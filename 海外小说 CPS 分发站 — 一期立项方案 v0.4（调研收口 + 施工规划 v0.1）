@@ -1,0 +1,811 @@
+<callout icon="⚠️">文档状态：**v0.2 收敛版（审计已回灌）**。P0 只读审计已完成，基线 commit `cdfb75e`（`feature/v8.0.0-favorites`，v8.0.0 freeze），报告 1512 行，CPS 仓库 `git status --porcelain` 为空、零污染。本文档原「基于既有 Notion 文档的推断」已全部由带 `文件:行号` 证据的审计结论替换或推翻；标 📌 的段落即审计回灌处。三分清单与搬运顺序见 §九。
+
+</callout>
+
+</callout>
+
+</callout>
+
+</callout>
+
+</callout>
+
+</callout>
+
+</callout>
+
+</callout>
+
+决策人：Weifeng Chen ｜ 参照项目：<mention-page url="https://www.notion.so/d21601b5fd3482e4b355816cbb0461be" name="CPS项目"></callout>
+
+<aside>
+📊
+
+**状态摘要（2026-08-02）**
+
+当前版本：**v0.4 调研收口 / 施工规划 v0.1**
+
+当前状态：`READY_FOR_IMPLEMENTATION_PLANNING`
+
+正式开发：`NOT_STARTED` —— 本轮只产出任务、依赖、验收与 Gate，**未创建任何代码、Schema 或部署物**
+
+收益调研：`I8 = IN_PROGRESS`（独立并行，**不阻塞** P1/P2/P3 非收益部分）
+
+已完成 Gate：**Gate A = `PASS_FOR_PLANNING`**；**Gate C = `CONDITIONAL_PASS`**；**Gate D 部分 PASS**（书目与试读读取、已有推广资源读取）
+
+尚未完成 Gate：**Gate B 全部未开始**（生产门禁）；**Gate D 剩余 OPEN**（推广资源生成合同、收益接口）
+
+当前 Owner 决策：✅ D1 已决（MoboReader / 全语种 / `splitRatio >= 50` / 人工批次 / 累计不限但单次设限）│ ✅ D2 已关闭（正文可展示）│ ✅ D3 复用 `home_carousel_*` │ ✅ D4 埋点一期开 │ ✅ D5 已关闭（不等 CPS 八期，R6 解除）│ ✅ W4 = `OWNER_DECIDED` │ ✅ W2 = `OWNER_CONFIRMED`（R8 解除）
+
+仍开放的 Owner 决策：W6 品牌口径 │ W9 有副作用接口首测授权 │ D6 工期与人力 │ 缓存/SEO 索引/截断策略的书面细则
+
+最近一次接口验证：**2026-08-02**（Probe Run `P0-SECOND-20260801-JST`，4 个生产只读接口，≤ 30/100 请求，HTTP 429 = 0，渠道写操作 = 0，付费章节请求 = 0）
+
+最近一次架构裁决：2026-08-02（`preview.materializationPolicy = UPSTREAM_RETURNED_PREVIEW`；作者/国家/完结维度 `OUT_OF_SCOPE_V1`；标签标准化入 Phase 2）
+
+下一步执行人：Codex（P1 原型 X1–X7 + I8 收益 XHR 自然捕获）│ Claude Code（P1 Schema 草案与继承矩阵落地）│ Weifeng（W6 / W9 / D6）
+
+下一步任务：按 §十四「一期施工规划 v0.1」启动 **P1 地基 12 项**；P2 必须等 P1 三条硬前置完成
+
+❗编号说明：本版仍为增量修订，章节序号沿用 v0.2.1；新增 §二（C）、§十四、§十五。
+
+</aside>
+
+## 一、项目背景与目标
+
+### 1.1 背景
+
+现有 <mention-page url="https://www.notion.so/d21601b5fd3482e4b355816cbb0461be" name="CPS项目"> 是海外短剧 CPS 独立站分发系统，已跑通完整闭环：
+
+- 后台 CMS 从北斗（beidou）、畅读（changdu）等渠道接口拉取剧集数据；
+- 领取推广链接 / 推广码（promo_url / app_promo_url / promo_code 三分链路）；
+- 批量生成 SEO 页面，前台 Next.js App Router + ISR 承接搜索流量；
+- `/go/:code` 服务端埋点后 302 跳转真实推广链接；
+- 拉取渠道结算数据做收益归因看板。
+
+**海外小说 CPS 的业务原理与短剧完全同构**：同样是「渠道接口取内容 + 取推广链接 → 生成 SEO 页面 → 引导点击转化 → 回拉结算归因」。因此本项目的核心命题不是「从零设计」，而是：
+
+> 在最大化复用 CPS 已验证架构资产的前提下，把「内容实体」从「剧集/集数」替换为「小说/章节」，并**在新项目起点上一次性完成 SQLite → PostgreSQL 的架构升级**。
+> 
+
+### 1.2 为什么这次必须上 PostgreSQL
+
+CPS 项目历史上多次提出 SQLite → PostgreSQL 迁移，均以「当前量级无并发写瓶颈」为由降级/取消（二期 P0→取消，八期维持 SQLite）。遗留的结构性代价是：
+
+| 问题 | CPS 当前状态 | 对小说项目的放大效应 |
+| --- | --- | --- |
+| 容灾性差 | 单机单文件 `cps.db`，靠 `.backup`  • 文件快照 | 小说数据量（章节级）比剧集大 1–2 个数量级 |
+| 并发写差 | `SQLITE_BUSY` / database is locked 风险，Next 主进程与 worker 各持连接写同一文件 | 章节同步是天然高频写场景 |
+| 无法跨容器 | SQLite 不能跨容器共享，Next + PM2 Worker 被迫同容器 | 阻碍 worker 横向扩容 |
+| C 端无法写库 | 八期收藏功能被迫退化为纯 localStorage | 小说站的书架/阅读进度是核心需求，必须能写库 |
+
+**结论：小说项目在 Day 0 直接采用 PostgreSQL，不迁移、不兼容 SQLite。** 这是新建项目最便宜的时机——没有存量数据、没有 58 条 migration chain 的历史包袱。
+
+📌 **审计回灌：这个决策被证明比预期更正确，但理由和原先写的不一样。**
+
+- 「并发写差」不是推测，是**已经付过账的事实**：生产环境把埋点写路径整条关停（`CPS_PUBLIC_TRACKING_WRITE_DISABLED=1`、`CPS_TRACKING_ACCEPT_EVENT_TYPES=none`、`CPS_TRACKING_SUMMARY_REBUILD_MODE=off`，`docker-compose.yml:78-80`）。这是 SQLite 单写者压力最硬的证据——高频写功能不是没做，是做完被主动关掉了。
+- 代码里有两处**为 SQLite 写锁而存在的 hack**：`changdu-promo-claim-enqueue.ts:204-206` 用 `UPDATE ... WHERE id = -1` 的 no-op 抢全局写锁（注释直书其意图），以及 3 处事务内 `PRAGMA busy_timeout = 30000`。
+- 迁移的**正收益也被量化**：约 25 个 `*Json String` 列可升级 `jsonb` + GIN 索引（目前所有 JSON 查询只能全表扫 + 应用层 parse）；`schema.prisma:539-542` 记录的 partial unique index 欠债可以直接还掉；worker 可用 `FOR UPDATE SKIP LOCKED` 水平扩展；40+ 个状态 `String` 列可加 CHECK 约束（CPS 现在一个都没有）。
+- ⚠️ 但**成本项和原先的判断完全不同**：最贵的不是语法，是静默故障。详见 §九。
+
+### 1.3 一期目标（可验收）
+
+1. ✅ **已完成**：CPS 可复用性只读审计，产出三分清单 **A 直接搬 9 项 / B 改造搬 13 项 / C 重写或不搬 12 项**（摘要见 §九；原 B 级的「CSV/XLSX 表格导入」已按 2026-08-01 决策整体废弃）；
+2. 落地 PostgreSQL 数据底座 + 渠道适配层（至少 1 个渠道真实拉通）；
+3. 后台可批量导入小说 + 领取推广链接/推广码；
+4. 前台可生成并发布小说详情页与**站内试读章节页（正文站内渲染）**，SEO 可索引，`/go/:code` 埋点跳转闭环可用；
+5. 全程不触碰 CPS 生产环境（独立仓库、独立数据库、独立域名、独立部署）。
+
+### 1.4 一期明确不做（Out of Scope）
+
+- 用户账号体系（注册登录 / OAuth / 书架同步）— 推迟到需求验证后立项；
+- **完整全本在线阅读器**（目录导航、翻页交互、字体/夜间模式、阅读进度记忆）— 一期只做「试读额度内的正文站内展示」，不做全本阅读体验；
+- 正文站内全文检索（一期只检索元数据与简介）；
+- 多语言 i18n 前台（参照 CPS 三期教训：体量未到不做多国家站群）；
+- 达人分销后台（参照 <mention-page url="https://www.notion.so/b18601b5fd3482f1b4e4019259dbfa80?pvs=1" name="Studio cps 项目立项文档">，另立项）；
+- 从 CPS 生产库迁移任何数据。
+
+---
+
+## 二（A）、已确认的技术与产品基线 v0.2
+
+<aside>
+✅
+
+下列 10 条为 **Owner 已裁决、不再重开讨论**的基线。每条均在「架构与数据模型字典」中有对应条目（含决策理由、约束、验收标准），以字典为实施权威口径。
+
+</aside>
+
+1. **独立仓库** — 不 fork CPS，本阶段不建 CPS/小说共享 monorepo 包；通用代码以「拷贝 + 改造」引入，并登记来源文件与基线 commit。
+2. **PostgreSQL Day 0** — 第一天即用 PG 16，不复制 CPS 的 SQLite 库，也不复制其 SQLite 专用队列、锁、备份实现。
+3. **一期采用 `preview-only materialization`** — 渠道作品可有数千章；站内主要物化免费试读章节；常态几十章，容量目标上限约百章；**不默认同步、不存储整本全部章节正文**。
+4. **Chapter API 强制 cursor 分页** — 不提供「返回全部章节」接口。这是正确的 API 契约，**不代表一期要保存数千章**；两个口径不得互相混用。
+5. **Worker 不是绿地重写** — 继承北斗/畅读已验证的任务状态机、幂等键、task/item 两级结构、双闸写保护、allowlist、安全上限、错误分类、审计留痕与恢复流程；**只替换** SQLite 单写者假设、任务领取、锁、Cron 与多进程并发实现。
+6. **Day 0 只一个 PG 主库** — 操作审计表与业务表同库，保证可同事务写入；**不单独建“审计数据库”**；分析查询先用只读角色 + 查询超时 + 汇总表；只有分析负载达阈值后才加只读副本或独立分析库。
+7. **P1 本地开发不再被渠道未知项共同阻塞** — 畅读 `projectType`、北斗小说能力、章节正文接口三者均不阻 Gate A。
+8. **畅读能力与正文规则影响 P2/P3**，但不阻塞新仓库、PG Schema、鉴权、Worker 骸架等 P1 工作。
+9. **北斗小说能力 = 第二渠道验证项**，不作为第一渠道与 P1 的 Gate。
+10. **JWT / Cookie / Secret / 签名密钥不得写入 Notion** — 只记凭证别名、环境、主体摘要、不可逆指纹、过期时间、验证状态。
+
+另有 6 条由上述基线派生的数据模型与安全裁决（Novel/Chapter canonical 与渠道 SourceItem 分离、试读策略可配置、PG 原子任务领取、双闸写保护、Cron 唯一执行、数据库角色分离、有副作用接口首测过 Owner Gate），均已逐条录入架构字典，此处不重复展开。
+
+---
+
+## 二（C）、已确认业务与技术基线 v0.4（P0 两轮调研收口）
+
+<aside>
+✅
+
+本节为 **2026-08-02 正式收口版**，基于 Probe Run `P0-BROWSER-20260801-1933JST` 与 `P0-SECOND-20260801-JST` 两轮生产只读调研 + Owner 裁决。与 §二（A）v0.2 基线冲突时，**以本节为准**；与四个数据库冲突时，以数据库为准。
+
+</aside>
+
+### C.1 渠道与品类
+
+- **主渠道主体：MoboReader**（畅读名下小说线早期产品，~92,000 本）；PlotNovel（~2,700+ 本）为同主体第二个 app；MoboReels 属**短剧线**，与本项目无内容关系。
+- **`projectType=1` = 小说**，证据等级 `PRODUCTION_READ_PROVEN`（双向证明：小说 tab 发 1、短剧 tab 发 2）。
+- **已确认的四个生产只读接口**（均已入「渠道接口台账」，含 14 节正文）：
+
+| 接口 | 能力域 | 关键结论 |
+| --- | --- | --- |
+| `POST /api/v1/res/getlistpc` | 书目列表 | `totalCount` = 95,479（**全语种合计**，非英语单语种）；pageSize 10；同时携带已有推广资源字段 |
+| `POST /api/v1/material/getbydataid` | 素材详情 | `statusText` / `materialStatus` / `materialType` / `materialName` |
+| `POST /api/v1/res/getvideoinfo` | 作品资源信息 | 小说复用同一接口；返回 `payEpisFrom` / `allEpis` / `splitRatio` |
+| `POST /api/v1/res/getchapterinfo` | 章节目录 + 内嵌正文 | **无独立正文接口**；`chapterContent` 纯文本内嵌在目录响应里；无分页/cursor |
+- **小说与短剧接口高度同构** → 正式项目**以畅读演进后的架构为主**，不以北斗旧形态为主（北斗仅补充 QPS、`retryable`、`retryAfterMs` 等经验）。
+- 🔴 **CPS 中所有硬钉 `projectType=2` 的实现，在小说项目中必须参数化**（已知 5 处：`changdu-getcode.ts:7`、`changdu-getvideoinfo.ts:10`、`changdu.ts:80`、`changdu-preview-capability.ts:89/112`、`schema.prisma:366`）。对应字典条目 `projectType.parameterized`。
+- ❗新增待验证点：`getlistpc` 是否支持按 `agencyId` / app 过滤。若不支持，SourceApp 维度只能在**写入时按行内 `agencyId` 切分**，不能在拉取阶段切分。
+
+### C.2 书目同步范围（Owner 已确认，D1 关闭）
+
+| 维度 | 一期取值 |
+| --- | --- |
+| 来源主体 | MoboReader |
+| 语种 | **全部语种**（渠道侧上限 18 种） |
+| 来源标签 | 全部接收，**不预先排除** |
+| 最低分成比例 | `splitRatio >= 50` |
+| 推广资源 | 有无现成推广资源均可进书目库；允许运营后续人工生成 |
+| 同步方式 | **人工发起批次**（不做自动全量轮询） |
+| 累计书量 | **不设硬上限** |
+| 单次任务 | **必须设置安全上限** |
+
+<aside>
+🔴
+
+**不得混淆的两个口径**：`项目累计总量不限` ≠ `单次任务无限`。每一个同步批次必须同时具备：最大分页数 · 最大 item 数 · `dry-run` · Feature Flag · Allow Write · 进度检查点 · 可恢复状态 · 人工触发来源 · 审计记录。九项缺一不得上线。
+
+</aside>
+
+对应字典条目：`catalog.selectionPolicy`、`catalog.manualBatchIngestion`、`catalog.noGlobalHardLimit`、`catalog.perTaskSafetyLimit`。
+
+### C.3 试读章节规则（W4 = ***\*`OWNER_DECIDED`****）
+
+```
+preview.materializationPolicy = UPSTREAM_RETURNED_PREVIEW
+```
+
+定义：
+
+- 只物化 `getchapterinfo.chapterList[]` **实际返回**的章节；
+- **不按 `payEpisFrom - 1` 推算并主动获取更多章节**；
+- `payEpisFrom` 只保存为**收费边界**，不作为拉取目标；
+- 代码按返回数组**真实长度**处理，**不把 3 永久写死**。
+
+当前证据（Probe Run `P0-SECOND-20260801-JST`）：
+
+| 样本 | 语种 | `allEpis` | `payEpisFrom` | `payEpisFrom - 1` | 实际返回章数 |
+| --- | --- | --- | --- | --- | --- |
+| `BOOK_SAMPLE_EN_A` | 英语 | 255 | 8 | 7 | 3（1/2/3） |
+| `BOOK_SAMPLE_EN_B` | 英语 | 468 | 6 | 5 | 3（1/2/3） |
+| `BOOK_SAMPLE_FR` | 法语 | 291 | 6 | 5 | 3（1/2/3） |
+
+结论尺度：证据支持「**当前畅读样本固定返回前三章**」，且三例均 `chapterList.length < payEpisFrom - 1`，因此**不支持**「返回全部免费章节」这一假设；但**不得推广为所有渠道、所有语种永久恒为 3**。
+
+📉 **容量口径重算**（取代 §3.4.2 百章口径）：实测单章 2.2–11.9 KB，取 3 章/本，9.5 万本 ≈ **0.7–2 GB** 正文，PG + TOAST 压缩后更低。对象存储、冷热分层均不需要。
+
+### C.4 正文授权
+
+```
+preview.displayAuthorization = OWNER_CONFIRMED
+```
+
+- ✅ 免费试读正文**允许在站内展示**（Owner 为畅读合法注册分销商，持商用授权）；
+- ✅ 技术接口返回**内嵌纯文本**，无水印、无截断标志、无 HTML；
+- ⚠️ **当前不是渠道正式文档证据**，证据等级 `DOC_CONFIRMED`（Owner 声明），建议补登分销协议编号与有效期；
+- ⚠️ **长期缓存、搜索引擎索引、完整展示与截断策略仍为待确认项**（Gate C 尾巴，不阻塞 P2）；
+- 🔴 硬约束：若渠道上调 `payEpisFrom`，**已展示章节必须自动下架**，不得靠人工盯。
+
+### C.5 元数据缺失与一期产品范围
+
+两轮生产只读调研**未发现**以下字段（`UPSTREAM_FIELD_NOT_FOUND`）：**作者**（`author`/`writer`/`penName`/`creator`）、**国家地区**（`country`/`region`/`origin`）、**连载完结状态**（`completionStatus`/`serialStatus`/`finished`/`isFinished`/`isCompleted`/`updateStatus`/`releaseStatus`）。
+
+🔴 **以下现有字段语义未证，不得强行映射为上述维度**：`isRelease`（boolean，**不得等同于完结状态**）、`localType`（number，枚举未证）、`localSubType`（本样本 null）、`seriesTypeList`（array，元素语义未证）、`recommendList`（array）。
+
+一期范围裁决：
+
+```
+作者搜索     = OUT_OF_SCOPE_V1
+作者聚合页   = OUT_OF_SCOPE_V1
+作者 SEO 页   = OUT_OF_SCOPE_V1
+国家筛选     = OUT_OF_SCOPE_V1
+完结榜       = OUT_OF_SCOPE_V1
+连载榜       = OUT_OF_SCOPE_V1
+```
+
+✅ **允许一期使用的维度**：语言 · 来源题材标签 · 来源推荐标签 · 分成比例 · 是否已有推广资源 · 总章节数 · 收费起始章。
+
+⚠️ **对 §二（B）实体映射表的修正**：该表列的 `novel` 字段含「作者」与「连载状态」，现**陆续降为可空预留列**：P1 建表时保留列（不得塞进 jsonb，以免阻断二期搜索），但**前台不得展示、不得建索引页、不得进入 sitemap**。
+
+### C.6 推广资源
+
+```
+promotion.existingResourceRead  = PRODUCTION_READ_PROVEN
+promotion.generateCapability    = BROWSER_OBSERVED + OWNER_CONFIRMED
+promotion.generateApiContract   = UNPROVEN
+```
+
+✅ **已确认的已有推广资源字段**：`kocCode`、`publicUrl`、`homeLink`、`onlineUrl`、`promoCreateTime`（以上在 `getlistpc`）；`materialStatus`、`statusText`（在 `getbydataid`）。样本推广码长度 6，Host `eng.moboreader.com`，`hasQuery=false`。
+
+🔴 **页面存在「生成推广资源」按钮，Owner 确认点击后可生成，但本轮未执行**，因此：生成 Endpoint **未确认** · 请求 Body **未确认** · 幂等规则 **未确认** · readback 规则 **未确认**。**正式开发时不得擅自复用短剧 `getcode` 协议**——本轮自然打开推广页签未观察到 `getcode`，只能得出「未证明共用」，不能得出「一定不共用」。
+
+### C.7 来源标签与分类（Phase 2 架构，本轮不实施）
+
+渠道已证提供：题材标签（Werewolf、Billionaires 等）· 受众标签（女频等）· 推荐标签（本周爆款等）· 语言标签 · 多语言标志 · 来源平台。
+
+```
+渠道原始标签
+  → 标签维度识别
+  → SourceLabelMapping
+  → CanonicalTag
+  → 站内分类 / 标签 / 运营徽标
+```
+
+硬要求：
+
+1. **原始来源标签必须保存**（原样入库，不在写入时丢弃）；
+2. `seriesTypeList` 优先用于**题材与受众**映射；
+3. `recommendList` 作为**动态运营标签**，**不直接成为永久 SEO 分类**（否则榜单波动会洗掉聚合页）；
+4. **未识别标签只保存，不自动公开**；
+5. 简介自动分类**降级为来源标签缺失时的兜底**，不再是主路径；
+6. 映射规则由**后台配置**，不硬编码；
+7. 多语言统一走 `locale-canonical.ts` 单一真源。
+
+候选实体（**仅进入 Phase 2 计划**）：`source_label` · `canonical_tag` · `source_label_mapping`。
+
+### C.8 CPS 继承原则（收口）
+
+1. 小说项目**继承畅读**的两级任务、item 恢复、审计、资格判断与领链状态机；
+2. 北斗**仅补充** QPS、`retryable`、`retryAfterMs` 等经验，不作为形态参照；
+3. 🔴 **Claim 必须先提交写前意图审计，再调用上游**（CPS `changdu-promo-claim.ts:933-946` → `:948`）；
+4. 🔴 **Claim 结果未知时禁止自动重试**，进入人工复核（`claim_retry_blocked`）；
+5. **审计表只存脱敏推广码与 URL hostname**（`[redacted_code:length=N]`）；
+6. 业务 `PromoLink` 表**可以**保存真实链接，但读取权限必须严格限制；
+7. 凭证**只允许 `ChannelAccountCredential` 单轨**（彻底废弃 CPS 的 settings/env 三路解析）；
+8. 搬运**按符号切割，不按文件闭包整体复制**；
+9. **PostgreSQL 只替换**任务领取、锁、租约、Cron 与数据库重试条件，**不重写业务状态机**。
+
+---
+
+## 二（D）、收益接口并行调研（独立 OPEN，不阻塞规划）
+
+```
+I8 = IN_PROGRESS
+MoboReader_vs_MoboReels = ACCOUNT_RELATION_UNPROVEN
+```
+
+✅ **当前只确认了收益 UI 的可筛选维度**（页面路由 `GET /cn/report/daily`）：全部 / 网文 / 短剧 · 分成收入 / 分销收入 · 产品 · 团队成员 · 书或短剧 · 推广码 · 日期。
+
+🔴 **尚未确认**：收益 API Endpoint · Method · Request Body · `agencyId` · `agencyName` · `projectType` · `seriesId` · 推广码字段 · MoboReader 与 MoboReels 是否同结算主体 · 是否需要两个 ChannelAccount · 是否需要两套 Credential。
+
+⚠️ **共用浏览器登录态 ≠ 共用结算主体。** 在取得收益 XHR 字段合同前，一律保持 `ACCOUNT_RELATION_UNPROVEN`，不得选 `ACCOUNT_AND_REVENUE_SEPARABLE`。这也意味着 §十二 Q5「渠道账号可与 CPS 共用」仍是待验证项，R7 不能销。
+
+🔒 **必须标为「待 I8 后冻结」的五项**（不得在本轮定稿）：ChannelAccount 最终作用域 · Revenue Schema · 收益归因键 · 收益同步 Adapter · P4 看板。
+
+除此五项之外，**收益调研不得阻塞任何 P1/P2/P3 规划与实施**。
+
+### 四级 Gate 最新状态（2026-08-02）
+
+| Gate | 状态 | 依据 / 剩余项 |
+| --- | --- | --- |
+| **Gate A**（P1 本地开工） | ✅ `PASS_FOR_PLANNING` | 渠道与品类已确认 · 书目接口已确认 · 章节与正文接口已确认 · 多书多语种样本已完成 · 试读物化规则已定 · 选品与批次规则已定 · CPS 继承边界已定。**不因收益接口未完成而关闭** |
+| **Gate B**（P1 生产门禁） | ⚪ 全部未开始 | W8 部署方案 · X7 角色分离 · X6 恢复演练 · X4 原子领取 · X5 Cron 唯一 · migration 解耦 · 可观测性 · 发布回滚 SOP |
+| **Gate C**（P2 试读展示） | 🟡 `CONDITIONAL_PASS` | ✅ 技术可读取（已证）│ ✅ Owner 展示授权（已确认）│ ⚠️ 缓存 / SEO 索引 / 全文或截断 仍待补充 |
+| **Gate D**（P3 第一渠道） | 🟡 拆分后部分 PASS | ✅ 书目与试读读取 = PASS │ ✅ 已有推广资源读取 = PASS │ 🔴 推广资源**生成合同** = OPEN（W9 + I7b）│ 🔴 收益接口 = OPEN（I8） |
+
+---
+
+## 二（B）、业务模型：短剧 → 小说 的实体映射
+
+这是全项目最关键的一张表。**审计与开发都以此表为对齐口径。**
+
+| CPS（短剧） | Novel（小说） | 说明 |
+| --- | --- | --- |
+| drama（剧集） | novel（书） | 主内容实体，SEO 页面主体 |
+| episode（集） | chapter（章节） | 📌 **审计推翻原假设：CPS 根本没有 Episode 表。**71 个 model 里「集」只是 `Drama.episodeCount` / `freeEpisodeCount` 两个标量（`schema.prisma:28-29`）。所以「几十集 → 几千章」压不垮任何既有实现——**因为没有既有实现可压垮**。章节管理是彻底的 greenfield，必须在 P1 从零设计，不能假设「照剧集那套做就行」 |
+| episode_count | chapter_count / word_count | 小说需额外的字数、连载状态（完结/连载中） |
+| 封面图（3:4 竖版） | 书封（2:3 或 3:4） | 图片处理链路可直接复用 |
+| 预告视频（前 30 秒） | 试读正文（**站内展示**前 N 章 / 前 N 字） | 🔴 **已定：站内展示，不跳转渠道**。📌 审计确认零可复用资产：唯一按集建行的 `DramaPreviewAsset` 是视频语义，行数被 `freeEpisodeCount` 卡死（`preview-sync.ts:604`），唯一键 `[provider, appId, serialId, episodeOrder]` 假设「每 provider 独立一套」——**明确不可作为章节表的形状参照**。见 §3.4 |
+| 题材分类（狼人/霸总/复仇…） | 题材分类（Werewolf / CEO / Romance / Fantasy…） | 分类规则引擎可复用，词表需重建 |
+| serial_link / app_link / promo_code | book_link / app_link / promo_code | 推广三分链路结构预期一致 |
+| channel（北斗/畅读）+ source_app（剧场） | channel + source_app（书城/站点） | 多渠道底座模型可直接搬 |
+
+**核心判断**：小说项目 ≈ CPS 七期「多渠道底座」架构 + 新的内容实体 + PostgreSQL。
+
+---
+
+## 三、架构方案（待审计确认）
+
+### 3.1 技术栈基线
+
+| 层 | 选型 | 相对 CPS 的变化 |
+| --- | --- | --- |
+| 框架 | Next.js（App Router）+ React + TypeScript | ✅ 不变 |
+| ORM | Prisma | ✅ 不变（provider 改 postgresql） |
+| 数据库 | **PostgreSQL 16** | 🔴 变更（CPS 为 SQLite） |
+| 任务队列 | 独立 Worker 进程 | ⚠️ 可从「PM2 同容器」升级为独立容器 |
+| 认证 | Auth.js v5 + Turnstile（仅后台） | ✅ 不变 |
+| 部署 | Docker Compose + Nginx + Certbot | ⚠️ 新增 postgres service + 备份策略重写 |
+| 前台渲染 | ISR + sitemap + 稳定页面资产 ID | ✅ 复用 `public_page_id` 思路 |
+
+### 3.2 PostgreSQL 带来的架构解锁
+
+| 能力 | SQLite 下的现状 | PostgreSQL 下 |
+| --- | --- | --- |
+| Worker 拆容器 | ❌ 不可能 | ✅ Next 与 Worker 独立容器/独立机器 |
+| 并发写 | 单写者 + BUSY 重试 | ✅ MVCC，行级锁 |
+| C 端写入（书架/阅读进度/点击埋点） | 必须绕开 DB | ✅ 直接写库 |
+| 备份/容灾 | 文件快照 | ✅ `pg_dump`  • WAL 归档 + PITR |
+| 全文检索 | 无 | ✅ `tsvector` / `pg_trgm`（小说搜索是刚需） |
+| 数据分析 | 受限 | ✅ 窗口函数、物化视图做归因看板 |
+
+### 3.3 必须新写的迁移/部署配套（不可复用 CPS）
+
+- `pg_dump` + WAL 归档 + 定时备份 cron + 恢复演练 SOP（CPS 的 SQLite `.backup` SOP 整体作废）；
+- Docker Compose 中 postgres service + volume + 健康检查 + 连接池（PgBouncer 视量级决定）；
+- Prisma migration 基线重建（不继承 CPS 的 58 条 SQLite migration）；
+- 回滚预案：git tag + `pg_dump` 快照 + docker image 快照（三件套结构沿用，介质替换）。
+
+### 3.4 站内正文展示（一期新增能力，CPS 零可复用资产）
+
+<aside>
+✅
+
+**已定决策（2026-07-28）**：试读采用**站内展示正文**，不走「跳转渠道试读页」。版权与合规由 Weifeng Chen 承接，不在工程范围内；工程侧只负责存储、渲染、索引策略与防盗。
+
+</aside>
+
+这是本项目与 CPS 差异最大的一块。CPS 的对应物是「前 30 秒预告视频」，且视频从不落地、只做跳转，因此**没有任何可搬运的正文托管、分章渲染、阅读版式资产**。
+
+**3.4.1 数据模型（正文与元数据分离）**
+
+| 表 | 内容 | 理由 |
+| --- | --- | --- |
+| `novel` | 书级元数据（书名/作者/字数/章节数/连载状态/题材/书封/简介/语种） | SEO 主体，高频读 |
+| `novel_chapter` | 章级元数据（序号/标题/字数/是否试读/发布状态） | 目录与分页查询，不含正文 |
+| `novel_chapter_content` | 正文（1:1 关联章节，独立表） | 避免主表膨胀；PG TOAST 自动压缩长文本；列表查询永不带正文 |
+
+**关键约束：只落地试读额度内的章节正文。** 非试读章节只存元数据（标题+字数），不入库正文。这同时压住存储量级与合规面。
+
+**3.4.2 存储量级粗估（已按 2026-08-01 试读口径重算）**
+
+口径：常态几十章，**上限约百章**（Owner 已拍「可以取前 100 章」）。按 3KB/章：100 章 ≈ 300KB/本 → 1 万本 ≈ **3GB** 正文；PG + TOAST 压缩后实际更低，单实例完全无压力。对照：若全本入库（2000–3000 章/本）则是 60–90GB 级，一期明确不做。
+
+❗注意：百章口径使同步时长、限流风险与章节表行数均比原 10 章估算高一个量级（单本 100 行 vs 10 行），因此单本最大物化章数必须做成**可配置的安全上限**，而不是默认无限拉取（见 X1）。
+
+**3.4.3 渲染与 URL**
+
+- 详情页：`/novel/{public_page_id}`（沿用 CPS 页面资产 ID 体系）
+- 试读页：`/novel/{public_page_id}/chapter/{n}`
+- ISR 静态化，正文按章为单位；单章过长时段落分块渲染，不做前端翻页器
+- 每章底部固定 CTA → `/go/:code`，埋点口径与 CPS 一致
+
+**3.4.4 SEO 策略（这是站内展示最大的技术风险面）**
+
+📌 **审计发现：CPS 仓库内不存在「A/B/C 类页面分类」这个东西。**实际只有 4 条互相独立的机制：`Article.seoVisibility`（取值 `public` / `seo_only`，后者是 index,follow 但不进列表页，**不是** noindex）、分页 ≥2 的 noindex（`seo-utils.ts:138`）、`unavailable-pages.ts` 下架清单、`Drama.rightsStatus` 的 410/404 门禁（`proxy.ts:109-114`）。因此下面的 A/B/C 口径是**本项目新定义的**，必须在 P1 落成代码级枚举 + 单一真源，不能停留在口头约定：
+
+- **A 类可索引**：书详情页、题材/榜单聚合页
+- **A 类可索引（限量）**：**仅第 1 章**试读页可索引，用于承接「书名 + chapter 1 / read online」长尾词
+- **C 类 noindex**：第 2 章及以后的试读页，避免 thin content 与站内重复内容稀释权重
+- 所有试读页 canonical 指向书详情页；章节间用 `rel=prev/next`
+
+**3.4.5 防盗与速率限制**
+
+正文是有成本的资产：试读接口/页面需基础速率限制与访客标识校验（可复用 CPS 现有访客标识与埋点链路），防止被整站抓取二次分发。
+
+**3.4.6 一期明确不做**
+
+翻页阅读器交互、字体/夜间模式、阅读进度记忆（依赖账号体系，已 Out of Scope）、正文全文检索。
+
+### 3.5 数据库架构与环境隔离（2026-08-01 讨论结论）
+
+背景：CPS 现状是单文件 SQLite，**且审计库与生产库是同一个**；站点规模约 5 万独立访客 / 月。
+
+**结论一：升级 PostgreSQL 的理由是「能力」，不是「流量」。** 5 万 UV/月折算峰值只有个位数 QPS，且读多写少——单纯看吞吐，SQLite 完全够用，这也正是 CPS 历次以「当前量级无并发瓶颈」降级迁移的原因，那个判断在性能维度上并没有错。但 CPS 实际踩到的四类问题**全部与 QPS 无关**：单写者（埋点写路径被迫整条关停）、容灾（只有文件快照、无 PITR）、不能跨容器（worker 绑死同容器）、C 端不能写库（收藏退化为 localStorage）。这四条不会因为流量小而消失，也不会通过优化 SQLite 解决。**所以本项目必须以「解锁能力」立项，不要以「性能不够」立项**——后者会在评审时被自己的数据打回，这正是 CPS 前两次迁移提案失败的原因。
+
+**结论二：这个规模的标准架构就是「单实例 PG + 连接池 + 可验证的备份」，不要过度设计。**
+
+| 组件 | 本项目取值 | 说明 |
+| --- | --- | --- |
+| 实例 | 单台 PostgreSQL 16 primary | 5 万 UV/月不需要集群、不需要分片、不需要读写分离 |
+| 连接池 | 先用 Prisma 自带连接池；连接数吃紧再上 PgBouncer（transaction 模式） | 应用未 serverless 化前不急 |
+| 备份 | 每日 `pg_dump`  • WAL 归档 + PITR，异地留存 | 替代 CPS 的 `.backup` 文件快照 SOP（整体作废） |
+| 恢复 | P1 内必须做一次完整恢复演练并计时 | 没演练过的备份等于没有备份（R5） |
+| 高可用 | **一期不做** | 需要时再加流复制 standby，届时应用代码零改动 |
+| 可观测性 | `pg_stat_statements`  • 慢查询日志 + 连接数告警 | CPS 目前在 DB 层完全没有可观测性 |
+
+**结论三（🔄 2026-08-01 已修正口径）：需要隔离的是「分析/报表负载」，不是「操作审计表」。** 原文把两件事混为一谈，现拆开：`audit_log` 等**操作审计表必须与业务表同库**，否则无法同事务写入，会出现「写了业务没写审计」使审计不可信；而分析与报表查询才是需要隔离的那一面。以下风险描述仍成立，但应理解为针对**分析负载与写权限**，而非针对审计表位置。 现状风险有三层：① 审计与统计查询是全表扫 + 大聚合，在 SQLite 上会长时间持有读事务、与写路径争锁；② 审计脚本一旦拿到可写连接，误操作直接打在生产数据上；③ 无法在不影响生产的前提下做重口径回溯。本项目的目标形态：
+
+- **生产库**：只有应用（web + worker）以最小权限角色连接；
+- **分析 / 报表**：🔄 **修正为「分析库后置」**——Day 0 不建独立分析库、也不做每日 `pg_dump` 回灌分析库，而是分析查询直接跑主库，靠三件事兼容：**只读角色 + `statement_timeout` + T+1 汇总表**。只有达到预先写明的阈值（分析类查询 P95 > 2s，或占主库 CPU > 20%，或出现因分析查询引发的前台延时告警）才新增流复制只读副本或独立分析库；
+- **权限三分**：应用角色 / 只读分析角色 / 迁移角色，审计侧只发只读角色；
+- **开发与预生产**：独立实例（或至少独立 database + 独立角色），**禁止**任何非生产环境连生产库。
+
+---
+
+## 四、渠道接入（P0 未知项最多）
+
+### 4.1 现状认知（来自 CPS 既有调研，需重新验证）
+
+📌 以下已由审计给出带证据的结论，不再是推断：
+
+- **畅读（cdreader）：找到了品类判别位，但不敢下结论。**所有请求体都带 `projectType`，全仓**硬钉为 `2`**（`adapters/changdu-getcode.ts:7`、`changdu-getvideoinfo.ts:10`、`changdu.ts:80`、`changdu-preview-capability.ts:89/112`），还专门持久化进审计表（`schema.prisma:366`）。一个叫 project **type** 的整型判别位被钉死单值，是上游支持多品类的强证据；但仓库内**零处说明 `2` 以外取值的含义**，无注释、无枚举、无文档。
+- **北斗（inbeidou）：无从推断。**API base `api-scenter.inbeidou.cn`，请求里**没有任何品类参数**。另外北斗**压根没有实现 `ChannelAdapter`**（`adapters/beidou.ts:1-6` 自述「纯解析层」）。
+- **全仓 grep 结果**：`novel` / `book` / `chapter` / `comic` / `manga` 在渠道适配层（`adapters/`、`beidou-*`、`changdu-*`、`channel-*`）**零命中**。命中的全是 `contentType`（HTTP 头）、`categoryType`（站内分类）等无关词。
+- **弱信号（仅供参考，不作结论）**：畅读两个 host 是 `kocserver-cn.cdreader.com` / `mobotreeserver-cn.cdreader.com`，域名字面含 "reader"，接口路径是 `/api/v1/res/`（res = resource，非 video）。这只是命名观察。
+
+### 4.2 因此渠道层设计为「双通道适配」
+
+📌 **2026-08-01 决策：表格通道整体废弃。** 手动导入名单在 CPS 侧已被废弃，小说项目不再保留 CSV / XLSX 批量导入通道。连带影响：`import-service.ts`（644 行）与浏览器侧 xlsx 解析从 B 级搬运清单中移除（B 级 14 → 13 项），`import` 后台页面与相关 npm script 不建；飞书那条线本来就已被 CPS 官方冻结（`CLAUDE.md` §6 定为只读遗留、`schema.prisma:64-66` 软冻结、`adapters/feishu.ts:7-9` 全文一句 `throw`），至此表格方向整体清空。若未来确有一次性批量灌数需求，走一次性运维脚本 + `dryRun`，**不建常驻功能入口**。
+
+沿用 CPS 的 Adapter 架构，一期只支持：
+
+1. **API 通道** — 有正式接口的渠道。这是唯一的规模化入口，因此 Gate 0 的渠道验证从「前置检查」升级为**唯一路径依赖**：原先「无接口则退化为表格通道」的兜底已不存在（见 R1）；
+2. **人工通道** — 后台单条录入 + 手动贴推广链接，仅用于样本验证与应急补录，不承担规模化职责。
+
+<aside>
+🔄
+
+**原「立项硬前置 Gate 0」已于 2026-08-01 被四级 Gate 取代（见 §七 A）。** 修正要点：下列三问仍然必验，但它们**只阻 Gate C / Gate D**，不再「在写任何业务代码之前」卡住整个 P1：① 阻 Gate D；② 阻 Gate C；③ 属第二渠道验证，不阻任何 Gate。新仓库、PG Schema、鉴权、Worker 骸架可在三问有结论前开工。以下为三问原文，已拆成任务 W1 / W2 / W3：① **畅读 `projectType` 除 `2` 之外有哪些取值、是否对应小说/漫画** —— 这是最低成本、最高信息量的一问，直接决定能否复用畅读链路还是必须换渠道；② **接口是否返回可展示的章节正文文本**（字段、单次返回几章、有无截断/水印/防盗/频率限制）—— 对应 R8，若不返回正文则 §3.4 站内展示方案整体无法落地；③ **北斗是否有小说品类接口**。求证方式优先书面问渠道方；若要试探非 `2` 的 `projectType`，只允许在沙箱/测试账号下进行，**不得使用生产凭证**。
+
+</aside>
+
+---
+
+## 五、阶段划分
+
+| 阶段 | 主题 | 关键产出 | 门禁 |
+| --- | --- | --- | --- |
+| **~~Gate 0~~** → **Gate A** | 🔄 已改为「P1 本地开工门禁」，不再是渠道可行性前置 | 书量与语种区间 + 五条架构基线确认 | 不等渠道接口探测；渠道能力改由 Gate C/D 把关（见 §七 A） |
+| **P0** | CPS 可复用性只读审计（Claude Code） | 直接搬/改造搬/重写三分清单 + 依赖图 | 审计报告评审通过 |
+| **P1** | PG 数据底座 + 渠道注册表 | Prisma schema、migration 基线、seed、Docker Compose | 本地 + 预生产可起、备份/恢复演练通过 |
+| **P2** | 渠道同步 + 领链闭环 | 至少 1 渠道真实拉到小说元数据 + 试读章节正文 + 推广链接落库 | 单本端到端可证 |
+| **P3** | 后台 CMS + 批量生成页面 | 小说管理、模板批量生成、推广字段管理 | 100 本批量生成不超时 |
+| **P4** | 前台 SEO 页面 + `/go/:code` 埋点 | 详情页/列表页/**试读章节页**/sitemap/埋点跳转 | Lighthouse + 索引可用性验收 + 试读页 canonical/noindex 口径抽检 |
+| **P5** | 结算回拉 + 归因看板 | 收益/点击/EPC 漏斗 | 与渠道后台数据对得上 |
+
+📌 **审计给出的三条硬前置（任一违反都会返工）**
+
+1. **`chapter` 表设计必须在 P1 完成，不能推到 P2** —— 它决定 P2 的模板字段、P3 的同步粒度、P4 的归因维度，而 CPS 没有任何参照实现。附带一条：`BatchTaskItem.dramaId` 是**非空 Int**（`schema.prisma:1441`），队列子项绑死单个内容实体；新项目要做「章节级批量任务」必须一开始就泛化为 `targetType` + `targetId`。
+2. **Worker 任务领取的原子性必须在 P2 早期一次做对** —— CPS 现在是 `findFirst` → `update` 两步（`worker/index.ts:106-120`），多容器下会重复执行同一任务；PG 下改 `UPDATE ... RETURNING` 或 `SELECT ... FOR UPDATE SKIP LOCKED`。同时把 4 个 cron 从 Next 进程移出（`instrumentation.ts:18/76/123/142` 只靠进程内 `globalThis.__cronRegistered` 去重，web 扩到 N 副本就跑 N 次）。
+3. **`locale-canonical.ts` 单一真源必须在写入任何多语言数据之前建好** —— CPS 语种映射四处独立硬编码（`adapters/beidou.ts:18`、`promo-selection.ts`、`tag-classifier.ts:96`、`i18n/og-locale.ts`），从 v3.0.2.6 想抽到 v8.0 仍未抽成，已付两次全库 normalize 的代价。
+
+---
+
+## 六、风险登记
+
+| ID | 风险 | 等级 | 缓解 |
+| --- | --- | --- | --- |
+| R1 | 北斗/畅读无小说品类接口。📌 **表格通道废弃后此风险等级实质上升**：不再有兜底通道，无接口即无内容源 | 🔴 高 | 🔄 **已降级为阻 Gate D，不阻 Gate A**：W1/W3 并行求证；若两家都没有小说接口，必须先找到第三家有 API 的书城渠道才能过 Gate D，而不是退化为人工录入。P1 本地底座（仓库/Schema/Worker 骸架）可先行，最差情况下损失限于 Adapter 层 |
+| R2 | 📌 **风险性质已变更**：原判「章节量级压垮既有实现」的前提不成立（CPS 无 Episode 表）；真实风险是**章节管理完全无可搬运资产，工量被低估** | 🔴 高 | P1 内独立设计并评审 `chapter` 三表；任何返回章节的接口强制 `take`  • cursor，不提供「返回全部」选项 |
+| R3 | CPS 代码「北斗专用结构」耦合深，搬运成本被低估 | 🟡 中 | P0 审计明确耦合面，宁可重写不可硬搬 |
+| R4 | 站内正文展示引发 SEO 重复内容 / thin content，稀释站点权重 | 🟡 中 | 仅首章可索引，其余 noindex + canonical 回详情页（§3.4.4） |
+| R8 | 渠道接口不返回可展示的章节正文（只给跳转链接） | 🔴 高 | 🔄 改为 **Gate C 必验项**（W2 权利 + I6 技术，二者互证）；若不返回正文，§3.4 站内展示方案无法落地，需在 Gate C 前出退路（待决 D2）。不阻 P1 |
+| R9 | 正文被整站抓取二次分发 | 🟡 中 | 速率限制 + 访客标识校验；只落地试读额度内正文 |
+| R10 | **搬运 CPS 原生 SQL 时引入静默故障**：42 处 `AS camelCase` 别名在 PG 下被折叠成小写，`row.taskName` 变 `undefined` 且**不报错** | 🔴 高 | 凡搬运带原生 SQL 的模块，一律改 Prisma 查询或给别名加双引号；搬运后逐个断言返回字段非 undefined |
+| R11 | 误把 `ChannelAdapter` 当成即插即用的多渠道底座直接搬（实际全文 34 行、2 个方法、仅畅读一家实现） | 🟡 中 | P3 先把接口扩到覆盖领链 / 凭证解析 / 错误分类，再接第一家书城 |
+| R12 | 照抄 CPS 的「无界 `findMany`  • 大 `IN`」模式（`instrumentation.ts:32-52`）与 `promo_code` 无索引（`schema.prisma:32`） | 🟡 中 | 定时发布强制分批；`promo_code` 第一天就建索引；详情页查询用 React `cache()` 做请求级去重 |
+| R13 | 审计/分析查询与生产库同库（沿袭 CPS 现状）：大聚合与生产写路径争锁；审计脚本持可写连接可误伤生产数据 | 🟡 中 | 🔄 已按 2026-08-01 口径修正：角色五分（migration owner / web / worker / analyst 只读 / backup，见 X7），analyst 必携 `statement_timeout`；**操作审计表留在主库同事务**，隔离的只是分析负载；分析库后置到阈值触发 |
+| R5 | PG 团队经验不足（历史一直 SQLite） | 🟡 中 | P1 强制做一次完整恢复演练 |
+| R6 | 双项目并行摊薄精力（CPS 八期在跑） | 🟡 中 | 明确 CPS 八期收口后再进 P2 |
+| R7 | 与 CPS 共用渠道账号导致配额/凭证互相影响 | 🟡 中 | 独立子账号；凭证不共享 |
+
+---
+
+## 七、技术调研执行计划（原「待决问题」）
+
+原 §七 的散文式 Open Questions 与审计报告 §7 的 14 条未知项，已全部转化为 **32 项可执行调研任务**，逐行录入「技术调研任务台账」。本节只保留分派约束与 Gate 定义，**任务状态以台账为唯一真源**，不在本页重复维护。
+
+| 执行人 | 任务 | 执行方式 | 轨道约束 |
+| --- | --- | --- | --- |
+| **Weifeng** | W1–W9（9 项） | 人工求证（优先书面问渠道方） | 业务与渠道决策；口头结论只能记为 `HYPOTHESIS`，书面回复才能升 `DOC_CONFIRMED` |
+| **Claude Code** | C1–C5（5 项） | 静态代码审计 | 只扫计划搬运模块，不全量迁移 108 脚本 / 275 测试；需动态验证时只能用 disposable worktree，**不得自称只读** |
+| **Codex（探测）** | I1–I10（10 项） | 自动 Curl / 沙箱 | 凭证走本地环境变量或临时 Secret File，禁写 Prompt/Git/日志/Notion；Endpoint allowlist；并发 1、QPS ≤ 1、总请求硬上限；禁无限翻页、禁压测；样例全脱敏 |
+| **Codex（原型）** | X1–X7（7 项） | 本地 PG 原型 | X1–X3 不依赖渠道探测，**可即刻开工**；X4–X7 服务 Gate B |
+| **Cursor** | E1 | 产品实现 | **不负责第一轮黑盒调研**；待接口字典 + Adapter 契约 + 核心裁决均「已确认」后才开工 |
+
+### 七 A、四级 Gate 与开工条件（取代原 Gate 0）
+
+<aside>
+🔴
+
+**被推翻的旧口径**：「W1/W2/W3 共同卡住整个 P1」、「最小开工集 = W1+W2+W4+W8+D1」已作废。渠道未知项**只阻 Gate C / Gate D**。
+
+</aside>
+
+**Gate A：P1 本地开发开工**（当前 5/6）
+
+- ⚠️ 一期书量与语种给出合理区间（**唯一未完成项，对应 W5 / D1**）
+- ✅ 确认独立仓库 ｜ ✅ 确认 PostgreSQL ｜ ✅ 确认 `preview-only materialization` ｜ ✅ 确认继承北斗/畅读业务状态机 ｜ ✅ 确认基础数据模型命名（X1 十表）
+- **不需要**等待任何渠道接口探测结束
+
+**Gate B：P1 生产环境门禁**（全部未开始）
+
+- 服务器与 PostgreSQL 部署方案（W8）｜ 数据库角色分离（X7）｜ 备份及**真实恢复演练**（X6）｜ Worker 原子领取（X4）｜ Cron 唯一执行（X5）｜ migration 与应用启动解耦｜ 慢查询・连接数・健康检查｜ 发布与回滚 SOP
+
+**Gate C：P2 试读展示门禁**
+
+- 渠道是否返回正文｜ 正文是否允许在自有网站展示｜ 是否允许缓存｜ 国家/语言/水印/截断/频率限制｜ 默认试读策略｜ **渠道不返回正文时的退路**
+- 对应任务：W2（权利）+ I6（技术），二者互证
+
+**Gate D：P3 第一渠道接入门禁**
+
+- 第一渠道书目/详情/章节/试读/推广链接接口探测（I3–I7）｜ 凭证与账户模型（I1）｜ 错误码・限流・幂等・分页（I9）｜ 只读接口探测全部完成｜ **第一条有副作用接口由 Owner 明确批准并人工或沙箱执行**（W9 + I10）｜ Adapter 契约与字段数据字典完成（C5 + 字段字典）
+
+### 七 B、Owner 决策项收敛状态（原 Q1–Q7）
+
+1. Q1：域名与品牌 → 🟡 **部分已决（2026-08-01）**：**域名独立，品牌可不独立**；品牌口径待与运营商定（W6）。工程影响：域名独立意味着 SITE_URL、sitemap、IndexNow key、埋点 cookie 作用域均与 CPS 完全分离，这一点已可定稿。
+2. ~~Q2：仓库策略~~ → ✅ **已决（审计建议，2026-07-28）**：**新建独立仓库，拷贝 + 改造起步；不 fork、不 monorepo 抽包。**否决 fork：CPS 主干仍在高频发版（本基线即当天 freeze 的 v8.0.0），fork 会持续背 upstream 合并成本，而两侧业务立刻分叉（小说站要加 `chapter` 表，CPS 永远不会加）。否决抽包：真正值得共享的通用底座只有 8–10 个模块、不足 8k 行，为它建包管理/版本/CI 成本高于收益，且**抽包必然要动 CPS 生产代码**，违反「CPS 不得因新项目而变动」的硬约束。
+3. ~~Q3：站内搜索~~ → ✅ **已决（2026-08-01，W7）**：**书名/作者/题材搜索放二期**，一期不上 `pg_trgm` / `tsvector`。硬约束：schema 不得阻断后续加索引——书名与作者**必须保留为独立列**，不得塞进 jsonb。
+4. ~~Q4：试读形态~~ → ✅ **已决（2026-07-28）**：站内展示前 N 章正文，版权与合规由 Weifeng Chen 承接。派生待决 **Q4a**：试读额度口径是「前 N 章」还是「前 N 字」，是否按渠道 / 按单本可配？（影响 `novel_chapter.is_preview` 的判定逻辑与同步链路）→ 🟡 **Q4a 已有初步拍板（2026-08-01，W4）**：默认**可取前 100 章**，且策略做成三级可配（全局 → 渠道 → 单本）。仍需 Gate C 渠道规则确认后才能定稿，因此证据等级停在 `HYPOTHESIS`。
+5. ~~Q5：抽公共包供 CPS 反向复用~~ → ✅ **已决：本阶段不做**（基线第 1 条）。另：渠道账号方面 Owner 已反馈**可与 CPS 共用**（似无配额限制，收入可靠网文/小说标签或品类接口区分），因此 R7「必需独立子账号」降级为待验证；**验证点在 I8**——若收益行不携带可区分品类的字段，则必须回到独立子账号。
+6. ~~Q6：服务器~~ → ✅ **已决（2026-08-01，W8）**：**新开 VPS**。并回答 Owner 反问「要不要开两个 VPS 实例」：**Day 0 单实例即可**——PG 与应用同机不同容器，走网络而非共享文件（这已解决 SQLite 时代「不能跳容器」的根因）；只有当内存或备份 IO 互相影响时才拆第二台。两台定位为扩展选项，不是 Gate B 前置。
+7. ~~Q7：分析延迟~~ → ✅ **已决（2026-08-01，W8）**：**T+1 可接受**，因此采用「分析库后置」（只读角色 + 查询超时 + 汇总表）。⚠️ 同时修正 Owner 提的「尽量手动实时同步，同 cps」：**PG 下不应再用文件拷贝实现同步**（SQLite 时代才能拷单文件）；真需近实时请用**流复制只读副本**，不要用定时 `pg_dump` 假装实时（那只是更贵的 T+1）。
+8. ⚠️ **新增待决 D1（当前唯一 Gate A 阻塞项）**：一期书量区间、语种数量、首发国家/地区、预计站内物化试读章节数（W5）。只需区间，不需精确值。
+
+---
+
+## 八、下一步
+
+1. ✅ 立项书 v0.1 草案；
+2. ✅ P0 只读审计完成（基线 `cdfb75e`，1512 行报告，CPS 零污染）；
+3. ✅ 审计回灌，本文档升级为 v0.2 收敛版；
+4. ✅ **四级 Gate 重建 + 32 项调研任务台账化 + 16 条架构基线入字典**（v0.3，2026-08-01）；
+5. ⏭ **可即刻并行开工（不等渠道）**：Codex 跑 X1（十表模型）、X2（cursor 分页）、X3（八项索引）；Claude Code 跑 C1（继承矩阵 20 项）。
+6. ⏭ **Weifeng 决 D1**（书量区间 + 语种数 + 首发地区）——当前 Gate A 的唯一阻塞项，只需区间。
+7. ⏭ **W1 / W2 补书面求证**：目前只有口头结论（W1「存在」、W2「可以」），证据等级必须停在 `HYPOTHESIS`；未得书面或真实响应之前，**不得过 Gate C / Gate D**。
+8. ⏭ 低成本未知项（不阻任何 Gate）：`proxy.ts` 未登记 admin 路由行为（C4，**静态控制流证明优先；动态验证只能用 disposable worktree**）、PG 是否接受 `AT` 作未加引号表别名（本地空库 `SELECT 1 FROM (VALUES(1)) at;`，零风险）。
+9. ⏭ 待 Gate C/D 有结论后出 **v0.4 施工版**：按目标 13 节结构重排章节序号，并补工期与人力。
+
+## 九、审计回灌摘要（P0 结论）
+
+完整报告：CPS 仓库可复用性只读审计 —— 为「海外小说 CPS 分发站」立项服务（落盘路径 `docs/audit/novel-v1-reuse-audit.md`，1512 行，全部结论附 `文件:行号`）。
+
+### 9.1 三分清单总览
+
+| 判定 | 数量 | 代表模块 |
+| --- | --- | --- |
+| **A 直接搬** | 9 | 鉴权/会话/2FA/登录风控全套、feature flag、管理端能力位、构建与 lint 配置、nginx、渠道注册三表（`Channel`/`SourceApp`/`ChannelApp`）、凭证 AES 加密、slug 别名与 301/308、IndexNow 契约与 outbox 表 |
+| **B 改造搬** | 13 | 模板引擎（294 行，条件渲染 + 白名单字段）、页面资产 ID 体系、slug 生成、`proxy.ts`、sitemap 家族、IndexNow 投递、文章批量生成、渠道账户与凭证服务、同步任务表、领链状态机、`/go/:code`、埋点表、收益归因骨架 |
+| **C 重写 / 不搬** | 12 | 前台站点查询层（1585 行，5 处 SQLite 方言原生 SQL）、北斗全链路（94 文件）、畅读全链路（143 文件）、飞书通道（已冻结）、预览试看链路、换租客批量切换（3000+ 行）、SQLite 部署栈与备份 SOP、测试脚手架 |
+
+**最有价值的复用面是 SEO 底座**（模板引擎 + 页面资产 ID + sitemap 家族 + IndexNow outbox + ISR），与内容形态基本正交，B 级、总工量约 8–12 人日。
+
+**最弱的一环是 ISR / 缓存标签**：`cache-tags.ts` 全文 19 行、只有 2 个 tag，主要靠散落各处的 `revalidatePath`。建议重新设计而非照搬。
+
+### 9.2 SQLite → PostgreSQL：最贵的不是语法，是静默故障
+
+| 等级 | 问题 | PG 下的表现 |
+| --- | --- | --- |
+| 🔴🔴 | 42 处 `AS camelCase` 别名（分布在 `batch-actions.ts`、`task-actions.ts`、`tag-actions.ts`、`site-queries.ts`、`sitemap.ts`、`home-carousel-config.ts`、`preview-sync.ts`） | PG 折叠为小写，`row.taskName` → `undefined`，**不报错**。其中 `home-carousel-config.ts:101` 会让轮播**静默回落默认配置** |
+| 🔴🔴 | `changdu-promo-claim-enqueue.ts:204-206` 的 no-op `UPDATE`（注释写明「抢 SQLite 写锁」） | 影响 0 行、不加锁、不报错，「全局只允许一个 active claim 任务」的并发保护**凭空消失** |
+| 🔴 | 3 处事务内 `PRAGMA busy_timeout`（`channel-sync-task.ts:302/386`、`review-generation.ts:328`，均未走 `isSqliteDatasourceUrl` 守卫）；`task-list-ordering.ts:12-13` 的 `strftime` / `typeof` | 直接抛错，整个事务失败 |
+| 🟠 | `?` 位置占位符、`tr.enabled = 1`（布尔比整数）、`review-generation.ts:264` 把 epoch 毫秒整数写进 DateTime 列 | 抛错，但定位容易 |
+
+**对本项目的含义**：这些点全部落在 C 级模块里，只要坚持「不搬原生 SQL、改用 Prisma 查询」就能整体规避——但一旦为省事直接拷贝某个 B 级模块的 raw SQL，就会引入不报错的故障。这是 R10。
+
+### 9.3 只搬「新的那一半」
+
+CPS 做过一轮通用化，但是**加法式解耦**：新建通用表，旧的专用表与字段全部保留。证据是三处并存——`DramaSourceMapping`（旧）与 `DramaSourceItem`（新）、`SettlementOrder`（旧）与 `ChannelRevenueDailyStat`（新）、`site_settings` 明文凭证列与 `ChannelAccountCredential`。第三处并存直接催生了 `BeidouTokenSource = channel_account | settings | env | missing` 的三路解析和一个 `"conflict"` 状态。
+
+**因此：搬 `Channel` / `SourceApp` / `ChannelApp` / `SourceItem` / `PromoLink` / `SyncTask` / `ChannelAccount+Credential+ChangeLog` / `ChannelRevenue*` 骨架；一张旧表都不带，凭证只走单轨。**
+
+两个值得**主动抄设计**的点：`ChangduTotalRevenueActiveFingerprint`（用 DB 级 UNIQUE 把应用层 TOCTOU 升级成原子互斥，schema 里有完整注释）、以及领链的 **pre-read → claim → readback 三段状态机 + 审计表三列**（照抄状态机与表结构，重写调用层）。
+
+### 9.4 强烈建议继承的工程规范
+
+- **双闸写保护**：`FEATURE_X=true` 开功能 + `X_ALLOW_WRITE=true` 才真写库，两把钥匙缺一不写。
+- **不可变构建元数据烘焙**：`/app/.build-metadata.json` 写入 version/commit/builtAt 且不可被 env 覆盖，`/api/health` 用它检测陈旧 env 污染（源自一次真实事故）。
+- **`CPS_APP_IMAGE` fail-closed**：不给 `latest` 兜底。
+- **自定义 Error 子类 + `code` 字段 + 类型守卫**，DB 侧用 `errorKind` 列存分类、业务侧用字面量联合类型约束。
+- **`CLAUDE.md` 作为架构事实唯一权威源** + `docs/governance/` 的 DB 字典与改动日志。
+
+三条**不要继承**：`tsconfig` 把 `scripts/` 排除在类型检查外；API 路由不经过 proxy、保护全靠每个 route 自觉调 `requireAdminSession()`（应改默认拒绝）；proxy 层直接 `import { prisma }` 并在每次公开详情页请求打 1–2 次库（应改页面层 `notFound()` / `gone()`）。
+
+---
+
+## 十、关联数据库（结论的唯一真源）
+
+<aside>
+📚
+
+**本页是叙事与裁决，四个数据库才是可查询的事实库。** 任何两者冲约时，**以数据库为准**，本页应在同一轮写回中跟新。
+
+</aside>
+
+| 数据库 | 粒度 | 当前内容 | 使用纪律 |
+| --- | --- | --- | --- |
+| 🗂️ 技术调研任务台账 | 一任务一行 | **32 行**（W1–W9 / C1–C5 / I1–I10 / X1–X7 / E1） | 状态变更必须先改这里再做下一件事；本页不重复维护任务状态 |
+| 🔌 渠道接口台账 | 一接口一行 | 含【模板】渠道接口登记页（14 节固定正文结构） | 每个新接口从模板开行；21 个属性含 Probe Run ID 与凭证指纹（**只存摘要/指纹，不存 JWT**） |
+| 📒 接口字段数据字典 | **一字段一行** | 等待 I1–I9 探测写入 | 标题格式 `接口名称.direction.jsonPath`；**禁止只贴一段 JSON 了事**；未验证字段只能标候选/假设 |
+| 🏛️ 架构与数据模型字典 | 一裁决一行 | **16 条**（对应 §二（A）基线） | 含决策理由、约束、验收标准；实施时以此为权威口径，不以本页散文为准 |
+
+数据库入口已挂在本页底部（四个关联数据库 block）。
+
+## 十一、强制写回规则与证据等级
+
+**触发条件**：每完成一次代码审计、Curl 探测、人工渠道确认或 PG 原型，**必须在进入下一项工作前完成 Notion 写回**。不得批量缓存到最后一次性补登。
+
+1. 更新「技术调研任务台账」状态；
+2. 创建或更新「渠道接口台账」（每接口一行 + 14 节正文）；
+3. 将每个新发现字段**逐行**写入「接口字段数据字典」；
+4. 将产生的架构要求或数据模型变化写入「架构与数据模型字典」；
+5. 附上**脱敏证据**（请求/响应样例、文件:行号、原型 SQL 与输出）；
+6. 记录**环境、时间、Probe Run ID、证据等级**；
+7. 标记对 **Gate / Schema / Adapter / Worker / 页面** 的影响。
+
+### 十一.1 七级证据等级（全项目统一口径）
+
+| 等级 | 含义 | 典型来源 |
+| --- | --- | --- |
+| `HYPOTHESIS` | 经验推测或待验证候选 | 口头反馈、命名观察、弱信号（当前 W1/W2/W3/W4 均在此级） |
+| `CODE_CONFIRMED` | 由 CPS 静态代码证明 | 带 `文件:行号` 的审计结论 |
+| `DOC_CONFIRMED` | 渠道正式文档或**书面**回复证明 | 渠道对接人书面答复、官方 API 文档 |
+| `SANDBOX_PROVEN` | 沙箱真实请求证明 | 沙箱/测试账号响应（已脱敏） |
+| `PRODUCTION_READ_PROVEN` | 生产凭证**只读**请求证明 | I1–I9 在限速约束下的只读探测 |
+| `CANARY_WRITE_PROVEN` | 经 Owner 批准的**单条写入**证明 | W9 授权后的首条有副作用请求 |
+| `DEPRECATED` | 已失效或停止使用 | 被废弃的接口、被推翻的裁决（如表格导入通道） |
+
+🔴 **硬规则**：任何未经验证的字段、枚举、接口路径或架构假设，**不得从 `HYPOTHESIS` 直接标记为「已确认」**。口头“存在/可以”不构成验证。
+
+### 十一.2 冲突处理：被替代机制
+
+出现与旧结论冲突的新证据时，**不得直接删除旧记录**：
+
+1. 旧记录状态改为「被替代」；
+2. 创建新记录；
+3. 用「替代条目」字段建立双向替代关系；
+4. 写明变更原因与新证据（含环境、时间、证据等级）。
+
+本页本轮已按此机制处理三处被替代口径（保留原文 + 🔄 标记，未删）：Gate 0 三问、§3.5 结论三分析库、R1/R8/R13 缓解措施。
+
+## 十二、待 Owner 决策（台账外的开放项）
+
+| ID | 待决事项 | 阻塞 |
+| --- | --- | --- |
+| D1 | 一期书量区间 / 语种数 / 首发地区 / 预计物化试读章数 | 🔴 **Gate A**（当前唯一） |
+| D2 | 渠道不返回正文时的退路（改跳转 / 只做书详页 / 换渠道） | Gate C |
+| D3 | 首页与聚合页形态（榜单 / 题材 / 语种入口） | P4 |
+| D4 | 埋点是否一期就开（CPS 现已整条关停） | P4/P5 |
+| D5 | CPS 八期收口日期（决定何时进 P2，R6） | P2 |
+| D6 | 工期与人力投入 | v0.4 施工版 |
+| W6 | 品牌口径（域名已定为独立；品牌待与运营商定） | P4 前需定稿 |
+| W9 | 有副作用接口首测授权（当前“暂不”） | 🔴 I10 已标阻塞；Gate D 末项 |
+
+## 十三、变更日志
+
+| 版本 | 日期 | 主要变更 |
+| --- | --- | --- |
+| v0.1 | 2026-07-28 | 初稿：背景、实体映射、PG 立项理由、阶段划分、风险 R1–R7 |
+| v0.1.1 | 2026-07-28 | 试读形态定为**站内展示正文**（版权由 Owner 承接），新增 §3.4 与 R8/R9 |
+| v0.2 | 2026-07-28 | P0 审计回灌：推翻「CPS 有 Episode 表」假设；三分清单 9/14/12；新增 R10–R12 与 §九 |
+| v0.2.1 | 2026-08-01 | 表格导入通道**整体废弃**（B 级 14→13）；新增 §3.5 数据库架构与环境隔离、R13、Q7 |
+| **v0.3** | **2026-08-01** | ① 新增 §二（A）**已确认基线 v0.2**（10 条）；② **四级 Gate A/B/C/D 取代 Gate 0**，推翻「W1/W2/W3 卡住整个 P1」；③ §七 改为**技术调研执行计划**，32 项任务入台账；④ 新建**四个关联数据库**  • 16 条架构字典条目 + 接口登记页模板；⑤ 新增**强制写回规则 + 七级证据等级 + 被替代机制**；⑥ 落定 Owner 新答案：试读**前 100 章**、站内搜索**二期**、**域名独立品牌待定**、**新开 VPS 且 Day 0 单实例**、T+1 可接受；⑦ 修正 §3.4.2 容量口径（10 章→百章，1 万本≈ 3GB）；⑧ 修正 §3.5 结论三：**审计表入主库同事务、分析库后置**；⑨ R1、R8、R13 缓解口径重写，R7 降级（渠道账号可共用，验证点移至 I8） |
+| **v0.4** | **2026-08-02** | ① 新增 **§二（C）已确认业务与技术基线 v0.4**（八小节，P0 两轮调研正式收口）；② 新增 **§二（D）收益接口并行调研**，I8、五项冻结项独立 OPEN；③ **Gate 状态更新**：A=`PASS_FOR_PLANNING`、C=`CONDITIONAL_PASS`、D 拆四项两 PASS 两 OPEN；④ **W4 = `OWNER_DECIDED`**，试读改 `UPSTREAM_RETURNED_PREVIEW`（**推翻前 100 章**）；⑤ **D1 关闭**（MoboReader / 全语种 / `splitRatio >= 50` / 人工批次），**D2 / D5 关闭**，**R6 / R8 解除**；⑥ **作者 / 国家 / 完结维度 `OUT_OF_SCOPE_V1`**；⑦ 标签标准化入 **Phase 2**；⑧ 容量口径重算（3GB → **0.7–2GB**）；⑨ 新增 **§十四 一期施工规划 v0.1**（P1 12 / P2 12 / P3 10 / P4 7 / Phase 2 6，共 **47** 项） |
+
+---
+
+## 十四、一期施工规划 v0.1
+
+<aside>
+🚧
+
+**本节只生成任务、依赖、验收与 Gate，不创建任何代码。** 当前正式开发状态 = `NOT_STARTED`。任何人（包括 Cursor / Codex / Claude Code）**不得以本节为依据开始写业务代码**，需先由 Owner 单独下达开发指令。
+
+</aside>
+
+### 14.1 P1：地基（12 项）
+
+目标：在**不依赖任何渠道未知项**的前提下，把库、鉴权、Worker、双闸、备份全部立起来。
+
+| ID | 任务 | 依赖 | 验收标准 | Gate |
+| --- | --- | --- | --- | --- |
+| P1-01 | 独立正式仓库规划（命名、分支策略、CI、`CLAUDE.md` 单一真源、搬运来源登记表） | — | 每一个从 CPS 搬入的符号都能查到「来源文件 + 基线 commit `d4e4bf9`」 | A |
+| P1-02 | PostgreSQL 16 架构落地（Docker Compose · volume · 健康检查 · 连接池 · `statement_timeout`） | P1-01 | 本地与预生产均可一键起；应用与 PG **同机不同容器**、走网络不走共享文件 | A/B |
+| P1-03 | **数据模型草案**：`novel` / `novel_source_item` / `novel_chapter` / `novel_chapter_content`（含 `pay_epis_from`、`all_epis`、`is_preview`） | P1-01 | 唯一键含 **app 维度**（照搬 `[channelAppId, sourceKey, sourceLanguageCode]`）；作者/完结为**可空预留列且不入 jsonb**；正文独立表 | A |
+| P1-04 | 任务两级模型：`task` / `task_item`，`targetType`  • `targetId` **泛化**（不重蹈 `BatchTaskItem.dramaId` 非空 Int 的覆辙） | P1-03 | 可同时承载「书级」与「章节级」子项而不改表结构 | A |
+| P1-05 | 鉴权、2FA、能力位（A 级直接搬：`requireAdminSession` 改**默认拒绝**） | P1-01 | 新增任意 admin 路由，**不显式登记即不可访问**（修正 CPS 「靠 route 自觉调」的缺陷） | A |
+| P1-06 | Feature Flag + Allow Write **双闸**基础设施 | P1-01 | 只开 FEATURE 不开 ALLOW_WRITE 时，任何写路径**零写库**且返回显式拒绝码 | A/B |
+| P1-07 | **Worker 原子领取**设计：`UPDATE ... WHERE id=(SELECT ... FOR UPDATE SKIP LOCKED LIMIT 1) RETURNING *`  • item lease（`locked_by` / `locked_until`） | P1-02, P1-04 | 双 worker 跑同一任务**只执行一次**；杀进程后 30 分钟内回到 pending 且 attempt+1 | B |
+| P1-08 | **Cron 唯一执行**：从 Next 进程移出，改 advisory lock / 独立调度容器 | P1-07 | web 扩到 N 副本，cron **仍只跑一次** | B |
+| P1-09 | 🔴 **`locale-canonical.ts` 单一真源**（硬前置：必须在写入任何多语言数据**之前**建好） | P1-01 | 全仓**零处**第二处语种映射硬编码；lint 规则卡住新增映射表 | A |
+| P1-10 | 凭证**单轨**设计：只保留 `ChannelAccountCredential`  • AES 加密；不建 settings / env 旁路 | P1-03 | 不存在 `TokenSource` 三路解析，也不存在 `conflict` 状态 | A/B |
+| P1-11 | 备份、**真实恢复演练**与角色权限（migration owner / web / worker / analyst 只读 / backup 五分） | P1-02 | 完整恢复演练**已执行并计时**；analyst 角色写操作被拒 | B |
+| P1-12 | 发布与回滚 SOP + 构建元数据烘焙 + `/api/health` 陈旧 env 检测 | P1-02 | `/api/health` 可检出镜像与 env 不一致；`CPS_APP_IMAGE` 类参数 **fail-closed** | B |
+
+### 14.2 P2：内容与 SEO（12 项）
+
+| ID | 任务 | 依赖 | 验收标准 |
+| --- | --- | --- | --- |
+| P2-01 | **人工批次书目同步**（`getlistpc`），含 C.2 九项安全件 | P1-07 | 无人工触发则**零拉取**；超出单次上限自动停并可断点续跑 |
+| P2-02 | 选品规则实现：`splitRatio >= 50` 过滤 + 全语种 + 全标签接收 | P2-01 | 过滤发生在**写入前**且阈值可配，不硬编码 |
+| P2-03 | **试读物化**：只存 `chapterList[]` 实际返回章节 | P1-03, P2-01 | 代码中**搜不到常量 3**；上游返回 5 章时自动存 5 章 |
+| P2-04 | `payEpisFrom` 作为**收费边界**入库 + **下调自动下架**机制 | P2-03 | 模拟 `payEpisFrom` 从 7 改 2，第 2–3 章页在下一个同步周期内返回 404 |
+| P2-05 | 页面模板引擎（B 级搬，294 行，白名单字段） | P1-03 | 模板引用不存在字段时**显式报错**，不静默渲染空字符串 |
+| P2-06 | Slug 与页面资产 ID（`public_page_id` 体系 + slug_aliases + 301/308） | P1-03 | 改书名不断链；旧 slug 308 到新 slug |
+| P2-07 | 前台详情页 `/novel/{public_page_id}` | P2-05, P2-06 | 详情页查询**不带正文**；请求级 `cache()` 去重 |
+| P2-08 | 试读章节页 `/novel/{id}/chapter/{n}`  • SEO 口径（**仅第 1 章可索引**，其余 noindex + canonical 回详情页） | P2-03, P2-07 | 可索引判定是**代码级枚举单一真源**，不是模板里的 if |
+| P2-09 | 分类与标签**基础**：原始来源标签原样入库（不映射、不公开） | P2-01 | `seriesTypeList` / `recommendList` 原样可查；**前台不展示未映射标签** |
+| P2-10 | Sitemap 家族（B 级搬，**必须先切断 `DISPLAY_NAME_TO_APP_ID` → 北斗适配层的泄漏**） | P2-07 | 闭包从 27 文件降到 ≈21；sitemap **不包含**作者/国家/完结类页面 |
+| P2-11 | IndexNow 契约 + outbox 表（A 级） | P2-10 | 推送失败可重放且幂等 |
+| P2-12 | **裁决：CSV 纯解析工具是否保留** → 建议**不建常驻入口**，只保留 30 行零依赖 parser 作为一次性运维脚本（带 `dryRun`） | — | `import` 后台页面与 npm script **不存在**；nodejieba / sharp / xlsx 均不进依赖树 |
+
+🚫 **P2 明确排除**：作者搜索 / 作者聚合页 / 国家筛选 / 完结榜 / 连载榜（均 `OUT_OF_SCOPE_V1`，见 C.5）。
+
+### 14.3 P3：渠道商业能力（10 项）
+
+| ID | 任务 | 依赖 | 验收 / 约束 |
+| --- | --- | --- | --- |
+| P3-01 | **已有推广资源读取**（`kocCode` / `publicUrl` / `homeLink` / `promoCreateTime`） | P2-01 | 零写操作即可完成；已是 `PRODUCTION_READ_PROVEN` |
+| P3-02 | `promo_link` 入库（业务表可存真实链接，**读权限严格限制**） | P3-01, P1-03 | 普通 admin 角色看不到完整推广码 |
+| P3-03 | `/go/:code` 服务端埋点 + 302 | P3-02 | `promo_code` **第一天就建索引**（不重蹈 CPS 无索引覆辙） |
+| P3-04 | **写前意图审计**：调上游**之前**先落审计行 | P1-04 | 断网场景下仍能从审计表查到「意图过、结果未知」 |
+| P3-05 | **readback** 三段状态机（pre-read → claim → readback） | P3-04 | readback 失败进 `claim_retry_blocked` 且**不再调上游** |
+| P3-06 | **人工复核队列**（结果未知禁止自动重试） | P3-05 | 任何自动重试路径在代码层**不存在**，而非靠配置关闭 |
+| P3-07 | 反重复领取闩 + 单次安全上限 + QPS 限速 | P3-05 | 并发入队**只成一个** active task |
+| P3-08 | 审计脱敏（`[redacted_code:length=N]`  • 只存 hostname） | P3-04 | 审计表**查不到真码** |
+| P3-09 | 🔴 **推广资源生成接口 canary 调研**（I7b） | **W9 Owner 授权** | 单条 canary，人工或沙箱执行；**不得假设复用 `getcode`** |
+| P3-10 | Adapter 契约定稿（**`listChapters` 与 `fetchPreviewContent` 合并为一个能力**，因上游目录与正文合一） | P3-05 | 副作用能力在**类型层可区分**（`SideEffectingCapability`） |
+
+### 14.4 P4：收益与归因（7 项，占位）
+
+```
+P4 = PLAN_PLACEHOLDER_PENDING_I8
+```
+
+🔒 **下列七项只建立占位计划，不冻结 Schema、不定归因键、不开工**：
+
+1. **P4-01 收益接口探测**（I8）—— 只允许在 Owner 自然触发一条非空收益查询时，捕获**已发生请求**的脱敏合同；禁止猜测 Path 与枚举。
+2. **P4-02 账户作用域**—— MoboReader / MoboReels 是否同结算主体，决定 `ChannelAccount` 是一个还是两个。
+3. **P4-03 原始快照表**—— 渠道返回原样存档，不在写入时加工。
+4. **P4-04 归因快照**—— 归因键待 I8 后确定。
+5. **P4-05 日汇总表**—— T+1（Owner 已确认可接受）。
+6. **P4-06 看板**—— 收益 / 点击 / EPC 漏斗。
+7. **P4-07 人工对账**—— 与渠道后台数字逐日对平。
+
+❗同时受 I8 阻塞的跨阶段事项：**P1-03 中的 `ChannelAccount` 作用域只能先建表不定语义**；**R7（渠道账号共用）不得销**。
+
+### 14.5 Phase 2：来源标签标准化（6 项，不在一期）
+
+`source_label` · `canonical_tag` · `source_label_mapping` · 动态推荐徽标 · 简介分类兜底 · 后台映射管理。
+
+前置条件：P2-09（原始标签已入库）+ P1-09（locale 单一真源）。若 P2 阶段就把标签直接映射成 SEO 分类，Phase 2 将需要一次全库重算——这正是 CPS 语种映射已经付过两次的代价。
+
+### 14.6 三条不可调换的硬前置（来自 C2 依赖闭包）
+
+1. **P1-07 Worker 原子领取必须早于 P2 任何同步**；
+2. **P1-09 `locale-canonical.ts` 必须早于写入任何多语言数据**（全语种同步使这条从「建议」升为「硬阻塞」）；
+3. **P1-03 `chapter` 表设计必须在 P1 完成**，不得推到 P2。
+
+---
+
+【立项前置】Novel v1 可复用性只读审计任务书（Claude Code 执行）
+
+【台账】Novel v1 调研与待确认事项（按执行人分派）
+
+技术调研任务台账
+
+架构与数据模型字典
+
+渠道接口台账
+
+接口字段数据字典
