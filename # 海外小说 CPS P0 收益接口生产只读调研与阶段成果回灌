@@ -1,0 +1,234 @@
+# 海外小说 CPS P0 收益接口生产只读调研与阶段成果回灌
+
+## 1. Result
+
+```text
+RESULT=P0_REVENUE_PROBE_AND_BACKFILL_PARTIAL
+revenue=ACCOUNT_SHARED_REVENUE_SEPARABLE
+BOOK_OR_PROMO_FILTER_SAMPLE_UNAVAILABLE
+notion=REAL_DATABASE_BACKFILL_BLOCKED
+sideEffectOperations=0
+sensitiveValuesPersisted=0
+```
+
+收益 XHR 已成功捕获；本轮 Notion 连接器不可用，Edge UI 又持续失去焦点，因此不能声称四库正式回灌完成。已生成幂等 outbox，作为下一次真实数据库回灌的审计输入。
+
+## 2. Probe Run
+
+- Probe Run ID：`P0-REVENUE-20260802-JST`
+- 环境：`production_read`
+- 页面：`GET /cn/report/daily`
+- 日期范围：`2026-07-26` 至 `2026-08-02`
+- UI 查询：3 次（R1、R2、R2 同条件重复）
+- 渠道收益 XHR：6 次（每次自然触发 `GetReport` 与 `GetReportMaxTime`）
+- HTTP 429：0
+- 并发：1
+- 渠道写操作：0
+- 报表下载/导出：0
+
+## 3. 真实收益接口
+
+### 3.1 主查询接口
+
+```text
+Host: kocserver-cn.cdreader.com
+Method: POST
+Path: /api/Report/GetReport
+HTTP: 200
+Content-Type: application/json; charset=utf-8
+```
+
+Request Body：
+
+| JSON Path | 类型 | R1 网文 | R2 短剧 |
+| --- | --- | --- | --- |
+| `$.beginTime` | string | `2026-07-26` | 相同 |
+| `$.endTime` | string | `2026-08-02` | 相同 |
+| `$.dates` | array[string] | 两个 ISO 时间点 | 相同 |
+| `$.dimensions` | array[string] | `["1"]` | 相同 |
+| `$.pageIndex` | number | `1` | `1` |
+| `$.pageSize` | number | `999` | `999` |
+| `$.projectType` | number | `1` | `2` |
+
+没有 Query 参数；请求通过 JSON Body 传递筛选条件。
+
+### 3.2 响应结构
+
+```text
+$.data.headers[]
+$.data.list[]
+$.code
+$.message
+$.status
+```
+
+`$.data.headers[]`：
+
+- `label:string`
+- `value:string`
+- `isOtherColor:boolean`
+
+本轮 headers 证明的指标映射：
+
+| UI 指标 | 响应字段 |
+| --- | --- |
+| 日期 | `dimensionKey` |
+| 激活用户数 | `realDevNum` |
+| 新用户数 | `newRealDevNum` |
+| 新用户比例 | `realDevNumRate` |
+| 分成收入（US$） | `realIncome` |
+
+`$.data.list[]` 已观察字段：
+
+```text
+dimension, dimensionKey, dimensionValue, isTotal,
+devNum, newDevNum, activeDevNum,
+realDevNum, newRealDevNum, activeRealDevNum, realDevNumRate,
+income, newIncome, activeIncome,
+realIncome, newRealIncome, activeRealIncome,
+subItems,
+distribIncome, newDistribIncome, activeDistribIncome,
+realDistribIncome, newRealDistribIncome, activeRealDistribIncome,
+amount, newAmount, activeAmount, chargeAmount, adAmount,
+realAmount, newRealAmount, activeRealAmount,
+realProfit, newRealProfit, activeRealProfit,
+rmbAmount, newRMBAmount, activeRMBAmount,
+rmbRealIncome, newRMBRealIncome, activeRMBRealIncome,
+rmbRealDistribIncome, newRMBRealDistribIncome, activeRMBRealDistribIncome,
+rmbRealProfit, newRMBRealProfit, activeRMBRealProfit
+```
+
+数组与汇总路径：
+
+- 明细数组：`$.data.list`
+- 汇总行：`$.data.list[?(@.isTotal==1)]`
+- R1 空数据：`$.data.headers` 正常返回，`$.data.list=[]`
+- R2：UI 显示共 9 条；响应包含 `isTotal=1` 总计行和 `isTotal=0` 明细行。
+- 分页：请求带 `pageIndex=1`、`pageSize=999`；响应未观察到独立分页对象或 totalCount。
+- 稳定性：相同 R2 条件重复查询后 UI 仍为 9 条；本轮未导出原始响应，未计算重复响应哈希。
+
+### 3.3 辅助接口
+
+```text
+Host: kocserver-cn.cdreader.com
+Path: /api/Report/GetReportMaxTime
+HTTP: 200
+```
+
+该接口由每次查询自然触发。Method、Body 与响应结构未在请求预算内继续展开，保持 `ADDITIONAL_CONTRACT_CAPTURE_REQUIRED`，不得猜测。
+
+## 4. 字段缺失与语义边界
+
+捕获的广泛查询 Request/Response 均未出现：
+
+- `agencyId`
+- `agencyName`
+- `seriesId` / `bookId`
+- `seriesName`
+- `promoCode`
+- `materialId`
+- product/app/platform 字段
+- team member 字段
+- settlement status
+- 独立 `currency` 字段
+
+UI 列名证明 `realIncome` 当前展示为 US$；响应同时存在 `rmb*` 字段，但本轮不把它们强制映射成独立 currency 维度。
+
+R3 的“书/短剧”下拉在 Computer Use 与 Owner 前台切换并发时无法稳定读取。未盲选、未猜枚举，结论：
+
+```text
+BOOK_OR_PROMO_FILTER_SAMPLE_UNAVAILABLE
+```
+
+## 5. MoboReader_vs_MoboReels
+
+```text
+MoboReader_vs_MoboReels=ACCOUNT_SHARED_REVENUE_SEPARABLE
+```
+
+| 问题 | 生产只读结论 |
+| --- | --- |
+| 是否共用浏览器登录态 | 是 |
+| 是否共用同一收益接口 | 是，`POST /api/Report/GetReport` |
+| 是否用字段区分网文和短剧 | 是 |
+| 区分字段是否为 `projectType` | 是；网文 `1`，短剧 `2` |
+| 是否分别返回不同 `agencyId` | 否；当前合同没有该字段 |
+| 是否返回 `agencyName` | 否 |
+| 是否可按 `seriesId` 或推广码归因 | 当前广泛查询合同未证明；R3 未完成 |
+| 是否需要两个 ChannelAccount | 当前技术合同不要求；一个登录账户下以 `projectType` 分流 |
+| 是否需要两套 Credential | 当前证据不要求；同一凭证成功查询两类业务 |
+| 小说与短剧收益是否能稳定拆分 | 能在请求层按 `projectType` 稳定拆分 |
+
+该结论只冻结技术账户和查询维度，不等价于已证明渠道内部法律结算主体相同。由于 API 没有 agency 字段，结算主体仍不能按 agency 建模。
+
+## 6. Owner 已裁决事项
+
+以下内容按 Owner 决策记录，不降级为假设：
+
+```text
+catalog.sourceAgency = MoboReader
+catalog.projectType = 1
+catalog.languages = ALL
+catalog.sourceTags = ALL
+catalog.minimumSplitRatio = 50
+catalog.existingPromoRequired = false
+catalog.ingestionMode = MANUAL_BATCH
+catalog.totalCatalogHardLimit = NONE
+catalog.perTaskSafetyLimit = REQUIRED
+
+preview.materializationPolicy = UPSTREAM_RETURNED_PREVIEW
+preview.displayAuthorization = OWNER_CONFIRMED
+
+authorSearch = OUT_OF_SCOPE_V1
+authorPages = OUT_OF_SCOPE_V1
+countryFilter = OUT_OF_SCOPE_V1
+completionRanking = OUT_OF_SCOPE_V1
+serializationRanking = OUT_OF_SCOPE_V1
+
+taxonomy.rawSourceLabels = REQUIRED
+taxonomy.phase2CanonicalMapping = PLANNED
+
+promotion.existingResourceRead = PRODUCTION_READ_PROVEN
+promotion.generateCapability = BROWSER_OBSERVED + OWNER_CONFIRMED
+promotion.generateApiContract = UNPROVEN
+```
+
+## 7. Notion 回灌状态
+
+本轮真实数据库直接新增/更新：
+
+| 数据库 | 本轮直接写入 |
+| --- | ---: |
+| 技术调研任务台账 | 0 |
+| 渠道接口台账 | 0 |
+| 接口字段数据字典 | 0 |
+| 架构与数据模型字典 | 0 |
+
+原因：Notion 连接器返回 `Unknown tool`；UI 回灌期间 Edge 持续失去焦点。没有把 outbox 伪报为数据库写入。
+
+已生成幂等 outbox：
+
+| outbox | 条目数 |
+| --- | ---: |
+| 渠道接口 | 2 |
+| 收益字段 | 63 |
+| 架构/业务裁决 | 18 |
+| 任务状态 | 12 |
+
+未完成：
+
+- 四库真实 upsert；
+- 23 个一期关键字段的关联接口、可空性、脱敏样例、目标字段与 Adapter 影响补齐；
+- 四个旧 P0 报告页的历史来源提示；
+- `GetReportMaxTime` 的完整合同；
+- R3 书籍/推广码归因样本。
+
+## 8. 安全验收
+
+- 副作用操作数：`0`
+- 敏感值落盘数：`0`
+- 结算、确认、修改、提交、换绑：`0`
+- 报表下载/导出：`0`
+- Cookie/JWT/邮箱/完整推广码写入报告、Git、Notion：`0`
+- 本轮首次页面可访问性读取短暂出现账户邮箱；未复制、未落盘，后续输出统一脱敏。
+- 未开始 Adapter、Worker、Schema 或正式项目开发。
