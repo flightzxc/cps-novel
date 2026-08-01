@@ -1,0 +1,195 @@
+
+
+## 1. 最终状态
+
+```text
+RESULT=P0_SECOND_PROBE_PARTIAL
+promotion=EXISTING_PROMO_SAMPLE_FOUND
+revenue=ACCOUNT_RELATION_UNPROVEN
+writeback=DATABASE_BACKFILL_BLOCKED
+MULTI_BOOK_RESULT=PRODUCTION_READ_PROVEN
+MULTI_LANGUAGE_RESULT=EN_FR_SAMPLE_PROVEN
+```
+
+A（多书、多语种试读）与 B（元数据字段排查）已完成到本轮只读证据允许的范围。C 已确认收益页面及其可见维度，但未可靠取得收益 XHR 的字段合同，因此不能形成账户和结算主体的稳定拆分结论。四个真实 Notion 数据库均已获得本轮结构化写回；字段字典的必填、可空、关联接口和目标字段候选等列仍未全部补齐，故不声明完整回填。
+
+## 2. Probe Run
+
+- Probe Run ID：`P0-SECOND-20260801-JST`
+- 渠道：`changdu`
+- 环境：`production_read`
+- 浏览器：Microsoft Edge，Owner 当前登录的桌面会话
+- 验证窗口：`2026-08-01—2026-08-02 JST`（跨日运行）
+- 报告生成：`2026-08-01 16:59 UTC` / `2026-08-02 01:59 JST`
+- 渠道请求预算：`≤30/100`；并发 `1`；HTTP 429 `0`
+- 付费章节请求：`0`
+- 渠道写操作：`0`
+- 原始正文、Cookie、JWT、完整推广码、完整签名 URL 落盘：`0`
+
+## 3. A：多书、多语种试读规则
+
+三本样本均由页面自然操作触发已知只读接口。书籍、章节与正文只使用脱敏标签、计数与不可逆哈希表示。
+
+| 样本 | language | languageName | allEpis | payEpisFrom | payEpisFrom - 1 | chapterList.length | 返回序号 |
+| --- | ---: | --- | ---: | ---: | ---: | ---: | --- |
+| `BOOK_SAMPLE_EN_A` | 3 | 英语 | 255 | 8 | 7 | 3 | 1, 2, 3 |
+| `BOOK_SAMPLE_EN_B` | 3 | 英语 | 468 | 6 | 5 | 3 | 1, 2, 3 |
+| `BOOK_SAMPLE_FR` | `NOT_SAFELY_CONFIRMED` | 法语 | 291 | 6 | 5 | 3 | 1, 2, 3 |
+
+正文结构与统计：
+
+| 样本 | 章节 | chapterContent | 格式 | 字符数 | SHA-256 前 12 位 | 显式截断/水印字段 |
+| --- | ---: | --- | --- | ---: | --- | --- |
+| EN_A | 1 | 有 | 纯文本 | 3997 | `df14414e0097` | 未见 |
+| EN_A | 2 | 有 | 纯文本 | 3825 | `790bb45a35e5` | 未见 |
+| EN_A | 3 | 有 | 纯文本 | 4159 | `575e3629e04a` | 未见 |
+| EN_B | 1 | 有 | 纯文本 | 11858 | `a085e4b0324c` | 未见 |
+| EN_B | 2 | 有 | 纯文本 | 8314 | `a9699e34ebb7` | 未见 |
+| EN_B | 3 | 有 | 纯文本 | 8681 | `330bfa94c039` | 未见 |
+| FR | 1 | 有 | 纯文本 | 8734 | `55edbc8fba4c` | 未见 |
+| FR | 2 | 有 | 纯文本 | 7019 | `fe947d8da4a5` | 未见 |
+| FR | 3 | 有 | 纯文本 | 6895 | `d2ff0784743c` | 未见 |
+
+结论：
+
+- `MULTI_BOOK_RESULT=PRODUCTION_READ_PROVEN`
+- `MULTI_LANGUAGE_RESULT=EN_FR_SAMPLE_PROVEN`
+- 三本样本的 `chapterList.length` 均为 3，且都小于 `payEpisFrom - 1`；证据支持“上游固定返回前三章”，不支持“返回全部免费章节”。
+- 法语 `languageName` 已由生产只读响应证明，但对应数字枚举本轮没有获得足够安全证据，不能填猜测值。
+- 结论只覆盖英语与法语样本，不推广到其他语种。
+- W4 建议：`UPSTREAM_RETURNED_PREVIEW`；状态：`WAITING_OWNER_FINAL_DECISION`。
+
+## 4. B：作者、国家、完结状态专项排查
+
+已检查最多三本既有样本的页面信息，以及自然触发的 `getlistpc`、`getbydataid`、`getvideoinfo`、`getchapterinfo` 脱敏结构。未扫描未知路径，也未因候选字段名猜测接口。
+
+### 4.1 候选字段结果
+
+以下字段在已检查范围内均为 `UPSTREAM_FIELD_NOT_FOUND`：
+
+- 作者：`author`、`writer`、`penName`、`creator`
+- 国家/地区：`country`、`region`、`origin`
+- 完结/连载：`completionStatus`、`serialStatus`、`finished`、`isFinished`、`isCompleted`、`updateStatus`、`releaseStatus`
+
+以下字段实际存在，但只能标为 `FIELD_PRESENT_SEMANTICS_UNCONFIRMED`：
+
+| 字段 | 已证类型 | 结论 |
+| --- | --- | --- |
+| `isRelease` | boolean | 不得等同于完结状态 |
+| `localType` | number | 业务枚举未证 |
+| `localSubType` | null（本样本） | 业务枚举及非空形态未证 |
+| `seriesTypeList` | array | 元素语义未证 |
+| `recommendList` | array | 推荐语义与状态语义均未证 |
+
+### 4.2 产品范围影响
+
+作者字段未找到：
+
+```text
+一期不得承诺作者搜索、作者聚合页或作者 SEO 页面；
+除非后续增加人工、外部元数据或新的渠道接口。
+```
+
+完结状态未找到：
+
+```text
+一期不得承诺可靠的完结榜与连载榜；
+只能使用已验证的其他状态或不展示该维度。
+```
+
+国家/地区字段未找到：一期不得把语言、`localType` 或页面标签替代为作品国家；需要新渠道字段、书面映射文档或外部元数据后才能展示。
+
+## 5. 已有推广资源只读样本
+
+`promotion=EXISTING_PROMO_SAMPLE_FOUND`
+
+- 仅打开书目中已存在推广资源的样本；未点击生成、领取、下载、加入 MoboTree 或任何发布/绑定动作。
+- `getlistpc` 证明字段：`kocCode:string(nonempty)`、`publicUrl:string`、`homeLink:string`、`onlineUrl:null`、`promoCreateTime:string`。
+- 推广码仅保留：长度 `6`，SHA-256 前 12 位 `25446af99bbd`。
+- 推广 URL 仅保留：Host `eng.moboreader.com`、脱敏 Path、`hasQuery=false`。
+- `getbydataid` 证明字段：`statusText:string(nonempty)`、`materialStatus:number`、`materialType:number`、`materialName:string`。
+- 自然打开已有“推广”页签时未观察到 `getcode`；只能得出“该样本未证明与短剧 `getcode` 共用”，不能得出接口不存在或一定不共用。
+
+## 6. C：收益主体关系
+
+已通过页面自然导航确认收益统计页面 `GET /cn/report/daily`。页面可见：
+
+- 业务维度：全部、网文、短剧；
+- 收益类型：分成收入、分销收入；
+- 筛选项：产品、团队成员、书/短剧、推广码、日期；
+- 列：日期、激活用户、新增用户、新用户比例、分成收入（USD）；
+- 默认日期的小说查询返回 0 行。
+
+本轮未可靠捕获收益 XHR 的完整请求与响应字段，因此单独结论如下。
+
+```text
+MoboReader_vs_MoboReels=ACCOUNT_RELATION_UNPROVEN
+```
+
+| 问题 | 结论 |
+| --- | --- |
+| 是否共用同一浏览器登录会话 | 是，`BROWSER_OBSERVED_ONLY` |
+| 是否拥有不同 `agencyId` | 未证明 |
+| 收益请求是否带 `agencyId` | 未证明 |
+| 收益请求或响应是否带 `projectType` | 未证明 |
+| 是否带 `seriesId`、推广码或素材 ID | 未证明 |
+| 小说和短剧收益是否可由接口字段稳定区分 | UI 可选择网文/短剧；接口字段稳定性未证明 |
+| 是否需要两个 ChannelAccount | 未决，不能由共用登录态推断 |
+| 是否需要两套 Credential | 未决，不能由共用登录态推断 |
+
+只共用登录态不能证明共用结算主体。当前不得选择 `ACCOUNT_AND_REVENUE_SEPARABLE` 或 `ACCOUNT_SHARED_REVENUE_SEPARABLE`；在获得收益 XHR 字段合同前，应保持 `ACCOUNT_RELATION_UNPROVEN`，并将收入维度标为不足。
+
+## 7. 接口与字段证据摘要
+
+本轮继续确认的生产只读接口：
+
+- `POST /api/v1/res/getlistpc`
+- `POST /api/v1/material/getbydataid`
+- `POST /api/v1/res/getvideoinfo`
+- `POST /api/v1/res/getchapterinfo`
+- `GET /cn/report/daily`（只证明 UI 路由与页面维度，不等于收益 API 合同已证）
+
+完整字段名已回填到真实字段数据库：`getlistpc` 53 个、`getbydataid` 25 个、`getvideoinfo` 10 个、`getchapterinfo` 15 个、缺失候选 14 个，共 117 条唯一键记录。推断字段没有升级为生产只读证据。
+
+## 8. Notion 真实数据库写回
+
+本轮没有只写 P0 报告子页；已直接写入四个真实数据库：
+
+| 数据库 | 本轮写回 |
+| --- | --- |
+| 技术调研任务台账 | 14 个既有任务状态/证据/输出更新；W4/W5 保持待 Owner 决策 |
+| 渠道接口台账 | 4 个已知接口更新 Probe/备注；新增 1 条收益 UI 记录 |
+| 接口字段数据字典 | 新增 117 条字段/候选唯一键，写入方向、实际字段名、JSON Path、已证类型、证据等级与关键业务含义 |
+| 架构与数据模型字典 | 新增 18 条，包括多语种试读、作者/国家/完结覆盖、收益主体关系与授权 Gate |
+
+仍未完整回填：字段必填性、可空性、关联接口、脱敏样例、目标站内字段候选，以及部分 Adapter/Worker 影响列；旧 P0 子页也未逐条清理为“仅供历史参考”。按本轮验收规则，写回状态记为 `DATABASE_BACKFILL_BLOCKED`；这表示全量回填未完成，不否认上述四库已经发生的实质写回。
+
+## 9. 授权边界
+
+- Owner 已确认免费试读正文可展示：`OWNER_CONFIRMED`，但不是渠道官方文档证据。
+- 缓存、搜索引擎索引、完整正文展示、截断策略仍待 Owner/渠道书面确认。
+- “技术可返回正文”不等于获得缓存、索引或商业展示授权。
+
+## 10. 安全与脱敏验收
+
+- 未读取 Cookie、本地存储、密码库或浏览器 Profile。
+- 未复制、落盘或重放 JWT/Cookie；未跨 Host 使用真实凭证。
+- 未请求付费章节；未调用生成推广码、领取、下载、MoboTree、发布、结算、导出等能力。
+- 未猜测、扫描未知 Endpoint。
+- `.gitignore` 已验证覆盖 `.env`、`.env.*`、`*.secret`、`probe-config.local.json`、`probe-output/raw/`。
+- 两次瞬时脱敏事件已处置：前轮 DevTools 可访问性输出出现不完整、无签名的认证片段；本轮首次页面 DOM 观察短暂包含账户邮箱、已有推广值/链接和免费正文。两者均未写入磁盘、Git、Notion 或报告；后续均改为内存摘要和脱敏值。
+
+## 11. 未完成原因与下一安全动作
+
+- 收益 XHR 的 Method、Path、请求字段与响应字段未获得可靠证据；不得猜测 Path 或枚举。
+- 若 Owner 后续在 Network 面板自然触发一条非空收益查询，可仅捕获该已发生请求的脱敏合同，以判断 `agencyId`、`projectType`、`seriesId`/推广码/素材 ID 维度。
+- 若要支持作者、国家或完结状态，需要 Owner/渠道提供已知只读 Endpoint 或字段文档；不得通过接口扫描寻找。
+- 若要完成数据库全量回填，需要继续补齐 117 条字段的必填/可空/样例/目标字段/影响列，并清理旧 P0 子页状态。
+
+## 12. 最终 RESULT
+
+```text
+P0_SECOND_PROBE_PARTIAL
+```
+
+阻塞项是收益接口字段合同和数据库剩余列，不是凭证、429 或安全停止。没有开始正式 Adapter、Worker、Schema 或生产部署实现。
