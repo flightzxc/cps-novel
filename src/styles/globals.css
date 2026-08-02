@@ -1,0 +1,54 @@
+@import "tailwindcss";
+
+/*
+ * 设计 token 骨架 — P1-04 只建结构，色值由 ClaudeDesign 在 P1-10 定稿。
+ * 下面所有值都是 PLACEHOLDER，不是最终配色。
+ * 选用深灰底（非纯黑）+ 浅灰字（非纯白），仅为满足可访问性对比度的
+ * 临时占位，不代表最终品牌视觉。
+ */
+:root {
+  /* 站点主体（整体深色）—— 以下全部为 PLACEHOLDER */
+  --novel-bg: #16181d; /* PLACEHOLDER */
+  --novel-bg-elevated: #1f2228; /* PLACEHOLDER */
+  --novel-fg: #e6e6e6; /* PLACEHOLDER */
+  --novel-fg-muted: #a8a8ad; /* PLACEHOLDER */
+  --novel-fg-subtle: #7a7a80; /* PLACEHOLDER */
+  --novel-border: #2c2f36; /* PLACEHOLDER */
+  --novel-primary: #6b7cff; /* PLACEHOLDER */
+  --novel-primary-hover: #5567e6; /* PLACEHOLDER */
+  --novel-accent: #f2a94e; /* PLACEHOLDER */
+  --novel-accent-hover: #d9922f; /* PLACEHOLDER */
+  --novel-danger: #e5534b; /* PLACEHOLDER */
+  --novel-success: #3fb27f; /* PLACEHOLDER */
+
+  /* 阅读区专用（跟随系统，P1-11 实现手动覆盖）—— 以下全部为 PLACEHOLDER */
+  --reader-bg: #16181d; /* PLACEHOLDER */
+  --reader-fg: #dcdcdc; /* PLACEHOLDER */
+  --reader-fg-muted: #98989e; /* PLACEHOLDER */
+  --reader-selection: #3a3f4b; /* PLACEHOLDER */
+}
+
+@theme inline {
+  --color-novel-bg: var(--novel-bg);
+  --color-novel-bg-elevated: var(--novel-bg-elevated);
+  --color-novel-fg: var(--novel-fg);
+  --color-novel-fg-muted: var(--novel-fg-muted);
+  --color-novel-fg-subtle: var(--novel-fg-subtle);
+  --color-novel-border: var(--novel-border);
+  --color-novel-primary: var(--novel-primary);
+  --color-novel-primary-hover: var(--novel-primary-hover);
+  --color-novel-accent: var(--novel-accent);
+  --color-novel-accent-hover: var(--novel-accent-hover);
+  --color-novel-danger: var(--novel-danger);
+  --color-novel-success: var(--novel-success);
+
+  --color-reader-bg: var(--reader-bg);
+  --color-reader-fg: var(--reader-fg);
+  --color-reader-fg-muted: var(--reader-fg-muted);
+  --color-reader-selection: var(--reader-selection);
+}
+
+body {
+  background: var(--novel-bg);
+  color: var(--novel-fg);
+}

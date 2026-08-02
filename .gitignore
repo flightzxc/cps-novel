@@ -1,0 +1,42 @@
+# dependencies
+/node_modules
+
+# next.js build output
+/.next/
+/out/
+/build
+next-env.d.ts
+
+# testing / coverage
+/coverage
+/test-results
+
+# generated code
+/src/generated/
+
+# misc
+.DS_Store
+Thumbs.db
+*.pem
+*.tsbuildinfo
+
+# logs
+npm-debug.log*
+logs/
+
+# env files — 敏感配置不入库
+# 注意：.env.example 不包含敏感值，应当提交入库，不要忽略它
+.env
+.env.local
+.env.*.local
+.env.development
+.env.production
+.env.test
+!.env.example
+
+# vercel
+.vercel
+
+# temp
+.tmp/
+/tmp/
