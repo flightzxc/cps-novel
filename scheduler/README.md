@@ -6,13 +6,12 @@
 
 独立 Scheduler 进程：按时间/周期到点建任务（入队），不执行任何业务逻辑。
 
-## 本轮范围
+## P1-07 实现
 
-🔴 本轮（P1-04）只建目录，不写实现。当前目录仅含本 README 与 `.gitkeep` 占位。
-
-## 填充任务
-
-由 **P1-07（Worker、Scheduler、任务租约和 fencing）** 填充。
+- `index.ts` 是独立、一次性 Scheduler 进程入口；
+- schedule registry 可注入，本轮生产 registry 为空；
+- `ScheduleRun`、`CronRun`、`GenericTask` 和 items 在同一事务内 enqueue；
+- Scheduler 不导入渠道 Adapter、Credential 或任何网络投递代码。
 
 ## 特别纪律
 

@@ -6,13 +6,13 @@
 
 任务定义与处理器（handler）注册表、任务领取/租约/心跳续租辅助逻辑，供 `worker/` 与 `scheduler/` 共用。
 
-## 本轮范围
+## P1-07 实现
 
-🔴 本轮（P1-04）只建目录，不写实现。当前目录仅含本 README 与 `.gitkeep` 占位。
-
-## 填充任务
-
-由 **P1-07（Worker、Scheduler、任务租约和 fencing）** 填充。
+- `registry.ts`：HANDLERS 注册与 allowlist 双重 fail-closed；
+- `store.ts`：三类固定 PostgreSQL claim/recovery SQL、lease、heartbeat、fencing 与 parent 重算；
+- `scheduler.ts`：ScheduleRun/CronRun/GenericTask 单事务 singleton enqueue；
+- `side-effect-intent.ts`：外部调用前独立提交的 intent 与 unknown 阻断边界；
+- `state.ts` / `types.ts`：共享状态派生与运行时接口。
 
 ## 特别纪律
 
