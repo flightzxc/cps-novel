@@ -1,0 +1,927 @@
+// P1-05A review draft only. No migration may be generated from this file until
+// Claude records a PASS in docs/p1/P1_05_SCHEMA_REVIEW_PACKAGE.md.
+// PostgreSQL-only constraints that Prisma cannot express are catalogued in
+// docs/governance/database-governance.md and the JSONL dictionary.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Channel {
+  id        String   @id @default(uuid()) @db.Uuid
+  code      String   @unique @db.VarChar(64)
+  name      String   @db.VarChar(160)
+  status    String   @default("active") @db.VarChar(32)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  channelApps     ChannelApp[]
+  channelAccounts ChannelAccount[]
+
+  @@index([status], map: "channel_status_idx")
+  @@map("channel")
+}
+
+model SourceApp {
+  id        String   @id @default(uuid()) @db.Uuid
+  code      String   @unique @db.VarChar(64)
+  name      String   @db.VarChar(160)
+  status    String   @default("active") @db.VarChar(32)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  channelApps ChannelApp[]
+
+  @@index([status], map: "source_app_status_idx")
+  @@map("source_app")
+}
+
+model ChannelApp {
+  id            String   @id @default(uuid()) @db.Uuid
+  channelId     String   @map("channel_id") @db.Uuid
+  sourceAppId   String   @map("source_app_id") @db.Uuid
+  externalAppId String   @map("external_app_id") @db.VarChar(128)
+  projectType   Int      @map("project_type") @db.SmallInt
+  status        String   @default("active") @db.VarChar(32)
+  config        Json     @default("{}") @db.JsonB
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  channel          Channel             @relation(fields: [channelId], references: [id], onDelete: Restrict)
+  sourceApp        SourceApp           @relation(fields: [sourceAppId], references: [id], onDelete: Restrict)
+  capabilities     ChannelCapability[]
+  sourceItems      NovelSourceItem[]
+  sourceLabels     SourceLabel[]
+  promoLinks       PromoLink[]
+  catalogScanTasks CatalogScanTask[]
+  channelSyncTasks ChannelSyncTask[]
+  genericTasks     GenericTask[]
+  sideEffects      SideEffectIntent[]
+
+  @@unique([channelId, sourceAppId, externalAppId], map: "channel_app_binding_key")
+  @@index([status], map: "channel_app_status_idx")
+  @@index([projectType, status], map: "channel_app_project_status_idx")
+  @@map("channel_app")
+}
+
+model ChannelCapability {
+  id            String   @id @default(uuid()) @db.Uuid
+  channelAppId  String   @map("channel_app_id") @db.Uuid
+  capabilityKey String   @map("capability_key") @db.VarChar(96)
+  status        String   @default("registered_disabled") @db.VarChar(32)
+  sideEffecting Boolean  @default(false) @map("side_effecting")
+  evidenceLevel String   @map("evidence_level") @db.VarChar(48)
+  reasonCode    String?  @map("reason_code") @db.VarChar(96)
+  enabledGate   String?  @map("enabled_gate") @db.VarChar(160)
+  qpsLimit      Decimal? @map("qps_limit") @db.Decimal(8, 3)
+  timeoutMs     Int?     @map("timeout_ms")
+  config        Json     @default("{}") @db.JsonB
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  channelApp ChannelApp @relation(fields: [channelAppId], references: [id], onDelete: Restrict)
+
+  @@unique([channelAppId, capabilityKey], map: "channel_capability_app_key")
+  @@index([status, sideEffecting], map: "channel_capability_status_effect_idx")
+  @@map("channel_capability")
+}
+
+model ChannelAccount {
+  id              String    @id @default(uuid()) @db.Uuid
+  channelId       String    @map("channel_id") @db.Uuid
+  businessId      String    @unique @map("business_id") @db.VarChar(96)
+  accountName     String    @map("account_name") @db.VarChar(160)
+  status          String    @default("active") @db.VarChar(32)
+  lastValidatedAt DateTime? @map("last_validated_at") @db.Timestamptz(6)
+  lastSyncedAt    DateTime? @map("last_synced_at") @db.Timestamptz(6)
+  deletedAt       DateTime? @map("deleted_at") @db.Timestamptz(6)
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  channel              Channel                              @relation(fields: [channelId], references: [id], onDelete: Restrict)
+  credentials          ChannelAccountCredential[]
+  activeFingerprints   ChannelCredentialActiveFingerprint[]
+  credentialChangeLogs CredentialChangeLog[]
+  promoLinks           PromoLink[]
+  catalogScanTasks     CatalogScanTask[]
+  channelSyncTasks     ChannelSyncTask[]
+  genericTasks         GenericTask[]
+  sideEffects          SideEffectIntent[]
+
+  @@index([channelId, status], map: "channel_account_channel_status_idx")
+  @@index([status, deletedAt], map: "channel_account_status_deleted_idx")
+  @@map("channel_account")
+}
+
+model ChannelAccountCredential {
+  id                String    @id @default(uuid()) @db.Uuid
+  channelAccountId  String    @map("channel_account_id") @db.Uuid
+  credentialType    String    @default("bearer_jwt") @map("credential_type") @db.VarChar(64)
+  encryptedSecret   Bytes     @map("encrypted_secret") @db.ByteA
+  keyVersion        Int       @map("key_version") @db.SmallInt
+  secretFingerprint String    @map("secret_fingerprint") @db.VarChar(96)
+  fingerprintPrefix String    @map("fingerprint_prefix") @db.VarChar(16)
+  expiresAt         DateTime? @map("expires_at") @db.Timestamptz(6)
+  lastValidatedAt   DateTime? @map("last_validated_at") @db.Timestamptz(6)
+  status            String    @default("active") @db.VarChar(32)
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  channelAccount    ChannelAccount                      @relation(fields: [channelAccountId], references: [id], onDelete: Restrict)
+  activeFingerprint ChannelCredentialActiveFingerprint?
+  changeLogs        CredentialChangeLog[]
+
+  @@index([channelAccountId, status], map: "credential_account_status_idx")
+  @@index([credentialType, status], map: "credential_type_status_idx")
+  @@index([expiresAt], map: "credential_expires_at_idx")
+  @@map("channel_account_credential")
+}
+
+model ChannelCredentialActiveFingerprint {
+  id               String   @id @default(uuid()) @db.Uuid
+  fingerprint      String   @unique @db.VarChar(96)
+  credentialId     String   @unique @map("credential_id") @db.Uuid
+  channelAccountId String   @map("channel_account_id") @db.Uuid
+  credentialType   String   @map("credential_type") @db.VarChar(64)
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  credential     ChannelAccountCredential @relation(fields: [credentialId], references: [id], onDelete: Cascade)
+  channelAccount ChannelAccount           @relation(fields: [channelAccountId], references: [id], onDelete: Restrict)
+
+  @@index([channelAccountId, credentialType], map: "active_fingerprint_account_type_idx")
+  @@map("channel_credential_active_fingerprint")
+}
+
+model CredentialChangeLog {
+  id               BigInt   @id @default(autoincrement()) @db.BigInt
+  channelAccountId String   @map("channel_account_id") @db.Uuid
+  credentialId     String?  @map("credential_id") @db.Uuid
+  actorType        String   @map("actor_type") @db.VarChar(32)
+  actorId          String?  @map("actor_id") @db.VarChar(128)
+  action           String   @db.VarChar(64)
+  oldFingerprint   String?  @map("old_fingerprint") @db.VarChar(96)
+  newFingerprint   String?  @map("new_fingerprint") @db.VarChar(96)
+  reason           String?
+  detail           Json     @default("{}") @db.JsonB
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  channelAccount ChannelAccount            @relation(fields: [channelAccountId], references: [id], onDelete: Restrict)
+  credential     ChannelAccountCredential? @relation(fields: [credentialId], references: [id], onDelete: SetNull)
+
+  @@index([channelAccountId, createdAt], map: "credential_log_account_created_idx")
+  @@index([actorId, createdAt], map: "credential_log_actor_created_idx")
+  @@index([action, createdAt], map: "credential_log_action_created_idx")
+  @@map("credential_change_log")
+}
+
+model Novel {
+  id                String    @id @default(uuid()) @db.Uuid
+  businessId        String    @unique @map("business_id") @db.VarChar(96)
+  title             String    @db.VarChar(500)
+  description       String    @db.Text
+  coverUrl          String?   @map("cover_url") @db.Text
+  locale            String    @db.VarChar(16)
+  slug              String    @db.VarChar(240)
+  author            String?   @db.VarChar(300)
+  completionStatus  String?   @map("completion_status") @db.VarChar(64)
+  country           String?   @db.VarChar(96)
+  region            String?   @db.VarChar(96)
+  totalChapterCount Int       @default(0) @map("total_chapter_count")
+  paidFromChapter   Int?      @map("paid_from_chapter")
+  splitRatio        Decimal?  @map("split_ratio") @db.Decimal(9, 4)
+  status            String    @default("draft") @db.VarChar(32)
+  deletedAt         DateTime? @map("deleted_at") @db.Timestamptz(6)
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  sourceItems        NovelSourceItem[]
+  chapters           NovelChapter[]
+  previewPolicy      NovelPreviewPolicy?
+  articles           Article[]
+  trackingEvents     TrackingEvent[]
+  carouselSlots      HomeCarouselManualSlot[]
+  carouselCandidates HomeCarouselAutoCandidate[]
+  carouselServing    HomeCarouselServing[]
+
+  @@index([status, updatedAt], map: "novel_status_updated_idx")
+  @@index([locale, status], map: "novel_locale_status_idx")
+  @@map("novel")
+}
+
+model NovelSourceItem {
+  id                      String    @id @default(uuid()) @db.Uuid
+  channelAppId            String    @map("channel_app_id") @db.Uuid
+  novelId                 String?   @map("novel_id") @db.Uuid
+  externalBookId          String    @map("external_book_id") @db.VarChar(160)
+  sourceLanguageCode      String    @map("source_language_code") @db.VarChar(64)
+  sourceLanguageName      String?   @map("source_language_name") @db.VarChar(160)
+  sourceLocale            String?   @map("source_locale") @db.VarChar(16)
+  title                   String    @db.VarChar(500)
+  description             String    @db.Text
+  coverUrl                String?   @map("cover_url") @db.Text
+  totalChapterCount       Int       @default(0) @map("total_chapter_count")
+  paidFromChapter         Int?      @map("paid_from_chapter")
+  splitRatio              Decimal?  @map("split_ratio") @db.Decimal(9, 4)
+  ttoSplitRatio           Decimal?  @map("tto_split_ratio") @db.Decimal(9, 4)
+  externalAgencyId        String?   @map("external_agency_id") @db.VarChar(128)
+  sourceCreatedAtRaw      String?   @map("source_created_at_raw") @db.Text
+  sourceCreatedAt         DateTime? @map("source_created_at") @db.Timestamptz(6)
+  sourceUpdatedAt         DateTime? @map("source_updated_at") @db.Timestamptz(6)
+  lastSeenAt              DateTime? @map("last_seen_at") @db.Timestamptz(6)
+  status                  String    @default("pending") @db.VarChar(32)
+  rawPayload              Json      @map("raw_payload") @db.JsonB
+  rawPayloadSchemaVersion Int       @default(1) @map("raw_payload_schema_version")
+  deletedAt               DateTime? @map("deleted_at") @db.Timestamptz(6)
+  createdAt               DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt               DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  channelApp         ChannelApp               @relation(fields: [channelAppId], references: [id], onDelete: Restrict)
+  novel              Novel?                   @relation(fields: [novelId], references: [id], onDelete: SetNull)
+  chapterSourceItems NovelChapterSourceItem[]
+  labels             NovelSourceItemLabel[]
+  promoLinks         PromoLink[]
+  channelSyncItems   ChannelSyncTaskItem[]
+
+  @@unique([channelAppId, externalBookId, sourceLanguageCode], map: "novel_source_identity_key")
+  @@index([novelId], map: "novel_source_novel_idx")
+  @@index([channelAppId, sourceLocale], map: "novel_source_app_locale_idx")
+  @@index([channelAppId, splitRatio], map: "novel_source_app_split_ratio_idx")
+  @@index([sourceUpdatedAt], map: "novel_source_updated_idx")
+  @@index([status, lastSeenAt], map: "novel_source_status_seen_idx")
+  @@map("novel_source_item")
+}
+
+model NovelChapter {
+  id                     String    @id @default(uuid()) @db.Uuid
+  novelId                String    @map("novel_id") @db.Uuid
+  canonicalChapterNumber Int       @map("canonical_chapter_number")
+  title                  String?   @db.VarChar(500)
+  status                 String    @default("preview") @db.VarChar(32)
+  sourceUpdatedAt        DateTime? @map("source_updated_at") @db.Timestamptz(6)
+  deletedAt              DateTime? @map("deleted_at") @db.Timestamptz(6)
+  createdAt              DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt              DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  novel       Novel                    @relation(fields: [novelId], references: [id], onDelete: Restrict)
+  sourceItems NovelChapterSourceItem[]
+  content     NovelChapterContent?
+
+  @@index([novelId, status, canonicalChapterNumber], map: "novel_chapter_listing_idx")
+  @@map("novel_chapter")
+}
+
+model NovelChapterSourceItem {
+  id                      String    @id @default(uuid()) @db.Uuid
+  novelSourceItemId       String    @map("novel_source_item_id") @db.Uuid
+  novelChapterId          String?   @map("novel_chapter_id") @db.Uuid
+  externalChapterId       String    @map("external_chapter_id") @db.VarChar(160)
+  sourceChapterNumber     Int?      @map("source_chapter_number")
+  chapterName             String?   @map("chapter_name") @db.VarChar(500)
+  chapterShowName         String?   @map("chapter_show_name") @db.VarChar(500)
+  status                  String    @default("pending") @db.VarChar(32)
+  lastSeenAt              DateTime? @map("last_seen_at") @db.Timestamptz(6)
+  sourceUpdatedAt         DateTime? @map("source_updated_at") @db.Timestamptz(6)
+  rawPayload              Json      @map("raw_payload") @db.JsonB
+  rawPayloadSchemaVersion Int       @default(1) @map("raw_payload_schema_version")
+  createdAt               DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt               DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  novelSourceItem NovelSourceItem @relation(fields: [novelSourceItemId], references: [id], onDelete: Cascade)
+  novelChapter    NovelChapter?   @relation(fields: [novelChapterId], references: [id], onDelete: SetNull)
+
+  @@unique([novelSourceItemId, externalChapterId], map: "chapter_source_identity_key")
+  @@index([novelChapterId], map: "chapter_source_chapter_idx")
+  @@index([sourceUpdatedAt], map: "chapter_source_updated_idx")
+  @@map("novel_chapter_source_item")
+}
+
+model NovelChapterContent {
+  id             String   @id @default(uuid()) @db.Uuid
+  novelChapterId String   @unique @map("novel_chapter_id") @db.Uuid
+  body           String   @db.Text
+  charCount      Int      @map("char_count")
+  contentHash    String   @map("content_hash") @db.Char(64)
+  materializedAt DateTime @map("materialized_at") @db.Timestamptz(6)
+  sourceFetchId  String?  @map("source_fetch_id") @db.Uuid
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  novelChapter NovelChapter         @relation(fields: [novelChapterId], references: [id], onDelete: Cascade)
+  sourceFetch  ChannelSyncTaskItem? @relation(fields: [sourceFetchId], references: [id], onDelete: SetNull)
+
+  @@index([contentHash], map: "chapter_content_hash_idx")
+  @@map("novel_chapter_content")
+}
+
+model NovelPreviewPolicy {
+  id                       String    @id @default(uuid()) @db.Uuid
+  novelId                  String    @unique @map("novel_id") @db.Uuid
+  materializationPolicy    String    @default("upstream_returned_preview") @map("materialization_policy") @db.VarChar(64)
+  materializedChapterCount Int       @default(0) @map("materialized_chapter_count")
+  displayAuthorized        Boolean   @default(true) @map("display_authorized")
+  indexAuthorized          Boolean   @default(true) @map("index_authorized")
+  cacheAuthorized          Boolean   @default(true) @map("cache_authorized")
+  maxMaterializedChapters  Int       @map("max_materialized_chapters")
+  lastRefreshedAt          DateTime? @map("last_refreshed_at") @db.Timestamptz(6)
+  createdAt                DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  novel Novel @relation(fields: [novelId], references: [id], onDelete: Cascade)
+
+  @@map("novel_preview_policy")
+}
+
+model SourceLabel {
+  id                 String   @id @default(uuid()) @db.Uuid
+  channelAppId       String   @map("channel_app_id") @db.Uuid
+  labelKind          String   @map("label_kind") @db.VarChar(32)
+  externalLabelValue String   @map("external_label_value") @db.VarChar(300)
+  displayValue       String?  @map("display_value") @db.VarChar(300)
+  createdAt          DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  channelApp  ChannelApp             @relation(fields: [channelAppId], references: [id], onDelete: Restrict)
+  sourceItems NovelSourceItemLabel[]
+
+  @@unique([channelAppId, labelKind, externalLabelValue], map: "source_label_identity_key")
+  @@index([labelKind], map: "source_label_kind_idx")
+  @@map("source_label")
+}
+
+model NovelSourceItemLabel {
+  id                String   @id @default(uuid()) @db.Uuid
+  novelSourceItemId String   @map("novel_source_item_id") @db.Uuid
+  sourceLabelId     String   @map("source_label_id") @db.Uuid
+  firstSeenAt       DateTime @default(now()) @map("first_seen_at") @db.Timestamptz(6)
+  lastSeenAt        DateTime @default(now()) @map("last_seen_at") @db.Timestamptz(6)
+  active            Boolean  @default(true)
+
+  novelSourceItem NovelSourceItem @relation(fields: [novelSourceItemId], references: [id], onDelete: Cascade)
+  sourceLabel     SourceLabel     @relation(fields: [sourceLabelId], references: [id], onDelete: Cascade)
+
+  @@unique([novelSourceItemId, sourceLabelId], map: "novel_source_label_key")
+  @@index([sourceLabelId, active], map: "novel_source_label_active_idx")
+  @@index([novelSourceItemId, active], map: "novel_source_item_label_active_idx")
+  @@map("novel_source_item_label")
+}
+
+model PromoLink {
+  id                    String    @id @default(uuid()) @db.Uuid
+  novelSourceItemId     String    @map("novel_source_item_id") @db.Uuid
+  channelAppId          String    @map("channel_app_id") @db.Uuid
+  channelAccountId      String    @map("channel_account_id") @db.Uuid
+  offerType             String    @map("offer_type") @db.VarChar(64)
+  origin                String    @default("upstream_existing") @db.VarChar(32)
+  upstreamCode          String?   @map("upstream_code") @db.Text
+  publicRedirectCode    String    @unique(map: "promo_link_public_redirect_code_key") @map("public_redirect_code") @db.VarChar(32)
+  webUrl                String?   @map("web_url") @db.Text
+  appUrl                String?   @map("app_url") @db.Text
+  idempotencyKey        String    @unique @map("idempotency_key") @db.Char(64)
+  status                String    @default("pending") @db.VarChar(32)
+  errorKind             String?   @map("error_kind") @db.VarChar(96)
+  errorMessage          String?   @map("error_message") @db.Text
+  fetchedAt             DateTime? @map("fetched_at") @db.Timestamptz(6)
+  expiresAt             DateTime? @map("expires_at") @db.Timestamptz(6)
+  lastAttemptedAt       DateTime? @map("last_attempted_at") @db.Timestamptz(6)
+  rawLinks              Json      @default("{}") @map("raw_links") @db.JsonB
+  rawLinksSchemaVersion Int       @default(1) @map("raw_links_schema_version")
+  deletedAt             DateTime? @map("deleted_at") @db.Timestamptz(6)
+  createdAt             DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt             DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  novelSourceItem NovelSourceItem    @relation(fields: [novelSourceItemId], references: [id], onDelete: Restrict)
+  channelApp      ChannelApp         @relation(fields: [channelAppId], references: [id], onDelete: Restrict)
+  channelAccount  ChannelAccount     @relation(fields: [channelAccountId], references: [id], onDelete: Restrict)
+  articles        Article[]
+  trackingEvents  TrackingEvent[]
+  sideEffects     SideEffectIntent[]
+
+  @@index([novelSourceItemId], map: "promo_link_source_idx")
+  @@index([channelAccountId, status], map: "promo_link_account_status_idx")
+  @@index([status, fetchedAt], map: "promo_link_status_fetched_idx")
+  @@map("promo_link")
+}
+
+model TrackingEvent {
+  id                   BigInt   @id @default(autoincrement()) @db.BigInt
+  eventType            String   @map("event_type") @db.VarChar(64)
+  articleId            String?  @map("article_id") @db.Uuid
+  novelId              String?  @map("novel_id") @db.Uuid
+  promoLinkId          String?  @map("promo_link_id") @db.Uuid
+  publicRedirectCode   String?  @map("public_redirect_code") @db.VarChar(32)
+  sessionHash          String?  @map("session_hash") @db.Char(64)
+  requestHash          String?  @map("request_hash") @db.Char(64)
+  ipHash               String?  @map("ip_hash") @db.Char(64)
+  userAgentHash        String?  @map("user_agent_hash") @db.Char(64)
+  saltVersion          Int      @default(1) @map("salt_version") @db.SmallInt
+  context              Json     @default("{}") @db.JsonB
+  contextSchemaVersion Int      @default(1) @map("context_schema_version")
+  occurredAt           DateTime @default(now()) @map("occurred_at") @db.Timestamptz(6)
+
+  article   Article?   @relation(fields: [articleId], references: [id], onDelete: SetNull)
+  novel     Novel?     @relation(fields: [novelId], references: [id], onDelete: SetNull)
+  promoLink PromoLink? @relation(fields: [promoLinkId], references: [id], onDelete: SetNull)
+
+  @@index([eventType, occurredAt], map: "tracking_event_type_time_idx")
+  @@index([publicRedirectCode, occurredAt], map: "tracking_public_code_time_idx")
+  @@index([promoLinkId, occurredAt], map: "tracking_promo_time_idx")
+  @@index([novelId, occurredAt], map: "tracking_novel_time_idx")
+  @@map("tracking_event")
+}
+
+model CatalogScanTask {
+  id                   String    @id @default(uuid()) @db.Uuid
+  channelAccountId     String    @map("channel_account_id") @db.Uuid
+  channelAppId         String    @map("channel_app_id") @db.Uuid
+  projectType          Int       @map("project_type") @db.SmallInt
+  mode                 String    @default("apply") @db.VarChar(16)
+  status               String    @default("pending") @db.VarChar(32)
+  requestToken         String    @unique @map("request_token") @db.VarChar(160)
+  pageStart            Int       @map("page_start")
+  pageEnd              Int       @map("page_end")
+  pageSize             Int       @map("page_size")
+  catalogObservedTotal Int?      @map("catalog_observed_total")
+  batchExpectedCount   Int?      @map("batch_expected_count")
+  batchActualCount     Int?      @map("batch_actual_count")
+  totalCount           Int       @default(0) @map("total_count")
+  successCount         Int       @default(0) @map("success_count")
+  failedCount          Int       @default(0) @map("failed_count")
+  params               Json      @default("{}") @db.JsonB
+  result               Json?     @db.JsonB
+  error                Json?     @db.JsonB
+  requestedAt          DateTime  @default(now()) @map("requested_at") @db.Timestamptz(6)
+  startedAt            DateTime? @map("started_at") @db.Timestamptz(6)
+  completedAt          DateTime? @map("completed_at") @db.Timestamptz(6)
+  createdAt            DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  channelAccount ChannelAccount        @relation(fields: [channelAccountId], references: [id], onDelete: Restrict)
+  channelApp     ChannelApp            @relation(fields: [channelAppId], references: [id], onDelete: Restrict)
+  items          CatalogScanTaskItem[]
+
+  @@index([status, createdAt], map: "catalog_scan_status_created_idx")
+  @@index([channelAccountId, channelAppId, projectType], map: "catalog_scan_scope_idx")
+  @@map("catalog_scan_task")
+}
+
+model CatalogScanTaskItem {
+  id                 String    @id @default(uuid()) @db.Uuid
+  taskId             String    @map("task_id") @db.Uuid
+  pageIndex          Int       @map("page_index")
+  pageRangeEnd       Int?      @map("page_range_end")
+  requestFingerprint String    @map("request_fingerprint") @db.Char(64)
+  status             String    @default("pending") @db.VarChar(32)
+  attemptCount       Int       @default(0) @map("attempt_count")
+  executionToken     String?   @map("execution_token") @db.Uuid
+  leaseEpoch         BigInt    @default(0) @map("lease_epoch") @db.BigInt
+  lockedBy           String?   @map("locked_by") @db.VarChar(160)
+  lockedUntil        DateTime? @map("locked_until") @db.Timestamptz(6)
+  heartbeatAt        DateTime? @map("heartbeat_at") @db.Timestamptz(6)
+  returnedCount      Int?      @map("returned_count")
+  payload            Json      @default("{}") @db.JsonB
+  result             Json?     @db.JsonB
+  error              Json?     @db.JsonB
+  startedAt          DateTime? @map("started_at") @db.Timestamptz(6)
+  finishedAt         DateTime? @map("finished_at") @db.Timestamptz(6)
+  createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  task CatalogScanTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@unique([taskId, pageIndex], map: "catalog_scan_item_page_key")
+  @@index([taskId, status], map: "catalog_scan_item_task_status_idx")
+  @@map("catalog_scan_task_item")
+}
+
+model ChannelSyncTask {
+  id                 String    @id @default(uuid()) @db.Uuid
+  taskType           String    @map("task_type") @db.VarChar(96)
+  channelAccountId   String    @map("channel_account_id") @db.Uuid
+  channelAppId       String    @map("channel_app_id") @db.Uuid
+  operationScopeHash String    @map("operation_scope_hash") @db.Char(64)
+  mode               String    @default("apply") @db.VarChar(16)
+  status             String    @default("pending") @db.VarChar(32)
+  requestToken       String    @unique @map("request_token") @db.VarChar(160)
+  totalCount         Int       @default(0) @map("total_count")
+  successCount       Int       @default(0) @map("success_count")
+  failedCount        Int       @default(0) @map("failed_count")
+  skippedCount       Int       @default(0) @map("skipped_count")
+  params             Json      @default("{}") @db.JsonB
+  result             Json?     @db.JsonB
+  error              Json?     @db.JsonB
+  requestedAt        DateTime  @default(now()) @map("requested_at") @db.Timestamptz(6)
+  startedAt          DateTime? @map("started_at") @db.Timestamptz(6)
+  completedAt        DateTime? @map("completed_at") @db.Timestamptz(6)
+  createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  channelAccount ChannelAccount        @relation(fields: [channelAccountId], references: [id], onDelete: Restrict)
+  channelApp     ChannelApp            @relation(fields: [channelAppId], references: [id], onDelete: Restrict)
+  items          ChannelSyncTaskItem[]
+
+  @@index([taskType, status, createdAt], map: "channel_sync_type_status_created_idx")
+  @@index([channelAccountId, channelAppId], map: "channel_sync_account_app_idx")
+  @@map("channel_sync_task")
+}
+
+model ChannelSyncTaskItem {
+  id                String    @id @default(uuid()) @db.Uuid
+  taskId            String    @map("task_id") @db.Uuid
+  novelSourceItemId String    @map("novel_source_item_id") @db.Uuid
+  status            String    @default("pending") @db.VarChar(32)
+  attemptCount      Int       @default(0) @map("attempt_count")
+  executionToken    String?   @map("execution_token") @db.Uuid
+  leaseEpoch        BigInt    @default(0) @map("lease_epoch") @db.BigInt
+  lockedBy          String?   @map("locked_by") @db.VarChar(160)
+  lockedUntil       DateTime? @map("locked_until") @db.Timestamptz(6)
+  heartbeatAt       DateTime? @map("heartbeat_at") @db.Timestamptz(6)
+  payload           Json      @default("{}") @db.JsonB
+  result            Json?     @db.JsonB
+  error             Json?     @db.JsonB
+  startedAt         DateTime? @map("started_at") @db.Timestamptz(6)
+  finishedAt        DateTime? @map("finished_at") @db.Timestamptz(6)
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  task            ChannelSyncTask       @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  novelSourceItem NovelSourceItem       @relation(fields: [novelSourceItemId], references: [id], onDelete: Restrict)
+  chapterContents NovelChapterContent[]
+
+  @@unique([taskId, novelSourceItemId], map: "channel_sync_item_source_key")
+  @@index([taskId, status], map: "channel_sync_item_task_status_idx")
+  @@index([novelSourceItemId], map: "channel_sync_item_source_idx")
+  @@map("channel_sync_task_item")
+}
+
+model GenericTask {
+  id                 String    @id @default(uuid()) @db.Uuid
+  taskType           String    @map("task_type") @db.VarChar(96)
+  channelAccountId   String?   @map("channel_account_id") @db.Uuid
+  channelAppId       String?   @map("channel_app_id") @db.Uuid
+  operationScopeHash String    @map("operation_scope_hash") @db.Char(64)
+  originTaskId       String?   @map("origin_task_id") @db.Uuid
+  mode               String    @default("apply") @db.VarChar(16)
+  status             String    @default("pending") @db.VarChar(32)
+  requestToken       String    @unique @map("request_token") @db.VarChar(160)
+  totalCount         Int       @default(0) @map("total_count")
+  successCount       Int       @default(0) @map("success_count")
+  failedCount        Int       @default(0) @map("failed_count")
+  skippedCount       Int       @default(0) @map("skipped_count")
+  params             Json      @default("{}") @db.JsonB
+  result             Json?     @db.JsonB
+  error              Json?     @db.JsonB
+  requestedAt        DateTime  @default(now()) @map("requested_at") @db.Timestamptz(6)
+  startedAt          DateTime? @map("started_at") @db.Timestamptz(6)
+  completedAt        DateTime? @map("completed_at") @db.Timestamptz(6)
+  createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  channelAccount ChannelAccount?   @relation(fields: [channelAccountId], references: [id], onDelete: Restrict)
+  channelApp     ChannelApp?       @relation(fields: [channelAppId], references: [id], onDelete: Restrict)
+  items          GenericTaskItem[]
+  cronRun        CronRun?
+
+  @@unique([taskType, originTaskId], map: "generic_task_origin_key")
+  @@index([status, taskType, createdAt], map: "generic_task_claim_idx")
+  @@index([channelAccountId, channelAppId], map: "generic_task_account_app_idx")
+  @@map("generic_task")
+}
+
+model GenericTaskItem {
+  id             String    @id @default(uuid()) @db.Uuid
+  taskId         String    @map("task_id") @db.Uuid
+  targetType     String    @map("target_type") @db.VarChar(64)
+  targetId       String    @map("target_id") @db.VarChar(160)
+  status         String    @default("pending") @db.VarChar(32)
+  attemptCount   Int       @default(0) @map("attempt_count")
+  executionToken String?   @map("execution_token") @db.Uuid
+  leaseEpoch     BigInt    @default(0) @map("lease_epoch") @db.BigInt
+  lockedBy       String?   @map("locked_by") @db.VarChar(160)
+  lockedUntil    DateTime? @map("locked_until") @db.Timestamptz(6)
+  heartbeatAt    DateTime? @map("heartbeat_at") @db.Timestamptz(6)
+  payload        Json      @default("{}") @db.JsonB
+  result         Json?     @db.JsonB
+  error          Json?     @db.JsonB
+  startedAt      DateTime? @map("started_at") @db.Timestamptz(6)
+  finishedAt     DateTime? @map("finished_at") @db.Timestamptz(6)
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  task GenericTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@unique([taskId, targetType, targetId], map: "generic_task_item_target_key")
+  @@index([taskId, status], map: "generic_task_item_task_status_idx")
+  @@map("generic_task_item")
+}
+
+model SideEffectIntent {
+  id                 String    @id @default(uuid()) @db.Uuid
+  effectKey          String    @unique @map("effect_key") @db.Char(64)
+  operationType      String    @map("operation_type") @db.VarChar(96)
+  idempotencyKey     String    @map("idempotency_key") @db.Char(64)
+  targetType         String    @map("target_type") @db.VarChar(64)
+  targetId           String    @map("target_id") @db.VarChar(160)
+  taskItemType       String?   @map("task_item_type") @db.VarChar(64)
+  taskItemId         String?   @map("task_item_id") @db.Uuid
+  channelAccountId   String?   @map("channel_account_id") @db.Uuid
+  channelAppId       String?   @map("channel_app_id") @db.Uuid
+  promoLinkId        String?   @map("promo_link_id") @db.Uuid
+  status             String    @default("prepared") @db.VarChar(32)
+  attemptFingerprint String?   @map("attempt_fingerprint") @db.Char(64)
+  requestSummary     Json      @default("{}") @map("request_summary") @db.JsonB
+  responseShape      Json?     @map("response_shape") @db.JsonB
+  committedAt        DateTime  @default(now()) @map("committed_at") @db.Timestamptz(6)
+  confirmedAt        DateTime? @map("confirmed_at") @db.Timestamptz(6)
+  createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  channelAccount ChannelAccount? @relation(fields: [channelAccountId], references: [id], onDelete: Restrict)
+  channelApp     ChannelApp?     @relation(fields: [channelAppId], references: [id], onDelete: Restrict)
+  promoLink      PromoLink?      @relation(fields: [promoLinkId], references: [id], onDelete: Restrict)
+
+  @@unique([operationType, idempotencyKey], map: "side_effect_operation_idempotency_key")
+  @@index([targetType, targetId, createdAt], map: "side_effect_target_created_idx")
+  @@index([status, createdAt], map: "side_effect_status_created_idx")
+  @@map("side_effect_intent")
+}
+
+model OperationAudit {
+  id             BigInt   @id @default(autoincrement()) @db.BigInt
+  actorType      String   @map("actor_type") @db.VarChar(32)
+  actorId        String?  @map("actor_id") @db.VarChar(128)
+  action         String   @db.VarChar(96)
+  entityType     String   @map("entity_type") @db.VarChar(64)
+  entityId       String   @map("entity_id") @db.VarChar(160)
+  requestId      String?  @map("request_id") @db.VarChar(160)
+  taskType       String?  @map("task_type") @db.VarChar(64)
+  taskId         String?  @map("task_id") @db.Uuid
+  reason         String?  @db.Text
+  beforeSnapshot Json?    @map("before_snapshot") @db.JsonB
+  afterSnapshot  Json?    @map("after_snapshot") @db.JsonB
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([entityType, entityId, createdAt], map: "operation_audit_entity_created_idx")
+  @@index([requestId], map: "operation_audit_request_idx")
+  @@index([taskType, taskId], map: "operation_audit_task_idx")
+  @@map("operation_audit")
+}
+
+model IndexNowOutbox {
+  id               String    @id @default(uuid()) @db.Uuid
+  articleId        String?   @map("article_id") @db.Uuid
+  url              String    @db.Text
+  revision         BigInt    @db.BigInt
+  eventType        String    @map("event_type") @db.VarChar(48)
+  locale           String    @db.VarChar(16)
+  status           String    @default("pending") @db.VarChar(32)
+  attemptCount     Int       @default(0) @map("attempt_count")
+  maxAttempts      Int       @default(5) @map("max_attempts")
+  nextAttemptAt    DateTime? @map("next_attempt_at") @db.Timestamptz(6)
+  availableAt      DateTime? @map("available_at") @db.Timestamptz(6)
+  lastHttpStatus   Int?      @map("last_http_status")
+  lastErrorKind    String?   @map("last_error_kind") @db.VarChar(96)
+  lastErrorSummary String?   @map("last_error_summary") @db.Text
+  source           String    @db.VarChar(64)
+  sourceTaskId     String?   @map("source_task_id") @db.Uuid
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  article  Article?                @relation(fields: [articleId], references: [id], onDelete: SetNull)
+  attempts IndexNowOutboxAttempt[]
+
+  @@unique([url, revision], map: "indexnow_outbox_url_revision_key")
+  @@index([status, nextAttemptAt], map: "indexnow_outbox_status_retry_idx")
+  @@index([status, availableAt], map: "indexnow_outbox_status_available_idx")
+  @@index([articleId], map: "indexnow_outbox_article_idx")
+  @@map("indexnow_outbox")
+}
+
+model IndexNowOutboxAttempt {
+  id              BigInt    @id @default(autoincrement()) @db.BigInt
+  outboxId        String    @map("outbox_id") @db.Uuid
+  attemptNo       Int       @map("attempt_no")
+  attemptState    String    @default("started") @map("attempt_state") @db.VarChar(32)
+  requestBatchId  String    @map("request_batch_id") @db.VarChar(160)
+  startedAt       DateTime  @default(now()) @map("started_at") @db.Timestamptz(6)
+  requestAt       DateTime  @map("request_at") @db.Timestamptz(6)
+  responseAt      DateTime? @map("response_at") @db.Timestamptz(6)
+  httpStatus      Int?      @map("http_status")
+  errorKind       String?   @map("error_kind") @db.VarChar(96)
+  responseSummary String?   @map("response_summary") @db.Text
+  batchSize       Int       @default(1) @map("batch_size")
+
+  outbox IndexNowOutbox @relation(fields: [outboxId], references: [id], onDelete: Cascade)
+
+  @@unique([outboxId, attemptNo], map: "indexnow_attempt_number_key")
+  @@index([requestBatchId], map: "indexnow_attempt_request_batch_idx")
+  @@map("indexnow_outbox_attempt")
+}
+
+model ScheduleRun {
+  id               String    @id @default(uuid()) @db.Uuid
+  scheduleKey      String    @map("schedule_key") @db.VarChar(128)
+  scheduleRevision Int       @map("schedule_revision")
+  triggerKind      String    @default("scheduled") @map("trigger_kind") @db.VarChar(32)
+  scheduledFor     DateTime? @map("scheduled_for") @db.Timestamptz(6)
+  manualTriggerId  String?   @unique @map("manual_trigger_id") @db.VarChar(160)
+  timezone         String    @db.VarChar(64)
+  misfirePolicy    String    @default("bounded_catch_up") @map("misfire_policy") @db.VarChar(32)
+  maxCatchUpRuns   Int       @default(1) @map("max_catch_up_runs")
+  status           String    @default("due") @db.VarChar(32)
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  cronRun CronRun?
+
+  @@unique([scheduleKey, scheduledFor], map: "schedule_run_scheduled_key")
+  @@index([status, scheduledFor], map: "schedule_run_due_idx")
+  @@map("schedule_run")
+}
+
+model CronRun {
+  id            String    @id @default(uuid()) @db.Uuid
+  scheduleRunId String    @unique @map("schedule_run_id") @db.Uuid
+  genericTaskId String?   @unique @map("generic_task_id") @db.Uuid
+  status        String    @default("created") @db.VarChar(32)
+  claimedBy     String?   @map("claimed_by") @db.VarChar(160)
+  claimedAt     DateTime? @map("claimed_at") @db.Timestamptz(6)
+  enqueuedAt    DateTime? @map("enqueued_at") @db.Timestamptz(6)
+  error         Json?     @db.JsonB
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  scheduleRun ScheduleRun  @relation(fields: [scheduleRunId], references: [id], onDelete: Restrict)
+  genericTask GenericTask? @relation(fields: [genericTaskId], references: [id], onDelete: Restrict)
+
+  @@index([status, createdAt], map: "cron_run_status_created_idx")
+  @@map("cron_run")
+}
+
+model ArticleTemplate {
+  id            String    @id @default(uuid()) @db.Uuid
+  templateKey   String    @map("template_key") @db.VarChar(96)
+  locale        String?   @db.VarChar(16)
+  version       Int
+  schemaVersion Int       @default(1) @map("schema_version")
+  status        String    @default("draft") @db.VarChar(32)
+  bodyTemplate  String    @map("body_template") @db.Text
+  seoTemplate   Json      @default("{}") @map("seo_template") @db.JsonB
+  deletedAt     DateTime? @map("deleted_at") @db.Timestamptz(6)
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  articles Article[]
+
+  @@unique([templateKey, version], map: "article_template_version_key")
+  @@index([status, locale], map: "article_template_status_locale_idx")
+  @@map("article_template")
+}
+
+model Article {
+  id                String    @id @default(uuid()) @db.Uuid
+  novelId           String    @map("novel_id") @db.Uuid
+  templateId        String?   @map("template_id") @db.Uuid
+  promoLinkId       String?   @map("promo_link_id") @db.Uuid
+  locale            String    @db.VarChar(16)
+  slug              String    @db.VarChar(240)
+  publicPageShortId String    @unique @map("public_page_short_id") @db.VarChar(32)
+  title             String    @db.VarChar(500)
+  summary           String?   @db.Text
+  body              String    @db.Text
+  seoMetadata       Json      @default("{}") @map("seo_metadata") @db.JsonB
+  seoSchemaVersion  Int       @default(1) @map("seo_schema_version")
+  status            String    @default("draft") @db.VarChar(32)
+  publishAt         DateTime? @map("publish_at") @db.Timestamptz(6)
+  publishedAt       DateTime? @map("published_at") @db.Timestamptz(6)
+  deletedAt         DateTime? @map("deleted_at") @db.Timestamptz(6)
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  novel              Novel                       @relation(fields: [novelId], references: [id], onDelete: Restrict)
+  template           ArticleTemplate?            @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  promoLink          PromoLink?                  @relation(fields: [promoLinkId], references: [id], onDelete: Restrict)
+  trackingEvents     TrackingEvent[]
+  indexNowOutbox     IndexNowOutbox[]
+  carouselSlots      HomeCarouselManualSlot[]
+  carouselCandidates HomeCarouselAutoCandidate[]
+  carouselServing    HomeCarouselServing[]
+
+  @@unique([novelId, locale], map: "article_novel_locale_key")
+  @@index([status, publishedAt], map: "article_status_published_idx")
+  @@index([locale, status], map: "article_locale_status_idx")
+  @@index([promoLinkId], map: "article_promo_link_idx")
+  @@map("article")
+}
+
+model HomeCarouselManualSlot {
+  id        String    @id @default(uuid()) @db.Uuid
+  locale    String    @db.VarChar(16)
+  position  Int
+  novelId   String    @map("novel_id") @db.Uuid
+  articleId String    @map("article_id") @db.Uuid
+  enabled   Boolean   @default(true)
+  startsAt  DateTime? @map("starts_at") @db.Timestamptz(6)
+  endsAt    DateTime? @map("ends_at") @db.Timestamptz(6)
+  createdBy String    @map("created_by") @db.VarChar(128)
+  updatedBy String    @map("updated_by") @db.VarChar(128)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  novel    Novel                 @relation(fields: [novelId], references: [id], onDelete: Restrict)
+  article  Article               @relation(fields: [articleId], references: [id], onDelete: Restrict)
+  servings HomeCarouselServing[]
+
+  @@index([locale, enabled, position], map: "carousel_manual_locale_enabled_idx")
+  @@index([articleId], map: "carousel_manual_article_idx")
+  @@map("home_carousel_manual_slot")
+}
+
+model HomeCarouselAutoBatch {
+  id               String    @id @default(uuid()) @db.Uuid
+  uniqueKey        String    @unique @map("unique_key") @db.VarChar(160)
+  runDate          DateTime  @map("run_date") @db.Date
+  triggerSource    String    @map("trigger_source") @db.VarChar(64)
+  localeScope      String?   @map("locale_scope") @db.VarChar(16)
+  status           String    @default("pending") @db.VarChar(32)
+  algorithmVersion String    @map("algorithm_version") @db.VarChar(64)
+  params           Json      @default("{}") @db.JsonB
+  errorMessage     String?   @map("error_message") @db.Text
+  startedAt        DateTime? @map("started_at") @db.Timestamptz(6)
+  finishedAt       DateTime? @map("finished_at") @db.Timestamptz(6)
+  createdBy        String?   @map("created_by") @db.VarChar(128)
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  candidates HomeCarouselAutoCandidate[]
+  servings   HomeCarouselServing[]
+
+  @@index([status, createdAt], map: "carousel_batch_status_created_idx")
+  @@index([runDate], map: "carousel_batch_run_date_idx")
+  @@map("home_carousel_auto_batch")
+}
+
+model HomeCarouselAutoCandidate {
+  id        String   @id @default(uuid()) @db.Uuid
+  batchId   String   @map("batch_id") @db.Uuid
+  locale    String   @db.VarChar(16)
+  novelId   String   @map("novel_id") @db.Uuid
+  articleId String   @map("article_id") @db.Uuid
+  source    String   @db.VarChar(64)
+  score     Decimal? @db.Decimal(12, 6)
+  rank      Int
+  reason    Json     @default("{}") @db.JsonB
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  batch   HomeCarouselAutoBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  novel   Novel                 @relation(fields: [novelId], references: [id], onDelete: Restrict)
+  article Article               @relation(fields: [articleId], references: [id], onDelete: Restrict)
+
+  @@unique([batchId, locale, rank], map: "carousel_candidate_batch_locale_rank_key")
+  @@unique([batchId, novelId], map: "carousel_candidate_batch_novel_key")
+  @@index([batchId, locale], map: "carousel_candidate_batch_locale_idx")
+  @@map("home_carousel_auto_candidate")
+}
+
+model HomeCarouselServing {
+  id           String    @id @default(uuid()) @db.Uuid
+  locale       String    @db.VarChar(16)
+  position     Int
+  novelId      String    @map("novel_id") @db.Uuid
+  articleId    String    @map("article_id") @db.Uuid
+  source       String    @db.VarChar(32)
+  manualSlotId String?   @map("manual_slot_id") @db.Uuid
+  batchId      String?   @map("batch_id") @db.Uuid
+  mergedAt     DateTime  @map("merged_at") @db.Timestamptz(6)
+  validFrom    DateTime  @default(now()) @map("valid_from") @db.Timestamptz(6)
+  validTo      DateTime? @map("valid_to") @db.Timestamptz(6)
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  novel      Novel                   @relation(fields: [novelId], references: [id], onDelete: Restrict)
+  article    Article                 @relation(fields: [articleId], references: [id], onDelete: Restrict)
+  manualSlot HomeCarouselManualSlot? @relation(fields: [manualSlotId], references: [id], onDelete: SetNull)
+  batch      HomeCarouselAutoBatch?  @relation(fields: [batchId], references: [id], onDelete: SetNull)
+
+  @@unique([locale, position], map: "carousel_serving_locale_position_key")
+  @@index([locale, validFrom, validTo, position], map: "carousel_serving_active_lookup_idx")
+  @@index([articleId], map: "carousel_serving_article_idx")
+  @@map("home_carousel_serving")
+}
+
+model HomeCarouselChangeLog {
+  id           BigInt   @id @default(autoincrement()) @db.BigInt
+  locale       String   @db.VarChar(16)
+  action       String   @db.VarChar(64)
+  manualSlotId String?  @map("manual_slot_id") @db.Uuid
+  actorType    String   @map("actor_type") @db.VarChar(32)
+  actorId      String?  @map("actor_id") @db.VarChar(128)
+  beforeState  Json?    @map("before_state") @db.JsonB
+  afterState   Json?    @map("after_state") @db.JsonB
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([locale, createdAt], map: "carousel_change_locale_created_idx")
+  @@index([manualSlotId], map: "carousel_change_manual_slot_idx")
+  @@map("home_carousel_change_log")
+}
