@@ -6,13 +6,12 @@
 
 Worker 进程入口与任务处理器实现：轮询/领取任务、执行业务逻辑（含需要解密凭证的任务）、写回结果与审计。是本项目唯一可解密渠道凭证的进程。
 
-## 本轮范围
+## P1-07 实现
 
-🔴 本轮（P1-04）只建目录，不写实现。当前目录仅含本 README 与 `.gitkeep` 占位。
-
-## 填充任务
-
-由 **P1-07（Worker、Scheduler、任务租约和 fencing）** 填充。
+- `index.ts` 是独立 Worker 进程入口；
+- `runtime/` 提供 allowlist 驱动的轮询、三类 item 的领取/恢复、心跳和 graceful drain；
+- 本轮生产 `HANDLERS` 为空，不包含渠道 Adapter 或正式业务 handler；
+- handler 结果只通过 fenced finalize 提交，失去租约后结果被丢弃。
 
 ## 特别纪律
 
