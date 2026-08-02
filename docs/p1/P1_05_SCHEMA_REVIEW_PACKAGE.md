@@ -2,7 +2,7 @@
 
 **Reviewer：Claude**
 
-**Review status：PENDING**
+**Review status：PENDING REREVIEW AFTER 10/10 FINDINGS RESOLVED**
 
 **Migration gate：CLOSED UNTIL CLAUDE PASS**
 
@@ -12,10 +12,26 @@
 - `src/domain/database-statuses.ts`：状态值单一草案真源。
 - `src/domain/database-invariants.ts`：数据库无关不变量。
 - `docs/governance/database-governance.md`：物理约束、权限、保留和漂移设计。
-- `docs/governance/database-schema-dictionary.jsonl`：表、字段与约束机器基线。
+- `docs/governance/database-schema-dictionary.jsonl`：37 表、495 字段、269 约束/索引/事务契约，共 801 条机器基线。
+- `docs/governance/port-registry.md`：CPS pattern-only/adapt/PG reimplementation 登记。
 - `docs/p1/P1_05_CPS_SCHEMA_EVIDENCE.md`：CPS 实读证据。
 
 当前没有 `prisma/migrations`，没有启动或连接 PostgreSQL，没有 Prisma Client 生成物。
+
+## 2.1 P1-05A-REVISION 处置摘要
+
+| Claude finding | 修订结果 | 评审证据 |
+| --- | --- | --- |
+| R-01 canonical 只补空 | RESOLVED | 选择写事务/条件 UPDATE 契约，不增加 provenance 表；普通同步只补空，运营清空后的重补必须显式授权 |
+| R-02 Article body | RESOLVED | 冻结为模板渲染 SEO 正文、published 时 S0、`web_app` 可读，与章节版权正文的删除/保留/导出策略分离 |
+| R-03 fingerprint prefix | RESOLVED | S1 内部非密文元数据，web/admin 可读，禁止 public 读取及反推完整 credential |
+| R-04 IndexNow 幽灵 CHECK | RESOLVED | 删除 `indexnow_outbox_attempt_status_check`，只保留真实 `attempt_state` 字段/CHECK/索引 |
+| R-05 published Article CHECK | RESOLVED | 登记 title、slug、body 非空白及 promo_link_id 非空四条命名 Migration-only CHECK |
+| R-06 Carousel serving | RESOLVED | 选择方案①：仅当前快照，删除 `valid_from/valid_to` 与区间索引，`(locale,position)` 绝对唯一，历史只进 change log |
+| R-07 Article/PromoLink Novel | RESOLVED | Prisma 已验证可表达 `(promo_link_id,novel_id) → promo_link(id,novel_id)` 复合 FK，不依赖服务层猜测 |
+| R-08 status 语义 | RESOLVED | 24 个 status 字段逐值术语化；明确 stale/withdrawn 以及 unpublished/takedown 的 HTTP/SEO 差异 |
+| R-09 unknown locale | RESOLVED | SourceItem mapped locale 可空；Novel locale 只接受 canonical，无法映射不创建/不发布且不建立 DB 映射表 |
+| R-10 port registry | RESOLVED | 按 CPS 精确文件/行号/baseline 登记 PATTERN_ONLY、ADAPT、PG_REIMPLEMENT，无 COPY |
 
 ## 2. 表组与分类
 
@@ -40,7 +56,7 @@ DROP：Revenue P4 表、CanonicalTag/SourceLabelMapping、跨语言作品组、C
 
 ### A. Novel / NovelSourceItem 基数
 
-草案：一个来源语种版本对应一个 Novel；SourceItem 在 `pending` 时可无 Novel，linked 后指向一个 Novel。V1 不自动跨语种合并。
+草案：一个来源语种版本对应一个 Novel；SourceItem 在 `pending` 时可无 Novel，linked 后指向一个 Novel。V1 不自动跨语种合并。普通来源同步只能补 canonical 空值；非空值不覆盖，运营明确清空后的重补必须显式授权。
 
 - [ ] PASS
 - [ ] CHANGE REQUIRED：
@@ -61,14 +77,14 @@ DROP：Revenue P4 表、CanonicalTag/SourceLabelMapping、跨语言作品组、C
 
 ### D. Locale 与前台查询
 
-草案：SourceItem `source_locale` 可空并允许 unknown；Novel/Article locale 非空。前台只读 published Article、非 unpublished/takedown Novel 和 preview Chapter；详情查询不带正文。
+草案：SourceItem 保存上游语种原值，mapped `source_locale` 可空；Novel/Article locale 必须是站点 canonical locale 且不得 unknown。无法映射时不创建/不发布 Novel，不在数据库建立第二套映射。前台只读 published Article、published Novel 和 preview Chapter；详情查询不带正文。
 
 - [ ] PASS
 - [ ] CHANGE REQUIRED：
 
 ### E. PromoLink 确定选链
 
-草案：Article 通过 `promo_link_id` 显式确定公开 CTA；不按创建时间、账户顺序或“第一条 active”猜选。草稿可空，published 必须非空。
+草案：Article 通过 `promo_link_id` 显式确定公开 CTA；不按创建时间、账户顺序或“第一条 active”猜选。`PromoLink` 直接携带 `novel_id`，`Article(promo_link_id,novel_id)` 复合 FK 指向 `PromoLink(id,novel_id)`，数据库证明同 Novel。草稿可空，published 必须非空。
 
 - [ ] PASS
 - [ ] CHANGE REQUIRED：
@@ -97,6 +113,9 @@ DROP：Revenue P4 表、CanonicalTag/SourceLabelMapping、跨语言作品组、C
 - [ ] credential fingerprint 由数据库 unique latch 兜底。
 - [ ] IndexNow 幂等键是 `(url, revision)`。
 - [ ] side_effect_intent 有永久 effect_key；operation_audit append-only。
+- [ ] published Article 的 title/slug/body 非空白且 promo_link_id 非空由四条 Migration-only CHECK 登记。
+- [ ] Article 与 PromoLink 的同 Novel 归属由 Prisma 可表达的复合 FK 保证。
+- [ ] home_carousel_serving 仅保存当前快照，`(locale,position)` 绝对唯一且无有效期区间字段。
 - [ ] Web/Scheduler 无凭证密文权限，Worker 是唯一解密面。
 - [ ] ScheduleRun scheduled instant 和 CronRun→Task 关系满足原子 enqueue 设计。
 

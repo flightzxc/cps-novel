@@ -200,6 +200,7 @@ model Novel {
   updatedAt         DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   sourceItems        NovelSourceItem[]
+  promoLinks         PromoLink[]
   chapters           NovelChapter[]
   previewPolicy      NovelPreviewPolicy?
   articles           Article[]
@@ -372,6 +373,7 @@ model NovelSourceItemLabel {
 
 model PromoLink {
   id                    String    @id @default(uuid()) @db.Uuid
+  novelId               String    @map("novel_id") @db.Uuid
   novelSourceItemId     String    @map("novel_source_item_id") @db.Uuid
   channelAppId          String    @map("channel_app_id") @db.Uuid
   channelAccountId      String    @map("channel_account_id") @db.Uuid
@@ -394,14 +396,17 @@ model PromoLink {
   createdAt             DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt             DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
 
+  novel           Novel              @relation(fields: [novelId], references: [id], onDelete: Restrict)
   novelSourceItem NovelSourceItem    @relation(fields: [novelSourceItemId], references: [id], onDelete: Restrict)
   channelApp      ChannelApp         @relation(fields: [channelAppId], references: [id], onDelete: Restrict)
   channelAccount  ChannelAccount     @relation(fields: [channelAccountId], references: [id], onDelete: Restrict)
-  articles        Article[]
+  articles        Article[]          @relation("ArticlePromoLinkByNovel")
   trackingEvents  TrackingEvent[]
   sideEffects     SideEffectIntent[]
 
+  @@unique([id, novelId], map: "promo_link_id_novel_key")
   @@index([novelSourceItemId], map: "promo_link_source_idx")
+  @@index([novelId, status], map: "promo_link_novel_status_idx")
   @@index([channelAccountId, status], map: "promo_link_account_status_idx")
   @@index([status, fetchedAt], map: "promo_link_status_fetched_idx")
   @@map("promo_link")
@@ -802,7 +807,7 @@ model Article {
 
   novel              Novel                       @relation(fields: [novelId], references: [id], onDelete: Restrict)
   template           ArticleTemplate?            @relation(fields: [templateId], references: [id], onDelete: SetNull)
-  promoLink          PromoLink?                  @relation(fields: [promoLinkId], references: [id], onDelete: Restrict)
+  promoLink          PromoLink?                  @relation("ArticlePromoLinkByNovel", fields: [promoLinkId, novelId], references: [id, novelId], onDelete: Restrict)
   trackingEvents     TrackingEvent[]
   indexNowOutbox     IndexNowOutbox[]
   carouselSlots      HomeCarouselManualSlot[]
@@ -886,18 +891,16 @@ model HomeCarouselAutoCandidate {
 }
 
 model HomeCarouselServing {
-  id           String    @id @default(uuid()) @db.Uuid
-  locale       String    @db.VarChar(16)
+  id           String   @id @default(uuid()) @db.Uuid
+  locale       String   @db.VarChar(16)
   position     Int
-  novelId      String    @map("novel_id") @db.Uuid
-  articleId    String    @map("article_id") @db.Uuid
-  source       String    @db.VarChar(32)
-  manualSlotId String?   @map("manual_slot_id") @db.Uuid
-  batchId      String?   @map("batch_id") @db.Uuid
-  mergedAt     DateTime  @map("merged_at") @db.Timestamptz(6)
-  validFrom    DateTime  @default(now()) @map("valid_from") @db.Timestamptz(6)
-  validTo      DateTime? @map("valid_to") @db.Timestamptz(6)
-  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  novelId      String   @map("novel_id") @db.Uuid
+  articleId    String   @map("article_id") @db.Uuid
+  source       String   @db.VarChar(32)
+  manualSlotId String?  @map("manual_slot_id") @db.Uuid
+  batchId      String?  @map("batch_id") @db.Uuid
+  mergedAt     DateTime @map("merged_at") @db.Timestamptz(6)
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
   novel      Novel                   @relation(fields: [novelId], references: [id], onDelete: Restrict)
   article    Article                 @relation(fields: [articleId], references: [id], onDelete: Restrict)
@@ -905,7 +908,6 @@ model HomeCarouselServing {
   batch      HomeCarouselAutoBatch?  @relation(fields: [batchId], references: [id], onDelete: SetNull)
 
   @@unique([locale, position], map: "carousel_serving_locale_position_key")
-  @@index([locale, validFrom, validTo, position], map: "carousel_serving_active_lookup_idx")
   @@index([articleId], map: "carousel_serving_article_idx")
   @@map("home_carousel_serving")
 }
