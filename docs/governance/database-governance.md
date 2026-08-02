@@ -2,9 +2,9 @@
 
 **Owner：Codex**
 
-**任务：P1-05B**
+**任务：P1-05B / P1-06**
 
-**状态：IMPLEMENTED — POSTGRESQL 16 VALIDATED**
+**状态：P1-05B VALIDATED；P1-06 IMPLEMENTED，待本报告记录恢复演练证据**
 
 **数据库目标：PostgreSQL 16**
 
@@ -191,7 +191,22 @@
 | public code、published metadata | S0 | 可读 | 可读写 | 任务参数可引用 | 可读 |
 | `article.body` | S0（published 时） | `web_app` 公开页面渲染可读 | 可生成/更新 | 不读 | 可读公开版本；不是章节版权正文 |
 
-P1-06 创建角色并实测 REVOKE；P1-05B 不猜角色 DDL。
+### P1-06 已实施权限矩阵
+
+| 角色 | 对象所有权 / DDL | 读取 | 写入 | 额外限制 |
+| --- | --- | --- | --- | --- |
+| `migration_owner` | 唯一应用对象 Owner；执行 Migration | 全部 | 全部 | 不作为应用运行身份 |
+| `web_app` | 无 | S0/S1 与公开章节正文；凭证仅元数据 | 后台元数据、任务入队、Audit 追加 | 禁止读取 `encrypted_secret`、完整 fingerprint、原始上游 payload/真实跳转信息 |
+| `worker_app` | 无 | 完成任务与凭证处理所需全部列 | 业务/任务状态与追加日志；仅章节撤回正文允许 DELETE | `operation_audit` 等追加日志禁止 UPDATE/DELETE |
+| `analyst_ro` | 无 | S0/S1 列 | 无 | `default_transaction_read_only=on`；`statement_timeout=30s`；禁止 S2/S3 |
+| `backup_role` | 无 | 完整逻辑/物理备份所需全部表、序列 | 无 | `REPLICATION` 仅用于 `pg_basebackup`；凭证仅由备份系统托管 |
+
+`infra/postgres/roles.sql` 不含密码；登录凭证由运行时 secret manager 或一次性测试脚本生成。
+`infra/postgres/grants.sql` 必须在每次 Migration 后重放；未来对象默认关闭，新增表或敏感列必须显式评审后授予。
+`PUBLIC` 没有 `public` schema 的 `CREATE`，运行角色没有数据库 `TEMPORARY` 或 schema `CREATE`。
+
+Scheduler 本轮不创建、不获得独立数据库角色，也不获得任何凭证解密密钥；P1-06 不实现 Scheduler。
+完整逻辑备份要求 `backup_role` 能读取密文，但该能力不授予 Web、Analyst 或 Scheduler，备份产物必须按最高敏感级别加密、隔离和审计。
 
 ## 8. 软删除与保留
 
@@ -238,3 +253,4 @@ P1-06 创建角色并实测 REVOKE；P1-05B 不猜角色 DDL。
 | 2026-08-02 | P1-05A | 建立 37 表 Prisma 草案、状态真源、机器字典、约束与评审基线；未创建 Migration | Codex | 待 Claude 领域评审 |
 | 2026-08-03 | P1-05A-REVISION | 修复 Claude 10 项领域评审：canonical 只补空、Article CHECK/复合 FK、serving 当前快照、locale、字典语义与 CPS pattern registry；仍未创建 Migration | Codex | 待 Claude 领域复评 |
 | 2026-08-03 | P1-05B | 建立 37 表 PostgreSQL 初始 Migration，落地 66 个 CHECK、部分唯一/claim/recovery 索引与 2 个保护 trigger；在 PostgreSQL 16.14 完成空库、重放、零 drift 与真实正负测试 | Codex | 已验证 |
+| 2026-08-03 | P1-06 | 建立五角色、列级敏感数据隔离、逻辑备份/一次性恢复脚本和物理 base backup/WAL/PITR 运行手册；生产 PITR 未在本轮宣称建立 | Codex | 逻辑恢复演练见 P1-06 报告 |
