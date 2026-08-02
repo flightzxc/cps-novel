@@ -26,12 +26,14 @@
 | R-02 Article body | RESOLVED | 冻结为模板渲染 SEO 正文、published 时 S0、`web_app` 可读，与章节版权正文的删除/保留/导出策略分离 |
 | R-03 fingerprint prefix | RESOLVED | S1 内部非密文元数据，web/admin 可读，禁止 public 读取及反推完整 credential |
 | R-04 IndexNow 幽灵 CHECK | RESOLVED | 删除 `indexnow_outbox_attempt_status_check`，只保留真实 `attempt_state` 字段/CHECK/索引 |
-| R-05 published Article CHECK | RESOLVED | 登记 title、slug、body 非空白及 promo_link_id 非空四条命名 Migration-only CHECK |
+| R-05 published Article CHECK | RESOLVED | 登记 title、slug、body 非空白、promo_link_id 非空及 published_at 非空五条命名 Migration-only CHECK |
 | R-06 Carousel serving | RESOLVED | 选择方案①：仅当前快照，删除 `valid_from/valid_to` 与区间索引，`(locale,position)` 绝对唯一，历史只进 change log |
 | R-07 Article/PromoLink Novel | RESOLVED | Prisma 已验证可表达 `(promo_link_id,novel_id) → promo_link(id,novel_id)` 复合 FK，不依赖服务层猜测 |
 | R-08 status 语义 | RESOLVED | 24 个 status 字段逐值术语化；明确 stale/withdrawn 以及 unpublished/takedown 的 HTTP/SEO 差异 |
 | R-09 unknown locale | RESOLVED | SourceItem mapped locale 可空；Novel locale 只接受 canonical，无法映射不创建/不发布且不建立 DB 映射表 |
 | R-10 port registry | RESOLVED | 按 CPS 精确文件/行号/baseline 登记 PATTERN_ONLY、ADAPT、PG_REIMPLEMENT，无 COPY |
+
+RG-01 单项修复：恢复 `db:public:article:article_published_published_at_check`。非 published Article 可令 `published_at` 为空；进入 published 必须原子写入该时间。P1-05B 创建 Article→PromoLink 复合 FK 时必须使用 PostgreSQL 默认 `MATCH SIMPLE`，禁止 `MATCH FULL`，以允许草稿的 `promo_link_id = NULL`、`novel_id NOT NULL` 组合。
 
 ## 2. 表组与分类
 
@@ -113,7 +115,7 @@ DROP：Revenue P4 表、CanonicalTag/SourceLabelMapping、跨语言作品组、C
 - [ ] credential fingerprint 由数据库 unique latch 兜底。
 - [ ] IndexNow 幂等键是 `(url, revision)`。
 - [ ] side_effect_intent 有永久 effect_key；operation_audit append-only。
-- [ ] published Article 的 title/slug/body 非空白且 promo_link_id 非空由四条 Migration-only CHECK 登记。
+- [ ] published Article 的 title/slug/body 非空白且 promo_link_id、published_at 非空由五条 Migration-only CHECK 登记。
 - [ ] Article 与 PromoLink 的同 Novel 归属由 Prisma 可表达的复合 FK 保证。
 - [ ] home_carousel_serving 仅保存当前快照，`(locale,position)` 绝对唯一且无有效期区间字段。
 - [ ] Web/Scheduler 无凭证密文权限，Worker 是唯一解密面。

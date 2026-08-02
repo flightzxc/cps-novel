@@ -150,12 +150,18 @@ P1-05A 只登记，不创建 SQL：
     - `db:public:article:article_published_title_check`: `status <> 'published' OR btrim(title) <> ''`；
     - `db:public:article:article_published_slug_check`: `status <> 'published' OR btrim(slug) <> ''`；
     - `db:public:article:article_published_body_check`: `status <> 'published' OR btrim(body) <> ''`；
-    - `db:public:article:article_published_promo_link_check`: `status <> 'published' OR promo_link_id IS NOT NULL`。
+    - `db:public:article:article_published_promo_link_check`: `status <> 'published' OR promo_link_id IS NOT NULL`；
+    - `db:public:article:article_published_published_at_check`: `status <> 'published' OR published_at IS NOT NULL`。
 12. `promo_link` 提供 `db:public:promo_link:promo_link_id_novel_key` = `UNIQUE(id, novel_id)`；Article 以 `db:public:article:article_promo_link_novel_fkey` = `(promo_link_id, novel_id)` 复合 FK 引用该键，数据库保证所选 PromoLink 与 Article 属于同一 Novel。Prisma 草案已完整表达，正式 Migration 必须保留具名复合 FK。
 13. Article locale 与 Novel locale 一致仍由写事务和集成测试保证；数据库不建立第二套 locale 映射。
 14. `operation_audit`、IndexNow attempt、credential/carousel log 禁止普通 UPDATE/DELETE；权限落地归 P1-06。
 15. ScheduleRun scheduled/manual 互斥字段 CHECK；CronRun 与 GenericTask 在同一事务创建并一对一关联。
 16. Item 结果提交必须在同一事务验证 `execution_token` 和 `lease_epoch`；旧租约为零行更新并回滚业务结果。
+
+### P1-05B Migration 注意事项
+
+- Article 进入 `published` 前必须在同一原子写入中设置 `published_at`；draft 及其他非 published 状态允许 `published_at IS NULL`。
+- `Article(promo_link_id, novel_id)` → `PromoLink(id, novel_id)` 复合 FK 必须保持 PostgreSQL 默认 `MATCH SIMPLE`，禁止手写为 `MATCH FULL`。草稿 Article 合法允许 `promo_link_id = NULL` 且 `novel_id` 非空；`MATCH FULL` 会错误拒绝该合法记录。
 
 ## 6. 并发与事务不变量
 

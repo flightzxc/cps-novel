@@ -9,6 +9,7 @@ export const DATABASE_INVARIANTS = {
   permanentPublicCode: "public_redirect_code is globally unique, immutable, and never reused.",
   privateUpstreamCode: "upstream_code never appears in public URLs or tracking records.",
   articlePromoNovelMatch: "Article.promo_link_id and Article.novel_id must reference the same PromoLink novel identity through a composite foreign key.",
+  articlePublishedTimestamp: "A published Article must have published_at; entering published atomically sets it, while non-published drafts may leave it null.",
   carouselServingSnapshot: "home_carousel_serving contains current rows only; locale and position are absolutely unique, and history belongs in home_carousel_change_log.",
   workerDelivery: "Workers execute at least once; all protected result writes are fenced.",
   leaseFence: "execution_token and lease_epoch must both match before a worker result commits.",
