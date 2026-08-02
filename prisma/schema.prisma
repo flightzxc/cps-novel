@@ -1,5 +1,5 @@
-// P1-05A review draft only. No migration may be generated from this file until
-// Claude records a PASS in docs/p1/P1_05_SCHEMA_REVIEW_PACKAGE.md.
+// P1-05B executable PostgreSQL schema. The initial migration is
+// prisma/migrations/20260803090000_p1_initial_schema/migration.sql.
 // PostgreSQL-only constraints that Prisma cannot express are catalogued in
 // docs/governance/database-governance.md and the JSONL dictionary.
 
@@ -807,7 +807,7 @@ model Article {
 
   novel              Novel                       @relation(fields: [novelId], references: [id], onDelete: Restrict)
   template           ArticleTemplate?            @relation(fields: [templateId], references: [id], onDelete: SetNull)
-  promoLink          PromoLink?                  @relation("ArticlePromoLinkByNovel", fields: [promoLinkId, novelId], references: [id, novelId], onDelete: Restrict)
+  promoLink          PromoLink?                  @relation("ArticlePromoLinkByNovel", fields: [promoLinkId, novelId], references: [id, novelId], onDelete: Restrict, map: "article_promo_link_novel_fkey")
   trackingEvents     TrackingEvent[]
   indexNowOutbox     IndexNowOutbox[]
   carouselSlots      HomeCarouselManualSlot[]

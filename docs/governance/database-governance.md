@@ -2,21 +2,24 @@
 
 **Owner：Codex**
 
-**任务：P1-05A**
+**任务：P1-05B**
 
-**状态：DRAFT — WAITING_CLAUDE_DOMAIN_REREVIEW**
+**状态：IMPLEMENTED — POSTGRESQL 16 VALIDATED**
 
 **数据库目标：PostgreSQL 16**
 
-本文件是人类可读的数据库设计与变更真源；机器可读基线为
-`docs/governance/database-schema-dictionary.jsonl`。`prisma/schema.prisma` 当前仅为可评审草案，Claude 对领域模型给出 PASS 前，不得生成 Migration。
+本文件是人类可读的数据库治理基线；机器可读基线为
+`docs/governance/database-schema-dictionary.jsonl`。P1-05B 的可执行初始基线为
+`prisma/migrations/20260803090000_p1_initial_schema/migration.sql`，并已在隔离的 PostgreSQL 16 实例验证。
 
 ## 1. 权威与边界
 
 冲突裁决顺序：Notion P1 正式台账 → Owner 六项修正 → 正式实施分工 → candidate-v0.2.1 → P1 shared contracts → CPS parity matrix → CPS 只读证据。
 
+数据库落地后的运行真源优先级：**已执行 Migration > 当前 Schema/SQL > 本治理文档 > JSONL 数据字典 > Notion 治理镜像**。
+
 - 新项目与 CPS 零共享；CPS 只作只读证据。
-- P1-05A 不创建 Migration、不启动数据库、不生成 Prisma Client。
+- P1-05B 只使用一次性 PostgreSQL 16 验证实例，不创建正式数据库。
 - P1-06 落地数据库角色、GRANT/REVOKE、备份与恢复。
 - P1-07 实现 claim、heartbeat、fencing、Worker 与 Scheduler 运行时。
 - P1-08 实现 Auth、Credential 加解密和后台 API。
@@ -134,7 +137,7 @@
 
 ## 5. Migration-only 物理约束清单
 
-P1-05A 只登记，不创建 SQL：
+以下对象已由 `20260803090000_p1_initial_schema` 中的手写 PostgreSQL SQL 落地：
 
 1. 所有状态、非负计数、正数页码/章号、时间窗顺序和 processing 租约完整性 CHECK。
 2. `channel_account_credential(channel_account_id, credential_type) WHERE status='active'`。
@@ -142,7 +145,7 @@ P1-05A 只登记，不创建 SQL：
 4. `novel_chapter(novel_id, canonical_chapter_number) WHERE deleted_at IS NULL`。
 5. `article(locale, slug) WHERE deleted_at IS NULL`。
 6. `catalog_scan_task(channel_account_id, channel_app_id, project_type) WHERE status IN ('pending','processing')`。
-7. ChannelSync active scope 部分唯一；GenericTask 使用 `COALESCE` 规范化 nullable account/app 后建立 active 唯一。
+7. ChannelSync active scope 部分唯一；GenericTask 使用 PostgreSQL `NULLS NOT DISTINCT` 对 nullable account/app 建立 active 唯一，不使用 UUID sentinel 或 `COALESCE` 表达式。
 8. 三类 Item 分别建立 pending claim 与 expired lease recovery 两套部分索引；查询不得使用 OR。
 9. `home_carousel_manual_slot` 的 enabled+未软删 position/novel 两个部分唯一索引，PostgreSQL 谓词使用 `enabled IS TRUE`。
 10. `promo_link.public_redirect_code` 使用全局非部分 UNIQUE、byte-wise/case-sensitive 语义和不可变 trigger；软删行继续占位。
@@ -152,7 +155,7 @@ P1-05A 只登记，不创建 SQL：
     - `db:public:article:article_published_body_check`: `status <> 'published' OR btrim(body) <> ''`；
     - `db:public:article:article_published_promo_link_check`: `status <> 'published' OR promo_link_id IS NOT NULL`；
     - `db:public:article:article_published_published_at_check`: `status <> 'published' OR published_at IS NOT NULL`。
-12. `promo_link` 提供 `db:public:promo_link:promo_link_id_novel_key` = `UNIQUE(id, novel_id)`；Article 以 `db:public:article:article_promo_link_novel_fkey` = `(promo_link_id, novel_id)` 复合 FK 引用该键，数据库保证所选 PromoLink 与 Article 属于同一 Novel。Prisma 草案已完整表达，正式 Migration 必须保留具名复合 FK。
+12. `promo_link` 提供 `db:public:promo_link:promo_link_id_novel_key` = `UNIQUE(id, novel_id)`；Article 以 `db:public:article:article_promo_link_novel_fkey` = `(promo_link_id, novel_id)` 复合 FK 引用该键，数据库保证所选 PromoLink 与 Article 属于同一 Novel。Prisma 和初始 Migration 均保留该具名复合 FK。
 13. Article locale 与 Novel locale 一致仍由写事务和集成测试保证；数据库不建立第二套 locale 映射。
 14. `operation_audit`、IndexNow attempt、credential/carousel log 禁止普通 UPDATE/DELETE；权限落地归 P1-06。
 15. ScheduleRun scheduled/manual 互斥字段 CHECK；CronRun 与 GenericTask 在同一事务创建并一对一关联。
@@ -166,7 +169,7 @@ P1-05A 只登记，不创建 SQL：
 ## 6. 并发与事务不变量
 
 - `db:public:novel:novel_canonical_fill_only_contract`：来源同步写 Novel canonical 字段时只允许把数据库当前空值补成来源值；`title`、`description`、`cover_url`、`slug`、`author` 等非空 canonical 值一律不覆盖。P1-07 必须用条件 UPDATE/同事务行锁实现，不采用“先读再无条件写”。
-- 运营明确清空 canonical 字段后，是否重新从来源补值必须由显式运营操作携带授权；普通同步不得根据空值猜测授权。P1-05A 不增加字段 provenance 表。
+- 运营明确清空 canonical 字段后，是否重新从来源补值必须由显式运营操作携带授权；普通同步不得根据空值猜测授权。P1-05 不增加字段 provenance 表。
 - SourceItem 可保留未知上游语种原值，`source_locale` 映射失败时为 `NULL`/unknown 语义；不得猜测、不得把上游原值直接写入 `Novel.locale`。无法映射时不创建或不发布 Novel，locale 映射唯一真源仍在应用层。
 - Worker 是 at-least-once。claim 或过期回收每次易主都生成新 token 并令 epoch +1；heartbeat 不改变 epoch。
 - pending claim 使用 `status='pending'` 专用查询；recovery 使用 `status='processing' AND locked_until < transaction_timestamp()` 专用查询。
@@ -188,7 +191,7 @@ P1-05A 只登记，不创建 SQL：
 | public code、published metadata | S0 | 可读 | 可读写 | 任务参数可引用 | 可读 |
 | `article.body` | S0（published 时） | `web_app` 公开页面渲染可读 | 可生成/更新 | 不读 | 可读公开版本；不是章节版权正文 |
 
-P1-06 创建角色并实测 REVOKE；P1-05A 不猜角色 DDL。
+P1-06 创建角色并实测 REVOKE；P1-05B 不猜角色 DDL。
 
 ## 8. 软删除与保留
 
@@ -196,7 +199,7 @@ P1-06 创建角色并实测 REVOKE；P1-05A 不猜角色 DDL。
 - PromoLink 不允许硬删；公开码永久占位。
 - 核心身份、业务审计、side-effect intent 长期保留。
 - Task 头建议终态后 365 天、Item 180 天；TrackingEvent 90 天；IndexNow attempt、CronRun 180 天；carousel change log 365 天。
-- P1-05A 不创建清理任务；保留期执行归 P1-07/P1-06 运维流程。
+- P1-05B 不创建清理任务；保留期执行归 P1-07/P1-06 运维流程。
 - `withdrawn` 章节保留元数据但删除 `novel_chapter_content`；`stale` 只停展，正文保留。
 - `article.body` 是模板渲染后的 SEO 正文，随 Article 软删除和长期保留策略管理；章节 `withdrawn` 不得级联删除 Article body。公开版本可按 Article 导出策略导出，不能按章节版权正文策略处理。
 
@@ -210,10 +213,12 @@ P1-06 创建角色并实测 REVOKE；P1-05A 不猜角色 DDL。
 ## 10. 数据字典一致性
 
 - 每个 Prisma scalar 字段必须有 `db:public:{table}:{field}` 记录。
-- 每张表和每个计划约束分别有 table/constraint stable_key。
-- active 字典记录必须映射 Prisma 或已应用 SQL Migration；本阶段记录均为 `planned`。
+- 每张表和每个约束分别有 table/constraint stable_key。
+- 825 条字典记录均为 `active`；数据库对象记录必须填写 `managed_by`、`physical_name` 和 `introduced_in_migration`。
+- `managed_by` 只允许 `prisma_schema | migration_sql | application_contract`；应用事务合同不得冒充数据库对象。
+- active 字典记录必须映射 Prisma、已应用 SQL Migration 或 `src/domain/database-invariants.ts` 中的应用事务不变量。
 - 字段替代只允许 `deprecated/superseded`，旧记录不得删除。
-- 后续 drift CI 同时解析 Prisma DMMF 和迁移后 `pg_catalog`，双向拒绝孤儿字段与幽灵字段。
+- `scripts/check-database-dictionary-drift.mjs` 同时解析 Prisma Schema、JSONL 和迁移后的 `pg_catalog`，双向拒绝孤儿字段、幽灵字段和未登记数据库对象。
 - 每个正式 Migration 必须回填 `introduced_in_migration`。
 - Notion 只同步已确认的 business meaning、状态、敏感级别、角色、不变量和关键唯一/FK；索引物理名、opclass、执行计划、锁和 rollback SQL 只留本地。
 - Notion 以 stable_key 幂等 upsert，禁止同一字段重复建记录。
@@ -223,7 +228,7 @@ P1-06 创建角色并实测 REVOKE；P1-05A 不猜角色 DDL。
 - Prisma 管理普通列、关系、FK、普通 unique/index。
 - CHECK、部分索引、不可变 trigger、表达式索引、append-only 权限和列级权限必须使用手写 Migration。
 - 生产禁止 `prisma db push`。
-- P1-05A 未修改依赖；精确请求见 `docs/p1/P1_05_DEPENDENCY_CHANGE_REQUEST.md`。
+- Prisma CLI 与 Client 均固定为 `6.19.2`，由 Claude dependency commit `db0d4cd1` 合入；P1-05B 未修改依赖文件。
 - 原生 SQL 如返回 camelCase alias，必须双引号。
 
 ## 12. 变更日志
@@ -232,3 +237,4 @@ P1-06 创建角色并实测 REVOKE；P1-05A 不猜角色 DDL。
 | --- | --- | --- | --- | --- |
 | 2026-08-02 | P1-05A | 建立 37 表 Prisma 草案、状态真源、机器字典、约束与评审基线；未创建 Migration | Codex | 待 Claude 领域评审 |
 | 2026-08-03 | P1-05A-REVISION | 修复 Claude 10 项领域评审：canonical 只补空、Article CHECK/复合 FK、serving 当前快照、locale、字典语义与 CPS pattern registry；仍未创建 Migration | Codex | 待 Claude 领域复评 |
+| 2026-08-03 | P1-05B | 建立 37 表 PostgreSQL 初始 Migration，落地 66 个 CHECK、部分唯一/claim/recovery 索引与 2 个保护 trigger；在 PostgreSQL 16.14 完成空库、重放、零 drift 与真实正负测试 | Codex | 已验证 |
