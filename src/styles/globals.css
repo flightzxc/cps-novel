@@ -1,54 +1,186 @@
 @import "tailwindcss";
 
-/*
- * 设计 token 骨架 — P1-04 只建结构，色值由 ClaudeDesign 在 P1-10 定稿。
- * 下面所有值都是 PLACEHOLDER，不是最终配色。
- * 选用深灰底（非纯黑）+ 浅灰字（非纯白），仅为满足可访问性对比度的
- * 临时占位，不代表最终品牌视觉。
- */
-:root {
-  /* 站点主体（整体深色）—— 以下全部为 PLACEHOLDER */
-  --novel-bg: #16181d; /* PLACEHOLDER */
-  --novel-bg-elevated: #1f2228; /* PLACEHOLDER */
-  --novel-fg: #e6e6e6; /* PLACEHOLDER */
-  --novel-fg-muted: #a8a8ad; /* PLACEHOLDER */
-  --novel-fg-subtle: #7a7a80; /* PLACEHOLDER */
-  --novel-border: #2c2f36; /* PLACEHOLDER */
-  --novel-primary: #6b7cff; /* PLACEHOLDER */
-  --novel-primary-hover: #5567e6; /* PLACEHOLDER */
-  --novel-accent: #f2a94e; /* PLACEHOLDER */
-  --novel-accent-hover: #d9922f; /* PLACEHOLDER */
-  --novel-danger: #e5534b; /* PLACEHOLDER */
-  --novel-success: #3fb27f; /* PLACEHOLDER */
+/* ============================================================================
+ * 用户端设计 token —— 视觉方向「墨与纸」
+ * 口径唯一真源：docs/p1/P1_10_VISUAL_DIRECTION.md
+ *
+ * 三条纪律：
+ *   1. 组件里禁止出现任何硬编码色值，一律走本文件的变量；
+ *   2. 站点作用域恒为深色，不跟随系统；阅读作用域默认跟随系统且可手动覆盖；
+ *   3. 基底不用纯黑、正文不用纯白。
+ *
+ * 色值改动会被 tests/ui/design-tokens.test.ts 重新计算对比度，改色不改测试
+ * 会直接失败。
+ * ========================================================================== */
 
-  /* 阅读区专用（跟随系统，P1-11 实现手动覆盖）—— 以下全部为 PLACEHOLDER */
-  --reader-bg: #16181d; /* PLACEHOLDER */
-  --reader-fg: #dcdcdc; /* PLACEHOLDER */
-  --reader-fg-muted: #98989e; /* PLACEHOLDER */
-  --reader-selection: #3a3f4b; /* PLACEHOLDER */
+:root {
+  /* --- 字体：系统栈，不引入任何 Web Font --------------------------------- */
+  --novel-font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei",
+    sans-serif;
+  /* 书名与阅读正文用系统衬线。CJK 语种下若无可用衬线字族会自动回落到无衬线，
+     不做任何补偿——这是接受的降级，不是缺陷。 */
+  --novel-font-serif: ui-serif, Georgia, Cambria, "Iowan Old Style",
+    "Times New Roman", "Songti SC", "Noto Serif CJK SC", serif;
+
+  /* --- 圆角：三档，没有全圆角。全圆角胶囊是 App 商店语言，本站不用。 ----- */
+  --novel-radius-sm: 6px;
+  --novel-radius-md: 10px;
+  --novel-radius-lg: 14px;
+
+  /* --- 封面比例的唯一定义处 ---------------------------------------------
+     真实上游封面资产尚未量过，当前 3/4 是待核实值。需要改时只改这一行，
+     全站不得出现第二处硬编码比例。 */
+  --novel-cover-aspect: 3 / 4;
+
+  --novel-content-max: 1200px;
+
+  /* --- 阅读作用域的两套调色板 --------------------------------------------
+     十六进制值只在这里写一次，下面三个 .reader 规则块全部引用它们，
+     避免「跟随系统」与「手动深色」两处色值漂移。 */
+  --reader-light-bg: #f6f3ec;
+  --reader-light-fg: #23231f;
+  --reader-light-fg-muted: #5c5a53;
+  --reader-light-selection: #e3d9c4;
+
+  --reader-dark-bg: #15181f;
+  --reader-dark-fg: #dce0e8;
+  --reader-dark-fg-muted: #99a1b0;
+  --reader-dark-selection: #2e3646;
 }
 
+/* ============================================================================
+ * 站点作用域 —— 恒定深色，不跟随系统，不提供切换
+ * 覆盖页头、页脚、导航、卡片、按钮。
+ * ========================================================================== */
+.site {
+  --novel-bg: #12151c;
+  --novel-bg-elevated: #1a1e27;
+  --novel-bg-raised: #232936;
+  --novel-fg: #e7eaf0;
+  --novel-fg-muted: #a6aebf;
+  --novel-fg-subtle: #8a93a5;
+  --novel-border: #2a303d;
+  --novel-border-strong: #626c84;
+  --novel-primary: #e0a96d;
+  --novel-primary-hover: #eebc85;
+  --novel-accent: #f0e4ce;
+  --novel-accent-hover: #fbf2e2;
+  --novel-on-accent: #12151c;
+  --novel-on-primary: #12151c;
+  --novel-danger: #f0938a;
+  --novel-success: #7fcca4;
+  --novel-focus: #f0e4ce;
+
+  color-scheme: dark;
+  background-color: var(--novel-bg);
+  color: var(--novel-fg);
+  font-family: var(--novel-font-sans);
+  -webkit-text-size-adjust: 100%;
+}
+
+/* ============================================================================
+ * 阅读作用域 —— 只包住章节正文阅读区
+ *
+ * 边界纪律：同一个章节页上，页头、页脚、章节导航、行动按钮始终留在站点作用域，
+ * 不随系统或用户选择翻转。浅色阅读时页面仍然明确属于本站。
+ *
+ * 三态语义：system（默认，跟随系统）/ light / dark，手动选择优先级更高。
+ * 持久化在 P1-11，本轮只保证状态可切换、外观真实变化。
+ * ========================================================================== */
+.reader {
+  /* 这三项由阅读设置控件以内联样式覆盖，是 P1-11 接本地存储的挂载点 */
+  --reader-font-size: 18px;
+  --reader-line-height: 1.8;
+  --reader-measure: 68ch;
+
+  /* 焦点环在阅读区内改用当前阅读前景色，否则浅色纸面上的纸色焦点环不可见 */
+  --novel-focus: var(--reader-fg);
+
+  background-color: var(--reader-bg);
+  color: var(--reader-fg);
+  font-family: var(--novel-font-serif);
+}
+
+/* 跟随系统时的浅色，以及用户手动选择浅色 */
+.reader[data-reader-theme="system"],
+.reader[data-reader-theme="light"] {
+  --reader-bg: var(--reader-light-bg);
+  --reader-fg: var(--reader-light-fg);
+  --reader-fg-muted: var(--reader-light-fg-muted);
+  --reader-selection: var(--reader-light-selection);
+  color-scheme: light;
+}
+
+/* 跟随系统且系统为深色 */
+@media (prefers-color-scheme: dark) {
+  .reader[data-reader-theme="system"] {
+    --reader-bg: var(--reader-dark-bg);
+    --reader-fg: var(--reader-dark-fg);
+    --reader-fg-muted: var(--reader-dark-fg-muted);
+    --reader-selection: var(--reader-dark-selection);
+    color-scheme: dark;
+  }
+}
+
+/* 用户手动选择深色——优先级高于系统 */
+.reader[data-reader-theme="dark"] {
+  --reader-bg: var(--reader-dark-bg);
+  --reader-fg: var(--reader-dark-fg);
+  --reader-fg-muted: var(--reader-dark-fg-muted);
+  --reader-selection: var(--reader-dark-selection);
+  color-scheme: dark;
+}
+
+.reader ::selection {
+  background-color: var(--reader-selection);
+  color: var(--reader-fg);
+}
+
+/* ============================================================================
+ * 焦点态 —— 键盘可达且明显。所有交互元素共用，不允许组件各写各的。
+ * ========================================================================== */
+:where(.site, .reader) :focus-visible {
+  outline: 2px solid var(--novel-focus);
+  outline-offset: 2px;
+}
+
+/* ============================================================================
+ * Tailwind 主题映射。inline 表示工具类直接内联 var() 引用，
+ * 因此上面按作用域声明的变量能被正确解析。
+ * ========================================================================== */
 @theme inline {
   --color-novel-bg: var(--novel-bg);
   --color-novel-bg-elevated: var(--novel-bg-elevated);
+  --color-novel-bg-raised: var(--novel-bg-raised);
   --color-novel-fg: var(--novel-fg);
   --color-novel-fg-muted: var(--novel-fg-muted);
   --color-novel-fg-subtle: var(--novel-fg-subtle);
   --color-novel-border: var(--novel-border);
+  --color-novel-border-strong: var(--novel-border-strong);
   --color-novel-primary: var(--novel-primary);
   --color-novel-primary-hover: var(--novel-primary-hover);
   --color-novel-accent: var(--novel-accent);
   --color-novel-accent-hover: var(--novel-accent-hover);
+  --color-novel-on-accent: var(--novel-on-accent);
+  --color-novel-on-primary: var(--novel-on-primary);
   --color-novel-danger: var(--novel-danger);
   --color-novel-success: var(--novel-success);
+  --color-novel-focus: var(--novel-focus);
 
   --color-reader-bg: var(--reader-bg);
   --color-reader-fg: var(--reader-fg);
   --color-reader-fg-muted: var(--reader-fg-muted);
   --color-reader-selection: var(--reader-selection);
+
+  --font-novel-sans: var(--novel-font-sans);
+  --font-novel-serif: var(--novel-font-serif);
+
+  --radius-novel-sm: var(--novel-radius-sm);
+  --radius-novel-md: var(--novel-radius-md);
+  --radius-novel-lg: var(--novel-radius-lg);
 }
 
 body {
-  background: var(--novel-bg);
-  color: var(--novel-fg);
+  margin: 0;
 }
