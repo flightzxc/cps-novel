@@ -6,13 +6,14 @@
 
 后台身份认证：会话管理、2FA、能力位（capability）框架、登录态校验辅助函数。
 
-## 本轮范围
+## 当前实现状态
 
-🔴 本轮（P1-04）只建目录，不写实现。当前目录仅含本 README 与 `.gitkeep` 占位。
+P1-08A 已提供可运行的纯 Auth 核心：Session 生命周期、TOTP、恢复码、2FA challenge、
+登录失败记录、Capability 和可注入存储端口。生产 PostgreSQL 持久化仍需通过
+`docs/p1/P1_08_SCHEMA_DEPENDENCY_CHANGE_REQUEST.md` 审批后接入。
 
-## 填充任务
-
-由 **P1-08（Auth、Credential、后台 API 和能力位）** 填充。
+测试内存适配器只存在于 `tests/backend/auth/`，明确为
+`TEST_ONLY / NOT_PRODUCTION_PERSISTENCE`。
 
 ## 特别纪律
 

@@ -6,13 +6,11 @@
 
 后台/公开面共用的服务端业务逻辑层：Server Action 与 API Route 背后的实际处理函数、权限校验、跨表事务编排。前端（Claude 侧）只消费这一层暴露的契约，不直接操作数据库。
 
-## 本轮范围
+## 当前实现状态
 
-🔴 本轮（P1-04）只建目录，不写实现。当前目录仅含本 README 与 `.gitkeep` 占位。
-
-## 填充任务
-
-由 **P1-08（Auth、Credential、后台 API 和能力位）** 填充。
+P1-08A 已在 `auth/` 建立 Admin 页面/API/Action 注册表、默认拒绝 guards、
+Origin/request-id/cookie 契约和 service mutation 二次授权。因本轮禁止修改 `src/app/**`，
+这些 guards 尚未接入 Next.js 页面或 Route Handler。
 
 ## 特别纪律
 

@@ -38,6 +38,20 @@ P1-05A 只登记从 CPS 提取的数据库**模式证据**；没有字节复制�
 | `home_carousel_auto_candidate` pattern | `prisma/schema.prisma` | `786-803` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | Drama→Novel/Article；分数改 numeric，保留 batch/locale/rank 唯一模式 | Codex |
 | `home_carousel_serving` pattern | `prisma/schema.prisma` | `808-826` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | 冻结为仅当前快照，`(locale, position)` 绝对唯一；删除时间有效期历史职责 | Codex |
 | `home_carousel_change_log` pattern | `prisma/schema.prisma` | `831-843` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `PATTERN_ONLY` | 保留 append-only 历史模式；移除 Drama 引用并承担 serving 历史变更 | Codex |
+| `ADMIN_IDLE_TIMEOUT_MS` / `ADMIN_SESSION_TOUCH_INTERVAL_MS` / `ADMIN_ABSOLUTE_TIMEOUT_MS` | `src/lib/session-timeout.ts` | `3-5` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | 保留 2h idle、15min touch、24h absolute 参数；由 JWT token 改为显式 Session record | Codex |
+| `validateAdminSession` | `src/lib/session-timeout.ts` | `17-69` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | 保留绝对超时 fail-closed；增加 idle、撤销、identity 状态、session version 与时间序验证 | Codex |
+| `requireAdminSession` | `src/lib/admin-session.ts` | `40-88` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | 从 NextAuth/Prisma 闭包切成 token hash + `AdminIdentityStore`/`SessionStore` 端口，保留 sessionVersion 拒绝语义 | Codex |
+| `AdminCapability` / `ADMIN_CAPABILITY_CONFIG` | `src/lib/admin-capabilities.ts` | `3-29` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | 能力名改为 Novel 管理四项；promo/revenue 无默认角色，四项均登记 2FA 风险属性 | Codex |
+| `hasAdminCapability` | `src/lib/admin-capabilities.ts` | `45-66` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | 保留 role/user env allowlist；输入改为端口化 `AdminAuthContext` | Codex |
+| `requireAdminCapability` | `src/lib/admin-capabilities.ts` | `68-80` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | 统一为 `admin_capability_denied` 403，并与 2FA 检查保持分层 | Codex |
+| TOTP secret/URI/verification primitives | `src/lib/totp.ts` | `3-60` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | 保留 SHA1/6 位/30s/±1；移除 otpauth/qrcode 依赖，以 Node crypto 实现 RFC 6238，issuer 改 cps-novel | Codex |
+| `encryptTotpSecret` / `decryptTotpSecret` | `src/lib/totp-crypto.ts` | `1-118` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | 保留 AES-256-GCM v1 载荷与严格 key/payload 校验；改为显式可注入 key，仍只用于 TOTP | Codex |
+| Recovery Code primitives | `src/lib/recovery-codes.ts` | `4-63` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | 保留 10 个一次性格式和掩码；因禁止新增 bcryptjs 改为 Node scrypt + 独立盐 | Codex |
+| Login failure dual-key limiter | `src/lib/auth-utils.ts` | `5-208` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | 保留 username/IP 双维度、5 次/15min；identifier 改 SHA-256 且持久化切为 `LoginAttemptStore` | Codex |
+| 2FA pending setup lifecycle | `src/lib/two-factor-settings.ts` | `4-239` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | 保留 10min pending、确认后启用、恢复码轮换与 sessionVersion 前进；切断 Prisma/QR UI 闭包 | Codex |
+| 2FA login challenge lifecycle | `src/lib/two-factor-login.ts` | `263-529` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | 保留 hash token、5min、5 次、TOTP/恢复码和单次消费；改为存储端口 | Codex |
+| `ADMIN_PAGE_ROOTS` / segment-safe match | `src/proxy.ts` | `20-45` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | 路由清单换为 Novel 后台 14 根路径，并新增未登记页面/API/Action 默认 404 | Codex |
+| Credential capability boundary pattern | `src/app/(admin)/channel-accounts/actions.ts` | `49-200` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `PATTERN_ONLY` | 只保留六操作命名与入口先鉴权模式；本轮不搬 Credential 写入、解密、渠道校验或 Action 实现 | Codex |
 
 ## 使用说明
 
