@@ -638,3 +638,24 @@ SCHEMA_OR_MIGRATION_CHANGED=NO
 
 **下一步**：Owner 就 O1 / O3 / O4 拍板后，由 Codex 执行 C1～C4。
 C1 与 C2 不依赖任何 Owner 决策，可先行；C3 待 O3；C4 为文档修订。
+
+---
+
+## 13. Owner 决策落地回执（2026-08-04）
+
+本节只记录调研完成后的 Owner 决策，不改写前述只读证据：
+
+```text
+O1=ADOPT_CPS_CREDENTIAL_STATUS_WITH_DEFECT_FIX
+O3=APPROVED_BOTH
+O4=APPROVED_REVISED_RULE
+```
+
+- O1：小说采用 `active | superseded | expired | invalid`，删除 Credential `disabled/revoked`；
+  validate 明确拒绝 superseded，修复 CPS 的无明文复活缺陷。
+- O3：补入 `credential_ambiguous` 与 `account_inactive`，两者语义不得互相替代。
+- O4：CPS parity 调研成为同类模块冻结前的强制证据步骤；CPS 仍不高于小说冻结架构。
+- F-2：不新增 `two_factor_consumed`；Recovery Code 成功使用时原子推进 identity 与绑定
+  Session 的同一 sessionVersion，旧 Session 失效、当前 Session 保持有效。
+- F-3：`CredentialQueuedResult` 与 `lastValidatedAt` 已冻结；异步 validation + taskId 保持
+  `EXPLICIT_DIVERGENCE / CPS_HAS_NO_EQUIVALENT`，本轮未实现 Worker。

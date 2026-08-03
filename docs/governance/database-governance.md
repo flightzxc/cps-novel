@@ -2,7 +2,7 @@
 
 **Owner：Codex**
 
-**任务：P1-05B / P1-06**
+**任务：P1-05B / P1-06 / P1-08 CPS parity**
 
 **状态：P1-05B VALIDATED；P1-06 IMPLEMENTED，待本报告记录恢复演练证据**
 
@@ -10,7 +10,9 @@
 
 本文件是人类可读的数据库治理基线；机器可读基线为
 `docs/governance/database-schema-dictionary.jsonl`。P1-05B 的可执行初始基线为
-`prisma/migrations/20260803090000_p1_initial_schema/migration.sql`，并已在隔离的 PostgreSQL 16 实例验证。
+`prisma/migrations/20260803090000_p1_initial_schema/migration.sql`；后续决策只允许通过增量
+Migration 演进，当前 Credential 状态增量为
+`20260804090000_p1_08_credential_status_parity`。
 
 ## 1. 权威与边界
 
@@ -19,6 +21,10 @@
 数据库落地后的运行真源优先级：**已执行 Migration > 当前 Schema/SQL > 本治理文档 > JSONL 数据字典 > Notion 治理镜像**。
 
 - 新项目与 CPS 零共享；CPS 只作只读证据。
+- 涉及 CPS 同类模块的数据字典、状态词表、字段语义、状态转换、错误码或安全边界冻结前，
+  必须完成 CPS 只读 parity 调研。CPS 是强制参考证据，不是高于小说冻结架构的权威源。
+- 偏离 CPS 时，必须在 JSONL evidence 或本治理文档登记 CPS 行为、小说行为、偏离原因和
+  Owner 决策；不得用普通 parity 备注掩盖架构偏离。
 - P1-05B 只使用一次性 PostgreSQL 16 验证实例，不创建正式数据库。
 - P1-06 落地数据库角色、GRANT/REVOKE、备份与恢复。
 - P1-07 实现 claim、heartbeat、fencing、Worker 与 Scheduler 运行时。
@@ -53,6 +59,18 @@
 | `channel_account_credential` | CPS_PARITY_ADAPTED | 加密凭证、key version、指纹元数据 | 每账户/类型单 active 部分唯一 | 明文、env fallback、conflict 三轨 |
 | `channel_credential_active_fingerprint` | CPS_PARITY（模式） | 活跃凭证指纹占位 | fingerprint、credential_id 分别唯一 | 应用层先查后写 |
 | `credential_change_log` | CPS_PARITY_ADAPTED | 凭证安全变更事件，不含 secret | append-only；账户/时间索引 | legacy credential log |
+
+#### P1-08 CPS parity 与显式偏离登记
+
+| ID | 分类 | CPS 行为 | 小说行为 | 偏离原因 | Owner 决策 |
+| --- | --- | --- | --- | --- | --- |
+| `P1-08-CRED-STATUS` | `CPS_PARITY_WITH_DEFECT_FIX` | Credential 使用 `active/superseded/expired/invalid`；validate 未过滤 status，可将 superseded 复活 | 使用同一四态；validate 只接受 active/expired/invalid，superseded 不可恢复 | 修复 CPS 已证实的复活缺陷；disabled 只属于 Account；删除小说原 revoked | `O1=ADOPT_CPS_CREDENTIAL_STATUS_WITH_DEFECT_FIX` |
+| `P1-08-CHALLENGE-SESSION` | `CPS_HAS_NO_EQUIVALENT` | 登录前 challenge 绑定 user + cookie，无数据库 Session | challenge 必须绑定当前数据库 Session | 小说采用长生命周期 DB Session + step-up 2FA，模型不同 | `CHALLENGE_SESSION_BINDING=REQUIRED` |
+| `P1-08-WORKER-DECRYPT` | `CPS_HAS_NO_EQUIVALENT` | Web 与 Worker 共享 key，Web 可读取并解密 Credential | Worker 是唯一密文读取/解密执行体；Web 与 Scheduler 无密钥 | 小说冻结了更强的进程与数据库权限隔离 | Owner 已批准的 Credential 安全边界 |
+| `P1-08-ASYNC-VALIDATION` | **`EXPLICIT_DIVERGENCE / CPS_HAS_NO_EQUIVALENT`** | Credential validation 同步、本地执行，无 taskId | validation 通过任务入队并返回稳定 taskId 与 mutation request id | 保持 Web 无解密能力，并以 P1-07 fencing 承载可恢复异步执行 | P1-08B 冻结架构；本轮只冻结契约，不实现 Worker |
+
+`P1-08-ASYNC-VALIDATION` 是显式 divergence record，不得降级为普通 parity 备注或在后续
+字典生成中丢失。
 
 ### 3.2 Novel、章节与标签
 
@@ -107,7 +125,7 @@
 - Channel：`active | inactive | registered_disabled`
 - Account：`active | disabled`
 - Capability：`enabled | registered_disabled | registered_partial`
-- Credential：`active | superseded | revoked | expired`
+- Credential：`active | superseded | expired | invalid`
 - Novel：`draft | ready | published | unpublished | takedown`
 - SourceItem：`pending | linked | ignored | stale`
 - Chapter：`preview | locked | stale | withdrawn`
@@ -137,7 +155,7 @@
 
 ## 5. Migration-only 物理约束清单
 
-以下对象已由 `20260803090000_p1_initial_schema` 中的手写 PostgreSQL SQL 落地：
+以下对象由 `20260803090000_p1_initial_schema` 及后续具名增量 Migration 落地：
 
 1. 所有状态、非负计数、正数页码/章号、时间窗顺序和 processing 租约完整性 CHECK。
 2. `channel_account_credential(channel_account_id, credential_type) WHERE status='active'`。
@@ -160,6 +178,9 @@
 14. `operation_audit`、IndexNow attempt、credential/carousel log 禁止普通 UPDATE/DELETE；权限落地归 P1-06。
 15. ScheduleRun scheduled/manual 互斥字段 CHECK；CronRun 与 GenericTask 在同一事务创建并一对一关联。
 16. Item 结果提交必须在同一事务验证 `execution_token` 和 `lease_epoch`；旧租约为零行更新并回滚业务结果。
+17. `20260804090000_p1_08_credential_status_parity` 将 Credential CHECK 增量替换为
+    `active | superseded | expired | invalid`；如检测到 `revoked` 存量必须失败并要求人工处置，
+    不得静默迁移到其他状态。
 
 ### P1-05B Migration 注意事项
 

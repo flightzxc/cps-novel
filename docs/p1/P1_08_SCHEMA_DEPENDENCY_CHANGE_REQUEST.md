@@ -71,8 +71,10 @@ P1-08A 已新增明确的 `AuthUnitOfWork` port；生产 adapter 不得用多个
 2. **完成 TOTP challenge**：消费 challenge、标记其绑定 Session 的
    `two_factor_completed_at`，两步同成同败。
 3. **使用 recovery code 完成 challenge**：消费 recovery code、消费 challenge、标记绑定
-   Session 的 `two_factor_completed_at`，三步同成同败。challenge 消费失败不得提前烧掉
-   recovery code，recovery 消费失败不得产生 Session/challenge 半状态。
+   Session 的 `two_factor_completed_at`，同时将 identity `session_version` 前进一版并把绑定
+   Session 更新到同一新版本，五步同成同败。其他旧 Session 因版本不匹配失效，绑定 Session
+   不得自我失效。challenge 消费失败不得提前烧掉 recovery code，recovery 消费失败不得产生
+   Session/challenge/version 半状态。
 
 `TEST_ONLY / NOT_PRODUCTION_PERSISTENCE` 内存 adapter 实现同一原子接口并通过故障注入测试；
 这不构成生产持久化实现。

@@ -46,3 +46,25 @@
 ## Deferred Production Work
 
 当前 schema 没有 Admin/Session/2FA 表，且本轮禁止修改 Prisma/package/contracts/App。生产 Store、跨表事务、cookie Handler 和全站 wiring 依赖变更申请审批。内存适配器不得用于部署。
+
+## CPS parity Owner decision addendum（2026-08-04）
+
+- Recovery Code 成功路径的 `AuthUnitOfWork` 已冻结为同一原子提交：消费 recovery code、
+  消费 challenge、identity `sessionVersion + 1`、绑定 Session 更新到新版本并写入
+  `twoFactorCompletedAt`。因此其他旧 Session 失效，当前绑定 Session 保持有效。
+- F-2 错误码维持 `two_factor_failed | two_factor_expired | two_factor_locked`，未新增
+  `two_factor_consumed`。
+- `TEST_ONLY / NOT_PRODUCTION_PERSISTENCE` 内存 adapter 实现相同原子语义与逐阶段回滚注入；
+  生产 PostgreSQL Auth Store 仍未实现。
+- Credential 四态、queued result 与 CPS parity 治理属于纯契约/增量数据库约束；Credential
+  Worker Handler、解密和真实 validation 仍为 `NOT_IMPLEMENTED`。
+
+### Parity decision validation snapshot
+
+- `npm run build` / `npm run typecheck` / `npm run lint`：PASS。
+- backend：15 files / 92 tests PASS；Auth + Credential 专项：45/45 PASS。
+- disposable PostgreSQL：`16.14 (Debian 16.14-1.pgdg13+1)`；空库应用 2 条 migration、
+  重复部署、双向 schema diff、Credential 四态 CHECK、revoked 升级阻断与 10/10 数据库
+  constraint tests 全部 PASS；容器与 volume 已清理。
+- dictionary drift：37 models / 825 active records；数据库 catalog 37 tables / 159 constraints /
+  163 indexes / 2 triggers，PASS。
