@@ -5,16 +5,12 @@ import {
   buildWorkerAllowlist,
   sanitizePersistedTaskError,
 } from "../src/lib/tasks";
-import { runWorker } from "./runtime";
-
-function optionalPositiveInteger(value: string | undefined, name: string): number | undefined {
-  if (value === undefined) return undefined;
-  const parsed = Number(value);
-  if (!Number.isSafeInteger(parsed) || parsed < 1) throw new Error(`${name} must be a positive integer`);
-  return parsed;
-}
+import { parseShutdownDrainTimeoutEnv, runWorker } from "./runtime";
 
 export async function main(): Promise<void> {
+  const shutdownDrainTimeoutMs = parseShutdownDrainTimeoutEnv(
+    process.env.WORKER_SHUTDOWN_DRAIN_TIMEOUT_MS,
+  );
   const prisma = new PrismaClient();
   const controller = new AbortController();
   const stop = () => controller.abort();
@@ -31,10 +27,7 @@ export async function main(): Promise<void> {
       handlers: HANDLERS,
       allowlist,
       signal: controller.signal,
-      shutdownDrainTimeoutMs: optionalPositiveInteger(
-        process.env.WORKER_SHUTDOWN_DRAIN_TIMEOUT_MS,
-        "WORKER_SHUTDOWN_DRAIN_TIMEOUT_MS",
-      ),
+      shutdownDrainTimeoutMs,
     });
   } finally {
     process.removeListener("SIGINT", stop);

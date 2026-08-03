@@ -12,6 +12,10 @@ import {
   type TaskHandlerRegistry,
   type WorkerAllowlistConfig,
 } from "../../src/lib/tasks";
+import {
+  DEFAULT_SHUTDOWN_DRAIN_TIMEOUT_MS,
+  validateShutdownDrainTimeoutMs,
+} from "./shutdown-timeout";
 
 export interface WorkerRuntimeOptions {
   prisma: PrismaClient;
@@ -30,8 +34,6 @@ export interface DrainLoopOptions {
   pollMs: number;
   cycle: () => Promise<boolean>;
 }
-
-export const DEFAULT_SHUTDOWN_DRAIN_TIMEOUT_MS = 30_000;
 
 type DrainResult<T> =
   | { status: "completed"; value: T }
@@ -63,7 +65,6 @@ function waitForHandlerDrain<T>(
   signal: AbortSignal,
   timeoutMs: number,
 ): Promise<DrainResult<T>> {
-  if (timeoutMs < 1) throw new Error("shutdownDrainTimeoutMs must be positive");
   return new Promise((resolve) => {
     let settled = false;
     let timeout: ReturnType<typeof setTimeout> | undefined;
@@ -87,13 +88,11 @@ function waitForHandlerDrain<T>(
 }
 
 export async function processOneWorkerCycle(options: WorkerRuntimeOptions): Promise<boolean> {
+  const shutdownDrainTimeoutMs = validateShutdownDrainTimeoutMs(
+    options.shutdownDrainTimeoutMs ?? DEFAULT_SHUTDOWN_DRAIN_TIMEOUT_MS,
+  );
   if (options.signal.aborted || !options.allowlist.willConsume) return false;
   const leaseMs = options.leaseMs ?? 30_000;
-  const shutdownDrainTimeoutMs = options.shutdownDrainTimeoutMs
-    ?? DEFAULT_SHUTDOWN_DRAIN_TIMEOUT_MS;
-  if (!Number.isFinite(shutdownDrainTimeoutMs) || shutdownDrainTimeoutMs < 1) {
-    throw new Error("shutdownDrainTimeoutMs must be positive");
-  }
   const maxAttemptsByType = Object.fromEntries(
     options.allowlist.effective.map((taskType) => [
       taskType,
@@ -184,11 +183,14 @@ export async function processOneWorkerCycle(options: WorkerRuntimeOptions): Prom
 }
 
 export async function runWorker(options: WorkerRuntimeOptions): Promise<void> {
+  const shutdownDrainTimeoutMs = validateShutdownDrainTimeoutMs(
+    options.shutdownDrainTimeoutMs ?? DEFAULT_SHUTDOWN_DRAIN_TIMEOUT_MS,
+  );
   if (!options.allowlist.willConsume) return;
   await runDrainLoop({
     signal: options.signal,
     pollMs: options.pollMs ?? 1_000,
-    cycle: () => processOneWorkerCycle(options),
+    cycle: () => processOneWorkerCycle({ ...options, shutdownDrainTimeoutMs }),
   });
 }
 
