@@ -44,7 +44,7 @@ export type ConfirmTwoFactorSetupTransactionResult =
   | { status: "conflict" };
 
 export type CompleteTwoFactorChallengeTransactionResult =
-  | { status: "committed" }
+  | { status: "committed"; sessionVersion: number }
   | {
       status:
         | "challenge_unavailable"

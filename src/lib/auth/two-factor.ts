@@ -133,6 +133,7 @@ export async function completeTwoFactorChallenge(input: {
   sessionId: string;
   completedAt: Date;
   method: "totp" | "recovery_code";
+  sessionVersion: number;
 }> {
   const now = input.now ?? new Date();
   const context = validateAdminSession(input.context.session, input.context.identity, now);
@@ -192,5 +193,6 @@ export async function completeTwoFactorChallenge(input: {
     sessionId: challenge.sessionId,
     completedAt: now,
     method,
+    sessionVersion: transaction.sessionVersion,
   };
 }

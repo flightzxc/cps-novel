@@ -6,6 +6,7 @@ import {
   hashRecoveryCode,
   verifyRecoveryCode,
 } from "@/lib/auth/recovery-codes";
+import { validateAdminSession } from "@/lib/auth/session";
 import { decryptTotpSecret, encryptTotpSecret, TotpSecretCryptoError } from "@/lib/auth/totp-crypto";
 import { generateTotpCode, generateTotpSecret, verifyTotpCode } from "@/lib/auth/totp";
 import {
@@ -195,26 +196,54 @@ describe("two-factor service", () => {
       codeHash: hashRecoveryCode(recoveryCode, { cost: 1024 }),
       usedAt: null,
     });
-    const context = sessionContext(memory);
+    const oldContext = sessionContext(memory, "session-old");
+    const context = sessionContext(memory, "session-bound");
     const first = await createTwoFactorChallenge({ context, twoFactor: memory, now: NOW });
-    await expect(
-      completeTwoFactorChallenge({
-        context,
-        token: first.token,
-        recoveryCode,
-        twoFactor: memory,
-        recoveryCodes: memory,
-        transactions: memory,
-        encryptionKey: KEY,
-        now: NOW,
-      }),
-    ).resolves.toMatchObject({ method: "recovery_code" });
+    const result = await completeTwoFactorChallenge({
+      context,
+      token: first.token,
+      recoveryCode,
+      twoFactor: memory,
+      recoveryCodes: memory,
+      transactions: memory,
+      encryptionKey: KEY,
+      now: NOW,
+    });
+    expect(result).toMatchObject({ method: "recovery_code", sessionVersion: 2 });
     expect(memory.recovery.get("recovery-1")?.usedAt).toEqual(NOW);
+    expect(memory.identities.get("admin-1")?.sessionVersion).toBe(2);
+    expect(memory.sessions.get(context.session.id)).toMatchObject({
+      sessionVersion: 2,
+      twoFactorCompletedAt: NOW,
+    });
+    expect(() =>
+      validateAdminSession(
+        memory.sessions.get(oldContext.session.id)!,
+        memory.identities.get("admin-1")!,
+        NOW,
+      ),
+    ).toThrowError(expect.objectContaining({ code: "jwt_invalid" }));
+    expect(() =>
+      validateAdminSession(
+        memory.sessions.get(context.session.id)!,
+        memory.identities.get("admin-1")!,
+        NOW,
+      ),
+    ).not.toThrow();
 
-    const second = await createTwoFactorChallenge({ context, twoFactor: memory, now: NOW });
+    const refreshedContext = validateAdminSession(
+      memory.sessions.get(context.session.id)!,
+      memory.identities.get("admin-1")!,
+      NOW,
+    );
+    const second = await createTwoFactorChallenge({
+      context: refreshedContext,
+      twoFactor: memory,
+      now: NOW,
+    });
     await expect(
       completeTwoFactorChallenge({
-        context,
+        context: refreshedContext,
         token: second.token,
         recoveryCode,
         twoFactor: memory,
@@ -343,6 +372,49 @@ describe("two-factor service", () => {
       expect(memory.recovery.get("recovery-1")?.usedAt).toBeNull();
       expect([...memory.challenges.values()][0].consumedAt).toBeNull();
       expect(memory.sessions.get(context.session.id)?.twoFactorCompletedAt).toBeNull();
+    }
+  });
+
+  it("rolls back all recovery-code effects at every atomic transaction stage", async () => {
+    for (const failure of [
+      "recovery_code",
+      "challenge",
+      "identity_session_version",
+      "bound_session_version",
+      "two_factor_completed",
+    ] as const) {
+      const memory = stores();
+      enableTwoFactor(memory);
+      const recoveryCode = "ABCD-1234-EF56";
+      memory.recovery.set("recovery-1", {
+        id: "recovery-1",
+        identityId: "admin-1",
+        codeHash: hashRecoveryCode(recoveryCode, { cost: 1024 }),
+        usedAt: null,
+      });
+      const context = sessionContext(memory, `session-${failure}`);
+      const challenge = await createTwoFactorChallenge({ context, twoFactor: memory, now: NOW });
+      memory.failNextRecoveryTransactionAt = failure;
+
+      await expect(
+        completeTwoFactorChallenge({
+          context,
+          token: challenge.token,
+          recoveryCode,
+          twoFactor: memory,
+          recoveryCodes: memory,
+          transactions: memory,
+          encryptionKey: KEY,
+          now: NOW,
+        }),
+      ).rejects.toMatchObject({ code: "two_factor_failed" });
+      expect(memory.recovery.get("recovery-1")?.usedAt).toBeNull();
+      expect([...memory.challenges.values()][0].consumedAt).toBeNull();
+      expect(memory.identities.get("admin-1")?.sessionVersion).toBe(1);
+      expect(memory.sessions.get(context.session.id)).toMatchObject({
+        sessionVersion: 1,
+        twoFactorCompletedAt: null,
+      });
     }
   });
 });

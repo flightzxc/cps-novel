@@ -67,6 +67,13 @@ export class TestOnlyInMemoryAuthStores
     | "session_unavailable"
     | "recovery_code_unavailable"
     | null = null;
+  failNextRecoveryTransactionAt:
+    | "recovery_code"
+    | "challenge"
+    | "identity_session_version"
+    | "bound_session_version"
+    | "two_factor_completed"
+    | null = null;
 
   async findById(identityId: string): Promise<AdminIdentity | null> {
     const value = this.identities.get(identityId);
@@ -261,10 +268,29 @@ export class TestOnlyInMemoryAuthStores
       this.failNextChallengeTransaction = null;
       return { status };
     }
+    if (recoveryCode && this.failNextRecoveryTransactionAt) {
+      this.failNextRecoveryTransactionAt = null;
+      return { status: "recovery_code_unavailable" };
+    }
 
-    if (recoveryCode) recoveryCode.usedAt = new Date(input.completedAt);
-    challenge.consumedAt = new Date(input.completedAt);
-    session.twoFactorCompletedAt = new Date(input.completedAt);
-    return { status: "committed" };
+    const nextVersion = recoveryCode ? identity.sessionVersion + 1 : identity.sessionVersion;
+    const nextIdentity = recoveryCode
+      ? { ...identity, sessionVersion: nextVersion }
+      : identity;
+    const nextSession = {
+      ...session,
+      sessionVersion: nextVersion,
+      twoFactorCompletedAt: new Date(input.completedAt),
+    };
+    const nextChallenge = { ...challenge, consumedAt: new Date(input.completedAt) };
+    const nextRecoveryCode = recoveryCode
+      ? { ...recoveryCode, usedAt: new Date(input.completedAt) }
+      : null;
+
+    if (nextRecoveryCode) this.recovery.set(nextRecoveryCode.id, nextRecoveryCode);
+    this.challenges.set(nextChallenge.id, nextChallenge);
+    this.identities.set(nextIdentity.id, nextIdentity);
+    this.sessions.set(nextSession.id, nextSession);
+    return { status: "committed", sessionVersion: nextVersion };
   }
 }
