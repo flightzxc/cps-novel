@@ -20,6 +20,15 @@ describe("P1-07 SQL and shutdown contracts", () => {
     expect(source).not.toContain("locked_until = ${lease.lockedUntil}");
   });
 
+  it("locks each parent before taking the aggregate statement snapshot", () => {
+    expect(source).toContain("SELECT id FROM catalog_scan_task WHERE id = ${taskId}::uuid FOR UPDATE");
+    expect(source).toContain("SELECT id FROM channel_sync_task WHERE id = ${taskId}::uuid FOR UPDATE");
+    expect(source).toContain("SELECT id FROM generic_task WHERE id = ${taskId}::uuid FOR UPDATE");
+    expect(source.indexOf("SELECT id FROM generic_task WHERE")).toBeLessThan(
+      source.indexOf("FROM generic_task_item WHERE task_id"),
+    );
+  });
+
   it("stops new cycles and drains the current one", async () => {
     const controller = new AbortController();
     let cycles = 0;

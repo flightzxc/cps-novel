@@ -6,6 +6,7 @@ import type {
   TaskLease,
   TaskOutcome,
 } from "./types";
+import { sanitizePersistedTaskError } from "./errors";
 
 type Db = PrismaClient | Prisma.TransactionClient;
 
@@ -172,6 +173,9 @@ export async function recomputeParentTask(
   taskId: string,
 ): Promise<void> {
   if (family === "catalog_scan") {
+    await tx.$queryRaw(Prisma.sql`
+      SELECT id FROM catalog_scan_task WHERE id = ${taskId}::uuid FOR UPDATE
+    `);
     await tx.$executeRaw(Prisma.sql`
       WITH counts AS (
         SELECT COUNT(*)::int AS total,
@@ -194,6 +198,9 @@ export async function recomputeParentTask(
       FROM counts c WHERE t.id = ${taskId}::uuid
     `);
   } else if (family === "channel_sync") {
+    await tx.$queryRaw(Prisma.sql`
+      SELECT id FROM channel_sync_task WHERE id = ${taskId}::uuid FOR UPDATE
+    `);
     await tx.$executeRaw(Prisma.sql`
       WITH counts AS (
         SELECT COUNT(*)::int AS total,
@@ -218,6 +225,9 @@ export async function recomputeParentTask(
       FROM counts c WHERE t.id = ${taskId}::uuid
     `);
   } else {
+    await tx.$queryRaw(Prisma.sql`
+      SELECT id FROM generic_task WHERE id = ${taskId}::uuid FOR UPDATE
+    `);
     await tx.$executeRaw(Prisma.sql`
       WITH counts AS (
         SELECT COUNT(*)::int AS total,
@@ -361,7 +371,10 @@ export async function recoverExpiredItem(
     if (!row) return null;
     const maxAttempts = input.maxAttemptsByType[row.task_type] ?? 3;
     const terminal = row.attempt_count >= maxAttempts;
-    const error = json({ code: "stale_processing", attemptCount: row.attempt_count, maxAttempts });
+    const error = json(sanitizePersistedTaskError({
+      code: "stale_processing",
+      message: `Processing lease expired at attempt ${row.attempt_count} of ${maxAttempts}`,
+    }));
     if (input.family === "catalog_scan") {
       await tx.$executeRaw(Prisma.sql`
         UPDATE catalog_scan_task_item SET
@@ -452,7 +465,9 @@ async function guardedFinalize(
     throw new Error("CatalogScan items do not support skipped");
   }
   const result = json(outcome.result);
-  const error = json(outcome.error);
+  const error = json(
+    outcome.status === "failed" ? sanitizePersistedTaskError(outcome.error) : null,
+  );
   const predicate = Prisma.sql`
     id = ${lease.itemId}::uuid AND status = 'processing'
     AND locked_by = ${lease.workerId}
