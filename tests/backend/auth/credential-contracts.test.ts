@@ -7,6 +7,8 @@ import {
   CREDENTIAL_EXECUTION_STATUS,
   CREDENTIAL_SCHEDULER_EXECUTION_ALLOWED,
   type CredentialContractCode,
+  type CredentialMetadata,
+  type CredentialQueuedResult,
 } from "@/lib/credentials/contracts";
 
 describe("credential web boundary", () => {
@@ -18,10 +20,46 @@ describe("credential web boundary", () => {
       "credential_fingerprint_conflict",
       "credential_validation_failed",
       "credential_capability_denied",
+      "credential_ambiguous",
+      "account_inactive",
     ];
-    expect(new Set(codes).size).toBe(6);
+    expect(new Set(codes).size).toBe(8);
     expect(CREDENTIAL_EXECUTION_STATUS).toBe("NOT_IMPLEMENTED");
     expect(CREDENTIAL_SCHEDULER_EXECUTION_ALLOWED).toBe(false);
+  });
+
+  it("freezes redacted metadata and queued results without secret material", () => {
+    const metadata: CredentialMetadata = {
+      credentialId: "credential-1",
+      channelAccountId: "account-1",
+      credentialType: "bearer_jwt",
+      fingerprintPrefix: "abcd",
+      status: "invalid",
+      expiresAt: null,
+      lastValidatedAt: "2026-08-04T00:00:00.000Z",
+    };
+    const queued: CredentialQueuedResult = {
+      code: "credential_validation_queued",
+      state: "queued",
+      taskId: "task-1",
+      credentialId: metadata.credentialId,
+      channelAccountId: metadata.channelAccountId,
+      enqueuedAt: "2026-08-04T00:00:01.000Z",
+      mutationRequestId: "550e8400-e29b-41d4-a716-446655440000",
+    };
+
+    expect(metadata).toHaveProperty("lastValidatedAt");
+    expect(metadata.status).toBe("invalid");
+    expect(Object.keys(queued).sort()).toEqual([
+      "channelAccountId",
+      "code",
+      "credentialId",
+      "enqueuedAt",
+      "mutationRequestId",
+      "state",
+      "taskId",
+    ]);
+    expect(JSON.stringify(queued)).not.toMatch(/secret|ciphertext|fingerprint/i);
   });
 
   it("contains no Credential secret read, crypto, or decryption entry point", async () => {

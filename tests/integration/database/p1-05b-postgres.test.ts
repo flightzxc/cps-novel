@@ -1,8 +1,20 @@
 import { PrismaClient } from "@prisma/client";
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 const enabled = process.env.P1_05B_DATABASE_TEST === "1";
 const prisma = new PrismaClient();
+const credentialStatusMigration = readFileSync(
+  path.join(
+    process.cwd(),
+    "prisma/migrations/20260804090000_p1_08_credential_status_parity/migration.sql",
+  ),
+  "utf8",
+);
+const revokedGuard = credentialStatusMigration.match(
+  /DO \$credential_status_guard\$[\s\S]*?\$credential_status_guard\$;/,
+)?.[0];
 
 const ids = {
   channel: "00000000-0000-4000-8000-000000000001",
@@ -252,6 +264,51 @@ describe.skipIf(!enabled).sequential("P1-05B PostgreSQL constraints", () => {
         '${ids.credentialB}', '${ids.accountB}', 'bearer_jwt'
       )
     `, "channel_credential_active_fingerprint_fingerprint_key");
+  });
+
+  it("enforces the final four-value Credential status CHECK", async () => {
+    const rows = await prisma.$queryRawUnsafe<Array<{ definition: string }>>(`
+      SELECT pg_get_constraintdef(oid) AS definition
+      FROM pg_constraint
+      WHERE conname = 'channel_account_credential_status_check'
+    `);
+    expect(rows).toHaveLength(1);
+    for (const status of ["active", "superseded", "expired", "invalid"]) {
+      expect(rows[0].definition).toContain(status);
+      await execute(
+        `UPDATE channel_account_credential SET status = '${status}' WHERE id = '${ids.credentialA}'`,
+      );
+    }
+    expect(rows[0].definition).not.toContain("disabled");
+    expect(rows[0].definition).not.toContain("revoked");
+    await expectDatabaseFailure(
+      `UPDATE channel_account_credential SET status = 'disabled' WHERE id = '${ids.credentialA}'`,
+      "channel_account_credential_status_check",
+    );
+    await expectDatabaseFailure(
+      `UPDATE channel_account_credential SET status = 'revoked' WHERE id = '${ids.credentialA}'`,
+      "channel_account_credential_status_check",
+    );
+    await execute(
+      `UPDATE channel_account_credential SET status = 'active' WHERE id = '${ids.credentialA}'`,
+    );
+  });
+
+  it("fails the incremental migration instead of remapping revoked rows", async () => {
+    expect(revokedGuard).toBeTruthy();
+    await expect(
+      prisma.$transaction(async (transaction) => {
+        await transaction.$executeRawUnsafe(`CREATE SCHEMA p1_08_revoked_guard`);
+        await transaction.$executeRawUnsafe(`SET LOCAL search_path TO p1_08_revoked_guard`);
+        await transaction.$executeRawUnsafe(`
+          CREATE TABLE channel_account_credential (status varchar(32) NOT NULL)
+        `);
+        await transaction.$executeRawUnsafe(`
+          INSERT INTO channel_account_credential (status) VALUES ('revoked')
+        `);
+        await transaction.$executeRawUnsafe(revokedGuard!);
+      }),
+    ).rejects.toThrow(/manual disposition is required before retrying/);
   });
 
   it("enforces CatalogScan active scope per account and app", async () => {

@@ -2,7 +2,7 @@
 export const CHANNEL_STATUSES = ["active", "inactive", "registered_disabled"] as const;
 export const CHANNEL_ACCOUNT_STATUSES = ["active", "disabled"] as const;
 export const CAPABILITY_STATUSES = ["enabled", "registered_disabled", "registered_partial"] as const;
-export const CREDENTIAL_STATUSES = ["active", "superseded", "revoked", "expired"] as const;
+export const CREDENTIAL_STATUSES = ["active", "superseded", "expired", "invalid"] as const;
 export const NOVEL_STATUSES = ["draft", "ready", "published", "unpublished", "takedown"] as const;
 export const NOVEL_SOURCE_ITEM_STATUSES = ["pending", "linked", "ignored", "stale"] as const;
 export const NOVEL_CHAPTER_STATUSES = ["preview", "locked", "stale", "withdrawn"] as const;
@@ -67,8 +67,8 @@ export const DATABASE_STATUS_SEMANTICS = {
   channel_account_credential: {
     active: "Credential is the account/type active version and owns the fingerprint latch.",
     superseded: "Credential was replaced by a newer version and cannot be used for new work.",
-    revoked: "Credential was explicitly invalidated and must never be used.",
     expired: "Credential passed its expiry boundary and must not be used.",
+    invalid: "Credential validation failed and it must not be used unless replaced or revalidated.",
   },
   novel: {
     draft: "Canonical record is incomplete and public routes return 404.",

@@ -128,6 +128,7 @@ model ChannelAccountCredential {
   fingerprintPrefix String    @map("fingerprint_prefix") @db.VarChar(16)
   expiresAt         DateTime? @map("expires_at") @db.Timestamptz(6)
   lastValidatedAt   DateTime? @map("last_validated_at") @db.Timestamptz(6)
+  /// active | superseded | expired | invalid; enforced by migration SQL CHECK.
   status            String    @default("active") @db.VarChar(32)
   createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt         DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
