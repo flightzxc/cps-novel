@@ -14,6 +14,7 @@ import {
   createTwoFactorChallenge,
   startTwoFactorSetup,
 } from "@/lib/auth/two-factor";
+import type { AdminAuthContext, AdminSessionRecord } from "@/lib/auth/types";
 
 import { TestOnlyInMemoryAuthStores } from "./test-only-in-memory-stores";
 
@@ -32,6 +33,45 @@ function stores() {
     twoFactorEnabled: false,
   });
   return value;
+}
+
+function sessionContext(
+  memory: TestOnlyInMemoryAuthStores,
+  sessionId = "session-1",
+): AdminAuthContext {
+  const identity = memory.identities.get("admin-1")!;
+  const issuedAt = new Date(NOW.getTime() - 60_000);
+  const session: AdminSessionRecord = {
+    id: sessionId,
+    identityId: identity.id,
+    tokenHash: `token-hash-${sessionId}`,
+    sessionVersion: identity.sessionVersion,
+    issuedAt,
+    lastSeenAt: issuedAt,
+    absoluteExpiresAt: new Date(NOW.getTime() + 60 * 60 * 1000),
+    twoFactorCompletedAt: null,
+    revokedAt: null,
+  };
+  memory.sessions.set(session.id, session);
+  return {
+    identity: { ...identity },
+    session: { ...session },
+    twoFactorCompleted: false,
+  };
+}
+
+function enableTwoFactor(memory: TestOnlyInMemoryAuthStores, secret = generateTotpSecret()) {
+  memory.identities.get("admin-1")!.twoFactorEnabled = true;
+  memory.twoFactorStates.set("admin-1", {
+    identityId: "admin-1",
+    enabled: true,
+    encryptedSecret: encryptTotpSecret(secret, KEY),
+    confirmedAt: NOW,
+    pendingEncryptedSecret: null,
+    pendingExpiresAt: null,
+    recoveryCodesRotatedAt: null,
+  });
+  return secret;
 }
 
 describe("TOTP and recovery primitives", () => {
@@ -87,7 +127,7 @@ describe("two-factor service", () => {
       code: generateTotpCode(setup.manualKey, NOW.getTime()),
       identities: memory,
       twoFactor: memory,
-      recoveryCodes: memory,
+      transactions: memory,
       encryptionKey: KEY,
       recoveryHashCost: 1024,
       now: NOW,
@@ -100,24 +140,17 @@ describe("two-factor service", () => {
 
   it("records failed challenge attempts and consumes a valid TOTP challenge", async () => {
     const memory = stores();
-    const secret = generateTotpSecret();
-    memory.identities.get("admin-1")!.twoFactorEnabled = true;
-    memory.twoFactorStates.set("admin-1", {
-      identityId: "admin-1",
-      enabled: true,
-      encryptedSecret: encryptTotpSecret(secret, KEY),
-      confirmedAt: NOW,
-      pendingEncryptedSecret: null,
-      pendingExpiresAt: null,
-      recoveryCodesRotatedAt: null,
-    });
-    const challenge = await createTwoFactorChallenge({ identityId: "admin-1", twoFactor: memory, now: NOW });
+    const secret = enableTwoFactor(memory);
+    const context = sessionContext(memory);
+    const challenge = await createTwoFactorChallenge({ context, twoFactor: memory, now: NOW });
     await expect(
       completeTwoFactorChallenge({
+        context,
         token: challenge.token,
         code: "000000",
         twoFactor: memory,
         recoveryCodes: memory,
+        transactions: memory,
         encryptionKey: KEY,
         now: NOW,
       }),
@@ -125,21 +158,27 @@ describe("two-factor service", () => {
     expect([...memory.challenges.values()][0].attemptCount).toBe(1);
 
     const result = await completeTwoFactorChallenge({
+      context,
       token: challenge.token,
       code: generateTotpCode(secret, NOW.getTime()),
       twoFactor: memory,
       recoveryCodes: memory,
+      transactions: memory,
       encryptionKey: KEY,
       now: NOW,
     });
     expect(result.method).toBe("totp");
+    expect(result.sessionId).toBe(context.session.id);
     expect([...memory.challenges.values()][0].consumedAt).toEqual(NOW);
+    expect(memory.sessions.get(context.session.id)?.twoFactorCompletedAt).toEqual(NOW);
     await expect(
       completeTwoFactorChallenge({
+        context,
         token: challenge.token,
         code: generateTotpCode(secret, NOW.getTime()),
         twoFactor: memory,
         recoveryCodes: memory,
+        transactions: memory,
         encryptionKey: KEY,
         now: NOW,
       }),
@@ -148,46 +187,162 @@ describe("two-factor service", () => {
 
   it("consumes a recovery code exactly once", async () => {
     const memory = stores();
-    const secret = generateTotpSecret();
     const recoveryCode = "ABCD-1234-EF56";
-    memory.identities.get("admin-1")!.twoFactorEnabled = true;
-    memory.twoFactorStates.set("admin-1", {
+    enableTwoFactor(memory);
+    memory.recovery.set("recovery-1", {
+      id: "recovery-1",
       identityId: "admin-1",
-      enabled: true,
-      encryptedSecret: encryptTotpSecret(secret, KEY),
-      confirmedAt: NOW,
-      pendingEncryptedSecret: null,
-      pendingExpiresAt: null,
-      recoveryCodesRotatedAt: NOW,
+      codeHash: hashRecoveryCode(recoveryCode, { cost: 1024 }),
+      usedAt: null,
     });
-    await memory.replaceForIdentity(
-      "admin-1",
-      [{ id: "recovery-1", codeHash: hashRecoveryCode(recoveryCode, { cost: 1024 }) }],
-      NOW,
-    );
-    const first = await createTwoFactorChallenge({ identityId: "admin-1", twoFactor: memory, now: NOW });
+    const context = sessionContext(memory);
+    const first = await createTwoFactorChallenge({ context, twoFactor: memory, now: NOW });
     await expect(
       completeTwoFactorChallenge({
+        context,
         token: first.token,
         recoveryCode,
         twoFactor: memory,
         recoveryCodes: memory,
+        transactions: memory,
         encryptionKey: KEY,
         now: NOW,
       }),
     ).resolves.toMatchObject({ method: "recovery_code" });
     expect(memory.recovery.get("recovery-1")?.usedAt).toEqual(NOW);
 
-    const second = await createTwoFactorChallenge({ identityId: "admin-1", twoFactor: memory, now: NOW });
+    const second = await createTwoFactorChallenge({ context, twoFactor: memory, now: NOW });
     await expect(
       completeTwoFactorChallenge({
+        context,
         token: second.token,
         recoveryCode,
         twoFactor: memory,
         recoveryCodes: memory,
+        transactions: memory,
         encryptionKey: KEY,
         now: NOW,
       }),
     ).rejects.toMatchObject({ code: "two_factor_failed" });
+  });
+
+  it("binds a challenge to exactly one session for an identity", async () => {
+    const memory = stores();
+    const secret = enableTwoFactor(memory);
+    const boundContext = sessionContext(memory, "session-bound");
+    const otherContext = sessionContext(memory, "session-other");
+    const challenge = await createTwoFactorChallenge({
+      context: boundContext,
+      twoFactor: memory,
+      now: NOW,
+    });
+
+    await expect(
+      completeTwoFactorChallenge({
+        context: otherContext,
+        token: challenge.token,
+        code: generateTotpCode(secret, NOW.getTime()),
+        twoFactor: memory,
+        recoveryCodes: memory,
+        transactions: memory,
+        encryptionKey: KEY,
+        now: NOW,
+      }),
+    ).rejects.toMatchObject({ code: "two_factor_failed", status: 403 });
+    expect([...memory.challenges.values()][0].consumedAt).toBeNull();
+    expect(memory.sessions.get("session-other")?.twoFactorCompletedAt).toBeNull();
+
+    await expect(
+      completeTwoFactorChallenge({
+        context: boundContext,
+        token: challenge.token,
+        code: generateTotpCode(secret, NOW.getTime()),
+        twoFactor: memory,
+        recoveryCodes: memory,
+        transactions: memory,
+        encryptionKey: KEY,
+        now: NOW,
+      }),
+    ).resolves.toMatchObject({ sessionId: "session-bound", method: "totp" });
+  });
+
+  it("rolls back every setup mutation when its transaction cannot commit", async () => {
+    for (const failure of ["enable", "recovery", "session_version"] as const) {
+      const memory = stores();
+      const setup = await startTwoFactorSetup({
+        identityId: "admin-1",
+        identities: memory,
+        twoFactor: memory,
+        encryptionKey: KEY,
+        now: NOW,
+      });
+      memory.recovery.set("existing", {
+        id: "existing",
+        identityId: "admin-1",
+        codeHash: hashRecoveryCode("AABB-CCDD-1122", { cost: 1024 }),
+        usedAt: null,
+      });
+      memory.failNextSetupTransactionAt = failure;
+
+      await expect(
+        confirmTwoFactorSetup({
+          identityId: "admin-1",
+          code: generateTotpCode(setup.manualKey, NOW.getTime()),
+          identities: memory,
+          twoFactor: memory,
+          transactions: memory,
+          encryptionKey: KEY,
+          recoveryHashCost: 1024,
+          now: NOW,
+        }),
+      ).rejects.toThrow("state changed concurrently");
+      expect(memory.identities.get("admin-1")).toMatchObject({
+        sessionVersion: 1,
+        twoFactorEnabled: false,
+      });
+      expect(memory.twoFactorStates.get("admin-1")).toMatchObject({
+        enabled: false,
+        encryptedSecret: null,
+        pendingEncryptedSecret: expect.any(String),
+      });
+      expect([...memory.recovery.keys()]).toEqual(["existing"]);
+    }
+  });
+
+  it("does not burn a recovery code or partially complete a session on transaction failure", async () => {
+    for (const failure of [
+      "challenge_unavailable",
+      "session_unavailable",
+      "recovery_code_unavailable",
+    ] as const) {
+      const memory = stores();
+      enableTwoFactor(memory);
+      const recoveryCode = "ABCD-1234-EF56";
+      memory.recovery.set("recovery-1", {
+        id: "recovery-1",
+        identityId: "admin-1",
+        codeHash: hashRecoveryCode(recoveryCode, { cost: 1024 }),
+        usedAt: null,
+      });
+      const context = sessionContext(memory);
+      const challenge = await createTwoFactorChallenge({ context, twoFactor: memory, now: NOW });
+      memory.failNextChallengeTransaction = failure;
+
+      await expect(
+        completeTwoFactorChallenge({
+          context,
+          token: challenge.token,
+          recoveryCode,
+          twoFactor: memory,
+          recoveryCodes: memory,
+          transactions: memory,
+          encryptionKey: KEY,
+          now: NOW,
+        }),
+      ).rejects.toBeInstanceOf(AdminAccessError);
+      expect(memory.recovery.get("recovery-1")?.usedAt).toBeNull();
+      expect([...memory.challenges.values()][0].consumedAt).toBeNull();
+      expect(memory.sessions.get(context.session.id)?.twoFactorCompletedAt).toBeNull();
+    }
   });
 });

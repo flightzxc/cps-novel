@@ -4,6 +4,7 @@ import {
   ADMIN_LOGIN_LOCK_WINDOW_MS,
   clearFailedLogins,
   getLoginRateLimitStatus,
+  hashLoginAttemptIdentifier,
   recordFailedLogin,
 } from "@/lib/auth/login-attempts";
 import { ADMIN_ABSOLUTE_TIMEOUT_MS } from "@/lib/auth/session";
@@ -28,8 +29,21 @@ describe("login attempts", () => {
     const locked = await recordFailedLogin(memory, "admin", "203.0.113.1", NOW);
     expect(locked.locked).toBe(true);
     expect(locked.remainingMs).toBe(ADMIN_LOGIN_LOCK_WINDOW_MS);
-    await clearFailedLogins(memory, "admin", "203.0.113.1");
-    expect((await getLoginRateLimitStatus(memory, "admin", "203.0.113.1", NOW)).locked).toBe(false);
+    await clearFailedLogins(memory, "admin");
+    expect(memory.attempts.has(hashLoginAttemptIdentifier("user", "admin"))).toBe(false);
+    expect(memory.attempts.has(hashLoginAttemptIdentifier("ip", "203.0.113.1"))).toBe(true);
+    expect((await getLoginRateLimitStatus(memory, "admin", "203.0.113.1", NOW)).locked).toBe(true);
+  });
+
+  it("atomically records concurrent failures without losing counts", async () => {
+    const memory = new TestOnlyInMemoryAuthStores();
+    await Promise.all(
+      Array.from({ length: 20 }, () =>
+        recordFailedLogin(memory, "admin", "203.0.113.2", NOW),
+      ),
+    );
+    expect(memory.attempts.get(hashLoginAttemptIdentifier("user", "admin"))?.failureCount).toBe(20);
+    expect(memory.attempts.get(hashLoginAttemptIdentifier("ip", "203.0.113.2"))?.failureCount).toBe(20);
   });
 });
 

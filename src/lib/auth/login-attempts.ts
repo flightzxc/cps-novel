@@ -66,26 +66,24 @@ export async function recordFailedLogin(
   now = new Date(),
 ): Promise<LoginRateLimitStatus> {
   const keys = identifiers(username, ip);
-  for (const key of keys) {
-    const current = activeRecord(await store.find(key), now);
-    const failureCount = (current?.failureCount ?? 0) + 1;
-    await store.put({
-      identifierHash: key,
-      failureCount,
-      lockedUntil:
-        failureCount >= ADMIN_LOGIN_MAX_FAILURES
-          ? new Date(now.getTime() + ADMIN_LOGIN_LOCK_WINDOW_MS)
-          : null,
-      updatedAt: now,
-    });
-  }
+  await Promise.all(
+    keys.map((identifierHash) =>
+      store.recordFailure({
+        identifierHash,
+        now,
+        windowMs: ADMIN_LOGIN_LOCK_WINDOW_MS,
+        maxFailures: ADMIN_LOGIN_MAX_FAILURES,
+      }),
+    ),
+  );
   return getLoginRateLimitStatus(store, username, ip, now);
 }
 
 export async function clearFailedLogins(
   store: LoginAttemptStore,
   username: string,
-  ip: string,
 ): Promise<void> {
-  await store.deleteMany(identifiers(username, ip));
+  await store.clear(
+    hashLoginAttemptIdentifier("user", normalizeAdminUsername(username)),
+  );
 }

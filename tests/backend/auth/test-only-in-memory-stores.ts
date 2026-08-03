@@ -6,6 +6,9 @@
  */
 import type {
   AdminIdentityStore,
+  AuthUnitOfWork,
+  CompleteTwoFactorChallengeTransactionResult,
+  ConfirmTwoFactorSetupTransactionResult,
   LoginAttemptStore,
   RecoveryCodeStore,
   SessionStore,
@@ -19,6 +22,7 @@ import type {
   TwoFactorChallenge,
   TwoFactorState,
 } from "@/lib/auth/types";
+import { validateAdminSession } from "@/lib/auth/session";
 
 function cloneDate(value: Date | null): Date | null {
   return value ? new Date(value) : null;
@@ -42,6 +46,7 @@ function cloneSession(value: AdminSessionRecord): AdminSessionRecord {
 export class TestOnlyInMemoryAuthStores
   implements
     AdminIdentityStore,
+    AuthUnitOfWork,
     SessionStore,
     TwoFactorStore,
     RecoveryCodeStore,
@@ -56,18 +61,16 @@ export class TestOnlyInMemoryAuthStores
   readonly challenges = new Map<string, TwoFactorChallenge>();
   readonly recovery = new Map<string, RecoveryCodeRecord>();
   readonly attempts = new Map<string, LoginAttemptRecord>();
+  failNextSetupTransactionAt: "enable" | "recovery" | "session_version" | null = null;
+  failNextChallengeTransaction:
+    | "challenge_unavailable"
+    | "session_unavailable"
+    | "recovery_code_unavailable"
+    | null = null;
 
   async findById(identityId: string): Promise<AdminIdentity | null> {
     const value = this.identities.get(identityId);
     return value ? cloneIdentity(value) : null;
-  }
-
-  async advanceSessionVersion(identityId: string, expectedVersion: number): Promise<number | null> {
-    const current = this.identities.get(identityId);
-    if (!current || current.sessionVersion !== expectedVersion) return null;
-    current.sessionVersion += 1;
-    current.twoFactorEnabled = true;
-    return current.sessionVersion;
   }
 
   async findByTokenHash(tokenHash: string): Promise<AdminSessionRecord | null> {
@@ -79,13 +82,6 @@ export class TestOnlyInMemoryAuthStores
     const current = this.sessions.get(sessionId);
     if (!current || current.revokedAt) return false;
     current.lastSeenAt = new Date(seenAt);
-    return true;
-  }
-
-  async markTwoFactorCompleted(sessionId: string, completedAt: Date): Promise<boolean> {
-    const current = this.sessions.get(sessionId);
-    if (!current || current.revokedAt) return false;
-    current.twoFactorCompletedAt = new Date(completedAt);
     return true;
   }
 
@@ -116,17 +112,6 @@ export class TestOnlyInMemoryAuthStores
     this.twoFactorStates.set(identityId, current);
   }
 
-  async enableFromPending(identityId: string, confirmedAt: Date): Promise<boolean> {
-    const current = this.twoFactorStates.get(identityId);
-    if (!current?.pendingEncryptedSecret) return false;
-    current.enabled = true;
-    current.encryptedSecret = current.pendingEncryptedSecret;
-    current.confirmedAt = new Date(confirmedAt);
-    current.pendingEncryptedSecret = null;
-    current.pendingExpiresAt = null;
-    return true;
-  }
-
   async createChallenge(challenge: TwoFactorChallenge): Promise<void> {
     this.challenges.set(challenge.id, { ...challenge });
   }
@@ -141,39 +126,10 @@ export class TestOnlyInMemoryAuthStores
     if (current) current.attemptCount += 1;
   }
 
-  async consumeChallenge(challengeId: string, consumedAt: Date): Promise<boolean> {
-    const current = this.challenges.get(challengeId);
-    if (!current || current.consumedAt) return false;
-    current.consumedAt = new Date(consumedAt);
-    return true;
-  }
-
-  async replaceForIdentity(
-    identityId: string,
-    codes: ReadonlyArray<{ id: string; codeHash: string }>,
-    rotatedAt: Date,
-  ): Promise<void> {
-    for (const [id, record] of this.recovery) {
-      if (record.identityId === identityId) this.recovery.delete(id);
-    }
-    for (const code of codes) {
-      this.recovery.set(code.id, { ...code, identityId, usedAt: null });
-    }
-    const state = this.twoFactorStates.get(identityId);
-    if (state) state.recoveryCodesRotatedAt = new Date(rotatedAt);
-  }
-
   async listUnused(identityId: string): Promise<RecoveryCodeRecord[]> {
     return [...this.recovery.values()]
       .filter((record) => record.identityId === identityId && record.usedAt === null)
       .map((record) => ({ ...record }));
-  }
-
-  async consumeIfUnused(codeId: string, usedAt: Date): Promise<boolean> {
-    const current = this.recovery.get(codeId);
-    if (!current || current.usedAt) return false;
-    current.usedAt = new Date(usedAt);
-    return true;
   }
 
   async find(identifierHash: string): Promise<LoginAttemptRecord | null> {
@@ -181,11 +137,134 @@ export class TestOnlyInMemoryAuthStores
     return value ? { ...value } : null;
   }
 
-  async put(record: LoginAttemptRecord): Promise<void> {
-    this.attempts.set(record.identifierHash, { ...record });
+  async recordFailure(input: {
+    identifierHash: string;
+    now: Date;
+    windowMs: number;
+    maxFailures: number;
+  }): Promise<LoginAttemptRecord> {
+    const current = this.attempts.get(input.identifierHash);
+    const windowActive = Boolean(
+      current &&
+        (current.lockedUntil?.getTime() ?? current.updatedAt.getTime() + input.windowMs) >
+          input.now.getTime(),
+    );
+    const failureCount = windowActive ? current!.failureCount + 1 : 1;
+    const record = {
+      identifierHash: input.identifierHash,
+      failureCount,
+      lockedUntil:
+        failureCount >= input.maxFailures
+          ? new Date(input.now.getTime() + input.windowMs)
+          : null,
+      updatedAt: new Date(input.now),
+    };
+    this.attempts.set(input.identifierHash, record);
+    return { ...record };
   }
 
-  async deleteMany(identifierHashes: readonly string[]): Promise<void> {
-    for (const identifier of identifierHashes) this.attempts.delete(identifier);
+  async clear(identifierHash: string): Promise<void> {
+    this.attempts.delete(identifierHash);
+  }
+
+  async confirmTwoFactorSetup(input: {
+    identityId: string;
+    expectedSessionVersion: number;
+    expectedPendingEncryptedSecret: string;
+    confirmedAt: Date;
+    recoveryCodes: ReadonlyArray<{ id: string; codeHash: string }>;
+  }): Promise<ConfirmTwoFactorSetupTransactionResult> {
+    const identity = this.identities.get(input.identityId);
+    const state = this.twoFactorStates.get(input.identityId);
+    if (
+      !identity ||
+      identity.sessionVersion !== input.expectedSessionVersion ||
+      state?.pendingEncryptedSecret !== input.expectedPendingEncryptedSecret ||
+      !state.pendingExpiresAt ||
+      state.pendingExpiresAt.getTime() <= input.confirmedAt.getTime()
+    ) {
+      return { status: "conflict" };
+    }
+    if (this.failNextSetupTransactionAt) {
+      this.failNextSetupTransactionAt = null;
+      return { status: "conflict" };
+    }
+
+    const nextVersion = identity.sessionVersion + 1;
+    const nextIdentity = { ...identity, sessionVersion: nextVersion, twoFactorEnabled: true };
+    const nextState: TwoFactorState = {
+      ...state,
+      enabled: true,
+      encryptedSecret: state.pendingEncryptedSecret,
+      confirmedAt: new Date(input.confirmedAt),
+      pendingEncryptedSecret: null,
+      pendingExpiresAt: null,
+      recoveryCodesRotatedAt: new Date(input.confirmedAt),
+    };
+    const nextRecovery = new Map(this.recovery);
+    for (const [id, record] of nextRecovery) {
+      if (record.identityId === input.identityId) nextRecovery.delete(id);
+    }
+    for (const code of input.recoveryCodes) {
+      nextRecovery.set(code.id, {
+        ...code,
+        identityId: input.identityId,
+        usedAt: null,
+      });
+    }
+
+    this.identities.set(input.identityId, nextIdentity);
+    this.twoFactorStates.set(input.identityId, nextState);
+    this.recovery.clear();
+    for (const [id, record] of nextRecovery) this.recovery.set(id, record);
+    return { status: "committed", nextSessionVersion: nextVersion };
+  }
+
+  async completeTwoFactorChallenge(input: {
+    challengeId: string;
+    identityId: string;
+    sessionId: string;
+    completedAt: Date;
+    recoveryCodeId: string | null;
+  }): Promise<CompleteTwoFactorChallengeTransactionResult> {
+    const challenge = this.challenges.get(input.challengeId);
+    if (
+      !challenge ||
+      challenge.consumedAt ||
+      challenge.expiresAt.getTime() <= input.completedAt.getTime() ||
+      challenge.identityId !== input.identityId ||
+      challenge.sessionId !== input.sessionId
+    ) {
+      return { status: "challenge_unavailable" };
+    }
+    const session = this.sessions.get(input.sessionId);
+    const identity = this.identities.get(input.identityId);
+    if (!session || !identity || session.identityId !== input.identityId) {
+      return { status: "session_unavailable" };
+    }
+    try {
+      validateAdminSession(session, identity, input.completedAt);
+    } catch {
+      return { status: "session_unavailable" };
+    }
+    const recoveryCode = input.recoveryCodeId
+      ? this.recovery.get(input.recoveryCodeId)
+      : null;
+    if (
+      input.recoveryCodeId &&
+      (!recoveryCode || recoveryCode.usedAt || recoveryCode.identityId !== input.identityId)
+    ) {
+      return { status: "recovery_code_unavailable" };
+    }
+    if (this.failNextChallengeTransaction) {
+      const status = this.failNextChallengeTransaction;
+      this.failNextChallengeTransaction = null;
+      return { status };
+    }
+
+    if (recoveryCode) recoveryCode.usedAt = new Date(input.completedAt);
+    challenge.consumedAt = new Date(input.completedAt);
+    session.twoFactorCompletedAt = new Date(input.completedAt);
+    return { status: "committed" };
   }
 }

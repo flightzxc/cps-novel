@@ -40,6 +40,7 @@ export type TwoFactorState = {
 export type TwoFactorChallenge = {
   id: string;
   identityId: string;
+  sessionId: string;
   tokenHash: string;
   expiresAt: Date;
   consumedAt: Date | null;
