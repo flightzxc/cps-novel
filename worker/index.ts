@@ -1,7 +1,18 @@
 import { pathToFileURL } from "node:url";
 import { PrismaClient } from "@prisma/client";
-import { HANDLERS, buildWorkerAllowlist } from "../src/lib/tasks";
+import {
+  HANDLERS,
+  buildWorkerAllowlist,
+  sanitizePersistedTaskError,
+} from "../src/lib/tasks";
 import { runWorker } from "./runtime";
+
+function optionalPositiveInteger(value: string | undefined, name: string): number | undefined {
+  if (value === undefined) return undefined;
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed) || parsed < 1) throw new Error(`${name} must be a positive integer`);
+  return parsed;
+}
 
 export async function main(): Promise<void> {
   const prisma = new PrismaClient();
@@ -20,6 +31,10 @@ export async function main(): Promise<void> {
       handlers: HANDLERS,
       allowlist,
       signal: controller.signal,
+      shutdownDrainTimeoutMs: optionalPositiveInteger(
+        process.env.WORKER_SHUTDOWN_DRAIN_TIMEOUT_MS,
+        "WORKER_SHUTDOWN_DRAIN_TIMEOUT_MS",
+      ),
     });
   } finally {
     process.removeListener("SIGINT", stop);
@@ -30,7 +45,7 @@ export async function main(): Promise<void> {
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   main().catch((error) => {
-    console.error(error);
+    console.error(sanitizePersistedTaskError(error, "worker_runtime_error"));
     process.exitCode = 1;
   });
 }

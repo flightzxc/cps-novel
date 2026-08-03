@@ -1,10 +1,12 @@
 import { randomUUID } from "node:crypto";
 import { spawn } from "node:child_process";
 import path from "node:path";
-import { PrismaClient } from "@prisma/client";
+import { Prisma, PrismaClient } from "@prisma/client";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import {
   LeaseLostError,
+  PERSISTED_TASK_ERROR_MESSAGE_MAX_LENGTH,
+  buildWorkerAllowlist,
   claimPendingItem,
   createHandlerRegistry,
   enqueueScheduledTask,
@@ -14,7 +16,9 @@ import {
   prepareSideEffectIntent,
   recoverExpiredItem,
   transitionSideEffectIntent,
+  type TaskLease,
 } from "@/lib/tasks";
+import { processOneWorkerCycle } from "../../../worker/runtime";
 
 const enabled = process.env.P1_07_DATABASE_TEST === "1";
 const prisma = new PrismaClient();
@@ -28,8 +32,13 @@ const ids = {
   sourceItem: "50000000-0000-4000-8000-000000000701",
 } as const;
 
-function client(): PrismaClient {
-  const value = new PrismaClient();
+function client(applicationName?: string): PrismaClient {
+  const databaseUrl = process.env.DATABASE_URL;
+  const value = applicationName && databaseUrl
+    ? new PrismaClient({
+      datasourceUrl: `${databaseUrl}&application_name=${encodeURIComponent(applicationName)}`,
+    })
+    : new PrismaClient();
   clients.push(value);
   return value;
 }
@@ -77,6 +86,63 @@ async function createGenericTask(targetId = randomUUID()) {
     },
     include: { items: true },
   });
+}
+
+async function createGenericTaskWithItems(count: number) {
+  const prefix = randomUUID();
+  return prisma.genericTask.create({
+    data: {
+      taskType: "runtime.test",
+      operationScopeHash: randomUUID().replaceAll("-", "").padEnd(64, "0"),
+      requestToken: randomUUID(),
+      totalCount: count,
+      items: {
+        create: Array.from({ length: count }, (_, index) => ({
+          targetType: "test",
+          targetId: `${prefix}-${index}`,
+          payload: { index },
+        })),
+      },
+    },
+    include: { items: true },
+  });
+}
+
+async function waitFor(
+  predicate: () => Promise<boolean>,
+  timeoutMs = 5_000,
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (!(await predicate())) {
+    if (Date.now() >= deadline) throw new Error("Timed out waiting for PostgreSQL barrier");
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+}
+
+async function waitForLockWaiters(applicationNames: string[]): Promise<void> {
+  await waitFor(async () => {
+    const rows = await prisma.$queryRaw<Array<{ count: bigint }>>(Prisma.sql`
+      SELECT COUNT(*)::bigint AS count
+      FROM pg_stat_activity
+      WHERE application_name IN (${Prisma.join(applicationNames)})
+        AND wait_event_type = 'Lock'
+    `);
+    return Number(rows[0]?.count ?? 0n) === applicationNames.length;
+  });
+}
+
+async function within<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<never>((_, reject) => {
+        timeout = setTimeout(() => reject(new Error(`Operation exceeded ${timeoutMs}ms`)), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
 }
 
 async function expireGenericItem(itemId: string) {
@@ -247,6 +313,122 @@ describe.skipIf(!enabled).sequential("P1-07 PostgreSQL 16 runtime", () => {
     expect(parent).toMatchObject({ status: "completed", successCount: 1, failedCount: 0 });
   });
 
+  it("serializes same-parent recompute before taking a fresh aggregate snapshot", async () => {
+    for (let iteration = 0; iteration < 3; iteration += 1) {
+      const task = await createGenericTaskWithItems(2);
+      const appA = `p107-parent-a-${iteration}`;
+      const appB = `p107-parent-b-${iteration}`;
+      const workerA = client(appA);
+      const workerB = client(appB);
+      const gate = client();
+      const leaseA = await claimPendingItem(workerA, {
+        family: "generic", taskTypes: ["runtime.test"], workerId: appA, leaseMs: 60_000,
+      });
+      const leaseB = await claimPendingItem(workerB, {
+        family: "generic", taskTypes: ["runtime.test"], workerId: appB, leaseMs: 60_000,
+      });
+      expect(leaseA?.taskId).toBe(task.id);
+      expect(leaseB?.taskId).toBe(task.id);
+
+      let announceLocked!: () => void;
+      let releaseGate!: () => void;
+      const locked = new Promise<void>((resolve) => { announceLocked = resolve; });
+      const release = new Promise<void>((resolve) => { releaseGate = resolve; });
+      const gatePromise = gate.$transaction(async (tx) => {
+        await tx.$queryRaw(Prisma.sql`
+          SELECT id FROM generic_task WHERE id = ${task.id}::uuid FOR UPDATE
+        `);
+        announceLocked();
+        await release;
+      }, { timeout: 10_000 });
+      await locked;
+
+      const finalizeA = finalizeTaskItem(workerA, leaseA!, { status: "success" });
+      const finalizeB = finalizeTaskItem(workerB, leaseB!, { status: "success" });
+      try {
+        await waitForLockWaiters([appA, appB]);
+      } finally {
+        releaseGate();
+      }
+      await gatePromise;
+      await Promise.all([finalizeA, finalizeB]);
+
+      const items = await prisma.genericTaskItem.groupBy({
+        by: ["status"], where: { taskId: task.id }, _count: true,
+      });
+      const parent = await prisma.genericTask.findUniqueOrThrow({ where: { id: task.id } });
+      expect(items).toEqual([{ status: "success", _count: 2 }]);
+      expect(parent).toMatchObject({
+        status: "completed", totalCount: 2, successCount: 2, failedCount: 0,
+      });
+    }
+  }, 30_000);
+
+  it("does not serialize recompute for different parents", async () => {
+    const taskA = await createGenericTask();
+    const taskB = await createGenericTask();
+    const appA = "p107-independent-parent-a";
+    const workerA = client(appA);
+    const workerB = client("p107-independent-parent-b");
+    const gate = client();
+    const leaseA = await claimPendingItem(workerA, {
+      family: "generic", taskTypes: ["runtime.test"], workerId: appA, leaseMs: 60_000,
+    });
+    const leaseB = await claimPendingItem(workerB, {
+      family: "generic", taskTypes: ["runtime.test"], workerId: "independent-b", leaseMs: 60_000,
+    });
+    expect(new Set([leaseA?.taskId, leaseB?.taskId])).toEqual(new Set([taskA.id, taskB.id]));
+    expect(leaseA?.taskId).not.toBe(leaseB?.taskId);
+
+    let announceLocked!: () => void;
+    let releaseGate!: () => void;
+    const locked = new Promise<void>((resolve) => { announceLocked = resolve; });
+    const release = new Promise<void>((resolve) => { releaseGate = resolve; });
+    const gatePromise = gate.$transaction(async (tx) => {
+      await tx.$queryRaw(Prisma.sql`
+        SELECT id FROM generic_task WHERE id = ${leaseA!.taskId}::uuid FOR UPDATE
+      `);
+      announceLocked();
+      await release;
+    }, { timeout: 10_000 });
+    await locked;
+
+    const blockedFinalize = finalizeTaskItem(workerA, leaseA!, { status: "success" });
+    try {
+      await waitForLockWaiters([appA]);
+      await within(finalizeTaskItem(workerB, leaseB!, { status: "success" }), 2_000);
+      expect(await prisma.genericTask.findUniqueOrThrow({ where: { id: leaseB!.taskId } }))
+        .toMatchObject({ status: "completed", successCount: 1 });
+    } finally {
+      releaseGate();
+    }
+    await gatePromise;
+    await blockedFinalize;
+  }, 15_000);
+
+  it("persists only bounded and redacted task error fields", async () => {
+    await createGenericTask();
+    const lease = await claimPendingItem(prisma, {
+      family: "generic", taskTypes: ["runtime.test"], workerId: "worker-error", leaseMs: 60_000,
+    });
+    await finalizeTaskItem(prisma, lease!, {
+      status: "failed",
+      error: {
+        code: "UPSTREAM_FAILURE",
+        message: `Authorization: Bearer abc-secret api_key=abc-secret password=abc-secret ${"x".repeat(4_096)}`,
+        stack: "private stack abc-secret",
+        cause: { responseBody: "abc-secret" },
+      },
+    });
+    const item = await prisma.genericTaskItem.findUniqueOrThrow({ where: { id: lease!.itemId } });
+    const error = item.error as { code: string; message: string; stack?: unknown };
+    expect(Object.keys(error).sort()).toEqual(["code", "message"]);
+    expect(error.code).toBe("upstream_failure");
+    expect(error.message.length).toBeLessThanOrEqual(PERSISTED_TASK_ERROR_MESSAGE_MAX_LENGTH);
+    expect(JSON.stringify(error)).not.toContain("abc-secret");
+    expect(error).not.toHaveProperty("stack");
+  });
+
   it("terminalizes poison items when the claim budget is exhausted", async () => {
     const task = await createGenericTask();
     await prisma.genericTaskItem.update({
@@ -302,6 +484,101 @@ describe.skipIf(!enabled).sequential("P1-07 PostgreSQL 16 runtime", () => {
     });
     expect(restarted).toMatchObject({ workerId: "restarted-worker", attemptCount: 2, leaseEpoch: 2n });
   }, 25_000);
+
+  it("drains an abort-aware handler inside the shutdown deadline", async () => {
+    const task = await createGenericTask();
+    const controller = new AbortController();
+    let announceStarted!: () => void;
+    const started = new Promise<void>((resolve) => { announceStarted = resolve; });
+    const handlers = createHandlerRegistry({
+      "runtime.test": {
+        family: "generic",
+        handler: async ({ signal }) => {
+          announceStarted();
+          if (!signal.aborted) {
+            await new Promise<void>((resolve) => signal.addEventListener("abort", () => resolve(), { once: true }));
+          }
+          return { status: "success", result: { shutdown: "cooperative" } };
+        },
+      },
+    });
+    const running = processOneWorkerCycle({
+      prisma,
+      workerId: "worker-cooperative-shutdown",
+      handlers,
+      allowlist: buildWorkerAllowlist("runtime.test", handlers),
+      signal: controller.signal,
+      leaseMs: 500,
+      shutdownDrainTimeoutMs: 250,
+    });
+    await started;
+    controller.abort();
+    expect(await within(running, 1_000)).toBe(true);
+    expect(await prisma.genericTaskItem.findUniqueOrThrow({ where: { id: task.items[0].id } }))
+      .toMatchObject({ status: "success", result: { shutdown: "cooperative" } });
+  });
+
+  it("bounds an abort-ignoring handler and fences its late result", async () => {
+    const task = await createGenericTask();
+    const controller = new AbortController();
+    let announceStarted!: () => void;
+    let releaseLate!: () => void;
+    const started = new Promise<void>((resolve) => { announceStarted = resolve; });
+    const late = new Promise<void>((resolve) => { releaseLate = resolve; });
+    let oldLease: TaskLease | undefined;
+    const handlers = createHandlerRegistry({
+      "runtime.test": {
+        family: "generic",
+        handler: async ({ lease }) => {
+          oldLease = lease;
+          announceStarted();
+          await late;
+          return { status: "success", result: { owner: "late-old" } };
+        },
+      },
+    });
+    const running = processOneWorkerCycle({
+      prisma,
+      workerId: "worker-ignores-abort",
+      handlers,
+      allowlist: buildWorkerAllowlist("runtime.test", handlers),
+      signal: controller.signal,
+      leaseMs: 150,
+      shutdownDrainTimeoutMs: 40,
+    });
+    await started;
+    controller.abort();
+    expect(await within(running, 1_000)).toBe(true);
+
+    const stopped = await prisma.genericTaskItem.findUniqueOrThrow({ where: { id: task.items[0].id } });
+    await waitFor(async () => {
+      const rows = await prisma.$queryRaw<Array<{ expired: boolean }>>(Prisma.sql`
+        SELECT locked_until < transaction_timestamp() AS expired
+        FROM generic_task_item WHERE id = ${task.items[0].id}::uuid
+      `);
+      return rows[0]?.expired === true;
+    }, 2_000);
+    const expired = await prisma.genericTaskItem.findUniqueOrThrow({ where: { id: task.items[0].id } });
+    expect(expired.heartbeatAt?.getTime()).toBe(stopped.heartbeatAt?.getTime());
+
+    expect(await recoverExpiredItem(prisma, {
+      family: "generic", taskTypes: ["runtime.test"], maxAttemptsByType: { "runtime.test": 3 },
+    })).toMatchObject({ action: "requeued", leaseEpoch: 1n });
+    const newLease = await claimPendingItem(prisma, {
+      family: "generic", taskTypes: ["runtime.test"], workerId: "worker-after-timeout", leaseMs: 60_000,
+    });
+    expect(newLease).toMatchObject({ attemptCount: 2, leaseEpoch: 2n });
+    expect(newLease!.executionToken).not.toBe(oldLease!.executionToken);
+    await finalizeTaskItem(prisma, newLease!, { status: "success", result: { owner: "new" } });
+
+    releaseLate();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    await expect(finalizeTaskItem(prisma, oldLease!, {
+      status: "success", result: { owner: "late-old" },
+    })).rejects.toBeInstanceOf(LeaseLostError);
+    expect(await prisma.genericTaskItem.findUniqueOrThrow({ where: { id: task.items[0].id } }))
+      .toMatchObject({ status: "success", result: { owner: "new" } });
+  }, 10_000);
 
   it("allows exactly one of ten concurrent schedulers to enqueue", async () => {
     const registry = createHandlerRegistry({
