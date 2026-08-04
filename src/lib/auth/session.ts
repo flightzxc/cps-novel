@@ -86,7 +86,12 @@ export async function requireAdminSession(
   const now = dependencies.now ?? new Date();
   const context = validateAdminSession(session, identity, now);
   if (now.getTime() - session.lastSeenAt.getTime() >= ADMIN_SESSION_TOUCH_INTERVAL_MS) {
-    if (!(await dependencies.sessions.touchLastSeen(session.id, now))) {
+    if (!(await dependencies.sessions.touchLastSeen({
+      sessionId: session.id,
+      identityId: identity.id,
+      sessionVersion: identity.sessionVersion,
+      seenAt: now,
+    }))) {
       throw new AdminAccessError("jwt_invalid", 401, "Invalid admin session");
     }
   }

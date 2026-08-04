@@ -172,7 +172,11 @@ export async function completeTwoFactorChallenge(input: {
   }
 
   if (!method) {
-    await input.twoFactor.incrementChallengeAttempts(challenge.id);
+    await input.twoFactor.incrementChallengeAttempts({
+      challengeId: challenge.id,
+      now,
+      maxAttempts: TWO_FACTOR_CHALLENGE_MAX_ATTEMPTS,
+    });
     throw new AdminAccessError("two_factor_failed", 403, "Invalid two-factor or recovery code");
   }
   const transaction = await input.transactions.completeTwoFactorChallenge({

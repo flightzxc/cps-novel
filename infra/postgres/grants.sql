@@ -10,30 +10,30 @@ BEGIN
     current_database()
   );
   EXECUTE format(
-    'GRANT CONNECT ON DATABASE %I TO web_app, worker_app, analyst_ro, backup_role',
+    'GRANT CONNECT ON DATABASE %I TO web_app, worker_app, scheduler_app, analyst_ro, backup_role',
     current_database()
   );
 END
 $database_grants$;
 
 REVOKE CREATE ON SCHEMA public FROM PUBLIC;
-REVOKE ALL PRIVILEGES ON SCHEMA public FROM web_app, worker_app, analyst_ro, backup_role;
-GRANT USAGE ON SCHEMA public TO web_app, worker_app, analyst_ro, backup_role;
+REVOKE ALL PRIVILEGES ON SCHEMA public FROM web_app, worker_app, scheduler_app, analyst_ro, backup_role;
+GRANT USAGE ON SCHEMA public TO web_app, worker_app, scheduler_app, analyst_ro, backup_role;
 GRANT USAGE, CREATE ON SCHEMA public TO migration_owner;
 
 REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA public FROM PUBLIC;
 REVOKE ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public FROM PUBLIC;
 REVOKE ALL PRIVILEGES ON ALL FUNCTIONS IN SCHEMA public FROM PUBLIC;
 REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA public
-  FROM web_app, worker_app, analyst_ro, backup_role;
+  FROM web_app, worker_app, scheduler_app, analyst_ro, backup_role;
 REVOKE ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public
-  FROM web_app, worker_app, analyst_ro, backup_role;
+  FROM web_app, worker_app, scheduler_app, analyst_ro, backup_role;
 REVOKE ALL PRIVILEGES ON ALL FUNCTIONS IN SCHEMA public
-  FROM web_app, worker_app, analyst_ro, backup_role;
+  FROM web_app, worker_app, scheduler_app, analyst_ro, backup_role;
 
 -- Worker is the only runtime allowed to read every application column.
 -- backup_role must read every column and sequence value for a complete dump.
-GRANT SELECT ON ALL TABLES IN SCHEMA public TO worker_app, backup_role;
+GRANT SELECT ON ALL TABLES IN SCHEMA public TO backup_role;
 GRANT SELECT ON ALL SEQUENCES IN SCHEMA public TO backup_role;
 
 -- Tables without restricted columns can be read directly by Web and Analyst.
@@ -68,6 +68,13 @@ GRANT SELECT ON TABLE
   home_carousel_change_log,
   _prisma_migrations
 TO web_app, analyst_ro;
+
+-- Web owns Admin authentication persistence; other online roles receive no Auth table access.
+GRANT SELECT ON TABLE admin_identity, admin_session, admin_two_factor,
+  admin_two_factor_challenge, admin_recovery_code, admin_login_attempt TO web_app;
+GRANT INSERT, UPDATE ON TABLE admin_identity, admin_session, admin_two_factor,
+  admin_two_factor_challenge, admin_recovery_code, admin_login_attempt TO web_app;
+GRANT DELETE ON TABLE admin_recovery_code, admin_login_attempt TO web_app;
 
 -- Web may inspect task request fingerprints; Analyst may not.
 GRANT SELECT ON TABLE catalog_scan_task_item TO web_app;
@@ -146,12 +153,21 @@ GRANT INSERT, UPDATE ON TABLE
   home_carousel_auto_candidate, home_carousel_serving
 TO worker_app;
 GRANT DELETE ON TABLE novel_chapter_content TO worker_app;
+GRANT DELETE ON TABLE channel_credential_active_fingerprint TO worker_app;
 GRANT INSERT ON TABLE
   credential_change_log, operation_audit, indexnow_outbox_attempt,
   home_carousel_change_log
 TO worker_app;
 
-GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO web_app, worker_app;
+-- Worker read surface is explicit and excludes every Admin Auth table.
+GRANT SELECT ON TABLE channel_account, channel_account_credential,
+  channel_credential_active_fingerprint, credential_change_log,
+  generic_task, generic_task_item, operation_audit TO worker_app;
+
+-- Scheduler only creates scheduling and GenericTask metadata. It never reads Credential/Auth secrets.
+GRANT SELECT, INSERT, UPDATE ON TABLE schedule_run, cron_run, generic_task, generic_task_item TO scheduler_app;
+
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO web_app, worker_app, scheduler_app;
 
 -- Future objects start closed. P1 grants must be revised explicitly when a
 -- migration adds a table or sensitive column.

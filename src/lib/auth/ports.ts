@@ -1,5 +1,6 @@
 import type {
   AdminIdentity,
+  AdminLoginIdentity,
   AdminSessionRecord,
   LoginAttemptRecord,
   RecoveryCodeRecord,
@@ -9,11 +10,19 @@ import type {
 
 export interface AdminIdentityStore {
   findById(identityId: string): Promise<AdminIdentity | null>;
+  findByNormalizedUsername(username: string): Promise<AdminLoginIdentity | null>;
 }
 
 export interface SessionStore {
   findByTokenHash(tokenHash: string): Promise<AdminSessionRecord | null>;
-  touchLastSeen(sessionId: string, seenAt: Date): Promise<boolean>;
+  create(session: AdminSessionRecord): Promise<void>;
+  touchLastSeen(input: {
+    sessionId: string;
+    identityId: string;
+    sessionVersion: number;
+    seenAt: Date;
+  }): Promise<boolean>;
+  revoke(sessionId: string, revokedAt: Date): Promise<boolean>;
 }
 
 export interface TwoFactorStore {
@@ -21,7 +30,11 @@ export interface TwoFactorStore {
   savePendingSetup(identityId: string, encryptedSecret: string, expiresAt: Date): Promise<void>;
   createChallenge(challenge: TwoFactorChallenge): Promise<void>;
   findChallengeByTokenHash(tokenHash: string): Promise<TwoFactorChallenge | null>;
-  incrementChallengeAttempts(challengeId: string): Promise<void>;
+  incrementChallengeAttempts(input: {
+    challengeId: string;
+    now: Date;
+    maxAttempts: number;
+  }): Promise<boolean>;
 }
 
 export interface RecoveryCodeStore {
@@ -75,6 +88,7 @@ export type AdminRateLimitDecision = {
 };
 
 export interface AdminRateLimitPort {
+  /** Optional defense in depth. P1 mutation security relies on request-id idempotency and task deduplication. */
   consume(input: {
     scope: string;
     subject: string;

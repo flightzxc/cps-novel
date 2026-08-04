@@ -5,7 +5,7 @@ import {
 } from "@/lib/auth/capabilities";
 import { AdminAccessError } from "@/lib/auth/errors";
 import type { AdminIdentityStore, AdminRateLimitPort, SessionStore } from "@/lib/auth/ports";
-import { requireAdminSession } from "@/lib/auth/session";
+import { requireAdminSession, validateAdminSession } from "@/lib/auth/session";
 import type { AdminAuthContext } from "@/lib/auth/types";
 
 import { requireMutationRequestId, requireSameOrigin } from "./origin";
@@ -174,4 +174,24 @@ export function requireAdminServiceMutation(
   requireAdminCapability(authorization.context, capability, env);
   requireAdminTwoFactor(authorization.context);
   return authorization.context;
+}
+
+export async function requireFreshAdminServiceMutation(
+  authorization: AdminServiceAuthorization | null | undefined,
+  capability: AdminCapability,
+  input: SessionDependencies & { entryId: string; requestId: string; env?: NodeJS.ProcessEnv },
+): Promise<AdminAuthContext> {
+  requireAdminServiceMutation(authorization, capability, input.env);
+  if (!authorization || authorization.entryId !== input.entryId || authorization.requestId !== input.requestId) {
+    throw new AdminAccessError("admin_service_authorization_required", 403, "Service authorization binding mismatch");
+  }
+  const session = await input.sessions.findByTokenHash(authorization.context.session.tokenHash);
+  const identity = session ? await input.identities.findById(session.identityId) : null;
+  if (!session || !identity || session.id !== authorization.context.session.id) {
+    throw new AdminAccessError("jwt_invalid", 401, "Invalid admin session");
+  }
+  const context = validateAdminSession(session, identity, input.now ?? new Date());
+  requireAdminCapability(context, capability, input.env);
+  requireAdminTwoFactor(context);
+  return context;
 }

@@ -9,6 +9,9 @@ export type AdminIdentity = {
   twoFactorEnabled: boolean;
 };
 
+/** Server-internal login record. Never serialize or return through an Admin contract. */
+export type AdminLoginIdentity = AdminIdentity & { passwordHash: string };
+
 export type AdminSessionRecord = {
   id: string;
   tokenHash: string;
@@ -31,8 +34,10 @@ export type TwoFactorState = {
   identityId: string;
   enabled: boolean;
   encryptedSecret: string | null;
+  keyVersion?: number | null;
   confirmedAt: Date | null;
   pendingEncryptedSecret: string | null;
+  pendingKeyVersion?: number | null;
   pendingExpiresAt: Date | null;
   recoveryCodesRotatedAt: Date | null;
 };

@@ -180,6 +180,103 @@ model CredentialChangeLog {
   @@map("credential_change_log")
 }
 
+model AdminIdentity {
+  id             String   @id @default(uuid()) @db.Uuid
+  username       String   @unique @db.VarChar(160)
+  passwordHash   String   @map("password_hash") @db.Text
+  role           String   @db.VarChar(64)
+  status         String   @default("active") @db.VarChar(32)
+  sessionVersion Int      @default(0) @map("session_version")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  sessions      AdminSession[]
+  twoFactor     AdminTwoFactor?
+  challenges   AdminTwoFactorChallenge[]
+  recoveryCodes AdminRecoveryCode[]
+
+  @@index([status, updatedAt], map: "admin_identity_status_updated_idx")
+  @@map("admin_identity")
+}
+
+model AdminSession {
+  id                   String    @id @default(uuid()) @db.Uuid
+  identityId           String    @map("identity_id") @db.Uuid
+  tokenHash            String    @unique @map("token_hash") @db.Char(64)
+  sessionVersion       Int       @map("session_version")
+  issuedAt             DateTime  @map("issued_at") @db.Timestamptz(6)
+  lastSeenAt           DateTime  @map("last_seen_at") @db.Timestamptz(6)
+  absoluteExpiresAt    DateTime  @map("absolute_expires_at") @db.Timestamptz(6)
+  twoFactorCompletedAt DateTime? @map("two_factor_completed_at") @db.Timestamptz(6)
+  revokedAt            DateTime? @map("revoked_at") @db.Timestamptz(6)
+  createdAt            DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  identity   AdminIdentity @relation(fields: [identityId], references: [id], onDelete: Cascade)
+  challenges AdminTwoFactorChallenge[]
+
+  @@unique([id, identityId], map: "admin_session_identity_pair_key")
+  @@map("admin_session")
+}
+
+model AdminTwoFactor {
+  identityId            String    @id @map("identity_id") @db.Uuid
+  enabled               Boolean   @default(false)
+  encryptedSecret       String?   @map("encrypted_secret") @db.Text
+  keyVersion            Int?      @map("key_version") @db.SmallInt
+  confirmedAt           DateTime? @map("confirmed_at") @db.Timestamptz(6)
+  pendingEncryptedSecret String?  @map("pending_encrypted_secret") @db.Text
+  pendingKeyVersion     Int?      @map("pending_key_version") @db.SmallInt
+  pendingExpiresAt      DateTime? @map("pending_expires_at") @db.Timestamptz(6)
+  recoveryCodesRotatedAt DateTime? @map("recovery_codes_rotated_at") @db.Timestamptz(6)
+  createdAt             DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt             DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  identity AdminIdentity @relation(fields: [identityId], references: [id], onDelete: Cascade)
+
+  @@map("admin_two_factor")
+}
+
+model AdminTwoFactorChallenge {
+  id            String    @id @default(uuid()) @db.Uuid
+  identityId    String    @map("identity_id") @db.Uuid
+  sessionId     String    @map("session_id") @db.Uuid
+  tokenHash     String    @unique @map("token_hash") @db.Char(64)
+  expiresAt     DateTime  @map("expires_at") @db.Timestamptz(6)
+  consumedAt    DateTime? @map("consumed_at") @db.Timestamptz(6)
+  attemptCount  Int       @default(0) @map("attempt_count")
+  requestIpHash String?   @map("request_ip_hash") @db.Char(64)
+  userAgentHash String?   @map("user_agent_hash") @db.Char(64)
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  identity AdminIdentity @relation(fields: [identityId], references: [id], onDelete: Cascade)
+  session  AdminSession  @relation(fields: [sessionId, identityId], references: [id, identityId], onDelete: Cascade)
+
+  @@map("admin_two_factor_challenge")
+}
+
+model AdminRecoveryCode {
+  id         String    @id @default(uuid()) @db.Uuid
+  identityId String    @map("identity_id") @db.Uuid
+  codeHash   String    @unique @map("code_hash") @db.Text
+  usedAt     DateTime? @map("used_at") @db.Timestamptz(6)
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  identity AdminIdentity @relation(fields: [identityId], references: [id], onDelete: Cascade)
+
+  @@index([identityId, usedAt], map: "admin_recovery_code_identity_unused_idx")
+  @@map("admin_recovery_code")
+}
+
+model AdminLoginAttempt {
+  identifierHash String    @id @map("identifier_hash") @db.Char(64)
+  failureCount   Int       @default(0) @map("failure_count")
+  lockedUntil    DateTime? @map("locked_until") @db.Timestamptz(6)
+  updatedAt      DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([lockedUntil], map: "admin_login_attempt_locked_idx")
+  @@map("admin_login_attempt")
+}
+
 model Novel {
   id                String    @id @default(uuid()) @db.Uuid
   businessId        String    @unique @map("business_id") @db.VarChar(96)
