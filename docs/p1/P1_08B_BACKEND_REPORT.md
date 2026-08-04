@@ -45,3 +45,11 @@ supersede Worker 和查询链已实现；生产 create/replace secret intake 因
 GenericTask payload 仅含 account/credential/actor/request/operation 非敏感标识。Web/Scheduler
 源码扫描无 Credential decrypt/key import。完整 fingerprint 和密文只存在 Worker/数据库内部，
 UI/结果只使用 prefix。CPS 保持只读。
+
+## Frontend contract review required fix
+
+Claude review 的唯一 REQUIRED_FIX 已收口：`getCredentialTaskResult` 现在显式读取持久化的
+`GenericTaskItem.error`，但服务读模型只对白名单稳定 code 返回 `{ code }`；message、stack、
+cause、数据库异常、payload 和任意未知 code 均不会进入 `CredentialTaskStatusView` 输入。
+`account_inactive`、`credential_missing`、`credential_ambiguous`、
+`credential_validation_failed` 可由 contracts projection 映射为 `failureCode`；成功 result 路径不变。

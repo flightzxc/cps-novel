@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { Prisma, type PrismaClient } from "@prisma/client";
 
-import { CREDENTIAL_TASK_TYPES, type CredentialMetadata, type CredentialQueuedResult, type CredentialRedactedResult } from "@/lib/credentials/contracts";
+import { CREDENTIAL_TASK_TYPES, type CredentialContractCode, type CredentialMetadata, type CredentialQueuedResult, type CredentialRedactedResult } from "@/lib/credentials/contracts";
 import type { AdminIdentityStore, SessionStore } from "@/lib/auth/ports";
 import { requireFreshAdminServiceMutation, type AdminServiceAuthorization } from "@/server/auth/guards";
 
@@ -101,8 +101,49 @@ export async function enqueueCredentialOperation(input: { authorization: AdminSe
   }
 }
 
-export async function getCredentialTaskResult(db: PrismaClient, taskId: string): Promise<{ state: string; result: CredentialRedactedResult | null }> {
-  const task = await db.genericTask.findUnique({ where: { id: taskId }, include: { items: { take: 1 } } });
+const CREDENTIAL_TASK_FAILURE_CODES = Object.freeze([
+  "account_inactive",
+  "credential_missing",
+  "credential_ambiguous",
+  "credential_validation_failed",
+  "credential_fingerprint_conflict",
+] as const satisfies readonly CredentialContractCode[]);
+
+export type CredentialTaskFailureCode = (typeof CREDENTIAL_TASK_FAILURE_CODES)[number];
+export type CredentialTaskFailure = Readonly<{ code: CredentialTaskFailureCode }>;
+
+/**
+ * `generic_task_item.error` is already sanitized before persistence. This
+ * projection applies a second allowlist and deliberately drops every field
+ * except the stable code before the value can reach a frontend contract.
+ */
+export function projectPersistedCredentialTaskFailure(error: unknown): CredentialTaskFailure | null {
+  if (!error || typeof error !== "object" || Array.isArray(error)) return null;
+  const code = (error as Record<string, unknown>).code;
+  return typeof code === "string" && CREDENTIAL_TASK_FAILURE_CODES.includes(code as CredentialTaskFailureCode)
+    ? Object.freeze({ code: code as CredentialTaskFailureCode })
+    : null;
+}
+
+export type CredentialTaskReadResult = {
+  state: string;
+  result: CredentialRedactedResult | null;
+  error: CredentialTaskFailure | null;
+};
+
+export async function getCredentialTaskResult(db: PrismaClient, taskId: string): Promise<CredentialTaskReadResult> {
+  const task = await db.genericTask.findUnique({
+    where: { id: taskId },
+    select: {
+      taskType: true,
+      status: true,
+      items: { take: 1, select: { result: true, error: true } },
+    },
+  });
   if (!task || !Object.values(CREDENTIAL_TASK_TYPES).includes(task.taskType as never) || task.taskType === CREDENTIAL_TASK_TYPES.replaceGated) throw new Error("credential_missing");
-  return { state: task.status, result: (task.items[0]?.result as CredentialRedactedResult | null) ?? null };
+  return {
+    state: task.status,
+    result: (task.items[0]?.result as CredentialRedactedResult | null) ?? null,
+    error: projectPersistedCredentialTaskFailure(task.items[0]?.error),
+  };
 }
