@@ -15,6 +15,13 @@ import {
   projectTwoFactorState,
 } from "@/contracts";
 import { CredentialReplacementIdempotencyConflictError } from "@/server/credentials/service";
+import { AdminAccessError } from "@/lib/auth/errors";
+import {
+  ADMIN_ABSOLUTE_TIMEOUT_MS,
+  ADMIN_IDLE_TIMEOUT_MS,
+  validateAdminSession,
+} from "@/lib/auth/session";
+import type { AdminIdentity, AdminSessionRecord } from "@/lib/auth/types";
 
 const NOW = new Date("2026-08-04T00:00:00.000Z");
 const IDLE_TIMEOUT_MS = 2 * 60 * 60 * 1000;
@@ -381,6 +388,62 @@ describe("error envelope", () => {
       status: 409,
       code: "admin_mutation_request_id_invalid",
     });
+  });
+
+  it("preserves both session expiry reasons from the real validateAdminSession error", () => {
+    // Idle expiry is recoverable by signing in again; the absolute cap is not.
+    // Collapsing them would leave the sign-in screen unable to say which.
+    const identity: AdminIdentity = {
+      id: "identity-1",
+      username: "operator",
+      role: "super_admin",
+      status: "active",
+      sessionVersion: 1,
+      twoFactorEnabled: true,
+    };
+    const issuedAt = new Date(NOW.getTime() - 3 * 60 * 60 * 1000);
+    const base: AdminSessionRecord = {
+      id: "session-1",
+      tokenHash: "a".repeat(64),
+      identityId: identity.id,
+      sessionVersion: identity.sessionVersion,
+      issuedAt,
+      lastSeenAt: NOW,
+      absoluteExpiresAt: new Date(issuedAt.getTime() + ADMIN_ABSOLUTE_TIMEOUT_MS),
+      twoFactorCompletedAt: NOW,
+      revokedAt: null,
+    };
+
+    const cases: Array<[AdminSessionRecord, string]> = [
+      [{ ...base, lastSeenAt: new Date(NOW.getTime() - ADMIN_IDLE_TIMEOUT_MS) }, "idle_timeout"],
+      [{ ...base, absoluteExpiresAt: new Date(NOW) }, "absolute_timeout"],
+    ];
+
+    for (const [session, reason] of cases) {
+      let caught: unknown;
+      try {
+        validateAdminSession(session, identity, NOW);
+      } catch (error) {
+        caught = error;
+      }
+      expect(caught).toBeInstanceOf(AdminAccessError);
+      const error = caught as AdminAccessError;
+      expect(error.code).toBe("jwt_expired");
+
+      const envelope = projectErrorEnvelope({
+        code: error.code,
+        status: error.status,
+        details: error.details,
+      });
+      expect(envelope).toEqual({
+        ok: false,
+        status: 401,
+        code: "jwt_expired",
+        details: { reason },
+      });
+      expect(JSON.stringify(envelope)).not.toContain("Admin session expired");
+      expect(JSON.stringify(envelope)).not.toContain("a".repeat(64));
+    }
   });
 
   it("projects the real service conflict error without leaking its message", () => {

@@ -21,8 +21,18 @@ export type AdminErrorStatus = 401 | 403 | 404 | 409 | 429;
  * Machine-readable reasons that further qualify a code. Constrained to a frozen
  * set so the field can never become a channel for server-authored prose;
  * introducing a new reason is a deliberate contract change, not a string edit.
+ *
+ * Each value has a server counterpart that already emits it:
+ * - `idempotency_conflict` — 409 from `CredentialReplacementIdempotencyConflictError`
+ * - `idle_timeout` / `absolute_timeout` — 401 `jwt_expired` from
+ *   `validateAdminSession`. The two are not interchangeable to an operator:
+ *   idle expiry is recoverable by signing in again, while the absolute cap means
+ *   the 24h session ceiling was reached and a fresh session is mandatory.
  */
-export type ErrorEnvelopeReason = "idempotency_conflict";
+export type ErrorEnvelopeReason =
+  | "idempotency_conflict"
+  | "idle_timeout"
+  | "absolute_timeout";
 
 /**
  * The only structured hints allowed alongside a code.
@@ -48,7 +58,11 @@ export type ErrorEnvelope = {
 
 const ALLOWED_STATUSES: readonly AdminErrorStatus[] = [401, 403, 404, 409, 429];
 
-const ALLOWED_REASONS: readonly ErrorEnvelopeReason[] = ["idempotency_conflict"];
+const ALLOWED_REASONS: readonly ErrorEnvelopeReason[] = [
+  "idempotency_conflict",
+  "idle_timeout",
+  "absolute_timeout",
+];
 
 function isAdminErrorStatus(value: unknown): value is AdminErrorStatus {
   return typeof value === "number" && ALLOWED_STATUSES.includes(value as AdminErrorStatus);
