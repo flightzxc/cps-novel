@@ -67,5 +67,5 @@ export interface CredentialSecretIntakePort {
   consume(intakeId: string): Promise<{ secret: string } | null>;
 }
 
-export const CREDENTIAL_EXECUTION_STATUS = "PARTIAL_SECRET_INGRESS_GATED" as const;
+export const CREDENTIAL_EXECUTION_STATUS = "WEB_SYNCHRONOUS_INGRESS_ENABLED" as const;
 export const CREDENTIAL_SCHEDULER_EXECUTION_ALLOWED = false as const;

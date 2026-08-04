@@ -2,13 +2,23 @@ import { createHash, randomUUID } from "node:crypto";
 import { Prisma, type PrismaClient } from "@prisma/client";
 
 import { CREDENTIAL_TASK_TYPES, type CredentialContractCode, type CredentialMetadata, type CredentialQueuedResult, type CredentialRedactedResult } from "@/lib/credentials/contracts";
+import { CredentialLifecycleError } from "@/lib/credentials/lifecycle";
+import { validateCredentialJwtLocally } from "@/lib/credentials/jwt";
+import {
+  encryptNewCredentialSecret,
+  fingerprintNewCredentialSecret,
+} from "@/lib/credentials/web-ingress-crypto";
+import { AdminAccessError } from "@/lib/auth/errors";
 import type { AdminIdentityStore, SessionStore } from "@/lib/auth/ports";
 import { requireFreshAdminServiceMutation, type AdminServiceAuthorization } from "@/server/auth/guards";
 
 type Dependencies = { db: PrismaClient; identities: AdminIdentityStore; sessions: SessionStore; now?: Date; env?: NodeJS.ProcessEnv };
 
 function isUniqueConflict(error: unknown): boolean {
-  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002";
+  return error instanceof Prisma.PrismaClientKnownRequestError && (
+    error.code === "P2002"
+    || (error.code === "P2010" && (error.meta as { code?: unknown } | undefined)?.code === "23505")
+  );
 }
 
 function reason(value: string | undefined, required: boolean): string | null {
@@ -16,6 +26,31 @@ function reason(value: string | undefined, required: boolean): string | null {
   if (required && !normalized) throw new Error("A reason is required");
   if (normalized.length > 1000) throw new Error("Reason is too long");
   return normalized || null;
+}
+
+const CREDENTIAL_REPLACE_AUDIT_ACTION = "credential.replace.completed";
+const JWT_LIKE_TEXT = /(?:^|\s)[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+(?:\s|$)/;
+
+type CredentialMetadataRow = {
+  id: string;
+  channelAccountId: string;
+  credentialType: string;
+  fingerprintPrefix: string;
+  status: string;
+  expiresAt: Date | null;
+  lastValidatedAt: Date | null;
+};
+
+function credentialMetadata(row: CredentialMetadataRow): CredentialMetadata {
+  return {
+    credentialId: row.id,
+    channelAccountId: row.channelAccountId,
+    credentialType: row.credentialType,
+    fingerprintPrefix: row.fingerprintPrefix,
+    status: row.status as CredentialMetadata["status"],
+    expiresAt: row.expiresAt?.toISOString() ?? null,
+    lastValidatedAt: row.lastValidatedAt?.toISOString() ?? null,
+  };
 }
 
 async function actor(authorization: AdminServiceAuthorization, entryId: string, requestId: string, deps: Dependencies) {
@@ -64,6 +99,251 @@ export async function setChannelAccountStatus(input: { authorization: AdminServi
 export async function listCredentialMetadata(db: PrismaClient, channelAccountId: string): Promise<CredentialMetadata[]> {
   const rows = await db.channelAccountCredential.findMany({ where: { channelAccountId }, select: { id: true, channelAccountId: true, credentialType: true, fingerprintPrefix: true, status: true, expiresAt: true, lastValidatedAt: true }, orderBy: { createdAt: "desc" } });
   return rows.map((row) => ({ credentialId: row.id, channelAccountId: row.channelAccountId, credentialType: row.credentialType, fingerprintPrefix: row.fingerprintPrefix, status: row.status as CredentialMetadata["status"], expiresAt: row.expiresAt?.toISOString() ?? null, lastValidatedAt: row.lastValidatedAt?.toISOString() ?? null }));
+}
+
+async function findCommittedCredentialReplacement(
+  db: PrismaClient,
+  requestId: string,
+): Promise<CredentialMetadata | null> {
+  const audit = await db.operationAudit.findFirst({
+    where: {
+      actorType: "admin",
+      action: CREDENTIAL_REPLACE_AUDIT_ACTION,
+      requestId,
+    },
+    select: { entityId: true },
+  });
+  if (!audit) return null;
+  const row = await db.channelAccountCredential.findUnique({
+    where: { id: audit.entityId },
+    select: {
+      id: true,
+      channelAccountId: true,
+      credentialType: true,
+      fingerprintPrefix: true,
+      status: true,
+      expiresAt: true,
+      lastValidatedAt: true,
+    },
+  });
+  return row ? credentialMetadata(row) : null;
+}
+
+/**
+ * Synchronous add/replace ingress. The plaintext JWT is used only for this
+ * invocation, never enters a task/audit/log, and is encrypted before the
+ * transaction writes the sole permitted persisted representation.
+ */
+export async function addOrReplaceCredential(input: {
+  authorization: AdminServiceAuthorization;
+  requestId: string;
+  channelAccountId: string;
+  credentialType?: "bearer_jwt";
+  secret: string;
+  reason: string;
+}, deps: Dependencies): Promise<CredentialMetadata> {
+  const allowedEntryIds = new Set([
+    "admin.api.credential.replace",
+    "admin.credential.replace",
+  ]);
+  if (!allowedEntryIds.has(input.authorization.entryId)) {
+    throw new AdminAccessError(
+      "admin_service_authorization_required",
+      403,
+      "Service authorization is not valid for Credential replacement",
+    );
+  }
+  const context = await actor(
+    input.authorization,
+    input.authorization.entryId,
+    input.requestId,
+    deps,
+  );
+  const why = reason(input.reason, true);
+  if (
+    (input.secret.trim() && why?.includes(input.secret.trim()))
+    || (why !== null && JWT_LIKE_TEXT.test(why))
+  ) {
+    throw new CredentialLifecycleError(
+      "credential_validation_failed",
+      "The operation reason must not contain credential material",
+    );
+  }
+  const prior = await findCommittedCredentialReplacement(deps.db, input.requestId);
+  if (prior) return prior;
+
+  const now = deps.now ?? new Date();
+  const validation = validateCredentialJwtLocally(input.secret, now);
+  if (validation.status === "invalid") {
+    throw new CredentialLifecycleError(
+      "credential_validation_failed",
+      "The submitted credential is not a valid JWT",
+    );
+  }
+
+  const credentialId = randomUUID();
+  const credentialType = input.credentialType ?? "bearer_jwt";
+  const encrypted = encryptNewCredentialSecret({
+    secret: input.secret,
+    channelAccountId: input.channelAccountId,
+    credentialId,
+    env: deps.env,
+  });
+  const fingerprint = fingerprintNewCredentialSecret(input.secret, deps.env);
+
+  try {
+    return await deps.db.$transaction(async (tx) => {
+      const existingAudit = await tx.operationAudit.findFirst({
+        where: {
+          actorType: "admin",
+          action: CREDENTIAL_REPLACE_AUDIT_ACTION,
+          requestId: input.requestId,
+        },
+        select: { entityId: true },
+      });
+      if (existingAudit) {
+        const existing = await tx.channelAccountCredential.findUniqueOrThrow({
+          where: { id: existingAudit.entityId },
+          select: {
+            id: true,
+            channelAccountId: true,
+            credentialType: true,
+            fingerprintPrefix: true,
+            status: true,
+            expiresAt: true,
+            lastValidatedAt: true,
+          },
+        });
+        return credentialMetadata(existing);
+      }
+
+      const accounts = await tx.$queryRaw<Array<{ status: string }>>(Prisma.sql`
+        SELECT status
+        FROM channel_account
+        WHERE id=${input.channelAccountId}::uuid AND deleted_at IS NULL
+        FOR UPDATE
+      `);
+      if (accounts[0]?.status !== "active") {
+        throw new CredentialLifecycleError(
+          "account_inactive",
+          "The channel account is not active",
+        );
+      }
+
+      const previous = await tx.$queryRaw<Array<{ id: string; fingerprint_prefix: string }>>(Prisma.sql`
+        SELECT id, fingerprint_prefix
+        FROM channel_account_credential
+        WHERE channel_account_id=${input.channelAccountId}::uuid
+          AND credential_type=${credentialType}
+          AND status='active'
+        ORDER BY id
+        FOR UPDATE
+      `);
+
+      // An active replacement is inserted in a non-active intermediate state so
+      // its fingerprint can be reserved before the old latch is released.
+      const initialStatus = validation.status === "active" ? "invalid" : "expired";
+      await tx.$executeRaw(Prisma.sql`
+        INSERT INTO channel_account_credential (
+          id, channel_account_id, credential_type, encrypted_secret, key_version,
+          secret_fingerprint, fingerprint_prefix, expires_at, last_validated_at,
+          status, created_at, updated_at
+        ) VALUES (
+          ${credentialId}::uuid, ${input.channelAccountId}::uuid, ${credentialType},
+          ${encrypted.encryptedSecret}, ${encrypted.keyVersion}, ${fingerprint.full},
+          ${fingerprint.prefix}, ${validation.expiresAt}, ${now}, ${initialStatus},
+          transaction_timestamp(), transaction_timestamp()
+        )
+      `);
+
+      if (validation.status === "active") {
+        await tx.$executeRaw(Prisma.sql`
+          INSERT INTO channel_credential_active_fingerprint (
+            id, fingerprint, credential_id, channel_account_id, credential_type, created_at
+          ) VALUES (
+            ${randomUUID()}::uuid, ${fingerprint.full}, ${credentialId}::uuid,
+            ${input.channelAccountId}::uuid, ${credentialType}, transaction_timestamp()
+          )
+        `);
+      }
+
+      await tx.$executeRaw(Prisma.sql`
+        UPDATE channel_account_credential
+        SET status='superseded', updated_at=transaction_timestamp()
+        WHERE channel_account_id=${input.channelAccountId}::uuid
+          AND credential_type=${credentialType}
+          AND status='active'
+          AND id<>${credentialId}::uuid
+      `);
+      if (previous.length > 0) {
+        await tx.$executeRaw(Prisma.sql`
+          DELETE FROM channel_credential_active_fingerprint
+          WHERE credential_id IN (${Prisma.join(previous.map((row) => Prisma.sql`${row.id}::uuid`))})
+        `);
+      }
+      if (validation.status === "active") {
+        await tx.$executeRaw(Prisma.sql`
+          UPDATE channel_account_credential
+          SET status='active', updated_at=transaction_timestamp()
+          WHERE id=${credentialId}::uuid AND status='invalid'
+        `);
+      }
+
+      await tx.channelAccount.update({
+        where: { id: input.channelAccountId },
+        data: { lastValidatedAt: now },
+        select: { id: true },
+      });
+      await tx.credentialChangeLog.create({
+        data: {
+          channelAccountId: input.channelAccountId,
+          credentialId,
+          actorType: "admin",
+          actorId: context.identity.id,
+          action: previous.length > 0 ? "replace" : "add",
+          oldFingerprint: previous[0]?.fingerprint_prefix ?? null,
+          newFingerprint: fingerprint.prefix,
+          reason: why,
+          detail: { credentialType, status: validation.status },
+        },
+        select: { id: true },
+      });
+      await tx.operationAudit.create({
+        data: {
+          actorType: "admin",
+          actorId: context.identity.id,
+          action: CREDENTIAL_REPLACE_AUDIT_ACTION,
+          entityType: "ChannelAccountCredential",
+          entityId: credentialId,
+          requestId: input.requestId,
+          reason: why,
+          afterSnapshot: {
+            credentialType,
+            status: validation.status,
+            fingerprintPrefix: fingerprint.prefix,
+          },
+        },
+      });
+
+      return credentialMetadata({
+        id: credentialId,
+        channelAccountId: input.channelAccountId,
+        credentialType,
+        fingerprintPrefix: fingerprint.prefix,
+        status: validation.status,
+        expiresAt: validation.expiresAt,
+        lastValidatedAt: now,
+      });
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+  } catch (error) {
+    if (!isUniqueConflict(error)) throw error;
+    const committed = await findCommittedCredentialReplacement(deps.db, input.requestId);
+    if (committed) return committed;
+    throw new CredentialLifecycleError(
+      "credential_fingerprint_conflict",
+      "An active credential already uses this fingerprint",
+    );
+  }
 }
 
 export async function enqueueCredentialOperation(input: { authorization: AdminServiceAuthorization; entryId: "admin.credential.validate" | "admin.credential.supersede"; requestId: string; channelAccountId: string; credentialId: string; operation: "validate" | "supersede"; reason?: string }, deps: Dependencies): Promise<CredentialQueuedResult> {

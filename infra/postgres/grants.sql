@@ -127,7 +127,9 @@ GRANT SELECT (
   status, request_summary, response_shape, committed_at, confirmed_at, created_at
 ) ON side_effect_intent TO web_app, analyst_ro;
 
--- Web writes operational metadata and enqueues work, but never writes credentials.
+-- Web writes operational metadata and enqueues validate/supersede work. For
+-- Owner-approved synchronous add/replace it may insert a new ciphertext and
+-- rotate lifecycle metadata, but it still cannot SELECT persisted ciphertext.
 GRANT INSERT, UPDATE ON TABLE
   channel, source_app, channel_app, channel_capability, channel_account,
   novel, novel_preview_policy, source_label, novel_source_item_label,
@@ -137,6 +139,20 @@ GRANT INSERT, UPDATE ON TABLE
   cron_run, indexnow_outbox
 TO web_app;
 GRANT INSERT ON TABLE operation_audit TO web_app;
+GRANT INSERT (
+  id, channel_account_id, credential_type, encrypted_secret, key_version,
+  secret_fingerprint, fingerprint_prefix, expires_at, last_validated_at,
+  status, created_at, updated_at
+) ON channel_account_credential TO web_app;
+GRANT UPDATE (status, updated_at) ON channel_account_credential TO web_app;
+GRANT INSERT (
+  id, fingerprint, credential_id, channel_account_id, credential_type, created_at
+) ON channel_credential_active_fingerprint TO web_app;
+GRANT DELETE ON TABLE channel_credential_active_fingerprint TO web_app;
+GRANT INSERT (
+  channel_account_id, credential_id, actor_type, actor_id, action,
+  old_fingerprint, new_fingerprint, reason, detail, created_at
+) ON credential_change_log TO web_app;
 
 -- Worker can mutate business/task state. Append-only tables are INSERT-only;
 -- hard delete is limited to withdrawn chapter content.

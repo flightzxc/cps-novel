@@ -22,14 +22,11 @@ export type CredentialMetadataView = {
  * orthogonal to {@link CredentialTaskState}, which is the *lifecycle* axis of an
  * operation already accepted.
  *
- * `unavailable_pending_owner_gate` exists so P1-09B can render add/replace as
- * explicitly not-yet-enabled instead of letting an operator submit and receive a
- * vague server error: the Secret Ingress protocol is unapproved, so those
- * entries are not in the production registry and would 404.
+ * Add/replace is synchronously supported after the Owner-approved Web ingress
+ * flow; validate and supersede keep their asynchronous task lifecycle.
  */
 export type CredentialOperationAvailabilityState =
   | "supported"
-  | "unavailable_pending_owner_gate"
   | "unavailable_capability_denied"
   | "unavailable_two_factor_required";
 
@@ -38,15 +35,11 @@ export type CredentialOperationAvailability = {
   readonly state: CredentialOperationAvailabilityState;
 };
 
-/** Frozen until the Owner approves a Secret Ingress protocol. */
-export const CREDENTIAL_OWNER_GATED_OPERATIONS: readonly CredentialOperation[] = Object.freeze([
-  "add_or_replace_credential",
-]);
-
 export const CREDENTIAL_SUPPORTED_OPERATIONS: readonly CredentialOperation[] = Object.freeze([
   "create_account",
   "disable_account",
   "enable_account",
+  "add_or_replace_credential",
   "validate_credential",
   "supersede_credential",
 ]);
@@ -150,11 +143,6 @@ export function projectCredentialMetadata(input: {
   });
 }
 
-/**
- * The Owner gate outranks capability: add/replace stays
- * `unavailable_pending_owner_gate` even for an operator who holds
- * `credential:manage`, because the backing route is not registered at all.
- */
 export function projectCredentialOperationAvailability(input: {
   credentialManage: AdminCapabilityState;
 }): readonly CredentialOperationAvailability[] {
@@ -165,17 +153,9 @@ export function projectCredentialOperationAvailability(input: {
         ? "unavailable_two_factor_required"
         : "unavailable_capability_denied";
 
-  const entries: CredentialOperationAvailability[] = [
-    ...CREDENTIAL_SUPPORTED_OPERATIONS.map((operation) =>
-      Object.freeze({ operation, state: fromCapability }),
-    ),
-    ...CREDENTIAL_OWNER_GATED_OPERATIONS.map((operation) =>
-      Object.freeze({
-        operation,
-        state: "unavailable_pending_owner_gate" as const,
-      }),
-    ),
-  ];
+  const entries: CredentialOperationAvailability[] = CREDENTIAL_SUPPORTED_OPERATIONS.map(
+    (operation) => Object.freeze({ operation, state: fromCapability }),
+  );
   return Object.freeze(entries);
 }
 

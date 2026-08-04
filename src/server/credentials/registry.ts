@@ -8,6 +8,7 @@ const routes = [
     { id: "admin.api.channel_account.disable", path: "/api/admin/channel-accounts/disable", methods: ["POST"], capability },
     { id: "admin.api.channel_account.enable", path: "/api/admin/channel-accounts/enable", methods: ["POST"], capability },
     { id: "admin.api.credential.metadata", path: "/api/admin/credentials/metadata", methods: ["GET"], capability },
+    { id: "admin.api.credential.replace", path: "/api/admin/credentials/replace", methods: ["POST"], capability },
     { id: "admin.api.credential.validate", path: "/api/admin/credentials/validate", methods: ["POST"], capability },
     { id: "admin.api.credential.supersede", path: "/api/admin/credentials/supersede", methods: ["POST"], capability },
     { id: "admin.api.credential_task.status", path: "/api/admin/credential-tasks/status", methods: ["GET"], capability },
@@ -16,6 +17,7 @@ const actions = [
   { id: "admin.channel_account.create", capability, mutation: true },
   { id: "admin.channel_account.disable", capability, mutation: true },
   { id: "admin.channel_account.enable", capability, mutation: true },
+  { id: "admin.credential.replace", capability, mutation: true },
   { id: "admin.credential.validate", capability, mutation: true },
   { id: "admin.credential.supersede", capability, mutation: true },
 ] as const satisfies AdminRegistry["actions"];
