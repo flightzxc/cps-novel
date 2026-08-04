@@ -8,12 +8,34 @@
 
 ## 本轮范围
 
-🔴 本轮（P1-04）只建目录与占位说明，**不写任何类型定义**、不写业务 DTO。
+P1-08B 已落地首批 Admin / Credential DTO 与投影函数（见下「已落地契约」）。P1-04 的
+「只建目录、不写类型」阶段已结束。
+
+### 已落地契约（P1-08B）
+
+| 文件 | 内容 |
+| --- | --- |
+| `errors.ts` | `ErrorEnvelope`、`AdminErrorCode`、`projectErrorEnvelope` |
+| `admin-session.ts` | `AdminSessionView`、`AdminCapabilityView`、`AdminCapabilityState` 及投影 |
+| `two-factor.ts` | `TwoFactorStateView`、`TwoFactorSetupResult`、`TwoFactorChallengeView`、`RecoveryCodesOneTimeResult` 及投影 |
+| `channel-accounts.ts` | `ChannelAccountView` 及投影 |
+| `credentials.ts` | `CredentialMetadataView`、`CredentialOperationAvailability`、`CredentialQueuedResultView`、`CredentialTaskStatusView`、`CredentialRedactedValidationResultView` 及投影 |
+
+### 两条使本层可被机器校验的规则
+
+1. **零运行时依赖**：只允许 `import type` 引用 `src/lib/**` 与 `src/server/**`。
+   `@/lib/auth/session` 顶层 import 了 `node:crypto`，值引用会把 Node 内建模块带进浏览器包。
+   唯一放行的值引用是 `@/domain/database-statuses`（零 import 的叶子模块）。
+2. **投影逐字段装配**：任何投影都不得 spread 数据库行、`AdminAuthContext` 或 `Error`。
+   `tokenHash` / `sessionVersion` / `passwordHash` / `encryptedSecret` / 完整 fingerprint /
+   TOTP 密文 / recovery code hash / stack 因此没有出口。
+
+两条规则均由 `tests/backend/contracts/no-sensitive-fields.test.ts` 静态 + 运行时守卫。
 
 ## 硬纪律
 
 1. 🔴 **不提前猜写未经调研的渠道接口**——契约必须有依据（既有 P1 架构文档、CPS 只读参考实测证据、或明确的产品需求），不得凭空拍脑袋定字段；
-2. 🔴 **本轮（P1-04）不实现任何业务 DTO**，只建立目录与本说明文件；
+2. 🔴 **契约必须对应已实施的后端形状**——新增 DTO 前须有后端实现或冻结设计为依据；
 3. 契约变更走 **PR + custodian 合并**流程：非 custodian 一方提 PR，Claude 合并前需取得 Codex（审核方）确认；
 4. 🔴 **FROZEN 级契约的变更需 Owner 确认**，不得由执行体单方面改动已冻结的契约。
 
@@ -34,4 +56,7 @@
 
 ## 填充任务
 
-首批契约随 **P1-08**（Claude 侧签字确认 API 契约）与 **P1-09**（后台 UI 消费契约）陆续落地；正式契约联调在 **P1-12**。
+首批契约已随 **P1-08B** 落地（Admin Session / Capability / 2FA / ChannelAccount / Credential）；
+**P1-09** 消费它们实现后台 UI；正式契约联调在 **P1-12**。
+
+前台读取、Locale、URL 构造、公开短码、SEO 收录、Feature Flag、埋点等主题仍未落地。
