@@ -80,15 +80,31 @@ export class TestOnlyInMemoryAuthStores
     return value ? cloneIdentity(value) : null;
   }
 
+  async findByNormalizedUsername(username: string) {
+    const value = [...this.identities.values()].find((identity) => identity.username === username);
+    return value ? { ...cloneIdentity(value), passwordHash: "scrypt$v1$1024$8$1$AA==$AA==" } : null;
+  }
+
   async findByTokenHash(tokenHash: string): Promise<AdminSessionRecord | null> {
     const value = [...this.sessions.values()].find((session) => session.tokenHash === tokenHash);
     return value ? cloneSession(value) : null;
   }
 
-  async touchLastSeen(sessionId: string, seenAt: Date): Promise<boolean> {
+  async create(session: AdminSessionRecord): Promise<void> {
+    this.sessions.set(session.id, cloneSession(session));
+  }
+
+  async touchLastSeen(input: { sessionId: string; identityId: string; sessionVersion: number; seenAt: Date }): Promise<boolean> {
+    const current = this.sessions.get(input.sessionId);
+    if (!current || current.revokedAt) return false;
+    current.lastSeenAt = new Date(Math.max(current.lastSeenAt.getTime(), input.seenAt.getTime()));
+    return true;
+  }
+
+  async revoke(sessionId: string, revokedAt: Date): Promise<boolean> {
     const current = this.sessions.get(sessionId);
     if (!current || current.revokedAt) return false;
-    current.lastSeenAt = new Date(seenAt);
+    current.revokedAt = new Date(revokedAt);
     return true;
   }
 
@@ -128,9 +144,11 @@ export class TestOnlyInMemoryAuthStores
     return value ? { ...value } : null;
   }
 
-  async incrementChallengeAttempts(challengeId: string): Promise<void> {
-    const current = this.challenges.get(challengeId);
-    if (current) current.attemptCount += 1;
+  async incrementChallengeAttempts(input: { challengeId: string; now: Date; maxAttempts: number }): Promise<boolean> {
+    const current = this.challenges.get(input.challengeId);
+    if (!current || current.consumedAt || current.expiresAt <= input.now || current.attemptCount >= input.maxAttempts) return false;
+    current.attemptCount += 1;
+    return true;
   }
 
   async listUnused(identityId: string): Promise<RecoveryCodeRecord[]> {

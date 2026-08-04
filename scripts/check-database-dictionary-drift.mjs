@@ -119,8 +119,8 @@ function assertStaticConsistency(schemaTables, records) {
     }
   }
 
-  if (schemaTables.size !== 37) {
-    problems.push(`expected 37 Prisma models, found ${schemaTables.size}`);
+  if (schemaTables.size !== 43) {
+    problems.push(`expected 43 Prisma models, found ${schemaTables.size}`);
   }
   if (problems.length) fail(problems);
   return { recordCount: records.length, activeCount: active.length };
@@ -198,7 +198,7 @@ async function assertCatalogConsistency(records) {
     for (const name of [...actualConstraints, ...actualIndexes, ...actualTriggers]) {
       if (!expectedPhysical.has(name)) problems.push(`database object missing from dictionary ${name}`);
     }
-    if (actualTables.size !== 37) problems.push(`expected 37 database tables, found ${actualTables.size}`);
+    if (actualTables.size !== 43) problems.push(`expected 43 database tables, found ${actualTables.size}`);
     if (problems.length) fail(problems);
     return {
       tableCount: actualTables.size,

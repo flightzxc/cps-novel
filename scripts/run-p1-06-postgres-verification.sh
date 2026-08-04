@@ -32,17 +32,20 @@ bootstrap_password="$(openssl rand -hex 24)"
 migration_password="$(openssl rand -hex 24)"
 web_password="$(openssl rand -hex 24)"
 worker_password="$(openssl rand -hex 24)"
+scheduler_password="$(openssl rand -hex 24)"
 analyst_password="$(openssl rand -hex 24)"
 backup_password="$(openssl rand -hex 24)"
 printf '%s' "$bootstrap_password" >"$secret_dir/bootstrap-password"
 printf "ALTER ROLE migration_owner PASSWORD '%s';\n" "$migration_password" >"$secret_dir/role-passwords.sql"
 printf "ALTER ROLE web_app PASSWORD '%s';\n" "$web_password" >>"$secret_dir/role-passwords.sql"
 printf "ALTER ROLE worker_app PASSWORD '%s';\n" "$worker_password" >>"$secret_dir/role-passwords.sql"
+printf "ALTER ROLE scheduler_app PASSWORD '%s';\n" "$scheduler_password" >>"$secret_dir/role-passwords.sql"
 printf "ALTER ROLE analyst_ro PASSWORD '%s';\n" "$analyst_password" >>"$secret_dir/role-passwords.sql"
 printf "ALTER ROLE backup_role PASSWORD '%s';\n" "$backup_password" >>"$secret_dir/role-passwords.sql"
 printf '127.0.0.1:5432:*:migration_owner:%s\n' "$migration_password" >"$secret_dir/pgpass-container"
 printf '127.0.0.1:5432:*:web_app:%s\n' "$web_password" >>"$secret_dir/pgpass-container"
 printf '127.0.0.1:5432:*:worker_app:%s\n' "$worker_password" >>"$secret_dir/pgpass-container"
+printf '127.0.0.1:5432:*:scheduler_app:%s\n' "$scheduler_password" >>"$secret_dir/pgpass-container"
 printf '127.0.0.1:5432:*:analyst_ro:%s\n' "$analyst_password" >>"$secret_dir/pgpass-container"
 printf '127.0.0.1:5432:*:backup_role:%s\n' "$backup_password" >>"$secret_dir/pgpass-container"
 chmod 600 "$secret_dir"/*
@@ -56,10 +59,10 @@ node -e '
 '
 npm ci
 
-if ! docker image inspect postgres:16 >/dev/null 2>&1; then
+if ! docker image inspect postgres:16.14 >/dev/null 2>&1; then
   mkdir -p "$secret_dir/docker-config"
   printf '{}\n' >"$secret_dir/docker-config/config.json"
-  DOCKER_CONFIG="$secret_dir/docker-config" docker pull postgres:16 >/dev/null
+  DOCKER_CONFIG="$secret_dir/docker-config" docker pull postgres:16.14 >/dev/null
 fi
 docker volume create "$volume_name" >/dev/null
 docker run -d \
@@ -72,7 +75,7 @@ docker run -d \
   -e POSTGRES_PASSWORD_FILE=/run/p106-secrets/bootstrap-password \
   -e POSTGRES_DB=postgres \
   -p 127.0.0.1::5432 \
-  postgres:16 >/dev/null
+  postgres:16.14 >/dev/null
 
 for _ in $(seq 1 60); do
   if docker exec "$container_name" pg_isready -U p106_admin -d postgres >/dev/null 2>&1; then
@@ -92,6 +95,7 @@ docker exec "$container_name" createdb -U p106_admin -O migration_owner "$source
 owner_url="postgresql://migration_owner:${migration_password}@127.0.0.1:${host_port}/${source_database}?schema=public"
 web_url="postgresql://web_app:${web_password}@127.0.0.1:${host_port}/${source_database}?schema=public"
 worker_url="postgresql://worker_app:${worker_password}@127.0.0.1:${host_port}/${source_database}?schema=public"
+scheduler_url="postgresql://scheduler_app:${scheduler_password}@127.0.0.1:${host_port}/${source_database}?schema=public"
 analyst_url="postgresql://analyst_ro:${analyst_password}@127.0.0.1:${host_port}/${source_database}?schema=public"
 backup_url="postgresql://backup_role:${backup_password}@127.0.0.1:${host_port}/${source_database}?schema=public"
 
@@ -159,7 +163,7 @@ migration_sql="SELECT count(*) FROM _prisma_migrations WHERE finished_at IS NOT 
 
 source_table_count="$(db_query "$source_database" "$table_sql" | tr -d '[:space:]')"
 restore_table_count="$(db_query "$restore_database" "$table_sql" | tr -d '[:space:]')"
-[[ "$source_table_count" == "37" && "$restore_table_count" == "37" ]]
+[[ "$source_table_count" == "43" && "$restore_table_count" == "43" ]]
 source_rows="$(db_query "$source_database" "$row_sql")"
 restore_rows="$(db_query "$restore_database" "$row_sql")"
 [[ "$source_rows" == "$restore_rows" ]]
@@ -169,8 +173,8 @@ restore_constraints="$(db_query "$restore_database" "$constraint_sql" | tr -d '[
 source_objects="$(db_query "$source_database" "$index_trigger_sql" | tr -d '[:space:]')"
 restore_objects="$(db_query "$restore_database" "$index_trigger_sql" | tr -d '[:space:]')"
 [[ -n "$source_objects" && "$source_objects" == "$restore_objects" ]]
-[[ "$(db_query "$source_database" "$migration_sql" | tr -d '[:space:]')" == "1" ]]
-[[ "$(db_query "$restore_database" "$migration_sql" | tr -d '[:space:]')" == "1" ]]
+[[ "$(db_query "$source_database" "$migration_sql" | tr -d '[:space:]')" == "3" ]]
+[[ "$(db_query "$restore_database" "$migration_sql" | tr -d '[:space:]')" == "3" ]]
 
 DATABASE_URL="$owner_url" node scripts/check-database-dictionary-drift.mjs
 restore_owner_url="postgresql://migration_owner:${migration_password}@127.0.0.1:${host_port}/${restore_database}?schema=public"
@@ -203,6 +207,6 @@ echo "RESTORE_DURATION_MS=${restore_duration_ms}"
 echo "TABLE_COUNT=${restore_table_count}"
 echo "CONSTRAINT_DIGEST=${restore_constraints}"
 echo "OBJECT_DIGEST=${restore_objects}"
-echo "DICTIONARY_DRIFT=0_OF_825"
+echo "DICTIONARY_DRIFT=0_OF_920"
 echo "PITR_STATUS=SCRIPT_AND_RUNBOOK_ONLY"
 echo "P1_06_VERIFICATION=PASS"

@@ -12,7 +12,7 @@ import {
 } from "@/lib/credentials/contracts";
 
 describe("credential web boundary", () => {
-  it("defines all redacted task result codes while execution remains deferred", () => {
+  it("defines all redacted task result codes while production secret intake remains gated", () => {
     const codes: CredentialContractCode[] = [
       "credential_validation_queued",
       "credential_missing",
@@ -24,7 +24,7 @@ describe("credential web boundary", () => {
       "account_inactive",
     ];
     expect(new Set(codes).size).toBe(8);
-    expect(CREDENTIAL_EXECUTION_STATUS).toBe("NOT_IMPLEMENTED");
+    expect(CREDENTIAL_EXECUTION_STATUS).toBe("PARTIAL_SECRET_INGRESS_GATED");
     expect(CREDENTIAL_SCHEDULER_EXECUTION_ALLOWED).toBe(false);
   });
 
@@ -62,7 +62,7 @@ describe("credential web boundary", () => {
     expect(JSON.stringify(queued)).not.toMatch(/secret|ciphertext|fingerprint/i);
   });
 
-  it("contains no Credential secret read, crypto, or decryption entry point", async () => {
+  it("keeps Credential decryption and symmetric key access out of the Web boundary", async () => {
     async function typescriptSources(directory: string): Promise<string[]> {
       const entries = await readdir(directory, { withFileTypes: true });
       const nested = await Promise.all(
@@ -77,7 +77,7 @@ describe("credential web boundary", () => {
 
     const source = (
       await Promise.all(
-        ["src/lib/credentials", "src/server"].map((directory) =>
+        ["src/lib/credentials", "src/server", "scheduler"].map((directory) =>
           typescriptSources(path.resolve(process.cwd(), directory)),
         ),
       )
@@ -86,6 +86,14 @@ describe("credential web boundary", () => {
       .join("\n");
     expect(source).not.toMatch(/encrypted[_A-Z]?secret/i);
     expect(source).not.toMatch(/decrypt|createDecipheriv|CHANNEL_CREDENTIAL_ENCRYPTION_KEY/);
-    expect(source).not.toMatch(/node:crypto/);
+    expect(source).not.toMatch(/CREDENTIAL_ENCRYPTION_KEYS|CREDENTIAL_FINGERPRINT_HMAC_KEY/);
+
+    const workerCrypto = await readFile(
+      path.resolve(process.cwd(), "worker/credentials/crypto.ts"),
+      "utf8",
+    );
+    expect(workerCrypto).toMatch(/createDecipheriv/);
+    expect(workerCrypto).toMatch(/CHANNEL_CREDENTIAL_ENCRYPTION_KEY_V/);
+    expect(workerCrypto).toMatch(/CHANNEL_CREDENTIAL_FINGERPRINT_KEY/);
   });
 });

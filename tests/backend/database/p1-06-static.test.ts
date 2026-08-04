@@ -7,9 +7,9 @@ const root = resolve(import.meta.dirname, "../../..");
 const read = (path: string) => readFileSync(resolve(root, path), "utf8");
 
 describe("P1-06 database operations static contracts", () => {
-  it("defines exactly the five approved roles without embedded passwords", () => {
+  it("defines the six approved least-privilege roles without embedded passwords", () => {
     const sql = read("infra/postgres/roles.sql");
-    for (const role of ["migration_owner", "web_app", "worker_app", "analyst_ro", "backup_role"]) {
+    for (const role of ["migration_owner", "web_app", "worker_app", "scheduler_app", "analyst_ro", "backup_role"]) {
       expect(sql).toContain(`'${role}'`);
       expect(sql).toMatch(new RegExp(`ALTER ROLE ${role} WITH`));
     }
@@ -17,7 +17,7 @@ describe("P1-06 database operations static contracts", () => {
     expect(sql).toContain("ALTER ROLE analyst_ro SET default_transaction_read_only = 'on'");
     expect(sql).toMatch(/ALTER ROLE backup_role WITH[\s\S]*REPLICATION/);
     expect(sql).not.toMatch(/PASSWORD\s+['"][^'"]+/i);
-    expect(sql).not.toContain("scheduler_app");
+    expect(sql).toContain("ALTER ROLE scheduler_app WITH");
   });
 
   it("revokes public DDL and uses column grants for restricted data", () => {
@@ -26,7 +26,11 @@ describe("P1-06 database operations static contracts", () => {
     expect(sql).toContain("REVOKE CREATE, TEMPORARY ON DATABASE");
     expect(sql).toContain("GRANT SELECT (\n  id, channel_account_id, credential_type");
     expect(sql).not.toMatch(/GRANT SELECT ON TABLE channel_account_credential TO (?:web_app|analyst_ro)/);
-    expect(sql).toContain("GRANT SELECT ON ALL TABLES IN SCHEMA public TO worker_app, backup_role");
+    expect(sql).toContain("GRANT SELECT ON ALL TABLES IN SCHEMA public TO backup_role");
+    expect(sql).toContain("GRANT SELECT ON TABLE channel_account, channel_account_credential");
+    expect(sql).toContain("TO scheduler_app");
+    expect(sql).not.toMatch(/GRANT SELECT ON ALL TABLES[^;]*worker_app/);
+    expect(sql).not.toMatch(/GRANT SELECT[^;]*admin_(?:identity|session|two_factor|recovery_code|login_attempt)[^;]*worker_app/s);
     expect(sql).toContain("GRANT INSERT ON TABLE operation_audit TO web_app");
     expect(sql).toContain("credential_change_log, operation_audit, indexnow_outbox_attempt");
     expect(sql).not.toMatch(/GRANT (?:UPDATE|DELETE)[^;]*operation_audit/s);
@@ -63,9 +67,9 @@ describe("P1-06 database operations static contracts", () => {
     expect(runbook).toContain("RTO 不超过 4 小时");
   });
 
-  it("preserves the 825-record dictionary", () => {
+  it("extends the dictionary for the six approved Auth tables without duplicate keys", () => {
     const records = read("docs/governance/database-schema-dictionary.jsonl").trim().split("\n");
-    expect(records).toHaveLength(825);
-    expect(new Set(records.map((line) => JSON.parse(line).stable_key)).size).toBe(825);
+    expect(records).toHaveLength(920);
+    expect(new Set(records.map((line) => JSON.parse(line).stable_key)).size).toBe(920);
   });
 });
