@@ -28,8 +28,8 @@ describe("P1-08B production backend contracts", () => {
     expect(verifyAdminPassword("a sufficiently long admin password", "not-versioned")).toBe(false);
   });
 
-  it("registers synchronous replace and keeps its legacy task type out of Worker execution", () => {
-    expect(resolveAdminRoute("/api/admin/credentials/replace", "POST", P1_08B_ADMIN_REGISTRY)?.capability).toBe("credential:manage");
+  it("registers synchronous replace only as an Action and keeps its legacy task type out of Worker execution", () => {
+    expect(resolveAdminRoute("/api/admin/credentials/replace", "POST", P1_08B_ADMIN_REGISTRY)).toBeNull();
     expect(resolveAdminAction("admin.credential.replace", P1_08B_ADMIN_REGISTRY)?.mutation).toBe(true);
     expect(resolveAdminAction("admin.credential.validate", P1_08B_ADMIN_REGISTRY)?.capability).toBe("credential:manage");
     expect(resolveAdminAction("admin.credential.supersede", P1_08B_ADMIN_REGISTRY)?.mutation).toBe(true);

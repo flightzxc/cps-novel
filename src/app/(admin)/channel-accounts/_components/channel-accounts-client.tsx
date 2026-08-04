@@ -110,7 +110,12 @@ export function ChannelAccountsClient({
       `/api/admin/credential-tasks/status?taskId=${encodeURIComponent(taskId)}`,
     );
     if (result.ok) setTask(result.data);
-    else setNotice({ tone: "error", text: `任务查询失败：${errorEnvelopeCopy(result.envelope)}` });
+    else if (result.envelope.code === "credential_task_not_found") {
+      setTask(null);
+      setNotice({ tone: "error", text: `任务查询失败：${errorEnvelopeCopy(result.envelope)}` });
+    } else {
+      setNotice({ tone: "error", text: `任务查询失败：${errorEnvelopeCopy(result.envelope)}` });
+    }
   }
 
   return (

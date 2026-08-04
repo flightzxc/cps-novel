@@ -1,3 +1,6 @@
+import { readFile } from "node:fs/promises";
+import path from "node:path";
+
 import { describe, expect, it } from "vitest";
 
 import {
@@ -54,6 +57,21 @@ describe("origin, request id, cookies, and page registry", () => {
       expect.objectContaining({ code: "admin_origin_denied", status: 403 }),
     );
     expect(() => requireSameOrigin("https://evil.example", "https://admin.example.com")).toThrow();
+    expect(() => requireSameOrigin("https://admin.example.com", "")).toThrowError(
+      expect.objectContaining({ code: "admin_origin_denied", status: 403 }),
+    );
+    expect(() => requireSameOrigin("https://admin.example.com", "not-a-url")).toThrowError(
+      expect.objectContaining({ code: "admin_origin_denied", status: 403 }),
+    );
+  });
+
+  it("requires ADMIN_CANONICAL_ORIGIN instead of deriving it from Host", async () => {
+    const source = await readFile(
+      path.resolve(process.cwd(), "src/app/api/admin/_lib/deps.ts"),
+      "utf8",
+    );
+    expect(source).toContain("process.env.ADMIN_CANONICAL_ORIGIN?.trim() ?? \"\"");
+    expect(source).not.toMatch(/headers\(\)|get\(["']host["']\)|localhost/);
   });
 
   it("requires a UUID mutation request id", () => {

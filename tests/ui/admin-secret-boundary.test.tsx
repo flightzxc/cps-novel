@@ -89,6 +89,18 @@ describe("admin UI never references credential secret material", () => {
       expect(source, `${file} must not read envelope.message`).not.toMatch(/envelope\.message/);
     }
   });
+
+  it("keeps Client Components away from Prisma and server services", async () => {
+    const files = (await Promise.all(ADMIN_UI_ROOTS.map(sources))).flat();
+    const clients = files.filter(({ source }) => /^\s*["']use client["'];/m.test(source));
+    expect(clients.length).toBeGreaterThan(0);
+    for (const { file, source } of clients) {
+      expect(source, `${file} must not import Prisma`).not.toMatch(/@prisma\/client|\bprisma\b/i);
+      expect(source, `${file} must not import server services`).not.toMatch(
+        /from\s+["']@\/(?:server|lib\/credentials)\//,
+      );
+    }
+  });
 });
 
 describe("error copy is owned by the frontend", () => {
@@ -108,6 +120,7 @@ describe("error copy is owned by the frontend", () => {
     "two_factor_expired",
     "two_factor_locked",
     "credential_validation_queued",
+    "credential_task_not_found",
     "credential_missing",
     "credential_expired",
     "credential_fingerprint_conflict",

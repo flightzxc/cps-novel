@@ -48,6 +48,16 @@ export class CredentialReplacementIdempotencyConflictError extends Error {
   }
 }
 
+export class CredentialTaskNotFoundError extends Error {
+  readonly code = "credential_task_not_found" as const;
+  readonly status = 404 as const;
+
+  constructor() {
+    super("Credential task does not exist or is outside the permitted query scope");
+    this.name = "CredentialTaskNotFoundError";
+  }
+}
+
 type CredentialReplacementBinding = Readonly<{
   requestId: string;
   actorId: string;
@@ -205,23 +215,14 @@ export async function addOrReplaceCredential(input: {
   secret: string;
   reason: string;
 }, deps: Dependencies): Promise<CredentialMetadata> {
-  const allowedEntryIds = new Set([
-    "admin.api.credential.replace",
-    "admin.credential.replace",
-  ]);
-  if (!allowedEntryIds.has(input.authorization.entryId)) {
+  if (input.authorization.entryId !== "admin.credential.replace") {
     throw new AdminAccessError(
       "admin_service_authorization_required",
       403,
       "Service authorization is not valid for Credential replacement",
     );
   }
-  const context = await actor(
-    input.authorization,
-    input.authorization.entryId,
-    input.requestId,
-    deps,
-  );
+  const context = await actor(input.authorization, "admin.credential.replace", input.requestId, deps);
   const why = reason(input.reason, true);
   if (
     (input.secret.trim() && why?.includes(input.secret.trim()))
@@ -471,7 +472,13 @@ export async function getCredentialTaskResult(db: PrismaClient, taskId: string):
       items: { take: 1, select: { result: true, error: true } },
     },
   });
-  if (!task || !Object.values(CREDENTIAL_TASK_TYPES).includes(task.taskType as never) || task.taskType === CREDENTIAL_TASK_TYPES.replaceGated) throw new Error("credential_missing");
+  if (
+    !task
+    || !Object.values(CREDENTIAL_TASK_TYPES).includes(task.taskType as never)
+    || task.taskType === CREDENTIAL_TASK_TYPES.replaceGated
+  ) {
+    throw new CredentialTaskNotFoundError();
+  }
   return {
     state: task.status,
     result: (task.items[0]?.result as CredentialRedactedResult | null) ?? null,

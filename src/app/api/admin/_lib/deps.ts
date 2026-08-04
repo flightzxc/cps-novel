@@ -1,5 +1,5 @@
 import { PrismaClient } from "@prisma/client";
-import { cookies, headers } from "next/headers";
+import { cookies } from "next/headers";
 
 import {
   PostgreSQLAdminIdentityStore,
@@ -37,16 +37,12 @@ export async function readSessionToken(): Promise<string | null> {
 /**
  * Canonical origin for the same-origin check.
  *
- * Prefers the explicitly configured value; the `host` header is only a fallback
- * for local development, because trusting it in production would let a spoofed
- * Host satisfy `requireSameOrigin` against itself.
+ * The configured value is mandatory in every environment. Returning an empty
+ * value keeps mutations fail-closed in `requireSameOrigin`; request Host is
+ * never trusted to define its own security boundary.
  */
 export async function canonicalOrigin(): Promise<string> {
-  const configured = process.env.ADMIN_CANONICAL_ORIGIN?.trim();
-  if (configured) return configured;
-  if (process.env.NODE_ENV === "production") return "";
-  const host = (await headers()).get("host") ?? "";
-  return host ? `http://${host}` : "";
+  return process.env.ADMIN_CANONICAL_ORIGIN?.trim() ?? "";
 }
 
 export async function mutationRequestInput(request: Request) {

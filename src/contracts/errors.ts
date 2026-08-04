@@ -7,7 +7,10 @@ import type { CredentialContractCode } from "@/lib/credentials/contracts";
  * The frontend must switch on `code` and never parse a server message: the
  * envelope deliberately carries no free-text field for it to read.
  */
-export type AdminErrorCode = AdminAccessErrorCode | CredentialContractCode;
+export type AdminErrorCode =
+  | AdminAccessErrorCode
+  | CredentialContractCode
+  | "credential_task_not_found";
 
 /**
  * 409 carries idempotency conflicts: a mutation request id was replayed with a

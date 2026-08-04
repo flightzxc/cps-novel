@@ -2,7 +2,10 @@ import { projectErrorEnvelope, type AdminErrorCode, type ErrorEnvelope } from "@
 import { isAdminAccessError } from "@/lib/auth/errors";
 import type { CredentialContractCode } from "@/lib/credentials/contracts";
 import { CredentialLifecycleError } from "@/lib/credentials/lifecycle";
-import { CredentialReplacementIdempotencyConflictError } from "@/server/credentials/service";
+import {
+  CredentialReplacementIdempotencyConflictError,
+  CredentialTaskNotFoundError,
+} from "@/server/credentials/service";
 
 /**
  * `CredentialLifecycleError` carries a stable code but no HTTP status, so the
@@ -29,6 +32,9 @@ const CREDENTIAL_CODE_STATUS: Readonly<Record<CredentialContractCode, 401 | 403 
  * become the thing that forwards it.
  */
 export function toErrorEnvelope(error: unknown): ErrorEnvelope {
+  if (error instanceof CredentialTaskNotFoundError) {
+    return projectErrorEnvelope({ code: error.code, status: error.status });
+  }
   if (error instanceof CredentialReplacementIdempotencyConflictError) {
     return projectErrorEnvelope({
       code: error.code,

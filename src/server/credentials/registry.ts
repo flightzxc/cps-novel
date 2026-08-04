@@ -4,13 +4,7 @@ const capability = "credential:manage" as const;
 
 const routes = [
     { id: "admin.api.channel_accounts.list", path: "/api/admin/channel-accounts", methods: ["GET"], capability },
-    { id: "admin.api.channel_account.create", path: "/api/admin/channel-accounts/create", methods: ["POST"], capability },
-    { id: "admin.api.channel_account.disable", path: "/api/admin/channel-accounts/disable", methods: ["POST"], capability },
-    { id: "admin.api.channel_account.enable", path: "/api/admin/channel-accounts/enable", methods: ["POST"], capability },
     { id: "admin.api.credential.metadata", path: "/api/admin/credentials/metadata", methods: ["GET"], capability },
-    { id: "admin.api.credential.replace", path: "/api/admin/credentials/replace", methods: ["POST"], capability },
-    { id: "admin.api.credential.validate", path: "/api/admin/credentials/validate", methods: ["POST"], capability },
-    { id: "admin.api.credential.supersede", path: "/api/admin/credentials/supersede", methods: ["POST"], capability },
     { id: "admin.api.credential_task.status", path: "/api/admin/credential-tasks/status", methods: ["GET"], capability },
   ] as const satisfies AdminRegistry["routes"];
 const actions = [

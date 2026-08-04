@@ -25,6 +25,7 @@ const COPY: Readonly<Record<AdminErrorCode, string>> = Object.freeze({
   two_factor_expired: "验证已过期，请重新开始",
   two_factor_locked: "尝试次数过多，请重新登录",
   credential_validation_queued: "校验任务已入队",
+  credential_task_not_found: "任务不存在或不可查询",
   credential_missing: "未找到对应凭证",
   credential_expired: "该 JWT 已过期",
   credential_fingerprint_conflict: "该 JWT 已被其它账户占用，无法重复启用",

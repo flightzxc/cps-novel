@@ -1,6 +1,8 @@
 import type { PrismaClient } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
 
+import { projectCredentialTaskStatus } from "@/contracts";
+import { jsonError } from "@/app/api/admin/_lib/respond";
 import {
   getCredentialTaskResult,
   projectPersistedCredentialTaskFailure,
@@ -68,6 +70,35 @@ describe("Credential task result read path", () => {
     }), "task-1");
 
     expect(read).toEqual({ state: "completed", result, error: null });
+  });
+
+  it.each([
+    ["pending", "queued"],
+    ["processing", "running"],
+    ["completed", "completed"],
+    ["failed", "failed"],
+  ] as const)("projects task status %s to the stable UI state %s", (status, state) => {
+    expect(projectCredentialTaskStatus({ taskId: "task-1", status }).state).toBe(state);
+  });
+
+  it.each([
+    null,
+    { taskType: "catalog.scan.v1", status: "completed", items: [] },
+    { taskType: "credential.replace.v1", status: "completed", items: [] },
+  ])("returns a safe 404 credential_task_not_found envelope for an unavailable task", async (task) => {
+    let thrown: unknown;
+    try {
+      await getCredentialTaskResult(databaseReturning(task), "task-private");
+    } catch (error) {
+      thrown = error;
+    }
+    const response = jsonError(thrown);
+    expect(response.status).toBe(404);
+    expect(await response.json()).toEqual({
+      ok: false,
+      status: 404,
+      code: "credential_task_not_found",
+    });
   });
 
   it("collapses missing, malformed, and unknown codes instead of passing strings through", () => {

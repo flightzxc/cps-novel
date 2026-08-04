@@ -267,29 +267,28 @@ describe("default-deny admin boundary", () => {
     expect(new AdminAccessError("admin_rate_limited", 429, "limited")).toMatchObject({ status: 429 });
   });
 
-  it("guards synchronous credential replacement with capability, 2FA, and origin", async () => {
+  it("guards synchronous credential replacement Action with capability, 2FA, and origin", async () => {
     const request = {
-      pathname: "/api/admin/credentials/replace",
-      method: "POST",
+      actionId: "admin.credential.replace",
       sessionToken: TOKEN,
       origin: ORIGIN,
       canonicalOrigin: ORIGIN,
       requestId: REQUEST_ID,
     };
     const noCapability = fixture({ role: "viewer" });
-    await expect(requireAdminRouteAccess(request, {
+    await expect(requireAdminActionAccess(request, {
       ...dependencies(noCapability),
       registry: P1_08B_ADMIN_REGISTRY,
     })).rejects.toMatchObject({ code: "admin_capability_denied", status: 403 });
 
     const noTwoFactor = fixture({ twoFactorCompleted: false });
-    await expect(requireAdminRouteAccess(request, {
+    await expect(requireAdminActionAccess(request, {
       ...dependencies(noTwoFactor),
       registry: P1_08B_ADMIN_REGISTRY,
     })).rejects.toMatchObject({ code: "admin_two_factor_required", status: 403 });
 
     const allowed = fixture();
-    await expect(requireAdminRouteAccess({ ...request, origin: "https://evil.example" }, {
+    await expect(requireAdminActionAccess({ ...request, origin: "https://evil.example" }, {
       ...dependencies(allowed),
       registry: P1_08B_ADMIN_REGISTRY,
     })).rejects.toMatchObject({ code: "admin_origin_denied", status: 403 });

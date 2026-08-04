@@ -56,12 +56,12 @@ describe("P1-08B synchronous Web Credential ingress", () => {
     expect(first.prefix).toMatch(/^[0-9a-f]{12}$/);
   });
 
-  it("registers add/replace as a guarded route and action", () => {
+  it("registers add/replace only as a guarded action", () => {
     expect(resolveAdminRoute(
       "/api/admin/credentials/replace",
       "POST",
       P1_08B_ADMIN_REGISTRY,
-    )).toMatchObject({ capability: "credential:manage" });
+    )).toBeNull();
     expect(resolveAdminAction(
       "admin.credential.replace",
       P1_08B_ADMIN_REGISTRY,
