@@ -2,12 +2,13 @@
 
 **Requester:** Codex
 
-**Status:** `OWNER_APPROVED_WITH_CONDITIONS_CORE_UPDATED`
+**Status:** `OWNER_APPROVED_AND_P1_08B_IMPLEMENTED`
 
-**Production persistence:** `APPROVED_DESIGN_NOT_IMPLEMENTED`
+**Production persistence:** `IMPLEMENTED_IN_P1_08B`
 
-本申请不修改 `prisma/**`、package 文件或 `src/contracts/**`。P1-08A 仅提供端口化核心和
-`TEST_ONLY / NOT_PRODUCTION_PERSISTENCE` 内存适配器。
+P1-08B 已按 Owner 批准范围实现新的增量 Migration、六个 PostgreSQL adapter/transaction
+边界和真实角色验证；未修改 package 文件或 `src/contracts/**`。P1-08A 的内存 adapter 仍仅为
+`TEST_ONLY / NOT_PRODUCTION_PERSISTENCE`。
 
 ## Owner 决定（2026-08-03）
 
@@ -21,9 +22,9 @@ AUTH_UNIT_OF_WORK=REQUIRED
 LOGIN_ATTEMPT_ATOMIC_UPSERT=REQUIRED
 ```
 
-六张 Auth 表及以上密码学和超时参数已获 Owner 批准。本轮只将附加条件落实到 Auth
-端口、`TEST_ONLY` 适配器和测试；生产 PostgreSQL Store、Prisma migration、App wiring
-与 Credential Worker 执行链均未实施。实施生产持久化仍须由对应 owner 在其授权范围内执行。
+六张 Auth 表及以上密码学和超时参数已获 Owner 批准，并由 P1-08B 落地为 PostgreSQL 16.14
+Migration 与生产 Store。App wiring 和 secret-ingress gated 的 create/replace 入口仍未实施；
+validate/supersede Credential Worker 已实现且不调用真实上游。
 
 ## 1. PostgreSQL 数据模型建议
 

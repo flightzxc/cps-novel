@@ -52,6 +52,10 @@ P1-05A 只登记从 CPS 提取的数据库**模式证据**；没有字节复制�
 | 2FA login challenge lifecycle | `src/lib/two-factor-login.ts` | `263-529` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | 保留 hash token、5min、5 次、TOTP/恢复码和单次消费；改为存储端口 | Codex |
 | `ADMIN_PAGE_ROOTS` / segment-safe match | `src/proxy.ts` | `20-45` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | 路由清单换为 Novel 后台 14 根路径，并新增未登记页面/API/Action 默认 404 | Codex |
 | Credential capability boundary pattern | `src/app/(admin)/channel-accounts/actions.ts` | `49-200` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `PATTERN_ONLY` | 只保留六操作命名与入口先鉴权模式；本轮不搬 Credential 写入、解密、渠道校验或 Action 实现 | Codex |
+| `validateCredentialJwtLocally` | `src/lib/channel-account/jwt.ts` | `66-109` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | 保留三段 JWT、base64url payload 与 exp 秒/毫秒解析；输出映射为 active/expired/invalid，不声明验签且不访问网络 | Codex |
+| Worker Credential AES-GCM envelope | `src/lib/channel-account/credential-crypto.ts` | `31-131` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | 保留 AES-256-GCM 严格 key/envelope 校验；改为 Worker-only versioned key、bytea envelope，并用 account/credential UUID AAD 隔离 | Codex |
+| Worker Credential fingerprint HMAC | `src/lib/channel-account/credential-crypto.ts` | `133-148` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | 保留 HMAC-SHA256 指纹；拆分独立稳定 fingerprint key，完整值仅 Worker/DB 内部，DTO 只给 12 字符 prefix | Codex |
+| insert-before-delete fingerprint reservation | `src/lib/changdu-total-revenue/credential-service.ts` | `299-301,385-389` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `PATTERN_ONLY` | 保留唯一占位先预留再释放旧值的并发原则；小说使用 PostgreSQL UNIQUE 最终裁决并纳入 P1-07 fenced transaction | Codex |
 
 ## 使用说明
 

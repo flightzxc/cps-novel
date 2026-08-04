@@ -67,7 +67,7 @@ Migration 演进，当前 Credential 状态增量为
 | `P1-08-CRED-STATUS` | `CPS_PARITY_WITH_DEFECT_FIX` | Credential 使用 `active/superseded/expired/invalid`；validate 未过滤 status，可将 superseded 复活 | 使用同一四态；validate 只接受 active/expired/invalid，superseded 不可恢复 | 修复 CPS 已证实的复活缺陷；disabled 只属于 Account；删除小说原 revoked | `O1=ADOPT_CPS_CREDENTIAL_STATUS_WITH_DEFECT_FIX` |
 | `P1-08-CHALLENGE-SESSION` | `CPS_HAS_NO_EQUIVALENT` | 登录前 challenge 绑定 user + cookie，无数据库 Session | challenge 必须绑定当前数据库 Session | 小说采用长生命周期 DB Session + step-up 2FA，模型不同 | `CHALLENGE_SESSION_BINDING=REQUIRED` |
 | `P1-08-WORKER-DECRYPT` | `CPS_HAS_NO_EQUIVALENT` | Web 与 Worker 共享 key，Web 可读取并解密 Credential | Worker 是唯一密文读取/解密执行体；Web 与 Scheduler 无密钥 | 小说冻结了更强的进程与数据库权限隔离 | Owner 已批准的 Credential 安全边界 |
-| `P1-08-ASYNC-VALIDATION` | **`EXPLICIT_DIVERGENCE / CPS_HAS_NO_EQUIVALENT`** | Credential validation 同步、本地执行，无 taskId | validation 通过任务入队并返回稳定 taskId 与 mutation request id | 保持 Web 无解密能力，并以 P1-07 fencing 承载可恢复异步执行 | P1-08B 冻结架构；本轮只冻结契约，不实现 Worker |
+| `P1-08-ASYNC-VALIDATION` | **`EXPLICIT_DIVERGENCE / CPS_HAS_NO_EQUIVALENT`** | Credential validation 同步、本地执行，无 taskId | validation 通过任务入队并返回稳定 taskId 与 mutation request id | 保持 Web 无解密能力，并以 P1-07 fencing 承载可恢复异步执行 | P1-08B 已实现 validate Worker；create/replace 仍受 secret ingress Gate 约束 |
 
 `P1-08-ASYNC-VALIDATION` 是显式 divergence record，不得降级为普通 parity 备注或在后续
 字典生成中丢失。
@@ -221,12 +221,14 @@ Migration 演进，当前 Credential 状态增量为
 | `worker_app` | 无 | 完成任务与凭证处理所需全部列 | 业务/任务状态与追加日志；仅章节撤回正文允许 DELETE | `operation_audit` 等追加日志禁止 UPDATE/DELETE |
 | `analyst_ro` | 无 | S0/S1 列 | 无 | `default_transaction_read_only=on`；`statement_timeout=30s`；禁止 S2/S3 |
 | `backup_role` | 无 | 完整逻辑/物理备份所需全部表、序列 | 无 | `REPLICATION` 仅用于 `pg_basebackup`；凭证仅由备份系统托管 |
+| `scheduler_app` | 无 | schedule/generic task 元数据 | 仅创建/更新 schedule 与 GenericTask 元数据 | 禁止 Auth/Credential secret；不导入 Worker handler registry；无 Credential key |
 
 `infra/postgres/roles.sql` 不含密码；登录凭证由运行时 secret manager 或一次性测试脚本生成。
 `infra/postgres/grants.sql` 必须在每次 Migration 后重放；未来对象默认关闭，新增表或敏感列必须显式评审后授予。
 `PUBLIC` 没有 `public` schema 的 `CREATE`，运行角色没有数据库 `TEMPORARY` 或 schema `CREATE`。
 
-Scheduler 本轮不创建、不获得独立数据库角色，也不获得任何凭证解密密钥；P1-06 不实现 Scheduler。
+P1-08B 新增独立 `scheduler_app`，只授予 schedule/generic task 元数据权限；它不获得任何凭证
+解密密钥，不读取 Auth/Credential secret，也不执行 Credential handler。
 完整逻辑备份要求 `backup_role` 能读取密文，但该能力不授予 Web、Analyst 或 Scheduler，备份产物必须按最高敏感级别加密、隔离和审计。
 
 ## 8. 软删除与保留
@@ -250,7 +252,7 @@ Scheduler 本轮不创建、不获得独立数据库角色，也不获得任何�
 
 - 每个 Prisma scalar 字段必须有 `db:public:{table}:{field}` 记录。
 - 每张表和每个约束分别有 table/constraint stable_key。
-- 825 条字典记录均为 `active`；数据库对象记录必须填写 `managed_by`、`physical_name` 和 `introduced_in_migration`。
+- 920 条字典记录均为 `active`；数据库对象记录必须填写 `managed_by`、`physical_name` 和 `introduced_in_migration`。
 - `managed_by` 只允许 `prisma_schema | migration_sql | application_contract`；应用事务合同不得冒充数据库对象。
 - active 字典记录必须映射 Prisma、已应用 SQL Migration 或 `src/domain/database-invariants.ts` 中的应用事务不变量。
 - 字段替代只允许 `deprecated/superseded`，旧记录不得删除。
@@ -275,3 +277,4 @@ Scheduler 本轮不创建、不获得独立数据库角色，也不获得任何�
 | 2026-08-03 | P1-05A-REVISION | 修复 Claude 10 项领域评审：canonical 只补空、Article CHECK/复合 FK、serving 当前快照、locale、字典语义与 CPS pattern registry；仍未创建 Migration | Codex | 待 Claude 领域复评 |
 | 2026-08-03 | P1-05B | 建立 37 表 PostgreSQL 初始 Migration，落地 66 个 CHECK、部分唯一/claim/recovery 索引与 2 个保护 trigger；在 PostgreSQL 16.14 完成空库、重放、零 drift 与真实正负测试 | Codex | 已验证 |
 | 2026-08-03 | P1-06 | 建立五角色、列级敏感数据隔离、逻辑备份/一次性恢复脚本和物理 base backup/WAL/PITR 运行手册；生产 PITR 未在本轮宣称建立 | Codex | 逻辑恢复演练见 P1-06 报告 |
+| 2026-08-04 | P1-08B | 增加六张 Auth 表、生产 PostgreSQL Store、独立 scheduler_app、Credential validate/supersede Worker 与脱敏查询；create/replace secret intake 保持 Gate | Codex | PostgreSQL 16.14 disposable verification PASS |

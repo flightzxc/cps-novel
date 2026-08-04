@@ -1,8 +1,8 @@
 # P1-08B · Credential Worker Integration Plan
 
-**Status:** `NOT_STARTED`
+**Status:** `PARTIALLY_IMPLEMENTED_SECRET_INGRESS_GATE_REQUIRED`
 
-**Entry gate:** P1-07R merged to main, P1-08A rebased and revalidated
+**Entry gate:** `SATISFIED` — P1-07R/P1-08A are present in base `4fc7a950`
 
 ## Objective
 
@@ -45,6 +45,16 @@ Credential 操作：
 - 双 Worker、旧 lease、重试和恢复场景均不产生双 active Credential 或重复外部副作用。
 - `credential_missing`、`credential_expired`、validation failed 与 capability denied 全部返回脱敏结果。
 
+## Implemented / gated split
+
+- Implemented: account create/disable/enable service, metadata/task query, validate/supersede enqueue,
+  Worker-only decrypt/local validation/supersede handlers, fenced writes, redacted results, production Auth stores.
+- Gated: browser secret intake and production add/replace entry. `credential.replace.v1` is a contract constant
+  only and is absent from the production Admin/Worker registries.
+- Deferred: real upstream network validation, `src/app/**` wiring, Admin UI and formal `src/contracts/**` DTOs.
+
 ## Explicit Non-goals
 
-P1-08A 不实现 AES Credential 解密、Credential DB 写入、Worker Handler、渠道请求、真实校验任务或任务注册。本计划也不授权在 P1-07R 合并前提前修改 Worker/Scheduler。
+本轮不调用真实上游，不实现未经 Owner 批准的 secret ingress，不给 Web/Scheduler Credential
+对称密钥，也不修改 `src/contracts/**`。rate-limit port 是可选 defense-in-depth；P1 强制边界为
+mutation request id 幂等和 active task 去重。
