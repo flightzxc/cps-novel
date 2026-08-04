@@ -15,10 +15,16 @@
 
 ## 1. 所有权总表
 
+> **2026-08-04 修订（P1-09）**：`src/app/(admin)/**` 与 `src/app/api/**` 原记为 Codex，
+> 与 `P1_IMPLEMENTATION_ASSIGNMENT.md` §P1-09（主责 Claude，唯一写入目录含 `src/app/`）冲突。
+> 依该文件第 8 行「本文件是正式分工与目录所有权的唯一真源，与 `P1_MODULE_OWNERSHIP.md`
+> 冲突时以本文件为准」，此处按分工表更正为 Claude，并同步 §7 速查表。
+> `src/server/**` 仍归 Codex —— P1-09 的后台服务接线放在 `src/app/api/admin/_lib/`。
+
 | 目录 | Owner | 说明 |
 | --- | --- | --- |
-| `src/app/(admin)/**` | **Codex** | 后台全部页面与 server actions |
-| `src/app/api/**` | **Codex** | 内部 API |
+| `src/app/(admin)/**` | **Claude** | 后台全部页面与 server actions（P1-09） |
+| `src/app/api/**` | **Claude** | 内部 API Route Handler（P1-09） |
 | `src/app/go/[code]/**` | **Codex** | 跳转路由（与推广资产同侧） |
 | `src/app/[locale]/(site)/**` | **Claude** | 前台全部页面 |
 | `src/app/layout.tsx` / `globals.css` | **Claude** | 根布局与主题变量 |
@@ -146,15 +152,16 @@ Codex 落 migration
 
 ```
 Claude 拥有：
-  src/app/[locale]/(site)/**   src/app/layout.tsx   globals.css
-  src/components/site/**       src/styles/**
+  src/app/**                   （含 (admin)/** 与 api/**，见 §1 修订）
+  src/components/site/**       src/components/admin/**   src/styles/**
+  src/features/admin-ui/**
   src/lib/locale-canonical.ts  src/lib/site/**   src/lib/seo/**
   src/lib/slug/**              src/lib/public-page-id.ts
   docs/architecture/**         docs/p1/**
 
 Codex 拥有：
-  src/app/(admin)/**    src/app/api/**    src/app/go/[code]/**
-  src/components/admin/**
+  src/app/go/[code]/**
+  src/server/**
   src/lib/adapters/**   channel/**   tasks/**   promo/**   revenue/**
   src/lib/indexnow/**   sitemap/**   tracking/**   auth/**
   src/lib/public-redirect-code.ts    db.ts    datasource-url.ts
