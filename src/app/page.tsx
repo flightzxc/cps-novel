@@ -18,7 +18,12 @@ const ENTRIES: PreviewEntry[] = [
   {
     href: "/dev-preview/home",
     title: "首页",
-    note: "主推位（不使用宽幅 banner）+ 作品网格。移动 2 列 / 桌面 5 列。",
+    note: "通栏出血 Hero + 轮播（4 本有横版物料）+ 作品网格。移动 2 列 / 桌面 5 列。",
+  },
+  {
+    href: "/dev-preview/home-fallback",
+    title: "首页 · 无横版物料回落",
+    note: "主推列表一本都没有横版主视觉时，整体落回封面编排版，页头回到实底。",
   },
   {
     href: "/dev-preview/novel",

@@ -29,6 +29,41 @@ function mockCover(from: string, to: string, seed: number): string {
   return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
 }
 
+/**
+ * 生成一张 16:9 内联横版主视觉，站位真实运营物料。
+ *
+ * 刻意做得比封面亮、比封面花——Hero 的对比度门槛必须在「图很亮」的情况下也成立，
+ * 假数据如果全是暗图，就验证不出压黑层够不够。
+ */
+function mockHero(from: string, to: string, seed: number): string {
+  const horizon = 560 + seed * 18;
+  const sunX = 1040 + seed * 46;
+  const sunY = horizon - 150 - seed * 12;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900">
+<defs>
+<linearGradient id="sky" x1="0" y1="0" x2="0.3" y2="1">
+<stop offset="0" stop-color="${to}"/><stop offset="0.55" stop-color="${from}"/><stop offset="1" stop-color="${to}"/>
+</linearGradient>
+<radialGradient id="glow" cx="${sunX / 1600}" cy="${sunY / 900}" r="0.42">
+<stop offset="0" stop-color="#fff3dd" stop-opacity="0.9"/>
+<stop offset="0.35" stop-color="#ffd9a8" stop-opacity="0.35"/>
+<stop offset="1" stop-color="#ffd9a8" stop-opacity="0"/>
+</radialGradient>
+<linearGradient id="water" x1="0" y1="0" x2="0" y2="1">
+<stop offset="0" stop-color="#000000" stop-opacity="0"/>
+<stop offset="1" stop-color="#000000" stop-opacity="0.42"/>
+</linearGradient>
+</defs>
+<rect width="1600" height="900" fill="url(#sky)"/>
+<rect width="1600" height="900" fill="url(#glow)"/>
+<circle cx="${sunX}" cy="${sunY}" r="${86 + seed * 6}" fill="#fff6e6" opacity="0.85"/>
+<rect y="${horizon}" width="1600" height="${900 - horizon}" fill="url(#water)"/>
+<path d="M0 ${horizon} L${300 + seed * 30} ${horizon - 120 - seed * 14} L${560 + seed * 20} ${horizon} Z" fill="#000000" opacity="0.42"/>
+<path d="M${900 + seed * 25} ${horizon} L${1180 + seed * 18} ${horizon - 190 - seed * 10} L${1520} ${horizon} Z" fill="#000000" opacity="0.3"/>
+</svg>`;
+  return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+}
+
 const TAGS: Record<string, SiteTag> = {
   modern: { slug: "modern", label: "都市", href: "/dev-preview/collection" },
   romance: { slug: "romance", label: "言情", href: "/dev-preview/collection" },
@@ -136,6 +171,7 @@ export const MOCK_NOVEL_DETAIL: NovelDetailView = {
   id: "mock-1",
   title: "The Lantern Keeper's Daughter",
   coverUrl: mockCover("#8b3a62", "#2b1d4a", 1),
+  heroImageUrl: mockHero("#a8527d", "#241631", 1),
   description:
     "港口的灯塔守了四十年，最后一任守塔人留下的不是航海日志，是一本写满陌生人名字的账簿。\n" +
     "女儿回到岛上处理遗物时，发现账簿上最新的一笔记在她自己名下，日期是三天后。\n" +
@@ -161,6 +197,84 @@ export const MOCK_NOVEL_DETAIL_SPARSE: NovelDetailView = {
   tags: [],
   previewChapters: [],
 };
+
+/**
+ * 首页主推列表 —— 对应运营人工编排位（架构文档的 home_carousel_manual_slot）。
+ *
+ * 🔴 顺序是编排出来的，**不表示排名**。
+ *
+ * 第 4 本刻意**不带** heroImageUrl：用来验证首页只把有横版物料的放进轮播，
+ * 不会拿一个空底图凑数。
+ */
+export const MOCK_FEATURED_LIST: NovelDetailView[] = [
+  MOCK_NOVEL_DETAIL,
+  {
+    id: "mock-2",
+    title: "Salt, Smoke and Second Chances",
+    coverUrl: mockCover("#c2703a", "#4a2415", 2),
+    heroImageUrl: mockHero("#d98a4a", "#3a1c0e", 2),
+    description:
+      "他在码头开了十七年的熏鱼铺，从不接受预订，也从不解释为什么每周三闭店。\n直到那个总在周三下午出现在对街长椅上的女人，某天没有出现。",
+    locale: EN,
+    totalChapterCount: 184,
+    tags: [TAGS.romance],
+    previewChapters: [
+      { number: 1, title: "Closed on Wednesdays", href: CHAPTER_HREF },
+      { number: 2, title: "The Empty Bench", href: CHAPTER_HREF },
+    ],
+    readOnUpstreamHref: "/dev-preview/novel#mock-go-link",
+  },
+  {
+    id: "mock-4",
+    title: "The Cartographer of Small Regrets",
+    coverUrl: mockCover("#6b4ea8", "#241a44", 4),
+    heroImageUrl: mockHero("#7d5fc4", "#1d1538", 4),
+    description:
+      "地图上有七个地方被人用铅笔轻轻圈住，又擦掉了。擦得很干净，但纸面留下了痕。\n她决定按着这七个痕迹走一遍，看看那个人当年到底想去、又最终没去哪里。",
+    locale: EN,
+    totalChapterCount: 312,
+    tags: [TAGS.fantasy, TAGS.suspense],
+    previewChapters: [
+      { number: 1, title: "Seven Erased Circles", href: CHAPTER_HREF },
+      { number: 2, title: "The First Place He Didn't Go", href: CHAPTER_HREF },
+      { number: 3, title: "Graphite Never Really Leaves", href: CHAPTER_HREF },
+    ],
+    readOnUpstreamHref: "/dev-preview/novel#mock-go-link",
+  },
+  {
+    id: "mock-7",
+    title: "The Weight of Borrowed Names",
+    coverUrl: mockCover("#3f7d55", "#16301f", 6),
+    heroImageUrl: mockHero("#4f9c6b", "#122a1a", 6),
+    description:
+      "这个镇子上有个不成文的规矩：谁家孩子夭折了，名字就借给下一个出生的孩子用。\n她今年二十四岁，用的是第三个人的名字。",
+    locale: EN,
+    totalChapterCount: 96,
+    tags: [TAGS.fantasy, TAGS.romance],
+    previewChapters: [{ number: 1, title: "The Third Name", href: CHAPTER_HREF }],
+    readOnUpstreamHref: "/dev-preview/novel#mock-go-link",
+  },
+  {
+    // 无横版物料的一本：不会进轮播
+    id: "mock-9",
+    title: "Where the Tide Keeps Score",
+    coverUrl: mockCover("#4a5b9c", "#181f3c", 8),
+    description: "潮水每天涨落两次，而她已经数了四千三百次。",
+    locale: EN,
+    totalChapterCount: 58,
+    tags: [TAGS.suspense],
+    previewChapters: [{ number: 1, title: "Four Thousand Three Hundred", href: CHAPTER_HREF }],
+  },
+];
+
+/** 全部不带横版物料——用来验证首页整体回落到封面编排版 */
+export const MOCK_FEATURED_LIST_NO_HERO: NovelDetailView[] = MOCK_FEATURED_LIST.map(
+  (novel) => {
+    const withoutHero = { ...novel };
+    delete withoutHero.heroImageUrl;
+    return withoutHero;
+  },
+);
 
 const MOCK_PARAGRAPHS = [
   "灯塔的门锁了四十年，钥匙一直挂在门边的钉子上。这是岛上人尽皆知的矛盾，也是没有人去追究的那一种。",

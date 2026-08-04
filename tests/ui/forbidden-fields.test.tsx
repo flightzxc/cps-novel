@@ -11,10 +11,24 @@ import { mockChrome } from "@/features/public-ui/fixtures/mock-chrome";
 import {
   MOCK_CHAPTER,
   MOCK_CHAPTER_LAST,
+  MOCK_FEATURED_LIST,
+  MOCK_FEATURED_LIST_NO_HERO,
   MOCK_NOVEL_CARDS,
   MOCK_NOVEL_DETAIL,
   MOCK_NOVEL_DETAIL_SPARSE,
 } from "@/features/public-ui/fixtures/mock-content";
+
+const featuredEntries = MOCK_FEATURED_LIST.map((novel) => ({
+  novel,
+  detailHref: "/dev-preview/novel",
+  startReadingHref: "/dev-preview/chapter",
+}));
+
+const fallbackEntries = MOCK_FEATURED_LIST_NO_HERO.map((novel) => ({
+  novel,
+  detailHref: "/dev-preview/novel",
+  startReadingHref: "/dev-preview/chapter",
+}));
 
 /**
  * 全屏幕的禁用字段扫描。
@@ -74,13 +88,21 @@ const FORBIDDEN_EN = [
 
 const SCREENS: [string, ReactElement][] = [
   [
-    "首页",
+    "首页 · Hero 形态",
     <HomeScreen
       key="home"
       chrome={mockChrome("home")}
-      featured={MOCK_NOVEL_DETAIL}
-      featuredDetailHref="/dev-preview/novel"
-      featuredStartReadingHref="/dev-preview/chapter"
+      featuredList={featuredEntries}
+      novels={MOCK_NOVEL_CARDS}
+      browseAllHref="/dev-preview/collection"
+    />,
+  ],
+  [
+    "首页 · 无横版物料回落",
+    <HomeScreen
+      key="home-fallback"
+      chrome={mockChrome("home")}
+      featuredList={fallbackEntries}
       novels={MOCK_NOVEL_CARDS}
       browseAllHref="/dev-preview/collection"
     />,

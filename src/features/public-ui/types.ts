@@ -9,6 +9,10 @@
  *   sameAuthorBooks / fullBookProgress / fullChapterCatalog /
  *   splitRatio / upstreamCode / 应用下载模块 / 用户体系 / 评论 / 收藏
  *
+ * 这条禁令针对的是**上游字段**——分销接口不返回、只在上游官网上存在的东西。
+ * 它不禁止我方自己产出的运营资产（例如 heroImageUrl 的横版主视觉），
+ * 那类字段的来源是我方对象存储，不是渠道接口，判断标准见各字段注释。
+ *
  * 口径见 docs/p1/P1_10_VISUAL_DIRECTION.md 第九节。
  */
 
@@ -59,6 +63,16 @@ export interface NovelDetailView {
   id: string;
   title: string;
   coverUrl?: string;
+  /**
+   * 16:9 横版主视觉，用于首页通栏 Hero。
+   *
+   * 🔴 **这不是上游字段**——分销接口不返回主视觉图。它是我方运营上传的物料，
+   * 存在对象存储里（架构文档 §2.1 / §2.2 已把「运营上传物」列为其既有职责）。
+   * 不要去渠道接口里找这个字段。
+   *
+   * 缺失时首页回落到封面编排版（FeaturedNovel），不做拉伸、不做模糊铺底。
+   */
+  heroImageUrl?: string;
   description: string;
   locale: LocaleBadge;
   /** 总章数。客观标量，可展示；🔴 绝不据此生成任何章节行。 */

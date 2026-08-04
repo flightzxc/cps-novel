@@ -16,12 +16,26 @@ export interface MetaItem {
   value: ReactNode;
 }
 
+/**
+ * 色调。默认第三级文本；压在主视觉图上时用 on-media（更亮，因为底下是不可控图像）。
+ * 做成显式开关而不是让调用方用 className 覆盖——覆盖依赖工具类在样式表里的先后
+ * 顺序，不可靠。
+ */
+export type MetaTone = "subtle" | "on-media";
+
+const TONE: Record<MetaTone, string> = {
+  subtle: "text-novel-fg-subtle",
+  "on-media": "text-novel-fg-muted-on-media",
+};
+
 export function MetaList({
   items,
   className = "",
+  tone = "subtle",
 }: {
   items: (MetaItem | null | undefined | false)[];
   className?: string;
+  tone?: MetaTone;
 }) {
   const present = items.filter(
     (item): item is MetaItem =>
@@ -34,7 +48,7 @@ export function MetaList({
 
   return (
     <ul
-      className={`flex list-none flex-wrap items-center gap-x-3 gap-y-1 p-0 text-sm text-novel-fg-subtle ${className}`}
+      className={`flex list-none flex-wrap items-center gap-x-3 gap-y-1 p-0 text-sm ${TONE[tone]} ${className}`}
       data-testid="meta-list"
     >
       {present.map((item, index) => (

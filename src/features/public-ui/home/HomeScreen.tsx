@@ -3,6 +3,7 @@ import { SectionHeader } from "@/components/SectionHeader";
 import { BookGrid } from "@/features/public-ui/book/BookGrid";
 import { SiteShell, type SiteChrome } from "@/features/public-ui/layout/SiteShell";
 import type { NovelCardView, NovelDetailView } from "@/features/public-ui/types";
+import { FeaturedHero, type FeaturedHeroItem } from "./FeaturedHero";
 import { FeaturedNovel } from "./FeaturedNovel";
 
 /**
@@ -10,33 +11,48 @@ import { FeaturedNovel } from "./FeaturedNovel";
  *
  * 结构：页头 → 主推位 → 作品网格 → 页脚。
  *
+ * 主推位有两种形态，由物料决定，不由配置决定：
+ *   有横版主视觉 → 通栏出血 Hero + 轮播（FeaturedHero）
+ *   一张都没有   → 封面编排版（FeaturedNovel），只需要竖版封面
+ * 混合时只把有物料的放进轮播——把两种形态混在同一个轮播里会让节奏断掉。
+ *
  * 区块小标题不带 emoji（四个竞品全部带，这是最省力的区隔点），
- * 也不使用任何暗示排名或热度的措辞——我们没有可信的排序信号。
+ * 也不使用任何暗示排名或热度的措辞：轮播顺序来自运营编排位，不是榜单。
  */
+export interface FeaturedEntry {
+  novel: NovelDetailView;
+  detailHref: string;
+  startReadingHref?: string;
+}
+
 export function HomeScreen({
-  featured,
-  featuredDetailHref,
-  featuredStartReadingHref,
+  featuredList = [],
   novels,
   browseAllHref,
   chrome,
 }: {
-  /** 主推的一本。没有时整个主推位不渲染，首页直接从网格开始。 */
-  featured?: NovelDetailView;
-  featuredDetailHref?: string;
-  featuredStartReadingHref?: string;
+  /** 运营编排的主推列表（对应架构文档的 home_carousel_manual_slot），建议 4–6 本。 */
+  featuredList?: FeaturedEntry[];
   novels: NovelCardView[];
   browseAllHref?: string;
   chrome?: SiteChrome;
 }) {
+  const heroItems: FeaturedHeroItem[] = featuredList.filter(
+    (entry) => Boolean(entry.novel.heroImageUrl),
+  );
+  const hasHero = heroItems.length > 0;
+  const fallback = !hasHero ? featuredList[0] : undefined;
+
   return (
-    <SiteShell chrome={chrome}>
+    <SiteShell chrome={chrome} headerOverlay={hasHero}>
+      {hasHero ? <FeaturedHero items={heroItems} /> : null}
+
       <Container>
-        {featured && featuredDetailHref ? (
+        {fallback ? (
           <FeaturedNovel
-            novel={featured}
-            detailHref={featuredDetailHref}
-            startReadingHref={featuredStartReadingHref}
+            novel={fallback.novel}
+            detailHref={fallback.detailHref}
+            startReadingHref={fallback.startReadingHref}
           />
         ) : null}
 
