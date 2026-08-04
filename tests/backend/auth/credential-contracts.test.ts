@@ -12,7 +12,7 @@ import {
 } from "@/lib/credentials/contracts";
 
 describe("credential web boundary", () => {
-  it("defines all redacted task result codes while production secret intake remains gated", () => {
+  it("defines all redacted task result codes with synchronous Web ingress enabled", () => {
     const codes: CredentialContractCode[] = [
       "credential_validation_queued",
       "credential_missing",
@@ -24,7 +24,7 @@ describe("credential web boundary", () => {
       "account_inactive",
     ];
     expect(new Set(codes).size).toBe(8);
-    expect(CREDENTIAL_EXECUTION_STATUS).toBe("PARTIAL_SECRET_INGRESS_GATED");
+    expect(CREDENTIAL_EXECUTION_STATUS).toBe("WEB_SYNCHRONOUS_INGRESS_ENABLED");
     expect(CREDENTIAL_SCHEDULER_EXECUTION_ALLOWED).toBe(false);
   });
 
@@ -62,7 +62,7 @@ describe("credential web boundary", () => {
     expect(JSON.stringify(queued)).not.toMatch(/secret|ciphertext|fingerprint/i);
   });
 
-  it("keeps Credential decryption and symmetric key access out of the Web boundary", async () => {
+  it("keeps persisted-secret SELECT/decryption out of Web and all key access out of Scheduler", async () => {
     async function typescriptSources(directory: string): Promise<string[]> {
       const entries = await readdir(directory, { withFileTypes: true });
       const nested = await Promise.all(
@@ -75,18 +75,23 @@ describe("credential web boundary", () => {
       return nested.flat();
     }
 
-    const source = (
-      await Promise.all(
-        ["src/lib/credentials", "src/server", "scheduler"].map((directory) =>
-          typescriptSources(path.resolve(process.cwd(), directory)),
-        ),
-      )
-    )
-      .flat()
-      .join("\n");
-    expect(source).not.toMatch(/encrypted[_A-Z]?secret/i);
-    expect(source).not.toMatch(/decrypt|createDecipheriv|CHANNEL_CREDENTIAL_ENCRYPTION_KEY/);
-    expect(source).not.toMatch(/CREDENTIAL_ENCRYPTION_KEYS|CREDENTIAL_FINGERPRINT_HMAC_KEY/);
+    const webCrypto = await readFile(
+      path.resolve(process.cwd(), "src/lib/credentials/web-ingress-crypto.ts"),
+      "utf8",
+    );
+    expect(webCrypto).toMatch(/createCipheriv/);
+    expect(webCrypto).toMatch(/CHANNEL_CREDENTIAL_ENCRYPTION_KEY_V/);
+    expect(webCrypto).not.toMatch(/createDecipheriv|function decrypt|export function decrypt/);
+
+    const service = await readFile(
+      path.resolve(process.cwd(), "src/server/credentials/service.ts"),
+      "utf8",
+    );
+    expect(service).toMatch(/INSERT INTO channel_account_credential/);
+    expect(service).not.toMatch(/SELECT[^;`]*encrypted_secret/is);
+
+    const scheduler = (await typescriptSources(path.resolve(process.cwd(), "scheduler"))).join("\n");
+    expect(scheduler).not.toMatch(/decrypt|createDecipheriv|CHANNEL_CREDENTIAL_/);
 
     const workerCrypto = await readFile(
       path.resolve(process.cwd(), "worker/credentials/crypto.ts"),

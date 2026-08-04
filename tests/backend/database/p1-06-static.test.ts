@@ -32,6 +32,10 @@ describe("P1-06 database operations static contracts", () => {
     expect(sql).not.toMatch(/GRANT SELECT ON ALL TABLES[^;]*worker_app/);
     expect(sql).not.toMatch(/GRANT SELECT[^;]*admin_(?:identity|session|two_factor|recovery_code|login_attempt)[^;]*worker_app/s);
     expect(sql).toContain("GRANT INSERT ON TABLE operation_audit TO web_app");
+    expect(sql).toContain("encrypted_secret, key_version");
+    expect(sql).toContain(") ON channel_account_credential TO web_app");
+    expect(sql).toContain("GRANT UPDATE (status, updated_at) ON channel_account_credential TO web_app");
+    expect(sql).toContain("GRANT DELETE ON TABLE channel_credential_active_fingerprint TO web_app");
     expect(sql).toContain("credential_change_log, operation_audit, indexnow_outbox_attempt");
     expect(sql).not.toMatch(/GRANT (?:UPDATE|DELETE)[^;]*operation_audit/s);
   });

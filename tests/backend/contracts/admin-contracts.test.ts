@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  CREDENTIAL_OWNER_GATED_OPERATIONS,
   projectAdminCapability,
   projectAdminSession,
   projectChannelAccount,
@@ -216,15 +215,14 @@ describe("credential contract", () => {
     }
   });
 
-  it("gates add/replace behind the Owner decision even for a granted operator", () => {
+  it("exposes add/replace as supported after the Owner-approved synchronous ingress", () => {
     const granted = projectCredentialOperationAvailability({ credentialManage: "granted" });
     expect(granted.find((entry) => entry.operation === "add_or_replace_credential")?.state).toBe(
-      "unavailable_pending_owner_gate",
+      "supported",
     );
     expect(granted.find((entry) => entry.operation === "validate_credential")?.state).toBe(
       "supported",
     );
-    expect(CREDENTIAL_OWNER_GATED_OPERATIONS).toEqual(["add_or_replace_credential"]);
   });
 
   it("distinguishes capability denial from a pending step-up", () => {

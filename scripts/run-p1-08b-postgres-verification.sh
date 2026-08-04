@@ -123,6 +123,7 @@ npx vitest run --project node tests/integration/auth/p1-08b-postgres-auth.test.t
 
 P1_08B_DATABASE_TEST=1 \
 P1_08B_OWNER_DATABASE_URL="$owner_url" \
+P1_08B_WEB_DATABASE_URL="$web_url" \
 P1_08B_WORKER_DATABASE_URL="$worker_url" \
 CHANNEL_CREDENTIAL_ENCRYPTION_KEY_V1="$credential_encryption_key" \
 CHANNEL_CREDENTIAL_FINGERPRINT_KEY="$credential_fingerprint_key" \

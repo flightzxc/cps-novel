@@ -102,7 +102,19 @@ describe.skipIf(!enabled).sequential("P1-06 PostgreSQL role enforcement", () => 
     }
   });
 
-  it("blocks Web from credential ciphertext and DDL while allowing metadata", async () => {
+  it("allows Web ciphertext INSERT but blocks persisted ciphertext SELECT and DDL", async () => {
+    const webCredentialId = randomUUID();
+    await web.$executeRaw`
+      INSERT INTO channel_account_credential (
+        id, channel_account_id, credential_type, encrypted_secret, key_version,
+        secret_fingerprint, fingerprint_prefix, status, updated_at
+      ) VALUES (
+        ${webCredentialId}::uuid, ${ids.account}::uuid, 'bearer_jwt',
+        ${randomBytes(32)}, 1, ${randomBytes(32).toString("hex")},
+        ${randomBytes(4).toString("hex")}, 'invalid', now()
+      )
+    `;
+    expect(await owner.channelAccountCredential.count({ where: { id: webCredentialId } })).toBe(1);
     await expectDenied(() => web.$queryRawUnsafe("SELECT encrypted_secret FROM channel_account_credential LIMIT 1"));
     await expectDenied(() => web.$queryRawUnsafe("SELECT * FROM channel_account_credential LIMIT 1"));
     await expectDenied(() => web.$executeRawUnsafe("CREATE TABLE p1_06_web_ddl_probe (id integer)"));
