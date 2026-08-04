@@ -17,5 +17,6 @@ Credential 数据库写入、解密、渠道校验、Worker Handler 和真实任
 
 - 本目录提供的函数如涉及解密，只能在 Worker 运行时上下文中被调用；Web/Server Action 侧只能读取凭证**元数据**（指纹前缀、过期时间、状态），永不回显密文；
 - Scheduler 容器不得注入 `CHANNEL_CREDENTIAL_ENCRYPTION_KEY` 类环境变量；
+- create/replace production secret intake remains gated; no plaintext is accepted into GenericTask JSON.
 - 凭证写操作（六个凭证操作对齐 CPS `channel-accounts/actions.ts` 形态）全部需 `credential:manage` 能力位门控；
 - 指纹冲突最终由数据库唯一约束兜底，不得仅靠应用层判断。

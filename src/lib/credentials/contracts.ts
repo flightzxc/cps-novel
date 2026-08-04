@@ -48,13 +48,24 @@ export type CredentialWorkerEnqueueRequest = {
 };
 
 export type CredentialRedactedResult = {
-  success: boolean;
-  code: CredentialContractCode;
-  credentialId: string | null;
+  code: CredentialContractCode | null;
+  credentialId: string;
+  status: CredentialStatus;
   fingerprintPrefix: string | null;
   expiresAt: string | null;
-  message: string;
+  lastValidatedAt: string | null;
 };
 
-export const CREDENTIAL_EXECUTION_STATUS = "NOT_IMPLEMENTED" as const;
+export const CREDENTIAL_TASK_TYPES = Object.freeze({
+  validate: "credential.validate.v1",
+  supersede: "credential.supersede.v1",
+  replaceGated: "credential.replace.v1",
+} as const);
+
+export interface CredentialSecretIntakePort {
+  /** Worker-only one-time consumption. No production adapter exists before Owner approval. */
+  consume(intakeId: string): Promise<{ secret: string } | null>;
+}
+
+export const CREDENTIAL_EXECUTION_STATUS = "PARTIAL_SECRET_INGRESS_GATED" as const;
 export const CREDENTIAL_SCHEDULER_EXECUTION_ALLOWED = false as const;
