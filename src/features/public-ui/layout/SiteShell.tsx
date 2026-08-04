@@ -20,12 +20,18 @@ export interface SiteChrome {
 export function SiteShell({
   children,
   chrome = {},
+  headerOverlay = false,
 }: {
   children: ReactNode;
   chrome?: SiteChrome;
+  /**
+   * 页头浮在主视觉之上（首页有 Hero 时）。页头脱离文档流，主内容顶到视口顶端，
+   * Hero 因此能从视口最上沿开始出血。滚出 Hero 后页头自动恢复底色与分隔线。
+   */
+  headerOverlay?: boolean;
 }) {
   return (
-    <div className="flex min-h-screen flex-col bg-novel-bg">
+    <div className="relative flex min-h-screen flex-col bg-novel-bg">
       <a
         href="#main"
         className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-novel-md focus:bg-novel-accent focus:px-4 focus:py-2 focus:text-sm focus:text-novel-on-accent"
@@ -37,6 +43,7 @@ export function SiteShell({
         brandHref={chrome.brandHref}
         navItems={chrome.navItems}
         localeNav={chrome.localeNav}
+        overlay={headerOverlay}
       />
 
       <main id="main" className="flex-1">

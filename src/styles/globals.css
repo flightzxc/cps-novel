@@ -35,6 +35,60 @@
 
   --novel-content-max: 1200px;
 
+  /* --- 首页主推 Hero ------------------------------------------------------
+     图层自下而上：底图 → mask 渐隐 → 左向压黑 → 纵向压黑 → 内容。
+
+     mask 是「无边缘感」的关键，不能用纯色遮罩替代：纯色遮罩只是压暗，图片的
+     下边缘仍然存在；mask 是把图像本身在底部溶解掉，肉眼找不到边。
+
+     两层压黑负责正文对比度。物料亮度不可控，所以门槛由「压黑起点足够黑」保证，
+     而不是靠挑图——文字锁在左侧 --novel-hero-text-width 内，该区间左向压黑的
+     不透明度不低于 0.9，即使底下是纯白图，合成后仍在受控暗区。
+     实际比值由 tests/ui/design-tokens.test.ts 按最坏情况重算。 */
+  --novel-hero-height: 620px;
+  --novel-hero-height-mobile: 560px;
+  --novel-hero-text-width: 340px;
+
+  --novel-hero-mask: linear-gradient(
+    to bottom,
+    #000 0%,
+    #000 56%,
+    rgba(0, 0, 0, 0.7) 80%,
+    rgba(0, 0, 0, 0) 100%
+  );
+  --novel-hero-mask-mobile: linear-gradient(
+    to bottom,
+    #000 0%,
+    #000 50%,
+    rgba(0, 0, 0, 0.6) 76%,
+    rgba(0, 0, 0, 0) 100%
+  );
+
+  --novel-hero-scrim-x: linear-gradient(
+    to right,
+    rgba(10, 12, 17, 0.96) 0%,
+    rgba(10, 12, 17, 0.9) 26%,
+    rgba(12, 14, 20, 0.62) 46%,
+    rgba(18, 21, 28, 0.18) 68%,
+    rgba(18, 21, 28, 0) 86%
+  );
+  --novel-hero-scrim-y: linear-gradient(
+    to bottom,
+    rgba(10, 12, 17, 0.82) 0%,
+    rgba(12, 14, 20, 0.18) 18%,
+    rgba(14, 17, 23, 0.34) 62%,
+    rgba(18, 21, 28, 0.88) 88%,
+    #12151c 100%
+  );
+  --novel-hero-scrim-y-mobile: linear-gradient(
+    to bottom,
+    rgba(10, 12, 17, 0.72) 0%,
+    rgba(12, 14, 20, 0.1) 16%,
+    rgba(12, 14, 20, 0.42) 48%,
+    rgba(14, 17, 23, 0.92) 76%,
+    #12151c 100%
+  );
+
   /* --- 阅读作用域的两套调色板 --------------------------------------------
      十六进制值只在这里写一次，下面三个 .reader 规则块全部引用它们，
      避免「跟随系统」与「手动深色」两处色值漂移。 */
@@ -71,6 +125,10 @@
   --novel-danger: #f0938a;
   --novel-success: #7fcca4;
   --novel-focus: #f0e4ce;
+
+  /* 压在主视觉图上的文字。比常规前景更亮——底下是不可控的图像，不是纯色。 */
+  --novel-fg-on-media: #f2f4f8;
+  --novel-fg-muted-on-media: #c8cfdd;
 
   color-scheme: dark;
   background-color: var(--novel-bg);
@@ -167,6 +225,8 @@
   --color-novel-danger: var(--novel-danger);
   --color-novel-success: var(--novel-success);
   --color-novel-focus: var(--novel-focus);
+  --color-novel-fg-on-media: var(--novel-fg-on-media);
+  --color-novel-fg-muted-on-media: var(--novel-fg-muted-on-media);
 
   --color-reader-bg: var(--reader-bg);
   --color-reader-fg: var(--reader-fg);

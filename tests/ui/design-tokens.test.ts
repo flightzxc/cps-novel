@@ -8,6 +8,7 @@ import {
   contrastRatio,
   isPureBlack,
   isPureWhite,
+  relativeLuminance,
 } from "@/design/contrast";
 
 /**
@@ -124,6 +125,35 @@ describe("设计 token · 结构", () => {
     expect(occurrences).toHaveLength(1);
   });
 
+  it("Hero 的遮罩与压黑各只定义一次，且组件只能引用不能自造", () => {
+    for (const token of [
+      "--novel-hero-mask",
+      "--novel-hero-mask-mobile",
+      "--novel-hero-scrim-x",
+      "--novel-hero-scrim-y",
+      "--novel-hero-scrim-y-mobile",
+      "--novel-hero-height",
+      "--novel-hero-height-mobile",
+      "--novel-hero-text-width",
+    ]) {
+      const defined = css.match(new RegExp(`${token}\\s*:`, "g")) ?? [];
+      expect(defined, `${token} 应当只定义一次，实际 ${defined.length} 次`).toHaveLength(1);
+    }
+  });
+
+  it("mask 是渐隐而不是纯色遮罩——纯色压暗消不掉图片的边", () => {
+    expect(root["--novel-hero-mask"]).toMatch(/linear-gradient/);
+    // 末端必须完全透明，图像才会被溶解掉
+    expect(root["--novel-hero-mask"]).toMatch(/rgba\(0,\s*0,\s*0,\s*0\)\s*100%/);
+    expect(root["--novel-hero-mask-mobile"]).toMatch(/rgba\(0,\s*0,\s*0,\s*0\)\s*100%/);
+  });
+
+  it("纵向压黑末端并入页面底色，Hero 才能无缝长进页面", () => {
+    const pageBg = site["--novel-bg"];
+    expect(root["--novel-hero-scrim-y"].toLowerCase()).toContain(`${pageBg} 100%`);
+    expect(root["--novel-hero-scrim-y-mobile"].toLowerCase()).toContain(`${pageBg} 100%`);
+  });
+
   it("不引入任何 Web Font", () => {
     expect(css).not.toMatch(/@font-face/);
     expect(css).not.toMatch(/fonts\.googleapis|fonts\.gstatic|@import url\(/);
@@ -180,5 +210,58 @@ describe("设计 token · WCAG AA 对比度", () => {
 
   it.each(nonTextPairs)("%s 达到非文本 3:1", (_label, foreground, background) => {
     expect(contrastRatio(foreground, background)).toBeGreaterThanOrEqual(WCAG_AA_NON_TEXT);
+  });
+});
+
+describe("Hero 文字对比度 · 最坏情况", () => {
+  /**
+   * 主视觉物料是批量生成的，亮度不可控。所以门槛不能靠「挑图」，只能靠
+   * 「压黑起点足够黑」——这里按最坏情况算：**底下是一张纯白图**，
+   * 上面压左向压黑层在文字列内的**最低**不透明度。
+   *
+   * 文字锁在左侧 --novel-hero-text-width（340px）内。左向压黑写的是百分比，
+   * 在 1440 视口下 340px ≈ 23.6%，落在 0% 的 .96 与 26% 的 .9 之间，
+   * 因此文字列内不透明度不低于 0.9，取 0.9 作为最坏值。
+   */
+  const WORST_CASE_SCRIM_ALPHA = 0.9;
+  const WORST_CASE_MEDIA = "#ffffff";
+  /** 压黑层在该处的色值（左向压黑 26% 处那一站） */
+  const SCRIM_COLOR = { r: 10, g: 12, b: 17 };
+
+  /** alpha 合成：scrim over media */
+  const composited = {
+    r: Math.round(SCRIM_COLOR.r * WORST_CASE_SCRIM_ALPHA + 255 * (1 - WORST_CASE_SCRIM_ALPHA)),
+    g: Math.round(SCRIM_COLOR.g * WORST_CASE_SCRIM_ALPHA + 255 * (1 - WORST_CASE_SCRIM_ALPHA)),
+    b: Math.round(SCRIM_COLOR.b * WORST_CASE_SCRIM_ALPHA + 255 * (1 - WORST_CASE_SCRIM_ALPHA)),
+  };
+
+  it("左向压黑的起点与文字列内取值确实是我们假设的那两站", () => {
+    // 起点必须比文字列内那一站更黑，否则最坏值假设不成立
+    expect(root["--novel-hero-scrim-x"]).toMatch(/rgba\(10,\s*12,\s*17,\s*0\.96\)\s*0%/);
+    expect(root["--novel-hero-scrim-x"]).toMatch(/rgba\(10,\s*12,\s*17,\s*0\.9\)\s*26%/);
+  });
+
+  it("书名色压在纯白图上仍达到 7:1", () => {
+    const ratio = contrastRatio(site["--novel-fg-on-media"], composited);
+    expect(ratio, `实测 ${ratio.toFixed(2)}:1`).toBeGreaterThanOrEqual(7);
+  });
+
+  it("简介色压在纯白图上仍达到 7:1", () => {
+    const ratio = contrastRatio(site["--novel-fg-muted-on-media"], composited);
+    expect(ratio, `实测 ${ratio.toFixed(2)}:1`).toBeGreaterThanOrEqual(7);
+  });
+
+  it("压在图上的文字比常规前景更亮——底下是不可控图像，不是纯色", () => {
+    expect(relativeLuminance(site["--novel-fg-on-media"])).toBeGreaterThan(
+      relativeLuminance(site["--novel-fg"]),
+    );
+    expect(relativeLuminance(site["--novel-fg-muted-on-media"])).toBeGreaterThan(
+      relativeLuminance(site["--novel-fg-muted"]),
+    );
+  });
+
+  it("即便退到纯白底也不用纯白字", () => {
+    expect(isPureWhite(site["--novel-fg-on-media"])).toBe(false);
+    expect(WORST_CASE_MEDIA).toBe("#ffffff"); // 最坏情况的定义，供审阅时对照
   });
 });
