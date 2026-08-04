@@ -25,6 +25,7 @@ const databaseUrl = process.env.P1_08B_WORKER_DATABASE_URL ?? process.env.DATABA
 const ownerUrl = process.env.P1_08B_OWNER_DATABASE_URL ?? process.env.DATABASE_URL;
 const owner = new PrismaClient({ datasourceUrl: ownerUrl });
 const web = new PrismaClient({ datasourceUrl: process.env.P1_08B_WEB_DATABASE_URL ?? databaseUrl });
+const webSecond = new PrismaClient({ datasourceUrl: process.env.P1_08B_WEB_DATABASE_URL ?? databaseUrl });
 const worker = new PrismaClient({ datasourceUrl: databaseUrl });
 const channelId = "08000000-0000-4000-8000-000000000001";
 const accountId = "08000000-0000-4000-8000-000000000002";
@@ -33,17 +34,17 @@ function jwt(exp: number) {
   return `${Buffer.from('{"alg":"none"}').toString("base64url")}.${Buffer.from(JSON.stringify({ exp })).toString("base64url")}.signature`;
 }
 
-async function ingressAuthorization(requestId: string, now: Date) {
+async function ingressAuthorization(requestId: string, now: Date, actorId = "p108b-web-admin") {
   const stores = new TestOnlyInMemoryAuthStores();
   const identity: AdminIdentity = {
-    id: "p108b-web-admin",
-    username: "p108b-web-admin",
+    id: actorId,
+    username: actorId,
     role: "super_admin",
     status: "active",
     sessionVersion: 1,
     twoFactorEnabled: true,
   };
-  const token = `p108b-session-${requestId}`;
+  const token = `p108b-session-${actorId}-${requestId}`;
   const session: AdminSessionRecord = {
     id: randomUUID(),
     tokenHash: hashAdminSessionToken(token),
@@ -78,10 +79,12 @@ async function ingest(input: {
   channelAccountId?: string;
   now?: Date;
   reason?: string;
+  actorId?: string;
+  db?: PrismaClient;
 }) {
   const requestId = input.requestId ?? randomUUID();
   const now = input.now ?? new Date("2026-08-04T12:00:00.000Z");
-  const guarded = await ingressAuthorization(requestId, now);
+  const guarded = await ingressAuthorization(requestId, now, input.actorId);
   return addOrReplaceCredential({
     authorization: guarded.authorization,
     requestId,
@@ -89,12 +92,40 @@ async function ingest(input: {
     secret: input.secret,
     reason: input.reason ?? "Owner-approved credential rotation",
   }, {
-    db: web,
+    db: input.db ?? web,
     identities: guarded.stores,
     sessions: guarded.stores,
     now,
     env: process.env,
   });
+}
+
+async function mutationCounts() {
+  return {
+    credentials: await owner.channelAccountCredential.count(),
+    activeCredentials: await owner.channelAccountCredential.count({ where: { status: "active" } }),
+    changes: await owner.credentialChangeLog.count(),
+    audits: await owner.operationAudit.count({ where: { action: "credential.replace.completed" } }),
+  };
+}
+
+async function captureFailure(action: () => Promise<unknown>) {
+  try {
+    await action();
+  } catch (error) {
+    return error;
+  }
+  throw new Error("Expected operation to fail");
+}
+
+function expectIdempotencyConflict(error: unknown) {
+  const expected = {
+    status: 409,
+    code: "admin_mutation_request_id_invalid",
+    details: { reason: "idempotency_conflict" },
+  };
+  expect(error).toMatchObject(expected);
+  expect(JSON.parse(JSON.stringify(error))).toEqual(expected);
 }
 
 async function createCredential(secret: string, status: "active" | "superseded" | "expired" | "invalid" = "active") {
@@ -146,7 +177,12 @@ describe.skipIf(!enabled).sequential("P1-08B Credential Worker", () => {
     await owner.channelAccount.create({ data: { id: accountId, channelId, businessId: randomUUID(), accountName: "P1-08B account", status: "active" } });
   });
 
-  afterAll(async () => { await Promise.all([owner.$disconnect(), web.$disconnect(), worker.$disconnect()]); });
+  afterAll(async () => { await Promise.all([
+    owner.$disconnect(),
+    web.$disconnect(),
+    webSecond.$disconnect(),
+    worker.$disconnect(),
+  ]); });
 
   it("adds a valid JWT synchronously without a task or plaintext leak", async () => {
     const marker = `P108B_WEB_SECRET_${randomUUID()}`;
@@ -211,7 +247,110 @@ describe.skipIf(!enabled).sequential("P1-08B Credential Worker", () => {
     expect(await owner.channelAccountCredential.count({ where: { status: "active" } })).toBe(1);
     expect(await owner.credentialChangeLog.count()).toBe(2);
     expect(await owner.operationAudit.count({ where: { action: "credential.replace.completed" } })).toBe(2);
+    expect(await owner.operationAudit.count({ where: { requestId } })).toBe(1);
     expect(await owner.genericTask.count()).toBe(0);
+  });
+
+  it("coalesces concurrent identical retries from independent Web connections", async () => {
+    const old = await ingest({ secret: jwt(1_900_000_000) });
+    const requestId = randomUUID();
+    const secret = jwt(1_910_000_000);
+    const [first, second] = await Promise.all([
+      ingest({ secret, requestId, db: web }),
+      ingest({ secret, requestId, db: webSecond }),
+    ]);
+
+    expect(second).toEqual(first);
+    expect(await owner.channelAccountCredential.findUniqueOrThrow({
+      where: { id: old.credentialId },
+    })).toMatchObject({ status: "superseded" });
+    expect(await mutationCounts()).toEqual({
+      credentials: 2,
+      activeCredentials: 1,
+      changes: 2,
+      audits: 2,
+    });
+    expect(await owner.operationAudit.count({ where: { requestId } })).toBe(1);
+  });
+
+  it("rejects cross-actor requestId reuse without exposing or writing the first result", async () => {
+    const requestId = randomUUID();
+    const secret = jwt(1_900_000_000);
+    const committed = await ingest({ secret, requestId, actorId: "p108b-actor-one" });
+    const before = await mutationCounts();
+    const error = await captureFailure(() => ingest({
+      secret,
+      requestId,
+      actorId: "p108b-actor-two",
+    }));
+
+    expectIdempotencyConflict(error);
+    expect(JSON.stringify(error)).not.toContain(committed.credentialId);
+    expect(JSON.stringify(error)).not.toContain(committed.fingerprintPrefix);
+    expect(await mutationCounts()).toEqual(before);
+  });
+
+  it("rejects cross-account requestId reuse with zero additional writes", async () => {
+    const requestId = randomUUID();
+    const secret = jwt(1_900_000_000);
+    await ingest({ secret, requestId });
+    const secondAccountId = randomUUID();
+    await owner.channelAccount.create({ data: {
+      id: secondAccountId,
+      channelId,
+      businessId: randomUUID(),
+      accountName: "P1-08B idempotency conflict account",
+      status: "active",
+    } });
+    const before = await mutationCounts();
+    const error = await captureFailure(() => ingest({
+      secret,
+      requestId,
+      channelAccountId: secondAccountId,
+    }));
+
+    expectIdempotencyConflict(error);
+    expect(await mutationCounts()).toEqual(before);
+    expect(await owner.channelAccountCredential.count({
+      where: { channelAccountId: secondAccountId },
+    })).toBe(0);
+  });
+
+  it("rejects requestId reuse with a different JWT and preserves the committed active row", async () => {
+    const requestId = randomUUID();
+    const committed = await ingest({ secret: jwt(1_900_000_000), requestId });
+    const before = await mutationCounts();
+    const error = await captureFailure(() => ingest({
+      secret: jwt(1_910_000_000),
+      requestId,
+    }));
+
+    expectIdempotencyConflict(error);
+    expect(await mutationCounts()).toEqual(before);
+    expect(await owner.channelAccountCredential.findUniqueOrThrow({
+      where: { id: committed.credentialId },
+    })).toMatchObject({ status: "active" });
+  });
+
+  it("allows one concurrent payload and explicitly conflicts the mismatched retry", async () => {
+    const requestId = randomUUID();
+    const outcomes = await Promise.allSettled([
+      ingest({ secret: jwt(1_900_000_000), requestId, db: web }),
+      ingest({ secret: jwt(1_910_000_000), requestId, db: webSecond }),
+    ]);
+    const fulfilled = outcomes.filter((outcome) => outcome.status === "fulfilled");
+    const rejected = outcomes.filter((outcome) => outcome.status === "rejected");
+
+    expect(fulfilled).toHaveLength(1);
+    expect(rejected).toHaveLength(1);
+    expectIdempotencyConflict((rejected[0] as PromiseRejectedResult).reason);
+    expect(await mutationCounts()).toEqual({
+      credentials: 1,
+      activeCredentials: 1,
+      changes: 1,
+      audits: 1,
+    });
+    expect(await owner.operationAudit.count({ where: { requestId } })).toBe(1);
   });
 
   it("returns stable account and fingerprint conflicts without partial replacement", async () => {

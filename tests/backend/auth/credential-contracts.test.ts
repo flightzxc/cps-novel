@@ -90,6 +90,15 @@ describe("credential web boundary", () => {
     expect(service).toMatch(/INSERT INTO channel_account_credential/);
     expect(service).not.toMatch(/SELECT[^;`]*encrypted_secret/is);
 
+    const webBoundary = (
+      await Promise.all(
+        ["src/server", "src/lib/credentials"].map((directory) =>
+          typescriptSources(path.resolve(process.cwd(), directory)),
+        ),
+      )
+    ).flat().join("\n");
+    expect(webBoundary).not.toMatch(/createDecipheriv|decryptCredentialSecret/);
+
     const scheduler = (await typescriptSources(path.resolve(process.cwd(), "scheduler"))).join("\n");
     expect(scheduler).not.toMatch(/decrypt|createDecipheriv|CHANNEL_CREDENTIAL_/);
 

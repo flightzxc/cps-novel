@@ -38,7 +38,7 @@ add/replace、Credential validate/supersede Worker 和查询链均已实现。
 - live/static dictionary：43 models、920/920 active records、0 drift；catalog 43 tables、187
   constraints、183 indexes、2 triggers。
 - P1-06 role regression：6/6；P1-07 runtime regression：16/16。
-- P1-08B Auth PostgreSQL：8/8；Credential Web ingress + Worker PostgreSQL：10/10。
+- P1-08B Auth PostgreSQL：8/8；Credential Web ingress + Worker PostgreSQL：15/15。
 - 后端静态/单元：139/139；全量无数据库环境测试：150 passed / 50 PostgreSQL cases
   skipped（后者已由 disposable PostgreSQL 脚本独立执行）。
 - disposable container、volume 和临时 credential/key directory：清理确认 `yes`。
@@ -61,3 +61,15 @@ Claude review 的唯一 REQUIRED_FIX 已收口：`getCredentialTaskResult` 现�
 cause、数据库异常、payload 和任意未知 code 均不会进入 `CredentialTaskStatusView` 输入。
 `account_inactive`、`credential_missing`、`credential_ambiguous`、
 `credential_validation_failed` 可由 contracts projection 映射为 `failureCode`；成功 result 路径不变。
+
+## Secret Ingress idempotency binding review fix
+
+Claude 复核的唯一 REQUIRED_FIX 已收口。同步 add/replace 现在以
+`requestId + action + actorId + channelAccountId + fingerprintPrefix` 绑定一次已提交请求；事务前
+预检、事务内重查，以及 PostgreSQL unique/serialization 冲突恢复均调用同一个比较函数。
+
+五项全部一致时返回首次脱敏 metadata，且不重复 Credential、supersede、change log 或 audit。
+任一项错配则 fail closed：`status=409`、`code=admin_mutation_request_id_invalid`、
+`details.reason=idempotency_conflict`，零新增写入且不返回首次 metadata。审计仅保存 prefix，未新增
+JWT、密文、完整 fingerprint 或原始 payload。双独立 Web 数据库连接已验证相同并发重试合并、
+并发 payload mismatch 一成功一明确冲突；本修复未修改 Schema、Migration 或角色权限。

@@ -21,6 +21,13 @@ function isUniqueConflict(error: unknown): boolean {
   );
 }
 
+function isSerializableWriteConflict(error: unknown): boolean {
+  return error instanceof Prisma.PrismaClientKnownRequestError && (
+    error.code === "P2034"
+    || (error.code === "P2010" && (error.meta as { code?: unknown } | undefined)?.code === "40001")
+  );
+}
+
 function reason(value: string | undefined, required: boolean): string | null {
   const normalized = value?.trim() ?? "";
   if (required && !normalized) throw new Error("A reason is required");
@@ -30,6 +37,23 @@ function reason(value: string | undefined, required: boolean): string | null {
 
 const CREDENTIAL_REPLACE_AUDIT_ACTION = "credential.replace.completed";
 const JWT_LIKE_TEXT = /(?:^|\s)[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+(?:\s|$)/;
+
+export class CredentialReplacementIdempotencyConflictError extends Error {
+  readonly code = "admin_mutation_request_id_invalid" as const;
+  readonly status = 409 as const;
+  readonly details = Object.freeze({ reason: "idempotency_conflict" as const });
+
+  constructor() {
+    super("Credential replacement idempotency binding conflict");
+  }
+}
+
+type CredentialReplacementBinding = Readonly<{
+  requestId: string;
+  actorId: string;
+  channelAccountId: string;
+  fingerprintPrefix: string;
+}>;
 
 type CredentialMetadataRow = {
   id: string;
@@ -101,17 +125,54 @@ export async function listCredentialMetadata(db: PrismaClient, channelAccountId:
   return rows.map((row) => ({ credentialId: row.id, channelAccountId: row.channelAccountId, credentialType: row.credentialType, fingerprintPrefix: row.fingerprintPrefix, status: row.status as CredentialMetadata["status"], expiresAt: row.expiresAt?.toISOString() ?? null, lastValidatedAt: row.lastValidatedAt?.toISOString() ?? null }));
 }
 
+function assertCredentialReplacementBinding(input: {
+  binding: CredentialReplacementBinding;
+  audit: {
+    requestId: string | null;
+    action: string;
+    actorId: string | null;
+    afterSnapshot: Prisma.JsonValue | null;
+  };
+  credential: CredentialMetadataRow;
+}): void {
+  const snapshot = input.audit.afterSnapshot;
+  const snapshotPrefix = snapshot && typeof snapshot === "object" && !Array.isArray(snapshot)
+    ? (snapshot as Prisma.JsonObject).fingerprintPrefix
+    : null;
+  if (
+    input.audit.requestId !== input.binding.requestId
+    || input.audit.action !== CREDENTIAL_REPLACE_AUDIT_ACTION
+    || input.audit.actorId !== input.binding.actorId
+    || input.credential.channelAccountId !== input.binding.channelAccountId
+    || snapshotPrefix !== input.binding.fingerprintPrefix
+    || input.credential.fingerprintPrefix !== input.binding.fingerprintPrefix
+  ) {
+    throw new CredentialReplacementIdempotencyConflictError();
+  }
+}
+
+type CredentialReplacementReader = Pick<
+  Prisma.TransactionClient,
+  "operationAudit" | "channelAccountCredential"
+>;
+
 async function findCommittedCredentialReplacement(
-  db: PrismaClient,
-  requestId: string,
+  db: CredentialReplacementReader,
+  binding: CredentialReplacementBinding,
 ): Promise<CredentialMetadata | null> {
   const audit = await db.operationAudit.findFirst({
     where: {
       actorType: "admin",
       action: CREDENTIAL_REPLACE_AUDIT_ACTION,
-      requestId,
+      requestId: binding.requestId,
     },
-    select: { entityId: true },
+    select: {
+      requestId: true,
+      action: true,
+      actorId: true,
+      entityId: true,
+      afterSnapshot: true,
+    },
   });
   if (!audit) return null;
   const row = await db.channelAccountCredential.findUnique({
@@ -126,7 +187,9 @@ async function findCommittedCredentialReplacement(
       lastValidatedAt: true,
     },
   });
-  return row ? credentialMetadata(row) : null;
+  if (!row) throw new CredentialReplacementIdempotencyConflictError();
+  assertCredentialReplacementBinding({ binding, audit, credential: row });
+  return credentialMetadata(row);
 }
 
 /**
@@ -169,9 +232,6 @@ export async function addOrReplaceCredential(input: {
       "The operation reason must not contain credential material",
     );
   }
-  const prior = await findCommittedCredentialReplacement(deps.db, input.requestId);
-  if (prior) return prior;
-
   const now = deps.now ?? new Date();
   const validation = validateCredentialJwtLocally(input.secret, now);
   if (validation.status === "invalid") {
@@ -181,6 +241,16 @@ export async function addOrReplaceCredential(input: {
     );
   }
 
+  const fingerprint = fingerprintNewCredentialSecret(input.secret, deps.env);
+  const idempotencyBinding: CredentialReplacementBinding = Object.freeze({
+    requestId: input.requestId,
+    actorId: context.identity.id,
+    channelAccountId: input.channelAccountId,
+    fingerprintPrefix: fingerprint.prefix,
+  });
+  const prior = await findCommittedCredentialReplacement(deps.db, idempotencyBinding);
+  if (prior) return prior;
+
   const credentialId = randomUUID();
   const credentialType = input.credentialType ?? "bearer_jwt";
   const encrypted = encryptNewCredentialSecret({
@@ -189,33 +259,11 @@ export async function addOrReplaceCredential(input: {
     credentialId,
     env: deps.env,
   });
-  const fingerprint = fingerprintNewCredentialSecret(input.secret, deps.env);
 
   try {
     return await deps.db.$transaction(async (tx) => {
-      const existingAudit = await tx.operationAudit.findFirst({
-        where: {
-          actorType: "admin",
-          action: CREDENTIAL_REPLACE_AUDIT_ACTION,
-          requestId: input.requestId,
-        },
-        select: { entityId: true },
-      });
-      if (existingAudit) {
-        const existing = await tx.channelAccountCredential.findUniqueOrThrow({
-          where: { id: existingAudit.entityId },
-          select: {
-            id: true,
-            channelAccountId: true,
-            credentialType: true,
-            fingerprintPrefix: true,
-            status: true,
-            expiresAt: true,
-            lastValidatedAt: true,
-          },
-        });
-        return credentialMetadata(existing);
-      }
+      const existing = await findCommittedCredentialReplacement(tx, idempotencyBinding);
+      if (existing) return existing;
 
       const accounts = await tx.$queryRaw<Array<{ status: string }>>(Prisma.sql`
         SELECT status
@@ -318,6 +366,7 @@ export async function addOrReplaceCredential(input: {
           requestId: input.requestId,
           reason: why,
           afterSnapshot: {
+            channelAccountId: input.channelAccountId,
             credentialType,
             status: validation.status,
             fingerprintPrefix: fingerprint.prefix,
@@ -336,9 +385,11 @@ export async function addOrReplaceCredential(input: {
       });
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
   } catch (error) {
-    if (!isUniqueConflict(error)) throw error;
-    const committed = await findCommittedCredentialReplacement(deps.db, input.requestId);
+    const uniqueConflict = isUniqueConflict(error);
+    if (!uniqueConflict && !isSerializableWriteConflict(error)) throw error;
+    const committed = await findCommittedCredentialReplacement(deps.db, idempotencyBinding);
     if (committed) return committed;
+    if (!uniqueConflict) throw error;
     throw new CredentialLifecycleError(
       "credential_fingerprint_conflict",
       "An active credential already uses this fingerprint",
