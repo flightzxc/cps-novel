@@ -2,8 +2,8 @@
 
 ## Result
 
-`P1_08B_SECRET_INGRESS_GATE_REQUIRED`。Auth 生产持久化、账户后端、Credential validate/
-supersede Worker 和查询链已实现；生产 create/replace secret intake 因未冻结协议保持默认拒绝。
+`P1_08B_WEB_SECRET_INGRESS_READY_FOR_REVIEW`。Auth 生产持久化、账户后端、同步 Web
+add/replace、Credential validate/supersede Worker 和查询链均已实现。
 
 ## Implemented
 
@@ -17,14 +17,16 @@ supersede Worker 和查询链已实现；生产 create/replace secret intake 因
   执行列但禁读 Admin hash；Scheduler/Analyst 禁读 secret；所有 runtime role 禁止 DDL。
 - Account create/disable/enable；Credential metadata、validate/supersede enqueue 和 task query；
   request-id 幂等、active task 去重、operation audit 与 fresh service re-authorization。
-- Worker-only AES-256-GCM versioned envelope（UUID AAD）、独立 fingerprint HMAC key、本地 JWT
-  exp validation、fenced validate/supersede protected writes、redacted persisted result。
+- Web encrypt-only / Worker decrypt-capable AES-256-GCM versioned envelope（UUID AAD）、独立
+  fingerprint HMAC key、本地 JWT exp validation、fenced validate/supersede protected writes、
+  redacted persisted result。Web 可 INSERT 新密文但不能 SELECT 已持久化密文。
 - Production handler registry 只登记 `credential.validate.v1` 和 `credential.supersede.v1`；
   Scheduler 不导入 registry/crypto，production schedules 仍为空。
+- Owner 批准同步 add/replace：malformed 零写入，expired 可保存，active 使用 insert-before-delete
+  fingerprint reservation；mutationRequestId 重放不重复 Credential/change log/audit，且不创建任务。
 
 ## Explicitly not implemented
 
-- Secret ingress、生产 add/replace Route/Action/handler/adapter。
 - 真实上游网络校验；P1 只做本地 JWT 结构/exp 检查，不声明验签。
 - `src/app/**` wiring、Admin UI、`src/contracts/**` DTO。
 - Admin mutation 持久限流表或内存限流器；rate-limit port 为可选扩展，login-attempt 表不复用。
@@ -36,15 +38,21 @@ supersede Worker 和查询链已实现；生产 create/replace secret intake 因
 - live/static dictionary：43 models、920/920 active records、0 drift；catalog 43 tables、187
   constraints、183 indexes、2 triggers。
 - P1-06 role regression：6/6；P1-07 runtime regression：16/16。
-- P1-08B Auth PostgreSQL：8/8；Credential Worker PostgreSQL：6/6。
-- 后端静态/单元：96/96（最终全套命令结果见交付终报）。
+- P1-08B Auth PostgreSQL：8/8；Credential Web ingress + Worker PostgreSQL：10/10。
+- 后端静态/单元：139/139；全量无数据库环境测试：150 passed / 50 PostgreSQL cases
+  skipped（后者已由 disposable PostgreSQL 脚本独立执行）。
 - disposable container、volume 和临时 credential/key directory：清理确认 `yes`。
+
+最终门禁：build、typecheck、lint、`npm test`、backend、integration、live/static dictionary
+drift 均 PASS；P1-06 6/6 与 P1-07 16/16 回归 PASS。add/replace availability 已从 Owner
+gate 切换为 `supported`，成功响应为脱敏 metadata；validate/supersede queued result 不变。
 
 ## Security notes
 
-GenericTask payload 仅含 account/credential/actor/request/operation 非敏感标识。Web/Scheduler
-源码扫描无 Credential decrypt/key import。完整 fingerprint 和密文只存在 Worker/数据库内部，
-UI/结果只使用 prefix。CPS 保持只读。
+GenericTask payload 仅含 account/credential/actor/request/operation 非敏感标识，同步 add/replace
+不创建 GenericTask。Web 只在请求内持有新 JWT 并导入 encrypt-only 模块；无 persisted-secret
+SELECT/decrypt 入口。完整 fingerprint 和密文只存在受限数据库列，UI/结果只使用 prefix。
+Scheduler 无 Credential key。CPS 保持只读。
 
 ## Frontend contract review required fix
 

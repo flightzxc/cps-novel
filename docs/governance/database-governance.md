@@ -66,8 +66,8 @@ Migration 演进，当前 Credential 状态增量为
 | --- | --- | --- | --- | --- | --- |
 | `P1-08-CRED-STATUS` | `CPS_PARITY_WITH_DEFECT_FIX` | Credential 使用 `active/superseded/expired/invalid`；validate 未过滤 status，可将 superseded 复活 | 使用同一四态；validate 只接受 active/expired/invalid，superseded 不可恢复 | 修复 CPS 已证实的复活缺陷；disabled 只属于 Account；删除小说原 revoked | `O1=ADOPT_CPS_CREDENTIAL_STATUS_WITH_DEFECT_FIX` |
 | `P1-08-CHALLENGE-SESSION` | `CPS_HAS_NO_EQUIVALENT` | 登录前 challenge 绑定 user + cookie，无数据库 Session | challenge 必须绑定当前数据库 Session | 小说采用长生命周期 DB Session + step-up 2FA，模型不同 | `CHALLENGE_SESSION_BINDING=REQUIRED` |
-| `P1-08-WORKER-DECRYPT` | `CPS_HAS_NO_EQUIVALENT` | Web 与 Worker 共享 key，Web 可读取并解密 Credential | Worker 是唯一密文读取/解密执行体；Web 与 Scheduler 无密钥 | 小说冻结了更强的进程与数据库权限隔离 | Owner 已批准的 Credential 安全边界 |
-| `P1-08-ASYNC-VALIDATION` | **`EXPLICIT_DIVERGENCE / CPS_HAS_NO_EQUIVALENT`** | Credential validation 同步、本地执行，无 taskId | validation 通过任务入队并返回稳定 taskId 与 mutation request id | 保持 Web 无解密能力，并以 P1-07 fencing 承载可恢复异步执行 | P1-08B 已实现 validate Worker；create/replace 仍受 secret ingress Gate 约束 |
+| `P1-08-PERSISTED-SECRET-READ` | `CPS_PARITY_ADAPTED` | Web 接收明文、加密入库，也可读取并解密持久化 Credential | Web 请求内接收并加密新 JWT，只获密文 INSERT、无密文 SELECT/历史解密；Worker 独占持久化密文读取/解密；Scheduler 无密钥 | 避免 sealed intake 额外表、密钥对、TTL/消费状态机，同时以列级权限缩小 Web 暴露面 | `P1_08B_WEB_SYNCHRONOUS_INGRESS_APPROVED`；`WORKER_ONLY_PERSISTED_SECRET_READ_AND_DECRYPT` |
+| `P1-08-ASYNC-VALIDATION` | **`EXPLICIT_DIVERGENCE / CPS_HAS_NO_EQUIVALENT`** | Credential validation 同步、本地执行，无 taskId | add/replace 同步完成并返回 metadata；显式 validate/supersede 仍通过任务入队并返回稳定 taskId 与 mutation request id | 保留 P1-07 fencing、重试和可恢复执行语义，且 Web 不读取持久化密文 | P1-08B add/replace 同步 Gate 已关闭；validate/supersede Worker 链保持 |
 
 `P1-08-ASYNC-VALIDATION` 是显式 divergence record，不得降级为普通 parity 备注或在后续
 字典生成中丢失。
@@ -205,7 +205,7 @@ Migration 演进，当前 Credential 状态增量为
 
 | 数据 | 级别 | Web | Worker | Scheduler | Analyst |
 | --- | --- | --- | --- | --- | --- |
-| `encrypted_secret` | S3 | 禁止 SELECT/解密 | 最小范围可读并解密 | 禁止 | 禁止 |
+| `encrypted_secret` | S3 | 仅可 INSERT 新密文；禁止 SELECT/解密已保存密文 | 最小范围可读并解密 | 禁止 | 禁止 |
 | fingerprint prefix/expiry/status | S1 | 后台 `web_app`/admin 可读元数据 | 可读写 | 不读 | prefix/status 可读；不得反推出完整凭证 |
 | upstream_code/web_url/raw source payload | S2 | 默认不直读；受控服务投影 | 业务需要可读 | 不读 | 脱敏投影 |
 | chapter body | S2 版权内容 | 仅公开读模型读取 preview | 物化写 | 不读 | 禁止导出 |
@@ -217,7 +217,7 @@ Migration 演进，当前 Credential 状态增量为
 | 角色 | 对象所有权 / DDL | 读取 | 写入 | 额外限制 |
 | --- | --- | --- | --- | --- |
 | `migration_owner` | 唯一应用对象 Owner；执行 Migration | 全部 | 全部 | 不作为应用运行身份 |
-| `web_app` | 无 | S0/S1 与公开章节正文；凭证仅元数据 | 后台元数据、任务入队、Audit 追加 | 禁止读取 `encrypted_secret`、完整 fingerprint、原始上游 payload/真实跳转信息 |
+| `web_app` | 无 | S0/S1 与公开章节正文；凭证仅元数据 | 后台元数据、任务入队、Audit 追加；同步 add/replace 可 INSERT 新密文及轮换元数据 | 禁止 SELECT/解密已保存 `encrypted_secret`、禁止读取完整 fingerprint、原始上游 payload/真实跳转信息 |
 | `worker_app` | 无 | 完成任务与凭证处理所需全部列 | 业务/任务状态与追加日志；仅章节撤回正文允许 DELETE | `operation_audit` 等追加日志禁止 UPDATE/DELETE |
 | `analyst_ro` | 无 | S0/S1 列 | 无 | `default_transaction_read_only=on`；`statement_timeout=30s`；禁止 S2/S3 |
 | `backup_role` | 无 | 完整逻辑/物理备份所需全部表、序列 | 无 | `REPLICATION` 仅用于 `pg_basebackup`；凭证仅由备份系统托管 |
@@ -229,7 +229,8 @@ Migration 演进，当前 Credential 状态增量为
 
 P1-08B 新增独立 `scheduler_app`，只授予 schedule/generic task 元数据权限；它不获得任何凭证
 解密密钥，不读取 Auth/Credential secret，也不执行 Credential handler。
-完整逻辑备份要求 `backup_role` 能读取密文，但该能力不授予 Web、Analyst 或 Scheduler，备份产物必须按最高敏感级别加密、隔离和审计。
+完整逻辑备份要求 `backup_role` 能读取密文；在线读取能力不授予 Web、Analyst 或 Scheduler，
+备份产物必须按最高敏感级别加密、隔离和审计。
 
 ## 8. 软删除与保留
 
@@ -278,3 +279,4 @@ P1-08B 新增独立 `scheduler_app`，只授予 schedule/generic task 元数据�
 | 2026-08-03 | P1-05B | 建立 37 表 PostgreSQL 初始 Migration，落地 66 个 CHECK、部分唯一/claim/recovery 索引与 2 个保护 trigger；在 PostgreSQL 16.14 完成空库、重放、零 drift 与真实正负测试 | Codex | 已验证 |
 | 2026-08-03 | P1-06 | 建立五角色、列级敏感数据隔离、逻辑备份/一次性恢复脚本和物理 base backup/WAL/PITR 运行手册；生产 PITR 未在本轮宣称建立 | Codex | 逻辑恢复演练见 P1-06 报告 |
 | 2026-08-04 | P1-08B | 增加六张 Auth 表、生产 PostgreSQL Store、独立 scheduler_app、Credential validate/supersede Worker 与脱敏查询；create/replace secret intake 保持 Gate | Codex | PostgreSQL 16.14 disposable verification PASS |
+| 2026-08-04 | P1-08B | Owner 关闭 Secret Ingress Gate：Web 同步校验并加密新 JWT，只获密文 INSERT、无持久化密文 SELECT；add/replace 返回 metadata，validate/supersede 保持 Worker 异步 | Codex | `P1_08B_WEB_SYNCHRONOUS_INGRESS_APPROVED`；待 targeted review |

@@ -8,15 +8,15 @@
 
 ## 当前实现状态
 
-P1-08A 仅冻结 `contracts.ts` 的元数据、Worker 入队和脱敏结果契约。
-Credential 数据库写入、解密、渠道校验、Worker Handler 和真实任务入队均未实现，留待 P1-08B。
+P1-08B 支持同步 Web add/replace：明文仅在请求内存中短暂存在，Web 使用版本化
+Credential key 加密后写入正式密文列。异步 validate/supersede 仍由 Worker 执行。
 
 ## 特别纪律
 
-🔴 **Web 进程不解密凭证，只有 Worker 能解密，Scheduler 无密钥。**
+🔴 **Web 只加密新提交的凭证；只有 Worker 能读取并解密已持久化凭证，Scheduler 无密钥。**
 
-- 本目录提供的函数如涉及解密，只能在 Worker 运行时上下文中被调用；Web/Server Action 侧只能读取凭证**元数据**（指纹前缀、过期时间、状态），永不回显密文；
+- `web-ingress-crypto.ts` 只导出新 secret 的加密/指纹入口，不导出解密；Web/Server Action 只能读取凭证**元数据**（指纹前缀、过期时间、状态），永不读取或回显已保存密文；
 - Scheduler 容器不得注入 `CHANNEL_CREDENTIAL_ENCRYPTION_KEY` 类环境变量；
-- create/replace production secret intake remains gated; no plaintext is accepted into GenericTask JSON.
+- add/replace 同步完成且不创建 GenericTask；任何 GenericTask JSON 仍禁止 secret/ciphertext/fingerprint；
 - 凭证写操作（六个凭证操作对齐 CPS `channel-accounts/actions.ts` 形态）全部需 `credential:manage` 能力位门控；
 - 指纹冲突最终由数据库唯一约束兜底，不得仅靠应用层判断。
