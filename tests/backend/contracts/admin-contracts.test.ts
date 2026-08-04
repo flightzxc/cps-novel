@@ -14,6 +14,7 @@ import {
   projectTwoFactorSetup,
   projectTwoFactorState,
 } from "@/contracts";
+import { CredentialReplacementIdempotencyConflictError } from "@/server/credentials/service";
 
 const NOW = new Date("2026-08-04T00:00:00.000Z");
 const IDLE_TIMEOUT_MS = 2 * 60 * 60 * 1000;
@@ -348,5 +349,55 @@ describe("error envelope", () => {
 
   it("falls back to 403 for a status outside the published envelope", () => {
     expect(projectErrorEnvelope({ code: "credential_missing", status: 500 }).status).toBe(403);
+  });
+
+  it("preserves a 409 idempotency conflict instead of coercing it to 403", () => {
+    // Coercion would make a replayed mutation request id look like a permission
+    // problem, sending the operator to the capability screen instead of the
+    // request they actually need to resubmit.
+    expect(
+      projectErrorEnvelope({
+        code: "admin_mutation_request_id_invalid",
+        status: 409,
+        details: { reason: "idempotency_conflict" },
+      }),
+    ).toEqual({
+      ok: false,
+      status: 409,
+      code: "admin_mutation_request_id_invalid",
+      details: { reason: "idempotency_conflict" },
+    });
+  });
+
+  it("drops an unrecognised reason rather than forwarding it", () => {
+    expect(
+      projectErrorEnvelope({
+        code: "admin_mutation_request_id_invalid",
+        status: 409,
+        details: { reason: "something the browser cannot branch on" },
+      }),
+    ).toEqual({
+      ok: false,
+      status: 409,
+      code: "admin_mutation_request_id_invalid",
+    });
+  });
+
+  it("projects the real service conflict error without leaking its message", () => {
+    const error = new CredentialReplacementIdempotencyConflictError();
+    const envelope = projectErrorEnvelope({
+      code: error.code,
+      status: error.status,
+      details: error.details,
+    });
+
+    expect(envelope).toEqual({
+      ok: false,
+      status: 409,
+      code: "admin_mutation_request_id_invalid",
+      details: { reason: "idempotency_conflict" },
+    });
+    expect(envelope).not.toHaveProperty("message");
+    expect(JSON.stringify(envelope)).not.toContain("binding conflict");
   });
 });

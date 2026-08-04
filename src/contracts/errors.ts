@@ -9,19 +9,34 @@ import type { CredentialContractCode } from "@/lib/credentials/contracts";
  */
 export type AdminErrorCode = AdminAccessErrorCode | CredentialContractCode;
 
-export type AdminErrorStatus = 401 | 403 | 404 | 429;
+/**
+ * 409 carries idempotency conflicts: a mutation request id was replayed with a
+ * different actor, account or payload. It must survive projection intact —
+ * coercing it to 403 would read as a permission problem and send the operator
+ * looking in the wrong place.
+ */
+export type AdminErrorStatus = 401 | 403 | 404 | 409 | 429;
+
+/**
+ * Machine-readable reasons that further qualify a code. Constrained to a frozen
+ * set so the field can never become a channel for server-authored prose;
+ * introducing a new reason is a deliberate contract change, not a string edit.
+ */
+export type ErrorEnvelopeReason = "idempotency_conflict";
 
 /**
  * The only structured hints allowed alongside a code.
  *
- * Both are machine values, not prose: `capability` is an `AdminCapability`
- * literal and `retryAfterSeconds` is a decimal integer string. Anything the
- * server puts in `AdminAccessError.details` outside this whitelist is dropped
- * by {@link projectErrorEnvelope}.
+ * All three are machine values, not prose: `capability` is an `AdminCapability`
+ * literal, `retryAfterSeconds` is a decimal integer string, and `reason` is one
+ * of {@link ErrorEnvelopeReason}. Anything the server puts in
+ * `AdminAccessError.details` outside this whitelist is dropped by
+ * {@link projectErrorEnvelope}.
  */
 export type ErrorEnvelopeDetails = {
   readonly capability?: string;
   readonly retryAfterSeconds?: string;
+  readonly reason?: ErrorEnvelopeReason;
 };
 
 export type ErrorEnvelope = {
@@ -31,21 +46,36 @@ export type ErrorEnvelope = {
   readonly details?: ErrorEnvelopeDetails;
 };
 
-const ALLOWED_STATUSES: readonly AdminErrorStatus[] = [401, 403, 404, 429];
+const ALLOWED_STATUSES: readonly AdminErrorStatus[] = [401, 403, 404, 409, 429];
+
+const ALLOWED_REASONS: readonly ErrorEnvelopeReason[] = ["idempotency_conflict"];
 
 function isAdminErrorStatus(value: unknown): value is AdminErrorStatus {
   return typeof value === "number" && ALLOWED_STATUSES.includes(value as AdminErrorStatus);
 }
 
+function isEnvelopeReason(value: unknown): value is ErrorEnvelopeReason {
+  return typeof value === "string" && ALLOWED_REASONS.includes(value as ErrorEnvelopeReason);
+}
+
 function pickDetails(details: unknown): ErrorEnvelopeDetails | undefined {
   if (!details || typeof details !== "object") return undefined;
   const source = details as Record<string, unknown>;
-  const picked: { capability?: string; retryAfterSeconds?: string } = {};
+  const picked: {
+    capability?: string;
+    retryAfterSeconds?: string;
+    reason?: ErrorEnvelopeReason;
+  } = {};
   if (typeof source.capability === "string") picked.capability = source.capability;
   if (typeof source.retryAfterSeconds === "string") {
     picked.retryAfterSeconds = source.retryAfterSeconds;
   }
-  return picked.capability === undefined && picked.retryAfterSeconds === undefined
+  // Unknown reasons are dropped rather than forwarded: an unrecognised token
+  // would reach the browser as an unhandled branch.
+  if (isEnvelopeReason(source.reason)) picked.reason = source.reason;
+  return picked.capability === undefined
+    && picked.retryAfterSeconds === undefined
+    && picked.reason === undefined
     ? undefined
     : Object.freeze(picked);
 }
