@@ -77,8 +77,8 @@ baked identity，证明运行时 env 不能覆盖镜像身份。没有创建或�
 postgres/web/worker/scheduler 四服务；无 SQLite、无 `env_file`、无 latest fallback，四服务均为
 `json-file` 10m × 3，Postgres 无宿主机端口，Web 仅 loopback，Worker/Scheduler 无业务端口。
 
-一键脚本末尾仍打印 runtime 阶段遗留的 `BLOCKED_WEB_HEALTH=WAITING_FOR_CLAUDE_ROUTE_HANDLER`；
-该提示不参与控制流，脚本 exit 0，真实 Web healthcheck 和 HTTP 均已在本报告验证为 healthy/200。
+P1-12 closeout 已删除 runtime 阶段遗留的 Health 阻断提示；该变更只移除状态噪音，
+不改变脚本控制流。真实 Web healthcheck 和 HTTP 均已在本报告验证为 healthy/200。
 
 ## 5. Health HTTP E2E
 
