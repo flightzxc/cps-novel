@@ -1,4 +1,4 @@
-import { ButtonLink } from "@/components/Button";
+import { ButtonNavLink } from "@/components/Button";
 
 /**
  * 上一章 / 下一章。
@@ -6,8 +6,13 @@ import { ButtonLink } from "@/components/Button";
  * 边界处按钮不渲染（而不是渲染成禁用的链接）——一个不能去任何地方的链接对键盘
  * 和读屏用户是噪音。首尾位置用一句说明代替，让用户知道是到头了而不是坏了。
  *
- * 本轮是普通链接跳转；P1-11 会把它换成客户端路由以做到章节切换不整页刷新，
- * 届时只需替换这个组件内部的导航方式，调用方不变。
+ * 走客户端路由（`ButtonNavLink`），因此切章不整页刷新，layout 层的阅读设置与
+ * 站点外壳都原样保留。
+ *
+ * 🔴 `scroll={false}` 不能去掉。App Router 默认会在导航后把页面滚到顶，而那段
+ * 滚动发生在章节页**祖先**的 commit 回调里，晚于章节页自己的 effect，会盖掉
+ * 阅读位置的恢复。关掉它之后，滚动完全由 `useReadingPosition` 负责——包括
+ * 「新章节没有存过位置时显式回到顶部」这一条。
  */
 export function ChapterPager({
   previousHref,
@@ -25,17 +30,17 @@ export function ChapterPager({
       data-testid="chapter-pager"
     >
       {previousHref ? (
-        <ButtonLink href={previousHref} variant="outline" rel="prev">
+        <ButtonNavLink href={previousHref} variant="outline" rel="prev" scroll={false}>
           上一章
-        </ButtonLink>
+        </ButtonNavLink>
       ) : (
         <span className="text-sm text-novel-fg-subtle">已是第一章</span>
       )}
 
       {nextHref ? (
-        <ButtonLink href={nextHref} variant="outline" rel="next">
+        <ButtonNavLink href={nextHref} variant="outline" rel="next" scroll={false}>
           下一章
-        </ButtonLink>
+        </ButtonNavLink>
       ) : (
         <span className="text-sm text-novel-fg-subtle">已是最后一章试读</span>
       )}

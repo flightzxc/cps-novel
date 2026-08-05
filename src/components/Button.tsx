@@ -1,4 +1,10 @@
-import type { AnchorHTMLAttributes, ButtonHTMLAttributes, ReactNode } from "react";
+import Link from "next/link";
+import type {
+  AnchorHTMLAttributes,
+  ButtonHTMLAttributes,
+  ComponentProps,
+  ReactNode,
+} from "react";
 
 /**
  * 行动按钮。
@@ -78,5 +84,29 @@ export function ButtonLink({
     <a className={classesFor(variant, size, className)} {...rest}>
       {children}
     </a>
+  );
+}
+
+/**
+ * 站内导航形态的按钮：与 ButtonLink 视觉完全一致，但走客户端路由。
+ *
+ * 用途限站内地址。站外入口（正式阅读跳转）必须继续用 ButtonLink——那是真正的
+ * 离站导航，走客户端路由既没有意义，也会让 rel="nofollow sponsored" 的语义变模糊。
+ *
+ * 可以留在 server component 里：next/link 自身不需要 "use client"。
+ * 在没有 App Router 上下文的环境（如 jsdom 单测）里，Link 的每处 router 调用
+ * 都有 null 守卫，会退化成一个普通 <a>，因此不需要为测试准备 router mock。
+ */
+export function ButtonNavLink({
+  variant = "outline",
+  size = "md",
+  className = "",
+  children,
+  ...rest
+}: CommonProps & ComponentProps<typeof Link>) {
+  return (
+    <Link className={classesFor(variant, size, className)} {...rest}>
+      {children}
+    </Link>
   );
 }

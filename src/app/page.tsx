@@ -1,5 +1,7 @@
 import { Container } from "@/components/Container";
 import { BrandLockup } from "@/components/BrandMark";
+import { MOCK_PREVIEW_CHAPTER_TOTAL } from "@/features/public-ui/fixtures/mock-content";
+import { devPreviewChapterPath } from "@/features/public-ui/fixtures/preview-paths";
 
 /**
  * 开发预览索引。
@@ -36,12 +38,12 @@ const ENTRIES: PreviewEntry[] = [
     note: "无封面、无标签、无可试读章节。验证版面在最少字段下仍然成立。",
   },
   {
-    href: "/dev-preview/chapter",
+    href: devPreviewChapterPath(1),
     title: "章节阅读页",
-    note: "阅读作用域 + 阅读设置面板（可切换，本轮不持久化）。",
+    note: "阅读作用域 + 阅读设置面板；设置与阅读位置持久化，切章不整页刷新。",
   },
   {
-    href: "/dev-preview/chapter-last",
+    href: devPreviewChapterPath(MOCK_PREVIEW_CHAPTER_TOTAL),
     title: "章节阅读页 · 最后一章",
     note: "无下一章；正式阅读升为主动作。",
   },

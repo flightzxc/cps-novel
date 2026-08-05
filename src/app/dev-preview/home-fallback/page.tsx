@@ -4,6 +4,10 @@ import {
   MOCK_FEATURED_LIST_NO_HERO,
   MOCK_NOVEL_CARDS,
 } from "@/features/public-ui/fixtures/mock-content";
+import {
+  devPreviewFirstChapterPath,
+  devPreviewNovelPath,
+} from "@/features/public-ui/fixtures/preview-paths";
 
 /**
  * MOCK_ONLY 预览：首页的**回落形态**。
@@ -17,8 +21,9 @@ export default function HomeFallbackPreviewPage() {
       chrome={mockChrome("home")}
       featuredList={MOCK_FEATURED_LIST_NO_HERO.map((novel) => ({
         novel,
-        detailHref: "/dev-preview/novel",
-        startReadingHref: novel.previewChapters.length > 0 ? "/dev-preview/chapter" : undefined,
+        detailHref: devPreviewNovelPath(),
+        startReadingHref:
+          novel.previewChapters.length > 0 ? devPreviewFirstChapterPath() : undefined,
       }))}
       novels={MOCK_NOVEL_CARDS}
       browseAllHref="/dev-preview/collection"

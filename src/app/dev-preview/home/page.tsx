@@ -4,6 +4,10 @@ import {
   MOCK_FEATURED_LIST,
   MOCK_NOVEL_CARDS,
 } from "@/features/public-ui/fixtures/mock-content";
+import {
+  devPreviewFirstChapterPath,
+  devPreviewNovelPath,
+} from "@/features/public-ui/fixtures/preview-paths";
 
 /** MOCK_ONLY 预览：首页页面壳（有横版物料 → 通栏出血 Hero + 轮播） */
 export default function HomePreviewPage() {
@@ -12,8 +16,9 @@ export default function HomePreviewPage() {
       chrome={mockChrome("home")}
       featuredList={MOCK_FEATURED_LIST.map((novel) => ({
         novel,
-        detailHref: "/dev-preview/novel",
-        startReadingHref: novel.previewChapters.length > 0 ? "/dev-preview/chapter" : undefined,
+        detailHref: devPreviewNovelPath(),
+        startReadingHref:
+          novel.previewChapters.length > 0 ? devPreviewFirstChapterPath() : undefined,
       }))}
       novels={MOCK_NOVEL_CARDS}
       browseAllHref="/dev-preview/collection"
