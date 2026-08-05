@@ -261,4 +261,16 @@ describe("阅读设置 · P1-11 接入点", () => {
     ).toBe("system");
     expect(normalizeReaderSettings(null)).toEqual(DEFAULT_READER_SETTINGS);
   });
+
+  it("非整数档位回默认档，而不是回中间档", () => {
+    // 越界整数是「选过但超范围」，夹回两端；非整数是存储被损坏或被手改，
+    // 唯一说得通的落点是默认值。字号有 4 档，中间档（2）恰好不等于默认档（1），
+    // 这条断言就是用来钉住两者区别的。
+    expect(normalizeReaderSettings({ fontSizeIndex: NaN }).fontSizeIndex).toBe(
+      DEFAULT_READER_SETTINGS.fontSizeIndex,
+    );
+    expect(normalizeReaderSettings({ fontSizeIndex: 1.5 }).fontSizeIndex).toBe(
+      DEFAULT_READER_SETTINGS.fontSizeIndex,
+    );
+  });
 });

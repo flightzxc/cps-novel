@@ -49,9 +49,19 @@ export const DEFAULT_READER_SETTINGS: ReaderSettings = {
  */
 export const READER_SETTINGS_STORAGE_KEY = "novel:reader-settings:v1";
 
-function clampIndex(index: number, length: number): number {
+/**
+ * 收敛单个档位下标。
+ *
+ * 越界的整数夹回两端（读者以前选过 22px，后来档位表缩短了，夹到最大档是对的）；
+ * 而**非整数一律回默认档**——那不是「选过但超范围」，那是存储被损坏或被手改，
+ * 此时唯一说得通的落点是默认值。
+ *
+ * 原先非整数回落到中间档 `Math.floor(length / 2)`：字号有 4 档，中间档是 2（20px），
+ * 而默认档是 1（18px）——损坏的存储会把读者送到一个他从没选过的档位。
+ */
+function clampIndex(index: number, length: number, fallback: number): number {
   if (!Number.isInteger(index)) {
-    return Math.floor(length / 2);
+    return fallback;
   }
   return Math.min(Math.max(index, 0), length - 1);
 }
@@ -71,14 +81,17 @@ export function normalizeReaderSettings(
     fontSizeIndex: clampIndex(
       source.fontSizeIndex ?? DEFAULT_READER_SETTINGS.fontSizeIndex,
       READER_FONT_SIZES.length,
+      DEFAULT_READER_SETTINGS.fontSizeIndex,
     ),
     lineHeightIndex: clampIndex(
       source.lineHeightIndex ?? DEFAULT_READER_SETTINGS.lineHeightIndex,
       READER_LINE_HEIGHTS.length,
+      DEFAULT_READER_SETTINGS.lineHeightIndex,
     ),
     measureIndex: clampIndex(
       source.measureIndex ?? DEFAULT_READER_SETTINGS.measureIndex,
       READER_MEASURES.length,
+      DEFAULT_READER_SETTINGS.measureIndex,
     ),
   };
 }
