@@ -120,6 +120,25 @@ describe("设计 token · 结构", () => {
     expect(manualDarkAt).toBeGreaterThan(systemDarkAt);
   });
 
+  it("补水前的防闪规则存在，且比 system 的两条规则更具体", () => {
+    // 服务端不知道读者存过什么主题，阅读区只能先按 system 渲染。章节布局里的
+    // 内联脚本在补水前把偏好写到 <html data-reader-pref-theme>，这两条规则据此
+    // 提前压过 system 的表现，否则手动选过浅/深色的读者会闪一帧相反的配色。
+    for (const theme of ["light", "dark"]) {
+      expect(css).toContain(
+        `:root[data-reader-pref-theme="${theme}"] .reader[data-reader-theme="system"]`,
+      );
+    }
+
+    // 必须写在 system 的浅色规则与深色媒体查询**之后**：这两条规则和它们的
+    // 特异性差距只有一个属性选择器，靠的是"后来者胜"，顺序反了就压不住。
+    const systemDarkAt = css.search(/@media \(prefers-color-scheme: dark\)/);
+    const prefDarkAt = css.indexOf(
+      ':root[data-reader-pref-theme="dark"] .reader[data-reader-theme="system"]',
+    );
+    expect(prefDarkAt).toBeGreaterThan(systemDarkAt);
+  });
+
   it("封面比例只有一个定义处", () => {
     const occurrences = css.match(/--novel-cover-aspect\s*:/g) ?? [];
     expect(occurrences).toHaveLength(1);

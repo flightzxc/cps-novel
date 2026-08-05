@@ -21,8 +21,8 @@
 | `home-fallback-desktop.png` | 首页 · 无横版物料回落 | 1440×900 |
 | `novel-desktop.png` / `novel-mobile.png` | 小说详情（含可试读章节区块） | 1440×900 / 390×844 |
 | `novel-sparse-desktop.png` | 详情 · 极端稀疏（无封面/标签/试读章） | 1440×900 |
-| `chapter-desktop.png` / `chapter-mobile.png` | 章节阅读（阅读作用域） | 1440×900 / 390×844 |
-| `chapter-last-desktop.png` | 章节 · 末章（正式阅读升为主动作） | 1440×900 |
+| `chapter-desktop.png` / `chapter-mobile.png` | 章节阅读（阅读作用域），第 1 章 | 1440×900 / 390×844 |
+| `chapter-last-desktop.png` | 章节 · 末章（正式阅读升为主动作），第 3 章 | 1440×900 |
 | `collection-desktop.png` | 语言 / 题材聚合 | 1440×900 |
 | `collection-empty-desktop.png` | 聚合 · 空状态 | 1440×900 |
 | `unavailable-desktop.png` | 下架状态 | 1440×900 |
@@ -56,3 +56,9 @@ npm run build && PORT=3111 npm run start
 1. **内容是 MOCK_ONLY 假数据**，不是真实上游内容；封面与横版主视觉都是内联 SVG 占位。
 2. **依赖本机 Chrome**，不同 Chrome 大版本渲染可能有细微差异；跨机器比对前先确认版本一致。
 3. **承载路由是临时的开发预览路由**，正式 URL 结构冻结后需要重新生成。
+   章节页在 P1-11 已改为动态段：第 1 章是 `/dev-preview/chapter/1`，
+   末章是 `/dev-preview/chapter/3`（原先的 `/dev-preview/chapter` 与
+   `/dev-preview/chapter-last` 两个静态页已删除）。
+4. **章节基线要在干净的浏览器配置下生成。** 阅读器现在会把偏好与阅读位置写进
+   localStorage，带着旧配置截图会截到深色阅读区或滚动到一半的正文。上面的
+   headless 命令每次用全新临时配置，天然满足；换用常驻浏览器截图时需自行清空。
