@@ -1,0 +1,142 @@
+x-json-logging: &json-logging
+  driver: json-file
+  options:
+    max-size: 10m
+    max-file: "3"
+
+x-app-runtime: &app-runtime
+  image: ${CPS_NOVEL_APP_IMAGE:?CPS_NOVEL_APP_IMAGE is required}
+  build:
+    context: .
+    args:
+      APP_VERSION: ${APP_VERSION:?APP_VERSION is required}
+      GIT_COMMIT: ${GIT_COMMIT:?GIT_COMMIT is required}
+      BUILD_DATE: ${BUILD_DATE:?BUILD_DATE is required}
+  user: "1001:1001"
+  restart: unless-stopped
+  depends_on:
+    postgres:
+      condition: service_healthy
+  networks:
+    - runtime
+  logging: *json-logging
+
+services:
+  postgres:
+    image: postgres:16.14
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_DB: cps_novel
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_admin_password
+      P1_12_MIGRATION_OWNER_PASSWORD_FILE: /run/secrets/migration_owner_password
+      P1_12_WEB_APP_PASSWORD_FILE: /run/secrets/web_app_password
+      P1_12_WORKER_APP_PASSWORD_FILE: /run/secrets/worker_app_password
+      P1_12_SCHEDULER_APP_PASSWORD_FILE: /run/secrets/scheduler_app_password
+      P1_12_ANALYST_RO_PASSWORD_FILE: /run/secrets/analyst_ro_password
+      P1_12_BACKUP_ROLE_PASSWORD_FILE: /run/secrets/backup_role_password
+    secrets:
+      - postgres_admin_password
+      - migration_owner_password
+      - web_app_password
+      - worker_app_password
+      - scheduler_app_password
+      - analyst_ro_password
+      - backup_role_password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./infra/postgres/init-roles.sh:/docker-entrypoint-initdb.d/10-p1-12-roles.sh:ro
+      - ./infra/postgres/roles.sql:/opt/cps-novel-postgres/roles.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d cps_novel"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+    networks:
+      - runtime
+    logging: *json-logging
+
+  web:
+    <<: *app-runtime
+    command: ["node", "server.js"]
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      HOSTNAME: "0.0.0.0"
+      DATABASE_URL: ${P1_12_WEB_DATABASE_URL:?P1_12_WEB_DATABASE_URL is required}
+      APP_VERSION: ${APP_VERSION:?APP_VERSION is required}
+      GIT_COMMIT: ${GIT_COMMIT:?GIT_COMMIT is required}
+      ADMIN_CANONICAL_ORIGIN: ${ADMIN_CANONICAL_ORIGIN:-http://127.0.0.1:3000}
+      TOTP_ENCRYPTION_KEY: ${TOTP_ENCRYPTION_KEY:?TOTP_ENCRYPTION_KEY is required}
+      CHANNEL_CREDENTIAL_ENCRYPTION_KEY_V1: ${CHANNEL_CREDENTIAL_ENCRYPTION_KEY_V1:?CHANNEL_CREDENTIAL_ENCRYPTION_KEY_V1 is required}
+      CHANNEL_CREDENTIAL_FINGERPRINT_KEY: ${CHANNEL_CREDENTIAL_FINGERPRINT_KEY:?CHANNEL_CREDENTIAL_FINGERPRINT_KEY is required}
+      CREDENTIAL_MANAGE_ROLES: ${CREDENTIAL_MANAGE_ROLES:-super_admin}
+      CREDENTIAL_MANAGE_USER_IDS: ${CREDENTIAL_MANAGE_USER_IDS:-}
+    ports:
+      - "127.0.0.1:${P1_12_WEB_PORT:-3000}:3000"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/api/health >/dev/null 2>&1 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
+
+  worker:
+    <<: *app-runtime
+    command: ["tsx", "worker/index.ts"]
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: ${P1_12_WORKER_DATABASE_URL:?P1_12_WORKER_DATABASE_URL is required}
+      WORKER_ID: ${WORKER_ID:-compose-worker}
+      WORKER_TASK_ALLOWLIST: credential.validate.v1,credential.supersede.v1
+      WORKER_SHUTDOWN_DRAIN_TIMEOUT_MS: ${WORKER_SHUTDOWN_DRAIN_TIMEOUT_MS:-30000}
+      CHANNEL_CREDENTIAL_ENCRYPTION_KEY_V1: ${CHANNEL_CREDENTIAL_ENCRYPTION_KEY_V1:?CHANNEL_CREDENTIAL_ENCRYPTION_KEY_V1 is required}
+      CHANNEL_CREDENTIAL_FINGERPRINT_KEY: ${CHANNEL_CREDENTIAL_FINGERPRINT_KEY:?CHANNEL_CREDENTIAL_FINGERPRINT_KEY is required}
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - node -e 'const value=require("node:fs").readFileSync("/proc/1/cmdline","utf8");if(!value.includes("worker/index.ts"))process.exit(1)'
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  scheduler:
+    <<: *app-runtime
+    command: ["bash", "scripts/run-scheduler-loop.sh"]
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: ${P1_12_SCHEDULER_DATABASE_URL:?P1_12_SCHEDULER_DATABASE_URL is required}
+      SCHEDULER_INTERVAL_SECONDS: ${SCHEDULER_INTERVAL_SECONDS:-60}
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - node -e 'const value=require("node:fs").readFileSync("/proc/1/cmdline","utf8");if(!value.includes("run-scheduler-loop.sh"))process.exit(1)'
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+networks:
+  runtime:
+    name: ${P1_12_COMPOSE_PROJECT:?P1_12_COMPOSE_PROJECT is required}_network
+
+volumes:
+  postgres_data:
+
+secrets:
+  postgres_admin_password:
+    file: ${P1_12_POSTGRES_ADMIN_PASSWORD_FILE:?P1_12_POSTGRES_ADMIN_PASSWORD_FILE is required}
+  migration_owner_password:
+    file: ${P1_12_MIGRATION_OWNER_PASSWORD_FILE:?P1_12_MIGRATION_OWNER_PASSWORD_FILE is required}
+  web_app_password:
+    file: ${P1_12_WEB_APP_PASSWORD_FILE:?P1_12_WEB_APP_PASSWORD_FILE is required}
+  worker_app_password:
+    file: ${P1_12_WORKER_APP_PASSWORD_FILE:?P1_12_WORKER_APP_PASSWORD_FILE is required}
+  scheduler_app_password:
+    file: ${P1_12_SCHEDULER_APP_PASSWORD_FILE:?P1_12_SCHEDULER_APP_PASSWORD_FILE is required}
+  analyst_ro_password:
+    file: ${P1_12_ANALYST_RO_PASSWORD_FILE:?P1_12_ANALYST_RO_PASSWORD_FILE is required}
+  backup_role_password:
+    file: ${P1_12_BACKUP_ROLE_PASSWORD_FILE:?P1_12_BACKUP_ROLE_PASSWORD_FILE is required}
