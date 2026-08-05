@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { ChapterScreen } from "@/features/public-ui/chapter/ChapterScreen";
 import { ReaderSettingsProvider } from "@/features/public-ui/chapter/ReaderSettingsProvider";
+import { buildReaderBootstrapScript } from "@/features/public-ui/chapter/reader-bootstrap";
 import {
   READER_FONT_SIZES,
   READER_LINE_HEIGHTS,
@@ -47,28 +48,38 @@ describe("防闪 · ① 布局里的内联脚本", () => {
     expect(scriptAt).toBeLessThan(childrenAt);
   });
 
+  it("脚本内容由共享的生成器产出，布局里不自己拼一份", () => {
+    // 布局里手写脚本 = 又开一条与 normalizeReaderSettings 漂移的口子。
+    expect(CHAPTER_LAYOUT_SOURCE).toContain("buildReaderBootstrapScript");
+  });
+
   it("主题与排版三项都回放——只修主题等于只解决了一半", () => {
-    expect(CHAPTER_LAYOUT_SOURCE).toContain("data-reader-pref-theme");
+    const script = buildReaderBootstrapScript();
+    expect(script).toContain("data-reader-pref-theme");
     for (const cssVar of [
       "--reader-pref-font-size",
       "--reader-pref-line-height",
       "--reader-pref-measure",
     ]) {
-      expect(CHAPTER_LAYOUT_SOURCE).toContain(cssVar);
+      expect(script).toContain(cssVar);
     }
   });
 
   it("整段包在 try/catch 里——存储被禁用时不能挡住正文", () => {
-    expect(CHAPTER_LAYOUT_SOURCE).toContain("try{");
-    expect(CHAPTER_LAYOUT_SOURCE).toContain("catch(e){}");
+    const script = buildReaderBootstrapScript();
+    expect(script).toContain("try{");
+    expect(script).toContain("catch(e){}");
   });
 
   it("档位表从同一个真源注入，脚本里不另抄一份字面量", () => {
     // 抄一份就会和 reader-settings.ts 漂移，读者的档位会在补水前后对不上。
-    for (const literal of ["READER_FONT_SIZES", "READER_LINE_HEIGHTS", "READER_MEASURES"]) {
-      expect(CHAPTER_LAYOUT_SOURCE).toContain(literal);
-    }
+    const script = buildReaderBootstrapScript();
+    expect(script).toContain(JSON.stringify(READER_FONT_SIZES));
+    expect(script).toContain(JSON.stringify(READER_LINE_HEIGHTS));
+    expect(script).toContain(JSON.stringify(READER_MEASURES));
+    // 生成器之外不得有第二处档位来源：布局源码里不该出现任何档位字面量。
     expect(CHAPTER_LAYOUT_SOURCE).not.toContain('"22px"');
+    expect(CHAPTER_LAYOUT_SOURCE).not.toContain("READER_FONT_SIZES");
   });
 });
 

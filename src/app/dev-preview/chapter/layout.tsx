@@ -1,12 +1,7 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import { ReaderSettingsProvider } from "@/features/public-ui/chapter/ReaderSettingsProvider";
-import {
-  READER_FONT_SIZES,
-  READER_LINE_HEIGHTS,
-  READER_MEASURES,
-  READER_SETTINGS_STORAGE_KEY,
-} from "@/features/public-ui/chapter/reader-settings";
+import { buildReaderBootstrapScript } from "@/features/public-ui/chapter/reader-bootstrap";
 
 export const metadata: Metadata = {
   // 根布局与 dev-preview 布局都已经声明过；这里第三次显式声明，是因为章节页是
@@ -40,31 +35,11 @@ export default function ChapterPreviewLayout({ children }: { children: ReactNode
         对应的规则与 fallback 层据此提前生效。补水后由 ReaderSettingsProvider
         保持两者同值，之后阅读区的内联样式接管。
 
-        跟随系统 + 默认排版不需要它——那本来就是服务端渲染出的样子，不存在闪烁。
+        脚本内容由 `buildReaderBootstrapScript()` 生成，其收敛语义与
+        `normalizeReaderSettings` 逐条相同——两边漂移就等于把闪烁换成了跳变。
         脚本自身整体 try/catch：存储被禁用时静默放弃，绝不能因此挡住正文。
       */}
-      <script
-        dangerouslySetInnerHTML={{
-          __html: [
-            "try{",
-            `var s=localStorage.getItem(${JSON.stringify(READER_SETTINGS_STORAGE_KEY)});`,
-            "if(s){",
-            "var p=JSON.parse(s),r=document.documentElement,",
-            `F=${JSON.stringify(READER_FONT_SIZES)},`,
-            `L=${JSON.stringify(READER_LINE_HEIGHTS)},`,
-            `M=${JSON.stringify(READER_MEASURES)};`,
-            // 主题：只回放手动覆盖。system 不写属性——那本来就该由媒体查询决定。
-            'if(p.theme==="light"||p.theme==="dark"){r.setAttribute("data-reader-pref-theme",p.theme)}',
-            // 排版：档位下标必须是本表内的合法整数才回放，避免被手改过的存储
-            // 把 undefined 写进 CSS 变量。真正的收敛在补水后由 normalizeReaderSettings 做。
-            'if(F[p.fontSizeIndex]){r.style.setProperty("--reader-pref-font-size",F[p.fontSizeIndex])}',
-            'if(L[p.lineHeightIndex]){r.style.setProperty("--reader-pref-line-height",L[p.lineHeightIndex])}',
-            'if(M[p.measureIndex]){r.style.setProperty("--reader-pref-measure",M[p.measureIndex])}',
-            "}",
-            "}catch(e){}",
-          ].join(""),
-        }}
-      />
+      <script dangerouslySetInnerHTML={{ __html: buildReaderBootstrapScript() }} />
       <ReaderSettingsProvider>{children}</ReaderSettingsProvider>
     </>
   );

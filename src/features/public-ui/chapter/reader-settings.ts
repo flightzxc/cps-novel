@@ -21,6 +21,14 @@ export const READER_LINE_HEIGHTS = ["1.6", "1.8", "2"] as const;
 /** 页宽档位（行长）。默认档落在既有设计说明给定的 68–72 字符区间内。 */
 export const READER_MEASURES = ["60ch", "68ch", "76ch"] as const;
 
+/**
+ * 合法主题值的唯一清单。
+ *
+ * 补水前的 bootstrap 脚本与 `normalizeReaderSettings` 都从这里取，避免两处各写
+ * 一份判断——两份判断一旦漂移，读者会在补水瞬间看到主题跳变。
+ */
+export const READER_THEMES = ["system", "light", "dark"] as const;
+
 export const READER_THEME_OPTIONS: { value: ReaderTheme; label: string }[] = [
   { value: "system", label: "跟随系统" },
   { value: "light", label: "浅色" },
@@ -49,46 +57,62 @@ export const DEFAULT_READER_SETTINGS: ReaderSettings = {
 export const READER_SETTINGS_STORAGE_KEY = "novel:reader-settings:v1";
 
 /**
- * 收敛单个档位下标。
+ * 收敛单个档位下标。**这条规则是冻结的**，补水前的 bootstrap 脚本必须逐条照做。
  *
- * 越界的整数夹回两端（读者以前选过 22px，后来档位表缩短了，夹到最大档是对的）；
- * 而**非整数一律回默认档**——那不是「选过但超范围」，那是存储被损坏或被手改，
- * 此时唯一说得通的落点是默认值。
+ * | 输入 | 结果 | 为什么 |
+ * | --- | --- | --- |
+ * | 合法整数（在范围内） | 原样 | 读者确实选过 |
+ * | 合法整数（越界） | 夹到最近边界 | 读者选过 22px，后来档位表缩短了，夹到最大档才是他的本意 |
+ * | 小数 / NaN / Infinity | 默认档 | 不是「选过但超范围」，是数据坏了 |
+ * | 字符串数字 `"2"` | 默认档 | **不做隐式转换**：存储里出现字符串说明写入方不是本模块，值不可信 |
+ * | null / undefined / 数组 / 对象 | 默认档 | 同上 |
  *
- * 原先非整数回落到中间档 `Math.floor(length / 2)`：字号有 4 档，中间档是 2（20px），
- * 而默认档是 1（18px）——损坏的存储会把读者送到一个他从没选过的档位。
+ * `Number.isInteger` 一次性覆盖「是 number」「是有限值」「是整数」三条：
+ * 非 number 返回 false，NaN 与 ±Infinity 也返回 false。
  */
-function clampIndex(index: number, length: number, fallback: number): number {
+function clampIndex(index: unknown, length: number, fallback: number): number {
   if (!Number.isInteger(index)) {
     return fallback;
   }
-  return Math.min(Math.max(index, 0), length - 1);
+  return Math.min(Math.max(index as number, 0), length - 1);
 }
 
-/** 把越界或损坏的值收敛回合法范围。从本地存储读回的值必须先过这一层。 */
+/** 合法主题以外的一切（含非字符串）都回 system。 */
+function normalizeTheme(theme: unknown): ReaderTheme {
+  return (READER_THEMES as readonly string[]).includes(theme as string)
+    ? (theme as ReaderTheme)
+    : DEFAULT_READER_SETTINGS.theme;
+}
+
+/**
+ * 把越界或损坏的值收敛回合法范围。
+ *
+ * 🔴 **这是设置的唯一信任边界。** 从本地存储读回、从外部灌入、从任何调用方传进来
+ * 的值，都必须先过这一层再进内存状态 / localStorage / onSettingsChange —— 三者
+ * 必须拿到同一份规范化结果，否则读者会在补水瞬间看到跳变。
+ *
+ * 注意这里**不能**用 `source.x ?? DEFAULT.x` 再交给 clampIndex：`??` 只挡 null 与
+ * undefined，挡不住 `"2"`、`1.5`、`[]` 这些。合法性判断必须整个交给 clampIndex。
+ */
 export function normalizeReaderSettings(
   input: Partial<ReaderSettings> | null | undefined,
 ): ReaderSettings {
-  const source = input ?? {};
-  const theme: ReaderTheme =
-    source.theme === "light" || source.theme === "dark" || source.theme === "system"
-      ? source.theme
-      : DEFAULT_READER_SETTINGS.theme;
+  const source = (input ?? {}) as Record<string, unknown>;
 
   return {
-    theme,
+    theme: normalizeTheme(source.theme),
     fontSizeIndex: clampIndex(
-      source.fontSizeIndex ?? DEFAULT_READER_SETTINGS.fontSizeIndex,
+      source.fontSizeIndex,
       READER_FONT_SIZES.length,
       DEFAULT_READER_SETTINGS.fontSizeIndex,
     ),
     lineHeightIndex: clampIndex(
-      source.lineHeightIndex ?? DEFAULT_READER_SETTINGS.lineHeightIndex,
+      source.lineHeightIndex,
       READER_LINE_HEIGHTS.length,
       DEFAULT_READER_SETTINGS.lineHeightIndex,
     ),
     measureIndex: clampIndex(
-      source.measureIndex ?? DEFAULT_READER_SETTINGS.measureIndex,
+      source.measureIndex,
       READER_MEASURES.length,
       DEFAULT_READER_SETTINGS.measureIndex,
     ),

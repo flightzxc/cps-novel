@@ -89,7 +89,51 @@ CSS 变量）→ `globals.css` 的 `--reader-pref-*` 兜底层与主题回放规
 主题回放规则只作用于 `[data-reader-theme="system"]`，与补水后的 `light`/`dark` 匹配集
 互斥——这是整套双机制安全的根据，不是靠优先级碰巧压住。
 
-### 3.5 顺带修正的一处 P1-10 缺陷
+### 3.5 设置的收敛语义：三处必须逐条相同（Codex 复核后修）
+
+首轮实现里，收敛规则有**三个各自为政的执行点**，其中补水前脚本用「档位表下标是否
+存在」代替规范化，与 `normalizeReaderSettings` 在三处分歧：
+
+| 存储值 | 旧脚本（补水前） | normalize（补水后） | 读者看到 |
+| --- | --- | --- | --- |
+| `"2"`（字符串） | 20px（隐式转换） | 18px（默认档） | 20px → 18px 跳变 |
+| `99` | 18px（下标不存在，回默认） | 22px（夹到最大档） | 18px → 22px 跳变 |
+| `-99` | 18px（同上） | 16px（夹到最小档） | 18px → 16px 跳变 |
+
+**每一处分歧都是一次整页回流**——而补水前脚本存在的全部意义就是消除它。
+
+现在收敛规则冻结为一条，三处共用：
+
+- `Number.isInteger` 一次覆盖「是 number / 有限 / 整数」三条；
+- **合法整数**越界才夹到最近边界（读者确实选过，只是档位表变短了）；
+- 小数 / NaN / Infinity / 字符串数字 / null / undefined / 数组 / 对象 → **该字段默认档**；
+- 非法主题 → `system`；malformed JSON / 非对象 / 数组 → 全部默认值。
+
+🔴 **字符串数字不做隐式转换**：存储里出现 `"2"` 说明写入方不是本模块，值不可信。
+
+补水前脚本不再手写，改由 `chapter/reader-bootstrap.ts` 的 `buildReaderBootstrapScript()`
+生成——档位表、默认值、主题清单、存储键全部从 `reader-settings.ts` 注入，脚本里没有
+任何手抄字面量。它是纯字符串构造，不引入 Node-only 运行时，产物由章节布局内联进
+HTML，不进客户端 bundle。
+
+**写入路径也收敛为一条**：
+
+```
+partial → 与当前设置合并 → normalizeReaderSettings
+  → React state → localStorage → onSettingsChange
+```
+
+规范化发生在**分流之前**，三个出口拿到同一个对象。此前 `applySettings` 直接把调用方
+传来的值分发出去：受控分支会被 Provider 纠正、自持分支不会、回调两种情形都拿原始值
+——同一次点击在三个出口得到三种结果。存储层 `writeReaderSettings` 另加一道冗余的
+规范化，让「localStorage 里不可能存在非法值」成为存储层自己的不变量，而不是一条
+依赖调用方守规矩的约定。
+
+补水时还会**就地修复历史脏值**（仅在存储内容与其规范化结果不同时写一次）：否则
+`"2"` 会长期躺在 localStorage 里，语义上没问题但字面上与内存状态不一致，排查的人
+看到两个值分不清哪个算数。
+
+### 3.6 顺带修正的一处 P1-10 缺陷
 
 `normalizeReaderSettings` 的 `clampIndex` 对**非整数**回落到中间档
 （`Math.floor(length/2)`）。字号有 4 档，中间档是 2（20px），而默认档是 1（18px）——
@@ -114,6 +158,7 @@ CSS 变量）→ `globals.css` 的 `--reader-pref-*` 兜底层与主题回放规
 | 5 | 换字号后位置仍对得上 | 22px 下记录位置 → 改 16px → 刷新 → 锚点段落仍在视口顶部（偏离 58px < 段高）。裸像素方案在这一步必错 |
 | 6 | 新章节回到顶部 | 切到没存过位置的第 2 章，`scrollY = 0` |
 | 7 | 补水前配色与排版已正确 | 模拟补水前的 DOM（`system` 态 + 无内联样式）：`pref-theme=dark` → 深色底 + 22px + 60ch；`=light` → 浅色底；无 pref → 回落到媒体查询 + 18px/68ch |
+| 7b | 补水前后收敛结果一致（Codex 复核后补） | 从**构建产物 HTML 里抽出真正被内联的那段脚本**在浏览器中执行：`"2"`→18px、`99`→22px/2/76ch、`-99`→16px/1.6/60ch、`1.5`→18px、非法主题→无属性、malformed→全默认，逐条与 `normalizeReaderSettings` 相同。再以 `"2"` 实际刷新页面，`--reader-pref-font-size` 与正文实际渲染字号同为 18px，无跳变（旧实现是 20px→18px） |
 | 8 | noindex 且无 canonical | `<meta name="robots" content="noindex, nofollow">`，全页**无** `rel="canonical"` |
 | 9 | 章号越界与非规范写法 404 | `/chapter/99` → 404；`/chapter/01` → 404（避免同一章有多个可访问地址） |
 

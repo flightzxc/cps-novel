@@ -71,13 +71,26 @@ export function ChapterScreen({
     enabled: hydrated,
   });
 
-  function applySettings(next: ReaderSettings) {
+  /**
+   * 设置变更的唯一出口。
+   *
+   * 🔴 规范化必须发生在**分流之前**：内存状态、localStorage 与 onSettingsChange
+   * 三者拿到的是同一个 normalized 对象。若在这里放过一个非法值，受控分支会由
+   * Provider 纠正、自持分支不会，回调则两种情形都拿到原始值——同一次点击在三个
+   * 出口得到三种结果。
+   *
+   * 接受部分设置：调用方只描述改了什么，与当前设置的合并在这里完成。
+   * 规范化是幂等的，Provider 内部再做一次不会得到不同结果。
+   */
+  function applySettings(patch: Partial<ReaderSettings>) {
+    const normalized = normalizeReaderSettings({ ...settings, ...patch });
+
     if (readerSettingsContext) {
-      readerSettingsContext.setSettings(next);
+      readerSettingsContext.setSettings(normalized);
     } else {
-      setLocalSettings(next);
+      setLocalSettings(normalized);
     }
-    onSettingsChange?.(next);
+    onSettingsChange?.(normalized);
   }
 
   const isLastPreviewChapter =

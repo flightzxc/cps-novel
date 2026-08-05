@@ -1,15 +1,16 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import {
   DEFAULT_READER_SETTINGS,
   READER_FONT_SIZES,
   READER_LINE_HEIGHTS,
   READER_MEASURES,
+  normalizeReaderSettings,
   type ReaderSettings,
 } from "./reader-settings";
-import { readReaderSettings, writeReaderSettings } from "./reader-storage";
+import { hydrateReaderSettings, writeReaderSettings } from "./reader-storage";
 
 /**
  * 阅读偏好的跨章存活容器。
@@ -27,7 +28,19 @@ import { readReaderSettings, writeReaderSettings } from "./reader-storage";
 
 export interface ReaderSettingsContextValue {
   settings: ReaderSettings;
-  setSettings: (next: ReaderSettings) => void;
+  /**
+   * 提交一次设置变更。
+   *
+   * 接受**部分**设置：调用方只描述「改了什么」，与当前完整设置的合并、以及合并
+   * 结果的规范化都由这里负责。写入顺序是固定的：
+   *
+   *   partial → 与当前设置合并 → normalizeReaderSettings
+   *     → React state → localStorage → onSettingsChange
+   *
+   * 🔴 三个出口拿到的必须是**同一个** normalized 对象。任何「先写未规范化的值、
+   * 再靠 effect 纠正」的写法都会产生一帧非法状态，读者看得见。
+   */
+  setSettings: (patch: Partial<ReaderSettings>) => void;
   /**
    * 是否已从本地存储读回。
    *
@@ -89,7 +102,8 @@ export function ReaderSettingsProvider({ children }: { children: ReactNode }) {
   const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
-    const stored = readReaderSettings();
+    // 顺带把历史脏值就地修复，让存储内容与内存状态在字面上也一致。
+    const stored = hydrateReaderSettings();
     // 从 localStorage 读初值是 react-hooks/set-state-in-effect 覆盖不到的正当情形：
     // 值只存在于客户端，渲染期读会破坏 hydration，所以只能在挂载后同步一次。
     //
@@ -116,11 +130,17 @@ export function ReaderSettingsProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  const setSettings = useCallback((next: ReaderSettings) => {
-    setSettingsState(next);
-    writeReaderSettings(next);
-    syncPreferenceMirror(next);
-  }, []);
+  // 合并 → 规范化 → 依次喂给 state、localStorage、`<html>` 镜像，三者是同一个对象。
+  //
+  // 副作用刻意留在 updater **之外**：React 在 StrictMode 下会重复调用 updater 来
+  // 检查纯度，把 localStorage 写入放进去会写两次。这里也不用 useCallback——
+  // context value 本来就是每次渲染新建的对象字面量，记住这个函数换不来任何复用。
+  function setSettings(patch: Partial<ReaderSettings>) {
+    const normalized = normalizeReaderSettings({ ...settings, ...patch });
+    setSettingsState(normalized);
+    writeReaderSettings(normalized);
+    syncPreferenceMirror(normalized);
+  }
 
   return (
     <ReaderSettingsContext.Provider value={{ settings, setSettings, hydrated }}>

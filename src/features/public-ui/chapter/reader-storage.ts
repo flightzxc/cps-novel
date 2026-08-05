@@ -98,15 +98,49 @@ function writeJson(key: string, value: unknown): void {
 /** 读回阅读偏好。没存过、存坏了、读不了，一律回默认值。 */
 export function readReaderSettings(): ReaderSettings {
   const parsed = readJson<Partial<ReaderSettings>>(READER_SETTINGS_STORAGE_KEY);
-  if (!parsed || typeof parsed !== "object") {
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
     return DEFAULT_READER_SETTINGS;
   }
   return normalizeReaderSettings(parsed);
 }
 
-/** 写入阅读偏好。 */
+/**
+ * 读回偏好，并在存储内容与其规范化结果不一致时就地修复。
+ *
+ * 只读不修的话，localStorage 会长期留着 `"2"`、`99` 这类历史脏值：语义上没问题
+ * （每次读都会被收敛），但「存储内容」与「内存状态」在字面上不一致——排查问题的人
+ * 会看到两个不同的值，并且没法判断哪个才算数。补水时顺手写回一次，这条不变量就
+ * 从「读的时候才成立」变成「随时都成立」。
+ *
+ * 仅在确实不同的时候写，避免每次打开页面都做一次无谓的写入。
+ */
+export function hydrateReaderSettings(): ReaderSettings {
+  const normalized = readReaderSettings();
+
+  const storage = safeLocalStorage();
+  if (storage) {
+    try {
+      const raw = storage.getItem(READER_SETTINGS_STORAGE_KEY);
+      if (raw !== null && raw !== JSON.stringify(normalized)) {
+        writeReaderSettings(normalized);
+      }
+    } catch {
+      // 读不了就不修。修复是锦上添花，不能反过来把阅读流程搞崩。
+    }
+  }
+
+  return normalized;
+}
+
+/**
+ * 写入阅读偏好。
+ *
+ * 写前再规范化一次，是刻意的第二道闸：调用方（Provider）已经规范化过，这里再过
+ * 一遍纯属冗余——但它让「localStorage 里不可能存在非法值」成为存储层自己的不变量，
+ * 而不是一条依赖调用方守规矩的约定。规范化是幂等的，重复一次没有代价。
+ */
 export function writeReaderSettings(settings: ReaderSettings): void {
-  writeJson(READER_SETTINGS_STORAGE_KEY, settings);
+  writeJson(READER_SETTINGS_STORAGE_KEY, normalizeReaderSettings(settings));
 }
 
 function readPositionMap(): PositionMap {
