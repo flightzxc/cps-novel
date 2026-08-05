@@ -29,7 +29,8 @@ describe.skipIf(!localeReadyForFinalIntegration)("P1-13 locale canonical single 
   });
 
   it("keeps locale mapping literals out of every other executable source", () => {
-    const offenders = sourceFiles(root)
+    const offenders = ["src", "worker", "scheduler"]
+      .flatMap((directory) => sourceFiles(path.join(root, directory)))
       .map((absolute) => ({
         relative: path.relative(root, absolute),
         source: readFileSync(absolute, "utf8"),
