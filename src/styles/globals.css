@@ -147,10 +147,18 @@
  * 持久化在 P1-11，本轮只保证状态可切换、外观真实变化。
  * ========================================================================== */
 .reader {
-  /* 这三项由阅读设置控件以内联样式覆盖，是 P1-11 接本地存储的挂载点 */
-  --reader-font-size: 18px;
-  --reader-line-height: 1.8;
-  --reader-measure: 68ch;
+  /*
+   * 这三项由阅读设置控件以内联样式覆盖（内联样式优先级高于本规则）。
+   *
+   * 中间那层 --reader-pref-* 是防闪用的：补水之前阅读区还没有内联样式，
+   * 章节布局的内联脚本已经把存储里的排版参数写到 :root 上，于是这里直接取到
+   * 读者的真实档位；没存过就落到后面的默认值。少了这一层，改过字号的读者每次
+   * 打开页面都会先按 18px 排一遍版再跳到自己的档位——那是整页回流，比配色闪一下
+   * 明显得多，而且会让阅读位置按错误的排版参数被测量。
+   */
+  --reader-font-size: var(--reader-pref-font-size, 18px);
+  --reader-line-height: var(--reader-pref-line-height, 1.8);
+  --reader-measure: var(--reader-pref-measure, 68ch);
 
   /* 焦点环在阅读区内改用当前阅读前景色，否则浅色纸面上的纸色焦点环不可见 */
   --novel-focus: var(--reader-fg);
@@ -183,6 +191,34 @@
 
 /* 用户手动选择深色——优先级高于系统 */
 .reader[data-reader-theme="dark"] {
+  --reader-bg: var(--reader-dark-bg);
+  --reader-fg: var(--reader-dark-fg);
+  --reader-fg-muted: var(--reader-dark-fg-muted);
+  --reader-selection: var(--reader-dark-selection);
+  color-scheme: dark;
+}
+
+/* ----------------------------------------------------------------------------
+ * 防闪：补水之前的手动主题覆盖
+ *
+ * 服务端不知道读者在本机存过什么，阅读区只能先按 system 渲染，等 React 补水后
+ * 才改 data-reader-theme。中间那一帧，手动选过浅色/深色的读者会看到相反的配色。
+ * 章节布局里的阻塞式内联脚本在补水前把偏好写到 <html data-reader-pref-theme>，
+ * 下面两条规则据此提前压过 system 的表现。
+ *
+ * 只匹配 [data-reader-theme="system"]：补水后阅读区自己的属性已经是真实值，
+ * 那时两套机制同值，谁生效结果都一样。选择器写得比上面几条更具体是必要的——
+ * 补水前要压过 system 的浅色规则和深色媒体查询。
+ * -------------------------------------------------------------------------- */
+:root[data-reader-pref-theme="light"] .reader[data-reader-theme="system"] {
+  --reader-bg: var(--reader-light-bg);
+  --reader-fg: var(--reader-light-fg);
+  --reader-fg-muted: var(--reader-light-fg-muted);
+  --reader-selection: var(--reader-light-selection);
+  color-scheme: light;
+}
+
+:root[data-reader-pref-theme="dark"] .reader[data-reader-theme="system"] {
   --reader-bg: var(--reader-dark-bg);
   --reader-fg: var(--reader-dark-fg);
   --reader-fg-muted: var(--reader-dark-fg-muted);

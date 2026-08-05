@@ -199,10 +199,11 @@ describe("阅读设置面板", () => {
     expect(screen.queryByTestId("reader-settings-panel")).toBeNull();
   });
 
-  it("明确告知本轮设置不跨会话保持", () => {
+  it("明确告知偏好只落在本设备", () => {
     render(<ChapterScreen chapter={MOCK_CHAPTER} />);
     openPanel();
-    expect(screen.getByText("设置仅在本次浏览生效")).toBeTruthy();
+    // 无账号体系，跨设备不同步是预期行为，面板要说清楚而不是让读者自己发现。
+    expect(screen.getByText("设置保存在本设备，不跨设备同步")).toBeTruthy();
   });
 });
 

@@ -8,6 +8,7 @@ import type { ChapterView } from "@/features/public-ui/types";
 import { BookAttributionBar } from "./BookAttributionBar";
 import { ChapterPager } from "./ChapterPager";
 import { ReaderSettingsPanel } from "./ReaderSettingsPanel";
+import { useReaderSettingsContext } from "./ReaderSettingsProvider";
 import {
   DEFAULT_READER_SETTINGS,
   normalizeReaderSettings,
@@ -23,9 +24,18 @@ import {
  * 用户选择翻转。这样浅色阅读模式下，页面仍然明确属于本站，而不是变成一张
  * 来路不明的白纸。
  *
- * 分期：本轮设置真实可切换但不持久化；P1-11 负责持久化、滚动位置恢复、
- * 章节切换不整页刷新。initialSettings 就是 P1-11 从本地存储灌入初值的接入点，
- * 届时不需要改这个组件的结构。
+ * 设置状态有两种模式：
+ *
+ *   **受控** —— 被挂在 `ReaderSettingsProvider` 下时（正常的章节路由就是这样），
+ *   状态住在 layout 层的 Provider 里。切章时这个组件会重挂，但设置不会丢，
+ *   这正是「章节切换保持阅读设置」得以成立的原因。
+ *
+ *   **自持** —— 独立渲染、没有 Provider 时（测试与将来可能的嵌入场景），
+ *   退回组件内部的 useState，行为与 P1-10 完全一致。
+ *
+ * 之所以要两种模式而不是一律受控：`initialSettings` 只在惰性初始化里读一次，
+ * 而 Provider 是在首帧之后才从 localStorage 补水的。若把状态留在这里，补水后的
+ * 新初值传不进来，就得靠 `key=` 强制重挂——那既会打断滚动，也会丢面板开合状态。
  */
 export function ChapterScreen({
   chapter,
@@ -35,18 +45,28 @@ export function ChapterScreen({
 }: {
   chapter: ChapterView;
   chrome?: SiteChrome;
-  /** P1-11 从本地存储读回的初值。本轮不传，走默认值。 */
+  /** 无 Provider 时的初值。有 Provider 时以 Provider 的值为准。 */
   initialSettings?: Partial<ReaderSettings>;
-  /** P1-11 的持久化回调挂载点。本轮不传。 */
+  /** 设置变更的外部观察点。持久化本身由 Provider 负责，这里只是通知。 */
   onSettingsChange?: (next: ReaderSettings) => void;
 }) {
-  const [settings, setSettings] = useState<ReaderSettings>(() =>
+  const readerSettingsContext = useReaderSettingsContext();
+  const [localSettings, setLocalSettings] = useState<ReaderSettings>(() =>
     normalizeReaderSettings(initialSettings),
   );
   const [panelOpen, setPanelOpen] = useState(false);
 
+  const settings = readerSettingsContext ? readerSettingsContext.settings : localSettings;
+
+  // 自持模式下没有「等存储读回」这回事，settings 从第一帧起就是最终值。
+  const hydrated = readerSettingsContext ? readerSettingsContext.hydrated : true;
+
   function applySettings(next: ReaderSettings) {
-    setSettings(next);
+    if (readerSettingsContext) {
+      readerSettingsContext.setSettings(next);
+    } else {
+      setLocalSettings(next);
+    }
     onSettingsChange?.(next);
   }
 
@@ -103,7 +123,13 @@ export function ChapterScreen({
         className="reader mt-8 md:mt-12"
         data-reader-theme={settings.theme}
         data-testid="reader-surface"
-        style={readerStyleVars(settings)}
+        /*
+         * 补水前**不写**内联排版变量，交给 globals.css 里的 --reader-pref-* 兜底层
+         * ——那一层的值由章节布局的防闪脚本在补水前就写好了。若这里在补水前写死
+         * 默认档，内联样式会盖掉脚本的成果，排版仍旧闪一次。
+         * 服务端与客户端首帧都取不到 context 的 hydrated=true，两边一致，不会 mismatch。
+         */
+        style={hydrated ? readerStyleVars(settings) : undefined}
       >
         <Container>
           <div

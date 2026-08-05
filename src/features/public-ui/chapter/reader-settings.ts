@@ -4,13 +4,12 @@ import type { CSSProperties } from "react";
  * 阅读器设置的状态接口。
  *
  * 分期边界：
- *   P1-10（本轮）——控件外观 + 真实可切换 + 阅读区外观真实变化，**不持久化**。
- *                   刷新后回到默认值，这是预期行为，不是缺陷。
- *   P1-11（下一轮）——本地存储持久化、滚动位置恢复、章节切换不整页刷新。
+ *   P1-10 —— 控件外观 + 真实可切换 + 阅读区外观真实变化，不持久化。
+ *   P1-11 —— 本地存储持久化、阅读位置恢复、章节切换不整页刷新。
  *
- * 本轮对下一轮的义务：控件不能是静态图形，必须有明确的状态接口，并留出接本地
- * 存储的挂载点。因此这里把「设置的形状」「默认值」「存储键」「序列化」都定义好，
- * P1-11 只需要在 ReaderSettingsProvider 的初值与变更回调上接线，不用改组件。
+ * 本文件只负责「设置的形状、默认值、合法性收敛、翻译成 CSS 变量」这四件事，
+ * 不碰存储本身——读写在 `./reader-storage.ts`，跨章存活在
+ * `./ReaderSettingsProvider.tsx`。这样纯函数部分保持可在任意环境直接测试。
  */
 
 export type ReaderTheme = "system" | "light" | "dark";
@@ -44,8 +43,8 @@ export const DEFAULT_READER_SETTINGS: ReaderSettings = {
 };
 
 /**
- * P1-11 接本地存储时使用的键。本轮不写不读，只在这里定义，避免下一轮临时起名。
- * 无账号体系，偏好只在本设备生效——这是预期行为。
+ * 阅读偏好的本地存储键。
+ * 无账号体系，偏好只在本设备生效——这是预期行为，不是缺陷。
  */
 export const READER_SETTINGS_STORAGE_KEY = "novel:reader-settings:v1";
 
@@ -66,7 +65,7 @@ function clampIndex(index: number, length: number, fallback: number): number {
   return Math.min(Math.max(index, 0), length - 1);
 }
 
-/** 把越界或损坏的值收敛回合法范围。P1-11 从本地存储读回时应先过这一层。 */
+/** 把越界或损坏的值收敛回合法范围。从本地存储读回的值必须先过这一层。 */
 export function normalizeReaderSettings(
   input: Partial<ReaderSettings> | null | undefined,
 ): ReaderSettings {

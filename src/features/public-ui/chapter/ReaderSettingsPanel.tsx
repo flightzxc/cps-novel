@@ -147,7 +147,8 @@ export function ReaderSettingsPanel({
       </div>
 
       <div className="mt-6 flex items-center justify-between border-t border-novel-border pt-4">
-        <p className="text-xs text-novel-fg-subtle">设置仅在本次浏览生效</p>
+        {/* 无账号体系，偏好只能落在本机。与其让读者换台设备后困惑，不如说清楚。 */}
+        <p className="text-xs text-novel-fg-subtle">设置保存在本设备，不跨设备同步</p>
         <button
           type="button"
           onClick={onReset}
