@@ -1,8 +1,11 @@
-FROM node:20-alpine AS dependencies
+ARG NODE_BASE_IMAGE=node:20-alpine@sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb8363f609372293
+
+FROM ${NODE_BASE_IMAGE} AS dependencies
 
 WORKDIR /app
 
 RUN apk add --no-cache libc6-compat openssl python3 make g++
+RUN npm install --global npm@11.6.2
 
 COPY package.json package-lock.json ./
 RUN npm ci
@@ -19,12 +22,12 @@ ENV NEXT_TELEMETRY_DISABLED=1
 
 RUN npm run build
 
-FROM node:20-alpine AS runner
+FROM ${NODE_BASE_IMAGE} AS runner
 
 WORKDIR /app
 
 RUN apk add --no-cache bash libc6-compat openssl \
-    && npm install --global tsx@4.21.0
+    && npm install --global npm@11.6.2 tsx@4.21.0
 
 RUN addgroup --system --gid 1001 nodejs \
     && adduser --system --uid 1001 --ingroup nodejs nextjs

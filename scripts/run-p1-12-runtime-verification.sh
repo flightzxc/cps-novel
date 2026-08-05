@@ -25,6 +25,14 @@ cleanup
 "${compose[@]}" config >/dev/null
 echo "COMPOSE_CONFIG=PASS"
 
+DOCKER_BUILDKIT=0 docker build --pull=false --platform linux/amd64 \
+  --build-arg "NODE_BASE_IMAGE=node:20-alpine@sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb8363f609372293" \
+  --build-arg "APP_VERSION=$APP_VERSION" \
+  --build-arg "GIT_COMMIT=$GIT_COMMIT" \
+  --build-arg "BUILD_DATE=$BUILD_DATE" \
+  --tag "$CPS_NOVEL_APP_IMAGE" \
+  "$project_root"
+
 bash "$project_root/scripts/p1-12-compose-up.sh"
 
 expected_services=$'postgres\nweb\nworker\nscheduler'

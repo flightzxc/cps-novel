@@ -10,7 +10,15 @@ prepare_p1_12_local_environment
 compose=(docker compose -p "$P1_12_COMPOSE_PROJECT" -f "$project_root/docker-compose.yml")
 
 "${compose[@]}" config >/dev/null
-"${compose[@]}" build
+if docker image inspect "$CPS_NOVEL_APP_IMAGE" >/dev/null 2>&1; then
+  image_identity="$(docker image inspect "$CPS_NOVEL_APP_IMAGE" --format '{{index .Config.Labels "org.opencontainers.image.version"}}|{{index .Config.Labels "org.opencontainers.image.revision"}}|{{index .Config.Labels "org.opencontainers.image.created"}}')"
+  [[ "$image_identity" == "$APP_VERSION|$GIT_COMMIT|$BUILD_DATE" ]] || {
+    echo "ERROR: existing exact image tag has mismatched immutable metadata: $CPS_NOVEL_APP_IMAGE" >&2
+    exit 1
+  }
+else
+  "${compose[@]}" build
+fi
 "${compose[@]}" up -d postgres
 
 postgres_ready=no

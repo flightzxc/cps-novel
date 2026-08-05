@@ -75,6 +75,9 @@ describe("P1-12 Compose and image contracts", () => {
   });
 
   it("bakes one immutable metadata file and aligned OCI labels from required args", () => {
+    expect(dockerfile).toContain("ARG NODE_BASE_IMAGE=node:20-alpine@sha256:");
+    expect(dockerfile).toContain("FROM ${NODE_BASE_IMAGE} AS dependencies");
+    expect(compose).toContain("NODE_BASE_IMAGE: ${P1_12_NODE_BASE_IMAGE:-node:20-alpine@sha256:");
     for (const argument of ["APP_VERSION", "GIT_COMMIT", "BUILD_DATE"]) {
       expect(dockerfile).toContain(`ARG ${argument}`);
       expect(compose).toContain(`${argument}: \${${argument}:?${argument} is required}`);
@@ -89,6 +92,7 @@ describe("P1-12 Compose and image contracts", () => {
   it("keeps migrations one-shot and reuses the P1-06 roles and grants", () => {
     const launcher = read("scripts/p1-12-compose-up.sh");
     expect(launcher).toContain('up -d postgres');
+    expect(launcher).toContain("existing exact image tag has mismatched immutable metadata");
     expect(launcher).toContain("prisma migrate deploy");
     expect(launcher).toContain("infra/postgres/grants.sql");
     expect(launcher.indexOf("prisma migrate deploy")).toBeLessThan(launcher.indexOf("up -d web worker scheduler"));
