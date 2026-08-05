@@ -150,6 +150,7 @@ export async function processOneWorkerCycle(options: WorkerRuntimeOptions): Prom
     try {
       const handlerPromise = registration.handler({
         lease,
+        mode: lease.mode,
         signal: options.signal,
         heartbeat: handlerHeartbeat,
       }).catch((error) => ({
@@ -168,7 +169,10 @@ export async function processOneWorkerCycle(options: WorkerRuntimeOptions): Prom
         await Promise.allSettled(handlerHeartbeats);
         return true;
       }
-      await finalizeTaskItem(options.prisma, lease, drainResult.value);
+      const outcome = lease.mode === "dry_run"
+        ? { ...drainResult.value, protectedWrite: undefined }
+        : drainResult.value;
+      await finalizeTaskItem(options.prisma, lease, outcome);
     } catch (error) {
       if (!(error instanceof LeaseLostError)) throw error;
     } finally {

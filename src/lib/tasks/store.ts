@@ -4,6 +4,7 @@ import type {
   RecoveryResult,
   TaskFamily,
   TaskLease,
+  TaskMode,
   TaskOutcome,
 } from "./types";
 import { sanitizePersistedTaskError } from "./errors";
@@ -22,6 +23,7 @@ interface CandidateRow {
 }
 
 interface LeaseRow extends CandidateRow {
+  mode: TaskMode;
   execution_token: string;
   locked_until: Date;
 }
@@ -120,17 +122,18 @@ async function assignLease(
   let rows: LeaseRow[];
   if (family === "catalog_scan") {
     rows = await tx.$queryRaw<LeaseRow[]>(Prisma.sql`
-      UPDATE catalog_scan_task_item
-      SET status = 'processing', attempt_count = attempt_count + 1,
+      UPDATE catalog_scan_task_item i
+      SET status = 'processing', attempt_count = i.attempt_count + 1,
           execution_token = ${executionToken}::uuid, lease_epoch = lease_epoch + 1,
           locked_by = ${workerId},
           locked_until = transaction_timestamp() + (${leaseMs} * interval '1 millisecond'),
           heartbeat_at = transaction_timestamp(),
-          started_at = COALESCE(started_at, transaction_timestamp()),
+          started_at = COALESCE(i.started_at, transaction_timestamp()),
           finished_at = NULL, updated_at = transaction_timestamp()
-      WHERE id = ${itemId}::uuid AND status = 'pending'
-      RETURNING id, task_id, 'catalog_scan'::text AS task_type, payload,
-                attempt_count, lease_epoch, execution_token, locked_until
+      FROM catalog_scan_task t
+      WHERE i.id = ${itemId}::uuid AND i.status = 'pending' AND t.id = i.task_id
+      RETURNING i.id, i.task_id, 'catalog_scan'::text AS task_type, t.mode, i.payload,
+                i.attempt_count, i.lease_epoch, i.execution_token, i.locked_until
     `);
   } else if (family === "channel_sync") {
     rows = await tx.$queryRaw<LeaseRow[]>(Prisma.sql`
@@ -144,7 +147,7 @@ async function assignLease(
           finished_at = NULL, updated_at = transaction_timestamp()
       FROM channel_sync_task t
       WHERE i.id = ${itemId}::uuid AND i.status = 'pending' AND t.id = i.task_id
-      RETURNING i.id, i.task_id, t.task_type, i.payload,
+      RETURNING i.id, i.task_id, t.task_type, t.mode, i.payload,
                 i.attempt_count, i.lease_epoch, i.execution_token, i.locked_until
     `);
   } else {
@@ -159,7 +162,7 @@ async function assignLease(
           finished_at = NULL, updated_at = transaction_timestamp()
       FROM generic_task t
       WHERE i.id = ${itemId}::uuid AND i.status = 'pending' AND t.id = i.task_id
-      RETURNING i.id, i.task_id, t.task_type, i.payload,
+      RETURNING i.id, i.task_id, t.task_type, t.mode, i.payload,
                 i.attempt_count, i.lease_epoch, i.execution_token, i.locked_until
     `);
   }
@@ -281,6 +284,7 @@ export async function claimPendingItem(
     return {
       family: input.family,
       taskType: row.task_type,
+      mode: row.mode,
       itemId: row.id,
       taskId: row.task_id,
       workerId: input.workerId,

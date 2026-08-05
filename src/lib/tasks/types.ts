@@ -3,11 +3,13 @@ import type { Prisma } from "@prisma/client";
 export const TASK_FAMILIES = ["catalog_scan", "channel_sync", "generic"] as const;
 
 export type TaskFamily = (typeof TASK_FAMILIES)[number];
+export type TaskMode = "dry_run" | "apply";
 export type TerminalItemStatus = "success" | "skipped" | "failed";
 
 export interface TaskLease {
   family: TaskFamily;
   taskType: string;
+  mode: TaskMode;
   itemId: string;
   taskId: string;
   workerId: string;
@@ -29,6 +31,7 @@ export interface TaskOutcome {
 
 export interface TaskHandlerContext {
   lease: TaskLease;
+  mode: TaskMode;
   signal: AbortSignal;
   heartbeat: () => Promise<boolean>;
 }

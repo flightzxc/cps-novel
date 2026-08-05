@@ -5,6 +5,7 @@ import { runDrainLoop } from "../../../worker/runtime";
 
 describe("P1-07 SQL and shutdown contracts", () => {
   const source = readFileSync(path.join(process.cwd(), "src/lib/tasks/store.ts"), "utf8");
+  const workerSource = readFileSync(path.join(process.cwd(), "worker/runtime/worker.ts"), "utf8");
 
   it("keeps pending and expired SKIP LOCKED paths separate", () => {
     expect(source.match(/FOR UPDATE OF i SKIP LOCKED/g)).toHaveLength(6);
@@ -18,6 +19,14 @@ describe("P1-07 SQL and shutdown contracts", () => {
     expect(source).toContain("lease_epoch = ${lease.leaseEpoch}");
     expect(source).toContain("locked_until > transaction_timestamp()");
     expect(source).not.toContain("locked_until = ${lease.lockedUntil}");
+  });
+
+  it("propagates task mode on every lease and suppresses only dry-run protected writes", () => {
+    expect(source.match(/t\.mode/g)).toHaveLength(3);
+    expect(source).toContain("mode: row.mode");
+    expect(workerSource).toContain("mode: lease.mode");
+    expect(workerSource).toContain('lease.mode === "dry_run"');
+    expect(workerSource).toContain("protectedWrite: undefined");
   });
 
   it("locks each parent before taking the aggregate statement snapshot", () => {
