@@ -4,6 +4,52 @@
 
 ---
 
+## 2026-08-06 · P1-15 收口文档与 P2 交接输入包
+
+### 事实基线
+
+- P1 最终本地 `main`：`fb8cddbdf7c8ff6b566169eade4a89258e7db668`；
+- P1-04～P1-13 的交付提交均已进入本地 `main`；
+- P1-13 PostgreSQL 16.14 最终门禁：PG 71/71、Backend 185/185、UI 469/469、Full 725/725；
+- P1-14 对 `fb8cddb` 的最终聚焦只读审计：`P1_14_FINAL_AUDIT_PASS`、
+  `REQUIRED_FIXES=NONE`、9 项 `NON_BLOCKING_NOTES`；
+- CPS 本轮只读核验：clean@`d77c3b968285698529cf97c7f0f97b286d7a2a9c`。
+
+### 本轮做了什么
+
+- 新增 `docs/governance/P1_CLOSEOUT_REPORT.md`：登记 P1-04～P1-14 的本地完成状态、进入 main
+  的 commit 证据、P1-12/P1-13/P1-14 结果、三条硬前置与待决项状态；
+- 新增 `docs/governance/P1_RISK_AND_DEBT_REGISTER.md`：逐条登记 P1-14 的 9 项
+  `NON_BLOCKING_NOTES`，不把任何 note 改写为 P1 required fix；
+- 新增 `docs/governance/P2_HANDOFF_INPUT.md`：整理 P1 可复用基础、不得重做的冻结边界、
+  多语/URL/SEO/上游 probe 前置、运维债务和 P2 首批建议工作包；
+- 更新版本台账与本开发日志；
+- D-2/D-7/D-8/W6/W9/R3 仍按正式文档登记为 OPEN；D-12 以详情页嵌入真实试读章节、
+  不建独立目录路由的代码与测试证据登记为 RESOLVED。
+
+### 特别前置
+
+- 首次正式远端 CI 配置前，必须显式运行 `scripts/p1-13-postgres-verification.sh` 或等价
+  PostgreSQL 16 门禁；默认 `npm test` 不代表 PG 71/71；
+- 实际启用 365 天 `operation_audit` 清理任务前，必须设计受控特权清理路径；
+- locale upstream registry 与 publish whitelist 当前均为空，D-7 和上游枚举证据齐备前继续
+  fail-closed。
+
+### 状态与下一门
+
+```text
+P1_04_TO_P1_14=COMPLETE
+P1_14=P1_14_FINAL_AUDIT_PASS
+P1_14_REQUIRED_FIXES=NONE
+P1_15=WAITING_FOR_GPT_NOTION_AND_OWNER_GATE
+REMOTE_SYNC=NOT_ATTEMPTED_LOCAL_ONLY
+RELEASED=NO
+DEPLOYED=NO
+NEXT_GATE=GPT_NOTION_UPDATE_THEN_OWNER_RELEASE
+```
+
+P1-15 的本地文档提交不构成 Owner 放行，不得据此登记为已发布、已部署或 P2 已开工。
+
 ## 2026-08-05 · P1-11 阅读器功能
 
 ### 本轮做了什么
