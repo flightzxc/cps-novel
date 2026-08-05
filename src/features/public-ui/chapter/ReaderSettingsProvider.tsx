@@ -102,6 +102,20 @@ export function ReaderSettingsProvider({ children }: { children: ReactNode }) {
     syncPreferenceMirror(stored);
   }, []);
 
+  useEffect(() => {
+    // 阅读位置由我们自己恢复，必须把浏览器的自动滚动恢复关掉，否则刷新与前进后退
+    // 时浏览器会先按**像素**还原一次——而像素值在读者改过字号之后本来就是错的，
+    // 两者还会互相打架。离开章节路由时还回去，不影响站内其它页面。
+    if (typeof history === "undefined" || !("scrollRestoration" in history)) {
+      return;
+    }
+    const previous = history.scrollRestoration;
+    history.scrollRestoration = "manual";
+    return () => {
+      history.scrollRestoration = previous;
+    };
+  }, []);
+
   const setSettings = useCallback((next: ReaderSettings) => {
     setSettingsState(next);
     writeReaderSettings(next);

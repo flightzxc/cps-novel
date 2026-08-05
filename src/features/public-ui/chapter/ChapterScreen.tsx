@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { ButtonLink } from "@/components/Button";
 import { Container } from "@/components/Container";
 import { SiteShell, type SiteChrome } from "@/features/public-ui/layout/SiteShell";
@@ -9,6 +9,7 @@ import { BookAttributionBar } from "./BookAttributionBar";
 import { ChapterPager } from "./ChapterPager";
 import { ReaderSettingsPanel } from "./ReaderSettingsPanel";
 import { useReaderSettingsContext } from "./ReaderSettingsProvider";
+import { useReadingPosition } from "./useReadingPosition";
 import {
   DEFAULT_READER_SETTINGS,
   normalizeReaderSettings,
@@ -60,6 +61,15 @@ export function ChapterScreen({
 
   // 自持模式下没有「等存储读回」这回事，settings 从第一帧起就是最终值。
   const hydrated = readerSettingsContext ? readerSettingsContext.hydrated : true;
+
+  const readerBodyRef = useRef<HTMLDivElement>(null);
+  useReadingPosition({
+    novelKey: chapter.novel.id,
+    chapterNumber: chapter.number,
+    containerRef: readerBodyRef,
+    // 补水前排版还是默认档，此时测量段落位置会算出错误的落点。
+    enabled: hydrated,
+  });
 
   function applySettings(next: ReaderSettings) {
     if (readerSettingsContext) {
@@ -133,6 +143,7 @@ export function ChapterScreen({
       >
         <Container>
           <div
+            ref={readerBodyRef}
             className="mx-auto py-10 md:py-16"
             style={{
               maxWidth: "var(--reader-measure)",
@@ -142,8 +153,10 @@ export function ChapterScreen({
             data-testid="reader-body"
           >
             {chapter.paragraphs.map((paragraph, index) => (
-              // 西文为主，段间距代替首行缩进
-              <p key={index} className="mt-[1em] first:mt-0">
+              // 西文为主，段间距代替首行缩进。
+              // data-paragraph-index 是阅读位置的锚点：存「第几段 + 段内占比」
+              // 而不是像素值，换字号 / 行高 / 页宽后仍然还原到同一句话。
+              <p key={index} data-paragraph-index={index} className="mt-[1em] first:mt-0">
                 {paragraph}
               </p>
             ))}

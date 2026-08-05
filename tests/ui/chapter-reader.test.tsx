@@ -233,22 +233,22 @@ describe("阅读设置 · P1-11 接入点", () => {
     );
   });
 
-  it("本轮不读写本地存储", () => {
-    const getItem = vi.spyOn(Storage.prototype, "getItem");
+  it("没有 Provider 时不自行持久化偏好——那是 Provider 的职责", () => {
     const setItem = vi.spyOn(Storage.prototype, "setItem");
 
     render(<ChapterScreen chapter={MOCK_CHAPTER} />);
     openPanel();
     fireEvent.click(screen.getByRole("radio", { name: "深色" }));
 
-    expect(getItem).not.toHaveBeenCalled();
-    expect(setItem).not.toHaveBeenCalled();
+    // 阅读位置仍然会写（那是按章记的，与有没有 Provider 无关），
+    // 但偏好的键一次都不该出现——独立渲染时它只活在组件自己的 state 里。
+    const keysWritten = setItem.mock.calls.map((call) => call[0]);
+    expect(keysWritten).not.toContain(READER_SETTINGS_STORAGE_KEY);
 
-    getItem.mockRestore();
     setItem.mockRestore();
   });
 
-  it("存储键已定义，避免下一轮临时起名", () => {
+  it("存储键保持稳定，换了键等于把所有读者的偏好清空", () => {
     expect(READER_SETTINGS_STORAGE_KEY).toBe("novel:reader-settings:v1");
   });
 

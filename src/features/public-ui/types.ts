@@ -93,6 +93,20 @@ export interface PreviewPosition {
 
 /** 章节页所属小说的最小信息，用于轻量归属条 */
 export interface ChapterNovelRef {
+  /**
+   * 稳定的不透明标识，用于把阅读位置按 `novel + chapter` 粒度分键存储。
+   *
+   * 🔴 **永远不渲染**：它不是给用户看的内容，只是本地存储的键的一部分。
+   * 与 `NovelCardView.id` / `NovelDetailView.id` 是同一个东西、同一套语义
+   * （将来对应 `Novel.businessId`），所以沿用 `id` 这个名字而不另起一个——
+   * 同一个概念在同一个文件里不该有两种叫法。
+   *
+   * 不承载任何上游元信息，因此不触碰本文件顶部的字段禁令：它是**当下就需要**
+   * 的功能字段，不是「将来可能有」的预留位。
+   *
+   * 不能用书名代替：书名会改，改了之后读者的阅读位置就全丢了。
+   */
+  id: string;
   title: string;
   href: string;
   coverUrl?: string;

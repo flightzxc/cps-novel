@@ -292,6 +292,8 @@ export const MOCK_CHAPTER: ChapterView = {
   title: "The Ledger of Strangers",
   paragraphs: MOCK_PARAGRAPHS,
   novel: {
+    // 稳定不透明标识，用于阅读位置按 novel + chapter 分键。永不渲染。
+    id: MOCK_NOVEL_DETAIL.id,
     title: MOCK_NOVEL_DETAIL.title,
     href: DETAIL_HREF,
     coverUrl: MOCK_NOVEL_DETAIL.coverUrl,
