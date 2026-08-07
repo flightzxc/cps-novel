@@ -309,7 +309,7 @@ describe("🔴 无 Admission 四态 / 无 Manual Exception", () => {
 });
 
 describe("🔴 Hard Gate（PromoLink）", () => {
-  it("🔴 PUBLISH_GATE_REASONS 精确等于 supersession 后的十元素冻结注册表（防新增/删除/改序）", () => {
+  it("🔴 PUBLISH_GATE_REASONS 精确等于最终九元素冻结注册表（防新增/删除/改序）", () => {
     expect([...PUBLISH_GATE_REASONS]).toEqual([
       "locale_not_publishable",
       "required_metadata_missing",
@@ -317,7 +317,6 @@ describe("🔴 Hard Gate（PromoLink）", () => {
       "preview_body_missing",
       "promo_link_missing",
       "promo_link_not_ready",
-      "promo_url_invalid",
       "page_identity_conflict",
       "rights_blocked",
       "blocking_sync_exception",
@@ -332,10 +331,9 @@ describe("🔴 Hard Gate（PromoLink）", () => {
     expect(PUBLISH_GATE_REASONS).not.toContain("public_redirect_code_missing");
   });
 
-  it("promo_link_missing / promo_link_not_ready / promo_url_invalid 三项都在注册表里", () => {
+  it("最终只保留 promo_link_missing / promo_link_not_ready 两项 Promo reason", () => {
     expect(PUBLISH_GATE_REASONS).toContain("promo_link_missing");
     expect(PUBLISH_GATE_REASONS).toContain("promo_link_not_ready");
-    expect(PUBLISH_GATE_REASONS).toContain("promo_url_invalid");
   });
 
   it("promo_link_missing 单独出现即拒绝发布", () => {
@@ -482,7 +480,7 @@ describe("PublishIntent 行为", () => {
 });
 
 describe("required_metadata_missing 详情 DTO 形状", () => {
-  it("PUBLISH_REQUIRED_METADATA_FIELDS 精确等于 [title, slug, body]，且冻结", () => {
+  it("PUBLISH_REQUIRED_METADATA_FIELDS 精确等于 Article 发布产物 [title, slug, body]，且冻结", () => {
     expect([...PUBLISH_REQUIRED_METADATA_FIELDS]).toEqual(["title", "slug", "body"]);
     expect(Object.isFrozen(PUBLISH_REQUIRED_METADATA_FIELDS)).toBe(true);
   });

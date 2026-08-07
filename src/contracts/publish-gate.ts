@@ -33,20 +33,20 @@ export function narrowPublishIntent(value: unknown): PublishIntent | null {
 
 /**
  * 发布失败稳定理由码。全部为阻断级：任一存在即拒绝本次 now/scheduled，内容保持 draft。
- * promo_link_missing / promo_link_not_ready / promo_url_invalid 三项合起来承接
- * Owner supersession 决策 7（PromoLink 缺失即禁止发布）。public_redirect_code 本身
+ * promo_link_missing / promo_link_not_ready 两项合起来承接 Owner supersession 决策 7
+ *（PromoLink 缺失或当前业务不可发布即禁止发布）；必要的 URL 可用性校验归入
+ * promo_link_not_ready。public_redirect_code 本身
  * 由数据库 NOT NULL + UNIQUE 约束保证（`prisma/schema.prisma:481`），业务层永远
  * 到达不了"码未分配"这个状态，因此不作为可达的失败理由登记在此。
  * P2 V1 没有任何豁免机制可以绕过这些理由。
  */
 export const PUBLISH_GATE_REASONS = Object.freeze([
   "locale_not_publishable", // isPublishableLocale 为 false（D-7 fail-closed）
-  "required_metadata_missing", // 标题/slug/正文等发布硬字段缺失；可携带 RequiredMetadataMissingDetail
+  "required_metadata_missing", // Article 发布产物的 title/slug/body 缺失；可携带 RequiredMetadataMissingDetail
   "preview_chapter_missing", // 无可信已物化、可公开的试读章节（章节真源边界）
   "preview_body_missing", // 已物化试读章节存在，但正文为空
   "promo_link_missing", // PromoLink 记录不存在
-  "promo_link_not_ready", // PromoLink 存在但未达 fetched/可用态
-  "promo_url_invalid", // PromoLink 的跳转 URL 未通过校验
+  "promo_link_not_ready", // PromoLink 存在但未达 fetched/业务可用态，含必要的 URL 可用性校验
   "page_identity_conflict", // slug/(novelId,locale)/短码等页面身份冲突
   "rights_blocked", // 权利态阻断：takedown/withdrawn 等
   "blocking_sync_exception", // DTO 归一阶段的 fail-closed 收敛：未登记理由或非法输入统一收敛于此
@@ -63,9 +63,11 @@ export function narrowPublishGateReason(value: unknown): PublishGateReason | nul
 }
 
 /**
- * required_metadata_missing 允许携带的缺失字段清单（对应 article 表 published 行
- * CHECK 约束的非空字段）。字段级判定与实际填充是 P2-07 evaluator 的职责，本契约
- * 只冻结取值域的形状。
+ * required_metadata_missing 允许携带的缺失字段清单，对应最终待发布 Article 的
+ * published 行 CHECK 约束。这里的 body 明确指 Article.body：它是 Template Engine
+ * 或其他已授权内容生产路径生成的最终发布产物，不是 Novel 的通用 metadata 字段。
+ * P2-01 只冻结该最终产物在发布时必须非空；如何生成/填充它属于 P2-02，字段级判定
+ * 属于 P2-07 evaluator，本契约不实现或扩大任一任务。
  */
 export const PUBLISH_REQUIRED_METADATA_FIELDS = Object.freeze(["title", "slug", "body"] as const);
 export type PublishRequiredMetadataField = (typeof PUBLISH_REQUIRED_METADATA_FIELDS)[number];

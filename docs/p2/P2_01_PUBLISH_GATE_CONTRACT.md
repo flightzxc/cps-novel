@@ -27,7 +27,7 @@
 4. **P2 V1 无 MANUAL_EXCEPTION**：没有人工豁免/放行机制。
 5. **Changdu V1 试读**：最多物化上游真实返回的前 3 章；少于 3 章按实际数量；禁止用 `allEpis`/`totalChapterCount` 补造章节。
 6. **`payEpisFrom` 只存来源值**：不因后续变化自动撤回、删除正文、重算 SEO 或推送 IndexNow。
-7. **PromoLink 缺失禁止发布**：这是 Hard Gate，没有任何绕过路径。**Owner supersession 原文 §四（Promo Gate 条款）进一步明文规定**具体理由码为三项——`promo_link_missing`（PromoLink 不存在）、`promo_link_not_ready`（PromoLink 存在但未达 fetched/可用态）、`promo_url_invalid`（PromoLink 跳转 URL 未通过校验）。**这三项是原文明文列举的 Owner 决定，不是执行方对"PromoLink 缺失禁止发布"这句话的推论或延伸**——§3 理由码表逐项引用本条时以此为准。
+7. **PromoLink 缺失或未就绪禁止发布**：这是 Hard Gate，没有任何绕过路径。最终理由码只有两项——`promo_link_missing`（PromoLink 不存在）与 `promo_link_not_ready`（PromoLink 已存在但当前业务不可发布，包含必要的 URL 可用性校验）。
 8. **`splitRatio`、`source_label` 不参与发布 Gate**：分成比例是渠道业务元数据，来源标签是展示信息，两者都不构成发布与否的判断依据。
 
 ### 0.2 本节明确取代的旧内容
@@ -93,7 +93,7 @@ P2-01 Owner 决策，**不包含**本节记录的八条决策或任何 supersess
 | 生命周期 | `Article.status` 是普通 `String` 字段，`@default("draft")` 后仅跟一句行注释列出 `draft/pending/published/offline` 四值（`src/lib/constants.ts:6-11`、`prisma/schema.prisma:561`）——仅字段注释约定，无约束、无状态机 | 复用既有 `ARTICLE_STATUSES`：`draft/published/unpublished/takedown`（`src/domain/database-statuses.ts:22`）；无 `pending`；`scheduled` = `draft` + `publishAt` | `CPS_PARITY_ADAPTED`（受既有 domain 冻结约束，不新增状态） |
 | 发布意图（draft/now/scheduled） | `publishType` = `z.enum(["draft","now","scheduled"])`，仅入参不落库（`src/lib/validators/article.ts:14`、`src/lib/article-generation.ts:63-91`；默认 `draft` 见 `docs/p1/P1_ADMIN_PARITY_SPEC.md:146`） | `PUBLISH_INTENTS` 同值同语义 | `CPS_PARITY` |
 | 定时发布 | `scheduled` → `status=pending` + node-cron 每分钟翻转，翻转时**不复查**门禁（`src/instrumentation.ts:18-72`，已知缺口） | 冻结：进入 `published` 的每次转换（含到点翻转）都必须过同一个 gate | `CPS_PARITY_ADAPTED`（Owner 决策 6，不复制 CPS 缺口） |
-| PromoLink 存在性/可用态门禁 | 发布前检查 `Drama.promoUrl` 非空，来源无关（`src/actions/drama-publish-actions.ts:110-114`、`src/actions/article-actions.ts:563-567`、`src/lib/batch-actions-core.ts:188-197`） | `promo_link_missing` / `promo_link_not_ready` / `promo_url_invalid` 三项 Hard Gate（§0 决策 7，原文 §四 Promo Gate 条款明文列举） | `CPS_PARITY` |
+| PromoLink 存在性/可用态门禁 | 发布前检查 `Drama.promoUrl` 非空，来源无关（`src/actions/drama-publish-actions.ts:110-114`、`src/actions/article-actions.ts:563-567`、`src/lib/batch-actions-core.ts:188-197`） | `promo_link_missing` / `promo_link_not_ready` 两项 Hard Gate；后者覆盖必要的 URL 可用性校验（§0 决策 7） | `CPS_PARITY` |
 | `public_redirect_code`（公开跳转短码本身） | CPS `promoCode` 概念相近，但字段级不变量不同：CPS 没有"全局唯一、永不复用、创建后不可变"的显式约束（换绑流查 `promoCode` 处：`src/lib/article-drama-switch-service.ts:257-262`） | 小说侧原创约束：`prisma/schema.prisma:481` 定义 `publicRedirectCode` 为 `@unique` 且非可空（NOT NULL + UNIQUE）；唯一生成入口 `src/lib/redirect/public-redirect-code.ts`（`CLAUDE.md` §3.2.1、§5 修正 6：全局唯一、永不复用、不可变、唯一索引不排除软删）。仍是发布硬前置，但业务层因 DB 约束永远到达不了"码未分配"这个失败态，故不在 `PUBLISH_GATE_REASONS` 登记对应理由码 | `ORIGINAL_REQUIRED`（理由：该字段的具体不变量为小说侧原创，非 CPS 直接搬迁） |
 | Locale gate | blog 族白名单 `normalizeBlogArticleFamilyLocale`（`src/lib/supported-site-locales.ts:46-65`）+ 模板/剧集语种一致校验（`src/lib/template-locale-guard.ts:13-28`） | `locale_not_publishable` 对应 `isPublishableLocale(novel.locale)` 为 `false`；唯一真源是 `src/lib/locale/locale-canonical.ts:143-145`（`CLAUDE.md` §3.2.1 登记的唯一真源文件），fail-closed，实现是小说侧唯一真源，非 CPS 白名单的直接搬迁 | `CPS_PARITY`（概念对齐：都是发布前语种白名单硬门禁） |
 | 页面身份冲突 | `(locale, slug)` `@@unique`（`prisma/schema.prisma:577`）+ slug 预检 + `publicPageShortId` fail-closed 守卫（`src/lib/article-public-page-id.ts:94-128`）+ 换绑流 `duplicate_page` 硬拒（`src/lib/article-drama-switch-service.ts:333-350,404-422`） | `page_identity_conflict` | `CPS_PARITY` |
@@ -108,19 +108,18 @@ P2-01 Owner 决策，**不包含**本节记录的八条决策或任何 supersess
 
 ## 3. Reason 码表
 
-`PUBLISH_GATE_REASONS` 的十个理由码全部为**阻断级**：任一出现即拒绝本次
+`PUBLISH_GATE_REASONS` 的九个理由码全部为**阻断级**：任一出现即拒绝本次
 `now`/`scheduled`，内容保持 `draft`；`createPublishGateResult` 可一次归一多个
 理由，按下表顺序输出。
 
 | 理由码 | 冻结条件 | 依据 |
 | --- | --- | --- |
 | `locale_not_publishable` | `isPublishableLocale(novel.locale)` 为 `false` | `src/lib/locale/locale-canonical.ts`；D-7 fail-closed |
-| `required_metadata_missing` | 标题/slug/正文等发布硬字段缺失；可携带 `RequiredMetadataMissingDetail.missingFields`（P2-07 填充） | 对应 `article` 表 `published` 行 CHECK 约束语义；字段域见 `PUBLISH_REQUIRED_METADATA_FIELDS` |
+| `required_metadata_missing` | 最终待发布 `Article` 的 `title` / `slug` / `body` 缺失；可携带 `RequiredMetadataMissingDetail.missingFields`（P2-07 填充）。其中 `body` 是 Template Engine 或其他已授权内容生产路径生成的最终 `Article.body` 发布产物，不是 `Novel` metadata；P2-01 只冻结非空要求，不实现 P2-02 | 对应 `article` 表 `published` 行 CHECK 约束语义；字段域见 `PUBLISH_REQUIRED_METADATA_FIELDS` |
 | `preview_chapter_missing` | 无可信已物化、可公开的试读章节 | §4；章节真源边界 |
 | `preview_body_missing` | 已物化试读章节存在，但正文为空 | §4 |
 | `promo_link_missing` | PromoLink 记录不存在 | Hard Gate；§0 决策 7（原文 §四 Promo Gate 条款明文列举，非推论）；CPS `promoUrl` 门禁概念对齐 |
-| `promo_link_not_ready` | PromoLink 存在但未达 `fetched`/可用态 | Hard Gate；§0 决策 7（原文 §四 Promo Gate 条款明文列举，非推论） |
-| `promo_url_invalid` | PromoLink 的跳转 URL 未通过校验 | Hard Gate；§0 决策 7（原文 §四 Promo Gate 条款明文列举，非推论）——这是 Owner 原文的明文规定，不是执行方对"PromoLink 缺失禁止发布"这句话的推论或延伸 |
+| `promo_link_not_ready` | PromoLink 存在但当前业务不可发布，包含未达 `fetched`/可用态及必要的 URL 可用性校验 | Hard Gate；§0 决策 7 |
 | `page_identity_conflict` | slug / `(novelId, locale)` / 短码等页面身份冲突 | CPS `duplicate_page` parity |
 | `rights_blocked` | 权利态阻断（`takedown`/`withdrawn` 等） | CPS `rightsStatus` parity |
 | `blocking_sync_exception` | `createPublishGateResult` 归一阶段的 fail-closed 收敛：候选理由不在本注册表内，或输入本身不是数组 | DTO 层输入卫生（hygiene），不是门禁评估；未登记的理由不丢弃、不静默通过 |
@@ -201,12 +200,12 @@ run` 执行时这类断言会编译期擦除、运行时不做任何校验，只
 | 🔴 生命周期不复制第二套 | `PUBLISH_INTENTS` 精确值；剥注释源码（valueVisible）无 `pending`/`offline`；不为 `ARTICLE_STATUSES` 建第二份同值数组；任何导出数组不得混入 `published`/`unpublished`/`takedown`（防改序或部分复制） |
 | 🔴 模块导出面精确锁定 | `Object.keys(publishGate).sort()` 精确等于冻结的八个导出名——防止复活 cap 常量或新增任何游离导出 |
 | 🔴 无 Admission 四态 / 无 Manual Exception | `src/contracts/` 全目录（valueVisible）无 admission / manual exception / override / waiver / allowlist；导出名不含 admission/exception，命中值只能是 `blocking_sync_exception` |
-| 🔴 Hard Gate（PromoLink） | `PUBLISH_GATE_REASONS` 精确等于冻结的十元素列表（防新增/删除/改序）且数组本身冻结；`public_redirect_code_missing` 已不在册；`promo_link_missing`/`promo_link_not_ready`/`promo_url_invalid` 在册；单独出现即拒绝 |
+| 🔴 Hard Gate（PromoLink） | `PUBLISH_GATE_REASONS` 精确等于冻结的九元素列表（防新增/删除/改序）且数组本身冻结；`public_redirect_code_missing` 不在册；`promo_link_missing`/`promo_link_not_ready` 在册；单独出现即拒绝 |
 | 🔴 分成比例/来源标签不进 gate | 理由码不含 split/label/pay；剥注释源码（valueVisible）无 splitRatio 等敏感标识 |
 | 🔴 试读物化规则移出通用 Gate 模块 | 模块导出无 `/^CHANGDU/`、`/^PREVIEW_MAX/` 前缀键；`resolveChangduPreviewChapterCount` 不再导出；剥注释源码（valueVisible）无 `allEpis` |
 | `createPublishGateResult` 行为（DTO 归一，不是 evaluator） | 旧名 `buildPublishGateResult` 不再导出；空输入通过；多理由去重且按注册表顺序；未登记理由收敛为 `blocking_sync_exception`；非数组输入同样 fail-closed 不抛异常；结果与数组冻结；结果无自由文本字段（`expectTypeOf` 类型层形状校验，见上方 load-bearing 说明）；空 reasons 不证明所有 Gate 已执行 |
 | PublishIntent 行为 | 合法值识别；非法值收敛为 `null`；默认值 `draft`；注册表冻结 |
-| `required_metadata_missing` 详情 DTO 形状 | `PUBLISH_REQUIRED_METADATA_FIELDS` 精确等于 `[title, slug, body]` 且冻结；`RequiredMetadataMissingDetail` 类型层形状校验（见上方 load-bearing 说明）；不混入 `PublishGateResult` 形状 |
+| `required_metadata_missing` 详情 DTO 形状 | `PUBLISH_REQUIRED_METADATA_FIELDS` 精确等于 `[title, slug, body]` 且冻结；`body` 明确为最终 `Article.body`/Template Engine 输出要求，不是 Novel metadata；`RequiredMetadataMissingDetail` 类型层形状校验（见上方 load-bearing 说明）；不混入 `PublishGateResult` 形状 |
 | `paid_from_chapter` 政策 | 四个自动动作全部关闭；对象冻结 |
 
 ---
