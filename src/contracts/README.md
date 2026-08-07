@@ -11,7 +11,7 @@
 P1-08B 已落地首批 Admin / Credential DTO 与投影函数（见下「已落地契约」）。P1-04 的
 「只建目录、不写类型」阶段已结束。
 
-### 已落地契约（P1-08B）
+### 已落地契约
 
 | 文件 | 内容 |
 | --- | --- |
@@ -20,6 +20,7 @@ P1-08B 已落地首批 Admin / Credential DTO 与投影函数（见下「已落�
 | `two-factor.ts` | `TwoFactorStateView`、`TwoFactorSetupResult`、`TwoFactorChallengeView`、`RecoveryCodesOneTimeResult` 及投影 |
 | `channel-accounts.ts` | `ChannelAccountView` 及投影 |
 | `credentials.ts` | `CredentialMetadataView`、`CredentialOperationAvailability`、`CredentialQueuedResultView`、`CredentialTaskStatusView`、`CredentialRedactedValidationResultView` 及投影 |
+| `publish-gate.ts` | 🔴 FROZEN——`PublishIntent`、`PublishGateReason`、`PublishGateResult`、`buildPublishGateResult` 与 Changdu 试读/`paid_from_chapter` 政策常量（P2-01，见 `docs/p2/P2_01_PUBLISH_GATE_CONTRACT.md`） |
 
 ### 两条使本层可被机器校验的规则
 
@@ -41,7 +42,7 @@ P1-08B 已落地首批 Admin / Credential DTO 与投影函数（见下「已落�
 
 ## 未来填充目录（本轮仅列主题，不写内容）
 
-以下是已知会在后续任务中落地为具体契约文件的主题，供后续任务参考规划，**本轮不创建任何对应的类型文件**：
+以下是已知会在后续任务中落地为具体契约文件的主题，供后续任务参考规划；除已标注部分落地的条目外，**本轮不创建其余对应的类型文件**：
 
 1. 数据读取契约（前台读接口的数据形状）
 2. Locale（语言/地区）契约
@@ -51,7 +52,7 @@ P1-08B 已落地首批 Admin / Credential DTO 与投影函数（见下「已落�
 6. Feature Flag 契约
 7. 任务入队契约
 8. 埋点（analytics/tracking）契约
-9. 内容状态（草稿/发布/软删等）契约
+9. 内容状态（草稿/发布/软删等）契约（`publish-gate.ts` 已落地其发布门禁部分，见上表）
 10. 渠道无关性契约（渠道特定字段不得泄漏到通用层）
 
 ## 填充任务
