@@ -20,7 +20,7 @@ P1-08B 已落地首批 Admin / Credential DTO 与投影函数（见下「已落�
 | `two-factor.ts` | `TwoFactorStateView`、`TwoFactorSetupResult`、`TwoFactorChallengeView`、`RecoveryCodesOneTimeResult` 及投影 |
 | `channel-accounts.ts` | `ChannelAccountView` 及投影 |
 | `credentials.ts` | `CredentialMetadataView`、`CredentialOperationAvailability`、`CredentialQueuedResultView`、`CredentialTaskStatusView`、`CredentialRedactedValidationResultView` 及投影 |
-| `publish-gate.ts` | 🔴 FROZEN——`PublishIntent`、`PublishGateReason`、`PublishGateResult`、`buildPublishGateResult` 与 Changdu 试读/`paid_from_chapter` 政策常量（P2-01，见 `docs/p2/P2_01_PUBLISH_GATE_CONTRACT.md`） |
+| `publish-gate.ts` | 🔴 FROZEN——`PublishIntent`、`PublishGateReason`、`PublishGateResult`、`createPublishGateResult`（DTO 归一 helper，非 evaluator）、`RequiredMetadataMissingDetail` 与 `paid_from_chapter` 政策常量；试读物化 cap 冻结在文档、不在本文件（P2-01 supersession，见 `docs/p2/P2_01_PUBLISH_GATE_CONTRACT.md` §0/§4） |
 
 ### 两条使本层可被机器校验的规则
 
