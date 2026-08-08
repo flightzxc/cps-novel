@@ -26,6 +26,7 @@ export {
 
 export {
   ERR_TEMPLATE_FIELD_NOT_REGISTERED,
+  ERR_TEMPLATE_HTML_CONTEXT,
   ERR_TEMPLATE_OUTPUT_INVALID,
   ERR_TEMPLATE_SYNTAX,
   ERR_TEMPLATE_VALUE_INVALID,
@@ -36,6 +37,12 @@ export {
   type TemplateErrorCode,
   type TemplateErrorContext,
 } from "./errors";
+
+export {
+  analyzeHtmlInterpolation,
+  type HtmlInterpolationIssue,
+  type HtmlInterpolationReason,
+} from "./html";
 
 export {
   REGISTERED_TEMPLATE_FIELDS,

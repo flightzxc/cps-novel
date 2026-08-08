@@ -73,6 +73,11 @@ P2-02 是首批 `owner = Claude` 的搬运条目。全部落在 `src/lib/seo/tem
 
 CPS 侧的 `renderContentBlocks`（`src/lib/template-engine.ts:223-261`）、`previewTemplate`（`:263-294`）、`resolveTemplateEpisodeCount`（`:76-83`）、`renderAltTemplate`（`src/lib/article-v2-service.ts:121-128`）、`truncateDescription`（`src/lib/seo-templates/_shared.ts:7-15`）判为 `DROP`，未搬入任何字节，理由逐条见 `docs/p2/P2_02_TEMPLATE_ENGINE.md` §2。
 
+`src/lib/seo/template/html.ts`（正文插值的窄上下文扫描器 `analyzeHtmlInterpolation`）与
+`escapeHtmlText`、`ABSOLUTE_HTTP_URL` / `PUBLIC_REDIRECT_PATH` 两条取值形态校验**无 CPS 来源**：
+CPS 对变量落在什么 HTML 位置完全不判定，也不对 `<img src>` 做任何 scheme 校验，判为
+`ORIGINAL_REQUIRED`，故不在本表登记（本表只登记有 CPS 来源的符号）。
+
 ### 无搬运的任务（显式登记，避免被当成漏登）
 
 | 任务 | CPS 复刻分类 | 原因 |

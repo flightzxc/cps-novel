@@ -20,6 +20,7 @@ import { describe, expect, it } from "vitest";
 import {
   ARTICLE_TEMPLATE_SLOTS,
   ERR_TEMPLATE_FIELD_NOT_REGISTERED,
+  ERR_TEMPLATE_HTML_CONTEXT,
   ERR_TEMPLATE_OUTPUT_INVALID,
   ERR_TEMPLATE_SYNTAX,
   ERR_TEMPLATE_VALUE_INVALID,
@@ -29,6 +30,7 @@ import {
   TEMPLATE_FIELD_KEYS,
   TEMPLATE_SEO_SCHEMA_VERSION,
   TemplateRenderError,
+  analyzeHtmlInterpolation,
   analyzeTemplate,
   buildNovelTemplateValues,
   escapeHtmlText,
@@ -50,20 +52,21 @@ const FULL_INPUT: NovelTemplateInput = {
   coverUrl: "https://cdn.example.com/cover/duke.jpg",
   totalChapterCount: 420,
   previewChapterCount: 3,
-  promoRedirectUrl: "https://read.example.com/go/ab12cd",
+  // 站内公开跳转入口：/go/<public_redirect_code>，不是绝对 URL——引擎不读站点域名。
+  promoRedirectUrl: "/go/ab12cd34",
 };
 
 function values(overrides: Partial<NovelTemplateInput> = {}): NovelTemplateValues {
   return buildNovelTemplateValues({ ...FULL_INPUT, ...overrides });
 }
 
-/** 默认按正文槽位渲染（会转义）；纯文本槽位用 `renderText`。 */
+/** 默认按正文槽位渲染（转义 + 窄上下文合同）；纯文本槽位用 `renderText`。 */
 function renderBody(template: string, map: NovelTemplateValues = values()): string {
-  return renderTemplateSlot(template, map, { slot: "body", escapeValues: true });
+  return renderTemplateSlot(template, map, { slot: "body", context: "html" });
 }
 
 function renderText(template: string, map: NovelTemplateValues = values()): string {
-  return renderTemplateSlot(template, map, { slot: "title", escapeValues: false });
+  return renderTemplateSlot(template, map, { slot: "title", context: "text" });
 }
 
 function captureError(run: () => unknown): TemplateRenderError {
@@ -245,7 +248,7 @@ describe("缺字段显式失败（fail-closed，不 fail-open 成空串）", () 
     const withIds = captureError(() =>
       renderTemplateSlot("{cover_url}", values({ coverUrl: null }), {
         slot: "body",
-        escapeValues: true,
+        context: "html",
         templateKey: "novel-detail-en",
         novelId: "novel-1",
       }),
@@ -270,10 +273,11 @@ describe("缺字段显式失败（fail-closed，不 fail-open 成空串）", () 
     expect(isTemplateRenderError(undefined)).toBe(false);
   });
 
-  it("错误码表恰好是冻结的五项", () => {
+  it("错误码表恰好是冻结的六项", () => {
     expect([...TEMPLATE_ERROR_CODES]).toEqual([
       ERR_TEMPLATE_SYNTAX,
       ERR_TEMPLATE_FIELD_NOT_REGISTERED,
+      ERR_TEMPLATE_HTML_CONTEXT,
       ERR_TEMPLATE_VAR_EMPTY,
       ERR_TEMPLATE_VALUE_INVALID,
       ERR_TEMPLATE_OUTPUT_INVALID,
@@ -428,37 +432,248 @@ describe("HTML 转义：保留 CPS 的模板语言，丢掉 CPS 的注入缺陷"
   });
 });
 
-describe("url 类字段的 scheme 校验（CPS 对 <img src> 零校验）", () => {
-  it("http / https 绝对地址通过", () => {
-    expect(renderText("{cover_url}", values({ coverUrl: "http://a.example.com/x.jpg" }))).toBe(
-      "http://a.example.com/x.jpg",
-    );
-    expect(renderText("{cover_url}", values({ coverUrl: "https://a.example.com/x.jpg" }))).toBe(
-      "https://a.example.com/x.jpg",
-    );
+describe("取值形态校验：逐字段独立，不共用一条 URL 规则", () => {
+  describe("cover_url：站外资源，只认干净的绝对 http/https", () => {
+    it("http / https 绝对地址通过（现有行为保持）", () => {
+      expect(renderText("{cover_url}", values({ coverUrl: "http://a.example.com/x.jpg" }))).toBe(
+        "http://a.example.com/x.jpg",
+      );
+      expect(renderText("{cover_url}", values({ coverUrl: "https://a.example.com/x.jpg" }))).toBe(
+        "https://a.example.com/x.jpg",
+      );
+      expect(
+        renderText("{cover_url}", values({ coverUrl: "https://a.example.com/x.jpg?a=1&b=2#f" })),
+      ).toBe("https://a.example.com/x.jpg?a=1&b=2#f");
+    });
+
+    it("危险 scheme / 相对路径 / 协议相对 / 逃逸字符 / 反斜杠 / 控制字符一律拒绝", () => {
+      for (const bad of [
+        "javascript:alert(1)",
+        "JavaScript:alert(1)",
+        "data:text/html;base64,PHNjcmlwdD4=",
+        "/covers/a.jpg",
+        "covers/a.jpg",
+        "//cdn.example.com/a.jpg",
+        "/go/ab12cd34",
+        'https://a.example.com/a.jpg" onerror="x',
+        "https://a.example.com/a'b.jpg",
+        "https://a.example.com/a<b>.jpg",
+        "https://a.example.com/a b.jpg",
+        "https://a.example.com/a\\b.jpg",
+        "https://a.example.com/a\u0000b.jpg",
+        "https://a.example.com/a\tb.jpg",
+        "https://a.example.com/a\u007fb.jpg",
+        "ftp://a.example.com/a.jpg",
+      ]) {
+        const error = captureError(() => renderText("{cover_url}", values({ coverUrl: bad })));
+        expect(error.code, `${JSON.stringify(bad)} 应被拒绝`).toBe(ERR_TEMPLATE_VALUE_INVALID);
+        expect(error.field).toBe("cover_url");
+        expect(error.constraint).toBe("absolute_url");
+      }
+    });
   });
 
-  it("危险 scheme、相对路径、协议相对地址、含引号或空白的取值一律拒绝", () => {
-    for (const bad of [
-      "javascript:alert(1)",
-      "data:text/html;base64,PHNjcmlwdD4=",
-      "/covers/a.jpg",
-      "covers/a.jpg",
-      "//cdn.example.com/a.jpg",
-      'https://a.example.com/a.jpg" onerror="x',
-      "https://a.example.com/a b.jpg",
-      "ftp://a.example.com/a.jpg",
-    ]) {
-      const error = captureError(() => renderText("{cover_url}", values({ coverUrl: bad })));
-      expect(error.code, `${bad} 应被拒绝`).toBe(ERR_TEMPLATE_VALUE_INVALID);
-      expect(error.field).toBe("cover_url");
-    }
+  describe("promo_redirect_url：站内公开跳转入口 /go/<公开跳转码>", () => {
+    it("🔴 合法的 /go/<码> 通过——这是冻结的公开入口形态，不依赖站点域名", () => {
+      for (const good of ["/go/ab12cd34", "/go/a1", "/go/AB12cd34", "/go/" + "a1".repeat(16)]) {
+        expect(renderText("{promo_redirect_url}", values({ promoRedirectUrl: good }))).toBe(good);
+      }
+    });
+
+    it("协议相对、危险 scheme、路径穿越、多段、空白/控制字符、反斜杠一律拒绝", () => {
+      for (const bad of [
+        "//evil.example",
+        "//evil.example/go/ab12",
+        "javascript:alert(1)",
+        "data:text/html,x",
+        "/go/../admin",
+        "/go/ab/cd",
+        "/go/",
+        "/go/ab 12",
+        "/go/ab\t12",
+        "/go/ab\n12",
+        "/go/ab\u000012",
+        "/go/ab%2f..",
+        "/go/ab\\cd",
+        '/go/ab"onerror=x',
+        "/go/ab'onerror=x",
+        "/go/<script>",
+        "/goo/ab12",
+        "go/ab12",
+        "/GO/ab12",
+        // 超过 PromoLink.publicRedirectCode 的 VarChar(32)
+        "/go/" + "a".repeat(33),
+      ]) {
+        const error = captureError(() =>
+          renderText("{promo_redirect_url}", values({ promoRedirectUrl: bad })),
+        );
+        expect(error.code, `${JSON.stringify(bad)} 应被拒绝`).toBe(ERR_TEMPLATE_VALUE_INVALID);
+        expect(error.field).toBe("promo_redirect_url");
+        expect(error.constraint).toBe("redirect_path");
+      }
+    });
+
+    it("绝对 URL 也被拒绝——当前合同里没有它的证据，不为未来可能性开口子", () => {
+      expect(
+        captureError(() =>
+          renderText("{promo_redirect_url}", values({ promoRedirectUrl: "https://x.example/go/ab12" })),
+        ).code,
+      ).toBe(ERR_TEMPLATE_VALUE_INVALID);
+    });
   });
 
-  it("text 类字段不做 scheme 校验", () => {
+  it("text 类字段不做形态校验", () => {
     expect(renderText("{novel_description}", values({ description: "javascript:not a url" }))).toBe(
       "javascript:not a url",
     );
+    expect(renderText("{novel_title}", values({ title: "//evil.example" }))).toBe("//evil.example");
+  });
+});
+
+describe("🔴 正文 HTML 插值的窄上下文合同", () => {
+  const htmlError = (template: string) => captureError(() => renderBody(template));
+
+  it("A. 文本节点插值放行，且正确转义", () => {
+    expect(renderBody("<p>{novel_title}</p>", values({ title: "A & <b>" }))).toBe(
+      "<p>A &amp; &lt;b&gt;</p>",
+    );
+    expect(renderBody("{novel_description}")).toBe(FULL_INPUT.description);
+    expect(renderBody("<div><span>{total_chapter_count}</span></div>")).toBe(
+      "<div><span>420</span></div>",
+    );
+    expect(analyzeHtmlInterpolation("<p>{novel_title}</p>")).toEqual([]);
+  });
+
+  it("B. 已授权的带引号属性放行：href={promo_redirect_url} / src={cover_url}", () => {
+    expect(renderBody('<a href="{promo_redirect_url}">read</a>')).toBe(
+      `<a href="${FULL_INPUT.promoRedirectUrl}">read</a>`,
+    );
+    expect(renderBody("<a href='{promo_redirect_url}'>read</a>")).toBe(
+      `<a href='${FULL_INPUT.promoRedirectUrl}'>read</a>`,
+    );
+    expect(renderBody('<img src="{cover_url}" alt="">')).toBe(
+      `<img src="${FULL_INPUT.coverUrl}" alt="">`,
+    );
+    expect(analyzeHtmlInterpolation('<a href="{promo_redirect_url}"></a>')).toEqual([]);
+  });
+
+  it("🔴 未加引号的属性值拒绝——取值里一个空格就能造出新属性", () => {
+    for (const template of [
+      "<img alt={novel_title}>",
+      "<a href={promo_redirect_url}>x</a>",
+      "<img src={cover_url}>",
+      "<img alt={novel_title} >",
+    ]) {
+      const error = htmlError(template);
+      expect(error.code, `${template} 应被拒绝`).toBe(ERR_TEMPLATE_HTML_CONTEXT);
+      expect(error.constraint).toBe("unquoted_attribute");
+    }
+  });
+
+  it("🔴 事件属性拒绝（JS 上下文，实体转义无意义）", () => {
+    for (const template of [
+      '<div onclick="{novel_title}">x</div>',
+      '<div ONCLICK="{novel_title}">x</div>',
+      '<img onerror="{cover_url}">',
+      '<body onload="{novel_description}">',
+    ]) {
+      const error = htmlError(template);
+      expect(error.code, `${template} 应被拒绝`).toBe(ERR_TEMPLATE_HTML_CONTEXT);
+      expect(error.constraint).toBe("event_attribute");
+    }
+  });
+
+  it("🔴 style 属性拒绝（CSS 上下文）", () => {
+    const error = htmlError('<div style="{novel_title}">x</div>');
+    expect(error.code).toBe(ERR_TEMPLATE_HTML_CONTEXT);
+    expect(error.constraint).toBe("style_attribute");
+    expect(error.attribute).toBe("style");
+  });
+
+  it("🔴 script / style 块内拒绝", () => {
+    expect(htmlError("<script>{novel_title}</script>").constraint).toBe("script_block");
+    expect(htmlError('<script type="text/javascript">{cover_url}</script>').constraint).toBe(
+      "script_block",
+    );
+    expect(htmlError("<style>{novel_title}</style>").constraint).toBe("style_block");
+    // 未闭合的 script 块同样一路算到模板末尾。
+    expect(htmlError("<script>{novel_title}").constraint).toBe("script_block");
+  });
+
+  it("🔴 标签名与属性名位置拒绝", () => {
+    expect(htmlError("<{novel_title}>x</p>").constraint).toBe("tag_name");
+    expect(htmlError("</{novel_title}>").constraint).toBe("tag_name");
+    expect(htmlError('<img {novel_title}="x">').constraint).toBe("attribute_name");
+    expect(htmlError('<img data-{novel_title}="x">').constraint).toBe("attribute_name");
+  });
+
+  it("🔴 HTML 注释内拒绝", () => {
+    expect(htmlError("<!-- {novel_title} -->").constraint).toBe("comment");
+    expect(htmlError("<!-- 未闭合 {cover_url}").constraint).toBe("comment");
+  });
+
+  it("🔴 未授权的属性拒绝——文本属性不预建", () => {
+    for (const template of [
+      '<img alt="{novel_title}">',
+      '<div title="{novel_description}">x</div>',
+      '<img src="{promo_redirect_url}">',
+      '<a href="{cover_url}">x</a>',
+      '<a href="{novel_title}">x</a>',
+      '<meta content="{novel_description}">',
+    ]) {
+      const error = htmlError(template);
+      expect(error.code, `${template} 应被拒绝`).toBe(ERR_TEMPLATE_HTML_CONTEXT);
+      expect(error.constraint).toBe("attribute_not_permitted");
+    }
+  });
+
+  it("🔴 属性值里的拼接拒绝——这是 scheme 注入的唯一入口", () => {
+    for (const template of [
+      '<a href="javascript:{promo_redirect_url}">x</a>',
+      '<a href="/x{promo_redirect_url}">x</a>',
+      '<a href="{promo_redirect_url}?a=1">x</a>',
+      '<img src="{cover_url}{cover_url}">',
+      '<a href="{if cover_url}{promo_redirect_url}{endif}">x</a>',
+      '<a href=" {promo_redirect_url}">x</a>',
+    ]) {
+      const error = htmlError(template);
+      expect(error.code, `${template} 应被拒绝`).toBe(ERR_TEMPLATE_HTML_CONTEXT);
+      expect(error.constraint).toBe("value_not_isolated");
+    }
+  });
+
+  it("条件块包裹整段标签是被支持的写法", () => {
+    const template = '{if cover_url}<img src="{cover_url}" alt="">{endif}';
+    expect(analyzeHtmlInterpolation(template)).toEqual([]);
+    expect(renderBody(template)).toBe(`<img src="${FULL_INPUT.coverUrl}" alt="">`);
+    expect(renderBody(template, values({ coverUrl: null }))).toBe("");
+  });
+
+  it("不含变量的属性与标签不受影响", () => {
+    expect(analyzeHtmlInterpolation('<div class="a" onclick="go()" style="color:red"></div>')).toEqual(
+      [],
+    );
+    expect(analyzeHtmlInterpolation("<script>var a = 1;</script>")).toEqual([]);
+    expect(renderBody('<p class="lead">{novel_description}</p>')).toBe(
+      `<p class="lead">${FULL_INPUT.description}</p>`,
+    );
+  });
+
+  it("纯文本槽位不做 HTML 判定——它们不是 HTML", () => {
+    expect(renderText("<img alt={novel_title}>")).toBe(`<img alt=${FULL_INPUT.title}>`);
+    expect(renderText("<script>{novel_title}</script>")).toBe(
+      `<script>${FULL_INPUT.title}</script>`,
+    );
+  });
+
+  it("analyzeHtmlInterpolation 可在保存期单独调用，逐条报出违规", () => {
+    const issues = analyzeHtmlInterpolation(
+      '<img alt={novel_title}><div style="{novel_description}">x</div>',
+    );
+    expect(issues).toEqual([
+      { field: "novel_title", reason: "unquoted_attribute", attribute: "alt" },
+      { field: "novel_description", reason: "style_attribute", attribute: "style" },
+    ]);
   });
 });
 

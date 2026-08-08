@@ -36,8 +36,14 @@
  * 空字符串一路流到线上变成「作者：」这种残缺文案。
  */
 
-/** 字段取值的校验口径。`url` 比 `text` 多一层 scheme 校验。 */
-export type TemplateFieldKind = "text" | "url";
+/**
+ * 字段取值的校验口径。**逐字段独立**，不共用一条 URL 规则：
+ *
+ * - `text`——不做形态校验，只要求非空；
+ * - `absolute_url`——必须是干净的 `http(s)://…` 绝对地址（站外资源，如 CDN 封面图）；
+ * - `redirect_path`——必须是站内公开跳转入口 `/go/<public_redirect_code>` 的形态。
+ */
+export type TemplateFieldKind = "text" | "absolute_url" | "redirect_path";
 
 export type TemplateFieldDefinition = {
   readonly key: string;
@@ -47,6 +53,15 @@ export type TemplateFieldDefinition = {
    * `{if key}…{endif}` 包裹后再引用，否则缺该值的小说会在渲染期失败。
    */
   readonly required: boolean;
+  /**
+   * 该字段被批准出现在正文 HTML 的哪一个**带引号属性值**里（小写、精确匹配）。
+   *
+   * 未登记（`undefined`）= 该字段只能出现在 HTML 文本节点。登记了也只放行这一个属性，
+   * 且变量必须**独占整个属性值**——见 `html.ts` 的窄上下文合同。
+   *
+   * 🔴 **不预建**：`alt` / `title` 一类的文本属性要等有真实模板证据再逐个补入。
+   */
+  readonly htmlAttribute?: string;
   /** 后台变量面板展示名。 */
   readonly label: string;
   /** 后台变量面板说明文案。 */
@@ -79,8 +94,9 @@ export const REGISTERED_TEMPLATE_FIELDS = [
   },
   {
     key: "cover_url",
-    kind: "url",
+    kind: "absolute_url",
     required: false,
+    htmlAttribute: "src",
     label: "封面图",
     description: "封面图地址（Novel.coverUrl 可空）——引用前请用条件块包裹",
   },
@@ -100,10 +116,11 @@ export const REGISTERED_TEMPLATE_FIELDS = [
   },
   {
     key: "promo_redirect_url",
-    kind: "url",
+    kind: "redirect_path",
     required: true,
+    htmlAttribute: "href",
     label: "正式阅读地址",
-    description: "由调用方按公开跳转码预先解析好的地址；引擎自己不构造任何 URL",
+    description: "站内公开跳转入口 /go/<公开跳转码>，由调用方解析好传入；引擎自己不构造任何 URL",
   },
 ] as const satisfies readonly TemplateFieldDefinition[];
 

@@ -15,6 +15,7 @@
 
 export const ERR_TEMPLATE_SYNTAX = "ERR_TEMPLATE_SYNTAX";
 export const ERR_TEMPLATE_FIELD_NOT_REGISTERED = "ERR_TEMPLATE_FIELD_NOT_REGISTERED";
+export const ERR_TEMPLATE_HTML_CONTEXT = "ERR_TEMPLATE_HTML_CONTEXT";
 export const ERR_TEMPLATE_VAR_EMPTY = "ERR_TEMPLATE_VAR_EMPTY";
 export const ERR_TEMPLATE_VALUE_INVALID = "ERR_TEMPLATE_VALUE_INVALID";
 export const ERR_TEMPLATE_OUTPUT_INVALID = "ERR_TEMPLATE_OUTPUT_INVALID";
@@ -26,15 +27,20 @@ export const ERR_TEMPLATE_OUTPUT_INVALID = "ERR_TEMPLATE_OUTPUT_INVALID";
  *   `{if x}` 当普通文本泄漏到输出里，本项目视为模板本身有病，直接拒绝。
  * - `ERR_TEMPLATE_FIELD_NOT_REGISTERED`——模板引用了白名单之外的名字。CPS 是
  *   「原样透出」（变量位）或「静默删块」（条件位），两种都会让 `{author}` 悄悄上线。
+ * - `ERR_TEMPLATE_HTML_CONTEXT`——正文里的变量落在窄上下文合同之外的位置（未加引号的
+ *   属性、属性名/标签名、`on*`/`style`、script/style 块、注释，或属性值里有拼接）。
+ *   实体转义守不住这些位置，见 `html.ts`。
  * - `ERR_TEMPLATE_VAR_EMPTY`——已登记字段在渲染期没有取值。可空字段的正确写法是
  *   条件块，不是让它渲染成空串。
- * - `ERR_TEMPLATE_VALUE_INVALID`——`url` 类字段的取值不是 http/https 绝对地址。
+ * - `ERR_TEMPLATE_VALUE_INVALID`——字段取值不符合它自己那一档的形态要求
+ *   （`absolute_url` 要干净的 http/https 绝对地址，`redirect_path` 要 `/go/<码>`）。
  * - `ERR_TEMPLATE_OUTPUT_INVALID`——渲染产物违反槽位输出合同（trim 后为空、
  *   或超出目标列长度）。对齐 `article` 表的 `btrim(...) <> ''` 与 `VarChar(500)`。
  */
 export const TEMPLATE_ERROR_CODES = Object.freeze([
   ERR_TEMPLATE_SYNTAX,
   ERR_TEMPLATE_FIELD_NOT_REGISTERED,
+  ERR_TEMPLATE_HTML_CONTEXT,
   ERR_TEMPLATE_VAR_EMPTY,
   ERR_TEMPLATE_VALUE_INVALID,
   ERR_TEMPLATE_OUTPUT_INVALID,
@@ -52,8 +58,13 @@ export type TemplateErrorContext = {
   readonly templateKey?: string;
   /** 出错的小说标识，便于把失败条目落回队列。 */
   readonly novelId?: string;
-  /** 输出合同的具体违反项，仅 `ERR_TEMPLATE_OUTPUT_INVALID` 使用。 */
+  /**
+   * 具体违反项。`ERR_TEMPLATE_SYNTAX` 用配对问题、`ERR_TEMPLATE_HTML_CONTEXT` 用上下文
+   * 原因、`ERR_TEMPLATE_OUTPUT_INVALID` 用输出合同项。
+   */
   readonly constraint?: string;
+  /** 涉及的 HTML 属性名（小写），仅 `ERR_TEMPLATE_HTML_CONTEXT` 的属性类原因携带。 */
+  readonly attribute?: string;
 };
 
 /**
@@ -69,12 +80,14 @@ export class TemplateRenderError extends Error {
   readonly templateKey?: string;
   readonly novelId?: string;
   readonly constraint?: string;
+  readonly attribute?: string;
 
   constructor(code: TemplateErrorCode, context: TemplateErrorContext = {}) {
     const details = [
       context.slot === undefined ? null : `slot=${context.slot}`,
       context.field === undefined ? null : `field=${context.field}`,
       context.constraint === undefined ? null : `constraint=${context.constraint}`,
+      context.attribute === undefined ? null : `attribute=${context.attribute}`,
       context.templateKey === undefined ? null : `templateKey=${context.templateKey}`,
       context.novelId === undefined ? null : `novelId=${context.novelId}`,
     ].filter((part): part is string => part !== null);
@@ -87,6 +100,7 @@ export class TemplateRenderError extends Error {
     if (context.templateKey !== undefined) this.templateKey = context.templateKey;
     if (context.novelId !== undefined) this.novelId = context.novelId;
     if (context.constraint !== undefined) this.constraint = context.constraint;
+    if (context.attribute !== undefined) this.attribute = context.attribute;
   }
 }
 

@@ -38,6 +38,11 @@ export type {
 export type { TemplateErrorCode, TemplateErrorContext } from "@/lib/seo/template/errors";
 
 export type {
+  HtmlInterpolationIssue,
+  HtmlInterpolationReason,
+} from "@/lib/seo/template/html";
+
+export type {
   TemplateFieldDefinition,
   TemplateFieldKey,
   TemplateFieldKind,

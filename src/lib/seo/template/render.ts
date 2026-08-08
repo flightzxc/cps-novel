@@ -50,12 +50,19 @@
 
 import {
   ERR_TEMPLATE_FIELD_NOT_REGISTERED,
+  ERR_TEMPLATE_HTML_CONTEXT,
   ERR_TEMPLATE_SYNTAX,
   ERR_TEMPLATE_VALUE_INVALID,
   ERR_TEMPLATE_VAR_EMPTY,
   TemplateRenderError,
 } from "./errors";
-import { getTemplateField, isRegisteredTemplateField, type TemplateFieldKey } from "./fields";
+import {
+  getTemplateField,
+  isRegisteredTemplateField,
+  type TemplateFieldKind,
+  type TemplateFieldKey,
+} from "./fields";
+import { analyzeHtmlInterpolation } from "./html";
 import type { NovelTemplateValues } from "./values";
 
 /**
@@ -69,11 +76,43 @@ const TOKEN_PATTERN = /\{if\s+(\w+)\}|\{endif\}|\{(\w+)\}/g;
 const VARIABLE_PATTERN = /\{(\w+)\}/g;
 
 /**
- * `url` 类字段的取值形态。只认 http/https 绝对地址，且不含空白与引号/尖括号/反引号——
- * 后者是为了在属性上下文里也无法逃逸。`javascript:`、相对路径、协议相对 `//host`
- * 一律不认。CPS 没有这层校验，它把 `coverUrl` 直接拼进 `<img src="…">`。
+ * `absolute_url` 类字段（站外资源，如 CDN 封面图）的取值形态。
+ *
+ * 只认 http/https 绝对地址，字符集写成**正向白名单**（RFC 3986 的 unreserved +
+ * sub-delims + gen-delims，去掉引号类）而不是反向排除——反向排除很容易漏掉某一类控制字符。
+ * 于是空白、控制字符、双引号、单引号、尖括号、反引号、反斜杠、花括号、竖线全部落在集合之外；
+ * 反斜杠单列是因为它是常见的解析器差异绕过点。javascript:、data:、相对路径、协议相对 //host 一律不认。
+ * CPS 没有这层校验，它把 coverUrl 直接拼进未校验的 img src。
  */
-const ABSOLUTE_HTTP_URL = /^https?:\/\/[^\s"'<>`]+$/;
+const ABSOLUTE_HTTP_URL = /^https?:\/\/[A-Za-z0-9._~:\/?#[\]@!$&()*+,;=%-]+$/;
+
+/**
+ * `redirect_path` 类字段的取值形态：站内公开跳转入口 `/go/<public_redirect_code>`。
+ *
+ * 🔴 这是**校验**，不是构造：引擎不拼 URL、不 import P2-03 的 URL builder、不读站点域名。
+ * `/go/{public_redirect_code}` 是已冻结的公开入口形态（`src/lib/redirect/README.md`
+ * 与 P1 共享契约的 `buildGoPath`），调用方解析好之后传进来，这里只确认它确实是那个形态。
+ *
+ * 码的字符集取 `PromoLink.publicRedirectCode` 的既有约束：`VarChar(32)`，生成算法改造自
+ * CPS 已验证的短码模式（字母表为小写字母 + 数字，强制含数字）。这里放宽到大小写字母 +
+ * 数字，但**不含** `.` `/` `%` `\` `-` `_`——单段、无转义、无路径穿越。
+ * 将来若 `public-redirect-code.ts` 的字母表变化，这条正则是唯一要跟着改的地方。
+ *
+ * 于是 `//evil.example`（不以 `/go/` 开头）、`/go/../x`、`/go/a b`、`/go/a"onerror`
+ * 全部落在字符集之外。
+ */
+const PUBLIC_REDIRECT_PATH = /^\/go\/[A-Za-z0-9]{1,32}$/;
+
+function isValueShapeValid(kind: TemplateFieldKind, value: string): boolean {
+  switch (kind) {
+    case "absolute_url":
+      return ABSOLUTE_HTTP_URL.test(value);
+    case "redirect_path":
+      return PUBLIC_REDIRECT_PATH.test(value);
+    case "text":
+      return true;
+  }
+}
 
 /**
  * 模板静态分析结论。供后台保存路径在**写入前**判定模板本身是否可用。
@@ -100,8 +139,14 @@ export type TemplateAnalysis = {
 export type RenderSlotOptions = {
   /** 槽位名，只用于错误定位。 */
   readonly slot: string;
-  /** 是否对**被插入的取值**做 HTML 实体转义。正文槽位为 `true`。 */
-  readonly escapeValues: boolean;
+  /**
+   * 槽位的产物类型。
+   *
+   * - `html`（正文槽位）——插入的取值做 HTML 实体转义，**并**执行 `html.ts` 的窄上下文
+   *   合同：变量只允许出现在文本节点或已授权的带引号属性值里。
+   * - `text`（标题与两个 meta 槽位）——纯文本，不转义、不做 HTML 判定。
+   */
+  readonly context: "html" | "text";
   readonly templateKey?: string;
   readonly novelId?: string;
 };
@@ -279,6 +324,19 @@ export function renderTemplateSlot(
     );
   }
 
+  // HTML 槽位的窄上下文合同：实体转义守不住未加引号的属性、事件属性、script/style
+  // 等位置，因此在渲染前就拒绝，而不是指望转义兜底。
+  if (options.context === "html") {
+    const [htmlIssue] = analyzeHtmlInterpolation(template);
+    if (htmlIssue !== undefined) {
+      throw new TemplateRenderError(ERR_TEMPLATE_HTML_CONTEXT, {
+        ...locate(htmlIssue.field),
+        constraint: htmlIssue.reason,
+        ...(htmlIssue.attribute === undefined ? {} : { attribute: htmlIssue.attribute }),
+      });
+    }
+  }
+
   // Step 1：消解条件块。
   // CPS 口径：非 undefined、非空串、非 "0" 才渲染块内容。额外先 trim——纯空白与空串
   // 在 fail-closed 语义下是同一件事，也与 PostgreSQL 的 btrim(body) <> '' 保持一致。
@@ -302,10 +360,14 @@ export function renderTemplateSlot(
       throw new TemplateRenderError(ERR_TEMPLATE_VAR_EMPTY, locate(field));
     }
 
-    if (definition.kind === "url" && !ABSOLUTE_HTTP_URL.test(value)) {
-      throw new TemplateRenderError(ERR_TEMPLATE_VALUE_INVALID, locate(field));
+    // 形态校验逐字段独立：站外资源要绝对 http/https，站内跳转要 /go/<码>。
+    if (!isValueShapeValid(definition.kind, value)) {
+      throw new TemplateRenderError(ERR_TEMPLATE_VALUE_INVALID, {
+        ...locate(field),
+        constraint: definition.kind,
+      });
     }
 
-    return options.escapeValues ? escapeHtmlText(value) : value;
+    return options.context === "html" ? escapeHtmlText(value) : value;
   });
 }

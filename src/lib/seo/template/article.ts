@@ -169,8 +169,8 @@ function renderSlot(
 ): string {
   const rendered = renderTemplateSlot(template, values, {
     slot,
-    // 只有正文是 HTML 片段，需要对插值做实体转义。
-    escapeValues: slot === "body",
+    // 只有正文是 HTML 片段：既要对插值做实体转义，也要过窄上下文合同。
+    context: slot === "body" ? "html" : "text",
     ...(context.templateKey === undefined ? {} : { templateKey: context.templateKey }),
     ...(context.novelId === undefined ? {} : { novelId: context.novelId }),
   });
