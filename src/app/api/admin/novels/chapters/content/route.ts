@@ -21,7 +21,7 @@ export const dynamic = "force-dynamic";
  */
 export async function GET(request: Request) {
   return handle(async () => {
-    const context = await guardContentRead(request, "content:read");
+    const context = await guardContentRead(request);
     const params = new URL(request.url).searchParams;
     const content = await readAdminChapterContent(prisma, {
       novelId: params.get("novelId")?.trim() ?? "",

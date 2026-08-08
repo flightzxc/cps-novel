@@ -71,6 +71,44 @@ P2-04 在其上组合，凭证面仍然单一 owner。
 正文在 UI 上必须**点击**才请求：挂载即取会让每次导航都要求更强的能力位，也会把审计
 写成「页面被打开过」而不是「有人选择读了它」。
 
+### 🔴 Owner 裁决（2026-08-08）：能力位保留，内核改动交 Codex
+
+Codex 复核给出 `AUTH_SINGLE_SOURCE=FAIL`，要求删除 `content:view` / `content:read`
+改为「有效 Admin Session 即可」。该项与任务书 §6 冻结的「章节正文：必须
+`content:read`」冲突，已提请 Owner 裁决。**裁决结果：能力位保留**，内核收编由 Codex
+执行。
+
+Codex 的诊断分两条，本轮处理如下：
+
+| 诊断 | 状态 |
+| --- | --- |
+| route→capability 绑定仅由源码扫描测试关联，运行时 registry 不持有 | ✅ 本轮已修 |
+| `content-capabilities.ts` 重复实现 roles/userIds/env/default-deny | ⏳ 需 Codex 内核改动 |
+
+**已修部分**：能力位现在挂在 registration 上（`ADMIN_CONTENT_ROUTES[].readCapability`），
+`guardContentRead(request)` **不再接受能力位参数**——它用内核的 `resolveAdminRoute`
+匹配出本次路由，再从 registry 取绑定。于是 handler 没有参数可传，也就没有传错的可能；
+未登记为内容路由的请求取不到能力位，直接 404 而不是借用别人的授权。
+`CONTENT_ROUTE_CAPABILITIES` 改为从 registration 派生，不再是手写的第二份副本。
+
+**待 Codex 执行的内核收编**（三处，全在 Codex 目录）：
+
+1. `src/lib/auth/capabilities.ts`：`CapabilityConfig.requiresTwoFactor` 由字面量
+   `true` 放宽为 `boolean`；
+2. 同文件：`AdminCapability` 增加 `content:view` / `content:read`，
+   `ADMIN_CAPABILITY_CONFIG` 补两条（`CONTENT_VIEW_*` / `CONTENT_READ_*`，
+   `defaultRoles: []`，`requiresTwoFactor: false`）；
+3. `src/server/auth/guards.ts`：`enforceCapability` 改为尊重
+   `ADMIN_CAPABILITY_CONFIG[capability].requiresTwoFactor`，而不是无条件调
+   `requireAdminTwoFactor`。
+
+收编完成后，Claude 侧删除 `_lib/content-capabilities.ts`，内容路由的
+`readCapability` 直接填进 registration 的 `capability` 字段，`guardContentRead`
+退化为 `guardRead`。届时授权源恢复为单一真源，且读仍不要求 2FA。
+
+⚠️ 第 3 条是内核语义变更，会影响所有既有路由的判定路径，因此必须由 Codex 做并自行
+回归 P1-08B 凭证面——这也是本轮不代做的原因。
+
 ### 🔴 交给 Codex 的一处后端约束（未改代码，仅报告）
 
 `src/server/auth/guards.ts` 的 `enforceCapability` 在看到 `route.capability` 时

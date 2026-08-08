@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
 /** `admin.api.novel.detail` — `content:view`. Identity travels as `?novelId=`. */
 export async function GET(request: Request) {
   return handle(async () => {
-    await guardContentRead(request, "content:view");
+    await guardContentRead(request);
     const novelId = new URL(request.url).searchParams.get("novelId")?.trim() ?? "";
     const detail = await getAdminNovelDetail(prisma, novelId);
     if (!detail) throw new AdminContentNotFoundError("novel");

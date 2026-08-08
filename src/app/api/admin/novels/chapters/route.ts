@@ -16,7 +16,7 @@ export const dynamic = "force-dynamic";
  */
 export async function GET(request: Request) {
   return handle(async () => {
-    await guardContentRead(request, "content:view");
+    await guardContentRead(request);
     const page = await listAdminNovelChapters(prisma, chapterListQuery(new URL(request.url)));
     return projectAdminContentPage(page, projectAdminChapterListItem);
   });

@@ -7,6 +7,7 @@ import {
   ADMIN_CONTENT_ROUTES,
   CONTENT_ROUTE_CAPABILITIES,
   P2_04_ADMIN_REGISTRY,
+  contentReadCapabilityForRoute,
 } from "@/app/api/admin/_lib/registry";
 import {
   CONTENT_READ_CAPABILITIES,
@@ -56,8 +57,8 @@ const FILES = await contentRouteFiles();
  * P2-04 路由登记与 orphan 检查。
  *
  * `tests/backend/auth/admin-registry-parity.test.ts` 守的是 P1-08B 凭证面，
- * 这个文件守的是内容读取面，且多守一层：登记表里那条 route→能力位的绑定，必须
- * 在 route 源码里真的被调用。只对着 registry 断言的话，一个忘记调
+ * 这个文件守的是内容读取面，且多守一层：route→能力位的绑定必须由运行时 registry
+ * 持有（挂在 registration 上），而不是由 route 自行传参。只对着路径断言的话，一个忘记调
  * `guardContentRead` 的新 route 依然会"登记齐全"地通过。
  */
 describe("P2-04 内容路由登记", () => {
@@ -110,25 +111,40 @@ describe("P2-04 内容路由登记", () => {
 });
 
 describe("P2-04 路由与能力位绑定", () => {
-  it("每条内容路由都绑定了一个读能力位", () => {
+  /**
+   * 绑定由**运行时 registry** 持有，不是靠源码扫描把两边对起来。
+   *
+   * 早先的版本把能力位当参数传进 `guardContentRead`，再用一条 grep 用例声称"它们
+   * 是对应的"——运行时 registry 其实并不持有这条绑定（Codex 复核指出）。现在能力位
+   * 从 registration 上取，route 没有参数可传，也就没有传错的可能。
+   */
+  it("能力位挂在 registration 上，route 无从自行指定", () => {
     for (const route of ADMIN_CONTENT_ROUTES) {
-      expect(CONTENT_READ_CAPABILITIES).toContain(CONTENT_ROUTE_CAPABILITIES[route.id]);
+      expect(CONTENT_READ_CAPABILITIES).toContain(route.readCapability);
+      expect(contentReadCapabilityForRoute(route.id)).toBe(route.readCapability);
     }
+    for (const entry of FILES) {
+      expect(entry.source, `${entry.file} 仍在自行指定能力位`).toContain(
+        "guardContentRead(request)",
+      );
+      expect(entry.source, `${entry.file} 把能力位当参数传了`).not.toMatch(
+        /guardContentRead\(\s*request\s*,/,
+      );
+    }
+  });
+
+  it("派生表与 registration 同源，不存在第二份手写副本", () => {
     expect(Object.keys(CONTENT_ROUTE_CAPABILITIES).sort()).toEqual(
       ADMIN_CONTENT_ROUTES.map((route) => route.id).sort(),
     );
+    for (const route of ADMIN_CONTENT_ROUTES) {
+      expect(CONTENT_ROUTE_CAPABILITIES[route.id]).toBe(route.readCapability);
+    }
   });
 
-  it("route 源码真的调用了登记表绑定的那个能力位", () => {
-    for (const route of ADMIN_CONTENT_ROUTES) {
-      const entry = FILES.find((candidate) => candidate.route === route.path);
-      expect(entry, `找不到 ${route.path} 的 route 文件`).toBeTruthy();
-      const capability = CONTENT_ROUTE_CAPABILITIES[route.id];
-      expect(
-        entry?.source,
-        `${route.path} 未按登记调用 guardContentRead(request, "${capability}")`,
-      ).toContain(`guardContentRead(request, "${capability}")`);
-    }
+  it("未登记为内容路由的 id 取不到能力位，fail closed", () => {
+    expect(contentReadCapabilityForRoute("admin.api.channel_accounts.list")).toBeNull();
+    expect(contentReadCapabilityForRoute("admin.api.not_a_route")).toBeNull();
   });
 
   it("只有章节正文路由要 content:read，元数据路由一律 content:view", () => {
