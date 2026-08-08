@@ -69,8 +69,16 @@ export const OMITTED_CPS_NAV_ITEMS: readonly { readonly cps: string; readonly re
     { cps: "畅读链接", reason: "并入推广链接" },
   ]);
 
-/** Only `/channel-accounts` is a real page this phase; the rest are shell routes. */
-export const ADMIN_IMPLEMENTED_PAGES: readonly string[] = Object.freeze(["/channel-accounts"]);
+/**
+ * Pages that actually exist. Everything else in the menu is a registered shell
+ * route and renders greyed, so the sidebar never links to a 404.
+ *
+ * `/novels` joined the list in P2-04 (read-only content management).
+ */
+export const ADMIN_IMPLEMENTED_PAGES: readonly string[] = Object.freeze([
+  "/channel-accounts",
+  "/novels",
+]);
 
 export function isNavItemActive(pathname: string, item: AdminNavItem): boolean {
   return pathname === item.href || pathname.startsWith(`${item.href}/`);

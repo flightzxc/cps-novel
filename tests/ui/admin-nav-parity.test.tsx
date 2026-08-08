@@ -95,8 +95,14 @@ describe("admin page default-deny registration", () => {
 
     for (const file of files) {
       const source = await readFile(file, "utf8");
-      const call = source.match(/requireAdminPage\(\s*"([^"]+)"/);
-      expect(call, `${path.relative(process.cwd(), file)} must call requireAdminPage`).toBeTruthy();
+      // `requireContentPage` (P2-04) wraps `requireAdminPage` and adds a read
+      // capability check; the declared-path discipline is identical, so both
+      // count. Anything else means a page skipped the guard entirely.
+      const call = source.match(/require(?:Admin|Content)Page\(\s*"([^"]+)"/);
+      expect(
+        call,
+        `${path.relative(process.cwd(), file)} must call requireAdminPage or requireContentPage`,
+      ).toBeTruthy();
 
       const declared = call![1];
       const root = `/${declared.split("/")[1]}`;

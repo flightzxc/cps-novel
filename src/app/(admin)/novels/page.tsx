@@ -1,0 +1,84 @@
+import {
+  projectAdminContentPage,
+  projectAdminNovelListItem,
+  type AdminContentPageView,
+  type AdminNovelListItemView,
+} from "@/contracts";
+import { listAdminNovels } from "@/server/admin-content";
+
+import { prisma } from "../../api/admin/_lib/deps";
+import { AdminShell } from "../_components/admin-shell";
+import { sessionView } from "../_lib/page-guard";
+import { ContentCapabilityDenied } from "./_components/content-states";
+import { ContentPagination } from "./_components/content-pagination";
+import { NovelFilters } from "./_components/novel-filters";
+import { NovelsTable } from "./_components/novels-table";
+import { requireContentPage } from "./_lib/content-page-guard";
+
+export const dynamic = "force-dynamic";
+
+type SearchParams = {
+  page?: string;
+  search?: string;
+  status?: string;
+  locale?: string;
+};
+
+/**
+ * Novel list.
+ *
+ * Reads through `listAdminNovels` directly rather than calling its own HTTP
+ * route: a server component fetching its own origin would add a round trip, a
+ * second cookie hop and a second failure mode for no gain. The route exists for
+ * the browser; both entry points share one service and one projection, so
+ * neither can drift into showing a different set of fields.
+ */
+export default async function NovelsPage({
+  searchParams,
+}: {
+  searchParams: Promise<SearchParams>;
+}) {
+  const params = await searchParams;
+  const { context, granted } = await requireContentPage("/novels", "content:view");
+
+  let page: AdminContentPageView<AdminNovelListItemView> | null = null;
+  if (granted) {
+    const result = await listAdminNovels(prisma, {
+      page: params.page ? Number(params.page) : undefined,
+      search: params.search,
+      status: params.status as never,
+      locale: params.locale,
+    });
+    page = projectAdminContentPage(result, projectAdminNovelListItem);
+  }
+
+  return (
+    <AdminShell
+      session={sessionView(context)}
+      title="书目管理"
+      description={
+        page ? `共 ${page.total} 部书目` : "浏览已入库的书目、章节与试读落地情况。"
+      }
+    >
+      <div className="space-y-6">
+        {granted && page ? (
+          <>
+            <NovelFilters
+              values={{ search: params.search, status: params.status, locale: params.locale }}
+            />
+            <NovelsTable novels={page.items} />
+            <ContentPagination
+              basePath="/novels"
+              params={params}
+              page={page.page}
+              totalPages={page.totalPages}
+              total={page.total}
+            />
+          </>
+        ) : (
+          <ContentCapabilityDenied capability="content:view" />
+        )}
+      </div>
+    </AdminShell>
+  );
+}
