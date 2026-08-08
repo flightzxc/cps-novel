@@ -5,7 +5,11 @@ import {
   projectAdminChapterListItem,
   projectAdminContentPage,
   projectAdminNovelDetail,
+  type AdminChapterListItemView,
+  type AdminContentPageView,
+  type ErrorEnvelope,
 } from "@/contracts";
+import { errorEnvelopeCopy } from "@/features/admin-ui/error-copy";
 import { getAdminNovelDetail, listAdminNovelChapters } from "@/server/admin-content";
 
 import { prisma } from "../../../api/admin/_lib/deps";
@@ -13,7 +17,8 @@ import { AdminShell } from "../../_components/admin-shell";
 import { sessionView } from "../../_lib/page-guard";
 import { ChaptersTable } from "../_components/chapters-table";
 import { ContentPagination } from "../_components/content-pagination";
-import { ContentCapabilityDenied } from "../_components/content-states";
+import { ContentCapabilityDenied, ContentErrorPanel } from "../_components/content-states";
+import { notFoundIfMissingIdentifier, queryErrorEnvelope } from "../_lib/content-errors";
 import {
   NovelIdentityPanel,
   NovelPreviewPanel,
@@ -55,17 +60,27 @@ export default async function NovelDetailPage({
     );
   }
 
-  const detail = await getAdminNovelDetail(prisma, novelId).catch(() => null);
+  const detail = await getAdminNovelDetail(prisma, novelId).catch(notFoundIfMissingIdentifier);
   if (!detail) notFound();
 
-  const chapters = projectAdminContentPage(
-    await listAdminNovelChapters(prisma, {
-      novelId,
-      page: query.page ? Number(query.page) : undefined,
-      status: query.status as never,
-    }),
-    projectAdminChapterListItem,
-  );
+  // Chapter paging is driven by the query string, so its failures split two
+  // ways: a bad `?page=` is the operator's typo and stays inline, anything else
+  // is a real fault and goes to the error boundary.
+  let chapters: AdminContentPageView<AdminChapterListItemView> | null = null;
+  let chapterError: ErrorEnvelope | null = null;
+  try {
+    chapters = projectAdminContentPage(
+      await listAdminNovelChapters(prisma, {
+        novelId,
+        page: query.page ? Number(query.page) : undefined,
+        status: query.status as never,
+      }),
+      projectAdminChapterListItem,
+    );
+  } catch (error) {
+    chapterError = queryErrorEnvelope(error);
+    if (!chapterError) throw error;
+  }
   const novel = projectAdminNovelDetail(detail);
 
   return (
@@ -96,16 +111,22 @@ export default async function NovelDetailPage({
         <section className="space-y-3">
           <h2 className="text-sm font-semibold text-gray-900">
             章节列表
-            <span className="ml-2 font-normal text-gray-500">共 {chapters.total} 章</span>
+            {chapters && <span className="ml-2 font-normal text-gray-500">共 {chapters.total} 章</span>}
           </h2>
-          <ChaptersTable novelId={novel.novelId} chapters={chapters.items} />
-          <ContentPagination
-            basePath={`/novels/${novel.novelId}`}
-            params={query}
-            page={chapters.page}
-            totalPages={chapters.totalPages}
-            total={chapters.total}
-          />
+          {chapters ? (
+            <>
+              <ChaptersTable novelId={novel.novelId} chapters={chapters.items} />
+              <ContentPagination
+                basePath={`/novels/${novel.novelId}`}
+                params={query}
+                page={chapters.page}
+                totalPages={chapters.totalPages}
+                total={chapters.total}
+              />
+            </>
+          ) : (
+            <ContentErrorPanel message={errorEnvelopeCopy(chapterError!)} />
+          )}
         </section>
       </div>
     </AdminShell>

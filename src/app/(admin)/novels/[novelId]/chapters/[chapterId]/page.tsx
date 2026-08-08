@@ -14,6 +14,7 @@ import {
   ChapterSourcesPanel,
 } from "../../../_components/chapter-detail-panel";
 import { ContentCapabilityDenied } from "../../../_components/content-states";
+import { notFoundIfMissingIdentifier } from "../../../_lib/content-errors";
 import { requireContentPage } from "../../../_lib/content-page-guard";
 
 export const dynamic = "force-dynamic";
@@ -50,7 +51,9 @@ export default async function ChapterDetailPage({
     );
   }
 
-  const record = await getAdminChapterDetail(prisma, novelId, chapterId).catch(() => null);
+  const record = await getAdminChapterDetail(prisma, novelId, chapterId).catch(
+    notFoundIfMissingIdentifier,
+  );
   if (!record) notFound();
 
   const chapter = projectAdminChapterDetail(record);
