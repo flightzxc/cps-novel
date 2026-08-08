@@ -92,6 +92,28 @@ P2-04 在其上组合，凭证面仍然单一 owner。
 若 Codex 认为读能力位应当收编进 `AdminCapability`，需要一并调整 `CapabilityConfig`
 的类型与 `enforceCapability` 的分支——那是内核改动，属于 Codex 的决定，本轮不代做。
 
+### 🔴 边界：不得波及公开阅读链路（Owner 裁决 2026-08-08）
+
+P2-04 的 Admin Session、`content:view`、`content:read` **只适用于管理员后台与
+`/api/admin/*` 内容读取链路**，绝不扩散到公开阅读链路。站点没有面向读者的登录体系，
+公开试读章节必须支持匿名游客直读。本轮不得新增、也不得为将来铺路：
+
+- 用户登录要求 / public reader authentication；
+- `content:read` 对公开 Route 的校验；
+- 未登录跳登录；
+- 任何降低公开试读转化的访问门槛。
+
+公开 Route 是否允许返回某章节，由「该内容是否属于允许公开/试读范围」的
+public-content contract 决定，**不由 Admin capability 决定**。P2-04 不改变任何
+public reading contract。
+
+这条边界由 `tests/ui/public-reading-no-auth.test.ts` 强制：`src/app` 中非后台文件
+与 `src/features/public-ui/**` 一旦引用任何后台权限设施即失败。公开屏幕上不出现
+「登录 / 注册 / 会员」文案另由 `tests/ui/forbidden-fields.test.tsx` 覆盖。
+
+之所以现在就下闸：公开阅读 Route 尚未落地，等它落地时顺手 import 一个
+`requireContentPage` 是最自然的动作，而后果是给匿名读者加了一道登录墙。
+
 ### 需要配置的环境变量
 
 四项默认全空（与 `promo:claim` / `revenue:view` 一致），未配置即无人可读：
