@@ -8,6 +8,7 @@ import {
   requireAdminSession,
 } from "@/lib/auth/session";
 import {
+  ADMIN_CAPABILITY_CONFIG,
   hasAdminCapability,
   requireHighRiskAdminCapability,
   type AdminCapability,
@@ -131,6 +132,8 @@ describe("admin capabilities", () => {
     const context = await requireAdminSession(TOKEN, { identities: stores, sessions: stores, now: NOW });
     expect(hasAdminCapability(context, "credential:manage", {} as NodeJS.ProcessEnv)).toBe(true);
     expect(hasAdminCapability(context, "content:takedown", {} as NodeJS.ProcessEnv)).toBe(true);
+    expect(hasAdminCapability(context, "content:view", {} as NodeJS.ProcessEnv)).toBe(false);
+    expect(hasAdminCapability(context, "content:read", {} as NodeJS.ProcessEnv)).toBe(false);
     expect(hasAdminCapability(context, "promo:claim", {} as NodeJS.ProcessEnv)).toBe(false);
     expect(hasAdminCapability(context, "revenue:view", {} as NodeJS.ProcessEnv)).toBe(false);
   });
@@ -148,9 +151,19 @@ describe("admin capabilities", () => {
         REVENUE_VIEW_USER_IDS: "admin-1",
       } as unknown as NodeJS.ProcessEnv),
     ).toBe(true);
+    expect(
+      hasAdminCapability(context, "content:view", {
+        CONTENT_VIEW_ROLES: "ops",
+      } as unknown as NodeJS.ProcessEnv),
+    ).toBe(true);
+    expect(
+      hasAdminCapability(context, "content:read", {
+        CONTENT_READ_USER_IDS: "admin-1",
+      } as unknown as NodeJS.ProcessEnv),
+    ).toBe(true);
   });
 
-  it("requires completed 2FA for every capability", async () => {
+  it("keeps every pre-existing high-risk capability marked as requiring 2FA", async () => {
     const capabilities: AdminCapability[] = [
       "credential:manage",
       "content:takedown",
@@ -164,9 +177,25 @@ describe("admin capabilities", () => {
       REVENUE_VIEW_USER_IDS: "admin-1",
     } as unknown as NodeJS.ProcessEnv;
     for (const capability of capabilities) {
+      expect(ADMIN_CAPABILITY_CONFIG[capability].requiresTwoFactor).toBe(true);
       expect(() => requireHighRiskAdminCapability(context, capability, env)).toThrowError(
         expect.objectContaining({ code: "admin_two_factor_required", status: 403 }),
       );
     }
+  });
+
+  it("registers content reads in the same capability source without a 2FA requirement", () => {
+    expect(ADMIN_CAPABILITY_CONFIG["content:view"]).toEqual({
+      rolesEnv: "CONTENT_VIEW_ROLES",
+      userIdsEnv: "CONTENT_VIEW_USER_IDS",
+      defaultRoles: [],
+      requiresTwoFactor: false,
+    });
+    expect(ADMIN_CAPABILITY_CONFIG["content:read"]).toEqual({
+      rolesEnv: "CONTENT_READ_ROLES",
+      userIdsEnv: "CONTENT_READ_USER_IDS",
+      defaultRoles: [],
+      requiresTwoFactor: false,
+    });
   });
 });

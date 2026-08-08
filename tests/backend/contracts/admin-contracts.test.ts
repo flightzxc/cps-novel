@@ -87,6 +87,17 @@ describe("capability contract", () => {
       }).state,
     ).toBe("denied");
   });
+
+  it("projects a granted non-2FA capability as granted without a completed step-up", () => {
+    expect(
+      projectAdminCapability({
+        capability: "content:read",
+        granted: true,
+        requiresTwoFactor: false,
+        twoFactorCompleted: false,
+      }).state,
+    ).toBe("granted");
+  });
 });
 
 describe("two-factor contract", () => {

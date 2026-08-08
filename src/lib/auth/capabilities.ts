@@ -4,6 +4,8 @@ import type { AdminAuthContext } from "./types";
 export type AdminCapability =
   | "credential:manage"
   | "content:takedown"
+  | "content:view"
+  | "content:read"
   | "promo:claim"
   | "revenue:view";
 
@@ -11,7 +13,7 @@ type CapabilityConfig = {
   rolesEnv: string;
   userIdsEnv: string;
   defaultRoles: readonly string[];
-  requiresTwoFactor: true;
+  requiresTwoFactor: boolean;
 };
 
 export const ADMIN_CAPABILITY_CONFIG: Readonly<Record<AdminCapability, CapabilityConfig>> =
@@ -27,6 +29,18 @@ export const ADMIN_CAPABILITY_CONFIG: Readonly<Record<AdminCapability, Capabilit
       userIdsEnv: "CONTENT_TAKEDOWN_USER_IDS",
       defaultRoles: ["super_admin"],
       requiresTwoFactor: true,
+    },
+    "content:view": {
+      rolesEnv: "CONTENT_VIEW_ROLES",
+      userIdsEnv: "CONTENT_VIEW_USER_IDS",
+      defaultRoles: [],
+      requiresTwoFactor: false,
+    },
+    "content:read": {
+      rolesEnv: "CONTENT_READ_ROLES",
+      userIdsEnv: "CONTENT_READ_USER_IDS",
+      defaultRoles: [],
+      requiresTwoFactor: false,
     },
     "promo:claim": {
       rolesEnv: "PROMO_CLAIM_ROLES",

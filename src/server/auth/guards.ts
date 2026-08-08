@@ -1,4 +1,5 @@
 import {
+  ADMIN_CAPABILITY_CONFIG,
   requireAdminCapability,
   requireAdminTwoFactor,
   type AdminCapability,
@@ -69,7 +70,9 @@ function enforceCapability(
 ): void {
   if (!capability) return;
   requireAdminCapability(context, capability, env);
-  requireAdminTwoFactor(context);
+  if (ADMIN_CAPABILITY_CONFIG[capability].requiresTwoFactor) {
+    requireAdminTwoFactor(context);
+  }
 }
 
 export async function requireAdminPageAccess(

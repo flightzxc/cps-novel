@@ -29,6 +29,18 @@ const registry: AdminRegistry = {
       methods: ["POST"],
       capability: "credential:manage",
     },
+    {
+      id: "content.metadata",
+      path: "/api/admin/content/metadata",
+      methods: ["GET"],
+      capability: "content:view",
+    },
+    {
+      id: "content.body",
+      path: "/api/admin/content/body",
+      methods: ["GET"],
+      capability: "content:read",
+    },
   ],
   actions: [
     {
@@ -154,6 +166,76 @@ describe("default-deny admin boundary", () => {
         dependencies(noTwoFactor),
       ),
     ).rejects.toMatchObject({ code: "admin_two_factor_required", status: 403 });
+  });
+
+  it("enforces content read grants through the core without requiring 2FA", async () => {
+    const noSession = fixture({ role: "editor", twoFactorCompleted: false });
+    await expect(
+      requireAdminRouteAccess(
+        { pathname: "/api/admin/content/metadata", method: "GET" },
+        dependencies(
+          noSession,
+          { CONTENT_VIEW_ROLES: "editor" } as unknown as NodeJS.ProcessEnv,
+        ),
+      ),
+    ).rejects.toMatchObject({ code: "jwt_missing", status: 401 });
+
+    const noGrant = fixture({ role: "editor", twoFactorCompleted: false });
+    await expect(
+      requireAdminRouteAccess(
+        {
+          pathname: "/api/admin/content/metadata",
+          method: "GET",
+          sessionToken: TOKEN,
+        },
+        dependencies(noGrant),
+      ),
+    ).rejects.toMatchObject({ code: "admin_capability_denied", status: 403 });
+
+    const roleGrant = fixture({ role: "editor", twoFactorCompleted: false });
+    await expect(
+      requireAdminRouteAccess(
+        {
+          pathname: "/api/admin/content/metadata",
+          method: "GET",
+          sessionToken: TOKEN,
+        },
+        dependencies(
+          roleGrant,
+          { CONTENT_VIEW_ROLES: "editor" } as unknown as NodeJS.ProcessEnv,
+        ),
+      ),
+    ).resolves.toMatchObject({ context: { identity: { role: "editor" }, twoFactorCompleted: false } });
+
+    const userGrant = fixture({ role: "editor", twoFactorCompleted: false });
+    await expect(
+      requireAdminRouteAccess(
+        {
+          pathname: "/api/admin/content/body",
+          method: "GET",
+          sessionToken: TOKEN,
+        },
+        dependencies(
+          userGrant,
+          { CONTENT_READ_USER_IDS: "admin-1" } as unknown as NodeJS.ProcessEnv,
+        ),
+      ),
+    ).resolves.toMatchObject({ context: { identity: { id: "admin-1" }, twoFactorCompleted: false } });
+
+    const wrongGrant = fixture({ role: "editor", twoFactorCompleted: false });
+    await expect(
+      requireAdminRouteAccess(
+        {
+          pathname: "/api/admin/content/body",
+          method: "GET",
+          sessionToken: TOKEN,
+        },
+        dependencies(
+          wrongGrant,
+          { CONTENT_VIEW_ROLES: "editor" } as unknown as NodeJS.ProcessEnv,
+        ),
+      ),
+    ).rejects.toMatchObject({ code: "admin_capability_denied", status: 403 });
   });
 
   it("rejects expired sessions and illegal origins", async () => {

@@ -33,7 +33,14 @@ describe("P1-08B production backend contracts", () => {
     expect(resolveAdminAction("admin.credential.replace", P1_08B_ADMIN_REGISTRY)?.mutation).toBe(true);
     expect(resolveAdminAction("admin.credential.validate", P1_08B_ADMIN_REGISTRY)?.capability).toBe("credential:manage");
     expect(resolveAdminAction("admin.credential.supersede", P1_08B_ADMIN_REGISTRY)?.mutation).toBe(true);
-    expect(ADMIN_CAPABILITY_CONFIG["credential:manage"].requiresTwoFactor).toBe(true);
+    for (const capability of [
+      "credential:manage",
+      "content:takedown",
+      "promo:claim",
+      "revenue:view",
+    ] as const) {
+      expect(ADMIN_CAPABILITY_CONFIG[capability].requiresTwoFactor).toBe(true);
+    }
     expect(CREDENTIAL_TASK_TYPES).toEqual({
       validate: "credential.validate.v1",
       supersede: "credential.supersede.v1",
