@@ -6,7 +6,8 @@ import {
   PostgreSQLSessionStore,
 } from "@/lib/auth/postgres";
 import { ADMIN_SESSION_COOKIE_NAME } from "@/server/auth/cookie-contract";
-import { P1_08B_ADMIN_REGISTRY } from "@/server/credentials";
+
+import { P2_04_ADMIN_REGISTRY } from "./registry";
 
 /**
  * Admin-side server wiring.
@@ -20,7 +21,8 @@ const globalForPrisma = globalThis as unknown as { adminPrisma?: PrismaClient };
 export const prisma: PrismaClient = globalForPrisma.adminPrisma ?? new PrismaClient();
 if (process.env.NODE_ENV !== "production") globalForPrisma.adminPrisma = prisma;
 
-export const ADMIN_REGISTRY = P1_08B_ADMIN_REGISTRY;
+/** P1-08B credential routes plus the P2-04 content read routes. */
+export const ADMIN_REGISTRY = P2_04_ADMIN_REGISTRY;
 
 export function guardDependencies() {
   return {

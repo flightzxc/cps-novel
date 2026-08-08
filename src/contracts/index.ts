@@ -18,3 +18,4 @@ export * from "./two-factor";
 export * from "./channel-accounts";
 export * from "./credentials";
 export * from "./publish-gate";
+export * from "./admin-content";

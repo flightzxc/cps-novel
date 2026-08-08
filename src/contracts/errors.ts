@@ -1,3 +1,4 @@
+import type { AdminContentQueryErrorCode } from "@/server/admin-content";
 import type { AdminAccessErrorCode } from "@/lib/auth/errors";
 import type { CredentialContractCode } from "@/lib/credentials/contracts";
 
@@ -6,19 +7,32 @@ import type { CredentialContractCode } from "@/lib/credentials/contracts";
  *
  * The frontend must switch on `code` and never parse a server message: the
  * envelope deliberately carries no free-text field for it to read.
+ *
+ * `AdminContentQueryErrorCode` is imported as a type from the P2-04 kernel so
+ * the browser's branch list cannot drift from the codes the kernel actually
+ * throws — a new validation code there becomes a compile error here until copy
+ * exists for it.
  */
 export type AdminErrorCode =
   | AdminAccessErrorCode
   | CredentialContractCode
-  | "credential_task_not_found";
+  | AdminContentQueryErrorCode
+  | "credential_task_not_found"
+  /** A well-formed novel or chapter id that matches no live row. */
+  | "admin_content_not_found";
 
 /**
  * 409 carries idempotency conflicts: a mutation request id was replayed with a
  * different actor, account or payload. It must survive projection intact —
  * coercing it to 403 would read as a permission problem and send the operator
  * looking in the wrong place.
+ *
+ * 400 arrives with P2-04 for the same reason. The credential routes took a
+ * single opaque id, so malformed input was not a category they could produce;
+ * the content routes take page, page size, status, locale and search from the
+ * query string, and a rejected `page=0` is neither "forbidden" nor "not found".
  */
-export type AdminErrorStatus = 401 | 403 | 404 | 409 | 429;
+export type AdminErrorStatus = 400 | 401 | 403 | 404 | 409 | 429;
 
 /**
  * Machine-readable reasons that further qualify a code. Constrained to a frozen
@@ -59,7 +73,7 @@ export type ErrorEnvelope = {
   readonly details?: ErrorEnvelopeDetails;
 };
 
-const ALLOWED_STATUSES: readonly AdminErrorStatus[] = [401, 403, 404, 409, 429];
+const ALLOWED_STATUSES: readonly AdminErrorStatus[] = [400, 401, 403, 404, 409, 429];
 
 const ALLOWED_REASONS: readonly ErrorEnvelopeReason[] = [
   "idempotency_conflict",

@@ -2,10 +2,28 @@ import { projectErrorEnvelope, type AdminErrorCode, type ErrorEnvelope } from "@
 import { isAdminAccessError } from "@/lib/auth/errors";
 import type { CredentialContractCode } from "@/lib/credentials/contracts";
 import { CredentialLifecycleError } from "@/lib/credentials/lifecycle";
+import { AdminContentQueryError } from "@/server/admin-content";
 import {
   CredentialReplacementIdempotencyConflictError,
   CredentialTaskNotFoundError,
 } from "@/server/credentials/service";
+
+/**
+ * A well-formed identifier that resolves to nothing live.
+ *
+ * Distinct from `AdminContentQueryError("invalid_identifier")`, which is a
+ * malformed id: one tells the operator to fix the link, the other tells them the
+ * novel is gone or soft-deleted. Collapsing both to one code would erase that.
+ */
+export class AdminContentNotFoundError extends Error {
+  readonly code = "admin_content_not_found" as const;
+  readonly status = 404 as const;
+
+  constructor(entity: "novel" | "chapter") {
+    super(`Admin content ${entity} not found`);
+    this.name = "AdminContentNotFoundError";
+  }
+}
 
 /**
  * `CredentialLifecycleError` carries a stable code but no HTTP status, so the
@@ -32,6 +50,17 @@ const CREDENTIAL_CODE_STATUS: Readonly<Record<CredentialContractCode, 401 | 403 
  * become the thing that forwards it.
  */
 export function toErrorEnvelope(error: unknown): ErrorEnvelope {
+  if (error instanceof AdminContentNotFoundError) {
+    return projectErrorEnvelope({ code: error.code, status: error.status });
+  }
+  if (error instanceof AdminContentQueryError) {
+    // `invalid_read_context` is the one code here that is never the caller's
+    // fault — it means this route wired the audit context wrong. Reporting it as
+    // a 400 would send an operator off to edit a URL that is already correct.
+    return error.code === "invalid_read_context"
+      ? projectErrorEnvelope({ code: "admin_service_authorization_required", status: 403 })
+      : projectErrorEnvelope({ code: error.code, status: 400 });
+  }
   if (error instanceof CredentialTaskNotFoundError) {
     return projectErrorEnvelope({ code: error.code, status: error.status });
   }

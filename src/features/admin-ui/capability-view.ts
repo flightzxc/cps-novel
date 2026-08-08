@@ -1,4 +1,8 @@
-import type { AdminCapabilityState, AdminCapabilityView } from "@/contracts";
+import type {
+  AdminCapabilityState,
+  AdminCapabilityView,
+  ContentReadCapability,
+} from "@/contracts";
 import type { AdminCapability } from "@/lib/auth/capabilities";
 
 export const ADMIN_CAPABILITY_LABELS: Readonly<Record<AdminCapability, string>> = Object.freeze({
@@ -7,6 +11,29 @@ export const ADMIN_CAPABILITY_LABELS: Readonly<Record<AdminCapability, string>> 
   "promo:claim": "推广领取",
   "revenue:view": "收益查看",
 });
+
+/**
+ * Kept in a second table rather than merged into the one above, because the two
+ * families behave differently: an `AdminCapability` can be blocked by a missing
+ * 2FA step-up, a read capability never can. Merging them would let a caller pass
+ * a read capability where `capabilityBlockReason` would offer to run a 2FA
+ * challenge that does not apply.
+ */
+export const CONTENT_READ_CAPABILITY_LABELS: Readonly<Record<ContentReadCapability, string>> =
+  Object.freeze({
+    "content:view": "内容查看",
+    "content:read": "章节正文读取",
+  });
+
+/**
+ * Reason copy for a blocked read.
+ *
+ * Only one branch exists, and that is the point: reads are granted or denied,
+ * with no "complete 2FA and retry" middle state to offer.
+ */
+export function contentReadBlockReason(capability: ContentReadCapability): string {
+  return `缺少能力位 ${CONTENT_READ_CAPABILITY_LABELS[capability]}（${capability}），请联系管理员授予`;
+}
 
 export function findCapabilityState(
   capabilities: readonly AdminCapabilityView[],

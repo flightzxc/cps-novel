@@ -3,6 +3,7 @@ import path from "node:path";
 
 import { describe, expect, it } from "vitest";
 
+import { P2_04_ADMIN_REGISTRY } from "@/app/api/admin/_lib/registry";
 import { resolveAdminAction, resolveAdminRoute } from "@/server/auth/registry";
 import { P1_08B_ADMIN_REGISTRY } from "@/server/credentials";
 
@@ -10,6 +11,23 @@ const EXPECTED_GET_ROUTES = [
   "/api/admin/channel-accounts",
   "/api/admin/credential-tasks/status",
   "/api/admin/credentials/metadata",
+] as const;
+
+/**
+ * P2-04 read routes, registered on top of P1-08B rather than inside it.
+ *
+ * The filesystem scan below covers all of `src/app/api/admin`, so it necessarily
+ * sees every phase's routes; the registry it compares against therefore has to
+ * be the composed one the app actually resolves with
+ * (`P2_04_ADMIN_REGISTRY`). The P1-08B-specific assertions further down stay
+ * scoped to `P1_08B_ADMIN_REGISTRY.routes`, so this file still guards the
+ * credential surface exactly as before.
+ */
+const EXPECTED_CONTENT_GET_ROUTES = [
+  "/api/admin/novels",
+  "/api/admin/novels/chapters",
+  "/api/admin/novels/chapters/content",
+  "/api/admin/novels/detail",
 ] as const;
 
 const EXPECTED_ACTIONS = [
@@ -38,13 +56,13 @@ async function routeHandlers(directory: string): Promise<string[]> {
 describe("P1-09 Admin registry parity", () => {
   it("registers every real GET Handler and no route without a Handler", async () => {
     const actual = (await routeHandlers(path.resolve(process.cwd(), "src/app/api/admin"))).sort();
-    const registered = P1_08B_ADMIN_REGISTRY.routes.map((route) => route.path).sort();
-    expect(actual).toEqual([...EXPECTED_GET_ROUTES].sort());
+    const registered = P2_04_ADMIN_REGISTRY.routes.map((route) => route.path).sort();
+    expect(actual).toEqual([...EXPECTED_GET_ROUTES, ...EXPECTED_CONTENT_GET_ROUTES].sort());
     expect(registered).toEqual(actual);
     for (const route of P1_08B_ADMIN_REGISTRY.routes) {
       expect(route.methods).toEqual(["GET"]);
       expect(route.capability).toBe("credential:manage");
-      expect(resolveAdminRoute(route.path, "GET", P1_08B_ADMIN_REGISTRY)).not.toBeNull();
+      expect(resolveAdminRoute(route.path, "GET", P2_04_ADMIN_REGISTRY)).not.toBeNull();
     }
   });
 

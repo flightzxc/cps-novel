@@ -1,6 +1,6 @@
 import type { AdminErrorCode, ErrorEnvelope } from "@/contracts";
 
-import { ADMIN_CAPABILITY_LABELS } from "./capability-view";
+import { ADMIN_CAPABILITY_LABELS, CONTENT_READ_CAPABILITY_LABELS } from "./capability-view";
 
 /**
  * The frontend owns this copy.
@@ -33,6 +33,17 @@ const COPY: Readonly<Record<AdminErrorCode, string>> = Object.freeze({
   credential_capability_denied: "缺少凭证管理能力位",
   credential_ambiguous: "同一账户存在多条有效凭证，请先人工处置",
   account_inactive: "该渠道账户已停用，请先启用后再操作",
+  // P2-04 content reads. Each names the offending parameter, because these are
+  // reachable only from a hand-edited URL and "参数无效" would leave the operator
+  // guessing which of five query parameters to fix.
+  invalid_page: "页码无效，必须是大于 0 的整数",
+  invalid_page_size: "每页条数无效，必须在 1 到 100 之间",
+  invalid_search: "搜索词无效或超过长度上限",
+  invalid_status: "状态取值未登记",
+  invalid_locale: "语种未登记",
+  invalid_identifier: "标识格式无效，必须是合法 UUID",
+  invalid_read_context: "服务端读取上下文缺失，请刷新页面后重试",
+  admin_content_not_found: "该内容不存在或已被删除",
 });
 
 /** Reason refines the code; without it the two session expiries read identically. */
@@ -46,8 +57,12 @@ export function errorEnvelopeCopy(envelope: ErrorEnvelope): string {
   const reason = envelope.details?.reason;
   if (reason && REASON_COPY[reason]) return REASON_COPY[reason];
   if (envelope.code === "admin_capability_denied" && envelope.details?.capability) {
-    const capability = envelope.details.capability as keyof typeof ADMIN_CAPABILITY_LABELS;
-    const label = ADMIN_CAPABILITY_LABELS[capability];
+    const capability = envelope.details.capability;
+    // Two families share the one `admin_capability_denied` code, so both tables
+    // are consulted before falling back to the generic line.
+    const label =
+      ADMIN_CAPABILITY_LABELS[capability as keyof typeof ADMIN_CAPABILITY_LABELS]
+      ?? CONTENT_READ_CAPABILITY_LABELS[capability as keyof typeof CONTENT_READ_CAPABILITY_LABELS];
     if (label) return `缺少能力位 ${label}（${capability}）`;
   }
   if (envelope.code === "admin_rate_limited" && envelope.details?.retryAfterSeconds) {
