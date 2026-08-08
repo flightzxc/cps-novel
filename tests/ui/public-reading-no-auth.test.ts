@@ -21,20 +21,29 @@ import { describe, expect, it } from "vitest";
 
 const ADMIN_ROOTS = ["src/app/(admin)", "src/app/api/admin"] as const;
 
-/** 后台权限设施。出现在公开侧即为越界。 */
+/**
+ * 后台权限设施。出现在公开侧即为越界。
+ *
+ * 随内核收编更新过一次：`content:view` / `content:read` 现在是核心
+ * `AdminCapability`，授权走统一的 `guardRead` / `hasAdminCapability`，所以这里守的
+ * 是内核符号本身，而不是 P2-04 曾经的私有实现——后者已删除，继续列它等于守一个不
+ * 存在的东西，用例会假绿。
+ */
 const ADMIN_AUTH_IMPORTS = [
   "@/lib/auth/",
   "@/server/auth/",
   "@/server/credentials",
-  "_lib/content-capabilities",
   "_lib/content-route",
   "_lib/content-page-guard",
   "_lib/page-guard",
+  "_lib/route",
   "requireAdminPage",
   "requireContentPage",
-  "guardContentRead",
   "requireAdminSession",
-  "hasContentReadCapability",
+  "guardRead",
+  "hasAdminCapability",
+  "requireAdminCapability",
+  "ADMIN_CAPABILITY_CONFIG",
   "content:view",
   "content:read",
 ] as const;

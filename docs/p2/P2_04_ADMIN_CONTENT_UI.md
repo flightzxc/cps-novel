@@ -71,64 +71,45 @@ P2-04 在其上组合，凭证面仍然单一 owner。
 正文在 UI 上必须**点击**才请求：挂载即取会让每次导航都要求更强的能力位，也会把审计
 写成「页面被打开过」而不是「有人选择读了它」。
 
-### 🔴 Owner 裁决（2026-08-08）：能力位保留，内核改动交 Codex
+### 授权唯一真源（2026-08-08 收口完成）
 
-Codex 复核给出 `AUTH_SINGLE_SOURCE=FAIL`，要求删除 `content:view` / `content:read`
-改为「有效 Admin Session 即可」。该项与任务书 §6 冻结的「章节正文：必须
-`content:read`」冲突，已提请 Owner 裁决。**裁决结果：能力位保留**，内核收编由 Codex
-执行。
+`content:view` / `content:read` 是**核心 `AdminCapability` 成员**，登记在
+`ADMIN_CAPABILITY_CONFIG` 中，`requiresTwoFactor: false`、`defaultRoles: []`。
+P2-04 没有任何私有授权实现。
 
-Codex 的诊断分两条，本轮处理如下：
+链路与凭证面完全一致，一条不多：
 
-| 诊断 | 状态 |
-| --- | --- |
-| route→capability 绑定仅由源码扫描测试关联，运行时 registry 不持有 | ✅ 本轮已修 |
-| `content-capabilities.ts` 重复实现 roles/userIds/env/default-deny | ⏳ 需 Codex 内核改动 |
+```
+Route → guardRead → requireAdminRouteAccess
+        ├─ resolveAdminRoute  未登记 ⇒ 404（不做 session 查询）
+        ├─ requireAdminSession  无有效会话 ⇒ 401
+        └─ enforceCapability   无 grant ⇒ 403
+                               requiresTwoFactor=false ⇒ 不要求 2FA
+```
 
-**已修部分**：能力位现在挂在 registration 上（`ADMIN_CONTENT_ROUTES[].readCapability`），
-`guardContentRead(request)` **不再接受能力位参数**——它用内核的 `resolveAdminRoute`
-匹配出本次路由，再从 registry 取绑定。于是 handler 没有参数可传，也就没有传错的可能；
-未登记为内容路由的请求取不到能力位，直接 404 而不是借用别人的授权。
-`CONTENT_ROUTE_CAPABILITIES` 改为从 registration 派生，不再是手写的第二份副本。
+绑定由 registration 的标准 `capability` 字段持有，内核每次请求据此判定——既不是
+route 传参，也不是源码扫描测试"声称"的对应关系。handler 没有参数可传，也就没有传
+错的可能。
 
-**待 Codex 执行的内核收编**（三处，全在 Codex 目录）：
+页面侧同样只用内核的 `hasAdminCapability`，不自行读 role / userId / env。
 
-1. `src/lib/auth/capabilities.ts`：`CapabilityConfig.requiresTwoFactor` 由字面量
-   `true` 放宽为 `boolean`；
-2. 同文件：`AdminCapability` 增加 `content:view` / `content:read`，
-   `ADMIN_CAPABILITY_CONFIG` 补两条（`CONTENT_VIEW_*` / `CONTENT_READ_*`，
-   `defaultRoles: []`，`requiresTwoFactor: false`）；
-3. `src/server/auth/guards.ts`：`enforceCapability` 改为尊重
-   `ADMIN_CAPABILITY_CONFIG[capability].requiresTwoFactor`，而不是无条件调
-   `requireAdminTwoFactor`。
+**演进过程（三轮）**，留档以免重蹈：
 
-收编完成后，Claude 侧删除 `_lib/content-capabilities.ts`，内容路由的
-`readCapability` 直接填进 registration 的 `capability` 字段，`guardContentRead`
-退化为 `guardRead`。届时授权源恢复为单一真源，且读仍不要求 2FA。
+| 轮次 | 做法 | 结果 |
+| --- | --- | --- |
+| v1 | 能力位当参数传进 `guardContentRead` | 绑定只由 grep 测试关联，registry 不持有 |
+| v2 | 能力位挂在私有 `readCapability` 字段 | 绑定入 registry，但内核不读它；授权仍是第二套实现 |
+| v3 | Codex 收编进 `AdminCapability`，本轮删除私有实现 | ✅ 唯一真源 |
 
-⚠️ 第 3 条是内核语义变更，会影响所有既有路由的判定路径，因此必须由 Codex 做并自行
-回归 P1-08B 凭证面——这也是本轮不代做的原因。
+前两轮的根因是同一个：读能力位待在 `AdminCapability` 之外。内核收编后
+（`CapabilityConfig.requiresTwoFactor` 放宽为 `boolean`，`enforceCapability` 改为
+尊重它，高风险能力位行为不变），私有实现就没有存在理由了，已随本轮删除
+`_lib/content-capabilities.ts`。
 
-### 🔴 交给 Codex 的一处后端约束（未改代码，仅报告）
-
-`src/server/auth/guards.ts` 的 `enforceCapability` 在看到 `route.capability` 时
-无条件调用 `requireAdminTwoFactor`；`src/lib/auth/capabilities.ts` 的
-`CapabilityConfig.requiresTwoFactor` 也被硬编码为字面量 `true`。对现存四个能力位
-（都守写入或密钥）这是对的，但它使得**「要能力位、但不要 2FA」在 `AdminCapability`
-体系内无法表达**。
-
-本轮的选择是不动 Codex 内核：读能力位定义在 Claude 侧的
-`src/app/api/admin/_lib/content-capabilities.ts`，沿用同样的 `*_ROLES` /
-`*_USER_IDS` env allowlist 与默认拒绝，只是不耦合 2FA；内容路由在登记表里**刻意
-不填 `capability`**，改由 `guardContentRead` 在 Route 层强制。
-
-为避免退化成「谁记得检查谁检查」，route→能力位的绑定以数据形式登记在
-`CONTENT_ROUTE_CAPABILITIES`，并由 `tests/ui/admin-content-registry.test.ts` 同时断言：
-磁盘上的 route 全部登记、登记表无 orphan、每个 route 源码真的调用了它被绑定的那个
-能力位。
-
-若 Codex 认为读能力位应当收编进 `AdminCapability`，需要一并调整 `CapabilityConfig`
-的类型与 `enforceCapability` 的分支——那是内核改动，属于 Codex 的决定，本轮不代做。
+回归防线：`tests/ui/admin-content-registry.test.ts` 除了登记/orphan/GET-only，还扫
+`src/` 全树，确认 `CONTENT_*_ROLES`、`CONTENT_*_USER_IDS`、私有能力位类型与私有 guard
+**只允许出现在内核** `src/lib/auth/capabilities.ts`。已做负向验证：把章节正文路由的
+`capability` 摘掉退化成 session-only，用例立即失败。
 
 ### 🔴 边界：不得波及公开阅读链路（Owner 裁决 2026-08-08）
 
@@ -198,3 +179,6 @@ URL——这样 `tests/ui/admin-nav-parity.test.tsx` 能把字面量与文件实
   运行时真正使用的 `P2_04_ADMIN_REGISTRY` 比对，并新增
   `EXPECTED_CONTENT_GET_ROUTES`；P1-08B 专属断言仍旧只作用于
   `P1_08B_ADMIN_REGISTRY.routes`，凭证面的守护强度不变。
+- `tests/ui/public-reading-no-auth.test.ts`：内核收编后，禁列从 P2-04 曾经的私有实现
+  （已删除，继续列会假绿）改为守内核符号本身——`guardRead`、`hasAdminCapability`、
+  `ADMIN_CAPABILITY_CONFIG`、`content:view` / `content:read`。边界强度只增不减。

@@ -46,21 +46,6 @@ import type { NovelChapterStatus, NovelStatus } from "@/domain/database-statuses
 
 export type { AdminContentExceptionCode };
 
-/**
- * The read grants the content screens are gated on.
- *
- * Declared in the contract layer because both sides need the same two literals:
- * the route wiring enforces them (`src/app/api/admin/_lib/content-capabilities.ts`)
- * and the browser names them when a control is blocked. They are deliberately
- * *not* members of `AdminCapability` — that union is typed as always requiring
- * 2FA, and these must not. The linked module explains the trade-off in full.
- *
- * `content:view` covers metadata: novel and chapter listings, novel detail.
- * `content:read` covers chapter prose, and only that, so browsing the catalogue
- * never implies the right to read licensed text.
- */
-export type ContentReadCapability = "content:view" | "content:read";
-
 /** Page envelope. Mirrors {@link AdminContentPage} minus the item type. */
 export type AdminContentPageView<T> = {
   readonly items: readonly T[];

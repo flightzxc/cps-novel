@@ -1,7 +1,8 @@
 import { projectAdminChapterContent } from "@/contracts";
 import { readAdminChapterContent } from "@/server/admin-content";
 
-import { contentReadRequestId, guardContentRead } from "../../../_lib/content-route";
+import { contentReadRequestId } from "../../../_lib/content-route";
+import { guardRead } from "../../../_lib/route";
 import { prisma } from "../../../_lib/deps";
 import { AdminContentNotFoundError, handle } from "../../../_lib/respond";
 
@@ -16,12 +17,14 @@ export const dynamic = "force-dynamic";
  * property of calling this route rather than something the UI has to remember to
  * report. The actor id comes from the guarded session — never from the request.
  *
- * No 2FA step-up: reads are gated by capability alone. See
- * `_lib/content-capabilities.ts` for why that lives outside `AdminCapability`.
+ * No 2FA step-up: `content:read` is registered in `ADMIN_CAPABILITY_CONFIG` with
+ * `requiresTwoFactor: false`, so `enforceCapability` checks the grant and stops
+ * there. Authorisation is entirely `guardRead`'s, exactly as for every other
+ * admin route.
  */
 export async function GET(request: Request) {
   return handle(async () => {
-    const context = await guardContentRead(request);
+    const context = await guardRead(request);
     const params = new URL(request.url).searchParams;
     const content = await readAdminChapterContent(prisma, {
       novelId: params.get("novelId")?.trim() ?? "",

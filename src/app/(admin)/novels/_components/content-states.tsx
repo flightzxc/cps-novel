@@ -1,5 +1,5 @@
-import type { ContentReadCapability } from "@/contracts";
-import { contentReadBlockReason } from "@/features/admin-ui/capability-view";
+import { capabilityBlockReason } from "@/features/admin-ui/capability-view";
+import type { AdminCapability } from "@/lib/auth/capabilities";
 
 /**
  * Loading skeleton for a table.
@@ -34,15 +34,22 @@ export function ContentTableSkeleton({ rows = 5 }: { rows?: number }) {
  * Names the capability rather than saying "无权限" — P1-09 acceptance ⑥. The
  * screen still renders its shell and heading, so an operator can tell the
  * feature exists and that they need a grant, not that the page is broken.
+ *
+ * The state is fixed at `denied` because it is the only blocked state a read
+ * capability can be in: `content:view` / `content:read` are configured
+ * `requiresTwoFactor: false`, so `two_factor_required` is unreachable for them
+ * and offering a 2FA challenge here would send the operator somewhere useless.
  */
-export function ContentCapabilityDenied({ capability }: { capability: ContentReadCapability }) {
+export function ContentCapabilityDenied({ capability }: { capability: AdminCapability }) {
   return (
     <div
       role="status"
       data-testid="content-capability-denied"
       className="rounded-xl border border-amber-200 bg-amber-50 px-6 py-10 text-center"
     >
-      <p className="text-sm font-medium text-amber-900">{contentReadBlockReason(capability)}</p>
+      <p className="text-sm font-medium text-amber-900">
+        {capabilityBlockReason(capability, "denied")}
+      </p>
     </div>
   );
 }

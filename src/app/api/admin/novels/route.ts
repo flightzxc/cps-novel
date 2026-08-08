@@ -2,7 +2,8 @@ import { projectAdminContentPage, projectAdminNovelListItem } from "@/contracts"
 import { listAdminNovels } from "@/server/admin-content";
 
 import { prisma } from "../_lib/deps";
-import { guardContentRead, novelListQuery } from "../_lib/content-route";
+import { novelListQuery } from "../_lib/content-route";
+import { guardRead } from "../_lib/route";
 import { handle } from "../_lib/respond";
 
 export const dynamic = "force-dynamic";
@@ -17,7 +18,7 @@ export const dynamic = "force-dynamic";
  */
 export async function GET(request: Request) {
   return handle(async () => {
-    await guardContentRead(request);
+    await guardRead(request);
     const page = await listAdminNovels(prisma, novelListQuery(new URL(request.url)));
     return projectAdminContentPage(page, projectAdminNovelListItem);
   });

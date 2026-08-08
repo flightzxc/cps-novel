@@ -1,7 +1,6 @@
-import type { ContentReadCapability } from "@/contracts";
+import { hasAdminCapability, type AdminCapability } from "@/lib/auth/capabilities";
 import type { AdminAuthContext } from "@/lib/auth/types";
 
-import { hasContentReadCapability } from "../../../api/admin/_lib/content-capabilities";
 import { requireAdminPage } from "../../_lib/page-guard";
 
 export type ContentPageAccess = {
@@ -34,8 +33,8 @@ export type ContentPageAccess = {
  */
 export async function requireContentPage(
   pathname: string,
-  capability: ContentReadCapability,
+  capability: AdminCapability,
 ): Promise<ContentPageAccess> {
   const context = await requireAdminPage(pathname);
-  return { context, granted: hasContentReadCapability(context, capability) };
+  return { context, granted: hasAdminCapability(context, capability) };
 }

@@ -2,10 +2,10 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { projectAdminChapterDetail } from "@/contracts";
+import { hasAdminCapability } from "@/lib/auth/capabilities";
 import { getAdminChapterDetail } from "@/server/admin-content";
 
 import { prisma } from "../../../../../api/admin/_lib/deps";
-import { hasContentReadCapability } from "../../../../../api/admin/_lib/content-capabilities";
 import { AdminShell } from "../../../../_components/admin-shell";
 import { sessionView } from "../../../../_lib/page-guard";
 import { ChapterContentViewer } from "../../../_components/chapter-content-viewer";
@@ -57,7 +57,7 @@ export default async function ChapterDetailPage({
   if (!record) notFound();
 
   const chapter = projectAdminChapterDetail(record);
-  const canReadBody = hasContentReadCapability(context, "content:read");
+  const canReadBody = hasAdminCapability(context, "content:read");
 
   return (
     <AdminShell

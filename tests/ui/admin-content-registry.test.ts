@@ -7,16 +7,9 @@ import {
   ADMIN_CONTENT_ROUTES,
   CONTENT_ROUTE_CAPABILITIES,
   P2_04_ADMIN_REGISTRY,
-  contentReadCapabilityForRoute,
 } from "@/app/api/admin/_lib/registry";
-import {
-  CONTENT_READ_CAPABILITIES,
-  CONTENT_READ_CAPABILITY_CONFIG,
-  hasContentReadCapability,
-  requireContentReadCapability,
-} from "@/app/api/admin/_lib/content-capabilities";
 import { ADMIN_REGISTRY } from "@/app/api/admin/_lib/deps";
-import type { AdminAuthContext } from "@/lib/auth/types";
+import { ADMIN_CAPABILITY_CONFIG } from "@/lib/auth/capabilities";
 import { resolveAdminRoute } from "@/server/auth/registry";
 import { P1_08B_ADMIN_REGISTRY } from "@/server/credentials";
 
@@ -58,8 +51,8 @@ const FILES = await contentRouteFiles();
  *
  * `tests/backend/auth/admin-registry-parity.test.ts` 守的是 P1-08B 凭证面，
  * 这个文件守的是内容读取面，且多守一层：route→能力位的绑定必须由运行时 registry
- * 持有（挂在 registration 上），而不是由 route 自行传参。只对着路径断言的话，一个忘记调
- * `guardContentRead` 的新 route 依然会"登记齐全"地通过。
+ * 持有（标准 `capability` 字段，内核每次请求都据此判定），而不是由 route 自行传参或
+ * 自行判断。只对着路径断言的话，一个忘记接授权的新 route 依然会"登记齐全"地通过。
  */
 describe("P2-04 内容路由登记", () => {
   it("磁盘上的每个内容 GET route 都已登记", () => {
@@ -112,23 +105,52 @@ describe("P2-04 内容路由登记", () => {
 
 describe("P2-04 路由与能力位绑定", () => {
   /**
-   * 绑定由**运行时 registry** 持有，不是靠源码扫描把两边对起来。
+   * 绑定由**运行时 registry** 持有，且由内核在每次请求上执行。
    *
-   * 早先的版本把能力位当参数传进 `guardContentRead`，再用一条 grep 用例声称"它们
-   * 是对应的"——运行时 registry 其实并不持有这条绑定（Codex 复核指出）。现在能力位
-   * 从 registration 上取，route 没有参数可传，也就没有传错的可能。
+   * 用的是标准 `capability` 字段——`requireAdminRouteAccess` 解析出路由后直接把它
+   * 交给 `enforceCapability`。route 没有参数可传，也就没有传错的可能；能力位与授权
+   * 判定都不再有 P2-04 私有实现。
    */
-  it("能力位挂在 registration 上，route 无从自行指定", () => {
+  it("每条内容路由都用标准 capability 字段登记，且是核心 AdminCapability", () => {
     for (const route of ADMIN_CONTENT_ROUTES) {
-      expect(CONTENT_READ_CAPABILITIES).toContain(route.readCapability);
-      expect(contentReadCapabilityForRoute(route.id)).toBe(route.readCapability);
+      expect(ADMIN_CAPABILITY_CONFIG[route.capability]).toBeTruthy();
+      const resolved = resolveAdminRoute(route.path, "GET", P2_04_ADMIN_REGISTRY);
+      // 运行时解析出来的那条 registration 必须自带能力位，否则 enforceCapability
+      // 会当成"无需能力位"直接放行
+      expect(resolved?.capability, `${route.path} 运行时未携带能力位`).toBe(route.capability);
     }
+  });
+
+  it("内容读取能力位在内核里登记为不要求 2FA，高风险能力位不受影响", () => {
+    expect(ADMIN_CAPABILITY_CONFIG["content:view"].requiresTwoFactor).toBe(false);
+    expect(ADMIN_CAPABILITY_CONFIG["content:read"].requiresTwoFactor).toBe(false);
+    expect(ADMIN_CAPABILITY_CONFIG["credential:manage"].requiresTwoFactor).toBe(true);
+    expect(ADMIN_CAPABILITY_CONFIG["content:takedown"].requiresTwoFactor).toBe(true);
+  });
+
+  it("默认拒绝：两个读能力位都没有默认角色", () => {
+    expect(ADMIN_CAPABILITY_CONFIG["content:view"].defaultRoles).toEqual([]);
+    expect(ADMIN_CAPABILITY_CONFIG["content:read"].defaultRoles).toEqual([]);
+  });
+
+  /**
+   * 本轮收口的核心：P2-04 不得再有第二套授权源。
+   *
+   * 既扫源码（不许出现私有 guard / 私有能力位配置），也扫依赖（route 必须走与凭证面
+   * 同一个 `guardRead`）。
+   */
+  it("route 走统一 guardRead，没有 P2-04 专用授权实现", () => {
     for (const entry of FILES) {
-      expect(entry.source, `${entry.file} 仍在自行指定能力位`).toContain(
-        "guardContentRead(request)",
+      expect(entry.source, `${entry.file} 未走统一 guardRead`).toContain("guardRead(request)");
+      expect(entry.source, `${entry.file} 仍引用已删除的专用 guard`).not.toContain(
+        "guardContentRead",
       );
-      expect(entry.source, `${entry.file} 把能力位当参数传了`).not.toMatch(
-        /guardContentRead\(\s*request\s*,/,
+      expect(entry.source, `${entry.file} 仍引用第二套授权源`).not.toContain(
+        "content-capabilities",
+      );
+      // 能力位由 registration 决定，route 不得自行判定
+      expect(entry.source, `${entry.file} 自行做了能力位判断`).not.toMatch(
+        /hasAdminCapability|requireAdminCapability|requireAdminTwoFactor/,
       );
     }
   });
@@ -138,13 +160,8 @@ describe("P2-04 路由与能力位绑定", () => {
       ADMIN_CONTENT_ROUTES.map((route) => route.id).sort(),
     );
     for (const route of ADMIN_CONTENT_ROUTES) {
-      expect(CONTENT_ROUTE_CAPABILITIES[route.id]).toBe(route.readCapability);
+      expect(CONTENT_ROUTE_CAPABILITIES[route.id]).toBe(route.capability);
     }
-  });
-
-  it("未登记为内容路由的 id 取不到能力位，fail closed", () => {
-    expect(contentReadCapabilityForRoute("admin.api.channel_accounts.list")).toBeNull();
-    expect(contentReadCapabilityForRoute("admin.api.not_a_route")).toBeNull();
   });
 
   it("只有章节正文路由要 content:read，元数据路由一律 content:view", () => {
@@ -165,123 +182,83 @@ describe("P2-04 路由与能力位绑定", () => {
 });
 
 /**
- * 显式构造 env，而不是 `{}` 或继承 `process.env`。
+ * 授权唯一真源的源码审计（本轮验收第 7 条）。
  *
- * 前者过不了 `NodeJS.ProcessEnv` 的类型（NODE_ENV 必填），后者会让本机 shell 里
- * 恰好设了 CONTENT_* 的开发者跑出与 CI 不同的结果——默认拒绝这一条尤其怕这个。
+ * 前两版 P2-04 都在 `src/app` 里自带了一份 roles/userIds/env/default-deny 的解析。
+ * 它现在删掉了，而"删掉了"这件事必须是可回归的——否则下一个需要读能力位的页面又会
+ * 就地写一份。判据是：这套解析只允许出现在内核 `src/lib/auth/capabilities.ts` 里。
  */
-function env(overrides: Record<string, string> = {}): NodeJS.ProcessEnv {
-  return { NODE_ENV: "test", ...overrides };
+const KERNEL = "src/lib/auth/capabilities.ts";
+
+async function walk(root: string): Promise<{ file: string; source: string }[]> {
+  const directory = path.resolve(process.cwd(), root);
+  const entries = await readdir(directory, { withFileTypes: true });
+  const nested = await Promise.all(
+    entries.map(async (entry) => {
+      const target = path.join(directory, entry.name);
+      const relative = path.relative(process.cwd(), target);
+      if (entry.isDirectory()) return walk(relative);
+      return /\.tsx?$/.test(entry.name)
+        ? [{ file: relative, source: await readFile(target, "utf8") }]
+        : [];
+    }),
+  );
+  return nested.flat();
 }
 
-function context(role: string, id = "admin-1"): AdminAuthContext {
-  return {
-    identity: {
-      id,
-      username: "operator",
-      role,
-      status: "active",
-      sessionVersion: 1,
-      twoFactorEnabled: false,
-    },
-    // 会话本体与 2FA 状态不参与读能力判定，这里给的是"完全没做过 2FA"的会话。
-    session: {
-      id: "session-1",
-      tokenHash: "hash",
-      identityId: id,
-      sessionVersion: 1,
-      issuedAt: new Date(0),
-      lastSeenAt: new Date(0),
-      absoluteExpiresAt: new Date(0),
-      twoFactorCompletedAt: null,
-      revokedAt: null,
-    },
-    twoFactorCompleted: false,
-  };
+/**
+ * 注释在扫描前剥掉，沿用 `admin-secret-boundary.test.tsx` 的做法。
+ *
+ * 守的是代码碰了什么，不是注释怎么说的——本轮好几处注释正当地解释着"这里为什么
+ * 不再有私有 guard"，把这种说明判成违规，只会逼人把说明删掉。
+ */
+function stripComments(source: string): string {
+  return source.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/(^|[^:])\/\/.*$/gm, "$1");
 }
 
-describe("P2-04 读能力位语义", () => {
-  it("默认拒绝：没有配置 env 时任何角色都读不到", () => {
-    for (const capability of CONTENT_READ_CAPABILITIES) {
-      expect(CONTENT_READ_CAPABILITY_CONFIG[capability].defaultRoles).toEqual([]);
-      expect(hasContentReadCapability(context("super_admin"), capability, env())).toBe(false);
-    }
+const SOURCES = (await walk("src")).map((entry) => ({
+  ...entry,
+  source: stripComments(entry.source),
+}));
+
+describe("P2-04 授权唯一真源", () => {
+  it("扫描范围非空且包含内核本身", () => {
+    expect(SOURCES.length).toBeGreaterThan(0);
+    expect(SOURCES.some((entry) => entry.file === KERNEL)).toBe(true);
   });
 
-  it("按角色与按用户 ID 两条授予路径都生效", () => {
+  it("第二套授权源已删除，文件不存在", () => {
     expect(
-      hasContentReadCapability(context("editor"), "content:view", env({
-        CONTENT_VIEW_ROLES: "editor,ops",
-      })),
-    ).toBe(true);
-    expect(
-      hasContentReadCapability(context("nobody", "u-9"), "content:read", env({
-        CONTENT_READ_USER_IDS: "u-9",
-      })),
-    ).toBe(true);
-    expect(
-      hasContentReadCapability(context("nobody", "u-8"), "content:read", env({
-        CONTENT_READ_USER_IDS: "u-9",
-      })),
+      SOURCES.some((entry) => entry.file.endsWith("_lib/content-capabilities.ts")),
     ).toBe(false);
   });
 
-  /**
-   * 本轮最关键的一条：读不要求 2FA。
-   *
-   * 传入的 context 是 `twoFactorCompleted: false`、`twoFactorCompletedAt: null`
-   * 的会话——放在 `requireAdminCapability` + `requireAdminTwoFactor` 那条链上会
-   * 直接 403。这里必须放行。
-   */
-  it("已授予能力位的会话即使从未完成 2FA 也能读", () => {
-    expect(() =>
-      requireContentReadCapability(context("editor"), "content:view", env({
-        CONTENT_VIEW_ROLES: "editor",
-      })),
-    ).not.toThrow();
-    expect(() =>
-      requireContentReadCapability(context("editor"), "content:read", env({
-        CONTENT_READ_ROLES: "editor",
-      })),
-    ).not.toThrow();
+  it.each([
+    ["*_ROLES env 解析", /CONTENT_(VIEW|READ)_ROLES/],
+    ["*_USER_IDS env 解析", /CONTENT_(VIEW|READ)_USER_IDS/],
+    ["私有能力位类型", /ContentReadCapability/],
+    ["私有能力位配置表", /CONTENT_READ_CAPABILITY_CONFIG/],
+    ["私有 grant 判定", /hasContentReadCapability|requireContentReadCapability/],
+    ["P2-04 专用 guard", /guardContentRead/],
+  ])("%s 只允许出现在内核里", (_name, pattern) => {
+    const offenders = SOURCES.filter(
+      (entry) => entry.file !== KERNEL && pattern.test(entry.source),
+    ).map((entry) => entry.file);
+    expect(offenders).toEqual([]);
   });
 
-  it("未授予时抛出点名能力位的 403", () => {
-    try {
-      requireContentReadCapability(context("editor"), "content:read", env());
-      expect.unreachable("应当抛出");
-    } catch (error) {
-      const denied = error as { code: string; status: number; details: Record<string, string> };
-      expect(denied.code).toBe("admin_capability_denied");
-      expect(denied.status).toBe(403);
-      expect(denied.details.capability).toBe("content:read");
-    }
-  });
-
-  it("读能力位在配置上就标记为不要求 2FA，且实现里不引用 2FA 检查", async () => {
-    for (const capability of CONTENT_READ_CAPABILITIES) {
-      expect(CONTENT_READ_CAPABILITY_CONFIG[capability].requiresTwoFactor).toBe(false);
-    }
-    const source = await readFile(
-      path.resolve(process.cwd(), "src/app/api/admin/_lib/content-capabilities.ts"),
-      "utf8",
-    );
-    const code = source.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/(^|[^:])\/\/.*$/gm, "$1");
-    expect(code).not.toContain("requireAdminTwoFactor");
-  });
-
-  /**
-   * 登记表里刻意不给内容路由填 `capability`：guard 的 `enforceCapability` 一旦
-   * 看到该字段就会连带强制 2FA。这条断言把"为什么留空"钉住，避免后人"顺手补上"
-   * 而在无人察觉的情况下给所有读加上 2FA 门槛。
-   */
-  it("内容路由在 registry 里不填 capability，以避开 guard 的 2FA 强制", () => {
-    for (const route of P2_04_ADMIN_REGISTRY.routes) {
-      const isContentRoute = ADMIN_CONTENT_ROUTES.some(
-        (candidate) => candidate.path === route.path,
+  it("UI 侧一律用内核的 hasAdminCapability 判权，不自行读 role/userId/env", () => {
+    const ui = SOURCES.filter((entry) => entry.file.startsWith("src/app/(admin)/novels"));
+    expect(ui.length).toBeGreaterThan(0);
+    for (const { file, source } of ui) {
+      expect(source, `${file} 自行读取 identity.role 判权`).not.toMatch(
+        /identity\.role\s*===|identity\.role\s*\)/,
       );
-      if (isContentRoute) expect(route.capability).toBeUndefined();
-      else expect(route.capability).toBe("credential:manage");
+      expect(source, `${file} 自行读取 env 判权`).not.toMatch(/process\.env\.[A-Z_]*(ROLE|USER)/);
     }
+    const guard = SOURCES.find(
+      (entry) => entry.file === "src/app/(admin)/novels/_lib/content-page-guard.ts",
+    );
+    expect(guard?.source).toContain("hasAdminCapability");
   });
 });

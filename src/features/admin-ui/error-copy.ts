@@ -1,6 +1,6 @@
 import type { AdminErrorCode, ErrorEnvelope } from "@/contracts";
 
-import { ADMIN_CAPABILITY_LABELS, CONTENT_READ_CAPABILITY_LABELS } from "./capability-view";
+import { ADMIN_CAPABILITY_LABELS } from "./capability-view";
 
 /**
  * The frontend owns this copy.
@@ -57,12 +57,8 @@ export function errorEnvelopeCopy(envelope: ErrorEnvelope): string {
   const reason = envelope.details?.reason;
   if (reason && REASON_COPY[reason]) return REASON_COPY[reason];
   if (envelope.code === "admin_capability_denied" && envelope.details?.capability) {
-    const capability = envelope.details.capability;
-    // Two families share the one `admin_capability_denied` code, so both tables
-    // are consulted before falling back to the generic line.
-    const label =
-      ADMIN_CAPABILITY_LABELS[capability as keyof typeof ADMIN_CAPABILITY_LABELS]
-      ?? CONTENT_READ_CAPABILITY_LABELS[capability as keyof typeof CONTENT_READ_CAPABILITY_LABELS];
+    const capability = envelope.details.capability as keyof typeof ADMIN_CAPABILITY_LABELS;
+    const label = ADMIN_CAPABILITY_LABELS[capability];
     if (label) return `缺少能力位 ${label}（${capability}）`;
   }
   if (envelope.code === "admin_rate_limited" && envelope.details?.retryAfterSeconds) {
