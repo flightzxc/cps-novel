@@ -65,6 +65,8 @@ export type TemplateErrorContext = {
   readonly constraint?: string;
   /** 涉及的 HTML 属性名（小写），仅 `ERR_TEMPLATE_HTML_CONTEXT` 的属性类原因携带。 */
   readonly attribute?: string;
+  /** 涉及的 HTML 标签名（小写），仅 `ERR_TEMPLATE_HTML_CONTEXT` 的属性类原因携带。 */
+  readonly tag?: string;
 };
 
 /**
@@ -81,12 +83,14 @@ export class TemplateRenderError extends Error {
   readonly novelId?: string;
   readonly constraint?: string;
   readonly attribute?: string;
+  readonly tag?: string;
 
   constructor(code: TemplateErrorCode, context: TemplateErrorContext = {}) {
     const details = [
       context.slot === undefined ? null : `slot=${context.slot}`,
       context.field === undefined ? null : `field=${context.field}`,
       context.constraint === undefined ? null : `constraint=${context.constraint}`,
+      context.tag === undefined ? null : `tag=${context.tag}`,
       context.attribute === undefined ? null : `attribute=${context.attribute}`,
       context.templateKey === undefined ? null : `templateKey=${context.templateKey}`,
       context.novelId === undefined ? null : `novelId=${context.novelId}`,
@@ -101,6 +105,7 @@ export class TemplateRenderError extends Error {
     if (context.novelId !== undefined) this.novelId = context.novelId;
     if (context.constraint !== undefined) this.constraint = context.constraint;
     if (context.attribute !== undefined) this.attribute = context.attribute;
+    if (context.tag !== undefined) this.tag = context.tag;
   }
 }
 

@@ -333,6 +333,7 @@ export function renderTemplateSlot(
         ...locate(htmlIssue.field),
         constraint: htmlIssue.reason,
         ...(htmlIssue.attribute === undefined ? {} : { attribute: htmlIssue.attribute }),
+        ...(htmlIssue.tag === undefined ? {} : { tag: htmlIssue.tag }),
       });
     }
   }

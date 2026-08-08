@@ -54,14 +54,23 @@ export type TemplateFieldDefinition = {
    */
   readonly required: boolean;
   /**
-   * 该字段被批准出现在正文 HTML 的哪一个**带引号属性值**里（小写、精确匹配）。
+   * 该字段被批准出现在正文 HTML 的哪一个 **`标签 + 带引号属性值`** 组合里
+   * （两者都小写、都精确匹配）。
    *
-   * 未登记（`undefined`）= 该字段只能出现在 HTML 文本节点。登记了也只放行这一个属性，
-   * 且变量必须**独占整个属性值**——见 `html.ts` 的窄上下文合同。
+   * 🔴 **必须绑定标签，只绑属性名不够。** `src` 这个属性名在 `<img>` 上是图片，在
+   * `<script>` 上就是可执行代码——`<script src="{cover_url}">` 会把上游可控的封面地址
+   * 变成 JS 加载源。同理 `<iframe src>`、`<embed src>`、`<link href>`、`<base href>`。
    *
-   * 🔴 **不预建**：`alt` / `title` 一类的文本属性要等有真实模板证据再逐个补入。
+   * 未登记（`undefined`）= 该字段只能出现在 HTML 文本节点。登记了也只放行这**一个**
+   * 标签属性组合，且变量必须**独占整个属性值**——见 `html.ts` 的窄上下文合同。
+   *
+   * 🔴 **不预建**：`alt` / `title` 一类的文本属性、以及任何额外的兼容标签，都要等有
+   * 真实模板证据再逐个补入。
    */
-  readonly htmlAttribute?: string;
+  readonly htmlBinding?: {
+    readonly tag: string;
+    readonly attribute: string;
+  };
   /** 后台变量面板展示名。 */
   readonly label: string;
   /** 后台变量面板说明文案。 */
@@ -96,7 +105,7 @@ export const REGISTERED_TEMPLATE_FIELDS = [
     key: "cover_url",
     kind: "absolute_url",
     required: false,
-    htmlAttribute: "src",
+    htmlBinding: { tag: "img", attribute: "src" },
     label: "封面图",
     description: "封面图地址（Novel.coverUrl 可空）——引用前请用条件块包裹",
   },
@@ -118,7 +127,7 @@ export const REGISTERED_TEMPLATE_FIELDS = [
     key: "promo_redirect_url",
     kind: "redirect_path",
     required: true,
-    htmlAttribute: "href",
+    htmlBinding: { tag: "a", attribute: "href" },
     label: "正式阅读地址",
     description: "站内公开跳转入口 /go/<公开跳转码>，由调用方解析好传入；引擎自己不构造任何 URL",
   },

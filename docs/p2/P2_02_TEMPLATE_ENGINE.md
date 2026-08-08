@@ -61,18 +61,24 @@
 V1 **不实现 HTML sanitizer，也不实现完整的 context-aware escaping**，改为收窄合同。正文里的变量只允许出现在两种上下文：
 
 - **A. HTML 文本节点**——任何已登记字段都可以；
-- **B. 明确批准的、带引号的属性值**——由登记表的 `htmlAttribute` 逐字段授权。
+- **B. 明确批准的 `标签 + 带引号属性值` 组合**——由登记表的 `htmlBinding` 逐字段授权。
 
-当前的属性映射只有两条，且**逐字段精确匹配**：
+当前的授权只有两条，且**标签与属性必须同时精确匹配**（都按小写比较）：
 
-| 字段 | 允许的属性 |
+| 字段 | 允许的位置 |
 | --- | --- |
-| `promo_redirect_url` | `href` |
-| `cover_url` | `src` |
+| `promo_redirect_url` | `a[href]` |
+| `cover_url` | `img[src]` |
+
+🔴 **授权必须绑定标签，只认属性名是漏的。** `src` 在 `<img>` 上是图片，在 `<script>` 上就是可执行代码——`<script src="{cover_url}">` 会把上游可控的封面地址变成 JS 加载源。同类还有 `<iframe src>`、`<embed src>`、`<video src>`、`<input src>`、`<link href>`、`<base href>`、`<area href>`，以及反向搭配 `<img href>` / `<a src>`。绑定成 `img[src]` / `a[href]` 之后这些一次全关。
+
+**结束标签永不授权**（`</a href="{x}">`）：浏览器会丢弃结束标签的属性，值只会被静默吞掉。
 
 其余字段一律只能进文本节点。变量还必须**独占整个属性值**——`href="{promo_redirect_url}"` 放行，`href="javascript:{promo_redirect_url}"`、`href="/x{promo_redirect_url}"`、`href="{if a}{promo_redirect_url}{endif}"` 全部拒绝，因为拼接是 scheme 注入的唯一入口。
 
 **明确拒绝的上下文**：未加引号的属性值、属性名位置、标签名位置、`on*` 事件属性、`style` 属性、`<script>` 块、`<style>` 块、HTML 注释，以及任何判不准的位置（扫描器判不准就拒绝，不试图恢复错误标记）。
+
+🔴 **raw text 的结束边界必须是真正的结束标签。** 浏览器要求 `</script` 之后紧跟空白、`/` 或 `>`，因此 `</scriptx>` **不是**结束标签，它仍然是脚本内容。若按「以 `</script` 开头」做前缀匹配就会提前退出 raw text，把后面那段仍在可执行上下文里的文本当成普通文本节点放行——等于绕过整个合同。判不准时一律把 raw text 延伸到模板末尾（保守方向：多拒不漏），`</script` 恰好抵达模板结尾也按未闭合处理。另外**不看自闭合写法**：HTML（非 XHTML）里 `<script/>` 并不自闭合，浏览器照样进入 raw text。
 
 🔴 **`alt` / `title` 一类文本属性不预建。** 要放行必须先给出真实模板证据，再往登记表的 `htmlAttribute` 上逐个补——不为「将来可能用到」提前开口子。
 
@@ -166,10 +172,10 @@ CPS 文件路径均相对其仓库根，基线 `d77c3b968285698529cf97c7f0f97b28
 | --- | --- | --- | --- | --- | --- |
 | `novel_title` | `text` | 是 | 仅文本节点 | `Novel.title`（非空列） | `NovelDetailView.title` |
 | `novel_description` | `text` | 是 | 仅文本节点 | `Novel.description`（非空列） | `NovelDetailView.description` |
-| `cover_url` | `absolute_url` | 否 | `src` | `Novel.coverUrl`（可空列） | `NovelDetailView.coverUrl?` |
+| `cover_url` | `absolute_url` | 否 | `img[src]` | `Novel.coverUrl`（可空列） | `NovelDetailView.coverUrl?` |
 | `total_chapter_count` | `text` | 否 | 仅文本节点 | `Novel.totalChapterCount`（默认 0 = 未知） | `src/features/public-ui/types.ts` 明文放行为「客观标量，可展示」；🔴 绝不据此生成章节行 |
 | `preview_chapter_count` | `text` | 否 | 仅文本节点 | 口径对应 `NovelPreviewPolicy.materializedChapterCount`，**由调用方传入** | `PreviewPosition.total`（「试读 1 / 3」的分母）。该表读写归 P2-05，引擎不自读 |
-| `promo_redirect_url` | `redirect_path` | 是 | `href` | 调用方按 `PromoLink.publicRedirectCode` 解析好的 `/go/<码>` | `docs/p1/P1_10_VISUAL_DIRECTION.md` §9 允许「公开跳转码对应的正式阅读按钮」；发布门禁本就要求 PromoLink 就绪 |
+| `promo_redirect_url` | `redirect_path` | 是 | `a[href]` | 调用方按 `PromoLink.publicRedirectCode` 解析好的 `/go/<码>` | `docs/p1/P1_10_VISUAL_DIRECTION.md` §9 允许「公开跳转码对应的正式阅读按钮」；发布门禁本就要求 PromoLink 就绪 |
 
 `required: false` 的字段被裸引用时，`analyzeTemplate` 报 `unguardedOptionalFields`——模板合法但「缺该值的那些小说」会在渲染期失败，这一档告警把代价提前给模板作者看到，而不是等批量生成时逐条失败。
 
@@ -240,7 +246,7 @@ CPS 文件路径均相对其仓库根，基线 `d77c3b968285698529cf97c7f0f97b28
 
 ## 7. 测试清单
 
-对应 `tests/ui/template-engine.test.ts`，vitest `ui` project，83 条。
+对应 `tests/ui/template-engine.test.ts`，vitest `ui` project，87 条。
 
 🔴 放在 `src/` 下的测试**一条都不会被收集**（两个 project 的 include 都不覆盖 `src/`），且 `passWithNoTests: true` 会让空跑判 PASS——落点写错不会有任何提示。
 
@@ -253,7 +259,9 @@ CPS 文件路径均相对其仓库根，基线 `d77c3b968285698529cf97c7f0f97b28
 | 未登记字段拒绝 | 13 个禁止名逐个：保存期 `analyzeTemplate` 报出 **且** 渲染期抛码；条件位同样拒绝；藏在永不渲染的块里也拒绝；原型链属性名拒绝；CPS 没有的语法（`{a.b}` / `{a\|upper}` / `{else}`）不被悄悄支持 |
 | 语法错误 | `unclosed_if` / `unexpected_endif`；配对数相同但顺序错乱也抓；语法错误优先于未登记字段；合法配对时 `endif` 不被当成字段 |
 | HTML 转义 | 正文槽位实体转义；模板自带标签原样保留；属性上下文无法逃逸；纯文本槽位不转义；条件块内模板文本不转义而取值转义；**取值里的 `{x}` / `{if x}` 不被二次展开** |
-| 🔴 正文 HTML 窄上下文合同 | 文本节点插值放行且正确转义；`href="{promo_redirect_url}"` / `src="{cover_url}"` 放行（单双引号皆可）；**拒绝**未加引号属性、`on*` 事件属性（含大小写变体）、`style` 属性、`<script>`/`<style>` 块（含未闭合）、标签名位置、属性名位置、HTML 注释（含未闭合）、未授权属性（`alt` / `title` / `meta content` / 交换 href↔src）、属性值拼接（scheme 前缀 / 路径前缀 / 查询后缀 / 双变量 / 条件块 / 前导空格）；条件块包裹整段标签放行；不含变量的 `onclick` / `style` / `script` 不受影响；纯文本槽位不做 HTML 判定；`analyzeHtmlInterpolation` 可在保存期单独调用并逐条报出 |
+| 🔴 正文 HTML 窄上下文合同 | 文本节点插值放行且正确转义；`a[href]="{promo_redirect_url}"` / `img[src]="{cover_url}"` 放行（单双引号皆可、标签名大小写不敏感）；**拒绝**未加引号属性、`on*` 事件属性（含大小写变体）、`style` 属性、标签名位置、属性名位置、HTML 注释（含未闭合）、未授权属性（`alt` / `title` / `meta content`）、属性值拼接（scheme 前缀 / 路径前缀 / 查询后缀 / 双变量 / 条件块 / 前导空格）；条件块包裹整段标签放行；不含变量的 `onclick` / `style` / `script` 不受影响；纯文本槽位不做 HTML 判定；`analyzeHtmlInterpolation` 可在保存期单独调用并逐条报出（含 `tag` / `attribute`） |
+| 🔴 标签绑定（P1 回归） | `<script src>` / `<iframe src>` / `<embed src>` / `<frame src>` / `<input src>` / `<video src>` / `<link href>` / `<base href>` / `<area href>` 逐个拒绝并报出实际标签；反向搭配 `<img href>` / `<a src>` 拒绝；结束标签 `</a href>` / `</img src>` 拒绝 |
+| 🔴 raw text 结束边界（P1 回归） | `</scriptx>` / `</scriptfoo>` / `</stylex>` / `</styles>` / 大小写变体 `</SCRIPTX>` 均**不**算闭合，其后的插值仍判 `script_block` / `style_block`；`</script` 抵达模板末尾按未闭合处理；`<script/>` / `<style/>` 自闭合写法照样进入 raw text；真正的合法边界 `</script>` / `</script >` / `</script/>` / `</SCRIPT>` / `</style\t>` 正常退出并放行后续文本节点 |
 | 🔴 取值形态逐字段校验 | `cover_url`：http/https（含 query/fragment）通过，`javascript:`（含大小写变体）/ `data:` / 相对路径 / 协议相对 / `/go/…` / 引号 / 尖括号 / 空白 / 反斜杠 / NUL / 制表符 / DEL / `ftp:` 拒绝；`promo_redirect_url`：`/go/<码>`（含大小写、1 字符、32 字符）通过，`//evil.example` / 危险 scheme / `/go/../admin` / 多段 / 空码 / 空白 / 换行 / NUL / `%2f` / 反斜杠 / 引号 / `<script>` / `/goo/` / 缺前导斜杠 / `/GO/` / 超 32 字符 / **绝对 URL** 拒绝；text 类字段不做形态校验 |
 | 可空字段裸引用告警 | 裸引用报出；同名条件块包住（含嵌套层）不报；别的字段的条件块不算包住；非空列字段不报 |
 | 取值表构建 | 恒含全部登记键且值恒为字符串；计数字段 0 保留而负数/小数/NaN/null 折空；文本两端裁空白；**`Map` 承载，原型链属性名取不到东西** |

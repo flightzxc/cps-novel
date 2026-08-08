@@ -20,8 +20,14 @@
  *
  * **A. HTML 文本节点**——任何已登记字段都可以。
  *
- * **B. 明确批准的、带引号的属性值**——由登记表的 `htmlAttribute` 逐字段授权，
- * 当前只有两条：`promo_redirect_url → href`、`cover_url → src`。
+ * **B. 明确批准的 `标签 + 带引号属性值` 组合**——由登记表的 `htmlBinding` 逐字段授权，
+ * 当前只有两条：`promo_redirect_url → a[href]`、`cover_url → img[src]`。
+ *
+ * 🔴 **授权必须绑定标签。** 只认属性名是不够的：`src` 在 `<img>` 上是图片，在
+ * `<script>` 上就是可执行代码——`<script src="{cover_url}">` 能把上游可控的封面地址
+ * 变成 JS 加载源。同理 `<iframe src>`、`<embed src>`、`<link href>`、`<base href>`。
+ * 结束标签（`</a href="…">`）永不授权：浏览器会丢弃它的属性，值只会被静默吞掉。
+ *
  * 且变量必须**独占整个属性值**：`href="{promo_redirect_url}"` 放行，
  * `href="/x{promo_redirect_url}"`、`href="{if a}{promo_redirect_url}{endif}"` 一律拒绝——
  * 拼接是 scheme 注入（`href="javascript:{x}"`）的唯一入口。
@@ -68,6 +74,8 @@ export type HtmlInterpolationIssue = {
   readonly reason: HtmlInterpolationReason;
   /** 涉及的属性名（小写），仅属性相关的原因携带。 */
   readonly attribute?: string;
+  /** 涉及的标签名（小写），仅属性相关的原因携带。 */
+  readonly tag?: string;
 };
 
 type Token = {
@@ -112,6 +120,35 @@ function isTagNameChar(char: string): boolean {
 }
 
 /**
+ * 找到 raw text 元素（`script` / `style`）真正的结束边界。
+ *
+ * 🔴 **不能用「以 `</script` 开头」当边界。** 浏览器要求结束标签名之后紧跟
+ * 空白、`/` 或 `>`，因此 `</scriptx>` **不是**结束标签——它仍然是脚本内容。
+ * 若按前缀匹配提前退出 raw text，后面那段仍在可执行上下文里的文本会被当成普通
+ * HTML 文本节点放行，等于绕过整个合同。
+ *
+ * 判不准时一律把 raw text 延伸到模板末尾（保守方向：多拒不漏）。名字末尾恰好到达
+ * 模板结尾（`…</script` 后无字符）同样按未闭合处理。
+ */
+function findRawTextEnd(template: string, from: number, tagName: string): number {
+  const lower = template.toLowerCase();
+  const needle = `</${tagName}`;
+  let cursor = from;
+
+  while (cursor <= lower.length) {
+    const found = lower.indexOf(needle, cursor);
+    if (found === -1) return template.length;
+
+    const after = lower[found + needle.length];
+    if (after === ">" || after === "/" || (after !== undefined && isWhitespace(after))) {
+      return found;
+    }
+    cursor = found + needle.length;
+  }
+  return template.length;
+}
+
+/**
  * 扫描正文模板，返回全部违反窄上下文合同的变量引用。
  *
  * 纯函数。空数组表示模板的每一处变量都落在文本节点或已授权的带引号属性值里。
@@ -120,11 +157,19 @@ export function analyzeHtmlInterpolation(template: string): readonly HtmlInterpo
   const issues: HtmlInterpolationIssue[] = [];
   const length = template.length;
 
-  const report = (field: string, reason: HtmlInterpolationReason, attribute?: string) => {
+  const report = (
+    field: string,
+    reason: HtmlInterpolationReason,
+    attribute?: string,
+    tag?: string,
+  ) => {
     issues.push(
-      Object.freeze(
-        attribute === undefined ? { field, reason } : { field, reason, attribute },
-      ),
+      Object.freeze({
+        field,
+        reason,
+        ...(attribute === undefined ? {} : { attribute }),
+        ...(tag === undefined ? {} : { tag }),
+      }),
     );
   };
 
@@ -144,30 +189,34 @@ export function analyzeHtmlInterpolation(template: string): readonly HtmlInterpo
 
   /** 带引号属性值的判定。`fields` 是该值内出现的全部变量。 */
   const classifyQuotedValue = (
+    tagName: string,
+    isClosingTag: boolean,
     attribute: string,
     fields: readonly string[],
     hasOtherContent: boolean,
   ) => {
     if (fields.length === 0) return;
+    const tag = tagName.toLowerCase();
     const lower = attribute.toLowerCase();
 
     if (lower.startsWith("on")) {
-      for (const field of fields) report(field, "event_attribute", lower);
+      for (const field of fields) report(field, "event_attribute", lower, tag);
       return;
     }
     if (lower === "style") {
-      for (const field of fields) report(field, "style_attribute", lower);
+      for (const field of fields) report(field, "style_attribute", lower, tag);
       return;
     }
     // 变量必须独占整个属性值：拼接是 scheme 注入的唯一入口。
     if (fields.length > 1 || hasOtherContent) {
-      for (const field of fields) report(field, "value_not_isolated", lower);
+      for (const field of fields) report(field, "value_not_isolated", lower, tag);
       return;
     }
     const field = fields[0];
-    const definition = getTemplateField(field);
-    if (definition === null || definition.htmlAttribute !== lower) {
-      report(field, "attribute_not_permitted", lower);
+    const binding = getTemplateField(field)?.htmlBinding;
+    // 🔴 标签与属性必须同时匹配；结束标签永不授权（浏览器丢弃其属性）。
+    if (isClosingTag || binding === undefined || binding.tag !== tag || binding.attribute !== lower) {
+      report(field, "attribute_not_permitted", lower, tag);
     }
   };
 
@@ -263,7 +312,7 @@ export function analyzeHtmlInterpolation(template: string): readonly HtmlInterpo
             cursor += 1;
           }
           if (cursor < length) cursor += 1; // 吃掉闭合引号。
-          classifyQuotedValue(attribute, fields, hasOtherContent);
+          classifyQuotedValue(tagName, isClosing, attribute, fields, hasOtherContent);
           continue;
         }
 
@@ -271,7 +320,9 @@ export function analyzeHtmlInterpolation(template: string): readonly HtmlInterpo
         while (cursor < length && !isWhitespace(template[cursor]) && template[cursor] !== ">") {
           const token = matchToken(template, cursor);
           if (token !== null) {
-            if (token.kind === "field") report(token.name, "unquoted_attribute", attribute.toLowerCase());
+            if (token.kind === "field") {
+              report(token.name, "unquoted_attribute", attribute.toLowerCase(), tagName.toLowerCase());
+            }
             cursor += token.length;
             continue;
           }
@@ -282,10 +333,11 @@ export function analyzeHtmlInterpolation(template: string): readonly HtmlInterpo
       index = cursor;
 
       // script / style 是 raw text 元素：里面的一切都不是 HTML 文本节点。
+      // 🔴 不看 selfClosing：HTML（非 XHTML）里 `<script/>` 并不自闭合，浏览器照样
+      // 进入 raw text，跟着写的内容仍是脚本。
       const lowerTag = tagName.toLowerCase();
-      if (!isClosing && !selfClosing && (lowerTag === "script" || lowerTag === "style")) {
-        const closeAt = template.toLowerCase().indexOf(`</${lowerTag}`, index);
-        const stop = closeAt === -1 ? length : closeAt;
+      if (!isClosing && (lowerTag === "script" || lowerTag === "style")) {
+        const stop = findRawTextEnd(template, index, lowerTag);
         reportRange(index, stop, lowerTag === "script" ? "script_block" : "style_block");
         index = stop;
       }

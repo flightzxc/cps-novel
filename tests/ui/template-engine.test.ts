@@ -544,7 +544,7 @@ describe("🔴 正文 HTML 插值的窄上下文合同", () => {
     expect(analyzeHtmlInterpolation("<p>{novel_title}</p>")).toEqual([]);
   });
 
-  it("B. 已授权的带引号属性放行：href={promo_redirect_url} / src={cover_url}", () => {
+  it("B. 已授权的 标签+属性 组合放行：a[href]={promo_redirect_url} / img[src]={cover_url}", () => {
     expect(renderBody('<a href="{promo_redirect_url}">read</a>')).toBe(
       `<a href="${FULL_INPUT.promoRedirectUrl}">read</a>`,
     );
@@ -554,7 +554,80 @@ describe("🔴 正文 HTML 插值的窄上下文合同", () => {
     expect(renderBody('<img src="{cover_url}" alt="">')).toBe(
       `<img src="${FULL_INPUT.coverUrl}" alt="">`,
     );
+    // 标签名大小写不敏感。
+    expect(renderBody('<IMG SRC="{cover_url}">')).toBe(`<IMG SRC="${FULL_INPUT.coverUrl}">`);
     expect(analyzeHtmlInterpolation('<a href="{promo_redirect_url}"></a>')).toEqual([]);
+  });
+
+  it("🔴 授权绑定到 标签+属性 组合——同名属性换个标签就是可执行上下文", () => {
+    // <script src> 会把上游可控的封面地址变成 JS 加载源；只认属性名挡不住它。
+    for (const [template, field, tag] of [
+      ['<script src="{cover_url}"></script>', "cover_url", "script"],
+      ['<iframe src="{cover_url}"></iframe>', "cover_url", "iframe"],
+      ['<embed src="{cover_url}">', "cover_url", "embed"],
+      ['<frame src="{cover_url}">', "cover_url", "frame"],
+      ['<input src="{cover_url}">', "cover_url", "input"],
+      ['<video src="{cover_url}">', "cover_url", "video"],
+      ['<link href="{promo_redirect_url}">', "promo_redirect_url", "link"],
+      ['<base href="{promo_redirect_url}">', "promo_redirect_url", "base"],
+      ['<area href="{promo_redirect_url}">', "promo_redirect_url", "area"],
+      // 反向搭配同样拒绝：img 上的 href、a 上的 src。
+      ['<img href="{promo_redirect_url}">', "promo_redirect_url", "img"],
+      ['<a src="{cover_url}"></a>', "cover_url", "a"],
+    ] as const) {
+      const error = htmlError(template);
+      expect(error.code, `${template} 应被拒绝`).toBe(ERR_TEMPLATE_HTML_CONTEXT);
+      expect(error.constraint).toBe("attribute_not_permitted");
+      expect(error.field).toBe(field);
+      expect(error.tag, `${template} 应报出标签`).toBe(tag);
+    }
+  });
+
+  it("🔴 结束标签永不授权——浏览器丢弃它的属性，值只会被静默吞掉", () => {
+    for (const template of ['</a href="{promo_redirect_url}">', '</img src="{cover_url}">']) {
+      const error = htmlError(template);
+      expect(error.code, `${template} 应被拒绝`).toBe(ERR_TEMPLATE_HTML_CONTEXT);
+      expect(error.constraint).toBe("attribute_not_permitted");
+    }
+  });
+
+  it("🔴 raw text 结束边界必须是真正的结束标签——`</scriptx>` 不是", () => {
+    // 浏览器要求结束标签名之后紧跟空白 / `/` / `>`。按前缀匹配会提前退出 raw text，
+    // 把仍在可执行上下文里的文本当成普通文本节点放行。
+    for (const [template, reason] of [
+      ['<script>a</scriptx>{novel_title}</script>', "script_block"],
+      ['<script>a</scriptfoo>{cover_url}</script>', "script_block"],
+      ['<style>a</stylex>{novel_title}</style>', "style_block"],
+      ['<style>a</styles>{novel_title}</style>', "style_block"],
+      // 大小写变体同样是假边界。
+      ['<script>a</SCRIPTX>{novel_title}</script>', "script_block"],
+      // `</script` 恰好到模板末尾也不算闭合，保守延伸到末尾。
+      ['<script>{novel_title}</script', "script_block"],
+      // 自闭合写法在 HTML 里不成立，浏览器照样进入 raw text。
+      ["<script/>{novel_title}", "script_block"],
+      ["<style/>{novel_title}", "style_block"],
+    ] as const) {
+      const error = htmlError(template);
+      expect(error.code, `${template} 应被拒绝`).toBe(ERR_TEMPLATE_HTML_CONTEXT);
+      expect(error.constraint, `${template} 应判为 ${reason}`).toBe(reason);
+    }
+  });
+
+  it("真正的结束标签才退出 raw text——合法边界照常放行后续文本节点", () => {
+    for (const template of [
+      "<script>var a=1;</script>{novel_title}",
+      "<script>var a=1;</script >{novel_title}",
+      "<script>var a=1;</script/>{novel_title}",
+      "<script>var a=1;</SCRIPT>{novel_title}",
+      "<style>a{}</style>{novel_title}",
+      "<style>a{}</style\t>{novel_title}",
+    ]) {
+      expect(analyzeHtmlInterpolation(template), `${template} 应放行`).toEqual([]);
+    }
+    // 退出 raw text 之后是文本节点，取值照常实体转义（书名里的 ' → &#39;）。
+    expect(renderBody("<script>var a=1;</script>{novel_title}")).toBe(
+      `<script>var a=1;</script>${escapeHtmlText(FULL_INPUT.title)}`,
+    );
   });
 
   it("🔴 未加引号的属性值拒绝——取值里一个空格就能造出新属性", () => {
@@ -671,8 +744,8 @@ describe("🔴 正文 HTML 插值的窄上下文合同", () => {
       '<img alt={novel_title}><div style="{novel_description}">x</div>',
     );
     expect(issues).toEqual([
-      { field: "novel_title", reason: "unquoted_attribute", attribute: "alt" },
-      { field: "novel_description", reason: "style_attribute", attribute: "style" },
+      { field: "novel_title", reason: "unquoted_attribute", attribute: "alt", tag: "img" },
+      { field: "novel_description", reason: "style_attribute", attribute: "style", tag: "div" },
     ]);
   });
 });
