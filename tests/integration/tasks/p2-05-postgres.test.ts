@@ -6,6 +6,7 @@ import { materializeChangduPreview } from "@/lib/preview";
 import {
   buildWorkerAllowlist,
   createMoboreaderCatalogScanTask,
+  createMoboreaderPreviewRefreshTask,
 } from "@/lib/tasks";
 import { encryptCredentialSecretForWorker } from "../../../worker/credentials/crypto";
 import { createMoboreaderWorkerHandlers } from "../../../worker/handlers/moboreader";
@@ -27,6 +28,7 @@ const gates = {
   NODE_ENV: "test",
   FEATURE_NOVEL_CATALOG_SYNC: "true",
   NOVEL_CATALOG_SYNC_ALLOW_WRITE: "true",
+  MOBOREADER_PREVIEW_SOURCE_APP_CODES: "changdu",
 } satisfies NodeJS.ProcessEnv;
 
 function page(bookId = "book-1") {
@@ -104,23 +106,44 @@ async function seedFoundation() {
   });
 }
 
-async function enqueue(mode: "dry_run" | "apply", requestToken: string = randomUUID()) {
+async function enqueue(
+  mode: "dry_run" | "apply",
+  requestToken: string = randomUUID(),
+  env: NodeJS.ProcessEnv = gates,
+) {
   return createMoboreaderCatalogScanTask(owner, {
     channelAccountId: ids.account,
     channelAppId: ids.channelApp,
     pageStart: 1,
     pageEnd: 1,
     pageSize: 1,
-    maxItems: 1,
     requestToken,
     actorId: "owner",
     requestId: randomUUID(),
     mode,
-  }, gates);
+  }, env);
 }
 
-async function consume(readAdapter = adapter()) {
-  const handlers = createMoboreaderWorkerHandlers(worker, { adapter: readAdapter, env: gates });
+async function enqueueRange(input: {
+  pageEnd: number;
+  pageSize: number;
+  env?: NodeJS.ProcessEnv;
+}) {
+  return createMoboreaderCatalogScanTask(owner, {
+    channelAccountId: ids.account,
+    channelAppId: ids.channelApp,
+    pageStart: 1,
+    pageEnd: input.pageEnd,
+    pageSize: input.pageSize,
+    requestToken: randomUUID(),
+    actorId: "owner",
+    requestId: randomUUID(),
+    mode: "apply",
+  }, input.env ?? gates);
+}
+
+async function consume(readAdapter = adapter(), env: NodeJS.ProcessEnv = gates) {
+  const handlers = createMoboreaderWorkerHandlers(worker, { adapter: readAdapter, env });
   return processOneWorkerCycle({
     prisma: worker,
     workerId: "p2-05-worker",
@@ -129,6 +152,28 @@ async function consume(readAdapter = adapter()) {
     signal: new AbortController().signal,
     leaseMs: 30_000,
   });
+}
+
+async function seedLinkedSource(bookId: string, businessId: string) {
+  const novel = await owner.novel.create({
+    data: { businessId, title: `Novel ${bookId}`, description: "Description", locale: "en-US", slug: businessId },
+  });
+  const source = await owner.novelSourceItem.create({
+    data: {
+      channelAppId: ids.channelApp,
+      novelId: novel.id,
+      externalBookId: bookId,
+      sourceLanguageCode: "2",
+      sourceLanguageName: "English",
+      title: `Old ${bookId}`,
+      description: "Old",
+      totalChapterCount: 1,
+      paidFromChapter: 1,
+      status: "linked",
+      rawPayload: { seeded: true },
+    },
+  });
+  return { novel, source };
 }
 
 function chapters(count: number) {
@@ -160,10 +205,17 @@ describe.skipIf(!enabled).sequential("P2-05 PostgreSQL 16.14 write paths", () =>
   });
 
   it("retains task/audit results while dry-run makes zero business writes", async () => {
-    const created = await enqueue("dry_run");
+    const dryRunOnly = {
+      NODE_ENV: "test",
+      FEATURE_NOVEL_CATALOG_SYNC: "true",
+      NOVEL_CATALOG_SYNC_ALLOW_WRITE: "false",
+      MOBOREADER_PREVIEW_SOURCE_APP_CODES: "changdu",
+    } satisfies NodeJS.ProcessEnv;
+    const created = await enqueue("dry_run", randomUUID(), dryRunOnly);
     expect(created.status).toBe("enqueued");
-    expect(await consume()).toBe(true);
+    expect(await consume(adapter(), dryRunOnly)).toBe(true);
     expect(await owner.novelSourceItem.count()).toBe(0);
+    expect(await owner.channelSyncTask.count()).toBe(0);
     const task = await owner.catalogScanTask.findUniqueOrThrow({ where: { id: created.taskId } });
     expect(task).toMatchObject({ status: "completed", successCount: 1 });
     expect(await owner.operationAudit.count({ where: { taskId: created.taskId } })).toBeGreaterThanOrEqual(2);
@@ -175,6 +227,7 @@ describe.skipIf(!enabled).sequential("P2-05 PostgreSQL 16.14 write paths", () =>
     expect(await owner.novelSourceItem.count()).toBe(1);
     const task = await owner.catalogScanTask.findUniqueOrThrow({ where: { id: first.taskId } });
     expect(task.result).toMatchObject({ checkpoint: { lastCompletedPage: 1, returnedCount: 1 } });
+    expect(task.result).toMatchObject({ stopReason: "expected_total_reached", terminalState: "completed" });
     const duplicate = await createMoboreaderCatalogScanTask(owner, {
       channelAccountId: ids.account,
       channelAppId: ids.channelApp,
@@ -218,7 +271,6 @@ describe.skipIf(!enabled).sequential("P2-05 PostgreSQL 16.14 write paths", () =>
       pageStart: 1,
       pageEnd: 2,
       pageSize: 1,
-      maxItems: 2,
       requestToken: randomUUID(),
       actorId: "owner",
       requestId: randomUUID(),
@@ -243,6 +295,124 @@ describe.skipIf(!enabled).sequential("P2-05 PostgreSQL 16.14 write paths", () =>
       status: "completed",
       successCount: 2,
       result: { checkpoint: { lastCompletedPage: 2 } },
+    });
+  });
+
+  it("records safety limit as logical partial_failed and schema-compatible completed_with_errors", async () => {
+    const safetyEnv = { ...gates, MOBOREADER_CATALOG_SAFETY_MAX_PAGES: "1" } satisfies NodeJS.ProcessEnv;
+    const created = await enqueueRange({ pageEnd: 3, pageSize: 1, env: safetyEnv });
+    expect(await consume(adapter(), safetyEnv)).toBe(true);
+    const task = await owner.catalogScanTask.findUniqueOrThrow({ where: { id: created.taskId } });
+    expect(task).toMatchObject({ status: "completed_with_errors", totalCount: 1, successCount: 1 });
+    expect(task.result).toMatchObject({
+      stopReason: "safety_limit",
+      terminalState: "partial_failed",
+      completeness: { expected: 3, actual: 1 },
+    });
+  });
+
+  it.each([
+    ["empty_page", { items: [], totalCount: 10, rawEvidence: { __boundary: "approved_raw_evidence" } }],
+    ["short_page", { ...page("short"), totalCount: 10 }],
+  ] as const)("stops remaining pages on %s and records incomplete expected-vs-actual", async (reason, response) => {
+    const created = await enqueueRange({ pageEnd: 3, pageSize: 2 });
+    expect(await consume({ ...adapter(), listBooks: async () => response } as MoboreaderReadAdapter)).toBe(true);
+    const task = await owner.catalogScanTask.findUniqueOrThrow({ where: { id: created.taskId } });
+    expect(task).toMatchObject({ status: "completed_with_errors", totalCount: 3, successCount: 3 });
+    expect(task.result).toMatchObject({ stopReason: reason, terminalState: "partial_failed" });
+    expect(await owner.catalogScanTaskItem.count({ where: { taskId: created.taskId, result: { path: ["stoppedBeforeFetch"], equals: true } } })).toBe(2);
+  });
+
+  it("records upstream_error and does not continue later catalog pages", async () => {
+    const created = await enqueueRange({ pageEnd: 3, pageSize: 1 });
+    const failing = { ...adapter(), listBooks: async () => { throw new Error("upstream body must not persist"); } };
+    expect(await consume(failing)).toBe(true);
+    const task = await owner.catalogScanTask.findUniqueOrThrow({ where: { id: created.taskId } });
+    expect(task).toMatchObject({ status: "completed_with_errors", failedCount: 3 });
+    expect(task.result).toMatchObject({ stopReason: "upstream_error", terminalState: "partial_failed" });
+    expect(JSON.stringify(task.error)).not.toContain("upstream body must not persist");
+  });
+
+  it("enqueues exactly the current linked catalog batch into disabled ChannelSyncTask items", async () => {
+    const touched = await seedLinkedSource("book-1", "scope-touched");
+    const outside = await seedLinkedSource("book-outside", "scope-outside");
+    const created = await enqueue("apply");
+    expect(await consume()).toBe(true);
+    const preview = await owner.channelSyncTask.findUniqueOrThrow({
+      where: { requestToken: `moboreader.preview_refresh.v1:${created.taskId}` },
+      include: { items: true },
+    });
+    expect(preview).toMatchObject({
+      taskType: "moboreader.preview_refresh.v1",
+      status: "disabled",
+      totalCount: 1,
+      params: {
+        trigger: "auto",
+        catalogScanTaskId: created.taskId,
+        runtime: { chunkSize: 25, concurrency: 2, timeoutMs: 20_000, freshnessMs: 86_400_000 },
+        evidence: { materialType: "open", dataId: "open", productionPreviewCall: "fail_closed" },
+      },
+    });
+    expect(preview.items.map(({ novelSourceItemId }) => novelSourceItemId)).toEqual([touched.source.id]);
+    expect(preview.items.map(({ novelSourceItemId }) => novelSourceItemId)).not.toContain(outside.source.id);
+
+    const retry = await createMoboreaderPreviewRefreshTask(owner, {
+      channelAccountId: ids.account,
+      channelAppId: ids.channelApp,
+      novelSourceItemIds: [touched.source.id],
+      requestToken: `moboreader.preview_refresh.v1:${created.taskId}`,
+      actorId: "owner",
+      requestId: randomUUID(),
+    }, gates);
+    expect(retry).toMatchObject({ status: "duplicate", taskId: preview.id });
+  });
+
+  it("uses the same task path for manual trigger and applies 24h freshness without widening scope", async () => {
+    const stale = await seedLinkedSource("book-1", "manual-stale");
+    const fresh = await seedLinkedSource("book-fresh", "manual-fresh");
+    await owner.novelPreviewPolicy.create({
+      data: {
+        novelId: fresh.novel.id,
+        maxMaterializedChapters: 3,
+        lastRefreshedAt: new Date(),
+      },
+    });
+    const manual = await createMoboreaderPreviewRefreshTask(owner, {
+      channelAccountId: ids.account,
+      channelAppId: ids.channelApp,
+      novelSourceItemIds: [stale.source.id, fresh.source.id],
+      requestToken: randomUUID(),
+      actorId: "owner",
+      requestId: randomUUID(),
+    }, gates);
+    expect(manual).toMatchObject({
+      status: "enqueued",
+      taskStatus: "disabled",
+      eligibleCount: 1,
+      skipReasonCounts: { fresh_preview: 1 },
+    });
+    const task = await owner.channelSyncTask.findUniqueOrThrow({
+      where: { id: manual.status === "enqueued" ? manual.taskId : randomUUID() },
+      include: { items: true },
+    });
+    expect(task.params).toMatchObject({ trigger: "manual" });
+    expect(task.items.map(({ novelSourceItemId }) => novelSourceItemId)).toEqual([stale.source.id]);
+
+    const noSourceAppAllowlist = await createMoboreaderPreviewRefreshTask(owner, {
+      channelAccountId: ids.account,
+      channelAppId: ids.channelApp,
+      novelSourceItemIds: [stale.source.id],
+      requestToken: randomUUID(),
+      actorId: "owner",
+      requestId: randomUUID(),
+    }, {
+      NODE_ENV: "test",
+      FEATURE_NOVEL_CATALOG_SYNC: "true",
+      NOVEL_CATALOG_SYNC_ALLOW_WRITE: "true",
+    });
+    expect(noSourceAppAllowlist).toEqual({
+      status: "no_eligible_sources",
+      skipReasonCounts: { source_app_not_allowlisted: 1 },
     });
   });
 
@@ -286,7 +456,53 @@ describe.skipIf(!enabled).sequential("P2-05 PostgreSQL 16.14 write paths", () =>
     expect(two).toMatchObject({ materializedCount: 2, staleCount: 1 });
     expect(await owner.novelChapterContent.count()).toBe(3);
     expect(await owner.novelChapter.count({ where: { status: "stale" } })).toBe(1);
+    const restored = await materializeChangduPreview(worker, { ...common, chapterList: chapters(3), allEpis: 101, payEpisFrom: 8 });
+    expect(restored).toMatchObject({ materializedCount: 3, restoredCount: 1 });
+    expect(await owner.novelChapter.count({ where: { status: "stale" } })).toBe(0);
     expect(await owner.indexNowOutbox.count()).toBe(0);
+    const previewAudits = await owner.operationAudit.findMany({
+      where: { action: "moboreader.preview.materialized" },
+      select: { afterSnapshot: true },
+    });
+    const serializedAudits = JSON.stringify(previewAudits);
+    expect(serializedAudits).not.toContain("body-1");
+    expect(serializedAudits).not.toContain("body-2");
+  });
+
+  it("rereads per-novel preview cap values 1, 2 and 5 on each refresh", async () => {
+    await enqueue("apply");
+    await consume();
+    const source = await owner.novelSourceItem.findFirstOrThrow();
+    const novel = await owner.novel.create({ data: { businessId: "dynamic-cap", title: "Dynamic", description: "D", locale: "en-US", slug: "dynamic-cap" } });
+    await owner.novelSourceItem.update({ where: { id: source.id }, data: { novelId: novel.id } });
+    const sync = await owner.channelSyncTask.create({
+      data: {
+        taskType: "moboreader.preview_refresh.v1",
+        channelAccountId: ids.account,
+        channelAppId: ids.channelApp,
+        operationScopeHash: "d".repeat(64),
+        requestToken: randomUUID(),
+        status: "disabled",
+        totalCount: 1,
+        items: { create: [{ novelSourceItemId: source.id, payload: { test: true } }] },
+      },
+      include: { items: true },
+    });
+    const common = {
+      novelId: novel.id,
+      novelSourceItemId: source.id,
+      sourceFetchId: sync.items[0].id,
+      actorId: "owner",
+      requestId: randomUUID(),
+      taskId: sync.id,
+      trustedCompleteResponse: true,
+      chapterList: chapters(5),
+    };
+    expect((await materializeChangduPreview(worker, common)).materializedCount).toBe(3);
+    for (const cap of [1, 2, 5]) {
+      await owner.novelPreviewPolicy.update({ where: { novelId: novel.id }, data: { maxMaterializedChapters: cap } });
+      expect((await materializeChangduPreview(worker, common)).materializedCount).toBe(cap);
+    }
   });
 
   it("failed and empty refreshes retain old valid preview state", async () => {

@@ -15,7 +15,7 @@ function chapters(count: number) {
 }
 
 describe("Changdu preview policy materialization", () => {
-  it.each([[5, 3], [3, 3], [2, 2]])("materializes actual %i chapters to policy cap as %i", (actual, expected) => {
+  it.each([[5, 3], [3, 3], [2, 2], [1, 1]])("materializes actual %i chapters to policy cap as %i", (actual, expected) => {
     const plan = buildChangduPreviewPlan({
       chapterList: chapters(actual),
       maxMaterializedChapters: CHANGDU_INITIAL_MAX_MATERIALIZED_CHAPTERS,
@@ -24,6 +24,15 @@ describe("Changdu preview policy materialization", () => {
     expect(plan.authoritative).toBe(true);
     expect(plan.materializedCount).toBe(expected);
     expect(plan.chapters.map(({ i }) => i)).toEqual(Array.from({ length: expected }, (_, index) => index + 1));
+  });
+
+  it.each([1, 2, 5])("uses database-supplied policy cap %i instead of a hard-coded three", (cap) => {
+    const plan = buildChangduPreviewPlan({
+      chapterList: chapters(5),
+      maxMaterializedChapters: cap,
+      trustedCompleteResponse: true,
+    });
+    expect(plan.materializedCount).toBe(cap);
   });
 
   it("does not fabricate chapters from scalar allEpis or totalChapterCount", () => {

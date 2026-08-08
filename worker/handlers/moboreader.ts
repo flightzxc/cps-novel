@@ -9,7 +9,9 @@ import {
   isNovelCatalogSyncWriteAllowed,
 } from "../../src/lib/flags";
 import {
+  enqueueMoboreaderPreviewRefreshTask,
   MOBOREADER_CATALOG_LIMITS,
+  MOBOREADER_PREVIEW_DISABLED_REASON,
   MOBOREADER_TASK_TYPES,
 } from "../../src/lib/tasks/moboreader";
 import { createHandlerRegistry, type TaskHandler } from "../../src/lib/tasks";
@@ -21,24 +23,59 @@ export interface MoboreaderCatalogPayload {
   name: string;
   orderType: number;
   projectType: number;
-  maxPages: number;
-  maxItems: number;
+  safetyMaxPages: number;
+  requestedPageEnd: number;
+  scheduledPageEnd: number;
   expiresAt: string;
   source: "manual";
   actorId: string;
   requestId: string;
 }
 
+export type MoboreaderCatalogStopReason =
+  | "expected_total_reached"
+  | "expected_pages_reached"
+  | "empty_page"
+  | "short_page"
+  | "safety_limit"
+  | "upstream_error";
+
+export function determineMoboreaderCatalogStopReason(input: {
+  returnedCount: number;
+  pageSize: number;
+  fetchedRaw: number;
+  batchExpectedCount: number;
+  pageIndex: number;
+  requestedPageEnd: number;
+  scheduledPageEnd: number;
+}): Exclude<MoboreaderCatalogStopReason, "upstream_error"> | null {
+  if (input.returnedCount === 0) return "empty_page";
+  if (input.fetchedRaw >= input.batchExpectedCount) return "expected_total_reached";
+  if (input.scheduledPageEnd < input.requestedPageEnd && input.pageIndex >= input.scheduledPageEnd) return "safety_limit";
+  if (input.pageIndex >= input.requestedPageEnd) return "expected_pages_reached";
+  if (input.returnedCount < input.pageSize) return "short_page";
+  return null;
+}
+
 export function parseMoboreaderCatalogPayload(value: unknown): MoboreaderCatalogPayload {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("catalog_payload_invalid");
   const item = value as Partial<MoboreaderCatalogPayload>;
-  const integers = [item.pageIndex, item.pageSize, item.projectType, item.maxPages, item.maxItems, item.orderType];
+  const integers = [
+    item.pageIndex,
+    item.pageSize,
+    item.projectType,
+    item.safetyMaxPages,
+    item.requestedPageEnd,
+    item.scheduledPageEnd,
+    item.orderType,
+  ];
   if (integers.some((number) => !Number.isSafeInteger(number))) throw new Error("catalog_payload_invalid");
   if (item.pageIndex! < 1 || item.pageSize! < 1 || item.pageSize! > MOBOREADER_CATALOG_LIMITS.maxPageSize) {
     throw new Error("catalog_payload_invalid");
   }
-  if (item.maxPages! < 1 || item.maxPages! > MOBOREADER_CATALOG_LIMITS.maxPages) throw new Error("max_pages_exceeded");
-  if (item.maxItems! < 1 || item.maxItems! > MOBOREADER_CATALOG_LIMITS.maxItems) throw new Error("max_items_exceeded");
+  if (item.safetyMaxPages! < 1 || item.requestedPageEnd! < item.pageIndex! || item.scheduledPageEnd! < item.pageIndex!) {
+    throw new Error("catalog_payload_invalid");
+  }
   if (item.source !== "manual" || typeof item.actorId !== "string" || !item.actorId || typeof item.requestId !== "string" || !item.requestId) {
     throw new Error("manual_source_required");
   }
@@ -83,12 +120,13 @@ async function loadAndValidateTaskScope(
   const pageCount = task.pageEnd - task.pageStart + 1;
   if (
     pageCount < 1
-    || pageCount > payload.maxPages
-    || pageCount * task.pageSize > payload.maxItems
     || task.pageSize !== payload.pageSize
     || task.projectType !== payload.projectType
+    || task.pageEnd !== payload.requestedPageEnd
+    || payload.scheduledPageEnd > task.pageEnd
+    || payload.scheduledPageEnd - task.pageStart + 1 > payload.safetyMaxPages
     || payload.pageIndex < task.pageStart
-    || payload.pageIndex > task.pageEnd
+    || payload.pageIndex > payload.scheduledPageEnd
   ) {
     throw new Error("catalog_task_bounds_mismatch");
   }
@@ -159,6 +197,8 @@ async function persistCatalogPage(
     taskId: string;
     itemId: string;
     channelAppId: string;
+    env: NodeJS.ProcessEnv;
+    now: Date;
   },
 ) {
   await tx.$queryRaw(Prisma.sql`SELECT id FROM catalog_scan_task WHERE id = ${input.taskId}::uuid FOR UPDATE`);
@@ -166,15 +206,8 @@ async function persistCatalogPage(
     where: { id: input.itemId },
     data: { returnedCount: input.response.items.length },
   });
-  const [totals] = await tx.$queryRaw<Array<{ total: bigint; max_page: number }>>(Prisma.sql`
-    SELECT COALESCE(SUM(returned_count), 0)::bigint AS total,
-           COALESCE(MAX(page_index), ${input.payload.pageIndex})::int AS max_page
-    FROM catalog_scan_task_item
-    WHERE task_id = ${input.taskId}::uuid AND status = 'success'
-  `);
-  if (Number(totals.total) > input.payload.maxItems) throw new Error("max_items_exceeded");
-
-  const now = new Date();
+  const now = input.now;
+  const sourceItemIds: string[] = [];
   for (const book of input.response.items) {
     const source = await tx.novelSourceItem.upsert({
       where: {
@@ -217,6 +250,7 @@ async function persistCatalogPage(
         rawPayload: book.rawEvidence as Prisma.InputJsonObject,
       },
     });
+    sourceItemIds.push(source.id);
     const labels: Array<{ kind: "series_type" | "recommend" | "language" | "agency"; value: string }> = [
       ...book.seriesTypeList.map((value) => ({ kind: "series_type" as const, value })),
       ...book.recommendList.map((value) => ({ kind: "recommend" as const, value })),
@@ -225,17 +259,121 @@ async function persistCatalogPage(
     ];
     await persistLabels(tx, input.channelAppId, source.id, labels, now);
   }
+
+  const [beforeStop] = await tx.$queryRaw<Array<{ total: bigint; max_page: number }>>(Prisma.sql`
+    SELECT COALESCE(SUM(returned_count), 0)::bigint AS total,
+           COALESCE(MAX(page_index) FILTER (
+             WHERE status = 'success' AND COALESCE((result->>'stoppedBeforeFetch')::boolean, false) = false
+           ), ${input.payload.pageIndex})::int AS max_page
+    FROM catalog_scan_task_item
+    WHERE task_id = ${input.taskId}::uuid AND status = 'success'
+  `);
+  const fetchedRaw = Number(beforeStop.total);
+  const task = await tx.catalogScanTask.findUniqueOrThrow({
+    where: { id: input.taskId },
+    select: { pageStart: true, pageEnd: true, pageSize: true },
+  });
+  const requestedCapacity = (task.pageEnd - task.pageStart + 1) * task.pageSize;
+  const upstreamRemaining = Math.max(0, input.response.totalCount - (task.pageStart - 1) * task.pageSize);
+  const batchExpectedCount = Math.min(requestedCapacity, upstreamRemaining);
+  const stopReason = determineMoboreaderCatalogStopReason({
+    returnedCount: input.response.items.length,
+    pageSize: input.payload.pageSize,
+    fetchedRaw,
+    batchExpectedCount,
+    pageIndex: input.payload.pageIndex,
+    requestedPageEnd: input.payload.requestedPageEnd,
+    scheduledPageEnd: input.payload.scheduledPageEnd,
+  });
+
+  await tx.catalogScanTaskItem.update({
+    where: { id: input.itemId },
+    data: {
+      result: {
+        source: "manual",
+        pageIndex: input.payload.pageIndex,
+        returnedCount: input.response.items.length,
+        observedTotal: input.response.totalCount,
+        sourceItemIds,
+        stopReason,
+      },
+    },
+  });
+  if (stopReason) {
+    await tx.catalogScanTaskItem.updateMany({
+      where: { taskId: input.taskId, status: "pending", pageIndex: { gt: input.payload.pageIndex } },
+      data: {
+        status: "success",
+        returnedCount: 0,
+        result: { stoppedBeforeFetch: true, stopReason },
+        finishedAt: now,
+      },
+    });
+  }
+
+  const [afterStop] = await tx.$queryRaw<Array<{ actual: bigint; pending: bigint; processing: bigint; failed: bigint }>>(Prisma.sql`
+    SELECT COALESCE(SUM(returned_count), 0)::bigint AS actual,
+           COUNT(*) FILTER (WHERE status = 'pending')::bigint AS pending,
+           COUNT(*) FILTER (WHERE status = 'processing')::bigint AS processing,
+           COUNT(*) FILTER (WHERE status = 'failed')::bigint AS failed
+    FROM catalog_scan_task_item WHERE task_id = ${input.taskId}::uuid
+  `);
+  const batchActualCount = Number(afterStop.actual);
+  const terminal = Number(afterStop.pending) === 0 && Number(afterStop.processing) === 0;
+  const partialFailed = terminal && (
+    stopReason === "safety_limit"
+    || Number(afterStop.failed) > 0
+    || batchActualCount < batchExpectedCount
+  );
+  let previewEnqueue: Prisma.InputJsonObject | null = null;
+  let touchedSourceItemIds = sourceItemIds;
+  if (terminal) {
+    const itemResults = await tx.catalogScanTaskItem.findMany({
+      where: { taskId: input.taskId },
+      select: { result: true },
+    });
+    touchedSourceItemIds = Array.from(new Set(itemResults.flatMap(({ result }) => {
+      if (!result || typeof result !== "object" || Array.isArray(result)) return [];
+      const ids = (result as Record<string, unknown>).sourceItemIds;
+      return Array.isArray(ids) ? ids.filter((id): id is string => typeof id === "string") : [];
+    })));
+    if (touchedSourceItemIds.length > 0) {
+      const preview = await enqueueMoboreaderPreviewRefreshTask(tx, {
+        trigger: "auto",
+        catalogScanTaskId: input.taskId,
+        channelAccountId: (await tx.catalogScanTask.findUniqueOrThrow({ where: { id: input.taskId } })).channelAccountId,
+        channelAppId: input.channelAppId,
+        novelSourceItemIds: touchedSourceItemIds,
+        requestToken: `moboreader.preview_refresh.v1:${input.taskId}`,
+        actorId: input.payload.actorId,
+        requestId: input.payload.requestId,
+        mode: "apply",
+      }, input.env, now);
+      previewEnqueue = preview as unknown as Prisma.InputJsonObject;
+    }
+  }
   await tx.catalogScanTask.update({
     where: { id: input.taskId },
     data: {
       catalogObservedTotal: input.response.totalCount,
+      batchExpectedCount,
+      batchActualCount,
       result: {
         checkpoint: {
-          lastCompletedPage: totals.max_page,
+          lastCompletedPage: beforeStop.max_page,
           returnedCount: input.response.items.length,
           observedTotal: input.response.totalCount,
           completedAt: now.toISOString(),
         },
+        stopReason,
+        terminalState: terminal ? (partialFailed ? "partial_failed" : "completed") : "processing",
+        completeness: {
+          expected: batchExpectedCount,
+          actual: batchActualCount,
+          fetchedUniqueSourceItems: touchedSourceItemIds.length,
+          duplicateObservations: Math.max(0, batchActualCount - touchedSourceItemIds.length),
+        },
+        previewEnqueue,
       },
     },
   });
@@ -253,6 +391,77 @@ async function persistCatalogPage(
         pageIndex: input.payload.pageIndex,
         returnedCount: input.response.items.length,
         observedTotal: input.response.totalCount,
+        stopReason,
+      },
+    },
+  });
+}
+
+async function persistCatalogUpstreamFailure(
+  tx: Prisma.TransactionClient,
+  input: {
+    taskId: string;
+    itemId: string;
+    payload: MoboreaderCatalogPayload;
+    channelAppId: string;
+    env: NodeJS.ProcessEnv;
+    now: Date;
+  },
+) {
+  await tx.$queryRaw(Prisma.sql`SELECT id FROM catalog_scan_task WHERE id = ${input.taskId}::uuid FOR UPDATE`);
+  const now = input.now;
+  await tx.catalogScanTaskItem.updateMany({
+    where: { taskId: input.taskId, status: "pending", pageIndex: { gt: input.payload.pageIndex } },
+    data: {
+      status: "failed",
+      error: { code: "upstream_error", message: "Catalog scan stopped after an upstream error" },
+      result: { stoppedBeforeFetch: true, stopReason: "upstream_error" },
+      finishedAt: now,
+    },
+  });
+  const [totals] = await tx.$queryRaw<Array<{ actual: bigint; expected: number | null }>>(Prisma.sql`
+    SELECT COALESCE(SUM(i.returned_count), 0)::bigint AS actual, t.batch_expected_count AS expected
+    FROM catalog_scan_task t
+    LEFT JOIN catalog_scan_task_item i ON i.task_id = t.id
+    WHERE t.id = ${input.taskId}::uuid
+    GROUP BY t.batch_expected_count
+  `);
+  const actual = Number(totals.actual);
+  const expected = totals.expected ?? actual;
+  const itemResults = await tx.catalogScanTaskItem.findMany({
+    where: { taskId: input.taskId },
+    select: { result: true },
+  });
+  const touchedSourceItemIds = Array.from(new Set(itemResults.flatMap(({ result }) => {
+    if (!result || typeof result !== "object" || Array.isArray(result)) return [];
+    const ids = (result as Record<string, unknown>).sourceItemIds;
+    return Array.isArray(ids) ? ids.filter((id): id is string => typeof id === "string") : [];
+  })));
+  let previewEnqueue: Prisma.InputJsonObject | null = null;
+  if (touchedSourceItemIds.length > 0) {
+    const task = await tx.catalogScanTask.findUniqueOrThrow({ where: { id: input.taskId } });
+    const preview = await enqueueMoboreaderPreviewRefreshTask(tx, {
+      trigger: "auto",
+      catalogScanTaskId: input.taskId,
+      channelAccountId: task.channelAccountId,
+      channelAppId: input.channelAppId,
+      novelSourceItemIds: touchedSourceItemIds,
+      requestToken: `moboreader.preview_refresh.v1:${input.taskId}`,
+      actorId: input.payload.actorId,
+      requestId: input.payload.requestId,
+      mode: "apply",
+    }, input.env, now);
+    previewEnqueue = preview as unknown as Prisma.InputJsonObject;
+  }
+  await tx.catalogScanTask.update({
+    where: { id: input.taskId },
+    data: {
+      batchActualCount: actual,
+      result: {
+        stopReason: "upstream_error",
+        terminalState: "partial_failed",
+        completeness: { expected, actual },
+        previewEnqueue,
       },
     },
   });
@@ -290,16 +499,55 @@ export function createMoboreaderCatalogHandler(
       binding.credential_id,
       binding.key_version,
     );
-    const response = await adapter.listBooks({
-      name: payload.name,
-      orderType: payload.orderType,
-      pageIndex: payload.pageIndex,
-      pageSize: payload.pageSize,
-      projectType: payload.projectType,
-    }, token, signal);
-    if (response.items.length > payload.pageSize || response.items.length > payload.maxItems) {
-      return { status: "failed", error: { code: "upstream_page_limit_exceeded", message: "Upstream page exceeded task bounds" } };
+    let response: ListBooksResponse;
+    try {
+      response = await adapter.listBooks({
+        name: payload.name,
+        orderType: payload.orderType,
+        pageIndex: payload.pageIndex,
+        pageSize: payload.pageSize,
+        projectType: payload.projectType,
+      }, token, signal);
+    } catch {
+      return {
+        status: "failed",
+        result: { stopReason: "upstream_error", terminalState: "partial_failed" },
+        error: { code: "upstream_error", message: "MoboReader catalog read failed" },
+        protectedWrite: async (tx) => persistCatalogUpstreamFailure(tx, {
+          taskId: lease.taskId,
+          itemId: lease.itemId,
+          payload,
+          channelAppId: scope.channelAppId,
+          env,
+          now: now(),
+        }),
+      };
     }
+    if (response.items.length > payload.pageSize) {
+      return {
+        status: "failed",
+        result: { stopReason: "upstream_error", terminalState: "partial_failed" },
+        error: { code: "upstream_page_limit_exceeded", message: "Upstream page exceeded the requested page size" },
+        protectedWrite: async (tx) => persistCatalogUpstreamFailure(tx, {
+          taskId: lease.taskId,
+          itemId: lease.itemId,
+          payload,
+          channelAppId: scope.channelAppId,
+          env,
+          now: now(),
+        }),
+      };
+    }
+    const observedFetchedPosition = (payload.pageIndex - 1) * payload.pageSize + response.items.length;
+    const stopReason = determineMoboreaderCatalogStopReason({
+      returnedCount: response.items.length,
+      pageSize: payload.pageSize,
+      fetchedRaw: observedFetchedPosition,
+      batchExpectedCount: response.totalCount,
+      pageIndex: payload.pageIndex,
+      requestedPageEnd: payload.requestedPageEnd,
+      scheduledPageEnd: payload.scheduledPageEnd,
+    });
     const result = {
       source: "manual",
       mode,
@@ -308,6 +556,8 @@ export function createMoboreaderCatalogHandler(
       observedTotal: response.totalCount,
       plannedSourceIds: response.items.map((item) => `${item.externalBookId}:${item.language}`),
       checkpoint: { pageIndex: payload.pageIndex },
+      stopReason,
+      terminalState: stopReason === "safety_limit" ? "partial_failed" : undefined,
     };
     return {
       status: "success",
@@ -318,7 +568,28 @@ export function createMoboreaderCatalogHandler(
         taskId: lease.taskId,
         itemId: lease.itemId,
         channelAppId: scope.channelAppId,
+        env,
+        now: now(),
       }),
+    };
+  };
+}
+
+export function createMoboreaderPreviewHandler(
+  _db: PrismaClient,
+  dependencies: MoboreaderHandlerDependencies = {},
+): TaskHandler {
+  const adapter = dependencies.adapter ?? createMoboreaderReadAdapter();
+  return async () => {
+    // Deliberately do not inspect a source row or invoke either preview endpoint:
+    // materialType and dataId provenance are still unproven production inputs.
+    void adapter;
+    return {
+      status: "failed",
+      error: {
+        code: MOBOREADER_PREVIEW_DISABLED_REASON,
+        message: "Preview production call is fail-closed pending materialType and dataId evidence",
+      },
     };
   };
 }
@@ -332,6 +603,11 @@ export function createMoboreaderWorkerHandlers(
       family: "catalog_scan",
       maxAttempts: 3,
       handler: createMoboreaderCatalogHandler(db, dependencies),
+    },
+    [MOBOREADER_TASK_TYPES.previewRefresh]: {
+      family: "channel_sync",
+      maxAttempts: 1,
+      handler: createMoboreaderPreviewHandler(db, dependencies),
     },
   });
 }

@@ -61,6 +61,11 @@ async function selectPending(
                  i.created_at AS cursor_at
           FROM catalog_scan_task_item i
           WHERE i.status = 'pending' ${cursorClause}
+            AND NOT EXISTS (
+              SELECT 1 FROM catalog_scan_task_item earlier
+              WHERE earlier.task_id = i.task_id AND earlier.page_index < i.page_index
+                AND earlier.status IN ('pending', 'processing')
+            )
           ORDER BY i.created_at, i.id
           LIMIT 128
           FOR UPDATE OF i SKIP LOCKED
@@ -192,6 +197,12 @@ export async function recomputeParentTask(
         total_count = c.total, success_count = c.success, failed_count = c.failed,
         status = CASE
           WHEN c.pending + c.processing > 0 THEN 'processing'
+          WHEN t.result->>'terminalState' = 'partial_failed'
+            OR EXISTS (
+              SELECT 1 FROM catalog_scan_task_item terminal_item
+              WHERE terminal_item.task_id = t.id
+                AND terminal_item.result->>'terminalState' = 'partial_failed'
+            ) THEN 'completed_with_errors'
           WHEN c.failed > 0 AND c.success = 0 THEN 'failed'
           WHEN c.failed > 0 THEN 'completed_with_errors'
           ELSE 'completed' END,
@@ -517,6 +528,33 @@ export async function finalizeTaskItem(
   await prisma.$transaction(async (tx) => {
     const affected = await guardedFinalize(tx, lease, outcome);
     if (affected !== 1) throw new LeaseLostError(lease);
+    if (lease.family === "catalog_scan" && outcome.result && typeof outcome.result === "object" && !Array.isArray(outcome.result)) {
+      const stopReason = (outcome.result as Record<string, unknown>).stopReason;
+      if (typeof stopReason === "string" && [
+        "expected_total_reached",
+        "expected_pages_reached",
+        "empty_page",
+        "short_page",
+        "safety_limit",
+        "upstream_error",
+      ].includes(stopReason)) {
+        const terminalStatus = stopReason === "upstream_error" ? "failed" : "success";
+        await tx.$executeRaw(Prisma.sql`
+          UPDATE catalog_scan_task_item remaining
+          SET status = ${terminalStatus}, returned_count = COALESCE(returned_count, 0),
+              result = jsonb_build_object('stoppedBeforeFetch', true, 'stopReason', ${stopReason}),
+              error = ${stopReason === "upstream_error"
+                ? JSON.stringify(sanitizePersistedTaskError({ code: "upstream_error", message: "Catalog scan stopped after an upstream error" }))
+                : null}::jsonb,
+              finished_at = transaction_timestamp(), updated_at = transaction_timestamp()
+          WHERE remaining.task_id = ${lease.taskId}::uuid AND remaining.status = 'pending'
+            AND remaining.page_index > (
+              SELECT current_item.page_index FROM catalog_scan_task_item current_item
+              WHERE current_item.id = ${lease.itemId}::uuid
+            )
+        `);
+      }
+    }
     if (outcome.protectedWrite) await outcome.protectedWrite(tx);
     await tx.operationAudit.create({
       data: {
