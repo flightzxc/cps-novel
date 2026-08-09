@@ -49,20 +49,6 @@ export function TagsTable({
         <p className="text-gray-400">
           {activity === "history" ? "暂无历史标签" : "没有符合条件的标签"}
         </p>
-        {/*
-          `current` / `history` are strictly complementary at the kernel
-          (label-level `EXISTS` over active links): `current` rows always have
-          `novelCount >= 1` and `history` rows always have `novelCount === 0`.
-          `active` on `novel_source_item_label` is never written `false` by any
-          shipped write path yet, so `history` is reliably empty right now —
-          that is a true statement about the data, not a query failure, and the
-          copy says so rather than reading like a broken filter.
-        */}
-        {activity === "history" && (
-          <p className="mt-1 text-xs text-gray-400" data-testid="tags-history-empty-note">
-            当前没有已失效的标签。标签的失效标记由上游写侧回写，写侧尚未落地，因此该档目前恒为空。
-          </p>
-        )}
       </div>
     );
   }

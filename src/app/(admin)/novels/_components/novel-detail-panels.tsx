@@ -269,19 +269,13 @@ export function NovelLabelsPanel({ novel }: { novel: AdminNovelDetailView }) {
 }
 
 /**
- * `displayValue` and `externalLabelValue` render in parallel, never as a
- * fallback of one for the other:
+ * Display follows the upstream contract by kind:
  *
- * - has a display value → the display value leads, the raw upstream value
- *   trails in parentheses as a small grey aside — the curated name is what an
- *   operator reads first, but the code it was derived from stays one glance
- *   away;
- * - no display value (true for every row today — the write side has not
- *   backfilled `display_value` yet) → only the raw value renders. It is never
- *   invented from anywhere, and in particular never from a UI-local
- *   code-to-name table: the one language-code mapping this project trusts is
- *   `src/lib/locale/locale-canonical.ts`, and a `language`-kind label with no
- *   `display_value` shows its upstream code exactly as given.
+ * - `series_type` / `recommend`: the raw value is already operator-readable
+ *   and is therefore the primary text;
+ * - `language` / `agency`: the upstream display name leads and the raw
+ *   identity remains visible beside it. A missing display name is explicit;
+ *   the raw identity never impersonates it through a fallback.
  */
 function NovelLabelGroup({ labels }: { labels: readonly AdminNovelLabelView[] }) {
   if (labels.length === 0) {
@@ -289,18 +283,32 @@ function NovelLabelGroup({ labels }: { labels: readonly AdminNovelLabelView[] })
   }
   return (
     <div className="flex flex-wrap gap-1.5">
-      {labels.map((label) => (
-        <span
-          key={label.labelId}
-          className="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-700"
-          data-testid={`novel-label-${label.labelId}`}
-        >
-          {label.displayValue ?? label.externalLabelValue}
-          {label.displayValue && (
-            <span className="ml-1 text-gray-400">（{label.externalLabelValue}）</span>
-          )}
-        </span>
-      ))}
+      {labels.map((label) => {
+        const rawIsPrimary = label.labelKind === "series_type" || label.labelKind === "recommend";
+        return (
+          <span
+            key={label.labelId}
+            className="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-700"
+            data-testid={`novel-label-${label.labelId}`}
+          >
+            {rawIsPrimary ? (
+              label.externalLabelValue
+            ) : (
+              <>
+                {label.displayValue ?? (
+                  <span
+                    className="text-gray-400"
+                    data-testid={`novel-label-display-missing-${label.labelId}`}
+                  >
+                    展示名缺失
+                  </span>
+                )}
+                <span className="ml-1 text-gray-400">（原值：{label.externalLabelValue}）</span>
+              </>
+            )}
+          </span>
+        );
+      })}
     </div>
   );
 }

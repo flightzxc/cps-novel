@@ -203,12 +203,10 @@ describe("P2-06 标签筛选栏", () => {
 });
 
 describe("P2-06 标签空态", () => {
-  it("activity=history 时给出专属说明：写侧尚未回填，该档目前恒为空", () => {
+  it("activity=history 时只显示普通产品空态", () => {
     render(<TagsTable labels={[]} activity="history" />);
     expect(screen.getByText("暂无历史标签")).toBeTruthy();
-    const note = screen.getByTestId("tags-history-empty-note");
-    expect(note.textContent).toContain("写侧尚未落地");
-    expect(note.textContent).toContain("该档目前恒为空");
+    expect(screen.queryByTestId("tags-history-empty-note")).toBeNull();
   });
 
   it("activity=current 时是普通空态，没有历史说明", () => {

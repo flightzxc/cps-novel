@@ -639,13 +639,19 @@ export async function getAdminNovelDetail(
 }
 
 // Whether `sl` (source_label, must be aliased `sl` in the enclosing query)
-// currently carries at least one active novel association. This predicate,
-// and its negation, partition ALL labels disjointly: current ⊎ history = all.
-//
-// 🔴 Do NOT redefine "history" as "exists an inactive association" — a label
-// can carry both active and inactive novel_source_item_label rows at the same
-// time, which would let it show up in both current and history simultaneously
-// and break the partition. "history" is strictly "no active association left".
+// has ever been related to a live source item / novel. Bare dictionary rows do
+// not belong to current, history or their union.
+const LABEL_HAS_ANY_NOVEL_RELATION = Prisma.sql`EXISTS (
+  SELECT 1
+  FROM novel_source_item_label nsil
+  JOIN novel_source_item nsi ON nsi.id = nsil.novel_source_item_id AND nsi.deleted_at IS NULL
+  JOIN novel n2 ON n2.id = nsi.novel_id AND n2.deleted_at IS NULL
+  WHERE nsil.source_label_id = sl.id
+)`;
+
+// Whether `sl` currently carries at least one active novel association. Do not
+// redefine history as "exists an inactive association": one label may have
+// both active and inactive relations, but it must appear in current only.
 const LABEL_HAS_ACTIVE_NOVEL = Prisma.sql`EXISTS (
   SELECT 1
   FROM novel_source_item_label nsil
@@ -661,8 +667,11 @@ function sourceLabelFilters(input: NormalizedSourceLabelList): Prisma.Sql {
     filters.push(Prisma.sql`POSITION(LOWER(${input.search}) IN LOWER(sl.external_label_value)) > 0`);
   }
   if (input.activity === "current") filters.push(LABEL_HAS_ACTIVE_NOVEL);
-  if (input.activity === "history") filters.push(Prisma.sql`NOT ${LABEL_HAS_ACTIVE_NOVEL}`);
-  // activity === "all" adds no predicate.
+  if (input.activity === "history") {
+    filters.push(LABEL_HAS_ANY_NOVEL_RELATION);
+    filters.push(Prisma.sql`NOT ${LABEL_HAS_ACTIVE_NOVEL}`);
+  }
+  if (input.activity === "all") filters.push(LABEL_HAS_ANY_NOVEL_RELATION);
   return filters.length > 0 ? Prisma.join(filters, " AND ") : Prisma.sql`TRUE`;
 }
 

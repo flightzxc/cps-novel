@@ -9,6 +9,7 @@ import {
   AdminContentQueryError,
   getAdminNovelDetail,
   listAdminNovels,
+  listAdminSourceLabels,
   normalizeAdminChapterListInput,
   normalizeAdminNovelListInput,
   readAdminChapterContent,
@@ -22,6 +23,11 @@ function queryDb(results: unknown[]) {
   const query = vi.fn();
   for (const result of results) query.mockResolvedValueOnce(result);
   return { db: { $queryRaw: query } as unknown as PrismaClient, query };
+}
+
+function normalizedSql(value: unknown): string {
+  const sql = value as { strings: readonly string[] };
+  return sql.strings.join("?").replace(/\s+/g, " ").trim();
 }
 
 function listRow() {
@@ -194,5 +200,32 @@ describe("P2-04 admin content projections", () => {
     });
     expect(JSON.stringify(audit.mock.calls)).not.toContain("copyrighted-body-sentinel");
     expect(JSON.stringify(audit.mock.calls)).not.toContain("a".repeat(64));
+  });
+});
+
+describe("P2-06 source label activity partition", () => {
+  async function countQueryFor(activity: "current" | "history" | "all") {
+    const { db, query } = queryDb([[{ count: "0" }], []]);
+    await listAdminSourceLabels(db, { activity });
+    return normalizedSql(query.mock.calls[0]?.[0]);
+  }
+
+  it("current requires one active relation", async () => {
+    const sql = await countQueryFor("current");
+    expect(sql.match(/FROM novel_source_item_label nsil/g)).toHaveLength(1);
+    expect(sql.match(/AND nsil\.active/g)).toHaveLength(1);
+  });
+
+  it("history requires a relation and excludes every label with an active relation", async () => {
+    const sql = await countQueryFor("history");
+    expect(sql.match(/FROM novel_source_item_label nsil/g)).toHaveLength(2);
+    expect(sql.match(/AND nsil\.active/g)).toHaveLength(1);
+    expect(sql).toContain(") AND NOT EXISTS (");
+  });
+
+  it("all is the relation-backed union and excludes bare dictionary rows", async () => {
+    const sql = await countQueryFor("all");
+    expect(sql.match(/FROM novel_source_item_label nsil/g)).toHaveLength(1);
+    expect(sql).not.toContain("AND nsil.active");
   });
 });
