@@ -1,8 +1,10 @@
+import { createHash } from "node:crypto";
 import { Prisma, type PrismaClient } from "@prisma/client";
 import {
   buildMoboreaderPreviewRequestsFromCatalogRow,
   createMoboreaderReadAdapter,
   type ListBooksResponse,
+  type MoboreaderBook,
   type MoboreaderReadAdapter,
 } from "../../src/lib/adapters";
 import {
@@ -162,15 +164,154 @@ function decimal(value: number | null): Prisma.Decimal | null {
   return value === null ? null : new Prisma.Decimal(value);
 }
 
+const SOURCE_LABEL_KINDS = ["series_type", "recommend", "language", "agency"] as const;
+type SourceLabelKind = (typeof SOURCE_LABEL_KINDS)[number];
+
+export interface DroppedLabelGroup {
+  kind: SourceLabelKind;
+  length: number;
+  sha256: string;
+  count: number;
+}
+
+export interface DroppedLabelsSummary {
+  count: number;
+  groups: DroppedLabelGroup[];
+}
+
+interface SourceLabelWrite {
+  kind: SourceLabelKind;
+  value: string;
+  displayValue?: string;
+}
+
+export interface SourceLabelWritePlan {
+  labels: SourceLabelWrite[];
+  droppedLabels: DroppedLabelsSummary;
+}
+
+function droppedLabelsJson(summary: DroppedLabelsSummary): Prisma.InputJsonObject {
+  return summary as unknown as Prisma.InputJsonObject;
+}
+
+function postgresCharacterLength(value: string): number {
+  return Array.from(value).length;
+}
+
+function droppedLabel(kind: SourceLabelKind, value: string): DroppedLabelGroup {
+  return {
+    kind,
+    length: postgresCharacterLength(value),
+    sha256: createHash("sha256").update(value, "utf8").digest("hex"),
+    count: 1,
+  };
+}
+
+function isSourceLabelKind(value: unknown): value is SourceLabelKind {
+  return typeof value === "string" && SOURCE_LABEL_KINDS.includes(value as SourceLabelKind);
+}
+
+export function mergeDroppedLabels(summaries: readonly unknown[]): DroppedLabelsSummary {
+  const groups = new Map<string, DroppedLabelGroup>();
+  let count = 0;
+  for (const summary of summaries) {
+    if (!summary || typeof summary !== "object" || Array.isArray(summary)) continue;
+    const candidateGroups = (summary as { groups?: unknown }).groups;
+    if (!Array.isArray(candidateGroups)) continue;
+    for (const candidate of candidateGroups) {
+      if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) continue;
+      const group = candidate as Partial<DroppedLabelGroup>;
+      if (
+        !isSourceLabelKind(group.kind)
+        || !Number.isSafeInteger(group.length) || group.length! < 0
+        || typeof group.sha256 !== "string" || !/^[a-f0-9]{64}$/.test(group.sha256)
+        || !Number.isSafeInteger(group.count) || group.count! < 1
+      ) continue;
+      const key = `${group.kind}\n${group.length}\n${group.sha256}`;
+      const groupCount = group.count!;
+      const existing = groups.get(key);
+      if (existing) existing.count += groupCount;
+      else groups.set(key, {
+        kind: group.kind,
+        length: group.length!,
+        sha256: group.sha256,
+        count: groupCount,
+      });
+      count += groupCount;
+    }
+  }
+  return {
+    count,
+    groups: Array.from(groups.values()).sort((left, right) => (
+      left.kind.localeCompare(right.kind)
+      || left.length - right.length
+      || left.sha256.localeCompare(right.sha256)
+    )),
+  };
+}
+
+export function buildSourceLabelWritePlan(book: MoboreaderBook): SourceLabelWritePlan {
+  const candidates: SourceLabelWrite[] = [
+    ...book.seriesTypeList.map((value) => ({ kind: "series_type" as const, value })),
+    ...book.recommendList.map((value) => ({ kind: "recommend" as const, value })),
+    { kind: "language", value: book.language, displayValue: book.languageName ?? undefined },
+    ...(book.agencyId
+      ? [{ kind: "agency" as const, value: book.agencyId, displayValue: book.agencyName ?? undefined }]
+      : []),
+  ];
+  const labels = new Map<string, SourceLabelWrite>();
+  const dropped: DroppedLabelGroup[] = [];
+  for (const candidate of candidates) {
+    if (postgresCharacterLength(candidate.value) > 300) {
+      dropped.push(droppedLabel(candidate.kind, candidate.value));
+      continue;
+    }
+    const displayValue = candidate.displayValue?.trim() ? candidate.displayValue : undefined;
+    const safeDisplayValue = displayValue && postgresCharacterLength(displayValue) > 300
+      ? undefined
+      : displayValue;
+    if (displayValue && safeDisplayValue === undefined) {
+      dropped.push(droppedLabel(candidate.kind, displayValue));
+    }
+    const key = `${candidate.kind}\n${candidate.value}`;
+    const existing = labels.get(key);
+    labels.set(key, {
+      kind: candidate.kind,
+      value: candidate.value,
+      displayValue: safeDisplayValue ?? existing?.displayValue,
+    });
+  }
+  return {
+    labels: Array.from(labels.values()),
+    droppedLabels: mergeDroppedLabels([{ groups: dropped }]),
+  };
+}
+
+async function loadTaskDroppedLabels(
+  tx: Prisma.TransactionClient,
+  taskId: string,
+): Promise<DroppedLabelsSummary> {
+  const results = await tx.catalogScanTaskItem.findMany({
+    where: { taskId },
+    select: { result: true },
+  });
+  return mergeDroppedLabels(results.map(({ result }) => {
+    if (!result || typeof result !== "object" || Array.isArray(result)) return null;
+    return (result as Record<string, unknown>).droppedLabels;
+  }));
+}
+
 async function persistLabels(
   tx: Prisma.TransactionClient,
   channelAppId: string,
   sourceItemId: string,
-  labels: readonly { kind: "series_type" | "recommend" | "language" | "agency"; value: string }[],
+  book: MoboreaderBook,
   now: Date,
-) {
-  for (const label of labels) {
-    if (!label.value || label.value.length > 300) continue;
+): Promise<DroppedLabelsSummary> {
+  if (!book.labelSnapshotComplete) return { count: 0, groups: [] };
+  const plan = buildSourceLabelWritePlan(book);
+  const currentSourceLabelIds: string[] = [];
+  for (const label of plan.labels) {
     const sourceLabel = await tx.sourceLabel.upsert({
       where: {
         channelAppId_labelKind_externalLabelValue: {
@@ -179,9 +320,15 @@ async function persistLabels(
           externalLabelValue: label.value,
         },
       },
-      create: { channelAppId, labelKind: label.kind, externalLabelValue: label.value },
-      update: {},
+      create: {
+        channelAppId,
+        labelKind: label.kind,
+        externalLabelValue: label.value,
+        displayValue: label.displayValue,
+      },
+      update: label.displayValue === undefined ? {} : { displayValue: label.displayValue },
     });
+    currentSourceLabelIds.push(sourceLabel.id);
     await tx.novelSourceItemLabel.upsert({
       where: {
         novelSourceItemId_sourceLabelId: { novelSourceItemId: sourceItemId, sourceLabelId: sourceLabel.id },
@@ -190,6 +337,17 @@ async function persistLabels(
       update: { active: true, lastSeenAt: now },
     });
   }
+  await tx.novelSourceItemLabel.updateMany({
+    where: {
+      novelSourceItemId: sourceItemId,
+      active: true,
+      ...(currentSourceLabelIds.length > 0
+        ? { sourceLabelId: { notIn: currentSourceLabelIds } }
+        : {}),
+    },
+    data: { active: false },
+  });
+  return plan.droppedLabels;
 }
 
 async function persistCatalogPage(
@@ -211,6 +369,7 @@ async function persistCatalogPage(
   });
   const now = input.now;
   const sourceItemIds: string[] = [];
+  const droppedLabels: DroppedLabelsSummary[] = [];
   for (const book of input.response.items) {
     const source = await tx.novelSourceItem.upsert({
       where: {
@@ -254,14 +413,9 @@ async function persistCatalogPage(
       },
     });
     sourceItemIds.push(source.id);
-    const labels: Array<{ kind: "series_type" | "recommend" | "language" | "agency"; value: string }> = [
-      ...book.seriesTypeList.map((value) => ({ kind: "series_type" as const, value })),
-      ...book.recommendList.map((value) => ({ kind: "recommend" as const, value })),
-      { kind: "language", value: book.language },
-      ...(book.agencyId ? [{ kind: "agency" as const, value: book.agencyId }] : []),
-    ];
-    await persistLabels(tx, input.channelAppId, source.id, labels, now);
+    droppedLabels.push(await persistLabels(tx, input.channelAppId, source.id, book, now));
   }
+  const pageDroppedLabels = mergeDroppedLabels(droppedLabels);
 
   const [beforeStop] = await tx.$queryRaw<Array<{ total: bigint; max_page: number }>>(Prisma.sql`
     SELECT COALESCE(SUM(returned_count), 0)::bigint AS total,
@@ -299,9 +453,11 @@ async function persistCatalogPage(
         observedTotal: input.response.totalCount,
         sourceItemIds,
         stopReason,
+        droppedLabels: droppedLabelsJson(pageDroppedLabels),
       },
     },
   });
+  const taskDroppedLabels = await loadTaskDroppedLabels(tx, input.taskId);
   if (stopReason) {
     await tx.catalogScanTaskItem.updateMany({
       where: { taskId: input.taskId, status: "pending", pageIndex: { gt: input.payload.pageIndex } },
@@ -377,6 +533,7 @@ async function persistCatalogPage(
           duplicateObservations: Math.max(0, batchActualCount - touchedSourceItemIds.length),
         },
         previewEnqueue,
+        droppedLabels: droppedLabelsJson(taskDroppedLabels),
       },
     },
   });
@@ -395,6 +552,7 @@ async function persistCatalogPage(
         returnedCount: input.response.items.length,
         observedTotal: input.response.totalCount,
         stopReason,
+        droppedLabels: droppedLabelsJson(pageDroppedLabels),
       },
     },
   });
@@ -440,6 +598,7 @@ async function persistCatalogUpstreamFailure(
     const ids = (result as Record<string, unknown>).sourceItemIds;
     return Array.isArray(ids) ? ids.filter((id): id is string => typeof id === "string") : [];
   })));
+  const taskDroppedLabels = await loadTaskDroppedLabels(tx, input.taskId);
   let previewEnqueue: Prisma.InputJsonObject | null = null;
   if (touchedSourceItemIds.length > 0) {
     const task = await tx.catalogScanTask.findUniqueOrThrow({ where: { id: input.taskId } });
@@ -465,6 +624,7 @@ async function persistCatalogUpstreamFailure(
         terminalState: "partial_failed",
         completeness: { expected, actual },
         previewEnqueue,
+        droppedLabels: droppedLabelsJson(taskDroppedLabels),
       },
     },
   });

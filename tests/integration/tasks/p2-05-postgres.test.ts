@@ -1,7 +1,12 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { PrismaClient } from "@prisma/client";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import type { MoboreaderReadAdapter } from "@/lib/adapters";
+import {
+  createMoboreaderReadAdapter,
+  type ListBooksResponse,
+  type MoboreaderBook,
+  type MoboreaderReadAdapter,
+} from "@/lib/adapters";
 import { materializeChangduPreview } from "@/lib/preview";
 import {
   buildWorkerAllowlist,
@@ -31,7 +36,11 @@ const gates = {
   MOBOREADER_PREVIEW_SOURCE_APP_CODES: "changdu",
 } satisfies NodeJS.ProcessEnv;
 
-function page(bookId = "book-1") {
+function page(
+  bookId = "book-1",
+  overrides: Partial<MoboreaderBook> = {},
+  totalCount = 95_479,
+): ListBooksResponse {
   return {
     items: [{
       externalBookId: bookId,
@@ -52,6 +61,7 @@ function page(bookId = "book-1") {
       createTime: null,
       seriesTypeList: ["raw-series-type"],
       recommendList: ["raw-recommend"],
+      labelSnapshotComplete: true,
       rawEvidence: {
         id: bookId,
         agencyId: "agency-1",
@@ -61,9 +71,10 @@ function page(bookId = "book-1") {
         source_label: { future: "unknown" },
         __boundary: "approved_raw_evidence",
       } as const,
+      ...overrides,
     }],
-    totalCount: 95_479,
-    rawEvidence: { totalCount: 95_479, __boundary: "approved_raw_evidence" } as const,
+    totalCount,
+    rawEvidence: { totalCount, __boundary: "approved_raw_evidence" } as const,
   };
 }
 
@@ -171,8 +182,12 @@ async function enqueueRange(input: {
   }, input.env ?? gates);
 }
 
-async function consume(readAdapter = adapter(), env: NodeJS.ProcessEnv = gates) {
-  const handlers = createMoboreaderWorkerHandlers(worker, { adapter: readAdapter, env });
+async function consume(
+  readAdapter = adapter(),
+  env: NodeJS.ProcessEnv = gates,
+  now?: () => Date,
+) {
+  const handlers = createMoboreaderWorkerHandlers(worker, { adapter: readAdapter, env, now });
   return processOneWorkerCycle({
     prisma: worker,
     workerId: "p2-05-worker",
@@ -296,6 +311,230 @@ describe.skipIf(!enabled).sequential("P2-05 PostgreSQL 16.14 write paths", () =>
     expect(rerun).toMatchObject({ status: "duplicate", taskId: duplicate.taskId });
     expect(await owner.novelSourceItem.count()).toBe(1);
     expect(await owner.sourceLabel.count()).toBe(4);
+  });
+
+  it("preserves four raw identities and updates only real language and agency display names", async () => {
+    const firstPage = page("labels", {
+      agencyId: " agency-01 ",
+      agencyName: "Agency One",
+      language: " language-02 ",
+      languageName: "Language One",
+      seriesTypeList: ["  series/type  "],
+      recommendList: ["recommend/特别"],
+    });
+    await enqueue("apply");
+    await consume({ ...adapter(), listBooks: async () => firstPage });
+    const initial = await owner.sourceLabel.findMany({ orderBy: { labelKind: "asc" } });
+    expect(initial.map(({ labelKind, externalLabelValue, displayValue }) => ({
+      labelKind,
+      externalLabelValue,
+      displayValue,
+    }))).toEqual([
+      { labelKind: "agency", externalLabelValue: " agency-01 ", displayValue: "Agency One" },
+      { labelKind: "language", externalLabelValue: " language-02 ", displayValue: "Language One" },
+      { labelKind: "recommend", externalLabelValue: "recommend/特别", displayValue: null },
+      { labelKind: "series_type", externalLabelValue: "  series/type  ", displayValue: null },
+    ]);
+    const identities = new Map(initial.map(({ labelKind, id }) => [labelKind, id]));
+
+    await enqueue("apply", randomUUID());
+    await consume({
+      ...adapter(),
+      listBooks: async () => page("labels", {
+        ...firstPage.items[0],
+        agencyName: "Agency Renamed",
+        languageName: "Language Renamed",
+      }),
+    });
+    const renamed = await owner.sourceLabel.findMany({ orderBy: { labelKind: "asc" } });
+    expect(renamed).toHaveLength(4);
+    expect(new Map(renamed.map(({ labelKind, id }) => [labelKind, id]))).toEqual(identities);
+    expect(renamed.find(({ labelKind }) => labelKind === "language")?.displayValue).toBe("Language Renamed");
+    expect(renamed.find(({ labelKind }) => labelKind === "agency")?.displayValue).toBe("Agency Renamed");
+
+    await enqueue("apply", randomUUID());
+    await consume({
+      ...adapter(),
+      listBooks: async () => page("labels", {
+        ...firstPage.items[0],
+        agencyName: null,
+        languageName: null,
+      }),
+    });
+    const missingDisplay = await owner.sourceLabel.findMany();
+    expect(missingDisplay).toHaveLength(4);
+    expect(missingDisplay.find(({ labelKind }) => labelKind === "language")?.displayValue).toBe("Language Renamed");
+    expect(missingDisplay.find(({ labelKind }) => labelKind === "agency")?.displayValue).toBe("Agency Renamed");
+  });
+
+  it("reconciles active state per trusted book while preserving history and refreshing last_seen", async () => {
+    const firstSeen = new Date();
+    const missingAt = new Date(firstSeen.valueOf() + 60_000);
+    const restoredAt = new Date(firstSeen.valueOf() + 120_000);
+    await enqueue("apply");
+    await consume({ ...adapter(), listBooks: async () => page("lifecycle") }, gates, () => firstSeen);
+    const source = await owner.novelSourceItem.findFirstOrThrow({ where: { externalBookId: "lifecycle" } });
+    const oldLabel = await owner.sourceLabel.findFirstOrThrow({
+      where: { channelAppId: ids.channelApp, labelKind: "series_type", externalLabelValue: "raw-series-type" },
+    });
+    const initialRelation = await owner.novelSourceItemLabel.findUniqueOrThrow({
+      where: { novelSourceItemId_sourceLabelId: { novelSourceItemId: source.id, sourceLabelId: oldLabel.id } },
+    });
+    expect(initialRelation).toMatchObject({ active: true, lastSeenAt: firstSeen });
+
+    await enqueue("apply", randomUUID());
+    await consume({
+      ...adapter(),
+      listBooks: async () => page("lifecycle", {
+        seriesTypeList: ["replacement-series"],
+      }),
+    }, gates, () => missingAt);
+    const inactive = await owner.novelSourceItemLabel.findUniqueOrThrow({
+      where: { novelSourceItemId_sourceLabelId: { novelSourceItemId: source.id, sourceLabelId: oldLabel.id } },
+    });
+    expect(inactive).toMatchObject({
+      active: false,
+      firstSeenAt: initialRelation.firstSeenAt,
+      lastSeenAt: firstSeen,
+    });
+    const language = await owner.sourceLabel.findFirstOrThrow({
+      where: { channelAppId: ids.channelApp, labelKind: "language", externalLabelValue: "2" },
+    });
+    expect(await owner.novelSourceItemLabel.findUniqueOrThrow({
+      where: { novelSourceItemId_sourceLabelId: { novelSourceItemId: source.id, sourceLabelId: language.id } },
+    })).toMatchObject({ active: true, lastSeenAt: missingAt });
+
+    await enqueue("apply", randomUUID());
+    await consume({ ...adapter(), listBooks: async () => page("lifecycle") }, gates, () => restoredAt);
+    expect(await owner.novelSourceItemLabel.findUniqueOrThrow({
+      where: { novelSourceItemId_sourceLabelId: { novelSourceItemId: source.id, sourceLabelId: oldLabel.id } },
+    })).toMatchObject({
+      active: true,
+      firstSeenAt: initialRelation.firstSeenAt,
+      lastSeenAt: restoredAt,
+    });
+  });
+
+  it("keeps successful per-book reconciliation after later partial failure and skips incomplete snapshots", async () => {
+    await enqueue("apply");
+    await consume({ ...adapter(), listBooks: async () => page("durable-labels") });
+    const source = await owner.novelSourceItem.findFirstOrThrow({ where: { externalBookId: "durable-labels" } });
+    const oldLabel = await owner.sourceLabel.findFirstOrThrow({
+      where: { channelAppId: ids.channelApp, labelKind: "series_type", externalLabelValue: "raw-series-type" },
+    });
+    await enqueue("apply", randomUUID());
+    await consume({ ...adapter(), listBooks: async () => page("unseen-on-failed-page") });
+    const unseenSource = await owner.novelSourceItem.findFirstOrThrow({
+      where: { externalBookId: "unseen-on-failed-page" },
+    });
+
+    const range = await enqueueRange({ pageEnd: 2, pageSize: 1 });
+    const partialLongValue = `partial-${"y".repeat(293)}`;
+    const partialAdapter: MoboreaderReadAdapter = {
+      ...adapter(),
+      listBooks: async (request) => {
+        if (request.pageIndex === 1) {
+          return page("durable-labels", {
+            seriesTypeList: ["confirmed-on-page-one", partialLongValue],
+          }, 2);
+        }
+        throw new Error("later page failed");
+      },
+    };
+    await consume(partialAdapter);
+    expect(await owner.novelSourceItemLabel.findUniqueOrThrow({
+      where: { novelSourceItemId_sourceLabelId: { novelSourceItemId: source.id, sourceLabelId: oldLabel.id } },
+    })).toMatchObject({ active: false });
+    const confirmed = await owner.sourceLabel.findFirstOrThrow({
+      where: { channelAppId: ids.channelApp, labelKind: "series_type", externalLabelValue: "confirmed-on-page-one" },
+    });
+    expect(await owner.novelSourceItemLabel.findUniqueOrThrow({
+      where: { novelSourceItemId_sourceLabelId: { novelSourceItemId: source.id, sourceLabelId: confirmed.id } },
+    })).toMatchObject({ active: true });
+    expect(await owner.novelSourceItemLabel.findUniqueOrThrow({
+      where: { novelSourceItemId_sourceLabelId: { novelSourceItemId: unseenSource.id, sourceLabelId: oldLabel.id } },
+    })).toMatchObject({ active: true });
+
+    await consume(partialAdapter);
+    expect(await owner.catalogScanTask.findUniqueOrThrow({ where: { id: range.taskId } })).toMatchObject({
+      status: "completed_with_errors",
+      result: { terminalState: "partial_failed", droppedLabels: { count: 1 } },
+    });
+    expect(await owner.novelSourceItemLabel.findUniqueOrThrow({
+      where: { novelSourceItemId_sourceLabelId: { novelSourceItemId: source.id, sourceLabelId: oldLabel.id } },
+    })).toMatchObject({ active: false });
+    expect(await owner.novelSourceItemLabel.findUniqueOrThrow({
+      where: { novelSourceItemId_sourceLabelId: { novelSourceItemId: source.id, sourceLabelId: confirmed.id } },
+    })).toMatchObject({ active: true });
+    expect(await owner.novelSourceItemLabel.findUniqueOrThrow({
+      where: { novelSourceItemId_sourceLabelId: { novelSourceItemId: unseenSource.id, sourceLabelId: oldLabel.id } },
+    })).toMatchObject({ active: true });
+
+    await enqueue("apply", randomUUID());
+    const incompleteAdapter = createMoboreaderReadAdapter({
+      maxAttempts: 1,
+      fetchImpl: async () => new Response(JSON.stringify({
+        data: {
+          totalCount: 1,
+          list: [{
+            id: "durable-labels",
+            seriesId: "series-durable-labels",
+            seriesName: "Incomplete label row",
+            language: "2",
+            languageName: "English",
+            seriesTypeList: [],
+            recommendList: [],
+          }],
+        },
+      }), { status: 200, headers: { "content-type": "application/json" } }),
+    });
+    await consume(incompleteAdapter);
+    expect(await owner.novelSourceItemLabel.findUniqueOrThrow({
+      where: { novelSourceItemId_sourceLabelId: { novelSourceItemId: source.id, sourceLabelId: confirmed.id } },
+    })).toMatchObject({ active: true });
+  });
+
+  it("keeps oversize source values only in raw_payload and exposes a non-leaking anomaly summary", async () => {
+    const longValue = `oversize-${"x".repeat(293)}`;
+    expect(Array.from(longValue)).toHaveLength(302);
+    const digest = createHash("sha256").update(longValue, "utf8").digest("hex");
+    const created = await enqueue("apply");
+    await consume({
+      ...adapter(),
+      listBooks: async () => page("oversize", {
+        seriesTypeList: [longValue],
+        rawEvidence: {
+          id: "oversize",
+          agencyId: "agency-1",
+          agencyName: "Agency",
+          seriesId: "series-oversize",
+          projectType: 1,
+          language: "2",
+          languageName: "English",
+          seriesTypeList: [longValue],
+          recommendList: ["raw-recommend"],
+          __boundary: "approved_raw_evidence",
+        },
+      }),
+    });
+    expect(await owner.sourceLabel.count({ where: { externalLabelValue: longValue } })).toBe(0);
+    expect(await owner.sourceLabel.count()).toBe(3);
+    const source = await owner.novelSourceItem.findFirstOrThrow({ where: { externalBookId: "oversize" } });
+    expect(JSON.stringify(source.rawPayload)).toContain(longValue);
+
+    const expected = {
+      count: 1,
+      groups: [{ kind: "series_type", length: 302, sha256: digest, count: 1 }],
+    };
+    const item = await owner.catalogScanTaskItem.findFirstOrThrow({ where: { taskId: created.taskId } });
+    const task = await owner.catalogScanTask.findUniqueOrThrow({ where: { id: created.taskId } });
+    const audit = await owner.operationAudit.findFirstOrThrow({
+      where: { taskId: created.taskId, action: "moboreader.catalog_page.applied.1" },
+    });
+    expect(item.result).toMatchObject({ droppedLabels: expected });
+    expect(task.result).toMatchObject({ droppedLabels: expected });
+    expect(audit.afterSnapshot).toMatchObject({ droppedLabels: expected });
+    expect(JSON.stringify({ item: item.result, task: task.result, audit: audit.afterSnapshot })).not.toContain(longValue);
   });
 
   it("enforces active uniqueness before work is consumed", async () => {
