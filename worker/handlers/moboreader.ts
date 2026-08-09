@@ -287,18 +287,37 @@ export function buildSourceLabelWritePlan(book: MoboreaderBook): SourceLabelWrit
   };
 }
 
-async function loadTaskDroppedLabels(
+export interface TaskLabelSummary {
+  droppedLabels: DroppedLabelsSummary;
+  incompleteLabelSnapshots: number;
+}
+
+function sumIncompleteLabelSnapshots(results: Array<{ result: Prisma.JsonValue | null }>): number {
+  return results.reduce((total, { result }) => {
+    if (!result || typeof result !== "object" || Array.isArray(result)) return total;
+    const value = (result as Record<string, unknown>).incompleteLabelSnapshots;
+    return Number.isSafeInteger(value) && (value as number) >= 0 ? total + (value as number) : total;
+  }, 0);
+}
+
+async function loadTaskLabelSummary(
   tx: Prisma.TransactionClient,
   taskId: string,
-): Promise<DroppedLabelsSummary> {
+): Promise<TaskLabelSummary> {
   const results = await tx.catalogScanTaskItem.findMany({
     where: { taskId },
     select: { result: true },
   });
-  return mergeDroppedLabels(results.map(({ result }) => {
+  const droppedLabels = mergeDroppedLabels(results.map(({ result }) => {
     if (!result || typeof result !== "object" || Array.isArray(result)) return null;
     return (result as Record<string, unknown>).droppedLabels;
   }));
+  return { droppedLabels, incompleteLabelSnapshots: sumIncompleteLabelSnapshots(results) };
+}
+
+interface PersistLabelsResult {
+  droppedLabels: DroppedLabelsSummary;
+  incompleteLabelSnapshot: boolean;
 }
 
 async function persistLabels(
@@ -307,8 +326,10 @@ async function persistLabels(
   sourceItemId: string,
   book: MoboreaderBook,
   now: Date,
-): Promise<DroppedLabelsSummary> {
-  if (!book.labelSnapshotComplete) return { count: 0, groups: [] };
+): Promise<PersistLabelsResult> {
+  if (!book.labelSnapshotComplete) {
+    return { droppedLabels: { count: 0, groups: [] }, incompleteLabelSnapshot: true };
+  }
   const plan = buildSourceLabelWritePlan(book);
   const currentSourceLabelIds: string[] = [];
   for (const label of plan.labels) {
@@ -347,7 +368,7 @@ async function persistLabels(
     },
     data: { active: false },
   });
-  return plan.droppedLabels;
+  return { droppedLabels: plan.droppedLabels, incompleteLabelSnapshot: false };
 }
 
 async function persistCatalogPage(
@@ -370,6 +391,7 @@ async function persistCatalogPage(
   const now = input.now;
   const sourceItemIds: string[] = [];
   const droppedLabels: DroppedLabelsSummary[] = [];
+  let pageIncompleteLabelSnapshots = 0;
   for (const book of input.response.items) {
     const source = await tx.novelSourceItem.upsert({
       where: {
@@ -413,7 +435,9 @@ async function persistCatalogPage(
       },
     });
     sourceItemIds.push(source.id);
-    droppedLabels.push(await persistLabels(tx, input.channelAppId, source.id, book, now));
+    const labelResult = await persistLabels(tx, input.channelAppId, source.id, book, now);
+    droppedLabels.push(labelResult.droppedLabels);
+    if (labelResult.incompleteLabelSnapshot) pageIncompleteLabelSnapshots += 1;
   }
   const pageDroppedLabels = mergeDroppedLabels(droppedLabels);
 
@@ -454,10 +478,10 @@ async function persistCatalogPage(
         sourceItemIds,
         stopReason,
         droppedLabels: droppedLabelsJson(pageDroppedLabels),
+        incompleteLabelSnapshots: pageIncompleteLabelSnapshots,
       },
     },
   });
-  const taskDroppedLabels = await loadTaskDroppedLabels(tx, input.taskId);
   if (stopReason) {
     await tx.catalogScanTaskItem.updateMany({
       where: { taskId: input.taskId, status: "pending", pageIndex: { gt: input.payload.pageIndex } },
@@ -486,6 +510,11 @@ async function persistCatalogPage(
   );
   let previewEnqueue: Prisma.InputJsonObject | null = null;
   let touchedSourceItemIds = sourceItemIds;
+  // Same non-terminal/terminal convention as completeness.fetchedUniqueSourceItems above:
+  // non-terminal pages carry this page's own value, and only the terminal page pays for
+  // the one full-task scan that recomputes the durable, idempotent task-level summary.
+  let taskDroppedLabels = pageDroppedLabels;
+  let taskIncompleteLabelSnapshots = pageIncompleteLabelSnapshots;
   if (terminal) {
     const itemResults = await tx.catalogScanTaskItem.findMany({
       where: { taskId: input.taskId },
@@ -496,6 +525,9 @@ async function persistCatalogPage(
       const ids = (result as Record<string, unknown>).sourceItemIds;
       return Array.isArray(ids) ? ids.filter((id): id is string => typeof id === "string") : [];
     })));
+    const labelSummary = await loadTaskLabelSummary(tx, input.taskId);
+    taskDroppedLabels = labelSummary.droppedLabels;
+    taskIncompleteLabelSnapshots = labelSummary.incompleteLabelSnapshots;
     if (touchedSourceItemIds.length > 0) {
       const preview = await enqueueMoboreaderPreviewRefreshTask(tx, {
         trigger: "auto",
@@ -534,6 +566,7 @@ async function persistCatalogPage(
         },
         previewEnqueue,
         droppedLabels: droppedLabelsJson(taskDroppedLabels),
+        incompleteLabelSnapshots: taskIncompleteLabelSnapshots,
       },
     },
   });
@@ -553,6 +586,7 @@ async function persistCatalogPage(
         observedTotal: input.response.totalCount,
         stopReason,
         droppedLabels: droppedLabelsJson(pageDroppedLabels),
+        incompleteLabelSnapshots: pageIncompleteLabelSnapshots,
       },
     },
   });
@@ -598,7 +632,7 @@ async function persistCatalogUpstreamFailure(
     const ids = (result as Record<string, unknown>).sourceItemIds;
     return Array.isArray(ids) ? ids.filter((id): id is string => typeof id === "string") : [];
   })));
-  const taskDroppedLabels = await loadTaskDroppedLabels(tx, input.taskId);
+  const taskLabelSummary = await loadTaskLabelSummary(tx, input.taskId);
   let previewEnqueue: Prisma.InputJsonObject | null = null;
   if (touchedSourceItemIds.length > 0) {
     const task = await tx.catalogScanTask.findUniqueOrThrow({ where: { id: input.taskId } });
@@ -624,7 +658,8 @@ async function persistCatalogUpstreamFailure(
         terminalState: "partial_failed",
         completeness: { expected, actual },
         previewEnqueue,
-        droppedLabels: droppedLabelsJson(taskDroppedLabels),
+        droppedLabels: droppedLabelsJson(taskLabelSummary.droppedLabels),
+        incompleteLabelSnapshots: taskLabelSummary.incompleteLabelSnapshots,
       },
     },
   });

@@ -470,7 +470,12 @@ describe.skipIf(!enabled).sequential("P2-05 PostgreSQL 16.14 write paths", () =>
       where: { novelSourceItemId_sourceLabelId: { novelSourceItemId: unseenSource.id, sourceLabelId: oldLabel.id } },
     })).toMatchObject({ active: true });
 
-    await enqueue("apply", randomUUID());
+    const sourceLabelCountBeforeIncomplete = await owner.sourceLabel.count();
+    const relationsBeforeIncomplete = await owner.novelSourceItemLabel.findMany({
+      where: { novelSourceItemId: source.id },
+      orderBy: { sourceLabelId: "asc" },
+    });
+    const incompleteEnqueue = await enqueue("apply", randomUUID());
     const incompleteAdapter = createMoboreaderReadAdapter({
       maxAttempts: 1,
       fetchImpl: async () => new Response(JSON.stringify({
@@ -492,6 +497,30 @@ describe.skipIf(!enabled).sequential("P2-05 PostgreSQL 16.14 write paths", () =>
     expect(await owner.novelSourceItemLabel.findUniqueOrThrow({
       where: { novelSourceItemId_sourceLabelId: { novelSourceItemId: source.id, sourceLabelId: confirmed.id } },
     })).toMatchObject({ active: true });
+    // F3: an untrusted label snapshot (missing agencyId entirely) must not write any
+    // structured label row or flip any active/inactive state — only a durable count.
+    expect(await owner.sourceLabel.count()).toBe(sourceLabelCountBeforeIncomplete);
+    expect(await owner.novelSourceItemLabel.findMany({
+      where: { novelSourceItemId: source.id },
+      orderBy: { sourceLabelId: "asc" },
+    })).toEqual(relationsBeforeIncomplete);
+    const incompleteItem = await owner.catalogScanTaskItem.findFirstOrThrow({
+      where: { taskId: incompleteEnqueue.taskId },
+    });
+    expect(incompleteItem.result).toMatchObject({
+      incompleteLabelSnapshots: 1,
+      droppedLabels: { count: 0, groups: [] },
+    });
+    const incompleteTask = await owner.catalogScanTask.findUniqueOrThrow({ where: { id: incompleteEnqueue.taskId } });
+    expect(incompleteTask.result).toMatchObject({
+      terminalState: "completed",
+      incompleteLabelSnapshots: 1,
+      droppedLabels: { count: 0, groups: [] },
+    });
+    const incompleteAudit = await owner.operationAudit.findFirstOrThrow({
+      where: { taskId: incompleteEnqueue.taskId, action: "moboreader.catalog_page.applied.1" },
+    });
+    expect(incompleteAudit.afterSnapshot).toMatchObject({ incompleteLabelSnapshots: 1 });
   });
 
   it("keeps oversize source values only in raw_payload and exposes a non-leaking anomaly summary", async () => {
@@ -535,6 +564,70 @@ describe.skipIf(!enabled).sequential("P2-05 PostgreSQL 16.14 write paths", () =>
     expect(task.result).toMatchObject({ droppedLabels: expected });
     expect(audit.afterSnapshot).toMatchObject({ droppedLabels: expected });
     expect(JSON.stringify({ item: item.result, task: task.result, audit: audit.afterSnapshot })).not.toContain(longValue);
+  });
+
+  it("keeps per-page droppedLabels on non-terminal pages and only aggregates the full task at the terminal page", async () => {
+    const longA = `oversize-a-${"a".repeat(293)}`;
+    const longB = `oversize-b-${"b".repeat(293)}`;
+    const digestA = createHash("sha256").update(longA, "utf8").digest("hex");
+    const digestB = createHash("sha256").update(longB, "utf8").digest("hex");
+    const lengthA = Array.from(longA).length;
+    const lengthB = Array.from(longB).length;
+    const created = await enqueueRange({ pageEnd: 3, pageSize: 1 });
+    const pagedAdapter: MoboreaderReadAdapter = {
+      ...adapter(),
+      listBooks: async (request) => {
+        if (request.pageIndex === 1) return page("page-a", { seriesTypeList: [longA] }, 3);
+        if (request.pageIndex === 2) return page("page-b", { seriesTypeList: [longB] }, 3);
+        return page("page-c", {}, 3);
+      },
+    };
+
+    expect(await consume(pagedAdapter)).toBe(true);
+    const itemPage1 = await owner.catalogScanTaskItem.findFirstOrThrow({
+      where: { taskId: created.taskId, pageIndex: 1 },
+    });
+    expect(itemPage1.result).toMatchObject({
+      droppedLabels: { count: 1, groups: [{ kind: "series_type", length: lengthA, sha256: digestA, count: 1 }] },
+    });
+    const taskAfterPage1 = await owner.catalogScanTask.findUniqueOrThrow({ where: { id: created.taskId } });
+    expect(taskAfterPage1.result).toMatchObject({
+      terminalState: "processing",
+      droppedLabels: { count: 1, groups: [{ kind: "series_type", length: lengthA, sha256: digestA, count: 1 }] },
+    });
+
+    expect(await consume(pagedAdapter)).toBe(true);
+    const itemPage2 = await owner.catalogScanTaskItem.findFirstOrThrow({
+      where: { taskId: created.taskId, pageIndex: 2 },
+    });
+    expect(itemPage2.result).toMatchObject({
+      droppedLabels: { count: 1, groups: [{ kind: "series_type", length: lengthB, sha256: digestB, count: 1 }] },
+    });
+    // Still non-terminal (page 3 is pending): the task summary must stay page-scoped
+    // (only page 2's drop) rather than already carrying page 1's drop as well.
+    const taskAfterPage2 = await owner.catalogScanTask.findUniqueOrThrow({ where: { id: created.taskId } });
+    expect(taskAfterPage2.result).toMatchObject({
+      terminalState: "processing",
+      droppedLabels: { count: 1, groups: [{ kind: "series_type", length: lengthB, sha256: digestB, count: 1 }] },
+    });
+
+    expect(await consume(pagedAdapter)).toBe(true);
+    const itemPage3 = await owner.catalogScanTaskItem.findFirstOrThrow({
+      where: { taskId: created.taskId, pageIndex: 3 },
+    });
+    expect(itemPage3.result).toMatchObject({ droppedLabels: { count: 0, groups: [] } });
+    // Terminal page: the task summary must now be the full-task aggregate across all pages.
+    const finalTask = await owner.catalogScanTask.findUniqueOrThrow({ where: { id: created.taskId } });
+    expect(finalTask.result).toMatchObject({
+      terminalState: "completed",
+      droppedLabels: {
+        count: 2,
+        groups: expect.arrayContaining([
+          { kind: "series_type", length: lengthA, sha256: digestA, count: 1 },
+          { kind: "series_type", length: lengthB, sha256: digestB, count: 1 },
+        ]),
+      },
+    });
   });
 
   it("enforces active uniqueness before work is consumed", async () => {
