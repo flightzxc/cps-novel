@@ -12,13 +12,11 @@ Feature Flag 与写入闸（Allow Write）的读取入口。
 src/lib/flags/feature-flags.ts
 ```
 
-## 本轮范围
+## 当前实现
 
-🔴 本轮（P1-04）只建目录，不写实现。当前目录仅含本 README 与 `.gitkeep` 占位。
-
-## 填充任务
-
-由 **P1-06（Feature Flag + Allow Write 双闸基础设施，Notion 编号以台账为准）** 落地；后续各能力按需追加 flag。
+P2-05 已登记 `FEATURE_NOVEL_CATALOG_SYNC` 与
+`NOVEL_CATALOG_SYNC_ALLOW_WRITE`；治理登记见
+`docs/governance/feature-flag-registry.md`。
 
 ## 特别纪律
 

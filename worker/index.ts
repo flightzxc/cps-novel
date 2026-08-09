@@ -2,9 +2,11 @@ import { pathToFileURL } from "node:url";
 import { PrismaClient } from "@prisma/client";
 import {
   buildWorkerAllowlist,
+  createHandlerRegistry,
   sanitizePersistedTaskError,
 } from "../src/lib/tasks";
 import { createCredentialWorkerHandlers } from "./handlers/credential";
+import { createMoboreaderWorkerHandlers } from "./handlers/moboreader";
 import { parseShutdownDrainTimeoutEnv, runWorker } from "./runtime";
 
 export async function main(): Promise<void> {
@@ -16,7 +18,10 @@ export async function main(): Promise<void> {
   const stop = () => controller.abort();
   process.once("SIGINT", stop);
   process.once("SIGTERM", stop);
-  const handlers = createCredentialWorkerHandlers(prisma);
+  const handlers = createHandlerRegistry({
+    ...createCredentialWorkerHandlers(prisma),
+    ...createMoboreaderWorkerHandlers(prisma),
+  });
   const allowlist = buildWorkerAllowlist(process.env.WORKER_TASK_ALLOWLIST, handlers);
   if (allowlist.invalid.length > 0) {
     console.error(`Unregistered task types were excluded: ${allowlist.invalid.join(",")}`);

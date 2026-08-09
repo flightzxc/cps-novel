@@ -125,6 +125,9 @@ export P1_08B_WORKER_DATABASE_URL="$worker_url"
 export P1_08B_SCHEDULER_DATABASE_URL="$scheduler_url"
 export P1_08B_ANALYST_DATABASE_URL="$analyst_url"
 export P1_13_DATABASE_TEST=1
+export P2_05_DATABASE_TEST=1
+export P2_05_OWNER_DATABASE_URL="$owner_url"
+export P2_05_WORKER_DATABASE_URL="$worker_url"
 export CHANNEL_CREDENTIAL_ENCRYPTION_KEY_V1="$credential_encryption_key"
 export CHANNEL_CREDENTIAL_FINGERPRINT_KEY="$credential_fingerprint_key"
 
