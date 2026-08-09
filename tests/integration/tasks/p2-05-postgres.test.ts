@@ -367,55 +367,115 @@ describe.skipIf(!enabled).sequential("P2-05 PostgreSQL 16.14 write paths", () =>
     expect(missingDisplay.find(({ labelKind }) => labelKind === "agency")?.displayValue).toBe("Agency Renamed");
   });
 
-  it("reconciles active state per trusted book while preserving history and refreshing last_seen", async () => {
+  it("keeps absent relations active while refreshing only labels returned by upstream", async () => {
     const firstSeen = new Date();
-    const missingAt = new Date(firstSeen.valueOf() + 60_000);
-    const restoredAt = new Date(firstSeen.valueOf() + 120_000);
+    const secondSeen = new Date(firstSeen.valueOf() + 60_000);
     await enqueue("apply");
-    await consume({ ...adapter(), listBooks: async () => page("lifecycle") }, gates, () => firstSeen);
-    const source = await owner.novelSourceItem.findFirstOrThrow({ where: { externalBookId: "lifecycle" } });
-    const oldLabel = await owner.sourceLabel.findFirstOrThrow({
-      where: { channelAppId: ids.channelApp, labelKind: "series_type", externalLabelValue: "raw-series-type" },
+    await consume({
+      ...adapter(),
+      listBooks: async () => page("incremental-labels", { seriesTypeList: ["A", "B"] }),
+    }, gates, () => firstSeen);
+    const source = await owner.novelSourceItem.findFirstOrThrow({
+      where: { externalBookId: "incremental-labels" },
     });
-    const initialRelation = await owner.novelSourceItemLabel.findUniqueOrThrow({
-      where: { novelSourceItemId_sourceLabelId: { novelSourceItemId: source.id, sourceLabelId: oldLabel.id } },
-    });
-    expect(initialRelation).toMatchObject({ active: true, lastSeenAt: firstSeen });
+    const [labelA, labelB] = await Promise.all(["A", "B"].map((externalLabelValue) => (
+      owner.sourceLabel.findFirstOrThrow({
+        where: { channelAppId: ids.channelApp, labelKind: "series_type", externalLabelValue },
+      })
+    )));
+    const [initialA, initialB] = await Promise.all([labelA, labelB].map((label) => (
+      owner.novelSourceItemLabel.findUniqueOrThrow({
+        where: {
+          novelSourceItemId_sourceLabelId: {
+            novelSourceItemId: source.id,
+            sourceLabelId: label.id,
+          },
+        },
+      })
+    )));
+    expect(initialA).toMatchObject({ active: true, lastSeenAt: firstSeen });
+    expect(initialB).toMatchObject({ active: true, lastSeenAt: firstSeen });
 
     await enqueue("apply", randomUUID());
     await consume({
       ...adapter(),
-      listBooks: async () => page("lifecycle", {
-        seriesTypeList: ["replacement-series"],
-      }),
-    }, gates, () => missingAt);
-    const inactive = await owner.novelSourceItemLabel.findUniqueOrThrow({
-      where: { novelSourceItemId_sourceLabelId: { novelSourceItemId: source.id, sourceLabelId: oldLabel.id } },
-    });
-    expect(inactive).toMatchObject({
-      active: false,
-      firstSeenAt: initialRelation.firstSeenAt,
-      lastSeenAt: firstSeen,
-    });
-    const language = await owner.sourceLabel.findFirstOrThrow({
-      where: { channelAppId: ids.channelApp, labelKind: "language", externalLabelValue: "2" },
-    });
-    expect(await owner.novelSourceItemLabel.findUniqueOrThrow({
-      where: { novelSourceItemId_sourceLabelId: { novelSourceItemId: source.id, sourceLabelId: language.id } },
-    })).toMatchObject({ active: true, lastSeenAt: missingAt });
-
-    await enqueue("apply", randomUUID());
-    await consume({ ...adapter(), listBooks: async () => page("lifecycle") }, gates, () => restoredAt);
-    expect(await owner.novelSourceItemLabel.findUniqueOrThrow({
-      where: { novelSourceItemId_sourceLabelId: { novelSourceItemId: source.id, sourceLabelId: oldLabel.id } },
-    })).toMatchObject({
+      listBooks: async () => page("incremental-labels", { seriesTypeList: ["A"] }),
+    }, gates, () => secondSeen);
+    const [refreshedA, absentB] = await Promise.all([labelA, labelB].map((label) => (
+      owner.novelSourceItemLabel.findUniqueOrThrow({
+        where: {
+          novelSourceItemId_sourceLabelId: {
+            novelSourceItemId: source.id,
+            sourceLabelId: label.id,
+          },
+        },
+      })
+    )));
+    expect(refreshedA).toMatchObject({
       active: true,
-      firstSeenAt: initialRelation.firstSeenAt,
-      lastSeenAt: restoredAt,
+      firstSeenAt: initialA.firstSeenAt,
+      lastSeenAt: secondSeen,
+    });
+    expect(absentB).toMatchObject({
+      active: true,
+      firstSeenAt: initialB.firstSeenAt,
+      lastSeenAt: firstSeen,
     });
   });
 
-  it("keeps successful per-book reconciliation after later partial failure and skips incomplete snapshots", async () => {
+  it("keeps an explicitly inactive relation inactive when upstream returns it again", async () => {
+    const firstSeen = new Date();
+    const returnedAgainAt = new Date(firstSeen.valueOf() + 60_000);
+    await enqueue("apply");
+    await consume({
+      ...adapter(),
+      listBooks: async () => page("manual-inactive", { seriesTypeList: ["B"] }),
+    }, gates, () => firstSeen);
+    const source = await owner.novelSourceItem.findFirstOrThrow({ where: { externalBookId: "manual-inactive" } });
+    const label = await owner.sourceLabel.findFirstOrThrow({
+      where: { channelAppId: ids.channelApp, labelKind: "series_type", externalLabelValue: "B" },
+    });
+    const relationKey = {
+      novelSourceItemId_sourceLabelId: { novelSourceItemId: source.id, sourceLabelId: label.id },
+    };
+    const initial = await owner.novelSourceItemLabel.findUniqueOrThrow({ where: relationKey });
+    await owner.novelSourceItemLabel.update({ where: relationKey, data: { active: false } });
+
+    await enqueue("apply", randomUUID());
+    await consume({
+      ...adapter(),
+      listBooks: async () => page("manual-inactive", { seriesTypeList: ["B"] }),
+    }, gates, () => returnedAgainAt);
+    expect(await owner.novelSourceItemLabel.findUniqueOrThrow({ where: relationKey })).toMatchObject({
+      active: false,
+      firstSeenAt: initial.firstSeenAt,
+      lastSeenAt: returnedAgainAt,
+    });
+  });
+
+  it("creates a newly returned label relation active by default", async () => {
+    const firstSeen = new Date();
+    const newLabelSeenAt = new Date(firstSeen.valueOf() + 60_000);
+    await enqueue("apply");
+    await consume({
+      ...adapter(),
+      listBooks: async () => page("new-label", { seriesTypeList: ["A"] }),
+    }, gates, () => firstSeen);
+    await enqueue("apply", randomUUID());
+    await consume({
+      ...adapter(),
+      listBooks: async () => page("new-label", { seriesTypeList: ["A", "C"] }),
+    }, gates, () => newLabelSeenAt);
+    const source = await owner.novelSourceItem.findFirstOrThrow({ where: { externalBookId: "new-label" } });
+    const labelC = await owner.sourceLabel.findFirstOrThrow({
+      where: { channelAppId: ids.channelApp, labelKind: "series_type", externalLabelValue: "C" },
+    });
+    expect(await owner.novelSourceItemLabel.findUniqueOrThrow({
+      where: { novelSourceItemId_sourceLabelId: { novelSourceItemId: source.id, sourceLabelId: labelC.id } },
+    })).toMatchObject({ active: true, lastSeenAt: newLabelSeenAt });
+  });
+
+  it("keeps successful positive facts after later partial failure and skips incomplete snapshots", async () => {
     await enqueue("apply");
     await consume({ ...adapter(), listBooks: async () => page("durable-labels") });
     const source = await owner.novelSourceItem.findFirstOrThrow({ where: { externalBookId: "durable-labels" } });
@@ -444,7 +504,7 @@ describe.skipIf(!enabled).sequential("P2-05 PostgreSQL 16.14 write paths", () =>
     await consume(partialAdapter);
     expect(await owner.novelSourceItemLabel.findUniqueOrThrow({
       where: { novelSourceItemId_sourceLabelId: { novelSourceItemId: source.id, sourceLabelId: oldLabel.id } },
-    })).toMatchObject({ active: false });
+    })).toMatchObject({ active: true });
     const confirmed = await owner.sourceLabel.findFirstOrThrow({
       where: { channelAppId: ids.channelApp, labelKind: "series_type", externalLabelValue: "confirmed-on-page-one" },
     });
@@ -462,7 +522,7 @@ describe.skipIf(!enabled).sequential("P2-05 PostgreSQL 16.14 write paths", () =>
     });
     expect(await owner.novelSourceItemLabel.findUniqueOrThrow({
       where: { novelSourceItemId_sourceLabelId: { novelSourceItemId: source.id, sourceLabelId: oldLabel.id } },
-    })).toMatchObject({ active: false });
+    })).toMatchObject({ active: true });
     expect(await owner.novelSourceItemLabel.findUniqueOrThrow({
       where: { novelSourceItemId_sourceLabelId: { novelSourceItemId: source.id, sourceLabelId: confirmed.id } },
     })).toMatchObject({ active: true });

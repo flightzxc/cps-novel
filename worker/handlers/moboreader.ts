@@ -331,7 +331,6 @@ async function persistLabels(
     return { droppedLabels: { count: 0, groups: [] }, incompleteLabelSnapshot: true };
   }
   const plan = buildSourceLabelWritePlan(book);
-  const currentSourceLabelIds: string[] = [];
   for (const label of plan.labels) {
     const sourceLabel = await tx.sourceLabel.upsert({
       where: {
@@ -349,25 +348,21 @@ async function persistLabels(
       },
       update: label.displayValue === undefined ? {} : { displayValue: label.displayValue },
     });
-    currentSourceLabelIds.push(sourceLabel.id);
     await tx.novelSourceItemLabel.upsert({
       where: {
         novelSourceItemId_sourceLabelId: { novelSourceItemId: sourceItemId, sourceLabelId: sourceLabel.id },
       },
-      create: { novelSourceItemId: sourceItemId, sourceLabelId: sourceLabel.id, lastSeenAt: now },
-      update: { active: true, lastSeenAt: now },
+      create: {
+        novelSourceItemId: sourceItemId,
+        sourceLabelId: sourceLabel.id,
+        active: true,
+        lastSeenAt: now,
+      },
+      // Upstream presence refreshes the observed fact only. `active=false` is
+      // an explicit local operator/CLI decision and sync must not reactivate it.
+      update: { lastSeenAt: now },
     });
   }
-  await tx.novelSourceItemLabel.updateMany({
-    where: {
-      novelSourceItemId: sourceItemId,
-      active: true,
-      ...(currentSourceLabelIds.length > 0
-        ? { sourceLabelId: { notIn: currentSourceLabelIds } }
-        : {}),
-    },
-    data: { active: false },
-  });
   return { droppedLabels: plan.droppedLabels, incompleteLabelSnapshot: false };
 }
 

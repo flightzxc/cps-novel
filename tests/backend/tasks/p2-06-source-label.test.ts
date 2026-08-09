@@ -95,4 +95,20 @@ describe("P2-06 source label write planning", () => {
     expect(sourceProjection).toBeDefined();
     expect(sourceProjection).not.toContain("raw_payload");
   });
+
+  it("uses incremental facts without absence deactivation or automatic reactivation", () => {
+    const root = resolve(import.meta.dirname, "../../..");
+    const worker = readFileSync(resolve(root, "worker/handlers/moboreader.ts"), "utf8");
+    const start = worker.indexOf("async function persistLabels(");
+    const end = worker.indexOf("\nasync function persistCatalogPage", start);
+    expect(start).toBeGreaterThanOrEqual(0);
+    expect(end).toBeGreaterThan(start);
+    const persistLabels = worker.slice(start, end);
+
+    expect(persistLabels).not.toContain("updateMany");
+    expect(persistLabels).not.toContain("notIn");
+    expect(persistLabels).not.toMatch(/update:\s*\{\s*active:/);
+    expect(persistLabels).toMatch(/create:\s*\{[\s\S]*?active:\s*true,/);
+    expect(persistLabels).toMatch(/update:\s*\{\s*lastSeenAt:\s*now\s*\}/);
+  });
 });
