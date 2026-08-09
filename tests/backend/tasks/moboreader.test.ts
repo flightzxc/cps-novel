@@ -133,15 +133,15 @@ describe("MoboReader catalog safety and parity", () => {
     expect(adapter.listBooks).not.toHaveBeenCalled();
   });
 
-  it("fails closed before any production Preview adapter call while evidence is open", async () => {
+  it("keeps the Preview feature gate ahead of database and upstream access", async () => {
     const adapter = { listBooks: vi.fn(), fetchBookMaterial: vi.fn(), fetchPreviewChapters: vi.fn() };
-    const outcome = await createMoboreaderPreviewHandler({} as never, { adapter })({
+    const outcome = await createMoboreaderPreviewHandler({} as never, { adapter, env: { NODE_ENV: "test" } })({
       lease: { family: "channel_sync", taskType: "moboreader.preview_refresh.v1", mode: "apply", itemId: "item", taskId: "task", workerId: "worker", executionToken: "token", leaseEpoch: 1n, attemptCount: 1, lockedUntil: new Date(), payload: {} },
       mode: "apply",
       signal: new AbortController().signal,
       heartbeat: async () => true,
     });
-    expect(outcome).toMatchObject({ status: "failed", error: { code: "material_type_contract_unproven" } });
+    expect(outcome).toMatchObject({ status: "failed", error: { code: "feature_disabled" } });
     expect(adapter.fetchBookMaterial).not.toHaveBeenCalled();
     expect(adapter.fetchPreviewChapters).not.toHaveBeenCalled();
   });

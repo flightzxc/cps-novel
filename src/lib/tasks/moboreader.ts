@@ -18,8 +18,7 @@ export const MOBOREADER_CATALOG_LIMITS = Object.freeze({
 
 export const MOBOREADER_CATALOG_SAFETY_MAX_PAGES_ENV = "MOBOREADER_CATALOG_SAFETY_MAX_PAGES";
 
-export const MOBOREADER_PREVIEW_RUNTIME_STATUS = "registered_disabled" as const;
-export const MOBOREADER_PREVIEW_DISABLED_REASON = "material_type_contract_unproven" as const;
+export const MOBOREADER_PREVIEW_RUNTIME_STATUS = "enabled" as const;
 
 export interface CreateMoboreaderCatalogScanTaskInput {
   channelAccountId: string;
@@ -56,7 +55,7 @@ interface EnqueueMoboreaderPreviewRefreshTaskInput extends CreateMoboreaderPrevi
 }
 
 export type MoboreaderPreviewTaskCreationResult =
-  | { status: "enqueued"; taskId: string; taskStatus: "disabled"; eligibleCount: number; skipReasonCounts: Record<string, number> }
+  | { status: "enqueued"; taskId: string; taskStatus: "pending" | "disabled"; eligibleCount: number; skipReasonCounts: Record<string, number> }
   | { status: "duplicate"; taskId: string }
   | { status: "active_conflict"; taskId: string }
   | { status: "no_eligible_sources"; skipReasonCounts: Record<string, number> };
@@ -88,16 +87,6 @@ export class MoboreaderTaskInputError extends Error {
   constructor(readonly code: string) {
     super(code);
     this.name = "MoboreaderTaskInputError";
-  }
-}
-
-export class MoboreaderPreviewContractDisabledError extends Error {
-  readonly code = MOBOREADER_PREVIEW_DISABLED_REASON;
-  readonly status = MOBOREADER_PREVIEW_RUNTIME_STATUS;
-
-  constructor() {
-    super("MoboReader preview refresh is disabled until materialType has a proven contract");
-    this.name = "MoboreaderPreviewContractDisabledError";
   }
 }
 
@@ -240,7 +229,6 @@ export async function createMoboreaderCatalogScanTask(
     featureFlagEnabled: enabled,
     allowWriteEnabled: writeAllowed,
     registeredDetailStatus: MOBOREADER_PREVIEW_RUNTIME_STATUS,
-    registeredDetailReason: MOBOREADER_PREVIEW_DISABLED_REASON,
   } satisfies Prisma.InputJsonObject;
   try {
     return await prisma.$transaction(async (tx) => {
@@ -442,6 +430,9 @@ async function enqueueMoboreaderPreviewRefreshTaskInDb(
 
   const taskId = randomUUID();
   const operationScopeHash = digest([...eligibleIds].sort());
+  const enabled = isNovelCatalogSyncEnabled(env);
+  const writeAllowed = isNovelCatalogSyncWriteAllowed(env);
+  const taskStatus = enabled && (input.mode === "dry_run" || writeAllowed) ? "pending" : "disabled";
   await db.channelSyncTask.create({
     data: {
       id: taskId,
@@ -451,26 +442,24 @@ async function enqueueMoboreaderPreviewRefreshTaskInDb(
       operationScopeHash,
       requestToken: input.requestToken,
       mode: input.mode,
-      status: "disabled",
+      status: taskStatus,
       totalCount: eligibleIds.length,
       params: {
         trigger: input.trigger,
         catalogScanTaskId: input.catalogScanTaskId ?? null,
         runtime: { ...runtime },
-        featureFlagEnabled: isNovelCatalogSyncEnabled(env),
-        allowWriteEnabled: isNovelCatalogSyncWriteAllowed(env),
+        featureFlagEnabled: enabled,
+        allowWriteEnabled: writeAllowed,
         skipReasonCounts,
         evidence: {
-          materialType: "open",
-          dataId: "open",
-          productionPreviewCall: "fail_closed",
+          dataId: "confirmed_getlistpc_series_id",
+          materialType: "confirmed_runtime_selection_policy",
+          materialTypeGlobalConstant: "not_asserted",
+          materialType1001: "rejected",
+          productionPreviewCall: "enabled",
         },
       },
-      result: {
-        blocker: MOBOREADER_PREVIEW_DISABLED_REASON,
-        eligibleCount: eligibleIds.length,
-        skipReasonCounts,
-      },
+      result: { eligibleCount: eligibleIds.length, skipReasonCounts },
       items: {
         createMany: {
           data: eligibleIds.map((novelSourceItemId) => ({
@@ -478,8 +467,9 @@ async function enqueueMoboreaderPreviewRefreshTaskInDb(
             payload: {
               trigger: input.trigger,
               runtime: { ...runtime },
+              actorId: input.actorId,
+              requestId: input.requestId,
               contractStatus: MOBOREADER_PREVIEW_RUNTIME_STATUS,
-              contractReason: MOBOREADER_PREVIEW_DISABLED_REASON,
             },
           })),
         },
@@ -490,7 +480,7 @@ async function enqueueMoboreaderPreviewRefreshTaskInDb(
     data: {
       actorType: input.trigger === "auto" ? "worker" : "admin",
       actorId: input.actorId,
-      action: "moboreader.preview_refresh.queued_disabled",
+      action: taskStatus === "pending" ? "moboreader.preview_refresh.queued" : "moboreader.preview_refresh.queued_disabled",
       entityType: "ChannelSyncTask",
       entityId: taskId,
       requestId: input.requestId,
@@ -498,14 +488,13 @@ async function enqueueMoboreaderPreviewRefreshTaskInDb(
       taskId,
       afterSnapshot: {
         trigger: input.trigger,
-        status: "disabled",
+        status: taskStatus,
         eligibleCount: eligibleIds.length,
         skipReasonCounts,
-        blocker: MOBOREADER_PREVIEW_DISABLED_REASON,
       },
     },
   });
-  return { status: "enqueued", taskId, taskStatus: "disabled", eligibleCount: eligibleIds.length, skipReasonCounts };
+  return { status: "enqueued", taskId, taskStatus, eligibleCount: eligibleIds.length, skipReasonCounts };
 }
 
 export async function enqueueMoboreaderPreviewRefreshTask(

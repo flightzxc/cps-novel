@@ -4,6 +4,12 @@
 > （随 HEAD `3493485` 交付）冲突之处，一律以本文件为准；该矩阵在本轮修订完成后需同步更新。
 >
 > 最高原则：**CPS parity**。CPS 没有的限制模型与调度模型，不得为工程完整性自行新增。
+>
+> **2026-08-09 Owner evidence amendment（覆盖原 §5 阻塞口径）**：
+> `DATAID_SOURCE=getlistpc.seriesId`；`materialType` 按 `row.materialType ?? 1` 在运行时选择。
+> 该规则不是全局常量：存在值（含 `0`）原值透传，仅 `null` / `undefined` 回退 `1`；
+> `1001` 已证属于 `/material/temp/uploadcallback`，对 `getbydataid` 明确拒绝。原跨书/跨语种取样要求
+> 降为 supplementary verification，不再阻断 P2-05 Final DoD。
 
 ```text
 基线 HEAD      = 349348587815d5e7e7e85ebe891df29c8d760aa7（不回退、不重做）
@@ -22,7 +28,7 @@ MERGE          = 禁止，直至全量验收通过
 | ---: | --- | --- |
 | 1 | 取消 1000 部 / 2000 页**业务上限**；只保留真正的技术安全保护 | 需改动，见 §2.1 |
 | 2 | checkpoint / 续跑机制保留 | 保留，语义修正见 §2.2 |
-| 3 | P2-05 不拆分验收；书目同步 + 试读物化整体闭环才算 DONE | 见 §5 阻塞链 |
+| 3 | P2-05 不拆分验收；书目同步 + 试读物化整体闭环才算 DONE | 证据已闭环，见 §5 |
 | 4 | `paid_from_chapter` 继续只存不动 | 已合规，加回归断言 |
 | 5 | `maxMaterializedChapters=3` 是默认值不是硬上限，按书可配 | 已合规，加回归断言 |
 | 6 | 自动排程前移到 P2-05；复用同一 Task/worker/双闸/幂等/租约/checkpoint | 需新增，见 §3 |
@@ -308,35 +314,23 @@ requestToken = "moboreader.preview_refresh.v1:" + <catalogScanTaskId>
 
 ---
 
-## 5. 阻塞链
+## 5. materialType / dataId 证据闭环
+
+Owner 已基于静态 bundle 定向追踪和真实 Network fallback 分支作出最终证据裁决：
 
 ```text
-P2-05 整体 DONE（冻结 3：不拆分验收）
-  └─ 依赖 试读物化生产链路闭环
-      └─ 依赖 getbydataid 可调用
-          └─ 依赖 materialType 的「值」与「来源」
-              └─ 依赖 一次 Owner 授权的生产只读浏览器捕获   ← 唯一解
+DATAID_EVIDENCE=CONFIRMED
+DATAID_SOURCE=getlistpc.seriesId
+MATERIALTYPE_EVIDENCE=CONFIRMED_AS_RUNTIME_SELECTION_POLICY
+MATERIALTYPE_GLOBAL_CONSTANT=NOT_ASSERTED
+MATERIALTYPE_1001=REJECTED
 ```
 
-取证结论 `P2_05_MATERIALTYPE_EVIDENCE_NOT_PROVEN` 未变：字段名已证
-（`P0_BROWSER_INTERFACE_PROBE.md:61` 请求侧、`P0_SECOND_BROWSER_PROBE.md:110` 响应侧 `number`），
-**值与来源零证据**；本地全域无副本；CPS 全仓零命中；git 历史从未出现过该值。
+实现必须只使用一条运行时选择规则：原始 `getlistpc` row 的 `materialType` 非 `null` / `undefined`
+时原值透传，否则 fallback `1`。不得使用 truthiness fallback（`0` 也是存在值），不得写死全局 `1`，
+不得使用 `1001`，不得从其他素材接口类推。`dataId` 只能来自同一 row 的 `seriesId`，不得 fallback 到 `id`。
 
-工程侧无路可走：不得猜枚举、不得由字段名推断、不得类推短剧默认值。
-
-**下次捕获必须拿到**（`materialType` 是数字不是密钥，可原值保留；`kocCode` / `publicUrl` /
-正文照旧脱敏）：
-
-1. `materialType` 字面值 ← 硬阻断
-2. `dataId` 字面值 + 同一本书 `getlistpc` 行的 `id` / `seriesId`（`dataId` 来源同样未证，是并列缺口）
-3. 同次调用的 `agencyId` / `projectType` / `language` 取值
-4. 该 `getlistpc` 行的完整 key 集合，判定 `materialType` 是否 per-item 存在
-5. 响应侧 `data.materialType` 字面值，验证请求值与响应值是否相等
-
-样本量 **≥3 本书 × ≥2 语种**。只抓 1 本无法区分「每本不同 / 渠道内固定 / 协议常量」。
-
-**执行顺序建议**：§2 与 §3 不依赖 `materialType`，可先行实现并自测；但按冻结 3，
-**完成也不得报 DONE**，须等物化链路接通后整体验收。
+跨小说/跨语言取样保留为 supplementary verification，不再是 Final DoD blocker。
 
 ---
 
@@ -390,6 +384,9 @@ P2-05 整体 DONE（冻结 3：不拆分验收）
 RESULT=P2_05_REVISION_SPEC_FINAL
 OWNER_DECISIONS=7 项冻结 + S1
 OVERDESIGN_REMOVED=1000 配额 / 去重表 / 全目录 cursor / C1-C2-C3 轮转
-BLOCKING=materialType + dataId（需 Owner 授权生产只读浏览器捕获）
-NEXT_GATE=CODEX_EXECUTE_SECTION_2_AND_3
+DATAID_EVIDENCE=CONFIRMED
+MATERIALTYPE_EVIDENCE=CONFIRMED_AS_RUNTIME_SELECTION_POLICY
+MATERIALTYPE_GLOBAL_CONSTANT=NOT_ASSERTED
+MATERIALTYPE_1001=REJECTED
+NEXT_GATE=CODEX_P2_05_FINAL_INTEGRATION_AND_REREVIEW
 ```

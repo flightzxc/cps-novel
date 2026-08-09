@@ -99,8 +99,14 @@ export interface MaterializeChangduPreviewResult {
   hashPrefixes: readonly string[];
 }
 
+type PreviewWriteDb = PrismaClient | Prisma.TransactionClient;
+
+function isPrismaClient(db: PreviewWriteDb): db is PrismaClient {
+  return "$transaction" in db;
+}
+
 export async function materializeChangduPreview(
-  prisma: PrismaClient,
+  prisma: PreviewWriteDb,
   input: MaterializeChangduPreviewInput,
 ): Promise<MaterializeChangduPreviewResult> {
   if (!input.trustedCompleteResponse || input.chapterList.length === 0) {
@@ -114,7 +120,7 @@ export async function materializeChangduPreview(
       hashPrefixes: [],
     };
   }
-  return prisma.$transaction(async (tx) => {
+  const write = async (tx: Prisma.TransactionClient): Promise<MaterializeChangduPreviewResult> => {
     const locked = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
       SELECT n.id
       FROM novel n
@@ -300,5 +306,6 @@ export async function materializeChangduPreview(
       restoredCount,
       hashPrefixes: plan.chapters.map((chapter) => chapter.contentHash.slice(0, 12)),
     };
-  });
+  };
+  return isPrismaClient(prisma) ? prisma.$transaction(write) : write(prisma);
 }

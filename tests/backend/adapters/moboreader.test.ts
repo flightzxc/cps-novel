@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   MoboreaderAdapterError,
+  buildMoboreaderPreviewRequestsFromCatalogRow,
   createMoboreaderReadAdapter,
   parseBookMaterialResponse,
   parseListBooksResponse,
@@ -36,6 +37,61 @@ function listPayload() {
 }
 
 describe("MoboReader read adapter", () => {
+  it("passes through a present getlistpc materialType without treating 1 or 1001 as a global constant", () => {
+    const requests = buildMoboreaderPreviewRequestsFromCatalogRow({
+      id: 332676694,
+      seriesId: 7654321,
+      agencyId: 6833,
+      projectType: 1,
+      language: 3,
+      materialType: 77,
+    });
+    expect(requests.material).toEqual({
+      agencyId: 6833,
+      dataId: 7654321,
+      projectType: 1,
+      language: 3,
+      materialType: 77,
+    });
+    expect(requests.materialTypeSource).toBe("getlistpc.materialType");
+    expect(requests.material.materialType).not.toBe(1);
+    expect(requests.material.materialType).not.toBe(1001);
+  });
+
+  it.each([undefined, null])("falls back to materialType=1 only when getlistpc materialType is %s", (materialType) => {
+    const requests = buildMoboreaderPreviewRequestsFromCatalogRow({
+      id: "not-the-data-id",
+      seriesId: "series-is-the-data-id",
+      agencyId: "agency-1",
+      projectType: 1,
+      language: 2,
+      materialType,
+    });
+    expect(requests.material).toMatchObject({ dataId: "series-is-the-data-id", materialType: 1 });
+    expect(requests.chapters.seriesId).toBe("series-is-the-data-id");
+    expect(requests.materialTypeSource).toBe("fallback_1");
+    expect(requests.material.materialType).not.toBe(1001);
+  });
+
+  it("does not replace a present zero materialType via truthiness fallback", () => {
+    expect(buildMoboreaderPreviewRequestsFromCatalogRow({
+      seriesId: "series-0",
+      agencyId: "agency-1",
+      projectType: 1,
+      language: 2,
+      materialType: 0,
+    }).material.materialType).toBe(0);
+  });
+
+  it("fails closed instead of substituting getlistpc.id when seriesId is absent", () => {
+    expect(() => buildMoboreaderPreviewRequestsFromCatalogRow({
+      id: "must-not-be-used",
+      agencyId: "agency-1",
+      projectType: 1,
+      language: 2,
+    })).toThrow(MoboreaderAdapterError);
+  });
+
   it("parses getlistpc and confines unknown fields to redacted raw evidence", () => {
     const parsed = parseListBooksResponse(listPayload());
     expect(parsed.totalCount).toBe(95_479);
@@ -96,6 +152,33 @@ describe("MoboReader read adapter", () => {
     expect(capturedUrl).toBe("https://kocserver-cn.cdreader.com/api/v1/res/getlistpc");
     expect(JSON.parse(String(capturedInit?.body))).toEqual({ name: "", orderType: 0, pageIndex: 2, pageSize: 100, projectType: 1 });
     expect(new URL(capturedUrl).search).toBe("");
+  });
+
+  it("sends the frozen runtime-selected getbydataid request unchanged", async () => {
+    let capturedUrl = "";
+    let capturedBody: unknown;
+    const fetchImpl: typeof fetch = async (url, init) => {
+      capturedUrl = String(url);
+      capturedBody = JSON.parse(String(init?.body));
+      return new Response(JSON.stringify({ data: { list: [], totalCount: 0 } }), { status: 200 });
+    };
+    const adapter = createMoboreaderReadAdapter({ fetchImpl });
+    const { material } = buildMoboreaderPreviewRequestsFromCatalogRow({
+      id: 332676694,
+      seriesId: 7654321,
+      agencyId: 6833,
+      projectType: 1,
+      language: 3,
+    });
+    await adapter.fetchBookMaterial(material, "secret-token");
+    expect(capturedUrl).toBe("https://kocserver-cn.cdreader.com/api/v1/material/getbydataid");
+    expect(capturedBody).toEqual({
+      agencyId: 6833,
+      dataId: 7654321,
+      projectType: 1,
+      language: 3,
+      materialType: 1,
+    });
   });
 
   it("retries safe reads for retryable status and honors bounded Retry-After", async () => {

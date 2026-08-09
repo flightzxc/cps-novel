@@ -19,18 +19,26 @@ export interface ListBooksRequest {
 }
 
 export interface FetchBookMaterialRequest {
-  agencyId: string;
-  dataId: string;
+  agencyId: string | number;
+  dataId: string | number;
   projectType: number;
   language: string | number;
   materialType: string | number;
 }
 
 export interface FetchPreviewChaptersRequest {
-  agencyId: string;
-  seriesId: string;
+  agencyId: string | number;
+  seriesId: string | number;
   projectType: number;
   language: string | number;
+}
+
+export const MOBOREADER_FALLBACK_MATERIAL_TYPE = 1;
+
+export interface MoboreaderPreviewRequests {
+  material: FetchBookMaterialRequest;
+  chapters: FetchPreviewChaptersRequest;
+  materialTypeSource: "getlistpc.materialType" | "fallback_1";
 }
 
 export type RawEvidence = Readonly<Record<string, unknown>> & {
@@ -42,6 +50,7 @@ export interface MoboreaderBook {
   agencyId: string | null;
   agencyName: string | null;
   seriesId: string;
+  materialType: string | number | null;
   title: string;
   description: string | null;
   coverUrl: string | null;
@@ -65,7 +74,7 @@ export interface ListBooksResponse {
 }
 
 export interface BookMaterialResponse {
-  dataId: string;
+  dataId: string | null;
   seriesId: string | null;
   materialType: string | number | null;
   materialStatus: string | number | null;
@@ -131,6 +140,24 @@ function requiredString(value: unknown): string {
   return value;
 }
 
+function requestScalar(value: unknown): string | number {
+  if (typeof value === "string" && value.trim()) return value;
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  throw new MoboreaderAdapterError("malformed_payload", false);
+}
+
+function optionalIdentifier(value: unknown): string | null {
+  if (typeof value === "string" && value.trim()) return value;
+  if (typeof value === "number" && Number.isFinite(value)) return String(value);
+  return null;
+}
+
+function requiredIdentifier(value: unknown): string {
+  const identifier = optionalIdentifier(value);
+  if (identifier === null) throw new MoboreaderAdapterError("malformed_payload", false);
+  return identifier;
+}
+
 function optionalString(value: unknown): string | null {
   return typeof value === "string" ? value : null;
 }
@@ -192,17 +219,51 @@ function responseData(value: unknown): Record<string, unknown> {
   return record(envelope.data);
 }
 
+/**
+ * Frozen Owner contract for constructing both Preview reads from one original
+ * getlistpc row. In particular, `id` is never a fallback for `dataId`, and a
+ * present materialType (including zero) is never replaced by the fallback.
+ */
+export function buildMoboreaderPreviewRequestsFromCatalogRow(value: unknown): MoboreaderPreviewRequests {
+  const row = record(value);
+  const agencyId = requestScalar(row.agencyId);
+  const seriesId = requestScalar(row.seriesId);
+  const language = requestScalar(row.language);
+  const projectType = integer(row.projectType);
+  const hasMaterialType = row.materialType !== null && row.materialType !== undefined;
+  const materialType = hasMaterialType
+    ? requestScalar(row.materialType)
+    : MOBOREADER_FALLBACK_MATERIAL_TYPE;
+  return {
+    material: {
+      agencyId,
+      dataId: seriesId,
+      projectType,
+      language,
+      materialType,
+    },
+    chapters: {
+      agencyId,
+      seriesId,
+      projectType,
+      language,
+    },
+    materialTypeSource: hasMaterialType ? "getlistpc.materialType" : "fallback_1",
+  };
+}
+
 export function parseListBooksResponse(value: unknown): ListBooksResponse {
   const data = responseData(value);
   if (!Array.isArray(data.list)) throw new MoboreaderAdapterError("malformed_payload", false);
   const items = data.list.map((value): MoboreaderBook => {
     const row = record(value);
-    const seriesId = requiredString(row.seriesId ?? row.id);
+    const seriesId = requiredIdentifier(row.seriesId);
     return {
-      externalBookId: requiredString(row.id ?? row.seriesId),
+      externalBookId: requiredIdentifier(row.id ?? row.seriesId),
       agencyId: optionalString(row.agencyId) ?? (typeof row.agencyId === "number" ? String(row.agencyId) : null),
       agencyName: optionalString(row.agencyName),
       seriesId,
+      materialType: typeof row.materialType === "string" || typeof row.materialType === "number" ? row.materialType : null,
       title: requiredString(row.seriesName),
       description: optionalString(row.description),
       coverUrl: optionalString(row.coverUrl ?? row.logo),
@@ -224,12 +285,13 @@ export function parseListBooksResponse(value: unknown): ListBooksResponse {
 
 export function parseBookMaterialResponse(value: unknown): BookMaterialResponse {
   const data = responseData(value);
+  const item = Array.isArray(data.list) && data.list.length > 0 ? record(data.list[0]) : data;
   return {
-    dataId: requiredString(data.dataId ?? data.id),
-    seriesId: optionalString(data.seriesId),
-    materialType: typeof data.materialType === "string" || typeof data.materialType === "number" ? data.materialType : null,
-    materialStatus: typeof data.materialStatus === "string" || typeof data.materialStatus === "number" ? data.materialStatus : null,
-    statusText: optionalString(data.statusText),
+    dataId: optionalIdentifier(item.dataId ?? item.id),
+    seriesId: optionalIdentifier(item.seriesId),
+    materialType: typeof item.materialType === "string" || typeof item.materialType === "number" ? item.materialType : null,
+    materialStatus: typeof item.materialStatus === "string" || typeof item.materialStatus === "number" ? item.materialStatus : null,
+    statusText: optionalString(item.statusText),
     rawEvidence: toApprovedRawEvidence(data),
   };
 }

@@ -1,5 +1,6 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
 import {
+  buildMoboreaderPreviewRequestsFromCatalogRow,
   createMoboreaderReadAdapter,
   type ListBooksResponse,
   type MoboreaderReadAdapter,
@@ -11,9 +12,11 @@ import {
 import {
   enqueueMoboreaderPreviewRefreshTask,
   MOBOREADER_CATALOG_LIMITS,
-  MOBOREADER_PREVIEW_DISABLED_REASON,
+  MOBOREADER_PREVIEW_ENV,
+  resolveMoboreaderPreviewRuntimeConfig,
   MOBOREADER_TASK_TYPES,
 } from "../../src/lib/tasks/moboreader";
+import { materializeChangduPreview } from "../../src/lib/preview";
 import { createHandlerRegistry, type TaskHandler } from "../../src/lib/tasks";
 import { decryptCredentialSecretForWorker } from "../credentials/crypto";
 
@@ -473,6 +476,129 @@ export interface MoboreaderHandlerDependencies {
   now?: () => Date;
 }
 
+interface MoboreaderPreviewPayload {
+  trigger: "manual" | "auto";
+  actorId: string;
+  requestId: string;
+}
+
+function parseMoboreaderPreviewPayload(value: unknown): MoboreaderPreviewPayload {
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("preview_payload_invalid");
+  const payload = value as Partial<MoboreaderPreviewPayload>;
+  if (payload.trigger !== "manual" && payload.trigger !== "auto") throw new Error("preview_trigger_invalid");
+  if (typeof payload.actorId !== "string" || !payload.actorId) throw new Error("preview_actor_required");
+  if (typeof payload.requestId !== "string" || !payload.requestId) throw new Error("preview_request_id_required");
+  return payload as MoboreaderPreviewPayload;
+}
+
+function configuredSourceApps(env: NodeJS.ProcessEnv): Set<string> {
+  return new Set((env[MOBOREADER_PREVIEW_ENV.sourceAppCodes] ?? "")
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean));
+}
+
+async function loadMoboreaderPreviewScope(db: PrismaClient, taskId: string, itemId: string, env: NodeJS.ProcessEnv) {
+  const item = await db.channelSyncTaskItem.findUnique({
+    where: { id: itemId },
+    select: {
+      taskId: true,
+      novelSourceItemId: true,
+      task: {
+        select: {
+          taskType: true,
+          channelAccountId: true,
+          channelAppId: true,
+        },
+      },
+      novelSourceItem: {
+        select: {
+          id: true,
+          novelId: true,
+          channelAppId: true,
+          externalAgencyId: true,
+          sourceLanguageCode: true,
+          rawPayload: true,
+          deletedAt: true,
+        },
+      },
+    },
+  });
+  if (!item || item.taskId !== taskId || item.task.taskType !== MOBOREADER_TASK_TYPES.previewRefresh) {
+    throw new Error("preview_task_scope_invalid");
+  }
+  const source = item.novelSourceItem;
+  if (!source.novelId || source.deletedAt || source.channelAppId !== item.task.channelAppId) {
+    throw new Error("preview_source_binding_missing");
+  }
+  const app = await db.channelApp.findFirst({
+    where: {
+      id: item.task.channelAppId,
+      status: "active",
+      channel: { status: "active" },
+      sourceApp: { status: "active" },
+    },
+    select: {
+      channelId: true,
+      projectType: true,
+      sourceApp: { select: { code: true } },
+      capabilities: {
+        where: {
+          capabilityKey: { in: ["getbydataid", "getchapterinfo"] },
+          status: "enabled",
+          sideEffecting: false,
+        },
+        select: { capabilityKey: true },
+      },
+    },
+  });
+  if (!app || !configuredSourceApps(env).has(app.sourceApp.code)) throw new Error("preview_channel_binding_unavailable");
+  const capabilities = new Set(app.capabilities.map(({ capabilityKey }) => capabilityKey));
+  if (!capabilities.has("getbydataid") || !capabilities.has("getchapterinfo")) {
+    throw new Error("preview_read_capability_unavailable");
+  }
+  const account = await db.channelAccount.findFirst({
+    where: {
+      id: item.task.channelAccountId,
+      channelId: app.channelId,
+      status: "active",
+      deletedAt: null,
+    },
+    select: {
+      id: true,
+      credentials: {
+        where: { status: "active", OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }] },
+        select: { id: true, encryptedSecret: true, keyVersion: true },
+        orderBy: { createdAt: "desc" },
+        take: 2,
+      },
+    },
+  });
+  if (!account || account.credentials.length !== 1) {
+    throw new Error(account ? "credential_ambiguous" : "preview_account_unavailable");
+  }
+  const requests = buildMoboreaderPreviewRequestsFromCatalogRow(source.rawPayload);
+  if (
+    requests.material.projectType !== app.projectType
+    || String(requests.material.agencyId) !== source.externalAgencyId
+    || String(requests.material.language) !== source.sourceLanguageCode
+  ) {
+    throw new Error("preview_catalog_identity_mismatch");
+  }
+  const credential = account.credentials[0];
+  return {
+    novelId: source.novelId,
+    novelSourceItemId: source.id,
+    requests,
+    token: decryptCredentialSecretForWorker(
+      credential.encryptedSecret,
+      account.id,
+      credential.id,
+      credential.keyVersion,
+    ),
+  };
+}
+
 export function createMoboreaderCatalogHandler(
   db: PrismaClient,
   dependencies: MoboreaderHandlerDependencies = {},
@@ -576,19 +702,65 @@ export function createMoboreaderCatalogHandler(
 }
 
 export function createMoboreaderPreviewHandler(
-  _db: PrismaClient,
+  db: PrismaClient,
   dependencies: MoboreaderHandlerDependencies = {},
 ): TaskHandler {
-  const adapter = dependencies.adapter ?? createMoboreaderReadAdapter();
-  return async () => {
-    // Deliberately do not inspect a source row or invoke either preview endpoint:
-    // materialType and dataId provenance are still unproven production inputs.
-    void adapter;
+  const env = dependencies.env ?? process.env;
+  const runtime = resolveMoboreaderPreviewRuntimeConfig(env);
+  const adapter = dependencies.adapter ?? createMoboreaderReadAdapter({ timeoutMs: runtime.timeoutMs });
+  return async ({ lease, mode, signal }) => {
+    if (!isNovelCatalogSyncEnabled(env)) {
+      return { status: "failed", error: { code: "feature_disabled", message: "Preview refresh feature is disabled" } };
+    }
+    if (mode === "apply" && !isNovelCatalogSyncWriteAllowed(env)) {
+      return { status: "failed", error: { code: "write_disabled", message: "Preview refresh write gate is disabled" } };
+    }
+    const payload = parseMoboreaderPreviewPayload(lease.payload);
+    const scope = await loadMoboreaderPreviewScope(db, lease.taskId, lease.itemId, env);
+    try {
+      await adapter.fetchBookMaterial(scope.requests.material, scope.token, signal);
+    } catch {
+      return {
+        status: "failed",
+        error: { code: "upstream_material_read_failed", message: "MoboReader material read failed" },
+      };
+    }
+    let preview;
+    try {
+      preview = await adapter.fetchPreviewChapters(scope.requests.chapters, scope.token, signal);
+    } catch {
+      return {
+        status: "failed",
+        error: { code: "upstream_preview_read_failed", message: "MoboReader Preview read failed" },
+      };
+    }
+    if (preview.chapterList.length === 0) {
+      return {
+        status: "skipped",
+        result: {
+          reason: "upstream_empty_preview",
+          materialTypeSource: scope.requests.materialTypeSource,
+          upstreamCount: 0,
+        },
+      };
+    }
     return {
-      status: "failed",
-      error: {
-        code: MOBOREADER_PREVIEW_DISABLED_REASON,
-        message: "Preview production call is fail-closed pending materialType and dataId evidence",
+      status: "success",
+      result: {
+        materialTypeSource: scope.requests.materialTypeSource,
+        upstreamCount: preview.chapterList.length,
+      },
+      protectedWrite: async (tx) => {
+        await materializeChangduPreview(tx, {
+          novelId: scope.novelId,
+          novelSourceItemId: scope.novelSourceItemId,
+          sourceFetchId: lease.itemId,
+          actorId: payload.actorId,
+          requestId: payload.requestId,
+          taskId: lease.taskId,
+          chapterList: preview.chapterList,
+          trustedCompleteResponse: true,
+        });
       },
     };
   };

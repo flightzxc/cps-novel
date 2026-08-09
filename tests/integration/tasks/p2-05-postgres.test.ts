@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { PrismaClient } from "@prisma/client";
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { MoboreaderReadAdapter } from "@/lib/adapters";
 import { materializeChangduPreview } from "@/lib/preview";
 import {
@@ -38,6 +38,7 @@ function page(bookId = "book-1") {
       agencyId: "agency-1",
       agencyName: "Agency",
       seriesId: `series-${bookId}`,
+      materialType: null,
       title: `Title ${bookId}`,
       description: "Description",
       coverUrl: null,
@@ -51,7 +52,15 @@ function page(bookId = "book-1") {
       createTime: null,
       seriesTypeList: ["raw-series-type"],
       recommendList: ["raw-recommend"],
-      rawEvidence: { source_label: { future: "unknown" }, __boundary: "approved_raw_evidence" } as const,
+      rawEvidence: {
+        id: bookId,
+        agencyId: "agency-1",
+        seriesId: `series-${bookId}`,
+        projectType: 1,
+        language: "2",
+        source_label: { future: "unknown" },
+        __boundary: "approved_raw_evidence",
+      } as const,
     }],
     totalCount: 95_479,
     rawEvidence: { totalCount: 95_479, __boundary: "approved_raw_evidence" } as const,
@@ -61,8 +70,19 @@ function page(bookId = "book-1") {
 function adapter(bookId = "book-1"): MoboreaderReadAdapter {
   return {
     listBooks: async () => page(bookId),
-    fetchBookMaterial: async () => { throw new Error("registered_disabled"); },
-    fetchPreviewChapters: async () => { throw new Error("registered_disabled"); },
+    fetchBookMaterial: async () => ({
+      dataId: null,
+      seriesId: `series-${bookId}`,
+      materialType: null,
+      materialStatus: null,
+      statusText: null,
+      rawEvidence: { list: [], __boundary: "approved_raw_evidence" },
+    }),
+    fetchPreviewChapters: async () => ({
+      bookId: `series-${bookId}`,
+      currentLanguage: "2",
+      chapterList: chapters(3),
+    }),
   };
 }
 
@@ -89,6 +109,15 @@ async function seedFoundation() {
       sideEffecting: false,
       evidenceLevel: "READ_ONLY_PRODUCTION_READ_PROVEN",
     },
+  });
+  await owner.channelCapability.createMany({
+    data: ["getbydataid", "getchapterinfo"].map((capabilityKey) => ({
+      channelAppId: ids.channelApp,
+      capabilityKey,
+      status: "enabled",
+      sideEffecting: false,
+      evidenceLevel: "READ_ONLY_PRODUCTION_READ_PROVEN",
+    })),
   });
   await owner.channelAccount.create({
     data: { id: ids.account, channelId: ids.channel, businessId: "p2-05-account", accountName: "P2-05" },
@@ -149,6 +178,18 @@ async function consume(readAdapter = adapter(), env: NodeJS.ProcessEnv = gates) 
     workerId: "p2-05-worker",
     handlers,
     allowlist: buildWorkerAllowlist("catalog_scan", handlers),
+    signal: new AbortController().signal,
+    leaseMs: 30_000,
+  });
+}
+
+async function consumePreview(readAdapter = adapter(), env: NodeJS.ProcessEnv = gates) {
+  const handlers = createMoboreaderWorkerHandlers(worker, { adapter: readAdapter, env });
+  return processOneWorkerCycle({
+    prisma: worker,
+    workerId: "p2-05-preview-worker",
+    handlers,
+    allowlist: buildWorkerAllowlist("moboreader.preview_refresh.v1", handlers),
     signal: new AbortController().signal,
     leaseMs: 30_000,
   });
@@ -333,7 +374,7 @@ describe.skipIf(!enabled).sequential("P2-05 PostgreSQL 16.14 write paths", () =>
     expect(JSON.stringify(task.error)).not.toContain("upstream body must not persist");
   });
 
-  it("enqueues exactly the current linked catalog batch into disabled ChannelSyncTask items", async () => {
+  it("enqueues exactly the current linked catalog batch and executes the frozen fallback request contract", async () => {
     const touched = await seedLinkedSource("book-1", "scope-touched");
     const outside = await seedLinkedSource("book-outside", "scope-outside");
     const created = await enqueue("apply");
@@ -344,17 +385,46 @@ describe.skipIf(!enabled).sequential("P2-05 PostgreSQL 16.14 write paths", () =>
     });
     expect(preview).toMatchObject({
       taskType: "moboreader.preview_refresh.v1",
-      status: "disabled",
+      status: "pending",
       totalCount: 1,
       params: {
         trigger: "auto",
         catalogScanTaskId: created.taskId,
         runtime: { chunkSize: 25, concurrency: 2, timeoutMs: 20_000, freshnessMs: 86_400_000 },
-        evidence: { materialType: "open", dataId: "open", productionPreviewCall: "fail_closed" },
+        evidence: {
+          dataId: "confirmed_getlistpc_series_id",
+          materialType: "confirmed_runtime_selection_policy",
+          materialTypeGlobalConstant: "not_asserted",
+          materialType1001: "rejected",
+          productionPreviewCall: "enabled",
+        },
       },
     });
     expect(preview.items.map(({ novelSourceItemId }) => novelSourceItemId)).toEqual([touched.source.id]);
     expect(preview.items.map(({ novelSourceItemId }) => novelSourceItemId)).not.toContain(outside.source.id);
+
+    const readAdapter = adapter();
+    readAdapter.fetchBookMaterial = vi.fn(readAdapter.fetchBookMaterial);
+    readAdapter.fetchPreviewChapters = vi.fn(readAdapter.fetchPreviewChapters);
+    expect(await consumePreview(readAdapter)).toBe(true);
+    expect(readAdapter.fetchBookMaterial).toHaveBeenCalledWith({
+      agencyId: "agency-1",
+      dataId: "series-book-1",
+      projectType: 1,
+      language: "2",
+      materialType: 1,
+    }, "test-jwt", expect.any(AbortSignal));
+    expect(readAdapter.fetchPreviewChapters).toHaveBeenCalledWith({
+      agencyId: "agency-1",
+      seriesId: "series-book-1",
+      projectType: 1,
+      language: "2",
+    }, "test-jwt", expect.any(AbortSignal));
+    expect(await owner.channelSyncTask.findUniqueOrThrow({ where: { id: preview.id } })).toMatchObject({
+      status: "completed",
+      successCount: 1,
+    });
+    expect(await owner.novelChapter.count({ where: { novelId: touched.novel.id } })).toBe(3);
 
     const retry = await createMoboreaderPreviewRefreshTask(owner, {
       channelAccountId: ids.account,
@@ -387,7 +457,7 @@ describe.skipIf(!enabled).sequential("P2-05 PostgreSQL 16.14 write paths", () =>
     }, gates);
     expect(manual).toMatchObject({
       status: "enqueued",
-      taskStatus: "disabled",
+      taskStatus: "pending",
       eligibleCount: 1,
       skipReasonCounts: { fresh_preview: 1 },
     });
