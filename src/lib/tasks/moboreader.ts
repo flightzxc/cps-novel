@@ -350,17 +350,6 @@ async function enqueueMoboreaderPreviewRefreshTaskInDb(
   const duplicate = await db.channelSyncTask.findUnique({ where: { requestToken: input.requestToken } });
   if (duplicate) return { status: "duplicate", taskId: duplicate.id };
 
-  const active = await db.channelSyncTask.findFirst({
-    where: {
-      taskType: MOBOREADER_TASK_TYPES.previewRefresh,
-      channelAccountId: input.channelAccountId,
-      channelAppId: input.channelAppId,
-      status: { in: ["pending", "processing"] },
-    },
-    orderBy: { createdAt: "asc" },
-  });
-  if (active) return { status: "active_conflict", taskId: active.id };
-
   const skipReasonCounts: Record<string, number> = {};
   const binding = await db.channelApp.findFirst({
     where: { id: input.channelAppId, status: "active", channel: { status: "active" }, sourceApp: { status: "active" } },
@@ -430,6 +419,17 @@ async function enqueueMoboreaderPreviewRefreshTaskInDb(
 
   const taskId = randomUUID();
   const operationScopeHash = digest([...eligibleIds].sort());
+  const active = await db.channelSyncTask.findFirst({
+    where: {
+      taskType: MOBOREADER_TASK_TYPES.previewRefresh,
+      channelAccountId: input.channelAccountId,
+      channelAppId: input.channelAppId,
+      operationScopeHash,
+      status: { in: ["pending", "processing"] },
+    },
+    orderBy: { createdAt: "asc" },
+  });
+  if (active) return { status: "active_conflict", taskId: active.id };
   const enabled = isNovelCatalogSyncEnabled(env);
   const writeAllowed = isNovelCatalogSyncWriteAllowed(env);
   const taskStatus = enabled && (input.mode === "dry_run" || writeAllowed) ? "pending" : "disabled";

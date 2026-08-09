@@ -468,6 +468,17 @@ describe.skipIf(!enabled).sequential("P2-05 PostgreSQL 16.14 write paths", () =>
     expect(task.params).toMatchObject({ trigger: "manual" });
     expect(task.items.map(({ novelSourceItemId }) => novelSourceItemId)).toEqual([stale.source.id]);
 
+    const disjoint = await seedLinkedSource("book-disjoint", "manual-disjoint");
+    const disjointManual = await createMoboreaderPreviewRefreshTask(owner, {
+      channelAccountId: ids.account,
+      channelAppId: ids.channelApp,
+      novelSourceItemIds: [disjoint.source.id],
+      requestToken: randomUUID(),
+      actorId: "owner",
+      requestId: randomUUID(),
+    }, gates);
+    expect(disjointManual).toMatchObject({ status: "enqueued", eligibleCount: 1 });
+
     const noSourceAppAllowlist = await createMoboreaderPreviewRefreshTask(owner, {
       channelAccountId: ids.account,
       channelAppId: ids.channelApp,
