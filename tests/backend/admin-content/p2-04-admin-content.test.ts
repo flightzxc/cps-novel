@@ -150,10 +150,10 @@ describe("P2-04 admin content projections", () => {
     expect(serialized).not.toContain("body");
   });
 
-  it("returns null detail without adding a per-relation query path", async () => {
-    const { db, query } = queryDb([[], []]);
+  it("runs a fixed, constant number of queries regardless of source/label row count (no N+1)", async () => {
+    const { db, query } = queryDb([[], [], []]);
     await expect(getAdminNovelDetail(db, NOVEL_ID)).resolves.toBeNull();
-    expect(query).toHaveBeenCalledTimes(2);
+    expect(query).toHaveBeenCalledTimes(3);
   });
 
   it("audits a successful body read without copying content metadata into Audit", async () => {

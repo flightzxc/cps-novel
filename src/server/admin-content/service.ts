@@ -15,15 +15,21 @@ import {
   type AdminContentPage,
   type AdminContentSyncSummary,
   type AdminNovelDetail,
+  type AdminNovelLabelSummary,
   type AdminNovelListInput,
   type AdminNovelListItem,
   type AdminNovelSourceSummary,
   type AdminPreviewPolicy,
   type AdminPreviewSummary,
+  type AdminSourceLabelActivity,
+  type AdminSourceLabelListInput,
+  type AdminSourceLabelListItem,
 } from "@/domain/admin-content";
 import {
+  LABEL_KINDS,
   NOVEL_CHAPTER_STATUSES,
   NOVEL_STATUSES,
+  type LabelKind,
   type NovelChapterStatus,
   type NovelStatus,
 } from "@/domain/database-statuses";
@@ -38,7 +44,9 @@ export type AdminContentQueryErrorCode =
   | "invalid_status"
   | "invalid_locale"
   | "invalid_identifier"
-  | "invalid_read_context";
+  | "invalid_read_context"
+  | "invalid_label_kind"
+  | "invalid_activity";
 
 export class AdminContentQueryError extends Error {
   readonly code: AdminContentQueryErrorCode;
@@ -55,13 +63,20 @@ type NormalizedNovelList = NormalizedPage & {
   status?: NovelStatus;
   locale?: string;
   search?: string;
+  labelId?: string;
 };
 type NormalizedChapterList = NormalizedPage & {
   novelId: string;
   status?: NovelChapterStatus;
 };
+type NormalizedSourceLabelList = NormalizedPage & {
+  labelKind?: LabelKind;
+  search?: string;
+  activity: AdminSourceLabelActivity;
+};
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const ADMIN_SOURCE_LABEL_ACTIVITIES: readonly AdminSourceLabelActivity[] = ["current", "history", "all"];
 
 function normalizePage(page: unknown, pageSize: unknown): NormalizedPage {
   const normalizedPage = page ?? 1;
@@ -109,11 +124,42 @@ export function normalizeAdminNovelListInput(input: AdminNovelListInput = {}): N
       `Search must not exceed ${ADMIN_CONTENT_MAX_SEARCH_LENGTH} characters`,
     );
   }
+  const labelId = input.labelId !== undefined ? requireUuid(input.labelId) : undefined;
   return {
     ...pagination,
     status: input.status,
     locale: input.locale,
     search: search || undefined,
+    labelId,
+  };
+}
+
+export function normalizeAdminSourceLabelListInput(
+  input: AdminSourceLabelListInput = {},
+): NormalizedSourceLabelList {
+  const pagination = normalizePage(input.page, input.pageSize);
+  if (input.labelKind !== undefined && !LABEL_KINDS.includes(input.labelKind as LabelKind)) {
+    throw new AdminContentQueryError("invalid_label_kind", "Label kind is not registered");
+  }
+  if (input.search !== undefined && typeof input.search !== "string") {
+    throw new AdminContentQueryError("invalid_search", "Search must be a string");
+  }
+  const search = input.search?.trim();
+  if (search && search.length > ADMIN_CONTENT_MAX_SEARCH_LENGTH) {
+    throw new AdminContentQueryError(
+      "invalid_search",
+      `Search must not exceed ${ADMIN_CONTENT_MAX_SEARCH_LENGTH} characters`,
+    );
+  }
+  const activity = input.activity ?? "current";
+  if (!ADMIN_SOURCE_LABEL_ACTIVITIES.includes(activity)) {
+    throw new AdminContentQueryError("invalid_activity", "Activity filter is not registered");
+  }
+  return {
+    ...pagination,
+    labelKind: input.labelKind,
+    search: search || undefined,
+    activity,
   };
 }
 
@@ -273,6 +319,18 @@ function novelFilters(input: NormalizedNovelList): Prisma.Sql {
       OR POSITION(LOWER(${input.search}) IN LOWER(n.business_id)) > 0
       OR POSITION(LOWER(${input.search}) IN LOWER(n.slug)) > 0
       OR n.id::text = ${input.search}
+    )`);
+  }
+  if (input.labelId) {
+    // EXISTS, never JOIN: this predicate is reused verbatim by both the count
+    // query (single-table `novel n`) and the page CTE. A JOIN here would
+    // fan out rows and inflate COUNT(*), and the count query has no
+    // novel_source_item/novel_source_item_label aliases to join against.
+    filters.push(Prisma.sql`EXISTS (
+      SELECT 1 FROM novel_source_item nsi
+      JOIN novel_source_item_label nsil ON nsil.novel_source_item_id = nsi.id
+      WHERE nsi.novel_id = n.id AND nsi.deleted_at IS NULL
+        AND nsil.active AND nsil.source_label_id = ${input.labelId}::uuid
     )`);
   }
   return Prisma.join(filters, " AND ");
@@ -485,12 +543,28 @@ function sourceSummary(row: NovelSourceRow): AdminNovelSourceSummary {
   };
 }
 
+type NovelLabelRow = {
+  id: string;
+  label_kind: LabelKind;
+  external_label_value: string;
+  display_value: string | null;
+};
+
+function novelLabelSummary(row: NovelLabelRow): AdminNovelLabelSummary {
+  return {
+    labelId: row.id,
+    labelKind: row.label_kind,
+    externalLabelValue: row.external_label_value,
+    displayValue: row.display_value,
+  };
+}
+
 export async function getAdminNovelDetail(
   db: QueryClient,
   novelId: string,
 ): Promise<AdminNovelDetail | null> {
   const id = requireUuid(novelId);
-  const [rows, sourceRows] = await Promise.all([
+  const [rows, sourceRows, labelRows] = await Promise.all([
     db.$queryRaw<NovelDetailRow[]>(Prisma.sql`
       WITH page AS (
         SELECT n.* FROM novel n WHERE n.id = ${id}::uuid AND n.deleted_at IS NULL
@@ -520,6 +594,20 @@ export async function getAdminNovelDetail(
       ORDER BY nsi.updated_at DESC, nsi.id DESC
       LIMIT ${ADMIN_CONTENT_MAX_SOURCE_ITEMS}
     `),
+    // Labels reach a novel only via novel_source_item; one query across all
+    // four label_kind values (never 4 kind-scoped queries), active labels only.
+    db.$queryRaw<NovelLabelRow[]>(Prisma.sql`
+      SELECT DISTINCT sl.id, sl.label_kind, sl.external_label_value, sl.display_value
+      FROM novel_source_item_label nsil
+      JOIN novel_source_item nsi ON nsi.id = nsil.novel_source_item_id
+      JOIN novel n ON n.id = nsi.novel_id AND n.deleted_at IS NULL
+      JOIN source_label sl ON sl.id = nsil.source_label_id
+      WHERE nsi.novel_id = ${id}::uuid AND nsi.deleted_at IS NULL AND nsil.active
+      -- display_value is nullable and today is always NULL (the write side does
+      -- not backfill it yet), so it cannot order anything on its own: fall
+      -- through to the raw value and then the id for a total order.
+      ORDER BY sl.label_kind, sl.display_value, sl.external_label_value, sl.id
+    `),
   ]);
   const row = rows[0];
   if (!row) return null;
@@ -544,9 +632,98 @@ export async function getAdminNovelDetail(
     sync: syncSummary(row),
     sources: sourceRows.map(sourceSummary),
     sourcesTruncated: count(row.source_item_count) > sourceRows.length,
+    labels: labelRows.map(novelLabelSummary),
     createdAt: requiredIso(row.created_at),
     updatedAt: requiredIso(row.updated_at),
   };
+}
+
+// Whether `sl` (source_label, must be aliased `sl` in the enclosing query)
+// currently carries at least one active novel association. This predicate,
+// and its negation, partition ALL labels disjointly: current ⊎ history = all.
+//
+// 🔴 Do NOT redefine "history" as "exists an inactive association" — a label
+// can carry both active and inactive novel_source_item_label rows at the same
+// time, which would let it show up in both current and history simultaneously
+// and break the partition. "history" is strictly "no active association left".
+const LABEL_HAS_ACTIVE_NOVEL = Prisma.sql`EXISTS (
+  SELECT 1
+  FROM novel_source_item_label nsil
+  JOIN novel_source_item nsi ON nsi.id = nsil.novel_source_item_id AND nsi.deleted_at IS NULL
+  JOIN novel n2 ON n2.id = nsi.novel_id AND n2.deleted_at IS NULL
+  WHERE nsil.source_label_id = sl.id AND nsil.active
+)`;
+
+function sourceLabelFilters(input: NormalizedSourceLabelList): Prisma.Sql {
+  const filters: Prisma.Sql[] = [];
+  if (input.labelKind) filters.push(Prisma.sql`sl.label_kind = ${input.labelKind}`);
+  if (input.search) {
+    filters.push(Prisma.sql`POSITION(LOWER(${input.search}) IN LOWER(sl.external_label_value)) > 0`);
+  }
+  if (input.activity === "current") filters.push(LABEL_HAS_ACTIVE_NOVEL);
+  if (input.activity === "history") filters.push(Prisma.sql`NOT ${LABEL_HAS_ACTIVE_NOVEL}`);
+  // activity === "all" adds no predicate.
+  return filters.length > 0 ? Prisma.join(filters, " AND ") : Prisma.sql`TRUE`;
+}
+
+type SourceLabelListRow = {
+  id: string;
+  label_kind: LabelKind;
+  external_label_value: string;
+  display_value: string | null;
+  novel_count: string;
+};
+
+function sourceLabelListItem(row: SourceLabelListRow): AdminSourceLabelListItem {
+  return {
+    labelId: row.id,
+    labelKind: row.label_kind,
+    externalLabelValue: row.external_label_value,
+    displayValue: row.display_value,
+    novelCount: count(row.novel_count),
+  };
+}
+
+export async function listAdminSourceLabels(
+  db: QueryClient,
+  input: AdminSourceLabelListInput = {},
+): Promise<AdminContentPage<AdminSourceLabelListItem>> {
+  const normalized = normalizeAdminSourceLabelListInput(input);
+  const where = sourceLabelFilters(normalized);
+  const [totalRows, rows] = await Promise.all([
+    db.$queryRaw<Array<{ count: string }>>(Prisma.sql`
+      SELECT COUNT(*)::text AS count FROM source_label sl WHERE ${where}
+    `),
+    db.$queryRaw<SourceLabelListRow[]>(Prisma.sql`
+      WITH page AS (
+        SELECT sl.*
+        FROM source_label sl
+        WHERE ${where}
+        ORDER BY sl.label_kind ASC, sl.external_label_value ASC, sl.id ASC
+        LIMIT ${normalized.pageSize} OFFSET ${normalized.offset}
+      ),
+      label_novel_counts AS (
+        -- novelCount is always the "currently active" cardinality, independent
+        -- of the activity scope that decided which labels made it into the page.
+        -- A "history" row is therefore guaranteed novelCount = 0, and a
+        -- "current" row is guaranteed novelCount >= 1 (see LABEL_HAS_ACTIVE_NOVEL).
+        SELECT p.id AS source_label_id, COUNT(DISTINCT nsi.novel_id)::text AS novel_count
+        FROM novel_source_item_label nsil
+        JOIN page p ON p.id = nsil.source_label_id
+        JOIN novel_source_item nsi ON nsi.id = nsil.novel_source_item_id AND nsi.deleted_at IS NULL
+        JOIN novel n ON n.id = nsi.novel_id AND n.deleted_at IS NULL
+        WHERE nsil.active
+        GROUP BY p.id
+      )
+      SELECT p.id, p.label_kind, p.external_label_value, p.display_value,
+        COALESCE(lnc.novel_count, '0') AS novel_count
+      FROM page p
+      LEFT JOIN label_novel_counts lnc ON lnc.source_label_id = p.id
+      ORDER BY p.label_kind ASC, p.external_label_value ASC, p.id ASC
+    `),
+  ]);
+  const items = rows.map(sourceLabelListItem);
+  return pageResult(items, count(totalRows[0]?.count), normalized);
 }
 
 type ChapterListRow = {

@@ -1,6 +1,8 @@
-import type { AdminNovelDetailView } from "@/contracts";
+import type { AdminNovelDetailView, AdminNovelLabelView } from "@/contracts";
+import { LABEL_KINDS, type LabelKind } from "@/domain/database-statuses";
 import {
   formatDateTime,
+  LABEL_KIND_BADGES,
   taskModeLabel,
   taskStatusLabel,
 } from "@/features/admin-ui/content-view";
@@ -230,5 +232,75 @@ export function NovelSourcesPanel({ novel }: { novel: AdminNovelDetailView }) {
         </div>
       )}
     </Panel>
+  );
+}
+
+/**
+ * Source labels (P2-06), grouped by `label_kind` and shown beside upstream
+ * provenance for the same reason `NovelSourcesPanel` sits next to it: both
+ * answer "what did the channel actually say about this book," just at a
+ * different granularity — one row per source item versus one chip per
+ * dictionary entry.
+ *
+ * Every registered `LabelKind` renders its own row even when this novel
+ * carries no label of that kind — the same discipline `ExceptionBadges` uses
+ * for an empty exception list (see that component's doc comment): a blank row
+ * is ambiguous between "checked, this novel has none of this kind" and "not
+ * evaluated," and a fixed four-row layout is what makes the distinction
+ * visible at a glance instead of requiring the reader to count.
+ */
+export function NovelLabelsPanel({ novel }: { novel: AdminNovelDetailView }) {
+  const byKind = new Map<LabelKind, AdminNovelLabelView[]>(LABEL_KINDS.map((kind) => [kind, []]));
+  for (const label of novel.labels) {
+    byKind.get(label.labelKind)?.push(label);
+  }
+
+  return (
+    <Panel title="来源标签">
+      <dl>
+        {LABEL_KINDS.map((kind) => (
+          <Field key={kind} label={LABEL_KIND_BADGES[kind].label}>
+            <NovelLabelGroup labels={byKind.get(kind) ?? []} />
+          </Field>
+        ))}
+      </dl>
+    </Panel>
+  );
+}
+
+/**
+ * `displayValue` and `externalLabelValue` render in parallel, never as a
+ * fallback of one for the other:
+ *
+ * - has a display value → the display value leads, the raw upstream value
+ *   trails in parentheses as a small grey aside — the curated name is what an
+ *   operator reads first, but the code it was derived from stays one glance
+ *   away;
+ * - no display value (true for every row today — the write side has not
+ *   backfilled `display_value` yet) → only the raw value renders. It is never
+ *   invented from anywhere, and in particular never from a UI-local
+ *   code-to-name table: the one language-code mapping this project trusts is
+ *   `src/lib/locale/locale-canonical.ts`, and a `language`-kind label with no
+ *   `display_value` shows its upstream code exactly as given.
+ */
+function NovelLabelGroup({ labels }: { labels: readonly AdminNovelLabelView[] }) {
+  if (labels.length === 0) {
+    return <span className="text-xs text-gray-400">无标签</span>;
+  }
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {labels.map((label) => (
+        <span
+          key={label.labelId}
+          className="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-700"
+          data-testid={`novel-label-${label.labelId}`}
+        >
+          {label.displayValue ?? label.externalLabelValue}
+          {label.displayValue && (
+            <span className="ml-1 text-gray-400">（{label.externalLabelValue}）</span>
+          )}
+        </span>
+      ))}
+    </div>
   );
 }

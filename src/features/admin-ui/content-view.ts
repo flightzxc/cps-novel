@@ -1,5 +1,5 @@
 import type { AdminContentExceptionCode } from "@/contracts";
-import type { NovelChapterStatus, NovelStatus } from "@/domain/database-statuses";
+import type { LabelKind, NovelChapterStatus, NovelStatus } from "@/domain/database-statuses";
 
 /**
  * Presentation vocabulary for the content-management screens.
@@ -28,6 +28,25 @@ export const CHAPTER_STATUS_BADGES: Readonly<Record<NovelChapterStatus, StatusBa
     stale: { label: "上游过期", color: "bg-amber-100 text-amber-800" },
     withdrawn: { label: "已撤回", color: "bg-red-100 text-red-800" },
   });
+
+/**
+ * Source-label kind vocabulary (P2-06).
+ *
+ * Same lookup shape as {@link NOVEL_STATUS_BADGES}: `source_label` carries no
+ * Chinese label of its own — it is an unexplained upstream dictionary — so
+ * these four strings are authored here rather than derived from
+ * `DATABASE_STATUS_SEMANTICS`, which has no `source_label` entry to derive
+ * from. `language` deliberately does not become a code → language-name map:
+ * that mapping already has one source of truth, `locale-canonical.ts`, and a
+ * second one here would be exactly the drift it exists to prevent. This badge
+ * only ever labels the *kind* "language", never a language value.
+ */
+export const LABEL_KIND_BADGES: Readonly<Record<LabelKind, StatusBadge>> = Object.freeze({
+  series_type: { label: "题材", color: "bg-indigo-100 text-indigo-800" },
+  recommend: { label: "推荐位", color: "bg-pink-100 text-pink-800" },
+  language: { label: "语言", color: "bg-cyan-100 text-cyan-800" },
+  agency: { label: "机构", color: "bg-teal-100 text-teal-800" },
+});
 
 /**
  * Exception codes are the whole point of the sync column.

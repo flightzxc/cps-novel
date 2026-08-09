@@ -7,11 +7,13 @@ import type {
   AdminContentPage,
   AdminContentSyncSummary,
   AdminNovelDetail,
+  AdminNovelLabelSummary,
   AdminNovelListItem,
   AdminNovelSourceSummary,
   AdminPreviewSummary,
+  AdminSourceLabelListItem,
 } from "@/domain/admin-content";
-import type { NovelChapterStatus, NovelStatus } from "@/domain/database-statuses";
+import type { LabelKind, NovelChapterStatus, NovelStatus } from "@/domain/database-statuses";
 
 /**
  * Admin content read surface (P2-04).
@@ -104,6 +106,21 @@ export type AdminPreviewPolicyView = {
   readonly updatedAt: string;
 };
 
+/**
+ * Source label dictionary entry (P2-06), mirrors {@link AdminSourceLabelListItem}.
+ *
+ * `novelCount` is an aggregate the kernel computes, not a field the browser
+ * derives client-side — it exists so the tag list can show usage without a
+ * second round trip per row.
+ */
+export type AdminSourceLabelView = {
+  readonly labelId: string;
+  readonly labelKind: LabelKind;
+  readonly externalLabelValue: string;
+  readonly displayValue: string | null;
+  readonly novelCount: number;
+};
+
 export type AdminNovelListItemView = {
   readonly novelId: string;
   readonly businessId: string;
@@ -137,11 +154,20 @@ export type AdminNovelSourceView = {
   readonly updatedAt: string;
 };
 
+/** Mirrors {@link AdminNovelLabelSummary} — the tag dictionary entries attached to one novel. */
+export type AdminNovelLabelView = {
+  readonly labelId: string;
+  readonly labelKind: LabelKind;
+  readonly externalLabelValue: string;
+  readonly displayValue: string | null;
+};
+
 export type AdminNovelDetailView = AdminNovelListItemView & {
   readonly description: string;
   readonly previewPolicy: AdminPreviewPolicyView | null;
   readonly sources: readonly AdminNovelSourceView[];
   readonly sourcesTruncated: boolean;
+  readonly labels: readonly AdminNovelLabelView[];
 };
 
 export type AdminChapterListItemView = {
@@ -290,6 +316,15 @@ function novelSourceView(source: AdminNovelSourceSummary): AdminNovelSourceView 
   });
 }
 
+function novelLabelView(label: AdminNovelLabelSummary): AdminNovelLabelView {
+  return Object.freeze({
+    labelId: label.labelId,
+    labelKind: label.labelKind,
+    externalLabelValue: label.externalLabelValue,
+    displayValue: label.displayValue,
+  });
+}
+
 export function projectAdminNovelDetail(novel: AdminNovelDetail): AdminNovelDetailView {
   // `AdminNovelDetail` is a structural superset of the list item, so the shared
   // fields go through the *same* projection rather than a second hand-written
@@ -300,6 +335,18 @@ export function projectAdminNovelDetail(novel: AdminNovelDetail): AdminNovelDeta
     previewPolicy: previewPolicyView(novel.preview),
     sources: Object.freeze(novel.sources.map(novelSourceView)),
     sourcesTruncated: novel.sourcesTruncated,
+    labels: Object.freeze(novel.labels.map(novelLabelView)),
+  });
+}
+
+/** Top-level projection for the `/api/admin/tags` list (P2-06). */
+export function projectAdminSourceLabel(label: AdminSourceLabelListItem): AdminSourceLabelView {
+  return Object.freeze({
+    labelId: label.labelId,
+    labelKind: label.labelKind,
+    externalLabelValue: label.externalLabelValue,
+    displayValue: label.displayValue,
+    novelCount: label.novelCount,
   });
 }
 

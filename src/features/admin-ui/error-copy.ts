@@ -44,6 +44,9 @@ const COPY: Readonly<Record<AdminErrorCode, string>> = Object.freeze({
   invalid_identifier: "标识格式无效，必须是合法 UUID",
   invalid_read_context: "服务端读取上下文缺失，请刷新页面后重试",
   admin_content_not_found: "该内容不存在或已被删除",
+  // P2-06 source-label reads.
+  invalid_label_kind: "标签类型未登记",
+  invalid_activity: "标签筛选档位未登记",
 });
 
 /** Reason refines the code; without it the two session expiries read identically. */

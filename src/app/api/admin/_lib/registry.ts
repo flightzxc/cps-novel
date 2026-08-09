@@ -66,6 +66,12 @@ export const ADMIN_CONTENT_ROUTES = [
     methods: ["GET"],
     capability: "content:read",
   },
+  {
+    id: "admin.api.source_label.list",
+    path: "/api/admin/tags",
+    methods: ["GET"],
+    capability: "content:view",
+  },
 ] as const satisfies AdminRegistry["routes"];
 
 export type AdminContentRouteId = (typeof ADMIN_CONTENT_ROUTES)[number]["id"];
