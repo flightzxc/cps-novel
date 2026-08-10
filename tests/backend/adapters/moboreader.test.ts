@@ -103,10 +103,49 @@ describe("MoboReader read adapter", () => {
       payEpisFrom: 4,
       seriesTypeList: ["fantasy"],
       recommendList: ["featured"],
+      labelSnapshotComplete: true,
     });
     expect(parsed.items[0].rawEvidence.source_label).toEqual({ future: "preserve-me" });
     expect(parsed.items[0].rawEvidence.kocCode).toBe("[redacted]");
     expect(parsed.items[0].rawEvidence.publicUrl).toBe("[redacted]");
+  });
+
+  it("preserves all four source label identities without trimming or mapping", () => {
+    const payload = listPayload();
+    payload.data.list[0].agencyId = " agency-01 ";
+    payload.data.list[0].language = 2;
+    payload.data.list[0].seriesTypeList = [{ value: "  fantasy  " }];
+    payload.data.list[0].recommendList = ["Featured/特别"];
+    const [book] = parseListBooksResponse(payload).items;
+    expect({
+      agency: book.agencyId,
+      language: book.language,
+      seriesType: book.seriesTypeList[0],
+      recommend: book.recommendList[0],
+    }).toEqual({
+      agency: " agency-01 ",
+      language: "2",
+      seriesType: "  fantasy  ",
+      recommend: "Featured/特别",
+    });
+  });
+
+  it("distinguishes a complete empty label snapshot from missing or malformed label structures", () => {
+    const complete = listPayload();
+    complete.data.list[0].agencyId = null as unknown as string;
+    complete.data.list[0].seriesTypeList = [];
+    complete.data.list[0].recommendList = [];
+    expect(parseListBooksResponse(complete).items[0].labelSnapshotComplete).toBe(true);
+
+    const missingAgency = listPayload() as unknown as { data: { list: Array<Record<string, unknown>>; totalCount: number } };
+    delete missingAgency.data.list[0].agencyId;
+    expect(parseListBooksResponse(missingAgency).items[0].labelSnapshotComplete).toBe(false);
+
+    const malformed = listPayload() as unknown as { data: { list: Array<Record<string, unknown>>; totalCount: number } };
+    malformed.data.list[0].recommendList = ["valid", { unexpected: "value" }];
+    const parsed = parseListBooksResponse(malformed).items[0];
+    expect(parsed.labelSnapshotComplete).toBe(false);
+    expect(parsed.recommendList).toEqual([]);
   });
 
   it("parses getbydataid without assigning semantics to unknown status values", () => {
