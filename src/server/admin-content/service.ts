@@ -603,9 +603,9 @@ export async function getAdminNovelDetail(
       JOIN novel n ON n.id = nsi.novel_id AND n.deleted_at IS NULL
       JOIN source_label sl ON sl.id = nsil.source_label_id
       WHERE nsi.novel_id = ${id}::uuid AND nsi.deleted_at IS NULL AND nsil.active
-      -- display_value is nullable and today is always NULL (the write side does
-      -- not backfill it yet), so it cannot order anything on its own: fall
-      -- through to the raw value and then the id for a total order.
+      -- display_value is nullable — only language and agency labels carry one —
+      -- so it cannot order the set on its own: fall through to the raw value
+      -- and then the id for a total order.
       ORDER BY sl.label_kind, sl.display_value, sl.external_label_value, sl.id
     `),
   ]);

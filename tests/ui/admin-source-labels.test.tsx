@@ -29,7 +29,7 @@ const LABEL_RECOMMEND = sourceLabelListItem({
   displayValue: "热门推荐",
   novelCount: 5,
 });
-/** 展示名尚未回填的一行——本文件反补偿断言的主角。 */
+/** 没有展示名的一行——本文件反补偿断言的主角。 */
 const LABEL_LANGUAGE_NO_DISPLAY = sourceLabelListItem({
   labelId: "24040000-0000-4000-8000-000000000035",
   labelKind: "language",
@@ -102,9 +102,10 @@ describe("P2-06 标签字典表 · 严格只读", () => {
 
 describe("P2-06 标签字典表 · 反补偿断言", () => {
   /**
-   * 🔴 核心红线：写侧尚未回填 display_value 的行，展示名单元格必须显示 "—"，
-   * 绝不能拿原值顶替。用原值顶替会让运营误判"这行已经有人工/结构化展示名了"，
-   * 这正是本项目禁止的补偿式 UI（见 `tags-table.tsx` 该单元格的注释）。
+   * 🔴 核心红线：没有 display_value 的行，展示名单元格必须显示 "—"，绝不能拿
+   * 原值顶替。原值与展示名是不同字段（且只有 language / agency 才有展示名），
+   * 用原值顶替会让运营误判"这行已经有展示名了"，这正是本项目禁止的补偿式 UI
+   * （见 `tags-table.tsx` 该单元格的注释）。
    */
   it("displayValue 为 null 的行，展示名单元格是「—」，且不包含原值", () => {
     const { container } = render(<TagsTable labels={LABELS} activity="current" />);

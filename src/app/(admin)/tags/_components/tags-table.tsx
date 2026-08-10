@@ -82,10 +82,12 @@ export function TagsTable({
               <td className="px-4 py-3 text-gray-600">
                 {/*
                   No `?? label.externalLabelValue` fallback here, on purpose.
-                  The write side has not backfilled `display_value` for any row
-                  yet — it is NULL across the whole table — and substituting
-                  the raw value would read to an operator as "this row already
-                  has a curated display name," which is false and is exactly
+                  The raw value and the display name are different fields: the
+                  raw value is the token the channel sent, the display name is
+                  the channel's own readable name for it, and only `language`
+                  and `agency` carry one at all. Substituting the raw value
+                  where no display name exists would read to an operator as
+                  "this row has a display name," which is false and is exactly
                   the kind of compensating UI this project forbids. A missing
                   display name renders as "—", nothing more.
                 */}
