@@ -3,9 +3,11 @@ import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import { projectAdminChapterListItem, projectAdminNovelDetail } from "@/contracts";
+import { LABEL_KINDS } from "@/domain/database-statuses";
 import { ChaptersTable } from "@/app/(admin)/novels/_components/chapters-table";
 import {
   NovelIdentityPanel,
+  NovelLabelsPanel,
   NovelPreviewPanel,
   NovelSourcesPanel,
   NovelSyncPanel,
@@ -141,6 +143,61 @@ describe("P2-04 书目详情 · 上游来源", () => {
     render(<NovelSourcesPanel novel={none} />);
     expect(screen.getByText("暂无来源条目")).toBeTruthy();
     expect(screen.queryByRole("table")).toBeNull();
+  });
+});
+
+/**
+ * P2-06：书目详情页的来源标签面板。
+ *
+ * fixture `novelDetail()`（`fixtures/admin-content.ts`）登记了三条标签：
+ * `series_type/romance`（原值即展示内容）、`language/en`（展示名为 null）、
+ * `agency/moboreader`（有展示名"摩宝阅读"）。`recommend` 这个 kind 完全没有
+ * 登记，专门用来验证"无标签"占位。
+ */
+describe("P2-06 书目详情 · 来源标签", () => {
+  it("按 LABEL_KINDS 的顺序分组渲染，四个 kind 都出栏", () => {
+    render(<NovelLabelsPanel novel={DETAIL} />);
+    const labels = screen.getAllByText(/^(题材|推荐位|语言|机构)$/).map((node) => node.textContent);
+    expect(labels).toEqual(["题材", "推荐位", "语言", "机构"]);
+    expect(LABEL_KINDS).toEqual(["series_type", "recommend", "language", "agency"]);
+  });
+
+  it("series_type / recommend 以原值作为主展示，不依赖 displayValue", () => {
+    render(<NovelLabelsPanel novel={DETAIL} />);
+    const romance = screen.getByTestId("novel-label-24040000-0000-4000-8000-000000000031");
+    expect(romance.textContent).toBe("romance");
+  });
+
+  it("language / agency 的展示名与原值并列可见", () => {
+    render(<NovelLabelsPanel novel={DETAIL} />);
+    const agency = screen.getByTestId("novel-label-24040000-0000-4000-8000-000000000033");
+    expect(agency.textContent).toContain("摩宝阅读");
+    expect(agency.textContent).toContain("moboreader");
+  });
+
+  it("language / agency 的 displayValue 缺失时显式标注，raw 只作为原值展示", () => {
+    render(<NovelLabelsPanel novel={DETAIL} />);
+    const language = screen.getByTestId("novel-label-24040000-0000-4000-8000-000000000032");
+    expect(language.textContent).toContain("展示名缺失");
+    expect(language.textContent).toContain("原值：en");
+    expect(language.textContent).not.toBe("en");
+    expect(
+      screen.getByTestId(
+        "novel-label-display-missing-24040000-0000-4000-8000-000000000032",
+      ),
+    ).toBeTruthy();
+  });
+
+  it("某个 kind 在该书目下没有标签时，渲染显式的「无标签」占位，而不是留空", () => {
+    render(<NovelLabelsPanel novel={DETAIL} />);
+    // fixture 没有登记任何 recommend kind 的标签
+    expect(screen.getByText("无标签")).toBeTruthy();
+  });
+
+  it("面板整体只读：没有链接，没有按钮", () => {
+    const { container } = render(<NovelLabelsPanel novel={DETAIL} />);
+    expect(container.querySelectorAll("a").length).toBe(0);
+    expect(container.querySelectorAll("button").length).toBe(0);
   });
 });
 

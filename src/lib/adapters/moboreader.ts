@@ -64,6 +64,7 @@ export interface MoboreaderBook {
   createTime: string | null;
   seriesTypeList: readonly string[];
   recommendList: readonly string[];
+  labelSnapshotComplete: boolean;
   rawEvidence: RawEvidence;
 }
 
@@ -173,19 +174,30 @@ function integer(value: unknown): number {
   return value as number;
 }
 
-function labelValues(value: unknown): string[] {
-  if (!Array.isArray(value)) return [];
+interface ParsedLabelValues {
+  values: string[];
+  complete: boolean;
+}
+
+function parsedLabelValue(value: unknown): string | null {
+  if (typeof value === "string") return value.trim() ? value : null;
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const row = value as Record<string, unknown>;
+  const candidate = row.value ?? row.name ?? row.label ?? row.id;
+  if (typeof candidate === "string") return candidate.trim() ? candidate : null;
+  if (typeof candidate === "number" && Number.isFinite(candidate)) return String(candidate);
+  return null;
+}
+
+function labelValues(value: unknown): ParsedLabelValues {
+  if (!Array.isArray(value)) return { values: [], complete: false };
   const labels: string[] = [];
   for (const item of value) {
-    if (typeof item === "string") labels.push(item);
-    else if (item && typeof item === "object") {
-      const row = item as Record<string, unknown>;
-      const candidate = row.value ?? row.name ?? row.label ?? row.id;
-      if (typeof candidate === "string") labels.push(candidate);
-      else if (typeof candidate === "number") labels.push(String(candidate));
-    }
+    const label = parsedLabelValue(item);
+    if (label === null) return { values: [], complete: false };
+    labels.push(label);
   }
-  return labels;
+  return { values: labels, complete: true };
 }
 
 const REDACTED_EVIDENCE_KEYS = new Set([
@@ -258,9 +270,14 @@ export function parseListBooksResponse(value: unknown): ListBooksResponse {
   const items = data.list.map((value): MoboreaderBook => {
     const row = record(value);
     const seriesId = requiredIdentifier(row.seriesId);
+    const agencyId = optionalIdentifier(row.agencyId);
+    const seriesTypeList = labelValues(row.seriesTypeList);
+    const recommendList = labelValues(row.recommendList);
+    const agencyIdentityComplete = Object.hasOwn(row, "agencyId")
+      && (row.agencyId === null || agencyId !== null);
     return {
       externalBookId: requiredIdentifier(row.id ?? row.seriesId),
-      agencyId: optionalString(row.agencyId) ?? (typeof row.agencyId === "number" ? String(row.agencyId) : null),
+      agencyId,
       agencyName: optionalString(row.agencyName),
       seriesId,
       materialType: typeof row.materialType === "string" || typeof row.materialType === "number" ? row.materialType : null,
@@ -275,8 +292,9 @@ export function parseListBooksResponse(value: unknown): ListBooksResponse {
       splitRatio: optionalNumber(row.splitRatio),
       ttoSplitRatio: optionalNumber(row.ttoSplitRatio),
       createTime: optionalString(row.createTime),
-      seriesTypeList: labelValues(row.seriesTypeList),
-      recommendList: labelValues(row.recommendList),
+      seriesTypeList: seriesTypeList.values,
+      recommendList: recommendList.values,
+      labelSnapshotComplete: agencyIdentityComplete && seriesTypeList.complete && recommendList.complete,
       rawEvidence: toApprovedRawEvidence(row),
     };
   });

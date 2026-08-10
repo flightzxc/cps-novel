@@ -4,6 +4,7 @@ import type {
   AdminChapterListItem,
   AdminNovelDetail,
   AdminNovelListItem,
+  AdminSourceLabelListItem,
 } from "@/domain/admin-content";
 
 /**
@@ -142,6 +143,26 @@ export function novelDetail(overrides: Partial<AdminNovelDetail> = {}): AdminNov
       },
     ],
     sourcesTruncated: false,
+    labels: [
+      {
+        labelId: "24040000-0000-4000-8000-000000000031",
+        labelKind: "series_type",
+        externalLabelValue: "romance",
+        displayValue: "言情",
+      },
+      {
+        labelId: "24040000-0000-4000-8000-000000000032",
+        labelKind: "language",
+        externalLabelValue: "en",
+        displayValue: null,
+      },
+      {
+        labelId: "24040000-0000-4000-8000-000000000033",
+        labelKind: "agency",
+        externalLabelValue: "moboreader",
+        displayValue: "摩宝阅读",
+      },
+    ],
     ...overrides,
   };
 }
@@ -215,6 +236,19 @@ export function chapterContent(
     contentHash: `a1b2c3d4e5f6${SENTINELS.contentHashTail}`,
     materializedAt: NOW,
     updatedAt: NOW,
+    ...overrides,
+  };
+}
+
+export function sourceLabelListItem(
+  overrides: Partial<AdminSourceLabelListItem> = {},
+): AdminSourceLabelListItem {
+  return {
+    labelId: "24040000-0000-4000-8000-000000000031",
+    labelKind: "series_type",
+    externalLabelValue: "romance",
+    displayValue: "言情",
+    novelCount: 12,
     ...overrides,
   };
 }

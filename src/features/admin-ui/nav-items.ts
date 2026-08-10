@@ -74,10 +74,12 @@ export const OMITTED_CPS_NAV_ITEMS: readonly { readonly cps: string; readonly re
  * route and renders greyed, so the sidebar never links to a 404.
  *
  * `/novels` joined the list in P2-04 (read-only content management).
+ * `/tags` joined in P2-06 (read-only source-label dictionary).
  */
 export const ADMIN_IMPLEMENTED_PAGES: readonly string[] = Object.freeze([
   "/channel-accounts",
   "/novels",
+  "/tags",
 ]);
 
 export function isNavItemActive(pathname: string, item: AdminNavItem): boolean {

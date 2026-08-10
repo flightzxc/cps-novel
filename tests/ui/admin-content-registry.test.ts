@@ -13,23 +13,27 @@ import { ADMIN_CAPABILITY_CONFIG } from "@/lib/auth/capabilities";
 import { resolveAdminRoute } from "@/server/auth/registry";
 import { P1_08B_ADMIN_REGISTRY } from "@/server/credentials";
 
-const CONTENT_ROUTE_DIR = path.resolve(process.cwd(), "src/app/api/admin/novels");
+const CONTENT_ROUTE_DIRS = [
+  path.resolve(process.cwd(), "src/app/api/admin/novels"),
+  path.resolve(process.cwd(), "src/app/api/admin/tags"),
+];
 
 const EXPECTED_CONTENT_ROUTES = [
   "/api/admin/novels",
   "/api/admin/novels/chapters",
   "/api/admin/novels/chapters/content",
   "/api/admin/novels/detail",
+  "/api/admin/tags",
 ] as const;
 
 type RouteFile = { readonly route: string; readonly file: string; readonly source: string };
 
-async function contentRouteFiles(directory = CONTENT_ROUTE_DIR): Promise<RouteFile[]> {
+async function contentRouteFilesIn(directory: string): Promise<RouteFile[]> {
   const entries = await readdir(directory, { withFileTypes: true });
   const nested = await Promise.all(
     entries.map(async (entry) => {
       const target = path.join(directory, entry.name);
-      if (entry.isDirectory()) return contentRouteFiles(target);
+      if (entry.isDirectory()) return contentRouteFilesIn(target);
       if (entry.name !== "route.ts") return [];
       const relative = path.relative(path.resolve(process.cwd(), "src/app"), target);
       return [
@@ -41,6 +45,11 @@ async function contentRouteFiles(directory = CONTENT_ROUTE_DIR): Promise<RouteFi
       ];
     }),
   );
+  return nested.flat();
+}
+
+async function contentRouteFiles(directories = CONTENT_ROUTE_DIRS): Promise<RouteFile[]> {
+  const nested = await Promise.all(directories.map((directory) => contentRouteFilesIn(directory)));
   return nested.flat();
 }
 
@@ -169,6 +178,7 @@ describe("P2-04 路由与能力位绑定", () => {
     expect(CONTENT_ROUTE_CAPABILITIES["admin.api.novel.list"]).toBe("content:view");
     expect(CONTENT_ROUTE_CAPABILITIES["admin.api.novel.detail"]).toBe("content:view");
     expect(CONTENT_ROUTE_CAPABILITIES["admin.api.novel_chapter.list"]).toBe("content:view");
+    expect(CONTENT_ROUTE_CAPABILITIES["admin.api.source_label.list"]).toBe("content:view");
   });
 
   it("route 不自行查库：查询一律走 src/server/admin-content", () => {

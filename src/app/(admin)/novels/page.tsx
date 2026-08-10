@@ -22,6 +22,13 @@ type SearchParams = {
   search?: string;
   status?: string;
   locale?: string;
+  /**
+   * A `source_label.id`, reached by following "查看关联小说" from `/tags` (P2-06).
+   * Exact match on a real dictionary row — there is deliberately no label
+   * dropdown here and no matching by label text, so the only way to arrive at a
+   * value is a row that actually exists.
+   */
+  labelId?: string;
 };
 
 /**
@@ -48,6 +55,7 @@ export default async function NovelsPage({
       search: params.search,
       status: params.status as never,
       locale: params.locale,
+      labelId: params.labelId,
     });
     page = projectAdminContentPage(result, projectAdminNovelListItem);
   }
@@ -64,7 +72,12 @@ export default async function NovelsPage({
         {granted && page ? (
           <>
             <NovelFilters
-              values={{ search: params.search, status: params.status, locale: params.locale }}
+              values={{
+                search: params.search,
+                status: params.status,
+                locale: params.locale,
+                labelId: params.labelId,
+              }}
             />
             <NovelsTable novels={page.items} />
             <ContentPagination

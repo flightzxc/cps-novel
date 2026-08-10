@@ -156,6 +156,59 @@ describe("P2-04 书目筛选", () => {
   });
 });
 
+/**
+ * P2-06：`/novels?labelId=…` 从 `/tags` 跳转过来时的筛选态。
+ *
+ * `labelId` 与其余筛选字段的地位不同——没有下拉可选，来源只能是 `/tags` 那一行
+ * 的「查看关联小说」链接。三件事必须同时成立：提示条要出现、隐藏字段要把
+ * `labelId` 带过下一次提交（否则点一次「搜索」就把标签筛选静默丢了）、以及
+ * 「清除」链接必须精确地只丢 `labelId` 和 `page`，其余筛选原样保留。
+ */
+describe("P2-06 书目筛选 · labelId 来源标签态", () => {
+  it("values.labelId 存在时渲染提示条，且表单里有对应的隐藏字段", () => {
+    const { container } = render(
+      <NovelFilters values={{ labelId: "24040000-0000-4000-8000-000000000031" }} />,
+    );
+    expect(screen.getByTestId("novel-label-filter-banner")).toBeTruthy();
+
+    const hidden = container.querySelector('form input[type="hidden"][name="labelId"]');
+    expect(hidden).toBeTruthy();
+    expect((hidden as HTMLInputElement).value).toBe("24040000-0000-4000-8000-000000000031");
+  });
+
+  it("values.labelId 不存在时不渲染提示条，也没有隐藏字段", () => {
+    const { container } = render(<NovelFilters values={{ search: "夜航" }} />);
+    expect(screen.queryByTestId("novel-label-filter-banner")).toBeNull();
+    expect(container.querySelector('input[name="labelId"]')).toBeNull();
+  });
+
+  it("清除链接的 href 丢掉 labelId 与 page，保留 search / status / locale", () => {
+    render(
+      <NovelFilters
+        values={{
+          search: "夜航",
+          status: "published",
+          locale: "en",
+          labelId: "24040000-0000-4000-8000-000000000031",
+        }}
+      />,
+    );
+    const clearHref = screen.getByTestId("novel-label-filter-clear").getAttribute("href") ?? "";
+    const params = new URLSearchParams(clearHref.split("?")[1] ?? "");
+
+    expect(params.get("labelId")).toBeNull();
+    expect(params.has("page")).toBe(false);
+    expect(params.get("search")).toBe("夜航");
+    expect(params.get("status")).toBe("published");
+    expect(params.get("locale")).toBe("en");
+  });
+
+  it("清除链接在没有其余筛选时退化为裸的 /novels", () => {
+    render(<NovelFilters values={{ labelId: "24040000-0000-4000-8000-000000000031" }} />);
+    expect(screen.getByTestId("novel-label-filter-clear").getAttribute("href")).toBe("/novels");
+  });
+});
+
 describe("P2-04 分页", () => {
   it("只有一页时整块不渲染", () => {
     const { container } = render(

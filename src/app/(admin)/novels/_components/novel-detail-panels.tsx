@@ -1,6 +1,8 @@
-import type { AdminNovelDetailView } from "@/contracts";
+import type { AdminNovelDetailView, AdminNovelLabelView } from "@/contracts";
+import { LABEL_KINDS, type LabelKind } from "@/domain/database-statuses";
 import {
   formatDateTime,
+  LABEL_KIND_BADGES,
   taskModeLabel,
   taskStatusLabel,
 } from "@/features/admin-ui/content-view";
@@ -230,5 +232,83 @@ export function NovelSourcesPanel({ novel }: { novel: AdminNovelDetailView }) {
         </div>
       )}
     </Panel>
+  );
+}
+
+/**
+ * Source labels (P2-06), grouped by `label_kind` and shown beside upstream
+ * provenance for the same reason `NovelSourcesPanel` sits next to it: both
+ * answer "what did the channel actually say about this book," just at a
+ * different granularity — one row per source item versus one chip per
+ * dictionary entry.
+ *
+ * Every registered `LabelKind` renders its own row even when this novel
+ * carries no label of that kind — the same discipline `ExceptionBadges` uses
+ * for an empty exception list (see that component's doc comment): a blank row
+ * is ambiguous between "checked, this novel has none of this kind" and "not
+ * evaluated," and a fixed four-row layout is what makes the distinction
+ * visible at a glance instead of requiring the reader to count.
+ */
+export function NovelLabelsPanel({ novel }: { novel: AdminNovelDetailView }) {
+  const byKind = new Map<LabelKind, AdminNovelLabelView[]>(LABEL_KINDS.map((kind) => [kind, []]));
+  for (const label of novel.labels) {
+    byKind.get(label.labelKind)?.push(label);
+  }
+
+  return (
+    <Panel title="来源标签">
+      <dl>
+        {LABEL_KINDS.map((kind) => (
+          <Field key={kind} label={LABEL_KIND_BADGES[kind].label}>
+            <NovelLabelGroup labels={byKind.get(kind) ?? []} />
+          </Field>
+        ))}
+      </dl>
+    </Panel>
+  );
+}
+
+/**
+ * Display follows the upstream contract by kind:
+ *
+ * - `series_type` / `recommend`: the raw value is already operator-readable
+ *   and is therefore the primary text;
+ * - `language` / `agency`: the upstream display name leads and the raw
+ *   identity remains visible beside it. A missing display name is explicit;
+ *   the raw identity never impersonates it through a fallback.
+ */
+function NovelLabelGroup({ labels }: { labels: readonly AdminNovelLabelView[] }) {
+  if (labels.length === 0) {
+    return <span className="text-xs text-gray-400">无标签</span>;
+  }
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {labels.map((label) => {
+        const rawIsPrimary = label.labelKind === "series_type" || label.labelKind === "recommend";
+        return (
+          <span
+            key={label.labelId}
+            className="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-700"
+            data-testid={`novel-label-${label.labelId}`}
+          >
+            {rawIsPrimary ? (
+              label.externalLabelValue
+            ) : (
+              <>
+                {label.displayValue ?? (
+                  <span
+                    className="text-gray-400"
+                    data-testid={`novel-label-display-missing-${label.labelId}`}
+                  >
+                    展示名缺失
+                  </span>
+                )}
+                <span className="ml-1 text-gray-400">（原值：{label.externalLabelValue}）</span>
+              </>
+            )}
+          </span>
+        );
+      })}
+    </div>
   );
 }

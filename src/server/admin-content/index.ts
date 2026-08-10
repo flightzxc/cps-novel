@@ -4,8 +4,10 @@ export {
   getAdminNovelDetail,
   listAdminNovelChapters,
   listAdminNovels,
+  listAdminSourceLabels,
   normalizeAdminChapterListInput,
   normalizeAdminNovelListInput,
+  normalizeAdminSourceLabelListInput,
   readAdminChapterContent,
   type AdminContentQueryErrorCode,
 } from "./service";

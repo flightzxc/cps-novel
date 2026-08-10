@@ -2,6 +2,7 @@ import {
   ADMIN_CONTENT_MAX_PAGE_SIZE,
   type AdminChapterListInput,
   type AdminNovelListInput,
+  type AdminSourceLabelListInput,
 } from "@/domain/admin-content";
 
 /**
@@ -58,6 +59,22 @@ export function novelListQuery(url: URL): AdminNovelListInput {
     status: optional(params, "status") as AdminNovelListInput["status"],
     locale: optional(params, "locale"),
     search: optional(params, "search"),
+    labelId: optional(params, "labelId"),
+  };
+}
+
+/** Same parse-only discipline as {@link novelListQuery} — `labelKind` and
+ * `activity` are registered-value lists the kernel owns, not this layer. */
+export function sourceLabelListQuery(url: URL): AdminSourceLabelListInput {
+  const params = url.searchParams;
+  const page = optional(params, "page");
+  const pageSize = optional(params, "pageSize");
+  return {
+    page: page === undefined ? undefined : Number(page),
+    pageSize: pageSize === undefined ? undefined : Number(pageSize),
+    labelKind: optional(params, "labelKind") as AdminSourceLabelListInput["labelKind"],
+    search: optional(params, "search"),
+    activity: optional(params, "activity") as AdminSourceLabelListInput["activity"],
   };
 }
 

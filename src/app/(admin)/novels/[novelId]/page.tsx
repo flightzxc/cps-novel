@@ -21,6 +21,7 @@ import { ContentCapabilityDenied, ContentErrorPanel } from "../_components/conte
 import { notFoundIfMissingIdentifier, queryErrorEnvelope } from "../_lib/content-errors";
 import {
   NovelIdentityPanel,
+  NovelLabelsPanel,
   NovelPreviewPanel,
   NovelSourcesPanel,
   NovelSyncPanel,
@@ -107,6 +108,11 @@ export default async function NovelDetailPage({
         </div>
 
         <NovelSourcesPanel novel={novel} />
+
+        {/* Labels reach a novel only through its source items, so this panel sits
+            directly under the upstream-sources panel rather than with the
+            identity fields — it describes what the channel said, not what we own. */}
+        <NovelLabelsPanel novel={novel} />
 
         <section className="space-y-3">
           <h2 className="text-sm font-semibold text-gray-900">
