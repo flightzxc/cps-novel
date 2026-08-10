@@ -61,6 +61,8 @@ P1-05A 只登记从 CPS 提取的数据库**模式证据**；没有字节复制�
 | 后台列表表格外观（表头/分隔/行悬停/两行身份单元格） | `src/components/dramas/dramas-list-client.tsx` | `199-360` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `PATTERN_ONLY` | 只保留 `bg-gray-50` 表头、`divide-y divide-gray-100`、`px-4 py-3`、名称over ID 的两行单元格与右对齐操作列；**不搬**勾选列、批量工具条、编辑/删除图标——本期无写操作 | Claude |
 | 后台筛选栏（GET 表单，字段名即查询参数） | `src/app/(admin)/dramas/page.tsx` | `93-160` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `PATTERN_ONLY` | 保留纯 `method="GET"`、URL 可分享、不引入客户端状态；选项来源换成 `NOVEL_STATUSES` 与 `SITE_LOCALES` | Claude |
 | 后台分页页脚 | `src/app/(admin)/dramas/page.tsx` | `166-196` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | 保留「第 x / y 页，共 n 条」+ 上/下一页、单页时整块不渲染；改用 `URLSearchParams` 克隆当前参数，修掉 CPS 手工字符串拼接会拼坏含 `&` 搜索词的问题 | Claude |
+| 标签字典列表的列组织（P2-06） | `src/app/(admin)/tags/_components/tag-rule-list.tsx` | `222-335` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `PATTERN_ONLY` | 只借「主标识 mono + 维度彩色胶囊 + 关联计数裸数字」的列组织与信息密度；内容从 TagRule 规则换成上游原始标签，**不搬**新建/编辑/删除按钮、`confirm()` 删除流与整个操作列——本期严格只读。页面外框改走本仓 `/novels` 既有形态（卡片化筛选栏 + GET 表单 + 卡片化分页），不采用 CPS 该页的裸 div + CSR 即时筛选 | Claude |
+| 「查看关联小说」行内链接（P2-06） | `src/app/(admin)/tags/_components/tag-rule-list.tsx` | `299-307` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | 保留「标签行直接跳到被该标签标注的内容列表」这一交互形态；CPS 原链接指向 `/dramas?tagId=`，而 `/dramas` 的 searchParams 根本不含 `tagId`（参数被静默忽略，是条失效链接）——小说侧改为 `?labelId=<source_label.id>` 并在 `novelFilters()` 里以 `EXISTS` 谓词真正接通 | Claude |
 
 ### 无搬运的任务（显式登记，避免被当成漏登）
 

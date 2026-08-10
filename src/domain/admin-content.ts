@@ -1,4 +1,5 @@
 import type {
+  LabelKind,
   NovelChapterStatus,
   NovelStatus,
 } from "./database-statuses";
@@ -30,6 +31,32 @@ export type AdminNovelListInput = Readonly<{
   status?: NovelStatus;
   locale?: string;
   search?: string;
+  labelId?: string;
+}>;
+
+export type AdminSourceLabelActivity = "current" | "history" | "all";
+
+export type AdminSourceLabelListInput = Readonly<{
+  page?: number;
+  pageSize?: number;
+  labelKind?: LabelKind;
+  search?: string;                        // contains, applied to external_label_value
+  activity?: AdminSourceLabelActivity;    // defaults to "current"
+}>;
+
+export type AdminSourceLabelListItem = Readonly<{
+  labelId: string;
+  labelKind: LabelKind;
+  externalLabelValue: string;
+  displayValue: string | null;
+  novelCount: number;                     // COUNT(DISTINCT nsi.novel_id), bound by activity
+}>;
+
+export type AdminNovelLabelSummary = Readonly<{
+  labelId: string;
+  labelKind: LabelKind;
+  externalLabelValue: string;
+  displayValue: string | null;
 }>;
 
 export type AdminChapterListInput = Readonly<{
@@ -138,6 +165,7 @@ export type AdminNovelDetail = Readonly<{
   sync: AdminContentSyncSummary;
   sources: readonly AdminNovelSourceSummary[];
   sourcesTruncated: boolean;
+  labels: readonly AdminNovelLabelSummary[];
   createdAt: string;
   updatedAt: string;
 }>;
