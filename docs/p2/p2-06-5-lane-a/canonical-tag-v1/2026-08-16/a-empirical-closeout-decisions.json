@@ -1,0 +1,323 @@
+{
+  "schema_version": 1,
+  "decision_date": "2026-08-16",
+  "owner_principle": "CanonicalTag is a user retrieval entry, not a literary knowledge graph. Prefer MERGE + ALIAS when the combined result set would not feel materially wrong.",
+  "prior_candidate_count": 119,
+  "final_candidate_count": 116,
+  "remaining_merge_reviews": 0,
+  "remaining_low_value_reviews": 0,
+  "b1_run_acceptability": "ACCEPT_WITH_TIMING_WAIVER",
+  "sampling_decision": "10K_SUFFICIENT",
+  "authoritative_b1_status": "PARTIAL",
+  "global_request_spacing_contract_ms": 1000,
+  "timing_waiver_scope": "SINGLE_RUN_ONLY",
+  "timing_violations": [
+    {
+      "previous_attempt": 11,
+      "next_attempt": 12,
+      "previous_started_at": "2026-08-15T12:00:44.110Z",
+      "next_started_at": "2026-08-15T12:00:45.109Z",
+      "interval_ms": 999
+    },
+    {
+      "previous_attempt": 46,
+      "next_attempt": 47,
+      "previous_started_at": "2026-08-15T12:01:19.144Z",
+      "next_started_at": "2026-08-15T12:01:20.143Z",
+      "interval_ms": 999
+    },
+    {
+      "previous_attempt": 79,
+      "next_attempt": 80,
+      "previous_started_at": "2026-08-15T12:01:52.179Z",
+      "next_started_at": "2026-08-15T12:01:53.178Z",
+      "interval_ms": 999
+    },
+    {
+      "previous_attempt": 179,
+      "next_attempt": 180,
+      "previous_started_at": "2026-08-15T12:03:32.267Z",
+      "next_started_at": "2026-08-15T12:03:33.266Z",
+      "interval_ms": 999
+    },
+    {
+      "previous_attempt": 204,
+      "next_attempt": 205,
+      "previous_started_at": "2026-08-15T12:03:57.299Z",
+      "next_started_at": "2026-08-15T12:03:58.298Z",
+      "interval_ms": 999
+    },
+    {
+      "previous_attempt": 222,
+      "next_attempt": 223,
+      "previous_started_at": "2026-08-15T12:04:15.312Z",
+      "next_started_at": "2026-08-15T12:04:16.311Z",
+      "interval_ms": 999
+    }
+  ],
+  "decisions": [
+    {
+      "decision_id": "A-EMP-01",
+      "source_tags": [
+        "office-tension",
+        "office-romance"
+      ],
+      "final_decision": "KEEP_SEPARATE",
+      "canonical_targets": [
+        "office-tension",
+        "office-romance"
+      ],
+      "aliases": [],
+      "count_effect": 0,
+      "evidence_summary": "Office evidence contains genuine workplace romance and non-romantic workplace competition/adventure. Merging pure office tension into romance would create a materially wrong result set.",
+      "evidence_metrics": {
+        "exact_office_romance_phrase_books": 1,
+        "office_mention_books": 40,
+        "exact_source_tokens_present": []
+      },
+      "representative_books": [
+        {
+          "external_book_id": 31927497,
+          "title": "THE NANNY OF THE CEO",
+          "raw_language": 3,
+          "raw_tokens": [
+            "男频",
+            "Adventure"
+          ],
+          "description_excerpt": "__Althéa MAXWELL is a 26-year-old, the CEO and architect of a Western digital company. One of the best in San Jose with so many shareholders. It's beautiful, but it's cold. Only cares about her six-year-old daughter, Myla. And his two child"
+        },
+        {
+          "external_book_id": 470747970,
+          "title": "A Secretive Deal with My Billionaire Boss",
+          "raw_language": 3,
+          "raw_tokens": [
+            "女频",
+            "Billionaires"
+          ],
+          "description_excerpt": "Madison Harper knows all too well the chaos Alexander Knight leaves in his wake. As the billionaire CEO's personal assistant, she's cleaned up after countless scandals, soothed ex-lovers, and kept his messy private life from spilling into t"
+        },
+        {
+          "external_book_id": 5593250,
+          "title": "Desired By The Jerky Billionaire ",
+          "raw_language": 3,
+          "raw_tokens": [
+            "男频",
+            "Adventure"
+          ],
+          "description_excerpt": "I was here in Jax's office today to talk to him at our launch when I caught up with allaine who was sitting in Jax's chair. \"So you really work here?\" Allaine asked calmly when she saw me. \"Obviously?\" I answered him and showed no interest "
+        },
+        {
+          "external_book_id": 113848680,
+          "title": "The Twin Who Stole Tomorrow",
+          "raw_language": 3,
+          "raw_tokens": [
+            "女频",
+            "Horror"
+          ],
+          "description_excerpt": "I woke up to the hum of the office lights, keyboards clattering. This was my desk at Visionary Films. I was alive, and it was October 14th – the day before everything went to hell. Last time, my identical twin sister Jessica stole my script"
+        },
+        {
+          "external_book_id": 5598417,
+          "title": "Titan's Advent",
+          "raw_language": 15,
+          "raw_tokens": [
+            "男频",
+            "Pantasya"
+          ],
+          "description_excerpt": "The world witnessed a groundbreaking invention that shattered the boundaries of gaming as they knew it. The \"DivePod X,\" a marvel innovation from ISRI, promised an unparalleled level of immersion. It was the pinnacle of technology, capable "
+        }
+      ]
+    },
+    {
+      "decision_id": "A-EMP-02",
+      "source_tags": [
+        "future-world",
+        "sci-fi-world"
+      ],
+      "final_decision": "KEEP_SEPARATE",
+      "canonical_targets": [
+        "future-world",
+        "science-fiction"
+      ],
+      "aliases": [],
+      "count_effect": 0,
+      "evidence_summary": "Three future-world mentions lead into ancient rebirth or campus stories, while a Sci-fi-labelled contemporary relationship experiment is not a future-world setting. Neither direction of the result-set test is safe.",
+      "evidence_metrics": {
+        "future_world_phrase_books": 3,
+        "exact_sci_fi_token_books": 85
+      },
+      "representative_books": [
+        {
+          "external_book_id": 1075322689,
+          "title": "傾城醫妃：傲嬌王爺請讓道",
+          "raw_language": 20,
+          "raw_tokens": [
+            "女频",
+            "穿越重生"
+          ],
+          "description_excerpt": "未來世界超級軍委特工，因任務身首異處。醒來後成為丞相府被棄庶女，從此再不能眾星捧月。從小生活在男人堆裡，不懂男女之事，感情遲鈍。卻在頻頻無意間，總是撩到美男。 乾陵國權傾朝野的攝政王，江湖上聞風喪膽的武林盟主，嗜血、霸道、我行我素，俊美到人神共憤，卻過不了美人關。每次都被月卿影無意間的動作弄得面紅耳赤，在這個小女人面前，他的裡子面子都丟了個乾淨，卻甘之如飴。"
+        },
+        {
+          "external_book_id": 1075328862,
+          "title": "學霸馬甲捂不住了",
+          "raw_language": 20,
+          "raw_tokens": [
+            "女频",
+            "青春校園"
+          ],
+          "description_excerpt": "【爽文】學渣少女穿越未來世界，她又穿回來了！ What？還喊她學渣？掃一眼課本，這些題不要太簡單了好不好？ 於是整個學校都沸騰了。 語文老師：語文很少有能得滿分的人。 某學渣：不好意思我就是。 數學老師：你肯定又是倒數第一。 某學渣：不好意思十分鍾完成，我還睡了一覺，一不小心又是滿分。 英語老師：她居然精通十八國語言！！！ 其他老師：學渣逆襲了？ 某學霸地位逐漸不保，小弟憤憤不平：老大老大，她居然搶了你全年級第一。 某學霸瞄了一他一眼：眼睛給我睜大點，我倆是並排第一，下一次，"
+        },
+        {
+          "external_book_id": 5604553,
+          "title": "医妃翻身：皇叔，放肆宠",
+          "raw_language": 19,
+          "raw_tokens": [
+            "女频",
+            "穿越重生"
+          ],
+          "description_excerpt": "一朝穿越，未来世界的神医大佬苏红袖，重生到尚书府最不受宠的女儿身上。 废物？垃圾血脉？注定一辈子扑街？ 抱歉，本小姐可酥可萌，可脚踢渣男拳打白莲，凡是阻拦我之人，通通推倒！ 某妖孽一把咬住她的嘴角，她滔天咆哮，长得帅就可以耍流氓的嘛？ 谁知某妖孽摇身一变，竟成了大名九鼎的皇叔。 皇叔一把将她壁咚在墙上，声音湿嚅：“小女人，你休想逃过本尊的手掌心。” 一枚银针抵在他的腰际，某女一脸坏笑：“爷，小女子的银针可是不长眼的，敢问您，感不感动？”"
+        },
+        {
+          "external_book_id": 186675186,
+          "title": "Data of a Broken Heart",
+          "raw_language": 3,
+          "raw_tokens": [
+            "女频",
+            "Sci-fi"
+          ],
+          "description_excerpt": "The kiss was cold. Not just the late hour, but his eyes, fixated on a spiking graph over my shoulder, measuring my every breath. \"Perfect,\" Ethan murmured, pulling away. \"The oxytocin response was exactly as predicted.\" He wasn' t talking t"
+        }
+      ]
+    },
+    {
+      "decision_id": "A-EMP-03",
+      "source_tags": [
+        "student",
+        "campus"
+      ],
+      "final_decision": "MERGE_WITH_ALIAS",
+      "canonical_targets": [
+        "campus"
+      ],
+      "aliases": [
+        "student",
+        "Student"
+      ],
+      "count_effect": -1,
+      "evidence_summary": "Stable positive examples are school/campus stories, while Young Adult and Adolescent buckets contain adult and mislabelled works. A separate Student retrieval entry would not reliably improve results; Campus carries the user-facing intent and Student remains an alias.",
+      "evidence_metrics": {
+        "simplified_campus_token_books": 37,
+        "traditional_campus_token_books": 66,
+        "young_adult_token_books": 196,
+        "adolescent_token_books": 5,
+        "exact_source_tokens_present": []
+      },
+      "representative_books": [
+        {
+          "external_book_id": 5610480,
+          "title": "拽少别嚣张：本小姐惹上你了！",
+          "raw_language": 19,
+          "raw_tokens": [
+            "女频",
+            "青春校园"
+          ],
+          "description_excerpt": "“喂！你干嘛这么嚣张？你拽什么拽呀！别以为你是这儿的校草就不得了了！别以为你是学生会会长我就是怕了你了！本小姐告诉你！我南宫灵惹上你了！”这是嚣张小姐的强势宣誓，也彻底的惹火了腹黑冷酷校草，且看这对冤家如何斗智斗勇，爆笑上演女追男的故事！"
+        },
+        {
+          "external_book_id": 5610484,
+          "title": "青涩信笺",
+          "raw_language": 19,
+          "raw_tokens": [
+            "女频",
+            "青春校园"
+          ],
+          "description_excerpt": "一次座位的变动，让刚刚步入高中的许彦越有生以来第一次尝到了爱情的滋味。"
+        },
+        {
+          "external_book_id": 248122964,
+          "title": "身份曝光后，打脸冒充豪门的男友",
+          "raw_language": 19,
+          "raw_tokens": [
+            "女频",
+            "青春校园"
+          ],
+          "description_excerpt": "开学第一天，竹马男友送我上学却碰到一个两面三刀的舍友。 她贴着我的男友大赞他年纪轻轻气度非凡。 转头就阴阳我虚荣背假包立千金人设。 看到我整理床铺的时候，她夸张地倒吸冷气： 【昨天陪你来看宿舍的老男人不是说要给你在学校附近租个房子吗？怎么？生意黄了？】 得知我和男友约定好毕业就结婚的时候，她更是用整层楼都能听见的声音大喊： 【不是吧不是吧，现在还有想不劳而获上赶着靠男人的捞女啊？】 我在心里笑得超大声。 老男人？那是我的首富亲爹。 只是男友，是我爸司机的儿子！"
+        },
+        {
+          "external_book_id": 186674204,
+          "title": "The Ex-Wife's Fiery Reckoning",
+          "raw_language": 3,
+          "raw_tokens": [
+            "女频",
+            "Young Adult"
+          ],
+          "description_excerpt": "The last thing I remembered was the searing heat, a pain so absolute it burned away thought. Mark' s face floated above me, twisted not with concern but with a cold, triumphant sneer. Chloe was beside him, her arm linked through his, her ex"
+        },
+        {
+          "external_book_id": 1075326139,
+          "title": "為她破戒！我養的小狼狗竟然是京圈大佬",
+          "raw_language": 20,
+          "raw_tokens": [
+            "女频",
+            "Adolescent"
+          ],
+          "description_excerpt": "新婚夜，丈夫帶著小三私奔，留她獨守空房。 宋暖也不委屈自己，反手給自己找了個寬肩窄腰大長腿的男模。 管他渣不渣，帶勁就完事了。 快活了三年，丈夫帶著即將出世的私生子回來上戶口，她果斷抽身，回歸家庭打怪升級。 臨走前，她丟下巨額支票，“五百萬，買你三年的青春，以後別再見了。” 本以為從此一拍兩散，再無交集，誰知這瘋批舔狗竟然纏上了她，還和她一起對付賤女渣男。 不過，他的人脈好像不簡單。遇強則強，實力不詳！ 直到某天在宴會上，看到眾人對他恭敬有加，她才知道，她養的小白臉竟然是京圈"
+        }
+      ]
+    },
+    {
+      "decision_id": "A-EMP-LV-01",
+      "source_tags": [
+        "both-virgin"
+      ],
+      "final_decision": "DROP_LOW_VALUE",
+      "canonical_targets": [],
+      "aliases": [],
+      "count_effect": -1,
+      "evidence_summary": "No exact source token or explicit mutual-first-experience phrase appears in the accepted 10k sample. Generic virgin mentions do not prove both protagonists share a first experience, so the entry is too fragile and sensitive for Canonical v1.",
+      "evidence_metrics": {
+        "exact_source_token_books": 0,
+        "explicit_mutual_first_experience_books": 0,
+        "generic_virgin_mention_books": 7
+      },
+      "representative_books": []
+    },
+    {
+      "decision_id": "A-EMP-LV-02",
+      "source_tags": [
+        "power-play"
+      ],
+      "final_decision": "DROP_LOW_VALUE",
+      "canonical_targets": [],
+      "aliases": [],
+      "count_effect": -1,
+      "evidence_summary": "No exact Power Play source token appears. Both literal phrase matches describe explicit dominance/BDSM dynamics rather than a stable political, business, or court-intrigue retrieval concept; merging them elsewhere would be materially wrong.",
+      "evidence_metrics": {
+        "exact_source_token_books": 0,
+        "literal_phrase_books": 2
+      },
+      "representative_books": [
+        {
+          "external_book_id": 77465256,
+          "title": "Through Realms Of Sins (Short Steamy Compilations)",
+          "raw_language": 3,
+          "raw_tokens": [
+            "女频",
+            "Short stories"
+          ],
+          "description_excerpt": "In different worlds and timelines, an Omega woman becomes the obsession of powerful Alphas: CEOs, kings, mafia bosses, and supernatural beings. Every story would whisk you away into a world of dark romance and irresistible desire, where the"
+        },
+        {
+          "external_book_id": 576636506,
+          "title": "EDEN: Steamy Forbidden Pleasures ",
+          "raw_language": 3,
+          "raw_tokens": [
+            "女频",
+            "Short stories"
+          ],
+          "description_excerpt": "⚠️ Warning: [ Smut! Smut! Smut! ahead. For audiences 18yrs and older. Readers discretion is strongly advised. Enter at your own detriment.] He leaned in again, his breath warm and intoxicating on my ear, and he gave me a deep, possessive ki"
+        }
+      ]
+    }
+  ]
+}

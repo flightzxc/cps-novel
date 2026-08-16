@@ -1,0 +1,67 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-08-15T18:43:37.828Z",
+  "status": "COMPLETE_OFFLINE_CANDIDATES_GENERATED",
+  "canonical_sha256": "8bc8cdae8be2176bde170173e98bad2b9fa0e1770818174a57320816eefdccad",
+  "cross_review_matrix_sha256": "1f1cf172b476d44841cbff234bbbfbd6b182ec7658496cbcba3da0f1cf1a134c",
+  "raw_manifest_sha256": "4d7d6931687a2391ded9699ce90d54ceb3242ec232515d537eb7721274f61148",
+  "owner_timing_waiver_sha256": "52ce6e6ff5862353481023b9914fb06cd06e9ef5639913bb5044f4a01730d8d1",
+  "raw_run_status": "PARTIAL",
+  "raw_verification_status": "PARTIAL_TIMING_WAIVER_ACCEPTED",
+  "summary": {
+    "LANE_B_B2_STATUS": "COMPLETE_OFFLINE_CANDIDATES_GENERATED",
+    "B2_MAPPING_KEY_TOTAL": 285,
+    "B2_ACCEPT_MAP": 194,
+    "B2_MAPPING_CANDIDATE_ROW_COUNT": 198,
+    "B2_EXECUTABLE_MAPPING_EDGE_COUNT": 196,
+    "B2_DEFER": 52,
+    "B2_IGNORE_DROP": 37,
+    "B2_CANONICAL_GAP": 2,
+    "B2_OWNER_REVIEW_REMAINING": 0,
+    "mapping_coverage_by_token": 0.6807017543859649,
+    "mapping_coverage_by_occurrence": 0.8950895089508951,
+    "mapping_coverage_by_book_at_least_one": 0.9932,
+    "mapping_coverage_by_book_strict_all_tokens": 0.7968,
+    "mapped_book_count_at_least_one": 9932,
+    "mapped_book_count_strict_all_tokens": 7968,
+    "AUTO_WRITE_AUTHORIZED": "NO"
+  },
+  "files": [
+    {
+      "filename": "mapping-candidates-final.csv",
+      "bytes": 461740,
+      "sha256": "140057fea8e09980ab465c4eb780e228d07d69dab37d54bbab312da9cab82c38",
+      "row_count": 198
+    },
+    {
+      "filename": "deferred-source-dirty.csv",
+      "bytes": 87809,
+      "sha256": "fbf12737d7507af64af396ea920478d79fd4424d7b822dcdcd054260ed735c9e",
+      "row_count": 52
+    },
+    {
+      "filename": "ignored-source-tokens.csv",
+      "bytes": 60754,
+      "sha256": "ba9ad616d08e2740ed02bc8d84660581fe60eb17babfaaede9414c55bbe336b5",
+      "row_count": 37
+    },
+    {
+      "filename": "canonical-gaps.csv",
+      "bytes": 3139,
+      "sha256": "3a6e90a901bc05ba15b16619e307b721069e5d2890e82a63ebdd56790b434996",
+      "row_count": 2
+    },
+    {
+      "filename": "B2_FINAL_REPORT.md",
+      "bytes": 1385,
+      "sha256": "268b4d297017dd52cf4d8b354fd1b5bc9ea873e8b038e05911439785723273c6",
+      "row_count": null
+    },
+    {
+      "filename": "b2-final-summary.json",
+      "bytes": 642,
+      "sha256": "719ee404f9e1f362969ddfe0700652245adf7390afaa1865f705d62ed89676b9",
+      "row_count": null
+    }
+  ]
+}

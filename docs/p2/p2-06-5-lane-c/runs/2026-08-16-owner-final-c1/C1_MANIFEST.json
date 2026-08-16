@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "status": "CALIBRATION_REVIEW_PENDING",
+  "files": [
+    {
+      "filename": "calibration-summary.json",
+      "bytes": 203673,
+      "sha256": "c43a6fd13d4efac4ef66f099717f0100d44d6a01171825d1fe3e3400f1773514"
+    },
+    {
+      "filename": "LANE_C_REPORT.md",
+      "bytes": 1843,
+      "sha256": "7233fbd91cce17f1d0f2879108366b8808770a7a605cc836ba2c5c0576959ee4"
+    }
+  ],
+  "lineage": {
+    "canonical_sha256": "8bc8cdae8be2176bde170173e98bad2b9fa0e1770818174a57320816eefdccad",
+    "raw_manifest_sha256": "4d7d6931687a2391ded9699ce90d54ceb3242ec232515d537eb7721274f61148",
+    "b2_manifest_sha256": "4f370023d933dfa3d011ee310880d5e5ad050d92435f21ecc805abae65c881bf",
+    "waiver_sha256": "52ce6e6ff5862353481023b9914fb06cd06e9ef5639913bb5044f4a01730d8d1"
+  }
+}

@@ -1,0 +1,42 @@
+{
+  "schema_version": 2,
+  "generated_at": "2026-08-16T14:10:00+09:00",
+  "status": "READY_WITH_OWNER_REVIEW_REQUIRED",
+  "files": [
+    {
+      "path": "docs/p2/p2-06-5-owner-final/2026-08-16/report/artifact-v2.json",
+      "bytes": 12094,
+      "sha256": "82f36b4f46d3da29881a851089507669f99ad1686be6d4db16fee7a4e5857883"
+    },
+    {
+      "path": "docs/p2/p2-06-5-owner-final/2026-08-16/report/P2-06.5_OWNER_FINAL_REPORT_V2.html",
+      "bytes": 7295,
+      "sha256": "d25e423071178d4b851aa66e6e59acfd1472cbbb73aa5a510f4ec1fd6bdcfe81"
+    },
+    {
+      "path": "docs/p2/p2-06-5-owner-final/2026-08-16/report/qa/p2-06-5-owner-final-v2-desktop.png",
+      "bytes": 580231,
+      "sha256": "9a567f2bfb39170841efab854fca26c7ee623314003bb38b8b5f75e57613e026"
+    },
+    {
+      "path": "docs/p2/p2-06-5-owner-final/2026-08-16/report/qa/p2-06-5-owner-final-v2-mobile.png",
+      "bytes": 377009,
+      "sha256": "5323c3e64b0bef27e92c278587f9045e19180732e8490808eafe720e5c63284a"
+    }
+  ],
+  "c1_run": "2026-08-16-owner-final-c1-v2",
+  "browser_qa": {
+    "status": "PASS",
+    "checked_at": "2026-08-16T14:20:00+09:00",
+    "console_errors": 0,
+    "viewports": [
+      "1440x1000",
+      "390x844"
+    ],
+    "responsive_overflow": "PASS",
+    "screenshots": [
+      "docs/p2/p2-06-5-owner-final/2026-08-16/report/qa/p2-06-5-owner-final-v2-desktop.png",
+      "docs/p2/p2-06-5-owner-final/2026-08-16/report/qa/p2-06-5-owner-final-v2-mobile.png"
+    ]
+  }
+}

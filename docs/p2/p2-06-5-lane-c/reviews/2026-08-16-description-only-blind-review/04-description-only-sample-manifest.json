@@ -1,0 +1,1067 @@
+{
+  "schema_version": 1,
+  "lane": "P2-06.5/C",
+  "package": "description-only-precision-blind-review",
+  "status": "READY_FOR_INDEPENDENT_REVIEW",
+  "calibration_status": "CALIBRATION_REVIEW_PENDING",
+  "recommendation_status": "CALIBRATION_RECOMMENDATION_ONLY",
+  "auto_write_authorized": "NO",
+  "generated_at": "2026-08-16T15:00:00+09:00",
+  "reviewed_candidate": {
+    "config_id": "C",
+    "title_weight": 30,
+    "description_weight": 30,
+    "chapter_weight": 0,
+    "threshold": 30,
+    "max_text_tags": 3
+  },
+  "description_only_edge_definition": "descriptionMatched=true AND titleMatched=false AND selectedAfterCap=true",
+  "sampling": {
+    "seed": "20260816",
+    "method": "deterministic sha256 sort key, no RNG",
+    "sort_key": "sha256([\"20260816\", c1_input_sha256, stratum, sample_row_id].join(\"\\n\"))",
+    "population_target": 320,
+    "risk_target": 80,
+    "stratum_floor_population": 6,
+    "stratum_floor_sample": 2,
+    "risk_cells": [
+      {
+        "flag": "SAME_REGION_MULTI_TAG",
+        "quota": 14
+      },
+      {
+        "flag": "ROLE_OR_SETTING_TAG",
+        "quota": 14
+      },
+      {
+        "flag": "LONG_DESC_SINGLE_OCCURRENCE",
+        "quota": 12
+      },
+      {
+        "flag": "SELECTED_TAG_COUNT_GE3",
+        "quota": 12
+      },
+      {
+        "flag": "RAW_TAG_COUNT_GE4",
+        "quota": 10
+      },
+      {
+        "flag": "SOURCE_TEXT_DISAGREE_TEXT_ONLY",
+        "quota": 8
+      },
+      {
+        "flag": "CROSS_SCRIPT_KEYWORD",
+        "quota": 6
+      },
+      {
+        "flag": "SHORT_GENERIC_KEYWORD_NON_HE_BE",
+        "quota": 4
+      }
+    ],
+    "known_defect_excluded_from_risk_quota": [
+      "he",
+      "be"
+    ]
+  },
+  "lineage": {
+    "run_id": "2026-08-16-owner-final-c1-v2",
+    "canonical_sha256": "8bc8cdae8be2176bde170173e98bad2b9fa0e1770818174a57320816eefdccad",
+    "c1_input_sha256": "046fe9234b317eba145c3fbb35edd2e72af49e41309dcd5d5f45f7bc43d1776d",
+    "samples_fingerprint": "a13586b02af329ca97fc6790c1448d51e81d87c6b401ce967c73d9ac9df69582",
+    "taxonomy_fingerprint": "20901800594e26b10816cfc070a9c6c7df98694f750b0d81166d850d61a014f3",
+    "source_mapping_fingerprint": "fcd3c9df0dd411093045fce7b2b5d020c1517a98dca05c6127e8c2ff09f241b6",
+    "text_evidence_sha256": "cbdb9277c06ba5f8177a46af8bd276edaf85ef5a9dcbe00fbf3befd690133579",
+    "text_book_diagnostics_sha256": "2c6bcbeee34a1f06abe19dd26886363d39df0211d1dcc4a437afee0836cba386"
+  },
+  "source_run_manifest_sha256": "bc90875b92d8124a7f840f6a8aad8a47c420f387b29473b26b092a7d4ef309f9",
+  "statistics": {
+    "population": {
+      "novels": 3034,
+      "edges": 4554,
+      "distinct_tags": 91,
+      "known_defect_edges": 963,
+      "known_defect_novels": 803
+    },
+    "sample": {
+      "novels": 400,
+      "edges": 653,
+      "population_layer": 320,
+      "risk_layer": 80,
+      "distinct_tags": 69,
+      "known_defect_edges": 138,
+      "known_defect_novels": 118
+    },
+    "by_raw_language_scope": [
+      {
+        "raw_language_scope": "[\"RAW_LANGUAGE_SCOPE_V1\",\"[\\\"number\\\",\\\"3\\\"]\",[\"string\",\"英语\"]]",
+        "label": "英语 (3)",
+        "population_count": 913,
+        "population_sample_count": 96,
+        "risk_sample_count": 40,
+        "sample_count": 136,
+        "sampling_fraction": 0.148959
+      },
+      {
+        "raw_language_scope": "[\"RAW_LANGUAGE_SCOPE_V1\",\"[\\\"number\\\",\\\"19\\\"]\",[\"null\"]]",
+        "label": "code 19, no upstream name",
+        "population_count": 624,
+        "population_sample_count": 65,
+        "risk_sample_count": 9,
+        "sample_count": 74,
+        "sampling_fraction": 0.11859
+      },
+      {
+        "raw_language_scope": "[\"RAW_LANGUAGE_SCOPE_V1\",\"[\\\"number\\\",\\\"20\\\"]\",[\"null\"]]",
+        "label": "code 20, no upstream name",
+        "population_count": 546,
+        "population_sample_count": 57,
+        "risk_sample_count": 4,
+        "sample_count": 61,
+        "sampling_fraction": 0.111722
+      },
+      {
+        "raw_language_scope": "[\"RAW_LANGUAGE_SCOPE_V1\",\"[\\\"number\\\",\\\"6\\\"]\",[\"string\",\"法语\"]]",
+        "label": "法语 (6)",
+        "population_count": 284,
+        "population_sample_count": 30,
+        "risk_sample_count": 5,
+        "sample_count": 35,
+        "sampling_fraction": 0.123239
+      },
+      {
+        "raw_language_scope": "[\"RAW_LANGUAGE_SCOPE_V1\",\"[\\\"number\\\",\\\"4\\\"]\",[\"string\",\"西语\"]]",
+        "label": "西语 (4)",
+        "population_count": 214,
+        "population_sample_count": 22,
+        "risk_sample_count": 3,
+        "sample_count": 25,
+        "sampling_fraction": 0.116822
+      },
+      {
+        "raw_language_scope": "[\"RAW_LANGUAGE_SCOPE_V1\",\"[\\\"number\\\",\\\"5\\\"]\",[\"string\",\"葡语\"]]",
+        "label": "葡语 (5)",
+        "population_count": 178,
+        "population_sample_count": 18,
+        "risk_sample_count": 4,
+        "sample_count": 22,
+        "sampling_fraction": 0.123596
+      },
+      {
+        "raw_language_scope": "[\"RAW_LANGUAGE_SCOPE_V1\",\"[\\\"number\\\",\\\"15\\\"]\",[\"string\",\"菲律宾语\"]]",
+        "label": "菲律宾语 (15)",
+        "population_count": 70,
+        "population_sample_count": 7,
+        "risk_sample_count": 4,
+        "sample_count": 11,
+        "sampling_fraction": 0.157143
+      },
+      {
+        "raw_language_scope": "[\"RAW_LANGUAGE_SCOPE_V1\",\"[\\\"number\\\",\\\"9\\\"]\",[\"string\",\"日语\"]]",
+        "label": "日语 (9)",
+        "population_count": 70,
+        "population_sample_count": 7,
+        "risk_sample_count": 0,
+        "sample_count": 7,
+        "sampling_fraction": 0.1
+      },
+      {
+        "raw_language_scope": "[\"RAW_LANGUAGE_SCOPE_V1\",\"[\\\"number\\\",\\\"11\\\"]\",[\"string\",\"印尼\"]]",
+        "label": "印尼 (11)",
+        "population_count": 69,
+        "population_sample_count": 7,
+        "risk_sample_count": 2,
+        "sample_count": 9,
+        "sampling_fraction": 0.130435
+      },
+      {
+        "raw_language_scope": "[\"RAW_LANGUAGE_SCOPE_V1\",\"[\\\"number\\\",\\\"16\\\"]\",[\"string\",\"德语\"]]",
+        "label": "德语 (16)",
+        "population_count": 30,
+        "population_sample_count": 3,
+        "risk_sample_count": 1,
+        "sample_count": 4,
+        "sampling_fraction": 0.133333
+      },
+      {
+        "raw_language_scope": "[\"RAW_LANGUAGE_SCOPE_V1\",\"[\\\"number\\\",\\\"14\\\"]\",[\"string\",\"韩语\"]]",
+        "label": "韩语 (14)",
+        "population_count": 12,
+        "population_sample_count": 2,
+        "risk_sample_count": 6,
+        "sample_count": 8,
+        "sampling_fraction": 0.666667
+      },
+      {
+        "raw_language_scope": "[\"RAW_LANGUAGE_SCOPE_V1\",\"[\\\"number\\\",\\\"22\\\"]\",[\"string\",\"土耳其语\"]]",
+        "label": "土耳其语 (22)",
+        "population_count": 12,
+        "population_sample_count": 2,
+        "risk_sample_count": 2,
+        "sample_count": 4,
+        "sampling_fraction": 0.333333
+      },
+      {
+        "raw_language_scope": "[\"RAW_LANGUAGE_SCOPE_V1\",\"[\\\"number\\\",\\\"13\\\"]\",[\"string\",\"越南语\"]]",
+        "label": "越南语 (13)",
+        "population_count": 6,
+        "population_sample_count": 2,
+        "risk_sample_count": 0,
+        "sample_count": 2,
+        "sampling_fraction": 0.333333
+      },
+      {
+        "raw_language_scope": "[\"RAW_LANGUAGE_SCOPE_V1\",\"[\\\"number\\\",\\\"8\\\"]\",[\"string\",\"意大利语\"]]",
+        "label": "意大利语 (8)",
+        "population_count": 6,
+        "population_sample_count": 2,
+        "risk_sample_count": 0,
+        "sample_count": 2,
+        "sampling_fraction": 0.333333
+      }
+    ],
+    "by_canonical_tag": [
+      {
+        "stable_id": "ct-v1-happy-ending",
+        "edge_count": 93
+      },
+      {
+        "stable_id": "ct-v1-time-travel",
+        "edge_count": 53
+      },
+      {
+        "stable_id": "ct-v1-family",
+        "edge_count": 46
+      },
+      {
+        "stable_id": "ct-v1-tragic-ending",
+        "edge_count": 45
+      },
+      {
+        "stable_id": "ct-v1-betrayal",
+        "edge_count": 24
+      },
+      {
+        "stable_id": "ct-v1-wealthy-ceo",
+        "edge_count": 24
+      },
+      {
+        "stable_id": "ct-v1-rebirth",
+        "edge_count": 23
+      },
+      {
+        "stable_id": "ct-v1-romance",
+        "edge_count": 23
+      },
+      {
+        "stable_id": "ct-v1-horror",
+        "edge_count": 22
+      },
+      {
+        "stable_id": "ct-v1-crime",
+        "edge_count": 19
+      },
+      {
+        "stable_id": "ct-v1-genius",
+        "edge_count": 19
+      },
+      {
+        "stable_id": "ct-v1-werewolf-luna",
+        "edge_count": 18
+      },
+      {
+        "stable_id": "ct-v1-divorce",
+        "edge_count": 17
+      },
+      {
+        "stable_id": "ct-v1-doctor",
+        "edge_count": 12
+      },
+      {
+        "stable_id": "ct-v1-revenge",
+        "edge_count": 12
+      },
+      {
+        "stable_id": "ct-v1-legitimate-daughter",
+        "edge_count": 11
+      },
+      {
+        "stable_id": "ct-v1-student",
+        "edge_count": 11
+      },
+      {
+        "stable_id": "ct-v1-werewolf-alpha",
+        "edge_count": 11
+      },
+      {
+        "stable_id": "ct-v1-crown-prince",
+        "edge_count": 10
+      },
+      {
+        "stable_id": "ct-v1-emperor",
+        "edge_count": 10
+      },
+      {
+        "stable_id": "ct-v1-princess",
+        "edge_count": 10
+      },
+      {
+        "stable_id": "ct-v1-mafia",
+        "edge_count": 9
+      },
+      {
+        "stable_id": "ct-v1-marriage",
+        "edge_count": 9
+      },
+      {
+        "stable_id": "ct-v1-chef",
+        "edge_count": 8
+      },
+      {
+        "stable_id": "ct-v1-apocalypse",
+        "edge_count": 7
+      },
+      {
+        "stable_id": "ct-v1-assassin",
+        "edge_count": 7
+      },
+      {
+        "stable_id": "ct-v1-fantasy",
+        "edge_count": 6
+      },
+      {
+        "stable_id": "ct-v1-heir",
+        "edge_count": 6
+      },
+      {
+        "stable_id": "ct-v1-adventure",
+        "edge_count": 5
+      },
+      {
+        "stable_id": "ct-v1-campus",
+        "edge_count": 5
+      },
+      {
+        "stable_id": "ct-v1-xianxia",
+        "edge_count": 5
+      },
+      {
+        "stable_id": "ct-v1-regret",
+        "edge_count": 4
+      },
+      {
+        "stable_id": "ct-v1-royalty",
+        "edge_count": 4
+      },
+      {
+        "stable_id": "ct-v1-supernatural",
+        "edge_count": 4
+      },
+      {
+        "stable_id": "ct-v1-suspense",
+        "edge_count": 4
+      },
+      {
+        "stable_id": "ct-v1-entertainment-industry",
+        "edge_count": 3
+      },
+      {
+        "stable_id": "ct-v1-first-love",
+        "edge_count": 3
+      },
+      {
+        "stable_id": "ct-v1-lawyer",
+        "edge_count": 3
+      },
+      {
+        "stable_id": "ct-v1-military",
+        "edge_count": 3
+      },
+      {
+        "stable_id": "ct-v1-misunderstanding",
+        "edge_count": 3
+      },
+      {
+        "stable_id": "ct-v1-one-night-stand",
+        "edge_count": 3
+      },
+      {
+        "stable_id": "ct-v1-pregnancy",
+        "edge_count": 3
+      },
+      {
+        "stable_id": "ct-v1-substitute-marriage",
+        "edge_count": 3
+      },
+      {
+        "stable_id": "ct-v1-sweetness",
+        "edge_count": 3
+      },
+      {
+        "stable_id": "ct-v1-contract-marriage",
+        "edge_count": 2
+      },
+      {
+        "stable_id": "ct-v1-miracle-healer",
+        "edge_count": 2
+      },
+      {
+        "stable_id": "ct-v1-playboy",
+        "edge_count": 2
+      },
+      {
+        "stable_id": "ct-v1-vampire",
+        "edge_count": 2
+      },
+      {
+        "stable_id": "ct-v1-werewolf",
+        "edge_count": 2
+      },
+      {
+        "stable_id": "ct-v1-age-gap-romance",
+        "edge_count": 1
+      },
+      {
+        "stable_id": "ct-v1-amnesia",
+        "edge_count": 1
+      },
+      {
+        "stable_id": "ct-v1-arranged-marriage",
+        "edge_count": 1
+      },
+      {
+        "stable_id": "ct-v1-broken-heart",
+        "edge_count": 1
+      },
+      {
+        "stable_id": "ct-v1-childhood-sweethearts",
+        "edge_count": 1
+      },
+      {
+        "stable_id": "ct-v1-comedy",
+        "edge_count": 1
+      },
+      {
+        "stable_id": "ct-v1-contemporary-setting",
+        "edge_count": 1
+      },
+      {
+        "stable_id": "ct-v1-criminal-investigation",
+        "edge_count": 1
+      },
+      {
+        "stable_id": "ct-v1-ensemble-darling",
+        "edge_count": 1
+      },
+      {
+        "stable_id": "ct-v1-hidden-identity",
+        "edge_count": 1
+      },
+      {
+        "stable_id": "ct-v1-kidnapping",
+        "edge_count": 1
+      },
+      {
+        "stable_id": "ct-v1-kung-fu",
+        "edge_count": 1
+      },
+      {
+        "stable_id": "ct-v1-male-audience",
+        "edge_count": 1
+      },
+      {
+        "stable_id": "ct-v1-mature-content",
+        "edge_count": 1
+      },
+      {
+        "stable_id": "ct-v1-secretary",
+        "edge_count": 1
+      },
+      {
+        "stable_id": "ct-v1-superpowers",
+        "edge_count": 1
+      },
+      {
+        "stable_id": "ct-v1-urban-setting",
+        "edge_count": 1
+      },
+      {
+        "stable_id": "ct-v1-warrior-protagonist",
+        "edge_count": 1
+      },
+      {
+        "stable_id": "ct-v1-whirlwind-marriage",
+        "edge_count": 1
+      },
+      {
+        "stable_id": "ct-v1-young-adult",
+        "edge_count": 1
+      }
+    ],
+    "by_risk_flag": [
+      {
+        "flag": "MULTI_DESC_ONLY_EDGE",
+        "novel_count": 178
+      },
+      {
+        "flag": "ROLE_OR_SETTING_TAG",
+        "novel_count": 175
+      },
+      {
+        "flag": "LONG_DESC_SINGLE_OCCURRENCE",
+        "novel_count": 134
+      },
+      {
+        "flag": "GENERIC_KEYWORD_HE_BE",
+        "novel_count": 118
+      },
+      {
+        "flag": "SELECTED_TAG_COUNT_GE3",
+        "novel_count": 105
+      },
+      {
+        "flag": "SAME_REGION_MULTI_TAG",
+        "novel_count": 91
+      },
+      {
+        "flag": "SHORT_GENERIC_KEYWORD_NON_HE_BE",
+        "novel_count": 61
+      },
+      {
+        "flag": "CAP_TRUNCATED",
+        "novel_count": 50
+      },
+      {
+        "flag": "RAW_TAG_COUNT_GE4",
+        "novel_count": 50
+      },
+      {
+        "flag": "SOURCE_TEXT_DISAGREE_TEXT_ONLY",
+        "novel_count": 12
+      },
+      {
+        "flag": "CROSS_SCRIPT_KEYWORD",
+        "novel_count": 8
+      }
+    ],
+    "risk_cell_fill": [
+      {
+        "flag": "SAME_REGION_MULTI_TAG",
+        "quota": 14,
+        "filled": 14
+      },
+      {
+        "flag": "ROLE_OR_SETTING_TAG",
+        "quota": 14,
+        "filled": 14
+      },
+      {
+        "flag": "LONG_DESC_SINGLE_OCCURRENCE",
+        "quota": 12,
+        "filled": 12
+      },
+      {
+        "flag": "SELECTED_TAG_COUNT_GE3",
+        "quota": 12,
+        "filled": 12
+      },
+      {
+        "flag": "RAW_TAG_COUNT_GE4",
+        "quota": 10,
+        "filled": 10
+      },
+      {
+        "flag": "SOURCE_TEXT_DISAGREE_TEXT_ONLY",
+        "quota": 8,
+        "filled": 8
+      },
+      {
+        "flag": "CROSS_SCRIPT_KEYWORD",
+        "quota": 6,
+        "filled": 6
+      },
+      {
+        "flag": "SHORT_GENERIC_KEYWORD_NON_HE_BE",
+        "quota": 4,
+        "filled": 4
+      }
+    ],
+    "selected_ids": [
+      "c1-00048",
+      "c1-00100",
+      "c1-00127",
+      "c1-00131",
+      "c1-00190",
+      "c1-00195",
+      "c1-00237",
+      "c1-00260",
+      "c1-00274",
+      "c1-00299",
+      "c1-00314",
+      "c1-00346",
+      "c1-00400",
+      "c1-00475",
+      "c1-00480",
+      "c1-00486",
+      "c1-00488",
+      "c1-00512",
+      "c1-00557",
+      "c1-00635",
+      "c1-00659",
+      "c1-00666",
+      "c1-00670",
+      "c1-00709",
+      "c1-00721",
+      "c1-00742",
+      "c1-00861",
+      "c1-00870",
+      "c1-00964",
+      "c1-00971",
+      "c1-00974",
+      "c1-01000",
+      "c1-01009",
+      "c1-01056",
+      "c1-01092",
+      "c1-01184",
+      "c1-01225",
+      "c1-01280",
+      "c1-01285",
+      "c1-01289",
+      "c1-01499",
+      "c1-01511",
+      "c1-02355",
+      "c1-02390",
+      "c1-02403",
+      "c1-02476",
+      "c1-02478",
+      "c1-02491",
+      "c1-02544",
+      "c1-02567",
+      "c1-02586",
+      "c1-02595",
+      "c1-02599",
+      "c1-02615",
+      "c1-02623",
+      "c1-02639",
+      "c1-02646",
+      "c1-02667",
+      "c1-02675",
+      "c1-02766",
+      "c1-02767",
+      "c1-02802",
+      "c1-02822",
+      "c1-02823",
+      "c1-02829",
+      "c1-02831",
+      "c1-02882",
+      "c1-02891",
+      "c1-02899",
+      "c1-02923",
+      "c1-02969",
+      "c1-02973",
+      "c1-02978",
+      "c1-02985",
+      "c1-02993",
+      "c1-03011",
+      "c1-03034",
+      "c1-03041",
+      "c1-03073",
+      "c1-03079",
+      "c1-03092",
+      "c1-03095",
+      "c1-03100",
+      "c1-03107",
+      "c1-03122",
+      "c1-03125",
+      "c1-03130",
+      "c1-03148",
+      "c1-03184",
+      "c1-03195",
+      "c1-03200",
+      "c1-03213",
+      "c1-03240",
+      "c1-03246",
+      "c1-03280",
+      "c1-03281",
+      "c1-03330",
+      "c1-03338",
+      "c1-03344",
+      "c1-03349",
+      "c1-03354",
+      "c1-03362",
+      "c1-03388",
+      "c1-03397",
+      "c1-03403",
+      "c1-03423",
+      "c1-03454",
+      "c1-03455",
+      "c1-03460",
+      "c1-03463",
+      "c1-03464",
+      "c1-03479",
+      "c1-03493",
+      "c1-03494",
+      "c1-03564",
+      "c1-03601",
+      "c1-03622",
+      "c1-03626",
+      "c1-03629",
+      "c1-03655",
+      "c1-03691",
+      "c1-03711",
+      "c1-03720",
+      "c1-03757",
+      "c1-03759",
+      "c1-03761",
+      "c1-03790",
+      "c1-03795",
+      "c1-03817",
+      "c1-03848",
+      "c1-03899",
+      "c1-04069",
+      "c1-04101",
+      "c1-04102",
+      "c1-04104",
+      "c1-04127",
+      "c1-04129",
+      "c1-04135",
+      "c1-04157",
+      "c1-04189",
+      "c1-04208",
+      "c1-04219",
+      "c1-04234",
+      "c1-04244",
+      "c1-04253",
+      "c1-04269",
+      "c1-04270",
+      "c1-04313",
+      "c1-04344",
+      "c1-04369",
+      "c1-04394",
+      "c1-04411",
+      "c1-04423",
+      "c1-04461",
+      "c1-04482",
+      "c1-04486",
+      "c1-04494",
+      "c1-04521",
+      "c1-04546",
+      "c1-04550",
+      "c1-04556",
+      "c1-04563",
+      "c1-04566",
+      "c1-04571",
+      "c1-04576",
+      "c1-04592",
+      "c1-04595",
+      "c1-04601",
+      "c1-04616",
+      "c1-04635",
+      "c1-04654",
+      "c1-04669",
+      "c1-04688",
+      "c1-04702",
+      "c1-04710",
+      "c1-04713",
+      "c1-04715",
+      "c1-04721",
+      "c1-04734",
+      "c1-04748",
+      "c1-04751",
+      "c1-04776",
+      "c1-04784",
+      "c1-04790",
+      "c1-04830",
+      "c1-04840",
+      "c1-04939",
+      "c1-04952",
+      "c1-05031",
+      "c1-05041",
+      "c1-05051",
+      "c1-05052",
+      "c1-05055",
+      "c1-05056",
+      "c1-05068",
+      "c1-05070",
+      "c1-05072",
+      "c1-05074",
+      "c1-05079",
+      "c1-05084",
+      "c1-05095",
+      "c1-05108",
+      "c1-05119",
+      "c1-05122",
+      "c1-05138",
+      "c1-05152",
+      "c1-05164",
+      "c1-05166",
+      "c1-05168",
+      "c1-05174",
+      "c1-05177",
+      "c1-05180",
+      "c1-05191",
+      "c1-05192",
+      "c1-05200",
+      "c1-05202",
+      "c1-05208",
+      "c1-05227",
+      "c1-05230",
+      "c1-05231",
+      "c1-05259",
+      "c1-05265",
+      "c1-05269",
+      "c1-05282",
+      "c1-05310",
+      "c1-05312",
+      "c1-05326",
+      "c1-05333",
+      "c1-05339",
+      "c1-05347",
+      "c1-05360",
+      "c1-05364",
+      "c1-05370",
+      "c1-05371",
+      "c1-05372",
+      "c1-05403",
+      "c1-05411",
+      "c1-05412",
+      "c1-05442",
+      "c1-05451",
+      "c1-05457",
+      "c1-05462",
+      "c1-05472",
+      "c1-05475",
+      "c1-05487",
+      "c1-05531",
+      "c1-05549",
+      "c1-05552",
+      "c1-05561",
+      "c1-05562",
+      "c1-05566",
+      "c1-05572",
+      "c1-05582",
+      "c1-05584",
+      "c1-05586",
+      "c1-05603",
+      "c1-05624",
+      "c1-05628",
+      "c1-05631",
+      "c1-05633",
+      "c1-05635",
+      "c1-05647",
+      "c1-05651",
+      "c1-05658",
+      "c1-05661",
+      "c1-05690",
+      "c1-05691",
+      "c1-05692",
+      "c1-05693",
+      "c1-05707",
+      "c1-05721",
+      "c1-05737",
+      "c1-05744",
+      "c1-05747",
+      "c1-05748",
+      "c1-05751",
+      "c1-05769",
+      "c1-05778",
+      "c1-05787",
+      "c1-05793",
+      "c1-05794",
+      "c1-05799",
+      "c1-05801",
+      "c1-05818",
+      "c1-05834",
+      "c1-05838",
+      "c1-05844",
+      "c1-05847",
+      "c1-05851",
+      "c1-05856",
+      "c1-05885",
+      "c1-05886",
+      "c1-05887",
+      "c1-05888",
+      "c1-05896",
+      "c1-05909",
+      "c1-05913",
+      "c1-05934",
+      "c1-05936",
+      "c1-05939",
+      "c1-05959",
+      "c1-05965",
+      "c1-05971",
+      "c1-05976",
+      "c1-05989",
+      "c1-05996",
+      "c1-05999",
+      "c1-06009",
+      "c1-06010",
+      "c1-06011",
+      "c1-06018",
+      "c1-06022",
+      "c1-06029",
+      "c1-06039",
+      "c1-06079",
+      "c1-06135",
+      "c1-06164",
+      "c1-06183",
+      "c1-06224",
+      "c1-06238",
+      "c1-06326",
+      "c1-06374",
+      "c1-06377",
+      "c1-06456",
+      "c1-06476",
+      "c1-06520",
+      "c1-06706",
+      "c1-06811",
+      "c1-06824",
+      "c1-06825",
+      "c1-06827",
+      "c1-06842",
+      "c1-06899",
+      "c1-06937",
+      "c1-06944",
+      "c1-06954",
+      "c1-06960",
+      "c1-06996",
+      "c1-07104",
+      "c1-07110",
+      "c1-07242",
+      "c1-07274",
+      "c1-07281",
+      "c1-07348",
+      "c1-07351",
+      "c1-07383",
+      "c1-07388",
+      "c1-07423",
+      "c1-07515",
+      "c1-07564",
+      "c1-07620",
+      "c1-07673",
+      "c1-07742",
+      "c1-07788",
+      "c1-07879",
+      "c1-07926",
+      "c1-08025",
+      "c1-08056",
+      "c1-08058",
+      "c1-08069",
+      "c1-08114",
+      "c1-08124",
+      "c1-08146",
+      "c1-08182",
+      "c1-08240",
+      "c1-08252",
+      "c1-08399",
+      "c1-08401",
+      "c1-08440",
+      "c1-08448",
+      "c1-08453",
+      "c1-08473",
+      "c1-08512",
+      "c1-08522",
+      "c1-08557",
+      "c1-08563",
+      "c1-08577",
+      "c1-08599",
+      "c1-08648",
+      "c1-08649",
+      "c1-08672",
+      "c1-08688",
+      "c1-08716",
+      "c1-08731",
+      "c1-08771",
+      "c1-08802",
+      "c1-08803",
+      "c1-08819",
+      "c1-08830",
+      "c1-08838",
+      "c1-08867",
+      "c1-08901",
+      "c1-08925",
+      "c1-09588",
+      "c1-09614",
+      "c1-09650",
+      "c1-09651",
+      "c1-09676",
+      "c1-09866",
+      "c1-09896"
+    ]
+  },
+  "shortfalls": [],
+  "qa": [
+    {
+      "check": "unique_novels_equals_target",
+      "ok": true,
+      "detail": "400 novels"
+    },
+    {
+      "check": "review_ids_unique",
+      "ok": true,
+      "detail": "400 rows"
+    },
+    {
+      "check": "packages_aligned_one_to_one",
+      "ok": true,
+      "detail": "400 reviewer / 400 hidden"
+    },
+    {
+      "check": "all_edges_are_description_only",
+      "ok": true,
+      "detail": "title_matched must be false on every edge"
+    },
+    {
+      "check": "all_tags_in_canonical_final",
+      "ok": true,
+      "detail": "all proposed tags resolve"
+    },
+    {
+      "check": "reviewer_package_has_no_source_evidence",
+      "ok": true,
+      "detail": "no forbidden field present"
+    },
+    {
+      "check": "matched_spans_are_exact_substrings",
+      "ok": true,
+      "detail": "every span re-derives from the description"
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "01-description-only-review-sample.jsonl",
+      "bytes": 697086,
+      "sha256": "71cac9636cfc62156956a89ce3e4e84b152262a180ab0d2869e568c1dd20327b",
+      "rowCount": 400
+    },
+    {
+      "path": "02-description-only-review-sample.csv",
+      "bytes": 477055,
+      "sha256": "20b58a5a6c186b9547c1a2de48151ad578af0f6789b02a7923fba936eec48f14",
+      "rowCount": null
+    },
+    {
+      "path": "03-description-only-hidden-reference.jsonl",
+      "bytes": 901130,
+      "sha256": "e73945bad12ce81b6f58cd51e469c2527fe6aaceb758f56af9227b2725487ece",
+      "rowCount": 400
+    },
+    {
+      "path": "05-FABLE5_DESCRIPTION_ONLY_REVIEW_PROMPT.md",
+      "bytes": 3423,
+      "sha256": "94b8820aab8cad0a6c5fce05e5cef2d7dfaa9a9e55121c00be60db2c18145187",
+      "rowCount": null
+    },
+    {
+      "path": "06-DESCRIPTION_ONLY_SAMPLE_REPORT.md",
+      "bytes": 8279,
+      "sha256": "8085ccadf75f416bac199767ad4110655dc15a25ebaa88f3c1e46857ded4e605",
+      "rowCount": null
+    },
+    {
+      "path": "07-FABLE5_OUTPUT_SCHEMA.json",
+      "bytes": 2248,
+      "sha256": "b2f8b4d3623b10194482852189aac7a38bcb28bc8685e0216ec3e976f5373a82",
+      "rowCount": null
+    }
+  ]
+}

@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "lane": "P2-06.5/C",
+  "package": "description-only-blind-review-results",
+  "status": "REVIEW_RETURNED",
+  "auto_write_authorized": "NO",
+  "reviewed_edges": 653,
+  "reviewed_novels": 400,
+  "artifacts": [
+    {
+      "path": "01-fable5-merged-verdicts.json",
+      "bytes": 295925,
+      "sha256": "c6faec2b752c21b1cd9ce3e29032abc12ebde28520d6dcd21aee7695d59eeffd"
+    },
+    {
+      "path": "02-POST_BLIND_PRECISION_REPORT.md",
+      "bytes": 7956,
+      "sha256": "b54bec33d9c515b8d3c963e9c0bb0c08ae671de7622b5c63151efba68ff58d00"
+    }
+  ]
+}

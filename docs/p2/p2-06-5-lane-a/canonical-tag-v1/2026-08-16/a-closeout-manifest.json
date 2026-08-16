@@ -1,0 +1,67 @@
+{
+  "schema_version": 1,
+  "closeout_version": "1.0.0",
+  "decision_date": "2026-08-16",
+  "canonical_version": "1.0.0",
+  "canonical_tag_count": 116,
+  "canonical_artifact_sha256": "480bab2dcd0141e05012aa7e07a76ec4a0159ca372e222de3aa2c6a25508a7bd",
+  "canonical_status": "FINAL",
+  "b2_executed": false,
+  "authoritative_b1_status": "PARTIAL",
+  "timing_waiver_scope": "SINGLE_RUN_ONLY",
+  "timing_violation_count": 6,
+  "timing_violation_intervals_ms": [
+    999,
+    999,
+    999,
+    999,
+    999,
+    999
+  ],
+  "sources": {
+    "tag_coverage_sha256": "4f4249d78655e52f5b18f9ed2f401a159beededd3f1550b860b4220284b86c09",
+    "owner_correction_delta_sha256": "260c46d73a6b4b11f91a31c1f7a99cde24fbc9c41cc28eba2e840662d8c7c9d0",
+    "b1_raw_manifest_sha256": "4d7d6931687a2391ded9699ce90d54ceb3242ec232515d537eb7721274f61148",
+    "b1_derived_manifest_sha256": "8233d8e4f427af94f92ba5787b16f6638395d2203b218361fa550929d0314cc1",
+    "final_sample_keys_sha256": "24acc043aee6fd277d0a6084e0f29de34c2acaf8cd78b376cbeff78b977e1ef4",
+    "source_book_samples_sha256": "e70251f533fd1e3a2514f5a35ab01aeceb2be9142123602f29610a5d8a2d8ac0",
+    "request_attempts_sha256": "409e67d6a9ef2be7fb6057cfd502197f737cb627a943d2ea3128c7ed01bdd6c1"
+  },
+  "artifacts": [
+    {
+      "path": "canonical-tag-v1.0.0.json",
+      "bytes": 93391,
+      "sha256": "480bab2dcd0141e05012aa7e07a76ec4a0159ca372e222de3aa2c6a25508a7bd"
+    },
+    {
+      "path": "canonical-tag-v1.0.0.json.sha256",
+      "bytes": 92,
+      "sha256": "868c2158a1ac05b7e7d5bb0ec2b4366ab5c4dd3c93b6e1eb02b20d6764602ee8"
+    },
+    {
+      "path": "a-empirical-closeout-decisions.json",
+      "bytes": 15724,
+      "sha256": "19fd7920f92e14417bf1dfd85efb3bcfcad89c37394d18a8f5e1746b2a645b2f"
+    },
+    {
+      "path": "a-empirical-closeout-decisions.csv",
+      "bytes": 2287,
+      "sha256": "5cee78edb98f4077e66b300615a4c002bd95174b0edc2ade2b9ded5e19344d7c"
+    },
+    {
+      "path": "raw-language-resolution.json",
+      "bytes": 4110,
+      "sha256": "e50ed5ad7f4aebaaaad6255acae33348d184f802cc0580a52fce28f035c3bf0e"
+    },
+    {
+      "path": "A_EMPIRICAL_CLOSEOUT.md",
+      "bytes": 6631,
+      "sha256": "23ab9fd4c68bd3e1789b77f813158921be4cab24fe8f5733bb626d13f4bb8605"
+    },
+    {
+      "path": "A_EMPIRICAL_CLOSEOUT.html",
+      "bytes": 5054,
+      "sha256": "17975217d3cb47a538540c8b282fc60936222cd032ea96f93361f6f0fcb65c5c"
+    }
+  ]
+}

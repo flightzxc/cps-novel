@@ -6,9 +6,9 @@
 
 一次性/运维脚本：恢复演练脚本、项目隔离检查脚本（验证无 CPS 路径引用、CPS 工作区未被写入）等。
 
-## 本轮范围
+## P2-06.5 Lane B
 
-🔴 本轮（P1-04）只建目录，不写实现。当前目录仅含本 README 与 `.gitkeep` 占位。
+`p2-06-5-lane-b/` 提供独立只读的畅读 `seriesTypeList` 真实采样、B1 taxonomy 派生与 B2 CanonicalTag mapping 候选编译。入口与安全操作见 `docs/p2/P2_06_5_LANE_B_RUNBOOK.md`。
 
 ## 填充任务
 

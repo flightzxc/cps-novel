@@ -40,3 +40,8 @@ logs/
 # temp
 .tmp/
 /tmp/
+
+# P2-06.5 Lane B authoritative upstream responses and raw observations.
+# Derived, secret-free reports live under docs/p2/p2-06-5-lane-b/runs/.
+/artifacts/p2-06-5-lane-b/
+/artifacts/p2-06-5-lane-c/

@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "artifact_json_sha256": "35bb7ebeb795a6ed4c03e77d16fa9012842dfd074241724368ae9596585cb6e5",
+  "portable_html_sha256": "409bb337154e05483f878b91932785a74464472d29481bd151484bcf2757136e",
+  "validation": "passed",
+  "package": "passed",
+  "verification": "structural_only",
+  "browser_qa": "NOT_RUN_NO_COMPATIBLE_CHROMIUM",
+  "counts": {
+    "blocks": 15,
+    "charts": 2,
+    "metric_cards": 3,
+    "tables": 2
+  },
+  "external_network_dependencies": 0
+}

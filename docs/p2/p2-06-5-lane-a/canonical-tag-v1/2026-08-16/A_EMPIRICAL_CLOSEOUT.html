@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>P2-06.5 Gate A Empirical Closeout</title>
+  <style>
+    :root { color-scheme: light; --ink:#172033; --muted:#5f6b7a; --line:#dfe4ec; --blue:#2457d6; --soft:#f5f7fb; --good:#0f766e; --warn:#a16207; }
+    * { box-sizing:border-box; } body { margin:0; background:#eef2f7; color:var(--ink); font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
+    main { max-width:1040px; margin:32px auto; background:#fff; border:1px solid var(--line); border-radius:18px; box-shadow:0 18px 50px rgba(27,39,66,.08); padding:42px; }
+    h1 { font-size:30px; margin:0 0 8px; } h2 { margin-top:36px; font-size:20px; } p { color:var(--muted); }
+    .eyebrow { color:var(--blue); font-weight:700; letter-spacing:.08em; text-transform:uppercase; font-size:12px; }
+    .cards { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; margin:26px 0; }
+    .card { padding:18px; border:1px solid var(--line); border-radius:12px; background:var(--soft); } .card b { display:block; font-size:25px; color:var(--ink); } .card span { color:var(--muted); font-size:12px; }
+    .status { display:inline-block; padding:5px 9px; border-radius:999px; color:#fff; background:var(--good); font-size:12px; font-weight:700; }
+    .waiver { border-left:4px solid var(--warn); padding:12px 16px; background:#fffbeb; color:#713f12; }
+    table { width:100%; border-collapse:collapse; margin:14px 0; } th,td { text-align:left; border-bottom:1px solid var(--line); padding:10px 9px; vertical-align:top; } th { color:var(--muted); font-size:12px; text-transform:uppercase; }
+    code { background:#eef2ff; color:#3730a3; padding:2px 5px; border-radius:4px; overflow-wrap:anywhere; }
+    footer { margin-top:34px; padding-top:18px; border-top:1px solid var(--line); color:var(--muted); font-size:12px; }
+    @media (max-width:760px) { main { margin:0; border-radius:0; padding:24px; } .cards { grid-template-columns:repeat(2,1fr); } table { display:block; overflow-x:auto; } }
+  </style>
+</head>
+<body><main>
+  <div class="eyebrow">P2-06.5 · Gate A</div>
+  <h1>Empirical Closeout</h1>
+  <p>CanonicalTag v1 已收口；本页是便携式审计摘要，完整书目证据见同目录 JSON/CSV 与 Markdown 报告。</p>
+  <div class="cards">
+    <div class="card"><b>116</b><span>CanonicalTag v1</span></div>
+    <div class="card"><b>0</b><span>remaining merge reviews</span></div>
+    <div class="card"><b>0</b><span>remaining low-value reviews</span></div>
+    <div class="card"><b>FINAL</b><span>canonical status</span></div>
+  </div>
+  <p><span class="status">FINAL</span> <code>SHA-256 480bab2dcd0141e05012aa7e07a76ec4a0159ca372e222de3aa2c6a25508a7bd</code></p>
+  <div class="waiver"><strong>B1 remains PARTIAL.</strong> Owner waiver applies only to this run. Six 999ms intervals remain recorded; the global ≥1000ms start-spacing contract is unchanged.<ul><li>attempt 11 → 12: <strong>999ms</strong></li><li>attempt 46 → 47: <strong>999ms</strong></li><li>attempt 79 → 80: <strong>999ms</strong></li><li>attempt 179 → 180: <strong>999ms</strong></li><li>attempt 204 → 205: <strong>999ms</strong></li><li>attempt 222 → 223: <strong>999ms</strong></li></ul></div>
+  <h2>Closed decisions</h2>
+  <table><thead><tr><th>ID</th><th>Source tags</th><th>Decision</th><th>Canonical target</th><th>Count effect</th></tr></thead><tbody><tr><td><code>A-EMP-01</code></td><td>office-tension / office-romance</td><td>KEEP_SEPARATE</td><td>office-tension / office-romance</td><td>0</td></tr><tr><td><code>A-EMP-02</code></td><td>future-world / sci-fi-world</td><td>KEEP_SEPARATE</td><td>future-world / science-fiction</td><td>0</td></tr><tr><td><code>A-EMP-03</code></td><td>student / campus</td><td>MERGE_WITH_ALIAS</td><td>campus</td><td>-1</td></tr><tr><td><code>A-EMP-LV-01</code></td><td>both-virgin</td><td>DROP_LOW_VALUE</td><td>—</td><td>-1</td></tr><tr><td><code>A-EMP-LV-02</code></td><td>power-play</td><td>DROP_LOW_VALUE</td><td>—</td><td>-1</td></tr></tbody></table>
+  <h2>Raw language resolution</h2>
+  <p>19/20 仅保留 exact raw scope。字符形态只支持脚本方向推断，不足以证明 BCP-47 或地区；对应 C1 locale-specific statistics 明确阻断。</p>
+  <table><thead><tr><th>Raw language</th><th>Final books</th><th>Distinct tokens</th><th>Resolution</th><th>C1 locale stats</th></tr></thead><tbody><tr><td>19</td><td>1,155</td><td>31</td><td><code>RAW_SCOPE_ONLY</code></td><td><strong>BLOCKED</strong></td></tr><tr><td>20</td><td>1,165</td><td>33</td><td><code>RAW_SCOPE_ONLY</code></td><td><strong>BLOCKED</strong></td></tr></tbody></table>
+  <h2>Boundary</h2>
+  <p>B2 未运行；未修改数据库、schema、migration、生产 mapping、Worker/Scheduler、classifier 配置或业务代码。</p>
+  <footer>Decision date 2026-08-16 · Canonical version 1.0.0 · Evidence lineage and exact sample IDs are included in the companion artifacts.</footer>
+</main></body></html>

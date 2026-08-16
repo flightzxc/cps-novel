@@ -1,0 +1,233 @@
+{
+  "surface": "report",
+  "manifest": {
+    "version": 1,
+    "surface": "report",
+    "title": "P2-06.5 Owner Final · CanonicalTag v1, B2 与 C1 10k",
+    "description": "CanonicalTag v1 Final、Lane B B2 离线映射与 Lane C C1 10k 标定的技术验收报告。",
+    "generatedAt": "2026-08-16T03:52:00+09:00",
+    "cards": [
+      {
+        "id": "canonical_count",
+        "description": "Candidate 119 经 3 删 7 增后的公开 CanonicalTag v1 数量。",
+        "dataset": "headline",
+        "sourceId": "canonical_final",
+        "metrics": [{ "label": "CanonicalTag v1", "field": "canonical_count", "format": "number" }]
+      },
+      {
+        "id": "b2_closed",
+        "description": "已完成 Owner Final disposition 的 exact source mapping logical keys。",
+        "dataset": "headline",
+        "sourceId": "b2_summary",
+        "metrics": [{ "label": "B2 closed keys", "field": "b2_key_total", "format": "number" }]
+      },
+      {
+        "id": "c1_samples",
+        "description": "由 verified raw run 最终选择重建并完成 9 组标定的唯一小说数。",
+        "dataset": "headline",
+        "sourceId": "c1_summary",
+        "metrics": [{ "label": "C1 novels", "field": "c1_sample_count", "format": "number" }]
+      }
+    ],
+    "charts": [
+      {
+        "id": "b2_disposition",
+        "title": "B2 final disposition",
+        "subtitle": "194/285 logical groups are offline mapping candidates; 91 remain deferred, ignored/dropped, or Canonical gaps.",
+        "type": "horizontalBar",
+        "dataset": "b2_disposition",
+        "sourceId": "b2_summary",
+        "encodings": {
+          "x": { "field": "disposition", "type": "nominal", "label": "Disposition" },
+          "y": { "field": "logical_groups", "type": "quantitative", "label": "Logical groups" },
+          "tooltip": [
+            { "field": "share", "type": "quantitative", "label": "Share", "format": "percent" },
+            { "field": "executable_edges", "type": "quantitative", "label": "Executable edges" }
+          ]
+        },
+        "valueFormat": "number",
+        "layout": "full"
+      },
+      {
+        "id": "c1_hit_rate",
+        "title": "C1 text hit rate across nine configurations",
+        "subtitle": "A/B are title-triggered at threshold 30; C also admits description-only matches and therefore has materially higher coverage.",
+        "type": "bar",
+        "dataset": "c1_configurations",
+        "sourceId": "c1_summary",
+        "encodings": {
+          "x": { "field": "configuration", "type": "nominal", "label": "Scheme / maxTextTags" },
+          "y": { "field": "text_hit_rate", "type": "quantitative", "label": "Text hit rate", "format": "percent" },
+          "tooltip": [
+            { "field": "zero_hit_rate", "type": "quantitative", "label": "Zero-hit rate", "format": "percent" },
+            { "field": "average_text_tags", "type": "quantitative", "label": "Average text tags" },
+            { "field": "cap_truncated_books", "type": "quantitative", "label": "Cap-truncated books" }
+          ]
+        },
+        "valueFormat": "percent",
+        "layout": "full"
+      }
+    ],
+    "tables": [
+      {
+        "id": "c1_detail",
+        "title": "C1 configuration detail",
+        "subtitle": "All results are calibration evidence; none is a frozen production parameter.",
+        "dataset": "c1_configurations",
+        "sourceId": "c1_summary",
+        "defaultSort": { "field": "text_hit_rate", "direction": "desc" },
+        "columns": [
+          { "field": "configuration", "label": "Configuration", "type": "text" },
+          { "field": "text_hit_rate", "label": "Text hit", "format": "percent" },
+          { "field": "zero_hit_rate", "label": "Zero hit", "format": "percent" },
+          { "field": "average_text_tags", "label": "Avg text tags", "format": "number" },
+          { "field": "cap_truncated_books", "label": "Truncated books", "format": "number" },
+          { "field": "cap_truncated_tags", "label": "Truncated tags", "format": "number" }
+        ]
+      },
+      {
+        "id": "language_resolution",
+        "title": "Raw language 19/20 resolution",
+        "subtitle": "Display labels are not promoted to locale facts.",
+        "dataset": "language_resolution",
+        "sourceId": "c1_summary",
+        "defaultSort": { "field": "raw_language", "direction": "asc" },
+        "columns": [
+          { "field": "raw_language", "label": "Raw language", "type": "text" },
+          { "field": "sample_count", "label": "Samples", "format": "number" },
+          { "field": "resolution", "label": "Resolution", "type": "text" },
+          { "field": "locale_statistics", "label": "Locale-specific stats", "type": "text" }
+        ]
+      }
+    ],
+    "sources": [
+      { "id": "canonical_final", "label": "CanonicalTag v1 Final artifact", "path": "docs/p2/p2-06-5-lane-a/canonical-tag-v1-final/2026-08-16/canonical-tag-v1.0.0-final.json" },
+      { "id": "b2_summary", "label": "B2 Owner Final summary", "path": "docs/p2/p2-06-5-lane-b/b2-owner-final/2026-08-16/b2-final-summary.json" },
+      { "id": "c1_summary", "label": "C1 10k aggregate summary", "path": "docs/p2/p2-06-5-lane-c/runs/2026-08-16-owner-final-c1/calibration-summary.json" },
+      { "id": "waiver", "label": "Single-run Owner timing waiver", "path": "docs/p2/p2-06-5-owner-final/2026-08-16/OWNER_TIMING_WAIVER.json" }
+    ],
+    "blocks": [
+      { "id": "title", "type": "markdown", "body": "# P2-06.5 Owner Final · CanonicalTag v1, B2 与 C1 10k" },
+      {
+        "id": "executive_summary",
+        "type": "markdown",
+        "body": "## Executive Summary\n\nCanonicalTag v1 已以 **123** 条 Final taxonomy 固化；B2 已闭合全部 **285** 个 exact logical mapping key，Owner review 为 0；C1 已对 **10,000** 本最终样本完成 A/B/C × maxTextTags 2/3/5 的九组离线标定。所有 source mapping 都是 offline candidate，C1 参数仍需独立人工 adjudication，`AUTO_WRITE_AUTHORIZED=NO`。"
+      },
+      { "id": "headline_metrics", "type": "metric-strip", "cardIds": ["canonical_count", "b2_closed", "c1_samples"] },
+      {
+        "id": "b1_waiver",
+        "type": "markdown",
+        "sourceId": "waiver",
+        "body": "## B1 evidence remains PARTIAL\n\nOwner 的单次 waiver 仅接受 raw run `2026-08-15-changdu-real-b1-v2` 中恰好六次 **999ms** start-interval 违规。240/240 页成功、0 retry/429、semantic round-trip 通过且最终样本为 10,000；raw status 仍为 `PARTIAL`，全局 ≥1000ms 合同没有改变。Taxonomy discovery 仍按权威产物记录为 `TAXONOMY_DISCOVERY_NOT_SATURATED`。"
+      },
+      {
+        "id": "b2_findings",
+        "type": "markdown",
+        "sourceId": "b2_summary",
+        "body": "## B2 is closed as an offline candidate set\n\n194 groups map to Final CanonicalTags, 52 defer, 37 ignore/drop, and 2 remain explicit Canonical gaps. The 198 CSV rows comprise 196 executable FK edges plus two clearly typed compound-group summaries for the reviewed 科幻末世 1:N groups; 穿越重生 has no hard 1:N."
+      },
+      { "id": "b2_chart", "type": "chart", "chartId": "b2_disposition", "layout": "full" },
+      {
+        "id": "c1_findings",
+        "type": "markdown",
+        "sourceId": "c1_summary",
+        "body": "## C1 completed; parameter choice remains open\n\nA/B both produce a 10.56% text-hit rate because only the title weight reaches threshold 30. C raises description weight to 30 and produces a 35.96% hit rate, but this coverage increase has no independent false-positive adjudication. maxTextTags affects truncation but not whether a book has any text hit."
+      },
+      { "id": "c1_chart", "type": "chart", "chartId": "c1_hit_rate", "layout": "full" },
+      { "id": "c1_table", "type": "table", "tableId": "c1_detail", "layout": "full" },
+      {
+        "id": "language_identity",
+        "type": "markdown",
+        "sourceId": "c1_summary",
+        "body": "## Language 19 and 20 remain raw scopes\n\nExisting evidence does not prove exact locale identities. Both scopes retain `resolved_locale=null`; 2,320 affected sample rows may enter CJK text matching based on their actual script, while locale-specific C1 statistics are blocked."
+      },
+      { "id": "language_table", "type": "table", "tableId": "language_resolution", "layout": "full" },
+      {
+        "id": "limitations",
+        "type": "markdown",
+        "body": "## Limitations\n\n- B1 is accepted through a single-run operational waiver and must not be described as globally timing-compliant.\n- No complete upstream taxonomy denominator exists; source taxonomy coverage remains empirically observed, not exhaustive.\n- No independent C1 reviewer labels were supplied, so matcher risk flags are queueing signals—not measured false positives.\n- Non-Latin/non-CJK keyword coverage is explicitly insufficient; no translation or invented keyword expansion was used.\n- C2, production mapping, database writes, migrations, Workers and Schedulers were not run."
+      },
+      {
+        "id": "next_steps",
+        "type": "markdown",
+        "body": "## Next Steps\n\n1. Run the blind C1 adjudication package before selecting scheme, threshold, or maxTextTags.\n2. Resolve the two fanfiction Canonical gaps only through a future Owner taxonomy decision.\n3. Keep language 19/20 locale statistics blocked until exact upstream identity evidence is available.\n4. Promote no mapping until the offline candidate set passes the separate production approval path."
+      }
+    ]
+  },
+  "snapshot": {
+    "version": 1,
+    "generatedAt": "2026-08-16T03:52:00+09:00",
+    "status": "ready",
+    "datasets": {
+      "headline": [{ "canonical_count": 123, "b2_key_total": 285, "c1_sample_count": 10000 }],
+      "b2_disposition": [
+        { "disposition": "Map candidate", "logical_groups": 194, "share": 0.6807017544, "executable_edges": 196 },
+        { "disposition": "Defer", "logical_groups": 52, "share": 0.1824561404, "executable_edges": 0 },
+        { "disposition": "Ignore / drop", "logical_groups": 37, "share": 0.1298245614, "executable_edges": 0 },
+        { "disposition": "Canonical gap", "logical_groups": 2, "share": 0.0070175439, "executable_edges": 0 }
+      ],
+      "c1_configurations": [
+        { "configuration": "A / 2", "scheme": "A", "max_text_tags": 2, "sample_count": 10000, "text_hit_rate": 0.1056, "zero_hit_rate": 0.8944, "average_text_tags": 0.115, "cap_truncated_books": 9, "cap_truncated_tags": 10 },
+        { "configuration": "A / 3", "scheme": "A", "max_text_tags": 3, "sample_count": 10000, "text_hit_rate": 0.1056, "zero_hit_rate": 0.8944, "average_text_tags": 0.1159, "cap_truncated_books": 1, "cap_truncated_tags": 1 },
+        { "configuration": "A / 5", "scheme": "A", "max_text_tags": 5, "sample_count": 10000, "text_hit_rate": 0.1056, "zero_hit_rate": 0.8944, "average_text_tags": 0.116, "cap_truncated_books": 0, "cap_truncated_tags": 0 },
+        { "configuration": "B / 2", "scheme": "B", "max_text_tags": 2, "sample_count": 10000, "text_hit_rate": 0.1056, "zero_hit_rate": 0.8944, "average_text_tags": 0.115, "cap_truncated_books": 9, "cap_truncated_tags": 10 },
+        { "configuration": "B / 3", "scheme": "B", "max_text_tags": 3, "sample_count": 10000, "text_hit_rate": 0.1056, "zero_hit_rate": 0.8944, "average_text_tags": 0.1159, "cap_truncated_books": 1, "cap_truncated_tags": 1 },
+        { "configuration": "B / 5", "scheme": "B", "max_text_tags": 5, "sample_count": 10000, "text_hit_rate": 0.1056, "zero_hit_rate": 0.8944, "average_text_tags": 0.116, "cap_truncated_books": 0, "cap_truncated_tags": 0 },
+        { "configuration": "C / 2", "scheme": "C", "max_text_tags": 2, "sample_count": 10000, "text_hit_rate": 0.3596, "zero_hit_rate": 0.6404, "average_text_tags": 0.5049, "cap_truncated_books": 623, "cap_truncated_tags": 1186 },
+        { "configuration": "C / 3", "scheme": "C", "max_text_tags": 3, "sample_count": 10000, "text_hit_rate": 0.3596, "zero_hit_rate": 0.6404, "average_text_tags": 0.5672, "cap_truncated_books": 301, "cap_truncated_tags": 563 },
+        { "configuration": "C / 5", "scheme": "C", "max_text_tags": 5, "sample_count": 10000, "text_hit_rate": 0.3596, "zero_hit_rate": 0.6404, "average_text_tags": 0.6135, "cap_truncated_books": 68, "cap_truncated_tags": 100 }
+      ],
+      "language_resolution": [
+        { "raw_language": "19", "sample_count": 1155, "resolution": "RAW_SCOPE_ONLY", "locale_statistics": "BLOCKED" },
+        { "raw_language": "20", "sample_count": 1165, "resolution": "RAW_SCOPE_ONLY", "locale_statistics": "BLOCKED" }
+      ]
+    }
+  },
+  "sources": [
+    {
+      "id": "canonical_final",
+      "label": "CanonicalTag v1 Final artifact",
+      "path": "docs/p2/p2-06-5-lane-a/canonical-tag-v1-final/2026-08-16/canonical-tag-v1.0.0-final.json",
+      "query": {
+        "engine": "duckdb",
+        "language": "sql",
+        "sql": "SELECT count AS canonical_count FROM read_json_auto('docs/p2/p2-06-5-lane-a/canonical-tag-v1-final/2026-08-16/canonical-tag-v1.0.0-final.json')",
+        "description": "Reads the versioned Final taxonomy count.",
+        "tables_used": ["docs/p2/p2-06-5-lane-a/canonical-tag-v1-final/2026-08-16/canonical-tag-v1.0.0-final.json"],
+        "metric_definitions": { "canonical_count": "Number of public, unique CanonicalTag rows in the Final v1 artifact." }
+      }
+    },
+    {
+      "id": "b2_summary",
+      "label": "B2 Owner Final summary",
+      "path": "docs/p2/p2-06-5-lane-b/b2-owner-final/2026-08-16/b2-final-summary.json",
+      "query": {
+        "engine": "duckdb",
+        "language": "sql",
+        "sql": "WITH s AS (SELECT * FROM read_json_auto('docs/p2/p2-06-5-lane-b/b2-owner-final/2026-08-16/b2-final-summary.json')) SELECT 'Map candidate' AS disposition, B2_ACCEPT_MAP AS logical_groups FROM s UNION ALL SELECT 'Defer', B2_DEFER FROM s UNION ALL SELECT 'Ignore / drop', B2_IGNORE_DROP FROM s UNION ALL SELECT 'Canonical gap', B2_CANONICAL_GAP FROM s",
+        "description": "Reshapes the reviewed B2 logical-key disposition counts.",
+        "tables_used": ["docs/p2/p2-06-5-lane-b/b2-owner-final/2026-08-16/b2-final-summary.json"],
+        "metric_definitions": { "logical_groups": "Count of exact channel + raw-language-scope + token mapping groups in each final disposition." }
+      }
+    },
+    {
+      "id": "c1_summary",
+      "label": "C1 10k aggregate summary",
+      "path": "docs/p2/p2-06-5-lane-c/runs/2026-08-16-owner-final-c1/calibration-summary.json",
+      "query": {
+        "engine": "duckdb",
+        "language": "sql",
+        "sql": "SELECT c.config_id || ' / ' || c.max_text_tags AS configuration, c.* FROM read_json_auto('docs/p2/p2-06-5-lane-c/runs/2026-08-16-owner-final-c1/calibration-summary.json'), UNNEST(configurations) AS t(c)",
+        "description": "Reads the nine reviewed C1 aggregate configurations and exact 10k input QA.",
+        "tables_used": ["docs/p2/p2-06-5-lane-c/runs/2026-08-16-owner-final-c1/calibration-summary.json"],
+        "filters": { "sample_population": "Verified final selection of 10,000 unique novels", "configurations": "A/B/C × maxTextTags 2/3/5" },
+        "metric_definitions": { "text_hit_rate": "Books with at least one selected text tag divided by 10,000.", "zero_hit_rate": "Books with no selected text tag divided by 10,000.", "average_text_tags": "Selected text tags summed across books divided by 10,000; source tags are excluded from this cap metric." }
+      }
+    },
+    { "id": "waiver", "label": "Single-run Owner timing waiver", "path": "docs/p2/p2-06-5-owner-final/2026-08-16/OWNER_TIMING_WAIVER.json" }
+  ],
+  "package_info": {
+    "originUrl": "artifact://p2-06-5-owner-final-2026-08-16",
+    "controls": { "edit": false, "refresh": false }
+  }
+}

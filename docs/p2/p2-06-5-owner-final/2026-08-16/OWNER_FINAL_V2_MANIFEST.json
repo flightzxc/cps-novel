@@ -1,0 +1,75 @@
+{
+  "schema_version": 2,
+  "generated_at": "2026-08-16T14:10:00+09:00",
+  "closeout_status": "OWNER_PARAMETER_FREEZE_EVIDENCE_READY_PENDING_INDEPENDENT_C1_ADJUDICATION",
+  "authoritative_c1_run": "2026-08-16-owner-final-c1-v2",
+  "superseded_c1_run": "2026-08-16-owner-final-c1",
+  "files": [
+    {
+      "path": "docs/p2/p2-06-5-lane-a/canonical-tag-v1-final/2026-08-16/canonical-tag-v1.0.0-final.json",
+      "bytes": 130711,
+      "sha256": "8bc8cdae8be2176bde170173e98bad2b9fa0e1770818174a57320816eefdccad"
+    },
+    {
+      "path": "docs/p2/p2-06-5-lane-a/canonical-tag-v1-final/2026-08-16/CANONICAL_TAG_V1_MANIFEST.json",
+      "bytes": 1842,
+      "sha256": "611aadf7df96043cb0f8e55a833a0067d6eb4b7c59509102cf81c6ba26a7b48f"
+    },
+    {
+      "path": "docs/p2/p2-06-5-lane-b/b2-owner-final/2026-08-16/B2_FINAL_MANIFEST.json",
+      "bytes": 2423,
+      "sha256": "4f370023d933dfa3d011ee310880d5e5ad050d92435f21ecc805abae65c881bf"
+    },
+    {
+      "path": "docs/p2/p2-06-5-lane-c/runs/2026-08-16-owner-final-c1-v2/calibration-summary.json",
+      "bytes": 261072,
+      "sha256": "13eaeaff1bd28471470a2535a2b1a790942c62ac8892d8385cbc495b67e2d752"
+    },
+    {
+      "path": "docs/p2/p2-06-5-lane-c/runs/2026-08-16-owner-final-c1-v2/C1_MANIFEST.json",
+      "bytes": 981,
+      "sha256": "69591a49513019b8fba48e72e29bc2ea875944eafe3ed770df406cf5dcb17576"
+    },
+    {
+      "path": "docs/p2/p2-06-5-owner-final/2026-08-16/OWNER_TIMING_WAIVER.json",
+      "bytes": 593,
+      "sha256": "52ce6e6ff5862353481023b9914fb06cd06e9ef5639913bb5044f4a01730d8d1"
+    },
+    {
+      "path": "docs/p2/p2-06-5-owner-final/2026-08-16/OWNER_FINAL_CLOSEOUT.md",
+      "bytes": 7174,
+      "sha256": "12d32ca9e0b56fa7612fc2dfa23c634d372a2badd860e7db3255f3f781a2c97f"
+    },
+    {
+      "path": "docs/p2/p2-06-5-owner-final/2026-08-16/report/artifact-v2.json",
+      "bytes": 12094,
+      "sha256": "82f36b4f46d3da29881a851089507669f99ad1686be6d4db16fee7a4e5857883"
+    },
+    {
+      "path": "docs/p2/p2-06-5-owner-final/2026-08-16/report/P2-06.5_OWNER_FINAL_REPORT_V2.html",
+      "bytes": 7295,
+      "sha256": "d25e423071178d4b851aa66e6e59acfd1472cbbb73aa5a510f4ec1fd6bdcfe81"
+    },
+    {
+      "path": "docs/p2/p2-06-5-owner-final/2026-08-16/report/REPORT_DELIVERY_RECEIPT_V2.json",
+      "bytes": 1458,
+      "sha256": "7e18bdc4b7ebd6add05165c093549dbbcb8240e65077332cb092d7f4a8c6bc95"
+    },
+    {
+      "path": "docs/p2/p2-06-5-owner-final/2026-08-16/report/qa/p2-06-5-owner-final-v2-desktop.png",
+      "bytes": 580231,
+      "sha256": "9a567f2bfb39170841efab854fca26c7ee623314003bb38b8b5f75e57613e026"
+    },
+    {
+      "path": "docs/p2/p2-06-5-owner-final/2026-08-16/report/qa/p2-06-5-owner-final-v2-mobile.png",
+      "bytes": 377009,
+      "sha256": "5323c3e64b0bef27e92c278587f9045e19180732e8490808eafe720e5c63284a"
+    }
+  ],
+  "fixed": {
+    "canonical_count": 123,
+    "b2_key_total": 285,
+    "c1_sample_count": 10000,
+    "auto_write_authorized": false
+  }
+}

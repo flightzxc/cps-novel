@@ -1,0 +1,159 @@
+{
+  "schema_version": 1,
+  "decision_date": "2026-08-16",
+  "resolution_policy": "Do not infer a canonical locale from script, title, description, or null languageName. Retain exact raw scope until exact upstream evidence or an Owner-approved registry exists.",
+  "languages": [
+    {
+      "raw_language_json_value": 19,
+      "exact_raw_scope": "[\"RAW_LANGUAGE_SCOPE_V1\",\"[\\\"number\\\",\\\"19\\\"]\",[\"null\"]]",
+      "source_language_name_values": [
+        "null"
+      ],
+      "final_sample_books": 1155,
+      "distinct_exact_tokens": 31,
+      "top_exact_tokens": [
+        {
+          "token": "女频",
+          "frequency": 657
+        },
+        {
+          "token": "男频",
+          "frequency": 498
+        },
+        {
+          "token": "玄幻奇幻",
+          "frequency": 315
+        },
+        {
+          "token": "穿越重生",
+          "frequency": 287
+        },
+        {
+          "token": "古代言情",
+          "frequency": 164
+        },
+        {
+          "token": "现代言情",
+          "frequency": 111
+        },
+        {
+          "token": "悬疑灵异",
+          "frequency": 68
+        },
+        {
+          "token": "青春校园",
+          "frequency": 37
+        },
+        {
+          "token": "仙侠武侠",
+          "frequency": 29
+        },
+        {
+          "token": "历史架空",
+          "frequency": 18
+        },
+        {
+          "token": "灵异推理",
+          "frequency": 17
+        },
+        {
+          "token": "游戏竞技",
+          "frequency": 14
+        },
+        {
+          "token": "历史军事",
+          "frequency": 13
+        },
+        {
+          "token": "穿越幻想",
+          "frequency": 13
+        },
+        {
+          "token": "科幻末世",
+          "frequency": 10
+        }
+      ],
+      "script_inference": "Simplified Chinese (likely, not proven locale)",
+      "resolution": "RAW_SCOPE_ONLY",
+      "canonical_locale": null,
+      "c1_locale_specific_statistics": "BLOCKED",
+      "reason": "languageName is null and no repository or upstream registry proves an exact locale/region mapping. Script evidence is insufficient to assign BCP-47 or a region."
+    },
+    {
+      "raw_language_json_value": 20,
+      "exact_raw_scope": "[\"RAW_LANGUAGE_SCOPE_V1\",\"[\\\"number\\\",\\\"20\\\"]\",[\"null\"]]",
+      "source_language_name_values": [
+        "null"
+      ],
+      "final_sample_books": 1165,
+      "distinct_exact_tokens": 33,
+      "top_exact_tokens": [
+        {
+          "token": "女频",
+          "frequency": 724
+        },
+        {
+          "token": "男频",
+          "frequency": 441
+        },
+        {
+          "token": "穿越重生",
+          "frequency": 364
+        },
+        {
+          "token": "玄幻奇幻",
+          "frequency": 269
+        },
+        {
+          "token": "古代言情",
+          "frequency": 143
+        },
+        {
+          "token": "現代言情",
+          "frequency": 71
+        },
+        {
+          "token": "青春校園",
+          "frequency": 66
+        },
+        {
+          "token": "懸疑靈異",
+          "frequency": 48
+        },
+        {
+          "token": "歷史架空",
+          "frequency": 22
+        },
+        {
+          "token": "科幻末世",
+          "frequency": 22
+        },
+        {
+          "token": "現代都市",
+          "frequency": 19
+        },
+        {
+          "token": "仙俠武俠",
+          "frequency": 16
+        },
+        {
+          "token": "魔幻情緣",
+          "frequency": 14
+        },
+        {
+          "token": "Adeventure",
+          "frequency": 10
+        },
+        {
+          "token": "Xuanhuan",
+          "frequency": 10
+        }
+      ],
+      "script_inference": "Traditional Chinese (likely, not proven locale)",
+      "resolution": "RAW_SCOPE_ONLY",
+      "canonical_locale": null,
+      "c1_locale_specific_statistics": "BLOCKED",
+      "reason": "languageName is null and no repository or upstream registry proves an exact locale/region mapping. Script evidence is insufficient to assign BCP-47 or a region."
+    }
+  ]
+}

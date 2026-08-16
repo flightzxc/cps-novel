@@ -1,0 +1,58 @@
+{
+  "schema_version": 1,
+  "canonical_version": "1.0.0",
+  "canonical_status": "FINAL",
+  "artifact_path": "canonical-tag-v1.0.0-final.json",
+  "artifact_sha256": "8bc8cdae8be2176bde170173e98bad2b9fa0e1770818174a57320816eefdccad",
+  "row_count": 123,
+  "stable_id_unique": true,
+  "slug_unique": true,
+  "removed_ids": [
+    "ct-v1-split:time-travel+rebirth",
+    "ct-v1-power-dynamics-review",
+    "ct-v1-mutual-first-experience-review"
+  ],
+  "added_ids": [
+    "ct-v1-male-audience",
+    "ct-v1-lgbtq-romance",
+    "ct-v1-supernatural",
+    "ct-v1-horror",
+    "ct-v1-historical-fiction",
+    "ct-v1-gaming-esports",
+    "ct-v1-xianxia"
+  ],
+  "alias_collision_audit": {
+    "stable_id_unique": true,
+    "slug_unique": true,
+    "alias_collision_count": 0,
+    "alias_collisions": []
+  },
+  "generated_at": "2026-08-15T18:38:32.108Z",
+  "source_evidence_versions": {
+    "candidate": {
+      "filename": "cps-short-drama-canonical-tag-candidate-119.json",
+      "sha256": "1ab0fd880efadcc244b8e4e03bcf1d440f200cfa85f6b12828e18914d0a7d0e6"
+    },
+    "newCanonicalReview": {
+      "filename": "NEW_CANONICAL_CROSS_REVIEW.csv",
+      "sha256": "4cbcbe21ed89ffcad540edbccbc38eacadc0203664ef9a3183f446ed2c9b0308"
+    },
+    "crossReviewMatrix": {
+      "filename": "CROSS_REVIEW_MATRIX.csv",
+      "sha256": "1f1cf172b476d44841cbff234bbbfbd6b182ec7658496cbcba3da0f1cf1a134c"
+    },
+    "ownerReviewPackage": {
+      "filename": "OWNER_REVIEW_PACKAGE.csv",
+      "sha256": "fb50fce81abda949c4743a5da88534a659924a4cbfe8a3a2d1859dffe4910adf"
+    },
+    "crossReviewReport": {
+      "filename": "FINAL_CROSS_REVIEW_REPORT.md",
+      "sha256": "20d65be8f11d65cc16e6196aca622e97fc5d45b15fcf6bdc323ad68fc18088d4"
+    }
+  },
+  "superseded_artifact": {
+    "canonical_version": "1.0.0",
+    "count": 116,
+    "status": "SUPERSEDED_NOT_AN_INPUT"
+  }
+}

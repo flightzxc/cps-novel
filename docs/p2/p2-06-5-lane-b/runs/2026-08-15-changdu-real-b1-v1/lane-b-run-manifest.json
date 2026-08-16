@@ -1,0 +1,84 @@
+{
+  "schemaVersion": 1,
+  "runId": "2026-08-15-changdu-real-b1-v1",
+  "sourceScope": "changdu-app",
+  "gitHead": null,
+  "generatedAt": "2026-08-15T10:53:57.863Z",
+  "timezone": "Asia/Tokyo",
+  "requestBudget": {
+    "plannedUniquePages": 240,
+    "retryBudget": 10,
+    "httpAttemptCap": 250
+  },
+  "plannedRequests": 240,
+  "actualRequests": 1,
+  "pageSize": 100,
+  "targetUniqueBooks": 10000,
+  "actualUniqueBooks": 0,
+  "candidateUniqueBooks": 0,
+  "totalSourceTokens": 0,
+  "empiricalTokenCoverage": null,
+  "taxonomyCoverageRate": null,
+  "taxonomyCoverageStatus": "NOT_ESTIMABLE_NO_DENOMINATOR",
+  "discoveryStatus": "TAXONOMY_DISCOVERY_NOT_SATURATED",
+  "laneBSampleStatus": "BLOCKED",
+  "laneBMappingStatus": "WAITING_FOR_CANONICAL_TAG_V1",
+  "ownerReviewItems": 0,
+  "languageQuotaSatisfiedOrExhausted": true,
+  "rawRoundTripQaPassed": true,
+  "requestBudgetQaPassed": true,
+  "structureAnomalyCount": 0,
+  "rawManifestSha256": "ebb8d9c9bd6e7401dc76b8d74d233db59842b6b00f4344d56729f4b4de18aa96",
+  "rawSourceFiles": [
+    "source-book-samples.jsonl",
+    "source-token-observations.jsonl",
+    "source-token-structure-anomalies.jsonl",
+    "final-sample-book-keys.jsonl"
+  ],
+  "canonicalTagVersion": null,
+  "canonicalTagSha256": null,
+  "artifacts": [
+    {
+      "path": "LANE_B_REPORT.md",
+      "bytes": 2363,
+      "sha256": "f477f7134048c3601f7583938e7af376012501e4c9c0f81948911f6a2d503124",
+      "rowCount": null
+    },
+    {
+      "path": "locale-sample-distribution.csv",
+      "bytes": 137,
+      "sha256": "a0139334d2b3d44df55f8ae45729e6d2c73606ae1c3035b5d423990cf72479ab",
+      "rowCount": 0
+    },
+    {
+      "path": "source-taxonomy-inventory.csv",
+      "bytes": 407,
+      "sha256": "c397c68dc7c9c73983060c92ae0ae04bf82fff12fea8c9b5ffa9489aa4a713c1",
+      "rowCount": 0
+    },
+    {
+      "path": "source-token-cooccurrence.csv",
+      "bytes": 215,
+      "sha256": "3a8bc1593048761eb62bb68071b6957332e6e85d95f9cdc0229750f686a8fe33",
+      "rowCount": 0
+    },
+    {
+      "path": "source-token-evidence.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "rowCount": 0
+    },
+    {
+      "path": "source-token-structure-anomaly-summary.csv",
+      "bytes": 90,
+      "sha256": "0737bac5ee4766853149de1d9a2fc79c60149f93f553cea5b7b890b087efd6de",
+      "rowCount": 0
+    },
+    {
+      "path": "taxonomy-discovery-curve.csv",
+      "bytes": 173,
+      "sha256": "9de5a94d9039b8f034ee69756c7ddb0212ea04c484ee62ea5e500504dcb9dd30",
+      "rowCount": 0
+    }
+  ]
+}

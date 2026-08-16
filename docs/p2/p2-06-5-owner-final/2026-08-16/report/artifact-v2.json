@@ -1,0 +1,399 @@
+{
+  "schema_version": 2,
+  "surface": "portable_owner_report",
+  "title": "P2-06.5 Owner Final v2 · CanonicalTag v1 + B2 + C1 Readiness",
+  "generated_at": "2026-08-16T14:10:00+09:00",
+  "status": "CALIBRATION_REVIEW_PENDING",
+  "supersedes": {
+    "c1_run": "2026-08-16-owner-final-c1",
+    "report": "P2-06.5_OWNER_FINAL_REPORT.html"
+  },
+  "headline": {
+    "canonical_tag_count": 123,
+    "b2_mapping_key_total": 285,
+    "c1_sample_count": 10000,
+    "c1_input_sha256": "046fe9234b317eba145c3fbb35edd2e72af49e41309dcd5d5f45f7bc43d1776d"
+  },
+  "b2": {
+    "LANE_B_B2_STATUS": "COMPLETE_OFFLINE_CANDIDATES_GENERATED",
+    "B2_MAPPING_KEY_TOTAL": 285,
+    "B2_ACCEPT_MAP": 194,
+    "B2_MAPPING_CANDIDATE_ROW_COUNT": 198,
+    "B2_EXECUTABLE_MAPPING_EDGE_COUNT": 196,
+    "B2_DEFER": 52,
+    "B2_IGNORE_DROP": 37,
+    "B2_CANONICAL_GAP": 2,
+    "B2_OWNER_REVIEW_REMAINING": 0,
+    "mapping_coverage_by_token": 0.6807017543859649,
+    "mapping_coverage_by_occurrence": 0.8950895089508951,
+    "mapping_coverage_by_book_at_least_one": 0.9932,
+    "mapping_coverage_by_book_strict_all_tokens": 0.7968,
+    "mapped_book_count_at_least_one": 9932,
+    "mapped_book_count_strict_all_tokens": 7968,
+    "AUTO_WRITE_AUTHORIZED": "NO"
+  },
+  "c1": {
+    "status": {
+      "LANE_C_C1_STATUS": "CALIBRATION_REVIEW_PENDING",
+      "C1_SAMPLE_COUNT": 10000,
+      "C1_RECOMMENDED_SCHEME": "OWNER_REVIEW_REQUIRED",
+      "C1_RECOMMENDED_MAX_TEXT_TAGS": "OWNER_REVIEW_REQUIRED",
+      "C1_RECOMMENDED_THRESHOLD": "OWNER_REVIEW_REQUIRED",
+      "TEXT_PARAMETER_STATUS": "CALIBRATION_RECOMMENDATION_ONLY",
+      "CHAPTER_EVIDENCE_STATUS": "DEFER",
+      "C2_SAMPLE_REQUEST": "NONE_PENDING_C1_ADJUDICATION",
+      "LANGUAGE_19_RESOLUTION": "RAW_SCOPE_ONLY_LOCALE_STATISTICS_BLOCKED",
+      "LANGUAGE_20_RESOLUTION": "RAW_SCOPE_ONLY_LOCALE_STATISTICS_BLOCKED",
+      "OWNER_NEXT_DECISIONS": "C1_INDEPENDENT_ADJUDICATION;TEXT_PARAMETER_FREEZE;C2_NEED_DECISION_AFTER_RECALL_REVIEW",
+      "AUTO_WRITE_AUTHORIZED": "NO"
+    },
+    "input_qa": {
+      "unique_novels": 10000,
+      "unique_sample_rows": 10000,
+      "title_missing_or_empty": 0,
+      "description_missing_or_empty": 1,
+      "no_series_type": 1,
+      "raw_language_19_count": 1155,
+      "raw_language_20_count": 1165,
+      "locale_specific_statistics_blocked_count": 2320,
+      "mapped_source_tag_rows": 17932,
+      "novels_with_mapped_source_tags": 9932,
+      "manual_full_snapshot_count": 0,
+      "c1_input_sha256": "046fe9234b317eba145c3fbb35edd2e72af49e41309dcd5d5f45f7bc43d1776d",
+      "scorer_sample_sha256": "f14fa303128aa8713cdbd1c3f60e3ed161f055ced47f65bde354462860d8d330"
+    },
+    "false_positive_audit_status": "UNASSESSED_PENDING_INDEPENDENT_REVIEW",
+    "high_false_positive_keyword_status": "UNASSESSED_PENDING_INDEPENDENT_REVIEW",
+    "configurations": [
+      {
+        "configuration": "A/2",
+        "config_id": "A",
+        "max_text_tags": 2,
+        "sample_count": 10000,
+        "text_hit_rate": 0.1056,
+        "title_only_rate": 0.0524,
+        "description_only_rate": 0,
+        "title_description_both_rate": 0.0572,
+        "zero_hit_rate": 0.8944,
+        "average_text_tags": 0.115,
+        "selected_text_tag_count": {
+          "p50": 0,
+          "p90": 1,
+          "p99": 1
+        },
+        "raw_text_tag_count": {
+          "p50": 0,
+          "p90": 1,
+          "p99": 1
+        },
+        "cap_truncated_books": 9,
+        "cap_truncated_tags": 10,
+        "keyword_coverage_insufficient_count": 1207,
+        "mapped_count": 9932,
+        "text_supplement_count": 2,
+        "union_count": 9934,
+        "source_text_relations": {
+          "SOURCE_ONLY": 8878,
+          "NO_SOURCE_NO_TEXT": 66,
+          "SOURCE_AND_TEXT": 1054,
+          "TEXT_ONLY": 2
+        }
+      },
+      {
+        "configuration": "A/3",
+        "config_id": "A",
+        "max_text_tags": 3,
+        "sample_count": 10000,
+        "text_hit_rate": 0.1056,
+        "title_only_rate": 0.0526,
+        "description_only_rate": 0,
+        "title_description_both_rate": 0.0572,
+        "zero_hit_rate": 0.8944,
+        "average_text_tags": 0.1159,
+        "selected_text_tag_count": {
+          "p50": 0,
+          "p90": 1,
+          "p99": 1
+        },
+        "raw_text_tag_count": {
+          "p50": 0,
+          "p90": 1,
+          "p99": 1
+        },
+        "cap_truncated_books": 1,
+        "cap_truncated_tags": 1,
+        "keyword_coverage_insufficient_count": 1207,
+        "mapped_count": 9932,
+        "text_supplement_count": 2,
+        "union_count": 9934,
+        "source_text_relations": {
+          "SOURCE_ONLY": 8878,
+          "NO_SOURCE_NO_TEXT": 66,
+          "SOURCE_AND_TEXT": 1054,
+          "TEXT_ONLY": 2
+        }
+      },
+      {
+        "configuration": "A/5",
+        "config_id": "A",
+        "max_text_tags": 5,
+        "sample_count": 10000,
+        "text_hit_rate": 0.1056,
+        "title_only_rate": 0.0527,
+        "description_only_rate": 0,
+        "title_description_both_rate": 0.0572,
+        "zero_hit_rate": 0.8944,
+        "average_text_tags": 0.116,
+        "selected_text_tag_count": {
+          "p50": 0,
+          "p90": 1,
+          "p99": 1
+        },
+        "raw_text_tag_count": {
+          "p50": 0,
+          "p90": 1,
+          "p99": 1
+        },
+        "cap_truncated_books": 0,
+        "cap_truncated_tags": 0,
+        "keyword_coverage_insufficient_count": 1207,
+        "mapped_count": 9932,
+        "text_supplement_count": 2,
+        "union_count": 9934,
+        "source_text_relations": {
+          "SOURCE_ONLY": 8878,
+          "NO_SOURCE_NO_TEXT": 66,
+          "SOURCE_AND_TEXT": 1054,
+          "TEXT_ONLY": 2
+        }
+      },
+      {
+        "configuration": "B/2",
+        "config_id": "B",
+        "max_text_tags": 2,
+        "sample_count": 10000,
+        "text_hit_rate": 0.1056,
+        "title_only_rate": 0.0524,
+        "description_only_rate": 0,
+        "title_description_both_rate": 0.0572,
+        "zero_hit_rate": 0.8944,
+        "average_text_tags": 0.115,
+        "selected_text_tag_count": {
+          "p50": 0,
+          "p90": 1,
+          "p99": 1
+        },
+        "raw_text_tag_count": {
+          "p50": 0,
+          "p90": 1,
+          "p99": 1
+        },
+        "cap_truncated_books": 9,
+        "cap_truncated_tags": 10,
+        "keyword_coverage_insufficient_count": 1207,
+        "mapped_count": 9932,
+        "text_supplement_count": 2,
+        "union_count": 9934,
+        "source_text_relations": {
+          "SOURCE_ONLY": 8878,
+          "NO_SOURCE_NO_TEXT": 66,
+          "SOURCE_AND_TEXT": 1054,
+          "TEXT_ONLY": 2
+        }
+      },
+      {
+        "configuration": "B/3",
+        "config_id": "B",
+        "max_text_tags": 3,
+        "sample_count": 10000,
+        "text_hit_rate": 0.1056,
+        "title_only_rate": 0.0526,
+        "description_only_rate": 0,
+        "title_description_both_rate": 0.0572,
+        "zero_hit_rate": 0.8944,
+        "average_text_tags": 0.1159,
+        "selected_text_tag_count": {
+          "p50": 0,
+          "p90": 1,
+          "p99": 1
+        },
+        "raw_text_tag_count": {
+          "p50": 0,
+          "p90": 1,
+          "p99": 1
+        },
+        "cap_truncated_books": 1,
+        "cap_truncated_tags": 1,
+        "keyword_coverage_insufficient_count": 1207,
+        "mapped_count": 9932,
+        "text_supplement_count": 2,
+        "union_count": 9934,
+        "source_text_relations": {
+          "SOURCE_ONLY": 8878,
+          "NO_SOURCE_NO_TEXT": 66,
+          "SOURCE_AND_TEXT": 1054,
+          "TEXT_ONLY": 2
+        }
+      },
+      {
+        "configuration": "B/5",
+        "config_id": "B",
+        "max_text_tags": 5,
+        "sample_count": 10000,
+        "text_hit_rate": 0.1056,
+        "title_only_rate": 0.0527,
+        "description_only_rate": 0,
+        "title_description_both_rate": 0.0572,
+        "zero_hit_rate": 0.8944,
+        "average_text_tags": 0.116,
+        "selected_text_tag_count": {
+          "p50": 0,
+          "p90": 1,
+          "p99": 1
+        },
+        "raw_text_tag_count": {
+          "p50": 0,
+          "p90": 1,
+          "p99": 1
+        },
+        "cap_truncated_books": 0,
+        "cap_truncated_tags": 0,
+        "keyword_coverage_insufficient_count": 1207,
+        "mapped_count": 9932,
+        "text_supplement_count": 2,
+        "union_count": 9934,
+        "source_text_relations": {
+          "SOURCE_ONLY": 8878,
+          "NO_SOURCE_NO_TEXT": 66,
+          "SOURCE_AND_TEXT": 1054,
+          "TEXT_ONLY": 2
+        }
+      },
+      {
+        "configuration": "C/2",
+        "config_id": "C",
+        "max_text_tags": 2,
+        "sample_count": 10000,
+        "text_hit_rate": 0.3596,
+        "title_only_rate": 0.0465,
+        "description_only_rate": 0.3007,
+        "title_description_both_rate": 0.0572,
+        "zero_hit_rate": 0.6404,
+        "average_text_tags": 0.5049,
+        "selected_text_tag_count": {
+          "p50": 0,
+          "p90": 2,
+          "p99": 2
+        },
+        "raw_text_tag_count": {
+          "p50": 0,
+          "p90": 2,
+          "p99": 5
+        },
+        "cap_truncated_books": 623,
+        "cap_truncated_tags": 1186,
+        "keyword_coverage_insufficient_count": 1207,
+        "mapped_count": 9932,
+        "text_supplement_count": 33,
+        "union_count": 9965,
+        "source_text_relations": {
+          "SOURCE_ONLY": 6369,
+          "SOURCE_AND_TEXT": 3563,
+          "NO_SOURCE_NO_TEXT": 35,
+          "TEXT_ONLY": 33
+        }
+      },
+      {
+        "configuration": "C/3",
+        "config_id": "C",
+        "max_text_tags": 3,
+        "sample_count": 10000,
+        "text_hit_rate": 0.3596,
+        "title_only_rate": 0.0493,
+        "description_only_rate": 0.3034,
+        "title_description_both_rate": 0.0572,
+        "zero_hit_rate": 0.6404,
+        "average_text_tags": 0.5672,
+        "selected_text_tag_count": {
+          "p50": 0,
+          "p90": 2,
+          "p99": 3
+        },
+        "raw_text_tag_count": {
+          "p50": 0,
+          "p90": 2,
+          "p99": 5
+        },
+        "cap_truncated_books": 301,
+        "cap_truncated_tags": 563,
+        "keyword_coverage_insufficient_count": 1207,
+        "mapped_count": 9932,
+        "text_supplement_count": 33,
+        "union_count": 9965,
+        "source_text_relations": {
+          "SOURCE_ONLY": 6369,
+          "SOURCE_AND_TEXT": 3563,
+          "NO_SOURCE_NO_TEXT": 35,
+          "TEXT_ONLY": 33
+        }
+      },
+      {
+        "configuration": "C/5",
+        "config_id": "C",
+        "max_text_tags": 5,
+        "sample_count": 10000,
+        "text_hit_rate": 0.3596,
+        "title_only_rate": 0.0523,
+        "description_only_rate": 0.3037,
+        "title_description_both_rate": 0.0572,
+        "zero_hit_rate": 0.6404,
+        "average_text_tags": 0.6135,
+        "selected_text_tag_count": {
+          "p50": 0,
+          "p90": 2,
+          "p99": 5
+        },
+        "raw_text_tag_count": {
+          "p50": 0,
+          "p90": 2,
+          "p99": 5
+        },
+        "cap_truncated_books": 68,
+        "cap_truncated_tags": 100,
+        "keyword_coverage_insufficient_count": 1207,
+        "mapped_count": 9932,
+        "text_supplement_count": 33,
+        "union_count": 9965,
+        "source_text_relations": {
+          "SOURCE_ONLY": 6369,
+          "SOURCE_AND_TEXT": 3563,
+          "NO_SOURCE_NO_TEXT": 35,
+          "TEXT_ONLY": 33
+        }
+      }
+    ]
+  },
+  "sources": [
+    {
+      "id": "canonical",
+      "path": "docs/p2/p2-06-5-lane-a/canonical-tag-v1-final/2026-08-16/canonical-tag-v1.0.0-final.json"
+    },
+    {
+      "id": "b2",
+      "path": "docs/p2/p2-06-5-lane-b/b2-owner-final/2026-08-16/B2_FINAL_MANIFEST.json"
+    },
+    {
+      "id": "c1",
+      "path": "docs/p2/p2-06-5-lane-c/runs/2026-08-16-owner-final-c1-v2/calibration-summary.json"
+    },
+    {
+      "id": "waiver",
+      "path": "docs/p2/p2-06-5-owner-final/2026-08-16/OWNER_TIMING_WAIVER.json"
+    },
+    {
+      "id": "closeout",
+      "path": "docs/p2/p2-06-5-owner-final/2026-08-16/OWNER_FINAL_CLOSEOUT.md"
+    }
+  ],
+  "auto_write_authorized": false
+}

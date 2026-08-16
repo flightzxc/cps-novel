@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "waiver_id": "P2-06.5-B1-TIMING-WAIVER-2026-08-16",
+  "decision": "ACCEPT_WITH_TIMING_WAIVER",
+  "raw_run_id": "2026-08-15-changdu-real-b1-v2",
+  "raw_manifest_sha256": "4d7d6931687a2391ded9699ce90d54ceb3242ec232515d537eb7721274f61148",
+  "raw_run_status": "PARTIAL",
+  "allowed_verification_failures": [
+    "request-attempts.jsonl:start_interval"
+  ],
+  "expected_violation_count": 6,
+  "expected_interval_ms": 999,
+  "global_min_start_interval_ms": 1000,
+  "rerun_b1": "NO",
+  "scope": [
+    "LANE_A_FINAL",
+    "LANE_B_B2_OFFLINE",
+    "LANE_C_C1_OFFLINE"
+  ]
+}

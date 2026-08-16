@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "status": "CALIBRATION_REVIEW_PENDING",
+  "files": [
+    {
+      "filename": "calibration-summary.json",
+      "bytes": 261072,
+      "sha256": "13eaeaff1bd28471470a2535a2b1a790942c62ac8892d8385cbc495b67e2d752"
+    },
+    {
+      "filename": "LANE_C_REPORT.md",
+      "bytes": 3618,
+      "sha256": "d8829d0147e8c4f5d42a3dde84dc32a24a4ca112dd12d4cffdf94fa5f9d265e1"
+    }
+  ],
+  "lineage": {
+    "canonical_sha256": "8bc8cdae8be2176bde170173e98bad2b9fa0e1770818174a57320816eefdccad",
+    "raw_manifest_sha256": "4d7d6931687a2391ded9699ce90d54ceb3242ec232515d537eb7721274f61148",
+    "b2_manifest_sha256": "4f370023d933dfa3d011ee310880d5e5ad050d92435f21ecc805abae65c881bf",
+    "waiver_sha256": "52ce6e6ff5862353481023b9914fb06cd06e9ef5639913bb5044f4a01730d8d1",
+    "c1_input_sha256": "046fe9234b317eba145c3fbb35edd2e72af49e41309dcd5d5f45f7bc43d1776d",
+    "scorer_sample_sha256": "f14fa303128aa8713cdbd1c3f60e3ed161f055ced47f65bde354462860d8d330"
+  }
+}

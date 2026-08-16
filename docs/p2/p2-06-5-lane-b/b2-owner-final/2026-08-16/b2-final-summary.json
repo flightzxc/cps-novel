@@ -1,0 +1,18 @@
+{
+  "LANE_B_B2_STATUS": "COMPLETE_OFFLINE_CANDIDATES_GENERATED",
+  "B2_MAPPING_KEY_TOTAL": 285,
+  "B2_ACCEPT_MAP": 194,
+  "B2_MAPPING_CANDIDATE_ROW_COUNT": 198,
+  "B2_EXECUTABLE_MAPPING_EDGE_COUNT": 196,
+  "B2_DEFER": 52,
+  "B2_IGNORE_DROP": 37,
+  "B2_CANONICAL_GAP": 2,
+  "B2_OWNER_REVIEW_REMAINING": 0,
+  "mapping_coverage_by_token": 0.6807017543859649,
+  "mapping_coverage_by_occurrence": 0.8950895089508951,
+  "mapping_coverage_by_book_at_least_one": 0.9932,
+  "mapping_coverage_by_book_strict_all_tokens": 0.7968,
+  "mapped_book_count_at_least_one": 9932,
+  "mapped_book_count_strict_all_tokens": 7968,
+  "AUTO_WRITE_AUTHORIZED": "NO"
+}

@@ -1,0 +1,2821 @@
+{
+  "schema_version": 1,
+  "canonical_version": "1.0.0",
+  "decision_date": "2026-08-16",
+  "taxonomy_scope": "cross-language",
+  "count_includes_facet_values": true,
+  "tags": [
+    {
+      "canonical_tag_id": "ct-v1-adventure",
+      "slug": "adventure",
+      "display_name": "冒险",
+      "locale_scope": "*",
+      "definition": "用于检索以“冒险”为核心题材、设定或人物原型的小说；该概念必须对主线或用户选择结果具有实质影响。",
+      "include": [
+        "主线明确体现“冒险”（来源别名：Adventure）的作品。"
+      ],
+      "exclude": [
+        "仅在标题或简介中偶然提及“冒险”、但不影响主要情节或筛选期待的作品。"
+      ],
+      "status": "public",
+      "facet": "topic",
+      "aliases": [
+        "adventure",
+        "Adventure"
+      ],
+      "source_ordinals": [
+        67
+      ],
+      "decision_ids": []
+    },
+    {
+      "canonical_tag_id": "ct-v1-age-gap-romance",
+      "slug": "age-gap-romance",
+      "display_name": "年龄差恋爱",
+      "locale_scope": "*",
+      "definition": "用于检索以“年龄差恋爱”为核心题材、设定或人物原型的小说；该概念必须对主线或用户选择结果具有实质影响。",
+      "include": [
+        "主线明确体现“年龄差恋爱”（来源别名：Age-Gap Romance / Age Gap）的作品。"
+      ],
+      "exclude": [
+        "仅在标题或简介中偶然提及“年龄差恋爱”、但不影响主要情节或筛选期待的作品。"
+      ],
+      "status": "public",
+      "facet": "topic",
+      "aliases": [
+        "age-gap-romance",
+        "Age-Gap Romance",
+        "age-gap",
+        "Age Gap"
+      ],
+      "source_ordinals": [
+        29,
+        84
+      ],
+      "decision_ids": []
+    },
+    {
+      "canonical_tag_id": "ct-v1-amnesia",
+      "slug": "amnesia",
+      "display_name": "失忆",
+      "locale_scope": "*",
+      "definition": "用于检索以“失忆”为核心题材、设定或人物原型的小说；该概念必须对主线或用户选择结果具有实质影响。",
+      "include": [
+        "主线明确体现“失忆”（来源别名：Amnesia）的作品。"
+      ],
+      "exclude": [
+        "仅在标题或简介中偶然提及“失忆”、但不影响主要情节或筛选期待的作品。"
+      ],
+      "status": "public",
+      "facet": "topic",
+      "aliases": [
+        "amnesia",
+        "Amnesia"
+      ],
+      "source_ordinals": [
+        89
+      ],
+      "decision_ids": []
+    },
+    {
+      "canonical_tag_id": "ct-v1-apocalypse",
+      "slug": "apocalypse",
+      "display_name": "末世",
+      "locale_scope": "*",
+      "definition": "用于检索以“末世”为核心题材、设定或人物原型的小说；该概念必须对主线或用户选择结果具有实质影响。",
+      "include": [
+        "主线明确体现“末世”（来源别名：Apocalypse）的作品。"
+      ],
+      "exclude": [
+        "仅在标题或简介中偶然提及“末世”、但不影响主要情节或筛选期待的作品。"
+      ],
+      "status": "public",
+      "facet": "topic",
+      "aliases": [
+        "apocalypse",
+        "Apocalypse"
+      ],
+      "source_ordinals": [
+        40
+      ],
+      "decision_ids": []
+    },
+    {
+      "canonical_tag_id": "ct-v1-arranged-marriage",
+      "slug": "arranged-marriage",
+      "display_name": "包办婚姻",
+      "locale_scope": "*",
+      "definition": "用于检索以“包办婚姻”为核心题材、设定或人物原型的小说；该概念必须对主线或用户选择结果具有实质影响。",
+      "include": [
+        "主线明确体现“包办婚姻”（来源别名：Arranged Marriage）的作品。"
+      ],
+      "exclude": [
+        "仅在标题或简介中偶然提及“包办婚姻”、但不影响主要情节或筛选期待的作品。"
+      ],
+      "status": "public",
+      "facet": "topic",
+      "aliases": [
+        "arranged-marriage",
+        "Arranged Marriage"
+      ],
+      "source_ordinals": [
+        90
+      ],
+      "decision_ids": [
+        "OC-SEP-05"
+      ]
+    },
+    {
+      "canonical_tag_id": "ct-v1-assassin",
+      "slug": "assassin",
+      "display_name": "刺客",
+      "locale_scope": "*",
+      "definition": "用于检索以“刺客”为核心题材、设定或人物原型的小说；该概念必须对主线或用户选择结果具有实质影响。",
+      "include": [
+        "主线明确体现“刺客”（来源别名：Assassin）的作品。"
+      ],
+      "exclude": [
+        "仅在标题或简介中偶然提及“刺客”、但不影响主要情节或筛选期待的作品。"
+      ],
+      "status": "public",
+      "facet": "topic",
+      "aliases": [
+        "assassin",
+        "Assassin"
+      ],
+      "source_ordinals": [
+        86
+      ],
+      "decision_ids": []
+    },
+    {
+      "canonical_tag_id": "ct-v1-betrayal",
+      "slug": "betrayal",
+      "display_name": "背叛",
+      "locale_scope": "*",
+      "definition": "用于检索以“背叛”为核心题材、设定或人物原型的小说；该概念必须对主线或用户选择结果具有实质影响。",
+      "include": [
+        "主线明确体现“背叛”（来源别名：Betrayal）的作品。"
+      ],
+      "exclude": [
+        "仅在标题或简介中偶然提及“背叛”、但不影响主要情节或筛选期待的作品。"
+      ],
+      "status": "public",
+      "facet": "topic",
+      "aliases": [
+        "betrayal",
+        "Betrayal"
+      ],
+      "source_ordinals": [
+        97
+      ],
+      "decision_ids": []
+    },
+    {
+      "canonical_tag_id": "ct-v1-blind-date",
+      "slug": "blind-date",
+      "display_name": "相亲",
+      "locale_scope": "*",
+      "definition": "用于检索以“相亲”为核心题材、设定或人物原型的小说；该概念必须对主线或用户选择结果具有实质影响。",
+      "include": [
+        "主线明确体现“相亲”（来源别名：Blind Date）的作品。"
+      ],
+      "exclude": [
+        "仅在标题或简介中偶然提及“相亲”、但不影响主要情节或筛选期待的作品。"
+      ],
+      "status": "public",
+      "facet": "topic",
+      "aliases": [
+        "blind-date",
+        "Blind Date"
+      ],
+      "source_ordinals": [
+        113
+      ],
+      "decision_ids": []
+    },
+    {
+      "canonical_tag_id": "ct-v1-broken-heart",
+      "slug": "broken-heart",
+      "display_name": "失恋创伤",
+      "locale_scope": "*",
+      "definition": "用于检索以“失恋创伤”为核心题材、设定或人物原型的小说；该概念必须对主线或用户选择结果具有实质影响。",
+      "include": [
+        "主线明确体现“失恋创伤”（来源别名：Broken Heart）的作品。"
+      ],
+      "exclude": [
+        "仅在标题或简介中偶然提及“失恋创伤”、但不影响主要情节或筛选期待的作品。"
+      ],
+      "status": "public",
+      "facet": "topic",
+      "aliases": [
+        "broken-heart",
+        "Broken Heart"
+      ],
+      "source_ordinals": [
+        112
+      ],
+      "decision_ids": []
+    },
+    {
+      "canonical_tag_id": "ct-v1-campus",
+      "slug": "campus",
+      "display_name": "校园",
+      "locale_scope": "*",
+      "definition": "检索以学校、大学、校园生活及学生阶段关系为主要故事场景和阅读期待的小说。",
+      "include": [
+        "高中或大学生活、同学关系、学生成长、校园恋爱或校园事件构成主线。"
+      ],
+      "exclude": [
+        "人物只是具有学生身份、但主体情节不发生于学校或学生生活的作品。"
+      ],
+      "status": "public",
+      "facet": "topic",
+      "aliases": [
+        "campus",
+        "Campus",
+        "student",
+        "Student"
+      ],
+      "source_ordinals": [
+        63,
+        143
+      ],
+      "decision_ids": [
+        "OC-REV-03",
+        "A-EMP-03"
+      ]
+    },
+    {
+      "canonical_tag_id": "ct-v1-character-growth",
+      "slug": "character-growth",
+      "display_name": "人物成长",
+      "locale_scope": "*",
+      "definition": "用于检索以“人物成长”为核心题材、设定或人物原型的小说；该概念必须对主线或用户选择结果具有实质影响。",
+      "include": [
+        "主线明确体现“人物成长”（来源别名：Character Growth）的作品。"
+      ],
+      "exclude": [
+        "仅在标题或简介中偶然提及“人物成长”、但不影响主要情节或筛选期待的作品。"
+      ],
+      "status": "public",
+      "facet": "topic",
+      "aliases": [
+        "character-growth",
+        "Character Growth"
+      ],
+      "source_ordinals": [
+        71
+      ],
+      "decision_ids": []
+    },
+    {
+      "canonical_tag_id": "ct-v1-chef",
+      "slug": "chef",
+      "display_name": "厨师",
+      "locale_scope": "*",
+      "definition": "用于检索以“厨师”为核心题材、设定或人物原型的小说；该概念必须对主线或用户选择结果具有实质影响。",
+      "include": [
+        "主线明确体现“厨师”（来源别名：Chef）的作品。"
+      ],
+      "exclude": [
+        "仅在标题或简介中偶然提及“厨师”、但不影响主要情节或筛选期待的作品。"
+      ],
+      "status": "public",
+      "facet": "topic",
+      "aliases": [
+        "chef",
+        "Chef"
+      ],
+      "source_ordinals": [
+        76
+      ],
+      "decision_ids": []
+    },
+    {
+      "canonical_tag_id": "ct-v1-child-centered-romance",
+      "slug": "child-centered-romance",
+      "display_name": "萌宝题材",
+      "locale_scope": "*",
+      "definition": "用于检索以“萌宝题材”为核心题材、设定或人物原型的小说；该概念必须对主线或用户选择结果具有实质影响。",
+      "include": [
+        "主线明确体现“萌宝题材”（来源别名：Babies）的作品。"
+      ],
+      "exclude": [
+        "仅在标题或简介中偶然提及“萌宝题材”、但不影响主要情节或筛选期待的作品。"
+      ],
+      "status": "public",
+      "facet": "topic",
+      "aliases": [
+        "babies",
+        "Babies"
+      ],
+      "source_ordinals": [
+        72
+      ],
+      "decision_ids": []
+    },
+    {
+      "canonical_tag_id": "ct-v1-childhood-sweethearts",
+      "slug": "childhood-sweethearts",
+      "display_name": "青梅竹马",
+      "locale_scope": "*",
+      "definition": "用于检索以“青梅竹马”为核心题材、设定或人物原型的小说；该概念必须对主线或用户选择结果具有实质影响。",
+      "include": [
+        "主线明确体现“青梅竹马”（来源别名：Childhood Sweethearts）的作品。"
+      ],
+      "exclude": [
+        "仅在标题或简介中偶然提及“青梅竹马”、但不影响主要情节或筛选期待的作品。"
+      ],
+      "status": "public",
+      "facet": "topic",
+      "aliases": [
+        "childhood-sweethearts",
+        "Childhood Sweethearts"
+      ],
+      "source_ordinals": [
+        139
+      ],
+      "decision_ids": []
+    },
+    {
+      "canonical_tag_id": "ct-v1-comeback",
+      "slug": "comeback",
+      "display_name": "逆袭",
+      "locale_scope": "*",
+      "definition": "用于检索以“逆袭”为核心题材、设定或人物原型的小说；该概念必须对主线或用户选择结果具有实质影响。",
+      "include": [
+        "主线明确体现“逆袭”（来源别名：Female Comeback / Counterattack / Comeback）的作品。"
+      ],
+      "exclude": [
+        "仅在标题或简介中偶然提及“逆袭”、但不影响主要情节或筛选期待的作品。"
+      ],
+      "status": "public",
+      "facet": "topic",
+      "aliases": [
+        "female-comeback",
+        "Female Comeback",
+        "counterattack",
+        "Counterattack",
+        "comeback",
+        "Comeback"
+      ],
+      "source_ordinals": [
+        6,
+        133,
+        134
+      ],
+      "decision_ids": [
+        "OC-MRG-06",
+        "OC-SEP-04"
+      ]
+    },
+    {
+      "canonical_tag_id": "ct-v1-comedy",
+      "slug": "comedy",
+      "display_name": "喜剧",
+      "locale_scope": "*",
+      "definition": "用于检索以“喜剧”为核心题材、设定或人物原型的小说；该概念必须对主线或用户选择结果具有实质影响。",
+      "include": [
+        "主线明确体现“喜剧”（来源别名：Humor / Comedy）的作品。"
+      ],
+      "exclude": [
+        "仅在标题或简介中偶然提及“喜剧”、但不影响主要情节或筛选期待的作品。"
+      ],
+      "status": "public",
+      "facet": "topic",
+      "aliases": [
+        "humor",
+        "Humor",
+        "comedy",
+        "Comedy"
+      ],
+      "source_ordinals": [
+        21,
+        47
+      ],
+      "decision_ids": []
+    },
+    {
+      "canonical_tag_id": "ct-v1-contemporary-setting",
+      "slug": "contemporary-setting",
+      "display_name": "当代背景",
+      "locale_scope": "*",
+      "definition": "用于检索以“当代背景”为核心setting 筛选属性的小说；该概念必须对主线或用户选择结果具有实质影响。",
+      "include": [
+        "主线明确体现“当代背景”（来源别名：Modern）的作品。"
+      ],
+      "exclude": [
+        "仅在标题或简介中偶然提及“当代背景”、但不影响主要情节或筛选期待的作品。"
+      ],
+      "status": "public",
+      "facet": "setting",
+      "aliases": [
+        "modern",
+        "Modern"
+      ],
+      "source_ordinals": [
+        45
+      ],
+      "decision_ids": [
+        "OC-SEP-02"
+      ]
+    },
+    {
+      "canonical_tag_id": "ct-v1-contract-marriage",
+      "slug": "contract-marriage",
+      "display_name": "契约婚姻",
+      "locale_scope": "*",
+      "definition": "用于检索以“契约婚姻”为核心题材、设定或人物原型的小说；该概念必须对主线或用户选择结果具有实质影响。",
+      "include": [
+        "主线明确体现“契约婚姻”（来源别名：Contract Marriage / Fake Marriage / Contractual Marriage）的作品。"
+      ],
+      "exclude": [
+        "仅在标题或简介中偶然提及“契约婚姻”、但不影响主要情节或筛选期待的作品。"
+      ],
+      "status": "public",
+      "facet": "topic",
+      "aliases": [
+        "contract-marriage",
+        "Contract Marriage",
+        "fake-marriage",
+        "Fake Marriage",
+        "contractual-marriage",
+        "Contractual Marriage"
+      ],
+      "source_ordinals": [
+        7,
+        64,
+        74
+      ],
+      "decision_ids": [
+        "OC-MRG-01",
+        "OC-SEP-05"
+      ]
+    },
+    {
+      "canonical_tag_id": "ct-v1-court-intrigue",
+      "slug": "court-intrigue",
+      "display_name": "宫廷权谋",
+      "locale_scope": "*",
+      "definition": "用于检索以“宫廷权谋”为核心题材、设定或人物原型的小说；该概念必须对主线或用户选择结果具有实质影响。",
+      "include": [
+        "主线明确体现“宫廷权谋”（来源别名：Court Intrigue / Palace Intrigues）的作品。"
+      ],
+      "exclude": [
+        "仅在标题或简介中偶然提及“宫廷权谋”、但不影响主要情节或筛选期待的作品。"
+      ],
+      "status": "public",
+      "facet": "topic",
+      "aliases": [
+        "court-intrigue",
+        "Court Intrigue",
+        "palace-intrigues",
+        "Palace Intrigues"
+      ],
+      "source_ordinals": [
+        39,
+        73
+      ],
+      "decision_ids": []
+    },
+    {
+      "canonical_tag_id": "ct-v1-crime",
+      "slug": "crime",
+      "display_name": "犯罪",
+      "locale_scope": "*",
+      "definition": "用于检索以“犯罪”为核心题材、设定或人物原型的小说；该概念必须对主线或用户选择结果具有实质影响。",
+      "include": [
+        "主线明确体现“犯罪”（来源别名：Crime）的作品。"
+      ],
+      "exclude": [
+        "仅在标题或简介中偶然提及“犯罪”、但不影响主要情节或筛选期待的作品。"
+      ],
+      "status": "public",
+      "facet": "topic",
+      "aliases": [
+        "crime",
+        "Crime"
+      ],
+      "source_ordinals": [
+        124
+      ],
+      "decision_ids": []
+    },
+    {
+      "canonical_tag_id": "ct-v1-criminal-investigation",
+      "slug": "criminal-investigation",
+      "display_name": "刑事侦查",
+      "locale_scope": "*",
+      "definition": "用于检索以“刑事侦查”为核心题材、设定或人物原型的小说；该概念必须对主线或用户选择结果具有实质影响。",
+      "include": [
+        "主线明确体现“刑事侦查”（来源别名：Criminal Investigation）的作品。"
+      ],
+      "exclude": [
+        "仅在标题或简介中偶然提及“刑事侦查”、但不影响主要情节或筛选期待的作品。"
+      ],
+      "status": "public",
+      "facet": "topic",
+      "aliases": [
+        "criminal-investigation",
+        "Criminal Investigation"
+      ],
+      "source_ordinals": [
+        18
+      ],
+      "decision_ids": []
+    },
+    {
+      "canonical_tag_id": "ct-v1-cross-dressing",
+      "slug": "cross-dressing",
+      "display_name": "异装",
+      "locale_scope": "*",
+      "definition": "用于检索以“异装”为核心题材、设定或人物原型的小说；该概念必须对主线或用户选择结果具有实质影响。",
+      "include": [
+        "主线明确体现“异装”（来源别名：Cross-dressing）的作品。"
+      ],
+      "exclude": [
+        "仅在标题或简介中偶然提及“异装”、但不影响主要情节或筛选期待的作品。"
+      ],
+      "status": "public",
+      "facet": "topic",
+      "aliases": [
+        "cross-dressing",
+        "Cross-dressing"
+      ],
+      "source_ordinals": [
+        104
+      ],
+      "decision_ids": []
+    },
+    {
+      "canonical_tag_id": "ct-v1-crown-prince",
+      "slug": "crown-prince",
+      "display_name": "太子",
+      "locale_scope": "*",
+      "definition": "用于检索以“太子”为核心题材、设定或人物原型的小说；该概念必须对主线或用户选择结果具有实质影响。",
+      "include": [
+        "主线明确体现“太子”（来源别名：Crown Prince）的作品。"
+      ],
+      "exclude": [
+        "仅在标题或简介中偶然提及“太子”、但不影响主要情节或筛选期待的作品。"
+      ],
+      "status": "public",
+      "facet": "topic",
+      "aliases": [
+        "crown-prince",
+        "Crown Prince"
+      ],
+      "source_ordinals": [
+        46
+      ],
+      "decision_ids": []
+    },
+    {
+      "canonical_tag_id": "ct-v1-disability",
+      "slug": "disability",
+      "display_name": "残障角色",
+      "locale_scope": "*",
+      "definition": "用于检索以“残障角色”为核心题材、设定或人物原型的小说；该概念必须对主线或用户选择结果具有实质影响。",
+      "include": [
+        "主线明确体现“残障角色”（来源别名：Disability）的作品。"
+      ],
+      "exclude": [
+        "仅在标题或简介中偶然提及“残障角色”、但不影响主要情节或筛选期待的作品。"
+      ],
+      "status": "public",
+      "facet": "topic",
+      "aliases": [
+        "disability",
+        "Disability"
+      ],
+      "source_ordinals": [
+        115
+      ],
+      "decision_ids": []
+    },
+    {
+      "canonical_tag_id": "ct-v1-divorce",
+      "slug": "divorce",
+      "display_name": "离婚",
+      "locale_scope": "*",
+      "definition": "用于检索以“离婚”为核心题材、设定或人物原型的小说；该概念必须对主线或用户选择结果具有实质影响。",
+      "include": [
+        "主线明确体现“离婚”（来源别名：Divorce）的作品。"
+      ],
+      "exclude": [
+        "仅在标题或简介中偶然提及“离婚”、但不影响主要情节或筛选期待的作品。"
+      ],
+      "status": "public",
+      "facet": "topic",
+      "aliases": [
+        "divorce",
+        "Divorce"
+      ],
+      "source_ordinals": [
+        110
+      ],
+      "decision_ids": []
+    },
+    {
+      "canonical_tag_id": "ct-v1-doctor",
+      "slug": "doctor",
+      "display_name": "医生",
+      "locale_scope": "*",
+      "definition": "用于检索以“医生”为核心题材、设定或人物原型的小说；该概念必须对主线或用户选择结果具有实质影响。",
+      "include": [
+        "主线明确体现“医生”（来源别名：Doctor）的作品。"
+      ],
+      "exclude": [
+        "仅在标题或简介中偶然提及“医生”、但不影响主要情节或筛选期待的作品。"
+      ],
+      "status": "public",
+      "facet": "topic",
+      "aliases": [
+        "doctor",
+        "Doctor"
+      ],
+      "source_ordinals": [
+        98
+      ],
+      "decision_ids": []
+    },
+    {
+      "canonical_tag_id": "ct-v1-eastern-fantasy",
+      "slug": "eastern-fantasy",
+      "display_name": "东方奇幻",
+      "locale_scope": "*",
+      "definition": "用于检索以“东方奇幻”为核心题材、设定或人物原型的小说；该概念必须对主线或用户选择结果具有实质影响。",
+      "include": [
+        "主线明确体现“东方奇幻”（来源别名：Oriental Fantasy）的作品。"
+      ],
+      "exclude": [
+        "仅在标题或简介中偶然提及“东方奇幻”、但不影响主要情节或筛选期待的作品。"
+      ],
+      "status": "public",
+      "facet": "topic",
+      "aliases": [
+        "oriental-fantasy",
+        "Oriental Fantasy"
+      ],
+      "source_ordinals": [
+        109
+      ],
+      "decision_ids": []
+    },
+    {
+      "canonical_tag_id": "ct-v1-emotional-healing",
+      "slug": "emotional-healing",
+      "display_name": "情感治愈",
+      "locale_scope": "*",
+      "definition": "用于检索以“情感治愈”为核心题材、设定或人物原型的小说；该概念必须对主线或用户选择结果具有实质影响。",
+      "include": [
+        "主线明确体现“情感治愈”（来源别名：Healing）的作品。"
+      ],
+      "exclude": [
+        "仅在标题或简介中偶然提及“情感治愈”、但不影响主要情节或筛选期待的作品。"
+      ],
+      "status": "public",
+      "facet": "topic",
+      "aliases": [
+        "healing",
+        "Healing"
+      ],
+      "source_ordinals": [
+        96
+      ],
+      "decision_ids": []
+    },
+    {
+      "canonical_tag_id": "ct-v1-emperor",
+      "slug": "emperor",
+      "display_name": "皇帝",
+      "locale_scope": "*",
+      "definition": "用于检索以“皇帝”为核心题材、设定或人物原型的小说；该概念必须对主线或用户选择结果具有实质影响。",
+      "include": [
+        "主线明确体现“皇帝”（来源别名：Emperor）的作品。"
+      ],
+      "exclude": [
+        "仅在标题或简介中偶然提及“皇帝”、但不影响主要情节或筛选期待的作品。"
+      ],
+      "status": "public",
+      "facet": "topic",
+      "aliases": [
+        "emperor",
+        "Emperor"
+      ],
+      "source_ordinals": [
+        92
+      ],
+      "decision_ids": []
+    },
+    {
+      "canonical_tag_id": "ct-v1-ensemble-darling",
+      "slug": "ensemble-darling",
+      "display_name": "团宠",
+      "locale_scope": "*",
+      "definition": "用于检索以“团宠”为核心题材、设定或人物原型的小说；该概念必须对主线或用户选择结果具有实质影响。",
+      "include": [
+        "主线明确体现“团宠”（来源别名：Group Favorite）的作品。"
+      ],
+      "exclude": [
+        "仅在标题或简介中偶然提及“团宠”、但不影响主要情节或筛选期待的作品。"
+      ],
+      "status": "public",
+      "facet": "topic",
+      "aliases": [
+        "group-favorite",
+        "Group Favorite"
+      ],
+      "source_ordinals": [
+        78
+      ],
+      "decision_ids": []
+    },
+    {
+      "canonical_tag_id": "ct-v1-entertainment-industry",
+      "slug": "entertainment-industry",
+      "display_name": "娱乐圈",
+      "locale_scope": "*",
+      "definition": "用于检索以“娱乐圈”为核心题材、设定或人物原型的小说；该概念必须对主线或用户选择结果具有实质影响。",
+      "include": [
+        "主线明确体现“娱乐圈”（来源别名：Celebrity / Showbiz / Actor）的作品。"
+      ],
+      "exclude": [
+        "仅在标题或简介中偶然提及“娱乐圈”、但不影响主要情节或筛选期待的作品。"
+      ],
+      "status": "public",
+      "facet": "topic",
+      "aliases": [
+        "celebrity",
+        "Celebrity",
+        "showbiz",
+        "Showbiz",
+        "actor",
+        "Actor"
+      ],
+      "source_ordinals": [
+        23,
+        87,
+        147
+      ],
+      "decision_ids": [
+        "OC-MRG-05"
+      ]
+    },
+    {
+      "canonical_tag_id": "ct-v1-estrangement",
+      "slug": "estrangement",
+      "display_name": "关系疏离",
+      "locale_scope": "*",
+      "definition": "用于检索以“关系疏离”为核心题材、设定或人物原型的小说；该概念必须对主线或用户选择结果具有实质影响。",
+      "include": [
+        "主线明确体现“关系疏离”（来源别名：Estrangement）的作品。"
+      ],
+      "exclude": [
+        "仅在标题或简介中偶然提及“关系疏离”、但不影响主要情节或筛选期待的作品。"
+      ],
+      "status": "public",
+      "facet": "topic",
+      "aliases": [
+        "estrangement",
+        "Estrangement"
+      ],
+      "source_ordinals": [
+        68
+      ],
+      "decision_ids": []
+    },
+    {
+      "canonical_tag_id": "ct-v1-family",
+      "slug": "family",
+      "display_name": "家庭",
+      "locale_scope": "*",
+      "definition": "用于检索以“家庭”为核心题材、设定或人物原型的小说；该概念必须对主线或用户选择结果具有实质影响。",
+      "include": [
+        "主线明确体现“家庭”（来源别名：Family）的作品。"
+      ],
+      "exclude": [
+        "仅在标题或简介中偶然提及“家庭”、但不影响主要情节或筛选期待的作品。"
+      ],
+      "status": "public",
+      "facet": "topic",
+      "aliases": [
+        "family",
+        "Family"
+      ],
+      "source_ordinals": [
+        51
+      ],
+      "decision_ids": []
+    },
+    {
+      "canonical_tag_id": "ct-v1-family-feud",
+      "slug": "family-feud",
+      "display_name": "家族纷争",
+      "locale_scope": "*",
+      "definition": "用于检索以“家族纷争”为核心题材、设定或人物原型的小说；该概念必须对主线或用户选择结果具有实质影响。",
+      "include": [
+        "主线明确体现“家族纷争”（来源别名：Family Feud）的作品。"
+      ],
+      "exclude": [
+        "仅在标题或简介中偶然提及“家族纷争”、但不影响主要情节或筛选期待的作品。"
+      ],
+      "status": "public",
+      "facet": "topic",
+      "aliases": [
+        "family-feud",
+        "Family Feud"
+      ],
+      "source_ordinals": [
+        61
+      ],
+      "decision_ids": []
+    },
+    {
+      "canonical_tag_id": "ct-v1-fantasy",
+      "slug": "fantasy",
+      "display_name": "奇幻",
+      "locale_scope": "*",
+      "definition": "用于检索以“奇幻”为核心题材、设定或人物原型的小说；该概念必须对主线或用户选择结果具有实质影响。",
+      "include": [
+        "主线明确体现“奇幻”（来源别名：Fantasy）的作品。"
+      ],
+      "exclude": [
+        "仅在标题或简介中偶然提及“奇幻”、但不影响主要情节或筛选期待的作品。"
+      ],
+      "status": "public",
+      "facet": "topic",
+      "aliases": [
+        "fantasy",
+        "Fantasy"
+      ],
+      "source_ordinals": [
+        33
+      ],
+      "decision_ids": []
+    },
+    {
+      "canonical_tag_id": "ct-v1-fated-love",
+      "slug": "fated-love",
+      "display_name": "命定之爱",
+      "locale_scope": "*",
+      "definition": "用于检索以“命定之爱”为核心题材、设定或人物原型的小说；该概念必须对主线或用户选择结果具有实质影响。",
+      "include": [
+        "主线明确体现“命定之爱”（来源别名：Fated Love / Soulmates）的作品。"
+      ],
+      "exclude": [
+        "仅在标题或简介中偶然提及“命定之爱”、但不影响主要情节或筛选期待的作品。"
+      ],
+      "status": "public",
+      "facet": "topic",
+      "aliases": [
+        "fated-love",
+        "Fated Love",
+        "soulmates",
+        "Soulmates"
+      ],
+      "source_ordinals": [
+        4,
+        58
+      ],
+      "decision_ids": [
+        "OC-MRG-04"
+      ]
+    },
+    {
+      "canonical_tag_id": "ct-v1-female-audience",
+      "slug": "female-audience",
+      "display_name": "女性向",
+      "locale_scope": "*",
+      "definition": "用于检索以“女性向”为核心audience 筛选属性的小说；该概念必须对主线或用户选择结果具有实质影响。",
+      "include": [
+        "主线明确体现“女性向”（来源别名：Female-Centric）的作品。"
+      ],
+      "exclude": [
+        "仅在标题或简介中偶然提及“女性向”、但不影响主要情节或筛选期待的作品。"
+      ],
+      "status": "public",
+      "facet": "audience",
+      "aliases": [
+        "female-centric",
+        "Female-Centric"
+      ],
+      "source_ordinals": [
+        127
+      ],
+      "decision_ids": []
+    },
+    {
+      "canonical_tag_id": "ct-v1-first-love",
+      "slug": "first-love",
+      "display_name": "初恋",
+      "locale_scope": "*",
+      "definition": "用于检索以“初恋”为核心题材、设定或人物原型的小说；该概念必须对主线或用户选择结果具有实质影响。",
+      "include": [
+        "主线明确体现“初恋”（来源别名：First Love）的作品。"
+      ],
+      "exclude": [
+        "仅在标题或简介中偶然提及“初恋”、但不影响主要情节或筛选期待的作品。"
+      ],
+      "status": "public",
+      "facet": "topic",
+      "aliases": [
+        "first-love",
+        "First Love"
+      ],
+      "source_ordinals": [
+        55
+      ],
+      "decision_ids": []
+    },
+    {
+      "canonical_tag_id": "ct-v1-forbidden-love",
+      "slug": "forbidden-love",
+      "display_name": "禁忌之恋",
+      "locale_scope": "*",
+      "definition": "用于检索以“禁忌之恋”为核心题材、设定或人物原型的小说；该概念必须对主线或用户选择结果具有实质影响。",
+      "include": [
+        "主线明确体现“禁忌之恋”（来源别名：Forbidden Love）的作品。"
+      ],
+      "exclude": [
+        "仅在标题或简介中偶然提及“禁忌之恋”、但不影响主要情节或筛选期待的作品。"
+      ],
+      "status": "public",
+      "facet": "topic",
+      "aliases": [
+        "forbidden-love",
+        "Forbidden Love"
+      ],
+      "source_ordinals": [
+        35
+      ],
+      "decision_ids": []
+    },
+    {
+      "canonical_tag_id": "ct-v1-frenemies",
+      "slug": "frenemies",
+      "display_name": "亦敌亦友",
+      "locale_scope": "*",
+      "definition": "用于检索以“亦敌亦友”为核心题材、设定或人物原型的小说；该概念必须对主线或用户选择结果具有实质影响。",
+      "include": [
+        "主线明确体现“亦敌亦友”（来源别名：Frenemies）的作品。"
+      ],
+      "exclude": [
+        "仅在标题或简介中偶然提及“亦敌亦友”、但不影响主要情节或筛选期待的作品。"
+      ],
+      "status": "public",
+      "facet": "topic",
+      "aliases": [
+        "frenemies",
+        "Frenemies"
+      ],
+      "source_ordinals": [
+        24
+      ],
+      "decision_ids": []
+    },
+    {
+      "canonical_tag_id": "ct-v1-from-hate-to-love",
+      "slug": "from-hate-to-love",
+      "display_name": "由恨生爱",
+      "locale_scope": "*",
+      "definition": "用于检索以“由恨生爱”为核心题材、设定或人物原型的小说；该概念必须对主线或用户选择结果具有实质影响。",
+      "include": [
+        "主线明确体现“由恨生爱”（来源别名：From Hate to Love）的作品。"
+      ],
+      "exclude": [
+        "仅在标题或简介中偶然提及“由恨生爱”、但不影响主要情节或筛选期待的作品。"
+      ],
+      "status": "public",
+      "facet": "topic",
+      "aliases": [
+        "from-hate-to-love",
+        "From Hate to Love"
+      ],
+      "source_ordinals": [
+        34
+      ],
+      "decision_ids": []
+    },
+    {
+      "canonical_tag_id": "ct-v1-from-love-to-hate",
+      "slug": "from-love-to-hate",
+      "display_name": "由爱生恨",
+      "locale_scope": "*",
+      "definition": "用于检索以“由爱生恨”为核心题材、设定或人物原型的小说；该概念必须对主线或用户选择结果具有实质影响。",
+      "include": [
+        "主线明确体现“由爱生恨”（来源别名：From Love to Hate）的作品。"
+      ],
+      "exclude": [
+        "仅在标题或简介中偶然提及“由爱生恨”、但不影响主要情节或筛选期待的作品。"
+      ],
+      "status": "public",
+      "facet": "topic",
+      "aliases": [
+        "from-love-to-hate",
+        "From Love to Hate"
+      ],
+      "source_ordinals": [
+        27
+      ],
+      "decision_ids": []
+    },
+    {
+      "canonical_tag_id": "ct-v1-future-world",
+      "slug": "future-world",
+      "display_name": "未来世界",
+      "locale_scope": "*",
+      "definition": "检索主要故事世界处于相对叙事当下的未来时期，未来社会或未来环境是核心设定的小说。",
+      "include": [
+        "主要情节持续发生在未来社会、未来地球或未来文明。"
+      ],
+      "exclude": [
+        "角色仅来自未来、但主体故事发生在古代或当代的作品；未明确未来设定的当代科幻。"
+      ],
+      "status": "public",
+      "facet": "topic",
+      "aliases": [
+        "future-world",
+        "Future World"
+      ],
+      "source_ordinals": [
+        44
+      ],
+      "decision_ids": [
+        "OC-REV-02",
+        "A-EMP-02"
+      ]
+    },
+    {
+      "canonical_tag_id": "ct-v1-genius",
+      "slug": "genius",
+      "display_name": "天才",
+      "locale_scope": "*",
+      "definition": "用于检索以“天才”为核心题材、设定或人物原型的小说；该概念必须对主线或用户选择结果具有实质影响。",
+      "include": [
+        "主线明确体现“天才”（来源别名：Genius）的作品。"
+      ],
+      "exclude": [
+        "仅在标题或简介中偶然提及“天才”、但不影响主要情节或筛选期待的作品。"
+      ],
+      "status": "public",
+      "facet": "topic",
+      "aliases": [
+        "genius",
+        "Genius"
+      ],
+      "source_ordinals": [
+        66
+      ],
+      "decision_ids": []
+    },
+    {
+      "canonical_tag_id": "ct-v1-gradually-fall-in-love",
+      "slug": "gradually-fall-in-love",
+      "display_name": "日久生情",
+      "locale_scope": "*",
+      "definition": "用于检索以“日久生情”为核心题材、设定或人物原型的小说；该概念必须对主线或用户选择结果具有实质影响。",
+      "include": [
+        "主线明确体现“日久生情”（来源别名：Gradually Fall In Love）的作品。"
+      ],
+      "exclude": [
+        "仅在标题或简介中偶然提及“日久生情”、但不影响主要情节或筛选期待的作品。"
+      ],
+      "status": "public",
+      "facet": "topic",
+      "aliases": [
+        "gradually-fall-in-love",
+        "Gradually Fall In Love"
+      ],
+      "source_ordinals": [
+        36
+      ],
+      "decision_ids": []
+    },
+    {
+      "canonical_tag_id": "ct-v1-happy-ending",
+      "slug": "happy-ending",
+      "display_name": "圆满结局",
+      "locale_scope": "*",
+      "definition": "用于检索以“圆满结局”为核心ending 筛选属性的小说；该概念必须对主线或用户选择结果具有实质影响。",
+      "include": [
+        "主线明确体现“圆满结局”（来源别名：HE）的作品。"
+      ],
+      "exclude": [
+        "仅在标题或简介中偶然提及“圆满结局”、但不影响主要情节或筛选期待的作品。"
+      ],
+      "status": "public",
+      "facet": "ending",
+      "aliases": [
+        "he",
+        "HE"
+      ],
+      "source_ordinals": [
+        141
+      ],
+      "decision_ids": []
+    },
+    {
+      "canonical_tag_id": "ct-v1-heir",
+      "slug": "heir",
+      "display_name": "继承人",
+      "locale_scope": "*",
+      "definition": "用于检索以“继承人”为核心题材、设定或人物原型的小说；该概念必须对主线或用户选择结果具有实质影响。",
+      "include": [
+        "主线明确体现“继承人”（来源别名：Heir）的作品。"
+      ],
+      "exclude": [
+        "仅在标题或简介中偶然提及“继承人”、但不影响主要情节或筛选期待的作品。"
+      ],
+      "status": "public",
+      "facet": "topic",
+      "aliases": [
+        "heir",
+        "Heir"
+      ],
+      "source_ordinals": [
+        116
+      ],
+      "decision_ids": [
+        "OC-SEP-09"
+      ]
+    },
+    {
+      "canonical_tag_id": "ct-v1-hidden-identity",
+      "slug": "hidden-identity",
+      "display_name": "隐藏身份",
+      "locale_scope": "*",
+      "definition": "用于检索以“隐藏身份”为核心题材、设定或人物原型的小说；该概念必须对主线或用户选择结果具有实质影响。",
+      "include": [
+        "主线明确体现“隐藏身份”（来源别名：Hidden Identity / Hidden Identities）的作品。"
+      ],
+      "exclude": [
+        "仅在标题或简介中偶然提及“隐藏身份”、但不影响主要情节或筛选期待的作品。"
+      ],
+      "status": "public",
+      "facet": "topic",
+      "aliases": [
+        "hidden-identity",
+        "Hidden Identity",
+        "hidden-identities",
+        "Hidden Identities"
+      ],
+      "source_ordinals": [
+        1,
+        131
+      ],
+      "decision_ids": [
+        "OC-SEP-07"
+      ]
+    },
+    {
+      "canonical_tag_id": "ct-v1-historical-romance",
+      "slug": "historical-romance",
+      "display_name": "古代言情",
+      "locale_scope": "*",
+      "definition": "用于检索以“古代言情”为核心题材、设定或人物原型的小说；该概念必须对主线或用户选择结果具有实质影响。",
+      "include": [
+        "主线明确体现“古代言情”（来源别名：Historical Romance / Period Romance）的作品。"
+      ],
+      "exclude": [
+        "仅在标题或简介中偶然提及“古代言情”、但不影响主要情节或筛选期待的作品。"
+      ],
+      "status": "public",
+      "facet": "topic",
+      "aliases": [
+        "historical-romance",
+        "Historical Romance",
+        "period-romance",
+        "Period Romance"
+      ],
+      "source_ordinals": [
+        32,
+        144
+      ],
+      "decision_ids": []
+    },
+    {
+      "canonical_tag_id": "ct-v1-identity-swap",
+      "slug": "identity-swap",
+      "display_name": "身份互换",
+      "locale_scope": "*",
+      "definition": "用于检索以“身份互换”为核心题材、设定或人物原型的小说；该概念必须对主线或用户选择结果具有实质影响。",
+      "include": [
+        "主线明确体现“身份互换”（来源别名：Ldentity Swap）的作品。"
+      ],
+      "exclude": [
+        "仅在标题或简介中偶然提及“身份互换”、但不影响主要情节或筛选期待的作品。"
+      ],
+      "status": "public",
+      "facet": "topic",
+      "aliases": [
+        "ldentity-swap",
+        "Ldentity Swap"
+      ],
+      "source_ordinals": [
+        149
+      ],
+      "decision_ids": [
+        "OC-SEP-07"
+      ]
+    },
+    {
+      "canonical_tag_id": "ct-v1-impostor",
+      "slug": "impostor",
+      "display_name": "冒名者",
+      "locale_scope": "*",
+      "definition": "用于检索以“冒名者”为核心题材、设定或人物原型的小说；该概念必须对主线或用户选择结果具有实质影响。",
+      "include": [
+        "主线明确体现“冒名者”（来源别名：Impostor）的作品。"
+      ],
+      "exclude": [
+        "仅在标题或简介中偶然提及“冒名者”、但不影响主要情节或筛选期待的作品。"
+      ],
+      "status": "public",
+      "facet": "topic",
+      "aliases": [
+        "impostor",
+        "Impostor"
+      ],
+      "source_ordinals": [
+        77
+      ],
+      "decision_ids": [
+        "OC-SEP-07"
+      ]
+    },
+    {
+      "canonical_tag_id": "ct-v1-kidnapping",
+      "slug": "kidnapping",
+      "display_name": "绑架",
+      "locale_scope": "*",
+      "definition": "用于检索以“绑架”为核心题材、设定或人物原型的小说；该概念必须对主线或用户选择结果具有实质影响。",
+      "include": [
+        "主线明确体现“绑架”（来源别名：Kidnapping）的作品。"
+      ],
+      "exclude": [
+        "仅在标题或简介中偶然提及“绑架”、但不影响主要情节或筛选期待的作品。"
+      ],
+      "status": "public",
+      "facet": "topic",
+      "aliases": [
+        "kidnapping",
+        "Kidnapping"
+      ],
+      "source_ordinals": [
+        37
+      ],
+      "decision_ids": []
+    },
+    {
+      "canonical_tag_id": "ct-v1-kung-fu",
+      "slug": "kung-fu",
+      "display_name": "功夫",
+      "locale_scope": "*",
+      "definition": "用于检索以“功夫”为核心题材、设定或人物原型的小说；该概念必须对主线或用户选择结果具有实质影响。",
+      "include": [
+        "主线明确体现“功夫”（来源别名：Kung Fu）的作品。"
+      ],
+      "exclude": [
+        "仅在标题或简介中偶然提及“功夫”、但不影响主要情节或筛选期待的作品。"
+      ],
+      "status": "public",
+      "facet": "topic",
+      "aliases": [
+        "kung-fu",
+        "Kung Fu"
+      ],
+      "source_ordinals": [
+        57
+      ],
+      "decision_ids": []
+    },
+    {
+      "canonical_tag_id": "ct-v1-lawyer",
+      "slug": "lawyer",
+      "display_name": "律师",
+      "locale_scope": "*",
+      "definition": "用于检索以“律师”为核心题材、设定或人物原型的小说；该概念必须对主线或用户选择结果具有实质影响。",
+      "include": [
+        "主线明确体现“律师”（来源别名：Lawyer）的作品。"
+      ],
+      "exclude": [
+        "仅在标题或简介中偶然提及“律师”、但不影响主要情节或筛选期待的作品。"
+      ],
+      "status": "public",
+      "facet": "topic",
+      "aliases": [
+        "lawyer",
+        "Lawyer"
+      ],
+      "source_ordinals": [
+        69
+      ],
+      "decision_ids": []
+    },
+    {
+      "canonical_tag_id": "ct-v1-legitimate-daughter",
+      "slug": "legitimate-daughter",
+      "display_name": "嫡女",
+      "locale_scope": "*",
+      "definition": "用于检索以“嫡女”为核心题材、设定或人物原型的小说；该概念必须对主线或用户选择结果具有实质影响。",
+      "include": [
+        "主线明确体现“嫡女”（来源别名：Legitimate daughter）的作品。"
+      ],
+      "exclude": [
+        "仅在标题或简介中偶然提及“嫡女”、但不影响主要情节或筛选期待的作品。"
+      ],
+      "status": "public",
+      "facet": "topic",
+      "aliases": [
+        "legitimate-daughter",
+        "Legitimate daughter"
+      ],
+      "source_ordinals": [
+        148
+      ],
+      "decision_ids": []
+    },
+    {
+      "canonical_tag_id": "ct-v1-love-after-marriage",
+      "slug": "love-after-marriage",
+      "display_name": "先婚后爱",
+      "locale_scope": "*",
+      "definition": "用于检索以“先婚后爱”为核心题材、设定或人物原型的小说；该概念必须对主线或用户选择结果具有实质影响。",
+      "include": [
+        "主线明确体现“先婚后爱”（来源别名：Love After Marriage）的作品。"
+      ],
+      "exclude": [
+        "仅在标题或简介中偶然提及“先婚后爱”、但不影响主要情节或筛选期待的作品。"
+      ],
+      "status": "public",
+      "facet": "topic",
+      "aliases": [
+        "love-after-marriage",
+        "Love After Marriage"
+      ],
+      "source_ordinals": [
+        75
+      ],
+      "decision_ids": [
+        "OC-SEP-05"
+      ]
+    },
+    {
+      "canonical_tag_id": "ct-v1-love-at-first-sight",
+      "slug": "love-at-first-sight",
+      "display_name": "一见钟情",
+      "locale_scope": "*",
+      "definition": "用于检索以“一见钟情”为核心题材、设定或人物原型的小说；该概念必须对主线或用户选择结果具有实质影响。",
+      "include": [
+        "主线明确体现“一见钟情”（来源别名：Love at First Sight）的作品。"
+      ],
+      "exclude": [
+        "仅在标题或简介中偶然提及“一见钟情”、但不影响主要情节或筛选期待的作品。"
+      ],
+      "status": "public",
+      "facet": "topic",
+      "aliases": [
+        "love-at-first-sight",
+        "Love at First Sight"
+      ],
+      "source_ordinals": [
+        53
+      ],
+      "decision_ids": []
+    },
+    {
+      "canonical_tag_id": "ct-v1-love-triangle",
+      "slug": "love-triangle",
+      "display_name": "三角恋",
+      "locale_scope": "*",
+      "definition": "用于检索以“三角恋”为核心题材、设定或人物原型的小说；该概念必须对主线或用户选择结果具有实质影响。",
+      "include": [
+        "主线明确体现“三角恋”（来源别名：Love triangle）的作品。"
+      ],
+      "exclude": [
+        "仅在标题或简介中偶然提及“三角恋”、但不影响主要情节或筛选期待的作品。"
+      ],
+      "status": "public",
+      "facet": "topic",
+      "aliases": [
+        "love-triangle",
+        "Love triangle"
+      ],
+      "source_ordinals": [
+        120
+      ],
+      "decision_ids": []
+    },
+    {
+      "canonical_tag_id": "ct-v1-mafia",
+      "slug": "mafia",
+      "display_name": "黑帮",
+      "locale_scope": "*",
+      "definition": "用于检索以“黑帮”为核心题材、设定或人物原型的小说；该概念必须对主线或用户选择结果具有实质影响。",
+      "include": [
+        "主线明确体现“黑帮”（来源别名：Mafia）的作品。"
+      ],
+      "exclude": [
+        "仅在标题或简介中偶然提及“黑帮”、但不影响主要情节或筛选期待的作品。"
+      ],
+      "status": "public",
+      "facet": "topic",
+      "aliases": [
+        "mafia",
+        "Mafia"
+      ],
+      "source_ordinals": [
+        123
+      ],
+      "decision_ids": []
+    },
+    {
+      "canonical_tag_id": "ct-v1-maid",
+      "slug": "maid",
+      "display_name": "女仆",
+      "locale_scope": "*",
+      "definition": "用于检索以“女仆”为核心题材、设定或人物原型的小说；该概念必须对主线或用户选择结果具有实质影响。",
+      "include": [
+        "主线明确体现“女仆”（来源别名：Maid）的作品。"
+      ],
+      "exclude": [
+        "仅在标题或简介中偶然提及“女仆”、但不影响主要情节或筛选期待的作品。"
+      ],
+      "status": "public",
+      "facet": "topic",
+      "aliases": [
+        "maid",
+        "Maid"
+      ],
+      "source_ordinals": [
+        114
+      ],
+      "decision_ids": []
+    },
+    {
+      "canonical_tag_id": "ct-v1-marriage",
+      "slug": "marriage",
+      "display_name": "婚姻题材",
+      "locale_scope": "*",
+      "definition": "用于检索以“婚姻题材”为核心题材、设定或人物原型的小说；该概念必须对主线或用户选择结果具有实质影响。",
+      "include": [
+        "主线明确体现“婚姻题材”（来源别名：Marriage / Marrige）的作品。"
+      ],
+      "exclude": [
+        "仅在标题或简介中偶然提及“婚姻题材”、但不影响主要情节或筛选期待的作品。"
+      ],
+      "status": "public",
+      "facet": "topic",
+      "aliases": [
+        "marriage",
+        "Marriage",
+        "marrige",
+        "Marrige"
+      ],
+      "source_ordinals": [
+        80,
+        142
+      ],
+      "decision_ids": []
+    },
+    {
+      "canonical_tag_id": "ct-v1-mature-content",
+      "slug": "mature-content",
+      "display_name": "成人向内容",
+      "locale_scope": "*",
+      "definition": "用于检索以“成人向内容”为核心maturity 筛选属性的小说；该概念必须对主线或用户选择结果具有实质影响。",
+      "include": [
+        "主线明确体现“成人向内容”（来源别名：Erotic）的作品。"
+      ],
+      "exclude": [
+        "仅在标题或简介中偶然提及“成人向内容”、但不影响主要情节或筛选期待的作品。"
+      ],
+      "status": "public",
+      "facet": "maturity",
+      "aliases": [
+        "erotic",
+        "Erotic"
+      ],
+      "source_ordinals": [
+        128
+      ],
+      "decision_ids": []
+    },
+    {
+      "canonical_tag_id": "ct-v1-military",
+      "slug": "military",
+      "display_name": "军旅",
+      "locale_scope": "*",
+      "definition": "用于检索以“军旅”为核心题材、设定或人物原型的小说；该概念必须对主线或用户选择结果具有实质影响。",
+      "include": [
+        "主线明确体现“军旅”（来源别名：Soldier / Military）的作品。"
+      ],
+      "exclude": [
+        "仅在标题或简介中偶然提及“军旅”、但不影响主要情节或筛选期待的作品。"
+      ],
+      "status": "public",
+      "facet": "topic",
+      "aliases": [
+        "soldier",
+        "Soldier",
+        "military",
+        "Military"
+      ],
+      "source_ordinals": [
+        99,
+        137
+      ],
+      "decision_ids": [
+        "OC-MRG-08",
+        "OC-SEP-10"
+      ]
+    },
+    {
+      "canonical_tag_id": "ct-v1-miracle-healer",
+      "slug": "miracle-healer",
+      "display_name": "神医",
+      "locale_scope": "*",
+      "definition": "用于检索以“神医”为核心题材、设定或人物原型的小说；该概念必须对主线或用户选择结果具有实质影响。",
+      "include": [
+        "主线明确体现“神医”（来源别名：Miracle Healer）的作品。"
+      ],
+      "exclude": [
+        "仅在标题或简介中偶然提及“神医”、但不影响主要情节或筛选期待的作品。"
+      ],
+      "status": "public",
+      "facet": "topic",
+      "aliases": [
+        "miracle-healer",
+        "Miracle Healer"
+      ],
+      "source_ordinals": [
+        16
+      ],
+      "decision_ids": []
+    },
+    {
+      "canonical_tag_id": "ct-v1-misunderstanding",
+      "slug": "misunderstanding",
+      "display_name": "误会",
+      "locale_scope": "*",
+      "definition": "用于检索以“误会”为核心题材、设定或人物原型的小说；该概念必须对主线或用户选择结果具有实质影响。",
+      "include": [
+        "主线明确体现“误会”（来源别名：Misunderstanding）的作品。"
+      ],
+      "exclude": [
+        "仅在标题或简介中偶然提及“误会”、但不影响主要情节或筛选期待的作品。"
+      ],
+      "status": "public",
+      "facet": "topic",
+      "aliases": [
+        "misunderstanding",
+        "Misunderstanding"
+      ],
+      "source_ordinals": [
+        122
+      ],
+      "decision_ids": []
+    },
+    {
+      "canonical_tag_id": "ct-v1-modern-romance",
+      "slug": "modern-romance",
+      "display_name": "现代言情",
+      "locale_scope": "*",
+      "definition": "用于检索以“现代言情”为核心题材、设定或人物原型的小说；该概念必须对主线或用户选择结果具有实质影响。",
+      "include": [
+        "主线明确体现“现代言情”（来源别名：Modern Love / Modern Romance）的作品。"
+      ],
+      "exclude": [
+        "仅在标题或简介中偶然提及“现代言情”、但不影响主要情节或筛选期待的作品。"
+      ],
+      "status": "public",
+      "facet": "topic",
+      "aliases": [
+        "modern-love",
+        "Modern Love",
+        "modern-romance",
+        "Modern Romance"
+      ],
+      "source_ordinals": [
+        91,
+        103
+      ],
+      "decision_ids": []
+    },
+    {
+      "canonical_tag_id": "ct-v1-mother-in-law",
+      "slug": "mother-in-law",
+      "display_name": "婆媳关系",
+      "locale_scope": "*",
+      "definition": "用于检索以“婆媳关系”为核心题材、设定或人物原型的小说；该概念必须对主线或用户选择结果具有实质影响。",
+      "include": [
+        "主线明确体现“婆媳关系”（来源别名：Mother-in-Law）的作品。"
+      ],
+      "exclude": [
+        "仅在标题或简介中偶然提及“婆媳关系”、但不影响主要情节或筛选期待的作品。"
+      ],
+      "status": "public",
+      "facet": "topic",
+      "aliases": [
+        "mother-in-law",
+        "Mother-in-Law"
+      ],
+      "source_ordinals": [
+        49
+      ],
+      "decision_ids": []
+    },
+    {
+      "canonical_tag_id": "ct-v1-office-romance",
+      "slug": "office-romance",
+      "display_name": "职场恋爱",
+      "locale_scope": "*",
+      "definition": "检索核心恋爱关系在工作场所或职业合作关系中形成并持续推进的小说。",
+      "include": [
+        "老板与助理、同事或职业合作伙伴之间的恋爱是主线。"
+      ],
+      "exclude": [
+        "仅有办公室场景或纯职场竞争、没有核心恋爱关系的作品。"
+      ],
+      "status": "public",
+      "facet": "topic",
+      "aliases": [
+        "office-romance",
+        "Office Romance"
+      ],
+      "source_ordinals": [
+        31
+      ],
+      "decision_ids": [
+        "OC-REV-01",
+        "A-EMP-01"
+      ]
+    },
+    {
+      "canonical_tag_id": "ct-v1-office-tension",
+      "slug": "office-tension",
+      "display_name": "职场张力",
+      "locale_scope": "*",
+      "definition": "检索以职场竞争、权力不对等、伦理冲突或敌对合作为核心张力的小说；恋爱不是必要条件。",
+      "include": [
+        "主线由同事、上下级或商业对手之间的职场冲突推动。"
+      ],
+      "exclude": [
+        "只有恋爱发生在办公室、但职场冲突不构成主要阅读期待的作品。"
+      ],
+      "status": "public",
+      "facet": "topic",
+      "aliases": [
+        "office-tension",
+        "Office Tension"
+      ],
+      "source_ordinals": [
+        3
+      ],
+      "decision_ids": [
+        "OC-REV-01",
+        "A-EMP-01"
+      ]
+    },
+    {
+      "canonical_tag_id": "ct-v1-older-adult-romance",
+      "slug": "older-adult-romance",
+      "display_name": "中老年恋爱",
+      "locale_scope": "*",
+      "definition": "用于检索以“中老年恋爱”为核心题材、设定或人物原型的小说；该概念必须对主线或用户选择结果具有实质影响。",
+      "include": [
+        "主线明确体现“中老年恋爱”（来源别名：Silver Hair Romance）的作品。"
+      ],
+      "exclude": [
+        "仅在标题或简介中偶然提及“中老年恋爱”、但不影响主要情节或筛选期待的作品。"
+      ],
+      "status": "public",
+      "facet": "topic",
+      "aliases": [
+        "silver-hair-romance",
+        "Silver Hair Romance"
+      ],
+      "source_ordinals": [
+        65
+      ],
+      "decision_ids": []
+    },
+    {
+      "canonical_tag_id": "ct-v1-one-night-stand",
+      "slug": "one-night-stand",
+      "display_name": "一夜情",
+      "locale_scope": "*",
+      "definition": "用于检索以“一夜情”为核心题材、设定或人物原型的小说；该概念必须对主线或用户选择结果具有实质影响。",
+      "include": [
+        "主线明确体现“一夜情”（来源别名：One-night stand）的作品。"
+      ],
+      "exclude": [
+        "仅在标题或简介中偶然提及“一夜情”、但不影响主要情节或筛选期待的作品。"
+      ],
+      "status": "public",
+      "facet": "topic",
+      "aliases": [
+        "one-night-stand",
+        "One-night stand"
+      ],
+      "source_ordinals": [
+        88
+      ],
+      "decision_ids": []
+    },
+    {
+      "canonical_tag_id": "ct-v1-playboy",
+      "slug": "playboy",
+      "display_name": "花花公子",
+      "locale_scope": "*",
+      "definition": "用于检索以“花花公子”为核心题材、设定或人物原型的小说；该概念必须对主线或用户选择结果具有实质影响。",
+      "include": [
+        "主线明确体现“花花公子”（来源别名：Playboy）的作品。"
+      ],
+      "exclude": [
+        "仅在标题或简介中偶然提及“花花公子”、但不影响主要情节或筛选期待的作品。"
+      ],
+      "status": "public",
+      "facet": "topic",
+      "aliases": [
+        "playboy",
+        "Playboy"
+      ],
+      "source_ordinals": [
+        146
+      ],
+      "decision_ids": []
+    },
+    {
+      "canonical_tag_id": "ct-v1-pregnancy",
+      "slug": "pregnancy",
+      "display_name": "孕期",
+      "locale_scope": "*",
+      "definition": "用于检索以“孕期”为核心题材、设定或人物原型的小说；该概念必须对主线或用户选择结果具有实质影响。",
+      "include": [
+        "主线明确体现“孕期”（来源别名：Pregnant）的作品。"
+      ],
+      "exclude": [
+        "仅在标题或简介中偶然提及“孕期”、但不影响主要情节或筛选期待的作品。"
+      ],
+      "status": "public",
+      "facet": "topic",
+      "aliases": [
+        "pregnant",
+        "Pregnant"
+      ],
+      "source_ordinals": [
+        83
+      ],
+      "decision_ids": []
+    },
+    {
+      "canonical_tag_id": "ct-v1-princess",
+      "slug": "princess",
+      "display_name": "公主",
+      "locale_scope": "*",
+      "definition": "用于检索以“公主”为核心题材、设定或人物原型的小说；该概念必须对主线或用户选择结果具有实质影响。",
+      "include": [
+        "主线明确体现“公主”（来源别名：Princess）的作品。"
+      ],
+      "exclude": [
+        "仅在标题或简介中偶然提及“公主”、但不影响主要情节或筛选期待的作品。"
+      ],
+      "status": "public",
+      "facet": "topic",
+      "aliases": [
+        "princess",
+        "Princess"
+      ],
+      "source_ordinals": [
+        20
+      ],
+      "decision_ids": []
+    },
+    {
+      "canonical_tag_id": "ct-v1-rebirth",
+      "slug": "rebirth",
+      "display_name": "重生",
+      "locale_scope": "*",
+      "definition": "用于检索以“重生”为核心题材、设定或人物原型的小说；该概念必须对主线或用户选择结果具有实质影响。",
+      "include": [
+        "主线明确体现“重生”（来源别名：Rebirth）的作品。"
+      ],
+      "exclude": [
+        "仅在标题或简介中偶然提及“重生”、但不影响主要情节或筛选期待的作品。"
+      ],
+      "status": "public",
+      "facet": "topic",
+      "aliases": [
+        "rebirth",
+        "Rebirth"
+      ],
+      "source_ordinals": [
+        28
+      ],
+      "decision_ids": [
+        "OC-SEP-06"
+      ]
+    },
+    {
+      "canonical_tag_id": "ct-v1-redemption",
+      "slug": "redemption",
+      "display_name": "救赎",
+      "locale_scope": "*",
+      "definition": "用于检索以“救赎”为核心题材、设定或人物原型的小说；该概念必须对主线或用户选择结果具有实质影响。",
+      "include": [
+        "主线明确体现“救赎”（来源别名：Redemption）的作品。"
+      ],
+      "exclude": [
+        "仅在标题或简介中偶然提及“救赎”、但不影响主要情节或筛选期待的作品。"
+      ],
+      "status": "public",
+      "facet": "topic",
+      "aliases": [
+        "redemption",
+        "Redemption"
+      ],
+      "source_ordinals": [
+        130
+      ],
+      "decision_ids": []
+    },
+    {
+      "canonical_tag_id": "ct-v1-regret",
+      "slug": "regret",
+      "display_name": "追悔",
+      "locale_scope": "*",
+      "definition": "用于检索以“追悔”为核心题材、设定或人物原型的小说；该概念必须对主线或用户选择结果具有实质影响。",
+      "include": [
+        "主线明确体现“追悔”（来源别名：Regret）的作品。"
+      ],
+      "exclude": [
+        "仅在标题或简介中偶然提及“追悔”、但不影响主要情节或筛选期待的作品。"
+      ],
+      "status": "public",
+      "facet": "topic",
+      "aliases": [
+        "regret",
+        "Regret"
+      ],
+      "source_ordinals": [
+        107
+      ],
+      "decision_ids": []
+    },
+    {
+      "canonical_tag_id": "ct-v1-rekindled-love",
+      "slug": "rekindled-love",
+      "display_name": "破镜重圆",
+      "locale_scope": "*",
+      "definition": "用于检索以“破镜重圆”为核心题材、设定或人物原型的小说；该概念必须对主线或用户选择结果具有实质影响。",
+      "include": [
+        "主线明确体现“破镜重圆”（来源别名：Another chance / Rekindled Love）的作品。"
+      ],
+      "exclude": [
+        "仅在标题或简介中偶然提及“破镜重圆”、但不影响主要情节或筛选期待的作品。"
+      ],
+      "status": "public",
+      "facet": "topic",
+      "aliases": [
+        "another-chance",
+        "Another chance",
+        "rekindled-love",
+        "Rekindled Love"
+      ],
+      "source_ordinals": [
+        42,
+        117
+      ],
+      "decision_ids": [
+        "OC-MRG-02"
+      ]
+    },
+    {
+      "canonical_tag_id": "ct-v1-return-of-the-war-god",
+      "slug": "return-of-the-war-god",
+      "display_name": "战神归来",
+      "locale_scope": "*",
+      "definition": "用于检索以“战神归来”为核心题材、设定或人物原型的小说；该概念必须对主线或用户选择结果具有实质影响。",
+      "include": [
+        "主线明确体现“战神归来”（来源别名：Return of the War God）的作品。"
+      ],
+      "exclude": [
+        "仅在标题或简介中偶然提及“战神归来”、但不影响主要情节或筛选期待的作品。"
+      ],
+      "status": "public",
+      "facet": "topic",
+      "aliases": [
+        "return-of-the-war-god",
+        "Return of the War God"
+      ],
+      "source_ordinals": [
+        132
+      ],
+      "decision_ids": [
+        "OC-SEP-10"
+      ]
+    },
+    {
+      "canonical_tag_id": "ct-v1-revenge",
+      "slug": "revenge",
+      "display_name": "复仇",
+      "locale_scope": "*",
+      "definition": "用于检索以“复仇”为核心题材、设定或人物原型的小说；该概念必须对主线或用户选择结果具有实质影响。",
+      "include": [
+        "主线明确体现“复仇”（来源别名：Revenge Arc / Revenge）的作品。"
+      ],
+      "exclude": [
+        "仅在标题或简介中偶然提及“复仇”、但不影响主要情节或筛选期待的作品。"
+      ],
+      "status": "public",
+      "facet": "topic",
+      "aliases": [
+        "revenge-arc",
+        "Revenge Arc",
+        "revenge",
+        "Revenge"
+      ],
+      "source_ordinals": [
+        10,
+        12
+      ],
+      "decision_ids": [
+        "OC-SEP-04"
+      ]
+    },
+    {
+      "canonical_tag_id": "ct-v1-romance",
+      "slug": "romance",
+      "display_name": "言情",
+      "locale_scope": "*",
+      "definition": "用于检索以“言情”为核心题材、设定或人物原型的小说；该概念必须对主线或用户选择结果具有实质影响。",
+      "include": [
+        "主线明确体现“言情”（来源别名：Romance）的作品。"
+      ],
+      "exclude": [
+        "仅在标题或简介中偶然提及“言情”、但不影响主要情节或筛选期待的作品。"
+      ],
+      "status": "public",
+      "facet": "topic",
+      "aliases": [
+        "romance",
+        "Romance"
+      ],
+      "source_ordinals": [
+        14
+      ],
+      "decision_ids": []
+    },
+    {
+      "canonical_tag_id": "ct-v1-royalty",
+      "slug": "royalty",
+      "display_name": "王室",
+      "locale_scope": "*",
+      "definition": "用于检索以“王室”为核心题材、设定或人物原型的小说；该概念必须对主线或用户选择结果具有实质影响。",
+      "include": [
+        "主线明确体现“王室”（来源别名：Royal）的作品。"
+      ],
+      "exclude": [
+        "仅在标题或简介中偶然提及“王室”、但不影响主要情节或筛选期待的作品。"
+      ],
+      "status": "public",
+      "facet": "topic",
+      "aliases": [
+        "royal",
+        "Royal"
+      ],
+      "source_ordinals": [
+        100
+      ],
+      "decision_ids": []
+    },
+    {
+      "canonical_tag_id": "ct-v1-science-fiction",
+      "slug": "science-fiction",
+      "display_name": "科幻",
+      "locale_scope": "*",
+      "definition": "检索以科学、技术、宇宙、人工智能或推演性世界规则为核心设定的科幻小说，不限定发生时代。",
+      "include": [
+        "科技或科学推演对主要冲突和世界规则具有实质影响。"
+      ],
+      "exclude": [
+        "只有未来字样但缺乏科幻机制的作品；纯奇幻或仅角色来自未来的古代故事。"
+      ],
+      "status": "public",
+      "facet": "topic",
+      "aliases": [
+        "sci-fi-world",
+        "Sci-Fi World"
+      ],
+      "source_ordinals": [
+        85
+      ],
+      "decision_ids": [
+        "OC-REV-02",
+        "A-EMP-02"
+      ]
+    },
+    {
+      "canonical_tag_id": "ct-v1-secret-baby",
+      "slug": "secret-baby",
+      "display_name": "隐秘萌宝",
+      "locale_scope": "*",
+      "definition": "用于检索以“隐秘萌宝”为核心题材、设定或人物原型的小说；该概念必须对主线或用户选择结果具有实质影响。",
+      "include": [
+        "主线明确体现“隐秘萌宝”（来源别名：Secret Baby）的作品。"
+      ],
+      "exclude": [
+        "仅在标题或简介中偶然提及“隐秘萌宝”、但不影响主要情节或筛选期待的作品。"
+      ],
+      "status": "public",
+      "facet": "topic",
+      "aliases": [
+        "secret-baby",
+        "Secret Baby"
+      ],
+      "source_ordinals": [
+        5
+      ],
+      "decision_ids": []
+    },
+    {
+      "canonical_tag_id": "ct-v1-secretary",
+      "slug": "secretary",
+      "display_name": "秘书",
+      "locale_scope": "*",
+      "definition": "用于检索以“秘书”为核心题材、设定或人物原型的小说；该概念必须对主线或用户选择结果具有实质影响。",
+      "include": [
+        "主线明确体现“秘书”（来源别名：Secretary）的作品。"
+      ],
+      "exclude": [
+        "仅在标题或简介中偶然提及“秘书”、但不影响主要情节或筛选期待的作品。"
+      ],
+      "status": "public",
+      "facet": "topic",
+      "aliases": [
+        "secretary",
+        "Secretary"
+      ],
+      "source_ordinals": [
+        79
+      ],
+      "decision_ids": []
+    },
+    {
+      "canonical_tag_id": "ct-v1-security-guard",
+      "slug": "security-guard",
+      "display_name": "保安",
+      "locale_scope": "*",
+      "definition": "用于检索以“保安”为核心题材、设定或人物原型的小说；该概念必须对主线或用户选择结果具有实质影响。",
+      "include": [
+        "主线明确体现“保安”（来源别名：Security guard）的作品。"
+      ],
+      "exclude": [
+        "仅在标题或简介中偶然提及“保安”、但不影响主要情节或筛选期待的作品。"
+      ],
+      "status": "public",
+      "facet": "topic",
+      "aliases": [
+        "security-guard",
+        "Security guard"
+      ],
+      "source_ordinals": [
+        17
+      ],
+      "decision_ids": []
+    },
+    {
+      "canonical_tag_id": "ct-v1-single-mom-escape",
+      "slug": "single-mom-escape",
+      "display_name": "带娃逃离",
+      "locale_scope": "*",
+      "definition": "用于检索以“带娃逃离”为核心题材、设定或人物原型的小说；该概念必须对主线或用户选择结果具有实质影响。",
+      "include": [
+        "主线明确体现“带娃逃离”（来源别名：Single Mom Escape）的作品。"
+      ],
+      "exclude": [
+        "仅在标题或简介中偶然提及“带娃逃离”、但不影响主要情节或筛选期待的作品。"
+      ],
+      "status": "public",
+      "facet": "topic",
+      "aliases": [
+        "single-mom-escape",
+        "Single Mom Escape"
+      ],
+      "source_ordinals": [
+        129
+      ],
+      "decision_ids": [
+        "OC-SEP-03"
+      ]
+    },
+    {
+      "canonical_tag_id": "ct-v1-single-mother",
+      "slug": "single-mother",
+      "display_name": "单亲妈妈",
+      "locale_scope": "*",
+      "definition": "用于检索以“单亲妈妈”为核心题材、设定或人物原型的小说；该概念必须对主线或用户选择结果具有实质影响。",
+      "include": [
+        "主线明确体现“单亲妈妈”（来源别名：Single Mother）的作品。"
+      ],
+      "exclude": [
+        "仅在标题或简介中偶然提及“单亲妈妈”、但不影响主要情节或筛选期待的作品。"
+      ],
+      "status": "public",
+      "facet": "topic",
+      "aliases": [
+        "single-mother",
+        "Single Mother"
+      ],
+      "source_ordinals": [
+        136
+      ],
+      "decision_ids": [
+        "OC-SEP-03"
+      ]
+    },
+    {
+      "canonical_tag_id": "ct-v1-son-in-law-comeback",
+      "slug": "son-in-law-comeback",
+      "display_name": "赘婿逆袭",
+      "locale_scope": "*",
+      "definition": "用于检索以“赘婿逆袭”为核心题材、设定或人物原型的小说；该概念必须对主线或用户选择结果具有实质影响。",
+      "include": [
+        "主线明确体现“赘婿逆袭”（来源别名：Son in Law's Turnaround）的作品。"
+      ],
+      "exclude": [
+        "仅在标题或简介中偶然提及“赘婿逆袭”、但不影响主要情节或筛选期待的作品。"
+      ],
+      "status": "public",
+      "facet": "topic",
+      "aliases": [
+        "son-in-laws-turnaround",
+        "Son in Law's Turnaround"
+      ],
+      "source_ordinals": [
+        111
+      ],
+      "decision_ids": []
+    },
+    {
+      "canonical_tag_id": "ct-v1-soul-swap",
+      "slug": "soul-swap",
+      "display_name": "灵魂互换",
+      "locale_scope": "*",
+      "definition": "用于检索以“灵魂互换”为核心题材、设定或人物原型的小说；该概念必须对主线或用户选择结果具有实质影响。",
+      "include": [
+        "主线明确体现“灵魂互换”（来源别名：Soul Swap）的作品。"
+      ],
+      "exclude": [
+        "仅在标题或简介中偶然提及“灵魂互换”、但不影响主要情节或筛选期待的作品。"
+      ],
+      "status": "public",
+      "facet": "topic",
+      "aliases": [
+        "soul-swap",
+        "Soul Swap"
+      ],
+      "source_ordinals": [
+        25
+      ],
+      "decision_ids": []
+    },
+    {
+      "canonical_tag_id": "ct-v1-split:time-travel+rebirth",
+      "slug": "split:time-travel+rebirth",
+      "display_name": "拆分：穿越 + 重生",
+      "locale_scope": "*",
+      "definition": "用于检索以“拆分：穿越 + 重生”为核心题材、设定或人物原型的小说；该概念必须对主线或用户选择结果具有实质影响。",
+      "include": [
+        "主线明确体现“拆分：穿越 + 重生”（来源别名：Time Travel & Rebirth）的作品。"
+      ],
+      "exclude": [
+        "仅在标题或简介中偶然提及“拆分：穿越 + 重生”、但不影响主要情节或筛选期待的作品。"
+      ],
+      "status": "public",
+      "facet": "topic",
+      "aliases": [
+        "time-travel-rebirth",
+        "Time Travel & Rebirth"
+      ],
+      "source_ordinals": [
+        11
+      ],
+      "decision_ids": []
+    },
+    {
+      "canonical_tag_id": "ct-v1-substitute",
+      "slug": "substitute",
+      "display_name": "替身",
+      "locale_scope": "*",
+      "definition": "用于检索以“替身”为核心题材、设定或人物原型的小说；该概念必须对主线或用户选择结果具有实质影响。",
+      "include": [
+        "主线明确体现“替身”（来源别名：Substitute）的作品。"
+      ],
+      "exclude": [
+        "仅在标题或简介中偶然提及“替身”、但不影响主要情节或筛选期待的作品。"
+      ],
+      "status": "public",
+      "facet": "topic",
+      "aliases": [
+        "substitute",
+        "Substitute"
+      ],
+      "source_ordinals": [
+        13
+      ],
+      "decision_ids": [
+        "OC-SEP-01"
+      ]
+    },
+    {
+      "canonical_tag_id": "ct-v1-substitute-marriage",
+      "slug": "substitute-marriage",
+      "display_name": "替嫁",
+      "locale_scope": "*",
+      "definition": "用于检索以“替嫁”为核心题材、设定或人物原型的小说；该概念必须对主线或用户选择结果具有实质影响。",
+      "include": [
+        "主线明确体现“替嫁”（来源别名：Marriage Substitute）的作品。"
+      ],
+      "exclude": [
+        "仅在标题或简介中偶然提及“替嫁”、但不影响主要情节或筛选期待的作品。"
+      ],
+      "status": "public",
+      "facet": "topic",
+      "aliases": [
+        "marriage-substitute",
+        "Marriage Substitute"
+      ],
+      "source_ordinals": [
+        60
+      ],
+      "decision_ids": [
+        "OC-SEP-01"
+      ]
+    },
+    {
+      "canonical_tag_id": "ct-v1-sudden-wealth",
+      "slug": "sudden-wealth",
+      "display_name": "突然暴富",
+      "locale_scope": "*",
+      "definition": "用于检索以“突然暴富”为核心题材、设定或人物原型的小说；该概念必须对主线或用户选择结果具有实质影响。",
+      "include": [
+        "主线明确体现“突然暴富”（来源别名：Sudden Wealth）的作品。"
+      ],
+      "exclude": [
+        "仅在标题或简介中偶然提及“突然暴富”、但不影响主要情节或筛选期待的作品。"
+      ],
+      "status": "public",
+      "facet": "topic",
+      "aliases": [
+        "sudden-wealth",
+        "Sudden Wealth"
+      ],
+      "source_ordinals": [
+        93
+      ],
+      "decision_ids": []
+    },
+    {
+      "canonical_tag_id": "ct-v1-superpowers",
+      "slug": "superpowers",
+      "display_name": "超能力",
+      "locale_scope": "*",
+      "definition": "用于检索以“超能力”为核心题材、设定或人物原型的小说；该概念必须对主线或用户选择结果具有实质影响。",
+      "include": [
+        "主线明确体现“超能力”（来源别名：Superpowers）的作品。"
+      ],
+      "exclude": [
+        "仅在标题或简介中偶然提及“超能力”、但不影响主要情节或筛选期待的作品。"
+      ],
+      "status": "public",
+      "facet": "topic",
+      "aliases": [
+        "superpowers",
+        "Superpowers"
+      ],
+      "source_ordinals": [
+        50
+      ],
+      "decision_ids": []
+    },
+    {
+      "canonical_tag_id": "ct-v1-suspense",
+      "slug": "suspense",
+      "display_name": "悬疑",
+      "locale_scope": "*",
+      "definition": "用于检索以“悬疑”为核心题材、设定或人物原型的小说；该概念必须对主线或用户选择结果具有实质影响。",
+      "include": [
+        "主线明确体现“悬疑”（来源别名：Mystery & Suspense / Suspense / Suspense & Thriller）的作品。"
+      ],
+      "exclude": [
+        "仅在标题或简介中偶然提及“悬疑”、但不影响主要情节或筛选期待的作品。"
+      ],
+      "status": "public",
+      "facet": "topic",
+      "aliases": [
+        "mystery-suspense",
+        "Mystery & Suspense",
+        "suspense",
+        "Suspense",
+        "suspense-thriller",
+        "Suspense & Thriller"
+      ],
+      "source_ordinals": [
+        22,
+        119,
+        126
+      ],
+      "decision_ids": [
+        "OC-MRG-03"
+      ]
+    },
+    {
+      "canonical_tag_id": "ct-v1-sweetness",
+      "slug": "sweetness",
+      "display_name": "甜宠",
+      "locale_scope": "*",
+      "definition": "用于检索以“甜宠”为核心题材、设定或人物原型的小说；该概念必须对主线或用户选择结果具有实质影响。",
+      "include": [
+        "主线明确体现“甜宠”（来源别名：Sweetness）的作品。"
+      ],
+      "exclude": [
+        "仅在标题或简介中偶然提及“甜宠”、但不影响主要情节或筛选期待的作品。"
+      ],
+      "status": "public",
+      "facet": "topic",
+      "aliases": [
+        "sweetness",
+        "Sweetness"
+      ],
+      "source_ordinals": [
+        106
+      ],
+      "decision_ids": []
+    },
+    {
+      "canonical_tag_id": "ct-v1-system-fantasy",
+      "slug": "system-fantasy",
+      "display_name": "系统流",
+      "locale_scope": "*",
+      "definition": "用于检索以“系统流”为核心题材、设定或人物原型的小说；该概念必须对主线或用户选择结果具有实质影响。",
+      "include": [
+        "主线明确体现“系统流”（来源别名：Otherworldly system）的作品。"
+      ],
+      "exclude": [
+        "仅在标题或简介中偶然提及“系统流”、但不影响主要情节或筛选期待的作品。"
+      ],
+      "status": "public",
+      "facet": "topic",
+      "aliases": [
+        "otherworldly-system",
+        "Otherworldly system"
+      ],
+      "source_ordinals": [
+        59
+      ],
+      "decision_ids": []
+    },
+    {
+      "canonical_tag_id": "ct-v1-tearjerker",
+      "slug": "tearjerker",
+      "display_name": "催泪",
+      "locale_scope": "*",
+      "definition": "用于检索以“催泪”为核心题材、设定或人物原型的小说；该概念必须对主线或用户选择结果具有实质影响。",
+      "include": [
+        "主线明确体现“催泪”（来源别名：Tearjerker）的作品。"
+      ],
+      "exclude": [
+        "仅在标题或简介中偶然提及“催泪”、但不影响主要情节或筛选期待的作品。"
+      ],
+      "status": "public",
+      "facet": "topic",
+      "aliases": [
+        "tearjerker",
+        "Tearjerker"
+      ],
+      "source_ordinals": [
+        43
+      ],
+      "decision_ids": []
+    },
+    {
+      "canonical_tag_id": "ct-v1-time-loop",
+      "slug": "time-loop",
+      "display_name": "时间循环",
+      "locale_scope": "*",
+      "definition": "用于检索以“时间循环”为核心题材、设定或人物原型的小说；该概念必须对主线或用户选择结果具有实质影响。",
+      "include": [
+        "主线明确体现“时间循环”（来源别名：Time Loop）的作品。"
+      ],
+      "exclude": [
+        "仅在标题或简介中偶然提及“时间循环”、但不影响主要情节或筛选期待的作品。"
+      ],
+      "status": "public",
+      "facet": "topic",
+      "aliases": [
+        "time-loop",
+        "Time Loop"
+      ],
+      "source_ordinals": [
+        9
+      ],
+      "decision_ids": [
+        "OC-SEP-06"
+      ]
+    },
+    {
+      "canonical_tag_id": "ct-v1-time-travel",
+      "slug": "time-travel",
+      "display_name": "穿越",
+      "locale_scope": "*",
+      "definition": "用于检索以“穿越”为核心题材、设定或人物原型的小说；该概念必须对主线或用户选择结果具有实质影响。",
+      "include": [
+        "主线明确体现“穿越”（来源别名：Time Travel）的作品。"
+      ],
+      "exclude": [
+        "仅在标题或简介中偶然提及“穿越”、但不影响主要情节或筛选期待的作品。"
+      ],
+      "status": "public",
+      "facet": "topic",
+      "aliases": [
+        "time-travel",
+        "Time Travel"
+      ],
+      "source_ordinals": [
+        38
+      ],
+      "decision_ids": [
+        "OC-SEP-06"
+      ]
+    },
+    {
+      "canonical_tag_id": "ct-v1-tragic-ending",
+      "slug": "tragic-ending",
+      "display_name": "悲剧结局",
+      "locale_scope": "*",
+      "definition": "用于检索以“悲剧结局”为核心ending 筛选属性的小说；该概念必须对主线或用户选择结果具有实质影响。",
+      "include": [
+        "主线明确体现“悲剧结局”（来源别名：BE）的作品。"
+      ],
+      "exclude": [
+        "仅在标题或简介中偶然提及“悲剧结局”、但不影响主要情节或筛选期待的作品。"
+      ],
+      "status": "public",
+      "facet": "ending",
+      "aliases": [
+        "be",
+        "BE"
+      ],
+      "source_ordinals": [
+        140
+      ],
+      "decision_ids": []
+    },
+    {
+      "canonical_tag_id": "ct-v1-unrequited-love",
+      "slug": "unrequited-love",
+      "display_name": "单恋",
+      "locale_scope": "*",
+      "definition": "用于检索以“单恋”为核心题材、设定或人物原型的小说；该概念必须对主线或用户选择结果具有实质影响。",
+      "include": [
+        "主线明确体现“单恋”（来源别名：Unrequited Love）的作品。"
+      ],
+      "exclude": [
+        "仅在标题或简介中偶然提及“单恋”、但不影响主要情节或筛选期待的作品。"
+      ],
+      "status": "public",
+      "facet": "topic",
+      "aliases": [
+        "unrequited-love",
+        "Unrequited Love"
+      ],
+      "source_ordinals": [
+        48
+      ],
+      "decision_ids": []
+    },
+    {
+      "canonical_tag_id": "ct-v1-urban-hero",
+      "slug": "urban-hero",
+      "display_name": "都市英雄",
+      "locale_scope": "*",
+      "definition": "用于检索以“都市英雄”为核心题材、设定或人物原型的小说；该概念必须对主线或用户选择结果具有实质影响。",
+      "include": [
+        "主线明确体现“都市英雄”（来源别名：Urban Hero）的作品。"
+      ],
+      "exclude": [
+        "仅在标题或简介中偶然提及“都市英雄”、但不影响主要情节或筛选期待的作品。"
+      ],
+      "status": "public",
+      "facet": "topic",
+      "aliases": [
+        "urban-hero",
+        "Urban Hero"
+      ],
+      "source_ordinals": [
+        54
+      ],
+      "decision_ids": []
+    },
+    {
+      "canonical_tag_id": "ct-v1-urban-setting",
+      "slug": "urban-setting",
+      "display_name": "都市背景",
+      "locale_scope": "*",
+      "definition": "用于检索以“都市背景”为核心setting 筛选属性的小说；该概念必须对主线或用户选择结果具有实质影响。",
+      "include": [
+        "主线明确体现“都市背景”（来源别名：Urban）的作品。"
+      ],
+      "exclude": [
+        "仅在标题或简介中偶然提及“都市背景”、但不影响主要情节或筛选期待的作品。"
+      ],
+      "status": "public",
+      "facet": "setting",
+      "aliases": [
+        "urban",
+        "Urban"
+      ],
+      "source_ordinals": [
+        102
+      ],
+      "decision_ids": [
+        "OC-SEP-02"
+      ]
+    },
+    {
+      "canonical_tag_id": "ct-v1-vampire",
+      "slug": "vampire",
+      "display_name": "吸血鬼",
+      "locale_scope": "*",
+      "definition": "用于检索以“吸血鬼”为核心题材、设定或人物原型的小说；该概念必须对主线或用户选择结果具有实质影响。",
+      "include": [
+        "主线明确体现“吸血鬼”（来源别名：Vampire）的作品。"
+      ],
+      "exclude": [
+        "仅在标题或简介中偶然提及“吸血鬼”、但不影响主要情节或筛选期待的作品。"
+      ],
+      "status": "public",
+      "facet": "topic",
+      "aliases": [
+        "vampire",
+        "Vampire"
+      ],
+      "source_ordinals": [
+        82
+      ],
+      "decision_ids": []
+    },
+    {
+      "canonical_tag_id": "ct-v1-village-life",
+      "slug": "village-life",
+      "display_name": "乡村生活",
+      "locale_scope": "*",
+      "definition": "用于检索以“乡村生活”为核心题材、设定或人物原型的小说；该概念必须对主线或用户选择结果具有实质影响。",
+      "include": [
+        "主线明确体现“乡村生活”（来源别名：Village Life）的作品。"
+      ],
+      "exclude": [
+        "仅在标题或简介中偶然提及“乡村生活”、但不影响主要情节或筛选期待的作品。"
+      ],
+      "status": "public",
+      "facet": "topic",
+      "aliases": [
+        "village-life",
+        "Village Life"
+      ],
+      "source_ordinals": [
+        138
+      ],
+      "decision_ids": []
+    },
+    {
+      "canonical_tag_id": "ct-v1-warrior-protagonist",
+      "slug": "warrior-protagonist",
+      "display_name": "战士主角",
+      "locale_scope": "*",
+      "definition": "用于检索以“战士主角”为核心题材、设定或人物原型的小说；该概念必须对主线或用户选择结果具有实质影响。",
+      "include": [
+        "主线明确体现“战士主角”（来源别名：Warriors）的作品。"
+      ],
+      "exclude": [
+        "仅在标题或简介中偶然提及“战士主角”、但不影响主要情节或筛选期待的作品。"
+      ],
+      "status": "public",
+      "facet": "topic",
+      "aliases": [
+        "warriors",
+        "Warriors"
+      ],
+      "source_ordinals": [
+        30
+      ],
+      "decision_ids": [
+        "OC-SEP-10"
+      ]
+    },
+    {
+      "canonical_tag_id": "ct-v1-wealthy-ceo",
+      "slug": "wealthy-ceo",
+      "display_name": "豪门总裁",
+      "locale_scope": "*",
+      "definition": "用于检索以“豪门总裁”为核心题材、设定或人物原型的小说；该概念必须对主线或用户选择结果具有实质影响。",
+      "include": [
+        "主线明确体现“豪门总裁”（来源别名：Billionaire Heir / Billionaires / CEO）的作品。"
+      ],
+      "exclude": [
+        "仅在标题或简介中偶然提及“豪门总裁”、但不影响主要情节或筛选期待的作品。"
+      ],
+      "status": "public",
+      "facet": "topic",
+      "aliases": [
+        "billionaire-heir",
+        "Billionaire Heir",
+        "billionaires",
+        "Billionaires",
+        "ceo",
+        "CEO"
+      ],
+      "source_ordinals": [
+        8,
+        95,
+        121
+      ],
+      "decision_ids": [
+        "OC-MRG-07"
+      ]
+    },
+    {
+      "canonical_tag_id": "ct-v1-werewolf",
+      "slug": "werewolf",
+      "display_name": "狼人",
+      "locale_scope": "*",
+      "definition": "用于检索以“狼人”为核心题材、设定或人物原型的小说；该概念必须对主线或用户选择结果具有实质影响。",
+      "include": [
+        "主线明确体现“狼人”（来源别名：Werewolf）的作品。"
+      ],
+      "exclude": [
+        "仅在标题或简介中偶然提及“狼人”、但不影响主要情节或筛选期待的作品。"
+      ],
+      "status": "public",
+      "facet": "topic",
+      "aliases": [
+        "werewolf",
+        "Werewolf"
+      ],
+      "source_ordinals": [
+        94
+      ],
+      "decision_ids": [
+        "OC-SEP-08"
+      ]
+    },
+    {
+      "canonical_tag_id": "ct-v1-werewolf-alpha",
+      "slug": "werewolf-alpha",
+      "display_name": "Alpha（狼人首领）",
+      "locale_scope": "*",
+      "definition": "用于检索以“Alpha（狼人首领）”为核心题材、设定或人物原型的小说；该概念必须对主线或用户选择结果具有实质影响。",
+      "include": [
+        "主线明确体现“Alpha（狼人首领）”（来源别名：Alpha）的作品。"
+      ],
+      "exclude": [
+        "仅在标题或简介中偶然提及“Alpha（狼人首领）”、但不影响主要情节或筛选期待的作品。"
+      ],
+      "status": "public",
+      "facet": "topic",
+      "aliases": [
+        "alpha",
+        "Alpha"
+      ],
+      "source_ordinals": [
+        41
+      ],
+      "decision_ids": [
+        "OC-SEP-08"
+      ]
+    },
+    {
+      "canonical_tag_id": "ct-v1-werewolf-luna",
+      "slug": "werewolf-luna",
+      "display_name": "Luna（狼人女首领）",
+      "locale_scope": "*",
+      "definition": "用于检索以“Luna（狼人女首领）”为核心题材、设定或人物原型的小说；该概念必须对主线或用户选择结果具有实质影响。",
+      "include": [
+        "主线明确体现“Luna（狼人女首领）”（来源别名：Luna）的作品。"
+      ],
+      "exclude": [
+        "仅在标题或简介中偶然提及“Luna（狼人女首领）”、但不影响主要情节或筛选期待的作品。"
+      ],
+      "status": "public",
+      "facet": "topic",
+      "aliases": [
+        "luna",
+        "Luna"
+      ],
+      "source_ordinals": [
+        15
+      ],
+      "decision_ids": [
+        "OC-SEP-08"
+      ]
+    },
+    {
+      "canonical_tag_id": "ct-v1-western-fantasy",
+      "slug": "western-fantasy",
+      "display_name": "西方奇幻",
+      "locale_scope": "*",
+      "definition": "用于检索以“西方奇幻”为核心题材、设定或人物原型的小说；该概念必须对主线或用户选择结果具有实质影响。",
+      "include": [
+        "主线明确体现“西方奇幻”（来源别名：Western Fantasy）的作品。"
+      ],
+      "exclude": [
+        "仅在标题或简介中偶然提及“西方奇幻”、但不影响主要情节或筛选期待的作品。"
+      ],
+      "status": "public",
+      "facet": "topic",
+      "aliases": [
+        "western-fantasy",
+        "Western Fantasy"
+      ],
+      "source_ordinals": [
+        145
+      ],
+      "decision_ids": []
+    },
+    {
+      "canonical_tag_id": "ct-v1-whirlwind-marriage",
+      "slug": "whirlwind-marriage",
+      "display_name": "闪婚",
+      "locale_scope": "*",
+      "definition": "用于检索以“闪婚”为核心题材、设定或人物原型的小说；该概念必须对主线或用户选择结果具有实质影响。",
+      "include": [
+        "主线明确体现“闪婚”（来源别名：Whirlwind Marriage）的作品。"
+      ],
+      "exclude": [
+        "仅在标题或简介中偶然提及“闪婚”、但不影响主要情节或筛选期待的作品。"
+      ],
+      "status": "public",
+      "facet": "topic",
+      "aliases": [
+        "whirlwind-marriage",
+        "Whirlwind Marriage"
+      ],
+      "source_ordinals": [
+        135
+      ],
+      "decision_ids": [
+        "OC-SEP-05"
+      ]
+    },
+    {
+      "canonical_tag_id": "ct-v1-win-back-the-husband",
+      "slug": "win-back-the-husband",
+      "display_name": "挽回丈夫",
+      "locale_scope": "*",
+      "definition": "用于检索以“挽回丈夫”为核心题材、设定或人物原型的小说；该概念必须对主线或用户选择结果具有实质影响。",
+      "include": [
+        "主线明确体现“挽回丈夫”（来源别名：Win Back The Husband）的作品。"
+      ],
+      "exclude": [
+        "仅在标题或简介中偶然提及“挽回丈夫”、但不影响主要情节或筛选期待的作品。"
+      ],
+      "status": "public",
+      "facet": "topic",
+      "aliases": [
+        "win-back-the-husband",
+        "Win Back The Husband"
+      ],
+      "source_ordinals": [
+        101
+      ],
+      "decision_ids": []
+    },
+    {
+      "canonical_tag_id": "ct-v1-young-adult",
+      "slug": "young-adult",
+      "display_name": "青少年",
+      "locale_scope": "*",
+      "definition": "用于检索以“青少年”为核心audience 筛选属性的小说；该概念必须对主线或用户选择结果具有实质影响。",
+      "include": [
+        "主线明确体现“青少年”（来源别名：Teenagers）的作品。"
+      ],
+      "exclude": [
+        "仅在标题或简介中偶然提及“青少年”、但不影响主要情节或筛选期待的作品。"
+      ],
+      "status": "public",
+      "facet": "audience",
+      "aliases": [
+        "teenagers",
+        "Teenagers"
+      ],
+      "source_ordinals": [
+        19
+      ],
+      "decision_ids": []
+    }
+  ]
+}

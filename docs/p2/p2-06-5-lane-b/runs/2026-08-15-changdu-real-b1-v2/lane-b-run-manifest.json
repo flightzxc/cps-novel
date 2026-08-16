@@ -1,0 +1,90 @@
+{
+  "schemaVersion": 1,
+  "runId": "2026-08-15-changdu-real-b1-v2",
+  "sourceScope": "changdu-app",
+  "gitHead": null,
+  "generatedAt": "2026-08-15T12:07:58.774Z",
+  "timezone": "Asia/Tokyo",
+  "requestBudget": {
+    "plannedUniquePages": 240,
+    "retryBudget": 10,
+    "httpAttemptCap": 250
+  },
+  "plannedRequests": 240,
+  "actualRequests": 240,
+  "pageSize": 100,
+  "targetUniqueBooks": 10000,
+  "actualUniqueBooks": 10000,
+  "candidateUniqueBooks": 23998,
+  "totalSourceTokens": 285,
+  "empiricalTokenCoverage": 1,
+  "taxonomyCoverageRate": null,
+  "taxonomyCoverageStatus": "NOT_ESTIMABLE_NO_DENOMINATOR",
+  "discoveryStatus": "TAXONOMY_DISCOVERY_NOT_SATURATED",
+  "laneBSampleStatus": "PARTIAL",
+  "laneBMappingStatus": "WAITING_FOR_CANONICAL_TAG_V1",
+  "ownerReviewItems": 0,
+  "languageQuotaSatisfiedOrExhausted": true,
+  "rawRoundTripQaPassed": true,
+  "requestBudgetQaPassed": false,
+  "structureAnomalyCount": 0,
+  "rawManifestSha256": "4d7d6931687a2391ded9699ce90d54ceb3242ec232515d537eb7721274f61148",
+  "rawRunStatus": "PARTIAL",
+  "rawStopReason": "PLANNED_PAGES_COMPLETE",
+  "rawVerificationStatus": "PARTIAL_OPERATIONAL_QA_FAILED",
+  "rawVerificationFailures": [
+    "request-attempts.jsonl:start_interval"
+  ],
+  "rawSourceFiles": [
+    "source-book-samples.jsonl",
+    "source-token-observations.jsonl",
+    "source-token-structure-anomalies.jsonl",
+    "final-sample-book-keys.jsonl"
+  ],
+  "canonicalTagVersion": null,
+  "canonicalTagSha256": null,
+  "artifacts": [
+    {
+      "path": "LANE_B_REPORT.md",
+      "bytes": 5474,
+      "sha256": "45dd197abe688e715e772ce2a61eae8f1bd2bc03341e17d267496b25bbc162dd",
+      "rowCount": null
+    },
+    {
+      "path": "locale-sample-distribution.csv",
+      "bytes": 3414,
+      "sha256": "35f52200ef5b8789406fe6da9a297c06adb58c3406cb80ed14caa13e8acbbddf",
+      "rowCount": 17
+    },
+    {
+      "path": "source-taxonomy-inventory.csv",
+      "bytes": 5728101,
+      "sha256": "ee0c6acd32a925a2cd1bcc17986114d3ff511df25b064d950a7a6b13f2541d27",
+      "rowCount": 285
+    },
+    {
+      "path": "source-token-cooccurrence.csv",
+      "bytes": 143457,
+      "sha256": "92db139485007f95d3ad45290fe863befdf793338f3397f0669ba58c5c924aef",
+      "rowCount": 327
+    },
+    {
+      "path": "source-token-evidence.jsonl",
+      "bytes": 10855795,
+      "sha256": "0b16b521f6f62932c320f8422df90712c5e584deba010e3c8e7a4a37e27d3d13",
+      "rowCount": 2361
+    },
+    {
+      "path": "source-token-structure-anomaly-summary.csv",
+      "bytes": 90,
+      "sha256": "0737bac5ee4766853149de1d9a2fc79c60149f93f553cea5b7b890b087efd6de",
+      "rowCount": 0
+    },
+    {
+      "path": "taxonomy-discovery-curve.csv",
+      "bytes": 6052,
+      "sha256": "a9b39949c81c1089ab9594a779959f8cb763b8622cc21071904a8d081d92852d",
+      "rowCount": 66
+    }
+  ]
+}

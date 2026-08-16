@@ -1,0 +1,1 @@
+source_scope,locale_key,token_key_a,exact_raw_token_a,raw_token_utf8_base64_a,raw_token_sha256_a,token_key_b,exact_raw_token_b,raw_token_utf8_base64_b,raw_token_sha256_b,n_a,n_b,n_ab,jaccard,p_b_given_a,p_a_given_b

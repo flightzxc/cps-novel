@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "snapshot_status": "LOCKED",
+  "evidence_priority": [
+    "OWNER_FINAL_INSTRUCTION",
+    "FOUR_CROSS_REVIEW_FILES",
+    "REPORT_RECOMMENDATIONS",
+    "REPOSITORY_HISTORY"
+  ],
+  "files": [
+    {
+      "filename": "FINAL_CROSS_REVIEW_REPORT.md",
+      "sha256": "20d65be8f11d65cc16e6196aca622e97fc5d45b15fcf6bdc323ad68fc18088d4"
+    },
+    {
+      "filename": "OWNER_REVIEW_PACKAGE.csv",
+      "sha256": "fb50fce81abda949c4743a5da88534a659924a4cbfe8a3a2d1859dffe4910adf"
+    },
+    {
+      "filename": "NEW_CANONICAL_CROSS_REVIEW.csv",
+      "sha256": "4cbcbe21ed89ffcad540edbccbc38eacadc0203664ef9a3183f446ed2c9b0308"
+    },
+    {
+      "filename": "CROSS_REVIEW_MATRIX.csv",
+      "sha256": "1f1cf172b476d44841cbff234bbbfbd6b182ec7658496cbcba3da0f1cf1a134c"
+    },
+    {
+      "filename": "cps-short-drama-canonical-tag-candidate-119.json",
+      "sha256": "1ab0fd880efadcc244b8e4e03bcf1d440f200cfa85f6b12828e18914d0a7d0e6"
+    },
+    {
+      "filename": "cps-short-drama-canonical-tag-candidate-119.csv",
+      "sha256": "d2829b6a93089e3d66de6386e84855f3be3001d69bfe825b77830a3cbfc15a77"
+    }
+  ],
+  "raw_lineage": {
+    "run_id": "2026-08-15-changdu-real-b1-v2",
+    "raw_manifest_sha256": "4d7d6931687a2391ded9699ce90d54ceb3242ec232515d537eb7721274f61148",
+    "derived_manifest_sha256": "8233d8e45e99ca3356a12936fdf5cbf69ed1a8cccb09215965d483c41a07dcc1",
+    "raw_run_status": "PARTIAL",
+    "taxonomy_discovery_status": "TAXONOMY_DISCOVERY_NOT_SATURATED",
+    "owner_acceptance": "ACCEPT_WITH_TIMING_WAIVER"
+  },
+  "owner_timing_waiver_sha256": "52ce6e6ff5862353481023b9914fb06cd06e9ef5639913bb5044f4a01730d8d1",
+  "network_requests_during_owner_final": 0,
+  "auto_write_authorized": false
+}
