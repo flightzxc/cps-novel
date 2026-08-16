@@ -44,7 +44,7 @@ function usage() {
     "  node scripts/p2-06-5-text-calibration.mjs score --samples samples.jsonl --taxonomy taxonomy-keywords.json --output-dir /tmp/lane-c [--source-mapping source-mapping.json] [--run-id id] [--generated-at ISO]",
     "  node scripts/p2-06-5-text-calibration.mjs review --samples samples.jsonl --taxonomy taxonomy-keywords.json --reviews reviews.jsonl --output-dir /tmp/lane-c [--source-mapping source-mapping.json] [--run-id id] [--generated-at ISO]",
     "  node scripts/p2-06-5-text-calibration.mjs c2 --samples samples.jsonl --taxonomy taxonomy-keywords.json --preview-corpus preview-corpus.jsonl --output-dir /tmp/lane-c [--source-mapping source-mapping.json] [--run-id id] [--generated-at ISO]",
-    "  node scripts/p2-06-5-text-calibration.mjs owner-final-c1 --raw-run-dir PATH --owner-waiver PATH --b2-dir PATH --canonical PATH --canonical-sha256-file PATH --channel-app-id ID --authoritative-output-dir PATH --tracked-output-dir PATH [--run-id ID] [--generated-at ISO]",
+    "  node scripts/p2-06-5-text-calibration.mjs owner-final-c1 --raw-run-dir PATH --owner-waiver PATH --b2-dir PATH --canonical PATH --canonical-sha256-file PATH --channel-app-id ID --authoritative-output-dir PATH --tracked-output-dir PATH [--run-id ID] [--generated-at ISO] [--lexicon-override PATH]",
     "  node scripts/p2-06-5-text-calibration.mjs verify-owner-final-c1 --tracked-output-dir PATH",
     "  node scripts/p2-06-5-text-calibration.mjs description-only-blind-review --run-dir PATH --canonical PATH --output-dir PATH [--generated-at ISO] [--population-target N] [--risk-target N]",
     "",
@@ -127,6 +127,7 @@ async function main() {
       channelAppId: options["channel-app-id"] ?? "",
       authoritativeOutputDir: required(options, "authoritative-output-dir"),
       trackedOutputDir: required(options, "tracked-output-dir"),
+      lexiconOverridePath: optional(options, "lexicon-override"),
       runId: options["run-id"] ?? "UNSPECIFIED",
       generatedAt: options["generated-at"] ?? new Date().toISOString(),
     });

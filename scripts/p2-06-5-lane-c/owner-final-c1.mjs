@@ -15,12 +15,14 @@ import {
   verifyArtifactBundle,
   writeArtifactBundle,
 } from "./calibration.mjs";
+import { compareC1V3 } from "./c1-v3-compare.mjs";
 import {
   POST_FIX_POPULATION_SAMPLE_TARGET,
   POST_FIX_RISK_CELLS,
   POST_FIX_RISK_SAMPLE_TARGET,
   buildDescriptionOnlyBlindReview,
 } from "./description-only-blind-review.mjs";
+import { loadLexiconOverride, normalizeSeed, overlayRuleKey } from "./lexicon-eligibility.mjs";
 
 export const EXPECTED_CANONICAL_COUNT = 123;
 export const EXPECTED_SAMPLE_COUNT = 10_000;
@@ -35,10 +37,6 @@ function fail(message) { throw new Error(`P2-06.5 Lane C1 Owner Final: ${message
 function sha256(value) { return createHash("sha256").update(value).digest("hex"); }
 function stableTuple(values) { return JSON.stringify(values); }
 function jsonl(rows) { return rows.map((row) => JSON.stringify(row)).join("\n") + (rows.length ? "\n" : ""); }
-function normalizeSeed(value) { return value.normalize("NFKC").toLocaleLowerCase("und"); }
-function overlayRuleKey(canonicalTagId, normalizedSeed) { return stableTuple([canonicalTagId, normalizedSeed]); }
-async function loadLexiconOverride() { fail("C1 v3 lexicon override is excluded from the accepted Phase 1 baseline"); }
-async function compareC1V3() { fail("C1 v3 comparison is excluded from the accepted Phase 1 baseline"); }
 
 function classifyScript(value) {
   let cjk = 0; let latin = 0; let other = 0;
@@ -349,6 +347,33 @@ function rate(value) {
 function renderV3Report({ qa, c1InputSha256, sampleSha256, overlaySha256, comparisonRows, scored, auditQueue, v3Compare, blind, status }) {
   const row = comparisonRows[0];
   const sourceBlind = scored.sourceBlindSimulation?.[0];
+  if (!v3Compare) {
+    return `# P2-06.5 Lane C C1 v3 lexicon repair
+
+## Technical summary
+
+C1 v3 re-scored the same 10,000-book sample with scheme C after applying keyword-eligibility-v1. v2 compare was not requested in this run.
+
+## Input QA and lineage
+
+- Unique novels/sample rows: ${qa.unique_novels}/${qa.unique_sample_rows}
+- C1 input SHA-256: \`${c1InputSha256}\`
+- Scorer sample SHA-256: \`${sampleSha256}\`
+- Lexicon overlay SHA-256: \`${overlaySha256}\`
+
+## Scheme C / maxTextTags=3
+
+| hit | title-only | description-only | both | zero | avg | p50/p90/p99 | mapped | supplement | union | source-blind hit | source-blind zero |
+| ---: | ---: | ---: | ---: | ---: | ---: | --- | ---: | ---: | ---: | ---: | ---: |
+| ${rate(row.text_hit_rate)} | ${rate(row.title_only_rate)} | ${rate(row.description_only_rate)} | ${rate(row.title_description_both_rate)} | ${rate(row.zero_hit_rate)} | ${row.average_text_tags.toFixed(3)} | ${row.selected_text_tag_count.p50}/${row.selected_text_tag_count.p90}/${row.selected_text_tag_count.p99} | ${row.mapped_count} | ${row.text_supplement_count} | ${row.union_count} | ${rate(sourceBlind?.sourceBlindTextHitRate)} | ${rate(sourceBlind?.sourceBlindZeroHitRate)} |
+
+## Fixed status block
+
+\`\`\`text
+${Object.entries(status).map(([key, value]) => `${key}=${value}`).join("\n")}
+\`\`\`
+`;
+  }
   const cmp = v3Compare.comparison;
   const localeTable = v3Compare.localeRows.map((item) => `| ${item.locale} | ${item.v2_description_edges} | ${item.v3_description_edges} | ${item.removed_edges} |`).join("\n");
   const controlTable = cmp.control.map((item) => `| ${item.canonicalTagId} | ${item.v2Count} | ${item.v3Count} |`).join("\n");
