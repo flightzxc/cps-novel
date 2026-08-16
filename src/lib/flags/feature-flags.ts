@@ -1,5 +1,8 @@
 export const NOVEL_CATALOG_SYNC_FEATURE_FLAG = "FEATURE_NOVEL_CATALOG_SYNC";
 export const NOVEL_CATALOG_SYNC_ALLOW_WRITE_FLAG = "NOVEL_CATALOG_SYNC_ALLOW_WRITE";
+export const TAGGING_MASTER_FEATURE_FLAG = "FEATURE_TAGGING_V3";
+export const TAGGING_AUTO_FEATURE_FLAG = "FEATURE_TAGGING_AUTO";
+export const TAGGING_AUTO_WRITE_AUTHORIZATION = "AUTO_WRITE_AUTHORIZED";
 export const SITEMAP_AUTO_REFRESH_FEATURE_FLAG = "FEATURE_SITEMAP_AUTO_REFRESH";
 export const SITEMAP_AUTO_REFRESH_ALLOW_WRITE_FLAG = "SITEMAP_AUTO_REFRESH_ALLOW_WRITE";
 
@@ -9,6 +12,16 @@ export function isNovelCatalogSyncEnabled(env: NodeJS.ProcessEnv = process.env):
 
 export function isNovelCatalogSyncWriteAllowed(env: NodeJS.ProcessEnv = process.env): boolean {
   return env[NOVEL_CATALOG_SYNC_ALLOW_WRITE_FLAG] === "true";
+}
+
+export function isTaggingEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+  return env[TAGGING_MASTER_FEATURE_FLAG] === "true";
+}
+export function isAutoTaggingEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+  return env[TAGGING_AUTO_FEATURE_FLAG] === "true";
+}
+export function isAutoTagWriteAuthorized(env: NodeJS.ProcessEnv = process.env): boolean {
+  return env[TAGGING_AUTO_WRITE_AUTHORIZATION] === "YES";
 }
 
 // -----------------------------------------------------------------------
