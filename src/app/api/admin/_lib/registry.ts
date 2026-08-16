@@ -92,6 +92,15 @@ export const ADMIN_TASK_ROUTES = [
   { id: "admin.api.promo_link.list", path: "/api/admin/promo-links", methods: ["GET"], capability: "task:manage" },
 ] as const satisfies AdminRegistry["routes"];
 
+export const ADMIN_TAGGING_ROUTES = [
+  { id: "admin.api.canonical_tag.read", path: "/api/admin/canonical-tags", methods: ["GET"], capability: "content:view" },
+  { id: "admin.api.canonical_tag.write", path: "/api/admin/canonical-tags", methods: ["PUT"], capability: "tag:manage" },
+  { id: "admin.api.tag_mapping.read", path: "/api/admin/tag-mappings", methods: ["GET"], capability: "content:view" },
+  { id: "admin.api.tag_mapping.write", path: "/api/admin/tag-mappings", methods: ["PUT"], capability: "tag:manage" },
+  { id: "admin.api.novel_tag.read", path: "/api/admin/novels/tags", methods: ["GET"], capability: "content:view" },
+  { id: "admin.api.novel_tag.write", path: "/api/admin/novels/tags", methods: ["PUT"], capability: "tag:manage" },
+] as const satisfies AdminRegistry["routes"];
+
 export type AdminContentRouteId = (typeof ADMIN_CONTENT_ROUTES)[number]["id"];
 
 /**
@@ -285,6 +294,7 @@ export const P2_04_ADMIN_REGISTRY: AdminRegistry = Object.freeze({
     ...ADMIN_CONTENT_ROUTES,
     ...ADMIN_SITE_SETTING_ROUTES,
     ...ADMIN_TASK_ROUTES,
+    ...ADMIN_TAGGING_ROUTES,
   ]),
   // Actions: P2-04 itself registered no Server Action (a read slice, by
   // construction). P0-S13 added the first two mutation Actions on top of

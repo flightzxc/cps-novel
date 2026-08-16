@@ -3,6 +3,7 @@ import { isAdminAccessError } from "@/lib/auth/errors";
 import type { CredentialContractCode } from "@/lib/credentials/contracts";
 import { CredentialLifecycleError } from "@/lib/credentials/lifecycle";
 import { AdminContentQueryError } from "@/server/admin-content";
+import { TaggingAdminError } from "@/domain/tagging-admin";
 import {
   CredentialReplacementIdempotencyConflictError,
   CredentialTaskNotFoundError,
@@ -58,6 +59,9 @@ const CREDENTIAL_CODE_STATUS: Readonly<Record<CredentialContractCode, 401 | 403 
  * one that sends them chasing a role grant that would never have helped.
  */
 export function toErrorEnvelope(error: unknown): ErrorEnvelope {
+  if (error instanceof TaggingAdminError) {
+    return projectErrorEnvelope({ code: error.code, status: error.status });
+  }
   if (error instanceof AdminContentNotFoundError) {
     return projectErrorEnvelope({ code: error.code, status: error.status });
   }

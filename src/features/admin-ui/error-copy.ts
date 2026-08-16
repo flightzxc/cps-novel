@@ -67,6 +67,21 @@ const COPY: Readonly<Record<AdminErrorCode, string>> = Object.freeze({
   task_admin_concurrent_write: "任务已被其他操作同时修改，请刷新后重试",
   task_admin_active_scope_conflict: "同一渠道/应用范围内已有进行中的任务，请等待其完成后再重试",
   task_admin_internal_error: "系统内部错误，请联系工程排查并附上操作时间",
+  invalid_tag_request: "标签请求格式无效",
+  invalid_canonical_tag: "Canonical Tag 数据无效",
+  tagging_disabled: "标签功能当前未启用",
+  tag_write_not_authorized: "标签管理写入当前未获授权",
+  canonical_tag_not_found: "Canonical Tag 不存在",
+  mapping_not_found: "来源标签映射不存在",
+  novel_not_found: "小说不存在或已被删除",
+  inactive_canonical_tag: "目标 Canonical Tag 已停用",
+  alias_collision: "别名与另一个 Canonical Tag 冲突",
+  keyword_collision: "Keyword ID 与另一个 Canonical Tag 冲突",
+  mapping_identity_conflict: "来源标签映射 identity 冲突",
+  revision_conflict: "数据已被其他操作更新，请刷新后重试",
+  idempotency_conflict: "该请求标识已用于另一次不同的提交",
+  data_invariant_violation: "来源数据不满足标签解析约束，请先检查数据",
+  manual_mode_conflict: "小说当前不处于 manual 标签模式",
 });
 
 /** Reason refines the code; without it the two session expiries read identically. */

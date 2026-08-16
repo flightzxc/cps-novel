@@ -19,3 +19,4 @@ export * from "./channel-accounts";
 export * from "./credentials";
 export * from "./publish-gate";
 export * from "./admin-content";
+export * from "./tagging-admin";

@@ -1,6 +1,7 @@
 import type { AdminContentQueryErrorCode } from "@/server/admin-content";
 import type { AdminAccessErrorCode } from "@/lib/auth/errors";
 import type { CredentialContractCode } from "@/lib/credentials/contracts";
+import type { TaggingAdminErrorCode } from "@/domain/tagging-admin";
 
 /**
  * Every stable code the browser is allowed to branch on.
@@ -17,6 +18,7 @@ export type AdminErrorCode =
   | AdminAccessErrorCode
   | CredentialContractCode
   | AdminContentQueryErrorCode
+  | TaggingAdminErrorCode
   | "credential_task_not_found"
   | "site_setting_invalid"
   | "site_setting_conflict"

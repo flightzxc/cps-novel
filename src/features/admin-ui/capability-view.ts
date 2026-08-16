@@ -9,6 +9,7 @@ export const ADMIN_CAPABILITY_LABELS: Readonly<Record<AdminCapability, string>> 
   "content:takedown": "内容下架",
   "content:view": "内容查看",
   "content:read": "章节正文读取",
+  "tag:manage": "标签管理",
   "promo:claim": "推广领取",
   "revenue:view": "收益查看",
 });
