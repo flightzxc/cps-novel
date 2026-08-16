@@ -6,13 +6,12 @@ import { describe, expect, it } from "vitest";
 
 import { parseCsv } from "../../../scripts/p2-06-5-lane-a/owner-final.mjs";
 import { verifyB2FinalBundle } from "../../../scripts/p2-06-5-lane-b/b2-final.mjs";
-import { verifyOwnerFinalC1 } from "../../../scripts/p2-06-5-lane-c/owner-final-c1.mjs";
+import { verifyOwnerFinalC1 } from "../../../scripts/p2-06-5-lane-c/owner-final-c1-verify.mjs";
 
 const root = resolve(import.meta.dirname, "../../..");
 const canonicalDir = resolve(root, "docs/p2/p2-06-5-lane-a/canonical-tag-v1-final/2026-08-16");
 const b2Dir = resolve(root, "docs/p2/p2-06-5-lane-b/b2-owner-final/2026-08-16");
 const c1Dir = resolve(root, "docs/p2/p2-06-5-lane-c/runs/2026-08-16-owner-final-c1-v2");
-const c1AuthoritativeDir = resolve(root, "artifacts/p2-06-5-lane-c/2026-08-16-owner-final-c1-v2");
 const ownerEvidenceDir = resolve(root, "docs/p2/p2-06-5-owner-final/2026-08-16/evidence");
 const ownerFinalDir = resolve(root, "docs/p2/p2-06-5-owner-final/2026-08-16");
 
@@ -138,25 +137,12 @@ describe("P2-06.5 Owner Final versioned artifacts", () => {
     expect(summary.source_blind_simulation).toHaveLength(9);
     expect(summary.raw_scope_statistics.flatMap(({ rows }: { rows: Array<{ rawLanguageScope: string; localeStatisticsStatus: string }> }) => rows).filter(({ localeStatisticsStatus }: { localeStatisticsStatus: string }) => localeStatisticsStatus === "BLOCKED_RAW_SCOPE_ONLY").length).toBeGreaterThan(0);
 
-    const inputBytes = await readFile(resolve(c1AuthoritativeDir, "c1-input.jsonl"));
-    expect(sha256(inputBytes)).toBe(summary.c1_input_sha256);
-    const inputRows = inputBytes.toString("utf8").trim().split("\n").map((line) => JSON.parse(line));
-    expect(inputRows).toHaveLength(10000);
-    expect(new Set(inputRows.map(({ novel_identity: id }) => id)).size).toBe(10000);
-    expect(inputRows[0]).toMatchObject({
-      novel_identity: expect.any(String), channel_app_id: "changdu-app", raw_language_scope: expect.any(String),
-      title: expect.any(String), description: expect.any(String), raw_series_types: expect.any(Array), mapped_source_tags: expect.any(Array),
-    });
-    expect(inputRows.filter(({ raw_language_scope: scope }) => scope.includes('"19"') || scope.includes('"20"')).every(({ resolved_locale: locale }) => locale === null)).toBe(true);
-    const b2Edges = parseCsv(await readFile(resolve(b2Dir, "mapping-candidates-final.csv"), "utf8")).filter(({ record_type: type }) => type === "MAPPING_EDGE");
-    const edgeSet = new Set(b2Edges.map((row) => JSON.stringify([row.channel_app_id, row.raw_language_scope, row.exact_raw_token, row.canonical_stable_id, row.mapping_key])));
-    expect(inputRows.every((row) => row.mapped_source_tags.every((tag: { exact_raw_token: string; canonical_stable_id: string; mapping_key: string }) => edgeSet.has(JSON.stringify([row.channel_app_id, row.raw_language_scope, tag.exact_raw_token, tag.canonical_stable_id, tag.mapping_key]))))).toBe(true);
-
-    const shortfalls = JSON.parse(await readFile(resolve(c1AuthoritativeDir, "scored/audit-queue-shortfalls.json"), "utf8"));
-    expect(shortfalls.shortfalls).toEqual(expect.arrayContaining([
-      expect.objectContaining({ stratum: "HIGH_TAG_COUNT" }),
-      expect.objectContaining({ stratum: "SOURCE_TEXT_CONFLICT_REVIEW", available: 0 }),
-    ]));
+    // Raw C1 rows are intentionally ignored/excluded from the accepted authority
+    // baseline. Their immutable hashes and aggregate QA remain tracked here.
+    const c1Manifest = JSON.parse(await readFile(resolve(c1Dir, "C1_MANIFEST.json"), "utf8"));
+    expect(c1Manifest.lineage.c1_input_sha256).toBe(summary.c1_input_sha256);
+    expect(c1Manifest.lineage.scorer_sample_sha256).toBe(summary.scorer_sample_sha256);
+    expect(summary.audit_queue.shortfalls).toBe(304);
   });
 
   it("binds the authoritative v2 closeout and browser-verified portable report by byte hash", async () => {

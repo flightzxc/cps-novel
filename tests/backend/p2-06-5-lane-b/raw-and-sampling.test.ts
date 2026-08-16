@@ -330,12 +330,12 @@ describe("P2-06.5 Lane B deterministic 10k quota sample", () => {
       })),
     ];
     const plan = deriveLanguageQuotas(books, { targetBooks: 3_000 });
-    const byLanguage = new Map(plan.quotas.map((item: { rawLanguageIdentity: string; quota: number }) => [item.rawLanguageIdentity, item.quota]));
-    expect(byLanguage.get(rawLanguageIdentity("small"))).toBe(299);
-    expect(byLanguage.get(rawLanguageIdentity("medium"))).toBeGreaterThanOrEqual(500);
-    expect(byLanguage.get(rawLanguageIdentity("medium"))).toBeLessThanOrEqual(800);
-    expect(byLanguage.get(rawLanguageIdentity("large"))).toBeGreaterThanOrEqual(1_000);
-    expect(byLanguage.get(rawLanguageIdentity("large"))).toBeLessThanOrEqual(1_500);
+    const quotaByRawScope = new Map(plan.quotas.map((item: { rawLanguageIdentity: string; quota: number }) => [item.rawLanguageIdentity, item.quota]));
+    expect(quotaByRawScope.get(rawLanguageIdentity("small"))).toBe(299);
+    expect(quotaByRawScope.get(rawLanguageIdentity("medium"))).toBeGreaterThanOrEqual(500);
+    expect(quotaByRawScope.get(rawLanguageIdentity("medium"))).toBeLessThanOrEqual(800);
+    expect(quotaByRawScope.get(rawLanguageIdentity("large"))).toBeGreaterThanOrEqual(1_000);
+    expect(quotaByRawScope.get(rawLanguageIdentity("large"))).toBeLessThanOrEqual(1_500);
     expect(plan.derivedQuotaTotal).toBeLessThanOrEqual(2_499);
 
     const selected = selectQuotaBooks({ books, targetBooks: 2_000 });

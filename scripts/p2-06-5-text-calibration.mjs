@@ -24,7 +24,7 @@ import {
   summarizeC2Reviews,
   writeArtifactBundle,
 } from "./p2-06-5-lane-c/calibration.mjs";
-import { C1_V3_GENERATED_AT, runOwnerFinalC1, verifyOwnerFinalC1 } from "./p2-06-5-lane-c/owner-final-c1.mjs";
+import { verifyOwnerFinalC1 } from "./p2-06-5-lane-c/owner-final-c1-verify.mjs";
 import {
   POST_FIX_POPULATION_SAMPLE_TARGET,
   POST_FIX_RISK_CELLS,
@@ -44,7 +44,7 @@ function usage() {
     "  node scripts/p2-06-5-text-calibration.mjs score --samples samples.jsonl --taxonomy taxonomy-keywords.json --output-dir /tmp/lane-c [--source-mapping source-mapping.json] [--run-id id] [--generated-at ISO]",
     "  node scripts/p2-06-5-text-calibration.mjs review --samples samples.jsonl --taxonomy taxonomy-keywords.json --reviews reviews.jsonl --output-dir /tmp/lane-c [--source-mapping source-mapping.json] [--run-id id] [--generated-at ISO]",
     "  node scripts/p2-06-5-text-calibration.mjs c2 --samples samples.jsonl --taxonomy taxonomy-keywords.json --preview-corpus preview-corpus.jsonl --output-dir /tmp/lane-c [--source-mapping source-mapping.json] [--run-id id] [--generated-at ISO]",
-    "  node scripts/p2-06-5-text-calibration.mjs owner-final-c1 --raw-run-dir PATH --owner-waiver PATH --b2-dir PATH --canonical PATH --canonical-sha256-file PATH --channel-app-id ID --authoritative-output-dir PATH --tracked-output-dir PATH [--run-id ID] [--generated-at ISO] [--lexicon-override PATH] [--v2-authoritative-dir PATH] [--hidden-reference PATH] [--verdicts PATH] [--post-fix-blind-output-dir PATH]",
+    "  node scripts/p2-06-5-text-calibration.mjs owner-final-c1 --raw-run-dir PATH --owner-waiver PATH --b2-dir PATH --canonical PATH --canonical-sha256-file PATH --channel-app-id ID --authoritative-output-dir PATH --tracked-output-dir PATH [--run-id ID] [--generated-at ISO]",
     "  node scripts/p2-06-5-text-calibration.mjs verify-owner-final-c1 --tracked-output-dir PATH",
     "  node scripts/p2-06-5-text-calibration.mjs description-only-blind-review --run-dir PATH --canonical PATH --output-dir PATH [--generated-at ISO] [--population-target N] [--risk-target N]",
     "",
@@ -116,8 +116,8 @@ async function main() {
     return;
   }
   if (command === "owner-final-c1") {
+    const { runOwnerFinalC1 } = await import("./p2-06-5-lane-c/owner-final-c1.mjs");
     const canonicalSha256 = (await readFile(required(options, "canonical-sha256-file"), "utf8")).trim().split(/\s/u)[0];
-    const overlay = optional(options, "lexicon-override");
     const result = await runOwnerFinalC1({
       rawRunDir: required(options, "raw-run-dir"),
       waiverPath: required(options, "owner-waiver"),
@@ -127,13 +127,8 @@ async function main() {
       channelAppId: options["channel-app-id"] ?? "",
       authoritativeOutputDir: required(options, "authoritative-output-dir"),
       trackedOutputDir: required(options, "tracked-output-dir"),
-      lexiconOverridePath: overlay,
-      v2AuthoritativeDir: optional(options, "v2-authoritative-dir"),
-      hiddenReferencePath: optional(options, "hidden-reference"),
-      verdictsPath: optional(options, "verdicts"),
-      postFixBlindOutputDir: optional(options, "post-fix-blind-output-dir"),
-      runId: options["run-id"] ?? (overlay ? "2026-08-16-owner-final-c1-v3" : "UNSPECIFIED"),
-      generatedAt: options["generated-at"] ?? (overlay ? C1_V3_GENERATED_AT : new Date().toISOString()),
+      runId: options["run-id"] ?? "UNSPECIFIED",
+      generatedAt: options["generated-at"] ?? new Date().toISOString(),
     });
     process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
     return;

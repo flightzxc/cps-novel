@@ -160,25 +160,8 @@ Owner Final v2 额外输出 `c1-input.jsonl`，作为可审计的 Lane C 输入�
 
 `mapped_source_tags` 只允许来自同一 `channel_app_id + raw_language_scope + exact_raw_token` 的 B2 `MAPPING_EDGE`；它不会消耗 `maxTextTags` 配额。v2 使用新的 immutable run 目录 `2026-08-16-owner-final-c1-v2`，不覆盖初始 closeout draft。
 
-Owner Final C1 v3 在冻结 CanonicalTag 的前提下套用 `keyword-eligibility-v1` 覆盖层，只跑方案 C / maxTextTags=3：
-
-```bash
-node scripts/p2-06-5-text-calibration.mjs owner-final-c1 \
-  --raw-run-dir artifacts/p2-06-5-lane-b/2026-08-15-changdu-real-b1-v2 \
-  --owner-waiver docs/p2/p2-06-5-owner-final/2026-08-16/OWNER_TIMING_WAIVER.json \
-  --b2-dir docs/p2/p2-06-5-lane-b/b2-owner-final/2026-08-16 \
-  --canonical docs/p2/p2-06-5-lane-a/canonical-tag-v1-final/2026-08-16/canonical-tag-v1.0.0-final.json \
-  --canonical-sha256-file docs/p2/p2-06-5-lane-a/canonical-tag-v1-final/2026-08-16/canonical-tag-v1.0.0-final.json.sha256 \
-  --channel-app-id changdu-app \
-  --lexicon-override docs/p2/p2-06-5-lane-c/lexicon-overrides/2026-08-16/keyword-eligibility-v1.json \
-  --v2-authoritative-dir artifacts/p2-06-5-lane-c/2026-08-16-owner-final-c1-v2 \
-  --hidden-reference docs/p2/p2-06-5-lane-c/reviews/2026-08-16-description-only-blind-review/03-description-only-hidden-reference.jsonl \
-  --verdicts docs/p2/p2-06-5-lane-c/reviews/2026-08-16-description-only-blind-review-results/01-fable5-merged-verdicts.json \
-  --post-fix-blind-output-dir docs/p2/p2-06-5-lane-c/reviews/2026-08-16-post-fix-blind-review \
-  --authoritative-output-dir artifacts/p2-06-5-lane-c/2026-08-16-owner-final-c1-v3 \
-  --tracked-output-dir docs/p2/p2-06-5-lane-c/runs/2026-08-16-owner-final-c1-v3 \
-  --run-id 2026-08-16-owner-final-c1-v3
-```
+Phase 1 authority baseline excludes the separate C1 v3 lexicon-remediation WIP,
+including overrides, comparison tooling, post-fix review output, and ignored raw artifacts.
 
 ### `preview-corpus.jsonl` for C2
 
