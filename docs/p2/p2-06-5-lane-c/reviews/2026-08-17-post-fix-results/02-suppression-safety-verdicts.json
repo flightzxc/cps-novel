@@ -1,0 +1,246 @@
+{
+  "edge_verdicts": [
+    {
+      "review_id": "sup_1755ce820c35365e5752e1b0",
+      "canonical_stable_id": "ct-v1-werewolf-luna",
+      "verdict": "SUPPORTED",
+      "confidence": 0.75,
+      "reason": "整篇是标准狼人罗曼史：女主是 Alpha Demetri 的秘密妻子，怀着继承人，有 branco（狼群）、心灵链接、cucciolo（幼崽）与 Dea della Luna（月神）等稳定设定；女主即 Alpha 之妻这一 Luna 原型是核心前提。命中片段虽是『Dea della Luna』（月神），但点击该标签的用户看到这本狼人 Luna 题材不会觉得搜错。",
+      "false_positive_cause": "NONE"
+    },
+    {
+      "review_id": "sup_4229f2d55e09e7fdce4e5040",
+      "canonical_stable_id": "ct-v1-werewolf-luna",
+      "verdict": "UNSUPPORTED",
+      "confidence": 0.97,
+      "reason": "『La Luna』是第三者（一名伪装成神秘学者的女骗子）的绰号：『Amo a otra mujer, La Luna』。全篇是家族继承/背叛复仇剧，毫无狼人设定，纯属人名与狼人头衔的词形碰撞。",
+      "false_positive_cause": "MULTIPLE_MEANING"
+    },
+    {
+      "review_id": "sup_6017ec9b6895cf88f1af8035",
+      "canonical_stable_id": "ct-v1-chef",
+      "verdict": "SUPPORTED",
+      "confidence": 0.7,
+      "reason": "前世『mi carrera como chef pastelera fue destrozada』是女主被毁掉的核心事业，重生后要夺回的正是这条人生线；标题《El Postre Más Dulce》也指向甜点师身份。厨师是稳定的核心人物身份，足以形成找书期待。",
+      "false_positive_cause": "NONE"
+    },
+    {
+      "review_id": "sup_67a178ce20798de712e27a12",
+      "canonical_stable_id": "ct-v1-chef",
+      "verdict": "SUPPORTED",
+      "confidence": 0.85,
+      "reason": "女主是『au sommet de ma carrière de pâtissière』的糕点师，主线围绕 Meilleur Ouvrier de France 大赛被甜品下毒陷害、被逐出行业与复仇展开，厨师/糕点师身份就是主线本身。命中片段虽落在『chef-d'œuvre』（杰作）一词上，但该书出现在厨师标签下完全合理。",
+      "false_positive_cause": "NONE"
+    },
+    {
+      "review_id": "sup_7f847926be3c9be85246dd71",
+      "canonical_stable_id": "ct-v1-chef",
+      "verdict": "UNSUPPORTED",
+      "confidence": 0.85,
+      "reason": "『Marcos, um chef premiado』只是丈夫的一句职业标签，此后全篇是替身文学+系统流的婚姻背叛剧，没有任何烹饪相关情节；厨师身份对主线毫无实质影响。",
+      "false_positive_cause": "ROLE_ONLY"
+    },
+    {
+      "review_id": "sup_a0d8f02647a5b97b7016ad6f",
+      "canonical_stable_id": "ct-v1-werewolf-luna",
+      "verdict": "UNSUPPORTED",
+      "confidence": 0.98,
+      "reason": "命中的是『luna de miel』（蜜月）：『Es nuestra primera mañana de luna de miel』。这是黑手党背景的甜宠爱情文，没有任何狼人元素，纯属西语常用词组的多义碰撞。",
+      "false_positive_cause": "MULTIPLE_MEANING"
+    },
+    {
+      "review_id": "sup_a64b347252d92e9f63dc30f4",
+      "canonical_stable_id": "ct-v1-chef",
+      "verdict": "SUPPORTED",
+      "confidence": 0.95,
+      "reason": "『Isabela era uma chef confeiteira aclamada』，主线是高端餐饮界的甜点师被妹妹陷害身败名裂后重生，回到 Chef 导师选徒当日、带着『sabor primordial』的秘密重来；厨师身份与烹饪就是全书主线。",
+      "false_positive_cause": "NONE"
+    },
+    {
+      "review_id": "sup_aa46c20c9c00e8b5bd818edc",
+      "canonical_stable_id": "ct-v1-chef",
+      "verdict": "SUPPORTED",
+      "confidence": 0.9,
+      "reason": "女主在自己的 pâtisserie 醒来重生，前世死于 Macaron d'Or 大赛被人以盐换糖的破坏，命中片段的『Chef Édouard Lambert, mon mentor』是她的行业导师兼翻盘王牌；糕点师职业线贯穿全篇主线。",
+      "false_positive_cause": "NONE"
+    },
+    {
+      "review_id": "sup_bb3498bb8bb368d167bc005a",
+      "canonical_stable_id": "ct-v1-chef",
+      "verdict": "UNSUPPORTED",
+      "confidence": 0.98,
+      "reason": "德语『ihr Chef』意为『她的老板』（即 CEO Bates），与厨师毫无关系：『schlug ihr Chef vor: Heirate mich』。全篇是 CEO 办公室恋情，无任何烹饪内容，属跨语言词义漂移。",
+      "false_positive_cause": "TRANSLATION_DRIFT"
+    },
+    {
+      "review_id": "sup_bc24786e6159a0d92ebdcf99",
+      "canonical_stable_id": "ct-v1-chef",
+      "verdict": "UNSUPPORTED",
+      "confidence": 0.97,
+      "reason": "命中片段落在『le chef-d'œuvre d'Antoine』（安托万的杰作，指一幅画）：这是画家弟弟被权贵家族迫害、姐姐讨公道的故事，没有任何厨师或烹饪元素，纯属『chef-d'œuvre』的词形碰撞。",
+      "false_positive_cause": "MULTIPLE_MEANING"
+    },
+    {
+      "review_id": "sup_bd3a0ba2cb534306015cc31f",
+      "canonical_stable_id": "ct-v1-werewolf-luna",
+      "verdict": "SUPPORTED",
+      "confidence": 0.8,
+      "reason": "『Dejo la cirugía de mi Luna en tus manos』——女主就是 Carl 的 Luna，且有『el Alfa Arthur』在场，是明确的狼人 Alpha/Luna 设定；Luna 身份（被伴侣在手术台上抛弃的 Luna）是女主的核心身份与冲突起点。",
+      "false_positive_cause": "NONE"
+    },
+    {
+      "review_id": "sup_d943a02a72c5f177d0f8f54d",
+      "canonical_stable_id": "ct-v1-werewolf-luna",
+      "verdict": "SUPPORTED",
+      "confidence": 0.85,
+      "reason": "完整狼人设定（Branco Blackwood 狼群、Alpha Declan、无狼人类女主、Compagna Destinata），命中片段『in attesa della sua vera Luna』正是全书核心张力：契约妻子对上 Alpha 等待中的『真正的 Luna』。Luna 概念对主线有实质影响。",
+      "false_positive_cause": "NONE"
+    },
+    {
+      "review_id": "sup_de8097bea0508c2ea8e3ad61",
+      "canonical_stable_id": "ct-v1-chef",
+      "verdict": "UNSUPPORTED",
+      "confidence": 0.9,
+      "reason": "全篇是拐卖、顶替、复仇长篇，『un chef de Paris, M. Evans, cherchait sa fille disparue』只是结尾一句交代生父职业的收束性提及，厨师元素对主线零影响。",
+      "false_positive_cause": "INCIDENTAL_MENTION"
+    },
+    {
+      "review_id": "sup_df8668fa84152b78ffbfcb17",
+      "canonical_stable_id": "ct-v1-chef",
+      "verdict": "UNSUPPORTED",
+      "confidence": 0.85,
+      "reason": "Bruno 的职业是纽约顶尖心脏科医生（『uno de los mejores cardiólogo』），『El excelente chef, cantante, cotilla』只是罗列他会做饭等生活特长的顺带一提，厨师不构成题材或身份主线。",
+      "false_positive_cause": "INCIDENTAL_MENTION"
+    },
+    {
+      "review_id": "sup_e1a225dc1b4f0c0c90843719",
+      "canonical_stable_id": "ct-v1-chef",
+      "verdict": "SUPPORTED",
+      "confidence": 0.95,
+      "reason": "全书就是厨艺主线：『Maestra de la Tortilla』传人、全国墨西哥料理大赛、厨艺天赋被妹妹用系统吸走（『Ya no eran las manos de una chef』）、赴 Oaxaca 古市场夺回厨艺。厨师身份即核心题材。",
+      "false_positive_cause": "NONE"
+    },
+    {
+      "review_id": "sup_eff1efe117c0cd7f0215f7e2",
+      "canonical_stable_id": "ct-v1-werewolf-luna",
+      "verdict": "UNSUPPORTED",
+      "confidence": 0.97,
+      "reason": "『Luna es una trabajadora muy empeñosa』——Luna 只是女主的人名，故事是职场里老板婚外情引发的闹剧，毫无狼人设定，属人名与狼人头衔的词义碰撞。",
+      "false_positive_cause": "MULTIPLE_MEANING"
+    },
+    {
+      "review_id": "sup_f1e2a10741e3d01ddb6433e0",
+      "canonical_stable_id": "ct-v1-chef",
+      "verdict": "UNSUPPORTED",
+      "confidence": 0.98,
+      "reason": "法语『le chef de la mafia russe』意为俄罗斯黑手党首领，与厨师无关；全篇是黑手党爱情故事，无任何烹饪内容，属『chef=首领』的一词多义碰撞。",
+      "false_positive_cause": "MULTIPLE_MEANING"
+    },
+    {
+      "review_id": "sup_f3600e04c9cd6c0d39b723ec",
+      "canonical_stable_id": "ct-v1-werewolf-luna",
+      "verdict": "UNSUPPORTED",
+      "confidence": 0.97,
+      "reason": "『la Dra. Kimberly Luna』——Luna 是第三者医生的姓氏。全篇是现实向婚姻背叛复仇文，没有任何狼人元素，属姓氏与狼人头衔的词形碰撞。",
+      "false_positive_cause": "MULTIPLE_MEANING"
+    },
+    {
+      "review_id": "sup_f545a4d608e1c07132704994",
+      "canonical_stable_id": "ct-v1-chef",
+      "verdict": "UNSUPPORTED",
+      "confidence": 0.6,
+      "reason": "『Eu era uma chef de cozinha famosa』仅是开头一句职业交代，其后整个简介是丈夫施虐、弟弟被害、失去孩子的黑暗婚姻复仇线，没有任何烹饪情节；点厨师标签的用户看到这本书会觉得不对题。",
+      "false_positive_cause": "ROLE_ONLY"
+    },
+    {
+      "review_id": "sup_f8ccd8772a0cadbf0e604302",
+      "canonical_stable_id": "ct-v1-werewolf-luna",
+      "verdict": "UNSUPPORTED",
+      "confidence": 0.97,
+      "reason": "『Yo, Luna, ya no era la misma』（及昵称『Lunita』）——Luna 是女主人名。故事是孩子被害后的现实向复仇剧，毫无狼人设定，属人名碰撞。",
+      "false_positive_cause": "MULTIPLE_MEANING"
+    }
+  ],
+  "novel_verdicts": [
+    {
+      "review_id": "sup_1755ce820c35365e5752e1b0",
+      "overall_description_tag_quality": "GOOD"
+    },
+    {
+      "review_id": "sup_4229f2d55e09e7fdce4e5040",
+      "overall_description_tag_quality": "BAD"
+    },
+    {
+      "review_id": "sup_6017ec9b6895cf88f1af8035",
+      "overall_description_tag_quality": "GOOD"
+    },
+    {
+      "review_id": "sup_67a178ce20798de712e27a12",
+      "overall_description_tag_quality": "GOOD"
+    },
+    {
+      "review_id": "sup_7f847926be3c9be85246dd71",
+      "overall_description_tag_quality": "BAD"
+    },
+    {
+      "review_id": "sup_a0d8f02647a5b97b7016ad6f",
+      "overall_description_tag_quality": "BAD"
+    },
+    {
+      "review_id": "sup_a64b347252d92e9f63dc30f4",
+      "overall_description_tag_quality": "GOOD"
+    },
+    {
+      "review_id": "sup_aa46c20c9c00e8b5bd818edc",
+      "overall_description_tag_quality": "GOOD"
+    },
+    {
+      "review_id": "sup_bb3498bb8bb368d167bc005a",
+      "overall_description_tag_quality": "BAD"
+    },
+    {
+      "review_id": "sup_bc24786e6159a0d92ebdcf99",
+      "overall_description_tag_quality": "BAD"
+    },
+    {
+      "review_id": "sup_bd3a0ba2cb534306015cc31f",
+      "overall_description_tag_quality": "GOOD"
+    },
+    {
+      "review_id": "sup_d943a02a72c5f177d0f8f54d",
+      "overall_description_tag_quality": "GOOD"
+    },
+    {
+      "review_id": "sup_de8097bea0508c2ea8e3ad61",
+      "overall_description_tag_quality": "BAD"
+    },
+    {
+      "review_id": "sup_df8668fa84152b78ffbfcb17",
+      "overall_description_tag_quality": "BAD"
+    },
+    {
+      "review_id": "sup_e1a225dc1b4f0c0c90843719",
+      "overall_description_tag_quality": "GOOD"
+    },
+    {
+      "review_id": "sup_eff1efe117c0cd7f0215f7e2",
+      "overall_description_tag_quality": "BAD"
+    },
+    {
+      "review_id": "sup_f1e2a10741e3d01ddb6433e0",
+      "overall_description_tag_quality": "BAD"
+    },
+    {
+      "review_id": "sup_f3600e04c9cd6c0d39b723ec",
+      "overall_description_tag_quality": "BAD"
+    },
+    {
+      "review_id": "sup_f545a4d608e1c07132704994",
+      "overall_description_tag_quality": "BAD"
+    },
+    {
+      "review_id": "sup_f8ccd8772a0cadbf0e604302",
+      "overall_description_tag_quality": "BAD"
+    }
+  ]
+}

@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "lane": "P2-06.5/C",
+  "package": "post-fix-review-results",
+  "status": "REVIEW_RETURNED",
+  "auto_write_authorized": "NO",
+  "reviewer": "independent blind review, 6 isolated sessions, not the implementing model",
+  "survivor_edges": 294,
+  "survivor_novels": 200,
+  "suppression_edges": 20,
+  "artifacts": [
+    {
+      "path": "01-postfix-merged-verdicts.json",
+      "bytes": 137406,
+      "sha256": "0043d4cf57478a0a9c823c45332a4078533ee48c2934f31cb3dad0c6b0f41b63"
+    },
+    {
+      "path": "02-suppression-safety-verdicts.json",
+      "bytes": 11639,
+      "sha256": "f72911b036f88b54f3ef8f24ead5f94b735f2f7a2335047ede927a19d4c330f5"
+    },
+    {
+      "path": "03-POST_FIX_REVIEW_REPORT.md",
+      "bytes": 5589,
+      "sha256": "76e0419c054a82a9b981ba296bd1982993fa6f39883292bc7aa207c35c2509ae"
+    }
+  ]
+}

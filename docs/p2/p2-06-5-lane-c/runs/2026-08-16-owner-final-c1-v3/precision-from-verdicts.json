@@ -1,0 +1,70 @@
+{
+  "v2_description_only_edges": 4554,
+  "v3_description_only_edges": 3218,
+  "removed_description_edges": 1525,
+  "removed_candidate_edges": 1525,
+  "affected_novel_count": 1147,
+  "coverage_delta": -1336,
+  "ending_description_trigger_zeroed": [
+    "ct-v1-happy-ending",
+    "ct-v1-tragic-ending"
+  ],
+  "predicted_precision": 0.733,
+  "measured_precision_on_surviving_reviewed_edges": 0.7378048780487805,
+  "predicted_surviving_population_edges": 330,
+  "measured_surviving_population_edges": 328,
+  "v2_population_reviewed_edges": 491,
+  "v2_population_precision": 0.5193482688391039,
+  "precision_within_tolerance": true,
+  "control": [
+    {
+      "canonicalTagId": "ct-v1-time-travel",
+      "v2Count": 479,
+      "v3Count": 480,
+      "dropRatio": -0.0020876826722338203,
+      "collapsed": false
+    },
+    {
+      "canonicalTagId": "ct-v1-werewolf-alpha",
+      "v2Count": 118,
+      "v3Count": 127,
+      "dropRatio": -0.07627118644067797,
+      "collapsed": false
+    },
+    {
+      "canonicalTagId": "ct-v1-rebirth",
+      "v2Count": 259,
+      "v3Count": 260,
+      "dropRatio": -0.003861003861003861,
+      "collapsed": false
+    },
+    {
+      "canonicalTagId": "ct-v1-wealthy-ceo",
+      "v2Count": 143,
+      "v3Count": 156,
+      "dropRatio": -0.09090909090909091,
+      "collapsed": false
+    },
+    {
+      "canonicalTagId": "ct-v1-romance",
+      "v2Count": 125,
+      "v3Count": 130,
+      "dropRatio": -0.04,
+      "collapsed": false
+    },
+    {
+      "canonicalTagId": "ct-v1-mafia",
+      "v2Count": 68,
+      "v3Count": 81,
+      "dropRatio": -0.19117647058823528,
+      "collapsed": false
+    },
+    {
+      "canonicalTagId": "ct-v1-revenge",
+      "v2Count": 76,
+      "v3Count": 96,
+      "dropRatio": -0.2631578947368421,
+      "collapsed": false
+    }
+  ]
+}

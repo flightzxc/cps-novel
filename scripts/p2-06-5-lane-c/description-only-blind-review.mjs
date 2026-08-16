@@ -90,16 +90,29 @@ export const RISK_CELLS = Object.freeze([
   { flag: "SHORT_GENERIC_KEYWORD_NON_HE_BE", quota: 4 },
 ]);
 
-/** Scaled 80 → 50 while keeping the same cell order and coverage. */
+/**
+ * Tags carrying a grade-B `LOW_EVIDENCE_LOCALE_RULE` in the keyword eligibility
+ * overlay.  The rule was drawn from single-digit observations, so the surviving
+ * edges are the evidence that decides whether it keeps the right ones.
+ */
+export const LOCALE_RULE_TAG_IDS = Object.freeze(new Set(["ct-v1-chef", "ct-v1-werewolf-luna"]));
+
+/**
+ * Scaled 80 → 50.  `LOCALE_COLLISION_SURVIVOR` is filled first and given the
+ * largest quota on purpose: the post-fix round's stated priority is to gather
+ * evidence on the low-evidence chef/luna locale rules, and those survivors are
+ * rare enough that a proportional draw returns almost none of them.
+ */
 export const POST_FIX_RISK_CELLS = Object.freeze([
-  { flag: "SAME_REGION_MULTI_TAG", quota: 9 },
-  { flag: "ROLE_OR_SETTING_TAG", quota: 9 },
-  { flag: "LONG_DESC_SINGLE_OCCURRENCE", quota: 7 },
-  { flag: "SELECTED_TAG_COUNT_GE3", quota: 7 },
-  { flag: "RAW_TAG_COUNT_GE4", quota: 6 },
-  { flag: "SOURCE_TEXT_DISAGREE_TEXT_ONLY", quota: 5 },
-  { flag: "CROSS_SCRIPT_KEYWORD", quota: 4 },
-  { flag: "SHORT_GENERIC_KEYWORD_NON_HE_BE", quota: 3 },
+  { flag: "LOCALE_COLLISION_SURVIVOR", quota: 12 },
+  { flag: "SAME_REGION_MULTI_TAG", quota: 7 },
+  { flag: "ROLE_OR_SETTING_TAG", quota: 7 },
+  { flag: "LONG_DESC_SINGLE_OCCURRENCE", quota: 6 },
+  { flag: "SELECTED_TAG_COUNT_GE3", quota: 5 },
+  { flag: "RAW_TAG_COUNT_GE4", quota: 5 },
+  { flag: "SOURCE_TEXT_DISAGREE_TEXT_ONLY", quota: 4 },
+  { flag: "CROSS_SCRIPT_KEYWORD", quota: 2 },
+  { flag: "SHORT_GENERIC_KEYWORD_NON_HE_BE", quota: 2 },
 ]);
 
 /** Field names that must never appear anywhere in the reviewer package. */
@@ -399,6 +412,7 @@ function riskFlagsFor(novel, roleOrSetting) {
     flags.push("CROSS_SCRIPT_KEYWORD");
   }
   if (keywords.some((keyword) => KNOWN_DEFECTIVE_KEYWORDS.has(keyword.toLowerCase()))) flags.push("GENERIC_KEYWORD_HE_BE");
+  if (proposals.some((proposal) => LOCALE_RULE_TAG_IDS.has(proposal.edge.canonicalTagId))) flags.push("LOCALE_COLLISION_SURVIVOR");
   if (keywords.some((keyword) => {
     if (KNOWN_DEFECTIVE_KEYWORDS.has(keyword.toLowerCase())) return false;
     const length = codePoints(keyword).length;
@@ -654,7 +668,7 @@ function scopeLabel(rawLanguageScope) {
   }
 }
 
-function summarize({ novels, selected, populationByStratum, allocation, riskCounts }) {
+function summarize({ novels, selected, populationByStratum, allocation, riskCounts, riskCells = RISK_CELLS }) {
   const selectedByRow = new Map(selected.map((entry) => [entry.novel.sampleRowId, entry]));
   const strata = [...populationByStratum.keys()].sort((left, right) => populationByStratum.get(right) - populationByStratum.get(left) || left.localeCompare(right));
   const byScope = strata.map((stratum) => {
@@ -701,7 +715,7 @@ function summarize({ novels, selected, populationByStratum, allocation, riskCoun
     by_raw_language_scope: byScope,
     by_canonical_tag: tally(selected, (entry) => entry.novel.proposals.map((proposal) => proposal.tag.stable_id)).map(([stable_id, edge_count]) => ({ stable_id, edge_count })),
     by_risk_flag: tally(selected, (entry) => entry.novel.riskFlags).map(([flag, novel_count]) => ({ flag, novel_count })),
-    risk_cell_fill: RISK_CELLS.map(({ flag, quota }) => ({ flag, quota, filled: riskCounts.get(flag) ?? 0 })),
+    risk_cell_fill: riskCells.map(({ flag, quota }) => ({ flag, quota, filled: riskCounts.get(flag) ?? 0 })),
     selected_ids: [...selectedByRow.keys()].sort(),
   };
 }
@@ -1120,7 +1134,7 @@ export function buildReviewPackages(novels, {
     canonicalIds,
     expectedTotal: census ? novels.length : populationTarget + riskTarget,
   });
-  const stats = summarize({ novels, selected, populationByStratum, allocation, riskCounts });
+  const stats = summarize({ novels, selected, populationByStratum, allocation, riskCounts, riskCells });
   return { selected, reviewerRows, hiddenRows, qaChecks, stats, shortfalls, census };
 }
 

@@ -1,0 +1,92 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "P2-06.5 Lane C description-only blind review — Fable5 return format",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "edge_verdicts",
+    "novel_verdicts"
+  ],
+  "properties": {
+    "edge_verdicts": {
+      "type": "array",
+      "description": "One entry per novel x proposed CanonicalTag edge.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "review_id",
+          "canonical_stable_id",
+          "verdict",
+          "confidence",
+          "reason"
+        ],
+        "properties": {
+          "review_id": {
+            "type": "string"
+          },
+          "canonical_stable_id": {
+            "type": "string"
+          },
+          "verdict": {
+            "enum": [
+              "SUPPORTED",
+              "UNSUPPORTED",
+              "UNCERTAIN"
+            ]
+          },
+          "confidence": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1
+          },
+          "false_positive_cause": {
+            "enum": [
+              "NONE",
+              "INCIDENTAL_MENTION",
+              "SECONDARY_CHARACTER",
+              "GENERIC_KEYWORD",
+              "SETTING_ONLY",
+              "ROLE_ONLY",
+              "NEGATION_OR_CONTRAST",
+              "PAST_OR_BACKSTORY",
+              "MULTIPLE_MEANING",
+              "TRANSLATION_DRIFT",
+              "INSUFFICIENT_CONTEXT",
+              "OTHER"
+            ]
+          }
+        }
+      }
+    },
+    "novel_verdicts": {
+      "type": "array",
+      "description": "One entry per novel.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "review_id",
+          "overall_description_tag_quality"
+        ],
+        "properties": {
+          "review_id": {
+            "type": "string"
+          },
+          "overall_description_tag_quality": {
+            "enum": [
+              "GOOD",
+              "MIXED",
+              "BAD",
+              "UNCERTAIN"
+            ]
+          }
+        }
+      }
+    }
+  }
+}

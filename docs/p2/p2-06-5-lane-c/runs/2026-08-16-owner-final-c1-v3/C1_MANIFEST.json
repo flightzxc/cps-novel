@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "status": "CALIBRATION_REVIEW_PENDING",
+  "files": [
+    {
+      "filename": "calibration-summary.json",
+      "bytes": 34141,
+      "sha256": "54098ee0944ef86f8d5f57a34e6517f3e0fdebdcf34adc3976825057a0cfc82f"
+    },
+    {
+      "filename": "LANE_C_REPORT.md",
+      "bytes": 3858,
+      "sha256": "00b376944af50f814838b0b83a0fde8c9e1504a978def837e914d8b3fa530479"
+    },
+    {
+      "filename": "tag-level-before-after.csv",
+      "bytes": 4275,
+      "sha256": "0b594e80267409233da6ac99e0f4db3188b16bc503b894fe7f2096241b9262a5"
+    },
+    {
+      "filename": "locale-before-after.csv",
+      "bytes": 208,
+      "sha256": "46265dbf0fd893cbab841e09583469c5f308913c679a412f85684dd0300ee1e3"
+    },
+    {
+      "filename": "precision-from-verdicts.json",
+      "bytes": 1792,
+      "sha256": "f0d974f2c8a2d7a7bc3eaa0004c3f5b9c495879a3354f01e8dd2796770d5ca6c"
+    }
+  ],
+  "lineage": {
+    "canonical_sha256": "8bc8cdae8be2176bde170173e98bad2b9fa0e1770818174a57320816eefdccad",
+    "raw_manifest_sha256": "4d7d6931687a2391ded9699ce90d54ceb3242ec232515d537eb7721274f61148",
+    "b2_manifest_sha256": "4f370023d933dfa3d011ee310880d5e5ad050d92435f21ecc805abae65c881bf",
+    "waiver_sha256": "52ce6e6ff5862353481023b9914fb06cd06e9ef5639913bb5044f4a01730d8d1",
+    "c1_input_sha256": "046fe9234b317eba145c3fbb35edd2e72af49e41309dcd5d5f45f7bc43d1776d",
+    "scorer_sample_sha256": "f14fa303128aa8713cdbd1c3f60e3ed161f055ced47f65bde354462860d8d330",
+    "lexicon_override_sha256": "781916c970dc81735080f425fb9441c4484daf92ee534c82e1e48c04d8d259e4",
+    "lexicon_override_version": "keyword-eligibility-v1"
+  }
+}

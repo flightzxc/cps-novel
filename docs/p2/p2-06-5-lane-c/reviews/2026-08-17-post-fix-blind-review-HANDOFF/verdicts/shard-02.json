@@ -1,0 +1,550 @@
+{
+  "edge_verdicts": [
+    {
+      "review_id": "nrv_5a88d05ca5e96d380ade7802",
+      "canonical_stable_id": "ct-v1-crime",
+      "verdict": "SUPPORTED",
+      "confidence": 0.75,
+      "reason": "The male lead is 'the most notorious crime lord in the whole country - a kidnapper, robber, con artist'; the criminal-underworld identity is the stable premise of this captive dark romance.",
+      "false_positive_cause": "NONE"
+    },
+    {
+      "review_id": "nrv_5ab3544c538640d88ed4430f",
+      "canonical_stable_id": "ct-v1-student",
+      "verdict": "SUPPORTED",
+      "confidence": 0.85,
+      "reason": "Both leads are high school students and the entire arc (school corridors, group work, the writing showcase, school politics) plays out through their student lives.",
+      "false_positive_cause": "NONE"
+    },
+    {
+      "review_id": "nrv_5ab3544c538640d88ed4430f",
+      "canonical_stable_id": "ct-v1-romance",
+      "verdict": "SUPPORTED",
+      "confidence": 0.95,
+      "reason": "The description declares the genre 'High school literary romance' and the main thread is the love growing between Purity and Ethan.",
+      "false_positive_cause": "NONE"
+    },
+    {
+      "review_id": "nrv_5b2709834cc21b820158e3ae",
+      "canonical_stable_id": "ct-v1-rebirth",
+      "verdict": "SUPPORTED",
+      "confidence": 0.9,
+      "reason": "Opens with 重生後的周沐卿 — the heroine's rebirth is the stable premise that drives her scheming and self-protection arc.",
+      "false_positive_cause": "NONE"
+    },
+    {
+      "review_id": "nrv_5c840d7f1e7beffe76fefabb",
+      "canonical_stable_id": "ct-v1-revenge",
+      "verdict": "SUPPORTED",
+      "confidence": 0.9,
+      "reason": "After dying at her scheming junior's hands she is reborn and pursues a 狂热的复仇计划 — revenge is the declared main thread.",
+      "false_positive_cause": "NONE"
+    },
+    {
+      "review_id": "nrv_5ce3be6d65983e11ebd52891",
+      "canonical_stable_id": "ct-v1-werewolf-luna",
+      "verdict": "UNSUPPORTED",
+      "confidence": 0.95,
+      "reason": "'Luna' is simply the heroine's given name (Luna Bexter) in a human marriage-of-convenience romance; there is no werewolf content anywhere in the description.",
+      "false_positive_cause": "MULTIPLE_MEANING"
+    },
+    {
+      "review_id": "nrv_5f29640c98dc3e966a0e217a",
+      "canonical_stable_id": "ct-v1-betrayal",
+      "verdict": "UNSUPPORTED",
+      "confidence": 0.75,
+      "reason": "背叛 appears only in the male lead's backstory (被前妻背叛) explaining why he distrusts women; the main thread is 1960s family-building with a magic space, not a betrayal plot.",
+      "false_positive_cause": "PAST_OR_BACKSTORY"
+    },
+    {
+      "review_id": "nrv_5f29640c98dc3e966a0e217a",
+      "canonical_stable_id": "ct-v1-apocalypse",
+      "verdict": "UNSUPPORTED",
+      "confidence": 0.7,
+      "reason": "末世 is only the origin she transmigrates away from in the opening line; the story itself is set in the 1960s countryside, so an apocalypse-seeking reader would feel misled.",
+      "false_positive_cause": "PAST_OR_BACKSTORY"
+    },
+    {
+      "review_id": "nrv_60c7715a66853c4d768ee03e",
+      "canonical_stable_id": "ct-v1-wealthy-ceo",
+      "verdict": "SUPPORTED",
+      "confidence": 0.7,
+      "reason": "The male lead Nick Sebastian is introduced as the handsome CEO whose fake-lover arrangement with Kania is the premise; the CEO-romance archetype is the core reading expectation.",
+      "false_positive_cause": "NONE"
+    },
+    {
+      "review_id": "nrv_62301fad908c98bbaebcd9ef",
+      "canonical_stable_id": "ct-v1-revenge",
+      "verdict": "SUPPORTED",
+      "confidence": 0.95,
+      "reason": "'I didn't pray for salvation. I prayed for revenge' and returning on the rival's arm 'to burn his house down' — revenge is explicitly the main thread.",
+      "false_positive_cause": "NONE"
+    },
+    {
+      "review_id": "nrv_62301fad908c98bbaebcd9ef",
+      "canonical_stable_id": "ct-v1-heir",
+      "verdict": "UNSUPPORTED",
+      "confidence": 0.85,
+      "reason": "'heir' refers once to the unborn child ('the woman who murdered his heir'); there is no heir-identity or inheritance storyline.",
+      "false_positive_cause": "INCIDENTAL_MENTION"
+    },
+    {
+      "review_id": "nrv_660937814ec9ebd2af605366",
+      "canonical_stable_id": "ct-v1-crime",
+      "verdict": "SUPPORTED",
+      "confidence": 0.9,
+      "reason": "A police procedural: 'a series of bizarre and high-profile crimes' and closing in on a major drug lord's lair are the main plot the leads investigate.",
+      "false_positive_cause": "NONE"
+    },
+    {
+      "review_id": "nrv_660937814ec9ebd2af605366",
+      "canonical_stable_id": "ct-v1-assassin",
+      "verdict": "UNSUPPORTED",
+      "confidence": 0.8,
+      "reason": "The assassin appears only as one case victim ('an assassin run over on the highway') in a list of bizarre crimes; there is no assassin protagonist or assassin-driven thread.",
+      "false_positive_cause": "INCIDENTAL_MENTION"
+    },
+    {
+      "review_id": "nrv_660937814ec9ebd2af605366",
+      "canonical_stable_id": "ct-v1-criminal-investigation",
+      "verdict": "SUPPORTED",
+      "confidence": 0.9,
+      "reason": "Both leads are criminal investigators (Deputy Commander of the Criminal Investigation Division; a renowned criminal investigation expert) and cracking cases is the main plot.",
+      "false_positive_cause": "NONE"
+    },
+    {
+      "review_id": "nrv_669d90a83b80156c4b0351ac",
+      "canonical_stable_id": "ct-v1-emperor",
+      "verdict": "SUPPORTED",
+      "confidence": 0.75,
+      "reason": "The 傀儡皇帝 is the male lead with whom the heroine's 爱恨情仇 unfolds — a core character identity in this palace-intrigue romance.",
+      "false_positive_cause": "NONE"
+    },
+    {
+      "review_id": "nrv_685383f923f8e0ed68112b48",
+      "canonical_stable_id": "ct-v1-rebirth",
+      "verdict": "SUPPORTED",
+      "confidence": 0.55,
+      "reason": "The premise pits the transmigrated villainess against the 重生回来的女主 ('你重生，我穿越'); the reborn heroine-antagonist is a load-bearing premise element, though the protagonist herself is a transmigrator.",
+      "false_positive_cause": "NONE"
+    },
+    {
+      "review_id": "nrv_685383f923f8e0ed68112b48",
+      "canonical_stable_id": "ct-v1-romance",
+      "verdict": "SUPPORTED",
+      "confidence": 0.7,
+      "reason": "The plot is 拐个男主喜当爹 — winning the 王爷男主 as her child's father; the book frames itself squarely as a 言情 romance.",
+      "false_positive_cause": "NONE"
+    },
+    {
+      "review_id": "nrv_685383f923f8e0ed68112b48",
+      "canonical_stable_id": "ct-v1-time-travel",
+      "verdict": "SUPPORTED",
+      "confidence": 0.95,
+      "reason": "穿越成恶毒女配的白玥瑶 — transmigration into the villainess is the core premise.",
+      "false_positive_cause": "NONE"
+    },
+    {
+      "review_id": "nrv_6cfc7cbcdd4ec99f4c24f209",
+      "canonical_stable_id": "ct-v1-adventure",
+      "verdict": "SUPPORTED",
+      "confidence": 0.8,
+      "reason": "The description opens 'Classic adventure novel', and the author context (frontier dime novels, Deerhunter stories) confirms adventure as the genre expectation.",
+      "false_positive_cause": "NONE"
+    },
+    {
+      "review_id": "nrv_6d422ce9beb2bd663c558d1a",
+      "canonical_stable_id": "ct-v1-misunderstanding",
+      "verdict": "SUPPORTED",
+      "confidence": 0.6,
+      "reason": "The first marriage collapses on the false accusation 你曾害死了我们的孩子 born of 一场阴谋 — a wrongful-blame misunderstanding drives the plot's central conflict.",
+      "false_positive_cause": "NONE"
+    },
+    {
+      "review_id": "nrv_6d422ce9beb2bd663c558d1a",
+      "canonical_stable_id": "ct-v1-heir",
+      "verdict": "SUPPORTED",
+      "confidence": 0.6,
+      "reason": "The male lead is 霍氏的继承人 and the power broker of B市 — the conglomerate-heir identity is his core archetype in this CEO romance.",
+      "false_positive_cause": "NONE"
+    },
+    {
+      "review_id": "nrv_6f527f52cd8b8a376e32b314",
+      "canonical_stable_id": "ct-v1-crime",
+      "verdict": "SUPPORTED",
+      "confidence": 0.8,
+      "reason": "She is 'a biological asset designed to merge two crime families' and ends betrothed to the underworld King — the crime-family world is the stable setting.",
+      "false_positive_cause": "NONE"
+    },
+    {
+      "review_id": "nrv_6f527f52cd8b8a376e32b314",
+      "canonical_stable_id": "ct-v1-royalty",
+      "verdict": "UNSUPPORTED",
+      "confidence": 0.9,
+      "reason": "'royal' matches the color of her dress ('wearing royal blue instead of white'), and 'King of this city' is an underworld metaphor; there is no actual royalty.",
+      "false_positive_cause": "MULTIPLE_MEANING"
+    },
+    {
+      "review_id": "nrv_6f527f52cd8b8a376e32b314",
+      "canonical_stable_id": "ct-v1-kidnapping",
+      "verdict": "UNSUPPORTED",
+      "confidence": 0.85,
+      "reason": "The only kidnapping is one the mistress 'faked' as a single abuse incident; kidnapping is not a plot thread of the story.",
+      "false_positive_cause": "INCIDENTAL_MENTION"
+    },
+    {
+      "review_id": "nrv_6fbb4c101f69fd813e1d412d",
+      "canonical_stable_id": "ct-v1-regret",
+      "verdict": "SUPPORTED",
+      "confidence": 0.7,
+      "reason": "The title itself is 'C'était trop tard, je regrette' and Regret is listed among the stated parcours of John's sect ordeal — regret is the framing theme of the story.",
+      "false_positive_cause": "NONE"
+    },
+    {
+      "review_id": "nrv_721ea7e64ed07522df25b6d9",
+      "canonical_stable_id": "ct-v1-werewolf-alpha",
+      "verdict": "SUPPORTED",
+      "confidence": 0.95,
+      "reason": "Ryder Lupei is 'l'Alpha de la meute la plus puissante' (meute de Moon Crest) and the possessive Alpha-and-mate romance is the entire premise.",
+      "false_positive_cause": "NONE"
+    },
+    {
+      "review_id": "nrv_729added0ab1eb20680e89cd",
+      "canonical_stable_id": "ct-v1-lawyer",
+      "verdict": "UNSUPPORTED",
+      "confidence": 0.7,
+      "reason": "'a successful lawyer' is one line of family window-dressing; the plot is a blackmail thriller about James's criminal past, with no legal-profession storyline.",
+      "false_positive_cause": "ROLE_ONLY"
+    },
+    {
+      "review_id": "nrv_729added0ab1eb20680e89cd",
+      "canonical_stable_id": "ct-v1-redemption",
+      "verdict": "SUPPORTED",
+      "confidence": 0.55,
+      "reason": "The blurb frames the book as 'a tale of redemption' and the plot centers on a man confronting his dark criminal past to protect his family, which matches a redemption arc.",
+      "false_positive_cause": "NONE"
+    },
+    {
+      "review_id": "nrv_73a33c197958f6ea2d601858",
+      "canonical_stable_id": "ct-v1-time-travel",
+      "verdict": "SUPPORTED",
+      "confidence": 0.95,
+      "reason": "一朝穿越，竟成了遠近聞名的第一醜女 — transmigration is the story's opening premise and launches the whole 逆襲 arc.",
+      "false_positive_cause": "NONE"
+    },
+    {
+      "review_id": "nrv_780b96af0c9eab5475767a87",
+      "canonical_stable_id": "ct-v1-betrayal",
+      "verdict": "SUPPORTED",
+      "confidence": 0.55,
+      "reason": "Betrayal is named twice as the web the twins must untangle ('deception, betrayal, and political intrigue'; 'question the loyalty of those around them'), making it a central thread of the quest.",
+      "false_positive_cause": "NONE"
+    },
+    {
+      "review_id": "nrv_780b96af0c9eab5475767a87",
+      "canonical_stable_id": "ct-v1-age-gap-romance",
+      "verdict": "SUPPORTED",
+      "confidence": 0.7,
+      "reason": "The description explicitly builds a romance between Arianna and Alaric where 'an age gap creates an additional layer of complexity' — a stated age-gap love thread between main characters.",
+      "false_positive_cause": "NONE"
+    },
+    {
+      "review_id": "nrv_798687a165b85bb40340f391",
+      "canonical_stable_id": "ct-v1-mafia",
+      "verdict": "SUPPORTED",
+      "confidence": 0.95,
+      "reason": "The male lead is 'a ruthless mafia boss' and Rose being drawn into his web of sin and obsession is the entire premise.",
+      "false_positive_cause": "NONE"
+    },
+    {
+      "review_id": "nrv_7c9c47364b51ba7a9699a144",
+      "canonical_stable_id": "ct-v1-campus",
+      "verdict": "SUPPORTED",
+      "confidence": 0.55,
+      "reason": "The heroine is a 女生 and the heartthrob has 整个校园的绝版迷 — the romance plays out in a school setting, matching the campus-setting expectation, though the description is vague.",
+      "false_positive_cause": "NONE"
+    },
+    {
+      "review_id": "nrv_7c9c47364b51ba7a9699a144",
+      "canonical_stable_id": "ct-v1-misunderstanding",
+      "verdict": "SUPPORTED",
+      "confidence": 0.6,
+      "reason": "一场计谋，一场误会。一场失散，让他们的感情越来越远 — the misunderstanding is the stated pivot that drives the couple apart.",
+      "false_positive_cause": "NONE"
+    },
+    {
+      "review_id": "nrv_7cb8b6e53aa584fc2c892a20",
+      "canonical_stable_id": "ct-v1-wealthy-ceo",
+      "verdict": "SUPPORTED",
+      "confidence": 0.95,
+      "reason": "The husband is secretly 'der skrupellose Milliardär und CEO der Wall-Street-Macht Moran Group' — the hidden-billionaire-CEO reveal is the core premise and is in the title.",
+      "false_positive_cause": "NONE"
+    },
+    {
+      "review_id": "nrv_7d012ca169738e6b31ff4048",
+      "canonical_stable_id": "ct-v1-kung-fu",
+      "verdict": "UNSUPPORTED",
+      "confidence": 0.97,
+      "reason": "The match 在廚藝上下功夫 uses the idiom 下功夫 ('put effort into' cooking), not martial arts; the story is a comedic ancient-times marriage romance with no kung-fu content.",
+      "false_positive_cause": "MULTIPLE_MEANING"
+    },
+    {
+      "review_id": "nrv_7f3d0b7fd7819b09659eac42",
+      "canonical_stable_id": "ct-v1-time-travel",
+      "verdict": "SUPPORTED",
+      "confidence": 0.95,
+      "reason": "一觉醒来，云裳发现自己穿越了 — transmigration into the unfavored 大小姐 is the opening premise of the whole story.",
+      "false_positive_cause": "NONE"
+    },
+    {
+      "review_id": "nrv_803c904b368a6360a5a49d33",
+      "canonical_stable_id": "ct-v1-werewolf-luna",
+      "verdict": "SUPPORTED",
+      "confidence": 0.8,
+      "reason": "The heroine 'sera Reine de son peuple, mais la Luna Suprême aussi' — the Luna Suprême destiny is her core identity opposite the Alpha Suprême.",
+      "false_positive_cause": "NONE"
+    },
+    {
+      "review_id": "nrv_803c904b368a6360a5a49d33",
+      "canonical_stable_id": "ct-v1-werewolf-alpha",
+      "verdict": "SUPPORTED",
+      "confidence": 0.8,
+      "reason": "'Il est l'Alpha Suprême' — the male lead's Alpha identity is the stated core of the dual-ruler premise.",
+      "false_positive_cause": "NONE"
+    },
+    {
+      "review_id": "nrv_8102ab6c41f0d853f757656c",
+      "canonical_stable_id": "ct-v1-miracle-healer",
+      "verdict": "SUPPORTED",
+      "confidence": 0.9,
+      "reason": "得到神医传承之后，叶凌天开始吊打一切 — the miracle-doctor inheritance is the golden-finger premise, reinforced by the title 极品医圣.",
+      "false_positive_cause": "NONE"
+    },
+    {
+      "review_id": "nrv_81fd69be2df858e2b2b2b9f0",
+      "canonical_stable_id": "ct-v1-crime",
+      "verdict": "SUPPORTED",
+      "confidence": 0.6,
+      "reason": "Police investigate a string of deaths and injuries, with 师生背后邪恶的交易 and the statement 犯罪事件，竟发生在本该清净的校园 — criminal cases are central to the mystery.",
+      "false_positive_cause": "NONE"
+    },
+    {
+      "review_id": "nrv_81fd69be2df858e2b2b2b9f0",
+      "canonical_stable_id": "ct-v1-first-love",
+      "verdict": "UNSUPPORTED",
+      "confidence": 0.7,
+      "reason": "初恋 appears only in the closing rhetorical question (初恋一定是美好的吗？) and 青涩的早恋 is one backdrop element of a horror mystery — not the first-love romance a tag-clicker would expect.",
+      "false_positive_cause": "INCIDENTAL_MENTION"
+    },
+    {
+      "review_id": "nrv_81fd69be2df858e2b2b2b9f0",
+      "canonical_stable_id": "ct-v1-campus",
+      "verdict": "SUPPORTED",
+      "confidence": 0.85,
+      "reason": "The entire story is set at a 高校: campus legends, campus 诡异事件 and school-internal 纠葛 — the school is the primary setting per the tag's setting-based definition.",
+      "false_positive_cause": "NONE"
+    },
+    {
+      "review_id": "nrv_840c866fae6f6fd395688102",
+      "canonical_stable_id": "ct-v1-royalty",
+      "verdict": "SUPPORTED",
+      "confidence": 0.55,
+      "reason": "The mysterious stranger 'cache un secret royal' — one of the two central secrets driving the plot; royalty is entangled in the main intrigue, though its exact nature stays vague.",
+      "false_positive_cause": "NONE"
+    },
+    {
+      "review_id": "nrv_840c866fae6f6fd395688102",
+      "canonical_stable_id": "ct-v1-romance",
+      "verdict": "SUPPORTED",
+      "confidence": 0.85,
+      "reason": "Curiosity 'se mue en romance' and the resolution turns on whether 'leur amour est assez fort' — the love story is the main thread.",
+      "false_positive_cause": "NONE"
+    },
+    {
+      "review_id": "nrv_841e3a6e49c11f5bb6ab030b",
+      "canonical_stable_id": "ct-v1-betrayal",
+      "verdict": "SUPPORTED",
+      "confidence": 0.7,
+      "reason": "The outline names 背叛后的崛起 as a core theme and Adrien and Camille's 公开羞辱和背叛 as the central conflict, even though the description is a leaked writing prompt rather than a real blurb.",
+      "false_positive_cause": "NONE"
+    },
+    {
+      "review_id": "nrv_841e3a6e49c11f5bb6ab030b",
+      "canonical_stable_id": "ct-v1-heir",
+      "verdict": "SUPPORTED",
+      "confidence": 0.75,
+      "reason": "The turning point is Bernard declaring Chloé 亲生女儿和唯一继承人 with Adrien 被剥夺继承权, and the title is 'L'Héritière Oubliée' — heir-identity reversal is the climax.",
+      "false_positive_cause": "NONE"
+    },
+    {
+      "review_id": "nrv_841e3a6e49c11f5bb6ab030b",
+      "canonical_stable_id": "ct-v1-divorce",
+      "verdict": "SUPPORTED",
+      "confidence": 0.6,
+      "reason": "The core conflict includes 当众宣布Chloé的离婚和解雇 — the public divorce is the inciting humiliation the identity-reversal revenge arc answers.",
+      "false_positive_cause": "NONE"
+    },
+    {
+      "review_id": "nrv_843be6575b12adf561c0a003",
+      "canonical_stable_id": "ct-v1-crime",
+      "verdict": "UNSUPPORTED",
+      "confidence": 0.55,
+      "reason": "The match is 'un crime que je n'avais pas commis' — a crime she did NOT commit; the book is a wronged-wife revenge melodrama about a frame-up, not the crime-genre fiction a 犯罪 tag-clicker expects.",
+      "false_positive_cause": "NEGATION_OR_CONTRAST"
+    },
+    {
+      "review_id": "nrv_84c38a7820ed0e23d92f53b5",
+      "canonical_stable_id": "ct-v1-childhood-sweethearts",
+      "verdict": "UNSUPPORTED",
+      "confidence": 0.75,
+      "reason": "The 青梅竹马 bond is between the scumbag husband and his true wife 项轻轻 — the antagonist pair, not the main couple; a childhood-sweethearts-romance seeker would feel misled.",
+      "false_positive_cause": "SECONDARY_CHARACTER"
+    },
+    {
+      "review_id": "nrv_84c38a7820ed0e23d92f53b5",
+      "canonical_stable_id": "ct-v1-princess",
+      "verdict": "UNSUPPORTED",
+      "confidence": 0.85,
+      "reason": "豪门秦家的小公主 is metaphorical for the wealthy family's pampered true daughter in a modern setting; there is no royalty at all.",
+      "false_positive_cause": "MULTIPLE_MEANING"
+    },
+    {
+      "review_id": "nrv_85442f2d836b951a42dddfce",
+      "canonical_stable_id": "ct-v1-princess",
+      "verdict": "SUPPORTED",
+      "confidence": 0.85,
+      "reason": "出逃公主的绝世爱情 — the heroine is a runaway princess and that identity frames the entire love story.",
+      "false_positive_cause": "NONE"
+    },
+    {
+      "review_id": "nrv_85e7362ed02db13c0ad8ed44",
+      "canonical_stable_id": "ct-v1-assassin",
+      "verdict": "UNCERTAIN",
+      "confidence": 0.5,
+      "reason": "The one-sentence blurb lists 'the world's most deadly assassin' as one of three things the inspector tracks down; whether assassin content is prominent enough to satisfy the tag cannot be judged from this alone.",
+      "false_positive_cause": "INSUFFICIENT_CONTEXT"
+    },
+    {
+      "review_id": "nrv_8a14101f0879e3de0ed80e7d",
+      "canonical_stable_id": "ct-v1-miracle-healer",
+      "verdict": "UNSUPPORTED",
+      "confidence": 0.65,
+      "reason": "ゴッドハンドの神医は彼女 is one entry in a long list of the heroine's hidden identities (underground fighting champion, No.1 hacker, top racer, AI authority, manga artist...); healing is one facet of the all-powerful-wife trope, not a main thread.",
+      "false_positive_cause": "INCIDENTAL_MENTION"
+    },
+    {
+      "review_id": "nrv_8adba95064112208a1dfb38a",
+      "canonical_stable_id": "ct-v1-urban-setting",
+      "verdict": "UNSUPPORTED",
+      "confidence": 0.85,
+      "reason": "'urban' appears in 'escape from urban poverty' — the novel's whole arc leaves Oakland for pastoral farmland ('in search of land they can farm independently'); the urban-setting expectation is inverted.",
+      "false_positive_cause": "NEGATION_OR_CONTRAST"
+    },
+    {
+      "review_id": "nrv_8de3a256d4fa5294b5c8bcbd",
+      "canonical_stable_id": "ct-v1-supernatural",
+      "verdict": "SUPPORTED",
+      "confidence": 0.85,
+      "reason": "Framed as a 'Supernatural steamy romance series', and Flo's 'ability to see the future and see the dead' is her core trait — supernatural elements shape the premise and the abuse that sets the plot moving.",
+      "false_positive_cause": "NONE"
+    },
+    {
+      "review_id": "nrv_8de3a256d4fa5294b5c8bcbd",
+      "canonical_stable_id": "ct-v1-romance",
+      "verdict": "SUPPORTED",
+      "confidence": 0.9,
+      "reason": "A steamy romance: the Flo-Walter relationship — his walls and her slowly tearing them apart — is the entire plot.",
+      "false_positive_cause": "NONE"
+    },
+    {
+      "review_id": "nrv_90b3fae9c1ae8df602e06e27",
+      "canonical_stable_id": "ct-v1-superpowers",
+      "verdict": "UNSUPPORTED",
+      "confidence": 0.7,
+      "reason": "睜眼瞎的超能力者 is one of five listed target archetypes (校園大佬，鐵血暴君，冷清厲鬼...) in a quick-transmigration world-hopping story; superpowers are one arc's flavor, not a stable premise.",
+      "false_positive_cause": "INCIDENTAL_MENTION"
+    },
+    {
+      "review_id": "nrv_92e6fe19b2f3a9b5a67ebeaf",
+      "canonical_stable_id": "ct-v1-wealthy-ceo",
+      "verdict": "SUPPORTED",
+      "confidence": 0.65,
+      "reason": "After the divorce the heroine confronts her ex as the CEO of his company's rival firm ('rakibi olan firmanın CEO'su') — her powerful-CEO identity is the pivotal reveal driving the regret-and-chase plot.",
+      "false_positive_cause": "NONE"
+    },
+    {
+      "review_id": "nrv_944fd87f9abb2504b00f715f",
+      "canonical_stable_id": "ct-v1-apocalypse",
+      "verdict": "SUPPORTED",
+      "confidence": 0.95,
+      "reason": "末日死神病毒爆發 turns humanity into zombies and the hero begins his 末世之旅 — the zombie apocalypse is the core setting of the whole story.",
+      "false_positive_cause": "NONE"
+    },
+    {
+      "review_id": "nrv_95bbd46f806a7a81bb0de633",
+      "canonical_stable_id": "ct-v1-crime",
+      "verdict": "SUPPORTED",
+      "confidence": 0.8,
+      "reason": "The story lives in the criminal underworld — the husband is its 'King', she planned his massacre, and the finale happens at the 'Global Crime Summit' on the arm of his deadliest rival.",
+      "false_positive_cause": "NONE"
+    },
+    {
+      "review_id": "nrv_95bbd46f806a7a81bb0de633",
+      "canonical_stable_id": "ct-v1-mafia",
+      "verdict": "SUPPORTED",
+      "confidence": 0.8,
+      "reason": "The husband's reputation rests on having 'crippled the Russian mafia' and the whole cast are underworld bosses and rivals — the mafia world is the stable setting.",
+      "false_positive_cause": "NONE"
+    },
+    {
+      "review_id": "nrv_95bbd46f806a7a81bb0de633",
+      "canonical_stable_id": "ct-v1-genius",
+      "verdict": "SUPPORTED",
+      "confidence": 0.6,
+      "reason": "The 'strategic genius' credit belongs falsely to Craig; the heroine is the real 'architect of his empire' and the titular 'Shadow Strategist' — mastermind genius is her core identity.",
+      "false_positive_cause": "NONE"
+    }
+  ],
+  "novel_verdicts": [
+    { "review_id": "nrv_5a88d05ca5e96d380ade7802", "overall_description_tag_quality": "GOOD" },
+    { "review_id": "nrv_5ab3544c538640d88ed4430f", "overall_description_tag_quality": "GOOD" },
+    { "review_id": "nrv_5b2709834cc21b820158e3ae", "overall_description_tag_quality": "GOOD" },
+    { "review_id": "nrv_5c840d7f1e7beffe76fefabb", "overall_description_tag_quality": "GOOD" },
+    { "review_id": "nrv_5ce3be6d65983e11ebd52891", "overall_description_tag_quality": "BAD" },
+    { "review_id": "nrv_5f29640c98dc3e966a0e217a", "overall_description_tag_quality": "BAD" },
+    { "review_id": "nrv_60c7715a66853c4d768ee03e", "overall_description_tag_quality": "GOOD" },
+    { "review_id": "nrv_62301fad908c98bbaebcd9ef", "overall_description_tag_quality": "MIXED" },
+    { "review_id": "nrv_660937814ec9ebd2af605366", "overall_description_tag_quality": "MIXED" },
+    { "review_id": "nrv_669d90a83b80156c4b0351ac", "overall_description_tag_quality": "GOOD" },
+    { "review_id": "nrv_685383f923f8e0ed68112b48", "overall_description_tag_quality": "GOOD" },
+    { "review_id": "nrv_6cfc7cbcdd4ec99f4c24f209", "overall_description_tag_quality": "GOOD" },
+    { "review_id": "nrv_6d422ce9beb2bd663c558d1a", "overall_description_tag_quality": "GOOD" },
+    { "review_id": "nrv_6f527f52cd8b8a376e32b314", "overall_description_tag_quality": "MIXED" },
+    { "review_id": "nrv_6fbb4c101f69fd813e1d412d", "overall_description_tag_quality": "GOOD" },
+    { "review_id": "nrv_721ea7e64ed07522df25b6d9", "overall_description_tag_quality": "GOOD" },
+    { "review_id": "nrv_729added0ab1eb20680e89cd", "overall_description_tag_quality": "MIXED" },
+    { "review_id": "nrv_73a33c197958f6ea2d601858", "overall_description_tag_quality": "GOOD" },
+    { "review_id": "nrv_780b96af0c9eab5475767a87", "overall_description_tag_quality": "GOOD" },
+    { "review_id": "nrv_798687a165b85bb40340f391", "overall_description_tag_quality": "GOOD" },
+    { "review_id": "nrv_7c9c47364b51ba7a9699a144", "overall_description_tag_quality": "GOOD" },
+    { "review_id": "nrv_7cb8b6e53aa584fc2c892a20", "overall_description_tag_quality": "GOOD" },
+    { "review_id": "nrv_7d012ca169738e6b31ff4048", "overall_description_tag_quality": "BAD" },
+    { "review_id": "nrv_7f3d0b7fd7819b09659eac42", "overall_description_tag_quality": "GOOD" },
+    { "review_id": "nrv_803c904b368a6360a5a49d33", "overall_description_tag_quality": "GOOD" },
+    { "review_id": "nrv_8102ab6c41f0d853f757656c", "overall_description_tag_quality": "GOOD" },
+    { "review_id": "nrv_81fd69be2df858e2b2b2b9f0", "overall_description_tag_quality": "MIXED" },
+    { "review_id": "nrv_840c866fae6f6fd395688102", "overall_description_tag_quality": "GOOD" },
+    { "review_id": "nrv_841e3a6e49c11f5bb6ab030b", "overall_description_tag_quality": "GOOD" },
+    { "review_id": "nrv_843be6575b12adf561c0a003", "overall_description_tag_quality": "BAD" },
+    { "review_id": "nrv_84c38a7820ed0e23d92f53b5", "overall_description_tag_quality": "BAD" },
+    { "review_id": "nrv_85442f2d836b951a42dddfce", "overall_description_tag_quality": "GOOD" },
+    { "review_id": "nrv_85e7362ed02db13c0ad8ed44", "overall_description_tag_quality": "UNCERTAIN" },
+    { "review_id": "nrv_8a14101f0879e3de0ed80e7d", "overall_description_tag_quality": "BAD" },
+    { "review_id": "nrv_8adba95064112208a1dfb38a", "overall_description_tag_quality": "BAD" },
+    { "review_id": "nrv_8de3a256d4fa5294b5c8bcbd", "overall_description_tag_quality": "GOOD" },
+    { "review_id": "nrv_90b3fae9c1ae8df602e06e27", "overall_description_tag_quality": "BAD" },
+    { "review_id": "nrv_92e6fe19b2f3a9b5a67ebeaf", "overall_description_tag_quality": "GOOD" },
+    { "review_id": "nrv_944fd87f9abb2504b00f715f", "overall_description_tag_quality": "GOOD" },
+    { "review_id": "nrv_95bbd46f806a7a81bb0de633", "overall_description_tag_quality": "GOOD" }
+  ]
+}

@@ -1,0 +1,494 @@
+{
+  "edge_verdicts": [
+    {
+      "review_id": "nrv_d31e997dd23a739fc7820ab7",
+      "canonical_stable_id": "ct-v1-crown-prince",
+      "verdict": "UNSUPPORTED",
+      "confidence": 0.7,
+      "reason": "太子只在「驕傲不羈的東霄太子視她為夢中女神」一句出现，是众多爱慕者之一，男主另有其人（焚天大陆最狂傲尊贵的男人/妖孽），太子不构成核心人物身份。",
+      "false_positive_cause": "SECONDARY_CHARACTER"
+    },
+    {
+      "review_id": "nrv_d31e997dd23a739fc7820ab7",
+      "canonical_stable_id": "ct-v1-rebirth",
+      "verdict": "SUPPORTED",
+      "confidence": 0.9,
+      "reason": "「重生後她卻成了東霄國雲家第一廢柴」「強魂再世」是全书前提，废柴逆袭主线完全建立在重生设定上。",
+      "false_positive_cause": "NONE"
+    },
+    {
+      "review_id": "nrv_d49b7f10bc8f52278a183481",
+      "canonical_stable_id": "ct-v1-military",
+      "verdict": "UNSUPPORTED",
+      "confidence": 0.75,
+      "reason": "military 只出现在「When the military arrived...a four-star General snapped a sharp salute」的单一场景，用于铺垫男主隐藏身份；故事是隐藏大佬护卫式言情，不是军旅题材。",
+      "false_positive_cause": "INCIDENTAL_MENTION"
+    },
+    {
+      "review_id": "nrv_d9aa3f969d5878363ad836ff",
+      "canonical_stable_id": "ct-v1-apocalypse",
+      "verdict": "UNSUPPORTED",
+      "confidence": 0.8,
+      "reason": "简介明说「The grid never went down」，末日从未发生；结尾「What if I gave them an apocalypse?」是主角打算伪造末日复仇，属于现代都市复仇文而非末世题材。",
+      "false_positive_cause": "NEGATION_OR_CONTRAST"
+    },
+    {
+      "review_id": "nrv_d9bfda749b49212d3185c418",
+      "canonical_stable_id": "ct-v1-revenge",
+      "verdict": "SUPPORTED",
+      "confidence": 0.6,
+      "reason": "「only to see his native family killed. He wreaks his revenge before returning to England」——亲族被杀后复仇是简介给出的主要情节收束，构成真实的复仇叙事期待。",
+      "false_positive_cause": "NONE"
+    },
+    {
+      "review_id": "nrv_d9f213f0500e1e57fb0898e8",
+      "canonical_stable_id": "ct-v1-werewolf-luna",
+      "verdict": "SUPPORTED",
+      "confidence": 0.85,
+      "reason": "狼人帝国+Rei Alfa 设定下，「Uma bruxa poderia se tornar uma Luna?」正是核心悬念：女巫奴隶能否成为 Luna，与该标签的检索期待完全一致。",
+      "false_positive_cause": "NONE"
+    },
+    {
+      "review_id": "nrv_dcf7667a94c80b5d763bb826",
+      "canonical_stable_id": "ct-v1-legitimate-daughter",
+      "verdict": "SUPPORTED",
+      "confidence": 0.85,
+      "reason": "「穿成了...相府嫡長女」「堂堂相府嫡女」是女主稳定身份，继母庶妹欺压、宅斗虐渣的主线都围绕嫡女处境展开。",
+      "false_positive_cause": "NONE"
+    },
+    {
+      "review_id": "nrv_dcf7667a94c80b5d763bb826",
+      "canonical_stable_id": "ct-v1-time-travel",
+      "verdict": "SUPPORTED",
+      "confidence": 0.95,
+      "reason": "「卻意外穿成了爹不疼娘早逝的相府嫡長女。穿越當日...」——穿越是开篇核心前提。",
+      "false_positive_cause": "NONE"
+    },
+    {
+      "review_id": "nrv_dd8e7869a64f6c743d1212bd",
+      "canonical_stable_id": "ct-v1-lawyer",
+      "verdict": "UNSUPPORTED",
+      "confidence": 0.65,
+      "reason": "「a leader of underground organization, a lawyer and a CEO too?」——律师只是女主多重身份罗列中的一项，故事框架是双总裁对决言情，简介没有任何律师职业线。",
+      "false_positive_cause": "ROLE_ONLY"
+    },
+    {
+      "review_id": "nrv_de6b8ed10d44798a323a5d36",
+      "canonical_stable_id": "ct-v1-wealthy-ceo",
+      "verdict": "SUPPORTED",
+      "confidence": 0.75,
+      "reason": "「CEO/bos di tempat Alula bekerja adalah mantan pacar Alula」——前男友即现任 CEO 老板，是男主核心身份与全书冲突来源（书名即『前任变老板』）。",
+      "false_positive_cause": "NONE"
+    },
+    {
+      "review_id": "nrv_dfceb7cbd9b02aa8740ccf1f",
+      "canonical_stable_id": "ct-v1-rebirth",
+      "verdict": "SUPPORTED",
+      "confidence": 0.8,
+      "reason": "「因爲喪屍王喪命,重生到類似地球平行空間的Z國」——死后重生并继承异能是全书前提，六零撿漏爽文主线由此展开。",
+      "false_positive_cause": "NONE"
+    },
+    {
+      "review_id": "nrv_e079309d15a7a2bfddc69ca0",
+      "canonical_stable_id": "ct-v1-legitimate-daughter",
+      "verdict": "UNSUPPORTED",
+      "confidence": 0.85,
+      "reason": "命中的「嫡女」指三年后入宫的对手「蕭家正房嫡女」；女主蕭婉是「庶房長女」，与嫡女身份恰好相反，点嫡女标签找到庶女宫斗文会明显错位。",
+      "false_positive_cause": "SECONDARY_CHARACTER"
+    },
+    {
+      "review_id": "nrv_e0ec23c5200600298f466f63",
+      "canonical_stable_id": "ct-v1-apocalypse",
+      "verdict": "UNSUPPORTED",
+      "confidence": 0.6,
+      "reason": "「拯救人类于末世之中」是修辞性口号，故事是7个普通都市男女对抗奇异事件的都市异能文，并无末世废土设定。",
+      "false_positive_cause": "INCIDENTAL_MENTION"
+    },
+    {
+      "review_id": "nrv_e0ec23c5200600298f466f63",
+      "canonical_stable_id": "ct-v1-fantasy",
+      "verdict": "UNCERTAIN",
+      "confidence": 0.5,
+      "reason": "「奇幻」出现在「对抗生活中各种光怪陆离的奇幻事件」的形容用法；内容混合妖怪、驱魔、外星人、尖端科技，是都市异能/灵异/科幻杂糅，是否满足奇幻类型检索期待仅凭简介难定。",
+      "false_positive_cause": "GENERIC_KEYWORD"
+    },
+    {
+      "review_id": "nrv_e0ec23c5200600298f466f63",
+      "canonical_stable_id": "ct-v1-secretary",
+      "verdict": "UNSUPPORTED",
+      "confidence": 0.9,
+      "reason": "「秘书溶化，助理爆炸」只是奇异事件清单里的猎奇一笔，秘书既非主角身份也非题材元素。",
+      "false_positive_cause": "INCIDENTAL_MENTION"
+    },
+    {
+      "review_id": "nrv_e15b80f983b5702e3514059e",
+      "canonical_stable_id": "ct-v1-crime",
+      "verdict": "UNSUPPORTED",
+      "confidence": 0.6,
+      "reason": "crime 命中于「innocentant Camille de son crime」的普通词义；故事是婚姻背叛+隐藏股权复仇的言情虐文，虽有谋杀情节但不是犯罪类型小说的检索期待。",
+      "false_positive_cause": "GENERIC_KEYWORD"
+    },
+    {
+      "review_id": "nrv_e15b80f983b5702e3514059e",
+      "canonical_stable_id": "ct-v1-werewolf-luna",
+      "verdict": "UNSUPPORTED",
+      "confidence": 0.97,
+      "reason": "Luna 命中的是小三的姓名「le Dr Camille Luna」，全文与狼人毫无关系。",
+      "false_positive_cause": "MULTIPLE_MEANING"
+    },
+    {
+      "review_id": "nrv_e338dcf6e4fd28f65cac8ba7",
+      "canonical_stable_id": "ct-v1-werewolf-luna",
+      "verdict": "UNSUPPORTED",
+      "confidence": 0.97,
+      "reason": "Luna 命中的是 CEO 小女儿的名字「a pequena Luna, que só fala com ela」，这是女贼假扮保姆的都市言情，无任何狼人设定。",
+      "false_positive_cause": "MULTIPLE_MEANING"
+    },
+    {
+      "review_id": "nrv_e47f944eb5e420aae6960463",
+      "canonical_stable_id": "ct-v1-one-night-stand",
+      "verdict": "SUPPORTED",
+      "confidence": 0.7,
+      "reason": "「berurusan dengan rival bisnisnya karena one-night-stand saat ia mabuk di nightclub」——一夜情直接触发两条主线之一的闪婚契约，是前提级设定。",
+      "false_positive_cause": "NONE"
+    },
+    {
+      "review_id": "nrv_e545109fdd74586e714124a2",
+      "canonical_stable_id": "ct-v1-wealthy-ceo",
+      "verdict": "SUPPORTED",
+      "confidence": 0.75,
+      "reason": "「Bir teknoloji imparatorluğunun CEO'su olarak o bir kraldı」——男主是科技帝国 CEO，其身份与权势贯穿整个囚禁/背叛/假死复仇主线。",
+      "false_positive_cause": "NONE"
+    },
+    {
+      "review_id": "nrv_e845e2f5372c5714c534affb",
+      "canonical_stable_id": "ct-v1-time-travel",
+      "verdict": "SUPPORTED",
+      "confidence": 0.95,
+      "reason": "「一朝穿越,醫毒雙絕的頂級僱傭兵竟成廢柴癡女醜八怪」——穿越是全书开篇前提。",
+      "false_positive_cause": "NONE"
+    },
+    {
+      "review_id": "nrv_ea1162ef6352625c1ba3bd3c",
+      "canonical_stable_id": "ct-v1-student",
+      "verdict": "SUPPORTED",
+      "confidence": 0.8,
+      "reason": "奖学金、剽窃指控、开除、重回「Professor Miller's class」重来一世——全部冲突都发生在学生身份与校园学业场景内，学生身份持续影响主线。",
+      "false_positive_cause": "NONE"
+    },
+    {
+      "review_id": "nrv_eb05c2506f31ce1939049116",
+      "canonical_stable_id": "ct-v1-student",
+      "verdict": "UNSUPPORTED",
+      "confidence": 0.6,
+      "reason": "主角虽是「一名大学生...大一新生」，但主线是「深入丛林、翻越大山、进入不见底的海洋」的探险寻宝，学业与校园关系并非核心，学生只是人物背景。",
+      "false_positive_cause": "ROLE_ONLY"
+    },
+    {
+      "review_id": "nrv_eb5459d93df0c78f4ea2e577",
+      "canonical_stable_id": "ct-v1-pregnancy",
+      "verdict": "SUPPORTED",
+      "confidence": 0.55,
+      "reason": "「She has surprising news: she's pregnant」——前女友怀孕登门是全书发动事件，孕期状态在双方联手对抗 Aaron、旧情复燃的过程中构成稳定前提；但简介后半未再展开孕期线，故置信度中等。",
+      "false_positive_cause": "NONE"
+    },
+    {
+      "review_id": "nrv_eb95d876bd678c1cba165e9e",
+      "canonical_stable_id": "ct-v1-xianxia",
+      "verdict": "SUPPORTED",
+      "confidence": 0.6,
+      "reason": "「传承人皇血脉仍沦为宗门弃徒」「踏天庭逗九天玄女...笑主十道轮回」——宗门、天庭、轮回等东方修炼体系构成世界规则与逆袭主线，符合仙侠修真的检索期待。",
+      "false_positive_cause": "NONE"
+    },
+    {
+      "review_id": "nrv_ebe9c53345b3c13f4b3e8c8d",
+      "canonical_stable_id": "ct-v1-revenge",
+      "verdict": "UNSUPPORTED",
+      "confidence": 0.65,
+      "reason": "「vows to get revenge」指丈夫 Chillingworth 的复仇动机；主角是 Hester，全书核心是罪与耻辱的道德叙事，点复仇标签找到《红字》会明显偏离类型检索意图。",
+      "false_positive_cause": "SECONDARY_CHARACTER"
+    },
+    {
+      "review_id": "nrv_ef9e18e5601f5f1eecfd9ecb",
+      "canonical_stable_id": "ct-v1-revenge",
+      "verdict": "SUPPORTED",
+      "confidence": 0.95,
+      "reason": "「重生一世，她只为复仇而来，手撕绿茶虐渣，毁他帝王之路！」——复仇被明示为重生后的唯一目的，是主线。",
+      "false_positive_cause": "NONE"
+    },
+    {
+      "review_id": "nrv_ef9e18e5601f5f1eecfd9ecb",
+      "canonical_stable_id": "ct-v1-rebirth",
+      "verdict": "SUPPORTED",
+      "confidence": 0.95,
+      "reason": "「前世她权谋算计...满门抄斩」「重生一世」——前世惨死、重生复仇是全书前提。",
+      "false_positive_cause": "NONE"
+    },
+    {
+      "review_id": "nrv_efaac14ec07a10fa0214528a",
+      "canonical_stable_id": "ct-v1-genius",
+      "verdict": "UNSUPPORTED",
+      "confidence": 0.85,
+      "reason": "「亿万天才，群雄逐鹿」是形容世界格局的泛化套话，并非主角的天才人设；主角设定是遭陷害后重回十六岁重修武道。",
+      "false_positive_cause": "GENERIC_KEYWORD"
+    },
+    {
+      "review_id": "nrv_f21af6a3763b7b5adcd94887",
+      "canonical_stable_id": "ct-v1-emperor",
+      "verdict": "UNSUPPORTED",
+      "confidence": 0.85,
+      "reason": "「I'm going to build an Emperor」是比喻——把瘫痪的黑帮丈夫扶成地下世界之王；故事是现代黑帮医女言情，没有皇帝/帝制设定。",
+      "false_positive_cause": "MULTIPLE_MEANING"
+    },
+    {
+      "review_id": "nrv_f2fa231451dbb14952453621",
+      "canonical_stable_id": "ct-v1-divorce",
+      "verdict": "SUPPORTED",
+      "confidence": 0.8,
+      "reason": "「Dès sa sortie de l'hôpital, elle a rédigé la demande de divorce」——离婚是全书转折支点，『离婚+隐藏身份反杀』正是该标签用户要找的故事形态。",
+      "false_positive_cause": "NONE"
+    },
+    {
+      "review_id": "nrv_f4742692a67101a6f2c2e313",
+      "canonical_stable_id": "ct-v1-princess",
+      "verdict": "UNSUPPORTED",
+      "confidence": 0.9,
+      "reason": "「男主寵女主，寵成小公主」是宠溺程度的比喻，全书是现代青梅竹马童养媳宠文，无任何王室公主设定。",
+      "false_positive_cause": "MULTIPLE_MEANING"
+    },
+    {
+      "review_id": "nrv_f4742692a67101a6f2c2e313",
+      "canonical_stable_id": "ct-v1-rebirth",
+      "verdict": "SUPPORTED",
+      "confidence": 0.85,
+      "reason": "「媳婦長大重生了再養一遍」且排雷指南第1条明列「青梅竹馬童養媳，重生」——重生是作者自标的核心设定。",
+      "false_positive_cause": "NONE"
+    },
+    {
+      "review_id": "nrv_f4b4b266d6a312edbfb76938",
+      "canonical_stable_id": "ct-v1-time-travel",
+      "verdict": "SUPPORTED",
+      "confidence": 0.85,
+      "reason": "「你居然是和朕一起穿越过来的同学」——皇帝与女扮男装的丞相都是穿越者，这一设定是全书喜剧框架的根基。",
+      "false_positive_cause": "NONE"
+    },
+    {
+      "review_id": "nrv_f53a55012dd5a9f7ab7fe384",
+      "canonical_stable_id": "ct-v1-adventure",
+      "verdict": "UNCERTAIN",
+      "confidence": 0.5,
+      "reason": "「冒险」出现在对世界生活方式的泛述「靠驯服妖魔对战，生活，冒险」；简介主体是训练师学院+系统捕捉稀有妖魔，冒险是否构成主线仅凭简介难判。",
+      "false_positive_cause": "GENERIC_KEYWORD"
+    },
+    {
+      "review_id": "nrv_f53a55012dd5a9f7ab7fe384",
+      "canonical_stable_id": "ct-v1-time-travel",
+      "verdict": "SUPPORTED",
+      "confidence": 0.9,
+      "reason": "「藏锋穿越妖魔世界，获得提示系统」——穿越是开篇核心前提。",
+      "false_positive_cause": "NONE"
+    },
+    {
+      "review_id": "nrv_f584b0af0953387efd165617",
+      "canonical_stable_id": "ct-v1-werewolf-luna",
+      "verdict": "SUPPORTED",
+      "confidence": 0.6,
+      "reason": "命中处是女主名字「Luna, jeune louve-garou de 17 ans」，但她是 Alpha 之女、「princesse de la meute」，且预言指向她与敌对狼族继承人结合——实质就是狼人 Luna 题材的故事空间，检索不违和。",
+      "false_positive_cause": "NONE"
+    },
+    {
+      "review_id": "nrv_f584b0af0953387efd165617",
+      "canonical_stable_id": "ct-v1-werewolf-alpha",
+      "verdict": "SUPPORTED",
+      "confidence": 0.8,
+      "reason": "「Fille des Alphas Mikhail et Anastasia」「deux Alphas se faisaient face」——Alpha 首领是核心人物层（父亲、敌对首领 Dmitri、其继承人 Viktor），Alpha 权力与血约驱动全书。",
+      "false_positive_cause": "NONE"
+    },
+    {
+      "review_id": "nrv_f5e7825c5521f66f1f26bcee",
+      "canonical_stable_id": "ct-v1-romance",
+      "verdict": "SUPPORTED",
+      "confidence": 0.7,
+      "reason": "「ódio e amor a linha mais tênue que ja foi traçada」加上自述「Trata-se de uma obra é um romance dark」——爱恨纠缠是主线，暗黑言情定位明确。",
+      "false_positive_cause": "NONE"
+    },
+    {
+      "review_id": "nrv_f89d13bfb0fe0b6ba64f6801",
+      "canonical_stable_id": "ct-v1-crime",
+      "verdict": "SUPPORTED",
+      "confidence": 0.9,
+      "reason": "连环凶杀+警探追凶+「littérature policière」自我定位——典型犯罪/警察程序小说，完全符合犯罪标签检索期待。",
+      "false_positive_cause": "NONE"
+    },
+    {
+      "review_id": "nrv_f89d13bfb0fe0b6ba64f6801",
+      "canonical_stable_id": "ct-v1-assassin",
+      "verdict": "UNSUPPORTED",
+      "confidence": 0.85,
+      "reason": "法语「l'assassin」意为凶手/杀人犯，此处指连环杀手「le Tueur à la Main Rouge」；中文标签「刺客」指职业刺客原型，语义漂移导致错配。",
+      "false_positive_cause": "TRANSLATION_DRIFT"
+    },
+    {
+      "review_id": "nrv_f9240bddb4689830dab8a930",
+      "canonical_stable_id": "ct-v1-time-travel",
+      "verdict": "SUPPORTED",
+      "confidence": 0.85,
+      "reason": "「这一世她穿越而来...谁知他也穿梭而来」——双主角穿越是全书前提设定。",
+      "false_positive_cause": "NONE"
+    },
+    {
+      "review_id": "nrv_f948b62041effffeb5391ee0",
+      "canonical_stable_id": "ct-v1-time-travel",
+      "verdict": "SUPPORTED",
+      "confidence": 0.95,
+      "reason": "「她本是二十一世紀王牌特工，一朝穿越成了將軍府大小姐」——穿越是开篇核心前提。",
+      "false_positive_cause": "NONE"
+    },
+    {
+      "review_id": "nrv_fa01c5d363719c8a29645543",
+      "canonical_stable_id": "ct-v1-sweetness",
+      "verdict": "SUPPORTED",
+      "confidence": 0.9,
+      "reason": "作者自标签「【医妃+空间+替嫁+甜宠+男强女更强】」明示甜宠定位，结尾王爷宣示独宠的对话与之一致。",
+      "false_positive_cause": "NONE"
+    },
+    {
+      "review_id": "nrv_fa01c5d363719c8a29645543",
+      "canonical_stable_id": "ct-v1-genius",
+      "verdict": "SUPPORTED",
+      "confidence": 0.7,
+      "reason": "「一代天才医者带着神秘空间穿越」——天才医者是女主的核心人物身份，医术人设贯穿医妃主线。",
+      "false_positive_cause": "NONE"
+    },
+    {
+      "review_id": "nrv_fa01c5d363719c8a29645543",
+      "canonical_stable_id": "ct-v1-substitute-marriage",
+      "verdict": "SUPPORTED",
+      "confidence": 0.95,
+      "reason": "「成了替亲妹妹出嫁冲喜的工具人王妃」且自标签明列【替嫁】——替嫁是全书前提。",
+      "false_positive_cause": "NONE"
+    },
+    {
+      "review_id": "nrv_fb24721f8149c9be3566a2ff",
+      "canonical_stable_id": "ct-v1-wealthy-ceo",
+      "verdict": "SUPPORTED",
+      "confidence": 0.85,
+      "reason": "「dünyaca ünlü bir holdingin CEO'su maskesini çıkardı. Ortaya çıkan yüz, Sude'nin kocasından başkası değildi」——丈夫隐藏的世界级财团 CEO 身份是全书核心反转与男主身份。",
+      "false_positive_cause": "NONE"
+    },
+    {
+      "review_id": "nrv_fd06403847bcd28bd140cadc",
+      "canonical_stable_id": "ct-v1-vampire",
+      "verdict": "SUPPORTED",
+      "confidence": 0.75,
+      "reason": "「he is already bound to three immortals. The lycan, Dragon, and Vampire, who is not planning on letting him go」——吸血鬼是三位命定伴侣之一，属核心人物设定。",
+      "false_positive_cause": "NONE"
+    },
+    {
+      "review_id": "nrv_fd06403847bcd28bd140cadc",
+      "canonical_stable_id": "ct-v1-supernatural",
+      "verdict": "UNSUPPORTED",
+      "confidence": 0.7,
+      "reason": "英文 supernatural（「He never believed in a supernatural world」）指狼人/吸血鬼超自然世界，而中文「灵异」定义限定鬼怪、通灵、捉妖、风水、冥婚等怪谈题材；西式狼人命定伴侣文与灵异检索期待错位。",
+      "false_positive_cause": "TRANSLATION_DRIFT"
+    },
+    {
+      "review_id": "nrv_fd06403847bcd28bd140cadc",
+      "canonical_stable_id": "ct-v1-werewolf",
+      "verdict": "SUPPORTED",
+      "confidence": 0.9,
+      "reason": "「he turned into a werewolf during his game」——主角18岁生日变身狼人是全书起点，狼人/lycan 设定贯穿命定伴侣主线。",
+      "false_positive_cause": "NONE"
+    },
+    {
+      "review_id": "nrv_fd75852b4b0e1ad77bdef3a1",
+      "canonical_stable_id": "ct-v1-betrayal",
+      "verdict": "SUPPORTED",
+      "confidence": 0.55,
+      "reason": "「卻因族人背叛險些形神俱滅」——族人背叛是主角陨落、残魂夺舍、妖皇归来整个前提的直接成因；但简介极短，背叛后续清算未明示，置信度中等。",
+      "false_positive_cause": "NONE"
+    },
+    {
+      "review_id": "nrv_fe71ec77b7aaee64ba8eaf35",
+      "canonical_stable_id": "ct-v1-wealthy-ceo",
+      "verdict": "SUPPORTED",
+      "confidence": 0.7,
+      "reason": "「Chồng tôi, CEO Trịnh Đức Thắng」——CEO 丈夫是核心人物，弃妻宠外室、被隐藏身份的女主反杀的豪门总裁式冲突贯穿全书。",
+      "false_positive_cause": "NONE"
+    },
+    {
+      "review_id": "nrv_fe99fe4dbd6a1f77cb24c734",
+      "canonical_stable_id": "ct-v1-suspense",
+      "verdict": "UNSUPPORTED",
+      "confidence": 0.65,
+      "reason": "「This suspense-filled tale」是宣传性形容词；全书是关于被遗忘的殖民时期作家的历史/传记式文学小说（双时空、殖民史、作者生平），与悬疑类型检索期待明显错位。",
+      "false_positive_cause": "GENERIC_KEYWORD"
+    },
+    {
+      "review_id": "nrv_ff6a57d9060e383e53ec60a7",
+      "canonical_stable_id": "ct-v1-crime",
+      "verdict": "SUPPORTED",
+      "confidence": 0.65,
+      "reason": "「the Underboss of the Fazio crime family」——犯罪家族世界是稳定设定并驱动主线（联姻、投靠敌对家族、火并复仇），对用户选择结果有实质影响。",
+      "false_positive_cause": "NONE"
+    },
+    {
+      "review_id": "nrv_ff6a57d9060e383e53ec60a7",
+      "canonical_stable_id": "ct-v1-princess",
+      "verdict": "UNSUPPORTED",
+      "confidence": 0.85,
+      "reason": "「the perfect, loyal Mafia Princess」是黑帮圈的习语称谓（黑帮千金），并非王室公主；点「公主」标签找到现代黑帮言情会明显错位。",
+      "false_positive_cause": "MULTIPLE_MEANING"
+    },
+    {
+      "review_id": "nrv_ff6a57d9060e383e53ec60a7",
+      "canonical_stable_id": "ct-v1-mafia",
+      "verdict": "SUPPORTED",
+      "confidence": 0.95,
+      "reason": "Underboss 未婚夫、敌对家族 Capo、「I want the Fazio family burned to the ground」——黑帮世界与帮派火并是全书核心设定与主线。",
+      "false_positive_cause": "NONE"
+    }
+  ],
+  "novel_verdicts": [
+    {"review_id": "nrv_d31e997dd23a739fc7820ab7", "overall_description_tag_quality": "MIXED"},
+    {"review_id": "nrv_d49b7f10bc8f52278a183481", "overall_description_tag_quality": "BAD"},
+    {"review_id": "nrv_d9aa3f969d5878363ad836ff", "overall_description_tag_quality": "BAD"},
+    {"review_id": "nrv_d9bfda749b49212d3185c418", "overall_description_tag_quality": "GOOD"},
+    {"review_id": "nrv_d9f213f0500e1e57fb0898e8", "overall_description_tag_quality": "GOOD"},
+    {"review_id": "nrv_dcf7667a94c80b5d763bb826", "overall_description_tag_quality": "GOOD"},
+    {"review_id": "nrv_dd8e7869a64f6c743d1212bd", "overall_description_tag_quality": "BAD"},
+    {"review_id": "nrv_de6b8ed10d44798a323a5d36", "overall_description_tag_quality": "GOOD"},
+    {"review_id": "nrv_dfceb7cbd9b02aa8740ccf1f", "overall_description_tag_quality": "GOOD"},
+    {"review_id": "nrv_e079309d15a7a2bfddc69ca0", "overall_description_tag_quality": "BAD"},
+    {"review_id": "nrv_e0ec23c5200600298f466f63", "overall_description_tag_quality": "BAD"},
+    {"review_id": "nrv_e15b80f983b5702e3514059e", "overall_description_tag_quality": "BAD"},
+    {"review_id": "nrv_e338dcf6e4fd28f65cac8ba7", "overall_description_tag_quality": "BAD"},
+    {"review_id": "nrv_e47f944eb5e420aae6960463", "overall_description_tag_quality": "GOOD"},
+    {"review_id": "nrv_e545109fdd74586e714124a2", "overall_description_tag_quality": "GOOD"},
+    {"review_id": "nrv_e845e2f5372c5714c534affb", "overall_description_tag_quality": "GOOD"},
+    {"review_id": "nrv_ea1162ef6352625c1ba3bd3c", "overall_description_tag_quality": "GOOD"},
+    {"review_id": "nrv_eb05c2506f31ce1939049116", "overall_description_tag_quality": "BAD"},
+    {"review_id": "nrv_eb5459d93df0c78f4ea2e577", "overall_description_tag_quality": "GOOD"},
+    {"review_id": "nrv_eb95d876bd678c1cba165e9e", "overall_description_tag_quality": "GOOD"},
+    {"review_id": "nrv_ebe9c53345b3c13f4b3e8c8d", "overall_description_tag_quality": "BAD"},
+    {"review_id": "nrv_ef9e18e5601f5f1eecfd9ecb", "overall_description_tag_quality": "GOOD"},
+    {"review_id": "nrv_efaac14ec07a10fa0214528a", "overall_description_tag_quality": "BAD"},
+    {"review_id": "nrv_f21af6a3763b7b5adcd94887", "overall_description_tag_quality": "BAD"},
+    {"review_id": "nrv_f2fa231451dbb14952453621", "overall_description_tag_quality": "GOOD"},
+    {"review_id": "nrv_f4742692a67101a6f2c2e313", "overall_description_tag_quality": "MIXED"},
+    {"review_id": "nrv_f4b4b266d6a312edbfb76938", "overall_description_tag_quality": "GOOD"},
+    {"review_id": "nrv_f53a55012dd5a9f7ab7fe384", "overall_description_tag_quality": "MIXED"},
+    {"review_id": "nrv_f584b0af0953387efd165617", "overall_description_tag_quality": "GOOD"},
+    {"review_id": "nrv_f5e7825c5521f66f1f26bcee", "overall_description_tag_quality": "GOOD"},
+    {"review_id": "nrv_f89d13bfb0fe0b6ba64f6801", "overall_description_tag_quality": "MIXED"},
+    {"review_id": "nrv_f9240bddb4689830dab8a930", "overall_description_tag_quality": "GOOD"},
+    {"review_id": "nrv_f948b62041effffeb5391ee0", "overall_description_tag_quality": "GOOD"},
+    {"review_id": "nrv_fa01c5d363719c8a29645543", "overall_description_tag_quality": "GOOD"},
+    {"review_id": "nrv_fb24721f8149c9be3566a2ff", "overall_description_tag_quality": "GOOD"},
+    {"review_id": "nrv_fd06403847bcd28bd140cadc", "overall_description_tag_quality": "MIXED"},
+    {"review_id": "nrv_fd75852b4b0e1ad77bdef3a1", "overall_description_tag_quality": "GOOD"},
+    {"review_id": "nrv_fe71ec77b7aaee64ba8eaf35", "overall_description_tag_quality": "GOOD"},
+    {"review_id": "nrv_fe99fe4dbd6a1f77cb24c734", "overall_description_tag_quality": "BAD"},
+    {"review_id": "nrv_ff6a57d9060e383e53ec60a7", "overall_description_tag_quality": "MIXED"}
+  ]
+}

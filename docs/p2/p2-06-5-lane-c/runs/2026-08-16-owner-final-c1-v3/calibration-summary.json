@@ -1,0 +1,999 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-08-16T23:30:00+09:00",
+  "status": {
+    "C1_V3_STATUS": "CALIBRATION_REVIEW_PENDING",
+    "C1_V3_SAMPLE_COUNT": 10000,
+    "TITLE_WEIGHT": 30,
+    "DESCRIPTION_WEIGHT": 30,
+    "THRESHOLD": 30,
+    "MAX_TEXT_TAGS": 3,
+    "C1_V2_TEXT_HIT_RATE": 0.3596,
+    "C1_V3_TEXT_HIT_RATE": 0.3061,
+    "C1_V2_DESCRIPTION_ONLY_RATE": 0.3034,
+    "C1_V3_DESCRIPTION_ONLY_RATE": 0.2412,
+    "REMOVED_BAD_SEED_EDGES": 1525,
+    "PREDICTED_PRECISION_FROM_EXISTING_VERDICTS": 0.733,
+    "MEASURED_PRECISION_ON_SURVIVING_REVIEWED_EDGES": 0.7378048780487805,
+    "POST_FIX_BLIND_REVIEW_SAMPLE_COUNT": 200,
+    "POST_FIX_BLIND_REVIEW_STATUS": "READY_FOR_INDEPENDENT_REVIEW",
+    "TEXT_PARAMETER_STATUS": "CALIBRATION_RECOMMENDATION_ONLY",
+    "CHAPTER_EVIDENCE_STATUS": "DEFER",
+    "C2_SAMPLE_REQUEST": "NONE",
+    "AUTO_WRITE_AUTHORIZED": "NO",
+    "OWNER_NEXT_DECISION": "POST_FIX_PRECISION_REVIEW_AND_FINAL_PARAMETER_FREEZE",
+    "LANGUAGE_19_RESOLUTION": "RAW_SCOPE_ONLY_LOCALE_STATISTICS_BLOCKED",
+    "LANGUAGE_20_RESOLUTION": "RAW_SCOPE_ONLY_LOCALE_STATISTICS_BLOCKED"
+  },
+  "input_qa": {
+    "unique_novels": 10000,
+    "unique_sample_rows": 10000,
+    "title_missing_or_empty": 0,
+    "description_missing_or_empty": 1,
+    "no_series_type": 1,
+    "raw_language_19_count": 1155,
+    "raw_language_20_count": 1165,
+    "locale_specific_statistics_blocked_count": 2320,
+    "mapped_source_tag_rows": 17932,
+    "novels_with_mapped_source_tags": 9932,
+    "manual_full_snapshot_count": 0,
+    "c1_input_sha256": "046fe9234b317eba145c3fbb35edd2e72af49e41309dcd5d5f45f7bc43d1776d",
+    "scorer_sample_sha256": "f14fa303128aa8713cdbd1c3f60e3ed161f055ced47f65bde354462860d8d330"
+  },
+  "input_contract": {
+    "artifact": "c1-input.jsonl",
+    "fields": [
+      "novel_identity",
+      "channel_app_id",
+      "raw_language_scope",
+      "title",
+      "description",
+      "raw_series_types",
+      "mapped_source_tags"
+    ],
+    "mapped_source_tag_fields": [
+      "canonical_stable_id",
+      "canonical_slug",
+      "mapping_key",
+      "exact_raw_token"
+    ]
+  },
+  "canonical_sha256": "8bc8cdae8be2176bde170173e98bad2b9fa0e1770818174a57320816eefdccad",
+  "raw_manifest_sha256": "4d7d6931687a2391ded9699ce90d54ceb3242ec232515d537eb7721274f61148",
+  "b2_manifest_sha256": "4f370023d933dfa3d011ee310880d5e5ad050d92435f21ecc805abae65c881bf",
+  "waiver_sha256": "52ce6e6ff5862353481023b9914fb06cd06e9ef5639913bb5044f4a01730d8d1",
+  "authoritative_score_manifest_sha256": "a772c8214370417da755432f229b1dff0b24f2557fa51561fdb1531e7b4f3e50",
+  "c1_input_sha256": "046fe9234b317eba145c3fbb35edd2e72af49e41309dcd5d5f45f7bc43d1776d",
+  "scorer_sample_sha256": "f14fa303128aa8713cdbd1c3f60e3ed161f055ced47f65bde354462860d8d330",
+  "lexicon_override_sha256": "781916c970dc81735080f425fb9441c4484daf92ee534c82e1e48c04d8d259e4",
+  "lexicon_audit": {
+    "active_keyword_count": 360,
+    "disabled_seed_count": 8,
+    "coverage_insufficient_tag_count": 0,
+    "restricted_seed_count": 10
+  },
+  "sparse_evidence_row_count": 4476,
+  "audit_queue": {
+    "blind_cases": 1424,
+    "post_blind_conflicts": 0,
+    "shortfalls": 30
+  },
+  "false_positive_audit_status": "UNASSESSED_PENDING_INDEPENDENT_REVIEW",
+  "high_false_positive_keyword_status": "UNASSESSED_PENDING_INDEPENDENT_REVIEW",
+  "configurations": [
+    {
+      "config_id": "C",
+      "max_text_tags": 3,
+      "sample_count": 10000,
+      "text_hit_rate": 0.3061,
+      "title_only_rate": 0.053,
+      "description_only_rate": 0.2412,
+      "title_description_both_rate": 0.0535,
+      "zero_hit_rate": 0.6939,
+      "average_text_tags": 0.4341,
+      "selected_text_tag_count": {
+        "p50": 0,
+        "p90": 1,
+        "p99": 3
+      },
+      "raw_text_tag_count": {
+        "p50": 0,
+        "p90": 1,
+        "p99": 3
+      },
+      "cap_truncated_books": 96,
+      "cap_truncated_tags": 135,
+      "keyword_coverage_insufficient_count": 1207,
+      "mapped_count": 9932,
+      "text_supplement_count": 11,
+      "union_count": 9943,
+      "source_text_relations": {
+        "SOURCE_ONLY": 6882,
+        "SOURCE_AND_TEXT": 3050,
+        "NO_SOURCE_NO_TEXT": 57,
+        "TEXT_ONLY": 11
+      }
+    }
+  ],
+  "source_blind_simulation": [
+    {
+      "configId": "C",
+      "maxTextTags": 3,
+      "sourceBlindTextHitRate": 0.3061,
+      "sourceBlindZeroHitRate": 0.6939,
+      "sourceBlindAvgTextTags": 0.4341,
+      "byLanguage": [
+        {
+          "scriptBucket": "cjk",
+          "sourceLanguageCode": "[\"number\",14]",
+          "sourceBlindTextHitRate": 0,
+          "sourceBlindZeroHitRate": 1,
+          "sourceBlindAvgTextTags": 0
+        },
+        {
+          "scriptBucket": "cjk",
+          "sourceLanguageCode": "[\"number\",19]",
+          "sourceBlindTextHitRate": 0.6147186147186147,
+          "sourceBlindZeroHitRate": 0.3852813852813853,
+          "sourceBlindAvgTextTags": 0.9038961038961039
+        },
+        {
+          "scriptBucket": "cjk",
+          "sourceLanguageCode": "[\"number\",20]",
+          "sourceBlindTextHitRate": 0.5549828178694158,
+          "sourceBlindZeroHitRate": 0.44501718213058417,
+          "sourceBlindAvgTextTags": 0.7654639175257731
+        },
+        {
+          "scriptBucket": "cjk",
+          "sourceLanguageCode": "[\"number\",3]",
+          "sourceBlindTextHitRate": 0,
+          "sourceBlindZeroHitRate": 1,
+          "sourceBlindAvgTextTags": 0
+        },
+        {
+          "scriptBucket": "cjk",
+          "sourceLanguageCode": "[\"number\",6]",
+          "sourceBlindTextHitRate": 1,
+          "sourceBlindZeroHitRate": 0,
+          "sourceBlindAvgTextTags": 3
+        },
+        {
+          "scriptBucket": "cjk",
+          "sourceLanguageCode": "[\"number\",9]",
+          "sourceBlindTextHitRate": 0.14685314685314685,
+          "sourceBlindZeroHitRate": 0.8531468531468531,
+          "sourceBlindAvgTextTags": 0.16783216783216784
+        },
+        {
+          "scriptBucket": "latin",
+          "sourceLanguageCode": "[\"number\",11]",
+          "sourceBlindTextHitRate": 0.21052631578947367,
+          "sourceBlindZeroHitRate": 0.7894736842105263,
+          "sourceBlindAvgTextTags": 0.25226860254083483
+        },
+        {
+          "scriptBucket": "latin",
+          "sourceLanguageCode": "[\"number\",13]",
+          "sourceBlindTextHitRate": 0.05501618122977346,
+          "sourceBlindZeroHitRate": 0.9449838187702265,
+          "sourceBlindAvgTextTags": 0.06472491909385113
+        },
+        {
+          "scriptBucket": "latin",
+          "sourceLanguageCode": "[\"number\",15]",
+          "sourceBlindTextHitRate": 0.3881578947368421,
+          "sourceBlindZeroHitRate": 0.6118421052631579,
+          "sourceBlindAvgTextTags": 0.5394736842105263
+        },
+        {
+          "scriptBucket": "latin",
+          "sourceLanguageCode": "[\"number\",16]",
+          "sourceBlindTextHitRate": 0.26900584795321636,
+          "sourceBlindZeroHitRate": 0.7309941520467836,
+          "sourceBlindAvgTextTags": 0.30409356725146197
+        },
+        {
+          "scriptBucket": "latin",
+          "sourceLanguageCode": "[\"number\",20]",
+          "sourceBlindTextHitRate": 1,
+          "sourceBlindZeroHitRate": 0,
+          "sourceBlindAvgTextTags": 1
+        },
+        {
+          "scriptBucket": "latin",
+          "sourceLanguageCode": "[\"number\",22]",
+          "sourceBlindTextHitRate": 0.08173076923076923,
+          "sourceBlindZeroHitRate": 0.9182692307692307,
+          "sourceBlindAvgTextTags": 0.08173076923076923
+        },
+        {
+          "scriptBucket": "latin",
+          "sourceLanguageCode": "[\"number\",3]",
+          "sourceBlindTextHitRate": 0.5904936014625228,
+          "sourceBlindZeroHitRate": 0.40950639853747717,
+          "sourceBlindAvgTextTags": 1.0603290676416819
+        },
+        {
+          "scriptBucket": "latin",
+          "sourceLanguageCode": "[\"number\",4]",
+          "sourceBlindTextHitRate": 0.16788990825688074,
+          "sourceBlindZeroHitRate": 0.8321100917431192,
+          "sourceBlindAvgTextTags": 0.1834862385321101
+        },
+        {
+          "scriptBucket": "latin",
+          "sourceLanguageCode": "[\"number\",5]",
+          "sourceBlindTextHitRate": 0.20276497695852536,
+          "sourceBlindZeroHitRate": 0.7972350230414746,
+          "sourceBlindAvgTextTags": 0.2248847926267281
+        },
+        {
+          "scriptBucket": "latin",
+          "sourceLanguageCode": "[\"number\",6]",
+          "sourceBlindTextHitRate": 0.30350553505535055,
+          "sourceBlindZeroHitRate": 0.6964944649446494,
+          "sourceBlindAvgTextTags": 0.3763837638376384
+        },
+        {
+          "scriptBucket": "latin",
+          "sourceLanguageCode": "[\"number\",8]",
+          "sourceBlindTextHitRate": 0.2692307692307692,
+          "sourceBlindZeroHitRate": 0.7307692307692307,
+          "sourceBlindAvgTextTags": 0.3076923076923077
+        },
+        {
+          "scriptBucket": "latin",
+          "sourceLanguageCode": "[\"number\",9]",
+          "sourceBlindTextHitRate": 0,
+          "sourceBlindZeroHitRate": 1,
+          "sourceBlindAvgTextTags": 0
+        },
+        {
+          "scriptBucket": "other",
+          "sourceLanguageCode": "[\"number\",10]",
+          "sourceBlindTextHitRate": 0,
+          "sourceBlindZeroHitRate": 1,
+          "sourceBlindAvgTextTags": 0
+        },
+        {
+          "scriptBucket": "other",
+          "sourceLanguageCode": "[\"number\",12]",
+          "sourceBlindTextHitRate": 0,
+          "sourceBlindZeroHitRate": 1,
+          "sourceBlindAvgTextTags": 0
+        },
+        {
+          "scriptBucket": "other",
+          "sourceLanguageCode": "[\"number\",7]",
+          "sourceBlindTextHitRate": 0,
+          "sourceBlindZeroHitRate": 1,
+          "sourceBlindAvgTextTags": 0
+        },
+        {
+          "scriptBucket": "other",
+          "sourceLanguageCode": "[\"number\",9]",
+          "sourceBlindTextHitRate": 0,
+          "sourceBlindZeroHitRate": 1,
+          "sourceBlindAvgTextTags": 0
+        }
+      ]
+    }
+  ],
+  "raw_scope_statistics": [
+    {
+      "config_id": "C",
+      "max_text_tags": 3,
+      "rows": [
+        {
+          "scriptBucket": "cjk",
+          "sourceLanguageCode": "[\"number\",14]",
+          "sourceLanguageName": "韩语",
+          "rawLanguageScope": "[\"RAW_LANGUAGE_SCOPE_V1\",\"[\\\"number\\\",\\\"14\\\"]\",[\"string\",\"韩语\"]]",
+          "localeStatisticsStatus": "RAW_SCOPE_ONLY",
+          "sampleCount": 271,
+          "textDecisionSampleCount": 271,
+          "manualExcludedCount": 0,
+          "textHitRate": 0,
+          "titleOnlyRate": 0,
+          "descriptionOnlyRate": 0,
+          "bothRate": 0,
+          "zeroHitRate": 1,
+          "avgTextTags": 0,
+          "rawTextTagCount": {
+            "p50": 0,
+            "p90": 0,
+            "p99": 0
+          },
+          "selectedTextTagCount": {
+            "p50": 0,
+            "p90": 0,
+            "p99": 0
+          },
+          "capTruncatedBooks": 0,
+          "capTruncatedTags": 0,
+          "keywordCoverageInsufficientCount": 0
+        },
+        {
+          "scriptBucket": "cjk",
+          "sourceLanguageCode": "[\"number\",19]",
+          "sourceLanguageName": "[null]",
+          "rawLanguageScope": "[\"RAW_LANGUAGE_SCOPE_V1\",\"[\\\"number\\\",\\\"19\\\"]\",[\"null\"]]",
+          "localeStatisticsStatus": "BLOCKED_RAW_SCOPE_ONLY",
+          "sampleCount": 1155,
+          "textDecisionSampleCount": 1155,
+          "manualExcludedCount": 0,
+          "textHitRate": 0.6147186147186147,
+          "titleOnlyRate": 0.08311688311688312,
+          "descriptionOnlyRate": 0.5324675324675324,
+          "bothRate": 0.09783549783549783,
+          "zeroHitRate": 0.3852813852813853,
+          "avgTextTags": 0.9038961038961039,
+          "rawTextTagCount": {
+            "p50": 1,
+            "p90": 2,
+            "p99": 4
+          },
+          "selectedTextTagCount": {
+            "p50": 1,
+            "p90": 2,
+            "p99": 3
+          },
+          "capTruncatedBooks": 21,
+          "capTruncatedTags": 27,
+          "keywordCoverageInsufficientCount": 0
+        },
+        {
+          "scriptBucket": "cjk",
+          "sourceLanguageCode": "[\"number\",20]",
+          "sourceLanguageName": "[null]",
+          "rawLanguageScope": "[\"RAW_LANGUAGE_SCOPE_V1\",\"[\\\"number\\\",\\\"20\\\"]\",[\"null\"]]",
+          "localeStatisticsStatus": "BLOCKED_RAW_SCOPE_ONLY",
+          "sampleCount": 1164,
+          "textDecisionSampleCount": 1164,
+          "manualExcludedCount": 0,
+          "textHitRate": 0.5549828178694158,
+          "titleOnlyRate": 0.06786941580756013,
+          "descriptionOnlyRate": 0.45962199312714774,
+          "bothRate": 0.09020618556701031,
+          "zeroHitRate": 0.44501718213058417,
+          "avgTextTags": 0.7654639175257731,
+          "rawTextTagCount": {
+            "p50": 1,
+            "p90": 2,
+            "p99": 3
+          },
+          "selectedTextTagCount": {
+            "p50": 1,
+            "p90": 2,
+            "p99": 3
+          },
+          "capTruncatedBooks": 2,
+          "capTruncatedTags": 2,
+          "keywordCoverageInsufficientCount": 0
+        },
+        {
+          "scriptBucket": "cjk",
+          "sourceLanguageCode": "[\"number\",3]",
+          "sourceLanguageName": "英语",
+          "rawLanguageScope": "[\"RAW_LANGUAGE_SCOPE_V1\",\"[\\\"number\\\",\\\"3\\\"]\",[\"string\",\"英语\"]]",
+          "localeStatisticsStatus": "RAW_SCOPE_ONLY",
+          "sampleCount": 1,
+          "textDecisionSampleCount": 1,
+          "manualExcludedCount": 0,
+          "textHitRate": 0,
+          "titleOnlyRate": 0,
+          "descriptionOnlyRate": 0,
+          "bothRate": 0,
+          "zeroHitRate": 1,
+          "avgTextTags": 0,
+          "rawTextTagCount": {
+            "p50": 0,
+            "p90": 0,
+            "p99": 0
+          },
+          "selectedTextTagCount": {
+            "p50": 0,
+            "p90": 0,
+            "p99": 0
+          },
+          "capTruncatedBooks": 0,
+          "capTruncatedTags": 0,
+          "keywordCoverageInsufficientCount": 0
+        },
+        {
+          "scriptBucket": "cjk",
+          "sourceLanguageCode": "[\"number\",6]",
+          "sourceLanguageName": "法语",
+          "rawLanguageScope": "[\"RAW_LANGUAGE_SCOPE_V1\",\"[\\\"number\\\",\\\"6\\\"]\",[\"string\",\"法语\"]]",
+          "localeStatisticsStatus": "RAW_SCOPE_ONLY",
+          "sampleCount": 1,
+          "textDecisionSampleCount": 1,
+          "manualExcludedCount": 0,
+          "textHitRate": 1,
+          "titleOnlyRate": 0,
+          "descriptionOnlyRate": 1,
+          "bothRate": 0,
+          "zeroHitRate": 0,
+          "avgTextTags": 3,
+          "rawTextTagCount": {
+            "p50": 4,
+            "p90": 4,
+            "p99": 4
+          },
+          "selectedTextTagCount": {
+            "p50": 3,
+            "p90": 3,
+            "p99": 3
+          },
+          "capTruncatedBooks": 1,
+          "capTruncatedTags": 1,
+          "keywordCoverageInsufficientCount": 0
+        },
+        {
+          "scriptBucket": "cjk",
+          "sourceLanguageCode": "[\"number\",9]",
+          "sourceLanguageName": "日语",
+          "rawLanguageScope": "[\"RAW_LANGUAGE_SCOPE_V1\",\"[\\\"number\\\",\\\"9\\\"]\",[\"string\",\"日语\"]]",
+          "localeStatisticsStatus": "RAW_SCOPE_ONLY",
+          "sampleCount": 429,
+          "textDecisionSampleCount": 429,
+          "manualExcludedCount": 0,
+          "textHitRate": 0.14685314685314685,
+          "titleOnlyRate": 0.02564102564102564,
+          "descriptionOnlyRate": 0.11655011655011654,
+          "bothRate": 0.011655011655011656,
+          "zeroHitRate": 0.8531468531468531,
+          "avgTextTags": 0.16783216783216784,
+          "rawTextTagCount": {
+            "p50": 0,
+            "p90": 1,
+            "p99": 2
+          },
+          "selectedTextTagCount": {
+            "p50": 0,
+            "p90": 1,
+            "p99": 2
+          },
+          "capTruncatedBooks": 0,
+          "capTruncatedTags": 0,
+          "keywordCoverageInsufficientCount": 0
+        },
+        {
+          "scriptBucket": "latin",
+          "sourceLanguageCode": "[\"number\",11]",
+          "sourceLanguageName": "印尼",
+          "rawLanguageScope": "[\"RAW_LANGUAGE_SCOPE_V1\",\"[\\\"number\\\",\\\"11\\\"]\",[\"string\",\"印尼\"]]",
+          "localeStatisticsStatus": "RAW_SCOPE_ONLY",
+          "sampleCount": 551,
+          "textDecisionSampleCount": 551,
+          "manualExcludedCount": 0,
+          "textHitRate": 0.21052631578947367,
+          "titleOnlyRate": 0.043557168784029036,
+          "descriptionOnlyRate": 0.12341197822141561,
+          "bothRate": 0.05989110707803993,
+          "zeroHitRate": 0.7894736842105263,
+          "avgTextTags": 0.25226860254083483,
+          "rawTextTagCount": {
+            "p50": 0,
+            "p90": 1,
+            "p99": 2
+          },
+          "selectedTextTagCount": {
+            "p50": 0,
+            "p90": 1,
+            "p99": 2
+          },
+          "capTruncatedBooks": 0,
+          "capTruncatedTags": 0,
+          "keywordCoverageInsufficientCount": 0
+        },
+        {
+          "scriptBucket": "latin",
+          "sourceLanguageCode": "[\"number\",13]",
+          "sourceLanguageName": "越南语",
+          "rawLanguageScope": "[\"RAW_LANGUAGE_SCOPE_V1\",\"[\\\"number\\\",\\\"13\\\"]\",[\"string\",\"越南语\"]]",
+          "localeStatisticsStatus": "RAW_SCOPE_ONLY",
+          "sampleCount": 309,
+          "textDecisionSampleCount": 309,
+          "manualExcludedCount": 0,
+          "textHitRate": 0.05501618122977346,
+          "titleOnlyRate": 0.042071197411003236,
+          "descriptionOnlyRate": 0.019417475728155338,
+          "bothRate": 0,
+          "zeroHitRate": 0.9449838187702265,
+          "avgTextTags": 0.06472491909385113,
+          "rawTextTagCount": {
+            "p50": 0,
+            "p90": 0,
+            "p99": 1
+          },
+          "selectedTextTagCount": {
+            "p50": 0,
+            "p90": 0,
+            "p99": 1
+          },
+          "capTruncatedBooks": 0,
+          "capTruncatedTags": 0,
+          "keywordCoverageInsufficientCount": 0
+        },
+        {
+          "scriptBucket": "latin",
+          "sourceLanguageCode": "[\"number\",15]",
+          "sourceLanguageName": "菲律宾语",
+          "rawLanguageScope": "[\"RAW_LANGUAGE_SCOPE_V1\",\"[\\\"number\\\",\\\"15\\\"]\",[\"string\",\"菲律宾语\"]]",
+          "localeStatisticsStatus": "RAW_SCOPE_ONLY",
+          "sampleCount": 152,
+          "textDecisionSampleCount": 152,
+          "manualExcludedCount": 0,
+          "textHitRate": 0.3881578947368421,
+          "titleOnlyRate": 0.08552631578947369,
+          "descriptionOnlyRate": 0.2894736842105263,
+          "bothRate": 0.06578947368421052,
+          "zeroHitRate": 0.6118421052631579,
+          "avgTextTags": 0.5394736842105263,
+          "rawTextTagCount": {
+            "p50": 0,
+            "p90": 2,
+            "p99": 3
+          },
+          "selectedTextTagCount": {
+            "p50": 0,
+            "p90": 2,
+            "p99": 3
+          },
+          "capTruncatedBooks": 1,
+          "capTruncatedTags": 1,
+          "keywordCoverageInsufficientCount": 0
+        },
+        {
+          "scriptBucket": "latin",
+          "sourceLanguageCode": "[\"number\",16]",
+          "sourceLanguageName": "德语",
+          "rawLanguageScope": "[\"RAW_LANGUAGE_SCOPE_V1\",\"[\\\"number\\\",\\\"16\\\"]\",[\"string\",\"德语\"]]",
+          "localeStatisticsStatus": "RAW_SCOPE_ONLY",
+          "sampleCount": 171,
+          "textDecisionSampleCount": 171,
+          "manualExcludedCount": 0,
+          "textHitRate": 0.26900584795321636,
+          "titleOnlyRate": 0.05847953216374269,
+          "descriptionOnlyRate": 0.1695906432748538,
+          "bothRate": 0.06432748538011696,
+          "zeroHitRate": 0.7309941520467836,
+          "avgTextTags": 0.30409356725146197,
+          "rawTextTagCount": {
+            "p50": 0,
+            "p90": 1,
+            "p99": 2
+          },
+          "selectedTextTagCount": {
+            "p50": 0,
+            "p90": 1,
+            "p99": 2
+          },
+          "capTruncatedBooks": 0,
+          "capTruncatedTags": 0,
+          "keywordCoverageInsufficientCount": 0
+        },
+        {
+          "scriptBucket": "latin",
+          "sourceLanguageCode": "[\"number\",20]",
+          "sourceLanguageName": "[null]",
+          "rawLanguageScope": "[\"RAW_LANGUAGE_SCOPE_V1\",\"[\\\"number\\\",\\\"20\\\"]\",[\"null\"]]",
+          "localeStatisticsStatus": "BLOCKED_RAW_SCOPE_ONLY",
+          "sampleCount": 1,
+          "textDecisionSampleCount": 1,
+          "manualExcludedCount": 0,
+          "textHitRate": 1,
+          "titleOnlyRate": 0,
+          "descriptionOnlyRate": 1,
+          "bothRate": 0,
+          "zeroHitRate": 0,
+          "avgTextTags": 1,
+          "rawTextTagCount": {
+            "p50": 1,
+            "p90": 1,
+            "p99": 1
+          },
+          "selectedTextTagCount": {
+            "p50": 1,
+            "p90": 1,
+            "p99": 1
+          },
+          "capTruncatedBooks": 0,
+          "capTruncatedTags": 0,
+          "keywordCoverageInsufficientCount": 0
+        },
+        {
+          "scriptBucket": "latin",
+          "sourceLanguageCode": "[\"number\",22]",
+          "sourceLanguageName": "土耳其语",
+          "rawLanguageScope": "[\"RAW_LANGUAGE_SCOPE_V1\",\"[\\\"number\\\",\\\"22\\\"]\",[\"string\",\"土耳其语\"]]",
+          "localeStatisticsStatus": "RAW_SCOPE_ONLY",
+          "sampleCount": 208,
+          "textDecisionSampleCount": 208,
+          "manualExcludedCount": 0,
+          "textHitRate": 0.08173076923076923,
+          "titleOnlyRate": 0.004807692307692308,
+          "descriptionOnlyRate": 0.052884615384615384,
+          "bothRate": 0.02403846153846154,
+          "zeroHitRate": 0.9182692307692307,
+          "avgTextTags": 0.08173076923076923,
+          "rawTextTagCount": {
+            "p50": 0,
+            "p90": 0,
+            "p99": 1
+          },
+          "selectedTextTagCount": {
+            "p50": 0,
+            "p90": 0,
+            "p99": 1
+          },
+          "capTruncatedBooks": 0,
+          "capTruncatedTags": 0,
+          "keywordCoverageInsufficientCount": 0
+        },
+        {
+          "scriptBucket": "latin",
+          "sourceLanguageCode": "[\"number\",3]",
+          "sourceLanguageName": "英语",
+          "rawLanguageScope": "[\"RAW_LANGUAGE_SCOPE_V1\",\"[\\\"number\\\",\\\"3\\\"]\",[\"string\",\"英语\"]]",
+          "localeStatisticsStatus": "RAW_SCOPE_ONLY",
+          "sampleCount": 1094,
+          "textDecisionSampleCount": 1094,
+          "manualExcludedCount": 0,
+          "textHitRate": 0.5904936014625228,
+          "titleOnlyRate": 0.10146252285191956,
+          "descriptionOnlyRate": 0.5164533820840951,
+          "bothRate": 0.10694698354661791,
+          "zeroHitRate": 0.40950639853747717,
+          "avgTextTags": 1.0603290676416819,
+          "rawTextTagCount": {
+            "p50": 1,
+            "p90": 3,
+            "p99": 5
+          },
+          "selectedTextTagCount": {
+            "p50": 1,
+            "p90": 3,
+            "p99": 3
+          },
+          "capTruncatedBooks": 70,
+          "capTruncatedTags": 103,
+          "keywordCoverageInsufficientCount": 0
+        },
+        {
+          "scriptBucket": "latin",
+          "sourceLanguageCode": "[\"number\",4]",
+          "sourceLanguageName": "西语",
+          "rawLanguageScope": "[\"RAW_LANGUAGE_SCOPE_V1\",\"[\\\"number\\\",\\\"4\\\"]\",[\"string\",\"西语\"]]",
+          "localeStatisticsStatus": "RAW_SCOPE_ONLY",
+          "sampleCount": 1090,
+          "textDecisionSampleCount": 1090,
+          "manualExcludedCount": 0,
+          "textHitRate": 0.16788990825688074,
+          "titleOnlyRate": 0.06513761467889909,
+          "descriptionOnlyRate": 0.09174311926605505,
+          "bothRate": 0.01926605504587156,
+          "zeroHitRate": 0.8321100917431192,
+          "avgTextTags": 0.1834862385321101,
+          "rawTextTagCount": {
+            "p50": 0,
+            "p90": 1,
+            "p99": 2
+          },
+          "selectedTextTagCount": {
+            "p50": 0,
+            "p90": 1,
+            "p99": 2
+          },
+          "capTruncatedBooks": 0,
+          "capTruncatedTags": 0,
+          "keywordCoverageInsufficientCount": 0
+        },
+        {
+          "scriptBucket": "latin",
+          "sourceLanguageCode": "[\"number\",5]",
+          "sourceLanguageName": "葡语",
+          "rawLanguageScope": "[\"RAW_LANGUAGE_SCOPE_V1\",\"[\\\"number\\\",\\\"5\\\"]\",[\"string\",\"葡语\"]]",
+          "localeStatisticsStatus": "RAW_SCOPE_ONLY",
+          "sampleCount": 1085,
+          "textDecisionSampleCount": 1085,
+          "manualExcludedCount": 0,
+          "textHitRate": 0.20276497695852536,
+          "titleOnlyRate": 0.04331797235023042,
+          "descriptionOnlyRate": 0.14101382488479264,
+          "bothRate": 0.02857142857142857,
+          "zeroHitRate": 0.7972350230414746,
+          "avgTextTags": 0.2248847926267281,
+          "rawTextTagCount": {
+            "p50": 0,
+            "p90": 1,
+            "p99": 2
+          },
+          "selectedTextTagCount": {
+            "p50": 0,
+            "p90": 1,
+            "p99": 2
+          },
+          "capTruncatedBooks": 0,
+          "capTruncatedTags": 0,
+          "keywordCoverageInsufficientCount": 0
+        },
+        {
+          "scriptBucket": "latin",
+          "sourceLanguageCode": "[\"number\",6]",
+          "sourceLanguageName": "法语",
+          "rawLanguageScope": "[\"RAW_LANGUAGE_SCOPE_V1\",\"[\\\"number\\\",\\\"6\\\"]\",[\"string\",\"法语\"]]",
+          "localeStatisticsStatus": "RAW_SCOPE_ONLY",
+          "sampleCount": 1084,
+          "textDecisionSampleCount": 1084,
+          "manualExcludedCount": 0,
+          "textHitRate": 0.30350553505535055,
+          "titleOnlyRate": 0.04797047970479705,
+          "descriptionOnlyRate": 0.21217712177121772,
+          "bothRate": 0.07564575645756458,
+          "zeroHitRate": 0.6964944649446494,
+          "avgTextTags": 0.3763837638376384,
+          "rawTextTagCount": {
+            "p50": 0,
+            "p90": 1,
+            "p99": 2
+          },
+          "selectedTextTagCount": {
+            "p50": 0,
+            "p90": 1,
+            "p99": 2
+          },
+          "capTruncatedBooks": 1,
+          "capTruncatedTags": 1,
+          "keywordCoverageInsufficientCount": 0
+        },
+        {
+          "scriptBucket": "latin",
+          "sourceLanguageCode": "[\"number\",8]",
+          "sourceLanguageName": "意大利语",
+          "rawLanguageScope": "[\"RAW_LANGUAGE_SCOPE_V1\",\"[\\\"number\\\",\\\"8\\\"]\",[\"string\",\"意大利语\"]]",
+          "localeStatisticsStatus": "RAW_SCOPE_ONLY",
+          "sampleCount": 26,
+          "textDecisionSampleCount": 26,
+          "manualExcludedCount": 0,
+          "textHitRate": 0.2692307692307692,
+          "titleOnlyRate": 0.07692307692307693,
+          "descriptionOnlyRate": 0.15384615384615385,
+          "bothRate": 0.07692307692307693,
+          "zeroHitRate": 0.7307692307692307,
+          "avgTextTags": 0.3076923076923077,
+          "rawTextTagCount": {
+            "p50": 0,
+            "p90": 1,
+            "p99": 2
+          },
+          "selectedTextTagCount": {
+            "p50": 0,
+            "p90": 1,
+            "p99": 2
+          },
+          "capTruncatedBooks": 0,
+          "capTruncatedTags": 0,
+          "keywordCoverageInsufficientCount": 0
+        },
+        {
+          "scriptBucket": "latin",
+          "sourceLanguageCode": "[\"number\",9]",
+          "sourceLanguageName": "日语",
+          "rawLanguageScope": "[\"RAW_LANGUAGE_SCOPE_V1\",\"[\\\"number\\\",\\\"9\\\"]\",[\"string\",\"日语\"]]",
+          "localeStatisticsStatus": "RAW_SCOPE_ONLY",
+          "sampleCount": 1,
+          "textDecisionSampleCount": 1,
+          "manualExcludedCount": 0,
+          "textHitRate": 0,
+          "titleOnlyRate": 0,
+          "descriptionOnlyRate": 0,
+          "bothRate": 0,
+          "zeroHitRate": 1,
+          "avgTextTags": 0,
+          "rawTextTagCount": {
+            "p50": 0,
+            "p90": 0,
+            "p99": 0
+          },
+          "selectedTextTagCount": {
+            "p50": 0,
+            "p90": 0,
+            "p99": 0
+          },
+          "capTruncatedBooks": 0,
+          "capTruncatedTags": 0,
+          "keywordCoverageInsufficientCount": 0
+        },
+        {
+          "scriptBucket": "other",
+          "sourceLanguageCode": "[\"number\",10]",
+          "sourceLanguageName": "阿拉伯语",
+          "rawLanguageScope": "[\"RAW_LANGUAGE_SCOPE_V1\",\"[\\\"number\\\",\\\"10\\\"]\",[\"string\",\"阿拉伯语\"]]",
+          "localeStatisticsStatus": "RAW_SCOPE_ONLY",
+          "sampleCount": 46,
+          "textDecisionSampleCount": 46,
+          "manualExcludedCount": 0,
+          "textHitRate": 0,
+          "titleOnlyRate": 0,
+          "descriptionOnlyRate": 0,
+          "bothRate": 0,
+          "zeroHitRate": 1,
+          "avgTextTags": 0,
+          "rawTextTagCount": {
+            "p50": 0,
+            "p90": 0,
+            "p99": 0
+          },
+          "selectedTextTagCount": {
+            "p50": 0,
+            "p90": 0,
+            "p99": 0
+          },
+          "capTruncatedBooks": 0,
+          "capTruncatedTags": 0,
+          "keywordCoverageInsufficientCount": 46
+        },
+        {
+          "scriptBucket": "other",
+          "sourceLanguageCode": "[\"number\",12]",
+          "sourceLanguageName": "泰语",
+          "rawLanguageScope": "[\"RAW_LANGUAGE_SCOPE_V1\",\"[\\\"number\\\",\\\"12\\\"]\",[\"string\",\"泰语\"]]",
+          "localeStatisticsStatus": "RAW_SCOPE_ONLY",
+          "sampleCount": 545,
+          "textDecisionSampleCount": 545,
+          "manualExcludedCount": 0,
+          "textHitRate": 0,
+          "titleOnlyRate": 0,
+          "descriptionOnlyRate": 0,
+          "bothRate": 0,
+          "zeroHitRate": 1,
+          "avgTextTags": 0,
+          "rawTextTagCount": {
+            "p50": 0,
+            "p90": 0,
+            "p99": 0
+          },
+          "selectedTextTagCount": {
+            "p50": 0,
+            "p90": 0,
+            "p99": 0
+          },
+          "capTruncatedBooks": 0,
+          "capTruncatedTags": 0,
+          "keywordCoverageInsufficientCount": 545
+        },
+        {
+          "scriptBucket": "other",
+          "sourceLanguageCode": "[\"number\",7]",
+          "sourceLanguageName": "俄语",
+          "rawLanguageScope": "[\"RAW_LANGUAGE_SCOPE_V1\",\"[\\\"number\\\",\\\"7\\\"]\",[\"string\",\"俄语\"]]",
+          "localeStatisticsStatus": "RAW_SCOPE_ONLY",
+          "sampleCount": 615,
+          "textDecisionSampleCount": 615,
+          "manualExcludedCount": 0,
+          "textHitRate": 0,
+          "titleOnlyRate": 0,
+          "descriptionOnlyRate": 0,
+          "bothRate": 0,
+          "zeroHitRate": 1,
+          "avgTextTags": 0,
+          "rawTextTagCount": {
+            "p50": 0,
+            "p90": 0,
+            "p99": 0
+          },
+          "selectedTextTagCount": {
+            "p50": 0,
+            "p90": 0,
+            "p99": 0
+          },
+          "capTruncatedBooks": 0,
+          "capTruncatedTags": 0,
+          "keywordCoverageInsufficientCount": 615
+        },
+        {
+          "scriptBucket": "other",
+          "sourceLanguageCode": "[\"number\",9]",
+          "sourceLanguageName": "日语",
+          "rawLanguageScope": "[\"RAW_LANGUAGE_SCOPE_V1\",\"[\\\"number\\\",\\\"9\\\"]\",[\"string\",\"日语\"]]",
+          "localeStatisticsStatus": "RAW_SCOPE_ONLY",
+          "sampleCount": 1,
+          "textDecisionSampleCount": 1,
+          "manualExcludedCount": 0,
+          "textHitRate": 0,
+          "titleOnlyRate": 0,
+          "descriptionOnlyRate": 0,
+          "bothRate": 0,
+          "zeroHitRate": 1,
+          "avgTextTags": 0,
+          "rawTextTagCount": {
+            "p50": 0,
+            "p90": 0,
+            "p99": 0
+          },
+          "selectedTextTagCount": {
+            "p50": 0,
+            "p90": 0,
+            "p99": 0
+          },
+          "capTruncatedBooks": 0,
+          "capTruncatedTags": 0,
+          "keywordCoverageInsufficientCount": 1
+        }
+      ]
+    }
+  ],
+  "v3_compare": {
+    "v2_description_only_edges": 4554,
+    "v3_description_only_edges": 3218,
+    "removed_description_edges": 1525,
+    "removed_candidate_edges": 1525,
+    "affected_novel_count": 1147,
+    "coverage_delta": -1336,
+    "ending_description_trigger_zeroed": [
+      "ct-v1-happy-ending",
+      "ct-v1-tragic-ending"
+    ],
+    "predicted_precision": 0.733,
+    "measured_precision_on_surviving_reviewed_edges": 0.7378048780487805,
+    "predicted_surviving_population_edges": 330,
+    "measured_surviving_population_edges": 328,
+    "v2_population_reviewed_edges": 491,
+    "v2_population_precision": 0.5193482688391039,
+    "precision_within_tolerance": true,
+    "control": [
+      {
+        "canonicalTagId": "ct-v1-time-travel",
+        "v2Count": 479,
+        "v3Count": 480,
+        "dropRatio": -0.0020876826722338203,
+        "collapsed": false
+      },
+      {
+        "canonicalTagId": "ct-v1-werewolf-alpha",
+        "v2Count": 118,
+        "v3Count": 127,
+        "dropRatio": -0.07627118644067797,
+        "collapsed": false
+      },
+      {
+        "canonicalTagId": "ct-v1-rebirth",
+        "v2Count": 259,
+        "v3Count": 260,
+        "dropRatio": -0.003861003861003861,
+        "collapsed": false
+      },
+      {
+        "canonicalTagId": "ct-v1-wealthy-ceo",
+        "v2Count": 143,
+        "v3Count": 156,
+        "dropRatio": -0.09090909090909091,
+        "collapsed": false
+      },
+      {
+        "canonicalTagId": "ct-v1-romance",
+        "v2Count": 125,
+        "v3Count": 130,
+        "dropRatio": -0.04,
+        "collapsed": false
+      },
+      {
+        "canonicalTagId": "ct-v1-mafia",
+        "v2Count": 68,
+        "v3Count": 81,
+        "dropRatio": -0.19117647058823528,
+        "collapsed": false
+      },
+      {
+        "canonicalTagId": "ct-v1-revenge",
+        "v2Count": 76,
+        "v3Count": 96,
+        "dropRatio": -0.2631578947368421,
+        "collapsed": false
+      }
+    ]
+  }
+}

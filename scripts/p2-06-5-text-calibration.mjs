@@ -116,8 +116,13 @@ async function main() {
     return;
   }
   if (command === "owner-final-c1") {
-    const { runOwnerFinalC1 } = await import("./p2-06-5-lane-c/owner-final-c1.mjs");
+    const { runOwnerFinalC1, C1_V3_RUN_ID, C1_V3_GENERATED_AT } = await import("./p2-06-5-lane-c/owner-final-c1.mjs");
     const canonicalSha256 = (await readFile(required(options, "canonical-sha256-file"), "utf8")).trim().split(/\s/u)[0];
+    // Reproducing the authoritative v3 must not hinge on the operator recalling
+    // its exact timestamp: asking for that run id is enough.  Every other run
+    // id still gets a live timestamp, so a future overlay run cannot be stamped
+    // with v3's identity by accident.
+    const runId = options["run-id"] ?? "UNSPECIFIED";
     const result = await runOwnerFinalC1({
       rawRunDir: required(options, "raw-run-dir"),
       waiverPath: required(options, "owner-waiver"),
@@ -128,8 +133,9 @@ async function main() {
       authoritativeOutputDir: required(options, "authoritative-output-dir"),
       trackedOutputDir: required(options, "tracked-output-dir"),
       lexiconOverridePath: optional(options, "lexicon-override"),
-      runId: options["run-id"] ?? "UNSPECIFIED",
-      generatedAt: options["generated-at"] ?? new Date().toISOString(),
+      runId,
+      generatedAt: options["generated-at"]
+        ?? (runId === C1_V3_RUN_ID ? C1_V3_GENERATED_AT : new Date().toISOString()),
     });
     process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
     return;

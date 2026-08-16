@@ -1,0 +1,75 @@
+{
+  "schema_version": 1,
+  "lane": "P2-06.5/C",
+  "package": "suppression-safety-review",
+  "purpose": "Judge edges the grade-B locale rules removed, to detect true positives wrongly suppressed.",
+  "status": "READY_FOR_INDEPENDENT_REVIEW",
+  "auto_write_authorized": "NO",
+  "source_run": "2026-08-16-owner-final-c1-v2",
+  "seed": "20260817",
+  "requested_quota": {
+    "ct-v1-chef": {
+      "德语": 3,
+      "法语": 3,
+      "西语": 3,
+      "葡语": 3
+    },
+    "ct-v1-werewolf-luna": {
+      "西语": 4,
+      "意大利语": 4
+    }
+  },
+  "selected": 20,
+  "by_tag_scope": {
+    "ct-v1-werewolf-luna|意大利语": 2,
+    "ct-v1-werewolf-luna|西语": 6,
+    "ct-v1-chef|西语": 3,
+    "ct-v1-chef|法语": 5,
+    "ct-v1-chef|葡语": 3,
+    "ct-v1-chef|德语": 1
+  },
+  "shortfalls": [
+    {
+      "canonical_tag": "ct-v1-chef",
+      "named_scope": "德语",
+      "requested": 3,
+      "available": 1,
+      "shortfall": 2
+    },
+    {
+      "canonical_tag": "ct-v1-werewolf-luna",
+      "named_scope": "意大利语",
+      "requested": 4,
+      "available": 2,
+      "shortfall": 2
+    }
+  ],
+  "note": "DE holds only 1 chef edge and IT only 2 luna edges in the entire blocked pool; the requested per-locale quotas are capped by stock and refilled within the same tag.",
+  "artifacts": [
+    {
+      "path": "01-suppression-safety-review-sample.jsonl",
+      "bytes": 50772,
+      "sha256": "57eff0b07cd87eb97f7f8c978a9d5ed3bdeb859998305b668881876ca61eae50"
+    },
+    {
+      "path": "02-suppression-safety-hidden-reference.jsonl",
+      "bytes": 7431,
+      "sha256": "25093a627ff9a2ad1aed2c1b4e7b7bb8dd9a68c127dcbc0c0085635fd6844d8c"
+    },
+    {
+      "path": "03-suppression-safety-manifest.json",
+      "bytes": 1294,
+      "sha256": "bab456fc8956843ca9ba2d121489bde5d4ed7850cfa55fce6386574f72f086bd"
+    },
+    {
+      "path": "04-FABLE5_REVIEW_PROMPT.md",
+      "bytes": 3086,
+      "sha256": "0a2642304326c2c8f393e55ab87aa900865bcb2add653fbc36ca6e76e14bcef4"
+    },
+    {
+      "path": "05-FABLE5_OUTPUT_SCHEMA.json",
+      "bytes": 2248,
+      "sha256": "b2f8b4d3623b10194482852189aac7a38bcb28bc8685e0216ec3e976f5373a82"
+    }
+  ]
+}

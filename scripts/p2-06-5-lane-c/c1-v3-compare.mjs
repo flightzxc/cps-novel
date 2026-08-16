@@ -5,7 +5,6 @@
 import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
 import { readFile } from "node:fs/promises";
-import { join } from "node:path";
 
 export const REVIEWED_CONFIG_ID = "C";
 export const REVIEWED_MAX_TEXT_TAGS = 3;

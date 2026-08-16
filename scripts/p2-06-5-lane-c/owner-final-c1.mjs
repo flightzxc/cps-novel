@@ -28,6 +28,13 @@ export const EXPECTED_CANONICAL_COUNT = 123;
 export const EXPECTED_SAMPLE_COUNT = 10_000;
 export const EXPECTED_CANONICAL_SHA256 = "8bc8cdae8be2176bde170173e98bad2b9fa0e1770818174a57320816eefdccad";
 export const EXPECTED_C1_INPUT_SHA256 = "046fe9234b317eba145c3fbb35edd2e72af49e41309dcd5d5f45f7bc43d1776d";
+/**
+ * The authoritative v3 run identity.  Reproducing that run must not depend on
+ * an operator remembering the exact timestamp, so the CLI stamps
+ * `C1_V3_GENERATED_AT` automatically when — and only when — this run id is
+ * requested.  Any other run id keeps a live timestamp.
+ */
+export const C1_V3_RUN_ID = "2026-08-16-owner-final-c1-v3";
 export const C1_V3_GENERATED_AT = "2026-08-16T23:30:00+09:00";
 const CJK = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u;
 const LATIN = /\p{Script=Latin}/u;

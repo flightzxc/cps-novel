@@ -1,0 +1,478 @@
+{
+  "edge_verdicts": [
+    {
+      "review_id": "nrv_2a46617f81908f68f64e227a",
+      "canonical_stable_id": "ct-v1-wealthy-ceo",
+      "verdict": "SUPPORTED",
+      "confidence": 0.9,
+      "reason": "男主 Hiram 被简介定位为 'el CEO joven y apuesto'，契约婚姻+总裁男主是全书稳定前提，符合豪门总裁检索预期。",
+      "false_positive_cause": "NONE"
+    },
+    {
+      "review_id": "nrv_2af0b9b4b60cc651175c4ae6",
+      "canonical_stable_id": "ct-v1-legitimate-daughter",
+      "verdict": "SUPPORTED",
+      "confidence": 0.85,
+      "reason": "女主穿越后即成为「護國郡主府不受寵的嫡女」，继母庶妹迫害构成宅斗主线，嫡女身份是核心人设。",
+      "false_positive_cause": "NONE"
+    },
+    {
+      "review_id": "nrv_2af0b9b4b60cc651175c4ae6",
+      "canonical_stable_id": "ct-v1-time-travel",
+      "verdict": "SUPPORTED",
+      "confidence": 0.95,
+      "reason": "「二十一世紀警花蘭若漓穿越了」是全书起始设定，穿越是稳定前提。",
+      "false_positive_cause": "NONE"
+    },
+    {
+      "review_id": "nrv_2e1cec709165a7c01d509d19",
+      "canonical_stable_id": "ct-v1-emperor",
+      "verdict": "SUPPORTED",
+      "confidence": 0.6,
+      "reason": "「得到皇帝的宠爱，被封为后宫娘娘」并最终成为皇后卷入宫斗，皇帝是女主命运与宫斗主线中的稳定关系人物；但简介重心在女主自身崛起，置信度中等。",
+      "false_positive_cause": "NONE"
+    },
+    {
+      "review_id": "nrv_30274660fca983d7edaf6310",
+      "canonical_stable_id": "ct-v1-crown-prince",
+      "verdict": "SUPPORTED",
+      "confidence": 0.6,
+      "reason": "太子是贯穿性的主线对手：「再將太子拉下馬！」是女主明确目标，且「陪她與太子暗中博弈」再次出现，非一次性背景提及。",
+      "false_positive_cause": "NONE"
+    },
+    {
+      "review_id": "nrv_30665770b00ef6e5095537e6",
+      "canonical_stable_id": "ct-v1-mafia",
+      "verdict": "SUPPORTED",
+      "confidence": 0.65,
+      "reason": "女主父亲是「sang bos mafia」（黑帮老大），她以黑帮之女身份取消婚约另择配偶，黑帮世界构成后续故事的稳定设定。",
+      "false_positive_cause": "NONE"
+    },
+    {
+      "review_id": "nrv_3074564e7505fe5699b1a189",
+      "canonical_stable_id": "ct-v1-divorce",
+      "verdict": "SUPPORTED",
+      "confidence": 0.75,
+      "reason": "简介全部内容是男主凝视妻子留下的「les papiers du divorce」等他签字，离婚是开篇核心冲突与全书悬念。",
+      "false_positive_cause": "NONE"
+    },
+    {
+      "review_id": "nrv_334eef50fa07da9832a22980",
+      "canonical_stable_id": "ct-v1-genius",
+      "verdict": "SUPPORTED",
+      "confidence": 0.6,
+      "reason": "主角被定位为「華夏區第一天才辛陽」，天才身份是其海岛求生与征服主线的核心人设标签。",
+      "false_positive_cause": "NONE"
+    },
+    {
+      "review_id": "nrv_334eef50fa07da9832a22980",
+      "canonical_stable_id": "ct-v1-time-travel",
+      "verdict": "SUPPORTED",
+      "confidence": 0.9,
+      "reason": "「一覺醒來，穿越到末日浩劫後的世界」是全书起始稳定前提。",
+      "false_positive_cause": "NONE"
+    },
+    {
+      "review_id": "nrv_353f362ab64ea2d5100a277e",
+      "canonical_stable_id": "ct-v1-divorce",
+      "verdict": "UNCERTAIN",
+      "confidence": 0.5,
+      "reason": "「离婚！」只是简介结尾男主苏醒后的第一句台词式钩子，而书名「隐婚总裁宠不停」暗示婚姻延续；仅凭简介无法判断离婚是否构成主线。",
+      "false_positive_cause": "INSUFFICIENT_CONTEXT"
+    },
+    {
+      "review_id": "nrv_35c4763f69baf728745c6e91",
+      "canonical_stable_id": "ct-v1-genius",
+      "verdict": "SUPPORTED",
+      "confidence": 0.8,
+      "reason": "女主是「現世紀的醫學天才」，书名即「神醫醜妃」，医学天才身份直接驱动以身为药引解毒的主线。",
+      "false_positive_cause": "NONE"
+    },
+    {
+      "review_id": "nrv_35c4763f69baf728745c6e91",
+      "canonical_stable_id": "ct-v1-time-travel",
+      "verdict": "SUPPORTED",
+      "confidence": 0.95,
+      "reason": "「一朝穿越」成醜女嫁瘸子王爺，穿越是全书稳定前提。",
+      "false_positive_cause": "NONE"
+    },
+    {
+      "review_id": "nrv_36e911fd9800c737052c4870",
+      "canonical_stable_id": "ct-v1-crown-prince",
+      "verdict": "UNSUPPORTED",
+      "confidence": 0.7,
+      "reason": "「太子长琴」是山海经神话人物的专有名（主角之一的名字），并非宫廷储君设定；点「太子」标签想找东宫权谋的用户看到山海志怪耽美会明显觉得搜错。",
+      "false_positive_cause": "MULTIPLE_MEANING"
+    },
+    {
+      "review_id": "nrv_387f62ad6137aa84662cb29a",
+      "canonical_stable_id": "ct-v1-apocalypse",
+      "verdict": "UNSUPPORTED",
+      "confidence": 0.85,
+      "reason": "「末世的异能大佬」只交代女主穿越前的出身，故事发生在古代农门种田世界而非末世；末世仅是来历背景，不构成检索预期。",
+      "false_positive_cause": "PAST_OR_BACKSTORY"
+    },
+    {
+      "review_id": "nrv_387f62ad6137aa84662cb29a",
+      "canonical_stable_id": "ct-v1-time-travel",
+      "verdict": "SUPPORTED",
+      "confidence": 0.9,
+      "reason": "「一朝穿越，竟成了小可怜」，穿越到古代农门是全书稳定前提。",
+      "false_positive_cause": "NONE"
+    },
+    {
+      "review_id": "nrv_39055a47b98042a1308ab40e",
+      "canonical_stable_id": "ct-v1-time-travel",
+      "verdict": "SUPPORTED",
+      "confidence": 0.95,
+      "reason": "「顶级杀手，一朝穿越，成为丞相府的九小姐」是全书起始设定。",
+      "false_positive_cause": "NONE"
+    },
+    {
+      "review_id": "nrv_3a073042ef17407be3a1ab33",
+      "canonical_stable_id": "ct-v1-mafia",
+      "verdict": "SUPPORTED",
+      "confidence": 0.95,
+      "reason": "整个简介都在黑帮世界内：Fazi 家族、「Princesse de la Mafia」、敌对家族 Capo Lorenzo Moretti；女主与敌对黑帮首领结盟复仇即主线。",
+      "false_positive_cause": "NONE"
+    },
+    {
+      "review_id": "nrv_3a20c905f26ddc55eb79e810",
+      "canonical_stable_id": "ct-v1-legitimate-daughter",
+      "verdict": "UNSUPPORTED",
+      "confidence": 0.85,
+      "reason": "简介只是弃坑告示「本作品已经烂尾，请搜索嫡女国师观看」，「嫡女」命中的是另一本书的书名，对本书内容零信息支持。",
+      "false_positive_cause": "OTHER"
+    },
+    {
+      "review_id": "nrv_3a45f1411931510817bb8971",
+      "canonical_stable_id": "ct-v1-supernatural",
+      "verdict": "UNSUPPORTED",
+      "confidence": 0.65,
+      "reason": "命中的「supernatural」只是「the supernatural and the human realms collide」的开场泛指，本书是狼人族群战争题材；中文「灵异」标签定义指向鬼怪、通灵、民俗怪谈，狼人奇幻不符合该检索预期。",
+      "false_positive_cause": "TRANSLATION_DRIFT"
+    },
+    {
+      "review_id": "nrv_3a45f1411931510817bb8971",
+      "canonical_stable_id": "ct-v1-werewolf",
+      "verdict": "SUPPORTED",
+      "confidence": 0.95,
+      "reason": "主角 Claud 是「mountain werewolf」，复活后卷入山地与森林狼人族群之战，狼人是核心设定与主线。",
+      "false_positive_cause": "NONE"
+    },
+    {
+      "review_id": "nrv_3b69b74370dda60b88973ca0",
+      "canonical_stable_id": "ct-v1-wealthy-ceo",
+      "verdict": "SUPPORTED",
+      "confidence": 0.9,
+      "reason": "男主 Maurice 是「o CEO」且其双重身份之谜是主线悬念，带娃入职总裁公司重逢是典型豪门总裁文前提。",
+      "false_positive_cause": "NONE"
+    },
+    {
+      "review_id": "nrv_3bb4fa2063a23c2102c7f3c8",
+      "canonical_stable_id": "ct-v1-first-love",
+      "verdict": "SUPPORTED",
+      "confidence": 0.7,
+      "reason": "「haunted by the loss of his first love」（Jemmy）是男主拒绝新感情的核心心结，全书主线即能否放下初恋，初恋构成稳定主题。",
+      "false_positive_cause": "NONE"
+    },
+    {
+      "review_id": "nrv_3bb4fa2063a23c2102c7f3c8",
+      "canonical_stable_id": "ct-v1-regret",
+      "verdict": "SUPPORTED",
+      "confidence": 0.55,
+      "reason": "男主残忍拒绝深爱他的 Cecile 后「Guilt overwhelmed him」「never meant to hurt her」，书名 Rekindling 指向悔悟挽回弧线；追悔是情感主线方向，但简介只呈现开端，置信度中等。",
+      "false_positive_cause": "NONE"
+    },
+    {
+      "review_id": "nrv_3e4d66c4424e76032aa448ff",
+      "canonical_stable_id": "ct-v1-betrayal",
+      "verdict": "SUPPORTED",
+      "confidence": 0.9,
+      "reason": "「一场背叛，一朝重生」——前世夫君与庶妹合谋害死她与儿子，背叛是重生复仇主线的直接起点与全书动机。",
+      "false_positive_cause": "NONE"
+    },
+    {
+      "review_id": "nrv_408d102adab46e1da4865a41",
+      "canonical_stable_id": "ct-v1-time-travel",
+      "verdict": "SUPPORTED",
+      "confidence": 0.95,
+      "reason": "「神奇穿越到异世界」并获得三国杀召唤能力，穿越是全书稳定前提。",
+      "false_positive_cause": "NONE"
+    },
+    {
+      "review_id": "nrv_41c3c7a2aeb17146e40e5ea0",
+      "canonical_stable_id": "ct-v1-rebirth",
+      "verdict": "SUPPORTED",
+      "confidence": 0.9,
+      "reason": "「晕厥醒来发现自己重生……开启了新一次的逆天人生」，重生重来是主线框架。",
+      "false_positive_cause": "NONE"
+    },
+    {
+      "review_id": "nrv_41c3c7a2aeb17146e40e5ea0",
+      "canonical_stable_id": "ct-v1-genius",
+      "verdict": "UNSUPPORTED",
+      "confidence": 0.75,
+      "reason": "「第一天才」指把主角拍晕的对手，主角本人并非天才人设；天才只是反派的一次性称谓。",
+      "false_positive_cause": "SECONDARY_CHARACTER"
+    },
+    {
+      "review_id": "nrv_41c3c7a2aeb17146e40e5ea0",
+      "canonical_stable_id": "ct-v1-time-travel",
+      "verdict": "SUPPORTED",
+      "confidence": 0.55,
+      "reason": "主角被定位为「一代穿越者古阳」，穿越者身份是其核心人设背景，玄元大陆异世生活即穿越文形态；但简介主推重生逆袭，穿越仅一笔带过，置信度中等。",
+      "false_positive_cause": "NONE"
+    },
+    {
+      "review_id": "nrv_42ac3849cd7021ffea56899a",
+      "canonical_stable_id": "ct-v1-werewolf",
+      "verdict": "SUPPORTED",
+      "confidence": 0.9,
+      "reason": "男主 Dominic 是「a beta of his pack, a werewolf」，狼群职责与寻找 true mate 的压力直接构成主线冲突。",
+      "false_positive_cause": "NONE"
+    },
+    {
+      "review_id": "nrv_44cd5400881b0514f4ac4e81",
+      "canonical_stable_id": "ct-v1-betrayal",
+      "verdict": "SUPPORTED",
+      "confidence": 0.65,
+      "reason": "开篇即「a tale of love, betrayal, and vengeance」，继母 Queen Eleanor 的暗算与「the treachery that has haunted her family」构成夺位主线的核心冲突。",
+      "false_positive_cause": "NONE"
+    },
+    {
+      "review_id": "nrv_44cd5400881b0514f4ac4e81",
+      "canonical_stable_id": "ct-v1-adventure",
+      "verdict": "SUPPORTED",
+      "confidence": 0.55,
+      "reason": "「embarks on a perilous journey to reclaim her birthright, gathering allies and armies」是明确的征途冒险主线段落；但全书重心偏宫廷言情，置信度中等。",
+      "false_positive_cause": "NONE"
+    },
+    {
+      "review_id": "nrv_44cd5400881b0514f4ac4e81",
+      "canonical_stable_id": "ct-v1-forbidden-love",
+      "verdict": "SUPPORTED",
+      "confidence": 0.85,
+      "reason": "「falls for her personal guard, a forbidden love that blossoms into a passionate affair」，公主与侍卫的禁恋是核心感情线并直接左右主线抉择（heart vs heritage）。",
+      "false_positive_cause": "NONE"
+    },
+    {
+      "review_id": "nrv_4549b23bc3cbd09cd7e3aa71",
+      "canonical_stable_id": "ct-v1-werewolf-luna",
+      "verdict": "SUPPORTED",
+      "confidence": 0.55,
+      "reason": "命中的「sa mère, la luna」指女主亡母，但女主是 alpha 之女、且被月神定为「l'alpha des alphas」的天命伴侣，luna 概念在狼群权力结构与主线走向中有实质位置；因女主本人成为 luna 未明写，置信度中等。",
+      "false_positive_cause": "NONE"
+    },
+    {
+      "review_id": "nrv_4549b23bc3cbd09cd7e3aa71",
+      "canonical_stable_id": "ct-v1-werewolf-alpha",
+      "verdict": "SUPPORTED",
+      "confidence": 0.9,
+      "reason": "男主 Sinclair 是「l'alpha des alphas」，女主之父亦是 alpha，Alpha 身份与狼群权力结构是全书核心设定与感情线基础。",
+      "false_positive_cause": "NONE"
+    },
+    {
+      "review_id": "nrv_464691f712fb5bec0312f068",
+      "canonical_stable_id": "ct-v1-time-travel",
+      "verdict": "SUPPORTED",
+      "confidence": 0.95,
+      "reason": "「穿越到古代名声狼藉的农家女身上」是全书起始稳定前提。",
+      "false_positive_cause": "NONE"
+    },
+    {
+      "review_id": "nrv_4707a070cb59d1c7106146d1",
+      "canonical_stable_id": "ct-v1-werewolf-luna",
+      "verdict": "UNSUPPORTED",
+      "confidence": 0.95,
+      "reason": "「a morte de Luna, seu verdadeiro amor」中的 Luna 是丈夫真爱的人名，全书是重生婚恋复仇题材，与狼人 Luna 设定毫无关系，纯属人名撞词。",
+      "false_positive_cause": "MULTIPLE_MEANING"
+    },
+    {
+      "review_id": "nrv_472af27cd33c7b93bf669944",
+      "canonical_stable_id": "ct-v1-divorce",
+      "verdict": "SUPPORTED",
+      "confidence": 0.9,
+      "reason": "男主目睹妻子公开出轨后「j'ai appelé mon avocat. Ce divorce pour faute…C'était la vraie fin」，离婚是简介的核心行动与全书转折，书名「Mon Ex, Ma Patronne」亦印证离婚后的关系走向。",
+      "false_positive_cause": "NONE"
+    },
+    {
+      "review_id": "nrv_47a953748cd65a406a2d121f",
+      "canonical_stable_id": "ct-v1-time-travel",
+      "verdict": "SUPPORTED",
+      "confidence": 0.9,
+      "reason": "「靈魂穿越，轉世成為一個沒落貴族」是全书起始稳定前提。",
+      "false_positive_cause": "NONE"
+    },
+    {
+      "review_id": "nrv_4865cafc58ebb87a01f055eb",
+      "canonical_stable_id": "ct-v1-time-travel",
+      "verdict": "SUPPORTED",
+      "confidence": 0.95,
+      "reason": "「商界女王離奇穿越，化為農家小女」是全书起始稳定前提。",
+      "false_positive_cause": "NONE"
+    },
+    {
+      "review_id": "nrv_494b03f2f3824d682c359f68",
+      "canonical_stable_id": "ct-v1-marriage",
+      "verdict": "SUPPORTED",
+      "confidence": 0.85,
+      "reason": "报恩式「marriage contract」与「The marriage…became a gilded cage that confined Vivian for three years」——这段婚姻的困局、破裂与追悔是全书主线，婚姻题材成立。",
+      "false_positive_cause": "NONE"
+    },
+    {
+      "review_id": "nrv_49924af8cc9d8819c4ca6639",
+      "canonical_stable_id": "ct-v1-rebirth",
+      "verdict": "SUPPORTED",
+      "confidence": 0.95,
+      "reason": "「重生之後，她麻溜地悄悄認祖歸宗」，重生后复仇虐渣是全书主线框架。",
+      "false_positive_cause": "NONE"
+    },
+    {
+      "review_id": "nrv_4a317c95eba8c8f0089fe05d",
+      "canonical_stable_id": "ct-v1-rebirth",
+      "verdict": "SUPPORTED",
+      "confidence": 0.95,
+      "reason": "「一朝重生，虐渣男吊打假千金，做回首富親閨女」，重生是主线框架。",
+      "false_positive_cause": "NONE"
+    },
+    {
+      "review_id": "nrv_4ab452b99f46be4ec076556d",
+      "canonical_stable_id": "ct-v1-romance",
+      "verdict": "SUPPORTED",
+      "confidence": 0.8,
+      "reason": "「caught up in a steamy romance with the two brothers」，与两兄弟的情爱纠葛是主线，符合言情检索预期。",
+      "false_positive_cause": "NONE"
+    },
+    {
+      "review_id": "nrv_4d5e4548f2bada329cf90c1d",
+      "canonical_stable_id": "ct-v1-xianxia",
+      "verdict": "UNSUPPORTED",
+      "confidence": 0.7,
+      "reason": "「道术宗门」只是收集古镜途经的场所之一，全书是百鬼录、巫蛊苗疆、古镜探秘的灵异志怪题材，简介中无任何修炼境界成长主线，不符合仙侠修真检索预期。",
+      "false_positive_cause": "GENERIC_KEYWORD"
+    },
+    {
+      "review_id": "nrv_4e6c7d211d4a2c7fb82b1bcf",
+      "canonical_stable_id": "ct-v1-time-travel",
+      "verdict": "SUPPORTED",
+      "confidence": 0.95,
+      "reason": "开篇「穿越了」，叶知秋成为贫寒农家女是全书稳定前提。",
+      "false_positive_cause": "NONE"
+    },
+    {
+      "review_id": "nrv_50c177b1a368a3272b16e2dd",
+      "canonical_stable_id": "ct-v1-xianxia",
+      "verdict": "SUPPORTED",
+      "confidence": 0.65,
+      "reason": "世界以「突破境界」「閉關苦修」「神兵仙丹」「幽冥魔宗圣女」「天帝」等东方修炼体系为核心规则（真武大陆），符合仙侠修真设定；叙事偏搞笑系统流，置信度中等。",
+      "false_positive_cause": "NONE"
+    },
+    {
+      "review_id": "nrv_523d430ea4bd23283313b7c0",
+      "canonical_stable_id": "ct-v1-supernatural",
+      "verdict": "UNSUPPORTED",
+      "confidence": 0.6,
+      "reason": "男主的「supernatural strength」确属核心设定，但本书是神话西部奇幻言情；中文「灵异」标签定义为鬼怪、通灵、风水、民间怪谈类，西部超自然传奇不符合该标签的检索预期。",
+      "false_positive_cause": "TRANSLATION_DRIFT"
+    },
+    {
+      "review_id": "nrv_523d430ea4bd23283313b7c0",
+      "canonical_stable_id": "ct-v1-romance",
+      "verdict": "SUPPORTED",
+      "confidence": 0.75,
+      "reason": "「a sweeping tale of romance」且 Ellie 与 Jack 的感情抉择（「how far she'll go to stand beside the one…」）是主线之一，言情成立。",
+      "false_positive_cause": "NONE"
+    },
+    {
+      "review_id": "nrv_53a554f3799736f604ff4e12",
+      "canonical_stable_id": "ct-v1-legitimate-daughter",
+      "verdict": "SUPPORTED",
+      "confidence": 0.85,
+      "reason": "女主穿越成「尚書府雙腿殘廢的嫡女」，姨娘陷害、庶妹嫉恨、祖母偏心的嫡庶宅斗是核心处境，嫡女身份是稳定人设。",
+      "false_positive_cause": "NONE"
+    },
+    {
+      "review_id": "nrv_54b905293327d97201583fc6",
+      "canonical_stable_id": "ct-v1-romance",
+      "verdict": "UNCERTAIN",
+      "confidence": 0.5,
+      "reason": "命中的「Romance LGBT」在葡语中既可指「长篇小说」也可指言情；简介正文只讲 Lucy 的跨性别身份认同与自由抗争，未出现任何感情线，仅凭简介无法确认是言情向。",
+      "false_positive_cause": "MULTIPLE_MEANING"
+    },
+    {
+      "review_id": "nrv_5737deb815b285e2903f5fb9",
+      "canonical_stable_id": "ct-v1-first-love",
+      "verdict": "SUPPORTED",
+      "confidence": 0.75,
+      "reason": "「her husband's first love will come back」是女主婚姻从一开始就注定的核心威胁，Lauren 归来引爆全书主冲突，初恋概念对主线有实质影响。",
+      "false_positive_cause": "NONE"
+    },
+    {
+      "review_id": "nrv_593038fec252fcb7c0351834",
+      "canonical_stable_id": "ct-v1-vampire",
+      "verdict": "SUPPORTED",
+      "confidence": 0.85,
+      "reason": "Seraphiel 是「the cold, beautiful Vampire Lord」，是争夺 Zero 的两大主角之一（「a vampire who wants to possess him」），吸血鬼是核心人物身份。",
+      "false_positive_cause": "NONE"
+    },
+    {
+      "review_id": "nrv_593038fec252fcb7c0351834",
+      "canonical_stable_id": "ct-v1-student",
+      "verdict": "UNSUPPORTED",
+      "confidence": 0.6,
+      "reason": "「student ball」只是学院背景中的一场活动，简介主线是 Alpha 与吸血鬼领主的双强争夺与禁忌羁绊，学业与学生成长并未按标签定义持续影响主线。",
+      "false_positive_cause": "SETTING_ONLY"
+    },
+    {
+      "review_id": "nrv_593038fec252fcb7c0351834",
+      "canonical_stable_id": "ct-v1-heir",
+      "verdict": "UNSUPPORTED",
+      "confidence": 0.7,
+      "reason": "「the Alpha heir」指配角 Eliana，她只在开场命令 Zero 换装时出现一次，继承人概念与 Zero 的主线无实质关联。",
+      "false_positive_cause": "SECONDARY_CHARACTER"
+    }
+  ],
+  "novel_verdicts": [
+    {"review_id": "nrv_2a46617f81908f68f64e227a", "overall_description_tag_quality": "GOOD"},
+    {"review_id": "nrv_2af0b9b4b60cc651175c4ae6", "overall_description_tag_quality": "GOOD"},
+    {"review_id": "nrv_2e1cec709165a7c01d509d19", "overall_description_tag_quality": "GOOD"},
+    {"review_id": "nrv_30274660fca983d7edaf6310", "overall_description_tag_quality": "GOOD"},
+    {"review_id": "nrv_30665770b00ef6e5095537e6", "overall_description_tag_quality": "GOOD"},
+    {"review_id": "nrv_3074564e7505fe5699b1a189", "overall_description_tag_quality": "GOOD"},
+    {"review_id": "nrv_334eef50fa07da9832a22980", "overall_description_tag_quality": "GOOD"},
+    {"review_id": "nrv_353f362ab64ea2d5100a277e", "overall_description_tag_quality": "UNCERTAIN"},
+    {"review_id": "nrv_35c4763f69baf728745c6e91", "overall_description_tag_quality": "GOOD"},
+    {"review_id": "nrv_36e911fd9800c737052c4870", "overall_description_tag_quality": "BAD"},
+    {"review_id": "nrv_387f62ad6137aa84662cb29a", "overall_description_tag_quality": "MIXED"},
+    {"review_id": "nrv_39055a47b98042a1308ab40e", "overall_description_tag_quality": "GOOD"},
+    {"review_id": "nrv_3a073042ef17407be3a1ab33", "overall_description_tag_quality": "GOOD"},
+    {"review_id": "nrv_3a20c905f26ddc55eb79e810", "overall_description_tag_quality": "BAD"},
+    {"review_id": "nrv_3a45f1411931510817bb8971", "overall_description_tag_quality": "MIXED"},
+    {"review_id": "nrv_3b69b74370dda60b88973ca0", "overall_description_tag_quality": "GOOD"},
+    {"review_id": "nrv_3bb4fa2063a23c2102c7f3c8", "overall_description_tag_quality": "GOOD"},
+    {"review_id": "nrv_3e4d66c4424e76032aa448ff", "overall_description_tag_quality": "GOOD"},
+    {"review_id": "nrv_408d102adab46e1da4865a41", "overall_description_tag_quality": "GOOD"},
+    {"review_id": "nrv_41c3c7a2aeb17146e40e5ea0", "overall_description_tag_quality": "MIXED"},
+    {"review_id": "nrv_42ac3849cd7021ffea56899a", "overall_description_tag_quality": "GOOD"},
+    {"review_id": "nrv_44cd5400881b0514f4ac4e81", "overall_description_tag_quality": "GOOD"},
+    {"review_id": "nrv_4549b23bc3cbd09cd7e3aa71", "overall_description_tag_quality": "GOOD"},
+    {"review_id": "nrv_464691f712fb5bec0312f068", "overall_description_tag_quality": "GOOD"},
+    {"review_id": "nrv_4707a070cb59d1c7106146d1", "overall_description_tag_quality": "BAD"},
+    {"review_id": "nrv_472af27cd33c7b93bf669944", "overall_description_tag_quality": "GOOD"},
+    {"review_id": "nrv_47a953748cd65a406a2d121f", "overall_description_tag_quality": "GOOD"},
+    {"review_id": "nrv_4865cafc58ebb87a01f055eb", "overall_description_tag_quality": "GOOD"},
+    {"review_id": "nrv_494b03f2f3824d682c359f68", "overall_description_tag_quality": "GOOD"},
+    {"review_id": "nrv_49924af8cc9d8819c4ca6639", "overall_description_tag_quality": "GOOD"},
+    {"review_id": "nrv_4a317c95eba8c8f0089fe05d", "overall_description_tag_quality": "GOOD"},
+    {"review_id": "nrv_4ab452b99f46be4ec076556d", "overall_description_tag_quality": "GOOD"},
+    {"review_id": "nrv_4d5e4548f2bada329cf90c1d", "overall_description_tag_quality": "BAD"},
+    {"review_id": "nrv_4e6c7d211d4a2c7fb82b1bcf", "overall_description_tag_quality": "GOOD"},
+    {"review_id": "nrv_50c177b1a368a3272b16e2dd", "overall_description_tag_quality": "GOOD"},
+    {"review_id": "nrv_523d430ea4bd23283313b7c0", "overall_description_tag_quality": "MIXED"},
+    {"review_id": "nrv_53a554f3799736f604ff4e12", "overall_description_tag_quality": "GOOD"},
+    {"review_id": "nrv_54b905293327d97201583fc6", "overall_description_tag_quality": "UNCERTAIN"},
+    {"review_id": "nrv_5737deb815b285e2903f5fb9", "overall_description_tag_quality": "GOOD"},
+    {"review_id": "nrv_593038fec252fcb7c0351834", "overall_description_tag_quality": "MIXED"}
+  ]
+}
