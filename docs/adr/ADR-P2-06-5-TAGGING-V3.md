@@ -12,7 +12,11 @@ B2_STATUS                      = FINAL
 B2_MAPPING_KEYS                = 285
 B2_APPROVED_MAPPING_GROUPS     = 194
 B2_APPROVED_MAPPING_EDGES      = 196
-C1_PARAMETER_STATUS            = OWNER_REVIEW_PENDING
+C1_PARAMETER_STATUS            = FROZEN
+C1_FINAL_RUN_ID                = 2026-08-17-owner-final-c1-final
+TEXT_PARAMETERS                = title=30; description=30; threshold=30; maxTextTags=3
+KEYWORD_ELIGIBILITY_VERSION    = keyword-eligibility-v2
+KEYWORD_ELIGIBILITY_SHA256     = e796ba1ed79b344f790a70853d2e9773d6265e307615b2a60da28b90a6164854
 AUTO_WRITE_AUTHORIZED          = NO
 PRODUCTION_IMPLEMENTATION_AUTHORIZED = YES
 PRODUCTION_IMPLEMENTATION_STATUS     = IN_PROGRESS
@@ -287,7 +291,9 @@ type ClassifierConfig = {
 };
 ```
 
-pending 配置在 production loader 中返回 `CONFIG_NOT_READY`；测试通过显式 fixture 注入完整配置。
+Owner Final 已冻结 production config 为 `30 / 30 / 30 / 3`，production loader 直接消费
+`classifier-config-final.json` 并验证 taxonomy 与 `keyword-eligibility-v2` authority。任何 artifact
+状态、版本或 SHA 不一致仍 fail closed 为 `CONFIG_NOT_READY`；`AUTO_WRITE_AUTHORIZED=NO` 是独立写闸。
 Worker、service、CLI 和测试不得各自保存候选 production 数值。
 
 ## 9. Lifecycle
@@ -458,7 +464,7 @@ CANONICAL_TAG_V1_COUNT=123
 CANONICAL_TAG_V1_SHA256=8bc8cdae8be2176bde170173e98bad2b9fa0e1770818174a57320816eefdccad
 B2_STATUS=FINAL
 B2_MAPPING_KEYS=285
-C1_PARAMETER_STATUS=OWNER_REVIEW_PENDING
+C1_PARAMETER_STATUS=FROZEN
 C1_DESCRIPTION_ONLY_BLIND_REVIEW=IN_PARALLEL
 CHAPTER_EVIDENCE_STATUS=DEFER
 OFFLINE_LLM_ENRICHMENT=FUTURE_EXTENSION_NON_BLOCKING

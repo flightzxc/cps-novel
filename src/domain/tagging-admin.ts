@@ -31,6 +31,8 @@ export type AdminTagAuthority = Readonly<{
     activeKeywordCount: number;
     versions: readonly string[];
     fingerprint: string | null;
+    keywordEligibilityVersion: string;
+    keywordEligibilitySha256: string;
   }>;
   classifier: Readonly<{
     status: "OWNER_REVIEW_PENDING" | "FROZEN";

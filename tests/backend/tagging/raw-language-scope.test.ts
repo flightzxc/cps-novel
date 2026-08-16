@@ -33,13 +33,19 @@ describe("RAW_LANGUAGE_SCOPE_V1", () => {
   });
 });
 
-describe("Phase 1 classifier registration", () => {
-  it("is fail-closed and excludes noisy/source metadata", async () => {
-    expect(TAG_CLASSIFIER_PARAMETER_STATUS).toBe("OWNER_REVIEW_PENDING");
+describe("Final classifier registration", () => {
+  it("loads the frozen authority and excludes noisy/source metadata", async () => {
+    expect(TAG_CLASSIFIER_PARAMETER_STATUS).toBe("FROZEN");
     expect(TAG_CLASSIFIER_TEXT_FIELDS.strong).toEqual(["title"]);
     expect(TAG_CLASSIFIER_TEXT_FIELDS.weak).toEqual(["description"]);
     expect(TAG_CLASSIFIER_TEXT_FIELDS.excluded).toContain("sourceLanguageCode");
     expect(TAG_CLASSIFIER_TEXT_FIELDS.excluded).toContain("chapters");
-    expect(() => loadTagClassifierConfig()).toThrow(expect.objectContaining({ code: "CONFIG_NOT_READY" }));
+    expect(loadTagClassifierConfig()).toMatchObject({
+      status: "FROZEN",
+      titleWeight: 30,
+      descriptionWeight: 30,
+      threshold: 30,
+      maxTextTags: 3,
+    });
   });
 });

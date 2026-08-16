@@ -267,15 +267,17 @@ const authority = {
     activeKeywordCount: 0,
     versions: [],
     fingerprint: null,
+    keywordEligibilityVersion: "keyword-eligibility-v2",
+    keywordEligibilitySha256: "e796ba1ed79b344f790a70853d2e9773d6265e307615b2a60da28b90a6164854",
   },
   classifier: {
-    status: "OWNER_REVIEW_PENDING",
-    version: "pending",
-    titleWeight: null,
-    descriptionWeight: null,
-    threshold: null,
-    maxTextTags: null,
-    fingerprint: null,
+    status: "FROZEN",
+    version: "2026-08-17-owner-final-c1-final",
+    titleWeight: 30,
+    descriptionWeight: 30,
+    threshold: 30,
+    maxTextTags: 3,
+    fingerprint: "a".repeat(64),
   },
 } as const;
 
@@ -315,6 +317,13 @@ describe("P2-06.5 Tagging Admin browser projections", () => {
     } as unknown as AdminCanonicalTagDetail;
     const view = projectAdminCanonicalTagDetail(input);
     expect(view.tag.stableId).toBe("genre.wuxia");
+    expect(view.authority).toMatchObject({
+      keywords: {
+        keywordEligibilityVersion: "keyword-eligibility-v2",
+        keywordEligibilitySha256: "e796ba1ed79b344f790a70853d2e9773d6265e307615b2a60da28b90a6164854",
+      },
+      classifier: { status: "FROZEN", titleWeight: 30, descriptionWeight: 30, threshold: 30, maxTextTags: 3 },
+    });
     expect(JSON.stringify(view)).not.toMatch(/rawPayload|evidence|runId|secret/);
   });
 

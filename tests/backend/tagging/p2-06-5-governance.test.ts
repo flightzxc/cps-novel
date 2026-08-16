@@ -39,7 +39,7 @@ describe("P2-06.5 static database governance", () => {
   it("keeps auto classification explicit and the pure Tagging core dependency-free", () => {
     expect(scheduler).toContain("SCHEDULES: readonly ScheduleDefinition[] = Object.freeze([])");
     expect(scheduler).not.toMatch(/tagging|auto_classify|novel-tag-backfill/i);
-    const core = ["contracts.ts", "classifier.ts", "classifier-config.ts", "keyword-artifact.ts", "stable-json.ts", "task-contract.ts"]
+    const core = ["contracts.ts", "classifier.ts", "classifier-config.ts", "keyword-artifact.ts", "keyword-eligibility.ts", "stable-json.ts", "task-contract.ts"]
       .map((file) => readFileSync(path.join(root, "src/lib/tagging", file), "utf8"))
       .join("\n");
     expect(core).not.toMatch(/@prisma|next\/|worker\/|server\/|scheduler\//);

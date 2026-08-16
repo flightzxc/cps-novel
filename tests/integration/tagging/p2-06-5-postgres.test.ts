@@ -477,7 +477,11 @@ describe.skipIf(!enabled).sequential("P2-06.5 isolated PostgreSQL foundation", (
     expect(list.items.map((item) => item.id)).toContain(ids.tagA);
     expect(list.authority).toMatchObject({
       taxonomy: { canonicalV1Count: 123, status: "INCOMPLETE" },
-      classifier: { status: "OWNER_REVIEW_PENDING", titleWeight: null, fingerprint: null },
+      keywords: {
+        keywordEligibilityVersion: "keyword-eligibility-v2",
+        keywordEligibilitySha256: "e796ba1ed79b344f790a70853d2e9773d6265e307615b2a60da28b90a6164854",
+      },
+      classifier: { status: "FROZEN", titleWeight: 30, descriptionWeight: 30, threshold: 30, maxTextTags: 3 },
     });
 
     const before = await owner.canonicalTag.findUniqueOrThrow({ where: { id: ids.tagA } });

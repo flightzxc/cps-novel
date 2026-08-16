@@ -16,6 +16,10 @@ import {
   type TagKeywordMatchMode,
   type TagKeywordScriptBucket,
 } from "@/lib/tagging/keyword-artifact";
+import {
+  applyKeywordEligibilityAuthority,
+  loadKeywordEligibilityAuthority,
+} from "@/lib/tagging/keyword-eligibility";
 import { fingerprint, sha256 } from "@/lib/tagging/stable-json";
 
 type Db = PrismaClient | Prisma.TransactionClient;
@@ -104,25 +108,29 @@ export async function loadKeywordRuleArtifactFromDb(
   if (taxonomyVersions.size !== 1 || lexiconVersions.size !== 1) {
     throw new TaggingError("DATA_INVARIANT_VIOLATION", "Active taxonomy and keyword lexicon must each have exactly one version");
   }
+  const eligibility = loadKeywordEligibilityAuthority();
+  const tags = applyKeywordEligibilityAuthority(rows.map((row) => ({
+    canonicalTagId: row.id,
+    stableId: row.stableId,
+    // Owner-final C1 freezes ALL_PRIORITY_0_THEN_STABLE_ID. Display
+    // sortOrder is deliberately not reused as classifier priority.
+    textSelectionPriority: 0,
+    keywords: row.keywords.map((keyword) => ({
+      keywordId: keyword.keywordId,
+      value: keyword.value,
+      scriptBuckets: stringArray(keyword.scriptBuckets, "scriptBuckets") as TagKeywordScriptBucket[],
+      matchMode: keyword.matchMode as TagKeywordMatchMode,
+      riskFlags: stringArray(keyword.riskFlags, "riskFlags"),
+    })),
+  })), eligibility, { requireEnabledRuleCoverage: options.enforceCanonicalV1 !== false });
   return validateKeywordRuleArtifact({
     schemaVersion: 1,
     taxonomyVersion: [...taxonomyVersions][0],
     taxonomySha256: CANONICAL_TAG_V1_SHA256,
     keywordLexiconVersion: [...lexiconVersions][0],
-    tags: rows.map((row) => ({
-      canonicalTagId: row.id,
-      stableId: row.stableId,
-      // Owner-final C1 v2 freezes ALL_PRIORITY_0_THEN_STABLE_ID. Display
-      // sortOrder is deliberately not reused as classifier priority.
-      textSelectionPriority: 0,
-      keywords: row.keywords.map((keyword) => ({
-        keywordId: keyword.keywordId,
-        value: keyword.value,
-        scriptBuckets: stringArray(keyword.scriptBuckets, "scriptBuckets") as TagKeywordScriptBucket[],
-        matchMode: keyword.matchMode as TagKeywordMatchMode,
-        riskFlags: stringArray(keyword.riskFlags, "riskFlags"),
-      })),
-    })),
+    keywordEligibilityVersion: eligibility.version,
+    keywordEligibilitySha256: eligibility.sha256,
+    tags,
   });
 }
 
@@ -243,8 +251,9 @@ export async function classifyNovelForAuto(
         selectedCount: result.selectedCount,
         truncatedCount: result.truncatedCount,
         inputContractSha256: sha256("title+description:v1"),
+        keywordEligibilityVersion: authorities.artifact.keywordEligibilityVersion,
+        keywordEligibilitySha256: authorities.artifact.keywordEligibilitySha256,
       },
     },
   };
 }
-

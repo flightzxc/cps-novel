@@ -200,6 +200,8 @@ function projectAuthority(input: AdminTagAuthority): AdminTagAuthorityView {
       activeKeywordCount: input.keywords.activeKeywordCount,
       versions: Object.freeze([...input.keywords.versions]),
       fingerprint: input.keywords.fingerprint,
+      keywordEligibilityVersion: input.keywords.keywordEligibilityVersion,
+      keywordEligibilitySha256: input.keywords.keywordEligibilitySha256,
     }),
     classifier: Object.freeze({
       status: input.classifier.status,

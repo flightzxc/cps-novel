@@ -3,6 +3,7 @@ import type { FrozenTagClassifierConfig } from "./classifier-config";
 import type {
   ClassifierTagRule,
   KeywordRuleArtifact,
+  TagKeywordField,
   TagKeywordMatchMode,
   TagKeywordRule,
 } from "./keyword-artifact";
@@ -72,8 +73,11 @@ export function findProductionKeywordMatch(value: string, keyword: TagKeywordRul
   };
 }
 
-function fieldMatches(value: string, tag: ClassifierTagRule): KeywordMatch[] {
-  return tag.keywords.map((keyword) => findProductionKeywordMatch(value, keyword)).filter((match): match is KeywordMatch => match !== null);
+function fieldMatches(value: string, tag: ClassifierTagRule, field: TagKeywordField): KeywordMatch[] {
+  return tag.keywords
+    .filter((keyword) => keyword.allowedFields === undefined || keyword.allowedFields.includes(field))
+    .map((keyword) => findProductionKeywordMatch(value, keyword))
+    .filter((match): match is KeywordMatch => match !== null);
 }
 
 export function classifyNovelText(
@@ -84,8 +88,8 @@ export function classifyNovelText(
   const title = input.title ?? "";
   const description = input.description ?? "";
   const eligible = artifact.tags.flatMap((tag) => {
-    const titleMatches = fieldMatches(title, tag);
-    const descriptionMatches = fieldMatches(description, tag);
+    const titleMatches = fieldMatches(title, tag, "title");
+    const descriptionMatches = fieldMatches(description, tag, "description");
     const titleScore = titleMatches.length > 0 ? config.titleWeight : 0;
     const descriptionScore = descriptionMatches.length > 0 ? config.descriptionWeight : 0;
     const score = titleScore + descriptionScore;

@@ -1,7 +1,14 @@
+import laneCFinalConfig from "../../../docs/p2/p2-06-5-lane-c/final/2026-08-17/classifier-config-final.json";
+
 import { TaggingError } from "./contracts";
+import {
+  CURRENT_KEYWORD_ELIGIBILITY_SHA256,
+  CURRENT_KEYWORD_ELIGIBILITY_VERSION,
+} from "./keyword-eligibility";
+import { CANONICAL_TAG_V1_SHA256 } from "./keyword-artifact";
 import { fingerprint } from "./stable-json";
 
-export const TAG_CLASSIFIER_PARAMETER_STATUS = "OWNER_REVIEW_PENDING" as const;
+export const TAG_CLASSIFIER_PARAMETER_STATUS = "FROZEN" as const;
 export const TAG_CLASSIFIER_TEXT_FIELDS = {
   strong: ["title"],
   weak: ["description"],
@@ -27,16 +34,6 @@ export interface FrozenTagClassifierConfig extends TagClassifierConfig {
   fingerprint: string;
 }
 
-export const PRODUCTION_TAG_CLASSIFIER_CONFIG: TagClassifierConfig = Object.freeze({
-  status: TAG_CLASSIFIER_PARAMETER_STATUS,
-  version: "p2-06-5-owner-review-pending",
-  titleWeight: null,
-  descriptionWeight: null,
-  threshold: null,
-  maxTextTags: null,
-  fingerprint: null,
-});
-
 function configPayload(config: Pick<FrozenTagClassifierConfig, "version" | "titleWeight" | "descriptionWeight" | "threshold" | "maxTextTags">) {
   return {
     version: config.version,
@@ -53,6 +50,30 @@ export function createFrozenTagClassifierConfig(
   const payload = configPayload(input);
   return Object.freeze({ status: "FROZEN", ...input, fingerprint: fingerprint(payload) });
 }
+
+function productionConfigFromFinalAuthority(): FrozenTagClassifierConfig {
+  const artifact = laneCFinalConfig;
+  const parameters = artifact.text_parameters;
+  if (
+    artifact.status !== "FROZEN" || artifact.lane_status !== "FINAL" || parameters.status !== "FROZEN"
+    || parameters.chapter_weight !== 0
+    || artifact.keyword_eligibility_overlay.version !== CURRENT_KEYWORD_ELIGIBILITY_VERSION
+    || artifact.keyword_eligibility_overlay.sha256 !== CURRENT_KEYWORD_ELIGIBILITY_SHA256
+    || artifact.lineage.canonical_sha256 !== CANONICAL_TAG_V1_SHA256
+    || artifact.auto_write_authorized !== "NO"
+  ) {
+    throw new TaggingError("CONFIG_NOT_READY", "Lane C Final classifier authority is inconsistent");
+  }
+  return createFrozenTagClassifierConfig({
+    version: artifact.authoritative_run.run_id,
+    titleWeight: parameters.title_weight,
+    descriptionWeight: parameters.description_weight,
+    threshold: parameters.threshold,
+    maxTextTags: parameters.max_text_tags,
+  });
+}
+
+export const PRODUCTION_TAG_CLASSIFIER_CONFIG: FrozenTagClassifierConfig = productionConfigFromFinalAuthority();
 
 export function loadTagClassifierConfig(
   configured: TagClassifierConfig = PRODUCTION_TAG_CLASSIFIER_CONFIG,

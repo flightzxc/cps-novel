@@ -44,6 +44,10 @@ import {
   type TagKeywordMatchMode,
   type TagKeywordScriptBucket,
 } from "@/lib/tagging/keyword-artifact";
+import {
+  CURRENT_KEYWORD_ELIGIBILITY_SHA256,
+  CURRENT_KEYWORD_ELIGIBILITY_VERSION,
+} from "@/lib/tagging/keyword-eligibility";
 import { fingerprint } from "@/lib/tagging/stable-json";
 import {
   requireFreshAdminServiceMutation,
@@ -336,6 +340,8 @@ export async function readAdminTagAuthority(db: PrismaClient): Promise<AdminTagA
       activeKeywordCount,
       versions: lexiconVersions,
       fingerprint: keywordFingerprint,
+      keywordEligibilityVersion: CURRENT_KEYWORD_ELIGIBILITY_VERSION,
+      keywordEligibilitySha256: CURRENT_KEYWORD_ELIGIBILITY_SHA256,
     },
     classifier: { ...PRODUCTION_TAG_CLASSIFIER_CONFIG },
   };

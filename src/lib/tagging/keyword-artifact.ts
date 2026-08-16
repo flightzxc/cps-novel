@@ -9,6 +9,7 @@ export const TAG_KEYWORD_SCRIPT_BUCKETS = ["latin", "cjk", "other", "unknown"] a
 export const TAG_KEYWORD_MATCH_MODES = ["unicode_word", "cjk_contiguous", "auto"] as const;
 export type TagKeywordScriptBucket = (typeof TAG_KEYWORD_SCRIPT_BUCKETS)[number];
 export type TagKeywordMatchMode = (typeof TAG_KEYWORD_MATCH_MODES)[number];
+export type TagKeywordField = "title" | "description";
 
 export interface TagKeywordRule {
   keywordId: string;
@@ -16,6 +17,7 @@ export interface TagKeywordRule {
   scriptBuckets: TagKeywordScriptBucket[];
   matchMode: TagKeywordMatchMode;
   riskFlags: string[];
+  allowedFields?: TagKeywordField[];
 }
 
 export interface ClassifierTagRule {
@@ -30,12 +32,16 @@ export interface KeywordRuleArtifact {
   taxonomyVersion: string;
   taxonomySha256: string;
   keywordLexiconVersion: string;
+  keywordEligibilityVersion: string | null;
+  keywordEligibilitySha256: string | null;
   keywordFingerprint: string;
   tags: ClassifierTagRule[];
 }
 
-export type KeywordRuleArtifactInput = Omit<KeywordRuleArtifact, "keywordFingerprint"> & {
+export type KeywordRuleArtifactInput = Omit<KeywordRuleArtifact, "keywordFingerprint" | "keywordEligibilityVersion" | "keywordEligibilitySha256"> & {
   keywordFingerprint?: string;
+  keywordEligibilityVersion?: string | null;
+  keywordEligibilitySha256?: string | null;
 };
 
 function artifactPayload(artifact: Omit<KeywordRuleArtifact, "keywordFingerprint">) {
@@ -44,6 +50,8 @@ function artifactPayload(artifact: Omit<KeywordRuleArtifact, "keywordFingerprint
     taxonomyVersion: artifact.taxonomyVersion,
     taxonomySha256: artifact.taxonomySha256,
     keywordLexiconVersion: artifact.keywordLexiconVersion,
+    keywordEligibilityVersion: artifact.keywordEligibilityVersion,
+    keywordEligibilitySha256: artifact.keywordEligibilitySha256,
     tags: artifact.tags,
   };
 }
@@ -67,6 +75,15 @@ export function validateKeywordRuleArtifact(input: KeywordRuleArtifactInput): Ke
   }
   if (!/^[0-9a-f]{64}$/.test(input.taxonomySha256)) {
     throw new TaggingError("DATA_INVARIANT_VIOLATION", "Invalid taxonomy SHA-256");
+  }
+  const keywordEligibilityVersion = input.keywordEligibilityVersion ?? null;
+  const keywordEligibilitySha256 = input.keywordEligibilitySha256 ?? null;
+  if (
+    (keywordEligibilityVersion === null) !== (keywordEligibilitySha256 === null)
+    || (keywordEligibilityVersion !== null && keywordEligibilityVersion.length === 0)
+    || (keywordEligibilitySha256 !== null && !/^[0-9a-f]{64}$/.test(keywordEligibilitySha256))
+  ) {
+    throw new TaggingError("DATA_INVARIANT_VIOLATION", "Invalid keyword eligibility authority identity");
   }
   const tagIds = new Set<string>();
   const stableIds = new Set<string>();
@@ -97,12 +114,19 @@ export function validateKeywordRuleArtifact(input: KeywordRuleArtifactInput): Ke
       if (resolvesCjk && codePointLength(rawKeyword.value.normalize("NFC")) < 2) {
         throw new TaggingError("DATA_INVARIANT_VIOLATION", `CJK keyword is shorter than two code points: ${rawKeyword.keywordId}`);
       }
+      const allowedFields = rawKeyword.allowedFields === undefined
+        ? undefined
+        : strings(rawKeyword.allowedFields, "allowedFields") as TagKeywordField[];
+      if (allowedFields?.some((field) => field !== "title" && field !== "description")) {
+        throw new TaggingError("DATA_INVARIANT_VIOLATION", `Unsupported keyword field: ${rawKeyword.keywordId}`);
+      }
       return {
         keywordId: rawKeyword.keywordId,
         value: rawKeyword.value,
         scriptBuckets,
         matchMode: rawKeyword.matchMode,
         riskFlags: strings(rawKeyword.riskFlags, "riskFlags"),
+        ...(allowedFields === undefined ? {} : { allowedFields }),
       };
     }).sort((left, right) => left.keywordId.localeCompare(right.keywordId, "en"));
     return {
@@ -112,11 +136,15 @@ export function validateKeywordRuleArtifact(input: KeywordRuleArtifactInput): Ke
       keywords,
     };
   }).sort((left, right) => left.stableId.localeCompare(right.stableId, "en"));
-  const payload = artifactPayload({ ...input, tags } as Omit<KeywordRuleArtifact, "keywordFingerprint">);
+  const payload = artifactPayload({
+    ...input,
+    keywordEligibilityVersion,
+    keywordEligibilitySha256,
+    tags,
+  } as Omit<KeywordRuleArtifact, "keywordFingerprint">);
   const computed = fingerprint(payload);
   if (input.keywordFingerprint !== undefined && input.keywordFingerprint !== computed) {
     throw new TaggingError("DATA_INVARIANT_VIOLATION", "Keyword artifact fingerprint mismatch");
   }
   return Object.freeze({ ...payload, keywordFingerprint: computed });
 }
-
