@@ -44,6 +44,11 @@ const EXPECTED_TASK_ROUTES = [
   { path: "/api/admin/tasks/manual-reviews/resolve", methods: ["POST"] },
   { path: "/api/admin/promo-links", methods: ["GET"] },
 ] as const;
+const EXPECTED_TAGGING_ROUTES = [
+  { path: "/api/admin/canonical-tags", methods: ["GET", "PUT"] },
+  { path: "/api/admin/novels/tags", methods: ["GET", "PUT"] },
+  { path: "/api/admin/tag-mappings", methods: ["GET", "PUT"] },
+] as const;
 
 const EXPECTED_ACTIONS = [
   "admin.channel_account.create",
@@ -82,6 +87,7 @@ describe("P1-09 Admin registry parity", () => {
       ...EXPECTED_CONTENT_GET_ROUTES.map((routePath) => ({ path: routePath, methods: ["GET"] })),
       ...EXPECTED_SITE_SETTING_ROUTES.map((route) => ({ path: route.path, methods: [...route.methods] })),
       ...EXPECTED_TASK_ROUTES.map((route) => ({ path: route.path, methods: [...route.methods] })),
+      ...EXPECTED_TAGGING_ROUTES.map((route) => ({ path: route.path, methods: [...route.methods] })),
     ].sort((left, right) => left.path.localeCompare(right.path));
     const registered = P2_04_ADMIN_REGISTRY.routes
       .map((route) => ({ path: route.path, methods: [...route.methods].sort() }))

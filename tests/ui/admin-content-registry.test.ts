@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 import {
   ADMIN_CONTENT_ROUTES,
   ADMIN_TASK_ROUTES,
+  ADMIN_TAGGING_ROUTES,
   CONTENT_ROUTE_CAPABILITIES,
   P2_04_ADMIN_REGISTRY,
 } from "@/app/api/admin/_lib/registry";
@@ -86,11 +87,13 @@ describe("P2-04 内容路由登记", () => {
     for (const route of ADMIN_CONTENT_ROUTES) expect(paths).toContain(route.path);
     for (const route of ADMIN_SITE_SETTING_ROUTES) expect(paths).toContain(route.path);
     for (const route of ADMIN_TASK_ROUTES) expect(paths).toContain(route.path);
+    for (const route of ADMIN_TAGGING_ROUTES) expect(paths).toContain(route.path);
     expect(paths.length).toBe(
       P1_08B_ADMIN_REGISTRY.routes.length
       + ADMIN_CONTENT_ROUTES.length
       + ADMIN_SITE_SETTING_ROUTES.length
-      + ADMIN_TASK_ROUTES.length,
+      + ADMIN_TASK_ROUTES.length
+      + ADMIN_TAGGING_ROUTES.length,
     );
   });
 
