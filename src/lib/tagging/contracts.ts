@@ -1,4 +1,4 @@
-import type { Prisma } from "@prisma/client";
+import type { JsonObject } from "./stable-json";
 
 export type TagMode = "automatic" | "manual";
 export type PersistedTagSource = "manual" | "auto";
@@ -30,7 +30,7 @@ export interface TaggingActor {
 export interface AutoTagCandidate {
   canonicalTagId: string;
   score: number;
-  evidence: Prisma.InputJsonObject;
+  evidence: JsonObject;
 }
 
 export interface TagClassificationRunMetadata {
@@ -43,7 +43,7 @@ export interface TagClassificationRunMetadata {
   classifierConfigFingerprint: string;
   taskType?: string;
   taskId?: string;
-  resultSummary: Prisma.InputJsonObject;
+  resultSummary: JsonObject;
 }
 
 export const TAGGING_ERROR_CODES = [
@@ -60,4 +60,3 @@ export class TaggingError extends Error {
     this.name = "TaggingError";
   }
 }
-
