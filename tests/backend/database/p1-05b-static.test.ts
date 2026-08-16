@@ -20,9 +20,8 @@ describe("P1-05B static database contracts", () => {
       [path.join(root, "scripts/check-database-dictionary-drift.mjs"), "--static"],
       { encoding: "utf8" },
     );
-    // v0.2.0 foundation added the SiteSetting table (Stream F, migration
-    // 20260818120000_v020_foundation_shared): 43 -> 44 Prisma models.
-    expect(JSON.parse(output)).toMatchObject({ status: "ok", models: 44 });
+    // SiteSetting plus the seven Tagging V3 models bring the current schema to 51 models.
+    expect(JSON.parse(output)).toMatchObject({ status: "ok", models: 51 });
   });
 
   it("keeps stable keys globally unique and records physical ownership", () => {
