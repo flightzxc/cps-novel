@@ -10,6 +10,7 @@ export type AdminCapability =
   | "content:takedown"
   | "content:view"
   | "content:read"
+  | "tag:manage"
   | "promo:claim"
   | "revenue:view";
 
@@ -63,6 +64,12 @@ export const ADMIN_CAPABILITY_CONFIG: Readonly<Record<AdminCapability, Capabilit
       userIdsEnv: "CONTENT_READ_USER_IDS",
       defaultRoles: [],
       requiresTwoFactor: false,
+    },
+    "tag:manage": {
+      rolesEnv: "TAG_MANAGE_ROLES",
+      userIdsEnv: "TAG_MANAGE_USER_IDS",
+      defaultRoles: ["super_admin"],
+      requiresTwoFactor: true,
     },
     "promo:claim": {
       rolesEnv: "PROMO_CLAIM_ROLES",
