@@ -15,12 +15,14 @@ import {
   verifyArtifactBundle,
   writeArtifactBundle,
 } from "./calibration.mjs";
+import { compareC1V3 } from "./c1-v3-compare.mjs";
 import {
   POST_FIX_POPULATION_SAMPLE_TARGET,
   POST_FIX_RISK_CELLS,
   POST_FIX_RISK_SAMPLE_TARGET,
   buildDescriptionOnlyBlindReview,
 } from "./description-only-blind-review.mjs";
+import { loadLexiconOverride, normalizeSeed, overlayRuleKey } from "./lexicon-eligibility.mjs";
 
 export const EXPECTED_CANONICAL_COUNT = 123;
 export const EXPECTED_SAMPLE_COUNT = 10_000;
@@ -52,10 +54,6 @@ function fail(message) { throw new Error(`P2-06.5 Lane C1 Owner Final: ${message
 function sha256(value) { return createHash("sha256").update(value).digest("hex"); }
 function stableTuple(values) { return JSON.stringify(values); }
 function jsonl(rows) { return rows.map((row) => JSON.stringify(row)).join("\n") + (rows.length ? "\n" : ""); }
-function normalizeSeed(value) { return value.normalize("NFKC").toLocaleLowerCase("und"); }
-function overlayRuleKey(canonicalTagId, normalizedSeed) { return stableTuple([canonicalTagId, normalizedSeed]); }
-async function loadLexiconOverride() { fail("C1 v3 lexicon override is excluded from the accepted Phase 1 baseline"); }
-async function compareC1V3() { fail("C1 v3 comparison is excluded from the accepted Phase 1 baseline"); }
 
 function classifyScript(value) {
   let cjk = 0; let latin = 0; let other = 0;
