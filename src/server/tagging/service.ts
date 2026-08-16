@@ -66,6 +66,8 @@ export interface ReplaceAutoTagSnapshotInput {
   env?: NodeJS.ProcessEnv;
 }
 
+export type ReplaceAutoTagSnapshotTransactionInput = Omit<ReplaceAutoTagSnapshotInput, "db" | "env">;
+
 export interface TagMutationResult {
   mode: "automatic" | "manual";
   revision: bigint;
@@ -374,70 +376,75 @@ export async function replaceAutoTagSnapshot(input: ReplaceAutoTagSnapshotInput)
   if (new Set(tags.map((tag) => tag.canonicalTagId)).size !== tags.length) {
     throw new TaggingError("DATA_INVARIANT_VIOLATION", "Duplicate auto Tag candidate");
   }
-  const payloadFingerprint = sha256({ novelId: input.novelId, tags, runMetadata: input.runMetadata, contentSha: input.contentSha });
-  return input.db.$transaction(async (tx) => {
-    await lockRequest(tx, input.requestId);
-    const prior = await tx.tagClassificationRun.findUnique({
-      where: { novelId_requestId: { novelId: input.novelId, requestId: input.requestId } },
-      select: { id: true, resultSummary: true },
-    });
-    if (prior) {
-      const summary = auditPayload({ afterSnapshot: prior.resultSummary });
-      if (summary.mutationFingerprint !== payloadFingerprint) throw new TaggingError("IDEMPOTENCY_CONFLICT");
-      const state = await tx.novelTagState.findUnique({ where: { novelId: input.novelId } });
-      return { mode: state?.mode === "manual" ? "manual" : "automatic", revision: state?.revision ?? 0n, replayed: true, skipped: false, currentAutoRunId: prior.id };
-    }
-    const state = await lockNovelAndState(tx, input.novelId);
-    if (state.mode === "manual") {
-      return { mode: "manual", revision: state.revision, replayed: false, skipped: true, currentAutoRunId: state.current_auto_run_id };
-    }
-    await assertActiveTags(tx, tags.map((tag) => tag.canonicalTagId));
-    const run = await tx.tagClassificationRun.create({ data: {
-      novelId: input.novelId,
-      method: input.runMetadata.method,
-      taxonomyVersion: input.runMetadata.taxonomyVersion,
-      taxonomySha256: input.runMetadata.taxonomySha256,
-      keywordLexiconVersion: input.runMetadata.keywordLexiconVersion,
-      keywordFingerprint: input.runMetadata.keywordFingerprint,
-      classifierConfigVersion: input.runMetadata.classifierConfigVersion,
-      classifierConfigFingerprint: input.runMetadata.classifierConfigFingerprint,
-      contentSha256: input.contentSha,
-      requestId: input.requestId,
-      taskType: input.runMetadata.taskType,
-      taskId: input.runMetadata.taskId,
-      resultSummary: { schemaVersion: 1, classifier: input.runMetadata.resultSummary, mutationFingerprint: payloadFingerprint, tagCount: tags.length },
-      resultSchemaVersion: 1,
-    } });
-    await tx.novelCanonicalTag.deleteMany({ where: { novelId: input.novelId, source: "auto" } });
-    if (tags.length > 0) {
-      await tx.novelCanonicalTag.createMany({ data: tags.map((tag) => ({
-        novelId: input.novelId,
-        canonicalTagId: tag.canonicalTagId,
-        source: "auto",
-        score: tag.score,
-        classificationRunId: run.id,
-        evidence: tag.evidence,
-        evidenceSchemaVersion: 1,
-      })) });
-    }
-    await tx.novelTagState.update({ where: { novelId: input.novelId }, data: { currentAutoRunId: run.id } });
-    await tx.operationAudit.create({ data: {
-      actorType: "worker",
-      action: "tag.auto.replace",
-      entityType: "NovelTagState",
-      entityId: input.novelId,
-      requestId: input.requestId,
-      taskType: input.runMetadata.taskType,
-      taskId: input.runMetadata.taskId,
-      beforeSnapshot: { currentAutoRunId: state.current_auto_run_id },
-      afterSnapshot: { currentAutoRunId: run.id, tagCount: tags.length, contentSha256: input.contentSha },
-    } });
-    return { mode: "automatic", revision: state.revision, replayed: false, skipped: false, currentAutoRunId: run.id };
-  }, { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted });
+  return input.db.$transaction((tx) => replaceAutoTagSnapshotInTransaction(tx, { ...input, tags }), {
+    isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted,
+  });
 }
 
-/** Registered Phase 1 seam. Classifier/task caller is intentionally deferred. */
-export async function initializeNovelTagSnapshot(novelId: string): Promise<never> {
-  void novelId;
-  throw new TaggingError("CONFIG_NOT_READY");
+export async function replaceAutoTagSnapshotInTransaction(
+  tx: Prisma.TransactionClient,
+  input: ReplaceAutoTagSnapshotTransactionInput,
+): Promise<TagMutationResult> {
+  const tags = [...input.tags].sort((left, right) => left.canonicalTagId.localeCompare(right.canonicalTagId));
+  if (new Set(tags.map((tag) => tag.canonicalTagId)).size !== tags.length) {
+    throw new TaggingError("DATA_INVARIANT_VIOLATION", "Duplicate auto Tag candidate");
+  }
+  const payloadFingerprint = sha256({ novelId: input.novelId, tags, runMetadata: input.runMetadata, contentSha: input.contentSha });
+  await lockRequest(tx, input.requestId);
+  const prior = await tx.tagClassificationRun.findUnique({
+    where: { novelId_requestId: { novelId: input.novelId, requestId: input.requestId } },
+    select: { id: true, resultSummary: true },
+  });
+  if (prior) {
+    const summary = auditPayload({ afterSnapshot: prior.resultSummary });
+    if (summary.mutationFingerprint !== payloadFingerprint) throw new TaggingError("IDEMPOTENCY_CONFLICT");
+    const state = await tx.novelTagState.findUnique({ where: { novelId: input.novelId } });
+    return { mode: state?.mode === "manual" ? "manual" : "automatic", revision: state?.revision ?? 0n, replayed: true, skipped: false, currentAutoRunId: prior.id };
+  }
+  const state = await lockNovelAndState(tx, input.novelId);
+  if (state.mode === "manual") {
+    return { mode: "manual", revision: state.revision, replayed: false, skipped: true, currentAutoRunId: state.current_auto_run_id };
+  }
+  await assertActiveTags(tx, tags.map((tag) => tag.canonicalTagId));
+  const run = await tx.tagClassificationRun.create({ data: {
+    novelId: input.novelId,
+    method: input.runMetadata.method,
+    taxonomyVersion: input.runMetadata.taxonomyVersion,
+    taxonomySha256: input.runMetadata.taxonomySha256,
+    keywordLexiconVersion: input.runMetadata.keywordLexiconVersion,
+    keywordFingerprint: input.runMetadata.keywordFingerprint,
+    classifierConfigVersion: input.runMetadata.classifierConfigVersion,
+    classifierConfigFingerprint: input.runMetadata.classifierConfigFingerprint,
+    contentSha256: input.contentSha,
+    requestId: input.requestId,
+    taskType: input.runMetadata.taskType,
+    taskId: input.runMetadata.taskId,
+    resultSummary: { schemaVersion: 1, classifier: input.runMetadata.resultSummary, mutationFingerprint: payloadFingerprint, tagCount: tags.length },
+    resultSchemaVersion: 1,
+  } });
+  await tx.novelCanonicalTag.deleteMany({ where: { novelId: input.novelId, source: "auto" } });
+  if (tags.length > 0) {
+    await tx.novelCanonicalTag.createMany({ data: tags.map((tag) => ({
+      novelId: input.novelId,
+      canonicalTagId: tag.canonicalTagId,
+      source: "auto",
+      score: tag.score,
+      classificationRunId: run.id,
+      evidence: tag.evidence as Prisma.InputJsonObject,
+      evidenceSchemaVersion: 1,
+    })) });
+  }
+  await tx.novelTagState.update({ where: { novelId: input.novelId }, data: { currentAutoRunId: run.id } });
+  await tx.operationAudit.create({ data: {
+    actorType: "worker",
+    action: "tag.auto.replace",
+    entityType: "NovelTagState",
+    entityId: input.novelId,
+    requestId: input.requestId,
+    taskType: input.runMetadata.taskType,
+    taskId: input.runMetadata.taskId,
+    beforeSnapshot: { currentAutoRunId: state.current_auto_run_id },
+    afterSnapshot: { currentAutoRunId: run.id, tagCount: tags.length, contentSha256: input.contentSha },
+  } });
+  return { mode: "automatic", revision: state.revision, replayed: false, skipped: false, currentAutoRunId: run.id };
 }

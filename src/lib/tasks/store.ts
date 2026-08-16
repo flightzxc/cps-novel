@@ -605,6 +605,25 @@ async function guardedFinalize(
   `);
 }
 
+async function assertProtectedWriteLease(
+  tx: Prisma.TransactionClient,
+  lease: TaskLease,
+): Promise<void> {
+  const predicate = Prisma.sql`
+    id = ${lease.itemId}::uuid AND status = 'processing'
+    AND locked_by = ${lease.workerId}
+    AND execution_token = ${lease.executionToken}::uuid
+    AND lease_epoch = ${lease.leaseEpoch}
+    AND locked_until > transaction_timestamp()
+  `;
+  const rows = lease.family === "catalog_scan"
+    ? await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`SELECT id FROM catalog_scan_task_item WHERE ${predicate} FOR UPDATE`)
+    : lease.family === "channel_sync"
+      ? await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`SELECT id FROM channel_sync_task_item WHERE ${predicate} FOR UPDATE`)
+      : await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`SELECT id FROM generic_task_item WHERE ${predicate} FOR UPDATE`);
+  if (rows.length !== 1) throw new LeaseLostError(lease);
+}
+
 export async function finalizeTaskItem(
   prisma: PrismaClient,
   lease: TaskLease,
@@ -630,10 +649,16 @@ export async function finalizeTaskItem(
   await withDbRetry(
     () =>
       prisma.$transaction(async (tx) => {
-    const affected = await guardedFinalize(tx, lease, outcome);
+        let terminalOutcome = outcome;
+        if (outcome.protectedWrite) {
+          await assertProtectedWriteLease(tx, lease);
+          const override = await outcome.protectedWrite(tx);
+          if (override) terminalOutcome = { ...override };
+        }
+        const affected = await guardedFinalize(tx, lease, terminalOutcome);
     if (affected !== 1) throw new LeaseLostError(lease);
-    if (lease.family === "catalog_scan" && outcome.result && typeof outcome.result === "object" && !Array.isArray(outcome.result)) {
-      const stopReason = (outcome.result as Record<string, unknown>).stopReason;
+    if (lease.family === "catalog_scan" && terminalOutcome.result && typeof terminalOutcome.result === "object" && !Array.isArray(terminalOutcome.result)) {
+      const stopReason = (terminalOutcome.result as Record<string, unknown>).stopReason;
       if (typeof stopReason === "string" && [
         "expected_total_reached",
         "expected_pages_reached",
@@ -659,17 +684,16 @@ export async function finalizeTaskItem(
         `);
       }
     }
-    if (outcome.protectedWrite) await outcome.protectedWrite(tx);
     await tx.operationAudit.create({
       data: {
         actorType: "worker",
         actorId: lease.workerId,
-        action: `task_item.${outcome.status}`,
+        action: `task_item.${terminalOutcome.status}`,
         entityType: `${lease.family}_task_item`,
         entityId: lease.itemId,
         taskType: lease.taskType,
         taskId: lease.taskId,
-        reason: outcome.status === "failed" ? "worker_terminal_failure" : null,
+        reason: terminalOutcome.status === "failed" ? "worker_terminal_failure" : null,
       },
     });
     await recomputeParentTask(tx, lease.family, lease.taskId);

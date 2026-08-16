@@ -27,7 +27,15 @@ export interface TaskLease {
   payload: unknown;
 }
 
-export type ProtectedWrite = (transaction: Prisma.TransactionClient) => Promise<void>;
+export interface ProtectedWriteResult {
+  status: TerminalItemStatus;
+  result?: unknown;
+  error?: unknown;
+}
+
+export type ProtectedWrite = (
+  transaction: Prisma.TransactionClient,
+) => Promise<void | ProtectedWriteResult>;
 
 export interface TaskOutcome {
   status: TerminalItemStatus;

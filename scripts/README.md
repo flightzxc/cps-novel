@@ -10,6 +10,13 @@
 
 `p2-06-5-lane-b/` 提供独立只读的畅读 `seriesTypeList` 真实采样、B1 taxonomy 派生与 B2 CanonicalTag mapping 候选编译。入口与安全操作见 `docs/p2/P2_06_5_LANE_B_RUNBOOK.md`。
 
+## P2-06.5 Tagging explicit task
+
+`p2-06-5-production/tagging-backfill.ts` 只创建显式 `tagging.auto_classify` GenericTask。必须提供
+`--lifecycle initialize_missing|reclassify_existing`、`--request-id`，并且恰好选择
+`--novel-id`、`--locale` 或 `--all` 之一。默认 dry-run；apply 还必须满足 tagging 双闸和
+精确 `AUTO_WRITE_AUTHORIZED=YES`。Scheduler 不注册此任务。
+
 ## MoboReader foundation registration
 
 `register-moboreader-foundation.ts` 只登记冻结的 MoboReader / Changdu 基础档案，不创建凭证、
