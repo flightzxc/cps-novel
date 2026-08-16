@@ -6,7 +6,6 @@ import {
   rawLanguageScopeFromPayload,
 } from "@/lib/tagging/raw-language-scope";
 import { loadTagClassifierConfig, TAG_CLASSIFIER_PARAMETER_STATUS, TAG_CLASSIFIER_TEXT_FIELDS } from "@/lib/tagging/classifier-config";
-import { initializeNovelTagSnapshot } from "@/server/tagging";
 
 describe("RAW_LANGUAGE_SCOPE_V1", () => {
   it("preserves JSON type and exact value", () => {
@@ -42,6 +41,5 @@ describe("Phase 1 classifier registration", () => {
     expect(TAG_CLASSIFIER_TEXT_FIELDS.excluded).toContain("sourceLanguageCode");
     expect(TAG_CLASSIFIER_TEXT_FIELDS.excluded).toContain("chapters");
     expect(() => loadTagClassifierConfig()).toThrow(expect.objectContaining({ code: "CONFIG_NOT_READY" }));
-    await expect(initializeNovelTagSnapshot("00000000-0000-4000-8000-000000000000")).rejects.toMatchObject({ code: "CONFIG_NOT_READY" });
   });
 });

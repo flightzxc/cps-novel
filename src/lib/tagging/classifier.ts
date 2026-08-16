@@ -115,7 +115,11 @@ export function classifyNovelText(
     || left.textSelectionPriority - right.textSelectionPriority
     || left.stableId.localeCompare(right.stableId, "en")
   ));
-  const selected = eligible.slice(0, config.maxTextTags).map(({ stableId: _stableId, textSelectionPriority: _priority, ...candidate }) => candidate);
+  const selected = eligible.slice(0, config.maxTextTags).map(({ canonicalTagId, score, evidence }) => ({
+    canonicalTagId,
+    score,
+    evidence,
+  }));
   return {
     candidates: selected,
     rawEligibleCount: eligible.length,

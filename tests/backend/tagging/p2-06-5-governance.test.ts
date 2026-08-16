@@ -6,6 +6,7 @@ const root = process.cwd();
 const schema = readFileSync(path.join(root, "prisma/schema.prisma"), "utf8");
 const migration = readFileSync(path.join(root, "prisma/migrations/20260816160000_p2_06_5_tagging_v3/migration.sql"), "utf8");
 const grants = readFileSync(path.join(root, "infra/postgres/grants.sql"), "utf8");
+const scheduler = readFileSync(path.join(root, "scheduler/index.ts"), "utf8");
 
 describe("P2-06.5 static database governance", () => {
   it("registers exactly seven additive Tagging models and nullable raw scope", () => {
@@ -33,5 +34,17 @@ describe("P2-06.5 static database governance", () => {
     expect(grants).toMatch(/GRANT INSERT, UPDATE ON TABLE novel_tag_state, tag_classification_run,[\s\S]*?TO worker_app;/);
     expect(grants).toContain("source_label_mapping, novel_tag_state, novel_canonical_tag");
     expect(grants).toContain("GRANT INSERT ON TABLE operation_audit TO web_app");
+  });
+
+  it("keeps auto classification explicit and the pure Tagging core dependency-free", () => {
+    expect(scheduler).toContain("SCHEDULES: readonly ScheduleDefinition[] = Object.freeze([])");
+    expect(scheduler).not.toMatch(/tagging|auto_classify|novel-tag-backfill/i);
+    const core = ["contracts.ts", "classifier.ts", "classifier-config.ts", "keyword-artifact.ts", "stable-json.ts", "task-contract.ts"]
+      .map((file) => readFileSync(path.join(root, "src/lib/tagging", file), "utf8"))
+      .join("\n");
+    expect(core).not.toMatch(/@prisma|next\/|worker\/|server\/|scheduler\//);
+    const cli = readFileSync(path.join(root, "scripts/p2-06-5-production/tagging-backfill.ts"), "utf8");
+    expect(cli).toContain("P2_06_5_TAGGING_TASK_DATABASE_URL");
+    expect(cli).not.toMatch(/process\.env\.DATABASE_URL|scheduler/i);
   });
 });

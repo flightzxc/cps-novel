@@ -3,12 +3,19 @@ import { PrismaClient } from "@prisma/client";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { rawLanguageScopeFromPayload } from "@/lib/tagging/raw-language-scope";
+import { createFrozenTagClassifierConfig } from "@/lib/tagging/classifier-config";
+import { CANONICAL_TAG_V1_SHA256, validateKeywordRuleArtifact } from "@/lib/tagging/keyword-artifact";
+import { TAGGING_AUTO_CLASSIFY_TASK_TYPE } from "@/lib/tagging/task-contract";
+import { buildWorkerAllowlist, claimPendingItem, finalizeTaskItem } from "@/lib/tasks";
 import {
+  createTaggingAutoClassifyTask,
   exitManualTagMode,
   replaceAutoTagSnapshot,
   replaceManualTagSnapshot,
   resolveEffectiveTags,
 } from "@/server/tagging";
+import { createTaggingWorkerHandlers } from "../../../worker/handlers/novel-tag-backfill";
+import { processOneWorkerCycle } from "../../../worker/runtime";
 
 const enabled = process.env.P2_06_5_DATABASE_TEST === "1";
 const url = (name: string) => {
@@ -21,7 +28,7 @@ const web = new PrismaClient({ datasourceUrl: url("P2_06_5_WEB_DATABASE_URL") })
 const worker = new PrismaClient({ datasourceUrl: url("P2_06_5_WORKER_DATABASE_URL") });
 const scheduler = new PrismaClient({ datasourceUrl: url("P2_06_5_SCHEDULER_DATABASE_URL") });
 
-const env: NodeJS.ProcessEnv = { ...process.env, FEATURE_TAGGING_V3: "true", FEATURE_TAGGING_AUTO: "true", AUTO_WRITE_AUTHORIZED: "YES" };
+const env: NodeJS.ProcessEnv = { ...process.env, FEATURE_P2_06_5_TAGGING: "true", FEATURE_NOVEL_TAG_AUTO: "true", AUTO_WRITE_AUTHORIZED: "YES" };
 const ids = {
   channel: randomUUID(), sourceApp: randomUUID(), channelApp: randomUUID(), admin: randomUUID(),
   novel: randomUUID(), sourceItem: randomUUID(), tagA: randomUUID(), tagB: randomUUID(), tagC: randomUUID(),
@@ -30,6 +37,24 @@ const ids = {
 const rawPayload = { language: 2, languageName: " English ", seriesName: "Tagged Novel" };
 const rawScope = rawLanguageScopeFromPayload(rawPayload)!;
 const hash = "a".repeat(64);
+const classifierConfig = createFrozenTagClassifierConfig({
+  version: "fixture-v1", titleWeight: 30, descriptionWeight: 20, threshold: 20, maxTextTags: 3,
+});
+
+function keywordArtifact(canonicalTagId = ids.tagA) {
+  return validateKeywordRuleArtifact({
+    schemaVersion: 1,
+    taxonomyVersion: "v1",
+    taxonomySha256: CANONICAL_TAG_V1_SHA256,
+    keywordLexiconVersion: "fixture-lexicon-v1",
+    tags: [{
+      canonicalTagId,
+      stableId: "ct-v1-alpha",
+      textSelectionPriority: 0,
+      keywords: [{ keywordId: "kw-alpha", value: "Tagged", scriptBuckets: ["latin"], matchMode: "unicode_word", riskFlags: [] }],
+    }],
+  });
+}
 
 function autoMetadata() {
   return {
@@ -140,7 +165,7 @@ describe.skipIf(!enabled).sequential("P2-06.5 isolated PostgreSQL foundation", (
       db: web,
       novelId: ids.novel,
       locale: "zh",
-      env: { ...env, FEATURE_TAGGING_AUTO: "false" },
+      env: { ...env, FEATURE_NOVEL_TAG_AUTO: "false" },
     });
     expect(autoHidden.effective.map((tag) => tag.stableId)).toEqual(["ct-v1-beta", "ct-v1-alpha"]);
   });
@@ -213,7 +238,7 @@ describe.skipIf(!enabled).sequential("P2-06.5 isolated PostgreSQL foundation", (
   it("fails closed on flags, inactive objects, missing scope, and multiple source entities", async () => {
     await expect(replaceAutoTagSnapshot({
       db: worker, novelId: ids.novel, tags: [], runMetadata: autoMetadata(), contentSha: hash,
-      requestId: randomUUID(), env: { ...process.env, FEATURE_TAGGING_V3: "true", FEATURE_TAGGING_AUTO: "true", AUTO_WRITE_AUTHORIZED: "NO" },
+      requestId: randomUUID(), env: { ...process.env, FEATURE_P2_06_5_TAGGING: "true", FEATURE_NOVEL_TAG_AUTO: "true", AUTO_WRITE_AUTHORIZED: "NO" },
     })).rejects.toMatchObject({ code: "AUTO_WRITE_NOT_AUTHORIZED" });
     await expect(resolveEffectiveTags({ db: web, novelId: ids.novel, locale: "zh", env: {} as NodeJS.ProcessEnv })).rejects.toMatchObject({ code: "TAGGING_DISABLED" });
 
@@ -243,5 +268,129 @@ describe.skipIf(!enabled).sequential("P2-06.5 isolated PostgreSQL foundation", (
     expect(await owner.novelCanonicalTag.count({ where: { source: "mapped" } })).toBe(0);
     await expect(scheduler.$queryRawUnsafe("SELECT id FROM canonical_tag LIMIT 1")).rejects.toThrow();
     expect(await worker.$queryRawUnsafe("SELECT id FROM canonical_tag LIMIT 1")).toHaveLength(1);
+  });
+
+  it("runs scoped dry-run/apply tasks idempotently and fails closed on stale/manual/gate states", async () => {
+    const novelId = randomUUID();
+    await owner.novel.create({ data: {
+      id: novelId, businessId: `task-${novelId}`, locale: "zh", title: "Tagged lifecycle",
+      description: "description", slug: `task-${novelId}`, status: "draft",
+    } });
+    const dependencies = { config: classifierConfig, artifact: keywordArtifact(), enforceCanonicalV1: false };
+    const dryEnv = { ...process.env, FEATURE_P2_06_5_TAGGING: "true", FEATURE_NOVEL_TAG_AUTO: "false", AUTO_WRITE_AUTHORIZED: "NO" };
+    const applyEnv = { ...dryEnv, FEATURE_NOVEL_TAG_AUTO: "true", AUTO_WRITE_AUTHORIZED: "YES" };
+    const dry = await createTaggingAutoClassifyTask({
+      db: web, lifecycle: "initialize_missing", scope: { kind: "novel", novelId }, requestId: randomUUID(),
+      env: dryEnv, dependencies,
+    });
+    expect(dry.status).toBe("enqueued");
+    const dryHandlers = createTaggingWorkerHandlers(worker, { ...dependencies, env: dryEnv });
+    expect(await processOneWorkerCycle({
+      prisma: worker, workerId: "tag-dry-worker", handlers: dryHandlers,
+      allowlist: buildWorkerAllowlist(TAGGING_AUTO_CLASSIFY_TASK_TYPE, dryHandlers),
+      signal: new AbortController().signal,
+    })).toBe(true);
+    expect(await owner.genericTaskItem.findFirstOrThrow({ where: { taskId: "taskId" in dry ? dry.taskId : "" } })).toMatchObject({ status: "success", result: expect.objectContaining({ code: "dry_run" }) });
+    expect(await owner.tagClassificationRun.count({ where: { novelId } })).toBe(0);
+    expect(await owner.novelTagState.count({ where: { novelId } })).toBe(0);
+
+    const taskCountBeforeRejectedApply = await owner.genericTask.count();
+    await expect(createTaggingAutoClassifyTask({
+      db: web, lifecycle: "reclassify_existing", mode: "apply", scope: { kind: "novel", novelId },
+      requestId: randomUUID(), env: { ...applyEnv, AUTO_WRITE_AUTHORIZED: "NO" }, dependencies,
+    })).rejects.toMatchObject({ code: "AUTO_WRITE_NOT_AUTHORIZED" });
+    expect(await owner.genericTask.count()).toBe(taskCountBeforeRejectedApply);
+
+    const gateChanged = await createTaggingAutoClassifyTask({
+      db: web, lifecycle: "reclassify_existing", mode: "apply", scope: { kind: "novel", novelId },
+      requestId: randomUUID(), env: applyEnv, dependencies,
+    });
+    const deniedHandlers = createTaggingWorkerHandlers(worker, {
+      ...dependencies, env: { ...applyEnv, AUTO_WRITE_AUTHORIZED: "NO" },
+    });
+    await processOneWorkerCycle({
+      prisma: worker, workerId: "tag-denied-worker", handlers: deniedHandlers,
+      allowlist: buildWorkerAllowlist(TAGGING_AUTO_CLASSIFY_TASK_TYPE, deniedHandlers),
+      signal: new AbortController().signal,
+    });
+    expect(await owner.genericTaskItem.findFirstOrThrow({ where: { taskId: "taskId" in gateChanged ? gateChanged.taskId : "" } })).toMatchObject({
+      status: "failed", error: expect.objectContaining({ code: "auto_write_not_authorized" }),
+    });
+    expect(await owner.tagClassificationRun.count({ where: { novelId } })).toBe(0);
+
+    const applyRequest = randomUUID();
+    const appliedTask = await createTaggingAutoClassifyTask({
+      db: web, lifecycle: "reclassify_existing", mode: "apply", scope: { kind: "novel", novelId },
+      requestId: applyRequest, env: applyEnv, dependencies,
+    });
+    const applyHandlers = createTaggingWorkerHandlers(worker, { ...dependencies, env: applyEnv });
+    await processOneWorkerCycle({
+      prisma: worker, workerId: "tag-apply-worker", handlers: applyHandlers,
+      allowlist: buildWorkerAllowlist(TAGGING_AUTO_CLASSIFY_TASK_TYPE, applyHandlers),
+      signal: new AbortController().signal,
+    });
+    expect(await owner.tagClassificationRun.count({ where: { novelId } })).toBe(1);
+    expect(await owner.novelCanonicalTag.findMany({ where: { novelId, source: "auto" } })).toHaveLength(1);
+    const replay = await createTaggingAutoClassifyTask({
+      db: web, lifecycle: "reclassify_existing", mode: "apply", scope: { kind: "novel", novelId },
+      requestId: applyRequest, env: applyEnv, dependencies,
+    });
+    expect(replay).toMatchObject({ status: "duplicate", taskId: "taskId" in appliedTask ? appliedTask.taskId : undefined });
+    await expect(createTaggingAutoClassifyTask({
+      db: web, lifecycle: "initialize_missing", mode: "apply", scope: { kind: "novel", novelId },
+      requestId: applyRequest, env: applyEnv, dependencies,
+    })).rejects.toMatchObject({ code: "IDEMPOTENCY_CONFLICT" });
+
+    const stale = await createTaggingAutoClassifyTask({
+      db: web, lifecycle: "reclassify_existing", mode: "apply", scope: { kind: "novel", novelId },
+      requestId: randomUUID(), env: applyEnv, dependencies,
+    });
+    await owner.novel.update({ where: { id: novelId }, data: { title: "Changed after enqueue" } });
+    await processOneWorkerCycle({
+      prisma: worker, workerId: "tag-stale-worker", handlers: applyHandlers,
+      allowlist: buildWorkerAllowlist(TAGGING_AUTO_CLASSIFY_TASK_TYPE, applyHandlers),
+      signal: new AbortController().signal,
+    });
+    expect(await owner.genericTaskItem.findFirstOrThrow({ where: { taskId: "taskId" in stale ? stale.taskId : "" } })).toMatchObject({ status: "skipped", result: expect.objectContaining({ code: "content_changed" }) });
+    expect(await owner.tagClassificationRun.count({ where: { novelId } })).toBe(1);
+
+    await owner.novel.update({ where: { id: novelId }, data: { title: "Tagged lifecycle" } });
+    const manualRace = await createTaggingAutoClassifyTask({
+      db: web, lifecycle: "reclassify_existing", mode: "apply", scope: { kind: "novel", novelId },
+      requestId: randomUUID(), env: applyEnv, dependencies,
+    });
+    await replaceManualTagSnapshot({
+      db: web, novelId, canonicalTagIds: [], expectedRevision: 0n, requestId: randomUUID(),
+      actor: { id: ids.admin, type: "admin" },
+    });
+    await processOneWorkerCycle({
+      prisma: worker, workerId: "tag-manual-worker", handlers: applyHandlers,
+      allowlist: buildWorkerAllowlist(TAGGING_AUTO_CLASSIFY_TASK_TYPE, applyHandlers),
+      signal: new AbortController().signal,
+    });
+    expect(await owner.genericTaskItem.findFirstOrThrow({ where: { taskId: "taskId" in manualRace ? manualRace.taskId : "" } })).toMatchObject({ status: "skipped", result: expect.objectContaining({ code: "manual_mode" }) });
+    expect(await owner.tagClassificationRun.count({ where: { novelId } })).toBe(1);
+  });
+
+  it("lets a fenced protected write select the final terminal outcome", async () => {
+    const task = await owner.genericTask.create({ data: {
+      taskType: TAGGING_AUTO_CLASSIFY_TASK_TYPE,
+      operationScopeHash: hash,
+      requestToken: randomUUID(),
+      totalCount: 1,
+      items: { create: [{ targetType: "Novel", targetId: ids.novel, payload: {} }] },
+    }, include: { items: true } });
+    const lease = await claimPendingItem(worker, {
+      family: "generic", taskTypes: [TAGGING_AUTO_CLASSIFY_TASK_TYPE], workerId: "terminal-override", leaseMs: 30_000,
+    });
+    expect(lease?.itemId).toBe(task.items[0].id);
+    await finalizeTaskItem(worker, lease!, {
+      status: "success",
+      result: { code: "provisional" },
+      protectedWrite: async () => ({ status: "skipped", result: { code: "manual_mode" } }),
+    });
+    expect(await owner.genericTaskItem.findUniqueOrThrow({ where: { id: task.items[0].id } })).toMatchObject({
+      status: "skipped", result: { code: "manual_mode" },
+    });
   });
 });

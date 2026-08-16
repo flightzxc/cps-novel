@@ -100,6 +100,28 @@ export async function createTaggingAutoClassifyTask(
       throw new TaggingError("DATA_INVARIANT_VIOLATION", "All-scope apply authority confirmation mismatch");
     }
   }
+  const authority = {
+    taxonomyVersion: artifact.taxonomyVersion,
+    taxonomySha256: artifact.taxonomySha256,
+    keywordLexiconVersion: artifact.keywordLexiconVersion,
+    keywordFingerprint: artifact.keywordFingerprint,
+    classifierConfigVersion: config.version,
+    classifierConfigFingerprint: config.fingerprint,
+  };
+  const requestFingerprint = fingerprint({
+    schemaVersion: 1,
+    lifecycle: input.lifecycle,
+    mode,
+    scope: scopeSnapshot(input.scope),
+    authority,
+  });
+  const requestToken = `tagging:auto_classify:${input.requestId}`;
+  const duplicate = await input.db.genericTask.findUnique({ where: { requestToken } });
+  if (duplicate) {
+    const params = duplicate.params as Record<string, unknown>;
+    if (params.requestFingerprint !== requestFingerprint) throw new TaggingError("IDEMPOTENCY_CONFLICT");
+    return { status: "duplicate", taskId: duplicate.id, eligibleCount: duplicate.totalCount };
+  }
   const snapshots = await readNovelClassificationSnapshots(input.db, scopeForQuery(input.scope));
   const eligible = snapshots.filter((snapshot) => (
     snapshot.mode === "automatic"
@@ -130,14 +152,6 @@ export async function createTaggingAutoClassifyTask(
       payload: payload as unknown as Prisma.InputJsonObject,
     };
   });
-  const authority = {
-    taxonomyVersion: artifact.taxonomyVersion,
-    taxonomySha256: artifact.taxonomySha256,
-    keywordLexiconVersion: artifact.keywordLexiconVersion,
-    keywordFingerprint: artifact.keywordFingerprint,
-    classifierConfigVersion: config.version,
-    classifierConfigFingerprint: config.fingerprint,
-  };
   const payloadFingerprint = fingerprint({
     schemaVersion: 1,
     lifecycle: input.lifecycle,
@@ -146,13 +160,6 @@ export async function createTaggingAutoClassifyTask(
     authority,
     novelIds: eligible.map((snapshot) => snapshot.novelId),
   });
-  const requestToken = `tagging:auto_classify:${input.requestId}`;
-  const duplicate = await input.db.genericTask.findUnique({ where: { requestToken } });
-  if (duplicate) {
-    const params = duplicate.params as Record<string, unknown>;
-    if (params.payloadFingerprint !== payloadFingerprint) throw new TaggingError("IDEMPOTENCY_CONFLICT");
-    return { status: "duplicate", taskId: duplicate.id, eligibleCount: duplicate.totalCount };
-  }
   const taskId = randomUUID();
   try {
     await input.db.$transaction(async (tx) => {
@@ -169,6 +176,7 @@ export async function createTaggingAutoClassifyTask(
           lifecycle: input.lifecycle,
           scope: scopeSnapshot(input.scope),
           authority,
+          requestFingerprint,
           payloadFingerprint,
         },
         items: { createMany: { data: itemRows } },
@@ -189,7 +197,7 @@ export async function createTaggingAutoClassifyTask(
     const prior = await input.db.genericTask.findUnique({ where: { requestToken } });
     if (!prior) throw error;
     const params = prior.params as Record<string, unknown>;
-    if (params.payloadFingerprint !== payloadFingerprint) throw new TaggingError("IDEMPOTENCY_CONFLICT");
+    if (params.requestFingerprint !== requestFingerprint) throw new TaggingError("IDEMPOTENCY_CONFLICT");
     return { status: "duplicate", taskId: prior.id, eligibleCount: prior.totalCount };
   }
   return { status: "enqueued", taskId, taskStatus: "pending", eligibleCount: itemRows.length };
