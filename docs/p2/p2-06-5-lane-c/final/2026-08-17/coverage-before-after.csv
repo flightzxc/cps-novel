@@ -1,0 +1,10 @@
+metric,v2,v3,final
+text_hit_rate,0.359600,0.306100,0.308800
+description_only_rate,0.303400,0.241200,0.243500
+title_only_rate,0.049300,0.053000,0.055900
+both_rate,0.057200,0.053500,0.051300
+zero_hit_rate,0.640400,0.693900,0.691200
+avg_text_tags,0.567200,0.434100,0.434400
+description_only_edges,4554,3218,3222
+cap_truncated_books,301,96,96
+cap_truncated_tags,563,135,135

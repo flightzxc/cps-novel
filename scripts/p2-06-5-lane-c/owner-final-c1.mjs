@@ -36,6 +36,16 @@ export const EXPECTED_C1_INPUT_SHA256 = "046fe9234b317eba145c3fbb35edd2e72af49e4
  */
 export const C1_V3_RUN_ID = "2026-08-16-owner-final-c1-v3";
 export const C1_V3_GENERATED_AT = "2026-08-16T23:30:00+09:00";
+
+/** Owner Final materialization: grade-B locale rules removed, bare luna off description. */
+export const C1_FINAL_RUN_ID = "2026-08-17-owner-final-c1-final";
+export const C1_FINAL_GENERATED_AT = "2026-08-17T03:00:00+09:00";
+
+/** Run ids whose timestamp is frozen so the run reproduces without extra flags. */
+export const FROZEN_GENERATED_AT_BY_RUN_ID = Object.freeze({
+  [C1_V3_RUN_ID]: C1_V3_GENERATED_AT,
+  [C1_FINAL_RUN_ID]: C1_FINAL_GENERATED_AT,
+});
 const CJK = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u;
 const LATIN = /\p{Script=Latin}/u;
 const LETTER = /\p{L}/u;

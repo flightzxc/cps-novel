@@ -137,7 +137,32 @@ node scripts/p2-06-5-text-calibration.mjs verify-owner-final-c1 \
   --tracked-output-dir docs/p2/p2-06-5-lane-c/runs/2026-08-16-owner-final-c1-v2
 ```
 
-## C1 v3（关键词资格覆盖层）
+## C1 FINAL（Owner Final，参数已冻结）
+
+**这是当前权威运行。** 覆盖层 `keyword-eligibility-v2`：Grade B locale 规则全部撤销，
+`chef` 的 description 证据在所有语种恢复；裸词 `luna` 不再从 description 触发 `werewolf-luna`
+（title 不变）。冻结参数与决定见 `docs/p2/p2-06-5-lane-c/final/2026-08-17/`。
+
+```bash
+node scripts/p2-06-5-text-calibration.mjs owner-final-c1 \
+  --raw-run-dir artifacts/p2-06-5-lane-b/2026-08-15-changdu-real-b1-v2 \
+  --owner-waiver docs/p2/p2-06-5-owner-final/2026-08-16/OWNER_TIMING_WAIVER.json \
+  --b2-dir docs/p2/p2-06-5-lane-b/b2-owner-final/2026-08-16 \
+  --canonical docs/p2/p2-06-5-lane-a/canonical-tag-v1-final/2026-08-16/canonical-tag-v1.0.0-final.json \
+  --canonical-sha256-file docs/p2/p2-06-5-lane-a/canonical-tag-v1-final/2026-08-16/canonical-tag-v1.0.0-final.json.sha256 \
+  --channel-app-id changdu-app \
+  --lexicon-override docs/p2/p2-06-5-lane-c/lexicon-overrides/2026-08-17/keyword-eligibility-v2.json \
+  --authoritative-output-dir /tmp/c1-final-repro/auth \
+  --tracked-output-dir /tmp/c1-final-repro/tracked \
+  --run-id 2026-08-17-owner-final-c1-final
+```
+
+`--run-id 2026-08-17-owner-final-c1-final` 会自动套用冻结的 `generatedAt`，**无需传 `--generated-at`**。
+比对 `/tmp/c1-final-repro/auth/scored/` 与
+`artifacts/p2-06-5-lane-c/2026-08-17-owner-final-c1-final/scored/lane-c-run-manifest.json`，
+**11/11 全中**才算通过；核对完删除临时目录。
+
+## C1 v3（已被 FINAL 取代，保留以供复现）
 
 v3 与 v2 的唯一差别是加载了 `keyword-eligibility-v1` 覆盖层；CanonicalTag 产物本身未改。
 覆盖层停用 `he`/`be`，把 `horror`/`family`/`doctor` 的单词种子限制为仅 title，

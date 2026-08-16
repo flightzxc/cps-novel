@@ -19,7 +19,7 @@ import {
   POST_FIX_RISK_SAMPLE_TARGET,
 } from "../../../scripts/p2-06-5-lane-c/description-only-blind-review.mjs";
 import {
-  EXPECTED_OVERLAY_SHA256,
+  OVERLAY_SHA256_BY_VERSION,
   loadLexiconOverride,
   normalizeSeed,
 } from "../../../scripts/p2-06-5-lane-c/lexicon-eligibility.mjs";
@@ -27,7 +27,11 @@ import { buildLexicon, verifyOwnerFinalC1 } from "../../../scripts/p2-06-5-lane-
 
 const root = resolve(import.meta.dirname, "../../..");
 const canonicalPath = resolve(root, "docs/p2/p2-06-5-lane-a/canonical-tag-v1-final/2026-08-16/canonical-tag-v1.0.0-final.json");
+// v1 is superseded but still pinned: the v3 run must stay reproducible.
 const overlayPath = resolve(root, "docs/p2/p2-06-5-lane-c/lexicon-overrides/2026-08-16/keyword-eligibility-v1.json");
+const finalOverlayPath = resolve(root, "docs/p2/p2-06-5-lane-c/lexicon-overrides/2026-08-17/keyword-eligibility-v2.json");
+const EXPECTED_OVERLAY_SHA256 = OVERLAY_SHA256_BY_VERSION["keyword-eligibility-v1"];
+const FINAL_OVERLAY_SHA256 = OVERLAY_SHA256_BY_VERSION["keyword-eligibility-v2"];
 
 function sample(overrides: Record<string, unknown> = {}) {
   return {
@@ -48,15 +52,73 @@ function sample(overrides: Record<string, unknown> = {}) {
   };
 }
 
-async function lexicon() {
+async function lexicon(path = overlayPath) {
   const canonical = JSON.parse(await readFile(canonicalPath, "utf8"));
-  const { overlay } = await loadLexiconOverride(overlayPath);
+  const { overlay } = await loadLexiconOverride(path);
   return buildLexicon(canonical, overlay);
 }
+
+const finalLexicon = () => lexicon(finalOverlayPath);
 
 function tagKeywords(built: ReturnType<typeof buildLexicon>, tagId: string) {
   return built.taxonomy.canonicalTags.find((tag) => tag.canonicalTagId === tagId)!;
 }
+
+describe("keyword-eligibility-v2 overlay (Owner Final)", () => {
+  it("loads with a matching sidecar hash and supersedes v1", async () => {
+    const loaded = await loadLexiconOverride(finalOverlayPath);
+    expect(loaded.sha256).toBe(FINAL_OVERLAY_SHA256);
+    expect(loaded.overlay.version).toBe("keyword-eligibility-v2");
+    expect(loaded.overlay.rules).toHaveLength(11);
+  });
+
+  it("carries no grade-B rule at all", async () => {
+    const loaded = await loadLexiconOverride(finalOverlayPath);
+    expect(loaded.overlay.rules.filter((rule) => rule.grade === "B")).toHaveLength(0);
+    expect(loaded.overlay.rules.filter((rule) => rule.reason === "LOW_EVIDENCE_LOCALE_RULE")).toHaveLength(0);
+    expect(loaded.overlay.rules.some((rule) => rule.blockedDescriptionNamedScopes.length > 0)).toBe(false);
+  });
+
+  it("restores chef description evidence in every locale, including de", async () => {
+    const built = await finalLexicon();
+    const chef = tagKeywords(built, "ct-v1-chef").keywords.find((row) => normalizeSeed(row.value) === "chef")!;
+    expect(chef.allowedFields ?? null).toBeNull();
+    expect(chef.blockedDescriptionNamedScopes ?? []).toEqual([]);
+    for (const [name, code] of [["英语", 3], ["德语", 16], ["法语", 6], ["西语", 4], ["葡语", 5]] as const) {
+      const row = sample({ sourceLanguageName: name, scriptBucket: "latin", sourceLanguageCode: `["number",${code}]` });
+      expect(findKeywordMatch("une carrière de chef", chef, row, "description")).not.toBeNull();
+    }
+  });
+
+  it("stops bare luna from triggering on description in any locale but keeps title", async () => {
+    const built = await finalLexicon();
+    const luna = tagKeywords(built, "ct-v1-werewolf-luna").keywords.find((row) => normalizeSeed(row.value) === "luna")!;
+    expect(luna.allowedFields).toEqual(["title"]);
+    for (const [name, code] of [["西语", 4], ["法语", 6], ["葡语", 5], ["英语", 3], ["意大利语", 8]] as const) {
+      const row = sample({ sourceLanguageName: name, scriptBucket: "latin", sourceLanguageCode: `["number",${code}]` });
+      expect(findKeywordMatch("Luna the pack leader", luna, row, "description")).toBeNull();
+    }
+    const fr = sample({ sourceLanguageName: "法语", scriptBucket: "latin", sourceLanguageCode: '["number",6]' });
+    expect(findKeywordMatch("La Luna du Roi Lycan", luna, fr, "title")).not.toBeNull();
+  });
+
+  it("keeps the grade-A restrictions and adds no rule for the observation items", async () => {
+    const built = await finalLexicon();
+    for (const tagId of ["ct-v1-family", "ct-v1-doctor", "ct-v1-horror"]) {
+      const seed = { "ct-v1-family": "family", "ct-v1-doctor": "doctor", "ct-v1-horror": "horror" }[tagId]!;
+      const row = tagKeywords(built, tagId).keywords.find((item) => normalizeSeed(item.value) === seed)!;
+      expect(row.allowedFields).toEqual(["title"]);
+    }
+    const happy = tagKeywords(built, "ct-v1-happy-ending");
+    expect(happy.keywords.map((row) => normalizeSeed(row.value))).toEqual(["圆满结局"]);
+    for (const tagId of ["ct-v1-princess", "ct-v1-crown-prince", "ct-v1-student"]) {
+      for (const row of tagKeywords(built, tagId).keywords) {
+        expect(row.allowedFields ?? null).toBeNull();
+        expect(row.blockedDescriptionNamedScopes ?? []).toEqual([]);
+      }
+    }
+  });
+});
 
 describe("keyword-eligibility-v1 overlay", () => {
   it("loads with a matching sidecar hash", async () => {

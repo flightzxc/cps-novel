@@ -8,13 +8,27 @@
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 
-export const ELIGIBILITY_VERSION = "keyword-eligibility-v1";
-export const EXPECTED_OVERLAY_SHA256 = "781916c970dc81735080f425fb9441c4484daf92ee534c82e1e48c04d8d259e4";
+/**
+ * Every overlay version this build can load, pinned to its exact bytes.
+ * Superseded entries stay listed so runs already materialized against them
+ * remain reproducible; `ELIGIBILITY_VERSION` names the current one.
+ */
+export const OVERLAY_SHA256_BY_VERSION = Object.freeze({
+  "keyword-eligibility-v1": "781916c970dc81735080f425fb9441c4484daf92ee534c82e1e48c04d8d259e4",
+  "keyword-eligibility-v2": "e796ba1ed79b344f790a70853d2e9773d6265e307615b2a60da28b90a6164854",
+});
+
+export const ELIGIBILITY_VERSION = "keyword-eligibility-v2";
+export const EXPECTED_OVERLAY_SHA256 = OVERLAY_SHA256_BY_VERSION[ELIGIBILITY_VERSION];
 
 const ALLOWED_FIELDS = new Set(["title", "description", "chapter"]);
 const REASONS = new Set([
   "GENERIC_KEYWORD_HOMONYM_FULL_DISABLE",
   "GENERIC_KEYWORD_DESCRIPTION_DISABLED",
+  "BARE_WORD_DESCRIPTION_DISABLED",
+  // Retired by Owner Final 2026-08-17 after the suppression safety review
+  // measured 40% false removal.  Kept registered only so the superseded v1
+  // overlay still loads for reproduction; do not author new rules with it.
   "LOW_EVIDENCE_LOCALE_RULE",
 ]);
 
@@ -36,7 +50,9 @@ export function overlayRuleKey(canonicalTagId, normalizedSeed) {
 
 export function validateLexiconOverride(raw) {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) fail("overlay must be an object");
-  if (raw.version !== ELIGIBILITY_VERSION) fail(`overlay version must be ${ELIGIBILITY_VERSION}`);
+  if (!Object.hasOwn(OVERLAY_SHA256_BY_VERSION, raw.version)) {
+    fail(`overlay version ${raw.version} is not a registered version`);
+  }
   if (!raw.named_scope_labels || typeof raw.named_scope_labels !== "object") fail("named_scope_labels missing");
   const namedScopeValues = new Set(Object.values(raw.named_scope_labels));
   if (!Array.isArray(raw.rules) || raw.rules.length === 0) fail("rules must be a non-empty array");
@@ -94,7 +110,7 @@ export function validateLexiconOverride(raw) {
   };
 }
 
-export async function loadLexiconOverride(path, expectedSha256 = EXPECTED_OVERLAY_SHA256) {
+export async function loadLexiconOverride(path, expectedSha256 = null) {
   const bytes = await readFile(path);
   const digest = sha256(bytes);
   if (expectedSha256 && digest !== expectedSha256) {
@@ -104,5 +120,9 @@ export async function loadLexiconOverride(path, expectedSha256 = EXPECTED_OVERLA
   const sidecarText = (await readFile(sidecar, "utf8")).trim().split(/\s/u)[0];
   if (sidecarText !== digest) fail(`overlay sidecar SHA-256 mismatch: sidecar ${sidecarText}, file ${digest}`);
   const overlay = validateLexiconOverride(JSON.parse(bytes.toString("utf8")));
+  // The registry is the real gate: the bytes must match what this build pins
+  // for the version the overlay declares.
+  const pinned = OVERLAY_SHA256_BY_VERSION[overlay.version];
+  if (digest !== pinned) fail(`overlay ${overlay.version} SHA-256 mismatch: pinned ${pinned}, read ${digest}`);
   return { overlay, sha256: digest, path };
 }
