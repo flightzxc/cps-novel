@@ -62,6 +62,7 @@ model ChannelApp {
   channelSyncTasks ChannelSyncTask[]
   genericTasks     GenericTask[]
   sideEffects      SideEffectIntent[]
+  sourceTagMappings SourceLabelMapping[]
 
   @@unique([channelId, sourceAppId, externalAppId], map: "channel_app_binding_key")
   @@index([status], map: "channel_app_status_idx")
@@ -194,6 +195,8 @@ model AdminIdentity {
   twoFactor     AdminTwoFactor?
   challenges    AdminTwoFactorChallenge[]
   recoveryCodes AdminRecoveryCode[]
+  approvedSourceTagMappings SourceLabelMapping[] @relation("SourceLabelMappingApprover")
+  manualTagDecisions        NovelCanonicalTag[]  @relation("NovelCanonicalTagDecider")
 
   @@index([status, updatedAt], map: "admin_identity_status_updated_idx")
   @@map("admin_identity")
@@ -306,6 +309,9 @@ model Novel {
   carouselSlots      HomeCarouselManualSlot[]
   carouselCandidates HomeCarouselAutoCandidate[]
   carouselServing    HomeCarouselServing[]
+  tagState           NovelTagState?
+  canonicalTags      NovelCanonicalTag[]
+  tagClassificationRuns TagClassificationRun[]
 
   @@index([status, updatedAt], map: "novel_status_updated_idx")
   @@index([locale, status], map: "novel_locale_status_idx")
@@ -320,6 +326,7 @@ model NovelSourceItem {
   sourceLanguageCode      String    @map("source_language_code") @db.VarChar(64)
   sourceLanguageName      String?   @map("source_language_name") @db.VarChar(160)
   sourceLocale            String?   @map("source_locale") @db.VarChar(16)
+  rawLanguageScope        String?   @map("raw_language_scope") @db.Text
   title                   String    @db.VarChar(500)
   description             String    @db.Text
   coverUrl                String?   @map("cover_url") @db.Text
@@ -467,6 +474,157 @@ model NovelSourceItemLabel {
   @@index([sourceLabelId, active], map: "novel_source_label_active_idx")
   @@index([novelSourceItemId, active], map: "novel_source_item_label_active_idx")
   @@map("novel_source_item_label")
+}
+
+model CanonicalTag {
+  id                  String   @id @default(uuid()) @db.Uuid
+  stableId            String   @unique(map: "canonical_tag_stable_id_key") @map("stable_id") @db.VarChar(160)
+  slug                String   @unique(map: "canonical_tag_slug_key") @db.VarChar(160)
+  canonicalDefinition String   @map("canonical_definition") @db.Text
+  aliases             Json     @default("[]") @db.JsonB
+  facet               String?  @db.VarChar(64)
+  status              String   @default("active") @db.VarChar(32)
+  sortOrder           Int      @map("sort_order")
+  taxonomyVersion     String   @map("taxonomy_version") @db.VarChar(64)
+  createdAt           DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  translations  CanonicalTagTranslation[]
+  keywords      CanonicalTagKeyword[]
+  sourceMappings SourceLabelMapping[]
+  novelTags      NovelCanonicalTag[]
+
+  @@index([status, sortOrder, stableId], map: "canonical_tag_status_sort_idx")
+  @@map("canonical_tag")
+}
+
+model CanonicalTagTranslation {
+  id             String   @id @default(uuid()) @db.Uuid
+  canonicalTagId String   @map("canonical_tag_id") @db.Uuid
+  locale         String   @db.VarChar(16)
+  displayName    String   @map("display_name") @db.VarChar(160)
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  canonicalTag CanonicalTag @relation(fields: [canonicalTagId], references: [id], onDelete: Cascade)
+
+  @@unique([canonicalTagId, locale], map: "canonical_tag_translation_locale_key")
+  @@index([locale, displayName], map: "canonical_tag_translation_locale_name_idx")
+  @@map("canonical_tag_translation")
+}
+
+model CanonicalTagKeyword {
+  id             String   @id @default(uuid()) @db.Uuid
+  keywordId      String   @unique(map: "canonical_tag_keyword_stable_key") @map("keyword_id") @db.VarChar(200)
+  canonicalTagId String   @map("canonical_tag_id") @db.Uuid
+  value          String   @db.Text
+  scriptBuckets  Json     @default("[]") @map("script_buckets") @db.JsonB
+  matchMode      String   @map("match_mode") @db.VarChar(32)
+  riskFlags      Json     @default("[]") @map("risk_flags") @db.JsonB
+  active         Boolean  @default(true)
+  lexiconVersion String   @map("lexicon_version") @db.VarChar(64)
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  canonicalTag CanonicalTag @relation(fields: [canonicalTagId], references: [id], onDelete: Cascade)
+
+  @@index([canonicalTagId, active], map: "canonical_tag_keyword_tag_active_idx")
+  @@index([lexiconVersion, active], map: "canonical_tag_keyword_version_active_idx")
+  @@map("canonical_tag_keyword")
+}
+
+model SourceLabelMapping {
+  id               String   @id @default(uuid()) @db.Uuid
+  channelAppId     String   @map("channel_app_id") @db.Uuid
+  rawLanguageScope String   @map("raw_language_scope") @db.Text
+  rawToken         String   @map("raw_token") @db.Text
+  canonicalTagId   String   @map("canonical_tag_id") @db.Uuid
+  mappingVersion   String   @map("mapping_version") @db.VarChar(96)
+  active           Boolean  @default(true)
+  approvedBy       String   @map("approved_by") @db.Uuid
+  approvedAt       DateTime @default(now()) @map("approved_at") @db.Timestamptz(6)
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  channelApp   ChannelApp   @relation(fields: [channelAppId], references: [id], onDelete: Restrict)
+  canonicalTag CanonicalTag @relation(fields: [canonicalTagId], references: [id], onDelete: Restrict)
+  approver     AdminIdentity @relation("SourceLabelMappingApprover", fields: [approvedBy], references: [id], onDelete: Restrict)
+
+  @@unique([channelAppId, rawLanguageScope, rawToken, canonicalTagId], map: "source_label_mapping_edge_key")
+  @@index([canonicalTagId, active], map: "source_label_mapping_tag_active_idx")
+  @@map("source_label_mapping")
+}
+
+model NovelTagState {
+  novelId          String    @id @map("novel_id") @db.Uuid
+  mode             String    @default("automatic") @db.VarChar(16)
+  revision         BigInt    @default(0) @db.BigInt
+  currentAutoRunId String?   @map("current_auto_run_id") @db.Uuid
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  novel          Novel                 @relation(fields: [novelId], references: [id], onDelete: Cascade)
+  currentAutoRun TagClassificationRun? @relation("CurrentAutoRun", fields: [currentAutoRunId, novelId], references: [id, novelId], onDelete: Restrict)
+
+  @@unique([currentAutoRunId, novelId], map: "novel_tag_state_current_auto_run_key")
+  @@index([mode, updatedAt], map: "novel_tag_state_mode_updated_idx")
+  @@map("novel_tag_state")
+}
+
+model TagClassificationRun {
+  id                     String    @id @default(uuid()) @db.Uuid
+  novelId                String    @map("novel_id") @db.Uuid
+  method                 String    @db.VarChar(32)
+  taxonomyVersion        String    @map("taxonomy_version") @db.VarChar(64)
+  taxonomySha256         String    @map("taxonomy_sha256") @db.Char(64)
+  keywordLexiconVersion  String    @map("keyword_lexicon_version") @db.VarChar(64)
+  keywordFingerprint     String    @map("keyword_fingerprint") @db.Char(64)
+  classifierConfigVersion String   @map("classifier_config_version") @db.VarChar(64)
+  classifierConfigFingerprint String @map("classifier_config_fingerprint") @db.Char(64)
+  contentSha256          String    @map("content_sha256") @db.Char(64)
+  requestId              String    @map("request_id") @db.VarChar(160)
+  taskType               String?   @map("task_type") @db.VarChar(96)
+  taskId                 String?   @map("task_id") @db.Uuid
+  resultSummary          Json      @default("{}") @map("result_summary") @db.JsonB
+  resultSchemaVersion    Int       @default(1) @map("result_schema_version")
+  appliedAt              DateTime  @default(now()) @map("applied_at") @db.Timestamptz(6)
+  createdAt              DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  novel       Novel               @relation(fields: [novelId], references: [id], onDelete: Cascade)
+  currentForState NovelTagState?  @relation("CurrentAutoRun")
+  novelTags    NovelCanonicalTag[]
+
+  @@unique([novelId, requestId], map: "tag_classification_run_novel_request_key")
+  @@unique([id, novelId], map: "tag_classification_run_id_novel_key")
+  @@index([novelId, createdAt], map: "tag_classification_run_novel_created_idx")
+  @@index([taskType, taskId], map: "tag_classification_run_task_idx")
+  @@map("tag_classification_run")
+}
+
+model NovelCanonicalTag {
+  id                    String    @id @default(uuid()) @db.Uuid
+  novelId               String    @map("novel_id") @db.Uuid
+  canonicalTagId        String    @map("canonical_tag_id") @db.Uuid
+  source                String    @db.VarChar(16)
+  score                 Int?
+  classificationRunId   String?   @map("classification_run_id") @db.Uuid
+  evidence              Json      @default("{}") @db.JsonB
+  evidenceSchemaVersion Int       @default(1) @map("evidence_schema_version")
+  decidedBy             String?   @map("decided_by") @db.Uuid
+  decidedAt             DateTime  @default(now()) @map("decided_at") @db.Timestamptz(6)
+  createdAt             DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt             DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  novel            Novel                 @relation(fields: [novelId], references: [id], onDelete: Cascade)
+  canonicalTag      CanonicalTag          @relation(fields: [canonicalTagId], references: [id], onDelete: Restrict)
+  classificationRun TagClassificationRun? @relation(fields: [classificationRunId, novelId], references: [id, novelId], onDelete: Restrict)
+  decider           AdminIdentity?        @relation("NovelCanonicalTagDecider", fields: [decidedBy], references: [id], onDelete: Restrict)
+
+  @@unique([novelId, canonicalTagId, source], map: "novel_canonical_tag_source_key")
+  @@index([novelId, source], map: "novel_canonical_tag_novel_source_idx")
+  @@index([canonicalTagId, source], map: "novel_canonical_tag_tag_source_idx")
+  @@index([classificationRunId], map: "novel_canonical_tag_run_idx")
+  @@map("novel_canonical_tag")
 }
 
 model PromoLink {

@@ -102,7 +102,7 @@ GRANT SELECT (
 -- public /go route must test/resolve them. Analyst never receives them.
 GRANT SELECT (
   id, channel_app_id, novel_id, external_book_id, source_language_code,
-  source_language_name, source_locale, title, description, cover_url,
+  source_language_name, source_locale, raw_language_scope, title, description, cover_url,
   total_chapter_count, paid_from_chapter, split_ratio, tto_split_ratio,
   external_agency_id, source_created_at_raw, source_created_at,
   source_updated_at, last_seen_at, status, deleted_at, created_at, updated_at
@@ -153,6 +153,8 @@ GRANT INSERT, UPDATE ON TABLE
   channel, source_app, channel_app, channel_capability, channel_account,
   novel, novel_preview_policy, source_label, novel_source_item_label,
   article_template, article, home_carousel_manual_slot, tracking_event,
+  canonical_tag, canonical_tag_translation, canonical_tag_keyword,
+  source_label_mapping, novel_tag_state, novel_canonical_tag, tag_classification_run,
   catalog_scan_task, catalog_scan_task_item, channel_sync_task,
   channel_sync_task_item, generic_task, generic_task_item, schedule_run,
   cron_run, indexnow_outbox
@@ -161,6 +163,8 @@ TO web_app;
 -- Keep this column-scoped: Web must not be able to alter raw_payload or any
 -- other upstream evidence maintained exclusively by Worker.
 GRANT UPDATE (novel_id, status, updated_at) ON novel_source_item TO web_app;
+GRANT DELETE ON TABLE canonical_tag_translation, canonical_tag_keyword,
+  source_label_mapping, novel_canonical_tag TO web_app;
 GRANT INSERT ON TABLE operation_audit TO web_app;
 GRANT INSERT (
   id, channel_account_id, credential_type, encrypted_secret, key_version,
@@ -189,7 +193,9 @@ GRANT INSERT, UPDATE ON TABLE
   generic_task, generic_task_item, side_effect_intent, indexnow_outbox,
   schedule_run, cron_run, article_template, article,
   home_carousel_manual_slot, home_carousel_auto_batch,
-  home_carousel_auto_candidate, home_carousel_serving
+  home_carousel_auto_candidate, home_carousel_serving,
+  canonical_tag, canonical_tag_translation, canonical_tag_keyword,
+  source_label_mapping, novel_tag_state, novel_canonical_tag, tag_classification_run
 TO worker_app;
 GRANT DELETE ON TABLE novel_chapter_content TO worker_app;
 GRANT DELETE ON TABLE channel_credential_active_fingerprint TO worker_app;
@@ -206,7 +212,9 @@ GRANT SELECT ON TABLE channel, source_app, channel_app, channel_capability,
   novel, novel_source_item, novel_chapter, novel_chapter_source_item,
   novel_chapter_content, novel_preview_policy, source_label,
   novel_source_item_label, catalog_scan_task, catalog_scan_task_item,
-  channel_sync_task, channel_sync_task_item, promo_link, article TO worker_app;
+  channel_sync_task, channel_sync_task_item, promo_link, article,
+  canonical_tag, canonical_tag_translation, canonical_tag_keyword,
+  source_label_mapping, novel_tag_state, novel_canonical_tag, tag_classification_run TO worker_app;
 
 -- Scheduler only creates scheduling and GenericTask metadata. It never reads Credential/Auth secrets.
 GRANT SELECT, INSERT, UPDATE ON TABLE schedule_run, cron_run, generic_task, generic_task_item TO scheduler_app;

@@ -30,6 +30,10 @@ export const MISFIRE_POLICIES = ["bounded_catch_up", "skip", "mark_failed"] as c
 export const PREVIEW_MATERIALIZATION_POLICIES = ["upstream_returned_preview"] as const;
 export const CAROUSEL_BATCH_STATUSES = ["pending", "processing", "completed", "failed"] as const;
 export const CAROUSEL_SOURCES = ["manual", "automatic"] as const;
+export const CANONICAL_TAG_STATUSES = ["active", "inactive"] as const;
+export const NOVEL_TAG_MODES = ["automatic", "manual"] as const;
+export const NOVEL_TAG_SOURCES = ["manual", "auto"] as const;
+export const TAG_CLASSIFICATION_METHODS = ["deterministic_text", "offline_llm"] as const;
 
 const REGISTRY_STATUS_SEMANTICS = {
   active: "Registered and available for normal use.",
@@ -179,6 +183,14 @@ export const DATABASE_STATUS_SEMANTICS = {
     completed: "Candidate ranking completed and may feed the current serving snapshot.",
     failed: "Candidate computation terminated without replacing the current serving snapshot.",
   },
+  canonical_tag: {
+    active: "The global CanonicalTag may be returned by effective Tag resolution.",
+    inactive: "The identity remains auditable but is excluded from mapped, auto, and manual effective results.",
+  },
+  novel_tag_state: {
+    automatic: "Effective Tags are the union of exact read-derived mapped Tags and the current qualified auto snapshot.",
+    manual: "The complete manual snapshot owns the effective result, including an explicit empty snapshot.",
+  },
 } as const;
 
 export type ValueOf<T extends readonly string[]> = T[number];
@@ -200,3 +212,7 @@ export type IndexNowStatus = ValueOf<typeof INDEXNOW_STATUSES>;
 export type IndexNowAttemptOutcome = ValueOf<typeof INDEXNOW_ATTEMPT_OUTCOMES>;
 export type IndexNowAttemptRecoveryState = ValueOf<typeof INDEXNOW_ATTEMPT_RECOVERY_STATES>;
 export type ArticleStatus = ValueOf<typeof ARTICLE_STATUSES>;
+export type CanonicalTagStatus = ValueOf<typeof CANONICAL_TAG_STATUSES>;
+export type NovelTagMode = ValueOf<typeof NOVEL_TAG_MODES>;
+export type NovelTagSource = ValueOf<typeof NOVEL_TAG_SOURCES>;
+export type TagClassificationMethod = ValueOf<typeof TAG_CLASSIFICATION_METHODS>;

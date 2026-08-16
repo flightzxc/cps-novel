@@ -89,6 +89,7 @@ tests/integration/
 | `src/lib/indexnow/` | Codex | `outbox-contract.ts` |
 | `src/lib/preview/` | Codex | `changdu-materialization.ts` |
 | `src/lib/redirect/` | Codex | `public-redirect-code.ts` |
+| `src/lib/tagging/` | Codex | `contracts.ts`, `raw-language-scope.ts`, `classifier-config.ts` |
 | `src/lib/locale/` | **Claude** | `locale-canonical.ts` |
 | `src/lib/seo/` | **Claude** | — |
 | `src/lib/site/` | **Claude** | — |

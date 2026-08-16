@@ -335,6 +335,7 @@ P1-08B 新增独立 `scheduler_app`，只授予 schedule/generic task 元数据�
 | 2026-08-26 | X9 Task Admin | 零 migration；新增 `task:manage` + 当前会话 2FA 的三族任务读取/失败重试与 SideEffectIntent 人工裁决。Web 仅获得 `side_effect_intent(status,response_shape,confirmed_at)` 列级 UPDATE；裁决 CAS 与 OperationAudit 同事务，不触发上游、PromoLink 自动对账或 worker 通用 transition 出边 | Codex | PostgreSQL 16.14 disposable role/CAS/audit/worker-negative verification PASS；零 dictionary drift；容器已清理 |
 | 2026-09-01 | Book B E2E PromoLink 目的 URL 读取 | 零 schema migration；`web_app` 增加且仅增加 `promo_link.web_url/app_url` 的列级 SELECT，供发布门禁与公开 `/go` 跳转使用；不开放 `upstream_code`、原始上游 payload 或 Analyst/Scheduler 读取 | Codex | X8 Book B E2E 已验证发布门禁与 `/go`；Web 两列可读、Analyst 两列拒绝 |
 | 2026-09-03 | Book C SideEffectIntent Worker 读取 | 零 schema migration；`worker_app` 增加 `side_effect_intent` 表级 SELECT，使正式 claim handler 可执行 intent 预查、独立 prepare、状态迁移与 readback-only recovery；不扩张 Web/Scheduler 权限 | Codex | Book C 首次启动在 mutation 前发现缺口；补权后正式 handler PASS，`getcode=1`、intent `confirmed`、capability 已恢复关闭 |
+| 2026-09-05 | P2-06.5 Tagging V3 | 增加七表 Tagging V3 foundation、exact raw-language scope、角色权限与治理合同；无 taxonomy auto-write | Codex | 集成冻结提交历史；AUTO_WRITE_AUTHORIZED=NO |
 
 ## 13. 待跟进项（Schema 变更队列，Owner 待批）
 

@@ -23,6 +23,7 @@ import {
   MOBOREADER_TASK_TYPES,
 } from "../../src/lib/tasks/moboreader";
 import { materializeChangduPreview } from "../../src/lib/preview";
+import { rawLanguageScopeFromPayload } from "../../src/lib/tagging/raw-language-scope";
 import { createHandlerRegistry, type TaskHandler } from "../../src/lib/tasks";
 import {
   buildPromoLinkIdempotencyKey,
@@ -479,6 +480,8 @@ async function persistCatalogPage(
   let pageIncompleteLabelSnapshots = 0;
   for (const book of input.response.items) {
     const sourceLocale = resolveSiteLocale(book.language, book.languageName ?? undefined);
+    const rawLanguageScope = rawLanguageScopeFromPayload(book.rawEvidence);
+    if (rawLanguageScope === null) throw new Error("MoboReader raw language scope is not reliably derivable");
     const source = await tx.novelSourceItem.upsert({
       where: {
         channelAppId_externalBookId_sourceLanguageCode: {
@@ -493,6 +496,7 @@ async function persistCatalogPage(
         sourceLanguageCode: book.language,
         sourceLanguageName: book.languageName,
         sourceLocale,
+        rawLanguageScope,
         title: book.title,
         description: book.description ?? "",
         coverUrl: book.coverUrl,
@@ -508,6 +512,7 @@ async function persistCatalogPage(
       update: {
         sourceLanguageName: book.languageName ?? undefined,
         sourceLocale,
+        rawLanguageScope,
         title: book.title,
         description: book.description ?? undefined,
         coverUrl: book.coverUrl ?? undefined,
