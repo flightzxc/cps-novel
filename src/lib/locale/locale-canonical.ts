@@ -282,3 +282,59 @@ export function isPublishableLocale(locale: unknown): boolean {
 export function listPublishableLocales(): SiteLocale[] {
   return [...PUBLISHABLE_LOCALES];
 }
+
+/**
+ * ---------------------------------------------------------------------------
+ * 标签译名域（Tag Translation Domain）—— P2-06.5 F3。
+ *
+ * 🔴 这是与上面 `SiteLocale` / `SITE_LOCALES` **完全不同的第二个域**，不要合并
+ * 也不要互相推导：
+ *
+ * - `SITE_LOCALES` 回答「本站现在可以把哪个 locale 的页面发布给读者」——
+ *   fail-closed，目前只有 `en` 一项，且新增需要 Owner 决策（见上文）。
+ * - `TAG_TRANSLATION_LOCALES` 回答「CanonicalTag 的译名可以录入哪些语种」——
+ *   这是运营在后台给标签（一个未来面向用户检索/浏览的公共 taxonomy）录入
+ *   多语展示名时能选的固定语种表，跟站点发布白名单没有从属或推导关系：
+ *   一个 locale 完全可以在这张表里、却不在 `SITE_LOCALES`（甚至永远不会进
+ *   入后者），反之亦然。
+ *
+ * 用途是 admin 端 CanonicalTag 编辑器（`LocaleFieldEditor`）：把原来的自由
+ * 文本 locale 输入换成这张固定列表，从结构上消灭「运营手打错一个字母，
+ * 静默产生一个没有任何校验拦截的孤儿语种译名」这类错误——CPS 生产实现
+ * （`tags/_components/locale-field-editor.tsx`）已验证过这个交互模式。
+ *
+ * 20 项 = CPS 现行 19 码 + Novel 所需的 `zh`。
+ *
+ * 🔴 `zh` 在这张表里不是普通一项：它是 canonical taxonomy v1 目前**唯一**
+ * 实际有数据的语种，也是查询 resolver 的全局回退——
+ * `src/server/tagging/service.ts:141,254` 的
+ * `COALESCE(requested.display_name, zh.display_name, ct.slug)` 把 `'zh'`
+ * 硬编码成兜底键。这张表里少了 `zh`，admin 就没有任何入口能编辑这个兜底
+ * 语种；一旦某个标签的 `zh` 译名缺失或需要改，整条标签的中文展示名会退化
+ * 成 slug。所以 `zh` 必须始终可达、可编辑，不能被「默认收起」逻辑挡住编辑
+ * 入口——它就在 `TAG_TRANSLATION_DEFAULT_EXPANDED` 里，默认展开。
+ * ---------------------------------------------------------------------------
+ */
+
+/** CanonicalTag 译名可以录入的固定语种表。admin 端不提供此列表之外的输入。 */
+export const TAG_TRANSLATION_LOCALES = [
+  "en", "zh", "zh-CN", "zh-TW", "ja", "ko", "es", "fr", "de", "pt",
+  "it", "ru", "ar", "th", "vi", "id", "ms", "tr", "pl", "nl",
+] as const; // 20 项 = CPS 现行 19 码 + Novel 所需 zh
+
+/**
+ * 默认展开的语种（其余折叠，按钮渐进展开）。`zh` 必须在这里——见上方关于
+ * resolver 回退的说明；`en` 是 CPS 参考实现里同样默认展开的第二语种。除这
+ * 两项外，任何已有非空译名的语种也会在渲染时被强制展开，见
+ * `LocaleFieldEditor` 的实现。
+ */
+export const TAG_TRANSLATION_DEFAULT_EXPANDED = ["zh", "en"] as const;
+
+/** 语种码 → 该语种的母语名。用作 admin 输入框的 placeholder，不是选项文案。 */
+export const TAG_LOCALE_LABELS: Readonly<Record<string, string>> = Object.freeze({
+  en: "English", zh: "中文", "zh-CN": "简体中文", "zh-TW": "繁體中文",
+  ja: "日本語", ko: "한국어", es: "Español", fr: "Français", de: "Deutsch",
+  pt: "Português", it: "Italiano", ru: "Русский", ar: "العربية", th: "ไทย",
+  vi: "Tiếng Việt", id: "Bahasa Indonesia", ms: "Bahasa Melayu",
+  tr: "Türkçe", pl: "Polski", nl: "Nederlands",
+});

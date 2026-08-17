@@ -29,6 +29,7 @@ import {
   NovelSyncPanel,
 } from "../_components/novel-detail-panels";
 import { PublishLifecyclePanel } from "../_components/publish-lifecycle-panel";
+import { NovelTagsPanel } from "../_components/novel-tags-panel";
 import { requireContentPage } from "../_lib/content-page-guard";
 import { readPrimaryArticleForNovel } from "../_lib/read-primary-article";
 
@@ -93,6 +94,7 @@ export default async function NovelDetailPage({
     if (!chapterError) throw error;
   }
   const novel = projectAdminNovelDetail(detail);
+  const tagManageCapability = findCapabilityState(capabilityViews(context), "tag:manage");
 
   return (
     <AdminShell
@@ -133,6 +135,11 @@ export default async function NovelDetailPage({
             directly under the upstream-sources panel rather than with the
             identity fields — it describes what the channel said, not what we own. */}
         <NovelLabelsPanel novel={novel} />
+
+        {/* What we finally decided, versus what the channel said above — same
+            reading order as `NovelSourcesPanel` → `NovelLabelsPanel`, one
+            level more resolved. */}
+        <NovelTagsPanel novelId={novel.novelId} locale={novel.locale} capability={tagManageCapability} />
 
         <section className="space-y-3">
           <h2 className="text-sm font-semibold text-gray-900">
