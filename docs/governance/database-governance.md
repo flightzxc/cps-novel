@@ -20,6 +20,7 @@ Migration 演进，当前 Credential 状态增量为
 
 数据库落地后的运行真源优先级：**已执行 Migration > 当前 Schema/SQL > 本治理文档 > JSONL 数据字典 > Notion 治理镜像**。
 
+- 🔴 **任何 DB 改动必须同步本文档**（词典段 + §12 改动日志），未同步的 Migration 视为不完整交付；与 CPS 同一纪律。
 - 新项目与 CPS 零共享；CPS 只作只读证据。
 - 涉及 CPS 同类模块的数据字典、状态词表、字段语义、状态转换、错误码或安全边界冻结前，
   必须完成 CPS 只读 parity 调研。CPS 是强制参考证据，不是高于小说冻结架构的权威源。
@@ -110,13 +111,34 @@ Migration 演进，当前 Credential 状态增量为
 
 | 表 | 分类 | 字段责任 | 关键约束 | DROP |
 | --- | --- | --- | --- | --- |
-| `indexnow_outbox` | CPS_PARITY_ADAPTED | URL revision 的异步投递状态 | `(url, revision)` 唯一；七态 CHECK | 请求路径同步推送 |
-| `indexnow_outbox_attempt` | CPS_PARITY_ADAPTED | 每次投递尝试 | outbox+attempt_no 唯一；append-only | attempt JSON 数组作为真源 |
+| `indexnow_outbox` | CPS_PARITY_ADAPTED | URL revision 的异步投递状态；v0.2.0 foundation 补 8 个 CPS parity 字段（生命周期时间戳 `last_request_at`/`last_response_at`、review-defer 三件套 `defer_reason`/`released_at`/`release_reason`、审计字段 `release_commit`/`payload_host`、任务关联 `delivery_task_id`） | `(url, revision)` 唯一；七态 CHECK；`delivery_task_id` 是 GenericTask.id 关联但故意不建 Prisma FK（避免 GenericTask 365 天头保留期阻塞投递记录留存） | 请求路径同步推送 |
+| `indexnow_outbox_attempt` | CPS_PARITY_ADAPTED | 每次投递尝试；v0.2.0 foundation 把原 `attempt_state`（HTTP 结果分类，0 消费方）更名为 `outcome`（取值不变），把腾出的 `attempt_state` 名字用于 CPS worker 崩溃恢复语义（`started/completed/unknown_outcome`），并补 `worker_task_id` 任务关联 | outbox+attempt_no 唯一；append-only；`worker_task_id` 同样不建 Prisma FK | attempt JSON 数组作为真源 |
+
+#### v0.2.0 foundation：IndexNow attempt 字段更名与新增语义显式登记
+
+| ID | 分类 | CPS 行为 | 小说行为 | 偏离原因 | Owner 决策 |
+| --- | --- | --- | --- | --- | --- |
+| `V020-INDEXNOW-ATTEMPT-STATE-SPLIT` | `CPS_PARITY_ADAPTED` | `attemptState` 单字段同时承担 HTTP 结果分类语义 | 拆成两个独立字段：`outcome`（HTTP 结果分类，原 `attemptState` 更名，取值不变）+ 新 `attemptState`（CPS 崩溃恢复语义：`started/completed/unknown_outcome`） | 小说侧原 `attemptState` 字段全仓 0 个消费方（已核实），改名成本≈1 行且零下游影响；反向让移植代码迁就旧命名成本更高（CPS 侧 14 处引用） | `P2_07_12_STREAM_F_APPROVED`（`P2-07-12-移植审计-2026-08-12/DECISION-CHECK.md` 核查 1d） |
+| `V020-TASK-CORRELATION-UUID` | `CPS_PARITY_ADAPTED` | `deliveryTaskId`/`workerTaskId` 为 `Int`，指向 SQLite `BatchTask.id` 自增整数 | 改为 `String? @db.Uuid`，指向 `GenericTask.id`；不建 Prisma relation/FK（对称于既有 `indexnow_outbox.source_task_id` 的裸引用写法，且规避 GenericTask 365 天头保留期与 IndexNow outbox/attempt 保留期不一致导致的 FK 冲突） | 类型层面必须改（PG UUID vs SQLite Int 不兼容）；是否建 FK 是本轮新决策 | `P2_07_12_STREAM_F_APPROVED` |
+
+### 3.6 全局站点配置
+
+| 表 | 分类 | 字段责任 | 关键约束 | DROP |
+| --- | --- | --- | --- | --- |
+| `site_setting` | CPS_PARITY_ADAPTED | 全局 SEO/IndexNow 配置单例（v0.2.0 foundation 新增，PG 化自 CPS `SiteSetting`） | `id` 恒为 1；`site_setting_singleton_check` CHECK 在数据库层强制单例（CPS 仅靠应用纪律，本表新增该防线） | 北斗/飞书渠道专属字段（`beidouApiBase`/`beidouAuthToken`/`feishuAppId` 等）、`carouselConfigJson`（小说侧轮播参数已按批次存 `home_carousel_auto_batch.params`）、`previewSyncEnabled`（CPS 专属预览同步开关） |
 | `home_carousel_manual_slot` | CPS_PARITY_ADAPTED | locale 人工位置 | enabled active 部分唯一 | drama_id、SQLite boolean/int |
 | `home_carousel_auto_batch` | CPS_PARITY_ADAPTED | 自动计算批次 | unique_key 唯一；状态 CHECK | Web 内 cron |
 | `home_carousel_auto_candidate` | CPS_PARITY_ADAPTED | 排名、分数与解释 | batch+locale+rank、batch+novel 唯一 | Float 排名金额式精度 |
 | `home_carousel_serving` | CPS_PARITY_ADAPTED | 只保存当前正在服务的结果，不承担历史区间 | `(locale, position)` 绝对唯一；无 `valid_from/valid_to` | 在 serving 表内保存历史有效期 |
 | `home_carousel_change_log` | CPS_PARITY | 轮播历史变更与来源追溯的追加日志 | append-only | CPS drama 专用引用 |
+
+#### Sitemap 运行期部署环境合同
+
+| 环境变量 | 必填阶段 | 使用方 | 约束 |
+| --- | --- | --- | --- |
+| `SITE_URL` | **运行期部署必填**（Web 与执行 Sitemap 刷新的 Worker） | `robots.txt`、Sitemap URL 绝对化 | 必须是无凭证、无 path/query/fragment 的绝对 HTTP(S) origin；不得提供 CPS、localhost、fixture 或其他默认域名。容器镜像 build 不读取该值，运行期缺失或非法时 fail-closed。 |
+
+部署门禁与 D-7/feature flag 的上线顺序见 `docs/p2/P2_10_SITEMAP_RELEASE_CHECKLIST.md`。
 
 ## 4. 状态 CHECK 真源
 
@@ -142,12 +164,19 @@ Migration 演进，当前 Credential 状态增量为
 - Carousel batch：`pending | processing | completed | failed`
 
 其他受限枚举同样进入 CHECK：task mode `dry_run | apply`、PromoLink origin
-`upstream_existing | claimed`、label kind、IndexNow attempt state、ScheduleRun trigger kind、misfire policy、preview materialization policy 和 carousel serving source。
+`upstream_existing | claimed`、label kind、IndexNow attempt `outcome`（原 `attempt_state`
+更名，取值不变：`started | accepted | retryable_failed | permanent_failed`，机器真源
+`src/domain/database-statuses.ts` 的 `INDEXNOW_ATTEMPT_OUTCOMES`）、IndexNow attempt
+`attempt_state`（v0.2.0 foundation 新增，CPS 崩溃恢复语义：`started | completed |
+unknown_outcome`，机器真源 `INDEXNOW_ATTEMPT_RECOVERY_STATES`，与 `outcome` 是两个独立字段，
+不得混淆）、ScheduleRun trigger kind、misfire policy、preview materialization policy 和
+carousel serving source。
 
-逐值业务语义以 `src/domain/database-statuses.ts` 的 `DATABASE_STATUS_SEMANTICS` 和 JSONL 字典为机器真源。特别冻结：
+逐值业务语义以 `src/domain/database-statuses.ts` 的 `DATABASE_STATUS_SEMANTICS`（`indexnow_outbox_attempt`
+条目按列名 `outcome`/`attemptState` 二级嵌套，因为该表没有单一 `status` 列）和 JSONL 字典为机器真源。特别冻结：
 
 - Novel/Article `draft`、Novel `ready` 对公众为 404；`published` 才进入公开读取。
-- `unpublished` 保留稳定下架页并退出索引，内容继续保留；`takedown` 是版权或安全移除，公开路由返回 **HTTP 410 Gone**，两者不得合并。
+- `unpublished` 保留稳定下架页并退出索引，内容继续保留；`takedown` 是版权或安全移除，两者不得合并。公开路由 **V1 = HTTP 404**（页面层 `notFound()`）；**HTTP 410 为 post-V1，由 proxy 层实现**，本轮不在 RSC 里用自定义 digest 打 410。
 - Chapter `preview` 可展示和索引，`locked` 在 V1 不物化；可信且结构完整、非空的响应中缺席才进入 `stale`，立即停展并退出 sitemap，但正文保留。
 - 失败、结构异常或异常空列表等不可信响应不改变章节状态；`stale` 章节可信重现后自动恢复 `preview`。
 - `withdrawn` 是人工/版权撤回并返回 404，是唯一会通过版权流程删除 `novel_chapter_content` 的章节状态。
@@ -181,6 +210,17 @@ Migration 演进，当前 Credential 状态增量为
 17. `20260804090000_p1_08_credential_status_parity` 将 Credential CHECK 增量替换为
     `active | superseded | expired | invalid`；如检测到 `revoked` 存量必须失败并要求人工处置，
     不得静默迁移到其他状态。
+18. `20260818120000_v020_foundation_shared`（v0.2.0 foundation，本轮唯一 Migration）：
+    - `indexnow_outbox` 新增 8 字段（见 3.5）与 `(defer_reason, status)` 索引；
+    - `indexnow_outbox_attempt` 用 `RENAME COLUMN` + `RENAME CONSTRAINT` 把原 `attempt_state`
+      物理列与其 CHECK 更名为 `outcome`/`indexnow_outbox_attempt_outcome_check`（取值不变），
+      随后新增 `attempt_state` 列（CPS 崩溃恢复语义）与同名新 CHECK、以及 `worker_task_id`；
+    - 新建单例表 `site_setting`，`updated_at` 遵循本仓 `@updatedAt` 字段惯例不带数据库
+      `DEFAULT`（对照 `channel.updated_at` 等既有字段），迁移内种子 INSERT 显式提供该列的值；
+    - 本迁移在一次性 PostgreSQL 16 容器中完成 `migrate deploy`（含二次幂等重放）、
+      `migrate diff --exit-code`（migrations→schema、live db→schema 均零差异）与
+      `scripts/check-database-dictionary-drift.mjs` 全量校验（44 张表、950 条 active 字典记录、
+      零孤儿/幽灵）。
 
 ### P1-05B Migration 注意事项
 
@@ -280,3 +320,16 @@ P1-08B 新增独立 `scheduler_app`，只授予 schedule/generic task 元数据�
 | 2026-08-03 | P1-06 | 建立五角色、列级敏感数据隔离、逻辑备份/一次性恢复脚本和物理 base backup/WAL/PITR 运行手册；生产 PITR 未在本轮宣称建立 | Codex | 逻辑恢复演练见 P1-06 报告 |
 | 2026-08-04 | P1-08B | 增加六张 Auth 表、生产 PostgreSQL Store、独立 scheduler_app、Credential validate/supersede Worker 与脱敏查询；create/replace secret intake 保持 Gate | Codex | PostgreSQL 16.14 disposable verification PASS |
 | 2026-08-04 | P1-08B | Owner 关闭 Secret Ingress Gate：Web 同步校验并加密新 JWT，只获密文 INSERT、无持久化密文 SELECT；add/replace 返回 metadata，validate/supersede 保持 Worker 异步 | Codex | `P1_08B_WEB_SYNCHRONOUS_INGRESS_APPROVED`；待 targeted review |
+| 2026-08-18 | v0.2.0-foundation（Stream F，P2-07～12 一轮实施） | 唯一 Migration `20260818120000_v020_foundation_shared`：`indexnow_outbox` 补 8 字段、`indexnow_outbox_attempt` 更名 `attempt_state`→`outcome` 并新增 CPS 崩溃恢复语义的 `attempt_state`/`worker_task_id`、新建单例 `site_setting` 表（PG 化自 CPS，DROP 北斗/飞书/轮播 JSON 专属字段）；随附 db-retry 与 `credentials/service.ts` 内联判定收敛、可见性谓词族 `src/server/publication/visibility.ts`、`SiteSetting` accessor、公开访问入口适配、`publication-dispatcher`、Article path builder 移植 | Claude（Sonnet 编码/Opus 复核） | 一次性 PostgreSQL 16 容器验证 PASS（44 张表、950 条 active 字典记录、零 drift）；**P1 既有 45 个模型的字典词典全量回填另立轻量任务，不阻塞本轮**（沿用 2026-08-12 Owner 裁决第 2 条） |
+| 2026-08-18 | v0.2.0-publish-gate（Stream A，P2-07 发布门禁，合并前 Opus 复核 必改1/2） | 零 schema 改动。`applyPublishTransition` 收口 TOCTOU（facts/gate 读取移入事务、写入改条件 `updateMany`+`count` 校验+失败即抛出回滚）；移除 `OperationAudit` 上一版依赖 P2002 恢复的死分支，相关幂等注释降级为"顺序重试幂等，非并发安全"；§13 登记 `operation_audit` 幂等唯一索引为跟进项 | Claude（Sonnet 编码/Opus 复核） | `npm test` 1281 passed / 85 skipped；新增 TOCTOU 并发交错回归测试（`tests/backend/publish-gate/service.test.ts`，注入钩子模拟交错时序） |
+| 2026-08-18 | v0.2.0-public-wiring（Stream B PR2，P2-08 复核） | §4 冻结公开路由：`takedown` **V1 = HTTP 404**；**410 为 post-V1（proxy 层）**。零 schema 改动。 | Cursor | 页面层 `notFound()` + `novel/[slugParam]/not-found.tsx`；禁止 `NEXT_HTTP_ERROR_FALLBACK;410` digest |
+| 2026-08-18 | P2-10 Sitemap | 登记 `SITE_URL` 为 Web/刷新 Worker 的运行期部署必需 origin；镜像 build 不注入默认域名，运行期继续严格 fail-closed | Codex | 待 Claude 增量复核 |
+
+## 13. 待跟进项（Schema 变更队列，Owner 待批）
+
+本节登记"已识别、本轮因 schema 冻结未处理"的数据库变更需求，供下一轮 migration 排期时核对；
+未经 Owner 批准不得抢跑新增 migration。
+
+| 登记日期 | 提出方 | 表/字段 | 现状 | 建议变更 | 依据 |
+| --- | --- | --- | --- | --- | --- |
+| 2026-08-18 | Claude（Stream A，P2-07 合并前复核） | `operation_audit`（`prisma/schema.prisma:755-774`） | 仅 `@@index([requestId], map: "operation_audit_request_idx")` 普通索引；`(actor_type, action, entity_type, entity_id, request_id)` 无唯一约束 | 新增部分唯一索引 `(action, entity_type, entity_id, request_id)`（或含 `actor_type`），使 `src/server/publish-gate/service.ts` 的写口/权利态转换幂等判定从"应用层 check-then-insert（仅顺序重试安全）"升级为"数据库层强制（并发安全）" | `scratchpad/reports/A-REVIEW.md` 必改 2：`OperationAudit` 无唯一约束⇒P2002 恢复分支为死代码⇒并发同 `requestId` 提交可双写审计行 + 双发 `dispatchFirstPublicPublication`。本轮范围内 schema 已冻结（`P2_07_12_一轮实施分工方案_2026-08-12.md`），不新增 migration；已在 `service.ts` 相应位置的注释与本文件 §12 变更日志如实标注该限制，不作虚假的并发安全声明 |

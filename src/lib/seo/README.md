@@ -8,11 +8,7 @@ SEO 口径的实现：页面 metadata 生成、canonical 规则、可索引判�
 
 ## 本轮范围
 
-🔴 本轮（P1-04）只建目录，不写实现。当前目录仅含本 README 与 `.gitkeep` 占位。
-
-## 填充任务
-
-由 **P1-10（用户端深色设计系统和页面壳）** 起步，随 P2 的页面与 sitemap/IndexNow 链路完善。
+P2-08 PR·公共 helper 已落地纯函数：breadcrumb、TOC、FAQ 抽取、seo-utils、seo-meta-generator。不碰数据库。`getSiteUrl` 暂留 `seo-templates/_shared.ts`，语义对齐 Stream D 的 `src/lib/seo/site-url.ts`（仅 `SITE_URL`、绝对 origin）；D 合入后由整合方收口为委托该文件。章节路径由 `chapter-path.ts` 组合地基 `buildArticleRoutePath`，不改 `article-path.ts`。
 
 ## 特别纪律
 

@@ -1,0 +1,44 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`generateSeoMeta > builds novel metadata without PulseDrama, /drama/, or cross-Novel hreflang siblings 1`] = `
+{
+  "alternates": {
+    "canonical": "https://example.test/novel/lantern-keepers-daughter-pabc123",
+    "languages": {
+      "en": "https://example.test/novel/lantern-keepers-daughter-pabc123",
+      "x-default": "https://example.test/novel/lantern-keepers-daughter-pabc123",
+    },
+  },
+  "canonical": "https://example.test/novel/lantern-keepers-daughter-pabc123",
+  "description": "A coastal town keeps one lantern burning.",
+  "openGraph": {
+    "description": "A coastal town keeps one lantern burning.",
+    "images": [
+      {
+        "alt": "The Lantern Keeper's Daughter",
+        "height": 630,
+        "url": "https://example.test/covers/lantern.jpg",
+        "width": 1200,
+      },
+    ],
+    "locale": "en_US",
+    "siteName": "cps-novel",
+    "title": "The Lantern Keeper's Daughter",
+    "type": "book",
+    "url": "https://example.test/novel/lantern-keepers-daughter-pabc123",
+  },
+  "other": {
+    "application/ld+json": "[{"@context":"https://schema.org","@type":"Book","name":"The Lantern Keeper's Daughter","description":"A coastal town keeps one lantern burning.","url":"https://example.test/novel/lantern-keepers-daughter-pabc123","image":"https://example.test/covers/lantern.jpg","genre":["Romance"],"inLanguage":"en","numberOfChapters":12,"datePublished":"2026-01-01T00:00:00.000Z"},{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://example.test/"},{"@type":"ListItem","position":2,"name":"The Lantern Keeper's Daughter","item":"https://example.test/novel/lantern-keepers-daughter-pabc123"}]}]",
+  },
+  "robots": undefined,
+  "title": "The Lantern Keeper's Daughter",
+  "twitter": {
+    "card": "summary_large_image",
+    "description": "A coastal town keeps one lantern burning.",
+    "images": [
+      "https://example.test/covers/lantern.jpg",
+    ],
+    "title": "The Lantern Keeper's Daughter",
+  },
+}
+`;

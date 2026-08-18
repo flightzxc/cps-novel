@@ -4,6 +4,7 @@ import {
   isNovelCatalogSyncEnabled,
   isNovelCatalogSyncWriteAllowed,
 } from "../flags";
+import { isUniqueConstraintViolation as isUniqueViolation } from "@/lib/db/db-retry";
 
 export const MOBOREADER_TASK_TYPES = Object.freeze({
   catalogScan: "catalog_scan",
@@ -176,10 +177,6 @@ export function resolveMoboreaderCatalogSafetyMaxPages(
 
 function digest(value: unknown): string {
   return createHash("sha256").update(JSON.stringify(value)).digest("hex");
-}
-
-function isUniqueViolation(error: unknown): boolean {
-  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002";
 }
 
 export async function createMoboreaderCatalogScanTask(

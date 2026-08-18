@@ -3,6 +3,7 @@ import type { AdminCapability } from "@/lib/auth/capabilities";
 
 export const ADMIN_CAPABILITY_LABELS: Readonly<Record<AdminCapability, string>> = Object.freeze({
   "credential:manage": "凭证管理",
+  "content:publish": "内容发布",
   "content:takedown": "内容下架",
   "content:view": "内容查看",
   "content:read": "章节正文读取",

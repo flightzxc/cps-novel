@@ -1,4 +1,5 @@
 import { Prisma, type PrismaClient, type SideEffectIntent } from "@prisma/client";
+import { isUniqueConstraintViolation } from "@/lib/db/db-retry";
 
 export type SideEffectIntentTransition =
   | "confirmed"
@@ -79,7 +80,7 @@ export async function prepareSideEffectIntent(
       return { created: true, intent };
     });
   } catch (error) {
-    if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== "P2002") throw error;
+    if (!isUniqueConstraintViolation(error)) throw error;
     const existing = await prisma.sideEffectIntent.findUnique({ where: { effectKey: input.effectKey } });
     if (!existing || !sameIdentity(existing, input)) {
       throw new SideEffectIdentityConflictError(input.effectKey);

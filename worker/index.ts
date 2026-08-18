@@ -6,8 +6,19 @@ import {
   sanitizePersistedTaskError,
 } from "../src/lib/tasks";
 import { createCredentialWorkerHandlers } from "./handlers/credential";
+import { createIndexNowWorkerHandlers } from "./handlers/indexnow-delivery";
 import { createMoboreaderWorkerHandlers } from "./handlers/moboreader";
+import { createSitemapRefreshWorkerHandlers } from "./handlers/sitemap-refresh";
 import { parseShutdownDrainTimeoutEnv, runWorker } from "./runtime";
+
+export function createWorkerHandlers(prisma: PrismaClient) {
+  return createHandlerRegistry({
+    ...createCredentialWorkerHandlers(prisma),
+    ...createMoboreaderWorkerHandlers(prisma),
+    ...createIndexNowWorkerHandlers(prisma),
+    ...createSitemapRefreshWorkerHandlers(prisma),
+  });
+}
 
 export async function main(): Promise<void> {
   const shutdownDrainTimeoutMs = parseShutdownDrainTimeoutEnv(
@@ -18,10 +29,7 @@ export async function main(): Promise<void> {
   const stop = () => controller.abort();
   process.once("SIGINT", stop);
   process.once("SIGTERM", stop);
-  const handlers = createHandlerRegistry({
-    ...createCredentialWorkerHandlers(prisma),
-    ...createMoboreaderWorkerHandlers(prisma),
-  });
+  const handlers = createWorkerHandlers(prisma);
   const allowlist = buildWorkerAllowlist(process.env.WORKER_TASK_ALLOWLIST, handlers);
   if (allowlist.invalid.length > 0) {
     console.error(`Unregistered task types were excluded: ${allowlist.invalid.join(",")}`);
