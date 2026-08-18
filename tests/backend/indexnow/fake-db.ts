@@ -415,7 +415,7 @@ export function testEnv(overrides: Record<string, string | undefined> = {}): Nod
 export const TEST_SITE_URL = "https://cps-novel.example";
 
 /**
- * `internal-site-url.ts`'s `toAbsoluteSiteUrl`/`normalizeCanonicalUrl` read
+ * the shared `site-url.ts`'s `toAbsoluteUrl`/`normalizeCanonicalUrl` read
  * `process.env.SITE_URL` directly with no injectable override for callers
  * that go through `buildIndexNowCanonicalUrl` (`outbox.ts`, the worker
  * handler) — since `SiteUrlConfigurationError` is now thrown (not a default

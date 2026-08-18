@@ -7,12 +7,12 @@ import {
   isRegisteredSiteLocale,
   normalizeCanonicalUrl,
 } from "@/lib/indexnow/eligibility";
-import { IndexNowSiteUrlConfigurationError } from "@/lib/indexnow/internal-site-url";
+import { SiteUrlConfigurationError } from "@/lib/seo/site-url";
 
 const TEST_SITE_URL = "https://cps-novel.example";
 
 // `normalizeCanonicalUrl`/`buildIndexNowCanonicalUrl` read `process.env.SITE_URL`
-// via `internal-site-url.ts` with no injectable override (unlike
+// via the shared `src/lib/seo/site-url.ts` with no injectable override (unlike
 // `toAbsoluteSiteUrl` itself) — snapshot/restore around every test in this
 // file so the negative-path tests below can freely unset/mutate it without
 // leaking into `isNovelIndexNowEligible`'s unrelated tests.
@@ -73,13 +73,13 @@ describe("normalizeCanonicalUrl", () => {
   describe("SITE_URL configuration — fail-closed, no default domain (merge-review §4c)", () => {
     it("throws when SITE_URL is not set at all", () => {
       delete process.env.SITE_URL;
-      expect(() => normalizeCanonicalUrl("/novel/x-p1")).toThrow(IndexNowSiteUrlConfigurationError);
+      expect(() => normalizeCanonicalUrl("/novel/x-p1")).toThrow(SiteUrlConfigurationError);
     });
 
     it("does NOT fall back to NEXT_PUBLIC_SITE_URL — throws even when only that is set", () => {
       delete process.env.SITE_URL;
       process.env.NEXT_PUBLIC_SITE_URL = "https://should-not-be-used.example";
-      expect(() => normalizeCanonicalUrl("/novel/x-p1")).toThrow(IndexNowSiteUrlConfigurationError);
+      expect(() => normalizeCanonicalUrl("/novel/x-p1")).toThrow(SiteUrlConfigurationError);
     });
 
     it("never falls back to a hardcoded default domain (e.g. CPS's own production domain)", () => {
@@ -90,7 +90,7 @@ describe("normalizeCanonicalUrl", () => {
       } catch (caught) {
         error = caught;
       }
-      expect(error).toBeInstanceOf(IndexNowSiteUrlConfigurationError);
+      expect(error).toBeInstanceOf(SiteUrlConfigurationError);
       expect(String(error)).not.toContain("enpulsedrama.com");
     });
 
@@ -103,7 +103,7 @@ describe("normalizeCanonicalUrl", () => {
       ["ftp://x.example"],
     ])("rejects SITE_URL=%s (path, query, fragment, credentials, or non-HTTP(S) scheme)", (bad) => {
       process.env.SITE_URL = bad;
-      expect(() => normalizeCanonicalUrl("/novel/x-p1")).toThrow(IndexNowSiteUrlConfigurationError);
+      expect(() => normalizeCanonicalUrl("/novel/x-p1")).toThrow(SiteUrlConfigurationError);
     });
   });
 });
@@ -117,7 +117,7 @@ describe("buildIndexNowCanonicalUrl", () => {
   it("throws rather than silently using a default domain when SITE_URL is missing", () => {
     delete process.env.SITE_URL;
     expect(() => buildIndexNowCanonicalUrl({ locale: "en", slug: "great-novel", publicPageShortId: "abc123" })).toThrow(
-      IndexNowSiteUrlConfigurationError,
+      SiteUrlConfigurationError,
     );
   });
 });

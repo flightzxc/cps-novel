@@ -27,7 +27,7 @@ import {
   type PromoLinkReadinessState,
 } from "@/server/publication/visibility";
 
-import { toAbsoluteSiteUrl } from "./internal-site-url";
+import { toAbsoluteUrl } from "@/lib/seo/site-url";
 
 type Db = PrismaClient | Prisma.TransactionClient;
 
@@ -130,12 +130,13 @@ export function computeIndexNowRevision(updatedAt: Date): bigint {
 /**
  * Ported ADAPT from CPS `normalizeCanonicalUrl` (`indexnow-outbox.ts`):
  * forces `https:`, lowercases host, strips default ports, rejects query/
- * fragment and apparent double-encoding. `toAbsoluteSiteUrl` replaces CPS's
- * `toAbsoluteUrl` import (see `internal-site-url.ts`'s header for why this is
- * a private duplicate, not the shared module CPS had).
+ * fragment and apparent double-encoding. Uses the repo's single shared
+ * `toAbsoluteUrl` (`src/lib/seo/site-url.ts`) — the former private duplicate
+ * `internal-site-url.ts` was deleted at integration per its own directive
+ * once Stream D's shared module landed.
  */
 export function normalizeCanonicalUrl(input: string): string {
-  const absolute = toAbsoluteSiteUrl(input);
+  const absolute = toAbsoluteUrl(input);
   const url = new URL(absolute);
   if (url.search || url.hash) {
     throw new Error("IndexNow canonical URL must not contain a query string or fragment");

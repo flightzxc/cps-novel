@@ -30,50 +30,14 @@ const OPEN_GRAPH_TAGS: Record<string, string> = {
   nl: "nl_NL",
 };
 
-export class SiteUrlConfigurationError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "SiteUrlConfigurationError";
-  }
-}
+// Single source (v0.2.0 integration): `src/lib/seo/site-url.ts` is the only
+// implementation of getSiteUrl/SiteUrlConfigurationError in this repo, per the
+// round's arbitration. This module re-exports for existing consumers; the
+// former local duplicate (semantically identical) was removed as planned by
+// the TODO it carried.
+import { getSiteUrl, SiteUrlConfigurationError } from "@/lib/seo/site-url";
 
-/**
- * TODO(p2-10 / Stream D): once `src/lib/seo/site-url.ts` lands on the
- * integration branch, replace this body with
- * `export { getSiteUrl, SiteUrlConfigurationError } from "@/lib/seo/site-url"`.
- * Semantics below already match that module: SITE_URL only, absolute HTTP(S)
- * origin, no `NEXT_PUBLIC_SITE_URL` fallback.
- */
-export function getSiteUrl(
-  env: Readonly<{ SITE_URL?: string }> = { SITE_URL: process.env.SITE_URL },
-): string {
-  const raw = env.SITE_URL?.trim();
-  if (!raw) {
-    throw new SiteUrlConfigurationError("SITE_URL must be configured");
-  }
-
-  let parsed: URL;
-  try {
-    parsed = new URL(raw);
-  } catch {
-    throw new SiteUrlConfigurationError("SITE_URL must be an absolute HTTP(S) origin");
-  }
-
-  if (
-    (parsed.protocol !== "http:" && parsed.protocol !== "https:") ||
-    parsed.username ||
-    parsed.password ||
-    parsed.pathname !== "/" ||
-    parsed.search ||
-    parsed.hash
-  ) {
-    throw new SiteUrlConfigurationError(
-      "SITE_URL must be an absolute HTTP(S) origin without credentials, path, query, or fragment",
-    );
-  }
-
-  return parsed.origin;
-}
+export { getSiteUrl, SiteUrlConfigurationError };
 
 export function toAbsoluteUrl(path: ""): undefined;
 export function toAbsoluteUrl(path: null | undefined): undefined;
