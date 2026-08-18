@@ -35,26 +35,9 @@ const OPEN_GRAPH_TAGS: Record<string, string> = {
 // round's arbitration. This module re-exports for existing consumers; the
 // former local duplicate (semantically identical) was removed as planned by
 // the TODO it carried.
-import { getSiteUrl, SiteUrlConfigurationError } from "@/lib/seo/site-url";
+import { getSiteUrl, SiteUrlConfigurationError, toAbsoluteUrl } from "@/lib/seo/site-url";
 
-export { getSiteUrl, SiteUrlConfigurationError };
-
-export function toAbsoluteUrl(path: ""): undefined;
-export function toAbsoluteUrl(path: null | undefined): undefined;
-export function toAbsoluteUrl(path: string): string;
-export function toAbsoluteUrl(path: string | null | undefined): string | undefined;
-export function toAbsoluteUrl(path: string | null | undefined): string | undefined {
-  if (!path) {
-    return undefined;
-  }
-
-  if (/^https?:\/\//i.test(path)) {
-    return path;
-  }
-
-  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
-  return `${getSiteUrl()}${normalizedPath}`;
-}
+export { getSiteUrl, SiteUrlConfigurationError, toAbsoluteUrl };
 
 /** Truncate text to maxLen, ending at word boundary with ellipsis. */
 export function truncateDescription(text: string, maxLen = 155): string {

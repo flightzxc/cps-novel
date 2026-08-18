@@ -21,13 +21,24 @@ import { describe, expect, it } from "vitest";
  */
 
 const SRC_ROOT = join(process.cwd(), "src");
+// Same scan roots as publish-gate's no-bypass scanner: a copy pasted into
+// worker/ or scripts/ must trip this guard too.
+const SCAN_ROOTS = ["src", "worker", "scheduler", "scripts"]
+  .map((dir) => join(process.cwd(), dir))
+  .filter((dir) => {
+    try {
+      return statSync(dir).isDirectory();
+    } catch {
+      return false;
+    }
+  });
 
 function collectSourceFiles(dir: string, out: string[] = []): string[] {
   for (const entry of readdirSync(dir)) {
     const full = join(dir, entry);
     if (statSync(full).isDirectory()) {
       collectSourceFiles(full, out);
-    } else if (/\.(ts|tsx)$/.test(entry)) {
+    } else if (/\.(ts|tsx|mjs)$/.test(entry)) {
       out.push(full);
     }
   }
@@ -49,7 +60,7 @@ function nonCommentLines(file: string): Array<{ line: number; text: string }> {
 }
 
 describe("site-url single source", () => {
-  const files = collectSourceFiles(SRC_ROOT);
+  const files = SCAN_ROOTS.flatMap((root) => collectSourceFiles(root));
 
   it("never mentions the CPS production domain in live code", () => {
     const hits = files.flatMap((file) =>
@@ -77,7 +88,9 @@ describe("site-url single source", () => {
     );
     const fnDefs = files.filter((file) =>
       nonCommentLines(file).some(({ text }) =>
-        /function getSiteUrl\(/.test(text),
+        // function declaration or arrow/const re-implementation — a re-export
+        // line (`export { getSiteUrl ... } from`) intentionally does not match
+        /function getSiteUrl\(|getSiteUrl\s*=/.test(text),
       ),
     );
     const canonical = join(SRC_ROOT, "lib", "seo", "site-url.ts");
