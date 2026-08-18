@@ -1,0 +1,88 @@
+import { describe, expect, it, vi, beforeEach } from "vitest";
+
+const revalidatePath = vi.fn();
+vi.mock("next/cache", () => ({
+  revalidatePath: (...args: unknown[]) => revalidatePath(...args),
+}));
+
+import {
+  revalidatePublicArticlePaths,
+  revalidatePublicArticleSet,
+  revalidatePublicListings,
+} from "@/server/publication/revalidate";
+
+describe("revalidatePublicListings", () => {
+  beforeEach(() => revalidatePath.mockClear());
+
+  it("revalidates the home page and the browse listing, nothing else", () => {
+    revalidatePublicListings();
+    expect(revalidatePath.mock.calls).toEqual([["/"], ["/browse"]]);
+  });
+});
+
+describe("revalidatePublicArticlePaths", () => {
+  beforeEach(() => revalidatePath.mockClear());
+
+  it("revalidates listings, the article detail page, and the whole chapter subtree as a layout", () => {
+    revalidatePublicArticlePaths({ locale: "en", slug: "dragon-throne", shortId: "abc123" });
+    expect(revalidatePath.mock.calls).toEqual([
+      ["/"],
+      ["/browse"],
+      ["/novel/dragon-throne-pabc123"],
+      ["/novel/dragon-throne-pabc123/chapter", "layout"],
+    ]);
+  });
+
+  it("URL-encodes a slug that needs it, matching buildArticleRoutePath", () => {
+    revalidatePublicArticlePaths({ locale: "en", slug: "a b", shortId: "xyz" });
+    expect(revalidatePath).toHaveBeenCalledWith("/novel/a%20b-pxyz");
+    expect(revalidatePath).toHaveBeenCalledWith("/novel/a%20b-pxyz/chapter", "layout");
+  });
+});
+
+describe("revalidatePublicArticleSet", () => {
+  beforeEach(() => revalidatePath.mockClear());
+
+  it("revalidates listings exactly once regardless of how many articles are affected", () => {
+    revalidatePublicArticleSet([
+      { locale: "en", slug: "one", shortId: "aaa" },
+      { locale: "en", slug: "two", shortId: "bbb" },
+    ]);
+    const homeCalls = revalidatePath.mock.calls.filter((call) => call[0] === "/");
+    const browseCalls = revalidatePath.mock.calls.filter((call) => call[0] === "/browse");
+    expect(homeCalls).toHaveLength(1);
+    expect(browseCalls).toHaveLength(1);
+    expect(revalidatePath).toHaveBeenCalledWith("/novel/one-paaa");
+    expect(revalidatePath).toHaveBeenCalledWith("/novel/one-paaa/chapter", "layout");
+    expect(revalidatePath).toHaveBeenCalledWith("/novel/two-pbbb");
+    expect(revalidatePath).toHaveBeenCalledWith("/novel/two-pbbb/chapter", "layout");
+  });
+
+  it("still revalidates listings when the article list is empty (a Novel-level change with no affected Articles)", () => {
+    revalidatePublicArticleSet([]);
+    expect(revalidatePath.mock.calls).toEqual([["/"], ["/browse"]]);
+  });
+});
+
+describe("isolation: revalidatePath throwing outside a request-scoped context", () => {
+  beforeEach(() => revalidatePath.mockClear());
+
+  it("swallows a throw from any individual revalidatePath call and still attempts the rest", () => {
+    revalidatePath.mockImplementation((path: string) => {
+      if (path === "/") {
+        throw new Error("Invariant: static generation store missing (simulated out-of-request-scope call)");
+      }
+    });
+    expect(() =>
+      revalidatePublicArticlePaths({ locale: "en", slug: "s", shortId: "id1" }),
+    ).not.toThrow();
+    // The "/" call threw and was swallowed, but every subsequent call in the
+    // same broadcast still ran — one thrown path must not skip the rest.
+    expect(revalidatePath.mock.calls).toEqual([
+      ["/"],
+      ["/browse"],
+      ["/novel/s-pid1"],
+      ["/novel/s-pid1/chapter", "layout"],
+    ]);
+  });
+});
