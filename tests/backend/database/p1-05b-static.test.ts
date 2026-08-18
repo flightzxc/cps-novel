@@ -35,13 +35,23 @@ describe("P1-05B static database contracts", () => {
     // v0.2.0 foundation introduced this repo's first field/constraint renames
     // (IndexNowOutboxAttempt.attemptState -> outcome, and its CHECK), which
     // per docs/governance/database-governance.md §10 must be retained as
-    // `superseded` rather than deleted. "active" is no longer the only valid
-    // status; every record must be either currently active or an explicitly
-    // superseded historical entry — never any other value, and never simply
-    // dropped from the file.
+    // `superseded` rather than deleted. Exactly these two stable_keys are
+    // allowed to be non-active; every other record must still be exactly
+    // "active" — an unqualified `["active","superseded"]` allowlist would
+    // silently stop catching a future record mistakenly marked superseded.
+    const SUPERSEDED_STABLE_KEYS = new Set([
+      "db:public:indexnow_outbox_attempt:attempt_state",
+      "db:public:indexnow_outbox_attempt:indexnow_outbox_attempt_attempt_state_check",
+    ]);
     for (const record of records) {
-      expect(["active", "superseded"]).toContain(record.status);
+      const expectedStatus = SUPERSEDED_STABLE_KEYS.has(record.stable_key as string)
+        ? "superseded"
+        : "active";
+      expect(record.status).toBe(expectedStatus);
     }
+    expect(records.filter((record) => record.status === "superseded")).toHaveLength(
+      SUPERSEDED_STABLE_KEYS.size,
+    );
     expect(
       records
         .filter((record) => record.record_kind === "constraint")

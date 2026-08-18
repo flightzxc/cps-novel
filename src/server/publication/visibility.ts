@@ -24,6 +24,17 @@
  * `docs/governance/database-governance.md` §4's Novel/Article status
  * semantics table. Do not add a fifth ad hoc visibility check anywhere
  * else in the codebase — extend this module instead.
+ *
+ * Soft-delete is intentionally NOT modeled by the predicate functions above
+ * (`isPublicationStatePublic`, `isPubliclyAccessible`, etc.) — they only see
+ * `status`, never `deletedAt`. The `buildPrimary*Where`/`buildPublic*Where`
+ * fragments below are what enforce `deletedAt: null`. This is safe today
+ * because this module's only caller, `access.ts`'s
+ * `checkNovelArticlePublicAccess`, always loads its row through
+ * `buildPrimaryArticleWhere` first. A future caller that loads a row by id
+ * directly (skipping the where-builder) and then calls a predicate function
+ * on it would incorrectly treat a soft-deleted row as publicly accessible —
+ * always route through a `build*Where` fragment before calling a predicate.
  */
 import type { Prisma } from "@prisma/client";
 
