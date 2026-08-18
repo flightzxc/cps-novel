@@ -74,6 +74,31 @@ P1-05A 只登记从 CPS 提取的数据库**模式证据**；没有字节复制�
 | `resolveArticlePublishTimeForWrite` | `src/lib/article-publish-time.ts` | `1-26` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `COPY` | 原样复制：published 且无显式/既有 publishTime → now，否则取 submitted/existing 首个非空值；零依赖纯函数，字段名与业务语义均未改动 | Claude |
 | `offlineDrama`/`takedownDrama`/`restoreDrama` 编排骨架 → `applyNovelRightsTransition`(withdraw/takedown/restore) | `src/actions/drama-publish-actions.ts` | `294-486` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | 保留「查询受影响 article → 更新 status → 下游任务」顺序与三态划分；**改**：`rightsStatus` 独立轴改读同一 `NovelStatus`/`ArticleStatus` 枚举；`offline`纯 404 改 `unpublished` 的 noindex 保留页语义（本 PR 只落状态，不做渲染层）；`takedown` 新增 `NovelChapterContent` 删除工作流（CPS 无对应代码）；`restoreDrama` 可能直接回到之前状态（含 published）在小说侧明确**不搬**——改为恒回 `draft`，再次发布必须重过 evaluator（P2_01 §0 决策4 无 MANUAL_EXCEPTION）；revalidate 步骤delegate 给 Stream C，本 PR 不实现 | Claude |
 | `publishDrama` 编排骨架（刨去 article-generation 部分）→ `applyPublishTransition` | `src/actions/drama-publish-actions.ts` | `93-288`（刨去 `buildArticleSnapshot`/`getPreferredAutoTemplate` 约 60 行后的骨架） | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | 保留「查找已有 article → 切换 status → 下游任务」骨架；**新增**（CPS 无对应）：发布前必须调用 evaluator（P2-07 核心交付）、Novel 与其 Article 同事务共同发布；**不搬** `buildArticleSnapshot`/`getPreferredAutoTemplate` 模板自动渲染正文逻辑（小说侧 Article.body 由已授权内容生产路径填充，非本任务范围） | Claude |
+| `getHomeName` | `src/lib/breadcrumb-i18n.ts` | `31-34` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `COPY` | 原样复制；多语词条保留 | Cursor |
+| `addHeadingIds` | `src/lib/blog-content-utils.ts` | `17-28` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `COPY` | 原样复制 | Cursor |
+| `extractTocItems` | `src/lib/blog-content-utils.ts` | `34-61` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `COPY` | 原样复制 | Cursor |
+| `extractFaqItemsFromContent` | `src/lib/blog-seo.ts` | `191-213` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `COPY` | 原样复制；不搬 blog 路径 / hreflang / BlogPosting | Cursor |
+| `extractFaqItemsFromJsonBlocks` | `src/lib/blog-seo.ts` | `164-189` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `COPY` | 原样复制 | Cursor |
+| `buildFaqJsonLd`（源 `buildBlogFaqJsonLd`） | `src/lib/blog-seo.ts` | `215-231` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | 去 Blog 前缀；JSON-LD 形状不变 | Cursor |
+| `Pagination` | `src/components/site/pagination.tsx` | `10-59` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | 去掉 next-intl / `@/i18n/navigation`；英文 label props；token 换成 novel-* | Cursor |
+| `generateWebSiteJsonLd` | `src/lib/seo-utils.ts` | `14-22` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | origin 改走 `_shared.getSiteUrl`，无 PulseDrama 默认域 | Cursor |
+| `generateCreativeWorkJsonLd` | `src/lib/seo-utils.ts` | `38-57` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | `@type` 改 Book；`/drama/${slug}` 改为调用方传入 url；`episodeCount`→`chapterCount`；删 platform/provider | Cursor |
+| `generateBreadcrumbJsonLd` | `src/lib/seo-utils.ts` | `66-77` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `COPY` | 原样复制（origin 经 getSiteUrl） | Cursor |
+| `generateItemListJsonLd` | `src/lib/seo-utils.ts` | `88-103` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `COPY` | 原样复制 | Cursor |
+| `canonicalUrl` | `src/lib/seo-utils.ts` | `107-109` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `COPY` | 原样复制 | Cursor |
+| `buildHreflangAlternates` | `src/lib/seo-utils.ts` | `127-135` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | `SUPPORTED_SITE_LOCALES` 换成 `SITE_LOCALES`；仍是同路径 locale 前缀 map，不是跨 Novel 兄弟页 | Cursor |
+| `shouldNoIndex` | `src/lib/seo-utils.ts` | `139-141` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `COPY` | 原样复制 | Cursor |
+| `normalizeMetadataTitle` | `src/lib/seo-meta-generator.ts` | `82-94` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `COPY` | 原样复制 | Cursor |
+| `generateSeoMeta` | `src/lib/seo-meta-generator.ts` | `103-126` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | entity 从 drama/tag/category 收成 novel/home/collection；删 Short Dramas 默认文案 | Cursor |
+| `truncateDescription` | `src/lib/seo-templates/_shared.ts` | `7-15` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `COPY` | 原样复制 | Cursor |
+| `buildCanonical` | `src/lib/seo-templates/_shared.ts` | `21-26` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | origin 经 getSiteUrl，无 PulseDrama 默认域 | Cursor |
+| `buildLocaleCanonical` | `src/lib/seo-templates/_shared.ts` | `31-37` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `COPY` | 原样复制（en 无前缀） | Cursor |
+| `resolveOgImage` | `src/lib/seo-templates/_shared.ts` | `40-44` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | 去掉 pulsedrama 默认图；缺图 fail-closed | Cursor |
+| `paginatedRobots` | `src/lib/seo-templates/_shared.ts` | `47-50` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `COPY` | 原样复制 | Cursor |
+| `getSiteUrl` | `src/lib/site-url.ts` | `3-9` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | 内联进 `_shared.ts`，避免占用 Stream D 的 `site-url.ts` 落点；删除 `enpulsedrama.com` 默认域，缺 env 抛错 | Cursor |
+| `toAbsoluteUrl` | `src/lib/site-url.ts` | `11-26` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `COPY` | 原样复制到 `_shared.ts` | Cursor |
+| `openGraphLocaleTag`（源 `toOgLocale`） | `src/lib/i18n/og-locale.ts` | `31-33` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | 改名以免触发「第二份 locale 映射」守卫；表内容保留 | Cursor |
+| `buildNovelSeoMeta`（源 `buildDramaSeoMeta`） | `src/lib/seo-templates/drama.ts` | `36-123` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | 文案与 JSON-LD 从 TVSeries/VideoObject 改成 Book；删预告片分支 | Cursor |
 
 ### 无搬运的任务（显式登记，避免被当成漏登）
 
