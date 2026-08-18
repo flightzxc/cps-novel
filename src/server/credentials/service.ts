@@ -11,22 +11,12 @@ import {
 import { AdminAccessError } from "@/lib/auth/errors";
 import type { AdminIdentityStore, SessionStore } from "@/lib/auth/ports";
 import { requireFreshAdminServiceMutation, type AdminServiceAuthorization } from "@/server/auth/guards";
+import {
+  isSerializationFailure as isSerializableWriteConflict,
+  isUniqueConstraintViolation as isUniqueConflict,
+} from "@/lib/db/db-retry";
 
 type Dependencies = { db: PrismaClient; identities: AdminIdentityStore; sessions: SessionStore; now?: Date; env?: NodeJS.ProcessEnv };
-
-function isUniqueConflict(error: unknown): boolean {
-  return error instanceof Prisma.PrismaClientKnownRequestError && (
-    error.code === "P2002"
-    || (error.code === "P2010" && (error.meta as { code?: unknown } | undefined)?.code === "23505")
-  );
-}
-
-function isSerializableWriteConflict(error: unknown): boolean {
-  return error instanceof Prisma.PrismaClientKnownRequestError && (
-    error.code === "P2034"
-    || (error.code === "P2010" && (error.meta as { code?: unknown } | undefined)?.code === "40001")
-  );
-}
 
 function reason(value: string | undefined, required: boolean): string | null {
   const normalized = value?.trim() ?? "";
