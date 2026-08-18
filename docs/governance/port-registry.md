@@ -107,6 +107,9 @@ P1-05A 只登记从 CPS 提取的数据库**模式证据**；没有字节复制�
 | `GET /sitemap/[fileName]` 静态只读路由 | `src/app/sitemap/[fileName]/route.ts` | `1-35` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | 保留文件名先验校验、非法 404、静态缺失 503；仅调整 import 落点，fixture 验收不经过 HTTP | Codex |
 | `robots` metadata 路由 | `src/app/robots.ts` | `1-17` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | 保留 allow 全站、私有前缀 disallow 与 sitemap 声明；后台路径换为小说仓路由，站点 origin 改为必填且严格校验的 SITE_URL | Codex |
 | `getSiteUrl`/`toAbsoluteUrl` | `src/lib/site-url.ts` | `1-26` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | 保留单一绝对 URL 接缝与相对路径拼接；删除 CPS 硬编码域名和 NEXT_PUBLIC 回退，SITE_URL 缺失或非纯 origin 时 fail-closed | Codex |
+| `buildDramaPageEntries`/`buildMainPageEntries`/`buildSitemapFamily` → `createSitemapFamilyBuilder` | `src/lib/sitemap.ts` | `157-205,260-310,420-444,476-484,640-696` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | 仅保留首页与 Article 详情页集合、10,000 分片和 PG Date lastmod；DB 层 PromoLink 非空只做预过滤，每行仍调用冻结的 `isPromoReady`/发布状态谓词；URL 直接复用冻结 `buildArticlePath`，删除 blog/Category/Tag/北斗分支 | Codex |
+| `enqueueSitemapRefresh` | `src/lib/sitemap-refresh-enqueue.ts` | `1-57` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | 保留 pending/processing coalesce 意图；CPS BatchTask 改接 GenericTask 单一 global scope，并用 PostgreSQL advisory transaction lock 消除并发重复；关闭 feature flag 时不建任务，不搬旧 stale-recovery | Codex |
+| `handleSitemapRefresh` → `createSitemapRefreshHandler` | `worker/handlers/sitemap-refresh.ts` | `1-70` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | 保留有效文件锁 coalesced success、35 分钟陈旧锁按 runId 释放后仅重试一次、失败保留旧版本；改为 GenericTask `TaskHandler` outcome 并复用 runtime lease/heartbeat/fencing/过期回收 | Codex |
 
 ### 无搬运的任务（显式登记，避免被当成漏登）
 
