@@ -111,6 +111,17 @@ export function isNovelIndexNowEligible(
  * published Article produces a new `(url, revision)` pair and is resubmitted
  * to IndexNow, while a byte-identical retry of the same write is naturally
  * deduplicated by the unique constraint.
+ *
+ * 🟡 Known edge case, not a defect (`scratchpad/reports/E-REVIEW.md` §4b):
+ * `@updatedAt` is generated application-side (Prisma reads `Date.now()` on
+ * the process issuing the write), not by the database clock. If that
+ * process's clock is stepped backward by NTP between two edits of the same
+ * Article, the later edit can compute a *smaller* `updatedAt.getTime()` than
+ * an earlier one. If that smaller value happens to collide exactly (to the
+ * millisecond) with a `(url, revision)` pair that already exists, the write
+ * is classified `duplicate` and silently not resubmitted — a missed
+ * submission, not corrupted data, and it requires both a clock step-back and
+ * a millisecond-exact historical collision to trigger.
  */
 export function computeIndexNowRevision(updatedAt: Date): bigint {
   return BigInt(updatedAt.getTime());

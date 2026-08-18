@@ -3,7 +3,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { invalidateSiteSettingCache } from "@/server/site-settings/service";
 
 import { createIndexNowDeliveryHandler } from "../../../worker/handlers/indexnow-delivery";
-import { FakeIndexNowDb, testEnv } from "./fake-db";
+import { FakeIndexNowDb, TEST_SITE_URL, installTestSiteUrl, testEnv } from "./fake-db";
+
+installTestSiteUrl();
 
 const ENABLED_ENV = testEnv({ FEATURE_INDEXNOW_DELIVERY: "true", INDEXNOW_DELIVERY_ALLOW_WRITE: "true" });
 const LOCALE_OK = { isLocalePublishable: () => true };
@@ -43,7 +45,7 @@ function seedDueRow(fake: FakeIndexNowDb, overrides: Partial<Parameters<FakeInde
   fake.seedOutbox({
     id: "outbox-1",
     articleId: "article-1",
-    url: "https://enpulsedrama.com/novel/great-novel-pabc123",
+    url: `${TEST_SITE_URL}/novel/great-novel-pabc123`,
     revision: BigInt(new Date("2026-01-01T00:00:00.000Z").getTime()),
     status: "pending",
     attemptCount: 0,
@@ -83,7 +85,7 @@ describe("createIndexNowDeliveryHandler — fetchImpl-injected delivery outcomes
     const row = fake.outbox.get("outbox-1")!;
     expect(row.status).toBe("accepted");
     expect(row.attemptCount).toBe(1);
-    expect(row.payloadHost).toBe("enpulsedrama.com");
+    expect(row.payloadHost).toBe("indexnow-host.cps-novel.example");
     expect(row.lastHttpStatus).toBe(200);
 
     const attempt = [...fake.attempts.values()][0]!;
@@ -100,8 +102,8 @@ describe("createIndexNowDeliveryHandler — fetchImpl-injected delivery outcomes
 
     const [, init] = fetchImpl.mock.calls[0]!;
     const body = JSON.parse(init!.body as string);
-    expect(body.urlList).toEqual(["https://enpulsedrama.com/novel/great-novel-pabc123"]);
-    expect(body.host).toBe("enpulsedrama.com");
+    expect(body.urlList).toEqual([`${TEST_SITE_URL}/novel/great-novel-pabc123`]);
+    expect(body.host).toBe("indexnow-host.cps-novel.example");
     expect(body.key).toBe("test-index-now-key");
   });
 
@@ -219,7 +221,7 @@ describe("createIndexNowDeliveryHandler — pre-flight skip paths never call fet
 
   it("skips and cancels a row whose canonical URL changed (e.g. a slug edit)", async () => {
     const fake = new FakeIndexNowDb();
-    seedDueRow(fake, { url: "https://enpulsedrama.com/novel/old-slug-pabc123" });
+    seedDueRow(fake, { url: `${TEST_SITE_URL}/novel/old-slug-pabc123` });
     const fetchImpl = vi.fn();
     const handler = createIndexNowDeliveryHandler(fake.asPrismaClient(), fetchImpl, ENABLED_ENV, LOCALE_OK);
     const outcome = await handler(context("outbox-1"));

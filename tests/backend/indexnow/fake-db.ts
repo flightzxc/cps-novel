@@ -7,6 +7,7 @@
  * `$transaction` (see the outbox/recovery/handler file headers for why —
  * plain sequential writes, not fenced), so this double does not implement one.
  */
+import { afterEach, beforeEach } from "vitest";
 import { Prisma, type PrismaClient } from "@prisma/client";
 
 export type FakePromoLink = { status: string; webUrl: string | null; appUrl: string | null } | null;
@@ -82,9 +83,9 @@ function freshId(prefix: string): string {
 export type FakeSiteSetting = { indexNowHost: string; indexNowKey: string; indexNowKeyLocation: string; updatedAt: Date };
 
 const DEFAULT_SITE_SETTING: FakeSiteSetting = {
-  indexNowHost: "enpulsedrama.com",
+  indexNowHost: "indexnow-host.cps-novel.example",
   indexNowKey: "test-index-now-key",
-  indexNowKeyLocation: "https://enpulsedrama.com/test-index-now-key.txt",
+  indexNowKeyLocation: "https://indexnow-host.cps-novel.example/test-index-now-key.txt",
   updatedAt: new Date("2026-01-01T00:00:00.000Z"),
 };
 
@@ -409,4 +410,29 @@ export class FakeIndexNowDb {
  */
 export function testEnv(overrides: Record<string, string | undefined> = {}): NodeJS.ProcessEnv {
   return { NODE_ENV: "test", ...overrides };
+}
+
+export const TEST_SITE_URL = "https://cps-novel.example";
+
+/**
+ * `internal-site-url.ts`'s `toAbsoluteSiteUrl`/`normalizeCanonicalUrl` read
+ * `process.env.SITE_URL` directly with no injectable override for callers
+ * that go through `buildIndexNowCanonicalUrl` (`outbox.ts`, the worker
+ * handler) — since `SiteUrlConfigurationError` is now thrown (not a default
+ * domain) when it is unset, every test file exercising those call paths
+ * must set it. Call this once at module scope in such a file; it registers
+ * `beforeEach`/`afterEach` against that file's root suite (a file importing
+ * and calling this synchronously during collection is the same pattern as
+ * defining hooks directly in the file).
+ */
+export function installTestSiteUrl(url: string = TEST_SITE_URL): void {
+  let previous: string | undefined;
+  beforeEach(() => {
+    previous = process.env.SITE_URL;
+    process.env.SITE_URL = url;
+  });
+  afterEach(() => {
+    if (previous === undefined) delete process.env.SITE_URL;
+    else process.env.SITE_URL = previous;
+  });
 }

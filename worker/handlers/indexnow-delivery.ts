@@ -126,6 +126,19 @@ export function createIndexNowDeliveryHandler(
       return { status: "skipped", result: { reason: "eligibility_drift" } };
     }
 
+    // `row.attemptCount` was read via `findUnique` above, not a fenced
+    // `SELECT ... FOR UPDATE` — two workers racing the same due row (e.g.
+    // after a lease-expiry requeue hands the same `indexNowOutbox` row to a
+    // second `GenericTaskItem` before the first one's write lands) can both
+    // read the same `attemptCount` and compute the same `attemptNo` here.
+    // That race is closed by `IndexNowOutboxAttempt`'s own
+    // `@@unique([outboxId, attemptNo])` (`prisma/schema.prisma`), not by an
+    // explicit CAS: the loser's `create` below throws a unique-violation and
+    // the item fails/retries rather than proceeding. Because this `create`
+    // runs *before* the HTTP call, the loser never reaches `fetchImpl` —
+    // the unique index is what actually prevents a duplicate submission
+    // here, not merely a duplicate audit row
+    // (`scratchpad/reports/E-REVIEW.md` §3).
     const attemptNo = row.attemptCount + 1;
     const requestBatchId = randomUUID();
     const requestAt = new Date();

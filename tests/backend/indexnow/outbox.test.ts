@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 
 import { enqueueIndexNowFirstPublish, findPublishedWithoutIndexNowDelivery, releaseDeferredIndexNowOutbox } from "@/lib/indexnow/outbox";
 
-import { FakeIndexNowDb, testEnv } from "./fake-db";
+import { FakeIndexNowDb, installTestSiteUrl, testEnv } from "./fake-db";
+
+installTestSiteUrl();
 
 const ENABLED_ENV = testEnv({ FEATURE_INDEXNOW_OUTBOX: "true", INDEXNOW_OUTBOX_ALLOW_WRITE: "true" });
 // `isPublishableLocale` (the real default) is an empty whitelist pending

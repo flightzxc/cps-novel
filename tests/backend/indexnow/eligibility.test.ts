@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import {
   buildIndexNowCanonicalUrl,
@@ -7,6 +7,31 @@ import {
   isRegisteredSiteLocale,
   normalizeCanonicalUrl,
 } from "@/lib/indexnow/eligibility";
+import { IndexNowSiteUrlConfigurationError } from "@/lib/indexnow/internal-site-url";
+
+const TEST_SITE_URL = "https://cps-novel.example";
+
+// `normalizeCanonicalUrl`/`buildIndexNowCanonicalUrl` read `process.env.SITE_URL`
+// via `internal-site-url.ts` with no injectable override (unlike
+// `toAbsoluteSiteUrl` itself) — snapshot/restore around every test in this
+// file so the negative-path tests below can freely unset/mutate it without
+// leaking into `isNovelIndexNowEligible`'s unrelated tests.
+let previousSiteUrl: string | undefined;
+let previousPublicSiteUrl: string | undefined;
+
+beforeEach(() => {
+  previousSiteUrl = process.env.SITE_URL;
+  previousPublicSiteUrl = process.env.NEXT_PUBLIC_SITE_URL;
+  process.env.SITE_URL = TEST_SITE_URL;
+  delete process.env.NEXT_PUBLIC_SITE_URL;
+});
+
+afterEach(() => {
+  if (previousSiteUrl === undefined) delete process.env.SITE_URL;
+  else process.env.SITE_URL = previousSiteUrl;
+  if (previousPublicSiteUrl === undefined) delete process.env.NEXT_PUBLIC_SITE_URL;
+  else process.env.NEXT_PUBLIC_SITE_URL = previousPublicSiteUrl;
+});
 
 describe("computeIndexNowRevision", () => {
   it("is the millisecond epoch of updatedAt", () => {
@@ -44,12 +69,56 @@ describe("normalizeCanonicalUrl", () => {
   it("rejects an apparently double-encoded path", () => {
     expect(() => normalizeCanonicalUrl("https://example.com/novel/%2520x")).toThrow(/double-encoded/);
   });
+
+  describe("SITE_URL configuration — fail-closed, no default domain (merge-review §4c)", () => {
+    it("throws when SITE_URL is not set at all", () => {
+      delete process.env.SITE_URL;
+      expect(() => normalizeCanonicalUrl("/novel/x-p1")).toThrow(IndexNowSiteUrlConfigurationError);
+    });
+
+    it("does NOT fall back to NEXT_PUBLIC_SITE_URL — throws even when only that is set", () => {
+      delete process.env.SITE_URL;
+      process.env.NEXT_PUBLIC_SITE_URL = "https://should-not-be-used.example";
+      expect(() => normalizeCanonicalUrl("/novel/x-p1")).toThrow(IndexNowSiteUrlConfigurationError);
+    });
+
+    it("never falls back to a hardcoded default domain (e.g. CPS's own production domain)", () => {
+      delete process.env.SITE_URL;
+      let error: unknown;
+      try {
+        normalizeCanonicalUrl("/novel/x-p1");
+      } catch (caught) {
+        error = caught;
+      }
+      expect(error).toBeInstanceOf(IndexNowSiteUrlConfigurationError);
+      expect(String(error)).not.toContain("enpulsedrama.com");
+    });
+
+    it.each([
+      ["https://x.example/some/path"],
+      ["https://x.example/?q=1"],
+      ["https://x.example/#frag"],
+      ["https://user:pass@x.example"],
+      ["not-a-url"],
+      ["ftp://x.example"],
+    ])("rejects SITE_URL=%s (path, query, fragment, credentials, or non-HTTP(S) scheme)", (bad) => {
+      process.env.SITE_URL = bad;
+      expect(() => normalizeCanonicalUrl("/novel/x-p1")).toThrow(IndexNowSiteUrlConfigurationError);
+    });
+  });
 });
 
 describe("buildIndexNowCanonicalUrl", () => {
   it("builds through the sole slug/article-path entry point", () => {
     const url = buildIndexNowCanonicalUrl({ locale: "en", slug: "great-novel", publicPageShortId: "abc123" });
-    expect(url).toBe("https://enpulsedrama.com/novel/great-novel-pabc123");
+    expect(url).toBe(`${TEST_SITE_URL}/novel/great-novel-pabc123`);
+  });
+
+  it("throws rather than silently using a default domain when SITE_URL is missing", () => {
+    delete process.env.SITE_URL;
+    expect(() => buildIndexNowCanonicalUrl({ locale: "en", slug: "great-novel", publicPageShortId: "abc123" })).toThrow(
+      IndexNowSiteUrlConfigurationError,
+    );
   });
 });
 
