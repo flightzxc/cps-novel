@@ -122,6 +122,8 @@ import type { PrismaClient } from "@prisma/client";
 import type { AdminIdentityStore, SessionStore } from "@/lib/auth/ports";
 import type { NovelStatus } from "@/domain/database-statuses";
 import type { SiteLocale } from "@/lib/locale/locale-canonical";
+import { enqueueIndexNow } from "@/lib/indexnow/dispatch-handler";
+import { enqueueSitemapRefreshForPublication } from "@/lib/tasks/sitemap-refresh";
 import { dispatchFirstPublicPublication } from "@/server/publication/dispatcher";
 import {
   revalidatePublicArticlePaths,
@@ -417,6 +419,14 @@ export async function applyPublishTransition(
         source: dispatchSource(input.actor),
       },
       db,
+      // Integration wiring (v0.2.0): both side-effect handlers attached in one
+      // place, per the round's Q2 ruling (streams export handlers + wiring
+      // list; the integrator applies the call-site edit). Each handler is
+      // internally double-gated by its own feature flags, default off.
+      {
+        enqueueIndexNow,
+        enqueueSitemapRefresh: enqueueSitemapRefreshForPublication,
+      },
     );
   }
 
