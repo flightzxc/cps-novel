@@ -15,6 +15,14 @@ export type LoadedArticle = {
   readonly novelId: string;
   readonly locale: string;
   readonly slug: string;
+  /**
+   * `Article.publicPageShortId` — carried through purely so
+   * `src/server/publish-gate/service.ts` can build the public path to
+   * revalidate after a transition commits (`@/server/publication/revalidate`)
+   * without a second query. Not read by the gate itself (`evaluator.ts`
+   * never sees this value).
+   */
+  readonly publicPageShortId: string;
   readonly status: string;
   readonly publishedAt: Date | null;
 };
@@ -42,6 +50,7 @@ export async function loadPublishGateFacts(
       novelId: true,
       locale: true,
       slug: true,
+      publicPageShortId: true,
       status: true,
       title: true,
       body: true,
@@ -111,6 +120,7 @@ export async function loadPublishGateFacts(
       novelId: article.novelId,
       locale: article.locale,
       slug: article.slug,
+      publicPageShortId: article.publicPageShortId,
       status: article.status,
       publishedAt: article.publishedAt,
     },

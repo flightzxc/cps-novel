@@ -33,7 +33,20 @@ export type FakeArticle = {
   publishAt: Date | null;
   deletedAt: Date | null;
   promoLink: FakePromoLink;
+  /**
+   * Optional: only the invalidation-wiring tests
+   * (`tests/backend/publish-gate/invalidation-wiring.test.ts`) need a real,
+   * assertable value here. Every other existing test seeds Articles without
+   * it and gets `defaultShortId(id)` — deterministic, never asserted on by
+   * tests that don't care about it.
+   */
+  publicPageShortId?: string;
 };
+
+/** Deterministic fallback for `FakeArticle.publicPageShortId` when a test doesn't set one. */
+function defaultShortId(articleId: string): string {
+  return articleId.replace(/[^a-z0-9]/gi, "").slice(0, 8) || "shortid1";
+}
 export type FakeChapter = { id: string; novelId: string; status: string; deletedAt: Date | null; body: string | null };
 export type FakeAudit = {
   actorType: string;
@@ -100,6 +113,7 @@ export class FakePublishGateDb {
         novelId: article.novelId,
         locale: article.locale,
         slug: article.slug,
+        publicPageShortId: article.publicPageShortId ?? defaultShortId(article.id),
         status: article.status,
         title: article.title,
         body: article.body,
@@ -173,12 +187,17 @@ export class FakePublishGateDb {
   private articleFindMany = async (args: { where: Record<string, unknown> }) => {
     this.calls.push("article.findMany");
     const where = args.where;
-    const results: Array<{ id: string }> = [];
+    const results: Array<{ id: string; locale: string; slug: string; publicPageShortId: string }> = [];
     for (const article of this.articles.values()) {
       if (article.novelId !== where.novelId) continue;
       if (where.deletedAt === null && article.deletedAt !== null) continue;
       if (where.status !== undefined && article.status !== where.status) continue;
-      results.push({ id: article.id });
+      results.push({
+        id: article.id,
+        locale: article.locale,
+        slug: article.slug,
+        publicPageShortId: article.publicPageShortId ?? defaultShortId(article.id),
+      });
     }
     return results;
   };
