@@ -85,11 +85,13 @@ export async function loadIndexNowCandidateArticle(
  * an injectable predicate so tests are not permanently red against the
  * production-empty whitelist.
  */
+export type IndexNowEligibilityOptions = { isLocalePublishable?: (locale: string) => boolean };
+
 export function isNovelIndexNowEligible(
   article: Pick<IndexNowCandidateArticle, "locale" | "status">,
   novel: NovelPublicationState,
   promoLink: PromoLinkReadinessState,
-  options: { isLocalePublishable?: (locale: string) => boolean } = {},
+  options: IndexNowEligibilityOptions = {},
 ): boolean {
   const localeGate = options.isLocalePublishable ?? isPublishableLocale;
   if (!localeGate(article.locale)) return false;

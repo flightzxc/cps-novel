@@ -33,6 +33,7 @@ import {
   computeIndexNowRevision,
   isNovelIndexNowEligible,
   loadIndexNowCandidateArticle,
+  type IndexNowEligibilityOptions,
 } from "./eligibility";
 import {
   INDEXNOW_DELIVERY_TASK_TYPE,
@@ -90,6 +91,12 @@ export async function enqueueIndexNowFirstPublish(
   db: Db,
   input: EnqueueIndexNowFirstPublishInput,
   env: NodeJS.ProcessEnv = process.env,
+  // Threaded through to `isNovelIndexNowEligible` for the same reason
+  // `eligibility.ts`'s doc comment gives: the real `isPublishableLocale`
+  // whitelist is empty pending D-7, which would otherwise make every test
+  // of this function's happy path permanently red. Production callers never
+  // pass this — see `dispatch-handler.ts`.
+  eligibilityOptions?: IndexNowEligibilityOptions,
 ): Promise<EnqueueIndexNowFirstPublishResult> {
   if (!isIndexNowOutboxEnabled(env) || !isIndexNowOutboxWriteAllowed(env)) {
     return { outcome: "disabled" };
@@ -100,7 +107,7 @@ export async function enqueueIndexNowFirstPublish(
 
   const article = await loadIndexNowCandidateArticle(db, input.articleId);
   if (!article) return { outcome: "ineligible" };
-  if (!isNovelIndexNowEligible(article, article.novel, article.promoLink)) {
+  if (!isNovelIndexNowEligible(article, article.novel, article.promoLink, eligibilityOptions)) {
     return { outcome: "ineligible" };
   }
 
@@ -211,6 +218,7 @@ export async function releaseDeferredIndexNowOutbox(
 export async function findPublishedWithoutIndexNowDelivery(
   db: Db,
   limit = 500,
+  eligibilityOptions?: IndexNowEligibilityOptions,
 ): Promise<Array<{ articleId: string; novelId: string; locale: string; canonicalUrl: string }>> {
   const boundedLimit = Math.max(1, Math.min(limit, 5000));
   const candidates = await db.article.findMany({
@@ -232,7 +240,7 @@ export async function findPublishedWithoutIndexNowDelivery(
   for (const id of missingIds) {
     const article = await loadIndexNowCandidateArticle(db, id);
     if (!article) continue;
-    if (!isNovelIndexNowEligible(article, article.novel, article.promoLink)) continue;
+    if (!isNovelIndexNowEligible(article, article.novel, article.promoLink, eligibilityOptions)) continue;
     results.push({
       articleId: article.id,
       novelId: article.novelId,

@@ -42,6 +42,7 @@ import {
   buildIndexNowCanonicalUrl,
   isNovelIndexNowEligible,
   loadIndexNowCandidateArticle,
+  type IndexNowEligibilityOptions,
 } from "../../src/lib/indexnow/eligibility";
 import {
   classifyIndexNowResult,
@@ -69,6 +70,9 @@ export function createIndexNowDeliveryHandler(
   db: PrismaClient,
   fetchImpl: FetchLike = fetch,
   env: NodeJS.ProcessEnv = process.env,
+  // Same test-injectability escape hatch as `outbox.ts`'s
+  // `enqueueIndexNowFirstPublish` — see that function's doc comment.
+  eligibilityOptions?: IndexNowEligibilityOptions,
 ): TaskHandler {
   return async ({ lease }) => {
     const { outboxId } = payload(lease.payload);
@@ -103,7 +107,9 @@ export function createIndexNowDeliveryHandler(
     // its canonical URL has not changed (e.g. a slug edit) before spending a
     // submission on it.
     const article = row.articleId ? await loadIndexNowCandidateArticle(db, row.articleId) : null;
-    const stillEligible = article ? isNovelIndexNowEligible(article, article.novel, article.promoLink) : false;
+    const stillEligible = article
+      ? isNovelIndexNowEligible(article, article.novel, article.promoLink, eligibilityOptions)
+      : false;
     const currentCanonical = stillEligible && article ? buildIndexNowCanonicalUrl(article) : null;
     if (!stillEligible || currentCanonical !== row.url) {
       await db.indexNowOutbox.update({
