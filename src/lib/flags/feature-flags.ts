@@ -43,6 +43,8 @@ export function isIndexNowDeliveryEnabled(env: NodeJS.ProcessEnv = process.env):
 /** Second key: even with the feature on, the worker only calls the real IndexNow API / writes attempt or outcome data when this is also true. */
 export function isIndexNowDeliveryWriteAllowed(env: NodeJS.ProcessEnv = process.env): boolean {
   return env[INDEXNOW_DELIVERY_ALLOW_WRITE_FLAG] === "true";
+}
+
 export function isSitemapAutoRefreshEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
   return env[SITEMAP_AUTO_REFRESH_FEATURE_FLAG] === "true";
 }
