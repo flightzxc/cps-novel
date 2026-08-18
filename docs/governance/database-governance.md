@@ -313,3 +313,15 @@ P1-08B 新增独立 `scheduler_app`，只授予 schedule/generic task 元数据�
 | 2026-08-04 | P1-08B | 增加六张 Auth 表、生产 PostgreSQL Store、独立 scheduler_app、Credential validate/supersede Worker 与脱敏查询；create/replace secret intake 保持 Gate | Codex | PostgreSQL 16.14 disposable verification PASS |
 | 2026-08-04 | P1-08B | Owner 关闭 Secret Ingress Gate：Web 同步校验并加密新 JWT，只获密文 INSERT、无持久化密文 SELECT；add/replace 返回 metadata，validate/supersede 保持 Worker 异步 | Codex | `P1_08B_WEB_SYNCHRONOUS_INGRESS_APPROVED`；待 targeted review |
 | 2026-08-18 | v0.2.0-foundation（Stream F，P2-07～12 一轮实施） | 唯一 Migration `20260818120000_v020_foundation_shared`：`indexnow_outbox` 补 8 字段、`indexnow_outbox_attempt` 更名 `attempt_state`→`outcome` 并新增 CPS 崩溃恢复语义的 `attempt_state`/`worker_task_id`、新建单例 `site_setting` 表（PG 化自 CPS，DROP 北斗/飞书/轮播 JSON 专属字段）；随附 db-retry 与 `credentials/service.ts` 内联判定收敛、可见性谓词族 `src/server/publication/visibility.ts`、`SiteSetting` accessor、公开访问入口适配、`publication-dispatcher`、Article path builder 移植 | Claude（Sonnet 编码/Opus 复核） | 一次性 PostgreSQL 16 容器验证 PASS（44 张表、950 条 active 字典记录、零 drift）；**P1 既有 45 个模型的字典词典全量回填另立轻量任务，不阻塞本轮**（沿用 2026-08-12 Owner 裁决第 2 条） |
+| 2026-08-18 | v0.2.0-publish-gate（Stream A，P2-07 发布门禁，合并前 Opus 复核 必改1/2） | 零 schema 改动。`applyPublishTransition` 收口 TOCTOU（facts/gate 读取移入事务、写入改条件 `updateMany`+`count` 校验+失败即抛出回滚）；移除 `OperationAudit` 上一版依赖 P2002 恢复的死分支，相关幂等注释降级为"顺序重试幂等，非并发安全"；§13 登记 `operation_audit` 幂等唯一索引为跟进项 | Claude（Sonnet 编码/Opus 复核） | `npm test` 1277 passed / 85 skipped；新增 TOCTOU 并发交错回归测试（`tests/backend/publish-gate/service.test.ts`，注入钩子模拟交错时序） |
+
+## 13. 待跟进项（Schema 变更队列，Owner 待批）
+
+本节登记"已识别、本轮因 schema 冻结未处理"的数据库变更需求，供下一轮 migration 排期时核对；
+未经 Owner 批准不得抢跑新增 migration。
+
+| 登记日期 | 提出方 | 表/字段 | 现状 | 建议变更 | 依据 |
+| --- | --- | --- | --- | --- | --- |
+| 2026-08-18 | Claude（Stream A，P2-07 合并前复核） | `operation_audit`（`prisma/schema.prisma:755-774`） | 仅 `@@index([requestId], map: "operation_audit_request_idx")` 普通索引；`(actor_type, action, entity_type, entity_id, request_id)` 无唯一约束 | 新增部分唯一索引 `(action, entity_type, entity_id, request_id)`（或含 `actor_type`），使 `src/server/publish-gate/service.ts` 的写口/权利态转换幂等判定从"应用层 check-then-insert（仅顺序重试安全）"升级为"数据库层强制（并发安全）" | `scratchpad/reports/A-REVIEW.md` 必改 2：`OperationAudit` 无唯一约束⇒P2002 恢复分支为死代码⇒并发同 `requestId` 提交可双写审计行 + 双发 `dispatchFirstPublicPublication`。本轮范围内 schema 已冻结（`P2_07_12_一轮实施分工方案_2026-08-12.md`），不新增 migration；已在 `service.ts` 相应位置的注释与本文件 §12 变更日志如实标注该限制，不作虚假的并发安全声明 |
+
+
