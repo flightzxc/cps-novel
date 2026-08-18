@@ -22,6 +22,14 @@ import {
 
 export type { PublicChromeCurrent };
 
+/**
+ * Hard cap on the public Article candidate set loaded into memory before
+ * `isPromoReady` filtering and in-memory pagination.
+ *
+ * Impact if the catalog grows past this cap (accepted for V1, not fixed here):
+ * - `paginateCards` `totalCount` / `totalPages` under-count (browse pager lies)
+ * - sitemap may still emit URLs that `/browse` never lists (internal-link gap)
+ */
 export const PUBLIC_LIST_CAP = 240;
 export const HOME_GRID_LIMIT = 20;
 export const BROWSE_PAGE_SIZE = 20;

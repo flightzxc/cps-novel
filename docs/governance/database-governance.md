@@ -168,7 +168,7 @@ carousel serving source。
 条目按列名 `outcome`/`attemptState` 二级嵌套，因为该表没有单一 `status` 列）和 JSONL 字典为机器真源。特别冻结：
 
 - Novel/Article `draft`、Novel `ready` 对公众为 404；`published` 才进入公开读取。
-- `unpublished` 保留稳定下架页并退出索引，内容继续保留；`takedown` 是版权或安全移除，公开路由返回 **HTTP 410 Gone**，两者不得合并。
+- `unpublished` 保留稳定下架页并退出索引，内容继续保留；`takedown` 是版权或安全移除，两者不得合并。公开路由 **V1 = HTTP 404**（页面层 `notFound()`）；**HTTP 410 为 post-V1，由 proxy 层实现**，本轮不在 RSC 里用自定义 digest 打 410。
 - Chapter `preview` 可展示和索引，`locked` 在 V1 不物化；可信且结构完整、非空的响应中缺席才进入 `stale`，立即停展并退出 sitemap，但正文保留。
 - 失败、结构异常或异常空列表等不可信响应不改变章节状态；`stale` 章节可信重现后自动恢复 `preview`。
 - `withdrawn` 是人工/版权撤回并返回 404，是唯一会通过版权流程删除 `novel_chapter_content` 的章节状态。
@@ -314,6 +314,7 @@ P1-08B 新增独立 `scheduler_app`，只授予 schedule/generic task 元数据�
 | 2026-08-04 | P1-08B | Owner 关闭 Secret Ingress Gate：Web 同步校验并加密新 JWT，只获密文 INSERT、无持久化密文 SELECT；add/replace 返回 metadata，validate/supersede 保持 Worker 异步 | Codex | `P1_08B_WEB_SYNCHRONOUS_INGRESS_APPROVED`；待 targeted review |
 | 2026-08-18 | v0.2.0-foundation（Stream F，P2-07～12 一轮实施） | 唯一 Migration `20260818120000_v020_foundation_shared`：`indexnow_outbox` 补 8 字段、`indexnow_outbox_attempt` 更名 `attempt_state`→`outcome` 并新增 CPS 崩溃恢复语义的 `attempt_state`/`worker_task_id`、新建单例 `site_setting` 表（PG 化自 CPS，DROP 北斗/飞书/轮播 JSON 专属字段）；随附 db-retry 与 `credentials/service.ts` 内联判定收敛、可见性谓词族 `src/server/publication/visibility.ts`、`SiteSetting` accessor、公开访问入口适配、`publication-dispatcher`、Article path builder 移植 | Claude（Sonnet 编码/Opus 复核） | 一次性 PostgreSQL 16 容器验证 PASS（44 张表、950 条 active 字典记录、零 drift）；**P1 既有 45 个模型的字典词典全量回填另立轻量任务，不阻塞本轮**（沿用 2026-08-12 Owner 裁决第 2 条） |
 | 2026-08-18 | v0.2.0-publish-gate（Stream A，P2-07 发布门禁，合并前 Opus 复核 必改1/2） | 零 schema 改动。`applyPublishTransition` 收口 TOCTOU（facts/gate 读取移入事务、写入改条件 `updateMany`+`count` 校验+失败即抛出回滚）；移除 `OperationAudit` 上一版依赖 P2002 恢复的死分支，相关幂等注释降级为"顺序重试幂等，非并发安全"；§13 登记 `operation_audit` 幂等唯一索引为跟进项 | Claude（Sonnet 编码/Opus 复核） | `npm test` 1281 passed / 85 skipped；新增 TOCTOU 并发交错回归测试（`tests/backend/publish-gate/service.test.ts`，注入钩子模拟交错时序） |
+| 2026-08-18 | v0.2.0-public-wiring（Stream B PR2，P2-08 复核） | §4 冻结公开路由：`takedown` **V1 = HTTP 404**；**410 为 post-V1（proxy 层）**。零 schema 改动。 | Cursor | 页面层 `notFound()` + `novel/[slugParam]/not-found.tsx`；禁止 `NEXT_HTTP_ERROR_FALLBACK;410` digest |
 
 ## 13. 待跟进项（Schema 变更队列，Owner 待批）
 

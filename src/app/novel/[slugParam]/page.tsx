@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
 import { JsonLd } from "@/app/_components/json-ld";
-import { gone } from "@/app/_lib/http";
 import { loadArticleAccess, loadChrome, loadNovelDetail } from "@/app/_lib/public-load";
 import { noIndexMetadata, toNextMetadata } from "@/app/_lib/seo-metadata";
 import { NovelDetailScreen } from "@/features/public-ui/novel/NovelDetailScreen";
@@ -57,10 +56,7 @@ export default async function NovelDetailPage({
     loadChrome(),
   ]);
 
-  if (access.kind === "not_found") notFound();
-  if (access.kind === "takedown") {
-    gone();
-  }
+  if (access.kind === "not_found" || access.kind === "takedown") notFound();
   if (access.kind === "unavailable") {
     return (
       <UnavailableScreen

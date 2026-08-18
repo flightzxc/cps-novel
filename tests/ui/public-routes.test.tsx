@@ -10,23 +10,12 @@ import { UnavailableScreen } from "@/features/public-ui/status/UnavailableScreen
 import type { NovelCardView, NovelDetailView } from "@/features/public-ui/types";
 
 const NOT_FOUND = Symbol("next-not-found");
-const GONE = Symbol("next-gone");
 
 vi.mock("next/navigation", () => ({
   notFound: () => {
     throw NOT_FOUND;
   },
 }));
-
-vi.mock("@/app/_lib/http", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/app/_lib/http")>();
-  return {
-    ...actual,
-    gone: () => {
-      throw GONE;
-    },
-  };
-});
 
 vi.mock("@/app/_lib/public-load", () => ({
   loadChrome: vi.fn(),
@@ -95,6 +84,7 @@ const browseModule = await import("@/app/browse/page");
 const novelModule = await import("@/app/novel/[slugParam]/page");
 const chapterModule = await import("@/app/novel/[slugParam]/chapter/[chapterNumber]/page");
 const chapterLayoutModule = await import("@/app/novel/[slugParam]/chapter/layout");
+const novelNotFoundModule = await import("@/app/novel/[slugParam]/not-found");
 
 const ORIGIN = "https://example.test";
 
@@ -185,7 +175,7 @@ describe("public novel detail", () => {
     expect(screen.queryByText("前往正式阅读")).toBeNull();
   });
 
-  it("renders UnavailableScreen for unpublished and throws gone() for takedown", async () => {
+  it("renders UnavailableScreen for unpublished and calls notFound for takedown", async () => {
     loadArticleAccess.mockResolvedValue({ kind: "unavailable", title: DETAIL.title });
     const unpublished = await novelModule.default({
       params: Promise.resolve({ slugParam: "lantern-keepers-daughter-pabc123" }),
@@ -198,7 +188,7 @@ describe("public novel detail", () => {
       novelModule.default({
         params: Promise.resolve({ slugParam: "lantern-keepers-daughter-pabc123" }),
       }),
-    ).rejects.toBe(GONE);
+    ).rejects.toBe(NOT_FOUND);
   });
 
   it("calls notFound for missing articles", async () => {
@@ -297,6 +287,23 @@ describe("public chapter", () => {
         params: Promise.resolve({ slugParam: "lantern-keepers-daughter-pabc123", chapterNumber: "01" }),
       }),
     ).rejects.toBe(NOT_FOUND);
+  });
+
+  it("calls notFound for a takedown chapter URL", async () => {
+    loadArticleAccess.mockResolvedValue({ kind: "takedown", title: DETAIL.title });
+    await expect(
+      chapterModule.default({
+        params: Promise.resolve({ slugParam: "lantern-keepers-daughter-pabc123", chapterNumber: "1" }),
+      }),
+    ).rejects.toBe(NOT_FOUND);
+  });
+});
+
+describe("novel segment not-found.tsx", () => {
+  it("declares noindex and renders the unavailable explanation", () => {
+    expect(novelNotFoundModule.metadata.robots).toEqual({ index: false, follow: false });
+    render(novelNotFoundModule.default());
+    expect(screen.getByTestId("unavailable-screen")).toBeTruthy();
   });
 });
 
