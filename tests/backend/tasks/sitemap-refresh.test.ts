@@ -18,6 +18,10 @@ const enabledEnv: NodeJS.ProcessEnv = {
   ...process.env,
   FEATURE_SITEMAP_AUTO_REFRESH: "true",
 };
+const workerEnabledEnv: NodeJS.ProcessEnv = {
+  ...enabledEnv,
+  SITEMAP_AUTO_REFRESH_ALLOW_WRITE: "true",
+};
 const input = { reason: "article_first_publish", triggeredBy: "publish-gate" };
 
 function transactionDb(activeId?: string) {
@@ -65,6 +69,7 @@ function context(payload: unknown = input) {
 
 afterEach(() => {
   delete process.env.FEATURE_SITEMAP_AUTO_REFRESH;
+  delete process.env.SITEMAP_AUTO_REFRESH_ALLOW_WRITE;
 });
 
 describe("Sitemap refresh enqueue", () => {
@@ -142,6 +147,24 @@ describe("Sitemap refresh worker handler", () => {
     sitemapFiles: ["sitemap/site_mainpage_en.xml", "sitemap/site_novelpage_en.xml"],
   };
 
+  it("keeps filesystem generation off while the independent Worker write gate is closed", async () => {
+    const refresh = vi.fn();
+    const outcome = await createSitemapRefreshHandler({} as never, {
+      buildFamily: vi.fn(),
+      env: enabledEnv,
+      refresh,
+    })(context());
+
+    expect(outcome).toEqual({
+      status: "failed",
+      error: {
+        code: "write_disabled",
+        message: "Sitemap refresh worker write gate is disabled",
+      },
+    });
+    expect(refresh).not.toHaveBeenCalled();
+  });
+
   it("returns manifest, runId, and urlCount on success", async () => {
     const refresh = vi.fn().mockResolvedValue({
       ok: true,
@@ -151,6 +174,7 @@ describe("Sitemap refresh worker handler", () => {
     });
     const outcome = await createSitemapRefreshHandler({} as never, {
       buildFamily: vi.fn(),
+      env: workerEnabledEnv,
       refresh,
     })(context());
 
@@ -171,6 +195,7 @@ describe("Sitemap refresh worker handler", () => {
     const releaseLock = vi.fn();
     const outcome = await createSitemapRefreshHandler({} as never, {
       buildFamily: vi.fn(),
+      env: workerEnabledEnv,
       refresh,
       releaseLock,
       now: () => now,
@@ -189,6 +214,7 @@ describe("Sitemap refresh worker handler", () => {
     });
     const outcome = await createSitemapRefreshHandler({} as never, {
       buildFamily: vi.fn(),
+      env: workerEnabledEnv,
       refresh,
     })(context());
 
@@ -223,6 +249,7 @@ describe("Sitemap refresh worker handler", () => {
     const releaseLock = vi.fn().mockResolvedValue(undefined);
     const outcome = await createSitemapRefreshHandler({} as never, {
       buildFamily: vi.fn(),
+      env: workerEnabledEnv,
       refresh,
       releaseLock,
       now: () => now,
@@ -243,6 +270,7 @@ describe("Sitemap refresh worker handler", () => {
     });
     const outcome = await createSitemapRefreshHandler({} as never, {
       buildFamily: vi.fn(),
+      env: workerEnabledEnv,
       refresh,
     })(context());
     expect(outcome).toEqual({

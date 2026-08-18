@@ -1,6 +1,10 @@
 import type { PrismaClient } from "@prisma/client";
 
 import {
+  isSitemapAutoRefreshEnabled,
+  isSitemapAutoRefreshWriteAllowed,
+} from "../../src/lib/flags";
+import {
   releaseSitemapGenerationLock,
   refreshStaticSitemap,
   type RefreshStaticSitemapResult,
@@ -27,6 +31,7 @@ type ReleaseLock = typeof releaseSitemapGenerationLock;
 
 export type SitemapRefreshHandlerDependencies = Readonly<{
   rootDir?: string;
+  env?: NodeJS.ProcessEnv;
   now?: () => Date;
   buildFamily?: BuildSitemapFamily;
   refresh?: Refresh;
@@ -95,8 +100,21 @@ export function createSitemapRefreshHandler(
   const refresh = dependencies.refresh ?? refreshStaticSitemap;
   const releaseLock = dependencies.releaseLock ?? releaseSitemapGenerationLock;
   const now = dependencies.now ?? (() => new Date());
+  const env = dependencies.env ?? process.env;
 
   return async ({ lease, heartbeat }) => {
+    if (!isSitemapAutoRefreshEnabled(env)) {
+      return {
+        status: "failed",
+        error: { code: "feature_disabled", message: "Sitemap auto-refresh feature is disabled" },
+      };
+    }
+    if (!isSitemapAutoRefreshWriteAllowed(env)) {
+      return {
+        status: "failed",
+        error: { code: "write_disabled", message: "Sitemap refresh worker write gate is disabled" },
+      };
+    }
     const payload = parseSitemapRefreshPayload(lease.payload);
     await heartbeat();
 

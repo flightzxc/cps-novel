@@ -154,16 +154,16 @@ function buildNovelPageFiles(
  * reads happen only in the refresh worker; request routes remain static-only.
  */
 export function createSitemapFamilyBuilder(db: SitemapDb): BuildSitemapFamily {
-  const visibleByLocale = new Map<SiteLocale, Promise<ArticleSitemapCandidate[]>>();
+  const candidateCacheByRoute = new Map<SiteLocale, Promise<ArticleSitemapCandidate[]>>();
   const loadVisible = (locale: SiteLocale) => {
-    const existing = visibleByLocale.get(locale);
+    const existing = candidateCacheByRoute.get(locale);
     if (existing) return existing;
     const pending = db.article.findMany({
       where: articleSitemapWhere(locale),
       select: ARTICLE_SITEMAP_SELECT,
       orderBy: { id: "asc" },
     }).then((rows) => rows.filter(isVisibleCandidate));
-    visibleByLocale.set(locale, pending);
+    candidateCacheByRoute.set(locale, pending);
     return pending;
   };
 
