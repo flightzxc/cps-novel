@@ -6,6 +6,7 @@ import {
   sanitizePersistedTaskError,
 } from "../src/lib/tasks";
 import { createCredentialWorkerHandlers } from "./handlers/credential";
+import { createIndexNowWorkerHandlers } from "./handlers/indexnow-delivery";
 import { createMoboreaderWorkerHandlers } from "./handlers/moboreader";
 import { parseShutdownDrainTimeoutEnv, runWorker } from "./runtime";
 
@@ -21,6 +22,7 @@ export async function main(): Promise<void> {
   const handlers = createHandlerRegistry({
     ...createCredentialWorkerHandlers(prisma),
     ...createMoboreaderWorkerHandlers(prisma),
+    ...createIndexNowWorkerHandlers(prisma),
   });
   const allowlist = buildWorkerAllowlist(process.env.WORKER_TASK_ALLOWLIST, handlers);
   if (allowlist.invalid.length > 0) {
