@@ -2,10 +2,20 @@
  * TEST_ONLY — a minimal hand-rolled in-memory double for exactly the Prisma
  * call shapes `src/server/publish-gate/{facts,service}.ts` issue. Not a
  * general query engine: each method pattern-matches the specific
- * `where`/`select` shape its one real call site uses. `$transaction` simply
- * invokes the callback against `this` (no real atomicity/rollback) — none of
- * this PR's tests depend on partial-write rollback, only on the sequence of
- * calls and the resulting store state.
+ * `where`/`select` shape its one real call site uses.
+ *
+ * `$transaction` gives real rollback-on-throw semantics via a write-log
+ * (`undoLog`), not a no-op and deliberately NOT a whole-store snapshot:
+ * every write method that mutates `novels`/`articles`/`chapters`/`audits`
+ * pushes an undo closure onto `undoLog` (only while a transaction is open);
+ * if the callback throws, those closures run in reverse order, undoing only
+ * *this transaction's own writes*. A whole-store snapshot-and-restore would
+ * be wrong here: `onFactsLoaded` (below) simulates a *different*, already-
+ * committed concurrent transaction by mutating the same stores directly —
+ * those mutations must survive this transaction's rollback, not be wiped
+ * out by it, exactly as a real concurrent COMMIT in another Postgres session
+ * would. See `service.test.ts`'s TOCTOU regression tests, which depend on
+ * this distinction.
  */
 import type { PrismaClient } from "@prisma/client";
 
@@ -44,6 +54,23 @@ export class FakePublishGateDb {
   readonly audits: FakeAudit[] = [];
   /** Call log for assertions like "the update was never issued". */
   readonly calls: string[] = [];
+  /**
+   * Fires exactly once, immediately after the primary by-id Article lookup
+   * `loadPublishGateFacts` issues (i.e. right after the read a real
+   * transaction's gate decision is based on) — then clears itself. Lets a
+   * test simulate a concurrent transaction (e.g. `takedownNovel`) committing
+   * in the window between that read and this transaction's conditional
+   * write, without any real threads/processes: the hook mutates `novels`/
+   * `articles`/`chapters` directly, exactly as if another connection had
+   * committed. See `service.test.ts`'s TOCTOU regression test.
+   */
+  onFactsLoaded: (() => void) | null = null;
+  /** Non-null only while a `$transaction` callback is running. See the module header. */
+  private undoLog: Array<() => void> | null = null;
+
+  private logUndo(undo: () => void): void {
+    this.undoLog?.push(undo);
+  }
 
   seedNovel(novel: FakeNovel): this {
     this.novels.set(novel.id, novel);
@@ -68,7 +95,7 @@ export class FakePublishGateDb {
       if (!article || article.deletedAt !== null) return null;
       const novel = this.novels.get(article.novelId);
       if (!novel) return null;
-      return {
+      const result = {
         id: article.id,
         novelId: article.novelId,
         locale: article.locale,
@@ -80,6 +107,12 @@ export class FakePublishGateDb {
         novel: { status: novel.status, locale: novel.locale, deletedAt: novel.deletedAt },
         promoLink: article.promoLink,
       };
+      if (this.onFactsLoaded) {
+        const hook = this.onFactsLoaded;
+        this.onFactsLoaded = null;
+        hook();
+      }
+      return result;
     }
     // Page-identity conflict lookup: { id: { not }, deletedAt: null, locale, slug }
     const notId = (where.id as { not?: string } | undefined)?.not;
@@ -111,20 +144,30 @@ export class FakePublishGateDb {
     this.calls.push("novel.update");
     const novel = this.novels.get(args.where.id);
     if (!novel) throw new Error(`novel ${args.where.id} not found`);
+    const prevStatus = novel.status;
+    this.logUndo(() => {
+      novel.status = prevStatus;
+    });
     novel.status = args.data.status;
     return { ...novel };
   };
 
-  private articleUpdate = async (args: {
-    where: { id: string };
-    data: { status?: string; publishedAt?: Date | null };
+  /** Conditional single-row update — same TOCTOU-closing shape as `articleUpdateMany`'s single-row branch. */
+  private novelUpdateMany = async (args: {
+    where: { id: string; status: string; deletedAt: null };
+    data: { status: string };
   }) => {
-    this.calls.push("article.update");
-    const article = this.articles.get(args.where.id);
-    if (!article) throw new Error(`article ${args.where.id} not found`);
-    if (args.data.status !== undefined) article.status = args.data.status;
-    if (args.data.publishedAt !== undefined) article.publishedAt = args.data.publishedAt;
-    return { ...article };
+    this.calls.push("novel.updateMany");
+    const novel = this.novels.get(args.where.id);
+    if (!novel || novel.deletedAt !== null || novel.status !== args.where.status) {
+      return { count: 0 };
+    }
+    const prevStatus = novel.status;
+    this.logUndo(() => {
+      novel.status = prevStatus;
+    });
+    novel.status = args.data.status;
+    return { count: 1 };
   };
 
   private articleFindMany = async (args: { where: Record<string, unknown> }) => {
@@ -140,16 +183,51 @@ export class FakePublishGateDb {
     return results;
   };
 
-  private articleUpdateMany = async (args: { where: { id: { in: string[] } }; data: { status: string } }) => {
+  /**
+   * Two distinct call shapes, both real: `applyNovelRightsTransition` bulk-
+   * updates by `{ id: { in: [...] } }` (uniform, ungated cascade — see
+   * `service.ts`); `applyPublishTransition` conditionally updates a single
+   * row by `{ id, status: <expected current status>, deletedAt: null }` and
+   * inspects `count` to detect a concurrent change (TOCTOU close — see
+   * `service.ts`'s module header and `onFactsLoaded` above).
+   */
+  private articleUpdateMany = async (args: {
+    where: Record<string, unknown>;
+    data: { status?: string; publishedAt?: Date | null };
+  }) => {
     this.calls.push("article.updateMany");
-    let count = 0;
-    for (const id of args.where.id.in) {
-      const article = this.articles.get(id);
-      if (!article) continue;
-      article.status = args.data.status;
-      count += 1;
+    const where = args.where;
+    if (where.id && typeof where.id === "object" && "in" in (where.id as object)) {
+      let count = 0;
+      for (const id of (where.id as { in: string[] }).in) {
+        const article = this.articles.get(id);
+        if (!article) continue;
+        if (args.data.status !== undefined) {
+          const prevStatus = article.status;
+          this.logUndo(() => {
+            article.status = prevStatus;
+          });
+          article.status = args.data.status;
+        }
+        count += 1;
+      }
+      return { count };
     }
-    return { count };
+    // Conditional single-row shape: { id, status, deletedAt: null }.
+    const id = where.id as string;
+    const article = this.articles.get(id);
+    if (!article || article.deletedAt !== null || article.status !== where.status) {
+      return { count: 0 };
+    }
+    const prevStatus = article.status;
+    const prevPublishedAt = article.publishedAt;
+    this.logUndo(() => {
+      article.status = prevStatus;
+      article.publishedAt = prevPublishedAt;
+    });
+    if (args.data.status !== undefined) article.status = args.data.status;
+    if (args.data.publishedAt !== undefined) article.publishedAt = args.data.publishedAt;
+    return { count: 1 };
   };
 
   private novelChapterFindMany = async (args: { where: Record<string, unknown>; select?: unknown }) => {
@@ -173,6 +251,10 @@ export class FakePublishGateDb {
     for (const id of args.where.id.in) {
       const chapter = this.chapters.get(id);
       if (!chapter) continue;
+      const prevStatus = chapter.status;
+      this.logUndo(() => {
+        chapter.status = prevStatus;
+      });
       chapter.status = args.data.status;
       count += 1;
     }
@@ -185,6 +267,10 @@ export class FakePublishGateDb {
     for (const id of args.where.novelChapterId.in) {
       const chapter = this.chapters.get(id);
       if (chapter && chapter.body !== null) {
+        const prevBody = chapter.body;
+        this.logUndo(() => {
+          chapter.body = prevBody;
+        });
         chapter.body = null;
         count += 1;
       }
@@ -229,6 +315,12 @@ export class FakePublishGateDb {
   private operationAuditCreate = async (args: { data: FakeAudit }) => {
     this.calls.push("operationAudit.create");
     this.audits.push({ ...args.data });
+    // `undoLog` runs in strict reverse order, so by the time this entry's
+    // undo runs, any audit pushed after it (within the same transaction)
+    // has already been popped — this is always the current tail.
+    this.logUndo(() => {
+      this.audits.pop();
+    });
     return { ...args.data };
   };
 
@@ -238,13 +330,13 @@ export class FakePublishGateDb {
         findFirst: this.articleFindFirst,
         findMany: (args: { where: Record<string, unknown>; take?: number }) =>
           "publishAt" in (args.where ?? {}) ? this.articleFindManyDue(args) : this.articleFindMany(args),
-        update: this.articleUpdate,
         updateMany: this.articleUpdateMany,
       },
       novel: {
         findFirst: this.novelFindFirst,
         findUniqueOrThrow: this.novelFindUniqueOrThrow,
         update: this.novelUpdate,
+        updateMany: this.novelUpdateMany,
       },
       novelChapter: {
         findMany: this.novelChapterFindMany,
@@ -257,7 +349,25 @@ export class FakePublishGateDb {
         findFirst: this.operationAuditFindFirst,
         create: this.operationAuditCreate,
       },
-      $transaction: async (callback) => callback(client),
+      $transaction: async (callback) => {
+        // Real rollback-on-throw via the write-log described in this file's
+        // header — deliberately not a whole-store snapshot, which would also
+        // undo `onFactsLoaded`'s simulated *concurrent, already-committed*
+        // transaction. This codebase has no nested `$transaction` calls, but
+        // save/restore the previous log anyway rather than assuming that.
+        const previousLog = this.undoLog;
+        this.undoLog = [];
+        const thisLog = this.undoLog;
+        try {
+          const result = await callback(client);
+          this.undoLog = previousLog;
+          return result;
+        } catch (error) {
+          for (let i = thisLog.length - 1; i >= 0; i -= 1) thisLog[i]();
+          this.undoLog = previousLog;
+          throw error;
+        }
+      },
     };
     return client;
   }
@@ -273,13 +383,19 @@ type FakeClient = {
   article: {
     findFirst: (args: { where: Record<string, unknown> }) => Promise<unknown>;
     findMany: (args: { where: Record<string, unknown>; take?: number }) => Promise<unknown>;
-    update: (args: { where: { id: string }; data: { status?: string; publishedAt?: Date | null } }) => Promise<unknown>;
-    updateMany: (args: { where: { id: { in: string[] } }; data: { status: string } }) => Promise<unknown>;
+    updateMany: (args: {
+      where: Record<string, unknown>;
+      data: { status?: string; publishedAt?: Date | null };
+    }) => Promise<{ count: number }>;
   };
   novel: {
     findFirst: (args: { where: { id: string; deletedAt?: null } }) => Promise<unknown>;
     findUniqueOrThrow: (args: { where: { id: string } }) => Promise<unknown>;
     update: (args: { where: { id: string }; data: { status: string } }) => Promise<unknown>;
+    updateMany: (args: {
+      where: { id: string; status: string; deletedAt: null };
+      data: { status: string };
+    }) => Promise<{ count: number }>;
   };
   novelChapter: {
     findMany: (args: { where: Record<string, unknown>; select?: unknown }) => Promise<unknown>;

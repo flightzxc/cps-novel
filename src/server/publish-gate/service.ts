@@ -42,6 +42,33 @@
  * publish"); nothing here assumes there is only ever one Article, but this
  * PR does not need to solve that because there is only one today.
  *
+ * ## TOCTOU: the gate's read and its write live in the same transaction
+ *
+ * An earlier revision of this function loaded `PublishGateFacts` and
+ * evaluated the gate against the top-level `db` handle, *before* opening the
+ * transaction that wrote `published`. That left a window — between the read
+ * and the write — where a concurrent `takedownNovel` could commit (deleting
+ * `NovelChapterContent`, flipping `Novel`/`Article` to `takedown`) and then
+ * be silently overwritten by this function's unconditional
+ * `UPDATE ... SET status = 'published'`, republishing content whose body no
+ * longer exists. A merge-time review (`scratchpad/reports/A-REVIEW.md` 必改
+ * 1) reproduced this interleaving and it is exactly the class of defect this
+ * module exists to make structurally impossible.
+ *
+ * The fix, below: `loadPublishGateFacts` and `evaluatePublishGate` both run
+ * *inside* `db.$transaction`, against the transaction's own `tx` handle —
+ * and the write itself is a conditional `updateMany` whose `WHERE` clause
+ * pins `status` to the exact value this same transaction just read. If a
+ * concurrent transaction changed that status in between (PostgreSQL's
+ * default READ COMMITTED gives each statement a fresh read, not a stable
+ * snapshot for the whole transaction, so moving the read inside the
+ * transaction alone would not have been sufficient), `count` comes back `0`
+ * and this function returns `{ outcome: "conflict" }` instead of writing —
+ * never a silent publish over interference. `docs/governance/
+ * database-governance.md` §6 documents the same "conditional UPDATE, not
+ * read-then-unconditional-write" pattern for the canonical-fill contract;
+ * this is that same discipline applied here.
+ *
  * ## Restrictions vs. admissions
  *
  * `withdrawNovel`/`takedownNovel`/`restoreNovel` are restrictions/reversals,
@@ -77,7 +104,6 @@ import type { PrismaClient } from "@prisma/client";
 
 import type { AdminIdentityStore, SessionStore } from "@/lib/auth/ports";
 import type { NovelStatus } from "@/domain/database-statuses";
-import { isUniqueConstraintViolation } from "@/lib/db/db-retry";
 import { dispatchFirstPublicPublication } from "@/server/publication/dispatcher";
 import { requireFreshAdminServiceMutation, type AdminServiceAuthorization } from "@/server/auth/guards";
 
@@ -149,7 +175,18 @@ export type ApplyPublishTransitionResult =
       readonly firstPublish: boolean;
     }
   | { readonly outcome: "rejected"; readonly gate: PublishGateEvaluation }
-  | { readonly outcome: "not_found" };
+  | { readonly outcome: "not_found" }
+  | {
+      /**
+       * The Article's (or its Novel's) status changed between this
+       * transaction's read and its conditional write — e.g. a concurrent
+       * `takedownNovel` committed in between. The write was refused, not
+       * silently applied over the interference (see this module's header,
+       * "TOCTOU"). Safe to retry: a fresh call reloads facts and
+       * re-evaluates the gate against whatever is current now.
+       */
+      readonly outcome: "conflict";
+    };
 
 function auditActorType(actor: PublishTransitionActor): "admin" | "system" {
   return actor.type;
@@ -165,33 +202,71 @@ function dispatchSource(actor: PublishTransitionActor): string {
 
 const PUBLISH_AUDIT_ACTION = "article.publish";
 
+/** Internal shape returned from inside the transaction — `wrote` distinguishes a real write from an idempotent no-op replay before mapping to the public `ApplyPublishTransitionResult`. */
+type TxPublishOutcome =
+  | { readonly outcome: "not_found" }
+  | { readonly outcome: "rejected"; readonly gate: PublishGateEvaluation }
+  | {
+      readonly outcome: "published";
+      readonly articleId: string;
+      readonly novelId: string;
+      readonly locale: string;
+      readonly firstPublish: boolean;
+      readonly wrote: boolean;
+    };
+
+/**
+ * Thrown (never returned) when a conditional `updateMany` reports
+ * `count !== 1` — i.e. a concurrent transaction changed the row between this
+ * transaction's read and its write. Throwing rather than returning a
+ * `"conflict"` value is load-bearing: Prisma's interactive `$transaction`
+ * only rolls back on a thrown error. If the Article-side `updateMany` had
+ * already succeeded (`count === 1`) before a later Novel-side conflict is
+ * detected, *returning* a value would let that Article write COMMIT anyway
+ * — publishing the Article while reporting "conflict" to the caller. This
+ * class exists purely to force the rollback; it never crosses this
+ * function's boundary (caught below and mapped to `{ outcome: "conflict" }`).
+ */
+class PublishConflictSignal extends Error {}
+
 export async function applyPublishTransition(
   db: PrismaClient,
   input: ApplyPublishTransitionInput,
 ): Promise<ApplyPublishTransitionResult> {
   const now = input.now ?? new Date();
-  const loaded = await loadPublishGateFacts(db, input.articleId);
-  if (!loaded) return { outcome: "not_found" };
-  const { facts, article } = loaded;
-
-  const gate = evaluatePublishGate(facts);
-  if (!gate.publishable) {
-    return { outcome: "rejected", gate };
-  }
-
   const actorType = auditActorType(input.actor);
   const actorId = auditActorId(input.actor);
-  const firstPublish = article.publishedAt === null;
-  const publishedAt = resolveArticlePublishTimeForWrite({
-    status: "published",
-    existingPublishTime: article.publishedAt,
-    now,
-  })!; // non-null: status is "published" and resolveArticlePublishTimeForWrite
-  // always returns a Date in that branch when no explicit time is given.
 
-  let wrote = true;
+  let txResult: TxPublishOutcome;
   try {
-    await db.$transaction(async (tx) => {
+    txResult = await db.$transaction<TxPublishOutcome>(async (tx) => {
+      // Facts + gate are read and evaluated against `tx`, not the top-level
+      // `db` — see this module's header, "TOCTOU". Loading them earlier via
+      // `db` left a window between the read and the write where a
+      // concurrent rights transition could commit and then be silently
+      // overwritten.
+      const loaded = await loadPublishGateFacts(tx, input.articleId);
+      if (!loaded) return { outcome: "not_found" };
+      const { facts, article } = loaded;
+
+      const gate = evaluatePublishGate(facts);
+      if (!gate.publishable) {
+        return { outcome: "rejected", gate };
+      }
+
+      // Idempotency check: sequential-retry-safe only, NOT concurrency-safe.
+      // `OperationAudit` carries no unique constraint on (actorType, action,
+      // entityType, entityId, requestId) — only a plain index
+      // (`prisma/schema.prisma` — see `operation_audit_request_idx`) — so
+      // this is check-then-insert. Two genuinely concurrent calls with the
+      // same requestId can both pass this check before either commits its
+      // audit row, producing two audit rows and two
+      // `dispatchFirstPublicPublication` calls. A retried call *after* the
+      // original committed (the ordinary "network timeout, client retries"
+      // case) is safe. A partial unique index on `operation_audit` is
+      // registered as a schema follow-up
+      // (`docs/governance/database-governance.md` §13) rather than added
+      // here — this round's schema is frozen.
       const existingAudit = await tx.operationAudit.findFirst({
         where: {
           actorType,
@@ -202,19 +277,52 @@ export async function applyPublishTransition(
         },
       });
       if (existingAudit) {
-        wrote = false;
-        return;
+        return {
+          outcome: "published",
+          articleId: article.id,
+          novelId: article.novelId,
+          locale: article.locale,
+          firstPublish: false,
+          wrote: false,
+        };
       }
 
-      await tx.article.update({
-        where: { id: article.id },
+      const firstPublish = article.publishedAt === null;
+      const publishedAt = resolveArticlePublishTimeForWrite({
+        status: "published",
+        existingPublishTime: article.publishedAt,
+        now,
+      })!; // non-null: status is "published" and resolveArticlePublishTimeForWrite
+      // always returns a Date in that branch when no explicit time is given.
+
+      // Conditional write: the WHERE precondition pins the row to the exact
+      // status this same transaction just observed. If a concurrent
+      // transaction committed a different status in between, `count` is 0
+      // and this throws `PublishConflictSignal` rather than returning — see
+      // that class's doc comment for why a thrown signal (not a returned
+      // value) is required to actually roll back.
+      const articleWrite = await tx.article.updateMany({
+        where: { id: article.id, status: facts.article.status, deletedAt: null },
         data: { status: "published", publishedAt },
       });
-      // Idempotent: only writes when the Novel is not already published —
-      // see this module's header for why Novel and Article publish together.
-      if (facts.novel.status !== "published") {
-        await tx.novel.update({ where: { id: article.novelId }, data: { status: "published" } });
+      if (articleWrite.count !== 1) {
+        throw new PublishConflictSignal();
       }
+
+      // Idempotent: only writes when the Novel is not already published —
+      // see this module's header for why Novel and Article publish
+      // together. Same conditional-updateMany shape as the Article write
+      // above, same throw-to-roll-back reasoning.
+      if (facts.novel.status !== "published") {
+        const novelWrite = await tx.novel.updateMany({
+          where: { id: article.novelId, status: facts.novel.status, deletedAt: null },
+          data: { status: "published" },
+        });
+        if (novelWrite.count !== 1) {
+          throw new PublishConflictSignal();
+        }
+      }
+
       await tx.operationAudit.create({
         data: {
           actorType,
@@ -227,41 +335,45 @@ export async function applyPublishTransition(
           afterSnapshot: { articleStatus: "published", novelStatus: "published" },
         },
       });
-    });
-  } catch (error) {
-    if (!isUniqueConstraintViolation(error)) throw error;
-    const committed = await db.operationAudit.findFirst({
-      where: {
-        actorType,
-        action: PUBLISH_AUDIT_ACTION,
-        entityType: "Article",
-        entityId: article.id,
-        requestId: input.requestId,
-      },
-    });
-    if (!committed) throw error; // genuine conflict, not an idempotent replay
-    wrote = false;
-  }
 
-  if (wrote && firstPublish) {
-    await dispatchFirstPublicPublication(
-      {
+      return {
+        outcome: "published",
         articleId: article.id,
         novelId: article.novelId,
         locale: article.locale,
+        firstPublish,
+        wrote: true,
+      };
+    });
+  } catch (error) {
+    if (error instanceof PublishConflictSignal) {
+      return { outcome: "conflict" };
+    }
+    throw error;
+  }
+
+  if (txResult.outcome === "published" && txResult.wrote && txResult.firstPublish) {
+    await dispatchFirstPublicPublication(
+      {
+        articleId: txResult.articleId,
+        novelId: txResult.novelId,
+        locale: txResult.locale,
         source: dispatchSource(input.actor),
       },
       db,
     );
   }
 
-  return {
-    outcome: "published",
-    articleId: article.id,
-    novelId: article.novelId,
-    locale: article.locale,
-    firstPublish: wrote && firstPublish,
-  };
+  if (txResult.outcome === "published") {
+    return {
+      outcome: "published",
+      articleId: txResult.articleId,
+      novelId: txResult.novelId,
+      locale: txResult.locale,
+      firstPublish: txResult.firstPublish,
+    };
+  }
+  return txResult;
 }
 
 // ---------------------------------------------------------------------------
@@ -269,8 +381,13 @@ export async function applyPublishTransition(
 // straight to `published`: that is exactly CPS's `changeArticlesStatusByFilter`
 // defect (`P2-07.md` §4 — "如果 P2-07 要做批量发布，必须逐条调用 evaluator（不能
 // updateMany）"). The shared `requestId` plus a per-item `entityId` in the
-// audit idempotency lookup above is what makes retrying the whole batch safe
-// without needing a per-item requestId.
+// audit idempotency lookup means a *sequential* retry of the whole batch
+// (e.g. after a timeout) redoes exactly the same items without double-
+// writing. This is NOT a claim of concurrency safety: two literally-
+// concurrent callers submitting the same batch requestId can still each
+// pass the per-item idempotency check before either commits, for the same
+// reason documented on `applyPublishTransition`'s `existingAudit` check
+// above (no unique constraint backs it yet).
 // ---------------------------------------------------------------------------
 
 const MAX_BATCH_SIZE = 200;

@@ -126,7 +126,7 @@ describe("applyPublishTransition", () => {
       requestId: "req-1",
       actor: { type: "admin", adminId: "admin-1" },
     });
-    expect(db.calls.filter((c) => c === "novel.update")).toHaveLength(0);
+    expect(db.calls.filter((c) => c === "novel.updateMany")).toHaveLength(0);
   });
 
   it("preserves publishedAt and does not fire dispatch again on a second publish (firstPublish: false)", async () => {
@@ -153,11 +153,100 @@ describe("applyPublishTransition", () => {
       actor: { type: "admin" as const, adminId: "admin-1" },
     };
     await applyPublishTransition(db.asPrismaClient(), input);
-    const updateCallsAfterFirst = db.calls.filter((c) => c === "article.update").length;
+    const updateCallsAfterFirst = db.calls.filter((c) => c === "article.updateMany").length;
     await applyPublishTransition(db.asPrismaClient(), input);
-    expect(db.calls.filter((c) => c === "article.update")).toHaveLength(updateCallsAfterFirst);
+    expect(db.calls.filter((c) => c === "article.updateMany")).toHaveLength(updateCallsAfterFirst);
     expect(db.audits).toHaveLength(1);
     expect(dispatchFirstPublicPublication).toHaveBeenCalledTimes(1);
+  });
+
+  describe("TOCTOU: concurrent interleaving between the gate's read and its write", () => {
+    /**
+     * Reproduces `scratchpad/reports/A-REVIEW.md` 必改 1's interleaving
+     * exactly, without real threads: `FakePublishGateDb.onFactsLoaded` fires
+     * once, right after `loadPublishGateFacts`'s primary Article read
+     * returns — precisely the TOCTOU window the review identified — and
+     * mutates the store as if a concurrent `takedownNovel` transaction had
+     * just committed there. Before the fix this test guards,
+     * `article.update`/`novel.update` were unconditional and would have
+     * overwritten that interleaved takedown with `published`.
+     */
+    it("does not overwrite a Novel takedown that commits between the gate read and the write", async () => {
+      dispatchFirstPublicPublication.mockClear();
+      const db = seedReady(new FakePublishGateDb());
+      db.onFactsLoaded = () => {
+        // Simulates takedownNovel's effect committing inside the window
+        // between this transaction's primary Article read (which observed
+        // draft/ready) and everything after it.
+        db.novels.set("novel-1", { id: "novel-1", status: "takedown", locale: "en", deletedAt: null });
+        const article = db.articles.get("article-1")!;
+        article.status = "takedown";
+        const chapter = db.chapters.get("chapter-1")!;
+        chapter.status = "withdrawn";
+        chapter.body = null; // NovelChapterContent deleted by the takedown workflow
+      };
+
+      const result = await applyPublishTransition(db.asPrismaClient(), {
+        articleId: "article-1",
+        requestId: "req-1",
+        actor: { type: "admin", adminId: "admin-1" },
+      });
+
+      // `loadPublishGateFacts` issues the preview-chapter query *after* the
+      // primary Article read (in the `Promise.all` — see `facts.ts`), so it
+      // observes the hook's already-committed chapter withdrawal: the gate
+      // sees `preview_chapter_missing` and rejects on that basis, never
+      // reaching the write. This is READ COMMITTED behaving exactly as it
+      // should — each statement in the transaction sees the latest
+      // committed data as of that statement, not a single frozen snapshot —
+      // and it is a *second*, independent layer of protection on top of the
+      // write-side `conflict` check below: whichever part of
+      // `loadPublishGateFacts` happens to observe the interleaved commit is
+      // what catches it. `firstPublish` is never fired by mistake.
+      expect(result).toEqual({
+        outcome: "rejected",
+        gate: { publishable: false, reasons: ["preview_chapter_missing"], requiredMetadataMissing: null },
+      });
+      // The interleaved takedown must survive untouched — not silently
+      // republished over content whose body no longer exists.
+      expect(db.novels.get("novel-1")?.status).toBe("takedown");
+      expect(db.articles.get("article-1")?.status).toBe("takedown");
+      expect(db.chapters.get("chapter-1")?.body).toBeNull();
+      expect(db.audits).toHaveLength(0);
+      expect(dispatchFirstPublicPublication).not.toHaveBeenCalled();
+    });
+
+    it("rolls back an already-applied Article-side write when the Novel-side conditional write then finds a conflict", async () => {
+      // Same window, but only the Novel side changes concurrently (e.g. a
+      // second Article on the same Novel triggered the takedown) — the
+      // Article-side updateMany runs first and DOES succeed (its own
+      // precondition — Article status — was untouched by the hook); the
+      // Novel-side conditional write is what then detects the interleaving
+      // and throws `PublishConflictSignal`, which must roll back the
+      // Article-side write too. Without the throw-to-roll-back fix (an
+      // earlier revision just returned `{ outcome: "conflict" }` from inside
+      // the transaction), Prisma would have committed that partial write —
+      // publishing the Article while reporting "conflict" to the caller.
+      const db = seedReady(new FakePublishGateDb());
+      db.onFactsLoaded = () => {
+        db.novels.set("novel-1", { id: "novel-1", status: "takedown", locale: "en", deletedAt: null });
+      };
+
+      const result = await applyPublishTransition(db.asPrismaClient(), {
+        articleId: "article-1",
+        requestId: "req-1",
+        actor: { type: "admin", adminId: "admin-1" },
+      });
+
+      expect(result).toEqual({ outcome: "conflict" });
+      // The concurrent takedown survives — it was a different, already-
+      // committed transaction (`onFactsLoaded` bypasses this transaction's
+      // undo log entirely, exactly as a real concurrent COMMIT would).
+      expect(db.novels.get("novel-1")?.status).toBe("takedown");
+      // This transaction's OWN partial write is rolled back, not committed.
+      expect(db.articles.get("article-1")?.status).toBe("draft");
+      expect(db.audits).toHaveLength(0);
+    });
   });
 
   it("a system actor (scheduled-publish sweep) records a system-attributed audit row", async () => {
