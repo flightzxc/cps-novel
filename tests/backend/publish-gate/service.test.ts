@@ -1,0 +1,244 @@
+import { describe, expect, it, vi } from "vitest";
+
+import {
+  applyPublishTransition,
+  publishArticlesBatch,
+  publishDueScheduledArticles,
+} from "@/server/publish-gate/service";
+
+import { FakePublishGateDb } from "./fake-db";
+
+/**
+ * `applyPublishTransition` composes the real `evaluatePublishGate`, which
+ * defaults to the real (currently empty-whitelist, fail-closed)
+ * `isPublishableLocale`. Mocking the locale module here — rather than adding
+ * a test-only override parameter to production code — is what lets these
+ * tests exercise the "gate passes" path without weakening
+ * `evaluator.ts`'s production default. `vi.mock` calls are hoisted above all
+ * imports by vitest, so this applies before `evaluator.ts` (transitively
+ * imported by `service.ts` above) resolves it.
+ */
+vi.mock("@/lib/locale/locale-canonical", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/locale/locale-canonical")>();
+  return { ...actual, isPublishableLocale: () => true };
+});
+
+const dispatchFirstPublicPublication = vi.fn().mockResolvedValue({ errors: [] });
+vi.mock("@/server/publication/dispatcher", () => ({
+  dispatchFirstPublicPublication: (...args: unknown[]) => dispatchFirstPublicPublication(...args),
+}));
+
+function readyArticle(overrides: Partial<Parameters<InstanceType<typeof FakePublishGateDb>["seedArticle"]>[0]> = {}) {
+  return {
+    id: "article-1",
+    novelId: "novel-1",
+    locale: "en",
+    slug: "some-slug",
+    status: "draft",
+    title: "Title",
+    body: "Body",
+    publishedAt: null,
+    publishAt: null,
+    deletedAt: null,
+    promoLink: { id: "promo-1", status: "fetched", webUrl: "https://a", appUrl: null },
+    ...overrides,
+  };
+}
+
+function seedReady(db: InstanceType<typeof FakePublishGateDb>, overrides: Parameters<typeof readyArticle>[0] = {}) {
+  db.seedNovel({ id: "novel-1", status: "ready", locale: "en", deletedAt: null });
+  db.seedArticle(readyArticle(overrides));
+  db.seedChapter({ id: "chapter-1", novelId: "novel-1", status: "preview", deletedAt: null, body: "chapter body" });
+  return db;
+}
+
+describe("applyPublishTransition", () => {
+  it("returns not_found for a missing or soft-deleted Article", async () => {
+    const db = new FakePublishGateDb();
+    const result = await applyPublishTransition(db.asPrismaClient(), {
+      articleId: "missing",
+      requestId: "req-1",
+      actor: { type: "admin", adminId: "admin-1" },
+    });
+    expect(result).toEqual({ outcome: "not_found" });
+  });
+
+  it("rejects and writes nothing when the gate fails", async () => {
+    dispatchFirstPublicPublication.mockClear();
+    const db = seedReady(new FakePublishGateDb(), { promoLink: null });
+    const result = await applyPublishTransition(db.asPrismaClient(), {
+      articleId: "article-1",
+      requestId: "req-1",
+      actor: { type: "admin", adminId: "admin-1" },
+    });
+    expect(result.outcome).toBe("rejected");
+    if (result.outcome === "rejected") {
+      expect(result.gate.reasons).toEqual(["promo_link_missing"]);
+    }
+    expect(db.articles.get("article-1")?.status).toBe("draft");
+    expect(db.novels.get("novel-1")?.status).toBe("ready");
+    expect(db.audits).toHaveLength(0);
+    expect(dispatchFirstPublicPublication).not.toHaveBeenCalled();
+  });
+
+  it("publishes the Article and its Novel together on a passing gate, and dispatches first-publish", async () => {
+    dispatchFirstPublicPublication.mockClear();
+    const db = seedReady(new FakePublishGateDb());
+    const now = new Date("2026-08-18T00:00:00.000Z");
+    const result = await applyPublishTransition(db.asPrismaClient(), {
+      articleId: "article-1",
+      requestId: "req-1",
+      actor: { type: "admin", adminId: "admin-1" },
+      now,
+    });
+    expect(result).toEqual({
+      outcome: "published",
+      articleId: "article-1",
+      novelId: "novel-1",
+      locale: "en",
+      firstPublish: true,
+    });
+    expect(db.articles.get("article-1")?.status).toBe("published");
+    expect(db.articles.get("article-1")?.publishedAt).toEqual(now);
+    expect(db.novels.get("novel-1")?.status).toBe("published");
+    expect(db.audits).toHaveLength(1);
+    expect(db.audits[0]).toMatchObject({
+      actorType: "admin",
+      actorId: "admin-1",
+      action: "article.publish",
+      entityType: "Article",
+      entityId: "article-1",
+      requestId: "req-1",
+    });
+    expect(dispatchFirstPublicPublication).toHaveBeenCalledTimes(1);
+    expect(dispatchFirstPublicPublication).toHaveBeenCalledWith(
+      { articleId: "article-1", novelId: "novel-1", locale: "en", source: "admin.article.publish" },
+      db.asPrismaClient(),
+    );
+  });
+
+  it("does not re-promote an already-published Novel (idempotent no-op on that side)", async () => {
+    const db = seedReady(new FakePublishGateDb(), { publishedAt: new Date("2026-01-01T00:00:00.000Z") });
+    db.novels.set("novel-1", { id: "novel-1", status: "published", locale: "en", deletedAt: null });
+    db.articles.get("article-1")!.status = "unpublished"; // republish path: was public before, withdrawn, now retried
+    await applyPublishTransition(db.asPrismaClient(), {
+      articleId: "article-1",
+      requestId: "req-1",
+      actor: { type: "admin", adminId: "admin-1" },
+    });
+    expect(db.calls.filter((c) => c === "novel.update")).toHaveLength(0);
+  });
+
+  it("preserves publishedAt and does not fire dispatch again on a second publish (firstPublish: false)", async () => {
+    dispatchFirstPublicPublication.mockClear();
+    const originalPublishedAt = new Date("2026-01-01T00:00:00.000Z");
+    const db = seedReady(new FakePublishGateDb(), { status: "unpublished", publishedAt: originalPublishedAt });
+    const result = await applyPublishTransition(db.asPrismaClient(), {
+      articleId: "article-1",
+      requestId: "req-1",
+      actor: { type: "admin", adminId: "admin-1" },
+      now: new Date("2026-08-18T00:00:00.000Z"),
+    });
+    expect(result).toMatchObject({ outcome: "published", firstPublish: false });
+    expect(db.articles.get("article-1")?.publishedAt).toEqual(originalPublishedAt);
+    expect(dispatchFirstPublicPublication).not.toHaveBeenCalled();
+  });
+
+  it("is idempotent under a repeated requestId: does not write or dispatch twice", async () => {
+    dispatchFirstPublicPublication.mockClear();
+    const db = seedReady(new FakePublishGateDb());
+    const input = {
+      articleId: "article-1",
+      requestId: "req-1",
+      actor: { type: "admin" as const, adminId: "admin-1" },
+    };
+    await applyPublishTransition(db.asPrismaClient(), input);
+    const updateCallsAfterFirst = db.calls.filter((c) => c === "article.update").length;
+    await applyPublishTransition(db.asPrismaClient(), input);
+    expect(db.calls.filter((c) => c === "article.update")).toHaveLength(updateCallsAfterFirst);
+    expect(db.audits).toHaveLength(1);
+    expect(dispatchFirstPublicPublication).toHaveBeenCalledTimes(1);
+  });
+
+  it("a system actor (scheduled-publish sweep) records a system-attributed audit row", async () => {
+    const db = seedReady(new FakePublishGateDb());
+    await applyPublishTransition(db.asPrismaClient(), {
+      articleId: "article-1",
+      requestId: "req-1",
+      actor: { type: "system", source: "scheduled-publish" },
+    });
+    expect(db.audits[0]).toMatchObject({ actorType: "system", actorId: "scheduled-publish" });
+  });
+});
+
+describe("publishArticlesBatch", () => {
+  it("evaluates the gate per item — one rejection does not block the others", async () => {
+    const db = new FakePublishGateDb();
+    db.seedNovel({ id: "novel-1", status: "ready", locale: "en", deletedAt: null });
+    db.seedChapter({ id: "chapter-1", novelId: "novel-1", status: "preview", deletedAt: null, body: "b" });
+    db.seedArticle(readyArticle({ id: "article-ok", slug: "ok" }));
+    db.seedArticle(readyArticle({ id: "article-bad", slug: "bad", promoLink: null }));
+
+    const result = await publishArticlesBatch(db.asPrismaClient(), {
+      articleIds: ["article-ok", "article-bad"],
+      requestId: "batch-1",
+      actor: { type: "admin", adminId: "admin-1" },
+    });
+
+    expect(result.results).toEqual([
+      { articleId: "article-ok", result: expect.objectContaining({ outcome: "published" }) },
+      { articleId: "article-bad", result: expect.objectContaining({ outcome: "rejected" }) },
+    ]);
+    expect(db.articles.get("article-ok")?.status).toBe("published");
+    expect(db.articles.get("article-bad")?.status).toBe("draft");
+  });
+
+  it("rejects an oversized batch before writing anything", async () => {
+    const db = new FakePublishGateDb();
+    const ids = Array.from({ length: 201 }, (_, i) => `article-${i}`);
+    await expect(
+      publishArticlesBatch(db.asPrismaClient(), {
+        articleIds: ids,
+        requestId: "batch-1",
+        actor: { type: "admin", adminId: "admin-1" },
+      }),
+    ).rejects.toMatchObject({ code: "batch_too_large" });
+    expect(db.calls).toHaveLength(0);
+  });
+
+  it("a shared batch requestId does not collide across different Article ids (per-item entityId in the idempotency key)", async () => {
+    const db = new FakePublishGateDb();
+    db.seedNovel({ id: "novel-1", status: "ready", locale: "en", deletedAt: null });
+    db.seedChapter({ id: "chapter-1", novelId: "novel-1", status: "preview", deletedAt: null, body: "b" });
+    db.seedArticle(readyArticle({ id: "article-a", slug: "a" }));
+    db.seedArticle(readyArticle({ id: "article-b", slug: "b" }));
+    await publishArticlesBatch(db.asPrismaClient(), {
+      articleIds: ["article-a", "article-b"],
+      requestId: "same-request-id",
+      actor: { type: "admin", adminId: "admin-1" },
+    });
+    expect(db.articles.get("article-a")?.status).toBe("published");
+    expect(db.articles.get("article-b")?.status).toBe("published");
+    expect(db.audits).toHaveLength(2);
+  });
+});
+
+describe("publishDueScheduledArticles", () => {
+  it("only picks up draft Articles whose publishAt has passed, gated the same as an interactive publish", async () => {
+    const db = new FakePublishGateDb();
+    db.seedNovel({ id: "novel-1", status: "ready", locale: "en", deletedAt: null });
+    db.seedChapter({ id: "chapter-1", novelId: "novel-1", status: "preview", deletedAt: null, body: "b" });
+    const now = new Date("2026-08-18T12:00:00.000Z");
+    db.seedArticle(readyArticle({ id: "due", slug: "due", publishAt: new Date("2026-08-18T00:00:00.000Z") }));
+    db.seedArticle(readyArticle({ id: "not-due", slug: "not-due", publishAt: new Date("2026-08-19T00:00:00.000Z") }));
+    db.seedArticle(readyArticle({ id: "no-schedule", slug: "no-schedule", publishAt: null }));
+
+    const result = await publishDueScheduledArticles(db.asPrismaClient(), { now });
+
+    expect(result.results.map((r) => r.articleId)).toEqual(["due"]);
+    expect(db.articles.get("due")?.status).toBe("published");
+    expect(db.articles.get("not-due")?.status).toBe("draft");
+    expect(db.articles.get("no-schedule")?.status).toBe("draft");
+    expect(db.audits[0]).toMatchObject({ actorType: "system", actorId: "scheduled-publish" });
+  });
+});
