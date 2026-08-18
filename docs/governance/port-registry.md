@@ -71,6 +71,31 @@ P1-05A 只登记从 CPS 提取的数据库**模式证据**；没有字节复制�
 | `PRIMARY_DRAMA_RECORD`/`buildXxxWhere` 组合子形态 | `src/lib/drama-query-helpers.ts` | `1-45` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `PATTERN_ONLY` | 只借「基础谓词常量 + `buildXxxWhere(extra)` 用 `AND` 组合」的形态；Drama 换 Novel/Article 两组独立谓词，且**不搬** CPS `promoUrl: { not: "" }` 不 trim 的 DB 层判定——小说侧 DB 预过滤只做粗粒度状态筛选，应用层 `isPromoReady` 才是权威（`DECISION-CHECK.md` 核查3 实证的 CPS 已确认缺陷，本轮明令不得复刻） | Claude |
 | `dispatchFirstPublicPublication` | `src/lib/publication-dispatcher.ts` | `1-46` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | 保留「按 IndexNow/Sitemap 两条独立 side effect 各自 try/catch、失败互不阻塞」的编排骨架与错误收集形状；CPS 静态 import 两个 enqueue 函数并各自查 feature flag，小说侧两个 enqueue 函数均不存在（IndexNow/Sitemap 业务是 Stream E/D 范围），改为可选 `handlers` 参数注入，今天零 handler 即安全 no-op | Claude |
 | `buildDramaArticlePath`/`buildDramaArticleRoutePath`/`parseDramaArticleSlugParam` → Article path builder | `src/lib/drama-article-path.ts` | `1-55` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | 保留 locale 前缀 + short-id 后缀 URL 构造与其反解析；**删除** `flagOn`/可选 `shortId` 分支（`Article.publicPageShortId` 恒非空，无历史灰度可迁就）；路由段从 `/drama/` 改 `/novel/`；`parseArticleSlugParam` 不假设 CPS 固定 8 位长度 | Claude |
+| `getHomeName` | `src/lib/breadcrumb-i18n.ts` | `31-34` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `COPY` | 原样复制；多语词条保留 | Cursor |
+| `addHeadingIds` | `src/lib/blog-content-utils.ts` | `17-28` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `COPY` | 原样复制 | Cursor |
+| `extractTocItems` | `src/lib/blog-content-utils.ts` | `34-61` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `COPY` | 原样复制 | Cursor |
+| `extractFaqItemsFromContent` | `src/lib/blog-seo.ts` | `191-213` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `COPY` | 原样复制；不搬 blog 路径 / hreflang / BlogPosting | Cursor |
+| `extractFaqItemsFromJsonBlocks` | `src/lib/blog-seo.ts` | `164-189` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `COPY` | 原样复制 | Cursor |
+| `buildFaqJsonLd`（源 `buildBlogFaqJsonLd`） | `src/lib/blog-seo.ts` | `215-231` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | 去 Blog 前缀；JSON-LD 形状不变 | Cursor |
+| `Pagination` | `src/components/site/pagination.tsx` | `10-59` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | 去掉 next-intl / `@/i18n/navigation`；英文 label props；token 换成 novel-* | Cursor |
+| `generateWebSiteJsonLd` | `src/lib/seo-utils.ts` | `14-22` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | origin 改走 `_shared.getSiteUrl`，无 PulseDrama 默认域 | Cursor |
+| `generateCreativeWorkJsonLd` | `src/lib/seo-utils.ts` | `38-57` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | `@type` 改 Book；`/drama/${slug}` 改为调用方传入 url；`episodeCount`→`chapterCount`；删 platform/provider | Cursor |
+| `generateBreadcrumbJsonLd` | `src/lib/seo-utils.ts` | `66-77` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `COPY` | 原样复制（origin 经 getSiteUrl） | Cursor |
+| `generateItemListJsonLd` | `src/lib/seo-utils.ts` | `88-103` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `COPY` | 原样复制 | Cursor |
+| `canonicalUrl` | `src/lib/seo-utils.ts` | `107-109` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `COPY` | 原样复制 | Cursor |
+| `buildHreflangAlternates` | `src/lib/seo-utils.ts` | `127-135` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | `SUPPORTED_SITE_LOCALES` 换成 `SITE_LOCALES`；仍是同路径 locale 前缀 map，不是跨 Novel 兄弟页 | Cursor |
+| `shouldNoIndex` | `src/lib/seo-utils.ts` | `139-141` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `COPY` | 原样复制 | Cursor |
+| `normalizeMetadataTitle` | `src/lib/seo-meta-generator.ts` | `82-94` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `COPY` | 原样复制 | Cursor |
+| `generateSeoMeta` | `src/lib/seo-meta-generator.ts` | `103-126` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | entity 从 drama/tag/category 收成 novel/home/collection；删 Short Dramas 默认文案 | Cursor |
+| `truncateDescription` | `src/lib/seo-templates/_shared.ts` | `7-15` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `COPY` | 原样复制 | Cursor |
+| `buildCanonical` | `src/lib/seo-templates/_shared.ts` | `21-26` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | origin 经 getSiteUrl，无 PulseDrama 默认域 | Cursor |
+| `buildLocaleCanonical` | `src/lib/seo-templates/_shared.ts` | `31-37` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `COPY` | 原样复制（en 无前缀） | Cursor |
+| `resolveOgImage` | `src/lib/seo-templates/_shared.ts` | `40-44` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | 去掉 pulsedrama 默认图；缺图 fail-closed | Cursor |
+| `paginatedRobots` | `src/lib/seo-templates/_shared.ts` | `47-50` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `COPY` | 原样复制 | Cursor |
+| `getSiteUrl` | `src/lib/site-url.ts` | `3-9` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | 内联进 `_shared.ts`，避免占用 Stream D 的 `site-url.ts` 落点；删除 `enpulsedrama.com` 默认域，缺 env 抛错 | Cursor |
+| `toAbsoluteUrl` | `src/lib/site-url.ts` | `11-26` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `COPY` | 原样复制到 `_shared.ts` | Cursor |
+| `openGraphLocaleTag`（源 `toOgLocale`） | `src/lib/i18n/og-locale.ts` | `31-33` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | 改名以免触发「第二份 locale 映射」守卫；表内容保留 | Cursor |
+| `buildNovelSeoMeta`（源 `buildDramaSeoMeta`） | `src/lib/seo-templates/drama.ts` | `36-123` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | 文案与 JSON-LD 从 TVSeries/VideoObject 改成 Book；删预告片分支 | Cursor |
 
 ### 无搬运的任务（显式登记，避免被当成漏登）
 
