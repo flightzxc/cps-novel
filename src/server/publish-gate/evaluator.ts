@@ -71,7 +71,12 @@ export type PublishGatePreviewFacts = {
 };
 
 export type PublishGatePageIdentityFacts = {
-  /** A different, non-deleted Article already occupies this (locale, slug) pair. */
+  /**
+   * A different, non-deleted Article already occupies this (locale, slug)
+   * pair. Currently always `false` in V1 — `facts.ts` explains why
+   * (`article_locale_slug_active_uidx` makes the underlying row
+   * unreachable) and why this defense-in-depth check is kept anyway.
+   */
   readonly conflicting: boolean;
 };
 

@@ -57,6 +57,26 @@ export async function loadPublishGateFacts(
       where: { novelId: article.novelId, deletedAt: null, status: "preview" },
       select: { content: { select: { body: true } } },
     }),
+    // 🔴 Defense-in-depth, currently unreachable in V1 (merge-time review,
+    // `scratchpad/reports/A-REVIEW.md` §2 信息项): this query looks for a
+    // different, non-deleted Article already occupying this Article's own
+    // `(locale, slug)` pair. `article_locale_slug_active_uidx`
+    // (`prisma/migrations/20260803090000_p1_initial_schema/migration.sql:1287`
+    // — `UNIQUE (locale, slug) WHERE deleted_at IS NULL`) is structurally
+    // identical to this WHERE clause and applies unconditionally at every
+    // write, not only at publish time, so the database can never contain the
+    // row this query is looking for — `conflicting` is always `false` today.
+    // Same posture `docs/p2/P2_01_PUBLISH_GATE_CONTRACT.md` §3 takes for
+    // `public_redirect_code` (DB `NOT NULL + UNIQUE` makes that failure
+    // state unreachable too) — the difference is `public_redirect_code`'s
+    // reason code was removed from the frozen nine-element registry
+    // entirely for being unreachable, while `page_identity_conflict` stays
+    // registered; this query is kept, unlike that removal, because a future
+    // slug-alias table or an edit path that reassigns `slug` post-creation
+    // could reintroduce a reachable case the DB constraint alone would not
+    // cover the same way. Do not delete this query on the assumption it is
+    // dead — it is deliberately redundant with the DB constraint, not
+    // superseded by it.
     db.article.findFirst({
       where: {
         id: { not: article.id },
