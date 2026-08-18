@@ -157,12 +157,15 @@ Migration 演进，当前 Credential 状态增量为
 
 其他受限枚举同样进入 CHECK：task mode `dry_run | apply`、PromoLink origin
 `upstream_existing | claimed`、label kind、IndexNow attempt `outcome`（原 `attempt_state`
-更名，取值不变：`started | accepted | retryable_failed | permanent_failed`）、IndexNow attempt
+更名，取值不变：`started | accepted | retryable_failed | permanent_failed`，机器真源
+`src/domain/database-statuses.ts` 的 `INDEXNOW_ATTEMPT_OUTCOMES`）、IndexNow attempt
 `attempt_state`（v0.2.0 foundation 新增，CPS 崩溃恢复语义：`started | completed |
-unknown_outcome`，与 `outcome` 是两个独立字段，不得混淆）、ScheduleRun trigger kind、misfire
-policy、preview materialization policy 和 carousel serving source。
+unknown_outcome`，机器真源 `INDEXNOW_ATTEMPT_RECOVERY_STATES`，与 `outcome` 是两个独立字段，
+不得混淆）、ScheduleRun trigger kind、misfire policy、preview materialization policy 和
+carousel serving source。
 
-逐值业务语义以 `src/domain/database-statuses.ts` 的 `DATABASE_STATUS_SEMANTICS` 和 JSONL 字典为机器真源。特别冻结：
+逐值业务语义以 `src/domain/database-statuses.ts` 的 `DATABASE_STATUS_SEMANTICS`（`indexnow_outbox_attempt`
+条目按列名 `outcome`/`attemptState` 二级嵌套，因为该表没有单一 `status` 列）和 JSONL 字典为机器真源。特别冻结：
 
 - Novel/Article `draft`、Novel `ready` 对公众为 404；`published` 才进入公开读取。
 - `unpublished` 保留稳定下架页并退出索引，内容继续保留；`takedown` 是版权或安全移除，公开路由返回 **HTTP 410 Gone**，两者不得合并。

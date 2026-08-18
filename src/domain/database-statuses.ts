@@ -17,7 +17,10 @@ export const CATALOG_ITEM_STATUSES = ["pending", "processing", "success", "faile
 export const TASK_ITEM_STATUSES = ["pending", "processing", "success", "skipped", "failed"] as const;
 export const SIDE_EFFECT_INTENT_STATUSES = ["prepared", "confirmed", "failed", "claim_retry_blocked", "manual_review_required"] as const;
 export const INDEXNOW_STATUSES = ["pending", "processing", "accepted", "retry_wait", "permanent_failed", "dead_letter", "cancelled"] as const;
-export const INDEXNOW_ATTEMPT_STATES = ["started", "accepted", "retryable_failed", "permanent_failed"] as const;
+/** `indexnow_outbox_attempt.outcome` (v0.2.0 foundation rename, ex `attempt_state`; values unchanged). HTTP result classification for one delivery attempt. */
+export const INDEXNOW_ATTEMPT_OUTCOMES = ["started", "accepted", "retryable_failed", "permanent_failed"] as const;
+/** `indexnow_outbox_attempt.attempt_state` (v0.2.0 foundation, new column reusing the name vacated by the rename above). CPS worker crash-recovery semantics — distinct question from `outcome`. */
+export const INDEXNOW_ATTEMPT_RECOVERY_STATES = ["started", "completed", "unknown_outcome"] as const;
 export const ARTICLE_TEMPLATE_STATUSES = ["draft", "active", "retired"] as const;
 export const ARTICLE_STATUSES = ["draft", "published", "unpublished", "takedown"] as const;
 export const SCHEDULE_RUN_STATUSES = ["due", "enqueued", "misfired", "skipped", "failed"] as const;
@@ -128,6 +131,25 @@ export const DATABASE_STATUS_SEMANTICS = {
     dead_letter: "Retry budget was exhausted and operator inspection is required.",
     cancelled: "Delivery was deliberately cancelled because the revision is no longer actionable.",
   },
+  /**
+   * indexnow_outbox_attempt has no plain `status` column; these two enum
+   * columns fill that role and answer two different questions per row
+   * (docs/governance/database-governance.md §4 cross-references both by
+   * name — keep them in sync).
+   */
+  indexnow_outbox_attempt: {
+    outcome: {
+      started: "Attempt was created and its HTTP request has not yet been classified.",
+      accepted: "IndexNow accepted this attempt (HTTP 200/202).",
+      retryable_failed: "Attempt failed with a retryable HTTP status (429/5xx) or network error.",
+      permanent_failed: "Attempt failed with a non-retryable HTTP status (400/403/422).",
+    },
+    attemptState: {
+      started: "Request was sent but the worker has not yet recorded a response for this attempt.",
+      completed: "Worker recorded a response and applied its terminal classification to `outcome`.",
+      unknown_outcome: "Worker process ended after the request was sent but before a response was recorded; retried safely since IndexNow submission is idempotent.",
+    },
+  },
   schedule_run: {
     due: "A deterministic scheduled instant or manual trigger awaits atomic enqueue.",
     enqueued: "The corresponding CronRun and GenericTask were durably created.",
@@ -175,4 +197,6 @@ export type TaskStatus = ValueOf<typeof TASK_STATUSES>;
 export type TaskItemStatus = ValueOf<typeof TASK_ITEM_STATUSES>;
 export type SideEffectIntentStatus = ValueOf<typeof SIDE_EFFECT_INTENT_STATUSES>;
 export type IndexNowStatus = ValueOf<typeof INDEXNOW_STATUSES>;
+export type IndexNowAttemptOutcome = ValueOf<typeof INDEXNOW_ATTEMPT_OUTCOMES>;
+export type IndexNowAttemptRecoveryState = ValueOf<typeof INDEXNOW_ATTEMPT_RECOVERY_STATES>;
 export type ArticleStatus = ValueOf<typeof ARTICLE_STATUSES>;
