@@ -20,7 +20,9 @@ describe("P1-05B static database contracts", () => {
       [path.join(root, "scripts/check-database-dictionary-drift.mjs"), "--static"],
       { encoding: "utf8" },
     );
-    expect(JSON.parse(output)).toMatchObject({ status: "ok", models: 43 });
+    // v0.2.0 foundation added the SiteSetting table (Stream F, migration
+    // 20260818120000_v020_foundation_shared): 43 -> 44 Prisma models.
+    expect(JSON.parse(output)).toMatchObject({ status: "ok", models: 44 });
   });
 
   it("keeps stable keys globally unique and records physical ownership", () => {
@@ -30,7 +32,16 @@ describe("P1-05B static database contracts", () => {
       .map((line) => JSON.parse(line) as Record<string, unknown>);
     const keys = records.map((record) => record.stable_key);
     expect(new Set(keys).size).toBe(keys.length);
-    expect(records.every((record) => record.status === "active")).toBe(true);
+    // v0.2.0 foundation introduced this repo's first field/constraint renames
+    // (IndexNowOutboxAttempt.attemptState -> outcome, and its CHECK), which
+    // per docs/governance/database-governance.md §10 must be retained as
+    // `superseded` rather than deleted. "active" is no longer the only valid
+    // status; every record must be either currently active or an explicitly
+    // superseded historical entry — never any other value, and never simply
+    // dropped from the file.
+    for (const record of records) {
+      expect(["active", "superseded"]).toContain(record.status);
+    }
     expect(
       records
         .filter((record) => record.record_kind === "constraint")

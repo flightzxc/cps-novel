@@ -73,7 +73,10 @@ describe("P1-06 database operations static contracts", () => {
 
   it("extends the dictionary for the six approved Auth tables without duplicate keys", () => {
     const records = read("docs/governance/database-schema-dictionary.jsonl").trim().split("\n");
-    expect(records).toHaveLength(920);
-    expect(new Set(records.map((line) => JSON.parse(line).stable_key)).size).toBe(920);
+    // v0.2.0 foundation (Stream F, migration 20260818120000_v020_foundation_shared) added 32
+    // records for IndexNowOutbox/-Attempt's new fields and the SiteSetting table, so
+    // 920 -> 952. This assertion's purpose — no duplicate stable_key — is unaffected by the count.
+    expect(records).toHaveLength(952);
+    expect(new Set(records.map((line) => JSON.parse(line).stable_key)).size).toBe(952);
   });
 });
