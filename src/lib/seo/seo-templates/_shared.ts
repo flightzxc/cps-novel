@@ -1,12 +1,8 @@
 /**
  * Shared SEO primitives for metadata templates.
  *
- * Ported from CPS `src/lib/seo-templates/_shared.ts` (d77c3b9) plus the
- * `getSiteUrl` / `toAbsoluteUrl` pair from `src/lib/site-url.ts` (inlined
- * here so this PR does not claim Stream D's `src/lib/seo/site-url.ts` path).
- *
+ * Ported from CPS `src/lib/seo-templates/_shared.ts` (d77c3b9).
  * PulseDrama brand constants and the CPS default domain are not ported.
- * Missing SITE_URL fails closed (throws) rather than inventing a host.
  */
 
 const OPEN_GRAPH_TAGS: Record<string, string> = {
@@ -34,12 +30,49 @@ const OPEN_GRAPH_TAGS: Record<string, string> = {
   nl: "nl_NL",
 };
 
-export function getSiteUrl(): string {
-  const siteUrl = process.env.SITE_URL?.trim() || process.env.NEXT_PUBLIC_SITE_URL?.trim();
-  if (!siteUrl) {
-    throw new Error("SITE_URL or NEXT_PUBLIC_SITE_URL is required to build absolute SEO URLs");
+export class SiteUrlConfigurationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "SiteUrlConfigurationError";
   }
-  return siteUrl.endsWith("/") ? siteUrl.slice(0, -1) : siteUrl;
+}
+
+/**
+ * TODO(p2-10 / Stream D): once `src/lib/seo/site-url.ts` lands on the
+ * integration branch, replace this body with
+ * `export { getSiteUrl, SiteUrlConfigurationError } from "@/lib/seo/site-url"`.
+ * Semantics below already match that module: SITE_URL only, absolute HTTP(S)
+ * origin, no `NEXT_PUBLIC_SITE_URL` fallback.
+ */
+export function getSiteUrl(
+  env: Readonly<{ SITE_URL?: string }> = { SITE_URL: process.env.SITE_URL },
+): string {
+  const raw = env.SITE_URL?.trim();
+  if (!raw) {
+    throw new SiteUrlConfigurationError("SITE_URL must be configured");
+  }
+
+  let parsed: URL;
+  try {
+    parsed = new URL(raw);
+  } catch {
+    throw new SiteUrlConfigurationError("SITE_URL must be an absolute HTTP(S) origin");
+  }
+
+  if (
+    (parsed.protocol !== "http:" && parsed.protocol !== "https:") ||
+    parsed.username ||
+    parsed.password ||
+    parsed.pathname !== "/" ||
+    parsed.search ||
+    parsed.hash
+  ) {
+    throw new SiteUrlConfigurationError(
+      "SITE_URL must be an absolute HTTP(S) origin without credentials, path, query, or fragment",
+    );
+  }
+
+  return parsed.origin;
 }
 
 export function toAbsoluteUrl(path: ""): undefined;

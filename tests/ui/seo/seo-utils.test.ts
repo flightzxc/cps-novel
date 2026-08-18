@@ -9,6 +9,7 @@ import {
   generateWebSiteJsonLd,
   shouldNoIndex,
 } from "@/lib/seo/seo-utils";
+import { getSiteUrl, SiteUrlConfigurationError } from "@/lib/seo/seo-templates/_shared";
 
 const ORIGIN = "https://example.test";
 
@@ -95,5 +96,26 @@ describe("seo-utils", () => {
   it("marks page >= 2 as noindex", () => {
     expect(shouldNoIndex(1)).toBe(false);
     expect(shouldNoIndex(2)).toBe(true);
+  });
+
+  it("reads only SITE_URL and requires an absolute HTTP(S) origin", () => {
+    expect(getSiteUrl({ SITE_URL: ORIGIN })).toBe(ORIGIN);
+    expect(getSiteUrl({ SITE_URL: `${ORIGIN}/` })).toBe(ORIGIN);
+    expect(() => getSiteUrl({})).toThrow(SiteUrlConfigurationError);
+    expect(() => getSiteUrl({ SITE_URL: `${ORIGIN}/path` })).toThrow(SiteUrlConfigurationError);
+    expect(() => getSiteUrl({ SITE_URL: "ftp://novel.example" })).toThrow(SiteUrlConfigurationError);
+
+    const previous = process.env.SITE_URL;
+    const previousPublic = process.env.NEXT_PUBLIC_SITE_URL;
+    delete process.env.SITE_URL;
+    process.env.NEXT_PUBLIC_SITE_URL = ORIGIN;
+    try {
+      expect(() => getSiteUrl()).toThrow(SiteUrlConfigurationError);
+    } finally {
+      if (previous === undefined) delete process.env.SITE_URL;
+      else process.env.SITE_URL = previous;
+      if (previousPublic === undefined) delete process.env.NEXT_PUBLIC_SITE_URL;
+      else process.env.NEXT_PUBLIC_SITE_URL = previousPublic;
+    }
   });
 });

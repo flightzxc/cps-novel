@@ -95,7 +95,7 @@ P1-05A 只登记从 CPS 提取的数据库**模式证据**；没有字节复制�
 | `buildLocaleCanonical` | `src/lib/seo-templates/_shared.ts` | `31-37` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `COPY` | 原样复制（en 无前缀） | Cursor |
 | `resolveOgImage` | `src/lib/seo-templates/_shared.ts` | `40-44` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | 去掉 pulsedrama 默认图；缺图 fail-closed | Cursor |
 | `paginatedRobots` | `src/lib/seo-templates/_shared.ts` | `47-50` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `COPY` | 原样复制 | Cursor |
-| `getSiteUrl` | `src/lib/site-url.ts` | `3-9` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | 内联进 `_shared.ts`，避免占用 Stream D 的 `site-url.ts` 落点；删除 `enpulsedrama.com` 默认域，缺 env 抛错 | Cursor |
+| `getSiteUrl` | `src/lib/site-url.ts` | `3-9` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | 先内联进 `_shared.ts`；PR4 改为与 Stream D `site-url.ts` 同语义（仅 `SITE_URL`、校验绝对 HTTP(S) origin、无 `NEXT_PUBLIC_SITE_URL` 回退）。D 的文件尚未合入整合分支，本实现留 TODO 指向 `src/lib/seo/site-url.ts` 收敛点 | Cursor |
 | `toAbsoluteUrl` | `src/lib/site-url.ts` | `11-26` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `COPY` | 原样复制到 `_shared.ts` | Cursor |
 | `openGraphLocaleTag`（源 `toOgLocale`） | `src/lib/i18n/og-locale.ts` | `31-33` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | 改名以免触发「第二份 locale 映射」守卫；表内容保留 | Cursor |
 | `buildNovelSeoMeta`（源 `buildDramaSeoMeta`） | `src/lib/seo-templates/drama.ts` | `36-123` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | 文案与 JSON-LD 从 TVSeries/VideoObject 改成 Book；删预告片分支 | Cursor |
@@ -105,6 +105,8 @@ P1-05A 只登记从 CPS 提取的数据库**模式证据**；没有字节复制�
 | 任务 | CPS 复刻分类 | 原因 |
 | --- | --- | --- |
 | P1-11 阅读器功能 | `ORIGINAL_REQUIRED` | CPS 零可复用的正文托管、分章渲染、阅读版式资产——CPS 的试看是视频跳转，语义不可平移。**本轮无任何从 CPS 搬入的符号。** |
+| P2-08 PR2 公开接库 | `ORIGINAL_REQUIRED` | 公开路由、`src/lib/site` mapper、轮播空桩均为小说仓地基上的新接线。takedown/withdrawn V1 走页面层 `notFound()`（404），不搬 CPS proxy 410。明确不搬 `home-carousel-queries.ts`（Owner 裁决空数组）、`drama-hreflang.ts`、`site-queries.ts`、跨 Novel hreflang、`/go` handler。 |
+| `PUBLIC_LIST_CAP=240` 内存分页硬顶 | `ORIGINAL_REQUIRED` | 公开列表 `findMany({ take: 240 })` 后再 `isPromoReady` 过滤、内存分页。超限后 browse 的 `totalCount`/`totalPages` 失真，且 sitemap 可能收录 cap 之外的 URL 而 `/browse` 列不出（内链缺口）。V1 接受该限制，本轮不改实现。 |
 
 ## 使用说明
 
