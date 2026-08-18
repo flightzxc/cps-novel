@@ -95,8 +95,10 @@ function withDbRetry<T>(
 error as a unique/serialization/FK violation **must** import from this module. Do not write a
 second `error.code === "P2002"` check anywhere else, including `$queryRaw`/`$executeRaw` call
 sites that need the `P2010` + `meta.code` raw-SQL equivalent — `isUniqueConstraintViolation`/
-`isSerializationFailure` already handle both forms. `src/server/credentials/service.ts` was
-refactored in this PR to import these instead of its own local copies; treat that as the reference
+`isSerializationFailure` already handle both forms. `src/server/credentials/service.ts`,
+`src/lib/tasks/moboreader.ts`, and `src/lib/tasks/side-effect-intent.ts` were all refactored in
+this PR to import these instead of their own local copies (the latter two were pre-existing P1
+inline checks an Opus review round found and this PR consolidated); treat that as the reference
 example.
 
 ---
@@ -250,8 +252,8 @@ concatenate `/novel/${slug}-p${shortId}` inline anywhere.
 ## 8. Test coverage shipped with this PR
 
 All under `tests/backend/` (vitest `node` project; `tests/ui/` is the only path actually collected
-for jsdom/UI tests — see `reference_cps_novel_repo_conventions`). 132 new tests, all passing at PR
-time:
+for jsdom/UI tests — see `reference_cps_novel_repo_conventions`). 100 new tests (23+31+13+8+14+11),
+all passing at PR time:
 
 | Module | Test file | Count |
 | --- | --- | --- |
