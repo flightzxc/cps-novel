@@ -90,12 +90,24 @@
  * getting back to `published` means going through `applyPublishTransition`
  * again, gate and all.
  *
+ * ## Cache invalidation (Stream C / P2-09)
+ *
+ * `applyPublishTransition` and `applyNovelRightsTransition` both call
+ * `@/server/publication/revalidate` after their `$transaction` commits, never
+ * from inside it — `revalidatePath` has no transactional meaning and a write
+ * that later rolls back (e.g. a TOCTOU conflict thrown after an earlier
+ * statement succeeded) must not have already broadcast an invalidation for a
+ * change that never actually landed. Both call sites wrap the broadcast in
+ * `safeInvalidatePublicCache`, a call-site try/catch — the same isolation
+ * stance `dispatchFirstPublicPublication` takes internally per-handler — so a
+ * cache-invalidation failure can never fail the write it followed. See
+ * `docs/p2/P2_09_INVALIDATION_MATRIX.md` for the full write-path inventory
+ * this closes and why CPS's five confirmed invalidation gaps
+ * (`P2-07-12-移植审计-2026-08-12/P2-09.md` §4) do not reproduce here.
+ *
  * ## What this module does not do
  *
- * It does not call `revalidatePath`/`revalidateTag` — that wiring is
- * Stream C's job (`P2_07_12_一轮实施分工方案_2026-08-12.md` §三 Stream C: "A 写口
- * 定型后接线"), deliberately sequenced after this module's write-path shape
- * is stable. It does not build Server Action / Admin UI wiring for these
+ * It does not build Server Action / Admin UI wiring for these
  * functions — no admin screen calls them yet (`grep -rl publish
  * src/app/\(admin\)` turns up nothing but a status-badge label), so wiring a
  * Server Action now would be untested, unreachable code; the shape here
@@ -109,7 +121,13 @@ import type { PrismaClient } from "@prisma/client";
 
 import type { AdminIdentityStore, SessionStore } from "@/lib/auth/ports";
 import type { NovelStatus } from "@/domain/database-statuses";
+import type { SiteLocale } from "@/lib/locale/locale-canonical";
 import { dispatchFirstPublicPublication } from "@/server/publication/dispatcher";
+import {
+  revalidatePublicArticlePaths,
+  revalidatePublicArticleSet,
+  type ArticlePublicPathInput,
+} from "@/server/publication/revalidate";
 import { requireFreshAdminServiceMutation, type AdminServiceAuthorization } from "@/server/auth/guards";
 
 import { evaluatePublishGate, type PublishGateEvaluation } from "./evaluator";
@@ -146,6 +164,27 @@ function trimmedReason(value: string | undefined, required: boolean): string | n
   if (required && !normalized) throw new Error("A reason is required");
   if (normalized.length > 1000) throw new Error("Reason is too long");
   return normalized || null;
+}
+
+/**
+ * Call-site isolation boundary for cache invalidation — see this module's
+ * header, "Cache invalidation (Stream C / P2-09)". `@/server/publication/
+ * revalidate`'s own functions already never throw (each `revalidatePath`
+ * call is individually try/catch-wrapped there), but this wrapper is the
+ * belt to that module's suspenders: it guarantees a write path's return
+ * value is never affected by the invalidation step that follows it, provable
+ * by `tests/backend/publish-gate/invalidation-wiring.test.ts` mocking the
+ * revalidate module to throw and asserting the write still succeeds.
+ */
+function safeInvalidatePublicCache(run: () => void): void {
+  try {
+    run();
+  } catch (error) {
+    console.error(
+      "[publish-gate] public cache invalidation failed after a committed write:",
+      error,
+    );
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -216,6 +255,14 @@ type TxPublishOutcome =
       readonly articleId: string;
       readonly novelId: string;
       readonly locale: string;
+      /**
+       * Carried through purely to build the invalidated path after commit
+       * (`@/server/publication/revalidate`) — not part of the public
+       * `ApplyPublishTransitionResult` shape, so it never leaks into this
+       * module's exported API.
+       */
+      readonly slug: string;
+      readonly publicPageShortId: string;
       readonly firstPublish: boolean;
       readonly wrote: boolean;
     };
@@ -287,6 +334,8 @@ export async function applyPublishTransition(
           articleId: article.id,
           novelId: article.novelId,
           locale: article.locale,
+          slug: article.slug,
+          publicPageShortId: article.publicPageShortId,
           firstPublish: false,
           wrote: false,
         };
@@ -346,6 +395,8 @@ export async function applyPublishTransition(
         articleId: article.id,
         novelId: article.novelId,
         locale: article.locale,
+        slug: article.slug,
+        publicPageShortId: article.publicPageShortId,
         firstPublish,
         wrote: true,
       };
@@ -367,6 +418,20 @@ export async function applyPublishTransition(
       },
       db,
     );
+  }
+
+  // Cache invalidation fires on every real write (`wrote`), not only
+  // `firstPublish` — unlike the IndexNow/sitemap dispatch above, which is a
+  // one-time "this URL is new" event, a later republish (takedown → restore
+  // → publish again) also changes what the public page renders and must
+  // invalidate the same way. See this module's header, "Cache invalidation".
+  if (txResult.outcome === "published" && txResult.wrote) {
+    const pathInput: ArticlePublicPathInput = {
+      locale: txResult.locale as SiteLocale,
+      slug: txResult.slug,
+      shortId: txResult.publicPageShortId,
+    };
+    safeInvalidatePublicCache(() => revalidatePublicArticlePaths(pathInput));
   }
 
   if (txResult.outcome === "published") {
@@ -516,6 +581,28 @@ function requireSourceStatus(kind: RightsTransitionKind, novelId: string, novelS
   }
 }
 
+/**
+ * `RightsTransitionResult` plus the path-building fields for every affected
+ * Article — internal only (mirrors `TxPublishOutcome` vs.
+ * `ApplyPublishTransitionResult`'s split above). Never returned to callers
+ * of `withdrawNovel`/`takedownNovel`/`restoreNovel`; consumed by this
+ * function's own post-commit `safeInvalidatePublicCache` call and then
+ * discarded when mapping down to the public `RightsTransitionResult` shape.
+ */
+type NovelRightsTransitionTxResult = RightsTransitionResult & {
+  readonly affectedArticlePaths: readonly ArticlePublicPathInput[];
+};
+
+function toArticlePublicPathInputs(
+  rows: ReadonlyArray<{ locale: string; slug: string; publicPageShortId: string }>,
+): ArticlePublicPathInput[] {
+  return rows.map((row) => ({
+    locale: row.locale as SiteLocale,
+    slug: row.slug,
+    shortId: row.publicPageShortId,
+  }));
+}
+
 async function applyNovelRightsTransition(
   input: {
     authorization: AdminServiceAuthorization;
@@ -537,7 +624,7 @@ async function applyNovelRightsTransition(
   const auditAction = RIGHTS_TRANSITION_AUDIT_ACTION[input.kind];
   const nextStatus = RIGHTS_TRANSITION_TARGET[input.kind];
 
-  return deps.db.$transaction(async (tx) => {
+  const txResult = await deps.db.$transaction<NovelRightsTransitionTxResult>(async (tx) => {
     const existingAudit = await tx.operationAudit.findFirst({
       where: { actorType: "admin", action: auditAction, entityType: "Novel", entityId: input.novelId, requestId: input.requestId },
     });
@@ -545,9 +632,14 @@ async function applyNovelRightsTransition(
       const novel = await tx.novel.findUniqueOrThrow({ where: { id: input.novelId } });
       const articles = await tx.article.findMany({
         where: { novelId: input.novelId, deletedAt: null },
-        select: { id: true },
+        select: { id: true, locale: true, slug: true, publicPageShortId: true },
       });
-      return { novelId: input.novelId, novelStatus: novel.status as NovelStatus, affectedArticleIds: articles.map((a) => a.id) };
+      return {
+        novelId: input.novelId,
+        novelStatus: novel.status as NovelStatus,
+        affectedArticleIds: articles.map((a) => a.id),
+        affectedArticlePaths: toArticlePublicPathInputs(articles),
+      };
     }
 
     const novel = await tx.novel.findFirst({ where: { id: input.novelId, deletedAt: null } });
@@ -569,7 +661,7 @@ async function applyNovelRightsTransition(
         ...(input.kind === "withdraw" ? { status: "published" as const } : {}),
         ...(input.kind === "restore" ? { status: "takedown" as const } : {}),
       },
-      select: { id: true },
+      select: { id: true, locale: true, slug: true, publicPageShortId: true },
     });
     const affectedArticleIds = affected.map((a) => a.id);
 
@@ -614,8 +706,28 @@ async function applyNovelRightsTransition(
       },
     });
 
-    return { novelId: input.novelId, novelStatus: nextStatus, affectedArticleIds };
+    return {
+      novelId: input.novelId,
+      novelStatus: nextStatus,
+      affectedArticleIds,
+      affectedArticlePaths: toArticlePublicPathInputs(affected),
+    };
   });
+
+  // Post-commit, isolated — see this module's header, "Cache invalidation".
+  // Fires for every kind (withdraw/takedown/restore alike) and for the
+  // idempotent-replay branch too: cheap and safe to over-invalidate, and it
+  // keeps this call site free of a `wrote`-style branch the way
+  // `applyPublishTransition` needs (that branch exists there purely to skip
+  // an otherwise-unnecessary extra path lookup on replay, which this
+  // function's single query already avoids).
+  safeInvalidatePublicCache(() => revalidatePublicArticleSet(txResult.affectedArticlePaths));
+
+  return {
+    novelId: txResult.novelId,
+    novelStatus: txResult.novelStatus,
+    affectedArticleIds: txResult.affectedArticleIds,
+  };
 }
 
 export async function withdrawNovel(
