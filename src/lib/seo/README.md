@@ -8,7 +8,7 @@ SEO 口径的实现：页面 metadata 生成、canonical 规则、可索引判�
 
 ## 本轮范围
 
-P2-08 PR·公共 helper 已落地纯函数：breadcrumb、TOC、FAQ 抽取、seo-utils、seo-meta-generator。不碰数据库。`site-url.ts` 仍留给 Stream D；本目录把 `getSiteUrl` / `toAbsoluteUrl` 收在 `seo-templates/_shared.ts`。
+P2-08 PR·公共 helper 已落地纯函数：breadcrumb、TOC、FAQ 抽取、seo-utils、seo-meta-generator。不碰数据库。`site-url.ts` 仍留给 Stream D；本目录把 `getSiteUrl` / `toAbsoluteUrl` 收在 `seo-templates/_shared.ts`。章节路径由 `chapter-path.ts` 组合地基 `buildArticleRoutePath`，不改 `article-path.ts`。
 
 ## 特别纪律
 

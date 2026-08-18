@@ -105,6 +105,7 @@ P1-05A 只登记从 CPS 提取的数据库**模式证据**；没有字节复制�
 | 任务 | CPS 复刻分类 | 原因 |
 | --- | --- | --- |
 | P1-11 阅读器功能 | `ORIGINAL_REQUIRED` | CPS 零可复用的正文托管、分章渲染、阅读版式资产——CPS 的试看是视频跳转，语义不可平移。**本轮无任何从 CPS 搬入的符号。** |
+| P2-08 PR2 公开接库 | `ORIGINAL_REQUIRED` | 公开路由、`src/lib/site` mapper、`gone()`、轮播空桩均为小说仓地基上的新接线。明确不搬 `home-carousel-queries.ts`（Owner 裁决空数组）、`drama-hreflang.ts`、`site-queries.ts`、跨 Novel hreflang、`/go` handler。 |
 
 ## 使用说明
 

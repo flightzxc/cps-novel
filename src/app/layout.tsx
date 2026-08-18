@@ -5,8 +5,8 @@ import "@/styles/globals.css";
 export const metadata: Metadata = {
   title: "cps-novel",
   description: "海外小说内容分发站点",
-  // 🔴 P1-10 全部页面都是 MOCK_ONLY 的开发预览，整体不可索引，也不进 sitemap。
-  // 真实的 per-page SEO 元数据与 self-canonical 属于内容阶段，本轮不预设。
+  // Public pages override this from generateMetadata (innermost wins).
+  // `dev-preview` and `(admin)` keep noindex via their own layouts.
   robots: { index: false, follow: false },
 };
 
