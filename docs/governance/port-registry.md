@@ -99,6 +99,14 @@ P1-05A 只登记从 CPS 提取的数据库**模式证据**；没有字节复制�
 | `toAbsoluteUrl` | `src/lib/site-url.ts` | `11-26` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `COPY` | 原样复制到 `_shared.ts` | Cursor |
 | `openGraphLocaleTag`（源 `toOgLocale`） | `src/lib/i18n/og-locale.ts` | `31-33` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | 改名以免触发「第二份 locale 映射」守卫；表内容保留 | Cursor |
 | `buildNovelSeoMeta`（源 `buildDramaSeoMeta`） | `src/lib/seo-templates/drama.ts` | `36-123` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | 文案与 JSON-LD 从 TVSeries/VideoObject 改成 Book；删预告片分支 | Cursor |
+| `getStaticSitemapRoot`/`readStaticSitemapFile`/静态响应头 | `src/lib/static-sitemap-cache.ts` | `1-54` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | 原样保留 current 目录读取、路径穿越防御、缓存头和缺失返回 null；仅移动到 `src/lib/seo/` | Codex |
+| `generateStaticSitemaps`/release 校验与原子 symlink 切换 | `src/lib/static-sitemap-generator.ts` | `1-271` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | 保留 release 写入、自检、manifest 和 current.tmp→current 原子切换；类型缩为 mainpage/novelpage，locale 改读冻结白名单，PR1 要求显式注入 family builder | Codex |
+| Sitemap 文件锁、状态机与错误脱敏 | `src/lib/sitemap-refresh-state.ts` | `1-333` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | 保留 wx 排他锁、running/success/failed 状态、失败保留旧版本与敏感值脱敏；移动到 `src/lib/seo/` 并显式透传 family builder | Codex |
+| `renderUrlSetXml`/`renderSitemapIndexXml`/`parseSitemapFileName` | `src/lib/sitemap.ts` | `30-69,96-99,139-155,699-743` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | 提取无 DB 纯核心；类型缩为 mainpage/novelpage，文件名解析只认 `listPublishableLocales()`，不提供 fixture HTTP 白名单 | Codex |
+| `GET /sitemap.xml` 静态只读路由 | `src/app/sitemap.xml/route.ts` | `1-23` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | 保留 Node runtime、force-dynamic、静态命中 200 与缺失 503；仅调整 import 落点，禁止动态查库兜底 | Codex |
+| `GET /sitemap/[fileName]` 静态只读路由 | `src/app/sitemap/[fileName]/route.ts` | `1-35` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | 保留文件名先验校验、非法 404、静态缺失 503；仅调整 import 落点，fixture 验收不经过 HTTP | Codex |
+| `robots` metadata 路由 | `src/app/robots.ts` | `1-17` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | 保留 allow 全站、私有前缀 disallow 与 sitemap 声明；后台路径换为小说仓路由，站点 origin 改为必填且严格校验的 SITE_URL | Codex |
+| `getSiteUrl`/`toAbsoluteUrl` | `src/lib/site-url.ts` | `1-26` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | 保留单一绝对 URL 接缝与相对路径拼接；删除 CPS 硬编码域名和 NEXT_PUBLIC 回退，SITE_URL 缺失或非纯 origin 时 fail-closed | Codex |
 
 ### 无搬运的任务（显式登记，避免被当成漏登）
 
