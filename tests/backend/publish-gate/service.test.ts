@@ -114,6 +114,11 @@ describe("applyPublishTransition", () => {
     expect(dispatchFirstPublicPublication).toHaveBeenCalledWith(
       { articleId: "article-1", novelId: "novel-1", locale: "en", source: "admin.article.publish" },
       db.asPrismaClient(),
+      // Integration wiring: both flag-gated side-effect handlers attached.
+      {
+        enqueueIndexNow: expect.any(Function),
+        enqueueSitemapRefresh: expect.any(Function),
+      },
     );
   });
 
