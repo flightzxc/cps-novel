@@ -53,10 +53,10 @@ rotation) are excluded — they touch no public path.
 | 4 | `withdrawNovel` (published → unpublished) | same file | `/`, `/browse`, every affected Article's detail page + chapter subtree | `revalidatePublicArticleSet` after `$transaction` commits | ✅ wired this PR |
 | 5 | `takedownNovel` (any → takedown, cascades to every Article + deletes `NovelChapterContent`) | same file | same as #4 (cascades to *every* Article, published or not — see row "文章状态变更" below) | `revalidatePublicArticleSet` | ✅ wired this PR |
 | 6 | `restoreNovel` (takedown → draft, never straight to published) | same file | same as #4 | `revalidatePublicArticleSet` | ✅ wired this PR |
-| 7 | Admin-content metadata writes (title/summary/body edits to an already-published Article) | *does not exist yet* — `src/server/admin-content/service.ts` is 100% read (`listAdminNovels`/`getAdminNovelDetail`/`listAdminNovelChapters`/`getAdminChapterDetail`/`readAdminChapterContent`, no `update`/`create`/`delete`) | would affect this Article's detail page (+ chapter pages if body/title flow into chapter rendering) | **N/A — not built.** When built, must call `revalidatePublicArticlePaths` after its write commits, following exactly this PR's pattern (post-commit, `safeInvalidatePublicCache`-style call-site isolation) | 🔲 forward guidance only |
+| 7 | Admin-content metadata writes (title/summary/body edits to an already-published Article) | *does not exist yet* — `src/server/admin-content/service.ts` has exactly one write, `tx.operationAudit.create` for `action: "admin.chapter_content.read"` (an audit record *of a read*, per P2-04's `content:read` capability), and zero writes to `article`/`novel`/`novelChapter`/`novelChapterContent`/`promoLink` (`listAdminNovels`/`getAdminNovelDetail`/`listAdminNovelChapters`/`getAdminChapterDetail`/`readAdminChapterContent` are otherwise all reads) | would affect this Article's detail page (+ chapter pages if body/title flow into chapter rendering) | **N/A — not built.** When built, must call `revalidatePublicArticlePaths` after its write commits, following exactly this PR's pattern (post-commit, `safeInvalidatePublicCache`-style call-site isolation) | 🔲 forward guidance only |
 | 8 | Cover image write | *does not exist yet* — `grep -rn coverUrl src --include="*.ts"` finds zero write sites | would affect this Novel's Article detail page + `/` (home featured grid uses `coverUrl`) | **N/A — not built.** Same guidance as #7 | 🔲 forward guidance only |
 | 9 | Tag / SourceLabel write (`worker/handlers/moboreader.ts`'s `sourceLabel.upsert`/`novelSourceItemLabel.upsert`) | `worker/` — Codex-owned territory (`CLAUDE.md` §3.2), sync-driven not admin-triggered, pre-existing P2-05/P2-06 ingestion code, out of this Stream's write-path scope per the task book's explicit enumeration | no public aggregation-by-label route exists yet (`/browse` lists *all* published Novels, unfiltered by label) | **N/A — no public surface to invalidate yet.** If a label-scoped public route is ever added, its write path must call `revalidatePublicListings()` at minimum, `revalidatePublicArticlePaths` per affected Article if the route is Article-scoped | 🔲 forward guidance only, out of Stream C's file-ownership scope |
-| 10 | `NovelChapter`/`NovelChapterContent` materialization (`src/lib/preview/changdu-materialization.ts`, invoked from `worker/handlers/moboreader.ts`) | `src/lib/preview/` + `worker/` — Codex-owned, pre-existing P2-05 ingestion pipeline, not in this round's task book's write-path enumeration (`publish-gate` / `admin-content` / covers / tags / batch — materialization sync is none of these) | could affect a Chapter's rendered body once materialized | **Deliberately out of scope for this PR** — see §5 | 🔲 flagged, not wired |
+| 10 | `NovelChapter`/`NovelChapterContent` materialization — `tx.novelChapterContent.upsert(...)` at `src/lib/preview/changdu-materialization.ts:234`, invoked from `worker/handlers/moboreader.ts` | `src/lib/preview/` + `worker/` — Codex-owned, pre-existing P2-05 ingestion pipeline, not in this round's task book's write-path enumeration (`publish-gate` / `admin-content` / covers / tags / batch — materialization sync is none of these) | **Writes today, right now, the exact chapter body `/novel/[slugParam]/chapter/[chapterNumber]` renders publicly.** Harmless only because every public route is `force-dynamic` (§4) — there is no page-level or query-level cache yet for this write to leave stale. | **None.** No call site exists — this is the gap itself, not a deferred nice-to-have. See §5 for the exact wiring required and who owns it (Codex). | 🔴 **blocking precondition** — any PR caching the chapter route must wire this write first, or chapter bodies go silently stale |
 
 **Batch paths**: the task book explicitly calls out "批量路径" as a category to cover. Rows #2/#3 show
 why no separate batch wiring exists: both loop `applyPublishTransition` per item, and invalidation is
@@ -114,6 +114,53 @@ conflate "ship the invalidation plumbing" with "turn on caching," and the latter
 correctness review (cache-key granularity, TTL choices, whether `unstable_cache` or route-level
 `revalidate` is the right primitive per route) that is out of scope for a P2-09 infrastructure PR.
 
+### 4.1 Failure window: invalidation is best-effort, not transactional
+
+🔴 **This is not recorded anywhere else in this codebase (`revalidate.ts`, `service.ts`) — this
+paragraph is the authoritative statement of the gap.** Every write path in §2 calls
+`@/server/publication/revalidate` *after* its `$transaction` commits (§"Cache invalidation" in
+`service.ts`'s module header) — that ordering is what prevents a *rolled-back* write from ever
+broadcasting an invalidation. It does **not** mean invalidation and the write are one atomic unit.
+Two distinct failure windows exist between "the database write is durable" and "the cache is actually
+cleared":
+
+1. **Process death between commit and the revalidate call.** `applyPublishTransition`/
+   `applyNovelRightsTransition` are ordinary `async` functions, not themselves transactional — if the
+   Node process crashes, is OOM-killed, or the request is aborted in the few milliseconds after
+   `db.$transaction(...)` resolves but before `revalidatePublicArticlePaths`/`revalidatePublicArticleSet`
+   runs, the write is permanently committed and the invalidation call **never happens at all**. There is
+   no retry, no outbox, no at-least-once redelivery for this step (compare `IndexNowOutbox`, which exists
+   precisely because IndexNow submission *does* need that durability — cache invalidation as implemented
+   here has none of it).
+2. **A swallowed failure.** `safeRevalidatePath` (`revalidate.ts`) and the call-site
+   `safeInvalidatePublicCache` (`service.ts`) both catch-and-log rather than propagate, by design — see
+   §2.2 of the merge review (`scratchpad/reports/C-REVIEW.md`) for why that isolation property is load-
+   bearing and tested. The same design that makes "an invalidation failure never blocks the write" true
+   also makes "an invalidation failure is invisible to the caller" true. If `revalidatePath` throws for a
+   reason other than "outside request scope" (a Next.js internal error, a bug in a future refactor), the
+   write still reports success and nothing downstream is told the cache was not cleared.
+
+Today this is harmless — §4 already establishes every public route is `force-dynamic`, so there is no
+Full Route Cache for a missed `revalidatePath` call to leave stale. **The moment that stops being true,
+this window becomes a real, silent data-staleness bug with no reconciliation mechanism.** No audit log,
+no dead-letter queue, and no periodic sweep exist to notice or repair a cache entry that a crashed
+process or a swallowed error left un-invalidated.
+
+### 4.2 Blocking precondition for the cache-enabling round: a bounded TTL fallback is mandatory
+
+Because of §4.1, **event-driven invalidation (this PR's `revalidatePath` broadcast) must never be the
+sole staleness control for any cache a future round adds.** Any PR that wraps a public-route query in
+`unstable_cache`, or removes a route's `force-dynamic` export in favor of a `revalidate` window or true
+ISR, **must pair it with a bounded TTL** (an `unstable_cache` `revalidate` option, or a route-level
+`revalidate` number) short enough that the failure windows in §4.1 self-heal within an acceptable
+staleness bound, independent of whether any `revalidatePath` call ever fires. Event-driven invalidation
+remains valuable as the *fast path* (clears the cache within the request/response cycle instead of
+waiting out the TTL), but it is not a substitute for the TTL, and a design that relies on it alone
+inherits exactly the failure mode CPS's own `active-locales.ts` cache (`P2-09.md` §4, "死 tag") shows in
+miniature: a cache with no working invalidation path degrading silently to "stale until someone notices."
+This is a blocking precondition for that future PR, not a suggestion — the review that approves it should
+reject a design that has event-driven invalidation without a TTL fallback on the same cache entry.
+
 ---
 
 ## 5. Deliberately not covered by this PR
@@ -121,15 +168,27 @@ correctness review (cache-key granularity, TTL choices, whether `unstable_cache`
 - **Sitemap paths** (`/sitemap.xml`, `/sitemap/[fileName]`) — Stream D's territory
   (`static-sitemap-cache.ts`/`sitemap-refresh-state.ts` equivalents), an independent invalidation
   mechanism per `P2-09.md` §5. Not touched here.
-- **`NovelChapter`/`NovelChapterContent` materialization** (`src/lib/preview/changdu-materialization.ts`,
-  `worker/handlers/moboreader.ts`) — Codex-owned sync/ingestion pipeline (`CLAUDE.md` §3.2: `worker/`),
-  pre-existing P2-05/P2-06 code, and not one of the write-path categories this round's task book
-  enumerated for Stream C (`publish-gate` / `admin-content` / covers / tags / batch). Flagged as row #10
-  in §2's table rather than silently skipped: if this pipeline's writes ever need public-page
-  invalidation (e.g. once chapter content becomes cacheable independently of Article status), the call
-  site is `worker/handlers/moboreader.ts`'s post-commit code, calling
-  `revalidatePublicArticlePaths`/`revalidatePublicArticleSet` the same way `publish-gate/service.ts`
-  does — but that file is outside this Stream's write-ownership boundary, so it is not wired here.
+- **`NovelChapter`/`NovelChapterContent` materialization** — `tx.novelChapterContent.upsert(...)` at
+  `src/lib/preview/changdu-materialization.ts:234`, invoked from `worker/handlers/moboreader.ts`.
+  🔴 **This is not a hypothetical future concern: this write path writes the exact chapter body that
+  `/novel/[slugParam]/chapter/[chapterNumber]` renders publicly, today.** It is harmless *only* because
+  every public route is still `force-dynamic` (§4) — there is no cache yet for a missed invalidation to
+  leave stale. Left unwired here because it is Codex-owned territory (`CLAUDE.md` §3.2: `worker/`,
+  `src/lib/preview/` is not in Claude's §3.1 grant either), pre-existing P2-05/P2-06 ingestion code, and
+  not one of the write-path categories this round's task book enumerated for Stream C (`publish-gate` /
+  `admin-content` / covers / tags / batch).
+
+  **This is a blocking precondition for any future PR that adds caching to the chapter route** — page-
+  level `revalidate`, `unstable_cache` around the chapter query, or true ISR — not deferred scope to
+  pick up "eventually." That PR must first add a call to `revalidatePublicArticlePaths`/
+  `revalidatePublicArticleSet` (`@/server/publication/revalidate`) in
+  `worker/handlers/moboreader.ts`'s post-commit code, immediately after the materialization transaction
+  in `changdu-materialization.ts:234` lands, following the exact post-commit / `wrote`-gated /
+  call-site-isolated pattern `publish-gate/service.ts` already uses. Owner: **Codex** (the file is in
+  Codex's territory; this Claude-owned Stream cannot wire it directly). Until that lands, enabling any
+  cache on the chapter route will serve stale chapter bodies with no invalidation path to catch it —
+  compounding the §4.1/§4.2 best-effort gap with a write path that has *no* invalidation call at all,
+  not even an unreliable one.
 - **Locale-scoped invalidation** — `SiteLocale` has exactly one member (`"en"`,
   `src/lib/locale/locale-canonical.ts`) today, so `buildArticlePath`'s locale prefix is always empty and
   every path this module builds matches the real (locale-prefix-free) route tree
