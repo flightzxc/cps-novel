@@ -17,9 +17,14 @@
  * The fix is structural, not a checklist: **`applyPublishTransition` below is
  * the only function anywhere in this codebase that may write
  * `Article.status = "published"` or `Novel.status = "published"`.**
- * `tests/backend/publish-gate/no-bypass.test.ts` greps the tree for any other
- * `.update`/`.updateMany` call sites writing that literal and fails the build
- * if one appears. Every other way `published` could ever be reached —
+ * `tests/backend/publish-gate/no-bypass.test.ts` statically scans `src/`,
+ * `worker/`, `scheduler/`, and `scripts/` for any other Prisma model-delegate
+ * write on `article`/`novel` (`update`/`updateMany`/`create`/`upsert`/...,
+ * literal or variable `status:` values alike) or raw-SQL call mentioning an
+ * article/novel status, and fails if one appears outside this directory —
+ * see that test file's header for the exact, non-overclaimed scope (a source
+ * scan narrows the search space, it does not prove no bypass exists by
+ * construction). Every other way `published` could ever be reached —
  * interactive admin action, batch action, and the scheduled-publish sweep a
  * future cron/worker calls — is a thin wrapper around this one function, so
  * there is no second, unchecked path the way CPS's three `updateMany` call
