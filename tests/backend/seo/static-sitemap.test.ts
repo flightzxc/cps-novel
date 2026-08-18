@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { GET as getSitemapIndex } from "@/app/sitemap.xml/route";
 import { GET as getSitemapChild } from "@/app/sitemap/[fileName]/route";
-import robots from "@/app/robots";
+import { buildRobots } from "@/app/robots";
 import {
   acquireSitemapGenerationLock,
   readSitemapRefreshState,
@@ -54,7 +54,7 @@ describe("SITE_URL", () => {
 
   it("builds robots directives from the configured origin", () => {
     process.env.SITE_URL = "https://novel.example/";
-    expect(robots()).toEqual({
+    expect(buildRobots()).toEqual({
       rules: [{
         userAgent: "*",
         allow: "/",
@@ -71,7 +71,7 @@ describe("SITE_URL", () => {
       sitemap: "https://novel.example/sitemap.xml",
     });
     delete process.env.SITE_URL;
-    expect(() => robots()).toThrow(SiteUrlConfigurationError);
+    expect(() => buildRobots()).toThrow(SiteUrlConfigurationError);
   });
 });
 

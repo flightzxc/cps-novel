@@ -132,6 +132,14 @@ Migration 演进，当前 Credential 状态增量为
 | `home_carousel_serving` | CPS_PARITY_ADAPTED | 只保存当前正在服务的结果，不承担历史区间 | `(locale, position)` 绝对唯一；无 `valid_from/valid_to` | 在 serving 表内保存历史有效期 |
 | `home_carousel_change_log` | CPS_PARITY | 轮播历史变更与来源追溯的追加日志 | append-only | CPS drama 专用引用 |
 
+#### Sitemap 运行期部署环境合同
+
+| 环境变量 | 必填阶段 | 使用方 | 约束 |
+| --- | --- | --- | --- |
+| `SITE_URL` | **运行期部署必填**（Web 与执行 Sitemap 刷新的 Worker） | `robots.txt`、Sitemap URL 绝对化 | 必须是无凭证、无 path/query/fragment 的绝对 HTTP(S) origin；不得提供 CPS、localhost、fixture 或其他默认域名。容器镜像 build 不读取该值，运行期缺失或非法时 fail-closed。 |
+
+部署门禁与 D-7/feature flag 的上线顺序见 `docs/p2/P2_10_SITEMAP_RELEASE_CHECKLIST.md`。
+
 ## 4. 状态 CHECK 真源
 
 正式 CHECK 值必须与 `src/domain/database-statuses.ts` 一致：
@@ -315,6 +323,7 @@ P1-08B 新增独立 `scheduler_app`，只授予 schedule/generic task 元数据�
 | 2026-08-18 | v0.2.0-foundation（Stream F，P2-07～12 一轮实施） | 唯一 Migration `20260818120000_v020_foundation_shared`：`indexnow_outbox` 补 8 字段、`indexnow_outbox_attempt` 更名 `attempt_state`→`outcome` 并新增 CPS 崩溃恢复语义的 `attempt_state`/`worker_task_id`、新建单例 `site_setting` 表（PG 化自 CPS，DROP 北斗/飞书/轮播 JSON 专属字段）；随附 db-retry 与 `credentials/service.ts` 内联判定收敛、可见性谓词族 `src/server/publication/visibility.ts`、`SiteSetting` accessor、公开访问入口适配、`publication-dispatcher`、Article path builder 移植 | Claude（Sonnet 编码/Opus 复核） | 一次性 PostgreSQL 16 容器验证 PASS（44 张表、950 条 active 字典记录、零 drift）；**P1 既有 45 个模型的字典词典全量回填另立轻量任务，不阻塞本轮**（沿用 2026-08-12 Owner 裁决第 2 条） |
 | 2026-08-18 | v0.2.0-publish-gate（Stream A，P2-07 发布门禁，合并前 Opus 复核 必改1/2） | 零 schema 改动。`applyPublishTransition` 收口 TOCTOU（facts/gate 读取移入事务、写入改条件 `updateMany`+`count` 校验+失败即抛出回滚）；移除 `OperationAudit` 上一版依赖 P2002 恢复的死分支，相关幂等注释降级为"顺序重试幂等，非并发安全"；§13 登记 `operation_audit` 幂等唯一索引为跟进项 | Claude（Sonnet 编码/Opus 复核） | `npm test` 1281 passed / 85 skipped；新增 TOCTOU 并发交错回归测试（`tests/backend/publish-gate/service.test.ts`，注入钩子模拟交错时序） |
 | 2026-08-18 | v0.2.0-public-wiring（Stream B PR2，P2-08 复核） | §4 冻结公开路由：`takedown` **V1 = HTTP 404**；**410 为 post-V1（proxy 层）**。零 schema 改动。 | Cursor | 页面层 `notFound()` + `novel/[slugParam]/not-found.tsx`；禁止 `NEXT_HTTP_ERROR_FALLBACK;410` digest |
+| 2026-08-18 | P2-10 Sitemap | 登记 `SITE_URL` 为 Web/刷新 Worker 的运行期部署必需 origin；镜像 build 不注入默认域名，运行期继续严格 fail-closed | Codex | 待 Claude 增量复核 |
 
 ## 13. 待跟进项（Schema 变更队列，Owner 待批）
 
@@ -324,5 +333,3 @@ P1-08B 新增独立 `scheduler_app`，只授予 schedule/generic task 元数据�
 | 登记日期 | 提出方 | 表/字段 | 现状 | 建议变更 | 依据 |
 | --- | --- | --- | --- | --- | --- |
 | 2026-08-18 | Claude（Stream A，P2-07 合并前复核） | `operation_audit`（`prisma/schema.prisma:755-774`） | 仅 `@@index([requestId], map: "operation_audit_request_idx")` 普通索引；`(actor_type, action, entity_type, entity_id, request_id)` 无唯一约束 | 新增部分唯一索引 `(action, entity_type, entity_id, request_id)`（或含 `actor_type`），使 `src/server/publish-gate/service.ts` 的写口/权利态转换幂等判定从"应用层 check-then-insert（仅顺序重试安全）"升级为"数据库层强制（并发安全）" | `scratchpad/reports/A-REVIEW.md` 必改 2：`OperationAudit` 无唯一约束⇒P2002 恢复分支为死代码⇒并发同 `requestId` 提交可双写审计行 + 双发 `dispatchFirstPublicPublication`。本轮范围内 schema 已冻结（`P2_07_12_一轮实施分工方案_2026-08-12.md`），不新增 migration；已在 `service.ts` 相应位置的注释与本文件 §12 变更日志如实标注该限制，不作虚假的并发安全声明 |
-
-
