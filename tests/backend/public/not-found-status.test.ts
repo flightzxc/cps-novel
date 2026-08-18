@@ -10,7 +10,12 @@ describe("public novel notFound() HTTP status", () => {
     try {
       notFound();
     } catch (error) {
-      expect(isHTTPAccessFallbackError(error)).toBe(true);
+      // Test-only import of Next internals (http-access-fallback): if the
+      // internal path/shape changes on upgrade, this fails loudly at import
+      // time instead of silently regressing production status codes.
+      if (!isHTTPAccessFallbackError(error)) {
+        throw new Error("notFound() did not throw an HTTP access fallback error");
+      }
       expect(getAccessFallbackHTTPStatus(error)).toBe(404);
       return;
     }
