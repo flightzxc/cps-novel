@@ -192,7 +192,7 @@ model AdminIdentity {
 
   sessions      AdminSession[]
   twoFactor     AdminTwoFactor?
-  challenges   AdminTwoFactorChallenge[]
+  challenges    AdminTwoFactorChallenge[]
   recoveryCodes AdminRecoveryCode[]
 
   @@index([status, updatedAt], map: "admin_identity_status_updated_idx")
@@ -211,7 +211,7 @@ model AdminSession {
   revokedAt            DateTime? @map("revoked_at") @db.Timestamptz(6)
   createdAt            DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
 
-  identity   AdminIdentity @relation(fields: [identityId], references: [id], onDelete: Cascade)
+  identity   AdminIdentity             @relation(fields: [identityId], references: [id], onDelete: Cascade)
   challenges AdminTwoFactorChallenge[]
 
   @@unique([id, identityId], map: "admin_session_identity_pair_key")
@@ -219,17 +219,17 @@ model AdminSession {
 }
 
 model AdminTwoFactor {
-  identityId            String    @id @map("identity_id") @db.Uuid
-  enabled               Boolean   @default(false)
-  encryptedSecret       String?   @map("encrypted_secret") @db.Text
-  keyVersion            Int?      @map("key_version") @db.SmallInt
-  confirmedAt           DateTime? @map("confirmed_at") @db.Timestamptz(6)
-  pendingEncryptedSecret String?  @map("pending_encrypted_secret") @db.Text
-  pendingKeyVersion     Int?      @map("pending_key_version") @db.SmallInt
-  pendingExpiresAt      DateTime? @map("pending_expires_at") @db.Timestamptz(6)
+  identityId             String    @id @map("identity_id") @db.Uuid
+  enabled                Boolean   @default(false)
+  encryptedSecret        String?   @map("encrypted_secret") @db.Text
+  keyVersion             Int?      @map("key_version") @db.SmallInt
+  confirmedAt            DateTime? @map("confirmed_at") @db.Timestamptz(6)
+  pendingEncryptedSecret String?   @map("pending_encrypted_secret") @db.Text
+  pendingKeyVersion      Int?      @map("pending_key_version") @db.SmallInt
+  pendingExpiresAt       DateTime? @map("pending_expires_at") @db.Timestamptz(6)
   recoveryCodesRotatedAt DateTime? @map("recovery_codes_rotated_at") @db.Timestamptz(6)
-  createdAt             DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt             DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  createdAt              DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt              DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   identity AdminIdentity @relation(fields: [identityId], references: [id], onDelete: Cascade)
 
@@ -788,8 +788,21 @@ model IndexNowOutbox {
   lastHttpStatus   Int?      @map("last_http_status")
   lastErrorKind    String?   @map("last_error_kind") @db.VarChar(96)
   lastErrorSummary String?   @map("last_error_summary") @db.Text
+  /// CPS parity (v0.2.0 foundation): request/response lifecycle timestamps for the most recent delivery attempt.
+  lastRequestAt    DateTime? @map("last_request_at") @db.Timestamptz(6)
+  lastResponseAt   DateTime? @map("last_response_at") @db.Timestamptz(6)
+  /// CPS parity: review-defer workflow. deferReason is a free-form registered code (e.g. await_review_schedule); non-null only while status stays pending/processing pending release.
+  deferReason      String?   @map("defer_reason") @db.VarChar(96)
+  releasedAt       DateTime? @map("released_at") @db.Timestamptz(6)
+  releaseReason    String?   @map("release_reason") @db.Text
+  /// CPS parity: audit trail of the deploy commit that released a deferred entry; empty string when never deferred.
+  releaseCommit    String    @default("") @map("release_commit") @db.VarChar(64)
+  /// CPS parity: audit-only recorded IndexNow endpoint host used for this delivery; empty string until first attempt.
+  payloadHost      String    @default("") @map("payload_host") @db.VarChar(255)
   source           String    @db.VarChar(64)
   sourceTaskId     String?   @map("source_task_id") @db.Uuid
+  /// GenericTask.id correlation only (v0.2.0 foundation); intentionally not a Prisma relation/FK — see docs/p2/V020_FOUNDATION_INTERFACES.md.
+  deliveryTaskId   String?   @map("delivery_task_id") @db.Uuid
   createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt        DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
 
@@ -800,6 +813,7 @@ model IndexNowOutbox {
   @@index([status, nextAttemptAt], map: "indexnow_outbox_status_retry_idx")
   @@index([status, availableAt], map: "indexnow_outbox_status_available_idx")
   @@index([articleId], map: "indexnow_outbox_article_idx")
+  @@index([deferReason, status], map: "indexnow_outbox_defer_reason_status_idx")
   @@map("indexnow_outbox")
 }
 
@@ -807,6 +821,9 @@ model IndexNowOutboxAttempt {
   id              BigInt    @id @default(autoincrement()) @db.BigInt
   outboxId        String    @map("outbox_id") @db.Uuid
   attemptNo       Int       @map("attempt_no")
+  /// v0.2.0 foundation rename (ex attemptState): HTTP result classification. Values unchanged: started | accepted | retryable_failed | permanent_failed. Zero verified consumers before rename.
+  outcome         String    @default("started") @map("outcome") @db.VarChar(32)
+  /// CPS parity (v0.2.0 foundation): worker crash-recovery state, distinct from `outcome`. started | completed | unknown_outcome.
   attemptState    String    @default("started") @map("attempt_state") @db.VarChar(32)
   requestBatchId  String    @map("request_batch_id") @db.VarChar(160)
   startedAt       DateTime  @default(now()) @map("started_at") @db.Timestamptz(6)
@@ -816,12 +833,40 @@ model IndexNowOutboxAttempt {
   errorKind       String?   @map("error_kind") @db.VarChar(96)
   responseSummary String?   @map("response_summary") @db.Text
   batchSize       Int       @default(1) @map("batch_size")
+  /// GenericTask.id correlation only (v0.2.0 foundation); intentionally not a Prisma relation/FK — see docs/p2/V020_FOUNDATION_INTERFACES.md.
+  workerTaskId    String?   @map("worker_task_id") @db.Uuid
 
   outbox IndexNowOutbox @relation(fields: [outboxId], references: [id], onDelete: Cascade)
 
   @@unique([outboxId, attemptNo], map: "indexnow_attempt_number_key")
   @@index([requestBatchId], map: "indexnow_attempt_request_batch_idx")
   @@map("indexnow_outbox_attempt")
+}
+
+/// CPS parity (v0.2.0 foundation): singleton global site configuration row, PostgreSQL-ized.
+/// CPS vendor-specific fields (beidou/feishu integration, carousel JSON config, preview sync toggle)
+/// are intentionally dropped — cps-novel has no such vendor integrations and already models carousel
+/// parameters per-batch in HomeCarouselAutoBatch.params. See docs/p2/V020_FOUNDATION_INTERFACES.md.
+model SiteSetting {
+  id                              Int      @id @default(1)
+  siteName                        String   @default("CPS Novel") @map("site_name") @db.VarChar(160)
+  siteDescription                 String   @default("") @map("site_description") @db.Text
+  homeMetaTitle                   String   @default("") @map("home_meta_title") @db.VarChar(500)
+  homeMetaDescription             String   @default("") @map("home_meta_description") @db.Text
+  defaultOgImage                  String   @default("") @map("default_og_image") @db.Text
+  googleSearchConsoleVerification String   @default("") @map("google_search_console_verification") @db.VarChar(255)
+  footerCopyrightText             String   @default("") @map("footer_copyright_text") @db.Text
+  footerDisclaimerText            String   @default("") @map("footer_disclaimer_text") @db.Text
+  /// CPS_PARITY_ADAPTED: CPS stores this as a JSON-serialized String; novel prefers jsonb per the
+  /// project's physical convention for structured config (docs/governance/database-governance.md §2).
+  friendLinks                     Json     @default("[]") @map("friend_links") @db.JsonB
+  indexNowHost                    String   @default("") @map("indexnow_host") @db.VarChar(255)
+  indexNowKey                     String   @default("") @map("indexnow_key") @db.VarChar(255)
+  indexNowKeyLocation             String   @default("") @map("indexnow_key_location") @db.VarChar(255)
+  ga4MeasurementId                String?  @map("ga4_measurement_id") @db.VarChar(64)
+  updatedAt                       DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@map("site_setting")
 }
 
 model ScheduleRun {
