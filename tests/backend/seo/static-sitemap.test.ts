@@ -2,7 +2,7 @@ import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { GET as getSitemapIndex } from "@/app/sitemap.xml/route";
 import { GET as getSitemapChild } from "@/app/sitemap/[fileName]/route";
@@ -14,6 +14,7 @@ import {
   summarizeSitemapError,
 } from "@/lib/seo/sitemap-refresh-state";
 import { getSiteUrl, SiteUrlConfigurationError } from "@/lib/seo/site-url";
+import { listPublishableLocales } from "@/lib/locale/locale-canonical";
 import { readStaticSitemapFile } from "@/lib/seo/static-sitemap-cache";
 import { generateStaticSitemaps } from "@/lib/seo/static-sitemap-generator";
 import type { BuildSitemapFamily } from "@/lib/seo/sitemap";
@@ -114,6 +115,28 @@ describe("static sitemap cache and routes", () => {
 });
 
 describe("static sitemap generation and refresh state", () => {
+  it("fails closed through the refresh chain while D-7 keeps the publishable locale list empty", async () => {
+    process.env.SITE_URL = "https://fixture.example";
+    const root = await temporaryRoot();
+    const buildFamily = vi.fn(builder());
+
+    expect(listPublishableLocales()).toEqual([]);
+    const result = await refreshStaticSitemap({
+      buildFamily,
+      rootDir: root,
+      runId: "d7-open",
+      initiatedBy: "test",
+      reason: "empty production locale whitelist",
+    });
+
+    expect(result.status).toBe("failed");
+    expect(result.state.task.errorSummary).toContain("No sitemap child files were generated");
+    expect(buildFamily).not.toHaveBeenCalled();
+    expect(result.state.current).toEqual({ kind: "missing" });
+    await expect(fs.lstat(path.join(root, "sitemap-generation.lock")))
+      .rejects.toMatchObject({ code: "ENOENT" });
+  });
+
   it("promotes a release atomically and replaces an existing symlink", async () => {
     process.env.SITE_URL = "https://fixture.example";
     const root = await temporaryRoot();
