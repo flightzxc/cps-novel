@@ -6,10 +6,12 @@
  *
  * `isUniqueConstraintViolation` and `isSerializationFailure` are the single
  * source of truth for P2002/P2034 (and their raw-SQL `$queryRaw`/`$executeRaw`
- * equivalents, P2010 wrapping Postgres SQLSTATE 23505/40001) classification —
- * `src/server/credentials/service.ts` previously defined its own local copies
- * of this logic; it now imports from here instead. Do not re-implement this
- * classification a second time anywhere in the codebase.
+ * equivalents, P2010 wrapping Postgres SQLSTATE 23505/40001) classification.
+ * `src/server/credentials/service.ts`, `src/lib/tasks/moboreader.ts`, and
+ * `src/lib/tasks/side-effect-intent.ts` previously each defined their own
+ * local copy of this logic; all three now import from here instead. New
+ * code must always import from here — do not write a second
+ * `error.code === "P2002"`-style check anywhere in the codebase.
  */
 import { Prisma } from "@prisma/client";
 
