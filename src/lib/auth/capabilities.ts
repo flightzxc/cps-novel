@@ -3,6 +3,7 @@ import type { AdminAuthContext } from "./types";
 
 export type AdminCapability =
   | "credential:manage"
+  | "content:publish"
   | "content:takedown"
   | "content:view"
   | "content:read"
@@ -21,6 +22,12 @@ export const ADMIN_CAPABILITY_CONFIG: Readonly<Record<AdminCapability, Capabilit
     "credential:manage": {
       rolesEnv: "CREDENTIAL_MANAGE_ROLES",
       userIdsEnv: "CREDENTIAL_MANAGE_USER_IDS",
+      defaultRoles: ["super_admin"],
+      requiresTwoFactor: true,
+    },
+    "content:publish": {
+      rolesEnv: "CONTENT_PUBLISH_ROLES",
+      userIdsEnv: "CONTENT_PUBLISH_USER_IDS",
       defaultRoles: ["super_admin"],
       requiresTwoFactor: true,
     },
