@@ -24,6 +24,7 @@ vi.mock("@/app/_lib/public-load", () => ({
   loadArticleAccess: vi.fn(),
   loadNovelDetail: vi.fn(),
   loadChapterView: vi.fn(),
+  loadHreflangSiblings: vi.fn(),
 }));
 
 const publicLoad = await import("@/app/_lib/public-load");
@@ -33,6 +34,7 @@ const loadBrowseNovels = vi.mocked(publicLoad.loadBrowseNovels);
 const loadArticleAccess = vi.mocked(publicLoad.loadArticleAccess);
 const loadNovelDetail = vi.mocked(publicLoad.loadNovelDetail);
 const loadChapterView = vi.mocked(publicLoad.loadChapterView);
+const loadHreflangSiblings = vi.mocked(publicLoad.loadHreflangSiblings);
 
 const SETTINGS = {
   siteName: "cps-novel",
@@ -96,6 +98,8 @@ beforeEach(() => {
   loadArticleAccess.mockReset();
   loadNovelDetail.mockReset();
   loadChapterView.mockReset();
+  loadHreflangSiblings.mockReset();
+  loadHreflangSiblings.mockResolvedValue([]);
 });
 
 afterEach(() => {
@@ -222,6 +226,55 @@ describe("public novel detail", () => {
     );
     expect(JSON.stringify(metadata)).not.toContain("PulseDrama");
     expect(JSON.stringify(metadata)).not.toContain("/drama/");
+  });
+
+  it("resolves hreflang alternates from the real Prisma novelId, not the businessId, and only from actual siblings (P0-S7a)", async () => {
+    loadArticleAccess.mockResolvedValue({
+      kind: "published",
+      articleId: "article-1",
+      novelId: "novel-1",
+      slugPart: "lantern-keepers-daughter",
+      shortId: "abc123",
+      title: DETAIL.title,
+    });
+    loadNovelDetail.mockResolvedValue(DETAIL);
+    loadHreflangSiblings.mockResolvedValue([
+      { locale: "fr", slug: "la-fille-du-gardien-du-phare", publicPageShortId: "def456" },
+    ]);
+
+    const metadata = await novelModule.generateMetadata({
+      params: Promise.resolve({ slugParam: "lantern-keepers-daughter-pabc123" }),
+    });
+
+    // Called with the Prisma UUID from `access.novelId` — never `DETAIL.id`
+    // (`businessId`, "biz-1"), which is a structurally different identifier.
+    expect(loadHreflangSiblings).toHaveBeenCalledWith("novel-1");
+    expect(metadata.alternates?.languages).toEqual({
+      en: `${ORIGIN}/novel/lantern-keepers-daughter-pabc123`,
+      fr: `${ORIGIN}/fr/novel/la-fille-du-gardien-du-phare-pdef456`,
+      "x-default": `${ORIGIN}/novel/lantern-keepers-daughter-pabc123`,
+    });
+  });
+
+  it("never blindly enumerates the full registry when there is no published sibling (P0-S7a anti-regression)", async () => {
+    loadArticleAccess.mockResolvedValue({
+      kind: "published",
+      articleId: "article-1",
+      novelId: "novel-1",
+      slugPart: "lantern-keepers-daughter",
+      shortId: "abc123",
+      title: DETAIL.title,
+    });
+    loadNovelDetail.mockResolvedValue(DETAIL);
+    loadHreflangSiblings.mockResolvedValue([]);
+
+    const metadata = await novelModule.generateMetadata({
+      params: Promise.resolve({ slugParam: "lantern-keepers-daughter-pabc123" }),
+    });
+
+    // 15 registered locales; with zero published siblings only the current
+    // locale + x-default may appear — never a dead link for `ja`/`ar`/etc.
+    expect(Object.keys(metadata.alternates?.languages ?? {}).sort()).toEqual(["en", "x-default"]);
   });
 
   it("noindexes unavailable and takedown metadata", async () => {

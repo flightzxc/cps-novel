@@ -2,12 +2,19 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
 import { JsonLd } from "@/app/_components/json-ld";
-import { loadArticleAccess, loadChapterView, loadChrome } from "@/app/_lib/public-load";
+import {
+  loadArticleAccess,
+  loadChapterView,
+  loadChrome,
+  loadHreflangSiblings,
+} from "@/app/_lib/public-load";
 import { noIndexMetadata, toNextMetadata } from "@/app/_lib/seo-metadata";
 import { ChapterScreen } from "@/features/public-ui/chapter/ChapterScreen";
 import { UnavailableScreen } from "@/features/public-ui/status/UnavailableScreen";
+import { canonicalUrl } from "@/lib/seo/seo-utils";
 import { generateSeoMeta } from "@/lib/seo/seo-meta-generator";
-import { buildChapterRoutePath } from "@/lib/seo/chapter-path";
+import { buildChapterPath, buildChapterRoutePath } from "@/lib/seo/chapter-path";
+import { buildNovelHreflangAlternates, type NovelHreflangSibling } from "@/lib/seo/novel-hreflang";
 import { PUBLIC_SITE_LOCALE } from "@/lib/site/locale-label";
 
 export const dynamic = "force-dynamic";
@@ -15,6 +22,34 @@ export const dynamic = "force-dynamic";
 function parseChapterNumber(raw: string): number | null {
   if (!/^[1-9]\d*$/.test(raw)) return null;
   return Number(raw);
+}
+
+/**
+ * Same filtered-hreflang requirement as the novel page (`NovelSeoData.
+ * hreflangAlternates` is required — see `seo-templates/novel.ts`), but the
+ * sibling path is the sibling's own chapter URL (`buildChapterPath`), not
+ * its Article root. Canonical chapter numbers are Novel-scoped and shared
+ * across every locale's Article (`src/lib/site/queries.ts`), so the same
+ * `chapterNumber` is valid for every sibling.
+ */
+async function buildHreflangForChapter(
+  novelId: string,
+  chapterNumber: number,
+  routePath: string,
+): Promise<Record<string, string>> {
+  const siblings = await loadHreflangSiblings(novelId);
+  return buildNovelHreflangAlternates({
+    siblings,
+    currentLocale: PUBLIC_SITE_LOCALE,
+    canonical: canonicalUrl(routePath),
+    buildSiblingPath: (sibling: NovelHreflangSibling) =>
+      buildChapterPath({
+        locale: sibling.locale,
+        slug: sibling.slug,
+        shortId: sibling.publicPageShortId,
+        chapterNumber,
+      }),
+  });
 }
 
 export async function generateMetadata({
@@ -37,20 +72,22 @@ export async function generateMetadata({
   ]);
   if (!chapter) return noIndexMetadata("章节不存在");
 
+  const routePath = buildChapterRoutePath({
+    slug: access.slugPart,
+    shortId: access.shortId,
+    chapterNumber,
+  });
   const seo = generateSeoMeta({
     entity: "novel",
     locale: PUBLIC_SITE_LOCALE,
     data: {
       title: `${chapter.title} · ${chapter.novel.title}`,
       description: chapter.paragraphs[0] ?? chapter.novel.title,
-      canonicalPath: buildChapterRoutePath({
-        slug: access.slugPart,
-        shortId: access.shortId,
-        chapterNumber,
-      }),
+      canonicalPath: routePath,
       coverUrl: chapter.novel.coverUrl,
       defaultOgImage: settings.defaultOgImage.trim() || null,
       siteName: settings.siteName,
+      hreflangAlternates: await buildHreflangForChapter(access.novelId, chapterNumber, routePath),
     },
   });
   return toNextMetadata(seo);
@@ -85,20 +122,22 @@ export default async function PublicChapterPage({
   const chapter = await loadChapterView(access.articleId, chapterNumber);
   if (!chapter) notFound();
 
+  const routePath = buildChapterRoutePath({
+    slug: access.slugPart,
+    shortId: access.shortId,
+    chapterNumber,
+  });
   const seo = generateSeoMeta({
     entity: "novel",
     locale: PUBLIC_SITE_LOCALE,
     data: {
       title: `${chapter.title} · ${chapter.novel.title}`,
       description: chapter.paragraphs[0] ?? chapter.novel.title,
-      canonicalPath: buildChapterRoutePath({
-        slug: access.slugPart,
-        shortId: access.shortId,
-        chapterNumber,
-      }),
+      canonicalPath: routePath,
       coverUrl: chapter.novel.coverUrl,
       defaultOgImage: settings.defaultOgImage.trim() || null,
       siteName: settings.siteName,
+      hreflangAlternates: await buildHreflangForChapter(access.novelId, chapterNumber, routePath),
     },
   });
 

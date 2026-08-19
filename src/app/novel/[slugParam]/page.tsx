@@ -2,15 +2,42 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
 import { JsonLd } from "@/app/_components/json-ld";
-import { loadArticleAccess, loadChrome, loadNovelDetail } from "@/app/_lib/public-load";
+import {
+  loadArticleAccess,
+  loadChrome,
+  loadHreflangSiblings,
+  loadNovelDetail,
+} from "@/app/_lib/public-load";
 import { noIndexMetadata, toNextMetadata } from "@/app/_lib/seo-metadata";
 import { NovelDetailScreen } from "@/features/public-ui/novel/NovelDetailScreen";
 import { UnavailableScreen } from "@/features/public-ui/status/UnavailableScreen";
+import { canonicalUrl } from "@/lib/seo/seo-utils";
 import { generateSeoMeta } from "@/lib/seo/seo-meta-generator";
-import { buildArticleRoutePath } from "@/lib/slug/article-path";
+import { buildNovelHreflangAlternates, type NovelHreflangSibling } from "@/lib/seo/novel-hreflang";
+import { buildArticlePath, buildArticleRoutePath } from "@/lib/slug/article-path";
 import { PUBLIC_SITE_LOCALE } from "@/lib/site/locale-label";
 
 export const dynamic = "force-dynamic";
+
+/**
+ * Resolves this page's `alternates.languages` — the filtered layer required
+ * by `NovelSeoData.hreflangAlternates` (see `seo-templates/novel.ts`), never
+ * the same-path blind enumeration. `access.novelId` is the real Prisma
+ * `Novel.id`, not `NovelDetailView.id` (which is `businessId`).
+ */
+async function buildHreflangForArticle(
+  novelId: string,
+  routePath: string,
+): Promise<Record<string, string>> {
+  const siblings = await loadHreflangSiblings(novelId);
+  return buildNovelHreflangAlternates({
+    siblings,
+    currentLocale: PUBLIC_SITE_LOCALE,
+    canonical: canonicalUrl(routePath),
+    buildSiblingPath: (sibling: NovelHreflangSibling) =>
+      buildArticlePath({ locale: sibling.locale, slug: sibling.slug, shortId: sibling.publicPageShortId }),
+  });
+}
 
 export async function generateMetadata({
   params,
@@ -29,17 +56,19 @@ export async function generateMetadata({
   const [{ settings }, novel] = await Promise.all([loadChrome(), loadNovelDetail(access.articleId)]);
   if (!novel) return noIndexMetadata("Not found");
 
+  const routePath = buildArticleRoutePath({ slug: access.slugPart, shortId: access.shortId });
   const seo = generateSeoMeta({
     entity: "novel",
     locale: PUBLIC_SITE_LOCALE,
     data: {
       title: novel.title,
       description: novel.description,
-      canonicalPath: buildArticleRoutePath({ slug: access.slugPart, shortId: access.shortId }),
+      canonicalPath: routePath,
       coverUrl: novel.coverUrl,
       defaultOgImage: settings.defaultOgImage.trim() || null,
       chapterCount: novel.totalChapterCount,
       siteName: settings.siteName,
+      hreflangAlternates: await buildHreflangForArticle(access.novelId, routePath),
     },
   });
   return toNextMetadata(seo);
@@ -71,17 +100,19 @@ export default async function NovelDetailPage({
   const novel = await loadNovelDetail(access.articleId);
   if (!novel) notFound();
 
+  const routePath = buildArticleRoutePath({ slug: access.slugPart, shortId: access.shortId });
   const seo = generateSeoMeta({
     entity: "novel",
     locale: PUBLIC_SITE_LOCALE,
     data: {
       title: novel.title,
       description: novel.description,
-      canonicalPath: buildArticleRoutePath({ slug: access.slugPart, shortId: access.shortId }),
+      canonicalPath: routePath,
       coverUrl: novel.coverUrl,
       defaultOgImage: settings.defaultOgImage.trim() || null,
       chapterCount: novel.totalChapterCount,
       siteName: settings.siteName,
+      hreflangAlternates: await buildHreflangForArticle(access.novelId, routePath),
     },
   });
 
