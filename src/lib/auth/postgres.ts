@@ -1,5 +1,6 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
 
+import { withDbRetry } from "@/lib/db/db-retry";
 import type {
   AdminIdentityStore, AuthUnitOfWork, CompleteTwoFactorChallengeTransactionResult,
   ConfirmTwoFactorSetupTransactionResult, LoginAttemptStore, RecoveryCodeStore,
@@ -42,13 +43,23 @@ export class PostgreSQLSessionStore implements SessionStore {
     await this.db.adminSession.create({ data: session });
   }
   async touchLastSeen(input: { sessionId: string; identityId: string; sessionVersion: number; seenAt: Date }): Promise<boolean> {
-    const count = await this.db.$executeRaw`
+    // A single statement is its own implicit transaction, and `GREATEST(...,
+    // seenAt)` is monotonic — re-issuing this exact UPDATE after a
+    // transient failure (whether or not the first attempt secretly
+    // committed) always converges to the same end state, so a blind
+    // whole-statement retry is safe with no fencing or idempotency check
+    // needed.
+    const count = await withDbRetry(
+      () =>
+        this.db.$executeRaw`
       UPDATE admin_session s SET last_seen_at = GREATEST(s.last_seen_at, ${input.seenAt})
       WHERE s.id = ${input.sessionId}::uuid AND s.identity_id = ${input.identityId}::uuid
         AND s.session_version = ${input.sessionVersion} AND s.revoked_at IS NULL
         AND s.absolute_expires_at > ${input.seenAt}
         AND EXISTS (SELECT 1 FROM admin_identity i WHERE i.id=s.identity_id AND i.status='active' AND i.session_version=s.session_version)
-    `;
+    `,
+      { op: "auth.session.touchLastSeen", itemId: input.sessionId },
+    );
     return count === 1;
   }
   async revoke(sessionId: string, revokedAt: Date): Promise<boolean> {
@@ -63,18 +74,59 @@ export class PostgreSQLTwoFactorStore implements TwoFactorStore {
     return row;
   }
   async savePendingSetup(identityId: string, encryptedSecret: string, expiresAt: Date): Promise<void> {
-    await this.db.adminTwoFactor.upsert({
-      where: { identityId },
-      create: { identityId, pendingEncryptedSecret: encryptedSecret, pendingKeyVersion: 1, pendingExpiresAt: expiresAt },
-      update: { pendingEncryptedSecret: encryptedSecret, pendingKeyVersion: 1, pendingExpiresAt: expiresAt },
-    });
+    // Upsert on the `identityId` unique key: re-running it with the same
+    // arguments after a transient failure produces the same row either way,
+    // so a blind whole-statement retry needs no extra idempotency check.
+    await withDbRetry(
+      () =>
+        this.db.adminTwoFactor.upsert({
+          where: { identityId },
+          create: { identityId, pendingEncryptedSecret: encryptedSecret, pendingKeyVersion: 1, pendingExpiresAt: expiresAt },
+          update: { pendingEncryptedSecret: encryptedSecret, pendingKeyVersion: 1, pendingExpiresAt: expiresAt },
+        }),
+      { op: "auth.twoFactor.savePendingSetup", itemId: identityId },
+    );
   }
   async createChallenge(challenge: TwoFactorChallenge): Promise<void> {
-    await this.db.adminTwoFactorChallenge.create({ data: challenge });
+    // `challenge.id` is generated once by the caller (`two-factor.ts`)
+    // before this method runs, so — unlike `savePendingSetup`'s upsert —
+    // this single `create` has no dedup key of its own to fall back on. In
+    // the narrow window where the first attempt actually committed but the
+    // connection dropped before the ack, a retry re-issuing the identical
+    // `create` hits a P2002 unique-constraint violation on the primary key.
+    // `isTransientDbError` already excludes P2002, so that surfaces as a
+    // loud, single error to the caller (who just retries the whole 2FA
+    // challenge flow) rather than a silent duplicate row — an accepted,
+    // bounded trade-off; see `incrementChallengeAttempts` below for the one
+    // write in this file where the ambiguous-commit outcome is silent
+    // instead of loud and this file deliberately does not wrap it.
+    await withDbRetry(
+      () => this.db.adminTwoFactorChallenge.create({ data: challenge }),
+      { op: "auth.twoFactor.createChallenge", itemId: challenge.id },
+    );
   }
   async findChallengeByTokenHash(tokenHash: string): Promise<TwoFactorChallenge | null> {
     return this.db.adminTwoFactorChallenge.findUnique({ where: { tokenHash } });
   }
+  /**
+   * Deliberately NOT wrapped in `withDbRetry` (P0-S2 db-retry wiring pass).
+   * Unlike `touchLastSeen`'s `GREATEST(...)`, this is a plain
+   * `attempt_count = attempt_count + 1` — not idempotent under a blind
+   * whole-statement retry. In the ordinary transient-failure case (the
+   * first attempt never committed) a retry is harmless. But in the narrow
+   * ambiguous-commit case (the UPDATE actually committed and only the
+   * connection/ack was lost), the row is still `consumed_at IS NULL` and
+   * `attempt_count < maxAttempts` — the exact same predicate a retry would
+   * re-check — so a retry would silently apply a *second* increment for
+   * one real failed 2FA attempt, with no error and no signal to the
+   * caller. That would only ever over-penalize a legitimate user (locking
+   * them out one attempt early), never under-penalize an attacker, but it
+   * is a silent miscount of a security-relevant counter, which is a
+   * different — and worse — failure mode than the loud, bounded errors
+   * accepted elsewhere in this file (see `createChallenge` above). Retrying
+   * this safely would need an idempotency key this table does not carry;
+   * out of scope for this wiring pass (schema is frozen).
+   */
   async incrementChallengeAttempts(input: { challengeId: string; now: Date; maxAttempts: number }): Promise<boolean> {
     const count = await this.db.$executeRaw`
       UPDATE admin_two_factor_challenge SET attempt_count=attempt_count+1
@@ -134,7 +186,23 @@ export class PostgreSQLAuthUnitOfWork implements AuthUnitOfWork {
     identityId: string; expectedSessionVersion: number; expectedPendingEncryptedSecret: string;
     confirmedAt: Date; recoveryCodes: ReadonlyArray<{ id: string; codeHash: string }>;
   }): Promise<ConfirmTwoFactorSetupTransactionResult> {
-    return this.db.$transaction(async (tx) => {
+    // Whole-transaction retry, same shape used throughout this PR. Safe to
+    // retry from scratch: the `FOR UPDATE` guard SELECT above pins
+    // `expectedPendingEncryptedSecret`/`expectedSessionVersion` to the exact
+    // pre-confirm state. If the first attempt actually committed before an
+    // ambiguous connection drop, `pending_encrypted_secret` is now `null`
+    // (cleared by the very `adminTwoFactor.update` below) and the retried
+    // guard SELECT no longer matches — so the retry returns `{ status:
+    // "conflict" }` instead of re-running `adminRecoveryCode.createMany`
+    // with the same pre-generated recovery-code ids a second time. The
+    // caller (`two-factor.ts`'s `confirmTwoFactorSetup`) surfaces that as
+    // "Two-factor setup state changed concurrently" even though 2FA is now
+    // actually enabled — a conservative, fail-closed report rather than a
+    // fully accurate one, consistent with this PR's other ambiguous-commit
+    // trade-offs (see `store.ts`'s `finalizeTaskItem`).
+    return withDbRetry(
+      () =>
+        this.db.$transaction(async (tx) => {
       const locked = await tx.$queryRaw<Array<{ session_version: number }>>`
         SELECT i.session_version FROM admin_identity i JOIN admin_two_factor f ON f.identity_id=i.id
         WHERE i.id=${input.identityId}::uuid AND i.status='active'
@@ -156,13 +224,25 @@ export class PostgreSQLAuthUnitOfWork implements AuthUnitOfWork {
       const identity = await tx.adminIdentity.update({ where: { id: input.identityId }, data: { sessionVersion: { increment: 1 } } });
       this.stage("setup_version");
       return { status: "committed", nextSessionVersion: identity.sessionVersion } as const;
-    });
+        }),
+      { op: "auth.twoFactor.confirmTwoFactorSetup", itemId: input.identityId },
+    );
   }
 
   async completeTwoFactorChallenge(input: {
     challengeId: string; identityId: string; sessionId: string; completedAt: Date; recoveryCodeId: string | null;
   }): Promise<CompleteTwoFactorChallengeTransactionResult> {
-    return this.db.$transaction(async (tx) => {
+    // Whole-transaction retry, same shape as `confirmTwoFactorSetup` above.
+    // Safe to retry from scratch: the `consumed_at IS NULL` guard on the
+    // challenge SELECT below no longer matches once this same transaction
+    // has actually consumed it (`adminTwoFactorChallenge.update` further
+    // down), so a retry landing after an ambiguous commit returns `{
+    // status: "challenge_unavailable" }` — a clean, already-handled outcome
+    // for the caller — instead of re-running the recovery-code consumption
+    // or session-version bump a second time.
+    return withDbRetry(
+      () =>
+        this.db.$transaction(async (tx) => {
       const challenges = await tx.$queryRaw<Array<{ attempt_count: number }>>`
         SELECT attempt_count FROM admin_two_factor_challenge
         WHERE id=${input.challengeId}::uuid AND identity_id=${input.identityId}::uuid
@@ -195,6 +275,8 @@ export class PostgreSQLAuthUnitOfWork implements AuthUnitOfWork {
       await tx.adminSession.update({ where: { id: input.sessionId }, data: { twoFactorCompletedAt: input.completedAt } });
       if (input.recoveryCodeId) this.stage("two_factor_completed");
       return { status: "committed", sessionVersion: version } as const;
-    });
+        }),
+      { op: "auth.twoFactor.completeTwoFactorChallenge", itemId: input.challengeId },
+    );
   }
 }
