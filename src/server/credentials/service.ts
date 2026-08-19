@@ -4,6 +4,7 @@ import { Prisma, type PrismaClient } from "@prisma/client";
 import { CREDENTIAL_TASK_TYPES, type CredentialContractCode, type CredentialMetadata, type CredentialQueuedResult, type CredentialRedactedResult } from "@/lib/credentials/contracts";
 import { CredentialLifecycleError } from "@/lib/credentials/lifecycle";
 import { validateCredentialJwtLocally } from "@/lib/credentials/jwt";
+import { assertReasonFreeOfCredentialMaterial } from "@/lib/credentials/reason-guard";
 import {
   encryptNewCredentialSecret,
   fingerprintNewCredentialSecret,
@@ -26,7 +27,6 @@ function reason(value: string | undefined, required: boolean): string | null {
 }
 
 const CREDENTIAL_REPLACE_AUDIT_ACTION = "credential.replace.completed";
-const JWT_LIKE_TEXT = /(?:^|\s)[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+(?:\s|$)/;
 
 export class CredentialReplacementIdempotencyConflictError extends Error {
   readonly code = "admin_mutation_request_id_invalid" as const;
@@ -214,15 +214,7 @@ export async function addOrReplaceCredential(input: {
   }
   const context = await actor(input.authorization, "admin.credential.replace", input.requestId, deps);
   const why = reason(input.reason, true);
-  if (
-    (input.secret.trim() && why?.includes(input.secret.trim()))
-    || (why !== null && JWT_LIKE_TEXT.test(why))
-  ) {
-    throw new CredentialLifecycleError(
-      "credential_validation_failed",
-      "The operation reason must not contain credential material",
-    );
-  }
+  if (why !== null) assertReasonFreeOfCredentialMaterial(why, input.secret);
   const now = deps.now ?? new Date();
   const validation = validateCredentialJwtLocally(input.secret, now);
   if (validation.status === "invalid") {
