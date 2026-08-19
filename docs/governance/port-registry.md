@@ -136,6 +136,27 @@ P1-05A 只登记从 CPS 提取的数据库**模式证据**；没有字节复制�
 | `textToSlug`（设计思路） → `src/lib/slug/text-to-slug.ts` | `src/lib/slug-utils.ts` | `143-207` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `PATTERN_ONLY` | 只借「Latin 文字按词切分、符号统一视作分隔符、其余脚本原样保留为独立 Unicode 段而非丢弃」的设计思路，以及数字后缀感知的最短长度健康度判定（`isUnhealthyArticleSlug` → `isHealthySlug`）；**不搬** `pinyin-pro` 中文转拼音分支（`shouldTransliterateChinese`/`pushChineseTokens`）——`SiteLocale` 今天只登记 `"en"` 一个成员且上游语种登记表为空，本轮没有会把 CJK 文本经由中文族 `SiteLocale` 传入的调用点，零新依赖；若日后登记中文族 `SiteLocale`，那才是评估转写库的时点 | Claude |
 | `PUBLIC_PAGE_SHORT_ID_ALPHABET`/`createArticlePublicPageShortId`/`isArticlePublicPageShortIdUniqueConflict`/`createWithArticlePublicPageShortIdRetry` → `src/lib/slug/short-id.ts` | `src/lib/article-public-page-id.ts` | `8-16,33-79` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | 保留字母表（小写字母+数字）、固定长度、强制含至少一位数字、P2002 冲突有界重试（默认 5 次）的算法形状；改名去掉 CPS 的 Article/Drama 专属命名，泛化为本项目的 `publicPageShortId` 字段；`isPublicPageShortIdConflict` 改为叠加在 `src/lib/db/db-retry.ts` 的 `isUniqueConstraintViolation` 之上而非另起一份 `P2002` 判定 | Claude |
 
+P2-02 是首批 `owner = Claude` 的搬运条目。全部落在 `src/lib/seo/template/`，逐符号登记如下。
+
+| symbol | source_file | source_lines | baseline_commit | port_kind | changed_what | owner |
+| --- | --- | --- | --- | --- | --- | --- |
+| `WILDCARD_FIELDS` → `REGISTERED_TEMPLATE_FIELDS` | `src/lib/template-engine.ts` | `13-35` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | 保留「同一份 `as const` 数组既做渲染期判定又驱动后台变量面板」的形态；18 个短剧键整表重写为 6 个小说键，增列 `kind`（url 类做 scheme 校验）与 `required`（可空列裸引用告警）；`author`/`country`/`completion_status` 等禁止字段不登记 | Claude |
+| `WildcardField` → `TemplateFieldKey` | `src/lib/template-engine.ts` | `35` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | 保留 `(typeof ARRAY)[number]["key"]` 的键联合类型推导写法，数组换成小说登记表 | Claude |
+| `ERR_TEMPLATE_VAR_EMPTY` | `src/lib/template-engine.ts` | `37` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `COPY` | 原样复制码值与命名 | Claude |
+| `TemplateVarEmptyError` → `TemplateRenderError` | `src/lib/template-engine.ts` | `39-62` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | 保留「Error 子类 + 只读 `code` + 结构化 `k=v` 消息、不回带取值」的形态；由单一码扩为五码，定位字段换成 `slot`/`field`/`constraint`/`templateKey`/`novelId` | Claude |
+| `isTemplateVarEmptyError` → `isTemplateRenderError` | `src/lib/template-engine.ts` | `64-74` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | 保留 `instanceof` + `code` 属性双判定的跨 realm 写法（Worker 与 Web 不同模块 realm）；判定集合换成五码注册表 | Claude |
+| `renderTemplateInternal` → `renderTemplateSlot` | `src/lib/template-engine.ts` | `166-221` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | 模板语言逐字保留：两条正则 `\{if\s+(\w+)\}` 与 `\{(\w+)\}`、先条件后变量的两步顺序、替换不二次扫描、`"0"` 为假。三处改造：① 严格模式由 slug 专用扩为全槽位唯一模式，未登记字段由 `return match` 改为抛错；② `{if}` 判真前 trim（消除 CPS `:189` 与 `:201` 的口径不一致）；③ **正则不动点重扫改为 token 深度配对扫描**——CPS 实现在外层条件为假时会把字面 `{endif}` 泄漏进产物，可复现证据见 `docs/p2/P2_02_TEMPLATE_ENGINE.md` §2.1 | Claude |
+| `buildWildcardMap` → `buildNovelTemplateValues` | `src/lib/template-engine.ts` | `85-137` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | 保留「扁平、预字符串化、恒含全部登记键、`null` 折成空串」的取值表形态；字段整表换成小说字段；容器由普通对象改 `Map`（模板变量名匹配 `\w+`，普通对象上 `constructor`/`__proto__` 会取到原型链） | Claude |
+| `buildArticleSnapshot` → `renderArticleDraft` | `src/lib/article-generation.ts` | `204-272` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | 保留「一次调用产出多个槽位」的装配形态；六槽位降为四槽位（slug 归 P2-03/P2-06，metaKeywords 无对应列）；**去掉全部 fallback 链**——CPS 把同一装配逻辑复制成四份且 fallback 各不相同，fallback 属发布链路策略，归调用方 / P2-07 | Claude |
+| `findUnsupportedVariables` → `analyzeTemplate` | `src/components/templates/template-form.tsx` | `99-115` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | 保留「保存期扫描模板文本、报出未登记变量、`endif` 不算字段」的思路；由 React 组件内的告警函数改为零依赖纯函数（可硬拦截，CPS 侧仅弹黄条仍允许保存）；扫描器与渲染器共用同一套 token 正则，并附带 `{if}`/`{endif}` 配对校验与可空字段裸引用告警 | Claude |
+
+CPS 侧的 `renderContentBlocks`（`src/lib/template-engine.ts:223-261`）、`previewTemplate`（`:263-294`）、`resolveTemplateEpisodeCount`（`:76-83`）、`renderAltTemplate`（`src/lib/article-v2-service.ts:121-128`）、`truncateDescription`（`src/lib/seo-templates/_shared.ts:7-15`）判为 `DROP`，未搬入任何字节，理由逐条见 `docs/p2/P2_02_TEMPLATE_ENGINE.md` §2。
+
+`src/lib/seo/template/html.ts`（正文插值的窄上下文扫描器 `analyzeHtmlInterpolation`）与
+`escapeHtmlText`、`ABSOLUTE_HTTP_URL` / `PUBLIC_REDIRECT_PATH` 两条取值形态校验**无 CPS 来源**：
+CPS 对变量落在什么 HTML 位置完全不判定，也不对 `<img src>` 做任何 scheme 校验，判为
+`ORIGINAL_REQUIRED`，故不在本表登记（本表只登记有 CPS 来源的符号）。
+
 ### 无搬运的任务（显式登记，避免被当成漏登）
 
 | 任务 | CPS 复刻分类 | 原因 |
