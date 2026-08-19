@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { Prisma, type PrismaClient } from "@prisma/client";
+import { withDbRetry } from "@/lib/db/db-retry";
 import type {
   RecoveryResult,
   TaskFamily,
@@ -279,33 +280,53 @@ export async function claimPendingItem(
 ): Promise<TaskLease | null> {
   if (input.taskTypes.length === 0) return null;
   if (input.leaseMs < 1) throw new Error("leaseMs must be positive");
-  return prisma.$transaction(async (tx) => {
-    const candidate = await selectPending(tx, input.family, input.taskTypes);
-    if (!candidate) return null;
-    const executionToken = randomUUID();
-    const row = await assignLease(
-      tx,
-      input.family,
-      candidate.id,
-      input.workerId,
-      executionToken,
-      input.leaseMs,
-    );
-    await recomputeParentTask(tx, input.family, row.task_id);
-    return {
-      family: input.family,
-      taskType: row.task_type,
-      mode: row.mode,
-      itemId: row.id,
-      taskId: row.task_id,
-      workerId: input.workerId,
-      executionToken: row.execution_token,
-      leaseEpoch: row.lease_epoch,
-      attemptCount: row.attempt_count,
-      lockedUntil: row.locked_until,
-      payload: row.payload,
-    };
-  });
+  // `withDbRetry` wraps the whole `$transaction` call, never a statement
+  // inside it — Postgres aborts the entire transaction on most errors, so a
+  // partial-statement retry inside an already-open transaction cannot work
+  // (see `src/server/publish-gate/service.ts`'s `applyPublishTransition` for
+  // the same reasoning). Safe to retry from scratch: nothing commits until
+  // the callback returns, so a genuinely transient failure (lock-wait
+  // timeout, serialization failure) leaves no lease assigned and a retry
+  // simply re-selects a pending candidate. If the failure was instead an
+  // ambiguous commit (the write actually landed but the connection dropped
+  // before the ack), `selectPending`'s `status = 'pending'` predicate no
+  // longer matches that row on retry — the retry picks a *different*
+  // pending item (or none) and the first item's real, committed lease is
+  // simply not returned to this caller. That is not a new failure mode:
+  // it is the same "lease exists but no worker is actively holding it"
+  // state a crashed worker already leaves behind, and `recoverExpiredItem`
+  // already exists to reclaim it once `locked_until` passes.
+  return withDbRetry(
+    () =>
+      prisma.$transaction(async (tx) => {
+        const candidate = await selectPending(tx, input.family, input.taskTypes);
+        if (!candidate) return null;
+        const executionToken = randomUUID();
+        const row = await assignLease(
+          tx,
+          input.family,
+          candidate.id,
+          input.workerId,
+          executionToken,
+          input.leaseMs,
+        );
+        await recomputeParentTask(tx, input.family, row.task_id);
+        return {
+          family: input.family,
+          taskType: row.task_type,
+          mode: row.mode,
+          itemId: row.id,
+          taskId: row.task_id,
+          workerId: input.workerId,
+          executionToken: row.execution_token,
+          leaseEpoch: row.lease_epoch,
+          attemptCount: row.attempt_count,
+          lockedUntil: row.locked_until,
+          payload: row.payload,
+        };
+      }),
+    { op: "tasks.claimPendingItem", sourceKey: input.family },
+  );
 }
 
 async function selectExpired(
@@ -381,7 +402,15 @@ export async function recoverExpiredItem(
   input: { family: TaskFamily; taskTypes: string[]; maxAttemptsByType: Record<string, number> },
 ): Promise<RecoveryResult | null> {
   if (input.taskTypes.length === 0) return null;
-  return prisma.$transaction(async (tx) => {
+  // Same whole-transaction retry shape as `claimPendingItem` above, and safe
+  // for the same reason: nothing commits until the callback returns, and
+  // `selectExpired`'s `status = 'processing'` predicate no longer matches a
+  // row this same function already (ambiguously) recovered, so a retry
+  // after an ack-lost commit picks a different expired candidate rather
+  // than double-processing the first one.
+  return withDbRetry(
+    () =>
+      prisma.$transaction(async (tx) => {
     const row = await selectExpired(tx, input.family, input.taskTypes);
     if (!row) return null;
     const maxAttempts = input.maxAttemptsByType[row.task_type] ?? 3;
@@ -430,7 +459,9 @@ export async function recoverExpiredItem(
       attemptCount: row.attempt_count,
       leaseEpoch: row.lease_epoch,
     };
-  });
+      }),
+    { op: "tasks.recoverExpiredItem", sourceKey: input.family },
+  );
 }
 
 export async function heartbeatTaskItem(
@@ -438,7 +469,6 @@ export async function heartbeatTaskItem(
   lease: TaskLease,
   leaseMs: number,
 ): Promise<boolean> {
-  let count: number;
   const predicate = Prisma.sql`
     id = ${lease.itemId}::uuid AND status = 'processing'
     AND locked_by = ${lease.workerId}
@@ -446,28 +476,43 @@ export async function heartbeatTaskItem(
     AND lease_epoch = ${lease.leaseEpoch}
     AND locked_until > transaction_timestamp()
   `;
+  let statement: Prisma.Sql;
   if (lease.family === "catalog_scan") {
-    count = await db.$executeRaw(Prisma.sql`
+    statement = Prisma.sql`
       UPDATE catalog_scan_task_item SET
         locked_until = transaction_timestamp() + (${leaseMs} * interval '1 millisecond'),
         heartbeat_at = transaction_timestamp(), updated_at = transaction_timestamp()
       WHERE ${predicate}
-    `);
+    `;
   } else if (lease.family === "channel_sync") {
-    count = await db.$executeRaw(Prisma.sql`
+    statement = Prisma.sql`
       UPDATE channel_sync_task_item SET
         locked_until = transaction_timestamp() + (${leaseMs} * interval '1 millisecond'),
         heartbeat_at = transaction_timestamp(), updated_at = transaction_timestamp()
       WHERE ${predicate}
-    `);
+    `;
   } else {
-    count = await db.$executeRaw(Prisma.sql`
+    statement = Prisma.sql`
       UPDATE generic_task_item SET
         locked_until = transaction_timestamp() + (${leaseMs} * interval '1 millisecond'),
         heartbeat_at = transaction_timestamp(), updated_at = transaction_timestamp()
       WHERE ${predicate}
-    `);
+    `;
   }
+  // A single `$executeRaw` statement is its own implicit transaction — no
+  // multi-statement transaction to worry about retrying part of. Re-running
+  // this exact conditional UPDATE (fencing on `execution_token`/
+  // `lease_epoch`/`locked_by`/`status`) after a transient failure is
+  // idempotent either way: if the first attempt never committed, the retry
+  // applies it once; if it ambiguously did commit, the retry's `locked_until
+  // > transaction_timestamp()` predicate still matches (the row is still
+  // `processing` under the same lease) and it just extends `locked_until`
+  // a little further — never a fencing violation, never a double side
+  // effect visible to the caller.
+  const count = await withDbRetry(
+    () => db.$executeRaw(statement),
+    { op: "tasks.heartbeatTaskItem", itemId: lease.itemId, sourceKey: lease.family },
+  );
   return count === 1;
 }
 
@@ -525,7 +570,26 @@ export async function finalizeTaskItem(
   lease: TaskLease,
   outcome: TaskOutcome,
 ): Promise<void> {
-  await prisma.$transaction(async (tx) => {
+  // Whole-transaction retry, same shape as `claimPendingItem`/
+  // `recoverExpiredItem` above. `guardedFinalize`'s fencing predicate
+  // (`execution_token`/`lease_epoch`/`locked_by`/`status = 'processing'`)
+  // is the safety net an ambiguous-commit-then-retry relies on: if the
+  // first attempt actually committed before the connection dropped, the
+  // retried `guardedFinalize` no longer matches the row (it is no longer
+  // `processing`) and `affected !== 1`, so this throws `LeaseLostError`
+  // instead of re-applying `outcome`. Per the frozen fencing contract
+  // (CLAUDE.md §5 修正3), a fencing mismatch must reject and must never be
+  // retried further — `LeaseLostError` never matches `isTransientDbError`
+  // (its message names no transient condition), so `withDbRetry` rethrows
+  // it immediately. This means a genuine ambiguous-commit race surfaces to
+  // the caller as `LeaseLostError` even though the finalize actually
+  // succeeded — a conservative, fail-closed outcome (never a double write)
+  // rather than a fully accurate one; see `src/lib/tasks/store.ts` in this
+  // PR's write-up for why that trade-off was accepted rather than adding a
+  // new idempotency read here.
+  await withDbRetry(
+    () =>
+      prisma.$transaction(async (tx) => {
     const affected = await guardedFinalize(tx, lease, outcome);
     if (affected !== 1) throw new LeaseLostError(lease);
     if (lease.family === "catalog_scan" && outcome.result && typeof outcome.result === "object" && !Array.isArray(outcome.result)) {
@@ -569,5 +633,7 @@ export async function finalizeTaskItem(
       },
     });
     await recomputeParentTask(tx, lease.family, lease.taskId);
-  });
+      }),
+    { op: "tasks.finalizeTaskItem", itemId: lease.itemId, sourceKey: lease.family },
+  );
 }
