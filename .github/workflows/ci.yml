@@ -1,0 +1,113 @@
+# P0 批次 0 · S1：cps-novel-integration 最低 CI 质量门禁。
+#
+# 范围（"最低"门禁，不代表全部验收面）：
+#   npm ci → prisma generate → prisma validate → prisma migrate deploy
+#   → vitest 全量运行（tests/ui + tests/backend + tests/integration）
+#   → next build → 数据字典漂移检测（scripts/check-database-dictionary-drift.mjs）。
+# 任一步失败即整体失败，全程不使用 continue-on-error；本文件不含任何
+# 部署/发布步骤——发布归 Codex 另行处理。
+#
+# 🔴 必跑集，任何人不得从 CI 收集范围中移出（详见 tests/backend/README 与本仓
+# CLAUDE.md §5 修正5"默认拒绝"）：
+#   - tests/backend/auth/admin-registry-parity.test.ts
+#     路由注册表奇偶测试，是后台权限"未登记即拒绝"防线的回归锚点。
+#   - tests/backend/seo/site-url-single-source.test.ts
+#     URL 单一源守卫测试，是域名/绝对 URL 纪律（唯一真源）的回归锚点。
+#   两者都在 vitest 的 node project 下自动收集，删除/跳过/隔离其中任何一个
+#   都等价于关闭对应防线，禁止在不经 Owner 裁决的情况下改动。
+#
+# 数据字典漂移检测的连接方式（二选一中选择"真实跑通"一侧）：
+#   scripts/check-database-dictionary-drift.mjs 默认会用 PrismaClient 连接
+#   DATABASE_URL 所指数据库，核对 schema.prisma / 字典 JSONL / 数据库实际目录
+#   三方一致（--static 参数可跳过数据库目录核对，仅做静态一致性检查）。
+#   本工作流选择起 postgres:16 服务容器、跑完 `prisma migrate deploy` 后，
+#   以默认（非 --static）模式执行该脚本，做到端到端真实核对，而不是跳过。
+#
+# tests/integration 下按角色分权（owner/web/worker/scheduler/analyst/backup）
+# 的 Postgres 集成用例（P1-06 / P1-07 / P1-08B / P2-04 / P2-05 / P1-13，文件名
+# 形如 *-postgres.test.ts）各自用专属环境变量（如 P1_06_DATABASE_TEST=1）做
+# describe.skipIf 显式开关，未设置时自动跳过、不计入失败。这些用例依赖
+# infra/postgres/roles.sql + grants.sql 建立的多角色权限矩阵，其真实验证目前
+# 由 scripts/run-p1-06-postgres-verification.sh 等独立脚本承担（各自起专用
+# docker 容器、生成角色密码、灌 roles.sql/grants.sql）。本"最低门禁"不复刻这套
+# 多角色基础设施——那是 infra/ 与 schema 范畴的产品决策，超出 S1 施工单
+# "只新增 CI 配置与必要脚本、不改 schema"的授权边界。是否要为这些角色化用例
+# 新增一个独立的重量级 workflow，留给 Owner/Codex 裁决。
+#
+# 本文件路径落在 CLAUDE.md §3.3"共享路径的唯一 merge custodian"表中的
+# `CI / infra/` 一行，custodian 是 Codex，Claude 只有审核权、不直接合并——
+# 本分支只是按 custodian 流程提交提案，最终合并需由 Codex 执行。
+
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality-gate:
+    name: Quality gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: cps_novel
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d cps_novel"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/cps_novel?schema=public
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Node 20：对齐 .nvmrc（内容为 "20"）与 package.json engines.node
+      # (">=20.9.0")。setup-node 会解析 .nvmrc 得到主版本号 20，落在
+      # engines 声明的范围内。
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: ".nvmrc"
+          cache: "npm"
+
+      - name: Install dependencies (npm ci)
+        run: npm ci
+
+      - name: Prisma generate
+        run: npx prisma generate
+
+      - name: Prisma validate
+        run: npx prisma validate
+
+      # 供后续"数据字典漂移检测"与任何选择性开启的 Postgres 集成用例使用；
+      # 未显式设置 P1_06_DATABASE_TEST=1 等开关的角色化集成用例仍会自动跳过。
+      - name: Prisma migrate deploy
+        run: npx prisma migrate deploy
+
+      - name: Vitest (ui + node projects, full run)
+        run: npm test
+
+      - name: Next build
+        run: npm run build
+
+      # 默认模式（非 --static）：核对 schema.prisma / 字典 JSONL / 数据库
+      # 实际目录三方一致，需要上一步已迁移到位的真实 PostgreSQL。
+      - name: Database dictionary drift check
+        run: node scripts/check-database-dictionary-drift.mjs
