@@ -11,6 +11,7 @@ const PRIVATE_ROUTE_PREFIXES = [
   "/tasks",
   "/settings",
   "/dev-preview",
+  "/go",
 ] as const;
 
 export function buildRobots(): MetadataRoute.Robots {
