@@ -112,8 +112,14 @@ export class MoboreaderAdapterError extends Error {
       | "malformed_payload",
     readonly retryable: boolean,
     readonly status: number | null = null,
+    /**
+     * Diagnostic-only detail (field name + received shape). Never derived from
+     * raw upstream values — only from field names and `typeof`/emptiness, so
+     * it cannot leak credentials, titles, or response bodies into logs.
+     */
+    readonly detail: string | null = null,
   ) {
-    super(`MoboReader read failed: ${code}${status === null ? "" : ` (${status})`}`);
+    super(`MoboReader read failed: ${code}${status === null ? "" : ` (${status})`}${detail ? ` — ${detail}` : ""}`);
     this.name = "MoboreaderAdapterError";
   }
 }
@@ -153,9 +159,25 @@ function optionalIdentifier(value: unknown): string | null {
   return null;
 }
 
-function requiredIdentifier(value: unknown): string {
+/** Diagnostic-only shape description. Reports type/emptiness, never the raw value. */
+function describeReceivedShape(value: unknown): string {
+  if (value === null) return "typeof object (null)";
+  if (value === undefined) return "typeof undefined";
+  if (typeof value === "string") return value.trim() ? "typeof string (non-empty)" : "typeof string (empty)";
+  if (typeof value === "number") return Number.isFinite(value) ? "typeof number (finite)" : "typeof number (non-finite)";
+  return `typeof ${typeof value}`;
+}
+
+function requiredIdentifier(field: string, value: unknown): string {
   const identifier = optionalIdentifier(value);
-  if (identifier === null) throw new MoboreaderAdapterError("malformed_payload", false);
+  if (identifier === null) {
+    throw new MoboreaderAdapterError(
+      "malformed_payload",
+      false,
+      null,
+      `${field}: expected a non-empty string or a finite number, received ${describeReceivedShape(value)}`,
+    );
+  }
   return identifier;
 }
 
@@ -269,14 +291,14 @@ export function parseListBooksResponse(value: unknown): ListBooksResponse {
   if (!Array.isArray(data.list)) throw new MoboreaderAdapterError("malformed_payload", false);
   const items = data.list.map((value): MoboreaderBook => {
     const row = record(value);
-    const seriesId = requiredIdentifier(row.seriesId);
+    const seriesId = requiredIdentifier("seriesId", row.seriesId);
     const agencyId = optionalIdentifier(row.agencyId);
     const seriesTypeList = labelValues(row.seriesTypeList);
     const recommendList = labelValues(row.recommendList);
     const agencyIdentityComplete = Object.hasOwn(row, "agencyId")
       && (row.agencyId === null || agencyId !== null);
     return {
-      externalBookId: requiredIdentifier(row.id ?? row.seriesId),
+      externalBookId: requiredIdentifier("externalBookId", row.id ?? row.seriesId),
       agencyId,
       agencyName: optionalString(row.agencyName),
       seriesId,
@@ -323,7 +345,7 @@ export function parsePreviewChaptersResponse(value: unknown): PreviewChaptersRes
     if (i < 1) throw new MoboreaderAdapterError("malformed_payload", false);
     return {
       i,
-      chapterID: requiredString(row.chapterID),
+      chapterID: requiredIdentifier("chapterID", row.chapterID),
       chapterName: optionalString(row.chapterName),
       chapterShowName: optionalString(row.chapterShowName),
       chapterContent: requiredString(row.chapterContent),
