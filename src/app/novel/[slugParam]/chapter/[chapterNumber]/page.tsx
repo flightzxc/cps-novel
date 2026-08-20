@@ -15,6 +15,7 @@ import { canonicalUrl } from "@/lib/seo/seo-utils";
 import { generateSeoMeta } from "@/lib/seo/seo-meta-generator";
 import { buildChapterPath, buildChapterRoutePath } from "@/lib/seo/chapter-path";
 import { buildNovelHreflangAlternates, type NovelHreflangSibling } from "@/lib/seo/novel-hreflang";
+import { getPublicT } from "@/lib/locale/messages";
 import { PUBLIC_SITE_LOCALE } from "@/lib/site/locale-label";
 
 export const dynamic = "force-dynamic";
@@ -59,18 +60,19 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { slugParam, chapterNumber: rawNumber } = await params;
   const chapterNumber = parseChapterNumber(rawNumber);
-  if (chapterNumber === null) return noIndexMetadata("章节不存在");
+  const t = getPublicT();
+  if (chapterNumber === null) return noIndexMetadata(t("meta.chapterNotFound"));
 
   const access = await loadArticleAccess(slugParam, PUBLIC_SITE_LOCALE);
   if (access.kind !== "published") {
-    return noIndexMetadata(access.kind === "not_found" ? "章节不存在" : access.title);
+    return noIndexMetadata(access.kind === "not_found" ? t("meta.chapterNotFound") : access.title);
   }
 
   const [{ settings }, chapter] = await Promise.all([
     loadChrome(),
     loadChapterView(access.articleId, chapterNumber),
   ]);
-  if (!chapter) return noIndexMetadata("章节不存在");
+  if (!chapter) return noIndexMetadata(t("meta.chapterNotFound"));
 
   const routePath = buildChapterRoutePath({
     slug: access.slugPart,

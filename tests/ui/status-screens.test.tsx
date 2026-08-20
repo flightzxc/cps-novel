@@ -9,8 +9,8 @@ describe("下架状态", () => {
   it("平静陈述当前不可阅读，并给一条回首页的路", () => {
     render(<UnavailableScreen reason="unpublished" homeHref="/" />);
 
-    expect(screen.getByRole("heading", { name: "这本书暂时不可阅读" })).toBeTruthy();
-    expect(screen.getByRole("link", { name: "回到首页" }).getAttribute("href")).toBe("/");
+    expect(screen.getByRole("heading", { name: "This book is temporarily unavailable" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Back to home" }).getAttribute("href")).toBe("/");
   });
 
   it("标出状态原因，供路由层将来映射 HTTP 状态码", () => {
@@ -25,8 +25,8 @@ describe("撤回状态", () => {
   it("文案与下架不同", () => {
     render(<UnavailableScreen reason="takedown" />);
 
-    expect(screen.getByRole("heading", { name: "这本书已经撤回" })).toBeTruthy();
-    expect(screen.getByText(/永久性的撤回/)).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "This book has been withdrawn" })).toBeTruthy();
+    expect(screen.getByText(/withdrawal is permanent/)).toBeTruthy();
   });
 
   it("标出状态原因", () => {
@@ -78,7 +78,7 @@ describe("聚合页", () => {
     );
 
     expect(screen.getByTestId("book-grid-empty")).toBeTruthy();
-    expect(screen.getByText("0 部作品")).toBeTruthy();
+    expect(screen.getByText("0 works")).toBeTruthy();
   });
 
   it("说明文字未提供时不渲染空段落", () => {
@@ -87,6 +87,6 @@ describe("聚合页", () => {
     const header = container.querySelector("main header") as HTMLElement;
     // 只剩「N 部作品」这一行，没有空的说明段落
     expect(header.querySelectorAll("p")).toHaveLength(1);
-    expect(header.textContent).toContain("0 部作品");
+    expect(header.textContent).toContain("0 works");
   });
 });

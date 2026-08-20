@@ -33,7 +33,7 @@ describe("阅读偏好 · 持久化", () => {
   it("改设置会写进本地存储", () => {
     renderWithProvider(<ChapterScreen chapter={MOCK_CHAPTER} />);
     openPanel();
-    fireEvent.click(screen.getByRole("radio", { name: "深色" }));
+    fireEvent.click(screen.getByRole("radio", { name: "Dark" }));
 
     expect(readReaderSettings().theme).toBe("dark");
     expect(window.localStorage.getItem(READER_SETTINGS_STORAGE_KEY)).toContain("dark");
@@ -43,9 +43,9 @@ describe("阅读偏好 · 持久化", () => {
     renderWithProvider(<ChapterScreen chapter={MOCK_CHAPTER} />);
     openPanel();
     fireEvent.click(screen.getByRole("radio", { name: "22" }));
-    fireEvent.click(screen.getByRole("radio", { name: "宽松" }));
-    fireEvent.click(screen.getByRole("radio", { name: "宽" }));
-    fireEvent.click(screen.getByRole("radio", { name: "浅色" }));
+    fireEvent.click(screen.getByRole("radio", { name: "Relaxed" }));
+    fireEvent.click(screen.getByRole("radio", { name: "Wide" }));
+    fireEvent.click(screen.getByRole("radio", { name: "Light" }));
 
     expect(readReaderSettings()).toEqual({
       theme: "light",
@@ -82,7 +82,7 @@ describe("阅读偏好 · 持久化", () => {
 
     renderWithProvider(<ChapterScreen chapter={MOCK_CHAPTER} />);
     openPanel();
-    fireEvent.click(screen.getByRole("button", { name: "恢复默认" }));
+    fireEvent.click(screen.getByRole("button", { name: "Reset to defaults" }));
 
     expect(readReaderSettings()).toEqual(DEFAULT_READER_SETTINGS);
   });
@@ -91,12 +91,12 @@ describe("阅读偏好 · 持久化", () => {
     renderWithProvider(<ChapterScreen chapter={MOCK_CHAPTER} />);
     openPanel();
 
-    fireEvent.click(screen.getByRole("radio", { name: "深色" }));
+    fireEvent.click(screen.getByRole("radio", { name: "Dark" }));
     expect(document.documentElement.getAttribute("data-reader-pref-theme")).toBe("dark");
 
     // 回到「跟随系统」时属性必须**移除**而不是写 "system"：
     // 没有属性参与，媒体查询才能自己说了算。
-    fireEvent.click(screen.getByRole("radio", { name: "跟随系统" }));
+    fireEvent.click(screen.getByRole("radio", { name: "Match system" }));
     expect(document.documentElement.hasAttribute("data-reader-pref-theme")).toBe(false);
   });
 });
@@ -136,7 +136,7 @@ describe("阅读偏好 · 存储异常不影响阅读", () => {
     renderWithProvider(<ChapterScreen chapter={MOCK_CHAPTER} />);
     openPanel();
 
-    expect(() => fireEvent.click(screen.getByRole("radio", { name: "深色" }))).not.toThrow();
+    expect(() => fireEvent.click(screen.getByRole("radio", { name: "Dark" }))).not.toThrow();
     // 存不下也要在本次会话内生效——存储失败不等于设置失败。
     expect(screen.getByTestId("reader-surface").getAttribute("data-reader-theme")).toBe(
       "dark",

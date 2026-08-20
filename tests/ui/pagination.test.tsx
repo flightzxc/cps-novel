@@ -16,6 +16,7 @@ describe("Pagination", () => {
     expect(screen.getByTestId("pagination")).toBeTruthy();
     expect(screen.getByRole("link", { name: /Previous/ }).getAttribute("href")).toBe("/browse");
     expect(screen.getByRole("link", { name: /Next/ }).getAttribute("href")).toBe("/browse?page=3");
-    expect(screen.getByText("Page 2 of 3")).toBeTruthy();
+    expect(screen.getByText("2 / 3")).toBeTruthy();
+    expect(screen.getByRole("navigation", { name: "Pagination" })).toBeTruthy();
   });
 });

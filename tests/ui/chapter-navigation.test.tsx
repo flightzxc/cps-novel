@@ -62,42 +62,42 @@ describe("章节切换 · 渲染出的导航", () => {
   it("中间章上下章都渲染，且指向相邻章", () => {
     render(<ChapterScreen chapter={getMockChapterView(2)!} />);
 
-    expect(screen.getByRole("link", { name: "上一章" }).getAttribute("href")).toBe(
+    expect(screen.getByRole("link", { name: "Previous chapter" }).getAttribute("href")).toBe(
       devPreviewChapterPath(1),
     );
-    expect(screen.getByRole("link", { name: "下一章" }).getAttribute("href")).toBe(
+    expect(screen.getByRole("link", { name: "Next chapter" }).getAttribute("href")).toBe(
       devPreviewChapterPath(3),
     );
   });
 
   it("首章不渲染上一章，末章不渲染下一章——不留死链", () => {
     const { unmount } = render(<ChapterScreen chapter={getMockChapterView(1)!} />);
-    expect(screen.queryByRole("link", { name: "上一章" })).toBeNull();
-    expect(screen.getByText("已是第一章")).toBeTruthy();
+    expect(screen.queryByRole("link", { name: "Previous chapter" })).toBeNull();
+    expect(screen.getByText("This is the first chapter")).toBeTruthy();
     unmount();
 
     render(<ChapterScreen chapter={getMockChapterView(MOCK_PREVIEW_CHAPTER_TOTAL)!} />);
-    expect(screen.queryByRole("link", { name: "下一章" })).toBeNull();
-    expect(screen.getByText("已是最后一章试读")).toBeTruthy();
+    expect(screen.queryByRole("link", { name: "Next chapter" })).toBeNull();
+    expect(screen.getByText("This is the last preview chapter")).toBeTruthy();
   });
 
   it("导航链接保留 rel=prev/next 语义", () => {
     render(<ChapterScreen chapter={getMockChapterView(2)!} />);
 
-    expect(screen.getByRole("link", { name: "上一章" }).getAttribute("rel")).toBe("prev");
-    expect(screen.getByRole("link", { name: "下一章" }).getAttribute("rel")).toBe("next");
+    expect(screen.getByRole("link", { name: "Previous chapter" }).getAttribute("rel")).toBe("prev");
+    expect(screen.getByRole("link", { name: "Next chapter" }).getAttribute("rel")).toBe("next");
   });
 
   it("试读进度随章号推进，分母恒为可试读章数", () => {
     const { unmount } = render(<ChapterScreen chapter={getMockChapterView(2)!} />);
     expect(screen.getByTestId("book-attribution-bar").textContent).toContain(
-      `试读 2 / ${MOCK_PREVIEW_CHAPTER_TOTAL}`,
+      `Preview 2 / ${MOCK_PREVIEW_CHAPTER_TOTAL}`,
     );
     unmount();
 
     render(<ChapterScreen chapter={getMockChapterView(3)!} />);
     expect(screen.getByTestId("book-attribution-bar").textContent).toContain(
-      `试读 3 / ${MOCK_PREVIEW_CHAPTER_TOTAL}`,
+      `Preview 3 / ${MOCK_PREVIEW_CHAPTER_TOTAL}`,
     );
   });
 

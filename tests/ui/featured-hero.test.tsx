@@ -74,7 +74,7 @@ describe("主推位形态选择", () => {
 
     expect(screen.queryByTestId("featured-hero")).toBeNull();
     // 回落版有自己的眉标与主推标题（书名在下方网格里也会出现，所以按 id 定位）
-    expect(screen.getByText("本期主推")).toBeTruthy();
+    expect(screen.getByText("Featured")).toBeTruthy();
     expect(container.querySelector("#featured-title")?.textContent).toBe(
       MOCK_FEATURED_LIST[0].title,
     );
@@ -84,7 +84,7 @@ describe("主推位形态选择", () => {
     renderHome([]);
 
     expect(screen.queryByTestId("featured-hero")).toBeNull();
-    expect(screen.queryByText("本期主推")).toBeNull();
+    expect(screen.queryByText("Featured")).toBeNull();
     expect(screen.getByTestId("book-grid")).toBeTruthy();
   });
 
@@ -98,6 +98,11 @@ describe("轮播行为", () => {
   it("dots 数量与轮播项数一致，当前项用 aria-selected 表达", () => {
     renderHome();
 
+    const hero = screen.getByTestId("featured-hero");
+    expect(hero.getAttribute("aria-label")).toBe("Featured works");
+    expect(hero.getAttribute("aria-roledescription")).toBe("carousel");
+    expect(screen.getByRole("tablist", { name: "Switch featured work" })).toBeTruthy();
+
     const tabs = screen.getByTestId("featured-hero-dots").querySelectorAll('[role="tab"]');
     expect(tabs).toHaveLength(HERO_COUNT);
     expect(tabs[0].getAttribute("aria-selected")).toBe("true");
@@ -107,8 +112,8 @@ describe("轮播行为", () => {
   it("点 dot 可切换", () => {
     renderHome();
 
-    fireEvent.click(screen.getAllByRole("tab", { name: "第 2 本" })[0]);
-    expect(screen.getAllByRole("tab", { name: "第 2 本" })[0].getAttribute("aria-selected")).toBe(
+    fireEvent.click(screen.getAllByRole("tab", { name: "Work 2" })[0]);
+    expect(screen.getAllByRole("tab", { name: "Work 2" })[0].getAttribute("aria-selected")).toBe(
       "true",
     );
   });
@@ -118,7 +123,7 @@ describe("轮播行为", () => {
     const hero = screen.getByTestId("featured-hero");
 
     fireEvent.keyDown(hero, { key: "ArrowRight" });
-    expect(screen.getAllByRole("tab", { name: "第 2 本" })[0].getAttribute("aria-selected")).toBe(
+    expect(screen.getAllByRole("tab", { name: "Work 2" })[0].getAttribute("aria-selected")).toBe(
       "true",
     );
 
@@ -126,7 +131,7 @@ describe("轮播行为", () => {
     fireEvent.keyDown(hero, { key: "ArrowLeft" });
     fireEvent.keyDown(hero, { key: "ArrowLeft" });
     expect(
-      screen.getAllByRole("tab", { name: `第 ${HERO_COUNT} 本` })[0].getAttribute("aria-selected"),
+      screen.getAllByRole("tab", { name: `Work ${HERO_COUNT}` })[0].getAttribute("aria-selected"),
     ).toBe("true");
   });
 
@@ -161,7 +166,7 @@ describe("轮播行为", () => {
         vi.advanceTimersByTime(HERO_AUTOPLAY_MS);
       });
       expect(
-        screen.getAllByRole("tab", { name: "第 2 本" })[0].getAttribute("aria-selected"),
+        screen.getAllByRole("tab", { name: "Work 2" })[0].getAttribute("aria-selected"),
       ).toBe("true");
     } finally {
       vi.useRealTimers();
@@ -177,7 +182,7 @@ describe("轮播行为", () => {
         vi.advanceTimersByTime(HERO_AUTOPLAY_MS * 3);
       });
       expect(
-        screen.getAllByRole("tab", { name: "第 1 本" })[0].getAttribute("aria-selected"),
+        screen.getAllByRole("tab", { name: "Work 1" })[0].getAttribute("aria-selected"),
       ).toBe("true");
     } finally {
       vi.useRealTimers();
@@ -193,7 +198,7 @@ describe("轮播行为", () => {
         vi.advanceTimersByTime(HERO_AUTOPLAY_MS * 3);
       });
       expect(
-        screen.getAllByRole("tab", { name: "第 1 本" })[0].getAttribute("aria-selected"),
+        screen.getAllByRole("tab", { name: "Work 1" })[0].getAttribute("aria-selected"),
       ).toBe("true");
     } finally {
       vi.useRealTimers();
@@ -203,7 +208,7 @@ describe("轮播行为", () => {
   it("向读屏用户播报当前在第几本", () => {
     const { container } = renderHome();
     const live = container.querySelector('[aria-live="polite"]');
-    expect(live?.textContent).toContain(`共 ${HERO_COUNT} 本`);
+    expect(live?.textContent).toContain(`of ${HERO_COUNT}`);
   });
 });
 
@@ -283,7 +288,7 @@ describe("页头在 Hero 上的形态", () => {
   it("展开移动端菜单时页头落回实底，菜单不会压在图上", () => {
     renderHome();
 
-    fireEvent.click(screen.getByRole("button", { name: "打开菜单" }));
+    fireEvent.click(screen.getByRole("button", { name: "Open menu" }));
 
     const header = screen.getByTestId("site-header");
     expect(header.getAttribute("data-header-transparent")).toBe("false");

@@ -122,13 +122,13 @@ describe("章节预览路由 · robots 与 canonical", () => {
     const first = await metadataFor("1");
     const second = await metadataFor("2");
     expect(first.title).not.toBe(second.title);
-    expect(String(first.title)).toContain("第 1 章");
-    expect(String(second.title)).toContain("第 2 章");
+    expect(String(first.title)).toContain("Chapter 1");
+    expect(String(second.title)).toContain("Chapter 2");
   });
 
   it("章号不存在时标题降级但仍然 noindex——404 页面也不能被收录", async () => {
     const metadata = await metadataFor(String(MOCK_PREVIEW_CHAPTER_TOTAL + 1));
-    expect(metadata.title).toBe("章节不存在");
+    expect(metadata.title).toBe("Chapter not found");
     expect(metadata.robots).toEqual({ index: false, follow: false });
   });
 

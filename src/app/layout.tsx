@@ -1,10 +1,13 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import "@/styles/globals.css";
+import { getPublicT } from "@/lib/locale/messages";
+
+const t = getPublicT();
 
 export const metadata: Metadata = {
   title: "cps-novel",
-  description: "海外小说内容分发站点",
+  description: t("meta.siteDescription"),
   // Public pages override this from generateMetadata (innermost wins).
   // `dev-preview` and `(admin)` keep noindex via their own layouts.
   robots: { index: false, follow: false },

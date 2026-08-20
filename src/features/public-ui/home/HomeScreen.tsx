@@ -3,6 +3,7 @@ import { SectionHeader } from "@/components/SectionHeader";
 import { BookGrid } from "@/features/public-ui/book/BookGrid";
 import { SiteShell, type SiteChrome } from "@/features/public-ui/layout/SiteShell";
 import type { NovelCardView, NovelDetailView } from "@/features/public-ui/types";
+import { getPublicT } from "@/lib/locale/messages";
 import { FeaturedHero, type FeaturedHeroItem } from "./FeaturedHero";
 import { FeaturedNovel } from "./FeaturedNovel";
 
@@ -37,6 +38,7 @@ export function HomeScreen({
   browseAllHref?: string;
   chrome?: SiteChrome;
 }) {
+  const t = getPublicT();
   const heroItems: FeaturedHeroItem[] = featuredList.filter(
     (entry) => Boolean(entry.novel.heroImageUrl),
   );
@@ -59,14 +61,14 @@ export function HomeScreen({
         <section aria-labelledby="all-works" className="pt-12 pb-4 md:pt-16">
           <SectionHeader
             id="all-works"
-            title="作品"
+            title={t("home.works")}
             action={
               browseAllHref ? (
                 <a
                   href={browseAllHref}
                   className="text-novel-primary transition-colors hover:text-novel-primary-hover"
                 >
-                  查看全部
+                  {t("home.viewAll")}
                 </a>
               ) : undefined
             }

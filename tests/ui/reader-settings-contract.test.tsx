@@ -193,7 +193,7 @@ describe("阅读设置契约 · 写入路径", () => {
     const setItem = vi.spyOn(Storage.prototype, "setItem");
     renderWithProvider();
     openPanel();
-    fireEvent.click(screen.getByRole("radio", { name: "深色" }));
+    fireEvent.click(screen.getByRole("radio", { name: "Dark" }));
 
     const settingsWrites = setItem.mock.calls.filter(
       (call) => call[0] === READER_SETTINGS_STORAGE_KEY,
@@ -274,7 +274,7 @@ describe("阅读设置契约 · 写入路径", () => {
       />,
     );
     openPanel();
-    fireEvent.click(screen.getByRole("radio", { name: "宽" }));
+    fireEvent.click(screen.getByRole("radio", { name: "Wide" }));
 
     const emitted = onSettingsChange.mock.calls.at(-1)?.[0] as ReaderSettings;
     expect(emitted).toEqual(normalizeReaderSettings(emitted));

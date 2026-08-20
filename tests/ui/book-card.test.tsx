@@ -29,7 +29,7 @@ describe("书籍卡片", () => {
     render(<BookCard novel={WITH_TAGS} />);
 
     expect(screen.getByRole("heading", { name: WITH_TAGS.title })).toBeTruthy();
-    expect(screen.getByAltText(`《${WITH_TAGS.title}》封面`)).toBeTruthy();
+    expect(screen.getByAltText(`Cover of ${WITH_TAGS.title}`)).toBeTruthy();
     expect(screen.getByText("言情")).toBeTruthy();
     expect(screen.getByText("都市")).toBeTruthy();
   });
