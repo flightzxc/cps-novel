@@ -11,16 +11,19 @@
  *
  * Deliberately **not** ported: CPS's `pinyin-pro` Chinese-to-pinyin
  * transliteration branch (`shouldTransliterateChinese`/`pushChineseTokens`).
- * `SiteLocale` (`src/lib/locale/locale-canonical.ts`) has exactly one
- * registered member today (`"en"`), and the upstream language registry that
- * drives `resolveSiteLocale` is still empty — there is no exercised call
- * site in this round that would ever route CJK text through a Chinese-family
- * `SiteLocale`. Non-Latin scripts are preserved as their own Unicode slug
- * segments instead — the same fallback CPS itself uses for "other" scripts,
- * and exactly what a browser/HTTP stack percent-encodes at the URL layer
- * regardless. That keeps this module at zero new dependencies. If/when a
- * CJK-family `SiteLocale` is ever registered, that is the natural point to
- * evaluate a transliteration library — not preemptively here.
+ * `SiteLocale` (`src/lib/locale/locale-canonical.ts`) is registered for 15
+ * locales as of P0-S10, but `PUBLISHABLE_LOCALES` there is still empty and
+ * the upstream language registry that drives `resolveSiteLocale` is still
+ * empty too — there is no exercised call site in this round that would ever
+ * route CJK/Thai/Arabic text through this module for a locale content can
+ * actually publish under. Non-Latin scripts are preserved as their own
+ * Unicode slug segments instead — the same fallback CPS itself uses for
+ * "other" scripts, and exactly what a browser/HTTP stack percent-encodes at
+ * the URL layer regardless. That keeps this module at zero new dependencies.
+ * If/when a CJK-family (or Thai/Arabic) `SiteLocale` is ever added to
+ * `PUBLISHABLE_LOCALES`, that is the natural point to evaluate a
+ * transliteration/segmentation library for it — not preemptively here. See
+ * `LOCALE_SEGMENTATION_RULES` below for the per-locale placeholder registry.
  */
 import type { SiteLocale } from "@/lib/locale/locale-canonical";
 
@@ -113,15 +116,59 @@ function latinWordSegmentedSlug(text: string): string {
 }
 
 /**
- * Per-`SiteLocale` segmentation rule registry. Today's single locale takes
- * the Latin word-segmentation branch. The `never`-typed default below means
- * registering a second `SiteLocale` in `locale-canonical.ts` without adding
- * a matching entry here fails `tsc`, not silently inherits Latin rules for a
- * script that may not want them — the same "must consciously extend"
- * discipline `locale-canonical.ts` itself documents for its own registry.
+ * Per-`SiteLocale` segmentation rule registry. The `Record<SiteLocale, ...>`
+ * type means registering a new `SiteLocale` in `locale-canonical.ts` without
+ * adding a matching entry here fails `tsc` — the same "must consciously
+ * extend" discipline `locale-canonical.ts` documents for its own registry.
+ *
+ * P0-S10 (2026-08-20): `locale-canonical.ts` expanded `SiteLocale` from 1
+ * member (`en`) to 15 (aligned with CPS's 15-language site locale set), which
+ * turned this `Record` into a `tsc` error (TS2740 — 14 keys missing). All 14
+ * new locales are registered here as `"latin-word-segmentation"` too. This is
+ * an **evaluated placeholder, not a verified per-script segmentation
+ * strategy**:
+ *
+ * 1. `PUBLISHABLE_LOCALES` (`locale-canonical.ts`) is still empty — no
+ *    non-`en` content can reach slug generation through any real call site
+ *    in this round, so there is nothing to validate a different strategy
+ *    against yet.
+ * 2. The Latin-word-segmentation branch already degrades safely for non-Latin
+ *    input: it preserves non-Latin Unicode runs as their own slug segment
+ *    (see `latinWordSegmentedSlug` above) rather than mangling or dropping
+ *    them, and whatever it produces still gets percent-encoded at the
+ *    browser/HTTP layer like any other URL path segment. That is a usable,
+ *    if generic, fallback — not a broken one.
+ * 3. The locales that most need a real per-script segmentation policy
+ *    (`ja`, `ko`, `zh-Hant`, `ar`, `th` at minimum — word-boundary rules for
+ *    these scripts differ meaningfully from Latin) should get one evaluated
+ *    at the point one of them actually enters `PUBLISHABLE_LOCALES`, because
+ *    that is the first moment a real call site exists to verify the choice
+ *    against. Guessing a strategy now, with nothing to exercise it, would be
+ *    exactly the kind of unverified mapping `locale-canonical.ts` itself
+ *    warns against for upstream language codes.
+ *
+ * Do not read the 14 new entries below as "Latin segmentation was evaluated
+ * and chosen for Thai/Japanese/Arabic/etc." — it was not. It is a
+ * placeholder registration that satisfies the exhaustiveness check while
+ * those locales remain unpublishable, and it must be revisited (not
+ * silently trusted) at each locale's publish-readiness review.
  */
 const LOCALE_SEGMENTATION_RULES: Readonly<Record<SiteLocale, "latin-word-segmentation">> = Object.freeze({
   en: "latin-word-segmentation",
+  es: "latin-word-segmentation",
+  "pt-BR": "latin-word-segmentation",
+  id: "latin-word-segmentation",
+  vi: "latin-word-segmentation",
+  th: "latin-word-segmentation",
+  ja: "latin-word-segmentation",
+  ko: "latin-word-segmentation",
+  "zh-Hant": "latin-word-segmentation",
+  ar: "latin-word-segmentation",
+  fr: "latin-word-segmentation",
+  de: "latin-word-segmentation",
+  pl: "latin-word-segmentation",
+  cs: "latin-word-segmentation",
+  ru: "latin-word-segmentation",
 });
 
 /**
