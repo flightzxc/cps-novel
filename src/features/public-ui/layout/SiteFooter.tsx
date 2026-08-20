@@ -12,11 +12,13 @@ export function SiteFooter({
   links = [],
   brandHref = "/",
   note,
+  navAriaLabel,
 }: {
   links?: NavItem[];
   brandHref?: string;
   /** 一行补充说明，例如内容来源声明。 */
   note?: string;
+  navAriaLabel: string;
 }) {
   return (
     <footer className="mt-20 border-t border-novel-border bg-novel-bg md:mt-28">
@@ -24,7 +26,7 @@ export function SiteFooter({
         <BrandLockup size={24} href={brandHref} />
 
         {links.length > 0 ? (
-          <nav aria-label="页脚导航">
+          <nav aria-label={navAriaLabel}>
             <ul className="flex list-none flex-wrap gap-x-6 gap-y-2 p-0">
               {links.map((link) => (
                 <li key={link.href + link.label}>

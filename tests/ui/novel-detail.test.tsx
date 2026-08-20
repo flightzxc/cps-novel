@@ -41,7 +41,7 @@ describe("小说详情页 · 字段边界", () => {
   it("展示总章数这个客观标量，但不据此生成章节行", () => {
     render(<NovelDetailScreen novel={MOCK_NOVEL_DETAIL} />);
 
-    expect(screen.getByText(/共 265 章/)).toBeTruthy();
+    expect(screen.getByText(/265 chapters/)).toBeTruthy();
     // 总章数 265，实际只列出 fixture 里的 3 条
     expect(screen.getByTestId("preview-chapter-list").querySelectorAll("li")).toHaveLength(3);
   });
@@ -74,7 +74,7 @@ describe("小说详情页 · 可试读章节区块", () => {
     for (const forbidden of ["完整目录", "全部章节", "全书目录", "完整章节"]) {
       expect(text).not.toContain(forbidden);
     }
-    expect(screen.getByText("可试读章节")).toBeTruthy();
+    expect(screen.getByText("Preview chapters")).toBeTruthy();
   });
 
   it("没有可试读章节时给出空状态，不留空列表", () => {
@@ -97,8 +97,8 @@ describe("小说详情页 · 标签与元信息", () => {
     const meta = screen.getAllByTestId("meta-list")[0];
     // 稀疏这本没有可试读章节，所以「可试读 N 章」这一项不出现
     expect(meta.textContent).toContain("English");
-    expect(meta.textContent).toContain("共 88 章");
-    expect(meta.textContent).not.toContain("可试读");
+    expect(meta.textContent).toContain("88 chapters");
+    expect(meta.textContent).not.toContain("preview chapters");
   });
 });
 
@@ -106,8 +106,8 @@ describe("小说详情页 · 行动区", () => {
   it("站内试读为主动作，正式阅读为次动作", () => {
     render(<NovelDetailScreen novel={MOCK_NOVEL_DETAIL} />);
 
-    const preview = screen.getByRole("link", { name: "开始试读" });
-    const upstream = screen.getByRole("link", { name: "前往正式阅读" });
+    const preview = screen.getByRole("link", { name: "Start preview" });
+    const upstream = screen.getByRole("link", { name: "Continue reading" });
 
     expect(preview.className).toContain("bg-novel-accent");
     expect(upstream.className).toContain("border-novel-border-strong");
@@ -117,20 +117,20 @@ describe("小说详情页 · 行动区", () => {
   it("正式阅读入口带 nofollow sponsored", () => {
     render(<NovelDetailScreen novel={MOCK_NOVEL_DETAIL} />);
     expect(
-      screen.getByRole("link", { name: "前往正式阅读" }).getAttribute("rel"),
+      screen.getByRole("link", { name: "Continue reading" }).getAttribute("rel"),
     ).toBe("nofollow sponsored");
   });
 
   it("没有公开跳转码时不渲染正式阅读入口", () => {
     render(<NovelDetailScreen novel={MOCK_NOVEL_DETAIL_SPARSE} />);
-    expect(screen.queryByRole("link", { name: "前往正式阅读" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Continue reading" })).toBeNull();
   });
 });
 
 describe("小说详情页 · 推荐结构", () => {
   it("本轮不接推荐数据时整块不渲染，不留空框", () => {
     render(<NovelDetailScreen novel={MOCK_NOVEL_DETAIL} />);
-    expect(screen.queryByRole("heading", { name: "相关作品" })).toBeNull();
+    expect(screen.queryByRole("heading", { name: "Related works" })).toBeNull();
   });
 
   it("传入数据时才渲染，且复用同一种卡片", () => {
@@ -138,7 +138,7 @@ describe("小说详情页 · 推荐结构", () => {
       <NovelDetailScreen novel={MOCK_NOVEL_DETAIL} related={MOCK_NOVEL_CARDS.slice(0, 3)} />,
     );
 
-    expect(screen.getByRole("heading", { name: "相关作品" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Related works" })).toBeTruthy();
     expect(container.querySelectorAll('[data-testid="book-card"]')).toHaveLength(3);
   });
 });

@@ -29,10 +29,11 @@ export const READER_MEASURES = ["60ch", "68ch", "76ch"] as const;
  */
 export const READER_THEMES = ["system", "light", "dark"] as const;
 
-export const READER_THEME_OPTIONS: { value: ReaderTheme; label: string }[] = [
-  { value: "system", label: "跟随系统" },
-  { value: "light", label: "浅色" },
-  { value: "dark", label: "深色" },
+/** Theme values only — visible labels live in the messages catalog. */
+export const READER_THEME_OPTIONS: { value: ReaderTheme }[] = [
+  { value: "system" },
+  { value: "light" },
+  { value: "dark" },
 ];
 
 export interface ReaderSettings {

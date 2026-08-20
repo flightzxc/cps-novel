@@ -1,4 +1,5 @@
 import type { NovelCardView } from "@/features/public-ui/types";
+import { getPublicT } from "@/lib/locale/messages";
 import { BookCard } from "./BookCard";
 
 /**
@@ -10,18 +11,19 @@ import { BookCard } from "./BookCard";
  */
 export function BookGrid({
   novels,
-  emptyMessage = "这里暂时没有可以阅读的作品。",
+  emptyMessage,
 }: {
   novels: NovelCardView[];
   emptyMessage?: string;
 }) {
+  const message = emptyMessage ?? getPublicT()("collection.empty");
   if (novels.length === 0) {
     return (
       <p
         className="rounded-novel-lg border border-novel-border bg-novel-bg-elevated px-6 py-12 text-center text-sm text-novel-fg-muted"
         data-testid="book-grid-empty"
       >
-        {emptyMessage}
+        {message}
       </p>
     );
   }

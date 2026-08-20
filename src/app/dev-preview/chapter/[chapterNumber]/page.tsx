@@ -6,6 +6,7 @@ import {
   MOCK_PREVIEW_CHAPTER_TOTAL,
   getMockChapterView,
 } from "@/features/public-ui/fixtures/mock-content";
+import { getPublicT } from "@/lib/locale/messages";
 
 /**
  * MOCK_ONLY 预览：章节阅读页。
@@ -41,11 +42,12 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { chapterNumber } = await params;
   const chapter = getMockChapterView(Number(chapterNumber));
+  const t = getPublicT();
 
   return {
     title: chapter
-      ? `第 ${chapter.number} 章 ${chapter.title} · ${chapter.novel.title}`
-      : "章节不存在",
+      ? `${t("chapter.heading", { number: chapter.number })} ${chapter.title} · ${chapter.novel.title}`
+      : t("meta.chapterNotFound"),
     robots: { index: false, follow: false },
   };
 }

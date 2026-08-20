@@ -7,6 +7,7 @@ import { Container } from "@/components/Container";
 import { MetaList } from "@/components/MetaList";
 import { TagList } from "@/components/Tag";
 import type { NovelDetailView } from "@/features/public-ui/types";
+import { useT } from "@/lib/locale/messages/MessagesProvider";
 
 /**
  * 首页主推位 · 通栏出血 Hero + 轮播。
@@ -55,11 +56,12 @@ export interface FeaturedHeroItem {
 
 export function FeaturedHero({
   items,
-  eyebrow = "本期主推",
+  eyebrow,
 }: {
   items: FeaturedHeroItem[];
   eyebrow?: string;
 }) {
+  const t = useT();
   const [index, setIndex] = useState(0);
   const [paused, setPaused] = useState(false);
   const baseId = useId();
@@ -118,8 +120,8 @@ export function FeaturedHero({
   return (
     <section
       role="region"
-      aria-roledescription="轮播"
-      aria-label="主推作品"
+      aria-roledescription={t("home.carouselRole")}
+      aria-label={t("home.carouselLabel")}
       data-testid="featured-hero"
       // 高度写死（移动 560 / 桌面 620），不随简介长短变化——切换时页面不能跳
       className="relative isolate w-full overflow-hidden h-[var(--novel-hero-height-mobile)] md:h-[var(--novel-hero-height)]"
@@ -172,7 +174,7 @@ export function FeaturedHero({
         <Container className="flex flex-col items-stretch gap-[18px] md:flex-row md:items-end md:justify-between md:gap-10">
           <div className="flex w-full flex-none flex-col items-start md:w-[var(--novel-hero-text-width)]">
             <p className="text-[11px] tracking-[0.2em] text-novel-fg-muted uppercase md:text-xs">
-              {eyebrow}
+              {eyebrow ?? t("home.featuredEyebrow")}
             </p>
 
             <h2
@@ -188,11 +190,11 @@ export function FeaturedHero({
               className="mt-3 md:mt-[18px]"
               items={[
                 { key: "locale", value: novel.locale.label },
-                { key: "chapters", value: `共 ${novel.totalChapterCount} 章` },
+                { key: "chapters", value: t("home.chapterCount", { count: novel.totalChapterCount }) },
               ]}
             />
 
-            <TagList tags={novel.tags} className="mt-4" label={`《${novel.title}》标签`} />
+            <TagList tags={novel.tags} className="mt-4" label={t("novel.tagsLabel")} />
 
             {/* 简介只取第一段：这里是引子，完整简介是详情页的事。
                 移动 2 行 / 桌面 4 行截断，保证高度不随文案长短变化。 */}
@@ -211,7 +213,7 @@ export function FeaturedHero({
                   size="lg"
                   className="flex-1 md:flex-none"
                 >
-                  开始试读
+                  {t("home.startPreview")}
                 </ButtonLink>
               ) : null}
               <ButtonLink
@@ -220,7 +222,7 @@ export function FeaturedHero({
                 size="lg"
                 className="flex-1 md:flex-none"
               >
-                查看详情
+                {t("home.viewDetails")}
               </ButtonLink>
             </div>
 
@@ -240,7 +242,7 @@ export function FeaturedHero({
 
       {/* 切换时告知读屏用户当前在第几本 */}
       <p aria-live="polite" className="sr-only">
-        第 {index + 1} 本，共 {count} 本：{novel.title}
+        {t("home.slideStatus", { n: index + 1, count, title: novel.title })}
       </p>
     </section>
   );
@@ -269,10 +271,11 @@ function HeroDots({
   baseId: string;
   className?: string;
 }) {
+  const t = useT();
   return (
     <div
       role="tablist"
-      aria-label="切换主推作品"
+      aria-label={t("home.switchFeatured")}
       data-testid="featured-hero-dots"
       className={`items-center gap-1.5 md:gap-2 ${className}`}
     >
@@ -283,7 +286,7 @@ function HeroDots({
           role="tab"
           id={`${baseId}-dot-${i}`}
           aria-selected={i === index}
-          aria-label={`第 ${i + 1} 本`}
+          aria-label={t("home.slideLabel", { n: i + 1 })}
           onClick={() => onSelect(i)}
           className="rounded-novel-sm p-1"
         >

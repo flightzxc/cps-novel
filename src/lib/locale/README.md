@@ -25,7 +25,15 @@ src/lib/locale/locale-canonical.ts
 
 因此今天 `resolveSiteLocale` 对任何输入都返回 `unknown`，`isPublishableLocale` 恒为 `false`，`listPublishableLocales()` 恒为 `[]`——这正是契约要求的 fail-closed 状态，不是未完成的占位。证据与 D-7 落地后，**只需要改这一个文件**。
 
-`SiteLocale` 目前只有 `en`：它是本仓库里唯一有依据的站点语种（根布局 `<html lang="en">`），也是 D-7 建议的起步语种。新增任何 locale 必须先有 Owner 决策。
+### P0-S7a（2026-08-20）更新
+
+`SITE_LOCALES`（**登记表**）已扩为 15 语，对齐 CPS 短剧站
+`SUPPORTED_SITE_LOCALES`（`en`/`es`/`pt-BR`/`id`/`vi`/`th`/`ja`/`ko`/`zh-Hant`/`ar`/
+`fr`/`de`/`pl`/`cs`/`ru`），Owner 已裁决"首批注册即全语种"。**这不改变发布白名单
+的状态**——`PUBLISHABLE_LOCALES` 逐条核对五项准入条件后仍为空，`en` 也不例外
+（前台仍混着中文占位文案、后台模板引擎未接线，见 `locale-canonical.ts` 内联
+注释的逐条证据）。「登记」与「可发布」是两件事，扩登记表不代表任何 locale
+解锁发布。新增任何 locale 必须先有 Owner 决策，且只能改这一个文件。
 
 ## 硬前置
 

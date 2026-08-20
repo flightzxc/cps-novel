@@ -2,6 +2,7 @@ import { cache } from "react";
 
 import { prisma } from "@/app/_lib/public-deps";
 import type { SiteLocale } from "@/lib/locale/locale-canonical";
+import { loadNovelHreflangSiblings } from "@/lib/seo/novel-hreflang";
 import {
   getPublicChapterView,
   getPublicNovelDetail,
@@ -27,4 +28,9 @@ export const loadNovelDetail = cache(async (articleId: string) => getPublicNovel
 
 export const loadChapterView = cache(async (articleId: string, chapterNumber: number) =>
   getPublicChapterView(prisma, articleId, chapterNumber),
+);
+
+/** Publicly-visible Article siblings (other locales) for one Novel — hreflang input. */
+export const loadHreflangSiblings = cache(async (novelId: string) =>
+  loadNovelHreflangSiblings(prisma, novelId),
 );

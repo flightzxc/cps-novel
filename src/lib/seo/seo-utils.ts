@@ -3,10 +3,14 @@
  *
  * Ported from CPS `src/lib/seo-utils.ts` (d77c3b9).
  * Drama `/drama/${slug}` URLs and genre-JSON parsing are replaced with
- * caller-supplied `url` + `genres[]`. Locale set comes from `SITE_LOCALES`.
+ * caller-supplied `url` + `genres[]`. Locale set for hreflang enumeration
+ * (`buildHreflangAlternates` below) comes from `listPublishableLocales()`,
+ * not the full `SITE_LOCALES` registry — see that function's own doc
+ * comment for why enumerating the wider registry would advertise dead
+ * hreflang links.
  */
 
-import { SITE_LOCALES } from "@/lib/locale/locale-canonical";
+import { listPublishableLocales } from "@/lib/locale/locale-canonical";
 
 import { buildCanonical, buildLocaleCanonical, getSiteUrl, toAbsoluteUrl } from "./seo-templates/_shared";
 
@@ -91,16 +95,47 @@ export function canonicalUrl(path: string) {
 
 /**
  * Build a complete alternates.languages map for a given canonical path.
- * Includes x-default (→ en) and every registered site locale.
- * This is the same-path locale-prefix map, not cross-Novel sibling hreflang.
+ *
+ * Safe ONLY for same-relative-path pages: every locale renders the exact
+ * same path shape (home `/`, collection `/browse`), so enumerating a whole
+ * locale set here can never point at a URL that doesn't structurally exist.
+ * A page whose path varies per locale (slug, short id — i.e. any Novel/
+ * Article detail page) must NOT use this function; it must resolve its real
+ * sibling set from the DB instead (`novel-hreflang.ts`,
+ * `buildNovelHreflangAlternates`), because blind enumeration there would
+ * produce dead links for locales that have no sibling Article at all.
+ *
+ * Enumerates `listPublishableLocales()`, never the full `SITE_LOCALES`
+ * registry. `SITE_LOCALES` only records that a locale is *mapped*
+ * (`locale-canonical.ts`'s upstream registry); it says nothing about
+ * whether that locale has a live, indexable route today. `SITE_LOCALES` is
+ * already 15 entries wide while `listPublishableLocales()` is empty (D-7
+ * still open) — iterating the wider set here would advertise hreflang
+ * alternates for locales this site has never actually served a page for.
+ * This is exactly the blind-enumeration failure mode this project's sibling
+ * short-drama site had to hotfix after `next-intl`'s default response-header
+ * `Link` enumeration walked its full registered-locale set instead of its
+ * live one.
+ *
+ * `currentLocale` is always included regardless of the whitelist — this is
+ * the URL the caller is actually rendering right now (self-referencing
+ * hreflang is expected practice, not an extra promise about readiness), and
+ * omitting it would be a regression versus today's single-locale behavior.
+ * `x-default` prefers the site default locale's entry, falling back to the
+ * current page when the default locale itself has not (yet) cleared the
+ * whitelist — see `locale-canonical.ts`'s `PUBLISHABLE_LOCALES` for why that
+ * is true even for `en` today.
  */
-export function buildHreflangAlternates(path: string): Record<string, string> {
-  const result: Record<string, string> = {
-    "x-default": buildLocaleCanonical("en", path),
-  };
-  for (const locale of SITE_LOCALES) {
+export function buildHreflangAlternates(
+  path: string,
+  currentLocale: string = "en",
+): Record<string, string> {
+  const result: Record<string, string> = {};
+  for (const locale of listPublishableLocales()) {
     result[locale] = buildLocaleCanonical(locale, path);
   }
+  result[currentLocale] = buildLocaleCanonical(currentLocale, path);
+  result["x-default"] = result.en ?? result[currentLocale]!;
   return result;
 }
 

@@ -69,9 +69,30 @@ describe("locale 唯一真源 · 冻结 API", () => {
     expect(listPublishableLocales.length).toBe(0);
   });
 
-  it("站点 locale 集合是冻结的，且不含 README 未声明的语种", () => {
-    expect([...SITE_LOCALES]).toEqual(["en"]);
+  it("站点 locale 集合是冻结的，对齐短剧站 15 语（P0-S7a Owner 裁决）", () => {
+    expect([...SITE_LOCALES]).toEqual([
+      "en",
+      "es",
+      "pt-BR",
+      "id",
+      "vi",
+      "th",
+      "ja",
+      "ko",
+      "zh-Hant",
+      "ar",
+      "fr",
+      "de",
+      "pl",
+      "cs",
+      "ru",
+    ]);
     expect(Object.isFrozen(SITE_LOCALES)).toBe(true);
+  });
+
+  it("登记表扩到 15 语后，仍不包含 CPS 的别名写法（pt / zh-TW 折叠进 pt-BR / zh-Hant）", () => {
+    expect(SITE_LOCALES).not.toContain("pt");
+    expect(SITE_LOCALES).not.toContain("zh-TW");
   });
 });
 
@@ -123,9 +144,15 @@ describe("locale 唯一真源 · resolveSiteLocale 映射不到就是 unknown", 
 });
 
 describe("locale 唯一真源 · 发布白名单 fail-closed", () => {
-  it("白名单当前为空：D-7 未定案，连 en 也不可发布", () => {
+  it("白名单当前为空：D-7 五项准入条件逐条核对后仍未定案，连 en 也不可发布", () => {
     expect(listPublishableLocales()).toEqual([]);
     expect(isPublishableLocale("en")).toBe(false);
+  });
+
+  it("P0-S7a：登记表扩到 15 语没有让任何一个绕过白名单闸——一个不多", () => {
+    for (const locale of SITE_LOCALES) {
+      expect(isPublishableLocale(locale), `${locale} 不该在白名单里`).toBe(false);
+    }
   });
 
   it("白名单永远是站点 locale 的子集——不能发布一个站点都不认的语种", () => {

@@ -94,7 +94,11 @@ describe("P2-04 admin content query validation", () => {
     [{ pageSize: 0 }, "invalid_page_size"],
     [{ pageSize: ADMIN_CONTENT_MAX_PAGE_SIZE + 1 }, "invalid_page_size"],
     [{ status: "active" }, "invalid_status"],
-    [{ locale: "fr" }, "invalid_locale"],
+    // P0-S7a expanded `SITE_LOCALES` from `["en"]` to a 15-locale registry
+    // (Owner decision) — `fr` is now registered and therefore no longer an
+    // `invalid_locale` case; `xx` is not, and was never intended to be,
+    // registered, so it keeps exercising the same validation branch.
+    [{ locale: "xx" }, "invalid_locale"],
     [{ search: "x".repeat(161) }, "invalid_search"],
   ])("fails safely for invalid list input %#", (input, code) => {
     try {

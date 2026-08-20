@@ -2,6 +2,7 @@ import { Container } from "@/components/Container";
 import { BookGrid } from "@/features/public-ui/book/BookGrid";
 import { SiteShell, type SiteChrome } from "@/features/public-ui/layout/SiteShell";
 import type { NovelCardView } from "@/features/public-ui/types";
+import { getPublicT } from "@/lib/locale/messages";
 
 /**
  * 语言聚合 / 题材聚合的共用屏幕。
@@ -23,6 +24,7 @@ export function CollectionScreen({
   chrome?: SiteChrome;
   emptyMessage?: string;
 }) {
+  const t = getPublicT();
   return (
     <SiteShell chrome={chrome}>
       <Container>
@@ -34,7 +36,7 @@ export function CollectionScreen({
             <p className="mt-4 max-w-[60ch] text-base text-novel-fg-muted">{description}</p>
           ) : null}
           <p className="mt-4 text-sm text-novel-fg-subtle tabular-nums">
-            {novels.length} 部作品
+            {t("collection.workCount", { count: novels.length })}
           </p>
         </header>
 

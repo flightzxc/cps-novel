@@ -122,6 +122,7 @@ import type { PrismaClient } from "@prisma/client";
 import type { AdminIdentityStore, SessionStore } from "@/lib/auth/ports";
 import type { NovelStatus } from "@/domain/database-statuses";
 import type { SiteLocale } from "@/lib/locale/locale-canonical";
+import { withDbRetry } from "@/lib/db/db-retry";
 import { enqueueIndexNow } from "@/lib/indexnow/dispatch-handler";
 import { enqueueSitemapRefreshForPublication } from "@/lib/tasks/sitemap-refresh";
 import { dispatchFirstPublicPublication } from "@/server/publication/dispatcher";
@@ -293,7 +294,19 @@ export async function applyPublishTransition(
 
   let txResult: TxPublishOutcome;
   try {
-    txResult = await db.$transaction<TxPublishOutcome>(async (tx) => {
+    // `withDbRetry` wraps the whole `$transaction` call, never a statement
+    // inside it (Postgres aborts the entire transaction on most errors, so a
+    // partial-statement retry inside an already-open transaction cannot
+    // work). Retrying the whole callback from scratch is safe here: nothing
+    // commits until the callback returns, and the `existingAudit` check at
+    // the top of the callback (see comment below) makes a retry that lands
+    // after an already-committed-but-ack-lost attempt a safe no-op replay
+    // instead of a double write. `PublishConflictSignal` (thrown, not a
+    // Prisma error) never matches `isTransientDbError` and is rethrown on
+    // the first attempt untouched — see this module's header, "TOCTOU".
+    txResult = await withDbRetry(
+      () =>
+        db.$transaction<TxPublishOutcome>(async (tx) => {
       // Facts + gate are read and evaluated against `tx`, not the top-level
       // `db` — see this module's header, "TOCTOU". Loading them earlier via
       // `db` left a window between the read and the write where a
@@ -402,7 +415,9 @@ export async function applyPublishTransition(
         firstPublish,
         wrote: true,
       };
-    });
+        }),
+      { op: "publish-gate.applyPublishTransition", itemId: input.articleId, idempotencyKey: input.requestId },
+    );
   } catch (error) {
     if (error instanceof PublishConflictSignal) {
       return { outcome: "conflict" };
@@ -634,7 +649,17 @@ async function applyNovelRightsTransition(
   const auditAction = RIGHTS_TRANSITION_AUDIT_ACTION[input.kind];
   const nextStatus = RIGHTS_TRANSITION_TARGET[input.kind];
 
-  const txResult = await deps.db.$transaction<NovelRightsTransitionTxResult>(async (tx) => {
+  // See `applyPublishTransition`'s comment above `withDbRetry` wraps the
+  // whole `$transaction` call, not a statement inside it. Safe to
+  // retry-from-scratch: the `existingAudit` guard read at the top of the
+  // callback below turns a retry landing after an already-committed (but
+  // ack-lost) attempt into a no-op replay of the same result, not a second
+  // write. `PublishLifecycleError` (novel_not_found, or the source-status
+  // guards below) is a business signal, not a Prisma error, and never
+  // matches `isTransientDbError`.
+  const txResult = await withDbRetry(
+    () =>
+      deps.db.$transaction<NovelRightsTransitionTxResult>(async (tx) => {
     const existingAudit = await tx.operationAudit.findFirst({
       where: { actorType: "admin", action: auditAction, entityType: "Novel", entityId: input.novelId, requestId: input.requestId },
     });
@@ -722,7 +747,9 @@ async function applyNovelRightsTransition(
       affectedArticleIds,
       affectedArticlePaths: toArticlePublicPathInputs(affected),
     };
-  });
+      }),
+    { op: "publish-gate.applyNovelRightsTransition", itemId: input.novelId, idempotencyKey: input.requestId },
+  );
 
   // Post-commit, isolated — see this module's header, "Cache invalidation".
   // Fires for every kind (withdraw/takedown/restore alike) and for the

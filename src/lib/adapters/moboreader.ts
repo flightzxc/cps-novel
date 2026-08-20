@@ -112,8 +112,14 @@ export class MoboreaderAdapterError extends Error {
       | "malformed_payload",
     readonly retryable: boolean,
     readonly status: number | null = null,
+    /**
+     * Diagnostic-only detail (field name + received shape). Never derived from
+     * raw upstream values — only from field names and `typeof`/emptiness, so
+     * it cannot leak credentials, titles, or response bodies into logs.
+     */
+    readonly detail: string | null = null,
   ) {
-    super(`MoboReader read failed: ${code}${status === null ? "" : ` (${status})`}`);
+    super(`MoboReader read failed: ${code}${status === null ? "" : ` (${status})`}${detail ? ` — ${detail}` : ""}`);
     this.name = "MoboreaderAdapterError";
   }
 }
@@ -153,9 +159,25 @@ function optionalIdentifier(value: unknown): string | null {
   return null;
 }
 
-function requiredIdentifier(value: unknown): string {
+/** Diagnostic-only shape description. Reports type/emptiness, never the raw value. */
+function describeReceivedShape(value: unknown): string {
+  if (value === null) return "typeof object (null)";
+  if (value === undefined) return "typeof undefined";
+  if (typeof value === "string") return value.trim() ? "typeof string (non-empty)" : "typeof string (empty)";
+  if (typeof value === "number") return Number.isFinite(value) ? "typeof number (finite)" : "typeof number (non-finite)";
+  return `typeof ${typeof value}`;
+}
+
+function requiredIdentifier(field: string, value: unknown): string {
   const identifier = optionalIdentifier(value);
-  if (identifier === null) throw new MoboreaderAdapterError("malformed_payload", false);
+  if (identifier === null) {
+    throw new MoboreaderAdapterError(
+      "malformed_payload",
+      false,
+      null,
+      `${field}: expected a non-empty string or a finite number, received ${describeReceivedShape(value)}`,
+    );
+  }
   return identifier;
 }
 
@@ -205,6 +227,20 @@ const REDACTED_EVIDENCE_KEYS = new Set([
   "publicurl", "homelink", "onlineurl", "promourl", "promocode",
 ]);
 
+/**
+ * Single source of truth for the sentinel this adapter substitutes for any
+ * `REDACTED_EVIDENCE_KEYS` field. `NovelSourceItem.rawPayload` (the only
+ * place `toApprovedRawEvidence`'s output is persisted — see
+ * `worker/handlers/moboreader.ts`'s `persistCatalogPage`) therefore carries
+ * this literal, never the real upstream value, for `kocCode`/`publicUrl`/
+ * `homeLink`/`onlineUrl`/`promoUrl`/`promoCode` on every synced row. Any
+ * downstream reader of `rawPayload` that treats a promo-shaped field as
+ * usable evidence (e.g. `worker/handlers/promo-link-claim.ts`'s §3.9
+ * pre-read) must compare against this constant — not a locally re-typed
+ * `"[redacted]"` literal — so the two can never drift apart.
+ */
+export const REDACTED_EVIDENCE_SENTINEL = "[redacted]" as const;
+
 function safeEvidenceValue(value: unknown, depth: number): unknown {
   if (depth > 5) return "[depth-limited]";
   if (Array.isArray(value)) return value.map((item) => safeEvidenceValue(item, depth + 1));
@@ -212,7 +248,7 @@ function safeEvidenceValue(value: unknown, depth: number): unknown {
     const output: Record<string, unknown> = {};
     for (const [key, item] of Object.entries(value as Record<string, unknown>)) {
       output[key] = REDACTED_EVIDENCE_KEYS.has(key.toLowerCase())
-        ? "[redacted]"
+        ? REDACTED_EVIDENCE_SENTINEL
         : safeEvidenceValue(item, depth + 1);
     }
     return output;
@@ -269,14 +305,14 @@ export function parseListBooksResponse(value: unknown): ListBooksResponse {
   if (!Array.isArray(data.list)) throw new MoboreaderAdapterError("malformed_payload", false);
   const items = data.list.map((value): MoboreaderBook => {
     const row = record(value);
-    const seriesId = requiredIdentifier(row.seriesId);
+    const seriesId = requiredIdentifier("seriesId", row.seriesId);
     const agencyId = optionalIdentifier(row.agencyId);
     const seriesTypeList = labelValues(row.seriesTypeList);
     const recommendList = labelValues(row.recommendList);
     const agencyIdentityComplete = Object.hasOwn(row, "agencyId")
       && (row.agencyId === null || agencyId !== null);
     return {
-      externalBookId: requiredIdentifier(row.id ?? row.seriesId),
+      externalBookId: requiredIdentifier("externalBookId", row.id ?? row.seriesId),
       agencyId,
       agencyName: optionalString(row.agencyName),
       seriesId,
@@ -323,7 +359,7 @@ export function parsePreviewChaptersResponse(value: unknown): PreviewChaptersRes
     if (i < 1) throw new MoboreaderAdapterError("malformed_payload", false);
     return {
       i,
-      chapterID: requiredString(row.chapterID),
+      chapterID: requiredIdentifier("chapterID", row.chapterID),
       chapterName: optionalString(row.chapterName),
       chapterShowName: optionalString(row.chapterShowName),
       chapterContent: requiredString(row.chapterContent),

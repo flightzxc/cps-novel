@@ -1,15 +1,17 @@
 import { CollectionScreen } from "@/features/public-ui/collection/CollectionScreen";
 import { mockChrome } from "@/features/public-ui/fixtures/mock-chrome";
+import { getPublicT } from "@/lib/locale/messages";
 
 /** MOCK_ONLY 预览：聚合页的空状态 */
 export default function EmptyCollectionPreviewPage() {
+  const t = getPublicT();
   return (
     <CollectionScreen
       chrome={mockChrome("collection")}
-      title="悬疑"
-      description="这个题材下当前可以阅读的全部作品。"
+      title="Suspense"
+      description={t("collection.genreDescription")}
       novels={[]}
-      emptyMessage="这个题材下暂时没有可以阅读的作品。"
+      emptyMessage={t("collection.genreEmpty")}
     />
   );
 }

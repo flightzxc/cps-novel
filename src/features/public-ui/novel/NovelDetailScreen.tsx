@@ -7,6 +7,7 @@ import { TagList } from "@/components/Tag";
 import { BookGrid } from "@/features/public-ui/book/BookGrid";
 import { SiteShell, type SiteChrome } from "@/features/public-ui/layout/SiteShell";
 import type { NovelCardView, NovelDetailView } from "@/features/public-ui/types";
+import { getPublicT } from "@/lib/locale/messages";
 import { PREVIEW_CHAPTERS_ANCHOR, PreviewChapterList } from "./PreviewChapterList";
 
 /**
@@ -30,7 +31,7 @@ export function NovelDetailScreen({
   novel,
   chrome,
   related,
-  relatedTitle = "相关作品",
+  relatedTitle,
 }: {
   novel: NovelDetailView;
   chrome?: SiteChrome;
@@ -38,6 +39,7 @@ export function NovelDetailScreen({
   related?: NovelCardView[];
   relatedTitle?: string;
 }) {
+  const t = getPublicT();
   const firstPreviewChapter = novel.previewChapters[0];
   const hasPreview = novel.previewChapters.length > 0;
 
@@ -50,7 +52,7 @@ export function NovelDetailScreen({
             <div className="mx-auto w-full max-w-[200px] md:mx-0 md:max-w-none">
               <CoverImage
                 src={novel.coverUrl}
-                alt={`《${novel.title}》封面`}
+                alt={t("novel.coverAlt", { title: novel.title })}
                 sizeHint="(min-width: 768px) 260px, 200px"
               />
             </div>
@@ -65,16 +67,16 @@ export function NovelDetailScreen({
                 className="mt-4"
                 items={[
                   { key: "locale", value: novel.locale.label },
-                  { key: "chapters", value: `共 ${novel.totalChapterCount} 章` },
+                  { key: "chapters", value: t("novel.chapterCount", { count: novel.totalChapterCount }) },
                   hasPreview && {
                     key: "preview",
-                    value: `可试读 ${novel.previewChapters.length} 章`,
+                    value: t("novel.previewCount", { count: novel.previewChapters.length }),
                   },
                 ]}
               />
 
               {/* 标签为空 → 整块消失，不留标题、不留空框 */}
-              <TagList tags={novel.tags} className="mt-5" label="题材标签" />
+              <TagList tags={novel.tags} className="mt-5" label={t("novel.genreTags")} />
 
               {/* --- 行动区 --- */}
               <div className="mt-8 flex flex-wrap gap-3 md:mt-10">
@@ -84,7 +86,7 @@ export function NovelDetailScreen({
                     variant="accent"
                     size="lg"
                   >
-                    开始试读
+                    {t("novel.startPreview")}
                   </ButtonLink>
                 ) : null}
 
@@ -96,7 +98,7 @@ export function NovelDetailScreen({
                     size="lg"
                     rel="nofollow sponsored"
                   >
-                    前往正式阅读
+                    {t("novel.readOnUpstream")}
                   </ButtonLink>
                 ) : null}
               </div>
@@ -105,7 +107,7 @@ export function NovelDetailScreen({
 
           {/* --- 简介：当作正文对待 --- */}
           <section aria-labelledby="synopsis" className="pt-14 md:pt-20">
-            <SectionHeader id="synopsis" title="简介" />
+            <SectionHeader id="synopsis" title={t("novel.synopsis")} />
             <div className="max-w-[68ch] font-novel-serif text-[1.0625rem] leading-[1.8] text-novel-fg-muted md:text-lg">
               {novel.description
                 .split("\n")
@@ -126,7 +128,7 @@ export function NovelDetailScreen({
         {/* --- 可选的内容推荐结构：无数据即整块不渲染 --- */}
         {related && related.length > 0 ? (
           <section aria-labelledby="related-works" className="pt-14 md:pt-20">
-            <SectionHeader id="related-works" title={relatedTitle} />
+            <SectionHeader id="related-works" title={relatedTitle ?? t("novel.relatedWorks")} />
             <BookGrid novels={related} />
           </section>
         ) : null}
