@@ -80,7 +80,14 @@ P1-05A 只登记从 CPS 提取的数据库**模式证据**；没有字节复制�
 | `extractFaqItemsFromContent` | `src/lib/blog-seo.ts` | `191-213` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `COPY` | 原样复制；不搬 blog 路径 / hreflang / BlogPosting | Cursor |
 | `extractFaqItemsFromJsonBlocks` | `src/lib/blog-seo.ts` | `164-189` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `COPY` | 原样复制 | Cursor |
 | `buildFaqJsonLd`（源 `buildBlogFaqJsonLd`） | `src/lib/blog-seo.ts` | `215-231` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | 去 Blog 前缀；JSON-LD 形状不变 | Cursor |
-| `Pagination` | `src/components/site/pagination.tsx` | `10-59` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | 去掉 next-intl / `@/i18n/navigation`；英文 label props；token 换成 novel-* | Cursor |
+| `Pagination` | `src/components/site/pagination.tsx` | `10-59` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | 去掉 next-intl / `@/i18n/navigation`；token 换成 novel-*；文案改走前台 messages catalog（无英语 default merge） | Cursor |
+| `common.viewAll` → `home.viewAll` | `src/messages/en.json` | `24` | `9d3b9eb42bfbbf536dddb149e5e7b61f5a88680c`（tag `v8.2.10`） | `ADAPT` | 只借 UI 语气；`View All` → `View all`；drama 口吻不搬 | Claude |
+| `common.featured` → `home.featuredEyebrow` | `src/messages/en.json` | `21` | `9d3b9eb42bfbbf536dddb149e5e7b61f5a88680c`（tag `v8.2.10`） | `ADAPT` | 只借 Featured 眉标语义 | Claude |
+| `common.pageOf` → `pagination.pageOf` | `src/messages/en.json` | `30` | `9d3b9eb42bfbbf536dddb149e5e7b61f5a88680c`（tag `v8.2.10`） | `ADAPT` | 原样 `{current} / {total}` | Claude |
+| `common.episodes` → `novel.chapterCount` / `home.chapterCount` | `src/messages/en.json` | `31` | `9d3b9eb42bfbbf536dddb149e5e7b61f5a88680c`（tag `v8.2.10`） | `ADAPT` | `{count} Episodes` → `{count} chapters` | Claude |
+| `error.title` → `unavailable.unpublishedTitle` | `src/messages/en.json` | `64` | `9d3b9eb42bfbbf536dddb149e5e7b61f5a88680c`（tag `v8.2.10`） | `ADAPT` | `This drama is unavailable` → `This book is temporarily unavailable`；另写 takedown 永久性撤回（短剧站无对等句） | Claude |
+| `error.home` → `unavailable.returnHome` | `src/messages/en.json` | `66` | `9d3b9eb42bfbbf536dddb149e5e7b61f5a88680c`（tag `v8.2.10`） | `ADAPT` | `Return Home Now` → `Back to home`，去掉促销口吻 | Claude |
+| tag/drama `coverAlt` → `novel.coverAlt` | `src/messages/en.json` | `91,97` | `9d3b9eb42bfbbf536dddb149e5e7b61f5a88680c`（tag `v8.2.10`） | `ADAPT` | `{name} cover` → `Cover of {title}`；不用《》 | Claude |
 | `generateWebSiteJsonLd` | `src/lib/seo-utils.ts` | `14-22` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | origin 改走 `_shared.getSiteUrl`，无 PulseDrama 默认域 | Cursor |
 | `generateCreativeWorkJsonLd` | `src/lib/seo-utils.ts` | `38-57` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | `@type` 改 Book；`/drama/${slug}` 改为调用方传入 url；`episodeCount`→`chapterCount`；删 platform/provider | Cursor |
 | `generateBreadcrumbJsonLd` | `src/lib/seo-utils.ts` | `66-77` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `COPY` | 原样复制（origin 经 getSiteUrl） | Cursor |

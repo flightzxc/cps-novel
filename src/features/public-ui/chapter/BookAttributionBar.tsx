@@ -1,5 +1,8 @@
+"use client";
+
 import { CoverImage } from "@/components/CoverImage";
 import type { ChapterNovelRef, PreviewPosition } from "@/features/public-ui/types";
+import { useT } from "@/lib/locale/messages/MessagesProvider";
 
 /**
  * 轻量书籍归属条。
@@ -20,6 +23,7 @@ export function BookAttributionBar({
   novel: ChapterNovelRef;
   previewPosition: PreviewPosition;
 }) {
+  const t = useT();
   return (
     <div
       className="flex items-center gap-3 border-b border-novel-border py-3"
@@ -42,7 +46,10 @@ export function BookAttributionBar({
       </span>
 
       <span className="text-sm text-novel-fg-subtle tabular-nums">
-        试读 {previewPosition.index} / {previewPosition.total}
+        {t("chapter.previewPosition", {
+          index: previewPosition.index,
+          total: previewPosition.total,
+        })}
       </span>
     </div>
   );

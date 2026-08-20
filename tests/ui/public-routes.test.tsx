@@ -56,8 +56,8 @@ const SETTINGS = {
 const CHROME = {
   brandHref: "/",
   navItems: [
-    { label: "首页", href: "/", current: true },
-    { label: "全部作品", href: "/browse" },
+    { label: "Home", href: "/", current: true },
+    { label: "All works", href: "/browse" },
   ],
   footerNote: "© test",
 };
@@ -112,7 +112,7 @@ describe("public home", () => {
     const { container } = render(tree);
 
     expect(screen.queryByTestId("featured-hero")).toBeNull();
-    expect(screen.queryByText("本期主推")).toBeNull();
+    expect(screen.queryByText("Featured")).toBeNull();
     expect(container.querySelector('[class*="skeleton"]')).toBeNull();
     expect(screen.getByTestId("book-grid")).toBeTruthy();
   });
@@ -176,7 +176,7 @@ describe("public novel detail", () => {
     });
     render(tree);
     expect(screen.getByRole("heading", { name: DETAIL.title })).toBeTruthy();
-    expect(screen.queryByText("前往正式阅读")).toBeNull();
+    expect(screen.queryByText("Continue reading")).toBeNull();
   });
 
   it("renders UnavailableScreen for unpublished and calls notFound for takedown", async () => {
@@ -361,10 +361,10 @@ describe("novel segment not-found.tsx", () => {
 });
 
 describe("empty featuredList contract", () => {
-  it("HomeScreen with an empty featured list has no hero, no 本期主推, and no skeleton", () => {
+  it("HomeScreen with an empty featured list has no hero, no Featured, and no skeleton", () => {
     const { container } = render(<HomeScreen featuredList={[]} novels={[CARD]} browseAllHref="/browse" />);
     expect(screen.queryByTestId("featured-hero")).toBeNull();
-    expect(screen.queryByText("本期主推")).toBeNull();
+    expect(screen.queryByText("Featured")).toBeNull();
     expect(container.querySelector('[class*="skeleton"]')).toBeNull();
     expect(container.querySelector('[data-testid="skeleton"]')).toBeNull();
   });

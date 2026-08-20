@@ -4,6 +4,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import { BrandLockup } from "@/components/BrandMark";
 import { Container } from "@/components/Container";
 import type { NavItem } from "@/features/public-ui/types";
+import { useT } from "@/lib/locale/messages/MessagesProvider";
 
 /** 页头高度（h-16）。overlay 模式下滚过这个距离就落回实底。 */
 const HEADER_HEIGHT_PX = 64;
@@ -32,6 +33,7 @@ export function SiteHeader({
    */
   overlay?: boolean;
 }) {
+  const t = useT();
   const [menuOpen, setMenuOpen] = useState(false);
   const [pinned, setPinned] = useState(false);
   const panelId = useId();
@@ -106,7 +108,7 @@ export function SiteHeader({
           <BrandLockup size={32} href={brandHref} />
 
           {/* 桌面导航 */}
-          <nav aria-label="主导航" className="hidden md:block">
+          <nav aria-label={t("nav.mainNav")} className="hidden md:block">
             <ul className="flex list-none items-center gap-7 p-0">
               {allItems.map((item) => (
                 <li key={item.href + item.label}>
@@ -123,7 +125,7 @@ export function SiteHeader({
             className="-mr-2 inline-flex h-10 w-10 items-center justify-center rounded-novel-md text-novel-fg-muted transition-colors hover:bg-novel-bg-raised hover:text-novel-fg md:hidden"
             aria-expanded={menuOpen}
             aria-controls={panelId}
-            aria-label={menuOpen ? "关闭菜单" : "打开菜单"}
+            aria-label={menuOpen ? t("nav.closeMenu") : t("nav.openMenu")}
             onClick={() => setMenuOpen((open) => !open)}
           >
             <svg

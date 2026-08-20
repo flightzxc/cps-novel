@@ -7,6 +7,7 @@ import { toNextMetadata } from "@/app/_lib/seo-metadata";
 import { CollectionScreen } from "@/features/public-ui/collection/CollectionScreen";
 import { Pagination } from "@/features/public-ui/collection/Pagination";
 import { generateSeoMeta } from "@/lib/seo/seo-meta-generator";
+import { getPublicT } from "@/lib/locale/messages";
 import { PUBLIC_SITE_LOCALE } from "@/lib/site/locale-label";
 import { paginateCards } from "@/lib/site/queries";
 
@@ -41,7 +42,7 @@ export async function generateMetadata({
   const { page } = await searchParams;
   const loaded = await loadBrowsePage(page);
   if (!loaded) {
-    return { title: "Not found", robots: { index: false, follow: false } };
+    return { title: getPublicT()("meta.notFound"), robots: { index: false, follow: false } };
   }
 
   const seo = generateSeoMeta({
@@ -69,6 +70,7 @@ export default async function BrowsePage({
   const loaded = await loadBrowsePage(page);
   if (!loaded) notFound();
 
+  const t = getPublicT();
   const seo = generateSeoMeta({
     entity: "collection",
     locale: PUBLIC_SITE_LOCALE,
@@ -88,10 +90,10 @@ export default async function BrowsePage({
       {seo.other ? <JsonLd json={seo.other["application/ld+json"]} /> : null}
       <CollectionScreen
         chrome={loaded.chrome}
-        title="全部作品"
-        description="本站当前可公开阅读的作品。"
+        title={t("collection.allWorksTitle")}
+        description={t("collection.allWorksDescription")}
         novels={loaded.paged.novels}
-        emptyMessage="暂时没有可公开的作品。"
+        emptyMessage={t("collection.allWorksEmpty")}
       />
       <Pagination
         currentPage={loaded.paged.page}

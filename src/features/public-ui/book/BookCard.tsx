@@ -1,6 +1,7 @@
 import { CoverImage } from "@/components/CoverImage";
 import { TagList } from "@/components/Tag";
 import type { NovelCardView } from "@/features/public-ui/types";
+import { getPublicT } from "@/lib/locale/messages";
 
 /**
  * 书籍卡片。首页与语言/题材聚合页**共用这一种卡片，不做第二套形态**。
@@ -12,6 +13,7 @@ import type { NovelCardView } from "@/features/public-ui/types";
  * 因为它是一本书的名字，不是一个视频的文件名。
  */
 export function BookCard({ novel }: { novel: NovelCardView }) {
+  const t = getPublicT();
   return (
     <article className="group" data-testid="book-card">
       <a
@@ -20,7 +22,7 @@ export function BookCard({ novel }: { novel: NovelCardView }) {
       >
         <CoverImage
           src={novel.coverUrl}
-          alt={`《${novel.title}》封面`}
+          alt={t("novel.coverAlt", { title: novel.title })}
           className="transition-opacity group-hover:opacity-90"
           sizeHint="(min-width: 768px) 220px, 45vw"
         />
@@ -34,7 +36,7 @@ export function BookCard({ novel }: { novel: NovelCardView }) {
       ) : null}
 
       {/* 标签为空时 TagList 返回 null，整块消失，不留空位 */}
-      <TagList tags={novel.tags} className="mt-2" label={`《${novel.title}》标签`} />
+      <TagList tags={novel.tags} className="mt-2" label={t("novel.tagsLabel")} />
     </article>
   );
 }
