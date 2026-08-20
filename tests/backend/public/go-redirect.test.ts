@@ -162,6 +162,79 @@ describe("GET /go/[code]", () => {
     expect(create).toHaveBeenCalledOnce();
   });
 
+  // P0-S10 (2026-08-20): U1 open-redirect coverage. Batch-1 integration
+  // review independently re-verified each of these is already blocked by
+  // `normalizeRedirectUrl` (`src/app/go/_lib/redirect-safety.ts`) — this
+  // block is coverage, not a fix. If any of these ever starts returning a
+  // 302 (or otherwise leaking the unsafe target), that is a new regression,
+  // not something this comment already accounts for.
+  describe("open-redirect / scheme guard coverage (U1)", () => {
+    it("returns 404 for a protocol-relative //evil.com target (no scheme — new URL() rejects it without a base)", async () => {
+      findUnique.mockResolvedValue(promo({ webUrl: "//evil.com", appUrl: null }));
+      const response = await invoke(PUBLIC_CODE);
+      expect(response.status).toBe(404);
+      expect(response.headers.get("location")).toBeNull();
+      expect(create).not.toHaveBeenCalled();
+    });
+
+    it("returns 404 for a data: target", async () => {
+      findUnique.mockResolvedValue(promo({ webUrl: "data:text/html,<script>alert(1)</script>", appUrl: null }));
+      const response = await invoke(PUBLIC_CODE);
+      expect(response.status).toBe(404);
+      expect(response.headers.get("location")).toBeNull();
+      expect(create).not.toHaveBeenCalled();
+    });
+
+    it("returns 404 for a vbscript: target", async () => {
+      findUnique.mockResolvedValue(promo({ webUrl: "vbscript:alert(1)", appUrl: null }));
+      const response = await invoke(PUBLIC_CODE);
+      expect(response.status).toBe(404);
+      expect(response.headers.get("location")).toBeNull();
+      expect(create).not.toHaveBeenCalled();
+    });
+
+    it("returns 404 for an uppercase JAVASCRIPT: target (scheme check is not defeated by case)", async () => {
+      findUnique.mockResolvedValue(promo({ webUrl: "JAVASCRIPT:alert(document.cookie)", appUrl: null }));
+      const response = await invoke(PUBLIC_CODE);
+      expect(response.status).toBe(404);
+      expect(response.headers.get("location")).toBeNull();
+      expect(create).not.toHaveBeenCalled();
+    });
+
+    it("strips embedded CRLF from an otherwise-valid https target instead of forwarding it into the Location header (no response-header injection)", async () => {
+      // WHATWG URL parsing removes ASCII tab/newline from the input as a
+      // preprocessing step, so this never reaches NextResponse.redirect()
+      // with a raw \r or \n in it — verify that holds and nothing resembling
+      // an injected header (e.g. a real Set-Cookie) shows up.
+      findUnique.mockResolvedValue(
+        promo({ webUrl: "https://partner.example/read\r\nSet-Cookie: session=hijacked", appUrl: null }),
+      );
+      const response = await invoke(PUBLIC_CODE);
+      const location = response.headers.get("location");
+      expect(response.status).toBe(302);
+      expect(location).not.toBeNull();
+      expect(location).not.toMatch(/[\r\n]/);
+      expect(response.headers.get("set-cookie")).toBeNull();
+    });
+
+    it("redirects using appUrl when webUrl is absent (appUrl-only branch)", async () => {
+      const appTarget = "https://app.example/deep-link";
+      findUnique.mockResolvedValue(promo({ webUrl: null, appUrl: appTarget }));
+      const response = await invoke(PUBLIC_CODE);
+      expect(response.status).toBe(302);
+      expect(response.headers.get("location")).toBe(appTarget);
+      expect(create).toHaveBeenCalledOnce();
+    });
+
+    it("returns 404 when appUrl is the only candidate and it is itself unsafe (javascript:)", async () => {
+      findUnique.mockResolvedValue(promo({ webUrl: null, appUrl: "javascript:alert(1)" }));
+      const response = await invoke(PUBLIC_CODE);
+      expect(response.status).toBe(404);
+      expect(response.headers.get("location")).toBeNull();
+      expect(create).not.toHaveBeenCalled();
+    });
+  });
+
   it("does not look up or echo upstreamCode when that secret is used as the path", async () => {
     findUnique.mockResolvedValue(null);
     const response = await invoke(UPSTREAM_CODE);
