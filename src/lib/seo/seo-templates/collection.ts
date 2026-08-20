@@ -74,7 +74,7 @@ export function buildCollectionSeoMeta(
     },
     alternates: {
       canonical,
-      languages: buildHreflangAlternates(data.canonicalPath),
+      languages: buildHreflangAlternates(data.canonicalPath, locale),
     },
     robots: shouldNoIndex(pageNumber) ? { index: false, follow: true } : undefined,
     other: {

@@ -26,14 +26,52 @@
 /**
  * 站点 locale。
  *
- * 🔴 目前只有 `en`：它是本仓库里唯一有依据的站点语种（根布局 `<html lang="en">`），
- * 也是 D-7 建议的起步语种。**新增任何 locale 必须先有 Owner 决策**，
- * 且只能改这一个文件。
+ * P0-S7a（2026-08-20）：Owner 已裁决——首批注册即对齐短剧站 15 语（登记 ≠
+ * 可发布，见下方 `PUBLISHABLE_LOCALES`）。列表逐字取自 CPS 短剧站
+ * `src/lib/supported-site-locales.ts` 的 `SUPPORTED_SITE_LOCALES`
+ * （`git show v8.2.10:src/lib/supported-site-locales.ts`，仓库路径
+ * `/Users/chenweifeng/Documents/产品原型及文档/cps项目/cps-admin`，只读参考，
+ * 未改动该仓库任何文件）。CPS 该文件里 `pt`→`pt-BR`、`zh-TW`→`zh-Hant` 是别名
+ * 折叠规则，不是独立 locale，因此不登记为本站点的第 16、17 个 locale。
+ *
+ * 🔴 **新增/删减任何 locale 必须先有 Owner 决策，且只能改这一个文件**——
+ * 这条纪律不因登记表从 1 项扩到 15 项而改变。
  */
-export type SiteLocale = "en";
+export type SiteLocale =
+  | "en"
+  | "es"
+  | "pt-BR"
+  | "id"
+  | "vi"
+  | "th"
+  | "ja"
+  | "ko"
+  | "zh-Hant"
+  | "ar"
+  | "fr"
+  | "de"
+  | "pl"
+  | "cs"
+  | "ru";
 
-/** 站点已登记的全部 locale。发布白名单是它的子集。 */
-export const SITE_LOCALES: readonly SiteLocale[] = Object.freeze(["en"]);
+/** 站点已登记的全部 locale（15 语，对齐短剧站）。发布白名单是它的子集。 */
+export const SITE_LOCALES: readonly SiteLocale[] = Object.freeze([
+  "en",
+  "es",
+  "pt-BR",
+  "id",
+  "vi",
+  "th",
+  "ja",
+  "ko",
+  "zh-Hant",
+  "ar",
+  "fr",
+  "de",
+  "pl",
+  "cs",
+  "ru",
+]);
 
 /**
  * 上游语种登记表：一个站点 locale ← 一组上游取值。
@@ -60,11 +98,32 @@ const UPSTREAM_LANGUAGE_REGISTRY: readonly UpstreamLanguageRegistration[] = Obje
 /**
  * 发布白名单。
  *
- * 🔴 **当前为空，同样是有意的。** D-7（首发公开语种白名单）仍是 OPEN，且冻结的
- * 准入条件是五项齐备：前台 messages 无 fallback · 后台模板语种枚举已登记 ·
- * 该语种模板已跑通真实渲染 · SEO 元数据齐全 · sitemap 分片已验证。P1 阶段一项
- * 都不具备，所以连 `en` 也不进白名单——CPS `v6.0.4` 就是只注册了前台 locale、
- * 漏了后台模板枚举，线上才发现。
+ * 🔴 **P0-S7a 复核后依旧为空——连 `en` 都不进，这是本轮逐条核对五项准入条件
+ * 后的结论，不是沿用旧状态没检查。** D-7（`docs/architecture/candidate-v0.2.1/
+ * novel-v1-open-decisions.md`）冻结的准入条件是五项齐备：
+ *
+ * 1. 前台 messages 无 fallback——**不满足**。本仓库没有任何 messages 目录/i18n
+ *    目录；且公开路由的实际渲染树里混着大量中文占位文案（例如
+ *    `src/app/browse/page.tsx` 的 `title="全部作品"`、
+ *    `src/features/public-ui/status/UnavailableScreen.tsx` 的
+ *    `"这本书暂时不可阅读"`、`src/features/public-ui/layout/SiteHeader.tsx`
+ *    的 `aria-label="主导航"` 等——不是「en 缺文案」，是「en 页面里本就还有非
+ *    en 文案」，五项里最硬的一条直接不成立。这部分工作在 Cursor 的 U3。
+ * 2. 后台模板语种枚举已登记——**不满足**。`ArticleTemplate` 表存在于 schema，
+ *    但本仓库没有任何代码引用它；模板引擎尚未接线（P2-02 在独立分支，未进本
+ *    基线），无枚举可言。
+ * 3. 该语种模板已跑通真实渲染——**不满足**，前提条件 2 都不成立。
+ * 4. SEO 元数据齐全——P0-S7a 本单把这块基础设施补齐了（hreflang 发布状态过滤、
+ *    sitemap 分语种分片、canonical 单一源），但条件 1-3 仍卡关，单独满足条件
+ *    4 不能让任何 locale 通过「五项齐备」的准入线。
+ * 5. sitemap 分片已验证——本单验证的是分片**逻辑**（多 locale 参数化路径，见
+ *    `tests/backend/seo/`），不是针对真实生产内容的验证；`listPublishableLocales()`
+ *    仍为空时 `generateStaticSitemaps` 会直接失败（`No sitemap child files
+ *    were generated`），这本身就是 fail-closed 的证据而非缺陷。
+ *
+ * 结论：15 语没有一个满足全部五项，`en` 也不例外——CPS `v6.0.4` 就是只注册了
+ * 前台 locale、漏了后台模板枚举，线上才发现；宁可继续 fail-closed，也不要重
+ * 复那次事故。表一旦有 locale 真正五项齐备，只改这一个文件。
  */
 const PUBLISHABLE_LOCALES: readonly SiteLocale[] = Object.freeze([]);
 

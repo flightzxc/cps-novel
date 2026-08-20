@@ -123,10 +123,19 @@ describe("buildIndexNowCanonicalUrl", () => {
 });
 
 describe("isRegisteredSiteLocale", () => {
-  it("accepts en, rejects everything else", () => {
+  it("accepts every registered SITE_LOCALES member, rejects everything else", () => {
+    // P0-S7a expanded `SITE_LOCALES` from `["en"]` to the short-drama site's
+    // 15-locale registry (Owner decision) — `fr` is now registered, so this
+    // must now be `true`. Registered is not the same gate as publishable:
+    // `isNovelIndexNowEligible` below still calls `isPublishableLocale`
+    // (currently empty, D-7 open), so this widening does not, by itself,
+    // let any additional locale reach IndexNow.
     expect(isRegisteredSiteLocale("en")).toBe(true);
+    expect(isRegisteredSiteLocale("fr")).toBe(true);
     expect(isRegisteredSiteLocale("EN")).toBe(false);
-    expect(isRegisteredSiteLocale("fr")).toBe(false);
+    expect(isRegisteredSiteLocale("Fr")).toBe(false);
+    expect(isRegisteredSiteLocale("xx")).toBe(false);
+    expect(isRegisteredSiteLocale("en-US")).toBe(false);
   });
 });
 

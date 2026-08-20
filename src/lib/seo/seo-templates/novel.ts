@@ -1,5 +1,4 @@
 import { getHomeName } from "../breadcrumb-i18n";
-import { buildHreflangAlternates } from "../seo-utils";
 import {
   buildCanonical,
   buildLocaleCanonical,
@@ -18,6 +17,23 @@ export interface NovelSeoData {
   chapterCount?: number;
   publishTime?: Date | null;
   siteName: string;
+  /**
+   * Pre-computed, DB-verified hreflang alternates for this Novel's Article
+   * siblings — REQUIRED, not optional. Every other seo-template in this
+   * directory stays DB-free by design; this is the one field a Novel/Article
+   * detail page cannot compute here, because it needs a Prisma read (see
+   * `../novel-hreflang.ts`'s `buildNovelHreflangAlternatesByPublishedArticles`).
+   *
+   * Making this required (rather than optional-with-a-blind-enumeration
+   * fallback) is deliberate: `buildNovelSeoMeta` used to fall back to
+   * `seo-utils.ts#buildHreflangAlternates(data.canonicalPath)`, which is
+   * unsafe for a per-locale-slugged page (see that function's doc comment).
+   * A required field turns "caller forgot to pass sibling data" into a
+   * compile error instead of a silent blind-enumeration regression — see
+   * `tests/ui/seo/novel-hreflang-regression.test.ts` for the accompanying
+   * static guard that this file never re-imports `buildHreflangAlternates`.
+   */
+  hreflangAlternates: Record<string, string>;
 }
 
 export function buildNovelSeoMeta(data: NovelSeoData, locale = "en") {
@@ -73,7 +89,7 @@ export function buildNovelSeoMeta(data: NovelSeoData, locale = "en") {
     },
     alternates: {
       canonical,
-      languages: buildHreflangAlternates(data.canonicalPath),
+      languages: data.hreflangAlternates,
     },
     robots: undefined,
     other: {
