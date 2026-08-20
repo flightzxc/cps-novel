@@ -113,8 +113,11 @@ export type ValidatedChannelCapabilityStatusRequest = {
  * Enforces the "证据先于启用" (evidence precedes enablement) discipline
  * from `docs/governance/database-governance.md` §1 in the function
  * signature itself: `evidenceRef` is required and non-blank whenever the
- * target is `enabled`, and rejected outright for any other target — an
- * evidence reference for a *disable* has no meaning here.
+ * target is `enabled`. For any other target, whatever `input.evidenceRef`
+ * was passed is silently discarded (`evidenceRef` is returned as `null`,
+ * never read or validated) — not rejected/thrown — since an evidence
+ * reference for a *disable* has no meaning here and there is no reason to
+ * make that case an error.
  */
 export function validateChannelCapabilityStatusRequest(input: {
   readonly targetStatus: string;

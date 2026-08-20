@@ -34,9 +34,22 @@
  * every request under this segment. That is the correct, intentional state,
  * matching sitemap generation and hreflang's shared fail-closed posture
  * (`sitemap.ts`, `novel-hreflang.ts`) — not a bug to "fix" by loosening this
- * function. Flipping a second locale on is then a pure registry/content
- * change (add it to `PUBLISHABLE_LOCALES`); no route-tree change is
- * required, because the tree already exists here.
+ * function.
+ *
+ * 🔴 P0-S10 correction: adding a locale to `PUBLISHABLE_LOCALES` is
+ * necessary but NOT sufficient to make that locale routable — this file and
+ * `[locale]/layout.tsx` are the *only* two files in this subtree today
+ * (`src/app/[locale]/`), and neither is a `page.tsx`. There are zero leaf
+ * pages here. Making `getRoutableLocale` return non-null for a locale
+ * before its own `page.tsx` set exists under this segment (mirroring the
+ * bare-path tree: `src/app/page.tsx`, `src/app/browse/page.tsx`,
+ * `src/app/novel/...`) does not restore access — Next's router still 404s
+ * every route under that locale, just via "no matching `page.tsx`" instead
+ * of via this guard, and any hreflang/sitemap entries already pointing at
+ * `/{locale}/...` become dead links pointing at nothing. Publishing any
+ * second locale therefore MUST ship its full `[locale]/...` leaf-page set in
+ * the same batch as the `PUBLISHABLE_LOCALES` change — not as a follow-up —
+ * or hreflang/sitemap will advertise URLs this router does not yet serve.
  */
 import { isPublishableLocale, SITE_LOCALES, type SiteLocale } from "@/lib/locale/locale-canonical";
 import { PUBLIC_SITE_LOCALE } from "@/lib/site/locale-label";

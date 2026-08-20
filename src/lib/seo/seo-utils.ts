@@ -3,7 +3,11 @@
  *
  * Ported from CPS `src/lib/seo-utils.ts` (d77c3b9).
  * Drama `/drama/${slug}` URLs and genre-JSON parsing are replaced with
- * caller-supplied `url` + `genres[]`. Locale set comes from `SITE_LOCALES`.
+ * caller-supplied `url` + `genres[]`. Locale set for hreflang enumeration
+ * (`buildHreflangAlternates` below) comes from `listPublishableLocales()`,
+ * not the full `SITE_LOCALES` registry — see that function's own doc
+ * comment for why enumerating the wider registry would advertise dead
+ * hreflang links.
  */
 
 import { listPublishableLocales } from "@/lib/locale/locale-canonical";
