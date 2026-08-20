@@ -8,8 +8,22 @@
  *      calls. Reads `kocCode`/`publicUrl`/`homeLink`/`onlineUrl` straight
  *      out of `NovelSourceItem.rawPayload` (already fetched by the proven
  *      `getlistpc`/`getbydataid` capabilities during catalog sync —
- *      `worker/handlers/moboreader.ts`). If present, this alone is enough
- *      to write `PromoLink.status = 'fetched'`.
+ *      `worker/handlers/moboreader.ts`). *If a genuine, non-redacted value
+ *      were ever present*, this alone would be enough to write
+ *      `PromoLink.status = 'fetched'` — but 🔴 **it never is, in the sync
+ *      pipeline as it exists today**: `src/lib/adapters/moboreader.ts`'s
+ *      `toApprovedRawEvidence` unconditionally masks these exact fields to
+ *      `REDACTED_EVIDENCE_SENTINEL` before `rawPayload` is ever persisted
+ *      (`worker/handlers/moboreader.ts`'s `persistCatalogPage` is the only
+ *      writer). This handler's pre-read (`readExistingPromoFromRawPayload`)
+ *      therefore always observes `redacted: true` in production and takes
+ *      the third outcome below instead of ever reaching `fetched` through
+ *      this path — see `writePromoLinkExistingEvidenceRedacted` for the
+ *      write this produces, and its doc comment for what enabling this
+ *      path for real would require (Owner-gated, out of this task's scope).
+ *      The `already_available`/`fetched` write path itself remains correct
+ *      code, exercised by fixtures using genuinely non-redacted input, for
+ *      whenever that follow-up work lands.
  *   2. §3.10 "推广生成（占位流程）" — the side-effecting `claimPromo`
  *      capability. `ChannelCapability.status` for this key is
  *      `registered_disabled` everywhere in this codebase (nothing sets it
@@ -27,12 +41,21 @@
  * (length-only) or `safeHostname` (host-only) instead. `tests/backend/
  * tasks/promo-link-claim-redaction.test.ts` asserts this with a fixture
  * that carries both codes side by side.
+ *
+ * Whenever a PromoLink genuinely reaches `fetched` (either write path
+ * above), this handler also binds it back onto every locale Article for
+ * its Novel (`bindPromoLinkToArticles`) in the same transaction — see that
+ * function's header for the cardinality this binding strategy is derived
+ * from and its conflict semantics. This is the only writer of
+ * `Article.promoLinkId` in this codebase; without it, `evaluatePublishGate`
+ * reports `promo_link_missing` forever even once a real PromoLink exists.
  */
 import { createHash } from "node:crypto";
 import { Prisma, type PrismaClient } from "@prisma/client";
 import {
   classifyClaimPromoFailure,
   createPromoLinkClaimAdapter,
+  REDACTED_EVIDENCE_SENTINEL,
   type ClaimPromoRequest,
   type ClaimPromoResult,
   type PromoLinkClaimAdapter,
@@ -94,10 +117,34 @@ export interface ExistingPromoRead {
   kocCode: string | null;
   webUrl: string | null;
   appUrl: string | null;
+  /**
+   * True when at least one of the promo-shaped `raw_payload` fields
+   * (`kocCode`/`publicUrl`/`homeLink`/`onlineUrl`) carried
+   * `REDACTED_EVIDENCE_SENTINEL` rather than a real value. This is
+   * deliberately a separate signal from `kocCode === null`: the sentinel
+   * means "the sync-time adapter boundary masked this field" (see
+   * `src/lib/adapters/moboreader.ts`'s `toApprovedRawEvidence` — the *only*
+   * writer of `NovelSourceItem.rawPayload`, per
+   * `worker/handlers/moboreader.ts`'s `persistCatalogPage`), which is a
+   * structurally different fact than "upstream confirmed no promo yet"
+   * (doc §3.9's `promo_not_generated`). Conflating the two would make a
+   * masked-but-possibly-real code look identical to a genuine absence — the
+   * exact confusion this field exists to prevent. See this module's header
+   * and `writePromoLinkExistingEvidenceRedacted` for how callers must act
+   * on it.
+   */
+  redacted: boolean;
 }
 
 function nonBlank(value: unknown): string | null {
-  return typeof value === "string" && value.trim() ? value.trim() : null;
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  if (!trimmed || trimmed === REDACTED_EVIDENCE_SENTINEL) return null;
+  return trimmed;
+}
+
+function isRedactedSentinel(value: unknown): boolean {
+  return value === REDACTED_EVIDENCE_SENTINEL;
 }
 
 /**
@@ -112,16 +159,37 @@ function nonBlank(value: unknown): string | null {
  * sample has it null, so this mapping is currently inert; it only matters
  * once a populated sample is captured, at which point Codex should verify
  * this interpretation against real evidence rather than assume it.
+ *
+ * 🔴 Production reality today: `src/lib/adapters/moboreader.ts`'s
+ * `REDACTED_EVIDENCE_KEYS` unconditionally masks `kocCode`/`publicUrl`/
+ * `homeLink`/`onlineUrl` to `REDACTED_EVIDENCE_SENTINEL` before
+ * `persistCatalogPage` ever writes `rawPayload` — so `nonBlank` below can
+ * never observe a real value for these four fields via the sync pipeline as
+ * it exists today, and `kocCode`/`webUrl`/`appUrl` on the returned value are
+ * therefore always `null` in production; `redacted` is the field that
+ * actually distinguishes "upstream had nothing" from "upstream may have had
+ * something, but sync threw it away before we could judge". Enabling this
+ * §3.9 read path for real needs two things neither of which this task
+ * implements: (a) confirming against real upstream evidence that these
+ * fields are genuinely populated, and (b) moving catalog-sync's promo-code
+ * capture out of the redacted `rawPayload` snapshot into `PromoLink.
+ * upstreamCode` directly (its correct home) instead of `rawPayload`. Both
+ * are Owner-gated follow-up work, tracked separately — not this ticket.
  */
 export function readExistingPromoFromRawPayload(rawPayload: unknown): ExistingPromoRead {
   if (!rawPayload || typeof rawPayload !== "object" || Array.isArray(rawPayload)) {
-    return { kocCode: null, webUrl: null, appUrl: null };
+    return { kocCode: null, webUrl: null, appUrl: null, redacted: false };
   }
   const row = rawPayload as Record<string, unknown>;
+  const redacted = isRedactedSentinel(row.kocCode)
+    || isRedactedSentinel(row.publicUrl)
+    || isRedactedSentinel(row.homeLink)
+    || isRedactedSentinel(row.onlineUrl);
   return {
     kocCode: nonBlank(row.kocCode),
     webUrl: nonBlank(row.publicUrl) ?? nonBlank(row.homeLink),
     appUrl: nonBlank(row.onlineUrl),
+    redacted,
   };
 }
 
@@ -281,6 +349,97 @@ async function ensurePromoLinkRow(
   });
 }
 
+// ---------------------------------------------------------------------
+// Article binding — the missing other half of "PromoLink reached fetched".
+// `Article.promoLinkId` (`prisma/schema.prisma`'s `article_promo_link_novel_
+// fkey`, a composite FK on `(promo_link_id, novel_id)`) is what
+// `src/server/publish-gate/facts.ts` resolves `article.promoLink` through;
+// until this column is set, `evaluatePublishGate` reports
+// `promo_link_missing` forever, even for a PromoLink that is genuinely
+// `fetched`. Nothing else in this codebase writes this column.
+//
+// Cardinality read from schema (not assumed): `PromoLink.idempotencyKey` is
+// keyed on `(channelAppId, novelSourceItemId, channelAccountId, offerType)`
+// — it carries no locale dimension at all. `Article` is keyed on
+// `(novelId, locale)` (`article_novel_locale_key`) — one Article row per
+// locale per Novel. Since a PromoLink cannot be locale-specific (the
+// concept doesn't exist on that row), the only binding strategy consistent
+// with this basis is: every locale Article under the same Novel shares the
+// *same* PromoLink. A Novel can in principle have more than one PromoLink
+// (multiple NovelSourceItems/channel accounts/offer types), so binding is
+// scoped per-PromoLink, first-fetched-wins — see the conflict handling
+// below for what happens when a second, different PromoLink for the same
+// Novel also reaches `fetched`.
+// ---------------------------------------------------------------------
+
+interface ArticleBindingResult {
+  boundArticleIds: string[];
+  alreadyBoundArticleIds: string[];
+  conflictedArticleIds: string[];
+}
+
+/**
+ * Binds `promoLinkId` onto every non-deleted Article for `novelId` that
+ * does not already carry a *different* PromoLink. Runs inside the same `tx`
+ * as the PromoLink write that produced `promoLinkId` (both
+ * `writePromoLinkAlreadyAvailable` and `writePromoLinkClaimed` call this
+ * after their `promoLink.update`), and therefore inherits that write's
+ * `withDbRetry`-wrapped whole-transaction retry from
+ * `src/lib/tasks/store.ts`'s `finalizeTaskItem` — no separate retry wrapper
+ * is added here (nesting one would reproduce the same
+ * open-transaction-abort hazard `ensurePromoLinkRow`'s header documents for
+ * nested conflict-retry loops).
+ *
+ * Idempotent by construction: the `findMany` immediately before each write
+ * is this call's guard read — a row already pointing at `promoLinkId` is
+ * left untouched (`alreadyBoundArticleIds`), so re-running the same
+ * terminal write (e.g. a retried task attempt) never produces a second
+ * write or a duplicate audit-worthy side effect.
+ *
+ * Conflict semantics: a row already pointing at a *different*, non-null
+ * `promoLinkId` is left untouched, not overwritten and not failed
+ * (`conflictedArticleIds`) — throwing here would roll back the entire
+ * transaction, including the PromoLink row genuinely reaching `fetched`,
+ * over an unrelated Article's pre-existing binding. Silently overwriting it
+ * would violate the "never overwrite an existing binding" requirement this
+ * function exists to satisfy. Skip is therefore the only option that lets a
+ * true, correct fact (this PromoLink is fetched) commit while never
+ * clobbering a different one; conflicts are still observable — both call
+ * sites fold these counts into the same `operationAudit` row this write
+ * already creates — so silently overwriting is never confused with
+ * silently skipping. A Novel with more than one live PromoLink competing
+ * for the same Article does not yet have an Owner-defined selection policy
+ * beyond this first-fetched-wins default; see this task's final report.
+ *
+ * A locale whose Article row does not exist yet (content-creation pipeline
+ * has not run for it) is simply absent from `findMany`'s result — no error,
+ * nothing to bind, matching this function's "safe skip, never throw" brief.
+ */
+async function bindPromoLinkToArticles(
+  tx: Prisma.TransactionClient,
+  novelId: string,
+  promoLinkId: string,
+): Promise<ArticleBindingResult> {
+  const articles = await tx.article.findMany({
+    where: { novelId, deletedAt: null },
+    select: { id: true, promoLinkId: true },
+  });
+  const result: ArticleBindingResult = { boundArticleIds: [], alreadyBoundArticleIds: [], conflictedArticleIds: [] };
+  for (const article of articles) {
+    if (article.promoLinkId === promoLinkId) {
+      result.alreadyBoundArticleIds.push(article.id);
+      continue;
+    }
+    if (article.promoLinkId !== null) {
+      result.conflictedArticleIds.push(article.id);
+      continue;
+    }
+    await tx.article.update({ where: { id: article.id }, data: { promoLinkId } });
+    result.boundArticleIds.push(article.id);
+  }
+  return result;
+}
+
 async function writePromoLinkAlreadyAvailable(
   tx: Prisma.TransactionClient,
   scope: ClaimScope,
@@ -303,6 +462,7 @@ async function writePromoLinkAlreadyAvailable(
       lastAttemptedAt: now,
     },
   });
+  const articleBinding = await bindPromoLinkToArticles(tx, scope.source.novelId, row.id);
   await tx.operationAudit.create({
     data: {
       actorType: "worker",
@@ -316,7 +476,71 @@ async function writePromoLinkAlreadyAvailable(
         decision: "already_available",
         upstreamCode: redactUpstreamCode(existingRead.kocCode),
         host: safeHostname(existingRead.webUrl ?? existingRead.appUrl),
+        articlesBound: articleBinding.boundArticleIds.length,
+        articlesAlreadyBound: articleBinding.alreadyBoundArticleIds.length,
+        articlesConflicted: articleBinding.conflictedArticleIds.length,
       },
+    },
+  });
+  return row.id;
+}
+
+/**
+ * §3.9's third outcome — distinct from both `already_available` (real,
+ * usable evidence) and `capability_disabled`/`promo_not_generated` (a
+ * genuine absence). `raw_payload` carries `REDACTED_EVIDENCE_SENTINEL` for
+ * at least one promo-shaped field, which means the sync-time adapter
+ * boundary masked whatever was there — we cannot tell from this alone
+ * whether upstream actually has a promo code. Writing `fetched` here would
+ * silently persist the sentinel as if it were the real `upstream_code`/
+ * `web_url` (exactly the defect this function exists to close — the public
+ * `/go/{code}` redirect would resolve `"[redacted]"` as a URL and 404 for
+ * every reader while the publish gate waved the Article through as ready).
+ * `status` stays inside the four values the `promo_link_status_check`
+ * CHECK constraint allows (`pending`/`fetched`/`failed`/
+ * `registered_disabled`) — `pending` + a distinguishing `errorKind` is the
+ * same pattern `writePromoLinkManualReview` already uses for "not resolved,
+ * blocked for a specific, known, non-error reason".
+ *
+ * Deliberately does **not** fall through to the §3.10 capability check
+ * below it: `REDACTED_EVIDENCE_KEYS` masks these fields unconditionally
+ * whenever upstream's response object includes the key at all (empty or
+ * populated), so in the current sync implementation this branch fires for
+ * effectively every synced row — always short-circuiting here keeps that
+ * fact visible in `errorKind` instead of getting silently absorbed into
+ * `capability_disabled`'s message (which would then wrongly read as "no
+ * promo exists AND capability is off", losing the redaction fact
+ * entirely). If `claimPromo` is ever unfrozen, whoever does that unfreezing
+ * must decide — with real evidence in hand, per this module's header —
+ * whether an `existing_evidence_redacted` PromoLink should still attempt a
+ * live claim; that decision is out of this task's scope.
+ */
+async function writePromoLinkExistingEvidenceRedacted(
+  tx: Prisma.TransactionClient,
+  scope: ClaimScope,
+  payload: PromoLinkClaimPayload,
+  now: Date,
+): Promise<string> {
+  const row = await ensurePromoLinkRow(tx, scope, payload);
+  await tx.promoLink.update({
+    where: { idempotencyKey: scope.idempotencyKey },
+    data: {
+      status: "pending",
+      errorKind: "existing_evidence_redacted",
+      errorMessage: "raw_payload carries the sync-time redaction sentinel for one or more promo fields; local evidence cannot be used to judge whether upstream already has a promo (worker/handlers/promo-link-claim.ts header)",
+      lastAttemptedAt: now,
+    },
+  });
+  await tx.operationAudit.create({
+    data: {
+      actorType: "worker",
+      actorId: payload.actorId,
+      action: "promo_link_claim.existing_evidence_redacted",
+      entityType: "PromoLink",
+      entityId: row.id,
+      requestId: payload.requestId,
+      taskType: PROMO_LINK_CLAIM_TASK_TYPE,
+      afterSnapshot: { decision: "existing_evidence_redacted" },
     },
   });
   return row.id;
@@ -438,6 +662,7 @@ async function writePromoLinkClaimed(
       lastAttemptedAt: now,
     },
   });
+  const articleBinding = await bindPromoLinkToArticles(tx, scope.source.novelId, row.id);
   await tx.operationAudit.create({
     data: {
       actorType: "worker",
@@ -449,6 +674,9 @@ async function writePromoLinkClaimed(
       taskType: PROMO_LINK_CLAIM_TASK_TYPE,
       afterSnapshot: {
         decision: "claimed",
+        articlesBound: articleBinding.boundArticleIds.length,
+        articlesAlreadyBound: articleBinding.alreadyBoundArticleIds.length,
+        articlesConflicted: articleBinding.conflictedArticleIds.length,
         upstreamCode: redactUpstreamCode(result.upstreamCode),
         host: safeHostname(result.webUrl ?? result.appUrl),
       },
@@ -682,6 +910,24 @@ export function createPromoLinkClaimHandler(
         status: "success",
         result: { decision: "already_available", host: safeHostname(existingRead.webUrl ?? existingRead.appUrl) },
         protectedWrite: (tx) => writePromoLinkAlreadyAvailable(tx, scope, existingRead, payload, now()).then(() => undefined),
+      };
+    }
+
+    // `existingRead.kocCode` was falsy above — but that can mean two very
+    // different things: upstream genuinely has nothing yet, or sync's
+    // redaction boundary masked whatever was there before this handler ever
+    // saw it. `redacted` tells them apart; see `writePromoLinkExistingEvidenceRedacted`
+    // for why this must short-circuit here rather than silently falling
+    // through to the capability check below (which would misreport this as
+    // "no promo + capability disabled", losing the redaction fact).
+    if (existingRead.redacted) {
+      if (!writeAllowed) {
+        return { status: "skipped", result: { decision: "would_skip_evidence_redacted" } };
+      }
+      return {
+        status: "success",
+        result: { decision: "existing_evidence_redacted" },
+        protectedWrite: (tx) => writePromoLinkExistingEvidenceRedacted(tx, scope, payload, now()).then(() => undefined),
       };
     }
 

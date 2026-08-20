@@ -61,6 +61,7 @@ export type FakeSideEffectIntent = {
   createdAt: Date;
 };
 export type FakeAudit = { actorType: string; actorId: string; action: string; entityType: string; entityId: string; requestId: string; afterSnapshot?: unknown };
+export type FakeArticle = { id: string; novelId: string; locale: string; promoLinkId: string | null; deletedAt: Date | null };
 
 let idCounter = 0;
 function nextId(prefix: string): string {
@@ -75,6 +76,7 @@ export class FakePromoLinkClaimHandlerDb {
   readonly capabilities = new Map<string, FakeChannelCapability>();
   readonly credentials: FakeChannelCredential[] = [];
   readonly promoLinks = new Map<string, FakePromoLink>();
+  readonly articles = new Map<string, FakeArticle>();
   readonly intents = new Map<string, FakeSideEffectIntent>();
   readonly audits: FakeAudit[] = [];
   readonly calls: string[] = [];
@@ -106,6 +108,11 @@ export class FakePromoLinkClaimHandlerDb {
 
   seedCredential(credential: FakeChannelCredential): this {
     this.credentials.push(credential);
+    return this;
+  }
+
+  seedArticle(article: FakeArticle): this {
+    this.articles.set(article.id, article);
     return this;
   }
 
@@ -265,6 +272,23 @@ export class FakePromoLinkClaimHandlerDb {
     return { count: 1 };
   };
 
+  private articleFindMany = async (args: { where: { novelId: string; deletedAt: null } }) => {
+    this.calls.push("article.findMany");
+    return [...this.articles.values()]
+      .filter((row) => row.novelId === args.where.novelId && row.deletedAt === null)
+      .map((row) => ({ id: row.id, promoLinkId: row.promoLinkId }));
+  };
+
+  private articleUpdate = async (args: { where: { id: string }; data: { promoLinkId: string } }) => {
+    this.calls.push("article.update");
+    const row = this.articles.get(args.where.id);
+    if (!row) throw new Error(`article ${args.where.id} not found`);
+    const before = { ...row };
+    this.logUndo(() => Object.assign(row, before));
+    row.promoLinkId = args.data.promoLinkId;
+    return { ...row };
+  };
+
   private operationAuditCreate = async (args: { data: FakeAudit }) => {
     this.calls.push("operationAudit.create");
     this.audits.push({ ...args.data });
@@ -282,6 +306,7 @@ export class FakePromoLinkClaimHandlerDb {
       channelCapability: { findUnique: this.channelCapabilityFindUnique },
       channelAccountCredential: { findMany: this.channelAccountCredentialFindMany },
       promoLink: { findUnique: this.promoLinkFindUnique, upsert: this.promoLinkUpsert, update: this.promoLinkUpdate },
+      article: { findMany: this.articleFindMany, update: this.articleUpdate },
       sideEffectIntent: {
         findUnique: this.sideEffectIntentFindUnique,
         findUniqueOrThrow: this.sideEffectIntentFindUniqueOrThrow,

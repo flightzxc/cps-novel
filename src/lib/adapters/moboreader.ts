@@ -227,6 +227,20 @@ const REDACTED_EVIDENCE_KEYS = new Set([
   "publicurl", "homelink", "onlineurl", "promourl", "promocode",
 ]);
 
+/**
+ * Single source of truth for the sentinel this adapter substitutes for any
+ * `REDACTED_EVIDENCE_KEYS` field. `NovelSourceItem.rawPayload` (the only
+ * place `toApprovedRawEvidence`'s output is persisted — see
+ * `worker/handlers/moboreader.ts`'s `persistCatalogPage`) therefore carries
+ * this literal, never the real upstream value, for `kocCode`/`publicUrl`/
+ * `homeLink`/`onlineUrl`/`promoUrl`/`promoCode` on every synced row. Any
+ * downstream reader of `rawPayload` that treats a promo-shaped field as
+ * usable evidence (e.g. `worker/handlers/promo-link-claim.ts`'s §3.9
+ * pre-read) must compare against this constant — not a locally re-typed
+ * `"[redacted]"` literal — so the two can never drift apart.
+ */
+export const REDACTED_EVIDENCE_SENTINEL = "[redacted]" as const;
+
 function safeEvidenceValue(value: unknown, depth: number): unknown {
   if (depth > 5) return "[depth-limited]";
   if (Array.isArray(value)) return value.map((item) => safeEvidenceValue(item, depth + 1));
@@ -234,7 +248,7 @@ function safeEvidenceValue(value: unknown, depth: number): unknown {
     const output: Record<string, unknown> = {};
     for (const [key, item] of Object.entries(value as Record<string, unknown>)) {
       output[key] = REDACTED_EVIDENCE_KEYS.has(key.toLowerCase())
-        ? "[redacted]"
+        ? REDACTED_EVIDENCE_SENTINEL
         : safeEvidenceValue(item, depth + 1);
     }
     return output;

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   MoboreaderAdapterError,
+  REDACTED_EVIDENCE_SENTINEL,
   buildMoboreaderPreviewRequestsFromCatalogRow,
   createMoboreaderReadAdapter,
   parseBookMaterialResponse,
@@ -107,8 +108,8 @@ describe("MoboReader read adapter", () => {
       labelSnapshotComplete: true,
     });
     expect(parsed.items[0].rawEvidence.source_label).toEqual({ future: "preserve-me" });
-    expect(parsed.items[0].rawEvidence.kocCode).toBe("[redacted]");
-    expect(parsed.items[0].rawEvidence.publicUrl).toBe("[redacted]");
+    expect(parsed.items[0].rawEvidence.kocCode).toBe(REDACTED_EVIDENCE_SENTINEL);
+    expect(parsed.items[0].rawEvidence.publicUrl).toBe(REDACTED_EVIDENCE_SENTINEL);
   });
 
   it("preserves all four source label identities without trimming or mapping", () => {
