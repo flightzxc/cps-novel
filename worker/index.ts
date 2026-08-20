@@ -8,6 +8,7 @@ import {
 import { createCredentialWorkerHandlers } from "./handlers/credential";
 import { createIndexNowWorkerHandlers } from "./handlers/indexnow-delivery";
 import { createMoboreaderWorkerHandlers } from "./handlers/moboreader";
+import { createPromoLinkClaimWorkerHandlers } from "./handlers/promo-link-claim";
 import { createSitemapRefreshWorkerHandlers } from "./handlers/sitemap-refresh";
 import { parseShutdownDrainTimeoutEnv, runWorker } from "./runtime";
 
@@ -15,6 +16,7 @@ export function createWorkerHandlers(prisma: PrismaClient) {
   return createHandlerRegistry({
     ...createCredentialWorkerHandlers(prisma),
     ...createMoboreaderWorkerHandlers(prisma),
+    ...createPromoLinkClaimWorkerHandlers(prisma),
     ...createIndexNowWorkerHandlers(prisma),
     ...createSitemapRefreshWorkerHandlers(prisma),
   });

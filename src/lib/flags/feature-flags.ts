@@ -52,3 +52,29 @@ export function isSitemapAutoRefreshEnabled(env: NodeJS.ProcessEnv = process.env
 export function isSitemapAutoRefreshWriteAllowed(env: NodeJS.ProcessEnv = process.env): boolean {
   return env[SITEMAP_AUTO_REFRESH_ALLOW_WRITE_FLAG] === "true";
 }
+
+// -----------------------------------------------------------------------
+// P0-S5 (promo link claim chain). Same "一 flag 一函数、双闸" discipline as
+// every pair above. `FEATURE_PROMO_LINK_CLAIM` gates the whole task chain
+// (task creation + worker handler) including the zero-upstream-call
+// "already-existing promo read" path (`novel-v1-adapter-and-workflow-
+// v0.2.1.md` §3.9). `PROMO_LINK_CLAIM_ALLOW_WRITE` additionally gates any
+// protected business write and — for the disabled `claimPromo` capability
+// specifically — is necessary but never sufficient: that path also requires
+// `ChannelCapability.status = 'enabled'`, which nothing in this codebase
+// ever sets (registered_disabled until Owner unfreezes it, see
+// `src/lib/adapters/promo-link-claim.ts`). registered: docs/governance/
+// feature-flag-registry.md.
+// -----------------------------------------------------------------------
+export const PROMO_LINK_CLAIM_FEATURE_FLAG = "FEATURE_PROMO_LINK_CLAIM";
+export const PROMO_LINK_CLAIM_ALLOW_WRITE_FLAG = "PROMO_LINK_CLAIM_ALLOW_WRITE";
+
+/** Gates whether the promo-link claim task factory and worker handler do anything at all. */
+export function isPromoLinkClaimEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+  return env[PROMO_LINK_CLAIM_FEATURE_FLAG] === "true";
+}
+
+/** Second key: even with the feature on, protected writes (PromoLink upserts, the disabled claimPromo call) only happen when this is also true. */
+export function isPromoLinkClaimWriteAllowed(env: NodeJS.ProcessEnv = process.env): boolean {
+  return env[PROMO_LINK_CLAIM_ALLOW_WRITE_FLAG] === "true";
+}
