@@ -45,9 +45,32 @@ describe("createContentFromSourceItem — apply, success path", () => {
     expect(article?.locale).toBe("en");
     expect(article?.slug).toBe("the-great-adventure-begins");
     expect(article?.title).toBe("The Great Adventure Begins");
-    expect(article?.body).toBe("");
+    // P0-S9: body is now rendered by the P2-02 Template Engine against
+    // DEFAULT_ARTICLE_TEMPLATE (`@/server/content-creation/default-article-template`),
+    // not left `""` — that was S4's placeholder, explicitly deferred to
+    // "P2-02 or another authorized content production path". Assert on
+    // substance (non-blank + the fields that do have values) rather than an
+    // exact string, so this test does not have to change every time the
+    // built-in template's copy is tweaked.
+    expect(article?.body).not.toBe("");
+    expect(article?.body).toContain("<h1>The Great Adventure Begins</h1>");
+    expect(article?.body).toContain("A sweeping tale of courage.");
+    expect(article?.body).toContain('<img src="https://example.com/cover.jpg" alt="Cover">');
+    expect(article?.body).toContain("Total chapters: 42");
+    // No PromoLink exists at creation time (S5's territory) — the `{if
+    // promo_redirect_url}` block is omitted entirely, not rendered blank.
+    expect(article?.body).not.toContain("Start Reading");
     expect(article?.publicPageShortId).toHaveLength(8);
     expect(article?.publicPageShortId).toBe(result.publicPageShortId);
+
+    // The other two rendered slots (metaTitle/metaDescription) land in
+    // seoMetadata — the fake store doesn't persist that column, so assert on
+    // the raw write args instead (see fake-db.ts's `lastArticleCreateArgs`).
+    expect(fake.lastArticleCreateArgs?.seoMetadata).toEqual({
+      metaTitle: "The Great Adventure Begins",
+      metaDescription: "A sweeping tale of courage.",
+    });
+    expect(fake.lastArticleCreateArgs?.seoSchemaVersion).toBe(1);
 
     // NovelSourceItem is linked and transitioned.
     const linkedSourceItem = fake.sourceItems.get(sourceItem.id);

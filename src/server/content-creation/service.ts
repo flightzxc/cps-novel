@@ -19,14 +19,22 @@
  *   "locale 必须是站点 canonical locale"), not that it is the *correct* one
  *   for this row. **TODO(S7a): derive `locale` from
  *   `NovelSourceItem.sourceLocale` instead of accepting it as an input.**
- * - **`Article.body` is left `""`.** Rendering the actual publish-ready body
- *   is P2-02's job (Template Engine or another authorized content
- *   production path) — see `src/contracts/publish-gate.ts`'s header. An
- *   empty `body` on a `draft` row satisfies `article_published_body_check`
- *   (`status <> 'published' OR btrim(body) <> ''`) without any special
- *   casing; the publish gate's own `required_metadata_missing` /
- *   `preview_body_missing` reasons are what stop an under-filled draft from
- *   ever reaching `published` later.
+ * - **`Article.body`/`title`/`seoMetadata` are rendered by the P2-02
+ *   Template Engine (`@/lib/seo/template`), not hand-assembled here.**
+ *   P0-S9 wires the engine in against a single code-literal
+ *   `DEFAULT_ARTICLE_TEMPLATE` (`./default-article-template.ts`) — see that
+ *   module's header for why a `templateKey`-driven `ArticleTemplate` DB
+ *   lookup is deferred rather than built now. `Article.templateId` is left
+ *   `null`: nothing here creates or references an `ArticleTemplate` row.
+ *   The rendered `body` is non-blank for every row this service creates
+ *   (the four optional template fields — `cover_url`, `total_chapter_count`,
+ *   `preview_chapter_count`, `promo_redirect_url` — are each wrapped in
+ *   their own `{if}` block, so a still-missing `PromoLink` or unmaterialized
+ *   preview chapters shrink the body, never blank it), which is what clears
+ *   `required_metadata_missing`'s `body` check
+ *   (`src/server/publish-gate/evaluator.ts`) — the publish gate's other
+ *   reasons (`promo_link_missing`, `preview_chapter_missing`, …) are
+ *   untouched by this and still gate `published` normally.
  * - **Never touches `PromoLink`.** Claiming/creating promo assets is S5's
  *   territory. `Article.promoLinkId` is left `null`; `article_published_
  *   promo_link_check` already stops a promo-less Article from publishing.
@@ -75,8 +83,15 @@ import { isHealthySlug, textToSlug } from "@/lib/slug/text-to-slug";
 import { createWithPublicPageShortIdRetry, generatePublicPageShortIdCandidate } from "@/lib/slug/short-id";
 import { withDbRetry } from "@/lib/db/db-retry";
 import { SITE_LOCALES, type SiteLocale } from "@/lib/locale/locale-canonical";
+import {
+  buildNovelTemplateValues,
+  isTemplateRenderError,
+  renderArticleDraft,
+  type TemplateErrorCode,
+} from "@/lib/seo/template";
 
 import { createNovelWithBusinessIdRetry } from "./business-id";
+import { DEFAULT_ARTICLE_TEMPLATE, DEFAULT_ARTICLE_TEMPLATE_KEY } from "./default-article-template";
 
 // ---------------------------------------------------------------------------
 // Actor / audit
@@ -190,7 +205,24 @@ export type CreateContentResult =
   | { readonly outcome: "slug_unhealthy"; readonly field: "novel" | "article"; readonly baseSlug: string }
   | { readonly outcome: "slug_conflict_exhausted"; readonly field: "novel" | "article"; readonly baseSlug: string }
   /** Lost the creation race to a concurrent call for the same source item — see module header. Safe to retry: the retry will land in `"already_exists"`. */
-  | { readonly outcome: "concurrent_creation_conflict" };
+  | { readonly outcome: "concurrent_creation_conflict" }
+  /**
+   * `DEFAULT_ARTICLE_TEMPLATE` (or, once wired, a DB-sourced template) failed
+   * to render — see `TemplateRenderError` (`@/lib/seo/template`). Structured
+   * the same way the rest of this union prefers a returned outcome over an
+   * uncaught throw: the failing `novel.create`/`Novel` this attempt started
+   * is rolled back (the transaction still aborts — this outcome is produced
+   * by catching the render failure *outside* the transaction, after
+   * `$transaction` has already unwound it), so a retry starts clean rather
+   * than colliding with an orphaned row. `code`/`slot`/`constraint` mirror
+   * `TemplateRenderError`'s own fields; deliberately excludes `field` (the
+   * template variable name) and any rendered content — this outcome must
+   * stay safe to log verbatim. Every field of `DEFAULT_ARTICLE_TEMPLATE` is
+   * either a required, non-blank DB column (`novel_title`/`novel_description`)
+   * or wrapped in `{if}`, so this should not occur in practice; it exists as
+   * a fail-closed backstop, not an expected steady-state outcome.
+   */
+  | { readonly outcome: "template_render_failed"; readonly code: TemplateErrorCode; readonly slot?: string; readonly constraint?: string };
 
 export type CreateContentFromSourceItemInput = {
   readonly novelSourceItemId: string;
@@ -442,6 +474,28 @@ async function runCreateTransaction(
     }),
   );
 
+  // Render before the Article write, not after: `renderArticleDraft` throws
+  // (never returns a half-filled draft) on any of its four slots failing, and
+  // every field it reads here (`sourceItem.title`/`description`/`coverUrl`/
+  // `totalChapterCount`) is the exact same data `novel.create` above just
+  // wrote — reading it off `sourceItem` instead of the returned `novel` row
+  // avoids widening `NovelRow`'s type for fields nothing else in this module
+  // needs. `previewChapterCount`/`promoRedirectUrl` are intentionally omitted
+  // (undefined → normalizes to `""`): neither exists yet at this point in the
+  // pipeline (P2-05 / S5 territory — see module header), and
+  // `DEFAULT_ARTICLE_TEMPLATE` wraps both in `{if}` blocks, so their absence
+  // shrinks the rendered body instead of failing it.
+  const templateValues = buildNovelTemplateValues({
+    title: sourceItem.title,
+    description: sourceItem.description,
+    coverUrl: sourceItem.coverUrl,
+    totalChapterCount: sourceItem.totalChapterCount,
+  });
+  const rendered = renderArticleDraft(DEFAULT_ARTICLE_TEMPLATE, templateValues, {
+    templateKey: DEFAULT_ARTICLE_TEMPLATE_KEY,
+    novelId: novel.id,
+  });
+
   const article = await createWithPublicPageShortIdRetry((candidateShortId) =>
     tx.article.create({
       data: {
@@ -452,14 +506,25 @@ async function runCreateTransaction(
         // remains textually greppable as the one authorized write site —
         // see tests/backend/slug/short-id-sole-source.test.ts.
         publicPageShortId: candidateShortId,
-        title: sourceItem.title,
+        // `rendered.title` is the `title` template slot's output — equal in
+        // content to `sourceItem.title` today (`DEFAULT_ARTICLE_TEMPLATE.title`
+        // is the bare `{novel_title}` variable) but trimmed and already
+        // checked against `Article.title`'s `VarChar(500)` bound
+        // (`ERR_TEMPLATE_OUTPUT_INVALID`/`too_long` above, before this
+        // insert), rather than trusting the DB to reject an oversized value.
+        title: rendered.title,
         summary: sourceItem.description,
-        // P2-02 (Template Engine or another authorized content production
-        // path) territory — see module header and
-        // src/contracts/publish-gate.ts. `""` satisfies the NOT NULL column
-        // and the draft-row CHECK; the publish gate blocks publish on an
-        // empty body.
-        body: "",
+        // The Template Engine's (P2-02, `@/lib/seo/template`) real rendered
+        // body — see module header. Non-blank by construction: every
+        // required field it references (`novel_title`/`novel_description`)
+        // is a NOT NULL `Novel` column, and every optional one is guarded by
+        // `{if}`. This is what clears `required_metadata_missing`'s `body`
+        // check in `src/server/publish-gate/evaluator.ts`.
+        body: rendered.body,
+        seoMetadata: rendered.seoMetadata,
+        seoSchemaVersion: rendered.seoSchemaVersion,
+        // templateId intentionally left unset (column default `null`) — no
+        // `ArticleTemplate` row exists; see default-article-template.ts.
         // status intentionally omitted — see module header, "Never writes status".
       },
     }),
@@ -546,6 +611,19 @@ export async function createContentFromSourceItem(
   } catch (error) {
     if (error instanceof ContentCreationConflictSignal) {
       return { outcome: "concurrent_creation_conflict" };
+    }
+    // `isTemplateRenderError` (not `instanceof`) — same cross-realm duck-type
+    // guard `@/lib/seo/template`'s own doc comment requires: Worker and Web
+    // are different module realms, so a naive `instanceof` could miss a
+    // legitimate `TemplateRenderError` thrown from the other realm's copy of
+    // the class.
+    if (isTemplateRenderError(error)) {
+      return {
+        outcome: "template_render_failed",
+        code: error.code,
+        ...(error.slot === undefined ? {} : { slot: error.slot }),
+        ...(error.constraint === undefined ? {} : { constraint: error.constraint }),
+      };
     }
     throw error;
   }
