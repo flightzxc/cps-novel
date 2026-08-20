@@ -40,9 +40,35 @@ import {
 
 export class CliArgumentError extends Error {}
 
+/**
+ * Reads the value following a `--flag` token. Returns `undefined` only when
+ * the flag itself is absent from `argv` — a genuinely missing *optional*
+ * flag (e.g. `--evidence` when disabling) must stay silent so the caller's
+ * own "is required" checks (or lack thereof) decide what that means.
+ *
+ * P0-S10 (2026-08-20): if the flag *is* present but the following token is
+ * missing (end of argv) or itself looks like another flag (starts with
+ * `--`), this throws instead of returning that token as the value. Before
+ * this fix, `--evidence --apply` silently parsed as
+ * `evidenceRef = "--apply"` *and* `apply = true` (the latter from the
+ * separate `argv.includes("--apply")` check below) — a single dropped
+ * argument would both hand the write path a nonsense evidence string and
+ * still flip `--apply` on, letting one typo defeat "证据先于启用"
+ * (evidence-precedes-enablement,
+ * `docs/governance/database-governance.md` §1) without any error at all.
+ * Treating a `--`-shaped "value" as missing-and-erroring closes that hole;
+ * the trade-off (a real value can never itself start with `--`) is
+ * accepted deliberately for this operator-facing break-glass tool.
+ */
 function arg(argv: readonly string[], name: string): string | undefined {
   const index = argv.indexOf(name);
-  return index >= 0 ? argv[index + 1] : undefined;
+  if (index < 0) return undefined;
+  const value = argv[index + 1];
+  if (value === undefined || value.startsWith("--")) {
+    const got = value === undefined ? "nothing (it was the last argument)" : `another flag ("${value}")`;
+    throw new CliArgumentError(`${name} requires a value, but got ${got} — did an argument get dropped?`);
+  }
+  return value;
 }
 
 export type CliOptions = {

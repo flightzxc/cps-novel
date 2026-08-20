@@ -64,6 +64,65 @@ describe("parseCliOptions", () => {
     expect(() => parseCliOptions(["--channel-app", "a", "--capability", "b", "--reason", "r"], ENV)).toThrow(CliArgumentError);
     expect(() => parseCliOptions(["--channel-app", "a", "--capability", "b", "--to", "enabled"], ENV)).toThrow(CliArgumentError);
   });
+
+  // P0-S10 (2026-08-20) regression: a flag whose value token was dropped
+  // must never silently swallow the *next* flag as its value — see `arg()`
+  // in scripts/set-channel-capability-status.ts.
+  describe("does not swallow a following flag as a dropped value (P0-S10)", () => {
+    it("--evidence immediately followed by --apply throws instead of setting evidenceRef='--apply' and apply=true", () => {
+      expect(() =>
+        parseCliOptions(
+          [
+            "--channel-app", "a",
+            "--capability", "b",
+            "--to", "enabled",
+            "--reason", "r",
+            "--evidence", "--apply",
+          ],
+          ENV,
+        ),
+      ).toThrow(CliArgumentError);
+    });
+
+    it("--reason immediately followed by another flag throws rather than adopting the flag text as the reason", () => {
+      expect(() =>
+        parseCliOptions(
+          ["--channel-app", "a", "--capability", "b", "--to", "enabled", "--reason", "--evidence"],
+          ENV,
+        ),
+      ).toThrow(CliArgumentError);
+    });
+
+    it("a required flag with no value at all (end of argv) still throws", () => {
+      expect(() =>
+        parseCliOptions(["--channel-app", "a", "--capability", "b", "--to", "enabled", "--reason"], ENV),
+      ).toThrow(CliArgumentError);
+    });
+
+    it("an --evidence value that legitimately does not start with -- is still accepted", () => {
+      const options = parseCliOptions(
+        [
+          "--channel-app", "a",
+          "--capability", "b",
+          "--to", "enabled",
+          "--reason", "r",
+          "--evidence", "smoke-2026-08-20.md",
+          "--apply",
+        ],
+        ENV,
+      );
+      expect(options.evidenceRef).toBe("smoke-2026-08-20.md");
+      expect(options.apply).toBe(true);
+    });
+
+    it("an optional flag that is simply absent (not dropped) still parses fine — --evidence omitted entirely for a disable", () => {
+      const options = parseCliOptions(
+        ["--channel-app", "a", "--capability", "b", "--to", "registered_disabled", "--reason", "r"],
+        ENV,
+      );
+      expect(options.evidenceRef).toBeUndefined();
+    });
+  });
 });
 
 function seedDisabled(db: FakeChannelCapabilityDb) {
