@@ -67,6 +67,7 @@ describe("SITE_URL", () => {
           "/tasks",
           "/settings",
           "/dev-preview",
+          "/go",
         ],
       }],
       sitemap: "https://novel.example/sitemap.xml",
