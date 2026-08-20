@@ -133,6 +133,29 @@ P1-05A 只登记从 CPS 提取的数据库**模式证据**；没有字节复制�
 | `pollTask` → `scripts/admin-e2e-smoke.ts` | `scripts/changdu-admin-e2e-smoke.ts` | `275-294` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | 保留 3 秒轮询、有界超时与同源 credential fetch；端点改为仓库现有 `/api/admin/credential-tasks/status`，终态改为小说任务 `completed/completed_with_errors/failed/disabled`，驱动改为可注入的 Node `fetch`，不虚构尚不存在的通用 GenericTask 路由 | Codex |
 | `assertNoForbiddenFlags` / `/tmp` 路径闸 / `DATABASE_URL` 交叉校验 / `scrub` → `scripts/lib/acceptance-safety.ts` | `scripts/changdu-preview-catalog-acceptance-cli.ts` | `77-179,204-232` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | 保留 allowlist 参数、凭证类 flag 拒绝、输出脱敏和 DB 目标交叉校验模式；SQLite 文件路径匹配改为 PostgreSQL `DATABASE_URL` SHA-256 指纹定时比较，原始 URL 不进 argv/报告；补 symlink escape 拒绝 | Codex |
 | P2-12 只读验收 CLI 编排 → `scripts/acceptance/p2-12-acceptance-cli.ts` | `scripts/changdu-preview-catalog-acceptance-cli.ts` | `234-275` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | 保留独立 CLI、先安全闸后执行、脱敏 JSON 结果的编排形状；删除 Changdu preview catalog 写入闭包，改为只读调用 Vitest 纵向验收用例 | Codex |
+| `textToSlug`（设计思路） → `src/lib/slug/text-to-slug.ts` | `src/lib/slug-utils.ts` | `143-207` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `PATTERN_ONLY` | 只借「Latin 文字按词切分、符号统一视作分隔符、其余脚本原样保留为独立 Unicode 段而非丢弃」的设计思路，以及数字后缀感知的最短长度健康度判定（`isUnhealthyArticleSlug` → `isHealthySlug`）；**不搬** `pinyin-pro` 中文转拼音分支（`shouldTransliterateChinese`/`pushChineseTokens`）——`SiteLocale` 今天只登记 `"en"` 一个成员且上游语种登记表为空，本轮没有会把 CJK 文本经由中文族 `SiteLocale` 传入的调用点，零新依赖；若日后登记中文族 `SiteLocale`，那才是评估转写库的时点 | Claude |
+| `PUBLIC_PAGE_SHORT_ID_ALPHABET`/`createArticlePublicPageShortId`/`isArticlePublicPageShortIdUniqueConflict`/`createWithArticlePublicPageShortIdRetry` → `src/lib/slug/short-id.ts` | `src/lib/article-public-page-id.ts` | `8-16,33-79` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | 保留字母表（小写字母+数字）、固定长度、强制含至少一位数字、P2002 冲突有界重试（默认 5 次）的算法形状；改名去掉 CPS 的 Article/Drama 专属命名，泛化为本项目的 `publicPageShortId` 字段；`isPublicPageShortIdConflict` 改为叠加在 `src/lib/db/db-retry.ts` 的 `isUniqueConstraintViolation` 之上而非另起一份 `P2002` 判定 | Claude |
+
+P2-02 是首批 `owner = Claude` 的搬运条目。全部落在 `src/lib/seo/template/`，逐符号登记如下。
+
+| symbol | source_file | source_lines | baseline_commit | port_kind | changed_what | owner |
+| --- | --- | --- | --- | --- | --- | --- |
+| `WILDCARD_FIELDS` → `REGISTERED_TEMPLATE_FIELDS` | `src/lib/template-engine.ts` | `13-35` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | 保留「同一份 `as const` 数组既做渲染期判定又驱动后台变量面板」的形态；18 个短剧键整表重写为 6 个小说键，增列 `kind`（url 类做 scheme 校验）与 `required`（可空列裸引用告警）；`author`/`country`/`completion_status` 等禁止字段不登记 | Claude |
+| `WildcardField` → `TemplateFieldKey` | `src/lib/template-engine.ts` | `35` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | 保留 `(typeof ARRAY)[number]["key"]` 的键联合类型推导写法，数组换成小说登记表 | Claude |
+| `ERR_TEMPLATE_VAR_EMPTY` | `src/lib/template-engine.ts` | `37` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `COPY` | 原样复制码值与命名 | Claude |
+| `TemplateVarEmptyError` → `TemplateRenderError` | `src/lib/template-engine.ts` | `39-62` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | 保留「Error 子类 + 只读 `code` + 结构化 `k=v` 消息、不回带取值」的形态；由单一码扩为五码，定位字段换成 `slot`/`field`/`constraint`/`templateKey`/`novelId` | Claude |
+| `isTemplateVarEmptyError` → `isTemplateRenderError` | `src/lib/template-engine.ts` | `64-74` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | 保留 `instanceof` + `code` 属性双判定的跨 realm 写法（Worker 与 Web 不同模块 realm）；判定集合换成五码注册表 | Claude |
+| `renderTemplateInternal` → `renderTemplateSlot` | `src/lib/template-engine.ts` | `166-221` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | 模板语言逐字保留：两条正则 `\{if\s+(\w+)\}` 与 `\{(\w+)\}`、先条件后变量的两步顺序、替换不二次扫描、`"0"` 为假。三处改造：① 严格模式由 slug 专用扩为全槽位唯一模式，未登记字段由 `return match` 改为抛错；② `{if}` 判真前 trim（消除 CPS `:189` 与 `:201` 的口径不一致）；③ **正则不动点重扫改为 token 深度配对扫描**——CPS 实现在外层条件为假时会把字面 `{endif}` 泄漏进产物，可复现证据见 `docs/p2/P2_02_TEMPLATE_ENGINE.md` §2.1 | Claude |
+| `buildWildcardMap` → `buildNovelTemplateValues` | `src/lib/template-engine.ts` | `85-137` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | 保留「扁平、预字符串化、恒含全部登记键、`null` 折成空串」的取值表形态；字段整表换成小说字段；容器由普通对象改 `Map`（模板变量名匹配 `\w+`，普通对象上 `constructor`/`__proto__` 会取到原型链） | Claude |
+| `buildArticleSnapshot` → `renderArticleDraft` | `src/lib/article-generation.ts` | `204-272` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | 保留「一次调用产出多个槽位」的装配形态；六槽位降为四槽位（slug 归 P2-03/P2-06，metaKeywords 无对应列）；**去掉全部 fallback 链**——CPS 把同一装配逻辑复制成四份且 fallback 各不相同，fallback 属发布链路策略，归调用方 / P2-07 | Claude |
+| `findUnsupportedVariables` → `analyzeTemplate` | `src/components/templates/template-form.tsx` | `99-115` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | 保留「保存期扫描模板文本、报出未登记变量、`endif` 不算字段」的思路；由 React 组件内的告警函数改为零依赖纯函数（可硬拦截，CPS 侧仅弹黄条仍允许保存）；扫描器与渲染器共用同一套 token 正则，并附带 `{if}`/`{endif}` 配对校验与可空字段裸引用告警 | Claude |
+
+CPS 侧的 `renderContentBlocks`（`src/lib/template-engine.ts:223-261`）、`previewTemplate`（`:263-294`）、`resolveTemplateEpisodeCount`（`:76-83`）、`renderAltTemplate`（`src/lib/article-v2-service.ts:121-128`）、`truncateDescription`（`src/lib/seo-templates/_shared.ts:7-15`）判为 `DROP`，未搬入任何字节，理由逐条见 `docs/p2/P2_02_TEMPLATE_ENGINE.md` §2。
+
+`src/lib/seo/template/html.ts`（正文插值的窄上下文扫描器 `analyzeHtmlInterpolation`）与
+`escapeHtmlText`、`ABSOLUTE_HTTP_URL` / `PUBLIC_REDIRECT_PATH` 两条取值形态校验**无 CPS 来源**：
+CPS 对变量落在什么 HTML 位置完全不判定，也不对 `<img src>` 做任何 scheme 校验，判为
+`ORIGINAL_REQUIRED`，故不在本表登记（本表只登记有 CPS 来源的符号）。
 
 ### 无搬运的任务（显式登记，避免被当成漏登）
 
@@ -142,6 +165,7 @@ P1-05A 只登记从 CPS 提取的数据库**模式证据**；没有字节复制�
 | P2-08 PR2 公开接库 | `ORIGINAL_REQUIRED` | 公开路由、`src/lib/site` mapper、轮播空桩均为小说仓地基上的新接线。takedown/withdrawn V1 走页面层 `notFound()`（404），不搬 CPS proxy 410。明确不搬 `home-carousel-queries.ts`（Owner 裁决空数组）、`drama-hreflang.ts`、`site-queries.ts`、跨 Novel hreflang、`/go` handler。 |
 | `PUBLIC_LIST_CAP=240` 内存分页硬顶 | `ORIGINAL_REQUIRED` | 公开列表 `findMany({ take: 240 })` 后再 `isPromoReady` 过滤、内存分页。超限后 browse 的 `totalCount`/`totalPages` 失真，且 sitemap 可能收录 cap 之外的 URL 而 `/browse` 列不出（内链缺口）。V1 接受该限制，本轮不改实现。 |
 | P2-11 `src/lib/indexnow/sweep.ts`（`sweepDueIndexNowDeliveries`/`createIndexNowDeliveryTaskItem`） | `ORIGINAL_REQUIRED` | CPS 的 `deliverDueIndexNow` 是单一长函数（查due→CAS 认领→HTTP 投递一体化），没有"把到期行拆成独立可租用工作单元"这一步——小说仓因为改用 `GenericTaskItem` 租约模型（见上方 PATTERN_ONLY 条目），必须新写一层"扫描到期行 + 为每行创建任务项"的调度逻辑，CPS 无对应函数可搬。 |
+| P0-S4 `src/server/content-creation/service.ts`（`createContentFromSourceItem` 编排本体：guard 状态机、dry-run、并发冲突关闭、审计写入）与 `src/server/content-creation/business-id.ts`（`Novel.businessId` 生成器） | `ORIGINAL_REQUIRED` | CPS 的 `Drama` 行只靠上游同步任务写入，没有一个独立的"从 SourceItem 创建 canonical 内容"服务可搬；`business_id` 概念在 CPS 里对应上游直传的 `dramaId`，不是自生成短码，无算法可搬。整条创建编排（guard 读+条件 `updateMany` 关闭并发竞态+同事务审计）是本仓自建，只在两处局部借用了本表已登记的既有基建（`src/lib/db/db-retry.ts` 的 `isUniqueConstraintViolation`/`withDbRetry`，以及本表另两条 `slug/short-id` 条目登记的 shortId 算法）。 |
 
 ## 使用说明
 
