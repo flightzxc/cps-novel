@@ -258,13 +258,11 @@ export function analyzeHtmlInterpolation(template: string): readonly HtmlInterpo
       }
 
       // 属性区域。
-      let selfClosing = false;
       while (cursor < length) {
         while (cursor < length && isWhitespace(template[cursor])) cursor += 1;
         if (cursor >= length) break;
         if (template.startsWith("/>", cursor)) {
           cursor += 2;
-          selfClosing = true;
           break;
         }
         if (template[cursor] === ">") {
@@ -333,8 +331,10 @@ export function analyzeHtmlInterpolation(template: string): readonly HtmlInterpo
       index = cursor;
 
       // script / style 是 raw text 元素：里面的一切都不是 HTML 文本节点。
-      // 🔴 不看 selfClosing：HTML（非 XHTML）里 `<script/>` 并不自闭合，浏览器照样
-      // 进入 raw text，跟着写的内容仍是脚本。
+      // 🔴 不看标签是否写成 `/>` 的形式：HTML（非 XHTML）里 `<script/>` 并不自闭合，
+      // 浏览器照样进入 raw text，跟着写的内容仍是脚本——所以属性解析阶段即使见到
+      // `/>` 也只用来结束属性区域（见上方 `template.startsWith("/>", cursor)`），
+      // 不会、也不该被这里拿来当"这个标签自闭合，不必进入 raw text"的信号。
       const lowerTag = tagName.toLowerCase();
       if (!isClosing && (lowerTag === "script" || lowerTag === "style")) {
         const stop = findRawTextEnd(template, index, lowerTag);
