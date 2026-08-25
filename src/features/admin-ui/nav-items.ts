@@ -75,10 +75,13 @@ export const OMITTED_CPS_NAV_ITEMS: readonly { readonly cps: string; readonly re
  *
  * `/novels` joined the list in P2-04 (read-only content management).
  * `/tags` joined in P2-06 (read-only source-label dictionary).
+ * `/catalog-sync` joined in P0-S13 (the `NovelSourceItem` → `Novel`/`Article`
+ * content-creation trigger — dry-run preview and apply, gated separately).
  */
 export const ADMIN_IMPLEMENTED_PAGES: readonly string[] = Object.freeze([
   "/channel-accounts",
   "/novels",
+  "/catalog-sync",
   "/tags",
 ]);
 
