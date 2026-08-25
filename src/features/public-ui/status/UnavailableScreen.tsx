@@ -2,6 +2,7 @@ import { ButtonLink } from "@/components/Button";
 import { Container } from "@/components/Container";
 import { SiteShell, type SiteChrome } from "@/features/public-ui/layout/SiteShell";
 import type { UnavailableReason } from "@/features/public-ui/types";
+import type { SiteLocale } from "@/lib/locale/locale-canonical";
 import { getPublicT, type MessageKey } from "@/lib/locale/messages";
 
 /**
@@ -26,22 +27,24 @@ const COPY_KEYS: Record<UnavailableReason, { title: MessageKey; body: MessageKey
 };
 
 export function UnavailableScreen({
+  locale,
   reason,
   homeHref = "/",
   chrome,
   /** 可选：把书名说出来，让用户确认自己没走错地方。没有就不显示。 */
   novelTitle,
 }: {
+  locale: SiteLocale;
   reason: UnavailableReason;
   homeHref?: string;
   chrome?: SiteChrome;
   novelTitle?: string;
 }) {
-  const t = getPublicT();
+  const t = getPublicT(locale);
   const copy = COPY_KEYS[reason];
 
   return (
-    <SiteShell chrome={chrome}>
+    <SiteShell locale={locale} chrome={chrome}>
       <Container>
         <div
           className="flex min-h-[46vh] flex-col items-start justify-center py-20 md:py-28"

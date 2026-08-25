@@ -96,7 +96,7 @@ function rawStore(): string | null {
 describe("阅读位置 · 停留期间的记录", () => {
   it("读到第 10 段时，记录的就是第 10 段", () => {
     restoreLayout = installLayout();
-    render(<ChapterScreen chapter={CHAPTER_1} />);
+    render(<ChapterScreen locale="en" chapter={CHAPTER_1} />);
 
     readTo(10);
 
@@ -105,7 +105,7 @@ describe("阅读位置 · 停留期间的记录", () => {
 
   it("visibilitychange 同样能落盘——切到后台被回收也不丢位置", () => {
     restoreLayout = installLayout();
-    render(<ChapterScreen chapter={CHAPTER_1} />);
+    render(<ChapterScreen locale="en" chapter={CHAPTER_1} />);
 
     scrollTo(7);
     fireEvent(document, new Event("visibilitychange"));
@@ -117,7 +117,7 @@ describe("阅读位置 · 停留期间的记录", () => {
 describe("阅读位置 · 离开章节", () => {
   it("切走后位置仍是第 10 段，不被覆盖成末段", () => {
     restoreLayout = installLayout();
-    const { unmount } = render(<ChapterScreen chapter={CHAPTER_1} />);
+    const { unmount } = render(<ChapterScreen locale="en" chapter={CHAPTER_1} />);
 
     readTo(10);
     expect(readReadingPosition(KEY_1)?.paragraphIndex).toBe(10);
@@ -133,7 +133,7 @@ describe("阅读位置 · 离开章节", () => {
 
   it("已落盘的记录在离章时一个字节都没被重写——detached 的零 rect 不产生写入", () => {
     restoreLayout = installLayout();
-    const { unmount } = render(<ChapterScreen chapter={CHAPTER_1} />);
+    const { unmount } = render(<ChapterScreen locale="en" chapter={CHAPTER_1} />);
 
     readTo(10);
     const before = rawStore();
@@ -147,7 +147,7 @@ describe("阅读位置 · 离开章节", () => {
 
   it("还没跑的那一帧滚动不会丢：离章前用仍然有效的 DOM 补记一次", () => {
     restoreLayout = installLayout();
-    const { unmount } = render(<ChapterScreen chapter={CHAPTER_1} />);
+    const { unmount } = render(<ChapterScreen locale="en" chapter={CHAPTER_1} />);
 
     readTo(3);
     expect(readReadingPosition(KEY_1)?.paragraphIndex).toBe(3);
@@ -164,7 +164,7 @@ describe("阅读位置 · 离开章节", () => {
 
   it("只是路过、从未滚动的章节，不留下任何记录", () => {
     restoreLayout = installLayout();
-    const { unmount } = render(<ChapterScreen chapter={CHAPTER_2} />);
+    const { unmount } = render(<ChapterScreen locale="en" chapter={CHAPTER_2} />);
 
     expect(readReadingPosition(KEY_2)).toBeNull();
     unmount();
@@ -181,7 +181,7 @@ describe("阅读位置 · 离开章节", () => {
     // 不挡住的话，每翻过一章都会留下一条「第 0 段、段首」的记录——它与「没有记录」
     // 在恢复时等价，纯属占用 200 条上限。这里用显式 scroll 事件复现浏览器行为。
     restoreLayout = installLayout();
-    const { unmount } = render(<ChapterScreen chapter={CHAPTER_2} />);
+    const { unmount } = render(<ChapterScreen locale="en" chapter={CHAPTER_2} />);
 
     scrollTo(0);
     fireEvent(window, new Event("pagehide"));
@@ -193,7 +193,7 @@ describe("阅读位置 · 离开章节", () => {
 
   it("但读者真的翻回章首时，已有记录会被更新成章首", () => {
     restoreLayout = installLayout();
-    render(<ChapterScreen chapter={CHAPTER_1} />);
+    render(<ChapterScreen locale="en" chapter={CHAPTER_1} />);
 
     readTo(10);
     expect(readReadingPosition(KEY_1)?.paragraphIndex).toBe(10);
@@ -206,11 +206,11 @@ describe("阅读位置 · 离开章节", () => {
   it("两章各自的记录互不干扰：路过第 2 章不影响第 1 章", () => {
     restoreLayout = installLayout();
 
-    const first = render(<ChapterScreen chapter={CHAPTER_1} />);
+    const first = render(<ChapterScreen locale="en" chapter={CHAPTER_1} />);
     readTo(9);
     first.unmount();
 
-    const second = render(<ChapterScreen chapter={CHAPTER_2} />);
+    const second = render(<ChapterScreen locale="en" chapter={CHAPTER_2} />);
     second.unmount();
 
     expect(readReadingPosition(KEY_1)?.paragraphIndex).toBe(9);
@@ -221,7 +221,7 @@ describe("阅读位置 · 离开章节", () => {
 describe("阅读位置 · 几何不可信时拒绝写入", () => {
   it("阅读根被摘出文档后，滚动与离开都不再写存储", () => {
     restoreLayout = installLayout();
-    const { container } = render(<ChapterScreen chapter={CHAPTER_1} />);
+    const { container } = render(<ChapterScreen locale="en" chapter={CHAPTER_1} />);
 
     readTo(10);
     const before = rawStore();
@@ -239,11 +239,11 @@ describe("阅读位置 · 几何不可信时拒绝写入", () => {
 
   it("恢复回原位：存过第 10 段，重新进入该章就回到第 10 段", () => {
     restoreLayout = installLayout();
-    const first = render(<ChapterScreen chapter={CHAPTER_1} />);
+    const first = render(<ChapterScreen locale="en" chapter={CHAPTER_1} />);
     readTo(10);
     first.unmount();
 
-    render(<ChapterScreen chapter={CHAPTER_1} />);
+    render(<ChapterScreen locale="en" chapter={CHAPTER_1} />);
 
     // 第 10 段顶部在 1000px 处，ratio 0 → 落回 1000。
     expect(Math.round(window.scrollY)).toBe(10 * PARAGRAPH_HEIGHT);

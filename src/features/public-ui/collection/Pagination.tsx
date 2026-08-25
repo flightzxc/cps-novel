@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import type { SiteLocale } from "@/lib/locale/locale-canonical";
 import { getPublicT } from "@/lib/locale/messages";
 
 /**
@@ -12,19 +13,21 @@ import { getPublicT } from "@/lib/locale/messages";
  */
 
 export interface PaginationProps {
+  locale: SiteLocale;
   currentPage: number;
   totalPages: number;
   basePath: string;
 }
 
 export function Pagination({
+  locale,
   currentPage,
   totalPages,
   basePath,
 }: PaginationProps) {
   if (totalPages <= 1) return null;
 
-  const t = getPublicT();
+  const t = getPublicT(locale);
   const prevPage = currentPage - 1;
   const nextPage = currentPage + 1;
   const prevUrl = prevPage <= 1 ? basePath : `${basePath}?page=${prevPage}`;

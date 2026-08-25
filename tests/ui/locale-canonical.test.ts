@@ -5,7 +5,9 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 import {
+  ARTICLE_TEMPLATE_CRUD_LANDED,
   SITE_LOCALES,
+  assertPublishableLocalesFailClosed,
   isPublishableLocale,
   listPublishableLocales,
   resolveSiteLocale,
@@ -254,5 +256,49 @@ describe("locale 唯一真源 · 全仓不得有第二份映射", () => {
     expect(canonicalSource).not.toMatch(/\.slice\(\s*0\s*,\s*2\s*\)/);
     expect(canonicalSource).not.toMatch(/toLowerCase\(\)|toUpperCase\(\)/);
     expect(canonicalSource).not.toMatch(/startsWith\(/);
+  });
+});
+
+describe("locale 唯一真源 · D-7 条件二 fail-closed 守卫（S14）", () => {
+  /**
+   * 背景：CPS v6.0.4 事故——只注册了前台 locale，漏了后台模板枚举。Opus 终审
+   * 对本仓库 D-7 条件二的裁定是「内置默认模板对 en 实质满足，但这份安全是
+   * 巧合，不是机制」。这组用例验的正是「巧合已经变成机制」：只要
+   * `ARTICLE_TEMPLATE_CRUD_LANDED` 还是 false，任何越出 `{"en"}` 的
+   * `PUBLISHABLE_LOCALES` 配置都必须在断言执行的那一刻抛出，不能留到运行时。
+   */
+
+  it("模块常量今天确实是 false——这是守卫本身生效的前提，不是附带断言", () => {
+    expect(ARTICLE_TEMPLATE_CRUD_LANDED).toBe(false);
+  });
+
+  it("真实模块加载不抛：当前 PUBLISHABLE_LOCALES 为空，满足 ⊆ {\"en\"}", () => {
+    // 走到这一行本身就是「真实模块加载没有抛」的证据——import 在文件顶部，
+    // 若守卫在模块加载时抛出，整个测试文件都跑不起来。这里再显式断言一次
+    // 前提事实，避免这条证据只靠"没崩"这种隐式信号。
+    expect(listPublishableLocales()).toEqual([]);
+  });
+
+  it("🔴 越界即抛：CRUD 未落地时，非 en 的 locale 混进白名单必须抛出", () => {
+    expect(() => assertPublishableLocalesFailClosed(["es"], false)).toThrow(
+      /D-7 条件二 fail-closed 守卫触发/,
+    );
+    expect(() => assertPublishableLocalesFailClosed(["en", "ja"], false)).toThrow(/ja/);
+    expect(() => assertPublishableLocalesFailClosed(["en", "es", "ko"], false)).toThrow(
+      /es, ko/,
+    );
+  });
+
+  it("空集与 {\"en\"} 的任意子集都不抛——这两种是当前允许的唯一状态", () => {
+    expect(() => assertPublishableLocalesFailClosed([], false)).not.toThrow();
+    expect(() => assertPublishableLocalesFailClosed(["en"], false)).not.toThrow();
+  });
+
+  it("CRUD 落地后（articleTemplateCrudLanded=true）守卫让路，不再拦截", () => {
+    expect(() => assertPublishableLocalesFailClosed(["es", "ja", "ko"], true)).not.toThrow();
+  });
+
+  it("错误信息里点名 CPS v6.0.4 事故——这是守卫来历的可追溯性，不是装饰", () => {
+    expect(() => assertPublishableLocalesFailClosed(["fr"], false)).toThrow(/v6\.0\.4/);
   });
 });

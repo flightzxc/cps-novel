@@ -127,6 +127,53 @@ const UPSTREAM_LANGUAGE_REGISTRY: readonly UpstreamLanguageRegistration[] = Obje
  */
 const PUBLISHABLE_LOCALES: readonly SiteLocale[] = Object.freeze([]);
 
+/**
+ * D-7 条件二 fail-closed 守卫（模块加载即断言，不是运行时才发现）。
+ *
+ * 背景：CPS `v6.0.4` 事故——只注册了前台 locale，漏了后台模板枚举，某语种
+ * 页面裸奔上线才被发现。本仓库 D-7 条件二（"后台模板语种枚举已登记"）今天
+ * 对 `en` 之所以不炸，是因为消息目录里内置了 `en` 默认文案——Opus 终审的
+ * 裁定原话是：这份安全**是巧合，不是机制**，`ArticleTemplate` CRUD 一旦落地、
+ * 有人往 `PUBLISHABLE_LOCALES` 里加一个非 `en` 语种，没有任何东西会拦住它，
+ * 直到模板引擎在生产渲染时找不到模板才会现形。
+ *
+ * 这道守卫把"巧合"钉成"机制"：只要模板 CRUD 没落地，`PUBLISHABLE_LOCALES`
+ * 就只能是空集，或者是 `{"en"}` 的子集；越界的化，模块一加载就抛，不允许
+ * 悄悄发布到运行时才炸。
+ */
+export function assertPublishableLocalesFailClosed(
+  locales: readonly SiteLocale[],
+  articleTemplateCrudLanded: boolean,
+): void {
+  if (articleTemplateCrudLanded) {
+    // 条件二已经有真实机制兜底（模板引擎读真实枚举），不再需要这道临时闸。
+    return;
+  }
+  const outOfBounds = locales.filter((locale) => locale !== "en");
+  if (outOfBounds.length > 0) {
+    throw new Error(
+      "D-7 条件二 fail-closed 守卫触发：ARTICLE_TEMPLATE_CRUD_LANDED=false 时，" +
+        `PUBLISHABLE_LOCALES 只能是空集或 {"en"} 的子集，发现越界 locale：` +
+        `${outOfBounds.join(", ")}。ArticleTemplate CRUD 未落地前，任何非 en ` +
+        "语种都不得进入发布白名单——这正是 CPS v6.0.4 事故的形状（只注册前台 " +
+        "locale，漏了后台模板枚举），不要在本仓库重演。",
+    );
+  }
+}
+
+/**
+ * `ArticleTemplate` CRUD 是否已经落地为真实机制（表有数据、且模板引擎在渲染时
+ * 真的读它，不是"表存在于 schema"这种字面意义的落地）。
+ *
+ * 🔴 翻转条件：等 P2-02 模板引擎接线、且某 locale 在 `ArticleTemplate` 里有
+ * 真实枚举记录并被渲染路径实际读取之后，由那次改动的作者把这个常量改成
+ * `true`——同一次改动必须在 PR/commit 描述里说明是哪次改动让 D-7 条件二/三
+ * 成立，不能只改一个布尔值就算数。改的时候只能改这一处，不能在别处另开关。
+ */
+export const ARTICLE_TEMPLATE_CRUD_LANDED = false;
+
+assertPublishableLocalesFailClosed(PUBLISHABLE_LOCALES, ARTICLE_TEMPLATE_CRUD_LANDED);
+
 const CODE_INDEX: ReadonlyMap<string, SiteLocale> = new Map(
   UPSTREAM_LANGUAGE_REGISTRY.flatMap((entry) =>
     entry.codes.map((code) => [String(code), entry.locale] as const),

@@ -35,6 +35,23 @@ src/lib/locale/locale-canonical.ts
 注释的逐条证据）。「登记」与「可发布」是两件事，扩登记表不代表任何 locale
 解锁发布。新增任何 locale 必须先有 Owner 决策，且只能改这一个文件。
 
+### P0-S14（本轮）更新：D-7 条件二 fail-closed 守卫
+
+`locale-canonical.ts` 新增两个导出，**不属于**上面的冻结契约三元组，是给
+`PUBLISHABLE_LOCALES` 自己用的模块加载期断言：
+
+- `ARTICLE_TEMPLATE_CRUD_LANDED`（`boolean`，今天是 `false`）——`ArticleTemplate`
+  CRUD 是否已经是真实机制而不是字面意义的"表存在于 schema"。翻转条件见该
+  常量自己的行内注释。
+- `assertPublishableLocalesFailClosed(locales, articleTemplateCrudLanded)`——
+  只要后者是 `false`，前者的元素就必须 ⊆ `{"en"}`，否则模块一加载就抛。
+
+背景：Opus 终审对 D-7 条件二的裁定是「内置默认 messages 目录让 `en` 实质满足
+条件 2/3，但这份安全是巧合，不是机制」——`ArticleTemplate` CRUD 落地前，没有
+任何东西拦着有人往 `PUBLISHABLE_LOCALES` 里加一个非 `en` 语种。这道守卫把
+巧合钉成机制，正对应 CPS `v6.0.4` 事故的形状（只注册了前台 locale，漏了后台
+模板枚举）。
+
 ## 硬前置
 
 `locale-canonical.ts` 是 P1 的**硬前置 2**：必须在写入任何多语言数据之前建好，早于 P1-05 之后的任何内容写入链路。

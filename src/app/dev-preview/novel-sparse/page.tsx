@@ -1,6 +1,7 @@
 import { NovelDetailScreen } from "@/features/public-ui/novel/NovelDetailScreen";
 import { mockChrome } from "@/features/public-ui/fixtures/mock-chrome";
 import { MOCK_NOVEL_DETAIL_SPARSE } from "@/features/public-ui/fixtures/mock-content";
+import { PUBLIC_SITE_LOCALE } from "@/lib/site/locale-label";
 
 /**
  * MOCK_ONLY 预览：详情页的极端稀疏情况。
@@ -8,5 +9,11 @@ import { MOCK_NOVEL_DETAIL_SPARSE } from "@/features/public-ui/fixtures/mock-con
  * 且不得靠任何虚构元数据补密度。
  */
 export default function SparseNovelDetailPreviewPage() {
-  return <NovelDetailScreen chrome={mockChrome()} novel={MOCK_NOVEL_DETAIL_SPARSE} />;
+  return (
+    <NovelDetailScreen
+      locale={PUBLIC_SITE_LOCALE}
+      chrome={mockChrome(PUBLIC_SITE_LOCALE)}
+      novel={MOCK_NOVEL_DETAIL_SPARSE}
+    />
+  );
 }
