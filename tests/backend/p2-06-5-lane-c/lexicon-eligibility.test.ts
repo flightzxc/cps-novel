@@ -7,7 +7,7 @@ import { describe, expect, it } from "vitest";
 import {
   C1_V3_CONFIGURATION,
   findKeywordMatch,
-  scoreCalibration,
+  scoreCalibration as scoreCalibrationUntyped,
   validateTaxonomy,
   verifyArtifactBundle,
   writeArtifactBundle,
@@ -20,10 +20,132 @@ import {
 } from "../../../scripts/p2-06-5-lane-c/description-only-blind-review.mjs";
 import {
   OVERLAY_SHA256_BY_VERSION,
-  loadLexiconOverride,
+  loadLexiconOverride as loadLexiconOverrideUntyped,
   normalizeSeed,
 } from "../../../scripts/p2-06-5-lane-c/lexicon-eligibility.mjs";
-import { buildLexicon, verifyOwnerFinalC1 } from "../../../scripts/p2-06-5-lane-c/owner-final-c1.mjs";
+import { buildLexicon as buildLexiconUntyped, verifyOwnerFinalC1 } from "../../../scripts/p2-06-5-lane-c/owner-final-c1.mjs";
+
+/**
+ * `scripts/p2-06-5-lane-c/*.mjs` are untyped offline calibration tooling
+ * (Codex territory). `tsc` infers each export's signature purely from its
+ * own function body, with two gaps that surface only here, at the TS call
+ * site:
+ *
+ *  - `buildLexicon(canonical, overlay = null)` and the `lexiconOverride`
+ *    field of `scoreCalibration`'s options both use an unannotated
+ *    `= null` default with no other constraint, so tsc widens the
+ *    parameter to exactly `null | undefined` — rejecting every real
+ *    (non-null) argument this file passes them (TS2345 / TS2322).
+ *  - `buildLexicon`'s `audit` object gains `restricted_seed_count` /
+ *    `restricted` / `lexicon_override_version` only via a property
+ *    assignment *after* the literal's declaration (`audit.restricted_seed_count
+ *    = …`), reached whenever `overlay` is truthy — which is every call in
+ *    this file. tsc's inferred return type only reflects the literal's
+ *    initial keys, so it drops those three (TS2339).
+ *  - Because `buildLexicon`'s untyped `canonical` parameter has no
+ *    annotation, tsc types it (and everything derived from it, including
+ *    `taxonomy.canonicalTags` and each tag's `keywords`) as `any`; the same
+ *    happens to `loadLexiconOverride`'s `overlay.rules`. Arrow-function
+ *    parameters passed to `.find`/`.filter`/`.map`/`.some` on those `any`
+ *    arrays get no contextual type, so tsc reports them as implicitly `any`
+ *    (TS7006) even though they are real, well-shaped rows at runtime.
+ *
+ * All of this is an inference gap in consuming untyped JS from TS, not a
+ * defect in the calibration code. The interfaces and `as unknown as …`
+ * casts below describe the real shapes — read directly off
+ * `owner-final-c1.mjs` (`buildLexicon`), `lexicon-eligibility.mjs`
+ * (`loadLexiconOverride`/`validateLexiconOverride`), and `calibration.mjs`
+ * (`scoreCalibration`) — so this file's own callbacks stop widening to
+ * `any`. They change no runtime behavior: `buildLexicon`, `loadLexiconOverride`,
+ * and `scoreCalibration` below are the same functions, just re-exposed
+ * under their original names with an accurate static type.
+ */
+interface OverlayRule {
+  grade: string | null;
+  canonicalTagId: string;
+  normalizedSeed: string;
+  enabled: boolean;
+  allowedFields: string[] | null;
+  blockedDescriptionNamedScopes: string[];
+  reason: string;
+  changeReason: string;
+}
+
+interface LexiconOverlay {
+  version: string;
+  namedScopeLabels: Record<string, string>;
+  rules: OverlayRule[];
+  byKey: Map<string, OverlayRule>;
+}
+
+interface LexiconKeyword {
+  keywordId: string;
+  value: string;
+  scriptBuckets: string[];
+  matchMode: string;
+  sourceLanguageCodes: string[];
+  riskFlags: string[];
+  // Only set on the keyword object when the overlay rule supplies a
+  // restriction; absent (not null) otherwise — see `buildLexicon`.
+  allowedFields?: string[];
+  blockedDescriptionNamedScopes?: string[];
+}
+
+interface LexiconCanonicalTag {
+  canonicalTagId: string;
+  slug: string;
+  definition: string;
+  textSelectionPriority: number;
+  keywordCoverageStatus: string;
+  keywords: LexiconKeyword[];
+}
+
+interface LexiconAudit {
+  source: string;
+  normalization_for_collision_audit_only: string;
+  active_keyword_count: number;
+  coverage_insufficient_tag_count: number;
+  disabled_seed_count: number;
+  disabled: any[];
+  tie_break: string;
+  // Only present when `buildLexicon` receives a non-null overlay — true for
+  // every call in this file. See the block comment above.
+  restricted_seed_count?: number;
+  restricted?: any[];
+  lexicon_override_version?: string;
+}
+
+interface BuiltLexicon {
+  taxonomy: {
+    taxonomyVersion: string;
+    keywordLexiconVersion: string;
+    canonicalTags: LexiconCanonicalTag[];
+  };
+  audit: LexiconAudit;
+}
+
+const loadLexiconOverride = loadLexiconOverrideUntyped as unknown as (
+  path: string,
+) => Promise<{ overlay: LexiconOverlay; sha256: string; path: string }>;
+
+const buildLexicon = buildLexiconUntyped as unknown as (
+  canonical: unknown,
+  overlay: LexiconOverlay | null,
+) => BuiltLexicon;
+
+type ScoreCalibrationResult = ReturnType<typeof scoreCalibrationUntyped>;
+const scoreCalibration = scoreCalibrationUntyped as unknown as (input: {
+  samples: unknown;
+  taxonomy: unknown;
+  sourceMapping?: unknown;
+  previewCorpus?: unknown;
+  configurations?: unknown;
+  maxTextTags?: unknown;
+  runId?: string;
+  generatedAt?: string;
+  mode?: string;
+  lexiconOverride?: { version: string; sha256: string } | null;
+}) => ScoreCalibrationResult;
 
 const root = resolve(import.meta.dirname, "../../..");
 const canonicalPath = resolve(root, "docs/p2/p2-06-5-lane-a/canonical-tag-v1-final/2026-08-16/canonical-tag-v1.0.0-final.json");
