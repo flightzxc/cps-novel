@@ -16,14 +16,14 @@ src/lib/locale/locale-canonical.ts
 
 ## 当前状态
 
-`locale-canonical.ts` 已落地（P1-13），导出冻结契约的三个 API。**两张数据表刻意为空**：
+`locale-canonical.ts` 已落地（P1-13），导出冻结契约的三个 API。
 
-| 表 | 状态 | 解除条件 |
+| 表 | 状态 | 说明 |
 | --- | --- | --- |
-| 上游语种登记表 | 空 | 上游 `language` 数值码的枚举来自接口探测证据（`P0_BROWSER_INTERFACE_PROBE.md` / `P0_SECOND_BROWSER_PROBE.md`），这两份证据不在本仓库内；`§U-3` 另记有「法语数值枚举未安全取得」。没有证据就登记数值码，等于凭空发明上游契约 |
+| 上游语种登记表 | **部分填充（2 项，P0-S15）** | 依据《C2 真上游只读诊断报告 2026-08-26》真实 `getlistpc` 20 条样本登记了 `3 → en`、`7 → ru`（详见下方「P0-S15 更新」）。这只是样本覆盖到的子集，不是完整上游枚举——未登记的数值码依旧落 `unknown` |
 | 发布白名单 | 空 | **D-7 仍是 OPEN**。且冻结准入条件是五项齐备：messages 无 fallback · 后台模板语种枚举已登记 · 模板已跑通真实渲染 · SEO 元数据齐全 · sitemap 分片已验证。P1 一项都不具备，所以连 `en` 也不进 |
 
-因此今天 `resolveSiteLocale` 对任何输入都返回 `unknown`，`isPublishableLocale` 恒为 `false`，`listPublishableLocales()` 恒为 `[]`——这正是契约要求的 fail-closed 状态，不是未完成的占位。证据与 D-7 落地后，**只需要改这一个文件**。
+因此今天 `resolveSiteLocale(3)` / `resolveSiteLocale(7)`（及其字符串写法）能解出 `en` / `ru`，其余数值码依旧返回 `unknown`；`isPublishableLocale` 仍恒为 `false`，`listPublishableLocales()` 仍恒为 `[]`——登记表从空到有 2 项不改变发布白名单独立 fail-closed 的事实，「映射成功」与「可发布」始终是两道独立的闸。证据继续到手后，唯一要改的还是这一个文件。
 
 ### P0-S7a（2026-08-20）更新
 
@@ -51,6 +51,25 @@ src/lib/locale/locale-canonical.ts
 任何东西拦着有人往 `PUBLISHABLE_LOCALES` 里加一个非 `en` 语种。这道守卫把
 巧合钉成机制，正对应 CPS `v6.0.4` 事故的形状（只注册了前台 locale，漏了后台
 模板枚举）。
+
+### P0-S15（2026-08-26）更新：上游登记表首次填充
+
+依据《C2 真上游只读诊断报告 2026-08-26》（执行基线 `d103cf2`，真实 `getlistpc`
+接口 20 条样本）：`$.data.list[*].language` 20 条全为 number，标量集合
+`{3, 7}`；`$.data.list[*].languageName` 20 条全为 string，集合
+`{英语, 俄语}`；`$.data.currentLanguage` 为 number `{3}`。`language` 与
+`languageName` 逐条成对出现，且与已归档 Lane B 证据一致：`3 → 英语 → en`，
+`7 → 俄语 → ru`。`UPSTREAM_LANGUAGE_REGISTRY` 首次从空表填入这两条登记，每条
+都带来源引用（见 `locale-canonical.ts` 内联注释）。
+
+🔴 **这只是本页 20 条样本覆盖到的子集，不代表上游完整语种枚举。** 未登记的
+数值码——即便看起来"像"某个语种——依旧返回 `unknown`，fail-closed 语义不变。
+扩表规则不变：新增登记必须附带真实上游成对证据，禁止推测补齐。
+
+**这不影响发布白名单。** `PUBLISHABLE_LOCALES` 依旧是独立冻结的空集
+（`Object.freeze([])`），P0-S14 的 D-7 条件二 fail-closed 守卫也未改动——
+「上游码映射得到 locale」与「该 locale 可以发布」永远是两道独立的闸，登记表
+从空到有 2 项不会让任何 locale 绕过白名单。
 
 ## 硬前置
 

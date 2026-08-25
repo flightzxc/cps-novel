@@ -13,6 +13,12 @@
  * 🔴 **全项目唯一的语种映射实现。** 任何其他位置出现第二份语种映射硬编码都是违规：
  * CPS 因映射散落四处，付过两次全库 normalize 的代价。
  *
+ * P0-S15（2026-08-26）：上游登记表首次填充，依据《C2 真上游只读诊断报告
+ * 2026-08-26》的真实成对证据登记了 `3 → en`、`7 → ru`（逐条来源见下方
+ * `UPSTREAM_LANGUAGE_REGISTRY` 的内联注释）。**这只是 20 条样本覆盖到的子集，
+ * 不是完整上游枚举**——未登记的数值码依旧落 `unknown`，fail-closed 语义不变，
+ * 发布白名单依旧独立为空（登记 ≠ 可发布）。
+ *
  * ## 三条不可协商的语义
  *
  * 1. **映射不到就是 `unknown`**——不猜测、不做区域回退、不拿上游原值当 locale。
@@ -76,14 +82,20 @@ export const SITE_LOCALES: readonly SiteLocale[] = Object.freeze([
 /**
  * 上游语种登记表：一个站点 locale ← 一组上游取值。
  *
- * 🔴 **当前为空，这是有意的，不是漏写。** 上游 `language` 是数值码，其枚举来自
- * 接口探测证据（`P0_BROWSER_INTERFACE_PROBE.md` / `P0_SECOND_BROWSER_PROBE.md`），
- * 而这两份证据不在本仓库内；`novel-v1-adapter-and-workflow` §U-3 还明确记着
- * 「法语的 `language` 数值枚举未安全取得」。没有证据就登记数值码，等于凭空发明
- * 上游契约——正是契约里点名禁止的那种猜测。
+ * P0-S15（2026-08-26）：**已按真实上游证据填入子集，不再是空表。** 来源是
+ * 《C2 真上游只读诊断报告 2026-08-26》（执行基线 `d103cf2`，真实 `getlistpc`
+ * 接口 20 条样本）：`$.data.list[*].language` 20 条全为 number，标量集合
+ * `{3, 7}`；`$.data.list[*].languageName` 20 条全为 string，集合
+ * `{英语, 俄语}`；`$.data.currentLanguage` 为 number `{3}`。`language` 与
+ * `languageName` 逐条成对出现，且与已归档 Lane B 证据一致：`3 → 英语 → en`，
+ * `7 → 俄语 → ru`。下面两条登记就是这份证据的直接转录，不做任何推断。
  *
- * 于是今天 `resolveSiteLocale` 对任何输入都返回 `unknown`，链路 fail-closed：
- * SourceItem 可建、Novel 不建、进人工队列。证据到手后，唯一要改的就是这张表。
+ * 🔴 **这只是本页 20 条样本覆盖到的子集，不代表上游完整语种枚举。** 未在这份
+ * /未来同等真实证据里出现过成对样本的数值码，`resolveSiteLocale` 依旧落
+ * `unknown`——哪怕直觉上"像"某个语种也不得推测补齐。扩表规则不变：新增登记
+ * 必须附带真实上游成对证据（数值码 + `languageName` + 二者同条目出现的原始
+ * 样本引用），没有证据就是凭空发明上游契约——正是本文件开头「三条不可协商
+ * 的语义」第 3 条点名禁止的那种猜测。
  */
 type UpstreamLanguageRegistration = {
   readonly locale: SiteLocale;
@@ -93,7 +105,23 @@ type UpstreamLanguageRegistration = {
   readonly names: readonly string[];
 };
 
-const UPSTREAM_LANGUAGE_REGISTRY: readonly UpstreamLanguageRegistration[] = Object.freeze([]);
+const UPSTREAM_LANGUAGE_REGISTRY: readonly UpstreamLanguageRegistration[] = Object.freeze([
+  {
+    locale: "en",
+    // 证据：《C2 真上游只读诊断报告 2026-08-26》真实 getlistpc 20 条样本
+    // （基线 d103cf2）—— language=3 与 languageName="英语" 逐条成对出现，
+    // currentLanguage 同样为 3；与已归档 Lane B 成对证据一致。
+    codes: [3],
+    names: ["英语"],
+  },
+  {
+    locale: "ru",
+    // 证据同上——language=7 与 languageName="俄语" 逐条成对出现，
+    // 与已归档 Lane B 成对证据一致。
+    codes: [7],
+    names: ["俄语"],
+  },
+]);
 
 /**
  * 发布白名单。
