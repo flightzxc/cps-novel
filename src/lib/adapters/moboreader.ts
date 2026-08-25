@@ -65,6 +65,19 @@ export interface MoboreaderBook {
   seriesTypeList: readonly string[];
   recommendList: readonly string[];
   labelSnapshotComplete: boolean;
+  /**
+   * Sensitive promo material captured from the original catalog row before
+   * `toApprovedRawEvidence` redacts it. This object is an in-memory handoff
+   * to the catalog transaction only; it must never enter task results,
+   * audits, logs, or `NovelSourceItem.rawPayload`.
+   *
+   * `onlineUrl` is deliberately absent: C2 observed 20/20 null values and
+   * did not establish that it is an application URL.
+   */
+  existingPromo: Readonly<{
+    upstreamCode: string | null;
+    webUrl: string | null;
+  }>;
   rawEvidence: RawEvidence;
 }
 
@@ -224,7 +237,7 @@ function labelValues(value: unknown): ParsedLabelValues {
 
 const REDACTED_EVIDENCE_KEYS = new Set([
   "token", "authorization", "jwt", "secret", "chaptercontent", "koccode",
-  "publicurl", "homelink", "onlineurl", "promourl", "promocode",
+  "publicurl", "homelink", "onlineurl", "promourl", "promocode", "promotionaltext",
 ]);
 
 /**
@@ -265,6 +278,25 @@ export function toApprovedRawEvidence(value: unknown): RawEvidence {
 function responseData(value: unknown): Record<string, unknown> {
   const envelope = record(value);
   return record(envelope.data);
+}
+
+function nonBlankPromoString(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const normalized = value.trim();
+  return normalized ? normalized : null;
+}
+
+/**
+ * Extracts the proven catalog promo fields before the raw-evidence redaction
+ * boundary. Values remain confidential and are returned only on the typed
+ * in-memory adapter result. `publicUrl` wins over `homeLink`; both are
+ * production-observed web URLs. `onlineUrl` is not assigned semantics.
+ */
+function existingPromoFromCatalogRow(row: Record<string, unknown>): MoboreaderBook["existingPromo"] {
+  return Object.freeze({
+    upstreamCode: nonBlankPromoString(row.kocCode),
+    webUrl: nonBlankPromoString(row.publicUrl) ?? nonBlankPromoString(row.homeLink),
+  });
 }
 
 /**
@@ -331,6 +363,7 @@ export function parseListBooksResponse(value: unknown): ListBooksResponse {
       seriesTypeList: seriesTypeList.values,
       recommendList: recommendList.values,
       labelSnapshotComplete: agencyIdentityComplete && seriesTypeList.complete && recommendList.complete,
+      existingPromo: existingPromoFromCatalogRow(row),
       rawEvidence: toApprovedRawEvidence(row),
     };
   });

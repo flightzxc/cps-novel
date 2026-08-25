@@ -8,7 +8,9 @@ import {
   type MoboreaderReadAdapter,
 } from "@/lib/adapters";
 import { materializeChangduPreview } from "@/lib/preview";
+import { resolveSiteLocale } from "@/lib/locale/locale-canonical";
 import {
+  buildPromoLinkIdempotencyKey,
   buildWorkerAllowlist,
   createMoboreaderCatalogScanTask,
   createMoboreaderPreviewRefreshTask,
@@ -62,6 +64,7 @@ function page(
       seriesTypeList: ["raw-series-type"],
       recommendList: ["raw-recommend"],
       labelSnapshotComplete: true,
+      existingPromo: { upstreamCode: null, webUrl: null },
       rawEvidence: {
         id: bookId,
         agencyId: "agency-1",
@@ -210,7 +213,12 @@ async function consumePreview(readAdapter = adapter(), env: NodeJS.ProcessEnv = 
   });
 }
 
-async function seedLinkedSource(bookId: string, businessId: string) {
+async function seedLinkedSource(
+  bookId: string,
+  businessId: string,
+  language = "2",
+  languageName = "English",
+) {
   const novel = await owner.novel.create({
     data: { businessId, title: `Novel ${bookId}`, description: "Description", locale: "en-US", slug: businessId },
   });
@@ -219,8 +227,8 @@ async function seedLinkedSource(bookId: string, businessId: string) {
       channelAppId: ids.channelApp,
       novelId: novel.id,
       externalBookId: bookId,
-      sourceLanguageCode: "2",
-      sourceLanguageName: "English",
+      sourceLanguageCode: language,
+      sourceLanguageName: languageName,
       title: `Old ${bookId}`,
       description: "Old",
       totalChapterCount: 1,
@@ -311,6 +319,129 @@ describe.skipIf(!enabled).sequential("P2-05 PostgreSQL 16.14 write paths", () =>
     expect(rerun).toMatchObject({ status: "duplicate", taskId: duplicate.taskId });
     expect(await owner.novelSourceItem.count()).toBe(1);
     expect(await owner.sourceLabel.count()).toBe(4);
+  });
+
+  it("writes sourceLocale and captures a linked source promo before rawPayload redaction", async () => {
+    const linked = await seedLinkedSource("promo-book", "promo-book-business", "3", "英语");
+    await owner.article.create({
+      data: {
+        novelId: linked.novel.id,
+        locale: "en-US",
+        slug: "promo-book-article",
+        publicPageShortId: "promoarticle1",
+        title: "Promo article",
+        body: "Body",
+      },
+    });
+    const secretCode = "UPSTREAM-SECRET-CODE";
+    const secretUrl = "https://promo.example/secret-path";
+    const response = page("promo-book", {
+      language: "3",
+      languageName: "英语",
+      existingPromo: { upstreamCode: secretCode, webUrl: secretUrl },
+      rawEvidence: {
+        id: "promo-book",
+        agencyId: "agency-1",
+        seriesId: "series-promo-book",
+        projectType: 1,
+        language: "3",
+        kocCode: "[redacted]",
+        publicUrl: "[redacted]",
+        promotionalText: "[redacted]",
+        __boundary: "approved_raw_evidence",
+      },
+    });
+    const created = await enqueue("apply");
+    expect(await consume({ ...adapter(), listBooks: async () => response })).toBe(true);
+
+    const source = await owner.novelSourceItem.findUniqueOrThrow({ where: { id: linked.source.id } });
+    expect(source.sourceLocale).toBe(resolveSiteLocale("3", "英语"));
+    expect(JSON.stringify(source.rawPayload)).not.toContain(secretCode);
+    expect(JSON.stringify(source.rawPayload)).not.toContain(secretUrl);
+    expect(source.rawPayload).toMatchObject({
+      kocCode: "[redacted]",
+      publicUrl: "[redacted]",
+      promotionalText: "[redacted]",
+    });
+
+    const promoLink = await owner.promoLink.findUniqueOrThrow({
+      where: {
+        idempotencyKey: buildPromoLinkIdempotencyKey({
+          channelAppId: ids.channelApp,
+          novelSourceItemId: linked.source.id,
+          channelAccountId: ids.account,
+          offerType: "read",
+        }),
+      },
+    });
+    expect(promoLink).toMatchObject({
+      novelId: linked.novel.id,
+      novelSourceItemId: linked.source.id,
+      channelAccountId: ids.account,
+      offerType: "read",
+      origin: "upstream_existing",
+      upstreamCode: secretCode,
+      webUrl: secretUrl,
+      appUrl: null,
+      status: "fetched",
+    });
+    expect(promoLink.publicRedirectCode).toMatch(/^[a-z0-9]{10}$/);
+    expect((await owner.article.findUniqueOrThrow({ where: { novelId_locale: { novelId: linked.novel.id, locale: "en-US" } } })).promoLinkId)
+      .toBe(promoLink.id);
+    const item = await owner.catalogScanTaskItem.findFirstOrThrow({ where: { taskId: created.taskId } });
+    expect(item.result).toMatchObject({ promoCapture: { fetched: 1, deferredUntilLinked: 0, incomplete: 0, articlesBound: 1 } });
+    const publicEvidence = JSON.stringify({
+      item: item.result,
+      audits: await owner.operationAudit.findMany({
+        where: { taskId: created.taskId },
+        select: { action: true, reason: true, beforeSnapshot: true, afterSnapshot: true },
+      }),
+    });
+    expect(publicEvidence).not.toContain(secretCode);
+    expect(publicEvidence).not.toContain(secretUrl);
+
+    const updatedCode = "UPDATED-UPSTREAM-SECRET";
+    const updatedUrl = "https://promo.example/updated-secret-path";
+    await enqueue("apply");
+    expect(await consume({
+      ...adapter(),
+      listBooks: async () => page("promo-book", {
+        language: "3",
+        languageName: "英语",
+        existingPromo: { upstreamCode: updatedCode, webUrl: updatedUrl },
+      }),
+    })).toBe(true);
+    const refreshed = await owner.promoLink.findUniqueOrThrow({ where: { id: promoLink.id } });
+    expect(await owner.promoLink.count()).toBe(1);
+    expect(refreshed.publicRedirectCode).toBe(promoLink.publicRedirectCode);
+    expect(refreshed).toMatchObject({ upstreamCode: updatedCode, webUrl: updatedUrl, status: "fetched" });
+  });
+
+  it("defers promo capture for an unlinked source without staging secrets in rawPayload", async () => {
+    const secretCode = "UNLINKED-SECRET-CODE";
+    const created = await enqueue("apply");
+    expect(await consume({
+      ...adapter(),
+      listBooks: async () => page("unlinked-promo", {
+        existingPromo: { upstreamCode: secretCode, webUrl: "https://promo.example/unlinked" },
+        rawEvidence: {
+          id: "unlinked-promo",
+          agencyId: "agency-1",
+          seriesId: "series-unlinked-promo",
+          projectType: 1,
+          language: "2",
+          kocCode: "[redacted]",
+          publicUrl: "[redacted]",
+          promotionalText: "[redacted]",
+          __boundary: "approved_raw_evidence",
+        },
+      }),
+    })).toBe(true);
+    expect(await owner.promoLink.count()).toBe(0);
+    const source = await owner.novelSourceItem.findFirstOrThrow({ where: { externalBookId: "unlinked-promo" } });
+    expect(JSON.stringify(source.rawPayload)).not.toContain(secretCode);
+    const item = await owner.catalogScanTaskItem.findFirstOrThrow({ where: { taskId: created.taskId } });
+    expect(item.result).toMatchObject({ promoCapture: { fetched: 0, deferredUntilLinked: 1 } });
   });
 
   it("preserves four raw identities and updates only real language and agency display names", async () => {

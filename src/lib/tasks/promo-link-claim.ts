@@ -40,6 +40,30 @@ export interface PromoLinkClaimScopeItem {
   offerType: string;
 }
 
+/**
+ * The only currently evidenced offer for a catalog-provided reading link.
+ * Keep this next to the idempotency formula so catalog sync and the frozen
+ * claim task cannot silently mint different PromoLink identities.
+ */
+export const UPSTREAM_EXISTING_PROMO_OFFER_TYPE = "read" as const;
+
+/**
+ * Stable PromoLink identity shared by sync-time extraction and the claim
+ * task. `novelSourceItemId` represents the source identity triple already
+ * protected by `novel_source_identity_key`; account and offer keep distinct
+ * channel assets separate.
+ */
+export function buildPromoLinkIdempotencyKey(input: {
+  channelAppId: string;
+  novelSourceItemId: string;
+  channelAccountId: string;
+  offerType: string;
+}): string {
+  return createHash("sha256")
+    .update(`promo_link\n${input.channelAppId}\n${input.novelSourceItemId}\n${input.channelAccountId}\n${input.offerType}`, "utf8")
+    .digest("hex");
+}
+
 export interface CreatePromoLinkClaimTaskInput {
   channelAccountId: string;
   channelAppId: string;

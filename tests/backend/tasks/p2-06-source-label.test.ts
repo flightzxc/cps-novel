@@ -29,6 +29,7 @@ function book(overrides: Partial<MoboreaderBook> = {}): MoboreaderBook {
     seriesTypeList: ["  series/type  "],
     recommendList: ["recommend/特别"],
     labelSnapshotComplete: true,
+    existingPromo: { upstreamCode: null, webUrl: null },
     rawEvidence: { __boundary: "approved_raw_evidence" },
     ...overrides,
   };

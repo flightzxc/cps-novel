@@ -183,7 +183,7 @@ GRANT SELECT ON TABLE channel, source_app, channel_app, channel_capability,
   novel, novel_source_item, novel_chapter, novel_chapter_source_item,
   novel_chapter_content, novel_preview_policy, source_label,
   novel_source_item_label, catalog_scan_task, catalog_scan_task_item,
-  channel_sync_task, channel_sync_task_item TO worker_app;
+  channel_sync_task, channel_sync_task_item, promo_link, article TO worker_app;
 
 -- Scheduler only creates scheduling and GenericTask metadata. It never reads Credential/Auth secrets.
 GRANT SELECT, INSERT, UPDATE ON TABLE schedule_run, cron_run, generic_task, generic_task_item TO scheduler_app;

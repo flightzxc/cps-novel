@@ -33,6 +33,7 @@ function listPayload() {
         source_label: { future: "preserve-me" },
         kocCode: "must-not-leak",
         publicUrl: "https://promo.example/secret",
+        promotionalText: "Share with code must-not-leak",
       }],
     },
   };
@@ -106,10 +107,27 @@ describe("MoboReader read adapter", () => {
       seriesTypeList: ["fantasy"],
       recommendList: ["featured"],
       labelSnapshotComplete: true,
+      existingPromo: {
+        upstreamCode: "must-not-leak",
+        webUrl: "https://promo.example/secret",
+      },
     });
     expect(parsed.items[0].rawEvidence.source_label).toEqual({ future: "preserve-me" });
     expect(parsed.items[0].rawEvidence.kocCode).toBe(REDACTED_EVIDENCE_SENTINEL);
     expect(parsed.items[0].rawEvidence.publicUrl).toBe(REDACTED_EVIDENCE_SENTINEL);
+    expect(parsed.items[0].rawEvidence.promotionalText).toBe(REDACTED_EVIDENCE_SENTINEL);
+    expect(JSON.stringify(parsed.items[0].rawEvidence)).not.toContain("must-not-leak");
+  });
+
+  it("uses publicUrl then homeLink for the in-memory promo handoff and assigns no onlineUrl semantics", () => {
+    const payload = listPayload() as unknown as { data: { list: Array<Record<string, unknown>>; totalCount: number } };
+    payload.data.list[0].publicUrl = "";
+    payload.data.list[0].homeLink = "https://promo.example/home";
+    payload.data.list[0].onlineUrl = "app://unproven";
+    expect(parseListBooksResponse(payload).items[0].existingPromo).toEqual({
+      upstreamCode: "must-not-leak",
+      webUrl: "https://promo.example/home",
+    });
   });
 
   it("preserves all four source label identities without trimming or mapping", () => {

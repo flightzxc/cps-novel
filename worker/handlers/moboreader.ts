@@ -20,7 +20,14 @@ import {
 } from "../../src/lib/tasks/moboreader";
 import { materializeChangduPreview } from "../../src/lib/preview";
 import { createHandlerRegistry, type TaskHandler } from "../../src/lib/tasks";
+import {
+  buildPromoLinkIdempotencyKey,
+  UPSTREAM_EXISTING_PROMO_OFFER_TYPE,
+} from "../../src/lib/tasks/promo-link-claim";
+import { resolveSiteLocale } from "../../src/lib/locale/locale-canonical";
+import { createPublicRedirectCode } from "../../src/lib/redirect";
 import { decryptCredentialSecretForWorker } from "../credentials/crypto";
+import { bindPromoLinkToArticles } from "./promo-link-binding";
 
 export interface MoboreaderCatalogPayload {
   pageIndex: number;
@@ -366,6 +373,77 @@ async function persistLabels(
   return { droppedLabels: plan.droppedLabels, incompleteLabelSnapshot: false };
 }
 
+interface CatalogPromoSummary {
+  fetched: number;
+  deferredUntilLinked: number;
+  incomplete: number;
+  articlesBound: number;
+  articlesConflicted: number;
+}
+
+function catalogPromoSummaryJson(summary: CatalogPromoSummary): Prisma.InputJsonObject {
+  return summary as unknown as Prisma.InputJsonObject;
+}
+
+async function persistExistingCatalogPromo(
+  tx: Prisma.TransactionClient,
+  input: {
+    source: { id: string; novelId: string | null; status: string };
+    book: MoboreaderBook;
+    channelAppId: string;
+    channelAccountId: string;
+    now: Date;
+  },
+): Promise<"absent" | "incomplete" | "deferred" | { articlesBound: number; articlesConflicted: number }> {
+  const { upstreamCode, webUrl } = input.book.existingPromo;
+  if (!upstreamCode && !webUrl) return "absent";
+  if (!upstreamCode || !webUrl) return "incomplete";
+  // PromoLink's schema requires a Novel FK. Secrets must not be staged in
+  // rawPayload while a source is still unlinked, so the safe outcome is to
+  // defer until a post-link catalog refresh can write the real destination.
+  if (!input.source.novelId || input.source.status !== "linked") return "deferred";
+
+  const idempotencyKey = buildPromoLinkIdempotencyKey({
+    channelAppId: input.channelAppId,
+    novelSourceItemId: input.source.id,
+    channelAccountId: input.channelAccountId,
+    offerType: UPSTREAM_EXISTING_PROMO_OFFER_TYPE,
+  });
+  const promoLink = await tx.promoLink.upsert({
+    where: { idempotencyKey },
+    create: {
+      novelId: input.source.novelId,
+      novelSourceItemId: input.source.id,
+      channelAppId: input.channelAppId,
+      channelAccountId: input.channelAccountId,
+      offerType: UPSTREAM_EXISTING_PROMO_OFFER_TYPE,
+      origin: "upstream_existing",
+      upstreamCode,
+      publicRedirectCode: createPublicRedirectCode(),
+      webUrl,
+      idempotencyKey,
+      status: "fetched",
+      fetchedAt: input.now,
+    },
+    // Preserve origin/appUrl on an existing row: a previously claimed row
+    // remains claimed, and C2 did not prove `onlineUrl` is an app URL.
+    update: {
+      upstreamCode,
+      webUrl,
+      status: "fetched",
+      errorKind: null,
+      errorMessage: null,
+      fetchedAt: input.now,
+    },
+    select: { id: true },
+  });
+  const binding = await bindPromoLinkToArticles(tx, input.source.novelId, promoLink.id);
+  return {
+    articlesBound: binding.boundArticleIds.length,
+    articlesConflicted: binding.conflictedArticleIds.length,
+  };
+}
+
 async function persistCatalogPage(
   tx: Prisma.TransactionClient,
   input: {
@@ -374,6 +452,7 @@ async function persistCatalogPage(
     taskId: string;
     itemId: string;
     channelAppId: string;
+    channelAccountId: string;
     env: NodeJS.ProcessEnv;
     now: Date;
   },
@@ -386,8 +465,16 @@ async function persistCatalogPage(
   const now = input.now;
   const sourceItemIds: string[] = [];
   const droppedLabels: DroppedLabelsSummary[] = [];
+  const promoSummary: CatalogPromoSummary = {
+    fetched: 0,
+    deferredUntilLinked: 0,
+    incomplete: 0,
+    articlesBound: 0,
+    articlesConflicted: 0,
+  };
   let pageIncompleteLabelSnapshots = 0;
   for (const book of input.response.items) {
+    const sourceLocale = resolveSiteLocale(book.language, book.languageName ?? undefined);
     const source = await tx.novelSourceItem.upsert({
       where: {
         channelAppId_externalBookId_sourceLanguageCode: {
@@ -401,6 +488,7 @@ async function persistCatalogPage(
         externalBookId: book.externalBookId,
         sourceLanguageCode: book.language,
         sourceLanguageName: book.languageName,
+        sourceLocale,
         title: book.title,
         description: book.description ?? "",
         coverUrl: book.coverUrl,
@@ -415,6 +503,7 @@ async function persistCatalogPage(
       },
       update: {
         sourceLanguageName: book.languageName ?? undefined,
+        sourceLocale,
         title: book.title,
         description: book.description ?? undefined,
         coverUrl: book.coverUrl ?? undefined,
@@ -430,6 +519,20 @@ async function persistCatalogPage(
       },
     });
     sourceItemIds.push(source.id);
+    const promoResult = await persistExistingCatalogPromo(tx, {
+      source,
+      book,
+      channelAppId: input.channelAppId,
+      channelAccountId: input.channelAccountId,
+      now,
+    });
+    if (promoResult === "incomplete") promoSummary.incomplete += 1;
+    else if (promoResult === "deferred") promoSummary.deferredUntilLinked += 1;
+    else if (promoResult !== "absent") {
+      promoSummary.fetched += 1;
+      promoSummary.articlesBound += promoResult.articlesBound;
+      promoSummary.articlesConflicted += promoResult.articlesConflicted;
+    }
     const labelResult = await persistLabels(tx, input.channelAppId, source.id, book, now);
     droppedLabels.push(labelResult.droppedLabels);
     if (labelResult.incompleteLabelSnapshot) pageIncompleteLabelSnapshots += 1;
@@ -474,6 +577,7 @@ async function persistCatalogPage(
         stopReason,
         droppedLabels: droppedLabelsJson(pageDroppedLabels),
         incompleteLabelSnapshots: pageIncompleteLabelSnapshots,
+        promoCapture: catalogPromoSummaryJson(promoSummary),
       },
     },
   });
@@ -582,6 +686,7 @@ async function persistCatalogPage(
         stopReason,
         droppedLabels: droppedLabelsJson(pageDroppedLabels),
         incompleteLabelSnapshots: pageIncompleteLabelSnapshots,
+        promoCapture: catalogPromoSummaryJson(promoSummary),
       },
     },
   });
@@ -884,6 +989,7 @@ export function createMoboreaderCatalogHandler(
         taskId: lease.taskId,
         itemId: lease.itemId,
         channelAppId: scope.channelAppId,
+        channelAccountId: scope.channelAccountId,
         env,
         now: now(),
       }),

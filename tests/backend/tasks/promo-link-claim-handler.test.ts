@@ -296,7 +296,7 @@ describe("P0-S5 promo-link claim handler — §3.9 already-existing promo (alway
     expect(JSON.stringify(audit)).toContain("[redacted_code:length=12]");
   });
 
-  it("is idempotent: a second run against an already-fetched PromoLink is a zero-write skip", async () => {
+  it("reconciles an already-fetched PromoLink and remains zero-write when no Article needs binding", async () => {
     const db = seedFoundation(new FakePromoLinkClaimHandlerDb(), { rawPayload: { kocCode: "REALCODE-XYZ", publicUrl: "https://eng.moboreader.com/promo/abc" } });
     const handler = createPromoLinkClaimHandler(db.asPrismaClient(), { env: APPLY_ENV });
     const lease = { ...baseLease(), payload: makePayload() };
@@ -304,8 +304,29 @@ describe("P0-S5 promo-link claim handler — §3.9 already-existing promo (alway
     await db.runProtectedWrite((first as { protectedWrite: (tx: unknown) => Promise<void> }).protectedWrite as never);
 
     const second = await handler({ lease, mode: "apply", signal: new AbortController().signal, heartbeat: async () => true });
-    expect(second).toMatchObject({ status: "skipped", result: { decision: "already_fetched" } });
-    expect("protectedWrite" in second).toBe(false);
+    expect(second).toMatchObject({ status: "success", result: { decision: "already_fetched" } });
+    db.calls.length = 0;
+    await db.runProtectedWrite((second as { protectedWrite: (tx: unknown) => Promise<void> }).protectedWrite as never);
+    expect(db.calls.filter((call) => call === "article.update")).toHaveLength(0);
+    expect(db.audits.filter((entry) => entry.action === "promo_link_claim.already_fetched_binding_reconciled")).toHaveLength(0);
+  });
+
+  it("binds an Article created after the PromoLink had already reached fetched", async () => {
+    const db = seedFoundation(new FakePromoLinkClaimHandlerDb(), { rawPayload: { kocCode: "REALCODE-XYZ", publicUrl: "https://eng.moboreader.com/promo/abc" } });
+    const handler = createPromoLinkClaimHandler(db.asPrismaClient(), { env: APPLY_ENV });
+    const lease = { ...baseLease(), payload: makePayload() };
+    const first = await handler({ lease, mode: "apply", signal: new AbortController().signal, heartbeat: async () => true });
+    await db.runProtectedWrite((first as { protectedWrite: (tx: unknown) => Promise<void> }).protectedWrite as never);
+    const idempotencyKey = buildPromoLinkIdempotencyKey({ channelAppId: "app-1", novelSourceItemId: "source-1", channelAccountId: "account-1", offerType: "read" });
+    const promoLinkId = db.promoLinkByIdempotencyKey(idempotencyKey)!.id;
+    db.seedArticle({ id: "article-late", novelId: "novel-1", locale: "en", promoLinkId: null, deletedAt: null });
+
+    const second = await handler({ lease, mode: "apply", signal: new AbortController().signal, heartbeat: async () => true });
+    await db.runProtectedWrite((second as { protectedWrite: (tx: unknown) => Promise<void> }).protectedWrite as never);
+
+    expect(db.articles.get("article-late")!.promoLinkId).toBe(promoLinkId);
+    expect(db.audits.find((entry) => entry.action === "promo_link_claim.already_fetched_binding_reconciled")?.afterSnapshot)
+      .toMatchObject({ articlesBound: 1, articlesConflicted: 0 });
   });
 });
 
