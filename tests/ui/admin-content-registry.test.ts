@@ -10,7 +10,7 @@ import {
 } from "@/app/api/admin/_lib/registry";
 import { ADMIN_REGISTRY } from "@/app/api/admin/_lib/deps";
 import { ADMIN_CAPABILITY_CONFIG } from "@/lib/auth/capabilities";
-import { resolveAdminRoute } from "@/server/auth/registry";
+import { resolveAdminAction, resolveAdminRoute } from "@/server/auth/registry";
 import { P1_08B_ADMIN_REGISTRY } from "@/server/credentials";
 
 const CONTENT_ROUTE_DIRS = [
@@ -104,11 +104,39 @@ describe("P2-04 内容路由登记", () => {
     }
   });
 
-  it("P2-04 没有新增任何 mutation Action", () => {
-    expect(P2_04_ADMIN_REGISTRY.actions).toEqual(P1_08B_ADMIN_REGISTRY.actions);
-    for (const action of P2_04_ADMIN_REGISTRY.actions) {
+  /**
+   * P2-04 itself still adds no Action — the assertion below stays scoped to
+   * "everything that is not a P0-S13 content-creation action" so this file
+   * keeps guarding that P2-04 fact rather than being weakened by a later
+   * round's real additions.
+   *
+   * P0-S13 (`src/app/(admin)/catalog-sync/_actions.ts`) is the first
+   * mutation Action composed on top of P1-08B's six, added via the same
+   * "compose on top, never edit the frozen half" pattern
+   * {@link ADMIN_CONTENT_ROUTES} already uses for routes.
+   */
+  it("P2-04 没有新增任何 mutation Action；P0-S13 在其上新增了两个内容创建 Action", () => {
+    const p204Actions = P2_04_ADMIN_REGISTRY.actions.filter(
+      (action) => !action.id.startsWith("admin.content_creation."),
+    );
+    expect(p204Actions).toEqual(P1_08B_ADMIN_REGISTRY.actions);
+    for (const action of p204Actions) {
       expect(action.capability).toBe("credential:manage");
     }
+
+    expect(P2_04_ADMIN_REGISTRY.actions.map((action) => action.id)).toEqual([
+      ...P1_08B_ADMIN_REGISTRY.actions.map((action) => action.id),
+      "admin.content_creation.dry_run",
+      "admin.content_creation.apply",
+    ]);
+    expect(resolveAdminAction("admin.content_creation.dry_run", P2_04_ADMIN_REGISTRY)).toMatchObject({
+      capability: "content:view",
+      mutation: false,
+    });
+    expect(resolveAdminAction("admin.content_creation.apply", P2_04_ADMIN_REGISTRY)).toMatchObject({
+      capability: "content:publish",
+      mutation: true,
+    });
   });
 });
 

@@ -90,10 +90,35 @@ export const CONTENT_ROUTE_CAPABILITIES: Readonly<
   >,
 );
 
+/**
+ * P0-S13 content-creation actions.
+ *
+ * `createContentFromSourceItem` (`@/server/content-creation`) carries no
+ * authorization of its own — its module header says so explicitly ("No admin
+ * UI, no Server Action wrapper. Nothing under `src/app/**` calls this yet").
+ * These two registrations are that missing binding, composed here the same
+ * way {@link ADMIN_CONTENT_ROUTES} composes on top of P1-08B rather than
+ * editing it.
+ *
+ * `dry_run` is a read: `content:view`, the same bar `/catalog-sync` and
+ * `/novels` already require to render, `mutation: false` so it skips
+ * same-origin/rate-limit/request-id enforcement exactly like every other read.
+ * `apply` is the real write and takes `content:publish` — the only existing
+ * content-mutation capability (2FA + `super_admin` default). There is no
+ * dedicated `content:create` in `AdminCapability`
+ * (`src/lib/auth/capabilities.ts`) and adding one is outside this file's
+ * write territory; reusing `content:publish` is a deliberate, documented
+ * choice, not an oversight — see the P0-S13 delivery notes for the tradeoff.
+ */
+export const ADMIN_CONTENT_CREATION_ACTIONS = [
+  { id: "admin.content_creation.dry_run", capability: "content:view", mutation: false },
+  { id: "admin.content_creation.apply", capability: "content:publish", mutation: true },
+] as const satisfies AdminRegistry["actions"];
+
 export const P2_04_ADMIN_REGISTRY: AdminRegistry = Object.freeze({
   pageRoots: ADMIN_PAGE_ROOTS,
   routes: Object.freeze([...P1_08B_ADMIN_REGISTRY.routes, ...ADMIN_CONTENT_ROUTES]),
-  // P2-04 is a read slice: it registers no Server Action, and adding a mutation
-  // capability here is out of scope by construction.
-  actions: P1_08B_ADMIN_REGISTRY.actions,
+  // P2-04 itself registered no Server Action (a read slice, by construction).
+  // P0-S13 is the first mutation Action composed on top of P1-08B's six.
+  actions: Object.freeze([...P1_08B_ADMIN_REGISTRY.actions, ...ADMIN_CONTENT_CREATION_ACTIONS]),
 });
