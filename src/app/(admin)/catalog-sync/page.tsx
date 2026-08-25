@@ -1,12 +1,15 @@
-import { findCapabilityState } from "@/features/admin-ui/capability-view";
+import { capabilityBlockReason, findCapabilityState } from "@/features/admin-ui/capability-view";
+import { MOBOREADER_CATALOG_LIMITS, resolveMoboreaderCatalogSafetyMaxPages } from "@/lib/tasks/moboreader";
 
 import { AdminShell } from "../_components/admin-shell";
 import { capabilityViews, sessionView } from "../_lib/page-guard";
 import { ContentCapabilityDenied } from "../novels/_components/content-states";
 import { ContentPagination } from "../novels/_components/content-pagination";
 import { requireContentPage } from "../novels/_lib/content-page-guard";
+import { CatalogScanTriggerForm } from "./_components/catalog-scan-trigger-form";
 import { CatalogSyncClient } from "./_components/catalog-sync-client";
 import { SourceItemFilters } from "./_components/source-item-filters";
+import { readActiveChannelAppOptions } from "./_lib/read-channel-apps";
 import { readSourceItemsPage } from "./_lib/read-source-items";
 
 export const dynamic = "force-dynamic";
@@ -41,10 +44,12 @@ export default async function CatalogSyncPage({
 
   const capabilities = capabilityViews(context);
   const contentPublish = findCapabilityState(capabilities, "content:publish");
+  const contentPublishBlockedReason = capabilityBlockReason("content:publish", contentPublish);
 
   const page = granted
     ? await readSourceItemsPage({ page: params.page, status: params.status, search: params.search })
     : null;
+  const channelApps = granted ? await readActiveChannelAppOptions() : [];
 
   return (
     <AdminShell
@@ -59,6 +64,13 @@ export default async function CatalogSyncPage({
       <div className="space-y-6">
         {granted && page ? (
           <>
+            <CatalogScanTriggerForm
+              channelApps={channelApps}
+              contentPublishGranted={contentPublishBlockedReason === null}
+              contentPublishBlockedReason={contentPublishBlockedReason}
+              maxPageSize={MOBOREADER_CATALOG_LIMITS.maxPageSize}
+              safetyMaxPages={resolveMoboreaderCatalogSafetyMaxPages()}
+            />
             <SourceItemFilters values={{ search: params.search, status: params.status }} />
             <CatalogSyncClient items={page.items} contentPublish={contentPublish} />
             <ContentPagination

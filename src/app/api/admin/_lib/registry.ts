@@ -115,10 +115,49 @@ export const ADMIN_CONTENT_CREATION_ACTIONS = [
   { id: "admin.content_creation.apply", capability: "content:publish", mutation: true },
 ] as const satisfies AdminRegistry["actions"];
 
+/**
+ * PR-C2 catalog-scan trigger.
+ *
+ * `createMoboreaderCatalogScanTask` (`@/lib/tasks/moboreader`) has had zero
+ * production callers since it was written — the audit that opened this task
+ * found no `src/app/**` reference to it at all, leaving operators with no way
+ * to make the cold-start catalog pipeline's step 4 (discover upstream
+ * catalog pages) actually run. These two registrations are that missing
+ * binding, composed the same way {@link ADMIN_CONTENT_CREATION_ACTIONS}
+ * composes on top of P1-08B.
+ *
+ * Both modes end up writing a `CatalogScanTask` row (plus an
+ * `OperationAudit` row) — unlike P0-S13's content-creation `dry_run`, which
+ * performs zero writes by construction, `createMoboreaderCatalogScanTask`
+ * always inserts, in *every* mode. `mode` there is a worker-side execution
+ * instruction (does the worker persist upstream `NovelSourceItem` rows or
+ * not), not a Web-side "compute a plan, write nothing" preview. So both
+ * actions below are registered `mutation: true` — even `dry_run` gets
+ * same-origin + rate-limit + request-id enforcement, which P0-S13's true
+ * dry run (`mutation: false`) deliberately skips.
+ *
+ * The capability split still mirrors P0-S13's convention: `dry_run` takes
+ * `content:view` (already required to reach `/catalog-sync` at all), `apply`
+ * takes `content:publish` (2FA + `super_admin` default) and, in the action
+ * body, additionally goes through `requireFreshAdminServiceMutation` — apply
+ * is the mode that, once `NOVEL_CATALOG_SYNC_ALLOW_WRITE` is also on, lets
+ * the worker actually persist upstream data instead of leaving the created
+ * task `disabled`.
+ */
+export const ADMIN_CATALOG_SCAN_ACTIONS = [
+  { id: "admin.catalog_scan.dry_run", capability: "content:view", mutation: true },
+  { id: "admin.catalog_scan.apply", capability: "content:publish", mutation: true },
+] as const satisfies AdminRegistry["actions"];
+
 export const P2_04_ADMIN_REGISTRY: AdminRegistry = Object.freeze({
   pageRoots: ADMIN_PAGE_ROOTS,
   routes: Object.freeze([...P1_08B_ADMIN_REGISTRY.routes, ...ADMIN_CONTENT_ROUTES]),
   // P2-04 itself registered no Server Action (a read slice, by construction).
-  // P0-S13 is the first mutation Action composed on top of P1-08B's six.
-  actions: Object.freeze([...P1_08B_ADMIN_REGISTRY.actions, ...ADMIN_CONTENT_CREATION_ACTIONS]),
+  // P0-S13 added the first two mutation Actions on top of P1-08B's six;
+  // PR-C2 adds two more for the catalog-scan trigger.
+  actions: Object.freeze([
+    ...P1_08B_ADMIN_REGISTRY.actions,
+    ...ADMIN_CONTENT_CREATION_ACTIONS,
+    ...ADMIN_CATALOG_SCAN_ACTIONS,
+  ]),
 });
