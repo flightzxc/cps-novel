@@ -8,8 +8,14 @@ import { describe, expect, it } from "vitest";
  *
  * P2-04 只治理后台读取权限。站点没有面向读者的登录体系，公开试读章节必须支持匿名
  * 游客直读，因此本轮引入的任何东西——Admin Session、`content:view`、`content:read`、
- * `guardContentRead`——都**只能**存在于 `src/app/(admin)` 与 `src/app/api/admin`
- * 之内。
+ * `guardContentRead`——都**只能**存在于 `src/app/(admin)`、`src/app/(admin-auth)`
+ * 与 `src/app/api/admin` 之内。
+ *
+ * `src/app/(admin-auth)`（PR-C1，登录 / 2FA 挑战 / 2FA 注册）加入 ADMIN_ROOTS 是
+ * 有意为之，不是放宽这条边界：这组页面存在的唯一理由就是签发/校验 Admin Session，
+ * 引用 `@/lib/auth/`、`@/server/auth/`、`ADMIN_SESSION_COOKIE_NAME`、`/login`
+ * 跳转是它的本职工作，而不是越界。公开阅读侧仍然零后台权限依赖——这正是本文件在
+ * `PUBLIC_APP_FILES` 之外单独排除它的原因。
  *
  * 这条边界靠人盯是守不住的：公开阅读 Route 还没落地（P2-03 之后才有），等它落地时
  * 顺手 import 一个 `requireContentPage` 是最自然不过的动作，而后果是给匿名读者加了
@@ -19,7 +25,7 @@ import { describe, expect, it } from "vitest";
  * 本文件守的是**代码依赖**，两者互补。
  */
 
-const ADMIN_ROOTS = ["src/app/(admin)", "src/app/api/admin"] as const;
+const ADMIN_ROOTS = ["src/app/(admin)", "src/app/(admin-auth)", "src/app/api/admin"] as const;
 
 /**
  * 后台权限设施。出现在公开侧即为越界。
@@ -98,6 +104,16 @@ describe("公开阅读链路 · 零后台权限依赖", () => {
   });
 
   /**
+   * `robots.ts` 是全站级元数据路由（sitemap 之外唯一的例外），不是某个阅读页面，也
+   * 不做任何跳转——它只是把 `/login`、`/two-factor` 列进 crawler 的 disallow 前缀
+   * （PR-C1）。裸字符串扫描分不清"列在 disallow 数组里的路径前缀"与"重定向目标"，
+   * 会把前者误判成后者，所以只在裸字符串这一条断言里放过它；同一测试里的 Admin
+   * Session cookie 读取、`redirect("/login")` 调用两条断言，以及 ADMIN_AUTH_IMPORTS
+   * 与 Admin 能力位那两组断言都仍然覆盖 `robots.ts`，真出现越界照样会红。
+   */
+  const BARE_LOGIN_STRING_SCAN_EXEMPT = new Set(["src/app/robots.ts"]);
+
+  /**
    * 匿名可读是公开侧的默认，不是某个 Route 记得放行的结果。
    * 公开侧一旦出现重定向到登录、或读取 Admin Session cookie，就是加了访问门槛。
    */
@@ -106,6 +122,7 @@ describe("公开阅读链路 · 零后台权限依赖", () => {
       const code = stripComments(source);
       expect(code, `${file} 读取了后台会话 cookie`).not.toMatch(/ADMIN_SESSION_COOKIE_NAME/);
       expect(code, `${file} 出现了登录跳转`).not.toMatch(/redirect\(\s*["'`]\/login/);
+      if (BARE_LOGIN_STRING_SCAN_EXEMPT.has(file)) continue;
       expect(code, `${file} 出现了登录跳转`).not.toMatch(/["'`]\/(login|sign-in|signin)["'`]/);
     }
   });
