@@ -1,6 +1,7 @@
 import { CoverImage } from "@/components/CoverImage";
 import { TagList } from "@/components/Tag";
 import type { NovelCardView } from "@/features/public-ui/types";
+import type { SiteLocale } from "@/lib/locale/locale-canonical";
 import { getPublicT } from "@/lib/locale/messages";
 
 /**
@@ -12,8 +13,8 @@ import { getPublicT } from "@/lib/locale/messages";
  * 密度上刻意比短剧站松一档：书名给到可读字号而不是缩略图标签字号，
  * 因为它是一本书的名字，不是一个视频的文件名。
  */
-export function BookCard({ novel }: { novel: NovelCardView }) {
-  const t = getPublicT();
+export function BookCard({ locale, novel }: { locale: SiteLocale; novel: NovelCardView }) {
+  const t = getPublicT(locale);
   return (
     <article className="group" data-testid="book-card">
       <a

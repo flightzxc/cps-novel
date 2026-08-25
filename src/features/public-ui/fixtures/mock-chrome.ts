@@ -7,10 +7,11 @@
  */
 
 import type { SiteChrome } from "@/features/public-ui/layout/SiteShell";
+import type { SiteLocale } from "@/lib/locale/locale-canonical";
 import { getPublicT } from "@/lib/locale/messages";
 
-export function mockChrome(current?: string): SiteChrome {
-  const t = getPublicT();
+export function mockChrome(locale: SiteLocale, current?: string): SiteChrome {
+  const t = getPublicT(locale);
   return {
     brandHref: "/dev-preview/home",
     navItems: [

@@ -8,12 +8,14 @@ import {
   devPreviewFirstChapterPath,
   devPreviewNovelPath,
 } from "@/features/public-ui/fixtures/preview-paths";
+import { PUBLIC_SITE_LOCALE } from "@/lib/site/locale-label";
 
 /** MOCK_ONLY 预览：首页页面壳（有横版物料 → 通栏出血 Hero + 轮播） */
 export default function HomePreviewPage() {
   return (
     <HomeScreen
-      chrome={mockChrome("home")}
+      locale={PUBLIC_SITE_LOCALE}
+      chrome={mockChrome(PUBLIC_SITE_LOCALE, "home")}
       featuredList={MOCK_FEATURED_LIST.map((novel) => ({
         novel,
         detailHref: devPreviewNovelPath(),

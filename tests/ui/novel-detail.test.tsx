@@ -10,7 +10,7 @@ import {
 
 describe("小说详情页 · 字段边界", () => {
   it("不渲染作者、评分、阅读量的任何占位", () => {
-    const { container } = render(<NovelDetailScreen novel={MOCK_NOVEL_DETAIL} />);
+    const { container } = render(<NovelDetailScreen locale="en" novel={MOCK_NOVEL_DETAIL} />);
     const text = container.textContent ?? "";
 
     for (const forbidden of [
@@ -31,7 +31,7 @@ describe("小说详情页 · 字段边界", () => {
   });
 
   it("不渲染分成比例与渠道真实码", () => {
-    const { container } = render(<NovelDetailScreen novel={MOCK_NOVEL_DETAIL} />);
+    const { container } = render(<NovelDetailScreen locale="en" novel={MOCK_NOVEL_DETAIL} />);
     const html = container.innerHTML;
 
     expect(html).not.toMatch(/split[_-]?ratio/i);
@@ -39,7 +39,7 @@ describe("小说详情页 · 字段边界", () => {
   });
 
   it("展示总章数这个客观标量，但不据此生成章节行", () => {
-    render(<NovelDetailScreen novel={MOCK_NOVEL_DETAIL} />);
+    render(<NovelDetailScreen locale="en" novel={MOCK_NOVEL_DETAIL} />);
 
     expect(screen.getByText(/265 chapters/)).toBeTruthy();
     // 总章数 265，实际只列出 fixture 里的 3 条
@@ -49,7 +49,7 @@ describe("小说详情页 · 字段边界", () => {
 
 describe("小说详情页 · 可试读章节区块", () => {
   it("嵌在详情页内，锚点为 preview-chapters，不建独立目录路由", () => {
-    const { container } = render(<NovelDetailScreen novel={MOCK_NOVEL_DETAIL} />);
+    const { container } = render(<NovelDetailScreen locale="en" novel={MOCK_NOVEL_DETAIL} />);
     const block = container.querySelector("#preview-chapters");
 
     expect(block).toBeTruthy();
@@ -57,7 +57,7 @@ describe("小说详情页 · 可试读章节区块", () => {
   });
 
   it("只渲染 fixture 里实际存在的章节", () => {
-    render(<NovelDetailScreen novel={MOCK_NOVEL_DETAIL} />);
+    render(<NovelDetailScreen locale="en" novel={MOCK_NOVEL_DETAIL} />);
 
     const items = screen.getByTestId("preview-chapter-list").querySelectorAll("li");
     expect(items).toHaveLength(MOCK_NOVEL_DETAIL.previewChapters.length);
@@ -68,7 +68,7 @@ describe("小说详情页 · 可试读章节区块", () => {
   });
 
   it("不出现「完整目录」「全部章节」这类表述", () => {
-    const { container } = render(<NovelDetailScreen novel={MOCK_NOVEL_DETAIL} />);
+    const { container } = render(<NovelDetailScreen locale="en" novel={MOCK_NOVEL_DETAIL} />);
     const text = container.textContent ?? "";
 
     for (const forbidden of ["完整目录", "全部章节", "全书目录", "完整章节"]) {
@@ -78,7 +78,7 @@ describe("小说详情页 · 可试读章节区块", () => {
   });
 
   it("没有可试读章节时给出空状态，不留空列表", () => {
-    render(<NovelDetailScreen novel={MOCK_NOVEL_DETAIL_SPARSE} />);
+    render(<NovelDetailScreen locale="en" novel={MOCK_NOVEL_DETAIL_SPARSE} />);
 
     expect(screen.getByTestId("preview-chapters-empty")).toBeTruthy();
     expect(screen.queryByTestId("preview-chapter-list")).toBeNull();
@@ -87,12 +87,12 @@ describe("小说详情页 · 可试读章节区块", () => {
 
 describe("小说详情页 · 标签与元信息", () => {
   it("标签为空时整个标签区块消失", () => {
-    const { container } = render(<NovelDetailScreen novel={MOCK_NOVEL_DETAIL_SPARSE} />);
+    const { container } = render(<NovelDetailScreen locale="en" novel={MOCK_NOVEL_DETAIL_SPARSE} />);
     expect(container.querySelector('[data-testid="tag-list"]')).toBeNull();
   });
 
   it("元信息是流式的，只渲染真实存在的项", () => {
-    render(<NovelDetailScreen novel={MOCK_NOVEL_DETAIL_SPARSE} />);
+    render(<NovelDetailScreen locale="en" novel={MOCK_NOVEL_DETAIL_SPARSE} />);
 
     const meta = screen.getAllByTestId("meta-list")[0];
     // 稀疏这本没有可试读章节，所以「可试读 N 章」这一项不出现
@@ -104,7 +104,7 @@ describe("小说详情页 · 标签与元信息", () => {
 
 describe("小说详情页 · 行动区", () => {
   it("站内试读为主动作，正式阅读为次动作", () => {
-    render(<NovelDetailScreen novel={MOCK_NOVEL_DETAIL} />);
+    render(<NovelDetailScreen locale="en" novel={MOCK_NOVEL_DETAIL} />);
 
     const preview = screen.getByRole("link", { name: "Start preview" });
     const upstream = screen.getByRole("link", { name: "Continue reading" });
@@ -115,27 +115,27 @@ describe("小说详情页 · 行动区", () => {
   });
 
   it("正式阅读入口带 nofollow sponsored", () => {
-    render(<NovelDetailScreen novel={MOCK_NOVEL_DETAIL} />);
+    render(<NovelDetailScreen locale="en" novel={MOCK_NOVEL_DETAIL} />);
     expect(
       screen.getByRole("link", { name: "Continue reading" }).getAttribute("rel"),
     ).toBe("nofollow sponsored");
   });
 
   it("没有公开跳转码时不渲染正式阅读入口", () => {
-    render(<NovelDetailScreen novel={MOCK_NOVEL_DETAIL_SPARSE} />);
+    render(<NovelDetailScreen locale="en" novel={MOCK_NOVEL_DETAIL_SPARSE} />);
     expect(screen.queryByRole("link", { name: "Continue reading" })).toBeNull();
   });
 });
 
 describe("小说详情页 · 推荐结构", () => {
   it("本轮不接推荐数据时整块不渲染，不留空框", () => {
-    render(<NovelDetailScreen novel={MOCK_NOVEL_DETAIL} />);
+    render(<NovelDetailScreen locale="en" novel={MOCK_NOVEL_DETAIL} />);
     expect(screen.queryByRole("heading", { name: "Related works" })).toBeNull();
   });
 
   it("传入数据时才渲染，且复用同一种卡片", () => {
     const { container } = render(
-      <NovelDetailScreen novel={MOCK_NOVEL_DETAIL} related={MOCK_NOVEL_CARDS.slice(0, 3)} />,
+      <NovelDetailScreen locale="en" novel={MOCK_NOVEL_DETAIL} related={MOCK_NOVEL_CARDS.slice(0, 3)} />,
     );
 
     expect(screen.getByRole("heading", { name: "Related works" })).toBeTruthy();

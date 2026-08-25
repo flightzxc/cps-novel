@@ -60,7 +60,7 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { slugParam, chapterNumber: rawNumber } = await params;
   const chapterNumber = parseChapterNumber(rawNumber);
-  const t = getPublicT();
+  const t = getPublicT(PUBLIC_SITE_LOCALE);
   if (chapterNumber === null) return noIndexMetadata(t("meta.chapterNotFound"));
 
   const access = await loadArticleAccess(slugParam, PUBLIC_SITE_LOCALE);
@@ -113,6 +113,7 @@ export default async function PublicChapterPage({
   if (access.kind === "unavailable") {
     return (
       <UnavailableScreen
+        locale={PUBLIC_SITE_LOCALE}
         chrome={chrome}
         reason="unpublished"
         novelTitle={access.title}
@@ -146,7 +147,7 @@ export default async function PublicChapterPage({
   return (
     <>
       {seo.other ? <JsonLd json={seo.other["application/ld+json"]} /> : null}
-      <ChapterScreen chrome={chrome} chapter={chapter} />
+      <ChapterScreen locale={PUBLIC_SITE_LOCALE} chrome={chrome} chapter={chapter} />
     </>
   );
 }

@@ -1,5 +1,6 @@
 import { SectionHeader } from "@/components/SectionHeader";
 import type { PreviewChapterRef } from "@/features/public-ui/types";
+import type { SiteLocale } from "@/lib/locale/locale-canonical";
 import { getPublicT } from "@/lib/locale/messages";
 
 /** 可试读章节区块的锚点。详情页内唯一，不新建独立目录路由。 */
@@ -17,8 +18,14 @@ export const PREVIEW_CHAPTERS_ANCHOR = "preview-chapters";
  *   3. 🔴 **这不是目录，是样章。** 每条带章号与章名、可点进阅读，按样章的节奏排，
  *      不按目录的节奏排。
  */
-export function PreviewChapterList({ chapters }: { chapters: PreviewChapterRef[] }) {
-  const t = getPublicT();
+export function PreviewChapterList({
+  locale,
+  chapters,
+}: {
+  locale: SiteLocale;
+  chapters: PreviewChapterRef[];
+}) {
+  const t = getPublicT(locale);
   const hasChapters = chapters.length > 0;
 
   return (

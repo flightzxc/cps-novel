@@ -5,7 +5,9 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 import {
+  ARTICLE_TEMPLATE_CRUD_LANDED,
   SITE_LOCALES,
+  assertPublishableLocalesFailClosed,
   isPublishableLocale,
   listPublishableLocales,
   resolveSiteLocale,
@@ -18,10 +20,14 @@ import {
  * 映射」这条纪律确实成立。第三条是这个模块存在的**全部理由**——CPS 因映射散落
  * 四处付过两次全库 normalize 的代价，所以它必须是自动化断言，不能只写在 README 里。
  *
- * 🔴 上游登记表与发布白名单当前都为空，这是契约要求的 fail-closed 状态：
- * 上游 `language` 数值码的枚举证据不在本仓库内，D-7（首发白名单）仍是 OPEN。
- * 因此下面关于「返回 unknown / 恒不可发布」的断言验的是**语义正确**，
- * 不是「还没实现」。表一旦落地，这些用例会立刻变成真实数据的回归网。
+ * P0-S15（2026-08-26）：上游登记表首次填入子集——依据《C2 真上游只读诊断
+ * 报告 2026-08-26》真实成对证据登记了 `3 → en`、`7 → ru`。这只是 20 条样本
+ * 覆盖到的子集，不是完整上游枚举，所以下面既有「已登记码解得出 locale」的
+ * 用例，也保留「未登记码依旧 unknown」的用例——两者都是回归网的一部分。
+ *
+ * 🔴 发布白名单依旧为空，这仍是契约要求的 fail-closed 状态：D-7（首发白名单）
+ * 仍是 OPEN，登记表从空到有 2 项不改变这一点——「返回 unknown/映射出 locale」
+ * 与「恒不可发布」是两件独立的事，见专门的边界用例。
  */
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -101,8 +107,14 @@ describe("locale 唯一真源 · resolveSiteLocale 映射不到就是 unknown", 
     ["null", null],
     ["undefined", undefined],
     ["空串", ""],
-    ["未登记的数值码", 3],
-    ["未登记数值码的字符串写法", "3"],
+    // 3、7 已在 P0-S15 登记为 en/ru（见下方专门的 describe 块），
+    // 这里改用登记表未覆盖的数值码，验的仍是「未登记就是 unknown」。
+    ["未登记的数值码 · 1", 1],
+    ["未登记数值码的字符串写法 · 1", "1"],
+    ["未登记的数值码 · 2", 2],
+    ["未登记数值码的字符串写法 · 2", "2"],
+    ["未登记的数值码 · 5", 5],
+    ["未登记数值码的字符串写法 · 5", "5"],
     ["负数", -1],
     ["小数", 1.5],
     ["NaN", Number.NaN],
@@ -110,9 +122,12 @@ describe("locale 唯一真源 · resolveSiteLocale 映射不到就是 unknown", 
     ["布尔", true],
     ["对象", {}],
     ["数组", []],
-    ["前导零写法", "03"],
-    ["带空格", " 3"],
-    ["十六进制写法", "0x3"],
+    // 以下三项特意用「登记表里真实存在的码 3」拼出非法形态，证明即便码本身
+    // 已登记，不精确匹配十进制整数写法照样不认——这比用未登记码更能说明
+    // codeKey() 的形态校验独立于登记表内容生效。
+    ["前导零写法（码本身已登记）", "03"],
+    ["带空格（码本身已登记）", " 3"],
+    ["十六进制写法（码本身已登记）", "0x3"],
   ])("%s → unknown", (_label, input) => {
     expect(resolveSiteLocale(input)).toBe("unknown");
   });
@@ -133,13 +148,62 @@ describe("locale 唯一真源 · resolveSiteLocale 映射不到就是 unknown", 
   });
 
   it("languageName 不做模糊匹配——未登记的文案一律 unknown", () => {
-    for (const name of ["English", "english", "英语", "Français", ""]) {
+    // 「英语」「俄语」自 P0-S15 起是已登记文案（见下方专门的 describe 块），
+    // 这里换成近似但不逐字相同的变体，验的仍是「精确匹配，不模糊」。
+    for (const name of ["English", "english", "英文", "俄罗斯语", "Français", ""]) {
       expect(resolveSiteLocale(0, name)).toBe("unknown");
     }
   });
 
   it("两个参数都给也不会拼出一个 locale", () => {
     expect(resolveSiteLocale(1, "English")).toBe("unknown");
+  });
+});
+
+describe("locale 唯一真源 · 上游登记表（P0-S15 首次填充）", () => {
+  /**
+   * 证据来源：《C2 真上游只读诊断报告 2026-08-26》（执行基线 `d103cf2`，
+   * 真实 `getlistpc` 接口 20 条样本）。`language`/`languageName` 逐条成对
+   * 出现，且与已归档 Lane B 证据一致：`3 → 英语 → en`，`7 → 俄语 → ru`。
+   * 这组用例既锁定「已证子集能解出 locale」，也锁定「未证数值码依旧
+   * unknown、不得推测补齐」——两者缺一都不能证明本轮改动的边界正确。
+   */
+
+  it("3（及其字符串写法）→ en", () => {
+    expect(resolveSiteLocale(3)).toBe("en");
+    expect(resolveSiteLocale("3")).toBe("en");
+  });
+
+  it("7（及其字符串写法）→ ru", () => {
+    expect(resolveSiteLocale(7)).toBe("ru");
+    expect(resolveSiteLocale("7")).toBe("ru");
+  });
+
+  it("languageName 备用键：已登记文案精确匹配也能解出 locale", () => {
+    // code 传一个不在登记表里的值，逼 resolveSiteLocale 落到 name 兜底路径。
+    expect(resolveSiteLocale(99, "英语")).toBe("en");
+    expect(resolveSiteLocale(99, "俄语")).toBe("ru");
+  });
+
+  it("code 命中优先于 name：两者都给时不看 name", () => {
+    // code=3 已经命中 en，name="俄语" 不会被查——name 只是 code 未命中时的
+    // 备用键，不是覆盖，也不是二次校验。
+    expect(resolveSiteLocale(3, "俄语")).toBe("en");
+  });
+
+  it("🔴 未证数值码依旧 unknown——20 条样本只覆盖 {3, 7}，不代表完整枚举", () => {
+    for (const code of [1, 2, 5]) {
+      expect(resolveSiteLocale(code)).toBe("unknown");
+      expect(resolveSiteLocale(String(code))).toBe("unknown");
+    }
+  });
+
+  it("🔴 登记表填充不改变发布白名单为空的事实——映射成功与可发布仍是两道独立的闸", () => {
+    expect(resolveSiteLocale(3)).toBe("en");
+    expect(resolveSiteLocale(7)).toBe("ru");
+    expect(isPublishableLocale("en")).toBe(false);
+    expect(isPublishableLocale("ru")).toBe(false);
+    expect(listPublishableLocales()).toEqual([]);
   });
 });
 
@@ -254,5 +318,49 @@ describe("locale 唯一真源 · 全仓不得有第二份映射", () => {
     expect(canonicalSource).not.toMatch(/\.slice\(\s*0\s*,\s*2\s*\)/);
     expect(canonicalSource).not.toMatch(/toLowerCase\(\)|toUpperCase\(\)/);
     expect(canonicalSource).not.toMatch(/startsWith\(/);
+  });
+});
+
+describe("locale 唯一真源 · D-7 条件二 fail-closed 守卫（S14）", () => {
+  /**
+   * 背景：CPS v6.0.4 事故——只注册了前台 locale，漏了后台模板枚举。Opus 终审
+   * 对本仓库 D-7 条件二的裁定是「内置默认模板对 en 实质满足，但这份安全是
+   * 巧合，不是机制」。这组用例验的正是「巧合已经变成机制」：只要
+   * `ARTICLE_TEMPLATE_CRUD_LANDED` 还是 false，任何越出 `{"en"}` 的
+   * `PUBLISHABLE_LOCALES` 配置都必须在断言执行的那一刻抛出，不能留到运行时。
+   */
+
+  it("模块常量今天确实是 false——这是守卫本身生效的前提，不是附带断言", () => {
+    expect(ARTICLE_TEMPLATE_CRUD_LANDED).toBe(false);
+  });
+
+  it("真实模块加载不抛：当前 PUBLISHABLE_LOCALES 为空，满足 ⊆ {\"en\"}", () => {
+    // 走到这一行本身就是「真实模块加载没有抛」的证据——import 在文件顶部，
+    // 若守卫在模块加载时抛出，整个测试文件都跑不起来。这里再显式断言一次
+    // 前提事实，避免这条证据只靠"没崩"这种隐式信号。
+    expect(listPublishableLocales()).toEqual([]);
+  });
+
+  it("🔴 越界即抛：CRUD 未落地时，非 en 的 locale 混进白名单必须抛出", () => {
+    expect(() => assertPublishableLocalesFailClosed(["es"], false)).toThrow(
+      /D-7 条件二 fail-closed 守卫触发/,
+    );
+    expect(() => assertPublishableLocalesFailClosed(["en", "ja"], false)).toThrow(/ja/);
+    expect(() => assertPublishableLocalesFailClosed(["en", "es", "ko"], false)).toThrow(
+      /es, ko/,
+    );
+  });
+
+  it("空集与 {\"en\"} 的任意子集都不抛——这两种是当前允许的唯一状态", () => {
+    expect(() => assertPublishableLocalesFailClosed([], false)).not.toThrow();
+    expect(() => assertPublishableLocalesFailClosed(["en"], false)).not.toThrow();
+  });
+
+  it("CRUD 落地后（articleTemplateCrudLanded=true）守卫让路，不再拦截", () => {
+    expect(() => assertPublishableLocalesFailClosed(["es", "ja", "ko"], true)).not.toThrow();
+  });
+
+  it("错误信息里点名 CPS v6.0.4 事故——这是守卫来历的可追溯性，不是装饰", () => {
+    expect(() => assertPublishableLocalesFailClosed(["fr"], false)).toThrow(/v6\.0\.4/);
   });
 });

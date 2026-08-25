@@ -31,7 +31,7 @@ function openPanel() {
 
 describe("阅读偏好 · 持久化", () => {
   it("改设置会写进本地存储", () => {
-    renderWithProvider(<ChapterScreen chapter={MOCK_CHAPTER} />);
+    renderWithProvider(<ChapterScreen locale="en" chapter={MOCK_CHAPTER} />);
     openPanel();
     fireEvent.click(screen.getByRole("radio", { name: "Dark" }));
 
@@ -40,7 +40,7 @@ describe("阅读偏好 · 持久化", () => {
   });
 
   it("四项排版参数各自都持久化，不是只存了主题", () => {
-    renderWithProvider(<ChapterScreen chapter={MOCK_CHAPTER} />);
+    renderWithProvider(<ChapterScreen locale="en" chapter={MOCK_CHAPTER} />);
     openPanel();
     fireEvent.click(screen.getByRole("radio", { name: "22" }));
     fireEvent.click(screen.getByRole("radio", { name: "Relaxed" }));
@@ -63,7 +63,7 @@ describe("阅读偏好 · 持久化", () => {
       measureIndex: 0,
     });
 
-    renderWithProvider(<ChapterScreen chapter={MOCK_CHAPTER} />);
+    renderWithProvider(<ChapterScreen locale="en" chapter={MOCK_CHAPTER} />);
 
     const surface = screen.getByTestId("reader-surface");
     expect(surface.getAttribute("data-reader-theme")).toBe("dark");
@@ -80,7 +80,7 @@ describe("阅读偏好 · 持久化", () => {
       measureIndex: 2,
     });
 
-    renderWithProvider(<ChapterScreen chapter={MOCK_CHAPTER} />);
+    renderWithProvider(<ChapterScreen locale="en" chapter={MOCK_CHAPTER} />);
     openPanel();
     fireEvent.click(screen.getByRole("button", { name: "Reset to defaults" }));
 
@@ -88,7 +88,7 @@ describe("阅读偏好 · 持久化", () => {
   });
 
   it("手动主题覆盖同时镜像到 html，供防闪脚本与 CSS 使用", () => {
-    renderWithProvider(<ChapterScreen chapter={MOCK_CHAPTER} />);
+    renderWithProvider(<ChapterScreen locale="en" chapter={MOCK_CHAPTER} />);
     openPanel();
 
     fireEvent.click(screen.getByRole("radio", { name: "Dark" }));
@@ -106,7 +106,7 @@ describe("阅读偏好 · 存储异常不影响阅读", () => {
     window.localStorage.setItem(READER_SETTINGS_STORAGE_KEY, "{ 这不是 JSON");
 
     expect(readReaderSettings()).toEqual(DEFAULT_READER_SETTINGS);
-    expect(() => renderWithProvider(<ChapterScreen chapter={MOCK_CHAPTER} />)).not.toThrow();
+    expect(() => renderWithProvider(<ChapterScreen locale="en" chapter={MOCK_CHAPTER} />)).not.toThrow();
     expect(screen.getByTestId("reader-surface").getAttribute("data-reader-theme")).toBe(
       "system",
     );
@@ -133,7 +133,7 @@ describe("阅读偏好 · 存储异常不影响阅读", () => {
         throw new DOMException("QuotaExceededError");
       });
 
-    renderWithProvider(<ChapterScreen chapter={MOCK_CHAPTER} />);
+    renderWithProvider(<ChapterScreen locale="en" chapter={MOCK_CHAPTER} />);
     openPanel();
 
     expect(() => fireEvent.click(screen.getByRole("radio", { name: "Dark" }))).not.toThrow();
@@ -151,7 +151,7 @@ describe("阅读偏好 · 存储异常不影响阅读", () => {
     });
 
     expect(readReaderSettings()).toEqual(DEFAULT_READER_SETTINGS);
-    expect(() => renderWithProvider(<ChapterScreen chapter={MOCK_CHAPTER} />)).not.toThrow();
+    expect(() => renderWithProvider(<ChapterScreen locale="en" chapter={MOCK_CHAPTER} />)).not.toThrow();
 
     getItem.mockRestore();
   });
