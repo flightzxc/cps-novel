@@ -166,7 +166,10 @@ prepare_database() {
   rm -f "$migration_env"
   [[ "$migration_status" -eq 0 ]] || return "$migration_status"
 
-  x8_compose exec -T postgres psql --no-psqlrc -v ON_ERROR_STOP=1 -U migration_owner -d cps_novel \
+  # grants.sql revokes privileges across the whole public schema. On repeat
+  # launches, that includes postgres-owned extension functions, so the
+  # operation must run as the bootstrap superuser to remain idempotent.
+  x8_compose exec -T postgres psql --no-psqlrc -v ON_ERROR_STOP=1 -U postgres -d cps_novel \
     <"$X8_PROJECT_ROOT/infra/postgres/grants.sql" >/dev/null
   x8_compose exec -T postgres psql --no-psqlrc -v ON_ERROR_STOP=1 -U postgres -d cps_novel \
     --command 'CREATE EXTENSION IF NOT EXISTS pg_stat_statements;' >/dev/null

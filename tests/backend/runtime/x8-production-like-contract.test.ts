@@ -68,6 +68,12 @@ describe("X8 local production-like contracts", () => {
     expect(launcher.indexOf("infra/postgres/grants.sql")).toBeLessThan(
       launcher.indexOf("CREATE EXTENSION IF NOT EXISTS pg_stat_statements"),
     );
+    const grantsInvocation = launcher.slice(
+      launcher.lastIndexOf("x8_compose exec", launcher.indexOf("infra/postgres/grants.sql")),
+      launcher.indexOf("infra/postgres/grants.sql"),
+    );
+    expect(grantsInvocation).toContain("-U postgres -d cps_novel");
+    expect(grantsInvocation).not.toContain("-U migration_owner");
     expect(launcher).toMatch(/function render_nginx_configs|render_nginx_configs\(\)/);
     expect(launcher.slice(launcher.indexOf("render_nginx_configs()"), launcher.indexOf("validate_rendered_topology()")))
       .toContain("return 0");
