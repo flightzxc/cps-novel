@@ -89,6 +89,14 @@ export const OMITTED_CPS_NAV_ITEMS: readonly { readonly cps: string; readonly re
  * status screen. Both still gate on `task:manage` at the route level
  * (`ADMIN_TASK_ROUTES`, `src/app/api/admin/_lib/registry.ts`) regardless of
  * this list.
+ * `/settings` joined in PR-C4 (OG fallback image + IndexNow delivery config
+ * admin surface). Note this list is not what keeps `/settings` clickable in
+ * the sidebar today — `itemState` in `./sidebar.tsx` already special-cases
+ * any entry with `children` as "built" regardless of this array, and the
+ * `/settings` entry has two (still-unbuilt) children. It is kept accurate
+ * here anyway because it is this module's registry of "pages that actually
+ * exist" and because a future change to that special case must not silently
+ * relabel `/settings` as unbuilt.
  */
 export const ADMIN_IMPLEMENTED_PAGES: readonly string[] = Object.freeze([
   "/channel-accounts",
@@ -97,6 +105,7 @@ export const ADMIN_IMPLEMENTED_PAGES: readonly string[] = Object.freeze([
   "/tags",
   "/tasks",
   "/promo-links",
+  "/settings",
 ]);
 
 export function isNavItemActive(pathname: string, item: AdminNavItem): boolean {
