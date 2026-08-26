@@ -29,11 +29,9 @@ describe("P0-S5 promo-link claim — upstream code never leaks", () => {
   });
 
   it("a fixture carrying both codes side by side: the audit-shaped snapshot exposes the public code but never the upstream one", () => {
-    // Shape mirrors exactly what worker/handlers/promo-link-claim.ts's
-    // `writePromoLinkClaimed`/`writePromoLinkAlreadyAvailable` pass to
-    // `operationAudit.create`'s `afterSnapshot` — built the same way, not
-    // copy-pasted from production code, so this test would catch a future
-    // regression at either call site independently.
+    // Shape mirrors what `writePromoLinkClaimed` passes to
+    // `operationAudit.create`'s `afterSnapshot`. Catalog promo capture uses
+    // its own aggregate-only audit and never serializes the upstream code.
     const auditSnapshot = {
       decision: "claimed",
       upstreamCode: redactUpstreamCode(REAL_UPSTREAM_CODE),
