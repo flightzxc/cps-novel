@@ -298,7 +298,7 @@ describe("takedown · 二次确认与版权/安全移除的警示文案", () => 
     expect(warning.textContent).toContain("410");
   });
 
-  it("原因为空时点击确认不提交，也不调用 Action", async () => {
+  it("原因为空时点击确认不提交、不调用 Action，确认框保持打开并就地展示校验提示", async () => {
     render(
       <PublishLifecyclePanel
         novelId="n1"
@@ -316,6 +316,46 @@ describe("takedown · 二次确认与版权/安全移除的警示文案", () => 
       fireEvent.click(screen.getByRole("button", { name: "确认移除" }));
     });
     expect(actions.takedownNovelAction).not.toHaveBeenCalled();
+    // Previously a silent no-op: the dialog stayed open with zero feedback,
+    // and this exact copy was unreachable from the button. Now it must
+    // actually render.
+    expect(dialog()?.open).toBe(true);
+    expect(screen.getByTestId("rights-transition-reason-error").textContent).toBe(
+      "请填写操作原因后再提交（会写入审计记录）。",
+    );
+  });
+
+  it("就地校验提示：输入内容后自动清除，重新打开确认框也会清除上一次的提示", async () => {
+    render(
+      <PublishLifecyclePanel
+        novelId="n1"
+        novelStatus="draft"
+        article={ARTICLE_DRAFT}
+        canPublish="granted"
+        canTakedown="granted"
+      />,
+    );
+    await act(async () => {
+      fireEvent.click(screen.getByTestId("publish-action-takedown"));
+    });
+    await waitFor(() => expect(dialog()?.open).toBe(true));
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "确认移除" }));
+    });
+    expect(screen.getByTestId("rights-transition-reason-error")).toBeTruthy();
+
+    const input = screen.getByPlaceholderText("例如：版权方要求下线");
+    fireEvent.change(input, { target: { value: "版" } });
+    expect(screen.queryByTestId("rights-transition-reason-error")).toBeNull();
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "取消" }));
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByTestId("publish-action-takedown"));
+    });
+    await waitFor(() => expect(dialog()?.open).toBe(true));
+    expect(screen.queryByTestId("rights-transition-reason-error")).toBeNull();
   });
 
   it("填写原因后确认，调用 takedownNovelAction 并携带 trim 后的原因，成功后刷新页面", async () => {

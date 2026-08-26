@@ -66,7 +66,7 @@ function PublishOutcomePanel({ result }: { result: ApplyPublishTransitionResult 
         <p className="mt-1 text-xs text-emerald-700">
           公开页面缓存已失效。
           {result.firstPublish
-            ? " IndexNow 与站点地图刷新已在服务端异步触发（对应功能开关关闭时会各自静默跳过）。发布接口未返回这两项调度各自的执行结果（成功/跳过/失败），本页面暂无法展示更细的状态——这是已知的服务端接口缺口，需要 src/server/publish-gate 一侧补充返回值才能在此如实呈现。"
+            ? " IndexNow 与站点地图刷新已在服务端异步触发（对应功能开关关闭时会各自静默跳过）。发布接口未返回这两项调度各自的执行结果（成功/跳过/失败），本页面暂无法展示更细的状态——这是已知的发布服务接口缺口，需要发布服务补充返回值才能在此如实呈现。"
             : " 非首次发布不会再次触发 IndexNow / 站点地图刷新调度（那只在首次公开发布时发生一次）。"}
         </p>
       </div>
@@ -130,6 +130,12 @@ export function PublishLifecyclePanel({
   const [notice, setNotice] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
   const [pending, setPending] = useState<RightsTransitionKind | null>(null);
   const [reason, setReason] = useState("");
+  const [reasonError, setReasonError] = useState<string | null>(null);
+
+  function openTransition(kind: RightsTransitionKind) {
+    setReasonError(null);
+    setPending(kind);
+  }
 
   const publishBlocked = capabilityBlockReason("content:publish", canPublish);
   const takedownBlocked = capabilityBlockReason("content:takedown", canTakedown);
@@ -160,7 +166,16 @@ export function PublishLifecyclePanel({
 
   async function runRightsTransition(kind: RightsTransitionKind) {
     const trimmed = reason.trim();
-    if (!trimmed) return;
+    if (!trimmed) {
+      // Was a silent no-op before: the confirm dialog stayed open with no
+      // feedback at all, and `invalidInputCopy("reason_required")` — the
+      // exact text the server itself would return for the same condition —
+      // was unreachable from this button. Surface it in place instead, so
+      // the operator sees why nothing happened and the copy actually ships.
+      setReasonError(invalidInputCopy("reason_required"));
+      return;
+    }
+    setReasonError(null);
     setBusy(true);
     setNotice(null);
     const requestId = crypto.randomUUID();
@@ -238,7 +253,7 @@ export function PublishLifecyclePanel({
             disabled={busy || publishBlocked !== null}
             title={publishBlocked ?? undefined}
             className={buttonClassName("secondary")}
-            onClick={() => setPending("withdraw")}
+            onClick={() => openTransition("withdraw")}
             data-testid="publish-action-withdraw"
           >
             下架
@@ -250,7 +265,7 @@ export function PublishLifecyclePanel({
             disabled={busy || takedownBlocked !== null}
             title={takedownBlocked ?? undefined}
             className={buttonClassName("danger")}
-            onClick={() => setPending("takedown")}
+            onClick={() => openTransition("takedown")}
             data-testid="publish-action-takedown"
           >
             版权/安全移除
@@ -262,7 +277,7 @@ export function PublishLifecyclePanel({
             disabled={busy || takedownBlocked !== null}
             title={takedownBlocked ?? undefined}
             className={buttonClassName("secondary")}
-            onClick={() => setPending("restore")}
+            onClick={() => openTransition("restore")}
             data-testid="publish-action-restore"
           >
             恢复
@@ -286,11 +301,22 @@ export function PublishLifecyclePanel({
         title={copy?.confirmTitle ?? ""}
         confirmLabel={copy?.confirmLabel ?? "确认"}
         confirmVariant={pending === "takedown" ? "danger" : "secondary"}
-        body={<RightsTransitionConfirmBody kind={pending} reason={reason} onReason={setReason} />}
+        body={
+          <RightsTransitionConfirmBody
+            kind={pending}
+            reason={reason}
+            onReason={(value) => {
+              setReason(value);
+              if (reasonError) setReasonError(null);
+            }}
+            reasonError={reasonError}
+          />
+        }
         onCancel={() => {
           if (busy) return;
           setPending(null);
           setReason("");
+          setReasonError(null);
         }}
         onConfirm={() => {
           if (pending) void runRightsTransition(pending);
@@ -304,10 +330,12 @@ function RightsTransitionConfirmBody({
   kind,
   reason,
   onReason,
+  reasonError,
 }: {
   kind: RightsTransitionKind | null;
   reason: string;
   onReason: (value: string) => void;
+  reasonError: string | null;
 }) {
   if (!kind) return null;
   const copy = describeRightsTransition(kind);
@@ -319,10 +347,16 @@ function RightsTransitionConfirmBody({
         <input
           value={reason}
           onChange={(event) => onReason(event.target.value)}
+          aria-invalid={reasonError !== null}
           className="w-full rounded-lg border border-gray-300 px-2 py-1.5 text-sm"
           placeholder={kind === "takedown" ? "例如：版权方要求下线" : "例如：运营决定临时下线"}
         />
       </label>
+      {reasonError && (
+        <p role="alert" data-testid="rights-transition-reason-error" className="text-xs text-red-700">
+          {reasonError}
+        </p>
+      )}
     </>
   );
 }

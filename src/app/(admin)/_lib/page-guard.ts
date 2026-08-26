@@ -38,9 +38,10 @@ const UNAUTHENTICATED_CODES: ReadonlySet<AdminAccessErrorCode> = new Set([
  * only — authorisation belongs to the Route Handler and is re-checked in the
  * mutation service, so a page never becomes the sole gate.
  *
- * `tests/backend/admin-ui/page-registration.test.ts` asserts that every
- * `page.tsx` under `(admin)` calls this with a path in `ADMIN_PAGE_ROOTS`, so a
- * new page cannot silently skip it.
+ * `tests/ui/admin-nav-parity.test.tsx`'s "admin page default-deny
+ * registration" suite asserts that every `page.tsx` under `(admin)` calls
+ * this with a path in `ADMIN_PAGE_ROOTS`, so a new page cannot silently skip
+ * it.
  *
  * PR-C1 adds two UX-layer redirects on top of that unchanged security
  * boundary — neither one relaxes what `requireAdminPageAccess` already
