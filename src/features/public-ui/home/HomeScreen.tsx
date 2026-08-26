@@ -3,6 +3,7 @@ import { SectionHeader } from "@/components/SectionHeader";
 import { BookGrid } from "@/features/public-ui/book/BookGrid";
 import { SiteShell, type SiteChrome } from "@/features/public-ui/layout/SiteShell";
 import type { NovelCardView, NovelDetailView } from "@/features/public-ui/types";
+import type { SiteLocale } from "@/lib/locale/locale-canonical";
 import { getPublicT } from "@/lib/locale/messages";
 import { FeaturedHero, type FeaturedHeroItem } from "./FeaturedHero";
 import { FeaturedNovel } from "./FeaturedNovel";
@@ -27,18 +28,20 @@ export interface FeaturedEntry {
 }
 
 export function HomeScreen({
+  locale,
   featuredList = [],
   novels,
   browseAllHref,
   chrome,
 }: {
+  locale: SiteLocale;
   /** 运营编排的主推列表（对应架构文档的 home_carousel_manual_slot），建议 4–6 本。 */
   featuredList?: FeaturedEntry[];
   novels: NovelCardView[];
   browseAllHref?: string;
   chrome?: SiteChrome;
 }) {
-  const t = getPublicT();
+  const t = getPublicT(locale);
   const heroItems: FeaturedHeroItem[] = featuredList.filter(
     (entry) => Boolean(entry.novel.heroImageUrl),
   );
@@ -46,12 +49,13 @@ export function HomeScreen({
   const fallback = !hasHero ? featuredList[0] : undefined;
 
   return (
-    <SiteShell chrome={chrome} headerOverlay={hasHero}>
+    <SiteShell locale={locale} chrome={chrome} headerOverlay={hasHero}>
       {hasHero ? <FeaturedHero items={heroItems} /> : null}
 
       <Container>
         {fallback ? (
           <FeaturedNovel
+            locale={locale}
             novel={fallback.novel}
             detailHref={fallback.detailHref}
             startReadingHref={fallback.startReadingHref}
@@ -73,7 +77,7 @@ export function HomeScreen({
               ) : undefined
             }
           />
-          <BookGrid novels={novels} />
+          <BookGrid locale={locale} novels={novels} />
         </section>
       </Container>
     </SiteShell>

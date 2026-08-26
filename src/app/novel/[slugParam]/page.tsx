@@ -89,6 +89,7 @@ export default async function NovelDetailPage({
   if (access.kind === "unavailable") {
     return (
       <UnavailableScreen
+        locale={PUBLIC_SITE_LOCALE}
         chrome={chrome}
         reason="unpublished"
         novelTitle={access.title}
@@ -119,7 +120,7 @@ export default async function NovelDetailPage({
   return (
     <>
       {seo.other ? <JsonLd json={seo.other["application/ld+json"]} /> : null}
-      <NovelDetailScreen chrome={chrome} novel={novel} />
+      <NovelDetailScreen locale={PUBLIC_SITE_LOCALE} chrome={chrome} novel={novel} />
     </>
   );
 }

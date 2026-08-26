@@ -103,7 +103,7 @@ describe("移动端导航", () => {
 describe("页面壳", () => {
   it("第一个可聚焦元素是跳过导航的锚点", () => {
     const { container } = renderWithMessages(
-      <SiteShell chrome={{ navItems: NAV }}>
+      <SiteShell locale="en" chrome={{ navItems: NAV }}>
         <p>正文</p>
       </SiteShell>,
     );
@@ -116,7 +116,7 @@ describe("页面壳", () => {
 
   it("页脚链接由调用方注入，未注入时不渲染导航", () => {
     renderWithMessages(
-      <SiteShell chrome={{}}>
+      <SiteShell locale="en" chrome={{}}>
         <p>正文</p>
       </SiteShell>,
     );
@@ -126,7 +126,7 @@ describe("页面壳", () => {
 
   it("页脚不含应用下载或用户体系入口", () => {
     const { container } = renderWithMessages(
-      <SiteShell chrome={{ footerLinks: [{ label: "关于本站", href: "/about" }] }}>
+      <SiteShell locale="en" chrome={{ footerLinks: [{ label: "关于本站", href: "/about" }] }}>
         <p>正文</p>
       </SiteShell>,
     );

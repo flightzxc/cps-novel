@@ -175,7 +175,7 @@ describe("阅读设置契约 · 写入路径", () => {
   function renderWithProvider() {
     return render(
       <ReaderSettingsProvider>
-        <ChapterScreen chapter={MOCK_CHAPTER} />
+        <ChapterScreen locale="en" chapter={MOCK_CHAPTER} />
       </ReaderSettingsProvider>,
     );
   }
@@ -214,7 +214,7 @@ describe("阅读设置契约 · 写入路径", () => {
     const onSettingsChange = vi.fn();
     render(
       <ReaderSettingsProvider>
-        <ChapterScreen chapter={MOCK_CHAPTER} onSettingsChange={onSettingsChange} />
+        <ChapterScreen locale="en" chapter={MOCK_CHAPTER} onSettingsChange={onSettingsChange} />
       </ReaderSettingsProvider>,
     );
     openPanel();
@@ -266,6 +266,7 @@ describe("阅读设置契约 · 写入路径", () => {
     const onSettingsChange = vi.fn();
     render(
       <ChapterScreen
+        locale="en"
         chapter={MOCK_CHAPTER}
         initialSettings={
           { fontSizeIndex: 99, theme: "sepia" } as unknown as Partial<ReaderSettings>
@@ -295,7 +296,7 @@ describe("阅读设置契约 · 补水前后无跳变", () => {
       // ② 补水后：Provider 读回并交给阅读区的值
       render(
         <ReaderSettingsProvider>
-          <ChapterScreen chapter={MOCK_CHAPTER} />
+          <ChapterScreen locale="en" chapter={MOCK_CHAPTER} />
         </ReaderSettingsProvider>,
       );
       const surface = screen.getByTestId("reader-surface");

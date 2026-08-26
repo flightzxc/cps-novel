@@ -49,6 +49,7 @@ export default async function HomePage() {
     <>
       {seo.other ? <JsonLd json={seo.other["application/ld+json"]} /> : null}
       <HomeScreen
+        locale={PUBLIC_SITE_LOCALE}
         chrome={chrome}
         featuredList={featuredList}
         novels={novels}

@@ -5,6 +5,7 @@ import { ButtonLink } from "@/components/Button";
 import { Container } from "@/components/Container";
 import { SiteShell, type SiteChrome } from "@/features/public-ui/layout/SiteShell";
 import type { ChapterView } from "@/features/public-ui/types";
+import type { SiteLocale } from "@/lib/locale/locale-canonical";
 import { useT } from "@/lib/locale/messages/MessagesProvider";
 import { BookAttributionBar } from "./BookAttributionBar";
 import { ChapterPager } from "./ChapterPager";
@@ -40,11 +41,13 @@ import {
  * 新初值传不进来，就得靠 `key=` 强制重挂——那既会打断滚动，也会丢面板开合状态。
  */
 export function ChapterScreen({
+  locale,
   chapter,
   chrome,
   initialSettings,
   onSettingsChange,
 }: {
+  locale: SiteLocale;
   chapter: ChapterView;
   chrome?: SiteChrome;
   /** 无 Provider 时的初值。有 Provider 时以 Provider 的值为准。 */
@@ -53,7 +56,7 @@ export function ChapterScreen({
   onSettingsChange?: (next: ReaderSettings) => void;
 }) {
   return (
-    <SiteShell chrome={chrome}>
+    <SiteShell locale={locale} chrome={chrome}>
       <ChapterScreenBody
         chapter={chapter}
         initialSettings={initialSettings}
