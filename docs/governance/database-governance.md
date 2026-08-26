@@ -257,11 +257,11 @@ carousel serving source。
 | 角色 | 对象所有权 / DDL | 读取 | 写入 | 额外限制 |
 | --- | --- | --- | --- | --- |
 | `migration_owner` | 唯一应用对象 Owner；执行 Migration | 全部 | 全部 | 不作为应用运行身份 |
-| `web_app` | 无 | S0/S1 与公开章节正文；凭证仅元数据 | 后台元数据、任务入队、Audit 追加；同步 add/replace 可 INSERT 新密文及轮换元数据 | 禁止 SELECT/解密已保存 `encrypted_secret`、禁止读取完整 fingerprint、原始上游 payload/真实跳转信息 |
-| `worker_app` | 无 | 完成任务与凭证处理所需全部列 | 业务/任务状态与追加日志；仅章节撤回正文允许 DELETE | `operation_audit` 等追加日志禁止 UPDATE/DELETE |
+| `web_app` | 无 | S0/S1 与公开章节正文；凭证仅元数据 | 后台元数据、任务入队、Audit 追加；同步 add/replace 可 INSERT 新密文及轮换元数据 | 禁止 SELECT/解密已保存 `encrypted_secret`、完整 fingerprint 与原始上游信息；超时 `30s / 5s / 60s`（statement / lock / idle transaction） |
+| `worker_app` | 无 | 完成任务与凭证处理所需全部列 | 业务/任务状态与追加日志；仅章节撤回正文允许 DELETE | `operation_audit` 等追加日志禁止 UPDATE/DELETE；超时 `5min / 15s / 5min` |
 | `analyst_ro` | 无 | S0/S1 列 | 无 | `default_transaction_read_only=on`；`statement_timeout=30s`；禁止 S2/S3 |
 | `backup_role` | 无 | 完整逻辑/物理备份所需全部表、序列 | 无 | `REPLICATION` 仅用于 `pg_basebackup`；凭证仅由备份系统托管 |
-| `scheduler_app` | 无 | schedule/generic task 元数据 | 仅创建/更新 schedule 与 GenericTask 元数据 | 禁止 Auth/Credential secret；不导入 Worker handler registry；无 Credential key |
+| `scheduler_app` | 无 | schedule/generic task 元数据 | 仅创建/更新 schedule 与 GenericTask 元数据 | 禁止 Auth/Credential secret；不导入 Worker handler registry；无 Credential key；超时 `1min / 5s / 60s` |
 
 `infra/postgres/roles.sql` 不含密码；登录凭证由运行时 secret manager 或一次性测试脚本生成。
 `infra/postgres/grants.sql` 必须在每次 Migration 后重放；未来对象默认关闭，新增表或敏感列必须显式评审后授予。
@@ -325,6 +325,7 @@ P1-08B 新增独立 `scheduler_app`，只授予 schedule/generic task 元数据�
 | 2026-08-18 | v0.2.0-public-wiring（Stream B PR2，P2-08 复核） | §4 冻结公开路由：`takedown` **V1 = HTTP 404**；**410 为 post-V1（proxy 层）**。零 schema 改动。 | Cursor | 页面层 `notFound()` + `novel/[slugParam]/not-found.tsx`；禁止 `NEXT_HTTP_ERROR_FALLBACK;410` digest |
 | 2026-08-18 | P2-10 Sitemap | 登记 `SITE_URL` 为 Web/刷新 Worker 的运行期部署必需 origin；镜像 build 不注入默认域名，运行期继续严格 fail-closed | Codex | 待 Claude 增量复核 |
 | 2026-08-26 | P0 catalog promo capture (`ce7f0f1`) | `worker_app` 的表级 SELECT 增加 `promo_link` 与 `article`，供 MoboReader catalog 在脱敏前捕获已有推广资产并绑定本地文章；不新增写权、不扩张 Web/Scheduler 凭证面 | Codex | 已合入 `ce7f0f1`；集成验证覆盖角色读取与脱敏边界 |
+| 2026-08-26 | X2 PostgreSQL 硬化 | 零 schema migration；冻结 Web/Worker/Scheduler 的 statement/lock/idle transaction 超时，增加 `max_connections=100`、500ms 慢查询与 `pg_stat_statements` preload 配置合同，并补启用/回滚手册与一次性 PostgreSQL 16 验证 | Codex | 仓库配置合同已验证；生产尚需运维窗口 preload、重启、`CREATE EXTENSION` 与现网核验 |
 
 ## 13. 待跟进项（Schema 变更队列，Owner 待批）
 
