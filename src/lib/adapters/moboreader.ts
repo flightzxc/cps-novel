@@ -246,11 +246,11 @@ const REDACTED_EVIDENCE_KEYS = new Set([
  * place `toApprovedRawEvidence`'s output is persisted — see
  * `worker/handlers/moboreader.ts`'s `persistCatalogPage`) therefore carries
  * this literal, never the real upstream value, for `kocCode`/`publicUrl`/
- * `homeLink`/`onlineUrl`/`promoUrl`/`promoCode` on every synced row. Any
- * downstream reader of `rawPayload` that treats a promo-shaped field as
- * usable evidence (e.g. `worker/handlers/promo-link-claim.ts`'s §3.9
- * pre-read) must compare against this constant — not a locally re-typed
- * `"[redacted]"` literal — so the two can never drift apart.
+ * `homeLink`/`onlineUrl`/`promoUrl`/`promoCode` on every synced row. Promo
+ * extraction happens before this boundary and no downstream reader may
+ * reconstruct promo evidence from `rawPayload`; the exported constant is
+ * retained for evidence-boundary tests and consumers that display the
+ * sanitized snapshot.
  */
 export const REDACTED_EVIDENCE_SENTINEL = "[redacted]" as const;
 
