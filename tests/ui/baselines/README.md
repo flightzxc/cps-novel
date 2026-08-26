@@ -32,10 +32,15 @@
 
 ## 怎么重新生成
 
+🔴 **起服务前先设 `DEV_PREVIEW_ENABLED=true`，否则整棵 `/dev-preview` 树 404。**
+kill switch（`src/app/dev-preview/layout.tsx`）是 `force-dynamic`，逐请求读这个
+环境变量，不在构建期固化——`build` 步骤可以不带，但跑 `start` 的进程必须带，
+否则截到的是 404 页而不是真实内容。
+
 先起本地服务：
 
 ```bash
-npm run build && PORT=3111 npm run start
+npm run build && DEV_PREVIEW_ENABLED=true PORT=3111 npm run start
 ```
 
 再跑（`--virtual-time-budget=2500` 必须小于轮播 7 秒的自动播放间隔，

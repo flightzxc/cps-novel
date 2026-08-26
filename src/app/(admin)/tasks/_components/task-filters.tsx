@@ -1,6 +1,7 @@
 import {
   TASK_FAMILIES,
   TASK_FAMILY_LABELS,
+  TASK_LIST_DEFAULT_LIMIT,
   TASK_LIST_LIMIT_OPTIONS,
   TASK_STATUSES,
 } from "../_lib/task-copy";
@@ -51,7 +52,10 @@ export function TaskFilters({ values }: { values: TaskFilterValues }) {
         </select>
         <select
           name="limit"
-          defaultValue={values.limit ?? ""}
+          // 未显式选过时对齐服务端缺省（`limit()` 在 `service.ts` 里的 50），
+          // 而不是留空——留空会被浏览器渲染成选项里的第一项（20），与页面标题
+          // 显示的"上限 50"不一致，一提交筛选表单就把条数静默收窄到 20。
+          defaultValue={values.limit ?? String(TASK_LIST_DEFAULT_LIMIT)}
           aria-label="显示条数上限"
           className="rounded-lg border border-gray-300 py-2 pl-3 pr-8 text-sm focus:border-blue-500 focus:outline-none"
         >

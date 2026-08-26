@@ -9,6 +9,7 @@ import {
   isRetryableTaskStatus,
   itemStatusOptionsFor,
   taskFamilyLabel,
+  TASK_LIST_DEFAULT_LIMIT,
   TASK_LIST_LIMIT_OPTIONS,
 } from "../_lib/task-copy";
 import { RetryFailedButton } from "./retry-failed-button";
@@ -141,7 +142,10 @@ export function TaskDetailPanel({
           </select>
           <select
             name="itemLimit"
-            defaultValue={itemLimitValue ?? ""}
+            // 同 `TaskFilters` 的顶层 limit 下拉：未显式选过时对齐服务端缺省
+            // 50，不留空——留空会被浏览器选中列表里的第一项（20），与实际生效
+            // 的上限不一致。
+            defaultValue={itemLimitValue ?? String(TASK_LIST_DEFAULT_LIMIT)}
             aria-label="子项显示条数上限"
             className="rounded-lg border border-gray-300 py-1.5 pl-3 pr-8 text-xs focus:border-blue-500 focus:outline-none"
           >

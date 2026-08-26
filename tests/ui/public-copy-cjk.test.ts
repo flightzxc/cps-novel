@@ -39,6 +39,9 @@ const CJK =
 const SCAN_ROOTS = [
   "src/app/page.tsx",
   "src/app/layout.tsx",
+  "src/app/error.tsx",
+  "src/app/global-error.tsx",
+  "src/app/not-found.tsx",
   "src/app/browse",
   "src/app/novel",
   "src/features/public-ui",

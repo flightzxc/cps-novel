@@ -43,7 +43,7 @@
 
 ### 视觉偏离登记（P1-10）
 
-- **§12 状态页形态例外**：`PublicStatusPanel` 的 `bare` 模式不渲染页头页脚，偏离「页头 → 状态说明块
+- **§10 状态页形态例外**：`PublicStatusPanel` 的 `bare` 模式不渲染页头页脚，偏离「页头 → 状态说明块
   → 返回入口 → 页脚」。root 404 / error 没有 chrome 数据可喂页脚，且品牌槽位当前仍是
   `BRAND_PLACEHOLDER` 文本，不能出现在公开错误页。`UnavailableScreen` 仍走 `SiteShell`，不受影响。
 - **§13 品牌标记同步义务**：`src/app/icon.tsx` 与 `src/components/BrandMark.tsx` 是同一个几何占位的

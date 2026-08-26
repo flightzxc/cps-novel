@@ -8,6 +8,15 @@ export const metadata: Metadata = {
 };
 
 /**
+ * 强制逐请求求值，禁止预渲染。
+ *
+ * Kill switch 读的是 `process.env.DEV_PREVIEW_ENABLED`：若本层被预渲染，
+ * `notFound()` 的判断结果会在构建镜像里固化为常量，运行时再改 env 也关不掉
+ * /开不了这组路由。`force-dynamic` 保证每次请求都重新读取 env。
+ */
+export const dynamic = "force-dynamic";
+
+/**
  * 开发预览路由的外壳。
  *
  * 🔴 这组路由是临时的：正式 URL 结构（尤其是语种段）尚未冻结，本轮不自行决定

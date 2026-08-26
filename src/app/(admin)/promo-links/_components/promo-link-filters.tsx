@@ -9,6 +9,15 @@ export type PromoLinkFilterValues = {
 const LIMIT_OPTIONS = [20, 50, 100] as const;
 
 /**
+ * Mirrors `limit()`'s default in `src/server/task-admin/service.ts`
+ * (`value === "" → 50`, same helper backs `listAdminPromoLinks`). That
+ * function is a private, unexported helper — nothing to import — so this is
+ * a local copy, not a derived re-export. Keep it in sync if the server
+ * default ever changes.
+ */
+const DEFAULT_LIMIT = 50;
+
+/**
  * Same `method="GET"` filter-bar convention as `/tags` and `/tasks`.
  * `novelId` is a free-text UUID field, not a dropdown — there is no novel
  * picker here (`PromoLinkAdminDto` carries only the raw id, no joined
@@ -44,7 +53,9 @@ export function PromoLinkFilters({ values }: { values: PromoLinkFilterValues }) 
         </div>
         <select
           name="limit"
-          defaultValue={values.limit ?? ""}
+          // 未显式选过时对齐服务端缺省 50，不留空——留空会被浏览器选中列表里的
+          // 第一项（20），与页面标题显示的实际生效上限不一致。
+          defaultValue={values.limit ?? String(DEFAULT_LIMIT)}
           aria-label="显示条数上限"
           className="rounded-lg border border-gray-300 py-2 pl-3 pr-8 text-sm focus:border-blue-500 focus:outline-none"
         >

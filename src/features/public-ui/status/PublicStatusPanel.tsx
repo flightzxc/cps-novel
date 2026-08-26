@@ -8,7 +8,7 @@ import { Container } from "@/components/Container";
  * public error boundary. Does not render SiteShell — root not-found / error
  * have no chrome data to feed a header or footer, and the brand slot is still
  * the `BRAND_PLACEHOLDER` text, which must not ship on a public error page.
- * Registered as an exception to the P1-10 §12 status-page form.
+ * Registered as an exception to the P1-10 §10 status-page form.
  *
  * `min-h-[46vh]` only applies inside a SiteShell, where the header and footer
  * take up the rest of the viewport. `bare` has neither, so it centres on the

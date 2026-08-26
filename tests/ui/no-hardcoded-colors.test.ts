@@ -1,5 +1,5 @@
 import { readFileSync, readdirSync, statSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
@@ -19,9 +19,20 @@ const SCAN_ROOTS = ["../../src/components", "../../src/features/public-ui", "../
  *
  * `icon.tsx` 是 `next/og` ImageResponse 画布，不能解析 CSS 变量 / Tailwind，
  * 色值必须内联；token 对齐写在该文件注释里，不走组件扫描。
+ *
+ * 🔴 豁免按仓库相对路径精确匹配（而非 basename）：按 basename 匹配会让任何目录下
+ * 同名的 `icon.tsx` 一并逃逸扫描，豁免范围必须锁定到这一个文件。
  */
 const EXEMPT_DIRS = ["fixtures"];
-const EXEMPT_FILES = ["icon.tsx"];
+const EXEMPT_FILES = ["src/app/icon.tsx"];
+
+// 见 design-tokens.test.ts 的同一处注释：jsdom 的全局 URL 与 fileURLToPath 不兼容
+const here = dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = resolve(here, "../..");
+
+function toRepoRelativePath(fullPath: string): string {
+  return relative(REPO_ROOT, fullPath).split(sep).join("/");
+}
 
 function collectFiles(dir: string): string[] {
   const out: string[] = [];
@@ -33,7 +44,7 @@ function collectFiles(dir: string): string[] {
       }
       out.push(...collectFiles(full));
     } else if (/\.tsx?$/.test(entry)) {
-      if (!EXEMPT_FILES.includes(entry)) {
+      if (!EXEMPT_FILES.includes(toRepoRelativePath(full))) {
         out.push(full);
       }
     }
@@ -41,8 +52,6 @@ function collectFiles(dir: string): string[] {
   return out;
 }
 
-// 见 design-tokens.test.ts 的同一处注释：jsdom 的全局 URL 与 fileURLToPath 不兼容
-const here = dirname(fileURLToPath(import.meta.url));
 const files = SCAN_ROOTS.flatMap((root) => collectFiles(resolve(here, root)));
 
 describe("组件零硬编码色值", () => {
