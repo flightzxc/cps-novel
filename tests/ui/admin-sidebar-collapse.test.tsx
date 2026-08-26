@@ -24,6 +24,12 @@ const CAPABILITIES: readonly AdminCapabilityView[] = [
   { capability: "content:takedown", state: "granted" },
   { capability: "promo:claim", state: "granted" },
   { capability: "revenue:view", state: "granted" },
+  // PR-C6a binds `/settings` to `settings:manage` so an operator without it
+  // sees the entry greyed out. This suite is about collapse/expand mechanics,
+  // not capability gating, so it grants the capability like it already does
+  // for `/channel-accounts` above (`credential:manage`) to keep `/settings`
+  // rendering as a live link.
+  { capability: "settings:manage", state: "granted" },
 ];
 
 function renderSidebar(path: string) {

@@ -33,7 +33,7 @@ export const ADMIN_NAV_ITEMS: readonly AdminNavItem[] = Object.freeze([
   { href: "/articles", label: "文章管理", icon: "article" },
   { href: "/categories", label: "分类管理", icon: "category" },
   { href: "/tags", label: "标签管理", icon: "tag" },
-  { href: "/tasks", label: "任务中心", icon: "task" },
+  { href: "/tasks", label: "任务中心", icon: "task", capability: "task:manage" },
   {
     href: "/revenue",
     label: "数据看板",
@@ -45,6 +45,7 @@ export const ADMIN_NAV_ITEMS: readonly AdminNavItem[] = Object.freeze([
     href: "/settings",
     label: "站点设置",
     icon: "settings",
+    capability: "settings:manage",
     children: [
       { href: "/settings/api-config", label: "API 配置", icon: "settings" },
       { href: "/settings/security", label: "账号安全", icon: "shield" },

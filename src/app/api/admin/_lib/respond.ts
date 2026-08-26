@@ -1,4 +1,4 @@
-import { projectErrorEnvelope, type AdminErrorCode, type ErrorEnvelope } from "@/contracts";
+import { projectErrorEnvelope, type ErrorEnvelope } from "@/contracts";
 import { isAdminAccessError } from "@/lib/auth/errors";
 import type { CredentialContractCode } from "@/lib/credentials/contracts";
 import { CredentialLifecycleError } from "@/lib/credentials/lifecycle";
@@ -50,9 +50,12 @@ const CREDENTIAL_CODE_STATUS: Readonly<Record<CredentialContractCode, 401 | 403 
 /**
  * Map any thrown server error onto the frozen envelope.
  *
- * Anything unrecognised collapses to a generic 403 with no detail: an unexpected
- * `Error` may carry a driver message or a stack, and this boundary must never
- * become the thing that forwards it.
+ * Anything unrecognised collapses to `admin_internal_error` / 500 with no
+ * detail: an unexpected `Error` may carry a driver message or a stack, and
+ * this boundary must never become the thing that forwards it. This used to
+ * collapse to `admin_capability_denied` / 403, which reads to an operator as
+ * "you lack a permission" — the wrong diagnosis for "the server broke", and
+ * one that sends them chasing a role grant that would never have helped.
  */
 export function toErrorEnvelope(error: unknown): ErrorEnvelope {
   if (error instanceof AdminContentNotFoundError) {
@@ -100,7 +103,7 @@ export function toErrorEnvelope(error: unknown): ErrorEnvelope {
       status: CREDENTIAL_CODE_STATUS[error.code],
     });
   }
-  return projectErrorEnvelope({ code: "admin_capability_denied" as AdminErrorCode, status: 403 });
+  return projectErrorEnvelope({ code: "admin_internal_error", status: 500 });
 }
 
 export function jsonOk<T>(data: T, status = 200): Response {
