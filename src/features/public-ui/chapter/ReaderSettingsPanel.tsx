@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useId, useRef } from "react";
+import { useT } from "@/lib/locale/messages/MessagesProvider";
+import type { MessageKey } from "@/lib/locale/messages";
 import {
   DEFAULT_READER_SETTINGS,
   READER_FONT_SIZES,
@@ -10,6 +12,24 @@ import {
   type ReaderSettings,
   type ReaderTheme,
 } from "./reader-settings";
+
+const THEME_LABEL_KEYS: Record<ReaderTheme, MessageKey> = {
+  system: "chapter.themeSystem",
+  light: "chapter.themeLight",
+  dark: "chapter.themeDark",
+};
+
+const LINE_HEIGHT_LABEL_KEYS: MessageKey[] = [
+  "chapter.lineHeightCompact",
+  "chapter.lineHeightStandard",
+  "chapter.lineHeightRelaxed",
+];
+
+const MEASURE_LABEL_KEYS: MessageKey[] = [
+  "chapter.measureNarrow",
+  "chapter.measureStandard",
+  "chapter.measureWide",
+];
 
 /**
  * 阅读设置面板。
@@ -38,6 +58,7 @@ export function ReaderSettingsPanel({
   onReset: () => void;
   labelledBy?: string;
 }) {
+  const t = useT();
   const panelRef = useRef<HTMLDivElement>(null);
   const titleId = useId();
 
@@ -81,13 +102,13 @@ export function ReaderSettingsPanel({
     >
       <div className="flex items-center justify-between">
         <h2 id={titleId} className="text-sm font-medium text-novel-fg">
-          阅读设置
+          {t("chapter.readerSettings")}
         </h2>
         <button
           type="button"
           onClick={onClose}
           className="-mr-2 inline-flex h-9 w-9 items-center justify-center rounded-novel-md text-novel-fg-muted transition-colors hover:bg-novel-bg-raised hover:text-novel-fg"
-          aria-label="关闭阅读设置"
+          aria-label={t("chapter.closeReaderSettings")}
         >
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
             <path
@@ -102,10 +123,10 @@ export function ReaderSettingsPanel({
 
       <div className="mt-5 flex flex-col gap-5">
         <OptionRow
-          label="主题"
+          label={t("chapter.theme")}
           options={READER_THEME_OPTIONS.map((option) => ({
             key: option.value,
-            label: option.label,
+            label: t(THEME_LABEL_KEYS[option.value]),
             selected: settings.theme === option.value,
             onSelect: () => onChange({ ...settings, theme: option.value as ReaderTheme }),
           }))}
@@ -113,7 +134,7 @@ export function ReaderSettingsPanel({
         />
 
         <OptionRow
-          label="字号"
+          label={t("chapter.fontSize")}
           options={READER_FONT_SIZES.map((size, index) => ({
             key: size,
             label: size.replace("px", ""),
@@ -124,10 +145,10 @@ export function ReaderSettingsPanel({
         />
 
         <OptionRow
-          label="行高"
+          label={t("chapter.lineHeight")}
           options={READER_LINE_HEIGHTS.map((value, index) => ({
             key: value,
-            label: ["紧凑", "标准", "宽松"][index] ?? value,
+            label: t(LINE_HEIGHT_LABEL_KEYS[index] ?? "chapter.lineHeightStandard"),
             selected: settings.lineHeightIndex === index,
             onSelect: () => onChange({ ...settings, lineHeightIndex: index }),
           }))}
@@ -135,10 +156,10 @@ export function ReaderSettingsPanel({
         />
 
         <OptionRow
-          label="页宽"
+          label={t("chapter.measure")}
           options={READER_MEASURES.map((value, index) => ({
             key: value,
-            label: ["窄", "标准", "宽"][index] ?? value,
+            label: t(MEASURE_LABEL_KEYS[index] ?? "chapter.measureStandard"),
             selected: settings.measureIndex === index,
             onSelect: () => onChange({ ...settings, measureIndex: index }),
           }))}
@@ -148,14 +169,14 @@ export function ReaderSettingsPanel({
 
       <div className="mt-6 flex items-center justify-between border-t border-novel-border pt-4">
         {/* 无账号体系，偏好只能落在本机。与其让读者换台设备后困惑，不如说清楚。 */}
-        <p className="text-xs text-novel-fg-subtle">设置保存在本设备，不跨设备同步</p>
+        <p className="text-xs text-novel-fg-subtle">{t("chapter.persistNote")}</p>
         <button
           type="button"
           onClick={onReset}
           disabled={isDefault}
           className="rounded-novel-sm px-2 py-1 text-xs text-novel-fg-muted transition-colors hover:text-novel-fg disabled:pointer-events-none disabled:opacity-45"
         >
-          恢复默认
+          {t("chapter.resetDefaults")}
         </button>
       </div>
     </div>

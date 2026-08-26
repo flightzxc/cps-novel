@@ -2,7 +2,7 @@
 
 > 基线：`BASE 62453d2`（分支 `feature/v0.1.0-p2-01-publish-contract`）
 > CPS 参照基线：`d77c3b968285698529cf97c7f0f97b286d7a2a9c`（只读参考，见 `CLAUDE.md` §2）
-> 状态：待 Codex 契约审查
+> 状态：Codex 审查完成，Owner 口径已冻结（`FROZEN`）
 > 变更级别：🔴 `FROZEN`（变更需 Owner 确认）
 > 输入依据：`docs/governance/P2_HANDOFF_INPUT.md` §3/§5/§9（背景材料，成文早于本轮
 > Owner 决策，不包含 §0 记录的 supersession 内容——引用它时只作背景，见 §0 末尾说明）

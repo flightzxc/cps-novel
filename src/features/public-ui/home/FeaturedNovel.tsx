@@ -3,6 +3,8 @@ import { CoverImage } from "@/components/CoverImage";
 import { MetaList } from "@/components/MetaList";
 import { TagList } from "@/components/Tag";
 import type { NovelDetailView } from "@/features/public-ui/types";
+import type { SiteLocale } from "@/lib/locale/locale-canonical";
+import { getPublicT } from "@/lib/locale/messages";
 
 /**
  * 首页主推位 · 封面编排版 —— **无横版主视觉物料时的回落形态**。
@@ -22,11 +24,13 @@ import type { NovelDetailView } from "@/features/public-ui/types";
  * 依据见 docs/p1/P1_10_VISUAL_DIRECTION.md 第五节与文末变更记录。
  */
 export function FeaturedNovel({
+  locale,
   novel,
-  eyebrow = "本期主推",
+  eyebrow,
   detailHref,
   startReadingHref,
 }: {
+  locale: SiteLocale;
   novel: NovelDetailView;
   eyebrow?: string;
   /** 详情页地址，由路由层注入 */
@@ -34,11 +38,12 @@ export function FeaturedNovel({
   /** 站内试读入口。没有可试读章节时不渲染该按钮。 */
   startReadingHref?: string;
 }) {
+  const t = getPublicT(locale);
   return (
     <section aria-labelledby="featured-title" className="pt-12 pb-4 md:pt-20 md:pb-8">
       <div className="border-t border-novel-border pt-6 md:pt-10">
         <p className="text-xs tracking-[0.2em] text-novel-fg-subtle uppercase">
-          {eyebrow}
+          {eyebrow ?? t("home.featuredEyebrow")}
         </p>
 
         <div className="mt-6 grid gap-8 md:mt-10 md:grid-cols-[minmax(0,320px)_minmax(0,1fr)] md:gap-14">
@@ -46,7 +51,7 @@ export function FeaturedNovel({
             <a href={detailHref} className="block rounded-novel-md">
               <CoverImage
                 src={novel.coverUrl}
-                alt={`《${novel.title}》封面`}
+                alt={t("novel.coverAlt", { title: novel.title })}
                 sizeHint="(min-width: 768px) 320px, 240px"
               />
             </a>
@@ -66,11 +71,11 @@ export function FeaturedNovel({
               className="mt-4"
               items={[
                 { key: "locale", value: novel.locale.label },
-                { key: "chapters", value: `共 ${novel.totalChapterCount} 章` },
+                { key: "chapters", value: t("home.chapterCount", { count: novel.totalChapterCount }) },
               ]}
             />
 
-            <TagList tags={novel.tags} className="mt-4" label={`《${novel.title}》标签`} />
+            <TagList tags={novel.tags} className="mt-4" label={t("novel.tagsLabel")} />
 
             <p className="mt-6 max-w-[60ch] text-base leading-relaxed text-novel-fg-muted md:mt-7 md:text-lg">
               {novel.description}
@@ -79,11 +84,11 @@ export function FeaturedNovel({
             <div className="mt-8 flex flex-wrap gap-3 md:mt-10">
               {startReadingHref ? (
                 <ButtonLink href={startReadingHref} variant="accent" size="lg">
-                  开始试读
+                  {t("home.startPreview")}
                 </ButtonLink>
               ) : null}
               <ButtonLink href={detailHref} variant="outline" size="lg">
-                查看详情
+                {t("home.viewDetails")}
               </ButtonLink>
             </div>
           </div>

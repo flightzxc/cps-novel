@@ -106,7 +106,7 @@ describe("阅读位置 · 滚动分支", () => {
     // 必须自己回到顶部，否则切到新章会停在上一章的滚动量上。
     const scrollTo = vi.spyOn(window, "scrollTo");
 
-    render(<ChapterScreen chapter={CHAPTER_2} />);
+    render(<ChapterScreen locale="en" chapter={CHAPTER_2} />);
 
     expect(scrollTo).toHaveBeenCalledWith(
       expect.objectContaining({ top: 0, behavior: "auto" }),
@@ -121,7 +121,7 @@ describe("阅读位置 · 滚动分支", () => {
     });
     const scrollTo = vi.spyOn(window, "scrollTo");
 
-    render(<ChapterScreen chapter={CHAPTER_1} />);
+    render(<ChapterScreen locale="en" chapter={CHAPTER_1} />);
 
     // 走的是「回到顶部」这一支，而不是恢复到第 0 段的某个偏移。
     expect(scrollTo).toHaveBeenCalledWith(
@@ -137,7 +137,7 @@ describe("阅读位置 · 滚动分支", () => {
     });
     const scrollTo = vi.spyOn(window, "scrollTo");
 
-    render(<ChapterScreen chapter={CHAPTER_1} />);
+    render(<ChapterScreen locale="en" chapter={CHAPTER_1} />);
 
     expect(scrollTo).toHaveBeenCalledWith(
       expect.objectContaining({ top: 0, behavior: "auto" }),
@@ -146,7 +146,7 @@ describe("阅读位置 · 滚动分支", () => {
   });
 
   it("正文每段都带锚点下标，供位置恢复定位", () => {
-    render(<ChapterScreen chapter={CHAPTER_1} />);
+    render(<ChapterScreen locale="en" chapter={CHAPTER_1} />);
 
     const paragraphs = screen
       .getByTestId("reader-body")

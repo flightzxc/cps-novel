@@ -1,5 +1,7 @@
 import { SectionHeader } from "@/components/SectionHeader";
 import type { PreviewChapterRef } from "@/features/public-ui/types";
+import type { SiteLocale } from "@/lib/locale/locale-canonical";
+import { getPublicT } from "@/lib/locale/messages";
 
 /** 可试读章节区块的锚点。详情页内唯一，不新建独立目录路由。 */
 export const PREVIEW_CHAPTERS_ANCHOR = "preview-chapters";
@@ -16,7 +18,14 @@ export const PREVIEW_CHAPTERS_ANCHOR = "preview-chapters";
  *   3. 🔴 **这不是目录，是样章。** 每条带章号与章名、可点进阅读，按样章的节奏排，
  *      不按目录的节奏排。
  */
-export function PreviewChapterList({ chapters }: { chapters: PreviewChapterRef[] }) {
+export function PreviewChapterList({
+  locale,
+  chapters,
+}: {
+  locale: SiteLocale;
+  chapters: PreviewChapterRef[];
+}) {
+  const t = getPublicT(locale);
   const hasChapters = chapters.length > 0;
 
   return (
@@ -28,10 +37,10 @@ export function PreviewChapterList({ chapters }: { chapters: PreviewChapterRef[]
     >
       <SectionHeader
         id="preview-chapters-title"
-        title="可试读章节"
+        title={t("novel.previewChapters")}
         description={
           hasChapters
-            ? `本站可试读 ${chapters.length} 章，均由上游实际提供。`
+            ? t("novel.previewChaptersDescription", { count: chapters.length })
             : undefined
         }
       />
@@ -45,7 +54,7 @@ export function PreviewChapterList({ chapters }: { chapters: PreviewChapterRef[]
                 className="flex items-baseline gap-4 py-4 transition-colors hover:bg-novel-bg-elevated md:py-5"
               >
                 <span className="w-14 shrink-0 text-sm tabular-nums text-novel-fg-subtle md:w-16">
-                  第 {chapter.number} 章
+                  {t("novel.chapterHeading", { number: chapter.number })}
                 </span>
                 <span className="font-novel-serif text-base text-novel-fg md:text-lg">
                   {chapter.title}
@@ -59,7 +68,7 @@ export function PreviewChapterList({ chapters }: { chapters: PreviewChapterRef[]
           className="rounded-novel-lg border border-novel-border bg-novel-bg-elevated px-6 py-10 text-center text-sm text-novel-fg-muted"
           data-testid="preview-chapters-empty"
         >
-          这本书目前没有可以试读的章节。
+          {t("novel.noPreviewChapters")}
         </p>
       )}
     </section>

@@ -21,6 +21,10 @@ const COPY: Readonly<Record<AdminErrorCode, string>> = Object.freeze({
   admin_mutation_request_id_invalid: "请求标识无效或已被用于另一次提交",
   admin_rate_limited: "操作过于频繁，请稍后重试",
   admin_service_authorization_required: "服务端授权校验未通过，请刷新页面后重试",
+  // Distinct from `admin_capability_denied`: this is not a permission problem,
+  // it is an unrecognised server-side failure. Conflating the two sends an
+  // operator chasing a role grant that would never have fixed anything.
+  admin_internal_error: "系统内部错误，请联系工程排查并附上操作时间",
   two_factor_failed: "验证码或恢复码不正确",
   two_factor_expired: "验证已过期，请重新开始",
   two_factor_locked: "尝试次数过多，请重新登录",
@@ -33,6 +37,9 @@ const COPY: Readonly<Record<AdminErrorCode, string>> = Object.freeze({
   credential_capability_denied: "缺少凭证管理能力位",
   credential_ambiguous: "同一账户存在多条有效凭证，请先人工处置",
   account_inactive: "该渠道账户已停用，请先启用后再操作",
+  site_setting_invalid: "站点设置参数无效，请检查后重试",
+  site_setting_conflict: "站点设置已被其他操作人修改，请刷新后重试",
+  site_setting_not_seeded: "站点设置单例缺失，请联系运维检查部署",
   // P2-04 content reads. Each names the offending parameter, because these are
   // reachable only from a hand-edited URL and "参数无效" would leave the operator
   // guessing which of five query parameters to fix.
@@ -47,6 +54,18 @@ const COPY: Readonly<Record<AdminErrorCode, string>> = Object.freeze({
   // P2-06 source-label reads.
   invalid_label_kind: "标签类型未登记",
   invalid_activity: "标签筛选档位未登记",
+  // Task-admin boundary (`task-admin-route.ts`). Eight distinct failure
+  // modes that used to share one generic sentence — each needs its own
+  // wording so an operator can tell "fix your input" from "wait and retry"
+  // from "go resolve a manual review item".
+  task_admin_invalid_request: "任务查询或操作参数无效，请检查后重试",
+  task_admin_not_found: "任务不存在或已被清理",
+  task_admin_state_conflict: "任务当前状态不支持该操作，请刷新后重试",
+  task_admin_idempotency_conflict: "该请求标识已用于另一次不同的提交，已拒绝以避免静默覆盖",
+  task_admin_unresolved_intent: "该任务有未裁决的人工审查项，先去处理",
+  task_admin_concurrent_write: "任务已被其他操作同时修改，请刷新后重试",
+  task_admin_active_scope_conflict: "同一渠道/应用范围内已有进行中的任务，请等待其完成后再重试",
+  task_admin_internal_error: "系统内部错误，请联系工程排查并附上操作时间",
 });
 
 /** Reason refines the code; without it the two session expiries read identically. */

@@ -135,7 +135,7 @@ describe("防闪 · ③ 阅读区的内联样式时机", () => {
 
     render(
       <ReaderSettingsProvider>
-        <ChapterScreen chapter={MOCK_CHAPTER} />
+        <ChapterScreen locale="en" chapter={MOCK_CHAPTER} />
       </ReaderSettingsProvider>,
     );
 
@@ -147,7 +147,7 @@ describe("防闪 · ③ 阅读区的内联样式时机", () => {
 
   it("独立渲染（无 Provider）时立即写内联变量，不受补水门控影响", () => {
     // 自持模式没有"等存储读回"这回事，P1-10 的行为必须逐字节保持。
-    render(<ChapterScreen chapter={MOCK_CHAPTER} initialSettings={{ fontSizeIndex: 0 }} />);
+    render(<ChapterScreen locale="en" chapter={MOCK_CHAPTER} initialSettings={{ fontSizeIndex: 0 }} />);
 
     const style = screen.getByTestId("reader-surface").getAttribute("style") ?? "";
     expect(style).toContain("--reader-font-size: 16px");

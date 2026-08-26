@@ -1,5 +1,7 @@
 export * from "./errors";
 export * from "./moboreader";
+export * from "./promo-link-claim";
+export * from "./promo-link-claim-limits";
 export * from "./registry";
 export * from "./scheduler";
 export * from "./sitemap-refresh";

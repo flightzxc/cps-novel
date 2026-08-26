@@ -1,4 +1,6 @@
 import type { NovelCardView } from "@/features/public-ui/types";
+import type { SiteLocale } from "@/lib/locale/locale-canonical";
+import { getPublicT } from "@/lib/locale/messages";
 import { BookCard } from "./BookCard";
 
 /**
@@ -9,19 +11,22 @@ import { BookCard } from "./BookCard";
  * 「阅读类产品比视频类更松」这条方向定调。槽宽也相应加大。
  */
 export function BookGrid({
+  locale,
   novels,
-  emptyMessage = "这里暂时没有可以阅读的作品。",
+  emptyMessage,
 }: {
+  locale: SiteLocale;
   novels: NovelCardView[];
   emptyMessage?: string;
 }) {
+  const message = emptyMessage ?? getPublicT(locale)("collection.empty");
   if (novels.length === 0) {
     return (
       <p
         className="rounded-novel-lg border border-novel-border bg-novel-bg-elevated px-6 py-12 text-center text-sm text-novel-fg-muted"
         data-testid="book-grid-empty"
       >
-        {emptyMessage}
+        {message}
       </p>
     );
   }
@@ -33,7 +38,7 @@ export function BookGrid({
     >
       {novels.map((novel) => (
         <li key={novel.id}>
-          <BookCard novel={novel} />
+          <BookCard locale={locale} novel={novel} />
         </li>
       ))}
     </ul>

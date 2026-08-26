@@ -31,6 +31,20 @@ const EXPECTED_CONTENT_GET_ROUTES = [
   "/api/admin/tags",
 ] as const;
 
+const EXPECTED_SITE_SETTING_ROUTES = [
+  { path: "/api/admin/site-settings", methods: ["GET", "PATCH"] },
+] as const;
+
+const EXPECTED_TASK_ROUTES = [
+  { path: "/api/admin/tasks", methods: ["GET"] },
+  { path: "/api/admin/tasks/detail", methods: ["GET"] },
+  { path: "/api/admin/tasks/items", methods: ["GET"] },
+  { path: "/api/admin/tasks/retry-failed", methods: ["POST"] },
+  { path: "/api/admin/tasks/manual-reviews", methods: ["GET"] },
+  { path: "/api/admin/tasks/manual-reviews/resolve", methods: ["POST"] },
+  { path: "/api/admin/promo-links", methods: ["GET"] },
+] as const;
+
 const EXPECTED_ACTIONS = [
   "admin.channel_account.create",
   "admin.channel_account.disable",
@@ -40,30 +54,58 @@ const EXPECTED_ACTIONS = [
   "admin.credential.supersede",
 ] as const;
 
-async function routeHandlers(directory: string): Promise<string[]> {
+async function routeHandlers(directory: string): Promise<Array<{ path: string; methods: string[] }>> {
   const entries = await readdir(directory, { withFileTypes: true });
   const nested = await Promise.all(entries.map(async (entry) => {
     const target = path.join(directory, entry.name);
     if (entry.isDirectory()) return routeHandlers(target);
     if (entry.name !== "route.ts") return [];
     const source = await readFile(target, "utf8");
-    if (!/export async function (?:GET|HEAD|OPTIONS)\b/.test(source)) return [];
+    const methods = [...source.matchAll(/export async function (GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)\b/g)]
+      .map((match) => match[1]);
+    if (methods.length === 0) return [];
     const relative = path.relative(path.resolve(process.cwd(), "src/app"), target);
-    return [`/${relative.replace(/\/route\.ts$/, "").split(path.sep).join("/")}`];
+    return [{
+      path: `/${relative.replace(/\/route\.ts$/, "").split(path.sep).join("/")}`,
+      methods: methods.sort(),
+    }];
   }));
   return nested.flat();
 }
 
 describe("P1-09 Admin registry parity", () => {
-  it("registers every real GET Handler and no route without a Handler", async () => {
-    const actual = (await routeHandlers(path.resolve(process.cwd(), "src/app/api/admin"))).sort();
-    const registered = P2_04_ADMIN_REGISTRY.routes.map((route) => route.path).sort();
-    expect(actual).toEqual([...EXPECTED_GET_ROUTES, ...EXPECTED_CONTENT_GET_ROUTES].sort());
+  it("registers every real Handler with its exact method and no route without a Handler", async () => {
+    const actual = (await routeHandlers(path.resolve(process.cwd(), "src/app/api/admin")))
+      .sort((left, right) => left.path.localeCompare(right.path));
+    const expected = [
+      ...EXPECTED_GET_ROUTES.map((routePath) => ({ path: routePath, methods: ["GET"] })),
+      ...EXPECTED_CONTENT_GET_ROUTES.map((routePath) => ({ path: routePath, methods: ["GET"] })),
+      ...EXPECTED_SITE_SETTING_ROUTES.map((route) => ({ path: route.path, methods: [...route.methods] })),
+      ...EXPECTED_TASK_ROUTES.map((route) => ({ path: route.path, methods: [...route.methods] })),
+    ].sort((left, right) => left.path.localeCompare(right.path));
+    const registered = P2_04_ADMIN_REGISTRY.routes
+      .map((route) => ({ path: route.path, methods: [...route.methods].sort() }))
+      .sort((left, right) => left.path.localeCompare(right.path));
+    expect(actual).toEqual(expected);
     expect(registered).toEqual(actual);
     for (const route of P1_08B_ADMIN_REGISTRY.routes) {
       expect(route.methods).toEqual(["GET"]);
       expect(route.capability).toBe("credential:manage");
       expect(resolveAdminRoute(route.path, "GET", P2_04_ADMIN_REGISTRY)).not.toBeNull();
+    }
+    for (const route of EXPECTED_TASK_ROUTES) {
+      expect(resolveAdminRoute(route.path, route.methods[0], P2_04_ADMIN_REGISTRY)).toMatchObject({
+        capability: "task:manage",
+        methods: route.methods,
+      });
+    }
+    for (const route of EXPECTED_SITE_SETTING_ROUTES) {
+      for (const method of route.methods) {
+        expect(resolveAdminRoute(route.path, method, P2_04_ADMIN_REGISTRY)).toMatchObject({
+          capability: "settings:manage",
+          methods: route.methods,
+        });
+      }
     }
   });
 

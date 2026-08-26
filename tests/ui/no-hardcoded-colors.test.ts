@@ -1,5 +1,5 @@
 import { readFileSync, readdirSync, statSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
@@ -14,29 +14,45 @@ import { describe, expect, it } from "vitest";
 const SCAN_ROOTS = ["../../src/components", "../../src/features/public-ui", "../../src/app"];
 
 /**
- * 假数据目录是唯一豁免：它生成的是**内容图片**（内联占位封面的渐变），
+ * 假数据目录是唯一内容豁免：它生成的是**内容图片**（内联占位封面的渐变），
  * 属于「封面是全站唯一高饱和元素」里的封面，不是界面颜色。
+ *
+ * `brand-mark-image.tsx` 画的是 `next/og` ImageResponse 画布，Satori 不解析
+ * CSS 变量 / Tailwind，色值必须内联；token 对齐写在该文件注释里，不走组件扫描。
+ * 两个图标路由（`icon.tsx` / `apple-icon.tsx`）只调用它，本身不含色值，因此不在豁免名单里。
+ *
+ * 🔴 豁免按仓库相对路径精确匹配（而非 basename）：按 basename 匹配会让任何目录下
+ * 同名的 `brand-mark-image.tsx` 一并逃逸扫描，豁免范围必须锁定到这一个文件。
  */
-const EXEMPT = ["fixtures"];
+const EXEMPT_DIRS = ["fixtures"];
+const EXEMPT_FILES = ["src/app/_components/brand-mark-image.tsx"];
+
+// 见 design-tokens.test.ts 的同一处注释：jsdom 的全局 URL 与 fileURLToPath 不兼容
+const here = dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = resolve(here, "../..");
+
+function toRepoRelativePath(fullPath: string): string {
+  return relative(REPO_ROOT, fullPath).split(sep).join("/");
+}
 
 function collectFiles(dir: string): string[] {
   const out: string[] = [];
   for (const entry of readdirSync(dir)) {
     const full = join(dir, entry);
     if (statSync(full).isDirectory()) {
-      if (EXEMPT.includes(entry)) {
+      if (EXEMPT_DIRS.includes(entry)) {
         continue;
       }
       out.push(...collectFiles(full));
     } else if (/\.tsx?$/.test(entry)) {
-      out.push(full);
+      if (!EXEMPT_FILES.includes(toRepoRelativePath(full))) {
+        out.push(full);
+      }
     }
   }
   return out;
 }
 
-// 见 design-tokens.test.ts 的同一处注释：jsdom 的全局 URL 与 fileURLToPath 不兼容
-const here = dirname(fileURLToPath(import.meta.url));
 const files = SCAN_ROOTS.flatMap((root) => collectFiles(resolve(here, root)));
 
 describe("组件零硬编码色值", () => {

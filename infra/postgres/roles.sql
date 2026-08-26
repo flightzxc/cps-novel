@@ -35,6 +35,20 @@ ALTER ROLE analyst_ro WITH
 ALTER ROLE backup_role WITH
   LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT REPLICATION NOBYPASSRLS;
 
+-- X2 runtime query budgets. ALTER ROLE settings apply to new sessions; deploys
+-- must recycle the corresponding connection pools after replaying this file.
+ALTER ROLE web_app SET statement_timeout = '30s';
+ALTER ROLE web_app SET lock_timeout = '5s';
+ALTER ROLE web_app SET idle_in_transaction_session_timeout = '60s';
+
+ALTER ROLE worker_app SET statement_timeout = '5min';
+ALTER ROLE worker_app SET lock_timeout = '15s';
+ALTER ROLE worker_app SET idle_in_transaction_session_timeout = '5min';
+
+ALTER ROLE scheduler_app SET statement_timeout = '1min';
+ALTER ROLE scheduler_app SET lock_timeout = '5s';
+ALTER ROLE scheduler_app SET idle_in_transaction_session_timeout = '60s';
+
 ALTER ROLE analyst_ro SET statement_timeout = '30s';
 ALTER ROLE analyst_ro SET default_transaction_read_only = 'on';
 ALTER ROLE backup_role SET default_transaction_read_only = 'on';

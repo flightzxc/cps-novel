@@ -41,6 +41,7 @@ prepare_p1_12_local_environment() {
   write_secret_once "$P1_12_SECRET_DIR/totp.key" base64
   write_secret_once "$P1_12_SECRET_DIR/credential-v1.key" base64
   write_secret_once "$P1_12_SECRET_DIR/credential-fingerprint.key" base64
+  write_secret_once "$P1_12_SECRET_DIR/tracking-hash-salt.key" base64
 
   export P1_12_POSTGRES_ADMIN_PASSWORD_FILE="$P1_12_SECRET_DIR/postgres_admin.password"
   export P1_12_MIGRATION_OWNER_PASSWORD_FILE="$P1_12_SECRET_DIR/migration_owner.password"
@@ -63,9 +64,11 @@ prepare_p1_12_local_environment() {
   export TOTP_ENCRYPTION_KEY="$(read_secret_value "$P1_12_SECRET_DIR/totp.key")"
   export CHANNEL_CREDENTIAL_ENCRYPTION_KEY_V1="$(read_secret_value "$P1_12_SECRET_DIR/credential-v1.key")"
   export CHANNEL_CREDENTIAL_FINGERPRINT_KEY="$(read_secret_value "$P1_12_SECRET_DIR/credential-fingerprint.key")"
+  export TRACKING_HASH_SALT="$(read_secret_value "$P1_12_SECRET_DIR/tracking-hash-salt.key")"
 
   export P1_12_COMPOSE_PROJECT="${P1_12_COMPOSE_PROJECT:-cps-novel-p1-12}"
   export APP_VERSION="$(node -p 'require(process.argv[1]).version' "$P1_12_PROJECT_ROOT/package.json")"
+  export NEXT_PUBLIC_BUILD_VERSION="${NEXT_PUBLIC_BUILD_VERSION:-v${APP_VERSION}}"
   export GIT_COMMIT="$(git -C "$P1_12_PROJECT_ROOT" rev-parse HEAD)"
   local build_date_file="$P1_12_RUNTIME_DIR/build-date-${GIT_COMMIT}.txt"
   if [[ ! -f "$build_date_file" ]]; then
@@ -75,4 +78,8 @@ prepare_p1_12_local_environment() {
   export BUILD_DATE="$(tr -d '\r\n' <"$build_date_file")"
   export CPS_NOVEL_APP_IMAGE="cps-novel:${APP_VERSION}-${GIT_COMMIT:0:7}"
   export ADMIN_CANONICAL_ORIGIN="${ADMIN_CANONICAL_ORIGIN:-http://127.0.0.1:${P1_12_WEB_PORT:-3000}}"
+  export SITE_URL="${SITE_URL:-$ADMIN_CANONICAL_ORIGIN}"
+  export TZ="${TZ:-Asia/Tokyo}"
+  export WORKER_TASK_ALLOWLIST="${WORKER_TASK_ALLOWLIST:-credential.validate.v1,credential.supersede.v1,catalog_scan}"
+  export MOBOREADER_PREVIEW_SOURCE_APP_CODES="${MOBOREADER_PREVIEW_SOURCE_APP_CODES:-changdu}"
 }

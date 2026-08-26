@@ -9,12 +9,14 @@ import {
   type AdminContentPageView,
   type ErrorEnvelope,
 } from "@/contracts";
+import { findCapabilityState } from "@/features/admin-ui/capability-view";
 import { errorEnvelopeCopy } from "@/features/admin-ui/error-copy";
+import { AdminTimeZoneNote } from "@/features/admin-ui/time-zone-note";
 import { getAdminNovelDetail, listAdminNovelChapters } from "@/server/admin-content";
 
 import { prisma } from "../../../api/admin/_lib/deps";
 import { AdminShell } from "../../_components/admin-shell";
-import { sessionView } from "../../_lib/page-guard";
+import { capabilityViews, sessionView } from "../../_lib/page-guard";
 import { ChaptersTable } from "../_components/chapters-table";
 import { ContentPagination } from "../_components/content-pagination";
 import { ContentCapabilityDenied, ContentErrorPanel } from "../_components/content-states";
@@ -26,7 +28,9 @@ import {
   NovelSourcesPanel,
   NovelSyncPanel,
 } from "../_components/novel-detail-panels";
+import { PublishLifecyclePanel } from "../_components/publish-lifecycle-panel";
 import { requireContentPage } from "../_lib/content-page-guard";
+import { readPrimaryArticleForNovel } from "../_lib/read-primary-article";
 
 export const dynamic = "force-dynamic";
 
@@ -64,6 +68,12 @@ export default async function NovelDetailPage({
   const detail = await getAdminNovelDetail(prisma, novelId).catch(notFoundIfMissingIdentifier);
   if (!detail) notFound();
 
+  // Article lookup for the publish/rights-transition controls below — see
+  // `../_lib/read-primary-article.ts`'s header for why this is a page-local
+  // read rather than a `src/server/admin-content` addition.
+  const primaryArticle = await readPrimaryArticleForNovel(novelId);
+  const capabilities = capabilityViews(context);
+
   // Chapter paging is driven by the query string, so its failures split two
   // ways: a bad `?page=` is the operator's typo and stays inline, anything else
   // is a real fault and goes to the error boundary.
@@ -99,6 +109,8 @@ export default async function NovelDetailPage({
       }
     >
       <div className="space-y-6">
+        <AdminTimeZoneNote />
+
         <div className="grid gap-6 lg:grid-cols-2">
           <NovelIdentityPanel novel={novel} />
           <div className="space-y-6">
@@ -106,6 +118,14 @@ export default async function NovelDetailPage({
             <NovelSyncPanel novel={novel} />
           </div>
         </div>
+
+        <PublishLifecyclePanel
+          novelId={novel.novelId}
+          novelStatus={novel.status}
+          article={primaryArticle}
+          canPublish={findCapabilityState(capabilities, "content:publish")}
+          canTakedown={findCapabilityState(capabilities, "content:takedown")}
+        />
 
         <NovelSourcesPanel novel={novel} />
 

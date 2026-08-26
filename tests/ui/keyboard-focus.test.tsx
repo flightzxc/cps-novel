@@ -50,7 +50,7 @@ describe("键盘可达", () => {
 
   it("按钮不用 tabindex 篡改自然 Tab 顺序", () => {
     const { container } = render(
-      <NovelDetailScreen chrome={mockChrome()} novel={MOCK_NOVEL_DETAIL} />,
+      <NovelDetailScreen locale="en" chrome={mockChrome("en")} novel={MOCK_NOVEL_DETAIL} />,
     );
 
     for (const node of container.querySelectorAll("a, button")) {
@@ -61,7 +61,7 @@ describe("键盘可达", () => {
 
   it("详情页的每个交互元素都有可读名称", () => {
     const { container } = render(
-      <NovelDetailScreen chrome={mockChrome()} novel={MOCK_NOVEL_DETAIL} />,
+      <NovelDetailScreen locale="en" chrome={mockChrome("en")} novel={MOCK_NOVEL_DETAIL} />,
     );
 
     for (const node of container.querySelectorAll("a, button")) {
@@ -74,7 +74,7 @@ describe("键盘可达", () => {
   });
 
   it("阅读设置入口声明了展开状态与弹层类型", () => {
-    render(<ChapterScreen chrome={mockChrome()} chapter={MOCK_CHAPTER} />);
+    render(<ChapterScreen locale="en" chrome={mockChrome("en")} chapter={MOCK_CHAPTER} />);
 
     const toggle = screen.getByTestId("reader-settings-toggle");
     expect(toggle.getAttribute("aria-expanded")).toBe("false");
@@ -86,7 +86,7 @@ describe("键盘可达", () => {
   });
 
   it("设置面板的档位控件是 radiogroup，可用方向键操作", () => {
-    render(<ChapterScreen chrome={mockChrome()} chapter={MOCK_CHAPTER} />);
+    render(<ChapterScreen locale="en" chrome={mockChrome("en")} chapter={MOCK_CHAPTER} />);
     fireEvent.click(screen.getByTestId("reader-settings-toggle"));
 
     const groups = screen.getAllByRole("radiogroup");
@@ -98,7 +98,7 @@ describe("键盘可达", () => {
 
   it("装饰性图形对读屏隐藏", () => {
     const { container } = render(
-      <NovelDetailScreen chrome={mockChrome()} novel={MOCK_NOVEL_DETAIL} />,
+      <NovelDetailScreen locale="en" chrome={mockChrome("en")} novel={MOCK_NOVEL_DETAIL} />,
     );
 
     for (const svg of container.querySelectorAll("svg")) {

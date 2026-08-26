@@ -4,6 +4,7 @@ import { Prisma, type PrismaClient } from "@prisma/client";
 import { CREDENTIAL_TASK_TYPES, type CredentialContractCode, type CredentialMetadata, type CredentialQueuedResult, type CredentialRedactedResult } from "@/lib/credentials/contracts";
 import { CredentialLifecycleError } from "@/lib/credentials/lifecycle";
 import { validateCredentialJwtLocally } from "@/lib/credentials/jwt";
+import { assertReasonFreeOfCredentialMaterial } from "@/lib/credentials/reason-guard";
 import {
   encryptNewCredentialSecret,
   fingerprintNewCredentialSecret,
@@ -14,6 +15,7 @@ import { requireFreshAdminServiceMutation, type AdminServiceAuthorization } from
 import {
   isSerializationFailure as isSerializableWriteConflict,
   isUniqueConstraintViolation as isUniqueConflict,
+  withDbRetry,
 } from "@/lib/db/db-retry";
 
 type Dependencies = { db: PrismaClient; identities: AdminIdentityStore; sessions: SessionStore; now?: Date; env?: NodeJS.ProcessEnv };
@@ -26,7 +28,6 @@ function reason(value: string | undefined, required: boolean): string | null {
 }
 
 const CREDENTIAL_REPLACE_AUDIT_ACTION = "credential.replace.completed";
-const JWT_LIKE_TEXT = /(?:^|\s)[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+(?:\s|$)/;
 
 export class CredentialReplacementIdempotencyConflictError extends Error {
   readonly code = "admin_mutation_request_id_invalid" as const;
@@ -84,13 +85,25 @@ async function actor(authorization: AdminServiceAuthorization, entryId: string, 
 export async function createChannelAccount(input: { authorization: AdminServiceAuthorization; requestId: string; channelId: string; businessId: string; accountName: string }, deps: Dependencies) {
   const context = await actor(input.authorization, "admin.channel_account.create", input.requestId, deps);
   try {
-    return await deps.db.$transaction(async (tx) => {
-      const existing = await tx.operationAudit.findFirst({ where: { actorType: "admin", action: "channel_account.create", requestId: input.requestId } });
-      if (existing) return tx.channelAccount.findUnique({ where: { id: existing.entityId } });
-      const account = await tx.channelAccount.create({ data: { channelId: input.channelId, businessId: input.businessId.trim(), accountName: input.accountName.trim(), status: "active" } });
-      await tx.operationAudit.create({ data: { actorType: "admin", actorId: context.identity.id, action: "channel_account.create", entityType: "ChannelAccount", entityId: account.id, requestId: input.requestId } });
-      return account;
-    });
+    // `withDbRetry` wraps the whole `$transaction` call, never a statement
+    // inside it — see `src/server/publish-gate/service.ts`'s
+    // `applyPublishTransition` for the same pattern and its rationale. Safe
+    // to retry from scratch: the `existing` guard read at the top of the
+    // callback turns a retry that lands after an already-committed (but
+    // ack-lost) attempt into a no-op replay, not a second `create`. Unique
+    // conflicts (P2002, handled below) never match `isTransientDbError` and
+    // fall straight through to this existing catch block unretried.
+    return await withDbRetry(
+      () =>
+        deps.db.$transaction(async (tx) => {
+          const existing = await tx.operationAudit.findFirst({ where: { actorType: "admin", action: "channel_account.create", requestId: input.requestId } });
+          if (existing) return tx.channelAccount.findUnique({ where: { id: existing.entityId } });
+          const account = await tx.channelAccount.create({ data: { channelId: input.channelId, businessId: input.businessId.trim(), accountName: input.accountName.trim(), status: "active" } });
+          await tx.operationAudit.create({ data: { actorType: "admin", actorId: context.identity.id, action: "channel_account.create", entityType: "ChannelAccount", entityId: account.id, requestId: input.requestId } });
+          return account;
+        }),
+      { op: "credentials.createChannelAccount", idempotencyKey: input.requestId },
+    );
   } catch (error) {
     if (!isUniqueConflict(error)) throw error;
     const committed = await deps.db.operationAudit.findFirst({ where: { actorType: "admin", action: "channel_account.create", requestId: input.requestId } });
@@ -104,14 +117,21 @@ export async function setChannelAccountStatus(input: { authorization: AdminServi
   const why = reason(input.reason, true);
   const auditAction = input.nextStatus === "active" ? "channel_account.enable" : "channel_account.disable";
   try {
-    return await deps.db.$transaction(async (tx) => {
-      const existing = await tx.operationAudit.findFirst({ where: { actorType: "admin", action: auditAction, requestId: input.requestId } });
-      if (existing) return tx.channelAccount.findUnique({ where: { id: existing.entityId } });
-      const before = await tx.channelAccount.findUniqueOrThrow({ where: { id: input.channelAccountId } });
-      const account = await tx.channelAccount.update({ where: { id: input.channelAccountId }, data: { status: input.nextStatus } });
-      await tx.operationAudit.create({ data: { actorType: "admin", actorId: context.identity.id, action: auditAction, entityType: "ChannelAccount", entityId: account.id, requestId: input.requestId, reason: why, beforeSnapshot: { status: before.status }, afterSnapshot: { status: account.status } } });
-      return account;
-    });
+    // Same whole-transaction retry shape as `createChannelAccount` above —
+    // the `existing` guard read makes a retry-after-ambiguous-commit a safe
+    // replay instead of a double write.
+    return await withDbRetry(
+      () =>
+        deps.db.$transaction(async (tx) => {
+          const existing = await tx.operationAudit.findFirst({ where: { actorType: "admin", action: auditAction, requestId: input.requestId } });
+          if (existing) return tx.channelAccount.findUnique({ where: { id: existing.entityId } });
+          const before = await tx.channelAccount.findUniqueOrThrow({ where: { id: input.channelAccountId } });
+          const account = await tx.channelAccount.update({ where: { id: input.channelAccountId }, data: { status: input.nextStatus } });
+          await tx.operationAudit.create({ data: { actorType: "admin", actorId: context.identity.id, action: auditAction, entityType: "ChannelAccount", entityId: account.id, requestId: input.requestId, reason: why, beforeSnapshot: { status: before.status }, afterSnapshot: { status: account.status } } });
+          return account;
+        }),
+      { op: "credentials.setChannelAccountStatus", itemId: input.channelAccountId, idempotencyKey: input.requestId },
+    );
   } catch (error) {
     if (!isUniqueConflict(error)) throw error;
     const committed = await deps.db.operationAudit.findFirst({ where: { actorType: "admin", action: auditAction, requestId: input.requestId } });
@@ -214,15 +234,7 @@ export async function addOrReplaceCredential(input: {
   }
   const context = await actor(input.authorization, "admin.credential.replace", input.requestId, deps);
   const why = reason(input.reason, true);
-  if (
-    (input.secret.trim() && why?.includes(input.secret.trim()))
-    || (why !== null && JWT_LIKE_TEXT.test(why))
-  ) {
-    throw new CredentialLifecycleError(
-      "credential_validation_failed",
-      "The operation reason must not contain credential material",
-    );
-  }
+  if (why !== null) assertReasonFreeOfCredentialMaterial(why, input.secret);
   const now = deps.now ?? new Date();
   const validation = validateCredentialJwtLocally(input.secret, now);
   if (validation.status === "invalid") {
@@ -252,7 +264,22 @@ export async function addOrReplaceCredential(input: {
   });
 
   try {
-    return await deps.db.$transaction(async (tx) => {
+    // Whole-transaction retry, same shape as `createChannelAccount` above.
+    // This transaction runs at `Serializable` isolation specifically so
+    // `isSerializationFailure` (P2034) fires under write-write contention —
+    // `isTransientDbError` treats that as transient, so `withDbRetry` is
+    // what actually makes the Serializable choice pay off instead of
+    // pushing a raw P2034 straight at the caller. Safe to retry from
+    // scratch: `findCommittedCredentialReplacement`'s guard read at the top
+    // of the callback (mirroring the outer `prior` check above) turns a
+    // retry landing after an already-committed-but-ack-lost attempt into a
+    // clean replay, never a second write. `credentialId`/`encrypted`/
+    // `fingerprint` are computed once, outside this retry boundary, and
+    // stay identical across attempts — that is required for the replay
+    // check to recognize its own prior work, not a bug.
+    return await withDbRetry(
+      () =>
+        deps.db.$transaction(async (tx) => {
       const existing = await findCommittedCredentialReplacement(tx, idempotencyBinding);
       if (existing) return existing;
 
@@ -374,7 +401,9 @@ export async function addOrReplaceCredential(input: {
         expiresAt: validation.expiresAt,
         lastValidatedAt: now,
       });
-    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+        }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }),
+      { op: "credentials.addOrReplaceCredential", itemId: input.channelAccountId, idempotencyKey: input.requestId },
+    );
   } catch (error) {
     const uniqueConflict = isUniqueConflict(error);
     if (!uniqueConflict && !isSerializableWriteConflict(error)) throw error;
@@ -401,7 +430,16 @@ export async function enqueueCredentialOperation(input: { authorization: AdminSe
     enqueuedAt: task.createdAt.toISOString(), mutationRequestId: input.requestId,
   });
   try {
-    return await deps.db.$transaction(async (tx) => {
+    // Whole-transaction retry, same shape as the other write paths in this
+    // file. Safe to retry from scratch: the `prior` guard read on the
+    // stable `requestToken` dedup key (not on `taskId`, which is freshly
+    // regenerated by `randomUUID()` on every callback invocation, including
+    // a retry) turns a retry landing after an already-committed-but-ack-
+    // lost attempt into a clean `queued(prior)` replay instead of a second
+    // `genericTask.create`.
+    return await withDbRetry(
+      () =>
+        deps.db.$transaction(async (tx) => {
     const prior = await tx.genericTask.findUnique({ where: { requestToken } });
     if (prior) return queued(prior);
     const taskId = randomUUID();
@@ -409,7 +447,9 @@ export async function enqueueCredentialOperation(input: { authorization: AdminSe
     await tx.genericTask.create({ data: { id: taskId, taskType, channelAccountId: input.channelAccountId, operationScopeHash, requestToken, status: "pending", params: payload, items: { create: [{ targetType: "credential", targetId: input.credentialId, payload }] } } });
     await tx.operationAudit.create({ data: { actorType: "admin", actorId: context.identity.id, action: `credential.${input.operation}.queued`, entityType: "ChannelAccountCredential", entityId: input.credentialId, requestId: input.requestId, taskType, taskId, reason: input.reason?.trim() || null } });
     return { code: "credential_validation_queued", state: "queued", taskId, credentialId: input.credentialId, channelAccountId: input.channelAccountId, enqueuedAt: now.toISOString(), mutationRequestId: input.requestId };
-    }, { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted });
+        }, { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted }),
+      { op: "credentials.enqueueCredentialOperation", itemId: input.credentialId, idempotencyKey: input.requestId },
+    );
   } catch (error) {
     if (!isUniqueConflict(error)) throw error;
     const prior = await deps.db.genericTask.findFirst({ where: {

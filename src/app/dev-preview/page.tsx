@@ -81,9 +81,7 @@ export default function PreviewIndexPage() {
           下列页面全部使用本地假数据，不连接任何接口、数据库或上游内容。
           这些地址是临时的开发预览入口，整体不可索引、不进 sitemap、不进 SEO 契约。
         </p>
-        <p className="mt-2">
-          视觉口径见 <code className="text-novel-primary">docs/p1/P1_10_VISUAL_DIRECTION.md</code>。
-        </p>
+        <p className="mt-2">视觉口径与站点暗色阅读界面一致。</p>
       </div>
 
       <ul className="mt-10 list-none border-t border-novel-border p-0">

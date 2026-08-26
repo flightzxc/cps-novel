@@ -24,6 +24,12 @@ const CAPABILITIES: readonly AdminCapabilityView[] = [
   { capability: "content:takedown", state: "granted" },
   { capability: "promo:claim", state: "granted" },
   { capability: "revenue:view", state: "granted" },
+  // PR-C6a binds `/settings` to `settings:manage` so an operator without it
+  // sees the entry greyed out. This suite is about collapse/expand mechanics,
+  // not capability gating, so it grants the capability like it already does
+  // for `/channel-accounts` above (`credential:manage`) to keep `/settings`
+  // rendering as a live link.
+  { capability: "settings:manage", state: "granted" },
 ];
 
 function renderSidebar(path: string) {
@@ -124,17 +130,33 @@ describe("侧栏 · 折叠与展开", () => {
 describe("侧栏 · active 与分组展开", () => {
   it("本期未建的入口不是链接，点不动但仍占位——运营看得到功能存在", () => {
     renderSidebar("/dashboard");
-    // 真页面：/novels（P2-04 内容管理）、/tags（P2-06 标签字典）与 /channel-accounts；
-    // /settings 因为有子项而可展开。
+    // 真页面：/novels（P2-04 内容管理）、/catalog-sync（P0-S13 内容创建入口）、
+    // /tags（P2-06 标签字典）与 /channel-accounts；/settings 因为有子项而可展开。
+    // /tasks 与 /promo-links（PR-C5）也是真页面了，但这份 fixture 没有授予
+    // `task:manage`，所以两者仍然不出现在链接列表里——只是原因从"未建"变成了
+    // "缺能力位"，见下面单独的断言。
     expect(screen.getAllByRole("link").map((link) => link.textContent)).toEqual([
       "书目管理",
+      "目录同步",
       "标签管理",
       "站点设置",
       "渠道账户",
     ]);
-    const notBuilt = screen.getByText("目录同步").closest("[aria-disabled]");
+    // /previews 仍然是纯占位——没有对应页面，也没有能力位，是"本期未建"唯一
+    // 剩下的干净样本（/promo-links 现在是"建了但缺能力位"，语义不同）。
+    const notBuilt = screen.getByText("试读管理").closest("[aria-disabled]");
     expect(notBuilt?.getAttribute("aria-disabled")).toBe("true");
     expect(notBuilt?.getAttribute("title")).toBe("本期未建");
+  });
+
+  it("PR-C5：/tasks 与 /promo-links 已建页面，但没有 task:manage 时按能力位缺口置灰，不再是本期未建", () => {
+    renderSidebar("/dashboard");
+    for (const label of ["任务中心", "推广链接"]) {
+      const blocked = screen.getByText(label).closest("[aria-disabled]");
+      expect(blocked?.getAttribute("aria-disabled")).toBe("true");
+      expect(blocked?.getAttribute("title")).toBe("缺少能力位 任务管理（task:manage），请联系管理员授予");
+      expect(blocked?.textContent).toContain("受限");
+    }
   });
 
   it("子路由激活时父级分组自动展开，且父级自身也算 active", () => {

@@ -16,6 +16,12 @@ import {
   DEFAULT_SHUTDOWN_DRAIN_TIMEOUT_MS,
   validateShutdownDrainTimeoutMs,
 } from "./shutdown-timeout";
+import {
+  projectWorkerTaskFailureEvent,
+  serializeWorkerTaskFailureEvent,
+  type WorkerTaskFailureEvent,
+  type WorkerTaskFailureReporter,
+} from "./failure-reporter";
 
 export interface WorkerRuntimeOptions {
   prisma: PrismaClient;
@@ -27,6 +33,8 @@ export interface WorkerRuntimeOptions {
   pollMs?: number;
   shutdownDrainTimeoutMs?: number;
   onError?: (error: unknown) => void;
+  onTaskFailure?: WorkerTaskFailureReporter["onTaskFailure"];
+  now?: () => Date;
 }
 
 export interface DrainLoopOptions {
@@ -58,6 +66,32 @@ function taskTypesForFamily(
   effective: string[],
 ): string[] {
   return effective.filter((taskType) => registry[taskType]?.family === family);
+}
+
+export async function emitWorkerTaskFailure(
+  event: WorkerTaskFailureEvent,
+  options: Pick<WorkerRuntimeOptions, "onTaskFailure" | "onError"> = {},
+): Promise<void> {
+  const projected = projectWorkerTaskFailureEvent(event);
+  console.error(serializeWorkerTaskFailureEvent(projected));
+  if (!options.onTaskFailure) return;
+  try {
+    await options.onTaskFailure(projected);
+  } catch {
+    // The notification channel is best-effort and must never stop polling.
+    try {
+      options.onError?.({
+        code: "worker_failure_reporter_failed",
+        message: "Worker failure reporter failed",
+      });
+    } catch {
+      // An observer callback is not allowed to become a Worker failure path.
+    }
+  }
+}
+
+function occurredAt(options: WorkerRuntimeOptions): string {
+  return (options.now?.() ?? new Date()).toISOString();
 }
 
 function waitForHandlerDrain<T>(
@@ -107,8 +141,24 @@ export async function processOneWorkerCycle(options: WorkerRuntimeOptions): Prom
       family,
       taskTypes,
       maxAttemptsByType,
+      workerId: options.workerId,
     });
-    if (recovered) return true;
+    if (recovered) {
+      if (recovered.action === "failed") {
+        await emitWorkerTaskFailure({
+          family: recovered.family,
+          taskType: recovered.taskType,
+          taskId: recovered.taskId,
+          itemId: recovered.itemId,
+          workerId: options.workerId,
+          errorKind: "stale_processing",
+          attempt: recovered.attemptCount,
+          source: "lease_recovery",
+          occurredAt: occurredAt(options),
+        }, options);
+      }
+      return true;
+    }
   }
 
   for (const family of TASK_FAMILIES) {
@@ -173,6 +223,19 @@ export async function processOneWorkerCycle(options: WorkerRuntimeOptions): Prom
         ? { ...drainResult.value, protectedWrite: undefined }
         : drainResult.value;
       await finalizeTaskItem(options.prisma, lease, outcome);
+      if (outcome.status === "failed") {
+        await emitWorkerTaskFailure({
+          family: lease.family,
+          taskType: lease.taskType,
+          taskId: lease.taskId,
+          itemId: lease.itemId,
+          workerId: lease.workerId,
+          errorKind: sanitizePersistedTaskError(outcome.error).code,
+          attempt: lease.attemptCount,
+          source: "handler",
+          occurredAt: occurredAt(options),
+        }, options);
+      }
     } catch (error) {
       if (!(error instanceof LeaseLostError)) throw error;
     } finally {

@@ -90,8 +90,9 @@ const SCREENS: [string, ReactElement][] = [
   [
     "首页 · Hero 形态",
     <HomeScreen
+      locale="en"
       key="home"
-      chrome={mockChrome("home")}
+      chrome={mockChrome("en", "home")}
       featuredList={featuredEntries}
       novels={MOCK_NOVEL_CARDS}
       browseAllHref="/dev-preview/collection"
@@ -100,8 +101,9 @@ const SCREENS: [string, ReactElement][] = [
   [
     "首页 · 无横版物料回落",
     <HomeScreen
+      locale="en"
       key="home-fallback"
-      chrome={mockChrome("home")}
+      chrome={mockChrome("en", "home")}
       featuredList={fallbackEntries}
       novels={MOCK_NOVEL_CARDS}
       browseAllHref="/dev-preview/collection"
@@ -109,31 +111,32 @@ const SCREENS: [string, ReactElement][] = [
   ],
   [
     "小说详情",
-    <NovelDetailScreen key="detail" chrome={mockChrome()} novel={MOCK_NOVEL_DETAIL} />,
+    <NovelDetailScreen locale="en" key="detail" chrome={mockChrome("en")} novel={MOCK_NOVEL_DETAIL} />,
   ],
   [
     "小说详情 · 稀疏",
-    <NovelDetailScreen key="sparse" chrome={mockChrome()} novel={MOCK_NOVEL_DETAIL_SPARSE} />,
+    <NovelDetailScreen locale="en" key="sparse" chrome={mockChrome("en")} novel={MOCK_NOVEL_DETAIL_SPARSE} />,
   ],
-  ["章节阅读", <ChapterScreen key="chapter" chrome={mockChrome()} chapter={MOCK_CHAPTER} />],
+  ["章节阅读", <ChapterScreen locale="en" key="chapter" chrome={mockChrome("en")} chapter={MOCK_CHAPTER} />],
   [
     "章节阅读 · 末章",
-    <ChapterScreen key="last" chrome={mockChrome()} chapter={MOCK_CHAPTER_LAST} />,
+    <ChapterScreen locale="en" key="last" chrome={mockChrome("en")} chapter={MOCK_CHAPTER_LAST} />,
   ],
   [
     "聚合",
     <CollectionScreen
+      locale="en"
       key="collection"
-      chrome={mockChrome("collection")}
+      chrome={mockChrome("en", "collection")}
       title="言情"
       novels={MOCK_NOVEL_CARDS}
     />,
   ],
   [
     "下架",
-    <UnavailableScreen key="unpublished" chrome={mockChrome()} reason="unpublished" />,
+    <UnavailableScreen locale="en" key="unpublished" chrome={mockChrome("en")} reason="unpublished" />,
   ],
-  ["撤回", <UnavailableScreen key="takedown" chrome={mockChrome()} reason="takedown" />],
+  ["撤回", <UnavailableScreen locale="en" key="takedown" chrome={mockChrome("en")} reason="takedown" />],
 ];
 
 describe("全屏幕禁用字段扫描", () => {

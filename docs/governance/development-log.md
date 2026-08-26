@@ -4,6 +4,67 @@
 
 ---
 
+## 2026-08-26 · X7 上线前治理收口与 S16
+
+### 本轮做了什么
+
+- 审核并接受 `proposal/p0-s16-typecheck` @ `240bad6`：清除 Lane C 的 21 个 typecheck 基线错误，
+  并在 CI 中新增独立全仓 `npm run typecheck`；
+- 补齐 `src/lib/indexnow/` / `preview/` / `site/` 唯一 Owner，将违反根目录纪律的
+  `src/lib/indexnow-backfill-manifest.ts` 无行为变化地收敛到 `src/lib/indexnow/backfill-manifest.ts`；
+- 原样归档 C2 2026-08-21/26 两份只读诊断，8/26 为权威业务结论，8/21 只保留历史链；
+- 补登 `ce7f0f1` 的 worker grants，纠正 P1 Gate/P2-01/claim flag 的陈旧状态文字；
+- 建立 8 high / 0 critical 的 npm audit 处置台账，禁止 `npm audit fix --force`，
+  登记 Next custodian PR、Prisma/nanoid 限期延期和生产镜像裁剪跟进；
+- 将 flag + worker allowlist “同次变更/同次回滚”写入发布检查单，并将 X11 登记为
+  IndexNow delivery 开闸步骤 8–9 的硬前置；misfire 显式选 `skip`，不留未定义策略。
+
+### 明确没做的
+
+- 本轮不实现 X11 schedule，不开任何 feature/write flag，不修改生产 allowlist；
+- 不修改 package/lockfile，Next/eslint-config-next `16.3.3` 升级由 Claude custodian 独立交付；
+- 不夹带 S14 `src/lib/site/chrome.ts` locale 修复，本轮只登记 `src/lib/site/` 归 Claude。
+
+## 2026-08-26 · U4 前台防线包
+
+### 本轮做了什么
+
+- B1 公开树错误边界：新增 `src/app/error.tsx`、`src/app/global-error.tsx`、`src/app/not-found.tsx`，
+  共用新抽出的 `PublicStatusPanel`（与 `UnavailableScreen` 同一套视觉语言）；两个错误边界各自
+  `console.error`——`global-error` 不能依赖 `error.tsx` 落日志，因为布局失败根本到不了那层边界；
+- B2 favicon：`src/app/icon.tsx` 用 `next/og` 代码生成，图形复刻 `BrandMark` 的几何占位；
+- B3 dev-preview kill switch：`DEV_PREVIEW_ENABLED !== "true"` 时 `notFound()`，并从 preview 页
+  去掉内部文档路径；
+- B15 JSON-LD：`<` 转义为 `\u003c`，堵住 `</script>` 逃逸；
+- N5 后台时区：`src/features/admin-ui/datetime.ts` 显式 `timeZone: Asia/Shanghai`，时区由
+  `AdminTimeZoneNote` 每页声明一次，值本身不带后缀；
+- B14 `lang`：根 `<html>` 保持 `lang="en"`，`(admin)` / `(admin-auth)` 包裹层标 `lang="zh-CN"`，
+  并由 `AdminDocumentLang` 同步 `document.documentElement.lang`。
+
+### 视觉偏离登记（P1-10）
+
+- **§10 状态页形态例外**：`PublicStatusPanel` 的 `bare` 模式不渲染页头页脚，偏离「页头 → 状态说明块
+  → 返回入口 → 页脚」。root 404 / error 没有 chrome 数据可喂页脚，且品牌槽位当前仍是
+  `BRAND_PLACEHOLDER` 文本，不能出现在公开错误页。`UnavailableScreen` 仍走 `SiteShell`，不受影响。
+- **§13 品牌标记同步义务**：`src/app/icon.tsx` 与 `src/components/BrandMark.tsx` 是同一个几何占位的
+  两份实现（Satori 不支持 SVG 与 CSS 变量，favicon 只能用 div 重画）。🔴 正式 Logo 到位时两者必须
+  一起替换；favicon 不得引入第二套品牌识别。
+
+### 明确没做的（本轮范围外）
+
+- 错误页没有使用 `--novel-danger`：错误态与下架态的区分靠「重试」这个纸色主动作，不靠色彩。
+
+### 待办登记 · U4-TODO-01 · root 404 / error 缺基准图
+
+- **现状**：`PublicStatusPanel` 的 `bare` 形态（root `not-found` / `error` / `global-error`）没有基准图；
+  `tests/ui/baselines/README.md` 的清单仍是 13 张，同族的 `unavailable` / `takedown` 都有图。
+  清单测试只拦「夹带未登记的图」，所以缺图不会让 `test:ui` 失败。
+- **风险**：这三个形态的版面改动没有可比对的快照，评审时也没有图可看。
+- **为什么本轮不做**：补图需要临时承载路由 + 本地起服务截图，属于视觉回归体系的完善项，不是上线阻断项。
+- **触发处理时间点**：**在 `dev-preview` 树里加错误态展示路由时一并补**——那时同一条路由还能顺便验证
+  `DEV_PREVIEW_ENABLED` 关闭态确实 404。
+- **建议 Owner**：Claude（`tests/ui/` 与 `src/app/` 独占写入）。
+
 ## 2026-08-06 · P1-15 收口文档与 P2 交接输入包
 
 ### 事实基线

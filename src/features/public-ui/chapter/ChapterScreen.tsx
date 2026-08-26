@@ -5,6 +5,8 @@ import { ButtonLink } from "@/components/Button";
 import { Container } from "@/components/Container";
 import { SiteShell, type SiteChrome } from "@/features/public-ui/layout/SiteShell";
 import type { ChapterView } from "@/features/public-ui/types";
+import type { SiteLocale } from "@/lib/locale/locale-canonical";
+import { useT } from "@/lib/locale/messages/MessagesProvider";
 import { BookAttributionBar } from "./BookAttributionBar";
 import { ChapterPager } from "./ChapterPager";
 import { ReaderSettingsPanel } from "./ReaderSettingsPanel";
@@ -39,11 +41,13 @@ import {
  * 新初值传不进来，就得靠 `key=` 强制重挂——那既会打断滚动，也会丢面板开合状态。
  */
 export function ChapterScreen({
+  locale,
   chapter,
   chrome,
   initialSettings,
   onSettingsChange,
 }: {
+  locale: SiteLocale;
   chapter: ChapterView;
   chrome?: SiteChrome;
   /** 无 Provider 时的初值。有 Provider 时以 Provider 的值为准。 */
@@ -51,6 +55,27 @@ export function ChapterScreen({
   /** 设置变更的外部观察点。持久化本身由 Provider 负责，这里只是通知。 */
   onSettingsChange?: (next: ReaderSettings) => void;
 }) {
+  return (
+    <SiteShell locale={locale} chrome={chrome}>
+      <ChapterScreenBody
+        chapter={chapter}
+        initialSettings={initialSettings}
+        onSettingsChange={onSettingsChange}
+      />
+    </SiteShell>
+  );
+}
+
+function ChapterScreenBody({
+  chapter,
+  initialSettings,
+  onSettingsChange,
+}: {
+  chapter: ChapterView;
+  initialSettings?: Partial<ReaderSettings>;
+  onSettingsChange?: (next: ReaderSettings) => void;
+}) {
+  const t = useT();
   const readerSettingsContext = useReaderSettingsContext();
   const [localSettings, setLocalSettings] = useState<ReaderSettings>(() =>
     normalizeReaderSettings(initialSettings),
@@ -97,7 +122,7 @@ export function ChapterScreen({
     chapter.previewPosition.index >= chapter.previewPosition.total;
 
   return (
-    <SiteShell chrome={chrome}>
+    <>
       <Container>
         <BookAttributionBar novel={chapter.novel} previewPosition={chapter.previewPosition} />
 
@@ -105,7 +130,7 @@ export function ChapterScreen({
         <div className="relative flex items-start justify-between gap-4 pt-8 md:pt-12">
           <div>
             <p className="text-sm text-novel-fg-subtle tabular-nums">
-              第 {chapter.number} 章
+              {t("chapter.heading", { number: chapter.number })}
             </p>
             <h1 className="mt-2 font-novel-serif text-2xl leading-tight font-semibold tracking-tight text-balance text-novel-fg md:text-3xl">
               {chapter.title}
@@ -128,7 +153,7 @@ export function ChapterScreen({
                 strokeLinecap="round"
               />
             </svg>
-            阅读设置
+            {t("chapter.readerSettings")}
           </button>
 
           <ReaderSettingsPanel
@@ -187,11 +212,11 @@ export function ChapterScreen({
             <div className="mt-10 rounded-novel-lg border border-novel-border bg-novel-bg-elevated p-6 md:mt-14 md:p-8">
               <p className="font-novel-serif text-lg text-novel-fg md:text-xl">
                 {isLastPreviewChapter
-                  ? "本站的试读到此结束。"
-                  : "想连着读下去？"}
+                  ? t("chapter.endOfPreview")
+                  : t("chapter.continuePrompt")}
               </p>
               <p className="mt-2 max-w-[52ch] text-sm text-novel-fg-muted">
-                后续章节在原平台继续阅读。
+                {t("chapter.remainingOnOrigin")}
               </p>
               <ButtonLink
                 href={chapter.readOnUpstreamHref}
@@ -200,12 +225,12 @@ export function ChapterScreen({
                 rel="nofollow sponsored"
                 className="mt-6"
               >
-                前往正式阅读
+                {t("chapter.readOnUpstream")}
               </ButtonLink>
             </div>
           ) : null}
         </div>
       </Container>
-    </SiteShell>
+    </>
   );
 }

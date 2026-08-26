@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { computeManifestSha256, verifyManifestSha256, type IndexNowBackfillManifest } from "@/lib/indexnow-backfill-manifest";
+import { computeManifestSha256, verifyManifestSha256, type IndexNowBackfillManifest } from "@/lib/indexnow/backfill-manifest";
 
 import { buildBackfillManifest, parseArticleIdsArg } from "../../../scripts/indexnow-backfill-manifest";
 

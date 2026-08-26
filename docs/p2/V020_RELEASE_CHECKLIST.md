@@ -30,6 +30,8 @@
   git push origin v0.2.0
   ```
 
+- [ ] 已复核 `docs/governance/NPM_AUDIT_REGISTER_2026-08-26.md`；Next/eslint-config-next custodian 安全 PR 与其必过验收已有结论，Prisma/nanoid 限期延期未过期。
+
 ## 2. 部署必需环境变量
 
 - [ ] Web 与 Sitemap refresh Worker 都显式设置真实 `SITE_URL`。
@@ -42,6 +44,10 @@
 
 ## 3. Flag 分级开放
 
+**任务消费原子规则：**任务类 flag 与 `WORKER_TASK_ALLOWLIST` 必须在同一次发布变更中一起修改、
+一起回滚，禁止分两次部署。该规则至少覆盖 `promo_link.claim.v1` + claim 双闸、
+`sitemap_refresh` + Sitemap 写闸、`indexnow_delivery` + delivery 双闸。
+
 ### Level 0：部署时全 off
 
 - [ ] `FEATURE_INDEXNOW_OUTBOX=false`
@@ -50,7 +56,11 @@
 - [ ] `INDEXNOW_DELIVERY_ALLOW_WRITE=false`
 - [ ] `FEATURE_SITEMAP_AUTO_REFRESH=false`
 - [ ] `SITEMAP_AUTO_REFRESH_ALLOW_WRITE=false`
-- [ ] Worker allowlist 不含 `indexnow_delivery` / `sitemap_refresh`。
+- [ ] `FEATURE_PROMO_LINK_CLAIM=false`
+- [ ] `PROMO_LINK_CLAIM_ALLOW_WRITE=false`
+- [ ] Worker Level 0 allowlist 精确为 `credential.validate.v1,credential.supersede.v1,catalog_scan`。
+- [ ] C2b parser 修复验收前不消费 `moboreader.preview_refresh.v1`；让 preview item 留在 pending，不把可恢复工作消费成 failed。
+- [ ] Worker allowlist 不含 `promo_link.claim.v1` / `indexnow_delivery` / `sitemap_refresh`。
 
 ### Level 1：只开 IndexNow enqueue 双闸观察
 
@@ -60,9 +70,28 @@
 
 ### Level 2：最后开 IndexNow worker 双闸
 
+- [ ] **X11 硬前置已验收；未满足时本 Level 不得开始。**
 - [ ] 单独审批 `FEATURE_INDEXNOW_DELIVERY=true` + `INDEXNOW_DELIVERY_ALLOW_WRITE=true`。
-- [ ] 同次变更才将 `indexnow_delivery` 纳入 Worker allowlist，避免 write gate 关闭时把 pending 任务消费成 failed。
+- [ ] 与上述双闸在**同一次发布变更**中将 `indexnow_delivery` 纳入 Worker allowlist，避免 write gate 关闭时把 pending 任务消费成 failed。
 - [ ] 观察 HTTP 403/422、终态失败率和 retry/dead-letter；命中 stop condition 立即回关 worker 双闸并人工复核。
+
+### 3.1 开闸顺序表（步骤 8–9 受 X11 硬门禁）
+
+| 步骤 | 操作 | 必过证据 / 失败处置 |
+| ---: | --- | --- |
+| 1 | 以全 flag off + Level 0 allowlist 部署 | compose config 确认 allowlist 非空、无未注册 taskType；worker 启动日志已打印 requested/effective/invalid |
+| 2 | 验证 `SiteSetting` 与 `/indexnow-key.txt` | host 与 `SITE_URL` 一致，key 不进日志/证据 |
+| 3 | 打开 IndexNow outbox enqueue 双闸 | delivery 双闸仍 off，allowlist 仍不含 `indexnow_delivery` |
+| 4 | 观察 outbox URL/locale/revision/去重/任务量 | 异常即回关 outbox 双闸，不进后续步骤 |
+| 5 | 完成 Sitemap fixture、正式 locale dry-run 与 HTTP route 验收 | D-7 / 目录权限 / 分片 / `lastmod` 全部 PASS |
+| 6 | 同次变更开 Sitemap 写闸并加 `sitemap_refresh` allowlist | 任一侧不能同时生效即整体回滚 |
+| 7 | 验收 X11 首个生产 schedule | scheduler 每分钟只入队 sweep-control generic task；去重有效；misfire=`skip`；scheduler 无凭证/无外部调用；worker 能执行现有 due sweep |
+| 8 | 在 X11 PASS 后，于一次发布变更中打开 delivery 双闸 | **X11 未 PASS 时严禁改为 true**；步骤 8 不得单独部署 |
+| 9 | 在与步骤 8 同一次变更中加入 `indexnow_delivery` allowlist 并验证 sweep/delivery | 步骤 8–9 必须原子同发/同回滚；403/422/终态失败率越线即同时回关双闸并移除 allowlist |
+
+**X11 misfire 裁决：**显式采用 `skip`，只生成当前时间桶。sweep 本身扫描数据库中全部当前到期行，
+历史桶 `bounded_catch_up` 只会重复扫描并增加开闸压力。X11 未落地前，
+`FEATURE_INDEXNOW_DELIVERY` / `INDEXNOW_DELIVERY_ALLOW_WRITE` 必须保持 `false`，且 allowlist 必须排除 `indexnow_delivery`。
 
 ## 4. D-7 与 Sitemap 开放时序
 
@@ -82,7 +111,7 @@
   ```
 
 - [ ] 只有“fixture PASS → Owner 关 D-7 → 正式 locale dry-run PASS → HTTP route PASS”全部完成后，才允许开 `FEATURE_SITEMAP_AUTO_REFRESH`。
-- [ ] 先只开 enqueue flag 观察 pending/coalesce；单独审批后才同次开 `SITEMAP_AUTO_REFRESH_ALLOW_WRITE` 并将 `sitemap_refresh` 加入 Worker allowlist。
+- [ ] 先只开 enqueue flag 观察 pending/coalesce；单独审批后才在**同一次发布变更**中开 `SITEMAP_AUTO_REFRESH_ALLOW_WRITE` 并将 `sitemap_refresh` 加入 Worker allowlist。
 
 ## 5. IndexNow SiteSetting 前置
 
@@ -101,6 +130,7 @@
 - [ ] `OperationAudit.requestId` 唯一索引（解决真并发同 requestId 的审计/派发双写窗口）。
 - [ ] 开缓存轮的有界 TTL 兜底。
 - [ ] 章节物化写口接入失效矩阵。
+- [ ] X11：落地 scheduler 每分钟 sweep-control schedule、去重、misfire=`skip` 与 worker due-sweep 验收；它是上表步骤 8–9 的硬前置。
 
 ## 7. 发布证据归档
 

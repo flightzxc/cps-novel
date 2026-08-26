@@ -1,0 +1,122 @@
+/**
+ * Complete English UI catalog — the type source of truth for public copy.
+ *
+ * Tone adapted from CPS `src/messages/en.json` at tag v8.2.10 (UI chrome only):
+ * drama/watch/play/episode → novel/read/chapter. Do not merge other locales
+ * into this tree.
+ */
+export const en = {
+  nav: {
+    home: "Home",
+    browse: "All works",
+    genres: "Genres",
+    mainNav: "Main navigation",
+    footerNav: "Footer navigation",
+    skipToContent: "Skip to main content",
+    openMenu: "Open menu",
+    closeMenu: "Close menu",
+    about: "About",
+    copyright: "Content and copyright",
+    footerNote:
+      "This site offers free preview chapters. The full story is on the original platform.",
+  },
+  home: {
+    works: "Works",
+    viewAll: "View all",
+    featuredEyebrow: "Featured",
+    startPreview: "Start preview",
+    viewDetails: "View details",
+    carouselLabel: "Featured works",
+    carouselRole: "carousel",
+    switchFeatured: "Switch featured work",
+    slideLabel: "Work {n}",
+    slideStatus: "Work {n} of {count}: {title}",
+    chapterCount: "{count} chapters",
+  },
+  novel: {
+    coverAlt: "Cover of {title}",
+    tagsLabel: "Tags",
+    genreTags: "Genre tags",
+    chapterCount: "{count} chapters",
+    previewCount: "{count} preview chapters",
+    startPreview: "Start preview",
+    readOnUpstream: "Continue reading",
+    synopsis: "Synopsis",
+    previewChapters: "Preview chapters",
+    previewChaptersDescription:
+      "{count} preview chapters on this site, all provided by the original platform.",
+    noPreviewChapters: "This book has no preview chapters yet.",
+    relatedWorks: "Related works",
+    chapterHeading: "Chapter {number}",
+  },
+  chapter: {
+    nav: "Chapter navigation",
+    previous: "Previous chapter",
+    next: "Next chapter",
+    firstChapter: "This is the first chapter",
+    lastPreviewChapter: "This is the last preview chapter",
+    heading: "Chapter {number}",
+    readerSettings: "Reading settings",
+    closeReaderSettings: "Close reading settings",
+    previewPosition: "Preview {index} / {total}",
+    endOfPreview: "That's the end of the preview on this site.",
+    continuePrompt: "Want to keep reading?",
+    remainingOnOrigin: "Later chapters continue on the original platform.",
+    readOnUpstream: "Continue reading",
+    theme: "Theme",
+    fontSize: "Font size",
+    lineHeight: "Line height",
+    measure: "Page width",
+    persistNote: "Settings are saved on this device and do not sync across devices.",
+    resetDefaults: "Reset to defaults",
+    themeSystem: "Match system",
+    themeLight: "Light",
+    themeDark: "Dark",
+    lineHeightCompact: "Compact",
+    lineHeightStandard: "Standard",
+    lineHeightRelaxed: "Relaxed",
+    measureNarrow: "Narrow",
+    measureStandard: "Standard",
+    measureWide: "Wide",
+  },
+  collection: {
+    workCount: "{count} works",
+    empty: "No works to read here yet.",
+    allWorksTitle: "All works",
+    allWorksDescription: "Works currently available to read on this site.",
+    allWorksEmpty: "No publicly available works yet.",
+    genreDescription: "Works you can read in this collection.",
+    genreEmpty: "No works in this collection yet.",
+  },
+  unavailable: {
+    unpublishedTitle: "This book is temporarily unavailable",
+    unpublishedBody:
+      "It has been removed from this site. If it returns, this address will still work.",
+    takedownTitle: "This book has been withdrawn",
+    takedownBody:
+      "At the rights holder's request, this site no longer offers this book. This withdrawal is permanent.",
+    returnHome: "Back to home",
+  },
+  errorPage: {
+    title: "Something went wrong",
+    body: "This page could not be loaded. You can try again, or go back home.",
+    retry: "Try again",
+  },
+  notFoundPage: {
+    title: "This page could not be found",
+    body: "The address may be wrong, or this page is no longer here.",
+  },
+  pagination: {
+    previous: "Previous",
+    next: "Next",
+    pageOf: "{current} / {total}",
+    label: "Pagination",
+  },
+  meta: {
+    notFound: "Not found",
+    chapterNotFound: "Chapter not found",
+    siteDescription: "Overseas novel distribution site",
+  },
+} as const;
+
+export type Messages = typeof en;

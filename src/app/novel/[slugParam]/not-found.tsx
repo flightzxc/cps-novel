@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 
 import { UnavailableScreen } from "@/features/public-ui/status/UnavailableScreen";
+import { PUBLIC_SITE_LOCALE } from "@/lib/site/locale-label";
 
 export const metadata: Metadata = {
   robots: { index: false, follow: false },
@@ -12,5 +13,5 @@ export const metadata: Metadata = {
  * a real HTTP 404; HTTP 410 is post-V1 (proxy layer).
  */
 export default function NovelNotFoundPage() {
-  return <UnavailableScreen reason="unpublished" homeHref="/" />;
+  return <UnavailableScreen locale={PUBLIC_SITE_LOCALE} reason="unpublished" homeHref="/" />;
 }

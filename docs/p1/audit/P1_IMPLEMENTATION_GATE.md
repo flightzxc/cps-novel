@@ -1,5 +1,10 @@
 # P1-03 · 正式编程 Gate
 
+> **Supersession（2026-08-02 Owner 裁决）：**本文是 P1-03 Architecture Contract Gate 未放行时的历史快照，
+> 不再代表当前编程授权。`docs/p1/P1_OWNER_MINIMUM_CORRECTIONS.md` 已明确 Gate Owner-approved，
+> `docs/p1/P1_IMPLEMENTATION_ASSIGNMENT.md` 已冻结 P1-04～P1-15 正式实施分工并放行开发。
+> 以下“禁止编程”等文字仅保留当时审计链，与上述高优先级文件冲突时不得用于阻断已授权实施。
+
 > 当前 Gate：**Architecture Contract Gate = CLOSED**  
 > Claude 正式编程授权：**否**  
 > Codex 正式编程授权：**否**  

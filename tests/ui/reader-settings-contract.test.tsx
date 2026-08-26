@@ -175,7 +175,7 @@ describe("阅读设置契约 · 写入路径", () => {
   function renderWithProvider() {
     return render(
       <ReaderSettingsProvider>
-        <ChapterScreen chapter={MOCK_CHAPTER} />
+        <ChapterScreen locale="en" chapter={MOCK_CHAPTER} />
       </ReaderSettingsProvider>,
     );
   }
@@ -193,7 +193,7 @@ describe("阅读设置契约 · 写入路径", () => {
     const setItem = vi.spyOn(Storage.prototype, "setItem");
     renderWithProvider();
     openPanel();
-    fireEvent.click(screen.getByRole("radio", { name: "深色" }));
+    fireEvent.click(screen.getByRole("radio", { name: "Dark" }));
 
     const settingsWrites = setItem.mock.calls.filter(
       (call) => call[0] === READER_SETTINGS_STORAGE_KEY,
@@ -214,7 +214,7 @@ describe("阅读设置契约 · 写入路径", () => {
     const onSettingsChange = vi.fn();
     render(
       <ReaderSettingsProvider>
-        <ChapterScreen chapter={MOCK_CHAPTER} onSettingsChange={onSettingsChange} />
+        <ChapterScreen locale="en" chapter={MOCK_CHAPTER} onSettingsChange={onSettingsChange} />
       </ReaderSettingsProvider>,
     );
     openPanel();
@@ -266,6 +266,7 @@ describe("阅读设置契约 · 写入路径", () => {
     const onSettingsChange = vi.fn();
     render(
       <ChapterScreen
+        locale="en"
         chapter={MOCK_CHAPTER}
         initialSettings={
           { fontSizeIndex: 99, theme: "sepia" } as unknown as Partial<ReaderSettings>
@@ -274,7 +275,7 @@ describe("阅读设置契约 · 写入路径", () => {
       />,
     );
     openPanel();
-    fireEvent.click(screen.getByRole("radio", { name: "宽" }));
+    fireEvent.click(screen.getByRole("radio", { name: "Wide" }));
 
     const emitted = onSettingsChange.mock.calls.at(-1)?.[0] as ReaderSettings;
     expect(emitted).toEqual(normalizeReaderSettings(emitted));
@@ -295,7 +296,7 @@ describe("阅读设置契约 · 补水前后无跳变", () => {
       // ② 补水后：Provider 读回并交给阅读区的值
       render(
         <ReaderSettingsProvider>
-          <ChapterScreen chapter={MOCK_CHAPTER} />
+          <ChapterScreen locale="en" chapter={MOCK_CHAPTER} />
         </ReaderSettingsProvider>,
       );
       const surface = screen.getByTestId("reader-surface");

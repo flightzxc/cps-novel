@@ -1,4 +1,7 @@
+"use client";
+
 import { ButtonNavLink } from "@/components/Button";
+import { useT } from "@/lib/locale/messages/MessagesProvider";
 
 /**
  * 上一章 / 下一章。
@@ -23,26 +26,27 @@ export function ChapterPager({
   nextHref?: string;
   className?: string;
 }) {
+  const t = useT();
   return (
     <nav
-      aria-label="章节导航"
+      aria-label={t("chapter.nav")}
       className={`flex items-center justify-between gap-3 ${className}`}
       data-testid="chapter-pager"
     >
       {previousHref ? (
         <ButtonNavLink href={previousHref} variant="outline" rel="prev" scroll={false}>
-          上一章
+          {t("chapter.previous")}
         </ButtonNavLink>
       ) : (
-        <span className="text-sm text-novel-fg-subtle">已是第一章</span>
+        <span className="text-sm text-novel-fg-subtle">{t("chapter.firstChapter")}</span>
       )}
 
       {nextHref ? (
         <ButtonNavLink href={nextHref} variant="outline" rel="next" scroll={false}>
-          下一章
+          {t("chapter.next")}
         </ButtonNavLink>
       ) : (
-        <span className="text-sm text-novel-fg-subtle">已是最后一章试读</span>
+        <span className="text-sm text-novel-fg-subtle">{t("chapter.lastPreviewChapter")}</span>
       )}
     </nav>
   );

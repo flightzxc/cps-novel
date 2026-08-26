@@ -37,7 +37,7 @@ export function buildHomeSeoMeta(data: HomeSeoData, locale = "en") {
     },
     alternates: {
       canonical,
-      languages: buildHreflangAlternates("/"),
+      languages: buildHreflangAlternates("/", locale),
     },
     robots: undefined,
     other: {

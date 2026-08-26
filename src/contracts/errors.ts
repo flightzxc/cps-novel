@@ -18,8 +18,28 @@ export type AdminErrorCode =
   | CredentialContractCode
   | AdminContentQueryErrorCode
   | "credential_task_not_found"
+  | "site_setting_invalid"
+  | "site_setting_conflict"
+  | "site_setting_not_seeded"
   /** A well-formed novel or chapter id that matches no live row. */
-  | "admin_content_not_found";
+  | "admin_content_not_found"
+  /**
+   * The route boundary's catch-all: an unrecognised, non-`AdminAccessError`,
+   * non-domain exception. Previously silently coerced to `admin_capability_denied`
+   * / 403 in {@link projectErrorEnvelope}'s caller — see `respond.ts` — which read
+   * to an operator as "you lack a permission" when the real story was "the server
+   * broke". This code exists so those two failure modes are never the same
+   * sentence.
+   */
+  | "admin_internal_error"
+  | "task_admin_invalid_request"
+  | "task_admin_not_found"
+  | "task_admin_state_conflict"
+  | "task_admin_idempotency_conflict"
+  | "task_admin_unresolved_intent"
+  | "task_admin_concurrent_write"
+  | "task_admin_active_scope_conflict"
+  | "task_admin_internal_error";
 
 /**
  * 409 carries idempotency conflicts: a mutation request id was replayed with a
@@ -32,7 +52,7 @@ export type AdminErrorCode =
  * the content routes take page, page size, status, locale and search from the
  * query string, and a rejected `page=0` is neither "forbidden" nor "not found".
  */
-export type AdminErrorStatus = 400 | 401 | 403 | 404 | 409 | 429;
+export type AdminErrorStatus = 400 | 401 | 403 | 404 | 409 | 429 | 500;
 
 /**
  * Machine-readable reasons that further qualify a code. Constrained to a frozen
@@ -73,7 +93,7 @@ export type ErrorEnvelope = {
   readonly details?: ErrorEnvelopeDetails;
 };
 
-const ALLOWED_STATUSES: readonly AdminErrorStatus[] = [400, 401, 403, 404, 409, 429];
+const ALLOWED_STATUSES: readonly AdminErrorStatus[] = [400, 401, 403, 404, 409, 429, 500];
 
 const ALLOWED_REASONS: readonly ErrorEnvelopeReason[] = [
   "idempotency_conflict",

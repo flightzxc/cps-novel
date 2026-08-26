@@ -1,12 +1,14 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   MoboreaderAdapterError,
+  REDACTED_EVIDENCE_SENTINEL,
   buildMoboreaderPreviewRequestsFromCatalogRow,
   createMoboreaderReadAdapter,
   parseBookMaterialResponse,
   parseListBooksResponse,
   parsePreviewChaptersResponse,
 } from "@/lib/adapters";
+import { buildChangduPreviewPlan } from "@/lib/preview";
 
 function listPayload() {
   return {
@@ -31,6 +33,7 @@ function listPayload() {
         source_label: { future: "preserve-me" },
         kocCode: "must-not-leak",
         publicUrl: "https://promo.example/secret",
+        promotionalText: "Share with code must-not-leak",
       }],
     },
   };
@@ -104,10 +107,27 @@ describe("MoboReader read adapter", () => {
       seriesTypeList: ["fantasy"],
       recommendList: ["featured"],
       labelSnapshotComplete: true,
+      existingPromo: {
+        upstreamCode: "must-not-leak",
+        webUrl: "https://promo.example/secret",
+      },
     });
     expect(parsed.items[0].rawEvidence.source_label).toEqual({ future: "preserve-me" });
-    expect(parsed.items[0].rawEvidence.kocCode).toBe("[redacted]");
-    expect(parsed.items[0].rawEvidence.publicUrl).toBe("[redacted]");
+    expect(parsed.items[0].rawEvidence.kocCode).toBe(REDACTED_EVIDENCE_SENTINEL);
+    expect(parsed.items[0].rawEvidence.publicUrl).toBe(REDACTED_EVIDENCE_SENTINEL);
+    expect(parsed.items[0].rawEvidence.promotionalText).toBe(REDACTED_EVIDENCE_SENTINEL);
+    expect(JSON.stringify(parsed.items[0].rawEvidence)).not.toContain("must-not-leak");
+  });
+
+  it("uses publicUrl then homeLink for the in-memory promo handoff and assigns no onlineUrl semantics", () => {
+    const payload = listPayload() as unknown as { data: { list: Array<Record<string, unknown>>; totalCount: number } };
+    payload.data.list[0].publicUrl = "";
+    payload.data.list[0].homeLink = "https://promo.example/home";
+    payload.data.list[0].onlineUrl = "app://unproven";
+    expect(parseListBooksResponse(payload).items[0].existingPromo).toEqual({
+      upstreamCode: "must-not-leak",
+      webUrl: "https://promo.example/home",
+    });
   });
 
   it("preserves all four source label identities without trimming or mapping", () => {
@@ -165,6 +185,82 @@ describe("MoboReader read adapter", () => {
     });
     expect(parsed.chapterList).toHaveLength(1);
     expect(parsed).not.toHaveProperty("allEpis");
+  });
+
+  it("accepts a numeric getchapterinfo chapterID by converting it to a string (D-1 fix, aligned with seriesId/externalBookId strictness)", () => {
+    const parsed = parsePreviewChaptersResponse({
+      data: {
+        bookId: "b1",
+        currentLanguage: 2,
+        chapterList: [{ i: 1, chapterID: 5001001, chapterName: "One", chapterShowName: "Chapter 1", chapterContent: "body" }],
+      },
+    });
+    expect(parsed.chapterList[0].chapterID).toBe("5001001");
+    expect(typeof parsed.chapterList[0].chapterID).toBe("string");
+  });
+
+  it("accepts a string getchapterinfo chapterID unchanged", () => {
+    const parsed = parsePreviewChaptersResponse({
+      data: {
+        bookId: "b1",
+        currentLanguage: 2,
+        chapterList: [{ i: 1, chapterID: "c-001", chapterName: "One", chapterShowName: "Chapter 1", chapterContent: "body" }],
+      },
+    });
+    expect(parsed.chapterList[0].chapterID).toBe("c-001");
+  });
+
+  it.each([
+    ["null", null as unknown],
+    ["missing", undefined as unknown],
+    ["an empty string", "" as unknown],
+  ])("still fails closed on a diagnosable chapterID (%s) naming the field and the received typeof", (_label, chapterID) => {
+    const row: Record<string, unknown> = { i: 1, chapterName: "One", chapterShowName: "Chapter 1", chapterContent: "body" };
+    if (chapterID !== undefined) row.chapterID = chapterID;
+    let caught: unknown;
+    try {
+      parsePreviewChaptersResponse({ data: { bookId: "b1", currentLanguage: 2, chapterList: [row] } });
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeInstanceOf(MoboreaderAdapterError);
+    const error = caught as MoboreaderAdapterError;
+    expect(error.code).toBe("malformed_payload");
+    expect(error.retryable).toBe(false);
+    expect(error.detail).toContain("chapterID");
+    expect(error.detail).toMatch(/typeof/);
+    expect(error.message).toContain("chapterID");
+  });
+
+  it("end-to-end: a numeric chapterID in a minimal getchapterinfo fixture parses successfully and reaches the persisted-field boundary as a string", () => {
+    // Minimal real-shaped getchapterinfo response with a numeric chapterID,
+    // the exact upstream shape the D-1 smoke recheck found the parser rejecting.
+    const fixture = {
+      data: {
+        bookId: "book-998877",
+        currentLanguage: 2,
+        chapterList: [
+          { i: 1, chapterID: 5001001, chapterName: "Chapter One", chapterShowName: null, chapterContent: "Once upon a time." },
+        ],
+      },
+    };
+    const parsed = parsePreviewChaptersResponse(fixture);
+    expect(parsed.chapterList).toHaveLength(1);
+    expect(parsed.chapterList[0].chapterID).toBe("5001001");
+
+    // buildChangduPreviewPlan is the pure planning step whose output chapters
+    // feed changdu-materialization.ts's Prisma upsert
+    // (`externalChapterId: chapter.chapterID`, NovelChapterSourceItem.externalChapterId
+    // is `String @db.VarChar(160)`). Asserting the type here pins the
+    // "field written to the DB is a string" invariant without a live database.
+    const plan = buildChangduPreviewPlan({
+      chapterList: parsed.chapterList,
+      maxMaterializedChapters: 3,
+      trustedCompleteResponse: true,
+    });
+    expect(plan.authoritative).toBe(true);
+    expect(plan.chapters[0].chapterID).toBe("5001001");
+    expect(typeof plan.chapters[0].chapterID).toBe("string");
   });
 
   it.each([

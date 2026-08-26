@@ -13,6 +13,12 @@
  * 🔴 **全项目唯一的语种映射实现。** 任何其他位置出现第二份语种映射硬编码都是违规：
  * CPS 因映射散落四处，付过两次全库 normalize 的代价。
  *
+ * P0-S15（2026-08-26）：上游登记表首次填充，依据《C2 真上游只读诊断报告
+ * 2026-08-26》的真实成对证据登记了 `3 → en`、`7 → ru`（逐条来源见下方
+ * `UPSTREAM_LANGUAGE_REGISTRY` 的内联注释）。**这只是 20 条样本覆盖到的子集，
+ * 不是完整上游枚举**——未登记的数值码依旧落 `unknown`，fail-closed 语义不变，
+ * 发布白名单依旧独立为空（登记 ≠ 可发布）。
+ *
  * ## 三条不可协商的语义
  *
  * 1. **映射不到就是 `unknown`**——不猜测、不做区域回退、不拿上游原值当 locale。
@@ -26,26 +32,70 @@
 /**
  * 站点 locale。
  *
- * 🔴 目前只有 `en`：它是本仓库里唯一有依据的站点语种（根布局 `<html lang="en">`），
- * 也是 D-7 建议的起步语种。**新增任何 locale 必须先有 Owner 决策**，
- * 且只能改这一个文件。
+ * P0-S7a（2026-08-20）：Owner 已裁决——首批注册即对齐短剧站 15 语（登记 ≠
+ * 可发布，见下方 `PUBLISHABLE_LOCALES`）。列表逐字取自 CPS 短剧站
+ * `src/lib/supported-site-locales.ts` 的 `SUPPORTED_SITE_LOCALES`
+ * （`git show v8.2.10:src/lib/supported-site-locales.ts`，仓库路径
+ * `/Users/chenweifeng/Documents/产品原型及文档/cps项目/cps-admin`，只读参考，
+ * 未改动该仓库任何文件）。CPS 该文件里 `pt`→`pt-BR`、`zh-TW`→`zh-Hant` 是别名
+ * 折叠规则，不是独立 locale，因此不登记为本站点的第 16、17 个 locale。
+ *
+ * 🔴 **新增/删减任何 locale 必须先有 Owner 决策，且只能改这一个文件**——
+ * 这条纪律不因登记表从 1 项扩到 15 项而改变。
  */
-export type SiteLocale = "en";
+export type SiteLocale =
+  | "en"
+  | "es"
+  | "pt-BR"
+  | "id"
+  | "vi"
+  | "th"
+  | "ja"
+  | "ko"
+  | "zh-Hant"
+  | "ar"
+  | "fr"
+  | "de"
+  | "pl"
+  | "cs"
+  | "ru";
 
-/** 站点已登记的全部 locale。发布白名单是它的子集。 */
-export const SITE_LOCALES: readonly SiteLocale[] = Object.freeze(["en"]);
+/** 站点已登记的全部 locale（15 语，对齐短剧站）。发布白名单是它的子集。 */
+export const SITE_LOCALES: readonly SiteLocale[] = Object.freeze([
+  "en",
+  "es",
+  "pt-BR",
+  "id",
+  "vi",
+  "th",
+  "ja",
+  "ko",
+  "zh-Hant",
+  "ar",
+  "fr",
+  "de",
+  "pl",
+  "cs",
+  "ru",
+]);
 
 /**
  * 上游语种登记表：一个站点 locale ← 一组上游取值。
  *
- * 🔴 **当前为空，这是有意的，不是漏写。** 上游 `language` 是数值码，其枚举来自
- * 接口探测证据（`P0_BROWSER_INTERFACE_PROBE.md` / `P0_SECOND_BROWSER_PROBE.md`），
- * 而这两份证据不在本仓库内；`novel-v1-adapter-and-workflow` §U-3 还明确记着
- * 「法语的 `language` 数值枚举未安全取得」。没有证据就登记数值码，等于凭空发明
- * 上游契约——正是契约里点名禁止的那种猜测。
+ * P0-S15（2026-08-26）：**已按真实上游证据填入子集，不再是空表。** 来源是
+ * 《C2 真上游只读诊断报告 2026-08-26》（执行基线 `d103cf2`，真实 `getlistpc`
+ * 接口 20 条样本）：`$.data.list[*].language` 20 条全为 number，标量集合
+ * `{3, 7}`；`$.data.list[*].languageName` 20 条全为 string，集合
+ * `{英语, 俄语}`；`$.data.currentLanguage` 为 number `{3}`。`language` 与
+ * `languageName` 逐条成对出现，且与已归档 Lane B 证据一致：`3 → 英语 → en`，
+ * `7 → 俄语 → ru`。下面两条登记就是这份证据的直接转录，不做任何推断。
  *
- * 于是今天 `resolveSiteLocale` 对任何输入都返回 `unknown`，链路 fail-closed：
- * SourceItem 可建、Novel 不建、进人工队列。证据到手后，唯一要改的就是这张表。
+ * 🔴 **这只是本页 20 条样本覆盖到的子集，不代表上游完整语种枚举。** 未在这份
+ * /未来同等真实证据里出现过成对样本的数值码，`resolveSiteLocale` 依旧落
+ * `unknown`——哪怕直觉上"像"某个语种也不得推测补齐。扩表规则不变：新增登记
+ * 必须附带真实上游成对证据（数值码 + `languageName` + 二者同条目出现的原始
+ * 样本引用），没有证据就是凭空发明上游契约——正是本文件开头「三条不可协商
+ * 的语义」第 3 条点名禁止的那种猜测。
  */
 type UpstreamLanguageRegistration = {
   readonly locale: SiteLocale;
@@ -55,18 +105,102 @@ type UpstreamLanguageRegistration = {
   readonly names: readonly string[];
 };
 
-const UPSTREAM_LANGUAGE_REGISTRY: readonly UpstreamLanguageRegistration[] = Object.freeze([]);
+const UPSTREAM_LANGUAGE_REGISTRY: readonly UpstreamLanguageRegistration[] = Object.freeze([
+  {
+    locale: "en",
+    // 证据：《C2 真上游只读诊断报告 2026-08-26》真实 getlistpc 20 条样本
+    // （基线 d103cf2）—— language=3 与 languageName="英语" 逐条成对出现，
+    // currentLanguage 同样为 3；与已归档 Lane B 成对证据一致。
+    codes: [3],
+    names: ["英语"],
+  },
+  {
+    locale: "ru",
+    // 证据同上——language=7 与 languageName="俄语" 逐条成对出现，
+    // 与已归档 Lane B 成对证据一致。
+    codes: [7],
+    names: ["俄语"],
+  },
+]);
 
 /**
  * 发布白名单。
  *
- * 🔴 **当前为空，同样是有意的。** D-7（首发公开语种白名单）仍是 OPEN，且冻结的
- * 准入条件是五项齐备：前台 messages 无 fallback · 后台模板语种枚举已登记 ·
- * 该语种模板已跑通真实渲染 · SEO 元数据齐全 · sitemap 分片已验证。P1 阶段一项
- * 都不具备，所以连 `en` 也不进白名单——CPS `v6.0.4` 就是只注册了前台 locale、
- * 漏了后台模板枚举，线上才发现。
+ * 🔴 **P0-S7a 复核后依旧为空——连 `en` 都不进，这是本轮逐条核对五项准入条件
+ * 后的结论，不是沿用旧状态没检查。** D-7（`docs/architecture/candidate-v0.2.1/
+ * novel-v1-open-decisions.md`）冻结的准入条件是五项齐备：
+ *
+ * 1. 前台 messages 无 fallback——**不满足**。本仓库没有任何 messages 目录/i18n
+ *    目录；且公开路由的实际渲染树里混着大量中文占位文案（例如
+ *    `src/app/browse/page.tsx` 的 `title="全部作品"`、
+ *    `src/features/public-ui/status/UnavailableScreen.tsx` 的
+ *    `"这本书暂时不可阅读"`、`src/features/public-ui/layout/SiteHeader.tsx`
+ *    的 `aria-label="主导航"` 等——不是「en 缺文案」，是「en 页面里本就还有非
+ *    en 文案」，五项里最硬的一条直接不成立。这部分工作在 Cursor 的 U3。
+ * 2. 后台模板语种枚举已登记——**不满足**。`ArticleTemplate` 表存在于 schema，
+ *    但本仓库没有任何代码引用它；模板引擎尚未接线（P2-02 在独立分支，未进本
+ *    基线），无枚举可言。
+ * 3. 该语种模板已跑通真实渲染——**不满足**，前提条件 2 都不成立。
+ * 4. SEO 元数据齐全——P0-S7a 本单把这块基础设施补齐了（hreflang 发布状态过滤、
+ *    sitemap 分语种分片、canonical 单一源），但条件 1-3 仍卡关，单独满足条件
+ *    4 不能让任何 locale 通过「五项齐备」的准入线。
+ * 5. sitemap 分片已验证——本单验证的是分片**逻辑**（多 locale 参数化路径，见
+ *    `tests/backend/seo/`），不是针对真实生产内容的验证；`listPublishableLocales()`
+ *    仍为空时 `generateStaticSitemaps` 会直接失败（`No sitemap child files
+ *    were generated`），这本身就是 fail-closed 的证据而非缺陷。
+ *
+ * 结论：15 语没有一个满足全部五项，`en` 也不例外——CPS `v6.0.4` 就是只注册了
+ * 前台 locale、漏了后台模板枚举，线上才发现；宁可继续 fail-closed，也不要重
+ * 复那次事故。表一旦有 locale 真正五项齐备，只改这一个文件。
  */
 const PUBLISHABLE_LOCALES: readonly SiteLocale[] = Object.freeze([]);
+
+/**
+ * D-7 条件二 fail-closed 守卫（模块加载即断言，不是运行时才发现）。
+ *
+ * 背景：CPS `v6.0.4` 事故——只注册了前台 locale，漏了后台模板枚举，某语种
+ * 页面裸奔上线才被发现。本仓库 D-7 条件二（"后台模板语种枚举已登记"）今天
+ * 对 `en` 之所以不炸，是因为消息目录里内置了 `en` 默认文案——Opus 终审的
+ * 裁定原话是：这份安全**是巧合，不是机制**，`ArticleTemplate` CRUD 一旦落地、
+ * 有人往 `PUBLISHABLE_LOCALES` 里加一个非 `en` 语种，没有任何东西会拦住它，
+ * 直到模板引擎在生产渲染时找不到模板才会现形。
+ *
+ * 这道守卫把"巧合"钉成"机制"：只要模板 CRUD 没落地，`PUBLISHABLE_LOCALES`
+ * 就只能是空集，或者是 `{"en"}` 的子集；越界的化，模块一加载就抛，不允许
+ * 悄悄发布到运行时才炸。
+ */
+export function assertPublishableLocalesFailClosed(
+  locales: readonly SiteLocale[],
+  articleTemplateCrudLanded: boolean,
+): void {
+  if (articleTemplateCrudLanded) {
+    // 条件二已经有真实机制兜底（模板引擎读真实枚举），不再需要这道临时闸。
+    return;
+  }
+  const outOfBounds = locales.filter((locale) => locale !== "en");
+  if (outOfBounds.length > 0) {
+    throw new Error(
+      "D-7 条件二 fail-closed 守卫触发：ARTICLE_TEMPLATE_CRUD_LANDED=false 时，" +
+        `PUBLISHABLE_LOCALES 只能是空集或 {"en"} 的子集，发现越界 locale：` +
+        `${outOfBounds.join(", ")}。ArticleTemplate CRUD 未落地前，任何非 en ` +
+        "语种都不得进入发布白名单——这正是 CPS v6.0.4 事故的形状（只注册前台 " +
+        "locale，漏了后台模板枚举），不要在本仓库重演。",
+    );
+  }
+}
+
+/**
+ * `ArticleTemplate` CRUD 是否已经落地为真实机制（表有数据、且模板引擎在渲染时
+ * 真的读它，不是"表存在于 schema"这种字面意义的落地）。
+ *
+ * 🔴 翻转条件：等 P2-02 模板引擎接线、且某 locale 在 `ArticleTemplate` 里有
+ * 真实枚举记录并被渲染路径实际读取之后，由那次改动的作者把这个常量改成
+ * `true`——同一次改动必须在 PR/commit 描述里说明是哪次改动让 D-7 条件二/三
+ * 成立，不能只改一个布尔值就算数。改的时候只能改这一处，不能在别处另开关。
+ */
+export const ARTICLE_TEMPLATE_CRUD_LANDED = false;
+
+assertPublishableLocalesFailClosed(PUBLISHABLE_LOCALES, ARTICLE_TEMPLATE_CRUD_LANDED);
 
 const CODE_INDEX: ReadonlyMap<string, SiteLocale> = new Map(
   UPSTREAM_LANGUAGE_REGISTRY.flatMap((entry) =>

@@ -35,6 +35,7 @@ describe("P1-08B production backend contracts", () => {
     expect(resolveAdminAction("admin.credential.supersede", P1_08B_ADMIN_REGISTRY)?.mutation).toBe(true);
     for (const capability of [
       "credential:manage",
+      "task:manage",
       "content:takedown",
       "promo:claim",
       "revenue:view",
