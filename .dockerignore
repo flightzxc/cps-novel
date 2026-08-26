@@ -6,6 +6,8 @@ coverage
 test-results
 tests
 docs
+artifacts
+output
 *.log
 .env
 .env.*

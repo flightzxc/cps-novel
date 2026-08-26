@@ -14,6 +14,7 @@ const capacityLocations = read("infra/production-like/nginx/snippets/capacity-lo
 const proxyHeaders = read("infra/production-like/nginx/snippets/proxy-headers.conf");
 const launcher = read("scripts/x8-production-like.sh");
 const envHelper = read("scripts/lib/x8-production-like-env.sh");
+const dockerignore = read(".dockerignore");
 
 describe("X8 local production-like contracts", () => {
   it("extends rather than changing the frozen four-service base topology", () => {
@@ -26,6 +27,12 @@ describe("X8 local production-like contracts", () => {
     expect(overlay).toContain("name: cps_novel_x8_sitemap_static");
     expect(overlay).toContain("name: cps_novel_x8_wal_archive");
     expect(overlay).not.toMatch(/network_mode:\s*host/);
+  });
+
+  it("keeps local evidence and upstream samples out of the production image context", () => {
+    for (const path of [".tmp", "node_modules", "test-results", "tests", "docs", "artifacts", "output"]) {
+      expect(dockerignore.split(/\r?\n/)).toContain(path);
+    }
   });
 
   it("loads the X2 PostgreSQL runtime configuration and keeps backup credentials narrow", () => {
