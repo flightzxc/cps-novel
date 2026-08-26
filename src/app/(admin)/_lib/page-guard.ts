@@ -46,20 +46,30 @@ const UNAUTHENTICATED_CODES: ReadonlySet<AdminAccessErrorCode> = new Set([
  * boundary — neither one relaxes what `requireAdminPageAccess` already
  * enforces, both just replace what used to be an uncaught `AdminAccessError`
  * (rendered by e.g. `novels/error.tsx` as an opaque "read failed" boundary)
- * with a landing spot the operator can actually act on:
+ * with a landing spot the operator can actually act on. PR-C1b tightens the
+ * second of the two after an audit found it left a session-freshness gap:
  *
  * 1. No usable session (`jwt_missing` / `jwt_invalid` / `jwt_expired`) sends
  *    the browser to `/login?next=<registered root>`, instead of throwing.
  *    `/login` itself is outside `ADMIN_PAGE_ROOTS` by design — see
  *    `(admin-auth)/_lib/auth-session.ts` — so this never loops.
  * 2. A valid session whose identity has not enabled 2FA is redirected to the
- *    forced-enrollment screen at `/two-factor/setup`. This does not gate
- *    reads that never demanded 2FA in the first place (`content:view` /
- *    `content:read` stay `requiresTwoFactor: false` in
- *    `ADMIN_CAPABILITY_CONFIG`, and `requireContentPage` still deliberately
- *    skips any step-up check) — it only guarantees an account that has never
- *    gone through 2FA setup cannot browse the backend indefinitely on a
- *    password-only session.
+ *    forced-enrollment screen at `/two-factor/setup`. It only guarantees an
+ *    account that has never gone through 2FA setup cannot browse the
+ *    backend indefinitely on a password-only session.
+ * 3. (PR-C1b) A valid session whose identity *has* enabled 2FA but has not
+ *    completed a challenge on *this* session (`twoFactorCompleted ===
+ *    false` — `authenticateAdminLogin` issues the session at the password
+ *    stage, before any challenge) is sent to
+ *    `/two-factor/challenge?next=<registered root>` instead of being allowed
+ *    to render. Before this, a password-only session could browse every
+ *    registered read page indefinitely without ever completing the step-up
+ *    it enrolled for. This is a session-level gate, orthogonal to the
+ *    per-capability `requiresTwoFactor` flag in `ADMIN_CAPABILITY_CONFIG`
+ *    (`content:view` / `content:read` still stay `requiresTwoFactor: false`
+ *    for *mutation* routes — see `requireContentPage` — that axis is
+ *    unchanged): this check is "has the operator completed today's 2FA at
+ *    all", not "does this specific action require it".
  */
 export async function requireAdminPage(pathname: string): Promise<AdminAuthContext> {
   let context: AdminAuthContext;
@@ -81,6 +91,15 @@ export async function requireAdminPage(pathname: string): Promise<AdminAuthConte
   }
   if (!context.identity.twoFactorEnabled) {
     redirect("/two-factor/setup");
+  }
+  if (!context.twoFactorCompleted) {
+    // Same "pattern may not be navigable" resolution as the jwt-missing
+    // branch above. Unreachable in practice (an unregistered `pathname`
+    // would already have thrown `admin_route_not_registered` out of
+    // `requireAdminPageAccess`, above), kept only as the same defensive
+    // fallback the sibling branch uses.
+    const root = resolveAdminPage(pathname) ?? "/login";
+    redirect(`/two-factor/challenge?next=${encodeURIComponent(root)}`);
   }
   return context;
 }
