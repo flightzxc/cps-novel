@@ -16,6 +16,7 @@ import type {
 } from "@/contracts";
 import { adminFetch } from "@/features/admin-ui/admin-fetch";
 import { capabilityBlockReason } from "@/features/admin-ui/capability-view";
+import { formatDateTime } from "@/features/admin-ui/datetime";
 import { errorEnvelopeCopy } from "@/features/admin-ui/error-copy";
 
 import {
@@ -50,17 +51,6 @@ const TASK_STATE_LABEL: Readonly<Record<CredentialTaskStatusView["state"], strin
   disabled: "已停用",
   unknown: "未知",
 });
-
-function formatTime(value: string | null): string {
-  if (!value) return "-";
-  return new Intl.DateTimeFormat("zh-CN", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(new Date(value));
-}
 
 type Pending =
   | { kind: "disable"; accountId: string; accountName: string }
@@ -221,8 +211,8 @@ export function ChannelAccountsClient({
                     <StatusBadge tone="danger">未配置</StatusBadge>
                   )}
                 </TD>
-                <TD className="text-xs">{formatTime(current?.expiresAt ?? null)}</TD>
-                <TD className="text-xs">{formatTime(account.lastValidatedAt)}</TD>
+                <TD className="text-xs">{formatDateTime(current?.expiresAt ?? null)}</TD>
+                <TD className="text-xs">{formatDateTime(account.lastValidatedAt)}</TD>
                 {canManage && (
                   <TD className="space-y-2">
                     <ReplaceCredentialForm

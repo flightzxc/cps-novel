@@ -97,6 +97,14 @@ export const en = {
       "At the rights holder's request, this site no longer offers this book. This withdrawal is permanent.",
     returnHome: "Back to home",
   },
+  errorPage: {
+    title: "Something went wrong",
+    body: "This page could not be loaded. You can go back home and try again.",
+  },
+  notFoundPage: {
+    title: "This page could not be found",
+    body: "The address may be wrong, or this page is no longer here.",
+  },
   pagination: {
     previous: "Previous",
     next: "Next",

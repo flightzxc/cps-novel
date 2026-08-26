@@ -113,25 +113,11 @@ export function taskModeLabel(value: string): string {
   return TASK_MODE_LABELS[value] ?? value;
 }
 
-/**
- * CPS `src/lib/utils.ts:10` `formatDate`, ported verbatim in behaviour.
- *
- * The `zh-CN` locale and the `-` for empty are both deliberate: operators read
- * these tables next to CPS all day, and a different empty marker or date order
- * across the two backends is a real source of misreading.
- */
-export function formatDateTime(value: string | null | undefined): string {
-  if (!value) return "-";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "-";
-  return date.toLocaleDateString("zh-CN", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
+export {
+  ADMIN_DISPLAY_TIME_ZONE,
+  ADMIN_DISPLAY_TIME_ZONE_LABEL,
+  formatDateTime,
+} from "./datetime";
 
 export function formatCount(value: number | null | undefined): string {
   return value === null || value === undefined ? "-" : String(value);
