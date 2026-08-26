@@ -12,6 +12,15 @@ const PRIVATE_ROUTE_PREFIXES = [
   "/settings",
   "/dev-preview",
   "/go",
+  // PR-C1: the admin login / 2FA challenge / 2FA setup surface
+  // (`(admin-auth)` route group). These pages are outside `(admin)` and
+  // `ADMIN_PAGE_ROOTS` by design (see `(admin-auth)/_lib/auth-session.ts`),
+  // so they are not covered by any of the prefixes above and need their own
+  // entries. Per-page `robots: { index: false, follow: false }` metadata
+  // already keeps them out of the index; this additionally keeps crawlers
+  // from spending budget on them.
+  "/login",
+  "/two-factor",
 ] as const;
 
 export function buildRobots(): MetadataRoute.Robots {
