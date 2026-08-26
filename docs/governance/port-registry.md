@@ -9,6 +9,15 @@
 - `baseline_commit` 统一为 CPS 只读参考仓库的固定基线：`d77c3b968285698529cf97c7f0f97b286d7a2a9c`
 - CPS 只读参考路径：`/Users/chenweifeng/Documents/产品原型及文档/cps项目/cps-admin-v811-search-ux`（详见仓库根 `CLAUDE.md`）
 
+### X 系列上线加固参考基线（2026-08-26）
+
+X1–X4/X6/X7/X9/X10 如需核对已上线的 CPS 运维流程，只从另一只读工作区
+`/Users/chenweifeng/Documents/产品原型及文档/cps项目/cps-admin` 执行 `git show v8.2.18:<path>`。
+annotated tag `v8.2.18` 的 peeled commit 固定登记为
+`0ec20c4ee08b4b007e773feab811703a59ac3048`；X 系列新增条目必须在 `baseline_commit` 列写该 peeled commit，
+不得写 tag 名或 tag object。旧条目仍保留当时的 `d77c3b...` 证据链，不批量改写。
+标签多语资产、北斗与飞书专属逻辑仍明确禁止搬运。
+
 ## `port_kind` 取值说明
 
 | 取值 | 含义 |
@@ -120,7 +129,7 @@ P1-05A 只登记从 CPS 提取的数据库**模式证据**；没有字节复制�
 | `deliverDueIndexNow` 的手写逐行 CAS 认领循环 | `src/lib/indexnow-delivery-service.ts` | `249-268` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `PATTERN_ONLY`（**不搬代码，只借问题域**） | 不搬 CPS 手写的 `updateMany` CAS 认领；改用小说仓既有 `GenericTaskItem` 的 `executionToken`/`leaseEpoch` 租约机制（`src/lib/tasks/store.ts`，P1-07 已验证），详见 `worker/handlers/indexnow-delivery.ts` | Claude |
 | `deliverDueIndexNow` 的 HTTP 投递主体 → `worker/handlers/indexnow-delivery.ts` | `src/lib/indexnow-delivery-service.ts` | `270-368` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | 保留请求构造（`AbortController` 10s 超时）、`urlList` payload 结构、响应分类与 attempt/outbox 两段写入顺序；**改**：CPS 单次投递最多 500 URL 批量，小说仓 V1 改为一个 `GenericTaskItem` = 一次投递 = 一个 URL（`INDEXNOW_HTTP_BATCH_SIZE` 未被 handler 消费，理由见 `delivery-primitives.ts` 头部注释）；`cancelEligibilityDrift` 的"投递前复核资格漂移"思路保留但内联到单行处理里，不再是独立批量函数 | Claude |
 | `site-url.ts`（`getSiteUrl`/`toAbsoluteUrl`）→ `internal-site-url.ts`（`toAbsoluteSiteUrl`） | `src/lib/site-url.ts` | `1-26` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | 保留 env 覆盖 + 默认站点 URL + 末尾斜杠归一化；因 P2-09/Stream C 尚未落地共享 `site-url.ts`，本任务改为 `src/lib/indexnow/` 私有副本，明确标注等 Stream C 落地后废弃合并（该文件头部注释） | Claude |
-| `manifestHashPayload`/`computeManifestSha256`/`verifyManifestSha256` | `src/lib/indexnow-backfill-manifest.ts` | `1-41` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `COPY` | 原样复制；`IndexNowBackfillEntry.drama_id` 改名 `novel_id`，删除 `source_app`/`batch_task_id`（CPS AI 生成任务专属，无对应） | Claude |
+| `manifestHashPayload`/`computeManifestSha256`/`verifyManifestSha256` | `src/lib/indexnow-backfill-manifest.ts` | `1-41` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `COPY` | 原样复制并收敛至 Codex 独占的 `src/lib/indexnow/backfill-manifest.ts`；`IndexNowBackfillEntry.drama_id` 改名 `novel_id`，删除 `source_app`/`batch_task_id`（CPS AI 生成任务专属，无对应） | Codex |
 | `assertBackfillWriteGates`/`assertBackfillStopConditions` | `scripts/indexnow-backfill-apply.ts` | `26-61` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `COPY` | 原样复制两道双闸判定（`--confirm`+`ALLOW_WRITE`、403 硬停/422>3 次停/终态失败率>5% 停/worker 任务失败停）；`prisma.batchTask.count` 换 `prisma.genericTask.count` | Claude |
 | `scripts/indexnow-backfill-apply.ts` 主流程（`main`） | `scripts/indexnow-backfill-apply.ts` | `63-124` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | 保留 manifest 读取+SHA-256 校验+commit 匹配+`--limit`/`--offset` 分页+双重写保护的主流程；候选核实与派发调用换成 `loadIndexNowCandidateArticle`/`isNovelIndexNowEligible`/`buildIndexNowCanonicalUrl`/`enqueueIndexNowFirstPublish` | Claude |
 | `scripts/indexnow-backfill-manifest.ts` 输出结构与 CLI 骨架 | `scripts/indexnow-backfill-manifest.ts` | `1-236`（保留约 40%：输出 schema、`--article-ids` 校验、`fs.writeFile({flag:"wx"})` 防覆盖） | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | 候选来源查询（约 55 行，`prisma.batchTaskItem.findMany`）整体不搬，改用 `findPublishedWithoutIndexNowDelivery` 差集查询（`P2-11.md` §5） | Claude |

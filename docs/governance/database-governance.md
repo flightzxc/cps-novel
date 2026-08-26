@@ -324,6 +324,7 @@ P1-08B 新增独立 `scheduler_app`，只授予 schedule/generic task 元数据�
 | 2026-08-18 | v0.2.0-publish-gate（Stream A，P2-07 发布门禁，合并前 Opus 复核 必改1/2） | 零 schema 改动。`applyPublishTransition` 收口 TOCTOU（facts/gate 读取移入事务、写入改条件 `updateMany`+`count` 校验+失败即抛出回滚）；移除 `OperationAudit` 上一版依赖 P2002 恢复的死分支，相关幂等注释降级为"顺序重试幂等，非并发安全"；§13 登记 `operation_audit` 幂等唯一索引为跟进项 | Claude（Sonnet 编码/Opus 复核） | `npm test` 1281 passed / 85 skipped；新增 TOCTOU 并发交错回归测试（`tests/backend/publish-gate/service.test.ts`，注入钩子模拟交错时序） |
 | 2026-08-18 | v0.2.0-public-wiring（Stream B PR2，P2-08 复核） | §4 冻结公开路由：`takedown` **V1 = HTTP 404**；**410 为 post-V1（proxy 层）**。零 schema 改动。 | Cursor | 页面层 `notFound()` + `novel/[slugParam]/not-found.tsx`；禁止 `NEXT_HTTP_ERROR_FALLBACK;410` digest |
 | 2026-08-18 | P2-10 Sitemap | 登记 `SITE_URL` 为 Web/刷新 Worker 的运行期部署必需 origin；镜像 build 不注入默认域名，运行期继续严格 fail-closed | Codex | 待 Claude 增量复核 |
+| 2026-08-26 | P0 catalog promo capture (`ce7f0f1`) | `worker_app` 的表级 SELECT 增加 `promo_link` 与 `article`，供 MoboReader catalog 在脱敏前捕获已有推广资产并绑定本地文章；不新增写权、不扩张 Web/Scheduler 凭证面 | Codex | 已合入 `ce7f0f1`；集成验证覆盖角色读取与脱敏边界 |
 
 ## 13. 待跟进项（Schema 变更队列，Owner 待批）
 
