@@ -29,7 +29,10 @@ const EXPECTED_CONTENT_GET_ROUTES = [
   "/api/admin/novels/chapters/content",
   "/api/admin/novels/detail",
   "/api/admin/tags",
-  "/api/admin/site-settings",
+] as const;
+
+const EXPECTED_SITE_SETTING_ROUTES = [
+  { path: "/api/admin/site-settings", methods: ["GET", "PATCH"] },
 ] as const;
 
 const EXPECTED_TASK_ROUTES = [
@@ -77,6 +80,7 @@ describe("P1-09 Admin registry parity", () => {
     const expected = [
       ...EXPECTED_GET_ROUTES.map((routePath) => ({ path: routePath, methods: ["GET"] })),
       ...EXPECTED_CONTENT_GET_ROUTES.map((routePath) => ({ path: routePath, methods: ["GET"] })),
+      ...EXPECTED_SITE_SETTING_ROUTES.map((route) => ({ path: route.path, methods: [...route.methods] })),
       ...EXPECTED_TASK_ROUTES.map((route) => ({ path: route.path, methods: [...route.methods] })),
     ].sort((left, right) => left.path.localeCompare(right.path));
     const registered = P2_04_ADMIN_REGISTRY.routes
@@ -94,6 +98,14 @@ describe("P1-09 Admin registry parity", () => {
         capability: "task:manage",
         methods: route.methods,
       });
+    }
+    for (const route of EXPECTED_SITE_SETTING_ROUTES) {
+      for (const method of route.methods) {
+        expect(resolveAdminRoute(route.path, method, P2_04_ADMIN_REGISTRY)).toMatchObject({
+          capability: "settings:manage",
+          methods: route.methods,
+        });
+      }
     }
   });
 
