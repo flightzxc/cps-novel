@@ -78,6 +78,17 @@ export async function readActiveContext(): Promise<AdminAuthContext | null> {
   }
 }
 
+/**
+ * Whether the browser still sent a session cookie, even if that session is
+ * already stale (`sessionVersion` mismatch after 2FA setup, idle timeout,
+ * revoked in another tab). Used by `/two-factor/setup` so a Server Action
+ * refresh does not `redirect("/login")` and unmount the one-time recovery
+ * codes still sitting in client state.
+ */
+export async function hasSessionCookie(): Promise<boolean> {
+  return Boolean(await readSessionToken());
+}
+
 /** Session lookup that throws `AdminAccessError` (jwt_missing / jwt_invalid /
  * jwt_expired) when there is no valid session — for mutations that require
  * one (2FA challenge completion, 2FA setup, logout). */

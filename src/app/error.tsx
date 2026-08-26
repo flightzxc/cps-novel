@@ -1,9 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { PublicStatusPanel } from "@/features/public-ui/status/PublicStatusPanel";
-import { getPublicT } from "@/lib/locale/messages";
-import { PUBLIC_SITE_LOCALE } from "@/lib/site/locale-label";
+import { PublicErrorStatus } from "@/features/public-ui/status/PublicErrorStatus";
 
 /**
  * Root error boundary for the public tree (and any admin segment without its
@@ -17,21 +15,9 @@ export default function ErrorPage({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
-  const t = getPublicT(PUBLIC_SITE_LOCALE);
-
   useEffect(() => {
     console.error(error);
   }, [error]);
 
-  return (
-    <PublicStatusPanel
-      bare
-      testId="public-error-panel"
-      title={t("errorPage.title")}
-      body={t("errorPage.body")}
-      homeLabel={t("unavailable.returnHome")}
-      retryLabel={t("errorPage.retry")}
-      onRetry={reset}
-    />
-  );
+  return <PublicErrorStatus onRetry={reset} />;
 }

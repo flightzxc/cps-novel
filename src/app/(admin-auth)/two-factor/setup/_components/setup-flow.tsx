@@ -1,6 +1,5 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useEffect, useState, type FormEvent } from "react";
 
 import { buttonClassName } from "@/components/ui/button";
@@ -8,7 +7,9 @@ import { CopyButton } from "@/components/ui/copy-button";
 import type { RecoveryCodesOneTimeResult, TwoFactorSetupResult } from "@/contracts";
 import { errorEnvelopeCopy } from "@/features/admin-ui/error-copy";
 
-import { confirmSetupAction, startSetupAction } from "../_actions";
+import { AuthCard } from "../../../_components/auth-card";
+import { AuthLogoutControl } from "../../../_components/auth-logout-control";
+import { confirmSetupAction, finishSetupAction, startSetupAction } from "../_actions";
 
 const INPUT_CLASS =
   "w-full rounded-lg border border-gray-300 px-3 py-2 text-center font-mono text-lg tracking-[0.3em] text-gray-900 placeholder:tracking-normal placeholder:text-gray-400 placeholder:font-sans placeholder:text-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 disabled:bg-gray-100";
@@ -141,31 +142,33 @@ function StartedStep({
 }
 
 function DoneStep({ recovery, next }: { recovery: RecoveryCodesOneTimeResult; next: string | null }) {
-  const router = useRouter();
-  const loginHref = next ? `/login?next=${encodeURIComponent(next)}` : "/login";
+  const [busy, setBusy] = useState(false);
+
+  async function onContinue() {
+    if (busy) return;
+    setBusy(true);
+    await finishSetupAction({ next });
+  }
 
   return (
     <div className="space-y-4">
-      <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
-        双重验证已启用。请立即保存以下恢复码——每个只显示这一次，验证器不可用时可用它们登录。
+      <p role="status" className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+        双重验证已启用。请立即保存以下恢复码——本页关闭后无法再见，验证器不可用时只能靠它们登录。
       </p>
-      <div className="grid grid-cols-2 gap-2 rounded-lg border border-gray-200 bg-gray-50 p-3 font-mono text-sm text-gray-900">
+      <ul className="grid grid-cols-1 gap-2 rounded-lg border border-gray-200 bg-gray-50 p-3 font-mono text-sm text-gray-900 sm:grid-cols-2">
         {recovery.codes.map((code) => (
-          <span key={code} className="rounded bg-white px-2 py-1 text-center">
-            {code}
-          </span>
+          <li key={code} className="flex items-center gap-2 rounded bg-white px-2 py-1">
+            <span className="min-w-0 flex-1 truncate text-center">{code}</span>
+            <CopyButton value={code} label="复制" />
+          </li>
         ))}
-      </div>
+      </ul>
       <CopyButton value={recovery.codes.join("\n")} label="复制全部恢复码" />
       <p className="text-xs text-gray-500">
-        为使本次启用生效，当前登录状态需要重新验证——点击下方按钮重新登录，这次会进入刚刚启用的双重验证。
+        保存完成后点击下方按钮。当前登录会被作废，需要重新登录，这次会进入刚刚启用的双重验证。
       </p>
-      <button
-        type="button"
-        onClick={() => router.push(loginHref)}
-        className={buttonClassName("primary", "w-full")}
-      >
-        我已保存，重新登录
+      <button type="button" disabled={busy} onClick={onContinue} className={buttonClassName("primary", "w-full")}>
+        {busy ? "正在退出…" : "我已保存，继续"}
       </button>
     </div>
   );
@@ -189,14 +192,25 @@ export function SetupFlow({ next }: { next: string | null }) {
     setStep({ name: "started", setup: result.data });
   }
 
-  if (step.name === "idle") return <IdleStep onStart={onStart} busy={busy} error={error} />;
-  if (step.name === "started") {
-    return (
-      <StartedStep
-        setup={step.setup}
-        onDone={(recovery) => setStep({ name: "done", recovery })}
-      />
+  const body =
+    step.name === "idle" ? (
+      <IdleStep onStart={onStart} busy={busy} error={error} />
+    ) : step.name === "started" ? (
+      <StartedStep setup={step.setup} onDone={(recovery) => setStep({ name: "done", recovery })} />
+    ) : (
+      <DoneStep recovery={step.recovery} next={next} />
     );
-  }
-  return <DoneStep recovery={step.recovery} next={next} />;
+
+  return (
+    <div className="flex w-full max-w-md flex-col items-center">
+      <AuthCard title="启用双重验证" description="首次登录需先启用双重验证（2FA），启用后才能进入后台">
+        {body}
+      </AuthCard>
+      {step.name !== "done" ? (
+        <div className="mt-3">
+          <AuthLogoutControl />
+        </div>
+      ) : null}
+    </div>
+  );
 }

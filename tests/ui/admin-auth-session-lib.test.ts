@@ -30,6 +30,7 @@ vi.mock("next/headers", () => ({
 const {
   clearSessionCookie,
   clearTwoFactorChallengeCookie,
+  hasSessionCookie,
   postAuthDestination,
   readTwoFactorChallengeToken,
   requestIp,
@@ -214,5 +215,15 @@ describe("cookie contract — every attribute, not just the name", () => {
   it("returns null, not undefined, when the challenge cookie is absent", async () => {
     cookieJar.get.mockReturnValue(undefined);
     await expect(readTwoFactorChallengeToken()).resolves.toBeNull();
+  });
+
+  it("hasSessionCookie is true only when the session cookie has a value", async () => {
+    cookieJar.get.mockImplementation((name: string) =>
+      name === ADMIN_SESSION_COOKIE_NAME ? { value: "token" } : undefined,
+    );
+    await expect(hasSessionCookie()).resolves.toBe(true);
+
+    cookieJar.get.mockReturnValue(undefined);
+    await expect(hasSessionCookie()).resolves.toBe(false);
   });
 });

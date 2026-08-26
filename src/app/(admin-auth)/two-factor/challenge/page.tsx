@@ -6,6 +6,7 @@ import type { AdminAuthContext } from "@/lib/auth/types";
 
 import { twoFactorStore } from "../../../api/admin/_lib/auth-deps";
 import { AuthCard } from "../../_components/auth-card";
+import { AuthLogoutControl } from "../../_components/auth-logout-control";
 import {
   ADMIN_LANDING_PATH,
   LOGIN_PATH,
@@ -59,8 +60,13 @@ export default async function TwoFactorChallengePage({
   const view = await loadChallengeView(context, await readTwoFactorChallengeToken());
 
   return (
-    <AuthCard title="双重验证" description="输入身份验证器应用中的 6 位验证码，或使用一次性恢复码">
-      <ChallengeForm view={view} next={safeNextPath(next)} />
-    </AuthCard>
+    <div className="flex w-full max-w-md flex-col items-center">
+      <AuthCard title="双重验证" description="输入身份验证器应用中的 6 位验证码，或使用一次性恢复码">
+        <ChallengeForm view={view} next={safeNextPath(next)} />
+      </AuthCard>
+      <div className="mt-3">
+        <AuthLogoutControl />
+      </div>
+    </div>
   );
 }

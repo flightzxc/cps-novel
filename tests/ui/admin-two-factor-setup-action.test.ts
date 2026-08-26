@@ -2,39 +2,58 @@ import "./setup-cleanup";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AdminAccessError } from "@/lib/auth/errors";
+import { hashAdminSessionToken } from "@/lib/auth/session";
 import type { AdminAuthContext } from "@/lib/auth/types";
 
 /**
- * PR-C1 · `two-factor/setup/_actions.ts` — `startSetupAction` and
- * `confirmSetupAction`'s own wiring.
+ * PR-C1 / U5 · `two-factor/setup/_actions.ts` — `startSetupAction`,
+ * `confirmSetupAction`, and `finishSetupAction`.
  *
- * Same mocking policy as `admin-two-factor-challenge-action.test.ts`:
- * `../../_lib/auth-session` is replaced as a unit (its own logic lives in
- * `admin-auth-session-lib.test.ts`); `@/lib/auth/two-factor`,
- * `@/lib/auth/login` (for the post-confirm revoke) and the store factories
- * are mocked at the service boundary. What this file proves is
- * `confirmSetupAction`'s documented, slightly unusual contract: on success it
- * does not leave the bootstrapping session half-alive — it revokes it and
- * clears both cookies outright, forcing a real second login that this time
- * engages the challenge — see the docstring on `confirmSetupAction` for why.
+ * `confirmSetupAction` returns the one-time recovery codes and does **not**
+ * revoke or clear cookies: doing that in the same action made the follow-up
+ * RSC render bounce to `/login` before the operator could save the codes
+ * (X8 R1). Session fencing still happens inside `confirmTwoFactorSetup`
+ * (`sessionVersion` bump). Explicit revoke + cookie clear + `/login` are
+ * `finishSetupAction`, after "我已保存，继续".
  */
+
+class RedirectSignal extends Error {
+  constructor(readonly url: string) {
+    super(`NEXT_REDIRECT:${url}`);
+  }
+}
+
+const redirectMock = vi.hoisted(() =>
+  vi.fn((url: string) => {
+    throw new RedirectSignal(url);
+  }),
+);
+vi.mock("next/navigation", () => ({ redirect: redirectMock }));
 
 const requireActiveContext = vi.hoisted(() => vi.fn());
 const requireSameOriginSubmission = vi.hoisted(() => vi.fn(() => Promise.resolve()));
 const clearSessionCookie = vi.hoisted(() => vi.fn());
 const clearTwoFactorChallengeCookie = vi.hoisted(() => vi.fn());
+const safeNextPath = vi.hoisted(() => vi.fn((value: string | null | undefined) => value ?? null));
 
 vi.mock("@/app/(admin-auth)/_lib/auth-session", () => ({
   requireActiveContext,
   requireSameOriginSubmission,
   clearSessionCookie,
   clearTwoFactorChallengeCookie,
+  LOGIN_PATH: "/login",
+  safeNextPath,
 }));
 
+const findByTokenHash = vi.hoisted(() => vi.fn());
+const readSessionToken = vi.hoisted(() => vi.fn());
 const guardDependencies = vi.hoisted(() =>
-  vi.fn(() => ({ identities: { marker: "identities" }, sessions: { marker: "sessions" } })),
+  vi.fn(() => ({
+    identities: { marker: "identities" },
+    sessions: { marker: "sessions", findByTokenHash },
+  })),
 );
-vi.mock("@/app/api/admin/_lib/deps", () => ({ guardDependencies }));
+vi.mock("@/app/api/admin/_lib/deps", () => ({ guardDependencies, readSessionToken }));
 
 const startTwoFactorSetup = vi.hoisted(() => vi.fn());
 const confirmTwoFactorSetup = vi.hoisted(() => vi.fn());
@@ -47,12 +66,24 @@ const authUnitOfWork = vi.hoisted(() => vi.fn(() => ({ marker: "auth-uow" })));
 const twoFactorStore = vi.hoisted(() => vi.fn(() => ({ marker: "two-factor-store" })));
 vi.mock("@/app/api/admin/_lib/auth-deps", () => ({ authUnitOfWork, twoFactorStore }));
 
-const { startSetupAction, confirmSetupAction } = await import("@/app/(admin-auth)/two-factor/setup/_actions");
+const { startSetupAction, confirmSetupAction, finishSetupAction } = await import(
+  "@/app/(admin-auth)/two-factor/setup/_actions"
+);
 
 const fakeContext = {
   identity: { id: "id-1", twoFactorEnabled: false },
   session: { id: "session-1" },
 } as unknown as AdminAuthContext;
+
+async function runFinish(next?: string | null): Promise<string> {
+  try {
+    await finishSetupAction(next === undefined ? {} : { next });
+    throw new Error("finishSetupAction did not redirect");
+  } catch (error) {
+    if (error instanceof RedirectSignal) return error.url;
+    throw error;
+  }
+}
 
 beforeEach(() => {
   requireActiveContext.mockReset();
@@ -61,12 +92,17 @@ beforeEach(() => {
   requireSameOriginSubmission.mockResolvedValue(undefined);
   clearSessionCookie.mockReset();
   clearTwoFactorChallengeCookie.mockReset();
+  safeNextPath.mockReset();
+  safeNextPath.mockImplementation((value: string | null | undefined) => value ?? null);
   guardDependencies.mockClear();
+  findByTokenHash.mockReset();
+  readSessionToken.mockReset();
   startTwoFactorSetup.mockReset();
   confirmTwoFactorSetup.mockReset();
   revokeAdminSession.mockReset();
   authUnitOfWork.mockClear();
   twoFactorStore.mockClear();
+  redirectMock.mockClear();
 });
 
 describe("startSetupAction", () => {
@@ -150,7 +186,7 @@ describe("confirmSetupAction", () => {
     expect(clearTwoFactorChallengeCookie).not.toHaveBeenCalled();
   });
 
-  it("on success: forwards the code, then revokes the bootstrapping session and clears both cookies", async () => {
+  it("on success: returns the one-time codes and does not revoke or clear cookies", async () => {
     confirmTwoFactorSetup.mockResolvedValue({
       recoveryCodes: ["A1B2-C3D4-E5F6", "G7H8-I9J0-K1L2"],
       nextSessionVersion: 2,
@@ -165,25 +201,67 @@ describe("confirmSetupAction", () => {
       twoFactor: { marker: "two-factor-store" },
       transactions: { marker: "auth-uow" },
     });
-    expect(revokeAdminSession).toHaveBeenCalledWith({ marker: "sessions" }, "session-1");
-    expect(clearSessionCookie).toHaveBeenCalledTimes(1);
-    expect(clearTwoFactorChallengeCookie).toHaveBeenCalledTimes(1);
+    expect(revokeAdminSession).not.toHaveBeenCalled();
+    expect(clearSessionCookie).not.toHaveBeenCalled();
+    expect(clearTwoFactorChallengeCookie).not.toHaveBeenCalled();
     expect(result).toEqual({
       ok: true,
       data: { codes: ["A1B2-C3D4-E5F6", "G7H8-I9J0-K1L2"], generatedAt: expect.any(String) },
     });
   });
+});
 
-  it("revokes and clears cookies only after confirmTwoFactorSetup resolves, never before", async () => {
-    let revokedBeforeConfirm = false;
-    revokeAdminSession.mockImplementation(() => {
-      revokedBeforeConfirm = confirmTwoFactorSetup.mock.calls.length === 0;
-      return Promise.resolve(true);
-    });
-    confirmTwoFactorSetup.mockResolvedValue({ recoveryCodes: ["X"], nextSessionVersion: 2 });
+describe("finishSetupAction", () => {
+  it("rejects a cross-origin submission before revoking anything", async () => {
+    requireSameOriginSubmission.mockRejectedValue(
+      new AdminAccessError("admin_origin_denied", 403, "Admin mutation origin denied"),
+    );
 
-    await confirmSetupAction({ code: "123456" });
+    await expect(finishSetupAction()).rejects.toEqual(
+      expect.objectContaining({ code: "admin_origin_denied" }),
+    );
+    expect(revokeAdminSession).not.toHaveBeenCalled();
+    expect(clearSessionCookie).not.toHaveBeenCalled();
+    expect(redirectMock).not.toHaveBeenCalled();
+  });
 
-    expect(revokedBeforeConfirm).toBe(false);
+  it("revokes the leftover bootstrap session, clears both cookies, and lands on /login", async () => {
+    readSessionToken.mockResolvedValue("raw-token");
+    findByTokenHash.mockResolvedValue({ id: "session-1" });
+
+    const url = await runFinish();
+
+    expect(findByTokenHash).toHaveBeenCalledWith(hashAdminSessionToken("raw-token"));
+    expect(revokeAdminSession).toHaveBeenCalledWith(
+      expect.objectContaining({ findByTokenHash }),
+      "session-1",
+    );
+    expect(clearSessionCookie).toHaveBeenCalledTimes(1);
+    expect(clearTwoFactorChallengeCookie).toHaveBeenCalledTimes(1);
+    expect(url).toBe("/login");
+  });
+
+  it("appends a validated next onto /login so the second login can resume the deep link", async () => {
+    readSessionToken.mockResolvedValue("raw-token");
+    findByTokenHash.mockResolvedValue({ id: "session-1" });
+    safeNextPath.mockReturnValue("/tags");
+
+    expect(await runFinish("/tags")).toBe("/login?next=%2Ftags");
+  });
+
+  it("drops an unsafe next rather than putting it on the login URL", async () => {
+    readSessionToken.mockResolvedValue(null);
+    safeNextPath.mockReturnValue(null);
+
+    expect(await runFinish("https://evil.example")).toBe("/login");
+  });
+
+  it("still clears cookies and redirects when the leftover cookie is already gone", async () => {
+    readSessionToken.mockResolvedValue(null);
+
+    expect(await runFinish()).toBe("/login");
+    expect(revokeAdminSession).not.toHaveBeenCalled();
+    expect(clearSessionCookie).toHaveBeenCalledTimes(1);
+    expect(clearTwoFactorChallengeCookie).toHaveBeenCalledTimes(1);
   });
 });

@@ -1,9 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { PublicStatusPanel } from "@/features/public-ui/status/PublicStatusPanel";
-import { getPublicT } from "@/lib/locale/messages";
-import { PUBLIC_SITE_LOCALE } from "@/lib/site/locale-label";
+import { PublicErrorStatus } from "@/features/public-ui/status/PublicErrorStatus";
 import "@/styles/globals.css";
 
 /**
@@ -21,8 +19,6 @@ export default function GlobalErrorPage({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
-  const t = getPublicT(PUBLIC_SITE_LOCALE);
-
   useEffect(() => {
     console.error(error);
   }, [error]);
@@ -30,15 +26,7 @@ export default function GlobalErrorPage({
   return (
     <html lang="en">
       <body className="site">
-        <PublicStatusPanel
-          bare
-          testId="public-global-error-panel"
-          title={t("errorPage.title")}
-          body={t("errorPage.body")}
-          homeLabel={t("unavailable.returnHome")}
-          retryLabel={t("errorPage.retry")}
-          onRetry={reset}
-        />
+        <PublicErrorStatus testId="public-global-error-panel" onRetry={reset} />
       </body>
     </html>
   );

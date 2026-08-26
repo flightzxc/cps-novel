@@ -4,6 +4,28 @@
 
 ---
 
+## 2026-08-27 · U5 认证 UX 收尾 + 基准图待办
+
+### 本轮做了什么
+
+- R1 follow-up（X8 项 13）：`confirmSetupAction` 成功后不再立刻 `revoke` / 清 cookie。
+  `confirmTwoFactorSetup` 仍立刻 bump `sessionVersion`，bootstrap 会话过不了
+  `requireAdminSession`，后台 API 不会保持已授权。显式作废 + 清 cookie + `/login`
+  挪到「我已保存，继续」触发的 `finishSetupAction`。`/two-factor/setup` 在 cookie
+  仍在、context 已 stale 时继续渲染 `SetupFlow`，避免 RSC 刷新把一次性恢复码视图卸掉。
+  恢复码只在本次 action 结果与客户端内存里，不进 URL / cookie / localStorage / 日志。
+- R3（X12 复核）：`/two-factor/challenge` 与 `/two-factor/setup`（idle/started）补次要
+  「退出登录」，走既有 `logoutAction`。恢复码 `done` 步不渲染登出，避免未确认保存就被清页。
+- U4-TODO-01 闭环：`/dev-preview/status/{error,not-found,global-error}` 静态展示页，
+  与真实 `error.tsx` / `not-found.tsx` / `global-error.tsx` 共用 `PublicErrorStatus` /
+  `PublicNotFoundStatus`。补 `not-found-desktop.png` / `error-desktop.png`，清单 13 → 15。
+  global-error 只展示面板、不单独截图。kill switch 仍由 `dev-preview/layout.tsx` 管辖。
+
+### 明确没做的
+
+- 未改 `src/lib/auth/` 的 `confirmTwoFactorSetup` / session 端口，未给当前会话补
+  `sessionVersion` 回写；未 push、未部署。
+
 ## 2026-08-26 · X12 Admin API 会话级 2FA 收口
 
 ### 本轮做了什么
@@ -79,14 +101,10 @@
 
 ### 待办登记 · U4-TODO-01 · root 404 / error 缺基准图
 
-- **现状**：`PublicStatusPanel` 的 `bare` 形态（root `not-found` / `error` / `global-error`）没有基准图；
-  `tests/ui/baselines/README.md` 的清单仍是 13 张，同族的 `unavailable` / `takedown` 都有图。
-  清单测试只拦「夹带未登记的图」，所以缺图不会让 `test:ui` 失败。
-- **风险**：这三个形态的版面改动没有可比对的快照，评审时也没有图可看。
-- **为什么本轮不做**：补图需要临时承载路由 + 本地起服务截图，属于视觉回归体系的完善项，不是上线阻断项。
-- **触发处理时间点**：**在 `dev-preview` 树里加错误态展示路由时一并补**——那时同一条路由还能顺便验证
-  `DEV_PREVIEW_ENABLED` 关闭态确实 404。
-- **建议 Owner**：Claude（`tests/ui/` 与 `src/app/` 独占写入）。
+- **状态**：已闭环（U5，2026-08-27）。`/dev-preview/status/not-found` 与
+  `/dev-preview/status/error` 承载路由已建，`not-found-desktop.png` /
+  `error-desktop.png` 已入库，清单 13 → 15。`DEV_PREVIEW_ENABLED` 关闭态仍由
+  `dev-preview/layout.tsx` 整树 `notFound()`。
 
 ## 2026-08-06 · P1-15 收口文档与 P2 交接输入包
 

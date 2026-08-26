@@ -8,7 +8,7 @@ import { describe, expect, it } from "vitest";
  * 视觉基准图的**清单校验**（P1-10）。
  *
  * 🔴 这**不是**自动截图回归。仓库里没有截图对比机制，本轮也明确不新增这类依赖。
- * 这个文件能证明的只有三件事：README 声明的 13 张图确实在库里、每张都是真 PNG
+ * 这个文件能证明的只有三件事：README 声明的 15 张图确实在库里、每张都是真 PNG
  * 且尺寸与声明的视口一致、目录里没有夹带未登记的图。像素级差异要靠
  * `baselines/README.md` 里那条 Chrome 命令重跑后人工比对——见本轮交付报告的
  * VISUAL_BASELINE_HASH_MATCH。
@@ -65,8 +65,8 @@ function readPngHeader(file: string): { width: number; height: number; bytes: nu
 const MANIFEST = parseManifest();
 
 describe("视觉基准 · 清单", () => {
-  it("README 声明 13 张图", () => {
-    expect(MANIFEST).toHaveLength(13);
+  it("README 声明 15 张图", () => {
+    expect(MANIFEST).toHaveLength(15);
   });
 
   it("声明的每张图都在库里，且不是空文件", () => {

@@ -51,6 +51,9 @@ vi.mock("@/app/api/admin/_lib/auth-deps", () => ({
   twoFactorStore: () => ({ findChallengeByTokenHash }),
 }));
 
+const logoutAction = vi.hoisted(() => vi.fn(() => Promise.resolve()));
+vi.mock("@/app/(admin-auth)/_lib/logout-action", () => ({ logoutAction }));
+
 const completeChallengeAction = vi.hoisted(() => vi.fn());
 const resendChallengeAction = vi.hoisted(() => vi.fn());
 vi.mock("@/app/(admin-auth)/two-factor/challenge/_actions", () => ({
@@ -74,6 +77,7 @@ beforeEach(() => {
   findChallengeByTokenHash.mockReset();
   completeChallengeAction.mockReset();
   resendChallengeAction.mockReset();
+  logoutAction.mockClear();
 });
 
 async function visitPage(next?: string): Promise<{ redirectedTo: string } | { element: ReactElement }> {
@@ -146,6 +150,18 @@ describe("TwoFactorChallengePage — loadChallengeView collapses every non-usabl
     });
     await renderWithToken("raw-token");
     expect(screen.getByText(/已过期或不可用/)).toBeTruthy();
+  });
+
+  it("renders a secondary logout control wired to logoutAction", async () => {
+    readActiveContext.mockResolvedValue({ identity, session, twoFactorCompleted: false });
+    readTwoFactorChallengeToken.mockResolvedValue(null);
+    const { element } = (await visitPage()) as { element: ReactElement };
+    render(element);
+
+    const button = screen.getByRole("button", { name: "退出登录" });
+    expect(button.closest("form")).toBeTruthy();
+    fireEvent.click(button);
+    await waitFor(() => expect(logoutAction).toHaveBeenCalledTimes(1));
   });
 
   it("renders the real form with remaining attempts once a live challenge is found", async () => {

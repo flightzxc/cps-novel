@@ -27,6 +27,8 @@
 | `collection-empty-desktop.png` | 聚合 · 空状态 | 1440×900 |
 | `unavailable-desktop.png` | 下架状态 | 1440×900 |
 | `takedown-desktop.png` | 撤回状态 | 1440×900 |
+| `not-found-desktop.png` | Root 404（`PublicStatusPanel` bare） | 1440×900 |
+| `error-desktop.png` | Root error（`PublicStatusPanel` bare，含重试） | 1440×900 |
 
 只截首屏视口，不截整页：评审关心的是首屏版面。
 
@@ -54,6 +56,16 @@ npm run build && DEV_PREVIEW_ENABLED=true PORT=3111 npm run start
   http://localhost:3111/dev-preview/home
 ```
 
+root 404 / error 换 URL 即可：
+
+```bash
+--screenshot=tests/ui/baselines/not-found-desktop.png \
+  http://localhost:3111/dev-preview/status/not-found
+
+--screenshot=tests/ui/baselines/error-desktop.png \
+  http://localhost:3111/dev-preview/status/error
+```
+
 其余屏幕换 URL、文件名与视口即可。
 
 ## 已知约束
@@ -64,10 +76,9 @@ npm run build && DEV_PREVIEW_ENABLED=true PORT=3111 npm run start
    章节页在 P1-11 已改为动态段：第 1 章是 `/dev-preview/chapter/1`，
    末章是 `/dev-preview/chapter/3`（原先的 `/dev-preview/chapter` 与
    `/dev-preview/chapter-last` 两个静态页已删除）。
-4. **root 404 / error 形态缺图（U4-TODO-01）。** `PublicStatusPanel` 的 `bare` 形态没有基准图，
-   上表 13 张里也没有它的位置。补图需要先在 `dev-preview` 树里加错误态展示路由，登记在
-   `docs/governance/development-log.md` 的 2026-08-26 条目下。清单测试只拦未登记的图，
-   所以缺图不会让 `npm run test:ui` 失败——**不要把「清单通过」读成「形态全覆盖」**。
-5. **章节基线要在干净的浏览器配置下生成。** 阅读器现在会把偏好与阅读位置写进
+   root 404 / error 的承载路由是 `/dev-preview/status/not-found` 与
+   `/dev-preview/status/error`（另有 `/dev-preview/status/global-error` 面板展
+   示，不单独截图：与 error 同文案，只是 `testId` 不同，且不套第二层 html/body）。
+4. **章节基线要在干净的浏览器配置下生成。** 阅读器现在会把偏好与阅读位置写进
    localStorage，带着旧配置截图会截到深色阅读区或滚动到一半的正文。上面的
    headless 命令每次用全新临时配置，天然满足；换用常驻浏览器截图时需自行清空。

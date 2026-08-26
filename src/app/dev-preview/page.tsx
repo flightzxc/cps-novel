@@ -64,6 +64,21 @@ const ENTRIES: PreviewEntry[] = [
     title: "撤回状态",
     note: "文案不同、视觉相同。HTTP 状态码由内容阶段的路由层负责。",
   },
+  {
+    href: "/dev-preview/status/not-found",
+    title: "Root 404",
+    note: "与 src/app/not-found.tsx 同一组件与文案。静态展示，不真的 404。",
+  },
+  {
+    href: "/dev-preview/status/error",
+    title: "Root error",
+    note: "与 src/app/error.tsx 同一组件与文案。静态展示，不抛错；重试为空操作。",
+  },
+  {
+    href: "/dev-preview/status/global-error",
+    title: "Root global-error 面板",
+    note: "与 global-error 同一面板。预览页不套第二层 html/body。",
+  },
 ];
 
 export default function PreviewIndexPage() {
