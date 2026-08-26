@@ -106,21 +106,31 @@ describe("P2-04 内容路由登记", () => {
 
   /**
    * P2-04 itself still adds no Action — the assertion below stays scoped to
-   * "everything that is not a P0-S13 content-creation action and not a
-   * PR-C2 catalog-scan action" so this file keeps guarding that P2-04 fact
-   * rather than being weakened by a later round's real additions.
+   * "everything that is not a P0-S13 content-creation action, not a PR-C2
+   * catalog-scan action, and not a PR-C3 publish/rights-transition action"
+   * so this file keeps guarding that P2-04 fact rather than being weakened
+   * by a later round's real additions.
    *
    * P0-S13 (`src/app/(admin)/catalog-sync/_actions.ts`) is the first
    * mutation Action composed on top of P1-08B's six, added via the same
    * "compose on top, never edit the frozen half" pattern
    * {@link ADMIN_CONTENT_ROUTES} already uses for routes. PR-C2 adds two
    * more on top of that (`admin.catalog_scan.dry_run` /
-   * `admin.catalog_scan.apply`), same composition, same discipline.
+   * `admin.catalog_scan.apply`). PR-C3 adds five more
+   * (`src/app/(admin)/novels/_actions.ts`) for the publish/rights-transition
+   * triggers — the first Actions this file guards that are not all bound to
+   * the same capability: publish and withdraw take `content:publish`,
+   * takedown and restore take the stricter `content:takedown`, mirroring
+   * `src/server/publish-gate/service.ts`'s own `RIGHTS_TRANSITION_CAPABILITY`
+   * table.
    */
-  it("P2-04 没有新增任何 mutation Action；P0-S13 与 PR-C2 各自在其上新增了两个 Action", () => {
+  it("P2-04 没有新增任何 mutation Action；P0-S13 / PR-C2 / PR-C3 各自在其上新增了自己的 Action", () => {
     const p204Actions = P2_04_ADMIN_REGISTRY.actions.filter(
       (action) =>
-        !action.id.startsWith("admin.content_creation.") && !action.id.startsWith("admin.catalog_scan."),
+        !action.id.startsWith("admin.content_creation.") &&
+        !action.id.startsWith("admin.catalog_scan.") &&
+        !action.id.startsWith("admin.article.") &&
+        !action.id.startsWith("admin.novel."),
     );
     expect(p204Actions).toEqual(P1_08B_ADMIN_REGISTRY.actions);
     for (const action of p204Actions) {
@@ -133,6 +143,11 @@ describe("P2-04 内容路由登记", () => {
       "admin.content_creation.apply",
       "admin.catalog_scan.dry_run",
       "admin.catalog_scan.apply",
+      "admin.article.publish",
+      "admin.article.publish_batch",
+      "admin.novel.withdraw",
+      "admin.novel.takedown",
+      "admin.novel.restore",
     ]);
     expect(resolveAdminAction("admin.content_creation.dry_run", P2_04_ADMIN_REGISTRY)).toMatchObject({
       capability: "content:view",
@@ -151,6 +166,29 @@ describe("P2-04 内容路由登记", () => {
     });
     expect(resolveAdminAction("admin.catalog_scan.apply", P2_04_ADMIN_REGISTRY)).toMatchObject({
       capability: "content:publish",
+      mutation: true,
+    });
+    // PR-C3: publish and withdraw stay at content:publish; takedown and
+    // restore step up to content:takedown — see this block's own doc
+    // comment above for why restore is not content:publish too.
+    expect(resolveAdminAction("admin.article.publish", P2_04_ADMIN_REGISTRY)).toMatchObject({
+      capability: "content:publish",
+      mutation: true,
+    });
+    expect(resolveAdminAction("admin.article.publish_batch", P2_04_ADMIN_REGISTRY)).toMatchObject({
+      capability: "content:publish",
+      mutation: true,
+    });
+    expect(resolveAdminAction("admin.novel.withdraw", P2_04_ADMIN_REGISTRY)).toMatchObject({
+      capability: "content:publish",
+      mutation: true,
+    });
+    expect(resolveAdminAction("admin.novel.takedown", P2_04_ADMIN_REGISTRY)).toMatchObject({
+      capability: "content:takedown",
+      mutation: true,
+    });
+    expect(resolveAdminAction("admin.novel.restore", P2_04_ADMIN_REGISTRY)).toMatchObject({
+      capability: "content:takedown",
       mutation: true,
     });
   });

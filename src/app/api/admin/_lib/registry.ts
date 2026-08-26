@@ -149,15 +149,53 @@ export const ADMIN_CATALOG_SCAN_ACTIONS = [
   { id: "admin.catalog_scan.apply", capability: "content:publish", mutation: true },
 ] as const satisfies AdminRegistry["actions"];
 
+/**
+ * PR-C3 publish/rights-transition triggers.
+ *
+ * `src/server/publish-gate/service.ts`'s five admin-facing exports
+ * (`publishArticleAsAdmin`, `publishArticlesBatchAsAdmin`, `withdrawNovel`,
+ * `takedownNovel`, `restoreNovel`) had zero production callers before this —
+ * that module's own header says so explicitly ("no admin screen calls them
+ * yet"). These five registrations are that missing binding, composed the
+ * same way {@link ADMIN_CONTENT_CREATION_ACTIONS} and
+ * {@link ADMIN_CATALOG_SCAN_ACTIONS} compose on top of P1-08B.
+ *
+ * The `id` values are not this file's choice: each service function
+ * hardcodes the exact `entryId` string it checks its ticket against
+ * internally (see `../../(admin)/novels/_actions.ts`'s header for the full
+ * explanation), so these five ids are a mechanical transcription of those
+ * literals, not a naming convention picked here.
+ *
+ * The capability split follows `src/server/publish-gate/service.ts`'s own
+ * `RIGHTS_TRANSITION_CAPABILITY` table verbatim — publish and withdraw take
+ * `content:publish`; takedown and restore take the stricter
+ * `content:takedown` (restore's, because "restore" in this codebase always
+ * lands on `draft`, never straight back to `published` — re-publishing after
+ * a takedown means going through the Hard Gate again, but *reaching* draft
+ * from takedown is still gated the same as the takedown itself, per that
+ * table). This is stricter than a single blanket `content:publish` would be,
+ * on purpose — matching the service's own authorization split is what this
+ * file's registrations are for.
+ */
+export const ADMIN_PUBLISH_LIFECYCLE_ACTIONS = [
+  { id: "admin.article.publish", capability: "content:publish", mutation: true },
+  { id: "admin.article.publish_batch", capability: "content:publish", mutation: true },
+  { id: "admin.novel.withdraw", capability: "content:publish", mutation: true },
+  { id: "admin.novel.takedown", capability: "content:takedown", mutation: true },
+  { id: "admin.novel.restore", capability: "content:takedown", mutation: true },
+] as const satisfies AdminRegistry["actions"];
+
 export const P2_04_ADMIN_REGISTRY: AdminRegistry = Object.freeze({
   pageRoots: ADMIN_PAGE_ROOTS,
   routes: Object.freeze([...P1_08B_ADMIN_REGISTRY.routes, ...ADMIN_CONTENT_ROUTES]),
   // P2-04 itself registered no Server Action (a read slice, by construction).
   // P0-S13 added the first two mutation Actions on top of P1-08B's six;
-  // PR-C2 adds two more for the catalog-scan trigger.
+  // PR-C2 adds two more for the catalog-scan trigger; PR-C3 adds five more
+  // for the publish/rights-transition triggers.
   actions: Object.freeze([
     ...P1_08B_ADMIN_REGISTRY.actions,
     ...ADMIN_CONTENT_CREATION_ACTIONS,
     ...ADMIN_CATALOG_SCAN_ACTIONS,
+    ...ADMIN_PUBLISH_LIFECYCLE_ACTIONS,
   ]),
 });
