@@ -21,7 +21,16 @@ export type ContentPageAccess = {
  * routes and services that enforce the capability themselves, and the page
  * simply declines to fetch when `granted` is false.
  *
- * No 2FA check, deliberately — reads never demand a step-up.
+ * No *capability-level* 2FA check here, deliberately — this function never
+ * calls `requireAdminTwoFactor` itself, and `content:view` / `content:read`
+ * stay `requiresTwoFactor: false` in `ADMIN_CAPABILITY_CONFIG`, so *mutating*
+ * those two capabilities never demands a completed step-up. That is a
+ * different axis from `requireAdminPage`'s own *session-level* gate (PR-C1b):
+ * it still redirects to `/two-factor/challenge` when the identity has 2FA
+ * enabled but this session hasn't completed a challenge, before this
+ * function's `hasAdminCapability` check ever runs — so a content page still
+ * cannot render on a password-only session, it just isn't this function
+ * that enforces it.
  *
  * `pathname` is the **route pattern**, dynamic segments and all
  * (`/novels/[novelId]`), not the resolved URL. `resolveAdminPage` only needs the
