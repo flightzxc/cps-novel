@@ -1,5 +1,5 @@
 import { listAdminPromoLinks } from "@/server/task-admin";
-import { AdminTimeZoneNote } from "@/features/admin-ui/admin-time-zone-note";
+import { AdminTimeZoneNote } from "@/features/admin-ui/time-zone-note";
 
 import { prisma } from "../../api/admin/_lib/deps";
 import { AdminShell } from "../_components/admin-shell";

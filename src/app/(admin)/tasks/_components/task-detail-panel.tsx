@@ -1,7 +1,8 @@
 import Link from "next/link";
 
 import { taskStatusLabel } from "@/features/admin-ui/content-view";
-import { AdminTimeZoneNote, formatAdminTimestamp } from "@/features/admin-ui/admin-time-zone-note";
+import { formatDateTime } from "@/features/admin-ui/datetime";
+import { AdminTimeZoneNote } from "@/features/admin-ui/time-zone-note";
 import type { TaskFamily } from "@/lib/tasks";
 
 import {
@@ -185,7 +186,7 @@ export function TaskDetailPanel({
                     <td className="px-3 py-2">{taskStatusLabel(item.status)}</td>
                     <td className="px-3 py-2 text-right">{item.attemptCount}</td>
                     <td className="px-3 py-2 font-mono text-[11px] text-gray-500">{item.leaseEpoch}</td>
-                    <td className="px-3 py-2 text-gray-500">{formatAdminTimestamp(item.lockedUntil)}</td>
+                    <td className="px-3 py-2 text-gray-500">{formatDateTime(item.lockedUntil)}</td>
                     <td className="px-3 py-2">{errorSummaryCell(item.errorSummary)}</td>
                   </tr>
                 ))}

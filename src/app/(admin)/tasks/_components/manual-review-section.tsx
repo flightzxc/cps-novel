@@ -1,4 +1,5 @@
-import { AdminTimeZoneNote, formatAdminTimestamp } from "@/features/admin-ui/admin-time-zone-note";
+import { formatDateTime } from "@/features/admin-ui/datetime";
+import { AdminTimeZoneNote } from "@/features/admin-ui/time-zone-note";
 
 import { MANUAL_REVIEW_EMPTY_STATE } from "../_lib/manual-review-copy";
 import { ManualReviewResolveControls } from "./manual-review-resolve-controls";
@@ -64,7 +65,7 @@ export function ManualReviewSection({ reviews }: { reviews: readonly ManualRevie
               <div className="flex flex-wrap items-baseline justify-between gap-2">
                 <p className="text-sm font-medium text-gray-900">{review.operationType}</p>
                 <p className="text-xs text-gray-500">
-                  提交于 {formatAdminTimestamp(review.committedAt)} · 创建于 {formatAdminTimestamp(review.createdAt)}
+                  提交于 {formatDateTime(review.committedAt)} · 创建于 {formatDateTime(review.createdAt)}
                 </p>
               </div>
               <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">

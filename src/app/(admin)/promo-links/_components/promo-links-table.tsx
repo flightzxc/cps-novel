@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-import { formatAdminTimestamp } from "@/features/admin-ui/admin-time-zone-note";
+import { formatDateTime } from "@/features/admin-ui/datetime";
 
 import {
   PROMO_LINKS_EMPTY_STATE,
@@ -88,9 +88,9 @@ export function PromoLinksTable({ links }: { links: readonly PromoLinkRow[] }) {
                 <ErrorKindCell status={link.status} errorKind={link.errorKind} />
               </td>
               <td className="px-4 py-3 font-mono text-xs text-gray-700">{link.publicRedirectCode}</td>
-              <td className="px-4 py-3 text-xs text-gray-500">{formatAdminTimestamp(link.fetchedAt)}</td>
-              <td className="px-4 py-3 text-xs text-gray-500">{formatAdminTimestamp(link.lastAttemptedAt)}</td>
-              <td className="px-4 py-3 text-xs text-gray-500">{formatAdminTimestamp(link.expiresAt)}</td>
+              <td className="px-4 py-3 text-xs text-gray-500">{formatDateTime(link.fetchedAt)}</td>
+              <td className="px-4 py-3 text-xs text-gray-500">{formatDateTime(link.lastAttemptedAt)}</td>
+              <td className="px-4 py-3 text-xs text-gray-500">{formatDateTime(link.expiresAt)}</td>
             </tr>
           ))}
         </tbody>
