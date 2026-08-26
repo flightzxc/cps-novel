@@ -316,7 +316,15 @@ function summarize(items: readonly PublishNovelsBatchItem[]): PublishNovelsBatch
         summary.notFound += 1;
         break;
       default:
-        assertUnreachableOutcome(item.result.outcome);
+        // `item.result` itself — not `.outcome` — is what the switch above
+        // has already narrowed to `never` here; re-reading `.outcome` off an
+        // already-`never` value is a type error in its own right (`never`
+        // has no properties), so the exhaustiveness argument has to be the
+        // object the switch discriminated on, same as
+        // `assertUnreachableCode(code)` / `assertUnreachableKind(kind)` in
+        // `./_lib/publish-outcome-copy.ts` pass the switched-on value
+        // itself, not one of its properties.
+        assertUnreachableOutcome(item.result);
     }
   }
   return summary;
