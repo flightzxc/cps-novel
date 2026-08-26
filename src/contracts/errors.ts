@@ -22,7 +22,24 @@ export type AdminErrorCode =
   | "site_setting_conflict"
   | "site_setting_not_seeded"
   /** A well-formed novel or chapter id that matches no live row. */
-  | "admin_content_not_found";
+  | "admin_content_not_found"
+  /**
+   * The route boundary's catch-all: an unrecognised, non-`AdminAccessError`,
+   * non-domain exception. Previously silently coerced to `admin_capability_denied`
+   * / 403 in {@link projectErrorEnvelope}'s caller — see `respond.ts` — which read
+   * to an operator as "you lack a permission" when the real story was "the server
+   * broke". This code exists so those two failure modes are never the same
+   * sentence.
+   */
+  | "admin_internal_error"
+  | "task_admin_invalid_request"
+  | "task_admin_not_found"
+  | "task_admin_state_conflict"
+  | "task_admin_idempotency_conflict"
+  | "task_admin_unresolved_intent"
+  | "task_admin_concurrent_write"
+  | "task_admin_active_scope_conflict"
+  | "task_admin_internal_error";
 
 /**
  * 409 carries idempotency conflicts: a mutation request id was replayed with a
