@@ -4,6 +4,26 @@
 
 ---
 
+## 2026-08-26 · X12 Admin API 会话级 2FA 收口
+
+### 本轮做了什么
+
+- 在所有已登记的 admin Route Handler 与 Admin Server Action 上增加统一会话级门槛：未注册
+  2FA 返回 `admin_two_factor_setup_required`，已注册但当前会话未完成挑战返回
+  `admin_two_factor_required`；两者均与 capability 的 `requiresTwoFactor` 轴正交；
+- 页面访问仍由既有 page guard 引导 setup/challenge，未登记入口仍优先 default-deny 404，缺失或失效
+  会话仍返回 401；
+- 新增 GET `/api/admin/novels`、读写 Route/Action、挑战后放行及错误信封/前端文案回归覆盖；
+- X12 从最终候选已合入后的本地 `main@2595e81` 独立分支交付，不改 schema、migration、数据库
+  grants、Docker/日志或部署入口。
+
+### 机器排障边界
+
+- 本阶段不创建或复用任何机器 API 身份；SSH、容器日志与 `analyst_ro` 只读数据库链不经过 admin
+  session guard，保持原路径；
+- 未来若需要机器 API 身份，必须同时满足独立、短时、可审计、默认只读四项属性，并另经 Owner 审批；
+- X8 部署输入仍未齐备，本轮不声称生产 SSH/TLS 通达性，不 push、不部署。
+
 ## 2026-08-26 · X7 上线前治理收口与 S16
 
 ### 本轮做了什么

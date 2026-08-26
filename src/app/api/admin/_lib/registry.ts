@@ -17,10 +17,10 @@ import { ADMIN_SITE_SETTING_ROUTES } from "@/server/site-settings/registry";
  * Each content route carries a standard `capability`, the same field the
  * credential routes use. Nothing about these routes is special any more:
  * `requireAdminRouteAccess` resolves the path, requires a session, and calls
- * `enforceCapability`, which grants or refuses from
- * `ADMIN_CAPABILITY_CONFIG` — and skips the 2FA step-up because
- * `content:view` / `content:read` are registered there with
- * `requiresTwoFactor: false`.
+ * the session-level 2FA gate before `enforceCapability`, which grants or
+ * refuses from `ADMIN_CAPABILITY_CONFIG`. `content:view` / `content:read`
+ * remain `requiresTwoFactor: false` on the capability axis, but X12 requires
+ * every human admin API/Action session to have completed its global step-up.
  *
  * So the binding is held by the registry *and* enforced from it, by the kernel,
  * on every request. A handler cannot name its own grant, and an unregistered

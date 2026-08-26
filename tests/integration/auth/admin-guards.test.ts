@@ -30,8 +30,8 @@ const registry: AdminRegistry = {
       capability: "credential:manage",
     },
     {
-      id: "content.metadata",
-      path: "/api/admin/content/metadata",
+      id: "admin.api.novel.list",
+      path: "/api/admin/novels",
       methods: ["GET"],
       capability: "content:view",
     },
@@ -48,11 +48,22 @@ const registry: AdminRegistry = {
       capability: "credential:manage",
       mutation: true,
     },
+    {
+      id: "admin.content_creation.dry_run",
+      capability: "content:view",
+      mutation: false,
+    },
+    {
+      id: "admin.catalog_scan.dry_run",
+      capability: "content:view",
+      mutation: true,
+    },
   ],
 };
 
 function fixture(options: {
   role?: string;
+  twoFactorEnabled?: boolean;
   twoFactorCompleted?: boolean;
   expired?: boolean;
 } = {}) {
@@ -63,7 +74,7 @@ function fixture(options: {
     role: options.role ?? "super_admin",
     status: "active",
     sessionVersion: 1,
-    twoFactorEnabled: true,
+    twoFactorEnabled: options.twoFactorEnabled ?? true,
   };
   const issuedAt = new Date(NOW.getTime() - 60 * 60 * 1000);
   const session: AdminSessionRecord = {
@@ -127,13 +138,40 @@ describe("default-deny admin boundary", () => {
   });
 
   it("keeps page access at AuthN only", async () => {
-    const stores = fixture({ role: "viewer" });
+    const stores = fixture({ role: "viewer", twoFactorEnabled: false });
     await expect(
       requireAdminPageAccess(
         { pathname: "/dashboard", sessionToken: TOKEN },
         dependencies(stores),
       ),
-    ).resolves.toMatchObject({ identity: { role: "viewer" } });
+    ).resolves.toMatchObject({ identity: { role: "viewer", twoFactorEnabled: false } });
+  });
+
+  it("requires 2FA enrollment before valid admin sessions can call read or write routes", async () => {
+    const stores = fixture({ twoFactorEnabled: false });
+    await expect(
+      requireAdminRouteAccess(
+        {
+          pathname: "/api/admin/novels",
+          method: "GET",
+          sessionToken: TOKEN,
+        },
+        dependencies(
+          stores,
+          { CONTENT_VIEW_ROLES: "super_admin" } as unknown as NodeJS.ProcessEnv,
+        ),
+      ),
+    ).rejects.toMatchObject({ code: "admin_two_factor_setup_required", status: 403 });
+    await expect(
+      requireAdminRouteAccess(
+        {
+          pathname: "/api/admin/credentials/validate",
+          method: "POST",
+          sessionToken: TOKEN,
+        },
+        dependencies(stores),
+      ),
+    ).rejects.toMatchObject({ code: "admin_two_factor_setup_required", status: 403 });
   });
 
   it("returns 403 for missing capability and incomplete 2FA", async () => {
@@ -168,11 +206,11 @@ describe("default-deny admin boundary", () => {
     ).rejects.toMatchObject({ code: "admin_two_factor_required", status: 403 });
   });
 
-  it("enforces content read grants through the core without requiring 2FA", async () => {
+  it("keeps content grants separate while requiring session-level 2FA on reads", async () => {
     const noSession = fixture({ role: "editor", twoFactorCompleted: false });
     await expect(
       requireAdminRouteAccess(
-        { pathname: "/api/admin/content/metadata", method: "GET" },
+        { pathname: "/api/admin/novels", method: "GET" },
         dependencies(
           noSession,
           { CONTENT_VIEW_ROLES: "editor" } as unknown as NodeJS.ProcessEnv,
@@ -180,11 +218,11 @@ describe("default-deny admin boundary", () => {
       ),
     ).rejects.toMatchObject({ code: "jwt_missing", status: 401 });
 
-    const noGrant = fixture({ role: "editor", twoFactorCompleted: false });
+    const noGrant = fixture({ role: "editor" });
     await expect(
       requireAdminRouteAccess(
         {
-          pathname: "/api/admin/content/metadata",
+          pathname: "/api/admin/novels",
           method: "GET",
           sessionToken: TOKEN,
         },
@@ -192,11 +230,26 @@ describe("default-deny admin boundary", () => {
       ),
     ).rejects.toMatchObject({ code: "admin_capability_denied", status: 403 });
 
-    const roleGrant = fixture({ role: "editor", twoFactorCompleted: false });
+    const passwordOnly = fixture({ role: "editor", twoFactorCompleted: false });
     await expect(
       requireAdminRouteAccess(
         {
-          pathname: "/api/admin/content/metadata",
+          pathname: "/api/admin/novels",
+          method: "GET",
+          sessionToken: TOKEN,
+        },
+        dependencies(
+          passwordOnly,
+          { CONTENT_VIEW_ROLES: "editor" } as unknown as NodeJS.ProcessEnv,
+        ),
+      ),
+    ).rejects.toMatchObject({ code: "admin_two_factor_required", status: 403 });
+
+    const roleGrant = fixture({ role: "editor" });
+    await expect(
+      requireAdminRouteAccess(
+        {
+          pathname: "/api/admin/novels",
           method: "GET",
           sessionToken: TOKEN,
         },
@@ -205,9 +258,9 @@ describe("default-deny admin boundary", () => {
           { CONTENT_VIEW_ROLES: "editor" } as unknown as NodeJS.ProcessEnv,
         ),
       ),
-    ).resolves.toMatchObject({ context: { identity: { role: "editor" }, twoFactorCompleted: false } });
+    ).resolves.toMatchObject({ context: { identity: { role: "editor" }, twoFactorCompleted: true } });
 
-    const userGrant = fixture({ role: "editor", twoFactorCompleted: false });
+    const userGrant = fixture({ role: "editor" });
     await expect(
       requireAdminRouteAccess(
         {
@@ -220,9 +273,9 @@ describe("default-deny admin boundary", () => {
           { CONTENT_READ_USER_IDS: "admin-1" } as unknown as NodeJS.ProcessEnv,
         ),
       ),
-    ).resolves.toMatchObject({ context: { identity: { id: "admin-1" }, twoFactorCompleted: false } });
+    ).resolves.toMatchObject({ context: { identity: { id: "admin-1" }, twoFactorCompleted: true } });
 
-    const wrongGrant = fixture({ role: "editor", twoFactorCompleted: false });
+    const wrongGrant = fixture({ role: "editor" });
     await expect(
       requireAdminRouteAccess(
         {
@@ -236,6 +289,53 @@ describe("default-deny admin boundary", () => {
         ),
       ),
     ).rejects.toMatchObject({ code: "admin_capability_denied", status: 403 });
+  });
+
+  it("applies the same session step-up to read and mutation Admin Server Actions", async () => {
+    const env = { CONTENT_VIEW_ROLES: "editor" } as unknown as NodeJS.ProcessEnv;
+    const passwordOnly = fixture({ role: "editor", twoFactorCompleted: false });
+
+    await expect(
+      requireAdminActionAccess(
+        { actionId: "admin.content_creation.dry_run", sessionToken: TOKEN },
+        dependencies(passwordOnly, env),
+      ),
+    ).rejects.toMatchObject({ code: "admin_two_factor_required", status: 403 });
+    await expect(
+      requireAdminActionAccess(
+        {
+          actionId: "admin.catalog_scan.dry_run",
+          sessionToken: TOKEN,
+          origin: "https://evil.example",
+          canonicalOrigin: ORIGIN,
+          requestId: REQUEST_ID,
+        },
+        dependencies(passwordOnly, env),
+      ),
+    ).rejects.toMatchObject({ code: "admin_two_factor_required", status: 403 });
+
+    const steppedUp = fixture({ role: "editor" });
+    await expect(
+      requireAdminActionAccess(
+        { actionId: "admin.content_creation.dry_run", sessionToken: TOKEN },
+        dependencies(steppedUp, env),
+      ),
+    ).resolves.toMatchObject({ context: { twoFactorCompleted: true } });
+    await expect(
+      requireAdminActionAccess(
+        {
+          actionId: "admin.catalog_scan.dry_run",
+          sessionToken: TOKEN,
+          origin: ORIGIN,
+          canonicalOrigin: ORIGIN,
+          requestId: REQUEST_ID,
+        },
+        dependencies(steppedUp, env),
+      ),
+    ).resolves.toMatchObject({
+      context: { twoFactorCompleted: true },
+      serviceAuthorization: { entryId: "admin.catalog_scan.dry_run" },
+    });
   });
 
   it("rejects expired sessions and illegal origins", async () => {
@@ -345,6 +445,7 @@ describe("default-deny admin boundary", () => {
   it("maps guard errors to explicit access classes", () => {
     expect(new AdminAccessError("jwt_missing", 401, "missing")).toMatchObject({ status: 401 });
     expect(new AdminAccessError("admin_capability_denied", 403, "denied")).toMatchObject({ status: 403 });
+    expect(new AdminAccessError("admin_two_factor_setup_required", 403, "setup")).toMatchObject({ status: 403 });
     expect(new AdminAccessError("admin_route_not_registered", 404, "missing")).toMatchObject({ status: 404 });
     expect(new AdminAccessError("admin_rate_limited", 429, "limited")).toMatchObject({ status: 429 });
   });

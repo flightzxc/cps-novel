@@ -14,6 +14,7 @@ const COPY: Readonly<Record<AdminErrorCode, string>> = Object.freeze({
   jwt_invalid: "登录已失效，请重新登录",
   jwt_expired: "会话已过期，请重新登录",
   admin_capability_denied: "当前账号缺少执行该操作所需的能力位",
+  admin_two_factor_setup_required: "请先完成双重验证设置，再继续操作",
   admin_two_factor_required: "该操作要求当前会话已完成双重验证",
   admin_route_not_registered: "该接口未登记，已被默认拒绝",
   admin_action_not_registered: "该操作未登记，已被默认拒绝",

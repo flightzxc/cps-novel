@@ -63,6 +63,25 @@ async function enforceRateLimit(
   }
 }
 
+/**
+ * Every human admin Route Handler and registered Admin Server Action requires
+ * a fully stepped-up session, independently of the entry's capability.
+ *
+ * Page access deliberately stays outside this helper: the page wrapper needs
+ * the authenticated context so it can redirect an unenrolled identity to
+ * setup and a password-level session to the challenge screen.
+ */
+function enforceAdminSessionTwoFactor(context: AdminAuthContext): void {
+  if (!context.identity.twoFactorEnabled) {
+    throw new AdminAccessError(
+      "admin_two_factor_setup_required",
+      403,
+      "Two-factor authentication setup is required",
+    );
+  }
+  requireAdminTwoFactor(context);
+}
+
 function enforceCapability(
   context: AdminAuthContext,
   capability: AdminCapability | undefined,
@@ -105,6 +124,7 @@ export async function requireAdminRouteAccess(
     throw new AdminAccessError("admin_route_not_registered", 404, "Admin API route not registered");
   }
   const context = await requireAdminSession(input.sessionToken, dependencies);
+  enforceAdminSessionTwoFactor(context);
   enforceCapability(context, route.capability, dependencies.env);
   const mutation = !["GET", "HEAD", "OPTIONS"].includes(input.method.toUpperCase());
   if (!mutation) return { context };
@@ -139,6 +159,7 @@ export async function requireAdminActionAccess(
     throw new AdminAccessError("admin_action_not_registered", 404, "Admin action not registered");
   }
   const context = await requireAdminSession(input.sessionToken, dependencies);
+  enforceAdminSessionTwoFactor(context);
   enforceCapability(context, action.capability, dependencies.env);
   if (!action.mutation) return { context };
   requireSameOrigin(input.origin, input.canonicalOrigin ?? "");

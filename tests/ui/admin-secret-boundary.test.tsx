@@ -109,6 +109,7 @@ describe("error copy is owned by the frontend", () => {
     "jwt_invalid",
     "jwt_expired",
     "admin_capability_denied",
+    "admin_two_factor_setup_required",
     "admin_two_factor_required",
     "admin_route_not_registered",
     "admin_action_not_registered",

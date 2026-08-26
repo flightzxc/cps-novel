@@ -64,6 +64,23 @@ describe("toErrorEnvelope — every existing category is unaffected", () => {
     });
   });
 
+  it("projects the 2FA setup requirement as its own 403 without a server message", () => {
+    const envelope = toErrorEnvelope(
+      new AdminAccessError(
+        "admin_two_factor_setup_required",
+        403,
+        "server-only setup detail",
+      ),
+    );
+    expect(envelope).toEqual({
+      ok: false,
+      status: 403,
+      code: "admin_two_factor_setup_required",
+    });
+    expect(JSON.stringify(envelope)).not.toContain("server-only setup detail");
+    expect(errorEnvelopeCopy(envelope)).toBe("请先完成双重验证设置，再继续操作");
+  });
+
   it("AdminContentNotFoundError keeps its 404", () => {
     expect(toErrorEnvelope(new AdminContentNotFoundError("novel"))).toEqual({
       ok: false,
