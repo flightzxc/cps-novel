@@ -68,6 +68,8 @@ P2-04 在其上组合，凭证面仍然单一 owner。
 | 书目/章节元数据 | 有效 Admin Session + `content:view`，**不要求 2FA** |
 | 章节正文 | 有效 Admin Session + `content:read`，**不要求 2FA**，每次读取后端写一条 `operation_audit` |
 
+> 2026-08-26 X12 起会话级 2FA 对全部 admin API 生效，本矩阵的 `requiresTwoFactor` 列仅描述能力轴。
+
 正文在 UI 上必须**点击**才请求：挂载即取会让每次导航都要求更强的能力位，也会把审计
 写成「页面被打开过」而不是「有人选择读了它」。
 

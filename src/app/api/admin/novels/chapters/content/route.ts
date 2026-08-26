@@ -17,10 +17,15 @@ export const dynamic = "force-dynamic";
  * property of calling this route rather than something the UI has to remember to
  * report. The actor id comes from the guarded session — never from the request.
  *
- * No 2FA step-up: `content:read` is registered in `ADMIN_CAPABILITY_CONFIG` with
- * `requiresTwoFactor: false`, so `enforceCapability` checks the grant and stops
- * there. Authorisation is entirely `guardRead`'s, exactly as for every other
- * admin route.
+ * Session-level 2FA is already required here: `guardRead` calls
+ * `requireAdminRouteAccess`, which resolves the path, requires a session, and
+ * calls the kernel step-up gate — X12 requires every human admin API/Action
+ * session to have completed it — before `enforceCapability` runs.
+ * `content:read` is registered in `ADMIN_CAPABILITY_CONFIG` with
+ * `requiresTwoFactor: false`, but that is the capability axis only: it means
+ * the grant adds no *additional* step-up requirement on top of the
+ * session-level gate, not that this route skips 2FA. Authorisation is
+ * entirely `guardRead`'s, exactly as for every other admin route.
  */
 export async function GET(request: Request) {
   return handle(async () => {

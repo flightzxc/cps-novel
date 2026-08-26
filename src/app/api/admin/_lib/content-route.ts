@@ -11,9 +11,12 @@ import {
  * There is no guard here any more. `content:view` / `content:read` are ordinary
  * `AdminCapability` members, so the content routes authorise through the same
  * `guardRead` as every other admin route: `requireAdminRouteAccess` resolves the
- * path against the registry, requires a session, and calls `enforceCapability`,
- * which reads the grant off the registration and skips the 2FA step-up because
- * these two are configured `requiresTwoFactor: false`.
+ * path against the registry, requires a session, calls the kernel step-up gate
+ * — X12 requires every human admin API/Action session to have completed it —
+ * and then calls `enforceCapability`, which reads the grant off the
+ * registration. These two are configured `requiresTwoFactor: false`, but that
+ * is the capability axis only: it adds no additional step-up requirement on
+ * top of the session-level gate that already ran.
  *
  * The bespoke `guardContentRead` that used to live here was a second
  * authorisation implementation. It is gone, and nothing replaced it — that is

@@ -13,9 +13,12 @@
   `admin_two_factor_required`；两者均与 capability 的 `requiresTwoFactor` 轴正交；
 - 页面访问仍由既有 page guard 引导 setup/challenge，未登记入口仍优先 default-deny 404，缺失或失效
   会话仍返回 401；
-- 新增 GET `/api/admin/novels`、读写 Route/Action、挑战后放行及错误信封/前端文案回归覆盖；
+- 补充 GET `/api/admin/novels` 的回归覆盖、读写 Route/Action、挑战后放行及错误信封/前端文案回归覆盖；
 - X12 从最终候选已合入后的本地 `main@2595e81` 独立分支交付，不改 schema、migration、数据库
-  grants、Docker/日志或部署入口。
+  grants、Docker/日志或部署入口；
+- 登记：X12 本轮直接修改了 4 个 Claude 领土文件（`registry.ts` 注释、`error-copy.ts`、
+  `tests/ui/admin-error-envelope.test.ts`、`tests/ui/admin-secret-boundary.test.tsx`），
+  Claude custodian 已复核并 accept，此处留痕以防"跨界随手改"沉淀成惯例。
 
 ### 机器排障边界
 
