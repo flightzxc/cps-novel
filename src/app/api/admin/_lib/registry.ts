@@ -1,6 +1,7 @@
 import type { AdminCapability } from "@/lib/auth/capabilities";
 import { ADMIN_PAGE_ROOTS, type AdminRegistry } from "@/server/auth/registry";
 import { P1_08B_ADMIN_REGISTRY } from "@/server/credentials";
+import { ADMIN_SITE_SETTING_ROUTES } from "@/server/site-settings/registry";
 
 /**
  * The registry the running app actually resolves against.
@@ -8,6 +9,8 @@ import { P1_08B_ADMIN_REGISTRY } from "@/server/credentials";
  * P1-08B's registry is frozen in `src/server/credentials/registry.ts` and stays
  * that way; P2-04 composes on top rather than editing it, so the credential
  * surface keeps a single owner and this file keeps a single reason to change.
+ * X6 follows the same rule: its exact SiteSetting route remains owned by the
+ * server module and is composed here into the registry used by the app.
  *
  * ## The capability binding
  *
@@ -72,6 +75,21 @@ export const ADMIN_CONTENT_ROUTES = [
     methods: ["GET"],
     capability: "content:view",
   },
+] as const satisfies AdminRegistry["routes"];
+
+/**
+ * X9 task operations are a separate high-risk capability surface. Read and
+ * write methods are both registry-bound to `task:manage`; the guard therefore
+ * requires a current session with completed 2FA before any handler executes.
+ */
+export const ADMIN_TASK_ROUTES = [
+  { id: "admin.api.task.list", path: "/api/admin/tasks", methods: ["GET"], capability: "task:manage" },
+  { id: "admin.api.task.detail", path: "/api/admin/tasks/detail", methods: ["GET"], capability: "task:manage" },
+  { id: "admin.api.task.items", path: "/api/admin/tasks/items", methods: ["GET"], capability: "task:manage" },
+  { id: "admin.api.task.retry_failed", path: "/api/admin/tasks/retry-failed", methods: ["POST"], capability: "task:manage" },
+  { id: "admin.api.task.manual_reviews", path: "/api/admin/tasks/manual-reviews", methods: ["GET"], capability: "task:manage" },
+  { id: "admin.api.task.manual_review.resolve", path: "/api/admin/tasks/manual-reviews/resolve", methods: ["POST"], capability: "task:manage" },
+  { id: "admin.api.promo_link.list", path: "/api/admin/promo-links", methods: ["GET"], capability: "task:manage" },
 ] as const satisfies AdminRegistry["routes"];
 
 export type AdminContentRouteId = (typeof ADMIN_CONTENT_ROUTES)[number]["id"];
@@ -187,11 +205,21 @@ export const ADMIN_PUBLISH_LIFECYCLE_ACTIONS = [
 
 export const P2_04_ADMIN_REGISTRY: AdminRegistry = Object.freeze({
   pageRoots: ADMIN_PAGE_ROOTS,
-  routes: Object.freeze([...P1_08B_ADMIN_REGISTRY.routes, ...ADMIN_CONTENT_ROUTES]),
-  // P2-04 itself registered no Server Action (a read slice, by construction).
-  // P0-S13 added the first two mutation Actions on top of P1-08B's six;
-  // PR-C2 adds two more for the catalog-scan trigger; PR-C3 adds five more
-  // for the publish/rights-transition triggers.
+  // Routes: the union of every composed group. P1-08B's credential surface,
+  // P2-04's content reads, X6's SiteSetting route and X9's task-operations
+  // routes each stay owned where they are declared and are only assembled here.
+  routes: Object.freeze([
+    ...P1_08B_ADMIN_REGISTRY.routes,
+    ...ADMIN_CONTENT_ROUTES,
+    ...ADMIN_SITE_SETTING_ROUTES,
+    ...ADMIN_TASK_ROUTES,
+  ]),
+  // Actions: P2-04 itself registered no Server Action (a read slice, by
+  // construction). P0-S13 added the first two mutation Actions on top of
+  // P1-08B's six; PR-C2 adds two more for the catalog-scan trigger; PR-C3 adds
+  // five more for the publish/rights-transition triggers. X6/X9 add no Action:
+  // their writes are explicit, registry-bound HTTP routes whose services
+  // revalidate their auth tickets, so the Action list is unchanged by them.
   actions: Object.freeze([
     ...P1_08B_ADMIN_REGISTRY.actions,
     ...ADMIN_CONTENT_CREATION_ACTIONS,

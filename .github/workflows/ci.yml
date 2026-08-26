@@ -3,9 +3,18 @@
 # 范围（"最低"门禁，不代表全部验收面）：
 #   npm ci → prisma generate → prisma validate → prisma migrate deploy
 #   → vitest 全量运行（tests/ui + tests/backend + tests/integration）
-#   → next build → 数据字典漂移检测（scripts/check-database-dictionary-drift.mjs）。
+#   → tsc --noEmit（npm run typecheck，全仓）→ next build
+#   → 数据字典漂移检测（scripts/check-database-dictionary-drift.mjs）。
 # 任一步失败即整体失败，全程不使用 continue-on-error；本文件不含任何
 # 部署/发布步骤——发布归 Codex 另行处理。
+#
+# 为什么 `next build` 不能替代独立的 typecheck 步骤：`next build` 只对
+# Next.js 自身的模块图（app/ 与其可达依赖）做类型检查，不会遍历
+# `tests/backend`、`tests/integration`、`scripts/` 等游离于该模块图之外
+# 的文件；这正是 P0-S16 之前 `tests/backend/p2-06-5-lane-c/
+# lexicon-eligibility.test.ts` 的 21 个基线类型错误能连续存活六七轮全量
+# typecheck 而未被本 CI 拦下的原因。独立的 `npm run typecheck`（即
+# `tsc --noEmit`，覆盖 tsconfig.json 的 `include` 全仓范围）补上这道缺口。
 #
 # 🔴 必跑集，任何人不得从 CI 收集范围中移出（详见 tests/backend/README 与本仓
 # CLAUDE.md §5 修正5"默认拒绝"）：
@@ -103,6 +112,9 @@ jobs:
 
       - name: Vitest (ui + node projects, full run)
         run: npm test
+
+      - name: TypeScript typecheck (tsc --noEmit, full repo)
+        run: npm run typecheck
 
       - name: Next build
         run: npm run build

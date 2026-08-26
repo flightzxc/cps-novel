@@ -2,13 +2,11 @@
  * Backfill manifest hash/verify primitives (Stream E, P2-11).
  *
  * Ported COPY_AS_IS from CPS `src/lib/indexnow-backfill-manifest.ts` (41
- * lines, `P2-07-12-移植审计-2026-08-12/P2-11.md` §7 "A · COPY_AS_IS"). Kept at
- * this same top-level path (matching CPS's own placement, not nested under
- * `src/lib/indexnow/`) since the manifest format is a standalone on-disk
- * artifact contract shared between `scripts/indexnow-backfill-manifest.ts`
- * (producer) and `scripts/indexnow-backfill-apply.ts` (consumer), not part
- * of the outbox/delivery runtime module tree. `docs/governance/
- * port-registry.md` has the per-symbol registration.
+ * lines, `P2-07-12-移植审计-2026-08-12/P2-11.md` §7 "A · COPY_AS_IS").
+ * The file lives under the Codex-owned `src/lib/indexnow/` module registered
+ * in `CLAUDE.md`; scripts remain the producer/consumer boundary for this
+ * standalone on-disk artifact contract. `docs/governance/port-registry.md`
+ * has the per-symbol registration.
  */
 import { createHash } from "node:crypto";
 

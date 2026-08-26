@@ -7,7 +7,17 @@
 ## 基线
 
 - `baseline_commit` 统一为 CPS 只读参考仓库的固定基线：`d77c3b968285698529cf97c7f0f97b286d7a2a9c`
+- X10 依 Owner 指定的短剧 tag `v8.2.18` 取证；登记时使用 peeled commit `0ec20c4ee08b4b007e773feab811703a59ac3048`，不使用 annotated tag object ID。
 - CPS 只读参考路径：`/Users/chenweifeng/Documents/产品原型及文档/cps项目/cps-admin-v811-search-ux`（详见仓库根 `CLAUDE.md`）
+
+### X 系列上线加固参考基线（2026-08-26）
+
+X1–X4/X6/X7/X9/X10 如需核对已上线的 CPS 运维流程，只从另一只读工作区
+`/Users/chenweifeng/Documents/产品原型及文档/cps项目/cps-admin` 执行 `git show v8.2.18:<path>`。
+annotated tag `v8.2.18` 的 peeled commit 固定登记为
+`0ec20c4ee08b4b007e773feab811703a59ac3048`；X 系列新增条目必须在 `baseline_commit` 列写该 peeled commit，
+不得写 tag 名或 tag object。旧条目仍保留当时的 `d77c3b...` 证据链，不批量改写。
+标签多语资产、北斗与飞书专属逻辑仍明确禁止搬运。
 
 ## `port_kind` 取值说明
 
@@ -96,6 +106,8 @@ P1-05A 只登记从 CPS 提取的数据库**模式证据**；没有字节复制�
 | `buildHreflangAlternates` | `src/lib/seo-utils.ts` | `127-135` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | `SUPPORTED_SITE_LOCALES` 换成 `SITE_LOCALES`；仍是同路径 locale 前缀 map，不是跨 Novel 兄弟页 | Cursor |
 | `shouldNoIndex` | `src/lib/seo-utils.ts` | `139-141` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `COPY` | 原样复制 | Cursor |
 | `normalizeMetadataTitle` | `src/lib/seo-meta-generator.ts` | `82-94` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `COPY` | 原样复制 | Cursor |
+| 生产 `.env.example` 分节模板形态 | `.env.example` | `1-120` | `0ec20c4ee08b4b007e773feab811703a59ac3048` | `PATTERN_ONLY` | 只借鉴“按配置域分节 + secret 留空 + 运维注释”形态；重写为 PostgreSQL 多角色 URL、7 个 Docker password file、独立加密/fingerprint key、compose 构建元数据、五组双闸与分阶段 Worker allowlist；不搬 SQLite 路径、短剧域名、NextAuth/Turnstile、北斗或飞书配置 | Codex |
+| `bootstrap-admin-identity.ts` 运维 CLI 纪律形态 | `scripts/reset-password.ts` | `1-40` | `0ec20c4ee08b4b007e773feab811703a59ac3048` | `PATTERN_ONLY` | 只借鉴“独立运维脚本 + 复用正式密码 hash + 明确失败退出”的形态；改为仅冷启动首个 `super_admin`、密码只走 env 且至少 12 位、默认 dry-run/`--apply`、稳定 request-id、advisory lock、scrypt 和同事务 `OperationAudit`；不搬短剧 argv 明文密码、无审计 update 或既有用户重置语义 | Codex |
 | `generateSeoMeta` | `src/lib/seo-meta-generator.ts` | `103-126` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | entity 从 drama/tag/category 收成 novel/home/collection；删 Short Dramas 默认文案 | Cursor |
 | `truncateDescription` | `src/lib/seo-templates/_shared.ts` | `7-15` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `COPY` | 原样复制 | Cursor |
 | `buildCanonical` | `src/lib/seo-templates/_shared.ts` | `21-26` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | origin 经 getSiteUrl，无 PulseDrama 默认域 | Cursor |
@@ -120,7 +132,7 @@ P1-05A 只登记从 CPS 提取的数据库**模式证据**；没有字节复制�
 | `deliverDueIndexNow` 的手写逐行 CAS 认领循环 | `src/lib/indexnow-delivery-service.ts` | `249-268` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `PATTERN_ONLY`（**不搬代码，只借问题域**） | 不搬 CPS 手写的 `updateMany` CAS 认领；改用小说仓既有 `GenericTaskItem` 的 `executionToken`/`leaseEpoch` 租约机制（`src/lib/tasks/store.ts`，P1-07 已验证），详见 `worker/handlers/indexnow-delivery.ts` | Claude |
 | `deliverDueIndexNow` 的 HTTP 投递主体 → `worker/handlers/indexnow-delivery.ts` | `src/lib/indexnow-delivery-service.ts` | `270-368` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | 保留请求构造（`AbortController` 10s 超时）、`urlList` payload 结构、响应分类与 attempt/outbox 两段写入顺序；**改**：CPS 单次投递最多 500 URL 批量，小说仓 V1 改为一个 `GenericTaskItem` = 一次投递 = 一个 URL（`INDEXNOW_HTTP_BATCH_SIZE` 未被 handler 消费，理由见 `delivery-primitives.ts` 头部注释）；`cancelEligibilityDrift` 的"投递前复核资格漂移"思路保留但内联到单行处理里，不再是独立批量函数 | Claude |
 | `site-url.ts`（`getSiteUrl`/`toAbsoluteUrl`）→ `internal-site-url.ts`（`toAbsoluteSiteUrl`） | `src/lib/site-url.ts` | `1-26` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | 保留 env 覆盖 + 默认站点 URL + 末尾斜杠归一化；因 P2-09/Stream C 尚未落地共享 `site-url.ts`，本任务改为 `src/lib/indexnow/` 私有副本，明确标注等 Stream C 落地后废弃合并（该文件头部注释） | Claude |
-| `manifestHashPayload`/`computeManifestSha256`/`verifyManifestSha256` | `src/lib/indexnow-backfill-manifest.ts` | `1-41` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `COPY` | 原样复制；`IndexNowBackfillEntry.drama_id` 改名 `novel_id`，删除 `source_app`/`batch_task_id`（CPS AI 生成任务专属，无对应） | Claude |
+| `manifestHashPayload`/`computeManifestSha256`/`verifyManifestSha256` | `src/lib/indexnow-backfill-manifest.ts` | `1-41` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `COPY` | 原样复制并收敛至 Codex 独占的 `src/lib/indexnow/backfill-manifest.ts`；`IndexNowBackfillEntry.drama_id` 改名 `novel_id`，删除 `source_app`/`batch_task_id`（CPS AI 生成任务专属，无对应） | Codex |
 | `assertBackfillWriteGates`/`assertBackfillStopConditions` | `scripts/indexnow-backfill-apply.ts` | `26-61` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `COPY` | 原样复制两道双闸判定（`--confirm`+`ALLOW_WRITE`、403 硬停/422>3 次停/终态失败率>5% 停/worker 任务失败停）；`prisma.batchTask.count` 换 `prisma.genericTask.count` | Claude |
 | `scripts/indexnow-backfill-apply.ts` 主流程（`main`） | `scripts/indexnow-backfill-apply.ts` | `63-124` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | 保留 manifest 读取+SHA-256 校验+commit 匹配+`--limit`/`--offset` 分页+双重写保护的主流程；候选核实与派发调用换成 `loadIndexNowCandidateArticle`/`isNovelIndexNowEligible`/`buildIndexNowCanonicalUrl`/`enqueueIndexNowFirstPublish` | Claude |
 | `scripts/indexnow-backfill-manifest.ts` 输出结构与 CLI 骨架 | `scripts/indexnow-backfill-manifest.ts` | `1-236`（保留约 40%：输出 schema、`--article-ids` 校验、`fs.writeFile({flag:"wx"})` 防覆盖） | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | 候选来源查询（约 55 行，`prisma.batchTaskItem.findMany`）整体不搬，改用 `findPublishedWithoutIndexNowDelivery` 差集查询（`P2-11.md` §5） | Claude |
@@ -139,6 +151,7 @@ P1-05A 只登记从 CPS 提取的数据库**模式证据**；没有字节复制�
 | `buildDramaPageEntries`/`buildMainPageEntries`/`buildSitemapFamily` → `createSitemapFamilyBuilder` | `src/lib/sitemap.ts` | `157-205,260-310,420-444,476-484,640-696` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | 仅保留首页与 Article 详情页集合、10,000 分片和 PG Date lastmod；DB 层 PromoLink 非空只做预过滤，每行仍调用冻结的 `isPromoReady`/发布状态谓词；URL 直接复用冻结 `buildArticlePath`，删除 blog/Category/Tag/北斗分支 | Codex |
 | `enqueueSitemapRefresh` | `src/lib/sitemap-refresh-enqueue.ts` | `1-57` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | 保留 pending/processing coalesce 意图；CPS BatchTask 改接 GenericTask 单一 global scope，并用 PostgreSQL advisory transaction lock 消除并发重复；关闭 feature flag 时不建任务，不搬旧 stale-recovery | Codex |
 | `handleSitemapRefresh` → `createSitemapRefreshHandler` | `worker/handlers/sitemap-refresh.ts` | `1-70` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | 保留有效文件锁 coalesced success、35 分钟陈旧锁按 runId 释放后仅重试一次、失败保留旧版本；改为 GenericTask `TaskHandler` outcome 并复用 runtime lease/heartbeat/fencing/过期回收 | Codex |
+| `emitWorkerTaskFailure` / `createWorkerFailureWebhookReporter` 旁路失败隔离模式 | `scripts/cps-daily-backup.sh` | `25-53,139-152` | `0ec20c4ee08b4b007e773feab811703a59ac3048` | `PATTERN_ONLY` | 只借“耐久事实先成立，可观测旁路失败不改写主流程结论”的事故验证模式，没有复制 shell 代码；小说仓改为 finalize/recovery commit 后的脱敏 JSON stderr + 可选 HTTP webhook。冻结 tag 中不存在 `cps-health-alert.sh`，故 30 分钟冷却、仅 2xx 推进和超时重试均依本次 Owner 合同原创实现，不虚假登记为该 tag 搬运；不搬标签多语、北斗或飞书逻辑 | Codex |
 | `isLocalBaseUrl` / smoke 参数、报告与公开 URL 检查骨架 → `scripts/admin-e2e-smoke.ts` | `scripts/changdu-admin-e2e-smoke.ts` | `65-129,156-190,358-449` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | 保留 localhost 安全闸、独立 CLI、JSON 报告/失败证据与公开 URL HTTP 断言；删除 Changdu 登录/同步/批量生成语义，改为用户显式传入小说公开路径；为不破坏仓库既有“无浏览器截图依赖”契约，Puppeteer 驱动改为 Node 原生 `fetch`，证据路径收紧到 `/tmp` | Codex |
 | `pollTask` → `scripts/admin-e2e-smoke.ts` | `scripts/changdu-admin-e2e-smoke.ts` | `275-294` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | 保留 3 秒轮询、有界超时与同源 credential fetch；端点改为仓库现有 `/api/admin/credential-tasks/status`，终态改为小说任务 `completed/completed_with_errors/failed/disabled`，驱动改为可注入的 Node `fetch`，不虚构尚不存在的通用 GenericTask 路由 | Codex |
 | `assertNoForbiddenFlags` / `/tmp` 路径闸 / `DATABASE_URL` 交叉校验 / `scrub` → `scripts/lib/acceptance-safety.ts` | `scripts/changdu-preview-catalog-acceptance-cli.ts` | `77-179,204-232` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | 保留 allowlist 参数、凭证类 flag 拒绝、输出脱敏和 DB 目标交叉校验模式；SQLite 文件路径匹配改为 PostgreSQL `DATABASE_URL` SHA-256 指纹定时比较，原始 URL 不进 argv/报告；补 symlink escape 拒绝 | Codex |

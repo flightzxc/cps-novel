@@ -21,15 +21,17 @@
 | --- | --- | --- |
 | **本项目（唯一可写）** | `/Users/chenweifeng/Documents/产品原型及文档/cps海阅/cps-novel` | 读 + 写 |
 | **CPS 参考（只读）** | `/Users/chenweifeng/Documents/产品原型及文档/cps项目/cps-admin-v811-search-ux` | **只读**，基线 commit `d77c3b968285698529cf97c7f0f97b286d7a2a9c` |
+| **CPS X 系列生产 tag 参考（仅 Git object 只读）** | `/Users/chenweifeng/Documents/产品原型及文档/cps项目/cps-admin` | 只允许 `git show v8.2.18:<path>`；peeled commit `0ec20c4ee08b4b007e773feab811703a59ac3048` |
 
 硬性约束：
 
 1. 所有代码、配置、文档**只能**写入本仓库根目录之下；
-2. **CPS 工作区任何情况下不得写入**——包括临时文件、日志、缓存、测试产物；
-3. 每个任务交付节点必须验证 CPS 工作区 `git status --porcelain` 为 **0 行**，`HEAD` 仍为 `d77c3b968285698529cf97c7f0f97b286d7a2a9c`；
+2. **两个 CPS 工作区任何情况下都不得写入**——包括临时文件、日志、缓存、测试产物；
+3. 每个任务交付节点必须验证：旧基线工作区 `git status --porcelain` 为 **0 行**且 `HEAD` 仍为 `d77c3b...`；
+   X 系列参考仓只读 Git object，执行前后 `HEAD` 和 `git status --porcelain=v1` 必须字节一致，对其既有未提交状态不得 clean/stash/checkout；
 4. **禁止**以 symlink、git submodule、相对路径引用等任何方式把 CPS 目录接入本项目构建；
 5. 从 CPS 搬运代码一律**复制 + 改造**，并登记 `docs/governance/port-registry.md`（来源文件、行号、基线 commit、改动说明）——未登记的搬运视为违规；
-6. 文档中提及 CPS 参考路径时，只使用上表这一条绝对路径，不得散落引用其他 CPS 内部路径写法。
+6. 文档中提及 CPS 参考路径时，只使用上表两条已冻结的绝对路径，并同时写明对应 commit；不得散落引用其他 CPS 内部路径写法。
 
 ---
 
@@ -48,6 +50,7 @@ src/features/admin-ui/
 src/features/public-ui/
 src/lib/locale/
 src/lib/seo/
+src/lib/site/
 src/lib/slug/
 tests/ui/
 ```
@@ -64,6 +67,8 @@ src/lib/tasks/
 src/lib/adapters/
 src/lib/app/
 src/lib/flags/
+src/lib/indexnow/
+src/lib/preview/
 src/lib/redirect/
 worker/
 scheduler/
@@ -81,9 +86,12 @@ tests/integration/
 | --- | --- | --- |
 | `src/lib/app/` | Codex | `app-version.ts` |
 | `src/lib/flags/` | Codex | `feature-flags.ts` |
+| `src/lib/indexnow/` | Codex | `outbox-contract.ts` |
+| `src/lib/preview/` | Codex | `changdu-materialization.ts` |
 | `src/lib/redirect/` | Codex | `public-redirect-code.ts` |
 | `src/lib/locale/` | **Claude** | `locale-canonical.ts` |
 | `src/lib/seo/` | **Claude** | — |
+| `src/lib/site/` | **Claude** | — |
 | `src/lib/slug/` | **Claude** | — |
 | `src/lib/db/` `auth/` `credentials/` `tasks/` `adapters/` | Codex | — |
 
@@ -183,6 +191,6 @@ npm run test       # vitest run
 
 ## 8. 当前阶段
 
-**P1-04（新仓库和工程骨架）已完成**：目录树按第 3 节所有权表建全，Codex 侧空目录含 `.gitkeep` 占位，`docs/governance/` 治理文档骨架就位，本 `CLAUDE.md` 建立。
-
-**下一步：P1-05（Codex，PostgreSQL Schema、Migration、约束和索引）**——设计与草案可与 P1-04 并行准备，但正式写文件需等本任务（P1-04）交付确认后开始。P1-05 完成后解锁 P1-06 / P1-07 / P1-08。
+**P1 已收口，P2-12 竖向验收与 P0 收尾已落地。** 当前处于 v0.2.0 上线前加固和发布证据收口阶段；
+feature/write flags 仍按 `docs/p2/V020_RELEASE_CHECKLIST.md` 保持 fail-closed，未经检查单与 Owner 审批不得开闸。
+IndexNow delivery 的首个生产 schedule 另立 X11，X11 验收前 delivery 双闸和 worker allowlist 消费均不得开放。

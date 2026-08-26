@@ -399,7 +399,12 @@ async function selectExpired(
 
 export async function recoverExpiredItem(
   prisma: PrismaClient,
-  input: { family: TaskFamily; taskTypes: string[]; maxAttemptsByType: Record<string, number> },
+  input: {
+    family: TaskFamily;
+    taskTypes: string[];
+    maxAttemptsByType: Record<string, number>;
+    workerId?: string;
+  },
 ): Promise<RecoveryResult | null> {
   if (input.taskTypes.length === 0) return null;
   // Same whole-transaction retry shape as `claimPendingItem` above, and safe
@@ -450,9 +455,24 @@ export async function recoverExpiredItem(
         WHERE id = ${row.id}::uuid AND status = 'processing'
       `);
     }
+    if (terminal) {
+      await tx.operationAudit.create({
+        data: {
+          actorType: "worker",
+          actorId: input.workerId ?? "lease-recovery",
+          action: "task_item.failed",
+          entityType: `${input.family}_task_item`,
+          entityId: row.id,
+          taskType: row.task_type,
+          taskId: row.task_id,
+          reason: "stale_processing",
+        },
+      });
+    }
     await recomputeParentTask(tx, input.family, row.task_id);
     return {
       family: input.family,
+      taskType: row.task_type,
       itemId: row.id,
       taskId: row.task_id,
       action: terminal ? "failed" : "requeued",

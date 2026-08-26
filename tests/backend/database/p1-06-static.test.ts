@@ -35,6 +35,11 @@ describe("P1-06 database operations static contracts", () => {
     expect(sql).toContain("encrypted_secret, key_version");
     expect(sql).toContain(") ON channel_account_credential TO web_app");
     expect(sql).toContain("GRANT UPDATE (status, updated_at) ON channel_account_credential TO web_app");
+    expect(sql).toContain(
+      "GRANT UPDATE (status, response_shape, confirmed_at) ON side_effect_intent TO web_app",
+    );
+    expect(sql).not.toMatch(/GRANT UPDATE ON (?:TABLE )?side_effect_intent TO web_app/);
+    expect(sql).not.toMatch(/GRANT (?:INSERT|DELETE) ON (?:TABLE )?side_effect_intent TO web_app/);
     expect(sql).toContain("GRANT DELETE ON TABLE channel_credential_active_fingerprint TO web_app");
     expect(sql).toContain("credential_change_log, operation_audit, indexnow_outbox_attempt");
     expect(sql).not.toMatch(/GRANT (?:UPDATE|DELETE)[^;]*operation_audit/s);
@@ -61,6 +66,7 @@ describe("P1-06 database operations static contracts", () => {
       "scripts/db/archive-wal.sh",
       "scripts/db/restore-pitr.sh",
       "scripts/run-p1-06-postgres-verification.sh",
+      "scripts/run-x9-postgres-verification.sh",
     ];
     for (const script of scripts) {
       execFileSync("bash", ["-n", resolve(root, script)]);
@@ -78,5 +84,13 @@ describe("P1-06 database operations static contracts", () => {
     // 920 -> 952. This assertion's purpose — no duplicate stable_key — is unaffected by the count.
     expect(records).toHaveLength(952);
     expect(new Set(records.map((line) => JSON.parse(line).stable_key)).size).toBe(952);
+    const intents = records.map((line) => JSON.parse(line)).filter(
+      (record) => record.table_name === "side_effect_intent"
+        && ["status", "response_shape", "confirmed_at"].includes(record.field_name),
+    );
+    expect(intents).toHaveLength(3);
+    for (const record of intents) {
+      expect(`${record.notes ?? ""} ${record.llm_constraints ?? ""}`).toMatch(/X9|manual/i);
+    }
   });
 });

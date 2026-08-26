@@ -26,7 +26,7 @@ import {
   computeManifestSha256,
   type IndexNowBackfillEntry,
   type IndexNowBackfillManifest,
-} from "../src/lib/indexnow-backfill-manifest";
+} from "../src/lib/indexnow/backfill-manifest";
 import { findPublishedWithoutIndexNowDelivery } from "../src/lib/indexnow/outbox";
 
 function arg(name: string): string | undefined {

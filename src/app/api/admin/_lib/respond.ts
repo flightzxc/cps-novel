@@ -7,6 +7,11 @@ import {
   CredentialReplacementIdempotencyConflictError,
   CredentialTaskNotFoundError,
 } from "@/server/credentials/service";
+import {
+  SiteSettingMutationConflictError,
+  SiteSettingNotSeededError,
+  SiteSettingValidationError,
+} from "@/server/site-settings/service";
 
 /**
  * A well-formed identifier that resolves to nothing live.
@@ -69,6 +74,17 @@ export function toErrorEnvelope(error: unknown): ErrorEnvelope {
       code: error.code,
       status: error.status,
       details: error.details,
+    });
+  }
+  if (
+    error instanceof SiteSettingValidationError
+    || error instanceof SiteSettingMutationConflictError
+    || error instanceof SiteSettingNotSeededError
+  ) {
+    return projectErrorEnvelope({
+      code: error.code,
+      status: error.status,
+      details: error instanceof SiteSettingMutationConflictError ? error.details : undefined,
     });
   }
   if (isAdminAccessError(error)) {

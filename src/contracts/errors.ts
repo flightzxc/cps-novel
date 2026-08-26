@@ -18,6 +18,9 @@ export type AdminErrorCode =
   | CredentialContractCode
   | AdminContentQueryErrorCode
   | "credential_task_not_found"
+  | "site_setting_invalid"
+  | "site_setting_conflict"
+  | "site_setting_not_seeded"
   /** A well-formed novel or chapter id that matches no live row. */
   | "admin_content_not_found";
 
@@ -32,7 +35,7 @@ export type AdminErrorCode =
  * the content routes take page, page size, status, locale and search from the
  * query string, and a rejected `page=0` is neither "forbidden" nor "not found".
  */
-export type AdminErrorStatus = 400 | 401 | 403 | 404 | 409 | 429;
+export type AdminErrorStatus = 400 | 401 | 403 | 404 | 409 | 429 | 500;
 
 /**
  * Machine-readable reasons that further qualify a code. Constrained to a frozen
@@ -73,7 +76,7 @@ export type ErrorEnvelope = {
   readonly details?: ErrorEnvelopeDetails;
 };
 
-const ALLOWED_STATUSES: readonly AdminErrorStatus[] = [400, 401, 403, 404, 409, 429];
+const ALLOWED_STATUSES: readonly AdminErrorStatus[] = [400, 401, 403, 404, 409, 429, 500];
 
 const ALLOWED_REASONS: readonly ErrorEnvelopeReason[] = [
   "idempotency_conflict",

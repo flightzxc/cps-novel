@@ -132,6 +132,10 @@ Migration 演进，当前 Credential 状态增量为
 | `home_carousel_serving` | CPS_PARITY_ADAPTED | 只保存当前正在服务的结果，不承担历史区间 | `(locale, position)` 绝对唯一；无 `valid_from/valid_to` | 在 serving 表内保存历史有效期 |
 | `home_carousel_change_log` | CPS_PARITY | 轮播历史变更与来源追溯的追加日志 | append-only | CPS drama 专用引用 |
 
+X6 只开放 `default_og_image` 与 IndexNow 三字段的管理写口：单例缺失是部署损坏，
+禁止 upsert/自动重建；写入以 `updated_at` 为乐观锁，并与脱敏 `operation_audit`
+同事务。IndexNow key 原值禁止进入 Audit，提交后才失效进程内读缓存。
+
 #### Sitemap 运行期部署环境合同
 
 | 环境变量 | 必填阶段 | 使用方 | 约束 |
@@ -251,17 +255,18 @@ carousel serving source。
 | chapter body | S2 版权内容 | 仅公开读模型读取 preview | 物化写 | 不读 | 禁止导出 |
 | public code、published metadata | S0 | 可读 | 可读写 | 任务参数可引用 | 可读 |
 | `article.body` | S0（published 时） | `web_app` 公开页面渲染可读 | 可生成/更新 | 不读 | 可读公开版本；不是章节版权正文 |
+| `site_setting.indexnow_key` | S2 | `settings:manage` + 当前会话 2FA 的受控 API 可读/写 | IndexNow 任务可读 | 禁止 | 禁止 |
 
 ### P1-06 已实施权限矩阵
 
 | 角色 | 对象所有权 / DDL | 读取 | 写入 | 额外限制 |
 | --- | --- | --- | --- | --- |
 | `migration_owner` | 唯一应用对象 Owner；执行 Migration | 全部 | 全部 | 不作为应用运行身份 |
-| `web_app` | 无 | S0/S1 与公开章节正文；凭证仅元数据 | 后台元数据、任务入队、Audit 追加；同步 add/replace 可 INSERT 新密文及轮换元数据 | 禁止 SELECT/解密已保存 `encrypted_secret`、禁止读取完整 fingerprint、原始上游 payload/真实跳转信息 |
-| `worker_app` | 无 | 完成任务与凭证处理所需全部列 | 业务/任务状态与追加日志；仅章节撤回正文允许 DELETE | `operation_audit` 等追加日志禁止 UPDATE/DELETE |
+| `web_app` | 无 | S0/S1 与公开章节正文；凭证仅元数据；`site_setting` | 后台元数据、任务入队、Audit 追加；同步 add/replace 可 INSERT 新密文及轮换元数据；`site_setting` 仅四字段 + `updated_at` UPDATE；X9 人工裁决仅可 UPDATE `side_effect_intent(status,response_shape,confirmed_at)` | 禁止 SELECT/解密已保存 `encrypted_secret`、完整 fingerprint 与原始上游 payload/真实跳转信息；SiteSetting 禁止 INSERT/DELETE/其他列 UPDATE；人工裁决不得改 intent identity/evidence/linkage；超时 `30s / 5s / 60s`（statement / lock / idle transaction） |
+| `worker_app` | 无 | 完成任务与凭证处理所需全部列；`site_setting` | 业务/任务状态与追加日志；仅章节撤回正文允许 DELETE | `operation_audit` 等追加日志禁止 UPDATE/DELETE；SiteSetting 只读；通用 intent transition 无 `manual_review_required` 出边；超时 `5min / 15s / 5min` |
 | `analyst_ro` | 无 | S0/S1 列 | 无 | `default_transaction_read_only=on`；`statement_timeout=30s`；禁止 S2/S3 |
 | `backup_role` | 无 | 完整逻辑/物理备份所需全部表、序列 | 无 | `REPLICATION` 仅用于 `pg_basebackup`；凭证仅由备份系统托管 |
-| `scheduler_app` | 无 | schedule/generic task 元数据 | 仅创建/更新 schedule 与 GenericTask 元数据 | 禁止 Auth/Credential secret；不导入 Worker handler registry；无 Credential key |
+| `scheduler_app` | 无 | schedule/generic task 元数据 | 仅创建/更新 schedule 与 GenericTask 元数据 | 禁止 Auth/Credential secret；不导入 Worker handler registry；无 Credential key；超时 `1min / 5s / 60s` |
 
 `infra/postgres/roles.sql` 不含密码；登录凭证由运行时 secret manager 或一次性测试脚本生成。
 `infra/postgres/grants.sql` 必须在每次 Migration 后重放；未来对象默认关闭，新增表或敏感列必须显式评审后授予。
@@ -324,6 +329,10 @@ P1-08B 新增独立 `scheduler_app`，只授予 schedule/generic task 元数据�
 | 2026-08-18 | v0.2.0-publish-gate（Stream A，P2-07 发布门禁，合并前 Opus 复核 必改1/2） | 零 schema 改动。`applyPublishTransition` 收口 TOCTOU（facts/gate 读取移入事务、写入改条件 `updateMany`+`count` 校验+失败即抛出回滚）；移除 `OperationAudit` 上一版依赖 P2002 恢复的死分支，相关幂等注释降级为"顺序重试幂等，非并发安全"；§13 登记 `operation_audit` 幂等唯一索引为跟进项 | Claude（Sonnet 编码/Opus 复核） | `npm test` 1281 passed / 85 skipped；新增 TOCTOU 并发交错回归测试（`tests/backend/publish-gate/service.test.ts`，注入钩子模拟交错时序） |
 | 2026-08-18 | v0.2.0-public-wiring（Stream B PR2，P2-08 复核） | §4 冻结公开路由：`takedown` **V1 = HTTP 404**；**410 为 post-V1（proxy 层）**。零 schema 改动。 | Cursor | 页面层 `notFound()` + `novel/[slugParam]/not-found.tsx`；禁止 `NEXT_HTTP_ERROR_FALLBACK;410` digest |
 | 2026-08-18 | P2-10 Sitemap | 登记 `SITE_URL` 为 Web/刷新 Worker 的运行期部署必需 origin；镜像 build 不注入默认域名，运行期继续严格 fail-closed | Codex | 待 Claude 增量复核 |
+| 2026-08-26 | P0 catalog promo capture (`ce7f0f1`) | `worker_app` 的表级 SELECT 增加 `promo_link` 与 `article`，供 MoboReader catalog 在脱敏前捕获已有推广资产并绑定本地文章；不新增写权、不扩张 Web/Scheduler 凭证面 | Codex | 已合入 `ce7f0f1`；集成验证覆盖角色读取与脱敏边界 |
+| 2026-08-26 | X2 PostgreSQL 硬化 | 零 schema migration；冻结 Web/Worker/Scheduler 的 statement/lock/idle transaction 超时，增加 `max_connections=100`、500ms 慢查询与 `pg_stat_statements` preload 配置合同，并补启用/回滚手册与一次性 PostgreSQL 16 验证 | Codex | 仓库配置合同已验证；生产尚需运维窗口 preload、重启、`CREATE EXTENSION` 与现网核验 |
+| 2026-08-26 | X6 SiteSetting 写服务 | 零 schema migration；新增 `settings:manage` + 当前会话 2FA 双门、精确 GET/PATCH registry、四字段校验、`updated_at` 乐观锁、request-id 重放绑定、脱敏 Audit 与提交后缓存失效；同步收紧 `site_setting` 到 Web/Worker 读与 Web 最小列 UPDATE | Codex | 待 Claude custodian 复核 `src/app/**`、`src/contracts/**`、`src/features/admin-ui/**` 伴随变更；`scripts/run-x6-site-setting-postgres-verification.sh` 已以 PostgreSQL 16.14 验证 Web 最小写列、Worker 只读、Analyst/Scheduler 拒绝、事务 Audit 与字典零漂移，并清理 disposable 实例 |
+| 2026-08-26 | X9 Task Admin | 零 migration；新增 `task:manage` + 当前会话 2FA 的三族任务读取/失败重试与 SideEffectIntent 人工裁决。Web 仅获得 `side_effect_intent(status,response_shape,confirmed_at)` 列级 UPDATE；裁决 CAS 与 OperationAudit 同事务，不触发上游、PromoLink 自动对账或 worker 通用 transition 出边 | Codex | PostgreSQL 16.14 disposable role/CAS/audit/worker-negative verification PASS；零 dictionary drift；容器已清理 |
 
 ## 13. 待跟进项（Schema 变更队列，Owner 待批）
 

@@ -30,7 +30,7 @@ import { fileURLToPath } from "node:url";
 
 import { PrismaClient } from "@prisma/client";
 
-import { verifyManifestSha256, type IndexNowBackfillManifest } from "../src/lib/indexnow-backfill-manifest";
+import { verifyManifestSha256, type IndexNowBackfillManifest } from "../src/lib/indexnow/backfill-manifest";
 import { buildIndexNowCanonicalUrl, isNovelIndexNowEligible, loadIndexNowCandidateArticle } from "../src/lib/indexnow/eligibility";
 import { enqueueIndexNowFirstPublish } from "../src/lib/indexnow/outbox";
 
