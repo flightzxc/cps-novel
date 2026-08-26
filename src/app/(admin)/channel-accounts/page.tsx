@@ -6,6 +6,7 @@ import {
   type CredentialMetadataView,
 } from "@/contracts";
 import { findCapabilityState } from "@/features/admin-ui/capability-view";
+import { AdminTimeZoneNote } from "@/features/admin-ui/time-zone-note";
 
 import { prisma } from "../../api/admin/_lib/deps";
 import { AdminShell } from "../_components/admin-shell";
@@ -95,12 +96,15 @@ export default async function ChannelAccountsPage() {
       title="渠道账户"
       description="管理渠道子账号与上游 JWT 凭证。密文永不回显，界面只展示指纹前缀。"
     >
-      <ChannelAccountsClient
-        rows={rows}
-        channels={channels}
-        availability={availability}
-        credentialManage={credentialManage}
-      />
+      <div className="space-y-2">
+        <AdminTimeZoneNote />
+        <ChannelAccountsClient
+          rows={rows}
+          channels={channels}
+          availability={availability}
+          credentialManage={credentialManage}
+        />
+      </div>
     </AdminShell>
   );
 }

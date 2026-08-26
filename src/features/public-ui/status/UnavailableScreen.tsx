@@ -1,6 +1,5 @@
-import { ButtonLink } from "@/components/Button";
-import { Container } from "@/components/Container";
 import { SiteShell, type SiteChrome } from "@/features/public-ui/layout/SiteShell";
+import { PublicStatusPanel } from "@/features/public-ui/status/PublicStatusPanel";
 import type { UnavailableReason } from "@/features/public-ui/types";
 import type { SiteLocale } from "@/lib/locale/locale-canonical";
 import { getPublicT, type MessageKey } from "@/lib/locale/messages";
@@ -45,31 +44,15 @@ export function UnavailableScreen({
 
   return (
     <SiteShell locale={locale} chrome={chrome}>
-      <Container>
-        <div
-          className="flex min-h-[46vh] flex-col items-start justify-center py-20 md:py-28"
-          data-testid="unavailable-screen"
-          data-unavailable-reason={reason}
-        >
-          <div className="max-w-[52ch]">
-            {novelTitle ? (
-              <p className="font-novel-serif text-base text-novel-fg-subtle">
-                {novelTitle}
-              </p>
-            ) : null}
-
-            <h1 className="mt-3 font-novel-serif text-2xl leading-tight font-semibold tracking-tight text-novel-fg md:text-4xl">
-              {t(copy.title)}
-            </h1>
-
-            <p className="mt-5 text-base leading-relaxed text-novel-fg-muted">{t(copy.body)}</p>
-
-            <ButtonLink href={homeHref} variant="outline" size="lg" className="mt-10">
-              {t("unavailable.returnHome")}
-            </ButtonLink>
-          </div>
-        </div>
-      </Container>
+      <PublicStatusPanel
+        testId="unavailable-screen"
+        reason={reason}
+        eyebrow={novelTitle}
+        title={t(copy.title)}
+        body={t(copy.body)}
+        homeHref={homeHref}
+        homeLabel={t("unavailable.returnHome")}
+      />
     </SiteShell>
   );
 }

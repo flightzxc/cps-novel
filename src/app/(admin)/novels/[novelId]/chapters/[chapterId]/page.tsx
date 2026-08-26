@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { projectAdminChapterDetail } from "@/contracts";
+import { AdminTimeZoneNote } from "@/features/admin-ui/time-zone-note";
 import { hasAdminCapability } from "@/lib/auth/capabilities";
 import { getAdminChapterDetail } from "@/server/admin-content";
 
@@ -74,6 +75,8 @@ export default async function ChapterDetailPage({
       }
     >
       <div className="space-y-6">
+        <AdminTimeZoneNote />
+
         <div className="grid gap-6 lg:grid-cols-2">
           <ChapterDetailPanel chapter={chapter} />
           <ChapterSourcesPanel chapter={chapter} />

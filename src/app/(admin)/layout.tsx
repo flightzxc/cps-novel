@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { AdminDocumentLang } from "@/features/admin-ui/admin-document-lang";
 
 export const metadata = {
   title: "海外阅读后台",
@@ -17,5 +18,10 @@ export const metadata = {
  * that default-deny checks against. Pages compose `<AdminShell>` themselves.
  */
 export default function AdminLayout({ children }: { children: ReactNode }) {
-  return <div className="min-h-screen bg-gray-50 text-gray-900">{children}</div>;
+  return (
+    <div lang="zh-CN" className="min-h-screen bg-gray-50 text-gray-900">
+      <AdminDocumentLang />
+      {children}
+    </div>
+  );
 }

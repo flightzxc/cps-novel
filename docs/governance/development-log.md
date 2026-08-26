@@ -25,6 +25,36 @@
 - 不修改 package/lockfile，Next/eslint-config-next `16.3.3` 升级由 Claude custodian 独立交付；
 - 不夹带 S14 `src/lib/site/chrome.ts` locale 修复，本轮只登记 `src/lib/site/` 归 Claude。
 
+## 2026-08-26 · U4 前台防线包
+
+### 本轮做了什么
+
+- B1 公开树错误边界：新增 `src/app/error.tsx`、`src/app/global-error.tsx`、`src/app/not-found.tsx`，
+  共用新抽出的 `PublicStatusPanel`（与 `UnavailableScreen` 同一套视觉语言）；两个错误边界各自
+  `console.error`——`global-error` 不能依赖 `error.tsx` 落日志，因为布局失败根本到不了那层边界；
+- B2 favicon：`src/app/icon.tsx` 用 `next/og` 代码生成，图形复刻 `BrandMark` 的几何占位；
+- B3 dev-preview kill switch：`DEV_PREVIEW_ENABLED !== "true"` 时 `notFound()`，并从 preview 页
+  去掉内部文档路径；
+- B15 JSON-LD：`<` 转义为 `\u003c`，堵住 `</script>` 逃逸；
+- N5 后台时区：`src/features/admin-ui/datetime.ts` 显式 `timeZone: Asia/Shanghai`，时区由
+  `AdminTimeZoneNote` 每页声明一次，值本身不带后缀；
+- B14 `lang`：根 `<html>` 保持 `lang="en"`，`(admin)` / `(admin-auth)` 包裹层标 `lang="zh-CN"`，
+  并由 `AdminDocumentLang` 同步 `document.documentElement.lang`。
+
+### 视觉偏离登记（P1-10）
+
+- **§12 状态页形态例外**：`PublicStatusPanel` 的 `bare` 模式不渲染页头页脚，偏离「页头 → 状态说明块
+  → 返回入口 → 页脚」。root 404 / error 没有 chrome 数据可喂页脚，且品牌槽位当前仍是
+  `BRAND_PLACEHOLDER` 文本，不能出现在公开错误页。`UnavailableScreen` 仍走 `SiteShell`，不受影响。
+- **§13 品牌标记同步义务**：`src/app/icon.tsx` 与 `src/components/BrandMark.tsx` 是同一个几何占位的
+  两份实现（Satori 不支持 SVG 与 CSS 变量，favicon 只能用 div 重画）。🔴 正式 Logo 到位时两者必须
+  一起替换；favicon 不得引入第二套品牌识别。
+
+### 明确没做的（本轮范围外）
+
+- root 404 / error 两个新页面形态**没有基准图**，`tests/ui/baselines/README.md` 的清单仍是 13 张；
+- 错误页没有使用 `--novel-danger`：错误态与下架态的区分靠「重试」这个纸色主动作，不靠色彩。
+
 ## 2026-08-06 · P1-15 收口文档与 P2 交接输入包
 
 ### 事实基线

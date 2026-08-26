@@ -5,6 +5,7 @@ import {
   type AdminNovelListItemView,
 } from "@/contracts";
 import { findCapabilityState } from "@/features/admin-ui/capability-view";
+import { AdminTimeZoneNote } from "@/features/admin-ui/time-zone-note";
 import { listAdminNovels } from "@/server/admin-content";
 
 import { prisma } from "../../api/admin/_lib/deps";
@@ -80,10 +81,13 @@ export default async function NovelsPage({
                 labelId: params.labelId,
               }}
             />
-            <NovelsBatchPublish
-              novels={page.items}
-              canPublish={findCapabilityState(capabilityViews(context), "content:publish")}
-            />
+            <div className="space-y-2">
+              <AdminTimeZoneNote />
+              <NovelsBatchPublish
+                novels={page.items}
+                canPublish={findCapabilityState(capabilityViews(context), "content:publish")}
+              />
+            </div>
             <ContentPagination
               basePath="/novels"
               params={params}

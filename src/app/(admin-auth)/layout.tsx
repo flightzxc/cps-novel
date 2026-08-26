@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { AdminDocumentLang } from "@/features/admin-ui/admin-document-lang";
 
 export const metadata = {
   title: "海外阅读后台",
@@ -20,7 +21,8 @@ export const metadata = {
  */
 export default function AdminAuthLayout({ children }: { children: ReactNode }) {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4 py-10 text-gray-900">
+    <div lang="zh-CN" className="flex min-h-screen items-center justify-center bg-gray-50 px-4 py-10 text-gray-900">
+      <AdminDocumentLang />
       {children}
     </div>
   );

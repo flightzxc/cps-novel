@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
+import { notFound } from "next/navigation";
 
 export const metadata: Metadata = {
   // 根布局已设 noindex；这里再显式声明一次，避免将来有人只改根布局就以为放开了。
@@ -11,8 +12,15 @@ export const metadata: Metadata = {
  *
  * 🔴 这组路由是临时的：正式 URL 结构（尤其是语种段）尚未冻结，本轮不自行决定
  * 任何永久路由。屏幕组件本身与路由无关，这里只负责喂假数据和挂标记。
+ *
+ * Kill switch: production (and any env without an explicit opt-in) 404s the
+ * whole tree. Local preview requires `DEV_PREVIEW_ENABLED=true`.
  */
 export default function DevPreviewLayout({ children }: { children: ReactNode }) {
+  if (process.env.DEV_PREVIEW_ENABLED !== "true") {
+    notFound();
+  }
+
   return (
     <div data-mock-only="true">
       {children}
