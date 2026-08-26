@@ -4,13 +4,13 @@
  * v0.2.1.md` §3.9/§3.10, §4). One unified decision tree per
  * `GenericTaskItem`, covering both halves of the architecture doc's flow:
  *
- *   1. §3.9 "已有推广资源读取" — the production path now extracts
+ *   1. §3.9 "已有推广资源读取" — the production path extracts
  *      `kocCode` plus `publicUrl`/`homeLink` from the catalog response before
  *      evidence redaction and writes them directly to `PromoLink` in
- *      `worker/handlers/moboreader.ts`. This handler's raw-payload reader is
- *      retained only as a legacy compatibility path for snapshots created
- *      before that boundary was enforced. New sync snapshots contain only
- *      redaction sentinels, and this path must stay fail-closed for them.
+ *      `worker/handlers/moboreader.ts`. This handler never interprets promo
+ *      fields from `NovelSourceItem.rawPayload`: official snapshots have
+ *      been redacted since the first catalog writer, so there is no genuine
+ *      non-redacted compatibility history to recover here.
  *   2. §3.10 "推广生成（占位流程）" — the side-effecting `claimPromo`
  *      capability. `ChannelCapability.status` for this key is
  *      `registered_disabled` everywhere in this codebase (nothing sets it
@@ -40,7 +40,6 @@ import { Prisma, type PrismaClient } from "@prisma/client";
 import {
   classifyClaimPromoFailure,
   createPromoLinkClaimAdapter,
-  REDACTED_EVIDENCE_SENTINEL,
   type ClaimPromoRequest,
   type ClaimPromoResult,
   type PromoLinkClaimAdapter,
@@ -95,88 +94,6 @@ export function parsePromoLinkClaimPayload(value: unknown): PromoLinkClaimPayloa
   }
   if (Number.isNaN(Date.parse(item.expiresAt as string))) throw new Error("task_expiry_invalid");
   return item as PromoLinkClaimPayload;
-}
-
-// ---------------------------------------------------------------------
-// §3.9 pre-read — pure, no IO
-// ---------------------------------------------------------------------
-
-export interface ExistingPromoRead {
-  kocCode: string | null;
-  webUrl: string | null;
-  appUrl: string | null;
-  /**
-   * True when at least one of the promo-shaped `raw_payload` fields
-   * (`kocCode`/`publicUrl`/`homeLink`/`onlineUrl`) carried
-   * `REDACTED_EVIDENCE_SENTINEL` rather than a real value. This is
-   * deliberately a separate signal from `kocCode === null`: the sentinel
-   * means "the sync-time adapter boundary masked this field" (see
-   * `src/lib/adapters/moboreader.ts`'s `toApprovedRawEvidence` — the *only*
-   * writer of `NovelSourceItem.rawPayload`, per
-   * `worker/handlers/moboreader.ts`'s `persistCatalogPage`), which is a
-   * structurally different fact than "upstream confirmed no promo yet"
-   * (doc §3.9's `promo_not_generated`). Conflating the two would make a
-   * masked-but-possibly-real code look identical to a genuine absence — the
-   * exact confusion this field exists to prevent. See this module's header
-   * and `writePromoLinkExistingEvidenceRedacted` for how callers must act
-   * on it.
-   */
-  redacted: boolean;
-}
-
-function nonBlank(value: unknown): string | null {
-  if (typeof value !== "string") return null;
-  const trimmed = value.trim();
-  if (!trimmed || trimmed === REDACTED_EVIDENCE_SENTINEL) return null;
-  return trimmed;
-}
-
-function isRedactedSentinel(value: unknown): boolean {
-  return value === REDACTED_EVIDENCE_SENTINEL;
-}
-
-/**
- * Legacy compatibility reader for already-fetched promo fields in
- * `raw_payload` — no upstream call. Field mapping per doc §2.3
- * `readExistingPromo`:
- * `kocCode`/`publicUrl`/`homeLink` are `PRODUCTION_READ_PROVEN`.
- * `onlineUrl` → `appUrl` is this handler's own interpretation, not
- * doc-proven: the doc lists `onlineUrl` alongside `publicUrl`/`homeLink` as
- * one of the promo-shaped fields returned by the catalog endpoints, but
- * explicitly flags its null-vs-populated meaning as unproven ("onlineUrl
- * 为 null 的含义未证" — §2.3 `readExistingPromo` 未知项). Every observed
- * sample has it null, so this mapping is currently inert; it only matters
- * once a populated sample is captured, at which point Codex should verify
- * this interpretation against real evidence rather than assume it.
- *
- * Production reality: `src/lib/adapters/moboreader.ts`'s
- * `REDACTED_EVIDENCE_KEYS` unconditionally masks `kocCode`/`publicUrl`/
- * `homeLink`/`onlineUrl` to `REDACTED_EVIDENCE_SENTINEL` before
- * `persistCatalogPage` ever writes `rawPayload` — so `nonBlank` below can
- * never observe a real value for these four fields via the sync pipeline as
- * it exists today, and `kocCode`/`webUrl`/`appUrl` on the returned value are
- * therefore always `null` in production; `redacted` is the field that
- * actually distinguishes "upstream had nothing" from "upstream may have had
- * something, but sync captured it through the direct `PromoLink` path".
- * Do not revive this reader as the production source of truth: it remains
- * solely for genuinely non-redacted historical snapshots and for the S11
- * sentinel quarantine behavior.
- */
-export function readExistingPromoFromRawPayload(rawPayload: unknown): ExistingPromoRead {
-  if (!rawPayload || typeof rawPayload !== "object" || Array.isArray(rawPayload)) {
-    return { kocCode: null, webUrl: null, appUrl: null, redacted: false };
-  }
-  const row = rawPayload as Record<string, unknown>;
-  const redacted = isRedactedSentinel(row.kocCode)
-    || isRedactedSentinel(row.publicUrl)
-    || isRedactedSentinel(row.homeLink)
-    || isRedactedSentinel(row.onlineUrl);
-  return {
-    kocCode: nonBlank(row.kocCode),
-    webUrl: nonBlank(row.publicUrl) ?? nonBlank(row.homeLink),
-    appUrl: nonBlank(row.onlineUrl),
-    redacted,
-  };
 }
 
 // ---------------------------------------------------------------------
@@ -350,9 +267,9 @@ async function ensurePromoLinkRow(
 /**
  * Binds `promoLinkId` onto every non-deleted Article for `novelId` that
  * does not already carry a *different* PromoLink. Runs inside the same `tx`
- * as the PromoLink write that produced `promoLinkId` (both
- * `writePromoLinkAlreadyAvailable` and `writePromoLinkClaimed` call this
- * after their `promoLink.update`), and therefore inherits that write's
+ * as the PromoLink write that produced `promoLinkId` (catalog capture and
+ * `writePromoLinkClaimed` call this after their `PromoLink` write), and
+ * therefore inherits that write's
  * `withDbRetry`-wrapped whole-transaction retry from
  * `src/lib/tasks/store.ts`'s `finalizeTaskItem` — no separate retry wrapper
  * is added here (nesting one would reproduce the same
@@ -384,51 +301,6 @@ async function ensurePromoLinkRow(
  * has not run for it) is simply absent from `findMany`'s result — no error,
  * nothing to bind, matching this function's "safe skip, never throw" brief.
  */
-async function writePromoLinkAlreadyAvailable(
-  tx: Prisma.TransactionClient,
-  scope: ClaimScope,
-  existingRead: ExistingPromoRead,
-  payload: PromoLinkClaimPayload,
-  now: Date,
-): Promise<string> {
-  const row = await ensurePromoLinkRow(tx, scope, payload);
-  await tx.promoLink.update({
-    where: { idempotencyKey: scope.idempotencyKey },
-    data: {
-      origin: "upstream_existing",
-      status: "fetched",
-      upstreamCode: existingRead.kocCode,
-      webUrl: existingRead.webUrl,
-      appUrl: existingRead.appUrl,
-      errorKind: null,
-      errorMessage: null,
-      fetchedAt: now,
-      lastAttemptedAt: now,
-    },
-  });
-  const articleBinding = await bindPromoLinkToArticles(tx, scope.source.novelId, row.id);
-  await tx.operationAudit.create({
-    data: {
-      actorType: "worker",
-      actorId: payload.actorId,
-      action: "promo_link_claim.already_available",
-      entityType: "PromoLink",
-      entityId: row.id,
-      requestId: payload.requestId,
-      taskType: PROMO_LINK_CLAIM_TASK_TYPE,
-      afterSnapshot: {
-        decision: "already_available",
-        upstreamCode: redactUpstreamCode(existingRead.kocCode),
-        host: safeHostname(existingRead.webUrl ?? existingRead.appUrl),
-        articlesBound: articleBinding.boundArticleIds.length,
-        articlesAlreadyBound: articleBinding.alreadyBoundArticleIds.length,
-        articlesConflicted: articleBinding.conflictedArticleIds.length,
-      },
-    },
-  });
-  return row.id;
-}
-
 async function reconcileAlreadyFetchedBinding(
   tx: Prisma.TransactionClient,
   scope: ClaimScope,
@@ -455,67 +327,6 @@ async function reconcileAlreadyFetchedBinding(
       },
     },
   });
-}
-
-/**
- * §3.9's third outcome — distinct from both `already_available` (real,
- * usable evidence) and `capability_disabled`/`promo_not_generated` (a
- * genuine absence). `raw_payload` carries `REDACTED_EVIDENCE_SENTINEL` for
- * at least one promo-shaped field, which means the sync-time adapter
- * boundary masked whatever was there — we cannot tell from this alone
- * whether upstream actually has a promo code. Writing `fetched` here would
- * silently persist the sentinel as if it were the real `upstream_code`/
- * `web_url` (exactly the defect this function exists to close — the public
- * `/go/{code}` redirect would resolve `"[redacted]"` as a URL and 404 for
- * every reader while the publish gate waved the Article through as ready).
- * `status` stays inside the four values the `promo_link_status_check`
- * CHECK constraint allows (`pending`/`fetched`/`failed`/
- * `registered_disabled`) — `pending` + a distinguishing `errorKind` is the
- * same pattern `writePromoLinkManualReview` already uses for "not resolved,
- * blocked for a specific, known, non-error reason".
- *
- * Deliberately does **not** fall through to the §3.10 capability check
- * below it: `REDACTED_EVIDENCE_KEYS` masks these fields unconditionally
- * whenever upstream's response object includes the key at all (empty or
- * populated), so in the current sync implementation this branch fires for
- * effectively every synced row — always short-circuiting here keeps that
- * fact visible in `errorKind` instead of getting silently absorbed into
- * `capability_disabled`'s message (which would then wrongly read as "no
- * promo exists AND capability is off", losing the redaction fact
- * entirely). If `claimPromo` is ever unfrozen, whoever does that unfreezing
- * must decide — with real evidence in hand, per this module's header —
- * whether an `existing_evidence_redacted` PromoLink should still attempt a
- * live claim; that decision is out of this task's scope.
- */
-async function writePromoLinkExistingEvidenceRedacted(
-  tx: Prisma.TransactionClient,
-  scope: ClaimScope,
-  payload: PromoLinkClaimPayload,
-  now: Date,
-): Promise<string> {
-  const row = await ensurePromoLinkRow(tx, scope, payload);
-  await tx.promoLink.update({
-    where: { idempotencyKey: scope.idempotencyKey },
-    data: {
-      status: "pending",
-      errorKind: "existing_evidence_redacted",
-      errorMessage: "raw_payload carries the sync-time redaction sentinel for one or more promo fields; local evidence cannot be used to judge whether upstream already has a promo (worker/handlers/promo-link-claim.ts header)",
-      lastAttemptedAt: now,
-    },
-  });
-  await tx.operationAudit.create({
-    data: {
-      actorType: "worker",
-      actorId: payload.actorId,
-      action: "promo_link_claim.existing_evidence_redacted",
-      entityType: "PromoLink",
-      entityId: row.id,
-      requestId: payload.requestId,
-      taskType: PROMO_LINK_CLAIM_TASK_TYPE,
-      afterSnapshot: { decision: "existing_evidence_redacted" },
-    },
-  });
-  return row.id;
 }
 
 async function writePromoLinkCapabilityDisabled(
@@ -877,41 +688,10 @@ export function createPromoLinkClaimHandler(
       };
     }
 
-    const existingRead = readExistingPromoFromRawPayload(scope.source.rawPayload);
-    // Doc §4 item 14 "dry-run 走完真实判定": even in dry-run, every gate
-    // above this line (feature flag, TTL, scope resolution, already-fetched
-    // short-circuit, the §3.9 pre-read decision) runs for real. Only the
-    // write-allow-gated branches below stop short — with zero adapter call
-    // and zero `protectedWrite` either way.
-    if (existingRead.kocCode) {
-      if (!writeAllowed) {
-        return { status: "skipped", result: { decision: "would_fetch_existing" } };
-      }
-      return {
-        status: "success",
-        result: { decision: "already_available", host: safeHostname(existingRead.webUrl ?? existingRead.appUrl) },
-        protectedWrite: (tx) => writePromoLinkAlreadyAvailable(tx, scope, existingRead, payload, now()).then(() => undefined),
-      };
-    }
-
-    // `existingRead.kocCode` was falsy above — but that can mean two very
-    // different things: upstream genuinely has nothing yet, or sync's
-    // redaction boundary masked whatever was there before this handler ever
-    // saw it. `redacted` tells them apart; see `writePromoLinkExistingEvidenceRedacted`
-    // for why this must short-circuit here rather than silently falling
-    // through to the capability check below (which would misreport this as
-    // "no promo + capability disabled", losing the redaction fact).
-    if (existingRead.redacted) {
-      if (!writeAllowed) {
-        return { status: "skipped", result: { decision: "would_skip_evidence_redacted" } };
-      }
-      return {
-        status: "success",
-        result: { decision: "existing_evidence_redacted" },
-        protectedWrite: (tx) => writePromoLinkExistingEvidenceRedacted(tx, scope, payload, now()).then(() => undefined),
-      };
-    }
-
+    // Doc §4 item 14 "dry-run 走完真实判定": feature flag, TTL,
+    // scope resolution, fetched-link reconciliation, and the capability
+    // decision all run for real. Promo evidence is owned exclusively by the
+    // catalog-capture boundary and is never reconstructed from rawPayload.
     if (!writeAllowed) {
       return {
         status: "skipped",
