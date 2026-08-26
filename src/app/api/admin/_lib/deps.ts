@@ -21,7 +21,7 @@ const globalForPrisma = globalThis as unknown as { adminPrisma?: PrismaClient };
 export const prisma: PrismaClient = globalForPrisma.adminPrisma ?? new PrismaClient();
 if (process.env.NODE_ENV !== "production") globalForPrisma.adminPrisma = prisma;
 
-/** P1-08B credential routes plus the P2-04 content read routes. */
+/** P1-08B credentials, P2-04 content reads, and X9 task administration. */
 export const ADMIN_REGISTRY = P2_04_ADMIN_REGISTRY;
 
 export function guardDependencies() {

@@ -77,6 +77,21 @@ export const ADMIN_CONTENT_ROUTES = [
   },
 ] as const satisfies AdminRegistry["routes"];
 
+/**
+ * X9 task operations are a separate high-risk capability surface. Read and
+ * write methods are both registry-bound to `task:manage`; the guard therefore
+ * requires a current session with completed 2FA before any handler executes.
+ */
+export const ADMIN_TASK_ROUTES = [
+  { id: "admin.api.task.list", path: "/api/admin/tasks", methods: ["GET"], capability: "task:manage" },
+  { id: "admin.api.task.detail", path: "/api/admin/tasks/detail", methods: ["GET"], capability: "task:manage" },
+  { id: "admin.api.task.items", path: "/api/admin/tasks/items", methods: ["GET"], capability: "task:manage" },
+  { id: "admin.api.task.retry_failed", path: "/api/admin/tasks/retry-failed", methods: ["POST"], capability: "task:manage" },
+  { id: "admin.api.task.manual_reviews", path: "/api/admin/tasks/manual-reviews", methods: ["GET"], capability: "task:manage" },
+  { id: "admin.api.task.manual_review.resolve", path: "/api/admin/tasks/manual-reviews/resolve", methods: ["POST"], capability: "task:manage" },
+  { id: "admin.api.promo_link.list", path: "/api/admin/promo-links", methods: ["GET"], capability: "task:manage" },
+] as const satisfies AdminRegistry["routes"];
+
 export type AdminContentRouteId = (typeof ADMIN_CONTENT_ROUTES)[number]["id"];
 
 /**
@@ -99,8 +114,9 @@ export const P2_04_ADMIN_REGISTRY: AdminRegistry = Object.freeze({
     ...P1_08B_ADMIN_REGISTRY.routes,
     ...ADMIN_CONTENT_ROUTES,
     ...ADMIN_SITE_SETTING_ROUTES,
+    ...ADMIN_TASK_ROUTES,
   ]),
-  // P2-04 is a read slice: it registers no Server Action, and adding a mutation
-  // capability here is out of scope by construction.
+  // Existing Server Actions remain P1-08B-owned. X6/X9 writes are explicit,
+  // registry-bound HTTP routes whose services revalidate their auth tickets.
   actions: P1_08B_ADMIN_REGISTRY.actions,
 });

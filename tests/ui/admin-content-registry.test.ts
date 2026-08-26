@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   ADMIN_CONTENT_ROUTES,
+  ADMIN_TASK_ROUTES,
   CONTENT_ROUTE_CAPABILITIES,
   P2_04_ADMIN_REGISTRY,
 } from "@/app/api/admin/_lib/registry";
@@ -78,16 +79,18 @@ describe("P2-04 内容路由登记", () => {
     expect(orphans).toEqual([]);
   });
 
-  it("运行时 registry 是 P1-08B、P2-04 与 X6 的并集", () => {
+  it("运行时 registry 组合 P1-08B、P2-04、X6 与 X9 路由且无遗漏", () => {
     expect(ADMIN_REGISTRY).toBe(P2_04_ADMIN_REGISTRY);
     const paths = P2_04_ADMIN_REGISTRY.routes.map((route) => route.path);
     for (const route of P1_08B_ADMIN_REGISTRY.routes) expect(paths).toContain(route.path);
     for (const route of ADMIN_CONTENT_ROUTES) expect(paths).toContain(route.path);
     for (const route of ADMIN_SITE_SETTING_ROUTES) expect(paths).toContain(route.path);
+    for (const route of ADMIN_TASK_ROUTES) expect(paths).toContain(route.path);
     expect(paths.length).toBe(
       P1_08B_ADMIN_REGISTRY.routes.length
       + ADMIN_CONTENT_ROUTES.length
-      + ADMIN_SITE_SETTING_ROUTES.length,
+      + ADMIN_SITE_SETTING_ROUTES.length
+      + ADMIN_TASK_ROUTES.length,
     );
   });
 

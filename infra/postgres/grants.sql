@@ -138,6 +138,11 @@ GRANT UPDATE (
   default_og_image, indexnow_host, indexnow_key, indexnow_key_location, updated_at
 ) ON site_setting TO web_app;
 
+-- X9: Web may adjudicate a manual-review intent only through the guarded
+-- task-admin service. It cannot change intent identity, request evidence,
+-- linkage, or timestamps other than the explicit confirmation time.
+GRANT UPDATE (status, response_shape, confirmed_at) ON side_effect_intent TO web_app;
+
 -- Web writes operational metadata and enqueues validate/supersede work. For
 -- Owner-approved synchronous add/replace it may insert a new ciphertext and
 -- rotate lifecycle metadata, but it still cannot SELECT persisted ciphertext.

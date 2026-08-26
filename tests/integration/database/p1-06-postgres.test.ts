@@ -23,6 +23,7 @@ const ids = {
   credential: randomUUID(),
   task: randomUUID(),
   item: randomUUID(),
+  intent: randomUUID(),
 };
 const suffix = randomBytes(8).toString("hex");
 
@@ -83,6 +84,16 @@ describe.skipIf(!enabled).sequential("P1-06 PostgreSQL role enforcement", () => 
     await owner.$executeRaw`
       INSERT INTO generic_task_item (id, task_id, target_type, target_id, status, updated_at)
       VALUES (${ids.item}::uuid, ${ids.task}::uuid, 'permission_probe', ${suffix}, 'pending', now())
+    `;
+    await owner.$executeRaw`
+      INSERT INTO side_effect_intent (
+        id, effect_key, operation_type, idempotency_key, target_type, target_id,
+        status, request_summary
+      ) VALUES (
+        ${ids.intent}::uuid, ${randomBytes(32).toString("hex")}, 'p1_06.permission_probe',
+        ${randomBytes(32).toString("hex")}, 'permission_probe', ${suffix},
+        'manual_review_required', '{}'::jsonb
+      )
     `;
   }, 30_000);
 
@@ -146,6 +157,32 @@ describe.skipIf(!enabled).sequential("P1-06 PostgreSQL role enforcement", () => 
       await expectDenied(() => client.$executeRawUnsafe(`UPDATE operation_audit SET action = 'denied' WHERE id = ${id}`));
       await expectDenied(() => client.$executeRawUnsafe(`DELETE FROM operation_audit WHERE id = ${id}`));
     }
+  });
+
+  it("limits Web intent adjudication to status, response_shape, and confirmed_at", async () => {
+    await web.$executeRaw`
+      UPDATE side_effect_intent
+      SET status = 'confirmed', response_shape = '{"manualResolution":"effect_confirmed"}'::jsonb,
+          confirmed_at = now()
+      WHERE id = ${ids.intent}::uuid AND status = 'manual_review_required'
+    `;
+    const [intent] = await owner.$queryRaw<Array<{ status: string; response_shape: unknown }>>`
+      SELECT status, response_shape FROM side_effect_intent WHERE id = ${ids.intent}::uuid
+    `;
+    expect(intent).toMatchObject({ status: "confirmed" });
+
+    await expectDenied(() => web.$executeRaw`
+      UPDATE side_effect_intent SET effect_key = ${randomBytes(32).toString("hex")} WHERE id = ${ids.intent}::uuid
+    `);
+    await expectDenied(() => web.$executeRaw`
+      UPDATE side_effect_intent SET idempotency_key = ${randomBytes(32).toString("hex")} WHERE id = ${ids.intent}::uuid
+    `);
+    await expectDenied(() => web.$executeRaw`
+      UPDATE side_effect_intent SET request_summary = '{"tampered":true}'::jsonb WHERE id = ${ids.intent}::uuid
+    `);
+    await expectDenied(() => analyst.$executeRaw`
+      UPDATE side_effect_intent SET status = 'failed' WHERE id = ${ids.intent}::uuid
+    `);
   });
 
   it("allows Worker minimum credential, claim, fenced write, and audit operations", async () => {
