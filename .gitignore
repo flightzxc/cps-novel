@@ -10,6 +10,7 @@ next-env.d.ts
 # testing / coverage
 /coverage
 /test-results
+/.playwright-cli/
 
 # generated code
 /src/generated/
