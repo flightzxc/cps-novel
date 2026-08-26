@@ -10,11 +10,14 @@ import "@/styles/globals.css";
  * html/body. Public tree stays `lang="en"`. Logging stays on `error.tsx`.
  */
 export default function GlobalErrorPage({
-  error: _error,
+  error,
+  reset,
 }: {
   error: Error & { digest?: string };
   reset: () => void;
 }) {
+  void error;
+  void reset;
   const t = getPublicT(PUBLIC_SITE_LOCALE);
 
   return (
