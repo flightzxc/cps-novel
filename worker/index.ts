@@ -12,7 +12,11 @@ import { createIndexNowWorkerHandlers } from "./handlers/indexnow-delivery";
 import { createMoboreaderWorkerHandlers } from "./handlers/moboreader";
 import { createPromoLinkClaimWorkerHandlers } from "./handlers/promo-link-claim";
 import { createSitemapRefreshWorkerHandlers } from "./handlers/sitemap-refresh";
-import { parseShutdownDrainTimeoutEnv, runWorker } from "./runtime";
+import {
+  createWorkerFailureWebhookReporterFromEnv,
+  parseShutdownDrainTimeoutEnv,
+  runWorker,
+} from "./runtime";
 
 export interface WorkerStartupLogger {
   info(message: string): void;
@@ -68,6 +72,7 @@ export async function main(): Promise<void> {
   const shutdownDrainTimeoutMs = parseShutdownDrainTimeoutEnv(
     process.env.WORKER_SHUTDOWN_DRAIN_TIMEOUT_MS,
   );
+  const failureReporter = createWorkerFailureWebhookReporterFromEnv(process.env);
   const prisma = new PrismaClient();
   const controller = new AbortController();
   const stop = () => controller.abort();
@@ -86,6 +91,7 @@ export async function main(): Promise<void> {
       allowlist,
       signal: controller.signal,
       shutdownDrainTimeoutMs,
+      onTaskFailure: failureReporter?.onTaskFailure,
     });
   } finally {
     process.removeListener("SIGINT", stop);

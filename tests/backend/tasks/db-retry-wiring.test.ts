@@ -73,7 +73,8 @@ describe("db-retry wiring: recoverExpiredItem", () => {
       .mockResolvedValueOnce([{ ...row, cursor_at: new Date(), eligible: true }]) // selectExpired
       .mockResolvedValueOnce([]); // recomputeParentTask's SELECT ... FOR UPDATE
     const executeRaw = vi.fn().mockResolvedValue(1); // requeue/fail UPDATE + recomputeParentTask's UPDATE
-    const tx = { $queryRaw: queryRaw, $executeRaw: executeRaw };
+    const operationAuditCreate = vi.fn();
+    const tx = { $queryRaw: queryRaw, $executeRaw: executeRaw, operationAudit: { create: operationAuditCreate } };
     const { client, attempts } = fakePrisma(tx, 1);
 
     const result = await recoverExpiredItem(client, {
@@ -83,7 +84,40 @@ describe("db-retry wiring: recoverExpiredItem", () => {
     expect(attempts.count).toBe(2);
     expect(result).toMatchObject({ itemId: "item-1", taskId: "task-1", action: "requeued" });
     expect(executeRaw).toHaveBeenCalledTimes(2);
+    expect(operationAuditCreate).not.toHaveBeenCalled();
   }, 10_000);
+
+  it("writes the stale terminal failure audit in the recovery transaction", async () => {
+    const row = { id: "item-1", task_id: "task-1", task_type: "some_type", payload: null, attempt_count: 3, lease_epoch: 3n };
+    const queryRaw = vi.fn()
+      .mockResolvedValueOnce([{ ...row, cursor_at: new Date(), eligible: true }])
+      .mockResolvedValueOnce([]);
+    const executeRaw = vi.fn().mockResolvedValue(1);
+    const operationAuditCreate = vi.fn().mockResolvedValue({});
+    const tx = { $queryRaw: queryRaw, $executeRaw: executeRaw, operationAudit: { create: operationAuditCreate } };
+    const { client } = fakePrisma(tx, 0);
+
+    const result = await recoverExpiredItem(client, {
+      family: "generic",
+      taskTypes: ["some_type"],
+      maxAttemptsByType: { some_type: 3 },
+      workerId: "recovery-worker",
+    });
+
+    expect(result).toMatchObject({ action: "failed", taskType: "some_type", attemptCount: 3 });
+    expect(operationAuditCreate).toHaveBeenCalledWith({
+      data: {
+        actorType: "worker",
+        actorId: "recovery-worker",
+        action: "task_item.failed",
+        entityType: "generic_task_item",
+        entityId: "item-1",
+        taskType: "some_type",
+        taskId: "task-1",
+        reason: "stale_processing",
+      },
+    });
+  });
 });
 
 describe("db-retry wiring: finalizeTaskItem", () => {

@@ -7,6 +7,7 @@
 ## 基线
 
 - `baseline_commit` 统一为 CPS 只读参考仓库的固定基线：`d77c3b968285698529cf97c7f0f97b286d7a2a9c`
+- X10 依 Owner 指定的短剧 tag `v8.2.18` 取证；登记时使用 peeled commit `0ec20c4ee08b4b007e773feab811703a59ac3048`，不使用 annotated tag object ID。
 - CPS 只读参考路径：`/Users/chenweifeng/Documents/产品原型及文档/cps项目/cps-admin-v811-search-ux`（详见仓库根 `CLAUDE.md`）
 
 ### X 系列上线加固参考基线（2026-08-26）
@@ -150,6 +151,7 @@ P1-05A 只登记从 CPS 提取的数据库**模式证据**；没有字节复制�
 | `buildDramaPageEntries`/`buildMainPageEntries`/`buildSitemapFamily` → `createSitemapFamilyBuilder` | `src/lib/sitemap.ts` | `157-205,260-310,420-444,476-484,640-696` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | 仅保留首页与 Article 详情页集合、10,000 分片和 PG Date lastmod；DB 层 PromoLink 非空只做预过滤，每行仍调用冻结的 `isPromoReady`/发布状态谓词；URL 直接复用冻结 `buildArticlePath`，删除 blog/Category/Tag/北斗分支 | Codex |
 | `enqueueSitemapRefresh` | `src/lib/sitemap-refresh-enqueue.ts` | `1-57` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | 保留 pending/processing coalesce 意图；CPS BatchTask 改接 GenericTask 单一 global scope，并用 PostgreSQL advisory transaction lock 消除并发重复；关闭 feature flag 时不建任务，不搬旧 stale-recovery | Codex |
 | `handleSitemapRefresh` → `createSitemapRefreshHandler` | `worker/handlers/sitemap-refresh.ts` | `1-70` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | 保留有效文件锁 coalesced success、35 分钟陈旧锁按 runId 释放后仅重试一次、失败保留旧版本；改为 GenericTask `TaskHandler` outcome 并复用 runtime lease/heartbeat/fencing/过期回收 | Codex |
+| `emitWorkerTaskFailure` / `createWorkerFailureWebhookReporter` 旁路失败隔离模式 | `scripts/cps-daily-backup.sh` | `25-53,139-152` | `0ec20c4ee08b4b007e773feab811703a59ac3048` | `PATTERN_ONLY` | 只借“耐久事实先成立，可观测旁路失败不改写主流程结论”的事故验证模式，没有复制 shell 代码；小说仓改为 finalize/recovery commit 后的脱敏 JSON stderr + 可选 HTTP webhook。冻结 tag 中不存在 `cps-health-alert.sh`，故 30 分钟冷却、仅 2xx 推进和超时重试均依本次 Owner 合同原创实现，不虚假登记为该 tag 搬运；不搬标签多语、北斗或飞书逻辑 | Codex |
 | `isLocalBaseUrl` / smoke 参数、报告与公开 URL 检查骨架 → `scripts/admin-e2e-smoke.ts` | `scripts/changdu-admin-e2e-smoke.ts` | `65-129,156-190,358-449` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | 保留 localhost 安全闸、独立 CLI、JSON 报告/失败证据与公开 URL HTTP 断言；删除 Changdu 登录/同步/批量生成语义，改为用户显式传入小说公开路径；为不破坏仓库既有“无浏览器截图依赖”契约，Puppeteer 驱动改为 Node 原生 `fetch`，证据路径收紧到 `/tmp` | Codex |
 | `pollTask` → `scripts/admin-e2e-smoke.ts` | `scripts/changdu-admin-e2e-smoke.ts` | `275-294` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | 保留 3 秒轮询、有界超时与同源 credential fetch；端点改为仓库现有 `/api/admin/credential-tasks/status`，终态改为小说任务 `completed/completed_with_errors/failed/disabled`，驱动改为可注入的 Node `fetch`，不虚构尚不存在的通用 GenericTask 路由 | Codex |
 | `assertNoForbiddenFlags` / `/tmp` 路径闸 / `DATABASE_URL` 交叉校验 / `scrub` → `scripts/lib/acceptance-safety.ts` | `scripts/changdu-preview-catalog-acceptance-cli.ts` | `77-179,204-232` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | 保留 allowlist 参数、凭证类 flag 拒绝、输出脱敏和 DB 目标交叉校验模式；SQLite 文件路径匹配改为 PostgreSQL `DATABASE_URL` SHA-256 指纹定时比较，原始 URL 不进 argv/报告；补 symlink escape 拒绝 | Codex |

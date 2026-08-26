@@ -69,6 +69,7 @@ export interface TaskItemCounts {
 
 export interface RecoveryResult {
   family: TaskFamily;
+  taskType: string;
   itemId: string;
   taskId: string;
   action: "requeued" | "failed";

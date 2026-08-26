@@ -441,12 +441,26 @@ describe.skipIf(!enabled).sequential("P1-07 PostgreSQL 16 runtime", () => {
     });
     const recovery = await recoverExpiredItem(prisma, {
       family: "generic", taskTypes: ["runtime.test"], maxAttemptsByType: { "runtime.test": 3 },
+      workerId: "recovery-worker",
     });
     expect(recovery?.action).toBe("failed");
     const item = await prisma.genericTaskItem.findUniqueOrThrow({ where: { id: task.items[0].id } });
     const parent = await prisma.genericTask.findUniqueOrThrow({ where: { id: task.id } });
     expect(item.status).toBe("failed");
     expect(parent.status).toBe("failed");
+    await expect(prisma.operationAudit.findFirstOrThrow({
+      where: {
+        action: "task_item.failed",
+        entityType: "generic_task_item",
+        entityId: task.items[0].id,
+      },
+    })).resolves.toMatchObject({
+      actorType: "worker",
+      actorId: "recovery-worker",
+      taskType: "runtime.test",
+      taskId: task.id,
+      reason: "stale_processing",
+    });
   });
 
   it("recovers after a real worker child process is killed and restarted", async () => {
