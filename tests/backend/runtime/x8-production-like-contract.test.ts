@@ -15,6 +15,7 @@ const proxyHeaders = read("infra/production-like/nginx/snippets/proxy-headers.co
 const launcher = read("scripts/x8-production-like.sh");
 const envHelper = read("scripts/lib/x8-production-like-env.sh");
 const dockerignore = read(".dockerignore");
+const acceptanceReport = read("docs/operations/X8_LOCAL_PRODUCTION_LIKE_ACCEPTANCE_2026-08-26.md");
 
 describe("X8 local production-like contracts", () => {
   it("extends rather than changing the frozen four-service base topology", () => {
@@ -30,9 +31,27 @@ describe("X8 local production-like contracts", () => {
   });
 
   it("keeps local evidence and upstream samples out of the production image context", () => {
-    for (const path of [".tmp", "node_modules", "test-results", "tests", "docs", "artifacts", "output"]) {
+    for (const path of [
+      ".tmp",
+      "node_modules",
+      "test-results",
+      "tests",
+      "docs",
+      "artifacts",
+      "output",
+      ".playwright-cli",
+    ]) {
       expect(dockerignore.split(/\r?\n/)).toContain(path);
     }
+  });
+
+  it("keeps the durable acceptance report free of credential-shaped material", () => {
+    expect(acceptanceReport).not.toMatch(/postgres(?:ql)?:\/\//i);
+    expect(acceptanceReport).not.toMatch(/otpauth:\/\//i);
+    expect(acceptanceReport).not.toMatch(/-----BEGIN [A-Z ]+-----/);
+    expect(acceptanceReport).not.toMatch(/[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{10,}/);
+    expect(acceptanceReport).not.toMatch(/https?:\/\/[^/\s:@]+:[^@\s/]+@/);
+    expect(acceptanceReport).not.toMatch(/\b[A-Z0-9]{4}(?:-[A-Z0-9]{4}){2}\b/);
   });
 
   it("loads the X2 PostgreSQL runtime configuration and keeps backup credentials narrow", () => {
