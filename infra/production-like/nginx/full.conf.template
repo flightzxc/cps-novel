@@ -1,0 +1,119 @@
+user nginx;
+worker_processes auto;
+error_log /dev/stderr notice;
+pid /var/run/nginx.pid;
+
+events {
+    worker_connections 2048;
+}
+
+http {
+    include /etc/nginx/mime.types;
+    default_type application/octet-stream;
+    sendfile on;
+    tcp_nopush on;
+    keepalive_timeout 65;
+    server_tokens off;
+
+    log_format x8_json escape=json
+        '{"time":"$time_iso8601","remote_addr":"$remote_addr","request":"$request",'
+        '"status":$status,"bytes":$body_bytes_sent,"request_time":$request_time,'
+        '"upstream_time":"$upstream_response_time","limit_req":"$limit_req_status",'
+        '"limit_conn":"$limit_conn_status","user_agent":"$http_user_agent"}';
+    access_log /dev/stdout x8_json;
+
+    gzip on;
+    gzip_vary on;
+    gzip_min_length 1024;
+    gzip_types text/plain text/css application/json application/javascript application/xml image/svg+xml;
+
+    include /etc/nginx/x8-source/snippets/limit-zones.conf;
+    limit_req_status 429;
+    limit_conn_status 429;
+
+    upstream app_backend {
+        server web:3000;
+        keepalive 32;
+    }
+
+    server {
+        listen 80;
+        server_name __X8_DOMAIN__;
+        return 308 https://$host$request_uri;
+    }
+
+    server {
+        listen 443 ssl;
+        http2 on;
+        server_name __X8_DOMAIN__;
+
+        ssl_certificate /etc/nginx/tls/__X8_DOMAIN__.pem;
+        ssl_certificate_key /etc/nginx/tls/__X8_DOMAIN__-key.pem;
+        ssl_protocols TLSv1.2 TLSv1.3;
+        ssl_session_cache shared:X8TLS:10m;
+        ssl_session_timeout 1d;
+        ssl_session_tickets off;
+
+        client_max_body_size 2m;
+        include /etc/nginx/x8-source/snippets/security-headers.conf;
+
+        location ^~ /_next/static/ {
+            include /etc/nginx/x8-source/snippets/proxy-headers.conf;
+            proxy_hide_header Cache-Control;
+            add_header Cache-Control "public, max-age=31536000, immutable" always;
+            include /etc/nginx/x8-source/snippets/security-headers.conf;
+            proxy_pass http://app_backend;
+        }
+
+        location = /robots.txt {
+            include /etc/nginx/x8-source/snippets/proxy-headers.conf;
+            proxy_hide_header Cache-Control;
+            add_header Cache-Control "no-store" always;
+            include /etc/nginx/x8-source/snippets/security-headers.conf;
+            proxy_pass http://app_backend;
+        }
+
+        location = /sitemap.xml {
+            include /etc/nginx/x8-source/snippets/proxy-headers.conf;
+            proxy_hide_header Cache-Control;
+            add_header Cache-Control "no-store" always;
+            include /etc/nginx/x8-source/snippets/security-headers.conf;
+            proxy_pass http://app_backend;
+        }
+
+        location ^~ /sitemap/ {
+            include /etc/nginx/x8-source/snippets/proxy-headers.conf;
+            proxy_hide_header Cache-Control;
+            add_header Cache-Control "no-store" always;
+            include /etc/nginx/x8-source/snippets/security-headers.conf;
+            proxy_pass http://app_backend;
+        }
+
+        location ^~ /api/ {
+            include /etc/nginx/x8-source/snippets/proxy-headers.conf;
+            proxy_hide_header Cache-Control;
+            add_header Cache-Control "no-store" always;
+            include /etc/nginx/x8-source/snippets/security-headers.conf;
+            proxy_pass http://app_backend;
+        }
+
+        include /etc/nginx/x8-source/snippets/capacity-locations.conf;
+
+        location ~ ^/(?:login|logout|two-factor|novels|channel-accounts|catalog-sync|promo-links|settings|tags|tasks)(?:/|$) {
+            include /etc/nginx/x8-source/snippets/proxy-headers.conf;
+            proxy_hide_header Cache-Control;
+            add_header Cache-Control "no-store" always;
+            include /etc/nginx/x8-source/snippets/security-headers.conf;
+            proxy_pass http://app_backend;
+        }
+
+        location ^~ /dev-preview/ {
+            return 404;
+        }
+
+        location / {
+            include /etc/nginx/x8-source/snippets/proxy-headers.conf;
+            proxy_pass http://app_backend;
+        }
+    }
+}

@@ -1,0 +1,30 @@
+user nginx;
+worker_processes auto;
+error_log /dev/stderr notice;
+pid /var/run/nginx.pid;
+
+events {
+    worker_connections 1024;
+}
+
+http {
+    include /etc/nginx/mime.types;
+    default_type application/octet-stream;
+    access_log /dev/stdout combined;
+    sendfile on;
+
+    upstream app_backend {
+        server web:3000;
+        keepalive 16;
+    }
+
+    server {
+        listen 80;
+        server_name __X8_DOMAIN__;
+
+        location / {
+            include /etc/nginx/x8-source/snippets/proxy-headers.conf;
+            proxy_pass http://app_backend;
+        }
+    }
+}

@@ -1,0 +1,95 @@
+services:
+  postgres:
+    entrypoint: ["/bin/bash", "/opt/cps-novel-x8/postgres-entrypoint.sh"]
+    command: ["postgres", "-c", "config_file=/etc/postgresql/postgresql.conf", "-c", "listen_addresses=*"]
+    environment:
+      P1_06_WAL_ARCHIVE_DIR: /var/lib/postgresql/wal-archive
+    volumes:
+      - wal_archive:/var/lib/postgresql/wal-archive
+      - ./infra/postgres/pitr/postgresql.conf.example:/etc/postgresql/postgresql.conf:ro
+      - ./infra/production-like/postgres-entrypoint.sh:/opt/cps-novel-x8/postgres-entrypoint.sh:ro
+      - ./infra/production-like/launch-day-health-checks.sql:/opt/cps-novel-x8/launch-day-health-checks.sql:ro
+      - ./scripts/db/archive-wal.sh:/app/scripts/db/archive-wal.sh:ro
+
+  web:
+    ports: !reset []
+    networks:
+      - edge
+      - runtime
+
+  nginx:
+    image: ${X8_NGINX_IMAGE:-nginx:1.28.0-alpine}
+    restart: unless-stopped
+    command: ["nginx", "-g", "daemon off;", "-c", "/etc/nginx/x8/active.conf"]
+    depends_on:
+      web:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:${X8_HTTP_PORT:-80}:80"
+      - "127.0.0.1:${X8_HTTPS_PORT:-443}:443"
+    volumes:
+      - ${X8_NGINX_RUNTIME_DIR:?X8_NGINX_RUNTIME_DIR is required}:/etc/nginx/x8:ro
+      - ./infra/production-like/nginx:/etc/nginx/x8-source:ro
+      - ${X8_TLS_DIR:?X8_TLS_DIR is required}:/etc/nginx/tls:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-check-certificate -qO- https://127.0.0.1/api/health >/dev/null 2>&1 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
+    networks:
+      - edge
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+
+  backup-timer:
+    image: postgres:16.14
+    restart: unless-stopped
+    command: ["/bin/bash", "/opt/cps-novel-x8/backup-timer.sh"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PGHOST: postgres
+      PGPORT: "5432"
+      PGDATABASE: cps_novel
+      PGUSER: backup_role
+      X8_BACKUP_INTERVAL_SECONDS: ${X8_BACKUP_INTERVAL_SECONDS:-86400}
+      X8_BACKUP_RUN_ON_START: ${X8_BACKUP_RUN_ON_START:-true}
+      X8_BACKUP_OUTPUT_DIR: /backups
+      X8_BACKUP_PGPASS_SOURCE: /run/x8-secrets/backup.pgpass
+    volumes:
+      - ./scripts/db/backup-logical.sh:/opt/cps-novel-x8/backup-logical.sh:ro
+      - ./infra/production-like/backup-timer.sh:/opt/cps-novel-x8/backup-timer.sh:ro
+      - ${X8_BACKUP_DIR:?X8_BACKUP_DIR is required}:/backups
+      - ${X8_BACKUP_PGPASS_FILE:?X8_BACKUP_PGPASS_FILE is required}:/run/x8-secrets/backup.pgpass:ro
+    healthcheck:
+      test: ["CMD-SHELL", "test -f /tmp/x8-backup-last-success"]
+      interval: 30s
+      timeout: 5s
+      retries: 4
+      start_period: 90s
+    networks:
+      - runtime
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+
+networks:
+  edge:
+    name: cps_novel_x8_edge
+  runtime:
+    name: cps_novel_x8_runtime
+
+volumes:
+  postgres_data:
+    name: cps_novel_x8_postgres_data
+  sitemap_static:
+    name: cps_novel_x8_sitemap_static
+  wal_archive:
+    name: cps_novel_x8_wal_archive
