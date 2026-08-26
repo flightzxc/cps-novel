@@ -17,8 +17,10 @@ FROM dependencies AS builder
 
 COPY . .
 
+ARG NEXT_PUBLIC_BUILD_VERSION
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
+ENV NEXT_PUBLIC_BUILD_VERSION=${NEXT_PUBLIC_BUILD_VERSION}
 
 RUN npm run build
 
@@ -30,11 +32,14 @@ RUN apk add --no-cache bash libc6-compat openssl \
     && npm install --global npm@11.6.2 tsx@4.21.0
 
 RUN addgroup --system --gid 1001 nodejs \
-    && adduser --system --uid 1001 --ingroup nodejs nextjs
+    && adduser --system --uid 1001 --ingroup nodejs nextjs \
+    && mkdir -p /app/runtime/static-sitemaps \
+    && chown -R nextjs:nodejs /app/runtime
 
 ARG APP_VERSION
 ARG GIT_COMMIT
 ARG BUILD_DATE
+ARG NEXT_PUBLIC_BUILD_VERSION
 
 LABEL org.opencontainers.image.title="cps-novel" \
       org.opencontainers.image.version="${APP_VERSION}" \
@@ -56,6 +61,7 @@ COPY --from=builder --chown=nextjs:nodejs /app/tsconfig.json ./tsconfig.json
 
 RUN set -eu; \
     test -n "${APP_VERSION}"; \
+    test -n "${NEXT_PUBLIC_BUILD_VERSION}"; \
     test "${APP_VERSION}" != "latest"; \
     test "$(node -p 'require("./package.json").version')" = "${APP_VERSION}"; \
     echo "${GIT_COMMIT}" | grep -Eq '^[0-9a-f]{40}$'; \

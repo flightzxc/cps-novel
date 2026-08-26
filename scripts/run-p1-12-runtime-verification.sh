@@ -30,6 +30,7 @@ DOCKER_BUILDKIT=0 docker build --pull=false --platform linux/amd64 \
   --build-arg "APP_VERSION=$APP_VERSION" \
   --build-arg "GIT_COMMIT=$GIT_COMMIT" \
   --build-arg "BUILD_DATE=$BUILD_DATE" \
+  --build-arg "NEXT_PUBLIC_BUILD_VERSION=$NEXT_PUBLIC_BUILD_VERSION" \
   --tag "$CPS_NOVEL_APP_IMAGE" \
   "$project_root"
 
@@ -62,11 +63,11 @@ metadata="$(docker run --rm --pull never --network none --entrypoint node "$CPS_
 echo "IMAGE_METADATA=PASS"
 
 "${compose[@]}" exec -T web node -e '
-  const required = ["DATABASE_URL", "APP_VERSION", "GIT_COMMIT", "TOTP_ENCRYPTION_KEY", "CHANNEL_CREDENTIAL_ENCRYPTION_KEY_V1", "CHANNEL_CREDENTIAL_FINGERPRINT_KEY"];
+  const required = ["DATABASE_URL", "APP_VERSION", "GIT_COMMIT", "NEXT_PUBLIC_BUILD_VERSION", "SITE_URL", "SITEMAP_STATIC_DIR", "TRACKING_HASH_SALT", "TZ", "TOTP_ENCRYPTION_KEY", "CHANNEL_CREDENTIAL_ENCRYPTION_KEY_V1", "CHANNEL_CREDENTIAL_FINGERPRINT_KEY"];
   if (required.some((key) => !process.env[key])) process.exit(1);
 ' >/dev/null
 "${compose[@]}" exec -T worker node -e '
-  const required = ["DATABASE_URL", "CHANNEL_CREDENTIAL_ENCRYPTION_KEY_V1", "CHANNEL_CREDENTIAL_FINGERPRINT_KEY"];
+  const required = ["DATABASE_URL", "SITE_URL", "SITEMAP_STATIC_DIR", "TZ", "WORKER_TASK_ALLOWLIST", "CHANNEL_CREDENTIAL_ENCRYPTION_KEY_V1", "CHANNEL_CREDENTIAL_FINGERPRINT_KEY"];
   const forbidden = ["TOTP_ENCRYPTION_KEY"];
   if (required.some((key) => !process.env[key]) || forbidden.some((key) => key in process.env)) process.exit(1);
 ' >/dev/null
@@ -79,15 +80,33 @@ echo "IMAGE_METADATA=PASS"
     /DECRYPT.*KEY/,
   ];
   const keys = Object.keys(process.env);
-  if (!process.env.DATABASE_URL || forbidden.some((pattern) => keys.some((key) => pattern.test(key)))) process.exit(1);
+  const required = ["DATABASE_URL", "SITE_URL", "TZ"];
+  if (required.some((key) => !process.env[key]) || forbidden.some((pattern) => keys.some((key) => pattern.test(key)))) process.exit(1);
 ' >/dev/null
 echo "PROCESS_SECRET_ISOLATION=PASS"
+
+shared_sitemap_probe=".p1-12-shared-volume-$GIT_COMMIT"
+"${compose[@]}" exec -T worker node -e '
+  const fs = require("node:fs");
+  const path = require("node:path");
+  const target = path.join(process.env.SITEMAP_STATIC_DIR, process.argv[1]);
+  fs.writeFileSync(target, "worker-uid=" + process.getuid(), { mode: 0o644 });
+' "$shared_sitemap_probe"
+"${compose[@]}" exec -T web node -e '
+  const fs = require("node:fs");
+  const path = require("node:path");
+  const target = path.join(process.env.SITEMAP_STATIC_DIR, process.argv[1]);
+  if (fs.readFileSync(target, "utf8") !== "worker-uid=1001") process.exit(1);
+  fs.unlinkSync(target);
+' "$shared_sitemap_probe"
+echo "SITEMAP_SHARED_VOLUME_UID_1001=PASS"
 
 all_logs="$("${compose[@]}" logs --no-color 2>/dev/null || true)"
 for secret_path in \
   "$P1_12_SECRET_DIR/totp.key" \
   "$P1_12_SECRET_DIR/credential-v1.key" \
   "$P1_12_SECRET_DIR/credential-fingerprint.key" \
+  "$P1_12_SECRET_DIR/tracking-hash-salt.key" \
   "$P1_12_SECRET_DIR/migration_owner.password" \
   "$P1_12_SECRET_DIR/web_app.password" \
   "$P1_12_SECRET_DIR/worker_app.password" \

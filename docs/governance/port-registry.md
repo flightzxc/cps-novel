@@ -105,6 +105,7 @@ P1-05A 只登记从 CPS 提取的数据库**模式证据**；没有字节复制�
 | `buildHreflangAlternates` | `src/lib/seo-utils.ts` | `127-135` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | `SUPPORTED_SITE_LOCALES` 换成 `SITE_LOCALES`；仍是同路径 locale 前缀 map，不是跨 Novel 兄弟页 | Cursor |
 | `shouldNoIndex` | `src/lib/seo-utils.ts` | `139-141` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `COPY` | 原样复制 | Cursor |
 | `normalizeMetadataTitle` | `src/lib/seo-meta-generator.ts` | `82-94` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `COPY` | 原样复制 | Cursor |
+| 生产 `.env.example` 分节模板形态 | `.env.example` | `1-120` | `0ec20c4ee08b4b007e773feab811703a59ac3048` | `PATTERN_ONLY` | 只借鉴“按配置域分节 + secret 留空 + 运维注释”形态；重写为 PostgreSQL 多角色 URL、7 个 Docker password file、独立加密/fingerprint key、compose 构建元数据、五组双闸与分阶段 Worker allowlist；不搬 SQLite 路径、短剧域名、NextAuth/Turnstile、北斗或飞书配置 | Codex |
 | `generateSeoMeta` | `src/lib/seo-meta-generator.ts` | `103-126` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | entity 从 drama/tag/category 收成 novel/home/collection；删 Short Dramas 默认文案 | Cursor |
 | `truncateDescription` | `src/lib/seo-templates/_shared.ts` | `7-15` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `COPY` | 原样复制 | Cursor |
 | `buildCanonical` | `src/lib/seo-templates/_shared.ts` | `21-26` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | origin 经 getSiteUrl，无 PulseDrama 默认域 | Cursor |
