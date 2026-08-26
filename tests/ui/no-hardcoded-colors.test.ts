@@ -17,14 +17,15 @@ const SCAN_ROOTS = ["../../src/components", "../../src/features/public-ui", "../
  * 假数据目录是唯一内容豁免：它生成的是**内容图片**（内联占位封面的渐变），
  * 属于「封面是全站唯一高饱和元素」里的封面，不是界面颜色。
  *
- * `icon.tsx` 是 `next/og` ImageResponse 画布，不能解析 CSS 变量 / Tailwind，
- * 色值必须内联；token 对齐写在该文件注释里，不走组件扫描。
+ * `brand-mark-image.tsx` 画的是 `next/og` ImageResponse 画布，Satori 不解析
+ * CSS 变量 / Tailwind，色值必须内联；token 对齐写在该文件注释里，不走组件扫描。
+ * 两个图标路由（`icon.tsx` / `apple-icon.tsx`）只调用它，本身不含色值，因此不在豁免名单里。
  *
  * 🔴 豁免按仓库相对路径精确匹配（而非 basename）：按 basename 匹配会让任何目录下
- * 同名的 `icon.tsx` 一并逃逸扫描，豁免范围必须锁定到这一个文件。
+ * 同名的 `brand-mark-image.tsx` 一并逃逸扫描，豁免范围必须锁定到这一个文件。
  */
 const EXEMPT_DIRS = ["fixtures"];
-const EXEMPT_FILES = ["src/app/icon.tsx"];
+const EXEMPT_FILES = ["src/app/_components/brand-mark-image.tsx"];
 
 // 见 design-tokens.test.ts 的同一处注释：jsdom 的全局 URL 与 fileURLToPath 不兼容
 const here = dirname(fileURLToPath(import.meta.url));

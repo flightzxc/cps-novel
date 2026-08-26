@@ -52,8 +52,18 @@
 
 ### 明确没做的（本轮范围外）
 
-- root 404 / error 两个新页面形态**没有基准图**，`tests/ui/baselines/README.md` 的清单仍是 13 张；
 - 错误页没有使用 `--novel-danger`：错误态与下架态的区分靠「重试」这个纸色主动作，不靠色彩。
+
+### 待办登记 · U4-TODO-01 · root 404 / error 缺基准图
+
+- **现状**：`PublicStatusPanel` 的 `bare` 形态（root `not-found` / `error` / `global-error`）没有基准图；
+  `tests/ui/baselines/README.md` 的清单仍是 13 张，同族的 `unavailable` / `takedown` 都有图。
+  清单测试只拦「夹带未登记的图」，所以缺图不会让 `test:ui` 失败。
+- **风险**：这三个形态的版面改动没有可比对的快照，评审时也没有图可看。
+- **为什么本轮不做**：补图需要临时承载路由 + 本地起服务截图，属于视觉回归体系的完善项，不是上线阻断项。
+- **触发处理时间点**：**在 `dev-preview` 树里加错误态展示路由时一并补**——那时同一条路由还能顺便验证
+  `DEV_PREVIEW_ENABLED` 关闭态确实 404。
+- **建议 Owner**：Claude（`tests/ui/` 与 `src/app/` 独占写入）。
 
 ## 2026-08-06 · P1-15 收口文档与 P2 交接输入包
 
