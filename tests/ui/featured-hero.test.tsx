@@ -43,7 +43,7 @@ function entries(list = MOCK_FEATURED_LIST) {
 
 function renderHome(featuredList = entries()) {
   return render(
-    <HomeScreen featuredList={featuredList} novels={MOCK_NOVEL_CARDS} />,
+    <HomeScreen locale="en" featuredList={featuredList} novels={MOCK_NOVEL_CARDS} />,
   );
 }
 

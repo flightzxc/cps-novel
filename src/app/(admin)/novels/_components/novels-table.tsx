@@ -6,25 +6,50 @@ import { formatDateTime, taskStatusLabel } from "@/features/admin-ui/content-vie
 import { ExceptionBadges, NovelStatusBadge } from "./content-badges";
 
 /**
+ * Optional selection column, driven entirely by the caller — this component
+ * never owns selection state itself. Omitting this prop (the default for
+ * every call site until PR-C3) renders exactly the markup it always has: no
+ * checkbox column, no `<input>` anywhere, which is what
+ * `tests/ui/admin-novels-list.test.tsx`'s "每行只提供查看入口，不提供任何写操作控件"
+ * still asserts for that zero-prop call.
+ */
+export type NovelsTableSelection = {
+  readonly selected: ReadonlySet<string>;
+  readonly onToggle: (novelId: string) => void;
+  /** True disables (not hides) that row's checkbox — a row mid-request, for instance. */
+  readonly disabled?: (novel: AdminNovelListItemView) => boolean;
+};
+
+/**
  * Novel list table.
  *
  * Layout is CPS parity with `dramas-list-client.tsx:199-360`: `bg-gray-50`
  * header, `divide-y divide-gray-100` body, `px-4 py-3` cells, a two-line
  * identity cell (name over id) and a right-aligned actions column.
  *
- * Two CPS features are deliberately absent, and their absence is the design:
+ * One CPS feature is deliberately still absent:
  *
- * - **No selection checkboxes.** CPS uses them to drive batch classify, batch
- *   promo retry and delete. P2-04 implements no mutation, so a checkbox column
- *   would be a control that selects rows for nothing.
  * - **No edit or delete icon.** The actions column holds a single "查看" link.
+ *
+ * The other — selection checkboxes — is no longer absent as of PR-C3: P2-04's
+ * original header here explained the omission as "P2-04 implements no
+ * mutation, so a checkbox column would be a control that selects rows for
+ * nothing." PR-C3 is that mutation (batch publish), so the column exists now,
+ * strictly opt-in via {@link NovelsTableSelection} — see that type's doc
+ * comment for why every pre-existing call site is unaffected.
  *
  * The columns themselves are `CPS_PARITY_ADAPTED`. CPS shows 平台/题材/分类/集数;
  * a novel's operational questions are different — how many chapters actually
  * landed versus what upstream claims, how many are materialised for preview, and
  * whether the last sync left an exception behind.
  */
-export function NovelsTable({ novels }: { novels: readonly AdminNovelListItemView[] }) {
+export function NovelsTable({
+  novels,
+  selection,
+}: {
+  novels: readonly AdminNovelListItemView[];
+  selection?: NovelsTableSelection;
+}) {
   if (novels.length === 0) {
     return (
       <div className="rounded-xl border border-gray-200 bg-white px-6 py-16 text-center text-gray-400 shadow-sm">
@@ -38,6 +63,7 @@ export function NovelsTable({ novels }: { novels: readonly AdminNovelListItemVie
       <table className="w-full text-sm">
         <thead className="border-b border-gray-200 bg-gray-50">
           <tr>
+            {selection && <th className="w-10 px-4 py-3" aria-hidden="true" />}
             <th className="px-4 py-3 text-left font-medium text-gray-500">书目</th>
             <th className="px-4 py-3 text-left font-medium text-gray-500">语种</th>
             <th className="px-4 py-3 text-left font-medium text-gray-500">状态</th>
@@ -52,6 +78,19 @@ export function NovelsTable({ novels }: { novels: readonly AdminNovelListItemVie
         <tbody className="divide-y divide-gray-100">
           {novels.map((novel) => (
             <tr key={novel.novelId} className="hover:bg-gray-50">
+              {selection && (
+                <td className="px-4 py-3">
+                  <input
+                    type="checkbox"
+                    aria-label={`选择 ${novel.title}`}
+                    data-testid={`novel-select-${novel.novelId}`}
+                    checked={selection.selected.has(novel.novelId)}
+                    disabled={selection.disabled?.(novel) ?? false}
+                    onChange={() => selection.onToggle(novel.novelId)}
+                    className="h-4 w-4 rounded border-gray-300"
+                  />
+                </td>
+              )}
               <td className="px-4 py-3">
                 <p className="font-medium text-gray-900">{novel.title}</p>
                 <p className="text-xs text-gray-400">{novel.businessId}</p>

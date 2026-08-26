@@ -3,7 +3,6 @@ import type { NavItem } from "@/features/public-ui/types";
 import type { SiteLocale } from "@/lib/locale/locale-canonical";
 import { getPublicT, loadMessages } from "@/lib/locale/messages";
 import { MessagesProvider } from "@/lib/locale/messages/MessagesProvider";
-import { PUBLIC_SITE_LOCALE } from "@/lib/site/locale-label";
 import { SiteFooter } from "./SiteFooter";
 import { SiteHeader } from "./SiteHeader";
 
@@ -20,12 +19,18 @@ export interface SiteChrome {
  *
  * 与路由无关——所有链接由调用方注入。跳过导航的锚点放在最前面，键盘与读屏用户
  * 第一个 Tab 就能直接进正文。
+ *
+ * 🔴 P0-S14：`locale` 是必填项，没有默认值。这不是风格选择——本仓库首发只有
+ * `en` 一个可发布语种，若这里留一个 `= "en"` 的默认值，第二语种接入那天，
+ * 只要有一个调用方忘了传 `locale`，页面会在不报错的情况下裸奔出英文文案，
+ * 这正是 CPS `v6.0.4` 事故的形状（语种登记有漏洞，事故要等上线后才现形）。
+ * 必填 prop 把这类遗漏从「运行时才发现」变成「编译不过」。
  */
 export function SiteShell({
   children,
   chrome = {},
   headerOverlay = false,
-  locale = PUBLIC_SITE_LOCALE,
+  locale,
 }: {
   children: ReactNode;
   chrome?: SiteChrome;
@@ -34,7 +39,7 @@ export function SiteShell({
    * Hero 因此能从视口最上沿开始出血。滚出 Hero 后页头自动恢复底色与分隔线。
    */
   headerOverlay?: boolean;
-  locale?: SiteLocale;
+  locale: SiteLocale;
 }) {
   const messages = loadMessages(locale);
   const t = getPublicT(locale);

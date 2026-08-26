@@ -1,5 +1,10 @@
 import type { AdminContentExceptionCode } from "@/contracts";
-import type { LabelKind, NovelChapterStatus, NovelStatus } from "@/domain/database-statuses";
+import type {
+  LabelKind,
+  NovelChapterStatus,
+  NovelSourceItemStatus,
+  NovelStatus,
+} from "@/domain/database-statuses";
 
 /**
  * Presentation vocabulary for the content-management screens.
@@ -27,6 +32,24 @@ export const CHAPTER_STATUS_BADGES: Readonly<Record<NovelChapterStatus, StatusBa
     locked: { label: "锁定", color: "bg-gray-100 text-gray-800" },
     stale: { label: "上游过期", color: "bg-amber-100 text-amber-800" },
     withdrawn: { label: "已撤回", color: "bg-red-100 text-red-800" },
+  });
+
+/**
+ * Source-item vocabulary (P0-S13, `/catalog-sync`).
+ *
+ * Labels are written against `DATABASE_STATUS_SEMANTICS.novel_source_item`
+ * (`src/domain/database-statuses.ts`), not guessed: `pending` is "mirrored but
+ * not linked to a canonical Novel" — i.e. eligible for content creation —
+ * `linked` already has its Novel/Article pair, `ignored` was deliberately
+ * excluded without deleting the mirror, and `stale` disappeared from a
+ * trustworthy upstream response and is excluded from ordinary selection.
+ */
+export const NOVEL_SOURCE_ITEM_STATUS_BADGES: Readonly<Record<NovelSourceItemStatus, StatusBadge>> =
+  Object.freeze({
+    pending: { label: "待创建", color: "bg-blue-100 text-blue-800" },
+    linked: { label: "已建立书目", color: "bg-green-100 text-green-800" },
+    ignored: { label: "已忽略", color: "bg-gray-100 text-gray-800" },
+    stale: { label: "上游已过期", color: "bg-amber-100 text-amber-800" },
   });
 
 /**

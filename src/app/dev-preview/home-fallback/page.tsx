@@ -8,6 +8,7 @@ import {
   devPreviewFirstChapterPath,
   devPreviewNovelPath,
 } from "@/features/public-ui/fixtures/preview-paths";
+import { PUBLIC_SITE_LOCALE } from "@/lib/site/locale-label";
 
 /**
  * MOCK_ONLY 预览：首页的**回落形态**。
@@ -18,7 +19,8 @@ import {
 export default function HomeFallbackPreviewPage() {
   return (
     <HomeScreen
-      chrome={mockChrome("home")}
+      locale={PUBLIC_SITE_LOCALE}
+      chrome={mockChrome(PUBLIC_SITE_LOCALE, "home")}
       featuredList={MOCK_FEATURED_LIST_NO_HERO.map((novel) => ({
         novel,
         detailHref: devPreviewNovelPath(),

@@ -362,7 +362,7 @@ describe("novel segment not-found.tsx", () => {
 
 describe("empty featuredList contract", () => {
   it("HomeScreen with an empty featured list has no hero, no Featured, and no skeleton", () => {
-    const { container } = render(<HomeScreen featuredList={[]} novels={[CARD]} browseAllHref="/browse" />);
+    const { container } = render(<HomeScreen locale="en" featuredList={[]} novels={[CARD]} browseAllHref="/browse" />);
     expect(screen.queryByTestId("featured-hero")).toBeNull();
     expect(screen.queryByText("Featured")).toBeNull();
     expect(container.querySelector('[class*="skeleton"]')).toBeNull();

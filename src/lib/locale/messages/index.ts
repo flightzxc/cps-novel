@@ -1,5 +1,4 @@
 import type { SiteLocale } from "@/lib/locale/locale-canonical";
-import { PUBLIC_SITE_LOCALE } from "@/lib/site/locale-label";
 
 import { en, type Messages } from "./en";
 import ar from "./ar";
@@ -117,6 +116,14 @@ export function createTranslator(messages: Messages): Translator {
   return (key, vars) => t(messages, key, vars);
 }
 
-export function getPublicT(locale: SiteLocale = PUBLIC_SITE_LOCALE): Translator {
+/**
+ * 🔴 P0-S14：`locale` 没有默认值，故意的。曾经的 `= PUBLIC_SITE_LOCALE`
+ * 默认参数，让 17 处调用点悄悄靠一个隐式常量拿到英文——第二语种接入那天，
+ * 这些调用点一个都不会报错，只会继续吐英文文案，直到有人肉眼发现页面语种
+ * 不对。这正是 CPS `v6.0.4` 事故的形状（登记链路有缺口，事故要等上线后才
+ * 现形）。去掉默认值以后，任何调用点漏传 locale 就是编译错误，不是运行时
+ * 静默降级。
+ */
+export function getPublicT(locale: SiteLocale): Translator {
   return createTranslator(loadMessages(locale));
 }

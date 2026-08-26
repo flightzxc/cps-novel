@@ -3,6 +3,8 @@ import type { ReactNode } from "react";
 import type { AdminSessionView } from "@/contracts";
 import { AdminSidebar } from "@/features/admin-ui/sidebar";
 
+import { logoutAction } from "../../(admin-auth)/_lib/logout-action";
+
 const BUILD_VERSION = process.env.NEXT_PUBLIC_BUILD_VERSION?.trim() || "v0.1.0-dev";
 
 /**
@@ -37,6 +39,14 @@ export function AdminShell({
               {session.username}
               <span className="ml-1 text-gray-400">({session.role})</span>
             </span>
+            <form action={logoutAction}>
+              <button
+                type="submit"
+                className="rounded-lg px-2 py-1 text-xs font-medium text-gray-500 hover:bg-gray-100 hover:text-gray-700"
+              >
+                退出登录
+              </button>
+            </form>
           </div>
         </header>
         <main className="px-6 py-6">{children}</main>

@@ -18,7 +18,7 @@ function openPanel() {
 
 describe("章节页 · 结构与字段边界", () => {
   it("轻量书籍归属条标出所属小说与当前试读范围", () => {
-    render(<ChapterScreen chapter={MOCK_CHAPTER} />);
+    render(<ChapterScreen locale="en" chapter={MOCK_CHAPTER} />);
 
     const bar = screen.getByTestId("book-attribution-bar");
     expect(bar.textContent).toContain(MOCK_CHAPTER.novel.title);
@@ -26,7 +26,7 @@ describe("章节页 · 结构与字段边界", () => {
   });
 
   it("试读范围的分母是可试读章数，不是总章数，也不出现全书进度百分比", () => {
-    const { container } = render(<ChapterScreen chapter={MOCK_CHAPTER} />);
+    const { container } = render(<ChapterScreen locale="en" chapter={MOCK_CHAPTER} />);
     const text = container.textContent ?? "";
 
     expect(text).toContain("Preview 1 / 3");
@@ -35,7 +35,7 @@ describe("章节页 · 结构与字段边界", () => {
   });
 
   it("渲染章号、章名与全部段落", () => {
-    render(<ChapterScreen chapter={MOCK_CHAPTER} />);
+    render(<ChapterScreen locale="en" chapter={MOCK_CHAPTER} />);
 
     expect(screen.getByText("Chapter 1")).toBeTruthy();
     expect(screen.getByRole("heading", { name: MOCK_CHAPTER.title })).toBeTruthy();
@@ -45,7 +45,7 @@ describe("章节页 · 结构与字段边界", () => {
   });
 
   it("不出现作者、字数、发布日期等分销接口不提供的字段", () => {
-    const { container } = render(<ChapterScreen chapter={MOCK_CHAPTER} />);
+    const { container } = render(<ChapterScreen locale="en" chapter={MOCK_CHAPTER} />);
     const text = container.textContent ?? "";
 
     for (const forbidden of ["作者", "字数", "发布于", "评分", "阅读量"]) {
@@ -57,13 +57,13 @@ describe("章节页 · 结构与字段边界", () => {
 
 describe("章节页 · 章节导航", () => {
   it("有上下章时渲染链接", () => {
-    render(<ChapterScreen chapter={MOCK_CHAPTER_LAST} />);
+    render(<ChapterScreen locale="en" chapter={MOCK_CHAPTER_LAST} />);
     expect(screen.getByRole("navigation", { name: "Chapter navigation" })).toBeTruthy();
     expect(screen.getByRole("link", { name: "Previous chapter" }).getAttribute("rel")).toBe("prev");
   });
 
   it("边界处不渲染无处可去的链接，改用说明文字", () => {
-    render(<ChapterScreen chapter={MOCK_CHAPTER} />);
+    render(<ChapterScreen locale="en" chapter={MOCK_CHAPTER} />);
 
     expect(screen.queryByRole("link", { name: "Previous chapter" })).toBeNull();
     expect(screen.getByText("This is the first chapter")).toBeTruthy();
@@ -71,7 +71,7 @@ describe("章节页 · 章节导航", () => {
   });
 
   it("最后一章试读时正式阅读升为主动作", () => {
-    render(<ChapterScreen chapter={MOCK_CHAPTER_LAST} />);
+    render(<ChapterScreen locale="en" chapter={MOCK_CHAPTER_LAST} />);
 
     expect(screen.getByText("That's the end of the preview on this site.")).toBeTruthy();
     expect(
@@ -80,7 +80,7 @@ describe("章节页 · 章节导航", () => {
   });
 
   it("非最后一章时正式阅读保持次动作", () => {
-    render(<ChapterScreen chapter={MOCK_CHAPTER} />);
+    render(<ChapterScreen locale="en" chapter={MOCK_CHAPTER} />);
 
     const link = screen.getByRole("link", { name: "Continue reading" });
     expect(link.className).not.toContain("bg-novel-accent");
@@ -90,7 +90,7 @@ describe("章节页 · 章节导航", () => {
 
 describe("章节页 · 阅读作用域边界", () => {
   it("只有正文阅读区在阅读作用域里", () => {
-    const { container } = render(<ChapterScreen chapter={MOCK_CHAPTER} />);
+    const { container } = render(<ChapterScreen locale="en" chapter={MOCK_CHAPTER} />);
 
     const surfaces = container.querySelectorAll(".reader");
     expect(surfaces).toHaveLength(1);
@@ -104,7 +104,7 @@ describe("章节页 · 阅读作用域边界", () => {
   });
 
   it("默认主题是跟随系统", () => {
-    render(<ChapterScreen chapter={MOCK_CHAPTER} />);
+    render(<ChapterScreen locale="en" chapter={MOCK_CHAPTER} />);
     expect(screen.getByTestId("reader-surface").getAttribute("data-reader-theme")).toBe(
       "system",
     );
@@ -113,7 +113,7 @@ describe("章节页 · 阅读作用域边界", () => {
 
 describe("阅读设置面板", () => {
   it("默认收起，点击后展开", () => {
-    render(<ChapterScreen chapter={MOCK_CHAPTER} />);
+    render(<ChapterScreen locale="en" chapter={MOCK_CHAPTER} />);
 
     expect(screen.queryByTestId("reader-settings-panel")).toBeNull();
     openPanel();
@@ -122,7 +122,7 @@ describe("阅读设置面板", () => {
   });
 
   it("四组控件齐备：主题三态 + 字号 + 行高 + 页宽", () => {
-    render(<ChapterScreen chapter={MOCK_CHAPTER} />);
+    render(<ChapterScreen locale="en" chapter={MOCK_CHAPTER} />);
     openPanel();
 
     expect(
@@ -140,7 +140,7 @@ describe("阅读设置面板", () => {
   });
 
   it("控件不是静态图形：切主题会改变阅读区的实际属性", () => {
-    render(<ChapterScreen chapter={MOCK_CHAPTER} />);
+    render(<ChapterScreen locale="en" chapter={MOCK_CHAPTER} />);
     openPanel();
 
     fireEvent.click(screen.getByRole("radio", { name: "Dark" }));
@@ -151,7 +151,7 @@ describe("阅读设置面板", () => {
   });
 
   it("控件不是静态图形：改字号 / 行高 / 页宽会改变阅读区的 CSS 变量", () => {
-    render(<ChapterScreen chapter={MOCK_CHAPTER} />);
+    render(<ChapterScreen locale="en" chapter={MOCK_CHAPTER} />);
     openPanel();
 
     fireEvent.click(screen.getByRole("radio", { name: "22" }));
@@ -165,7 +165,7 @@ describe("阅读设置面板", () => {
   });
 
   it("radio 的选中态用 aria-checked 表达", () => {
-    render(<ChapterScreen chapter={MOCK_CHAPTER} />);
+    render(<ChapterScreen locale="en" chapter={MOCK_CHAPTER} />);
     openPanel();
 
     expect(screen.getByRole("radio", { name: "Match system" }).getAttribute("aria-checked")).toBe(
@@ -178,7 +178,7 @@ describe("阅读设置面板", () => {
   });
 
   it("恢复默认把四项设置一次性还原", () => {
-    render(<ChapterScreen chapter={MOCK_CHAPTER} />);
+    render(<ChapterScreen locale="en" chapter={MOCK_CHAPTER} />);
     openPanel();
 
     fireEvent.click(screen.getByRole("radio", { name: "Dark" }));
@@ -194,7 +194,7 @@ describe("阅读设置面板", () => {
   });
 
   it("Esc 关闭面板", () => {
-    render(<ChapterScreen chapter={MOCK_CHAPTER} />);
+    render(<ChapterScreen locale="en" chapter={MOCK_CHAPTER} />);
     openPanel();
 
     fireEvent.keyDown(document, { key: "Escape" });
@@ -202,7 +202,7 @@ describe("阅读设置面板", () => {
   });
 
   it("明确告知偏好只落在本设备", () => {
-    render(<ChapterScreen chapter={MOCK_CHAPTER} />);
+    render(<ChapterScreen locale="en" chapter={MOCK_CHAPTER} />);
     openPanel();
     // 无账号体系，跨设备不同步是预期行为，面板要说清楚而不是让读者自己发现。
     expect(screen.getByText("Settings are saved on this device and do not sync across devices.")).toBeTruthy();
@@ -213,6 +213,7 @@ describe("阅读设置 · P1-11 接入点", () => {
   it("接受外部灌入的初值（P1-11 从本地存储读回）", () => {
     render(
       <ChapterScreen
+        locale="en"
         chapter={MOCK_CHAPTER}
         initialSettings={{ theme: "dark", fontSizeIndex: 3 }}
       />,
@@ -225,7 +226,7 @@ describe("阅读设置 · P1-11 接入点", () => {
 
   it("向外抛出变更（P1-11 的持久化回调）", () => {
     const onSettingsChange = vi.fn();
-    render(<ChapterScreen chapter={MOCK_CHAPTER} onSettingsChange={onSettingsChange} />);
+    render(<ChapterScreen locale="en" chapter={MOCK_CHAPTER} onSettingsChange={onSettingsChange} />);
 
     openPanel();
     fireEvent.click(screen.getByRole("radio", { name: "Dark" }));
@@ -238,7 +239,7 @@ describe("阅读设置 · P1-11 接入点", () => {
   it("没有 Provider 时不自行持久化偏好——那是 Provider 的职责", () => {
     const setItem = vi.spyOn(Storage.prototype, "setItem");
 
-    render(<ChapterScreen chapter={MOCK_CHAPTER} />);
+    render(<ChapterScreen locale="en" chapter={MOCK_CHAPTER} />);
     openPanel();
     fireEvent.click(screen.getByRole("radio", { name: "Dark" }));
 

@@ -4,15 +4,16 @@ import {
   type AdminContentPageView,
   type AdminNovelListItemView,
 } from "@/contracts";
+import { findCapabilityState } from "@/features/admin-ui/capability-view";
 import { listAdminNovels } from "@/server/admin-content";
 
 import { prisma } from "../../api/admin/_lib/deps";
 import { AdminShell } from "../_components/admin-shell";
-import { sessionView } from "../_lib/page-guard";
+import { capabilityViews, sessionView } from "../_lib/page-guard";
 import { ContentCapabilityDenied } from "./_components/content-states";
 import { ContentPagination } from "./_components/content-pagination";
 import { NovelFilters } from "./_components/novel-filters";
-import { NovelsTable } from "./_components/novels-table";
+import { NovelsBatchPublish } from "./_components/novels-batch-publish";
 import { requireContentPage } from "./_lib/content-page-guard";
 
 export const dynamic = "force-dynamic";
@@ -79,7 +80,10 @@ export default async function NovelsPage({
                 labelId: params.labelId,
               }}
             />
-            <NovelsTable novels={page.items} />
+            <NovelsBatchPublish
+              novels={page.items}
+              canPublish={findCapabilityState(capabilityViews(context), "content:publish")}
+            />
             <ContentPagination
               basePath="/novels"
               params={params}

@@ -3,6 +3,7 @@ import { CoverImage } from "@/components/CoverImage";
 import { MetaList } from "@/components/MetaList";
 import { TagList } from "@/components/Tag";
 import type { NovelDetailView } from "@/features/public-ui/types";
+import type { SiteLocale } from "@/lib/locale/locale-canonical";
 import { getPublicT } from "@/lib/locale/messages";
 
 /**
@@ -23,11 +24,13 @@ import { getPublicT } from "@/lib/locale/messages";
  * 依据见 docs/p1/P1_10_VISUAL_DIRECTION.md 第五节与文末变更记录。
  */
 export function FeaturedNovel({
+  locale,
   novel,
   eyebrow,
   detailHref,
   startReadingHref,
 }: {
+  locale: SiteLocale;
   novel: NovelDetailView;
   eyebrow?: string;
   /** 详情页地址，由路由层注入 */
@@ -35,7 +38,7 @@ export function FeaturedNovel({
   /** 站内试读入口。没有可试读章节时不渲染该按钮。 */
   startReadingHref?: string;
 }) {
-  const t = getPublicT();
+  const t = getPublicT(locale);
   return (
     <section aria-labelledby="featured-title" className="pt-12 pb-4 md:pt-20 md:pb-8">
       <div className="border-t border-novel-border pt-6 md:pt-10">
