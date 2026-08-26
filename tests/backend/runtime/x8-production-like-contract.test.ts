@@ -131,11 +131,16 @@ describe("X8 local production-like contracts", () => {
 
   it("uses the real PostgreSQL two-int advisory lock signature", () => {
     const bootstrap = read("scripts/bootstrap-admin-identity.ts");
+    const foundation = read("scripts/register-moboreader-foundation.ts");
     const sitemapRefresh = read("src/lib/tasks/sitemap-refresh.ts");
     expect(bootstrap).toContain("${BOOTSTRAP_ADMIN_ADVISORY_LOCK.namespace}::int");
     expect(bootstrap).toContain("${BOOTSTRAP_ADMIN_ADVISORY_LOCK.scope}::int");
+    expect(bootstrap).toContain(")::text AS lock_result");
+    expect(foundation).toContain("pg_advisory_xact_lock(hashtextextended");
+    expect(foundation).toContain(")::text AS lock_result");
     expect(sitemapRefresh).toContain("${SITEMAP_REFRESH_ADVISORY_LOCK.namespace}::int");
     expect(sitemapRefresh).toContain("${SITEMAP_REFRESH_ADVISORY_LOCK.scope}::int");
+    expect(sitemapRefresh).toContain(")::text AS lock_result");
   });
 
   const composeAvailable = spawnSync("docker", ["compose", "version"], { stdio: "ignore" }).status === 0;

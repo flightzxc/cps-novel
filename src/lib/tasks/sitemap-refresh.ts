@@ -52,7 +52,7 @@ async function enqueueInTransaction(
     SELECT pg_advisory_xact_lock(
       ${SITEMAP_REFRESH_ADVISORY_LOCK.namespace}::int,
       ${SITEMAP_REFRESH_ADVISORY_LOCK.scope}::int
-    )
+    )::text AS lock_result
   `);
 
   const active = await tx.genericTask.findFirst({

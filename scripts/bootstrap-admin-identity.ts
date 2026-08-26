@@ -276,7 +276,7 @@ async function applyBootstrap(
       SELECT pg_advisory_xact_lock(
         ${BOOTSTRAP_ADMIN_ADVISORY_LOCK.namespace}::int,
         ${BOOTSTRAP_ADMIN_ADVISORY_LOCK.scope}::int
-      )
+      )::text AS lock_result
     `);
 
     const committed = await findCommittedBootstrap(tx, options.requestId);
