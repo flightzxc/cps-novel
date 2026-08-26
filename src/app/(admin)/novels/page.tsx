@@ -4,6 +4,7 @@ import {
   type AdminContentPageView,
   type AdminNovelListItemView,
 } from "@/contracts";
+import { AdminTimeZoneNote } from "@/features/admin-ui/time-zone-note";
 import { listAdminNovels } from "@/server/admin-content";
 
 import { prisma } from "../../api/admin/_lib/deps";
@@ -79,7 +80,10 @@ export default async function NovelsPage({
                 labelId: params.labelId,
               }}
             />
-            <NovelsTable novels={page.items} />
+            <div className="space-y-2">
+              <AdminTimeZoneNote />
+              <NovelsTable novels={page.items} />
+            </div>
             <ContentPagination
               basePath="/novels"
               params={params}

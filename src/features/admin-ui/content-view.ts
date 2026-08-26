@@ -116,6 +116,7 @@ export function taskModeLabel(value: string): string {
 export {
   ADMIN_DISPLAY_TIME_ZONE,
   ADMIN_DISPLAY_TIME_ZONE_LABEL,
+  ADMIN_TIME_ZONE_NOTE,
   formatDateTime,
 } from "./datetime";
 

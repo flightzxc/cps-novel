@@ -1,4 +1,5 @@
 import { capabilityBlockReason, findCapabilityState } from "@/features/admin-ui/capability-view";
+import { AdminTimeZoneNote } from "@/features/admin-ui/time-zone-note";
 import { MOBOREADER_CATALOG_LIMITS, resolveMoboreaderCatalogSafetyMaxPages } from "@/lib/tasks/moboreader";
 
 import { AdminShell } from "../_components/admin-shell";
@@ -72,7 +73,10 @@ export default async function CatalogSyncPage({
               safetyMaxPages={resolveMoboreaderCatalogSafetyMaxPages()}
             />
             <SourceItemFilters values={{ search: params.search, status: params.status }} />
-            <CatalogSyncClient items={page.items} contentPublish={contentPublish} />
+            <div className="space-y-2">
+              <AdminTimeZoneNote />
+              <CatalogSyncClient items={page.items} contentPublish={contentPublish} />
+            </div>
             <ContentPagination
               basePath="/catalog-sync"
               params={{ status: params.status, search: params.search }}

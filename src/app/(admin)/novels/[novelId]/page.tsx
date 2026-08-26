@@ -10,6 +10,7 @@ import {
   type ErrorEnvelope,
 } from "@/contracts";
 import { errorEnvelopeCopy } from "@/features/admin-ui/error-copy";
+import { AdminTimeZoneNote } from "@/features/admin-ui/time-zone-note";
 import { getAdminNovelDetail, listAdminNovelChapters } from "@/server/admin-content";
 
 import { prisma } from "../../../api/admin/_lib/deps";
@@ -99,6 +100,8 @@ export default async function NovelDetailPage({
       }
     >
       <div className="space-y-6">
+        <AdminTimeZoneNote />
+
         <div className="grid gap-6 lg:grid-cols-2">
           <NovelIdentityPanel novel={novel} />
           <div className="space-y-6">

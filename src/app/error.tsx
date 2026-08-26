@@ -10,7 +10,13 @@ import { PUBLIC_SITE_LOCALE } from "@/lib/site/locale-label";
  * own error.tsx). Never render `error.message` — Next strips it in production
  * and in development it can carry driver detail.
  */
-export default function ErrorPage({ error }: { error: Error & { digest?: string }; reset: () => void }) {
+export default function ErrorPage({
+  error,
+  reset,
+}: {
+  error: Error & { digest?: string };
+  reset: () => void;
+}) {
   const t = getPublicT(PUBLIC_SITE_LOCALE);
 
   useEffect(() => {
@@ -24,6 +30,8 @@ export default function ErrorPage({ error }: { error: Error & { digest?: string 
       title={t("errorPage.title")}
       body={t("errorPage.body")}
       homeLabel={t("unavailable.returnHome")}
+      retryLabel={t("errorPage.retry")}
+      onRetry={reset}
     />
   );
 }
