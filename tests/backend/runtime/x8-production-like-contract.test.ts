@@ -14,6 +14,7 @@ const capacityLocations = read("infra/production-like/nginx/snippets/capacity-lo
 const proxyHeaders = read("infra/production-like/nginx/snippets/proxy-headers.conf");
 const launcher = read("scripts/x8-production-like.sh");
 const envHelper = read("scripts/lib/x8-production-like-env.sh");
+const grants = read("infra/postgres/grants.sql");
 const dockerignore = read(".dockerignore");
 const acceptanceReport = read("docs/operations/X8_LOCAL_PRODUCTION_LIKE_ACCEPTANCE_2026-08-26.md");
 
@@ -74,6 +75,10 @@ describe("X8 local production-like contracts", () => {
     );
     expect(grantsInvocation).toContain("-U postgres -d cps_novel");
     expect(grantsInvocation).not.toContain("-U migration_owner");
+    expect(grants).toContain(
+      "GRANT UPDATE (novel_id, status, updated_at) ON novel_source_item TO web_app;",
+    );
+    expect(grants).not.toContain("GRANT UPDATE ON TABLE novel_source_item TO web_app");
     expect(launcher).toMatch(/function render_nginx_configs|render_nginx_configs\(\)/);
     expect(launcher.slice(launcher.indexOf("render_nginx_configs()"), launcher.indexOf("validate_rendered_topology()")))
       .toContain("return 0");
