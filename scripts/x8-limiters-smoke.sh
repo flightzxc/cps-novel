@@ -22,7 +22,7 @@ fi
 
 docker network create "$X8_LIMIT_NETWORK" >/dev/null
 docker run -d --rm --name "$X8_LIMIT_SLOW" --network "$X8_LIMIT_NETWORK" node:20-alpine \
-  node -e 'require("node:http").createServer((_request,response)=>setTimeout(()=>response.end("ok"),2000)).listen(3000,"0.0.0.0")' \
+  node -e 'require("node:http").createServer((request,response)=>{response.writeHead(200,{"Content-Type":"text/plain","Content-Length":"2"});response.flushHeaders();setTimeout(()=>response.end("ok"),request.url.includes("connection-smoke")?5000:2000)}).listen(3000,"0.0.0.0")' \
   >/dev/null
 docker run -d --rm --name "$X8_LIMIT_NGINX" --network "$X8_LIMIT_NETWORK" \
   -p "127.0.0.1:${X8_LIMIT_PORT}:8080" \
@@ -32,7 +32,7 @@ docker run -d --rm --name "$X8_LIMIT_NGINX" --network "$X8_LIMIT_NETWORK" \
 
 ready=no
 for _ in $(seq 1 30); do
-  if curl --silent --output /dev/null "http://127.0.0.1:${X8_LIMIT_PORT}/novel/ready"; then
+  if curl --silent --fail --output /dev/null "http://127.0.0.1:${X8_LIMIT_PORT}/novel/ready"; then
     ready=yes
     break
   fi
@@ -44,28 +44,30 @@ assert_connection_limit() {
   local path="$1" allowed="$2" expected="$3"
   local pids=() status
   for _ in $(seq 1 "$allowed"); do
-    curl --silent --output /dev/null "http://127.0.0.1:${X8_LIMIT_PORT}${path}" &
+    curl --silent --fail --output /dev/null "http://127.0.0.1:${X8_LIMIT_PORT}${path}" &
     pids+=("$!")
   done
-  sleep 0.3
+  sleep 1
   status="$(curl --silent --output /dev/null --write-out '%{http_code}' "http://127.0.0.1:${X8_LIMIT_PORT}${path}")"
   [[ "$status" == "$expected" ]] || {
     echo "ERROR: connection limiter for $path returned $status, expected $expected" >&2
     exit 1
   }
   local pid
-  for pid in "${pids[@]}"; do wait "$pid" || true; done
+  for pid in "${pids[@]}"; do
+    wait "$pid" || { echo "ERROR: an allowed connection request failed for $path" >&2; exit 1; }
+  done
 }
 
 assert_rate_limit() {
   local path="$1" accepted="$2" user_agent="$3"
   local pids=() status
   for _ in $(seq 1 "$accepted"); do
-    curl --silent --output /dev/null --user-agent "$user_agent" \
+    curl --silent --fail --output /dev/null --user-agent "$user_agent" \
       "http://127.0.0.1:${X8_LIMIT_PORT}${path}" &
     pids+=("$!")
   done
-  sleep 0.2
+  sleep 0.8
   status="$(curl --silent --output /dev/null --write-out '%{http_code}' --user-agent "$user_agent" \
     "http://127.0.0.1:${X8_LIMIT_PORT}${path}")"
   [[ "$status" == "429" ]] || {
@@ -73,7 +75,9 @@ assert_rate_limit() {
     exit 1
   }
   local pid
-  for pid in "${pids[@]}"; do wait "$pid" || true; done
+  for pid in "${pids[@]}"; do
+    wait "$pid" || { echo "ERROR: an allowed rate request failed for $path" >&2; exit 1; }
+  done
 }
 
 assert_connection_limit /novel/connection-smoke 8 429

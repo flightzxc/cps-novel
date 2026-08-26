@@ -70,6 +70,7 @@ render_nginx_configs() {
     echo "ERROR: unresolved nginx template token" >&2
     exit 65
   }
+  return 0
 }
 
 validate_rendered_topology() {
@@ -141,9 +142,6 @@ prepare_database() {
   wait_for_postgres
   x8_compose exec -T postgres psql --no-psqlrc -v ON_ERROR_STOP=1 -U postgres -d cps_novel \
     --file /opt/cps-novel-postgres/roles.sql >/dev/null
-  x8_compose exec -T postgres psql --no-psqlrc -v ON_ERROR_STOP=1 -U postgres -d cps_novel \
-    --command 'CREATE EXTENSION IF NOT EXISTS pg_stat_statements;' >/dev/null
-
   local role
   for role in migration_owner web_app worker_app scheduler_app analyst_ro backup_role; do
     x8_compose exec -T postgres psql --no-psqlrc -U postgres -d cps_novel \
@@ -170,6 +168,8 @@ prepare_database() {
 
   x8_compose exec -T postgres psql --no-psqlrc -v ON_ERROR_STOP=1 -U migration_owner -d cps_novel \
     <"$X8_PROJECT_ROOT/infra/postgres/grants.sql" >/dev/null
+  x8_compose exec -T postgres psql --no-psqlrc -v ON_ERROR_STOP=1 -U postgres -d cps_novel \
+    --command 'CREATE EXTENSION IF NOT EXISTS pg_stat_statements;' >/dev/null
 }
 
 wait_for_url() {

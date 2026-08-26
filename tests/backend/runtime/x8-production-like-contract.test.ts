@@ -39,6 +39,12 @@ describe("X8 local production-like contracts", () => {
     expect(read("infra/production-like/backup-timer.sh")).toContain(
       "/opt/cps-novel-x8/backup-logical.sh --output",
     );
+    expect(launcher.indexOf("infra/postgres/grants.sql")).toBeLessThan(
+      launcher.indexOf("CREATE EXTENSION IF NOT EXISTS pg_stat_statements"),
+    );
+    expect(launcher).toMatch(/function render_nginx_configs|render_nginx_configs\(\)/);
+    expect(launcher.slice(launcher.indexOf("render_nginx_configs()"), launcher.indexOf("validate_rendered_topology()")))
+      .toContain("return 0");
   });
 
   it("implements the three-stage local TLS transition without a production fallback", () => {
@@ -114,6 +120,15 @@ describe("X8 local production-like contracts", () => {
     expect(healthSql).toContain("BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY;");
     expect(healthSql.match(/X8_HEALTH_SQL_GROUP_/g)).toHaveLength(5);
     expect(healthSql.trimEnd().endsWith("COMMIT;")).toBe(true);
+  });
+
+  it("uses the real PostgreSQL two-int advisory lock signature", () => {
+    const bootstrap = read("scripts/bootstrap-admin-identity.ts");
+    const sitemapRefresh = read("src/lib/tasks/sitemap-refresh.ts");
+    expect(bootstrap).toContain("${BOOTSTRAP_ADMIN_ADVISORY_LOCK.namespace}::int");
+    expect(bootstrap).toContain("${BOOTSTRAP_ADMIN_ADVISORY_LOCK.scope}::int");
+    expect(sitemapRefresh).toContain("${SITEMAP_REFRESH_ADVISORY_LOCK.namespace}::int");
+    expect(sitemapRefresh).toContain("${SITEMAP_REFRESH_ADVISORY_LOCK.scope}::int");
   });
 
   const composeAvailable = spawnSync("docker", ["compose", "version"], { stdio: "ignore" }).status === 0;
