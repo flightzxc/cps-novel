@@ -59,6 +59,10 @@ npm run build && PORT=3111 npm run start
    章节页在 P1-11 已改为动态段：第 1 章是 `/dev-preview/chapter/1`，
    末章是 `/dev-preview/chapter/3`（原先的 `/dev-preview/chapter` 与
    `/dev-preview/chapter-last` 两个静态页已删除）。
-4. **章节基线要在干净的浏览器配置下生成。** 阅读器现在会把偏好与阅读位置写进
+4. **root 404 / error 形态缺图（U4-TODO-01）。** `PublicStatusPanel` 的 `bare` 形态没有基准图，
+   上表 13 张里也没有它的位置。补图需要先在 `dev-preview` 树里加错误态展示路由，登记在
+   `docs/governance/development-log.md` 的 2026-08-26 条目下。清单测试只拦未登记的图，
+   所以缺图不会让 `npm run test:ui` 失败——**不要把「清单通过」读成「形态全覆盖」**。
+5. **章节基线要在干净的浏览器配置下生成。** 阅读器现在会把偏好与阅读位置写进
    localStorage，带着旧配置截图会截到深色阅读区或滚动到一半的正文。上面的
    headless 命令每次用全新临时配置，天然满足；换用常驻浏览器截图时需自行清空。
