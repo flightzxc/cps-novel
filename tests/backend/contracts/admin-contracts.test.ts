@@ -365,8 +365,12 @@ describe("error envelope", () => {
     });
   });
 
+  it("preserves 500 for an explicit deployment-damage contract", () => {
+    expect(projectErrorEnvelope({ code: "site_setting_not_seeded", status: 500 }).status).toBe(500);
+  });
+
   it("falls back to 403 for a status outside the published envelope", () => {
-    expect(projectErrorEnvelope({ code: "credential_missing", status: 500 }).status).toBe(403);
+    expect(projectErrorEnvelope({ code: "credential_missing", status: 418 }).status).toBe(403);
   });
 
   it("preserves a 409 idempotency conflict instead of coercing it to 403", () => {

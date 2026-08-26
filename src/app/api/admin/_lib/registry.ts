@@ -1,6 +1,7 @@
 import type { AdminCapability } from "@/lib/auth/capabilities";
 import { ADMIN_PAGE_ROOTS, type AdminRegistry } from "@/server/auth/registry";
 import { P1_08B_ADMIN_REGISTRY } from "@/server/credentials";
+import { ADMIN_SITE_SETTING_ROUTES } from "@/server/site-settings/registry";
 
 /**
  * The registry the running app actually resolves against.
@@ -8,6 +9,8 @@ import { P1_08B_ADMIN_REGISTRY } from "@/server/credentials";
  * P1-08B's registry is frozen in `src/server/credentials/registry.ts` and stays
  * that way; P2-04 composes on top rather than editing it, so the credential
  * surface keeps a single owner and this file keeps a single reason to change.
+ * X6 follows the same rule: its exact SiteSetting route remains owned by the
+ * server module and is composed here into the registry used by the app.
  *
  * ## The capability binding
  *
@@ -92,7 +95,11 @@ export const CONTENT_ROUTE_CAPABILITIES: Readonly<
 
 export const P2_04_ADMIN_REGISTRY: AdminRegistry = Object.freeze({
   pageRoots: ADMIN_PAGE_ROOTS,
-  routes: Object.freeze([...P1_08B_ADMIN_REGISTRY.routes, ...ADMIN_CONTENT_ROUTES]),
+  routes: Object.freeze([
+    ...P1_08B_ADMIN_REGISTRY.routes,
+    ...ADMIN_CONTENT_ROUTES,
+    ...ADMIN_SITE_SETTING_ROUTES,
+  ]),
   // P2-04 is a read slice: it registers no Server Action, and adding a mutation
   // capability here is out of scope by construction.
   actions: P1_08B_ADMIN_REGISTRY.actions,

@@ -127,10 +127,11 @@ describe("admin session lifecycle", () => {
 });
 
 describe("admin capabilities", () => {
-  it("defaults only credential and takedown to super_admin", async () => {
+  it("defaults settings management to super_admin and keeps unconfigured reads denied", async () => {
     const { stores } = fixture();
     const context = await requireAdminSession(TOKEN, { identities: stores, sessions: stores, now: NOW });
     expect(hasAdminCapability(context, "credential:manage", {} as NodeJS.ProcessEnv)).toBe(true);
+    expect(hasAdminCapability(context, "settings:manage", {} as NodeJS.ProcessEnv)).toBe(true);
     expect(hasAdminCapability(context, "content:takedown", {} as NodeJS.ProcessEnv)).toBe(true);
     expect(hasAdminCapability(context, "content:view", {} as NodeJS.ProcessEnv)).toBe(false);
     expect(hasAdminCapability(context, "content:read", {} as NodeJS.ProcessEnv)).toBe(false);
@@ -161,11 +162,17 @@ describe("admin capabilities", () => {
         CONTENT_READ_USER_IDS: "admin-1",
       } as unknown as NodeJS.ProcessEnv),
     ).toBe(true);
+    expect(
+      hasAdminCapability(context, "settings:manage", {
+        SETTINGS_MANAGE_ROLES: "ops",
+      } as unknown as NodeJS.ProcessEnv),
+    ).toBe(true);
   });
 
   it("keeps every pre-existing high-risk capability marked as requiring 2FA", async () => {
     const capabilities: AdminCapability[] = [
       "credential:manage",
+      "settings:manage",
       "content:takedown",
       "promo:claim",
       "revenue:view",

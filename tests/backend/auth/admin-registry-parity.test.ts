@@ -29,6 +29,7 @@ const EXPECTED_CONTENT_GET_ROUTES = [
   "/api/admin/novels/chapters/content",
   "/api/admin/novels/detail",
   "/api/admin/tags",
+  "/api/admin/site-settings",
 ] as const;
 
 const EXPECTED_ACTIONS = [

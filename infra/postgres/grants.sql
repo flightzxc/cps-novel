@@ -127,6 +127,17 @@ GRANT SELECT (
   status, request_summary, response_shape, committed_at, confirmed_at, created_at
 ) ON side_effect_intent TO web_app, analyst_ro;
 
+-- X6 SiteSetting boundary. Web serves the public configuration and owns the
+-- guarded admin write service; Worker reads IndexNow/SEO execution config.
+-- Analyst and Scheduler deliberately receive no access because the singleton
+-- contains the S2 IndexNow key. Web can update only the four X6 fields plus
+-- the optimistic-lock timestamp; INSERT/DELETE and every other column remain
+-- migration_owner-only.
+GRANT SELECT ON TABLE site_setting TO web_app, worker_app;
+GRANT UPDATE (
+  default_og_image, indexnow_host, indexnow_key, indexnow_key_location, updated_at
+) ON site_setting TO web_app;
+
 -- Web writes operational metadata and enqueues validate/supersede work. For
 -- Owner-approved synchronous add/replace it may insert a new ciphertext and
 -- rotate lifecycle metadata, but it still cannot SELECT persisted ciphertext.

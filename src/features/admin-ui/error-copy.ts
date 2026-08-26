@@ -33,6 +33,9 @@ const COPY: Readonly<Record<AdminErrorCode, string>> = Object.freeze({
   credential_capability_denied: "缺少凭证管理能力位",
   credential_ambiguous: "同一账户存在多条有效凭证，请先人工处置",
   account_inactive: "该渠道账户已停用，请先启用后再操作",
+  site_setting_invalid: "站点设置参数无效，请检查后重试",
+  site_setting_conflict: "站点设置已被其他操作人修改，请刷新后重试",
+  site_setting_not_seeded: "站点设置单例缺失，请联系运维检查部署",
   // P2-04 content reads. Each names the offending parameter, because these are
   // reachable only from a hand-edited URL and "参数无效" would leave the operator
   // guessing which of five query parameters to fix.

@@ -12,6 +12,7 @@ import { ADMIN_REGISTRY } from "@/app/api/admin/_lib/deps";
 import { ADMIN_CAPABILITY_CONFIG } from "@/lib/auth/capabilities";
 import { resolveAdminRoute } from "@/server/auth/registry";
 import { P1_08B_ADMIN_REGISTRY } from "@/server/credentials";
+import { ADMIN_SITE_SETTING_ROUTES } from "@/server/site-settings";
 
 const CONTENT_ROUTE_DIRS = [
   path.resolve(process.cwd(), "src/app/api/admin/novels"),
@@ -77,12 +78,17 @@ describe("P2-04 内容路由登记", () => {
     expect(orphans).toEqual([]);
   });
 
-  it("运行时使用的 registry 是 P1-08B 与 P2-04 的并集", () => {
+  it("运行时 registry 是 P1-08B、P2-04 与 X6 的并集", () => {
     expect(ADMIN_REGISTRY).toBe(P2_04_ADMIN_REGISTRY);
     const paths = P2_04_ADMIN_REGISTRY.routes.map((route) => route.path);
     for (const route of P1_08B_ADMIN_REGISTRY.routes) expect(paths).toContain(route.path);
     for (const route of ADMIN_CONTENT_ROUTES) expect(paths).toContain(route.path);
-    expect(paths.length).toBe(P1_08B_ADMIN_REGISTRY.routes.length + ADMIN_CONTENT_ROUTES.length);
+    for (const route of ADMIN_SITE_SETTING_ROUTES) expect(paths).toContain(route.path);
+    expect(paths.length).toBe(
+      P1_08B_ADMIN_REGISTRY.routes.length
+      + ADMIN_CONTENT_ROUTES.length
+      + ADMIN_SITE_SETTING_ROUTES.length,
+    );
   });
 
   it("内容路由只登记 GET，未登记的写方法一律默认拒绝", () => {
