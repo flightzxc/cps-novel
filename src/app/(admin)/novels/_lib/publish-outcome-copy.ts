@@ -79,7 +79,7 @@ export function describeRightsTransition(kind: RightsTransitionKind): RightsTran
         confirmTitle: "确认对该书目执行版权/安全移除？",
         confirmLabel: "确认移除",
         warning:
-          "这是版权或安全层面的强制移除，公开页面将返回 HTTP 410 Gone 并退出索引。更严重的是：该书目下所有非撤回状态的章节会被立即转为「已撤回」，其正文（NovelChapterContent）将被永久删除，不可恢复。请确认已核实版权/安全依据后再继续。",
+          "这是版权或安全层面的强制移除，公开页面将返回 HTTP 410 Gone 并退出索引。更严重的是：该书目下所有非撤回状态的章节会被立即转为「已撤回」，其章节正文数据将被永久删除，不可恢复。请确认已核实版权/安全依据后再继续。",
         successMessage: "已执行版权/安全移除，受影响章节的正文已按流程删除。",
       };
     case "restore":

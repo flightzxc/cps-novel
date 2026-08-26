@@ -140,8 +140,22 @@ async function runNovelAction<T>(
   requestId: string,
   revalidate: readonly string[],
   run: (authorization: AdminServiceAuthorization) => Promise<T>,
+  /**
+   * Input validation that must reject *before* `authorize()` spends anything
+   * scoped to this `requestId` — the per-action rate-limit allowance and the
+   * `requestId` idempotency key `requireAdminActionAccess` mints. A reason
+   * that is blank client-side is never going to become valid server-side, so
+   * paying that cost for it first is pure waste (and, repeated, a way to
+   * exhaust the limiter on requests that were never going to do anything).
+   * Runs inside the same `try` as everything else, so a thrown
+   * `PublishActionInputError` still comes out through the same
+   * `invalid_input` branch below — the return shape is unchanged, only the
+   * ordering relative to `authorize()` is.
+   */
+  validate?: () => void,
 ): Promise<PublishActionResult<T>> {
   try {
+    validate?.();
     const authorization = await authorize(actionId, requestId);
     const data = await run(authorization);
     for (const path of revalidate) revalidatePath(path);
@@ -179,20 +193,19 @@ export async function withdrawNovelAction(input: {
   requestId: string;
   reason: string;
 }): Promise<PublishActionResult<RightsTransitionResult>> {
+  let reason = "";
   return runNovelAction(
     "admin.novel.withdraw",
     input.requestId,
     [`/novels/${input.novelId}`, "/novels"],
     async (authorization) =>
       withdrawNovel(
-        {
-          authorization,
-          requestId: input.requestId,
-          novelId: input.novelId,
-          reason: requireNonBlankReason(input.reason),
-        },
+        { authorization, requestId: input.requestId, novelId: input.novelId, reason },
         serviceDependencies(),
       ),
+    () => {
+      reason = requireNonBlankReason(input.reason);
+    },
   );
 }
 
@@ -201,20 +214,19 @@ export async function takedownNovelAction(input: {
   requestId: string;
   reason: string;
 }): Promise<PublishActionResult<RightsTransitionResult>> {
+  let reason = "";
   return runNovelAction(
     "admin.novel.takedown",
     input.requestId,
     [`/novels/${input.novelId}`, "/novels"],
     async (authorization) =>
       takedownNovel(
-        {
-          authorization,
-          requestId: input.requestId,
-          novelId: input.novelId,
-          reason: requireNonBlankReason(input.reason),
-        },
+        { authorization, requestId: input.requestId, novelId: input.novelId, reason },
         serviceDependencies(),
       ),
+    () => {
+      reason = requireNonBlankReason(input.reason);
+    },
   );
 }
 
@@ -223,20 +235,19 @@ export async function restoreNovelAction(input: {
   requestId: string;
   reason: string;
 }): Promise<PublishActionResult<RightsTransitionResult>> {
+  let reason = "";
   return runNovelAction(
     "admin.novel.restore",
     input.requestId,
     [`/novels/${input.novelId}`, "/novels"],
     async (authorization) =>
       restoreNovel(
-        {
-          authorization,
-          requestId: input.requestId,
-          novelId: input.novelId,
-          reason: requireNonBlankReason(input.reason),
-        },
+        { authorization, requestId: input.requestId, novelId: input.novelId, reason },
         serviceDependencies(),
       ),
+    () => {
+      reason = requireNonBlankReason(input.reason);
+    },
   );
 }
 
@@ -266,6 +277,18 @@ export type PublishNovelsBatchOutcome = {
   readonly summary: PublishNovelsBatchSummary;
 };
 
+/**
+ * Same exhaustiveness discipline as `./_lib/publish-outcome-copy.ts`'s
+ * `assertUnreachableCode` / `assertUnreachableKind`: a `default` branch that
+ * only type-checks while `ApplyPublishTransitionResult["outcome"]` is fully
+ * covered above it. Add a fifth outcome to that union without adding a case
+ * here and this switch stops compiling, instead of silently leaving the new
+ * outcome uncounted in the batch-publish summary.
+ */
+function assertUnreachableOutcome(value: never): never {
+  throw new Error(`Unhandled publish outcome: ${JSON.stringify(value)}`);
+}
+
 function summarize(items: readonly PublishNovelsBatchItem[]): PublishNovelsBatchSummary {
   const summary: { -readonly [K in keyof PublishNovelsBatchSummary]: number } = {
     published: 0,
@@ -292,6 +315,8 @@ function summarize(items: readonly PublishNovelsBatchItem[]): PublishNovelsBatch
       case "not_found":
         summary.notFound += 1;
         break;
+      default:
+        assertUnreachableOutcome(item.result.outcome);
     }
   }
   return summary;

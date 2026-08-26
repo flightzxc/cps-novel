@@ -187,18 +187,20 @@ describe.each([
     expect(guards.requireAdminActionAccess.mock.calls[0][0]).toMatchObject({ actionId });
   });
 
-  it("原因为空白 → invalid_input reason_required，且从不调用 service", async () => {
+  it("原因为空白 → invalid_input reason_required，且从不调用 service，也从不请求授权（在 authorize() 之前就拒绝，不消耗限流额度与 requestId 幂等键）", async () => {
     guards.requireAdminActionAccess.mockResolvedValue(granted());
     const result = await action({ novelId: "n1", requestId: "req-1", reason: "   " });
     expect(result).toEqual({ ok: false, kind: "invalid_input", code: "reason_required" });
     expect(serviceFn).not.toHaveBeenCalled();
+    expect(guards.requireAdminActionAccess).not.toHaveBeenCalled();
   });
 
-  it("原因超过 1000 字 → invalid_input reason_too_long，且从不调用 service", async () => {
+  it("原因超过 1000 字 → invalid_input reason_too_long，且从不调用 service，也从不请求授权", async () => {
     guards.requireAdminActionAccess.mockResolvedValue(granted());
     const result = await action({ novelId: "n1", requestId: "req-1", reason: "字".repeat(1001) });
     expect(result).toEqual({ ok: false, kind: "invalid_input", code: "reason_too_long" });
     expect(serviceFn).not.toHaveBeenCalled();
+    expect(guards.requireAdminActionAccess).not.toHaveBeenCalled();
   });
 
   it("原因被 trim 后原样透传给 service，novelId/requestId 原样透传", async () => {
