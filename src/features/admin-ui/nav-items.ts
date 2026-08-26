@@ -77,12 +77,21 @@ export const OMITTED_CPS_NAV_ITEMS: readonly { readonly cps: string; readonly re
  * `/tags` joined in P2-06 (read-only source-label dictionary).
  * `/catalog-sync` joined in P0-S13 (the `NovelSourceItem` → `Novel`/`Article`
  * content-creation trigger — dry-run preview and apply, gated separately).
+ * `/settings` joined in PR-C4 (OG fallback image + IndexNow delivery config
+ * admin surface). Note this list is not what keeps `/settings` clickable in
+ * the sidebar today — `itemState` in `./sidebar.tsx` already special-cases
+ * any entry with `children` as "built" regardless of this array, and the
+ * `/settings` entry has two (still-unbuilt) children. It is kept accurate
+ * here anyway because it is this module's registry of "pages that actually
+ * exist" and because a future change to that special case must not silently
+ * relabel `/settings` as unbuilt.
  */
 export const ADMIN_IMPLEMENTED_PAGES: readonly string[] = Object.freeze([
   "/channel-accounts",
   "/novels",
   "/catalog-sync",
   "/tags",
+  "/settings",
 ]);
 
 export function isNavItemActive(pathname: string, item: AdminNavItem): boolean {
