@@ -127,9 +127,8 @@ describe("isRegisteredSiteLocale", () => {
     // P0-S7a expanded `SITE_LOCALES` from `["en"]` to the short-drama site's
     // 15-locale registry (Owner decision) — `fr` is now registered, so this
     // must now be `true`. Registered is not the same gate as publishable:
-    // `isNovelIndexNowEligible` below still calls `isPublishableLocale`
-    // (currently empty, D-7 open), so this widening does not, by itself,
-    // let any additional locale reach IndexNow.
+    // `isNovelIndexNowEligible` still calls `isPublishableLocale` — U6
+    // admitted `en`, so only `en` reaches IndexNow; `fr` remains blocked.
     expect(isRegisteredSiteLocale("en")).toBe(true);
     expect(isRegisteredSiteLocale("fr")).toBe(true);
     expect(isRegisteredSiteLocale("EN")).toBe(false);
@@ -148,12 +147,15 @@ describe("isNovelIndexNowEligible", () => {
     expect(isNovelIndexNowEligible(PUBLISHED_ARTICLE, PUBLISHED_NOVEL, READY_PROMO, { isLocalePublishable: () => true })).toBe(true);
   });
 
-  it("is ineligible when the locale gate rejects (production default: the D-7 whitelist is empty)", () => {
-    // No override passed — exercises the real `isPublishableLocale`, which
-    // is `Object.freeze([])` today (`src/lib/locale/locale-canonical.ts`).
-    // This is the documented, currently-a-no-op production behavior, not a
-    // bug in this test.
-    expect(isNovelIndexNowEligible(PUBLISHED_ARTICLE, PUBLISHED_NOVEL, READY_PROMO)).toBe(false);
+  it("is eligible under the real D-7 whitelist for en", () => {
+    // No override — exercises the real `isPublishableLocale`. U6 admitted `en`.
+    expect(isNovelIndexNowEligible(PUBLISHED_ARTICLE, PUBLISHED_NOVEL, READY_PROMO)).toBe(true);
+  });
+
+  it("is ineligible when the locale has not cleared D-7", () => {
+    expect(
+      isNovelIndexNowEligible({ ...PUBLISHED_ARTICLE, locale: "es" }, PUBLISHED_NOVEL, READY_PROMO),
+    ).toBe(false);
   });
 
   it("is ineligible when the Novel is not published", () => {

@@ -78,12 +78,11 @@ export async function loadIndexNowCandidateArticle(
  * the broader `SITE_LOCALES` registry — deliberately the same choice
  * Stream D's sitemap generator is documented as making
  * (`P2-07-12-移植审计-2026-08-12/P2-11.md` §9: "本任务的 `isSupportedSiteLocale`
- * 等价物同样会撞上这个问题"). `listPublishableLocales()` is empty pending the
- * D-7 whitelist decision, so **IndexNow enqueue is currently a real no-op
- * for every locale** — this is a shared, already-documented blocker, not a
- * defect introduced here; see this Stream's report / wiring notes. Accepts
- * an injectable predicate so tests are not permanently red against the
- * production-empty whitelist.
+ * 等价物同样会撞上这个问题"). U6 admitted `en` under D-7; other locales
+ * remain blocked. Passing this locale check still requires the publication
+ * and promo checks below, and enqueue separately enforces both write flags.
+ * The optional predicate lets tests isolate these conditions; production
+ * callers use the real whitelist.
  */
 export type IndexNowEligibilityOptions = { isLocalePublishable?: (locale: string) => boolean };
 

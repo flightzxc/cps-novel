@@ -61,13 +61,13 @@ export function ManualReviewResolveControls({ intentId }: { intentId: string }) 
       { method: "POST", body: { intentId, resolution, reason: trimmed } },
     );
     setBusy(false);
-    setPendingResolution(null);
-    setReason("");
     if (!outcome.ok) {
       setErrorMessage(errorEnvelopeCopy(outcome.envelope));
       setResult(null);
       return;
     }
+    setPendingResolution(null);
+    setReason("");
     setResult(outcome.data);
     setErrorMessage(null);
     router.refresh();

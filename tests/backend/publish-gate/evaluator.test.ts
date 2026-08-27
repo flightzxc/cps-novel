@@ -23,10 +23,16 @@ describe("evaluatePublishGate", () => {
     expect(result).toEqual({ publishable: true, reasons: [], requiredMetadataMissing: null });
   });
 
-  it("defaults to the real, fail-closed isPublishableLocale when no override is given", () => {
-    // PUBLISHABLE_LOCALES is intentionally empty until D-7 clears — production
-    // code must never inject an override, so the default path must reject.
+  it("defaults to the real isPublishableLocale when no override is given", () => {
+    // U6 admitted `en`. The default path must not inject an override, so
+    // locale-en facts that otherwise pass the gate are now publishable.
     const result = evaluatePublishGate(facts());
+    expect(result.publishable).toBe(true);
+    expect(result.reasons).not.toContain("locale_not_publishable");
+  });
+
+  it("still fail-closes locales that have not cleared D-7", () => {
+    const result = evaluatePublishGate(facts({ novel: { status: "ready", locale: "es" } }));
     expect(result.publishable).toBe(false);
     expect(result.reasons).toContain("locale_not_publishable");
   });

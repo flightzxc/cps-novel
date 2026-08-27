@@ -101,6 +101,7 @@ export const en = {
     title: "Something went wrong",
     body: "This page could not be loaded. You can try again, or go back home.",
     retry: "Try again",
+    digest: "Error ID {digest}",
   },
   notFoundPage: {
     title: "This page could not be found",

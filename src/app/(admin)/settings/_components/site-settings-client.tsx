@@ -10,35 +10,11 @@ import { adminFetch } from "@/features/admin-ui/admin-fetch";
 import { capabilityBlockReason } from "@/features/admin-ui/capability-view";
 import { errorEnvelopeCopy } from "@/features/admin-ui/error-copy";
 
+import type { AdminSiteSettingView, SiteSettingMutationResult } from "../_lib/site-setting-types";
+
 const SITE_SETTINGS_PATH = "/api/admin/site-settings";
 
-/**
- * Structural duplicates of `@/server/site-settings`'s `AdminSiteSettingView`
- * / `SiteSettingMutationResult`, not a re-export.
- *
- * `tests/ui/admin-secret-boundary.test.tsx` ("keeps Client Components away
- * from Prisma and server services") forbids any `"use client"` file —
- * this one included — from importing `@/server/**` at all, type-only or
- * not: the rule is about the source text a Client Component is allowed to
- * reference, not about what tree-shaking would actually ship to the
- * browser. `page.tsx` (a Server Component) imports the real types from
- * `@/server/site-settings` and passes values through untouched, so the two
- * shapes are structurally identical by construction — TypeScript accepts
- * the assignment on that basis without either side importing from the
- * other.
- */
-type SiteSettingView = Readonly<{
-  defaultOgImage: string;
-  indexNowHost: string;
-  indexNowKey: string;
-  indexNowKeyLocation: string;
-  updatedAt: string;
-}>;
-
-type SiteSettingMutationResult = Readonly<{
-  setting: SiteSettingView;
-  replayed: boolean;
-}>;
+type SiteSettingView = AdminSiteSettingView;
 
 function formatTime(value: string): string {
   return new Intl.DateTimeFormat("zh-CN", {
@@ -110,19 +86,26 @@ export function SiteSettingsClient({
     );
   }
 
-  function applyServerSetting(next: SiteSettingView) {
+  function applyServerSetting(next: SiteSettingView, section: "og" | "indexNow" | "all") {
     setCurrent(next);
-    setOgImage(next.defaultOgImage);
-    setOgImageBroken(false);
-    setIndexNowHost(next.indexNowHost);
-    setIndexNowKey(next.indexNowKey);
-    setIndexNowKeyLocation(next.indexNowKeyLocation);
+    // Success only resets the section that was submitted, so an uncommitted
+    // draft in the other section survives. A 409 refetch uses `"all"` because
+    // the whole row is stale.
+    if (section === "og" || section === "all") {
+      setOgImage(next.defaultOgImage);
+      setOgImageBroken(false);
+    }
+    if (section === "indexNow" || section === "all") {
+      setIndexNowHost(next.indexNowHost);
+      setIndexNowKey(next.indexNowKey);
+      setIndexNowKeyLocation(next.indexNowKeyLocation);
+    }
   }
 
   /** Re-reads the row after a 409 so the operator's next attempt starts from a fresh `expectedUpdatedAt`, not the stale one that just lost the race. */
   async function refetchAfterConflict() {
     const result = await adminFetch<SiteSettingView>(SITE_SETTINGS_PATH);
-    if (result.ok) applyServerSetting(result.data);
+    if (result.ok) applyServerSetting(result.data, "all");
   }
 
   async function submitPatch(
@@ -131,6 +114,7 @@ export function SiteSettingsClient({
     expectedUpdatedAt: string,
     setBusy: (value: boolean) => void,
     clearReason: () => void,
+    section: "og" | "indexNow",
   ) {
     setBusy(true);
     setNotice(null);
@@ -151,7 +135,7 @@ export function SiteSettingsClient({
       return;
     }
 
-    applyServerSetting(result.data.setting);
+    applyServerSetting(result.data.setting, section);
     clearReason();
     setNotice(
       result.data.replayed
@@ -187,6 +171,7 @@ export function SiteSettingsClient({
       current.updatedAt,
       setOgBusy,
       () => setOgReason(""),
+      "og",
     );
   }
 
@@ -197,8 +182,13 @@ export function SiteSettingsClient({
     if (hostTrimmed !== current.indexNowHost) fields.indexNowHost = hostTrimmed;
     if (keyTrimmed !== current.indexNowKey) fields.indexNowKey = keyTrimmed;
     if (keyLocationTrimmed !== current.indexNowKeyLocation) fields.indexNowKeyLocation = keyLocationTrimmed;
-    await submitPatch(fields, indexNowReason, current.updatedAt, setIndexNowBusy, () =>
-      setIndexNowReason(""),
+    await submitPatch(
+      fields,
+      indexNowReason,
+      current.updatedAt,
+      setIndexNowBusy,
+      () => setIndexNowReason(""),
+      "indexNow",
     );
   }
 

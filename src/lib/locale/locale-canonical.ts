@@ -16,8 +16,9 @@
  * P0-S15（2026-08-26）：上游登记表首次填充，依据《C2 真上游只读诊断报告
  * 2026-08-26》的真实成对证据登记了 `3 → en`、`7 → ru`（逐条来源见下方
  * `UPSTREAM_LANGUAGE_REGISTRY` 的内联注释）。**这只是 20 条样本覆盖到的子集，
- * 不是完整上游枚举**——未登记的数值码依旧落 `unknown`，fail-closed 语义不变，
- * 发布白名单依旧独立为空（登记 ≠ 可发布）。
+ * 不是完整上游枚举**——未登记的数值码依旧落 `unknown`，fail-closed 语义不变。
+ * 发布白名单是独立的第二道闸（登记 ≠ 可发布）；U6 已按 Owner D-7 明示放行
+ * `en`，其余 14 语仍不在白名单。
  *
  * ## 三条不可协商的语义
  *
@@ -121,39 +122,33 @@ const UPSTREAM_LANGUAGE_REGISTRY: readonly UpstreamLanguageRegistration[] = Obje
     codes: [7],
     names: ["俄语"],
   },
+  // TODO(U6 / C2b): `docs/governance/C2B_GETCHAPTERINFO_SHAPE_DIAGNOSTIC_2026-08-27.md`
+  // （getchapterinfo 形态诊断）没有 language=5 的成对 languageName 证据——schema
+  // 只有 `currentLanguage`（number），没有 `language` / `languageName`，且诊断
+  // 刻意不记录标量值。未证不得猜，5 继续落 unknown。
 ]);
 
 /**
  * 发布白名单。
  *
- * 🔴 **P0-S7a 复核后依旧为空——连 `en` 都不进，这是本轮逐条核对五项准入条件
- * 后的结论，不是沿用旧状态没检查。** D-7（`docs/architecture/candidate-v0.2.1/
- * novel-v1-open-decisions.md`）冻结的准入条件是五项齐备：
+ * U6（2026-08-27）：Owner 明示 D-7 放行 `en`。D-7 五项准入按现状重写：
  *
- * 1. 前台 messages 无 fallback——**不满足**。本仓库没有任何 messages 目录/i18n
- *    目录；且公开路由的实际渲染树里混着大量中文占位文案（例如
- *    `src/app/browse/page.tsx` 的 `title="全部作品"`、
- *    `src/features/public-ui/status/UnavailableScreen.tsx` 的
- *    `"这本书暂时不可阅读"`、`src/features/public-ui/layout/SiteHeader.tsx`
- *    的 `aria-label="主导航"` 等——不是「en 缺文案」，是「en 页面里本就还有非
- *    en 文案」，五项里最硬的一条直接不成立。这部分工作在 Cursor 的 U3。
- * 2. 后台模板语种枚举已登记——**不满足**。`ArticleTemplate` 表存在于 schema，
- *    但本仓库没有任何代码引用它；模板引擎尚未接线（P2-02 在独立分支，未进本
- *    基线），无枚举可言。
- * 3. 该语种模板已跑通真实渲染——**不满足**，前提条件 2 都不成立。
- * 4. SEO 元数据齐全——P0-S7a 本单把这块基础设施补齐了（hreflang 发布状态过滤、
- *    sitemap 分语种分片、canonical 单一源），但条件 1-3 仍卡关，单独满足条件
- *    4 不能让任何 locale 通过「五项齐备」的准入线。
- * 5. sitemap 分片已验证——本单验证的是分片**逻辑**（多 locale 参数化路径，见
- *    `tests/backend/seo/`），不是针对真实生产内容的验证；`listPublishableLocales()`
- *    仍为空时 `generateStaticSitemaps` 会直接失败（`No sitemap child files
- *    were generated`），这本身就是 fail-closed 的证据而非缺陷。
+ * 1. 前台 messages 无 fallback——**已满足（U3）**。`src/lib/locale/messages/en.ts`
+ *    是完整英文目录；公开渲染树不再混中文占位。他语是 `Partial<Messages>`，
+ *    `loadMessages` 对不完整目录抛错而不是静默拼 en——这是 fail-closed，不是
+ *    把中文塞进 en 页。
+ * 2. 后台模板语种枚举已登记——**已满足（S9）**。内置模板覆盖 `en`；
+ *    `ARTICLE_TEMPLATE_CRUD_LANDED` 仍为 `false`，所以 S14 守卫仍只允许空集
+ *    或 `{"en"}` 的子集——本次放行正好是这个子集，不会触发守卫。
+ * 3. 该语种模板已跑通真实渲染——**已满足（S9 端到端）**。
+ * 4. SEO 元数据齐全——**已满足（S7a）**：hreflang 发布状态过滤、sitemap 分语种
+ *    分片、canonical 单一源。
+ * 5. sitemap 分片已验证——**已满足（X8 真实拓扑）**。
  *
- * 结论：15 语没有一个满足全部五项，`en` 也不例外——CPS `v6.0.4` 就是只注册了
- * 前台 locale、漏了后台模板枚举，线上才发现；宁可继续 fail-closed，也不要重
- * 复那次事故。表一旦有 locale 真正五项齐备，只改这一个文件。
+ * 映射成功 ≠ 可发布：`3 → en` 现可发布；`7 → ru` 仍映射成功、仍不在白名单。
+ * 非 `en` 语种在 `ARTICLE_TEMPLATE_CRUD_LANDED` 翻转前仍不得进入本表。
  */
-const PUBLISHABLE_LOCALES: readonly SiteLocale[] = Object.freeze([]);
+const PUBLISHABLE_LOCALES: readonly SiteLocale[] = Object.freeze(["en"]);
 
 /**
  * D-7 条件二 fail-closed 守卫（模块加载即断言，不是运行时才发现）。

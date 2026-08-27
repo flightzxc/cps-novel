@@ -240,6 +240,19 @@ describe("SetupFlow — idle -> started -> done, and the failure branch at each 
     await waitFor(() => expect(finishSetupAction).toHaveBeenCalledWith({ next: null }));
   });
 
+  it("resets busy and shows an error when finishSetupAction throws a non-redirect failure", async () => {
+    finishSetupAction.mockRejectedValueOnce(new Error("same-origin denied"));
+    await reachDone("/tags", ["A1B2-C3D4-E5F6"]);
+
+    fireEvent.click(screen.getByRole("button", { name: "我已保存，继续" }));
+
+    expect(await screen.findByRole("alert")).toBeTruthy();
+    expect(screen.getByRole("alert").textContent).toContain("退出失败");
+    expect(screen.getByRole("button", { name: "我已保存，继续" })).toBeTruthy();
+    expect(screen.getByText("A1B2-C3D4-E5F6")).toBeTruthy();
+    expect(routerPush).not.toHaveBeenCalled();
+  });
+
   it("does not show recovery codes again after a remount (second visit)", async () => {
     const view = await reachDone(null, ["A1B2-C3D4-E5F6"]);
     view.unmount();

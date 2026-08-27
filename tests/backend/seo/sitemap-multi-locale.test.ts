@@ -10,12 +10,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
  * locale's candidate query never bleeds into another locale's shard.
  *
  * `listPublishableLocales()` is mocked to a fixed three-locale set for this
- * file only — the real whitelist is empty today (D-7 open, see
- * `locale-canonical.ts`), which is already covered by
- * `static-sitemap.test.ts`'s "fails closed ... while D-7 keeps the
- * publishable locale list empty". This file verifies the sharding
- * *mechanism* is locale-parameterized and correct once locales are on the
- * whitelist, independent of when D-7 actually clears.
+ * file only. The real whitelist admits en and is exercised by
+ * `static-sitemap.test.ts`, including the zero-public-URL failure guard.
+ * This file verifies the simulated multi-locale sharding mechanism and
+ * separately retains the explicit empty-routeLocales failure case.
  */
 vi.mock("@/lib/locale/locale-canonical", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/locale/locale-canonical")>();

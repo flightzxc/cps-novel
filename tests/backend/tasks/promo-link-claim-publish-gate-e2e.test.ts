@@ -35,13 +35,10 @@ const APPLY_ENV: NodeJS.ProcessEnv = {
   PROMO_LINK_CLAIM_ALLOW_WRITE: "true",
 };
 
-// D-7 (launch locale whitelist) is still open project-wide — `PUBLISHABLE_
-// LOCALES` in `src/lib/locale/locale-canonical.ts` is deliberately empty
-// today, so every real call would fail closed on `locale_not_publishable`
-// regardless of this task. `evaluatePublishGate`'s `deps.isPublishableLocale`
-// override exists precisely for tests that need to look past that
-// unrelated, already-tracked gap — same technique `evaluator.test.ts` uses
-// — to isolate the one reason this test is actually about.
+// U6 admitted en under D-7. These tests use the explicit locale predicate
+// to isolate promo state transitions from whitelist policy. The evaluator
+// and content-creation suites separately exercise the real whitelist;
+// production publishing must not inject this override.
 const GATE_DEPS_SKIP_LAUNCH_WHITELIST = { isPublishableLocale: () => true };
 
 function baseLease(overrides: Partial<{ mode: "dry_run" | "apply" }> = {}) {

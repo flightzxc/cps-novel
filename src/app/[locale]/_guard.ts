@@ -14,9 +14,9 @@
  *    decision). This is the mapping/registration gate.
  * 2. **Publishable** — `isPublishableLocale(locale)` (D-7's independent,
  *    fail-closed publish whitelist). Registered ≠ publishable: today
- *    `SITE_LOCALES` has 15 entries and `PUBLISHABLE_LOCALES` has zero (see
- *    that file's inline evidence — no messages catalog, no template engine
- *    wiring, so not even `en` clears the bar yet).
+ *    `SITE_LOCALES` has 15 entries and `PUBLISHABLE_LOCALES` is `{en}`
+ *    (U6 / Owner D-7). `en` is still excluded from this prefix tree by the
+ *    third rule below (D-8 bare default-locale URLs).
  *
  * A THIRD, structural rule sits on top of both gates: the default locale
  * (`PUBLIC_SITE_LOCALE`, `en`) is deliberately EXCLUDED from ever resolving
@@ -29,12 +29,12 @@
  * `/en/...` must 404, not redirect: no such prefixed URL has ever been
  * published or linked from anywhere in this codebase.
  *
- * Net effect today: `getRoutableLocale` returns `null` for every input,
- * because `PUBLISHABLE_LOCALES` is empty — so `[locale]/layout.tsx` 404s
- * every request under this segment. That is the correct, intentional state,
- * matching sitemap generation and hreflang's shared fail-closed posture
- * (`sitemap.ts`, `novel-hreflang.ts`) — not a bug to "fix" by loosening this
- * function.
+ * Net effect today: `getRoutableLocale` still returns `null` for every input.
+ * `en` is publishable but excluded as the default locale; the other 14
+ * registered locales are not on the whitelist. `[locale]/layout.tsx` 404s
+ * every request under this segment. That is the correct, intentional state
+ * until a second locale is admitted **and** ships its `[locale]/...` leaf
+ * pages in the same batch.
  *
  * 🔴 P0-S10 correction: adding a locale to `PUBLISHABLE_LOCALES` is
  * necessary but NOT sufficient to make that locale routable — this file and

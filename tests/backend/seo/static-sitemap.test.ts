@@ -118,24 +118,53 @@ describe("static sitemap cache and routes", () => {
 });
 
 describe("static sitemap generation and refresh state", () => {
-  it("fails closed through the refresh chain while D-7 keeps the publishable locale list empty", async () => {
+  it("generates through the refresh chain once D-7 has admitted en", async () => {
     process.env.SITE_URL = "https://fixture.example";
     const root = await temporaryRoot();
     const buildFamily = vi.fn(builder());
 
-    expect(listPublishableLocales()).toEqual([]);
+    expect(listPublishableLocales()).toEqual(["en"]);
     const result = await refreshStaticSitemap({
       buildFamily,
       rootDir: root,
-      runId: "d7-open",
+      runId: "d7-en",
       initiatedBy: "test",
-      reason: "empty production locale whitelist",
+      reason: "en admitted to production locale whitelist",
     });
 
+    expect(result.status).toBe("success");
+    expect(buildFamily).toHaveBeenCalled();
+    expect(result.state.current.kind).not.toBe("missing");
+    await expect(fs.lstat(path.join(root, "sitemap-generation.lock")))
+      .rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("rejects child sitemaps with zero public URLs through the real refresh chain", async () => {
+    process.env.SITE_URL = "https://fixture.example";
+    const root = await temporaryRoot();
+    await generateStaticSitemaps({
+      buildFamily: builder(),
+      rootDir: root,
+      runId: "known-good",
+      routeLocales: ["en"],
+      types: ["mainpage"],
+    });
+    const validFamily = builder();
+    // Keep valid child files so the zero-URL guard, not the no-files guard, fires.
+    const emptyFamily = vi.fn<BuildSitemapFamily>(async (spec) =>
+      (await validFamily(spec)).map((file) => ({ ...file, entries: [] })),
+    );
+    const result = await refreshStaticSitemap({
+      buildFamily: emptyFamily,
+      rootDir: root,
+      runId: "zero-urls",
+      initiatedBy: "test",
+    });
+
+    expect(emptyFamily).toHaveBeenCalled();
     expect(result.status).toBe("failed");
-    expect(result.state.task.errorSummary).toContain("No sitemap child files were generated");
-    expect(buildFamily).not.toHaveBeenCalled();
-    expect(result.state.current).toEqual({ kind: "missing" });
+    expect(result.state.task.errorSummary).toBe("Generated sitemap contains no public URLs");
+    expect(await fs.readlink(path.join(root, "current"))).toBe("releases/known-good");
     await expect(fs.lstat(path.join(root, "sitemap-generation.lock")))
       .rejects.toMatchObject({ code: "ENOENT" });
   });

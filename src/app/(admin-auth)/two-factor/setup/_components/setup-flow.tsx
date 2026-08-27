@@ -141,13 +141,33 @@ function StartedStep({
   );
 }
 
+function isNextRedirect(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "digest" in error &&
+    String((error as { digest?: unknown }).digest).startsWith("NEXT_REDIRECT")
+  );
+}
+
 function DoneStep({ recovery, next }: { recovery: RecoveryCodesOneTimeResult; next: string | null }) {
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   async function onContinue() {
     if (busy) return;
     setBusy(true);
-    await finishSetupAction({ next });
+    setError(null);
+    try {
+      await finishSetupAction({ next });
+    } catch (caught) {
+      // `redirect()` throws a NEXT_REDIRECT digest; swallowing it would leave
+      // the operator on this page after the session was already revoked.
+      if (isNextRedirect(caught)) throw caught;
+      setError("退出失败，请先保存恢复码后重试");
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (
@@ -167,6 +187,11 @@ function DoneStep({ recovery, next }: { recovery: RecoveryCodesOneTimeResult; ne
       <p className="text-xs text-gray-500">
         保存完成后点击下方按钮。当前登录会被作废，需要重新登录，这次会进入刚刚启用的双重验证。
       </p>
+      {error && (
+        <p role="alert" className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
+          {error}
+        </p>
+      )}
       <button type="button" disabled={busy} onClick={onContinue} className={buttonClassName("primary", "w-full")}>
         {busy ? "正在退出…" : "我已保存，继续"}
       </button>

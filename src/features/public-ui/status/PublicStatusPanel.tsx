@@ -25,6 +25,7 @@ export function PublicStatusPanel({
   bare = false,
   retryLabel,
   onRetry,
+  digestLabel,
 }: {
   title: string;
   body: string;
@@ -38,6 +39,8 @@ export function PublicStatusPanel({
   /** Retry is the paper action when present; going home stays the outline one. */
   retryLabel?: string;
   onRetry?: () => void;
+  /** Operator-facing error id (`error.digest`). Omitted when the boundary has none. */
+  digestLabel?: string;
 }) {
   const panel = (
     <Container>
@@ -56,6 +59,10 @@ export function PublicStatusPanel({
           </h1>
 
           <p className="mt-5 text-base leading-relaxed text-novel-fg-muted">{body}</p>
+
+          {digestLabel ? (
+            <p className="mt-3 font-mono text-xs text-novel-fg-subtle">{digestLabel}</p>
+          ) : null}
 
           <div className="mt-10 flex flex-wrap items-center gap-3">
             {retryLabel && onRetry ? (
