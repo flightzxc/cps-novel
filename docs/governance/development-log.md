@@ -4,6 +4,30 @@
 
 ---
 
+## 2026-08-27 · U6b 注释溯源合入与获批 Docker 构建缓存清理
+
+- 按 Owner 追加指令，将固定 `feature/pr-u6-polish@ce3cada` 以 merge commit `72a991e`
+  合入本地 main；父提交为 `6ed0faf` / `ce3cada`，无冲突，U5 与 U6 backend 四项修复均保留。
+  `fix/u6-backend-acceptance@4f76cdb`、`feature/canary-preflight@41538ba` 未移动。
+- Claude 已复核 accept U6b。独立检查确认：5 个生产文件去注释后的 TypeScript AST 打印结果
+  与固定 U6 `30842b1` 完全一致；另 1 个 UI 文件只替换测试标题，测试体与断言逐字不变。
+  `language=5` 的来源说明改为 X8 getlistpc 样本，仍缺成对 languageName、仍为 unknown；
+  未恢复旧产物、未发送新探针。清理 D-7 后的陈旧注释不改变白名单、查询或路由逻辑。
+- 合并后 Node 20.20.2 实跑 typecheck PASS；lint 0 error / 3 条既存 warning；完整 Node
+  123 files passed / 10 skipped、1137 tests passed / 95 skipped；完整 UI 85 files / 1369 tests
+  PASS。合计 2506 passed / 0 failed / 95 conditional skipped；Node CLI 15s、UI 默认不变。
+  本次注释补丁未重复安装依赖、Prisma 或 build，不将上一轮结果记为本次新跑。
+- Owner 随后明确授权仅执行 `docker builder prune -f`。在 `desktop-linux` / Docker Desktop
+  实际执行一次，前后均运行 `docker system df`：Build Cache 402 / 32.57GB → 368 / 26.84GB，
+  实收 **5.727GB**，剩余可回收 0B；本次清理前可回收值亦为 5.727GB，并非先前的 9.97GB。
+  镜像引用、9 个容器 ID、49 个卷名逐项前后一致，三个 `cps-novel:0.1.0-*` 回滚镜像完整保留。
+- 只读检查 Docker 文件系统剩余 5.7G（55G 总量、47G 已用、90%）；未进一步删除资源，
+  未运行 system prune 或带 `-a` 的清理。尚未重试金丝雀 PG / 镜像构建，释放空间不等于其验收通过；
+  后续若仍不足，停下由 Owner 扩大 Docker Desktop 虚拟磁盘配额。
+- token 文件交接协议已接受，但本次尚未收到仓库外 0600 文件的绝对路径及手测 200 确认；
+  未查找或读取未知凭证文件，未登录、导入 token、重建拓扑、打开业务闸或调用上游。
+- 详见 [U6b 与 Docker 缓存清理回执](../operations/U6B_DOCKER_CACHE_2026-08-27.md)。
+
 ## 2026-08-27 · U6 D-7 放行的 backend 补测与 custodian 签收
 
 ### 四项阻塞与签收
@@ -62,7 +86,8 @@
 - 合并后 npm ci、Prisma generate/validate、typecheck、lint、完整 Node/UI、build、静态字典与
   隔离检查均已实际复跑通过；计数与上述分支验证一致：2506 passed / 0 failed / 95 conditional skipped。
   重点回归再次 100/100；数据库套件跳过不计为真实 PG 通过。
-- 固定输入未扩大到执行期间源分支新增的 U6b `ce3cada`；金丝雀分支保持 `41538ba`。
+- 本次 U6 backend 合并的固定输入未扩大到当时源分支新增的 U6b `ce3cada`；
+  U6b 随后获 Owner 单独授权并合入，见上方追加记录。金丝雀分支保持 `41538ba`。
   运行镜像未重建，D-7 当前已在 main 代码生效，真实拓扑后续必须重建并按 evaluator 实测。
 - 详见 [U6 backend 验收回执](../operations/U6_BACKEND_ACCEPTANCE_2026-08-27.md)。
 
