@@ -30,6 +30,8 @@
   失败运行的临时资源清理 PASS。等待 Owner 确认仅清理未使用构建缓存；不删除镜像、容器或业务卷。
   本地凭证仍为 1 superseded / 0 active，等待 Owner 在正式 UI 导入手测 200 的新 token。
   16 个 preview item 仍 pending / attempt_count 总和 0；尚未执行上游读取或合并 main。
+- 定向实现提交 `146d35d`；逐页覆盖、五段阻断与门禁实数见
+  [金丝雀进度回执](../operations/CANARY_PREFLIGHT_2026-08-27.md)，该回执不代表最终验收通过。
 
 ## 2026-08-26 · X12 Admin API 会话级 2FA 收口
 
