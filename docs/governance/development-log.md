@@ -55,6 +55,17 @@
 - 核对 `src/lib/indexnow/eligibility.ts` 去除块注释后的文本逐字一致；修复未改 Claude 实现路径，
   schema/grants、依赖与 Vitest 配置均未改。新增 3 个测试场景，未删除或新增 skip。
 
+### 合入与合并后复跑
+
+- 修复提交 `4f76cdb`，main merge commit `457309d`（父提交 `00867ce` / `4f76cdb`）；
+  U5、固定 U6 `30842b1`、修复提交的祖先检查 PASS，merge 树与修复分支树一致。
+- 合并后 npm ci、Prisma generate/validate、typecheck、lint、完整 Node/UI、build、静态字典与
+  隔离检查均已实际复跑通过；计数与上述分支验证一致：2506 passed / 0 failed / 95 conditional skipped。
+  重点回归再次 100/100；数据库套件跳过不计为真实 PG 通过。
+- 固定输入未扩大到执行期间源分支新增的 U6b `ce3cada`；金丝雀分支保持 `41538ba`。
+  运行镜像未重建，D-7 当前已在 main 代码生效，真实拓扑后续必须重建并按 evaluator 实测。
+- 详见 [U6 backend 验收回执](../operations/U6_BACKEND_ACCEPTANCE_2026-08-27.md)。
+
 ## 2026-08-27 · U5 认证 UX 收尾 + 基准图待办
 
 ### 本轮做了什么
