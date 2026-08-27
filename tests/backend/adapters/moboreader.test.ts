@@ -187,6 +187,48 @@ describe("MoboReader read adapter", () => {
     expect(parsed).not.toHaveProperty("allEpis");
   });
 
+  it.each([
+    [998877, "998877"],
+    ["book-00998877", "book-00998877"],
+  ])("normalizes getchapterinfo bookId %s without changing its string contract", (bookId, expected) => {
+    const parsed = parsePreviewChaptersResponse({
+      data: {
+        bookId,
+        currentLanguage: 3,
+        chapterList: [{ i: 1, chapterID: 5001001, chapterContent: "body" }],
+      },
+    });
+    expect(parsed.bookId).toBe(expected);
+    expect(typeof parsed.bookId).toBe("string");
+    expect(parsed.chapterList[0].chapterID).toBe("5001001");
+  });
+
+  it.each([
+    [null, "typeof object (null)"],
+    ["", "typeof string (empty)"],
+  ])("rejects invalid bookId %s with field and shape diagnostics only", (bookId, shape) => {
+    let caught: unknown;
+    try {
+      parsePreviewChaptersResponse({
+        data: {
+          bookId,
+          currentLanguage: 3,
+          chapterList: [{ i: 1, chapterID: "private-chapter-id", chapterContent: "private-body" }],
+        },
+      });
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeInstanceOf(MoboreaderAdapterError);
+    const error = caught as MoboreaderAdapterError;
+    expect(error).toMatchObject({ code: "malformed_payload", retryable: false });
+    expect(error.detail).toContain("bookId");
+    expect(error.detail).toContain(shape);
+    expect(error.message).toContain("bookId");
+    expect(error.message).toContain(shape);
+    expect(error.message).not.toMatch(/private-chapter-id|private-body/);
+  });
+
   it("accepts a numeric getchapterinfo chapterID by converting it to a string (D-1 fix, aligned with seriesId/externalBookId strictness)", () => {
     const parsed = parsePreviewChaptersResponse({
       data: {
