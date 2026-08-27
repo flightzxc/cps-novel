@@ -4,10 +4,12 @@ import { withDbRetry } from "@/lib/db/db-retry";
 import type {
   RecoveryResult,
   TaskFamily,
+  TaskClaimTarget,
   TaskLease,
   TaskMode,
   TaskOutcome,
 } from "./types";
+import { TASK_FAMILIES } from "./types";
 import { sanitizePersistedTaskError } from "./errors";
 
 type Db = PrismaClient | Prisma.TransactionClient;
@@ -43,12 +45,25 @@ function json(value: unknown): string {
   return JSON.stringify(value ?? null);
 }
 
+export function validateTaskClaimTarget(target: TaskClaimTarget): void {
+  const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  if (!target || !TASK_FAMILIES.includes(target.family)
+    || typeof target.taskId !== "string" || !uuid.test(target.taskId)
+    || typeof target.itemId !== "string" || !uuid.test(target.itemId)) {
+    throw new Error("task_claim_target_invalid");
+  }
+}
+
 async function selectPending(
   tx: Prisma.TransactionClient,
   family: TaskFamily,
   taskTypes: string[],
+  target?: TaskClaimTarget,
 ): Promise<CandidateRow | null> {
   if (family === "catalog_scan" && !taskTypes.includes("catalog_scan")) return null;
+  const targetClause = target
+    ? Prisma.sql`AND i.task_id = ${target.taskId}::uuid AND i.id = ${target.itemId}::uuid`
+    : Prisma.empty;
   let cursor: { at: Date; id: string } | null = null;
   while (true) {
     const cursorClause = cursor
@@ -61,7 +76,7 @@ async function selectPending(
           SELECT i.id, i.task_id, i.payload, i.attempt_count, i.lease_epoch,
                  i.created_at AS cursor_at
           FROM catalog_scan_task_item i
-          WHERE i.status = 'pending' ${cursorClause}
+          WHERE i.status = 'pending' ${cursorClause} ${targetClause}
             AND NOT EXISTS (
               SELECT 1 FROM catalog_scan_task_item earlier
               WHERE earlier.task_id = i.task_id AND earlier.page_index < i.page_index
@@ -82,7 +97,7 @@ async function selectPending(
           SELECT i.id, i.task_id, i.payload, i.attempt_count, i.lease_epoch,
                  i.created_at AS cursor_at
           FROM channel_sync_task_item i
-          WHERE i.status = 'pending' ${cursorClause}
+          WHERE i.status = 'pending' ${cursorClause} ${targetClause}
           ORDER BY i.created_at, i.id
           LIMIT 128
           FOR UPDATE OF i SKIP LOCKED
@@ -98,7 +113,7 @@ async function selectPending(
           SELECT i.id, i.task_id, i.payload, i.attempt_count, i.lease_epoch,
                  i.created_at AS cursor_at
           FROM generic_task_item i
-          WHERE i.status = 'pending' ${cursorClause}
+          WHERE i.status = 'pending' ${cursorClause} ${targetClause}
           ORDER BY i.created_at, i.id
           LIMIT 128
           FOR UPDATE OF i SKIP LOCKED
@@ -276,8 +291,13 @@ export async function claimPendingItem(
     taskTypes: string[];
     workerId: string;
     leaseMs: number;
+    claimTarget?: TaskClaimTarget;
   },
 ): Promise<TaskLease | null> {
+  if (input.claimTarget !== undefined) {
+    validateTaskClaimTarget(input.claimTarget);
+    if (input.claimTarget.family !== input.family) return null;
+  }
   if (input.taskTypes.length === 0) return null;
   if (input.leaseMs < 1) throw new Error("leaseMs must be positive");
   // `withDbRetry` wraps the whole `$transaction` call, never a statement
@@ -299,7 +319,7 @@ export async function claimPendingItem(
   return withDbRetry(
     () =>
       prisma.$transaction(async (tx) => {
-        const candidate = await selectPending(tx, input.family, input.taskTypes);
+        const candidate = await selectPending(tx, input.family, input.taskTypes, input.claimTarget);
         if (!candidate) return null;
         const executionToken = randomUUID();
         const row = await assignLease(

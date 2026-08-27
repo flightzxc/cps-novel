@@ -15,6 +15,7 @@ usage() {
     '       scripts/x8-production-like.sh gate catalog-write <on|off|dry-run|status>' \
     '       scripts/x8-production-like.sh backup-now' \
     '       scripts/x8-production-like.sh restore-smoke' \
+    '       scripts/x8-production-like.sh preview-one --task-id <uuid> --item-id <uuid> --actor <operator-handle>' \
     '       scripts/x8-production-like.sh promo-fixture --source-item <id> --channel-account <id> --target-url <url> [--apply]' \
     '       scripts/x8-production-like.sh health-sql' \
     '       scripts/x8-production-like.sh verify' \
@@ -420,6 +421,22 @@ down_x8() {
   esac
 }
 
+preview_one() {
+  [[ $# -eq 6 ]] || usage
+  prepare_x8_environment
+  validate_rendered_topology
+  [[ "$FEATURE_NOVEL_CATALOG_SYNC" == "true" && "$NOVEL_CATALOG_SYNC_ALLOW_WRITE" == "true" ]] || {
+    echo "ERROR: preview-one requires the explicit catalog apply window" >&2
+    return 65
+  }
+  # Only this disposable worker may consume preview. The six-service topology
+  # and its permanent Level 0 allowlist remain unchanged.
+  x8_compose run --rm --no-deps -T \
+    -e P1_12_COMPOSE_PROJECT \
+    -e WORKER_TASK_ALLOWLIST=moboreader.preview_refresh.v1 \
+    worker tsx scripts/x8-preview-one.ts "$@"
+}
+
 accept_x8() {
   prepare_x8_environment
   local evidence="$X8_EVIDENCE_DIR/automated-acceptance-$(date -u '+%Y%m%dT%H%M%SZ').log"
@@ -446,6 +463,7 @@ case "$command" in
   gate) shift; [[ $# -eq 2 ]] || usage; gate_catalog "$@" ;;
   backup-now) [[ $# -eq 1 ]] || usage; backup_now ;;
   restore-smoke) [[ $# -eq 1 ]] || usage; restore_smoke ;;
+  preview-one) shift; preview_one "$@" ;;
   promo-fixture) shift; [[ $# -ge 6 ]] || usage; promo_fixture "$@" ;;
   health-sql) [[ $# -eq 1 ]] || usage; run_health_sql ;;
   verify) [[ $# -eq 1 ]] || usage; verify_x8 ;;

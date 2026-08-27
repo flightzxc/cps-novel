@@ -108,6 +108,18 @@ async function createGenericTaskWithItems(count: number) {
   });
 }
 
+async function createChannelTask(createdAt = new Date()) {
+  return prisma.channelSyncTask.create({
+    data: {
+      taskType: "runtime.channel", channelAccountId: ids.account, channelAppId: ids.app,
+      operationScopeHash: randomUUID().replaceAll("-", "").padEnd(64, "0"),
+      requestToken: randomUUID(), totalCount: 1, mode: "apply", createdAt,
+      items: { create: { novelSourceItemId: ids.sourceItem, createdAt } },
+    },
+    include: { items: true },
+  });
+}
+
 async function waitFor(
   predicate: () => Promise<boolean>,
   timeoutMs = 5_000,
@@ -223,6 +235,75 @@ describe.skipIf(!enabled).sequential("P1-07 PostgreSQL 16 runtime", () => {
     expect(item).toMatchObject({ status: "pending", attemptCount: 0, leaseEpoch: 0n });
   });
 
+  it("preserves default FIFO order without a claim target", async () => {
+    const earlier = await createChannelTask(new Date("2026-01-01T00:00:00Z"));
+    const later = await createChannelTask(new Date("2026-01-02T00:00:00Z"));
+    for (const expected of [earlier, later]) {
+      const lease = await claimPendingItem(prisma, {
+        family: "channel_sync", taskTypes: ["runtime.channel"], workerId: "fifo-worker", leaseMs: 60_000,
+      });
+      expect(lease).toMatchObject({ taskId: expected.id, itemId: expected.items[0].id, attemptCount: 1 });
+      await finalizeTaskItem(prisma, lease!, { status: "success" });
+    }
+  });
+
+  it("targets the queue tail through the real cycle without consuming 15 older items", async () => {
+    const earlier = await Promise.all(Array.from({ length: 15 }, () => createChannelTask(new Date("2026-01-01T00:00:00Z"))));
+    const target = await createChannelTask(new Date("2026-01-02T00:00:00Z"));
+    const seen: string[] = [];
+    const handlers = createHandlerRegistry({
+      "runtime.channel": { family: "channel_sync", handler: async ({ lease }) => {
+        seen.push(lease.itemId);
+        return { status: "success" };
+      } },
+    });
+    expect(await processOneWorkerCycle({
+      prisma, workerId: "targeted-worker", handlers,
+      allowlist: buildWorkerAllowlist("runtime.channel", handlers),
+      signal: new AbortController().signal,
+      claimTarget: { family: "channel_sync", taskId: target.id, itemId: target.items[0].id },
+    })).toBe(true);
+    expect(seen).toEqual([target.items[0].id]);
+    const untouched = await prisma.channelSyncTaskItem.findMany({ where: { taskId: { in: earlier.map((task) => task.id) } } });
+    expect(untouched).toHaveLength(15);
+    for (const item of untouched) expect(item).toMatchObject({ status: "pending", attemptCount: 0, leaseEpoch: 0n });
+    expect(await prisma.operationAudit.count({ where: { actorId: "targeted-worker", entityId: target.items[0].id, action: "task_item.success" } })).toBe(1);
+  });
+
+  it.each(["missing", "mismatch", "terminal", "parent_disabled", "not_allowlisted"])(
+    "never falls back from an ineligible targeted item (%s)", async (scenario) => {
+      const earlier = await createChannelTask(new Date("2026-01-01T00:00:00Z"));
+      const target = await createChannelTask(new Date("2026-01-02T00:00:00Z"));
+      if (scenario === "terminal") await prisma.channelSyncTaskItem.update({ where: { id: target.items[0].id }, data: { status: "success" } });
+      if (scenario === "parent_disabled") await prisma.channelSyncTask.update({ where: { id: target.id }, data: { status: "disabled" } });
+      const lease = await claimPendingItem(prisma, {
+        family: "channel_sync", taskTypes: scenario === "not_allowlisted" ? ["another.type"] : ["runtime.channel"],
+        workerId: "targeted-worker", leaseMs: 60_000,
+        claimTarget: {
+          family: "channel_sync", taskId: scenario === "mismatch" ? earlier.id : target.id,
+          itemId: scenario === "missing" ? randomUUID() : target.items[0].id,
+        },
+      });
+      expect(lease).toBeNull();
+      expect(await prisma.channelSyncTaskItem.findUniqueOrThrow({ where: { id: earlier.items[0].id } }))
+        .toMatchObject({ status: "pending", attemptCount: 0, leaseEpoch: 0n });
+      expect((await prisma.channelSyncTaskItem.findUniqueOrThrow({ where: { id: target.items[0].id } })).attemptCount).toBe(0);
+    },
+  );
+
+  it("allows only one concurrent claimant of the same target without falling back", async () => {
+    const earlier = await createChannelTask(new Date("2026-01-01T00:00:00Z"));
+    const target = await createChannelTask(new Date("2026-01-02T00:00:00Z"));
+    const claims = await Promise.all([client(), client()].map((db, index) => claimPendingItem(db, {
+      family: "channel_sync", taskTypes: ["runtime.channel"], workerId: `target-${index}`, leaseMs: 60_000,
+      claimTarget: { family: "channel_sync", taskId: target.id, itemId: target.items[0].id },
+    })));
+    expect(claims.filter(Boolean)).toHaveLength(1);
+    expect(claims.find(Boolean)?.itemId).toBe(target.items[0].id);
+    expect(await prisma.channelSyncTaskItem.findUniqueOrThrow({ where: { id: earlier.items[0].id } }))
+      .toMatchObject({ status: "pending", attemptCount: 0 });
+  });
+
   it("executes the fixed claim SQL for all three task families", async () => {
     await executeBatch(`
       INSERT INTO catalog_scan_task (
@@ -267,6 +348,27 @@ describe.skipIf(!enabled).sequential("P1-07 PostgreSQL 16 runtime", () => {
     expect(generic).toMatchObject({ family: "generic", taskType: "runtime.test", attemptCount: 1 });
   });
 
+  it("keeps catalog page ordering even when the later page is explicitly targeted", async () => {
+    const task = await prisma.catalogScanTask.create({
+      data: {
+        channelAccountId: ids.account, channelAppId: ids.app, projectType: 2,
+        requestToken: randomUUID(), pageStart: 1, pageEnd: 2, pageSize: 20,
+        items: { create: [1, 2].map((pageIndex) => ({ pageIndex, requestFingerprint: String(pageIndex).repeat(64) })) },
+      },
+      include: { items: { orderBy: { pageIndex: "asc" } } },
+    });
+    const input = { family: "catalog_scan" as const, taskTypes: ["catalog_scan"], workerId: "page-worker", leaseMs: 60_000 };
+    const claimTarget = { family: "catalog_scan" as const, taskId: task.id, itemId: task.items[1].id };
+    expect(await claimPendingItem(prisma, { ...input, claimTarget })).toBeNull();
+    for (const item of await prisma.catalogScanTaskItem.findMany({ where: { taskId: task.id } })) {
+      expect(item).toMatchObject({ status: "pending", attemptCount: 0 });
+    }
+    const first = await claimPendingItem(prisma, input);
+    expect(first?.itemId).toBe(task.items[0].id);
+    await finalizeTaskItem(prisma, first!, { status: "success" });
+    expect(await claimPendingItem(prisma, { ...input, claimTarget })).toMatchObject({ itemId: task.items[1].id, attemptCount: 1 });
+  });
+
   it("keeps lease_epoch stable across heartbeat", async () => {
     await createGenericTask();
     const lease = await claimPendingItem(prisma, {
@@ -280,10 +382,12 @@ describe.skipIf(!enabled).sequential("P1-07 PostgreSQL 16 runtime", () => {
     expect(item.lockedUntil!.getTime()).toBeGreaterThan(lease!.lockedUntil.getTime());
   });
 
-  it("recovers expired lease through pending and fences the old owner", async () => {
-    await createGenericTask();
+  it.each([false, true])("recovers expired lease through pending and fences the old owner (targeted=%s)", async (targeted) => {
+    const task = await createGenericTask();
+    const claimTarget = targeted ? { family: "generic" as const, taskId: task.id, itemId: task.items[0].id } : undefined;
     const oldLease = await claimPendingItem(prisma, {
       family: "generic", taskTypes: ["runtime.test"], workerId: "worker-old", leaseMs: 60_000,
+      claimTarget,
     });
     await expireGenericItem(oldLease!.itemId);
     const recovery = await recoverExpiredItem(prisma, {
@@ -292,6 +396,7 @@ describe.skipIf(!enabled).sequential("P1-07 PostgreSQL 16 runtime", () => {
     expect(recovery).toMatchObject({ action: "requeued", attemptCount: 1, leaseEpoch: 1n });
     const newLease = await claimPendingItem(prisma, {
       family: "generic", taskTypes: ["runtime.test"], workerId: "worker-new", leaseMs: 60_000,
+      claimTarget,
     });
     expect(newLease).toMatchObject({ attemptCount: 2, leaseEpoch: 2n });
     expect(newLease!.executionToken).not.toBe(oldLease!.executionToken);

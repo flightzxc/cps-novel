@@ -2,7 +2,8 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { parsePreviewOneArgs, runPreviewOne } from "../../../scripts/x8-preview-one";
 
 const root = resolve(import.meta.dirname, "../../..");
 const read = (path: string) => readFileSync(resolve(root, path), "utf8");
@@ -17,6 +18,55 @@ const envHelper = read("scripts/lib/x8-production-like-env.sh");
 const grants = read("infra/postgres/grants.sql");
 const dockerignore = read(".dockerignore");
 const acceptanceReport = read("docs/operations/X8_LOCAL_PRODUCTION_LIKE_ACCEPTANCE_2026-08-26.md");
+
+describe("X8 targeted preview operator boundary", () => {
+  const options = {
+    taskId: "00000000-0000-4000-8000-000000000001",
+    itemId: "00000000-0000-4000-8000-000000000002",
+    actor: "test-operator",
+  };
+  const args = ["--task-id", options.taskId, "--item-id", options.itemId, "--actor", options.actor];
+  const env = {
+    NODE_ENV: "test", P1_12_COMPOSE_PROJECT: "cps-novel-x8-local", SITE_URL: "https://novel.test",
+    FEATURE_NOVEL_CATALOG_SYNC: "true", NOVEL_CATALOG_SYNC_ALLOW_WRITE: "true",
+    WORKER_TASK_ALLOWLIST: "moboreader.preview_refresh.v1",
+  } satisfies NodeJS.ProcessEnv;
+
+  it("requires an exact target and an attributable operator handle", () => {
+    expect(parsePreviewOneArgs(args)).toEqual(options);
+    for (const invalid of [[], args.slice(0, 4), [...args, "--unknown", "value"], [...args, "--actor", "other"], [...args.slice(0, 5), "Bearer secret"]]) {
+      expect(() => parsePreviewOneArgs(invalid)).toThrow();
+    }
+  });
+
+  it.each([
+    [{ FEATURE_NOVEL_CATALOG_SYNC: "false" }, "preview_write_gates_closed"],
+    [{ NOVEL_CATALOG_SYNC_ALLOW_WRITE: "false" }, "preview_write_gates_closed"],
+    [{ WORKER_TASK_ALLOWLIST: "catalog_scan" }, "preview_only_allowlist_required"],
+    [{ WORKER_TASK_ALLOWLIST: "" }, "preview_only_allowlist_required"],
+    [{ P1_12_COMPOSE_PROJECT: "production" }, "local_topology_required"],
+    [{ SITE_URL: "https://other.example" }, "local_topology_required"],
+  ])("blocks before any database or upstream call: %j", async (overrides, reason) => {
+    const logger = vi.fn();
+    expect(await runPreviewOne({} as never, options, { env: { ...env, ...overrides }, logger }))
+      .toEqual({ outcome: "blocked", reason });
+    expect(logger).toHaveBeenLastCalledWith(expect.objectContaining({ ...options, phase: "finished", outcome: "blocked", reason }));
+  });
+
+  it("rejects privileged database roles instead of silently bypassing grants", async () => {
+    const db = { $queryRaw: vi.fn().mockResolvedValue([{ role: "postgres" }]) };
+    expect(await runPreviewOne(db as never, options, { env, logger: () => undefined }))
+      .toEqual({ outcome: "blocked", reason: "worker_role_required" });
+  });
+
+  it("runs a disposable preview-only worker without changing the permanent allowlist", () => {
+    const entry = launcher.slice(launcher.indexOf("preview_one()"), launcher.indexOf("accept_x8()"));
+    expect(entry).toContain("x8_compose run --rm --no-deps -T");
+    expect(entry).toContain("-e WORKER_TASK_ALLOWLIST=moboreader.preview_refresh.v1");
+    expect(entry).not.toContain("write_x8_gate_state");
+    expect(envHelper).toContain("export WORKER_TASK_ALLOWLIST=credential.validate.v1,credential.supersede.v1,catalog_scan");
+  });
+});
 
 describe("X8 local production-like contracts", () => {
   it("extends rather than changing the frozen four-service base topology", () => {

@@ -4,6 +4,33 @@
 
 ---
 
+## 2026-08-27 · 金丝雀预备轮（进行中）
+
+- 从 `feature/x8@d37506c` 建立 `feature/canary-preflight`；`5a6addf` 仅将
+  `getchapterinfo.data.bookId` 改为既有 `requiredIdentifier`，输出仍为 string。
+  四形态与 D-1/preview 回归 53/53；生产消费点只使用 chapterList，无 bookId 类型假设需要放宽。
+- **共享路径 custodian 确认**：Owner 本轮交接明确传达，Claude 已审核并 accept
+  `c02b4d7` 对 `vitest.config.ts` Node project 的 `testTimeout=15000`；UI project 不变。
+  合并 X8 时按该确认登记，不据此扩大其他共享路径权限。
+- Owner 确认增加正式定向领单能力：可选 task/item 限定只收窄 pending 查询；默认 FIFO
+  不变，不修改 executionToken、leaseEpoch、heartbeat、recoverExpiredItem 或 fenced finalize。
+  `preview-one` 保留双闸、能力位和 allowlist，并输出 taskId/itemId/触发方及提交结果。
+- 首次真实预览只消费 1 个 item，既有另外 15 项不动；预算优先用于第 2–11 页扩页。
+  候选书随后按需定向物化，不通过清空 FIFO 队列触达候选。
+- **独立发现 · preview TTL 不对称**：preview_refresh 没有 catalog_scan/claim 的六小时
+  task TTL，pending 不会因等待自动过期。生产中存在陈旧任务延后使用活动凭证执行的风险，
+  需要独立排期；本轮不新增 TTL、不把普通 pending 错报为 task_expired。
+- **后续**：将“重跑此书预览”接入 C5 任务中心正式 UI；X11 与 R1/R2 测试闸仍留下一轮。
+  本轮不更改 D-7、不开放 claimPromo/Sitemap/IndexNow、不 push/tag/部署生产。
+- 真实验收与最终门禁另记 operations 报告；未完成前不得把当前实现或单元测试当成金丝雀 PASS。
+- 合并前静态验证：Node 20.20.2 下 npm ci、Prisma 6.19.2 generate/validate、typecheck、
+  build、静态字典检查 PASS；lint 0 error / 3 条既存 warning；完整 Vitest 209 files passed /
+  10 skipped，2507 tests passed / 111 skipped。npm ci 保留已登记的 8 high，不自动升级依赖。
+- PostgreSQL 定向回归在创建隔离测试卷时遇到 Docker `no space left on device`，测试尚未开始，
+  失败运行的临时资源清理 PASS。等待 Owner 确认仅清理未使用构建缓存；不删除镜像、容器或业务卷。
+  本地凭证仍为 1 superseded / 0 active，等待 Owner 在正式 UI 导入手测 200 的新 token。
+  16 个 preview item 仍 pending / attempt_count 总和 0；尚未执行上游读取或合并 main。
+
 ## 2026-08-26 · X12 Admin API 会话级 2FA 收口
 
 ### 本轮做了什么

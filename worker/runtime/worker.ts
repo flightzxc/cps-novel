@@ -8,6 +8,8 @@ import {
   recoverExpiredItem,
   requireHandler,
   sanitizePersistedTaskError,
+  validateTaskClaimTarget,
+  type TaskClaimTarget,
   type TaskFamily,
   type TaskHandlerRegistry,
   type WorkerAllowlistConfig,
@@ -35,6 +37,7 @@ export interface WorkerRuntimeOptions {
   onError?: (error: unknown) => void;
   onTaskFailure?: WorkerTaskFailureReporter["onTaskFailure"];
   now?: () => Date;
+  claimTarget?: TaskClaimTarget;
 }
 
 export interface DrainLoopOptions {
@@ -125,6 +128,7 @@ export async function processOneWorkerCycle(options: WorkerRuntimeOptions): Prom
   const shutdownDrainTimeoutMs = validateShutdownDrainTimeoutMs(
     options.shutdownDrainTimeoutMs ?? DEFAULT_SHUTDOWN_DRAIN_TIMEOUT_MS,
   );
+  if (options.claimTarget !== undefined) validateTaskClaimTarget(options.claimTarget);
   if (options.signal.aborted || !options.allowlist.willConsume) return false;
   const leaseMs = options.leaseMs ?? 30_000;
   const maxAttemptsByType = Object.fromEntries(
@@ -163,12 +167,14 @@ export async function processOneWorkerCycle(options: WorkerRuntimeOptions): Prom
 
   for (const family of TASK_FAMILIES) {
     if (options.signal.aborted) return false;
+    if (options.claimTarget !== undefined && options.claimTarget.family !== family) continue;
     const taskTypes = taskTypesForFamily(family, options.handlers, options.allowlist.effective);
     const lease = await claimPendingItem(options.prisma, {
       family,
       taskTypes,
       workerId: options.workerId,
       leaseMs,
+      ...(options.claimTarget === undefined ? {} : { claimTarget: options.claimTarget }),
     });
     if (!lease) continue;
 
