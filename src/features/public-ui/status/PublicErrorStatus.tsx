@@ -15,9 +15,11 @@ import { PUBLIC_SITE_LOCALE } from "@/lib/site/locale-label";
 export function PublicErrorStatus({
   onRetry,
   testId = "public-error-panel",
+  digest,
 }: {
   onRetry?: () => void;
   testId?: string;
+  digest?: string;
 }) {
   const t = getPublicT(PUBLIC_SITE_LOCALE);
   return (
@@ -29,6 +31,7 @@ export function PublicErrorStatus({
       homeLabel={t("unavailable.returnHome")}
       retryLabel={t("errorPage.retry")}
       onRetry={onRetry ?? (() => undefined)}
+      digestLabel={digest ? t("errorPage.digest", { digest }) : undefined}
     />
   );
 }

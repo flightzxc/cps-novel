@@ -81,21 +81,13 @@ describe("P0-S9 end-to-end: content creation → real evaluatePublishGate", () =
     // (and must not) touch any other gate condition. Every reason present
     // here belongs to a different, already-known, out-of-scope gap:
     //
-    // - `locale_not_publishable`: `PUBLISHABLE_LOCALES` in
-    //   `src/lib/locale/locale-canonical.ts` is *deliberately empty* today —
-    //   D-7 (launch locale whitelist) is still open project-wide, and one of
-    //   its five admission criteria for "en" is literally "该语种模板已跑通
-    //   真实渲染" (this locale's template has been run through real
-    //   rendering), which is what this very test just did. The other four
-    //   criteria (no i18n message fallback, admin template-locale enum
-    //   registered, SEO metadata complete, sitemap sharding verified) are
-    //   unrelated to S9 and still outstanding — this reason will keep firing
-    //   until D-7 is closed by other work, regardless of body content.
     // - `preview_chapter_missing`: no preview chapter exists yet (P2-05's
     //   territory, untouched by S9).
     // - `promo_link_missing`: no PromoLink exists yet (S5's territory,
     //   untouched by S9 — this service never touches PromoLink at all).
-    expect(evaluation.reasons).toEqual(["locale_not_publishable", "preview_chapter_missing", "promo_link_missing"]);
+    // `locale_not_publishable` no longer fires: U6 admitted `en` to
+    // `PUBLISHABLE_LOCALES`.
+    expect(evaluation.reasons).toEqual(["preview_chapter_missing", "promo_link_missing"]);
     expect(evaluation.publishable).toBe(false);
   });
 

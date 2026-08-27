@@ -21,19 +21,17 @@ src/lib/locale/locale-canonical.ts
 | 表 | 状态 | 说明 |
 | --- | --- | --- |
 | 上游语种登记表 | **部分填充（2 项，P0-S15）** | 依据《C2 真上游只读诊断报告 2026-08-26》真实 `getlistpc` 20 条样本登记了 `3 → en`、`7 → ru`（详见下方「P0-S15 更新」）。这只是样本覆盖到的子集，不是完整上游枚举——未登记的数值码依旧落 `unknown` |
-| 发布白名单 | 空 | **D-7 仍是 OPEN**。且冻结准入条件是五项齐备：messages 无 fallback · 后台模板语种枚举已登记 · 模板已跑通真实渲染 · SEO 元数据齐全 · sitemap 分片已验证。P1 一项都不具备，所以连 `en` 也不进 |
+| 发布白名单 | `{en}` | **U6 Owner 明示 D-7 放行 `en`。** 其余 14 语仍不进。S14 守卫允许 `{"en"}` 子集，模块加载不抛。 |
 
-因此今天 `resolveSiteLocale(3)` / `resolveSiteLocale(7)`（及其字符串写法）能解出 `en` / `ru`，其余数值码依旧返回 `unknown`；`isPublishableLocale` 仍恒为 `false`，`listPublishableLocales()` 仍恒为 `[]`——登记表从空到有 2 项不改变发布白名单独立 fail-closed 的事实，「映射成功」与「可发布」始终是两道独立的闸。证据继续到手后，唯一要改的还是这一个文件。
+因此今天 `resolveSiteLocale(3)` / `resolveSiteLocale(7)`（及其字符串写法）能解出 `en` / `ru`，其余数值码依旧返回 `unknown`；`isPublishableLocale("en")` 为 `true`，其余 14 语仍为 `false`，`listPublishableLocales()` 为 `["en"]`。「映射成功」与「可发布」始终是两道独立的闸（`ru` 已映射、仍不可发布）。证据继续到手后，唯一要改的还是这一个文件。
 
 ### P0-S7a（2026-08-20）更新
 
 `SITE_LOCALES`（**登记表**）已扩为 15 语，对齐 CPS 短剧站
 `SUPPORTED_SITE_LOCALES`（`en`/`es`/`pt-BR`/`id`/`vi`/`th`/`ja`/`ko`/`zh-Hant`/`ar`/
-`fr`/`de`/`pl`/`cs`/`ru`），Owner 已裁决"首批注册即全语种"。**这不改变发布白名单
-的状态**——`PUBLISHABLE_LOCALES` 逐条核对五项准入条件后仍为空，`en` 也不例外
-（前台仍混着中文占位文案、后台模板引擎未接线，见 `locale-canonical.ts` 内联
-注释的逐条证据）。「登记」与「可发布」是两件事，扩登记表不代表任何 locale
-解锁发布。新增任何 locale 必须先有 Owner 决策，且只能改这一个文件。
+`fr`/`de`/`pl`/`cs`/`ru`），Owner 已裁决"首批注册即全语种"。**登记 ≠ 可发布**——
+U6 才按 Owner D-7 明示把 `en` 写入 `PUBLISHABLE_LOCALES`；其余 14 语仍不进。
+新增任何 locale 必须先有 Owner 决策，且只能改这一个文件。
 
 ### P0-S14（本轮）更新：D-7 条件二 fail-closed 守卫
 
@@ -66,10 +64,10 @@ src/lib/locale/locale-canonical.ts
 数值码——即便看起来"像"某个语种——依旧返回 `unknown`，fail-closed 语义不变。
 扩表规则不变：新增登记必须附带真实上游成对证据，禁止推测补齐。
 
-**这不影响发布白名单。** `PUBLISHABLE_LOCALES` 依旧是独立冻结的空集
-（`Object.freeze([])`），P0-S14 的 D-7 条件二 fail-closed 守卫也未改动——
-「上游码映射得到 locale」与「该 locale 可以发布」永远是两道独立的闸，登记表
-从空到有 2 项不会让任何 locale 绕过白名单。
+**这不影响「映射 ≠ 可发布」。** U6 把 `PUBLISHABLE_LOCALES` 从空集改成 `{en}`
+（Owner D-7 明示），P0-S14 的 D-7 条件二 fail-closed 守卫仍在——`{"en"}` 是
+该守卫允许的子集。「上游码映射得到 locale」与「该 locale 可以发布」永远是
+两道独立的闸；`7 → ru` 仍映射成功、仍不可发布。
 
 ## 硬前置
 

@@ -118,24 +118,23 @@ describe("static sitemap cache and routes", () => {
 });
 
 describe("static sitemap generation and refresh state", () => {
-  it("fails closed through the refresh chain while D-7 keeps the publishable locale list empty", async () => {
+  it("generates through the refresh chain once D-7 has admitted en", async () => {
     process.env.SITE_URL = "https://fixture.example";
     const root = await temporaryRoot();
     const buildFamily = vi.fn(builder());
 
-    expect(listPublishableLocales()).toEqual([]);
+    expect(listPublishableLocales()).toEqual(["en"]);
     const result = await refreshStaticSitemap({
       buildFamily,
       rootDir: root,
-      runId: "d7-open",
+      runId: "d7-en",
       initiatedBy: "test",
-      reason: "empty production locale whitelist",
+      reason: "en admitted to production locale whitelist",
     });
 
-    expect(result.status).toBe("failed");
-    expect(result.state.task.errorSummary).toContain("No sitemap child files were generated");
-    expect(buildFamily).not.toHaveBeenCalled();
-    expect(result.state.current).toEqual({ kind: "missing" });
+    expect(result.status).toBe("success");
+    expect(buildFamily).toHaveBeenCalled();
+    expect(result.state.current.kind).not.toBe("missing");
     await expect(fs.lstat(path.join(root, "sitemap-generation.lock")))
       .rejects.toMatchObject({ code: "ENOENT" });
   });

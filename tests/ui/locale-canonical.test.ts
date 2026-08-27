@@ -25,9 +25,9 @@ import {
  * 覆盖到的子集，不是完整上游枚举，所以下面既有「已登记码解得出 locale」的
  * 用例，也保留「未登记码依旧 unknown」的用例——两者都是回归网的一部分。
  *
- * 🔴 发布白名单依旧为空，这仍是契约要求的 fail-closed 状态：D-7（首发白名单）
- * 仍是 OPEN，登记表从空到有 2 项不改变这一点——「返回 unknown/映射出 locale」
- * 与「恒不可发布」是两件独立的事，见专门的边界用例。
+ * 🔴 发布白名单现为 `{en}`（U6 Owner D-7 明示放行）。登记表从空到有 2 项
+ * 不自动等于可发布——「返回 unknown/映射出 locale」与「是否在白名单」仍是
+ * 两件独立的事，见专门的边界用例。
  */
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -191,31 +191,31 @@ describe("locale 唯一真源 · 上游登记表（P0-S15 首次填充）", () =
     expect(resolveSiteLocale(3, "俄语")).toBe("en");
   });
 
-  it("🔴 未证数值码依旧 unknown——20 条样本只覆盖 {3, 7}，不代表完整枚举", () => {
+  it("🔴 未证数值码依旧 unknown——20 条样本只覆盖 {3, 7}，C2b 也未给 5 成对证据", () => {
     for (const code of [1, 2, 5]) {
       expect(resolveSiteLocale(code)).toBe("unknown");
       expect(resolveSiteLocale(String(code))).toBe("unknown");
     }
   });
 
-  it("🔴 登记表填充不改变发布白名单为空的事实——映射成功与可发布仍是两道独立的闸", () => {
+  it("🔴 登记表填充不把未放行的 locale 送进白名单——映射成功与可发布仍是两道独立的闸", () => {
     expect(resolveSiteLocale(3)).toBe("en");
     expect(resolveSiteLocale(7)).toBe("ru");
-    expect(isPublishableLocale("en")).toBe(false);
+    expect(isPublishableLocale("en")).toBe(true);
     expect(isPublishableLocale("ru")).toBe(false);
-    expect(listPublishableLocales()).toEqual([]);
+    expect(listPublishableLocales()).toEqual(["en"]);
   });
 });
 
 describe("locale 唯一真源 · 发布白名单 fail-closed", () => {
-  it("白名单当前为空：D-7 五项准入条件逐条核对后仍未定案，连 en 也不可发布", () => {
-    expect(listPublishableLocales()).toEqual([]);
-    expect(isPublishableLocale("en")).toBe(false);
+  it("白名单现为 {en}：Owner D-7 明示放行，其余 14 语仍拒绝", () => {
+    expect(listPublishableLocales()).toEqual(["en"]);
+    expect(isPublishableLocale("en")).toBe(true);
   });
 
-  it("P0-S7a：登记表扩到 15 语没有让任何一个绕过白名单闸——一个不多", () => {
+  it("P0-S7a 的 15 语登记没有让非 en 绕过白名单闸——一个不多", () => {
     for (const locale of SITE_LOCALES) {
-      expect(isPublishableLocale(locale), `${locale} 不该在白名单里`).toBe(false);
+      expect(isPublishableLocale(locale), `${locale}`).toBe(locale === "en");
     }
   });
 
@@ -239,15 +239,17 @@ describe("locale 唯一真源 · 发布白名单 fail-closed", () => {
 
   it("listPublishableLocales 返回副本，调用方改不动真源", () => {
     const first = listPublishableLocales();
-    first.push("en");
-    expect(listPublishableLocales()).toEqual([]);
+    first.push("ru");
+    expect(listPublishableLocales()).toEqual(["en"]);
     expect(listPublishableLocales()).not.toBe(first);
   });
 
   it("「映射成功」与「可发布」是两道独立的闸", () => {
-    // 同一个 locale 可以既是站点 locale、又不可发布——这正是当前 en 的状态。
-    expect(SITE_LOCALES).toContain("en");
-    expect(isPublishableLocale("en")).toBe(false);
+    // ru 已映射、仍不可发布——en 可发布并不把两道闸合成一道。
+    expect(SITE_LOCALES).toContain("ru");
+    expect(resolveSiteLocale(7)).toBe("ru");
+    expect(isPublishableLocale("ru")).toBe(false);
+    expect(isPublishableLocale("en")).toBe(true);
   });
 });
 
@@ -334,11 +336,11 @@ describe("locale 唯一真源 · D-7 条件二 fail-closed 守卫（S14）", () 
     expect(ARTICLE_TEMPLATE_CRUD_LANDED).toBe(false);
   });
 
-  it("真实模块加载不抛：当前 PUBLISHABLE_LOCALES 为空，满足 ⊆ {\"en\"}", () => {
+  it("真实模块加载不抛：当前 PUBLISHABLE_LOCALES 为 {\"en\"}，满足 ⊆ {\"en\"}", () => {
     // 走到这一行本身就是「真实模块加载没有抛」的证据——import 在文件顶部，
     // 若守卫在模块加载时抛出，整个测试文件都跑不起来。这里再显式断言一次
     // 前提事实，避免这条证据只靠"没崩"这种隐式信号。
-    expect(listPublishableLocales()).toEqual([]);
+    expect(listPublishableLocales()).toEqual(["en"]);
   });
 
   it("🔴 越界即抛：CRUD 未落地时，非 en 的 locale 混进白名单必须抛出", () => {

@@ -23,7 +23,15 @@ describe("root error.tsx", () => {
     expect(screen.getByTestId("public-error-panel")).toBeTruthy();
     expect(screen.getByRole("heading", { name: "Something went wrong" })).toBeTruthy();
     expect(screen.queryByText("driver secret must not leak")).toBeNull();
+    expect(screen.getByText("Error ID abc123")).toBeTruthy();
     assertHeadlessHome();
+    spy.mockRestore();
+  });
+
+  it("omits the error id when digest is absent", () => {
+    const spy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    render(<ErrorPage error={new Error("boom")} reset={() => undefined} />);
+    expect(screen.queryByText(/Error ID/)).toBeNull();
     spy.mockRestore();
   });
 
@@ -62,6 +70,7 @@ describe("root global-error.tsx", () => {
     expect(screen.getByTestId("public-global-error-panel")).toBeTruthy();
     expect(screen.getByRole("heading", { name: "Something went wrong" })).toBeTruthy();
     expect(screen.queryByText("layout failed")).toBeNull();
+    expect(screen.getByText("Error ID g1")).toBeTruthy();
     assertHeadlessHome();
     spy.mockRestore();
   });

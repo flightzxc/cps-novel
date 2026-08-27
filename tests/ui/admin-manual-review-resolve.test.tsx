@@ -151,21 +151,24 @@ describe("ManualReviewResolveControls · 双结果裁决 UI", () => {
     });
     const stateConflict = await screen.findByTestId(`manual-review-error-${INTENT_ID}`);
     expect(stateConflict.textContent).toContain("任务当前状态不支持该操作");
+    expect(dialog()?.open).toBe(true);
+    expect(
+      (screen.getByTestId(`manual-review-reason-input-${INTENT_ID}`) as HTMLInputElement).value,
+    ).toBe("reason");
 
     fetchMock.mockResolvedValueOnce(
       envelopeResponse({ ok: false, status: 409, code: "task_admin_idempotency_conflict" }),
     );
-    fireEvent.click(screen.getByTestId(`manual-review-confirm-effect-${INTENT_ID}`));
-    await waitFor(() => expect(dialog()?.open).toBe(true));
-    fireEvent.change(screen.getByTestId(`manual-review-reason-input-${INTENT_ID}`), {
-      target: { value: "reason" },
-    });
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: "提交裁决：已发生" }));
     });
     const idempotencyConflict = await screen.findByTestId(`manual-review-error-${INTENT_ID}`);
     expect(idempotencyConflict.textContent).toContain("已用于另一次不同的提交");
     expect(idempotencyConflict.textContent).not.toBe(stateConflict.textContent);
+    expect(dialog()?.open).toBe(true);
+    expect(
+      (screen.getByTestId(`manual-review-reason-input-${INTENT_ID}`) as HTMLInputElement).value,
+    ).toBe("reason");
     expect(routerRefresh).not.toHaveBeenCalled();
   });
 });

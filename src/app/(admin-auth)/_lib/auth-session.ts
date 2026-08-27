@@ -84,6 +84,14 @@ export async function readActiveContext(): Promise<AdminAuthContext | null> {
  * revoked in another tab). Used by `/two-factor/setup` so a Server Action
  * refresh does not `redirect("/login")` and unmount the one-time recovery
  * codes still sitting in client state.
+ *
+ * Presence-only on purpose. A garbage cookie (wrong value, other env) will
+ * render the idle enrollment form; `startSetupAction` still goes through
+ * `requireActiveContext` and fails, and idle/started already show logout.
+ * Distinguishing "version-stale real session" from "garbage cookie" would
+ * need `findByTokenHash`, but U5's recovery-code preserve path is exactly
+ * "cookie still here, sessionVersion already bumped" — a row lookup would
+ * change that signal for a case that cannot complete enrollment anyway.
  */
 export async function hasSessionCookie(): Promise<boolean> {
   return Boolean(await readSessionToken());

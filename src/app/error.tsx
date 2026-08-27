@@ -19,5 +19,5 @@ export default function ErrorPage({
     console.error(error);
   }, [error]);
 
-  return <PublicErrorStatus onRetry={reset} />;
+  return <PublicErrorStatus onRetry={reset} digest={error.digest} />;
 }

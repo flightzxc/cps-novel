@@ -26,7 +26,7 @@ export default function GlobalErrorPage({
   return (
     <html lang="en">
       <body className="site">
-        <PublicErrorStatus testId="public-global-error-panel" onRetry={reset} />
+        <PublicErrorStatus testId="public-global-error-panel" onRetry={reset} digest={error.digest} />
       </body>
     </html>
   );

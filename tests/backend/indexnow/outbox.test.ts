@@ -7,11 +7,8 @@ import { FakeIndexNowDb, installTestSiteUrl, testEnv } from "./fake-db";
 installTestSiteUrl();
 
 const ENABLED_ENV = testEnv({ FEATURE_INDEXNOW_OUTBOX: "true", INDEXNOW_OUTBOX_ALLOW_WRITE: "true" });
-// `isPublishableLocale` (the real default) is an empty whitelist pending
-// D-7 — see `eligibility.test.ts` for coverage of that production default.
-// These tests exercise the rest of `enqueueIndexNowFirstPublish`'s behavior
-// and inject an always-true locale gate so they are not permanently red
-// against that shared, already-documented blocker.
+// `isPublishableLocale` (the real default) is `{en}` after U6 / D-7.
+// Tests that need to look past the locale gate inject `LOCALE_OK`.
 const LOCALE_OK = { isLocalePublishable: () => true };
 
 function seedEligibleArticle(fake: FakeIndexNowDb, id: string, updatedAt: Date) {
@@ -71,9 +68,19 @@ describe("enqueueIndexNowFirstPublish — double-gate boundary", () => {
     expect(fake.outbox.size).toBe(1);
   });
 
-  it("is ineligible under the real (empty) locale whitelist even with both flags on — integration-level check of the shared D-7 blocker", async () => {
+  it("is ineligible under the real whitelist for a locale D-7 has not admitted", async () => {
     const fake = new FakeIndexNowDb();
-    seedEligibleArticle(fake, "article-1", new Date("2026-01-01T00:00:00.000Z"));
+    fake.seedArticle({
+      id: "article-1",
+      novelId: "novel-1",
+      locale: "es",
+      slug: "great-novel",
+      publicPageShortId: "abc123",
+      status: "published",
+      updatedAt: new Date("2026-01-01T00:00:00.000Z"),
+      novelStatus: "published",
+      promoLink: { status: "fetched", webUrl: "https://x.example/w", appUrl: null },
+    });
     const result = await enqueueIndexNowFirstPublish(fake.asPrismaClient(), { articleId: "article-1", source: "test" }, ENABLED_ENV);
     expect(result).toEqual({ outcome: "ineligible" });
     expect(fake.outbox.size).toBe(0);

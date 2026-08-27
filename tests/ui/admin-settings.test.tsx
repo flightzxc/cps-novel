@@ -190,6 +190,26 @@ describe("写：字段级编辑——只发改动的字段", () => {
     expect(body).not.toHaveProperty("indexNowKeyLocation");
   });
 
+  it("保存 OG 成功时不重置另一区未提交的 IndexNow 草稿", async () => {
+    const NEXT: AdminSiteSettingView = {
+      ...BASE_SETTING,
+      defaultOgImage: "https://cdn.example.com/next.jpg",
+      updatedAt: "2026-08-20T01:00:00.000Z",
+    };
+    queueFetch({ body: { ok: true, data: { setting: NEXT, replayed: false } } });
+    renderClient();
+
+    await type(within(indexNowForm()).getByLabelText("indexNowHost"), "draft.example.com");
+    await type(within(ogForm()).getByLabelText("图片地址"), "https://cdn.example.com/next.jpg");
+    await type(within(ogForm()).getByLabelText("修改原因（必填，写入审计）"), "更新封面");
+    await submit(ogForm());
+
+    await waitFor(() => expect(screen.getByRole("status").textContent).toBe("已保存"));
+    expect((within(indexNowForm()).getByLabelText("indexNowHost") as HTMLInputElement).value).toBe(
+      "draft.example.com",
+    );
+  });
+
   it("IndexNow 区只改一个字段时，PATCH 只带那一个字段", async () => {
     const { calls } = queueFetch({
       body: {
