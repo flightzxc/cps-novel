@@ -122,10 +122,11 @@ const UPSTREAM_LANGUAGE_REGISTRY: readonly UpstreamLanguageRegistration[] = Obje
     codes: [7],
     names: ["俄语"],
   },
-  // TODO(U6 / C2b): `docs/governance/C2B_GETCHAPTERINFO_SHAPE_DIAGNOSTIC_2026-08-27.md`
-  // （getchapterinfo 形态诊断）没有 language=5 的成对 languageName 证据——schema
-  // 只有 `currentLanguage`（number），没有 `language` / `languageName`，且诊断
-  // 刻意不记录标量值。未证不得猜，5 继续落 unknown。
+  // TODO: X8 验收报告的 getlistpc 样本出现过 `language=5`（`5 → unknown → 4`），
+  // 但没有成对 `languageName`，因此不登记。C2b 不能当这条码的来源：它是
+  // getchapterinfo 形态诊断，请求坐标 `language:number` 未记值，响应侧只有
+  // `currentLanguage`。闭合此项需新探针——X8 的 harness / 坐标 / 形态产物已按
+  // 纪律删除，回读旧报告拿不到 languageName。未证不得猜，5 继续落 unknown。
 ]);
 
 /**

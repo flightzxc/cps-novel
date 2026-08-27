@@ -12,11 +12,11 @@
  * Deliberately **not** ported: CPS's `pinyin-pro` Chinese-to-pinyin
  * transliteration branch (`shouldTransliterateChinese`/`pushChineseTokens`).
  * `SiteLocale` (`src/lib/locale/locale-canonical.ts`) is registered for 15
- * locales as of P0-S10, but `PUBLISHABLE_LOCALES` there is still empty and
- * the upstream language registry that drives `resolveSiteLocale` is still
- * empty too — there is no exercised call site in this round that would ever
- * route CJK/Thai/Arabic text through this module for a locale content can
- * actually publish under. Non-Latin scripts are preserved as their own
+ * locales as of P0-S10, but `PUBLISHABLE_LOCALES` is `{en}` only (U6 / D-7).
+ * The upstream registry that drives `resolveSiteLocale` only has `3 → en`
+ * and `7 → ru`. There is no exercised call site in this round that would
+ * ever route CJK/Thai/Arabic text through this module for a locale content
+ * can actually publish under. Non-Latin scripts are preserved as their own
  * Unicode slug segments instead — the same fallback CPS itself uses for
  * "other" scripts, and exactly what a browser/HTTP stack percent-encodes at
  * the URL layer regardless. That keeps this module at zero new dependencies.
@@ -128,7 +128,7 @@ function latinWordSegmentedSlug(text: string): string {
  * an **evaluated placeholder, not a verified per-script segmentation
  * strategy**:
  *
- * 1. `PUBLISHABLE_LOCALES` (`locale-canonical.ts`) is still empty — no
+ * 1. `PUBLISHABLE_LOCALES` (`locale-canonical.ts`) is `{en}` only — no
  *    non-`en` content can reach slug generation through any real call site
  *    in this round, so there is nothing to validate a different strategy
  *    against yet.

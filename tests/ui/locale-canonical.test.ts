@@ -191,7 +191,7 @@ describe("locale 唯一真源 · 上游登记表（P0-S15 首次填充）", () =
     expect(resolveSiteLocale(3, "俄语")).toBe("en");
   });
 
-  it("🔴 未证数值码依旧 unknown——20 条样本只覆盖 {3, 7}，C2b 也未给 5 成对证据", () => {
+  it("🔴 未证数值码依旧 unknown——C2 样本只覆盖 {3, 7}；X8 getlistpc 见过 5 但无名", () => {
     for (const code of [1, 2, 5]) {
       expect(resolveSiteLocale(code)).toBe("unknown");
       expect(resolveSiteLocale(String(code))).toBe("unknown");

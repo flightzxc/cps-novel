@@ -109,8 +109,8 @@ export function canonicalUrl(path: string) {
  * registry. `SITE_LOCALES` only records that a locale is *mapped*
  * (`locale-canonical.ts`'s upstream registry); it says nothing about
  * whether that locale has a live, indexable route today. `SITE_LOCALES` is
- * already 15 entries wide while `listPublishableLocales()` is empty (D-7
- * still open) — iterating the wider set here would advertise hreflang
+ * already 15 entries wide while `listPublishableLocales()` is `{en}`
+ * (U6 / D-7) — iterating the wider set here would advertise hreflang
  * alternates for locales this site has never actually served a page for.
  * This is exactly the blind-enumeration failure mode this project's sibling
  * short-drama site had to hotfix after `next-intl`'s default response-header
@@ -121,10 +121,9 @@ export function canonicalUrl(path: string) {
  * the URL the caller is actually rendering right now (self-referencing
  * hreflang is expected practice, not an extra promise about readiness), and
  * omitting it would be a regression versus today's single-locale behavior.
- * `x-default` prefers the site default locale's entry, falling back to the
- * current page when the default locale itself has not (yet) cleared the
- * whitelist — see `locale-canonical.ts`'s `PUBLISHABLE_LOCALES` for why that
- * is true even for `en` today.
+ * `x-default` prefers the site default locale's entry (`en`, now on the
+ * whitelist), falling back to the current page when that locale's URL is
+ * not among the built alternates.
  */
 export function buildHreflangAlternates(
   path: string,
