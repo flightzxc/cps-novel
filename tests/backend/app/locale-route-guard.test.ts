@@ -4,16 +4,15 @@ import { SITE_LOCALES } from "@/lib/locale/locale-canonical";
 import { getRoutableLocale } from "@/app/[locale]/_guard";
 
 describe("getRoutableLocale (P0-S7a locale route infra)", () => {
-  it("rejects every registered locale today, because none has cleared the D-7 publish whitelist", () => {
+  it("rejects every locale prefix: en is served bare and other locales have not cleared D-7", () => {
     for (const locale of SITE_LOCALES) {
-      expect(getRoutableLocale(locale), `${locale} should not be routable yet`).toBeNull();
+      expect(getRoutableLocale(locale), `${locale} should not resolve under a locale prefix`).toBeNull();
     }
   });
 
-  it("rejects the default locale (en) even hypothetically — it is served bare, never under a prefix", () => {
-    // Simulated future state: `en` clears the whitelist. Even then, a
-    // prefixed `/en/...` request must still 404 — the default locale never
-    // gets a second, duplicate-content URL under this segment.
+  it("rejects the default locale (en) despite D-7 admission — it is served bare", () => {
+    // U6 admitted en to the real whitelist. A prefixed `/en/...` request
+    // must still 404: the default-locale structural guard takes precedence.
     expect(getRoutableLocale("en")).toBeNull();
   });
 

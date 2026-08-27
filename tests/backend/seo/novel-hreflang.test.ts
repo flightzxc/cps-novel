@@ -5,14 +5,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
  * "本单最关键项" (P0-S7a's most critical deliverable) regression net.
  *
  * `listPublishableLocales()` is mocked to a fixed two-locale set for this
- * file only, so the visibility-filtering behaviour can be exercised without
- * waiting on the real D-7 whitelist (which is empty today — see
- * `locale-canonical.ts`). The real, unmocked empty-whitelist fail-closed
- * path is covered separately in
- * `novel-hreflang-empty-whitelist.test.ts`, matching the split already
- * established by `sitemap-data.test.ts` (explicit locale) vs.
- * `static-sitemap.test.ts` ("fails closed ... while D-7 keeps the
- * publishable locale list empty").
+ * file only, so cross-locale visibility filtering is exercised independently
+ * of the real D-7 whitelist, which admits only `en`. The real en query and
+ * the simulated empty-whitelist short-circuit are covered separately in
+ * `novel-hreflang-whitelist.test.ts`; this file covers the simulated
+ * multi-locale path.
  */
 vi.mock("@/lib/locale/locale-canonical", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/locale/locale-canonical")>();

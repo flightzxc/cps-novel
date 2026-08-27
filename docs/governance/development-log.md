@@ -4,6 +4,57 @@
 
 ---
 
+## 2026-08-27 · U6 D-7 放行的 backend 补测与 custodian 签收
+
+### 四项阻塞与签收
+
+- 固定接收 `feature/pr-u6-polish@30842b18f6789a0a9890a75d476f69b299e10d73`，
+  在其上建立 `fix/u6-backend-acceptance`；保留 U5 与金丝雀分支，不重写原 U6 提交。
+- 登记：U6 直接修改了 6 个 Codex 独占的 backend 测试文件：
+  `tests/backend/content-creation/publish-gate-e2e.test.ts`、
+  `tests/backend/publish-gate/evaluator.test.ts`、
+  `tests/backend/indexnow/eligibility.test.ts`、`tests/backend/indexnow/outbox.test.ts`、
+  `tests/backend/seo/static-sitemap.test.ts`、
+  `tests/backend/seo/novel-hreflang-empty-whitelist.test.ts`。
+  **Codex custodian 已复核并 accept 30842b1 的上述内容**；D-7 对 en 放行所需的断言变化保留，
+  此处按 X12 / `5459e0b` 先例补登记，不将越界未登记作为后续惯例。
+- hreflang 白名单测试改名为 `novel-hreflang-whitelist.test.ts`：保留真实 en 查询一次的断言，
+  新增仅在单个测试内 mock 空白名单的零查询回归，结束恢复 mock；同步修正主测试的失效指针。
+- sitemap 在真实 refresh → generator 链补测非空子文件数组、零 entries 的失败路径，
+  精确断言 `Generated sitemap contains no public URLs`，旧 current 不变且锁释放；
+  既有空 routeLocales / 无子文件回归保留，没有用注入 generate 异常替代新门禁。
+
+### 两项建议与影响登记
+
+- outbox 的 `seedEligibleArticle` 增加默认 en 的 locale 参数，删除 es 用例的重复 seed，
+  使用相同 helper 配对验证真实白名单下 en 入队、es 被拒；保留原负向断言。
+- 仅修正 Codex 领土内 IndexNow eligibility、promo 发布测试、sitemap 多语言测试和
+  locale route guard 测试的陈旧注释/用例理由，不改变生产执行语句或既有路由断言。
+- **容量观察**：D-7 放行 en 后，触达 hreflang loader 的小说页/章节页请求不再空集短路，
+  新增一次 `article.findMany`。外层 `loadHreflangSiblings` 已使用 React `cache`，按 novelId
+  复用同次渲染中的调用；不能把每个调用位置都累加为独立查询。本轮不优化查询/缓存，
+  未作压测，不据此声称并发容量或延迟已验收；后续容量评估需纳入详情页总查询数。
+- Sitemap 已有正式 worker → refresh → generator 调用链，当前运行双闸关闭；
+  不是“源码无生产调用点”。本轮不触发业务拓扑中的生成任务，不开放 Sitemap / IndexNow / claimPromo。
+- language=5 继续 unknown，不恢复旧诊断产物、不新增探针、不扩上游语种登记。
+- 验证按 Node 20 执行；Node project 的 15s 已获 Claude accept，本单仅通过 CLI 指定，
+  UI project 维持默认；`vitest.config.ts` 的正式修改仍由后续 X8 合入，不重复改配置。
+- 本单不使用 token、不清理 Docker、不重建运行镜像、不发布内容、不 push/tag/部署生产。
+  金丝雀分支 `41538ba` 的真实 PG / 凭证阻塞保留，不能将 U6 合入记为金丝雀验收完成。
+
+### 合并前验证（本次实跑）
+
+- Node 20.20.2 / Prisma 6.19.2：npm ci、generate/validate、typecheck、build、静态字典与
+  项目隔离 PASS；lint 0 error / 3 条既存 warning。Node 使用 CLI `--testTimeout=15000`，UI 默认不变。
+- 定向回归 10 files / 100 tests PASS；完整 Node 123 files passed / 10 skipped、1137 tests passed /
+  95 skipped；UI 85 files / 1369 tests PASS。合计 208 files passed / 10 skipped、2506 tests passed /
+  0 failed / 95 skipped。数据库套件未启用，本轮不冒称真实 PG 验收通过。
+- 首次默认 npm ci 在最后可见的 registry 元数据读取阶段长时间未结束，约七分钟后主动终止
+  （exit 143）；随后使用同一锁文件，以 `--prefer-offline --fetch-timeout=30000 --fetch-retries=1`
+  重跑成功（10s，491 added / 492 audited）。审计仍为已登记的 8 high；未跳过 audit、未改锁文件。
+- 核对 `src/lib/indexnow/eligibility.ts` 去除块注释后的文本逐字一致；修复未改 Claude 实现路径，
+  schema/grants、依赖与 Vitest 配置均未改。新增 3 个测试场景，未删除或新增 skip。
+
 ## 2026-08-27 · U5 认证 UX 收尾 + 基准图待办
 
 ### 本轮做了什么
