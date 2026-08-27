@@ -94,10 +94,9 @@ function isVisibleSibling(candidate: NovelHreflangCandidate): boolean {
 /**
  * Loads every publicly-visible Article sibling for one Novel, restricted to
  * locales that are BOTH actually published (row-level check above, not a DB
- * pre-filter alone) and currently on the D-7 publish whitelist. Returns `[]`
- * without touching the DB when the whitelist itself is empty — today's
- * state (see `locale-canonical.ts`), and the common case this function must
- * handle correctly since it runs on every novel/chapter page render.
+ * pre-filter alone) and currently on the D-7 publish whitelist (`{en}` as of
+ * U6). Still returns `[]` without touching the DB if the whitelist were
+ * empty (defensive); today's common path queries with `locale in ["en"]`.
  */
 export async function loadNovelHreflangSiblings(
   db: PrismaClient | Prisma.TransactionClient,
@@ -146,9 +145,8 @@ export type BuildNovelHreflangAlternatesInput = {
  * canonical the caller is rendering (never recomputed from `siblings`, so a
  * page always advertises itself correctly even if its own row was somehow
  * excluded from `siblings`), and `x-default` prefers the site default
- * locale's entry, falling back to `canonical` when the default locale isn't
- * (yet) among the siblings — which is the common case while
- * `PUBLISHABLE_LOCALES` stays empty.
+ * locale's entry, falling back to `canonical` when `en` is not among the
+ * siblings (e.g. this novel has no English article).
  */
 export function buildNovelHreflangAlternates(
   input: BuildNovelHreflangAlternatesInput,

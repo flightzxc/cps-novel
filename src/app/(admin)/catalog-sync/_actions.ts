@@ -50,12 +50,11 @@ import { toErrorEnvelope } from "../../api/admin/_lib/respond";
  * verify a `NovelSourceItem.sourceLocale` actually maps to whatever an
  * operator might pick — offering a dropdown would invite exactly the
  * wrong-locale-content mistake that module header warns about; (2)
- * `listPublishableLocales()` (`@/lib/locale/locale-canonical`) is empty for
- * every locale this round, `"en"` included, so there is no publishable locale
- * this round to justify a choice among. `SITE_LOCALES` does register 15
- * locales, but creation is a prerequisite to publishing, not publishing
- * itself, and expanding past `"en"` is deliberately deferred rather than
- * silently allowed.
+ * `listPublishableLocales()` (`@/lib/locale/locale-canonical`) is currently
+ * `["en"]` (U6 / D-7), so there is no second publishable locale this round
+ * to justify a picker. `SITE_LOCALES` does register 15 locales, but creation
+ * is a prerequisite to publishing, not publishing itself, and expanding past
+ * `"en"` is deliberately deferred rather than silently allowed.
  */
 
 const CONTENT_CREATION_LOCALE = "en" as const;
