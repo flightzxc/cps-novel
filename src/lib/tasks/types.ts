@@ -3,6 +3,13 @@ import type { Prisma } from "@prisma/client";
 export const TASK_FAMILIES = ["catalog_scan", "channel_sync", "generic"] as const;
 
 export type TaskFamily = (typeof TASK_FAMILIES)[number];
+
+/** Optional narrowing of pending candidates; never a lease or gate override. */
+export interface TaskClaimTarget {
+  family: TaskFamily;
+  taskId: string;
+  itemId: string;
+}
 export type TaskMode = "dry_run" | "apply";
 export type TerminalItemStatus = "success" | "skipped" | "failed";
 

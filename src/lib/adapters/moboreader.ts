@@ -405,7 +405,7 @@ export function parsePreviewChaptersResponse(value: unknown): PreviewChaptersRes
     identities.add(identity);
   }
   return {
-    bookId: requiredString(data.bookId),
+    bookId: requiredIdentifier("bookId", data.bookId),
     currentLanguage: requiredString(typeof data.currentLanguage === "number" ? String(data.currentLanguage) : data.currentLanguage),
     chapterList,
   };

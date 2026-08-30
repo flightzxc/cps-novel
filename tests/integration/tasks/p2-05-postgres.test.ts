@@ -3,6 +3,7 @@ import { PrismaClient } from "@prisma/client";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   createMoboreaderReadAdapter,
+  parsePreviewChaptersResponse,
   type ListBooksResponse,
   type MoboreaderBook,
   type MoboreaderReadAdapter,
@@ -18,6 +19,7 @@ import {
 import { encryptCredentialSecretForWorker } from "../../../worker/credentials/crypto";
 import { createMoboreaderWorkerHandlers } from "../../../worker/handlers/moboreader";
 import { processOneWorkerCycle } from "../../../worker/runtime/worker";
+import { runPreviewOne } from "../../../scripts/x8-preview-one";
 
 const enabled = process.env.P2_05_DATABASE_TEST === "1";
 const owner = new PrismaClient({ datasourceUrl: process.env.P2_05_OWNER_DATABASE_URL });
@@ -897,7 +899,7 @@ describe.skipIf(!enabled).sequential("P2-05 PostgreSQL 16.14 write paths", () =>
     expect(JSON.stringify(task.error)).not.toContain("upstream body must not persist");
   });
 
-  it("enqueues exactly the current linked catalog batch and executes the frozen fallback request contract", async () => {
+  it.each([false, true])("enqueues the linked batch and executes the frozen request contract (targeted=%s)", async (targeted) => {
     const touched = await seedLinkedSource("book-1", "scope-touched");
     const outside = await seedLinkedSource("book-outside", "scope-outside");
     const created = await enqueue("apply");
@@ -928,8 +930,28 @@ describe.skipIf(!enabled).sequential("P2-05 PostgreSQL 16.14 write paths", () =>
 
     const readAdapter = adapter();
     readAdapter.fetchBookMaterial = vi.fn(readAdapter.fetchBookMaterial);
-    readAdapter.fetchPreviewChapters = vi.fn(readAdapter.fetchPreviewChapters);
-    expect(await consumePreview(readAdapter)).toBe(true);
+    readAdapter.fetchPreviewChapters = vi.fn(async () => parsePreviewChaptersResponse({
+      data: { bookId: 998877, currentLanguage: 2, chapterList: chapters(3) },
+    }));
+    if (targeted) {
+      const logger = vi.fn();
+      const options = { taskId: preview.id, itemId: preview.items[0].id, actor: "test-operator" };
+      const dependencies = {
+        env: { ...gates, P1_12_COMPOSE_PROJECT: "cps-novel-x8-local", SITE_URL: "https://novel.test", WORKER_TASK_ALLOWLIST: "moboreader.preview_refresh.v1" },
+        handlers: createMoboreaderWorkerHandlers(worker, { adapter: readAdapter, env: gates }),
+        logger,
+      };
+      expect(await runPreviewOne(worker, options, dependencies)).toMatchObject({ outcome: "success", attemptCount: 1 });
+      expect(logger).toHaveBeenLastCalledWith(expect.objectContaining({
+        phase: "finished", taskId: preview.id, itemId: preview.items[0].id, actor: "test-operator", outcome: "success",
+      }));
+      expect(JSON.stringify(logger.mock.calls)).not.toMatch(/test-jwt|body-1|agency-1/);
+      expect(await runPreviewOne(worker, options, dependencies)).toMatchObject({ outcome: "not_consumed", reason: "target_not_eligible" });
+      expect(readAdapter.fetchBookMaterial).toHaveBeenCalledTimes(1);
+      expect(readAdapter.fetchPreviewChapters).toHaveBeenCalledTimes(1);
+    } else {
+      expect(await consumePreview(readAdapter)).toBe(true);
+    }
     expect(readAdapter.fetchBookMaterial).toHaveBeenCalledWith({
       agencyId: "agency-1",
       dataId: "series-book-1",
@@ -959,6 +981,37 @@ describe.skipIf(!enabled).sequential("P2-05 PostgreSQL 16.14 write paths", () =>
     }, gates);
     expect(retry).toMatchObject({ status: "duplicate", taskId: preview.id });
   });
+
+  it.each(["getbydataid", "getchapterinfo", "source_app_excluded", "channel_inactive", "account_disabled"])(
+    "targeting cannot bypass a closed preview boundary (%s)", async (boundary) => {
+      await seedLinkedSource("book-1", `disabled-${boundary}`);
+      const created = await enqueue("apply");
+      await consume();
+      const preview = await owner.channelSyncTask.findUniqueOrThrow({
+        where: { requestToken: `moboreader.preview_refresh.v1:${created.taskId}` }, include: { items: true },
+      });
+      const runtimeEnv = { ...gates };
+      if (boundary === "source_app_excluded") {
+        runtimeEnv.MOBOREADER_PREVIEW_SOURCE_APP_CODES = "another-source";
+      } else if (boundary === "channel_inactive") {
+        await owner.channel.update({ where: { id: ids.channel }, data: { status: "inactive" } });
+      } else if (boundary === "account_disabled") {
+        await owner.channelAccount.update({ where: { id: ids.account }, data: { status: "disabled" } });
+      } else {
+        await owner.channelCapability.updateMany({ where: { capabilityKey: boundary }, data: { status: "registered_disabled" } });
+      }
+      const readAdapter = adapter();
+      readAdapter.fetchBookMaterial = vi.fn(readAdapter.fetchBookMaterial);
+      readAdapter.fetchPreviewChapters = vi.fn(readAdapter.fetchPreviewChapters);
+      expect(await runPreviewOne(worker, { taskId: preview.id, itemId: preview.items[0].id, actor: "test-operator" }, {
+        env: { ...runtimeEnv, P1_12_COMPOSE_PROJECT: "cps-novel-x8-local", SITE_URL: "https://novel.test", WORKER_TASK_ALLOWLIST: "moboreader.preview_refresh.v1" },
+        handlers: createMoboreaderWorkerHandlers(worker, { adapter: readAdapter, env: runtimeEnv }), logger: () => undefined,
+      })).toMatchObject({ outcome: "failed" });
+      expect(readAdapter.fetchBookMaterial).not.toHaveBeenCalled();
+      expect(readAdapter.fetchPreviewChapters).not.toHaveBeenCalled();
+      expect(await owner.novelChapterContent.count()).toBe(0);
+    },
+  );
 
   it("uses the same task path for manual trigger and applies 24h freshness without widening scope", async () => {
     const stale = await seedLinkedSource("book-1", "manual-stale");

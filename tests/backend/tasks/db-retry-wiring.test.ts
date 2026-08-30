@@ -18,7 +18,7 @@ import { Prisma, type PrismaClient } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
 
 import { claimPendingItem, finalizeTaskItem, heartbeatTaskItem, LeaseLostError, recoverExpiredItem } from "@/lib/tasks/store";
-import type { TaskLease } from "@/lib/tasks/types";
+import type { TaskClaimTarget, TaskLease } from "@/lib/tasks/types";
 
 function prismaError(code: string): Prisma.PrismaClientKnownRequestError {
   return new Prisma.PrismaClientKnownRequestError(`simulated ${code}`, { code, clientVersion: "6.19.2" });
@@ -38,6 +38,28 @@ function fakePrisma(tx: Record<string, unknown>, failures: number) {
 }
 
 describe("db-retry wiring: claimPendingItem", () => {
+  it.each([
+    null,
+    { family: "channel_sync", taskId: "bad", itemId: "bad" },
+    { family: "unknown", taskId: "00000000-0000-4000-8000-000000000001", itemId: "00000000-0000-4000-8000-000000000002" },
+  ])("rejects a malformed claim target before entering a transaction", async (claimTarget) => {
+    const { client, attempts } = fakePrisma({}, 0);
+    await expect(claimPendingItem(client, {
+      family: "channel_sync", taskTypes: ["preview"], workerId: "worker", leaseMs: 30_000,
+      claimTarget: claimTarget as TaskClaimTarget,
+    })).rejects.toThrow("task_claim_target_invalid");
+    expect(attempts.count).toBe(0);
+  });
+
+  it("does not enter another family for a valid target", async () => {
+    const { client, attempts } = fakePrisma({}, 0);
+    expect(await claimPendingItem(client, {
+      family: "generic", taskTypes: ["preview"], workerId: "worker", leaseMs: 30_000,
+      claimTarget: { family: "channel_sync", taskId: "00000000-0000-4000-8000-000000000001", itemId: "00000000-0000-4000-8000-000000000002" },
+    })).toBeNull();
+    expect(attempts.count).toBe(0);
+  });
+
   it("retries a transient P1008 failure and succeeds on the second attempt", async () => {
     const row = {
       id: "item-1", task_id: "task-1", task_type: "some_type", payload: { a: 1 },
