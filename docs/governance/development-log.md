@@ -4,6 +4,39 @@
 
 ---
 
+## 2026-08-30 · 金丝雀预备轮实跑、扩页止损与 C4 微秒 CAS 修复
+
+- 将固定 `feature/x8@d37506c` 以 merge commit `c80665e` 合入 main，再将
+  `feature/canary-preflight@41538ba` 以 merge commit `56eb524` 合入；development-log 冲突保留
+  X8、U5/U6/U6b 与 canary 双方完整登记，没有整树覆盖。U5 `00867ce`、U6 `30842b1`、
+  U6b `ce3cada`、X8 `d37506c`、canary `41538ba` 祖先检查均 PASS。Claude 已 accept
+  Node project `testTimeout=15000` 的 custodian 记录随 X8 保留。
+- 在正式 `/channel-accounts` UI 导入仓库外 0600 token 并 validation 成功；浏览器 host 限定
+  `novel.test`，token 不进参数、日志、截图或报告，成功后源文件立即销毁。真实定向消费一项 en
+  preview：上游 3 章、物化 3 章、非空 3 章 / 20,675 字符；其余 15 个旧 pending item 未消费。
+  `getbydataid → getchapterinfo → materialize` 首次全链闭环，parser numeric bookId 修复实证 PASS。
+- 通过正式 `/catalog-sync` UI 对页 2～8 逐页 dry-run / apply；7 次 apply、140 条去重来源，
+  fetched/deferred/incomplete/bound/conflict 均为 0。按每个读取最多三次尝试预留，preview 6 +
+  catalog 42 = 48/48；没有 Retry-After/remaining/reset 证据可确认新窗口，因此页 9～11 未执行，
+  不纳入分母。候选未成立，Promo 绑定、evaluator、发布、`/go`、TrackingEvent 五段均记
+  FAIL / 前置阻断，发布 NO-GO；没有调用 claimPromo/rawPayload fixture/Sitemap/IndexNow。
+- C4 真实 `/settings` 首次写入暴露 foundation seed `timestamptz(6)` 微秒与浏览器 JavaScript Date
+  毫秒精度不对称：旧 exact CAS 永久 409。提交 `5b26912` 将 CAS 收窄为单毫秒半开区间，
+  保留成功写至少推进 1ms 与旧值并发拒绝语义；补单测后重建镜像，真实 UI 保存、重载与
+  `site_setting.update` 审计 PASS。占位图为 `https://novel.test/apple-icon`，待 Owner 更换正式图。
+- 最终 main 实跑：typecheck、lint（0 error / 3 既存 warning）、完整 Vitest 210 files passed /
+  10 skipped、2535 passed / 0 failed / 111 conditional skipped、build PASS；隔离 PostgreSQL core
+  118/118、X6 4/4、X9 3/3、字典与 cleanup PASS。镜像 `cps-novel:0.1.0-5b26912`
+  (`sha256:b14ed2fc…`) 的 X8 topology/PG/limiters/backup-restore/launch SQL accept 全 PASS。
+- 收尾：两个 preview 读取能力经正式 CLI dry-run/apply 恢复 `registered_disabled`（审计 83/84）；
+  凭证经 UI supersede task 完成（审计 85/86/87），最终 active=0；catalog gate closed，常驻
+  allowlist 未扩展，claimPromo/Sitemap/IndexNow 双闸全 false。Docker Desktop 虚拟磁盘经 Owner
+  授权从 56GB 扩到 128GB，VM 空闲 1.2G→69G；43 images、9 containers、49 volumes 均保留，
+  未执行 system prune 或任何 `-a` 清理。
+- 独立登记：preview_refresh 无 catalog_scan/claim 的 6h TTL，pending 不自动过期；本轮不补。
+  C5「重跑此书预览」UI、页 9～11、X11、R1/R2 留后续。完整证据见
+  [金丝雀预备轮最终回执](../operations/CANARY_PREFLIGHT_2026-08-27.md)。
+
 ## 2026-08-27 · U6b 注释溯源合入与获批 Docker 构建缓存清理
 
 - 按 Owner 追加指令，将固定 `feature/pr-u6-polish@ce3cada` 以 merge commit `72a991e`
