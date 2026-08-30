@@ -85,6 +85,7 @@ export class FakeContentCreationDb {
   readonly articles = new Map<string, FakeArticle>();
   readonly audits: FakeAudit[] = [];
   readonly calls: string[] = [];
+  lastSourceItemFindFirstArgs: { where: { id: string }; select?: Record<string, boolean> } | null = null;
 
   /** How many consecutive `novel.create` calls should throw a `business_id` P2002 before succeeding. */
   novelBusinessIdFailuresRemaining = 0;
@@ -160,8 +161,12 @@ export class FakeContentCreationDb {
     return full;
   }
 
-  private sourceItemFindFirst = async (args: { where: { id: string } }) => {
+  private sourceItemFindFirst = async (args: {
+    where: { id: string };
+    select?: Record<string, boolean>;
+  }) => {
     this.calls.push("novelSourceItem.findFirst");
+    this.lastSourceItemFindFirstArgs = args;
     const stored = this.sourceItems.get(args.where.id) ?? null;
     // Snapshot *before* firing the hook — the hook simulates a different,
     // already-committed concurrent transaction mutating the same

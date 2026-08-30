@@ -137,6 +137,19 @@ describe("createContentFromSourceItem — dry run (default mode)", () => {
     expect(fake.novels.size).toBe(0);
     expect(fake.articles.size).toBe(0);
     expect(fake.audits).toHaveLength(0);
+    expect(fake.lastSourceItemFindFirstArgs?.select).toEqual({
+      id: true,
+      novelId: true,
+      status: true,
+      title: true,
+      description: true,
+      coverUrl: true,
+      totalChapterCount: true,
+      paidFromChapter: true,
+      splitRatio: true,
+      deletedAt: true,
+    });
+    expect(fake.lastSourceItemFindFirstArgs?.select).not.toHaveProperty("rawPayload");
     const untouchedSourceItem = fake.sourceItems.get(sourceItem.id);
     expect(untouchedSourceItem?.novelId).toBeNull();
     expect(untouchedSourceItem?.status).toBe("pending");

@@ -319,7 +319,9 @@ export async function registerMoboreaderFoundation(
   }
 
   return db.$transaction(async (tx) => {
-    await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${ADVISORY_LOCK_KEY}, 0))`;
+    await tx.$queryRaw`
+      SELECT pg_advisory_xact_lock(hashtextextended(${ADVISORY_LOCK_KEY}, 0))::text AS lock_result
+    `;
     const beforeSnapshot = await loadSnapshot(tx);
     const before = inspectFoundationSnapshot(beforeSnapshot);
     const replay = await tx.operationAudit.findFirst({

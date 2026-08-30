@@ -6,6 +6,9 @@ coverage
 test-results
 tests
 docs
+artifacts
+output
+.playwright-cli
 *.log
 .env
 .env.*

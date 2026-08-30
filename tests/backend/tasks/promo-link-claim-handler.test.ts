@@ -1,12 +1,11 @@
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import type { ClaimPromoResult, PromoLinkClaimAdapter } from "@/lib/adapters";
-import { PromoLinkClaimAdapterError, REDACTED_EVIDENCE_SENTINEL } from "@/lib/adapters";
+import { PromoLinkClaimAdapterError } from "@/lib/adapters";
 import { PROMO_LINK_CLAIM_CAPABILITY_KEY, PROMO_LINK_CLAIM_TASK_TYPE } from "@/lib/tasks";
 import {
   buildPromoLinkIdempotencyKey,
   createPromoLinkClaimHandler,
   parsePromoLinkClaimPayload,
-  readExistingPromoFromRawPayload,
   redactUpstreamCode,
   safeHostname,
 } from "../../../worker/handlers/promo-link-claim";
@@ -86,54 +85,40 @@ function seedActiveCredential(db: FakePromoLinkClaimHandlerDb, token = fakeJwt()
   });
 }
 
+function seedFetchedPromoLink(db: FakePromoLinkClaimHandlerDb) {
+  const idempotencyKey = buildPromoLinkIdempotencyKey({
+    channelAppId: "app-1",
+    novelSourceItemId: "source-1",
+    channelAccountId: "account-1",
+    offerType: "read",
+  });
+  db.promoLinks.set("promo-link-existing", {
+    id: "promo-link-existing",
+    novelId: "novel-1",
+    novelSourceItemId: "source-1",
+    channelAppId: "app-1",
+    channelAccountId: "account-1",
+    offerType: "read",
+    origin: "upstream_existing",
+    upstreamCode: "REALCODE-XYZ",
+    publicRedirectCode: "abc123def4",
+    webUrl: "https://eng.moboreader.com/promo/abc",
+    appUrl: null,
+    idempotencyKey,
+    status: "fetched",
+    errorKind: null,
+    errorMessage: null,
+    fetchedAt: new Date(),
+    lastAttemptedAt: new Date(),
+  });
+  return "promo-link-existing";
+}
+
 describe("P0-S5 promo-link claim handler — payload and pure helpers", () => {
   it("parses a well-formed payload and rejects a malformed one", () => {
     expect(parsePromoLinkClaimPayload(makePayload())).toMatchObject({ novelSourceItemId: "source-1" });
     expect(() => parsePromoLinkClaimPayload({})).toThrow("claim_payload_invalid");
     expect(() => parsePromoLinkClaimPayload(makePayload({ expiresAt: "not-a-date" }))).toThrow("task_expiry_invalid");
-  });
-
-  it("reads the §3.9 pre-fetched promo fields without any upstream call — hypothetical non-redacted input", () => {
-    // P0-S11 note: `{ kocCode: "REALCODE1", ... }` is NOT what
-    // `NovelSourceItem.rawPayload` ever contains in production — the only
-    // writer (`worker/handlers/moboreader.ts`'s `persistCatalogPage`, via
-    // `src/lib/adapters/moboreader.ts`'s `toApprovedRawEvidence`)
-    // unconditionally redacts this exact key to `REDACTED_EVIDENCE_SENTINEL`
-    // before the row is ever persisted — see
-    // `tests/backend/adapters/moboreader.test.ts`'s redaction assertion and
-    // the "production reality" test below, which exercises the shape that
-    // actually reaches this function. This test still has value: it pins
-    // `readExistingPromoFromRawPayload`'s parsing contract for whenever a
-    // genuinely non-redacted value is ever passed in (e.g. once the
-    // Owner-gated follow-up work described in this module's header moves
-    // promo-code capture off the redacted `rawPayload` snapshot).
-    expect(readExistingPromoFromRawPayload({ kocCode: "REALCODE1", publicUrl: "https://eng.moboreader.com/x" })).toEqual({
-      kocCode: "REALCODE1",
-      webUrl: "https://eng.moboreader.com/x",
-      appUrl: null,
-      redacted: false,
-    });
-    expect(readExistingPromoFromRawPayload({})).toEqual({ kocCode: null, webUrl: null, appUrl: null, redacted: false });
-    expect(readExistingPromoFromRawPayload(null)).toEqual({ kocCode: null, webUrl: null, appUrl: null, redacted: false });
-  });
-
-  it("production reality: a sync-redacted raw_payload is never read as a real code, and is flagged distinctly from genuine absence", () => {
-    // This is the actual shape `NovelSourceItem.rawPayload` holds today —
-    // see `tests/backend/adapters/moboreader.test.ts`'s
-    // "confines unknown fields to redacted raw evidence" assertion, which
-    // proves the adapter produces exactly this shape.
-    const read = readExistingPromoFromRawPayload({
-      kocCode: REDACTED_EVIDENCE_SENTINEL,
-      publicUrl: REDACTED_EVIDENCE_SENTINEL,
-      homeLink: REDACTED_EVIDENCE_SENTINEL,
-      onlineUrl: REDACTED_EVIDENCE_SENTINEL,
-    });
-    expect(read).toEqual({ kocCode: null, webUrl: null, appUrl: null, redacted: true });
-
-    // A mix of one redacted field and everything else genuinely absent is
-    // still `redacted: true` — any single masked field is enough to make
-    // local evidence untrustworthy for this judgment.
-    expect(readExistingPromoFromRawPayload({ kocCode: REDACTED_EVIDENCE_SENTINEL })).toMatchObject({ redacted: true });
   });
 
   it("redacts the upstream code to a length marker and never the raw value", () => {
@@ -196,7 +181,7 @@ describe("P0-S5 promo-link claim handler — gates and structural failures", () 
 });
 
 describe("P0-S5 promo-link claim handler — dry-run is zero-side-effect but real judgment", () => {
-  it("evaluates the real §3.9 decision in dry-run without ever calling the adapter or writing (hypothetical non-redacted input — see P0-S11 note on the pure-helper test above)", async () => {
+  it("does not reconstruct promo evidence from rawPayload, even when it contains real-looking legacy values", async () => {
     const db = seedFoundation(new FakePromoLinkClaimHandlerDb(), { rawPayload: { kocCode: "REALCODE1", publicUrl: "https://eng.moboreader.com/x" } });
     const adapter: PromoLinkClaimAdapter = { claimPromo: vi.fn() };
     const handler = createPromoLinkClaimHandler(db.asPrismaClient(), { env: ENABLED_ENV, adapter });
@@ -206,15 +191,15 @@ describe("P0-S5 promo-link claim handler — dry-run is zero-side-effect but rea
       signal: new AbortController().signal,
       heartbeat: async () => true,
     });
-    expect(outcome).toMatchObject({ status: "skipped", result: { decision: "would_fetch_existing" } });
+    expect(outcome).toMatchObject({ status: "skipped", result: { decision: "would_skip_capability_disabled" } });
     expect("protectedWrite" in outcome).toBe(false);
     expect(adapter.claimPromo).not.toHaveBeenCalled();
     expect(db.promoLinks.size).toBe(0);
   });
 
-  it("P0-S11: reports would_skip_evidence_redacted in dry-run for the actual production raw_payload shape — never would_fetch_existing", async () => {
+  it("does not let redaction sentinels hide the real capability decision", async () => {
     const db = seedFoundation(new FakePromoLinkClaimHandlerDb(), {
-      rawPayload: { kocCode: REDACTED_EVIDENCE_SENTINEL, publicUrl: REDACTED_EVIDENCE_SENTINEL },
+      rawPayload: { kocCode: "[redacted]", publicUrl: "[redacted]" },
     });
     const adapter: PromoLinkClaimAdapter = { claimPromo: vi.fn() };
     const handler = createPromoLinkClaimHandler(db.asPrismaClient(), { env: ENABLED_ENV, adapter });
@@ -224,7 +209,7 @@ describe("P0-S5 promo-link claim handler — dry-run is zero-side-effect but rea
       signal: new AbortController().signal,
       heartbeat: async () => true,
     });
-    expect(outcome).toMatchObject({ status: "skipped", result: { decision: "would_skip_evidence_redacted" } });
+    expect(outcome).toMatchObject({ status: "skipped", result: { decision: "would_skip_capability_disabled" } });
     expect("protectedWrite" in outcome).toBe(false);
     expect(adapter.claimPromo).not.toHaveBeenCalled();
     expect(db.promoLinks.size).toBe(0);
@@ -258,18 +243,8 @@ describe("P0-S5 promo-link claim handler — dry-run is zero-side-effect but rea
   });
 });
 
-// P0-S11 note: every fixture below uses a genuinely non-redacted
-// `rawPayload.kocCode` (e.g. "REALCODE-XYZ") to exercise the
-// `writePromoLinkAlreadyAvailable` write path's own contract in isolation.
-// As documented on `readExistingPromoFromRawPayload` and this handler's
-// module header, the real sync pipeline never actually produces this shape
-// today (it always redacts these fields first) — see the dedicated
-// "production reality" tests above and the "existing_evidence_redacted"
-// describe block below for the shape that is actually reachable in
-// production. This block is kept because the write path itself must stay
-// correct for whenever the Owner-gated follow-up work lands.
-describe("P0-S5 promo-link claim handler — §3.9 already-existing promo (always enabled)", () => {
-  it("writes PromoLink.status=fetched from the cached raw_payload alone, no adapter call, upstream code redacted in the audit", async () => {
+describe("C2 §3.9 promo ownership and fetched-link reconciliation", () => {
+  it("never creates a fetched PromoLink from cached rawPayload promo fields", async () => {
     const db = seedFoundation(new FakePromoLinkClaimHandlerDb(), {
       rawPayload: { kocCode: "REALCODE-XYZ", publicUrl: "https://eng.moboreader.com/promo/abc" },
     });
@@ -281,48 +256,39 @@ describe("P0-S5 promo-link claim handler — §3.9 already-existing promo (alway
       signal: new AbortController().signal,
       heartbeat: async () => true,
     });
-    expect(outcome.status).toBe("success");
-    expect((outcome as { result: unknown }).result).toMatchObject({ decision: "already_available", host: "eng.moboreader.com" });
+    expect(outcome).toMatchObject({ status: "success", result: { decision: "capability_disabled" } });
     await db.runProtectedWrite((outcome as { protectedWrite: (tx: unknown) => Promise<void> }).protectedWrite as never);
     expect(adapter.claimPromo).not.toHaveBeenCalled();
 
     const idempotencyKey = buildPromoLinkIdempotencyKey({ channelAppId: "app-1", novelSourceItemId: "source-1", channelAccountId: "account-1", offerType: "read" });
     const row = db.promoLinkByIdempotencyKey(idempotencyKey);
-    expect(row).toMatchObject({ status: "fetched", origin: "upstream_existing", upstreamCode: "REALCODE-XYZ", webUrl: "https://eng.moboreader.com/promo/abc" });
+    expect(row).toMatchObject({ status: "registered_disabled", errorKind: "capability_disabled", upstreamCode: null, webUrl: null });
     expect(row!.publicRedirectCode).toMatch(/^[a-z0-9]{10}$/);
-
-    const audit = db.audits.find((entry) => entry.action === "promo_link_claim.already_available");
-    expect(JSON.stringify(audit)).not.toContain("REALCODE-XYZ");
-    expect(JSON.stringify(audit)).toContain("[redacted_code:length=12]");
+    expect(JSON.stringify(db.audits)).not.toContain("REALCODE-XYZ");
   });
 
   it("reconciles an already-fetched PromoLink and remains zero-write when no Article needs binding", async () => {
-    const db = seedFoundation(new FakePromoLinkClaimHandlerDb(), { rawPayload: { kocCode: "REALCODE-XYZ", publicUrl: "https://eng.moboreader.com/promo/abc" } });
+    const db = seedFoundation(new FakePromoLinkClaimHandlerDb());
+    seedFetchedPromoLink(db);
     const handler = createPromoLinkClaimHandler(db.asPrismaClient(), { env: APPLY_ENV });
     const lease = { ...baseLease(), payload: makePayload() };
-    const first = await handler({ lease, mode: "apply", signal: new AbortController().signal, heartbeat: async () => true });
-    await db.runProtectedWrite((first as { protectedWrite: (tx: unknown) => Promise<void> }).protectedWrite as never);
-
-    const second = await handler({ lease, mode: "apply", signal: new AbortController().signal, heartbeat: async () => true });
-    expect(second).toMatchObject({ status: "success", result: { decision: "already_fetched" } });
+    const outcome = await handler({ lease, mode: "apply", signal: new AbortController().signal, heartbeat: async () => true });
+    expect(outcome).toMatchObject({ status: "success", result: { decision: "already_fetched" } });
     db.calls.length = 0;
-    await db.runProtectedWrite((second as { protectedWrite: (tx: unknown) => Promise<void> }).protectedWrite as never);
+    await db.runProtectedWrite((outcome as { protectedWrite: (tx: unknown) => Promise<void> }).protectedWrite as never);
     expect(db.calls.filter((call) => call === "article.update")).toHaveLength(0);
     expect(db.audits.filter((entry) => entry.action === "promo_link_claim.already_fetched_binding_reconciled")).toHaveLength(0);
   });
 
   it("binds an Article created after the PromoLink had already reached fetched", async () => {
-    const db = seedFoundation(new FakePromoLinkClaimHandlerDb(), { rawPayload: { kocCode: "REALCODE-XYZ", publicUrl: "https://eng.moboreader.com/promo/abc" } });
+    const db = seedFoundation(new FakePromoLinkClaimHandlerDb());
+    const promoLinkId = seedFetchedPromoLink(db);
     const handler = createPromoLinkClaimHandler(db.asPrismaClient(), { env: APPLY_ENV });
     const lease = { ...baseLease(), payload: makePayload() };
-    const first = await handler({ lease, mode: "apply", signal: new AbortController().signal, heartbeat: async () => true });
-    await db.runProtectedWrite((first as { protectedWrite: (tx: unknown) => Promise<void> }).protectedWrite as never);
-    const idempotencyKey = buildPromoLinkIdempotencyKey({ channelAppId: "app-1", novelSourceItemId: "source-1", channelAccountId: "account-1", offerType: "read" });
-    const promoLinkId = db.promoLinkByIdempotencyKey(idempotencyKey)!.id;
     db.seedArticle({ id: "article-late", novelId: "novel-1", locale: "en", promoLinkId: null, deletedAt: null });
 
-    const second = await handler({ lease, mode: "apply", signal: new AbortController().signal, heartbeat: async () => true });
-    await db.runProtectedWrite((second as { protectedWrite: (tx: unknown) => Promise<void> }).protectedWrite as never);
+    const outcome = await handler({ lease, mode: "apply", signal: new AbortController().signal, heartbeat: async () => true });
+    await db.runProtectedWrite((outcome as { protectedWrite: (tx: unknown) => Promise<void> }).protectedWrite as never);
 
     expect(db.articles.get("article-late")!.promoLinkId).toBe(promoLinkId);
     expect(db.audits.find((entry) => entry.action === "promo_link_claim.already_fetched_binding_reconciled")?.afterSnapshot)
@@ -330,10 +296,10 @@ describe("P0-S5 promo-link claim handler — §3.9 already-existing promo (alway
   });
 });
 
-describe("P0-S11 promo-link claim handler — existing_evidence_redacted (actual production reality)", () => {
-  it("never writes status=fetched for a sync-redacted raw_payload — writes pending/existing_evidence_redacted instead", async () => {
+describe("C2 promo-link claim handler — redacted raw evidence is not a decision source", () => {
+  it("routes a sync-redacted rawPayload through the actual capability gate", async () => {
     const db = seedFoundation(new FakePromoLinkClaimHandlerDb(), {
-      rawPayload: { kocCode: REDACTED_EVIDENCE_SENTINEL, publicUrl: REDACTED_EVIDENCE_SENTINEL },
+      rawPayload: { kocCode: "[redacted]", publicUrl: "[redacted]" },
     });
     const adapter: PromoLinkClaimAdapter = { claimPromo: vi.fn() };
     const handler = createPromoLinkClaimHandler(db.asPrismaClient(), { env: APPLY_ENV, adapter });
@@ -343,27 +309,23 @@ describe("P0-S11 promo-link claim handler — existing_evidence_redacted (actual
       signal: new AbortController().signal,
       heartbeat: async () => true,
     });
-    expect(outcome).toMatchObject({ status: "success", result: { decision: "existing_evidence_redacted" } });
+    expect(outcome).toMatchObject({ status: "success", result: { decision: "capability_disabled" } });
     await db.runProtectedWrite((outcome as { protectedWrite: (tx: unknown) => Promise<void> }).protectedWrite as never);
     expect(adapter.claimPromo).not.toHaveBeenCalled();
 
     const idempotencyKey = buildPromoLinkIdempotencyKey({ channelAppId: "app-1", novelSourceItemId: "source-1", channelAccountId: "account-1", offerType: "read" });
     const row = db.promoLinkByIdempotencyKey(idempotencyKey);
-    // The defect this test guards: this row must never end up `fetched`
-    // with the literal sentinel string masquerading as a real code/URL —
-    // that is exactly what would make `/go/{code}` 404 for every reader
-    // while the publish gate waved the Article through as promo-ready.
-    expect(row).toMatchObject({ status: "pending", errorKind: "existing_evidence_redacted" });
+    expect(row).toMatchObject({ status: "registered_disabled", errorKind: "capability_disabled" });
     expect(row!.status).not.toBe("fetched");
-    expect(row!.upstreamCode).not.toBe(REDACTED_EVIDENCE_SENTINEL);
-    expect(row!.webUrl).not.toBe(REDACTED_EVIDENCE_SENTINEL);
+    expect(row!.upstreamCode).not.toBe("[redacted]");
+    expect(row!.webUrl).not.toBe("[redacted]");
     expect(row!.upstreamCode).toBeNull();
     expect(row!.webUrl).toBeNull();
   });
 
-  it("is not idempotent-terminal: a second run re-evaluates the same redacted evidence and writes the same pending state again (not an infinite-retry hazard — no adapter call either time)", async () => {
+  it("re-evaluates the capability state on a second run without calling the adapter", async () => {
     const db = seedFoundation(new FakePromoLinkClaimHandlerDb(), {
-      rawPayload: { kocCode: REDACTED_EVIDENCE_SENTINEL },
+      rawPayload: { kocCode: "[redacted]" },
     });
     const adapter: PromoLinkClaimAdapter = { claimPromo: vi.fn() };
     const handler = createPromoLinkClaimHandler(db.asPrismaClient(), { env: APPLY_ENV, adapter });
@@ -373,16 +335,15 @@ describe("P0-S11 promo-link claim handler — existing_evidence_redacted (actual
     await db.runProtectedWrite((first as { protectedWrite: (tx: unknown) => Promise<void> }).protectedWrite as never);
     const second = await handler({ lease, mode: "apply", signal: new AbortController().signal, heartbeat: async () => true });
 
-    expect(second).toMatchObject({ status: "success", result: { decision: "existing_evidence_redacted" } });
+    expect(second).toMatchObject({ status: "success", result: { decision: "capability_disabled" } });
     expect(adapter.claimPromo).not.toHaveBeenCalled();
   });
 });
 
 describe("P0-S11 promo-link claim handler — Article.promoLinkId binding (defect two)", () => {
-  it("binds a freshly-fetched PromoLink onto every locale Article for its Novel, in the same protectedWrite", async () => {
-    const db = seedFoundation(new FakePromoLinkClaimHandlerDb(), {
-      rawPayload: { kocCode: "REALCODE-XYZ", publicUrl: "https://eng.moboreader.com/promo/abc" },
-    });
+  it("binds a catalog-fetched PromoLink onto every locale Article through the compensation path", async () => {
+    const db = seedFoundation(new FakePromoLinkClaimHandlerDb());
+    const promoLinkId = seedFetchedPromoLink(db);
     db.seedArticle({ id: "article-en", novelId: "novel-1", locale: "en", promoLinkId: null, deletedAt: null });
     db.seedArticle({ id: "article-ko", novelId: "novel-1", locale: "ko", promoLinkId: null, deletedAt: null });
     const handler = createPromoLinkClaimHandler(db.asPrismaClient(), { env: APPLY_ENV });
@@ -394,19 +355,16 @@ describe("P0-S11 promo-link claim handler — Article.promoLinkId binding (defec
     });
     await db.runProtectedWrite((outcome as { protectedWrite: (tx: unknown) => Promise<void> }).protectedWrite as never);
 
-    const idempotencyKey = buildPromoLinkIdempotencyKey({ channelAppId: "app-1", novelSourceItemId: "source-1", channelAccountId: "account-1", offerType: "read" });
-    const promoLinkId = db.promoLinkByIdempotencyKey(idempotencyKey)!.id;
     expect(db.articles.get("article-en")!.promoLinkId).toBe(promoLinkId);
     expect(db.articles.get("article-ko")!.promoLinkId).toBe(promoLinkId);
 
-    const audit = db.audits.find((entry) => entry.action === "promo_link_claim.already_available");
+    const audit = db.audits.find((entry) => entry.action === "promo_link_claim.already_fetched_binding_reconciled");
     expect(audit?.afterSnapshot).toMatchObject({ articlesBound: 2, articlesAlreadyBound: 0, articlesConflicted: 0 });
   });
 
   it("is idempotent: re-running the write against already-bound Articles produces zero additional article.update calls", async () => {
-    const db = seedFoundation(new FakePromoLinkClaimHandlerDb(), {
-      rawPayload: { kocCode: "REALCODE-XYZ", publicUrl: "https://eng.moboreader.com/promo/abc" },
-    });
+    const db = seedFoundation(new FakePromoLinkClaimHandlerDb());
+    seedFetchedPromoLink(db);
     db.seedArticle({ id: "article-en", novelId: "novel-1", locale: "en", promoLinkId: null, deletedAt: null });
     const handler = createPromoLinkClaimHandler(db.asPrismaClient(), { env: APPLY_ENV });
     const lease = { ...baseLease(), payload: makePayload() };
@@ -417,22 +375,15 @@ describe("P0-S11 promo-link claim handler — Article.promoLinkId binding (defec
     expect(boundPromoLinkId).not.toBeNull();
 
     db.calls.length = 0;
-    // A second full `handler(...)` run would short-circuit at
-    // `already_fetched` (the PromoLink is already `fetched`) before ever
-    // reaching the binding code again — so this drives the binding logic's
-    // own idempotency directly, by replaying the *same* captured
-    // `protectedWrite` (`writePromoLinkAlreadyAvailable`) a second time
-    // against the already-bound state, exactly as a retried/duplicated task
-    // attempt replaying the same terminal write would.
+    // Replay the same compensation write as a duplicated terminal attempt.
     await db.runProtectedWrite((first as { protectedWrite: (tx: unknown) => Promise<void> }).protectedWrite as never);
     expect(db.calls.filter((call) => call === "article.update")).toHaveLength(0);
     expect(db.articles.get("article-en")!.promoLinkId).toBe(boundPromoLinkId);
   });
 
   it("conflict: an Article already bound to a different PromoLink is left untouched, never silently overwritten", async () => {
-    const db = seedFoundation(new FakePromoLinkClaimHandlerDb(), {
-      rawPayload: { kocCode: "REALCODE-XYZ", publicUrl: "https://eng.moboreader.com/promo/abc" },
-    });
+    const db = seedFoundation(new FakePromoLinkClaimHandlerDb());
+    seedFetchedPromoLink(db);
     db.seedArticle({ id: "article-en", novelId: "novel-1", locale: "en", promoLinkId: "some-other-promo-link-id", deletedAt: null });
     const handler = createPromoLinkClaimHandler(db.asPrismaClient(), { env: APPLY_ENV });
     const outcome = await handler({
@@ -451,14 +402,13 @@ describe("P0-S11 promo-link claim handler — Article.promoLinkId binding (defec
     const idempotencyKey = buildPromoLinkIdempotencyKey({ channelAppId: "app-1", novelSourceItemId: "source-1", channelAccountId: "account-1", offerType: "read" });
     expect(db.promoLinkByIdempotencyKey(idempotencyKey)).toMatchObject({ status: "fetched" });
 
-    const audit = db.audits.find((entry) => entry.action === "promo_link_claim.already_available");
+    const audit = db.audits.find((entry) => entry.action === "promo_link_claim.already_fetched_binding_reconciled");
     expect(audit?.afterSnapshot).toMatchObject({ articlesBound: 0, articlesConflicted: 1 });
   });
 
   it("safely skips when no Article exists yet for the Novel (content-creation pipeline has not run)", async () => {
-    const db = seedFoundation(new FakePromoLinkClaimHandlerDb(), {
-      rawPayload: { kocCode: "REALCODE-XYZ", publicUrl: "https://eng.moboreader.com/promo/abc" },
-    });
+    const db = seedFoundation(new FakePromoLinkClaimHandlerDb());
+    seedFetchedPromoLink(db);
     const handler = createPromoLinkClaimHandler(db.asPrismaClient(), { env: APPLY_ENV });
     const outcome = await handler({
       lease: { ...baseLease(), payload: makePayload() },

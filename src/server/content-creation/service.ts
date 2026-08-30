@@ -304,11 +304,29 @@ type SourceItemRow = {
   deletedAt: Date | null;
 };
 
+const SOURCE_ITEM_PLAN_SELECT = Object.freeze({
+  id: true,
+  novelId: true,
+  status: true,
+  title: true,
+  description: true,
+  coverUrl: true,
+  totalChapterCount: true,
+  paidFromChapter: true,
+  splitRatio: true,
+  deletedAt: true,
+} as const);
+
 type NovelRow = { id: string; businessId: string; locale: string; slug: string; deletedAt: Date | null };
 type ArticleRow = { id: string; slug: string; publicPageShortId: string };
 
 type ReadClient = {
-  novelSourceItem: { findFirst: (args: { where: { id: string } }) => Promise<SourceItemRow | null> };
+  novelSourceItem: {
+    findFirst: (args: {
+      where: { id: string };
+      select: typeof SOURCE_ITEM_PLAN_SELECT;
+    }) => Promise<SourceItemRow | null>;
+  };
   novel: {
     findFirst: (args: {
       where: { id?: string; locale?: string; slug?: string; deletedAt?: null };
@@ -346,7 +364,13 @@ async function loadPlan(
   | { readonly stage: "already_exists"; readonly summary: CreatedContentSummary }
   | { readonly stage: "ready"; readonly sourceItem: SourceItemRow; readonly novelSlug: string; readonly articleSlug: string }
 > {
-  const sourceItem = await client.novelSourceItem.findFirst({ where: { id: novelSourceItemId } });
+  // web_app deliberately has no SELECT grant on raw_payload. Keep this query
+  // aligned with the explicit column grant instead of letting Prisma request
+  // every NovelSourceItem column for a plan that needs only mirrored fields.
+  const sourceItem = await client.novelSourceItem.findFirst({
+    where: { id: novelSourceItemId },
+    select: SOURCE_ITEM_PLAN_SELECT,
+  });
   if (!sourceItem) return { stage: "blocked", result: { outcome: "source_item_not_found" } };
   if (sourceItem.deletedAt !== null) return { stage: "blocked", result: { outcome: "source_item_deleted" } };
 

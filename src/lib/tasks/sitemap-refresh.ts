@@ -50,9 +50,9 @@ async function enqueueInTransaction(
 
   await tx.$queryRaw(Prisma.sql`
     SELECT pg_advisory_xact_lock(
-      ${SITEMAP_REFRESH_ADVISORY_LOCK.namespace},
-      ${SITEMAP_REFRESH_ADVISORY_LOCK.scope}
-    )
+      ${SITEMAP_REFRESH_ADVISORY_LOCK.namespace}::int,
+      ${SITEMAP_REFRESH_ADVISORY_LOCK.scope}::int
+    )::text AS lock_result
   `);
 
   const active = await tx.genericTask.findFirst({

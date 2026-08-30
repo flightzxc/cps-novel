@@ -154,6 +154,10 @@ GRANT INSERT, UPDATE ON TABLE
   channel_sync_task_item, generic_task, generic_task_item, schedule_run,
   cron_run, indexnow_outbox
 TO web_app;
+-- Content creation links an already-sanitized source row to its new Novel.
+-- Keep this column-scoped: Web must not be able to alter raw_payload or any
+-- other upstream evidence maintained exclusively by Worker.
+GRANT UPDATE (novel_id, status, updated_at) ON novel_source_item TO web_app;
 GRANT INSERT ON TABLE operation_audit TO web_app;
 GRANT INSERT (
   id, channel_account_id, credential_type, encrypted_secret, key_version,

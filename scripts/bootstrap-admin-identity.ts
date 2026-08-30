@@ -274,9 +274,9 @@ async function applyBootstrap(
   return db.$transaction(async (tx) => {
     await tx.$queryRaw(Prisma.sql`
       SELECT pg_advisory_xact_lock(
-        ${BOOTSTRAP_ADMIN_ADVISORY_LOCK.namespace},
-        ${BOOTSTRAP_ADMIN_ADVISORY_LOCK.scope}
-      )
+        ${BOOTSTRAP_ADMIN_ADVISORY_LOCK.namespace}::int,
+        ${BOOTSTRAP_ADMIN_ADVISORY_LOCK.scope}::int
+      )::text AS lock_result
     `);
 
     const committed = await findCommittedBootstrap(tx, options.requestId);

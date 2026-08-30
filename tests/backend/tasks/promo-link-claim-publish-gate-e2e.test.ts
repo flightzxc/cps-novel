@@ -12,8 +12,9 @@
  * extending `FakePromoLinkClaimHandlerDb` to also satisfy that function's
  * Prisma call shape would be a second, unrelated fake-DB surface for a
  * module this task does not touch. What *is* real and unmodified end to
- * end: `createPromoLinkClaimHandler`'s decision + its `protectedWrite`
- * (`writePromoLinkAlreadyAvailable` → `bindPromoLinkToArticles`) actually
+ * end: `createPromoLinkClaimHandler`'s already-fetched compensation + its
+ * `protectedWrite` (`reconcileAlreadyFetchedBinding` →
+ * `bindPromoLinkToArticles`) actually
  * runs against the fake DB, and the resulting `Article.promoLinkId` /
  * `PromoLink` row are read back to build the "after" facts — nothing about
  * the binding outcome is asserted directly; it is only ever observed
@@ -21,10 +22,9 @@
  * proves its own mandate through the real evaluator rather than by
  * inspecting `Article.body` directly.
  */
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 
 import { evaluatePublishGate, type PublishGateFacts } from "@/server/publish-gate";
-import { REDACTED_EVIDENCE_SENTINEL, type PromoLinkClaimAdapter } from "@/lib/adapters";
 
 import { createPromoLinkClaimHandler, buildPromoLinkIdempotencyKey } from "../../../worker/handlers/promo-link-claim";
 import { FakePromoLinkClaimHandlerDb, type FakeArticle, type FakePromoLink } from "./promo-link-claim-handler-fake-db";
@@ -94,9 +94,38 @@ function seedFoundation(db: FakePromoLinkClaimHandlerDb) {
     novelId: "novel-1",
     status: "linked",
     deletedAt: null,
-    rawPayload: { kocCode: "REALCODE-E2E", publicUrl: "https://eng.moboreader.com/promo/e2e" },
+    rawPayload: { kocCode: "[redacted]", publicUrl: "[redacted]" },
   });
   return db;
+}
+
+function seedCatalogPromo(db: FakePromoLinkClaimHandlerDb) {
+  const idempotencyKey = buildPromoLinkIdempotencyKey({
+    channelAppId: "app-1",
+    novelSourceItemId: "source-1",
+    channelAccountId: "account-1",
+    offerType: "read",
+  });
+  db.promoLinks.set("promo-link-catalog", {
+    id: "promo-link-catalog",
+    novelId: "novel-1",
+    novelSourceItemId: "source-1",
+    channelAppId: "app-1",
+    channelAccountId: "account-1",
+    offerType: "read",
+    origin: "upstream_existing",
+    upstreamCode: "REALCODE-E2E",
+    publicRedirectCode: "abc123def4",
+    webUrl: "https://eng.moboreader.com/promo/e2e",
+    appUrl: null,
+    idempotencyKey,
+    status: "fetched",
+    errorKind: null,
+    errorMessage: null,
+    fetchedAt: new Date(),
+    lastAttemptedAt: new Date(),
+  });
+  return idempotencyKey;
 }
 
 describe("P0-S11 end-to-end: promo-link-claim binding → real evaluatePublishGate", () => {
@@ -109,30 +138,24 @@ describe("P0-S11 end-to-end: promo-link-claim binding → real evaluatePublishGa
     expect(before.reasons).toContain("promo_link_missing");
     expect(before.publishable).toBe(false);
 
-    // Run the real handler end to end: decision + its protectedWrite.
-    const adapter: PromoLinkClaimAdapter = { claimPromo: vi.fn() };
-    const handler = createPromoLinkClaimHandler(db.asPrismaClient(), { env: APPLY_ENV, adapter });
+    // Catalog capture owns §3.9 and has written the fetched PromoLink; the
+    // claim handler owns only the late-Article binding compensation.
+    const idempotencyKey = seedCatalogPromo(db);
+    const handler = createPromoLinkClaimHandler(db.asPrismaClient(), { env: APPLY_ENV });
     const outcome = await handler({
       lease: { ...baseLease(), payload: makePayload() },
       mode: "apply",
       signal: new AbortController().signal,
       heartbeat: async () => true,
     });
-    expect(outcome).toMatchObject({ status: "success", result: { decision: "already_available" } });
+    expect(outcome).toMatchObject({ status: "success", result: { decision: "already_fetched" } });
     await db.runProtectedWrite((outcome as { protectedWrite: (tx: unknown) => Promise<void> }).protectedWrite as never);
-    expect(adapter.claimPromo).not.toHaveBeenCalled();
 
     // AFTER: re-read the same Article + its now-bound PromoLink from the
     // fake DB — nothing here is asserted about the write directly, only fed
     // into the real evaluator.
     const boundArticle = db.articles.get("article-en")!;
     expect(boundArticle.promoLinkId).not.toBeNull();
-    const idempotencyKey = buildPromoLinkIdempotencyKey({
-      channelAppId: "app-1",
-      novelSourceItemId: "source-1",
-      channelAccountId: "account-1",
-      offerType: "read",
-    });
     const promoLinkRow = db.promoLinkByIdempotencyKey(idempotencyKey)!;
     expect(boundArticle.promoLinkId).toBe(promoLinkRow.id);
 
@@ -145,13 +168,7 @@ describe("P0-S11 end-to-end: promo-link-claim binding → real evaluatePublishGa
     expect(after.publishable).toBe(true);
   });
 
-  it("(control) a PromoLink that reaches existing_evidence_redacted — the P0-S11 defect-one fix — never clears promo_link_missing", async () => {
-    // Sanity check that the two P0-S11 fixes compose correctly: a
-    // redacted-evidence PromoLink (defect one) must never be treated as
-    // "ready" by the publish gate, and must never get bound to an Article
-    // either (`bindPromoLinkToArticles` is only ever called from the
-    // `fetched`-writing paths) — so `promo_link_missing` must still block
-    // publish, unlike the real-evidence case above.
+  it("(control) redacted raw promo evidence cannot clear promo_link_missing", async () => {
     const db = new FakePromoLinkClaimHandlerDb();
     db.seedChannelApp({ id: "app-1", status: "active", channelStatus: "active", channelId: "channel-1", projectType: 1 });
     db.seedChannelAccount({ id: "account-1", channelId: "channel-1", status: "active", deletedAt: null });
@@ -161,7 +178,7 @@ describe("P0-S11 end-to-end: promo-link-claim binding → real evaluatePublishGa
       novelId: "novel-1",
       status: "linked",
       deletedAt: null,
-      rawPayload: { kocCode: REDACTED_EVIDENCE_SENTINEL },
+      rawPayload: { kocCode: "[redacted]" },
     });
     db.seedArticle({ id: "article-en", novelId: "novel-1", locale: "en", promoLinkId: null, deletedAt: null });
 
@@ -172,7 +189,7 @@ describe("P0-S11 end-to-end: promo-link-claim binding → real evaluatePublishGa
       signal: new AbortController().signal,
       heartbeat: async () => true,
     });
-    expect(outcome).toMatchObject({ status: "success", result: { decision: "existing_evidence_redacted" } });
+    expect(outcome).toMatchObject({ status: "success", result: { decision: "capability_disabled" } });
     await db.runProtectedWrite((outcome as { protectedWrite: (tx: unknown) => Promise<void> }).protectedWrite as never);
 
     const article = db.articles.get("article-en")!;

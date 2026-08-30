@@ -4,8 +4,8 @@ set -euo pipefail
 set +x
 
 P1_12_PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-P1_12_RUNTIME_DIR="$P1_12_PROJECT_ROOT/.tmp/p1-12-runtime"
-P1_12_SECRET_DIR="$P1_12_RUNTIME_DIR/secrets"
+P1_12_RUNTIME_DIR="${P1_12_RUNTIME_DIR:-$P1_12_PROJECT_ROOT/.tmp/p1-12-runtime}"
+P1_12_SECRET_DIR="${P1_12_SECRET_DIR:-$P1_12_RUNTIME_DIR/secrets}"
 
 write_secret_once() {
   local path="$1"
