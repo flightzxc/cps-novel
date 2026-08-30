@@ -50,6 +50,7 @@ class FakeSiteSettingDb {
   row: Row | null;
   readonly audits: Audit[] = [];
   updateCalls = 0;
+  lastUpdateWindow: { gte: Date; lt: Date } | null = null;
 
   constructor(row: Row | null = BASE_ROW) {
     this.row = row ? structuredClone(row) : null;
@@ -60,14 +61,16 @@ class FakeSiteSettingDb {
       siteSetting: {
         findUnique: async () => this.row ? structuredClone(this.row) : null,
         updateMany: async (args: {
-          where: { id: number; updatedAt: Date };
+          where: { id: number; updatedAt: { gte: Date; lt: Date } };
           data: Partial<Row>;
         }) => {
           this.updateCalls += 1;
+          this.lastUpdateWindow = structuredClone(args.where.updatedAt);
           if (
             !this.row
             || args.where.id !== 1
-            || this.row.updatedAt.getTime() !== args.where.updatedAt.getTime()
+            || this.row.updatedAt.getTime() < args.where.updatedAt.gte.getTime()
+            || this.row.updatedAt.getTime() >= args.where.updatedAt.lt.getTime()
           ) {
             return { count: 0 };
           }
@@ -196,6 +199,10 @@ describe("updateAdminSiteSetting", () => {
       indexNowKeyLocation: "https://novel.example.com/indexnow-key.txt",
     } });
     expect(db.updateCalls).toBe(1);
+    expect(db.lastUpdateWindow).toEqual({
+      gte: BEFORE,
+      lt: new Date(BEFORE.getTime() + 1),
+    });
     expect(db.audits).toHaveLength(1);
     expect(db.audits[0]).toMatchObject({
       actorType: "admin",

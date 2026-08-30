@@ -481,6 +481,14 @@ export async function updateAdminSiteSetting(
   const updatedAt = new Date(
     Math.max(candidateNow.getTime(), expectedUpdatedAt.getTime() + 1),
   );
+  // PostgreSQL stores this column at microsecond precision, while Prisma's
+  // JavaScript Date projection (and the browser ISO value) can only preserve
+  // milliseconds. The foundation seed uses CURRENT_TIMESTAMP, so its first
+  // write can otherwise never match the exact stored value. Keep the CAS
+  // bounded to the one millisecond represented by expectedUpdatedAt; any
+  // committed service write advances updatedAt by at least one millisecond
+  // and therefore remains outside this exclusive window.
+  const expectedUpdatedAtExclusive = new Date(expectedUpdatedAt.getTime() + 1);
 
   try {
     const result = await withDbRetry(
@@ -493,7 +501,10 @@ export async function updateAdminSiteSetting(
         const before = toSnapshot(beforeRow);
         const currentValidation = validateMergedValues(before, { ...validated.patch }, env);
         const write = await tx.siteSetting.updateMany({
-          where: { id: 1, updatedAt: expectedUpdatedAt },
+          where: {
+            id: 1,
+            updatedAt: { gte: expectedUpdatedAt, lt: expectedUpdatedAtExclusive },
+          },
           data: { ...currentValidation.patch, updatedAt },
         });
         if (write.count !== 1) throw new SiteSettingConcurrentUpdateSignal();
