@@ -180,11 +180,26 @@ export async function processOneWorkerCycle(options: WorkerRuntimeOptions): Prom
 
     const registration = requireHandler(options.handlers, lease.taskType);
     const heartbeatController = new AbortController();
+    const leaseController = new AbortController();
+    const abortLeaseSignal = () => leaseController.abort(options.signal.reason);
+    if (options.signal.aborted) abortLeaseSignal();
+    else options.signal.addEventListener("abort", abortLeaseSignal, { once: true });
     let heartbeatEnabled = true;
     const handlerHeartbeats = new Set<Promise<boolean>>();
     const handlerHeartbeat = () => {
       if (!heartbeatEnabled) return Promise.resolve(false);
-      const heartbeat = heartbeatTaskItem(options.prisma, lease, leaseMs);
+      const heartbeat = heartbeatTaskItem(options.prisma, lease, leaseMs).then(
+        (retained) => {
+          if (!retained) leaseController.abort(new Error("task_lease_lost"));
+          return retained;
+        },
+        (error) => {
+          // A heartbeat error leaves ownership unproven. Abort the handler's
+          // external-call signal before surfacing the error.
+          leaseController.abort(error);
+          throw error;
+        },
+      );
       handlerHeartbeats.add(heartbeat);
       void heartbeat.then(
         () => handlerHeartbeats.delete(heartbeat),
@@ -197,9 +212,13 @@ export async function processOneWorkerCycle(options: WorkerRuntimeOptions): Prom
         await sleep(Math.max(10, Math.floor(leaseMs / 3)), heartbeatController.signal);
         if (heartbeatController.signal.aborted || !heartbeatEnabled) return;
         const retained = await heartbeatTaskItem(options.prisma, lease, leaseMs);
-        if (!retained) return;
+        if (!retained) {
+          leaseController.abort(new Error("task_lease_lost"));
+          return;
+        }
       }
     })().catch((error) => {
+      leaseController.abort(error);
       options.onError?.(sanitizePersistedTaskError(error, "worker_runtime_error"));
     });
 
@@ -207,7 +226,7 @@ export async function processOneWorkerCycle(options: WorkerRuntimeOptions): Prom
       const handlerPromise = registration.handler({
         lease,
         mode: lease.mode,
-        signal: options.signal,
+        signal: leaseController.signal,
         heartbeat: handlerHeartbeat,
       }).catch((error) => ({
         status: "failed" as const,
@@ -215,7 +234,7 @@ export async function processOneWorkerCycle(options: WorkerRuntimeOptions): Prom
       }));
       const drainResult = await waitForHandlerDrain(
         handlerPromise,
-        options.signal,
+        leaseController.signal,
         shutdownDrainTimeoutMs,
       );
       if (drainResult.status === "deadline") {
@@ -247,6 +266,8 @@ export async function processOneWorkerCycle(options: WorkerRuntimeOptions): Prom
     } finally {
       heartbeatEnabled = false;
       heartbeatController.abort();
+      leaseController.abort();
+      options.signal.removeEventListener("abort", abortLeaseSignal);
       await heartbeatPromise;
       await Promise.allSettled(handlerHeartbeats);
     }

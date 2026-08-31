@@ -30,9 +30,8 @@ function nonEmpty(value: string | undefined): string | undefined {
  * route exists for browser-side callers, this server render shares the same
  * service and projection instead of hairpinning through its own origin.
  *
- * This is a read-only screen by design — X9's contract exposes no mutation
- * for `PromoLink` rows (`claimPromo` itself stays `registered_disabled`,
- * see `src/lib/adapters/promo-link-claim.ts`'s header). The one actionable
+ * This is a read-only screen by design — claim execution is owned by the
+ * dual-gated worker path, not this page. The one actionable
  * control here is a cross-link into `/tasks`'s manual-review section for
  * `claim_manual_review_required` rows — that queue is where the actual
  * decision gets made, not here.

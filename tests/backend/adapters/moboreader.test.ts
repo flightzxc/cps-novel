@@ -328,7 +328,20 @@ describe("MoboReader read adapter", () => {
     await adapter.listBooks({ name: "", orderType: 0, pageIndex: 2, pageSize: 100, projectType: 1 }, "secret-token");
     expect(capturedUrl).toBe("https://kocserver-cn.cdreader.com/api/v1/res/getlistpc");
     expect(JSON.parse(String(capturedInit?.body))).toEqual({ name: "", orderType: 0, pageIndex: 2, pageSize: 100, projectType: 1 });
+    expect(capturedInit?.redirect).toBe("error");
     expect(new URL(capturedUrl).search).toBe("");
+  });
+
+  it("supports a single-attempt canary without retrying a retryable response", async () => {
+    const fetchImpl = vi.fn(async () => new Response("unlogged", { status: 503 }));
+    const sleep = vi.fn(async () => undefined);
+    const adapter = createMoboreaderReadAdapter({ fetchImpl, sleep, maxAttempts: 1 });
+    await expect(adapter.listBooks(
+      { name: "", orderType: 0, pageIndex: 1, pageSize: 20, projectType: 1 },
+      "token",
+    )).rejects.toMatchObject({ code: "upstream_http_error", status: 503 });
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(sleep).not.toHaveBeenCalled();
   });
 
   it("sends the frozen runtime-selected getbydataid request unchanged", async () => {

@@ -8,7 +8,11 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-function handlerCyclePrisma(finalizeAffected = 1, syntheticCatalogClose = false) {
+function handlerCyclePrisma(
+  finalizeAffected = 1,
+  syntheticCatalogClose = false,
+  executeRawOverride?: number[],
+) {
   const candidate = {
     id: "00000000-0000-4000-8000-000000000001",
     task_id: "00000000-0000-4000-8000-000000000002",
@@ -31,15 +35,16 @@ function handlerCyclePrisma(finalizeAffected = 1, syntheticCatalogClose = false)
     .mockResolvedValueOnce([leaseRow])
     .mockResolvedValueOnce([])
     .mockResolvedValueOnce([]);
-  const executeRawResults = syntheticCatalogClose
+  const executeRawResults = executeRawOverride ?? (syntheticCatalogClose
     ? [1, finalizeAffected, 500, 1]
-    : [1, finalizeAffected, 1];
+    : [1, finalizeAffected, 1]);
   const executeRaw = vi.fn();
   for (const result of executeRawResults) executeRaw.mockResolvedValueOnce(result);
   const operationAuditCreate = vi.fn().mockResolvedValue({});
   const tx = { $queryRaw: queryRaw, $executeRaw: executeRaw, operationAudit: { create: operationAuditCreate } };
   let committedTransactions = 0;
   const prisma = {
+    $executeRaw: executeRaw,
     $transaction: vi.fn(async (callback: (value: typeof tx) => Promise<unknown>) => {
       const result = await callback(tx);
       committedTransactions += 1;
@@ -76,6 +81,37 @@ function recoveryCyclePrisma(attemptCount: number) {
 }
 
 describe("X10 worker failure emission boundaries", () => {
+  it("aborts the handler signal immediately when an explicit heartbeat loses ownership", async () => {
+    // claim succeeds, handler heartbeat loses the fenced row, finalize also
+    // loses it and is swallowed as the expected LeaseLostError boundary.
+    const db = handlerCyclePrisma(1, false, [0, 0]);
+    const handlerObserved = vi.fn();
+    const observed: Array<boolean> = [];
+    const handlers = createHandlerRegistry({
+      "runtime.failure": {
+        family: "generic",
+        handler: async ({ signal, heartbeat }) => {
+          observed.push(signal.aborted);
+          observed.push(await heartbeat());
+          observed.push(signal.aborted);
+          handlerObserved();
+          return { status: "failed", error: { code: "lease_lost" } };
+        },
+      },
+    });
+
+    await expect(processOneWorkerCycle({
+      prisma: db.prisma,
+      workerId: "worker-lease-loss",
+      handlers,
+      allowlist: buildWorkerAllowlist("runtime.failure", handlers),
+      signal: new AbortController().signal,
+    })).resolves.toBe(true);
+    expect(observed).toEqual([false, false, true]);
+    expect(handlerObserved).toHaveBeenCalledTimes(1);
+    expect(db.operationAuditCreate).not.toHaveBeenCalled();
+  });
+
   it("emits one redacted handler event only after finalize commits", async () => {
     const db = handlerCyclePrisma(1, true);
     const onTaskFailure = vi.fn(async (event) => {

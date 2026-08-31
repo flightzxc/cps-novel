@@ -62,7 +62,11 @@ describe("X8 targeted preview operator boundary", () => {
   it("runs a disposable preview-only worker without changing the permanent allowlist", () => {
     const entry = launcher.slice(launcher.indexOf("preview_one()"), launcher.indexOf("accept_x8()"));
     expect(entry).toContain("x8_compose run --rm --no-deps -T");
+    expect(entry).toContain("operator_image=\"$(docker inspect --format '{{.Config.Image}}' \"$web_container\")\"");
+    expect(entry).toContain("CPS_NOVEL_APP_IMAGE=\"$operator_image\" x8_compose run");
     expect(entry).toContain("-e WORKER_TASK_ALLOWLIST=moboreader.preview_refresh.v1");
+    expect(entry).toContain("src/lib/adapters/moboreader.ts:/app/src/lib/adapters/moboreader.ts:ro");
+    expect(read("scripts/x8-preview-one.ts")).toContain("createMoboreaderReadAdapter({ maxAttempts: 1 })");
     expect(entry).not.toContain("write_x8_gate_state");
     expect(envHelper).toContain("export WORKER_TASK_ALLOWLIST=credential.validate.v1,credential.supersede.v1,catalog_scan");
   });

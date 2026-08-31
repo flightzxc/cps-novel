@@ -2,14 +2,16 @@
 import { pathToFileURL } from "node:url";
 import { randomUUID } from "node:crypto";
 import { PrismaClient } from "@prisma/client";
+import { createMoboreaderReadAdapter } from "../src/lib/adapters/moboreader";
 import { isNovelCatalogSyncEnabled, isNovelCatalogSyncWriteAllowed } from "../src/lib/flags";
 import {
   buildWorkerAllowlist,
+  createHandlerRegistry,
   MOBOREADER_TASK_TYPES,
   validateTaskClaimTarget,
   type TaskHandlerRegistry,
 } from "../src/lib/tasks";
-import { createWorkerHandlers } from "../worker";
+import { createMoboreaderPreviewHandler } from "../worker/handlers/moboreader";
 import { parseShutdownDrainTimeoutEnv, processOneWorkerCycle } from "../worker/runtime";
 
 export interface PreviewOneOptions {
@@ -83,7 +85,16 @@ export async function runPreviewOne(
   if (!isNovelCatalogSyncEnabled(env) || !isNovelCatalogSyncWriteAllowed(env)) {
     return finish({ outcome: "blocked", reason: "preview_write_gates_closed" });
   }
-  const handlers = dependencies.handlers ?? createWorkerHandlers(db);
+  const handlers = dependencies.handlers ?? createHandlerRegistry({
+    [MOBOREADER_TASK_TYPES.previewRefresh]: {
+      family: "channel_sync",
+      maxAttempts: 1,
+      handler: createMoboreaderPreviewHandler(db, {
+        adapter: createMoboreaderReadAdapter({ maxAttempts: 1 }),
+        env,
+      }),
+    },
+  });
   const allowlist = buildWorkerAllowlist(env.WORKER_TASK_ALLOWLIST, handlers);
   if (allowlist.invalid.length > 0 || allowlist.effective.length !== 1
     || allowlist.effective[0] !== MOBOREADER_TASK_TYPES.previewRefresh) {

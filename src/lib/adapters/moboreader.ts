@@ -461,6 +461,7 @@ export function createMoboreaderReadAdapter(options: AdapterOptions = {}): Mobor
       try {
         const response = await fetchImpl(`${MOBOREADER_ORIGIN}${path}`, {
           method: "POST",
+          redirect: "error",
           headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
           body: JSON.stringify(body),
           signal: scoped.signal,

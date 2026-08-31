@@ -343,6 +343,11 @@ export class FakePromoLinkClaimHandlerDb {
   async runProtectedWrite(fn: (tx: PrismaClient) => Promise<void>): Promise<void> {
     await fn(this.asPrismaClient());
   }
+
+  /** Runs a protected write inside the fake transaction/rollback boundary. */
+  async runProtectedWriteTransaction(fn: (tx: PrismaClient) => Promise<void>): Promise<void> {
+    await this.client.$transaction(fn as unknown as (tx: FakeClient) => Promise<void>);
+  }
 }
 
 type FakeClient = Record<string, any> & { $transaction: <T>(callback: (tx: FakeClient) => Promise<T>) => Promise<T> };

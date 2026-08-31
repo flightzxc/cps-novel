@@ -11,15 +11,11 @@
  *      fields from `NovelSourceItem.rawPayload`: official snapshots have
  *      been redacted since the first catalog writer, so there is no genuine
  *      non-redacted compatibility history to recover here.
- *   2. §3.10 "推广生成（占位流程）" — the side-effecting `claimPromo`
- *      capability. `ChannelCapability.status` for this key is
- *      `registered_disabled` everywhere in this codebase (nothing sets it
- *      to `enabled` — see `src/lib/adapters/promo-link-claim.ts`'s header
- *      for the four Owner-gated preconditions), so this path always
- *      terminates at "capability_disabled" in production today. The full
- *      `SideEffectIntent` → adapter → PromoLink state machine below it is
- *      real and tested (via a fixture adapter), not a stub — only the
- *      network call itself is refused.
+ *   2. §3.10 "推广生成" — the side-effecting `claimPromo` capability.
+ *      Its novel wire contract was frozen by the Owner-approved Book A
+ *      probe on 2026-08-31 (see `docs/operations/MOBOREADER_PROMO_CLAIM_
+ *      CONTRACT_2026-08-31.md`). Execution still requires both feature
+ *      flags and an explicitly enabled `ChannelCapability` row.
  *
  * `upstream_code` (the channel's real promo code) is read from upstream
  * responses and written to the DB, but must never reach a log line, an
@@ -50,6 +46,7 @@ import {
   createHandlerRegistry,
   prepareSideEffectIntent,
   transitionSideEffectIntent,
+  transitionSideEffectIntentInTransaction,
   type TaskHandler,
 } from "../../src/lib/tasks";
 export { buildPromoLinkIdempotencyKey } from "../../src/lib/tasks/promo-link-claim";
@@ -341,7 +338,7 @@ async function writePromoLinkCapabilityDisabled(
     data: {
       status: "registered_disabled",
       errorKind: "capability_disabled",
-      errorMessage: "claimPromo capability is registered_disabled pending Owner unfreeze (novel-v1-adapter-and-workflow-v0.2.1.md §2.3)",
+      errorMessage: "claimPromo capability is registered_disabled for this ChannelApp",
       lastAttemptedAt: now,
     },
   });
@@ -429,12 +426,17 @@ async function writePromoLinkClaimed(
   payload: PromoLinkClaimPayload,
   result: ClaimPromoResult,
   now: Date,
+  options: {
+    origin: "claimed" | "upstream_existing";
+    decision: "claimed" | "already_available" | "readback_recovered";
+    intentEffectKey?: string;
+  },
 ): Promise<string> {
   const row = await ensurePromoLinkRow(tx, scope, payload);
   await tx.promoLink.update({
     where: { idempotencyKey: scope.idempotencyKey },
     data: {
-      origin: "claimed",
+      origin: options.origin,
       status: "fetched",
       upstreamCode: result.upstreamCode,
       webUrl: result.webUrl,
@@ -450,13 +452,13 @@ async function writePromoLinkClaimed(
     data: {
       actorType: "worker",
       actorId: payload.actorId,
-      action: "promo_link_claim.claimed",
+      action: `promo_link_claim.${options.decision}`,
       entityType: "PromoLink",
       entityId: row.id,
       requestId: payload.requestId,
       taskType: PROMO_LINK_CLAIM_TASK_TYPE,
       afterSnapshot: {
-        decision: "claimed",
+        decision: options.decision,
         articlesBound: articleBinding.boundArticleIds.length,
         articlesAlreadyBound: articleBinding.alreadyBoundArticleIds.length,
         articlesConflicted: articleBinding.conflictedArticleIds.length,
@@ -465,13 +467,23 @@ async function writePromoLinkClaimed(
       },
     },
   });
+  if (options.intentEffectKey) {
+    await transitionSideEffectIntentInTransaction(tx, {
+      effectKey: options.intentEffectKey,
+      status: "confirmed",
+      responseShape: {
+        source: "readback",
+        hasWebUrl: Boolean(result.webUrl),
+        hasAppUrl: Boolean(result.appUrl),
+      },
+    });
+  }
   return row.id;
 }
 
 // ---------------------------------------------------------------------
-// §3.10 claimPromo path — real, tested via fixture adapter; unreachable in
-// production because `loadClaimScope`'s `capabilityEnabled` is always
-// false (see module header).
+// §3.10 claimPromo path — real contract, dual-gated, single mutation with
+// readback-only recovery.
 // ---------------------------------------------------------------------
 
 function claimRequestScalar(value: unknown): string | number | null {
@@ -540,33 +552,8 @@ async function claimViaAdapter(
   lease: { taskId: string; itemId: string; attemptCount: number },
   now: Date,
   signal: AbortSignal,
+  heartbeat: () => Promise<boolean>,
 ): Promise<{ status: "success" | "failed"; result?: unknown; error?: unknown; protectedWrite: (tx: Prisma.TransactionClient) => Promise<void> }> {
-  // Doc §3.10: "最近一条意图审计未被确认？→ claim_retry_blocked（转人工，禁止
-  // 自动重试）". Scoped by `targetId = scope.idempotencyKey` (the PromoLink
-  // asset identity), not by this attempt's own (not-yet-created) effectKey
-  // — any row found here necessarily belongs to an *earlier* attempt.
-  const priorUnconfirmed = await db.sideEffectIntent.findFirst({
-    where: {
-      targetType: "promo_link",
-      targetId: scope.idempotencyKey,
-      status: { in: ["prepared", "claim_retry_blocked", "manual_review_required"] },
-    },
-    orderBy: { createdAt: "desc" },
-  });
-  if (priorUnconfirmed) {
-    if (priorUnconfirmed.status === "prepared") {
-      await transitionSideEffectIntent(db, { effectKey: priorUnconfirmed.effectKey, status: "claim_retry_blocked" });
-      await transitionSideEffectIntent(db, { effectKey: priorUnconfirmed.effectKey, status: "manual_review_required" });
-    } else if (priorUnconfirmed.status === "claim_retry_blocked") {
-      await transitionSideEffectIntent(db, { effectKey: priorUnconfirmed.effectKey, status: "manual_review_required" });
-    }
-    return {
-      status: "success",
-      result: { decision: "manual_review_required" },
-      protectedWrite: (tx) => writePromoLinkManualReview(tx, scope, payload, now).then(() => undefined),
-    };
-  }
-
   const credential = await resolveClaimCredential(db, scope.account.id, now);
   if ("status" in credential) {
     return { status: "failed", error: credential.error, protectedWrite: async () => undefined };
@@ -577,6 +564,110 @@ async function claimViaAdapter(
     return {
       status: "failed",
       error: { code: "claim_source_fields_missing", message: "NovelSourceItem raw_payload is missing agencyId/seriesId/language" },
+      protectedWrite: async () => undefined,
+    };
+  }
+
+  if (!adapter.readPromoAfterClaim) {
+    return {
+      status: "failed",
+      error: { code: "claim_readback_unavailable", message: "Promo readback adapter is unavailable" },
+      protectedWrite: async () => undefined,
+    };
+  }
+
+  const readback = () => adapter.readPromoAfterClaim!(request, credential.secret, signal);
+
+  async function routeIntentToManualReview(effectKey: string, status: string): Promise<void> {
+    if (status === "prepared") {
+      await transitionSideEffectIntent(db, { effectKey, status: "claim_retry_blocked" });
+      await transitionSideEffectIntent(db, { effectKey, status: "manual_review_required" });
+    } else if (status === "claim_retry_blocked") {
+      await transitionSideEffectIntent(db, { effectKey, status: "manual_review_required" });
+    }
+    // A legacy `confirmed` row from the old confirmed-before-finalize
+    // sequence is deliberately left confirmed. Its presence still blocks
+    // every future mutation and forces readback-only recovery.
+  }
+
+  // Include legacy `confirmed` rows so a crash produced by the old ordering
+  // can never fall through to another getcode call.
+  const priorIntent = await db.sideEffectIntent.findFirst({
+    where: {
+      targetType: "promo_link",
+      targetId: scope.idempotencyKey,
+      status: { in: ["prepared", "claim_retry_blocked", "manual_review_required", "confirmed"] },
+    },
+    orderBy: { createdAt: "desc" },
+  });
+  if (priorIntent) {
+    // Once an intent has entered manual review, the generic worker may not
+    // adjudicate it back to confirmed. X9 owns that transition boundary.
+    // It also must not spend another upstream request for an object whose
+    // automatic lifecycle is already terminal.
+    if (priorIntent.status === "manual_review_required") {
+      return {
+        status: "success",
+        result: { decision: "manual_review_required" },
+        protectedWrite: (tx) => writePromoLinkManualReview(tx, scope, payload, now).then(() => undefined),
+      };
+    }
+    try {
+      const recovered = await readback();
+      if (recovered.status === "found") {
+        return {
+          status: "success",
+          result: { decision: "readback_recovered" },
+          protectedWrite: (tx) => writePromoLinkClaimed(tx, scope, payload, recovered.promo, now, {
+            origin: "claimed",
+            decision: "readback_recovered",
+            ...(priorIntent.status === "confirmed" ? {} : { intentEffectKey: priorIntent.effectKey }),
+          }).then(() => undefined),
+        };
+      }
+    } catch {
+      // Readback failure cannot authorize another mutation. It is routed to
+      // the same manual-review terminal below without exposing response data.
+    }
+    await routeIntentToManualReview(priorIntent.effectKey, priorIntent.status);
+    return {
+      status: "success",
+      result: { decision: "manual_review_required" },
+      protectedWrite: (tx) => writePromoLinkManualReview(tx, scope, payload, now).then(() => undefined),
+    };
+  }
+
+  // CPS parity: a current upstream promo short-circuits before any intent or
+  // mutation. Failure of this read-only guard fails closed; it never falls
+  // through to getcode.
+  let preRead;
+  try {
+    preRead = await readback();
+  } catch (error) {
+    const classified = classifyClaimPromoFailure(error);
+    return {
+      status: "failed",
+      error: { code: classified.failureCategory, message: "Promo pre-read failed" },
+      protectedWrite: async () => undefined,
+    };
+  }
+  if (preRead.status === "found") {
+    return {
+      status: "success",
+      result: { decision: "already_available" },
+      protectedWrite: (tx) => writePromoLinkClaimed(tx, scope, payload, preRead.promo, now, {
+        origin: "upstream_existing",
+        decision: "already_available",
+      }).then(() => undefined),
+    };
+  }
+  if (preRead.status === "target_not_in_coordinate") {
+    return {
+      status: "failed",
+      error: {
+        code: "claim_readback_target_absent",
+        message: "The evidenced readback coordinate did not include the target series",
+      },
       protectedWrite: async () => undefined,
     };
   }
@@ -593,16 +684,44 @@ async function claimViaAdapter(
     requestSummary: { offerType: payload.offerType, novelSourceItemId: scope.source.id },
   });
 
+  // Ownership is revalidated immediately before the only mutation. The
+  // runtime also wires lease loss into `signal`, so an in-flight request is
+  // aborted locally; because abort does not prove the server did not receive
+  // it, the catch path below still treats the outcome as ambiguous.
+  if (signal.aborted || !(await heartbeat())) {
+    return {
+      status: "failed",
+      error: { code: "lease_lost_before_claim", message: "Lease ownership was lost before claimPromo" },
+      protectedWrite: async () => undefined,
+    };
+  }
+
   let claimResult: ClaimPromoResult;
   try {
     claimResult = await adapter.claimPromo(request, credential.secret, signal);
   } catch (error) {
     const classified = classifyClaimPromoFailure(error);
     if (classified.ambiguous) {
+      try {
+        const recovered = await readback();
+        if (recovered.status === "found") {
+          return {
+            status: "success",
+            result: { decision: "readback_recovered" },
+            protectedWrite: (tx) => writePromoLinkClaimed(tx, scope, payload, recovered.promo, now, {
+              origin: "claimed",
+              decision: "readback_recovered",
+              intentEffectKey: effectKey,
+            }).then(() => undefined),
+          };
+        }
+      } catch {
+        // The mutation remains ambiguous. Never call getcode again.
+      }
       await transitionSideEffectIntent(db, {
         effectKey,
         status: "claim_retry_blocked",
-        responseShape: { failureCategory: classified.failureCategory },
+        responseShape: { failureCategory: classified.failureCategory, readbackConfirmed: false },
       });
       await transitionSideEffectIntent(db, { effectKey, status: "manual_review_required" });
       return {
@@ -623,15 +742,33 @@ async function claimViaAdapter(
     };
   }
 
-  await transitionSideEffectIntent(db, {
-    effectKey,
-    status: "confirmed",
-    responseShape: { hasWebUrl: Boolean(claimResult.webUrl), hasAppUrl: Boolean(claimResult.appUrl) },
-  });
+  let confirmed;
+  try {
+    confirmed = await readback();
+  } catch {
+    confirmed = { status: "missing" as const };
+  }
+  if (confirmed.status !== "found" || confirmed.promo.upstreamCode !== claimResult.upstreamCode) {
+    await transitionSideEffectIntent(db, {
+      effectKey,
+      status: "claim_retry_blocked",
+      responseShape: { failureCategory: "readback_unconfirmed", readbackConfirmed: false },
+    });
+    await transitionSideEffectIntent(db, { effectKey, status: "manual_review_required" });
+    return {
+      status: "success",
+      result: { decision: "manual_review_required" },
+      protectedWrite: (tx) => writePromoLinkManualReview(tx, scope, payload, now).then(() => undefined),
+    };
+  }
   return {
     status: "success",
     result: { decision: "claimed" },
-    protectedWrite: (tx) => writePromoLinkClaimed(tx, scope, payload, claimResult, now).then(() => undefined),
+    protectedWrite: (tx) => writePromoLinkClaimed(tx, scope, payload, confirmed.promo, now, {
+      origin: "claimed",
+      decision: "claimed",
+      intentEffectKey: effectKey,
+    }).then(() => undefined),
   };
 }
 
@@ -652,7 +789,7 @@ export function createPromoLinkClaimHandler(
   const adapter = dependencies.adapter ?? createPromoLinkClaimAdapter();
   const env = dependencies.env ?? process.env;
   const now = dependencies.now ?? (() => new Date());
-  return async ({ lease, mode, signal }) => {
+  return async ({ lease, mode, signal, heartbeat }) => {
     const payload = parsePromoLinkClaimPayload(lease.payload);
 
     if (!isPromoLinkClaimEnabled(env)) {
@@ -707,9 +844,7 @@ export function createPromoLinkClaimHandler(
       };
     }
 
-    // Dead in production (capabilityEnabled is always false) — real and
-    // fixture-tested, see this file's header.
-    return claimViaAdapter(db, adapter, scope, payload, lease, now(), signal);
+    return claimViaAdapter(db, adapter, scope, payload, lease, now(), signal, heartbeat);
   };
 }
 
@@ -720,7 +855,11 @@ export function createPromoLinkClaimWorkerHandlers(
   return createHandlerRegistry({
     [PROMO_LINK_CLAIM_TASK_TYPE]: {
       family: "generic",
-      maxAttempts: 3,
+      // getcode idempotency is unverified. A worker item therefore receives
+      // exactly one execution attempt. Crash/unknown recovery is initiated
+      // by a fresh explicit task, whose prior-intent guard permits readback
+      // only and can never reach the mutation again.
+      maxAttempts: 1,
       handler: createPromoLinkClaimHandler(db, dependencies),
     },
   });

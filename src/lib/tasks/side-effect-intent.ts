@@ -96,7 +96,39 @@ export function isAllowedSideEffectTransition(
   if (current === "prepared") {
     return next === "confirmed" || next === "failed" || next === "claim_retry_blocked";
   }
-  return current === "claim_retry_blocked" && next === "manual_review_required";
+  if (current === "claim_retry_blocked") {
+    return next === "confirmed" || next === "manual_review_required";
+  }
+  // `manual_review_required` is terminal for the generic worker graph.
+  // Only the dedicated adjudication boundary may leave that state.
+  return false;
+}
+
+export async function transitionSideEffectIntentInTransaction(
+  tx: Prisma.TransactionClient,
+  input: {
+    effectKey: string;
+    status: SideEffectIntentTransition;
+    responseShape?: Prisma.InputJsonValue;
+  },
+): Promise<SideEffectIntent> {
+  const current = await tx.sideEffectIntent.findUnique({ where: { effectKey: input.effectKey } });
+  if (!current) throw new Error(`Side-effect intent not found: ${input.effectKey}`);
+  if (!isAllowedSideEffectTransition(current.status, input.status)) {
+    throw new Error(`Illegal side-effect transition: ${current.status} -> ${input.status}`);
+  }
+  const changed = await tx.sideEffectIntent.updateMany({
+    where: { id: current.id, status: current.status },
+    data: {
+      status: input.status,
+      responseShape: input.responseShape,
+      confirmedAt: input.status === "confirmed" ? new Date() : undefined,
+    },
+  });
+  if (changed.count !== 1) {
+    throw new Error(`Concurrent side-effect transition rejected: ${current.status} -> ${input.status}`);
+  }
+  return tx.sideEffectIntent.findUniqueOrThrow({ where: { id: current.id } });
 }
 
 export async function transitionSideEffectIntent(
@@ -107,25 +139,7 @@ export async function transitionSideEffectIntent(
     responseShape?: Prisma.InputJsonValue;
   },
 ): Promise<SideEffectIntent> {
-  return prisma.$transaction(async (tx) => {
-    const current = await tx.sideEffectIntent.findUnique({ where: { effectKey: input.effectKey } });
-    if (!current) throw new Error(`Side-effect intent not found: ${input.effectKey}`);
-    if (!isAllowedSideEffectTransition(current.status, input.status)) {
-      throw new Error(`Illegal side-effect transition: ${current.status} -> ${input.status}`);
-    }
-    const changed = await tx.sideEffectIntent.updateMany({
-      where: { id: current.id, status: current.status },
-      data: {
-        status: input.status,
-        responseShape: input.responseShape,
-        confirmedAt: input.status === "confirmed" ? new Date() : undefined,
-      },
-    });
-    if (changed.count !== 1) {
-      throw new Error(`Concurrent side-effect transition rejected: ${current.status} -> ${input.status}`);
-    }
-    return tx.sideEffectIntent.findUniqueOrThrow({ where: { id: current.id } });
-  });
+  return prisma.$transaction((tx) => transitionSideEffectIntentInTransaction(tx, input));
 }
 
 export function markSideEffectUnknown(

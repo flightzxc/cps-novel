@@ -5,6 +5,7 @@ import { PROMO_LINK_CLAIM_CAPABILITY_KEY, PROMO_LINK_CLAIM_TASK_TYPE } from "@/l
 import {
   buildPromoLinkIdempotencyKey,
   createPromoLinkClaimHandler,
+  createPromoLinkClaimWorkerHandlers,
   parsePromoLinkClaimPayload,
   redactUpstreamCode,
   safeHostname,
@@ -14,6 +15,12 @@ import { FakePromoLinkClaimHandlerDb } from "./promo-link-claim-handler-fake-db"
 
 const ENABLED_ENV: NodeJS.ProcessEnv = { NODE_ENV: "test", FEATURE_PROMO_LINK_CLAIM: "true" };
 const APPLY_ENV: NodeJS.ProcessEnv = { ...ENABLED_ENV, PROMO_LINK_CLAIM_ALLOW_WRITE: "true" };
+
+it("registers promo claim with a single worker attempt", () => {
+  const db = new FakePromoLinkClaimHandlerDb();
+  const handlers = createPromoLinkClaimWorkerHandlers(db.asPrismaClient(), { env: APPLY_ENV });
+  expect(handlers[PROMO_LINK_CLAIM_TASK_TYPE]).toMatchObject({ family: "generic", maxAttempts: 1 });
+});
 
 function fakeJwt(expiresInSeconds = 3600): string {
   const payload = Buffer.from(JSON.stringify({ exp: Math.floor(Date.now() / 1000) + expiresInSeconds })).toString("base64url");
@@ -425,7 +432,7 @@ describe("P0-S11 promo-link claim handler — Article.promoLinkId binding (defec
   });
 });
 
-describe("P0-S5 promo-link claim handler — capability_disabled (production reality today)", () => {
+describe("P0-S5 promo-link claim handler — capability disabled gate", () => {
   it("writes PromoLink.status=registered_disabled when claimPromo is unproven/disabled and no existing promo is cached", async () => {
     const db = seedFoundation(new FakePromoLinkClaimHandlerDb(), { rawPayload: {} });
     const adapter: PromoLinkClaimAdapter = { claimPromo: vi.fn() };
@@ -445,7 +452,7 @@ describe("P0-S5 promo-link claim handler — capability_disabled (production rea
   });
 });
 
-describe("P0-S5 promo-link claim handler — claimPromo via fixture adapter (dead in prod, real and tested)", () => {
+describe("P0-S5 promo-link claim handler — frozen novel claim contract", () => {
   it("path 1: adapter success confirms the intent and writes PromoLink.status=fetched, origin=claimed", async () => {
     const db = seedFoundation(new FakePromoLinkClaimHandlerDb(), {
       rawPayload: { agencyId: "agency-1", seriesId: "series-1", language: "en" },
@@ -453,7 +460,12 @@ describe("P0-S5 promo-link claim handler — claimPromo via fixture adapter (dea
     });
     seedActiveCredential(db);
     const claimResult: ClaimPromoResult = { upstreamCode: "REALCODE-NEW", webUrl: "https://eng.moboreader.com/promo/new", appUrl: null };
-    const adapter: PromoLinkClaimAdapter = { claimPromo: vi.fn().mockResolvedValue(claimResult) };
+    const adapter: PromoLinkClaimAdapter = {
+      claimPromo: vi.fn().mockResolvedValue(claimResult),
+      readPromoAfterClaim: vi.fn()
+        .mockResolvedValueOnce({ status: "missing" })
+        .mockResolvedValueOnce({ status: "found", promo: claimResult }),
+    };
     const handler = createPromoLinkClaimHandler(db.asPrismaClient(), { env: APPLY_ENV, adapter });
     const outcome = await handler({
       lease: { ...baseLease(), payload: makePayload() },
@@ -463,6 +475,9 @@ describe("P0-S5 promo-link claim handler — claimPromo via fixture adapter (dea
     });
     expect(outcome).toMatchObject({ status: "success", result: { decision: "claimed" } });
     expect(adapter.claimPromo).toHaveBeenCalledTimes(1);
+    expect(adapter.readPromoAfterClaim).toHaveBeenCalledTimes(2);
+    expect([...db.intents.values()][0]).toMatchObject({ status: "prepared" });
+    expect(db.promoLinks.size).toBe(0);
     await db.runProtectedWrite((outcome as { protectedWrite: (tx: unknown) => Promise<void> }).protectedWrite as never);
 
     const idempotencyKey = buildPromoLinkIdempotencyKey({ channelAppId: "app-1", novelSourceItemId: "source-1", channelAccountId: "account-1", offerType: "read" });
@@ -479,6 +494,7 @@ describe("P0-S5 promo-link claim handler — claimPromo via fixture adapter (dea
     seedActiveCredential(db);
     const adapter: PromoLinkClaimAdapter = {
       claimPromo: vi.fn().mockRejectedValue(new PromoLinkClaimAdapterError("upstream_http_error", false, false, 422)),
+      readPromoAfterClaim: vi.fn().mockResolvedValue({ status: "missing" }),
     };
     const handler = createPromoLinkClaimHandler(db.asPrismaClient(), { env: APPLY_ENV, adapter });
     const outcome = await handler({
@@ -504,6 +520,7 @@ describe("P0-S5 promo-link claim handler — claimPromo via fixture adapter (dea
     seedActiveCredential(db);
     const adapter: PromoLinkClaimAdapter = {
       claimPromo: vi.fn().mockRejectedValue(new PromoLinkClaimAdapterError("request_timeout", true, true)),
+      readPromoAfterClaim: vi.fn().mockResolvedValue({ status: "missing" }),
     };
     const handler = createPromoLinkClaimHandler(db.asPrismaClient(), { env: APPLY_ENV, adapter });
     const outcome = await handler({
@@ -543,7 +560,10 @@ describe("P0-S5 promo-link claim handler — claimPromo via fixture adapter (dea
       responseShape: null,
       createdAt: new Date(Date.now() - 60_000),
     });
-    const adapter: PromoLinkClaimAdapter = { claimPromo: vi.fn() };
+    const adapter: PromoLinkClaimAdapter = {
+      claimPromo: vi.fn(),
+      readPromoAfterClaim: vi.fn().mockResolvedValue({ status: "missing" }),
+    };
     const handler = createPromoLinkClaimHandler(db.asPrismaClient(), { env: APPLY_ENV, adapter });
     const outcome = await handler({
       lease: { ...baseLease(), payload: makePayload() },
@@ -553,7 +573,176 @@ describe("P0-S5 promo-link claim handler — claimPromo via fixture adapter (dea
     });
     expect(outcome).toMatchObject({ status: "success", result: { decision: "manual_review_required" } });
     expect(adapter.claimPromo).not.toHaveBeenCalled();
+    expect(adapter.readPromoAfterClaim).toHaveBeenCalledTimes(1);
     const stale = db.intents.get("a".repeat(64));
     expect(stale).toMatchObject({ status: "manual_review_required" });
+  });
+
+  it("keeps an already manual intent outside automatic readback and adjudication", async () => {
+    const db = seedFoundation(new FakePromoLinkClaimHandlerDb(), {
+      rawPayload: { agencyId: "agency-1", seriesId: "series-1", language: "en" },
+      capabilityStatus: "enabled",
+    });
+    seedActiveCredential(db);
+    const idempotencyKey = buildPromoLinkIdempotencyKey({ channelAppId: "app-1", novelSourceItemId: "source-1", channelAccountId: "account-1", offerType: "read" });
+    const effectKey = "c".repeat(64);
+    db.intents.set(effectKey, {
+      id: "intent-manual",
+      effectKey,
+      operationType: "promo_link.claim_promo",
+      idempotencyKey: effectKey,
+      targetType: "promo_link",
+      targetId: idempotencyKey,
+      channelAccountId: "account-1",
+      channelAppId: "app-1",
+      status: "manual_review_required",
+      requestSummary: {},
+      responseShape: null,
+      createdAt: new Date(Date.now() - 60_000),
+    });
+    const adapter: PromoLinkClaimAdapter = {
+      claimPromo: vi.fn(),
+      readPromoAfterClaim: vi.fn(),
+    };
+    const handler = createPromoLinkClaimHandler(db.asPrismaClient(), { env: APPLY_ENV, adapter });
+    const outcome = await handler({
+      lease: { ...baseLease({ attemptCount: 1 }), payload: makePayload() },
+      mode: "apply",
+      signal: new AbortController().signal,
+      heartbeat: async () => true,
+    });
+
+    expect(outcome).toMatchObject({ status: "success", result: { decision: "manual_review_required" } });
+    expect(adapter.claimPromo).not.toHaveBeenCalled();
+    expect(adapter.readPromoAfterClaim).not.toHaveBeenCalled();
+    expect(db.intents.get(effectKey)).toMatchObject({ status: "manual_review_required" });
+  });
+
+  it("recovers a prepared intent by readback only and confirms it atomically with PromoLink", async () => {
+    const db = seedFoundation(new FakePromoLinkClaimHandlerDb(), {
+      rawPayload: { agencyId: "agency-1", seriesId: "series-1", language: "en" },
+      capabilityStatus: "enabled",
+    });
+    seedActiveCredential(db);
+    const idempotencyKey = buildPromoLinkIdempotencyKey({ channelAppId: "app-1", novelSourceItemId: "source-1", channelAccountId: "account-1", offerType: "read" });
+    const effectKey = "b".repeat(64);
+    db.intents.set(effectKey, {
+      id: "intent-recoverable",
+      effectKey,
+      operationType: "promo_link.claim_promo",
+      idempotencyKey: effectKey,
+      targetType: "promo_link",
+      targetId: idempotencyKey,
+      channelAccountId: "account-1",
+      channelAppId: "app-1",
+      status: "prepared",
+      requestSummary: {},
+      responseShape: null,
+      createdAt: new Date(Date.now() - 60_000),
+    });
+    const recoveredPromo: ClaimPromoResult = {
+      upstreamCode: "RECOVERED-CODE",
+      webUrl: "https://eng.moboreader.com/recovered",
+      appUrl: "https://eng.moboreader.com/book/recovered",
+    };
+    const adapter: PromoLinkClaimAdapter = {
+      claimPromo: vi.fn(),
+      readPromoAfterClaim: vi.fn().mockResolvedValue({ status: "found", promo: recoveredPromo }),
+    };
+    const handler = createPromoLinkClaimHandler(db.asPrismaClient(), { env: APPLY_ENV, adapter });
+    const outcome = await handler({
+      lease: { ...baseLease({ attemptCount: 2 }), payload: makePayload() },
+      mode: "apply",
+      signal: new AbortController().signal,
+      heartbeat: async () => true,
+    });
+
+    expect(outcome).toMatchObject({ status: "success", result: { decision: "readback_recovered" } });
+    expect(adapter.claimPromo).not.toHaveBeenCalled();
+    expect(db.intents.get(effectKey)).toMatchObject({ status: "prepared" });
+    expect(db.promoLinks.size).toBe(0);
+
+    await db.runProtectedWriteTransaction(
+      (outcome as { protectedWrite: (tx: unknown) => Promise<void> }).protectedWrite as never,
+    );
+    expect(db.intents.get(effectKey)).toMatchObject({ status: "confirmed" });
+    expect(db.promoLinkByIdempotencyKey(idempotencyKey)).toMatchObject({
+      status: "fetched",
+      origin: "claimed",
+      upstreamCode: "RECOVERED-CODE",
+    });
+  });
+
+  it("rolls back the PromoLink write when intent confirmation cannot commit", async () => {
+    const db = seedFoundation(new FakePromoLinkClaimHandlerDb(), {
+      rawPayload: { agencyId: "agency-1", seriesId: "series-1", language: "en" },
+      capabilityStatus: "enabled",
+    });
+    seedActiveCredential(db);
+    const claimResult: ClaimPromoResult = { upstreamCode: "ATOMIC-CODE", webUrl: "https://eng.moboreader.com/atomic", appUrl: null };
+    const adapter: PromoLinkClaimAdapter = {
+      claimPromo: vi.fn().mockResolvedValue(claimResult),
+      readPromoAfterClaim: vi.fn()
+        .mockResolvedValueOnce({ status: "missing" })
+        .mockResolvedValueOnce({ status: "found", promo: claimResult }),
+    };
+    const handler = createPromoLinkClaimHandler(db.asPrismaClient(), { env: APPLY_ENV, adapter });
+    const outcome = await handler({
+      lease: { ...baseLease(), payload: makePayload() },
+      mode: "apply",
+      signal: new AbortController().signal,
+      heartbeat: async () => true,
+    });
+    const effectKey = [...db.intents.keys()][0];
+    db.intents.delete(effectKey);
+
+    await expect(db.runProtectedWriteTransaction(
+      (outcome as { protectedWrite: (tx: unknown) => Promise<void> }).protectedWrite as never,
+    )).rejects.toThrow("Side-effect intent not found");
+    expect(db.promoLinks.size).toBe(0);
+    expect(db.audits.filter((entry) => entry.action === "promo_link_claim.claimed")).toHaveLength(0);
+  });
+
+  it("loses ownership before mutation, leaves prepared intent, and retries by readback only", async () => {
+    const db = seedFoundation(new FakePromoLinkClaimHandlerDb(), {
+      rawPayload: { agencyId: "agency-1", seriesId: "series-1", language: "en" },
+      capabilityStatus: "enabled",
+    });
+    seedActiveCredential(db);
+    const recoveredPromo: ClaimPromoResult = {
+      upstreamCode: "LEASE-RECOVERED",
+      webUrl: "https://eng.moboreader.com/lease-recovered",
+      appUrl: null,
+    };
+    const adapter: PromoLinkClaimAdapter = {
+      claimPromo: vi.fn(),
+      readPromoAfterClaim: vi.fn()
+        .mockResolvedValueOnce({ status: "missing" })
+        .mockResolvedValueOnce({ status: "found", promo: recoveredPromo }),
+    };
+    const handler = createPromoLinkClaimHandler(db.asPrismaClient(), { env: APPLY_ENV, adapter });
+
+    const first = await handler({
+      lease: { ...baseLease({ attemptCount: 1 }), payload: makePayload() },
+      mode: "apply",
+      signal: new AbortController().signal,
+      heartbeat: async () => false,
+    });
+    expect(first).toMatchObject({ status: "failed", error: { code: "lease_lost_before_claim" } });
+    expect(adapter.claimPromo).not.toHaveBeenCalled();
+    expect([...db.intents.values()][0]).toMatchObject({ status: "prepared" });
+
+    const second = await handler({
+      lease: { ...baseLease({ attemptCount: 2 }), payload: makePayload() },
+      mode: "apply",
+      signal: new AbortController().signal,
+      heartbeat: async () => true,
+    });
+    expect(second).toMatchObject({ status: "success", result: { decision: "readback_recovered" } });
+    expect(adapter.claimPromo).not.toHaveBeenCalled();
+    await db.runProtectedWriteTransaction(
+      (second as { protectedWrite: (tx: unknown) => Promise<void> }).protectedWrite as never,
+    );
+    expect([...db.intents.values()][0]).toMatchObject({ status: "confirmed" });
   });
 });

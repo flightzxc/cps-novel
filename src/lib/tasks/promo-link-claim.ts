@@ -19,9 +19,11 @@ import {
  *
  * What the worker handler (`worker/handlers/promo-link-claim.ts`) does with
  * each item is a single unified decision tree covering *both* halves of the
- * architecture doc's flow: the always-enabled "read the promo fields the
- * catalog sync already fetched" pre-read (§3.9, zero additional upstream
- * calls) and the disabled `claimPromo` side-effecting placeholder (§3.10).
+ * architecture doc's flow: a current upstream readback for an existing
+ * promo (§3.9) and the separately gated `claimPromo` side effect (§3.10).
+ * The novel wire contract for both calls was frozen by the Owner-approved
+ * Book A probe on 2026-08-31. The handler performs at most one mutation;
+ * every prepared/unknown recovery path is readback-only.
  * This factory only decides *which source items are in scope for a run* —
  * it does not know or care which of the two paths an item will resolve
  * through.
