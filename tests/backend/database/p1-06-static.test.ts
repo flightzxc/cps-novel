@@ -26,6 +26,8 @@ describe("P1-06 database operations static contracts", () => {
     expect(sql).toContain("REVOKE CREATE, TEMPORARY ON DATABASE");
     expect(sql).toContain("GRANT SELECT (\n  id, channel_account_id, credential_type");
     expect(sql).not.toMatch(/GRANT SELECT ON TABLE channel_account_credential TO (?:web_app|analyst_ro)/);
+    expect(sql).toContain("GRANT SELECT (web_url, app_url) ON promo_link TO web_app");
+    expect(sql).not.toMatch(/GRANT SELECT \(web_url, app_url\) ON promo_link TO analyst_ro/);
     expect(sql).toContain("GRANT SELECT ON ALL TABLES IN SCHEMA public TO backup_role");
     expect(sql).toContain("GRANT SELECT ON TABLE channel_account, channel_account_credential");
     expect(sql).toContain("TO scheduler_app");

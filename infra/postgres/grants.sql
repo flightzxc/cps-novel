@@ -97,7 +97,9 @@ GRANT SELECT (
   detail, created_at
 ) ON credential_change_log TO web_app, analyst_ro;
 
--- Raw upstream payloads and real destination URLs remain Worker-only.
+-- Raw upstream payloads and promo codes remain Worker-only. Web receives the
+-- two resolved destination columns because both the publish gate and the
+-- public /go route must test/resolve them. Analyst never receives them.
 GRANT SELECT (
   id, channel_app_id, novel_id, external_book_id, source_language_code,
   source_language_name, source_locale, title, description, cover_url,
@@ -121,6 +123,7 @@ GRANT SELECT (
   error_kind, error_message, fetched_at, last_attempted_at, deleted_at,
   created_at, updated_at
 ) ON promo_link TO web_app, analyst_ro;
+GRANT SELECT (web_url, app_url) ON promo_link TO web_app;
 GRANT SELECT (
   id, effect_key, operation_type, idempotency_key, target_type, target_id,
   task_item_type, task_item_id, channel_account_id, channel_app_id, promo_link_id,
