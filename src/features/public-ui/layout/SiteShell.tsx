@@ -8,6 +8,8 @@ import { SiteHeader } from "./SiteHeader";
 
 export interface SiteChrome {
   brandHref?: string;
+  /** 站点品牌名（`SiteSetting.siteName`）。缺失或空白时页头/页脚回落到占位符。 */
+  siteName?: string;
   navItems?: NavItem[];
   localeNav?: NavItem[];
   footerLinks?: NavItem[];
@@ -56,6 +58,7 @@ export function SiteShell({
 
         <SiteHeader
           brandHref={chrome.brandHref}
+          brandName={chrome.siteName}
           navItems={chrome.navItems}
           localeNav={chrome.localeNav}
           overlay={headerOverlay}
@@ -68,6 +71,7 @@ export function SiteShell({
         <SiteFooter
           links={chrome.footerLinks}
           brandHref={chrome.brandHref}
+          brandName={chrome.siteName}
           note={chrome.footerNote}
           navAriaLabel={t("nav.footerNav")}
         />

@@ -86,6 +86,23 @@ describe("章节页 · 章节导航", () => {
     expect(link.className).not.toContain("bg-novel-accent");
     expect(link.className).toContain("border-novel-border-strong");
   });
+
+  it("没有公开跳转码时，章末的提示文案与 CTA 整块不渲染（R1-1）", () => {
+    const chapterWithoutGoLink = { ...MOCK_CHAPTER, readOnUpstreamHref: undefined };
+    render(<ChapterScreen locale="en" chapter={chapterWithoutGoLink} />);
+
+    expect(screen.queryByRole("link", { name: "Continue reading" })).toBeNull();
+    expect(screen.queryByText("Want to keep reading?")).toBeNull();
+    expect(screen.queryByText("Later chapters continue on the original platform.")).toBeNull();
+  });
+
+  it("最后一章没有公开跳转码时，试读结束提示与 CTA 同样整块不渲染（R1-1）", () => {
+    const lastWithoutGoLink = { ...MOCK_CHAPTER_LAST, readOnUpstreamHref: undefined };
+    render(<ChapterScreen locale="en" chapter={lastWithoutGoLink} />);
+
+    expect(screen.queryByRole("link", { name: "Continue reading" })).toBeNull();
+    expect(screen.queryByText("That's the end of the preview on this site.")).toBeNull();
+  });
 });
 
 describe("章节页 · 阅读作用域边界", () => {

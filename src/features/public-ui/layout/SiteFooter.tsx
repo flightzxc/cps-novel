@@ -11,11 +11,14 @@ import type { NavItem } from "@/features/public-ui/types";
 export function SiteFooter({
   links = [],
   brandHref = "/",
+  brandName,
   note,
   navAriaLabel,
 }: {
   links?: NavItem[];
   brandHref?: string;
+  /** 站点品牌名。缺失或空白时 `BrandLockup` 回落到占位符。 */
+  brandName?: string;
   /** 一行补充说明，例如内容来源声明。 */
   note?: string;
   navAriaLabel: string;
@@ -23,7 +26,7 @@ export function SiteFooter({
   return (
     <footer className="mt-20 border-t border-novel-border bg-novel-bg md:mt-28">
       <Container className="flex flex-col gap-6 py-10 md:flex-row md:items-center md:justify-between md:py-12">
-        <BrandLockup size={24} href={brandHref} />
+        <BrandLockup size={24} href={brandHref} name={brandName} />
 
         {links.length > 0 ? (
           <nav aria-label={navAriaLabel}>

@@ -72,16 +72,26 @@ export function BrandMark({
   );
 }
 
-/** 标记 + 字标。作为整体的品牌入口。 */
+/**
+ * 标记 + 字标。作为整体的品牌入口。
+ *
+ * `name` 是站点品牌名（来自 `SiteSetting.siteName`）。🔴 缺失或 trim 后为空时
+ * 仍渲染 `BRAND_PLACEHOLDER_TEXT`——这是刻意保留的可见信号：未配置品牌名时，
+ * 页头应该看得出「这里还没配」，而不是安静地留白或另造一个「更好看」的默认名。
+ */
 export function BrandLockup({
   size = 32,
   href,
+  name,
   className = "",
 }: {
   size?: BrandMarkSize;
   href?: string;
+  /** 站点品牌名。缺失或全是空白时回落到占位符。 */
+  name?: string;
   className?: string;
 }) {
+  const wordmark = name?.trim() || BRAND_PLACEHOLDER_TEXT;
   const content = (
     <>
       <BrandMark size={size} />
@@ -89,7 +99,7 @@ export function BrandLockup({
         className="font-novel-serif text-base font-semibold tracking-tight text-novel-fg"
         data-brand-slot="wordmark"
       >
-        {BRAND_PLACEHOLDER_TEXT}
+        {wordmark}
       </span>
     </>
   );

@@ -19,11 +19,14 @@ const HEADER_HEIGHT_PX = 64;
  */
 export function SiteHeader({
   brandHref = "/",
+  brandName,
   navItems = [],
   localeNav,
   overlay = false,
 }: {
   brandHref?: string;
+  /** 站点品牌名。缺失或空白时 `BrandLockup` 回落到占位符。 */
+  brandName?: string;
   navItems?: NavItem[];
   /** 语言入口。只有在确实存在多个可发布语种时才由调用方传入。 */
   localeNav?: NavItem[];
@@ -105,7 +108,7 @@ export function SiteHeader({
         }
       >
         <Container className="flex h-16 items-center justify-between gap-4">
-          <BrandLockup size={32} href={brandHref} />
+          <BrandLockup size={32} href={brandHref} name={brandName} />
 
           {/* 桌面导航 */}
           <nav aria-label={t("nav.mainNav")} className="hidden md:block">

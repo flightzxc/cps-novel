@@ -53,6 +53,17 @@ describe("页头", () => {
     );
     expect(screen.getAllByRole("link", { name: "English" }).length).toBeGreaterThan(0);
   });
+
+  it("传入品牌名时渲染该品牌名，不再是占位符", () => {
+    renderWithMessages(<SiteHeader navItems={NAV} brandName="海阅" />);
+    expect(screen.getByText("海阅")).toBeTruthy();
+    expect(screen.queryByText(BRAND_PLACEHOLDER_TEXT)).toBeNull();
+  });
+
+  it("品牌名 trim 后为空白时仍回落到占位符", () => {
+    renderWithMessages(<SiteHeader navItems={NAV} brandName="   " />);
+    expect(screen.getByText(BRAND_PLACEHOLDER_TEXT)).toBeTruthy();
+  });
 });
 
 describe("移动端导航", () => {
@@ -134,5 +145,33 @@ describe("页面壳", () => {
     const footer = container.querySelector("footer");
     const text = within(footer as HTMLElement).getByRole("navigation").textContent ?? "";
     expect(text).not.toMatch(/App Store|Google Play|下载|登录|注册/);
+  });
+
+  it("chrome.siteName 透传给页头与页脚的品牌字标", () => {
+    const { container } = renderWithMessages(
+      <SiteShell locale="en" chrome={{ navItems: NAV, siteName: "海阅" }}>
+        <p>正文</p>
+      </SiteShell>,
+    );
+
+    const header = container.querySelector("header") as HTMLElement;
+    const footer = container.querySelector("footer") as HTMLElement;
+    expect(within(header).getByText("海阅")).toBeTruthy();
+    expect(within(footer).getByText("海阅")).toBeTruthy();
+    expect(within(header).queryByText(BRAND_PLACEHOLDER_TEXT)).toBeNull();
+    expect(within(footer).queryByText(BRAND_PLACEHOLDER_TEXT)).toBeNull();
+  });
+
+  it("chrome.siteName 缺失时页头与页脚仍显示占位符（未配置的可见信号）", () => {
+    const { container } = renderWithMessages(
+      <SiteShell locale="en" chrome={{ navItems: NAV }}>
+        <p>正文</p>
+      </SiteShell>,
+    );
+
+    const header = container.querySelector("header") as HTMLElement;
+    const footer = container.querySelector("footer") as HTMLElement;
+    expect(within(header).getByText(BRAND_PLACEHOLDER_TEXT)).toBeTruthy();
+    expect(within(footer).getByText(BRAND_PLACEHOLDER_TEXT)).toBeTruthy();
   });
 });

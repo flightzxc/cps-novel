@@ -17,6 +17,7 @@ import {
   toNovelCardView,
   toNovelDetailView,
   type PublicArticleRecord,
+  type PublicArticleDetailRecord,
   type PreviewChapterRecord,
 } from "./mappers";
 
@@ -58,7 +59,24 @@ const ARTICLE_CARD_SELECT = {
   },
 } as const;
 
+/**
+ * Detail / chapter select. Extends the card select with `publicRedirectCode`
+ * so the mapper can compute `readOnUpstreamHref`.
+ *
+ * 🔴 Deliberately NOT reused by `listPublicArticles`/`filterPromoReady` (the
+ * card path) — `tests/backend/public/mappers.test.ts:41` asserts the card
+ * JSON never carries the public redirect code, so the card query must keep
+ * loading `ARTICLE_CARD_SELECT` as-is rather than sharing this wider shape.
+ */
+const ARTICLE_DETAIL_SELECT = {
+  ...ARTICLE_CARD_SELECT,
+  promoLink: {
+    select: { status: true, webUrl: true, appUrl: true, publicRedirectCode: true },
+  },
+} as const;
+
 type ListedArticle = Prisma.ArticleGetPayload<{ select: typeof ARTICLE_CARD_SELECT }>;
+type ListedArticleDetail = Prisma.ArticleGetPayload<{ select: typeof ARTICLE_DETAIL_SELECT }>;
 
 export type PublicArticleAccess =
   | {
@@ -115,6 +133,13 @@ function toPublicArticle(row: ListedArticle): PublicArticleRecord {
     publicPageShortId: row.publicPageShortId,
     publishedAt: row.publishedAt,
     novel: row.novel,
+  };
+}
+
+function toPublicArticleDetail(row: ListedArticleDetail): PublicArticleDetailRecord {
+  return {
+    ...toPublicArticle(row),
+    promoLink: row.promoLink ? { publicRedirectCode: row.promoLink.publicRedirectCode } : null,
   };
 }
 
@@ -175,12 +200,12 @@ export async function getPublicNovelDetail(
 ): Promise<NovelDetailView | null> {
   const row = await db.article.findFirst({
     where: buildPrimaryArticleWhere({ id: articleId }),
-    select: ARTICLE_CARD_SELECT,
+    select: ARTICLE_DETAIL_SELECT,
   });
   if (!row || !isPromoReady(row.promoLink)) return null;
 
   const previewChapters = await listPreviewChapterRefs(db, row.novel.id);
-  return toNovelDetailView(toPublicArticle(row), previewChapters);
+  return toNovelDetailView(toPublicArticleDetail(row), previewChapters);
 }
 
 export async function listPreviewChapterRefs(
@@ -210,7 +235,7 @@ export async function getPublicChapterView(
 ): Promise<ChapterView | null> {
   const row = await db.article.findFirst({
     where: buildPrimaryArticleWhere({ id: articleId }),
-    select: ARTICLE_CARD_SELECT,
+    select: ARTICLE_DETAIL_SELECT,
   });
   if (!row || !isPromoReady(row.promoLink)) return null;
 
@@ -235,7 +260,7 @@ export async function getPublicChapterView(
   const body = chapter?.content?.body;
   if (!chapter || !body?.trim()) return null;
 
-  return toChapterView(toPublicArticle(row), { ...match, body }, previewChapters);
+  return toChapterView(toPublicArticleDetail(row), { ...match, body }, previewChapters);
 }
 
 export async function loadPublicChrome(

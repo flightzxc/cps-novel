@@ -17,6 +17,9 @@ export function chromeFromSiteSetting(
 
   return {
     brandHref: "/",
+    // 空白/未配置时不特殊处理——`BrandLockup` 自己按 trim 后是否为空决定要不要
+    // 回落到占位符，这里只做直传，不重复一遍判空逻辑。
+    siteName: settings.siteName,
     navItems: [
       { label: t("nav.home"), href: "/", current: current === "home" },
       { label: t("nav.browse"), href: "/browse", current: current === "browse" },
