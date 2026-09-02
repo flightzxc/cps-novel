@@ -37,6 +37,13 @@
 - [ ] Web 与 Sitemap refresh Worker 都显式设置真实 `SITE_URL`。
 - [ ] `SITE_URL` 是无凭证、无 path/query/fragment 的绝对 HTTP(S) origin；不得使用 CPS 域名、localhost 或 fixture 域名。
 - [ ] `SITE_URL` 是运行期 fail-closed 契约：缺失或非法时 robots/Sitemap/IndexNow URL 生成必须报错，不得回退到默认域名。
+- [ ] Worker 显式设置 CPS v8.3.6 parity 的发布默认：
+  `PROMO_LINK_CLAIM_READBACK_ATTEMPTS=3`、
+  `PROMO_LINK_CLAIM_READBACK_INTERVAL_MS=2000`，并以 `docker compose config`
+  核对生效值；attempts 运行时仍只允许 1–5。
+- [ ] 上述三次只覆盖同一账号内 `getlistpc` 的只读 readback；Worker task
+  `maxAttempts=1`，`getcode` 仍严格零 retry。不同账号领取到不同 code 是账号隔离事实，
+  不得当作 post-claim 可见性延迟处理。
 
   ```bash
   SITE_URL= npm test -- --project node tests/backend/seo/static-sitemap.test.ts tests/backend/indexnow/eligibility.test.ts

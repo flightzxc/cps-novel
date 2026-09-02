@@ -12,6 +12,7 @@ export type FakeNovelSourceItem = {
   id: string;
   channelAppId: string;
   novelId: string | null;
+  title: string;
   status: string;
   deletedAt: Date | null;
   rawPayload: unknown;

@@ -39,6 +39,7 @@ import {
   type ClaimPromoRequest,
   type ClaimPromoResult,
   type PromoLinkClaimAdapter,
+  type ReadPromoAfterClaimResult,
 } from "../../src/lib/adapters";
 import { isPromoLinkClaimEnabled, isPromoLinkClaimWriteAllowed } from "../../src/lib/flags";
 import {
@@ -53,6 +54,8 @@ export { buildPromoLinkIdempotencyKey } from "../../src/lib/tasks/promo-link-cla
 import {
   PROMO_LINK_CLAIM_CAPABILITY_KEY,
   PROMO_LINK_CLAIM_TASK_TYPE,
+  resolvePromoLinkClaimReadbackPolicy,
+  type PromoLinkClaimReadbackPolicy,
 } from "../../src/lib/tasks/promo-link-claim-limits";
 import { createPublicRedirectCode } from "../../src/lib/redirect";
 import { validateCredentialJwtLocally } from "../../src/lib/credentials/jwt";
@@ -132,7 +135,7 @@ export function safeHostname(url: string | null | undefined): string | null {
 // ---------------------------------------------------------------------
 
 interface ClaimScope {
-  source: { id: string; novelId: string; rawPayload: unknown };
+  source: { id: string; novelId: string; title: string; rawPayload: unknown };
   app: { id: string; channelId: string; projectType: number };
   account: { id: string };
   capabilityEnabled: boolean;
@@ -143,7 +146,7 @@ interface ClaimScope {
 async function loadClaimScope(db: PrismaClient, payload: PromoLinkClaimPayload): Promise<ClaimScope> {
   const source = await db.novelSourceItem.findUnique({
     where: { id: payload.novelSourceItemId },
-    select: { id: true, novelId: true, channelAppId: true, deletedAt: true, status: true, rawPayload: true },
+    select: { id: true, novelId: true, channelAppId: true, deletedAt: true, status: true, title: true, rawPayload: true },
   });
   if (!source || source.deletedAt || source.status !== "linked" || !source.novelId || source.channelAppId !== payload.channelAppId) {
     throw new Error("claim_source_binding_missing");
@@ -175,7 +178,7 @@ async function loadClaimScope(db: PrismaClient, payload: PromoLinkClaimPayload):
     select: { id: true, status: true, publicRedirectCode: true },
   });
   return {
-    source: { id: source.id, novelId: source.novelId, rawPayload: source.rawPayload },
+    source: { id: source.id, novelId: source.novelId, title: source.title, rawPayload: source.rawPayload },
     app,
     account,
     capabilityEnabled: capability?.status === "enabled" && capability.sideEffecting === true,
@@ -494,6 +497,7 @@ function claimRequestScalar(value: unknown): string | number | null {
 
 function buildClaimPromoRequest(
   rawPayload: unknown,
+  name: string,
   projectType: number,
   offerType: string,
 ): ClaimPromoRequest | null {
@@ -503,7 +507,7 @@ function buildClaimPromoRequest(
   const seriesId = claimRequestScalar(row.seriesId);
   const language = claimRequestScalar(row.language);
   if (agencyId === null || seriesId === null || language === null) return null;
-  return { agencyId, seriesId, projectType, language, offerType };
+  return { agencyId, seriesId, projectType, language, name: name.trim(), offerType };
 }
 
 /** SideEffectIntent identity for one specific worker attempt — see this file's header for why it is per-(task, item, attemptCount), not per-PromoLink. */
@@ -516,8 +520,43 @@ interface FailedOutcome {
   error: { code: string; message: string };
 }
 
+type ReadbackSleep = (milliseconds: number, signal: AbortSignal) => Promise<void>;
+
+function waitForReadbackRetry(milliseconds: number, signal: AbortSignal): Promise<void> {
+  if (signal.aborted) return Promise.reject(new Error("readback_retry_aborted"));
+  if (milliseconds === 0) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    const finish = () => {
+      signal.removeEventListener("abort", abort);
+      resolve();
+    };
+    const abort = () => {
+      clearTimeout(timeout);
+      reject(new Error("readback_retry_aborted"));
+    };
+    const timeout = setTimeout(finish, milliseconds);
+    signal.addEventListener("abort", abort, { once: true });
+  });
+}
+
 function failed(code: string, message: string): FailedOutcome {
   return { status: "failed", error: { code, message } };
+}
+
+function readbackFailureEvidence(
+  result: Exclude<ReadPromoAfterClaimResult, { status: "found" }>,
+): Record<string, string | number | null | boolean> {
+  if (result.status === "missing") {
+    return { readbackConfirmed: false, readbackStatus: "promo_missing" };
+  }
+  const evidence: Record<string, string | number | null | boolean> = {
+    readbackConfirmed: false,
+    readbackStatus: result.status,
+    readbackReason: result.reason,
+    readbackTotalCount: result.totalCount,
+  };
+  if ("returnedCount" in result) evidence.readbackReturnedCount = result.returnedCount;
+  return evidence;
 }
 
 async function resolveClaimCredential(
@@ -553,20 +592,35 @@ async function claimViaAdapter(
   now: Date,
   signal: AbortSignal,
   heartbeat: () => Promise<boolean>,
+  readbackPolicy: Readonly<PromoLinkClaimReadbackPolicy>,
+  sleep: ReadbackSleep,
 ): Promise<{ status: "success" | "failed"; result?: unknown; error?: unknown; protectedWrite: (tx: Prisma.TransactionClient) => Promise<void> }> {
   const credential = await resolveClaimCredential(db, scope.account.id, now);
   if ("status" in credential) {
     return { status: "failed", error: credential.error, protectedWrite: async () => undefined };
   }
 
-  const request = buildClaimPromoRequest(scope.source.rawPayload, scope.app.projectType, payload.offerType);
-  if (!request) {
+  if (!scope.source.title.trim()) {
+    return {
+      status: "failed",
+      error: { code: "claim_readback_title_unavailable", message: "The exact-target readback title is unavailable" },
+      protectedWrite: async () => undefined,
+    };
+  }
+  const builtRequest = buildClaimPromoRequest(
+    scope.source.rawPayload,
+    scope.source.title,
+    scope.app.projectType,
+    payload.offerType,
+  );
+  if (!builtRequest) {
     return {
       status: "failed",
       error: { code: "claim_source_fields_missing", message: "NovelSourceItem raw_payload is missing agencyId/seriesId/language" },
       protectedWrite: async () => undefined,
     };
   }
+  let request: ClaimPromoRequest = builtRequest;
 
   if (!adapter.readPromoAfterClaim) {
     return {
@@ -576,14 +630,85 @@ async function claimViaAdapter(
     };
   }
 
-  const readback = () => adapter.readPromoAfterClaim!(request, credential.secret, signal);
+  interface ExactReadbackOptions {
+    /** Retry a successful-but-not-yet-visible promo result after mutation. */
+    retryPromoVisibility: boolean;
+    /** A successful claim must eventually read back the same code. */
+    expectedUpstreamCode?: string;
+  }
 
-  async function routeIntentToManualReview(effectKey: string, status: string): Promise<void> {
+  /**
+   * Transport/visibility layer for one title coordinate. Only retryable
+   * read errors (429/5xx/timeout/network) are repeated. After mutation,
+   * `missing` and a stale promo code are also repeated because getlistpc may
+   * lag getcode. Structural contract failures return immediately.
+   */
+  const readCoordinate = async (
+    options: ExactReadbackOptions,
+  ): Promise<ReadPromoAfterClaimResult> => {
+    for (let attempt = 1; attempt <= readbackPolicy.attempts; attempt += 1) {
+      let result: ReadPromoAfterClaimResult;
+      try {
+        result = await adapter.readPromoAfterClaim!(request, credential.secret, signal);
+      } catch (error) {
+        const classified = classifyClaimPromoFailure(error);
+        if (!classified.retryable || attempt === readbackPolicy.attempts) throw error;
+        await sleep(readbackPolicy.intervalMs, signal);
+        if (signal.aborted) throw new Error("readback_retry_aborted");
+        continue;
+      }
+
+      const promoNotVisible = options.retryPromoVisibility && (
+        result.status === "missing"
+        || (
+          result.status === "found"
+          && options.expectedUpstreamCode !== undefined
+          && result.promo.upstreamCode !== options.expectedUpstreamCode
+        )
+      );
+      if (!promoNotVisible || attempt === readbackPolicy.attempts) return result;
+      await sleep(readbackPolicy.intervalMs, signal);
+      if (signal.aborted) throw new Error("readback_retry_aborted");
+    }
+    throw new Error("readback_retry_loop_exhausted_without_result");
+  };
+
+  /**
+   * Semantic locator layer shared by pre-read, post-claim confirmation, and
+   * readback-only recovery. A zero-row result reloads the mutable title and
+   * retries that coordinate exactly once. Each coordinate independently
+   * receives the bounded read-only policy above; getcode is never involved.
+   */
+  const readback = async (options: ExactReadbackOptions): Promise<ReadPromoAfterClaimResult> => {
+    const first = await readCoordinate(options);
+    if (first.status !== "target_not_located" || first.reason !== "title_no_match") return first;
+
+    const refreshedSource = await db.novelSourceItem.findUnique({
+      where: { id: scope.source.id },
+      select: { title: true },
+    });
+    const refreshedTitle = refreshedSource?.title.trim() ?? "";
+    if (!refreshedTitle) {
+      return { status: "target_not_located", reason: "title_unavailable", totalCount: null };
+    }
+    request = { ...request, name: refreshedTitle };
+    const retried = await readCoordinate(options);
+    if (retried.status === "target_not_located" && retried.reason === "title_no_match") {
+      return { status: "target_not_located", reason: "locator_stale", totalCount: 0 };
+    }
+    return retried;
+  };
+
+  async function routeIntentToManualReview(
+    effectKey: string,
+    status: string,
+    responseShape?: Record<string, string | number | null | boolean>,
+  ): Promise<void> {
     if (status === "prepared") {
-      await transitionSideEffectIntent(db, { effectKey, status: "claim_retry_blocked" });
+      await transitionSideEffectIntent(db, { effectKey, status: "claim_retry_blocked", responseShape });
       await transitionSideEffectIntent(db, { effectKey, status: "manual_review_required" });
     } else if (status === "claim_retry_blocked") {
-      await transitionSideEffectIntent(db, { effectKey, status: "manual_review_required" });
+      await transitionSideEffectIntent(db, { effectKey, status: "manual_review_required", responseShape });
     }
     // A legacy `confirmed` row from the old confirmed-before-finalize
     // sequence is deliberately left confirmed. Its presence still blocks
@@ -612,8 +737,12 @@ async function claimViaAdapter(
         protectedWrite: (tx) => writePromoLinkManualReview(tx, scope, payload, now).then(() => undefined),
       };
     }
+    let priorReadbackEvidence: Record<string, string | number | null | boolean> = {
+      readbackConfirmed: false,
+      readbackStatus: "readback_error",
+    };
     try {
-      const recovered = await readback();
+      const recovered = await readback({ retryPromoVisibility: true });
       if (recovered.status === "found") {
         return {
           status: "success",
@@ -625,14 +754,15 @@ async function claimViaAdapter(
           }).then(() => undefined),
         };
       }
+      priorReadbackEvidence = readbackFailureEvidence(recovered);
     } catch {
       // Readback failure cannot authorize another mutation. It is routed to
       // the same manual-review terminal below without exposing response data.
     }
-    await routeIntentToManualReview(priorIntent.effectKey, priorIntent.status);
+    await routeIntentToManualReview(priorIntent.effectKey, priorIntent.status, priorReadbackEvidence);
     return {
       status: "success",
-      result: { decision: "manual_review_required" },
+      result: { decision: "manual_review_required", readback: priorReadbackEvidence },
       protectedWrite: (tx) => writePromoLinkManualReview(tx, scope, payload, now).then(() => undefined),
     };
   }
@@ -642,7 +772,7 @@ async function claimViaAdapter(
   // through to getcode.
   let preRead;
   try {
-    preRead = await readback();
+    preRead = await readback({ retryPromoVisibility: false });
   } catch (error) {
     const classified = classifyClaimPromoFailure(error);
     return {
@@ -661,12 +791,38 @@ async function claimViaAdapter(
       }).then(() => undefined),
     };
   }
-  if (preRead.status === "target_not_in_coordinate") {
+  if (preRead.status === "target_not_located") {
     return {
       status: "failed",
       error: {
-        code: "claim_readback_target_absent",
-        message: "The evidenced readback coordinate did not include the target series",
+        code: preRead.reason === "title_unavailable"
+          ? "claim_readback_title_unavailable"
+          : preRead.reason === "locator_stale"
+            ? "claim_readback_locator_stale"
+            : "claim_readback_target_not_located",
+        message: preRead.reason === "locator_stale"
+          ? "The catalog title locator returned zero rows before and after its single refresh; manual review is required"
+          : "The exact-target title locator is unavailable",
+      },
+      protectedWrite: async () => undefined,
+    };
+  }
+  if (preRead.status === "target_missing") {
+    return {
+      status: "failed",
+      error: {
+        code: "claim_readback_target_missing",
+        message: `The complete candidate set contains no four-dimensional target match (totalCount=${preRead.totalCount})`,
+      },
+      protectedWrite: async () => undefined,
+    };
+  }
+  if (preRead.status === "ambiguous") {
+    return {
+      status: "failed",
+      error: {
+        code: "claim_readback_ambiguous",
+        message: `Exact-target readback requires manual review (${preRead.reason}, totalCount=${preRead.totalCount}, returnedCount=${preRead.returnedCount ?? "not_array"})`,
       },
       protectedWrite: async () => undefined,
     };
@@ -702,8 +858,12 @@ async function claimViaAdapter(
   } catch (error) {
     const classified = classifyClaimPromoFailure(error);
     if (classified.ambiguous) {
+      let recoveryEvidence: Record<string, string | number | null | boolean> = {
+        readbackConfirmed: false,
+        readbackStatus: "readback_error",
+      };
       try {
-        const recovered = await readback();
+        const recovered = await readback({ retryPromoVisibility: true });
         if (recovered.status === "found") {
           return {
             status: "success",
@@ -715,13 +875,14 @@ async function claimViaAdapter(
             }).then(() => undefined),
           };
         }
+        recoveryEvidence = readbackFailureEvidence(recovered);
       } catch {
         // The mutation remains ambiguous. Never call getcode again.
       }
       await transitionSideEffectIntent(db, {
         effectKey,
         status: "claim_retry_blocked",
-        responseShape: { failureCategory: classified.failureCategory, readbackConfirmed: false },
+        responseShape: { failureCategory: classified.failureCategory, ...recoveryEvidence },
       });
       await transitionSideEffectIntent(db, { effectKey, status: "manual_review_required" });
       return {
@@ -742,17 +903,26 @@ async function claimViaAdapter(
     };
   }
 
-  let confirmed;
+  let confirmed: ReadPromoAfterClaimResult | null = null;
   try {
-    confirmed = await readback();
+    confirmed = await readback({
+      retryPromoVisibility: true,
+      expectedUpstreamCode: claimResult.upstreamCode,
+    });
   } catch {
-    confirmed = { status: "missing" as const };
+    // The intent evidence below records the readback error without exposing
+    // an upstream body or authorizing another mutation.
   }
-  if (confirmed.status !== "found" || confirmed.promo.upstreamCode !== claimResult.upstreamCode) {
+  if (!confirmed || confirmed.status !== "found" || confirmed.promo.upstreamCode !== claimResult.upstreamCode) {
+    const confirmationEvidence = !confirmed
+      ? { readbackConfirmed: false, readbackStatus: "readback_error" }
+      : confirmed.status === "found"
+        ? { readbackConfirmed: false, readbackStatus: "promo_code_mismatch" }
+        : readbackFailureEvidence(confirmed);
     await transitionSideEffectIntent(db, {
       effectKey,
       status: "claim_retry_blocked",
-      responseShape: { failureCategory: "readback_unconfirmed", readbackConfirmed: false },
+      responseShape: { failureCategory: "readback_unconfirmed", ...confirmationEvidence },
     });
     await transitionSideEffectIntent(db, { effectKey, status: "manual_review_required" });
     return {
@@ -780,6 +950,8 @@ export interface PromoLinkClaimHandlerDependencies {
   adapter?: PromoLinkClaimAdapter;
   env?: NodeJS.ProcessEnv;
   now?: () => Date;
+  /** Test/host hook; production uses an AbortSignal-aware timer. */
+  sleep?: ReadbackSleep;
 }
 
 export function createPromoLinkClaimHandler(
@@ -789,6 +961,8 @@ export function createPromoLinkClaimHandler(
   const adapter = dependencies.adapter ?? createPromoLinkClaimAdapter();
   const env = dependencies.env ?? process.env;
   const now = dependencies.now ?? (() => new Date());
+  const readbackPolicy = resolvePromoLinkClaimReadbackPolicy(env);
+  const sleep = dependencies.sleep ?? waitForReadbackRetry;
   return async ({ lease, mode, signal, heartbeat }) => {
     const payload = parsePromoLinkClaimPayload(lease.payload);
 
@@ -844,7 +1018,18 @@ export function createPromoLinkClaimHandler(
       };
     }
 
-    return claimViaAdapter(db, adapter, scope, payload, lease, now(), signal, heartbeat);
+    return claimViaAdapter(
+      db,
+      adapter,
+      scope,
+      payload,
+      lease,
+      now(),
+      signal,
+      heartbeat,
+      readbackPolicy,
+      sleep,
+    );
   };
 }
 

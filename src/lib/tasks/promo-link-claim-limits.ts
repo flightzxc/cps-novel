@@ -6,20 +6,12 @@
  * evidence state, and this task's task-instruction explicitly forbids
  * reusing the short-drama-derived MoboReader numbers here.
  *
- * 🔴 ALL numeric values below are PENDING OWNER CALIBRATION. Two different
- * kinds of "pending" are mixed in here and the comment on each constant
- * says which:
- *   - `ttlMs` and `readback.*` are *local safety-hygiene knobs*, independent
- *     of the unproven `claimPromo` wire contract — they bound how long a
- *     stale task is allowed to still attempt an upstream call and how many
- *     times a (currently unreachable) readback may be retried. Their
- *     defaults are not guesses: they are the architecture doc's own citation
- *     of CPS's shipped, production-tested values for the same local-safety
- *     question (`novel-v1-adapter-and-workflow-v0.2.1.md` — see per-field
- *     comments for exact line references). They still need Owner sign-off
- *     before this project treats them as final, but they are evidenced
- *     starting points, not invented numbers.
- *   - `maxBatchSize` has no such precedent to cite — it is a deliberately
+ * `ttlMs` and `maxBatchSize` remain PENDING OWNER CALIBRATION; the comment
+ * on each says why. `readback.*` is a local safety-hygiene policy independent
+ * of the unproven `claimPromo` idempotency contract. Its deployment defaults
+ * were Owner-frozen on 2026-09-02 to match CPS v8.3.6: three read-only
+ * attempts at a 2000ms interval, while preserving the existing clamps.
+ * `maxBatchSize` has no precedent to cite — it is a deliberately
  *     conservative placeholder pending real Owner input once operators have
  *     opinions about explicit-selection batch size for a side-effecting-
  *     adjacent capability.
@@ -30,6 +22,11 @@ export const PROMO_LINK_CLAIM_CAPABILITY_KEY = "claimPromo";
 
 export const PROMO_LINK_CLAIM_TASK_TYPE = "promo_link.claim.v1";
 export const PROMO_LINK_CLAIM_TARGET_TYPE = "novel_source_item";
+
+export const PROMO_LINK_CLAIM_READBACK_ENV = Object.freeze({
+  attempts: "PROMO_LINK_CLAIM_READBACK_ATTEMPTS",
+  intervalMs: "PROMO_LINK_CLAIM_READBACK_INTERVAL_MS",
+});
 
 export const PROMO_LINK_CLAIM_LIMITS = Object.freeze({
   /**
@@ -53,20 +50,72 @@ export const PROMO_LINK_CLAIM_LIMITS = Object.freeze({
    */
   maxBatchSize: 50,
   /**
-   * Bounded readback retry — only reachable once `claimPromo` itself is
-   * unfrozen (see `src/lib/adapters/promo-link-claim.ts`). Defaults and caps
-   * are the architecture doc's citation of CPS's shipped, bidirectionally-
-   * clamped values for the same question
+   * Bounded readback retry for pre-read, post-claim confirmation, and
+   * readback-only recovery. The 3-attempt/2000ms deployment defaults are
+   * Owner-approved CPS v8.3.6 parity; the bidirectional clamps retain the
+   * architecture doc's cited CPS safety shape
    * (`novel-v1-adapter-and-workflow-v0.2.1.md:191`, citing
    * `changdu-promo-claim.ts:271-299,305-325`) — "上游写入延迟量级未知，参数需
    * 实测后定" (upstream write-latency magnitude is unmeasured; needs
-   * real-world measurement) is the doc's own words for why these remain
-   * PENDING OWNER CALIBRATION even though they have a CPS precedent.
+   * real-world measurement) remains the operational reason to keep these
+   * bounded and configurable.
    */
   readback: Object.freeze({
-    defaultAttempts: 1,
+    defaultAttempts: 3,
     maxAttempts: 5,
     defaultIntervalMs: 2_000,
     maxIntervalMs: 30_000,
   }),
 });
+
+export interface PromoLinkClaimReadbackPolicy {
+  attempts: number;
+  intervalMs: number;
+}
+
+export class PromoLinkClaimReadbackConfigError extends Error {
+  constructor(readonly variable: string) {
+    super(`${variable} must be an integer`);
+    this.name = "PromoLinkClaimReadbackConfigError";
+  }
+}
+
+function clampedInteger(
+  raw: string | undefined,
+  fallback: number,
+  minimum: number,
+  maximum: number,
+  variable: string,
+): number {
+  if (raw === undefined || raw.trim() === "") return fallback;
+  const parsed = Number(raw);
+  if (!Number.isSafeInteger(parsed)) throw new PromoLinkClaimReadbackConfigError(variable);
+  return Math.min(maximum, Math.max(minimum, parsed));
+}
+
+/**
+ * Runtime policy for read-only getlistpc recovery. Values are clamped in
+ * both directions to the existing CPS-derived safety bounds. This policy
+ * never controls task attempts or getcode dispatches.
+ */
+export function resolvePromoLinkClaimReadbackPolicy(
+  env: NodeJS.ProcessEnv = process.env,
+): Readonly<PromoLinkClaimReadbackPolicy> {
+  const limits = PROMO_LINK_CLAIM_LIMITS.readback;
+  return Object.freeze({
+    attempts: clampedInteger(
+      env[PROMO_LINK_CLAIM_READBACK_ENV.attempts],
+      limits.defaultAttempts,
+      1,
+      limits.maxAttempts,
+      PROMO_LINK_CLAIM_READBACK_ENV.attempts,
+    ),
+    intervalMs: clampedInteger(
+      env[PROMO_LINK_CLAIM_READBACK_ENV.intervalMs],
+      limits.defaultIntervalMs,
+      0,
+      limits.maxIntervalMs,
+      PROMO_LINK_CLAIM_READBACK_ENV.intervalMs,
+    ),
+  });
+}
