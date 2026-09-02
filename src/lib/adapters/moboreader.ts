@@ -1,3 +1,18 @@
+import {
+  MOBOREADER_BACKOFF_BASE_MS,
+  MOBOREADER_BACKOFF_CAP_MS,
+  MOBOREADER_MAX_RATE_LIMIT_RETRIES,
+  MOBOREADER_RATE_LIMITED_STATUSES,
+  MOBOREADER_RATE_LIMIT_TOTAL_BUDGET_MS,
+  MOBOREADER_RETRY_AFTER_CAP_MS,
+  MoboreaderRateLimitedError,
+  NOOP_MOBOREADER_RATE_GATE,
+  canAffordRetry,
+  computeRetryDelayMs,
+  parseRetryAfter,
+  type MoboreaderRateGate,
+} from "./moboreader-rate-limit";
+
 const MOBOREADER_ORIGIN = "https://kocserver-cn.cdreader.com";
 
 export const MOBOREADER_READ_ENDPOINTS = Object.freeze({
@@ -139,11 +154,44 @@ export class MoboreaderAdapterError extends Error {
 
 type Fetch = typeof fetch;
 
+/**
+ * Opt-in CPS-ported upstream rate-limit discipline (RC-3;
+ * `src/lib/adapters/moboreader-rate-limit.ts`). Omitting this field (the
+ * default) preserves the pre-existing single-loop retry behavior
+ * byte-for-byte — required so `tests/backend/adapters/moboreader.test.ts`'s
+ * frozen assertions about default attempt count / backoff / Retry-After
+ * cap keep passing unmodified. `worker/handlers/moboreader.ts` passes this
+ * explicitly so production traffic gets the new discipline; unit tests
+ * that construct this adapter directly and don't pass it get the old
+ * behavior, unchanged.
+ */
+export interface UpstreamRateLimitPolicyOptions {
+  /** Max retries for 429/503 specifically. Default: `MOBOREADER_MAX_RATE_LIMIT_RETRIES` (4). */
+  maxAttempts?: number;
+  backoffBaseMs?: number;
+  backoffCapMs?: number;
+  retryAfterCapMs?: number;
+  /** Total wall-clock budget for one logical request's retries, tracked
+   * separately from the per-attempt HTTP timeout. Default: `MOBOREADER_RATE_LIMIT_TOTAL_BUDGET_MS` (90_000). */
+  totalBudgetMs?: number;
+  /** Injected for tests; defaults to `Math.random`. */
+  random?: () => number;
+  /** Injected for tests; defaults to `Date.now`. */
+  now?: () => number;
+}
+
 interface AdapterOptions {
   fetchImpl?: Fetch;
   timeoutMs?: number;
   maxAttempts?: number;
   sleep?: (milliseconds: number) => Promise<void>;
+  /** Module-level upstream pacing door (RC-3). Defaults to a no-op so
+   * constructing this adapter with no options — as every existing test
+   * does — adds zero latency. Production wiring passes the shared
+   * `moboreaderUpstreamRateGate` singleton. */
+  rateGate?: MoboreaderRateGate;
+  /** See `UpstreamRateLimitPolicyOptions`. */
+  upstreamRateLimitPolicy?: UpstreamRateLimitPolicyOptions;
 }
 
 function record(value: unknown): Record<string, unknown> {
@@ -449,14 +497,19 @@ export function createMoboreaderReadAdapter(options: AdapterOptions = {}): Mobor
   const timeoutMs = options.timeoutMs ?? MOBOREADER_DEFAULT_TIMEOUT_MS;
   const maxAttempts = options.maxAttempts ?? MOBOREADER_MAX_READ_ATTEMPTS;
   const sleep = options.sleep ?? ((milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)));
+  const rateGate = options.rateGate ?? NOOP_MOBOREADER_RATE_GATE;
+  const policy = options.upstreamRateLimitPolicy;
   if (timeoutMs < 1 || maxAttempts < 1 || maxAttempts > MOBOREADER_MAX_READ_ATTEMPTS) {
     throw new Error("Invalid MoboReader read safety limits");
   }
 
-  async function post(path: string, body: Record<string, unknown>, token: string, signal?: AbortSignal): Promise<unknown> {
-    if (!Object.values(MOBOREADER_READ_ENDPOINTS).includes(path as never)) throw new Error("Endpoint is not allowlisted");
-    if (!token) throw new Error("MoboReader credential is required");
+  /**
+   * Pre-RC-3 retry loop, unchanged. Active whenever `upstreamRateLimitPolicy`
+   * is not supplied — i.e. for every existing caller/test.
+   */
+  async function legacyPost(path: string, body: Record<string, unknown>, token: string, signal?: AbortSignal): Promise<unknown> {
     for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      await rateGate.wait();
       const scoped = composeSignal(signal, timeoutMs);
       try {
         const response = await fetchImpl(`${MOBOREADER_ORIGIN}${path}`, {
@@ -490,6 +543,103 @@ export function createMoboreaderReadAdapter(options: AdapterOptions = {}): Mobor
       }
     }
     throw new MoboreaderAdapterError("transport_error", true);
+  }
+
+  /**
+   * RC-3 retry loop (CPS `changdu.ts`-ported semantics). Active only when
+   * `upstreamRateLimitPolicy` is supplied. 429/503 use
+   * `computeRetryDelayMs`/`parseRetryAfter`/`canAffordRetry` and, on
+   * exhaustion, throw `MoboreaderRateLimitedError` carrying `pageIndex` so
+   * the caller can resume from that page — no new recovery mechanism,
+   * `catalog_scan_task_item` is already one row per page. Every other
+   * retryable status (408, 5xx other than 503) keeps its pre-existing
+   * backoff formula but now shares the same elapsed-time budget, per RC-3
+   * item C ("保留对 408/5xx 的既有处理但纳入同一预算").
+   */
+  async function rateLimitAwarePost(
+    path: string,
+    body: Record<string, unknown>,
+    token: string,
+    rateLimitPolicy: UpstreamRateLimitPolicyOptions,
+    signal?: AbortSignal,
+  ): Promise<unknown> {
+    const nowFn = rateLimitPolicy.now ?? Date.now;
+    const random = rateLimitPolicy.random ?? Math.random;
+    const rateLimitMaxAttempts = rateLimitPolicy.maxAttempts ?? MOBOREADER_MAX_RATE_LIMIT_RETRIES;
+    const backoffBaseMs = rateLimitPolicy.backoffBaseMs ?? MOBOREADER_BACKOFF_BASE_MS;
+    const backoffCapMs = rateLimitPolicy.backoffCapMs ?? MOBOREADER_BACKOFF_CAP_MS;
+    const retryAfterCapMs = rateLimitPolicy.retryAfterCapMs ?? MOBOREADER_RETRY_AFTER_CAP_MS;
+    const totalBudgetMs = rateLimitPolicy.totalBudgetMs ?? MOBOREADER_RATE_LIMIT_TOTAL_BUDGET_MS;
+    const pageIndex = typeof body.pageIndex === "number" && Number.isFinite(body.pageIndex) ? body.pageIndex : null;
+    const startedAt = nowFn();
+    let attempt = 0;
+
+    for (;;) {
+      await rateGate.wait();
+      const scoped = composeSignal(signal, timeoutMs);
+      let response: Response;
+      try {
+        response = await fetchImpl(`${MOBOREADER_ORIGIN}${path}`, {
+          method: "POST",
+          redirect: "error",
+          headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+          body: JSON.stringify(body),
+          signal: scoped.signal,
+        });
+      } catch (error) {
+        scoped.cleanup();
+        if (error instanceof MoboreaderAdapterError) throw error;
+        if (signal?.aborted) throw new MoboreaderAdapterError("transport_error", false);
+        throw new MoboreaderAdapterError(scoped.timedOut() ? "request_timeout" : "transport_error", true);
+      }
+      scoped.cleanup();
+
+      if (response.ok) {
+        try {
+          return await response.json();
+        } catch {
+          throw new MoboreaderAdapterError("malformed_payload", false, response.status);
+        }
+      }
+
+      const status = response.status;
+      if (!shouldRetryStatus(status)) {
+        throw new MoboreaderAdapterError("upstream_http_error", false, status);
+      }
+
+      const rateLimited = MOBOREADER_RATE_LIMITED_STATUSES.has(status);
+      const parsedRetryAfterMs = parseRetryAfter(response.headers.get("retry-after"), nowFn(), retryAfterCapMs);
+      attempt += 1;
+      const exhaustedAttempts = attempt > rateLimitMaxAttempts;
+      const delayMs = exhaustedAttempts
+        ? 0
+        : computeRetryDelayMs({ attempt, retryAfterMs: parsedRetryAfterMs, random, backoffBaseMs, backoffCapMs });
+      const elapsedMs = nowFn() - startedAt;
+      const outOfBudget = !exhaustedAttempts && !canAffordRetry({ elapsedMs, delayMs, budgetMs: totalBudgetMs });
+
+      if (exhaustedAttempts || outOfBudget) {
+        if (rateLimited) {
+          throw new MoboreaderRateLimitedError({
+            status,
+            retryAfterMs: parsedRetryAfterMs,
+            pageIndex,
+            endpoint: path,
+            attempts: attempt - 1,
+            elapsedMs,
+            reason: outOfBudget ? "budget_exhausted" : "max_attempts",
+          });
+        }
+        throw new MoboreaderAdapterError("upstream_http_error", true, status);
+      }
+      await sleep(delayMs);
+    }
+  }
+
+  async function post(path: string, body: Record<string, unknown>, token: string, signal?: AbortSignal): Promise<unknown> {
+    if (!Object.values(MOBOREADER_READ_ENDPOINTS).includes(path as never)) throw new Error("Endpoint is not allowlisted");
+    if (!token) throw new Error("MoboReader credential is required");
+    if (policy) return rateLimitAwarePost(path, body, token, policy, signal);
+    return legacyPost(path, body, token, signal);
   }
 
   const adapter: MoboreaderReadAdapter = {

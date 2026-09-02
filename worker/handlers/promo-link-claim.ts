@@ -36,6 +36,7 @@ import { Prisma, type PrismaClient } from "@prisma/client";
 import {
   classifyClaimPromoFailure,
   createPromoLinkClaimAdapter,
+  moboreaderUpstreamRateGate,
   type ClaimPromoRequest,
   type ClaimPromoResult,
   type PromoLinkClaimAdapter,
@@ -958,7 +959,13 @@ export function createPromoLinkClaimHandler(
   db: PrismaClient,
   dependencies: PromoLinkClaimHandlerDependencies = {},
 ): TaskHandler {
-  const adapter = dependencies.adapter ?? createPromoLinkClaimAdapter();
+  // RC-3: shares the same process-wide upstream pacing door as the
+  // catalog/Preview adapters (`worker/handlers/moboreader.ts`) — getcode and
+  // its readback hit the same host, so all three task families must pace
+  // against one shared clock. This only makes the dispatch wait its turn;
+  // it does not add or change retries (the getcode call/error contract
+  // above stays frozen).
+  const adapter = dependencies.adapter ?? createPromoLinkClaimAdapter({ rateGate: moboreaderUpstreamRateGate });
   const env = dependencies.env ?? process.env;
   const now = dependencies.now ?? (() => new Date());
   const readbackPolicy = resolvePromoLinkClaimReadbackPolicy(env);

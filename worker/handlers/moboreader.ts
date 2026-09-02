@@ -3,9 +3,13 @@ import { Prisma, type PrismaClient } from "@prisma/client";
 import {
   buildMoboreaderPreviewRequestsFromCatalogRow,
   createMoboreaderReadAdapter,
+  moboreaderUpstreamRateGate,
+  resolveMoboreaderUpstreamRateLimitConfig,
+  MoboreaderRateLimitedError,
   type ListBooksResponse,
   type MoboreaderBook,
   type MoboreaderReadAdapter,
+  type UpstreamRateLimitPolicyOptions,
 } from "../../src/lib/adapters";
 import {
   isNovelCatalogSyncEnabled,
@@ -771,6 +775,26 @@ export interface MoboreaderHandlerDependencies {
   now?: () => Date;
 }
 
+/**
+ * Maps this repo's env-resolved upstream rate-limit config (RC-3) onto the
+ * adapter's `upstreamRateLimitPolicy` shape. Only used at the two
+ * production default-adapter construction sites below — a caller that
+ * supplies its own `dependencies.adapter` (every existing test) never
+ * touches this, and `resolveMoboreaderUpstreamRateLimitConfig` fails fast
+ * on a malformed override the same way `resolveMoboreaderPreviewRuntimeConfig`
+ * already does for Preview envs.
+ */
+function upstreamRateLimitPolicyFromEnv(env: NodeJS.ProcessEnv): UpstreamRateLimitPolicyOptions {
+  const config = resolveMoboreaderUpstreamRateLimitConfig(env);
+  return {
+    maxAttempts: config.maxRateLimitRetries,
+    backoffBaseMs: config.backoffBaseMs,
+    backoffCapMs: config.backoffCapMs,
+    retryAfterCapMs: config.retryAfterCapMs,
+    totalBudgetMs: config.totalBudgetMs,
+  };
+}
+
 interface MoboreaderPreviewPayload {
   trigger: "manual" | "auto";
   actorId: string;
@@ -898,8 +922,11 @@ export function createMoboreaderCatalogHandler(
   db: PrismaClient,
   dependencies: MoboreaderHandlerDependencies = {},
 ): TaskHandler {
-  const adapter = dependencies.adapter ?? createMoboreaderReadAdapter();
   const env = dependencies.env ?? process.env;
+  const adapter = dependencies.adapter ?? createMoboreaderReadAdapter({
+    rateGate: moboreaderUpstreamRateGate,
+    upstreamRateLimitPolicy: upstreamRateLimitPolicyFromEnv(env),
+  });
   const now = dependencies.now ?? (() => new Date());
   return async ({ lease, mode, signal }) => {
     const payload = parseMoboreaderCatalogPayload(lease.payload);
@@ -929,11 +956,26 @@ export function createMoboreaderCatalogHandler(
         pageSize: payload.pageSize,
         projectType: payload.projectType,
       }, token, signal);
-    } catch {
+    } catch (error) {
+      // RC-3: a `MoboreaderRateLimitedError` gets a richer, page-aware error
+      // message for operators, but the outcome shape (`status: "failed"`,
+      // `result.stopReason: "upstream_error"`, same `protectedWrite`) is
+      // byte-identical to the pre-existing generic-error path below — this
+      // task's item is a page, so `catalog_scan_task_item` already lets an
+      // operator resume from `payload.pageIndex` with a fresh scan task; no
+      // new recovery mechanism.
+      const rateLimited = error instanceof MoboreaderRateLimitedError;
       return {
         status: "failed",
         result: { stopReason: "upstream_error", terminalState: "partial_failed" },
-        error: { code: "upstream_error", message: "MoboReader catalog read failed" },
+        error: rateLimited
+          ? {
+              code: "upstream_rate_limited",
+              message: `MoboReader catalog read rate limited at page ${payload.pageIndex} `
+                + `(HTTP ${error.status}, ${error.reason}, retried ${error.attempts} time(s), `
+                + `elapsed ${error.elapsedMs}ms). Resume a new scan from page ${payload.pageIndex}.`,
+            }
+          : { code: "upstream_error", message: "MoboReader catalog read failed" },
         protectedWrite: async (tx) => persistCatalogUpstreamFailure(tx, {
           taskId: lease.taskId,
           itemId: lease.itemId,
@@ -1003,7 +1045,11 @@ export function createMoboreaderPreviewHandler(
 ): TaskHandler {
   const env = dependencies.env ?? process.env;
   const runtime = resolveMoboreaderPreviewRuntimeConfig(env);
-  const adapter = dependencies.adapter ?? createMoboreaderReadAdapter({ timeoutMs: runtime.timeoutMs });
+  const adapter = dependencies.adapter ?? createMoboreaderReadAdapter({
+    timeoutMs: runtime.timeoutMs,
+    rateGate: moboreaderUpstreamRateGate,
+    upstreamRateLimitPolicy: upstreamRateLimitPolicyFromEnv(env),
+  });
   return async ({ lease, mode, signal }) => {
     if (!isNovelCatalogSyncEnabled(env)) {
       return { status: "failed", error: { code: "feature_disabled", message: "Preview refresh feature is disabled" } };

@@ -17,6 +17,47 @@ export const MOBOREADER_CATALOG_LIMITS = Object.freeze({
   ttlMs: 6 * 60 * 60 * 1_000,
 });
 
+/**
+ * RC-3 upstream-pacing note (`docs/governance/port-registry.md`): CPS
+ * v8.3.6 caps its catalog page size at 20
+ * (`worker/handlers/changdu-source-sync.ts:814`,
+ * `Math.min(positiveInteger(params.pageSize, 20), 20)`), matching the page
+ * shape observed during the 2026-08-26 429 incident. RC-3 was scoped to
+ * port that same 20-row ceiling here as `MOBOREADER_CATALOG_LIMITS.maxPageSize`.
+ *
+ * That literal change was **not applied**: `MOBOREADER_CATALOG_LIMITS.maxPageSize`
+ * is asserted at 100 by frozen tests this port must not modify —
+ * `tests/backend/tasks/moboreader.test.ts`'s `validInput`/`payload`
+ * fixtures use `pageSize: 100` as the happy-path case (`:22`, `:30`,
+ * matched at `:45-50` and parsed at `:72`), and lowering the ceiling to 20
+ * would make those calls throw `page_size_exceeded` /
+ * `catalog_payload_invalid` instead. `MOBOREADER_CATALOG_LIMITS.maxPageSize`
+ * therefore stays 100 for the technical ceiling `validateMoboreaderCatalogScanInput`
+ * enforces.
+ *
+ * This constant instead carries the CPS-parity *recommendation* (20 rows,
+ * env-overridable) for whatever assembles a catalog-scan task's `pageSize`
+ * — the admin UI / API route under `src/app/**` (Claude territory; not
+ * touched by this port — see the port-registry entry for the exact lines
+ * to update) and any scheduler default. The two upstream-pacing
+ * mechanisms that do not depend on this value — the inter-request
+ * throttle door and the bounded 429/503 retry/budget — are wired
+ * regardless of what `pageSize` a caller picks; a caller requesting more
+ * than 20 rows/page is not itself unsafe under those two, only a
+ * deviation from CPS's own probed-safe page shape.
+ */
+export const MOBOREADER_UPSTREAM_RECOMMENDED_PAGE_SIZE = 20;
+export const MOBOREADER_UPSTREAM_RECOMMENDED_PAGE_SIZE_ENV = "MOBOREADER_UPSTREAM_RECOMMENDED_PAGE_SIZE";
+
+export function resolveMoboreaderUpstreamRecommendedPageSize(
+  env: NodeJS.ProcessEnv = process.env,
+): number {
+  const raw = env[MOBOREADER_UPSTREAM_RECOMMENDED_PAGE_SIZE_ENV];
+  if (raw === undefined || raw.trim() === "") return MOBOREADER_UPSTREAM_RECOMMENDED_PAGE_SIZE;
+  const parsed = Number(raw);
+  return positiveInteger(parsed, "upstream_recommended_page_size_invalid");
+}
+
 export const MOBOREADER_CATALOG_SAFETY_MAX_PAGES_ENV = "MOBOREADER_CATALOG_SAFETY_MAX_PAGES";
 
 export const MOBOREADER_PREVIEW_RUNTIME_STATUS = "enabled" as const;

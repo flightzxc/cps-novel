@@ -25,6 +25,8 @@
  * readback-only recovery. Upstream idempotency remains unverified.
  */
 
+import { NOOP_MOBOREADER_RATE_GATE, type MoboreaderRateGate } from "./moboreader-rate-limit";
+
 const MOBOREADER_ORIGIN = "https://kocserver-cn.cdreader.com";
 
 export const MOBOREADER_PROMO_ENDPOINTS = Object.freeze({
@@ -107,6 +109,22 @@ type Fetch = typeof fetch;
 export interface PromoLinkClaimAdapterOptions {
   fetchImpl?: Fetch;
   timeoutMs?: number;
+  /**
+   * Module-level upstream pacing door (RC-3;
+   * `src/lib/adapters/moboreader-rate-limit.ts`). Defaults to a no-op so
+   * constructing this adapter with no options — as every existing test
+   * does — adds zero latency. Production wiring
+   * (`worker/handlers/promo-link-claim.ts`) passes the shared
+   * `moboreaderUpstreamRateGate` singleton, the same one the catalog/Preview
+   * adapters use, so all MoboReader traffic in this process paces against
+   * one shared clock.
+   *
+   * This gate only makes the dispatch *wait its turn* — it does not retry.
+   * The getcode mutation's call/error semantics are frozen (no automatic
+   * retry, ambiguous outcomes route to readback-only recovery); this door
+   * sits in front of that contract, unchanged.
+   */
+  rateGate?: MoboreaderRateGate;
 }
 
 function asRecord(value: unknown, ambiguous: boolean): Record<string, unknown> {
@@ -254,6 +272,7 @@ export function createPromoLinkClaimAdapter(
 ): PromoLinkClaimAdapter {
   const fetchImpl = options.fetchImpl ?? fetch;
   const timeoutMs = options.timeoutMs ?? MOBOREADER_PROMO_TIMEOUT_MS;
+  const rateGate = options.rateGate ?? NOOP_MOBOREADER_RATE_GATE;
   if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1) {
     throw new Error("Invalid MoboReader promo timeout");
   }
@@ -272,6 +291,10 @@ export function createPromoLinkClaimAdapter(
     if (signal?.aborted) {
       throw new PromoLinkClaimAdapterError("transport_error", false, false);
     }
+    // Wait-only pacing door — see `PromoLinkClaimAdapterOptions.rateGate`.
+    // No retry semantics live here or below; a single dispatch, exactly as
+    // before RC-3.
+    await rateGate.wait();
     const scoped = scopedSignal(signal, timeoutMs);
     try {
       const response = await fetchImpl(`${MOBOREADER_ORIGIN}${path}`, {
