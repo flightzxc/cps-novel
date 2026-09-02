@@ -88,6 +88,23 @@ describe("RC-7b /api/health/worker route handler", () => {
     }
   });
 
+  /**
+   * 与 `/api/health/backup` 同一条纪律（论证见那边同名用例）：UptimeRobot Keyword
+   * 监控匹配的是原始响应体里的字面子串 `"workerStatus":"ok"`，而本文件其余断言都走
+   * `response.json()`，看不见序列化格式的变化。这里断言原始字节。
+   */
+  it("在原始响应体里逐字输出监控关键词，且非 ok 时一定不出现", async () => {
+    harness.result = { workerStatus: "ok", expiredLocks: 0, lastHeartbeatAgeSeconds: null, checkedAt: "2026-09-03T12:00:00.000Z" };
+    const okBody = await (await GET()).text();
+    expect(okBody).toContain('"workerStatus":"ok"');
+
+    for (const workerStatus of ["degraded", "failed"] as const) {
+      harness.result = { workerStatus, expiredLocks: 3, lastHeartbeatAgeSeconds: null, checkedAt: "2026-09-03T12:00:00.000Z" };
+      const body = await (await GET()).text();
+      expect(body, `${workerStatus} 不该满足监控关键词`).not.toContain('"workerStatus":"ok"');
+    }
+  });
+
   it("probes through the shared client instead of building its own", async () => {
     harness.result = { workerStatus: "ok", expiredLocks: 0, lastHeartbeatAgeSeconds: null, checkedAt: "2026-09-03T12:00:00.000Z" };
     await GET();
