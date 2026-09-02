@@ -30,6 +30,16 @@ RC-1（后台推广链接领取入口）对齐的是同一只读工作区
 不写 tag 名或 tag object。与 v8.2.18 一样，这只是同一只读路径上的另一个已冻结生产快照，不影响
 上方 X 系列条目仍固定在 v8.2.18。
 
+### RC-3 上游请求纪律参考基线（2026-09-03）
+
+RC-3（MoboReader 上游请求节流与 429/503 退避）与 RC-1 引用同一个冻结快照，
+`baseline_commit` 规则完全照上一节执行：peeled commit `16f2e4cfca51f46af0dede899ecf6242a770bbd0`，
+只走 `git show v8.3.6:<path>`，不读该仓工作树。补充两条**不得**写进 `baseline_commit` 的 ID，
+以免后来者取错：annotated tag object 本身
+（`4d8841234a2ae8385f78d6f7da3f068605e7e19d`，即 `git rev-parse v8.3.6` 的输出），
+以及取证当时该只读仓工作树的 HEAD（`5096765a7d53ba704bc8d07322864c366cb41895`）——
+两者都不是 tag 指向的提交。
+
 ## `port_kind` 取值说明
 
 | 取值 | 含义 |
@@ -200,6 +210,38 @@ RC-1 是首批 `owner = Claude` 引用 v8.3.6 基线的搬运条目（见上方"
 | --- | --- | --- | --- | --- | --- | --- |
 | `submitChangduPromoClaim` → `enqueuePromoLinkClaimAction` | `src/app/(admin)/sync/actions.ts` | `724-766` | `16f2e4cfca51f46af0dede899ecf6242a770bbd0` | `ADAPT` | 保留"只接受调用方显式枚举的 `sourceItemIds`，硬拒绝任何筛选描述符"这条纪律（CPS 端靠运行时判 `data.selection` 真值即拒绝；本仓在类型层面就不给这个字段留位置——`PromoLinkClaimTriggerInput` 只有 `novelSourceItemIds: string[]`，没有筛选形状可传）；CPS 单函数内联 `requireAdminSession()` + 直接落 `BatchTask`，本仓拆成 `requireAdminActionAccess` → `requireFreshAdminServiceMutation` 两段式新鲜校验（`promo:claim`，dry_run/apply 同一能力位，见 `_actions.ts` 内文档），且把返回值从 `{success,taskId,...}` 改造成与既有 `CatalogScanActionResult` 同形的 `{ok,data:{outcome,...}}` 判别式联合；`channelAppKey`（字符串业务键）换成本仓的 `channelAppId`（UUID FK）；新增本仓特有的 `ChannelCapability`（按渠道应用维度的 `claimPromo` 能力位）前置检查与 `capability_disabled` 结果分支——CPS 没有这一层，是本仓 P0-S6 引入的能力位模型的必然要求，不是从 CPS 搬来的 | Claude |
 | dry_run/apply 双模式表单交互（复选 + 账户/模式选择 + 提交前不可逆警示） | `src/app/(admin)/sync/_components/changdu-sync-panel.tsx` | `598-966`（`submitPromoClaim`/`canSubmitClaim`/勾选与提交区块） | `16f2e4cfca51f46af0dede899ecf6242a770bbd0` | `PATTERN_ONLY` | 只借鉴"显式勾选 + dry_run 优先 + apply 前置不可逆警示"的交互形态，不搬代码：CPS 面板把领取塞进一个已有 2000+ 行的畅读综合面板（同页还有来源同步、链接同步等其它职责）；本仓新建独立的 `PromoLinkClaimDialog`，触发入口挂在 `/catalog-sync` 的来源条目表格上，不复用/不魔改任何既有畅读面板结构 | Claude |
+
+RC-3（MoboReader 上游请求节流与 429/503 退避）同样 `owner = Claude`，与 RC-1 共用上方 v8.3.6 基线，来源集中在 CPS 的
+`src/lib/adapters/changdu-rate-limit.ts`、`src/lib/adapters/changdu.ts` 与 `worker/handlers/changdu-source-sync.ts`。
+
+| symbol | source_file | source_lines | baseline_commit | port_kind | changed_what | owner |
+| --- | --- | --- | --- | --- | --- | --- |
+| `CHANGDU_MIN_REQUEST_INTERVAL_MS` → `MOBOREADER_MIN_REQUEST_INTERVAL_MS` | `src/lib/adapters/changdu-rate-limit.ts` | `27` | `16f2e4cfca51f46af0dede899ecf6242a770bbd0` | `ADAPT` | 数值 1100ms 原样保留（上游按请求数限流约 60 次/窗口，1100ms ≈ 55 次/分钟留 8% 余量）；仅前缀改名。该常量在本仓的消费方式与 CPS 不同，见下方节流门条目 | Claude |
+| `CHANGDU_MAX_RATE_LIMIT_RETRIES` → `MOBOREADER_MAX_RATE_LIMIT_RETRIES` | `src/lib/adapters/changdu-rate-limit.ts` | `30` | `16f2e4cfca51f46af0dede899ecf6242a770bbd0` | `ADAPT` | 数值 4 原样保留；仅前缀改名 | Claude |
+| `CHANGDU_BACKOFF_BASE_MS` → `MOBOREADER_BACKOFF_BASE_MS` | `src/lib/adapters/changdu-rate-limit.ts` | `33` | `16f2e4cfca51f46af0dede899ecf6242a770bbd0` | `ADAPT` | 数值 2000ms 原样保留；仅前缀改名 | Claude |
+| `CHANGDU_BACKOFF_CAP_MS` → `MOBOREADER_BACKOFF_CAP_MS` | `src/lib/adapters/changdu-rate-limit.ts` | `36` | `16f2e4cfca51f46af0dede899ecf6242a770bbd0` | `ADAPT` | 数值 60000ms 原样保留；仅前缀改名 | Claude |
+| `CHANGDU_RETRY_AFTER_CAP_MS` → `MOBOREADER_RETRY_AFTER_CAP_MS` | `src/lib/adapters/changdu-rate-limit.ts` | `39` | `16f2e4cfca51f46af0dede899ecf6242a770bbd0` | `ADAPT` | 数值 120000ms 原样保留；仅前缀改名。注意本仓 `moboreader.ts` 原有的 `MAX_RETRY_AFTER_MS = 30_000` 只作用于未启用本策略的 legacy 路径，两者并存不冲突 | Claude |
+| `CHANGDU_RATE_LIMIT_TOTAL_BUDGET_MS` → `MOBOREADER_RATE_LIMIT_TOTAL_BUDGET_MS` | `src/lib/adapters/changdu-rate-limit.ts` | `59` | `16f2e4cfca51f46af0dede899ecf6242a770bbd0` | `ADAPT` | 数值 90000ms 原样保留；仅前缀改名。CPS 的 90 秒是按其 30 分钟任务看门狗与约 585 页节流算出的余量，本仓任务租约模型不同（一页一 item、30 秒租约 + 心跳续租），沿用同值属保守取值而非同口径推导 | Claude |
+| `CHANGDU_RETRYABLE_STATUSES` → `MOBOREADER_RATE_LIMITED_STATUSES` | `src/lib/adapters/changdu-rate-limit.ts` | `62` | `16f2e4cfca51f46af0dede899ecf6242a770bbd0` | `ADAPT` | 集合 `{429, 503}` 原样保留；改名以区分「触发限流退避的状态码」与本仓 `moboreader.ts` 既有的 `shouldRetryStatus`（408/429/≥500）——后者范围更宽且不属本次搬运 | Claude |
+| `ChangduRateLimitGiveUpReason` → `MoboreaderRateLimitGiveUpReason` | `src/lib/adapters/changdu-rate-limit.ts` | `65-69` | `16f2e4cfca51f46af0dede899ecf6242a770bbd0` | `COPY` | `"max_attempts"` \| `"budget_exhausted"` 两态原样复制，仅改类型名 | Claude |
+| `ChangduRateLimitedError` → `MoboreaderRateLimitedError` | `src/lib/adapters/changdu-rate-limit.ts` | `71-99` | `16f2e4cfca51f46af0dede899ecf6242a770bbd0` | `ADAPT` | 保留「重试耗尽后抛出带续跑坐标的专用错误类」形态与 `status`/`retryAfterMs`/`attempts`/`reason` 字段；`lastPage`（CPS 的页号）改为 `pageIndex`（非分页端点为 `null`），并新增 `endpoint` 与 `elapsedMs`——本仓一个适配器服务三类端点（getlistpc/getbydataid/getchapterinfo），只有页号不足以定位。消息文案由中文改英文以与本仓其余适配器一致 | Claude |
+| `parseRetryAfter` | `src/lib/adapters/changdu-rate-limit.ts` | `111-138` | `16f2e4cfca51f46af0dede899ecf6242a770bbd0` | `ADAPT` | RFC 9110 双格式解析逻辑逐字保留，含「先 `/[A-Za-z]/` 卡形状再 `Date.parse`」这一承重护栏（否则 `Retry-After: -5` 被当年份解析成负 delta、clamp 成 0，等于限流时立刻重试）；唯一改造是把上限由闭包常量改为第三个可选参数 `capMs`，默认仍是 120000ms。已独立验证：`"-5"`→null、`"abcxyz"`→null、`"0"`→0、`"9999"`→120000、HTTP-date +30s→30000、过期 HTTP-date→0 | Claude |
+| `computeRetryDelayMs` | `src/lib/adapters/changdu-rate-limit.ts` | `149-163` | `16f2e4cfca51f46af0dede899ecf6242a770bbd0` | `ADAPT` | 「Retry-After 权威值 +10% 抖动，否则指数退避 + full jitter `[cap/2, cap]`」公式逐字保留；改造为把 base/cap 由闭包常量改成可选入参（默认等于上面两个常量）。已独立验证 attempt 1..6 在 random=0/0.5/1 下分别落在 [1000,2000)/[2000,4000)/…/[30000,60000) | Claude |
+| `canAffordRetry` | `src/lib/adapters/changdu-rate-limit.ts` | `171-178` | `16f2e4cfca51f46af0dede899ecf6242a770bbd0` | `ADAPT` | 「睡下去之前先判预算，不够就立刻带坐标停下」的语义与 `elapsedMs + delayMs <= budget` 边界逐字保留；仅改默认预算常量名 | Claude |
+| CPS 分页循环页间节流 `await sleep(CHANGDU_MIN_REQUEST_INTERVAL_MS)` → `createMoboreaderRateGate` / `moboreaderUpstreamRateGate` | `worker/handlers/changdu-source-sync.ts` | `686-691` | `16f2e4cfca51f46af0dede899ecf6242a770bbd0` | `ADAPT` | 🔴 形态改变最大的一条。CPS 靠「串行分页循环里的一句 sleep」实现页间间隔，成立前提是那个循环是该主机的唯一调用方。本仓上游被三条互不相干的 worker 路径调用（catalog scan / Preview 物化 / 推广链接 claim 与回读），无法靠任一循环自己 sleep 保证全局间隔，故改写为进程级 FIFO 互斥节流门：每次 dispatch 前 `await gate.wait()`，队列串行化并发调用者，避免两个调用者读到同一个 `lastDispatchAt` 后同时发车。已独立验证 5 个并发 `wait()` 依次落在 0/1100/2200/3300/4400ms。承重限制：单例仅在进程内有效，多副本 worker 不共享（见本条 `changed_what` 末与运维说明） | Claude |
+| `createChangduListAdapter` 的两层超时重试循环 → `createMoboreaderReadAdapter` 内的 `rateLimitAwarePost` | `src/lib/adapters/changdu.ts` | `244-321` | `16f2e4cfca51f46af0dede899ecf6242a770bbd0` | `ADAPT` | 保留 v8.3.1 事故修复的承重结构：每次 HTTP 尝试各自新建超时、重试等待另受总预算约束、两者绝不共用时钟；以及「预算不足提前停」「耗尽后抛带坐标的限流错误」。三处改造：① 改为 **opt-in**——省略 `upstreamRateLimitPolicy` 时走原有 `legacyPost`，本仓既有测试与 scripts 的默认构造行为不变；② CPS 对非 `{429,503}` 状态一律立即失败，本仓保留既有的 408/5xx 可重试语义并纳入同一预算与退避表（是行为变更，已在函数 docstring 写明）；③ 抛出坐标由 `lastPage` 改 `pageIndex` + `endpoint` | Claude |
+| catalog `pageSize` 硬上限 20 → `MOBOREADER_CATALOG_LIMITS.maxPageSize` | `worker/handlers/changdu-source-sync.ts` | `814` | `16f2e4cfca51f46af0dede899ecf6242a770bbd0` | `ADAPT` | CPS 为 `Math.min(positiveInteger(params.pageSize, 20), 20)`，即默认 20、硬顶 20。本仓原为 100（从未对该主机探测过的值）。RC-3 fixup 将硬顶落到 20，并把 `tests/backend/tasks/moboreader.test.ts` 的 happy-path fixture 由 100 改 20、边界用例由 101 改 21。一处刻意分歧：CPS 静默 clamp，本仓 `validateMoboreaderCatalogScanInput` 抛 `page_size_exceeded` 拒绝——更严格，且与本仓 fail-fast 校验风格一致 | Claude |
+| catalog `pageSize` 默认 20 → `MOBOREADER_UPSTREAM_RECOMMENDED_PAGE_SIZE` | `worker/handlers/changdu-source-sync.ts` | `814` | `16f2e4cfca51f46af0dede899ecf6242a770bbd0` | `ADAPT` | 同一行的 `positiveInteger(params.pageSize, 20)` 默认值。拆成独立常量（可 env 覆盖）以便调小单次扫描而不动硬顶；与上一条同为 20 | Claude |
+
+RC-3 中**无 CPS 来源、判为 `ORIGINAL_REQUIRED` 故不登记**的部分：
+
+- `MOBOREADER_UPSTREAM_RATE_LIMIT_ENV` / `resolveMoboreaderUpstreamRateLimitConfig` / `MoboreaderRateLimitConfigError`
+  这一整层 env 覆盖——CPS 的 `changdu-rate-limit.ts` 把六个值全部硬编码，没有 env 层。本仓沿用自己既有的
+  `resolveMoboreaderPreviewRuntimeConfig` 形态新写，默认值等于上表 CPS 值，非法覆盖 fail fast。
+- `NOOP_MOBOREADER_RATE_GATE` 与 `upstreamRateLimitPolicy` 的 opt-in 开关：CPS 无对应概念（其修复是无条件生效的），
+  本仓为保持既有测试与 scripts 默认构造的字节级行为不变而新增。
+- `worker/handlers/moboreader.ts` 中 `upstream_rate_limited` 这一任务错误码与其运维文案：CPS 的失败落点是
+  `batchTask.errorLog`，与本仓 `GenericTaskItem` 的 `{code, message}` 结构不同，无可搬字节。
 
 ### 无搬运的任务（显式登记，避免被当成漏登）
 
