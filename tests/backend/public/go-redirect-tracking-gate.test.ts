@@ -89,6 +89,21 @@ describe("GET /go/[code] tracking write gate (RC-6)", () => {
     expect(create).not.toHaveBeenCalled();
   });
 
+  it("skips the tracking write but still redirects 302 when PUBLIC_TRACKING_WRITE_DISABLED=on", async () => {
+    // CPS `isTruthyEnv` accepts `on`/`yes` too, and this repo copies that set
+    // rather than its usual exact `=== "true"`. Asserted at the route (not
+    // just the pure function) so the widened set is proven to reach the real
+    // write site an operator would be relying on.
+    process.env.PUBLIC_TRACKING_WRITE_DISABLED = "on";
+    findUnique.mockResolvedValue(promo());
+
+    const response = await invoke(PUBLIC_CODE, { "user-agent": NORMAL_UA });
+
+    expect(response.status).toBe(302);
+    expect(response.headers.get("location")).toBe(TARGET);
+    expect(create).not.toHaveBeenCalled();
+  });
+
   it("skips the tracking write but still redirects 302 for an obvious bot user-agent", async () => {
     findUnique.mockResolvedValue(promo());
 

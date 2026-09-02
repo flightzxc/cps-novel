@@ -39,38 +39,38 @@ describe("shouldRecordGoRedirect", () => {
     expect(shouldRecordGoRedirect({ env: { NODE_ENV: "test" }, userAgent: NORMAL_UA })).toBe(true);
   });
 
-  it("returns false when PUBLIC_TRACKING_WRITE_DISABLED=1", () => {
-    expect(
-      shouldRecordGoRedirect({
-        env: { NODE_ENV: "test", PUBLIC_TRACKING_WRITE_DISABLED: "1" },
-        userAgent: NORMAL_UA,
-      }),
-    ).toBe(false);
-  });
+  // Accepted "disable" values are CPS `isTruthyEnv`'s set verbatim
+  // (`src/lib/cps-tracking.ts:585-587`): trim, then `/^(1|true|yes|on)$/i`.
+  // The `on`/`yes`/uppercase/whitespace rows are the point of the exception to
+  // this repo's usual `=== "true"` parsing -- an operator reaching for this
+  // valve mid-incident carries CPS habits, and a silent no-op there is the
+  // worst failure this flag has.
+  it.each(["1", "true", "TRUE", "True", "yes", "YES", "on", "ON", " 1 ", "  true  "])(
+    "closes the gate (returns false) for PUBLIC_TRACKING_WRITE_DISABLED=%j",
+    (value) => {
+      expect(
+        shouldRecordGoRedirect({
+          env: { NODE_ENV: "test", PUBLIC_TRACKING_WRITE_DISABLED: value },
+          userAgent: NORMAL_UA,
+        }),
+      ).toBe(false);
+    },
+  );
 
-  it("returns false when PUBLIC_TRACKING_WRITE_DISABLED=true", () => {
-    expect(
-      shouldRecordGoRedirect({
-        env: { NODE_ENV: "test", PUBLIC_TRACKING_WRITE_DISABLED: "true" },
-        userAgent: NORMAL_UA,
-      }),
-    ).toBe(false);
-  });
-
-  it("stays open (true) for an unrecognized flag value, matching the flag's fail-open contract", () => {
-    expect(
-      shouldRecordGoRedirect({
-        env: { NODE_ENV: "test", PUBLIC_TRACKING_WRITE_DISABLED: "yes" },
-        userAgent: NORMAL_UA,
-      }),
-    ).toBe(true);
-    expect(
-      shouldRecordGoRedirect({
-        env: { NODE_ENV: "test", PUBLIC_TRACKING_WRITE_DISABLED: "0" },
-        userAgent: NORMAL_UA,
-      }),
-    ).toBe(true);
-  });
+  // Everything else means "not disabled". The safe default for this flag is
+  // open: `/go` is the only attribution signal, so a typo must not silently
+  // kill it.
+  it.each(["0", "false", "FALSE", "off", "no", "", "   ", "enabled", "1;", "truthy"])(
+    "stays open (returns true) for the non-truthy value PUBLIC_TRACKING_WRITE_DISABLED=%j",
+    (value) => {
+      expect(
+        shouldRecordGoRedirect({
+          env: { NODE_ENV: "test", PUBLIC_TRACKING_WRITE_DISABLED: value },
+          userAgent: NORMAL_UA,
+        }),
+      ).toBe(true);
+    },
+  );
 
   it("returns false for an obvious bot user-agent even when the write gate is open", () => {
     expect(shouldRecordGoRedirect({ env: { NODE_ENV: "test" }, userAgent: BOT_UA })).toBe(false);

@@ -93,17 +93,30 @@ export function isPromoLinkClaimWriteAllowed(env: NodeJS.ProcessEnv = process.en
 // signal, so unset must mean writes stay ON here — the opposite of CPS's
 // safe-closed default.
 //
-// Exact-match parsing (`"1"` or `"true"`), matching this file's
-// `一 flag 一函数、=== "true"` discipline rather than CPS's regex-based
-// `isTruthyEnv`. An unrecognized value (e.g. "false", "0", "yes", garbage)
-// is treated as "not disabled" rather than fail-fast throwing: this flag's
-// safe default is open (writes on), so a misconfigured value must not
-// silently kill the only attribution signal.
+// Value parsing deliberately mirrors CPS's `isTruthyEnv`
+// (`src/lib/cps-tracking.ts:585-587`) verbatim — trim, then
+// `/^(1|true|yes|on)$/i` — instead of this file's usual exact `=== "true"`.
+// That exception is on purpose, and it is about failure direction: every
+// other flag in this file is an *enable* flag, where an unrecognized value
+// leaves the feature off, i.e. fails safe. This one is the inverse — a
+// safety valve whose unrecognized value leaves writes ON. The operator who
+// reaches for it is mid-incident (abuse spike, DB write pressure) and carries
+// CPS muscle memory: `on`, `yes`, `TRUE`, or a Compose `environment:` entry
+// with a trailing space (Compose does not strip it). Under exact matching
+// each of those is a silent no-op at exactly the moment the valve is needed.
+// Accepting CPS's full truthy set removes that trap and makes the port
+// faithful. Values that genuinely are not truthy ("0", "false", garbage,
+// empty) still mean "not disabled": the safe default stays open, because
+// `/go` is the only attribution signal and a typo must not silently kill it.
 // -----------------------------------------------------------------------
 export const PUBLIC_TRACKING_WRITE_DISABLED_FLAG = "PUBLIC_TRACKING_WRITE_DISABLED";
 
-/** Default (unset) is false — tracking writes stay ON. Only "1" or "true" turns them off. */
+/** CPS `isTruthyEnv`'s accepted set, copied verbatim. No `g` flag: `test` must stay stateless. */
+const PUBLIC_TRACKING_WRITE_DISABLED_TRUTHY = /^(1|true|yes|on)$/i;
+
+/** Default (unset) is false — tracking writes stay ON. Only `1`/`true`/`yes`/`on` (case-insensitive, trimmed) turns them off. */
 export function isPublicTrackingWriteDisabled(env: NodeJS.ProcessEnv = process.env): boolean {
-  const value = env[PUBLIC_TRACKING_WRITE_DISABLED_FLAG];
-  return value === "1" || value === "true";
+  return PUBLIC_TRACKING_WRITE_DISABLED_TRUTHY.test(
+    env[PUBLIC_TRACKING_WRITE_DISABLED_FLAG]?.trim() ?? "",
+  );
 }

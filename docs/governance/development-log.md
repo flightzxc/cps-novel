@@ -13,9 +13,13 @@
   "写或不写" 这一步受影响。
 - `src/lib/flags/feature-flags.ts`（Codex 独占目录，本次由 Claude 按任务指令跨界新增，
   已在下方登记）新增 `isPublicTrackingWriteDisabled(env)`：env 名
-  `PUBLIC_TRACKING_WRITE_DISABLED`，精确匹配 `"1"` 或 `"true"` 时关闭，其余值（含非法值）
-  一律按未关闭处理——**默认值刻意与 CPS 相反**：CPS 生产默认关闭公开追踪写入，本仓因
-  `/go` 是唯一归因信号，默认必须开启，未设置 env 时写入照常发生。
+  `PUBLIC_TRACKING_WRITE_DISABLED`，取值解析逐字照搬 CPS `isTruthyEnv`
+  （`src/lib/cps-tracking.ts:585-587`，`trim()` + `/^(1|true|yes|on)$/i`），其余值（含
+  `0`/`false`/空/非法值）一律按未关闭处理——**默认值刻意与 CPS 相反**：CPS 生产默认关闭
+  公开追踪写入，本仓因 `/go` 是唯一归因信号，默认必须开启，未设置 env 时写入照常发生。
+  解析没有沿用本文件其它 flag 的 `=== "true"` 精确匹配，是因为失败方向相反：那些是能力
+  开关（认不出→关闭→安全），这一个是停写安全阀（认不出→继续写→阀门在事故中静默失灵）。
+  已在 `docs/governance/feature-flag-registry.md` 补登记行与这两条例外说明。
 - 新增 `src/app/go/_lib/tracking-guard.ts`：`isObviousBotUserAgent` 原样复制 CPS 正则
   （`bot|crawler|spider|slurp|bingpreview|facebookexternalhit|whatsapp|telegrambot|curl|wget`，
   大小写不敏感）；`shouldRecordGoRedirect({ env, userAgent })` 先查写闸、再查 bot UA，
@@ -24,7 +28,8 @@
   外包一层 `if (shouldRecordGoRedirect({ userAgent }))`，其余字符不动；`catch {}` 仍照旧吞错，
   写入失败继续不阻塞跳转。
 - `.env.example` 在 `TRACKING_HASH_SALT` 后新增 `PUBLIC_TRACKING_WRITE_DISABLED=`
-  （默认空=开启，置 1 或 true 关闭，用途为防刷/防库涨的安全阀）。
+  （默认空=开启；置 `1`/`true`/`yes`/`on` 大小写不敏感、忽略首尾空格即关闭；用途为
+  防刷/防库涨的安全阀，注释同时写明为何默认与 CPS 相反）。
 - `docs/governance/port-registry.md` 在 "RC-1 v8.3.6 生产 tag 参考基线" 小节下补三条
   RC-6 登记（写闸判定 `ADAPT`、bot UA 正则 `COPY`、判定顺序 `ADAPT`），未搬 CPS 的
   accepted-event-types 白名单、限流与 cookie/visitor/session 身份模型（划给 R+1

@@ -21,3 +21,10 @@ All flags use exact `=== "true"` parsing and default off. A catalog `dry_run` ma
 | `PROMO_LINK_CLAIM_ALLOW_WRITE` | `false` | same as above | Allows protected `PromoLink`/`SideEffectIntent` writes; both this and `FEATURE_PROMO_LINK_CLAIM` must be `true` and task mode must be `apply`. Necessary but not sufficient for the disabled `claimPromo` branch specifically — that also requires `ChannelCapability.status = 'enabled'` for capability key `claimPromo`. P0-S6 added the audited, evidence-required `scripts/set-channel-capability-status.ts` toggle; no automatic or unaudited path enables it. |
 
 `FEATURE_PROMO_LINK_CLAIM`/`PROMO_LINK_CLAIM_ALLOW_WRITE` follow the same "一 flag 一函数、双闸" discipline and exact `=== "true"` parsing as every pair above. dry-run walks the real §3.9/§3.10 decision tree (feature flag, TTL, scope resolution, already-fetched short-circuit, existing-promo pre-read) but makes zero adapter calls and zero writes regardless of the write-allow flag — see that handler's own header comment for the full decision table.
+
+| `PUBLIC_TRACKING_WRITE_DISABLED` | `false`（未设置 = 写入开启） | `src/lib/flags/feature-flags.ts` 的 `isPublicTrackingWriteDisabled`，唯一调用方为 `src/app/go/_lib/tracking-guard.ts` 的 `shouldRecordGoRedirect`（再由 `src/app/go/[code]/route.ts` 调用） | RC-6 安全阀：置真时 `GET /go/[code]` 不再写 `TrackingEvent` 行，跳转行为（302/404、目标 URL、`Cache-Control: no-store`）完全不受影响。用于刷量高峰或数据库写压力下的临时止血。 |
+
+`PUBLIC_TRACKING_WRITE_DISABLED` 是本登记表里**唯二的例外**，两处都是有意为之，不是疏漏：
+
+1. **默认开而非默认关。** 上面每一个 flag 都是「能力开关」，默认关 = 能力不启用 = 安全。这一个是「停写开关」，默认关 = 写入照常发生。搬自 CPS `getTrackingWriteStatus`（`src/lib/cps-tracking.ts:42-56`，v8.3.6 `16f2e4cfca51f46af0dede899ecf6242a770bbd0`）但**默认值反转**：CPS 生产默认 `1`（`.env.example:160`、`docker-compose.yml:92`）因为它另有归因信号；本仓 `/go` 是唯一归因信号，未设置必须等于「写」。
+2. **取值解析不用 `=== "true"`，而是照搬 CPS `isTruthyEnv` 的 `/^(1|true|yes|on)$/i` + `trim()`**（`src/lib/cps-tracking.ts:585-587`）。理由是失败方向：其它 flag 认不出的值 → 能力保持关闭 = 安全；这一个认不出的值 → 写入保持开启，即安全阀在最需要它的时刻静默失灵。运维在事故中按 CPS 习惯写 `on`/`yes`/`TRUE`、或在 Compose `environment:` 条目里留了尾空格（Compose 不会去掉），在严格匹配下都会变成静默 no-op。非真值（`0`/`false`/空/乱码）仍按「未停写」处理，安全默认保持为开。
