@@ -251,6 +251,25 @@ RC-6（`/go` 公开跳转追踪写闸与爬虫过滤）同样引用 v8.3.6 基�
 | `isObviousBotUserAgent` | `src/lib/cps-tracking.ts` | `287-291` | `16f2e4cfca51f46af0dede899ecf6242a770bbd0` | `COPY` | 原样复制正则 `/bot\|crawler\|spider\|slurp\|bingpreview\|facebookexternalhit\|whatsapp\|telegrambot\|curl\|wget/i` 与判定函数，仅改函数落点（`src/app/go/_lib/tracking-guard.ts`） | Claude |
 | `safeRecordTrackingEvent` 写闸检查顺序（写闸 → bot UA → 写入） → `shouldRecordGoRedirect` | `src/lib/cps-tracking.ts` | `108-127` | `16f2e4cfca51f46af0dede899ecf6242a770bbd0` | `ADAPT` | 保留"先判写闸、再判 bot UA、通过才写"的判定顺序与"写失败不阻塞主流程"的纪律；**不搬**该函数里 accepted event types 白名单、限流（`isRateLimited`）与 `visitorId`/`sessionId`/cookie 身份模型——本仓 `/go` 只有一种事件类型（`go_redirect`）、无限流、无访客身份，这些是 R+1 Tracking 全链范围，本轮显式排除；`route.ts` 里原有的 `try { await prisma.trackingEvent.create(...) } catch {}` 同步 await + 吞错模式保持不变，未改为 CPS 的 `void ...catch()` fire-and-forget 形态 | Claude |
 
+### RC-7 最小告警链（v8.3.6 基线，`COPY_SEMANTICS_ONLY`）
+
+RC-7 把短剧的"关键词告警"**判据**搬进 `infra/production-like/alerts/*`。这里新增一个
+`port_kind = COPY_SEMANTICS_ONLY`：**判据逐条照搬、载体整体更换**——CPS 的载体是
+「HTTP 端点吐带关键词的紧凑 JSON + 外部 UptimeRobot 免费版 Keyword 类型监控做判定与
+推送」，而 X8 本地栈只监听 `127.0.0.1`，外部 SaaS 够不到，故改为「本地 shell 脚本按同一
+判据自查 + 通用出站 webhook 占位推送」。**CPS 仓内不存在任何 curl-webhook 推送脚本**
+（已在 v8.3.6 树内 `ls-tree -r` + 多轮关键词 grep 核实），故 `alert-lib.sh` 的推送/去抖/
+计数器实现全部为本仓原创，不登记为搬运；本表只登记真正有 CPS 出处的判据。生产上复用
+同一条通道的落法见 `docs/operations/ALERTS_RUNBOOK_2026-09-03.md` §1.1。
+
+| symbol | source_file | source_lines | baseline_commit | port_kind | changed_what | owner |
+| --- | --- | --- | --- | --- | --- | --- |
+| Keyword-监控判据（关键词优先于 HTTP 状态码）→ `is_health_body_ok` / `check_health` | `src/app/api/health/backup/route.ts` | `25-30`（头注释"必须用 Keyword 类型"段）、`31-36`（`HTTP_STATUS_BY_BACKUP_STATUS`） | `16f2e4cfca51f46af0dede899ecf6242a770bbd0` | `COPY_SEMANTICS_ONLY` | 保留"200 也可能是骗人的、必须在响应体里找成功关键词"这条判据（CPS 的 `unconfigured` 就是 200 却不健康的活证据，源自 `/api/health` 在 8-19 全站死透 103 分钟里一路返回 200）。改：判定方从 UptimeRobot 改为本地 `curl` + `grep`；关键词从 CPS 的 `"backupStatus":"ok"` 换成海阅 `/api/health` 自己的 `"ok":true`（本仓 `src/app/api/health/route.ts` 已 `report.ok ? 200 : 503`，`ok` 为响应体首字段）；**不搬**四态 `ok/failed/stale/unconfigured` 与状态码映射表本身——海阅 `/api/health` 是二态，没有 `unconfigured` 对应物 | Claude |
+| `DEFAULT_STALE_THRESHOLD_HOURS = 26` → `ALERT_BACKUP_MAX_AGE_SECONDS` | `src/lib/health-backup-status.ts` | `55-58` | `16f2e4cfca51f46af0dede899ecf6242a770bbd0` | `COPY_SEMANTICS_ONLY` | 阈值数值与理由逐字沿用（24h 周期 + 2h 余量，漏跑一整天之内必报），单位由小时改为秒（`93600`）以适配 shell。改：比较式为 `age > 阈值`，CPS 是 `ageMs >= thresholdMs`——边界上差 1 秒，量级无关，登记以免被当成漏抄 | Claude |
+| 新鲜度必须请求时现算 + "状态文件优先／退回观察产物 mtime"双信息源 → `resolve_marker_mtime_epoch` / `check_backup_freshness` | `src/lib/health-backup-status.ts` | `9-30`（头注释判定优先级）、`263-331`（`evaluateFromArtifactDirectory`） | `16f2e4cfca51f46af0dede899ecf6242a770bbd0` | `COPY_SEMANTICS_ONLY` | 保留核心护栏"年龄用当前时钟现算、绝不回显预算好的布尔值"，以及"死掉的 cron 伪造不了 mtime，产物比自我报告可信"这条来源选择理由。改：海阅 X8 侧**只有产物退路这一路**——`backup-timer.sh` 只 `touch /tmp/x8-backup-last-success`（且脚本 `set -e`，故仅成功时刷新），本仓没有 CPS 那样带 `exitCode` 的 `backup-status.json`，因此**不搬**状态文件分支，也就拿不到 CPS 的 `failed`（"上次跑失败了"）语义：一次失败的备份要等 26h 阈值才报，而不是像 CPS 那样立刻报。此限制已写进 runbook §7 | Claude |
+| "看不懂／看不到 = 不可信"fail-closed 判定表 → `fail_closed_run` 及各 check 的探测失败分支 | `src/lib/health-backup-status.ts` | `32-36`（A 表第 1 条）、`344-359`（`read_timeout`/`read_error` → `failed`） | `16f2e4cfca51f46af0dede899ecf6242a770bbd0` | `COPY_SEMANTICS_ONLY` | 保留"探测本身失败要当不健康报，绝不当静默健康"。改：CPS 的不可信来源是文件读不出／超时／JSON 坏；本仓扩到 `curl` 连不上、`psql` 不存在或连不上、`docker inspect` 失败、标记文件不可读四类，均走同一条 fail-closed 分支 | Claude |
+| Keyword-翻转演练法（翻转监控期望看到的东西、确认告警触发，不碰生产）→ `drill.sh` | `DEVLOG.md` | `60-78`（2026-08-22 v8.2.16 备份状态端点条目） | `16f2e4cfca51f46af0dede899ecf6242a770bbd0` | `COPY_SEMANTICS_ONLY` | 保留"没有信号到人才是根因"与 Keyword 监控法的结论；`tests/health-backup-route.test.ts:63-65` 的 `assert.match(rawText, /"backupStatus":"ok"/)` 是同一判据的测试侧表达。改：演练做成完全本地自包含形式（未监听端口 `127.0.0.1:1`、不存在的容器名、自建自删临时文件），断言本仓自建的文件计数器 `alert_fire_total()`；强制 `DRY_RUN=1` 且用独立 `mktemp -d` 状态目录，不碰真实去抖状态 | Claude |
+
 ### 无搬运的任务（显式登记，避免被当成漏登）
 
 | 任务 | CPS 复刻分类 | 原因 |

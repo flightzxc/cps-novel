@@ -47,6 +47,34 @@
   `void ...catch()` fire-and-forget 形态；未碰 `prisma/`、`src/server/`、`worker/**`、
   `src/lib/tasks/**`、`src/lib/adapters/**`；未写数据库、未 merge、未 push、未打 tag。
 
+## 2026-09-03 · RC-7 最小告警链（X8 本地 production-like）
+
+- 新增 `infra/production-like/alerts/`（6 个 shell 脚本）与
+  `docs/operations/ALERTS_RUNBOOK_2026-09-03.md`，覆盖三条最小告警：`/api/health`
+  非 200 或缺 `"ok":true` 关键词；worker 过期处理锁（SQL 逐字取自本仓
+  `docs/operations/LAUNCH_DAY_HEALTH_CHECKS.md` §2，已 `diff` 证明字节一致）+ worker
+  容器健康；备份成功标记超过 26h 未更新。
+- 判据搬自短剧 v8.3.6（只读，peeled `16f2e4cfca51f46af0dede899ecf6242a770bbd0`），
+  已按 `COPY_SEMANTICS_ONLY` 登记进 `port-registry.md`：载体由「HTTP 端点 + 外部
+  UptimeRobot Keyword 监控」换成「本地脚本 + 通用出站 webhook 占位」，因为 X8 只监听
+  `127.0.0.1`、外部 SaaS 够不到。CPS 仓内不存在 webhook 推送脚本，故推送/去抖/计数器
+  均为本仓原创，未虚报为搬运。
+- **复核轮修复三处**：①`DRY_RUN=1` 过去会把去抖状态写进真实 `ALERT_STATE_DIR`，
+  用默认目录做一次 dry-run 冒烟会静默掉随后 15 分钟内的真实告警（fail-open），现改为
+  dry-run 一律不写也不清除去抖状态；②runbook 原称 `run-all.sh`/`drill.sh`"故意不用
+  `-e`"，实测 errexit 仍是开的（`source alert-lib.sh` 会重新打开），已改为如实描述并
+  写明每个检查调用必须保持 `||` 守卫；③runbook 原措辞暗示存在一个"短剧现有下游
+  webhook URL"可指，实际那条链是拉取式的、CPS 侧没有接收端，已加 §1.1 更正并写明生产
+  落法（给海阅公开关键词端点 + 建 Keyword 监控；backup/worker 端点由 RC-7b 另做）。
+- 门禁：`bash -n` 六脚本全过；`DRY_RUN=1 drill.sh` 8/8 PASS（修复前后各跑一次，结果
+  一致）；复核另行构造了 `check-health.sh` 打未监听端口、`check-backup-freshness.sh`
+  两条分支标记不可读的独立 fail-closed 验证，均按预期告警。全程未接触真实服务、未推送、
+  未改 `docker-compose.yml`、未写宿主 crontab，真实状态目录 `/tmp/cps-novel-alerts`
+  自始至终未被创建。
+- **已知局限**：本机无 `psql`/`shellcheck`，SQL 分支只验证了"探测失败即告警"这条
+  fail-closed 路径，未在真实 PostgreSQL 上验证行数判据；接线（compose `alerts` 服务或
+  宿主 cron）两方案均为文本建议，未落地。
+
 ## 2026-09-03 · RC-1 推广链接领取正式后台入口
 
 - 在 `/catalog-sync` 的来源条目表格加多选复选框 + "领取推广链接"工具栏按钮，打开
