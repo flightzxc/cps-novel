@@ -31,6 +31,15 @@ import {
   type ContentCreationInputErrorCode,
   type CreateContentResult,
 } from "@/server/content-creation";
+import {
+  CONTENT_CREATION_BATCH_BUDGET_MS,
+  CONTENT_CREATION_BATCH_MAX_SELECTION,
+  ContentCreationBatchInputError,
+  applyContentCreationBatch,
+  dryRunContentCreationBatch,
+  type ContentCreationBatchApplyResult,
+  type ContentCreationBatchDryRunResult,
+} from "@/server/content-creation/batch";
 
 import { canonicalOrigin, guardDependencies, prisma, readSessionToken } from "../../api/admin/_lib/deps";
 import { toErrorEnvelope } from "../../api/admin/_lib/respond";
@@ -543,6 +552,155 @@ export async function enqueuePromoLinkClaimAction(
     return { ok: true, data: classifyPromoLinkClaimResult(result, input.mode) };
   } catch (error) {
     if (error instanceof PromoLinkClaimTaskInputError) {
+      return { ok: false, kind: "invalid_input", code: error.code };
+    }
+    return { ok: false, kind: "access_denied", envelope: toErrorEnvelope(error) };
+  }
+}
+
+/**
+ * RC-4 explicit-selection batch content-creation trigger.
+ *
+ * `applyContentCreationBatch`/`dryRunContentCreationBatch`
+ * (`@/server/content-creation/batch`) had zero `src/app/**` callers before
+ * this — they exist purely as a thin, serial, budgeted loop over the exact
+ * same `createContentFromSourceItem` call `dryRunContentCreationAction`/
+ * `applyContentCreationAction` above already make one item at a time. CPS
+ * v8.3.6 parity target is `runChangduPromoteDramaBatch`
+ * (`src/lib/changdu-promote-drama-batch.ts` in the read-only CPS reference,
+ * `git show v8.3.6:src/lib/changdu-promote-drama-batch.ts`): explicit
+ * id-list selection only, a per-run cap, strictly sequential per-item calls
+ * collected into a results array a summary is derived from — never a
+ * BatchTask/queue construction. See `@/server/content-creation/batch`'s
+ * module header for the full port-registry-worthy comparison.
+ *
+ * Two actions, not one split by client-controlled `mode`, for the exact
+ * reason `dryRunContentCreationAction`/`applyContentCreationAction` above
+ * are already two actions: dry_run needs only `content:view` (already
+ * required to reach `/catalog-sync`, zero writes) while apply needs
+ * `content:publish` (2FA + `super_admin` default, the real write). Reusing a
+ * single action branching on `mode` would make the enforced capability a
+ * function of client input — the same reasoning `runCatalogScanTrigger`'s
+ * doc comment spells out above.
+ *
+ * `novelSourceItemIds` is deduped and size-checked *here* first (same
+ * `Array.from(new Set(...))` + `items_required`/`batch_size_exceeded` early
+ * return `enqueuePromoLinkClaimAction` above already uses) so the operator
+ * gets a friendly rejection before ever reaching the service; the service
+ * layer (`@/server/content-creation/batch`) validates the exact same two
+ * conditions again as a backstop (`ContentCreationBatchInputError`), the
+ * same two-layer validation `createPromoLinkClaimTask` already applies on
+ * top of this file's own pre-checks.
+ */
+
+export type ContentCreationBatchDryRunActionResult =
+  | { readonly ok: true; readonly data: ContentCreationBatchDryRunResult }
+  | { readonly ok: false; readonly kind: "access_denied"; readonly envelope: ErrorEnvelope }
+  | { readonly ok: false; readonly kind: "invalid_input"; readonly code: string };
+
+export type ContentCreationBatchApplyActionResult =
+  | { readonly ok: true; readonly data: ContentCreationBatchApplyResult }
+  | { readonly ok: false; readonly kind: "access_denied"; readonly envelope: ErrorEnvelope }
+  | { readonly ok: false; readonly kind: "invalid_input"; readonly code: string };
+
+function requireBatchSelection(
+  novelSourceItemIds: readonly string[],
+): { readonly ok: true; readonly uniqueIds: readonly string[] } | { readonly ok: false; readonly code: "items_required" | "batch_size_exceeded" } {
+  const uniqueIds = Array.from(new Set(novelSourceItemIds));
+  if (uniqueIds.length === 0) return { ok: false, code: "items_required" };
+  if (uniqueIds.length > CONTENT_CREATION_BATCH_MAX_SELECTION) {
+    return { ok: false, code: "batch_size_exceeded" };
+  }
+  return { ok: true, uniqueIds };
+}
+
+/**
+ * Read-only batch preview, gated by `content:view` — same bar as the
+ * single-item `dryRunContentCreationAction`. Every id resolves through
+ * `createContentFromSourceItem` in `"dry_run"` mode, which performs zero
+ * writes by construction (see that service's module header); this action
+ * itself performs no writes either.
+ */
+export async function dryRunContentCreationBatchAction(input: {
+  novelSourceItemIds: readonly string[];
+  requestId: string;
+}): Promise<ContentCreationBatchDryRunActionResult> {
+  try {
+    const { context } = await authorizeAction("admin.content_creation.batch_dry_run", input.requestId);
+    const selection = requireBatchSelection(input.novelSourceItemIds);
+    if (!selection.ok) return { ok: false, kind: "invalid_input", code: selection.code };
+
+    const data = await dryRunContentCreationBatch(prisma, {
+      novelSourceItemIds: selection.uniqueIds,
+      locale: CONTENT_CREATION_LOCALE,
+      actor: { type: "admin", adminId: context.identity.id },
+      requestId: input.requestId,
+      budgetMs: CONTENT_CREATION_BATCH_BUDGET_MS,
+    });
+    return { ok: true, data };
+  } catch (error) {
+    if (error instanceof ContentCreationBatchInputError) {
+      return { ok: false, kind: "invalid_input", code: error.code };
+    }
+    return { ok: false, kind: "access_denied", envelope: toErrorEnvelope(error) };
+  }
+}
+
+/**
+ * The real batch write. Gated by `content:publish` — same bar and same
+ * `requireAdminActionAccess` → `requireFreshAdminServiceMutation` two-step
+ * as the single-item `applyContentCreationAction` above. Revalidates once
+ * (not per item) whenever at least one item actually reached `"created"` —
+ * a batch where every item resolved to `skipped_already_linked`/`failed`/
+ * `not_processed` changes nothing `/novels` or `/catalog-sync` render, so
+ * there is nothing to revalidate for.
+ */
+export async function applyContentCreationBatchAction(input: {
+  novelSourceItemIds: readonly string[];
+  requestId: string;
+}): Promise<ContentCreationBatchApplyActionResult> {
+  try {
+    const { serviceAuthorization } = await authorizeAction(
+      "admin.content_creation.batch_apply",
+      input.requestId,
+    );
+    if (!serviceAuthorization) {
+      // Unreachable given this action's own registration (capability is
+      // always set — see `ADMIN_CONTENT_CREATION_BATCH_ACTIONS`), kept as
+      // the same fail-closed backstop every other real write in this file
+      // uses.
+      const { AdminAccessError } = await import("@/lib/auth/errors");
+      throw new AdminAccessError(
+        "admin_service_authorization_required",
+        403,
+        "Action is not bound to a capability",
+      );
+    }
+    const guards = guardDependencies();
+    const context = await requireFreshAdminServiceMutation(serviceAuthorization, "content:publish", {
+      identities: guards.identities,
+      sessions: guards.sessions,
+      entryId: "admin.content_creation.batch_apply",
+      requestId: input.requestId,
+    });
+
+    const selection = requireBatchSelection(input.novelSourceItemIds);
+    if (!selection.ok) return { ok: false, kind: "invalid_input", code: selection.code };
+
+    const data = await applyContentCreationBatch(prisma, {
+      novelSourceItemIds: selection.uniqueIds,
+      locale: CONTENT_CREATION_LOCALE,
+      actor: { type: "admin", adminId: context.identity.id },
+      requestId: input.requestId,
+      budgetMs: CONTENT_CREATION_BATCH_BUDGET_MS,
+    });
+    if (data.counts.created > 0) {
+      revalidatePath("/catalog-sync");
+      revalidatePath("/novels");
+    }
+    return { ok: true, data };
+  } catch (error) {
+    if (error instanceof ContentCreationBatchInputError) {
       return { ok: false, kind: "invalid_input", code: error.code };
     }
     return { ok: false, kind: "access_denied", envelope: toErrorEnvelope(error) };

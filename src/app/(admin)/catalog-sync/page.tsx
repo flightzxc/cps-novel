@@ -2,6 +2,7 @@ import { capabilityBlockReason, findCapabilityState } from "@/features/admin-ui/
 import { AdminTimeZoneNote } from "@/features/admin-ui/time-zone-note";
 import { MOBOREADER_CATALOG_LIMITS, resolveMoboreaderCatalogSafetyMaxPages } from "@/lib/tasks/moboreader";
 import { PROMO_LINK_CLAIM_LIMITS } from "@/lib/tasks/promo-link-claim-limits";
+import { CONTENT_CREATION_BATCH_MAX_SELECTION } from "@/server/content-creation/batch";
 
 import { AdminShell } from "../_components/admin-shell";
 import { capabilityViews, sessionView } from "../_lib/page-guard";
@@ -86,6 +87,7 @@ export default async function CatalogSyncPage({
                 promoClaimMaxBatchSize={PROMO_LINK_CLAIM_LIMITS.maxBatchSize}
                 promoClaimGranted={promoClaimBlockedReason === null}
                 promoClaimBlockedReason={promoClaimBlockedReason}
+                contentCreationBatchMaxSize={CONTENT_CREATION_BATCH_MAX_SELECTION}
               />
             </div>
             <ContentPagination

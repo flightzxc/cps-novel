@@ -8,17 +8,22 @@ import type { AdminCapabilityState } from "@/contracts";
 import { capabilityBlockReason } from "@/features/admin-ui/capability-view";
 import { NOVEL_SOURCE_ITEM_STATUS_BADGES, formatDateTime } from "@/features/admin-ui/content-view";
 
+import { BatchCreateContentDialog } from "./batch-create-content-dialog";
 import { CreateContentDialog } from "./create-content-dialog";
 import { PromoLinkClaimDialog } from "./promo-link-claim-dialog";
 import type { ClaimChannelAppOption } from "../_lib/read-channel-apps";
 import type { SourceItemRow } from "../_lib/read-source-items";
 
 /**
- * `/catalog-sync` table + the two actions this screen exists for: opening
- * the create-content dialog on a row (`create-content-dialog.tsx`, P0-S13)
- * and, since RC-1, an explicit multi-select "领取推广链接" launcher
- * (`promo-link-claim-dialog.tsx`) — CPS v8.3.6 parity for
- * `submitChangduPromoClaim`.
+ * `/catalog-sync` table + the actions this screen exists for: opening the
+ * create-content dialog on a row (`create-content-dialog.tsx`, P0-S13), an
+ * explicit multi-select "领取推广链接" launcher (`promo-link-claim-dialog.tsx`,
+ * RC-1 — CPS v8.3.6 parity for `submitChangduPromoClaim`), and since RC-4 an
+ * explicit multi-select "批量创建内容" launcher
+ * (`batch-create-content-dialog.tsx` — CPS v8.3.6 parity for
+ * `runChangduPromoteDramaBatch`). Both multi-select launchers share this
+ * component's one `selectedIds` state — there is no second, independent
+ * selection mechanism for batch content creation.
  *
  * The "创建内容" trigger is always rendered, regardless of `contentPublish` —
  * opening the dialog only runs a dry run, which needs `content:view` (already
@@ -26,12 +31,16 @@ import type { SourceItemRow } from "../_lib/read-source-items";
  * dialog's own "确认创建" step, so a viewer without the write grant can still
  * see the plan an admin would need to approve, per capability-driven UX
  * (P1-09 acceptance ⑥: name the missing capability, do not hide the feature).
+ * The batch launcher follows the exact same rule: the toolbar button is
+ * always enabled once something is selected, and `BatchCreateContentDialog`
+ * gates only its own "确认创建" step on `contentPublish`.
  *
- * The claim checkbox column has no "select all" control, deliberately — this
- * screen never offers a filter-driven bulk-select shortcut, mirroring the
- * factory's own "explicit ids only, never a filter descriptor" contract
+ * The selection checkbox column has no "select all" control, deliberately —
+ * this screen never offers a filter-driven bulk-select shortcut, mirroring
+ * the factory's own "explicit ids only, never a filter descriptor" contract
  * (`createPromoLinkClaimTask`'s doc comment) and CPS's own hard rule
- * ("畅读推广码领取只支持显式勾选剧目，不支持当前筛选全量领取").
+ * ("畅读推广码领取只支持显式勾选剧目，不支持当前筛选全量领取") — RC-4's batch
+ * creation reuses this same explicit-selection discipline.
  */
 export function CatalogSyncClient({
   items,
@@ -40,6 +49,7 @@ export function CatalogSyncClient({
   promoClaimMaxBatchSize,
   promoClaimGranted,
   promoClaimBlockedReason,
+  contentCreationBatchMaxSize,
 }: {
   items: readonly SourceItemRow[];
   contentPublish: AdminCapabilityState;
@@ -47,10 +57,12 @@ export function CatalogSyncClient({
   promoClaimMaxBatchSize: number;
   promoClaimGranted: boolean;
   promoClaimBlockedReason: string | null;
+  contentCreationBatchMaxSize: number;
 }) {
   const [activeItem, setActiveItem] = useState<SourceItemRow | null>(null);
   const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(new Set());
   const [claimDialogOpen, setClaimDialogOpen] = useState(false);
+  const [batchCreateDialogOpen, setBatchCreateDialogOpen] = useState(false);
   const blockedReason = capabilityBlockReason("content:publish", contentPublish);
   const granted = blockedReason === null;
 
@@ -78,14 +90,24 @@ export function CatalogSyncClient({
         <p className="text-sm text-gray-600" data-testid="promo-claim-toolbar-count">
           已勾选 <span className="font-medium text-gray-900">{selectedItems.length}</span> 条来源条目
         </p>
-        <button
-          type="button"
-          disabled={selectedItems.length === 0}
-          className={buttonClassName("primary", "px-3 py-1.5 text-xs")}
-          onClick={() => setClaimDialogOpen(true)}
-        >
-          领取推广链接
-        </button>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            disabled={selectedItems.length === 0}
+            className={buttonClassName("secondary", "px-3 py-1.5 text-xs")}
+            onClick={() => setBatchCreateDialogOpen(true)}
+          >
+            批量创建内容
+          </button>
+          <button
+            type="button"
+            disabled={selectedItems.length === 0}
+            className={buttonClassName("primary", "px-3 py-1.5 text-xs")}
+            onClick={() => setClaimDialogOpen(true)}
+          >
+            领取推广链接
+          </button>
+        </div>
       </div>
 
       <Table>
@@ -165,6 +187,17 @@ export function CatalogSyncClient({
           promoClaimGranted={promoClaimGranted}
           promoClaimBlockedReason={promoClaimBlockedReason}
           onClose={() => setClaimDialogOpen(false)}
+          onSubmitted={() => setSelectedIds(new Set())}
+        />
+      )}
+
+      {batchCreateDialogOpen && (
+        <BatchCreateContentDialog
+          selectedItems={selectedItems}
+          maxBatchSize={contentCreationBatchMaxSize}
+          contentPublishGranted={granted}
+          contentPublishBlockedReason={blockedReason}
+          onClose={() => setBatchCreateDialogOpen(false)}
           onSubmitted={() => setSelectedIds(new Set())}
         />
       )}

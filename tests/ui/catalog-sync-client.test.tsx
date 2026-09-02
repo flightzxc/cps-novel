@@ -27,6 +27,8 @@ const actions = vi.hoisted(() => ({
   dryRunContentCreationAction: vi.fn(),
   applyContentCreationAction: vi.fn(),
   enqueuePromoLinkClaimAction: vi.fn(),
+  dryRunContentCreationBatchAction: vi.fn(),
+  applyContentCreationBatchAction: vi.fn(),
 }));
 
 const routerRefresh = vi.hoisted(() => vi.fn());
@@ -111,6 +113,7 @@ function renderPage(
     promoClaimMaxBatchSize?: number;
     promoClaimGranted?: boolean;
     promoClaimBlockedReason?: string | null;
+    contentCreationBatchMaxSize?: number;
   } = {},
 ) {
   return render(
@@ -121,6 +124,7 @@ function renderPage(
       promoClaimMaxBatchSize={options.promoClaimMaxBatchSize ?? 50}
       promoClaimGranted={options.promoClaimGranted ?? true}
       promoClaimBlockedReason={options.promoClaimBlockedReason ?? null}
+      contentCreationBatchMaxSize={options.contentCreationBatchMaxSize ?? 50}
     />,
   );
 }
@@ -150,6 +154,8 @@ beforeEach(() => {
   actions.dryRunContentCreationAction.mockReset();
   actions.applyContentCreationAction.mockReset();
   actions.enqueuePromoLinkClaimAction.mockReset();
+  actions.dryRunContentCreationBatchAction.mockReset();
+  actions.applyContentCreationBatchAction.mockReset();
   routerRefresh.mockReset();
 });
 
@@ -683,5 +689,286 @@ describe("领取推广链接 · 提交与结果分支", () => {
     await click(within(dialog()).getByRole("button", { name: "确认领取（dry_run）" }));
 
     expect(within(dialog()).getByRole("alert").textContent).toContain("缺少能力位");
+  });
+});
+
+/**
+ * RC-4 「批量创建内容」多选工具栏 + `BatchCreateContentDialog`.
+ *
+ * Same discipline as the RC-1 suite above: `dryRunContentCreationBatchAction`/
+ * `applyContentCreationBatchAction` are mocked the same way, this suite only
+ * checks wiring (what the dialog passes to which action, how each shape
+ * renders) — the batch loop/budget logic itself is covered by
+ * `tests/backend/content-creation/batch.test.ts`.
+ */
+
+function batchToolbarButton(): HTMLButtonElement {
+  return screen.getByRole("button", { name: "批量创建内容" }) as HTMLButtonElement;
+}
+
+const BATCH_PREVIEW_ITEMS = [
+  { novelSourceItemId: "src-1", status: "creatable" as const, result: { outcome: "dry_run" as const, plan: PLAN } },
+  {
+    novelSourceItemId: "src-2",
+    status: "skipped_already_linked" as const,
+    result: { outcome: "already_exists" as const, ...CREATED_SUMMARY },
+  },
+];
+const BATCH_PREVIEW_COUNTS = { creatable: 1, skipped_already_linked: 1, failed: 0, not_processed: 0 };
+
+describe("批量创建内容 · 选择工具栏（与领取推广链接共用同一选择状态）", () => {
+  it("初始未勾选任何行：按钮禁用", () => {
+    renderPage();
+    expect(batchToolbarButton().disabled).toBe(true);
+  });
+
+  it("勾选一行后两个多选按钮同时可点，说明共用同一份 selectedIds", async () => {
+    renderPage();
+    await click(checkboxFor("示例小说 A"));
+    expect(batchToolbarButton().disabled).toBe(false);
+    expect(claimToolbarButton().disabled).toBe(false);
+  });
+
+  it("没有勾选任何行时点击按钮不会打开对话框（按钮本身已禁用）", async () => {
+    renderPage();
+    await click(batchToolbarButton());
+    expect(dialog()).toBeNull();
+  });
+});
+
+describe("批量创建内容 · dry-run 预览自动触发", () => {
+  it("打开对话框以去重后的显式 id 列表调用 dryRunContentCreationBatchAction", async () => {
+    actions.dryRunContentCreationBatchAction.mockResolvedValue(
+      okResult({ items: BATCH_PREVIEW_ITEMS, counts: BATCH_PREVIEW_COUNTS }),
+    );
+    renderPage();
+    await click(checkboxFor("示例小说 A"));
+    await click(checkboxFor("已建立的条目"));
+    await click(batchToolbarButton());
+
+    expect(actions.dryRunContentCreationBatchAction).toHaveBeenCalledTimes(1);
+    const call = actions.dryRunContentCreationBatchAction.mock.calls[0][0];
+    expect(call.novelSourceItemIds).toEqual(["src-1", "src-2"]);
+    expect(call.requestId).toMatch(/^[0-9a-f-]{36}$/i);
+    expect(actions.applyContentCreationBatchAction).not.toHaveBeenCalled();
+  });
+
+  it("预览到达后展示汇总行与逐条状态徽标（可创建 / 已关联跳过）", async () => {
+    actions.dryRunContentCreationBatchAction.mockResolvedValue(
+      okResult({ items: BATCH_PREVIEW_ITEMS, counts: BATCH_PREVIEW_COUNTS }),
+    );
+    renderPage();
+    await click(checkboxFor("示例小说 A"));
+    await click(batchToolbarButton());
+
+    const dlg = within(dialog());
+    expect(dlg.getByTestId("batch-create-preview-summary").textContent).toContain("可创建 1 条");
+    expect(dlg.getByTestId("batch-create-item-status-src-1").textContent).toBe("可创建");
+    expect(dlg.getByTestId("batch-create-item-status-src-2").textContent).toBe("已关联，跳过");
+  });
+
+  it("超过单次上限：展示警告，不调用 dryRunContentCreationBatchAction，也没有确认按钮", async () => {
+    renderPage({
+      items: [row({ id: "src-1", title: "A" }), row({ id: "src-2", title: "B" })],
+      contentCreationBatchMaxSize: 1,
+    });
+    await click(checkboxFor("A"));
+    await click(checkboxFor("B"));
+    await click(batchToolbarButton());
+
+    const dlg = within(dialog());
+    expect(dlg.getByTestId("batch-create-over-limit").textContent).toContain("超过单次上限 1 条");
+    expect(actions.dryRunContentCreationBatchAction).not.toHaveBeenCalled();
+    expect(dlg.queryByRole("button", { name: /确认创建/ })).toBeNull();
+  });
+});
+
+describe("批量创建内容 · 确认创建 → apply", () => {
+  beforeEach(() => {
+    actions.dryRunContentCreationBatchAction.mockResolvedValue(
+      okResult({ items: BATCH_PREVIEW_ITEMS, counts: BATCH_PREVIEW_COUNTS }),
+    );
+  });
+
+  it("以去重后的 id 列表调用 applyContentCreationBatchAction；创建数>0 时刷新数据", async () => {
+    actions.applyContentCreationBatchAction.mockResolvedValue(
+      okResult({
+        items: [
+          { novelSourceItemId: "src-1", status: "created", result: { outcome: "created", ...CREATED_SUMMARY } },
+          { novelSourceItemId: "src-2", status: "skipped_already_linked", result: { outcome: "already_exists", ...CREATED_SUMMARY } },
+        ],
+        counts: { created: 1, skipped_already_linked: 1, failed: 0, not_processed: 0 },
+      }),
+    );
+    renderPage();
+    await click(checkboxFor("示例小说 A"));
+    await click(checkboxFor("已建立的条目"));
+    await click(batchToolbarButton());
+    await click(within(dialog()).getByRole("button", { name: /确认创建（批量/ }));
+
+    expect(actions.applyContentCreationBatchAction).toHaveBeenCalledTimes(1);
+    expect(actions.applyContentCreationBatchAction.mock.calls[0][0]).toMatchObject({
+      novelSourceItemIds: ["src-1", "src-2"],
+    });
+
+    const dlg = within(dialog());
+    await waitFor(() => {
+      expect(dlg.getByTestId("batch-create-result-summary").textContent).toContain("已创建 1 条");
+    });
+    expect(dlg.getByTestId("batch-create-item-status-src-1").textContent).toBe("已创建");
+    await waitFor(() => expect(routerRefresh).toHaveBeenCalledTimes(1));
+  });
+
+  it("全部跳过/失败、零创建：不触发 router.refresh", async () => {
+    actions.applyContentCreationBatchAction.mockResolvedValue(
+      okResult({
+        items: [
+          { novelSourceItemId: "src-1", status: "skipped_already_linked", result: { outcome: "already_exists", ...CREATED_SUMMARY } },
+        ],
+        counts: { created: 0, skipped_already_linked: 1, failed: 0, not_processed: 0 },
+      }),
+    );
+    renderPage();
+    await click(checkboxFor("示例小说 A"));
+    await click(batchToolbarButton());
+    await click(within(dialog()).getByRole("button", { name: /确认创建（批量/ }));
+
+    await waitFor(() => {
+      expect(within(dialog()).getByTestId("batch-create-result-summary")).toBeTruthy();
+    });
+    expect(routerRefresh).not.toHaveBeenCalled();
+  });
+
+  it("not_processed > 0：展示可再次提交剩余项的提示", async () => {
+    actions.applyContentCreationBatchAction.mockResolvedValue(
+      okResult({
+        items: [
+          { novelSourceItemId: "src-1", status: "created", result: { outcome: "created", ...CREATED_SUMMARY } },
+          { novelSourceItemId: "src-2", status: "not_processed" },
+        ],
+        counts: { created: 1, skipped_already_linked: 0, failed: 0, not_processed: 1 },
+      }),
+    );
+    renderPage();
+    await click(checkboxFor("示例小说 A"));
+    await click(checkboxFor("已建立的条目"));
+    await click(batchToolbarButton());
+    await click(within(dialog()).getByRole("button", { name: /确认创建（批量/ }));
+
+    await waitFor(() => {
+      expect(within(dialog()).getByTestId("batch-create-not-processed-hint").textContent).toContain(
+        "还有 1 条来源条目尚未处理",
+      );
+    });
+    expect(within(dialog()).getByTestId("batch-create-item-status-src-2").textContent).toBe(
+      "未处理（预算已用尽）",
+    );
+  });
+
+  it("提交成功后关闭对话框会清空已勾选的行——两个工具栏按钮都回到禁用", async () => {
+    actions.applyContentCreationBatchAction.mockResolvedValue(
+      okResult({
+        items: [{ novelSourceItemId: "src-1", status: "created", result: { outcome: "created", ...CREATED_SUMMARY } }],
+        counts: { created: 1, skipped_already_linked: 0, failed: 0, not_processed: 0 },
+      }),
+    );
+    renderPage();
+    await click(checkboxFor("示例小说 A"));
+    await click(batchToolbarButton());
+    await click(within(dialog()).getByRole("button", { name: /确认创建（批量/ }));
+    await waitFor(() => expect(within(dialog()).getByTestId("batch-create-result-summary")).toBeTruthy());
+    await click(within(dialog()).getByRole("button", { name: "关闭" }));
+
+    expect(dialog()).toBeNull();
+    expect(batchToolbarButton().disabled).toBe(true);
+    expect(claimToolbarButton().disabled).toBe(true);
+  });
+
+  it("预览里可创建数为 0 时，确认按钮保持可见但禁用（同 P1-09 验收⑥：点不动也不隐藏）", async () => {
+    actions.dryRunContentCreationBatchAction.mockResolvedValue(
+      okResult({
+        items: [
+          { novelSourceItemId: "src-2", status: "skipped_already_linked", result: { outcome: "already_exists", ...CREATED_SUMMARY } },
+        ],
+        counts: { creatable: 0, skipped_already_linked: 1, failed: 0, not_processed: 0 },
+      }),
+    );
+    renderPage();
+    await click(checkboxFor("已建立的条目"));
+    await click(batchToolbarButton());
+
+    const confirmButton = within(dialog()).getByRole("button", { name: /确认创建（批量/ }) as HTMLButtonElement;
+    expect(confirmButton.disabled).toBe(true);
+    await click(confirmButton);
+    expect(actions.applyContentCreationBatchAction).not.toHaveBeenCalled();
+  });
+
+  it("缺少 content:publish 时确认按钮禁用；点不动也就调不到 apply", async () => {
+    renderPage({ contentPublish: "denied" });
+    await click(checkboxFor("示例小说 A"));
+    await click(batchToolbarButton());
+
+    const dlg = within(dialog());
+    await waitFor(() => expect(dlg.getByTestId("batch-create-preview-summary")).toBeTruthy());
+    const confirmButton = dlg.getByRole("button", { name: /确认创建（批量/ }) as HTMLButtonElement;
+    expect(confirmButton.disabled).toBe(true);
+
+    await click(confirmButton);
+    expect(actions.applyContentCreationBatchAction).not.toHaveBeenCalled();
+  });
+});
+
+describe("批量创建内容 · 输入校验 / access_denied", () => {
+  it("invalid_input：文案来自映射表，而不是原样打印 code", async () => {
+    actions.dryRunContentCreationBatchAction.mockResolvedValue({
+      ok: false,
+      kind: "invalid_input",
+      code: "batch_size_exceeded",
+    });
+    renderPage();
+    await click(checkboxFor("示例小说 A"));
+    await click(batchToolbarButton());
+
+    await waitFor(() => {
+      expect(within(dialog()).getByRole("alert").textContent).toContain("超过单次上限");
+    });
+  });
+
+  it("access_denied：文案来自 errorEnvelopeCopy", async () => {
+    actions.dryRunContentCreationBatchAction.mockResolvedValue({
+      ok: false,
+      kind: "access_denied",
+      envelope: {
+        ok: false,
+        status: 403,
+        code: "admin_capability_denied",
+        details: { capability: "content:view" },
+      },
+    });
+    renderPage();
+    await click(checkboxFor("示例小说 A"));
+    await click(batchToolbarButton());
+
+    await waitFor(() => {
+      expect(within(dialog()).getByRole("alert").textContent).toContain("缺少能力位");
+    });
+  });
+});
+
+describe("批量创建内容 · 取消", () => {
+  it("取消不调用 apply Action，也不留下对话框，且不清空已勾选的行", async () => {
+    actions.dryRunContentCreationBatchAction.mockResolvedValue(
+      okResult({ items: BATCH_PREVIEW_ITEMS, counts: BATCH_PREVIEW_COUNTS }),
+    );
+    renderPage();
+    await click(checkboxFor("示例小说 A"));
+    await click(batchToolbarButton());
+    expect(dialog()).not.toBeNull();
+
+    await click(within(dialog()).getByRole("button", { name: "取消" }));
+
+    expect(dialog()).toBeNull();
+    expect(actions.applyContentCreationBatchAction).not.toHaveBeenCalled();
+    expect(batchToolbarButton().disabled).toBe(false);
   });
 });

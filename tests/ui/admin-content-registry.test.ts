@@ -133,7 +133,7 @@ describe("P2-04 内容路由登记", () => {
    * `src/server/publish-gate/service.ts`'s own `RIGHTS_TRANSITION_CAPABILITY`
    * table.
    */
-  it("P2-04 没有新增任何 mutation Action；P0-S13 / PR-C2 / PR-C3 / RC-1 各自在其上新增了自己的 Action", () => {
+  it("P2-04 没有新增任何 mutation Action；P0-S13 / PR-C2 / PR-C3 / RC-1 / RC-4 各自在其上新增了自己的 Action", () => {
     const p204Actions = P2_04_ADMIN_REGISTRY.actions.filter(
       (action) =>
         !action.id.startsWith("admin.content_creation.") &&
@@ -159,6 +159,8 @@ describe("P2-04 内容路由登记", () => {
       "admin.novel.takedown",
       "admin.novel.restore",
       "admin.promo_link_claim.enqueue",
+      "admin.content_creation.batch_dry_run",
+      "admin.content_creation.batch_apply",
     ]);
     expect(resolveAdminAction("admin.content_creation.dry_run", P2_04_ADMIN_REGISTRY)).toMatchObject({
       capability: "content:view",
@@ -209,6 +211,20 @@ describe("P2-04 内容路由登记", () => {
     // doc comment for the full reasoning.
     expect(resolveAdminAction("admin.promo_link_claim.enqueue", P2_04_ADMIN_REGISTRY)).toMatchObject({
       capability: "promo:claim",
+      mutation: true,
+    });
+    // RC-4: two actions, split by static id exactly like
+    // `admin.content_creation.dry_run`/`apply` above — `batch_dry_run` and
+    // `batch_apply` need different capabilities, so the split (not a
+    // client-supplied `mode`) is what keeps the enforced capability out of
+    // client-controlled input. See `ADMIN_CONTENT_CREATION_BATCH_ACTIONS`'s
+    // own doc comment for the full reasoning.
+    expect(resolveAdminAction("admin.content_creation.batch_dry_run", P2_04_ADMIN_REGISTRY)).toMatchObject({
+      capability: "content:view",
+      mutation: false,
+    });
+    expect(resolveAdminAction("admin.content_creation.batch_apply", P2_04_ADMIN_REGISTRY)).toMatchObject({
+      capability: "content:publish",
       mutation: true,
     });
   });
