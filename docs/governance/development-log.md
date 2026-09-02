@@ -4,6 +4,41 @@
 
 ---
 
+## 2026-09-03 · RC-7b 备份/Worker 关键词健康端点
+
+- 补上 RC-7 runbook §1.1 点名缺失的两个公开端点：`GET /api/health/backup` 与
+  `GET /api/health/worker`，形态与 `/api/health` 一致（无鉴权、`no-store`、
+  `runtime = "nodejs"` + `dynamic = "force-dynamic"`、紧凑 JSON），供外部 UptimeRobot
+  建 **Keyword** 类型监控，关键词分别为 `"backupStatus":"ok"` 与 `"workerStatus":"ok"`。
+- backup 端逐项搬自 CPS v8.3.6（peeled `16f2e4cfca51f46af0dede899ecf6242a770bbd0`）
+  `src/lib/health-backup-status.ts` + `src/app/api/health/backup/route.ts`：四态
+  `ok/unconfigured/failed/stale`、状态文件优先、`exitCode !== 0` 立即 failed（不看 age）、
+  ENOENT 退回产物目录、`ageMs >= thresholdMs` 判 stale、26h 阈值、2000ms 读超时、
+  5000/500 双重扫描界限、200/503 映射。**收敛**：不回显 CPS 那几个会泄漏备份文件名的
+  字段，只输出 `{ backupStatus, checkedAt, ageHours, source }`；产物命名白名单改成
+  `pg_dump` 的 `*.dump` / `*.sql*`。worker 端**不是搬运**——v8.3.6 树内无等价端点（已
+  `ls-tree -r` 核实），判据 SQL 逐字取自本仓 `LAUNCH_DAY_HEALTH_CHECKS.md` §2（与 runbook
+  只差一个结尾分号，已 `diff` 证明），用 `Prisma.sql` 标签、无字符串拼接、无调用方参数，
+  超时复用 `HEALTH_DATABASE_TIMEOUT_MS`。
+- **复核轮补一处 P1**：首轮把 RC-7b 唯一的生产合同漏掉了——两个 route 契约测试的断言
+  全部走 `response.json()`，而 UptimeRobot Keyword 监控匹配的是**响应体原始字节**。
+  变异验证：把 `Response.json(result, ...)` 换成 `JSON.stringify(result, null, 2)`，输出
+  变成 `"backupStatus": "ok"`（冒号后多一个空格）、线上关键词从此永久失配，而 42 个用例
+  全绿。CPS 源仓自己在 `tests/health-backup-route.test.ts` 里有 6 处
+  `assert.match(rawText, /"backupStatus":"ok"/)` 并写明"确切的紧凑 JSON 渲染方式本身就是
+  合同"，即这一项本就在被搬运的范围内。已补正反双向的原始字节断言（ok 时逐字出现、任一
+  非 ok 态一定不出现），并同形扩到 worker 端；补后该变异即被杀死。
+- 复核另做四组变异抽查，全部被既有用例杀死：26h→2h 边界、`exitCode !== 0` 改成看 age、
+  worker `expiredLocks > 0` 改成 `> 10`、route 把 stale 映射成 200。
+- 泄漏面复核：两个端点响应体均不含路径、文件名、SQL、表名、错误 message 或堆栈；
+  `console.error` 只落静态 `reasonCode`，worker 的失败分支直接丢弃 error 对象。
+- **部署前必读**：`/backups` 目前只挂进 `backup-timer` 容器，**没有挂进 `web`**，因此
+  `/api/health/backup` 在补挂载并配好 `BACKUP_OUTPUT_DIR` 之前会恒为 `unconfigured`
+  （HTTP 200 但 Keyword 判据不满足，监控会持续告警）。接线步骤见
+  `docs/operations/ALERTS_RUNBOOK_2026-09-03.md` §1.2。
+- 门禁：`typecheck` / `lint` / `test:ui` / `test:backend` 全绿（`publish-gate/no-bypass`
+  为基线既有失败，与本轮无关）。未 push、未部署、未改 compose、未动数据库。
+
 ## 2026-09-03 · RC-6 `/go` 公开跳转追踪写闸与爬虫过滤
 
 - 给公开跳转路由 `GET /go/[code]` 的 `TrackingEvent` 写入加一键关闭写闸与自明爬虫过滤，

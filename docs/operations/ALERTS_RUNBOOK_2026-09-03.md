@@ -58,6 +58,16 @@ backup / worker 两条**当前没有对应端点**，由 RC-7b 另做，不在�
 本脚本链因此**不是**那条生产通道的替代品，而是补充：X8 只监听 `127.0.0.1`，外部 SaaS
 够不到，故用本地脚本 + 宿主 cron 覆盖同一套判据。两者可并存，判据一致、载体不同。
 
+### 1.2 生产接线（RC-7b 已交付，端点不再缺）
+
+上一段说的「backup / worker 两条当前没有对应端点」已由 RC-7b 补齐。UptimeRobot 建三条
+**Keyword** 监控（判据＝响应体里找不到关键词就告警，不要用纯状态码类型）：
+`/api/health` → `"ok":true`；`/api/health/backup` → `"backupStatus":"ok"`；
+`/api/health/worker` → `"workerStatus":"ok"`。
+⚠️ backup 端点由 **web 容器**执行，必须让 web 读得到备份产物目录或状态文件：
+`BACKUP_OUTPUT_DIR` 要与 backup 容器的 `X8_BACKUP_OUTPUT_DIR` 指向**同一个挂载**
+（现状 `/backups` 只挂进了 `backup-timer`，web 没有），否则该端点恒为 `unconfigured`。
+
 | # | cps-novel 检查脚本 | 判据 | CPS 出处（只读，v8.3.6） | 阈值/来源 |
 | --- | --- | --- | --- | --- |
 | ① | `check-health.sh` | HTTP 200 且响应体含 `"ok":true` | `src/app/api/health/backup/route.ts` 头注释 + `tests/health-backup-route.test.ts:63-65`（Keyword 而非状态码） | 无（存在性判据） |

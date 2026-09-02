@@ -252,6 +252,22 @@ RC-6（`/go` 公开跳转追踪写闸与爬虫过滤）同样引用 v8.3.6 基�
 | `isObviousBotUserAgent` | `src/lib/cps-tracking.ts` | `287-291` | `16f2e4cfca51f46af0dede899ecf6242a770bbd0` | `COPY` | 原样复制正则 `/bot\|crawler\|spider\|slurp\|bingpreview\|facebookexternalhit\|whatsapp\|telegrambot\|curl\|wget/i` 与判定函数，仅改函数落点（`src/app/go/_lib/tracking-guard.ts`） | Claude |
 | `safeRecordTrackingEvent` 写闸检查顺序（写闸 → bot UA → 写入） → `shouldRecordGoRedirect` | `src/lib/cps-tracking.ts` | `108-127` | `16f2e4cfca51f46af0dede899ecf6242a770bbd0` | `ADAPT` | 保留"先判写闸、再判 bot UA、通过才写"的判定顺序与"写失败不阻塞主流程"的纪律；**不搬**该函数里 accepted event types 白名单、限流（`isRateLimited`）与 `visitorId`/`sessionId`/cookie 身份模型——本仓 `/go` 只有一种事件类型（`go_redirect`）、无限流、无访客身份，这些是 R+1 Tracking 全链范围，本轮显式排除；`route.ts` 里原有的 `try { await prisma.trackingEvent.create(...) } catch {}` 同步 await + 吞错模式保持不变，未改为 CPS 的 `void ...catch()` fire-and-forget 形态 | Claude |
 
+### RC-7b 备份/Worker 关键词健康端点（v8.3.6 基线，`ADAPT`）
+
+RC-7b 补上 RC-7 runbook §1.1 点名缺失的两个端点。`/api/health/backup` 是对 CPS 同名端点的
+逐项搬运（四态、状态文件优先、`exitCode !== 0` 不看 age、ENOENT 退回产物目录、
+`ageMs >= thresholdMs` 判 stale、26h 阈值、2000ms 读超时、5000/500 双重扫描界限、
+200/503 映射、`no-store`）。`/api/health/worker` **不在本表登记为搬运**：v8.3.6 树内
+`src/app/api/health` 只有 `backup/ live/ ready/ route.ts` 四项（已 `ls-tree -r` 核实），
+CPS 无等价端点；它只复用同一套 Keyword 载体形态，判据 SQL 逐字取自本仓
+`docs/operations/LAUNCH_DAY_HEALTH_CHECKS.md` §2，属 `ORIGINAL_REQUIRED`。
+
+| symbol | source_file | source_lines | baseline_commit | port_kind | changed_what | owner |
+| --- | --- | --- | --- | --- | --- | --- |
+| `evaluateBackupStatus` / `evaluateFromArtifactDirectory` / `DEFAULT_STALE_THRESHOLD_HOURS` / `BACKUP_STATUS_READ_TIMEOUT_MS` / `MAX_ARTIFACT_DIR_ENTRIES` / `MAX_ARTIFACT_STAT_CANDIDATES` → `src/server/health/backup-status.ts` 同名符号 | `src/lib/health-backup-status.ts` | `58`、`63`、`72-73`、`263-331`（产物退路）、`333-420`（主判定） | `16f2e4cfca51f46af0dede899ecf6242a770bbd0` | `ADAPT` | 判定表与四个常量逐项照搬（含"`exitCode !== 0` 立即 failed、不看 age"与"年龄必须请求时现算"两条核心护栏）。改：①覆盖点由 CPS 的模块级可变量 + `setBackupStatusOverridesForTests` 改为显式 `BackupStatusOptions` 参数注入（本仓路由处理函数可传参，无需模块级污染）；②产物命名白名单由 CPS 的 `^cps-\d{8}\.db$` / `^cps-\d{14}-[0-9A-Za-z]+\.db$` 换成 `/\.(?:dump\|sql(?:\.[A-Za-z0-9]+)?)$/i`——本仓 `backup-timer.sh` 产出的是 `pg_dump -Fc` 的 `cps-novel-x8-<UTC 戳>.dump`，不是 SQLite `.db`；③**不搬** `reasonCode`、`artifactName`、`artifactBytes`、`lastRunExitCode` 四个响应字段（CPS 在响应体里回显备份文件名，本仓收敛为只输出 `{ backupStatus, checkedAt, ageHours, source }`，不泄漏任何路径/文件名）；④env 名由 `BACKUP_STATUS_PATH`/`BACKUP_ARTIFACT_DIR` 改为 `BACKUP_STATUS_FILE`/`BACKUP_OUTPUT_DIR`，且无编译期默认路径（CPS 硬编码 `/app/data/...`、`/app/backups`） | Claude |
+| `HTTP_STATUS_BY_BACKUP_STATUS`（`ok`/`unconfigured`→200，`failed`/`stale`→503）+ `no-store` + "必须配 Keyword 类型监控"头注释论证 → `src/app/api/health/backup/route.ts` | `src/app/api/health/backup/route.ts` | `31-36`（映射表）、`1-30`（unconfigured 为何是 200 + Keyword 硬性要求）、`38-43`（`noStore`） | `16f2e4cfca51f46af0dede899ecf6242a770bbd0` | `ADAPT` | 映射表四态取值原样，`Cache-Control: no-store` 原样，头注释两段论证（unconfigured 返回 200 的理由；改成纯状态码监控会退化成"会骗人的监控点"）改写后保留。改：`NextResponse.json` → `Response.json`（与本仓 `/api/health` 一致），并显式声明 `runtime = "nodejs"`（CPS 只声明 `dynamic`）；响应体不再包 `ok`/`reasonCode`/`artifactName` 等字段，直接透传评估结果 | Claude |
+| Keyword-monitor 原始字节断言 `assert.match(rawText, /"backupStatus":"ok"/)` → `tests/ui/health-backup-route-contract.test.ts` 与 `tests/ui/health-worker-route-contract.test.ts` 的同名用例 | `tests/health-backup-route.test.ts` | `53`、`65`、`78-86`、`103-111`、`124-130`、`146-153`、`183-188`（共 6 处 `rawText` 断言） | `16f2e4cfca51f46af0dede899ecf6242a770bbd0` | `ADAPT` | 搬的是 CPS 那条注释写明的合同：UptimeRobot Keyword 监控对**响应体原始字节**做子串匹配，所以紧凑 JSON 的确切渲染方式本身就是合同，必须用 `.text()` 而非 `.json()` 断言。**首轮交付漏搬此项**（全部断言走 `response.json()`，复核用"把 `Response.json` 换成 `JSON.stringify(result, null, 2)`"的变异验证：42 个用例全绿而线上关键词已失配），复核轮补齐。改：正反双向断言（ok 时逐字出现、任一非 ok 态一定不出现），并同形扩到 `/api/health/worker` 的 `"workerStatus":"ok"` | Claude |
+
 ### RC-7 最小告警链（v8.3.6 基线，`COPY_SEMANTICS_ONLY`）
 
 RC-7 把短剧的"关键词告警"**判据**搬进 `infra/production-like/alerts/*`。这里新增一个
