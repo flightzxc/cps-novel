@@ -135,6 +135,15 @@
   `.env.example`；未改 `docker-compose.yml`；未写数据库；未 merge、未 push、未打
   tag。批量 dry-run 预览与批量 apply 共用同一 25s 预算常量，但各自独立计算——
   预览超预算不影响 apply 阶段重新计时。
+- 复核补测（Opus 变异抽查发现的缺口）：`tests/ui/admin-content-registry.test.ts` 只锁住
+  两条新 Action 在登记表里的能力位，锁不住动作体内实际传给 `requireFreshAdminServiceMutation`
+  的那个字符串——把 `applyContentCreationBatchAction` 里的 `"content:publish"` 改成
+  `"content:view"`，全量测试仍然全绿。已在 `tests/ui/catalog-sync-actions.test.ts`
+  补齐与单条 apply 同款的动作层守卫用例（要哪个能力位、ticket 缺失 fail-closed、
+  批量 dry-run 不做二次新鲜校验），外加批量特有契约（去重/上限前置拒绝、固定
+  `locale: "en"` 与服务端 `budgetMs`、actor 取自新鲜身份、`ContentCreationBatchInputError`
+  归为 `invalid_input`、`counts.created > 0` 才 revalidate、能力位校验先于选择校验）。
+  仅测试文件，未改生产代码；改回 `content:view` 后该用例即失败，缺口已闭合。
 
 ## 2026-09-03 · RC-1 推广链接领取正式后台入口
 

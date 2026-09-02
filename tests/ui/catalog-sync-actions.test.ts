@@ -72,6 +72,32 @@ const moboreader = vi.hoisted(() => {
   };
 });
 
+/**
+ * RC-4's batch wrapper (`@/server/content-creation/batch`, Codex territory) —
+ * mocked as a test double exactly like `@/server/content-creation` above. Its
+ * two exported constants have to be re-declared here because
+ * `_actions.ts` imports them in a *value* position (they are forwarded as
+ * `budgetMs` and used by the pre-check), so an incomplete mock would surface
+ * as `undefined` rather than as a missing-export error.
+ */
+const batchService = vi.hoisted(() => {
+  class ContentCreationBatchInputError extends Error {
+    readonly code: string;
+    constructor(code: string, message: string) {
+      super(message);
+      this.name = "ContentCreationBatchInputError";
+      this.code = code;
+    }
+  }
+  return {
+    CONTENT_CREATION_BATCH_MAX_SELECTION: 50,
+    CONTENT_CREATION_BATCH_BUDGET_MS: 25_000,
+    ContentCreationBatchInputError,
+    applyContentCreationBatch: vi.fn(),
+    dryRunContentCreationBatch: vi.fn(),
+  };
+});
+
 const flags = vi.hoisted(() => ({
   state: { featureEnabled: true, writeAllowed: true },
 }));
@@ -86,6 +112,7 @@ vi.mock("next/headers", () => ({
 vi.mock("next/cache", () => cache);
 vi.mock("@/server/auth/guards", () => guards);
 vi.mock("@/server/content-creation", () => service);
+vi.mock("@/server/content-creation/batch", () => batchService);
 vi.mock("@/lib/tasks/moboreader", () => moboreader);
 vi.mock("@/lib/flags", () => ({
   isNovelCatalogSyncEnabled: () => flags.state.featureEnabled,
@@ -108,6 +135,8 @@ const {
   applyContentCreationAction,
   dryRunCatalogScanTaskAction,
   applyCatalogScanTaskAction,
+  dryRunContentCreationBatchAction,
+  applyContentCreationBatchAction,
 } = await import("@/app/(admin)/catalog-sync/_actions");
 
 const IDENTITY = { id: "admin-1", username: "ops", role: "super_admin", status: "active", sessionVersion: 1, twoFactorEnabled: true };
@@ -121,6 +150,8 @@ beforeEach(() => {
   guards.requireAdminActionAccess.mockReset();
   guards.requireFreshAdminServiceMutation.mockReset();
   service.createContentFromSourceItem.mockReset();
+  batchService.applyContentCreationBatch.mockReset();
+  batchService.dryRunContentCreationBatch.mockReset();
   moboreader.createMoboreaderCatalogScanTask.mockReset();
   cache.revalidatePath.mockReset();
   harness.origin = "https://admin.example.com";
@@ -649,5 +680,236 @@ describe("applyCatalogScanTaskAction · 鉴权与参数", () => {
       ok: true,
       data: { outcome: "active_conflict", taskId: "task-active" },
     });
+  });
+});
+
+/**
+ * RC-4 批量创建内容的两个 Server Action。
+ *
+ * 与上方 `applyContentCreationAction` 同款的动作层鉴权用例，逐条对齐：单条
+ * apply 已经有"要哪个能力位 / ticket 丢了要 fail-closed / dry_run 不做二次新鲜
+ * 校验"这三条守卫测试，批量 apply 是同一条写路径的多条版本，缺了同样的三条就
+ * 意味着 `requireFreshAdminServiceMutation(..., "content:publish", ...)` 里的
+ * 能力位可以被改成 `content:view` 而整套测试全绿——registry 那张表只锁住了
+ * `resolveAdminAction` 的登记值，锁不住动作体内实际传给守卫的那个字符串。
+ */
+const BATCH_IDS = ["item-a", "item-b"] as const;
+const BATCH_APPLY_DATA = {
+  items: [
+    { novelSourceItemId: "item-a", status: "created" },
+    { novelSourceItemId: "item-b", status: "skipped_already_linked" },
+  ],
+  counts: { created: 1, skipped_already_linked: 1, failed: 0, not_processed: 0 },
+};
+const BATCH_DRY_RUN_DATA = {
+  items: [
+    { novelSourceItemId: "item-a", status: "creatable" },
+    { novelSourceItemId: "item-b", status: "skipped_already_linked" },
+  ],
+  counts: { creatable: 1, skipped_already_linked: 1, failed: 0, not_processed: 0 },
+};
+
+describe("dryRunContentCreationBatchAction · 鉴权与参数", () => {
+  it("以 admin.content_creation.batch_dry_run 请求授权，并带上 session/origin/requestId", async () => {
+    guards.requireAdminActionAccess.mockResolvedValue(granted());
+    batchService.dryRunContentCreationBatch.mockResolvedValue(BATCH_DRY_RUN_DATA);
+
+    await dryRunContentCreationBatchAction({ novelSourceItemIds: [...BATCH_IDS], requestId: "req-b1" });
+
+    expect(guards.requireAdminActionAccess.mock.calls[0][0]).toMatchObject({
+      actionId: "admin.content_creation.batch_dry_run",
+      sessionToken: "session-token-abc",
+      origin: "https://admin.example.com",
+      requestId: "req-b1",
+    });
+  });
+
+  it("非 mutation 的批量 dry-run 不调用 requireFreshAdminServiceMutation——与单条 dry-run 同规矩", async () => {
+    guards.requireAdminActionAccess.mockResolvedValue(granted());
+    batchService.dryRunContentCreationBatch.mockResolvedValue(BATCH_DRY_RUN_DATA);
+
+    await dryRunContentCreationBatchAction({ novelSourceItemIds: [...BATCH_IDS], requestId: "req-b1" });
+
+    expect(guards.requireFreshAdminServiceMutation).not.toHaveBeenCalled();
+  });
+
+  it("固定 locale: en 与服务端预算，actor 取自会话身份，id 去重后原样透传", async () => {
+    guards.requireAdminActionAccess.mockResolvedValue(granted());
+    batchService.dryRunContentCreationBatch.mockResolvedValue(BATCH_DRY_RUN_DATA);
+
+    await dryRunContentCreationBatchAction({
+      novelSourceItemIds: ["item-a", "item-b", "item-a"],
+      requestId: "req-b2",
+    });
+
+    const [, input] = batchService.dryRunContentCreationBatch.mock.calls[0];
+    expect(input).toEqual({
+      novelSourceItemIds: ["item-a", "item-b"],
+      locale: "en",
+      actor: { type: "admin", adminId: "admin-1" },
+      requestId: "req-b2",
+      budgetMs: 25_000,
+    });
+  });
+
+  it("空选择在到达服务层之前就被拒绝成 invalid_input", async () => {
+    guards.requireAdminActionAccess.mockResolvedValue(granted());
+
+    const result = await dryRunContentCreationBatchAction({ novelSourceItemIds: [], requestId: "req-b3" });
+
+    expect(result).toEqual({ ok: false, kind: "invalid_input", code: "items_required" });
+    expect(batchService.dryRunContentCreationBatch).not.toHaveBeenCalled();
+  });
+
+  it("超过单次上限也在服务层之前被拒绝成 batch_size_exceeded", async () => {
+    guards.requireAdminActionAccess.mockResolvedValue(granted());
+    const tooMany = Array.from({ length: 51 }, (_, index) => `item-${index}`);
+
+    const result = await dryRunContentCreationBatchAction({ novelSourceItemIds: tooMany, requestId: "req-b4" });
+
+    expect(result).toEqual({ ok: false, kind: "invalid_input", code: "batch_size_exceeded" });
+    expect(batchService.dryRunContentCreationBatch).not.toHaveBeenCalled();
+  });
+
+  it("守卫拒绝 → access_denied，且从不触碰服务层", async () => {
+    guards.requireAdminActionAccess.mockRejectedValue(
+      new AdminAccessError("admin_capability_denied", 403, "denied", { capability: "content:view" }),
+    );
+
+    const result = await dryRunContentCreationBatchAction({ novelSourceItemIds: [...BATCH_IDS], requestId: "req-b5" });
+
+    expect(result).toMatchObject({ ok: false, kind: "access_denied" });
+    expect(result.ok === false && result.kind === "access_denied" && result.envelope.code).toBe(
+      "admin_capability_denied",
+    );
+    expect(batchService.dryRunContentCreationBatch).not.toHaveBeenCalled();
+  });
+
+  it("服务层抛 ContentCreationBatchInputError（后备校验）→ invalid_input，不是 access_denied", async () => {
+    guards.requireAdminActionAccess.mockResolvedValue(granted());
+    batchService.dryRunContentCreationBatch.mockRejectedValue(
+      new batchService.ContentCreationBatchInputError("batch_size_exceeded", "too many"),
+    );
+
+    const result = await dryRunContentCreationBatchAction({ novelSourceItemIds: [...BATCH_IDS], requestId: "req-b6" });
+
+    expect(result).toEqual({ ok: false, kind: "invalid_input", code: "batch_size_exceeded" });
+  });
+});
+
+describe("applyContentCreationBatchAction · 鉴权与参数", () => {
+  it("以 admin.content_creation.batch_apply 请求授权，拿到 ticket 后调用 requireFreshAdminServiceMutation(content:publish)", async () => {
+    guards.requireAdminActionAccess.mockResolvedValue(granted());
+    guards.requireFreshAdminServiceMutation.mockResolvedValue(CONTEXT);
+    batchService.applyContentCreationBatch.mockResolvedValue(BATCH_APPLY_DATA);
+
+    await applyContentCreationBatchAction({ novelSourceItemIds: [...BATCH_IDS], requestId: "req-c1" });
+
+    expect(guards.requireAdminActionAccess.mock.calls[0][0]).toMatchObject({
+      actionId: "admin.content_creation.batch_apply",
+    });
+    expect(guards.requireFreshAdminServiceMutation).toHaveBeenCalledWith(
+      { ticket: true },
+      "content:publish",
+      expect.objectContaining({
+        identities: "identities-stub",
+        sessions: "sessions-stub",
+        entryId: "admin.content_creation.batch_apply",
+        requestId: "req-c1",
+      }),
+    );
+  });
+
+  it("固定 locale: en 与服务端预算，actor 取自 requireFreshAdminServiceMutation 返回的新鲜身份", async () => {
+    guards.requireAdminActionAccess.mockResolvedValue(granted());
+    guards.requireFreshAdminServiceMutation.mockResolvedValue({
+      identity: { ...IDENTITY, id: "fresh-admin-7" },
+    });
+    batchService.applyContentCreationBatch.mockResolvedValue(BATCH_APPLY_DATA);
+
+    await applyContentCreationBatchAction({
+      novelSourceItemIds: ["item-a", "item-b", "item-b"],
+      requestId: "req-c2",
+    });
+
+    const [, input] = batchService.applyContentCreationBatch.mock.calls[0];
+    expect(input).toEqual({
+      novelSourceItemIds: ["item-a", "item-b"],
+      locale: "en",
+      actor: { type: "admin", adminId: "fresh-admin-7" },
+      requestId: "req-c2",
+      budgetMs: 25_000,
+    });
+  });
+
+  it("counts.created > 0 时才 revalidatePath('/catalog-sync') 与 '/novels'；零创建不触发", async () => {
+    guards.requireAdminActionAccess.mockResolvedValue(granted());
+    guards.requireFreshAdminServiceMutation.mockResolvedValue(CONTEXT);
+    batchService.applyContentCreationBatch.mockResolvedValue(BATCH_APPLY_DATA);
+
+    await applyContentCreationBatchAction({ novelSourceItemIds: [...BATCH_IDS], requestId: "req-c3" });
+    expect(cache.revalidatePath).toHaveBeenCalledWith("/catalog-sync");
+    expect(cache.revalidatePath).toHaveBeenCalledWith("/novels");
+    expect(cache.revalidatePath).toHaveBeenCalledTimes(2);
+
+    cache.revalidatePath.mockClear();
+    batchService.applyContentCreationBatch.mockResolvedValue({
+      items: [{ novelSourceItemId: "item-a", status: "not_processed" }],
+      counts: { created: 0, skipped_already_linked: 0, failed: 0, not_processed: 1 },
+    });
+    await applyContentCreationBatchAction({ novelSourceItemIds: [...BATCH_IDS], requestId: "req-c4" });
+    expect(cache.revalidatePath).not.toHaveBeenCalled();
+  });
+
+  it("registration 未来若丢了 capability（serviceAuthorization 为空）也 fail-closed 成 access_denied", async () => {
+    guards.requireAdminActionAccess.mockResolvedValue({ context: CONTEXT, serviceAuthorization: undefined });
+
+    const result = await applyContentCreationBatchAction({ novelSourceItemIds: [...BATCH_IDS], requestId: "req-c5" });
+
+    expect(result).toMatchObject({ ok: false, kind: "access_denied" });
+    expect(guards.requireFreshAdminServiceMutation).not.toHaveBeenCalled();
+    expect(batchService.applyContentCreationBatch).not.toHaveBeenCalled();
+    expect(cache.revalidatePath).not.toHaveBeenCalled();
+  });
+
+  it("拿到 ticket 后 requireFreshAdminServiceMutation 再次拒绝（会话已失效）→ access_denied，且不写入", async () => {
+    guards.requireAdminActionAccess.mockResolvedValue(granted());
+    guards.requireFreshAdminServiceMutation.mockRejectedValue(
+      new AdminAccessError("jwt_invalid", 401, "stale session"),
+    );
+
+    const result = await applyContentCreationBatchAction({ novelSourceItemIds: [...BATCH_IDS], requestId: "req-c6" });
+
+    expect(result).toMatchObject({ ok: false, kind: "access_denied" });
+    expect(batchService.applyContentCreationBatch).not.toHaveBeenCalled();
+    expect(cache.revalidatePath).not.toHaveBeenCalled();
+  });
+
+  it("能力位校验先于选择校验：空选择也要先过 content:publish，绝不因为参数不合法就跳过鉴权", async () => {
+    guards.requireAdminActionAccess.mockResolvedValue(granted());
+    guards.requireFreshAdminServiceMutation.mockResolvedValue(CONTEXT);
+
+    const result = await applyContentCreationBatchAction({ novelSourceItemIds: [], requestId: "req-c7" });
+
+    expect(result).toEqual({ ok: false, kind: "invalid_input", code: "items_required" });
+    expect(guards.requireFreshAdminServiceMutation).toHaveBeenCalledWith(
+      { ticket: true },
+      "content:publish",
+      expect.objectContaining({ entryId: "admin.content_creation.batch_apply" }),
+    );
+    expect(batchService.applyContentCreationBatch).not.toHaveBeenCalled();
+  });
+
+  it("服务层抛 ContentCreationBatchInputError（后备校验）→ invalid_input，且不 revalidate", async () => {
+    guards.requireAdminActionAccess.mockResolvedValue(granted());
+    guards.requireFreshAdminServiceMutation.mockResolvedValue(CONTEXT);
+    batchService.applyContentCreationBatch.mockRejectedValue(
+      new batchService.ContentCreationBatchInputError("items_required", "empty"),
+    );
+
+    const result = await applyContentCreationBatchAction({ novelSourceItemIds: [...BATCH_IDS], requestId: "req-c8" });
+
+    expect(result).toEqual({ ok: false, kind: "invalid_input", code: "items_required" });
+    expect(cache.revalidatePath).not.toHaveBeenCalled();
   });
 });
