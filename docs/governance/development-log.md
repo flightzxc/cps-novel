@@ -75,6 +75,67 @@
   fail-closed 路径，未在真实 PostgreSQL 上验证行数判据；接线（compose `alerts` 服务或
   宿主 cron）两方案均为文本建议，未落地。
 
+## 2026-09-03 · RC-4 显式多选批量创建内容
+
+- 在 `/catalog-sync` 的来源条目表格工具栏（RC-1 已有的多选状态旁）新增"批量创建内容"
+  按钮，打开新对话框 `BatchCreateContentDialog`：展示已选数量/单次上限（50 条）、
+  先自动跑批量 dry-run 预览（逐条 可创建/已关联跳过/不可创建原因）、确认后才批量
+  apply，结果表逐条四态（`created`/`skipped_already_linked`/`failed`/
+  `not_processed`）+ 汇总计数，`not_processed > 0` 时明示"时间预算已用尽，还有 N
+  条未处理，请重新勾选后再次提交"。跨 `channelApp` 勾选允许（创建不依赖账号，
+  与 RC-1 的推广链接领取不同）；已 `linked` 的行在预览里标记跳过而非报错。与
+  "领取推广链接"共用同一份 `selectedIds` 选择状态，没有第二套选择机制。
+- 新增 Codex 领土文件 `src/server/content-creation/batch.ts`：
+  `applyContentCreationBatch`/`dryRunContentCreationBatch` 两个薄包装函数，逐条调用
+  **完全未改动**的单条入口 `createContentFromSourceItem`（`./service.ts`）——不复制其
+  判定逻辑或事务边界，每条命中它自己独立的 `$transaction`（`service.ts:474-598`
+  `runCreateTransaction`）。串行 `for` 循环（源码内不出现 `Promise.all`/
+  `Promise.allSettled`，`tests/backend/content-creation/batch.test.ts` 静态扫描守着
+  这条）；总时间预算 `CONTENT_CREATION_BATCH_BUDGET_MS = 25_000`ms，逐条开始前检查，
+  超预算即把剩余 id 原样标记 `not_processed` 并停止，已提交的项不回滚；上限常量
+  `CONTENT_CREATION_BATCH_MAX_SELECTION = 50`，与去重（`Array.from(new Set(...))`）
+  一起在 `requireNonEmptyDedupedIds` 里做，空选择/超限抛 `ContentCreationBatchInputError`
+  （`items_required`/`batch_size_exceeded`）。单条失败（无论是
+  `CreateContentResult` 里的业务态，还是防御性的 `ContentCreationInputError`
+  畸形输入分支，还是未分类异常）只标记该条 `failed`，继续处理其余条目。
+- 新增 Server Action `dryRunContentCreationBatchAction`/
+  `applyContentCreationBatchAction`（`catalog-sync/_actions.ts`）：授权沿用单条创建
+  同一套能力位——dry_run 走 `content:view`（零写入，`mutation:false`），apply 走
+  `content:publish` + `requireAdminActionAccess` → `requireFreshAdminServiceMutation`
+  两段式新鲜校验，与 P0-S13 单条 apply 逐字节一致。批量结果 `counts.created > 0`
+  时才 `revalidatePath("/catalog-sync")`/`revalidatePath("/novels")`，全部
+  跳过/失败/未处理时不做无意义的重渲染。
+- `src/app/api/admin/_lib/registry.ts` 新增 `ADMIN_CONTENT_CREATION_BATCH_ACTIONS`
+  （`admin.content_creation.batch_dry_run` → `content:view`/`mutation:false`，
+  `admin.content_creation.batch_apply` → `content:publish`/`mutation:true`），
+  composed 进 `P2_04_ADMIN_REGISTRY.actions`，未编辑任何既有分组；
+  `tests/ui/admin-content-registry.test.ts` 补两条穷举断言。
+- `docs/governance/port-registry.md` 新增 RC-4 登记段落（沿用 RC-1 已冻结的 v8.3.6
+  peeled commit `16f2e4cfca51f46af0dede899ecf6242a770bbd0`）：两条 `PATTERN_ONLY`
+  条目对齐 CPS `runChangduPromoteDramaBatch`
+  （`src/lib/changdu-promote-drama-batch.ts:174-199,423-455`）——显式选择+单次上限
+  校验的思路、以及严格串行 for 循环+按 status 汇总计数的编排形态；**明确不搬** CPS
+  的 `BatchTask`/CLI `--max-apply`/`--expected-count` 双输入机制，也不搬其
+  `ChangduPromoteDramaBatchDeps`；**新增**本仓才有的墙钟时间预算机制（CPS 无对应，
+  源于本仓自身 v7.9.6 504 事故教训）。
+- 测试：新建 `tests/backend/content-creation/batch.test.ts`（10 条，Codex 领土，
+  复用既有 `fake-db.ts`：去重/超限校验、created/skipped_already_linked/failed 三态
+  独立分类、防御性 `ContentCreationInputError` 分支单条失败不影响其余条、requestId
+  按条后缀、`budgetMs:0` 全 `not_processed` 零写入、`vi.spyOn(Date, "now")` 模拟
+  预算中途耗尽仍保留已提交项、dry-run 零写入、源码静态扫描守 "不用 Promise.all"）；
+  扩展 `tests/ui/catalog-sync-client.test.tsx`（+21，工具栏共享选择状态、dry-run
+  预览、apply 结果/汇总/not_processed 提示/关闭清空选择、超限/输入校验/access_denied/
+  取消）；扩展 `tests/ui/admin-content-registry.test.ts`（新 action id 穷举+能力位
+  绑定断言）。全部通过；`test:ui` 全量 90 files / 1465 tests PASS；`test:backend`
+  全量 128/129 files（1224/1225 tests，唯一失败仍是既有基线问题
+  `publish-gate/no-bypass.test.ts` 指向 `scripts/s1-exact-target-structural-smoke.ts`，
+  与本轮无关）。`typecheck`/`lint`（0 error）/`next build` 均 PASS。
+- 明确没做：未改 `src/server/content-creation/service.ts` 单条创建的任何判定/事务
+  边界（只新增独立文件调用它）；未改 `worker/**`；未改 flag 默认值或
+  `.env.example`；未改 `docker-compose.yml`；未写数据库；未 merge、未 push、未打
+  tag。批量 dry-run 预览与批量 apply 共用同一 25s 预算常量，但各自独立计算——
+  预览超预算不影响 apply 阶段重新计时。
+
 ## 2026-09-03 · RC-1 推广链接领取正式后台入口
 
 - 在 `/catalog-sync` 的来源条目表格加多选复选框 + "领取推广链接"工具栏按钮，打开

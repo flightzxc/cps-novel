@@ -28,7 +28,8 @@ RC-1（后台推广链接领取入口）对齐的是同一只读工作区
 的 peeled commit 固定登记为 `16f2e4cfca51f46af0dede899ecf6242a770bbd0`
 （`git rev-parse 'v8.3.6^{commit}'` 实测）；RC-1 新增条目在 `baseline_commit` 列写该 peeled commit，
 不写 tag 名或 tag object。与 v8.2.18 一样，这只是同一只读路径上的另一个已冻结生产快照，不影响
-上方 X 系列条目仍固定在 v8.2.18。
+上方 X 系列条目仍固定在 v8.2.18。RC-4（`/catalog-sync` 显式多选批量创建内容）沿用同一 v8.3.6 基线
+与同一 peeled commit，见下方 RC-4 登记段落，不重复取证。
 
 ### RC-3 上游请求纪律参考基线（2026-09-03）
 
@@ -269,6 +270,27 @@ RC-7 把短剧的"关键词告警"**判据**搬进 `infra/production-like/alerts
 | 新鲜度必须请求时现算 + "状态文件优先／退回观察产物 mtime"双信息源 → `resolve_marker_mtime_epoch` / `check_backup_freshness` | `src/lib/health-backup-status.ts` | `9-30`（头注释判定优先级）、`263-331`（`evaluateFromArtifactDirectory`） | `16f2e4cfca51f46af0dede899ecf6242a770bbd0` | `COPY_SEMANTICS_ONLY` | 保留核心护栏"年龄用当前时钟现算、绝不回显预算好的布尔值"，以及"死掉的 cron 伪造不了 mtime，产物比自我报告可信"这条来源选择理由。改：海阅 X8 侧**只有产物退路这一路**——`backup-timer.sh` 只 `touch /tmp/x8-backup-last-success`（且脚本 `set -e`，故仅成功时刷新），本仓没有 CPS 那样带 `exitCode` 的 `backup-status.json`，因此**不搬**状态文件分支，也就拿不到 CPS 的 `failed`（"上次跑失败了"）语义：一次失败的备份要等 26h 阈值才报，而不是像 CPS 那样立刻报。此限制已写进 runbook §7 | Claude |
 | "看不懂／看不到 = 不可信"fail-closed 判定表 → `fail_closed_run` 及各 check 的探测失败分支 | `src/lib/health-backup-status.ts` | `32-36`（A 表第 1 条）、`344-359`（`read_timeout`/`read_error` → `failed`） | `16f2e4cfca51f46af0dede899ecf6242a770bbd0` | `COPY_SEMANTICS_ONLY` | 保留"探测本身失败要当不健康报，绝不当静默健康"。改：CPS 的不可信来源是文件读不出／超时／JSON 坏；本仓扩到 `curl` 连不上、`psql` 不存在或连不上、`docker inspect` 失败、标记文件不可读四类，均走同一条 fail-closed 分支 | Claude |
 | Keyword-翻转演练法（翻转监控期望看到的东西、确认告警触发，不碰生产）→ `drill.sh` | `DEVLOG.md` | `60-78`（2026-08-22 v8.2.16 备份状态端点条目） | `16f2e4cfca51f46af0dede899ecf6242a770bbd0` | `COPY_SEMANTICS_ONLY` | 保留"没有信号到人才是根因"与 Keyword 监控法的结论；`tests/health-backup-route.test.ts:63-65` 的 `assert.match(rawText, /"backupStatus":"ok"/)` 是同一判据的测试侧表达。改：演练做成完全本地自包含形式（未监听端口 `127.0.0.1:1`、不存在的容器名、自建自删临时文件），断言本仓自建的文件计数器 `alert_fire_total()`；强制 `DRY_RUN=1` 且用独立 `mktemp -d` 状态目录，不碰真实去抖状态 | Claude |
+
+### RC-4 显式多选批量创建内容（v8.3.6 基线，`PATTERN_ONLY`）
+
+RC-4（`/catalog-sync` 显式多选批量创建内容）沿用 RC-1 已冻结的同一 v8.3.6 基线与同一只读工作区，
+执行方式相同（`git show v8.3.6:<path>` / `git grep <pat> v8.3.6 -- <path>`，工作树不可读、不
+checkout/stash）。**只搬运批量编排的语义（显式 id 集合、单次上限、逐条串行、结果台账），不搬运
+CPS 的 BatchTask/SQLite 机制**——本仓 `applyContentCreationBatch`/`dryRunContentCreationBatch`
+（`src/server/content-creation/batch.ts`）没有对应的批量任务行落库，是一次同步的 in-process 循环，
+调用方（Server Action）原地等待其返回，不经由 `GenericTask`/worker 异步消费，这一点与 CPS 该函数
+本身相同（CPS 的批量入口同样是同步 CLI 主流程内的循环，不是任务队列）。
+
+| symbol | source_file | source_lines | baseline_commit | port_kind | changed_what | owner |
+| --- | --- | --- | --- | --- | --- | --- |
+| `assertBatchApplyLimit` → `requireNonEmptyDedupedIds` / `ContentCreationBatchInputError` | `src/lib/changdu-promote-drama-batch.ts` | `174-199` | `16f2e4cfca51f46af0dede899ecf6242a770bbd0` | `PATTERN_ONLY` | 只借"显式 id 列表 + 单次上限硬拒绝，且校验先于任何数据库读写"的思路；**不搬** CPS 的 `--max-apply`/`--expected-count` 双 CLI 输入及二者互相印证（`expectedCount !== sourceItemIds.length` 一类校验）——本仓上限是固定导出常量 `CONTENT_CREATION_BATCH_MAX_SELECTION = 50`（`src/server/content-creation/batch.ts`），调用方是 Server Action 而非 CLI，只传一份显式 id 数组，没有第二个数字需要互相校验 | Codex |
+| 批量 apply 主循环（`for (const sample of eligibleSamples) { results.push(await runApply(...)) }` + `applySummary` 计数） → `runSequentialBudgetedBatch` + `applyContentCreationBatch`/`dryRunContentCreationBatch` | `src/lib/changdu-promote-drama-batch.ts` | `423-455` | `16f2e4cfca51f46af0dede899ecf6242a770bbd0` | `PATTERN_ONLY` | 只借"严格串行 for 循环、每条独立调用既有单条处理函数（`runApply`/`createContentFromSourceItem`）、结果逐条推入数组、再按 status 汇总计数"的编排形态，未搬一行 CPS 代码；**不搬** CLI 专属的 `ChangduPromoteDramaBatchDeps`/`--source-item-ids-file`/dry-run 报告聚合。**新增**（CPS 无对应机制）：墙钟时间预算 `CONTENT_CREATION_BATCH_BUDGET_MS = 25_000`ms——源于本仓自身 v7.9.6 事故教训（同步多条写入端点在反代默认 60s 超时下会 504），预算耗尽即停止，剩余 id 原样标记 `not_processed`、不处理、不回滚已提交项；CPS 批量 apply 没有任何超时/中止机制，一次跑完全部 `eligibleSamples`（仅受 `maxApply ≤ 5000` 数量上限约束） | Codex |
+
+RC-4 的 Server Action 接线（`dryRunContentCreationBatchAction`/`applyContentCreationBatchAction`，
+`src/app/(admin)/catalog-sync/_actions.ts`）与登记表新增两条（`admin.content_creation.batch_dry_run`/
+`admin.content_creation.batch_apply`，`src/app/api/admin/_lib/registry.ts`）复刻的是本仓 RC-1/P0-S13
+自己已有的授权两段式与"dry_run/apply 拆成两个静态 action id"惯例，**不是从 CPS 搬运**——CPS 该批量
+入口是 CLI 脚本，没有 Admin Action、能力位或 registry 概念可供搬运，故未在上表登记。
 
 ### 无搬运的任务（显式登记，避免被当成漏登）
 
