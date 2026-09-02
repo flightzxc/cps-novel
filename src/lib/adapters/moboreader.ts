@@ -551,10 +551,23 @@ export function createMoboreaderReadAdapter(options: AdapterOptions = {}): Mobor
    * `computeRetryDelayMs`/`parseRetryAfter`/`canAffordRetry` and, on
    * exhaustion, throw `MoboreaderRateLimitedError` carrying `pageIndex` so
    * the caller can resume from that page — no new recovery mechanism,
-   * `catalog_scan_task_item` is already one row per page. Every other
-   * retryable status (408, 5xx other than 503) keeps its pre-existing
-   * backoff formula but now shares the same elapsed-time budget, per RC-3
-   * item C ("保留对 408/5xx 的既有处理但纳入同一预算").
+   * `catalog_scan_task_item` is already one row per page.
+   *
+   * Every other retryable status (408, and 5xx other than 503) stays
+   * retryable and still surfaces as the pre-existing
+   * `MoboreaderAdapterError("upstream_http_error", true, status)` rather
+   * than a rate-limit error — but note it does NOT keep the legacy
+   * `min(250 × 2^(n-1), 2_000)` backoff: under this policy it shares the
+   * same `computeRetryDelayMs` schedule, retry ceiling and elapsed-time
+   * budget as 429/503. So on this path a 500 is retried up to
+   * `maxAttempts` (4) times with 2s–60s full-jitter waits inside the 90s
+   * budget, where the legacy loop retried it twice with sub-2s waits.
+   * That is deliberate — one budget, one schedule, one place to reason
+   * about how long a single logical request can occupy a lease — but it
+   * is a real behavior change for non-429 failures, not a carry-over.
+   * CPS's own loop treats every non-{429,503} status as immediately
+   * fatal; keeping 408/5xx retryable is this port's divergence, made to
+   * preserve MoboReader's pre-existing transient-error tolerance.
    */
   async function rateLimitAwarePost(
     path: string,
