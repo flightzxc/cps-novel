@@ -4,6 +4,49 @@
 
 ---
 
+## 2026-09-03 · RC-1 推广链接领取正式后台入口
+
+- 在 `/catalog-sync` 的来源条目表格加多选复选框 + "领取推广链接"工具栏按钮，打开
+  `PromoLinkClaimDialog`（新文件）确认对话框：展示已选数量/上限、跨渠道应用阻断、
+  `ChannelCapability`（claimPromo）未开启的前置提示、apply 模式下 claimPromo
+  不可逆的双向文案警示，以及六种 outcome（enqueued/enqueued_disabled/duplicate/
+  active_conflict/no_eligible_sources/capability_disabled）各自独立的结果面板。
+- 新增 Server Action `enqueuePromoLinkClaimAction`（`catalog-sync/_actions.ts`）：
+  单一 action（不像 catalog-scan 拆 dry_run/apply 两个 action id）——两种模式共用同一个
+  `promo:claim` 能力位，不存在需要靠静态 action id 隔离的、随 mode 变化的能力位。走
+  `requireAdminActionAccess` → `requireFreshAdminServiceMutation` 两段式新鲜校验；
+  提交前先查 `ChannelCapability`（按 `channelAppId` 维度，不是账户维度）是否
+  `enabled`，未开启则返回结构化 `capability_disabled`，不创建任务行；items 的
+  `offerType` 服务端硬编码为 `"read"`，不接受调用方传入；`novelSourceItemIds` 只接受
+  显式数组，类型层面就不存在筛选描述符可传（CPS v8.3.6 的
+  `submitChangduPromoClaim` 是运行时判 `data.selection` 拒绝，本仓是类型层面直接
+  没有这个位置）。
+- 在 `src/app/api/admin/_lib/registry.ts` 新增 `ADMIN_PROMO_LINK_CLAIM_ACTIONS`
+  （`admin.promo_link_claim.enqueue`，`promo:claim`，`mutation:true`），composed
+  进 `P2_04_ADMIN_REGISTRY.actions`，未编辑任何既有分组。
+- `/promo-links` 页保持只读不变（未碰数据/API），只更新自述文案与页头注释，说明
+  领取从 `/catalog-sync` 发起、结果在本页与 `/tasks` 体现，并加两条跳转链接。
+- `docs/governance/port-registry.md` 新增 "RC-1 v8.3.6 生产 tag 参考基线" 小节
+  （peeled commit `16f2e4cfca51f46af0dede899ecf6242a770bbd0`）与两条登记：Server
+  Action 的 `ADAPT`（对齐 `submitChangduPromoClaim`，`src/app/(admin)/sync/
+  actions.ts:724-766`）、表单交互形态的 `PATTERN_ONLY`（对齐
+  `changdu-sync-panel.tsx:598-966`，不搬代码，只借鉴交互顺序）。
+- 测试：`tests/ui/promo-link-claim-actions.test.ts`（23，鉴权/输入校验/能力位前置
+  检查/工厂参数形状/五种 status 分类）、`tests/ui/promo-claim-outcome-copy.test.ts`
+  （18，穷举覆盖 + 跳过原因标签 + 双闸检查单 + 不可逆提示分方向措辞）、扩展
+  `tests/ui/catalog-sync-client.test.tsx`（+18，工具栏/对话框/跨渠道应用/能力位
+  前置/超限/apply 警示/五种结果分支的整体渲染验收）、扩展
+  `tests/ui/admin-content-registry.test.ts`（登记新 action id 与其能力位绑定）。
+  全部通过；`test:ui` 全量 90 files / 1448 tests PASS；`test:backend` 全量
+  127/128 files（1 file 预置失败 `publish-gate/no-bypass.test.ts` 指向
+  `scripts/s1-exact-target-structural-smoke.ts`，与本轮无关——已用 `git stash`
+  切回基线 `1b9f82c` 复现同一失败确认是既有基线问题，不是本轮引入）。
+  `typecheck`/`lint`（0 error）/`next build` 均 PASS。
+- 明确没做：未改 `src/lib/tasks/promo-link-claim.ts` 工厂逻辑或任何 `worker/**`
+  handler；未改 flag 默认值或 `.env.example`；未改 `docker-compose.yml`；未写数据库
+  （本机跑着 `cps-novel-local`/`cps-novel-x8-local` 两套既有 Postgres 容器，均未连接
+  也未启动新容器）；未 merge、未 push、未打 tag。
+
 ## 2026-08-30 · 金丝雀预备轮实跑、扩页止损与 C4 微秒 CAS 修复
 
 - 将固定 `feature/x8@d37506c` 以 merge commit `c80665e` 合入 main，再将

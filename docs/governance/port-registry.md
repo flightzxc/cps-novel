@@ -19,6 +19,17 @@ annotated tag `v8.2.18` 的 peeled commit 固定登记为
 不得写 tag 名或 tag object。旧条目仍保留当时的 `d77c3b...` 证据链，不批量改写。
 标签多语资产、北斗与飞书专属逻辑仍明确禁止搬运。
 
+### RC-1 v8.3.6 生产 tag 参考基线（2026-09-03）
+
+RC-1（后台推广链接领取入口）对齐的是同一只读工作区
+`/Users/chenweifeng/Documents/产品原型及文档/cps项目/cps-admin` 上更新的生产 tag `v8.3.6`
+（`submitChangduPromoClaim` 的 CPS v8.3.6 版本）；执行的是 `git show v8.3.6:<path>` /
+`git grep <pat> v8.3.6 -- <path>`，工作树本身不可读、不 checkout/stash。annotated tag `v8.3.6`
+的 peeled commit 固定登记为 `16f2e4cfca51f46af0dede899ecf6242a770bbd0`
+（`git rev-parse 'v8.3.6^{commit}'` 实测）；RC-1 新增条目在 `baseline_commit` 列写该 peeled commit，
+不写 tag 名或 tag object。与 v8.2.18 一样，这只是同一只读路径上的另一个已冻结生产快照，不影响
+上方 X 系列条目仍固定在 v8.2.18。
+
 ## `port_kind` 取值说明
 
 | 取值 | 含义 |
@@ -181,6 +192,14 @@ CPS 侧的 `renderContentBlocks`（`src/lib/template-engine.ts:223-261`）、`pr
 `escapeHtmlText`、`ABSOLUTE_HTTP_URL` / `PUBLIC_REDIRECT_PATH` 两条取值形态校验**无 CPS 来源**：
 CPS 对变量落在什么 HTML 位置完全不判定，也不对 `<img src>` 做任何 scheme 校验，判为
 `ORIGINAL_REQUIRED`，故不在本表登记（本表只登记有 CPS 来源的符号）。
+
+RC-1 是首批 `owner = Claude` 引用 v8.3.6 基线的搬运条目（见上方"RC-1 v8.3.6 生产 tag 参考基线"）。
+逐符号登记如下。
+
+| symbol | source_file | source_lines | baseline_commit | port_kind | changed_what | owner |
+| --- | --- | --- | --- | --- | --- | --- |
+| `submitChangduPromoClaim` → `enqueuePromoLinkClaimAction` | `src/app/(admin)/sync/actions.ts` | `724-766` | `16f2e4cfca51f46af0dede899ecf6242a770bbd0` | `ADAPT` | 保留"只接受调用方显式枚举的 `sourceItemIds`，硬拒绝任何筛选描述符"这条纪律（CPS 端靠运行时判 `data.selection` 真值即拒绝；本仓在类型层面就不给这个字段留位置——`PromoLinkClaimTriggerInput` 只有 `novelSourceItemIds: string[]`，没有筛选形状可传）；CPS 单函数内联 `requireAdminSession()` + 直接落 `BatchTask`，本仓拆成 `requireAdminActionAccess` → `requireFreshAdminServiceMutation` 两段式新鲜校验（`promo:claim`，dry_run/apply 同一能力位，见 `_actions.ts` 内文档），且把返回值从 `{success,taskId,...}` 改造成与既有 `CatalogScanActionResult` 同形的 `{ok,data:{outcome,...}}` 判别式联合；`channelAppKey`（字符串业务键）换成本仓的 `channelAppId`（UUID FK）；新增本仓特有的 `ChannelCapability`（按渠道应用维度的 `claimPromo` 能力位）前置检查与 `capability_disabled` 结果分支——CPS 没有这一层，是本仓 P0-S6 引入的能力位模型的必然要求，不是从 CPS 搬来的 | Claude |
+| dry_run/apply 双模式表单交互（复选 + 账户/模式选择 + 提交前不可逆警示） | `src/app/(admin)/sync/_components/changdu-sync-panel.tsx` | `598-966`（`submitPromoClaim`/`canSubmitClaim`/勾选与提交区块） | `16f2e4cfca51f46af0dede899ecf6242a770bbd0` | `PATTERN_ONLY` | 只借鉴"显式勾选 + dry_run 优先 + apply 前置不可逆警示"的交互形态，不搬代码：CPS 面板把领取塞进一个已有 2000+ 行的畅读综合面板（同页还有来源同步、链接同步等其它职责）；本仓新建独立的 `PromoLinkClaimDialog`，触发入口挂在 `/catalog-sync` 的来源条目表格上，不复用/不魔改任何既有畅读面板结构 | Claude |
 
 ### 无搬运的任务（显式登记，避免被当成漏登）
 
