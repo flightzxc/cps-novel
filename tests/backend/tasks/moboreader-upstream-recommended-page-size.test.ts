@@ -1,12 +1,11 @@
 // RC-3: CPS v8.3.6 caps its catalog page size at 20
 // (`worker/handlers/changdu-source-sync.ts:814`,
-// `Math.min(positiveInteger(params.pageSize, 20), 20)`). This port could
-// not lower `MOBOREADER_CATALOG_LIMITS.maxPageSize` to 20 to match — see
-// the doc comment on `MOBOREADER_UPSTREAM_RECOMMENDED_PAGE_SIZE` in
-// `src/lib/tasks/moboreader.ts` for why (frozen fixtures in
-// `tests/backend/tasks/moboreader.test.ts` use `pageSize: 100` as their
-// happy path). This file only covers the new, additive constant; it does
-// not modify or duplicate that frozen file.
+// `Math.min(positiveInteger(params.pageSize, 20), 20)`). The RC-3 fixup
+// clamps BOTH values here to that CPS-parity 20: the hard ceiling
+// `MOBOREADER_CATALOG_LIMITS.maxPageSize` (previously an unprobed 100) and
+// the new default `MOBOREADER_UPSTREAM_RECOMMENDED_PAGE_SIZE`. The
+// happy-path fixtures in `tests/backend/tasks/moboreader.test.ts` moved
+// from `pageSize: 100` to `pageSize: 20` in the same fixup.
 import { describe, expect, it } from "vitest";
 import {
   MOBOREADER_CATALOG_LIMITS,
@@ -15,9 +14,11 @@ import {
 } from "@/lib/tasks/moboreader";
 
 describe("MOBOREADER_UPSTREAM_RECOMMENDED_PAGE_SIZE (RC-3)", () => {
-  it("matches CPS's ported value (20) without touching the frozen technical ceiling (100)", () => {
+  it("matches CPS's ported value (20), as does the hard ceiling it must never exceed", () => {
     expect(MOBOREADER_UPSTREAM_RECOMMENDED_PAGE_SIZE).toBe(20);
-    expect(MOBOREADER_CATALOG_LIMITS.maxPageSize).toBe(100);
+    expect(MOBOREADER_CATALOG_LIMITS.maxPageSize).toBe(20);
+    expect(MOBOREADER_UPSTREAM_RECOMMENDED_PAGE_SIZE)
+      .toBeLessThanOrEqual(MOBOREADER_CATALOG_LIMITS.maxPageSize);
   });
 
   it("defaults to 20 with no env override", () => {

@@ -19,7 +19,7 @@ const validInput = {
   channelAppId: "app",
   pageStart: 1,
   pageEnd: 10_000,
-  pageSize: 100,
+  pageSize: 20,
   requestToken: "request-token",
   actorId: "actor",
   requestId: "request-id",
@@ -27,7 +27,7 @@ const validInput = {
 
 const payload = {
   pageIndex: 1,
-  pageSize: 100,
+  pageSize: 20,
   name: "",
   orderType: 0,
   projectType: 1,
@@ -46,7 +46,7 @@ describe("MoboReader catalog safety and parity", () => {
       mode: "dry_run",
       safetyMaxPages: MOBOREADER_CATALOG_LIMITS.defaultSafetyMaxPages,
       pageEnd: 10_000,
-      pageSize: 100,
+      pageSize: 20,
     });
     expect(validateMoboreaderCatalogScanInput(validInput, {
       NODE_ENV: "test",
@@ -56,7 +56,7 @@ describe("MoboReader catalog safety and parity", () => {
       NODE_ENV: "test",
       MOBOREADER_CATALOG_SAFETY_MAX_PAGES: "0",
     })).toThrow("safety_max_pages_invalid");
-    expect(() => validateMoboreaderCatalogScanInput({ ...validInput, pageSize: 101 }, { NODE_ENV: "test" })).toThrow("page_size_exceeded");
+    expect(() => validateMoboreaderCatalogScanInput({ ...validInput, pageSize: 21 }, { NODE_ENV: "test" })).toThrow("page_size_exceeded");
   });
 
   it("removes the retired item quota from production catalog code", () => {

@@ -13,38 +13,45 @@ export const MOBOREADER_TASK_TYPES = Object.freeze({
 
 export const MOBOREADER_CATALOG_LIMITS = Object.freeze({
   defaultSafetyMaxPages: 2_000,
-  maxPageSize: 100,
+  /**
+   * Hard ceiling on a catalog-scan task's page size, clamped to CPS's own
+   * value by the RC-3 fixup (`docs/governance/port-registry.md`).
+   *
+   * CPS v8.3.6 caps this at 20 —
+   * `worker/handlers/changdu-source-sync.ts:814`,
+   * `Math.min(positiveInteger(params.pageSize, 20), 20)` — the page shape
+   * the 2026-08-26 429 incident was probed against. That upstream limits
+   * by *request count* (~60/window), so a 20-row page is the shape the
+   * measured ~55 requests/minute pacing budget was sized for. This repo
+   * previously allowed 100, a value never probed against that host and
+   * not a CPS-parity number.
+   *
+   * One deliberate divergence from CPS: CPS silently *clamps* an
+   * over-large request down to 20, whereas
+   * `validateMoboreaderCatalogScanInput` below *rejects* it with
+   * `page_size_exceeded`. Rejecting is the stricter of the two and matches
+   * this repo's existing fail-fast validation style; nothing here depends
+   * on the silent-clamp behavior.
+   */
+  maxPageSize: 20,
   ttlMs: 6 * 60 * 60 * 1_000,
 });
 
 /**
- * RC-3 upstream-pacing note (`docs/governance/port-registry.md`): CPS
- * v8.3.6 caps its catalog page size at 20
- * (`worker/handlers/changdu-source-sync.ts:814`,
- * `Math.min(positiveInteger(params.pageSize, 20), 20)`), matching the page
- * shape observed during the 2026-08-26 429 incident. RC-3 was scoped to
- * port that same 20-row ceiling here as `MOBOREADER_CATALOG_LIMITS.maxPageSize`.
+ * CPS-parity *default* page size for a newly assembled catalog-scan task.
+ * CPS's default is likewise 20 —
+ * `worker/handlers/changdu-source-sync.ts:814`'s
+ * `positiveInteger(params.pageSize, 20)` fallback.
  *
- * That literal change was **not applied**: `MOBOREADER_CATALOG_LIMITS.maxPageSize`
- * is asserted at 100 by frozen tests this port must not modify —
- * `tests/backend/tasks/moboreader.test.ts`'s `validInput`/`payload`
- * fixtures use `pageSize: 100` as the happy-path case (`:22`, `:30`,
- * matched at `:45-50` and parsed at `:72`), and lowering the ceiling to 20
- * would make those calls throw `page_size_exceeded` /
- * `catalog_payload_invalid` instead. `MOBOREADER_CATALOG_LIMITS.maxPageSize`
- * therefore stays 100 for the technical ceiling `validateMoboreaderCatalogScanInput`
- * enforces.
+ * Distinct from `MOBOREADER_CATALOG_LIMITS.maxPageSize` above only in
+ * role: that is the ceiling `validateMoboreaderCatalogScanInput` enforces,
+ * this is what a caller expressing no preference should send. Both are 20
+ * today; this one is env-overridable so a scan can be tuned smaller
+ * without moving the ceiling.
  *
- * This constant instead carries the CPS-parity *recommendation* (20 rows,
- * env-overridable) for whatever assembles a catalog-scan task's `pageSize`
- * — the admin UI / API route under `src/app/**` (Claude territory; not
- * touched by this port — see the port-registry entry for the exact lines
- * to update) and any scheduler default. The two upstream-pacing
- * mechanisms that do not depend on this value — the inter-request
- * throttle door and the bounded 429/503 retry/budget — are wired
- * regardless of what `pageSize` a caller picks; a caller requesting more
- * than 20 rows/page is not itself unsafe under those two, only a
- * deviation from CPS's own probed-safe page shape.
+ * The two upstream-pacing mechanisms that depend on neither value — the
+ * inter-request throttle door and the bounded 429/503 retry/budget — are
+ * wired regardless of what `pageSize` a caller picks.
  */
 export const MOBOREADER_UPSTREAM_RECOMMENDED_PAGE_SIZE = 20;
 export const MOBOREADER_UPSTREAM_RECOMMENDED_PAGE_SIZE_ENV = "MOBOREADER_UPSTREAM_RECOMMENDED_PAGE_SIZE";
