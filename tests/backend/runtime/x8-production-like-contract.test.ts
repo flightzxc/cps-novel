@@ -19,6 +19,21 @@ const grants = read("infra/postgres/grants.sql");
 const dockerignore = read(".dockerignore");
 const acceptanceReport = read("docs/operations/X8_LOCAL_PRODUCTION_LIKE_ACCEPTANCE_2026-08-26.md");
 
+/**
+ * RC-2b moved the per-level `WORKER_TASK_ALLOWLIST` / double-gate values out of
+ * literal `export FOO=bar` lines in `scripts/lib/x8-production-like-env.sh` and
+ * into `scripts/lib/x8-levels.json`, which both that helper and
+ * `scripts/acceptance/x8-validate-compose.mjs` read. The Level 0 expectations
+ * below are unchanged and still spelled out literally here — only where the
+ * helper reads them from has moved, so these assertions now check the table
+ * plus the wiring that consumes it.
+ */
+const x8Levels = JSON.parse(read("scripts/lib/x8-levels.json")) as Record<
+  string,
+  { workerTaskAllowlist: string; promoClaimRoles: string; flags: Record<string, string> }
+>;
+const LEVEL_0_ALLOWLIST = "credential.validate.v1,credential.supersede.v1,catalog_scan";
+
 describe("X8 targeted preview operator boundary", () => {
   const options = {
     taskId: "00000000-0000-4000-8000-000000000001",
@@ -68,7 +83,10 @@ describe("X8 targeted preview operator boundary", () => {
     expect(entry).toContain("src/lib/adapters/moboreader.ts:/app/src/lib/adapters/moboreader.ts:ro");
     expect(read("scripts/x8-preview-one.ts")).toContain("createMoboreaderReadAdapter({ maxAttempts: 1 })");
     expect(entry).not.toContain("write_x8_gate_state");
-    expect(envHelper).toContain("export WORKER_TASK_ALLOWLIST=credential.validate.v1,credential.supersede.v1,catalog_scan");
+    // The permanent allowlist still defaults to exactly Level 0; RC-2b only
+    // moved that value into scripts/lib/x8-levels.json.
+    expect(x8Levels["0"].workerTaskAllowlist).toBe(LEVEL_0_ALLOWLIST);
+    expect(envHelper).toContain('X8_LEVEL="${X8_LEVEL:-0}"');
   });
 });
 
@@ -178,9 +196,7 @@ describe("X8 local production-like contracts", () => {
   });
 
   it("keeps all non-catalog write gates closed and the worker allowlist at Level 0", () => {
-    expect(envHelper).toContain(
-      "export WORKER_TASK_ALLOWLIST=credential.validate.v1,credential.supersede.v1,catalog_scan",
-    );
+    expect(x8Levels["0"].workerTaskAllowlist).toBe(LEVEL_0_ALLOWLIST);
     for (const flag of [
       "FEATURE_PROMO_LINK_CLAIM",
       "PROMO_LINK_CLAIM_ALLOW_WRITE",
@@ -191,10 +207,41 @@ describe("X8 local production-like contracts", () => {
       "FEATURE_INDEXNOW_DELIVERY",
       "INDEXNOW_DELIVERY_ALLOW_WRITE",
     ]) {
-      expect(envHelper).toContain(`export ${flag}=false`);
+      expect(x8Levels["0"].flags[flag], `Level 0 ${flag}`).toBe("false");
     }
+    // Level 0 must not hand the admin UI the promo:claim grant either.
+    expect(x8Levels["0"].promoClaimRoles).toBe("");
+    // ...and the helper must actually consume that table rather than keeping
+    // its own copy of the values.
+    expect(envHelper).toContain('level_config="$(x8_level_config "$X8_LEVEL")"');
+    expect(envHelper).toContain('export "$level_key=$level_value"');
     expect(launcher).toContain("write_x8_gate_state apply");
     expect(launcher).toContain("write_x8_gate_state closed");
+  });
+
+  it("keeps the level table the single source of truth for both assertion sides", () => {
+    const validator = read("scripts/acceptance/x8-validate-compose.mjs");
+    expect(envHelper).toContain('X8_LEVELS_FILE="$X8_PROJECT_ROOT/scripts/lib/x8-levels.json"');
+    expect(validator).toContain('"..", "lib", "x8-levels.json"');
+    expect(Object.keys(x8Levels).filter((key) => key !== "_comment").sort()).toEqual(["0", "r", "uat"]);
+    // Each rung only ever adds task types to the one below it.
+    const [level0, levelUat, levelR] = ["0", "uat", "r"].map((key) => x8Levels[key].workerTaskAllowlist.split(","));
+    expect(levelUat.slice(0, level0.length)).toEqual(level0);
+    expect(levelR.slice(0, levelUat.length)).toEqual(levelUat);
+    // IndexNow stays hard-gated at every rung until X11 lands.
+    for (const level of ["0", "uat", "r"]) {
+      for (const flag of [
+        "FEATURE_INDEXNOW_OUTBOX",
+        "INDEXNOW_OUTBOX_ALLOW_WRITE",
+        "FEATURE_INDEXNOW_DELIVERY",
+        "INDEXNOW_DELIVERY_ALLOW_WRITE",
+      ]) {
+        expect(x8Levels[level].flags[flag], `${level} ${flag}`).toBe("false");
+      }
+      expect(x8Levels[level].workerTaskAllowlist).not.toContain("indexnow_delivery");
+    }
+    expect(x8Levels.uat.workerTaskAllowlist).not.toContain("sitemap_refresh");
+    expect(x8Levels.r.workerTaskAllowlist).toContain("sitemap_refresh");
   });
 
   it("ships valid shell and five read-only launch-day SQL groups", () => {
