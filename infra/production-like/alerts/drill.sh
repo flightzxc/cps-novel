@@ -40,6 +40,14 @@ source "${SCRIPT_DIR}/check-worker-locks.sh"
 # shellcheck source=infra/production-like/alerts/check-backup-freshness.sh
 source "${SCRIPT_DIR}/check-backup-freshness.sh"
 
+# NOTE (RC-7 review, verified empirically): errexit is effectively ON from here
+# on, despite the `set -uo pipefail` above. Sourcing alert-lib.sh re-enables it
+# (that file sets `-euo pipefail`), and every check-*.sh both sets it at load
+# and restores `set -e` on the way out of its own `set +e; ...; set -e` probe
+# blocks. So "one failing check never stops the others" is delivered by the
+# `|| ...` guard on each call below, NOT by the absence of -e. Keep every check
+# invocation guarded; an unguarded command here would abort the whole batch.
+
 pass_count=0
 fail_count=0
 

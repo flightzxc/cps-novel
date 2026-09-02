@@ -17,13 +17,13 @@ fail-closed 语义搬到 cps-novel 的 X8 本地 production-like 环境
 `docs/governance/*` 一律未动；下方"接线建议"只是文本片段,由复核者决定是否、
 何时落地。
 
-**已知合规缺口，留给复核者处理**：仓库 `CLAUDE.md` §2 第 5 条要求"从 CPS 搬运
-代码一律复制+改造，并登记 `docs/governance/port-registry.md`"，但本单硬约束
-明确禁止改动 `docs/governance/*`。下表列出的四条 CPS 出处因此**尚未登记**到
-port-registry，需要复核者在下一个允许改动该文件的批次里补登记（`baseline_commit`
-建议沿用 `port-registry.md` 里 RC-1 条目已用的同一个 v8.3.6 peeled commit
-`16f2e4cfca51f46af0dede899ecf6242a770bbd0`，与本仓库同一只读路径
-`/Users/chenweifeng/Documents/产品原型及文档/cps项目/cps-admin` 一致）。
+**合规登记（复核轮已补齐）**：仓库 `CLAUDE.md` §2 第 5 条要求"从 CPS 搬运代码
+一律复制+改造，并登记 `docs/governance/port-registry.md`"。施工单硬约束禁止改动
+`docs/governance/*`，故建单时未登记；**复核轮已在 `port-registry.md` 补上 RC-7
+条目**（`baseline_commit` 沿用 RC-1 同一个 v8.3.6 peeled commit
+`16f2e4cfca51f46af0dede899ecf6242a770bbd0`），`port_kind` 记为
+`COPY_SEMANTICS_ONLY`——判据逐条照搬，载体由 UptimeRobot Keyword 监控改为
+脚本 + 占位推送（见 §1.1）。
 
 ## 1. 三条判据的 CPS 出处与逐项对应
 
@@ -47,6 +47,17 @@ CPS 真正的机制是：**HTTP 端点吐出带成功关键词的紧凑 JSON，�
 一个通用出站 webhook 推送，让 Owner 把 `ALERT_PUSH_ENDPOINT`/`ALERT_PUSH_TOKEN`
 指到短剧现有告警落地的同一个下游通道（Owner 决定复用现有通道，而不是新建）。
 
+### 1.1 「复用短剧通道」在生产上怎么落（复核补充）
+
+短剧那条链是**拉取式**的：UptimeRobot 定时 GET 端点、在响应体找关键词，通知由它自己发；
+CPS 仓里**没有 webhook 接收端**，所以 `ALERT_PUSH_ENDPOINT` 并没有一个「短剧现有下游 URL」
+可指——上一段措辞易被读成有，特此更正。生产上复用同一条通道的正确落法是照搬载体：给海阅
+公开关键词端点、在同一个 UptimeRobot 账号建 Keyword 监控、复用已配好的通知联系人。
+`/api/health` 已具备该形状（`ok` 为首字段，紧凑序列化出 `"ok":true`，失败 503）；
+backup / worker 两条**当前没有对应端点**，由 RC-7b 另做，不在本单。
+本脚本链因此**不是**那条生产通道的替代品，而是补充：X8 只监听 `127.0.0.1`，外部 SaaS
+够不到，故用本地脚本 + 宿主 cron 覆盖同一套判据。两者可并存，判据一致、载体不同。
+
 | # | cps-novel 检查脚本 | 判据 | CPS 出处（只读，v8.3.6） | 阈值/来源 |
 | --- | --- | --- | --- | --- |
 | ① | `check-health.sh` | HTTP 200 且响应体含 `"ok":true` | `src/app/api/health/backup/route.ts` 头注释 + `tests/health-backup-route.test.ts:63-65`（Keyword 而非状态码） | 无（存在性判据） |
@@ -65,8 +76,11 @@ infra/production-like/alerts/drill.sh                     演练脚本（keyword
 docs/operations/ALERTS_RUNBOOK_2026-09-03.md              本文件
 ```
 
-所有脚本 `set -euo pipefail`（`run-all.sh`/`drill.sh` 用 `set -uo pipefail`，
-故意不用 `-e`，因为它们要在某个检查失败后继续跑剩下的检查）。为兼容本机
+所有脚本 `set -euo pipefail`；`run-all.sh`/`drill.sh` 顶部写的是 `set -uo pipefail`，
+**但复核实测 errexit 实际仍是开的**——`source alert-lib.sh` 会把 `-e` 重新打开，
+且每个 `check-*.sh` 退出自己的 `set +e; ...; set -e` 探测块时也会把 `-e` 还原。
+所以"某个检查失败后继续跑剩下的检查"这条契约，是靠每个调用点的 `|| ...` 兜住的，
+不是靠没有 `-e`；改这两个脚本时必须保持每个检查调用都带 `||` 守卫。为兼容本机
 `/bin/bash` 3.2（macOS 默认版本，无 `declare -A`）与目标容器/生产 Linux 主机
 的 bash，全部脚本只用索引数组、`${var:-}`/`${var:=}`、`[[ =~ ]]`，不用关联
 数组或 4.x 专属语法。
@@ -219,7 +233,10 @@ compose 版本后，重跑一次 `drill.sh` 作为回归；不需要接入 cron�
   必须先满足）。落地前必须先确认执行环境装了 `psql`（见第 4 节两个接线方案
   各自的前提）。
 - **debounce 掩盖了重复告警,但一次都没送达过**：`alert_fire` 只在推送成功
-  时才写去抖状态文件（见 `alert-lib.sh` 里的注释),所以"送达失败"不会被误判
+  时才写去抖状态文件（见 `alert-lib.sh` 里的注释),且 **`DRY_RUN=1` 一律不写、
+  也不清除**去抖状态（复核修复：否则用默认 `ALERT_STATE_DIR` 做一次 dry-run
+  冒烟，会在 `/tmp/cps-novel-alerts` 留下 `.last_sent`，把随后 15 分钟内的真实
+  告警静默掉——dry-run 绝不能让真实链路变安静）。所以"送达失败"不会被误判
   成"已经报过不用再报"；如果发现某个 key 长期不报,先查
   `${ALERT_STATE_DIR}/<key>.last_sent` 是否存在、`ALERT_PUSH_ENDPOINT` 是否
   配置。
@@ -240,8 +257,8 @@ compose 版本后，重跑一次 `drill.sh` 作为回归；不需要接入 cron�
 - **`ALERT_PUSH_ENDPOINT` 未接线前，所有告警只记日志不真正送达任何人**：这是
   预期状态（Owner 决定复用短剧现有通道，具体端点/token 由 Owner 在部署时
   填入,本单不知道也不应该知道那个值）。
-- **`docs/governance/port-registry.md` 未登记本单四条 CPS 出处**：见第 0 节,
-  硬约束与仓库自身治理规则冲突,留给复核者在允许改动该文件时补登记。
+- ~~`docs/governance/port-registry.md` 未登记本单四条 CPS 出处~~：**复核轮已补登记**
+  （RC-7 小节，`COPY_SEMANTICS_ONLY`），见第 0 节。
 - **`fail_closed_run` 辅助函数**：`alert-lib.sh` 里提供,`check-backup-freshness.sh`
   的 docker-exec 分支实际调用了它；其余检查脚本用的是等价的内联
   `set +e; ...; rc=$?; set -e` 模式（先写好再决定要不要抽成公共辅助,两种写法

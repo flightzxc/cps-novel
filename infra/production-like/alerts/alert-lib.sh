@@ -67,8 +67,19 @@ alert_should_suppress() {
   [[ ${delta} -lt ${ALERT_DEBOUNCE_SECONDS} ]]
 }
 
+# Records that an alert for this key was delivered, starting its debounce
+# window. DRY_RUN never writes it: a dry run that left a real .last_sent behind
+# would silently suppress the next *genuine* alert for up to
+# ALERT_DEBOUNCE_SECONDS — a dry run must never be able to make the live chain
+# quieter. Skipping the write only ever costs an extra (undelivered) dry-run
+# alert, which is the fail-closed direction. drill.sh is unaffected: it asserts
+# on the fire counter, and each of its scenarios uses a distinct key.
 alert_mark_sent() {
   local key="$1" file
+  if [[ "${DRY_RUN}" == "1" ]]; then
+    alert_log "[DRY_RUN] debounce state NOT recorded for key=${key} (a dry run must never suppress a later real alert)"
+    return 0
+  fi
   file="$(alert_debounce_file "${key}")"
   date +%s > "${file}"
 }
@@ -78,12 +89,19 @@ alert_mark_sent() {
 # silently swallowed by a stale debounce window, and so an operator watching
 # ALERT_STATE_DIR can see which keys are currently "open".
 alert_recover() {
+# DRY_RUN is read-only here too, for the same reason as alert_mark_sent: a dry
+# run must observe the live debounce state, never mutate it.
   local key="$1" file
   file="$(alert_debounce_file "${key}")"
-  if [[ -f "${file}" ]]; then
-    rm -f "${file}"
-    alert_log "recovered: key=${key} (debounce state cleared)"
+  if [[ ! -f "${file}" ]]; then
+    return 0
   fi
+  if [[ "${DRY_RUN}" == "1" ]]; then
+    alert_log "[DRY_RUN] would clear debounce state for key=${key} (not clearing)"
+    return 0
+  fi
+  rm -f "${file}"
+  alert_log "recovered: key=${key} (debounce state cleared)"
 }
 
 # Fired-alert counter, file-backed rather than a plain shell variable on
