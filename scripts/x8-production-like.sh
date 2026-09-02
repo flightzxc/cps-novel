@@ -20,7 +20,11 @@ usage() {
     '       scripts/x8-production-like.sh promo-fixture --source-item <id> --channel-account <id> --target-url <url> [--apply]' \
     '       scripts/x8-production-like.sh health-sql' \
     '       scripts/x8-production-like.sh verify' \
-    '       scripts/x8-production-like.sh accept' >&2
+    '       scripts/x8-production-like.sh accept' \
+    '' \
+    'env: X8_LEVEL=0|uat|r (default 0) selects the WORKER_TASK_ALLOWLIST /' \
+    '     double-gate rung from scripts/lib/x8-levels.json; invalid values' \
+    '     fail fast in prepare_x8_environment().' >&2
   exit 64
 }
 
@@ -84,8 +88,17 @@ validate_rendered_topology() {
     echo "ERROR: X8 public/admin origin drift" >&2
     exit 65
   }
-  [[ "$WORKER_TASK_ALLOWLIST" == "credential.validate.v1,credential.supersede.v1,catalog_scan" ]] || {
-    echo "ERROR: X8 worker allowlist drift" >&2
+  # RC-2b: the expected allowlist depends on X8_LEVEL (0/uat/r); both this
+  # exact-match assertion and the value prepare_x8_environment() exported
+  # come from the same table (scripts/lib/x8-levels.json), so they can only
+  # disagree if WORKER_TASK_ALLOWLIST was tampered with after export.
+  local expected_allowlist
+  expected_allowlist="$(x8_expected_worker_allowlist "$X8_LEVEL")" || {
+    echo "ERROR: unable to resolve expected worker allowlist for X8_LEVEL=$X8_LEVEL" >&2
+    exit 65
+  }
+  [[ "$WORKER_TASK_ALLOWLIST" == "$expected_allowlist" ]] || {
+    echo "ERROR: X8 worker allowlist drift for X8_LEVEL=$X8_LEVEL: expected '$expected_allowlist', got '$WORKER_TASK_ALLOWLIST'" >&2
     exit 65
   }
   grep -RInE 'proxy_ignore_headers|server_name[[:space:]]+[^;]*drama' \

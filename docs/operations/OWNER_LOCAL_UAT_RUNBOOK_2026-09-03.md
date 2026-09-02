@@ -12,66 +12,57 @@
 2. C2b 已验收：`docs/p2/V020_RELEASE_CHECKLIST.md` Level 0 的 C2b checkbox 已勾选，
    证据行引用 commit `5a6addf`、`tests/backend/adapters/moboreader.test.ts`
    190-204/206-230 行，本轮已在 HEAD `1b9f82c` 重跑 30/30 通过（见本仓库 RC-2 交付）。
-3. 本地环境已按 Level UAT 的值起（flag/allowlist 目标值见
-   `infra/production-like/.env.uat.example`；该文件当前是**值参考**，不是脚本会读取的
-   注入点——见下文"已知限制"第一条）。
+3. 本地环境已以 `X8_LEVEL=uat` 起（flag/allowlist 目标值见
+   `infra/production-like/.env.uat.example`，该文件由 `X8_LEVEL=uat` 自动导出，本文件仅
+   作对照——见 §2.1）。
 4. claim 相关 `ChannelCapability`（`getbydataid`、`getchapterinfo`、`claimPromo`，
    `projectType=1` 小说 scope）已由 `scripts/set-channel-capability-status.ts`
    置为 `enabled`，且该次 `--apply` 的 `OperationAudit` 行可查（见下文准备阶段）。
 
 ## 2. 准备阶段（由 Claude/Codex 完成，Owner 零手工）
 
-### 2.1 起 X8 本地拓扑（Level 0 基线，命令today可用）
+### 2.1 起 X8 本地拓扑（`X8_LEVEL=uat`）
 
-以下命令序列今天可直接工作，带来 Level 0（catalog dry-run，claim/sitemap/indexnow 全
-false）的六服务拓扑；只列命令，不代表本轮已执行：
+RC-2b 给 `scripts/lib/x8-production-like-env.sh` 加了 `X8_LEVEL`
+（`0`｜`uat`｜`r`，默认 `0`，非法值在 `prepare_x8_environment()` 里 fail-fast
+退出非零并打印允许值）。三个级别精确对应的 `WORKER_TASK_ALLOWLIST` 与双闸值是
+`scripts/lib/x8-levels.json` 里的单一真源（`scripts/x8-production-like.sh` 的
+`validate_rendered_topology()` 与 `scripts/acceptance/x8-validate-compose.mjs`
+都读同一份表，逐字对应 `docs/p2/V020_RELEASE_CHECKLIST.md` 的 Level 0 / Level
+UAT / Level R 段）。把 `X8_LEVEL=uat` 放在环境里，就可以一路用现有 CLI 把六服务
+拓扑真正起到 Level UAT，Owner 全程零手工：
 
 ```bash
-scripts/x8-production-like.sh setup     # 一次性：mkcert 信任 + /etc/hosts，仅 setup 允许改宿主机
-scripts/x8-production-like.sh up        # 起六服务，拒绝抢占已被占用的端口
-scripts/x8-production-like.sh status    # docker compose ps，确认六服务健康
-scripts/x8-production-like.sh verify    # 拓扑/allowlist/nginx 反模式静态校验
+export X8_LEVEL=uat                       # 之后本 shell 里的每条命令都在 Level UAT 下运行
+scripts/x8-production-like.sh setup       # 一次性：mkcert 信任 + /etc/hosts，仅 setup 允许改宿主机
+scripts/x8-production-like.sh up          # 起六服务；WORKER_TASK_ALLOWLIST 与五项 flag 均为 Level UAT 值；
+                                           # catalog-write 门首启默认落在 apply（写闸 true），无需额外开闸
+scripts/x8-production-like.sh status      # docker compose ps，确认六服务健康
+scripts/x8-production-like.sh verify      # 拓扑/allowlist/nginx 反模式静态校验，按 X8_LEVEL=uat 的期望值断言
 ```
 
-### 2.2 现状缺口：今天的 CLI 无法把 topology 抬到 Level UAT
+需要临时收紧 catalog 写闸时，既有 `gate catalog-write on|off|dry-run` 子命令不受
+影响，在 Level UAT 下依然可用、依然只管 `FEATURE_NOVEL_CATALOG_SYNC` /
+`NOVEL_CATALOG_SYNC_ALLOW_WRITE` 这一对，与 claim/sitemap/indexnow 五项 flag（由
+`X8_LEVEL` 决定）互不冲突。
 
-`scripts/lib/x8-production-like-env.sh` 的 `prepare_x8_environment()`
-（77-84 行）把 `FEATURE_PROMO_LINK_CLAIM`、`PROMO_LINK_CLAIM_ALLOW_WRITE`、
-`FEATURE_SITEMAP_AUTO_REFRESH`、`SITEMAP_AUTO_REFRESH_ALLOW_WRITE`、
-`FEATURE_INDEXNOW_OUTBOX`、`FEATURE_INDEXNOW_DELIVERY`（及其写闸）硬编码为
-`false`，无任何开关——脚本 `usage()` 里目前只有 `gate catalog-write
-<on|off|dry-run|status>` 一个 tri-state 维度，没有 claim/sitemap/indexnow 的
-对应项。同时：
+进入 Level UAT 前，本地若已经以 `X8_LEVEL=0`（或未设置，即默认 0）跑过
+`up`，需要先 `scripts/x8-production-like.sh down` 再以 `X8_LEVEL=uat`
+重新 `up`——`WORKER_TASK_ALLOWLIST`/双闸是容器启动时的环境变量快照，不会在运行
+中的容器上热更新。
 
-- `scripts/x8-production-like.sh` 的 `validate_rendered_topology()`
-  （80-90 行）硬断言 `WORKER_TASK_ALLOWLIST` 精确等于冻结的 Level 0 三项字符串
-  `credential.validate.v1,credential.supersede.v1,catalog_scan`，不等则 `exit 65`。
-- `scripts/acceptance/x8-validate-compose.mjs`（32-34 行）对渲染后的
-  `docker compose config` 做同样的精确字符串断言，用于 `up` 内部（间接经
-  `verify_x8`）与 `accept` 路径。
+### 2.2 如何验证渲染值（不起环境）
 
-两处断言的对象都是 Level 0 的**三项**allowlist，而 Level UAT 需要**五项**
-（追加 `moboreader.preview_refresh.v1`、`promo_link.claim.v1`）。这意味着
-`up` / `verify` / `accept` 今天调用 `prepare_x8_environment()` 后就不可能把
-claim 双闸真正置为 `true` 并通过拓扑校验——不是配置遗漏，是这两处校验函数把
-Level 0 的具体值硬编码成了唯一合法值。
+`scripts/lib/x8-levels.json` 的三级值可以脱离 Docker 单独核对（RC-2b 验收时用的
+就是这条路径，见本仓库 RC-2b 交付报告）：
 
-**本轮不修改 `infra/` 下的 `.sh`/`.mjs`**（属于运维脚本，任务范围排除）。这里
-只登记需要的调整，供后续处理：
+```bash
+source scripts/lib/x8-production-like-env.sh
+x8_level_config uat              # 打印 Level UAT 的 WORKER_TASK_ALLOWLIST + 五项 flag
+x8_expected_worker_allowlist r   # 只打印 Level R 的 allowlist 精确字符串
+```
 
-- `scripts/lib/x8-production-like-env.sh:77-84` 需要新增一个类似
-  `X8_GATE_STATE_FILE` 的 claim gate 状态开关（例如 `gate claim
-  on|off|status`），仿照既有 `write_x8_gate_state`/`gate_catalog` 的 tri-state
-  实现，让 `FEATURE_PROMO_LINK_CLAIM`/`PROMO_LINK_CLAIM_ALLOW_WRITE` 可控。
-- `scripts/x8-production-like.sh:85-89`（`validate_rendered_topology`）与
-  `scripts/acceptance/x8-validate-compose.mjs:32-34` 需要把"精确等于 Level 0
-  三项字符串"的断言改为"按当前 gate 组合校验对应的允许集合"（Level 0 三项 /
-  Level UAT 五项二选一），而不是继续假设只有一种合法值。
-- 在此之前，任何要在本地真实跑通 Level UAT 六项 claim 步骤（本文第 3 节步骤
-  6-8）的人，必须先完成上述一个小改动，或者绕过 wrapper 手工
-  `docker compose -p cps-novel-x8-local -f docker-compose.yml -f
-  infra/production-like/docker-compose.yml` 直接操作并自行承担 wrapper 原本
-  负责的证据/校验职责——本 Runbook 不建议后一种做法。
+真正起环境后，用 §2.4 的 worker 启动日志核对 `effective` allowlist 与预期一致。
 
 ### 2.3 能力位脚本命令（含 evidence 参数格式）
 
@@ -205,13 +196,13 @@ stale-if-error 配置。据此代码路径，PostgreSQL 真的停止后，`/go/{
   `FEATURE_SITEMAP_AUTO_REFRESH=false`；`${SITE_URL}/sitemap.xml` 在本轮预期
   返回非 200（例如 503 或等价的"未生成"响应），这是预期行为，不是本轮要修的
   缺陷。Sitemap 的验证只在 Level R（生产）阶段做。
-- **本 Runbook 第 2.2 节登记的脚本缺口**：今天的 `scripts/x8-production-like.sh`
-  / `scripts/lib/x8-production-like-env.sh` / `scripts/acceptance/x8-validate-compose.mjs`
-  无法把六服务拓扑真正抬到 Level UAT（claim 双闸 true + 五项 allowlist）——
-  只能抬到 Level 0。在那三处的小改动（新增 claim gate 维度、把allowlist 断言
-  参数化）落地前，第 2.1-2.4 节描述的是**目标操作序列**，不是"本轮已验证可
-  执行"的序列；哪怕环境包（`infra/production-like/.env.uat.example`）里的值
-  是对的，脚本今天也会在 `validate_rendered_topology()`/
-  `x8-validate-compose.mjs` 那一步拒绝启动。
 - **步骤 15 的 CTA 302 说明**：见第 3 节步骤 15 的脚注，基于代码核实，
   `/go/{code}` 在 PostgreSQL 停止时预期不会返回 302；本项以真实观测结果为准。
+- **`X8_LEVEL` 是进程环境变量，不持久化**：每次新开 shell 或新起容器都要重新
+  `export X8_LEVEL=uat`；容器一旦以某个 level 跑起来，切换 level 需要
+  `down` 后以新 level 重新 `up`（见 §2.1），不支持热切换。
+- **RC-2b 只验证了不起容器的渲染路径**：`x8_level_config`/
+  `x8_expected_worker_allowlist` 三级渲染值，以及 `x8-validate-compose.mjs`
+  对三级合成 `docker compose config` 片段的正反向断言，均已在本轮核实（见
+  RC-2b 交付报告）；`up`/`verify`/`accept` 走真实 Docker 六服务拓扑的端到端
+  验证不在本轮范围内，留给 Owner 实际执行本 Runbook 第 3 节时验证。

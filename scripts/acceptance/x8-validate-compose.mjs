@@ -1,8 +1,29 @@
+import fs from "node:fs";
+import path from "node:path";
 import process from "node:process";
+import { fileURLToPath } from "node:url";
 
 function fail(message) {
   throw new Error(`X8 compose isolation violation: ${message}`);
 }
+
+// RC-2b: single source of truth for the per-X8_LEVEL WORKER_TASK_ALLOWLIST /
+// double-gate values is scripts/lib/x8-levels.json — scripts/lib/
+// x8-production-like-env.sh reads the same file (via `node -e`) so the two
+// can never assert different strings for the same level.
+const levelsPath = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "lib", "x8-levels.json");
+let levelTable;
+try {
+  levelTable = JSON.parse(fs.readFileSync(levelsPath, "utf8"));
+} catch (error) {
+  fail(`unable to read X8 level table at ${levelsPath}: ${error.message}`);
+}
+const allowedLevels = Object.keys(levelTable).filter((key) => key !== "_comment");
+const level = process.env.X8_LEVEL ?? "0";
+if (!allowedLevels.includes(level)) {
+  fail(`unknown X8_LEVEL "${level}" (allowed: ${allowedLevels.join(", ")})`);
+}
+const levelEntry = levelTable[level];
 
 let input = "";
 for await (const chunk of process.stdin) input += chunk;
@@ -29,8 +50,10 @@ if (web.environment?.ADMIN_CANONICAL_ORIGIN !== "https://novel.test") {
   fail("ADMIN_CANONICAL_ORIGIN is not the X8 origin");
 }
 if (worker.environment?.SITE_URL !== "https://novel.test") fail("worker SITE_URL is not the X8 origin");
-if (worker.environment?.WORKER_TASK_ALLOWLIST !== "credential.validate.v1,credential.supersede.v1,catalog_scan") {
-  fail("worker allowlist is not the frozen Level 0 set");
+if (worker.environment?.WORKER_TASK_ALLOWLIST !== levelEntry.workerTaskAllowlist) {
+  fail(
+    `worker allowlist is not the frozen X8_LEVEL=${level} set (expected "${levelEntry.workerTaskAllowlist}", got "${worker.environment?.WORKER_TASK_ALLOWLIST}")`,
+  );
 }
 for (const service of [web, worker, services.scheduler]) {
   if (service.network_mode === "host") fail("host networking is forbidden");
@@ -48,6 +71,10 @@ for (const [key, name] of Object.entries({
 })) {
   if (config.volumes?.[key]?.name !== name) fail(`${key} volume name drift`);
 }
+// RC-2b: the "must equal a value" set is unchanged; the expected value per
+// flag now comes from levelEntry.flags instead of a hard-coded "false", so
+// X8_LEVEL=uat/r can assert their own frozen true/false combination while
+// X8_LEVEL=0 keeps asserting exactly what this file asserted before.
 for (const flag of [
   "FEATURE_PROMO_LINK_CLAIM",
   "PROMO_LINK_CLAIM_ALLOW_WRITE",
@@ -56,7 +83,10 @@ for (const flag of [
   "FEATURE_INDEXNOW_OUTBOX",
   "INDEXNOW_OUTBOX_ALLOW_WRITE",
 ]) {
-  if (web.environment?.[flag] !== "false") fail(`${flag} must stay false in web`);
+  const expected = levelEntry.flags[flag];
+  if (web.environment?.[flag] !== expected) {
+    fail(`${flag} must be ${expected} in web for X8_LEVEL=${level} (got ${web.environment?.[flag]})`);
+  }
 }
 for (const flag of [
   "FEATURE_PROMO_LINK_CLAIM",
@@ -66,6 +96,9 @@ for (const flag of [
   "FEATURE_INDEXNOW_DELIVERY",
   "INDEXNOW_DELIVERY_ALLOW_WRITE",
 ]) {
-  if (worker.environment?.[flag] !== "false") fail(`${flag} must stay false in worker`);
+  const expected = levelEntry.flags[flag];
+  if (worker.environment?.[flag] !== expected) {
+    fail(`${flag} must be ${expected} in worker for X8_LEVEL=${level} (got ${worker.environment?.[flag]})`);
+  }
 }
-console.log("X8_COMPOSE_ISOLATION=PASS");
+console.log(`X8_COMPOSE_ISOLATION=PASS (X8_LEVEL=${level})`);
