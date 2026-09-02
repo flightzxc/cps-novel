@@ -4,6 +4,44 @@
 
 ---
 
+## 2026-09-03 · RC-6 `/go` 公开跳转追踪写闸与爬虫过滤
+
+- 给公开跳转路由 `GET /go/[code]` 的 `TrackingEvent` 写入加一键关闭写闸与自明爬虫过滤，
+  语义搬自 CPS v8.3.6（peeled commit `16f2e4cfca51f46af0dede899ecf6242a770bbd0`）
+  `src/lib/cps-tracking.ts` 的 `getTrackingWriteStatus`/`safeRecordTrackingEvent`/
+  `isObviousBotUserAgent`；redirect 的 302/404 判定与目标 URL 计算逐字未动，只有
+  "写或不写" 这一步受影响。
+- `src/lib/flags/feature-flags.ts`（Codex 独占目录，本次由 Claude 按任务指令跨界新增，
+  已在下方登记）新增 `isPublicTrackingWriteDisabled(env)`：env 名
+  `PUBLIC_TRACKING_WRITE_DISABLED`，精确匹配 `"1"` 或 `"true"` 时关闭，其余值（含非法值）
+  一律按未关闭处理——**默认值刻意与 CPS 相反**：CPS 生产默认关闭公开追踪写入，本仓因
+  `/go` 是唯一归因信号，默认必须开启，未设置 env 时写入照常发生。
+- 新增 `src/app/go/_lib/tracking-guard.ts`：`isObviousBotUserAgent` 原样复制 CPS 正则
+  （`bot|crawler|spider|slurp|bingpreview|facebookexternalhit|whatsapp|telegrambot|curl|wget`，
+  大小写不敏感）；`shouldRecordGoRedirect({ env, userAgent })` 先查写闸、再查 bot UA，
+  两者皆不命中才允许写。
+- `src/app/go/[code]/route.ts` 只在既有 `try { await prisma.trackingEvent.create(...) }`
+  外包一层 `if (shouldRecordGoRedirect({ userAgent }))`，其余字符不动；`catch {}` 仍照旧吞错，
+  写入失败继续不阻塞跳转。
+- `.env.example` 在 `TRACKING_HASH_SALT` 后新增 `PUBLIC_TRACKING_WRITE_DISABLED=`
+  （默认空=开启，置 1 或 true 关闭，用途为防刷/防库涨的安全阀）。
+- `docs/governance/port-registry.md` 在 "RC-1 v8.3.6 生产 tag 参考基线" 小节下补三条
+  RC-6 登记（写闸判定 `ADAPT`、bot UA 正则 `COPY`、判定顺序 `ADAPT`），未搬 CPS 的
+  accepted-event-types 白名单、限流与 cookie/visitor/session 身份模型（划给 R+1
+  Tracking 全链）。
+- 测试新增两个文件（未改任何既有 `tests/backend/**` 文件）：
+  `tests/backend/public/go-tracking-guard.test.ts`（纯函数单测，`isObviousBotUserAgent`
+  按 CPS 正则逐 token 覆盖 + `shouldRecordGoRedirect` 的写闸/bot/顺序/非法值/空 UA
+  分支）与 `tests/backend/public/go-redirect-tracking-gate.test.ts`（路由级集成测试：
+  写闸关不写仍 302、bot UA 不写仍 302、正常 UA 写入且 302、`create` 抛错仍 302 的既有
+  行为回归、未知码 404 与写闸状态无关）。`typecheck`/`lint`/`test:ui`/`test:backend`
+  结果详见提交记录；`test:backend` 里 `publish-gate/no-bypass.test.ts` 的既有基线失败
+  与本轮无关，照实保留未处理。
+- 明确没做：未搬 CPS 的 cookie（`cps_visitor_id`/`cps_session_id`）、访客/会话身份、
+  限流或多事件类型白名单；未把 `route.ts` 的同步 `await ... catch {}` 改成 CPS 的
+  `void ...catch()` fire-and-forget 形态；未碰 `prisma/`、`src/server/`、`worker/**`、
+  `src/lib/tasks/**`、`src/lib/adapters/**`；未写数据库、未 merge、未 push、未打 tag。
+
 ## 2026-09-03 · RC-1 推广链接领取正式后台入口
 
 - 在 `/catalog-sync` 的来源条目表格加多选复选框 + "领取推广链接"工具栏按钮，打开

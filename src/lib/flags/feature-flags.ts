@@ -76,3 +76,34 @@ export function isPromoLinkClaimEnabled(env: NodeJS.ProcessEnv = process.env): b
 export function isPromoLinkClaimWriteAllowed(env: NodeJS.ProcessEnv = process.env): boolean {
   return env[PROMO_LINK_CLAIM_ALLOW_WRITE_FLAG] === "true";
 }
+
+// -----------------------------------------------------------------------
+// RC-6 (`/go` redirect tracking write gate). Semantics ported from CPS
+// `getTrackingWriteStatus`/`isPublicTrackingWriteDisabled`
+// (`src/lib/cps-tracking.ts:42-56`, v8.3.6 `16f2e4cfca51f46af0dede899ecf6242a770bbd0`),
+// collapsed to a single flag: CPS ORs two independent env vars
+// (`CPS_PUBLIC_TRACKING_WRITE_DISABLED` / `CPS_TRACKING_DISABLED`) because it
+// has several tracked event types; `/go` is this project's only write path,
+// so one flag is enough. registered: docs/governance/feature-flag-registry.md.
+//
+// Deliberately inverted default from CPS. CPS ships this closed by default
+// (`.env.example`/`docker-compose.yml` both default `CPS_PUBLIC_TRACKING_WRITE_DISABLED`
+// to `1`) because CPS has richer attribution signals elsewhere and treats
+// public tracking as opt-in. `/go` is this project's *only* attribution
+// signal, so unset must mean writes stay ON here — the opposite of CPS's
+// safe-closed default.
+//
+// Exact-match parsing (`"1"` or `"true"`), matching this file's
+// `一 flag 一函数、=== "true"` discipline rather than CPS's regex-based
+// `isTruthyEnv`. An unrecognized value (e.g. "false", "0", "yes", garbage)
+// is treated as "not disabled" rather than fail-fast throwing: this flag's
+// safe default is open (writes on), so a misconfigured value must not
+// silently kill the only attribution signal.
+// -----------------------------------------------------------------------
+export const PUBLIC_TRACKING_WRITE_DISABLED_FLAG = "PUBLIC_TRACKING_WRITE_DISABLED";
+
+/** Default (unset) is false — tracking writes stay ON. Only "1" or "true" turns them off. */
+export function isPublicTrackingWriteDisabled(env: NodeJS.ProcessEnv = process.env): boolean {
+  const value = env[PUBLIC_TRACKING_WRITE_DISABLED_FLAG];
+  return value === "1" || value === "true";
+}

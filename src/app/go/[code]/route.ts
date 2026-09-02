@@ -4,6 +4,7 @@ import { prisma } from "@/app/_lib/public-deps";
 import { isPromoReady } from "@/server/publication/visibility";
 
 import { getRequestIp, hashSensitive, normalizeRedirectUrl } from "../_lib/redirect-safety";
+import { shouldRecordGoRedirect } from "../_lib/tracking-guard";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -55,21 +56,23 @@ export async function GET(request: NextRequest, { params }: GoRouteProps): Promi
   try {
     const ip = getRequestIp(request.headers);
     const userAgent = request.headers.get("user-agent");
-    await prisma.trackingEvent.create({
-      data: {
-        eventType: "go_redirect",
-        articleId: null,
-        novelId: promoLink.novelId,
-        promoLinkId: promoLink.id,
-        publicRedirectCode: promoLink.publicRedirectCode,
-        sessionHash: null,
-        requestHash: null,
-        ipHash: ip ? hashSensitive(ip) : null,
-        userAgentHash: userAgent ? hashSensitive(userAgent) : null,
-        saltVersion: 1,
-        context: {},
-      },
-    });
+    if (shouldRecordGoRedirect({ userAgent })) {
+      await prisma.trackingEvent.create({
+        data: {
+          eventType: "go_redirect",
+          articleId: null,
+          novelId: promoLink.novelId,
+          promoLinkId: promoLink.id,
+          publicRedirectCode: promoLink.publicRedirectCode,
+          sessionHash: null,
+          requestHash: null,
+          ipHash: ip ? hashSensitive(ip) : null,
+          userAgentHash: userAgent ? hashSensitive(userAgent) : null,
+          saltVersion: 1,
+          context: {},
+        },
+      });
+    }
   } catch {
     // Tracking must never block or fail the redirect.
   }
