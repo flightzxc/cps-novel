@@ -13,9 +13,12 @@ PRODUCTION_CREATE_REPLACE=REGISTERED_AFTER_TEST_GATE
 
 add/replace 最终采用同步 Web 事务：浏览器通过 HTTPS 提交新 JWT；明文只在该请求内短暂
 存在；Web 完成本地 JWT 结构/payload/exp 检查，使用版本化
-`CHANNEL_CREDENTIAL_ENCRYPTION_KEY_V1` 加密，并在单一 PostgreSQL 事务中完成 fingerprint
+Credential secret 文件中 active 版本的 key 加密，并在单一 PostgreSQL 事务中完成 fingerprint
 reservation、旧 active supersede、新 Credential、账户 validation metadata、变更日志和 operation
 audit。响应只有 `CredentialMetadataView`，不创建 GenericTask。
+
+P0-1 后 active 版本由非秘密的 `CHANNEL_CREDENTIAL_ACTIVE_KEY_VERSION` 指定；加密 key 和独立
+fingerprint key 仅通过 `*_FILE` 指向的 Docker secret 读取，不再接受密钥材料 env。
 
 Web 可以持 Credential 加密 key 并 INSERT `encrypted_secret`，但 PostgreSQL 列级权限继续拒绝
 Web SELECT 该列，代码也不提供历史密文读取或解密入口。Worker 持同一 key，独占持久化密文的

@@ -142,7 +142,7 @@ async function seedFoundation() {
     data: {
       id: ids.credential,
       channelAccountId: ids.account,
-      encryptedSecret: new Uint8Array(encryptCredentialSecretForWorker("test-jwt", ids.account, ids.credential)),
+      encryptedSecret: new Uint8Array(encryptCredentialSecretForWorker("test-jwt", ids.account, ids.credential, 1)),
       keyVersion: 1,
       secretFingerprint: `hmac-sha256:v1:${"a".repeat(64)}`,
       fingerprintPrefix: "aaaaaaaaaaaa",

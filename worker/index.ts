@@ -1,5 +1,6 @@
 import { pathToFileURL } from "node:url";
 import { PrismaClient } from "@prisma/client";
+import { assertCredentialKeyringReady } from "../src/lib/credentials/keyring";
 import {
   buildWorkerAllowlist,
   createHandlerRegistry,
@@ -69,6 +70,7 @@ export function createWorkerHandlers(prisma: PrismaClient) {
 }
 
 export async function main(): Promise<void> {
+  assertCredentialKeyringReady(process.env);
   const shutdownDrainTimeoutMs = parseShutdownDrainTimeoutEnv(
     process.env.WORKER_SHUTDOWN_DRAIN_TIMEOUT_MS,
   );

@@ -79,9 +79,16 @@ describe("credential web boundary", () => {
       path.resolve(process.cwd(), "src/lib/credentials/web-ingress-crypto.ts"),
       "utf8",
     );
+    const keyring = await readFile(
+      path.resolve(process.cwd(), "src/lib/credentials/keyring.ts"),
+      "utf8",
+    );
     expect(webCrypto).toMatch(/createCipheriv/);
-    expect(webCrypto).toMatch(/CHANNEL_CREDENTIAL_ENCRYPTION_KEY_V/);
+    expect(webCrypto).toMatch(/loadCredentialKeyring/);
     expect(webCrypto).not.toMatch(/createDecipheriv|function decrypt|export function decrypt/);
+    expect(keyring).toMatch(/readFileSync/);
+    expect(keyring).toMatch(/CHANNEL_CREDENTIAL_ENCRYPTION_KEY_V\{n\}_FILE/);
+    expect(keyring).toMatch(/credential key material must use secret files/);
 
     const service = await readFile(
       path.resolve(process.cwd(), "src/server/credentials/service.ts"),
@@ -107,7 +114,16 @@ describe("credential web boundary", () => {
       "utf8",
     );
     expect(workerCrypto).toMatch(/createDecipheriv/);
-    expect(workerCrypto).toMatch(/CHANNEL_CREDENTIAL_ENCRYPTION_KEY_V/);
-    expect(workerCrypto).toMatch(/CHANNEL_CREDENTIAL_FINGERPRINT_KEY/);
+    expect(workerCrypto).toMatch(/loadCredentialKeyring/);
+  });
+
+  it("permanently disables the raw-SQL Credential importer", async () => {
+    const importer = await readFile(
+      path.resolve(process.cwd(), "scripts/x8-import-moboreader-canary-credential.mjs"),
+      "utf8",
+    );
+    expect(importer).toContain("retired credential importer");
+    expect(importer).toContain("process.exitCode = 64");
+    expect(importer).not.toMatch(/INSERT INTO|encrypted_secret|createCipheriv|createHmac/);
   });
 });

@@ -63,13 +63,18 @@ metadata="$(docker run --rm --pull never --network none --entrypoint node "$CPS_
 echo "IMAGE_METADATA=PASS"
 
 "${compose[@]}" exec -T web node -e '
-  const required = ["DATABASE_URL", "APP_VERSION", "GIT_COMMIT", "NEXT_PUBLIC_BUILD_VERSION", "SITE_URL", "SITEMAP_STATIC_DIR", "TRACKING_HASH_SALT", "TZ", "TOTP_ENCRYPTION_KEY", "CHANNEL_CREDENTIAL_ENCRYPTION_KEY_V1", "CHANNEL_CREDENTIAL_FINGERPRINT_KEY"];
-  if (required.some((key) => !process.env[key])) process.exit(1);
+  const fs = require("node:fs");
+  const required = ["DATABASE_URL", "APP_VERSION", "GIT_COMMIT", "NEXT_PUBLIC_BUILD_VERSION", "SITE_URL", "SITEMAP_STATIC_DIR", "TRACKING_HASH_SALT", "TZ", "TOTP_ENCRYPTION_KEY", "CHANNEL_CREDENTIAL_ACTIVE_KEY_VERSION", "CHANNEL_CREDENTIAL_ENCRYPTION_KEY_V1_FILE", "CHANNEL_CREDENTIAL_FINGERPRINT_KEY_FILE"];
+  const files = ["CHANNEL_CREDENTIAL_ENCRYPTION_KEY_V1_FILE", "CHANNEL_CREDENTIAL_FINGERPRINT_KEY_FILE"];
+  const forbidden = ["CHANNEL_CREDENTIAL_ENCRYPTION_KEY_V1", "CHANNEL_CREDENTIAL_FINGERPRINT_KEY"];
+  if (required.some((key) => !process.env[key]) || files.some((key) => !fs.existsSync(process.env[key])) || forbidden.some((key) => key in process.env)) process.exit(1);
 ' >/dev/null
 "${compose[@]}" exec -T worker node -e '
-  const required = ["DATABASE_URL", "SITE_URL", "SITEMAP_STATIC_DIR", "TZ", "WORKER_TASK_ALLOWLIST", "CHANNEL_CREDENTIAL_ENCRYPTION_KEY_V1", "CHANNEL_CREDENTIAL_FINGERPRINT_KEY"];
-  const forbidden = ["TOTP_ENCRYPTION_KEY"];
-  if (required.some((key) => !process.env[key]) || forbidden.some((key) => key in process.env)) process.exit(1);
+  const fs = require("node:fs");
+  const required = ["DATABASE_URL", "SITE_URL", "SITEMAP_STATIC_DIR", "TZ", "WORKER_TASK_ALLOWLIST", "CHANNEL_CREDENTIAL_ACTIVE_KEY_VERSION", "CHANNEL_CREDENTIAL_ENCRYPTION_KEY_V1_FILE", "CHANNEL_CREDENTIAL_FINGERPRINT_KEY_FILE"];
+  const files = ["CHANNEL_CREDENTIAL_ENCRYPTION_KEY_V1_FILE", "CHANNEL_CREDENTIAL_FINGERPRINT_KEY_FILE"];
+  const forbidden = ["TOTP_ENCRYPTION_KEY", "CHANNEL_CREDENTIAL_ENCRYPTION_KEY_V1", "CHANNEL_CREDENTIAL_FINGERPRINT_KEY"];
+  if (required.some((key) => !process.env[key]) || files.some((key) => !fs.existsSync(process.env[key])) || forbidden.some((key) => key in process.env)) process.exit(1);
 ' >/dev/null
 "${compose[@]}" exec -T scheduler node -e '
   const forbidden = [

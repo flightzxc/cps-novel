@@ -1,15 +1,5 @@
 import { createCipheriv, createHmac, randomBytes } from "node:crypto";
-
-const CREDENTIAL_ENCRYPTION_KEY_VERSION = 1;
-
-function canonicalKey(env: NodeJS.ProcessEnv, name: string): Buffer {
-  const value = env[name]?.trim() ?? "";
-  const decoded = Buffer.from(value, "base64");
-  if (!value || decoded.length !== 32 || decoded.toString("base64") !== value) {
-    throw new Error(`${name} must be canonical 32-byte base64`);
-  }
-  return decoded;
-}
+import { loadCredentialKeyring } from "./keyring";
 
 function credentialAad(channelAccountId: string, credentialId: string): Buffer {
   return Buffer.from(
@@ -32,11 +22,12 @@ export function encryptNewCredentialSecret(input: {
   const secret = input.secret.trim();
   if (!secret) throw new Error("Credential secret is empty");
   const env = input.env ?? process.env;
+  const keyring = loadCredentialKeyring(env);
   const iv = randomBytes(12);
-  const keyVersion = CREDENTIAL_ENCRYPTION_KEY_VERSION;
+  const keyVersion = keyring.activeVersion;
   const cipher = createCipheriv(
     "aes-256-gcm",
-    canonicalKey(env, `CHANNEL_CREDENTIAL_ENCRYPTION_KEY_V${keyVersion}`),
+    keyring.encryptionKey(keyVersion),
     iv,
   );
   cipher.setAAD(credentialAad(input.channelAccountId, input.credentialId));
@@ -55,9 +46,10 @@ export function fingerprintNewCredentialSecret(
   secret: string,
   env: NodeJS.ProcessEnv = process.env,
 ): { full: string; prefix: string } {
+  const keyring = loadCredentialKeyring(env);
   const digest = createHmac(
     "sha256",
-    canonicalKey(env, "CHANNEL_CREDENTIAL_FINGERPRINT_KEY"),
+    keyring.fingerprintKey,
   )
     .update("cps-novel:credential-fingerprint:v1\0")
     .update(secret.trim())

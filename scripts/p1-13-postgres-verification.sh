@@ -40,10 +40,11 @@ worker_password="$(openssl rand -hex 24)"
 scheduler_password="$(openssl rand -hex 24)"
 analyst_password="$(openssl rand -hex 24)"
 backup_password="$(openssl rand -hex 24)"
-credential_encryption_key="$(openssl rand -base64 32)"
-credential_fingerprint_key="$(openssl rand -base64 32)"
 
 printf '%s' "$bootstrap_password" >"$secret_dir/bootstrap-password"
+openssl rand 32 | openssl base64 -A >"$secret_dir/credential-v1.key"
+openssl rand 32 | openssl base64 -A >"$secret_dir/credential-v2.key"
+openssl rand 32 | openssl base64 -A >"$secret_dir/credential-fingerprint.key"
 for role_password in \
   "migration_owner:${migration_password}" \
   "web_app:${web_password}" \
@@ -128,8 +129,10 @@ export P1_13_DATABASE_TEST=1
 export P2_05_DATABASE_TEST=1
 export P2_05_OWNER_DATABASE_URL="$owner_url"
 export P2_05_WORKER_DATABASE_URL="$worker_url"
-export CHANNEL_CREDENTIAL_ENCRYPTION_KEY_V1="$credential_encryption_key"
-export CHANNEL_CREDENTIAL_FINGERPRINT_KEY="$credential_fingerprint_key"
+export CHANNEL_CREDENTIAL_ACTIVE_KEY_VERSION=2
+export CHANNEL_CREDENTIAL_ENCRYPTION_KEY_V1_FILE="$secret_dir/credential-v1.key"
+export CHANNEL_CREDENTIAL_ENCRYPTION_KEY_V2_FILE="$secret_dir/credential-v2.key"
+export CHANNEL_CREDENTIAL_FINGERPRINT_KEY_FILE="$secret_dir/credential-fingerprint.key"
 
 server_version="$(docker exec "$container_name" psql --no-psqlrc -U p113_admin -d "$database_name" -Atc "SHOW server_version")"
 printf 'POSTGRES_VERSION=%s\n' "$server_version"

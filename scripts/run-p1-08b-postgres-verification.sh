@@ -31,9 +31,10 @@ worker_password="$(openssl rand -hex 24)"
 scheduler_password="$(openssl rand -hex 24)"
 analyst_password="$(openssl rand -hex 24)"
 backup_password="$(openssl rand -hex 24)"
-credential_encryption_key="$(openssl rand -base64 32)"
-credential_fingerprint_key="$(openssl rand -base64 32)"
 printf '%s' "$bootstrap_password" >"$secret_dir/bootstrap-password"
+openssl rand 32 | openssl base64 -A >"$secret_dir/credential-v1.key"
+openssl rand 32 | openssl base64 -A >"$secret_dir/credential-v2.key"
+openssl rand 32 | openssl base64 -A >"$secret_dir/credential-fingerprint.key"
 for role_password in \
   "migration_owner:${migration_password}" \
   "web_app:${web_password}" \
@@ -102,31 +103,35 @@ DATABASE_URL="$owner_url" npx prisma migrate diff \
 docker exec -i "$container_name" psql --no-psqlrc -U p108b_admin -d "$database_name" <infra/postgres/grants.sql >/dev/null
 DATABASE_URL="$owner_url" node scripts/check-database-dictionary-drift.mjs
 
-P1_06_DATABASE_TEST=1 \
-P1_06_OWNER_DATABASE_URL="$owner_url" \
-P1_06_WEB_DATABASE_URL="$web_url" \
-P1_06_WORKER_DATABASE_URL="$worker_url" \
-P1_06_ANALYST_DATABASE_URL="$analyst_url" \
-P1_06_BACKUP_DATABASE_URL="$backup_url" \
-npx vitest run --project node tests/integration/database/p1-06-postgres.test.ts
+if [[ "${P0_1_CREDENTIAL_ONLY:-0}" != "1" ]]; then
+  P1_06_DATABASE_TEST=1 \
+  P1_06_OWNER_DATABASE_URL="$owner_url" \
+  P1_06_WEB_DATABASE_URL="$web_url" \
+  P1_06_WORKER_DATABASE_URL="$worker_url" \
+  P1_06_ANALYST_DATABASE_URL="$analyst_url" \
+  P1_06_BACKUP_DATABASE_URL="$backup_url" \
+  npx vitest run --project node tests/integration/database/p1-06-postgres.test.ts
 
-P1_07_DATABASE_TEST=1 DATABASE_URL="$owner_url" \
-npx vitest run --project node tests/integration/tasks/p1-07-postgres.test.ts
+  P1_07_DATABASE_TEST=1 DATABASE_URL="$owner_url" \
+  npx vitest run --project node tests/integration/tasks/p1-07-postgres.test.ts
+
+  P1_08B_DATABASE_TEST=1 \
+  P1_08B_OWNER_DATABASE_URL="$owner_url" \
+  P1_08B_WEB_DATABASE_URL="$web_url" \
+  P1_08B_WORKER_DATABASE_URL="$worker_url" \
+  P1_08B_SCHEDULER_DATABASE_URL="$scheduler_url" \
+  P1_08B_ANALYST_DATABASE_URL="$analyst_url" \
+  npx vitest run --project node tests/integration/auth/p1-08b-postgres-auth.test.ts
+fi
 
 P1_08B_DATABASE_TEST=1 \
 P1_08B_OWNER_DATABASE_URL="$owner_url" \
 P1_08B_WEB_DATABASE_URL="$web_url" \
 P1_08B_WORKER_DATABASE_URL="$worker_url" \
-P1_08B_SCHEDULER_DATABASE_URL="$scheduler_url" \
-P1_08B_ANALYST_DATABASE_URL="$analyst_url" \
-npx vitest run --project node tests/integration/auth/p1-08b-postgres-auth.test.ts
-
-P1_08B_DATABASE_TEST=1 \
-P1_08B_OWNER_DATABASE_URL="$owner_url" \
-P1_08B_WEB_DATABASE_URL="$web_url" \
-P1_08B_WORKER_DATABASE_URL="$worker_url" \
-CHANNEL_CREDENTIAL_ENCRYPTION_KEY_V1="$credential_encryption_key" \
-CHANNEL_CREDENTIAL_FINGERPRINT_KEY="$credential_fingerprint_key" \
+CHANNEL_CREDENTIAL_ACTIVE_KEY_VERSION=2 \
+CHANNEL_CREDENTIAL_ENCRYPTION_KEY_V1_FILE="$secret_dir/credential-v1.key" \
+CHANNEL_CREDENTIAL_ENCRYPTION_KEY_V2_FILE="$secret_dir/credential-v2.key" \
+CHANNEL_CREDENTIAL_FINGERPRINT_KEY_FILE="$secret_dir/credential-fingerprint.key" \
 npx vitest run --project node tests/integration/credentials/p1-08b-credential-worker.test.ts
 
 server_version="$(docker exec "$container_name" psql -U p108b_admin -d "$database_name" -Atc "SHOW server_version")"
@@ -135,6 +140,11 @@ echo "POSTGRES_VERSION=${server_version}"
 echo "MIGRATION_DEPLOY=PASS"
 echo "MIGRATION_REAPPLY=PASS"
 echo "SCHEMA_DIFF=PASS"
-echo "P1_06_REGRESSION=PASS"
-echo "P1_07_REGRESSION=PASS"
+if [[ "${P0_1_CREDENTIAL_ONLY:-0}" == "1" ]]; then
+  echo "P1_06_REGRESSION=SKIPPED_P0_1_FOCUSED"
+  echo "P1_07_REGRESSION=SKIPPED_P0_1_FOCUSED"
+else
+  echo "P1_06_REGRESSION=PASS"
+  echo "P1_07_REGRESSION=PASS"
+fi
 echo "P1_08B_POSTGRES_VERIFICATION=PASS"

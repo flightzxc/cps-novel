@@ -133,7 +133,7 @@ async function createCredential(secret: string, status: "active" | "superseded" 
   const fingerprint = fingerprintCredentialSecretForWorker(secret);
   await owner.channelAccountCredential.create({ data: {
     id: credentialId, channelAccountId: accountId, credentialType: "bearer_jwt",
-    encryptedSecret: Uint8Array.from(encryptCredentialSecretForWorker(secret, accountId, credentialId)),
+    encryptedSecret: Uint8Array.from(encryptCredentialSecretForWorker(secret, accountId, credentialId, 1)),
     keyVersion: 1, secretFingerprint: fingerprint.full, fingerprintPrefix: fingerprint.prefix, status,
   } });
   if (status === "active") await owner.channelCredentialActiveFingerprint.create({ data: {
@@ -165,8 +165,13 @@ async function cycle() {
 
 describe.skipIf(!enabled).sequential("P1-08B Credential Worker", () => {
   beforeAll(async () => {
-    if (!process.env.CHANNEL_CREDENTIAL_ENCRYPTION_KEY_V1 || !process.env.CHANNEL_CREDENTIAL_FINGERPRINT_KEY) {
-      throw new Error("Disposable Worker credential keys are required");
+    if (
+      !process.env.CHANNEL_CREDENTIAL_ACTIVE_KEY_VERSION
+      || !process.env.CHANNEL_CREDENTIAL_ENCRYPTION_KEY_V1_FILE
+      || !process.env.CHANNEL_CREDENTIAL_ENCRYPTION_KEY_V2_FILE
+      || !process.env.CHANNEL_CREDENTIAL_FINGERPRINT_KEY_FILE
+    ) {
+      throw new Error("Disposable Worker credential key files are required");
     }
   });
 
@@ -199,6 +204,7 @@ describe.skipIf(!enabled).sequential("P1-08B Credential Worker", () => {
       const stored = await owner.channelAccountCredential.findUniqueOrThrow({
         where: { id: result.credentialId },
       });
+      expect(stored.keyVersion).toBe(2);
       expect(Buffer.from(stored.encryptedSecret).toString("utf8")).not.toContain(secret);
       const evidence = {
         response: result,
@@ -217,6 +223,23 @@ describe.skipIf(!enabled).sequential("P1-08B Credential Worker", () => {
       log.mockRestore();
       error.mockRestore();
     }
+  });
+
+  it("validates an active V2 Web ingress through the Worker while V1 remains readable", async () => {
+    const result = await ingest({ secret: jwt(Math.floor(Date.now() / 1000) + 3600) });
+    const stored = await owner.channelAccountCredential.findUniqueOrThrow({
+      where: { id: result.credentialId },
+    });
+    expect(stored).toMatchObject({ status: "active", keyVersion: 2 });
+
+    const task = await enqueue("validate", result.credentialId);
+    expect(await cycle()).toBe(true);
+    expect(await owner.genericTaskItem.findUniqueOrThrow({
+      where: { id: task.items[0].id },
+    })).toMatchObject({
+      status: "success",
+      result: expect.objectContaining({ status: "active" }),
+    });
   });
 
   it("stores an expired JWT as expired and rejects malformed JWTs with zero writes", async () => {

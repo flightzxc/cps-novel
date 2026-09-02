@@ -62,8 +62,9 @@ prepare_p1_12_local_environment() {
   export P1_12_WORKER_DATABASE_URL="postgresql://worker_app:${worker_password}@postgres:5432/cps_novel?schema=public"
   export P1_12_SCHEDULER_DATABASE_URL="postgresql://scheduler_app:${scheduler_password}@postgres:5432/cps_novel?schema=public"
   export TOTP_ENCRYPTION_KEY="$(read_secret_value "$P1_12_SECRET_DIR/totp.key")"
-  export CHANNEL_CREDENTIAL_ENCRYPTION_KEY_V1="$(read_secret_value "$P1_12_SECRET_DIR/credential-v1.key")"
-  export CHANNEL_CREDENTIAL_FINGERPRINT_KEY="$(read_secret_value "$P1_12_SECRET_DIR/credential-fingerprint.key")"
+  export CHANNEL_CREDENTIAL_ACTIVE_KEY_VERSION="${CHANNEL_CREDENTIAL_ACTIVE_KEY_VERSION:-1}"
+  export CHANNEL_CREDENTIAL_ENCRYPTION_KEY_V1_FILE="$P1_12_SECRET_DIR/credential-v1.key"
+  export CHANNEL_CREDENTIAL_FINGERPRINT_KEY_FILE="$P1_12_SECRET_DIR/credential-fingerprint.key"
   export TRACKING_HASH_SALT="$(read_secret_value "$P1_12_SECRET_DIR/tracking-hash-salt.key")"
 
   export P1_12_COMPOSE_PROJECT="${P1_12_COMPOSE_PROJECT:-cps-novel-p1-12}"

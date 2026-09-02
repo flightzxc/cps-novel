@@ -9,6 +9,7 @@ const read = (path: string) => readFileSync(resolve(root, path), "utf8");
 const compose = read("docker-compose.yml");
 const dockerfile = read("Dockerfile");
 const envExample = read(".env.example");
+const releaseChecklist = read("docs/p2/V020_RELEASE_CHECKLIST.md");
 
 const DOUBLE_GATE_FLAGS = [
   "FEATURE_NOVEL_CATALOG_SYNC",
@@ -59,13 +60,29 @@ describe("P1-12 Compose and image contracts", () => {
     expect(serviceBlock("scheduler")).not.toMatch(/migrate/i);
   });
 
-  it("gives Web and Worker only their explicit credential key surface", () => {
+  it("mounts Credential keys into Web and Worker only as secret files", () => {
     const web = serviceBlock("web");
     const worker = serviceBlock("worker");
-    for (const key of ["CHANNEL_CREDENTIAL_ENCRYPTION_KEY_V1", "CHANNEL_CREDENTIAL_FINGERPRINT_KEY"]) {
+    for (const key of [
+      "CHANNEL_CREDENTIAL_ACTIVE_KEY_VERSION",
+      "CHANNEL_CREDENTIAL_ENCRYPTION_KEY_V1_FILE",
+      "CHANNEL_CREDENTIAL_FINGERPRINT_KEY_FILE",
+      "channel_credential_encryption_key_v1",
+      "channel_credential_fingerprint_key",
+    ]) {
       expect(web).toContain(key);
       expect(worker).toContain(key);
     }
+    expect(web).not.toMatch(/CHANNEL_CREDENTIAL_ENCRYPTION_KEY_V1:/);
+    expect(web).not.toMatch(/CHANNEL_CREDENTIAL_FINGERPRINT_KEY:/);
+    expect(worker).not.toMatch(/CHANNEL_CREDENTIAL_ENCRYPTION_KEY_V1:/);
+    expect(worker).not.toMatch(/CHANNEL_CREDENTIAL_FINGERPRINT_KEY:/);
+    expect(compose).toContain(
+      "file: ${CHANNEL_CREDENTIAL_ENCRYPTION_KEY_V1_FILE:?CHANNEL_CREDENTIAL_ENCRYPTION_KEY_V1_FILE is required}",
+    );
+    expect(compose).toContain(
+      "file: ${CHANNEL_CREDENTIAL_FINGERPRINT_KEY_FILE:?CHANNEL_CREDENTIAL_FINGERPRINT_KEY_FILE is required}",
+    );
     expect(web).toContain("TOTP_ENCRYPTION_KEY");
     expect(worker).not.toContain("TOTP_ENCRYPTION_KEY");
     expect(worker).toContain("WORKER_TASK_ALLOWLIST: ${WORKER_TASK_ALLOWLIST:?WORKER_TASK_ALLOWLIST is required}");
@@ -80,6 +97,25 @@ describe("P1-12 Compose and image contracts", () => {
       "TRACKING_HASH_SALT: ${TRACKING_HASH_SALT:?TRACKING_HASH_SALT is required}",
     );
     expect(compose).not.toMatch(/WORKER_TASK_ALLOWLIST:\s*credential/);
+  });
+
+  it("passes the bounded promo readback policy only to the worker", () => {
+    const worker = serviceBlock("worker");
+    const web = serviceBlock("web");
+    const scheduler = serviceBlock("scheduler");
+    expect(worker).toContain(
+      "PROMO_LINK_CLAIM_READBACK_ATTEMPTS: ${PROMO_LINK_CLAIM_READBACK_ATTEMPTS:-3}",
+    );
+    expect(worker).toContain(
+      "PROMO_LINK_CLAIM_READBACK_INTERVAL_MS: ${PROMO_LINK_CLAIM_READBACK_INTERVAL_MS:-2000}",
+    );
+    expect(web).not.toContain("PROMO_LINK_CLAIM_READBACK_ATTEMPTS");
+    expect(scheduler).not.toContain("PROMO_LINK_CLAIM_READBACK_ATTEMPTS");
+    expect(envExample).toContain("PROMO_LINK_CLAIM_READBACK_ATTEMPTS=3");
+    expect(envExample).toContain("PROMO_LINK_CLAIM_READBACK_INTERVAL_MS=2000");
+    expect(releaseChecklist).toContain("PROMO_LINK_CLAIM_READBACK_ATTEMPTS=3");
+    expect(releaseChecklist).toContain("PROMO_LINK_CLAIM_READBACK_INTERVAL_MS=2000");
+    expect(releaseChecklist).toContain("getcode` 仍严格零 retry");
   });
 
   it("passes all ten double-gate variables only to their relevant processes, default off", () => {
@@ -178,8 +214,9 @@ describe("P1-12 Compose and image contracts", () => {
       "P1_12_ANALYST_RO_PASSWORD_FILE",
       "P1_12_BACKUP_ROLE_PASSWORD_FILE",
       "TOTP_ENCRYPTION_KEY",
-      "CHANNEL_CREDENTIAL_ENCRYPTION_KEY_V1",
-      "CHANNEL_CREDENTIAL_FINGERPRINT_KEY",
+      "CHANNEL_CREDENTIAL_ACTIVE_KEY_VERSION",
+      "CHANNEL_CREDENTIAL_ENCRYPTION_KEY_V1_FILE",
+      "CHANNEL_CREDENTIAL_FINGERPRINT_KEY_FILE",
       "SITE_URL",
       "TRACKING_HASH_SALT",
       "TZ",
@@ -191,6 +228,10 @@ describe("P1-12 Compose and image contracts", () => {
   it("makes the local Compose helper satisfy every new fail-closed input", () => {
     const helper = read("scripts/lib/p1-12-local-env.sh");
     expect(helper).toContain('write_secret_once "$P1_12_SECRET_DIR/tracking-hash-salt.key" base64');
+    expect(helper).toContain('export CHANNEL_CREDENTIAL_ENCRYPTION_KEY_V1_FILE="$P1_12_SECRET_DIR/credential-v1.key"');
+    expect(helper).toContain('export CHANNEL_CREDENTIAL_FINGERPRINT_KEY_FILE="$P1_12_SECRET_DIR/credential-fingerprint.key"');
+    expect(helper).not.toMatch(/export CHANNEL_CREDENTIAL_ENCRYPTION_KEY_V1=/);
+    expect(helper).not.toMatch(/export CHANNEL_CREDENTIAL_FINGERPRINT_KEY=/);
     for (const variable of [
       "NEXT_PUBLIC_BUILD_VERSION",
       "TRACKING_HASH_SALT",
@@ -198,6 +239,7 @@ describe("P1-12 Compose and image contracts", () => {
       "TZ",
       "WORKER_TASK_ALLOWLIST",
       "MOBOREADER_PREVIEW_SOURCE_APP_CODES",
+      "CHANNEL_CREDENTIAL_ACTIVE_KEY_VERSION",
     ]) {
       expect(helper).toContain(`export ${variable}=`);
     }
@@ -218,6 +260,19 @@ describe("P1-12 Compose and image contracts", () => {
     }
     expect(compose).toContain("max-size: 10m");
     expect(compose).toContain('max-file: "3"');
+  });
+
+  it("runs Credential secret preflight before Web or Worker starts serving work", () => {
+    const web = serviceBlock("web");
+    const webStart = read("scripts/start-web.sh");
+    const workerStart = read("worker/index.ts");
+    expect(web).toContain('command: ["bash", "scripts/start-web.sh"]');
+    expect(webStart.indexOf("credential-secret-preflight.ts")).toBeLessThan(
+      webStart.indexOf("exec node server.js"),
+    );
+    expect(workerStart.indexOf("assertCredentialKeyringReady(process.env)")).toBeLessThan(
+      workerStart.indexOf("const prisma = new PrismaClient()"),
+    );
   });
 
   it("bakes one immutable metadata file and aligned OCI labels from required args", () => {
@@ -267,8 +322,9 @@ describe("P1-12 Compose and image contracts", () => {
       TRACKING_HASH_SALT: "compose-contract-salt",
       TZ: "Asia/Tokyo",
       TOTP_ENCRYPTION_KEY: "totp-contract-key",
-      CHANNEL_CREDENTIAL_ENCRYPTION_KEY_V1: "credential-contract-key",
-      CHANNEL_CREDENTIAL_FINGERPRINT_KEY: "fingerprint-contract-key",
+      CHANNEL_CREDENTIAL_ACTIVE_KEY_VERSION: "1",
+      CHANNEL_CREDENTIAL_ENCRYPTION_KEY_V1_FILE: "/tmp/credential-v1",
+      CHANNEL_CREDENTIAL_FINGERPRINT_KEY_FILE: "/tmp/credential-fingerprint",
     };
     delete baseEnv.WORKER_TASK_ALLOWLIST;
     const runConfig = (env: NodeJS.ProcessEnv) => spawnSync(
