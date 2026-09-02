@@ -203,6 +203,33 @@ export const ADMIN_PUBLISH_LIFECYCLE_ACTIONS = [
   { id: "admin.novel.restore", capability: "content:takedown", mutation: true },
 ] as const satisfies AdminRegistry["actions"];
 
+/**
+ * RC-1 promo-link claim trigger.
+ *
+ * `createPromoLinkClaimTask` (`@/lib/tasks/promo-link-claim`) had zero
+ * `src/app/**` callers before this — CPS v8.3.6 parity requires an explicit-
+ * selection launcher on the sync/catalog screen (`submitChangduPromoClaim`,
+ * `src/app/(admin)/sync/actions.ts:724-766` in the read-only CPS reference).
+ * This single registration is that missing binding, composed the same way
+ * {@link ADMIN_CATALOG_SCAN_ACTIONS} and {@link ADMIN_PUBLISH_LIFECYCLE_ACTIONS}
+ * compose on top of P1-08B.
+ *
+ * One action, not two split by mode, unlike `ADMIN_CATALOG_SCAN_ACTIONS`.
+ * That split exists there because `dry_run` and `apply` ask for *different*
+ * capabilities (`content:view` vs `content:publish`) — splitting by static
+ * action id is what keeps the capability enforced independent of
+ * client-controlled input. Here there is exactly one capability for the
+ * whole claim chain, `promo:claim`, required for *both* modes (the factory
+ * writes a `GenericTask` + `OperationAudit` row every time, dry_run
+ * included — see `../../../(admin)/catalog-sync/_actions.ts`'s
+ * `enqueuePromoLinkClaimAction` header for the full reasoning). With the
+ * capability identical either way, a single action branching on `mode`
+ * carries none of the risk the catalog-scan precedent avoids.
+ */
+export const ADMIN_PROMO_LINK_CLAIM_ACTIONS = [
+  { id: "admin.promo_link_claim.enqueue", capability: "promo:claim", mutation: true },
+] as const satisfies AdminRegistry["actions"];
+
 export const P2_04_ADMIN_REGISTRY: AdminRegistry = Object.freeze({
   pageRoots: ADMIN_PAGE_ROOTS,
   // Routes: the union of every composed group. P1-08B's credential surface,
@@ -217,13 +244,15 @@ export const P2_04_ADMIN_REGISTRY: AdminRegistry = Object.freeze({
   // Actions: P2-04 itself registered no Server Action (a read slice, by
   // construction). P0-S13 added the first two mutation Actions on top of
   // P1-08B's six; PR-C2 adds two more for the catalog-scan trigger; PR-C3 adds
-  // five more for the publish/rights-transition triggers. X6/X9 add no Action:
-  // their writes are explicit, registry-bound HTTP routes whose services
-  // revalidate their auth tickets, so the Action list is unchanged by them.
+  // five more for the publish/rights-transition triggers; RC-1 adds one more
+  // for the promo-link claim trigger. X6/X9 add no Action: their writes are
+  // explicit, registry-bound HTTP routes whose services revalidate their
+  // auth tickets, so the Action list is unchanged by them.
   actions: Object.freeze([
     ...P1_08B_ADMIN_REGISTRY.actions,
     ...ADMIN_CONTENT_CREATION_ACTIONS,
     ...ADMIN_CATALOG_SCAN_ACTIONS,
     ...ADMIN_PUBLISH_LIFECYCLE_ACTIONS,
+    ...ADMIN_PROMO_LINK_CLAIM_ACTIONS,
   ]),
 });

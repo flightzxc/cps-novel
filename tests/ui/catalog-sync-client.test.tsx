@@ -4,23 +4,29 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { AdminCapabilityState } from "@/contracts";
 import { describeCreateContentOutcome, type CreateContentResult } from "@/app/(admin)/catalog-sync/_lib/outcome-copy";
+import type { ClaimChannelAppOption } from "@/app/(admin)/catalog-sync/_lib/read-channel-apps";
 import type { SourceItemRow } from "@/app/(admin)/catalog-sync/_lib/read-source-items";
 
 import { installDialogShim } from "./jsdom-dialog";
 
 /**
- * `/catalog-sync` 渲染与接线验收（P0-S13）。
+ * `/catalog-sync` 渲染与接线验收（P0-S13 + RC-1）。
  *
  * 只替换两样东西：Server Action 模块与 `next/navigation`——`admin-channel-
  * accounts.test.tsx` 定的规矩同样适用于这里。替身只记录"哪个 Action 被调、
  * 参数是什么、回传了什么"，不改组件自己的判断：dry-run 先跑、"确认创建"是否
  * 可点、每种 outcome 渲染成什么，全部走真实组件与真实的
  * `describeCreateContentOutcome`。
+ *
+ * RC-1 的 `PromoLinkClaimDialog` 沿用同一条纪律，且只通过 `CatalogSyncClient`
+ * 驱动测试——`create-content-dialog.tsx` 从未有独立测试文件，两个从这个表格
+ * 打开的对话框走同一个precedent，而不是另开一份重复的渲染脚手架。
  */
 
 const actions = vi.hoisted(() => ({
   dryRunContentCreationAction: vi.fn(),
   applyContentCreationAction: vi.fn(),
+  enqueuePromoLinkClaimAction: vi.fn(),
 }));
 
 const routerRefresh = vi.hoisted(() => vi.fn());
@@ -48,6 +54,7 @@ function row(overrides: Partial<SourceItemRow> = {}): SourceItemRow {
     status: "pending",
     novelId: null,
     lastSeenAt: "2026-08-20T00:00:00.000Z",
+    channelAppId: "channel-app-1",
     channelCode: "moboreader",
     channelName: "Moboreader",
     sourceAppCode: "mobo-app-1",
@@ -60,6 +67,19 @@ const ROWS: readonly SourceItemRow[] = [
   row(),
   row({ id: "src-2", title: "已建立的条目", status: "linked", novelId: "novel-9" }),
 ];
+
+function claimApp(overrides: Partial<ClaimChannelAppOption> = {}): ClaimChannelAppOption {
+  return {
+    id: "channel-app-1",
+    channelCode: "moboreader",
+    channelName: "Moboreader",
+    sourceAppCode: "mobo-app-1",
+    sourceAppName: "Mobo App",
+    claimCapabilityEnabled: true,
+    channelAccounts: [{ id: "acct-1", businessId: "biz-1", accountName: "主账号" }],
+    ...overrides,
+  };
+}
 
 const PLAN = {
   locale: "en" as const,
@@ -84,12 +104,23 @@ function okResult<T>(data: T) {
 }
 
 function renderPage(
-  options: { items?: readonly SourceItemRow[]; contentPublish?: AdminCapabilityState } = {},
+  options: {
+    items?: readonly SourceItemRow[];
+    contentPublish?: AdminCapabilityState;
+    claimChannelApps?: readonly ClaimChannelAppOption[];
+    promoClaimMaxBatchSize?: number;
+    promoClaimGranted?: boolean;
+    promoClaimBlockedReason?: string | null;
+  } = {},
 ) {
   return render(
     <CatalogSyncClient
       items={options.items ?? ROWS}
       contentPublish={options.contentPublish ?? "granted"}
+      claimChannelApps={options.claimChannelApps ?? [claimApp()]}
+      promoClaimMaxBatchSize={options.promoClaimMaxBatchSize ?? 50}
+      promoClaimGranted={options.promoClaimGranted ?? true}
+      promoClaimBlockedReason={options.promoClaimBlockedReason ?? null}
     />,
   );
 }
@@ -118,6 +149,7 @@ function rowOf(title: string): HTMLElement {
 beforeEach(() => {
   actions.dryRunContentCreationAction.mockReset();
   actions.applyContentCreationAction.mockReset();
+  actions.enqueuePromoLinkClaimAction.mockReset();
   routerRefresh.mockReset();
 });
 
@@ -374,5 +406,282 @@ describe("取消与关闭", () => {
     // `open`。断言的是"这棵子树真的没了"，不是"open 变成了 false"。
     expect(dialog()).toBeNull();
     expect(actions.applyContentCreationAction).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * RC-1 「领取推广链接」多选工具栏 + `PromoLinkClaimDialog`。
+ *
+ * `enqueuePromoLinkClaimAction` is mocked the same way the two
+ * content-creation actions above are — this suite only checks wiring
+ * (what the dialog passes to the action, how each outcome renders), not
+ * `createPromoLinkClaimTask`'s own business logic (covered by
+ * `tests/ui/promo-link-claim-actions.test.ts`).
+ */
+
+function checkboxFor(title: string): HTMLInputElement {
+  return within(rowOf(title)).getByRole("checkbox") as HTMLInputElement;
+}
+
+function claimToolbarButton(): HTMLButtonElement {
+  return screen.getByRole("button", { name: "领取推广链接" }) as HTMLButtonElement;
+}
+
+describe("领取推广链接 · 选择工具栏", () => {
+  it("初始未勾选任何行：计数为 0，按钮禁用", () => {
+    renderPage();
+    expect(screen.getByTestId("promo-claim-toolbar-count").textContent).toContain("0");
+    expect(claimToolbarButton().disabled).toBe(true);
+  });
+
+  it("勾选一行后计数变为 1，按钮可点；再取消勾选恢复禁用", async () => {
+    renderPage();
+    await click(checkboxFor("示例小说 A"));
+    expect(screen.getByTestId("promo-claim-toolbar-count").textContent).toContain("1");
+    expect(claimToolbarButton().disabled).toBe(false);
+
+    await click(checkboxFor("示例小说 A"));
+    expect(screen.getByTestId("promo-claim-toolbar-count").textContent).toContain("0");
+    expect(claimToolbarButton().disabled).toBe(true);
+  });
+
+  it("没有勾选任何行时点击按钮不会打开对话框（按钮本身已禁用）", async () => {
+    renderPage();
+    await click(claimToolbarButton());
+    expect(dialog()).toBeNull();
+  });
+});
+
+describe("领取推广链接 · 对话框基础渲染与取消", () => {
+  it("打开对话框展示已选数量、上限与所属渠道应用", async () => {
+    renderPage();
+    await click(checkboxFor("示例小说 A"));
+    await click(claimToolbarButton());
+
+    const dlg = within(dialog());
+    expect(dlg.getByTestId("promo-claim-selection-count").textContent).toContain("1");
+    expect(dlg.getByTestId("promo-claim-selection-count").textContent).toContain("50");
+    expect(dlg.getByText(/Moboreader（moboreader）/)).toBeTruthy();
+  });
+
+  it("取消不调用 Action，也不留下对话框，且不清空已勾选的行", async () => {
+    renderPage();
+    await click(checkboxFor("示例小说 A"));
+    await click(claimToolbarButton());
+    expect(dialog()).not.toBeNull();
+
+    await click(within(dialog()).getByRole("button", { name: "取消" }));
+
+    expect(dialog()).toBeNull();
+    expect(actions.enqueuePromoLinkClaimAction).not.toHaveBeenCalled();
+    // 取消是"关闭对话框"，不是"提交成功后清空选择"——计数应保持为 1。
+    expect(screen.getByTestId("promo-claim-toolbar-count").textContent).toContain("1");
+  });
+});
+
+describe("领取推广链接 · 跨渠道应用选择", () => {
+  it("勾选分属不同渠道应用的行：对话框展示阻断提示，提交按钮保持禁用（同 P1-09 验收⑥：点不动也不隐藏，点了也调不到 action）", async () => {
+    renderPage({
+      items: [...ROWS, row({ id: "src-3", title: "另一渠道条目", channelAppId: "channel-app-2" })],
+    });
+    await click(checkboxFor("示例小说 A"));
+    await click(checkboxFor("另一渠道条目"));
+    await click(claimToolbarButton());
+
+    const dlg = within(dialog());
+    expect(dlg.getByTestId("promo-claim-cross-channel-app")).toBeTruthy();
+    const submitButton = dlg.getByRole("button", { name: /确认领取/ }) as HTMLButtonElement;
+    expect(submitButton.disabled).toBe(true);
+
+    await click(submitButton);
+    expect(actions.enqueuePromoLinkClaimAction).not.toHaveBeenCalled();
+  });
+});
+
+describe("领取推广链接 · 能力位未开启（ChannelCapability 前置检查）", () => {
+  it("所属渠道应用 claimCapabilityEnabled=false：展示冻结提示，不展示账户/模式选择器，提交按钮保持禁用", async () => {
+    renderPage({ claimChannelApps: [claimApp({ claimCapabilityEnabled: false })] });
+    await click(checkboxFor("示例小说 A"));
+    await click(claimToolbarButton());
+
+    const dlg = within(dialog());
+    expect(dlg.getByTestId("promo-claim-capability-disabled-precheck")).toBeTruthy();
+    expect(dlg.queryByLabelText("渠道账户")).toBeNull();
+    const submitButton = dlg.getByRole("button", { name: /确认领取/ }) as HTMLButtonElement;
+    expect(submitButton.disabled).toBe(true);
+  });
+});
+
+describe("领取推广链接 · 超过单次上限", () => {
+  it("已选数量超过 promoClaimMaxBatchSize 时展示警告，且提交按钮不可点", async () => {
+    renderPage({
+      items: [row({ id: "src-1", title: "A" }), row({ id: "src-2", title: "B" })],
+      promoClaimMaxBatchSize: 1,
+    });
+    await click(checkboxFor("A"));
+    await click(checkboxFor("B"));
+    await click(claimToolbarButton());
+
+    const dlg = within(dialog());
+    expect(dlg.getByText(/超过单次上限 1 条/)).toBeTruthy();
+    const submitButton = dlg.queryByRole("button", { name: /确认领取/ }) as HTMLButtonElement | null;
+    expect(submitButton?.disabled).toBe(true);
+  });
+});
+
+describe("领取推广链接 · apply 模式的不可逆提示与能力位闸门", () => {
+  it("切到 apply 会展示不可逆警示；缺少 promo:claim 时确认按钮禁用并说明原因", async () => {
+    renderPage({ promoClaimGranted: false, promoClaimBlockedReason: "缺少能力位 推广领取（promo:claim）" });
+    await click(checkboxFor("示例小说 A"));
+    await click(claimToolbarButton());
+
+    const dlg = within(dialog());
+    const modeSelect = dlg.getByLabelText("模式") as HTMLSelectElement;
+    fireEvent.change(modeSelect, { target: { value: "apply" } });
+
+    expect(dlg.getByTestId("promo-claim-apply-irreversible-warning")).toBeTruthy();
+    expect(dlg.getByText(/缺少能力位 推广领取/)).toBeTruthy();
+    const submitButton = dlg.getByRole("button", { name: "确认领取（apply）" }) as HTMLButtonElement;
+    expect(submitButton.disabled).toBe(true);
+  });
+
+  it("dry_run 模式下不展示不可逆警示", async () => {
+    renderPage();
+    await click(checkboxFor("示例小说 A"));
+    await click(claimToolbarButton());
+
+    expect(within(dialog()).queryByTestId("promo-claim-apply-irreversible-warning")).toBeNull();
+  });
+});
+
+describe("领取推广链接 · 提交与结果分支", () => {
+  it("确认领取以正确参数调用 enqueuePromoLinkClaimAction（账户来自选择器，offerType 不由前端传入）", async () => {
+    actions.enqueuePromoLinkClaimAction.mockResolvedValue(
+      okResult({ outcome: "enqueued", taskId: "task-1", mode: "dry_run", eligibleCount: 1, skipReasonCounts: {} }),
+    );
+    renderPage();
+    await click(checkboxFor("示例小说 A"));
+    await click(claimToolbarButton());
+    await click(within(dialog()).getByRole("button", { name: "确认领取（dry_run）" }));
+
+    expect(actions.enqueuePromoLinkClaimAction).toHaveBeenCalledTimes(1);
+    const call = actions.enqueuePromoLinkClaimAction.mock.calls[0][0];
+    expect(call).toMatchObject({
+      channelAccountId: "acct-1",
+      channelAppId: "channel-app-1",
+      novelSourceItemIds: ["src-1"],
+      mode: "dry_run",
+    });
+    expect(call.requestId).toMatch(/^[0-9a-f-]{36}$/i);
+    expect(call).not.toHaveProperty("offerType");
+  });
+
+  it("成功后展示 enqueued 结果面板，且提交按钮从对话框消失（不能重复提交同一次结果）", async () => {
+    actions.enqueuePromoLinkClaimAction.mockResolvedValue(
+      okResult({ outcome: "enqueued", taskId: "task-1", mode: "dry_run", eligibleCount: 1, skipReasonCounts: {} }),
+    );
+    renderPage();
+    await click(checkboxFor("示例小说 A"));
+    await click(claimToolbarButton());
+    await click(within(dialog()).getByRole("button", { name: "确认领取（dry_run）" }));
+
+    const dlg = within(dialog());
+    expect(dlg.getByTestId("promo-claim-outcome-enqueued")).toBeTruthy();
+    expect(dlg.queryByRole("button", { name: /确认领取/ })).toBeNull();
+  });
+
+  it("提交成功后关闭对话框会清空已勾选的行——工具栏计数回到 0", async () => {
+    actions.enqueuePromoLinkClaimAction.mockResolvedValue(
+      okResult({ outcome: "enqueued", taskId: "task-1", mode: "dry_run", eligibleCount: 1, skipReasonCounts: {} }),
+    );
+    renderPage();
+    await click(checkboxFor("示例小说 A"));
+    await click(claimToolbarButton());
+    await click(within(dialog()).getByRole("button", { name: "确认领取（dry_run）" }));
+    await click(within(dialog()).getByRole("button", { name: "关闭" }));
+
+    expect(dialog()).toBeNull();
+    expect(screen.getByTestId("promo-claim-toolbar-count").textContent).toContain("0");
+  });
+
+  it("capability_disabled 结果（提交时刻能力位刚好被冻结）：展示对应面板，不当成失败", async () => {
+    actions.enqueuePromoLinkClaimAction.mockResolvedValue(
+      okResult({ outcome: "capability_disabled", channelAppId: "channel-app-1" }),
+    );
+    renderPage();
+    await click(checkboxFor("示例小说 A"));
+    await click(claimToolbarButton());
+    await click(within(dialog()).getByRole("button", { name: "确认领取（dry_run）" }));
+
+    expect(within(dialog()).getByTestId("promo-claim-outcome-capability_disabled")).toBeTruthy();
+  });
+
+  it("enqueued_disabled 结果：展示双闸检查单，两个 env 变量名都出现在正文里", async () => {
+    actions.enqueuePromoLinkClaimAction.mockResolvedValue(
+      okResult({
+        outcome: "enqueued_disabled",
+        taskId: "task-2",
+        mode: "dry_run",
+        eligibleCount: 1,
+        skipReasonCounts: {},
+        flags: { featureEnabled: false, writeAllowed: false },
+      }),
+    );
+    renderPage();
+    await click(checkboxFor("示例小说 A"));
+    await click(claimToolbarButton());
+    await click(within(dialog()).getByRole("button", { name: "确认领取（dry_run）" }));
+
+    const dlg = within(dialog());
+    expect(dlg.getByTestId("promo-claim-flag-row-FEATURE_PROMO_LINK_CLAIM")).toBeTruthy();
+    expect(dlg.getByTestId("promo-claim-flag-row-PROMO_LINK_CLAIM_ALLOW_WRITE")).toBeTruthy();
+  });
+
+  it("no_eligible_sources 结果：逐条展示跳过原因，而不是只报一句「失败」", async () => {
+    actions.enqueuePromoLinkClaimAction.mockResolvedValue(
+      okResult({
+        outcome: "no_eligible_sources",
+        skipReasonCounts: { source_not_linked: 2 },
+      }),
+    );
+    renderPage();
+    await click(checkboxFor("示例小说 A"));
+    await click(claimToolbarButton());
+    await click(within(dialog()).getByRole("button", { name: "确认领取（dry_run）" }));
+
+    expect(within(dialog()).getByTestId("promo-claim-skip-source_not_linked").textContent).toContain("2");
+  });
+
+  it("invalid_input：文案来自映射表，而不是原样打印 code", async () => {
+    actions.enqueuePromoLinkClaimAction.mockResolvedValue({
+      ok: false,
+      kind: "invalid_input",
+      code: "batch_size_exceeded",
+    });
+    renderPage();
+    await click(checkboxFor("示例小说 A"));
+    await click(claimToolbarButton());
+    await click(within(dialog()).getByRole("button", { name: "确认领取（dry_run）" }));
+
+    expect(within(dialog()).getByRole("alert").textContent).toContain("超过单次上限");
+  });
+
+  it("access_denied：文案来自 errorEnvelopeCopy", async () => {
+    actions.enqueuePromoLinkClaimAction.mockResolvedValue({
+      ok: false,
+      kind: "access_denied",
+      envelope: {
+        ok: false,
+        status: 403,
+        code: "admin_capability_denied",
+        details: { capability: "promo:claim" },
+      },
+    });
+    renderPage();
+    await click(checkboxFor("示例小说 A"));
+    await click(claimToolbarButton());
+    await click(within(dialog()).getByRole("button", { name: "确认领取（dry_run）" }));
+
+    expect(within(dialog()).getByRole("alert").textContent).toContain("缺少能力位");
   });
 });

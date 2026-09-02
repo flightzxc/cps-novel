@@ -133,13 +133,14 @@ describe("P2-04 内容路由登记", () => {
    * `src/server/publish-gate/service.ts`'s own `RIGHTS_TRANSITION_CAPABILITY`
    * table.
    */
-  it("P2-04 没有新增任何 mutation Action；P0-S13 / PR-C2 / PR-C3 各自在其上新增了自己的 Action", () => {
+  it("P2-04 没有新增任何 mutation Action；P0-S13 / PR-C2 / PR-C3 / RC-1 各自在其上新增了自己的 Action", () => {
     const p204Actions = P2_04_ADMIN_REGISTRY.actions.filter(
       (action) =>
         !action.id.startsWith("admin.content_creation.") &&
         !action.id.startsWith("admin.catalog_scan.") &&
         !action.id.startsWith("admin.article.") &&
-        !action.id.startsWith("admin.novel."),
+        !action.id.startsWith("admin.novel.") &&
+        !action.id.startsWith("admin.promo_link_claim."),
     );
     expect(p204Actions).toEqual(P1_08B_ADMIN_REGISTRY.actions);
     for (const action of p204Actions) {
@@ -157,6 +158,7 @@ describe("P2-04 内容路由登记", () => {
       "admin.novel.withdraw",
       "admin.novel.takedown",
       "admin.novel.restore",
+      "admin.promo_link_claim.enqueue",
     ]);
     expect(resolveAdminAction("admin.content_creation.dry_run", P2_04_ADMIN_REGISTRY)).toMatchObject({
       capability: "content:view",
@@ -198,6 +200,15 @@ describe("P2-04 内容路由登记", () => {
     });
     expect(resolveAdminAction("admin.novel.restore", P2_04_ADMIN_REGISTRY)).toMatchObject({
       capability: "content:takedown",
+      mutation: true,
+    });
+    // RC-1: one action, not split by mode — dry_run and apply both require
+    // `promo:claim`, so unlike the catalog-scan pair there is no capability
+    // that varies with a client-controlled `mode` field to keep out of a
+    // single action's branching. See `ADMIN_PROMO_LINK_CLAIM_ACTIONS`'s own
+    // doc comment for the full reasoning.
+    expect(resolveAdminAction("admin.promo_link_claim.enqueue", P2_04_ADMIN_REGISTRY)).toMatchObject({
+      capability: "promo:claim",
       mutation: true,
     });
   });

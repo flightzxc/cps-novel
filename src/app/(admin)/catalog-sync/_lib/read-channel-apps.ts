@@ -1,3 +1,5 @@
+import { PROMO_LINK_CLAIM_CAPABILITY_KEY } from "@/lib/tasks/promo-link-claim-limits";
+
 import { prisma } from "@/app/api/admin/_lib/deps";
 
 /**
@@ -73,6 +75,78 @@ export async function readActiveChannelAppOptions(): Promise<readonly ChannelApp
     channelName: row.channel.name,
     sourceAppCode: row.sourceApp.code,
     sourceAppName: row.sourceApp.name,
+    channelAccounts: row.channel.channelAccounts.map((account) => ({
+      id: account.id,
+      businessId: account.businessId,
+      accountName: account.accountName,
+    })),
+  }));
+}
+
+/**
+ * RC-1: read side for the "领取推广链接" trigger on `/catalog-sync`.
+ *
+ * Same active-scope filter as {@link readActiveChannelAppOptions} above (the
+ * factory's own `binding` lookup in `createPromoLinkClaimTask`
+ * (`@/lib/tasks/promo-link-claim`) requires the identical
+ * `channelApp.status === "active"` AND `channel.status === "active"` AND at
+ * least one active, non-deleted `channelAccount` shape) — so every option
+ * this trigger offers is guaranteed to pass that lookup, barring the same
+ * page-render/submit race `active_channel_binding_required` still catches.
+ *
+ * The one addition is `claimCapabilityEnabled`: `ChannelCapability` is keyed
+ * by `(channelAppId, capabilityKey)`, not by account — there is no per-
+ * account claim capability in this schema, only a per-channel-app one. The
+ * factory itself never reads `ChannelCapability` at all (that enforcement
+ * lives in the worker handler), so without this flag an operator could
+ * submit a claim task against a channel app the worker will never process,
+ * and only find out from `/tasks` later. Channel apps are still returned
+ * even when disabled — hiding the row would look identical to "no such
+ * channel app", the same "visible but disabled, say why" convention
+ * `P1_ADMIN_PARITY_SPEC.md` §6 already uses for 北斗.
+ */
+export type ClaimChannelAppOption = ChannelAppScanOption & {
+  readonly claimCapabilityEnabled: boolean;
+};
+
+export async function readClaimEligibleChannelAppOptions(): Promise<readonly ClaimChannelAppOption[]> {
+  const rows = await prisma.channelApp.findMany({
+    where: {
+      status: "active",
+      channel: {
+        status: "active",
+        channelAccounts: { some: { status: "active", deletedAt: null } },
+      },
+    },
+    orderBy: [{ channel: { name: "asc" } }, { sourceApp: { name: "asc" } }],
+    select: {
+      id: true,
+      channel: {
+        select: {
+          code: true,
+          name: true,
+          channelAccounts: {
+            where: { status: "active", deletedAt: null },
+            orderBy: { accountName: "asc" },
+            select: { id: true, businessId: true, accountName: true },
+          },
+        },
+      },
+      sourceApp: { select: { code: true, name: true } },
+      capabilities: {
+        where: { capabilityKey: PROMO_LINK_CLAIM_CAPABILITY_KEY },
+        select: { status: true },
+      },
+    },
+  });
+
+  return rows.map((row) => ({
+    id: row.id,
+    channelCode: row.channel.code,
+    channelName: row.channel.name,
+    sourceAppCode: row.sourceApp.code,
+    sourceAppName: row.sourceApp.name,
+    claimCapabilityEnabled: row.capabilities[0]?.status === "enabled",
     channelAccounts: row.channel.channelAccounts.map((account) => ({
       id: account.id,
       businessId: account.businessId,

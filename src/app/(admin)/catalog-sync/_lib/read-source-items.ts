@@ -34,6 +34,19 @@ export type SourceItemRow = {
   /** Non-null only once `status === "linked"`. */
   readonly novelId: string | null;
   readonly lastSeenAt: string | null;
+  /**
+   * RC-1: the FK the promo-link claim trigger needs to enforce a
+   * single-channel-app selection client-side, before ever calling
+   * `enqueuePromoLinkClaimAction`. `createPromoLinkClaimTask`
+   * (`@/lib/tasks/promo-link-claim`) scopes its own eligibility read to
+   * `channelAppId: input.channelAppId` — a multi-channel-app selection
+   * would silently fall outside that scope and surface as a confusing
+   * `source_unlinked_or_deleted` skip reason instead of an honest
+   * "you selected across channel apps" message. `channelCode` /
+   * `channelName` below stay the *display* fields; this is the id the
+   * claim trigger actually groups and validates on.
+   */
+  readonly channelAppId: string;
   readonly channelCode: string;
   readonly channelName: string;
   readonly sourceAppCode: string;
@@ -109,6 +122,7 @@ export async function readSourceItemsPage(filters: SourceItemFilters): Promise<S
         status: true,
         novelId: true,
         lastSeenAt: true,
+        channelAppId: true,
         channelApp: {
           select: {
             channel: { select: { code: true, name: true } },
@@ -134,6 +148,7 @@ export async function readSourceItemsPage(filters: SourceItemFilters): Promise<S
       status: row.status as NovelSourceItemStatus,
       novelId: row.novelId,
       lastSeenAt: row.lastSeenAt ? row.lastSeenAt.toISOString() : null,
+      channelAppId: row.channelAppId,
       channelCode: row.channelApp.channel.code,
       channelName: row.channelApp.channel.name,
       sourceAppCode: row.channelApp.sourceApp.code,

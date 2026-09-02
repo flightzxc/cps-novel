@@ -6,12 +6,24 @@ import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 
 import type { ErrorEnvelope } from "@/contracts";
-import { isNovelCatalogSyncEnabled, isNovelCatalogSyncWriteAllowed } from "@/lib/flags";
+import {
+  isNovelCatalogSyncEnabled,
+  isNovelCatalogSyncWriteAllowed,
+  isPromoLinkClaimEnabled,
+  isPromoLinkClaimWriteAllowed,
+} from "@/lib/flags";
 import {
   MoboreaderTaskInputError,
   createMoboreaderCatalogScanTask,
   type MoboreaderTaskCreationResult,
 } from "@/lib/tasks/moboreader";
+import {
+  PromoLinkClaimTaskInputError,
+  UPSTREAM_EXISTING_PROMO_OFFER_TYPE,
+  createPromoLinkClaimTask,
+  type PromoLinkClaimTaskCreationResult,
+} from "@/lib/tasks/promo-link-claim";
+import { PROMO_LINK_CLAIM_CAPABILITY_KEY, PROMO_LINK_CLAIM_LIMITS } from "@/lib/tasks/promo-link-claim-limits";
 import { requireAdminActionAccess, requireFreshAdminServiceMutation } from "@/server/auth/guards";
 import {
   ContentCreationInputError,
@@ -338,4 +350,201 @@ export async function applyCatalogScanTaskAction(
   input: CatalogScanTriggerInput,
 ): Promise<CatalogScanActionResult> {
   return runCatalogScanTrigger("admin.catalog_scan.apply", "apply", input);
+}
+
+/**
+ * RC-1 promo-link claim trigger.
+ *
+ * `createPromoLinkClaimTask` (`@/lib/tasks/promo-link-claim`) had zero
+ * `src/app/**` callers before this — CPS v8.3.6 parity for this repo's
+ * promo-link claim chain (`submitChangduPromoClaim`,
+ * `src/app/(admin)/sync/actions.ts:724-766` in the read-only CPS reference)
+ * is that operators need an explicit-selection launcher on the sync/catalog
+ * screen, not a route that only the worker ever reaches. This is that
+ * missing entry, composed the same way the two trigger blocks above compose
+ * on top of P1-08B.
+ *
+ * Unlike the catalog-scan pair above, this is **one** action, not two split
+ * by `mode`. That split exists there because `dry_run` and `apply` ask for
+ * *different* capabilities (`content:view` vs `content:publish`) — splitting
+ * by static action id is what keeps the capability out of client-controlled
+ * input. Here there is only one capability for the whole claim chain,
+ * `promo:claim` (`src/lib/auth/capabilities.ts`), and it is required for
+ * *both* modes: the factory writes a `GenericTask` + `OperationAudit` row
+ * every time, dry_run included, so a cheap capability-free preview was never
+ * on the table the way P0-S13's true content-creation dry run is. With the
+ * capability identical either way, branching on `mode` inside one action
+ * carries none of the risk the catalog-scan comment above warns about.
+ *
+ * `offerType` is hardcoded to {@link UPSTREAM_EXISTING_PROMO_OFFER_TYPE}
+ * ("read"), not exposed as a picker — same reasoning
+ * `CONTENT_CREATION_LOCALE` uses above: it is the only offer type any
+ * fixture or production evidence has ever produced
+ * (`promo-link-claim-limits.ts`'s own doc comment), so a picker would only
+ * invite picking something nothing downstream has ever proven.
+ *
+ * `novelSourceItemIds` is a plain array, never a filter descriptor — there
+ * is no "claim everything matching the current status filter" input shape
+ * here at all, mirroring the factory's own `items` contract
+ * (`CreatePromoLinkClaimTaskInput`'s doc comment: "never a filter
+ * descriptor"). CPS's own `submitChangduPromoClaim` explicitly rejects a
+ * `selection` filter object for the exact same reason.
+ *
+ * Duplicate ids are folded here (not left for the factory's own silent
+ * `seen` dedupe) purely so `eligibleCount`/batch-size feedback reflects what
+ * the operator actually gets asked about, not a pre-dedupe count they never
+ * see. `requestToken` stays server-only, `randomUUID()` per submission, same
+ * as `runCatalogScanTrigger` above.
+ */
+
+export type PromoLinkClaimTriggerInput = {
+  readonly channelAccountId: string;
+  readonly channelAppId: string;
+  readonly novelSourceItemIds: readonly string[];
+  readonly mode: "dry_run" | "apply";
+  readonly requestId: string;
+};
+
+export type PromoLinkClaimOutcome =
+  | {
+      readonly outcome: "enqueued";
+      readonly taskId: string;
+      readonly mode: "dry_run" | "apply";
+      readonly eligibleCount: number;
+      readonly skipReasonCounts: Readonly<Record<string, number>>;
+    }
+  | {
+      readonly outcome: "enqueued_disabled";
+      readonly taskId: string;
+      readonly mode: "dry_run" | "apply";
+      readonly eligibleCount: number;
+      readonly skipReasonCounts: Readonly<Record<string, number>>;
+      /** Same "both flags, not just the one that blocked this call" shape as `CatalogScanOutcome["created_disabled"]["flags"]` above. */
+      readonly flags: { readonly featureEnabled: boolean; readonly writeAllowed: boolean };
+    }
+  | { readonly outcome: "duplicate"; readonly taskId: string }
+  | { readonly outcome: "active_conflict"; readonly taskId: string }
+  | { readonly outcome: "no_eligible_sources"; readonly skipReasonCounts: Readonly<Record<string, number>> }
+  | {
+      /**
+       * `ChannelCapability` (`(channelAppId, capabilityKey)`) is not
+       * something the factory itself ever reads — that enforcement lives in
+       * the worker handler. Checked here, before the factory is even
+       * called, purely so an operator does not have to submit, wait, and
+       * then discover on `/tasks` that the channel app's claim capability
+       * was never turned on. No task row is written for this outcome.
+       */
+      readonly outcome: "capability_disabled";
+      readonly channelAppId: string;
+    };
+
+export type PromoLinkClaimActionResult =
+  | { readonly ok: true; readonly data: PromoLinkClaimOutcome }
+  | { readonly ok: false; readonly kind: "access_denied"; readonly envelope: ErrorEnvelope }
+  | { readonly ok: false; readonly kind: "invalid_input"; readonly code: string };
+
+function classifyPromoLinkClaimResult(
+  result: PromoLinkClaimTaskCreationResult,
+  mode: "dry_run" | "apply",
+): PromoLinkClaimOutcome {
+  if (result.status === "duplicate") return { outcome: "duplicate", taskId: result.taskId };
+  if (result.status === "active_conflict") return { outcome: "active_conflict", taskId: result.taskId };
+  if (result.status === "no_eligible_sources") {
+    return { outcome: "no_eligible_sources", skipReasonCounts: result.skipReasonCounts };
+  }
+  if (result.taskStatus === "pending") {
+    return {
+      outcome: "enqueued",
+      taskId: result.taskId,
+      mode,
+      eligibleCount: result.eligibleCount,
+      skipReasonCounts: result.skipReasonCounts,
+    };
+  }
+  return {
+    outcome: "enqueued_disabled",
+    taskId: result.taskId,
+    mode,
+    eligibleCount: result.eligibleCount,
+    skipReasonCounts: result.skipReasonCounts,
+    flags: {
+      featureEnabled: isPromoLinkClaimEnabled(),
+      writeAllowed: isPromoLinkClaimWriteAllowed(),
+    },
+  };
+}
+
+export async function enqueuePromoLinkClaimAction(
+  input: PromoLinkClaimTriggerInput,
+): Promise<PromoLinkClaimActionResult> {
+  try {
+    const { serviceAuthorization } = await authorizeAction(
+      "admin.promo_link_claim.enqueue",
+      input.requestId,
+    );
+    if (!serviceAuthorization) {
+      // Unreachable given this action's own registration (capability is
+      // always set — see `ADMIN_PROMO_LINK_CLAIM_ACTIONS`), kept as the same
+      // fail-closed backstop the two trigger blocks above use.
+      const { AdminAccessError } = await import("@/lib/auth/errors");
+      throw new AdminAccessError(
+        "admin_service_authorization_required",
+        403,
+        "Action is not bound to a capability",
+      );
+    }
+    const guards = guardDependencies();
+    const fresh = await requireFreshAdminServiceMutation(serviceAuthorization, "promo:claim", {
+      identities: guards.identities,
+      sessions: guards.sessions,
+      entryId: "admin.promo_link_claim.enqueue",
+      requestId: input.requestId,
+    });
+
+    if (!input.channelAppId.trim()) {
+      return { ok: false, kind: "invalid_input", code: "channel_app_required" };
+    }
+    if (!input.channelAccountId.trim()) {
+      return { ok: false, kind: "invalid_input", code: "channel_account_required" };
+    }
+    const uniqueIds = Array.from(new Set(input.novelSourceItemIds));
+    if (uniqueIds.length === 0) {
+      return { ok: false, kind: "invalid_input", code: "items_required" };
+    }
+    if (uniqueIds.length > PROMO_LINK_CLAIM_LIMITS.maxBatchSize) {
+      return { ok: false, kind: "invalid_input", code: "batch_size_exceeded" };
+    }
+
+    const capability = await prisma.channelCapability.findUnique({
+      where: {
+        channelAppId_capabilityKey: {
+          channelAppId: input.channelAppId,
+          capabilityKey: PROMO_LINK_CLAIM_CAPABILITY_KEY,
+        },
+      },
+      select: { status: true },
+    });
+    if (capability?.status !== "enabled") {
+      return { ok: true, data: { outcome: "capability_disabled", channelAppId: input.channelAppId } };
+    }
+
+    const result = await createPromoLinkClaimTask(prisma, {
+      channelAccountId: input.channelAccountId,
+      channelAppId: input.channelAppId,
+      items: uniqueIds.map((novelSourceItemId) => ({
+        novelSourceItemId,
+        offerType: UPSTREAM_EXISTING_PROMO_OFFER_TYPE,
+      })),
+      requestToken: randomUUID(),
+      actorId: fresh.identity.id,
+      requestId: input.requestId,
+      mode: input.mode,
+    });
+    return { ok: true, data: classifyPromoLinkClaimResult(result, input.mode) };
+  } catch (error) {
+    if (error instanceof PromoLinkClaimTaskInputError) {
+      return { ok: false, kind: "invalid_input", code: error.code };
+    }
+    return { ok: false, kind: "access_denied", envelope: toErrorEnvelope(error) };
+  }
 }

@@ -9,11 +9,16 @@ import { capabilityBlockReason } from "@/features/admin-ui/capability-view";
 import { NOVEL_SOURCE_ITEM_STATUS_BADGES, formatDateTime } from "@/features/admin-ui/content-view";
 
 import { CreateContentDialog } from "./create-content-dialog";
+import { PromoLinkClaimDialog } from "./promo-link-claim-dialog";
+import type { ClaimChannelAppOption } from "../_lib/read-channel-apps";
 import type { SourceItemRow } from "../_lib/read-source-items";
 
 /**
- * `/catalog-sync` table + the one action this screen exists for: opening the
- * create-content dialog on a row (`create-content-dialog.tsx`).
+ * `/catalog-sync` table + the two actions this screen exists for: opening
+ * the create-content dialog on a row (`create-content-dialog.tsx`, P0-S13)
+ * and, since RC-1, an explicit multi-select "领取推广链接" launcher
+ * (`promo-link-claim-dialog.tsx`) — CPS v8.3.6 parity for
+ * `submitChangduPromoClaim`.
  *
  * The "创建内容" trigger is always rendered, regardless of `contentPublish` —
  * opening the dialog only runs a dry run, which needs `content:view` (already
@@ -21,17 +26,44 @@ import type { SourceItemRow } from "../_lib/read-source-items";
  * dialog's own "确认创建" step, so a viewer without the write grant can still
  * see the plan an admin would need to approve, per capability-driven UX
  * (P1-09 acceptance ⑥: name the missing capability, do not hide the feature).
+ *
+ * The claim checkbox column has no "select all" control, deliberately — this
+ * screen never offers a filter-driven bulk-select shortcut, mirroring the
+ * factory's own "explicit ids only, never a filter descriptor" contract
+ * (`createPromoLinkClaimTask`'s doc comment) and CPS's own hard rule
+ * ("畅读推广码领取只支持显式勾选剧目，不支持当前筛选全量领取").
  */
 export function CatalogSyncClient({
   items,
   contentPublish,
+  claimChannelApps,
+  promoClaimMaxBatchSize,
+  promoClaimGranted,
+  promoClaimBlockedReason,
 }: {
   items: readonly SourceItemRow[];
   contentPublish: AdminCapabilityState;
+  claimChannelApps: readonly ClaimChannelAppOption[];
+  promoClaimMaxBatchSize: number;
+  promoClaimGranted: boolean;
+  promoClaimBlockedReason: string | null;
 }) {
   const [activeItem, setActiveItem] = useState<SourceItemRow | null>(null);
+  const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(new Set());
+  const [claimDialogOpen, setClaimDialogOpen] = useState(false);
   const blockedReason = capabilityBlockReason("content:publish", contentPublish);
   const granted = blockedReason === null;
+
+  const selectedItems = items.filter((item) => selectedIds.has(item.id));
+
+  function toggleSelected(id: string) {
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
 
   return (
     <div className="space-y-4">
@@ -42,9 +74,24 @@ export function CatalogSyncClient({
         </p>
       )}
 
+      <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
+        <p className="text-sm text-gray-600" data-testid="promo-claim-toolbar-count">
+          已勾选 <span className="font-medium text-gray-900">{selectedItems.length}</span> 条来源条目
+        </p>
+        <button
+          type="button"
+          disabled={selectedItems.length === 0}
+          className={buttonClassName("primary", "px-3 py-1.5 text-xs")}
+          onClick={() => setClaimDialogOpen(true)}
+        >
+          领取推广链接
+        </button>
+      </div>
+
       <Table>
         <THead>
           <tr>
+            <TH className="w-8" />
             <TH>来源条目</TH>
             <TH>语种识别</TH>
             <TH>渠道</TH>
@@ -57,6 +104,15 @@ export function CatalogSyncClient({
         <TBody>
           {items.map((item) => (
             <tr key={item.id}>
+              <TD>
+                <input
+                  type="checkbox"
+                  aria-label={`勾选 ${item.title}`}
+                  checked={selectedIds.has(item.id)}
+                  onChange={() => toggleSelected(item.id)}
+                  className="h-4 w-4 rounded border-gray-300"
+                />
+              </TD>
               <TD>
                 <p className="font-medium text-gray-900">{item.title}</p>
                 <p className="text-xs text-gray-400">
@@ -88,7 +144,7 @@ export function CatalogSyncClient({
               </TD>
             </tr>
           ))}
-          {items.length === 0 && <EmptyRow colSpan={7}>没有符合条件的来源条目</EmptyRow>}
+          {items.length === 0 && <EmptyRow colSpan={8}>没有符合条件的来源条目</EmptyRow>}
         </TBody>
       </Table>
 
@@ -98,6 +154,18 @@ export function CatalogSyncClient({
           contentPublishGranted={granted}
           contentPublishBlockedReason={blockedReason}
           onClose={() => setActiveItem(null)}
+        />
+      )}
+
+      {claimDialogOpen && (
+        <PromoLinkClaimDialog
+          selectedItems={selectedItems}
+          channelApps={claimChannelApps}
+          maxBatchSize={promoClaimMaxBatchSize}
+          promoClaimGranted={promoClaimGranted}
+          promoClaimBlockedReason={promoClaimBlockedReason}
+          onClose={() => setClaimDialogOpen(false)}
+          onSubmitted={() => setSelectedIds(new Set())}
         />
       )}
     </div>

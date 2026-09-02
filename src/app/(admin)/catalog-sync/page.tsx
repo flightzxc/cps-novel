@@ -1,6 +1,7 @@
 import { capabilityBlockReason, findCapabilityState } from "@/features/admin-ui/capability-view";
 import { AdminTimeZoneNote } from "@/features/admin-ui/time-zone-note";
 import { MOBOREADER_CATALOG_LIMITS, resolveMoboreaderCatalogSafetyMaxPages } from "@/lib/tasks/moboreader";
+import { PROMO_LINK_CLAIM_LIMITS } from "@/lib/tasks/promo-link-claim-limits";
 
 import { AdminShell } from "../_components/admin-shell";
 import { capabilityViews, sessionView } from "../_lib/page-guard";
@@ -10,7 +11,7 @@ import { requireContentPage } from "../novels/_lib/content-page-guard";
 import { CatalogScanTriggerForm } from "./_components/catalog-scan-trigger-form";
 import { CatalogSyncClient } from "./_components/catalog-sync-client";
 import { SourceItemFilters } from "./_components/source-item-filters";
-import { readActiveChannelAppOptions } from "./_lib/read-channel-apps";
+import { readActiveChannelAppOptions, readClaimEligibleChannelAppOptions } from "./_lib/read-channel-apps";
 import { readSourceItemsPage } from "./_lib/read-source-items";
 
 export const dynamic = "force-dynamic";
@@ -46,11 +47,14 @@ export default async function CatalogSyncPage({
   const capabilities = capabilityViews(context);
   const contentPublish = findCapabilityState(capabilities, "content:publish");
   const contentPublishBlockedReason = capabilityBlockReason("content:publish", contentPublish);
+  const promoClaim = findCapabilityState(capabilities, "promo:claim");
+  const promoClaimBlockedReason = capabilityBlockReason("promo:claim", promoClaim);
 
   const page = granted
     ? await readSourceItemsPage({ page: params.page, status: params.status, search: params.search })
     : null;
   const channelApps = granted ? await readActiveChannelAppOptions() : [];
+  const claimChannelApps = granted ? await readClaimEligibleChannelAppOptions() : [];
 
   return (
     <AdminShell
@@ -75,7 +79,14 @@ export default async function CatalogSyncPage({
             <SourceItemFilters values={{ search: params.search, status: params.status }} />
             <div className="space-y-2">
               <AdminTimeZoneNote />
-              <CatalogSyncClient items={page.items} contentPublish={contentPublish} />
+              <CatalogSyncClient
+                items={page.items}
+                contentPublish={contentPublish}
+                claimChannelApps={claimChannelApps}
+                promoClaimMaxBatchSize={PROMO_LINK_CLAIM_LIMITS.maxBatchSize}
+                promoClaimGranted={promoClaimBlockedReason === null}
+                promoClaimBlockedReason={promoClaimBlockedReason}
+              />
             </div>
             <ContentPagination
               basePath="/catalog-sync"
