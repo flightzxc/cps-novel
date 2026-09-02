@@ -201,7 +201,7 @@ TO worker_app;
 -- Worker read surface is explicit and excludes every Admin Auth table.
 GRANT SELECT ON TABLE channel_account, channel_account_credential,
   channel_credential_active_fingerprint, credential_change_log,
-  generic_task, generic_task_item, operation_audit TO worker_app;
+  generic_task, generic_task_item, side_effect_intent, operation_audit TO worker_app;
 GRANT SELECT ON TABLE channel, source_app, channel_app, channel_capability,
   novel, novel_source_item, novel_chapter, novel_chapter_source_item,
   novel_chapter_content, novel_preview_policy, source_label,

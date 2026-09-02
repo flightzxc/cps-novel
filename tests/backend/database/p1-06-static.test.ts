@@ -30,6 +30,7 @@ describe("P1-06 database operations static contracts", () => {
     expect(sql).not.toMatch(/GRANT SELECT \(web_url, app_url\) ON promo_link TO analyst_ro/);
     expect(sql).toContain("GRANT SELECT ON ALL TABLES IN SCHEMA public TO backup_role");
     expect(sql).toContain("GRANT SELECT ON TABLE channel_account, channel_account_credential");
+    expect(sql).toMatch(/GRANT SELECT ON TABLE channel_account,[\s\S]*side_effect_intent,[\s\S]*TO worker_app;/);
     expect(sql).toContain("TO scheduler_app");
     expect(sql).not.toMatch(/GRANT SELECT ON ALL TABLES[^;]*worker_app/);
     expect(sql).not.toMatch(/GRANT SELECT[^;]*admin_(?:identity|session|two_factor|recovery_code|login_attempt)[^;]*worker_app/s);
