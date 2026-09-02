@@ -47,7 +47,14 @@ x8_level_config() {
       process.stderr.write(`ERROR: unknown X8 level "${level}" (allowed: ${allowed.join(", ")})\n`);
       process.exit(65);
     }
-    const lines = [`WORKER_TASK_ALLOWLIST=${entry.workerTaskAllowlist}`];
+    const lines = [
+      `WORKER_TASK_ALLOWLIST=${entry.workerTaskAllowlist}`,
+      // Not a double-gate flag: the promo:claim admin capability grant. The
+      // claim dialog on /catalog-sync refuses apply mode without it, so a
+      // Level UAT topology that only flipped FEATURE_PROMO_LINK_CLAIM would
+      // still be unable to run steps 6/7 of the Owner runbook.
+      `PROMO_CLAIM_ROLES=${entry.promoClaimRoles}`,
+    ];
     for (const [key, value] of Object.entries(entry.flags)) lines.push(`${key}=${value}`);
     process.stdout.write(lines.join("\n") + "\n");
   ' "$X8_LEVELS_FILE" "$level"

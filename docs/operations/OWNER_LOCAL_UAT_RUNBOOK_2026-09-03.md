@@ -6,18 +6,29 @@
 > 本文不是生产发布文档；Level R（收益上线）的字段清单在同一文件的 "### Level R"
 > 一节，本轮不涉及生产部署动作。
 
-## 1. 进入条件（四条，全部满足才能开始）
+## 1. 进入条件（五条，全部满足才能开始）
 
 1. RC-1 已合入 `main`（Claim launcher / 领取入口相关改动落地为 `main` 的祖先提交）。
 2. C2b 已验收：`docs/p2/V020_RELEASE_CHECKLIST.md` Level 0 的 C2b checkbox 已勾选，
    证据行引用 commit `5a6addf`、`tests/backend/adapters/moboreader.test.ts`
-   190-204/206-230 行，本轮已在 HEAD `1b9f82c` 重跑 30/30 通过（见本仓库 RC-2 交付）。
+   190-204/206-230 行，30/30 通过（见本仓库 RC-2 交付）。
 3. 本地环境已以 `X8_LEVEL=uat` 起（flag/allowlist 目标值见
    `infra/production-like/.env.uat.example`，该文件由 `X8_LEVEL=uat` 自动导出，本文件仅
    作对照——见 §2.1）。
 4. claim 相关 `ChannelCapability`（`getbydataid`、`getchapterinfo`、`claimPromo`，
    `projectType=1` 小说 scope）已由 `scripts/set-channel-capability-status.ts`
    置为 `enabled`，且该次 `--apply` 的 `OperationAudit` 行可查（见下文准备阶段）。
+5. admin 能力位 `promo:claim` 已授予登录账号。这与第 3 条的双闸是**两套独立的闸**：
+   `FEATURE_PROMO_LINK_CLAIM`/`PROMO_LINK_CLAIM_ALLOW_WRITE` 决定"这个功能开不开"，
+   `promo:claim` 决定"这个登录人能不能用"。缺后者时步骤 6/7 的领取弹窗只能停在
+   `dry_run`。授予方式是两个 env（`src/lib/auth/capabilities.ts`）：
+   `PROMO_CLAIM_ROLES`（角色名，逗号分隔）与 `PROMO_CLAIM_USER_IDS`（identity id，
+   逗号分隔），任一命中即放行，默认两者都空（`defaultRoles: []`，谁都没有）。
+   X8 本地拓扑无需手工设置——`X8_LEVEL=uat` 会自动导出
+   `PROMO_CLAIM_ROLES=super_admin`（`scripts/lib/x8-levels.json` 的 `promoClaimRoles`，
+   经 `docker-compose.yml` 的 `web` 服务传入），与
+   `scripts/bootstrap-admin-identity.ts` 的 `BOOTSTRAP_ADMIN_ROLE = "super_admin"`
+   对上。该能力位 `requiresTwoFactor: true`，所以步骤 1 的 2FA 必须真的走完。
 
 ## 2. 准备阶段（由 Claude/Codex 完成，Owner 零手工）
 
@@ -35,7 +46,8 @@ UAT / Level R 段）。把 `X8_LEVEL=uat` 放在环境里，就可以一路用�
 ```bash
 export X8_LEVEL=uat                       # 之后本 shell 里的每条命令都在 Level UAT 下运行
 scripts/x8-production-like.sh setup       # 一次性：mkcert 信任 + /etc/hosts，仅 setup 允许改宿主机
-scripts/x8-production-like.sh up          # 起六服务；WORKER_TASK_ALLOWLIST 与五项 flag 均为 Level UAT 值；
+scripts/x8-production-like.sh up          # 起六服务；WORKER_TASK_ALLOWLIST、八项双闸 flag 与
+                                           # PROMO_CLAIM_ROLES 均为 Level UAT 值；
                                            # catalog-write 门首启默认落在 apply（写闸 true），无需额外开闸
 scripts/x8-production-like.sh status      # docker compose ps，确认六服务健康
 scripts/x8-production-like.sh verify      # 拓扑/allowlist/nginx 反模式静态校验，按 X8_LEVEL=uat 的期望值断言
@@ -43,8 +55,8 @@ scripts/x8-production-like.sh verify      # 拓扑/allowlist/nginx 反模式静�
 
 需要临时收紧 catalog 写闸时，既有 `gate catalog-write on|off|dry-run` 子命令不受
 影响，在 Level UAT 下依然可用、依然只管 `FEATURE_NOVEL_CATALOG_SYNC` /
-`NOVEL_CATALOG_SYNC_ALLOW_WRITE` 这一对，与 claim/sitemap/indexnow 五项 flag（由
-`X8_LEVEL` 决定）互不冲突。
+`NOVEL_CATALOG_SYNC_ALLOW_WRITE` 这一对，与 claim/sitemap/indexnow 八项双闸 flag
+及 `PROMO_CLAIM_ROLES`（由 `X8_LEVEL` 决定）互不冲突。
 
 进入 Level UAT 前，本地若已经以 `X8_LEVEL=0`（或未设置，即默认 0）跑过
 `up`，需要先 `scripts/x8-production-like.sh down` 再以 `X8_LEVEL=uat`
@@ -58,7 +70,8 @@ scripts/x8-production-like.sh verify      # 拓扑/allowlist/nginx 反模式静�
 
 ```bash
 source scripts/lib/x8-production-like-env.sh
-x8_level_config uat              # 打印 Level UAT 的 WORKER_TASK_ALLOWLIST + 五项 flag
+x8_level_config uat              # 打印 Level UAT 的 WORKER_TASK_ALLOWLIST、
+                                 # PROMO_CLAIM_ROLES 与八项双闸 flag
 x8_expected_worker_allowlist r   # 只打印 Level R 的 allowlist 精确字符串
 ```
 
@@ -126,14 +139,14 @@ docker compose -p cps-novel-x8-local \
 | 3 | 小页区间 dry-run→apply | `/catalog-sync`（page ≤ 3、pageSize=20，见"已知限制"） | dry-run 预览无报错后 apply；对应 `NovelSourceItem` 行出现在数据库/后台列表 | 截图 + SQL：`SELECT count(*) FROM novel_source_item WHERE created_at > ...` |
 | 4 | 确认 preview 任务被消费 | `/tasks` | `moboreader.preview_refresh.v1` 对应 item 状态不再是 `pending`（success 或带诊断的 failed） | 截图（任务详情） |
 | 5 | 单本 dry-run + apply 创建内容 | `/catalog-sync`（针对步骤 3 产出的某一 source） | 创建成功后 `/novels` 出现新 Novel（`draft`）+ Article（`draft`，`locale=en`）；章节在后台可见 | 截图（`/novels` 详情页） |
-| 6 | 对**无 promo** 的书发起领取（apply） | `/catalog-sync` 勾选该书 → 发起 claim | `/tasks` 对应 item 变为 `completed`；`PromoLink.status=fetched`；`SideEffectIntent.status=confirmed`；本次 `getcode` 调用计数 = 1（decision=`claimed`，见 `worker/handlers/promo-link-claim.ts:434`） | 截图 + SQL：查 §3 side_effect_intent（此步应为 0 条 manual_review，不用该查询验证 fetched，仅作交叉核对） |
-| 7 | 对**已有 promo** 的书发起领取 | `/catalog-sync` 勾选该书 → 发起 claim | 结果为 `already_available`（同一 handler 的第二个 decision 分支）；本次 `getcode` 调用计数 = 0；无新增上游写 | 截图（任务详情里的 decision 字段） |
+| 6 | 对**无 promo** 的书发起领取（apply） | `/catalog-sync`：勾选该书行首复选框 → 工具条「领取推广链接」→ 弹窗内「领取模式」选 `apply（正式领取，需要 promo:claim）` → 「确认领取（apply）」 | `/tasks` 对应 item 变为 `completed`；`PromoLink.status=fetched`；`SideEffectIntent.status=confirmed`；本次 `getcode` 调用计数 = 1（decision=`claimed`，见 `worker/handlers/promo-link-claim.ts:435` 的 `decision` 联合类型） | 截图 + SQL：查 §3 side_effect_intent（此步应为 0 条 manual_review，不用该查询验证 fetched，仅作交叉核对） |
+| 7 | 对**已有 promo** 的书发起领取 | `/catalog-sync`：同步骤 6 的勾选 →「领取推广链接」→ `apply` | 结果为 `already_available`（同一 handler 的第二个 decision 分支）；本次 `getcode` 调用计数 = 0；无新增上游写 | 截图（任务详情里的 decision 字段） |
 | 8（可选，需 fixture） | 制造 readback 不确定场景 | `/tasks`（对应 item） | 结果落 `manual_review_required`（`worker/handlers/promo-link-claim.ts:374/709/711`），且不发生自动重试 | 截图 |
 | 9 | 发布已具备 promo 的书 | `/novels/{novelId}` | `applyPublishTransition` 成功；Novel/Article 终态为 `published` | 截图（发布后状态） |
 | 10 | 对**缺 promo** 的书尝试发布 | `/novels/{novelId}` | 被发布门禁拒绝，唯一/主要 reason 为 `promo_link_missing` | 截图（拒绝原因） |
 | 11 | 前台三个路径返回 200 | `/`、`/browse`、`/novel/{slug}` | 三个路径 HTTP 200 | 截图或 `curl -I` 输出 |
 | 12 | 章节可读、CTA 可见 | `/novel/{slug}/chapter/{n}` | 正文可读；章末 CTA（跳转按钮/链接）渲染出来 | 截图 |
-| 13 | 点击 CTA，确认 302 与 TrackingEvent | 由步骤 12 页面跳转到 `/go/{code}` | HTTP 302；`Location` 指向上游 web/app 目标；数据库新增 1 条 `TrackingEvent{eventType:"go_redirect"}` | 截图（网络面板 302）+ SQL：`SELECT count(*) FROM tracking_event WHERE event_type='go_redirect' AND created_at > ...` |
+| 13 | 点击 CTA，确认 302 与 TrackingEvent | 由步骤 12 页面跳转到 `/go/{code}` | HTTP 302；`Location` 指向上游 web/app 目标；数据库新增 1 条 `TrackingEvent{eventType:"go_redirect"}`。**必须用真实浏览器点击**：RC-6 起 `/go` 的埋点写入带 bot-UA 过滤（`src/app/go/_lib/tracking-guard.ts`），`curl`/`wget` 的 UA 命中该正则，会正常 302 但**不写** TrackingEvent | 截图（网络面板 302）+ SQL：`SELECT count(*) FROM tracking_event WHERE event_type='go_redirect' AND created_at > ...` |
 | 14 | 无效码与软删码返回 404 | `/go/{不存在的码}`、`/go/{已软删的码}` | 两者均 HTTP 404（`src/app/go/[code]/route.ts` 对 `deletedAt != null` 和未命中记录均返回 `notFound()`） | 截图或 `curl -I` |
 | 15（Claude/Codex 操作） | 停止 postgres 容器，验证故障可见性 | `/api/health`；再次点击步骤 13 的 CTA | `/api/health` 返回 503（`src/app/api/health/route.ts` 对 `report.ok=false` 返回 503，已核实）。**关于 CTA 302 的说明见下方脚注** | 截图 + `/api/health` 响应体 |
 | 16 | 下架并 takedown | `/novels/{novelId}`（发布生命周期面板，`publish-lifecycle-panel`） | 公开页 `/novel/{slug}` 返回 404 且响应头 `X-Robots-Tag`/meta 带 `noindex`；已物化章节被撤回（不可读） | 截图（公开页 404）+ 截图（后台撤回状态） |
@@ -187,8 +200,10 @@ stale-if-error 配置。据此代码路径，PostgreSQL 真的停止后，`/go/{
 
 ## 6. 已知限制
 
-- **RC-3 合入前**：`/catalog-sync` 目录同步的页区间必须手动限定 **≤ 3 页、
-  `pageSize=20`**；没有更宽范围的批量同步。
+- **目录同步页区间**：`/catalog-sync` 每次限定 **≤ 3 页、`pageSize=20`**。RC-3 已合入
+  `main`，`pageSize` 现在是机器强制上限（`MOBOREADER_CATALOG_LIMITS.maxPageSize = 20`，
+  超限被 `page_size_exceeded` 拒绝，表单上限也随之收窄），所以这一半不再依赖人工自律；
+  **页数 ≤ 3 仍然只是操作纪律**，没有对应的强制上限。
 - **RC-4 前**：内容创建（source → Novel/Article）只能单条进行，没有批量创建
   流程；步骤 5 因此是"对某一个 source 单独走一次 dry-run+apply"，不能对
   步骤 3 产出的全部 source 一次性创建。

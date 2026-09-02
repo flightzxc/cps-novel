@@ -91,6 +91,14 @@ services:
       SETTINGS_MANAGE_USER_IDS: ${SETTINGS_MANAGE_USER_IDS:-}
       TASK_MANAGE_ROLES: ${TASK_MANAGE_ROLES:-super_admin}
       TASK_MANAGE_USER_IDS: ${TASK_MANAGE_USER_IDS:-}
+      # promo:claim is the one capability that does NOT default to super_admin.
+      # It is a high-risk, upstream-writing grant (requiresTwoFactor, and
+      # defaultRoles: [] in src/lib/auth/capabilities.ts), so it stays granted
+      # to nobody unless an operator names a role explicitly. Passing it through
+      # here is what lets scripts/lib/x8-levels.json turn it on for X8_LEVEL=uat
+      # only; unset (Level 0, production) is byte-for-byte today's behaviour.
+      PROMO_CLAIM_ROLES: ${PROMO_CLAIM_ROLES:-}
+      PROMO_CLAIM_USER_IDS: ${PROMO_CLAIM_USER_IDS:-}
       FEATURE_NOVEL_CATALOG_SYNC: ${FEATURE_NOVEL_CATALOG_SYNC:-false}
       NOVEL_CATALOG_SYNC_ALLOW_WRITE: ${NOVEL_CATALOG_SYNC_ALLOW_WRITE:-false}
       FEATURE_INDEXNOW_OUTBOX: ${FEATURE_INDEXNOW_OUTBOX:-false}

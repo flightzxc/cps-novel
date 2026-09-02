@@ -55,6 +55,19 @@ if (worker.environment?.WORKER_TASK_ALLOWLIST !== levelEntry.workerTaskAllowlist
     `worker allowlist is not the frozen X8_LEVEL=${level} set (expected "${levelEntry.workerTaskAllowlist}", got "${worker.environment?.WORKER_TASK_ALLOWLIST}")`,
   );
 }
+// RC-2 review fixup: the promo:claim capability grant is what actually lets the
+// /catalog-sync claim dialog run in apply mode. It is not a double-gate flag, so
+// it gets its own assertion — Level 0 must render it empty (granted to nobody).
+if ((web.environment?.PROMO_CLAIM_ROLES ?? "") !== levelEntry.promoClaimRoles) {
+  fail(
+    `PROMO_CLAIM_ROLES must be "${levelEntry.promoClaimRoles}" in web for X8_LEVEL=${level} (got "${web.environment?.PROMO_CLAIM_ROLES ?? ""}")`,
+  );
+}
+for (const service of [worker, services.scheduler]) {
+  if (service.environment?.PROMO_CLAIM_ROLES !== undefined) {
+    fail("PROMO_CLAIM_ROLES is an admin-UI capability and must not reach worker/scheduler");
+  }
+}
 for (const service of [web, worker, services.scheduler]) {
   if (service.network_mode === "host") fail("host networking is forbidden");
 }

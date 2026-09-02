@@ -104,6 +104,13 @@
       `INDEXNOW_OUTBOX_ALLOW_WRITE=false`、`FEATURE_INDEXNOW_DELIVERY=false`、
       `INDEXNOW_DELIVERY_ALLOW_WRITE=false`、`FEATURE_SITEMAP_AUTO_REFRESH=false`、
       `SITEMAP_AUTO_REFRESH_ALLOW_WRITE=false`。
+- [ ] `PROMO_CLAIM_ROLES=super_admin`（`PROMO_CLAIM_USER_IDS` 留空）。这是 admin 能力位
+      `promo:claim`（`src/lib/auth/capabilities.ts`），**不是**上面的双闸，两者缺一都
+      无法真正领取：双闸开着但能力位为空时，`/catalog-sync` 的领取弹窗只能选 `dry_run`，
+      `apply` 会被"请切换回 dry_run，或联系管理员授予该能力位"挡下。该能力位
+      `defaultRoles: []`（默认谁都没有）且 `requiresTwoFactor: true`，因此 Level 0 与生产
+      必须保持为空；X8 本地拓扑由 `X8_LEVEL=uat` 自动置为 `super_admin`
+      （`scripts/lib/x8-levels.json` 的 `promoClaimRoles`）。
 - [ ] claim 相关 `ChannelCapability`（`getbydataid`、`getchapterinfo`、`claimPromo`，
       `projectType=1` 小说 scope）由受审计脚本 `scripts/set-channel-capability-status.ts`
       置为 `enabled`（先 dry-run 无 `--apply` 预览，再 `--apply` 写入，`--evidence` 必填）；
@@ -111,8 +118,10 @@
       （`src/server/channel-capability/service.ts` 顶部注释同一决策）。
 - [ ] 凭证只经 `/channel-accounts` UI 的 `addOrReplaceCredential` 正式入口录入；**禁用**
       `scripts/x8-import-moboreader-canary-credential.mjs`（或任何绕过 UI 的凭证导入脚本）。
-- [ ] `/catalog-sync` 目录同步页区间限制：RC-3 合入前，每次 dry-run/apply 手动限定
-      **≤ 3 页、`pageSize=20`**；无独立 env 变量承载，由操作人在 UI 表单中遵守。
+- [ ] `/catalog-sync` 目录同步页区间限制：每次 dry-run/apply 限定 **≤ 3 页、`pageSize=20`**。
+      RC-3 合入后 `pageSize` 已是机器强制上限（`MOBOREADER_CATALOG_LIMITS.maxPageSize=20`，
+      超限直接以 `page_size_exceeded` 拒绝），页数上限仍无 env 变量承载，由操作人在 UI
+      表单中遵守。
 
 ### Level R：收益上线（生产）
 
