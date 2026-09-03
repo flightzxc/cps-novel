@@ -132,6 +132,48 @@ docker compose -p cps-novel-x8-local \
   logs worker --no-color | grep worker_task_allowlist
 ```
 
+### 2.5 本地管理员账户与认证恢复（RC-11）
+
+**登录账号来源**：Level UAT 的 `up` 在 `ADMIN_LOCAL_IDENTITY_SEED=allow`（`X8_LEVEL=uat`
+自动导出）且两个本地 secret 文件均存在时，自动跑
+`scripts/x8-production-like.sh admin-seed`（内部调用
+`scripts/ensure-local-admin-identities.ts`），固定创建 `admin`/`admin2` 两个
+`super_admin`。密码只经本地 secret 文件（从不进 argv/日志/仓库），首次使用需要
+Owner 当面输入一次：
+
+```bash
+export X8_LEVEL=uat
+scripts/x8-production-like.sh admin-secret set admin    # 交互式 read -s，输入两遍确认
+scripts/x8-production-like.sh admin-secret set admin2   # 同上
+scripts/x8-production-like.sh up                        # 两个 secret 文件已就绪，自动 admin-seed
+```
+
+若 `up` 时 secret 文件还不存在，`admin-seed` 会被跳过并打印提示（不会让 `up` 失败）；
+之后单独补跑 `scripts/x8-production-like.sh admin-seed` 即可。`admin-seed` 幂等——
+账户已存在时默认跳过，只有再加 `--reset-password` 才更新密码哈希。
+
+**事故与恢复**：2026-09-04 X8 复用旧 PostgreSQL volume 后，遗留管理员 `x8-owner`
+已完成 2FA 绑定但 Owner 无验证器/恢复码，密码通过验证后卡死在
+`/two-factor/challenge`。`scripts/reset-admin-auth-state.ts`（受审计、默认
+dry-run）用于"只重置认证状态，不删账户"：撤销该身份全部会话、清 2FA 绑定字段、
+删挑战与恢复码、清登录限流记录。恢复此类账户的完整命令序列：
+
+```bash
+export X8_LEVEL=uat
+scripts/x8-production-like.sh down                       # 保留 volume，不加 --purge
+scripts/x8-production-like.sh admin-secret set admin      # Owner 当面输入
+scripts/x8-production-like.sh admin-secret set admin2
+scripts/x8-production-like.sh up                          # 自动 admin-seed
+scripts/x8-production-like.sh admin-reset x8-owner --deactivate            # dry-run 先看影响行数
+scripts/x8-production-like.sh admin-reset x8-owner --deactivate --apply    # 确认无误后 apply
+```
+
+浏览器打开 `https://zbcwf.novel.test/login`，用 `admin` 登录应直接进入后台（Level UAT
+`ADMIN_TWO_FACTOR_ENFORCEMENT=false`，不经过 2FA）。详见
+`docs/operations/ADMIN_AUTH_RECOVERY_2026-09-04.md`（事故全文、生产首次绑定流程、
+风险清单）。**本节脚本类操作同 Runbook 其余部分——Owner 不直接跑，由 Claude/Codex
+在准备阶段完成；Owner 只在浏览器里点击登录。**
+
 ## 3. Owner 执行 16 步
 
 每步的"证据"默认指管理后台截图；标注"SQL"的额外用只读角色跑
@@ -146,7 +188,8 @@ docker compose -p cps-novel-x8-local \
 |---:|---|---|---|---|
 | 0.5 | 验证主机隔离生效 | `https://novel.test/login`；`https://zbcwf.novel.test/` | 前者 HTTP 404（公开主机不服务后台登录页——这正是短剧站
 `enpulsedrama.com/login` 的已知缺陷，海阅必须不重现）；后者 HTTP 404（后台主机不服务公开首页） | 截图或 `curl -I` 输出两条 |
-| 1 | 登录（本地 2FA 已关闭，直接进后台） | `https://zbcwf.novel.test/login`（管理后台入口） | 输入账号密码后直接进入管理后台首页，会话建立，不出现 2FA 注册/挑战页面——RC-10 起 `X8_LEVEL=uat` 自动把 `ADMIN_TWO_FACTOR_ENFORCEMENT` 置为 `false`（规范值，`scripts/lib/x8-levels.json`）。**仅本地 UAT**；生产 Level R 保持 `true`，登录后仍需完成 2FA | 截图 |
+| 1 | 登录（本地 2FA 已关闭，直接进后台） | `https://zbcwf.novel.test/login`（管理后台入口，账号 `admin`，见 §2.5 的
+`admin-secret set` + `admin-seed`） | 输入账号密码后直接进入管理后台首页，会话建立，不出现 2FA 注册/挑战页面——RC-10 起 `X8_LEVEL=uat` 自动把 `ADMIN_TWO_FACTOR_ENFORCEMENT` 置为 `false`（规范值，`scripts/lib/x8-levels.json`）。**仅本地 UAT**；生产 Level R 保持 `true`，登录后仍需完成 2FA | 截图 |
 | 2 | 录入 MoboReader 凭证；校验任务转绿 | `/channel-accounts` | `addOrReplaceCredential` 保存成功；credential validation 任务状态变为 completed/success（页面转绿） | 截图（任务状态） |
 | 3 | 小页区间 dry-run→apply | `/catalog-sync`（page ≤ 3、pageSize=20，见"已知限制"） | dry-run 预览无报错后 apply；对应 `NovelSourceItem` 行出现在数据库/后台列表 | 截图 + SQL：`SELECT count(*) FROM novel_source_item WHERE created_at > ...` |
 | 4 | 确认 preview 任务被消费 | `/tasks` | `moboreader.preview_refresh.v1` 对应 item 状态不再是 `pending`（success 或带诊断的 failed） | 截图（任务详情） |

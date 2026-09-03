@@ -319,6 +319,22 @@ RC-4 的 Server Action 接线（`dryRunContentCreationBatchAction`/`applyContent
 | P0-S4 `src/server/content-creation/service.ts`（`createContentFromSourceItem` 编排本体：guard 状态机、dry-run、并发冲突关闭、审计写入）与 `src/server/content-creation/business-id.ts`（`Novel.businessId` 生成器） | `ORIGINAL_REQUIRED` | CPS 的 `Drama` 行只靠上游同步任务写入，没有一个独立的"从 SourceItem 创建 canonical 内容"服务可搬；`business_id` 概念在 CPS 里对应上游直传的 `dramaId`，不是自生成短码，无算法可搬。整条创建编排（guard 读+条件 `updateMany` 关闭并发竞态+同事务审计）是本仓自建，只在两处局部借用了本表已登记的既有基建（`src/lib/db/db-retry.ts` 的 `isUniqueConstraintViolation`/`withDbRetry`，以及本表另两条 `slug/short-id` 条目登记的 shortId 算法）。 |
 | X8 `bootstrap.conf.template`、AI crawler `limit_req`、`/novel`/`/go`/`/browse` `limit_conn` 与本地 mkcert 三步法 | `ORIGINAL_REQUIRED` | 冻结的 CPS `v8.2.18` tag 中不存在 bootstrap 与 AI snippet，也不含 2026-08-13/14 两份生产止血补丁，不能从短剧当前工作树越界补读。X8 依据 Owner 验收合同与两份止血文档重写小说路径、阈值和本地 TLS 编排；只登记上方 tag 内真实存在的 nginx 基线，不虚构 tag 来源。 |
 
+### RC-11 本地管理员认证恢复（v8.3.6 基线）
+
+RC-11 沿用 RC-1 已冻结的同一 v8.3.6 基线与同一只读工作区（`git show v8.3.6:<path>`，工作树不可读）。
+背景：X8 复用旧 PostgreSQL volume 后，遗留管理员 `x8-owner` 已在 2026-08-26 完成 2FA 绑定，
+Owner 没有验证器/恢复码，密码通过验证后被 `/two-factor/challenge` 卡死；`bootstrap-admin-identity.ts`
+要求身份表为空，无法用于"只重置认证状态"。`scripts/reset-admin-auth-state.ts` 借鉴 CPS
+`reset-2fa.ts` 的清理项清单，但审计/CLI 纪律改走本仓已有的 `bootstrap-admin-identity.ts` 形态
+（默认 dry-run、`--apply`、稳定 request-id、advisory lock、同事务 `OperationAudit`），而非 CPS
+的交互式确认字符串且不写审计。
+
+| symbol | source_file | source_lines | baseline_commit | port_kind | changed_what | owner |
+| --- | --- | --- | --- | --- | --- | --- |
+| `resetTwoFactorForUser` 清理项清单（撤销会话、清 2FA 绑定字段、删挑战、删恢复码、`sessionVersion++`） → `scripts/reset-admin-auth-state.ts` 的 `applyReset` | `scripts/reset-2fa.ts` | `139-165` | `16f2e4cfca51f46af0dede899ecf6242a770bbd0` | `PATTERN_ONLY` | 只借"清哪些字段/哪些表"的清单本身；**不搬** CPS 的交互式 `readline` 确认字符串（`RESET-2FA-<username>`）、SQLite 路径解析与告警、也不搬"不写审计"这一点——本仓改为默认 dry-run/`--apply`、`RESET_ADMIN_OPERATOR` env、`OperationAudit` 同事务写入、生产 `--break-glass` 门禁（CPS 无此概念）；额外新增本仓才有的 `admin_login_attempt` 清理（CPS 无登录限流表）与 `--deactivate`/`--ip` 选项 | Codex |
+| `createTotpQrCodeDataUrl`（`QRCode.toDataURL(uri,{errorCorrectionLevel:"M",margin:1,width:256})`） → `src/lib/auth/totp.ts` 同名函数 | `src/lib/totp.ts` | `63-68` | `16f2e4cfca51f46af0dede899ecf6242a770bbd0` | `ADAPT` | 三个渲染参数逐字照搬；**不搬** CPS 用 `otpauth` 包构造 URI/issuer/label 的方式——本仓 `createTotpUri`（既有，RC-11 未改）已用自实现 base32/HMAC-SHA1 独立构造 otpauth URI，`createTotpQrCodeDataUrl` 只接收现成 URI 字符串渲染成图，不改 TOTP 算法或 issuer/label 形态 | Claude |
+| `admin.username` 单一 `super_admin` 种子形态 → `scripts/ensure-local-admin-identities.ts` | `scripts/seed-admin.ts` | `8,15,23` | `16f2e4cfca51f46af0dede899ecf6242a770bbd0` | `PATTERN_ONLY` | 只借"env 注入密码、已存在则跳过、无 argv 明文"的形态；**不搬** CPS 单账户/无长度校验/bcrypt cost 12——本仓固定 `admin`+`admin2` 两账户、scrypt（复用既有 `hashAdminPassword`）、`ADMIN_LOCAL_IDENTITY_SEED=allow` 硬门禁下才允许 <12 位、写 `OperationAudit`、`--reset-password` 才更新既有账户 | Codex |
+
 ## 使用说明
 
 - `symbol`：被搬运的具体符号名（函数名/类型名/表名/字段名/组件名等），一行一个符号，不得用文件级粗粒度笼统登记；

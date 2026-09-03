@@ -62,6 +62,12 @@
       必须显式确认为 `true` 或不设置（`docker-compose.yml` 的 `web` 服务默认值即
       `true`）；`false` 仅允许本地 X8 `X8_LEVEL=uat` 拓扑，见下方 Level UAT 一节与
       `docs/operations/OWNER_LOCAL_UAT_RUNBOOK_2026-09-03.md` 步骤 1。
+- [ ] **`ADMIN_LOCAL_IDENTITY_SEED` 生产必须不设（RC-11，2026-09-04 Owner 冻结）。**
+      这是 `scripts/ensure-local-admin-identities.ts` 的种子门禁，唯一放行值是精确
+      的 `allow`——只有 `scripts/lib/x8-levels.json` 的 Level UAT 导出该值；生产环境
+      与 Level R 不得声明这个变量（`docker-compose.yml`/`.env.example` 均不含它）。
+      未设置时该脚本 fail-fast 拒绝执行，且是 `hashAdminPassword` 12 位密码下限的
+      唯一豁免路径——生产从不触达这条豁免。
 
   ```bash
   SITE_URL= npm test -- --project node tests/backend/seo/static-sitemap.test.ts tests/backend/indexnow/eligibility.test.ts
@@ -115,6 +121,15 @@
       Level UAT**——Owner 决定本地 UAT 不用 2FA，登录后直接进后台。X8 本地拓扑由
       `X8_LEVEL=uat` 自动导出（`scripts/lib/x8-levels.json` 的 `adminTwoFactorEnforcement`），
       Owner 无需手工设置。**绝不得**把这个值带到 Level R / 生产。
+- [ ] `ADMIN_LOCAL_IDENTITY_SEED=allow`（RC-11，2026-09-04 Owner 冻结）。**仅 Level
+      UAT**，同样由 `X8_LEVEL=uat` 自动导出。登录账号 = `admin`/`admin2`
+      两个 `super_admin`，由 `scripts/x8-production-like.sh admin-seed`（Level UAT 的
+      `up` 在两个本地 secret 文件均存在时自动触发）经
+      `scripts/ensure-local-admin-identities.ts` 创建，密码来自
+      `scripts/x8-production-like.sh admin-secret set admin|admin2` 写入的本地
+      secret 文件（`.tmp/x8-production-like/secrets/`，未跟踪、0600），**绝不得**把
+      这个值带到 Level R / 生产。详见
+      `docs/operations/OWNER_LOCAL_UAT_RUNBOOK_2026-09-03.md` §2.5。
 - [ ] `FEATURE_NOVEL_CATALOG_SYNC=true` / `NOVEL_CATALOG_SYNC_ALLOW_WRITE=true`（同一次变更
       内一起改，任务消费原子规则见本节开头）。
 - [ ] `FEATURE_PROMO_LINK_CLAIM=true` / `PROMO_LINK_CLAIM_ALLOW_WRITE=true`（同一次变更内
@@ -162,6 +177,12 @@
       发布记录一律用规范值 `true`）。上线前用 `docker compose config` 核对渲染出的
       `ADMIN_TWO_FACTOR_ENFORCEMENT` 确实是 `true`，而不是从 Level UAT 环境沿用下来的
       `false`。
+- [ ] **`ADMIN_LOCAL_IDENTITY_SEED` 不设置（RC-11，必勾项，2026-09-04 Owner 冻结）。**
+      Level UAT 的 `allow` 到此为止——`docker compose config` 核对渲染出的 `web`
+      环境中不出现这个变量。生产管理员**不得预绑 2FA**：首个 `super_admin` 走
+      `bootstrap-admin-identity.ts`（密码只经 env，≥12 位），首次登录进
+      `/two-factor/setup` 现场扫码绑定，见
+      `docs/operations/ADMIN_AUTH_RECOVERY_2026-09-04.md`。
 - [ ] `SITE_URL=https://pulsenovels.com`（生产域名，见上）。
 - [ ] `ADMIN_CANONICAL_ORIGIN=https://zbcwf.pulsenovels.com`（RC-9 后台主机隔离，见 §2）；
       上线前用 §4 的 HTTP route 验收命令确认两条：`https://pulsenovels.com/login` 404，

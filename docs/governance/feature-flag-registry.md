@@ -32,6 +32,13 @@ All flags use exact `=== "true"` parsing and default off. A catalog `dry_run` ma
 2. **默认值必须是 `true`。** `.env.example`、`docker-compose.yml` 的 `web` 服务、`scripts/lib/x8-levels.json` 的 Level 0/Level R 均显式或隐式落在 `true`；唯一允许 `false` 的是 `scripts/lib/x8-levels.json` 的 Level UAT（`X8_LEVEL=uat` 本地拓扑）。
 3. **关闭时打一次启动期告警。** `warnTwoFactorDisabledOnce()`（同文件）在进程内只 `console.error` 一次，由 `scripts/two-factor-enforcement-preflight.ts` 在 `scripts/start-web.sh` 里、`node server.js` 启动前调用；不在每次请求的 guard 里调用，避免刷屏。
 
+| `ADMIN_LOCAL_IDENTITY_SEED` | 未设置（= 拒绝） | `scripts/ensure-local-admin-identities.ts` 的 `requireLocalIdentitySeedAllowed` | RC-11：本地 X8 `admin`/`admin2` 两账户种子脚本的硬门禁；同时是该脚本内 `hashAdminPassword` 12 位密码下限的唯一豁免条件（`minLength: 1`，仅在此脚本自己的执行路径内生效，不改 `hashAdminPassword` 默认值）。 |
+
+`ADMIN_LOCAL_IDENTITY_SEED` 与 `ADMIN_TWO_FACTOR_ENFORCEMENT` 同一失败方向（未设置/拼错 → 更严格），但不是同义词精简开关——严格精确匹配（trim 后区分大小写），唯一放行值是精确的 `allow`：
+
+1. **不是能力开关，是运维种子脚本的一次性豁免闸。** 只有 `scripts/lib/x8-levels.json` 的 Level UAT（`X8_LEVEL=uat`）导出 `allow`；Level 0、Level R 均导出空字符串，`scripts/ensure-local-admin-identities.ts` 精确匹配 `"allow"` 时才继续，其余任何值（含空字符串、`true`、大小写变体、首尾空格）一律 fail-fast。
+2. **生产必须不设。** 见 `docs/p2/V020_RELEASE_CHECKLIST.md` §2；真实部署的 `docker-compose.yml`/`.env.example` 都不声明这个变量，与 CPS 无需长度豁免（无长度校验）不同，这是本仓专属的、刻意收紧的一次性豁免面。
+
 `PUBLIC_TRACKING_WRITE_DISABLED` 是本登记表里**唯二的例外**，两处都是有意为之，不是疏漏：
 
 1. **默认开而非默认关。** 上面每一个 flag 都是「能力开关」，默认关 = 能力不启用 = 安全。这一个是「停写开关」，默认关 = 写入照常发生。搬自 CPS `getTrackingWriteStatus`（`src/lib/cps-tracking.ts:42-56`，v8.3.6 `16f2e4cfca51f46af0dede899ecf6242a770bbd0`）但**默认值反转**：CPS 生产默认 `1`（`.env.example:160`、`docker-compose.yml:92`）因为它另有归因信号；本仓 `/go` 是唯一归因信号，未设置必须等于「写」。

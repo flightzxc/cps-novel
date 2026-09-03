@@ -4,6 +4,58 @@
 
 ---
 
+## 2026-09-04 · RC-11 本地管理员认证恢复 + 2FA 首次绑定 QR
+
+- 事故背景：X8 复用旧 PostgreSQL volume，遗留管理员 `x8-owner` 已在 2026-08-26 完成
+  2FA 绑定，Owner 没有验证器或恢复码，密码通过验证后被 `/two-factor/challenge` 卡死；
+  `bootstrap-admin-identity.ts` 要求身份表为空，无法用于"只重置认证状态"；此前也没有
+  在 X8 uat 固定初始化 `admin`/`admin2` 两账户的受审计入口。基于 RC-10 分支续做，RC-10
+  的开关与登录三分支未改。
+- 新增 `scripts/reset-admin-auth-state.ts`：受审计、默认 dry-run 的认证状态重置 CLI
+  （`--username`/`--reason`/`--request-id`/`--apply`/`--deactivate`/`--ip`/
+  `--break-glass`），形态镜像 `bootstrap-admin-identity.ts`（`RESET_ADMIN_OPERATOR`
+  env、固定 advisory lock `namespace 50_311`、同事务 `OperationAudit`、`--request-id`
+  重放去重）。事务内撤销该身份全部会话（`revokedAt` + `sessionVersion++`）、删 2FA
+  挑战、删恢复码、清 `admin_two_factor` 绑定字段、删该用户名（可选 `--ip`）的
+  `admin_login_attempt` 记录；`--deactivate` 只把 `status` 置 `disabled`，从不删行。
+  生产（`NODE_ENV=production` 且 `ADMIN_TWO_FACTOR_ENFORCEMENT` 为强制）的 `--apply`
+  额外要求 `--break-glass`，并把该标记写进审计 `afterSnapshot`。
+- 新增 `scripts/ensure-local-admin-identities.ts`：仅在 `ADMIN_LOCAL_IDENTITY_SEED=allow`
+  （严格精确匹配）时可执行的本地种子脚本，固定初始化 `admin`/`admin2` 两个
+  `super_admin`，密码分别从 `X8_ADMIN_PASSWORD`/`X8_ADMIN2_PASSWORD` env 读取（不进
+  argv/日志/仓库）；`--reset-password` 才更新既有账户；写 `OperationAudit`；幂等。
+- `src/lib/auth/password.ts` 的 `hashAdminPassword` 新增可选 `minLength`（默认仍为
+  12，所有既有调用方不变）——`ensure-local-admin-identities.ts` 是唯一传较低值的调用方，
+  且只在自身已确认 `ADMIN_LOCAL_IDENTITY_SEED=allow` 之后才这样做。
+- X8 三级新增 `adminLocalIdentitySeed` 字段（`scripts/lib/x8-levels.json`）：Level UAT
+  `allow`，Level 0/Level R 空字符串；`x8_level_config()` 随既有循环导出
+  `ADMIN_LOCAL_IDENTITY_SEED`。`scripts/x8-production-like.sh` 新增三个子命令：
+  `admin-secret set <admin|admin2>`（`read -s` 静默写 0600 secret 文件，从不回显）、
+  `admin-seed`（Level UAT only，经 `--env-from-file` 而非 `-e` 把密码/`DATABASE_URL`
+  传进容器，避免 argv/`ps` 暴露）、`admin-reset <username> [--deactivate] [--apply]
+  [--break-glass] [--ip]`（自动派生 `--reason`/`--request-id`）；两者均以
+  `$P1_12_MIGRATION_DATABASE_URL`（而非 `web_app` 的窄权限连接）跑在已构建的 `web`
+  镜像内——`web_app` 对 `admin_two_factor_challenge` 无 `DELETE` 授权。`up` 在
+  `X8_LEVEL=uat` 且两个 secret 文件均存在时自动跑 `admin-seed`，缺失只提示不失败。
+- 2FA 首次绑定加 QR：`src/lib/auth/totp.ts` 新增 `createTotpQrCodeDataUrl`（CPS 逐参数
+  parity：`errorCorrectionLevel:"M", margin:1, width:256`，新依赖 `qrcode@1.5.4` +
+  `@types/qrcode`，动态 `import()`，不改现有 `createTotpUri` 的算法/issuer/label）。
+  **未改 `src/contracts/two-factor.ts` 的 `TwoFactorSetupResult` 形状**——
+  `tests/backend/contracts/admin-contracts.test.ts` 用 `toEqual` 钉死该投影的精确字段，
+  是既有冻结文件不可改；`qrCodeDataUrl` 改为在 `two-factor/setup/_actions.ts` 里以
+  `TwoFactorSetupWithQr = TwoFactorSetupResult & { qrCodeDataUrl }` 组合在投影之上，
+  `setup-flow.tsx` 相应渲染一张 `<img>`（同 `site-settings-client.tsx` OG 预览图的
+  `eslint-disable-next-line @next/next/no-img-element` 先例）。
+- 门禁：`npm run typecheck`/`lint`/`test:ui`/`test:backend`/`build` 全绿；
+  `publish-gate/no-bypass.test.ts` 1 项基线既有失败（`scripts/s1-exact-target-
+  structural-smoke.ts` 命中 raw SQL 误报，RC-10 基线同样失败，本轮未新增违规、未改
+  该脚本）照实保留。`git grep` 未发现新增明文密码字面量。
+- 文档：`docs/operations/OWNER_LOCAL_UAT_RUNBOOK_2026-09-03.md` 新增 §2.5、步骤 1
+  文案更新；`docs/p2/V020_RELEASE_CHECKLIST.md` §2 新增 `ADMIN_LOCAL_IDENTITY_SEED`
+  生产必须不设条目；`.env.example` 新增 `X8_ADMIN_PASSWORD`/`X8_ADMIN2_PASSWORD`
+  注释（不给值）；`docs/governance/port-registry.md`/`feature-flag-registry.md` 已
+  登记；新增 `docs/operations/ADMIN_AUTH_RECOVERY_2026-09-04.md`。
+
 ## 2026-09-04 · RC-10 后台 2FA 全局强制开关
 
 - Owner 裁定：本地 UAT 不用 2FA（登录后直接进后台），生产/Level R 发布时再开启——
