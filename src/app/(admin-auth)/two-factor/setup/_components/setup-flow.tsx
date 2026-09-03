@@ -4,30 +4,21 @@ import { useEffect, useState, type FormEvent } from "react";
 
 import { buttonClassName } from "@/components/ui/button";
 import { CopyButton } from "@/components/ui/copy-button";
-import type { RecoveryCodesOneTimeResult, TwoFactorSetupResult } from "@/contracts";
+import type { RecoveryCodesOneTimeResult } from "@/contracts";
 import { errorEnvelopeCopy } from "@/features/admin-ui/error-copy";
 
 import { AuthCard } from "../../../_components/auth-card";
 import { AuthLogoutControl } from "../../../_components/auth-logout-control";
-import { confirmSetupAction, finishSetupAction, startSetupAction } from "../_actions";
+import { confirmSetupAction, finishSetupAction, startSetupAction, type TwoFactorSetupWithQr } from "../_actions";
 
 const INPUT_CLASS =
   "w-full rounded-lg border border-gray-300 px-3 py-2 text-center font-mono text-lg tracking-[0.3em] text-gray-900 placeholder:tracking-normal placeholder:text-gray-400 placeholder:font-sans placeholder:text-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 disabled:bg-gray-100";
 
 type Step =
   | { name: "idle" }
-  | { name: "started"; setup: TwoFactorSetupResult }
+  | { name: "started"; setup: TwoFactorSetupWithQr }
   | { name: "done"; recovery: RecoveryCodesOneTimeResult };
 
-/**
- * QR code note (asked for explicitly in the PR-C1 brief): this shows the
- * `otpauth://` URI as selectable text plus the manual base32 key, not a
- * rendered QR image. Every authenticator app accepts manual key entry, and
- * the "not new dependency first" instruction rules out pulling in a QR
- * library for what is, functionally, one string. A scannable QR is a
- * reasonable later enhancement once there's a real reason to add that
- * dependency.
- */
 function IdleStep({ onStart, busy, error }: { onStart: () => void; busy: boolean; error: string | null }) {
   return (
     <div className="space-y-4">
@@ -50,7 +41,7 @@ function StartedStep({
   setup,
   onDone,
 }: {
-  setup: TwoFactorSetupResult;
+  setup: TwoFactorSetupWithQr;
   onDone: (recovery: RecoveryCodesOneTimeResult) => void;
 }) {
   const [code, setCode] = useState("");
@@ -87,6 +78,22 @@ function StartedStep({
   return (
     <div className="space-y-4">
       <div className="space-y-2 rounded-lg border border-gray-200 bg-gray-50 p-3">
+        <div className="flex justify-center">
+          {/* RC-11: rendered PNG of the same otpauth:// URI shown below as
+              text — scan with Google Authenticator (or any TOTP app) instead
+              of typing the manual key. Same one-time secret either way. A
+              server-generated data: URL is not a next/image remote pattern
+              candidate, so plain img is correct here (same precedent as
+              site-settings-client.tsx's OG image preview). */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={setup.qrCodeDataUrl}
+            alt="双重验证二维码，使用身份验证器 App 扫描以完成绑定"
+            width={192}
+            height={192}
+            className="h-48 w-48 rounded-lg border border-gray-200 bg-white p-2"
+          />
+        </div>
         <div>
           <p className="text-xs font-medium text-gray-500">手动输入密钥</p>
           <div className="mt-1 flex items-center gap-2">

@@ -12,6 +12,7 @@ import {
 import { AdminAccessError } from "@/lib/auth/errors";
 import { revokeAdminSession } from "@/lib/auth/login";
 import { hashAdminSessionToken } from "@/lib/auth/session";
+import { createTotpQrCodeDataUrl } from "@/lib/auth/totp";
 import { confirmTwoFactorSetup, startTwoFactorSetup } from "@/lib/auth/two-factor";
 
 import { authUnitOfWork, twoFactorStore } from "../../../api/admin/_lib/auth-deps";
@@ -26,8 +27,20 @@ import {
   safeNextPath,
 } from "../../_lib/auth-session";
 
+/**
+ * RC-11: the QR rendering of `otpauthUri` composed on top of the frozen
+ * `TwoFactorSetupResult` projection (`@/contracts/two-factor.ts`) — added
+ * here, not to that contract's own shape, because
+ * `tests/backend/contracts/admin-contracts.test.ts` pins
+ * `projectTwoFactorSetup`'s exact output with `toEqual` and that file is out
+ * of scope for this change. Same secret either way; this is purely an
+ * additional rendering of `otpauthUri`, generated fresh on every call, never
+ * stored.
+ */
+export type TwoFactorSetupWithQr = TwoFactorSetupResult & { readonly qrCodeDataUrl: string };
+
 export type StartSetupResult =
-  | { ok: true; data: TwoFactorSetupResult }
+  | { ok: true; data: TwoFactorSetupWithQr }
   | { ok: false; envelope: ErrorEnvelope };
 
 export type ConfirmSetupResult =
@@ -55,7 +68,12 @@ export async function startSetupAction(): Promise<StartSetupResult> {
       identities,
       twoFactor: twoFactorStore(),
     });
-    return { ok: true, data: projectTwoFactorSetup(setup) };
+    // RC-11: render the same otpauth:// URI as a scannable QR so Google
+    // Authenticator can enroll by camera, not only manual key entry. Pure
+    // rendering of an already-generated secret — no new secret, no extra
+    // store write.
+    const qrCodeDataUrl = await createTotpQrCodeDataUrl(setup.otpauthUri);
+    return { ok: true, data: { ...projectTwoFactorSetup(setup), qrCodeDataUrl } };
   } catch (error) {
     return { ok: false, envelope: toErrorEnvelope(error) };
   }

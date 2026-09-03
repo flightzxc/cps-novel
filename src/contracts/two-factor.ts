@@ -16,6 +16,14 @@ export type TwoFactorStateView = {
  * `manualKey` and `otpauthUri` both carry the raw TOTP secret. They exist in the
  * response body and nowhere else: the database only ever holds the AES-GCM
  * ciphertext, and re-reading setup state must never reproduce them.
+ *
+ * RC-11 note: the setup screen also renders this as a scannable QR
+ * (`createTotpQrCodeDataUrl`, CPS-parity params) but that `qrCodeDataUrl`
+ * field is composed on top of this projection in
+ * `(admin-auth)/two-factor/setup/_actions.ts`, not added here —
+ * `tests/backend/contracts/admin-contracts.test.ts` pins this exact shape
+ * (`toEqual`, not `toMatchObject`) and that frozen file is out of scope for
+ * this change.
  */
 export type TwoFactorSetupResult = {
   readonly manualKey: string;

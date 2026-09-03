@@ -89,3 +89,30 @@ export function createTotpUri(username: string, secret: string, issuer = TOTP_IS
   });
   return `otpauth://totp/${encodeURIComponent(label)}?${query.toString()}`;
 }
+
+/**
+ * RC-11 — renders the same `otpauth://` URI `createTotpUri` already builds as
+ * a scannable QR code, so Google Authenticator (and any other TOTP app) can
+ * enroll by camera instead of manual key entry. Does not touch the TOTP
+ * construction itself (issuer/label/algorithm/digits/period are unchanged) —
+ * this only encodes the finished URI as an image.
+ *
+ * Parameters are byte-for-byte CPS parity (`v8.3.6:src/lib/totp.ts`'s
+ * `createTotpQrCodeDataUrl`): `errorCorrectionLevel: "M"`, `margin: 1`,
+ * `width: 256`. The dynamic `import("qrcode")` mirrors CPS too — this module
+ * is otherwise dependency-free and imported from both server actions and
+ * plain unit tests, so the (larger) `qrcode` package only loads where a QR is
+ * actually requested.
+ *
+ * The returned `data:image/png;base64,...` URL carries the same secret the
+ * URI does; like `manualKey`/`otpauthUri`, it must only ever leave the server
+ * in the one-time setup response body, never logged or persisted.
+ */
+export async function createTotpQrCodeDataUrl(uri: string): Promise<string> {
+  const QRCode = await import("qrcode");
+  return QRCode.toDataURL(uri, {
+    errorCorrectionLevel: "M",
+    margin: 1,
+    width: 256,
+  });
+}
