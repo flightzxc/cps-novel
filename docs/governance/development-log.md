@@ -33,6 +33,11 @@
   1 处既有基线失败（`scripts/s1-exact-target-structural-smoke.ts` 的
   `$executeRawUnsafe` 误报，与本轮无关，历史已知）；`bash -n` 通过。
 - 未 push、未 merge、未改任何业务逻辑/SEO 生成算法/prisma/数据库、未起停 docker。
+- 复核 fixup（Opus，同日）：`PRODUCTION_DOMAIN_2026-09-03.md` 消费方清单补上遗漏的两个真实
+  消费方 `src/lib/seo/novel-hreflang.ts` 与 `src/lib/indexnow/eligibility.ts`（均经
+  `toAbsoluteUrl()`），部署项补上 `/backups` 挂载一条（原只在 ALERTS_RUNBOOK §1.2），
+  X8 边界补记 `X8_LEVEL=r` 同样恒为 `novel.test`（已实测）；`.env.example` 给
+  `ADMIN_CANONICAL_ORIGIN` 补对称注释，与 `SITE_URL` 的生产值口径一致。文档仍 40 行封顶。
 
 ## 2026-09-03 · RC-7b 备份/Worker 关键词健康端点
 
