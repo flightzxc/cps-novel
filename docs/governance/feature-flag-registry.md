@@ -24,12 +24,12 @@ All flags use exact `=== "true"` parsing and default off. A catalog `dry_run` ma
 
 | `PUBLIC_TRACKING_WRITE_DISABLED` | `false`（未设置 = 写入开启） | `src/lib/flags/feature-flags.ts` 的 `isPublicTrackingWriteDisabled`，唯一调用方为 `src/app/go/_lib/tracking-guard.ts` 的 `shouldRecordGoRedirect`（再由 `src/app/go/[code]/route.ts` 调用） | RC-6 安全阀：置真时 `GET /go/[code]` 不再写 `TrackingEvent` 行，跳转行为（302/404、目标 URL、`Cache-Control: no-store`）完全不受影响。用于刷量高峰或数据库写压力下的临时止血。 |
 
-| `ADMIN_TWO_FACTOR_ENFORCEMENT` | `required`（未设置 = 强制） | `src/lib/auth/two-factor-enforcement.ts` 的 `readTwoFactorEnforcement`/`isTwoFactorEnforced`，调用方遍布 `src/lib/auth/capabilities.ts`（`requireAdminTwoFactor`）、`src/server/auth/guards.ts`（`enforceAdminSessionTwoFactor`）、`src/app/(admin)/_lib/page-guard.ts`、`src/app/(admin-auth)/login/_actions.ts`、`src/app/(admin-auth)/_lib/auth-session.ts`（`postAuthDestination`） | RC-10 全局开关：`disabled` 时后台跳过强制 2FA 注册/挑战，任何未完成 2FA 的会话都被当作已完成；`required`（默认）时行为与 RC-10 之前逐字相同。 |
+| `ADMIN_TWO_FACTOR_ENFORCEMENT` | `true`（未设置 = 强制） | `src/lib/auth/two-factor-enforcement.ts` 的 `readTwoFactorEnforcement`/`isTwoFactorEnforced`，调用方遍布 `src/lib/auth/capabilities.ts`（`requireAdminTwoFactor`）、`src/server/auth/guards.ts`（`enforceAdminSessionTwoFactor`）、`src/app/(admin)/_lib/page-guard.ts`、`src/app/(admin-auth)/login/_actions.ts`、`src/app/(admin-auth)/_lib/auth-session.ts`（`postAuthDestination`） | RC-10 全局开关：`false` 时后台跳过强制 2FA 注册/挑战，任何未完成 2FA 的会话都被当作已完成；`true`（默认）时行为与 RC-10 之前逐字相同。 |
 
 `ADMIN_TWO_FACTOR_ENFORCEMENT` 取值解析也不是简单 `=== "true"`（与下面的 `PUBLIC_TRACKING_WRITE_DISABLED` 同类，但失败方向相反），单独说明：
 
-1. **不是能力开关，是强制开关，且失败方向是"保持强制"。** 唯一能关闭 2FA 强制的值是精确（trim 后大小写不敏感）的 `disabled`；未设置、`required`、拼错的值（`Disable`/`off`/`0`/`no`）一律解析为 `required`。这是本登记表里唯一一个"认不出的值 → 更严格"的 flag——刻意如此：这是安全边界，不是普通功能开关。
-2. **默认值必须是 `required`。** `.env.example`、`docker-compose.yml` 的 `web` 服务、`scripts/lib/x8-levels.json` 的 Level 0/Level R 均显式或隐式落在 `required`；唯一允许 `disabled` 的是 `scripts/lib/x8-levels.json` 的 Level UAT（`X8_LEVEL=uat` 本地拓扑）。
+1. **不是能力开关，是强制开关，且失败方向是"保持强制"。** 规范值是 `true`（强制，默认）/`false`（关闭）；`required`/`disabled`（2026-09-04 首版用的词形）作为同义词继续被接受，trim 后大小写不敏感。唯一能关闭 2FA 强制的精确值是 `false` 或 `disabled`；未设置、`true`、`required`、拼错的值（`Disable`/`off`/`0`/`no`）一律解析为强制。这是本登记表里唯一一个"认不出的值 → 更严格"的 flag——刻意如此：这是安全边界，不是普通功能开关。
+2. **默认值必须是 `true`。** `.env.example`、`docker-compose.yml` 的 `web` 服务、`scripts/lib/x8-levels.json` 的 Level 0/Level R 均显式或隐式落在 `true`；唯一允许 `false` 的是 `scripts/lib/x8-levels.json` 的 Level UAT（`X8_LEVEL=uat` 本地拓扑）。
 3. **关闭时打一次启动期告警。** `warnTwoFactorDisabledOnce()`（同文件）在进程内只 `console.error` 一次，由 `scripts/two-factor-enforcement-preflight.ts` 在 `scripts/start-web.sh` 里、`node server.js` 启动前调用；不在每次请求的 guard 里调用，避免刷屏。
 
 `PUBLIC_TRACKING_WRITE_DISABLED` 是本登记表里**唯二的例外**，两处都是有意为之，不是疏漏：

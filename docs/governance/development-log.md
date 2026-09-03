@@ -12,8 +12,10 @@
   `twoFactorCompleted`/挑战/恢复码）与既有会话/登录逻辑均未改动。
 - 新增 `src/lib/auth/two-factor-enforcement.ts`（纯函数，无 Node/Prisma 依赖）：
   `ADMIN_TWO_FACTOR_ENFORCEMENT` 环境变量，`readTwoFactorEnforcement`/
-  `isTwoFactorEnforced` fail-closed——只有精确值 `disabled`（trim 后大小写不敏感）
-  关闭强制，未设置/`required`/任何其它值一律 `required`；`warnTwoFactorDisabledOnce`
+  `isTwoFactorEnforced` fail-closed。**同日 Owner 修正**：规范值改为 `true`（强制，
+  默认）/`false`（关闭），`required`/`disabled`（当天首版用词）作为同义词继续接受；
+  trim 后大小写不敏感；只有精确值 `false`/`disabled` 关闭强制，未设置/`true`/
+  `required`/任何其它值一律强制；`warnTwoFactorDisabledOnce`
   在关闭时进程内只 `console.error` 一次。
 - 接线五处，均只加"是否强制"判断，未改各自原有算法：
   `src/lib/auth/capabilities.ts` 的 `requireAdminTwoFactor`（新的唯一 2FA 断言入口，
@@ -32,12 +34,13 @@
   `scripts/start-web.sh` 既有的 `credential-secret-preflight.ts` 之后、
   `node server.js` 之前调用，非阻断——只在关闭时打一次日志。
 - X8 分级：`scripts/lib/x8-levels.json` 三级新增 `adminTwoFactorEnforcement`
-  字段——Level 0/Level R `required`，Level UAT `disabled`；
+  字段——Level 0/Level R `true`，Level UAT `false`（规范值；同日修正前一度是
+  `required`/`disabled`，已改用规范值）；
   `scripts/lib/x8-production-like-env.sh` 随既有 `level_config` 循环自动导出
   `ADMIN_TWO_FACTOR_ENFORCEMENT`；`scripts/acceptance/x8-validate-compose.mjs`
   新增 `web` 服务断言（对照 `PROMO_CLAIM_ROLES` 的既有写法）与 worker/scheduler
   不得携带该变量的反向断言；`docker-compose.yml` 的 `web` 服务默认值
-  `ADMIN_TWO_FACTOR_ENFORCEMENT: ${ADMIN_TWO_FACTOR_ENFORCEMENT:-required}`。
+  `ADMIN_TWO_FACTOR_ENFORCEMENT: ${ADMIN_TWO_FACTOR_ENFORCEMENT:-true}`。
 - 文档同步：`.env.example`、`docs/p2/V020_RELEASE_CHECKLIST.md`（§2 + Level UAT +
   Level R 必勾项）、`docs/operations/OWNER_LOCAL_UAT_RUNBOOK_2026-09-03.md`（入场
   条件 5 与步骤 1）、`docs/governance/feature-flag-registry.md` 均已登记。

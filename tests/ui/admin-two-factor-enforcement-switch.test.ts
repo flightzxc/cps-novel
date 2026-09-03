@@ -32,35 +32,54 @@ import type { AdminRegistry } from "@/server/auth/registry";
  */
 
 describe("readTwoFactorEnforcement / isTwoFactorEnforced — fail-closed table", () => {
+  // Owner correction (2026-09-04, same day as the initial cut): canonical
+  // values are `true` (enforced, default) / `false` (disabled);
+  // `required`/`disabled` (the initial cut's wording) remain accepted
+  // synonyms. Comparison is trim + case-insensitive. Anything other than
+  // the exact `false`/`disabled` — including unset, `true`, `required`,
+  // `0`, `off`, `no`, an empty string, or garbage — resolves to "required"
+  // (fail-closed).
   it.each([
     [undefined, "required"],
+    ["true", "required"],
+    ["TRUE", "required"],
     ["required", "required"],
     ["REQUIRED", "required"],
     ["yes", "required"],
     ["1", "required"],
-    ["true", "required"],
+    ["0", "required"],
     ["off", "required"],
+    ["no", "required"],
     ["disable", "required"],
     ["Disable", "required"],
     ["", "required"],
+    ["garbage-value", "required"],
+    ["false", "disabled"],
+    ["FALSE", "disabled"],
+    [" false ", "disabled"],
+    ["False", "disabled"],
     ["disabled", "disabled"],
     ["DISABLED", "disabled"],
     ["Disabled", "disabled"],
     [" disabled ", "disabled"],
     ["\tdisabled\n", "disabled"],
+    ["\tfalse\n", "disabled"],
   ] as const)("%j -> %s", (raw, expected) => {
     const env = (raw === undefined ? {} : { [ADMIN_TWO_FACTOR_ENFORCEMENT_ENV]: raw }) as NodeJS.ProcessEnv;
     expect(readTwoFactorEnforcement(env)).toBe(expected);
     expect(isTwoFactorEnforced(env)).toBe(expected === "required");
   });
 
-  it("defaults to process.env when no env argument is given", () => {
+  it("defaults to process.env when no env argument is given, and accepts both the canonical value and its synonym", () => {
     const original = process.env[ADMIN_TWO_FACTOR_ENFORCEMENT_ENV];
     delete process.env[ADMIN_TWO_FACTOR_ENFORCEMENT_ENV];
     try {
       expect(readTwoFactorEnforcement()).toBe("required");
       expect(isTwoFactorEnforced()).toBe(true);
-      process.env[ADMIN_TWO_FACTOR_ENFORCEMENT_ENV] = "disabled";
+      process.env[ADMIN_TWO_FACTOR_ENFORCEMENT_ENV] = "false";
+      expect(readTwoFactorEnforcement()).toBe("disabled");
+      expect(isTwoFactorEnforced()).toBe(false);
+      process.env[ADMIN_TWO_FACTOR_ENFORCEMENT_ENV] = "disabled"; // pre-correction synonym still works
       expect(readTwoFactorEnforcement()).toBe("disabled");
       expect(isTwoFactorEnforced()).toBe(false);
     } finally {
@@ -147,6 +166,11 @@ describe("requireAdminTwoFactor — capabilities.ts (the single choke point)", (
         env,
       ),
     ).not.toThrow();
+  });
+
+  it("disabled via the canonical value \"false\" (not just the \"disabled\" synonym): never throws", () => {
+    const env = { [ADMIN_TWO_FACTOR_ENFORCEMENT_ENV]: "false" } as unknown as NodeJS.ProcessEnv;
+    expect(() => requireAdminTwoFactor(context({ twoFactorCompleted: false }), env)).not.toThrow();
   });
 });
 

@@ -55,8 +55,9 @@ x8_level_config() {
       // still be unable to run steps 6/7 of the Owner runbook.
       `PROMO_CLAIM_ROLES=${entry.promoClaimRoles}`,
       // RC-10: the global 2FA enforcement switch (src/lib/auth/
-      // two-factor-enforcement.ts). "disabled" only for Level UAT; Level 0
-      // and Level R stay "required" (fail-closed default).
+      // two-factor-enforcement.ts). Canonical values are "true"/"false";
+      // "false" only for Level UAT, Level 0 and Level R stay "true"
+      // (fail-closed default).
       `ADMIN_TWO_FACTOR_ENFORCEMENT=${entry.adminTwoFactorEnforcement}`,
     ];
     for (const [key, value] of Object.entries(entry.flags)) lines.push(`${key}=${value}`);

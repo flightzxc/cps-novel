@@ -255,9 +255,13 @@ describe("X8 local production-like contracts", () => {
   });
 
   it("RC-10: disables ADMIN_TWO_FACTOR_ENFORCEMENT only at Level UAT, and exports/asserts it end to end", () => {
-    expect(x8Levels["0"].adminTwoFactorEnforcement).toBe("required");
-    expect(x8Levels.uat.adminTwoFactorEnforcement).toBe("disabled");
-    expect(x8Levels.r.adminTwoFactorEnforcement).toBe("required");
+    // Canonical values are "true"/"false" (Owner correction, 2026-09-04,
+    // same day as the initial cut) -- "required"/"disabled" remain accepted
+    // synonyms at the parsing layer (src/lib/auth/two-factor-enforcement.ts)
+    // but the level table and every exported/rendered value use true/false.
+    expect(x8Levels["0"].adminTwoFactorEnforcement).toBe("true");
+    expect(x8Levels.uat.adminTwoFactorEnforcement).toBe("false");
+    expect(x8Levels.r.adminTwoFactorEnforcement).toBe("true");
     // scripts/lib/x8-production-like-env.sh's x8_level_config() must read the
     // field from the same table (not a second hard-coded copy), and
     // prepare_x8_environment()'s existing `while IFS='=' read` loop exports
@@ -273,7 +277,7 @@ describe("X8 local production-like contracts", () => {
     );
     // docker-compose.yml's web service must default to the fail-closed value.
     const compose = read("docker-compose.yml");
-    expect(compose).toContain("ADMIN_TWO_FACTOR_ENFORCEMENT: ${ADMIN_TWO_FACTOR_ENFORCEMENT:-required}");
+    expect(compose).toContain("ADMIN_TWO_FACTOR_ENFORCEMENT: ${ADMIN_TWO_FACTOR_ENFORCEMENT:-true}");
   });
 
   it("ships valid shell and five read-only launch-day SQL groups", () => {

@@ -1,10 +1,10 @@
 {
-  "_comment": "Single source of truth for X8_LEVEL (RC-2b). Read by scripts/lib/x8-production-like-env.sh (bash, via `node -e`) and scripts/acceptance/x8-validate-compose.mjs (Node) so both sides assert the exact same values. Each level's workerTaskAllowlist/flags must stay letter-for-letter identical to the matching section in docs/p2/V020_RELEASE_CHECKLIST.md ('## 3. Flag 分级开放' -> Level 0 / Level UAT / Level R). promoClaimRoles is NOT one of the checklist's eight double-gate flags: it is the PROMO_CLAIM_ROLES admin-capability grant (src/lib/auth/capabilities.ts), which the double-gates alone cannot supply -- without it the /catalog-sync claim dialog's apply mode stays blocked no matter what FEATURE_PROMO_LINK_CLAIM says. Level 0 keeps it empty (granted to nobody), matching the capability's own defaultRoles: []. catalogSyncDefaultGateState only seeds scripts/lib/x8-production-like-env.sh's catalog-gate state file on its very first run for a given level; the existing `gate catalog-write on|off|dry-run` command still overrides it afterward, unchanged. adminTwoFactorEnforcement (RC-10) is the ADMIN_TWO_FACTOR_ENFORCEMENT value for the web service (src/lib/auth/two-factor-enforcement.ts): 'required' everywhere except Level UAT, which is 'disabled' by Owner decision (2026-09-04) -- local UAT only, never Level 0 (pre-deploy) or Level R (production).",
+  "_comment": "Single source of truth for X8_LEVEL (RC-2b). Read by scripts/lib/x8-production-like-env.sh (bash, via `node -e`) and scripts/acceptance/x8-validate-compose.mjs (Node) so both sides assert the exact same values. Each level's workerTaskAllowlist/flags must stay letter-for-letter identical to the matching section in docs/p2/V020_RELEASE_CHECKLIST.md ('## 3. Flag 分级开放' -> Level 0 / Level UAT / Level R). promoClaimRoles is NOT one of the checklist's eight double-gate flags: it is the PROMO_CLAIM_ROLES admin-capability grant (src/lib/auth/capabilities.ts), which the double-gates alone cannot supply -- without it the /catalog-sync claim dialog's apply mode stays blocked no matter what FEATURE_PROMO_LINK_CLAIM says. Level 0 keeps it empty (granted to nobody), matching the capability's own defaultRoles: []. catalogSyncDefaultGateState only seeds scripts/lib/x8-production-like-env.sh's catalog-gate state file on its very first run for a given level; the existing `gate catalog-write on|off|dry-run` command still overrides it afterward, unchanged. adminTwoFactorEnforcement (RC-10) is the ADMIN_TWO_FACTOR_ENFORCEMENT value for the web service (src/lib/auth/two-factor-enforcement.ts): canonical values are 'true' (enforced) / 'false' (disabled) -- 'required'/'disabled' remain accepted synonyms, see that file. 'true' everywhere except Level UAT, which is 'false' by Owner decision (2026-09-04) -- local UAT only, never Level 0 (pre-deploy) or Level R (production).",
   "0": {
     "workerTaskAllowlist": "credential.validate.v1,credential.supersede.v1,catalog_scan",
     "catalogSyncDefaultGateState": "dry-run",
     "promoClaimRoles": "",
-    "adminTwoFactorEnforcement": "required",
+    "adminTwoFactorEnforcement": "true",
     "flags": {
       "FEATURE_PROMO_LINK_CLAIM": "false",
       "PROMO_LINK_CLAIM_ALLOW_WRITE": "false",
@@ -20,7 +20,7 @@
     "workerTaskAllowlist": "credential.validate.v1,credential.supersede.v1,catalog_scan,moboreader.preview_refresh.v1,promo_link.claim.v1",
     "catalogSyncDefaultGateState": "apply",
     "promoClaimRoles": "super_admin",
-    "adminTwoFactorEnforcement": "disabled",
+    "adminTwoFactorEnforcement": "false",
     "flags": {
       "FEATURE_PROMO_LINK_CLAIM": "true",
       "PROMO_LINK_CLAIM_ALLOW_WRITE": "true",
@@ -36,7 +36,7 @@
     "workerTaskAllowlist": "credential.validate.v1,credential.supersede.v1,catalog_scan,moboreader.preview_refresh.v1,promo_link.claim.v1,sitemap_refresh",
     "catalogSyncDefaultGateState": "apply",
     "promoClaimRoles": "super_admin",
-    "adminTwoFactorEnforcement": "required",
+    "adminTwoFactorEnforcement": "true",
     "flags": {
       "FEATURE_PROMO_LINK_CLAIM": "true",
       "PROMO_LINK_CLAIM_ALLOW_WRITE": "true",
