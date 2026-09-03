@@ -3,11 +3,13 @@
 import type { ErrorEnvelope } from "@/contracts";
 import { authenticateAdminLogin } from "@/lib/auth/login";
 import { createTwoFactorChallenge } from "@/lib/auth/two-factor";
+import { isTwoFactorEnforced } from "@/lib/auth/two-factor-enforcement";
 
 import { guardDependencies } from "../../api/admin/_lib/deps";
 import { loginAttemptStore, twoFactorStore } from "../../api/admin/_lib/auth-deps";
 import { toErrorEnvelope } from "../../api/admin/_lib/respond";
 import {
+  ADMIN_LANDING_PATH,
   currentHeaders,
   requestIp,
   requireSameOriginSubmission,
@@ -31,6 +33,14 @@ export type LoginActionResult = { ok: true; next: string } | { ok: false; envelo
  * as `authenticateAdminLogin`'s single `jwt_invalid` (401), and
  * `errorEnvelopeCopy` renders one fixed string for it — nothing username-shaped
  * ever reaches the client.
+ *
+ * RC-10: when `ADMIN_TWO_FACTOR_ENFORCEMENT=disabled` (local UAT only — see
+ * `@/lib/auth/two-factor-enforcement.ts`), a successful login goes straight
+ * to the deep link or landing page instead of detouring through
+ * `/two-factor/setup` or `/two-factor/challenge` — no challenge cookie is
+ * written either. When enforcement is `required` (the fail-closed default),
+ * this branch never runs and the two-way `twoFactorEnabled` split below is
+ * unchanged.
  */
 export async function loginAction(input: {
   username: string;
@@ -55,6 +65,10 @@ export async function loginAction(input: {
     // `two-factor/challenge/page.tsx` and `two-factor/setup/page.tsx`).
     const next = safeNextPath(input.next);
     const query = next ? `?next=${encodeURIComponent(next)}` : "";
+
+    if (!isTwoFactorEnforced()) {
+      return { ok: true, next: next ?? ADMIN_LANDING_PATH };
+    }
 
     if (!context.identity.twoFactorEnabled) {
       return { ok: true, next: `${TWO_FACTOR_SETUP_PATH}${query}` };

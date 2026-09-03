@@ -28,7 +28,11 @@
    `PROMO_CLAIM_ROLES=super_admin`（`scripts/lib/x8-levels.json` 的 `promoClaimRoles`，
    经 `docker-compose.yml` 的 `web` 服务传入），与
    `scripts/bootstrap-admin-identity.ts` 的 `BOOTSTRAP_ADMIN_ROLE = "super_admin"`
-   对上。该能力位 `requiresTwoFactor: true`，所以步骤 1 的 2FA 必须真的走完。
+   对上。该能力位 `requiresTwoFactor: true`——**RC-10 之前**这意味着步骤 1 的 2FA
+   必须真的走完；**RC-10 起**，`X8_LEVEL=uat` 同时把 `ADMIN_TWO_FACTOR_ENFORCEMENT`
+   自动置为 `disabled`（`scripts/lib/x8-levels.json`），全局 2FA 强制关闭，
+   `requiresTwoFactor: true` 这条能力位标记本身不变但不再被执行，步骤 1 不再需要
+   走 2FA（见下方步骤 1 的更新说明）。生产 Level R 上这条能力位标记继续按原样强制。
 
 ## 2. 准备阶段（由 Claude/Codex 完成，Owner 零手工）
 
@@ -141,7 +145,7 @@ docker compose -p cps-novel-x8-local \
 |---:|---|---|---|---|
 | 0.5 | 验证主机隔离生效 | `https://novel.test/login`；`https://zbcwf.novel.test/` | 前者 HTTP 404（公开主机不服务后台登录页——这正是短剧站
 `enpulsedrama.com/login` 的已知缺陷，海阅必须不重现）；后者 HTTP 404（后台主机不服务公开首页） | 截图或 `curl -I` 输出两条 |
-| 1 | 登录 + 2FA | `https://zbcwf.novel.test/login`（管理后台入口） | 二次验证通过，进入管理后台首页，会话建立 | 截图 |
+| 1 | 登录（本地 2FA 已关闭，直接进后台） | `https://zbcwf.novel.test/login`（管理后台入口） | 输入账号密码后直接进入管理后台首页，会话建立，不出现 2FA 注册/挑战页面——RC-10 起 `X8_LEVEL=uat` 自动把 `ADMIN_TWO_FACTOR_ENFORCEMENT` 置为 `disabled`（`scripts/lib/x8-levels.json`）。**仅本地 UAT**；生产 Level R 保持 `required`，登录后仍需完成 2FA | 截图 |
 | 2 | 录入 MoboReader 凭证；校验任务转绿 | `/channel-accounts` | `addOrReplaceCredential` 保存成功；credential validation 任务状态变为 completed/success（页面转绿） | 截图（任务状态） |
 | 3 | 小页区间 dry-run→apply | `/catalog-sync`（page ≤ 3、pageSize=20，见"已知限制"） | dry-run 预览无报错后 apply；对应 `NovelSourceItem` 行出现在数据库/后台列表 | 截图 + SQL：`SELECT count(*) FROM novel_source_item WHERE created_at > ...` |
 | 4 | 确认 preview 任务被消费 | `/tasks` | `moboreader.preview_refresh.v1` 对应 item 状态不再是 `pending`（success 或带诊断的 failed） | 截图（任务详情） |

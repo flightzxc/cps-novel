@@ -8,6 +8,7 @@ import { AdminAccessError } from "@/lib/auth/errors";
 import type { AdminIdentityStore, AdminRateLimitPort, SessionStore } from "@/lib/auth/ports";
 import { requireAdminSession, validateAdminSession } from "@/lib/auth/session";
 import type { AdminAuthContext } from "@/lib/auth/types";
+import { isTwoFactorEnforced } from "@/lib/auth/two-factor-enforcement";
 
 import { requireMutationRequestId, requireSameOrigin } from "./origin";
 import {
@@ -70,8 +71,19 @@ async function enforceRateLimit(
  * Page access deliberately stays outside this helper: the page wrapper needs
  * the authenticated context so it can redirect an unenrolled identity to
  * setup and a password-level session to the challenge screen.
+ *
+ * RC-10: gated behind `isTwoFactorEnforced(env)` the same way
+ * `requireAdminTwoFactor` is — see `@/lib/auth/two-factor-enforcement.ts`.
+ * This function's own `twoFactorEnabled` throw sits *before* it ever calls
+ * `requireAdminTwoFactor`, so it needs its own check: disabling enforcement
+ * must also stop forcing an operator who has never set up 2FA out of every
+ * mutation/route, not just skip the completed-challenge check.
  */
-function enforceAdminSessionTwoFactor(context: AdminAuthContext): void {
+function enforceAdminSessionTwoFactor(
+  context: AdminAuthContext,
+  env: NodeJS.ProcessEnv | undefined,
+): void {
+  if (!isTwoFactorEnforced(env)) return;
   if (!context.identity.twoFactorEnabled) {
     throw new AdminAccessError(
       "admin_two_factor_setup_required",
@@ -79,7 +91,7 @@ function enforceAdminSessionTwoFactor(context: AdminAuthContext): void {
       "Two-factor authentication setup is required",
     );
   }
-  requireAdminTwoFactor(context);
+  requireAdminTwoFactor(context, env);
 }
 
 function enforceCapability(
@@ -90,7 +102,7 @@ function enforceCapability(
   if (!capability) return;
   requireAdminCapability(context, capability, env);
   if (ADMIN_CAPABILITY_CONFIG[capability].requiresTwoFactor) {
-    requireAdminTwoFactor(context);
+    requireAdminTwoFactor(context, env);
   }
 }
 
@@ -124,7 +136,7 @@ export async function requireAdminRouteAccess(
     throw new AdminAccessError("admin_route_not_registered", 404, "Admin API route not registered");
   }
   const context = await requireAdminSession(input.sessionToken, dependencies);
-  enforceAdminSessionTwoFactor(context);
+  enforceAdminSessionTwoFactor(context, dependencies.env);
   enforceCapability(context, route.capability, dependencies.env);
   const mutation = !["GET", "HEAD", "OPTIONS"].includes(input.method.toUpperCase());
   if (!mutation) return { context };
@@ -159,7 +171,7 @@ export async function requireAdminActionAccess(
     throw new AdminAccessError("admin_action_not_registered", 404, "Admin action not registered");
   }
   const context = await requireAdminSession(input.sessionToken, dependencies);
-  enforceAdminSessionTwoFactor(context);
+  enforceAdminSessionTwoFactor(context, dependencies.env);
   enforceCapability(context, action.capability, dependencies.env);
   if (!action.mutation) return { context };
   requireSameOrigin(input.origin, input.canonicalOrigin ?? "");
@@ -196,7 +208,7 @@ export function requireAdminServiceMutation(
     });
   }
   requireAdminCapability(authorization.context, capability, env);
-  requireAdminTwoFactor(authorization.context);
+  requireAdminTwoFactor(authorization.context, env);
   return authorization.context;
 }
 
@@ -216,6 +228,6 @@ export async function requireFreshAdminServiceMutation(
   }
   const context = validateAdminSession(session, identity, input.now ?? new Date());
   requireAdminCapability(context, capability, input.env);
-  requireAdminTwoFactor(context);
+  requireAdminTwoFactor(context, input.env);
   return context;
 }

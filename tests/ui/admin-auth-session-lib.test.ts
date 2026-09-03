@@ -128,6 +128,37 @@ describe("postAuthDestination — the three-way branch every entry point shares"
     expect(postAuthDestination(base, undefined)).toBe(ADMIN_LANDING_PATH);
     expect(postAuthDestination(base, "https://evil.example")).toBe(ADMIN_LANDING_PATH);
   });
+
+  describe("RC-10 ADMIN_TWO_FACTOR_ENFORCEMENT=disabled", () => {
+    it("collapses straight to the deep link / landing page, ignoring identity/session 2FA state entirely", () => {
+      const disabled = { ADMIN_TWO_FACTOR_ENFORCEMENT: "disabled" } as unknown as NodeJS.ProcessEnv;
+      expect(
+        postAuthDestination(
+          { identity: identity({ twoFactorEnabled: false }), twoFactorCompleted: false },
+          "/novels",
+          disabled,
+        ),
+      ).toBe("/novels");
+      expect(
+        postAuthDestination(
+          { identity: identity({ twoFactorEnabled: false }), twoFactorCompleted: false },
+          undefined,
+          disabled,
+        ),
+      ).toBe(ADMIN_LANDING_PATH);
+    });
+
+    it("an unrecognized value (fail-closed) still forces enrollment, same as required", () => {
+      const typo = { ADMIN_TWO_FACTOR_ENFORCEMENT: "off" } as unknown as NodeJS.ProcessEnv;
+      expect(
+        postAuthDestination(
+          { identity: identity({ twoFactorEnabled: false }), twoFactorCompleted: false },
+          "/novels",
+          typo,
+        ),
+      ).toBe(TWO_FACTOR_SETUP_PATH);
+    });
+  });
 });
 
 describe("requestIp", () => {

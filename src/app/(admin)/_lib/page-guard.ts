@@ -14,6 +14,7 @@ import {
 import { isAdminAccessError, type AdminAccessErrorCode } from "@/lib/auth/errors";
 import { ADMIN_IDLE_TIMEOUT_MS } from "@/lib/auth/session";
 import type { AdminAuthContext } from "@/lib/auth/types";
+import { isTwoFactorEnforced } from "@/lib/auth/two-factor-enforcement";
 import { requireAdminPageAccess } from "@/server/auth/guards";
 import { resolveAdminPage } from "@/server/auth/registry";
 
@@ -71,6 +72,14 @@ const UNAUTHENTICATED_CODES: ReadonlySet<AdminAccessErrorCode> = new Set([
  *    for *mutation* routes — see `requireContentPage` — that axis is
  *    unchanged): this check is "has the operator completed today's 2FA at
  *    all", not "does this specific action require it".
+ *
+ * RC-10: both redirects below (2 and 3 above) are additionally gated by
+ * `isTwoFactorEnforced()` (`@/lib/auth/two-factor-enforcement.ts`). When the
+ * global switch is `disabled` (local UAT only), neither fires — a
+ * password-only session renders every registered page normally. When it is
+ * `required` (unset, or anything other than the exact value `disabled` —
+ * the fail-closed default, and today's only production value), both
+ * redirects behave exactly as before this change.
  */
 export async function requireAdminPage(pathname: string): Promise<AdminAuthContext> {
   let context: AdminAuthContext;
@@ -90,17 +99,19 @@ export async function requireAdminPage(pathname: string): Promise<AdminAuthConte
     }
     throw error;
   }
-  if (!context.identity.twoFactorEnabled) {
-    redirect("/two-factor/setup");
-  }
-  if (!context.twoFactorCompleted) {
-    // Same "pattern may not be navigable" resolution as the jwt-missing
-    // branch above. Unreachable in practice (an unregistered `pathname`
-    // would already have thrown `admin_route_not_registered` out of
-    // `requireAdminPageAccess`, above), kept only as the same defensive
-    // fallback the sibling branch uses.
-    const root = resolveAdminPage(pathname) ?? "/login";
-    redirect(`/two-factor/challenge?next=${encodeURIComponent(root)}`);
+  if (isTwoFactorEnforced()) {
+    if (!context.identity.twoFactorEnabled) {
+      redirect("/two-factor/setup");
+    }
+    if (!context.twoFactorCompleted) {
+      // Same "pattern may not be navigable" resolution as the jwt-missing
+      // branch above. Unreachable in practice (an unregistered `pathname`
+      // would already have thrown `admin_route_not_registered` out of
+      // `requireAdminPageAccess`, above), kept only as the same defensive
+      // fallback the sibling branch uses.
+      const root = resolveAdminPage(pathname) ?? "/login";
+      redirect(`/two-factor/challenge?next=${encodeURIComponent(root)}`);
+    }
   }
   return context;
 }

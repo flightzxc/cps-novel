@@ -48,6 +48,7 @@ const twoFactorStore = vi.hoisted(() => vi.fn(() => ({ marker: "two-factor-store
 vi.mock("@/app/api/admin/_lib/auth-deps", () => ({ loginAttemptStore, twoFactorStore }));
 
 const { loginAction } = await import("@/app/(admin-auth)/login/_actions");
+const { ADMIN_LANDING_PATH } = await import("@/app/(admin-auth)/_lib/auth-session");
 
 function identity(overrides: Partial<AdminAuthContext["identity"]> = {}): AdminAuthContext["identity"] {
   return {
@@ -216,5 +217,38 @@ describe("loginAction — success, 2FA enabled -> challenge issued and its cooki
       expect.objectContaining({ httpOnly: true, secure: true, sameSite: "strict" }),
     );
     expect(result).toEqual({ ok: true, next: "/two-factor/challenge?next=%2Fnovels" });
+  });
+});
+
+describe("loginAction — RC-10 ADMIN_TWO_FACTOR_ENFORCEMENT=disabled", () => {
+  afterEach(() => {
+    delete process.env.ADMIN_TWO_FACTOR_ENFORCEMENT;
+  });
+
+  it("skips both the setup and challenge detours and lands on the validated deep link", async () => {
+    process.env.ADMIN_TWO_FACTOR_ENFORCEMENT = "disabled";
+    authenticateAdminLogin.mockResolvedValue({
+      token: "session-token",
+      context: context({ twoFactorEnabled: false }),
+    });
+
+    const result = await loginAction({ username: "root", password: "pw", next: "/tags" });
+
+    expect(createTwoFactorChallenge).not.toHaveBeenCalled();
+    expect(cookieJar.set).toHaveBeenCalledTimes(1); // session cookie only, no 2FA challenge cookie
+    expect(result).toEqual({ ok: true, next: "/tags" });
+  });
+
+  it("falls back to the landing page when next is absent, even for an already-2FA-enrolled identity", async () => {
+    process.env.ADMIN_TWO_FACTOR_ENFORCEMENT = "disabled";
+    authenticateAdminLogin.mockResolvedValue({
+      token: "session-token",
+      context: context({ twoFactorEnabled: true }),
+    });
+
+    const result = await loginAction({ username: "root", password: "pw" });
+
+    expect(createTwoFactorChallenge).not.toHaveBeenCalled();
+    expect(result).toEqual({ ok: true, next: ADMIN_LANDING_PATH });
   });
 });

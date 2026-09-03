@@ -55,6 +55,12 @@
 - [ ] 上述三次只覆盖同一账号内 `getlistpc` 的只读 readback；Worker task
   `maxAttempts=1`，`getcode` 仍严格零 retry。不同账号领取到不同 code 是账号隔离事实，
   不得当作 post-claim 可见性延迟处理。
+- [ ] **`ADMIN_TWO_FACTOR_ENFORCEMENT=required`（RC-10，2026-09-04 Owner 冻结）。** 唯一
+      能关闭强制 2FA 的精确值是 `disabled`（trim 后大小写不敏感）；未设置、拼错、或任何
+      其它值一律解析为 `required`，fail-closed。生产必须显式确认为 `required` 或不设置
+      （`docker-compose.yml` 的 `web` 服务默认值即 `required`）；`disabled` 仅允许本地
+      X8 `X8_LEVEL=uat` 拓扑，见下方 Level UAT 一节与
+      `docs/operations/OWNER_LOCAL_UAT_RUNBOOK_2026-09-03.md` 步骤 1。
 
   ```bash
   SITE_URL= npm test -- --project node tests/backend/seo/static-sitemap.test.ts tests/backend/indexnow/eligibility.test.ts
@@ -104,6 +110,10 @@
 > `docs/operations/OWNER_LOCAL_UAT_RUNBOOK_2026-09-03.md`。
 
 - [ ] Level 0 全部已核对（见上）。
+- [ ] `ADMIN_TWO_FACTOR_ENFORCEMENT=disabled`（RC-10，2026-09-04 Owner 冻结）。**仅
+      Level UAT**——Owner 决定本地 UAT 不用 2FA，登录后直接进后台。X8 本地拓扑由
+      `X8_LEVEL=uat` 自动导出（`scripts/lib/x8-levels.json` 的 `adminTwoFactorEnforcement`），
+      Owner 无需手工设置。**绝不得**把这个值带到 Level R / 生产。
 - [ ] `FEATURE_NOVEL_CATALOG_SYNC=true` / `NOVEL_CATALOG_SYNC_ALLOW_WRITE=true`（同一次变更
       内一起改，任务消费原子规则见本节开头）。
 - [ ] `FEATURE_PROMO_LINK_CLAIM=true` / `PROMO_LINK_CLAIM_ALLOW_WRITE=true`（同一次变更内
@@ -145,6 +155,11 @@
 > 无关、互不覆盖。
 
 - [ ] Level UAT 全部已核对（见上）。
+- [ ] **`ADMIN_TWO_FACTOR_ENFORCEMENT=required`（RC-10，必勾项，2026-09-04 Owner 冻结）。**
+      Level UAT 的 `disabled` 到此为止——生产/Level R 必须是 `required` 或干脆不设置
+      （`docker-compose.yml` 默认值即 `required`，fail-closed）。上线前用
+      `docker compose config` 核对渲染出的 `ADMIN_TWO_FACTOR_ENFORCEMENT` 确实是
+      `required`，而不是从 Level UAT 环境沿用下来的 `disabled`。
 - [ ] `SITE_URL=https://pulsenovels.com`（生产域名，见上）。
 - [ ] `ADMIN_CANONICAL_ORIGIN=https://zbcwf.pulsenovels.com`（RC-9 后台主机隔离，见 §2）；
       上线前用 §4 的 HTTP route 验收命令确认两条：`https://pulsenovels.com/login` 404，

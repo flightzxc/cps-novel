@@ -99,6 +99,12 @@ services:
       # only; unset (Level 0, production) is byte-for-byte today's behaviour.
       PROMO_CLAIM_ROLES: ${PROMO_CLAIM_ROLES:-}
       PROMO_CLAIM_USER_IDS: ${PROMO_CLAIM_USER_IDS:-}
+      # RC-10: global 2FA enforcement switch (src/lib/auth/
+      # two-factor-enforcement.ts). Fail-closed default -- unset, "required",
+      # or any value other than the exact "disabled" keeps 2FA required.
+      # Only scripts/lib/x8-levels.json's Level UAT sets this to "disabled";
+      # production must never override it.
+      ADMIN_TWO_FACTOR_ENFORCEMENT: ${ADMIN_TWO_FACTOR_ENFORCEMENT:-required}
       FEATURE_NOVEL_CATALOG_SYNC: ${FEATURE_NOVEL_CATALOG_SYNC:-false}
       NOVEL_CATALOG_SYNC_ALLOW_WRITE: ${NOVEL_CATALOG_SYNC_ALLOW_WRITE:-false}
       FEATURE_INDEXNOW_OUTBOX: ${FEATURE_INDEXNOW_OUTBOX:-false}

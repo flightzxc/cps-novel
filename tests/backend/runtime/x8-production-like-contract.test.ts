@@ -30,7 +30,12 @@ const acceptanceReport = read("docs/operations/X8_LOCAL_PRODUCTION_LIKE_ACCEPTAN
  */
 const x8Levels = JSON.parse(read("scripts/lib/x8-levels.json")) as Record<
   string,
-  { workerTaskAllowlist: string; promoClaimRoles: string; flags: Record<string, string> }
+  {
+    workerTaskAllowlist: string;
+    promoClaimRoles: string;
+    adminTwoFactorEnforcement: string;
+    flags: Record<string, string>;
+  }
 >;
 const LEVEL_0_ALLOWLIST = "credential.validate.v1,credential.supersede.v1,catalog_scan";
 
@@ -247,6 +252,28 @@ describe("X8 local production-like contracts", () => {
     }
     expect(x8Levels.uat.workerTaskAllowlist).not.toContain("sitemap_refresh");
     expect(x8Levels.r.workerTaskAllowlist).toContain("sitemap_refresh");
+  });
+
+  it("RC-10: disables ADMIN_TWO_FACTOR_ENFORCEMENT only at Level UAT, and exports/asserts it end to end", () => {
+    expect(x8Levels["0"].adminTwoFactorEnforcement).toBe("required");
+    expect(x8Levels.uat.adminTwoFactorEnforcement).toBe("disabled");
+    expect(x8Levels.r.adminTwoFactorEnforcement).toBe("required");
+    // scripts/lib/x8-production-like-env.sh's x8_level_config() must read the
+    // field from the same table (not a second hard-coded copy), and
+    // prepare_x8_environment()'s existing `while IFS='=' read` loop exports
+    // whatever x8_level_config() prints — no separate export line needed.
+    expect(envHelper).toContain("`ADMIN_TWO_FACTOR_ENFORCEMENT=${entry.adminTwoFactorEnforcement}`");
+    // scripts/acceptance/x8-validate-compose.mjs must assert the same table,
+    // on web only (an admin-UI/session concern, same category as
+    // PROMO_CLAIM_ROLES) and explicitly forbid it on worker/scheduler.
+    const validator = read("scripts/acceptance/x8-validate-compose.mjs");
+    expect(validator).toContain("levelEntry.adminTwoFactorEnforcement");
+    expect(validator).toContain(
+      "ADMIN_TWO_FACTOR_ENFORCEMENT is an admin-UI/session switch and must not reach worker/scheduler",
+    );
+    // docker-compose.yml's web service must default to the fail-closed value.
+    const compose = read("docker-compose.yml");
+    expect(compose).toContain("ADMIN_TWO_FACTOR_ENFORCEMENT: ${ADMIN_TWO_FACTOR_ENFORCEMENT:-required}");
   });
 
   it("ships valid shell and five read-only launch-day SQL groups", () => {

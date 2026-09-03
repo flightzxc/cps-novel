@@ -1,5 +1,5 @@
 import "./setup-cleanup";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AdminAccessError } from "@/lib/auth/errors";
 
@@ -130,6 +130,36 @@ describe("requireAdminPage — session-level step-up (PR-C1b)", () => {
   });
 
   it("still forces enrollment first when 2FA was never enabled — /two-factor/setup wins over the step-up check", async () => {
+    requireAdminPageAccess.mockResolvedValue({
+      identity: identity({ twoFactorEnabled: false }),
+      session: {},
+      twoFactorCompleted: false,
+    });
+    const result = await visit("/tags");
+    expect(result).toEqual({ redirectedTo: "/two-factor/setup" });
+  });
+});
+
+describe("requireAdminPage — RC-10 ADMIN_TWO_FACTOR_ENFORCEMENT=disabled", () => {
+  afterEach(() => {
+    delete process.env.ADMIN_TWO_FACTOR_ENFORCEMENT;
+  });
+
+  it("renders normally for a never-enrolled, never-stepped-up session — neither redirect fires", async () => {
+    process.env.ADMIN_TWO_FACTOR_ENFORCEMENT = "disabled";
+    const context = {
+      identity: identity({ twoFactorEnabled: false }),
+      session: {},
+      twoFactorCompleted: false,
+    };
+    requireAdminPageAccess.mockResolvedValue(context);
+    const result = await visit("/tags");
+    expect(redirectMock).not.toHaveBeenCalled();
+    expect(result).toEqual({ context });
+  });
+
+  it("an unrecognized value (fail-closed) still forces enrollment, same as required", async () => {
+    process.env.ADMIN_TWO_FACTOR_ENFORCEMENT = "off";
     requireAdminPageAccess.mockResolvedValue({
       identity: identity({ twoFactorEnabled: false }),
       session: {},

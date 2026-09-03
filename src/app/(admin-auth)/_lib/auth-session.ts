@@ -2,6 +2,7 @@ import { cookies, headers } from "next/headers";
 
 import { requireAdminSession } from "@/lib/auth/session";
 import type { AdminAuthContext } from "@/lib/auth/types";
+import { isTwoFactorEnforced } from "@/lib/auth/two-factor-enforcement";
 import {
   ADMIN_SESSION_COOKIE_CONTRACT,
   ADMIN_SESSION_COOKIE_NAME,
@@ -149,11 +150,21 @@ export function safeNextPath(value: string | string[] | undefined | null): strin
  * setup page each need: no 2FA enrolled yet -> forced setup; enrolled but
  * this session has not completed a challenge -> challenge; otherwise the
  * deep link (if it validated) or the default landing page.
+ *
+ * RC-10: when `ADMIN_TWO_FACTOR_ENFORCEMENT=disabled` (local UAT only — see
+ * `@/lib/auth/two-factor-enforcement.ts`), this collapses straight to the
+ * third branch regardless of `identity.twoFactorEnabled` /
+ * `twoFactorCompleted` — an already-authenticated visit to `/login` must not
+ * force an unenrolled local-UAT operator into `/two-factor/setup`. When
+ * enforcement is `required` (the fail-closed default), behaviour is
+ * unchanged.
  */
 export function postAuthDestination(
   context: Pick<AdminAuthContext, "identity" | "twoFactorCompleted">,
   next?: string | string[] | null,
+  env: NodeJS.ProcessEnv = process.env,
 ): string {
+  if (!isTwoFactorEnforced(env)) return safeNextPath(next) ?? ADMIN_LANDING_PATH;
   if (!context.identity.twoFactorEnabled) return TWO_FACTOR_SETUP_PATH;
   if (!context.twoFactorCompleted) return TWO_FACTOR_CHALLENGE_PATH;
   return safeNextPath(next) ?? ADMIN_LANDING_PATH;

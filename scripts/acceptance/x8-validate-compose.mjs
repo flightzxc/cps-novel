@@ -79,6 +79,19 @@ for (const service of [worker, services.scheduler]) {
     fail("PROMO_CLAIM_ROLES is an admin-UI capability and must not reach worker/scheduler");
   }
 }
+// RC-10: the global 2FA enforcement switch (src/lib/auth/
+// two-factor-enforcement.ts) is admin-UI/session-only, same category as
+// PROMO_CLAIM_ROLES above -- asserted on web, forbidden on worker/scheduler.
+if ((web.environment?.ADMIN_TWO_FACTOR_ENFORCEMENT ?? "") !== levelEntry.adminTwoFactorEnforcement) {
+  fail(
+    `ADMIN_TWO_FACTOR_ENFORCEMENT must be "${levelEntry.adminTwoFactorEnforcement}" in web for X8_LEVEL=${level} (got "${web.environment?.ADMIN_TWO_FACTOR_ENFORCEMENT ?? ""}")`,
+  );
+}
+for (const service of [worker, services.scheduler]) {
+  if (service.environment?.ADMIN_TWO_FACTOR_ENFORCEMENT !== undefined) {
+    fail("ADMIN_TWO_FACTOR_ENFORCEMENT is an admin-UI/session switch and must not reach worker/scheduler");
+  }
+}
 for (const service of [web, worker, services.scheduler]) {
   if (service.network_mode === "host") fail("host networking is forbidden");
 }

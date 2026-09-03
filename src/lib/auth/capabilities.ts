@@ -1,5 +1,6 @@
 import { AdminAccessError } from "./errors";
 import type { AdminAuthContext } from "./types";
+import { isTwoFactorEnforced } from "./two-factor-enforcement";
 
 export type AdminCapability =
   | "credential:manage"
@@ -113,7 +114,19 @@ export function requireAdminCapability(
   }
 }
 
-export function requireAdminTwoFactor(context: AdminAuthContext): void {
+/**
+ * RC-10: `env`'s only effect here is `ADMIN_TWO_FACTOR_ENFORCEMENT` — see
+ * `./two-factor-enforcement.ts`. When enforcement is `"disabled"` (local UAT
+ * only — see that module's header), this returns immediately and treats
+ * every session as already stepped up. When it is `"required"` (unset, or
+ * any value other than the exact `"disabled"` — the fail-closed default),
+ * behaviour is byte-for-byte what it was before RC-10.
+ */
+export function requireAdminTwoFactor(
+  context: AdminAuthContext,
+  env: NodeJS.ProcessEnv = process.env,
+): void {
+  if (!isTwoFactorEnforced(env)) return;
   if (!context.twoFactorCompleted) {
     throw new AdminAccessError(
       "admin_two_factor_required",
@@ -129,5 +142,5 @@ export function requireHighRiskAdminCapability(
   env: NodeJS.ProcessEnv = process.env,
 ): void {
   requireAdminCapability(context, capability, env);
-  requireAdminTwoFactor(context);
+  requireAdminTwoFactor(context, env);
 }

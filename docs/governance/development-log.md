@@ -4,6 +4,44 @@
 
 ---
 
+## 2026-09-04 · RC-10 后台 2FA 全局强制开关
+
+- Owner 裁定：本地 UAT 不用 2FA（登录后直接进后台），生产/Level R 发布时再开启——
+  参照 CPS 短剧站的既有形态（CPS 的 2FA 不是登录硬前置），但本轮不搬 per-user 可选
+  2FA；海阅只加一个全局"是否强制"开关，2FA 的算法、数据模型（`twoFactorEnabled`/
+  `twoFactorCompleted`/挑战/恢复码）与既有会话/登录逻辑均未改动。
+- 新增 `src/lib/auth/two-factor-enforcement.ts`（纯函数，无 Node/Prisma 依赖）：
+  `ADMIN_TWO_FACTOR_ENFORCEMENT` 环境变量，`readTwoFactorEnforcement`/
+  `isTwoFactorEnforced` fail-closed——只有精确值 `disabled`（trim 后大小写不敏感）
+  关闭强制，未设置/`required`/任何其它值一律 `required`；`warnTwoFactorDisabledOnce`
+  在关闭时进程内只 `console.error` 一次。
+- 接线五处，均只加"是否强制"判断，未改各自原有算法：
+  `src/lib/auth/capabilities.ts` 的 `requireAdminTwoFactor`（新的唯一 2FA 断言入口，
+  `requireHighRiskAdminCapability` 与 `src/server/auth/guards.ts` 的
+  `enforceCapability`/`requireAdminServiceMutation`/`requireFreshAdminServiceMutation`
+  均经它收敛）；`src/server/auth/guards.ts` 的 `enforceAdminSessionTwoFactor`
+  （API/Server Action 层自己的"identity 从未启用 2FA"独立抛错分支，不经过
+  `requireAdminTwoFactor`，需要单独判断）；`src/app/(admin)/_lib/page-guard.ts` 的
+  `requireAdminPage`（页面层强制注册/挑战跳转）；
+  `src/app/(admin-auth)/login/_actions.ts` 的 `loginAction`（登录成功后的跳转）；
+  `src/app/(admin-auth)/_lib/auth-session.ts` 的 `postAuthDestination`（已登录访客
+  重新访问 `/login` 时的落点，逻辑与 `loginAction` 同构，一并接线避免关闭后仍被
+  强制去 `/two-factor/setup`）。`/two-factor/setup`、`/two-factor/challenge` 两个
+  页面自身不改，关闭时仍可自愿访问。
+- 启动期告警：新增 `scripts/two-factor-enforcement-preflight.ts`，接在
+  `scripts/start-web.sh` 既有的 `credential-secret-preflight.ts` 之后、
+  `node server.js` 之前调用，非阻断——只在关闭时打一次日志。
+- X8 分级：`scripts/lib/x8-levels.json` 三级新增 `adminTwoFactorEnforcement`
+  字段——Level 0/Level R `required`，Level UAT `disabled`；
+  `scripts/lib/x8-production-like-env.sh` 随既有 `level_config` 循环自动导出
+  `ADMIN_TWO_FACTOR_ENFORCEMENT`；`scripts/acceptance/x8-validate-compose.mjs`
+  新增 `web` 服务断言（对照 `PROMO_CLAIM_ROLES` 的既有写法）与 worker/scheduler
+  不得携带该变量的反向断言；`docker-compose.yml` 的 `web` 服务默认值
+  `ADMIN_TWO_FACTOR_ENFORCEMENT: ${ADMIN_TWO_FACTOR_ENFORCEMENT:-required}`。
+- 文档同步：`.env.example`、`docs/p2/V020_RELEASE_CHECKLIST.md`（§2 + Level UAT +
+  Level R 必勾项）、`docs/operations/OWNER_LOCAL_UAT_RUNBOOK_2026-09-03.md`（入场
+  条件 5 与步骤 1）、`docs/governance/feature-flag-registry.md` 均已登记。
+
 ## 2026-09-03 · RC-9 后台主机隔离
 
 - Owner 裁定：后台配置走独立子域，前缀沿用 CPS 的 `zbcwf` → 生产后台 origin =
