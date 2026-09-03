@@ -64,6 +64,14 @@ backup / worker 两条**当前没有对应端点**，由 RC-7b 另做，不在�
 **Keyword** 监控（判据＝响应体里找不到关键词就告警，不要用纯状态码类型）：
 `/api/health` → `"ok":true`；`/api/health/backup` → `"backupStatus":"ok"`；
 `/api/health/worker` → `"workerStatus":"ok"`。
+
+生产域名 = `https://pulsenovels.com`（冻结，2026-09-03 Owner；见
+`docs/operations/PRODUCTION_DOMAIN_2026-09-03.md`）。三条监控的完整 URL：
+
+- `https://pulsenovels.com/api/health`
+- `https://pulsenovels.com/api/health/backup`
+- `https://pulsenovels.com/api/health/worker`
+
 ⚠️ backup 端点由 **web 容器**执行，必须让 web 读得到备份产物目录或状态文件：
 `BACKUP_OUTPUT_DIR` 要与 backup 容器的 `X8_BACKUP_OUTPUT_DIR` 指向**同一个挂载**
 （现状 `/backups` 只挂进了 `backup-timer`，web 没有），否则该端点恒为 `unconfigured`。

@@ -34,7 +34,12 @@
 
 ## 2. 部署必需环境变量
 
-- [ ] Web 与 Sitemap refresh Worker 都显式设置真实 `SITE_URL`。
+- [ ] **生产域名 = `https://pulsenovels.com`（冻结，2026-09-03 Owner）。** 唯一输入源是
+      `SITE_URL`，唯一解析函数是 `getSiteUrl()`（`src/lib/seo/site-url.ts`），fail-fast、
+      无默认值。详见 `docs/operations/PRODUCTION_DOMAIN_2026-09-03.md`。X8 本地
+      production-like UAT 不受影响，其域名固定 `https://novel.test`，与本条无关。
+- [ ] Web 与 Sitemap refresh Worker 都显式设置真实 `SITE_URL`（生产值即
+      `https://pulsenovels.com`）。
 - [ ] `SITE_URL` 是无凭证、无 path/query/fragment 的绝对 HTTP(S) origin；不得使用 CPS 域名、localhost 或 fixture 域名。
 - [ ] `SITE_URL` 是运行期 fail-closed 契约：缺失或非法时 robots/Sitemap/IndexNow URL 生成必须报错，不得回退到默认域名。
 - [ ] Worker 显式设置 CPS v8.3.6 parity 的发布默认：
@@ -128,8 +133,13 @@
 > Level UAT 全部已核对，在此基础上加开 Sitemap 写闸。IndexNow 双闸仍保持关闭——
 > X11（scheduler 每分钟 sweep-control schedule/去重/misfire=`skip`/worker due-sweep）
 > 硬前置未满足前不得触碰，与 §3 步骤 7–9 的既有裁决一致。
+>
+> 生产域名 = `https://pulsenovels.com`（冻结，2026-09-03 Owner）；这是本节起唯一合法的
+> `SITE_URL` 值，与本节以上 Level 0 / Level UAT 使用的 `https://novel.test`（X8 本地）
+> 无关、互不覆盖。
 
 - [ ] Level UAT 全部已核对（见上）。
+- [ ] `SITE_URL=https://pulsenovels.com`（生产域名，见上）。
 - [ ] `FEATURE_SITEMAP_AUTO_REFRESH=true` / `SITEMAP_AUTO_REFRESH_ALLOW_WRITE=true`（同一次
       变更内一起改）。
 - [ ] `WORKER_TASK_ALLOWLIST` 在 Level UAT 五项基础上追加 `sitemap_refresh`，与上一条

@@ -4,6 +4,36 @@
 
 ---
 
+## 2026-09-03 · RC-8 生产域名冻结 `pulsenovels.com`
+
+- Owner 正式购买 `pulsenovels.com`，冻结为 cps-novel 唯一生产主域名。本轮只做"域名字面量
+  与其输入源"的清单与替换，不改任何生成逻辑（canonical/hreflang/sitemap/robots/OG
+  的算法本身未动）。
+- 清单阶段确认单一输入源已经成立、不需要新增：env `SITE_URL` → `getSiteUrl()`
+  （`src/lib/seo/site-url.ts`），fail-fast、无默认值，唯一实现已由既有
+  `tests/backend/seo/site-url-single-source.test.ts` 守卫。全仓域名字面量普查
+  （排除 `node_modules`/`package-lock.json`）未发现代码里硬编码的生产占位域名
+  （无 `example.com`/`your-domain` 类的生产默认值）；`novel.test` 仅出现在 X8
+  本地 UAT 相关文件，未被本轮触碰。
+- 改动：`.env.example` 给 `SITE_URL` 加生产示例注释（值本身仍留空，遵循 fail-fast
+  契约）；`docs/p2/V020_RELEASE_CHECKLIST.md` §2 与 Level R 段、
+  `docs/operations/ALERTS_RUNBOOK_2026-09-03.md` §1.2 补充生产域名冻结声明与
+  UptimeRobot 完整 URL；新增 `docs/operations/PRODUCTION_DOMAIN_2026-09-03.md`
+  （单一输入源、消费方清单、X8 边界、留给 Codex 的部署项）。`infra/production-like/`
+  nginx 模板已是 `__X8_DOMAIN__` 参数化，未新增/未改任何 nginx 配置文件。
+- 新增 `tests/ui/seo/production-domain.test.ts`：锁定 `.env.example` 里 `SITE_URL`
+  的生产示例经 `getSiteUrl()` 解析后 origin 恰为 `https://pulsenovels.com`，并守卫
+  `.env.example` 的 `SITE_URL=` 赋值本身保持空（不得被后续改动加上默认值）。
+- X8 零变化证据：`X8_LEVEL=uat` 下 render-only 调用
+  `scripts/lib/x8-production-like-env.sh` 的 `prepare_x8_environment()`（未起任何
+  容器）得到 `SITE_URL=https://novel.test`、`ADMIN_CANONICAL_ORIGIN=https://novel.test`、
+  `X8_LOCAL_DOMAIN=novel.test`，与改动前一字未变；`scripts/`、`infra/` 目录本轮零改动。
+- 门禁：`typecheck` / `lint` / `test:ui`（93 files / 1503 tests）/ `build` 全绿；
+  `test:backend`（137 files / 1341 tests）仅 `tests/backend/publish-gate/no-bypass.test.ts`
+  1 处既有基线失败（`scripts/s1-exact-target-structural-smoke.ts` 的
+  `$executeRawUnsafe` 误报，与本轮无关，历史已知）；`bash -n` 通过。
+- 未 push、未 merge、未改任何业务逻辑/SEO 生成算法/prisma/数据库、未起停 docker。
+
 ## 2026-09-03 · RC-7b 备份/Worker 关键词健康端点
 
 - 补上 RC-7 runbook §1.1 点名缺失的两个公开端点：`GET /api/health/backup` 与
