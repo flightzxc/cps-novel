@@ -21,6 +21,9 @@ usage() {
     '       scripts/x8-production-like.sh health-sql' \
     '       scripts/x8-production-like.sh verify' \
     '       scripts/x8-production-like.sh accept' \
+    '       scripts/x8-production-like.sh admin-secret set <admin|admin2>' \
+    '       scripts/x8-production-like.sh admin-seed [--reset-password]' \
+    '       scripts/x8-production-like.sh admin-reset <username> [--deactivate] [--apply] [--break-glass] [--ip <ip>]' \
     '' \
     'env: X8_LEVEL=0|uat|r (default 0) selects the WORKER_TASK_ALLOWLIST /' \
     '     double-gate rung from scripts/lib/x8-levels.json; invalid values' \
@@ -300,6 +303,18 @@ up_x8() {
   wait_for_url "https://$X8_ADMIN_DOMAIN/api/health" https "$X8_ADMIN_DOMAIN"
 
   x8_compose up -d backup-timer
+
+  # RC-11: Level UAT only, and only once both local admin secrets exist --
+  # a fresh `setup`+`up` with neither secret set yet must not fail `up`
+  # itself, just say so and point at `admin-secret set`.
+  if [[ "$X8_LEVEL" == "uat" ]]; then
+    if [[ -f "$X8_SECRET_DIR/admin-password" && -f "$X8_SECRET_DIR/admin2-password" ]]; then
+      admin_seed
+    else
+      echo "X8_ADMIN_SEED_SKIPPED=missing local admin secrets; run 'admin-secret set admin' and 'admin-secret set admin2', then 'admin-seed'" >&2
+    fi
+  fi
+
   echo "X8_PRODUCTION_LIKE_STARTED=PASS"
   echo "X8_ORIGIN=https://novel.test"
   echo "X8_ADMIN_ORIGIN=https://$X8_ADMIN_DOMAIN"
@@ -559,6 +574,148 @@ catalog_one() {
     worker tsx scripts/x8-catalog-one.ts "$@"
 }
 
+# RC-11: writes a local X8 admin login password to a 0600 secret file, read
+# silently from stdin (never argv, never echoed, never logged) -- same
+# never-in-argv discipline `scripts/ensure-local-admin-identities.ts`'s own
+# docstring documents. `admin_seed()` reads the two files this writes;
+# neither this function nor its caller ever prints the password back out.
+admin_secret_set() {
+  [[ $# -eq 1 ]] || usage
+  local user="$1"
+  case "$user" in
+    admin | admin2) : ;;
+    *) echo "ERROR: admin-secret set requires user 'admin' or 'admin2'" >&2; exit 64 ;;
+  esac
+  prepare_x8_environment
+  local secret_file="$X8_SECRET_DIR/${user}-password"
+  local password="" confirm=""
+  read -r -s -p "Enter local X8 UAT password for '$user' (never production): " password
+  printf '\n' >&2
+  read -r -s -p "Confirm: " confirm
+  printf '\n' >&2
+  if [[ -z "$password" || "$password" != "$confirm" ]]; then
+    unset password confirm
+    echo "ERROR: password was empty or the two entries did not match" >&2
+    exit 65
+  fi
+  local temporary="${secret_file}.tmp.$$"
+  printf '%s' "$password" >"$temporary"
+  unset password confirm
+  chmod 600 "$temporary"
+  mv "$temporary" "$secret_file"
+  echo "X8_ADMIN_SECRET_SET=$user"
+}
+
+# RC-11: seeds (or, with --reset-password, updates the password hash for)
+# the two X8 Level UAT fixture accounts `admin`/`admin2` by running
+# scripts/ensure-local-admin-identities.ts inside the already-built `web`
+# image. Level UAT only -- that script's own ADMIN_LOCAL_IDENTITY_SEED gate
+# is the authoritative fail-closed check; this function's X8_LEVEL guard is
+# a fast, friendlier failure before even reading the secret files.
+#
+# Runs against $P1_12_MIGRATION_DATABASE_URL (not the narrower
+# $P1_12_WEB_DATABASE_URL web_app normally gets), the same migration-role
+# connection prepare_database() uses for `prisma migrate deploy` --
+# web_app's grants (infra/postgres/grants.sql) do not include DELETE on
+# admin_two_factor_challenge, which admin-reset (below) needs.
+admin_seed() {
+  [[ $# -le 1 ]] || usage
+  case "${1:-}" in
+    "" | --reset-password) : ;;
+    *) usage ;;
+  esac
+  prepare_x8_environment
+  [[ "$X8_LEVEL" == "uat" ]] || {
+    echo "ERROR: admin-seed is Level UAT only (current X8_LEVEL=$X8_LEVEL)" >&2
+    return 65
+  }
+  local admin_secret="$X8_SECRET_DIR/admin-password"
+  local admin2_secret="$X8_SECRET_DIR/admin2-password"
+  if [[ ! -f "$admin_secret" || ! -f "$admin2_secret" ]]; then
+    echo "ERROR: missing local admin secret file(s); run:" >&2
+    echo "  scripts/x8-production-like.sh admin-secret set admin" >&2
+    echo "  scripts/x8-production-like.sh admin-secret set admin2" >&2
+    return 65
+  fi
+  local web_container operator_image
+  web_container="$(x8_compose ps -q web 2>/dev/null || true)"
+  [[ -n "$web_container" ]] || {
+    echo "ERROR: admin-seed requires the verified web service image (run 'up' first)" >&2
+    return 65
+  }
+  operator_image="$(docker inspect --format '{{.Config.Image}}' "$web_container")"
+
+  # Env-file, not `-e`, for the two passwords and the migration DATABASE_URL
+  # -- same reasoning as prepare_database()'s migrate-deploy invocation:
+  # `docker compose run -e VAR=value` would put the value on the process
+  # argv `ps` can see; `--env-from-file` never does.
+  local seed_env
+  seed_env="$(mktemp "$X8_RUNTIME_DIR/admin-seed.XXXXXX")"
+  chmod 600 "$seed_env"
+  {
+    printf 'DATABASE_URL=%s\n' "$P1_12_MIGRATION_DATABASE_URL"
+    printf 'ADMIN_LOCAL_IDENTITY_SEED=%s\n' "$ADMIN_LOCAL_IDENTITY_SEED"
+    printf 'X8_ADMIN_PASSWORD=%s\n' "$(read_secret_value "$admin_secret")"
+    printf 'X8_ADMIN2_PASSWORD=%s\n' "$(read_secret_value "$admin2_secret")"
+  } >"$seed_env"
+  chmod 600 "$seed_env"
+
+  local status=0
+  CPS_NOVEL_APP_IMAGE="$operator_image" x8_compose run --rm --no-deps -T \
+    --env-from-file "$seed_env" \
+    web tsx scripts/ensure-local-admin-identities.ts "$@" || status=$?
+  rm -f "$seed_env"
+  return "$status"
+}
+
+# RC-11 — the X8-local convenience wrapper around
+# scripts/reset-admin-auth-state.ts's audited reset. Runs inside the `web`
+# image against $P1_12_MIGRATION_DATABASE_URL for the same reason admin_seed
+# does (web_app lacks DELETE on admin_two_factor_challenge). `--reason` and
+# `--request-id` are auto-derived here so the common local recovery case is
+# one command; `RESET_ADMIN_OPERATOR` defaults to a fixed local handle but
+# honors an already-exported value.
+admin_reset() {
+  [[ $# -ge 1 ]] || usage
+  local user="$1"
+  shift
+  local script_args=(--username "$user"
+    --reason "X8 local admin auth-state reset via scripts/x8-production-like.sh admin-reset"
+    --request-id "x8-admin-reset-${user}-$(date -u '+%Y%m%dT%H%M%SZ')")
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --deactivate | --apply | --break-glass) script_args+=("$1"); shift ;;
+      --ip) [[ $# -ge 2 ]] || usage; script_args+=(--ip "$2"); shift 2 ;;
+      *) usage ;;
+    esac
+  done
+
+  prepare_x8_environment
+  local web_container operator_image
+  web_container="$(x8_compose ps -q web 2>/dev/null || true)"
+  [[ -n "$web_container" ]] || {
+    echo "ERROR: admin-reset requires the verified web service image (run 'up' first)" >&2
+    return 65
+  }
+  operator_image="$(docker inspect --format '{{.Config.Image}}' "$web_container")"
+
+  local reset_env
+  reset_env="$(mktemp "$X8_RUNTIME_DIR/admin-reset.XXXXXX")"
+  chmod 600 "$reset_env"
+  {
+    printf 'DATABASE_URL=%s\n' "$P1_12_MIGRATION_DATABASE_URL"
+    printf 'RESET_ADMIN_OPERATOR=%s\n' "${RESET_ADMIN_OPERATOR:-x8-local-operator}"
+  } >"$reset_env"
+  chmod 600 "$reset_env"
+
+  local status=0
+  CPS_NOVEL_APP_IMAGE="$operator_image" x8_compose run --rm --no-deps -T \
+    --env-from-file "$reset_env" \
+    web tsx scripts/reset-admin-auth-state.ts "${script_args[@]}" || status=$?
+  rm -f "$reset_env"
+  return "$status"
+}
+
 accept_x8() {
   prepare_x8_environment
   local evidence="$X8_EVIDENCE_DIR/automated-acceptance-$(date -u '+%Y%m%dT%H%M%SZ').log"
@@ -591,5 +748,8 @@ case "$command" in
   health-sql) [[ $# -eq 1 ]] || usage; run_health_sql ;;
   verify) [[ $# -eq 1 ]] || usage; verify_x8 ;;
   accept) [[ $# -eq 1 ]] || usage; accept_x8 ;;
+  admin-secret) shift; [[ $# -eq 2 && "${1:-}" == "set" ]] || usage; shift; admin_secret_set "$@" ;;
+  admin-seed) shift; admin_seed "$@" ;;
+  admin-reset) shift; [[ $# -ge 1 ]] || usage; admin_reset "$@" ;;
   *) usage ;;
 esac

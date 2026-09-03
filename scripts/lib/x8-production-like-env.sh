@@ -59,6 +59,11 @@ x8_level_config() {
       // "false" only for Level UAT, Level 0 and Level R stay "true"
       // (fail-closed default).
       `ADMIN_TWO_FACTOR_ENFORCEMENT=${entry.adminTwoFactorEnforcement}`,
+      // RC-11: gate for scripts/ensure-local-admin-identities.ts. Fail-closed
+      // exact match on "allow" -- only Level UAT sets it; Level 0 and Level R
+      // render it empty, which that exact-match check treats the same as
+      // unset.
+      `ADMIN_LOCAL_IDENTITY_SEED=${entry.adminLocalIdentitySeed}`,
     ];
     for (const [key, value] of Object.entries(entry.flags)) lines.push(`${key}=${value}`);
     process.stdout.write(lines.join("\n") + "\n");

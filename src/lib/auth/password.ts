@@ -3,12 +3,23 @@ import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 const DEFAULT_COST = 16384;
 const DEFAULT_BLOCK_SIZE = 8;
 const DEFAULT_PARALLELIZATION = 1;
+const DEFAULT_MIN_LENGTH = 12;
 
 export function hashAdminPassword(
   password: string,
-  options: { cost?: number; blockSize?: number; parallelization?: number } = {},
+  options: { cost?: number; blockSize?: number; parallelization?: number; minLength?: number } = {},
 ): string {
-  if (password.length < 12) throw new Error("Admin password must contain at least 12 characters");
+  // RC-11: `minLength` defaults to the unchanged 12-character floor every
+  // existing caller (production login paths, `bootstrap-admin-identity.ts`)
+  // still gets for free. The only caller that ever passes a lower value is
+  // `scripts/ensure-local-admin-identities.ts`, and only after it has
+  // already verified `ADMIN_LOCAL_IDENTITY_SEED=allow` (a value that only
+  // `X8_LEVEL=uat` sets, never production) — the relaxation lives entirely
+  // behind that caller's own fail-closed gate, not here.
+  const minLength = options.minLength ?? DEFAULT_MIN_LENGTH;
+  if (password.length < minLength) {
+    throw new Error(`Admin password must contain at least ${minLength} characters`);
+  }
   const cost = options.cost ?? DEFAULT_COST;
   const blockSize = options.blockSize ?? DEFAULT_BLOCK_SIZE;
   const parallelization = options.parallelization ?? DEFAULT_PARALLELIZATION;

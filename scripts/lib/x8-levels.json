@@ -1,10 +1,11 @@
 {
-  "_comment": "Single source of truth for X8_LEVEL (RC-2b). Read by scripts/lib/x8-production-like-env.sh (bash, via `node -e`) and scripts/acceptance/x8-validate-compose.mjs (Node) so both sides assert the exact same values. Each level's workerTaskAllowlist/flags must stay letter-for-letter identical to the matching section in docs/p2/V020_RELEASE_CHECKLIST.md ('## 3. Flag 分级开放' -> Level 0 / Level UAT / Level R). promoClaimRoles is NOT one of the checklist's eight double-gate flags: it is the PROMO_CLAIM_ROLES admin-capability grant (src/lib/auth/capabilities.ts), which the double-gates alone cannot supply -- without it the /catalog-sync claim dialog's apply mode stays blocked no matter what FEATURE_PROMO_LINK_CLAIM says. Level 0 keeps it empty (granted to nobody), matching the capability's own defaultRoles: []. catalogSyncDefaultGateState only seeds scripts/lib/x8-production-like-env.sh's catalog-gate state file on its very first run for a given level; the existing `gate catalog-write on|off|dry-run` command still overrides it afterward, unchanged. adminTwoFactorEnforcement (RC-10) is the ADMIN_TWO_FACTOR_ENFORCEMENT value for the web service (src/lib/auth/two-factor-enforcement.ts): canonical values are 'true' (enforced) / 'false' (disabled) -- 'required'/'disabled' remain accepted synonyms, see that file. 'true' everywhere except Level UAT, which is 'false' by Owner decision (2026-09-04) -- local UAT only, never Level 0 (pre-deploy) or Level R (production).",
+  "_comment": "Single source of truth for X8_LEVEL (RC-2b). Read by scripts/lib/x8-production-like-env.sh (bash, via `node -e`) and scripts/acceptance/x8-validate-compose.mjs (Node) so both sides assert the exact same values. Each level's workerTaskAllowlist/flags must stay letter-for-letter identical to the matching section in docs/p2/V020_RELEASE_CHECKLIST.md ('## 3. Flag 分级开放' -> Level 0 / Level UAT / Level R). promoClaimRoles is NOT one of the checklist's eight double-gate flags: it is the PROMO_CLAIM_ROLES admin-capability grant (src/lib/auth/capabilities.ts), which the double-gates alone cannot supply -- without it the /catalog-sync claim dialog's apply mode stays blocked no matter what FEATURE_PROMO_LINK_CLAIM says. Level 0 keeps it empty (granted to nobody), matching the capability's own defaultRoles: []. catalogSyncDefaultGateState only seeds scripts/lib/x8-production-like-env.sh's catalog-gate state file on its very first run for a given level; the existing `gate catalog-write on|off|dry-run` command still overrides it afterward, unchanged. adminTwoFactorEnforcement (RC-10) is the ADMIN_TWO_FACTOR_ENFORCEMENT value for the web service (src/lib/auth/two-factor-enforcement.ts): canonical values are 'true' (enforced) / 'false' (disabled) -- 'required'/'disabled' remain accepted synonyms, see that file. 'true' everywhere except Level UAT, which is 'false' by Owner decision (2026-09-04) -- local UAT only, never Level 0 (pre-deploy) or Level R (production). adminLocalIdentitySeed (RC-11) is the ADMIN_LOCAL_IDENTITY_SEED value consumed by scripts/ensure-local-admin-identities.ts (fail-closed: only the exact value 'allow' lets that script seed the local admin/admin2 fixture accounts, and it also relaxes hashAdminPassword's 12-character floor for those two accounts only). 'allow' only at Level UAT; Level 0 and Level R leave it '' (unset in practice -- exported empty by x8_level_config() is equivalent to unset for that script's exact-match check), matching adminTwoFactorEnforcement's UAT-only carve-out.",
   "0": {
     "workerTaskAllowlist": "credential.validate.v1,credential.supersede.v1,catalog_scan",
     "catalogSyncDefaultGateState": "dry-run",
     "promoClaimRoles": "",
     "adminTwoFactorEnforcement": "true",
+    "adminLocalIdentitySeed": "",
     "flags": {
       "FEATURE_PROMO_LINK_CLAIM": "false",
       "PROMO_LINK_CLAIM_ALLOW_WRITE": "false",
@@ -21,6 +22,7 @@
     "catalogSyncDefaultGateState": "apply",
     "promoClaimRoles": "super_admin",
     "adminTwoFactorEnforcement": "false",
+    "adminLocalIdentitySeed": "allow",
     "flags": {
       "FEATURE_PROMO_LINK_CLAIM": "true",
       "PROMO_LINK_CLAIM_ALLOW_WRITE": "true",
@@ -37,6 +39,7 @@
     "catalogSyncDefaultGateState": "apply",
     "promoClaimRoles": "super_admin",
     "adminTwoFactorEnforcement": "true",
+    "adminLocalIdentitySeed": "",
     "flags": {
       "FEATURE_PROMO_LINK_CLAIM": "true",
       "PROMO_LINK_CLAIM_ALLOW_WRITE": "true",
