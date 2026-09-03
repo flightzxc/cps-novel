@@ -129,11 +129,12 @@ describe("startSetupAction", () => {
     expect(startTwoFactorSetup).not.toHaveBeenCalled();
   });
 
-  it("projects the manual key, otpauth URI and pending expiry on success", async () => {
+  it("projects the manual key, otpauth URI, pending expiry, and (RC-11) a scannable QR of the same URI on success", async () => {
     const pendingExpiresAt = new Date("2026-08-26T12:10:00.000Z");
+    const otpauthUri = "otpauth://totp/root@cps-novel?secret=JBSWY3DPEHPK3PXP";
     startTwoFactorSetup.mockResolvedValue({
       manualKey: "JBSWY3DPEHPK3PXP",
-      otpauthUri: "otpauth://totp/root@cps-novel?secret=JBSWY3DPEHPK3PXP",
+      otpauthUri,
       pendingExpiresAt,
     });
 
@@ -144,14 +145,19 @@ describe("startSetupAction", () => {
       identities: { marker: "identities" },
       twoFactor: { marker: "two-factor-store" },
     });
-    expect(result).toEqual({
-      ok: true,
-      data: {
-        manualKey: "JBSWY3DPEHPK3PXP",
-        otpauthUri: "otpauth://totp/root@cps-novel?secret=JBSWY3DPEHPK3PXP",
-        pendingExpiresAt: pendingExpiresAt.toISOString(),
-      },
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("unreachable");
+    expect(result.data).toMatchObject({
+      manualKey: "JBSWY3DPEHPK3PXP",
+      otpauthUri,
+      pendingExpiresAt: pendingExpiresAt.toISOString(),
     });
+    // RC-11: real `createTotpQrCodeDataUrl` (@/lib/auth/totp) is not mocked
+    // here on purpose -- it is pure, local, and deterministic-shaped, so
+    // asserting its actual output is more honest than stubbing it. The exact
+    // parameters (errorCorrectionLevel/margin/width, CPS parity) are pinned
+    // in tests/backend/auth/totp-qr.test.ts instead.
+    expect(result.data.qrCodeDataUrl.startsWith("data:image/png;base64,")).toBe(true);
   });
 
   it("surfaces an expired pending setup as two_factor_expired", async () => {
