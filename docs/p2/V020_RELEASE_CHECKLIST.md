@@ -40,6 +40,12 @@
       production-like UAT 不受影响，其域名固定 `https://novel.test`，与本条无关。
 - [ ] Web 与 Sitemap refresh Worker 都显式设置真实 `SITE_URL`（生产值即
       `https://pulsenovels.com`）。
+- [ ] **后台主机隔离（冻结，2026-09-03 Owner，RC-9）。** 生产 `ADMIN_CANONICAL_ORIGIN=
+      https://zbcwf.pulsenovels.com`，与 `SITE_URL` 主机不同——两者的主机名必须不相等。
+      `src/proxy.ts` 在两者相同时 fail-closed：所有后台路径（`ADMIN_PAGE_ROOTS` +
+      `/login` + `/two-factor` + `/api/admin`）在任何主机上恒 404，不会退化成公开域名
+      可开后台登录页（对照短剧站 `enpulsedrama.com/login` 的已知缺陷）。详见
+      `docs/operations/PRODUCTION_DOMAIN_2026-09-03.md`。
 - [ ] `SITE_URL` 是无凭证、无 path/query/fragment 的绝对 HTTP(S) origin；不得使用 CPS 域名、localhost 或 fixture 域名。
 - [ ] `SITE_URL` 是运行期 fail-closed 契约：缺失或非法时 robots/Sitemap/IndexNow URL 生成必须报错，不得回退到默认域名。
 - [ ] Worker 显式设置 CPS v8.3.6 parity 的发布默认：
@@ -140,6 +146,9 @@
 
 - [ ] Level UAT 全部已核对（见上）。
 - [ ] `SITE_URL=https://pulsenovels.com`（生产域名，见上）。
+- [ ] `ADMIN_CANONICAL_ORIGIN=https://zbcwf.pulsenovels.com`（RC-9 后台主机隔离，见 §2）；
+      上线前用 §4 的 HTTP route 验收命令确认两条：`https://pulsenovels.com/login` 404，
+      `https://zbcwf.pulsenovels.com/` 404（后台主机不服务公开首页）。
 - [ ] `FEATURE_SITEMAP_AUTO_REFRESH=true` / `SITEMAP_AUTO_REFRESH_ALLOW_WRITE=true`（同一次
       变更内一起改）。
 - [ ] `WORKER_TASK_ALLOWLIST` 在 Level UAT 五项基础上追加 `sitemap_refresh`，与上一条

@@ -4,6 +4,43 @@
 
 ---
 
+## 2026-09-03 · RC-9 后台主机隔离
+
+- Owner 裁定：后台配置走独立子域，前缀沿用 CPS 的 `zbcwf` → 生产后台 origin =
+  `https://zbcwf.pulsenovels.com`，公开站仍是 `https://pulsenovels.com`（RC-8 冻结值不变）。
+  Owner 同时指出 CPS 短剧站的已知缺陷——公开域名 `enpulsedrama.com/login` 也能打开后台
+  登录页；海阅要求后台路径只在后台主机可达、公开主机上后台路径恒 404、后台主机不服务
+  公开页面，且两主机一旦被误配成同值，后台路径必须 fail-closed 恒 404，不得重现该缺陷。
+- 新增 `src/proxy.ts`（Next 16 proxy 约定，取代 middleware.ts）+
+  `src/lib/site/admin-origin.ts`（纯函数：host/path 判定与 RC-9 规则表）。`isAdminPath`
+  从 `ADMIN_PAGE_ROOTS`（`src/server/auth/registry.ts`）+ `/login` + `/two-factor` +
+  `/api/admin` 派生，单一来源，不第二次手写路径清单。`ADMIN_CANONICAL_ORIGIN` 读取与
+  `src/app/api/admin/_lib/deps.ts` 的 `canonicalOrigin()` 保持文本一致（测试互相守护），
+  但因后者引入 Prisma/`next/headers`（proxy 运行时不可用）而不直接复用同一实现。
+  `SITE_URL`/`ADMIN_CANONICAL_ORIGIN` 解析失败一律 fail-closed 到"后台路径 404、公开
+  路径放行"，不让配置错误变成全站宕机。404 一律 `new NextResponse(null, {status:404})`，
+  不用 redirect（避免向公开访客泄露后台主机名）。
+- X8 本地同步：`X8_ADMIN_DOMAIN=zbcwf.novel.test`（默认可覆盖）在所有 `X8_LEVEL`
+  （`0`/`uat`/`r`）下一致导出 `ADMIN_CANONICAL_ORIGIN=https://zbcwf.novel.test`；
+  `setup`/`ensure_local_certificate` 幂等追加 `/etc/hosts` 与 mkcert SAN；
+  `full.conf.template` 新增后台 `server_name` 块（allowlist 默认拒绝）并把公开
+  `server_name` 块的后台路径正则从代理改成 `return 404;`；`validate_rendered_topology()`
+  新增硬门禁：`X8_ADMIN_DOMAIN == X8_LOCAL_DOMAIN` 时 fail-fast，不允许两主机被误配相同。
+  `scripts/acceptance/x8-validate-compose.mjs` 同步断言 `ADMIN_CANONICAL_ORIGIN` 是
+  `https://zbcwf.novel.test` 且与 `SITE_URL` 不同；`X8_LEVEL=0/uat/r` 三档 render-only
+  实测全 PASS。
+- 新增 `scripts/lib/admin-path-roots.json`（nginx 第二道防线的手写路径清单）+
+  `tests/ui/admin-path-roots-parity.test.ts` 守住它与 `ADMIN_PAGE_ROOTS` 不漂移；
+  `tests/ui/proxy-admin-host.test.ts` 覆盖规则表全矩阵；`tests/ui/seo/production-domain.test.ts`
+  新增 `ADMIN_CANONICAL_ORIGIN` 文档值断言（host 为 `zbcwf.pulsenovels.com` 且 ≠
+  `SITE_URL` host）。`tests/backend/runtime/x8-production-like-contract.test.ts` 168 行原
+  `ADMIN_CANONICAL_ORIGIN=https://novel.test` 断言随本轮更新为 `zbcwf.novel.test` 变体。
+- 门禁：`typecheck`/`lint`/`build` 全绿；`test:ui`（95 files / 1536 tests）全绿；
+  `test:backend`（137 files / 1341 tests）仅 `publish-gate/no-bypass.test.ts` 1 处既有
+  基线失败（与 RC-8 同一处，`$executeRawUnsafe` 误报，与本轮无关）；`bash -n` 通过。
+- 未 push、未 merge、未改 prisma/业务逻辑/SEO 生成逻辑、未起停 docker（仅
+  `docker compose config` 静态渲染 + node 校验，不创建容器）。
+
 ## 2026-09-03 · RC-8 生产域名冻结 `pulsenovels.com`
 
 - Owner 正式购买 `pulsenovels.com`，冻结为 cps-novel 唯一生产主域名。本轮只做"域名字面量

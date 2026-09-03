@@ -132,9 +132,16 @@ docker compose -p cps-novel-x8-local \
 每步的"证据"默认指管理后台截图；标注"SQL"的额外用只读角色跑
 `docs/operations/LAUNCH_DAY_HEALTH_CHECKS.md` 对应查询核对，不作为唯一证据来源。
 
+**RC-9 后台主机隔离**：步骤 1–10、16 的后台操作都在 `https://zbcwf.novel.test`
+上进行（管理后台专用主机，见 `docs/operations/PRODUCTION_DOMAIN_2026-09-03.md`）；
+步骤 11–15 的公开页面仍在 `https://novel.test` 上进行——两者是两个不同的
+浏览器地址栏主机，不是同一站点的不同路径。
+
 | # | 动作 | 页面路径 | 通过标准 | 证据 |
 |---:|---|---|---|---|
-| 1 | 登录 + 2FA | `/login`（管理后台入口） | 二次验证通过，进入管理后台首页，会话建立 | 截图 |
+| 0.5 | 验证主机隔离生效 | `https://novel.test/login`；`https://zbcwf.novel.test/` | 前者 HTTP 404（公开主机不服务后台登录页——这正是短剧站
+`enpulsedrama.com/login` 的已知缺陷，海阅必须不重现）；后者 HTTP 404（后台主机不服务公开首页） | 截图或 `curl -I` 输出两条 |
+| 1 | 登录 + 2FA | `https://zbcwf.novel.test/login`（管理后台入口） | 二次验证通过，进入管理后台首页，会话建立 | 截图 |
 | 2 | 录入 MoboReader 凭证；校验任务转绿 | `/channel-accounts` | `addOrReplaceCredential` 保存成功；credential validation 任务状态变为 completed/success（页面转绿） | 截图（任务状态） |
 | 3 | 小页区间 dry-run→apply | `/catalog-sync`（page ≤ 3、pageSize=20，见"已知限制"） | dry-run 预览无报错后 apply；对应 `NovelSourceItem` 行出现在数据库/后台列表 | 截图 + SQL：`SELECT count(*) FROM novel_source_item WHERE created_at > ...` |
 | 4 | 确认 preview 任务被消费 | `/tasks` | `moboreader.preview_refresh.v1` 对应 item 状态不再是 `pending`（success 或带诊断的 failed） | 截图（任务详情） |
