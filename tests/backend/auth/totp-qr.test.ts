@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 /**
  * RC-11 — `createTotpQrCodeDataUrl` (`@/lib/auth/totp.ts`), the one addition
@@ -10,6 +10,16 @@ import { describe, expect, it, vi } from "vitest";
  */
 
 describe("createTotpQrCodeDataUrl — CPS-parity call parameters (mocked qrcode)", () => {
+  // Review fixup: the unmock has to run even when an assertion above it
+  // throws. Left as trailing statements inside `it`, a failure of the
+  // parameter assertion leaked the `qrcode` mock into the real-library
+  // describe below, so a single genuine regression surfaced as three
+  // failures and the "real library" tests silently stopped being real.
+  afterEach(() => {
+    vi.doUnmock("qrcode");
+    vi.resetModules();
+  });
+
   it("calls QRCode.toDataURL with the exact CPS parameters and the given URI, unmodified", async () => {
     const toDataURL = vi.fn().mockResolvedValue("data:image/png;base64,MOCKED");
     vi.doMock("qrcode", () => ({ toDataURL }));
@@ -21,9 +31,6 @@ describe("createTotpQrCodeDataUrl — CPS-parity call parameters (mocked qrcode)
 
     expect(toDataURL).toHaveBeenCalledWith(uri, { errorCorrectionLevel: "M", margin: 1, width: 256 });
     expect(result).toBe("data:image/png;base64,MOCKED");
-
-    vi.doUnmock("qrcode");
-    vi.resetModules();
   });
 });
 
