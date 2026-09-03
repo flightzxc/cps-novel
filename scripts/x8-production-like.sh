@@ -48,6 +48,14 @@ host_entry_exists() {
     /etc/hosts
 }
 
+# RC-9: mirrors host_entry_exists()'s literal-domain style deliberately --
+# setup_x8() runs before prepare_x8_environment(), so X8_ADMIN_DOMAIN is not
+# yet exported at that call site either.
+admin_host_entry_exists() {
+  awk '$1 == "127.0.0.1" { for (i = 2; i <= NF; i++) if ($i == "zbcwf.novel.test") found = 1 } END { exit !found }' \
+    /etc/hosts
+}
+
 setup_x8() {
   require_command brew
   require_command sudo
@@ -62,17 +70,25 @@ setup_x8() {
     printf '%s\n' '127.0.0.1 novel.test # cps-novel-x8-local' | sudo tee -a /etc/hosts >/dev/null
   fi
   host_entry_exists || { echo "ERROR: novel.test was not added to /etc/hosts" >&2; exit 1; }
+  # RC-9 admin-host isolation: a distinct admin domain so src/proxy.ts and
+  # the admin nginx server block have somewhere real to isolate onto.
+  if ! admin_host_entry_exists; then
+    echo "Adding the marked zbcwf.novel.test entry to /etc/hosts (sudo authorization may be requested)."
+    printf '%s\n' '127.0.0.1 zbcwf.novel.test # cps-novel-x8-local' | sudo tee -a /etc/hosts >/dev/null
+  fi
+  admin_host_entry_exists || { echo "ERROR: zbcwf.novel.test was not added to /etc/hosts" >&2; exit 1; }
   echo "X8_HOST_SETUP=PASS"
 }
 
 render_nginx_configs() {
   local source_dir="$X8_PROJECT_ROOT/infra/production-like/nginx"
-  sed "s/__X8_DOMAIN__/$X8_LOCAL_DOMAIN/g" \
+  sed -e "s/__X8_DOMAIN__/$X8_LOCAL_DOMAIN/g" -e "s/__X8_ADMIN_DOMAIN__/$X8_ADMIN_DOMAIN/g" \
     "$source_dir/bootstrap.conf.template" >"$X8_NGINX_RUNTIME_DIR/bootstrap.conf"
-  sed "s/__X8_DOMAIN__/$X8_LOCAL_DOMAIN/g" \
+  sed -e "s/__X8_DOMAIN__/$X8_LOCAL_DOMAIN/g" -e "s/__X8_ADMIN_DOMAIN__/$X8_ADMIN_DOMAIN/g" \
     "$source_dir/full.conf.template" >"$X8_NGINX_RUNTIME_DIR/full.conf"
   chmod 600 "$X8_NGINX_RUNTIME_DIR/bootstrap.conf" "$X8_NGINX_RUNTIME_DIR/full.conf"
-  grep -F '__X8_DOMAIN__' "$X8_NGINX_RUNTIME_DIR/bootstrap.conf" "$X8_NGINX_RUNTIME_DIR/full.conf" >/dev/null 2>&1 && {
+  grep -F -e '__X8_DOMAIN__' -e '__X8_ADMIN_DOMAIN__' \
+    "$X8_NGINX_RUNTIME_DIR/bootstrap.conf" "$X8_NGINX_RUNTIME_DIR/full.conf" >/dev/null 2>&1 && {
     echo "ERROR: unresolved nginx template token" >&2
     exit 65
   }
@@ -84,8 +100,20 @@ validate_rendered_topology() {
     echo "ERROR: X8 compose project drift" >&2
     exit 65
   }
-  [[ "$SITE_URL" == "https://novel.test" && "$ADMIN_CANONICAL_ORIGIN" == "https://novel.test" ]] || {
-    echo "ERROR: X8 public/admin origin drift" >&2
+  [[ "$SITE_URL" == "https://novel.test" ]] || {
+    echo "ERROR: X8 public origin drift" >&2
+    exit 65
+  }
+  [[ "$ADMIN_CANONICAL_ORIGIN" == "https://${X8_ADMIN_DOMAIN}" ]] || {
+    echo "ERROR: X8 admin origin drift" >&2
+    exit 65
+  }
+  # RC-9 admin-host isolation is a security invariant, not a rendering
+  # nicety: refuse to proceed at all if the admin and public hosts were ever
+  # made to collide, rather than silently booting a topology src/proxy.ts
+  # would then have to fail closed against on every single request.
+  [[ "$X8_ADMIN_DOMAIN" != "$X8_LOCAL_DOMAIN" ]] || {
+    echo "ERROR: X8 admin/public host collision (X8_ADMIN_DOMAIN must differ from X8_LOCAL_DOMAIN)" >&2
     exit 65
   }
   # RC-2b: the expected allowlist depends on X8_LEVEL (0/uat/r); both this
@@ -193,6 +221,10 @@ prepare_database() {
 wait_for_url() {
   local url="$1"
   local mode="$2"
+  # RC-9: defaults to the public domain so every pre-existing call site is
+  # unchanged; up_x8()/verify_x8() pass X8_ADMIN_DOMAIN explicitly for the
+  # admin-origin probes.
+  local domain="${3:-$X8_LOCAL_DOMAIN}"
   local ready=no
   local ca_root=""
   if [[ "$mode" == "https" ]]; then
@@ -200,11 +232,11 @@ wait_for_url() {
   fi
   for _ in $(seq 1 60); do
     if [[ "$mode" == "https" ]]; then
-      if curl --silent --show-error --fail --cacert "$ca_root" --resolve novel.test:443:127.0.0.1 "$url" >/dev/null 2>&1; then
+      if curl --silent --show-error --fail --cacert "$ca_root" --resolve "$domain:443:127.0.0.1" "$url" >/dev/null 2>&1; then
         ready=yes
         break
       fi
-    elif curl --silent --show-error --fail --resolve novel.test:80:127.0.0.1 "$url" >/dev/null 2>&1; then
+    elif curl --silent --show-error --fail --resolve "$domain:80:127.0.0.1" "$url" >/dev/null 2>&1; then
       ready=yes
       break
     fi
@@ -216,9 +248,13 @@ wait_for_url() {
 ensure_local_certificate() {
   local certificate="$X8_TLS_DIR/novel.test.pem"
   local private_key="$X8_TLS_DIR/novel.test-key.pem"
-  if [[ ! -f "$certificate" || ! -f "$private_key" ]] || \
-    ! openssl x509 -checkend 604800 -noout -in "$certificate" >/dev/null 2>&1; then
-    mkcert -cert-file "$certificate" -key-file "$private_key" novel.test localhost 127.0.0.1 ::1
+  # RC-9: reissue if the cert predates the admin SAN too, not only on
+  # expiry -- an upgrade from a pre-RC-9 cert must not silently keep serving
+  # a certificate the admin server_name can't complete a TLS handshake for.
+  if [[ ! -f "$certificate" || ! -f "$private_key" ]] \
+    || ! openssl x509 -checkend 604800 -noout -in "$certificate" >/dev/null 2>&1 \
+    || ! openssl x509 -noout -ext subjectAltName -in "$certificate" 2>/dev/null | grep -qF "DNS:$X8_ADMIN_DOMAIN"; then
+    mkcert -cert-file "$certificate" -key-file "$private_key" novel.test "$X8_ADMIN_DOMAIN" localhost 127.0.0.1 ::1
   fi
   chmod 600 "$certificate" "$private_key"
 }
@@ -232,6 +268,10 @@ up_x8() {
   require_command mkcert
   host_entry_exists || {
     echo "ERROR: novel.test is absent from /etc/hosts; run scripts/x8-production-like.sh setup" >&2
+    exit 69
+  }
+  admin_host_entry_exists || {
+    echo "ERROR: zbcwf.novel.test is absent from /etc/hosts; run scripts/x8-production-like.sh setup" >&2
     exit 69
   }
   [[ -r "$(mkcert -CAROOT)/rootCA.pem" ]] || {
@@ -249,6 +289,7 @@ up_x8() {
   chmod 600 "$X8_NGINX_RUNTIME_DIR/active.conf"
   x8_compose up -d --force-recreate nginx
   wait_for_url http://novel.test/api/health http
+  wait_for_url "http://$X8_ADMIN_DOMAIN/api/health" http "$X8_ADMIN_DOMAIN"
 
   ensure_local_certificate
   cp "$X8_NGINX_RUNTIME_DIR/full.conf" "$X8_NGINX_RUNTIME_DIR/active.conf"
@@ -256,10 +297,12 @@ up_x8() {
   x8_compose exec -T nginx nginx -t -c /etc/nginx/x8/active.conf
   x8_compose exec -T nginx nginx -s reload -c /etc/nginx/x8/active.conf
   wait_for_url https://novel.test/api/health https
+  wait_for_url "https://$X8_ADMIN_DOMAIN/api/health" https "$X8_ADMIN_DOMAIN"
 
   x8_compose up -d backup-timer
   echo "X8_PRODUCTION_LIKE_STARTED=PASS"
   echo "X8_ORIGIN=https://novel.test"
+  echo "X8_ADMIN_ORIGIN=https://$X8_ADMIN_DOMAIN"
   echo "X8_COMPOSE_PROJECT=$P1_12_COMPOSE_PROJECT"
 }
 
@@ -328,6 +371,41 @@ verify_x8() {
     | openssl x509 -noout -ext subjectAltName | grep -F 'DNS:novel.test' >/dev/null
   grep -F 'proxy_set_header X-Forwarded-For $remote_addr;' \
     "$X8_PROJECT_ROOT/infra/production-like/nginx/snippets/proxy-headers.conf" >/dev/null
+
+  # RC-9 admin-host isolation (2026-09-03, Owner): the admin origin serves
+  # /login and /api/health but 404s the public home page; the public origin
+  # 404s /login but serves /. This is the exact inversion of the CPS
+  # short-drama site's flagged defect (its public domain opens its admin
+  # login page) -- verify it end to end, not just that the two nginx server
+  # blocks parsed.
+  local admin_login_status public_login_status admin_home_status admin_health_status
+  openssl s_client -connect 127.0.0.1:443 -servername "$X8_ADMIN_DOMAIN" </dev/null 2>/dev/null \
+    | openssl x509 -noout -ext subjectAltName | grep -F "DNS:$X8_ADMIN_DOMAIN" >/dev/null
+  admin_login_status="$(curl --silent --output /dev/null --write-out '%{http_code}' --cacert "$ca_root" \
+    --resolve "$X8_ADMIN_DOMAIN:443:127.0.0.1" "https://$X8_ADMIN_DOMAIN/login")"
+  [[ "$admin_login_status" == "200" ]] || {
+    echo "ERROR: admin host did not serve /login (got $admin_login_status)" >&2
+    exit 1
+  }
+  public_login_status="$(curl --silent --output /dev/null --write-out '%{http_code}' --cacert "$ca_root" \
+    --resolve novel.test:443:127.0.0.1 https://novel.test/login)"
+  [[ "$public_login_status" == "404" ]] || {
+    echo "ERROR: public host did not 404 /login (got $public_login_status) -- this is the CPS defect" >&2
+    exit 1
+  }
+  admin_home_status="$(curl --silent --output /dev/null --write-out '%{http_code}' --cacert "$ca_root" \
+    --resolve "$X8_ADMIN_DOMAIN:443:127.0.0.1" "https://$X8_ADMIN_DOMAIN/")"
+  [[ "$admin_home_status" == "404" ]] || {
+    echo "ERROR: admin host served the public home page (got $admin_home_status)" >&2
+    exit 1
+  }
+  admin_health_status="$(curl --silent --output /dev/null --write-out '%{http_code}' --cacert "$ca_root" \
+    --resolve "$X8_ADMIN_DOMAIN:443:127.0.0.1" "https://$X8_ADMIN_DOMAIN/api/health")"
+  [[ "$admin_health_status" == "200" ]] || {
+    echo "ERROR: admin host did not serve /api/health (got $admin_health_status)" >&2
+    exit 1
+  }
+
   verify_postgres
   echo "X8_TOPOLOGY_VERIFY=PASS"
 }

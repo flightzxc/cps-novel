@@ -18,9 +18,15 @@ http {
         keepalive 16;
     }
 
+    # RC-9: this stage-1 HTTP-only smoke config predates the real cert (see
+    # ensure_local_certificate() / up_x8() in scripts/x8-production-like.sh)
+    # and is replaced by full.conf's host-split server blocks before any
+    # traffic other than the readiness probe below is served, so it does not
+    # need to enforce the admin/public path split itself -- it just has to
+    # resolve both hostnames so wait_for_url can probe either one.
     server {
         listen 80;
-        server_name __X8_DOMAIN__;
+        server_name __X8_DOMAIN__ __X8_ADMIN_DOMAIN__;
 
         location / {
             include /etc/nginx/x8-source/snippets/proxy-headers.conf;

@@ -42,6 +42,21 @@ http {
         return 308 https://$host$request_uri;
     }
 
+    # RC-9 admin-host isolation (2026-09-03, Owner): the admin backend has its
+    # own domain so the public and admin origins are never the same nginx
+    # `server_name` match. This is the second, independent line of defense —
+    # src/proxy.ts enforces the identical split at the application layer and
+    # fails closed even if these two server blocks were ever misconfigured to
+    # collide (see src/lib/site/admin-origin.ts's rule table). Reuses the
+    # same TLS certificate as the public domain (mkcert issues one cert
+    # covering both SANs — see ensure_local_certificate() in
+    # scripts/x8-production-like.sh).
+    server {
+        listen 80;
+        server_name __X8_ADMIN_DOMAIN__;
+        return 308 https://$host$request_uri;
+    }
+
     server {
         listen 443 ssl;
         http2 on;
@@ -56,6 +71,26 @@ http {
 
         client_max_body_size 2m;
         include /etc/nginx/x8-source/snippets/security-headers.conf;
+
+        # RC-9: the public origin must 404 every admin path, not just skip
+        # proxying it through with the "no-store" header the block below used
+        # to add. Source of truth for this exact path list is
+        # scripts/lib/admin-path-roots.json, generated from
+        # src/server/auth/registry.ts's ADMIN_PAGE_ROOTS plus /login and
+        # /two-factor (tests/ui/admin-path-roots-parity.test.ts pins the
+        # match). This is the CPS short-drama site's own admin domain
+        # (Owner-flagged: its public domain can open its admin login page)
+        # inverted into an explicit deny, not left to fall through to the
+        # generic proxy location below.
+        location ~ ^/(?:dashboard|novels|catalog-sync|promo-links|previews|home-carousel|templates|articles|categories|tags|tasks|revenue|settings|channel-accounts|login|two-factor)(?:/|$) {
+            return 404;
+        }
+        location ^~ /api/admin/ {
+            return 404;
+        }
+        location = /api/admin {
+            return 404;
+        }
 
         location ^~ /_next/static/ {
             include /etc/nginx/x8-source/snippets/proxy-headers.conf;
@@ -99,14 +134,6 @@ http {
 
         include /etc/nginx/x8-source/snippets/capacity-locations.conf;
 
-        location ~ ^/(?:login|logout|two-factor|novels|channel-accounts|catalog-sync|promo-links|settings|tags|tasks)(?:/|$) {
-            include /etc/nginx/x8-source/snippets/proxy-headers.conf;
-            proxy_hide_header Cache-Control;
-            add_header Cache-Control "no-store" always;
-            include /etc/nginx/x8-source/snippets/security-headers.conf;
-            proxy_pass http://app_backend;
-        }
-
         location ^~ /dev-preview/ {
             return 404;
         }
@@ -114,6 +141,78 @@ http {
         location / {
             include /etc/nginx/x8-source/snippets/proxy-headers.conf;
             proxy_pass http://app_backend;
+        }
+    }
+
+    # RC-9: the admin origin. Default-deny, not default-proxy — only the
+    # admin path allowlist below (same source as the public server's deny
+    # list, above) and the shared health endpoints are reachable; everything
+    # else, including the public home page and every public content route,
+    # falls through to `location /`'s `return 404;`. The admin backend does
+    # not serve public pages.
+    server {
+        listen 443 ssl;
+        http2 on;
+        server_name __X8_ADMIN_DOMAIN__;
+
+        ssl_certificate /etc/nginx/tls/__X8_DOMAIN__.pem;
+        ssl_certificate_key /etc/nginx/tls/__X8_DOMAIN__-key.pem;
+        ssl_protocols TLSv1.2 TLSv1.3;
+        ssl_session_cache shared:X8TLS:10m;
+        ssl_session_timeout 1d;
+        ssl_session_tickets off;
+
+        client_max_body_size 2m;
+        include /etc/nginx/x8-source/snippets/security-headers.conf;
+
+        location ^~ /_next/ {
+            include /etc/nginx/x8-source/snippets/proxy-headers.conf;
+            proxy_hide_header Cache-Control;
+            add_header Cache-Control "public, max-age=31536000, immutable" always;
+            include /etc/nginx/x8-source/snippets/security-headers.conf;
+            proxy_pass http://app_backend;
+        }
+
+        location = /api/health {
+            include /etc/nginx/x8-source/snippets/proxy-headers.conf;
+            proxy_hide_header Cache-Control;
+            add_header Cache-Control "no-store" always;
+            include /etc/nginx/x8-source/snippets/security-headers.conf;
+            proxy_pass http://app_backend;
+        }
+        location ^~ /api/health/ {
+            include /etc/nginx/x8-source/snippets/proxy-headers.conf;
+            proxy_hide_header Cache-Control;
+            add_header Cache-Control "no-store" always;
+            include /etc/nginx/x8-source/snippets/security-headers.conf;
+            proxy_pass http://app_backend;
+        }
+
+        location ^~ /api/admin/ {
+            include /etc/nginx/x8-source/snippets/proxy-headers.conf;
+            proxy_hide_header Cache-Control;
+            add_header Cache-Control "no-store" always;
+            include /etc/nginx/x8-source/snippets/security-headers.conf;
+            proxy_pass http://app_backend;
+        }
+        location = /api/admin {
+            include /etc/nginx/x8-source/snippets/proxy-headers.conf;
+            proxy_hide_header Cache-Control;
+            add_header Cache-Control "no-store" always;
+            include /etc/nginx/x8-source/snippets/security-headers.conf;
+            proxy_pass http://app_backend;
+        }
+
+        location ~ ^/(?:dashboard|novels|catalog-sync|promo-links|previews|home-carousel|templates|articles|categories|tags|tasks|revenue|settings|channel-accounts|login|two-factor)(?:/|$) {
+            include /etc/nginx/x8-source/snippets/proxy-headers.conf;
+            proxy_hide_header Cache-Control;
+            add_header Cache-Control "no-store" always;
+            include /etc/nginx/x8-source/snippets/security-headers.conf;
+            proxy_pass http://app_backend;
+        }
+
+        location / {
+            return 404;
         }
     }
 }

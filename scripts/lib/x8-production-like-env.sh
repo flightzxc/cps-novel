@@ -132,7 +132,16 @@ prepare_x8_environment() {
 
   export P1_12_COMPOSE_PROJECT=cps-novel-x8-local
   export X8_LOCAL_DOMAIN=novel.test
-  export ADMIN_CANONICAL_ORIGIN=https://novel.test
+  # RC-9 admin-host isolation (2026-09-03, Owner): the admin backend is a
+  # distinct domain from the public site at every X8_LEVEL -- this is a
+  # security invariant, not a per-level knob (see
+  # docs/operations/PRODUCTION_DOMAIN_2026-09-03.md and src/proxy.ts). Prefix
+  # matches CPS's own `zbcwf` admin-subdomain convention. Overridable only
+  # for local experimentation; validate_rendered_topology() in
+  # scripts/x8-production-like.sh refuses to proceed if it ever equals
+  # X8_LOCAL_DOMAIN.
+  export X8_ADMIN_DOMAIN="${X8_ADMIN_DOMAIN:-zbcwf.novel.test}"
+  export ADMIN_CANONICAL_ORIGIN="https://${X8_ADMIN_DOMAIN}"
   export SITE_URL=https://novel.test
   export TZ=Asia/Tokyo
   export MOBOREADER_PREVIEW_SOURCE_APP_CODES=changdu

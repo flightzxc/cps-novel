@@ -1,0 +1,22 @@
+{
+  "_comment": "RC-9 admin-host isolation. nginx defense-in-depth copy of the admin path list consumed by src/proxy.ts's isAdminPath() (src/lib/site/admin-origin.ts), which derives it from ADMIN_PAGE_ROOTS (src/server/auth/registry.ts) plus /login, /two-factor, and /api/admin. This file is authored by hand, not rendered from the TS source, so tests/ui/admin-path-roots-parity.test.ts pins that the two never drift apart. Consumed by infra/production-like/nginx/full.conf.template's admin-path location regex (deny on the public server, allow on the admin server).",
+  "pageRoots": [
+    "/dashboard",
+    "/novels",
+    "/catalog-sync",
+    "/promo-links",
+    "/previews",
+    "/home-carousel",
+    "/templates",
+    "/articles",
+    "/categories",
+    "/tags",
+    "/tasks",
+    "/revenue",
+    "/settings",
+    "/channel-accounts",
+    "/login",
+    "/two-factor"
+  ],
+  "apiNamespace": "/api/admin"
+}

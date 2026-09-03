@@ -165,7 +165,12 @@ describe("X8 local production-like contracts", () => {
     expect(upFlow.indexOf("bootstrap.conf")).toBeLessThan(upFlow.indexOf("ensure_local_certificate"));
     expect(upFlow.indexOf("ensure_local_certificate")).toBeLessThan(upFlow.indexOf("full.conf"));
     expect(envHelper).toContain("export SITE_URL=https://novel.test");
-    expect(envHelper).toContain("export ADMIN_CANONICAL_ORIGIN=https://novel.test");
+    // RC-9 admin-host isolation (2026-09-03, Owner): the admin origin is a
+    // distinct domain from SITE_URL at every X8_LEVEL (scripts/lib/
+    // x8-production-like-env.sh), was previously the same
+    // "https://novel.test" this test pinned pre-RC-9.
+    expect(envHelper).toContain('export X8_ADMIN_DOMAIN="${X8_ADMIN_DOMAIN:-zbcwf.novel.test}"');
+    expect(envHelper).toContain('export ADMIN_CANONICAL_ORIGIN="https://${X8_ADMIN_DOMAIN}"');
   });
 
   it("freezes the novel, go, browse, deep-page, and AI capacity gates", () => {

@@ -46,8 +46,19 @@ for (const port of nginx.ports) {
   if (port.host_ip !== "127.0.0.1") fail(`nginx port ${port.published} is not loopback-bound`);
 }
 if (web.environment?.SITE_URL !== "https://novel.test") fail("web SITE_URL is not the X8 origin");
-if (web.environment?.ADMIN_CANONICAL_ORIGIN !== "https://novel.test") {
-  fail("ADMIN_CANONICAL_ORIGIN is not the X8 origin");
+// RC-9 admin-host isolation (2026-09-03, Owner): the admin backend is a
+// distinct domain from the public site, matching the default
+// X8_ADMIN_DOMAIN=zbcwf.novel.test exported by
+// scripts/lib/x8-production-like-env.sh. This is hard-coded (not read back
+// from process.env.ADMIN_CANONICAL_ORIGIN) on purpose -- the point of this
+// validator is to catch drift in the rendered compose config independently
+// of whatever the exporting script currently believes, not to compare the
+// env to itself.
+if (web.environment?.ADMIN_CANONICAL_ORIGIN !== "https://zbcwf.novel.test") {
+  fail("ADMIN_CANONICAL_ORIGIN is not the X8 admin origin");
+}
+if (web.environment?.ADMIN_CANONICAL_ORIGIN === web.environment?.SITE_URL) {
+  fail("ADMIN_CANONICAL_ORIGIN must not equal SITE_URL (RC-9 admin-host isolation)");
 }
 if (worker.environment?.SITE_URL !== "https://novel.test") fail("worker SITE_URL is not the X8 origin");
 if (worker.environment?.WORKER_TASK_ALLOWLIST !== levelEntry.workerTaskAllowlist) {
