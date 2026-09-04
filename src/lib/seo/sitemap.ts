@@ -12,8 +12,13 @@ import {
   isPublicationStatePublic,
 } from "@/server/publication/visibility";
 import { getSiteSetting } from "@/server/site-settings/service";
+import {
+  listDistinctPublicTaxonomy,
+  loadPublicTaxonomyByNovelIds,
+} from "@/lib/site/public-taxonomy";
+import { BROWSE_PAGE_SIZE } from "@/lib/site/queries";
 
-export const SITEMAP_TYPES = ["mainpage", "novelpage"] as const;
+export const SITEMAP_TYPES = ["mainpage", "novelpage", "categorypage"] as const;
 export type SitemapType = (typeof SITEMAP_TYPES)[number];
 
 export interface SitemapFamilySpec {
@@ -63,6 +68,7 @@ const ARTICLE_SITEMAP_SELECT = {
   updatedAt: true,
   novel: {
     select: {
+      id: true,
       status: true,
       deletedAt: true,
       coverUrl: true,
@@ -149,6 +155,53 @@ function buildNovelPageFiles(
   });
 }
 
+async function buildCategoryPageFiles(
+  db: SitemapDb,
+  locale: SiteLocale,
+  candidates: readonly ArticleSitemapCandidate[],
+): Promise<SitemapFile[]> {
+  const tagsByNovel = await loadPublicTaxonomyByNovelIds(
+    db,
+    candidates.map((candidate) => candidate.novel.id),
+    locale,
+  );
+  const categories = listDistinctPublicTaxonomy(tagsByNovel);
+  if (categories.length === 0) return [];
+
+  const entries: SitemapEntry[] = [];
+  for (const category of categories) {
+    const matching = candidates.filter((candidate) =>
+      (tagsByNovel.get(candidate.novel.id) ?? []).some((tag) => tag.id === category.id));
+    if (matching.length === 0) continue;
+    const lastmod = latestDate([
+      category.updatedAt,
+      ...matching.map((candidate) => candidate.updatedAt),
+    ]).toISOString();
+    const pageCount = Math.max(1, Math.ceil(matching.length / BROWSE_PAGE_SIZE));
+    for (let page = 1; page <= pageCount; page += 1) {
+      const path = page === 1
+        ? `/category/${category.slug}`
+        : `/category/${category.slug}?page=${page}`;
+      entries.push({
+        loc: toAbsoluteUrl(path),
+        lastmod,
+        changefreq: "weekly",
+        priority: page === 1 ? 0.7 : 0.5,
+      });
+    }
+  }
+
+  return chunks(entries, SITEMAP_SHARD_SIZE).map((shardEntries, index) => {
+    const name = getSitemapFileName("categorypage", locale, index);
+    return {
+      name,
+      url: toAbsoluteUrl(`/sitemap/${name}`),
+      lastmod: latestDate(shardEntries.map((entry) => new Date(entry.lastmod))).toISOString(),
+      entries: shardEntries,
+    };
+  });
+}
+
 /**
  * Production DB builder injected into the PR1 filesystem generator. Database
  * reads happen only in the refresh worker; request routes remain static-only.
@@ -170,6 +223,7 @@ export function createSitemapFamilyBuilder(db: SitemapDb): BuildSitemapFamily {
   return async ({ type, locale }) => {
     const candidates = await loadVisible(locale);
     if (type === "novelpage") return buildNovelPageFiles(locale, candidates);
+    if (type === "categorypage") return buildCategoryPageFiles(db, locale, candidates);
 
     const settings = await getSiteSetting(db, { ttlMs: 0 });
     const lastmod = latestDate([
@@ -214,7 +268,7 @@ export function parseSitemapFileName(fileName: string): {
   locale: SiteLocale;
   index: number;
 } | null {
-  const match = /^site_(mainpage|novelpage)_([a-zA-Z-]+)(?:_(\d+))?\.xml$/.exec(fileName);
+  const match = /^site_(mainpage|novelpage|categorypage)_([a-zA-Z-]+)(?:_(\d+))?\.xml$/.exec(fileName);
   if (!match) return null;
 
   const locale = match[2];

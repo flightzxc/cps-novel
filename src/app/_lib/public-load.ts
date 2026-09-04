@@ -7,6 +7,7 @@ import {
   getPublicChapterView,
   getPublicNovelDetail,
   listHomeNovels,
+  listPublicCategories as queryPublicCategories,
   listPublicArticles,
   loadPublicChrome,
   resolvePublicArticleBySlugParam,
@@ -18,6 +19,7 @@ import { getHomeCarouselItems } from "@/lib/site/home-carousel-service";
 export const loadChrome = cache(async (current?: PublicChromeCurrent) => loadPublicChrome(prisma, current));
 
 export const loadHomeNovels = cache(async (locale: SiteLocale) => listHomeNovels(prisma, locale));
+export const loadPublicCategories = cache(async (locale: SiteLocale) => queryPublicCategories(prisma, locale));
 export const loadHomeCarousel = cache(async (locale: SiteLocale) => getHomeCarouselItems(locale, prisma));
 
 export const loadBrowseNovels = cache(async (locale: SiteLocale) => listPublicArticles(prisma, locale));

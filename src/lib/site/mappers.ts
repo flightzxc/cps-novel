@@ -4,6 +4,7 @@ import type {
   NovelCardView,
   NovelDetailView,
   PreviewChapterRef,
+  SiteTag,
 } from "@/features/public-ui/types";
 import { isPublicRedirectCodeFormatValid } from "@/lib/redirect";
 import { buildArticlePath } from "@/lib/slug/article-path";
@@ -30,6 +31,7 @@ export type PublicArticleRecord = {
   publicPageShortId: string;
   publishedAt: Date | null;
   summary?: string | null;
+  tags?: readonly SiteTag[];
   novel: PublicNovelRecord;
 };
 
@@ -104,7 +106,7 @@ export function toNovelCardView(article: PublicArticleRecord): NovelCardView | n
     id: article.novel.businessId,
     title: article.title,
     coverUrl: article.novel.coverUrl ?? undefined,
-    tags: [],
+    tags: [...(article.tags ?? [])],
     locale: localeBadge(locale),
     href: buildArticlePath({
       locale,
@@ -151,7 +153,7 @@ export function toNovelDetailView(
     seoDescription: seoText(article.seoMetadata, "metaDescription"),
     locale: localeBadge(locale),
     totalChapterCount: article.novel.totalChapterCount,
-    tags: [],
+    tags: [...(article.tags ?? [])],
     previewChapters: toPreviewChapterRefs(article, previewChapters),
     readOnUpstreamHref: buildReadOnUpstreamHref(article.promoLink),
   };

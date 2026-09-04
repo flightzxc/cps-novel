@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
 import { JsonLd } from "@/app/_components/json-ld";
+import { prisma } from "@/app/_lib/public-deps";
 import { loadBrowseNovels, loadChrome } from "@/app/_lib/public-load";
 import { toNextMetadata } from "@/app/_lib/seo-metadata";
 import { CollectionScreen } from "@/features/public-ui/collection/CollectionScreen";
@@ -10,6 +11,7 @@ import { generateSeoMeta } from "@/lib/seo/seo-meta-generator";
 import { getPublicT } from "@/lib/locale/messages";
 import { PUBLIC_SITE_LOCALE } from "@/lib/site/locale-label";
 import { paginateCards } from "@/lib/site/queries";
+import { getPublicCategoryPage } from "@/lib/site/category-queries";
 
 export const dynamic = "force-dynamic";
 
@@ -20,9 +22,21 @@ function parseBrowsePageParam(raw: string | string[] | undefined): number | null
   return Number(value);
 }
 
-async function loadBrowsePage(rawPage: string | string[] | undefined) {
+async function loadBrowsePage(
+  rawPage: string | string[] | undefined,
+  rawCategory: string | string[] | undefined,
+) {
   const requested = parseBrowsePageParam(rawPage);
   if (requested === null) return null;
+
+  const category = Array.isArray(rawCategory) ? rawCategory[0] : rawCategory;
+  if (category) {
+    const [{ settings, chrome }, result] = await Promise.all([
+      loadChrome("browse"),
+      getPublicCategoryPage(prisma, PUBLIC_SITE_LOCALE, category, requested),
+    ]);
+    return result ? { settings, chrome, paged: result, category: result.category } : null;
+  }
 
   const [{ settings, chrome }, cards] = await Promise.all([
     loadChrome("browse"),
@@ -31,16 +45,16 @@ async function loadBrowsePage(rawPage: string | string[] | undefined) {
   const paged = paginateCards(cards, requested);
   if (requested > paged.totalPages && paged.totalCount > 0) return null;
 
-  return { settings, chrome, paged };
+  return { settings, chrome, paged, category: null };
 }
 
 export async function generateMetadata({
   searchParams,
 }: {
-  searchParams: Promise<{ page?: string | string[] }>;
+  searchParams: Promise<{ page?: string | string[]; category?: string | string[] }>;
 }): Promise<Metadata> {
-  const { page } = await searchParams;
-  const loaded = await loadBrowsePage(page);
+  const { page, category } = await searchParams;
+  const loaded = await loadBrowsePage(page, category);
   if (!loaded) {
     return {
       title: getPublicT(PUBLIC_SITE_LOCALE)("meta.notFound"),
@@ -53,9 +67,9 @@ export async function generateMetadata({
     locale: PUBLIC_SITE_LOCALE,
     pageNumber: loaded.paged.page,
     data: {
-      title: "All works",
-      description: loaded.settings.siteDescription || "Published novels.",
-      canonicalPath: "/browse",
+      title: loaded.category ? `${loaded.category.name} novels` : "All works",
+      description: loaded.category?.description || loaded.settings.siteDescription || "Published novels.",
+      canonicalPath: loaded.category ? `/browse?category=${encodeURIComponent(loaded.category.slug)}` : "/browse",
       items: loaded.paged.novels.map((novel) => ({ name: novel.title, url: novel.href })),
       siteName: loaded.settings.siteName,
       defaultOgImage: loaded.settings.defaultOgImage.trim() || loaded.paged.novels[0]?.coverUrl || null,
@@ -67,10 +81,10 @@ export async function generateMetadata({
 export default async function BrowsePage({
   searchParams,
 }: {
-  searchParams: Promise<{ page?: string | string[] }>;
+  searchParams: Promise<{ page?: string | string[]; category?: string | string[] }>;
 }) {
-  const { page } = await searchParams;
-  const loaded = await loadBrowsePage(page);
+  const { page, category } = await searchParams;
+  const loaded = await loadBrowsePage(page, category);
   if (!loaded) notFound();
 
   const t = getPublicT(PUBLIC_SITE_LOCALE);
@@ -79,9 +93,9 @@ export default async function BrowsePage({
     locale: PUBLIC_SITE_LOCALE,
     pageNumber: loaded.paged.page,
     data: {
-      title: "All works",
-      description: loaded.settings.siteDescription || "Published novels.",
-      canonicalPath: "/browse",
+      title: loaded.category ? `${loaded.category.name} novels` : "All works",
+      description: loaded.category?.description || loaded.settings.siteDescription || "Published novels.",
+      canonicalPath: loaded.category ? `/browse?category=${encodeURIComponent(loaded.category.slug)}` : "/browse",
       items: loaded.paged.novels.map((novel) => ({ name: novel.title, url: novel.href })),
       siteName: loaded.settings.siteName,
       defaultOgImage: loaded.settings.defaultOgImage.trim() || loaded.paged.novels[0]?.coverUrl || null,
@@ -94,8 +108,8 @@ export default async function BrowsePage({
       <CollectionScreen
         locale={PUBLIC_SITE_LOCALE}
         chrome={loaded.chrome}
-        title={t("collection.allWorksTitle")}
-        description={t("collection.allWorksDescription")}
+        title={loaded.category?.name || t("collection.allWorksTitle")}
+        description={loaded.category?.description || t("collection.allWorksDescription")}
         novels={loaded.paged.novels}
         emptyMessage={t("collection.allWorksEmpty")}
       />
@@ -104,6 +118,7 @@ export default async function BrowsePage({
         currentPage={loaded.paged.page}
         totalPages={loaded.paged.totalPages}
         basePath="/browse"
+        searchParams={loaded.category ? { category: loaded.category.slug } : undefined}
       />
     </>
   );

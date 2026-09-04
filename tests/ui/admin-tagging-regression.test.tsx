@@ -114,16 +114,12 @@ describe("P2-06.5 Admin V1 UI 不越界", () => {
     }
   });
 
-  it("不建 Task Admin UI —— task 生命周期继续 CLI-only", async () => {
+  it("不把 tagging backfill 暴露进既有 Task Admin UI", async () => {
     const files = await adminSources();
-    for (const { file } of files) {
-      expect(
-        file.includes(`${ADMIN_ROOT}/tasks`),
-        `${file}：本轮不得新建 Task Admin 页面`,
-      ).toBe(false);
+    for (const { file, source } of files.filter((entry) => entry.file.includes(`${ADMIN_ROOT}/tasks`))) {
+      expect(source, `${file}：AUTO_WRITE_AUTHORIZED=NO`).not.toMatch(/novel_tag_backfill|tagging-backfill/i);
     }
-    expect(ADMIN_IMPLEMENTED_PAGES, "/tasks 仍应是未建的占位菜单项").not.toContain("/tasks");
-    // 侧栏仍登记 /tasks（灰显占位），登记本身不等于实现。
+    expect(ADMIN_IMPLEMENTED_PAGES).toContain("/tasks");
     expect(ADMIN_NAV_ITEMS.map((item) => item.href)).toContain("/tasks");
   });
 
@@ -169,6 +165,19 @@ describe("P2-06.5 Admin V1 UI 不越界", () => {
       "/settings",
       "/channel-accounts",
     ]);
-    expect(ADMIN_IMPLEMENTED_PAGES).toEqual(["/channel-accounts", "/novels", "/tags"]);
+    expect(ADMIN_IMPLEMENTED_PAGES).toEqual([
+      "/channel-accounts",
+      "/novels",
+      "/catalog-sync",
+      "/templates",
+      "/articles",
+      "/home-carousel",
+      "/categories",
+      "/tags",
+      "/tasks",
+      "/promo-links",
+      "/settings",
+      "/settings/security",
+    ]);
   });
 });

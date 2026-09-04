@@ -2,7 +2,7 @@ import { Container } from "@/components/Container";
 import { SectionHeader } from "@/components/SectionHeader";
 import { BookGrid } from "@/features/public-ui/book/BookGrid";
 import { SiteShell, type SiteChrome } from "@/features/public-ui/layout/SiteShell";
-import type { NovelCardView, NovelDetailView } from "@/features/public-ui/types";
+import type { NovelCardView, NovelDetailView, SiteTag } from "@/features/public-ui/types";
 import type { SiteLocale } from "@/lib/locale/locale-canonical";
 import { getPublicT } from "@/lib/locale/messages";
 import { FeaturedHero, type FeaturedHeroItem } from "./FeaturedHero";
@@ -33,6 +33,7 @@ export function HomeScreen({
   novels,
   browseAllHref,
   chrome,
+  categories = [],
 }: {
   locale: SiteLocale;
   /** 运营编排的主推列表（对应架构文档的 home_carousel_manual_slot），建议 4–6 本。 */
@@ -40,6 +41,7 @@ export function HomeScreen({
   novels: NovelCardView[];
   browseAllHref?: string;
   chrome?: SiteChrome;
+  categories?: readonly SiteTag[];
 }) {
   const t = getPublicT(locale);
   const heroItems: FeaturedHeroItem[] = featuredList.filter(
@@ -60,6 +62,20 @@ export function HomeScreen({
             detailHref={fallback.detailHref}
             startReadingHref={fallback.startReadingHref}
           />
+        ) : null}
+
+        {categories.length > 0 ? (
+          <nav aria-label="Browse by category" className="flex flex-wrap gap-2 pt-10 md:pt-14">
+            {categories.map((category) => (
+              <a
+                key={category.slug}
+                href={category.href}
+                className="rounded-full border border-novel-border px-3 py-1.5 text-sm text-novel-fg-muted transition-colors hover:border-novel-primary hover:text-novel-primary"
+              >
+                {category.label}
+              </a>
+            ))}
+          </nav>
         ) : null}
 
         <section aria-labelledby="all-works" className="pt-12 pb-4 md:pt-16">

@@ -14,7 +14,7 @@ describe("P2-06.5 static database governance", () => {
       expect(schema).toContain(`model ${model} {`);
     }
     expect(schema).toMatch(/rawLanguageScope\s+String\?/);
-    expect((schema.match(/^model\s+/gm) ?? [])).toHaveLength(50);
+    expect((schema.match(/^model\s+/gm) ?? [])).toHaveLength(51);
   });
 
   it("keeps the migration structural and exact", () => {
@@ -31,7 +31,8 @@ describe("P2-06.5 static database governance", () => {
   it("keeps Scheduler outside Tagging grants while Web and Worker are least-privileged writers", () => {
     const schedulerGrant = grants.match(/GRANT SELECT, INSERT, UPDATE ON TABLE schedule_run[^;]+TO scheduler_app;/s)?.[0] ?? "";
     expect(schedulerGrant).not.toMatch(/canonical_tag|source_label_mapping|novel_tag_state/);
-    expect(grants).toMatch(/GRANT INSERT, UPDATE ON TABLE novel_tag_state, tag_classification_run,[\s\S]*?TO worker_app;/);
+    const workerWriteGrant = grants.match(/-- Worker can mutate business\/task state\.[\s\S]*?TO worker_app;/)?.[0] ?? "";
+    expect(workerWriteGrant).toMatch(/novel_tag_state, novel_canonical_tag, tag_classification_run/);
     expect(grants).toContain("source_label_mapping, novel_tag_state, novel_canonical_tag");
     expect(grants).toContain("GRANT INSERT ON TABLE operation_audit TO web_app");
   });

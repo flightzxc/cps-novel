@@ -17,6 +17,7 @@ export interface PaginationProps {
   currentPage: number;
   totalPages: number;
   basePath: string;
+  searchParams?: Readonly<Record<string, string>>;
 }
 
 export function Pagination({
@@ -24,14 +25,22 @@ export function Pagination({
   currentPage,
   totalPages,
   basePath,
+  searchParams = {},
 }: PaginationProps) {
   if (totalPages <= 1) return null;
 
   const t = getPublicT(locale);
   const prevPage = currentPage - 1;
   const nextPage = currentPage + 1;
-  const prevUrl = prevPage <= 1 ? basePath : `${basePath}?page=${prevPage}`;
-  const nextUrl = `${basePath}?page=${nextPage}`;
+  const pageUrl = (page: number) => {
+    const params = new URLSearchParams(searchParams);
+    if (page > 1) params.set("page", String(page));
+    else params.delete("page");
+    const query = params.toString();
+    return query ? `${basePath}?${query}` : basePath;
+  };
+  const prevUrl = pageUrl(prevPage);
+  const nextUrl = pageUrl(nextPage);
 
   return (
     <nav

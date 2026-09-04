@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 
 import { JsonLd } from "@/app/_components/json-ld";
-import { loadChrome, loadHomeCarousel, loadHomeNovels } from "@/app/_lib/public-load";
+import { loadChrome, loadHomeCarousel, loadHomeNovels, loadPublicCategories } from "@/app/_lib/public-load";
 import { toNextMetadata } from "@/app/_lib/seo-metadata";
 import { HomeScreen } from "@/features/public-ui/home/HomeScreen";
 import { generateSeoMeta } from "@/lib/seo/seo-meta-generator";
@@ -28,10 +28,11 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export default async function HomePage() {
-  const [{ settings, chrome }, novels, featuredList] = await Promise.all([
+  const [{ settings, chrome }, novels, featuredList, categories] = await Promise.all([
     loadChrome("home"),
     loadHomeNovels(PUBLIC_SITE_LOCALE),
     loadHomeCarousel(PUBLIC_SITE_LOCALE),
+    loadPublicCategories(PUBLIC_SITE_LOCALE),
   ]);
   const seo = generateSeoMeta({
     entity: "home",
@@ -53,6 +54,7 @@ export default async function HomePage() {
         featuredList={featuredList}
         novels={novels}
         browseAllHref="/browse"
+        categories={categories}
       />
     </>
   );

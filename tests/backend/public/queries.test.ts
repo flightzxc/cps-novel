@@ -142,7 +142,7 @@ describe("resolvePublicArticleBySlugParam", () => {
 describe("listPublicArticles", () => {
   it("pre-filters with buildPublicArticleWhere then drops rows that fail isPromoReady", async () => {
     const findMany = vi.fn().mockResolvedValue([listed(), listed({ id: "article-2", promoLink: BLANK_PROMO })]);
-    const db = { article: { findMany } } as unknown as PrismaClient;
+    const db = { article: { findMany }, $queryRaw: vi.fn().mockResolvedValue([]) } as unknown as PrismaClient;
 
     const cards = await listPublicArticles(db, "en");
     expect(findMany.mock.calls[0][0].where).toEqual(buildPublicArticleWhere({ locale: "en" }));

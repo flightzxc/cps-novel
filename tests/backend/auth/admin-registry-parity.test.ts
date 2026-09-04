@@ -89,8 +89,18 @@ describe("P1-09 Admin registry parity", () => {
       ...EXPECTED_TASK_ROUTES.map((route) => ({ path: route.path, methods: [...route.methods] })),
       ...EXPECTED_TAGGING_ROUTES.map((route) => ({ path: route.path, methods: [...route.methods] })),
     ].sort((left, right) => left.path.localeCompare(right.path));
-    const registered = P2_04_ADMIN_REGISTRY.routes
-      .map((route) => ({ path: route.path, methods: [...route.methods].sort() }))
+    const registered = Object.values(
+      P2_04_ADMIN_REGISTRY.routes.reduce<Record<string, { path: string; methods: string[] }>>(
+        (routes, route) => {
+          const current = routes[route.path] ?? { path: route.path, methods: [] };
+          current.methods.push(...route.methods);
+          routes[route.path] = current;
+          return routes;
+        },
+        {},
+      ),
+    )
+      .map((route) => ({ ...route, methods: [...new Set(route.methods)].sort() }))
       .sort((left, right) => left.path.localeCompare(right.path));
     expect(actual).toEqual(expected);
     expect(registered).toEqual(actual);

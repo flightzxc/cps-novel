@@ -2,6 +2,7 @@ import type { Prisma, PrismaClient } from "@prisma/client";
 
 import type { NovelCardView, NovelDetailView, ChapterView } from "@/features/public-ui/types";
 import type { SiteLocale } from "@/lib/locale/locale-canonical";
+import { PUBLIC_SITE_LOCALE } from "@/lib/site/locale-label";
 import { parseArticleSlugParam } from "@/lib/slug/article-path";
 import { checkNovelArticlePublicAccess } from "@/server/publication/access";
 import {
@@ -20,6 +21,11 @@ import {
   type PublicArticleDetailRecord,
   type PreviewChapterRecord,
 } from "./mappers";
+import {
+  listDistinctPublicTaxonomy,
+  loadPublicTaxonomyByNovelIds,
+  type PublicTaxonomyTag,
+} from "./public-taxonomy";
 
 export type { PublicChromeCurrent };
 
@@ -127,7 +133,10 @@ export async function resolvePublicArticleBySlugParam(
   return { kind: access.kind, title: article.title };
 }
 
-function toPublicArticle(row: ListedArticle): PublicArticleRecord {
+function toPublicArticle(
+  row: ListedArticle,
+  tags: readonly PublicTaxonomyTag[] = [],
+): PublicArticleRecord {
   return {
     id: row.id,
     title: row.title,
@@ -136,13 +145,17 @@ function toPublicArticle(row: ListedArticle): PublicArticleRecord {
     publicPageShortId: row.publicPageShortId,
     publishedAt: row.publishedAt,
     summary: row.summary,
+    tags,
     novel: row.novel,
   };
 }
 
-function toPublicArticleDetail(row: ListedArticleDetail): PublicArticleDetailRecord {
+function toPublicArticleDetail(
+  row: ListedArticleDetail,
+  tags: readonly PublicTaxonomyTag[] = [],
+): PublicArticleDetailRecord {
   return {
-    ...toPublicArticle(row),
+    ...toPublicArticle(row, tags),
     body: row.body,
     seoMetadata: row.seoMetadata,
     promoLink: row.promoLink ? { publicRedirectCode: row.promoLink.publicRedirectCode } : null,
@@ -164,12 +177,36 @@ export async function listPublicArticles(
     select: ARTICLE_CARD_SELECT,
   });
 
+  const visibleRows = filterPromoReady(rows);
+  const tagsByNovel = await loadPublicTaxonomyByNovelIds(
+    db,
+    visibleRows.map((row) => row.novel.id),
+    locale,
+  );
   const cards: NovelCardView[] = [];
-  for (const row of filterPromoReady(rows)) {
-    const card = toNovelCardView(toPublicArticle(row));
+  for (const row of visibleRows) {
+    const card = toNovelCardView(toPublicArticle(row, tagsByNovel.get(row.novel.id) ?? []));
     if (card) cards.push(card);
   }
   return cards;
+}
+
+export async function listPublicCategories(
+  db: PrismaClient | Prisma.TransactionClient,
+  locale: SiteLocale,
+): Promise<readonly PublicTaxonomyTag[]> {
+  const rows = await db.article.findMany({
+    where: buildPublicArticleWhere({ locale }),
+    orderBy: [{ publishedAt: "desc" }, { id: "asc" }],
+    take: PUBLIC_LIST_CAP,
+    select: ARTICLE_CARD_SELECT,
+  });
+  const visibleRows = filterPromoReady(rows);
+  return listDistinctPublicTaxonomy(await loadPublicTaxonomyByNovelIds(
+    db,
+    visibleRows.map((row) => row.novel.id),
+    locale,
+  ));
 }
 
 export async function listHomeNovels(
@@ -211,7 +248,8 @@ export async function getPublicNovelDetail(
   if (!row || !isPromoReady(row.promoLink)) return null;
 
   const previewChapters = await listPreviewChapterRefs(db, row.novel.id);
-  return toNovelDetailView(toPublicArticleDetail(row), previewChapters);
+  const tags = await loadPublicTaxonomyByNovelIds(db, [row.novel.id], row.locale);
+  return toNovelDetailView(toPublicArticleDetail(row, tags.get(row.novel.id) ?? []), previewChapters);
 }
 
 export async function listPreviewChapterRefs(
@@ -266,15 +304,23 @@ export async function getPublicChapterView(
   const body = chapter?.content?.body;
   if (!chapter || !body?.trim()) return null;
 
-  return toChapterView(toPublicArticleDetail(row), { ...match, body }, previewChapters);
+  const tags = await loadPublicTaxonomyByNovelIds(db, [row.novel.id], row.locale);
+  return toChapterView(
+    toPublicArticleDetail(row, tags.get(row.novel.id) ?? []),
+    { ...match, body },
+    previewChapters,
+  );
 }
 
 export async function loadPublicChrome(
   db: PrismaClient | Prisma.TransactionClient,
   current?: PublicChromeCurrent,
 ) {
-  const settings = await getSiteSetting(db);
-  return { settings, chrome: chromeFromSiteSetting(settings, current) };
+  const [settings, categories] = await Promise.all([
+    getSiteSetting(db),
+    listPublicCategories(db, PUBLIC_SITE_LOCALE),
+  ]);
+  return { settings, chrome: chromeFromSiteSetting(settings, current, categories) };
 }
 
 export type { SiteSettingSnapshot };

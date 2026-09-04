@@ -73,16 +73,18 @@ describe("X1 worker startup allowlist", () => {
     });
   });
 
-  it("registers exactly seven executable handlers and keeps promo-link-binding as a library", () => {
+  it("registers the governed executable handlers and keeps promo-link-binding as a library", () => {
     const registered = Object.keys(createWorkerHandlers({} as PrismaClient)).sort();
     expect(registered).toEqual([
       "catalog_scan",
       "credential.supersede.v1",
       "credential.validate.v1",
+      "home_carousel.compute.v1",
       "indexnow_delivery",
       "moboreader.preview_refresh.v1",
       "promo_link.claim.v1",
       "sitemap_refresh",
+      "tagging.auto_classify",
     ]);
     expect(registered).not.toContain("promo-link-binding");
   });
