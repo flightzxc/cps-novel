@@ -1,6 +1,6 @@
-import eligibilityV1 from "../../../docs/p2/p2-06-5-lane-c/lexicon-overrides/2026-08-16/keyword-eligibility-v1.json";
-import eligibilityV2 from "../../../docs/p2/p2-06-5-lane-c/lexicon-overrides/2026-08-17/keyword-eligibility-v2.json";
-import laneCFinalConfig from "../../../docs/p2/p2-06-5-lane-c/final/2026-08-17/classifier-config-final.json";
+import eligibilityV1 from "./artifacts/keyword-eligibility-v1.json";
+import eligibilityV2 from "./artifacts/keyword-eligibility-v2.json";
+import laneCFinalConfig from "./artifacts/classifier-config-final.json";
 
 import { TaggingError } from "./contracts";
 import type { ClassifierTagRule, TagKeywordField } from "./keyword-artifact";

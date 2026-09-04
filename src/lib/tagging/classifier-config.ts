@@ -1,4 +1,4 @@
-import laneCFinalConfig from "../../../docs/p2/p2-06-5-lane-c/final/2026-08-17/classifier-config-final.json";
+import laneCFinalConfig from "./artifacts/classifier-config-final.json";
 
 import { TaggingError } from "./contracts";
 import {

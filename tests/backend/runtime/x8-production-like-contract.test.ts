@@ -17,6 +17,8 @@ const launcher = read("scripts/x8-production-like.sh");
 const envHelper = read("scripts/lib/x8-production-like-env.sh");
 const grants = read("infra/postgres/grants.sql");
 const dockerignore = read(".dockerignore");
+const classifierConfigSource = read("src/lib/tagging/classifier-config.ts");
+const keywordEligibilitySource = read("src/lib/tagging/keyword-eligibility.ts");
 const acceptanceReport = read("docs/operations/X8_LOCAL_PRODUCTION_LIKE_ACCEPTANCE_2026-08-26.md");
 
 /**
@@ -121,6 +123,23 @@ describe("X8 local production-like contracts", () => {
     ]) {
       expect(dockerignore.split(/\r?\n/)).toContain(path);
     }
+  });
+
+  it("keeps frozen tagging runtime authorities inside the production image context", () => {
+    expect(dockerignore.split(/\r?\n/)).toContain("docs");
+    for (const source of [classifierConfigSource, keywordEligibilitySource]) {
+      expect(source).not.toMatch(/\.\.\/\.\.\/\.\.\/docs\//);
+      expect(source).toContain("./artifacts/");
+    }
+    expect(JSON.parse(read("src/lib/tagging/artifacts/classifier-config-final.json"))).toEqual(
+      JSON.parse(read("docs/p2/p2-06-5-lane-c/final/2026-08-17/classifier-config-final.json")),
+    );
+    expect(JSON.parse(read("src/lib/tagging/artifacts/keyword-eligibility-v1.json"))).toEqual(
+      JSON.parse(read("docs/p2/p2-06-5-lane-c/lexicon-overrides/2026-08-16/keyword-eligibility-v1.json")),
+    );
+    expect(JSON.parse(read("src/lib/tagging/artifacts/keyword-eligibility-v2.json"))).toEqual(
+      JSON.parse(read("docs/p2/p2-06-5-lane-c/lexicon-overrides/2026-08-17/keyword-eligibility-v2.json")),
+    );
   });
 
   it("keeps the durable acceptance report free of credential-shaped material", () => {
