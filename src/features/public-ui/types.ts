@@ -46,6 +46,8 @@ export interface NovelCardView {
   locale?: LocaleBadge;
   /** 详情页地址，由路由层注入。 */
   href: string;
+  /** 运营文章摘要；卡片只使用该字段，不回退展示上游长简介。 */
+  summary?: string;
 }
 
 /** 详情页里的一条可试读章节。只来自上游实际返回的章节，绝不由总章数推导。 */
@@ -74,6 +76,10 @@ export interface NovelDetailView {
    */
   heroImageUrl?: string;
   description: string;
+  /** 由受校验模板生成或后台编辑的可信 HTML 片段。 */
+  contentBody?: string;
+  seoTitle?: string;
+  seoDescription?: string;
   locale: LocaleBadge;
   /** 总章数。客观标量，可展示；🔴 绝不据此生成任何章节行。 */
   totalChapterCount: number;

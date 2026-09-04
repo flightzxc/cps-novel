@@ -29,6 +29,7 @@ export type PublicArticleRecord = {
   locale: string;
   publicPageShortId: string;
   publishedAt: Date | null;
+  summary?: string | null;
   novel: PublicNovelRecord;
 };
 
@@ -51,7 +52,15 @@ export type PublicArticlePromoLink = { publicRedirectCode: string } | null;
  */
 export type PublicArticleDetailRecord = PublicArticleRecord & {
   promoLink?: PublicArticlePromoLink;
+  body?: string;
+  seoMetadata?: unknown;
 };
+
+function seoText(value: unknown, key: "metaTitle" | "metaDescription"): string | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const field = (value as Record<string, unknown>)[key];
+  return typeof field === "string" && field.trim() ? field.trim() : undefined;
+}
 
 export type PreviewChapterRecord = {
   canonicalChapterNumber: number;
@@ -102,6 +111,7 @@ export function toNovelCardView(article: PublicArticleRecord): NovelCardView | n
       slug: article.slug,
       shortId: article.publicPageShortId,
     }),
+    summary: article.summary?.trim() || undefined,
   };
 }
 
@@ -135,7 +145,10 @@ export function toNovelDetailView(
     id: article.novel.businessId,
     title: article.title,
     coverUrl: article.novel.coverUrl ?? undefined,
-    description: article.novel.description,
+    description: article.summary?.trim() || article.novel.description,
+    contentBody: article.body?.trim() || undefined,
+    seoTitle: seoText(article.seoMetadata, "metaTitle"),
+    seoDescription: seoText(article.seoMetadata, "metaDescription"),
     locale: localeBadge(locale),
     totalChapterCount: article.novel.totalChapterCount,
     tags: [],

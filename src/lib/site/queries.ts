@@ -43,6 +43,7 @@ const ARTICLE_CARD_SELECT = {
   locale: true,
   publicPageShortId: true,
   publishedAt: true,
+  summary: true,
   novel: {
     select: {
       id: true,
@@ -70,6 +71,8 @@ const ARTICLE_CARD_SELECT = {
  */
 const ARTICLE_DETAIL_SELECT = {
   ...ARTICLE_CARD_SELECT,
+  body: true,
+  seoMetadata: true,
   promoLink: {
     select: { status: true, webUrl: true, appUrl: true, publicRedirectCode: true },
   },
@@ -132,6 +135,7 @@ function toPublicArticle(row: ListedArticle): PublicArticleRecord {
     locale: row.locale,
     publicPageShortId: row.publicPageShortId,
     publishedAt: row.publishedAt,
+    summary: row.summary,
     novel: row.novel,
   };
 }
@@ -139,6 +143,8 @@ function toPublicArticle(row: ListedArticle): PublicArticleRecord {
 function toPublicArticleDetail(row: ListedArticleDetail): PublicArticleDetailRecord {
   return {
     ...toPublicArticle(row),
+    body: row.body,
+    seoMetadata: row.seoMetadata,
     promoLink: row.promoLink ? { publicRedirectCode: row.promoLink.publicRedirectCode } : null,
   };
 }

@@ -16,6 +16,7 @@ import { generateSeoMeta } from "@/lib/seo/seo-meta-generator";
 import { buildNovelHreflangAlternates, type NovelHreflangSibling } from "@/lib/seo/novel-hreflang";
 import { buildArticlePath, buildArticleRoutePath } from "@/lib/slug/article-path";
 import { PUBLIC_SITE_LOCALE } from "@/lib/site/locale-label";
+import { buildFaqJsonLd } from "@/lib/seo/faq-extract";
 
 export const dynamic = "force-dynamic";
 
@@ -61,8 +62,8 @@ export async function generateMetadata({
     entity: "novel",
     locale: PUBLIC_SITE_LOCALE,
     data: {
-      title: novel.title,
-      description: novel.description,
+      title: novel.seoTitle ?? novel.title,
+      description: novel.seoDescription ?? novel.description,
       canonicalPath: routePath,
       coverUrl: novel.coverUrl,
       defaultOgImage: settings.defaultOgImage.trim() || null,
@@ -106,8 +107,8 @@ export default async function NovelDetailPage({
     entity: "novel",
     locale: PUBLIC_SITE_LOCALE,
     data: {
-      title: novel.title,
-      description: novel.description,
+      title: novel.seoTitle ?? novel.title,
+      description: novel.seoDescription ?? novel.description,
       canonicalPath: routePath,
       coverUrl: novel.coverUrl,
       defaultOgImage: settings.defaultOgImage.trim() || null,
@@ -117,9 +118,11 @@ export default async function NovelDetailPage({
     },
   });
 
+  const faqJsonLd = novel.contentBody ? buildFaqJsonLd(novel.contentBody) : null;
   return (
     <>
       {seo.other ? <JsonLd json={seo.other["application/ld+json"]} /> : null}
+      {faqJsonLd ? <JsonLd json={JSON.stringify(faqJsonLd)} /> : null}
       <NovelDetailScreen locale={PUBLIC_SITE_LOCALE} chrome={chrome} novel={novel} />
     </>
   );
