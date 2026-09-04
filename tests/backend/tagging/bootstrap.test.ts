@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -8,7 +8,9 @@ import { describe, expect, it } from "vitest";
 import type { KeywordEligibilityAuthority } from "../../../src/lib/tagging/keyword-eligibility";
 import {
   CANONICAL_ARTIFACT_RELATIVE_PATH,
+  CANONICAL_ARTIFACT_SHA256,
   MAPPING_ARTIFACT_RELATIVE_PATH,
+  MAPPING_ARTIFACT_SHA256,
   TAGGING_BOOTSTRAP_AUDIT_ACTION,
   TaggingBootstrapError,
   buildCanonicalPlan,
@@ -277,6 +279,27 @@ describe("tagging bootstrap artifact loading", () => {
     writeFileSync(mappingPath, mappingText);
     return root;
   }
+
+  /**
+   * PR6 re-acceptance gap: the two rejection tests below feed *wrong* bytes,
+   * so they stay green even if the pinned constants themselves are wrong —
+   * a one-digit edit to `MAPPING_ARTIFACT_SHA256` survived the whole suite.
+   * The pin's real job is to bind the CLI to *these* repo bytes, so assert
+   * the positive direction against the actual on-disk artifacts. (The
+   * failure mode a drifted pin causes is fail-closed — the CLI would refuse
+   * to run — but it would refuse at production run time rather than here.)
+   */
+  it("accepts the repository's real artifacts, binding the pinned SHA-256 to the bytes actually shipped", () => {
+    const artifacts = loadTaggingBootstrapArtifacts(REPO_ROOT);
+    expect(artifacts.canonicalSha256).toBe(CANONICAL_ARTIFACT_SHA256);
+    expect(artifacts.mappingSha256).toBe(MAPPING_ARTIFACT_SHA256);
+    expect(createHash("sha256").update(readFileSync(join(REPO_ROOT, CANONICAL_ARTIFACT_RELATIVE_PATH))).digest("hex")).toBe(
+      CANONICAL_ARTIFACT_SHA256,
+    );
+    expect(createHash("sha256").update(readFileSync(join(REPO_ROOT, MAPPING_ARTIFACT_RELATIVE_PATH))).digest("hex")).toBe(
+      MAPPING_ARTIFACT_SHA256,
+    );
+  });
 
   it("rejects a canonical artifact whose bytes do not match the pinned SHA-256", () => {
     const root = writeFixtureRepo("not the real canonical artifact", `${MAPPING_HEADER}\n`);
