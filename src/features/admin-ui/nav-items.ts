@@ -110,6 +110,7 @@ export const ADMIN_IMPLEMENTED_PAGES: readonly string[] = Object.freeze([
   "/tasks",
   "/promo-links",
   "/settings",
+  "/settings/security",
 ]);
 
 export function isNavItemActive(pathname: string, item: AdminNavItem): boolean {

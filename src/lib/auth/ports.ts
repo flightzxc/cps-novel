@@ -56,6 +56,10 @@ export type ConfirmTwoFactorSetupTransactionResult =
   | { status: "committed"; nextSessionVersion: number }
   | { status: "conflict" };
 
+export type RegenerateRecoveryCodesTransactionResult =
+  | { status: "committed"; nextSessionVersion: number }
+  | { status: "conflict" };
+
 export type CompleteTwoFactorChallengeTransactionResult =
   | { status: "committed"; sessionVersion: number }
   | {
@@ -73,6 +77,13 @@ export interface AuthUnitOfWork {
     confirmedAt: Date;
     recoveryCodes: ReadonlyArray<{ id: string; codeHash: string }>;
   }): Promise<ConfirmTwoFactorSetupTransactionResult>;
+  regenerateRecoveryCodes(input: {
+    identityId: string;
+    expectedSessionVersion: number;
+    expectedEncryptedSecret: string;
+    rotatedAt: Date;
+    recoveryCodes: ReadonlyArray<{ id: string; codeHash: string }>;
+  }): Promise<RegenerateRecoveryCodesTransactionResult>;
   completeTwoFactorChallenge(input: {
     challengeId: string;
     identityId: string;

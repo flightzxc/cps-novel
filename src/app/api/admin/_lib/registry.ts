@@ -284,6 +284,13 @@ export const ADMIN_HOME_CAROUSEL_ACTIONS = [
   { id: "admin.home_carousel.compute", capability: "settings:manage", mutation: true },
 ] as const satisfies AdminRegistry["actions"];
 
+/** Personal-account security mutations: authenticated session, no role grant. */
+export const ADMIN_SECURITY_ACTIONS = [
+  { id: "admin.security.two_factor.start", mutation: true },
+  { id: "admin.security.two_factor.confirm", mutation: true },
+  { id: "admin.security.recovery_codes.regenerate", mutation: true },
+] as const satisfies AdminRegistry["actions"];
+
 export const P2_04_ADMIN_REGISTRY: AdminRegistry = Object.freeze({
   pageRoots: ADMIN_PAGE_ROOTS,
   // Routes: the union of every composed group. P1-08B's credential surface,
@@ -314,5 +321,6 @@ export const P2_04_ADMIN_REGISTRY: AdminRegistry = Object.freeze({
     ...ADMIN_ARTICLE_TEMPLATE_ACTIONS,
     ...ADMIN_ARTICLE_ACTIONS,
     ...ADMIN_HOME_CAROUSEL_ACTIONS,
+    ...ADMIN_SECURITY_ACTIONS,
   ]),
 });
