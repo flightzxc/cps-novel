@@ -122,6 +122,77 @@
 
 ---
 
+## 2026-09-05 · PR6 fix lane D：收口 lane B 的 5 个跨边界项
+
+分支 `fix/pr6-lane-d-articles-leftovers`（`worktree cps-novel-pr6-lane-d`），基线
+`fix/pr6-lane-b-templates-articles@b866384`。Lane B 报告点名的 5 个跨边界项，本 lane
+在放开的文件边界内逐条收口。
+
+- **`article_conflict` 错误码登记**：`src/contracts/errors.ts` 的 `AdminErrorCode`
+  联合类型新增 `article_conflict`；`src/features/admin-ui/error-copy.ts` 的 `COPY`
+  表（`Readonly<Record<AdminErrorCode, string>>`，漏登记即编译期报错）补上中文文案
+  "文章已被其他操作人修改，请刷新后重试"。文章无 HTTP 路由——全部走
+  `articles/_actions.ts` 的 Server Action——所以没有 `respond.ts` 的
+  `toErrorEnvelope` 分支要同步补。新增 `tests/ui/admin-error-copy.test.ts` 锁定
+  `ArticleConflictError.code`/`.status` 与文案。`service.ts`/`_actions.ts` 里"两个
+  文件在 lane 边界外未登记"的过时注释已更新为已完成状态。
+- **M7 文章列表筛选**：`src/server/articles/service.ts` 新增 `listArticles`
+  （`locale`/`status`/`novelId`/`templateId` 四维过滤，语义对齐 CPS
+  `git show v8.3.6:src/actions/article-actions.ts` 的 `getArticles`），复用
+  `@/server/admin-content` 已登记的 `AdminContentQueryError`/
+  `invalid_status`/`invalid_locale`/`invalid_identifier`，未登记参数静默忽略；分页
+  `page`/`pageSize`（≤100，`ARTICLE_LIST_MAX_PAGE_SIZE`）+ 真实 `COUNT(*)` 出
+  `total`/`totalPages`（不伪造翻页，同 `@/server/admin-content`
+  `normalizeAdminNovelListInput` 的约定）。`articles/page.tsx` 接入
+  `searchParams` 驱动的筛选表单（新增 `_components/article-filters.tsx`）与分页
+  （复用 `../novels/_components/content-pagination.tsx`）；非法筛选值走新增
+  `_lib/query-errors.ts` 的 `articleQueryErrorEnvelope`（内联 400 面板，`invalid_
+  identifier` 在这里永远是"改筛选值"而不是 novels 详情页那种"这本书不存在"的 404，
+  故未直接复用 `novels/_lib/content-errors.ts` 的同名函数）；新增
+  `articles/error.tsx` 段级错误边界兜底非筛选异常。测试：
+  `tests/backend/articles/service.test.ts` 新增 `describe("listArticles ...")`
+  （单维/组合筛选、软删除永不出现、未登记参数忽略、四个非法值分别拒绝、分页与
+  `totalPages`），`tests/ui/articles-admin.test.tsx` 新增
+  `ArticleFilters` 咬合测试（字段名对齐 query-string key、当前值回填
+  `defaultValue`、状态四态选项、纯 GET 无 `page` 字段）。
+- **`Article.templateId` 写入测试**：读源码确认
+  `src/server/content-creation/service.ts:577` 的 `runCreateTransaction` 本就在
+  `tx.article.create` 写 `templateId: template.id`（语义未改，本 lane 只补测试）。
+  新增 `tests/backend/content-creation/template-selection.test.ts`：无已注册模板
+  时写入自动创建的 `system-default-v1` 模板 id；显式 `input.templateKey` 时写入该
+  模板 id 而非默认模板 id。两个断言都直接查
+  `fake.lastArticleCreateArgs.templateId`，不只查落库后的行。
+- **N-9 首页 categories 只查一次**：`src/app/_lib/public-load.ts` 的 `loadChrome`
+  加了可选第二参数 `categories`，转发进 `loadPublicChrome`（lane B 已给
+  `queries.ts` 加好的第三参数）；未新增导出名——`tests/ui/public-routes.test.tsx`
+  的 `vi.mock("@/app/_lib/public-load", () => ({ loadChrome: vi.fn(), ... }))`
+  是固定 mock 工厂，新增导出在该文件里会是 `undefined`，验证过会炸，改成给既有
+  `loadChrome` 加参数就没有这问题。`src/app/page.tsx` 的
+  `generateMetadata`/`HomePage` 都改成先 `loadPublicCategories(locale)` 一次，再把
+  结果传给 `loadChrome("home", categories)`。
+  `tests/backend/site/public-query-budget.test.ts` 首页用例上限从 ≤7 降到 ≤5（
+  `article.findMany` 3→2，`$queryRaw` taxonomy 3→2，`siteSetting.findUnique` 仍
+  1），并把用例本身改写成模拟接线后的调用顺序。
+- **重复 `article.findMany`（记录不改）**：`listPublicCategories` 与
+  `listPublicArticles`（经 `listHomeNovels`）各自独立跑同一条
+  `article.findMany`（同 `buildPublicArticleWhere`/`ARTICLE_CARD_SELECT`/
+  `take`），N-9 接线后首页仍剩这两次同形态查询。已在
+  `public-query-budget.test.ts` 文件头与新用例注释里记录来源与"需要每个调用方
+  兼容性审计后才能收口"的后续项，本 lane 未改代码。
+- 变异自检（改坏→红，复原→`git diff` 干净）：① `listArticles` 去掉 `status`
+  过滤条件 → `service.test.ts` 2 个用例转红；② `runCreateTransaction` 删掉
+  `templateId: template.id,` → `template-selection.test.ts` 2 个用例转红；③
+  `public-query-budget.test.ts` 首页用例改回"分别查两次 categories"的旧调用形态
+  （模拟 `page.tsx` 回退）→ 该用例在新 ≤5 阈值下转红（7 > 5）。
+- 门禁：`typecheck`/`lint`（0 error，3 条与本 lane 无关的既有 warning）/
+  `test:ui`（112 files / 1788 tests all green）/`test:backend`（157 files /
+  1471 tests，唯一失败 `publish-gate/no-bypass.test.ts` 指向
+  `scripts/s1-exact-target-structural-smoke.ts`，与本 lane 改动无关，任务书列为
+  唯一允许失败）/`build`（Next 16 Turbopack 编译通过，`/articles` 路由正常生成）。
+- 未 push、未合并；只在本 worktree 内提交。
+
+---
+
 ## 2026-09-05 · CPS 海阅首发后台与 SEO 运营面补全
 
 - 从 clean `main@f99c25e` 的独立 worktree 实施 M0–M12；主检出保持只读。
