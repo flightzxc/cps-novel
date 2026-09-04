@@ -92,6 +92,10 @@ import {
 
 import { createNovelWithBusinessIdRetry } from "./business-id";
 import { DEFAULT_ARTICLE_TEMPLATE, DEFAULT_ARTICLE_TEMPLATE_KEY } from "./default-article-template";
+import {
+  enqueueContentCreationPreview,
+  type ContentCreationPreviewEnqueueResult,
+} from "./preview-enqueue";
 
 // ---------------------------------------------------------------------------
 // Actor / audit
@@ -187,7 +191,7 @@ export type ContentCreationPlan = {
 };
 
 export type CreateContentResult =
-  | ({ readonly outcome: "created" } & CreatedContentSummary)
+  | ({ readonly outcome: "created"; readonly previewEnqueue?: ContentCreationPreviewEnqueueResult } & CreatedContentSummary)
   | ({ readonly outcome: "already_exists" } & CreatedContentSummary)
   | { readonly outcome: "dry_run"; readonly plan: ContentCreationPlan }
   | { readonly outcome: "source_item_not_found" }
@@ -232,6 +236,8 @@ export type CreateContentFromSourceItemInput = {
   readonly mode?: "dry_run" | "apply";
   readonly actor: CreateContentActor;
   readonly requestId: string;
+  /** Batch orchestration defers preview enqueue so one aggregate task is created. */
+  readonly deferPreviewEnqueue?: boolean;
 };
 
 /** Thrown only to force `$transaction` to roll back a losing attempt's just-inserted rows — never crosses this module's public boundary. See module header. */
@@ -625,13 +631,21 @@ export async function createContentFromSourceItem(
   const actorId = auditActorId(input.actor);
 
   try {
-    return await withDbRetry(
+    const result = await withDbRetry(
       () =>
         db.$transaction((tx) =>
           runCreateTransaction(tx as unknown as WriteClient, { novelSourceItemId, locale, actorType, actorId, requestId }),
         ),
       { op: "content-creation.createContentFromSourceItem", sourceItemId: novelSourceItemId, idempotencyKey: requestId },
     );
+    if (result.outcome !== "created" || input.deferPreviewEnqueue) return result;
+    const previewEnqueue = await enqueueContentCreationPreview(db, {
+      novelSourceItemIds: [novelSourceItemId],
+      requestToken: `moboreader.preview_refresh.v1:content_create:${novelSourceItemId}`,
+      requestId,
+      actorId,
+    });
+    return { ...result, previewEnqueue };
   } catch (error) {
     if (error instanceof ContentCreationConflictSignal) {
       return { outcome: "concurrent_creation_conflict" };

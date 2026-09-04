@@ -133,6 +133,28 @@ function CreatedSummary({ summary }: { summary: CreatedContentSummary }) {
   );
 }
 
+function PreviewEnqueueNotice({ result }: { result: Extract<CreateContentResult, { outcome: "created" }> }) {
+  const preview = result.previewEnqueue;
+  if (!preview) return null;
+  let message: string;
+  if (!preview.queued) {
+    message = preview.reason === "no_channel_account"
+      ? "预览未入队：没有可唯一确定的有效渠道账户；内容已创建，可稍后人工补发。"
+      : preview.reason === "mixed_channel_apps"
+        ? "预览未入队：所选来源跨越多个渠道应用；内容已创建，可分渠道补发。"
+        : preview.reason === "no_eligible_sources"
+          ? "预览未入队：当前没有符合条件的来源条目。"
+        : "预览未入队：提交后的入队步骤失败；内容已创建，可稍后人工补发。";
+  } else if (preview.status === "enqueued" && preview.taskStatus === "disabled") {
+    message = "预览任务已创建，但目录写闸关闭，任务状态为 disabled。";
+  } else if (preview.status === "duplicate" || preview.status === "active_conflict") {
+    message = "预览任务未重复创建：已存在相同或进行中的任务。";
+  } else {
+    message = "预览刷新任务已入队。";
+  }
+  return <p data-testid="preview-enqueue-result" className={`rounded-lg border px-3 py-2 text-sm ${TONE_STYLE.info}`}>{message}</p>;
+}
+
 function ResultPanel({ result }: { result: CreateContentResult }) {
   const copy = describeCreateContentOutcome(result);
   return (
@@ -148,6 +170,7 @@ function ResultPanel({ result }: { result: CreateContentResult }) {
       {(result.outcome === "created" || result.outcome === "already_exists") && (
         <CreatedSummary summary={result} />
       )}
+      {result.outcome === "created" && <PreviewEnqueueNotice result={result} />}
     </div>
   );
 }

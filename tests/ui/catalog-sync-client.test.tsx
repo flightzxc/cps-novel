@@ -270,7 +270,18 @@ describe("确认创建 → apply", () => {
 
   it("成功创建：调用 applyContentCreationAction、展示成功摘要与详情链接、并刷新数据", async () => {
     actions.applyContentCreationAction.mockResolvedValue(
-      okResult({ outcome: "created", ...CREATED_SUMMARY }),
+      okResult({
+        outcome: "created",
+        ...CREATED_SUMMARY,
+        previewEnqueue: {
+          queued: true,
+          status: "enqueued",
+          taskId: "preview-1",
+          taskStatus: "pending",
+          eligibleCount: 1,
+          skipReasonCounts: {},
+        },
+      }),
     );
     renderPage();
     await openDialog();
@@ -287,6 +298,7 @@ describe("确认创建 → apply", () => {
     expect(dlg.getByRole("link", { name: "查看书目详情" }).getAttribute("href")).toBe(
       "/novels/novel-1",
     );
+    expect(dlg.getByTestId("preview-enqueue-result").textContent).toContain("预览刷新任务已入队");
     await waitFor(() => expect(routerRefresh).toHaveBeenCalledTimes(1));
   });
 
@@ -832,6 +844,14 @@ describe("批量创建内容 · 确认创建 → apply", () => {
           { novelSourceItemId: "src-2", status: "skipped_already_linked", result: { outcome: "already_exists", ...CREATED_SUMMARY } },
         ],
         counts: { created: 1, skipped_already_linked: 1, failed: 0, not_processed: 0 },
+        previewEnqueue: {
+          queued: true,
+          status: "enqueued",
+          taskId: "preview-batch",
+          taskStatus: "disabled",
+          eligibleCount: 1,
+          skipReasonCounts: {},
+        },
       }),
     );
     renderPage();
@@ -850,6 +870,7 @@ describe("批量创建内容 · 确认创建 → apply", () => {
       expect(dlg.getByTestId("batch-create-result-summary").textContent).toContain("已创建 1 条");
     });
     expect(dlg.getByTestId("batch-create-item-status-src-1").textContent).toBe("已创建");
+    expect(dlg.getByTestId("batch-preview-enqueue-result").textContent).toContain("disabled");
     await waitFor(() => expect(routerRefresh).toHaveBeenCalledTimes(1));
   });
 

@@ -9,6 +9,10 @@ export {
   type CreatedContentSummary,
 } from "./service";
 export {
+  enqueueContentCreationPreview,
+  type ContentCreationPreviewEnqueueResult,
+} from "./preview-enqueue";
+export {
   createNovelWithBusinessIdRetry,
   generateNovelBusinessIdCandidate,
   isNovelBusinessIdConflict,

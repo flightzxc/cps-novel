@@ -280,6 +280,15 @@ export function BatchCreateContentDialog({
               </p>
             )}
             <ItemsTable items={stage.data.items} itemsById={itemsById} />
+            {stage.data.previewEnqueue && (
+              <p data-testid="batch-preview-enqueue-result" className={`rounded-lg border px-3 py-2 text-sm ${TONE_STYLE.info}`}>
+                {stage.data.previewEnqueue.queued
+                  ? stage.data.previewEnqueue.status === "enqueued" && stage.data.previewEnqueue.taskStatus === "disabled"
+                    ? "聚合预览任务已创建，但目录写闸关闭，任务状态为 disabled。"
+                    : "批量创建后的聚合预览刷新已处理；任务中心可查看结果。"
+                  : `聚合预览未入队（${stage.data.previewEnqueue.reason}）；已创建内容不受影响。`}
+              </p>
+            )}
           </div>
         )}
 
