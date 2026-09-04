@@ -864,6 +864,7 @@ model SiteSetting {
   indexNowKey                     String   @default("") @map("indexnow_key") @db.VarChar(255)
   indexNowKeyLocation             String   @default("") @map("indexnow_key_location") @db.VarChar(255)
   ga4MeasurementId                String?  @map("ga4_measurement_id") @db.VarChar(64)
+  carouselConfigJson              Json     @default("{}") @map("carousel_config_json") @db.JsonB
   updatedAt                       DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   @@map("site_setting")

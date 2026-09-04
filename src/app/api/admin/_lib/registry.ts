@@ -269,6 +269,12 @@ export const ADMIN_ARTICLE_ACTIONS = [
   { id: "admin.article.regenerate_batch", capability: "content:publish", mutation: true },
 ] as const satisfies AdminRegistry["actions"];
 
+export const ADMIN_HOME_CAROUSEL_ACTIONS = [
+  { id: "admin.home_carousel.config", capability: "settings:manage", mutation: true },
+  { id: "admin.home_carousel.manual_upsert", capability: "settings:manage", mutation: true },
+  { id: "admin.home_carousel.compute", capability: "settings:manage", mutation: true },
+] as const satisfies AdminRegistry["actions"];
+
 export const P2_04_ADMIN_REGISTRY: AdminRegistry = Object.freeze({
   pageRoots: ADMIN_PAGE_ROOTS,
   // Routes: the union of every composed group. P1-08B's credential surface,
@@ -297,5 +303,6 @@ export const P2_04_ADMIN_REGISTRY: AdminRegistry = Object.freeze({
     ...ADMIN_CONTENT_CREATION_BATCH_ACTIONS,
     ...ADMIN_ARTICLE_TEMPLATE_ACTIONS,
     ...ADMIN_ARTICLE_ACTIONS,
+    ...ADMIN_HOME_CAROUSEL_ACTIONS,
   ]),
 });

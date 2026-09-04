@@ -12,11 +12,13 @@ import {
   resolvePublicArticleBySlugParam,
   type PublicChromeCurrent,
 } from "@/lib/site/queries";
+import { getHomeCarouselItems } from "@/lib/site/home-carousel-service";
 
 
 export const loadChrome = cache(async (current?: PublicChromeCurrent) => loadPublicChrome(prisma, current));
 
 export const loadHomeNovels = cache(async (locale: SiteLocale) => listHomeNovels(prisma, locale));
+export const loadHomeCarousel = cache(async (locale: SiteLocale) => getHomeCarouselItems(locale, prisma));
 
 export const loadBrowseNovels = cache(async (locale: SiteLocale) => listPublicArticles(prisma, locale));
 

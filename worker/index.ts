@@ -13,6 +13,7 @@ import { createIndexNowWorkerHandlers } from "./handlers/indexnow-delivery";
 import { createMoboreaderWorkerHandlers } from "./handlers/moboreader";
 import { createPromoLinkClaimWorkerHandlers } from "./handlers/promo-link-claim";
 import { createSitemapRefreshWorkerHandlers } from "./handlers/sitemap-refresh";
+import { createHomeCarouselWorkerHandlers } from "./handlers/home-carousel";
 import {
   createWorkerFailureWebhookReporterFromEnv,
   parseShutdownDrainTimeoutEnv,
@@ -66,6 +67,7 @@ export function createWorkerHandlers(prisma: PrismaClient) {
     ...createPromoLinkClaimWorkerHandlers(prisma),
     ...createIndexNowWorkerHandlers(prisma),
     ...createSitemapRefreshWorkerHandlers(prisma),
+    ...createHomeCarouselWorkerHandlers(prisma),
   });
 }
 

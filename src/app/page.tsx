@@ -1,11 +1,10 @@
 import type { Metadata } from "next";
 
 import { JsonLd } from "@/app/_components/json-ld";
-import { loadChrome, loadHomeNovels } from "@/app/_lib/public-load";
+import { loadChrome, loadHomeCarousel, loadHomeNovels } from "@/app/_lib/public-load";
 import { toNextMetadata } from "@/app/_lib/seo-metadata";
 import { HomeScreen } from "@/features/public-ui/home/HomeScreen";
 import { generateSeoMeta } from "@/lib/seo/seo-meta-generator";
-import { getHomeCarouselItems } from "@/lib/site/home-carousel-service";
 import { PUBLIC_SITE_LOCALE } from "@/lib/site/locale-label";
 
 export const dynamic = "force-dynamic";
@@ -32,7 +31,7 @@ export default async function HomePage() {
   const [{ settings, chrome }, novels, featuredList] = await Promise.all([
     loadChrome("home"),
     loadHomeNovels(PUBLIC_SITE_LOCALE),
-    getHomeCarouselItems(PUBLIC_SITE_LOCALE),
+    loadHomeCarousel(PUBLIC_SITE_LOCALE),
   ]);
   const seo = generateSeoMeta({
     entity: "home",

@@ -37,7 +37,7 @@ const x8Levels = JSON.parse(read("scripts/lib/x8-levels.json")) as Record<
     flags: Record<string, string>;
   }
 >;
-const LEVEL_0_ALLOWLIST = "credential.validate.v1,credential.supersede.v1,catalog_scan";
+const LEVEL_0_ALLOWLIST = "credential.validate.v1,credential.supersede.v1,catalog_scan,home_carousel.compute.v1";
 
 describe("X8 targeted preview operator boundary", () => {
   const options = {
@@ -252,6 +252,7 @@ describe("X8 local production-like contracts", () => {
     }
     expect(x8Levels.uat.workerTaskAllowlist).not.toContain("sitemap_refresh");
     expect(x8Levels.r.workerTaskAllowlist).toContain("sitemap_refresh");
+    for (const level of ["0", "uat", "r"]) expect(x8Levels[level].workerTaskAllowlist).toContain("home_carousel.compute.v1");
   });
 
   it("RC-10: disables ADMIN_TWO_FACTOR_ENFORCEMENT only at Level UAT, and exports/asserts it end to end", () => {

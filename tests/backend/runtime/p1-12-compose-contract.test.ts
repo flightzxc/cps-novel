@@ -185,7 +185,7 @@ describe("P1-12 Compose and image contracts", () => {
 
   it("documents the exact staged worker allowlist and X11 delivery hard gate", () => {
     expect(envExample).toContain(
-      "WORKER_TASK_ALLOWLIST=credential.validate.v1,credential.supersede.v1,catalog_scan",
+      "WORKER_TASK_ALLOWLIST=credential.validate.v1,credential.supersede.v1,catalog_scan,home_carousel.compute.v1",
     );
     expect(envExample).toContain("After the C2b parser fix is accepted, append: moboreader.preview_refresh.v1");
     expect(envExample).toContain("With the claim double-gates in the SAME release change, append: promo_link.claim.v1");

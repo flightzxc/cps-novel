@@ -18,13 +18,12 @@ describe("public wiring source boundaries", () => {
     expect(source).not.toMatch(/\bcookies\s*\(/);
   });
 
-  it("home carousel service does not query HomeCarousel tables", async () => {
+  it("home carousel service reads serving and preserves the public field boundary", async () => {
     const source = stripComments(
       await readFile(path.resolve(process.cwd(), "src/lib/site/home-carousel-service.ts"), "utf8"),
     );
-    expect(source).not.toMatch(
-      /HomeCarouselManualSlot|HomeCarouselAutoBatch|HomeCarouselAutoCandidate|HomeCarouselServing|HomeCarouselChangeLog|homeCarouselManualSlot|homeCarouselAutoBatch/,
-    );
-    expect(source).toContain("return []");
+    expect(source).toContain("homeCarouselServing.findMany");
+    expect(source).toContain("buildPublicArticleWhere");
+    expect(source).not.toMatch(/upstreamCode|rawPayload|raw_payload/);
   });
 });
