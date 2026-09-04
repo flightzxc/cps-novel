@@ -130,15 +130,18 @@ GRANT SELECT (
   status, request_summary, response_shape, committed_at, confirmed_at, created_at
 ) ON side_effect_intent TO web_app, analyst_ro;
 
--- X6 SiteSetting boundary. Web serves the public configuration and owns the
--- guarded admin write service; Worker reads IndexNow/SEO execution config.
--- Analyst and Scheduler deliberately receive no access because the singleton
--- contains the S2 IndexNow key. Web can update only the four X6 fields plus
--- the optimistic-lock timestamp; INSERT/DELETE and every other column remain
--- migration_owner-only.
+-- SiteSetting boundary. Web serves public configuration and owns the guarded
+-- admin write service; Worker reads IndexNow/SEO execution config. Analyst and
+-- Scheduler deliberately receive no access because the singleton contains the
+-- S2 IndexNow key. Carousel config is owned by the same settings capability.
+-- INSERT/DELETE remain migration_owner-only.
 GRANT SELECT ON TABLE site_setting TO web_app, worker_app;
 GRANT UPDATE (
-  default_og_image, indexnow_host, indexnow_key, indexnow_key_location, updated_at
+  site_name, site_description, home_meta_title, home_meta_description,
+  default_og_image, google_search_console_verification,
+  footer_copyright_text, footer_disclaimer_text, friend_links,
+  indexnow_host, indexnow_key, indexnow_key_location, ga4_measurement_id,
+  carousel_config_json, updated_at
 ) ON site_setting TO web_app;
 
 -- X9: Web may adjudicate a manual-review intent only through the guarded

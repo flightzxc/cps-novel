@@ -18,6 +18,7 @@
     "test:integration": "vitest run --project node tests/integration"
   },
   "dependencies": {
+    "@next/third-parties": "16.2.4",
     "@prisma/client": "6.19.2",
     "next": "16.1.6",
     "qrcode": "^1.5.4",

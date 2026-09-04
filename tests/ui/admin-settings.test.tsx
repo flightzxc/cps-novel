@@ -17,10 +17,19 @@ import { SiteSettingsClient } from "@/app/(admin)/settings/_components/site-sett
  */
 
 const BASE_SETTING: AdminSiteSettingView = {
+  siteName: "CPS Novel",
+  siteDescription: "Published novels.",
+  homeMetaTitle: "CPS Novel",
+  homeMetaDescription: "Published novels.",
   defaultOgImage: "https://cdn.example.com/default-og.jpg",
+  googleSearchConsoleVerification: "",
+  footerCopyrightText: "",
+  footerDisclaimerText: "",
+  friendLinks: [],
   indexNowHost: "",
   indexNowKey: "",
   indexNowKeyLocation: "",
+  ga4MeasurementId: null,
   updatedAt: "2026-08-20T00:00:00.000Z",
 };
 

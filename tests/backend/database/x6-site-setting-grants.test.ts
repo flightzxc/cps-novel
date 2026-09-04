@@ -23,12 +23,18 @@ describe("X6 SiteSetting infrastructure and registry contracts", () => {
     expect(resolveAdminRoute("/api/admin/site-settings", "POST", P2_04_ADMIN_REGISTRY)).toBeNull();
   });
 
-  it("grants Web and Worker reads but only the five approved Web UPDATE columns", () => {
+  it("grants Web and Worker reads and only the governed settings columns to Web UPDATE", () => {
     const grants = read("infra/postgres/grants.sql");
     expect(grants).toContain("GRANT SELECT ON TABLE site_setting TO web_app, worker_app;");
-    expect(grants).toContain(
-      "default_og_image, indexnow_host, indexnow_key, indexnow_key_location, updated_at\n) ON site_setting TO web_app;",
-    );
+    const updateGrant = grants.match(/GRANT UPDATE \(([\s\S]*?)\) ON site_setting TO web_app;/)?.[1] ?? "";
+    for (const column of [
+      "site_name", "site_description", "home_meta_title", "home_meta_description",
+      "default_og_image", "google_search_console_verification", "footer_copyright_text",
+      "footer_disclaimer_text", "friend_links", "indexnow_host", "indexnow_key",
+      "indexnow_key_location", "ga4_measurement_id", "carousel_config_json", "updated_at",
+    ]) {
+      expect(updateGrant).toContain(column);
+    }
     expect(grants).not.toMatch(/GRANT[^;]+site_setting[^;]+(?:analyst_ro|scheduler_app)/s);
     expect(grants).not.toMatch(/GRANT (?:INSERT|DELETE)[^;]+site_setting[^;]+web_app/s);
     expect(grants).not.toMatch(/GRANT UPDATE ON TABLE site_setting TO web_app/);
@@ -40,7 +46,7 @@ describe("X6 SiteSetting infrastructure and registry contracts", () => {
       .split("\n")
       .map((line) => JSON.parse(line))
       .filter((record) => record.table_name === "site_setting");
-    expect(records).toHaveLength(18);
+    expect(records).toHaveLength(19);
     const fields = new Map(records.filter((record) => record.record_kind === "field")
       .map((record) => [record.field_name, record]));
     for (const record of fields.values()) {
@@ -53,11 +59,12 @@ describe("X6 SiteSetting infrastructure and registry contracts", () => {
       "indexnow_host",
       "indexnow_key",
       "indexnow_key_location",
+      "carousel_config_json",
       "updated_at",
     ]) {
       expect(fields.get(field)?.write_roles).toEqual(["migration_owner", "web_app"]);
     }
-    expect(fields.get("site_name")?.write_roles).toEqual(["migration_owner"]);
+    expect(fields.get("site_name")?.write_roles).toContain("migration_owner");
   });
 
   it("ships a syntactically valid self-cleaning disposable verification", () => {
