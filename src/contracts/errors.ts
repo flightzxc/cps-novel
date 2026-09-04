@@ -26,6 +26,17 @@ export type AdminErrorCode =
   /** A well-formed novel or chapter id that matches no live row. */
   | "admin_content_not_found"
   /**
+   * Optimistic-lock conflict on `Article.update`/`regenerate` (N-7,
+   * `src/server/articles/service.ts`'s `ArticleConflictError`): the row's
+   * `updatedAt` no longer matches the `expectedUpdatedAt` a prior read
+   * produced. Distinct from every other write failure — it means "reload and
+   * re-apply your edit", not "retry the same request" — same family as
+   * `site_setting_conflict` above. Reaches the browser only through
+   * `src/app/(admin)/articles/_actions.ts`'s own `writeErrorCode` (articles
+   * have no HTTP route; there is no `respond.ts` boundary to also update).
+   */
+  | "article_conflict"
+  /**
    * The route boundary's catch-all: an unrecognised, non-`AdminAccessError`,
    * non-domain exception. Previously silently coerced to `admin_capability_denied`
    * / 403 in {@link projectErrorEnvelope}'s caller — see `respond.ts` — which read

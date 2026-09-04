@@ -1,8 +1,12 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
 
+import type { AdminContentPage } from "@/domain/admin-content";
+import { ARTICLE_STATUSES, type ArticleStatus } from "@/domain/database-statuses";
+import { SITE_LOCALES } from "@/lib/locale/locale-canonical";
 import { buildNovelTemplateValues, isTemplateRenderError, renderArticleDraft } from "@/lib/seo/template";
 import type { AdminIdentityStore, SessionStore } from "@/lib/auth/ports";
 import { requireFreshAdminServiceMutation, type AdminServiceAuthorization } from "@/server/auth/guards";
+import { AdminContentQueryError } from "@/server/admin-content";
 import { selectActiveArticleTemplate, validateStoredArticleTemplate } from "@/server/article-templates";
 import { sanitizeArticleBody } from "./sanitize-body";
 
@@ -15,11 +19,13 @@ export const ARTICLE_REGENERATE_BUDGET_MS = 25_000;
  * stable `code`/`status` pair the Server Action layer maps to a client-visible
  * code, rather than falling into the generic `*_write_failed` catch-all.
  *
- * `article_conflict` still needs registering in `src/contracts/errors.ts`
- * (the `AdminErrorCode` union) and `src/features/admin-ui/error-copy.ts` (the
- * Chinese copy table) — both files sit outside this lane's file boundary
- * (`src/server/articles/**`, `src/app/(admin)/articles/**` only), so they are
- * not touched here. See the lane report for the exact entries to add.
+ * `article_conflict` is registered in `src/contracts/errors.ts` (the
+ * `AdminErrorCode` union) and `src/features/admin-ui/error-copy.ts` (the
+ * Chinese copy table, lane D). Articles have no HTTP route — every mutation
+ * goes through `src/app/(admin)/articles/_actions.ts`'s Server Actions — so
+ * there is no `src/app/api/admin/_lib/respond.ts` boundary to also wire this
+ * class into; that file's `toErrorEnvelope` only matters for `/api/admin/...`
+ * routes.
  */
 export class ArticleConflictError extends Error {
   readonly code = "article_conflict" as const;
@@ -257,5 +263,167 @@ export async function regenerateArticlesBatch(input: {
   return {
     items,
     counts: Object.fromEntries((["regenerated", "skipped", "failed", "not_processed"] as const).map((status) => [status, items.filter((item) => item.status === status).length])),
+  };
+}
+
+export type ArticleListItem = {
+  id: string;
+  title: string;
+  locale: string;
+  slug: string;
+  publicPageShortId: string;
+  status: string;
+  summary: string | null;
+  templateKey: string | null;
+  updatedAt: string;
+};
+
+export type ArticleListInput = {
+  page?: number;
+  pageSize?: number;
+  locale?: string;
+  status?: string;
+  novelId?: string;
+  templateId?: string;
+};
+
+export const ARTICLE_LIST_DEFAULT_PAGE_SIZE = 20;
+export const ARTICLE_LIST_MAX_PAGE_SIZE = 100;
+
+const ARTICLE_UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function requireArticleUuid(value: unknown): string {
+  if (typeof value !== "string" || !ARTICLE_UUID_PATTERN.test(value)) {
+    throw new AdminContentQueryError("invalid_identifier", "A valid UUID identifier is required");
+  }
+  return value.toLowerCase();
+}
+
+type NormalizedArticleList = {
+  page: number;
+  pageSize: number;
+  skip: number;
+  take: number;
+  locale?: string;
+  status?: ArticleStatus;
+  novelId?: string;
+  templateId?: string;
+};
+
+/**
+ * M7 ①: filter semantics mirror CPS `getArticles`
+ * (`git show v8.3.6:src/actions/article-actions.ts` around line 416 —
+ * `where = { ...(locale ? { locale } : {}), ...(status ? { status } : {}),
+ * ...(dramaId ? { dramaId } : {}), ...(templateId ? { templateId } : {}) }`)
+ * for the four dimensions registered here: `locale`, `status`, `novelId`
+ * (CPS's `dramaId`, renamed for this schema), `templateId`. An unregistered
+ * query-string key is silently ignored — same "a filter bar, not a schema
+ * validator" contract as every other admin list page.
+ *
+ * Pagination reuses the existing `≤ ARTICLE_LIST_MAX_PAGE_SIZE (100)`,
+ * `total`/`totalPages` computed from a real `COUNT(*)` convention
+ * (`@/server/admin-content`'s `normalizeAdminNovelListInput` /
+ * `ADMIN_CONTENT_MAX_PAGE_SIZE`) rather than a fixed `take` with no page
+ * count — this file mints its own `ARTICLE_LIST_MAX_PAGE_SIZE` constant
+ * instead of importing that one so the two lists' page-size ceilings can
+ * move independently, but the value and the "explicit, not-faked" pagination
+ * shape are the same choice.
+ *
+ * Validation errors reuse `@/server/admin-content`'s `AdminContentQueryError`
+ * and its already-registered codes (`invalid_page`, `invalid_page_size`,
+ * `invalid_status`, `invalid_locale`, `invalid_identifier`) rather than
+ * minting article-specific duplicates — those codes are already in
+ * `AdminErrorCode` and already have Chinese copy in `error-copy.ts`.
+ */
+function normalizeArticleListInput(input: ArticleListInput = {}): NormalizedArticleList {
+  const page = input.page ?? 1;
+  const pageSize = input.pageSize ?? ARTICLE_LIST_DEFAULT_PAGE_SIZE;
+  if (!Number.isInteger(page) || page < 1) {
+    throw new AdminContentQueryError("invalid_page", "Page must be a positive integer");
+  }
+  if (!Number.isInteger(pageSize) || pageSize < 1 || pageSize > ARTICLE_LIST_MAX_PAGE_SIZE) {
+    throw new AdminContentQueryError(
+      "invalid_page_size",
+      `Page size must be between 1 and ${ARTICLE_LIST_MAX_PAGE_SIZE}`,
+    );
+  }
+  if (input.status !== undefined && !ARTICLE_STATUSES.includes(input.status as ArticleStatus)) {
+    throw new AdminContentQueryError("invalid_status", "Article status is not registered");
+  }
+  if (input.locale !== undefined && !SITE_LOCALES.includes(input.locale as never)) {
+    throw new AdminContentQueryError("invalid_locale", "Locale is not registered");
+  }
+  const novelId = input.novelId !== undefined ? requireArticleUuid(input.novelId) : undefined;
+  const templateId = input.templateId !== undefined ? requireArticleUuid(input.templateId) : undefined;
+  return {
+    page,
+    pageSize,
+    skip: (page - 1) * pageSize,
+    take: pageSize,
+    locale: input.locale,
+    status: input.status as ArticleStatus | undefined,
+    novelId,
+    templateId,
+  };
+}
+
+const ARTICLE_LIST_SELECT = {
+  id: true,
+  title: true,
+  locale: true,
+  slug: true,
+  publicPageShortId: true,
+  status: true,
+  summary: true,
+  updatedAt: true,
+  template: { select: { templateKey: true } },
+} satisfies Prisma.ArticleSelect;
+
+/**
+ * Article list for `/articles` (M7). A plain read, not a service mutation —
+ * same shape as `@/server/admin-content`'s `listAdminNovels` — so it takes no
+ * `AdminServiceAuthorization`; the page (`requireContentPage("/articles",
+ * "content:view")`) is what gates access, exactly as it already did before
+ * this function existed.
+ */
+export async function listArticles(
+  db: Pick<PrismaClient, "article">,
+  input: ArticleListInput = {},
+): Promise<AdminContentPage<ArticleListItem>> {
+  const normalized = normalizeArticleListInput(input);
+  const where: Prisma.ArticleWhereInput = {
+    deletedAt: null,
+    ...(normalized.locale ? { locale: normalized.locale } : {}),
+    ...(normalized.status ? { status: normalized.status } : {}),
+    ...(normalized.novelId ? { novelId: normalized.novelId } : {}),
+    ...(normalized.templateId ? { templateId: normalized.templateId } : {}),
+  };
+  const [total, rows] = await Promise.all([
+    db.article.count({ where }),
+    db.article.findMany({
+      where,
+      orderBy: { updatedAt: "desc" },
+      skip: normalized.skip,
+      take: normalized.take,
+      select: ARTICLE_LIST_SELECT,
+    }),
+  ]);
+  const items = rows.map((row): ArticleListItem => ({
+    id: row.id,
+    title: row.title,
+    locale: row.locale,
+    slug: row.slug,
+    publicPageShortId: row.publicPageShortId,
+    status: row.status,
+    summary: row.summary,
+    templateKey: row.template?.templateKey ?? null,
+    updatedAt: row.updatedAt.toISOString(),
+  }));
+  return {
+    items,
+    page: normalized.page,
+    pageSize: normalized.pageSize,
+    total,
+    totalPages: Math.ceil(total / normalized.pageSize),
   };
 }

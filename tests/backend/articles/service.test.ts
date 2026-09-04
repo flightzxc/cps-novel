@@ -5,10 +5,13 @@ import { hashAdminSessionToken } from "@/lib/auth/session";
 import type { AdminIdentity, AdminSessionRecord } from "@/lib/auth/types";
 import { requireAdminActionAccess } from "@/server/auth/guards";
 import { P2_04_ADMIN_REGISTRY } from "@/app/api/admin/_lib/registry";
+import { AdminContentQueryError } from "@/server/admin-content";
 import {
+  ARTICLE_LIST_MAX_PAGE_SIZE,
   ARTICLE_REGENERATE_BATCH_MAX,
   ARTICLE_REGENERATE_BUDGET_MS,
   ArticleConflictError,
+  listArticles,
   regenerateArticle,
   regenerateArticlesBatch,
   updateArticleContent,
@@ -114,6 +117,30 @@ class FakeArticlesDb {
           Object.assign(row, args.data, { updatedAt: (args.data.updatedAt as Date | undefined) ?? bumpedNow() });
           return { count: 1 };
         },
+        // M7 `listArticles` support. `orderBy`/`skip`/`take` mirror the real
+        // Prisma call shape closely enough for the list tests below; `select`
+        // is ignored — this fake always returns the same list-row shape
+        // `listArticles` actually selects (id/title/locale/slug/
+        // publicPageShortId/status/summary/updatedAt/template.templateKey).
+        findMany: async (args: {
+          where: Record<string, unknown>;
+          orderBy?: { updatedAt?: "asc" | "desc" };
+          skip?: number;
+          take?: number;
+        }) => {
+          let rows = this.articles.filter((candidate) => this.matches(candidate, args.where));
+          if (args.orderBy?.updatedAt === "asc") {
+            rows = [...rows].sort((a, b) => a.updatedAt.getTime() - b.updatedAt.getTime());
+          } else {
+            rows = [...rows].sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
+          }
+          const skip = args.skip ?? 0;
+          const take = args.take ?? rows.length;
+          return rows.slice(skip, skip + take).map((row) => this.listRow(row));
+        },
+        count: async (args: { where: Record<string, unknown> }) => {
+          return this.articles.filter((candidate) => this.matches(candidate, args.where)).length;
+        },
       },
       articleTemplate: {
         findFirst: async (args: { where: Record<string, unknown> }) => {
@@ -142,7 +169,27 @@ class FakeArticlesDb {
       if (updatedAt.gte && row.updatedAt.getTime() < updatedAt.gte.getTime()) return false;
       if (updatedAt.lt && row.updatedAt.getTime() >= updatedAt.lt.getTime()) return false;
     }
+    // M7 `listArticles` filters — plain equality, same as Prisma's `where: { locale }` etc.
+    for (const key of ["locale", "status", "novelId", "templateId"] as const) {
+      if (where[key] !== undefined && row[key] !== where[key]) return false;
+    }
     return true;
+  }
+
+  /** `listArticles`'s row shape: id/title/locale/slug/publicPageShortId/status/summary/updatedAt + template.templateKey. */
+  private listRow(row: ArticleRow) {
+    const template = row.templateId ? this.templates.find((candidate) => candidate.id === row.templateId) ?? null : null;
+    return {
+      id: row.id,
+      title: row.title,
+      locale: row.locale,
+      slug: row.slug,
+      publicPageShortId: row.publicPageShortId,
+      status: row.status,
+      summary: row.summary,
+      updatedAt: row.updatedAt,
+      template: template ? { templateKey: template.templateKey } : null,
+    };
   }
 
   private matchesTemplate(row: TemplateRow, where: Record<string, unknown>): boolean {
@@ -410,5 +457,179 @@ describe("regenerateArticlesBatch", () => {
       { articleId: "budget-exceeded", status: "not_processed" },
     ]);
     expect(result.counts).toEqual({ regenerated: 1, skipped: 1, failed: 1, not_processed: 1 });
+  });
+});
+
+describe("listArticles (M7 ①)", () => {
+  /**
+   * Mutation target: "列表筛选去掉 status 条件 → 红" — remove the `status`
+   * branch from `service.ts`'s `where` object and this test (plus "组合筛选"
+   * below, which also asserts on `status`) turns red, because `takedown-1`
+   * (a `takedown` row that must not appear in a `status: "draft"` filter)
+   * would leak into the result.
+   */
+  it("按 status 筛选：只返回该状态的行", async () => {
+    const db = new FakeArticlesDb();
+    seedNovel(db, "novel-1");
+    seedArticle(db, { id: "draft-1", novelId: "novel-1", status: "draft" });
+    seedArticle(db, { id: "published-1", novelId: "novel-1", status: "published", slug: "published-1" });
+    seedArticle(db, { id: "takedown-1", novelId: "novel-1", status: "takedown", slug: "takedown-1" });
+
+    const page = await listArticles(db.asPrismaClient(), { status: "draft" });
+
+    expect(page.items.map((item) => item.id)).toEqual(["draft-1"]);
+    expect(page.total).toBe(1);
+  });
+
+  it("按 locale 筛选：只返回该语种的行", async () => {
+    const db = new FakeArticlesDb();
+    seedNovel(db, "novel-en");
+    seedNovel(db, "novel-fr");
+    seedArticle(db, { id: "en-1", novelId: "novel-en", locale: "en" });
+    seedArticle(db, { id: "fr-1", novelId: "novel-fr", locale: "fr", slug: "fr-1" });
+
+    const page = await listArticles(db.asPrismaClient(), { locale: "en" });
+
+    expect(page.items.map((item) => item.id)).toEqual(["en-1"]);
+  });
+
+  // `novelId`/`templateId` go through `requireArticleUuid` (M7 — see the
+  // "非法 …（不是 UUID）" tests below), so these two seed real UUID-shaped
+  // ids for the filter value even though every other test in this file uses
+  // plain readable ids for `Article.id` (which is never UUID-validated).
+  const NOVEL_A = "11111111-1111-4111-8111-111111111111";
+  const NOVEL_B = "22222222-2222-4222-8222-222222222222";
+  const TEMPLATE_A = "33333333-3333-4333-8333-333333333333";
+  const TEMPLATE_B = "44444444-4444-4444-8444-444444444444";
+
+  it("按 novelId 筛选：只返回该书目的行", async () => {
+    const db = new FakeArticlesDb();
+    seedNovel(db, NOVEL_A);
+    seedNovel(db, NOVEL_B);
+    seedArticle(db, { id: "a-1", novelId: NOVEL_A });
+    seedArticle(db, { id: "b-1", novelId: NOVEL_B, slug: "b-1" });
+
+    const page = await listArticles(db.asPrismaClient(), { novelId: NOVEL_A });
+
+    expect(page.items.map((item) => item.id)).toEqual(["a-1"]);
+  });
+
+  it("按 templateId 筛选：只返回绑定该模板的行", async () => {
+    const db = new FakeArticlesDb();
+    seedNovel(db, "novel-1");
+    seedTemplate(db, { id: TEMPLATE_A, templateKey: "tpl-a" });
+    seedTemplate(db, { id: TEMPLATE_B, templateKey: "tpl-b" });
+    seedArticle(db, { id: "tpl-a-article", novelId: "novel-1", templateId: TEMPLATE_A });
+    seedArticle(db, { id: "tpl-b-article", novelId: "novel-1", templateId: TEMPLATE_B, slug: "tpl-b-article" });
+
+    const page = await listArticles(db.asPrismaClient(), { templateId: TEMPLATE_A });
+
+    expect(page.items.map((item) => item.id)).toEqual(["tpl-a-article"]);
+    expect(page.items[0]!.templateKey).toBe("tpl-a");
+  });
+
+  it("组合筛选（locale + status）：两个条件都要满足", async () => {
+    const db = new FakeArticlesDb();
+    seedNovel(db, "novel-1");
+    seedArticle(db, { id: "en-draft", novelId: "novel-1", locale: "en", status: "draft" });
+    seedArticle(db, { id: "en-published", novelId: "novel-1", locale: "en", status: "published", slug: "en-published" });
+    seedArticle(db, { id: "fr-draft", novelId: "novel-1", locale: "fr", status: "draft", slug: "fr-draft" });
+
+    const page = await listArticles(db.asPrismaClient(), { locale: "en", status: "draft" });
+
+    expect(page.items.map((item) => item.id)).toEqual(["en-draft"]);
+  });
+
+  it("软删除的行永不出现，即使筛选条件全部匹配", async () => {
+    const db = new FakeArticlesDb();
+    seedNovel(db, "novel-1");
+    seedArticle(db, { id: "deleted-1", novelId: "novel-1", status: "draft", deletedAt: new Date(NOW) });
+
+    const page = await listArticles(db.asPrismaClient(), { status: "draft" });
+
+    expect(page.items).toEqual([]);
+    expect(page.total).toBe(0);
+  });
+
+  it("未登记的查询参数被忽略，不抛错", async () => {
+    const db = new FakeArticlesDb();
+    seedNovel(db, "novel-1");
+    seedArticle(db, { id: "article-1", novelId: "novel-1" });
+
+    const page = await listArticles(db.asPrismaClient(), {
+      // @ts-expect-error — deliberately passing an unregistered key to prove it is ignored, not rejected.
+      search: "should be ignored",
+    });
+
+    expect(page.items.map((item) => item.id)).toEqual(["article-1"]);
+  });
+
+  it("非法 status 被 invalid_status 拒绝（复用 @/server/admin-content 的错误码）", async () => {
+    const db = new FakeArticlesDb();
+    await expect(listArticles(db.asPrismaClient(), { status: "bogus" })).rejects.toMatchObject(
+      { code: "invalid_status" },
+    );
+    await expect(listArticles(db.asPrismaClient(), { status: "bogus" })).rejects.toBeInstanceOf(
+      AdminContentQueryError,
+    );
+  });
+
+  it("非法 locale 被 invalid_locale 拒绝", async () => {
+    const db = new FakeArticlesDb();
+    await expect(listArticles(db.asPrismaClient(), { locale: "not-a-locale" })).rejects.toMatchObject(
+      { code: "invalid_locale" },
+    );
+  });
+
+  it("非法 novelId（不是 UUID）被 invalid_identifier 拒绝", async () => {
+    const db = new FakeArticlesDb();
+    await expect(listArticles(db.asPrismaClient(), { novelId: "not-a-uuid" })).rejects.toMatchObject(
+      { code: "invalid_identifier" },
+    );
+  });
+
+  it("非法 templateId（不是 UUID）被 invalid_identifier 拒绝", async () => {
+    const db = new FakeArticlesDb();
+    await expect(listArticles(db.asPrismaClient(), { templateId: "not-a-uuid" })).rejects.toMatchObject(
+      { code: "invalid_identifier" },
+    );
+  });
+
+  it("分页：page/pageSize 生效，total/totalPages 来自真实计数（不是伪造翻页）", async () => {
+    const db = new FakeArticlesDb();
+    seedNovel(db, "novel-1");
+    for (let index = 0; index < 5; index += 1) {
+      seedArticle(db, {
+        id: `article-${index}`,
+        novelId: "novel-1",
+        slug: `article-${index}`,
+        updatedAt: new Date(NOW.getTime() + index * 1000),
+      });
+    }
+
+    const firstPage = await listArticles(db.asPrismaClient(), { page: 1, pageSize: 2 });
+    expect(firstPage.items).toHaveLength(2);
+    expect(firstPage.total).toBe(5);
+    expect(firstPage.totalPages).toBe(3);
+    // Newest-updated first, same ordering as the pre-M7 list.
+    expect(firstPage.items.map((item) => item.id)).toEqual(["article-4", "article-3"]);
+
+    const secondPage = await listArticles(db.asPrismaClient(), { page: 2, pageSize: 2 });
+    expect(secondPage.items.map((item) => item.id)).toEqual(["article-2", "article-1"]);
+
+    const thirdPage = await listArticles(db.asPrismaClient(), { page: 3, pageSize: 2 });
+    expect(thirdPage.items.map((item) => item.id)).toEqual(["article-0"]);
+  });
+
+  it("page < 1 被 invalid_page 拒绝", async () => {
+    const db = new FakeArticlesDb();
+    await expect(listArticles(db.asPrismaClient(), { page: 0 })).rejects.toMatchObject({ code: "invalid_page" });
+  });
+
+  it(`pageSize 超过上限 ${ARTICLE_LIST_MAX_PAGE_SIZE} 被 invalid_page_size 拒绝（同一处 ≤100 明示分页约定）`, async () => {
+    const db = new FakeArticlesDb();
+    await expect(
+      listArticles(db.asPrismaClient(), { pageSize: ARTICLE_LIST_MAX_PAGE_SIZE + 1 }),
+    ).rejects.toMatchObject({ code: "invalid_page_size" });
   });
 });

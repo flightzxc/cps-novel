@@ -8,11 +8,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
  * `tests/ui/templates-admin.test.tsx`: only the Server Action module and
  * `next/navigation` are replaced, the real components drive the assertions.
  *
- * 🔴 Known gap, not fixed here (out of this bite-test task's scope — see
- * lane report): `ArticleList`/`articles/page.tsx` do not actually implement
- * the locale/status/novel/template list filters the 施工规格 M7 row
- * describes; the list is an unfiltered `take: 200` query. No test below
- * asserts filtering because there is no filtering code to bite-test.
+ * M7's actual filtering (`locale`/`status`/`novelId`/`templateId`) landed in
+ * `@/server/articles`'s `listArticles` (lane D); its own validation and
+ * filter-combination coverage lives in `tests/backend/articles/service.test.ts`
+ * (a backend concern — building a real Prisma `where` clause), not here. This
+ * file's own `ArticleFilters · M7 filters` block below only bite-tests the
+ * form component: field names match the query-string keys `page.tsx` reads,
+ * and current values round-trip into `defaultValue`.
  */
 
 const listActions = vi.hoisted(() => ({
@@ -31,6 +33,7 @@ vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: routerRefresh }
 
 import { ArticleList, type ArticleListRow } from "@/app/(admin)/articles/_components/article-list";
 import { ArticleEditor } from "@/app/(admin)/articles/_components/article-editor";
+import { ArticleFilters } from "@/app/(admin)/articles/_components/article-filters";
 
 const DRAFT_ROW: ArticleListRow = {
   id: "article-1",
@@ -164,5 +167,41 @@ describe("ArticleEditor · 编辑与预览", () => {
   it("canWrite=false 时保存按钮禁用", () => {
     render(<ArticleEditor article={ARTICLE} canWrite={false} />);
     expect((screen.getByText("保存") as HTMLButtonElement).disabled).toBe(true);
+  });
+});
+
+describe("ArticleFilters · M7 filters", () => {
+  it("四个字段的 name 属性与 page.tsx 读取的 query-string key 一致", () => {
+    render(<ArticleFilters values={{}} />);
+    expect((screen.getByLabelText("语种") as HTMLSelectElement).name).toBe("locale");
+    expect((screen.getByLabelText("状态") as HTMLSelectElement).name).toBe("status");
+    expect((screen.getByLabelText("书目 ID") as HTMLInputElement).name).toBe("novelId");
+    expect((screen.getByLabelText("模板 ID") as HTMLInputElement).name).toBe("templateId");
+  });
+
+  it("当前筛选值回填为 defaultValue，而不是每次都从空表单开始", () => {
+    render(
+      <ArticleFilters
+        values={{ locale: "en", status: "published", novelId: "novel-1", templateId: "template-1" }}
+      />,
+    );
+    expect((screen.getByLabelText("语种") as HTMLSelectElement).value).toBe("en");
+    expect((screen.getByLabelText("状态") as HTMLSelectElement).value).toBe("published");
+    expect((screen.getByLabelText("书目 ID") as HTMLInputElement).value).toBe("novel-1");
+    expect((screen.getByLabelText("模板 ID") as HTMLInputElement).value).toBe("template-1");
+  });
+
+  it("状态下拉渲染文章四态而不是书目五态（没有 ready）", () => {
+    render(<ArticleFilters values={{}} />);
+    const select = screen.getByLabelText("状态") as HTMLSelectElement;
+    const optionLabels = Array.from(select.options).map((option) => option.textContent);
+    expect(optionLabels).toEqual(["全部状态", "草稿", "已发布", "已下线", "已撤回"]);
+  });
+
+  it("提交是纯 GET 表单，没有 page 字段——切换筛选会把分页重置回第 1 页", () => {
+    render(<ArticleFilters values={{ locale: "en" }} />);
+    const form = screen.getByRole("search") as HTMLFormElement;
+    expect(form.method).toBe("get");
+    expect(form.querySelector('input[name="page"]')).toBeNull();
   });
 });

@@ -30,9 +30,10 @@ function deps() {
  * N-7: `article_conflict` is the one error the UI must tell apart from every
  * other write failure (it means "reload and re-apply your edit", not "retry
  * the same request"). Everything else stays the pre-existing opaque
- * `*_failed` code — see `ArticleConflictError`'s doc comment for why the
- * broader error-taxonomy registration (`src/contracts/errors.ts`,
- * `src/features/admin-ui/error-copy.ts`) isn't done here.
+ * `*_failed` code. `article_conflict` is registered in `src/contracts/errors.ts`
+ * (`AdminErrorCode`) and `src/features/admin-ui/error-copy.ts` — see
+ * `ArticleConflictError`'s doc comment (`src/server/articles/service.ts`) for
+ * why there is no `respond.ts` entry to add alongside them.
  */
 function writeErrorCode(error: unknown, fallback: string): string {
   return error instanceof ArticleConflictError ? error.code : fallback;
