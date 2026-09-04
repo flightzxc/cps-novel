@@ -104,6 +104,8 @@ export type ContentCreationBatchInput = {
   readonly requestId: string;
   /** Forwarded to `createContentFromSourceItem` unchanged — defaults to `"en"` there. */
   readonly locale?: SiteLocale;
+  /** One template is fixed for the entire same-locale batch. */
+  readonly templateKey?: string;
   /** Defaults to {@link CONTENT_CREATION_BATCH_BUDGET_MS}; overridable only for tests. */
   readonly budgetMs?: number;
 };
@@ -185,6 +187,7 @@ async function runSequentialBudgetedBatch<TPrimaryStatus extends string>(
       const result = await createContentFromSourceItem(db, {
         novelSourceItemId,
         locale: input.locale,
+        templateKey: input.templateKey,
         mode,
         actor: input.actor,
         requestId: `${input.requestId}:${novelSourceItemId}`,

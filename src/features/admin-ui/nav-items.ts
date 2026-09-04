@@ -102,6 +102,7 @@ export const ADMIN_IMPLEMENTED_PAGES: readonly string[] = Object.freeze([
   "/channel-accounts",
   "/novels",
   "/catalog-sync",
+  "/templates",
   "/tags",
   "/tasks",
   "/promo-links",

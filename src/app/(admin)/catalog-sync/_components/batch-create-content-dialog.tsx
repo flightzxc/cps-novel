@@ -130,6 +130,7 @@ export function BatchCreateContentDialog({
   contentPublishBlockedReason,
   onClose,
   onSubmitted,
+  templateOptions = [],
 }: {
   selectedItems: readonly SourceItemRow[];
   maxBatchSize: number;
@@ -138,10 +139,12 @@ export function BatchCreateContentDialog({
   onClose: () => void;
   /** Called once an apply submission returns (any outcome) so the parent can clear the row selection — same contract as `PromoLinkClaimDialog`'s `onSubmitted`. */
   onSubmitted: () => void;
+  templateOptions?: readonly { readonly templateKey: string; readonly version: number }[];
 }) {
   const router = useRouter();
   const dialogRef = useRef<HTMLDialogElement>(null);
   const [stage, setStage] = useState<Stage>({ kind: "loading" });
+  const [templateKey, setTemplateKey] = useState(templateOptions[0]?.templateKey ?? "system-default-v1");
 
   const itemsById = new Map(selectedItems.map((item) => [item.id, item] as const));
   const overLimit = selectedItems.length > maxBatchSize;
@@ -162,6 +165,7 @@ export function BatchCreateContentDialog({
     dryRunContentCreationBatchAction({
       novelSourceItemIds: selectedItems.map((item) => item.id),
       requestId: crypto.randomUUID(),
+      templateKey,
     }).then((result) => {
       if (cancelled) return;
       if (!result.ok) {
@@ -178,13 +182,14 @@ export function BatchCreateContentDialog({
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- the selection is fixed for this dialog instance's whole lifetime, see PromoLinkClaimDialog's own note on the same pattern
-  }, []);
+  }, [templateKey]);
 
   async function confirmApply() {
     setStage({ kind: "applying" });
     const result = await applyContentCreationBatchAction({
       novelSourceItemIds: selectedItems.map((item) => item.id),
       requestId: crypto.randomUUID(),
+      templateKey,
     });
     if (!result.ok) {
       setStage(
@@ -217,6 +222,12 @@ export function BatchCreateContentDialog({
     >
       <div className="space-y-4 p-5">
         <h2 className="text-base font-semibold">批量创建内容</h2>
+        <label className="block text-sm text-gray-700">本批次固定模板
+          <select value={templateKey} onChange={(event) => setTemplateKey(event.target.value)} disabled={stage.kind === "applying"} className="mt-1 w-full rounded border border-gray-300 p-2">
+            {templateOptions.length === 0 && <option value="system-default-v1">system-default-v1（系统默认）</option>}
+            {templateOptions.map((template) => <option key={`${template.templateKey}:${template.version}`} value={template.templateKey}>{template.templateKey} · v{template.version}</option>)}
+          </select>
+        </label>
 
         <p className="text-sm text-gray-600" data-testid="batch-create-selection-count">
           已选择 <span className="font-medium text-gray-900">{selectedItems.length}</span> 条来源条目

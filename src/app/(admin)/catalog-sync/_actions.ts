@@ -114,6 +114,7 @@ async function authorizeAction(actionId: `admin.${string}`, requestId: string) {
 export async function dryRunContentCreationAction(input: {
   novelSourceItemId: string;
   requestId: string;
+  templateKey?: string;
 }): Promise<ContentCreationActionResult> {
   try {
     const { context } = await authorizeAction("admin.content_creation.dry_run", input.requestId);
@@ -123,6 +124,7 @@ export async function dryRunContentCreationAction(input: {
       mode: "dry_run",
       actor: { type: "admin", adminId: context.identity.id },
       requestId: input.requestId,
+      templateKey: input.templateKey,
     });
     return { ok: true, data };
   } catch (error) {
@@ -148,6 +150,7 @@ export async function dryRunContentCreationAction(input: {
 export async function applyContentCreationAction(input: {
   novelSourceItemId: string;
   requestId: string;
+  templateKey?: string;
 }): Promise<ContentCreationActionResult> {
   try {
     const { serviceAuthorization } = await authorizeAction(
@@ -179,6 +182,7 @@ export async function applyContentCreationAction(input: {
       mode: "apply",
       actor: { type: "admin", adminId: context.identity.id },
       requestId: input.requestId,
+      templateKey: input.templateKey,
     });
     if (data.outcome === "created") {
       // The source item's own status flipped (`pending` → `linked`) and a
@@ -624,6 +628,7 @@ function requireBatchSelection(
 export async function dryRunContentCreationBatchAction(input: {
   novelSourceItemIds: readonly string[];
   requestId: string;
+  templateKey?: string;
 }): Promise<ContentCreationBatchDryRunActionResult> {
   try {
     const { context } = await authorizeAction("admin.content_creation.batch_dry_run", input.requestId);
@@ -636,6 +641,7 @@ export async function dryRunContentCreationBatchAction(input: {
       actor: { type: "admin", adminId: context.identity.id },
       requestId: input.requestId,
       budgetMs: CONTENT_CREATION_BATCH_BUDGET_MS,
+      templateKey: input.templateKey,
     });
     return { ok: true, data };
   } catch (error) {
@@ -658,6 +664,7 @@ export async function dryRunContentCreationBatchAction(input: {
 export async function applyContentCreationBatchAction(input: {
   novelSourceItemIds: readonly string[];
   requestId: string;
+  templateKey?: string;
 }): Promise<ContentCreationBatchApplyActionResult> {
   try {
     const { serviceAuthorization } = await authorizeAction(
@@ -693,6 +700,7 @@ export async function applyContentCreationBatchAction(input: {
       actor: { type: "admin", adminId: context.identity.id },
       requestId: input.requestId,
       budgetMs: CONTENT_CREATION_BATCH_BUDGET_MS,
+      templateKey: input.templateKey,
     });
     if (data.counts.created > 0) {
       revalidatePath("/catalog-sync");

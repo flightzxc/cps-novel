@@ -180,16 +180,19 @@ export function CreateContentDialog({
   contentPublishGranted,
   contentPublishBlockedReason,
   onClose,
+  templateOptions = [],
 }: {
   item: SourceItemRow;
   contentPublishGranted: boolean;
   contentPublishBlockedReason: string | null;
   onClose: () => void;
+  templateOptions?: readonly { readonly templateKey: string; readonly version: number }[];
 }) {
   const router = useRouter();
   const dialogRef = useRef<HTMLDialogElement>(null);
   const [stage, setStage] = useState<Stage>({ kind: "loading" });
   const [applying, setApplying] = useState(false);
+  const [templateKey, setTemplateKey] = useState(templateOptions[0]?.templateKey ?? "system-default-v1");
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -208,6 +211,7 @@ export function CreateContentDialog({
     const result = await dryRunContentCreationAction({
       novelSourceItemId: item.id,
       requestId: crypto.randomUUID(),
+      templateKey,
     });
     if (!result.ok) return { kind: "error", message: failureMessage(result) };
     return result.data.outcome === "dry_run"
@@ -227,7 +231,7 @@ export function CreateContentDialog({
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- item.id is the only input that should re-trigger a dry run
-  }, [item.id]);
+  }, [item.id, templateKey]);
 
   function retryDryRun() {
     // A click handler, not an effect body — setting loading synchronously
@@ -241,6 +245,7 @@ export function CreateContentDialog({
     const result = await applyContentCreationAction({
       novelSourceItemId: item.id,
       requestId: crypto.randomUUID(),
+      templateKey,
     });
     setApplying(false);
     if (!result.ok) {
@@ -268,6 +273,12 @@ export function CreateContentDialog({
     >
       <div className="space-y-4 p-5">
         <h2 className="text-base font-semibold">创建内容 · {item.title}</h2>
+        <label className="block text-sm text-gray-700">文章模板
+          <select value={templateKey} onChange={(event) => setTemplateKey(event.target.value)} disabled={applying} className="mt-1 w-full rounded border border-gray-300 p-2">
+            {templateOptions.length === 0 && <option value="system-default-v1">system-default-v1（系统默认）</option>}
+            {templateOptions.map((template) => <option key={`${template.templateKey}:${template.version}`} value={template.templateKey}>{template.templateKey} · v{template.version}</option>)}
+          </select>
+        </label>
 
         {stage.kind === "loading" && (
           <p role="status" className="text-sm text-gray-500">

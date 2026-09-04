@@ -89,9 +89,13 @@ import {
   renderArticleDraft,
   type TemplateErrorCode,
 } from "@/lib/seo/template";
+import {
+  ensureDefaultArticleTemplate,
+  selectActiveArticleTemplate,
+  validateStoredArticleTemplate,
+} from "@/server/article-templates";
 
 import { createNovelWithBusinessIdRetry } from "./business-id";
-import { DEFAULT_ARTICLE_TEMPLATE, DEFAULT_ARTICLE_TEMPLATE_KEY } from "./default-article-template";
 import {
   enqueueContentCreationPreview,
   type ContentCreationPreviewEnqueueResult,
@@ -198,6 +202,7 @@ export type CreateContentResult =
   | { readonly outcome: "source_item_deleted" }
   | { readonly outcome: "source_item_ignored" }
   | { readonly outcome: "source_item_stale" }
+  | { readonly outcome: "template_not_available"; readonly templateKey?: string }
   /** Defensive: the source item's `novelId`/`status` combination doesn't match any state this service's state machine expects (e.g. `status === "linked"` but `novelId` is `null`, or `novelId` points at a missing/soft-deleted Novel, or a linked Novel has no Article for its own locale). Not this call's job to repair — surfaced for manual review. */
   | { readonly outcome: "source_item_inconsistent_state" }
   | {
@@ -232,6 +237,8 @@ export type CreateContentFromSourceItemInput = {
   readonly novelSourceItemId: string;
   /** Defaults to `"en"` — see module header, "Locale is caller-supplied, not derived." */
   readonly locale?: SiteLocale;
+  /** Explicit active template selection; omitted uses the fixed system-default-v1 preference, then the oldest active compatible template. */
+  readonly templateKey?: string;
   /** Defaults to `"dry_run"` — same safety-first default `src/lib/tasks/moboreader.ts` uses for its own `mode` parameter. */
   readonly mode?: "dry_run" | "apply";
   readonly actor: CreateContentActor;
@@ -475,17 +482,31 @@ type WriteClient = ReadClient & {
     }) => Promise<{ count: number }>;
   };
   operationAudit: { create: (args: { data: Record<string, unknown> }) => Promise<unknown> };
+  articleTemplate: Prisma.TransactionClient["articleTemplate"];
 };
 
 async function runCreateTransaction(
   tx: WriteClient,
-  input: { novelSourceItemId: string; locale: SiteLocale; actorType: "admin" | "system"; actorId: string; requestId: string },
+  input: { novelSourceItemId: string; locale: SiteLocale; templateKey?: string; actorType: "admin" | "system"; actorId: string; requestId: string },
 ): Promise<CreateContentResult> {
   const plan = await loadPlan(tx, input.novelSourceItemId, input.locale);
   if (plan.stage === "blocked") return plan.result;
   if (plan.stage === "already_exists") return { outcome: "already_exists", ...plan.summary };
 
   const { sourceItem, novelSlug, articleSlug } = plan;
+
+  await ensureDefaultArticleTemplate(tx);
+  const template = await selectActiveArticleTemplate(tx as unknown as PrismaClient, {
+    locale: input.locale,
+    ...(input.templateKey ? { templateKey: input.templateKey } : {}),
+  });
+  if (!template) {
+    return {
+      outcome: "template_not_available",
+      ...(input.templateKey ? { templateKey: input.templateKey } : {}),
+    };
+  }
+  const templateSource = validateStoredArticleTemplate(template);
 
   const novel = await createNovelWithBusinessIdRetry((businessId) =>
     tx.novel.create({
@@ -521,8 +542,8 @@ async function runCreateTransaction(
     coverUrl: sourceItem.coverUrl,
     totalChapterCount: sourceItem.totalChapterCount,
   });
-  const rendered = renderArticleDraft(DEFAULT_ARTICLE_TEMPLATE, templateValues, {
-    templateKey: DEFAULT_ARTICLE_TEMPLATE_KEY,
+  const rendered = renderArticleDraft(templateSource, templateValues, {
+    templateKey: template.templateKey,
     novelId: novel.id,
   });
 
@@ -553,8 +574,7 @@ async function runCreateTransaction(
         body: rendered.body,
         seoMetadata: rendered.seoMetadata,
         seoSchemaVersion: rendered.seoSchemaVersion,
-        // templateId intentionally left unset (column default `null`) — no
-        // `ArticleTemplate` row exists; see default-article-template.ts.
+        templateId: template.id,
         // status intentionally omitted — see module header, "Never writes status".
       },
     }),
@@ -624,6 +644,11 @@ export async function createContentFromSourceItem(
   const requestId = requireRequestId(input.requestId);
 
   if (mode === "dry_run") {
+    if (input.templateKey) {
+      const template = await selectActiveArticleTemplate(db, { locale, templateKey: input.templateKey });
+      if (!template) return { outcome: "template_not_available", templateKey: input.templateKey };
+      validateStoredArticleTemplate(template);
+    }
     return runDryRun(db, novelSourceItemId, locale);
   }
 
@@ -634,7 +659,14 @@ export async function createContentFromSourceItem(
     const result = await withDbRetry(
       () =>
         db.$transaction((tx) =>
-          runCreateTransaction(tx as unknown as WriteClient, { novelSourceItemId, locale, actorType, actorId, requestId }),
+          runCreateTransaction(tx as unknown as WriteClient, {
+            novelSourceItemId,
+            locale,
+            ...(input.templateKey ? { templateKey: input.templateKey } : {}),
+            actorType,
+            actorId,
+            requestId,
+          }),
         ),
       { op: "content-creation.createContentFromSourceItem", sourceItemId: novelSourceItemId, idempotencyKey: requestId },
     );

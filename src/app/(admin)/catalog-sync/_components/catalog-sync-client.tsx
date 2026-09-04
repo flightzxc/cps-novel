@@ -52,6 +52,7 @@ export function CatalogSyncClient({
   promoClaimGranted,
   promoClaimBlockedReason,
   contentCreationBatchMaxSize,
+  templateOptions = [],
 }: {
   items: readonly SourceItemRow[];
   catalogGate: { readonly featureEnabled: boolean; readonly writeAllowed: boolean };
@@ -61,6 +62,7 @@ export function CatalogSyncClient({
   promoClaimGranted: boolean;
   promoClaimBlockedReason: string | null;
   contentCreationBatchMaxSize: number;
+  templateOptions?: readonly { readonly id: string; readonly templateKey: string; readonly locale: string | null; readonly version: number }[];
 }) {
   const [activeItem, setActiveItem] = useState<SourceItemRow | null>(null);
   const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(new Set());
@@ -197,6 +199,7 @@ export function CatalogSyncClient({
           contentPublishGranted={granted}
           contentPublishBlockedReason={blockedReason}
           onClose={() => setActiveItem(null)}
+          templateOptions={templateOptions}
         />
       )}
 
@@ -220,6 +223,7 @@ export function CatalogSyncClient({
           contentPublishBlockedReason={blockedReason}
           onClose={() => setBatchCreateDialogOpen(false)}
           onSubmitted={() => setSelectedIds(new Set())}
+          templateOptions={templateOptions}
         />
       )}
     </div>

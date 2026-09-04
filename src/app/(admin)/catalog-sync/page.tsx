@@ -4,6 +4,8 @@ import { isNovelCatalogSyncEnabled, isNovelCatalogSyncWriteAllowed } from "@/lib
 import { MOBOREADER_CATALOG_LIMITS, resolveMoboreaderCatalogSafetyMaxPages } from "@/lib/tasks/moboreader";
 import { PROMO_LINK_CLAIM_LIMITS } from "@/lib/tasks/promo-link-claim-limits";
 import { CONTENT_CREATION_BATCH_MAX_SELECTION } from "@/server/content-creation/batch";
+import { listActiveArticleTemplateOptions } from "@/server/article-templates";
+import { prisma } from "../../api/admin/_lib/deps";
 
 import { AdminShell } from "../_components/admin-shell";
 import { capabilityViews, sessionView } from "../_lib/page-guard";
@@ -57,6 +59,7 @@ export default async function CatalogSyncPage({
     : null;
   const channelApps = granted ? await readActiveChannelAppOptions() : [];
   const claimChannelApps = granted ? await readClaimEligibleChannelAppOptions() : [];
+  const templateOptions = granted ? await listActiveArticleTemplateOptions(prisma, "en") : [];
 
   return (
     <AdminShell
@@ -93,6 +96,7 @@ export default async function CatalogSyncPage({
                 promoClaimGranted={promoClaimBlockedReason === null}
                 promoClaimBlockedReason={promoClaimBlockedReason}
                 contentCreationBatchMaxSize={CONTENT_CREATION_BATCH_MAX_SELECTION}
+                templateOptions={templateOptions}
               />
             </div>
             <ContentPagination

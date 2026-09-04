@@ -47,7 +47,22 @@ export type FakeArticle = {
   title: string;
   summary: string | null;
   body: string;
+  templateId: string | null;
   deletedAt: Date | null;
+};
+
+export type FakeArticleTemplate = {
+  id: string;
+  templateKey: string;
+  locale: string | null;
+  version: number;
+  schemaVersion: number;
+  status: string;
+  bodyTemplate: string;
+  seoTemplate: unknown;
+  deletedAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
 };
 
 export type FakeAudit = {
@@ -83,6 +98,7 @@ export class FakeContentCreationDb {
   readonly sourceItems = new Map<string, FakeSourceItem>();
   readonly novels = new Map<string, FakeNovel>();
   readonly articles = new Map<string, FakeArticle>();
+  readonly articleTemplates = new Map<string, FakeArticleTemplate>();
   readonly audits: FakeAudit[] = [];
   readonly calls: string[] = [];
   lastSourceItemFindFirstArgs: { where: { id: string }; select?: Record<string, boolean> } | null = null;
@@ -155,9 +171,29 @@ export class FakeContentCreationDb {
       title: article.title ?? "A Sample Title",
       summary: article.summary ?? "A sample description.",
       body: article.body ?? "",
+      templateId: article.templateId ?? null,
       deletedAt: article.deletedAt ?? null,
     };
     this.articles.set(full.id, full);
+    return full;
+  }
+
+  seedArticleTemplate(template: Partial<FakeArticleTemplate> = {}): FakeArticleTemplate {
+    const now = new Date();
+    const full: FakeArticleTemplate = {
+      id: template.id ?? nextUuid(),
+      templateKey: template.templateKey ?? "system-default-v1",
+      locale: template.locale === undefined ? "en" : template.locale,
+      version: template.version ?? 1,
+      schemaVersion: template.schemaVersion ?? 1,
+      status: template.status ?? "active",
+      bodyTemplate: template.bodyTemplate ?? "<h1>{novel_title}</h1><p>{novel_description}</p>",
+      seoTemplate: template.seoTemplate ?? { title: "{novel_title}", metaDescription: "{novel_description}" },
+      deletedAt: template.deletedAt ?? null,
+      createdAt: template.createdAt ?? now,
+      updatedAt: template.updatedAt ?? now,
+    };
+    this.articleTemplates.set(full.id, full);
     return full;
   }
 
@@ -277,6 +313,7 @@ export class FakeContentCreationDb {
       title: String(args.data.title),
       summary: (args.data.summary as string | null) ?? null,
       body: String(args.data.body ?? ""),
+      templateId: (args.data.templateId as string | null) ?? null,
       deletedAt: null,
     };
     this.articles.set(article.id, article);
@@ -284,6 +321,32 @@ export class FakeContentCreationDb {
       this.articles.delete(article.id);
     });
     return { ...article };
+  };
+
+  private articleTemplateCount = async () => {
+    this.calls.push("articleTemplate.count");
+    return Array.from(this.articleTemplates.values()).filter((row) => row.deletedAt === null).length;
+  };
+
+  private articleTemplateCreate = async (args: { data: Record<string, unknown> }) => {
+    this.calls.push("articleTemplate.create");
+    const row = this.seedArticleTemplate(args.data as Partial<FakeArticleTemplate>);
+    this.logUndo(() => this.articleTemplates.delete(row.id));
+    return { ...row };
+  };
+
+  private articleTemplateFindFirst = async (args: { where: Record<string, unknown> }) => {
+    this.calls.push("articleTemplate.findFirst");
+    const where = args.where;
+    const localeOr = (where.OR as Array<{ locale: string | null }> | undefined)?.map((entry) => entry.locale);
+    const rows = Array.from(this.articleTemplates.values()).filter((row) =>
+      row.deletedAt === null &&
+      (where.templateKey === undefined || row.templateKey === where.templateKey) &&
+      (where.status === undefined || row.status === where.status) &&
+      (localeOr === undefined || localeOr.includes(row.locale)),
+    );
+    rows.sort((left, right) => left.createdAt.getTime() - right.createdAt.getTime() || right.version - left.version);
+    return rows.length > 0 ? { ...rows[0] } : null;
   };
 
   private sourceItemUpdateMany = async (args: {
@@ -332,6 +395,11 @@ export class FakeContentCreationDb {
       operationAudit: {
         create: this.operationAuditCreate,
       },
+      articleTemplate: {
+        count: this.articleTemplateCount,
+        create: this.articleTemplateCreate,
+        findFirst: this.articleTemplateFindFirst,
+      },
       $transaction: async (callback) => {
         const previousLog = this.undoLog;
         this.undoLog = [];
@@ -375,6 +443,11 @@ type FakeClient = {
   };
   operationAudit: {
     create: (args: { data: FakeAudit }) => Promise<unknown>;
+  };
+  articleTemplate: {
+    count: (args?: unknown) => Promise<number>;
+    create: (args: { data: Record<string, unknown> }) => Promise<unknown>;
+    findFirst: (args: { where: Record<string, unknown> }) => Promise<unknown>;
   };
   $transaction: <T>(callback: (tx: FakeClient) => Promise<T>) => Promise<T>;
 };

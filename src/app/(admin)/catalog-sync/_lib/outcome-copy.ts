@@ -78,6 +78,14 @@ export function describeCreateContentOutcome(result: CreateContentResult): Outco
         title: "该来源条目已过期",
         body: "上游最近一次可信响应未再返回该条目，暂不建议创建内容；待其重新出现后再试。",
       };
+    case "template_not_available":
+      return {
+        tone: "danger",
+        title: "所选模板不可用",
+        body: result.templateKey
+          ? `模板「${result.templateKey}」不存在、未启用或不适用于当前语种，本次未创建内容。`
+          : "当前语种没有可用模板，本次未创建内容。",
+      };
     case "source_item_inconsistent_state":
       return {
         tone: "danger",
