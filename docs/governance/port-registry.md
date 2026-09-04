@@ -351,6 +351,17 @@ Owner 没有验证器/恢复码，密码通过验证后被 `/two-factor/challeng
 | **N-3（PR6 fix lane A 显式偏离）** `CarouselConfig.windowDays`/`tauDays`/`alpha`（收入评分算法的 W/τ/α 三参数） — Novel 侧 `HomeCarouselConfig` 类型不含这三个字段 | `src/lib/home-carousel-config.ts` | `41-43` | `16f2e4cfca51f46af0dede899ecf6242a770bbd0` | `ADAPT` | **不搬**：三字段只服务于 `revenueEnabled=true` 时的收入加权候选算法；Novel 无收入来源，`revenueEnabled` 恒 `false`（见上表 Home carousel 行），该算法分支从未被调用，字段本身也一并从类型里删除而非"读了不用"——`normalizeHomeCarouselConfig` 因此没有这三个键，也没有对应的默认值/校验逻辑。规格 M5 行原文列了 `W30/τ7/α2` 但未随之登记删减，此处补登记 | Claude |
 | **N-4（PR6 fix lane A 显式偏离）** `WRITABLE_CAROUSEL_CONFIG_KEYS`（5 字段：`revenueEnabled`/`revenueLocaleWhitelist`/`revenueSourceBeidouEnabled`/`revenueSourceChangduEnabled`/`cronEnabled`） → Novel `updateHomeCarouselConfig` 的可写字段（3 个：`cronSchedule`/`cronTimezone`/`cronEnabled`） | `src/lib/home-carousel-config-write.ts` | `9-15` | `16f2e4cfca51f46af0dede899ecf6242a770bbd0` | `ADAPT` | CPS 的 5 个可写字段里 4 个（`revenueEnabled`/`revenueLocaleWhitelist`/`revenueSourceBeidouEnabled`/`revenueSourceChangduEnabled`）在 Novel 无意义（同 N-3，无收入来源）；只有 `cronEnabled` 有对应语义。Novel 侧改为让管理员写 `cronSchedule`/`cronTimezone`/`cronEnabled` 三项（CPS 把前两者当固定运维值，不经 UI 可写）——这是本仓自己的选择，不是 CPS 语义的直接迁移，故单独登记而非归入上表 `ADAPT` 行的笼统描述 | Claude |
 
+### 2026-09-05 · PR6 fix lane B（M6/M7 咬合测试 + N-7/N-8/N-9）
+
+以下两条不是从 CPS 搬运的符号——CPS `article-actions.ts` 的 `updateArticle` 本身既无
+`expectedUpdatedAt` 乐观锁、也不对正文做标签白名单，两条都是本仓在 CPS 之上主动加固，登记为
+"与 CPS 同源风险"的接受/收口记录，而非 `ADAPT`/`COPY` 搬运。
+
+| symbol | source_file | source_lines | baseline_commit | port_kind | changed_what | owner |
+| --- | --- | --- | --- | --- | --- | --- |
+| N-7 `Article` 编辑/单条再生成乐观锁（`expectedUpdatedAt` 往返校验 + `[expected, expected+1ms)` 窗口 `updateMany` CAS，同 `SiteSettingMutationConflictError` 的 409 语义） | `src/server/site-settings/service.ts`（`expectedTimestamp`/`updateAdminSiteSetting` 的 CAS 窗口）→ `src/server/articles/service.ts`（`expectedArticleTimestamp`/`updateArticleContent`/`regenerateCore` 的 `ArticleConflictError`） | 窗口 CAS 模式 `560-612` | （本仓内部模式复用，非 CPS 搬运；CPS 无 Article 级乐观锁） | `PATTERN_ONLY` | 只借"往返校验 + 窄窗口 `updateMany` 计数判冲突"的形状；不搬 settings 的幂等重放指纹（`requestFingerprint`/`findCommittedUpdate`）——Article 单条编辑/再生成不需要重放去重；批量再生成（`regenerateArticlesBatch`）不接 CAS，见 `service.ts` 该函数上方注释的理由。`article_conflict` 错误码尚未登记进 `src/contracts/errors.ts`/`src/features/admin-ui/error-copy.ts`（不在本 lane 文件边界内），见交付报告 | Claude |
+| N-8 `Article.body` 管理员编辑白名单清洗（`sanitizeArticleBody`：p/br/h2/h3/ul/ol/li/strong/em/a[href https-only]/img[src https-only,alt]/blockquote，`script`/`style`/`on*`/`javascript:` 剥除） | — | — | — | `ORIGINAL_REQUIRED` | CPS `article-actions.ts` 的 `updateArticle` 同样把管理员提交的正文原样落库、不做任何标签白名单——本条目登记的是"本仓比 CPS 更严格"的加固，不是搬运；零依赖手写白名单解析器（`src/server/articles/sanitize-body.ts`），只作用于管理员手工编辑路径（`updateArticleContent`），模板引擎生成/再生成路径（`regenerateCore`）不受影响 | Claude |
+
 ## 使用说明
 
 - `symbol`：被搬运的具体符号名（函数名/类型名/表名/字段名/组件名等），一行一个符号，不得用文件级粗粒度笼统登记；

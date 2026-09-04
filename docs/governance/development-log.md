@@ -60,6 +60,68 @@
   （容器为会话开始前已运行的既有 X8 环境，本 lane 未 up/down 任何容器）。
 - 未 push、未 merge、未部署、未碰 prisma/migration（`carouselConfigJson` 列已在）。
 
+---
+
+## 2026-09-05 · PR6 fix lane B：M6/M7 咬合测试缺口 + N-7/N-8/N-9/N-13
+
+分支 `fix/pr6-lane-b-templates-articles`（`worktree cps-novel-pr6-lane-b`），基线
+`feature/launch-parity-operating-surfaces@a05e41b`。修复 Codex PR #6 验收
+`CHANGES_REQUIRED_2026-09-05.md` 里 B-2 项点名的 M6（模板）/M7（文章）咬合测试缺口与
+13 个新 action 的动作层 capability 测试，以及同批 N-7/N-8/N-9/N-13。
+
+- **B-2 咬合测试**：新增 `tests/backend/article-templates/service.test.ts`（未登记变量
+  被 `renderArticleDraft` 拒绝、停用模板不可被 `selectActiveArticleTemplate` 选中、
+  `ensureDefaultArticleTemplate` 表空落 `system-default-v1` 且幂等）、
+  `tests/ui/templates-admin.test.tsx`（列表/新建/编辑/启停/删除/错误回显）、
+  `tests/backend/articles/service.test.ts`（编辑写 body/seoMetadata 且审计、再生成保
+  slug/shortId、批量 ≤50/25s 四态）、`tests/ui/articles-admin.test.tsx`（列表/选择/单条
+  与批量再生成/编辑预览）、`tests/ui/novel-detail-seo-consumer.test.tsx`（`generateMetadata`
+  与页面正文优先 `Article.seoMetadata`/`body`、FAQ JSON-LD、未发布文章不进消费）、
+  `tests/ui/admin-actions-capability.test.ts`（13 个新 action：template 4/article
+  3/carousel 3/security 3，各一条"动作体实际传给 `requireFreshAdminServiceMutation`
+  或 `requireAdminActionAccess` 的 capability/actionId 必须等于 registry 声明"，抽 7
+  个做变异证明——`article-templates/service.ts`、`articles/service.ts` 的
+  `authorize()` 硬编码 capability 改 `content:view` 后对应测试全部转红，人工验证后已
+  复原）。所有新测试逐条手工验证：改坏对应实现后目标用例必须变红，复原后
+  `git status --porcelain` 干净。已知不足：list 筛选（locale/status/novel/template）
+  施工规格提及但 `ArticleList`/`articles/page.tsx` 从未实现，未新增；创建时写
+  `Article.templateId` 的测试属于 `src/server/content-creation/**`（本 lane 文件边界
+  外），未新增，留给该模块所有者。
+- **N-7 乐观锁**：`src/server/articles/service.ts` 新增 `ArticleConflictError`
+  （`article_conflict`/409，同 `SiteSettingMutationConflictError` 的错误码模式）与
+  `expectedArticleTimestamp`（settings 同款往返校验）；`updateArticleContent` 与
+  `regenerateArticle`（经 `regenerateCore` 新增可选 `expectedUpdatedAt` 参数）均走
+  `[expected, expected+1ms)` 窗口 `updateMany` CAS；批量再生成不接 CAS（理由见
+  `service.ts` 该函数上方注释）。`article_conflict` 尚未登记进
+  `src/contracts/errors.ts`/`src/features/admin-ui/error-copy.ts`（两者不在本 lane
+  文件边界内）。UI：`articles/_actions.ts` 区分 conflict 与其他失败码；
+  `[articleId]/page.tsx` 用 `updatedAt` 做 `<ArticleEditor key>` 使 `router.refresh()`
+  后重新挂载而不是徒劳的 `useState` 同步；`article-list.tsx` 单条再生成把
+  `row.updatedAt` 作为 `expectedUpdatedAt` 传入。
+- **N-8 正文白名单**：新增零依赖 `src/server/articles/sanitize-body.ts`
+  （`sanitizeArticleBody`：保留 `p/br/h2/h3/ul/ol/li/strong/em/a[href https-only]/
+  img[src https-only,alt]/blockquote`，剥除 `script`/`style`/`on*`/`javascript:`/非
+  https 链接），只接入 `updateArticleContent`（管理员手工编辑路径）；`regenerateCore`
+  （模板引擎生成/再生成路径）不受影响。登记为"与 CPS 同源风险的接受/收口"（CPS 原本
+  也不做正文白名单），见 `port-registry.md` 2026-09-05 · PR6 fix lane B 小节。
+- **N-9 公开侧查询数**：新增 `tests/backend/site/public-query-budget.test.ts`
+  （计数式 fake Prisma db，测出首页当前调用形态每次渲染 `getSiteSetting` +
+  `listPublicCategories` 形态合计 7 次新增查询——`loadChrome`/独立
+  `loadPublicCategories` 各查一次，`listHomeNovels` 又查一次同形态数据）。
+  `src/lib/site/queries.ts` 的 `loadPublicChrome` 加了可选第三参数 `categories`（预先
+  算好时跳过内部再查一次），并有对应能力测试；**未接入 `src/app/page.tsx`**——
+  尝试过直接在 `page.tsx` 里绕开 `@/app/_lib/public-load` 调用 `getSiteSetting`/
+  `loadPublicChrome`，会打穿 `tests/ui/public-routes.test.tsx`（本 lane 文件边界外，
+  只 mock `public-load.ts`，未 mock 真实 Prisma）——已验证会炸、已还原。真正接线需要
+  同时改 `src/app/_lib/public-load.ts`（`loadChrome` 签名或加一个变体），也不在本
+  lane 文件边界内。两处都在报告里列为需要整合者处理的跨边界项。
+- **N-13**：M1/M3/M9/M11 的 enforcement=false 覆盖仍是靠 M0
+  （`admin-capability-projection-enforcement.test.ts`）投影测试组合达成，本 lane 未
+  新增专属覆盖，也未声称"已补"。
+- 未 push、未合并；只在本 worktree 内提交。
+
+---
+
 ## 2026-09-05 · CPS 海阅首发后台与 SEO 运营面补全
 
 - 从 clean `main@f99c25e` 的独立 worktree 实施 M0–M12；主检出保持只读。
