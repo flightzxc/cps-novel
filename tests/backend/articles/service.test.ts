@@ -1,0 +1,414 @@
+import type { PrismaClient } from "@prisma/client";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+import { hashAdminSessionToken } from "@/lib/auth/session";
+import type { AdminIdentity, AdminSessionRecord } from "@/lib/auth/types";
+import { requireAdminActionAccess } from "@/server/auth/guards";
+import { P2_04_ADMIN_REGISTRY } from "@/app/api/admin/_lib/registry";
+import {
+  ARTICLE_REGENERATE_BATCH_MAX,
+  ARTICLE_REGENERATE_BUDGET_MS,
+  ArticleConflictError,
+  regenerateArticle,
+  regenerateArticlesBatch,
+  updateArticleContent,
+} from "@/server/articles";
+
+import { TestOnlyInMemoryAuthStores } from "../auth/test-only-in-memory-stores";
+
+/**
+ * M7 bite tests (交接提示词 B-2 / 施工规格 ACCEPTANCE_MATRIX row "M7 Article")
+ * plus N-7 (optimistic lock) and N-8 (body sanitization on the admin edit
+ * path — see `sanitize-body.test.ts` for the sanitizer's own unit coverage;
+ * this file only asserts `updateArticleContent` actually calls it).
+ *
+ * Mutation targets reproduced from the CHANGES_REQUIRED report / matrix:
+ *   - "再生成改 slug → 红": "regenerateArticle 保留 slug/publicPageShortId"
+ *     below asserts the row's slug/shortId are byte-identical before/after a
+ *     successful regenerate.
+ *   - N-7: "expectedUpdatedAt 不匹配时 update/regenerate 都返回冲突" below.
+ */
+
+const NOW = new Date("2026-09-05T03:00:00.000Z");
+const TOKEN = "articles-service-session";
+const ORIGIN = "https://admin.example.com";
+
+type ArticleRow = {
+  id: string;
+  novelId: string;
+  templateId: string | null;
+  promoLinkId: string | null;
+  locale: string;
+  slug: string;
+  publicPageShortId: string;
+  title: string;
+  summary: string | null;
+  body: string;
+  seoMetadata: unknown;
+  seoSchemaVersion: number;
+  status: string;
+  deletedAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+type NovelRow = { id: string; title: string; description: string; coverUrl: string | null; totalChapterCount: number };
+type PromoLinkRow = { id: string; publicRedirectCode: string };
+type TemplateRow = {
+  id: string;
+  templateKey: string;
+  locale: string | null;
+  version: number;
+  schemaVersion: number;
+  status: string;
+  bodyTemplate: string;
+  seoTemplate: unknown;
+  deletedAt: Date | null;
+};
+
+let nextUpdatedAt = NOW.getTime();
+function bumpedNow(): Date {
+  nextUpdatedAt += 1;
+  return new Date(nextUpdatedAt);
+}
+
+/** Only-what's-used-here in-memory `article`/`articleTemplate`/`novelChapter`/`operationAudit` double. */
+class FakeArticlesDb {
+  readonly articles: ArticleRow[] = [];
+  readonly novels = new Map<string, NovelRow>();
+  readonly promoLinks = new Map<string, PromoLinkRow>();
+  readonly templates: TemplateRow[] = [];
+  readonly audits: Array<Record<string, unknown>> = [];
+
+  private fullRow(row: ArticleRow) {
+    const novel = this.novels.get(row.novelId)!;
+    const promoLink = row.promoLinkId ? this.promoLinks.get(row.promoLinkId) ?? null : null;
+    return {
+      ...structuredClone(row),
+      novel: structuredClone(novel),
+      promoLink: promoLink ? structuredClone(promoLink) : null,
+    };
+  }
+
+  private client() {
+    return {
+      article: {
+        findFirst: async (args: { where: Record<string, unknown> }) => {
+          const row = this.articles.find((candidate) => this.matches(candidate, args.where));
+          return row ? this.fullRow(row) : null;
+        },
+        findFirstOrThrow: async (args: { where: Record<string, unknown> }) => {
+          const row = this.articles.find((candidate) => this.matches(candidate, args.where));
+          if (!row) throw new Error("article_not_found");
+          return this.fullRow(row);
+        },
+        update: async (args: { where: { id: string }; data: Record<string, unknown> }) => {
+          const row = this.articles.find((candidate) => candidate.id === args.where.id);
+          if (!row) throw new Error("article_not_found");
+          Object.assign(row, args.data, { updatedAt: (args.data.updatedAt as Date | undefined) ?? bumpedNow() });
+          return this.fullRow(row);
+        },
+        updateMany: async (args: { where: Record<string, unknown>; data: Record<string, unknown> }) => {
+          const row = this.articles.find((candidate) => this.matches(candidate, args.where));
+          if (!row) return { count: 0 };
+          Object.assign(row, args.data, { updatedAt: (args.data.updatedAt as Date | undefined) ?? bumpedNow() });
+          return { count: 1 };
+        },
+      },
+      articleTemplate: {
+        findFirst: async (args: { where: Record<string, unknown> }) => {
+          const matched = this.templates.filter((row) => this.matchesTemplate(row, args.where));
+          return matched[0] ? structuredClone(matched[0]) : null;
+        },
+      },
+      novelChapter: {
+        count: async () => 0,
+      },
+      operationAudit: {
+        create: async (args: { data: Record<string, unknown> }) => {
+          this.audits.push(structuredClone(args.data));
+          return { id: BigInt(this.audits.length) };
+        },
+      },
+      $transaction: async <T>(run: (tx: unknown) => Promise<T>): Promise<T> => run(this.client()),
+    };
+  }
+
+  private matches(row: ArticleRow, where: Record<string, unknown>): boolean {
+    if (where.id !== undefined && row.id !== where.id) return false;
+    if ("deletedAt" in where && where.deletedAt === null && row.deletedAt !== null) return false;
+    const updatedAt = where.updatedAt as { gte?: Date; lt?: Date } | undefined;
+    if (updatedAt) {
+      if (updatedAt.gte && row.updatedAt.getTime() < updatedAt.gte.getTime()) return false;
+      if (updatedAt.lt && row.updatedAt.getTime() >= updatedAt.lt.getTime()) return false;
+    }
+    return true;
+  }
+
+  private matchesTemplate(row: TemplateRow, where: Record<string, unknown>): boolean {
+    if (where.id !== undefined && row.id !== where.id) return false;
+    if (where.templateKey !== undefined && row.templateKey !== where.templateKey) return false;
+    if (where.status !== undefined && row.status !== where.status) return false;
+    if ("deletedAt" in where && where.deletedAt === null && row.deletedAt !== null) return false;
+    if (where.OR) {
+      const options = where.OR as ReadonlyArray<{ locale?: string | null }>;
+      if (!options.some((option) => row.locale === option.locale)) return false;
+    }
+    return true;
+  }
+
+  asPrismaClient(): PrismaClient {
+    return this.client() as unknown as PrismaClient;
+  }
+}
+
+function seedArticle(db: FakeArticlesDb, overrides: Partial<ArticleRow> & { id: string; novelId: string }): ArticleRow {
+  const row: ArticleRow = {
+    templateId: null,
+    promoLinkId: null,
+    locale: "en",
+    slug: "some-novel",
+    publicPageShortId: "AbCdEf12",
+    title: "Some Novel",
+    summary: "A summary",
+    body: "<p>Original body</p>",
+    seoMetadata: {},
+    seoSchemaVersion: 1,
+    status: "draft",
+    deletedAt: null,
+    createdAt: new Date(NOW),
+    updatedAt: new Date(NOW),
+    ...overrides,
+  };
+  db.articles.push(row);
+  return row;
+}
+
+function seedNovel(db: FakeArticlesDb, id: string, overrides: Partial<NovelRow> = {}): NovelRow {
+  const novel: NovelRow = { id, title: "Some Novel", description: "A description", coverUrl: null, totalChapterCount: 10, ...overrides };
+  db.novels.set(id, novel);
+  return novel;
+}
+
+function seedTemplate(db: FakeArticlesDb, overrides: Partial<TemplateRow> & { id: string; templateKey: string }): TemplateRow {
+  const row: TemplateRow = {
+    locale: "en",
+    version: 1,
+    schemaVersion: 1,
+    status: "active",
+    bodyTemplate: "<article><h1>{novel_title}</h1><p>{novel_description}</p></article>",
+    seoTemplate: { title: "{novel_title}", metaTitle: "{novel_title}", metaDescription: "{novel_description}" },
+    deletedAt: null,
+    ...overrides,
+  };
+  db.templates.push(row);
+  return row;
+}
+
+function authFixture() {
+  const stores = new TestOnlyInMemoryAuthStores();
+  const identity: AdminIdentity = {
+    id: "admin-1",
+    username: "admin",
+    role: "super_admin",
+    status: "active",
+    sessionVersion: 1,
+    twoFactorEnabled: true,
+  };
+  const session: AdminSessionRecord = {
+    id: "session-1",
+    tokenHash: hashAdminSessionToken(TOKEN),
+    identityId: identity.id,
+    sessionVersion: 1,
+    issuedAt: new Date(NOW.getTime() - 60 * 60 * 1000),
+    lastSeenAt: new Date(NOW.getTime() - 60_000),
+    absoluteExpiresAt: new Date(NOW.getTime() + 23 * 60 * 60 * 1000),
+    twoFactorCompletedAt: new Date(NOW.getTime() - 30_000),
+    revokedAt: null,
+  };
+  stores.identities.set(identity.id, identity);
+  stores.sessions.set(session.id, session);
+  return stores;
+}
+
+async function authorization(stores: TestOnlyInMemoryAuthStores, actionId: string, requestId = "550e8400-e29b-41d4-a716-446655440000") {
+  const guarded = await requireAdminActionAccess(
+    { actionId, sessionToken: TOKEN, origin: ORIGIN, canonicalOrigin: ORIGIN, requestId },
+    { identities: stores, sessions: stores, registry: P2_04_ADMIN_REGISTRY, now: NOW, env: {} as NodeJS.ProcessEnv },
+  );
+  return { authorization: guarded.serviceAuthorization!, requestId };
+}
+
+function deps(db: FakeArticlesDb, stores: TestOnlyInMemoryAuthStores) {
+  return { db: db.asPrismaClient(), identities: stores, sessions: stores, now: NOW };
+}
+
+beforeEach(() => {
+  nextUpdatedAt = NOW.getTime();
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
+describe("updateArticleContent", () => {
+  it("写 body（经 N-8 白名单清洗）与 seoMetadata，并落审计", async () => {
+    const db = new FakeArticlesDb();
+    seedNovel(db, "novel-1");
+    const row = seedArticle(db, { id: "article-1", novelId: "novel-1" });
+    const stores = authFixture();
+    const guarded = await authorization(stores, "admin.article.update");
+
+    const updated = await updateArticleContent(
+      {
+        ...guarded,
+        articleId: row.id,
+        expectedUpdatedAt: row.updatedAt.toISOString(),
+        patch: {
+          title: "New Title",
+          summary: "New summary",
+          body: '<p>hi</p><script>alert(1)</script>',
+          metaTitle: "New meta title",
+          metaDescription: "New meta description",
+        },
+      },
+      deps(db, stores),
+    );
+
+    expect(updated.title).toBe("New Title");
+    expect(updated.body).toBe("<p>hi</p>");
+    expect(updated.body).not.toContain("script");
+    expect(updated.seoMetadata).toMatchObject({ metaTitle: "New meta title", metaDescription: "New meta description" });
+    expect(db.audits).toHaveLength(1);
+    expect(db.audits[0]).toMatchObject({ action: "article.update", entityType: "Article", entityId: row.id });
+  });
+
+  it("N-7：expectedUpdatedAt 与当前行不一致时抛 ArticleConflictError，不写入", async () => {
+    const db = new FakeArticlesDb();
+    seedNovel(db, "novel-1");
+    const row = seedArticle(db, { id: "article-1", novelId: "novel-1" });
+    const stores = authFixture();
+    const guarded = await authorization(stores, "admin.article.update");
+
+    await expect(
+      updateArticleContent(
+        {
+          ...guarded,
+          articleId: row.id,
+          expectedUpdatedAt: new Date(row.updatedAt.getTime() - 5_000).toISOString(),
+          patch: { title: "Should not land", summary: "", body: "<p>x</p>", metaTitle: "", metaDescription: "" },
+        },
+        deps(db, stores),
+      ),
+    ).rejects.toBeInstanceOf(ArticleConflictError);
+
+    expect(db.articles.find((candidate) => candidate.id === row.id)!.title).toBe(row.title);
+    expect(db.audits).toHaveLength(0);
+  });
+});
+
+describe("regenerateArticle", () => {
+  it("再生成保留 slug/publicPageShortId 不变（mutation target: 再生成改 slug → 红）", async () => {
+    const db = new FakeArticlesDb();
+    seedNovel(db, "novel-1", { title: "Regenerated Title", description: "Regenerated description" });
+    seedTemplate(db, { id: "template-1", templateKey: "tpl-1" });
+    const row = seedArticle(db, {
+      id: "article-1",
+      novelId: "novel-1",
+      templateId: "template-1",
+      slug: "original-slug-must-survive",
+      publicPageShortId: "OriginalShortId1",
+    });
+    const stores = authFixture();
+    const guarded = await authorization(stores, "admin.article.regenerate");
+
+    const result = await regenerateArticle(
+      { ...guarded, articleId: row.id, expectedUpdatedAt: row.updatedAt.toISOString() },
+      deps(db, stores),
+    );
+
+    expect(result.outcome).toBe("regenerated");
+    const after = db.articles.find((candidate) => candidate.id === row.id)!;
+    expect(after.slug).toBe("original-slug-must-survive");
+    expect(after.publicPageShortId).toBe("OriginalShortId1");
+    expect(after.title).toBe("Regenerated Title");
+  });
+
+  it("N-7：expectedUpdatedAt 不匹配时返回 conflict outcome，不落库", async () => {
+    const db = new FakeArticlesDb();
+    seedNovel(db, "novel-1");
+    seedTemplate(db, { id: "template-1", templateKey: "tpl-1" });
+    const row = seedArticle(db, { id: "article-1", novelId: "novel-1", templateId: "template-1", title: "Stale-check title" });
+    const stores = authFixture();
+    const guarded = await authorization(stores, "admin.article.regenerate");
+
+    const result = await regenerateArticle(
+      { ...guarded, articleId: row.id, expectedUpdatedAt: new Date(row.updatedAt.getTime() - 1_000).toISOString() },
+      deps(db, stores),
+    );
+
+    expect(result.outcome).toBe("conflict");
+    expect(db.articles.find((candidate) => candidate.id === row.id)!.title).toBe("Stale-check title");
+  });
+
+  it("文章不存在时返回 article_not_found", async () => {
+    const db = new FakeArticlesDb();
+    const stores = authFixture();
+    const guarded = await authorization(stores, "admin.article.regenerate");
+    const result = await regenerateArticle(
+      { ...guarded, articleId: "missing", expectedUpdatedAt: NOW.toISOString() },
+      deps(db, stores),
+    );
+    expect(result.outcome).toBe("article_not_found");
+  });
+});
+
+describe("regenerateArticlesBatch", () => {
+  it("超过 50 个选择直接拒绝", async () => {
+    const db = new FakeArticlesDb();
+    const stores = authFixture();
+    const guarded = await authorization(stores, "admin.article.regenerate_batch");
+    const tooMany = Array.from({ length: ARTICLE_REGENERATE_BATCH_MAX + 1 }, (_, index) => `id-${index}`);
+    await expect(regenerateArticlesBatch({ ...guarded, articleIds: tooMany }, deps(db, stores))).rejects.toThrow(
+      "article_batch_selection_invalid",
+    );
+  });
+
+  it("四态：regenerated / skipped(不存在) / failed(无可用模板) / not_processed(超预算)", async () => {
+    const db = new FakeArticlesDb();
+    seedNovel(db, "novel-ok");
+    seedTemplate(db, { id: "template-1", templateKey: "tpl-1", locale: "en" });
+    seedArticle(db, { id: "ok", novelId: "novel-ok", templateId: "template-1", locale: "en" });
+    // No active template exists for "fr" — `selectActiveArticleTemplate` returns null.
+    seedNovel(db, "novel-no-template");
+    seedArticle(db, { id: "no-template", novelId: "novel-no-template", templateId: null, locale: "fr" });
+
+    const stores = authFixture();
+    const guarded = await authorization(stores, "admin.article.regenerate_batch");
+
+    // `Date.now()` is called once for `startedAt`, then once per loop
+    // iteration's budget check (before that item is processed). Exceeding
+    // the budget on the 4th check (index 3, the last id) forces that one
+    // id — and only that one — into `not_processed`.
+    const dateNowSpy = vi.spyOn(Date, "now");
+    dateNowSpy
+      .mockReturnValueOnce(0) // startedAt
+      .mockReturnValueOnce(0) // idx0 check: "ok"
+      .mockReturnValueOnce(0) // idx1 check: "no-template"
+      .mockReturnValueOnce(0) // idx2 check: "missing"
+      .mockReturnValue(ARTICLE_REGENERATE_BUDGET_MS); // idx3 check: "budget-exceeded" -> break
+
+    const result = await regenerateArticlesBatch(
+      { ...guarded, articleIds: ["ok", "no-template", "missing", "budget-exceeded"] },
+      deps(db, stores),
+    );
+
+    expect(result.items).toEqual([
+      { articleId: "ok", status: "regenerated", result: expect.objectContaining({ outcome: "regenerated" }) },
+      { articleId: "no-template", status: "failed", result: expect.objectContaining({ outcome: "template_not_available" }) },
+      { articleId: "missing", status: "skipped", result: expect.objectContaining({ outcome: "article_not_found" }) },
+      { articleId: "budget-exceeded", status: "not_processed" },
+    ]);
+    expect(result.counts).toEqual({ regenerated: 1, skipped: 1, failed: 1, not_processed: 1 });
+  });
+});
