@@ -138,7 +138,11 @@
       与上面两对双闸在**同一次变更**中一起生效；C2b 已验收（见上），
       `moboreader.preview_refresh.v1` 不再需要保持 pending-only。
 - [ ] `home_carousel.compute.v1` 已在 Web action、Scheduler、Worker handler 和 X8 UAT/R allowlist
-      四处登记；`cronEnabled=false` 不建任务，同一 business date 重复调度返回
+      四处登记（PR6 fix lane A 前，Scheduler 一项实际未登记——`scheduler/index.ts` 的
+      `SCHEDULES` 恒为空数组、`enqueueHomeCarouselCron` 零调用者，本行当时属于文档失实；
+      已在 `fix/pr6-lane-a-carousel` 分支补齐首条 `ScheduleDefinition` 并纳入
+      `tests/backend/home-carousel/cron.test.ts` 断言，发布时仍需按下方核对）；
+      `cronEnabled=false` 不建任务，同一 business date 重复调度返回
       `skipped_duplicate`。
 - [ ] IndexNow / Sitemap 双闸维持 Level 0 原值：`FEATURE_INDEXNOW_OUTBOX=false`、
       `INDEXNOW_OUTBOX_ALLOW_WRITE=false`、`FEATURE_INDEXNOW_DELIVERY=false`、

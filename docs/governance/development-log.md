@@ -4,6 +4,62 @@
 
 ---
 
+## 2026-09-05 · PR6 fix lane A — M5 轮播 scheduler 死代码修复 + B-2 咬合测试 + N-3/4/5/6 + 文档失实修正
+
+- 背景：PR #6（`feature/launch-parity-operating-surfaces@a05e41b`）验收 CHANGES_REQUIRED，
+  B-1 发现下方 2026-09-05 条目"`home_carousel.compute.v1` 进入 Scheduler、Worker 与 X8
+  allowlist"一句在写下时并不成立——`scheduler/index.ts` 的 `SCHEDULES` 恒为空数组、
+  `enqueueHomeCarouselCron` 全仓零调用者，Worker/X8 allowlist 三处确已登记但 Scheduler
+  从未真正注册；`V020_RELEASE_CHECKLIST.md:140` 与
+  `docs/p2/LAUNCH_PARITY_OPERATING_SURFACES_2026-09-05.md` 同样写了这句未兑现的话。
+  本条目记录把它补齐、而不是删改下方历史条目的过程。
+- 独立 worktree `cps-novel-pr6-lane-a`（`fix/pr6-lane-a-carousel`，基线同 `a05e41b`）；
+  文件边界限定在 `home-carousel` 相关路径，未碰 `registry.ts`、articles/templates/
+  tagging/settings/security 任一文件，未碰 Codex 的 `cps-novel-launch-parity` worktree。
+- B-1：`scheduler/index.ts` 新增首条 `ScheduleDefinition`（`buildHomeCarouselScheduleDefinition`，
+  新增于 `src/server/home-carousel/service.ts`）；`dueInstants`/`build` 按框架契约保持同步、
+  不带 db 句柄，改为读取 `main()` 每 tick 刷新一次的闭包配置快照。新增一枚极简 5 段 crontab
+  匹配器（`isHomeCarouselCronDue`，分钟精度，匹配 scheduler 进程本身的 tick 节奏）。
+  `cronEnabled=false` 时 `dueInstants` 直接返回空数组——不建 ScheduleRun/CronRun/GenericTask，
+  不是"建了再撤销"。默认时区由未登记偏离的 `Asia/Tokyo` 改回规格值 `Asia/Shanghai`。
+  `enqueueHomeCarouselCron`（原零调用者）保留为异步便捷入口，与 `ScheduleDefinition.build`
+  共享同一个纯函数 `buildHomeCarouselCronTaskInput`，不会出现两条实现分叉。scheduler 进程
+  仍只登记任务类型元数据（`family:"generic"`），从不执行 handler——真正执行体仍在 Worker
+  自己的 registry（`createWorkerHandlers`）里，这条边界由既有
+  `tests/backend/auth/p1-08b-production-contracts.test.ts`/`tests/backend/tasks/
+  scheduler-boundary.test.ts` 的源码扫描继续守着（改动过程中两次踩中这两个断言的禁用词，
+  已改措辞规避，未改断言本身）。
+- B-1 #3：`normalizeHomeCarouselConfig` 原先读了 `slotCount`/`newSlotCount`/
+  `newNovelWindowDays` 又丢弃、compute 侧全用字面量 5/1/14。现按 CPS
+  `home-carousel-config.ts` 的校验口径接住三个字段（slotCount 整数 ≥1；newSlotCount 整数
+  0-2；newNovelWindowDays 整数 ≥0，越界或非法回落默认值，不是 throw），`computeHomeCarouselInTx`
+  与 `upsertHomeCarouselManualSlot` 的 position 上限全部真读这三个值。
+- N-5：新增 `deleteHomeCarouselManualSlot`（写 `deletedAt`，change log 记
+  `manual_slot.delete`）；管理页加删除按钮（`window.confirm` 二次确认）。复用既有
+  `admin.home_carousel.manual_upsert` action id/`settings:manage` 能力位，未新增第 4 个
+  action id——`src/app/api/admin/_lib/registry.ts` 不在本 lane 文件边界内。
+- N-6：`/home-carousel` 管理页新增三块视图（最新批候选按 rank、serving 预览按 position 并
+  标注 manual/new_novel/recency 来源、change log 最近 50 条只读）；新增
+  `listLatestHomeCarouselCandidates`/`listHomeCarouselServing`/`listHomeCarouselChangeLog`
+  三个只读服务函数。
+- N-3/N-4：`docs/governance/port-registry.md` 补登记两条显式偏离——收入评分 W/τ/α 三参数
+  随 `revenueEnabled` 恒 false 一并从类型里删除（非"读了不用"）；配置可写字段从 CPS 的 5
+  个（4 个是收入相关，Novel 无意义）改为 Novel 自己的 3 个（cronSchedule/cronTimezone/
+  cronEnabled）。
+- 测试：`tests/backend/home-carousel/{compute,merge,queries,cron,actions-capability}.test.ts`
+  新增（fake-db in-memory 双，同 `tests/backend/tasks/promo-link-claim-factory-fake-db.ts`
+  设计）；`source-boundaries.test.ts`/`x8-production-like-contract.test.ts` 追加断言；
+  `tests/ui/home-carousel-admin.test.tsx` 新增。五项变异自检见 PR 报告，逐项复原。
+- 门禁：`typecheck`/`lint`/`test:ui`（108 files/1751 tests）/`build` 全绿；`test:backend`
+  仅 `publish-gate/no-bypass.test.ts`（`scripts/s1-exact-target-structural-smoke.ts` 的
+  `$executeRawUnsafe` 历史误报，未改该文件，与 main 同签名）与
+  `tests/backend/tagging/p2-06-5-governance.test.ts`（断言 `scheduler/index.ts` 源码字面量
+  `"SCHEDULES: readonly ScheduleDefinition[] = Object.freeze([])"`——B-1 要求的改动必然改掉
+  这个字面量；该测试文件属 tagging 边界，不在本 lane 可改范围，留给该测试的 owner 更新断言
+  为"不得引入 tagging 依赖"而非"SCHEDULES 恒空"）两处失败；X8 三级 render-only 验证全 PASS
+  （容器为会话开始前已运行的既有 X8 环境，本 lane 未 up/down 任何容器）。
+- 未 push、未 merge、未部署、未碰 prisma/migration（`carouselConfigJson` 列已在）。
+
 ## 2026-09-05 · CPS 海阅首发后台与 SEO 运营面补全
 
 - 从 clean `main@f99c25e` 的独立 worktree 实施 M0–M12；主检出保持只读。

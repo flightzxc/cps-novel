@@ -21,11 +21,18 @@
 
 - Admin routes：既有 `/api/admin/site-settings` 扩展 13 字段；Tagging GET/PUT routes 在组合 registry
   中按 method 绑定 `content:view`/`tag:manage`。
-- 新 actions：template 4、article 3、carousel 3、security 3；均由
+- 新 actions：template 4、article 3、carousel 3（`admin.home_carousel.manual_upsert` 复用于
+  N-5 人工位删除——PR6 fix lane A 未新增第 4 个 action id，因为 `P2_04_ADMIN_REGISTRY`
+  不在该 lane 的文件边界内；delete 与 upsert 同属 `settings:manage`、同一人工位资源，
+  语义上是同一 action 的另一种写法）、security 3；均由
   `P2_04_ADMIN_REGISTRY` 默认拒绝模型登记。业务类写服务继续执行 capability/service ticket 二次
   鉴权与 operation audit；本人安全动作绑定当前 session/identity/request ID。
 - 新任务：`home_carousel.compute.v1`，同时登记 Web action、Scheduler、GenericTask Worker handler、
-  Level 0/UAT/R allowlist；`tagging.auto_classify` 保持 explicit-only，不进 Scheduler/X8 allowlist。
+  Level 0/UAT/R allowlist（PR6 fix lane A 前，Scheduler 一项实为空文档——`SCHEDULES`
+  恒为空数组、`enqueueHomeCarouselCron` 零调用者；已在 `fix/pr6-lane-a-carousel` 补齐
+  首条 `ScheduleDefinition`，见 `tests/backend/home-carousel/cron.test.ts` 与
+  `tests/backend/runtime/x8-production-like-contract.test.ts` 的 B-1 #4 断言）；
+  `tagging.auto_classify` 保持 explicit-only，不进 Scheduler/X8 allowlist。
 - 迁移：`20260905090000_site_setting_carousel_config` 仅增 `jsonb NOT NULL DEFAULT '{}'`；Tagging
   migration 为从冻结的 18 提交历史集成的 additive schema，不含 seed/backfill。
 - 导航常驻：`/templates`、`/articles`、`/home-carousel`、`/categories`、`/settings/security`；
