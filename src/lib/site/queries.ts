@@ -322,22 +322,22 @@ export async function getPublicChapterView(
  * — it keeps calling this with two arguments and gets the original
  * self-fetching behavior.
  *
- * 🔴 Not wired into `src/app/page.tsx` yet, even though that page is exactly
- * the caller this was built for (its `generateMetadata`/body both call
- * `@/app/_lib/public-load`'s `loadChrome("home")` *and*, separately, that
- * module's own `loadPublicCategories(locale)` — two independent
- * `listPublicCategories` round-trips per render). Wiring the fix requires
- * either changing `loadChrome`'s signature or adding a variant, both in
- * `src/app/_lib/public-load.ts` — outside this lane's file boundary, and
- * that module is also the exact mock boundary `tests/ui/public-routes.test.tsx`
- * (outside this lane too) relies on: calling `getSiteSetting`/`loadPublicChrome`
- * directly from `page.tsx`, bypassing `public-load.ts`'s React-cache-wrapped
- * exports, breaks that test's Prisma mocking (verified: it does, real
- * `DATABASE_URL` errors) and was reverted for exactly that reason. This
- * parameter — and `tests/backend/site/public-query-budget.test.ts`, which
- * exercises it directly against `queries.ts` — exist so the capability is
- * ready and regression-tested the moment an integrator adds the matching
- * `public-load.ts` variant and threads it through `page.tsx`.
+ * Wired into `src/app/page.tsx` (lane D): `@/app/_lib/public-load`'s
+ * `loadChrome` now forwards an optional second argument down to this
+ * function's `categories` parameter, and both `generateMetadata` and the
+ * default export there fetch `loadPublicCategories(locale)` once and hand the
+ * (request-deduped, reference-equal) result to `loadChrome("home",
+ * categories)`, instead of `loadChrome("home")` running its own internal
+ * categories query *and* the page separately calling `loadPublicCategories`
+ * again. This landed as a `loadChrome` signature change rather than a new
+ * export precisely so `tests/ui/public-routes.test.tsx`'s
+ * `vi.mock("@/app/_lib/public-load", () => ({ loadChrome: vi.fn(), ... }))`
+ * factory (outside this lane's file boundary, not to be edited) keeps
+ * resolving `loadChrome` to a real mock function regardless of how many
+ * arguments `page.tsx` passes it — a second export absent from that fixed
+ * factory would be `undefined` at render time.
+ * `tests/backend/site/public-query-budget.test.ts` pins the resulting
+ * per-render query count.
  */
 export async function loadPublicChrome(
   db: PrismaClient | Prisma.TransactionClient,

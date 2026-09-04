@@ -13,10 +13,44 @@ import {
   resolvePublicArticleBySlugParam,
   type PublicChromeCurrent,
 } from "@/lib/site/queries";
+import type { PublicTaxonomyTag } from "@/lib/site/public-taxonomy";
 import { getHomeCarouselItems } from "@/lib/site/home-carousel-service";
 
 
-export const loadChrome = cache(async (current?: PublicChromeCurrent) => loadPublicChrome(prisma, current));
+/**
+ * N-9 (lane D wiring): `categories` is an optional second argument so a
+ * caller that has already computed the taxonomy list via
+ * `loadPublicCategories` for its own purposes (`src/app/page.tsx`'s
+ * `HomeScreen` `categories` prop) can pass it straight through, and
+ * `loadPublicChrome` skips re-running `listPublicCategories`'s
+ * `article.findMany` + taxonomy lookup a second time for the footer. Every
+ * other caller (`category/[slug]`, `novel/[slugParam]`, its
+ * `chapter/[chapterNumber]`, `browse`) keeps calling this with one argument
+ * and gets the original self-fetching behavior.
+ *
+ * This stayed a signature change rather than a new export deliberately:
+ * `tests/ui/public-routes.test.tsx` mocks this module with a fixed
+ * `vi.mock("@/app/_lib/public-load", () => ({ loadChrome: vi.fn(), ... }))`
+ * factory (outside this lane's file boundary, not to be edited) — a second
+ * export not present in that factory would be `undefined` when
+ * `src/app/page.tsx` called it, throwing at render. `loadChrome` itself is
+ * already in that factory as a bare `vi.fn()`, so an extra argument is a
+ * silent no-op for the mock and the existing `mockResolvedValue` still
+ * answers every call regardless of arity.
+ *
+ * Both this and `loadPublicCategories` are `React.cache()`-scoped per
+ * request: when `src/app/page.tsx`'s `generateMetadata` and its default
+ * export each call `loadPublicCategories(locale)` then `loadChrome("home",
+ * categories)` with the same locale and the same (cache-deduped,
+ * reference-equal) categories array, the pair collapses to one underlying
+ * `getSiteSetting` + one `listPublicCategories` round-trip for the whole
+ * render, not two of each. See `tests/backend/site/public-query-budget.test.ts`
+ * for the query-count regression gate.
+ */
+export const loadChrome = cache(
+  async (current?: PublicChromeCurrent, categories?: readonly PublicTaxonomyTag[]) =>
+    loadPublicChrome(prisma, current, categories),
+);
 
 export const loadHomeNovels = cache(async (locale: SiteLocale) => listHomeNovels(prisma, locale));
 export const loadPublicCategories = cache(async (locale: SiteLocale) => queryPublicCategories(prisma, locale));

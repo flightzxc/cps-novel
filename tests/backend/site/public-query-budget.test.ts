@@ -15,38 +15,37 @@ import { PUBLIC_SITE_LOCALE } from "@/lib/site/locale-label";
  * N-9 (施工规格 / 交接提示词): a regression gate on how many DB round-trips
  * one page render costs, plus one capability this file adds and locks in.
  *
- * Finding: `src/app/page.tsx` (home) calls `@/app/_lib/public-load`'s
+ * Finding (Lane B): `src/app/page.tsx` (home) called `@/app/_lib/public-load`'s
  * `loadChrome("home")` (settings + a full `listPublicCategories` query, for
  * the footer) *and*, separately, that module's own `loadPublicCategories
  * (locale)` (the same underlying query again, for `HomeScreen`'s own
  * `categories` prop) — two independent `listPublicCategories` round-trips
  * per home-page render for data that is identical both times (same locale,
- * same published-article snapshot).
+ * same published-article snapshot). `loadPublicChrome` (`@/lib/site/queries`)
+ * gained an optional third `categories` parameter so a caller who already has
+ * the list can pass it in instead of triggering a second query.
  *
- * 🔴 Not fixed in `page.tsx` — attempted, then reverted. `loadPublicChrome`
- * (`@/lib/site/queries`) below gained an optional third `categories`
- * parameter so a caller who already has the list can pass it in instead of
- * triggering a second query (see that function's doc comment). Wiring it
- * into `page.tsx` requires also changing `@/app/_lib/public-load.ts`'s
- * `loadChrome` (either its signature or a new variant) — outside this
- * lane's file boundary. Worse, `page.tsx` calling `queries.ts`/`getSiteSetting`
- * directly (bypassing `public-load.ts`'s React-cache-wrapped exports, which
- * is what an in-boundary-only fix would have to do) breaks
- * `tests/ui/public-routes.test.tsx` (outside this lane too, not to be
- * edited): that suite mocks `@/app/_lib/public-load` but not
- * `@/lib/site/queries` or the real Prisma client, so any direct call throws
- * a `DATABASE_URL` error. Verified by hand, then reverted. This is flagged
- * in the lane report as a follow-up for whoever owns `public-load.ts`.
+ * Fixed (Lane D): `@/app/_lib/public-load`'s `loadChrome` now forwards an
+ * optional second argument down to `loadPublicChrome`'s `categories`
+ * parameter (a signature change, not a new export — see that function's doc
+ * comment for why: `tests/ui/public-routes.test.tsx`'s fixed `vi.mock`
+ * factory only knows the existing export names). `src/app/page.tsx`'s
+ * `generateMetadata` and default export both now call
+ * `loadPublicCategories(locale)` once and hand the result to `loadChrome
+ * ("home", categories)`, so the redundant second `listPublicCategories`
+ * round-trip is gone.
  *
- * So this file does two things instead of one:
- *  1. Pins the *current, unfixed* production call pattern's query count as a
- *     ceiling — "≤ this many", not "exactly this many" — so a *further*
- *     regression still fails CI even though this specific inefficiency
- *     isn't closed yet.
+ * So this file does two things:
+ *  1. Pins the *fixed* production call pattern's query count as a ceiling —
+ *     "≤ this many", not "exactly this many" — so a regression still fails
+ *     CI. Was ≤ 7 (pre-fix: `loadPublicChrome` without `categories` +
+ *     a separate `listPublicCategories` + `listHomeNovels`, three
+ *     `article.findMany` calls); now ≤ 5 (`listPublicCategories` once +
+ *     `loadPublicChrome(..., categories)` + `listHomeNovels`, two
+ *     `article.findMany` calls — see the test below for the exact
+ *     before/after breakdown).
  *  2. Proves the `loadPublicChrome(..., categories)` capability itself works
- *     (no second query when `categories` is supplied) — a real, tested
- *     building block, ready for whoever wires it into `public-load.ts` +
- *     `page.tsx` together.
+ *     in isolation (no second query when `categories` is supplied).
  *
  * `getSiteSetting`'s own 30s process-local TTL cache
  * (`server/site-settings/service.ts`) means a *warm* cache serves every
@@ -61,14 +60,16 @@ import { PUBLIC_SITE_LOCALE } from "@/lib/site/locale-label";
  * coverage — deliberately excluded from this budget rather than
  * approximated.
  *
- * 🔴 Separately: `listPublicArticles` (called by `listHomeNovels`) and
- * `listPublicCategories` independently run the *exact same* `article.findMany`
- * query (same `buildPublicArticleWhere({locale})`, `ARTICLE_CARD_SELECT`,
- * `take`) — a second, older duplication this lane did not touch. Collapsing
- * it behind one cached fetch would need every current caller of either
- * function — including tests outside this lane's file boundary that inject
- * a fake `db: PrismaClient` per call — audited for compatibility first,
- * which is out of this lane's time budget. Also flagged in the lane report.
+ * 🔴 Still open, not this lane's fix either: `listPublicArticles` (called by
+ * `listHomeNovels`) and `listPublicCategories` independently run the *exact
+ * same* `article.findMany` query (same `buildPublicArticleWhere({locale})`,
+ * `ARTICLE_CARD_SELECT`, `take`) — visible below as the home page's remaining
+ * two `article.findMany` calls for what is, on the wire, one query executed
+ * twice. Collapsing it behind one cached fetch would need every current
+ * caller of either function — including tests outside this lane's file
+ * boundary that inject a fake `db: PrismaClient` per call — audited for
+ * compatibility first, which is out of this lane's time budget too. Flagged
+ * again in the lane report for whoever picks it up next.
  */
 
 type ArticleCardRow = {
@@ -184,31 +185,36 @@ beforeEach(() => {
 });
 
 describe("公开侧一次渲染的查询数（cold cache）", () => {
-  it("首页（当前生产调用形态，未接线修复）：getSiteSetting + listPublicCategories 形态合计 ≤ 7 次新增查询", async () => {
+  it("首页（N-9 已接线，lane D）：categories 只查一次，合计 ≤ 5 次新增查询（原 ≤ 7）", async () => {
     const db = new CountingFakeDb();
     const client = db.asPrismaClient();
 
-    // Mirrors `src/app/page.tsx` as it actually calls `@/app/_lib/public-load`
-    // today: `loadChrome("home")` (settings + its own internal categories
-    // query, here simulated as `loadPublicChrome` with no `categories` arg)
-    // *and* a separate `loadPublicCategories` call for `HomeScreen`'s prop —
-    // the duplication this file's header documents as not yet fixed.
-    await loadPublicChrome(client, "home");
-    await listPublicCategories(client, PUBLIC_SITE_LOCALE);
+    // Mirrors `src/app/page.tsx` as it now calls `@/app/_lib/public-load`
+    // after lane D's wiring: `loadPublicCategories(locale)` once, whose
+    // result is handed to `loadChrome("home", categories)` (here simulated
+    // directly against `queries.ts` as `loadPublicChrome(client, "home",
+    // categories)`) instead of `loadChrome("home")` re-querying categories
+    // internally. `generateMetadata` and the page body both do this same
+    // pair of calls in production, but `React.cache()` request-scoping
+    // dedupes them to exactly the one round-trip each modelled here.
+    const categories = await listPublicCategories(client, PUBLIC_SITE_LOCALE);
+    await loadPublicChrome(client, "home", categories);
     await listHomeNovels(client, PUBLIC_SITE_LOCALE);
 
     const settingAndCategoryCalls =
       db.countOf("siteSetting.findUnique") + db.countOf("article.findMany") + db.countOf("$queryRaw (taxonomy)");
-    expect(settingAndCategoryCalls).toBeLessThanOrEqual(7);
+    expect(settingAndCategoryCalls).toBeLessThanOrEqual(5);
     // Pin the exact shape too, so a regression that trades one call for a
     // different one still fails loudly instead of hiding under the sum.
     expect(db.countOf("siteSetting.findUnique")).toBe(1);
-    // loadPublicChrome's internal listPublicCategories + the page's own
-    // separate listPublicCategories call + listHomeNovels(->listPublicArticles):
-    // three separate `article.findMany` calls for what is, twice over, the
-    // exact same query.
-    expect(db.countOf("article.findMany")).toBe(3);
-    expect(db.countOf("$queryRaw (taxonomy)")).toBe(3);
+    // listPublicCategories once + listHomeNovels(->listPublicArticles) once:
+    // down from 3 (loadPublicChrome's own internal listPublicCategories call
+    // is gone now that `categories` is supplied). The remaining 2 are the
+    // still-open, separate duplication documented in this file's header —
+    // `listPublicCategories` and `listPublicArticles` run the identical
+    // `article.findMany` query for what are conceptually two different reads.
+    expect(db.countOf("article.findMany")).toBe(2);
+    expect(db.countOf("$queryRaw (taxonomy)")).toBe(2);
   });
 
   it("loadPublicChrome(..., categories) 能力：预先算好的 categories 不触发第二次查询（capability 就绪，尚未接入 page.tsx，见文件头注释）", async () => {
