@@ -335,6 +335,20 @@ Owner 没有验证器/恢复码，密码通过验证后被 `/two-factor/challeng
 | `createTotpQrCodeDataUrl`（`QRCode.toDataURL(uri,{errorCorrectionLevel:"M",margin:1,width:256})`） → `src/lib/auth/totp.ts` 同名函数 | `src/lib/totp.ts` | `63-68` | `16f2e4cfca51f46af0dede899ecf6242a770bbd0` | `ADAPT` | 三个渲染参数逐字照搬；**不搬** CPS 用 `otpauth` 包构造 URI/issuer/label 的方式——本仓 `createTotpUri`（既有，RC-11 未改）已用自实现 base32/HMAC-SHA1 独立构造 otpauth URI，`createTotpQrCodeDataUrl` 只接收现成 URI 字符串渲染成图，不改 TOTP 算法或 issuer/label 形态 | Claude |
 | `admin.username` 单一 `super_admin` 种子形态 → `scripts/ensure-local-admin-identities.ts` | `scripts/seed-admin.ts` | `8,15,23` | `16f2e4cfca51f46af0dede899ecf6242a770bbd0` | `PATTERN_ONLY` | 只借"env 注入密码、已存在则跳过、无 argv 明文"的形态；**不搬** CPS 单账户/无长度校验/bcrypt cost 12——本仓固定 `admin`+`admin2` 两账户、scrypt（复用既有 `hashAdminPassword`）、`ADMIN_LOCAL_IDENTITY_SEED=allow` 硬门禁下才允许 <12 位、写 `OperationAudit`、`--reset-password` 才更新既有账户 | Codex |
 
+### 2026-09-05 · Launch parity operating surfaces（v8.3.6）
+
+以下实现先记录 CPS 原始语义，再作 Drama/Episode→Novel/Chapter 与 PostgreSQL 必要适配；没有
+越过冻结 tag 读取 CPS 工作树。
+
+| symbol | source_file | source_lines | baseline_commit | port_kind | changed_what | owner |
+| --- | --- | --- | --- | --- | --- | --- |
+| Home carousel config/compute/merge/queries | `src/lib/home-carousel-config.ts`; `src/lib/home-carousel-compute.ts`; `src/lib/home-carousel-merge.ts`; `src/lib/home-carousel-queries.ts` | config 全文件；compute `357-425,586-639`; merge `126-204`; queries `78-236` | `16f2e4cfca51f46af0dede899ecf6242a770bbd0` | `ADAPT` | slot/new/window/500 上限、去重、无封面过滤不变；Drama→Novel，收入分支恒禁用，SQLite 访问改 Prisma/PostgreSQL | Codex |
+| Template CRUD/default selection | `src/lib/template-actions.ts`; `src/lib/article-generation.ts` | `1-183`; `168-250` | `16f2e4cfca51f46af0dede899ecf6242a770bbd0` | `ADAPT` | 复用本仓 fail-closed engine；fallback key 固定 system-default-v1；选择改 templateKey 并持久化 templateId | Codex |
+| Article edit/regenerate/public SEO | `src/lib/article-actions.ts`; `src/app/drama/[slug]/page.tsx`; `src/lib/blog-seo.ts` | `296-416,535-770`; `126-197`; `215-231` | `16f2e4cfca51f46af0dede899ecf6242a770bbd0` | `ADAPT` | Drama→Novel；保 slug/shortId；批量增加 50/25s 预算；公开只消费安全 Article 字段 | Codex |
+| Category page/SEO/sitemap projection | `src/app/category/[slug]/page.tsx`; `src/lib/seo-templates/category.ts`; `src/lib/sitemap.ts` | `38-130`; 全文件；`295-367` | `16f2e4cfca51f46af0dede899ecf6242a770bbd0` | `PATTERN_ONLY` | 不搬 Category 表；投影 CanonicalTag manual/mapped，按 sortOrder，空分类 fail closed | Codex |
+| Site settings 13 fields and consumers | `src/components/admin/settings-form.tsx`; `src/app/layout.tsx`; `src/components/site-footer.tsx` | `17-32`; `33-38,55-57,99`; `36-53` | `16f2e4cfca51f46af0dede899ecf6242a770bbd0` | `ADAPT` | 沿用 13 字段、GA4/GSC/footer 消费；friendLinks 改 jsonb，写入继续乐观锁/审计 | Codex |
+| Security state and recovery regeneration | `src/app/settings/security/page.tsx`; `src/components/security-panel.tsx`; `src/lib/two-factor-settings.ts` | `1-21`; 状态/动作；`115-240` | `16f2e4cfca51f46af0dede899ecf6242a770bbd0` | `ADAPT` | 四态、当前 TOTP、事务替换与 sessionVersion++ 不变；复用端口化 Auth store，无自助禁用 | Codex |
+
 ## 使用说明
 
 - `symbol`：被搬运的具体符号名（函数名/类型名/表名/字段名/组件名等），一行一个符号，不得用文件级粗粒度笼统登记；

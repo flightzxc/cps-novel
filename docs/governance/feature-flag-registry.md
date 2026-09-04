@@ -4,12 +4,21 @@
 | --- | --- | --- | --- |
 | `FEATURE_NOVEL_CATALOG_SYNC` | `false` | manual task factory, MoboReader catalog Worker handler | Allows the proven read-only `getlistpc` catalog workflow to be queued/consumed. |
 | `NOVEL_CATALOG_SYNC_ALLOW_WRITE` | `false` | manual task factory, MoboReader catalog Worker handler | Allows protected business writes only when the feature flag is also true and task mode is `apply`. |
+| `FEATURE_P2_06_5_TAGGING` | `false` | Tagging resolver、Admin routes、bootstrap/backfill | CanonicalTag 总闸；仅 exact `"true"` 开启读取与管理面。 |
+| `FEATURE_P2_06_5_TAG_ADMIN_WRITE` | `false` | CanonicalTag/mapping/manual snapshot Admin services | taxonomy、mapping 与 manual snapshot 写闸；仍需 `tag:manage`、2FA、request ID 与审计。 |
+| `FEATURE_NOVEL_TAG_AUTO` | `false` | resolver、tagging task factory/worker | 允许读取 auto layer 与创建 auto task；不等于授权生产写入。 |
+| `AUTO_WRITE_AUTHORIZED` | `NO` | auto classification Worker | 最终 Owner gate，仅 exact `"YES"` 放行 scoped auto apply；本次交付保持 `NO`。 |
 | `FEATURE_INDEXNOW_OUTBOX` | `false` | `src/lib/indexnow/dispatch-handler.ts`'s `enqueueIndexNow`, `outbox.ts`'s `enqueueIndexNowFirstPublish`/`releaseDeferredIndexNowOutbox` | Allows the IndexNow outbox enqueue path to run at all (P2-11). |
 | `INDEXNOW_OUTBOX_ALLOW_WRITE` | `false` | same as above | Allows `indexnow_outbox` rows to actually be written; both this and `FEATURE_INDEXNOW_OUTBOX` must be `true`. |
 | `FEATURE_INDEXNOW_DELIVERY` | `false` | `src/lib/indexnow/sweep.ts`'s `sweepDueIndexNowDeliveries`, `worker/handlers/indexnow-delivery.ts` | Allows the delivery sweep to create `GenericTaskItem`s and the worker handler to run at all. |
 | `INDEXNOW_DELIVERY_ALLOW_WRITE` | `false` | same as above | Allows the worker handler to call the real IndexNow API and write attempt/outcome data; both this and `FEATURE_INDEXNOW_DELIVERY` must be `true`. |
 
 Both `FEATURE_NOVEL_CATALOG_SYNC`/`NOVEL_CATALOG_SYNC_ALLOW_WRITE` use exact `=== "true"` parsing. A `dry_run` may read and build a plan when the feature flag is true, but the P1 runtime strips its protected write before finalization.
+
+Tagging 的三层开关独立：master 关闭时全体 fail closed；Admin write 只控制人工治理写；auto flag
+只控制 auto layer/task。auto apply 必须同时满足 master、auto flag 与
+`AUTO_WRITE_AUTHORIZED === "YES"`。本次 category public projection 只读 manual/mapped，不新增或
+放宽任何 auto-write 路径。
 
 The four IndexNow flags (P2-11, `P2_07_12_一轮实施分工方案_2026-08-12.md` §三 Stream E) are deliberately two *independent* double-gate pairs rather than one pair shared by both capabilities, matching the round's rollout convention ("enqueue 先行、worker 后开", `P2-07-12-移植审计-2026-08-12/P2-11.md` §11 红旗5): operators can turn on outbox writes first to inspect accumulated candidate URLs/eligibility before the worker ever calls the real external IndexNow API. All four use exact `=== "true"` parsing, same as the pair above.
 | `FEATURE_SITEMAP_AUTO_REFRESH` | `false` | Sitemap refresh enqueue adapter | Allows a filesystem-only Sitemap refresh task to be queued after publication. Disabled means no task row is created. |

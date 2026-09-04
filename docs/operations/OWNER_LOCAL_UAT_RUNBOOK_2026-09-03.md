@@ -205,6 +205,12 @@ scripts/x8-production-like.sh admin-reset x8-owner --deactivate --apply    # 确
 | 14 | 无效码与软删码返回 404 | `/go/{不存在的码}`、`/go/{已软删的码}` | 两者均 HTTP 404（`src/app/go/[code]/route.ts` 对 `deletedAt != null` 和未命中记录均返回 `notFound()`） | 截图或 `curl -I` |
 | 15（Claude/Codex 操作） | 停止 postgres 容器，验证故障可见性 | `/api/health`；再次点击步骤 13 的 CTA | `/api/health` 返回 503（`src/app/api/health/route.ts` 对 `report.ok=false` 返回 503，已核实）。**关于 CTA 302 的说明见下方脚注** | 截图 + `/api/health` 响应体 |
 | 16 | 下架并 takedown | `/novels/{novelId}`（发布生命周期面板，`publish-lifecycle-panel`） | 公开页 `/novel/{slug}` 返回 404 且响应头 `X-Robots-Tag`/meta 带 `noindex`；已物化章节被撤回（不可读） | 截图（公开页 404）+ 截图（后台撤回状态） |
+| 17 | 首页轮播运营 | `/home-carousel` | 配置可保存；人工位写入后首页 Hero 命中；清空 serving 时回退到最近 5 本有封面的已发布书 | 后台与首页截图 |
+| 18 | 模板管理与选择 | `/templates`、`/catalog-sync` | 新模板通过 fail-closed 校验后启用；创建内容显式选择该模板，Article.templateId 命中 | 后台截图 + 只读 SQL |
+| 19 | 文章编辑与 SEO | `/articles`、`/novel/{slug}` | 编辑 title/summary/body/SEO，单篇及批量再生成保留 slug/shortId；公开 head/body/FAQ JSON-LD 使用文章值 | 后台与公开页截图 |
+| 20 | 分类公开链 | `/categories`、`/browse?category=...`、`/category/{slug}` | manual 分类与 mapped 派生均可读，空分类 404；首页/footer 与 sitemap generator 按 sortOrder | 后台、browse、category 截图 |
+| 21 | 站点设置 consumer | `/settings`、公开首页 | 13 字段可编辑；GSC、GA4、OG site_name、home metadata、友链、版权与免责声明进入公开输出 | 后台截图 + head/footer 截图 |
+| 22（最后执行） | 账号安全 | `/settings/security` | 四态正确；regenerate 必须当前 TOTP，旧恢复码失效且 sessionVersion+1；新码只显示一次，无自助禁用 | 一次性码不得截图/落日志；只记录脱敏 PASS |
 
 **步骤 15 脚注（核实结论，非假设）**：`src/app/go/[code]/route.ts` 对每次请求
 都直接 `prisma.promoLink.findUnique(...)`，文件顶部显式 `export const dynamic =
@@ -219,7 +225,7 @@ stale-if-error 配置。据此代码路径，PostgreSQL 真的停止后，`/go/{
 
 ## 4. 通过判定
 
-16 步全部完成，且过程中：
+22 步全部完成，且过程中：
 
 - Owner 没有手工改任何 `.env`/compose 覆盖值；
 - Owner 没有直接执行任何脚本（`scripts/*.ts`、`scripts/*.sh`）——脚本类操作

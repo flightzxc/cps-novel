@@ -4,6 +4,20 @@
 
 ---
 
+## 2026-09-05 · CPS 海阅首发后台与 SEO 运营面补全
+
+- 从 clean `main@f99c25e` 的独立 worktree 实施 M0–M12；主检出保持只读。
+- 完成 enforcement-aware 能力投影、目录写闸三态、创建后 preview 入队、轮播、模板、文章、
+  CanonicalTag 分类公开链、13 字段站点设置与安全页恢复码事务轮换。
+- Tagging V3 仅从 `1237b17` 相对 `c5bf508` 的 18 个已提交历史重放；manual/mapped 公开读取，
+  `AUTO_WRITE_AUTHORIZED=NO`，无 taxonomy auto write。
+- 新 mutation 入口全部进入 Admin registry；`home_carousel.compute.v1` 进入 Scheduler、Worker 与
+  X8 allowlist；`SiteSetting.carouselConfigJson` migration、数据库字典和列级授权同步。
+- X8 原始截图、只读 SQL、门禁输出与 mutation 证据只保存在忽略目录
+  `.tmp/x8-production-like/evidence/`，不进入 Git。远端 push、PR、部署与 tag 均未执行。
+
+详见 `docs/p2/LAUNCH_PARITY_OPERATING_SURFACES_2026-09-05.md`。
+
 ## 2026-09-04 · RC-11 本地管理员认证恢复 + 2FA 首次绑定 QR
 
 - 事故背景：X8 复用旧 PostgreSQL volume，遗留管理员 `x8-owner` 已在 2026-08-26 完成

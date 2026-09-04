@@ -19,12 +19,21 @@ KEYWORD_ELIGIBILITY_VERSION    = keyword-eligibility-v2
 KEYWORD_ELIGIBILITY_SHA256     = e796ba1ed79b344f790a70853d2e9773d6265e307615b2a60da28b90a6164854
 AUTO_WRITE_AUTHORIZED          = NO
 PRODUCTION_IMPLEMENTATION_AUTHORIZED = YES
-PRODUCTION_IMPLEMENTATION_STATUS     = IN_PROGRESS
+PRODUCTION_IMPLEMENTATION_STATUS     = COMPLETE
 ```
 
 本 ADR 是 P2-06.5 Tagging 的唯一权威工程合同。旧
 `docs/p2/P2_06_5_ADR_TAGGING.md` 已被本文件 supersede；与本文件冲突的旧短路、locale Tag
 identity、mapping FK 或 auto 生命周期描述全部失效。
+
+## 2026-09-05 Owner amendment · public category projection
+
+Owner 将 CanonicalTag 的公开只读投影纳入首发范围，supersede 原决定 10 中“不是本期 public
+SEO contract”的时间范围，不改变其余 Tagging V3 语义。`/categories` 复用 CanonicalTag 管理；
+公开 `/category/[slug]`、`/browse?category=`、首页/页脚入口与 category sitemap 只消费 active
+CanonicalTag，并按 `sortOrder, stableId` 排序。有效分类仍是 manual FULL_SNAPSHOT 或 automatic
+mode 下的 mapped read-derived 结果；公开路径不物化 mapped、不执行任何 auto write。空分类 404
+且不进 sitemap。`AUTO_WRITE_AUTHORIZED=NO` 保持冻结。
 
 ## 1. Context
 

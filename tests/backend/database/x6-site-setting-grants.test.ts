@@ -55,16 +55,25 @@ describe("X6 SiteSetting infrastructure and registry contracts", () => {
       expect(record.read_roles).not.toContain("scheduler_app");
     }
     for (const field of [
+      "site_name",
+      "site_description",
+      "home_meta_title",
+      "home_meta_description",
       "default_og_image",
+      "google_search_console_verification",
+      "footer_copyright_text",
+      "footer_disclaimer_text",
+      "friend_links",
       "indexnow_host",
       "indexnow_key",
       "indexnow_key_location",
+      "ga4_measurement_id",
       "carousel_config_json",
       "updated_at",
     ]) {
       expect(fields.get(field)?.write_roles).toEqual(["migration_owner", "web_app"]);
     }
-    expect(fields.get("site_name")?.write_roles).toContain("migration_owner");
+    expect(fields.get("id")?.write_roles).toEqual(["migration_owner"]);
   });
 
   it("ships a syntactically valid self-cleaning disposable verification", () => {
