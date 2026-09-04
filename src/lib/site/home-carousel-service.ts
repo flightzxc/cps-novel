@@ -11,9 +11,17 @@ import { listPreviewChapterRefs } from "./queries";
 /**
  * Typed home-carousel contract aligned with `HomeScreen.featuredList`.
  *
- * Owner-final for this round: return an empty list. Do not import or query
- * the five `HomeCarousel*` tables. `heroImageUrl` has no DB column — do not
- * invent one. An empty list already skips FeaturedHero and FeaturedNovel.
+ * PR6 fix (B-1/B-2): this used to unconditionally `return []` ("Owner-final
+ * for this round" — that round ended once M5's serving/recency-fallback
+ * wiring landed). It now reads `HomeCarouselServing` (position order) and
+ * falls back to a recency scan over published articles when serving is
+ * empty; see `tests/backend/home-carousel/queries.test.ts` and
+ * `tests/backend/public/source-boundaries.test.ts`.
+ *
+ * `heroImageUrl` still has no DB column and is still not invented here —
+ * `toNovelDetailView` never sets it, so `FeaturedHero` (which requires it)
+ * stays skipped for real data; only `FeaturedNovel`-style rendering applies.
+ * That is Hero UI territory, out of this module's scope.
  */
 export type HomeCarouselItem = FeaturedEntry;
 
