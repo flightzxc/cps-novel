@@ -66,6 +66,13 @@ GRANT SELECT ON TABLE
   home_carousel_auto_candidate,
   home_carousel_serving,
   home_carousel_change_log,
+  canonical_tag,
+  canonical_tag_translation,
+  canonical_tag_keyword,
+  source_label_mapping,
+  novel_tag_state,
+  novel_canonical_tag,
+  tag_classification_run,
   _prisma_migrations
 TO web_app, analyst_ro;
 
