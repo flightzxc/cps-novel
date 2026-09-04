@@ -38,7 +38,22 @@ describe("P2-06.5 static database governance", () => {
   });
 
   it("keeps auto classification explicit and the pure Tagging core dependency-free", () => {
-    expect(scheduler).toContain("SCHEDULES: readonly ScheduleDefinition[] = Object.freeze([])");
+    // PR6 fix (B-1): this line used to pin the literal `SCHEDULES: readonly
+    // ScheduleDefinition[] = Object.freeze([])`, i.e. "the scheduler process
+    // registers no schedule at all". That was never the P2-06.5 governance
+    // invariant — it was an accident of the scheduler shipping empty. The
+    // invariant this suite owns is narrower and survives B-1 registering the
+    // home-carousel cron: the scheduler must never reach into Tagging, so
+    // auto classification stays explicit/manual (`AUTO_WRITE_AUTHORIZED=NO`).
+    // Asserted on the import statements specifically (a schedule for some
+    // *other* domain is allowed; a tagging/auto_classify import is not),
+    // then re-asserted across the whole file to catch a dynamic import or a
+    // bare string task type.
+    const schedulerImports = scheduler.match(/^import[\s\S]*?from "[^"]+";$/gm) ?? [];
+    expect(schedulerImports.length).toBeGreaterThan(0);
+    for (const statement of schedulerImports) {
+      expect(statement, `scheduler must not import Tagging: ${statement}`).not.toMatch(/tagging|auto_classify|canonical-tag|novel-tag/i);
+    }
     expect(scheduler).not.toMatch(/tagging|auto_classify|novel-tag-backfill/i);
     const core = ["contracts.ts", "classifier.ts", "classifier-config.ts", "keyword-artifact.ts", "keyword-eligibility.ts", "stable-json.ts", "task-contract.ts"]
       .map((file) => readFileSync(path.join(root, "src/lib/tagging", file), "utf8"))

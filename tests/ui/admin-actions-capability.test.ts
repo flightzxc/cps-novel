@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
- * B-2 · "13 个新 action（template 4 / article 3 / carousel 3 / security 3）
+ * B-2 · "14 个新 action（template 4 / article 3 / carousel 4 / security 3）
  * 各补一条动作层测试" (RC-4 lesson: 注册表穷举锁不住动作体字符串).
  *
  * `tests/ui/admin-content-registry.test.ts` / `tests/backend/auth/
@@ -88,7 +88,7 @@ const { createTemplateAction, updateTemplateAction, setTemplateStatusAction, del
 const { updateArticleAction, regenerateArticleAction, regenerateArticlesBatchAction } = await import(
   "@/app/(admin)/articles/_actions"
 );
-const { saveCarouselConfigAction, saveManualCarouselSlotAction, enqueueCarouselComputeAction } = await import(
+const { saveCarouselConfigAction, saveManualCarouselSlotAction, deleteManualCarouselSlotAction, enqueueCarouselComputeAction } = await import(
   "@/app/(admin)/home-carousel/_actions"
 );
 const { startSecuritySetupAction, confirmSecuritySetupAction, regenerateSecurityRecoveryCodesAction } = await import(
@@ -163,6 +163,10 @@ describe("template/article/carousel · 动作体传给 requireFreshAdminServiceM
     [
       "admin.home_carousel.manual_upsert",
       () => saveManualCarouselSlotAction({ requestId: "r1", locale: "en", position: 1, articleId: "a1", enabled: true }),
+    ],
+    [
+      "admin.home_carousel.manual_delete",
+      () => deleteManualCarouselSlotAction({ requestId: "r1", id: "slot-1", locale: "en" }),
     ],
     ["admin.home_carousel.compute", () => enqueueCarouselComputeAction({ requestId: "r1", locale: "en" })],
   ] as const)("%s", async (actionId, run) => {

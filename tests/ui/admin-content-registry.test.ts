@@ -177,6 +177,7 @@ describe("P2-04 内容路由登记", () => {
       "admin.article.regenerate_batch",
       "admin.home_carousel.config",
       "admin.home_carousel.manual_upsert",
+      "admin.home_carousel.manual_delete",
       "admin.home_carousel.compute",
       "admin.security.two_factor.start",
       "admin.security.two_factor.confirm",

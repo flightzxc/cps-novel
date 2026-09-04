@@ -154,15 +154,17 @@ export async function upsertHomeCarouselManualSlot(input: { authorization: Admin
  * `deletedAt`, matching the schema's existing column) so a deleted slot
  * drops out of `computeHomeCarouselInTx`'s `deletedAt: null` filter and the
  * next compute falls back to auto candidates for that position. Reuses the
- * `admin.home_carousel.manual_upsert` action id/capability (`settings:manage`)
- * rather than registering a new action id: the admin action registry
- * (`src/app/api/admin/_lib/registry.ts`) is out of this lane's file boundary
- * (owned by every module concurrently, per the PR6 fix-lane split), and
- * delete is a mutation on the same manual-slot resource under the same
- * capability, not a new capability surface.
+ * `settings:manage` capability but is registered as its own action id,
+ * `admin.home_carousel.manual_delete` (PR6 integration): the lane that added
+ * this function could not touch `src/app/api/admin/_lib/registry.ts` (shared
+ * across the concurrent fix lanes) and so temporarily reused
+ * `admin.home_carousel.manual_upsert`. Reusing an id would have made the
+ * `operation_audit`/rate-limit entry id of a destructive slot removal
+ * indistinguishable from an upsert; the integration pass registered the
+ * dedicated id instead. The capability is unchanged.
  */
 export async function deleteHomeCarouselManualSlot(input: { authorization: AdminServiceAuthorization; requestId: string; id: string; locale: string }, deps: HomeCarouselDependencies) {
-  const context = await auth(input.authorization, "admin.home_carousel.manual_upsert", input.requestId, deps);
+  const context = await auth(input.authorization, "admin.home_carousel.manual_delete", input.requestId, deps);
   return deps.db.$transaction(async (tx) => {
     const row = await tx.homeCarouselManualSlot.update({ where: { id: input.id }, data: { enabled: false, deletedAt: deps.now ?? new Date(), updatedBy: context.identity.id } });
     await tx.homeCarouselChangeLog.create({ data: { locale: input.locale, action: "manual.delete", manualSlotId: row.id, actorType: "admin", actorId: context.identity.id, afterState: { deletedAt: row.deletedAt?.toISOString() ?? null } } });

@@ -1,5 +1,5 @@
 /**
- * B-2 (13-action capability-binding requirement, home-carousel's 3 slice):
+ * B-2 (capability-binding requirement, home-carousel's 4-action slice):
  * `src/app/api/admin/_lib/registry.ts`'s `ADMIN_HOME_CAROUSEL_ACTIONS` locks
  * the *registry's* declared capability (`settings:manage`) for each action
  * id. Nothing in that table checks what capability string the *service
@@ -63,9 +63,9 @@ describe("home-carousel service functions ask for the capability the registry ac
     ).resolves.toMatchObject({ status: "enqueued" });
   });
 
-  it("admin.home_carousel.manual_upsert (reused for delete, N-5) → deleteHomeCarouselManualSlot succeeds under a settings:manage authorization", async () => {
+  it("admin.home_carousel.manual_delete → deleteHomeCarouselManualSlot succeeds under a settings:manage authorization", async () => {
     const { stores } = authFixture();
-    const { authorization, requestId } = await authorizeAction(stores, "admin.home_carousel.manual_upsert");
+    const { authorization, requestId } = await authorizeAction(stores, "admin.home_carousel.manual_delete");
     const db = new FakeHomeCarouselDb();
     const slotId = randomUUID();
     db.seedManualSlot({

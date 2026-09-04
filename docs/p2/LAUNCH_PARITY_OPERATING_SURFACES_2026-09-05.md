@@ -21,10 +21,8 @@
 
 - Admin routes：既有 `/api/admin/site-settings` 扩展 13 字段；Tagging GET/PUT routes 在组合 registry
   中按 method 绑定 `content:view`/`tag:manage`。
-- 新 actions：template 4、article 3、carousel 3（`admin.home_carousel.manual_upsert` 复用于
-  N-5 人工位删除——PR6 fix lane A 未新增第 4 个 action id，因为 `P2_04_ADMIN_REGISTRY`
-  不在该 lane 的文件边界内；delete 与 upsert 同属 `settings:manage`、同一人工位资源，
-  语义上是同一 action 的另一种写法）、security 3；均由
+- 新 actions：template 4、article 3、carousel 4（`config`/`manual_upsert`/`manual_delete`/
+  `compute`）、security 3；均由
   `P2_04_ADMIN_REGISTRY` 默认拒绝模型登记。业务类写服务继续执行 capability/service ticket 二次
   鉴权与 operation audit；本人安全动作绑定当前 session/identity/request ID。
 - 新任务：`home_carousel.compute.v1`，同时登记 Web action、Scheduler、GenericTask Worker handler、

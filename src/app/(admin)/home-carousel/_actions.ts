@@ -21,9 +21,9 @@ export async function saveCarouselConfigAction(input: { requestId: string; cronS
 export async function saveManualCarouselSlotAction(input: { requestId: string; id?: string; locale: string; position: number; articleId: string; enabled: boolean }) {
   return run(async () => upsertHomeCarouselManualSlot({ authorization: await auth("admin.home_carousel.manual_upsert", input.requestId), ...input }, deps()));
 }
-/** N-5: reuses the manual_upsert action id/capability — see deleteHomeCarouselManualSlot's doc comment. */
+/** N-5: own action id (`manual_delete`), same `settings:manage` capability — see deleteHomeCarouselManualSlot's doc comment. */
 export async function deleteManualCarouselSlotAction(input: { requestId: string; id: string; locale: string }) {
-  return run(async () => deleteHomeCarouselManualSlot({ authorization: await auth("admin.home_carousel.manual_upsert", input.requestId), ...input }, deps()));
+  return run(async () => deleteHomeCarouselManualSlot({ authorization: await auth("admin.home_carousel.manual_delete", input.requestId), ...input }, deps()));
 }
 export async function enqueueCarouselComputeAction(input: { requestId: string; locale: string }) {
   return run(async () => enqueueHomeCarouselCompute({ authorization: await auth("admin.home_carousel.compute", input.requestId), ...input }, deps()));

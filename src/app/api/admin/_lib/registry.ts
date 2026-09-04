@@ -281,6 +281,7 @@ export const ADMIN_ARTICLE_ACTIONS = [
 export const ADMIN_HOME_CAROUSEL_ACTIONS = [
   { id: "admin.home_carousel.config", capability: "settings:manage", mutation: true },
   { id: "admin.home_carousel.manual_upsert", capability: "settings:manage", mutation: true },
+  { id: "admin.home_carousel.manual_delete", capability: "settings:manage", mutation: true },
   { id: "admin.home_carousel.compute", capability: "settings:manage", mutation: true },
 ] as const satisfies AdminRegistry["actions"];
 

@@ -4,6 +4,56 @@
 
 ---
 
+## 2026-09-05 · PR6 四条 fix lane 线性整合 + 交界修补
+
+- 把 PR #6（`feature/launch-parity-operating-surfaces`，基线 `a05e41b`）的四条并行修复
+  lane 按 A → B → D → C 线性 cherry-pick 进 PR 分支本体，共 15 个 commit（A 4 /
+  B 4 / D 4 / C 3），全部保留原 trailer；未 rebase/reset/force，只在 `a05e41b` 之上追加。
+  - Lane A `fix/pr6-lane-a-carousel@16fab14`（`a05e41b..`，4 commit）
+  - Lane B `fix/pr6-lane-b-templates-articles@b866384`（`a05e41b..`，4 commit）
+  - Lane D `fix/pr6-lane-d-articles-leftovers@f701308`（基线是 lane B HEAD，与 B 合成
+    一段 8 commit 的 `a05e41b..f701308` 一次性 cherry-pick，保持原顺序）
+  - Lane C `fix/pr6-lane-c-tagging-bootstrap@129f821`（`a05e41b..`，3 commit）
+- 冲突只出现在本文件（三次，各 lane 都在顶部追加条目）：全部保留，按 A/B/D/C 顺序堆叠，
+  没有删改任何一条 lane 条目或下方历史条目。`docs/governance/port-registry.md` 的两处
+  追加自动合并成功（lane A 的 N-3/N-4 行与 lane B 的 N-7/N-8 段落各自独立）；
+  lane C 的 `docs/adr/ADR-P2-06-5-TAGGING-V3.md`/`docs/governance/database-governance.md`/
+  `docs/operations/OWNER_LOCAL_UAT_RUNBOOK_2026-09-03.md`/`scripts/README.md` 无冲突。
+  **无代码冲突**——四条 lane 的文件边界事前切开，事后证明确实不重叠。
+- 交界修补 1（B-1 × tagging 治理测试）：`tests/backend/tagging/p2-06-5-governance.test.ts`
+  原本断言 `scheduler/index.ts` 含源码字面量
+  `"SCHEDULES: readonly ScheduleDefinition[] = Object.freeze([])"`——那不是 P2-06.5 的
+  治理不变量，只是"scheduler 出厂时恰好为空"的偶然快照，而 B-1 必须改掉这个字面量。
+  改为断言 **`scheduler/index.ts` 的 import 语句不得含 tagging/auto_classify/canonical-tag/
+  novel-tag**（逐条 import 断言 + 全文再扫一遍兜住动态 import 与裸字符串任务类型），
+  该 `it` 块其余断言（纯 Tagging 核心无框架依赖、CLI 不读 `DATABASE_URL`）原样保留。
+  真正的治理语义（自动分类保持 explicit-only、`AUTO_WRITE_AUTHORIZED=NO`）比原断言更贴。
+- 交界修补 2（N-5 人工位删除的 action id）：lane A 因 `src/app/api/admin/_lib/registry.ts`
+  在其文件边界外，让 `deleteHomeCarouselManualSlot` 复用了
+  `admin.home_carousel.manual_upsert` 的 action id。整合后补上独立登记
+  `admin.home_carousel.manual_delete`（capability 同为 `settings:manage`，`mutation: true`），
+  服务体与 `_actions.ts` 动作体改用该 id。复用 id 会让一次破坏性的人工位删除在
+  `operation_audit`/限流的 entry id 上与 upsert 无法区分——这是登记独立 id 的实际理由，
+  不是形式对齐。同步更新 `tests/ui/admin-content-registry.test.ts` 的 action 穷举、
+  `tests/ui/admin-actions-capability.test.ts`（13 → 14 条，carousel 3 → 4）与
+  `tests/backend/home-carousel/actions-capability.test.ts`（delete 用例改用新 id）。
+  `tests/backend/auth/admin-registry-parity.test.ts` 无需改动——它穷举的是
+  `P1_08B_ADMIN_REGISTRY.actions`（凭证面），不含 P2-04 的轮播动作。
+- 交界修补 3（`article_conflict` 穷举）：查证后**无需补**
+  `tests/backend/contracts/admin-contracts.test.ts`——该文件没有 `AdminErrorCode` 穷举清单；
+  `tests/ui/admin-error-envelope.test.ts`/`admin-secret-boundary.test.tsx` 里的 code 数组
+  都是子集抽样而非穷举。`article_conflict` 的穷举性由 `error-copy.ts` 的
+  `Readonly<Record<AdminErrorCode, string>>` 在编译期保证，lane D 已补齐并有
+  `tests/ui/admin-error-copy.test.ts` 锁定。
+- 文档同步：`docs/p2/LAUNCH_PARITY_OPERATING_SURFACES_2026-09-05.md` 的"新 actions"行由
+  "carousel 3（复用 manual_upsert）"改为"carousel 4"；`docs/governance/port-registry.md`
+  N-7 行里"`article_conflict` 尚未登记"的过时说明改为已登记（lane D 已做，lane B 写下该行时
+  确为事实）。上方 lane A 条目里"`p2-06-5-governance.test.ts` 两处失败之一"的记述由本条
+  交界修补 1 消解，按本文件惯例不回改历史条目，在此登记。
+- 未 push、未改 PR、未 merge、未部署；未碰 prisma/migration。
+
+---
+
 ## 2026-09-05 · PR6 fix lane A — M5 轮播 scheduler 死代码修复 + B-2 咬合测试 + N-3/4/5/6 + 文档失实修正
 
 - 背景：PR #6（`feature/launch-parity-operating-surfaces@a05e41b`）验收 CHANGES_REQUIRED，
