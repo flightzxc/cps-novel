@@ -217,7 +217,7 @@ describe("公开侧一次渲染的查询数（cold cache）", () => {
     expect(db.countOf("$queryRaw (taxonomy)")).toBe(2);
   });
 
-  it("loadPublicChrome(..., categories) 能力：预先算好的 categories 不触发第二次查询（capability 就绪，尚未接入 page.tsx，见文件头注释）", async () => {
+  it("loadPublicChrome(..., categories) 能力：预先算好的 categories 不触发第二次查询（该能力已由 lane D 接入 src/app/page.tsx，本用例单独验证能力本身）", async () => {
     const db = new CountingFakeDb();
     const client = db.asPrismaClient();
     const categories = await listPublicCategories(client, PUBLIC_SITE_LOCALE);
