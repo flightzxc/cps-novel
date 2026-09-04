@@ -264,6 +264,9 @@ ensure_local_certificate() {
 
 up_x8() {
   prepare_x8_environment
+  # M2: persisted operator choice remains authoritative, but UAT/R drift must
+  # never be silent. The helper only warns and prints the explicit repair.
+  warn_x8_gate_drift
   require_command docker
   require_command node
   require_command curl

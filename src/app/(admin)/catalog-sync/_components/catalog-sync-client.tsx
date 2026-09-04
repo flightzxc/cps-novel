@@ -13,6 +13,7 @@ import { CreateContentDialog } from "./create-content-dialog";
 import { PromoLinkClaimDialog } from "./promo-link-claim-dialog";
 import type { ClaimChannelAppOption } from "../_lib/read-channel-apps";
 import type { SourceItemRow } from "../_lib/read-source-items";
+import { catalogWriteGateState } from "../_lib/scan-task-copy";
 
 /**
  * `/catalog-sync` table + the actions this screen exists for: opening the
@@ -44,6 +45,7 @@ import type { SourceItemRow } from "../_lib/read-source-items";
  */
 export function CatalogSyncClient({
   items,
+  catalogGate,
   contentPublish,
   claimChannelApps,
   promoClaimMaxBatchSize,
@@ -52,6 +54,7 @@ export function CatalogSyncClient({
   contentCreationBatchMaxSize,
 }: {
   items: readonly SourceItemRow[];
+  catalogGate: { readonly featureEnabled: boolean; readonly writeAllowed: boolean };
   contentPublish: AdminCapabilityState;
   claimChannelApps: readonly ClaimChannelAppOption[];
   promoClaimMaxBatchSize: number;
@@ -65,6 +68,7 @@ export function CatalogSyncClient({
   const [batchCreateDialogOpen, setBatchCreateDialogOpen] = useState(false);
   const blockedReason = capabilityBlockReason("content:publish", contentPublish);
   const granted = blockedReason === null;
+  const gateState = catalogWriteGateState(catalogGate);
 
   const selectedItems = items.filter((item) => selectedIds.has(item.id));
 
@@ -79,6 +83,23 @@ export function CatalogSyncClient({
 
   return (
     <div className="space-y-4">
+      <div
+        data-testid="catalog-write-gate-status"
+        data-state={gateState}
+        className={`rounded-lg border px-3 py-2 text-sm ${
+          gateState === "apply"
+            ? "border-green-200 bg-green-50 text-green-800"
+            : gateState === "dry_run"
+              ? "border-amber-200 bg-amber-50 text-amber-800"
+              : "border-red-200 bg-red-50 text-red-800"
+        }`}
+      >
+        <span className="font-medium">目录写闸：</span>
+        {gateState === "apply" && "apply（正式写入已开启）"}
+        {gateState === "dry_run" && "dry-run（仅试运行，正式写入关闭）"}
+        {gateState === "closed" && "closed（目录同步总闸关闭）"}
+      </div>
+
       {blockedReason && (
         <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
           {blockedReason}

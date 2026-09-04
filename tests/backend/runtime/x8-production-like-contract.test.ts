@@ -296,6 +296,14 @@ describe("X8 local production-like contracts", () => {
     expect(healthSql.trimEnd().endsWith("COMMIT;")).toBe(true);
   });
 
+  it("M2 warns on UAT/R catalog gate drift without overwriting operator state", () => {
+    expect(envHelper).toContain("warn_x8_gate_drift()");
+    expect(envHelper).toContain("X8 catalog-write gate drift");
+    expect(envHelper).toContain("gate catalog-write on");
+    expect(envHelper).not.toMatch(/warn_x8_gate_drift\(\)[\s\S]*write_x8_gate_state "\$expected"/);
+    expect(launcher).toMatch(/up_x8\(\)[\s\S]*prepare_x8_environment[\s\S]*warn_x8_gate_drift/);
+  });
+
   it("uses the real PostgreSQL two-int advisory lock signature", () => {
     const bootstrap = read("scripts/bootstrap-admin-identity.ts");
     const foundation = read("scripts/register-moboreader-foundation.ts");

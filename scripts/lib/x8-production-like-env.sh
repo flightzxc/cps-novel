@@ -106,6 +106,17 @@ write_x8_gate_state() {
   mv "$temporary" "$X8_GATE_STATE_FILE"
 }
 
+warn_x8_gate_drift() {
+  local expected actual
+  [[ "$X8_LEVEL" == "uat" || "$X8_LEVEL" == "r" ]] || return 0
+  expected="$(x8_level_catalog_default "$X8_LEVEL")"
+  actual="$(tr -d '\r\n' <"$X8_GATE_STATE_FILE")"
+  [[ "$actual" == "$expected" ]] && return 0
+  printf '%s\n' \
+    "WARNING: X8 catalog-write gate drift: level=$X8_LEVEL expected=$expected actual=$actual" \
+    "Repair explicitly (state is not overwritten): scripts/x8-production-like.sh gate catalog-write on" >&2
+}
+
 prepare_x8_environment() {
   # RC-2b: X8_LEVEL selects which docs/p2/V020_RELEASE_CHECKLIST.md flag
   # ladder rung this local topology boots at. Fail fast, before any

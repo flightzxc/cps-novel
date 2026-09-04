@@ -14,6 +14,17 @@ export type CatalogScanOutcome = Extract<CatalogScanActionResult, { ok: true }>[
 export type OutcomeTone = "success" | "info" | "warning" | "danger";
 export type OutcomeCopy = { readonly tone: OutcomeTone; readonly title: string; readonly body: string };
 
+export type CatalogWriteGateState = "closed" | "dry_run" | "apply";
+
+/** CPS v8.3.6 sync-panel parity: worker/write readiness is always visible. */
+export function catalogWriteGateState(input: {
+  readonly featureEnabled: boolean;
+  readonly writeAllowed: boolean;
+}): CatalogWriteGateState {
+  if (!input.featureEnabled) return "closed";
+  return input.writeAllowed ? "apply" : "dry_run";
+}
+
 const MODE_LABEL: Readonly<Record<"dry_run" | "apply", string>> = Object.freeze({
   dry_run: "dry_run（试运行）",
   apply: "apply（正式写入）",

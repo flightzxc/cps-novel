@@ -1,5 +1,6 @@
 import { capabilityBlockReason, findCapabilityState } from "@/features/admin-ui/capability-view";
 import { AdminTimeZoneNote } from "@/features/admin-ui/time-zone-note";
+import { isNovelCatalogSyncEnabled, isNovelCatalogSyncWriteAllowed } from "@/lib/flags";
 import { MOBOREADER_CATALOG_LIMITS, resolveMoboreaderCatalogSafetyMaxPages } from "@/lib/tasks/moboreader";
 import { PROMO_LINK_CLAIM_LIMITS } from "@/lib/tasks/promo-link-claim-limits";
 import { CONTENT_CREATION_BATCH_MAX_SELECTION } from "@/server/content-creation/batch";
@@ -82,6 +83,10 @@ export default async function CatalogSyncPage({
               <AdminTimeZoneNote />
               <CatalogSyncClient
                 items={page.items}
+                catalogGate={{
+                  featureEnabled: isNovelCatalogSyncEnabled(),
+                  writeAllowed: isNovelCatalogSyncWriteAllowed(),
+                }}
                 contentPublish={contentPublish}
                 claimChannelApps={claimChannelApps}
                 promoClaimMaxBatchSize={PROMO_LINK_CLAIM_LIMITS.maxBatchSize}

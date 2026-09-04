@@ -119,6 +119,7 @@ function renderPage(
   return render(
     <CatalogSyncClient
       items={options.items ?? ROWS}
+      catalogGate={{ featureEnabled: true, writeAllowed: true }}
       contentPublish={options.contentPublish ?? "granted"}
       claimChannelApps={options.claimChannelApps ?? [claimApp()]}
       promoClaimMaxBatchSize={options.promoClaimMaxBatchSize ?? 50}
@@ -164,6 +165,39 @@ afterEach(() => {
 });
 
 describe("来源条目表格 · 渲染", () => {
+  it("CPS sync-panel 语义：目录写闸三态始终可见", () => {
+    const { rerender } = renderPage();
+    expect(screen.getByTestId("catalog-write-gate-status").getAttribute("data-state")).toBe("apply");
+
+    rerender(
+      <CatalogSyncClient
+        items={ROWS}
+        catalogGate={{ featureEnabled: true, writeAllowed: false }}
+        contentPublish="granted"
+        claimChannelApps={[claimApp()]}
+        promoClaimMaxBatchSize={50}
+        promoClaimGranted
+        promoClaimBlockedReason={null}
+        contentCreationBatchMaxSize={50}
+      />,
+    );
+    expect(screen.getByTestId("catalog-write-gate-status").getAttribute("data-state")).toBe("dry_run");
+
+    rerender(
+      <CatalogSyncClient
+        items={ROWS}
+        catalogGate={{ featureEnabled: false, writeAllowed: true }}
+        contentPublish="granted"
+        claimChannelApps={[claimApp()]}
+        promoClaimMaxBatchSize={50}
+        promoClaimGranted
+        promoClaimBlockedReason={null}
+        contentCreationBatchMaxSize={50}
+      />,
+    );
+    expect(screen.getByTestId("catalog-write-gate-status").getAttribute("data-state")).toBe("closed");
+  });
+
   it("列出标题、语种识别、渠道、章节数与状态徽标", () => {
     renderPage();
     expect(screen.getByText("示例小说 A")).toBeTruthy();
