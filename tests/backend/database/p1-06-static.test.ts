@@ -83,10 +83,10 @@ describe("P1-06 database operations static contracts", () => {
   it("extends the dictionary for the six approved Auth tables without duplicate keys", () => {
     const records = read("docs/governance/database-schema-dictionary.jsonl").trim().split("\n");
     // v0.2.0 foundation (Stream F, migration 20260818120000_v020_foundation_shared) added 32
-    // records for IndexNowOutbox/-Attempt's new fields and the SiteSetting table, so
-    // 920 -> 952. This assertion's purpose — no duplicate stable_key — is unaffected by the count.
-    expect(records).toHaveLength(1112);
-    expect(new Set(records.map((line) => JSON.parse(line).stable_key)).size).toBe(1112);
+    // records for IndexNowOutbox/-Attempt's new fields and the SiteSetting table; launch parity
+    // adds the governed carousel_config_json field. The exact count still guards duplicate keys.
+    expect(records).toHaveLength(1113);
+    expect(new Set(records.map((line) => JSON.parse(line).stable_key)).size).toBe(1113);
     const intents = records.map((line) => JSON.parse(line)).filter(
       (record) => record.table_name === "side_effect_intent"
         && ["status", "response_shape", "confirmed_at"].includes(record.field_name),
