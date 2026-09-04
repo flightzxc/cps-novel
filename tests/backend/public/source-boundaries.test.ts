@@ -25,5 +25,15 @@ describe("public wiring source boundaries", () => {
     expect(source).toContain("homeCarouselServing.findMany");
     expect(source).toContain("buildPublicArticleWhere");
     expect(source).not.toMatch(/upstreamCode|rawPayload|raw_payload/);
+    // PR6 fix B-1/B-2: `heroImageUrl` has no DB column (see the module's own
+    // doc comment) — this file must never select/alias/assign it, only
+    // leave it unset via toNovelDetailView. A source-scan for the field name
+    // is the cheapest guard against a future "just read novel.heroImageUrl"
+    // shortcut landing here.
+    expect(source).not.toMatch(/heroImageUrl/);
+    // Behavioral coverage for "service reverted to a bare `return []`" lives in
+    // tests/backend/home-carousel/queries.test.ts (positive-path assertions
+    // against a fake db fail immediately if the function stops reading
+    // serving/recency data at all).
   });
 });

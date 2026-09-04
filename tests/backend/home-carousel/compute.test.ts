@@ -1,0 +1,98 @@
+import { describe, expect, it } from "vitest";
+
+import { computeHomeCarouselInTx } from "@/server/home-carousel";
+
+import { FakeHomeCarouselDb, type FakeArticle } from "./support";
+
+const NOW = new Date("2026-09-05T19:00:00.000Z");
+const DAY = 86_400_000;
+
+function article(overrides: Partial<FakeArticle> & { id: string; novelId: string }): FakeArticle {
+  return {
+    locale: "en",
+    status: "published",
+    deletedAt: null,
+    publishedAt: new Date(NOW.getTime() - 90 * DAY),
+    updatedAt: new Date(NOW.getTime() - 90 * DAY),
+    novel: { title: `Novel ${overrides.novelId}`, status: "published", deletedAt: null, coverUrl: "https://cdn.example.com/cover.jpg" },
+    ...overrides,
+  };
+}
+
+function seedSixOldArticles(db: FakeHomeCarouselDb) {
+  for (let i = 0; i < 6; i += 1) {
+    db.seedArticle(article({
+      id: `article-${i}`,
+      novelId: `novel-${i}`,
+      updatedAt: new Date(NOW.getTime() - i * DAY - 90 * DAY),
+      publishedAt: new Date(NOW.getTime() - i * DAY - 90 * DAY),
+    }));
+  }
+}
+
+describe("computeHomeCarouselInTx honors carouselConfigJson (PR6 fix B-1 #3)", () => {
+  it("slotCount caps how many candidates/serving rows are produced", async () => {
+    const dbDefault = new FakeHomeCarouselDb();
+    seedSixOldArticles(dbDefault);
+    const resultDefault = await computeHomeCarouselInTx(dbDefault.asTransactionClient(), { locale: "en", source: "manual", now: NOW });
+    expect(resultDefault.count).toBe(5); // DEFAULT_HOME_CAROUSEL_CONFIG.slotCount
+
+    const dbSmall = new FakeHomeCarouselDb();
+    dbSmall.carouselConfigJson = { slotCount: 2 };
+    seedSixOldArticles(dbSmall);
+    const resultSmall = await computeHomeCarouselInTx(dbSmall.asTransactionClient(), { locale: "en", source: "manual", now: NOW });
+    expect(resultSmall.count).toBe(2);
+    expect(dbSmall.serving).toHaveLength(2);
+  });
+
+  it("newNovelWindowDays gates which candidates count as new_novel", async () => {
+    const dbInWindow = new FakeHomeCarouselDb();
+    dbInWindow.carouselConfigJson = { newNovelWindowDays: 14 };
+    dbInWindow.seedArticle(article({ id: "fresh", novelId: "novel-fresh", publishedAt: new Date(NOW.getTime() - 1 * DAY), updatedAt: new Date(NOW.getTime() - 1 * DAY) }));
+    seedSixOldArticles(dbInWindow);
+    await computeHomeCarouselInTx(dbInWindow.asTransactionClient(), { locale: "en", source: "manual", now: NOW });
+    const freshCandidateInWindow = dbInWindow.candidates.find((row) => row.novelId === "novel-fresh");
+    expect(freshCandidateInWindow?.source).toBe("new_novel");
+
+    const dbOutsideWindow = new FakeHomeCarouselDb();
+    dbOutsideWindow.carouselConfigJson = { newNovelWindowDays: 0 };
+    dbOutsideWindow.seedArticle(article({ id: "fresh", novelId: "novel-fresh", publishedAt: new Date(NOW.getTime() - 1 * DAY), updatedAt: new Date(NOW.getTime() - 1 * DAY) }));
+    seedSixOldArticles(dbOutsideWindow);
+    await computeHomeCarouselInTx(dbOutsideWindow.asTransactionClient(), { locale: "en", source: "manual", now: NOW });
+    const freshCandidateOutsideWindow = dbOutsideWindow.candidates.find((row) => row.novelId === "novel-fresh");
+    expect(freshCandidateOutsideWindow?.source).toBe("recency");
+  });
+
+  it("newSlotCount=0 folds an in-window article into recency instead of reserving a new_novel slot", async () => {
+    const db = new FakeHomeCarouselDb();
+    db.carouselConfigJson = { newSlotCount: 0 };
+    db.seedArticle(article({ id: "fresh", novelId: "novel-fresh", publishedAt: new Date(NOW.getTime() - 1 * DAY), updatedAt: new Date(NOW.getTime() - 1 * DAY) }));
+    seedSixOldArticles(db);
+    await computeHomeCarouselInTx(db.asTransactionClient(), { locale: "en", source: "manual", now: NOW });
+    expect(db.candidates.some((row) => row.source === "new_novel")).toBe(false);
+  });
+
+  it("cron:<businessDate> is idempotent: a same-day repeat hits P2002 and returns skipped_duplicate", async () => {
+    const db = new FakeHomeCarouselDb();
+    seedSixOldArticles(db);
+    const first = await computeHomeCarouselInTx(db.asTransactionClient(), { locale: "en", source: "cron", now: NOW });
+    expect(first.status).toBe("success");
+    const second = await computeHomeCarouselInTx(db.asTransactionClient(), { locale: "en", source: "cron", now: NOW });
+    expect(second).toEqual({ status: "skipped_duplicate" });
+    expect(db.batches.size).toBe(1);
+  });
+
+  it("revenueEnabled cannot be turned on through stored config (compute never sees a revenue branch)", async () => {
+    const db = new FakeHomeCarouselDb();
+    db.carouselConfigJson = { revenueEnabled: true };
+    seedSixOldArticles(db);
+    const result = await computeHomeCarouselInTx(db.asTransactionClient(), { locale: "en", source: "manual", now: NOW });
+    expect(result.status).toBe("success");
+    expect(dbBatchParams(db)).toMatchObject({ revenueEnabled: false });
+  });
+});
+
+function dbBatchParams(db: FakeHomeCarouselDb) {
+  const [batch] = [...db.batches.values()];
+  return batch.params as Record<string, unknown>;
+}

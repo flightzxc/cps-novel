@@ -274,6 +274,20 @@ describe("X8 local production-like contracts", () => {
     for (const level of ["0", "uat", "r"]) expect(x8Levels[level].workerTaskAllowlist).toContain("home_carousel.compute.v1");
   });
 
+  it("PR6 fix B-1 #4: the scheduler actually registers the schedule the allowlist reserves a slot for", async () => {
+    // `home_carousel.compute.v1` sat in every level's WORKER_TASK_ALLOWLIST
+    // while scheduler/index.ts's SCHEDULES was still frozen empty (P1-07
+    // shipped the runtime with zero production schedules) — the allowlist
+    // let the worker consume the task type, but nothing ever produced one.
+    const { SCHEDULES } = await import("../../../scheduler/index");
+    const { HOME_CAROUSEL_SCHEDULE_KEY, HOME_CAROUSEL_TASK_TYPE } = await import("../../../src/server/home-carousel");
+    const definition = SCHEDULES.find((schedule) => schedule.scheduleKey === HOME_CAROUSEL_SCHEDULE_KEY);
+    expect(definition).toBeDefined();
+    const sample = definition!.build(new Date("2026-09-05T19:00:00.000Z"));
+    expect(sample.taskType).toBe(HOME_CAROUSEL_TASK_TYPE);
+    for (const level of ["0", "uat", "r"]) expect(x8Levels[level].workerTaskAllowlist).toContain(sample.taskType);
+  });
+
   it("RC-10: disables ADMIN_TWO_FACTOR_ENFORCEMENT only at Level UAT, and exports/asserts it end to end", () => {
     // Canonical values are "true"/"false" (Owner correction, 2026-09-04,
     // same day as the initial cut) -- "required"/"disabled" remain accepted
