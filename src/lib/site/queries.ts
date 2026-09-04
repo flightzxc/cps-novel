@@ -312,15 +312,43 @@ export async function getPublicChapterView(
   );
 }
 
+/**
+ * N-9: `categories` is optional so a caller who already needs the full
+ * taxonomy list for its own purposes (`src/app/page.tsx`'s `HomeScreen`
+ * `categories` prop) can compute it once and pass it in here, instead of
+ * this function re-running `listPublicCategories`'s `article.findMany` +
+ * taxonomy lookup a second time for the footer. Every other caller
+ * (`novel/[slugParam]/page.tsx`, which only wants the footer) is unaffected
+ * — it keeps calling this with two arguments and gets the original
+ * self-fetching behavior.
+ *
+ * 🔴 Not wired into `src/app/page.tsx` yet, even though that page is exactly
+ * the caller this was built for (its `generateMetadata`/body both call
+ * `@/app/_lib/public-load`'s `loadChrome("home")` *and*, separately, that
+ * module's own `loadPublicCategories(locale)` — two independent
+ * `listPublicCategories` round-trips per render). Wiring the fix requires
+ * either changing `loadChrome`'s signature or adding a variant, both in
+ * `src/app/_lib/public-load.ts` — outside this lane's file boundary, and
+ * that module is also the exact mock boundary `tests/ui/public-routes.test.tsx`
+ * (outside this lane too) relies on: calling `getSiteSetting`/`loadPublicChrome`
+ * directly from `page.tsx`, bypassing `public-load.ts`'s React-cache-wrapped
+ * exports, breaks that test's Prisma mocking (verified: it does, real
+ * `DATABASE_URL` errors) and was reverted for exactly that reason. This
+ * parameter — and `tests/backend/site/public-query-budget.test.ts`, which
+ * exercises it directly against `queries.ts` — exist so the capability is
+ * ready and regression-tested the moment an integrator adds the matching
+ * `public-load.ts` variant and threads it through `page.tsx`.
+ */
 export async function loadPublicChrome(
   db: PrismaClient | Prisma.TransactionClient,
   current?: PublicChromeCurrent,
+  categories?: readonly PublicTaxonomyTag[],
 ) {
-  const [settings, categories] = await Promise.all([
+  const [settings, resolvedCategories] = await Promise.all([
     getSiteSetting(db),
-    listPublicCategories(db, PUBLIC_SITE_LOCALE),
+    categories ?? listPublicCategories(db, PUBLIC_SITE_LOCALE),
   ]);
-  return { settings, chrome: chromeFromSiteSetting(settings, current, categories) };
+  return { settings, chrome: chromeFromSiteSetting(settings, current, resolvedCategories) };
 }
 
 export type { SiteSettingSnapshot };
