@@ -193,6 +193,57 @@
 
 ---
 
+## 2026-09-05 · PR6 fix lane C — CanonicalTag bootstrap CLI（B-3）+ 治理记录（N-11/N-12）
+
+- 背景：PR #6（`feature/launch-parity-operating-surfaces`）验收 CHANGES_REQUIRED，
+  B-3 指出 additive migration 无 seed、`mutateAdminCanonicalTag` 只有 update 没有
+  create、`canonicalTag.create` 只出现在一处测试 fixture——`canonical_tag` 在
+  UAT 环境恒为空，公开分类链（`/category/[slug]`）不可执行。从 `main a05e41b`
+  独立 worktree（`fix/pr6-lane-c-tagging-bootstrap`）施工，与并行修复 B-1/B-2 的
+  lane A/B 互不接触。
+- 新增 `scripts/p2-06-5-production/tagging-bootstrap.ts`：ADR-P2-06-5-TAGGING-V3 §12
+  "explicit bootstrap CLI" 的实现。默认 dry-run，读取并 SHA-256 校验两份权威文件
+  （CanonicalTag v1 Final JSON、B2 Owner Final mapping CSV），打印 123 tag /
+  123 translation / 314 alias / 360 keyword / 194 组 196 条 mapping edge 的计划
+  写入量与数据库当前计数，零写入。`--apply --approver <adminIdentity>
+  --channel-app changdu-app=<UUID>` 事务内幂等 upsert 并写 `OperationAudit`；
+  同 `--request-id` 重放零写入。不经过 `mutateAdmin*` 语义层（ADR：bootstrap 是
+  authority 平面），不写 `novel_canonical_tag`。
+- 施工中发现并修复一个真实 alias 冲突检测 bug：初版把"某 tag 的 alias 与自己的
+  slug/stableId 相同"（真实数据里 `ct-v1-adventure` 的 slug 与 alias 都是
+  "adventure"，是有意为之的关键词种子设计）误判为冲突并拒绝写入；在 X8 uat 实跑
+  dry-run 时被真实 123 条数据当场抓到（fixture 测试因数据太小没覆盖到）。修复为
+  只检测跨 tag 的身份碰撞（与 `mutateAdminCanonicalTag` 的 `replace_aliases` 校验
+  语义对齐——只查*其它* tag 的身份集合，不查自己），补充回归测试。
+- 新增 `tests/backend/tagging/bootstrap.test.ts`（22 用例，fake db + 小 fixture）：
+  CLI 参数解析、`parseCsv`、`buildCanonicalPlan`（去重/冲突/脚本过滤/overlay
+  disable/alias 碰撞）、`buildMappingPlan`（分组/fanout）、SHA-256 不符拒绝
+  （临时目录 fixture，非真实 123 条文件）、dry-run 零写入、approver 不存在/非
+  active 拒绝、channel-app 绑定缺失/不存在拒绝、apply 幂等（同 request-id 二次
+  调用为纯 replay，`novel_canonical_tag` 全程未被触碰）。
+- X8 uat（`cps-novel-x8-local`，基线 `a05e41b`）实跑：dry-run→apply 全部通过，
+  `canonical_tag`/`canonical_tag_translation`/`canonical_tag_keyword`/
+  `source_label_mapping` 落地 123/123/360/196，`novel_canonical_tag` 保持 0；
+  二次 apply（同 request-id）为 `outcome=replayed`。因 lane C 未合并，X8 镜像里
+  没有 `docs/`（生产镜像本就不打包）与新脚本文件，实跑时对 `docker compose run`
+  额外挂载三个只读 volume（脚本本身 + 两份权威文件），不修改 X8 worktree；见
+  runbook §2.6 记录的验证过命令与合并后的等效形态。
+- 治理记录（N-11/N-12）：`database-governance.md` §12 补两行——carousel 列
+  migration `20260905090000_site_setting_carousel_config` 此前遗漏未记；
+  `20260816160000_p2_06_5_tagging_v3` 与 `20260818120000_v020_foundation_shared`
+  的目录名字面序与 X8 卷上 `_prisma_migrations` 实际 apply 顺序不一致（`migrate
+  deploy` 只按"是否已记录"决定要不要应用，安全；`migrate dev` 的 shadow-DB 重放
+  假定目录序即应用序，会报漂移）——已用 `SELECT started_at FROM
+  _prisma_migrations` 实测核实该顺序倒挂确实存在，不是臆测；两个 migration 目录
+  均不改名。ADR §12 追加 2026-09-05 实现记录；`scripts/README.md`、
+  `docs/operations/OWNER_LOCAL_UAT_RUNBOOK_2026-09-03.md` §2.6 补命令形态。
+- 门禁：`npm run typecheck`/`npm run lint` 全绿；`npm run test:backend`
+  1445/1446（唯一失败 `publish-gate/no-bypass`，与 main 同签名、非本次改动引入）；
+  `npm run test:ui` 1740/1740 全绿。未 push、未改 PR、未碰主检出或 Codex 的
+  lane A/B worktree。
+
+---
+
 ## 2026-09-05 · CPS 海阅首发后台与 SEO 运营面补全
 
 - 从 clean `main@f99c25e` 的独立 worktree 实施 M0–M12；主检出保持只读。

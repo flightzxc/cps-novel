@@ -336,6 +336,8 @@ P1-08B 新增独立 `scheduler_app`，只授予 schedule/generic task 元数据�
 | 2026-09-01 | Book B E2E PromoLink 目的 URL 读取 | 零 schema migration；`web_app` 增加且仅增加 `promo_link.web_url/app_url` 的列级 SELECT，供发布门禁与公开 `/go` 跳转使用；不开放 `upstream_code`、原始上游 payload 或 Analyst/Scheduler 读取 | Codex | X8 Book B E2E 已验证发布门禁与 `/go`；Web 两列可读、Analyst 两列拒绝 |
 | 2026-09-03 | Book C SideEffectIntent Worker 读取 | 零 schema migration；`worker_app` 增加 `side_effect_intent` 表级 SELECT，使正式 claim handler 可执行 intent 预查、独立 prepare、状态迁移与 readback-only recovery；不扩张 Web/Scheduler 权限 | Codex | Book C 首次启动在 mutation 前发现缺口；补权后正式 handler PASS，`getcode=1`、intent `confirmed`、capability 已恢复关闭 |
 | 2026-09-05 | P2-06.5 Tagging V3 | 增加七表 Tagging V3 foundation、exact raw-language scope、角色权限与治理合同；无 taxonomy auto-write | Codex | 集成冻结提交历史；AUTO_WRITE_AUTHORIZED=NO |
+| 2026-09-05 | Launch parity M5 home carousel（`20260905090000_site_setting_carousel_config`） | `site_setting` 加一列 `carousel_config_json JSONB NOT NULL DEFAULT '{}'`（首页人工位/新剧位/衰减排序运营配置；收益排序对 Novel V1 恒禁用，见列注释） | Codex | 已在 X8 uat（`cps-novel-x8-local`）应用；补记本行前 §12 遗漏此条 |
+| 2026-09-05 | PR6 fix lane C — migration 时间戳顺序治理记录 | `20260816160000_p2_06_5_tagging_v3` 的目录名字面序排在 `20260818120000_v020_foundation_shared` 之前，但两者在同一 X8 长期卷上的实际 `migrate deploy` 应用顺序与目录名序不一致（`_prisma_migrations` 记录的 apply 顺序早于目录名对比结果）——`prisma migrate deploy` 只按"是否已记录在 `_prisma_migrations`"决定要不要应用，与目录名字面序无关，因此**安全**；`prisma migrate dev` 的 shadow-DB 重放假定目录名序即预期应用序，对这条历史会报漂移（drift），**不安全**、不能在这套 X8 卷上跑。两个目录都不改名——改名会使已落盘的 `_prisma_migrations.migration_name` 与磁盘目录名不一致，制造新的漂移而不是修复旧漂移。生产/新库从空库开始 `migrate deploy` 时两迁移严格按目录名序连续应用，不受此限制影响 | Claude（Sonnet，PR6 B-3 修复附带发现） | 只读记录，未执行任何 migration 操作；本行是 N-11 的登记，不是新变更 |
 
 ## 13. 待跟进项（Schema 变更队列，Owner 待批）
 

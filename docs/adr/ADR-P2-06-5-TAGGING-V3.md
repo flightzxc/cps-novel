@@ -366,6 +366,35 @@ auto apply 必须 master、auto 与 Owner gate 同时开放；任何 CLI/Admin/W
 和 B2 mappings 硬编码进 migration SQL。回滚优先关闭 flags/停用 edge/tag；不在本期设计 destructive
 down migration。
 
+### 2026-09-05 bootstrap CLI 落地（PR6 fix B-3）
+
+`scripts/p2-06-5-production/tagging-bootstrap.ts` 实现本节裁决，闭合 PR #6 验收 B-3
+（"CanonicalTag 无任何落库途径，公开分类链在 UAT 不可执行"）。对齐步骤 1-4：
+
+- 权威输入锁定为 CanonicalTag v1 Final JSON（`docs/p2/p2-06-5-lane-a/canonical-tag-v1-final/2026-08-16/canonical-tag-v1.0.0-final.json`，SHA-256
+  `8bc8cdae8be2176bde170173e98bad2b9fa0e1770818174a57320816eefdccad`，复用
+  `src/lib/tagging/keyword-artifact.ts` 的 `CANONICAL_TAG_V1_SHA256` 常量）与 B2 Owner
+  Final mapping candidates CSV（`docs/p2/p2-06-5-lane-b/b2-owner-final/2026-08-16/mapping-candidates-final.csv`，SHA-256
+  `140057fea8e09980ab465c4eb780e228d07d69dab37d54bbab312da9cab82c38`）；字节不符即拒。
+- dry-run 打印 123/123 翻译/314 alias（内联 `canonical_tag.aliases` JSONB，非独立表）/
+  360 keyword（对 438 条原始 `keyword_seeds` 应用去重+跨 tag 冲突+非 Latin/CJK 脚本+
+  `keyword-eligibility-v2` overlay 禁用后的结果，算法与 Lane C 校准脚本
+  `scripts/p2-06-5-lane-c/owner-final-c1.mjs` 的 `buildLexicon` 一致）/194 组 196 条
+  approved mapping edge，并核对数据库当前计数，零写入。
+- `--channel-app changdu-app=<ChannelApp UUID>` 由 operator 显式提供（不猜测名字/唯一
+  候选），dry-run 与 apply 都对 DB 校验该 UUID 存在且 `active`。`--apply --approver`
+  要求已存在且 `active` 的 `admin_identity`（只用于 `source_label_mapping.approved_by`；
+  `canonical_tag` 无 actor 列），事务 + `pg_advisory_xact_lock`，按各表唯一键幂等
+  upsert，写 `OperationAudit`（`actorType=system`，`action=canonical_tag.bootstrap`，
+  `afterSnapshot` 含 `canonicalV1Sha256`/`mappingArtifactSha256`/`taxonomyVersion`/
+  各表计数）。同 `--request-id` 重放零写入（复用
+  `scripts/bootstrap-admin-identity.ts` 的 replay 模式）；不产生 `mutateAdmin*` 调用、
+  不写 `novel_canonical_tag`。
+- 2026-09-05 在 X8 uat（`cps-novel-x8-local`，基线 `a05e41b`）实跑通过：dry-run 与
+  apply 计数与本节一致，`canonical_tag`/`canonical_tag_translation`/
+  `canonical_tag_keyword`/`source_label_mapping` 分别落地 123/123/360/196 行，
+  `novel_canonical_tag` 保持 0；同 `--request-id` 二次 `--apply` 为纯 replay。
+
 ## 13. Admin Behavior
 
 现有 `/tags` 保留为“来源标签”只读页。新增：

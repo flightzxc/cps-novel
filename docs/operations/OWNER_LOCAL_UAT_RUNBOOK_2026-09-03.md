@@ -152,6 +152,71 @@ scripts/x8-production-like.sh up                        # 两个 secret 文件�
 之后单独补跑 `scripts/x8-production-like.sh admin-seed` 即可。`admin-seed` 幂等——
 账户已存在时默认跳过，只有再加 `--reset-password` 才更新密码哈希。
 
+### 2.6 分类词典 bootstrap（CanonicalTag v1，PR6 fix B-3）
+
+步骤 20（分类公开链）需要 `canonical_tag` 表非空——additive migration 不带 seed，
+`mutateAdminCanonicalTag` 只支持 update 不支持 create（ADR-P2-06-5-TAGGING-V3 §12
+"schema migration + explicit bootstrap CLI"），所以 UAT 前必须先跑一次
+`scripts/p2-06-5-production/tagging-bootstrap.ts`：dry-run 核对计数与两份权威文件的
+SHA-256（CanonicalTag v1 Final 123 条、B2 Owner Final 194 组/196 条 approved mapping
+edge），确认无误后 `--apply` 一次。`--channel-app` 必须显式绑定
+`changdu-app -> ChannelApp UUID`（不得按名字/唯一候选猜测，见 ADR §12 步骤 3）；
+`--approver` 必须是 X8 已存在的 `active` `admin_identity`（用于
+`source_label_mapping.approved_by`；`canonical_tag` 本身没有 actor 列）。默认走
+`web` 镜像内一次性进程，DB 用 `$P1_12_MIGRATION_DATABASE_URL`
+（`web_app` 对这些表只有列级授权，写权限在 `migration_owner`）：
+
+一次性进程复用 `x8_compose`（`scripts/lib/x8-production-like-env.sh` 里
+`prepare_x8_environment` 已导出的 `$P1_12_MIGRATION_DATABASE_URL`/
+`$P1_12_COMPOSE_PROJECT`），形态与 `admin_seed()`/`admin_reset()` 相同：
+
+```bash
+export X8_LEVEL=uat
+scripts/x8-production-like.sh up   # 已起则跳过
+
+source scripts/lib/x8-production-like-env.sh
+prepare_x8_environment
+x8_compose() {
+  docker compose -p "$P1_12_COMPOSE_PROJECT" \
+    -f "$X8_PROJECT_ROOT/docker-compose.yml" \
+    -f "$X8_PROJECT_ROOT/infra/production-like/docker-compose.yml" "$@"
+}
+IMAGE="$(docker inspect --format '{{.Config.Image}}' "$(x8_compose ps -q web)")"
+
+# dry-run：只读，零写入
+CPS_NOVEL_APP_IMAGE="$IMAGE" x8_compose run --rm --no-deps -T \
+  -e DATABASE_URL="$P1_12_MIGRATION_DATABASE_URL" \
+  web tsx scripts/p2-06-5-production/tagging-bootstrap.ts \
+  --request-id x8-uat-tagging-bootstrap-$(date -u '+%Y%m%dT%H%M%SZ') \
+  --reason "owner local uat bootstrap" \
+  --channel-app changdu-app=<ChannelApp UUID>
+
+# 全部通过后原样加 --approver/--apply 跑一次
+... --approver <admin identity UUID 或 username> --apply
+```
+
+`<ChannelApp UUID>` 查 `SELECT ca.id FROM channel_app ca JOIN source_app sa ON
+sa.id=ca.source_app_id WHERE sa.code='changdu';`（X8 本地实测为
+`5e9aa528-88ab-43d4-97de-a0d9ff5e9862`，projectType=1，经 MoboReader 渠道接入，
+不要按名字/唯一候选猜测——上面这条查询本身就是"显式绑定"的核实步骤，不是自动推断）。
+`--approver` 用已存在的 `active` 身份（如 `admin`）。
+
+**PR6 Lane C 未合并前的本地验证**：`tagging-bootstrap.ts` 与两份权威文件不在已构建
+的 X8 镜像内（`docs/` 目录本就不打进生产镜像），额外加三个只读 volume 挂载到上面
+`run` 命令（脚本本身 + 两份 SHA 已核对的权威文件，路径与仓库相对路径一致）：
+`-v <lane-c-worktree>/scripts/p2-06-5-production/tagging-bootstrap.ts:/app/scripts/p2-06-5-production/tagging-bootstrap.ts:ro`、
+`-v <lane-c-worktree>/docs/p2/p2-06-5-lane-a/canonical-tag-v1-final/2026-08-16/canonical-tag-v1.0.0-final.json:/app/docs/p2/p2-06-5-lane-a/canonical-tag-v1-final/2026-08-16/canonical-tag-v1.0.0-final.json:ro`、
+`-v <lane-c-worktree>/docs/p2/p2-06-5-lane-b/b2-owner-final/2026-08-16/mapping-candidates-final.csv:/app/docs/p2/p2-06-5-lane-b/b2-owner-final/2026-08-16/mapping-candidates-final.csv:ro`。
+合并后镜像自带 `scripts/` 与 `docs/`（若发布流程也复制 `docs/`；否则两份权威文件的
+挂载仍需保留——这三行挂载不修改 X8 worktree 本身，只是运行时叠加）。已在 X8
+uat（`cps-novel-x8-local`，基线 `a05e41b`）验证：dry-run 与 apply 均通过，
+`--request-id` 相同的第二次 `--apply` 是纯 replay（`outcome=replayed`,
+`wrote=false`，计数不变）。
+
+幂等——同一 `--request-id` 重跑是纯 replay（零写入）；不同 `--request-id` 但内容不变
+的重跑按各表唯一键 upsert，不产生重复行。**从不写 `novel_canonical_tag`**——manual
+打标仍然只能在步骤 20 里通过后台 UI 完成，bootstrap 只负责词典本身。
+
 **事故与恢复**：2026-09-04 X8 复用旧 PostgreSQL volume 后，遗留管理员 `x8-owner`
 已完成 2FA 绑定但 Owner 无验证器/恢复码，密码通过验证后卡死在
 `/two-factor/challenge`。`scripts/reset-admin-auth-state.ts`（受审计、默认
