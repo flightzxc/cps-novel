@@ -138,11 +138,16 @@ GRANT SELECT (
 ) ON side_effect_intent TO web_app, analyst_ro;
 
 -- SiteSetting boundary. Web serves public configuration and owns the guarded
--- admin write service; Worker reads IndexNow/SEO execution config. Analyst and
--- Scheduler deliberately receive no access because the singleton contains the
--- S2 IndexNow key. Carousel config is owned by the same settings capability.
+-- admin write service; Worker reads IndexNow/SEO execution config. Analyst
+-- deliberately receives no access because the singleton contains the S2
+-- IndexNow key. Scheduler is not exempt from that boundary either: PR6 lane E
+-- gives it a column-scoped exception limited to the two columns it needs to
+-- time the home-carousel cron (`id` is required too, since it appears in the
+-- `WHERE id = 1` lookup) -- it still cannot see `indexnow_key` or any other
+-- column. Carousel config is owned by the same settings capability.
 -- INSERT/DELETE remain migration_owner-only.
 GRANT SELECT ON TABLE site_setting TO web_app, worker_app;
+GRANT SELECT (id, carousel_config_json) ON site_setting TO scheduler_app;
 GRANT UPDATE (
   site_name, site_description, home_meta_title, home_meta_description,
   default_og_image, google_search_console_verification,
@@ -209,6 +214,11 @@ GRANT INSERT, UPDATE ON TABLE
 TO worker_app;
 GRANT DELETE ON TABLE novel_chapter_content TO worker_app;
 GRANT DELETE ON TABLE channel_credential_active_fingerprint TO worker_app;
+-- PR6 lane E: computeHomeCarouselInTx (src/server/home-carousel/service.ts)
+-- fully replaces the serving snapshot each run with `deleteMany` followed by
+-- `createMany` -- there is no fixed row set to UPDATE in place, so DELETE is
+-- the only way to express "clear this locale's current serving rows".
+GRANT DELETE ON TABLE home_carousel_serving TO worker_app;
 GRANT INSERT ON TABLE
   credential_change_log, operation_audit, indexnow_outbox_attempt,
   home_carousel_change_log
@@ -225,6 +235,12 @@ GRANT SELECT ON TABLE channel, source_app, channel_app, channel_capability,
   channel_sync_task, channel_sync_task_item, promo_link, article,
   canonical_tag, canonical_tag_translation, canonical_tag_keyword,
   source_label_mapping, novel_tag_state, novel_canonical_tag, tag_classification_run TO worker_app;
+-- PR6 lane E: computeHomeCarouselInTx reads the manual-slot roster and its
+-- own prior batch/candidate/serving rows within the same transaction
+-- (findMany/update/deleteMany all evaluate a WHERE clause), which needs
+-- SELECT, not just the INSERT/UPDATE granted above.
+GRANT SELECT ON TABLE home_carousel_manual_slot, home_carousel_auto_batch,
+  home_carousel_auto_candidate, home_carousel_serving TO worker_app;
 
 -- Scheduler only creates scheduling and GenericTask metadata. It never reads Credential/Auth secrets.
 GRANT SELECT, INSERT, UPDATE ON TABLE schedule_run, cron_run, generic_task, generic_task_item TO scheduler_app;

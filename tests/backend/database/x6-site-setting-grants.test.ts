@@ -35,7 +35,15 @@ describe("X6 SiteSetting infrastructure and registry contracts", () => {
     ]) {
       expect(updateGrant).toContain(column);
     }
-    expect(grants).not.toMatch(/GRANT[^;]+site_setting[^;]+(?:analyst_ro|scheduler_app)/s);
+    expect(grants).not.toMatch(/GRANT[^;]+site_setting[^;]+analyst_ro/s);
+    // PR6 lane E gave scheduler_app a column-scoped SELECT (id,
+    // carousel_config_json) exception -- see
+    // tests/backend/database/carousel-grants.test.ts for that positive
+    // assertion. This file keeps enforcing that scheduler_app gets nothing
+    // beyond it: no whole-table SELECT (which would also expose
+    // indexnow_key) and no INSERT/UPDATE/DELETE.
+    expect(grants).not.toMatch(/GRANT SELECT ON TABLE[^;]*site_setting[^;]*scheduler_app/s);
+    expect(grants).not.toMatch(/GRANT (?:INSERT|UPDATE|DELETE)[^;]+site_setting[^;]+scheduler_app/s);
     expect(grants).not.toMatch(/GRANT (?:INSERT|DELETE)[^;]+site_setting[^;]+web_app/s);
     expect(grants).not.toMatch(/GRANT UPDATE ON TABLE site_setting TO web_app/);
   });
@@ -49,10 +57,20 @@ describe("X6 SiteSetting infrastructure and registry contracts", () => {
     expect(records).toHaveLength(19);
     const fields = new Map(records.filter((record) => record.record_kind === "field")
       .map((record) => [record.field_name, record]));
+    // PR6 lane E: scheduler_app reads exactly `id` and `carousel_config_json`
+    // (the column-scoped grant asserted in
+    // tests/backend/database/carousel-grants.test.ts) to time the
+    // home-carousel cron; every other column, including indexnow_key, stays
+    // Web/Worker-only.
+    const schedulerReadableFields = new Set(["id", "carousel_config_json"]);
     for (const record of fields.values()) {
-      expect(record.read_roles).toEqual(["web_app", "worker_app"]);
       expect(record.read_roles).not.toContain("analyst_ro");
-      expect(record.read_roles).not.toContain("scheduler_app");
+      if (schedulerReadableFields.has(record.field_name)) {
+        expect(record.read_roles).toEqual(["web_app", "worker_app", "scheduler_app"]);
+      } else {
+        expect(record.read_roles).toEqual(["web_app", "worker_app"]);
+        expect(record.read_roles).not.toContain("scheduler_app");
+      }
     }
     for (const field of [
       "site_name",
