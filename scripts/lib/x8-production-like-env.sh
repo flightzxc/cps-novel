@@ -188,11 +188,16 @@ prepare_x8_environment() {
       export NOVEL_CATALOG_SYNC_ALLOW_WRITE=false
       ;;
   esac
-  # RC-2b: WORKER_TASK_ALLOWLIST and the four other double-gate pairs
-  # (promo claim / sitemap / indexnow outbox / indexnow delivery) all come
-  # from the single X8_LEVEL table (scripts/lib/x8-levels.json) instead of
-  # being hard-coded here — this is the only place their values are set, so
-  # X8_LEVEL=0 stays byte-for-byte what this file exported before RC-2b.
+  # RC-2b: WORKER_TASK_ALLOWLIST and the double-gate pairs (promo claim /
+  # sitemap / indexnow outbox / indexnow delivery) all come from the single
+  # X8_LEVEL table (scripts/lib/x8-levels.json) instead of being hard-coded
+  # here — this is the only place their values are set, so X8_LEVEL=0 stays
+  # byte-for-byte what this file exported before RC-2b. PR6 lane F added the
+  # P2-06.5 tagging double-gate (FEATURE_P2_06_5_TAGGING /
+  # FEATURE_P2_06_5_TAG_ADMIN_WRITE) and the auto-classify pair
+  # (FEATURE_NOVEL_TAG_AUTO / AUTO_WRITE_AUTHORIZED) to the same table's
+  # `flags` object — this loop exports whatever keys that object has, so no
+  # change was needed here beyond this comment.
   local level_config level_key level_value
   level_config="$(x8_level_config "$X8_LEVEL")" || {
     echo "ERROR: failed to resolve X8_LEVEL configuration for '$X8_LEVEL'" >&2
