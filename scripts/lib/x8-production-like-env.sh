@@ -12,6 +12,15 @@ X8_BACKUP_DIR="$X8_RUNTIME_DIR/backups"
 X8_EVIDENCE_DIR="$X8_RUNTIME_DIR/evidence"
 X8_GATE_STATE_FILE="$X8_RUNTIME_DIR/catalog-gate.state"
 X8_BACKUP_PGPASS_FILE="$X8_SECRET_DIR/backup.pgpass"
+# X8 release-identity gate work order (2026-09-05): the one file `up` writes
+# after a successful build and before any container starts, and the one file
+# every gate operation reads its deployment identity from. Never hand-edited
+# (see resolve_x8_identity() / write_x8_identity() in x8-production-like.sh).
+X8_IDENTITY_FILE="$X8_RUNTIME_DIR/release-identity.json"
+# Single source of truth for the compose project name so gate_catalog_status()
+# (which must do zero environment prep, see 4.3(9)) doesn't need to call
+# prepare_x8_environment() just to know it.
+X8_COMPOSE_PROJECT_NAME="cps-novel-x8-local"
 
 export P1_12_RUNTIME_DIR="$X8_RUNTIME_DIR"
 export P1_12_SECRET_DIR="$X8_SECRET_DIR"
@@ -94,6 +103,113 @@ x8_level_catalog_default() {
   ' "$X8_LEVELS_FILE" "$level"
 }
 
+x8_read_gate_state() {
+  [[ -f "$X8_GATE_STATE_FILE" ]] || {
+    echo "ERROR: no X8 catalog gate state file at $X8_GATE_STATE_FILE; run 'up' first" >&2
+    return 65
+  }
+  local state
+  state="$(tr -d '\r\n' <"$X8_GATE_STATE_FILE")"
+  case "$state" in
+    dry-run | apply | closed) printf '%s' "$state" ;;
+    *)
+      echo "ERROR: corrupt X8 catalog gate state" >&2
+      return 65
+      ;;
+  esac
+}
+
+# X8 release-identity gate work order (2026-09-05), 施工项一 4.3(一)/(三): reads
+# the deploy identity `up` last wrote and exports X8_IDENTITY_*. This is the
+# ONLY sanctioned way for the gate command to learn its run level, image ref,
+# and image digest -- never from the branch's latest commit, never from a
+# caller-supplied X8_LEVEL, and never with a fallback if the file is missing
+# or unreadable. A missing/corrupt/leveless identity file is a hard failure,
+# by design ("级别不可判定即拒绝执行" -- Owner). This function never touches
+# docker, never creates a directory, and never writes anything -- it is safe
+# to call from a purely read-only path.
+resolve_x8_identity() {
+  if [[ ! -f "$X8_IDENTITY_FILE" ]]; then
+    echo "ERROR: no X8 deploy identity file at $X8_IDENTITY_FILE" >&2
+    echo "Run 'scripts/x8-production-like.sh up' (with an explicit X8_LEVEL=0|uat|r) to establish one before using the gate command." >&2
+    return 65
+  fi
+  local parsed
+  if ! parsed="$(node -e '
+    const fs = require("fs");
+    let data;
+    try {
+      data = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+    } catch (error) {
+      process.stderr.write(`ERROR: corrupt X8 deploy identity file (${error.message})\n`);
+      process.exit(65);
+    }
+    const requiredStrings = ["appVersion", "gitCommit", "level", "imageRef", "imageDigest", "composeProject", "buildDate"];
+    for (const key of requiredStrings) {
+      const value = data[key];
+      if (typeof value !== "string" || value.trim().length === 0) {
+        process.stderr.write(`ERROR: X8 deploy identity file is missing a valid "${key}"\n`);
+        process.exit(65);
+      }
+    }
+    if (!["0", "uat", "r"].includes(data.level)) {
+      process.stderr.write(`ERROR: X8 deploy identity file has an unrecognized level "${data.level}" (allowed: 0, uat, r)\n`);
+      process.exit(65);
+    }
+    if (
+      !Array.isArray(data.composeConfigFiles) ||
+      data.composeConfigFiles.length === 0 ||
+      !data.composeConfigFiles.every((entry) => typeof entry === "string" && entry.trim().length > 0)
+    ) {
+      process.stderr.write("ERROR: X8 deploy identity file is missing a valid \"composeConfigFiles\" list\n");
+      process.exit(65);
+    }
+    const lines = [
+      `APP_VERSION=${data.appVersion}`,
+      `GIT_COMMIT=${data.gitCommit}`,
+      `LEVEL=${data.level}`,
+      `IMAGE_REF=${data.imageRef}`,
+      `IMAGE_DIGEST=${data.imageDigest}`,
+      `COMPOSE_PROJECT=${data.composeProject}`,
+      `BUILD_DATE=${data.buildDate}`,
+      `COMPOSE_CONFIG_FILES=${data.composeConfigFiles.join(",")}`,
+    ];
+    process.stdout.write(lines.join("\n") + "\n");
+  ' "$X8_IDENTITY_FILE")"; then
+    return 65
+  fi
+  X8_IDENTITY_APP_VERSION=""
+  X8_IDENTITY_GIT_COMMIT=""
+  X8_IDENTITY_LEVEL=""
+  X8_IDENTITY_IMAGE_REF=""
+  X8_IDENTITY_IMAGE_DIGEST=""
+  X8_IDENTITY_COMPOSE_PROJECT=""
+  X8_IDENTITY_BUILD_DATE=""
+  X8_IDENTITY_COMPOSE_CONFIG_FILES=""
+  local key value
+  while IFS='=' read -r key value; do
+    case "$key" in
+      APP_VERSION) X8_IDENTITY_APP_VERSION="$value" ;;
+      GIT_COMMIT) X8_IDENTITY_GIT_COMMIT="$value" ;;
+      LEVEL) X8_IDENTITY_LEVEL="$value" ;;
+      IMAGE_REF) X8_IDENTITY_IMAGE_REF="$value" ;;
+      IMAGE_DIGEST) X8_IDENTITY_IMAGE_DIGEST="$value" ;;
+      COMPOSE_PROJECT) X8_IDENTITY_COMPOSE_PROJECT="$value" ;;
+      BUILD_DATE) X8_IDENTITY_BUILD_DATE="$value" ;;
+      COMPOSE_CONFIG_FILES) X8_IDENTITY_COMPOSE_CONFIG_FILES="$value" ;;
+    esac
+  done <<<"$parsed"
+  # Belt-and-suspenders: the node script above already exits 65 on a missing
+  # level, but never let a run level fall back silently for any other reason
+  # either (e.g. a future field-parsing change) -- undecidable always fails.
+  if [[ -z "$X8_IDENTITY_LEVEL" ]]; then
+    echo "ERROR: X8 deploy identity file does not resolve to a run level" >&2
+    return 65
+  fi
+  export X8_IDENTITY_APP_VERSION X8_IDENTITY_GIT_COMMIT X8_IDENTITY_LEVEL X8_IDENTITY_IMAGE_REF \
+    X8_IDENTITY_IMAGE_DIGEST X8_IDENTITY_COMPOSE_PROJECT X8_IDENTITY_BUILD_DATE X8_IDENTITY_COMPOSE_CONFIG_FILES
+}
+
 write_x8_gate_state() {
   local state="$1"
   [[ "$state" == "dry-run" || "$state" == "apply" || "$state" == "closed" ]] || {
@@ -106,15 +222,36 @@ write_x8_gate_state() {
   mv "$temporary" "$X8_GATE_STATE_FILE"
 }
 
+# X8 release-identity gate work order (2026-09-05), 施工项一 4.3(八): this used
+# to compare "the level's documented default" against "the persisted state
+# file" -- both static, neither ever looked at what the containers actually
+# have. That is exactly the blind spot the work order's 一.1 describes: the
+# alert stayed silent while the persisted state said "apply" and both running
+# containers actually had the gate closed. The comparison is now "persisted
+# state file" vs. "what is actually baked into the running web container's
+# environment" -- and the repair suggestion carries the full command,
+# including the level prefix and the (now-required, see 4.3(七)) --apply flag.
 warn_x8_gate_drift() {
-  local expected actual
   [[ "$X8_LEVEL" == "uat" || "$X8_LEVEL" == "r" ]] || return 0
-  expected="$(x8_level_catalog_default "$X8_LEVEL")"
-  actual="$(tr -d '\r\n' <"$X8_GATE_STATE_FILE")"
-  [[ "$actual" == "$expected" ]] && return 0
+  [[ -f "$X8_GATE_STATE_FILE" ]] || return 0
+  local persisted expected_enabled expected_write
+  persisted="$(tr -d '\r\n' <"$X8_GATE_STATE_FILE")"
+  case "$persisted" in
+    apply) expected_enabled=true; expected_write=true ;;
+    dry-run) expected_enabled=true; expected_write=false ;;
+    closed) expected_enabled=false; expected_write=false ;;
+    *) return 0 ;; # corrupt state is caught elsewhere (prepare_x8_environment)
+  esac
+  local web_container
+  web_container="$(x8_compose ps -q web 2>/dev/null || true)"
+  [[ -n "$web_container" ]] || return 0 # nothing running yet to compare against
+  local actual_enabled actual_write
+  actual_enabled="$(x8_container_env_value "$web_container" FEATURE_NOVEL_CATALOG_SYNC)"
+  actual_write="$(x8_container_env_value "$web_container" NOVEL_CATALOG_SYNC_ALLOW_WRITE)"
+  [[ "$actual_enabled" == "$expected_enabled" && "$actual_write" == "$expected_write" ]] && return 0
   printf '%s\n' \
-    "WARNING: X8 catalog-write gate drift: level=$X8_LEVEL expected=$expected actual=$actual" \
-    "Repair explicitly (state is not overwritten): scripts/x8-production-like.sh gate catalog-write on" >&2
+    "WARNING: X8 catalog-write gate drift: state=$persisted (expects FEATURE_NOVEL_CATALOG_SYNC=$expected_enabled NOVEL_CATALOG_SYNC_ALLOW_WRITE=$expected_write) actual web container has FEATURE_NOVEL_CATALOG_SYNC=$actual_enabled NOVEL_CATALOG_SYNC_ALLOW_WRITE=$actual_write" \
+    "Repair explicitly (state is not overwritten): X8_LEVEL=$X8_LEVEL scripts/x8-production-like.sh gate catalog-write on --apply" >&2
 }
 
 prepare_x8_environment() {
@@ -151,7 +288,7 @@ prepare_x8_environment() {
     return 65
   }
 
-  export P1_12_COMPOSE_PROJECT=cps-novel-x8-local
+  export P1_12_COMPOSE_PROJECT="$X8_COMPOSE_PROJECT_NAME"
   export X8_LOCAL_DOMAIN=novel.test
   # RC-9 admin-host isolation (2026-09-03, Owner): the admin backend is a
   # distinct domain from the public site at every X8_LEVEL -- this is a
@@ -172,7 +309,7 @@ prepare_x8_environment() {
   export X8_BACKUP_INTERVAL_SECONDS="${X8_BACKUP_INTERVAL_SECONDS:-86400}"
   export X8_BACKUP_RUN_ON_START="${X8_BACKUP_RUN_ON_START:-true}"
   export X8_RUNTIME_DIR X8_SECRET_DIR X8_TLS_DIR X8_NGINX_RUNTIME_DIR X8_BACKUP_DIR X8_EVIDENCE_DIR
-  export X8_GATE_STATE_FILE X8_BACKUP_PGPASS_FILE
+  export X8_GATE_STATE_FILE X8_BACKUP_PGPASS_FILE X8_IDENTITY_FILE
 
   case "$gate_state" in
     dry-run)

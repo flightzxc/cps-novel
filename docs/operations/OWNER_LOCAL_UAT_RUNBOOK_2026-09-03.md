@@ -58,10 +58,23 @@ scripts/x8-production-like.sh status      # docker compose ps，确认六服务�
 scripts/x8-production-like.sh verify      # 拓扑/allowlist/nginx 反模式静态校验，按 X8_LEVEL=uat 的期望值断言
 ```
 
-需要临时收紧 catalog 写闸时，既有 `gate catalog-write on|off|dry-run` 子命令不受
-影响，在 Level UAT 下依然可用、依然只管 `FEATURE_NOVEL_CATALOG_SYNC` /
-`NOVEL_CATALOG_SYNC_ALLOW_WRITE` 这一对，与 claim/sitemap/indexnow 八项双闸 flag
-及 `PROMO_CLAIM_ROLES`（由 `X8_LEVEL` 决定）互不冲突。
+需要临时收紧 catalog 写闸时，既有 `gate catalog-write on|off|dry-run` 子命令依然
+只管 `FEATURE_NOVEL_CATALOG_SYNC` / `NOVEL_CATALOG_SYNC_ALLOW_WRITE` 这一对，与
+claim/sitemap/indexnow 八项双闸 flag 及 `PROMO_CLAIM_ROLES` 互不冲突，但 X8
+发布身份固化工单（2026-09-05）之后有两点行为变化：
+
+1. **运行级别不再读调用现场的 `X8_LEVEL`**，而是读 `up` 最近一次成功构建后写下的
+   `.tmp/x8-production-like/release-identity.json`（该文件由 `up` 唯一写入，
+   不得手工编辑）。该文件缺失、损坏，或解析不出合法级别时，`gate` 直接失败并提示
+   先跑 `up`——不会静默回落到 Level 0。
+2. **计划模式是默认行为**：`gate catalog-write on|off|dry-run` 不带 `--apply` 时
+   只打印三方比对（状态文件 / 渲染候选 / 容器实测）与将要发生的变化，不触碰容器、
+   不写状态文件；要真正生效必须显式加 `--apply`，例如
+   `X8_LEVEL=uat scripts/x8-production-like.sh gate catalog-write on --apply`
+   （命令里的 `X8_LEVEL=uat` 只在需要重新走 `prepare_x8_environment()` 的早期
+   校验时有意义，实际决定本次操作级别的仍是发布身份文件）。只想查看当前状态、不
+   想有任何写入（含状态文件时间戳）时用 `gate catalog-write status`，它是纯只读
+   路径。
 
 进入 Level UAT 前，本地若已经以 `X8_LEVEL=0`（或未设置，即默认 0）跑过
 `up`，需要先 `scripts/x8-production-like.sh down` 再以 `X8_LEVEL=uat`

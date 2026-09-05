@@ -12,7 +12,8 @@ usage() {
     '       scripts/x8-production-like.sh up' \
     '       scripts/x8-production-like.sh down [--purge]' \
     '       scripts/x8-production-like.sh status' \
-    '       scripts/x8-production-like.sh gate catalog-write <on|off|dry-run|status>' \
+    '       scripts/x8-production-like.sh gate catalog-write <on|off|dry-run> [--apply]' \
+    '       scripts/x8-production-like.sh gate catalog-write status' \
     '       scripts/x8-production-like.sh backup-now' \
     '       scripts/x8-production-like.sh restore-smoke' \
     '       scripts/x8-production-like.sh catalog-one --task-id <uuid> --item-id <uuid> --actor <operator-handle>' \
@@ -27,7 +28,12 @@ usage() {
     '' \
     'env: X8_LEVEL=0|uat|r (default 0) selects the WORKER_TASK_ALLOWLIST /' \
     '     double-gate rung from scripts/lib/x8-levels.json; invalid values' \
-    '     fail fast in prepare_x8_environment().' >&2
+    '     fail fast in prepare_x8_environment(). Only `up` reads X8_LEVEL --' \
+    '     `gate catalog-write` reads its run level from the release identity' \
+    '     file `up` last wrote (.tmp/x8-production-like/release-identity.json)' \
+    '     and fails if that file is missing or does not resolve to a level.' \
+    '     `gate catalog-write on|off|dry-run` defaults to plan mode (prints' \
+    '     the diff, touches nothing); pass --apply to actually recreate.' >&2
   exit 64
 }
 
@@ -44,6 +50,125 @@ x8_compose() {
     -f "$X8_PROJECT_ROOT/docker-compose.yml" \
     -f "$X8_PROJECT_ROOT/infra/production-like/docker-compose.yml" \
     "$@"
+}
+
+# X8 release-identity gate work order (2026-09-05), 施工项一: reads one
+# environment variable out of a running (or stopped) container's *actual*
+# baked-in Config.Env -- never out of a re-render of persisted config, and
+# never out of `docker exec ... env` (which needs the container running).
+# Used both by warn_x8_gate_drift() (soft warning, in x8-production-like-env.sh)
+# and by the gate command's three-way pre-check below (hard failure). Never
+# fails: an unreadable container or an absent key both resolve to "", which
+# reliably compares unequal to any real expected value (fail-closed).
+x8_container_env_value() {
+  local container="$1" key="$2"
+  docker inspect --format '{{json .Config.Env}}' "$container" 2>/dev/null | node -e '
+    let data = "";
+    process.stdin.on("data", (chunk) => { data += chunk; });
+    process.stdin.on("end", () => {
+      const key = process.argv[1];
+      let entries = [];
+      try { entries = JSON.parse(data); } catch { entries = []; }
+      const prefix = `${key}=`;
+      const match = Array.isArray(entries) ? entries.find((entry) => typeof entry === "string" && entry.startsWith(prefix)) : undefined;
+      process.stdout.write(match ? match.slice(prefix.length) : "");
+    });
+  ' "$key"
+}
+
+# X8 release-identity gate work order (2026-09-05), 施工项一 4.3(四): container
+# labels are used ONLY for this front-and-back comparison against the release
+# identity file -- never as a source of identity themselves. Any mismatch
+# stops the gate command and names exactly which field drifted.
+x8_check_container_labels() {
+  local container="$1" service="$2"
+  local label_project label_service label_config_files label_image_id
+  label_project="$(docker inspect "$container" --format '{{index .Config.Labels "com.docker.compose.project"}}' 2>/dev/null || true)"
+  label_service="$(docker inspect "$container" --format '{{index .Config.Labels "com.docker.compose.service"}}' 2>/dev/null || true)"
+  label_config_files="$(docker inspect "$container" --format '{{index .Config.Labels "com.docker.compose.project.config_files"}}' 2>/dev/null || true)"
+  label_image_id="$(docker inspect "$container" --format '{{.Image}}' 2>/dev/null || true)"
+
+  [[ "$label_project" == "$X8_IDENTITY_COMPOSE_PROJECT" ]] || {
+    echo "ERROR: X8 gate pre-check failed: $service container compose-project label drift (running='$label_project' identity='$X8_IDENTITY_COMPOSE_PROJECT')" >&2
+    return 65
+  }
+  [[ "$label_service" == "$service" ]] || {
+    echo "ERROR: X8 gate pre-check failed: $service container compose-service label drift (running='$label_service' expected='$service')" >&2
+    return 65
+  }
+  [[ "$label_config_files" == "$X8_IDENTITY_COMPOSE_CONFIG_FILES" ]] || {
+    echo "ERROR: X8 gate pre-check failed: $service container compose config-files label drift (running='$label_config_files' identity='$X8_IDENTITY_COMPOSE_CONFIG_FILES')" >&2
+    return 65
+  }
+  [[ "$label_image_id" == "$X8_IDENTITY_IMAGE_DIGEST" ]] || {
+    echo "ERROR: X8 gate pre-check failed: $service container image digest drift (running='$label_image_id' identity='$X8_IDENTITY_IMAGE_DIGEST')" >&2
+    return 65
+  }
+  return 0
+}
+
+# X8 release-identity gate work order (2026-09-05), 施工项一 4.3(五), leg 1: the
+# rendered-config gate borrowed from the reference CPS short-drama
+# implementation. Renders differ; anything outside the two catalog-write
+# gate variables is unauthorized and fails closed.
+x8_gate_rendered_diff() {
+  local baseline_file="$1" candidate_file="$2"
+  node "$X8_PROJECT_ROOT/scripts/lib/x8-gate-diff.mjs" rendered "$baseline_file" "$candidate_file" \
+    "FEATURE_NOVEL_CATALOG_SYNC,NOVEL_CATALOG_SYNC_ALLOW_WRITE"
+}
+
+# X8 release-identity gate work order (2026-09-05), 施工项一 4.3(五), leg 2: the
+# leg the reference implementation is missing. Compares the baseline render
+# (persisted intent) against the web/worker containers' actual live
+# environment for the curated identity-relevant keys -- this is what catches
+# the exact drift this repo's local environment is confirmed to be in today
+# (state file says the gate is open; both containers actually have it
+# closed).
+x8_gate_actual_matches_baseline() {
+  local baseline_file="$1" web_container="$2" worker_container="$3"
+  local web_env_file worker_env_file actual_file keys_file
+  web_env_file="$(mktemp "${TMPDIR:-/tmp}/x8-gate-web-env.XXXXXX")"
+  worker_env_file="$(mktemp "${TMPDIR:-/tmp}/x8-gate-worker-env.XXXXXX")"
+  actual_file="$(mktemp "${TMPDIR:-/tmp}/x8-gate-actual.XXXXXX")"
+  keys_file="$(mktemp "${TMPDIR:-/tmp}/x8-gate-keys.XXXXXX")"
+
+  docker inspect --format '{{json .Config.Env}}' "$web_container" >"$web_env_file" 2>/dev/null || echo '[]' >"$web_env_file"
+  docker inspect --format '{{json .Config.Env}}' "$worker_container" >"$worker_env_file" 2>/dev/null || echo '[]' >"$worker_env_file"
+
+  node -e '
+    const fs = require("fs");
+    fs.writeFileSync(process.argv[1], JSON.stringify({
+      web: ["FEATURE_NOVEL_CATALOG_SYNC", "NOVEL_CATALOG_SYNC_ALLOW_WRITE", "PROMO_CLAIM_ROLES", "ADMIN_TWO_FACTOR_ENFORCEMENT"],
+      worker: ["FEATURE_NOVEL_CATALOG_SYNC", "NOVEL_CATALOG_SYNC_ALLOW_WRITE", "WORKER_TASK_ALLOWLIST"],
+    }));
+  ' "$keys_file"
+
+  node -e '
+    const fs = require("fs");
+    // `node -e` has no script-filename slot, so argv[1] is the first extra
+    // CLI argument (unlike running an actual .js/.mjs file, where argv[1] is
+    // the file path and extras start at argv[2]).
+    const [, outPath, webEnvPath, workerEnvPath] = process.argv;
+    const toMap = (raw) => {
+      let entries = [];
+      try { entries = JSON.parse(raw); } catch { entries = []; }
+      const map = {};
+      for (const entry of Array.isArray(entries) ? entries : []) {
+        const index = typeof entry === "string" ? entry.indexOf("=") : -1;
+        if (index > 0) map[entry.slice(0, index)] = entry.slice(index + 1);
+      }
+      return map;
+    };
+    fs.writeFileSync(outPath, JSON.stringify({
+      web: toMap(fs.readFileSync(webEnvPath, "utf8")),
+      worker: toMap(fs.readFileSync(workerEnvPath, "utf8")),
+    }));
+  ' "$actual_file" "$web_env_file" "$worker_env_file"
+
+  local status=0
+  node "$X8_PROJECT_ROOT/scripts/lib/x8-gate-diff.mjs" actual "$baseline_file" "$actual_file" "$keys_file" || status=$?
+  rm -f "$web_env_file" "$worker_env_file" "$actual_file" "$keys_file"
+  return "$status"
 }
 
 host_entry_exists() {
@@ -171,6 +296,59 @@ build_app_image() {
   fi
 }
 
+# X8 release-identity gate work order (2026-09-05), 施工项一 4.3(一): `up` is
+# the only entry point that builds images, so it is the only entry point
+# allowed to register a deploy identity. Called right after build_app_image()
+# succeeds and before any container starts. Fields are all derived from the
+# environment prepare_x8_environment()/build_app_image() already established
+# in this same `up` -- the image digest is freshly re-read from docker right
+# here, which is what lets this file "self-verify against the just-built
+# image" rather than trust a value computed earlier. Never hand-edited: the
+# file is written 0400 via temp-then-rename, and every gate operation only
+# ever reads it (resolve_x8_identity() in scripts/lib/x8-production-like-env.sh).
+write_x8_identity() {
+  require_command docker
+  require_command node
+  local image_digest
+  image_digest="$(docker image inspect "$CPS_NOVEL_APP_IMAGE" --format '{{.Id}}' 2>/dev/null || true)"
+  [[ -n "$image_digest" ]] || {
+    echo "ERROR: unable to resolve the local image digest for $CPS_NOVEL_APP_IMAGE while writing the X8 deploy identity" >&2
+    return 65
+  }
+  local temporary="${X8_IDENTITY_FILE}.tmp.$$"
+  if ! node -e '
+    const fs = require("fs");
+    // `node -e` has no script-filename slot, so argv[1] is the first extra
+    // CLI argument -- one leading skip, not two.
+    const [
+      , outPath, appVersion, gitCommit, level, imageRef, imageDigest,
+      composeProject, buildDate, configFileA, configFileB,
+    ] = process.argv;
+    const payload = {
+      schemaVersion: 1,
+      appVersion,
+      gitCommit,
+      level,
+      imageRef,
+      imageDigest,
+      composeProject,
+      buildDate,
+      composeConfigFiles: [configFileA, configFileB],
+      createdAt: new Date().toISOString(),
+    };
+    fs.writeFileSync(outPath, `${JSON.stringify(payload, null, 2)}\n`);
+  ' "$temporary" "$APP_VERSION" "$GIT_COMMIT" "$X8_LEVEL" "$CPS_NOVEL_APP_IMAGE" "$image_digest" \
+    "$P1_12_COMPOSE_PROJECT" "$BUILD_DATE" \
+    "$X8_PROJECT_ROOT/docker-compose.yml" "$X8_PROJECT_ROOT/infra/production-like/docker-compose.yml"; then
+    rm -f "$temporary"
+    echo "ERROR: failed to render the X8 deploy identity file" >&2
+    return 65
+  fi
+  chmod 400 "$temporary"
+  mv -f "$temporary" "$X8_IDENTITY_FILE"
+  echo "X8_RELEASE_IDENTITY_WRITTEN=$X8_IDENTITY_FILE"
+}
+
 wait_for_postgres() {
   local ready=no
   for _ in $(seq 1 60); do
@@ -264,9 +442,6 @@ ensure_local_certificate() {
 
 up_x8() {
   prepare_x8_environment
-  # M2: persisted operator choice remains authoritative, but UAT/R drift must
-  # never be silent. The helper only warns and prints the explicit repair.
-  warn_x8_gate_drift
   require_command docker
   require_command node
   require_command curl
@@ -288,8 +463,21 @@ up_x8() {
   render_nginx_configs
   validate_rendered_topology
   build_app_image
+  # X8 release-identity gate work order (2026-09-05), 施工项一 4.3(一): the
+  # deploy identity is registered right after a successful build, before any
+  # container starts (including postgres, which prepare_database() below
+  # would otherwise bring up first).
+  write_x8_identity
   prepare_database
   x8_compose up -d web worker scheduler
+
+  # M2/RC-… : persisted operator choice remains authoritative, but drift
+  # between it and what the containers actually have must never be silent.
+  # Checked here (after web/worker exist) rather than before, per 施工项一
+  # 4.3(八): the comparison basis is now "state file vs. container reality",
+  # which only means something once there is a container to inspect. The
+  # helper only warns and prints the explicit repair; it never blocks `up`.
+  warn_x8_gate_drift
 
   cp "$X8_NGINX_RUNTIME_DIR/bootstrap.conf" "$X8_NGINX_RUNTIME_DIR/active.conf"
   chmod 600 "$X8_NGINX_RUNTIME_DIR/active.conf"
@@ -497,25 +685,280 @@ echo "X8_LAUNCH_DAY_HEALTH_SQL=PASS"
 HEALTH_SQL
 }
 
+# X8 release-identity gate work order (2026-09-05), 施工项一 4.3(九): a pure
+# read path with zero environment prep -- no mkdir, no chmod, no secret-file
+# creation, no gate-state default write. This is the direct fix for the
+# incident that motivated this work order: an audit that believed itself
+# read-only ended up rewriting the gate state file's mtime by going through
+# the side-effecting prepare_x8_environment().
+gate_catalog_status() {
+  if [[ ! -f "$X8_GATE_STATE_FILE" ]]; then
+    echo "ERROR: no X8 catalog gate state file at $X8_GATE_STATE_FILE; nothing has been established yet (run 'up')" >&2
+    return 65
+  fi
+  local persisted
+  persisted="$(tr -d '\r\n' <"$X8_GATE_STATE_FILE")"
+  case "$persisted" in
+    dry-run | apply | closed) : ;;
+    *)
+      echo "ERROR: corrupt X8 catalog gate state" >&2
+      return 65
+      ;;
+  esac
+  printf 'X8_CATALOG_GATE=%s\n' "$persisted"
+
+  # P1_12_COMPOSE_PROJECT is a hardcoded literal, not an env-prep side
+  # effect -- setting it here (instead of calling prepare_x8_environment)
+  # is what lets `x8_compose ps`/`docker inspect` below run without ever
+  # touching a directory, a secret file, or the gate-state file itself.
+  export P1_12_COMPOSE_PROJECT="$X8_COMPOSE_PROJECT_NAME"
+  require_command docker
+  local web_container
+  web_container="$(x8_compose ps -q web 2>/dev/null || true)"
+  if [[ -z "$web_container" ]]; then
+    echo "X8_CATALOG_GATE_CONTAINER_CHECK=skipped (no running web container)"
+    return 0
+  fi
+
+  local expected_enabled expected_write
+  case "$persisted" in
+    apply) expected_enabled=true; expected_write=true ;;
+    dry-run) expected_enabled=true; expected_write=false ;;
+    closed) expected_enabled=false; expected_write=false ;;
+  esac
+  local actual_enabled actual_write
+  actual_enabled="$(x8_container_env_value "$web_container" FEATURE_NOVEL_CATALOG_SYNC)"
+  actual_write="$(x8_container_env_value "$web_container" NOVEL_CATALOG_SYNC_ALLOW_WRITE)"
+  if [[ "$actual_enabled" == "$expected_enabled" && "$actual_write" == "$expected_write" ]]; then
+    echo "X8_CATALOG_GATE_CONTAINER_CHECK=match"
+  else
+    echo "X8_CATALOG_GATE_CONTAINER_CHECK=drift"
+    printf '%s\n' \
+      "WARNING: X8 catalog-write gate drift: state=$persisted (expects FEATURE_NOVEL_CATALOG_SYNC=$expected_enabled NOVEL_CATALOG_SYNC_ALLOW_WRITE=$expected_write) actual web container has FEATURE_NOVEL_CATALOG_SYNC=$actual_enabled NOVEL_CATALOG_SYNC_ALLOW_WRITE=$actual_write" >&2
+  fi
+}
+
+# X8 release-identity gate work order (2026-09-05), 施工项一: the single-
+# variable recreate for the catalog-write gate. Implements 4.3(二)(三)(四)
+# (五)(六)(七): level and image come only from the release identity file
+# (never recomputed from the branch's latest commit, never defaulted);
+# container labels are used only for a front-and-back comparison against
+# that identity, never as an identity source; the pre-check is a three-way
+# comparison (persisted state, rendered candidate, container reality), not
+# just the reference implementation's two-way rendered diff; recreate always
+# runs before anything is written to disk, so a failure at any point up to
+# and including the recreate itself leaves the gate state file completely
+# untouched -- there is nothing to roll back; and plan mode (no --apply) is
+# the default, touching nothing.
+gate_catalog_recreate() {
+  local action="$1" apply="$2"
+  resolve_x8_identity || return 65
+
+  local persisted
+  persisted="$(x8_read_gate_state)" || return 65
+
+  local target
+  case "$action" in
+    on) target=apply ;;
+    off) target=closed ;;
+    dry-run) target=dry-run ;;
+  esac
+
+  # 4.3(三): the run level comes from the release identity, full stop --
+  # never from whatever X8_LEVEL the caller's shell happened to have (or not
+  # have) exported. Forcing it here before prepare_x8_environment() means a
+  # missing/wrong caller-side X8_LEVEL prefix can no longer silently change
+  # what this command does (一.1's core complaint).
+  export X8_LEVEL="$X8_IDENTITY_LEVEL"
+  prepare_x8_environment
+  # 4.3(二): image and version identity come only from the release identity
+  # file, overriding whatever prepare_p1_12_local_environment() just computed
+  # from the live git worktree HEAD.
+  export APP_VERSION="$X8_IDENTITY_APP_VERSION"
+  export GIT_COMMIT="$X8_IDENTITY_GIT_COMMIT"
+  export CPS_NOVEL_APP_IMAGE="$X8_IDENTITY_IMAGE_REF"
+  export BUILD_DATE="$X8_IDENTITY_BUILD_DATE"
+  echo "X8_GATE_LEVEL_SOURCE=release-identity level=$X8_IDENTITY_LEVEL image=$X8_IDENTITY_IMAGE_REF" >&2
+
+  require_command docker
+  require_command node
+
+  # 4.3(二): never build, never pull -- the frozen image must already exist
+  # locally and match the identity's digest exactly.
+  docker image inspect "$X8_IDENTITY_IMAGE_REF" >/dev/null 2>&1 || {
+    echo "ERROR: X8 gate command requires the frozen release image to already exist locally: $X8_IDENTITY_IMAGE_REF (the gate command never builds or pulls; run 'up' to (re)establish it)" >&2
+    return 65
+  }
+  local local_image_id
+  local_image_id="$(docker image inspect "$X8_IDENTITY_IMAGE_REF" --format '{{.Id}}')"
+  [[ "$local_image_id" == "$X8_IDENTITY_IMAGE_DIGEST" ]] || {
+    echo "ERROR: local image $X8_IDENTITY_IMAGE_REF has drifted from the release identity (identity=$X8_IDENTITY_IMAGE_DIGEST local=$local_image_id); run 'up' to re-establish identity" >&2
+    return 65
+  }
+
+  local web_container worker_container
+  web_container="$(x8_compose ps -q web 2>/dev/null || true)"
+  worker_container="$(x8_compose ps -q worker 2>/dev/null || true)"
+  [[ -n "$web_container" && -n "$worker_container" ]] || {
+    echo "ERROR: X8 gate command requires web and worker to already be running (run 'up' first)" >&2
+    return 65
+  }
+
+  # 4.3(四): container labels, front-and-back, never as identity source.
+  x8_check_container_labels "$web_container" web || return 65
+  x8_check_container_labels "$worker_container" worker || return 65
+
+  local baseline_file candidate_file
+  baseline_file="$(mktemp "${TMPDIR:-/tmp}/x8-gate-baseline.XXXXXX")"
+  candidate_file="$(mktemp "${TMPDIR:-/tmp}/x8-gate-candidate.XXXXXX")"
+  if ! x8_compose config --format json >"$baseline_file"; then
+    rm -f "$baseline_file" "$candidate_file"
+    return 65
+  fi
+
+  local target_enabled target_write
+  case "$target" in
+    apply) target_enabled=true; target_write=true ;;
+    dry-run) target_enabled=true; target_write=false ;;
+    closed) target_enabled=false; target_write=false ;;
+  esac
+  if ! FEATURE_NOVEL_CATALOG_SYNC="$target_enabled" NOVEL_CATALOG_SYNC_ALLOW_WRITE="$target_write" \
+    x8_compose config --format json >"$candidate_file"; then
+    rm -f "$baseline_file" "$candidate_file"
+    return 65
+  fi
+
+  local diff_output
+  if ! diff_output="$(x8_gate_rendered_diff "$baseline_file" "$candidate_file")"; then
+    rm -f "$baseline_file" "$candidate_file"
+    echo "ERROR: X8 gate rendered-config gate failed: a field outside the requested catalog-write flags would change (see above)" >&2
+    return 65
+  fi
+
+  # 4.3(五): the third leg -- baseline (persisted intent) vs. what the
+  # containers actually have right now. This is a hard failure, not a
+  # warning: the environment is confirmed to already be in exactly this
+  # drifted state today (state file says apply/write=true, both containers
+  # actually have it closed), and building a single-variable recreate on top
+  # of an inconsistent baseline is precisely what this work order forbids.
+  if ! x8_gate_actual_matches_baseline "$baseline_file" "$web_container" "$worker_container"; then
+    rm -f "$baseline_file" "$candidate_file"
+    echo "ERROR: X8 gate pre-check failed: the running containers do not match the persisted catalog-gate state (see drift above); the environment is not self-consistent enough for a single-variable recreate -- reconcile out of band (e.g. re-run 'up') first" >&2
+    return 65
+  fi
+
+  echo "=== X8 gate command: frozen pre-state ==="
+  echo "project=$P1_12_COMPOSE_PROJECT level=$X8_IDENTITY_LEVEL image=$X8_IDENTITY_IMAGE_REF image_digest=$X8_IDENTITY_IMAGE_DIGEST"
+  echo "persisted_gate=$persisted requested_action=$action target_gate=$target"
+  echo "=== rendered config gate: PASS (only the catalog-write gate variables differ) ==="
+  echo "$diff_output"
+  echo "=== three-way check: PASS (state file, rendered candidate, and container runtime agree outside the requested change) ==="
+
+  # 4.3(七): plan mode is the default. Nothing above this point wrote
+  # anything to disk or touched a container.
+  if [[ "$apply" != "true" ]]; then
+    rm -f "$baseline_file" "$candidate_file"
+    echo "X8_GATE_PLAN=PASS"
+    echo "No production-like action was executed (pass --apply to recreate)."
+    return 0
+  fi
+  rm -f "$baseline_file" "$candidate_file"
+
+  # 4.3(六): recreate first; only write the state file after a fully
+  # verified success. A failure here leaves the gate state file exactly as
+  # it was -- there is nothing to roll back.
+  echo "=== recreating web worker (--no-build --pull never) ==="
+  if ! FEATURE_NOVEL_CATALOG_SYNC="$target_enabled" NOVEL_CATALOG_SYNC_ALLOW_WRITE="$target_write" \
+    x8_compose up -d --no-deps --no-build --pull never --force-recreate web worker; then
+    echo "ERROR: recreate failed; X8 catalog gate state left unchanged at '$persisted' (nothing was written)" >&2
+    return 65
+  fi
+
+  local new_web new_worker
+  new_web="$(x8_compose ps -q web 2>/dev/null || true)"
+  new_worker="$(x8_compose ps -q worker 2>/dev/null || true)"
+  local service container pair mismatch=""
+  for pair in "web:$new_web" "worker:$new_worker"; do
+    service="${pair%%:*}"
+    container="${pair#*:}"
+    if [[ -z "$container" ]]; then
+      mismatch="$service container missing after recreate"
+      break
+    fi
+    local post_image_id
+    post_image_id="$(docker inspect --format '{{.Image}}' "$container" 2>/dev/null || true)"
+    if [[ "$post_image_id" != "$X8_IDENTITY_IMAGE_DIGEST" ]]; then
+      mismatch="$service image drifted after recreate (expected $X8_IDENTITY_IMAGE_DIGEST got $post_image_id)"
+      break
+    fi
+    local post_enabled post_write
+    post_enabled="$(x8_container_env_value "$container" FEATURE_NOVEL_CATALOG_SYNC)"
+    post_write="$(x8_container_env_value "$container" NOVEL_CATALOG_SYNC_ALLOW_WRITE)"
+    if [[ "$post_enabled" != "$target_enabled" || "$post_write" != "$target_write" ]]; then
+      mismatch="$service did not pick up the requested gate values after recreate"
+      break
+    fi
+    # 4.4 acceptance: "正常路径执行一次开闸: ... 任务白名单、领取授权角色、双因素
+    # 强制、镜像摘要,前后逐项相同". The pre-check's rendered-diff-gate already
+    # guarantees this mathematically (baseline vs. candidate render differ
+    # only in the two gate keys, and the recreate below used the exact same
+    # candidate environment) -- these direct post-hoc reads are the
+    # belt-and-suspenders confirmation, not a repeat of that inference.
+    if [[ "$service" == "web" ]]; then
+      local post_promo_roles post_two_factor
+      post_promo_roles="$(x8_container_env_value "$container" PROMO_CLAIM_ROLES)"
+      post_two_factor="$(x8_container_env_value "$container" ADMIN_TWO_FACTOR_ENFORCEMENT)"
+      if [[ "$post_promo_roles" != "${PROMO_CLAIM_ROLES:-}" || "$post_two_factor" != "${ADMIN_TWO_FACTOR_ENFORCEMENT:-}" ]]; then
+        mismatch="$service PROMO_CLAIM_ROLES/ADMIN_TWO_FACTOR_ENFORCEMENT drifted after recreate"
+        break
+      fi
+    else
+      local post_allowlist
+      post_allowlist="$(x8_container_env_value "$container" WORKER_TASK_ALLOWLIST)"
+      if [[ "$post_allowlist" != "${WORKER_TASK_ALLOWLIST:-}" ]]; then
+        mismatch="$service WORKER_TASK_ALLOWLIST drifted after recreate"
+        break
+      fi
+    fi
+  done
+
+  if [[ -n "$mismatch" ]]; then
+    echo "ERROR: post-recreate verification failed: $mismatch -- X8 catalog gate state left unchanged at '$persisted' (nothing was written); investigate the containers manually" >&2
+    return 65
+  fi
+
+  # Written as an explicit case (rather than a generic write_x8_gate_state
+  # "$target") so a future refactor can never widen what this line is
+  # allowed to persist without the change being visible in a diff here.
+  case "$target" in
+    apply) write_x8_gate_state apply ;;
+    dry-run) write_x8_gate_state dry-run ;;
+    closed) write_x8_gate_state closed ;;
+  esac
+  echo "X8_CATALOG_GATE=$target"
+  echo "X8_GATE_APPLY=PASS"
+}
+
 gate_catalog() {
   [[ "${1:-}" == "catalog-write" ]] || usage
   local action="${2:-}"
-  prepare_x8_environment
   case "$action" in
-    on) write_x8_gate_state apply ;;
-    off) write_x8_gate_state closed ;;
-    dry-run) write_x8_gate_state dry-run ;;
     status)
-      printf 'X8_CATALOG_GATE=%s\n' "$(tr -d '\r\n' <"$X8_GATE_STATE_FILE")"
-      return 0
+      [[ $# -eq 2 ]] || usage
+      gate_catalog_status
+      ;;
+    on | off | dry-run)
+      local apply=false
+      case "${3:-}" in
+        "") : ;;
+        --apply) apply=true ;;
+        *) usage ;;
+      esac
+      [[ $# -le 3 ]] || usage
+      gate_catalog_recreate "$action" "$apply"
       ;;
     *) usage ;;
   esac
-  prepare_x8_environment
-  if [[ -n "$(x8_compose ps -q web 2>/dev/null || true)" ]]; then
-    x8_compose up -d --no-deps --force-recreate web worker
-  fi
-  printf 'X8_CATALOG_GATE=%s\n' "$(tr -d '\r\n' <"$X8_GATE_STATE_FILE")"
 }
 
 down_x8() {
@@ -742,7 +1185,7 @@ case "$command" in
   up) [[ $# -eq 1 ]] || usage; up_x8 ;;
   down) shift; [[ $# -le 1 ]] || usage; down_x8 "${1:-}" ;;
   status) [[ $# -eq 1 ]] || usage; prepare_x8_environment; x8_compose ps ;;
-  gate) shift; [[ $# -eq 2 ]] || usage; gate_catalog "$@" ;;
+  gate) shift; [[ $# -ge 2 && $# -le 3 ]] || usage; gate_catalog "$@" ;;
   backup-now) [[ $# -eq 1 ]] || usage; backup_now ;;
   restore-smoke) [[ $# -eq 1 ]] || usage; restore_smoke ;;
   catalog-one) shift; catalog_one "$@" ;;
