@@ -49,32 +49,68 @@ UAT / Level R 段）。把 `X8_LEVEL=uat` 放在环境里，就可以一路用�
 拓扑真正起到 Level UAT，Owner 全程零手工：
 
 ```bash
-export X8_LEVEL=uat                       # 之后本 shell 里的每条命令都在 Level UAT 下运行
+export X8_LEVEL=uat                       # 之后本 shell 里读取 X8_LEVEL 的命令都在 Level UAT 下运行——
+                                           # 即 up/down/verify/accept/backup-now/restore-smoke/
+                                           # catalog-one/preview-one/promo-fixture/health-sql/
+                                           # admin-secret/admin-seed/admin-reset；`gate catalog-write`
+                                           # 与不带参数的 `status` 不读这个变量,见下方 2026-09-05
+                                           # 之后的行为变化说明
 scripts/x8-production-like.sh setup       # 一次性：mkcert 信任 + /etc/hosts，仅 setup 允许改宿主机
 scripts/x8-production-like.sh up          # 起六服务；WORKER_TASK_ALLOWLIST、八项双闸 flag 与
                                            # PROMO_CLAIM_ROLES 均为 Level UAT 值；
-                                           # catalog-write 门首启默认落在 apply（写闸 true），无需额外开闸
-scripts/x8-production-like.sh status      # docker compose ps，确认六服务健康
+                                           # catalog-write 门首启默认落在 apply（写闸 true），无需额外开闸；
+                                           # 全部探活通过后才把本次部署身份从候选提交为正式
+                                           # （见下方"发布身份"说明）
+scripts/x8-production-like.sh status      # 只读查询：确认六服务健康,零写入;需要 up 已经成功
+                                           # 提交过一次身份,否则会失败并提示先跑 up
 scripts/x8-production-like.sh verify      # 拓扑/allowlist/nginx 反模式静态校验，按 X8_LEVEL=uat 的期望值断言
 ```
 
 需要临时收紧 catalog 写闸时，既有 `gate catalog-write on|off|dry-run` 子命令依然
 只管 `FEATURE_NOVEL_CATALOG_SYNC` / `NOVEL_CATALOG_SYNC_ALLOW_WRITE` 这一对，与
 claim/sitemap/indexnow 八项双闸 flag 及 `PROMO_CLAIM_ROLES` 互不冲突，但 X8
-发布身份固化工单（2026-09-05）之后有两点行为变化：
+发布身份固化工单（2026-09-05，2026-09-06 补丁终审后再修）之后有几点行为变化：
 
-1. **运行级别不再读调用现场的 `X8_LEVEL`**，而是读 `up` 最近一次成功构建后写下的
-   `.tmp/x8-production-like/release-identity.json`（该文件由 `up` 唯一写入，
-   不得手工编辑）。该文件缺失、损坏，或解析不出合法级别时，`gate` 直接失败并提示
-   先跑 `up`——不会静默回落到 Level 0。
-2. **计划模式是默认行为**：`gate catalog-write on|off|dry-run` 不带 `--apply` 时
-   只打印三方比对（状态文件 / 渲染候选 / 容器实测）与将要发生的变化，不触碰容器、
-   不写状态文件；要真正生效必须显式加 `--apply`，例如
-   `scripts/x8-production-like.sh gate catalog-write on --apply`（命令行里
-   即使带上 `X8_LEVEL=uat` 前缀也不再有任何效果——`gate` 一律以发布身份文件里的
-   级别为准，这正是本条修复要消灭的"忘记前缀就悄悄按别的级别重建"问题）。只想
-   查看当前状态、不想有任何写入（含状态文件时间戳）时用
-   `gate catalog-write status`，它是纯只读路径。
+1. **运行级别不再读调用现场的 `X8_LEVEL`**，而是读部署身份文件里记录的级别（见下条）。
+   该文件缺失、损坏，或解析不出合法级别时，`gate` 直接失败并提示先跑 `up`——不会
+   静默回落到 Level 0。命令行里即使带上 `X8_LEVEL=uat` 前缀也对 `gate` 没有任何
+   效果——这正是本条修复要消灭的"忘记前缀就悄悄按别的级别重建"问题。
+2. **部署身份分"候选"与"已提交"两段（2026-09-06 补丁，决策二）**：`up`
+   在镜像构建成功、起任何容器之前，先把身份写成候选文件
+   （`.tmp/x8-production-like/release-identity.candidate.json`）；等数据库准备、
+   六服务起容器、全部探活都通过之后，才把候选提交为正式文件
+   （`.tmp/x8-production-like/release-identity.json`，`gate` 与 `status` 唯一会读
+   的文件，不得手工编辑）。`up` 中途任何一步失败，正式文件保持上一次成功部署时的
+   内容不动，磁盘上会留下一个 `release-identity.failed.txt` 说明这次失败在哪一步、
+   候选文件的内容是什么。此时 `gate`/`status` 会明确提示"上一次部署未完成"而不是
+   笼统的"没有身份文件"；恢复方式就是把 `up` 重新跑完。
+3. **实测对账不再是一张写死的键名单（2026-09-06 补丁，决策一）**：`gate` 执行前的
+   三方比对（状态文件 / 渲染候选 / 容器实测）现在核对渲染基线里该服务声明的**全部**
+   环境变量，而不是旧版本硬编码的 7 个键——promo 双闸、预览来源白名单等旧版本会
+   漏检的键，现在都在对账范围内；基线有而容器没有、容器有而基线没有，同样算漂移。
+   唯一豁免的是几个烘焙进基础镜像、docker-compose.yml 从未声明过的常量键
+   （`PATH`/`NODE_VERSION`/`YARN_VERSION`/`NEXT_TELEMETRY_DISABLED`/`PORT`/
+   `HOSTNAME`，见 `scripts/lib/x8-gate-diff.mjs` 的 `BASE_IMAGE_BAKED_KEYS`）。
+4. **部分成功会自动回滚（2026-09-06 补丁，P0-2）**：`--apply` 重建 web/worker 时，
+   如果两个服务没有一起达到目标值（例如其中一个重建失败、或事后校验发现摘要/
+   任务白名单等漂移），命令会自动尝试把两个服务一起重新拉回**操作前**的取值并
+   重新校验；只有两个服务都确认回到操作前状态，才报"已回滚"并结束（状态文件
+   全程不写）。如果连回滚都验证不了，会用 `FATAL`/`INCONSISTENT` 显著标出，并把
+   两个服务当前各自的真实取值打印出来，提示手工介入——这种情况下不要凭直觉重试
+   `gate`，先按打印的取值和下方"发布身份"逐项核对。
+5. **计划模式是默认行为**：`gate catalog-write on|off|dry-run` 不带 `--apply` 时
+   只打印三方比对与将要发生的变化，不触碰容器、不写状态文件、不在
+   `.tmp/x8-production-like/` 下留下任何新文件或改动任何文件的 mtime；要真正生效
+   必须显式加 `--apply`，例如 `scripts/x8-production-like.sh gate catalog-write
+   on --apply`。只想查看当前状态、不想有任何写入时用 `gate catalog-write
+   status`，它是纯只读路径；不带子命令的顶层 `status` 现在也是纯只读路径
+   （2026-09-06 补丁，P2-10），同样要求已经有一次成功提交的部署身份。
+6. **漂移告警的修复命令不保证一次就成功**：`up` 结束时如果发现容器实测与状态文件
+   不一致会打印 `WARNING`，建议的修复命令是 `gate catalog-write on --apply`；但
+   如果这条漂移不只涉及那两个闸门变量（第 3 条的全量对账发现了别的不一致），
+   `gate` 自己的三方前置检查会拒绝这条"修复"命令——这不是 bug，是设计如此（拒绝
+   在一个已经不自洽的环境上做单变量重建）。这种情况下的正确恢复路径是重新跑一次
+   `up`，而不是反复重试 `gate`。
 
 进入 Level UAT 前，本地若已经以 `X8_LEVEL=0`（或未设置，即默认 0）跑过
 `up`，需要先 `scripts/x8-production-like.sh down` 再以 `X8_LEVEL=uat`
@@ -354,7 +390,15 @@ stale-if-error 配置。据此代码路径，PostgreSQL 真的停止后，`/go/{
   `/go/{code}` 在 PostgreSQL 停止时预期不会返回 302；本项以真实观测结果为准。
 - **`X8_LEVEL` 是进程环境变量，不持久化**：每次新开 shell 或新起容器都要重新
   `export X8_LEVEL=uat`；容器一旦以某个 level 跑起来，切换 level 需要
-  `down` 后以新 level 重新 `up`（见 §2.1），不支持热切换。
+  `down` 后以新 level 重新 `up`（见 §2.1），不支持热切换。这条只对会调用
+  `prepare_x8_environment()` 的命令成立（`up`/`down`/`verify`/`accept` 等，见
+  §2.1 顶部列表）；`gate catalog-write` 与不带子命令的 `status` 完全不读这个
+  变量，它们的"级别"来自已提交的部署身份文件，不存在"忘记 export"这一类问题，
+  但也因此不支持"临时用另一个级别跑一次 gate"——那需要先用目标级别重新 `up`。
+- **部署身份候选/已提交两段同样不做跨 `up` 的合并**：某次 `up` 失败留下的候选或
+  失败标记，不会被下一次成功的 `up` "追溯修补"——下一次 `up` 从头重新构建、重新
+  探活，成功后整体覆盖为新的已提交身份；候选/失败标记只是"上一次没走完"的证据，
+  不是可恢复的中间状态。
 - **RC-2b 只验证了不起容器的渲染路径**：`x8_level_config`/
   `x8_expected_worker_allowlist` 三级渲染值，以及 `x8-validate-compose.mjs`
   对三级合成 `docker compose config` 片段的正反向断言，均已在本轮核实（见
