@@ -70,11 +70,11 @@ claim/sitemap/indexnow 八项双闸 flag 及 `PROMO_CLAIM_ROLES` 互不冲突，
 2. **计划模式是默认行为**：`gate catalog-write on|off|dry-run` 不带 `--apply` 时
    只打印三方比对（状态文件 / 渲染候选 / 容器实测）与将要发生的变化，不触碰容器、
    不写状态文件；要真正生效必须显式加 `--apply`，例如
-   `X8_LEVEL=uat scripts/x8-production-like.sh gate catalog-write on --apply`
-   （命令里的 `X8_LEVEL=uat` 只在需要重新走 `prepare_x8_environment()` 的早期
-   校验时有意义，实际决定本次操作级别的仍是发布身份文件）。只想查看当前状态、不
-   想有任何写入（含状态文件时间戳）时用 `gate catalog-write status`，它是纯只读
-   路径。
+   `scripts/x8-production-like.sh gate catalog-write on --apply`（命令行里
+   即使带上 `X8_LEVEL=uat` 前缀也不再有任何效果——`gate` 一律以发布身份文件里的
+   级别为准，这正是本条修复要消灭的"忘记前缀就悄悄按别的级别重建"问题）。只想
+   查看当前状态、不想有任何写入（含状态文件时间戳）时用
+   `gate catalog-write status`，它是纯只读路径。
 
 进入 Level UAT 前，本地若已经以 `X8_LEVEL=0`（或未设置，即默认 0）跑过
 `up`，需要先 `scripts/x8-production-like.sh down` 再以 `X8_LEVEL=uat`
