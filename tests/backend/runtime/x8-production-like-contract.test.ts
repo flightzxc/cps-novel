@@ -376,4 +376,113 @@ describe("X8 local production-like contracts", () => {
     expect(validate.status, validate.stderr).toBe(0);
     expect(validate.stdout).toContain("X8_COMPOSE_ISOLATION=PASS");
   });
+
+  /**
+   * PR6 fix (lane F): renders all three X8_LEVEL rungs (not just the
+   * default "0" the test above covers) and checks the P2-06.5 tagging
+   * double-gate lands on web + worker with exactly the values
+   * `scripts/lib/x8-levels.json` promises for that level -- the same
+   * table-driven double-check `x8-validate-compose.mjs` itself does, run
+   * here independently so a bug in the validator's own flag list can't
+   * hide a real passthrough gap.
+   */
+  it.skipIf(!composeAvailable)(
+    "renders the P2-06.5 tagging double-gate across Level 0 / UAT / R with the frozen per-level values",
+    () => {
+      const taggingFlagNames = [
+        "FEATURE_P2_06_5_TAGGING",
+        "FEATURE_P2_06_5_TAG_ADMIN_WRITE",
+        "FEATURE_NOVEL_TAG_AUTO",
+        "AUTO_WRITE_AUTHORIZED",
+      ] as const;
+      for (const level of ["0", "uat", "r"] as const) {
+        const result = spawnSync(
+          "bash",
+          [
+            "-c",
+            [
+              "source scripts/lib/x8-production-like-env.sh",
+              "prepare_x8_environment",
+              "docker compose -p \"$P1_12_COMPOSE_PROJECT\" -f docker-compose.yml -f infra/production-like/docker-compose.yml config --format json",
+            ].join("; "),
+          ],
+          { cwd: root, encoding: "utf8", env: { ...process.env, X8_LEVEL: level } },
+        );
+        expect(result.status, `${level}: ${result.stderr}`).toBe(0);
+        const validate = spawnSync("node", [resolve(root, "scripts/acceptance/x8-validate-compose.mjs")], {
+          cwd: root,
+          input: result.stdout,
+          encoding: "utf8",
+          env: { ...process.env, X8_LEVEL: level },
+        });
+        expect(validate.status, `${level}: ${validate.stderr}`).toBe(0);
+        const rendered = JSON.parse(result.stdout) as {
+          services: { web: { environment: Record<string, string> }; worker: { environment: Record<string, string> } };
+        };
+        for (const flag of taggingFlagNames) {
+          expect(rendered.services.web.environment[flag], `${level} web ${flag}`).toBe(x8Levels[level].flags[flag]);
+          expect(rendered.services.worker.environment[flag], `${level} worker ${flag}`).toBe(
+            x8Levels[level].flags[flag],
+          );
+        }
+      }
+    },
+  );
+
+  /**
+   * PR6 fix (lane F) mutation coverage: `x8-validate-compose.mjs`'s ADR
+   * guard hard-codes the expected value for `FEATURE_NOVEL_TAG_AUTO` /
+   * `AUTO_WRITE_AUTHORIZED` instead of reading it from
+   * `levelEntry.flags` -- this proves that guard actually fires by taking
+   * one real Level UAT render and mutating just the rendered JSON in
+   * memory (never touching `scripts/lib/x8-levels.json` on disk), so a
+   * future edit that flips either value to "true"/"YES" at any X8_LEVEL
+   * cannot silently pass by also "agreeing" with a correspondingly edited
+   * table.
+   */
+  it.skipIf(!composeAvailable)(
+    "ADR guard: the validator fails closed if FEATURE_NOVEL_TAG_AUTO or AUTO_WRITE_AUTHORIZED is ever not false/NO",
+    () => {
+      const result = spawnSync(
+        "bash",
+        [
+          "-c",
+          [
+            "source scripts/lib/x8-production-like-env.sh",
+            "prepare_x8_environment",
+            "docker compose -p \"$P1_12_COMPOSE_PROJECT\" -f docker-compose.yml -f infra/production-like/docker-compose.yml config --format json",
+          ].join("; "),
+        ],
+        { cwd: root, encoding: "utf8", env: { ...process.env, X8_LEVEL: "uat" } },
+      );
+      expect(result.status, result.stderr).toBe(0);
+      const rendered = JSON.parse(result.stdout);
+
+      const mutateAutoTrue = structuredClone(rendered);
+      mutateAutoTrue.services.web.environment.FEATURE_NOVEL_TAG_AUTO = "true";
+      mutateAutoTrue.services.worker.environment.FEATURE_NOVEL_TAG_AUTO = "true";
+      const autoTrueResult = spawnSync("node", [resolve(root, "scripts/acceptance/x8-validate-compose.mjs")], {
+        cwd: root,
+        input: JSON.stringify(mutateAutoTrue),
+        encoding: "utf8",
+        env: { ...process.env, X8_LEVEL: "uat" },
+      });
+      expect(autoTrueResult.status).not.toBe(0);
+      expect(autoTrueResult.stderr).toContain("ADR guard");
+      expect(autoTrueResult.stderr).toContain("FEATURE_NOVEL_TAG_AUTO");
+
+      const mutateAuthorizedYes = structuredClone(rendered);
+      mutateAuthorizedYes.services.web.environment.AUTO_WRITE_AUTHORIZED = "YES";
+      mutateAuthorizedYes.services.worker.environment.AUTO_WRITE_AUTHORIZED = "YES";
+      const authorizedYesResult = spawnSync("node", [resolve(root, "scripts/acceptance/x8-validate-compose.mjs")], {
+        cwd: root,
+        input: JSON.stringify(mutateAuthorizedYes),
+        encoding: "utf8",
+        env: { ...process.env, X8_LEVEL: "uat" },
+      });
+      expect(authorizedYesResult.status).not.toBe(0);
+      expect(authorizedYesResult.stderr).toContain("ADR guard");
+      expect(authorizedYesResult.stderr).toContain("AUTO_WRITE_AUTHORIZED");
+    },
+  );
 });

@@ -478,6 +478,13 @@ prepare_x8_environment() {
   # from the single X8_LEVEL table (scripts/lib/x8-levels.json) instead of
   # being hard-coded here — this is the only place their values are set, so
   # X8_LEVEL=0 stays byte-for-byte what this file exported before RC-2b.
+  # PR6 lane F added the P2-06.5 tagging double-gate (FEATURE_P2_06_5_TAGGING /
+  # FEATURE_P2_06_5_TAG_ADMIN_WRITE) and the auto-classify pair
+  # (FEATURE_NOVEL_TAG_AUTO / AUTO_WRITE_AUTHORIZED) to that same table's
+  # `flags` object; the loop below exports whatever keys that object has, so
+  # lane F needed no code change here. AUTO_WRITE_AUTHORIZED is a fail-closed
+  # exact-match string ("YES" required) and this table must never carry
+  # anything but "NO" until Owner authorizes auto-write (P2-06.5 ADR).
   local level_config level_key level_value
   level_config="$(x8_level_config "$X8_LEVEL")" || {
     echo "ERROR: failed to resolve X8_LEVEL configuration for '$X8_LEVEL'" >&2

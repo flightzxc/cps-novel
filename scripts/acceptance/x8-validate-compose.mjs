@@ -112,6 +112,9 @@ for (const [key, name] of Object.entries({
 // flag now comes from levelEntry.flags instead of a hard-coded "false", so
 // X8_LEVEL=uat/r can assert their own frozen true/false combination while
 // X8_LEVEL=0 keeps asserting exactly what this file asserted before.
+// PR6 lane F added FEATURE_P2_06_5_TAGGING / FEATURE_P2_06_5_TAG_ADMIN_WRITE
+// to both loops below -- like the other pairs here, they vary per level
+// (false at Level 0, true at UAT/R).
 for (const flag of [
   "FEATURE_PROMO_LINK_CLAIM",
   "PROMO_LINK_CLAIM_ALLOW_WRITE",
@@ -119,6 +122,8 @@ for (const flag of [
   "SITEMAP_AUTO_REFRESH_ALLOW_WRITE",
   "FEATURE_INDEXNOW_OUTBOX",
   "INDEXNOW_OUTBOX_ALLOW_WRITE",
+  "FEATURE_P2_06_5_TAGGING",
+  "FEATURE_P2_06_5_TAG_ADMIN_WRITE",
 ]) {
   const expected = levelEntry.flags[flag];
   if (web.environment?.[flag] !== expected) {
@@ -132,10 +137,44 @@ for (const flag of [
   "SITEMAP_AUTO_REFRESH_ALLOW_WRITE",
   "FEATURE_INDEXNOW_DELIVERY",
   "INDEXNOW_DELIVERY_ALLOW_WRITE",
+  "FEATURE_P2_06_5_TAGGING",
+  "FEATURE_P2_06_5_TAG_ADMIN_WRITE",
 ]) {
   const expected = levelEntry.flags[flag];
   if (worker.environment?.[flag] !== expected) {
     fail(`${flag} must be ${expected} in worker for X8_LEVEL=${level} (got ${worker.environment?.[flag]})`);
+  }
+}
+// ADR guard (P2-06.5 auto-classification): FEATURE_NOVEL_TAG_AUTO and
+// AUTO_WRITE_AUTHORIZED are deliberately NOT checked against
+// levelEntry.flags above -- unlike every other pair, these two must be
+// frozen at "false"/"NO" for every X8_LEVEL until Owner explicitly
+// authorizes auto-write. Hard-coding the expected value here (the same
+// reasoning as the ADMIN_CANONICAL_ORIGIN check above) means a table edit
+// that flips x8-levels.json's own flags to "true"/"YES" cannot slip past
+// this validator by also "agreeing" with itself -- both the source table
+// and the rendered compose config are checked independently against the
+// literal, frozen value.
+if (levelEntry.flags.FEATURE_NOVEL_TAG_AUTO !== "false") {
+  fail(
+    `x8-levels.json flags.FEATURE_NOVEL_TAG_AUTO must be "false" at every X8_LEVEL (ADR guard), got "${levelEntry.flags.FEATURE_NOVEL_TAG_AUTO}"`,
+  );
+}
+if (levelEntry.flags.AUTO_WRITE_AUTHORIZED !== "NO") {
+  fail(
+    `x8-levels.json flags.AUTO_WRITE_AUTHORIZED must be "NO" at every X8_LEVEL (ADR guard), got "${levelEntry.flags.AUTO_WRITE_AUTHORIZED}"`,
+  );
+}
+for (const [name, service] of [["web", web], ["worker", worker]]) {
+  if (service.environment?.FEATURE_NOVEL_TAG_AUTO !== "false") {
+    fail(
+      `FEATURE_NOVEL_TAG_AUTO must be "false" in ${name} for every X8_LEVEL (ADR guard), got "${service.environment?.FEATURE_NOVEL_TAG_AUTO}"`,
+    );
+  }
+  if (service.environment?.AUTO_WRITE_AUTHORIZED !== "NO") {
+    fail(
+      `AUTO_WRITE_AUTHORIZED must be "NO" in ${name} for every X8_LEVEL (ADR guard), got "${service.environment?.AUTO_WRITE_AUTHORIZED}"`,
+    );
   }
 }
 console.log(`X8_COMPOSE_ISOLATION=PASS (X8_LEVEL=${level})`);

@@ -93,6 +93,41 @@ const REASON_COPY: Readonly<Record<string, string>> = Object.freeze({
   idempotency_conflict: "该请求标识已用于另一次不同的提交，已拒绝以避免静默覆盖",
 });
 
+/**
+ * `ArticleTemplateInputError` codes (`src/server/article-templates/service.ts`).
+ *
+ * These do NOT go through `errorEnvelopeCopy`/`COPY` above: the template admin
+ * server actions (`app/(admin)/templates/_actions.ts`) return a plain
+ * `{ ok: false, code: string }` result, not an `ErrorEnvelope` — there is no
+ * REST envelope round-trip here, just a raw code string thrown by the service
+ * and echoed back by the action's catch block. Extending `AdminErrorCode`
+ * (and therefore `COPY`, which is typed as an exhaustive
+ * `Record<AdminErrorCode, string>`) just to fit these ten codes in would drag
+ * an unrelated contract type into template-only territory; a second small
+ * lookup table is cheaper and keeps `COPY`'s exhaustiveness meaningful.
+ */
+const TEMPLATE_ERROR_COPY: Readonly<Record<string, string>> = Object.freeze({
+  template_key_invalid: "模板 Key 不能为空，且长度不能超过 96 个字符",
+  template_name_invalid: "模板名称不能为空，且长度不能超过 191 个字符",
+  template_locale_invalid: "模板语种无效，请从下拉列表中选择",
+  template_article_type_invalid: "适用文章类型无效，请从下拉列表中选择",
+  template_content_invalid: "内容区块无效：至少需要一个区块，且每个区块的类型必须是标题/段落/CTA 按钮/图片/分隔线之一",
+  template_status_invalid: "状态取值无效",
+  template_title_invalid: "标题模板不能为空",
+  template_body_invalid: "由内容区块编译出的正文为空，请检查区块内容",
+  template_schema_invalid: "模板结构未通过校验，请检查各字段格式后重试",
+  template_write_failed: "保存失败，请稍后重试",
+  // Not in the ten codes the spec named, but a real reachable code from the
+  // same action (`_actions.ts` throws it when `serviceAuthorization` is
+  // missing) — leaving it untranslated would defeat the point of this table.
+  authorization_required: "服务端授权校验未通过，请刷新页面后重试",
+});
+
+/** Chinese copy for an `ArticleTemplateInputError` code; unknown codes still render in Chinese. */
+export function templateErrorCopy(code: string): string {
+  return TEMPLATE_ERROR_COPY[code] ?? `操作失败（错误码：${code}），请稍后重试`;
+}
+
 export function errorEnvelopeCopy(envelope: ErrorEnvelope): string {
   const reason = envelope.details?.reason;
   if (reason && REASON_COPY[reason]) return REASON_COPY[reason];

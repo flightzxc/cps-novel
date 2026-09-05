@@ -123,6 +123,22 @@ services:
       # resolves to an empty set and the task is rejected as
       # "no_eligible_sources" before it ever reaches the double-gate.
       MOBOREADER_PREVIEW_SOURCE_APP_CODES: ${MOBOREADER_PREVIEW_SOURCE_APP_CODES:-changdu}
+      # PR6 lane F: P2-06.5 tagging double-gate (plus auto-classify's own
+      # pair). FEATURE_P2_06_5_TAGGING is the master read gate consumed by
+      # src/server/tagging/admin-service.ts's requireTaggingRead -- with it
+      # unset/false, /categories and /tags's canonical + mappings pages (and
+      # the novel-detail tag panel) render a disabled-state panel instead of
+      # throwing TaggingAdminError("tagging_disabled") into the error
+      # boundary. FEATURE_P2_06_5_TAG_ADMIN_WRITE additionally gates operator
+      # writes from the Admin V1 UI. FEATURE_NOVEL_TAG_AUTO /
+      # AUTO_WRITE_AUTHORIZED gate the separate auto-classification task
+      # chain; AUTO_WRITE_AUTHORIZED is a fail-closed exact-match string (not
+      # a boolean) and must stay "NO" until Owner explicitly authorizes it
+      # (P2-06.5 ADR). registered: docs/governance/feature-flag-registry.md.
+      FEATURE_P2_06_5_TAGGING: ${FEATURE_P2_06_5_TAGGING:-false}
+      FEATURE_P2_06_5_TAG_ADMIN_WRITE: ${FEATURE_P2_06_5_TAG_ADMIN_WRITE:-false}
+      FEATURE_NOVEL_TAG_AUTO: ${FEATURE_NOVEL_TAG_AUTO:-false}
+      AUTO_WRITE_AUTHORIZED: ${AUTO_WRITE_AUTHORIZED:-NO}
     volumes:
       - sitemap_static:/app/runtime/static-sitemaps
     secrets:
@@ -159,6 +175,14 @@ services:
       SITEMAP_AUTO_REFRESH_ALLOW_WRITE: ${SITEMAP_AUTO_REFRESH_ALLOW_WRITE:-false}
       FEATURE_PROMO_LINK_CLAIM: ${FEATURE_PROMO_LINK_CLAIM:-false}
       PROMO_LINK_CLAIM_ALLOW_WRITE: ${PROMO_LINK_CLAIM_ALLOW_WRITE:-false}
+      # PR6 lane F: same P2-06.5 tagging double-gate as the web service --
+      # worker/handlers/novel-tag-backfill.ts reads all four directly via
+      # process.env (isTaggingEnabled/isAutoTaggingEnabled/
+      # isAutoTagWriteAuthorized). AUTO_WRITE_AUTHORIZED must stay "NO".
+      FEATURE_P2_06_5_TAGGING: ${FEATURE_P2_06_5_TAGGING:-false}
+      FEATURE_P2_06_5_TAG_ADMIN_WRITE: ${FEATURE_P2_06_5_TAG_ADMIN_WRITE:-false}
+      FEATURE_NOVEL_TAG_AUTO: ${FEATURE_NOVEL_TAG_AUTO:-false}
+      AUTO_WRITE_AUTHORIZED: ${AUTO_WRITE_AUTHORIZED:-NO}
       MOBOREADER_CATALOG_SAFETY_MAX_PAGES: ${MOBOREADER_CATALOG_SAFETY_MAX_PAGES:-2000}
       MOBOREADER_PREVIEW_CHUNK_SIZE: ${MOBOREADER_PREVIEW_CHUNK_SIZE:-25}
       MOBOREADER_PREVIEW_CONCURRENCY: ${MOBOREADER_PREVIEW_CONCURRENCY:-2}

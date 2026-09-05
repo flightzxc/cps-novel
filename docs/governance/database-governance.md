@@ -92,7 +92,7 @@ Migration 演进，当前 Credential 状态增量为
 | --- | --- | --- | --- | --- |
 | `promo_link` | CPS_PARITY_ADAPTED | 上游真实推广资产、所属 Novel 和我方永久公开码 | idempotency key 唯一；public code 全局非部分 UNIQUE；`(id, novel_id)` 复合唯一 | 上游码用于公开 URL |
 | `tracking_event` | CPS_PARITY_ADAPTED | 公开码点击/页面事件；只存盐哈希 | 时间查询索引；原始事件 90 天 | 每事件同步写、IP/UA 原值 |
-| `article_template` | CPS_PARITY_ADAPTED | 模板版本与 SEO 模板 | template key+version 唯一 | 作者/国家/完结模板变量 |
+| `article_template` | CPS_PARITY_ADAPTED | 模板版本与 SEO 模板；P2-02B 补 template_name/applicable_article_type/content_template/slug_template/meta_keywords_template 五列，body_template 改由 content_template 编译得到 | template key+version 唯一；applicable_article_type 五值 CHECK | 作者/国家/完结模板变量；slug_template 只是候选字符串，不是最终 Article.slug |
 | `article` | CPS_PARITY_ADAPTED | Novel 的 locale 页面快照、模板渲染 SEO 正文、页面身份和确定 PromoLink | novel+locale 唯一；复合 FK 保证 Article 与 PromoLink 属于同一 Novel；published 行内 CHECK | 换租客、评论生成、跨 Novel hreflang、渠道版权试读正文 |
 
 ### 3.4 任务、外部副作用与调度
@@ -162,6 +162,9 @@ X6 只开放 `default_og_image` 与 IndexNow 三字段的管理写口：单例�
 - Other Item：`pending | processing | success | skipped | failed`
 - SideEffectIntent：`prepared | confirmed | failed | claim_retry_blocked | manual_review_required`
 - IndexNow：`pending | processing | accepted | retry_wait | permanent_failed | dead_letter | cancelled`
+- ArticleTemplate：`draft | active | inactive`（P2-02B 前 CHECK 误写 `retired`，与应用层实际写入的
+  `inactive` 不一致——真实 PostgreSQL 上会让每次停用/软删除写入以 23514 报错；已在
+  `20260906090000_p2_02b_article_template_cps_parity` 一并修正）
 - Article：`draft | published | unpublished | takedown`
 - ScheduleRun：`due | enqueued | misfired | skipped | failed`
 - CronRun：`created | task_created | failed`
@@ -173,8 +176,11 @@ X6 只开放 `default_og_image` 与 IndexNow 三字段的管理写口：单例�
 `src/domain/database-statuses.ts` 的 `INDEXNOW_ATTEMPT_OUTCOMES`）、IndexNow attempt
 `attempt_state`（v0.2.0 foundation 新增，CPS 崩溃恢复语义：`started | completed |
 unknown_outcome`，机器真源 `INDEXNOW_ATTEMPT_RECOVERY_STATES`，与 `outcome` 是两个独立字段，
-不得混淆）、ScheduleRun trigger kind、misfire policy、preview materialization policy 和
-carousel serving source。
+不得混淆）、ScheduleRun trigger kind、misfire policy、preview materialization policy、
+carousel serving source 和 ArticleTemplate 的 `applicable_article_type`
+（`novel_article | blog_article | listicle | guide | any`，机器真源
+`src/server/article-templates/service.ts` 的 `APPLICABLE_ARTICLE_TYPES`；`novel_article`
+是 CPS `drama_article` 的直接改名，其余四值逐字照搬）。
 
 逐值业务语义以 `src/domain/database-statuses.ts` 的 `DATABASE_STATUS_SEMANTICS`（`indexnow_outbox_attempt`
 条目按列名 `outcome`/`attemptState` 二级嵌套，因为该表没有单一 `status` 列）和 JSONL 字典为机器真源。特别冻结：

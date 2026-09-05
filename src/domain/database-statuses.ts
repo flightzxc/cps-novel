@@ -21,7 +21,7 @@ export const INDEXNOW_STATUSES = ["pending", "processing", "accepted", "retry_wa
 export const INDEXNOW_ATTEMPT_OUTCOMES = ["started", "accepted", "retryable_failed", "permanent_failed"] as const;
 /** `indexnow_outbox_attempt.attempt_state` (v0.2.0 foundation, new column reusing the name vacated by the rename above). CPS worker crash-recovery semantics — distinct question from `outcome`. */
 export const INDEXNOW_ATTEMPT_RECOVERY_STATES = ["started", "completed", "unknown_outcome"] as const;
-export const ARTICLE_TEMPLATE_STATUSES = ["draft", "active", "retired"] as const;
+export const ARTICLE_TEMPLATE_STATUSES = ["draft", "active", "inactive"] as const;
 export const ARTICLE_STATUSES = ["draft", "published", "unpublished", "takedown"] as const;
 export const SCHEDULE_RUN_STATUSES = ["due", "enqueued", "misfired", "skipped", "failed"] as const;
 export const CRON_RUN_STATUSES = ["created", "task_created", "failed"] as const;
@@ -169,7 +169,7 @@ export const DATABASE_STATUS_SEMANTICS = {
   article_template: {
     draft: "Template version is editable and cannot be selected for publishing.",
     active: "Template version is approved for article rendering.",
-    retired: "Template version remains auditable but cannot be selected for new renders.",
+    inactive: "Template version remains auditable but cannot be selected for new renders.",
   },
   article: {
     draft: "Rendered article is not public and public routes return 404.",

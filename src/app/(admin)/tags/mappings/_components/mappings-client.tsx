@@ -200,10 +200,22 @@ function ConfirmBody({
 export function MappingsClient({
   items,
   tagManage,
+  writeFlagEnabled = true,
   prefillCanonicalTagId,
 }: {
   items: readonly AdminSourceLabelMappingView[];
   tagManage: AdminCapabilityState;
+  /**
+   * PR6 fix (lane F): `FEATURE_P2_06_5_TAG_ADMIN_WRITE`, read by the page
+   * (`readTaggingFlagState()`) and passed through as a boolean the same way
+   * `canonical-tags-client.tsx` does. Folded into `canManage` alongside the
+   * existing RBAC check; the page renders `TaggingWriteDisabledNotice` above
+   * this component when it is false. Optional, defaulting to `true`, so
+   * every pre-existing caller (in particular
+   * `tests/ui/admin-tag-mappings.test.tsx`, which this fix does not touch)
+   * keeps its prior behavior unchanged.
+   */
+  writeFlagEnabled?: boolean;
   prefillCanonicalTagId?: string;
 }) {
   const router = useRouter();
@@ -220,7 +232,7 @@ export function MappingsClient({
   const [createVersion, setCreateVersion] = useState("");
 
   const blocked = capabilityBlockReason("tag:manage", tagManage);
-  const canManage = blocked === null;
+  const canManage = blocked === null && writeFlagEnabled;
 
   async function run(action: Pending) {
     setBusy(true);

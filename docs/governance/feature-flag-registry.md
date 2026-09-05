@@ -20,6 +20,20 @@ Tagging 的三层开关独立：master 关闭时全体 fail closed；Admin write
 `AUTO_WRITE_AUTHORIZED === "YES"`。本次 category public projection 只读 manual/mapped，不新增或
 放宽任何 auto-write 路径。
 
+**PR6 fix lane F（2026-09-06）：这四行此前从未接入运行配置。** X8 现场
+`grep -i TAGGING docker-compose.yml .env.example scripts/lib/x8-levels.json`
+零命中——本表格描述的语义一直存在，但没有任何一处运行配置真正透传这四个变量，导致
+生产/X8 上 `/categories`、`/tags/canonical`、`/tags/mappings` 读到未设置的
+`FEATURE_P2_06_5_TAGGING` 时以 `TaggingAdminError("tagging_disabled")` 崩到错误边界。
+现已接入 `docker-compose.yml`（`web`/`worker`；`scheduler` 不消费，未接）、
+`scripts/lib/x8-levels.json`（Level 0 全 `false`/`NO`；Level UAT、Level R 的
+`FEATURE_P2_06_5_TAGGING`/`FEATURE_P2_06_5_TAG_ADMIN_WRITE` 为 `true`，
+`FEATURE_NOVEL_TAG_AUTO`/`AUTO_WRITE_AUTHORIZED` 三级恒为 `false`/`NO`）与
+`.env.example`。`scripts/acceptance/x8-validate-compose.mjs` 对
+`FEATURE_NOVEL_TAG_AUTO`/`AUTO_WRITE_AUTHORIZED` 有独立于
+`scripts/lib/x8-levels.json` 取值的硬编码断言（ADR guard），任何 level 渲染出
+`true`/`YES` 都直接 FAIL。详见 `docs/p2/V020_RELEASE_CHECKLIST.md` §2/§3。
+
 The four IndexNow flags (P2-11, `P2_07_12_一轮实施分工方案_2026-08-12.md` §三 Stream E) are deliberately two *independent* double-gate pairs rather than one pair shared by both capabilities, matching the round's rollout convention ("enqueue 先行、worker 后开", `P2-07-12-移植审计-2026-08-12/P2-11.md` §11 红旗5): operators can turn on outbox writes first to inspect accumulated candidate URLs/eligibility before the worker ever calls the real external IndexNow API. All four use exact `=== "true"` parsing, same as the pair above.
 | `FEATURE_SITEMAP_AUTO_REFRESH` | `false` | Sitemap refresh enqueue adapter | Allows a filesystem-only Sitemap refresh task to be queued after publication. Disabled means no task row is created. |
 | `SITEMAP_AUTO_REFRESH_ALLOW_WRITE` | `false` | Sitemap refresh Worker handler | Allows the Worker to generate and atomically promote a static Sitemap only while `FEATURE_SITEMAP_AUTO_REFRESH` is also true. |

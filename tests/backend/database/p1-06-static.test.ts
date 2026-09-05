@@ -84,9 +84,15 @@ describe("P1-06 database operations static contracts", () => {
     const records = read("docs/governance/database-schema-dictionary.jsonl").trim().split("\n");
     // v0.2.0 foundation (Stream F, migration 20260818120000_v020_foundation_shared) added 32
     // records for IndexNowOutbox/-Attempt's new fields and the SiteSetting table; launch parity
-    // adds the governed carousel_config_json field. The exact count still guards duplicate keys.
-    expect(records).toHaveLength(1113);
-    expect(new Set(records.map((line) => JSON.parse(line).stable_key)).size).toBe(1113);
+    // adds the governed carousel_config_json field. The ArticleTemplate CPS-parity migration
+    // (20260906090000_p2_02b_article_template_cps_parity) adds six: the five new columns
+    // (template_name, applicable_article_type, content_template, slug_template,
+    // meta_keywords_template) plus the applicable_article_type CHECK. The status column and
+    // article_template_status_check records were rewritten in place, not added, because that
+    // CHECK changed value sets ('retired' -> 'inactive') rather than gaining a new object.
+    // The exact count still guards duplicate keys.
+    expect(records).toHaveLength(1119);
+    expect(new Set(records.map((line) => JSON.parse(line).stable_key)).size).toBe(1119);
     const intents = records.map((line) => JSON.parse(line)).filter(
       (record) => record.table_name === "side_effect_intent"
         && ["status", "response_shape", "confirmed_at"].includes(record.field_name),
