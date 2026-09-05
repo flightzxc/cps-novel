@@ -192,14 +192,27 @@ class FakeArticlesDb {
     };
   }
 
+  /**
+   * Recursive so it can evaluate the `AND: [{OR:[...]}, {OR:[...]}]` shape
+   * `selectActiveArticleTemplate` builds (P2-02B: it combines the locale clause and the
+   * optional applicableArticleType clause under `AND` because two top-level `OR` keys
+   * can't be merged by object spread — the second would silently clobber the first).
+   * Without `AND` handling here, an unrecognized `AND` key was previously ignored
+   * entirely, which made every template match regardless of locale.
+   */
   private matchesTemplate(row: TemplateRow, where: Record<string, unknown>): boolean {
     if (where.id !== undefined && row.id !== where.id) return false;
     if (where.templateKey !== undefined && row.templateKey !== where.templateKey) return false;
     if (where.status !== undefined && row.status !== where.status) return false;
+    if (where.locale !== undefined && row.locale !== where.locale) return false;
     if ("deletedAt" in where && where.deletedAt === null && row.deletedAt !== null) return false;
     if (where.OR) {
-      const options = where.OR as ReadonlyArray<{ locale?: string | null }>;
-      if (!options.some((option) => row.locale === option.locale)) return false;
+      const options = where.OR as ReadonlyArray<Record<string, unknown>>;
+      if (!options.some((option) => this.matchesTemplate(row, option))) return false;
+    }
+    if (where.AND) {
+      const clauses = where.AND as ReadonlyArray<Record<string, unknown>>;
+      if (!clauses.every((clause) => this.matchesTemplate(row, clause))) return false;
     }
     return true;
   }

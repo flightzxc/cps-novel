@@ -498,6 +498,7 @@ async function runCreateTransaction(
   await ensureDefaultArticleTemplate(tx);
   const template = await selectActiveArticleTemplate(tx as unknown as PrismaClient, {
     locale: input.locale,
+    applicableArticleType: "novel_article",
     ...(input.templateKey ? { templateKey: input.templateKey } : {}),
   });
   if (!template) {
@@ -645,7 +646,11 @@ export async function createContentFromSourceItem(
 
   if (mode === "dry_run") {
     if (input.templateKey) {
-      const template = await selectActiveArticleTemplate(db, { locale, templateKey: input.templateKey });
+      const template = await selectActiveArticleTemplate(db, {
+        locale,
+        templateKey: input.templateKey,
+        applicableArticleType: "novel_article",
+      });
       if (!template) return { outcome: "template_not_available", templateKey: input.templateKey };
       validateStoredArticleTemplate(template);
     }

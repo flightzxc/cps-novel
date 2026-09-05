@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { TEMPLATE_SEO_SCHEMA_VERSION } from "@/lib/seo/template";
 import { ContentCreationInputError, createContentFromSourceItem } from "@/server/content-creation/service";
 
 import { FakeContentCreationDb } from "./fake-db";
@@ -70,7 +71,9 @@ describe("createContentFromSourceItem — apply, success path", () => {
       metaTitle: "The Great Adventure Begins",
       metaDescription: "A sweeping tale of courage.",
     });
-    expect(fake.lastArticleCreateArgs?.seoSchemaVersion).toBe(1);
+    // P2-02B bumped this to 2 (metaKeywords/slug slots) — assert against the live
+    // constant rather than a hardcoded literal so this test doesn't rot on the next bump.
+    expect(fake.lastArticleCreateArgs?.seoSchemaVersion).toBe(TEMPLATE_SEO_SCHEMA_VERSION);
 
     // NovelSourceItem is linked and transitioned.
     const linkedSourceItem = fake.sourceItems.get(sourceItem.id);

@@ -1068,17 +1068,22 @@ model CronRun {
 }
 
 model ArticleTemplate {
-  id            String    @id @default(uuid()) @db.Uuid
-  templateKey   String    @map("template_key") @db.VarChar(96)
-  locale        String?   @db.VarChar(16)
-  version       Int
-  schemaVersion Int       @default(1) @map("schema_version")
-  status        String    @default("draft") @db.VarChar(32)
-  bodyTemplate  String    @map("body_template") @db.Text
-  seoTemplate   Json      @default("{}") @map("seo_template") @db.JsonB
-  deletedAt     DateTime? @map("deleted_at") @db.Timestamptz(6)
-  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt     DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  id                    String    @id @default(uuid()) @db.Uuid
+  templateKey           String    @map("template_key") @db.VarChar(96)
+  templateName          String    @map("template_name") @db.VarChar(191)
+  locale                String?   @db.VarChar(16)
+  version               Int
+  schemaVersion         Int       @default(1) @map("schema_version")
+  status                String    @default("draft") @db.VarChar(32)
+  applicableArticleType String    @default("novel_article") @map("applicable_article_type") @db.VarChar(32)
+  bodyTemplate          String    @map("body_template") @db.Text
+  contentTemplate       Json      @default("[]") @map("content_template") @db.JsonB
+  seoTemplate           Json      @default("{}") @map("seo_template") @db.JsonB
+  slugTemplate          String    @default("") @map("slug_template") @db.Text
+  metaKeywordsTemplate  String    @default("") @map("meta_keywords_template") @db.Text
+  deletedAt             DateTime? @map("deleted_at") @db.Timestamptz(6)
+  createdAt             DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt             DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   articles Article[]
 

@@ -81,6 +81,34 @@ export const SITE_LOCALES: readonly SiteLocale[] = Object.freeze([
 ]);
 
 /**
+ * `SiteLocale` → 后台展示用中文标签。P2-02B（模板管理表单）新增：语种下拉需要
+ * 给运营看中文而不是裸 BCP-47 码，但下拉**提交**的值仍是 `SiteLocale` 字符串本身
+ * （与 CPS `src/lib/constants.ts` 的 `LOCALE_LABEL` 同一约定——文案只影响展示，
+ * 从不影响传输/存储的取值）。
+ *
+ * 🔴 只能加在这个唯一真源文件里，不建第二张表——`tests/ui/locale-canonical.test.ts`
+ * 的"没有第二张语种映射表"扫描按名字（含 LOCALE/LANGUAGE）+ 字面量集合声明识别，
+ * 排除的只有 `CANONICAL_PATH` 本身这一个文件。
+ */
+export const SITE_LOCALE_LABELS: Readonly<Record<SiteLocale, string>> = Object.freeze({
+  en: "英文",
+  es: "西班牙文",
+  "pt-BR": "葡萄牙文",
+  id: "印尼文",
+  vi: "越南文",
+  th: "泰文",
+  ja: "日文",
+  ko: "韩文",
+  "zh-Hant": "繁体中文",
+  ar: "阿拉伯文",
+  fr: "法文",
+  de: "德文",
+  pl: "波兰文",
+  cs: "捷克文",
+  ru: "俄文",
+});
+
+/**
  * 上游语种登记表：一个站点 locale ← 一组上游取值。
  *
  * P0-S15（2026-08-26）：**已按真实上游证据填入子集，不再是空表。** 来源是

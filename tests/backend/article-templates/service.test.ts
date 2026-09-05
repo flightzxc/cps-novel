@@ -6,6 +6,7 @@ import type { AdminIdentity, AdminSessionRecord } from "@/lib/auth/types";
 import { requireAdminActionAccess } from "@/server/auth/guards";
 import { P2_04_ADMIN_REGISTRY } from "@/app/api/admin/_lib/registry";
 import {
+  ArticleTemplateInputError,
   createArticleTemplate,
   ensureDefaultArticleTemplate,
   selectActiveArticleTemplate,
@@ -16,14 +17,16 @@ import { isTemplateRenderError } from "@/lib/seo/template";
 import { TestOnlyInMemoryAuthStores } from "../auth/test-only-in-memory-stores";
 
 /**
- * M6 bite tests (交接提示词 B-2 / 施工规格 ACCEPTANCE_MATRIX row "M6 Template").
+ * M6 bite tests (交接提示词 B-2 / 施工规格 ACCEPTANCE_MATRIX row "M6 Template"),
+ * extended in P2-02B (CPS parity: templateName/applicableArticleType/contentTemplate/
+ * slugTemplate/metaKeywordsTemplate + locale 白名单 + 自动版本号).
  *
  * Two of Opus's "存活变异" from the CHANGES_REQUIRED report are reproduced
  * verbatim as the mutation targets these tests exist to kill:
  *   - "从 `storage()` 删掉 `validateStoredArticleTemplate(stored)`（允许未登记
  *     变量保存）→ 全绿" — killed by "创建模板拒绝未登记变量" below, which
  *     drives the real `createArticleTemplate` (not a re-implementation of
- *     `storage()`) with a body referencing a field outside `fields.ts`'s
+ *     `storage()`) with a content block referencing a field outside `fields.ts`'s
  *     registered set and asserts the write is rejected.
  *   - the matrix's own "停用模板仍可选→红" — killed by "停用模板不可被选中"
  *     below, which asserts `selectActiveArticleTemplate` excludes a
@@ -37,12 +40,17 @@ const ORIGIN = "https://admin.example.com";
 type TemplateRow = {
   id: string;
   templateKey: string;
+  templateName: string;
   locale: string | null;
   version: number;
   schemaVersion: number;
   status: string;
+  applicableArticleType: string;
   bodyTemplate: string;
+  contentTemplate: unknown;
   seoTemplate: unknown;
+  slugTemplate: string;
+  metaKeywordsTemplate: string;
   deletedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
@@ -55,14 +63,27 @@ class FakeArticleTemplateDb {
   readonly rows: TemplateRow[] = [];
   readonly audits: Array<Record<string, unknown>> = [];
 
+  /**
+   * Recursive so it can evaluate the `AND: [{OR:[...]}, {OR:[...]}]` shape
+   * `selectActiveArticleTemplate`/`listActiveArticleTemplateOptions` build for
+   * combining the locale clause and the applicableArticleType clause — two
+   * top-level `OR` keys can't be merged by object spread (the second silently
+   * clobbers the first), so the real service combines them under `AND` instead.
+   */
   private matches(row: TemplateRow, where: Record<string, unknown>): boolean {
     if (where.id !== undefined && row.id !== where.id) return false;
     if (where.templateKey !== undefined && row.templateKey !== where.templateKey) return false;
     if (where.status !== undefined && row.status !== where.status) return false;
+    if (where.locale !== undefined && row.locale !== where.locale) return false;
+    if (where.applicableArticleType !== undefined && row.applicableArticleType !== where.applicableArticleType) return false;
     if ("deletedAt" in where && where.deletedAt === null && row.deletedAt !== null) return false;
     if (where.OR) {
-      const options = where.OR as ReadonlyArray<{ locale?: string | null }>;
-      if (!options.some((option) => row.locale === option.locale)) return false;
+      const options = where.OR as ReadonlyArray<Record<string, unknown>>;
+      if (!options.some((option) => this.matches(row, option))) return false;
+    }
+    if (where.AND) {
+      const clauses = where.AND as ReadonlyArray<Record<string, unknown>>;
+      if (!clauses.every((clause) => this.matches(row, clause))) return false;
     }
     return true;
   }
@@ -88,12 +109,17 @@ class FakeArticleTemplateDb {
           const row: TemplateRow = {
             id: `template-${(nextId += 1)}`,
             templateKey: args.data.templateKey as string,
+            templateName: args.data.templateName as string,
             locale: (args.data.locale as string | null) ?? null,
             version: args.data.version as number,
             schemaVersion: args.data.schemaVersion as number,
             status: args.data.status as string,
+            applicableArticleType: args.data.applicableArticleType as string,
             bodyTemplate: args.data.bodyTemplate as string,
+            contentTemplate: args.data.contentTemplate,
             seoTemplate: args.data.seoTemplate,
+            slugTemplate: (args.data.slugTemplate as string) ?? "",
+            metaKeywordsTemplate: (args.data.metaKeywordsTemplate as string) ?? "",
             deletedAt: null,
             createdAt: new Date(NOW),
             updatedAt: new Date(NOW),
@@ -181,11 +207,14 @@ function deps(db: FakeArticleTemplateDb, stores: TestOnlyInMemoryAuthStores) {
 
 const VALID_TEMPLATE = {
   templateKey: "tpl-valid",
+  templateName: "有效模板",
   locale: "en",
-  version: 1,
   status: "active" as const,
   titleTemplate: "{novel_title}",
-  bodyTemplate: "<article><h1>{novel_title}</h1><p>{novel_description}</p></article>",
+  contentTemplate: [
+    { type: "heading", content: "{novel_title}" },
+    { type: "paragraph", content: "{novel_description}" },
+  ],
   metaTitleTemplate: "{novel_title}",
   metaDescriptionTemplate: "{novel_description}",
 };
@@ -206,7 +235,14 @@ describe("createArticleTemplate · 未登记变量必须被引擎拒绝", () => 
     const guarded = await authorization(stores, "admin.article_template.create");
     await expect(
       createArticleTemplate(
-        { ...guarded, template: { ...VALID_TEMPLATE, templateKey: "tpl-bad", bodyTemplate: "<p>{author}</p>" } },
+        {
+          ...guarded,
+          template: {
+            ...VALID_TEMPLATE,
+            templateKey: "tpl-bad",
+            contentTemplate: [{ type: "paragraph", content: "{author}" }],
+          },
+        },
         deps(db, stores),
       ),
     ).rejects.toSatisfy((error: unknown) => isTemplateRenderError(error) && error.code === "ERR_TEMPLATE_FIELD_NOT_REGISTERED");
@@ -224,6 +260,65 @@ describe("createArticleTemplate · 未登记变量必须被引擎拒绝", () => 
       ),
     ).rejects.toSatisfy((error: unknown) => isTemplateRenderError(error) && error.code === "ERR_TEMPLATE_FIELD_NOT_REGISTERED");
     expect(db.rows).toHaveLength(0);
+  });
+
+  it("locale 越界（不在 SITE_LOCALES 白名单）被拒绝，且不落库", async () => {
+    const db = new FakeArticleTemplateDb();
+    const stores = authFixture();
+    const guarded = await authorization(stores, "admin.article_template.create");
+    await expect(
+      createArticleTemplate(
+        { ...guarded, template: { ...VALID_TEMPLATE, templateKey: "tpl-bad-locale", locale: "eng" } },
+        deps(db, stores),
+      ),
+    ).rejects.toSatisfy((error: unknown) => error instanceof ArticleTemplateInputError && error.code === "template_locale_invalid");
+    expect(db.rows).toHaveLength(0);
+  });
+
+  it("applicableArticleType 越界（不在五值枚举内）被拒绝，且不落库", async () => {
+    const db = new FakeArticleTemplateDb();
+    const stores = authFixture();
+    const guarded = await authorization(stores, "admin.article_template.create");
+    await expect(
+      createArticleTemplate(
+        {
+          ...guarded,
+          template: { ...VALID_TEMPLATE, templateKey: "tpl-bad-type", applicableArticleType: "drama_article" },
+        },
+        deps(db, stores),
+      ),
+    ).rejects.toSatisfy((error: unknown) => error instanceof ArticleTemplateInputError && error.code === "template_article_type_invalid");
+    expect(db.rows).toHaveLength(0);
+  });
+
+  it("contentTemplate 为空数组时被拒绝（至少一个内容区块）", async () => {
+    const db = new FakeArticleTemplateDb();
+    const stores = authFixture();
+    const guarded = await authorization(stores, "admin.article_template.create");
+    await expect(
+      createArticleTemplate(
+        { ...guarded, template: { ...VALID_TEMPLATE, templateKey: "tpl-empty-content", contentTemplate: [] } },
+        deps(db, stores),
+      ),
+    ).rejects.toSatisfy((error: unknown) => error instanceof ArticleTemplateInputError && error.code === "template_content_invalid");
+    expect(db.rows).toHaveLength(0);
+  });
+
+  it("同一 templateKey 连续创建两次，version 自动 +1（1 然后 2）", async () => {
+    const db = new FakeArticleTemplateDb();
+    const stores = authFixture();
+    const guarded = await authorization(stores, "admin.article_template.create");
+    const first = await createArticleTemplate(
+      { ...guarded, template: { ...VALID_TEMPLATE, templateKey: "tpl-versioned" } },
+      deps(db, stores),
+    );
+    const second = await createArticleTemplate(
+      { ...guarded, template: { ...VALID_TEMPLATE, templateKey: "tpl-versioned" } },
+      deps(db, stores),
+    );
+    expect(first.version).toBe(1);
+    expect(second.version).toBe(2);
+    expect(db.rows.filter((row) => row.templateKey === "tpl-versioned")).toHaveLength(2);
   });
 });
 
@@ -271,6 +366,44 @@ describe("selectActiveArticleTemplate · 停用模板不可被选中", () => {
     const selected = await selectActiveArticleTemplate(db.asPrismaClient(), { locale: "en" });
     expect(selected?.templateKey).toBe(DEFAULT_ARTICLE_TEMPLATE_KEY);
   });
+
+  it("applicableArticleType 参与过滤：不匹配的文章类型选不到，'any' 对全部类型可选中", async () => {
+    const db = new FakeArticleTemplateDb();
+    const stores = authFixture();
+    const guarded = await authorization(stores, "admin.article_template.create");
+    await createArticleTemplate(
+      { ...guarded, template: { ...VALID_TEMPLATE, templateKey: "tpl-blog", applicableArticleType: "blog_article" } },
+      deps(db, stores),
+    );
+    await createArticleTemplate(
+      { ...guarded, template: { ...VALID_TEMPLATE, templateKey: "tpl-any", applicableArticleType: "any" } },
+      deps(db, stores),
+    );
+
+    // A blog-only template must not be selectable for novel_article.
+    const blogAsNovel = await selectActiveArticleTemplate(db.asPrismaClient(), {
+      locale: "en",
+      templateKey: "tpl-blog",
+      applicableArticleType: "novel_article",
+    });
+    expect(blogAsNovel).toBeNull();
+
+    // The same blog-only template IS selectable for its own declared type.
+    const blogAsBlog = await selectActiveArticleTemplate(db.asPrismaClient(), {
+      locale: "en",
+      templateKey: "tpl-blog",
+      applicableArticleType: "blog_article",
+    });
+    expect(blogAsBlog?.templateKey).toBe("tpl-blog");
+
+    // A template declared "any" is selectable regardless of requested type.
+    const anyAsNovel = await selectActiveArticleTemplate(db.asPrismaClient(), {
+      locale: "en",
+      templateKey: "tpl-any",
+      applicableArticleType: "novel_article",
+    });
+    expect(anyAsNovel?.templateKey).toBe("tpl-any");
+  });
 });
 
 describe("ensureDefaultArticleTemplate · 表空时落 system-default-v1，幂等", () => {
@@ -282,7 +415,12 @@ describe("ensureDefaultArticleTemplate · 表空时落 system-default-v1，幂�
 
   it("表为空时创建 system-default-v1 v1 active", async () => {
     const row = await ensureDefaultArticleTemplate(db.asTransactionClient());
-    expect(row).toMatchObject({ templateKey: DEFAULT_ARTICLE_TEMPLATE_KEY, version: 1, status: "active" });
+    expect(row).toMatchObject({
+      templateKey: DEFAULT_ARTICLE_TEMPLATE_KEY,
+      version: 1,
+      status: "active",
+      applicableArticleType: "novel_article",
+    });
     expect(db.rows).toHaveLength(1);
   });
 

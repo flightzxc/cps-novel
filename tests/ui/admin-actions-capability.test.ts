@@ -103,10 +103,10 @@ function granted() {
 
 const TEMPLATE_FIXTURE = {
   templateKey: "tpl-1",
-  version: 1,
+  templateName: "模板 1",
   status: "active" as const,
   titleTemplate: "{novel_title}",
-  bodyTemplate: "<p>{novel_title}</p>",
+  contentTemplate: [{ type: "paragraph", content: "{novel_title}" }],
 };
 
 beforeEach(() => {
