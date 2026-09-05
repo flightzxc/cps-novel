@@ -183,6 +183,18 @@ describe("P1-12 Compose and image contracts", () => {
     }
   });
 
+  it("wires the preview source allowlist to Web as well as Worker (X8 gate identity work order, 2026-09-05)", () => {
+    // src/server/content-creation/preview-enqueue.ts enqueues
+    // moboreader.preview_refresh.v1 from the Web service, and the
+    // eligibility check in src/lib/tasks/moboreader.ts reads
+    // MOBOREADER_PREVIEW_SOURCE_APP_CODES from process.env at the call
+    // site. Before this fix only Worker's compose block set it, so Web
+    // resolved an empty allowlist and every preview task was rejected as
+    // "no_eligible_sources" before the double-gate was ever consulted.
+    const web = serviceBlock("web");
+    expect(web).toContain("MOBOREADER_PREVIEW_SOURCE_APP_CODES: ${MOBOREADER_PREVIEW_SOURCE_APP_CODES:-changdu}");
+  });
+
   it("documents the exact staged worker allowlist and X11 delivery hard gate", () => {
     expect(envExample).toContain(
       "WORKER_TASK_ALLOWLIST=credential.validate.v1,credential.supersede.v1,catalog_scan,home_carousel.compute.v1",
