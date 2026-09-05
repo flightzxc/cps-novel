@@ -4,6 +4,117 @@
 
 ---
 
+## 2026-09-06 · PR6 fix lane F — P2-06.5 标签管理 feature flag 接线缺口修复
+
+- 背景：运行中的 X8 uat（`cps-novel-x8-local`）web 日志出现
+  `TaggingAdminError: tagging_disabled (403)`，来自
+  `src/server/tagging/admin-service.ts:184-186` 的 `requireTaggingRead ->
+  isTaggingEnabled(env)`；`/categories` 与 `/tags` 的 Canonical/Mappings
+  页对该错误没有专门处理，最终落到 Next 通用错误边界 "Something went
+  wrong"。同一轮排查发现 `grep -i TAGGING docker-compose.yml .env.example
+  scripts/lib/x8-levels.json` 零命中、`docker inspect web` 的环境变量里
+  也没有任何 tagging 变量——`src/lib/flags/feature-flags.ts` 里已经定义好的
+  `FEATURE_P2_06_5_TAGGING`（主读闸）、`FEATURE_P2_06_5_TAG_ADMIN_WRITE`
+  （后台写闸）、`FEATURE_NOVEL_TAG_AUTO`（auto 分类闸）、
+  `AUTO_WRITE_AUTHORIZED`（ADR 门，精确 `YES` 才放行）四个变量，从未被任何
+  运行配置接入，`worker/handlers/novel-tag-backfill.ts` 同样拿不到。
+- 修复（透传 + 分级）：
+  - `docker-compose.yml`：`web`、`worker` 两个服务各加四行
+    `FEATURE_P2_06_5_TAGGING: ${FEATURE_P2_06_5_TAGGING:-false}` /
+    `FEATURE_P2_06_5_TAG_ADMIN_WRITE: ${...:-false}` /
+    `FEATURE_NOVEL_TAG_AUTO: ${...:-false}` /
+    `AUTO_WRITE_AUTHORIZED: ${AUTO_WRITE_AUTHORIZED:-NO}`；`scheduler` 不
+    消费这组 flag，未接。
+  - `scripts/lib/x8-levels.json`：三级 `flags` 各加四项——Level 0 为
+    `false/false/false/NO`；Level UAT、Level R 均为
+    `true/true/false/NO`（生产读 + 后台手工写开放，auto 分类关闭，
+    Owner 授权门恒 `NO`）。`scripts/lib/x8-production-like-env.sh` 的
+    `x8_level_config()` 本就通用遍历 `entry.flags` 导出，无需改代码，只补了
+    说明注释。
+  - `scripts/acceptance/x8-validate-compose.mjs`：
+    `FEATURE_P2_06_5_TAGGING`/`FEATURE_P2_06_5_TAG_ADMIN_WRITE` 纳入既有的
+    "按 level 表取期望值"断言循环（web、worker 各一处）；`FEATURE_NOVEL_TAG_AUTO`
+    /`AUTO_WRITE_AUTHORIZED` 走独立的硬编码断言（ADR guard）——期望值
+    `"false"`/`"NO"` 不从 `scripts/lib/x8-levels.json` 读取，任何 level（含
+    表本身与渲染出的 compose config）出现 `true`/`YES` 都直接 FAIL，防止表
+    被误改后"自己跟自己一致"就蒙混过关。
+  - `.env.example` 补四行默认值 + ADR 注释；`docs/p2/V020_RELEASE_CHECKLIST.md`
+    §2 与 Level 0/UAT/R 三节补齐对应勾选项；
+    `docs/governance/feature-flag-registry.md` 补一段"此前从未接入运行
+    配置"的接线说明（四个 flag 本身的语义行此前已存在，未新增）。
+- 修复（页面禁用态，`src/app/(admin)/categories/**`、
+  `src/app/(admin)/tags/**`、`src/app/(admin)/novels/_components/
+  novel-tags-panel.tsx`/`novel-tags-editor.tsx`）：
+  - 新增 `src/app/(admin)/tags/_lib/tagging-flag-checklist.ts`
+    （`readTaggingFlagState`/`taggingFlagChecklist`，纯函数）与
+    `src/app/(admin)/tags/_components/tagging-disabled-panel.tsx`
+    （`TaggingDisabledPanel`/`TaggingWriteDisabledNotice`，与
+    `catalog-sync` 的 `FlagChecklist` 同一视觉语言：逐项列出 flag 当前值
+    与说明，`已开启`/`未开启` 徽标）。
+  - `/categories`、`/tags/canonical`、`/tags/mappings` 三个页面在调用
+    `listAdminCanonicalTags`/`listAdminSourceLabelMappings` 之前先用
+    `readTaggingFlagState()` 预判：读闸关闭时渲染 `TaggingDisabledPanel`，
+    完全不再调用标签服务（不会再抛 `TaggingAdminError`）；读闸开、写闸关
+    时正常展示只读数据，并在 `CanonicalTagsClient`/`MappingsClient` 上方
+    渲染 `TaggingWriteDisabledNotice`，同时把 `writeFlagEnabled` 传给这两
+    个客户端组件，与既有的 `tag:manage` RBAC 检查一起折叠进 `canManage`，
+    编辑按钮预先禁用而不是等提交时才收到 `tag_write_not_authorized`。
+  - `novel-tags-panel.tsx` 同样在调用 `getAdminNovelTags`/
+    `listAllActiveCanonicalTags` 之前预判读闸，渲染
+    `TaggingDisabledPanel`；写闸状态同样传给 `NovelTagsEditor`。
+  - `/tags` 的"来源标签字典" tab（`src/app/(admin)/tags/page.tsx`）走
+    `listAdminSourceLabels`（`@/server/admin-content`），不经过 tagging
+    flag，未改动。
+  - `CanonicalTagsClient`/`MappingsClient`/`NovelTagsEditor` 的
+    `writeFlagEnabled` 均为可选参数、默认 `true`——三个既有的组件级测试
+    文件（`tests/ui/admin-canonical-tags.test.tsx`、
+    `tests/ui/admin-tag-mappings.test.tsx`、
+    `tests/ui/admin-novel-tags.test.tsx`）未改动，行为不变。
+- 新增测试：
+  - `tests/ui/categories-disabled-state.test.tsx`：真实渲染
+    `CategoriesPage`（`await CategoriesPage(...)` 后 `render`，与
+    `tests/ui/admin-two-factor-setup-page.test.tsx` 同一手法），覆盖读闸关
+    （禁用面板、`listAdminCanonicalTags` 零调用）、读开写关（只读 + 写通知
+    + 编辑器禁用）、两闸皆开（正常 + 编辑器可用）三种状态。
+  - `tests/backend/flags/tagging-flags-passthrough.test.ts`：直接解析
+    `docker-compose.yml` 文本，断言 `web`/`worker` 四变量透传且默认值精确
+    （`false/false/false/NO`）、`scheduler` 零透传；断言
+    `scripts/lib/x8-levels.json` 三级的 ADR 冻结值与 UAT/R 开闸值；一个
+    Docker-gated 的 belt-and-suspenders 用例用干净环境渲染裸
+    `docker-compose.yml`（不经 X8_LEVEL 脚本，因为该脚本总会为
+    `flags` 里的每个 key 导出一个值，会掩盖 compose 层默认值被删的变异）。
+  - `tests/backend/runtime/x8-production-like-contract.test.ts` 追加两个
+    Docker-gated 用例：三级（0/uat/r）渲染并核对四变量与
+    `scripts/lib/x8-levels.json` 完全一致；ADR guard 变异测试——在内存中把
+    渲染出的 JSON 的 `FEATURE_NOVEL_TAG_AUTO`/`AUTO_WRITE_AUTHORIZED` 改成
+    `true`/`YES` 后喂给 validator，断言其非零退出且报错信息含
+    `"ADR guard"`（从不写回 `scripts/lib/x8-levels.json` 本身）。
+- 变异验证（手工，均已复原）：① `docker-compose.yml` 里删掉
+  `AUTO_WRITE_AUTHORIZED` 的 `:-NO` 默认值，用干净环境渲染裸
+  compose——`AUTO_WRITE_AUTHORIZED` 变成空字符串，`tagging-flags-
+  passthrough.test.ts` 的透传断言转红；② 临时把
+  `scripts/lib/x8-levels.json` 的 `uat.flags.FEATURE_NOVEL_TAG_AUTO` 改成
+  `"true"`，走完整 X8 渲染管线（`x8-production-like-env.sh` +
+  `x8-validate-compose.mjs`），validator 报
+  `"x8-levels.json flags.FEATURE_NOVEL_TAG_AUTO must be \"false\" ...
+  (ADR guard)"` 后非零退出；改动前先复制原文件备份，验证完立即用备份覆盖
+  还原，`git diff` 核对与预期改动完全一致。
+- 门禁：`npm run typecheck`、`npm run lint`（0 error）、
+  `npm run test:ui`（114 files / 1805 tests 全绿，含新增三例与既有
+  `admin-canonical-tags`/`admin-tag-mappings`/`admin-novel-tags` 三个未改
+  文件）、`npm run test:backend`（164/165 files 通过，唯一失败是既有的
+  `publish-gate/no-bypass`——与本 lane 无关的已知基线失败）、
+  `npm run build` 全绿（`/categories`、`/tags/canonical`、`/tags/mappings`
+  均出现在路由清单）。X8 render-only 三级（`docker compose config`
+  静态渲染，未起容器）确认四变量：Level 0 → `false/false/false/NO`；
+  Level UAT/R → `true/true/false/NO`（web/worker 一致，scheduler 均
+  undefined）。
+- 范围边界：未改 `src/server/tagging/**` 门逻辑本体、未改
+  scheduler/carousel/articles/templates；未 push/未 merge/未改 PR/未动
+  docker 状态，交由 Fable 整合与重起。
+
+---
+
 ## 2026-09-05 · PR6 fix lane E — carousel PostgreSQL 权限缺口修复 + X8 实证
 
 - 背景：运行中的 X8 uat（`cps-novel-x8-local`）暴露 `scheduler` 容器持续
