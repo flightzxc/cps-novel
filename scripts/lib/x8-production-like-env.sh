@@ -293,20 +293,24 @@ warn_x8_gate_drift() {
   actual_enabled="$(x8_container_env_value "$web_container" FEATURE_NOVEL_CATALOG_SYNC)"
   actual_write="$(x8_container_env_value "$web_container" NOVEL_CATALOG_SYNC_ALLOW_WRITE)"
   [[ "$actual_enabled" == "$expected_enabled" && "$actual_write" == "$expected_write" ]] && return 0
-  # 2026-09-06 patch, P2-13: the repair command below is only guaranteed to
-  # work if this exact drift (the two catalog-write variables) is the ONLY
-  # thing out of sync. `gate catalog-write`'s own three-way pre-check
-  # reconciles the FULL persisted-state render against the running
-  # containers (决策一) -- if this warning's drift is a symptom of a wider
-  # inconsistency (e.g. the containers also disagree with the persisted
-  # state on something else, or the release identity itself does not match
-  # what is running), that pre-check will refuse the very command suggested
-  # here. Say so explicitly instead of implying one command always closes
-  # the loop.
+  # 2026-09-06 patch (second round), group 4: the P2-13 wording this replaced
+  # said the repair command below is "only guaranteed to work if this exact
+  # drift ... is the ONLY thing out of sync" -- implying such a case exists.
+  # It does not: `gate catalog-write`'s own three-way pre-check
+  # (x8_gate_actual_matches_baseline) reconciles the render of this SAME
+  # persisted state against these SAME containers' full environment. Since
+  # this warning already found that the persisted state and the actual web
+  # container disagree on FEATURE_NOVEL_CATALOG_SYNC/NOVEL_CATALOG_SYNC_ALLOW_WRITE,
+  # that pre-check is GUARANTEED to find the identical disagreement and
+  # refuse -- there is no narrower case where the suggested command
+  # succeeds. The only real recovery is re-running `up`, and specifically
+  # with the SAME X8_LEVEL this environment was last brought up at: `up`
+  # defaults to Level 0 when X8_LEVEL is unset, which would silently
+  # downgrade (not repair) a Level UAT/R environment.
   printf '%s\n' \
     "WARNING: X8 catalog-write gate drift: state=$persisted (expects FEATURE_NOVEL_CATALOG_SYNC=$expected_enabled NOVEL_CATALOG_SYNC_ALLOW_WRITE=$expected_write) actual web container has FEATURE_NOVEL_CATALOG_SYNC=$actual_enabled NOVEL_CATALOG_SYNC_ALLOW_WRITE=$actual_write" \
-    "Try: scripts/x8-production-like.sh gate catalog-write on --apply (the gate command reads its own run level from the committed release identity, not this shell's X8_LEVEL -- no prefix needed, and a failed attempt never overwrites the state file)." \
-    "If that command itself refuses because the containers don't match the persisted state as a whole (not just these two variables), the gate's three-way pre-check is working as intended, not broken -- reconcile by re-running 'scripts/x8-production-like.sh up' to re-establish a consistent baseline, rather than retrying the gate command." >&2
+    "This is NOT fixable by running 'gate catalog-write on --apply' (or off/dry-run): that command's own three-way pre-check reconciles the same persisted state against the same containers and is guaranteed to refuse for the identical reason this warning just fired." \
+    "Re-run 'scripts/x8-production-like.sh up' to re-establish a consistent baseline -- with the SAME X8_LEVEL this environment was brought up at ('up' defaults to Level 0 when X8_LEVEL is unset, which would silently downgrade rather than repair a Level UAT/R environment)." >&2
 }
 
 # Static topology exports shared by prepare_x8_environment() (the full,
@@ -500,15 +504,25 @@ prepare_x8_gate_environment() {
   export CHANNEL_CREDENTIAL_FINGERPRINT_KEY_FILE="$X8_SECRET_DIR/credential-fingerprint.key"
   export TRACKING_HASH_SALT="$(read_secret_value "$X8_SECRET_DIR/tracking-hash-salt.key")"
 
-  # Release identity, never the live git worktree (P1-6 / P2-11): the
-  # NEXT_PUBLIC_BUILD_VERSION derivation mirrors prepare_p1_12_local_environment()'s
-  # own "${NEXT_PUBLIC_BUILD_VERSION:-v${APP_VERSION}}" convention exactly,
-  # just sourced from the frozen appVersion instead of a fresh package.json read.
+  # Release identity, never the live git worktree (P1-6 / P2-11). Unlike
+  # prepare_p1_12_local_environment()'s own "${NEXT_PUBLIC_BUILD_VERSION:-v${APP_VERSION}}"
+  # convention -- which exists so a real deployment's environment can
+  # deliberately override a derived default -- this path is READING BACK a
+  # frozen, already-committed identity, not computing one: a caller's shell
+  # having NEXT_PUBLIC_BUILD_VERSION set (however that happened) must never
+  # be able to override what the identity says. 2026-09-06 patch (second
+  # round), group 4: the previous `${NEXT_PUBLIC_BUILD_VERSION:-...}` form
+  # was exactly the same class of bug P2-11 already fixed for this same
+  # variable in a different shape -- a caller's ambient shell could still
+  # inject a value here and have it silently win over the identity's own
+  # appVersion. Every other field derived from the identity in this function
+  # (APP_VERSION, GIT_COMMIT, CPS_NOVEL_APP_IMAGE, BUILD_DATE, immediately
+  # above) is already unconditional; this is now consistent with them.
   export APP_VERSION="$X8_IDENTITY_APP_VERSION"
   export GIT_COMMIT="$X8_IDENTITY_GIT_COMMIT"
   export CPS_NOVEL_APP_IMAGE="$X8_IDENTITY_IMAGE_REF"
   export BUILD_DATE="$X8_IDENTITY_BUILD_DATE"
-  export NEXT_PUBLIC_BUILD_VERSION="${NEXT_PUBLIC_BUILD_VERSION:-v${X8_IDENTITY_APP_VERSION}}"
+  export NEXT_PUBLIC_BUILD_VERSION="v${X8_IDENTITY_APP_VERSION}"
 
   local level_config level_key level_value
   level_config="$(x8_level_config "$X8_LEVEL")" || {

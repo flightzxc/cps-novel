@@ -5,7 +5,7 @@ import { join, resolve } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { BASE_IMAGE_BAKED_KEYS, diffRenderedConfigs, findActualDrift, formatDrift, formatEntry } from "../../../scripts/lib/x8-gate-diff.mjs";
+import { BASE_IMAGE_BAKED_KEYS, CATALOG_GATE_ENV_KEYS, diffRenderedConfigs, findActualDrift, formatDrift, formatEntry } from "../../../scripts/lib/x8-gate-diff.mjs";
 
 const root = resolve(import.meta.dirname, "../../..");
 const diffScript = resolve(root, "scripts/lib/x8-gate-diff.mjs");
@@ -271,6 +271,50 @@ describe("x8-gate-diff: findActualDrift (决策一 -- full reconciliation, no cu
         { services: ["worker"] },
       );
       expect(drift).toEqual([{ service: "worker", key: "PATH", expected: "<not declared in baseline render>", actual: "/usr/bin" }]);
+    });
+  });
+
+  // 2026-09-06 patch (second round), group 4: the per-key loop only ever
+  // visits keys that appear in the UNION of the baseline render's declared
+  // keys and the actual container's keys -- a key declared on NEITHER side
+  // (e.g. a future docker-compose.yml edit that drops
+  // FEATURE_NOVEL_CATALOG_SYNC from a service's `environment:` block
+  // entirely) is simply absent from that union and the loop never sees it,
+  // a silent vacuous pass for exactly the two variables this whole gate
+  // command exists to police. requiredKeys closes that gap.
+  describe("requiredKeys (group 4: fail closed when a required key is declared on NEITHER side)", () => {
+    it("CATALOG_GATE_ENV_KEYS is exactly the two catalog-write double-gate variables", () => {
+      expect([...CATALOG_GATE_ENV_KEYS].sort()).toEqual(["FEATURE_NOVEL_CATALOG_SYNC", "NOVEL_CATALOG_SYNC_ALLOW_WRITE"]);
+    });
+
+    it("fails closed when a required key is absent from BOTH the baseline render and the actual container", () => {
+      const drift = findActualDrift(
+        { web: { environment: { SOME_OTHER_KEY: "x" } } },
+        { web: { SOME_OTHER_KEY: "x" } },
+        { services: ["web"], requiredKeys: ["FEATURE_NOVEL_CATALOG_SYNC"] },
+      );
+      expect(drift).toEqual([
+        {
+          service: "web",
+          key: "FEATURE_NOVEL_CATALOG_SYNC",
+          expected: "<required key, but declared in neither the baseline render nor the actual container>",
+          actual: "<absent from both>",
+        },
+      ]);
+    });
+
+    it("does not double-report a required key that IS declared on at least one side -- the normal per-key check already covers it", () => {
+      const drift = findActualDrift(
+        { web: { environment: { FEATURE_NOVEL_CATALOG_SYNC: "true" } } },
+        { web: {} },
+        { services: ["web"], requiredKeys: ["FEATURE_NOVEL_CATALOG_SYNC"] },
+      );
+      expect(drift).toEqual([{ service: "web", key: "FEATURE_NOVEL_CATALOG_SYNC", expected: "true", actual: "<missing from container>" }]);
+    });
+
+    it("without requiredKeys at all, a key absent from both sides is silently invisible (documents the exact blind spot requiredKeys closes)", () => {
+      const drift = findActualDrift({ web: { environment: {} } }, { web: {} }, { services: ["web"] });
+      expect(drift).toEqual([]);
     });
   });
 });

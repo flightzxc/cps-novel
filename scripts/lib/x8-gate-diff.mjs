@@ -118,6 +118,20 @@ export const BASE_IMAGE_BAKED_KEYS = Object.freeze([
   "HOSTNAME",
 ]);
 
+// 2026-09-06 patch (second round), group 4: findActualDrift() builds its
+// per-service key set as the UNION of the baseline render's declared keys
+// and the actual container's keys. That is correct for "did any declared
+// key drift", but it has a blind spot the terminal auditor named directly:
+// a key that is declared on NEITHER side (e.g. a future docker-compose.yml
+// edit that accidentally drops FEATURE_NOVEL_CATALOG_SYNC from a service's
+// `environment:` block entirely, so it disappears from both the rendered
+// baseline and the container's real environment at once) is simply absent
+// from that union and never enters the per-key loop at all -- a silent,
+// vacuous pass for exactly the two variables this whole gate command exists
+// to police. requiredKeys (below) names the keys that must be checked
+// explicitly regardless of whether either side happens to declare them.
+export const CATALOG_GATE_ENV_KEYS = Object.freeze(["FEATURE_NOVEL_CATALOG_SYNC", "NOVEL_CATALOG_SYNC_ALLOW_WRITE"]);
+
 /**
  * Full per-service environment reconciliation between a baseline render
  * (persisted intent) and what the containers actually have. Fail-closed on
@@ -131,10 +145,10 @@ export const BASE_IMAGE_BAKED_KEYS = Object.freeze([
  *
  * @param {Record<string, {environment?: Record<string, unknown>}>} baselineServices
  * @param {Record<string, Record<string, unknown>>} actualByService
- * @param {{ services: readonly string[], allowedExtraKeys?: readonly string[] }} options
+ * @param {{ services: readonly string[], allowedExtraKeys?: readonly string[], requiredKeys?: readonly string[] }} options
  */
 export function findActualDrift(baselineServices, actualByService, options) {
-  const { services, allowedExtraKeys = [] } = options ?? {};
+  const { services, allowedExtraKeys = [], requiredKeys = [] } = options ?? {};
   if (!Array.isArray(services) || services.length === 0) {
     throw new Error("findActualDrift requires a non-empty `services` list to reconcile");
   }
@@ -153,6 +167,22 @@ export function findActualDrift(baselineServices, actualByService, options) {
     }
     const rendered = serviceBaseline.environment ?? {};
     const keys = new Set([...Object.keys(rendered), ...Object.keys(actual)]);
+    // 2026-09-06 patch (second round), group 4: a required key absent from
+    // BOTH the rendered baseline and the actual container never appears in
+    // `keys` above, so the per-key loop below would never visit it -- this
+    // is the explicit, fail-closed check for exactly that shape, checked
+    // once per service before the loop so it can never be shadowed by a
+    // "the key just happens to be declared somewhere" coincidence.
+    for (const requiredKey of requiredKeys) {
+      if (!keys.has(requiredKey)) {
+        drift.push({
+          service,
+          key: requiredKey,
+          expected: "<required key, but declared in neither the baseline render nor the actual container>",
+          actual: "<absent from both>",
+        });
+      }
+    }
     for (const key of keys) {
       const hasBaseline = Object.prototype.hasOwnProperty.call(rendered, key);
       const hasActual = Object.prototype.hasOwnProperty.call(actual, key);

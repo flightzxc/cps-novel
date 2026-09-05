@@ -59,8 +59,10 @@ scripts/x8-production-like.sh setup       # 一次性：mkcert 信任 + /etc/hos
 scripts/x8-production-like.sh up          # 起六服务；WORKER_TASK_ALLOWLIST、八项双闸 flag 与
                                            # PROMO_CLAIM_ROLES 均为 Level UAT 值；
                                            # catalog-write 门首启默认落在 apply（写闸 true），无需额外开闸；
-                                           # 全部探活通过后才把本次部署身份从候选提交为正式
-                                           # （见下方"发布身份"说明）
+                                           # postgres 就绪、web/worker/scheduler 三容器均探到
+                                           # healthy、nginx 起后两个域名的 HTTP 探活都过，才把
+                                           # 本次部署身份从候选提交为正式——这是五个服务，不是六个：
+                                           # backup-timer 在身份提交之后才起（见下方"发布身份"说明）
 scripts/x8-production-like.sh status      # 只读查询：确认六服务健康,零写入;需要 up 已经成功
                                            # 提交过一次身份,否则会失败并提示先跑 up
 scripts/x8-production-like.sh verify      # 拓扑/allowlist/nginx 反模式静态校验，按 X8_LEVEL=uat 的期望值断言
@@ -78,12 +80,13 @@ claim/sitemap/indexnow 八项双闸 flag 及 `PROMO_CLAIM_ROLES` 互不冲突，
 2. **部署身份分"候选"与"已提交"两段（2026-09-06 补丁，决策二）**：`up`
    在镜像构建成功、起任何容器之前，先把身份写成候选文件
    （`.tmp/x8-production-like/release-identity.candidate.json`）；等数据库准备、
-   六服务起容器、全部探活都通过之后，才把候选提交为正式文件
-   （`.tmp/x8-production-like/release-identity.json`，`gate` 与 `status` 唯一会读
-   的文件，不得手工编辑）。`up` 中途任何一步失败，正式文件保持上一次成功部署时的
-   内容不动，磁盘上会留下一个 `release-identity.failed.txt` 说明这次失败在哪一步、
-   候选文件的内容是什么。此时 `gate`/`status` 会明确提示"上一次部署未完成"而不是
-   笼统的"没有身份文件"；恢复方式就是把 `up` 重新跑完。
+   web/worker/scheduler 三容器均探到 healthy、nginx 起后两个域名的 HTTP(S)
+   探活都通过之后，才把候选提交为正式文件（`.tmp/x8-production-like/release-identity.json`，
+   `gate` 与 `status` 唯一会读的文件，不得手工编辑）——这一步不等 backup-timer，
+   它是身份提交**之后**才起的第六个服务。`up` 中途任何一步失败，正式文件保持
+   上一次成功部署时的内容不动，磁盘上会留下一个 `release-identity.failed.txt`
+   说明这次失败在哪一步、候选文件的内容是什么。此时 `gate`/`status` 会明确提示
+   "上一次部署未完成"而不是笼统的"没有身份文件"；恢复方式就是把 `up` 重新跑完。
 3. **实测对账不再是一张写死的键名单（2026-09-06 补丁，决策一）**：`gate` 执行前的
    三方比对（状态文件 / 渲染候选 / 容器实测）现在核对渲染基线里该服务声明的**全部**
    环境变量，而不是旧版本硬编码的 7 个键——promo 双闸、预览来源白名单等旧版本会
@@ -91,13 +94,16 @@ claim/sitemap/indexnow 八项双闸 flag 及 `PROMO_CLAIM_ROLES` 互不冲突，
    唯一豁免的是几个烘焙进基础镜像、docker-compose.yml 从未声明过的常量键
    （`PATH`/`NODE_VERSION`/`YARN_VERSION`/`NEXT_TELEMETRY_DISABLED`/`PORT`/
    `HOSTNAME`，见 `scripts/lib/x8-gate-diff.mjs` 的 `BASE_IMAGE_BAKED_KEYS`）。
-4. **部分成功会自动回滚（2026-09-06 补丁，P0-2）**：`--apply` 重建 web/worker 时，
-   如果两个服务没有一起达到目标值（例如其中一个重建失败、或事后校验发现摘要/
-   任务白名单等漂移），命令会自动尝试把两个服务一起重新拉回**操作前**的取值并
-   重新校验；只有两个服务都确认回到操作前状态，才报"已回滚"并结束（状态文件
-   全程不写）。如果连回滚都验证不了，会用 `FATAL`/`INCONSISTENT` 显著标出，并把
-   两个服务当前各自的真实取值打印出来，提示手工介入——这种情况下不要凭直觉重试
-   `gate`，先按打印的取值和下方"发布身份"逐项核对。
+4. **部分成功会自动回滚（2026-09-06 补丁，P0-2；2026-09-06 补丁第二轮，收窄了
+   触发条件的口径）**：`--apply` 重建 web/worker 时，只要重建本身失败、事后校验
+   发现漂移、**或者两个服务都已确认到达目标值但最终写状态文件本身失败**这三种
+   情况中的任意一种，命令都会自动尝试把两个服务一起重新拉回**操作前**的取值。
+   回滚后的重新校验与前置三方比对用的是**同一套全量对账**（第 3 条），不是只看
+   两个闸门变量或摘要/任务白名单几个挑出来的字段——只有两个服务的**全部**声明
+   环境变量都确认回到操作前状态，才报"已回滚"并结束（状态文件全程不写）。如果
+   连回滚都验证不了，会用 `FATAL`/`INCONSISTENT` 显著标出，并把两个服务当前
+   各自的真实取值打印出来，提示手工介入——这种情况下不要凭直觉重试 `gate`，先按
+   打印的取值和下方"发布身份"逐项核对。
 5. **计划模式是默认行为**：`gate catalog-write on|off|dry-run` 不带 `--apply` 时
    只打印三方比对与将要发生的变化，不触碰容器、不写状态文件、不在
    `.tmp/x8-production-like/` 下留下任何新文件或改动任何文件的 mtime；要真正生效
@@ -105,12 +111,15 @@ claim/sitemap/indexnow 八项双闸 flag 及 `PROMO_CLAIM_ROLES` 互不冲突，
    on --apply`。只想查看当前状态、不想有任何写入时用 `gate catalog-write
    status`，它是纯只读路径；不带子命令的顶层 `status` 现在也是纯只读路径
    （2026-09-06 补丁，P2-10），同样要求已经有一次成功提交的部署身份。
-6. **漂移告警的修复命令不保证一次就成功**：`up` 结束时如果发现容器实测与状态文件
-   不一致会打印 `WARNING`，建议的修复命令是 `gate catalog-write on --apply`；但
-   如果这条漂移不只涉及那两个闸门变量（第 3 条的全量对账发现了别的不一致），
-   `gate` 自己的三方前置检查会拒绝这条"修复"命令——这不是 bug，是设计如此（拒绝
-   在一个已经不自洽的环境上做单变量重建）。这种情况下的正确恢复路径是重新跑一次
-   `up`，而不是反复重试 `gate`。
+6. **漂移告警打印的"修复命令"实际上从来不会成功（2026-09-06 补丁第二轮，纠正上一版
+   措辞）**：`up` 结束时如果发现容器实测与状态文件不一致会打印 `WARNING`，之前的
+   文案暗示"只要漂移只涉及那两个闸门变量，`gate catalog-write on --apply` 就能修
+   好"——这是错的：`gate` 自己的三方前置检查核对的正是**同一份**持久化状态渲染
+   与**同一批**容器，这条警告能触发，就意味着那份前置检查一定会发现同样的
+   不一致而拒绝执行，不存在"漂移够窄就能修"的情况。**唯一**的恢复路径是重新跑一次
+   `up`——而且必须带上这个环境上次起时用的**同一个** `X8_LEVEL`：`up` 在
+   `X8_LEVEL` 未设置时默认落到 Level 0，裸跑会把 Level UAT/R 环境静默降级，而不是
+   把它修复回原状态。
 
 进入 Level UAT 前，本地若已经以 `X8_LEVEL=0`（或未设置，即默认 0）跑过
 `up`，需要先 `scripts/x8-production-like.sh down` 再以 `X8_LEVEL=uat`

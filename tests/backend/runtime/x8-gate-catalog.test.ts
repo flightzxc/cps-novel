@@ -328,6 +328,35 @@ describe("X8 gate environment: identity-derived fields, never the live git workt
     expectIdenticalSnapshots(before, snapshotDir(runtimeDir));
   });
 
+  // 2026-09-06 patch (second round), group 4: the direct regression test for
+  // the fix -- before it, this exact call site read
+  // `${NEXT_PUBLIC_BUILD_VERSION:-v${X8_IDENTITY_APP_VERSION}}`, so a caller
+  // whose shell already had NEXT_PUBLIC_BUILD_VERSION set (for any reason --
+  // a stale export, a CI default, ...) would silently win over the frozen
+  // identity's own appVersion, exactly the class of bug P2-11 already fixed
+  // for this same variable in a different shape. Every OTHER identity-
+  // derived field on the same call site (APP_VERSION, GIT_COMMIT,
+  // CPS_NOVEL_APP_IMAGE, BUILD_DATE) was already unconditional; this proves
+  // NEXT_PUBLIC_BUILD_VERSION now is too.
+  it("group 4: NEXT_PUBLIC_BUILD_VERSION cannot be overridden by the caller's ambient shell -- it always comes from the frozen identity", () => {
+    writeIdentity({ appVersion: "9.9.9-test-patch" });
+    writeGateState("closed");
+    const script = `
+      set -euo pipefail
+      source "${envLib}"
+      prepare_x8_gate_environment
+      echo "NEXT_PUBLIC_BUILD_VERSION=$NEXT_PUBLIC_BUILD_VERSION"
+    `;
+    const result = spawnSync("bash", ["-c", script], {
+      cwd: root,
+      encoding: "utf8",
+      env: { ...process.env, X8_RUNTIME_DIR: runtimeDir, NEXT_PUBLIC_BUILD_VERSION: "v-caller-injected-bogus" },
+    });
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stdout).toContain("NEXT_PUBLIC_BUILD_VERSION=v9.9.9-test-patch");
+    expect(result.stdout).not.toContain("v-caller-injected-bogus");
+  });
+
   it("fails closed (and provisions nothing) when a required secret file is missing, instead of creating one", () => {
     writeIdentity();
     writeGateState("closed");
@@ -597,33 +626,45 @@ describe("X8 gate command: status is read-only", () => {
     expect(result.stderr).toContain("nothing has been established yet");
   });
 
-  it("reports the persisted state and a container match without any identity file or writes", () => {
+  // 2026-09-06 patch (second round), group 4: `gate catalog-write status`
+  // now requires the same already-established identity every other gate
+  // subcommand requires (see gate_catalog_status()'s own comment for why --
+  // in short, querying containers through the non-identity-bound x8_compose()
+  // wrapper is what made this command unable to run in a genuinely clean
+  // shell in the first place). This test used to prove status worked
+  // WITHOUT an identity file at all; that specific claim is no longer true
+  // by design, so it now establishes one like every other test in this file.
+  it("reports the persisted state and a container match, with zero writes", () => {
+    writeIdentity();
     writeGateState("closed");
     const before = snapshotDir(runtimeDir);
     const result = runGate(["status"]);
-    expect(result.status).toBe(0);
+    expect(result.status, result.stderr).toBe(0);
     expect(result.stdout).toContain("X8_CATALOG_GATE=closed");
     expect(result.stdout).toContain("X8_CATALOG_GATE_CONTAINER_CHECK=match");
     expectIdenticalSnapshots(before, snapshotDir(runtimeDir));
   });
 
   it("reports drift (but still exits 0, a warning not a failure) when the container disagrees with the state file", () => {
+    writeIdentity();
     writeGateState("apply"); // expects true/true; HAPPY_STUB_ENV containers are false/false
     const result = runGate(["status"]);
-    expect(result.status).toBe(0);
+    expect(result.status, result.stderr).toBe(0);
     expect(result.stdout).toContain("X8_CATALOG_GATE_CONTAINER_CHECK=drift");
     expect(result.stderr).toContain("X8 catalog-write gate drift");
   });
 
   it("checks BOTH web and worker, not only web (P1-9)", () => {
+    writeIdentity();
     writeGateState("closed");
     const result = runGate(["status"], { STUB_WORKER_CONTAINER_ID: "" }); // web running, worker is not
-    expect(result.status).toBe(0);
+    expect(result.status, result.stderr).toBe(0);
     expect(result.stdout).toContain("X8_CATALOG_GATE_CONTAINER_CHECK=drift");
     expect(result.stderr).toContain("only one of web/worker has a running container");
   });
 
   it("treats a query failure as an error, not as 'no container' (P1-9 fail-closed)", () => {
+    writeIdentity();
     writeGateState("closed");
     const result = runGate(["status"], { STUB_PS_FAIL_WEB: "1" });
     expect(result.status).not.toBe(0);
@@ -638,6 +679,60 @@ describe("X8 gate command: status is read-only", () => {
     // secrets directory that establishRuntime() pre-created must be
     // completely unchanged.
     expect(() => statSync(join(runtimeDir, "release-identity.json"))).toThrow();
+  });
+});
+
+// 2026-09-06 patch (second round), group 4: the stub `docker` used by every
+// other test in this file never parses a real docker-compose.yml at all --
+// its `compose` handler ignores `-p`/`-f` entirely and returns canned
+// values regardless of the ambient environment, so it cannot see (and
+// cannot catch a regression to) the actual bug: `gate catalog-write status`
+// used to set only P1_12_COMPOSE_PROJECT and then invoke the real compose
+// binary with none of docker-compose.yml's other required variables set,
+// which fails at compose-file interpolation time before this command's own
+// diagnostics ever run (confirmed by hand against the real docker CLI while
+// diagnosing this). This describe block talks to the REAL docker/docker
+// compose binaries -- no stub on PATH -- so it is the one place in this
+// suite that actually exercises the real entry point Codex's audit meant.
+// It uses a compose PROJECT NAME unique to this test (never
+// "cps-novel-x8-local") specifically so it cannot collide with, list, or
+// otherwise touch a real X8 local stack that may happen to be running on
+// the machine executing this suite -- `ps -q` for a project with no
+// containers simply returns nothing, which is all this test needs.
+describe("X8 gate command: `gate catalog-write status` against the REAL docker compose binary (group 4)", () => {
+  const dockerComposeAvailable = spawnSync("docker", ["compose", "version"], { stdio: "ignore" }).status === 0;
+
+  it.skipIf(!dockerComposeAvailable)("runs to completion in a clean shell -- no ambient compose env beyond PATH/HOME, and no stub", () => {
+    writeIdentity({
+      composeProject: "cps-novel-x8-gate-status-realdocker-test",
+      composeConfigFiles: [resolve(root, "docker-compose.yml"), resolve(root, "infra/production-like/docker-compose.yml")],
+    });
+    writeGateState("closed");
+    const result = spawnSync("bash", [launcher, "gate", "catalog-write", "status"], {
+      cwd: root,
+      encoding: "utf8",
+      env: {
+        // Deliberately NOT `...process.env` and NOT the stub bin dir: this
+        // is meant to be as close to "a fresh terminal" as this test runner
+        // can produce. PATH/HOME are the only carry-overs, since they are
+        // what let bash/docker/node resolve at all.
+        // NODE_ENV is required by NodeJS.ProcessEnv's type (augmented by
+        // Next.js) but has no bearing on docker/docker-compose behavior --
+        // carrying it over does not compromise the "clean shell" intent.
+        NODE_ENV: process.env.NODE_ENV,
+        PATH: process.env.PATH,
+        HOME: process.env.HOME,
+        X8_RUNTIME_DIR: runtimeDir,
+      },
+    });
+    expect(result.status, `stdout:\n${result.stdout}\n---\nstderr:\n${result.stderr}`).toBe(0);
+    expect(result.stdout).toContain("X8_CATALOG_GATE=closed");
+    // No real container exists under this throwaway, never-before-seen
+    // project name, so the container cross-check degrades to "skipped" --
+    // the regression this test guards against is docker compose itself
+    // erroring out on an unset required variable before ever reaching this
+    // far, not any particular value of this line.
+    expect(result.stdout).toContain("X8_CATALOG_GATE_CONTAINER_CHECK=skipped");
   });
 });
 
@@ -731,14 +826,79 @@ describe("X8 gate command: apply mode recreates, verifies, and only then writes 
     // 4.4 acceptance: "正常路径执行一次开闸: ... 任务白名单、领取授权角色、双因素
     // 强制、镜像摘要,前后逐项相同" -- this is the direct behavioral test for
     // that clause, not just an inference from the rendered-diff-gate.
+    // 2026-09-06 patch (second round), group 3: the message wording changed
+    // from a hand-written "WORKER_TASK_ALLOWLIST drifted after recreate" to
+    // the shared full-reconciliation diagnostic (ACTUAL_CONTAINER_DRIFT +
+    // the formatted per-key line) -- assert on the pieces that prove the
+    // right key was actually caught, not the old literal sentence.
     writeIdentity();
     writeGateState("closed");
     const before = gateStateFileStat();
     const result = runGate(["on", "--apply"], { STUB_POST_WORKER_ALLOWLIST_OVERRIDE: "some_other_allowlist" });
     expect(result.status).not.toBe(0);
-    expect(result.stderr).toContain("WORKER_TASK_ALLOWLIST drifted after recreate");
+    expect(result.stderr).toContain("did not verify cleanly");
+    expect(result.stderr).toContain("environment drifted after recreate");
+    expect(result.stderr).toContain("WORKER_TASK_ALLOWLIST");
     expect(result.stderr).toContain("rolled back successfully");
     expect(gateStateFileStat().mtimeMs).toBe(before.mtimeMs);
+  });
+
+  // 2026-09-06 patch (second round), group 3: MOBOREADER_PREVIEW_SOURCE_APP_CODES
+  // is exactly the kind of key the OLD post-recreate verification (five
+  // hand-picked keys: the catalog-write pair, PROMO_CLAIM_ROLES,
+  // ADMIN_TWO_FACTOR_ENFORCEMENT, WORKER_TASK_ALLOWLIST) could never catch --
+  // it is not on that list, even though the PRE-operation three-way check a
+  // few lines up in this same file already reconciles it (see the "three-way
+  // pre-check catches drift the reference implementation cannot" describe
+  // block above). This is the direct regression test for closing that gap:
+  // revert x8_gate_verify_recreate() back to the five-key check and this
+  // goes green with no rollback attempted at all (post-recreate verification
+  // would report clean when it is not).
+  it("group 3: post-recreate verification now also catches drift in a key the OLD hand-checked list never covered (MOBOREADER_PREVIEW_SOURCE_APP_CODES)", () => {
+    writeIdentity();
+    writeGateState("closed");
+    const before = gateStateFileStat();
+    const result = runGate(["on", "--apply"], { STUB_POST_WEB_PREVIEW_APPS_OVERRIDE: "some_other_source_app" });
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("did not verify cleanly");
+    expect(result.stderr).toContain("environment drifted after recreate");
+    expect(result.stderr).toContain("MOBOREADER_PREVIEW_SOURCE_APP_CODES");
+    expect(result.stderr).toContain("rolled back successfully");
+    expect(gateStateFileStat().mtimeMs).toBe(before.mtimeMs);
+    expect(readFileSync(join(runtimeDir, "catalog-gate.state"), "utf8").trim()).toBe("closed");
+  });
+
+  // 2026-09-06 patch (second round), group 2: the final write_x8_gate_state()
+  // call used to have no failure path of its own -- if it failed AFTER
+  // recreate and post-recreate verification had already succeeded, the
+  // containers would be left at the NEW target values while the state file
+  // silently kept the OLD one, with no rollback attempt and no diagnostic.
+  // X8_RUNTIME_DIR is chmod'd read-only (no write/create/delete of new
+  // directory entries) right before the run so write_x8_gate_state()'s own
+  // `printf ... >"$temporary"` (a NEW file, .tmp.$$-suffixed) fails --
+  // portable, no root/special flags needed. The recreate-marker file is
+  // pre-created (empty) first so the stub docker's `>>` appends during the
+  // recreate/rollback `compose up` calls still succeed: appending to an
+  // EXISTING file only needs write permission on the FILE, not the
+  // directory (verified by hand before writing this test).
+  it("group 2: a failure writing the FINAL gate state file (after a fully successful recreate+verify) is routed through the same compensating rollback", () => {
+    writeIdentity();
+    writeGateState("closed");
+    const before = gateStateFileStat();
+    const marker = join(runtimeDir, "recreate-marker.env");
+    writeFileSync(marker, "");
+    chmodSync(runtimeDir, 0o500);
+    try {
+      const result = runGate(["on", "--apply"]);
+      expect(result.status).not.toBe(0);
+      expect(result.stderr).toContain("writing the new gate state failed");
+      expect(result.stderr).toContain("attempting a consistency rollback");
+      expect(result.stderr).toContain("rolled back successfully");
+    } finally {
+      chmodSync(runtimeDir, 0o700);
+    }
+    expect(gateStateFileStat().mtimeMs).toBe(before.mtimeMs);
+    expect(readFileSync(join(runtimeDir, "catalog-gate.state"), "utf8").trim()).toBe("closed");
   });
 
   it("P0-2: when the compensating rollback ALSO fails to verify, this fails loudly with both services' actual live state, and never writes state", () => {

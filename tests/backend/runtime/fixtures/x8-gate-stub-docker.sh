@@ -70,6 +70,18 @@ if [[ "${1:-}" == "inspect" ]]; then
       pre_image="${STUB_WORKER_LABEL_IMAGE:-}"; marker_key=WORKER
       health="${STUB_WORKER_HEALTH:-healthy}"
       ;;
+    # 2026-09-06 patch (second round), group 1 test support: `up_x8()` now
+    # waits for scheduler to report healthy too (x8_wait_services_healthy),
+    # alongside web/worker -- only .State.Health.Status is exercised by that
+    # path, but the other fields are filled in for symmetry with web/worker
+    # in case a future test needs them.
+    "${STUB_SCHEDULER_CONTAINER_ID:-__none__}")
+      label_project="${STUB_SCHEDULER_LABEL_PROJECT:-}"; label_service="${STUB_SCHEDULER_LABEL_SERVICE:-}"
+      label_config_files="${STUB_SCHEDULER_LABEL_CONFIG_FILES:-}"; env_json="${STUB_SCHEDULER_ENV_JSON:-[]}"
+      label_working_dir="${STUB_SCHEDULER_LABEL_WORKING_DIR:-/fixture}"
+      pre_image="${STUB_SCHEDULER_LABEL_IMAGE:-}"; marker_key=SCHEDULER
+      health="${STUB_SCHEDULER_HEALTH:-healthy}"
+      ;;
     *)
       echo "Error: No such object: $container" >&2
       exit 1
@@ -122,9 +134,20 @@ if [[ "${1:-}" == "inspect" ]]; then
         other="$(read_marker_flag "${marker_key}_OTHER" || true)"
         source_flag="$(read_marker_flag "${marker_key}_SOURCE" || true)"
         # Same "primary-only distortion" rule as {{.Image}} above, for the
-        # worker allowlist post-recreate-drift fixture.
+        # worker allowlist post-recreate-drift fixture. Only the single key
+        # under test is overridden -- FEATURE_PROMO_LINK_CLAIM (also part of
+        # worker's declared environment, see the `config` render below)
+        # stays at its ambient value so this remains a single-key drift, not
+        # an incidental second one.
         if [[ "$marker_key" == "WORKER" && "$source_flag" == "primary" && -n "${STUB_POST_WORKER_ALLOWLIST_OVERRIDE:-}" ]]; then
-          other="WORKER_TASK_ALLOWLIST=${STUB_POST_WORKER_ALLOWLIST_OVERRIDE}"
+          other="WORKER_TASK_ALLOWLIST=${STUB_POST_WORKER_ALLOWLIST_OVERRIDE};FEATURE_PROMO_LINK_CLAIM=${FEATURE_PROMO_LINK_CLAIM:-false}"
+        fi
+        # 2026-09-06 patch (second round), group 3 test support: the web
+        # equivalent, for a key the OLD hand-checked post-recreate
+        # verification never looked at at all (MOBOREADER_PREVIEW_SOURCE_APP_CODES)
+        # but the full-reconciliation post-recreate check now does.
+        if [[ "$marker_key" == "WEB" && "$source_flag" == "primary" && -n "${STUB_POST_WEB_PREVIEW_APPS_OVERRIDE:-}" ]]; then
+          other="PROMO_CLAIM_ROLES=${PROMO_CLAIM_ROLES:-};ADMIN_TWO_FACTOR_ENFORCEMENT=${ADMIN_TWO_FACTOR_ENFORCEMENT:-true};MOBOREADER_PREVIEW_SOURCE_APP_CODES=${STUB_POST_WEB_PREVIEW_APPS_OVERRIDE};FEATURE_PROMO_LINK_CLAIM=${FEATURE_PROMO_LINK_CLAIM:-false}"
         fi
         node -e '
           const [, enabled, write, other] = process.argv;
@@ -176,6 +199,13 @@ if [[ "${1:-}" == "compose" ]]; then
             exit 1
           fi
           echo "${STUB_WORKER_CONTAINER_ID:-}"
+          ;;
+        scheduler)
+          if [[ "${STUB_PS_FAIL_SCHEDULER:-}" == "1" ]]; then
+            echo "Error: stub compose ps failure (scheduler)" >&2
+            exit 1
+          fi
+          echo "${STUB_SCHEDULER_CONTAINER_ID:-}"
           ;;
       esac
       exit 0
@@ -250,7 +280,13 @@ if [[ "${1:-}" == "compose" ]]; then
                 echo "WEB_SOURCE=$source_tag"
                 echo "WEB_ENABLED=${FEATURE_NOVEL_CATALOG_SYNC:-false}"
                 echo "WEB_WRITE=${NOVEL_CATALOG_SYNC_ALLOW_WRITE:-false}"
-                echo "WEB_OTHER=PROMO_CLAIM_ROLES=${PROMO_CLAIM_ROLES:-};ADMIN_TWO_FACTOR_ENFORCEMENT=${ADMIN_TWO_FACTOR_ENFORCEMENT:-true}"
+                # 2026-09-06 patch (second round), group 3: MOBOREADER_PREVIEW_SOURCE_APP_CODES
+                # and FEATURE_PROMO_LINK_CLAIM are also part of web's declared
+                # environment (see the `config` render below) -- the full
+                # post-recreate reconciliation now checks them too, so the
+                # fixture has to actually report them, not just the two keys
+                # the OLD hand-checked verification looked at.
+                echo "WEB_OTHER=PROMO_CLAIM_ROLES=${PROMO_CLAIM_ROLES:-};ADMIN_TWO_FACTOR_ENFORCEMENT=${ADMIN_TWO_FACTOR_ENFORCEMENT:-true};MOBOREADER_PREVIEW_SOURCE_APP_CODES=${MOBOREADER_PREVIEW_SOURCE_APP_CODES:-changdu};FEATURE_PROMO_LINK_CLAIM=${FEATURE_PROMO_LINK_CLAIM:-false}"
               } >>"$marker"
               ;;
             worker)
@@ -259,7 +295,9 @@ if [[ "${1:-}" == "compose" ]]; then
                 echo "WORKER_SOURCE=$source_tag"
                 echo "WORKER_ENABLED=${FEATURE_NOVEL_CATALOG_SYNC:-false}"
                 echo "WORKER_WRITE=${NOVEL_CATALOG_SYNC_ALLOW_WRITE:-false}"
-                echo "WORKER_OTHER=WORKER_TASK_ALLOWLIST=${WORKER_TASK_ALLOWLIST:-}"
+                # FEATURE_PROMO_LINK_CLAIM is also part of worker's declared
+                # environment -- see the note on WEB_OTHER above.
+                echo "WORKER_OTHER=WORKER_TASK_ALLOWLIST=${WORKER_TASK_ALLOWLIST:-};FEATURE_PROMO_LINK_CLAIM=${FEATURE_PROMO_LINK_CLAIM:-false}"
               } >>"$marker"
               ;;
           esac
