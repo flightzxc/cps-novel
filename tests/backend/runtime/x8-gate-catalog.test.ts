@@ -1,13 +1,17 @@
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
   chmodSync,
+  lstatSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
   readdirSync,
+  readlinkSync,
   rmSync,
   statSync,
+  symlinkSync,
+  utimesSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -71,7 +75,33 @@ function establishRuntime() {
   writeFileSync(join(secretDir, "backup.pgpass"), "postgres:5432:cps_novel:backup_role:deadbeef\n");
 }
 
-type DirSnapshot = Record<string, { mtimeMs: number; size: number; sha256: string }>;
+// Terminal review, release-identity gate second round, finding 四: the
+// original shape here only ever recorded FILE entries (mtimeMs/size/sha256),
+// keyed by relative path. That silently missed four whole categories of
+// change to the runtime directory the "zero writes" tests in this file
+// exist to police:
+//   - an empty directory added or removed (the old `walk()` recursed into a
+//     directory but never gave the directory ITSELF an entry in `out`, so
+//     an empty dir appearing/disappearing left `Object.keys(out)` unchanged);
+//   - a directory's own mtime changing (same root cause -- directories
+//     never got a record at all);
+//   - a file's permission bits changing without its content, size, or mtime
+//     also changing (chmod does not touch mtime -- only the file's own
+//     record needs a `mode` field to see this, the file's OTHER three
+//     fields are silent on a chmod-only change);
+//   - a symlink appearing, disappearing, or being repointed (a `Dirent` for
+//     a symlink is neither `isDirectory()` nor `isFile()`, so the old code's
+//     `if`/`else if` matched neither branch and skipped it entirely --
+//     completely invisible, not even walked).
+// This is a test-only change: DirSnapshot now tags each entry with its
+// `type` (file/dir/symlink) and records the fields that matter for that
+// type, keyed by the same relative path as before.
+type DirSnapshot = Record<
+  string,
+  | { type: "file"; mtimeMs: number; size: number; sha256: string; mode: number }
+  | { type: "dir"; mtimeMs: number; mode: number }
+  | { type: "symlink"; target: string; mode: number }
+>;
 
 // Byte-level "did anything at all change" proof for the plan-mode /
 // status / query zero-write guarantees (patch work order section 3): a
@@ -85,12 +115,19 @@ function snapshotDir(dir: string): DirSnapshot {
     for (const entry of readdirSync(current, { withFileTypes: true })) {
       const full = join(current, entry.name);
       const rel = prefix ? `${prefix}/${entry.name}` : entry.name;
+      if (entry.isSymbolicLink()) {
+        const stat = lstatSync(full);
+        out[rel] = { type: "symlink", target: readlinkSync(full), mode: stat.mode & 0o777 };
+        continue;
+      }
       if (entry.isDirectory()) {
+        const stat = statSync(full);
+        out[rel] = { type: "dir", mtimeMs: stat.mtimeMs, mode: stat.mode & 0o777 };
         walk(full, rel);
       } else if (entry.isFile()) {
         const stat = statSync(full);
         const sha256 = createHash("sha256").update(readFileSync(full)).digest("hex");
-        out[rel] = { mtimeMs: stat.mtimeMs, size: stat.size, sha256 };
+        out[rel] = { type: "file", mtimeMs: stat.mtimeMs, size: stat.size, sha256, mode: stat.mode & 0o777 };
       }
     }
   };
@@ -121,8 +158,34 @@ afterEach(() => {
   rmSync(workDir, { recursive: true, force: true });
 });
 
+// Finding 三 (release-identity gate second round): levelEnv mirrors Level
+// "0"'s real entry in scripts/lib/x8-levels.json (WORKER_TASK_ALLOWLIST/
+// PROMO_CLAIM_ROLES/ADMIN_TWO_FACTOR_ENFORCEMENT/ADMIN_LOCAL_IDENTITY_SEED
+// plus the eight double-gate flags) -- kept byte-for-byte in sync with that
+// file's Level 0 section deliberately, so every EXISTING test in this suite
+// (whose STUB_WEB_ENV_JSON/STUB_WORKER_ENV_JSON/`compose config` fixtures
+// already assume these exact values) keeps passing unchanged even though
+// prepare_x8_gate_environment() no longer reads that file at all -- it now
+// reads levelEnv back out of the identity instead (see the dedicated
+// "no longer reads the worktree level table" test below for the case where
+// they deliberately diverge).
+const LEVEL_0_ENV = {
+  WORKER_TASK_ALLOWLIST: "credential.validate.v1,credential.supersede.v1,catalog_scan,home_carousel.compute.v1",
+  PROMO_CLAIM_ROLES: "",
+  ADMIN_TWO_FACTOR_ENFORCEMENT: "true",
+  ADMIN_LOCAL_IDENTITY_SEED: "",
+  FEATURE_PROMO_LINK_CLAIM: "false",
+  PROMO_LINK_CLAIM_ALLOW_WRITE: "false",
+  FEATURE_SITEMAP_AUTO_REFRESH: "false",
+  SITEMAP_AUTO_REFRESH_ALLOW_WRITE: "false",
+  FEATURE_INDEXNOW_OUTBOX: "false",
+  INDEXNOW_OUTBOX_ALLOW_WRITE: "false",
+  FEATURE_INDEXNOW_DELIVERY: "false",
+  INDEXNOW_DELIVERY_ALLOW_WRITE: "false",
+};
+
 const IDENTITY_DEFAULTS = {
-  schemaVersion: 1,
+  schemaVersion: 2,
   appVersion: "0.1.0",
   gitCommit: "a".repeat(40),
   level: "0",
@@ -132,6 +195,9 @@ const IDENTITY_DEFAULTS = {
   composeConfigFiles: ["/fixture/docker-compose.yml", "/fixture/infra/production-like/docker-compose.yml"],
   buildDate: "2026-09-05T00:00:00.000Z",
   createdAt: "2026-09-05T00:00:01.000Z",
+  levelEnv: LEVEL_0_ENV,
+  adminDomain: "zbcwf.novel.test",
+  credentialActiveKeyVersion: "1",
 };
 
 function writeIdentity(overrides: Partial<typeof IDENTITY_DEFAULTS> = {}) {
@@ -377,6 +443,103 @@ describe("X8 gate environment: identity-derived fields, never the live git workt
     expect(result.stderr).toContain("totp.key");
     expectIdenticalSnapshots(before, snapshotDir(runtimeDir));
   });
+
+  // Terminal review, release-identity gate second round, finding 三: this is
+  // the direct regression test for "the gate no longer reads the worktree's
+  // level table". Before the fix, prepare_x8_gate_environment() called
+  // x8_level_config("0"), which reads THIS REPO'S OWN scripts/lib/x8-levels.json
+  // fresh every time -- so WORKER_TASK_ALLOWLIST here would always come back
+  // as that file's real Level 0 value, no matter what the identity says. The
+  // identity below deliberately freezes a WORKER_TASK_ALLOWLIST that does
+  // NOT match the real repo file's Level 0 entry -- a pass here can only
+  // mean the exported value came from the identity's own frozen levelEnv.
+  it("finding 三: WORKER_TASK_ALLOWLIST (and the rest of levelEnv) comes from the frozen identity, never a fresh read of scripts/lib/x8-levels.json", () => {
+    writeIdentity({
+      levelEnv: {
+        ...LEVEL_0_ENV,
+        WORKER_TASK_ALLOWLIST: "totally-different-allowlist-value-not-in-the-real-table",
+      },
+    });
+    writeGateState("closed");
+    const script = `
+      set -euo pipefail
+      source "${envLib}"
+      prepare_x8_gate_environment
+      echo "WORKER_TASK_ALLOWLIST=$WORKER_TASK_ALLOWLIST"
+    `;
+    const result = spawnSync("bash", ["-c", script], {
+      cwd: root,
+      encoding: "utf8",
+      env: { ...process.env, X8_RUNTIME_DIR: runtimeDir },
+    });
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stdout).toContain("WORKER_TASK_ALLOWLIST=totally-different-allowlist-value-not-in-the-real-table");
+  });
+
+  // Finding 三, second half: X8_ADMIN_DOMAIN and CHANNEL_CREDENTIAL_ACTIVE_KEY_VERSION
+  // used to be defaulted from the CALLER's ambient shell (`${X8_ADMIN_DOMAIN:-zbcwf.novel.test}`
+  // in x8_export_static_topology(), `${CHANNEL_CREDENTIAL_ACTIVE_KEY_VERSION:-1}`
+  // directly in prepare_x8_gate_environment()) -- the exact same class of bug
+  // the NEXT_PUBLIC_BUILD_VERSION test above already covers for that
+  // variable. Both ambient variables are set here to values that differ from
+  // IDENTITY_DEFAULTS -- a pass can only mean the identity's frozen values
+  // won, not the caller's.
+  it("finding 三: X8_ADMIN_DOMAIN and CHANNEL_CREDENTIAL_ACTIVE_KEY_VERSION cannot be overridden by the caller's ambient shell -- both always come from the frozen identity", () => {
+    writeIdentity();
+    writeGateState("closed");
+    const script = `
+      set -euo pipefail
+      source "${envLib}"
+      prepare_x8_gate_environment
+      echo "X8_ADMIN_DOMAIN=$X8_ADMIN_DOMAIN"
+      echo "ADMIN_CANONICAL_ORIGIN=$ADMIN_CANONICAL_ORIGIN"
+      echo "CHANNEL_CREDENTIAL_ACTIVE_KEY_VERSION=$CHANNEL_CREDENTIAL_ACTIVE_KEY_VERSION"
+    `;
+    const result = spawnSync("bash", ["-c", script], {
+      cwd: root,
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        X8_RUNTIME_DIR: runtimeDir,
+        X8_ADMIN_DOMAIN: "caller-injected-bogus.example.test",
+        CHANNEL_CREDENTIAL_ACTIVE_KEY_VERSION: "999-caller-injected-bogus",
+      },
+    });
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stdout).toContain(`X8_ADMIN_DOMAIN=${IDENTITY_DEFAULTS.adminDomain}`);
+    expect(result.stdout).toContain(`ADMIN_CANONICAL_ORIGIN=https://${IDENTITY_DEFAULTS.adminDomain}`);
+    expect(result.stdout).toContain(`CHANNEL_CREDENTIAL_ACTIVE_KEY_VERSION=${IDENTITY_DEFAULTS.credentialActiveKeyVersion}`);
+    expect(result.stdout).not.toContain("caller-injected-bogus");
+  });
+
+  // A missing/invalid levelEnv, adminDomain, or credentialActiveKeyVersion
+  // must fail closed the same way a missing appVersion/level/etc. already
+  // does -- undecidable always fails, never falls back to a default.
+  it("finding 三: fails closed when the identity's levelEnv is missing", () => {
+    const withoutLevelEnv: Partial<typeof IDENTITY_DEFAULTS> = { ...IDENTITY_DEFAULTS };
+    delete withoutLevelEnv.levelEnv;
+    writeFileSync(join(runtimeDir, "release-identity.json"), JSON.stringify(withoutLevelEnv, null, 2));
+    writeGateState("closed");
+    const result = runGate(["status"]);
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain('missing a valid "levelEnv"');
+  });
+
+  it("finding 三: fails closed when the identity's adminDomain is empty", () => {
+    writeIdentity({ adminDomain: "" });
+    writeGateState("closed");
+    const result = runGate(["status"]);
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain('missing a valid "adminDomain"');
+  });
+
+  it("finding 三: fails closed on an unsupported schemaVersion instead of silently accepting it", () => {
+    writeIdentity({ schemaVersion: 1 } as never);
+    writeGateState("closed");
+    const result = runGate(["status"]);
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("unsupported schemaVersion");
+  });
 });
 
 describe("X8 gate command: never builds or pulls, and refuses a missing/drifted frozen image", () => {
@@ -563,10 +726,25 @@ describe("X8 gate command: the three-way pre-check catches drift the reference i
     expect(result.stderr).toContain("SOME_UNEXPECTED_RUNTIME_VAR");
   });
 
-  it("does NOT flag a base-image-baked key present only in the container as drift (the documented, tested exemption)", () => {
+  // Finding 一 (release-identity gate second round): the exemption is only
+  // legitimate when the container's value for an exempted key EQUALS what
+  // the identity-bound image itself bakes in by default -- x8_gate_actual_matches_baseline()
+  // now reads that default via `docker image inspect --format '{{json .Config.Env}}'`
+  // on $X8_IDENTITY_IMAGE_REF and compares against it, so this happy-path
+  // test must supply a matching STUB_IMAGE_ENV_JSON, or every exempted key
+  // would now (correctly) be flagged as drift.
+  const BASE_IMAGE_ENV_JSON = JSON.stringify([
+    "NODE_VERSION=20.20.2",
+    "YARN_VERSION=1.22.22",
+    "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+    "NEXT_TELEMETRY_DISABLED=1",
+  ]);
+
+  it("does NOT flag a base-image-baked key present only in the container as drift, when its value matches the image's own baked default (the documented, tested exemption)", () => {
     writeIdentity();
     writeGateState("closed");
     const result = runGate(["on"], {
+      STUB_IMAGE_ENV_JSON: BASE_IMAGE_ENV_JSON,
       STUB_WEB_ENV_JSON: JSON.stringify([
         "FEATURE_NOVEL_CATALOG_SYNC=false",
         "NOVEL_CATALOG_SYNC_ALLOW_WRITE=false",
@@ -584,6 +762,40 @@ describe("X8 gate command: the three-way pre-check catches drift the reference i
       ]),
     });
     expect(result.status, result.stderr).toBe(0);
+  });
+
+  // Finding 一: the direct regression test. Before the fix, a container
+  // whose env for an exempted key (here PATH) was CREATED with an override
+  // that differs from the image's own baked default was silently accepted
+  // -- because the exemption used to be "container has it -> always OK",
+  // never checked against anything. This container's actual PATH here
+  // diverges from the image's baked PATH (BASE_IMAGE_ENV_JSON above), which
+  // must now fail the three-way pre-check.
+  it("finding 一: FLAGS a base-image-baked key whose actual container value diverges from the identity-bound image's own baked default", () => {
+    writeIdentity();
+    writeGateState("closed");
+    const result = runGate(["on"], {
+      STUB_IMAGE_ENV_JSON: BASE_IMAGE_ENV_JSON,
+      STUB_WEB_ENV_JSON: JSON.stringify([
+        "FEATURE_NOVEL_CATALOG_SYNC=false",
+        "NOVEL_CATALOG_SYNC_ALLOW_WRITE=false",
+        "PROMO_CLAIM_ROLES=",
+        "ADMIN_TWO_FACTOR_ENFORCEMENT=true",
+        "MOBOREADER_PREVIEW_SOURCE_APP_CODES=changdu",
+        "FEATURE_PROMO_LINK_CLAIM=false",
+        "NODE_VERSION=20.20.2",
+        "YARN_VERSION=1.22.22",
+        // Overridden at container-creation time to something OTHER than what
+        // the image itself bakes in -- this changes nothing about `.Image`'s
+        // digest, so only the new imageBakedEnv comparison can catch it.
+        "PATH=/some/attacker-controlled/path:/usr/bin",
+        "NEXT_TELEMETRY_DISABLED=1",
+      ]),
+    });
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("ACTUAL_CONTAINER_DRIFT");
+    expect(result.stderr).toContain("web.PATH");
+    expect(result.stderr).toContain("/some/attacker-controlled/path:/usr/bin");
   });
 });
 
@@ -617,6 +829,166 @@ describe("X8 gate command: plan mode is the default and produces zero writes", (
     writeFileSync(join(runtimeDir, "stray-file.txt"), "should never happen in plan mode");
     expect(() => expectIdenticalSnapshots(before, snapshotDir(runtimeDir))).toThrow();
   });
+
+  // Terminal review, release-identity gate second round, finding 四: four
+  // more self-checks for the snapshot method itself, each pinning one of the
+  // categories the pre-fix snapshotDir()/DirSnapshot silently missed. These
+  // exercise the helper directly (no gate command involved) since the point
+  // is the snapshot mechanism's own coverage, not gate behavior.
+  it("self-check finding 四: detects an empty directory added", () => {
+    const before = snapshotDir(runtimeDir);
+    mkdirSync(join(runtimeDir, "a-new-empty-directory"));
+    expect(() => expectIdenticalSnapshots(before, snapshotDir(runtimeDir))).toThrow();
+  });
+
+  it("self-check finding 四: detects an empty directory removed", () => {
+    mkdirSync(join(runtimeDir, "will-be-removed"));
+    const before = snapshotDir(runtimeDir);
+    rmSync(join(runtimeDir, "will-be-removed"), { recursive: true });
+    expect(() => expectIdenticalSnapshots(before, snapshotDir(runtimeDir))).toThrow();
+  });
+
+  it("self-check finding 四: detects a directory's own mtime changing", () => {
+    const dir = join(runtimeDir, "secrets");
+    const before = snapshotDir(runtimeDir);
+    const distinctPast = new Date("2020-01-01T00:00:00.000Z");
+    utimesSync(dir, distinctPast, distinctPast);
+    expect(() => expectIdenticalSnapshots(before, snapshotDir(runtimeDir))).toThrow();
+  });
+
+  it("self-check finding 四: detects a file's permission bits changing with content/size/mtime all unchanged (chmod does not touch mtime)", () => {
+    const file = join(runtimeDir, "secrets", "totp.key");
+    const beforeStat = statSync(file);
+    const originalMode = beforeStat.mode & 0o777;
+    // 0o444 is guaranteed to differ from writeFileSync's default mode
+    // (0o644 under a typical 022 umask, confirmed empirically) -- picking a
+    // fixed "different" mode instead of e.g. re-applying the same default
+    // is what makes this a real permission CHANGE rather than an accidental
+    // no-op chmod.
+    const before = snapshotDir(runtimeDir);
+    chmodSync(file, 0o444);
+    const afterStat = statSync(file);
+    expect(afterStat.mode & 0o777).not.toBe(originalMode);
+    // chmod must not have moved mtime -- otherwise this would not isolate
+    // "permission changed" from "the OLD fields already caught it".
+    expect(afterStat.mtimeMs).toBe(beforeStat.mtimeMs);
+    try {
+      expect(() => expectIdenticalSnapshots(before, snapshotDir(runtimeDir))).toThrow();
+    } finally {
+      chmodSync(file, originalMode);
+    }
+  });
+
+  it("self-check finding 四: detects a symlink added (the old code silently skipped symlinks -- neither isFile() nor isDirectory())", () => {
+    const before = snapshotDir(runtimeDir);
+    symlinkSync(join(runtimeDir, "secrets", "totp.key"), join(runtimeDir, "a-new-symlink"));
+    try {
+      expect(() => expectIdenticalSnapshots(before, snapshotDir(runtimeDir))).toThrow();
+    } finally {
+      rmSync(join(runtimeDir, "a-new-symlink"));
+    }
+  });
+
+  it("self-check finding 四: detects a symlink's target changing", () => {
+    symlinkSync(join(runtimeDir, "secrets", "totp.key"), join(runtimeDir, "a-retargeted-symlink"));
+    try {
+      const before = snapshotDir(runtimeDir);
+      rmSync(join(runtimeDir, "a-retargeted-symlink"));
+      symlinkSync(join(runtimeDir, "secrets", "credential-v1.key"), join(runtimeDir, "a-retargeted-symlink"));
+      expect(() => expectIdenticalSnapshots(before, snapshotDir(runtimeDir))).toThrow();
+    } finally {
+      rmSync(join(runtimeDir, "a-retargeted-symlink"), { force: true });
+    }
+  });
+});
+
+describe("X8 gate command: temp files never leak, and never trust TMPDIR blindly (finding 二)", () => {
+  // Terminal review, release-identity gate second round, finding 二, second
+  // half ("并确保临时文件不落在运行时目录内"): x8_resolve_gate_tmpdir() (scripts/lib/
+  // x8-production-like-env.sh) refuses outright when TMPDIR resolves at or
+  // inside the runtime directory, instead of silently letting every
+  // x8_gate_* mktemp call site place a file (however briefly) inside the
+  // very directory the "plan mode / status make zero writes" guarantee is
+  // about.
+  it("refuses to run at all when TMPDIR resolves inside the runtime directory, instead of silently writing temp files there", () => {
+    writeIdentity();
+    writeGateState("closed");
+    const bogusTmpdir = join(runtimeDir, "tmp-inside-runtime-dir");
+    mkdirSync(bogusTmpdir, { recursive: true });
+    const result = runGate(["on"], { TMPDIR: bogusTmpdir });
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("resolves at or inside the X8 runtime directory");
+    // The refusal itself must not have created anything under the bogus
+    // TMPDIR either -- it exits before ever calling mktemp.
+    expect(readdirSync(bogusTmpdir)).toEqual([]);
+  });
+
+  it("still runs normally when TMPDIR points somewhere unrelated to the runtime directory", () => {
+    writeIdentity();
+    writeGateState("closed");
+    const unrelatedTmpdir = mkdtempSync(join(tmpdir(), "x8-gate-unrelated-tmpdir-"));
+    try {
+      const result = runGate(["on"], { TMPDIR: unrelatedTmpdir });
+      expect(result.status, result.stderr).toBe(0);
+      expect(result.stdout).toContain("X8_GATE_PLAN=PASS");
+    } finally {
+      rmSync(unrelatedTmpdir, { recursive: true, force: true });
+    }
+  });
+
+  // Terminal review, release-identity gate second round, finding 二, first
+  // half ("没有覆盖全部退出路径的统一清理"): gate_catalog_recreate()'s
+  // baseline_file/candidate_file used to be removed by a hand-duplicated
+  // `rm -f` immediately before each of its ~9 return points -- which did
+  // nothing at all for a raw SIGTERM/SIGINT delivered while the function is
+  // genuinely blocked in `docker compose up` (this function is called at
+  // the top level, never inside a tested `if`/`||`, so `set -e` gives it no
+  // protection either). An EXIT trap is what actually covers that path.
+  // This spawns the gate command ASYNCHRONOUSLY (not spawnSync) specifically
+  // so the test can deliver SIGTERM while the stub `docker compose up` is
+  // still sleeping, then assert no x8-gate-baseline.*/x8-gate-candidate.*
+  // file was left behind in a dedicated, otherwise-empty TMPDIR.
+  it("finding 二: an EXIT trap removes baseline_file/candidate_file even when SIGTERM arrives while blocked in `docker compose up`", async () => {
+    writeIdentity();
+    writeGateState("closed");
+    const isolatedTmpdir = mkdtempSync(join(tmpdir(), "x8-gate-sigterm-tmpdir-"));
+    try {
+      const marker = join(runtimeDir, "recreate-marker.env");
+      const child = spawn("bash", [launcher, "gate", "catalog-write", "on", "--apply"], {
+        cwd: root,
+        env: {
+          ...process.env,
+          PATH: `${stubBinDir}:${process.env.PATH}`,
+          X8_RUNTIME_DIR: runtimeDir,
+          TMPDIR: isolatedTmpdir,
+          STUB_MARKER_FILE: marker,
+          ...HAPPY_STUB_ENV,
+          // Blocks the stub's `docker compose up` long enough that a SIGTERM
+          // sent shortly after spawn is guaranteed to land while this
+          // function is still inside that call, with baseline_file/
+          // candidate_file (created earlier, before the pre-check) still
+          // sitting in isolatedTmpdir.
+          STUB_RECREATE_SLEEP_SECONDS: "5",
+        },
+      });
+      const exited = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((resolveExit) => {
+        child.on("exit", (code, signal) => resolveExit({ code, signal }));
+      });
+      // Give the child enough time to get through identity resolution and
+      // the three-way pre-check and reach the stub's (now-sleeping) `docker
+      // compose up` call before signaling it.
+      await new Promise((resolveDelay) => setTimeout(resolveDelay, 700));
+      child.kill("SIGTERM");
+      const { signal } = await exited;
+      expect(signal).toBe("SIGTERM");
+      const leftover = readdirSync(isolatedTmpdir).filter(
+        (name) => name.startsWith("x8-gate-baseline.") || name.startsWith("x8-gate-candidate."),
+      );
+      expect(leftover).toEqual([]);
+    } finally {
+      rmSync(isolatedTmpdir, { recursive: true, force: true });
+    }
+  }, 10000);
 });
 
 describe("X8 gate command: status is read-only", () => {

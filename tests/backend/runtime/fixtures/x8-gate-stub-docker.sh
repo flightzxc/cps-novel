@@ -32,9 +32,16 @@ if [[ "${1:-}" == "image" && "${2:-}" == "inspect" ]]; then
     echo "Error: No such image: $ref" >&2
     exit 1
   fi
-  if [[ -n "$fmt" ]]; then
-    echo "${STUB_IMAGE_ID:-}"
-  fi
+  case "$fmt" in
+    # Terminal review, release-identity gate second round, finding 一:
+    # x8_gate_actual_matches_baseline() now reads the image's OWN baked-in
+    # default environment (to check BASE_IMAGE_BAKED_KEYS-exempted values
+    # against it, not accept them unconditionally) -- distinct from every
+    # other format this stub is asked for, which all just want the image ID.
+    '{{json .Config.Env}}') echo "${STUB_IMAGE_ENV_JSON:-[]}" ;;
+    "") : ;; # existence-only check (`docker image inspect "$ref" >/dev/null`): no output needed
+    *) echo "${STUB_IMAGE_ID:-}" ;;
+  esac
   exit 0
 fi
 
@@ -253,6 +260,15 @@ if [[ "${1:-}" == "compose" ]]; then
       exit 0
       ;;
     up)
+      # Terminal review, release-identity gate second round, finding 二: a
+      # deliberate delay so a test can send SIGTERM to the parent
+      # scripts/x8-production-like.sh process while it is genuinely blocked
+      # in `docker compose up` (the exact real-world window a Ctrl+C during a
+      # slow recreate lands in) and then assert the EXIT-trap cleanup of
+      # baseline_file/candidate_file actually ran.
+      if [[ -n "${STUB_RECREATE_SLEEP_SECONDS:-}" ]]; then
+        sleep "$STUB_RECREATE_SLEEP_SECONDS"
+      fi
       is_rollback="${X8_GATE_ROLLBACK:-}"
       if [[ "$is_rollback" == "1" ]]; then
         exit_code="${STUB_ROLLBACK_EXIT:-0}"

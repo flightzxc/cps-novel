@@ -187,14 +187,39 @@ x8_gate_rendered_diff() {
 # pinned by the image-digest check that runs before this.
 x8_gate_actual_matches_baseline() {
   local baseline_file="$1" web_container="$2" worker_container="$3"
-  local web_env_file worker_env_file actual_file keys_file
-  web_env_file="$(mktemp "${TMPDIR:-/tmp}/x8-gate-web-env.XXXXXX")"
-  worker_env_file="$(mktemp "${TMPDIR:-/tmp}/x8-gate-worker-env.XXXXXX")"
-  actual_file="$(mktemp "${TMPDIR:-/tmp}/x8-gate-actual.XXXXXX")"
-  keys_file="$(mktemp "${TMPDIR:-/tmp}/x8-gate-keys.XXXXXX")"
+  local web_env_file worker_env_file actual_file keys_file image_env_file
+  web_env_file="$(mktemp "$X8_GATE_TMPDIR/x8-gate-web-env.XXXXXX")"
+  worker_env_file="$(mktemp "$X8_GATE_TMPDIR/x8-gate-worker-env.XXXXXX")"
+  actual_file="$(mktemp "$X8_GATE_TMPDIR/x8-gate-actual.XXXXXX")"
+  keys_file="$(mktemp "$X8_GATE_TMPDIR/x8-gate-keys.XXXXXX")"
+  image_env_file="$(mktemp "$X8_GATE_TMPDIR/x8-gate-image-env.XXXXXX")"
+  # Terminal review, release-identity gate second round: a single self-
+  # clearing RETURN trap replaces the scattered `rm -f ...; return N` pairs
+  # this function used to repeat at every exit point -- one place to get
+  # right instead of N, and it also fires for any FUTURE return path a later
+  # edit adds without remembering to clean up by hand. `trap - RETURN`
+  # inside the handler itself is what makes it fire exactly once for THIS
+  # invocation: without it, a RETURN trap set here would still be armed (and
+  # referencing these now-out-of-scope locals) the next time ANY function
+  # returns, including a caller several frames up.
+  trap 'rm -f "$web_env_file" "$worker_env_file" "$actual_file" "$keys_file" "$image_env_file"; trap - RETURN' RETURN
 
   docker inspect --format '{{json .Config.Env}}' "$web_container" >"$web_env_file" 2>/dev/null || echo '[]' >"$web_env_file"
   docker inspect --format '{{json .Config.Env}}' "$worker_container" >"$worker_env_file" 2>/dev/null || echo '[]' >"$worker_env_file"
+  # Terminal review, release-identity gate second round, finding 一: the
+  # image's OWN baked-in default environment, read directly off the exact
+  # image the release identity is bound to -- never off a running
+  # container, since a container can be CREATED with an env override for a
+  # key that also happens to be baked into the image (e.g. `docker run -e
+  # PATH=...` or a compose `environment:` entry), and that override changes
+  # nothing about `.Image`'s digest (already pinned by the caller's own
+  # check before this function runs). Without this, BASE_IMAGE_BAKED_KEYS
+  # below would keep accepting ANY value for an exempted key -- exactly the
+  # gap this patch closes. $X8_IDENTITY_IMAGE_REF is safe to inspect here
+  # (rather than the raw digest) because every real call path already
+  # verified it resolves to the identity's own pinned image ID before ever
+  # reaching this function (gate_catalog_recreate's 4.3(二) check).
+  docker image inspect "$X8_IDENTITY_IMAGE_REF" --format '{{json .Config.Env}}' >"$image_env_file" 2>/dev/null || echo '[]' >"$image_env_file"
 
   # 2026-09-06 patch (second round), group 4: requiredKeys (CATALOG_GATE_ENV_KEYS)
   # closes the "declared on neither side" blind spot in findActualDrift() --
@@ -209,15 +234,25 @@ x8_gate_actual_matches_baseline() {
   if ! node -e '
     const fs = require("fs");
     const { pathToFileURL } = require("url");
-    const [, outPath, diffModulePath] = process.argv;
+    const [, outPath, diffModulePath, imageEnvPath] = process.argv;
+    const toMap = (raw) => {
+      let entries = [];
+      try { entries = JSON.parse(raw); } catch { entries = []; }
+      const map = {};
+      for (const entry of Array.isArray(entries) ? entries : []) {
+        const index = typeof entry === "string" ? entry.indexOf("=") : -1;
+        if (index > 0) map[entry.slice(0, index)] = entry.slice(index + 1);
+      }
+      return map;
+    };
     import(pathToFileURL(diffModulePath).href).then(({ BASE_IMAGE_BAKED_KEYS, CATALOG_GATE_ENV_KEYS }) => {
-      fs.writeFileSync(outPath, JSON.stringify({ services: ["web", "worker"], allowedExtraKeys: BASE_IMAGE_BAKED_KEYS, requiredKeys: CATALOG_GATE_ENV_KEYS }));
+      const imageBakedEnv = toMap(fs.readFileSync(imageEnvPath, "utf8"));
+      fs.writeFileSync(outPath, JSON.stringify({ services: ["web", "worker"], allowedExtraKeys: BASE_IMAGE_BAKED_KEYS, requiredKeys: CATALOG_GATE_ENV_KEYS, imageBakedEnv }));
     }).catch((error) => {
       process.stderr.write(`ERROR: unable to resolve the base-image-baked key exemption list: ${error.message}\n`);
       process.exit(70);
     });
-  ' "$keys_file" "$X8_PROJECT_ROOT/scripts/lib/x8-gate-diff.mjs"; then
-    rm -f "$web_env_file" "$worker_env_file" "$actual_file" "$keys_file"
+  ' "$keys_file" "$X8_PROJECT_ROOT/scripts/lib/x8-gate-diff.mjs" "$image_env_file"; then
     return 65
   fi
 
@@ -245,7 +280,6 @@ x8_gate_actual_matches_baseline() {
 
   local status=0
   node "$X8_PROJECT_ROOT/scripts/lib/x8-gate-diff.mjs" actual "$baseline_file" "$actual_file" "$keys_file" || status=$?
-  rm -f "$web_env_file" "$worker_env_file" "$actual_file" "$keys_file"
   return "$status"
 }
 
@@ -398,6 +432,33 @@ write_x8_identity_candidate() {
     echo "ERROR: unable to resolve the local image digest for $CPS_NOVEL_APP_IMAGE while writing the X8 deploy identity candidate" >&2
     return 65
   }
+  # Terminal review, release-identity gate second round, finding 三: the
+  # gate command must stop reading scripts/lib/x8-levels.json (a file that
+  # lives in -- and can change independently in -- the current git
+  # worktree) and stop inheriting two ambient-env defaults
+  # (CHANNEL_CREDENTIAL_ACTIVE_KEY_VERSION, X8_ADMIN_DOMAIN) from whatever
+  # shell happens to invoke it. The fix is to freeze all three into the
+  # identity at the one point they are legitimately resolved -- here, during
+  # `up` -- so prepare_x8_gate_environment() can read them back later
+  # instead of re-deriving them. $X8_LEVEL/$X8_ADMIN_DOMAIN/
+  # $CHANNEL_CREDENTIAL_ACTIVE_KEY_VERSION are already exported by
+  # prepare_x8_environment() (via x8_level_config/x8_export_static_topology/
+  # prepare_p1_12_local_environment) by the time `up` reaches this function --
+  # this is not re-deriving them, only capturing the values this deploy
+  # actually used.
+  local level_config_lines
+  level_config_lines="$(x8_level_config "$X8_LEVEL")" || {
+    echo "ERROR: failed to resolve X8_LEVEL configuration for '$X8_LEVEL' while writing the X8 deploy identity candidate" >&2
+    return 65
+  }
+  [[ -n "${X8_ADMIN_DOMAIN:-}" ]] || {
+    echo "ERROR: X8_ADMIN_DOMAIN is not set while writing the X8 deploy identity candidate" >&2
+    return 65
+  }
+  [[ -n "${CHANNEL_CREDENTIAL_ACTIVE_KEY_VERSION:-}" ]] || {
+    echo "ERROR: CHANNEL_CREDENTIAL_ACTIVE_KEY_VERSION is not set while writing the X8 deploy identity candidate" >&2
+    return 65
+  }
   local temporary="${X8_IDENTITY_CANDIDATE_FILE}.tmp.$$"
   if ! node -e '
     const fs = require("fs");
@@ -406,9 +467,17 @@ write_x8_identity_candidate() {
     const [
       , outPath, appVersion, gitCommit, level, imageRef, imageDigest,
       composeProject, buildDate, configFileA, configFileB,
+      levelConfigLines, adminDomain, credentialActiveKeyVersion,
     ] = process.argv;
+    const levelEnv = {};
+    for (const line of levelConfigLines.split("\n")) {
+      if (!line) continue;
+      const index = line.indexOf("=");
+      if (index <= 0) continue;
+      levelEnv[line.slice(0, index)] = line.slice(index + 1);
+    }
     const payload = {
-      schemaVersion: 1,
+      schemaVersion: 2,
       appVersion,
       gitCommit,
       level,
@@ -417,12 +486,26 @@ write_x8_identity_candidate() {
       composeProject,
       buildDate,
       composeConfigFiles: [configFileA, configFileB],
+      // Finding 三: the FULL resolved X8_LEVEL configuration
+      // (WORKER_TASK_ALLOWLIST, PROMO_CLAIM_ROLES,
+      // ADMIN_TWO_FACTOR_ENFORCEMENT, ADMIN_LOCAL_IDENTITY_SEED, and the
+      // eight double-gate flags) frozen at deploy time, so
+      // prepare_x8_gate_environment() never has to read
+      // scripts/lib/x8-levels.json (the current git worktree) again.
+      levelEnv,
+      // Finding 三: the two remaining values prepare_x8_gate_environment()
+      // used to default from the CALLER ambient environment instead of
+      // the frozen identity -- frozen the same way every other
+      // identity-derived field already is.
+      adminDomain,
+      credentialActiveKeyVersion,
       createdAt: new Date().toISOString(),
     };
     fs.writeFileSync(outPath, `${JSON.stringify(payload, null, 2)}\n`);
   ' "$temporary" "$APP_VERSION" "$GIT_COMMIT" "$X8_LEVEL" "$CPS_NOVEL_APP_IMAGE" "$image_digest" \
     "$P1_12_COMPOSE_PROJECT" "$BUILD_DATE" \
-    "$X8_PROJECT_ROOT/docker-compose.yml" "$X8_PROJECT_ROOT/infra/production-like/docker-compose.yml"; then
+    "$X8_PROJECT_ROOT/docker-compose.yml" "$X8_PROJECT_ROOT/infra/production-like/docker-compose.yml" \
+    "$level_config_lines" "$X8_ADMIN_DOMAIN" "$CHANNEL_CREDENTIAL_ACTIVE_KEY_VERSION"; then
     rm -f "$temporary"
     echo "ERROR: failed to render the X8 deploy identity candidate file" >&2
     return 65
@@ -929,14 +1012,17 @@ HEALTH_SQL
 x8_gate_query_container() {
   local service="$1"
   local err_file container status=0
-  err_file="$(mktemp "${TMPDIR:-/tmp}/x8-gate-query-err.XXXXXX")"
+  err_file="$(mktemp "$X8_GATE_TMPDIR/x8-gate-query-err.XXXXXX")"
+  # Terminal review, release-identity gate second round: one self-clearing
+  # RETURN trap instead of the two hand-duplicated `rm -f "$err_file"` calls
+  # this function used to have (one per return path) -- see the identical
+  # pattern (and its rationale) in x8_gate_actual_matches_baseline() above.
+  trap 'rm -f "$err_file"; trap - RETURN' RETURN
   container="$(x8_gate_compose ps -q "$service" 2>"$err_file")" || status=$?
   if [[ $status -ne 0 ]]; then
     echo "ERROR: X8 gate status query failed while checking the $service service (exit $status): $(tr -d '\r\n' <"$err_file")" >&2
-    rm -f "$err_file"
     return 65
   fi
-  rm -f "$err_file"
   printf '%s' "$container"
 }
 
@@ -1226,10 +1312,44 @@ gate_catalog_recreate() {
   x8_check_container_labels "$worker_container" worker || return 65
 
   local baseline_file candidate_file
-  baseline_file="$(mktemp "${TMPDIR:-/tmp}/x8-gate-baseline.XXXXXX")"
-  candidate_file="$(mktemp "${TMPDIR:-/tmp}/x8-gate-candidate.XXXXXX")"
+  baseline_file="$(mktemp "$X8_GATE_TMPDIR/x8-gate-baseline.XXXXXX")"
+  candidate_file="$(mktemp "$X8_GATE_TMPDIR/x8-gate-candidate.XXXXXX")"
+  # Terminal review, release-identity gate second round, finding 二: these
+  # two files used to be cleaned up by a hand-duplicated `rm -f
+  # "$baseline_file" "$candidate_file"` immediately before every one of this
+  # function's ~9 return points -- easy to add a tenth return path later and
+  # forget the pair, and it does nothing at all for the one exit path that
+  # was never covered: this function is called at the top level (never
+  # inside a tested `if`/`||`), so a raw SIGINT/SIGTERM delivered while it is
+  # blocked in the (potentially slow) `docker compose up` call below
+  # terminates the process immediately, running neither the next line nor
+  # any of the manual `rm -f`s. An EXIT trap is bash's actual mechanism for
+  # "runs no matter how this process stops" -- confirmed empirically before
+  # relying on it here: `trap CMD EXIT` (deliberately WITHOUT also trapping
+  # INT/TERM, which would override their default terminate-the-process
+  # behavior and require this function to re-implement it) still fires CMD
+  # and the process still dies on SIGTERM exactly as it would with no trap
+  # at all. Safe to install process-wide here because nothing else in this
+  # function's call graph (x8_gate_rendered_diff, x8_gate_actual_matches_baseline,
+  # x8_gate_verify_recreate, write_x8_gate_state, x8_gate_actual_snapshot)
+  # ever touches the EXIT trap itself -- they use their own, independent,
+  # self-clearing RETURN traps instead, which cannot clobber this one.
+  #
+  # Deliberately DOUBLE-quoted, not single-quoted: this function returns
+  # normally on every non-signal path (success or any of its `return N`
+  # statements), and only much later -- once the whole script has unwound
+  # all the way back to its own end -- does the process actually exit and
+  # this trap fire. By then $baseline_file/$candidate_file (both `local` to
+  # THIS function invocation) are long out of scope, so a single-quoted trap
+  # body (which defers `$baseline_file`/`$candidate_file` expansion to
+  # fire-time) would hit "unbound variable" under this script's `set -u`.
+  # Double-quoting expands them immediately, right here, embedding the two
+  # literal resolved paths into the trap's command text -- correct whether
+  # the trap ends up firing seconds from now (SIGINT/SIGTERM while blocked in
+  # the `docker compose up` call below) or only after this function has long
+  # since returned.
+  trap "rm -f '$baseline_file' '$candidate_file'" EXIT
   if ! x8_gate_compose config --format json >"$baseline_file"; then
-    rm -f "$baseline_file" "$candidate_file"
     return 65
   fi
 
@@ -1241,13 +1361,11 @@ gate_catalog_recreate() {
   esac
   if ! FEATURE_NOVEL_CATALOG_SYNC="$target_enabled" NOVEL_CATALOG_SYNC_ALLOW_WRITE="$target_write" \
     x8_gate_compose config --format json >"$candidate_file"; then
-    rm -f "$baseline_file" "$candidate_file"
     return 65
   fi
 
   local diff_output
   if ! diff_output="$(x8_gate_rendered_diff "$baseline_file" "$candidate_file")"; then
-    rm -f "$baseline_file" "$candidate_file"
     echo "ERROR: X8 gate rendered-config gate failed: a field outside the requested catalog-write flags would change (see above)" >&2
     return 65
   fi
@@ -1256,7 +1374,6 @@ gate_catalog_recreate() {
   # what the containers actually have right now, reconciled key-for-key
   # (fail-closed on anything missing or extra), not a curated 7-key list.
   if ! x8_gate_actual_matches_baseline "$baseline_file" "$web_container" "$worker_container"; then
-    rm -f "$baseline_file" "$candidate_file"
     echo "ERROR: X8 gate pre-check failed: the running containers do not match the persisted catalog-gate state (see drift above); the environment is not self-consistent enough for a single-variable recreate -- reconcile out of band (e.g. re-run 'up') first" >&2
     return 65
   fi
@@ -1271,18 +1388,19 @@ gate_catalog_recreate() {
   # 4.3(七): plan mode is the default. Nothing above this point wrote
   # anything to disk or touched a container.
   if [[ "$apply" != "true" ]]; then
-    rm -f "$baseline_file" "$candidate_file"
     echo "X8_GATE_PLAN=PASS"
     echo "No production-like action was executed (pass --apply to recreate)."
     return 0
   fi
 
   # 2026-09-06 patch (second round), group 3: baseline_file (the persisted /
-  # pre-operation render) and candidate_file (the target render) are no
-  # longer deleted here -- both stay alive for the rest of this apply flow.
-  # candidate_file is exactly the full expected post-recreate environment
-  # x8_gate_verify_recreate() now reconciles against instead of a curated
-  # key list; baseline_file is exactly what a rollback must be re-verified
+  # pre-operation render) and candidate_file (the target render) stay alive
+  # for the rest of this apply flow (the EXIT trap installed above is what
+  # now removes them, on every path, including this function's own normal
+  # return -- see that trap's comment). candidate_file is exactly the full
+  # expected post-recreate environment x8_gate_verify_recreate() now
+  # reconciles against instead of a curated key list; baseline_file is
+  # exactly what a rollback must be re-verified
   # against. Every exit point below removes them explicitly.
 
   # Pre-operation (persisted) gate values -- the exact pair the environment
@@ -1339,7 +1457,6 @@ gate_catalog_recreate() {
     local already_at_pre
     already_at_pre="$(x8_gate_verify_recreate "$baseline_file")" || true
     if [[ -z "$already_at_pre" ]]; then
-      rm -f "$baseline_file" "$candidate_file"
       if [[ "$state_write_status" -ne 0 ]]; then
         echo "ERROR: X8 gate recreate and verification succeeded and both services already matched the pre-operation values (a no-op flip), but writing the new gate state failed (exit $state_write_status); nothing to roll back, gate state left unchanged at '$persisted'" >&2
       else
@@ -1372,15 +1489,12 @@ gate_catalog_recreate() {
       echo "Gate state file was left at '$persisted' (never written during this attempt), but the running containers may not reliably match it or each other. Actual current state:" >&2
       x8_gate_actual_snapshot >&2
       echo "Inspect both containers by hand; a clean recovery path is normally re-running 'up' to re-establish a consistent baseline." >&2
-      rm -f "$baseline_file" "$candidate_file"
       return 70
     fi
     echo "ERROR: recreate did not verify cleanly; rolled back successfully -- both services restored to the pre-operation values (gate state unchanged at '$persisted')" >&2
-    rm -f "$baseline_file" "$candidate_file"
     return 65
   fi
 
-  rm -f "$baseline_file" "$candidate_file"
   echo "X8_CATALOG_GATE=$target"
   echo "X8_GATE_APPLY=PASS"
 }

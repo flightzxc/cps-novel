@@ -246,20 +246,72 @@ describe("x8-gate-diff: findActualDrift (决策一 -- full reconciliation, no cu
       );
     });
 
-    it("does not flag an exempted key present only in the container", () => {
+    it("does not flag an exempted key present only in the container WHEN its value matches the image's own baked default", () => {
       const drift = findActualDrift(
         { worker: { environment: { FEATURE_NOVEL_CATALOG_SYNC: "true" } } },
         { worker: { FEATURE_NOVEL_CATALOG_SYNC: "true", PATH: "/usr/bin", NODE_VERSION: "20.20.2" } },
-        { services: ["worker"], allowedExtraKeys: BASE_IMAGE_BAKED_KEYS },
+        {
+          services: ["worker"],
+          allowedExtraKeys: BASE_IMAGE_BAKED_KEYS,
+          imageBakedEnv: { PATH: "/usr/bin", NODE_VERSION: "20.20.2" },
+        },
       );
       expect(drift).toEqual([]);
+    });
+
+    // Terminal review, release-identity gate second round, finding 一: this
+    // is the direct regression test. Before the fix, `allowedExtra.has(key)`
+    // alone made this a bare `continue` -- ANY value was accepted for an
+    // exempted key, on the theory that the image-digest check already pins
+    // it. That theory is false: a container can be CREATED with an env
+    // override for a key that also happens to be baked into the image
+    // (`docker run -e` / a compose `environment:` entry), which changes
+    // nothing about `.Image`'s digest at all. The exemption must only cover
+    // "the container has exactly what the image bakes in by default", not
+    // "the container has anything at all".
+    it("finding 一: FLAGS an exempted key whose actual value diverges from the image's own baked default (was previously accepted unconditionally)", () => {
+      const drift = findActualDrift(
+        { worker: { environment: { FEATURE_NOVEL_CATALOG_SYNC: "true" } } },
+        { worker: { FEATURE_NOVEL_CATALOG_SYNC: "true", PATH: "/usr/bin" } },
+        {
+          services: ["worker"],
+          allowedExtraKeys: BASE_IMAGE_BAKED_KEYS,
+          // The image itself bakes in a DIFFERENT default than what the
+          // container was actually created with.
+          imageBakedEnv: { PATH: "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" },
+        },
+      );
+      expect(drift).toEqual([
+        {
+          service: "worker",
+          key: "PATH",
+          expected: "<image-baked default: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin>",
+          actual: "/usr/bin",
+        },
+      ]);
+    });
+
+    it("finding 一: FLAGS an exempted key when imageBakedEnv was never resolved for it at all (fail closed, not a silent pass)", () => {
+      const drift = findActualDrift(
+        { worker: { environment: { FEATURE_NOVEL_CATALOG_SYNC: "true" } } },
+        { worker: { FEATURE_NOVEL_CATALOG_SYNC: "true", PATH: "/usr/bin" } },
+        { services: ["worker"], allowedExtraKeys: BASE_IMAGE_BAKED_KEYS, imageBakedEnv: {} },
+      );
+      expect(drift).toEqual([
+        {
+          service: "worker",
+          key: "PATH",
+          expected: "<not declared in baseline render, and not baked into the identity-bound image either>",
+          actual: "/usr/bin",
+        },
+      ]);
     });
 
     it("still flags a non-exempted extra key even when the exemption list is supplied", () => {
       const drift = findActualDrift(
         { worker: { environment: { FEATURE_NOVEL_CATALOG_SYNC: "true" } } },
         { worker: { FEATURE_NOVEL_CATALOG_SYNC: "true", PATH: "/usr/bin", ANOTHER_SURPRISE: "x" } },
-        { services: ["worker"], allowedExtraKeys: BASE_IMAGE_BAKED_KEYS },
+        { services: ["worker"], allowedExtraKeys: BASE_IMAGE_BAKED_KEYS, imageBakedEnv: { PATH: "/usr/bin" } },
       );
       expect(drift).toEqual([{ service: "worker", key: "ANOTHER_SURPRISE", expected: "<not declared in baseline render>", actual: "x" }]);
     });

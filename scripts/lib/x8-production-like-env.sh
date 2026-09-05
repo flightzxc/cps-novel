@@ -166,7 +166,22 @@ resolve_x8_identity() {
       process.stderr.write(`ERROR: corrupt X8 deploy identity file (${error.message})\n`);
       process.exit(65);
     }
-    const requiredStrings = ["appVersion", "gitCommit", "level", "imageRef", "imageDigest", "composeProject", "buildDate"];
+    // Terminal review, release-identity gate second round, finding 三: no
+    // real deploy has ever written a release identity file, so there is no
+    // back-compat obligation for schemaVersion 1 -- 2 (levelEnv/adminDomain/
+    // credentialActiveKeyVersion added) is simply the only accepted value
+    // now, and the version number is what actually changed, not left stale.
+    if (data.schemaVersion !== 2) {
+      process.stderr.write(`ERROR: X8 deploy identity file has an unsupported schemaVersion (${JSON.stringify(data.schemaVersion)}); expected 2\n`);
+      process.exit(65);
+    }
+    const requiredStrings = [
+      "appVersion", "gitCommit", "level", "imageRef", "imageDigest", "composeProject", "buildDate",
+      // Finding 三: the two values prepare_x8_gate_environment() used to
+      // default from the callers ambient environment instead of reading
+      // back from the frozen identity.
+      "adminDomain", "credentialActiveKeyVersion",
+    ];
     for (const key of requiredStrings) {
       const value = data[key];
       if (typeof value !== "string" || value.trim().length === 0) {
@@ -186,6 +201,22 @@ resolve_x8_identity() {
       process.stderr.write("ERROR: X8 deploy identity file is missing a valid \"composeConfigFiles\" list\n");
       process.exit(65);
     }
+    // Finding 三: the FULL resolved X8_LEVEL configuration, frozen at deploy
+    // time -- prepare_x8_gate_environment() exports this directly instead of
+    // re-reading scripts/lib/x8-levels.json (the current git worktree) via
+    // x8_level_config(). Empty-string values are legitimate (e.g.
+    // PROMO_CLAIM_ROLES="" at Level 0), so only the TYPE of each value is
+    // checked, not its length.
+    if (
+      typeof data.levelEnv !== "object" ||
+      data.levelEnv === null ||
+      Array.isArray(data.levelEnv) ||
+      Object.keys(data.levelEnv).length === 0 ||
+      !Object.values(data.levelEnv).every((value) => typeof value === "string")
+    ) {
+      process.stderr.write("ERROR: X8 deploy identity file is missing a valid \"levelEnv\" object\n");
+      process.exit(65);
+    }
     const lines = [
       `APP_VERSION=${data.appVersion}`,
       `GIT_COMMIT=${data.gitCommit}`,
@@ -195,6 +226,9 @@ resolve_x8_identity() {
       `COMPOSE_PROJECT=${data.composeProject}`,
       `BUILD_DATE=${data.buildDate}`,
       `COMPOSE_CONFIG_FILES=${data.composeConfigFiles.join(",")}`,
+      `ADMIN_DOMAIN=${data.adminDomain}`,
+      `CREDENTIAL_ACTIVE_KEY_VERSION=${data.credentialActiveKeyVersion}`,
+      `LEVEL_ENV_JSON=${JSON.stringify(data.levelEnv)}`,
     ];
     process.stdout.write(lines.join("\n") + "\n");
   ' "$X8_IDENTITY_FILE")"; then
@@ -208,6 +242,9 @@ resolve_x8_identity() {
   X8_IDENTITY_COMPOSE_PROJECT=""
   X8_IDENTITY_BUILD_DATE=""
   X8_IDENTITY_COMPOSE_CONFIG_FILES=""
+  X8_IDENTITY_ADMIN_DOMAIN=""
+  X8_IDENTITY_CREDENTIAL_ACTIVE_KEY_VERSION=""
+  X8_IDENTITY_LEVEL_ENV_JSON=""
   local key value
   while IFS='=' read -r key value; do
     case "$key" in
@@ -219,6 +256,9 @@ resolve_x8_identity() {
       COMPOSE_PROJECT) X8_IDENTITY_COMPOSE_PROJECT="$value" ;;
       BUILD_DATE) X8_IDENTITY_BUILD_DATE="$value" ;;
       COMPOSE_CONFIG_FILES) X8_IDENTITY_COMPOSE_CONFIG_FILES="$value" ;;
+      ADMIN_DOMAIN) X8_IDENTITY_ADMIN_DOMAIN="$value" ;;
+      CREDENTIAL_ACTIVE_KEY_VERSION) X8_IDENTITY_CREDENTIAL_ACTIVE_KEY_VERSION="$value" ;;
+      LEVEL_ENV_JSON) X8_IDENTITY_LEVEL_ENV_JSON="$value" ;;
     esac
   done <<<"$parsed"
   # Belt-and-suspenders: the node script above already exits 65 on a missing
@@ -251,7 +291,8 @@ resolve_x8_identity() {
   esac
   export X8_IDENTITY_APP_VERSION X8_IDENTITY_GIT_COMMIT X8_IDENTITY_LEVEL X8_IDENTITY_IMAGE_REF \
     X8_IDENTITY_IMAGE_DIGEST X8_IDENTITY_COMPOSE_PROJECT X8_IDENTITY_BUILD_DATE X8_IDENTITY_COMPOSE_CONFIG_FILES \
-    X8_IDENTITY_WORKING_DIR
+    X8_IDENTITY_WORKING_DIR X8_IDENTITY_ADMIN_DOMAIN X8_IDENTITY_CREDENTIAL_ACTIVE_KEY_VERSION \
+    X8_IDENTITY_LEVEL_ENV_JSON
 }
 
 write_x8_gate_state() {
@@ -450,6 +491,39 @@ prepare_x8_environment() {
 #     read the gate's current plan;
 #   - is therefore also what makes a directory-existence assertion of "up
 #     never fully ran" instead of the previous silent bootstrap.
+# Terminal review, release-identity gate second round, finding 二: every
+# x8_gate_* temp file (scripts/x8-production-like.sh) used to build its
+# mktemp template directly on "${TMPDIR:-/tmp}", trusting the caller's
+# environment without question. A caller whose shell happens to have TMPDIR
+# pointed AT (or inside) this environment's own runtime directory would then
+# have the gate command's "plan mode / status make zero writes to the
+# runtime directory" guarantee broken by construction -- a temp file would
+# be created, however briefly, inside the very directory that guarantee is
+# about. Resolved exactly once here, the single choke point every gate
+# subcommand already goes through, and exported as X8_GATE_TMPDIR so
+# scripts/x8-production-like.sh's own mktemp call sites never re-derive or
+# re-validate it themselves. Fails closed (refuses) rather than silently
+# substituting a different directory: an operator whose TMPDIR resolves
+# inside the runtime directory almost certainly set it that way by mistake,
+# and silently working around it would hide that mistake instead of
+# surfacing it.
+x8_resolve_gate_tmpdir() {
+  local candidate="${TMPDIR:-/tmp}"
+  local resolved_candidate resolved_runtime
+  resolved_candidate="$(cd "$candidate" 2>/dev/null && pwd -P || true)"
+  resolved_runtime="$(cd "$X8_RUNTIME_DIR" 2>/dev/null && pwd -P || true)"
+  if [[ -n "$resolved_candidate" && -n "$resolved_runtime" ]]; then
+    case "$resolved_candidate" in
+      "$resolved_runtime" | "$resolved_runtime"/*)
+        echo "ERROR: TMPDIR ('$candidate') resolves at or inside the X8 runtime directory ('$X8_RUNTIME_DIR') -- refusing to place temporary gate files there, which would defeat the gate command's zero-write guarantee for that directory. Unset TMPDIR or point it somewhere outside the runtime directory." >&2
+        return 65
+        ;;
+    esac
+  fi
+  X8_GATE_TMPDIR="$candidate"
+  export X8_GATE_TMPDIR
+}
+
 # resolve_x8_identity() (called first) is itself pure/read-only, so on
 # failure this function has touched nothing at all.
 prepare_x8_gate_environment() {
@@ -458,6 +532,7 @@ prepare_x8_gate_environment() {
   export X8_LEVEL="$X8_IDENTITY_LEVEL"
   export P1_12_COMPOSE_PROJECT="$X8_IDENTITY_COMPOSE_PROJECT"
   x8_export_static_topology
+  x8_resolve_gate_tmpdir || return 65
 
   local dir
   for dir in "$X8_RUNTIME_DIR" "$X8_SECRET_DIR" "$X8_NGINX_RUNTIME_DIR" "$X8_TLS_DIR" "$X8_BACKUP_DIR"; do
@@ -499,7 +574,6 @@ prepare_x8_gate_environment() {
   export P1_12_WORKER_DATABASE_URL="postgresql://worker_app:${worker_password}@postgres:5432/cps_novel?schema=public"
   export P1_12_SCHEDULER_DATABASE_URL="postgresql://scheduler_app:${scheduler_password}@postgres:5432/cps_novel?schema=public"
   export TOTP_ENCRYPTION_KEY="$(read_secret_value "$X8_SECRET_DIR/totp.key")"
-  export CHANNEL_CREDENTIAL_ACTIVE_KEY_VERSION="${CHANNEL_CREDENTIAL_ACTIVE_KEY_VERSION:-1}"
   export CHANNEL_CREDENTIAL_ENCRYPTION_KEY_V1_FILE="$X8_SECRET_DIR/credential-v1.key"
   export CHANNEL_CREDENTIAL_FINGERPRINT_KEY_FILE="$X8_SECRET_DIR/credential-fingerprint.key"
   export TRACKING_HASH_SALT="$(read_secret_value "$X8_SECRET_DIR/tracking-hash-salt.key")"
@@ -523,10 +597,44 @@ prepare_x8_gate_environment() {
   export CPS_NOVEL_APP_IMAGE="$X8_IDENTITY_IMAGE_REF"
   export BUILD_DATE="$X8_IDENTITY_BUILD_DATE"
   export NEXT_PUBLIC_BUILD_VERSION="v${X8_IDENTITY_APP_VERSION}"
+  # Terminal review, release-identity gate second round, finding 三: these
+  # two used to be defaulted from the CALLER's ambient environment --
+  # X8_ADMIN_DOMAIN inside x8_export_static_topology() (called above, via
+  # "${X8_ADMIN_DOMAIN:-zbcwf.novel.test}") and CHANNEL_CREDENTIAL_ACTIVE_KEY_VERSION
+  # directly in this function (via "${CHANNEL_CREDENTIAL_ACTIVE_KEY_VERSION:-1}").
+  # Both are now unconditional overrides from the frozen identity, exactly
+  # like APP_VERSION/GIT_COMMIT/etc. immediately above -- a caller's shell
+  # having either ambient variable set (however that happened) must never
+  # win over what this deploy's identity actually recorded.
+  # ADMIN_CANONICAL_ORIGIN is re-derived here too: x8_export_static_topology()
+  # already computed it from whatever X8_ADMIN_DOMAIN it saw, which is now
+  # stale the moment X8_ADMIN_DOMAIN is overridden below.
+  export X8_ADMIN_DOMAIN="$X8_IDENTITY_ADMIN_DOMAIN"
+  export ADMIN_CANONICAL_ORIGIN="https://${X8_ADMIN_DOMAIN}"
+  export CHANNEL_CREDENTIAL_ACTIVE_KEY_VERSION="$X8_IDENTITY_CREDENTIAL_ACTIVE_KEY_VERSION"
 
+  # Terminal review, release-identity gate second round, finding 三: the
+  # FULL X8_LEVEL configuration frozen into the identity at `up` time
+  # (write_x8_identity_candidate()), parsed back into the exact same
+  # `KEY=VALUE` line shape x8_level_config() used to produce -- so this loop
+  # is otherwise unchanged, only its SOURCE moved from a fresh read of
+  # scripts/lib/x8-levels.json (the current git worktree, which can differ
+  # from what this environment was actually deployed with) to the identity's
+  # own frozen levelEnv.
   local level_config level_key level_value
-  level_config="$(x8_level_config "$X8_LEVEL")" || {
-    echo "ERROR: failed to resolve X8_LEVEL configuration for '$X8_LEVEL'" >&2
+  level_config="$(node -e '
+    let data;
+    try {
+      data = JSON.parse(process.argv[1]);
+    } catch (error) {
+      process.stderr.write(`ERROR: X8 deploy identity levelEnv is not valid JSON (${error.message})\n`);
+      process.exit(65);
+    }
+    const lines = [];
+    for (const [key, value] of Object.entries(data)) lines.push(`${key}=${value}`);
+    process.stdout.write(lines.join("\n") + "\n");
+  ' "$X8_IDENTITY_LEVEL_ENV_JSON")" || {
+    echo "ERROR: failed to parse the X8 deploy identity's frozen level configuration" >&2
     return 65
   }
   while IFS='=' read -r level_key level_value; do

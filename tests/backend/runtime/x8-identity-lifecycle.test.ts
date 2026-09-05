@@ -59,6 +59,16 @@ const BASE_ENV = {
   X8_LEVEL: "0",
   P1_12_COMPOSE_PROJECT: "cps-novel-x8-local",
   BUILD_DATE: "2026-09-06T00:00:00.000Z",
+  // Finding 三 (release-identity gate second round): write_x8_identity_candidate()
+  // now also freezes X8_ADMIN_DOMAIN and CHANNEL_CREDENTIAL_ACTIVE_KEY_VERSION
+  // into the identity payload (levelEnv itself is resolved by calling the
+  // REAL x8_level_config() against this repo's own scripts/lib/x8-levels.json,
+  // which needs no stubbing since it is a pure, already-committed file read).
+  // These two stand in for what prepare_x8_environment() would have already
+  // exported by the time a real `up` reaches write_x8_identity_candidate(),
+  // exactly like the other hand-set vars in this fixture already do.
+  X8_ADMIN_DOMAIN: "zbcwf.novel.test",
+  CHANNEL_CREDENTIAL_ACTIVE_KEY_VERSION: "1",
   STUB_IMAGE_REF: IMAGE_REF,
   STUB_IMAGE_ID: IMAGE_ID,
   STUB_WEB_CONTAINER_ID: "stub-web-1",
@@ -116,6 +126,21 @@ describe("X8 release identity lifecycle: candidate write -> health check -> prom
     // and no failure marker was ever written.
     expect(() => statSync(candidateFilePath())).toThrow();
     expect(() => statSync(failureMarkerPath())).toThrow();
+    // Finding 三: write_x8_identity_candidate() now freezes the FULL X8_LEVEL
+    // configuration and the two remaining ambient-inherited defaults into
+    // the identity, at schemaVersion 2.
+    expect(identity.schemaVersion).toBe(2);
+    expect(identity.adminDomain).toBe("zbcwf.novel.test");
+    expect(identity.credentialActiveKeyVersion).toBe("1");
+    // Level "0" real values from the repo's own scripts/lib/x8-levels.json --
+    // proves levelEnv is the ACTUAL resolved table content, not a placeholder.
+    expect(identity.levelEnv).toMatchObject({
+      WORKER_TASK_ALLOWLIST: "credential.validate.v1,credential.supersede.v1,catalog_scan,home_carousel.compute.v1",
+      PROMO_CLAIM_ROLES: "",
+      ADMIN_TWO_FACTOR_ENFORCEMENT: "true",
+      ADMIN_LOCAL_IDENTITY_SEED: "",
+      FEATURE_PROMO_LINK_CLAIM: "false",
+    });
   });
 
   // This is the direct reproduction of the incident named in the work

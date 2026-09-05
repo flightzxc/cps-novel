@@ -145,10 +145,10 @@ export const CATALOG_GATE_ENV_KEYS = Object.freeze(["FEATURE_NOVEL_CATALOG_SYNC"
  *
  * @param {Record<string, {environment?: Record<string, unknown>}>} baselineServices
  * @param {Record<string, Record<string, unknown>>} actualByService
- * @param {{ services: readonly string[], allowedExtraKeys?: readonly string[], requiredKeys?: readonly string[] }} options
+ * @param {{ services: readonly string[], allowedExtraKeys?: readonly string[], requiredKeys?: readonly string[], imageBakedEnv?: Record<string, string> }} options
  */
 export function findActualDrift(baselineServices, actualByService, options) {
-  const { services, allowedExtraKeys = [], requiredKeys = [] } = options ?? {};
+  const { services, allowedExtraKeys = [], requiredKeys = [], imageBakedEnv = {} } = options ?? {};
   if (!Array.isArray(services) || services.length === 0) {
     throw new Error("findActualDrift requires a non-empty `services` list to reconcile");
   }
@@ -197,7 +197,34 @@ export function findActualDrift(baselineServices, actualByService, options) {
         continue;
       }
       // !hasBaseline && hasActual
-      if (allowedExtra.has(key)) continue;
+      if (allowedExtra.has(key)) {
+        // Terminal review, release-identity gate second round, finding 一:
+        // this used to be a bare `continue` -- ANY value was accepted for an
+        // exempted key, on the theory that BASE_IMAGE_BAKED_KEYS values are
+        // pinned by the image-digest check that already ran before this
+        // function. That theory is false: overriding a container's env at
+        // `docker run`/compose `environment:` time for a key that ALSO
+        // happens to be baked into the image does not change `.Image`'s
+        // digest at all, so the digest check cannot catch it. The exemption
+        // is now honored only when the actual value is EXACTLY what the
+        // identity-bound image itself bakes in by default (imageBakedEnv,
+        // read once via `docker image inspect` on that same image) -- any
+        // other value, including a key imageBakedEnv never reported at all
+        // (e.g. it was resolved against the wrong image, or inspection
+        // failed), is drift.
+        const hasBakedDefault = Object.prototype.hasOwnProperty.call(imageBakedEnv, key);
+        const bakedValue = hasBakedDefault ? String(imageBakedEnv[key]) : undefined;
+        if (hasBakedDefault && bakedValue === String(actual[key])) continue;
+        drift.push({
+          service,
+          key,
+          expected: hasBakedDefault
+            ? `<image-baked default: ${bakedValue}>`
+            : "<not declared in baseline render, and not baked into the identity-bound image either>",
+          actual: String(actual[key]),
+        });
+        continue;
+      }
       drift.push({ service, key, expected: "<not declared in baseline render>", actual: String(actual[key]) });
     }
   }
