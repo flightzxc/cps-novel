@@ -3,6 +3,8 @@ import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 
+import { findLevelSafetyInvariantViolations } from "../lib/x8-level-safety-invariants.mjs";
+
 function fail(message) {
   throw new Error(`X8 compose isolation violation: ${message}`);
 }
@@ -149,20 +151,16 @@ for (const flag of [
 // AUTO_WRITE_AUTHORIZED are deliberately NOT checked against
 // levelEntry.flags above -- unlike every other pair, these two must be
 // frozen at "false"/"NO" for every X8_LEVEL until Owner explicitly
-// authorizes auto-write. Hard-coding the expected value here (the same
-// reasoning as the ADMIN_CANONICAL_ORIGIN check above) means a table edit
-// that flips x8-levels.json's own flags to "true"/"YES" cannot slip past
-// this validator by also "agreeing" with itself -- both the source table
-// and the rendered compose config are checked independently against the
-// literal, frozen value.
-if (levelEntry.flags.FEATURE_NOVEL_TAG_AUTO !== "false") {
+// authorizes auto-write. The expected values live in exactly one place
+// (scripts/lib/x8-level-safety-invariants.mjs, also read by the gate
+// command's own safety-invariant check) so a table edit that flips
+// x8-levels.json's own flags to "true"/"YES" cannot slip past this
+// validator by also "agreeing" with itself -- both the source table and the
+// rendered compose config are checked independently against that literal,
+// frozen value.
+for (const violation of findLevelSafetyInvariantViolations(levelEntry.flags)) {
   fail(
-    `x8-levels.json flags.FEATURE_NOVEL_TAG_AUTO must be "false" at every X8_LEVEL (ADR guard), got "${levelEntry.flags.FEATURE_NOVEL_TAG_AUTO}"`,
-  );
-}
-if (levelEntry.flags.AUTO_WRITE_AUTHORIZED !== "NO") {
-  fail(
-    `x8-levels.json flags.AUTO_WRITE_AUTHORIZED must be "NO" at every X8_LEVEL (ADR guard), got "${levelEntry.flags.AUTO_WRITE_AUTHORIZED}"`,
+    `x8-levels.json flags.${violation.key} must be "${violation.expected}" at every X8_LEVEL (ADR guard), got "${violation.actual}"`,
   );
 }
 for (const [name, service] of [["web", web], ["worker", worker]]) {

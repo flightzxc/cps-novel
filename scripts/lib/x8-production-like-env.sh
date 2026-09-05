@@ -45,8 +45,19 @@ X8_ALLOWED_LEVELS=(0 uat r)
 # double-gate values is scripts/lib/x8-levels.json — scripts/acceptance/
 # x8-validate-compose.mjs reads the same file so the two never drift apart.
 # This helper is the only place that parses it on the bash side.
+#
+# Owner fix (release-identity gate third round): accepts an OPTIONAL second
+# argument -- the levels-file path to read -- defaulting to $X8_LEVELS_FILE
+# (the current worktree's own copy) so every pre-existing caller
+# (prepare_x8_environment(), x8_expected_worker_allowlist()) is unchanged.
+# prepare_x8_gate_environment() is the one caller that passes an explicit
+# path: the release identity's own recorded levelsFile, only after
+# independently verifying its content digest still matches what 'up' froze
+# (see that function and x8_file_sha256()) -- never a fresh, possibly-since-
+# edited read of this worktree's file.
 x8_level_config() {
   local level="$1"
+  local levels_file="${2:-$X8_LEVELS_FILE}"
   command -v node >/dev/null 2>&1 || {
     echo "ERROR: node is required to resolve X8_LEVEL configuration" >&2
     return 69
@@ -87,7 +98,73 @@ x8_level_config() {
     ];
     for (const [key, value] of Object.entries(entry.flags)) lines.push(`${key}=${value}`);
     process.stdout.write(lines.join("\n") + "\n");
-  ' "$X8_LEVELS_FILE" "$level"
+  ' "$levels_file" "$level"
+}
+
+# Owner fix (release-identity gate third round): the one place a file's
+# content digest is computed, used both to freeze the level table's digest
+# into the release identity at `up` time (write_x8_identity_candidate() in
+# scripts/x8-production-like.sh) and to re-verify it before the gate command
+# ever resolves that table (prepare_x8_gate_environment() below). node's
+# crypto module, not `shasum`/`sha256sum`, so the same code path runs
+# identically on every platform this repo's scripts already require node for.
+x8_file_sha256() {
+  local file="$1"
+  command -v node >/dev/null 2>&1 || {
+    echo "ERROR: node is required to compute a file digest" >&2
+    return 69
+  }
+  node -e '
+    const fs = require("fs");
+    const crypto = require("crypto");
+    const path = process.argv[1];
+    let data;
+    try {
+      data = fs.readFileSync(path);
+    } catch (error) {
+      process.stderr.write(`ERROR: unable to read file for digest: ${path} (${error.message})\n`);
+      process.exit(65);
+    }
+    process.stdout.write(crypto.createHash("sha256").update(data).digest("hex"));
+  ' "$file"
+}
+
+# Owner fix (release-identity gate third round): the safety-invariant check
+# the gate command runs immediately after resolving the level table's flags
+# and strictly before touching any container. The content-digest check in
+# prepare_x8_gate_environment() only proves the level table has not changed
+# since 'up' produced this release identity -- it says nothing about whether
+# the table's CONTENT was ever safe. This asserts the SAME P2-06.5
+# auto-classification ADR guard scripts/acceptance/x8-validate-compose.mjs
+# enforces on the rendered compose config, reading it from the one shared
+# definition (scripts/lib/x8-level-safety-invariants.mjs) so the two call
+# sites can never silently diverge.
+x8_assert_level_safety_invariants() {
+  local level_config_lines="$1"
+  node -e '
+    const { pathToFileURL } = require("url");
+    const [, invariantsModulePath, levelConfigLines] = process.argv;
+    const flags = {};
+    for (const line of levelConfigLines.split("\n")) {
+      if (!line) continue;
+      const index = line.indexOf("=");
+      if (index <= 0) continue;
+      flags[line.slice(0, index)] = line.slice(index + 1);
+    }
+    import(pathToFileURL(invariantsModulePath).href).then(({ findLevelSafetyInvariantViolations }) => {
+      const violations = findLevelSafetyInvariantViolations(flags);
+      if (violations.length === 0) return;
+      for (const violation of violations) {
+        process.stderr.write(
+          `ERROR: X8 gate safety invariant violated (ADR guard): ${violation.key} must be "${violation.expected}" at every X8_LEVEL, got "${violation.actual}" -- refusing to touch any container.\n`,
+        );
+      }
+      process.exit(65);
+    }).catch((error) => {
+      process.stderr.write(`ERROR: unable to load the X8 level safety invariant definitions: ${error.message}\n`);
+      process.exit(70);
+    });
+  ' "$X8_PROJECT_ROOT/scripts/lib/x8-level-safety-invariants.mjs" "$level_config_lines"
 }
 
 # Extracts just the expected WORKER_TASK_ALLOWLIST string for a level, from
@@ -166,13 +243,14 @@ resolve_x8_identity() {
       process.stderr.write(`ERROR: corrupt X8 deploy identity file (${error.message})\n`);
       process.exit(65);
     }
-    // Terminal review, release-identity gate second round, finding 三: no
-    // real deploy has ever written a release identity file, so there is no
-    // back-compat obligation for schemaVersion 1 -- 2 (levelEnv/adminDomain/
-    // credentialActiveKeyVersion added) is simply the only accepted value
-    // now, and the version number is what actually changed, not left stale.
-    if (data.schemaVersion !== 2) {
-      process.stderr.write(`ERROR: X8 deploy identity file has an unsupported schemaVersion (${JSON.stringify(data.schemaVersion)}); expected 2\n`);
+    // Owner fix (release-identity gate third round): no real deploy has ever
+    // written a release identity file, so there is no back-compat
+    // obligation for schemaVersion 1 or 2 -- 3 (levelEnv REMOVED, replaced
+    // by levelsFile/levelsFileDigest -- see below) is simply the only
+    // accepted value now, and the version number is what actually changed,
+    // not left stale.
+    if (data.schemaVersion !== 3) {
+      process.stderr.write(`ERROR: X8 deploy identity file has an unsupported schemaVersion (${JSON.stringify(data.schemaVersion)}); expected 3\n`);
       process.exit(65);
     }
     const requiredStrings = [
@@ -181,6 +259,16 @@ resolve_x8_identity() {
       // default from the callers ambient environment instead of reading
       // back from the frozen identity.
       "adminDomain", "credentialActiveKeyVersion",
+      // Owner fix (release-identity gate third round): the level table
+      // SOURCE -- its path and a content digest taken at deploy time --
+      // never its resolved values. prepare_x8_gate_environment() re-reads this
+      // exact path, re-verifies the digest, and only then resolves it via
+      // the ordinary x8_level_config() (this is the fix for the previous
+      // schemaVersion 2, which embedded `levelEnv` and froze RESOLVED values
+      // instead of binding to a verifiable source, exactly like
+      // composeConfigFiles/imageDigest already do for the compose files and
+      // image).
+      "levelsFile", "levelsFileDigest",
     ];
     for (const key of requiredStrings) {
       const value = data[key];
@@ -201,20 +289,18 @@ resolve_x8_identity() {
       process.stderr.write("ERROR: X8 deploy identity file is missing a valid \"composeConfigFiles\" list\n");
       process.exit(65);
     }
-    // Finding 三: the FULL resolved X8_LEVEL configuration, frozen at deploy
-    // time -- prepare_x8_gate_environment() exports this directly instead of
-    // re-reading scripts/lib/x8-levels.json (the current git worktree) via
-    // x8_level_config(). Empty-string values are legitimate (e.g.
-    // PROMO_CLAIM_ROLES="" at Level 0), so only the TYPE of each value is
-    // checked, not its length.
-    if (
-      typeof data.levelEnv !== "object" ||
-      data.levelEnv === null ||
-      Array.isArray(data.levelEnv) ||
-      Object.keys(data.levelEnv).length === 0 ||
-      !Object.values(data.levelEnv).every((value) => typeof value === "string")
-    ) {
-      process.stderr.write("ERROR: X8 deploy identity file is missing a valid \"levelEnv\" object\n");
+    // Owner fix (release-identity gate third round): levelsFile must be an
+    // absolute path (the same convention composeConfigFiles already uses,
+    // enforced in bash below) and levelsFileDigest must look like a real
+    // sha256 hex digest -- catches an obviously-corrupt identity here,
+    // before prepare_x8_gate_environment() ever tries to open the path or
+    // compare digests.
+    if (!data.levelsFile.startsWith("/")) {
+      process.stderr.write(`ERROR: X8 deploy identity file has an invalid "levelsFile" (must be an absolute path, got ${JSON.stringify(data.levelsFile)})\n`);
+      process.exit(65);
+    }
+    if (!/^[0-9a-f]{64}$/i.test(data.levelsFileDigest)) {
+      process.stderr.write("ERROR: X8 deploy identity file has an invalid \"levelsFileDigest\" (must be a sha256 hex digest)\n");
       process.exit(65);
     }
     const lines = [
@@ -228,7 +314,8 @@ resolve_x8_identity() {
       `COMPOSE_CONFIG_FILES=${data.composeConfigFiles.join(",")}`,
       `ADMIN_DOMAIN=${data.adminDomain}`,
       `CREDENTIAL_ACTIVE_KEY_VERSION=${data.credentialActiveKeyVersion}`,
-      `LEVEL_ENV_JSON=${JSON.stringify(data.levelEnv)}`,
+      `LEVELS_FILE=${data.levelsFile}`,
+      `LEVELS_FILE_DIGEST=${data.levelsFileDigest}`,
     ];
     process.stdout.write(lines.join("\n") + "\n");
   ' "$X8_IDENTITY_FILE")"; then
@@ -244,7 +331,8 @@ resolve_x8_identity() {
   X8_IDENTITY_COMPOSE_CONFIG_FILES=""
   X8_IDENTITY_ADMIN_DOMAIN=""
   X8_IDENTITY_CREDENTIAL_ACTIVE_KEY_VERSION=""
-  X8_IDENTITY_LEVEL_ENV_JSON=""
+  X8_IDENTITY_LEVELS_FILE=""
+  X8_IDENTITY_LEVELS_FILE_DIGEST=""
   local key value
   while IFS='=' read -r key value; do
     case "$key" in
@@ -258,7 +346,8 @@ resolve_x8_identity() {
       COMPOSE_CONFIG_FILES) X8_IDENTITY_COMPOSE_CONFIG_FILES="$value" ;;
       ADMIN_DOMAIN) X8_IDENTITY_ADMIN_DOMAIN="$value" ;;
       CREDENTIAL_ACTIVE_KEY_VERSION) X8_IDENTITY_CREDENTIAL_ACTIVE_KEY_VERSION="$value" ;;
-      LEVEL_ENV_JSON) X8_IDENTITY_LEVEL_ENV_JSON="$value" ;;
+      LEVELS_FILE) X8_IDENTITY_LEVELS_FILE="$value" ;;
+      LEVELS_FILE_DIGEST) X8_IDENTITY_LEVELS_FILE_DIGEST="$value" ;;
     esac
   done <<<"$parsed"
   # Belt-and-suspenders: the node script above already exits 65 on a missing
@@ -292,7 +381,7 @@ resolve_x8_identity() {
   export X8_IDENTITY_APP_VERSION X8_IDENTITY_GIT_COMMIT X8_IDENTITY_LEVEL X8_IDENTITY_IMAGE_REF \
     X8_IDENTITY_IMAGE_DIGEST X8_IDENTITY_COMPOSE_PROJECT X8_IDENTITY_BUILD_DATE X8_IDENTITY_COMPOSE_CONFIG_FILES \
     X8_IDENTITY_WORKING_DIR X8_IDENTITY_ADMIN_DOMAIN X8_IDENTITY_CREDENTIAL_ACTIVE_KEY_VERSION \
-    X8_IDENTITY_LEVEL_ENV_JSON
+    X8_IDENTITY_LEVELS_FILE X8_IDENTITY_LEVELS_FILE_DIGEST
 }
 
 write_x8_gate_state() {
@@ -647,30 +736,43 @@ prepare_x8_gate_environment() {
   export ADMIN_CANONICAL_ORIGIN="https://${X8_ADMIN_DOMAIN}"
   export CHANNEL_CREDENTIAL_ACTIVE_KEY_VERSION="$X8_IDENTITY_CREDENTIAL_ACTIVE_KEY_VERSION"
 
-  # Terminal review, release-identity gate second round, finding 三: the
-  # FULL X8_LEVEL configuration frozen into the identity at `up` time
-  # (write_x8_identity_candidate()), parsed back into the exact same
-  # `KEY=VALUE` line shape x8_level_config() used to produce -- so this loop
-  # is otherwise unchanged, only its SOURCE moved from a fresh read of
-  # scripts/lib/x8-levels.json (the current git worktree, which can differ
-  # from what this environment was actually deployed with) to the identity's
-  # own frozen levelEnv.
-  local level_config level_key level_value
-  level_config="$(node -e '
-    let data;
-    try {
-      data = JSON.parse(process.argv[1]);
-    } catch (error) {
-      process.stderr.write(`ERROR: X8 deploy identity levelEnv is not valid JSON (${error.message})\n`);
-      process.exit(65);
-    }
-    const lines = [];
-    for (const [key, value] of Object.entries(data)) lines.push(`${key}=${value}`);
-    process.stdout.write(lines.join("\n") + "\n");
-  ' "$X8_IDENTITY_LEVEL_ENV_JSON")" || {
-    echo "ERROR: failed to parse the X8 deploy identity's frozen level configuration" >&2
+  # Owner fix (release-identity gate third round): the previous design froze
+  # the level table's RESOLVED values (levelEnv) straight into the identity,
+  # which meant business flags (AUTO_WRITE_AUTHORIZED among them) left the
+  # one file the compliance script (scripts/acceptance/x8-validate-compose.mjs)
+  # and its independent fail-closed ADR guard actually protect -- the gate
+  # read a snapshot nothing ever re-validated. The fix binds the identity to
+  # the level table's SOURCE instead (levelsFile + levelsFileDigest, the same
+  # path+digest pattern imageRef/imageDigest already use for the release
+  # image): re-read the exact path 'up' recorded, refuse if it is gone or if
+  # its content digest no longer matches what was frozen (both fail closed --
+  # this environment's worktree was modified after deploy), and only then
+  # resolve it through the ordinary x8_level_config(). A safety-invariant
+  # check independent of the table's own content runs immediately after,
+  # before any of these values are exported and strictly before this
+  # environment lets a caller touch any container -- the digest check above
+  # only proves the table has not changed since deploy; it says nothing about
+  # whether what it says was ever safe.
+  [[ -f "$X8_IDENTITY_LEVELS_FILE" ]] || {
+    echo "ERROR: the X8 level table recorded in the release identity no longer exists at $X8_IDENTITY_LEVELS_FILE (has the deployed worktree been moved, or the file removed, since 'up' ran?)" >&2
     return 65
   }
+  local current_levels_digest
+  current_levels_digest="$(x8_file_sha256 "$X8_IDENTITY_LEVELS_FILE")" || {
+    echo "ERROR: failed to digest the X8 level table at $X8_IDENTITY_LEVELS_FILE" >&2
+    return 65
+  }
+  [[ "$current_levels_digest" == "$X8_IDENTITY_LEVELS_FILE_DIGEST" ]] || {
+    echo "ERROR: the X8 level table at $X8_IDENTITY_LEVELS_FILE has changed since 'up' produced this release identity (recorded digest $X8_IDENTITY_LEVELS_FILE_DIGEST, current digest $current_levels_digest) -- the working tree was modified after this deploy; re-run 'up' to establish a fresh identity before using the gate command." >&2
+    return 65
+  }
+
+  local level_config level_key level_value
+  level_config="$(x8_level_config "$X8_IDENTITY_LEVEL" "$X8_IDENTITY_LEVELS_FILE")" || {
+    echo "ERROR: failed to resolve X8_LEVEL configuration for '$X8_IDENTITY_LEVEL' from $X8_IDENTITY_LEVELS_FILE" >&2
+    return 65
+  }
+  x8_assert_level_safety_invariants "$level_config" || return 65
   while IFS='=' read -r level_key level_value; do
     [[ -n "$level_key" ]] || continue
     export "$level_key=$level_value"

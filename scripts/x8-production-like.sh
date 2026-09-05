@@ -432,23 +432,31 @@ write_x8_identity_candidate() {
     echo "ERROR: unable to resolve the local image digest for $CPS_NOVEL_APP_IMAGE while writing the X8 deploy identity candidate" >&2
     return 65
   }
-  # Terminal review, release-identity gate second round, finding 三: the
-  # gate command must stop reading scripts/lib/x8-levels.json (a file that
-  # lives in -- and can change independently in -- the current git
-  # worktree) and stop inheriting two ambient-env defaults
-  # (CHANNEL_CREDENTIAL_ACTIVE_KEY_VERSION, X8_ADMIN_DOMAIN) from whatever
-  # shell happens to invoke it. The fix is to freeze all three into the
-  # identity at the one point they are legitimately resolved -- here, during
-  # `up` -- so prepare_x8_gate_environment() can read them back later
-  # instead of re-deriving them. $X8_LEVEL/$X8_ADMIN_DOMAIN/
+  # Owner fix (release-identity gate third round): the previous fix here
+  # (finding 三) froze the level table's fully-RESOLVED values (levelEnv)
+  # into the identity so prepare_x8_gate_environment() would never have to
+  # re-read scripts/lib/x8-levels.json (a file that lives in -- and can
+  # change independently in -- the current git worktree). That solved the
+  # "worktree edit silently changes gate behavior" problem, but at the cost
+  # of letting business flags (AUTO_WRITE_AUTHORIZED among them) bypass the
+  # one file the compliance validator's ADR guard actually protects. The
+  # correct fix -- matching how composeConfigFiles/imageDigest already bind
+  # the identity to a SOURCE plus a verifiable fingerprint, never to derived
+  # values -- is to freeze the level table's PATH and a CONTENT DIGEST here,
+  # and let the gate re-read and re-verify that exact file (see
+  # prepare_x8_gate_environment() and x8_file_sha256()) instead of trusting a
+  # frozen snapshot of what it once said.
+  # CHANNEL_CREDENTIAL_ACTIVE_KEY_VERSION/X8_ADMIN_DOMAIN are unrelated to
+  # this fix (deploy identity, not a business flag) and are still frozen
+  # directly, unchanged from finding 三: $X8_LEVEL/$X8_ADMIN_DOMAIN/
   # $CHANNEL_CREDENTIAL_ACTIVE_KEY_VERSION are already exported by
   # prepare_x8_environment() (via x8_level_config/x8_export_static_topology/
   # prepare_p1_12_local_environment) by the time `up` reaches this function --
   # this is not re-deriving them, only capturing the values this deploy
   # actually used.
-  local level_config_lines
-  level_config_lines="$(x8_level_config "$X8_LEVEL")" || {
-    echo "ERROR: failed to resolve X8_LEVEL configuration for '$X8_LEVEL' while writing the X8 deploy identity candidate" >&2
+  local levels_file_digest
+  levels_file_digest="$(x8_file_sha256 "$X8_LEVELS_FILE")" || {
+    echo "ERROR: failed to digest the X8 level table at $X8_LEVELS_FILE while writing the X8 deploy identity candidate" >&2
     return 65
   }
   [[ -n "${X8_ADMIN_DOMAIN:-}" ]] || {
@@ -467,17 +475,10 @@ write_x8_identity_candidate() {
     const [
       , outPath, appVersion, gitCommit, level, imageRef, imageDigest,
       composeProject, buildDate, configFileA, configFileB,
-      levelConfigLines, adminDomain, credentialActiveKeyVersion,
+      levelsFile, levelsFileDigest, adminDomain, credentialActiveKeyVersion,
     ] = process.argv;
-    const levelEnv = {};
-    for (const line of levelConfigLines.split("\n")) {
-      if (!line) continue;
-      const index = line.indexOf("=");
-      if (index <= 0) continue;
-      levelEnv[line.slice(0, index)] = line.slice(index + 1);
-    }
     const payload = {
-      schemaVersion: 2,
+      schemaVersion: 3,
       appVersion,
       gitCommit,
       level,
@@ -486,13 +487,15 @@ write_x8_identity_candidate() {
       composeProject,
       buildDate,
       composeConfigFiles: [configFileA, configFileB],
-      // Finding 三: the FULL resolved X8_LEVEL configuration
-      // (WORKER_TASK_ALLOWLIST, PROMO_CLAIM_ROLES,
-      // ADMIN_TWO_FACTOR_ENFORCEMENT, ADMIN_LOCAL_IDENTITY_SEED, and the
-      // eight double-gate flags) frozen at deploy time, so
-      // prepare_x8_gate_environment() never has to read
-      // scripts/lib/x8-levels.json (the current git worktree) again.
-      levelEnv,
+      // Owner fix (release-identity gate third round): the level table
+      // SOURCE, not its resolved values -- prepare_x8_gate_environment()
+      // re-reads this exact path, refuses if its content digest no longer
+      // matches, and only then resolves it through x8_level_config(), which
+      // also runs the independent P2-06.5 safety-invariant check
+      // (scripts/lib/x8-level-safety-invariants.mjs) before exporting
+      // anything.
+      levelsFile,
+      levelsFileDigest,
       // Finding 三: the two remaining values prepare_x8_gate_environment()
       // used to default from the CALLER ambient environment instead of
       // the frozen identity -- frozen the same way every other
@@ -505,7 +508,7 @@ write_x8_identity_candidate() {
   ' "$temporary" "$APP_VERSION" "$GIT_COMMIT" "$X8_LEVEL" "$CPS_NOVEL_APP_IMAGE" "$image_digest" \
     "$P1_12_COMPOSE_PROJECT" "$BUILD_DATE" \
     "$X8_PROJECT_ROOT/docker-compose.yml" "$X8_PROJECT_ROOT/infra/production-like/docker-compose.yml" \
-    "$level_config_lines" "$X8_ADMIN_DOMAIN" "$CHANNEL_CREDENTIAL_ACTIVE_KEY_VERSION"; then
+    "$X8_LEVELS_FILE" "$levels_file_digest" "$X8_ADMIN_DOMAIN" "$CHANNEL_CREDENTIAL_ACTIVE_KEY_VERSION"; then
     rm -f "$temporary"
     echo "ERROR: failed to render the X8 deploy identity candidate file" >&2
     return 65

@@ -1,4 +1,5 @@
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -26,6 +27,8 @@ const STUB_DOCKER_SCRIPT = readFileSync(resolve(import.meta.dirname, "fixtures/x
 
 const root = resolve(import.meta.dirname, "../../..");
 const launcher = resolve(root, "scripts/x8-production-like.sh");
+const realLevelsFilePath = resolve(root, "scripts/lib/x8-levels.json");
+const realLevelsFileDigest = createHash("sha256").update(readFileSync(realLevelsFilePath)).digest("hex");
 
 let workDir: string;
 let runtimeDir: string;
@@ -60,13 +63,18 @@ const BASE_ENV = {
   P1_12_COMPOSE_PROJECT: "cps-novel-x8-local",
   BUILD_DATE: "2026-09-06T00:00:00.000Z",
   // Finding 三 (release-identity gate second round): write_x8_identity_candidate()
-  // now also freezes X8_ADMIN_DOMAIN and CHANNEL_CREDENTIAL_ACTIVE_KEY_VERSION
-  // into the identity payload (levelEnv itself is resolved by calling the
-  // REAL x8_level_config() against this repo's own scripts/lib/x8-levels.json,
-  // which needs no stubbing since it is a pure, already-committed file read).
-  // These two stand in for what prepare_x8_environment() would have already
-  // exported by the time a real `up` reaches write_x8_identity_candidate(),
-  // exactly like the other hand-set vars in this fixture already do.
+  // also freezes X8_ADMIN_DOMAIN and CHANNEL_CREDENTIAL_ACTIVE_KEY_VERSION
+  // into the identity payload. These two stand in for what
+  // prepare_x8_environment() would have already exported by the time a real
+  // `up` reaches write_x8_identity_candidate(), exactly like the other
+  // hand-set vars in this fixture already do.
+  //
+  // Owner fix (release-identity gate third round): write_x8_identity_candidate()
+  // no longer resolves and embeds the level table's VALUES -- it freezes the
+  // table's own PATH ($X8_LEVELS_FILE, this repo's real scripts/lib/x8-levels.json,
+  // which needs no stubbing since it is a pure, already-committed file read)
+  // plus a content digest (x8_file_sha256()), asserted below against
+  // realLevelsFilePath/realLevelsFileDigest computed the same way.
   X8_ADMIN_DOMAIN: "zbcwf.novel.test",
   CHANNEL_CREDENTIAL_ACTIVE_KEY_VERSION: "1",
   STUB_IMAGE_REF: IMAGE_REF,
@@ -126,21 +134,20 @@ describe("X8 release identity lifecycle: candidate write -> health check -> prom
     // and no failure marker was ever written.
     expect(() => statSync(candidateFilePath())).toThrow();
     expect(() => statSync(failureMarkerPath())).toThrow();
-    // Finding 三: write_x8_identity_candidate() now freezes the FULL X8_LEVEL
-    // configuration and the two remaining ambient-inherited defaults into
-    // the identity, at schemaVersion 2.
-    expect(identity.schemaVersion).toBe(2);
+    // Finding 三: write_x8_identity_candidate() freezes the two remaining
+    // ambient-inherited defaults into the identity. Owner fix (release-
+    // identity gate third round): schemaVersion is now 3, and the level
+    // table is bound by SOURCE (path + content digest), never by its
+    // resolved values -- levelEnv no longer exists on the payload at all.
+    expect(identity.schemaVersion).toBe(3);
     expect(identity.adminDomain).toBe("zbcwf.novel.test");
     expect(identity.credentialActiveKeyVersion).toBe("1");
-    // Level "0" real values from the repo's own scripts/lib/x8-levels.json --
-    // proves levelEnv is the ACTUAL resolved table content, not a placeholder.
-    expect(identity.levelEnv).toMatchObject({
-      WORKER_TASK_ALLOWLIST: "credential.validate.v1,credential.supersede.v1,catalog_scan,home_carousel.compute.v1",
-      PROMO_CLAIM_ROLES: "",
-      ADMIN_TWO_FACTOR_ENFORCEMENT: "true",
-      ADMIN_LOCAL_IDENTITY_SEED: "",
-      FEATURE_PROMO_LINK_CLAIM: "false",
-    });
+    expect(identity.levelEnv).toBeUndefined();
+    // Proves levelsFile/levelsFileDigest are the ACTUAL repo file and its
+    // ACTUAL current content digest, not a placeholder -- write_x8_identity_candidate()
+    // calls the same x8_file_sha256() helper against the same real path.
+    expect(identity.levelsFile).toBe(realLevelsFilePath);
+    expect(identity.levelsFileDigest).toBe(realLevelsFileDigest);
   });
 
   // This is the direct reproduction of the incident named in the work

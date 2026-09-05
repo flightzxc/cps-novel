@@ -42,6 +42,8 @@ const STUB_DOCKER_SCRIPT = readFileSync(resolve(import.meta.dirname, "fixtures/x
 const root = resolve(import.meta.dirname, "../../..");
 const launcher = resolve(root, "scripts/x8-production-like.sh");
 const envLib = resolve(root, "scripts/lib/x8-production-like-env.sh");
+const realLevelsFilePath = resolve(root, "scripts/lib/x8-levels.json");
+const realLevelsFileDigest = createHash("sha256").update(readFileSync(realLevelsFilePath)).digest("hex");
 
 let workDir: string;
 let runtimeDir: string;
@@ -158,17 +160,22 @@ afterEach(() => {
   rmSync(workDir, { recursive: true, force: true });
 });
 
-// Finding 三 (release-identity gate second round): levelEnv mirrors Level
-// "0"'s real entry in scripts/lib/x8-levels.json (WORKER_TASK_ALLOWLIST/
+// Finding 三 (release-identity gate second round), amended by the Owner fix
+// (release-identity gate third round): LEVEL_0_ENV mirrors Level "0"'s real
+// entry in scripts/lib/x8-levels.json (WORKER_TASK_ALLOWLIST/
 // PROMO_CLAIM_ROLES/ADMIN_TWO_FACTOR_ENFORCEMENT/ADMIN_LOCAL_IDENTITY_SEED
 // plus the eight double-gate flags) -- kept byte-for-byte in sync with that
 // file's Level 0 section deliberately, so every EXISTING test in this suite
 // (whose STUB_WEB_ENV_JSON/STUB_WORKER_ENV_JSON/`compose config` fixtures
-// already assume these exact values) keeps passing unchanged even though
-// prepare_x8_gate_environment() no longer reads that file at all -- it now
-// reads levelEnv back out of the identity instead (see the dedicated
-// "no longer reads the worktree level table" test below for the case where
-// they deliberately diverge).
+// already assume these exact values) keeps passing unchanged even though the
+// gate no longer embeds this in the identity: IDENTITY_DEFAULTS now binds to
+// the REAL scripts/lib/x8-levels.json by path + content digest
+// (realLevelsFilePath/realLevelsFileDigest above), and
+// prepare_x8_gate_environment() re-reads and re-resolves that exact file --
+// which is why this happens to match. See the dedicated "reads the level
+// table from the identity's recorded path" describe block below for the
+// case where a test deliberately points the identity at a DIFFERENT,
+// custom-built table instead.
 const LEVEL_0_ENV = {
   WORKER_TASK_ALLOWLIST: "credential.validate.v1,credential.supersede.v1,catalog_scan,home_carousel.compute.v1",
   PROMO_CLAIM_ROLES: "",
@@ -184,8 +191,40 @@ const LEVEL_0_ENV = {
   INDEXNOW_DELIVERY_ALLOW_WRITE: "false",
 };
 
+// A full, standalone Level "0" table entry (the shape x8_level_config()
+// requires: workerTaskAllowlist/promoClaimRoles/adminTwoFactorEnforcement/
+// adminLocalIdentitySeed/flags) -- used by the tests below that write a
+// CUSTOM levels-file fixture (never this repo's real scripts/lib/x8-levels.json)
+// so they can freely mutate one flag (e.g. AUTO_WRITE_AUTHORIZED) without
+// ever touching the real, committed table.
+const VALID_LEVEL_0_TABLE_ENTRY = {
+  workerTaskAllowlist: LEVEL_0_ENV.WORKER_TASK_ALLOWLIST,
+  promoClaimRoles: LEVEL_0_ENV.PROMO_CLAIM_ROLES,
+  adminTwoFactorEnforcement: LEVEL_0_ENV.ADMIN_TWO_FACTOR_ENFORCEMENT,
+  adminLocalIdentitySeed: LEVEL_0_ENV.ADMIN_LOCAL_IDENTITY_SEED,
+  flags: {
+    FEATURE_PROMO_LINK_CLAIM: "false",
+    PROMO_LINK_CLAIM_ALLOW_WRITE: "false",
+    FEATURE_SITEMAP_AUTO_REFRESH: "false",
+    SITEMAP_AUTO_REFRESH_ALLOW_WRITE: "false",
+    FEATURE_INDEXNOW_OUTBOX: "false",
+    INDEXNOW_OUTBOX_ALLOW_WRITE: "false",
+    FEATURE_INDEXNOW_DELIVERY: "false",
+    INDEXNOW_DELIVERY_ALLOW_WRITE: "false",
+    FEATURE_P2_06_5_TAGGING: "false",
+    FEATURE_P2_06_5_TAG_ADMIN_WRITE: "false",
+    FEATURE_NOVEL_TAG_AUTO: "false",
+    AUTO_WRITE_AUTHORIZED: "NO",
+  },
+};
+
+function writeCustomLevelsFile(path: string, level0Entry: typeof VALID_LEVEL_0_TABLE_ENTRY) {
+  writeFileSync(path, JSON.stringify({ "0": level0Entry }, null, 2));
+  return createHash("sha256").update(readFileSync(path)).digest("hex");
+}
+
 const IDENTITY_DEFAULTS = {
-  schemaVersion: 2,
+  schemaVersion: 3,
   appVersion: "0.1.0",
   gitCommit: "a".repeat(40),
   level: "0",
@@ -195,7 +234,12 @@ const IDENTITY_DEFAULTS = {
   composeConfigFiles: ["/fixture/docker-compose.yml", "/fixture/infra/production-like/docker-compose.yml"],
   buildDate: "2026-09-05T00:00:00.000Z",
   createdAt: "2026-09-05T00:00:01.000Z",
-  levelEnv: LEVEL_0_ENV,
+  // Owner fix (release-identity gate third round): binds to the level
+  // table's SOURCE, not its resolved values -- the REAL repo file and its
+  // REAL current content digest, verified afresh by
+  // prepare_x8_gate_environment() on every call.
+  levelsFile: realLevelsFilePath,
+  levelsFileDigest: realLevelsFileDigest,
   adminDomain: "zbcwf.novel.test",
   credentialActiveKeyVersion: "1",
 };
@@ -444,22 +488,22 @@ describe("X8 gate environment: identity-derived fields, never the live git workt
     expectIdenticalSnapshots(before, snapshotDir(runtimeDir));
   });
 
-  // Terminal review, release-identity gate second round, finding 三: this is
-  // the direct regression test for "the gate no longer reads the worktree's
-  // level table". Before the fix, prepare_x8_gate_environment() called
-  // x8_level_config("0"), which reads THIS REPO'S OWN scripts/lib/x8-levels.json
-  // fresh every time -- so WORKER_TASK_ALLOWLIST here would always come back
-  // as that file's real Level 0 value, no matter what the identity says. The
-  // identity below deliberately freezes a WORKER_TASK_ALLOWLIST that does
-  // NOT match the real repo file's Level 0 entry -- a pass here can only
-  // mean the exported value came from the identity's own frozen levelEnv.
-  it("finding 三: WORKER_TASK_ALLOWLIST (and the rest of levelEnv) comes from the frozen identity, never a fresh read of scripts/lib/x8-levels.json", () => {
-    writeIdentity({
-      levelEnv: {
-        ...LEVEL_0_ENV,
-        WORKER_TASK_ALLOWLIST: "totally-different-allowlist-value-not-in-the-real-table",
-      },
+  // Owner fix (release-identity gate third round): this is the direct
+  // regression test for "the gate reads the level table from the identity's
+  // RECORDED PATH, never unconditionally this worktree's own
+  // scripts/lib/x8-levels.json". The identity below points levelsFile at a
+  // CUSTOM, throwaway table (never the real repo file) whose Level 0 entry
+  // deliberately uses a WORKER_TASK_ALLOWLIST that does not appear anywhere
+  // in the real table -- a pass here can only mean the exported value came
+  // from the recorded path, with its digest independently verified, not a
+  // hard-coded read of this repo's own file.
+  it("reads the level table from the identity's recorded levelsFile path once its digest is verified, never a fixed worktree path", () => {
+    const customLevelsPath = join(workDir, "custom-levels.json");
+    const customDigest = writeCustomLevelsFile(customLevelsPath, {
+      ...VALID_LEVEL_0_TABLE_ENTRY,
+      workerTaskAllowlist: "totally-different-allowlist-value-not-in-the-real-table",
     });
+    writeIdentity({ levelsFile: customLevelsPath, levelsFileDigest: customDigest });
     writeGateState("closed");
     const script = `
       set -euo pipefail
@@ -512,17 +556,44 @@ describe("X8 gate environment: identity-derived fields, never the live git workt
     expect(result.stdout).not.toContain("caller-injected-bogus");
   });
 
-  // A missing/invalid levelEnv, adminDomain, or credentialActiveKeyVersion
-  // must fail closed the same way a missing appVersion/level/etc. already
-  // does -- undecidable always fails, never falls back to a default.
-  it("finding 三: fails closed when the identity's levelEnv is missing", () => {
-    const withoutLevelEnv: Partial<typeof IDENTITY_DEFAULTS> = { ...IDENTITY_DEFAULTS };
-    delete withoutLevelEnv.levelEnv;
-    writeFileSync(join(runtimeDir, "release-identity.json"), JSON.stringify(withoutLevelEnv, null, 2));
+  // A missing/invalid levelsFile, levelsFileDigest, adminDomain, or
+  // credentialActiveKeyVersion must fail closed the same way a missing
+  // appVersion/level/etc. already does -- undecidable always fails, never
+  // falls back to a default.
+  it("Owner fix: fails closed when the identity's levelsFile is missing", () => {
+    const withoutLevelsFile: Partial<typeof IDENTITY_DEFAULTS> = { ...IDENTITY_DEFAULTS };
+    delete withoutLevelsFile.levelsFile;
+    writeFileSync(join(runtimeDir, "release-identity.json"), JSON.stringify(withoutLevelsFile, null, 2));
     writeGateState("closed");
     const result = runGate(["status"]);
     expect(result.status).not.toBe(0);
-    expect(result.stderr).toContain('missing a valid "levelEnv"');
+    expect(result.stderr).toContain('missing a valid "levelsFile"');
+  });
+
+  it("Owner fix: fails closed when the identity's levelsFileDigest is missing", () => {
+    const withoutDigest: Partial<typeof IDENTITY_DEFAULTS> = { ...IDENTITY_DEFAULTS };
+    delete withoutDigest.levelsFileDigest;
+    writeFileSync(join(runtimeDir, "release-identity.json"), JSON.stringify(withoutDigest, null, 2));
+    writeGateState("closed");
+    const result = runGate(["status"]);
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain('missing a valid "levelsFileDigest"');
+  });
+
+  it("Owner fix: fails closed when the identity's levelsFileDigest is not a valid sha256 hex digest", () => {
+    writeIdentity({ levelsFileDigest: "not-a-real-digest" });
+    writeGateState("closed");
+    const result = runGate(["status"]);
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain('invalid "levelsFileDigest"');
+  });
+
+  it("Owner fix: fails closed when the identity's levelsFile is not an absolute path", () => {
+    writeIdentity({ levelsFile: "scripts/lib/x8-levels.json" });
+    writeGateState("closed");
+    const result = runGate(["status"]);
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain('invalid "levelsFile"');
   });
 
   it("finding 三: fails closed when the identity's adminDomain is empty", () => {
@@ -539,6 +610,126 @@ describe("X8 gate environment: identity-derived fields, never the live git workt
     const result = runGate(["status"]);
     expect(result.status).not.toBe(0);
     expect(result.stderr).toContain("unsupported schemaVersion");
+  });
+});
+
+/**
+ * Owner fix (release-identity gate third round): the core of this fix. The
+ * previous design (schemaVersion 2's `levelEnv`) froze the level table's
+ * RESOLVED values into the identity, which meant a business flag
+ * (AUTO_WRITE_AUTHORIZED) could leave the one file the compliance validator
+ * protects and reach the gate unexamined. The fix binds the identity to the
+ * level table's SOURCE instead -- levelsFile + levelsFileDigest -- and adds
+ * two independent checks in prepare_x8_gate_environment(), run in this
+ * order, strictly before any container is touched:
+ *   1. the recorded path must exist and its current content digest must
+ *      match what was frozen at `up` time (proves "the table has not
+ *      changed since deploy");
+ *   2. the resolved level config must satisfy the P2-06.5 auto-write ADR
+ *      guard (proves "the table's content was never unsafe to begin with"),
+ *      read from the SAME shared definition
+ *      (scripts/lib/x8-level-safety-invariants.mjs) scripts/acceptance/
+ *      x8-validate-compose.mjs uses.
+ * These are deliberately two SEPARATE properties: (1) alone cannot catch a
+ * level table that was already unsafe before this deploy's `up` ever ran;
+ * (2) alone cannot catch the table changing after deploy. Both must hold.
+ */
+describe("X8 gate command: level table content-digest binding and safety invariant (Owner fix, release-identity gate third round)", () => {
+  it("fails closed, and never touches the persisted gate state, when the level table's content digest no longer matches the release identity", () => {
+    const customLevelsPath = join(workDir, "tampered-levels.json");
+    writeCustomLevelsFile(customLevelsPath, VALID_LEVEL_0_TABLE_ENTRY);
+    // A digest that is guaranteed not to match whatever writeCustomLevelsFile
+    // just wrote (64 hex chars, but not the real sha256 of that content).
+    const wrongDigest = "0".repeat(64);
+    writeIdentity({ levelsFile: customLevelsPath, levelsFileDigest: wrongDigest });
+    writeGateState("closed");
+    const before = gateStateFileStat();
+    const result = runGate(["on"]);
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("has changed since");
+    expect(result.stderr).toContain(customLevelsPath);
+    expect(gateStateFileStat().mtimeMs).toBe(before.mtimeMs);
+  });
+
+  it("fails closed when the level table path recorded in the release identity no longer exists", () => {
+    const missingPath = join(workDir, "does-not-exist-levels.json");
+    writeIdentity({ levelsFile: missingPath, levelsFileDigest: "a".repeat(64) });
+    writeGateState("closed");
+    const result = runGate(["on"]);
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("no longer exists");
+    expect(result.stderr).toContain(missingPath);
+  });
+
+  it("exports the exact level config resolved from the recorded levels file, once its digest matches -- equivalent to a direct parse of that same file", () => {
+    const customLevelsPath = join(workDir, "matching-levels.json");
+    const entry = { ...VALID_LEVEL_0_TABLE_ENTRY, workerTaskAllowlist: "custom-matching-allowlist-value" };
+    const digest = writeCustomLevelsFile(customLevelsPath, entry);
+    writeIdentity({ levelsFile: customLevelsPath, levelsFileDigest: digest });
+    writeGateState("closed");
+    const script = `
+      set -euo pipefail
+      source "${envLib}"
+      prepare_x8_gate_environment
+      echo "WORKER_TASK_ALLOWLIST=$WORKER_TASK_ALLOWLIST"
+      echo "PROMO_CLAIM_ROLES=$PROMO_CLAIM_ROLES"
+      echo "ADMIN_TWO_FACTOR_ENFORCEMENT=$ADMIN_TWO_FACTOR_ENFORCEMENT"
+    `;
+    const result = spawnSync("bash", ["-c", script], {
+      cwd: root,
+      encoding: "utf8",
+      env: { ...process.env, X8_RUNTIME_DIR: runtimeDir },
+    });
+    expect(result.status, result.stderr).toBe(0);
+    // Exactly what a direct x8_level_config("0", customLevelsPath) call
+    // would produce -- proving the gate's export is equivalent to parsing
+    // the recorded file directly, not some other derivation.
+    expect(result.stdout).toContain(`WORKER_TASK_ALLOWLIST=${entry.workerTaskAllowlist}`);
+    expect(result.stdout).toContain(`PROMO_CLAIM_ROLES=${entry.promoClaimRoles}`);
+    expect(result.stdout).toContain(`ADMIN_TWO_FACTOR_ENFORCEMENT=${entry.adminTwoFactorEnforcement}`);
+  });
+
+  // The core new requirement: a level table that is self-consistent (digest
+  // matches) but whose CONTENT violates the P2-06.5 auto-write ADR guard
+  // must still be refused -- and refused before ever reaching a docker call.
+  // "X8_GATE_LEVEL_SOURCE=" is the first line gate_catalog_recreate() prints
+  // AFTER prepare_x8_gate_environment() returns successfully (see
+  // scripts/x8-production-like.sh) -- its absence is direct evidence this
+  // never got past environment preparation, let alone touched any container.
+  it("Owner fix (core): refuses when AUTO_WRITE_AUTHORIZED is not \"NO\" in an otherwise self-consistent (digest-matching) level table, and never touches any container", () => {
+    const badLevelsPath = join(workDir, "bad-auto-write-authorized.json");
+    const badEntry = {
+      ...VALID_LEVEL_0_TABLE_ENTRY,
+      flags: { ...VALID_LEVEL_0_TABLE_ENTRY.flags, AUTO_WRITE_AUTHORIZED: "YES" },
+    };
+    const digest = writeCustomLevelsFile(badLevelsPath, badEntry);
+    writeIdentity({ levelsFile: badLevelsPath, levelsFileDigest: digest });
+    writeGateState("closed");
+    const before = gateStateFileStat();
+    const result = runGate(["on", "--apply"]);
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("ADR guard");
+    expect(result.stderr).toContain("AUTO_WRITE_AUTHORIZED");
+    expect(result.stderr).toContain('got "YES"');
+    expect(result.stderr).not.toContain("X8_GATE_LEVEL_SOURCE=");
+    expect(gateStateFileStat().mtimeMs).toBe(before.mtimeMs);
+  });
+
+  it("Owner fix: refuses when FEATURE_NOVEL_TAG_AUTO is not \"false\" in an otherwise self-consistent level table, and never touches any container", () => {
+    const badLevelsPath = join(workDir, "bad-tag-auto.json");
+    const badEntry = {
+      ...VALID_LEVEL_0_TABLE_ENTRY,
+      flags: { ...VALID_LEVEL_0_TABLE_ENTRY.flags, FEATURE_NOVEL_TAG_AUTO: "true" },
+    };
+    const digest = writeCustomLevelsFile(badLevelsPath, badEntry);
+    writeIdentity({ levelsFile: badLevelsPath, levelsFileDigest: digest });
+    writeGateState("closed");
+    const before = gateStateFileStat();
+    const result = runGate(["on", "--apply"]);
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("ADR guard");
+    expect(result.stderr).toContain("FEATURE_NOVEL_TAG_AUTO");
+    expect(gateStateFileStat().mtimeMs).toBe(before.mtimeMs);
   });
 });
 
