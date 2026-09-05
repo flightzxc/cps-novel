@@ -302,9 +302,36 @@ write_x8_gate_state() {
     return 65
   }
   local temporary="${X8_GATE_STATE_FILE}.tmp.$$"
-  printf '%s\n' "$state" >"$temporary"
-  chmod 600 "$temporary"
-  mv "$temporary" "$X8_GATE_STATE_FILE"
+  # 2026-09-06 patch (third round), High finding: every call site invokes
+  # this as the left operand of `||` (e.g. `case ... esac || state_write_status=$?`
+  # in gate_catalog_write()) so it can capture a non-zero return without
+  # aborting the caller. Bash's documented `-e` inertness for "part of any
+  # command executed in a && or || list except the command following the
+  # final && or ||" propagates into a called function's ENTIRE body for the
+  # duration of that call -- confirmed empirically before relying on it here.
+  # That means none of the three steps below can rely on `set -e` to stop
+  # execution on failure; each one is checked explicitly instead. Without
+  # this, a failure in the first two steps (disk full, quota, transient I/O
+  # error) used to fall through to `chmod`/`mv` anyway -- `mv` renaming
+  # whatever the temp file ended up containing (empty, truncated, or stale
+  # leftover content) onto the real state file and returning 0, silently
+  # corrupting the persisted gate state while every caller believed the
+  # write had succeeded.
+  if ! printf '%s\n' "$state" >"$temporary"; then
+    echo "ERROR: failed to write X8 catalog gate state to temporary file '$temporary'" >&2
+    rm -f "$temporary"
+    return 65
+  fi
+  if ! chmod 600 "$temporary"; then
+    echo "ERROR: failed to set permissions on X8 catalog gate state temporary file '$temporary'" >&2
+    rm -f "$temporary"
+    return 65
+  fi
+  if ! mv "$temporary" "$X8_GATE_STATE_FILE"; then
+    echo "ERROR: failed to move X8 catalog gate state temporary file '$temporary' into place at '$X8_GATE_STATE_FILE'" >&2
+    rm -f "$temporary"
+    return 65
+  fi
 }
 
 # X8 release-identity gate work order (2026-09-05), 施工项一 4.3(八): this used

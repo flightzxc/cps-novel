@@ -128,8 +128,20 @@ export const BASE_IMAGE_BAKED_KEYS = Object.freeze([
 // baseline and the container's real environment at once) is simply absent
 // from that union and never enters the per-key loop at all -- a silent,
 // vacuous pass for exactly the two variables this whole gate command exists
-// to police. requiredKeys (below) names the keys that must be checked
-// explicitly regardless of whether either side happens to declare them.
+// to police. requiredKeys (the `options` parameter below) is what a caller
+// uses to name keys that must be checked explicitly regardless of whether
+// either side happens to declare them.
+//
+// 2026-09-06 patch (third round), wording fix: `requiredKeys` is a generic
+// parameter of findActualDrift(), but as of this patch it has exactly one
+// real caller (gate_catalog_recreate() in scripts/x8-production-like.sh),
+// and that caller passes exactly CATALOG_GATE_ENV_KEYS -- these same two
+// variables. This "declared on neither side" safety net does NOT extend to
+// any other identity-relevant environment variable (the promo double-gate
+// roles, ADMIN_TWO_FACTOR_ENFORCEMENT, WORKER_TASK_ALLOWLIST, the preview
+// source-app allowlist, ...) unless and until a future caller adds them to
+// its own requiredKeys list -- it is not a blanket "any required field
+// missing from both sides is rejected" guarantee for the whole gate.
 export const CATALOG_GATE_ENV_KEYS = Object.freeze(["FEATURE_NOVEL_CATALOG_SYNC", "NOVEL_CATALOG_SYNC_ALLOW_WRITE"]);
 
 /**

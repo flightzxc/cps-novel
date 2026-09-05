@@ -261,18 +261,25 @@ describe("X8 release identity lifecycle: candidate write -> health check -> prom
 
   // Group 1 bullet 3: x8_mark_identity_deploy_failed()'s own write must
   // never mask the ORIGINAL exit status the EXIT trap exists to preserve.
-  // Verified by hand before writing this test: a bare `{ ...; } >"$temporary"`
-  // whose redirect TARGET cannot even be opened (e.g. a read-only directory)
-  // does NOT actually trip `set -e` in bash (3.2 or 5.x -- checked both) --
-  // that specific failure shape turns out to be one of bash's few documented
-  // `errexit` exemptions, so it would not have discriminated the fix from
-  // the bug. What DOES trip `set -e` inside that block is an ordinary INNER
-  // command failing -- here, `cat "$X8_IDENTITY_CANDIDATE_FILE"` failing
-  // because the candidate is present (passes the function's own `[[ -f ]]`
-  // check) but unreadable, which is exactly the class of failure ("the
-  // runtime directory briefly unwritable, disk full, a TOCTOU race deleting
-  // or permission-mangling the candidate mid-write, ...") the source
-  // comment names.
+  // 2026-09-06 patch (third round): this comment used to claim that a bare
+  // `{ ...; } >"$temporary"` whose redirect TARGET cannot even be opened
+  // (e.g. a read-only directory) does NOT trip `set -e`, and so would not
+  // have discriminated the fix from the bug. That claim has been
+  // experimentally refuted: reproduced by hand, that exact failure shape --
+  // the write fails, then the function's own subsequent (unguarded) `mv`
+  // also fails -- swallows the original exit status (e.g. 42) down to 1
+  // with the `if ! { ... }; then ... fi` guard removed, and preserves it
+  // correctly with the guard in place. The guard is necessary and must stay
+  // exactly as it is. This test instead exercises a DIFFERENT trigger for
+  // that same guard -- `cat "$X8_IDENTITY_CANDIDATE_FILE"` failing because
+  // the candidate is present (passes the function's own `[[ -f ]]` check)
+  // but unreadable, via `chmod 000` below -- purely because it is a more
+  // portable way to force the inner block to fail than depending on a
+  // read-only directory, not because the redirect-open shape is exempt from
+  // `errexit` or safe to leave unguarded. Both are exactly the class of
+  // failure ("the runtime directory briefly unwritable, disk full, a TOCTOU
+  // race deleting or permission-mangling the candidate mid-write, ...") the
+  // source comment names.
   it("group 1 bullet 3: a failure partway through writing the failure marker never masks the ORIGINAL exit status", () => {
     const script = `
       set -euo pipefail
