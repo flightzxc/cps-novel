@@ -1,5 +1,7 @@
 #!/usr/bin/env node
-// X8 release-identity gate work order (2026-09-05), 施工项一 4.3(五).
+// X8 release-identity gate work order (2026-09-05), 施工项一 4.3(五), amended
+// by the 2026-09-06 patch work order (Owner-frozen decision 1: reconciliation
+// no longer maintains a hand-picked key whitelist).
 //
 // Two comparisons the gate command needs, kept here as pure functions (no
 // filesystem, no docker) so they can be unit tested directly, plus a small
@@ -9,15 +11,26 @@
 //    CPS short-drama implementation (scripts/ops/flag-only-recreate.sh):
 //    render the current ("baseline") and requested ("candidate") compose
 //    configs and refuse if anything besides the explicitly authorized
-//    environment keys would change.
+//    environment keys would change. Unlike the reference, this also compares
+//    everything OUTSIDE of `services` (top-level `name`, `networks`,
+//    `secrets`, `volumes`, ...) -- the reference only ever diffs per-service
+//    fields, so a top-level rename (e.g. a network name) would render
+//    differently and never be reported (2026-09-06 patch, P1-5).
 // 2. findActualDrift -- the leg the reference implementation does not have.
 //    Its baseline is always a fresh re-render of the persisted config, never
 //    a snapshot of what the containers actually have, so when persisted
 //    config and running containers have already diverged (confirmed true in
-//    this repo's local environment as of this work order), the rendered
-//    diff alone cannot see it. This compares the baseline render against the
-//    containers' actual live environment for a curated set of
-//    identity-relevant keys, and reports every field that disagrees.
+//    this repo's local environment as of the original work order), the
+//    rendered diff alone cannot see it. This compares the baseline render's
+//    FULL declared environment for each service against the containers'
+//    actual live environment -- not a curated handful of keys (that
+//    hand-picked list is exactly what the 2026-09-06 patch work order found:
+//    it covered 7 keys and missed everything else, including the promo
+//    double-gate and the preview source allowlist). Any of the three
+//    disagreement shapes -- value differs, baseline declares a key the
+//    container lacks, or the container has a key baseline never declared --
+//    is drift and fails closed, except for a short, explicit, documented
+//    exemption list (see BASE_IMAGE_BAKED_KEYS below).
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -25,6 +38,12 @@ import { fileURLToPath } from "node:url";
 function withoutEnvironment(service) {
   const rest = { ...service };
   delete rest.environment;
+  return rest;
+}
+
+function withoutServices(config) {
+  const rest = { ...config };
+  delete rest.services;
   return rest;
 }
 
@@ -59,28 +78,97 @@ export function diffRenderedConfigs(baseline, candidate, allowedKeys) {
       unauthorized.push({ service: name, key: "(service definition)", from: aRest, to: bRest });
     }
   }
+  // P1-5: everything that is not per-service (name, networks, secrets,
+  // volumes, configs, ...) must also be byte-identical between the two
+  // renders. Nothing in this whitelist is ever allowed to change via a
+  // catalog-write gate flip, so there is no "allowed" set here -- any
+  // difference at all is unauthorized.
+  const baselineTop = withoutServices(baseline);
+  const candidateTop = withoutServices(candidate);
+  if (JSON.stringify(baselineTop) !== JSON.stringify(candidateTop)) {
+    unauthorized.push({ service: "(top-level)", key: "(compose definition)", from: baselineTop, to: candidateTop });
+  }
   return { unauthorized, changed };
 }
 
+// 2026-09-06 patch work order, 决策一: these are baked into the application
+// image at build time (Dockerfile ENV / the node:alpine base image's own
+// ENV), never declared in docker-compose.yml's `environment:` block for
+// every service that has them baked in (worker never declares PORT/HOSTNAME,
+// for instance, even though the shared final image stage sets both). They
+// are therefore *structurally* absent from the baseline render for at least
+// one of the two services the gate command touches, yet always present in
+// that service's actual container environment -- an unavoidable, permanent
+// asymmetry between "what compose declares" and "what the image bakes in",
+// not a runtime injection that could silently vary between deployments. The
+// image-digest check the gate command already performs (before this
+// reconciliation ever runs) is what actually pins these: they can only ever
+// change together with a new image, and a new image is already a hard
+// failure by itself. Confirmed empirically against the real running
+// cps-novel-x8-local-web-1 / -worker-1 containers during this patch
+// (`docker inspect --format '{{json .Config.Env}}'`) -- this is the exact
+// and complete set of image-baked keys that are not also compose-declared
+// for at least one of web/worker; nothing else is exempted.
+export const BASE_IMAGE_BAKED_KEYS = Object.freeze([
+  "PATH",
+  "NODE_VERSION",
+  "YARN_VERSION",
+  "NEXT_TELEMETRY_DISABLED",
+  "PORT",
+  "HOSTNAME",
+]);
+
 /**
+ * Full per-service environment reconciliation between a baseline render
+ * (persisted intent) and what the containers actually have. Fail-closed on
+ * every shape of disagreement:
+ *   - a key both sides declare but with different values,
+ *   - a key the baseline render declares that the actual container lacks,
+ *   - a key present in the actual container that the baseline render never
+ *     declared for that service (unless explicitly exempted, see above).
+ * A service missing from either side entirely is also drift, not a
+ * vacuous "nothing to check" pass.
+ *
  * @param {Record<string, {environment?: Record<string, unknown>}>} baselineServices
  * @param {Record<string, Record<string, unknown>>} actualByService
- * @param {Record<string, readonly string[]>} keysByService
+ * @param {{ services: readonly string[], allowedExtraKeys?: readonly string[] }} options
  */
-export function findActualDrift(baselineServices, actualByService, keysByService) {
+export function findActualDrift(baselineServices, actualByService, options) {
+  const { services, allowedExtraKeys = [] } = options ?? {};
+  if (!Array.isArray(services) || services.length === 0) {
+    throw new Error("findActualDrift requires a non-empty `services` list to reconcile");
+  }
+  const allowedExtra = new Set(allowedExtraKeys);
   const drift = [];
-  for (const [service, keys] of Object.entries(keysByService)) {
-    const rendered = baselineServices?.[service]?.environment ?? {};
-    const actual = actualByService?.[service] ?? {};
+  for (const service of services) {
+    const serviceBaseline = baselineServices?.[service];
+    if (!serviceBaseline || typeof serviceBaseline !== "object") {
+      drift.push({ service, key: "(service)", expected: "<declared in baseline render>", actual: "<missing from baseline render>" });
+      continue;
+    }
+    const actual = actualByService?.[service];
+    if (!actual || typeof actual !== "object") {
+      drift.push({ service, key: "(service)", expected: "<running container>", actual: "<no container / unreadable environment>" });
+      continue;
+    }
+    const rendered = serviceBaseline.environment ?? {};
+    const keys = new Set([...Object.keys(rendered), ...Object.keys(actual)]);
     for (const key of keys) {
-      const expected = rendered[key];
-      // Not every key applies to every service (e.g. WORKER_TASK_ALLOWLIST
-      // is worker-only); skip keys the baseline render never set for it.
-      if (expected === undefined) continue;
-      const got = actual[key];
-      if (String(expected) !== String(got ?? "")) {
-        drift.push({ service, key, expected, actual: got ?? "" });
+      const hasBaseline = Object.prototype.hasOwnProperty.call(rendered, key);
+      const hasActual = Object.prototype.hasOwnProperty.call(actual, key);
+      if (hasBaseline && hasActual) {
+        if (String(rendered[key]) !== String(actual[key])) {
+          drift.push({ service, key, expected: String(rendered[key]), actual: String(actual[key]) });
+        }
+        continue;
       }
+      if (hasBaseline && !hasActual) {
+        drift.push({ service, key, expected: String(rendered[key]), actual: "<missing from container>" });
+        continue;
+      }
+      // !hasBaseline && hasActual
+      if (allowedExtra.has(key)) continue;
+      drift.push({ service, key, expected: "<not declared in baseline render>", actual: String(actual[key]) });
     }
   }
   return drift;
@@ -110,11 +198,11 @@ function main(argv) {
     process.stdout.write(changed.length > 0 ? `${changed.map(formatEntry).join("\n")}\n` : "(no rendered difference)\n");
     process.exit(0);
   } else if (mode === "actual") {
-    const [baselinePath, actualPath, keysSpecPath] = rest;
+    const [baselinePath, actualPath, specPath] = rest;
     const baseline = JSON.parse(readFileSync(baselinePath, "utf8"));
     const actualByService = JSON.parse(readFileSync(actualPath, "utf8"));
-    const keysByService = JSON.parse(readFileSync(keysSpecPath, "utf8"));
-    const drift = findActualDrift(baseline.services ?? {}, actualByService, keysByService);
+    const spec = JSON.parse(readFileSync(specPath, "utf8"));
+    const drift = findActualDrift(baseline.services ?? {}, actualByService, spec);
     if (drift.length > 0) {
       process.stderr.write("ACTUAL_CONTAINER_DRIFT:\n");
       for (const entry of drift) process.stderr.write(`${formatDrift(entry)}\n`);

@@ -12,11 +12,22 @@ X8_BACKUP_DIR="$X8_RUNTIME_DIR/backups"
 X8_EVIDENCE_DIR="$X8_RUNTIME_DIR/evidence"
 X8_GATE_STATE_FILE="$X8_RUNTIME_DIR/catalog-gate.state"
 X8_BACKUP_PGPASS_FILE="$X8_SECRET_DIR/backup.pgpass"
-# X8 release-identity gate work order (2026-09-05): the one file `up` writes
-# after a successful build and before any container starts, and the one file
-# every gate operation reads its deployment identity from. Never hand-edited
-# (see resolve_x8_identity() / write_x8_identity() in x8-production-like.sh).
+# X8 release-identity gate work order (2026-09-05), amended by the
+# 2026-09-06 patch work order (决策二: candidate vs. committed identity).
+# X8_IDENTITY_FILE is the COMMITTED identity -- the only one any gate
+# operation ever reads (resolve_x8_identity() in x8-production-like.sh).
+# X8_IDENTITY_CANDIDATE_FILE is written by `up` right after a successful
+# build, before any container starts (preserving the original, correct
+# "on disk before anything starts" intent) -- but it is NOT the committed
+# identity yet. Only once database prep, container start, and the health
+# probes all pass does `up` promote the candidate onto X8_IDENTITY_FILE
+# (write_x8_identity_candidate() / promote_x8_identity_candidate() in
+# x8-production-like.sh). If `up` fails anywhere in between, the previously
+# committed identity (if any) is left completely untouched, and
+# X8_IDENTITY_FAILURE_MARKER records that the deploy did not complete.
 X8_IDENTITY_FILE="$X8_RUNTIME_DIR/release-identity.json"
+X8_IDENTITY_CANDIDATE_FILE="$X8_RUNTIME_DIR/release-identity.candidate.json"
+X8_IDENTITY_FAILURE_MARKER="$X8_RUNTIME_DIR/release-identity.failed.txt"
 # Single source of truth for the compose project name so gate_catalog_status()
 # (which must do zero environment prep, see 4.3(9)) doesn't need to call
 # prepare_x8_environment() just to know it.
@@ -130,6 +141,17 @@ x8_read_gate_state() {
 # to call from a purely read-only path.
 resolve_x8_identity() {
   if [[ ! -f "$X8_IDENTITY_FILE" ]]; then
+    # 2026-09-06 patch, 决策二: a candidate (or a failure marker from a prior
+    # attempt) with no committed identity means a previous `up` started but
+    # never finished -- say so explicitly rather than the generic "run up"
+    # message, which reads as "nothing has ever been attempted" when
+    # something in fact was, and failed partway.
+    if [[ -f "$X8_IDENTITY_CANDIDATE_FILE" || -f "$X8_IDENTITY_FAILURE_MARKER" ]]; then
+      echo "ERROR: no committed X8 deploy identity file at $X8_IDENTITY_FILE -- the previous 'up' did not complete successfully (a candidate identity and/or failure marker exists but was never promoted)." >&2
+      [[ -f "$X8_IDENTITY_FAILURE_MARKER" ]] && echo "See $X8_IDENTITY_FAILURE_MARKER for what failed." >&2
+      echo "Run 'scripts/x8-production-like.sh up' again (with an explicit X8_LEVEL=0|uat|r) to complete a deploy before using the gate command." >&2
+      return 65
+    fi
     echo "ERROR: no X8 deploy identity file at $X8_IDENTITY_FILE" >&2
     echo "Run 'scripts/x8-production-like.sh up' (with an explicit X8_LEVEL=0|uat|r) to establish one before using the gate command." >&2
     return 65
@@ -206,8 +228,30 @@ resolve_x8_identity() {
     echo "ERROR: X8 deploy identity file does not resolve to a run level" >&2
     return 65
   fi
+  # 2026-09-06 patch work order, P1-8: the working directory Compose stamped
+  # onto every container it created (com.docker.compose.project.working_dir)
+  # is always the directory of the first `-f` file in that invocation -- so
+  # deriving the *expected* value from the identity's own first recorded
+  # config file (rather than the current script's $X8_PROJECT_ROOT) is what
+  # lets x8_check_container_labels() catch "a different worktree, pointed at
+  # the same runtime dir, silently recreating with its own directory's
+  # files" instead of only comparing the config-files list itself.
+  local first_config_file="${X8_IDENTITY_COMPOSE_CONFIG_FILES%%,*}"
+  # Pure string dirname -- deliberately never `cd`/`pwd` this, so a still-
+  # valid identity file whose recorded path happens not to exist right now
+  # (a stale identity for a runtime dir that was relocated, or -- as in this
+  # repo's own tests -- an intentionally fixture-only path) still resolves
+  # instead of failing for an unrelated filesystem reason.
+  case "$first_config_file" in
+    /*) X8_IDENTITY_WORKING_DIR="$(dirname "$first_config_file")" ;;
+    *)
+      echo "ERROR: X8 deploy identity file's composeConfigFiles must be absolute paths (got \"$first_config_file\")" >&2
+      return 65
+      ;;
+  esac
   export X8_IDENTITY_APP_VERSION X8_IDENTITY_GIT_COMMIT X8_IDENTITY_LEVEL X8_IDENTITY_IMAGE_REF \
-    X8_IDENTITY_IMAGE_DIGEST X8_IDENTITY_COMPOSE_PROJECT X8_IDENTITY_BUILD_DATE X8_IDENTITY_COMPOSE_CONFIG_FILES
+    X8_IDENTITY_IMAGE_DIGEST X8_IDENTITY_COMPOSE_PROJECT X8_IDENTITY_BUILD_DATE X8_IDENTITY_COMPOSE_CONFIG_FILES \
+    X8_IDENTITY_WORKING_DIR
 }
 
 write_x8_gate_state() {
@@ -249,9 +293,75 @@ warn_x8_gate_drift() {
   actual_enabled="$(x8_container_env_value "$web_container" FEATURE_NOVEL_CATALOG_SYNC)"
   actual_write="$(x8_container_env_value "$web_container" NOVEL_CATALOG_SYNC_ALLOW_WRITE)"
   [[ "$actual_enabled" == "$expected_enabled" && "$actual_write" == "$expected_write" ]] && return 0
+  # 2026-09-06 patch, P2-13: the repair command below is only guaranteed to
+  # work if this exact drift (the two catalog-write variables) is the ONLY
+  # thing out of sync. `gate catalog-write`'s own three-way pre-check
+  # reconciles the FULL persisted-state render against the running
+  # containers (决策一) -- if this warning's drift is a symptom of a wider
+  # inconsistency (e.g. the containers also disagree with the persisted
+  # state on something else, or the release identity itself does not match
+  # what is running), that pre-check will refuse the very command suggested
+  # here. Say so explicitly instead of implying one command always closes
+  # the loop.
   printf '%s\n' \
     "WARNING: X8 catalog-write gate drift: state=$persisted (expects FEATURE_NOVEL_CATALOG_SYNC=$expected_enabled NOVEL_CATALOG_SYNC_ALLOW_WRITE=$expected_write) actual web container has FEATURE_NOVEL_CATALOG_SYNC=$actual_enabled NOVEL_CATALOG_SYNC_ALLOW_WRITE=$actual_write" \
-    "Repair explicitly (state is not overwritten): X8_LEVEL=$X8_LEVEL scripts/x8-production-like.sh gate catalog-write on --apply" >&2
+    "Try: scripts/x8-production-like.sh gate catalog-write on --apply (the gate command reads its own run level from the committed release identity, not this shell's X8_LEVEL -- no prefix needed, and a failed attempt never overwrites the state file)." \
+    "If that command itself refuses because the containers don't match the persisted state as a whole (not just these two variables), the gate's three-way pre-check is working as intended, not broken -- reconcile by re-running 'scripts/x8-production-like.sh up' to re-establish a consistent baseline, rather than retrying the gate command." >&2
+}
+
+# Static topology exports shared by prepare_x8_environment() (the full,
+# provisioning-capable path) and prepare_x8_gate_environment() (the
+# 2026-09-06 patch's read-only, identity-only path, P1-6). Kept in one place
+# so the two paths cannot drift on a constant like a domain name or a port
+# default -- none of these ever depend on X8_LEVEL, the release identity, or
+# the live git worktree.
+x8_export_static_topology() {
+  export X8_LOCAL_DOMAIN=novel.test
+  # RC-9 admin-host isolation (2026-09-03, Owner): the admin backend is a
+  # distinct domain from the public site at every X8_LEVEL -- this is a
+  # security invariant, not a per-level knob (see
+  # docs/operations/PRODUCTION_DOMAIN_2026-09-03.md and src/proxy.ts). Prefix
+  # matches CPS's own `zbcwf` admin-subdomain convention. Overridable only
+  # for local experimentation; validate_rendered_topology() in
+  # scripts/x8-production-like.sh refuses to proceed if it ever equals
+  # X8_LOCAL_DOMAIN.
+  export X8_ADMIN_DOMAIN="${X8_ADMIN_DOMAIN:-zbcwf.novel.test}"
+  export ADMIN_CANONICAL_ORIGIN="https://${X8_ADMIN_DOMAIN}"
+  export SITE_URL=https://novel.test
+  export TZ=Asia/Tokyo
+  export MOBOREADER_PREVIEW_SOURCE_APP_CODES=changdu
+  export X8_HTTP_PORT="${X8_HTTP_PORT:-80}"
+  export X8_HTTPS_PORT="${X8_HTTPS_PORT:-443}"
+  export X8_NGINX_IMAGE="${X8_NGINX_IMAGE:-nginx:1.28.0-alpine}"
+  export X8_BACKUP_INTERVAL_SECONDS="${X8_BACKUP_INTERVAL_SECONDS:-86400}"
+  export X8_BACKUP_RUN_ON_START="${X8_BACKUP_RUN_ON_START:-true}"
+  export X8_RUNTIME_DIR X8_SECRET_DIR X8_TLS_DIR X8_NGINX_RUNTIME_DIR X8_BACKUP_DIR X8_EVIDENCE_DIR
+  export X8_GATE_STATE_FILE X8_BACKUP_PGPASS_FILE X8_IDENTITY_FILE X8_IDENTITY_CANDIDATE_FILE X8_IDENTITY_FAILURE_MARKER
+}
+
+# Maps a persisted/target catalog-gate tri-state onto the two double-gate
+# environment variables. Shared so the mapping can never disagree between
+# prepare_x8_environment() and prepare_x8_gate_environment().
+x8_export_catalog_gate_env() {
+  local gate_state="$1"
+  case "$gate_state" in
+    dry-run)
+      export FEATURE_NOVEL_CATALOG_SYNC=true
+      export NOVEL_CATALOG_SYNC_ALLOW_WRITE=false
+      ;;
+    apply)
+      export FEATURE_NOVEL_CATALOG_SYNC=true
+      export NOVEL_CATALOG_SYNC_ALLOW_WRITE=true
+      ;;
+    closed)
+      export FEATURE_NOVEL_CATALOG_SYNC=false
+      export NOVEL_CATALOG_SYNC_ALLOW_WRITE=false
+      ;;
+    *)
+      echo "ERROR: invalid X8 catalog gate state: $gate_state" >&2
+      return 65
+      ;;
+  esac
 }
 
 prepare_x8_environment() {
@@ -289,42 +399,8 @@ prepare_x8_environment() {
   }
 
   export P1_12_COMPOSE_PROJECT="$X8_COMPOSE_PROJECT_NAME"
-  export X8_LOCAL_DOMAIN=novel.test
-  # RC-9 admin-host isolation (2026-09-03, Owner): the admin backend is a
-  # distinct domain from the public site at every X8_LEVEL -- this is a
-  # security invariant, not a per-level knob (see
-  # docs/operations/PRODUCTION_DOMAIN_2026-09-03.md and src/proxy.ts). Prefix
-  # matches CPS's own `zbcwf` admin-subdomain convention. Overridable only
-  # for local experimentation; validate_rendered_topology() in
-  # scripts/x8-production-like.sh refuses to proceed if it ever equals
-  # X8_LOCAL_DOMAIN.
-  export X8_ADMIN_DOMAIN="${X8_ADMIN_DOMAIN:-zbcwf.novel.test}"
-  export ADMIN_CANONICAL_ORIGIN="https://${X8_ADMIN_DOMAIN}"
-  export SITE_URL=https://novel.test
-  export TZ=Asia/Tokyo
-  export MOBOREADER_PREVIEW_SOURCE_APP_CODES=changdu
-  export X8_HTTP_PORT="${X8_HTTP_PORT:-80}"
-  export X8_HTTPS_PORT="${X8_HTTPS_PORT:-443}"
-  export X8_NGINX_IMAGE="${X8_NGINX_IMAGE:-nginx:1.28.0-alpine}"
-  export X8_BACKUP_INTERVAL_SECONDS="${X8_BACKUP_INTERVAL_SECONDS:-86400}"
-  export X8_BACKUP_RUN_ON_START="${X8_BACKUP_RUN_ON_START:-true}"
-  export X8_RUNTIME_DIR X8_SECRET_DIR X8_TLS_DIR X8_NGINX_RUNTIME_DIR X8_BACKUP_DIR X8_EVIDENCE_DIR
-  export X8_GATE_STATE_FILE X8_BACKUP_PGPASS_FILE X8_IDENTITY_FILE
-
-  case "$gate_state" in
-    dry-run)
-      export FEATURE_NOVEL_CATALOG_SYNC=true
-      export NOVEL_CATALOG_SYNC_ALLOW_WRITE=false
-      ;;
-    apply)
-      export FEATURE_NOVEL_CATALOG_SYNC=true
-      export NOVEL_CATALOG_SYNC_ALLOW_WRITE=true
-      ;;
-    closed)
-      export FEATURE_NOVEL_CATALOG_SYNC=false
-      export NOVEL_CATALOG_SYNC_ALLOW_WRITE=false
-      ;;
-  esac
+  x8_export_static_topology
+  x8_export_catalog_gate_env "$gate_state" || return 65
   # RC-2b: WORKER_TASK_ALLOWLIST and the four other double-gate pairs
   # (promo claim / sitemap / indexnow outbox / indexnow delivery) all come
   # from the single X8_LEVEL table (scripts/lib/x8-levels.json) instead of
@@ -350,4 +426,103 @@ prepare_x8_environment() {
     chmod 600 "$temporary"
     mv "$temporary" "$X8_BACKUP_PGPASS_FILE"
   fi
+}
+
+# 2026-09-06 patch work order, P1-6 ("闸门需要的环境应当直接由身份文件构造", not
+# "run the HEAD-dependent prep flow, then overwrite four fields"). Builds the
+# ENTIRE environment the catalog-write gate command (and, per P2-10, the
+# read-only top-level `status` query) needs directly from the release
+# identity file:
+#   - never calls prepare_p1_12_local_environment() or anything that reads
+#     the live git worktree's HEAD or package.json -- APP_VERSION,
+#     GIT_COMMIT, CPS_NOVEL_APP_IMAGE, BUILD_DATE and NEXT_PUBLIC_BUILD_VERSION
+#     all come only from the frozen identity (this is also the P2-11 fix: the
+#     build-version variable is now covered by the same identity freeze as
+#     the other four fields, instead of being silently recomputed);
+#   - never mkdir's a directory or creates a secret/gate-state file -- every
+#     directory and secret this function needs must already exist (created
+#     by a prior `up`), or it fails outright rather than silently
+#     provisioning a fresh one out from under a caller who only wanted to
+#     read the gate's current plan;
+#   - is therefore also what makes a directory-existence assertion of "up
+#     never fully ran" instead of the previous silent bootstrap.
+# resolve_x8_identity() (called first) is itself pure/read-only, so on
+# failure this function has touched nothing at all.
+prepare_x8_gate_environment() {
+  resolve_x8_identity || return 65
+
+  export X8_LEVEL="$X8_IDENTITY_LEVEL"
+  export P1_12_COMPOSE_PROJECT="$X8_IDENTITY_COMPOSE_PROJECT"
+  x8_export_static_topology
+
+  local dir
+  for dir in "$X8_RUNTIME_DIR" "$X8_SECRET_DIR" "$X8_NGINX_RUNTIME_DIR" "$X8_TLS_DIR" "$X8_BACKUP_DIR"; do
+    [[ -d "$dir" ]] || {
+      echo "ERROR: X8 gate command requires an already-established runtime directory: $dir (run 'up' first -- the gate path never provisions one)" >&2
+      return 65
+    }
+  done
+
+  local secret_file
+  for secret_file in postgres_admin.password migration_owner.password web_app.password worker_app.password \
+    scheduler_app.password analyst_ro.password backup_role.password \
+    totp.key credential-v1.key credential-fingerprint.key tracking-hash-salt.key; do
+    [[ -f "$X8_SECRET_DIR/$secret_file" ]] || {
+      echo "ERROR: X8 gate command requires an already-established secret file: $X8_SECRET_DIR/$secret_file (run 'up' first -- the gate path never creates one)" >&2
+      return 65
+    }
+  done
+  [[ -f "$X8_BACKUP_PGPASS_FILE" ]] || {
+    echo "ERROR: X8 gate command requires an already-established file: $X8_BACKUP_PGPASS_FILE (run 'up' first)" >&2
+    return 65
+  }
+
+  export P1_12_POSTGRES_ADMIN_PASSWORD_FILE="$X8_SECRET_DIR/postgres_admin.password"
+  export P1_12_MIGRATION_OWNER_PASSWORD_FILE="$X8_SECRET_DIR/migration_owner.password"
+  export P1_12_WEB_APP_PASSWORD_FILE="$X8_SECRET_DIR/web_app.password"
+  export P1_12_WORKER_APP_PASSWORD_FILE="$X8_SECRET_DIR/worker_app.password"
+  export P1_12_SCHEDULER_APP_PASSWORD_FILE="$X8_SECRET_DIR/scheduler_app.password"
+  export P1_12_ANALYST_RO_PASSWORD_FILE="$X8_SECRET_DIR/analyst_ro.password"
+  export P1_12_BACKUP_ROLE_PASSWORD_FILE="$X8_SECRET_DIR/backup_role.password"
+
+  local migration_password web_password worker_password scheduler_password
+  migration_password="$(read_secret_value "$P1_12_MIGRATION_OWNER_PASSWORD_FILE")"
+  web_password="$(read_secret_value "$P1_12_WEB_APP_PASSWORD_FILE")"
+  worker_password="$(read_secret_value "$P1_12_WORKER_APP_PASSWORD_FILE")"
+  scheduler_password="$(read_secret_value "$P1_12_SCHEDULER_APP_PASSWORD_FILE")"
+  export P1_12_MIGRATION_DATABASE_URL="postgresql://migration_owner:${migration_password}@postgres:5432/cps_novel?schema=public"
+  export P1_12_WEB_DATABASE_URL="postgresql://web_app:${web_password}@postgres:5432/cps_novel?schema=public"
+  export P1_12_WORKER_DATABASE_URL="postgresql://worker_app:${worker_password}@postgres:5432/cps_novel?schema=public"
+  export P1_12_SCHEDULER_DATABASE_URL="postgresql://scheduler_app:${scheduler_password}@postgres:5432/cps_novel?schema=public"
+  export TOTP_ENCRYPTION_KEY="$(read_secret_value "$X8_SECRET_DIR/totp.key")"
+  export CHANNEL_CREDENTIAL_ACTIVE_KEY_VERSION="${CHANNEL_CREDENTIAL_ACTIVE_KEY_VERSION:-1}"
+  export CHANNEL_CREDENTIAL_ENCRYPTION_KEY_V1_FILE="$X8_SECRET_DIR/credential-v1.key"
+  export CHANNEL_CREDENTIAL_FINGERPRINT_KEY_FILE="$X8_SECRET_DIR/credential-fingerprint.key"
+  export TRACKING_HASH_SALT="$(read_secret_value "$X8_SECRET_DIR/tracking-hash-salt.key")"
+
+  # Release identity, never the live git worktree (P1-6 / P2-11): the
+  # NEXT_PUBLIC_BUILD_VERSION derivation mirrors prepare_p1_12_local_environment()'s
+  # own "${NEXT_PUBLIC_BUILD_VERSION:-v${APP_VERSION}}" convention exactly,
+  # just sourced from the frozen appVersion instead of a fresh package.json read.
+  export APP_VERSION="$X8_IDENTITY_APP_VERSION"
+  export GIT_COMMIT="$X8_IDENTITY_GIT_COMMIT"
+  export CPS_NOVEL_APP_IMAGE="$X8_IDENTITY_IMAGE_REF"
+  export BUILD_DATE="$X8_IDENTITY_BUILD_DATE"
+  export NEXT_PUBLIC_BUILD_VERSION="${NEXT_PUBLIC_BUILD_VERSION:-v${X8_IDENTITY_APP_VERSION}}"
+
+  local level_config level_key level_value
+  level_config="$(x8_level_config "$X8_LEVEL")" || {
+    echo "ERROR: failed to resolve X8_LEVEL configuration for '$X8_LEVEL'" >&2
+    return 65
+  }
+  while IFS='=' read -r level_key level_value; do
+    [[ -n "$level_key" ]] || continue
+    export "$level_key=$level_value"
+  done <<<"$level_config"
+
+  local gate_state
+  gate_state="$(x8_read_gate_state)" || return 65
+  x8_export_catalog_gate_env "$gate_state" || return 65
+  X8_GATE_PERSISTED_STATE="$gate_state"
+  export X8_GATE_PERSISTED_STATE
 }
