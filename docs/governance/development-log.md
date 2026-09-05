@@ -4,6 +4,100 @@
 
 ---
 
+## 2026-09-05 · PR6 fix lane E — carousel PostgreSQL 权限缺口修复 + X8 实证
+
+- 背景：运行中的 X8 uat（`cps-novel-x8-local`）暴露 `scheduler` 容器持续
+  `Restarting`，日志为 `scheduler/index.ts:59 main -> getHomeCarouselConfig
+  (src/server/home-carousel/service.ts:65) -> prisma.siteSetting.findUnique`
+  抛出 `42501 permission denied for table site_setting`；`infra/postgres/
+  grants.sql:140-145` 明确规定 Scheduler 不得访问 `site_setting`（含 S2
+  IndexNow key），但该表恰恰也是首页轮播 `carouselConfigJson` 的存放位置，
+  `scheduler` 判定 cron 是否到点必须读它——两条边界在这一列上直接冲突。
+  同一轮 `information_schema.role_table_grants` 复核另外发现 `worker_app`
+  对 `home_carousel_manual_slot/auto_batch/auto_candidate/serving` 只有
+  INSERT/UPDATE、无 SELECT，`home_carousel_change_log` 只有 INSERT；
+  `computeHomeCarouselInTx`（`src/server/home-carousel/service.ts:77-122`）
+  在同一事务里对前四张表分别 `findMany`/`update`/`deleteMany`，均需要
+  SELECT，`deleteMany` 收缩 `home_carousel_serving` 还需要 DELETE（这几处
+  查询之前从未被真实执行过，缺口一直潜伏到这次 X8 实跑才现形）。
+- 修复（`infra/postgres/grants.sql`）：
+  - `GRANT SELECT (id, carousel_config_json) ON site_setting TO
+    scheduler_app;`——列级授权，不给整表 SELECT；`id` 是因为 Prisma 生成的
+    `WHERE id = 1` 也需要该列的读权限。`indexnow_key` 等其余列、以及
+    `analyst_ro` 依旧零可见性。
+  - `worker_app` 补 `GRANT SELECT ON TABLE home_carousel_manual_slot,
+    home_carousel_auto_batch, home_carousel_auto_candidate,
+    home_carousel_serving TO worker_app;`。
+  - `worker_app` 补 `GRANT DELETE ON TABLE home_carousel_serving TO
+    worker_app;`——merge 用 `deleteMany` 整体清空该 locale 的 serving 快照
+    后 `createMany` 重建，不是"就地 UPDATE 固定行集"的语义，其余三张表没有
+    delete 调用，不给 DELETE。
+  - `home_carousel_change_log` 保持 INSERT-only 不变（worker 从不读回它）。
+  - `src/server/home-carousel/service.ts` 里 `getHomeCarouselConfig`
+    （scheduler 路径）与 `computeHomeCarouselInTx`（worker 路径）对
+    `siteSetting` 的两处读取本就是 `select:{carouselConfigJson:true}`
+    列级 select；`worker/handlers/home-carousel.ts` 只转调
+    `computeHomeCarouselInTx`。代码侧均无需改动。
+- 新增 `tests/backend/database/carousel-grants.test.ts`（6 用例）锁定上述
+  授权矩阵：scheduler_app 只有列级 SELECT 且对五张 `home_carousel_*` 零
+  访问；worker_app 四表 SELECT + `home_carousel_serving` 专属 DELETE；
+  `home_carousel_change_log` 维持 INSERT-only；web_app/analyst_ro 原有的
+  五表 SELECT 不受影响。手工做过一次变异验证：临时删掉
+  `GRANT SELECT (id, carousel_config_json) ON site_setting TO
+  scheduler_app;` 这一行，对应用例立即转红，然后已还原。
+- 交界修补（不在原始任务允许改动的文件清单内，但发现后判断为必要的连带
+  最小改动，否则契约测试与新授权直接矛盾、数据字典与真实授权漂移）：
+  - `tests/backend/database/x6-site-setting-grants.test.ts` 原先用一条
+    正则断言"scheduler_app 对 `site_setting` 零访问"
+    （`not.toMatch(/GRANT[^;]+site_setting[^;]+(?:analyst_ro|scheduler_app)/s)`），
+    这与本 lane 新增的列级授权字面冲突。已收窄为两条：analyst_ro 依旧
+    零访问原样保留；scheduler_app 改为"零整表 SELECT、零
+    INSERT/UPDATE/DELETE，只允许既定列级 SELECT"。"字典与授权同步"用例
+    同步放宽——`id`/`carousel_config_json` 两个字段允许 `read_roles`
+    含 `scheduler_app`，其余 17 个 `site_setting` 字段仍必须恰好是
+    `["web_app","worker_app"]`。
+  - `docs/governance/database-schema-dictionary.jsonl` 里
+    `site_setting.id`/`site_setting.carousel_config_json` 两条字段记录的
+    `read_roles` 同步补 `scheduler_app`，`notes`/`evidence` 附带一句
+    PR6 lane E 的授权来源说明；未触碰同表其余记录。
+- 门禁：`npm run typecheck` 通过；`npm run lint` 0 error（3 条既有无关
+  warning）；`npm run test:backend` 163/164 文件、1529/1530 用例通过，
+  唯一失败是既有基线失败 `tests/backend/publish-gate/no-bypass.test.ts`
+  （改动前后完全同构，非本 lane 引入）；`npm run test:ui` 113/113 文件、
+  1800/1800 用例全绿。
+- X8 实证（`cps-novel-x8-local`，`X8_LEVEL=uat`）：
+  1. 修复前复现：`docker ps` 显示 `cps-novel-x8-local-scheduler-1` 处于
+     `Restarting (1)` 循环；`docker logs` 与上方背景描述的堆栈完全一致；
+     直接查 `information_schema.role_table_grants`/`role_column_grants`
+     确认 `scheduler_app` 对 `site_setting` 与全部 `home_carousel_*` 均
+     0 行授权，`worker_app` 对四张 `home_carousel_*` 只有
+     INSERT/UPDATE（9 行，无 SELECT/DELETE）。
+  2. 以 postgres 超级用户对 X8 postgres 容器重跑修复后的
+     `infra/postgres/grants.sql`（该文件自带 REVOKE 重置，幂等，允许
+     重复执行）：63 条语句全部 `GRANT`/`REVOKE`/`DO`/`ALTER DEFAULT
+     PRIVILEGES` 成功，零报错。
+  3. `docker compose -p cps-novel-x8-local restart scheduler`：容器从
+     `Restarting` 转为持续 `Up ... (healthy)`，`RestartCount` 维持 0；
+     观察窗跨越至少两次 60s cron tick（`scripts/run-scheduler-loop.sh`
+     的 `SCHEDULER_INTERVAL_SECONDS=60`），`docker logs` 自重启时间点起
+     再未出现任何 42501 或其他错误。
+  4. 只读复核 `role_table_grants`/`role_column_grants`：`scheduler_app`
+     对 `site_setting` 恰好两行列级 SELECT（`id`、`carousel_config_json`），
+     零整表授权，对全部 `home_carousel_*` 仍 0 行；`worker_app` 对四张
+     `home_carousel_*` 各自新增 SELECT，`home_carousel_serving` 额外新增
+     DELETE，`home_carousel_change_log` 仍只有 INSERT——与
+     `carousel-grants.test.ts` 断言的矩阵逐项一致。
+  5. `curl https://novel.test/api/health`（`--resolve` 到本机）返回
+     `HTTP_STATUS=200`，body `{"ok":true,"status":"healthy",...}`；其余
+     五个容器（`web`/`worker`/`nginx`/`postgres`/`backup-timer`）全程保持
+     `healthy`，未被本次操作触碰。
+  - 全程未 down、未重建镜像、未跑任何有副作用的轮播 compute/manual 写入，
+    只做 grants 重跑 + restart scheduler + 只读 SQL/HTTP 校验。
+- 未 push、未改 PR、未 merge、未部署；未碰 prisma schema/migration；
+  未碰 `src/app/api/admin/_lib/registry.ts`。
+
+---
+
 ## 2026-09-05 · PR6 四条 fix lane 线性整合 + 交界修补
 
 - 把 PR #6（`feature/launch-parity-operating-surfaces`，基线 `a05e41b`）的四条并行修复
