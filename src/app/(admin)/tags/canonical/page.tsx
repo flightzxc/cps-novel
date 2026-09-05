@@ -11,7 +11,9 @@ import { capabilityViews, sessionView } from "../../_lib/page-guard";
 import { ContentCapabilityDenied } from "../../novels/_components/content-states";
 import { ContentPagination } from "../../novels/_components/content-pagination";
 import { requireContentPage } from "../../novels/_lib/content-page-guard";
+import { TaggingDisabledPanel, TaggingWriteDisabledNotice } from "../_components/tagging-disabled-panel";
 import { TagNavTabs } from "../_components/tag-nav-tabs";
+import { readTaggingFlagState } from "../_lib/tagging-flag-checklist";
 import { CanonicalTagFilters } from "./_components/canonical-tag-filters";
 import { CanonicalTagsClient } from "./_components/canonical-tags-client";
 import { ClassifierDiagnosticsPanel } from "./_components/classifier-diagnostics-panel";
@@ -42,6 +44,13 @@ type SearchParams = {
  * does through `canonicalTagGetInput` — the service owns all normalization
  * (page-number parsing, search trimming, active-filter validation), so this
  * page does not duplicate that logic.
+ *
+ * PR6 fix (lane F): `listAdminCanonicalTags` throws
+ * `TaggingAdminError("tagging_disabled", 403)` the instant
+ * `FEATURE_P2_06_5_TAGGING` is off (`requireTaggingRead`); this page now
+ * checks `readTaggingFlagState()` before calling the service at all and
+ * renders `TaggingDisabledPanel` in its place, instead of letting the throw
+ * reach the segment's error boundary.
  */
 export default async function CanonicalTagsPage({
   searchParams,
@@ -50,9 +59,10 @@ export default async function CanonicalTagsPage({
 }) {
   const params = await searchParams;
   const { context, granted } = await requireContentPage("/tags/canonical", "content:view");
+  const taggingFlags = readTaggingFlagState();
 
   let page: AdminCanonicalTagListView | null = null;
-  if (granted) {
+  if (granted && taggingFlags.readEnabled) {
     const result = await listAdminCanonicalTags(prisma, {
       page: params.page,
       search: params.search,
@@ -75,10 +85,19 @@ export default async function CanonicalTagsPage({
     >
       <div className="space-y-6">
         <TagNavTabs current="canonical" />
-        {granted && page ? (
+        {!granted ? (
+          <ContentCapabilityDenied capability="content:view" />
+        ) : !taggingFlags.readEnabled ? (
+          <TaggingDisabledPanel state={taggingFlags} />
+        ) : page ? (
           <>
+            {!taggingFlags.writeEnabled && <TaggingWriteDisabledNotice />}
             <CanonicalTagFilters values={{ search: params.search, active: params.active }} />
-            <CanonicalTagsClient items={page.items} tagManage={tagManage} />
+            <CanonicalTagsClient
+              items={page.items}
+              tagManage={tagManage}
+              writeFlagEnabled={taggingFlags.writeEnabled}
+            />
             <ContentPagination
               basePath="/tags/canonical"
               params={params}
@@ -88,9 +107,7 @@ export default async function CanonicalTagsPage({
             />
             <ClassifierDiagnosticsPanel authority={page.authority} />
           </>
-        ) : (
-          <ContentCapabilityDenied capability="content:view" />
-        )}
+        ) : null}
       </div>
     </AdminShell>
   );

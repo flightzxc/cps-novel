@@ -145,11 +145,23 @@ export function NovelTagsEditor({
   tagsView,
   canonicalTags,
   capability,
+  writeFlagEnabled = true,
 }: {
   novelId: string;
   tagsView: AdminNovelTagsView;
   canonicalTags: readonly AdminCanonicalTagView[];
   capability: AdminCapabilityState;
+  /**
+   * PR6 fix (lane F): `FEATURE_P2_06_5_TAG_ADMIN_WRITE`, read by
+   * `NovelTagsPanel` (`readTaggingFlagState()`) and passed through as a plain
+   * boolean the same way `canonical-tags-client.tsx` /
+   * `mappings-client.tsx` do. Folded into `canManage` alongside the existing
+   * RBAC check; the panel renders `TaggingWriteDisabledNotice` above this
+   * editor when it is false. Optional, defaulting to `true`, so every
+   * pre-existing caller (in particular `tests/ui/admin-novel-tags.test.tsx`,
+   * which this fix does not touch) keeps its prior behavior unchanged.
+   */
+  writeFlagEnabled?: boolean;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
@@ -160,7 +172,7 @@ export function NovelTagsEditor({
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
 
   const blocked = capabilityBlockReason("tag:manage", capability);
-  const canManage = blocked === null;
+  const canManage = blocked === null && writeFlagEnabled;
 
   async function run(
     label: string,

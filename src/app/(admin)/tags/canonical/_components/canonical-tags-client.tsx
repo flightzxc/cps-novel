@@ -73,9 +73,23 @@ function replaceAliases(canonicalTagId: string, expectedUpdatedAt: string, alias
 export function CanonicalTagsClient({
   items,
   tagManage,
+  writeFlagEnabled = true,
 }: {
   items: readonly AdminCanonicalTagView[];
   tagManage: AdminCapabilityState;
+  /**
+   * PR6 fix (lane F): `FEATURE_P2_06_5_TAG_ADMIN_WRITE`, read by the page
+   * (`readTaggingFlagState()`) and threaded through as a plain boolean
+   * rather than re-read here -- this component has no `env` to read from.
+   * Folded into `canManage` alongside the existing RBAC check so the edit
+   * button disables pre-emptively instead of only failing on submit with
+   * `tag_write_not_authorized`; the page renders `TaggingWriteDisabledNotice`
+   * above this component when it is false, so no second explanation is
+   * duplicated here. Optional, defaulting to `true`, so every pre-existing
+   * caller (in particular `tests/ui/admin-canonical-tags.test.tsx`, which
+   * this fix does not touch) keeps its prior behavior unchanged.
+   */
+  writeFlagEnabled?: boolean;
 }) {
   const router = useRouter();
   const [notice, setNotice] = useState<{ tone: "ok" | "error"; text: string; code?: string } | null>(null);
@@ -83,7 +97,7 @@ export function CanonicalTagsClient({
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const blocked = capabilityBlockReason("tag:manage", tagManage);
-  const canManage = blocked === null;
+  const canManage = blocked === null && writeFlagEnabled;
 
   async function run<T>(label: string, call: () => Promise<AdminFetchResult<T>>): Promise<T | null> {
     setBusy(true);

@@ -11,7 +11,9 @@ import { capabilityViews, sessionView } from "../../_lib/page-guard";
 import { ContentCapabilityDenied } from "../../novels/_components/content-states";
 import { ContentPagination } from "../../novels/_components/content-pagination";
 import { requireContentPage } from "../../novels/_lib/content-page-guard";
+import { TaggingDisabledPanel, TaggingWriteDisabledNotice } from "../_components/tagging-disabled-panel";
 import { TagNavTabs } from "../_components/tag-nav-tabs";
+import { readTaggingFlagState } from "../_lib/tagging-flag-checklist";
 import { MappingFilters } from "./_components/mapping-filters";
 import { MappingsClient } from "./_components/mappings-client";
 
@@ -48,6 +50,13 @@ type SearchParams = {
  * screen — *not* trimming or normalising `rawLanguageScope` / `rawToken`).
  * This page does not duplicate any of that, and in particular never touches
  * the two exact-identity fields itself.
+ *
+ * PR6 fix (lane F): `listAdminSourceLabelMappings` throws
+ * `TaggingAdminError("tagging_disabled", 403)` the instant
+ * `FEATURE_P2_06_5_TAGGING` is off (`requireTaggingRead`); this page now
+ * checks `readTaggingFlagState()` before calling the service at all and
+ * renders `TaggingDisabledPanel` in its place, instead of letting the throw
+ * reach the segment's error boundary.
  */
 export default async function TagMappingsPage({
   searchParams,
@@ -56,9 +65,10 @@ export default async function TagMappingsPage({
 }) {
   const params = await searchParams;
   const { context, granted } = await requireContentPage("/tags/mappings", "content:view");
+  const taggingFlags = readTaggingFlagState();
 
   let page: AdminSourceLabelMappingListView | null = null;
-  if (granted) {
+  if (granted && taggingFlags.readEnabled) {
     const result = await listAdminSourceLabelMappings(prisma, {
       page: params.page,
       search: params.search,
@@ -85,8 +95,13 @@ export default async function TagMappingsPage({
     >
       <div className="space-y-6">
         <TagNavTabs current="mappings" />
-        {granted && page ? (
+        {!granted ? (
+          <ContentCapabilityDenied capability="content:view" />
+        ) : !taggingFlags.readEnabled ? (
+          <TaggingDisabledPanel state={taggingFlags} />
+        ) : page ? (
           <>
+            {!taggingFlags.writeEnabled && <TaggingWriteDisabledNotice />}
             <MappingFilters
               values={{
                 search: params.search,
@@ -99,6 +114,7 @@ export default async function TagMappingsPage({
             <MappingsClient
               items={page.items}
               tagManage={tagManage}
+              writeFlagEnabled={taggingFlags.writeEnabled}
               prefillCanonicalTagId={params.canonicalTagId}
             />
             <ContentPagination
@@ -109,9 +125,7 @@ export default async function TagMappingsPage({
               total={page.total}
             />
           </>
-        ) : (
-          <ContentCapabilityDenied capability="content:view" />
-        )}
+        ) : null}
       </div>
     </AdminShell>
   );

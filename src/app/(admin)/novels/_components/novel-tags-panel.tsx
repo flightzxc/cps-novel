@@ -14,6 +14,8 @@ import { getAdminNovelTags, listAdminCanonicalTags } from "@/server/tagging/admi
 
 import { prisma } from "../../../api/admin/_lib/deps";
 import { TagAuditEntryRow } from "../../tags/_components/tag-audit-log";
+import { TaggingDisabledPanel, TaggingWriteDisabledNotice } from "../../tags/_components/tagging-disabled-panel";
+import { readTaggingFlagState } from "../../tags/_lib/tagging-flag-checklist";
 import { ContentErrorPanel } from "./content-states";
 import { NovelTagsEditor } from "./novel-tags-editor";
 
@@ -237,6 +239,22 @@ export async function NovelTagsPanel({
   locale: string;
   capability: AdminCapabilityState;
 }) {
+  // PR6 fix (lane F): `getAdminNovelTags` throws
+  // `TaggingAdminError("tagging_disabled", 403)` the instant
+  // `FEATURE_P2_06_5_TAGGING` is off (`requireTaggingRead`). `readNovelTags`
+  // below already catches that generically (pre-dates this fix), but this
+  // pre-check means the fetch — and `listAllActiveCanonicalTags`'s up-to-10
+  // extra page reads alongside it — never happens at all when the flag is
+  // off, and renders the same disabled-state panel every other tagging
+  // surface now uses instead of the generic error-copy sentence.
+  const taggingFlags = readTaggingFlagState();
+  if (!taggingFlags.readEnabled) {
+    return (
+      <Panel title="标签">
+        <TaggingDisabledPanel state={taggingFlags} />
+      </Panel>
+    );
+  }
   const result = await readNovelTags(novelId, locale);
   return (
     <Panel title="标签">
@@ -244,12 +262,14 @@ export async function NovelTagsPanel({
         <ContentErrorPanel message={errorEnvelopeCopy(result.envelope)} />
       ) : (
         <div className="space-y-4">
+          {!taggingFlags.writeEnabled && <TaggingWriteDisabledNotice />}
           <NovelTagsSummary tags={result.tags} />
           <NovelTagsEditor
             novelId={novelId}
             tagsView={result.tags}
             canonicalTags={result.canonicalTags}
             capability={capability}
+            writeFlagEnabled={taggingFlags.writeEnabled}
           />
         </div>
       )}
