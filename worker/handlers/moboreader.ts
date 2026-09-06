@@ -24,7 +24,7 @@ import {
 } from "../../src/lib/tasks/moboreader";
 import { materializeChangduPreview } from "../../src/lib/preview";
 import { rawLanguageScopeFromPayload } from "../../src/lib/tagging/raw-language-scope";
-import { createHandlerRegistry, type TaskHandler } from "../../src/lib/tasks";
+import { createHandlerRegistry, type ProtectedWriteResult, type TaskHandler } from "../../src/lib/tasks";
 import {
   buildPromoLinkIdempotencyKey,
   UPSTREAM_EXISTING_PROMO_OFFER_TYPE,
@@ -486,6 +486,7 @@ async function persistCatalogPage(
   tx: Prisma.TransactionClient,
   input: {
     response: ListBooksResponse;
+    baseResult: Prisma.InputJsonObject;
     payload: MoboreaderCatalogPayload;
     taskId: string;
     itemId: string;
@@ -494,7 +495,7 @@ async function persistCatalogPage(
     env: NodeJS.ProcessEnv;
     now: Date;
   },
-) {
+): Promise<ProtectedWriteResult> {
   await tx.$queryRaw(Prisma.sql`SELECT id FROM generic_task WHERE id = ${input.taskId}::uuid FOR UPDATE`);
   // Phase C: the pre-Phase-C code wrote `returnedCount` here as a separate
   // early physical-column update, before this same item's own `result` JSON
@@ -586,15 +587,16 @@ async function persistCatalogPage(
   }
   const pageDroppedLabels = mergeDroppedLabels(droppedLabels);
 
-  const [beforeStop] = await tx.$queryRaw<Array<{ total: bigint; max_page: number }>>(Prisma.sql`
-    SELECT COALESCE(SUM((result->>'returnedCount')::int), 0)::bigint AS total,
-           COALESCE(MAX((target_id)::int) FILTER (
-             WHERE status = 'success' AND COALESCE((result->>'stoppedBeforeFetch')::boolean, false) = false
-           ), ${input.payload.pageIndex})::int AS max_page
+  const [beforeStop] = await tx.$queryRaw<Array<{ total: bigint }>>(Prisma.sql`
+    SELECT COALESCE(SUM((result->>'returnedCount')::int), 0)::bigint AS total
     FROM generic_task_item
     WHERE task_id = ${input.taskId}::uuid AND target_type = 'catalog_page' AND status = 'success'
   `);
-  const fetchedRaw = Number(beforeStop.total);
+  // The current page remains `processing` until guardedFinalize. Treat its
+  // response as provisionally complete for this transaction's aggregate
+  // calculations without moving the terminal status write out of the
+  // fenced finalizer.
+  const fetchedRaw = Number(beforeStop.total) + input.response.items.length;
   const task = await tx.genericTask.findUniqueOrThrow({
     where: { id: input.taskId },
     select: { params: true },
@@ -613,21 +615,22 @@ async function persistCatalogPage(
     scheduledPageEnd: input.payload.scheduledPageEnd,
   });
 
+  const enrichedResult = {
+    ...input.baseResult,
+    stopReason,
+    sourceItemIds,
+    droppedLabels: droppedLabelsJson(pageDroppedLabels),
+    incompleteLabelSnapshots: pageIncompleteLabelSnapshots,
+    promoCapture: catalogPromoSummaryJson(promoSummary),
+  } satisfies Prisma.InputJsonObject;
+
+  // This provisional write makes the current page visible to the task-level
+  // aggregation below. persistCatalogPage returns the exact same value as a
+  // ProtectedWriteResult so guardedFinalize remains the sole terminal write
+  // and cannot replace it with the handler's pre-persistence result.
   await tx.genericTaskItem.update({
     where: { id: input.itemId },
-    data: {
-      result: {
-        source: "manual",
-        pageIndex: input.payload.pageIndex,
-        returnedCount: input.response.items.length,
-        observedTotal: input.response.totalCount,
-        sourceItemIds,
-        stopReason,
-        droppedLabels: droppedLabelsJson(pageDroppedLabels),
-        incompleteLabelSnapshots: pageIncompleteLabelSnapshots,
-        promoCapture: catalogPromoSummaryJson(promoSummary),
-      },
-    },
+    data: { result: enrichedResult },
   });
   if (stopReason) {
     // `target_id` is a page index encoded as text (`GenericTaskItem.targetId`
@@ -646,15 +649,15 @@ async function persistCatalogPage(
     `);
   }
 
-  const [afterStop] = await tx.$queryRaw<Array<{ actual: bigint; pending: bigint; processing: bigint; failed: bigint }>>(Prisma.sql`
+  const [afterStop] = await tx.$queryRaw<Array<{ actual: bigint; pending: bigint; processing_others: bigint; failed: bigint }>>(Prisma.sql`
     SELECT COALESCE(SUM((result->>'returnedCount')::int), 0)::bigint AS actual,
            COUNT(*) FILTER (WHERE status = 'pending')::bigint AS pending,
-           COUNT(*) FILTER (WHERE status = 'processing')::bigint AS processing,
+           COUNT(*) FILTER (WHERE status = 'processing' AND id <> ${input.itemId}::uuid)::bigint AS processing_others,
            COUNT(*) FILTER (WHERE status = 'failed')::bigint AS failed
     FROM generic_task_item WHERE task_id = ${input.taskId}::uuid AND target_type = 'catalog_page'
   `);
   const batchActualCount = Number(afterStop.actual);
-  const terminal = Number(afterStop.pending) === 0 && Number(afterStop.processing) === 0;
+  const terminal = Number(afterStop.pending) === 0 && Number(afterStop.processing_others) === 0;
   const partialFailed = terminal && (
     stopReason === "safety_limit"
     || Number(afterStop.failed) > 0
@@ -713,7 +716,7 @@ async function persistCatalogPage(
         batchExpectedCount,
         batchActualCount,
         checkpoint: {
-          lastCompletedPage: beforeStop.max_page,
+          lastCompletedPage: input.payload.pageIndex,
           returnedCount: input.response.items.length,
           observedTotal: input.response.totalCount,
           completedAt: now.toISOString(),
@@ -753,6 +756,7 @@ async function persistCatalogPage(
       },
     },
   });
+  return { status: "success", result: enrichedResult };
 }
 
 async function persistCatalogUpstreamFailure(
@@ -780,10 +784,16 @@ async function persistCatalogUpstreamFailure(
     WHERE task_id = ${input.taskId}::uuid AND target_type = 'catalog_page' AND status = 'pending'
       AND (target_id)::int > ${input.payload.pageIndex}
   `);
-  const [totals] = await tx.$queryRaw<Array<{ actual: bigint; expected: number | null; observed_total: number | null }>>(Prisma.sql`
+  const [totals] = await tx.$queryRaw<Array<{
+    actual: bigint;
+    expected: number | null;
+    observed_total: number | null;
+    prior_result: Prisma.JsonValue | null;
+  }>>(Prisma.sql`
     SELECT COALESCE(SUM((i.result->>'returnedCount')::int), 0)::bigint AS actual,
            (t.result->>'batchExpectedCount')::int AS expected,
-           (t.result->>'catalogObservedTotal')::int AS observed_total
+           (t.result->>'catalogObservedTotal')::int AS observed_total,
+           t.result AS prior_result
     FROM generic_task t
     LEFT JOIN generic_task_item i ON i.task_id = t.id AND i.target_type = 'catalog_page'
     WHERE t.id = ${input.taskId}::uuid
@@ -800,6 +810,9 @@ async function persistCatalogUpstreamFailure(
   // `undefined`.
   const priorObservedTotal = totals.observed_total;
   const priorBatchExpectedCount = totals.expected;
+  const priorTaskResult = totals.prior_result && typeof totals.prior_result === "object" && !Array.isArray(totals.prior_result)
+    ? totals.prior_result
+    : {};
   const itemResults = await tx.genericTaskItem.findMany({
     where: { taskId: input.taskId, targetType: "catalog_page" },
     select: { result: true },
@@ -829,6 +842,7 @@ async function persistCatalogUpstreamFailure(
     where: { id: input.taskId },
     data: {
       result: {
+        ...priorTaskResult,
         // Phase C: `catalogObservedTotal`/`batchExpectedCount`/
         // `batchActualCount` folded into `result` (no physical columns on
         // `GenericTask`) — see `persistCatalogPage` above. The first two are
@@ -838,7 +852,12 @@ async function persistCatalogUpstreamFailure(
         batchActualCount: actual,
         stopReason: "upstream_error",
         terminalState: "partial_failed",
-        completeness: { expected, actual },
+        completeness: {
+          expected,
+          actual,
+          fetchedUniqueSourceItems: touchedSourceItemIds.length,
+          duplicateObservations: Math.max(0, actual - touchedSourceItemIds.length),
+        },
         previewEnqueue,
         droppedLabels: droppedLabelsJson(taskLabelSummary.droppedLabels),
         incompleteLabelSnapshots: taskLabelSummary.incompleteLabelSnapshots,
@@ -1100,13 +1119,14 @@ export function createMoboreaderCatalogHandler(
       plannedSourceIds: response.items.map((item) => `${item.externalBookId}:${item.language}`),
       checkpoint: { pageIndex: payload.pageIndex },
       stopReason,
-      terminalState: stopReason === "safety_limit" ? "partial_failed" : undefined,
-    };
+      ...(stopReason === "safety_limit" ? { terminalState: "partial_failed" } : {}),
+    } satisfies Prisma.InputJsonObject;
     return {
       status: "success",
       result,
       protectedWrite: async (tx) => persistCatalogPage(tx, {
         response,
+        baseResult: result,
         payload,
         taskId: lease.taskId,
         itemId: lease.itemId,

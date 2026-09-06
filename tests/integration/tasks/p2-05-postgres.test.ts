@@ -396,7 +396,14 @@ describe.skipIf(!enabled).sequential("P2-05 PostgreSQL 16.14 write paths", () =>
     expect((await owner.article.findUniqueOrThrow({ where: { novelId_locale: { novelId: linked.novel.id, locale: "en-US" } } })).promoLinkId)
       .toBe(promoLink.id);
     const item = await owner.genericTaskItem.findFirstOrThrow({ where: { taskId: created.taskId } });
-    expect(item.result).toMatchObject({ promoCapture: { fetched: 1, deferredUntilLinked: 0, incomplete: 0, articlesBound: 1 } });
+    expect(item.result).toMatchObject({
+      mode: "apply",
+      plannedSourceIds: ["promo-book:3"],
+      checkpoint: { pageIndex: 1 },
+      sourceItemIds: [linked.source.id],
+      droppedLabels: { count: 0, groups: [] },
+      promoCapture: { fetched: 1, deferredUntilLinked: 0, incomplete: 0, articlesBound: 1 },
+    });
     const publicEvidence = JSON.stringify({
       item: item.result,
       audits: await owner.operationAudit.findMany({
@@ -895,12 +902,42 @@ describe.skipIf(!enabled).sequential("P2-05 PostgreSQL 16.14 write paths", () =>
   });
 
   it("records upstream_error and does not continue later catalog pages", async () => {
+    const linked = await seedLinkedSource("upstream-partial", "upstream-partial-business");
+    const longValue = `upstream-partial-${"z".repeat(293)}`;
     const created = await enqueueRange({ pageEnd: 3, pageSize: 1 });
-    const failing = { ...adapter(), listBooks: async () => { throw new Error("upstream body must not persist"); } };
+    const failing = {
+      ...adapter(),
+      listBooks: async (request: Parameters<MoboreaderReadAdapter["listBooks"]>[0]) => {
+        if (request.pageIndex === 1) {
+          return page("upstream-partial", { seriesTypeList: [longValue] }, 3);
+        }
+        throw new Error("upstream body must not persist");
+      },
+    };
+    expect(await consume(failing)).toBe(true);
     expect(await consume(failing)).toBe(true);
     const task = await owner.genericTask.findUniqueOrThrow({ where: { id: created.taskId } });
-    expect(task).toMatchObject({ status: "completed_with_errors", failedCount: 3 });
-    expect(task.result).toMatchObject({ stopReason: "upstream_error", terminalState: "partial_failed" });
+    expect(task).toMatchObject({ status: "completed_with_errors", successCount: 1, failedCount: 2 });
+    expect(task.result).toMatchObject({
+      checkpoint: { lastCompletedPage: 1, returnedCount: 1 },
+      stopReason: "upstream_error",
+      terminalState: "partial_failed",
+      completeness: { expected: 3, actual: 1, fetchedUniqueSourceItems: 1, duplicateObservations: 0 },
+      droppedLabels: { count: 1 },
+      previewEnqueue: { status: "enqueued", eligibleCount: 1 },
+    });
+    const failedItem = await owner.genericTaskItem.findFirstOrThrow({
+      where: { taskId: created.taskId, targetType: "catalog_page", targetId: "2" },
+    });
+    expect(failedItem).toMatchObject({
+      status: "failed",
+      result: { stopReason: "upstream_error", terminalState: "partial_failed" },
+      error: { code: "upstream_error", message: "MoboReader catalog read failed" },
+    });
+    expect(await owner.channelSyncTask.count({
+      where: { requestToken: `moboreader.preview_refresh.v1:${created.taskId}` },
+    })).toBe(1);
+    expect(await owner.novelSourceItem.findUniqueOrThrow({ where: { id: linked.source.id } })).toMatchObject({ status: "linked" });
     expect(JSON.stringify(task.error)).not.toContain("upstream body must not persist");
   });
 
@@ -912,6 +949,9 @@ describe.skipIf(!enabled).sequential("P2-05 PostgreSQL 16.14 write paths", () =>
     const preview = await owner.channelSyncTask.findUniqueOrThrow({
       where: { requestToken: `moboreader.preview_refresh.v1:${created.taskId}` },
       include: { items: true },
+    });
+    expect((await owner.genericTask.findUniqueOrThrow({ where: { id: created.taskId } })).result).toMatchObject({
+      previewEnqueue: { status: "enqueued", taskId: preview.id, eligibleCount: 1 },
     });
     expect(preview).toMatchObject({
       taskType: "moboreader.preview_refresh.v1",
