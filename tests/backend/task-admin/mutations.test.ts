@@ -21,9 +21,10 @@ import {
 const REASON = "operator checked the failed task evidence";
 
 describe("X9 failed-item retry", () => {
-  it.each(["channel_sync", "generic"] as const)(
-    "requeues every failed %s item, preserves fencing counters, recounts parent, and audits in the transaction",
-    async (family) => {
+  it(
+    "channel_sync (unchanged in-place semantics): requeues every failed item, preserves fencing counters, recounts parent, and audits in the transaction",
+    async () => {
+      const family = "channel_sync" as const;
       const stores = newStores();
       const admin = seedTaskAdmin(stores);
       const ticket = await issueTaskAuthorization(stores, {
@@ -42,6 +43,7 @@ describe("X9 failed-item retry", () => {
       expect(result).toMatchObject({
         family,
         taskId: TASK_ID,
+        originTaskId: null,
         status: "pending",
         retriedItemCount: 2,
         totalCount: 3,
@@ -80,6 +82,110 @@ describe("X9 failed-item retry", () => {
         taskType: family,
         reason: REASON,
       });
+    },
+  );
+
+  it(
+    "generic (C-7 CPS parity): creates a NEW sibling task linked by originTaskId, copies only the failed items, and leaves the origin task untouched",
+    async () => {
+      const stores = newStores();
+      const admin = seedTaskAdmin(stores);
+      const ticket = await issueTaskAuthorization(stores, {
+        token: admin.token,
+        pathname: "/api/admin/tasks/retry-failed",
+      });
+      const fake = new TaskAdminFakeDb();
+      const originBefore = { ...fake.parents.get("generic")! };
+      const originItemsBefore = fake.items.get("generic")!.map((row) => ({ ...row }));
+
+      const result = await retryFailedTask(
+        { ...ticket, family: "generic", taskId: TASK_ID, reason: REASON },
+        { db: fake.asPrismaClient(), identities: stores, sessions: stores, now: NOW },
+      );
+
+      expect(result).toMatchObject({
+        family: "generic",
+        originTaskId: TASK_ID,
+        status: "pending",
+        retriedItemCount: 2,
+        totalCount: 2,
+        successCount: 0,
+        failedCount: 0,
+        skippedCount: 0,
+        wrote: true,
+      });
+      expect(result.taskId).not.toBe(TASK_ID);
+
+      // The origin task and its own items are untouched -- no in-place reset.
+      expect(fake.parents.get("generic")).toEqual(originBefore);
+      expect(fake.items.get("generic")).toEqual(originItemsBefore);
+      expect(fake.itemUpdateCalls.get("generic")).toBeUndefined();
+      expect(fake.parentUpdateCalls.get("generic")).toBeUndefined();
+
+      // The new sibling task was created with originTaskId pointing back,
+      // and carries only the two failed items (never the success item).
+      expect(fake.createdGenericTasks).toHaveLength(1);
+      expect(fake.createdGenericTasks[0]).toMatchObject({
+        id: result.taskId,
+        taskType: "catalog_scan",
+        originTaskId: TASK_ID,
+      });
+      const newItems = fake.createdGenericTaskItems.get(result.taskId) ?? [];
+      expect(newItems).toHaveLength(2);
+      for (const row of newItems) expect(row.status).toBe("pending");
+      expect(newItems.map((row) => row.targetId).sort()).toEqual(["source-1", "source-2"]);
+      expect(newItems.map((row) => row.payload)).toEqual([
+        { seededFrom: "source-1" },
+        { seededFrom: "source-2" },
+      ]);
+
+      expect(fake.audits).toHaveLength(1);
+      expect(fake.audits[0]).toMatchObject({
+        action: TASK_RETRY_AUDIT_ACTION,
+        actorId: admin.identity.id,
+        entityId: TASK_ID,
+        taskType: "generic",
+        reason: REASON,
+      });
+    },
+  );
+
+  it(
+    "generic (C-7 negative case): a second retry of the SAME origin task under a different requestId is rejected by generic_task_origin_key (409, not a double-create)",
+    async () => {
+      const stores = newStores();
+      const admin = seedTaskAdmin(stores);
+      const fake = new TaskAdminFakeDb();
+      const dependencies = { db: fake.asPrismaClient(), identities: stores, sessions: stores, now: NOW };
+
+      const first = await issueTaskAuthorization(stores, {
+        token: admin.token,
+        pathname: "/api/admin/tasks/retry-failed",
+      });
+      const firstResult = await retryFailedTask(
+        { ...first, family: "generic", taskId: TASK_ID, reason: REASON },
+        dependencies,
+      );
+      expect(firstResult.wrote).toBe(true);
+
+      // A genuinely different admin submission (different requestId, so the
+      // committedAudit idempotency replay above never matches it) racing to
+      // retry the SAME origin task must not silently create a second
+      // sibling task -- this is exactly the scenario
+      // `generic_task_origin_key` (`@@unique([taskType, originTaskId])`)
+      // exists to close off.
+      const second = await issueTaskAuthorization(stores, {
+        token: admin.token,
+        pathname: "/api/admin/tasks/retry-failed",
+      });
+      await expect(retryFailedTask(
+        { ...second, family: "generic", taskId: TASK_ID, reason: "a second, independent retry attempt" },
+        dependencies,
+      )).rejects.toMatchObject({ code: "task_admin_active_scope_conflict", status: 409 });
+
+      // Exactly one sibling task exists -- the rejected attempt never wrote one.
+      expect(fake.createdGenericTasks).toHaveLength(1);
+      expect(fake.audits).toHaveLength(1);
     },
   );
 
@@ -122,7 +228,7 @@ describe("X9 failed-item retry", () => {
     expect(fake.itemUpdateCalls.size).toBe(0);
   });
 
-  it("safely replays the same committed request id and rejects a changed replay binding", async () => {
+  it("safely replays the same committed request id (generic: resolves back to the SAME sibling task, never creates a second one) and rejects a changed replay binding", async () => {
     const stores = newStores();
     const admin = seedTaskAdmin(stores);
     const ticket = await issueTaskAuthorization(stores, {
@@ -136,8 +242,15 @@ describe("X9 failed-item retry", () => {
     const first = await retryFailedTask(input, dependencies);
     const replay = await retryFailedTask(input, dependencies);
     expect(first.wrote).toBe(true);
-    expect(replay).toMatchObject({ wrote: false, auditId: first.auditId, retriedItemCount: 2 });
-    expect(fake.itemUpdateCalls.get("generic")).toBe(1);
+    expect(replay).toMatchObject({
+      wrote: false,
+      auditId: first.auditId,
+      taskId: first.taskId,
+      originTaskId: TASK_ID,
+      retriedItemCount: 2,
+    });
+    // Still exactly one sibling task -- the replay must not create a second.
+    expect(fake.createdGenericTasks).toHaveLength(1);
     expect(fake.audits).toHaveLength(1);
 
     await expect(retryFailedTask({ ...input, reason: "different binding" }, dependencies))

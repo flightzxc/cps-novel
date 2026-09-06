@@ -88,16 +88,45 @@ describe("RetryFailedButton · 重试失败项", () => {
     });
   });
 
-  it("成功后展示重试子项数并刷新页面", async () => {
+  it("channel_sync 成功后展示重试子项数（原地重置文案）并刷新页面", async () => {
     fetchMock.mockResolvedValue(
       okResponse({
-        family: "generic",
+        family: "channel_sync",
         taskId: TASK_ID,
+        originTaskId: null,
         status: "pending",
         retriedItemCount: 5,
         totalCount: 8,
         successCount: 3,
         failedCount: 5,
+        skippedCount: 0,
+        wrote: true,
+        auditId: "2",
+      }),
+    );
+    render(<RetryFailedButton family="channel_sync" taskId={TASK_ID} />);
+    await openAndFillReason();
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "确认重试" }));
+    });
+    const result = await screen.findByTestId("retry-failed-result");
+    expect(result.textContent).toContain("5");
+    expect(result.textContent).toContain("重置为 pending");
+    expect(routerRefresh).toHaveBeenCalled();
+  });
+
+  it("generic (C-7) 成功后展示「已创建重试任务」文案、原任务 id 与查看链接，而不是原地重置文案", async () => {
+    const NEW_TASK_ID = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
+    fetchMock.mockResolvedValue(
+      okResponse({
+        family: "generic",
+        taskId: NEW_TASK_ID,
+        originTaskId: TASK_ID,
+        status: "pending",
+        retriedItemCount: 5,
+        totalCount: 5,
+        successCount: 0,
+        failedCount: 0,
         skippedCount: 0,
         wrote: true,
         auditId: "2",
@@ -109,7 +138,12 @@ describe("RetryFailedButton · 重试失败项", () => {
       fireEvent.click(screen.getByRole("button", { name: "确认重试" }));
     });
     const result = await screen.findByTestId("retry-failed-result");
-    expect(result.textContent).toContain("5");
+    expect(result.textContent).toContain("已创建重试任务");
+    expect(result.textContent).toContain(NEW_TASK_ID);
+    expect(result.textContent).toContain(TASK_ID);
+    expect(result.textContent).not.toContain("重置为 pending");
+    const link = screen.getByRole("link", { name: "查看重试任务 →" });
+    expect(link.getAttribute("href")).toBe(`/tasks?taskId=${NEW_TASK_ID}&taskFamily=generic`);
     expect(routerRefresh).toHaveBeenCalled();
   });
 

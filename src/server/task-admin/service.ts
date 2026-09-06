@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+
 import { Prisma, type PrismaClient } from "@prisma/client";
 
 import {
@@ -115,9 +117,20 @@ export type ManualReviewDto = Readonly<{
   };
 }>;
 
+/**
+ * Phase C step C-7 (`施工工单_PhaseC_任务模型迁移与ImportProgress_2026-09-06.md`
+ * §四): CPS-parity retry for the `generic` family creates a NEW sibling
+ * `GenericTask` (carrying only the origin's failed items) instead of
+ * resetting the origin task in place — `originTaskId` is that new task's
+ * link back to the task it was retried from, `null` when this result came
+ * from the `channel_sync` in-place path (unchanged; `ChannelSyncTask` has
+ * no `originTaskId` column and this phase does not add one — see the
+ * work order's explicit "不改 ChannelSyncTask/Item 结构").
+ */
 export type RetryFailedTaskResult = Readonly<{
   family: TaskFamily;
   taskId: string;
+  originTaskId: string | null;
   status: "pending";
   retriedItemCount: number;
   totalCount: number;
@@ -165,6 +178,16 @@ type LockedParentRow = {
   status: string;
   channel_account_id: string | null;
   channel_app_id: string | null;
+  // Phase C step C-7: only read by the `generic`-family retry path
+  // (`createGenericRetryTask`), which needs enough of the origin row to
+  // stand up a full sibling `GenericTask`. `channel_sync_task` carries the
+  // same four extra columns (see the model in `prisma/schema.prisma`), so
+  // `lockParent`'s two branches can select them symmetrically without a
+  // union type.
+  task_type: string;
+  operation_scope_hash: string;
+  mode: string;
+  params: Prisma.JsonValue;
 };
 
 type AuditRow = {
@@ -441,12 +464,12 @@ async function lockParent(
   let rows: LockedParentRow[];
   if (family === "channel_sync") {
     rows = await tx.$queryRaw(Prisma.sql`
-      SELECT id, status, channel_account_id, channel_app_id
+      SELECT id, status, channel_account_id, channel_app_id, task_type, operation_scope_hash, mode, params
       FROM channel_sync_task WHERE id = ${taskId}::uuid FOR UPDATE
     `);
   } else {
     rows = await tx.$queryRaw(Prisma.sql`
-      SELECT id, status, channel_account_id, channel_app_id
+      SELECT id, status, channel_account_id, channel_app_id, task_type, operation_scope_hash, mode, params
       FROM generic_task WHERE id = ${taskId}::uuid FOR UPDATE
     `);
   }
@@ -473,7 +496,8 @@ function jsonObject(value: Prisma.JsonValue | null): Record<string, Prisma.JsonV
     : null;
 }
 
-function replayRetry(
+/** Replay for the unchanged `channel_sync` in-place-reset path. */
+function replayInPlaceRetry(
   audit: AuditRow,
   actorId: string,
   family: TaskFamily,
@@ -498,12 +522,54 @@ function replayRetry(
   return Object.freeze({
     family,
     taskId,
+    originTaskId: null,
     status: "pending",
     retriedItemCount: after.retriedItemCount,
     totalCount: after.totalCount,
     successCount: after.successCount,
     failedCount: after.failedCount,
     skippedCount: after.skippedCount,
+    wrote: false,
+    auditId: audit.id.toString(),
+  });
+}
+
+/**
+ * Replay for the `generic`-family CPS-parity path (C-7): the committed
+ * audit's `entityId` is still the ORIGIN task (the one the operator named
+ * in the request), but the actual pending work lives on the sibling task
+ * `createGenericRetryTask` created — `after.newTaskId` — so a resubmission
+ * of the same `requestId` must resolve back to that same sibling, not to
+ * `originTaskId` itself.
+ */
+function replayGenericRetry(
+  audit: AuditRow,
+  actorId: string,
+  originTaskId: string,
+  reason: string,
+): RetryFailedTaskResult {
+  const after = jsonObject(audit.afterSnapshot);
+  if (
+    audit.actorId !== actorId
+    || audit.entityId !== originTaskId
+    || audit.taskType !== "generic"
+    || audit.reason !== reason
+    || after?.status !== "pending"
+    || typeof after.newTaskId !== "string"
+    || typeof after.retriedItemCount !== "number"
+  ) {
+    throw new TaskAdminError("task_admin_idempotency_conflict", 409);
+  }
+  return Object.freeze({
+    family: "generic",
+    taskId: after.newTaskId,
+    originTaskId,
+    status: "pending",
+    retriedItemCount: after.retriedItemCount,
+    totalCount: after.retriedItemCount,
+    successCount: 0,
+    failedCount: 0,
+    skippedCount: 0,
     wrote: false,
     auditId: audit.id.toString(),
   });
@@ -635,6 +701,99 @@ async function recountAndResetParent(
   return counts;
 }
 
+type GenericFailedItem = { targetType: string; targetId: string; payload: Prisma.JsonValue };
+
+/**
+ * Phase C step C-7: the `generic`-family half of `retryFailedTask`'s CPS
+ * parity. Stands up a brand-new `GenericTask` — `originTaskId` pointing
+ * back at `parent.id` — carrying only the origin's currently-failed items,
+ * each recreated with its original `targetType`/`targetId`/`payload` (the
+ * worker's claim path reads `payload` off the item row, not the parent —
+ * `src/lib/tasks/store.ts`'s `claimPendingItem` — so copying it verbatim is
+ * what makes the sibling task actually reprocessable, not just a DB record).
+ * The origin task itself is left untouched: still `failed`/
+ * `completed_with_errors`, still holding its own historical counts — CPS
+ * parity means a new sibling task, not resetting the origin in place.
+ *
+ * `generic_task_origin_key` (`@@unique([taskType, originTaskId])`) is the
+ * single source of truth against a second concurrent retry of the very same
+ * origin task racing in under a different `requestId` (so the `committedAudit`
+ * idempotency replay above never sees it): the `genericTask.create` below
+ * throws a real Postgres unique-violation in that case, which the caller's
+ * `isUniqueConstraintViolation` catch (already wired for the pre-existing
+ * active-scope index) maps to the same `task_admin_active_scope_conflict`
+ * (409) — no new error taxonomy needed for this negative case.
+ */
+async function createGenericRetryTask(
+  tx: Prisma.TransactionClient,
+  parent: LockedParentRow,
+  audit: { actorId: string; requestId: string; reason: string },
+): Promise<RetryFailedTaskResult> {
+  const failedItems: GenericFailedItem[] = await tx.genericTaskItem.findMany({
+    where: { taskId: parent.id, status: "failed" },
+    select: { targetType: true, targetId: true, payload: true },
+  });
+  if (failedItems.length === 0) throw new TaskAdminError("task_admin_state_conflict", 409);
+
+  const created = await tx.genericTask.create({
+    data: {
+      taskType: parent.task_type,
+      channelAccountId: parent.channel_account_id,
+      channelAppId: parent.channel_app_id,
+      operationScopeHash: parent.operation_scope_hash,
+      originTaskId: parent.id,
+      mode: parent.mode,
+      status: "pending",
+      requestToken: randomUUID(),
+      totalCount: failedItems.length,
+      params: (parent.params ?? {}) as Prisma.InputJsonValue,
+    },
+    select: { id: true },
+  });
+  await tx.genericTaskItem.createMany({
+    data: failedItems.map((row) => ({
+      taskId: created.id,
+      targetType: row.targetType,
+      targetId: row.targetId,
+      status: "pending",
+      payload: (row.payload ?? {}) as Prisma.InputJsonValue,
+    })),
+  });
+  const auditRow = await tx.operationAudit.create({
+    data: {
+      actorType: "admin",
+      actorId: audit.actorId,
+      action: TASK_RETRY_AUDIT_ACTION,
+      entityType: "Task",
+      entityId: parent.id,
+      requestId: audit.requestId,
+      taskType: "generic",
+      taskId: parent.id,
+      reason: audit.reason,
+      beforeSnapshot: { status: parent.status, failedItemCount: failedItems.length },
+      afterSnapshot: {
+        status: "pending",
+        newTaskId: created.id,
+        retriedItemCount: failedItems.length,
+      },
+    },
+    select: { id: true },
+  });
+  return Object.freeze({
+    family: "generic" as const,
+    taskId: created.id,
+    originTaskId: parent.id,
+    status: "pending" as const,
+    retriedItemCount: failedItems.length,
+    totalCount: failedItems.length,
+    successCount: 0,
+    failedCount: 0,
+    skippedCount: 0,
+    wrote: true,
+    auditId: auditRow.id.toString(),
+  });
+}
+
 export async function retryFailedTask(
   input: {
     authorization: AdminServiceAuthorization;
@@ -665,7 +824,11 @@ export async function retryFailedTask(
         if (!parent) throw new TaskAdminError("task_admin_not_found", 404);
 
         const prior = await committedAudit(tx, TASK_RETRY_AUDIT_ACTION, input.requestId);
-        if (prior) return replayRetry(prior, context.identity.id, family, taskId, reason);
+        if (prior) {
+          return family === "generic"
+            ? replayGenericRetry(prior, context.identity.id, taskId, reason)
+            : replayInPlaceRetry(prior, context.identity.id, family, taskId, reason);
+        }
         if (!RETRYABLE_PARENT_STATUSES.has(parent.status)) {
           throw new TaskAdminError("task_admin_state_conflict", 409);
         }
@@ -676,12 +839,23 @@ export async function retryFailedTask(
           throw new TaskAdminError("task_admin_unresolved_intent", 409);
         }
 
+        if (family === "generic") {
+          return await createGenericRetryTask(tx, parent, {
+            actorId: context.identity.id,
+            requestId: input.requestId,
+            reason,
+          });
+        }
+
+        // `channel_sync` keeps the pre-C-7 in-place-reset semantics
+        // unchanged (see the work order's "不改 ChannelSyncTask/Item 结构" —
+        // there is no `originTaskId` column to link a sibling task to).
         const retriedItemCount = await retryItems(tx, family, taskId);
         if (retriedItemCount !== bindings.length) {
           throw new TaskAdminError("task_admin_concurrent_write", 409);
         }
         const counts = await recountAndResetParent(tx, family, taskId);
-        const audit = await tx.operationAudit.create({
+        const auditRow = await tx.operationAudit.create({
           data: {
             actorType: "admin",
             actorId: context.identity.id,
@@ -704,11 +878,12 @@ export async function retryFailedTask(
         return Object.freeze({
           family,
           taskId,
+          originTaskId: null,
           status: "pending" as const,
           retriedItemCount,
           ...counts,
           wrote: true,
-          auditId: audit.id.toString(),
+          auditId: auditRow.id.toString(),
         });
       }),
       { op: "task-admin.retryFailedTask", itemId: taskId, idempotencyKey: input.requestId },
