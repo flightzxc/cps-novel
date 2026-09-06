@@ -1,4 +1,5 @@
 import { NOVEL_SOURCE_ITEM_STATUSES, type NovelSourceItemStatus } from "@/domain/database-statuses";
+import { PROMO_LINK_CLAIM_TARGET_TYPE, PROMO_LINK_CLAIM_TASK_TYPE } from "@/lib/tasks/promo-link-claim-limits";
 
 import { prisma } from "@/app/api/admin/_lib/deps";
 
@@ -51,6 +52,19 @@ export type SourceItemRow = {
   readonly channelName: string;
   readonly sourceAppCode: string;
   readonly sourceAppName: string;
+  /**
+   * C-8 (`施工工单_PhaseC_任务模型迁移与ImportProgress_2026-09-06.md` §五):
+   * read-only projection of the SAME eligibility guard
+   * `createPromoLinkClaimTask` (`@/lib/tasks/promo-link-claim`) runs at
+   * claim time -- never a separate judgment, same discipline CPS's own
+   * `ClaimEligibilityBadge` doc comment names for its `promoClaimEligible`.
+   * `"source_unlinked_or_deleted"` (the factory's third skip reason) is not
+   * reachable here: every row in this listing already passed
+   * `deletedAt: null` and is already scoped to its own `channelAppId` --
+   * the two conditions that reason covers at claim time.
+   */
+  readonly promoClaimEligible: boolean;
+  readonly promoClaimIneligibleReason: "source_not_linked" | "item_already_active_elsewhere" | null;
 };
 
 export type SourceItemsPage = {
@@ -134,26 +148,57 @@ export async function readSourceItemsPage(filters: SourceItemFilters): Promise<S
     prisma.novelSourceItem.count({ where }),
   ]);
 
+  // C-8: same "cross-task overlap" query `createPromoLinkClaimTask`
+  // (`@/lib/tasks/promo-link-claim`) runs at claim time, scoped to just this
+  // page's `linked` rows -- a `pending`/`processing` promo-link-claim
+  // GenericTaskItem already targeting a row means claiming it again right
+  // now would be skipped as `item_already_active_elsewhere`.
+  const linkedRowIds = rows.filter((row) => row.status === "linked" && row.novelId).map((row) => row.id);
+  const activeElsewhere = linkedRowIds.length > 0
+    ? new Set(
+      (
+        await prisma.genericTaskItem.findMany({
+          where: {
+            targetType: PROMO_LINK_CLAIM_TARGET_TYPE,
+            targetId: { in: linkedRowIds },
+            task: { taskType: PROMO_LINK_CLAIM_TASK_TYPE, status: { in: ["pending", "processing"] } },
+          },
+          select: { targetId: true },
+        })
+      ).map((item) => item.targetId),
+    )
+    : new Set<string>();
+
   return {
-    items: rows.map((row) => ({
-      id: row.id,
-      title: row.title,
-      description: row.description,
-      coverUrl: row.coverUrl,
-      totalChapterCount: row.totalChapterCount,
-      paidFromChapter: row.paidFromChapter,
-      sourceLocale: row.sourceLocale,
-      sourceLanguageCode: row.sourceLanguageCode,
-      sourceLanguageName: row.sourceLanguageName,
-      status: row.status as NovelSourceItemStatus,
-      novelId: row.novelId,
-      lastSeenAt: row.lastSeenAt ? row.lastSeenAt.toISOString() : null,
-      channelAppId: row.channelAppId,
-      channelCode: row.channelApp.channel.code,
-      channelName: row.channelApp.channel.name,
-      sourceAppCode: row.channelApp.sourceApp.code,
-      sourceAppName: row.channelApp.sourceApp.name,
-    })),
+    items: rows.map((row) => {
+      const sourceNotLinked = row.status !== "linked" || !row.novelId;
+      const ineligibleReason = sourceNotLinked
+        ? ("source_not_linked" as const)
+        : activeElsewhere.has(row.id)
+          ? ("item_already_active_elsewhere" as const)
+          : null;
+      return {
+        id: row.id,
+        title: row.title,
+        description: row.description,
+        coverUrl: row.coverUrl,
+        totalChapterCount: row.totalChapterCount,
+        paidFromChapter: row.paidFromChapter,
+        sourceLocale: row.sourceLocale,
+        sourceLanguageCode: row.sourceLanguageCode,
+        sourceLanguageName: row.sourceLanguageName,
+        status: row.status as NovelSourceItemStatus,
+        novelId: row.novelId,
+        lastSeenAt: row.lastSeenAt ? row.lastSeenAt.toISOString() : null,
+        channelAppId: row.channelAppId,
+        channelCode: row.channelApp.channel.code,
+        channelName: row.channelApp.channel.name,
+        sourceAppCode: row.channelApp.sourceApp.code,
+        sourceAppName: row.channelApp.sourceApp.name,
+        promoClaimEligible: ineligibleReason === null,
+        promoClaimIneligibleReason: ineligibleReason,
+      };
+    }),
     page,
     pageSize: PAGE_SIZE,
     total,

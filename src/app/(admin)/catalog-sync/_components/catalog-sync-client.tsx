@@ -12,6 +12,7 @@ import { BatchCreateContentDialog } from "./batch-create-content-dialog";
 import { CreateContentDialog } from "./create-content-dialog";
 import { PromoLinkClaimDialog } from "./promo-link-claim-dialog";
 import type { ClaimChannelAppOption } from "../_lib/read-channel-apps";
+import { skipReasonLabel } from "../_lib/promo-claim-copy";
 import type { SourceItemRow } from "../_lib/read-source-items";
 
 /**
@@ -137,6 +138,7 @@ export function CatalogSyncClient({
             <TH>渠道</TH>
             <TH>章节</TH>
             <TH>状态</TH>
+            <TH>领取资格</TH>
             <TH>最近可见</TH>
             <TH>操作</TH>
           </tr>
@@ -172,6 +174,12 @@ export function CatalogSyncClient({
               <TD>
                 <SourceItemStatusBadge status={item.status} />
               </TD>
+              <TD>
+                <ClaimEligibilityBadge
+                  eligible={item.promoClaimEligible}
+                  reason={item.promoClaimIneligibleReason}
+                />
+              </TD>
               <TD className="text-xs text-gray-500">{formatDateTime(item.lastSeenAt)}</TD>
               <TD>
                 <button
@@ -184,7 +192,7 @@ export function CatalogSyncClient({
               </TD>
             </tr>
           ))}
-          {items.length === 0 && <EmptyRow colSpan={8}>没有符合条件的来源条目</EmptyRow>}
+          {items.length === 0 && <EmptyRow colSpan={9}>没有符合条件的来源条目</EmptyRow>}
         </TBody>
       </Table>
 
@@ -233,6 +241,46 @@ function SourceItemStatusBadge({ status }: { status: SourceItemRow["status"] }) 
       data-testid={`source-item-status-${status}`}
     >
       {badge.label}
+    </span>
+  );
+}
+
+/**
+ * "领取资格" column (C-8, CPS-parity with `changdu-sync-panel.tsx`'s
+ * `ClaimEligibilityBadge`): driven by `SourceItemRow.promoClaimEligible` /
+ * `promoClaimIneligibleReason`, which `readSourceItemsPage` computes from
+ * the SAME guard `createPromoLinkClaimTask` runs at claim time -- never a
+ * separate judgment, so this badge cannot promise "可领取" for a row the
+ * factory would actually skip. `reason` labels reuse 海阅's own existing
+ * `skipReasonLabel` map (`../_lib/promo-claim-copy.ts`) rather than CPS's
+ * domain-specific reason vocabulary (drama binding, changdu channel type,
+ * etc.) -- 海阅 doesn't have those concepts, only the three skip reasons
+ * `createPromoLinkClaimTask` already names.
+ */
+function ClaimEligibilityBadge({
+  eligible,
+  reason,
+}: {
+  eligible: SourceItemRow["promoClaimEligible"];
+  reason: SourceItemRow["promoClaimIneligibleReason"];
+}) {
+  if (eligible) {
+    return (
+      <span
+        className="inline-flex rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700"
+        data-testid="promo-claim-eligibility-eligible"
+      >
+        可领取
+      </span>
+    );
+  }
+  return (
+    <span
+      className="inline-flex rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700"
+      data-testid="promo-claim-eligibility-ineligible"
+      title={reason ?? undefined}
+    >
+      不可领取{reason ? ` · ${skipReasonLabel(reason)}` : ""}
     </span>
   );
 }

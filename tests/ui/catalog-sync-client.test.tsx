@@ -61,13 +61,26 @@ function row(overrides: Partial<SourceItemRow> = {}): SourceItemRow {
     channelName: "Moboreader",
     sourceAppCode: "mobo-app-1",
     sourceAppName: "Mobo App",
+    // Matches the default `status: "pending"` above -- not yet `linked`, so
+    // ineligible by the same `source_not_linked` rule `readSourceItemsPage`
+    // applies (C-8). Callers overriding `status` to `"linked"` must also
+    // override these two.
+    promoClaimEligible: false,
+    promoClaimIneligibleReason: "source_not_linked",
     ...overrides,
   };
 }
 
 const ROWS: readonly SourceItemRow[] = [
   row(),
-  row({ id: "src-2", title: "已建立的条目", status: "linked", novelId: "novel-9" }),
+  row({
+    id: "src-2",
+    title: "已建立的条目",
+    status: "linked",
+    novelId: "novel-9",
+    promoClaimEligible: true,
+    promoClaimIneligibleReason: null,
+  }),
 ];
 
 function claimApp(overrides: Partial<ClaimChannelAppOption> = {}): ClaimChannelAppOption {
@@ -200,6 +213,34 @@ describe("来源条目表格 · 渲染", () => {
   it("空表渲染空状态", () => {
     renderPage({ items: [] });
     expect(screen.getByText("没有符合条件的来源条目")).toBeTruthy();
+  });
+
+  it("领取资格列 (C-8)：可领取渲染绿色徽标，不可领取渲染红色徽标并带 reason 中文", () => {
+    renderPage({
+      items: [
+        row({ id: "src-eligible", promoClaimEligible: true, promoClaimIneligibleReason: null }),
+        row({
+          id: "src-not-linked",
+          promoClaimEligible: false,
+          promoClaimIneligibleReason: "source_not_linked",
+        }),
+        row({
+          id: "src-active-elsewhere",
+          promoClaimEligible: false,
+          promoClaimIneligibleReason: "item_already_active_elsewhere",
+        }),
+      ],
+    });
+    const eligible = screen.getAllByTestId("promo-claim-eligibility-eligible");
+    expect(eligible).toHaveLength(1);
+    expect(eligible[0].textContent).toBe("可领取");
+
+    const ineligible = screen.getAllByTestId("promo-claim-eligibility-ineligible");
+    expect(ineligible).toHaveLength(2);
+    expect(ineligible.map((el) => el.textContent)).toEqual([
+      "不可领取 · 来源条目尚未关联书目（未处于 linked 状态）",
+      "不可领取 · 该来源条目已经在另一个进行中的领取任务里",
+    ]);
   });
 
   it("每一行都有创建内容按钮，即便该条目已经 linked——点开会看到 already_exists 而不是被隐藏", () => {
@@ -724,6 +765,72 @@ describe("领取推广链接 · 提交与结果分支", () => {
     await click(within(dialog()).getByRole("button", { name: "确认领取（dry_run）" }));
 
     expect(within(dialog()).getByRole("alert").textContent).toContain("缺少能力位");
+  });
+});
+
+/**
+ * C-8 (`施工工单_PhaseC_任务模型迁移与ImportProgress_2026-09-06.md` §五):
+ * CPS-parity "预演" button + typed apply confirmation, copying
+ * `changdu-sync-panel.tsx`'s `submitPromoClaim` shape -- a one-click
+ * dry_run regardless of the `模式` dropdown, and a `window.prompt` gate
+ * (must literally type "确认领取") before any `apply` submission fires.
+ */
+describe("领取推广链接 · C-8 dry-run 预演按钮与 apply 前 window.prompt 确认", () => {
+  it("「推广码领取 dry-run」按钮无视下拉框的模式，始终以 dry_run 提交，且不会弹 window.prompt", async () => {
+    const promptSpy = vi.spyOn(window, "prompt");
+    actions.enqueuePromoLinkClaimAction.mockResolvedValue(
+      okResult({ outcome: "enqueued", taskId: "task-1", mode: "dry_run", eligibleCount: 1, skipReasonCounts: {} }),
+    );
+    renderPage();
+    await click(checkboxFor("示例小说 A"));
+    await click(claimToolbarButton());
+
+    const dlg = within(dialog());
+    // Switch the dropdown to apply -- the preview button must still force dry_run.
+    fireEvent.change(dlg.getByLabelText("模式") as HTMLSelectElement, { target: { value: "apply" } });
+    await click(dlg.getByTestId("promo-claim-dry-run-preview"));
+
+    expect(promptSpy).not.toHaveBeenCalled();
+    expect(actions.enqueuePromoLinkClaimAction).toHaveBeenCalledTimes(1);
+    expect(actions.enqueuePromoLinkClaimAction.mock.calls[0][0]).toMatchObject({ mode: "dry_run" });
+    promptSpy.mockRestore();
+  });
+
+  it("apply 提交前会弹 window.prompt；输入非「确认领取」时不调用 action", async () => {
+    const promptSpy = vi.spyOn(window, "prompt").mockReturnValue("算了");
+    renderPage();
+    await click(checkboxFor("示例小说 A"));
+    await click(claimToolbarButton());
+
+    const dlg = within(dialog());
+    fireEvent.change(dlg.getByLabelText("模式") as HTMLSelectElement, { target: { value: "apply" } });
+    await click(dlg.getByRole("button", { name: "确认领取（apply）" }));
+
+    expect(promptSpy).toHaveBeenCalledTimes(1);
+    expect(promptSpy.mock.calls[0][0]).toContain("确认领取");
+    expect(actions.enqueuePromoLinkClaimAction).not.toHaveBeenCalled();
+    // Dialog stays on the form stage -- no result panel rendered from a call that never happened.
+    expect(dlg.queryByTestId(/promo-claim-outcome-/)).toBeNull();
+    promptSpy.mockRestore();
+  });
+
+  it("apply 提交前输入「确认领取」时才真正提交，携带 mode: apply", async () => {
+    const promptSpy = vi.spyOn(window, "prompt").mockReturnValue("确认领取");
+    actions.enqueuePromoLinkClaimAction.mockResolvedValue(
+      okResult({ outcome: "enqueued", taskId: "task-2", mode: "apply", eligibleCount: 1, skipReasonCounts: {} }),
+    );
+    renderPage();
+    await click(checkboxFor("示例小说 A"));
+    await click(claimToolbarButton());
+
+    const dlg = within(dialog());
+    fireEvent.change(dlg.getByLabelText("模式") as HTMLSelectElement, { target: { value: "apply" } });
+    await click(dlg.getByRole("button", { name: "确认领取（apply）" }));
+
+    expect(promptSpy).toHaveBeenCalledTimes(1);
+    expect(actions.enqueuePromoLinkClaimAction).toHaveBeenCalledTimes(1);
+    expect(actions.enqueuePromoLinkClaimAction.mock.calls[0][0]).toMatchObject({ mode: "apply" });
+    promptSpy.mockRestore();
   });
 });
 
