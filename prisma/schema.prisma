@@ -58,7 +58,6 @@ model ChannelApp {
   sourceItems      NovelSourceItem[]
   sourceLabels     SourceLabel[]
   promoLinks       PromoLink[]
-  catalogScanTasks CatalogScanTask[]
   channelSyncTasks ChannelSyncTask[]
   genericTasks     GenericTask[]
   sideEffects      SideEffectIntent[]
@@ -109,7 +108,6 @@ model ChannelAccount {
   activeFingerprints   ChannelCredentialActiveFingerprint[]
   credentialChangeLogs CredentialChangeLog[]
   promoLinks           PromoLink[]
-  catalogScanTasks     CatalogScanTask[]
   channelSyncTasks     ChannelSyncTask[]
   genericTasks         GenericTask[]
   sideEffects          SideEffectIntent[]
@@ -693,70 +691,6 @@ model TrackingEvent {
   @@index([promoLinkId, occurredAt], map: "tracking_promo_time_idx")
   @@index([novelId, occurredAt], map: "tracking_novel_time_idx")
   @@map("tracking_event")
-}
-
-model CatalogScanTask {
-  id                   String    @id @default(uuid()) @db.Uuid
-  channelAccountId     String    @map("channel_account_id") @db.Uuid
-  channelAppId         String    @map("channel_app_id") @db.Uuid
-  projectType          Int       @map("project_type") @db.SmallInt
-  mode                 String    @default("apply") @db.VarChar(16)
-  status               String    @default("pending") @db.VarChar(32)
-  requestToken         String    @unique @map("request_token") @db.VarChar(160)
-  pageStart            Int       @map("page_start")
-  pageEnd              Int       @map("page_end")
-  pageSize             Int       @map("page_size")
-  catalogObservedTotal Int?      @map("catalog_observed_total")
-  batchExpectedCount   Int?      @map("batch_expected_count")
-  batchActualCount     Int?      @map("batch_actual_count")
-  totalCount           Int       @default(0) @map("total_count")
-  successCount         Int       @default(0) @map("success_count")
-  failedCount          Int       @default(0) @map("failed_count")
-  params               Json      @default("{}") @db.JsonB
-  result               Json?     @db.JsonB
-  error                Json?     @db.JsonB
-  requestedAt          DateTime  @default(now()) @map("requested_at") @db.Timestamptz(6)
-  startedAt            DateTime? @map("started_at") @db.Timestamptz(6)
-  completedAt          DateTime? @map("completed_at") @db.Timestamptz(6)
-  createdAt            DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt            DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
-
-  channelAccount ChannelAccount        @relation(fields: [channelAccountId], references: [id], onDelete: Restrict)
-  channelApp     ChannelApp            @relation(fields: [channelAppId], references: [id], onDelete: Restrict)
-  items          CatalogScanTaskItem[]
-
-  @@index([status, createdAt], map: "catalog_scan_status_created_idx")
-  @@index([channelAccountId, channelAppId, projectType], map: "catalog_scan_scope_idx")
-  @@map("catalog_scan_task")
-}
-
-model CatalogScanTaskItem {
-  id                 String    @id @default(uuid()) @db.Uuid
-  taskId             String    @map("task_id") @db.Uuid
-  pageIndex          Int       @map("page_index")
-  pageRangeEnd       Int?      @map("page_range_end")
-  requestFingerprint String    @map("request_fingerprint") @db.Char(64)
-  status             String    @default("pending") @db.VarChar(32)
-  attemptCount       Int       @default(0) @map("attempt_count")
-  executionToken     String?   @map("execution_token") @db.Uuid
-  leaseEpoch         BigInt    @default(0) @map("lease_epoch") @db.BigInt
-  lockedBy           String?   @map("locked_by") @db.VarChar(160)
-  lockedUntil        DateTime? @map("locked_until") @db.Timestamptz(6)
-  heartbeatAt        DateTime? @map("heartbeat_at") @db.Timestamptz(6)
-  returnedCount      Int?      @map("returned_count")
-  payload            Json      @default("{}") @db.JsonB
-  result             Json?     @db.JsonB
-  error              Json?     @db.JsonB
-  startedAt          DateTime? @map("started_at") @db.Timestamptz(6)
-  finishedAt         DateTime? @map("finished_at") @db.Timestamptz(6)
-  createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt          DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
-
-  task CatalogScanTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
-
-  @@unique([taskId, pageIndex], map: "catalog_scan_item_page_key")
-  @@index([taskId, status], map: "catalog_scan_item_task_status_idx")
-  @@map("catalog_scan_task_item")
 }
 
 model ChannelSyncTask {

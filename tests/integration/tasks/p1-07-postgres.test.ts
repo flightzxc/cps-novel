@@ -759,15 +759,11 @@ describe.skipIf(!enabled).sequential("P1-07 PostgreSQL 16 runtime", () => {
       .toMatchObject({ status: "claim_retry_blocked" });
   });
 
-  it("uses all six independent pending and expired indexes", async () => {
+  it("uses all four independent pending and expired indexes", async () => {
+    // Phase C: catalog_scan_task(_item) dropped -- there is no third table
+    // to seed/explain anymore, only channel_sync_task_item and
+    // generic_task_item.
     await executeBatch(`
-      INSERT INTO catalog_scan_task (
-        id, channel_account_id, channel_app_id, project_type, request_token,
-        page_start, page_end, page_size, status, updated_at
-      ) VALUES (
-        'a7000000-0000-4000-8000-000000000001', '${ids.account}', '${ids.app}', 7,
-        'p107-explain-catalog', 1, 6000, 20, 'processing', now()
-      );
       INSERT INTO channel_sync_task (
         id, task_type, channel_account_id, channel_app_id, operation_scope_hash,
         request_token, status, updated_at
@@ -788,19 +784,6 @@ describe.skipIf(!enabled).sequential("P1-07 PostgreSQL 16 runtime", () => {
         ('e7000000-0000-4000-8000-' || lpad(gs::text, 12, '0'))::uuid,
         '${ids.app}', 'p107-explain-' || gs, 'en', 'Explain ' || gs,
         '', 'pending', '{}', now()
-      FROM generate_series(1, 6000) gs;
-      INSERT INTO catalog_scan_task_item (
-        id, task_id, page_index, request_fingerprint, status, attempt_count,
-        execution_token, lease_epoch, locked_by, locked_until, updated_at
-      ) SELECT
-        ('b7000000-0000-4000-8000-' || lpad(gs::text, 12, '0'))::uuid,
-        'a7000000-0000-4000-8000-000000000001', gs, repeat(md5(gs::text), 2),
-        CASE WHEN gs <= 20 THEN 'pending' WHEN gs <= 40 THEN 'processing' ELSE 'success' END,
-        CASE WHEN gs BETWEEN 21 AND 40 THEN 1 ELSE 0 END,
-        CASE WHEN gs BETWEEN 21 AND 40 THEN ('c7000000-0000-4000-8000-' || lpad(gs::text, 12, '0'))::uuid END,
-        CASE WHEN gs BETWEEN 21 AND 40 THEN 1 ELSE 0 END,
-        CASE WHEN gs BETWEEN 21 AND 40 THEN 'worker' END,
-        CASE WHEN gs BETWEEN 21 AND 40 THEN now() - interval '1 hour' END, now()
       FROM generate_series(1, 6000) gs;
       INSERT INTO channel_sync_task_item (
         id, task_id, novel_source_item_id, status, attempt_count, execution_token,
@@ -829,29 +812,10 @@ describe.skipIf(!enabled).sequential("P1-07 PostgreSQL 16 runtime", () => {
         CASE WHEN gs BETWEEN 21 AND 40 THEN 'worker' END,
         CASE WHEN gs BETWEEN 21 AND 40 THEN now() - interval '1 hour' END, now()
       FROM generate_series(1, 6000) gs;
-      ANALYZE catalog_scan_task_item;
       ANALYZE channel_sync_task_item;
       ANALYZE generic_task_item
     `);
     const plans: Record<string, { pending: string[]; expired: string[] }> = {
-      catalog_scan_task_item: {
-        pending: await explainIndex(`
-          WITH candidates AS MATERIALIZED (
-            SELECT i.id, i.task_id, i.created_at AS cursor_at
-            FROM catalog_scan_task_item i WHERE i.status = 'pending'
-            ORDER BY i.created_at, i.id LIMIT 128 FOR UPDATE OF i SKIP LOCKED
-          )
-          SELECT c.id FROM candidates c JOIN catalog_scan_task t ON t.id = c.task_id
-          WHERE t.status IN ('pending', 'processing') ORDER BY c.cursor_at, c.id LIMIT 1
-        `, "catalog_scan_task_item_pending_global_idx"),
-        expired: await explainIndex(`
-          WITH candidates AS MATERIALIZED (
-            SELECT i.id, i.locked_until AS cursor_at FROM catalog_scan_task_item i
-            WHERE i.status = 'processing' AND i.locked_until < transaction_timestamp()
-            ORDER BY i.locked_until, i.id LIMIT 128 FOR UPDATE OF i SKIP LOCKED
-          ) SELECT id FROM candidates ORDER BY cursor_at, id LIMIT 1
-        `, "catalog_scan_task_item_expired_lease_idx"),
-      },
       channel_sync_task_item: {
         pending: await explainIndex(`
           WITH candidates AS MATERIALIZED (

@@ -287,7 +287,7 @@ describe.skipIf(!enabled).sequential("P2-05 PostgreSQL 16.14 write paths", () =>
     expect(await consume(adapter(), dryRunOnly)).toBe(true);
     expect(await owner.novelSourceItem.count()).toBe(0);
     expect(await owner.channelSyncTask.count()).toBe(0);
-    const task = await owner.catalogScanTask.findUniqueOrThrow({ where: { id: created.taskId } });
+    const task = await owner.genericTask.findUniqueOrThrow({ where: { id: created.taskId } });
     expect(task).toMatchObject({ status: "completed", successCount: 1 });
     expect(await owner.operationAudit.count({ where: { taskId: created.taskId } })).toBeGreaterThanOrEqual(2);
   });
@@ -296,7 +296,7 @@ describe.skipIf(!enabled).sequential("P2-05 PostgreSQL 16.14 write paths", () =>
     const first = await enqueue("apply");
     expect(await consume()).toBe(true);
     expect(await owner.novelSourceItem.count()).toBe(1);
-    const task = await owner.catalogScanTask.findUniqueOrThrow({ where: { id: first.taskId } });
+    const task = await owner.genericTask.findUniqueOrThrow({ where: { id: first.taskId } });
     expect(task.result).toMatchObject({ checkpoint: { lastCompletedPage: 1, returnedCount: 1 } });
     expect(task.result).toMatchObject({ stopReason: "expected_total_reached", terminalState: "completed" });
     const duplicate = await createMoboreaderCatalogScanTask(owner, {
@@ -395,7 +395,7 @@ describe.skipIf(!enabled).sequential("P2-05 PostgreSQL 16.14 write paths", () =>
     expect(promoLink.publicRedirectCode).toMatch(/^[a-z0-9]{10}$/);
     expect((await owner.article.findUniqueOrThrow({ where: { novelId_locale: { novelId: linked.novel.id, locale: "en-US" } } })).promoLinkId)
       .toBe(promoLink.id);
-    const item = await owner.catalogScanTaskItem.findFirstOrThrow({ where: { taskId: created.taskId } });
+    const item = await owner.genericTaskItem.findFirstOrThrow({ where: { taskId: created.taskId } });
     expect(item.result).toMatchObject({ promoCapture: { fetched: 1, deferredUntilLinked: 0, incomplete: 0, articlesBound: 1 } });
     const publicEvidence = JSON.stringify({
       item: item.result,
@@ -447,7 +447,7 @@ describe.skipIf(!enabled).sequential("P2-05 PostgreSQL 16.14 write paths", () =>
     expect(await owner.promoLink.count()).toBe(0);
     const source = await owner.novelSourceItem.findFirstOrThrow({ where: { externalBookId: "unlinked-promo" } });
     expect(JSON.stringify(source.rawPayload)).not.toContain(secretCode);
-    const item = await owner.catalogScanTaskItem.findFirstOrThrow({ where: { taskId: created.taskId } });
+    const item = await owner.genericTaskItem.findFirstOrThrow({ where: { taskId: created.taskId } });
     expect(item.result).toMatchObject({ promoCapture: { fetched: 0, deferredUntilLinked: 1 } });
   });
 
@@ -654,7 +654,7 @@ describe.skipIf(!enabled).sequential("P2-05 PostgreSQL 16.14 write paths", () =>
     })).toMatchObject({ active: true });
 
     await consume(partialAdapter);
-    expect(await owner.catalogScanTask.findUniqueOrThrow({ where: { id: range.taskId } })).toMatchObject({
+    expect(await owner.genericTask.findUniqueOrThrow({ where: { id: range.taskId } })).toMatchObject({
       status: "completed_with_errors",
       result: { terminalState: "partial_failed", droppedLabels: { count: 1 } },
     });
@@ -702,14 +702,14 @@ describe.skipIf(!enabled).sequential("P2-05 PostgreSQL 16.14 write paths", () =>
       where: { novelSourceItemId: source.id },
       orderBy: { sourceLabelId: "asc" },
     })).toEqual(relationsBeforeIncomplete);
-    const incompleteItem = await owner.catalogScanTaskItem.findFirstOrThrow({
+    const incompleteItem = await owner.genericTaskItem.findFirstOrThrow({
       where: { taskId: incompleteEnqueue.taskId },
     });
     expect(incompleteItem.result).toMatchObject({
       incompleteLabelSnapshots: 1,
       droppedLabels: { count: 0, groups: [] },
     });
-    const incompleteTask = await owner.catalogScanTask.findUniqueOrThrow({ where: { id: incompleteEnqueue.taskId } });
+    const incompleteTask = await owner.genericTask.findUniqueOrThrow({ where: { id: incompleteEnqueue.taskId } });
     expect(incompleteTask.result).toMatchObject({
       terminalState: "completed",
       incompleteLabelSnapshots: 1,
@@ -753,8 +753,8 @@ describe.skipIf(!enabled).sequential("P2-05 PostgreSQL 16.14 write paths", () =>
       count: 1,
       groups: [{ kind: "series_type", length: 302, sha256: digest, count: 1 }],
     };
-    const item = await owner.catalogScanTaskItem.findFirstOrThrow({ where: { taskId: created.taskId } });
-    const task = await owner.catalogScanTask.findUniqueOrThrow({ where: { id: created.taskId } });
+    const item = await owner.genericTaskItem.findFirstOrThrow({ where: { taskId: created.taskId } });
+    const task = await owner.genericTask.findUniqueOrThrow({ where: { id: created.taskId } });
     const audit = await owner.operationAudit.findFirstOrThrow({
       where: { taskId: created.taskId, action: "moboreader.catalog_page.applied.1" },
     });
@@ -782,40 +782,40 @@ describe.skipIf(!enabled).sequential("P2-05 PostgreSQL 16.14 write paths", () =>
     };
 
     expect(await consume(pagedAdapter)).toBe(true);
-    const itemPage1 = await owner.catalogScanTaskItem.findFirstOrThrow({
-      where: { taskId: created.taskId, pageIndex: 1 },
+    const itemPage1 = await owner.genericTaskItem.findFirstOrThrow({
+      where: { taskId: created.taskId, targetType: "catalog_page", targetId: "1" },
     });
     expect(itemPage1.result).toMatchObject({
       droppedLabels: { count: 1, groups: [{ kind: "series_type", length: lengthA, sha256: digestA, count: 1 }] },
     });
-    const taskAfterPage1 = await owner.catalogScanTask.findUniqueOrThrow({ where: { id: created.taskId } });
+    const taskAfterPage1 = await owner.genericTask.findUniqueOrThrow({ where: { id: created.taskId } });
     expect(taskAfterPage1.result).toMatchObject({
       terminalState: "processing",
       droppedLabels: { count: 1, groups: [{ kind: "series_type", length: lengthA, sha256: digestA, count: 1 }] },
     });
 
     expect(await consume(pagedAdapter)).toBe(true);
-    const itemPage2 = await owner.catalogScanTaskItem.findFirstOrThrow({
-      where: { taskId: created.taskId, pageIndex: 2 },
+    const itemPage2 = await owner.genericTaskItem.findFirstOrThrow({
+      where: { taskId: created.taskId, targetType: "catalog_page", targetId: "2" },
     });
     expect(itemPage2.result).toMatchObject({
       droppedLabels: { count: 1, groups: [{ kind: "series_type", length: lengthB, sha256: digestB, count: 1 }] },
     });
     // Still non-terminal (page 3 is pending): the task summary must stay page-scoped
     // (only page 2's drop) rather than already carrying page 1's drop as well.
-    const taskAfterPage2 = await owner.catalogScanTask.findUniqueOrThrow({ where: { id: created.taskId } });
+    const taskAfterPage2 = await owner.genericTask.findUniqueOrThrow({ where: { id: created.taskId } });
     expect(taskAfterPage2.result).toMatchObject({
       terminalState: "processing",
       droppedLabels: { count: 1, groups: [{ kind: "series_type", length: lengthB, sha256: digestB, count: 1 }] },
     });
 
     expect(await consume(pagedAdapter)).toBe(true);
-    const itemPage3 = await owner.catalogScanTaskItem.findFirstOrThrow({
-      where: { taskId: created.taskId, pageIndex: 3 },
+    const itemPage3 = await owner.genericTaskItem.findFirstOrThrow({
+      where: { taskId: created.taskId, targetType: "catalog_page", targetId: "3" },
     });
     expect(itemPage3.result).toMatchObject({ droppedLabels: { count: 0, groups: [] } });
     // Terminal page: the task summary must now be the full-task aggregate across all pages.
-    const finalTask = await owner.catalogScanTask.findUniqueOrThrow({ where: { id: created.taskId } });
+    const finalTask = await owner.genericTask.findUniqueOrThrow({ where: { id: created.taskId } });
     expect(finalTask.result).toMatchObject({
       terminalState: "completed",
       droppedLabels: {
@@ -852,17 +852,17 @@ describe.skipIf(!enabled).sequential("P2-05 PostgreSQL 16.14 write paths", () =>
       listBooks: async (request) => page(`book-${request.pageIndex}`),
     };
     expect(await consume(paged)).toBe(true);
-    expect(await owner.catalogScanTaskItem.count({ where: { taskId: created.taskId, status: "success" } })).toBe(1);
-    expect(await owner.catalogScanTaskItem.count({ where: { taskId: created.taskId, status: "pending" } })).toBe(1);
-    const completedPage = await owner.catalogScanTaskItem.findFirstOrThrow({
-      where: { taskId: created.taskId, status: "success" },
-      select: { pageIndex: true },
+    expect(await owner.genericTaskItem.count({ where: { taskId: created.taskId, status: "success" } })).toBe(1);
+    expect(await owner.genericTaskItem.count({ where: { taskId: created.taskId, status: "pending" } })).toBe(1);
+    const completedPage = await owner.genericTaskItem.findFirstOrThrow({
+      where: { taskId: created.taskId, targetType: "catalog_page", status: "success" },
+      select: { targetId: true },
     });
-    expect((await owner.catalogScanTask.findUniqueOrThrow({ where: { id: created.taskId } })).result)
-      .toMatchObject({ checkpoint: { lastCompletedPage: completedPage.pageIndex } });
+    expect((await owner.genericTask.findUniqueOrThrow({ where: { id: created.taskId } })).result)
+      .toMatchObject({ checkpoint: { lastCompletedPage: Number(completedPage.targetId) } });
     expect(await consume(paged)).toBe(true);
     expect(await owner.novelSourceItem.count()).toBe(2);
-    expect(await owner.catalogScanTask.findUniqueOrThrow({ where: { id: created.taskId } })).toMatchObject({
+    expect(await owner.genericTask.findUniqueOrThrow({ where: { id: created.taskId } })).toMatchObject({
       status: "completed",
       successCount: 2,
       result: { checkpoint: { lastCompletedPage: 2 } },
@@ -873,7 +873,7 @@ describe.skipIf(!enabled).sequential("P2-05 PostgreSQL 16.14 write paths", () =>
     const safetyEnv = { ...gates, MOBOREADER_CATALOG_SAFETY_MAX_PAGES: "1" } satisfies NodeJS.ProcessEnv;
     const created = await enqueueRange({ pageEnd: 3, pageSize: 1, env: safetyEnv });
     expect(await consume(adapter(), safetyEnv)).toBe(true);
-    const task = await owner.catalogScanTask.findUniqueOrThrow({ where: { id: created.taskId } });
+    const task = await owner.genericTask.findUniqueOrThrow({ where: { id: created.taskId } });
     expect(task).toMatchObject({ status: "completed_with_errors", totalCount: 1, successCount: 1 });
     expect(task.result).toMatchObject({
       stopReason: "safety_limit",
@@ -888,17 +888,17 @@ describe.skipIf(!enabled).sequential("P2-05 PostgreSQL 16.14 write paths", () =>
   ] as const)("stops remaining pages on %s and records incomplete expected-vs-actual", async (reason, response) => {
     const created = await enqueueRange({ pageEnd: 3, pageSize: 2 });
     expect(await consume({ ...adapter(), listBooks: async () => response } as MoboreaderReadAdapter)).toBe(true);
-    const task = await owner.catalogScanTask.findUniqueOrThrow({ where: { id: created.taskId } });
+    const task = await owner.genericTask.findUniqueOrThrow({ where: { id: created.taskId } });
     expect(task).toMatchObject({ status: "completed_with_errors", totalCount: 3, successCount: 3 });
     expect(task.result).toMatchObject({ stopReason: reason, terminalState: "partial_failed" });
-    expect(await owner.catalogScanTaskItem.count({ where: { taskId: created.taskId, result: { path: ["stoppedBeforeFetch"], equals: true } } })).toBe(2);
+    expect(await owner.genericTaskItem.count({ where: { taskId: created.taskId, result: { path: ["stoppedBeforeFetch"], equals: true } } })).toBe(2);
   });
 
   it("records upstream_error and does not continue later catalog pages", async () => {
     const created = await enqueueRange({ pageEnd: 3, pageSize: 1 });
     const failing = { ...adapter(), listBooks: async () => { throw new Error("upstream body must not persist"); } };
     expect(await consume(failing)).toBe(true);
-    const task = await owner.catalogScanTask.findUniqueOrThrow({ where: { id: created.taskId } });
+    const task = await owner.genericTask.findUniqueOrThrow({ where: { id: created.taskId } });
     expect(task).toMatchObject({ status: "completed_with_errors", failedCount: 3 });
     expect(task.result).toMatchObject({ stopReason: "upstream_error", terminalState: "partial_failed" });
     expect(JSON.stringify(task.error)).not.toContain("upstream body must not persist");

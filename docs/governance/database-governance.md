@@ -99,7 +99,7 @@ Migration 演进，当前 Credential 状态增量为
 
 | 表 | 分类 | 字段责任 | 关键约束 | DROP |
 | --- | --- | --- | --- | --- |
-| `catalog_scan_task` / `_item` | ORIGINAL_REQUIRED（Phase C 起并入 `generic_task`，见下方 Phase C 行；本表暂未 DROP，见 C-1/C-4） | 页区间目录扫描及租约 | account+app+project_type 单 active；item fencing | SQLite 伪写锁 |
+| ~~`catalog_scan_task` / `_item`~~ | **已 DROP（Phase C step C-4）**：并入 `generic_task`，见下方 `generic_task` 行 | ~~页区间目录扫描及租约~~ | ~~account+app+project_type 单 active；item fencing~~ | 已执行：`prisma/migrations/20260907091500_p3_drop_catalog_scan_task` |
 | `channel_sync_task` / `_item` | CPS_PARITY_ADAPTED | 已有 SourceItem 的定向作业 | 规范化 scope 单 active；item 指向 SourceItem | item 指向 Novel |
 | `generic_task` / `_item` | CPS_PARITY_ADAPTED；Phase C 起承载 `task_type='catalog_scan'` 行（`施工工单_PhaseC_任务模型迁移与ImportProgress_2026-09-06.md`），11 个原 CatalogScan 专属字段落 `params`/`result`/item `payload` JSON，item 用 `target_type='catalog_page'`、`target_id=页码字符串` | 规范化 scope 单 active（`operation_scope_hash` 对 catalog_scan 行折入 `project_type`）；target 二元唯一；C-1 新增两条 `WHERE task_type='catalog_scan'` partial index（`generic_task_catalog_scan_status_created_idx`、`generic_task_catalog_scan_scope_idx`），等价旧 `catalog_scan_status_created_idx`/`catalog_scan_scope_idx` | `drama_id` 非空固定目标 |
 | `side_effect_intent` | ORIGINAL_REQUIRED | 外部调用前永久 effect key 和独立已提交意图 | `effect_key` 永久唯一；operation+idempotency 唯一 | 与业务写同一未提交事务 |
@@ -158,7 +158,7 @@ X6 只开放 `default_og_image` 与 IndexNow 三字段的管理写口：单例�
 - ChapterSourceItem：`pending | materialized | failed`
 - PromoLink：`pending | fetched | failed | registered_disabled`
 - Task：`pending | processing | completed | completed_with_errors | failed | disabled`
-- Catalog Item：`pending | processing | success | failed`
+- ~~Catalog Item：`pending | processing | success | failed`~~（Phase C 起随 `catalog_scan_task_item` 一并 DROP；`task_type='catalog_scan'` 的 GenericTaskItem 走下面的 Other Item 六值集合，worker 侧仍保持“从不产生 skipped”的运行期不变量，但这不再是独立物理状态集）
 - Other Item：`pending | processing | success | skipped | failed`
 - SideEffectIntent：`prepared | confirmed | failed | claim_retry_blocked | manual_review_required`
 - IndexNow：`pending | processing | accepted | retry_wait | permanent_failed | dead_letter | cancelled`
@@ -201,9 +201,9 @@ carousel serving source 和 ArticleTemplate 的 `applicable_article_type`
 3. `novel(locale, slug) WHERE deleted_at IS NULL`。
 4. `novel_chapter(novel_id, canonical_chapter_number) WHERE deleted_at IS NULL`。
 5. `article(locale, slug) WHERE deleted_at IS NULL`。
-6. `catalog_scan_task(channel_account_id, channel_app_id, project_type) WHERE status IN ('pending','processing')`。
+6. ~~`catalog_scan_task(channel_account_id, channel_app_id, project_type) WHERE status IN ('pending','processing')`~~（Phase C step C-4 已 DROP；等效排他性现由 `generic_task_active_scope_uidx` 提供——`operation_scope_hash` 对 `task_type='catalog_scan'` 行折入 `project_type`）。
 7. ChannelSync active scope 部分唯一；GenericTask 使用 PostgreSQL `NULLS NOT DISTINCT` 对 nullable account/app 建立 active 唯一，不使用 UUID sentinel 或 `COALESCE` 表达式。
-8. 三类 Item 分别建立 pending claim 与 expired lease recovery 两套部分索引；查询不得使用 OR。
+8. ~~三类~~两类（Phase C 起 `catalog_scan_task_item` 已 DROP）Item 分别建立 pending claim 与 expired lease recovery 两套部分索引；查询不得使用 OR。
 9. `home_carousel_manual_slot` 的 enabled+未软删 position/novel 两个部分唯一索引，PostgreSQL 谓词使用 `enabled IS TRUE`。
 10. `promo_link.public_redirect_code` 使用全局非部分 UNIQUE、byte-wise/case-sensitive 语义和不可变 trigger；软删行继续占位。
 11. published Article 的行内必要条件拆为四条命名 CHECK，禁止空字符串绕过：
@@ -346,6 +346,7 @@ P1-08B 新增独立 `scheduler_app`，只授予 schedule/generic task 元数据�
 | 2026-09-05 | PR6 fix lane C — migration 时间戳顺序治理记录 | `20260816160000_p2_06_5_tagging_v3` 的目录名字面序排在 `20260818120000_v020_foundation_shared` 之前，但两者在同一 X8 长期卷上的实际 `migrate deploy` 应用顺序与目录名序不一致（`_prisma_migrations` 记录的 apply 顺序早于目录名对比结果）——`prisma migrate deploy` 只按"是否已记录在 `_prisma_migrations`"决定要不要应用，与目录名字面序无关，因此**安全**；`prisma migrate dev` 的 shadow-DB 重放假定目录名序即预期应用序，对这条历史会报漂移（drift），**不安全**、不能在这套 X8 卷上跑。两个目录都不改名——改名会使已落盘的 `_prisma_migrations.migration_name` 与磁盘目录名不一致，制造新的漂移而不是修复旧漂移。生产/新库从空库开始 `migrate deploy` 时两迁移严格按目录名序连续应用，不受此限制影响 | Claude（Sonnet，PR6 B-3 修复附带发现） | 只读记录，未执行任何 migration 操作；本行是 N-11 的登记，不是新变更 |
 | 2026-09-05 | PR6 fix lane E — carousel 权限缺口 | 零 schema migration。真机 X8 uat 暴露 `scheduler` 容器因 `42501 permission denied for table site_setting` 崩溃重启（`scheduler` 读 `carouselConfigJson` 判定 cron 是否到点，但 `scheduler_app` 对 `site_setting` 无任何授权）；`information_schema.role_table_grants` 复核同时发现 `worker_app` 对 `home_carousel_manual_slot/auto_batch/auto_candidate/serving` 只有 INSERT/UPDATE 无 SELECT（`computeHomeCarouselInTx` 的 `findMany`/`update`/`deleteMany` 均需 SELECT），且对 `home_carousel_serving` 无 DELETE（merge 用 `deleteMany` 整体收缩后 `createMany` 重建，非 UPDATE 语义）。修复：`GRANT SELECT (id, carousel_config_json) ON site_setting TO scheduler_app`（列级，`indexnow_key` 等其余列/`analyst_ro` 依旧零可见性）；`worker_app` 补四表 SELECT + `home_carousel_serving` DELETE；`home_carousel_change_log` 保持 INSERT-only 不变。`src/server/home-carousel/service.ts` 的 `getHomeCarouselConfig`/`computeHomeCarouselInTx` 已是列级 `select:{carouselConfigJson:true}`，代码侧无需改动。同步更新 `database-schema-dictionary.jsonl` 中 `site_setting.id`/`site_setting.carousel_config_json` 两条记录的 `read_roles`（加 `scheduler_app`），以及 `tests/backend/database/x6-site-setting-grants.test.ts` 原先"scheduler_app 对 site_setting 零访问"的契约断言（收窄为"零全表 SELECT/INSERT/UPDATE/DELETE，仅允许既定列级 SELECT"），使其与新授权一致 | Claude（Sonnet，PR6 fix lane E） | 新增 `tests/backend/database/carousel-grants.test.ts`（6 用例，含对列级 grant 的变异测试：删除该行断言立即转红）；`npm run typecheck && npm run lint && npm run test:backend`（163/164 文件通过，唯一失败为既有 `publish-gate/no-bypass` 基线失败）+ `npm run test:ui`（113/113 通过）全绿；X8 uat（`cps-novel-x8-local`）复现修复前崩溃（`docker ps` 显示 `scheduler` 持续 `Restarting`）后，以 postgres 超级用户重跑修复后的 `grants.sql`（自带 REVOKE 重置，幂等）并 `docker compose restart scheduler`：容器转为持续 `Up ... (healthy)`（`RestartCount` 维持 0，观察窗覆盖至少两次 60s cron tick，`docker logs` 自重启后再无 42501）；`role_table_grants`/`role_column_grants` 复核与预期矩阵完全一致（`scheduler_app` 仅 `site_setting(id, carousel_config_json)` 列级 SELECT、对 `home_carousel_*` 零访问；`worker_app` 四表新增 SELECT + `home_carousel_serving` 新增 DELETE）；`/api/health` 200 `ok:true` |
 | 2026-09-06 | Phase C — C-1 任务模型迁移 schema 先行（`20260907090000_p3_generic_task_catalog_scan_indexes`） | `TASK_ARCHITECTURE_DECISION = MIGRATE_TO_CPS_TASK_MODEL`（`CPS海阅_短剧到小说全链路Parity审计与收敛规划_2026-09-06.md` §4/§0）第一步：给 `generic_task` 补两条 `WHERE task_type='catalog_scan'` partial index，等价现有 `catalog_scan_status_created_idx`/`catalog_scan_scope_idx`；本步不删任何表、不改任何 CHECK/FK，`catalog_scan_task(_item)` 原样保留。`database-schema-dictionary.jsonl` 新增两条 `managed_by=migration_sql` 记录 | Claude（Sonnet，Phase C 施工） | 待一次性 PostgreSQL 16 容器验证（migrate deploy 幂等重放 + `check-database-dictionary-drift.mjs`）；详见本轮 Phase C 报告 |
+| 2026-09-06 | Phase C — C-4 DROP catalog_scan_task(_item)（`20260907091500_p3_drop_catalog_scan_task`） | C-2/C-3（应用层与测试已全部切至 `generic_task`/`generic_task_item`，`task_type='catalog_scan'`、`target_type='catalog_page'`）合入后，DROP 两表；Prisma model `CatalogScanTask`/`CatalogScanTaskItem` 一并移除（含 `ChannelAccount`/`ChannelApp` 上的 `catalogScanTasks` 反向关系字段）；无生产历史（102 行 UAT、零活体），非回填式迁移。`database-schema-dictionary.jsonl` 68 条记录改 `status=superseded`（不删除，遵 §10）；`check-database-dictionary-drift.mjs` 的 Prisma model/数据库表计数断言 51→49；`scripts/entity-fix/moboreader-foundation-swap.ts` 的前后快照去掉独立 `catalogScanTasks` 计数（并入 `genericTasks`）。 | Claude（Sonnet，Phase C 施工） | 待一次性 PostgreSQL 16 容器验证；详见本轮 Phase C 报告 |
 
 ## 13. 待跟进项（Schema 变更队列，Owner 待批）
 

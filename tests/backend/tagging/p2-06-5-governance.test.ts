@@ -14,7 +14,8 @@ describe("P2-06.5 static database governance", () => {
       expect(schema).toContain(`model ${model} {`);
     }
     expect(schema).toMatch(/rawLanguageScope\s+String\?/);
-    expect((schema.match(/^model\s+/gm) ?? [])).toHaveLength(51);
+    // Phase C step C-4 dropped CatalogScanTask/CatalogScanTaskItem (51 -> 49).
+    expect((schema.match(/^model\s+/gm) ?? [])).toHaveLength(49);
   });
 
   it("keeps the migration structural and exact", () => {

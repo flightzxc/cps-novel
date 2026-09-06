@@ -13,7 +13,12 @@ export const TASK_MODES = ["dry_run", "apply"] as const;
 export const PROMO_LINK_STATUSES = ["pending", "fetched", "failed", "registered_disabled"] as const;
 export const PROMO_LINK_ORIGINS = ["upstream_existing", "claimed"] as const;
 export const TASK_STATUSES = ["pending", "processing", "completed", "completed_with_errors", "failed", "disabled"] as const;
-export const CATALOG_ITEM_STATUSES = ["pending", "processing", "success", "failed"] as const;
+// Phase C: CATALOG_ITEM_STATUSES (pending|processing|success|failed, no
+// skipped) removed -- it described CatalogScanTaskItem's own lifecycle,
+// which is dropped. GenericTaskItem (including taskType='catalog_scan' rows)
+// uses TASK_ITEM_STATUSES below; the worker never emits 'skipped' for a
+// catalog_scan item (see store.ts's guardedFinalize guard), but that is now
+// a taskType-scoped runtime invariant, not a distinct physical status set.
 export const TASK_ITEM_STATUSES = ["pending", "processing", "success", "skipped", "failed"] as const;
 export const SIDE_EFFECT_INTENT_STATUSES = ["prepared", "confirmed", "failed", "claim_retry_blocked", "manual_review_required"] as const;
 export const INDEXNOW_STATUSES = ["pending", "processing", "accepted", "retry_wait", "permanent_failed", "dead_letter", "cancelled"] as const;
@@ -108,13 +113,9 @@ export const DATABASE_STATUS_SEMANTICS = {
     failed: "Asset retrieval or validation failed; public resolution must not guess a fallback.",
     registered_disabled: "Asset capability is registered but the external interface is unproven or disabled.",
   },
-  catalog_scan_task: TASK_STATUS_SEMANTICS,
-  catalog_scan_task_item: {
-    pending: TASK_ITEM_STATUS_SEMANTICS.pending,
-    processing: TASK_ITEM_STATUS_SEMANTICS.processing,
-    success: TASK_ITEM_STATUS_SEMANTICS.success,
-    failed: TASK_ITEM_STATUS_SEMANTICS.failed,
-  },
+  // Phase C: catalog_scan_task(_item) dropped -- CatalogScan is now
+  // GenericTask(taskType='catalog_scan'), covered by generic_task/
+  // generic_task_item below.
   channel_sync_task: TASK_STATUS_SEMANTICS,
   channel_sync_task_item: TASK_ITEM_STATUS_SEMANTICS,
   generic_task: TASK_STATUS_SEMANTICS,
