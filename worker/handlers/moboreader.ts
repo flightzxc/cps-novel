@@ -1073,14 +1073,22 @@ export function createMoboreaderCatalogHandler(
                 + `elapsed ${error.elapsedMs}ms). Resume a new scan from page ${payload.pageIndex}.`,
             }
           : { code: "upstream_error", message: "MoboReader catalog read failed" },
-        protectedWrite: async (tx) => persistCatalogUpstreamFailure(tx, {
-          taskId: lease.taskId,
-          itemId: lease.itemId,
-          payload,
-          channelAppId: scope.channelAppId,
-          channelAccountId: scope.channelAccountId,
-          env,
-          now: now(),
+        // Phase D D-1, 做法2: dry_run runs the real upstream call and the
+        // real judgement above (`result.stopReason` etc. are unconditional),
+        // but must never attach a `protectedWrite` — `persistCatalogUpstreamFailure`
+        // upserts real task-item/task rows and can enqueue a real (mode:
+        // "apply") preview-refresh task. See the twin comment on the success
+        // path below.
+        ...(mode === "dry_run" ? {} : {
+          protectedWrite: async (tx) => persistCatalogUpstreamFailure(tx, {
+            taskId: lease.taskId,
+            itemId: lease.itemId,
+            payload,
+            channelAppId: scope.channelAppId,
+            channelAccountId: scope.channelAccountId,
+            env,
+            now: now(),
+          }),
         }),
       };
     }
@@ -1089,14 +1097,16 @@ export function createMoboreaderCatalogHandler(
         status: "failed",
         result: { stopReason: "upstream_error", terminalState: "partial_failed" },
         error: { code: "upstream_page_limit_exceeded", message: "Upstream page exceeded the requested page size" },
-        protectedWrite: async (tx) => persistCatalogUpstreamFailure(tx, {
-          taskId: lease.taskId,
-          itemId: lease.itemId,
-          payload,
-          channelAppId: scope.channelAppId,
-          channelAccountId: scope.channelAccountId,
-          env,
-          now: now(),
+        ...(mode === "dry_run" ? {} : {
+          protectedWrite: async (tx) => persistCatalogUpstreamFailure(tx, {
+            taskId: lease.taskId,
+            itemId: lease.itemId,
+            payload,
+            channelAppId: scope.channelAppId,
+            channelAccountId: scope.channelAccountId,
+            env,
+            now: now(),
+          }),
         }),
       };
     }
@@ -1121,6 +1131,20 @@ export function createMoboreaderCatalogHandler(
       stopReason,
       ...(stopReason === "safety_limit" ? { terminalState: "partial_failed" } : {}),
     } satisfies Prisma.InputJsonObject;
+    // Phase D (施工工单_PhaseD_安全与运行态收口_2026-09-06.md D-1, 做法2): the
+    // real upstream fetch and the real stop-reason judgement above both ran
+    // unconditionally — `result` (already carrying `mode`) reflects exactly
+    // what an apply run would have decided. Only the write is conditional:
+    // dry_run must terminate the item without ever calling
+    // `persistCatalogPage` (source-item upsert, label writes, PromoLink
+    // upsert + article binding, and an auto preview-refresh enqueue). Status
+    // stays "success" rather than "skipped" — `guardedFinalize`
+    // (`src/lib/tasks/store.ts`) enforces the pre-existing Phase C parity
+    // invariant that a catalog-page item is success/failed only, never
+    // skipped; this is a page-shaped record either way, dry_run or not.
+    if (mode === "dry_run") {
+      return { status: "success", result };
+    }
     return {
       status: "success",
       result,
@@ -1183,6 +1207,24 @@ export function createMoboreaderPreviewHandler(
           reason: "upstream_empty_preview",
           materialTypeSource: scope.requests.materialTypeSource,
           upstreamCount: 0,
+        },
+      };
+    }
+    // Phase D (施工工单_PhaseD_安全与运行态收口_2026-09-06.md D-1, 做法2): both
+    // upstream reads and the empty-preview judgement above already ran for
+    // real. dry_run must stop here, without ever calling
+    // `materializeChangduPreview` (writes NovelChapter/NovelChapterContent) —
+    // same "skipped, no protectedWrite" shape as
+    // `worker/handlers/promo-link-claim.ts`'s own dry_run branch. Unlike the
+    // catalog-scan item above, this family (`channel_sync`) has no
+    // "no skipped" restriction in `guardedFinalize`.
+    if (mode === "dry_run") {
+      return {
+        status: "skipped",
+        result: {
+          decision: "would_materialize",
+          materialTypeSource: scope.requests.materialTypeSource,
+          upstreamCount: preview.chapterList.length,
         },
       };
     }

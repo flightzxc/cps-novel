@@ -564,10 +564,34 @@ export async function finalizeTaskItem(
     () =>
       prisma.$transaction(async (tx) => {
         let terminalOutcome = outcome;
+        // Phase D (施工工单_PhaseD_安全与运行态收口_2026-09-06.md D-1, 做法3): a
+        // fail-closed backstop for the dry_run-writes-nothing contract —
+        // independent of whether every handler actually got its own mode
+        // branching right (worker/handlers/moboreader.ts's catalog/preview
+        // handlers do, as of this same doc's 做法2, but this guards against
+        // a future handler regressing). Checked BEFORE `protectedWrite` is
+        // ever invoked: once a write has run there is nothing left to
+        // "block". A handler that is well-behaved for dry_run never sets
+        // `protectedWrite` in the first place, so this only fires for a
+        // handler bug — and when it does, the item is forced `failed` with
+        // an explicit, greppable error/audit reason instead of silently
+        // letting the write through.
+        let dryRunProtectedWriteBlocked = false;
         if (outcome.protectedWrite) {
-          await assertProtectedWriteLease(tx, lease);
-          const override = await outcome.protectedWrite(tx);
-          if (override) terminalOutcome = { ...override };
+          if (lease.mode === "dry_run") {
+            dryRunProtectedWriteBlocked = true;
+            terminalOutcome = {
+              status: "failed",
+              error: {
+                code: "dry_run_protected_write_blocked",
+                message: "Task handler attempted a protected write while the task lease mode is dry_run; the write was blocked before it ran",
+              },
+            };
+          } else {
+            await assertProtectedWriteLease(tx, lease);
+            const override = await outcome.protectedWrite(tx);
+            if (override) terminalOutcome = { ...override };
+          }
         }
         const affected = await guardedFinalize(tx, lease, terminalOutcome);
     if (affected !== 1) throw new LeaseLostError(lease);
@@ -617,7 +641,9 @@ export async function finalizeTaskItem(
         entityId: lease.itemId,
         taskType: lease.taskType,
         taskId: lease.taskId,
-        reason: terminalOutcome.status === "failed" ? "worker_terminal_failure" : null,
+        reason: dryRunProtectedWriteBlocked
+          ? "dry_run_protected_write_blocked"
+          : (terminalOutcome.status === "failed" ? "worker_terminal_failure" : null),
       },
     });
     await recomputeParentTask(tx, lease.family, lease.taskId);

@@ -537,6 +537,49 @@ describe.skipIf(!enabled).sequential("P1-07 PostgreSQL 16 runtime", () => {
     expect(error).not.toHaveProperty("stack");
   });
 
+  it("Phase D D-1: blocks a protectedWrite a handler wrongly attaches under a dry_run lease, before it ever runs", async () => {
+    // 施工工单_PhaseD_安全与运行态收口_2026-09-06.md D-1, 做法3: this is the
+    // fail-closed backstop in `finalizeTaskItem` (src/lib/tasks/store.ts),
+    // independent of any specific handler's own mode branching. Simulates a
+    // hypothetical regressed handler that (incorrectly) still attaches
+    // `protectedWrite` while the claimed lease's mode is "dry_run".
+    const task = await prisma.genericTask.create({
+      data: {
+        taskType: "runtime.test",
+        mode: "dry_run",
+        operationScopeHash: randomUUID().replaceAll("-", "").padEnd(64, "0"),
+        requestToken: randomUUID(),
+        totalCount: 1,
+        items: { create: [{ targetType: "test", targetId: randomUUID(), payload: {} }] },
+      },
+      include: { items: true },
+    });
+    const lease = await claimPendingItem(prisma, {
+      family: "generic", taskTypes: ["runtime.test"], workerId: "worker-dry-run-guard", leaseMs: 60_000,
+    });
+    expect(lease!.mode).toBe("dry_run");
+
+    let protectedWriteRan = false;
+    await finalizeTaskItem(prisma, lease!, {
+      status: "success",
+      result: { wouldWrite: true },
+      protectedWrite: async () => {
+        protectedWriteRan = true;
+      },
+    });
+    expect(protectedWriteRan).toBe(false);
+
+    const item = await prisma.genericTaskItem.findUniqueOrThrow({ where: { id: lease!.itemId } });
+    expect(item.status).toBe("failed");
+    expect(item.error).toMatchObject({ code: "dry_run_protected_write_blocked" });
+
+    const audit = await prisma.operationAudit.findFirst({
+      where: { taskId: task.id, entityId: lease!.itemId, action: "task_item.failed" },
+      orderBy: { createdAt: "desc" },
+    });
+    expect(audit).toMatchObject({ reason: "dry_run_protected_write_blocked" });
+  });
+
   it("terminalizes poison items when the claim budget is exhausted", async () => {
     const task = await createGenericTask();
     await prisma.genericTaskItem.update({

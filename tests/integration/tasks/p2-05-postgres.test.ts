@@ -13,11 +13,16 @@ import { resolveSiteLocale } from "@/lib/locale/locale-canonical";
 import {
   buildPromoLinkIdempotencyKey,
   buildWorkerAllowlist,
+  claimPendingItem,
   createMoboreaderCatalogScanTask,
   createMoboreaderPreviewRefreshTask,
 } from "@/lib/tasks";
 import { encryptCredentialSecretForWorker } from "../../../worker/credentials/crypto";
-import { createMoboreaderWorkerHandlers } from "../../../worker/handlers/moboreader";
+import {
+  createMoboreaderCatalogHandler,
+  createMoboreaderPreviewHandler,
+  createMoboreaderWorkerHandlers,
+} from "../../../worker/handlers/moboreader";
 import { processOneWorkerCycle } from "../../../worker/runtime/worker";
 import { runPreviewOne } from "../../../scripts/x8-preview-one";
 
@@ -275,21 +280,217 @@ describe.skipIf(!enabled).sequential("P2-05 PostgreSQL 16.14 write paths", () =>
     await Promise.all([owner.$disconnect(), worker.$disconnect()]);
   });
 
-  it("retains task/audit results while dry-run makes zero business writes", async () => {
-    const dryRunOnly = {
+  // Phase D (施工工单_PhaseD_安全与运行态收口_2026-09-06.md D-1): this test used
+  // to enqueue "dry_run" under ALLOW_WRITE=false and expect the worker to
+  // actually consume it (`consume(...)` === true) -- that only worked
+  // because the pre-Phase-D enqueue gate special-cased dry_run around the
+  // write flag (`enabled && (mode === "dry_run" || writeAllowed)`), and
+  // because the handler back then unconditionally attached a real
+  // `protectedWrite` regardless of mode. Split into the two scenarios D-1
+  // actually specifies: (1) ALLOW_WRITE=false disables enqueue uniformly for
+  // both modes now, so nothing is ever claimed; (2) dry_run makes zero
+  // business writes even when ALLOW_WRITE=true and the item really is
+  // claimed, fetched from upstream, and judged.
+  it("Phase D D-1 做法1: ALLOW_WRITE=false disables catalog-scan enqueue for dry_run and apply alike", async () => {
+    const writeClosed = {
       NODE_ENV: "test",
       FEATURE_NOVEL_CATALOG_SYNC: "true",
       NOVEL_CATALOG_SYNC_ALLOW_WRITE: "false",
       MOBOREADER_PREVIEW_SOURCE_APP_CODES: "moboreader",
     } satisfies NodeJS.ProcessEnv;
-    const created = await enqueue("dry_run", randomUUID(), dryRunOnly);
-    expect(created.status).toBe("enqueued");
-    expect(await consume(adapter(), dryRunOnly)).toBe(true);
+    const dryRunCreated = await enqueue("dry_run", randomUUID(), writeClosed);
+    expect(dryRunCreated).toMatchObject({ status: "enqueued", taskStatus: "disabled" });
+    const applyCreated = await enqueue("apply", randomUUID(), writeClosed);
+    expect(applyCreated).toMatchObject({ status: "enqueued", taskStatus: "disabled" });
+
+    // Neither task is claimable (both "disabled"), so one worker cycle finds
+    // nothing to do -- and, a fortiori, writes nothing.
+    expect(await consume(adapter(), writeClosed)).toBe(false);
     expect(await owner.novelSourceItem.count()).toBe(0);
+    expect(await owner.sourceLabel.count()).toBe(0);
+    expect(await owner.promoLink.count()).toBe(0);
+    expect(await owner.article.count()).toBe(0);
     expect(await owner.channelSyncTask.count()).toBe(0);
+  });
+
+  it("Phase D D-1 做法2/3: dry-run reads real upstream data and judges it for real, but makes zero business writes even when ALLOW_WRITE=true (end-to-end via the real worker loop)", async () => {
+    // NOTE: worker/runtime/worker.ts's processOneWorkerCycle() has ALREADY
+    // stripped any `protectedWrite` off a dry_run outcome before calling
+    // finalizeTaskItem() since commit 9aca875 (2026-08-05, pre-dates this
+    // doc) -- so this end-to-end assertion would stay green even if the
+    // handler-level 做法2 change below were reverted; it documents the
+    // desired real-worker-loop behavior but is NOT this doc's regression
+    // guard for the handler change. See the next test ("做法2 (handler
+    // level)") for the test that actually goes red without 做法2.
+    const created = await enqueue("dry_run");
+    expect(created).toMatchObject({ status: "enqueued", taskStatus: "pending" });
+    expect(await consume()).toBe(true);
+
+    // Zero rows in every table a real apply run would have touched.
+    expect(await owner.novelSourceItem.count()).toBe(0);
+    expect(await owner.sourceLabel.count()).toBe(0);
+    expect(await owner.novelSourceItemLabel.count()).toBe(0);
+    expect(await owner.promoLink.count()).toBe(0);
+    expect(await owner.article.count()).toBe(0);
+    // persistCatalogPage() is what enqueues the auto preview-refresh task on
+    // the terminal page; skipping it (dry_run's whole point) means no such
+    // task exists either.
+    expect(await owner.channelSyncTask.count()).toBe(0);
+
+    // Task/item bookkeeping and audit trail are unaffected -- only the
+    // business write is suppressed.
     const task = await owner.genericTask.findUniqueOrThrow({ where: { id: created.taskId } });
-    expect(task).toMatchObject({ status: "completed", successCount: 1 });
+    expect(task).toMatchObject({ status: "completed", successCount: 1, failedCount: 0 });
+    const item = await owner.genericTaskItem.findFirstOrThrow({ where: { taskId: created.taskId } });
+    expect(item.status).toBe("success");
+    expect(item.result).toMatchObject({ mode: "dry_run", pageIndex: 1, returnedCount: 1, observedTotal: 95_479 });
     expect(await owner.operationAudit.count({ where: { taskId: created.taskId } })).toBeGreaterThanOrEqual(2);
+  });
+
+  it("Phase D D-1 做法2 (handler level): the catalog handler itself never attaches protectedWrite under dry_run, independent of the runtime's own stripping", async () => {
+    // Calls createMoboreaderCatalogHandler() directly (bypassing
+    // processOneWorkerCycle entirely) so this test actually exercises the
+    // handler's own dry_run branch -- and goes red if that branch is
+    // reverted, unlike the end-to-end test above (which the pre-existing
+    // runtime-level strip in worker/runtime/worker.ts would still make
+    // pass).
+    const created = await enqueue("dry_run");
+    expect(created).toMatchObject({ status: "enqueued", taskStatus: "pending" });
+    const lease = await claimPendingItem(worker, {
+      family: "generic", taskTypes: ["catalog_scan"], workerId: "direct-handler-worker", leaseMs: 60_000,
+    });
+    expect(lease).not.toBeNull();
+    expect(lease!.mode).toBe("dry_run");
+    const handler = createMoboreaderCatalogHandler(worker, { adapter: adapter(), env: gates });
+    const outcome = await handler({
+      lease: lease!, mode: lease!.mode, signal: new AbortController().signal, heartbeat: async () => true,
+    });
+    expect(outcome).toMatchObject({
+      status: "success",
+      result: { mode: "dry_run", pageIndex: 1, returnedCount: 1, observedTotal: 95_479 },
+    });
+    expect(outcome.protectedWrite).toBeUndefined();
+    // The handler call above never reached finalizeTaskItem, so this is
+    // purely confirming the handler itself performed no write of its own.
+    expect(await owner.novelSourceItem.count()).toBe(0);
+    expect(await owner.promoLink.count()).toBe(0);
+  });
+
+  it("Phase D D-1 做法2: dry-run preview refresh reads upstream chapters but never materializes them", async () => {
+    // Unlike seedLinkedSource() (used by every other preview test here, but
+    // only ever consumed AFTER a real catalog-scan `consume()` has already
+    // overwritten its placeholder `rawPayload: { seeded: true }` with a real
+    // getlistpc-shaped row -- see e.g. "enqueues the linked batch..." below),
+    // this test consumes the preview item directly, with no prior catalog
+    // scan. It needs a `rawPayload` that already satisfies
+    // buildMoboreaderPreviewRequestsFromCatalogRow() and
+    // loadMoboreaderPreviewScope()'s cross-check against
+    // source.externalAgencyId/sourceLanguageCode/channelApp.projectType (1,
+    // per seedFoundation()) up front.
+    const novel = await owner.novel.create({
+      data: { businessId: "dry-run-preview", title: "Novel book-1", description: "Description", locale: "en-US", slug: "dry-run-preview" },
+    });
+    const source = await owner.novelSourceItem.create({
+      data: {
+        channelAppId: ids.channelApp,
+        novelId: novel.id,
+        externalBookId: "book-1",
+        sourceLanguageCode: "2",
+        sourceLanguageName: "English",
+        externalAgencyId: "agency-1",
+        title: "Old book-1",
+        description: "Old",
+        totalChapterCount: 1,
+        paidFromChapter: 1,
+        status: "linked",
+        rawPayload: { agencyId: "agency-1", seriesId: "series-book-1", language: "2", projectType: 1 },
+      },
+    });
+    const dryRunPreview = await createMoboreaderPreviewRefreshTask(owner, {
+      channelAccountId: ids.account,
+      channelAppId: ids.channelApp,
+      novelSourceItemIds: [source.id],
+      requestToken: randomUUID(),
+      actorId: "owner",
+      requestId: randomUUID(),
+      mode: "dry_run",
+    }, gates);
+    expect(dryRunPreview).toMatchObject({ status: "enqueued", taskStatus: "pending" });
+
+    const readAdapter = adapter();
+    readAdapter.fetchBookMaterial = vi.fn(readAdapter.fetchBookMaterial);
+    readAdapter.fetchPreviewChapters = vi.fn(readAdapter.fetchPreviewChapters);
+    expect(await consumePreview(readAdapter)).toBe(true);
+    // The real upstream calls happened (dry_run judges for real)...
+    expect(readAdapter.fetchBookMaterial).toHaveBeenCalledTimes(1);
+    expect(readAdapter.fetchPreviewChapters).toHaveBeenCalledTimes(1);
+    // ...but nothing was materialized.
+    expect(await owner.novelChapter.count()).toBe(0);
+    expect(await owner.novelChapterContent.count()).toBe(0);
+    expect(await owner.novelPreviewPolicy.count()).toBe(0);
+
+    const task = dryRunPreview.status === "enqueued"
+      ? await owner.channelSyncTask.findUniqueOrThrow({ where: { id: dryRunPreview.taskId } })
+      : null;
+    expect(task).toMatchObject({ status: "completed", successCount: 0, skippedCount: 1 });
+    const item = await owner.channelSyncTaskItem.findFirstOrThrow({ where: { taskId: task!.id } });
+    expect(item.status).toBe("skipped");
+    expect(item.result).toMatchObject({ decision: "would_materialize", upstreamCount: 3 });
+  });
+
+  it("Phase D D-1 做法2 (handler level): the preview handler itself never attaches protectedWrite under dry_run, independent of the runtime's own stripping", async () => {
+    // Same reasoning as the catalog handler's own direct-call test above:
+    // processOneWorkerCycle() already strips a dry_run outcome's
+    // protectedWrite before finalizeTaskItem() ever sees it (pre-dates this
+    // doc), so a full round-trip through consumePreview() would stay green
+    // even if this handler's own dry_run branch were reverted. Calling
+    // createMoboreaderPreviewHandler() directly is what actually regression-
+    // tests that branch.
+    const novel = await owner.novel.create({
+      data: { businessId: "dry-run-preview-direct", title: "Novel book-1", description: "Description", locale: "en-US", slug: "dry-run-preview-direct" },
+    });
+    const source = await owner.novelSourceItem.create({
+      data: {
+        channelAppId: ids.channelApp,
+        novelId: novel.id,
+        externalBookId: "book-1",
+        sourceLanguageCode: "2",
+        sourceLanguageName: "English",
+        externalAgencyId: "agency-1",
+        title: "Old book-1",
+        description: "Old",
+        totalChapterCount: 1,
+        paidFromChapter: 1,
+        status: "linked",
+        rawPayload: { agencyId: "agency-1", seriesId: "series-book-1", language: "2", projectType: 1 },
+      },
+    });
+    const dryRunPreview = await createMoboreaderPreviewRefreshTask(owner, {
+      channelAccountId: ids.account,
+      channelAppId: ids.channelApp,
+      novelSourceItemIds: [source.id],
+      requestToken: randomUUID(),
+      actorId: "owner",
+      requestId: randomUUID(),
+      mode: "dry_run",
+    }, gates);
+    expect(dryRunPreview).toMatchObject({ status: "enqueued", taskStatus: "pending" });
+    const lease = await claimPendingItem(worker, {
+      family: "channel_sync", taskTypes: ["moboreader.preview_refresh.v1"], workerId: "direct-handler-worker", leaseMs: 60_000,
+    });
+    expect(lease).not.toBeNull();
+    expect(lease!.mode).toBe("dry_run");
+    const handler = createMoboreaderPreviewHandler(worker, { adapter: adapter(), env: gates });
+    const outcome = await handler({
+      lease: lease!, mode: lease!.mode, signal: new AbortController().signal, heartbeat: async () => true,
+    });
+    expect(outcome).toMatchObject({
+      status: "skipped",
+      result: { decision: "would_materialize", upstreamCount: 3 },
+    });
+    expect(outcome.protectedWrite).toBeUndefined();
+    expect(await owner.novelChapter.count()).toBe(0);
+    expect(await owner.novelChapterContent.count()).toBe(0);
   });
 
   it("writes a checkpoint through worker_app and reruns idempotently", async () => {

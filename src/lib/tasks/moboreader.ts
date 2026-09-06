@@ -314,7 +314,21 @@ export async function createMoboreaderCatalogScanTask(
 
   const enabled = isNovelCatalogSyncEnabled(env);
   const writeAllowed = isNovelCatalogSyncWriteAllowed(env);
-  const taskStatus = enabled && (input.mode === "dry_run" || writeAllowed) ? "pending" : "disabled";
+  // Phase D (施工工单_PhaseD_安全与运行态收口_2026-09-06.md D-1, 做法1): this
+  // used to read `enabled && (input.mode === "dry_run" || writeAllowed)`,
+  // letting a dry_run task bypass the write gate and get enqueued as
+  // "pending" (and therefore actually claimed and processed by the worker)
+  // even while an operator had turned the whole feature's write gate off.
+  // Combined with the handler/finalizer previously attaching a real
+  // `protectedWrite` regardless of mode (fixed below in
+  // worker/handlers/moboreader.ts and src/lib/tasks/store.ts), that bypass
+  // was the actual "dry_run silently writes real rows while ALLOW_WRITE is
+  // false" hole this doc names. Now that dry_run never attaches a
+  // `protectedWrite` (and `finalizeTaskItem` fail-closed rejects one if a
+  // handler ever regresses), dry_run no longer needs — or gets — a special
+  // exemption from this gate: the one flag now uniformly decides whether
+  // this feature's tasks (of either mode) are even claimed and run at all.
+  const taskStatus = enabled && writeAllowed ? "pending" : "disabled";
   const expiresAt = new Date(Date.now() + MOBOREADER_CATALOG_LIMITS.ttlMs);
   const taskId = randomUUID();
   const scheduledPageEnd = Math.min(input.pageEnd, input.pageStart + input.safetyMaxPages - 1);
@@ -551,7 +565,9 @@ async function enqueueMoboreaderPreviewRefreshTaskInDb(
   if (active) return { status: "active_conflict", taskId: active.id };
   const enabled = isNovelCatalogSyncEnabled(env);
   const writeAllowed = isNovelCatalogSyncWriteAllowed(env);
-  const taskStatus = enabled && (input.mode === "dry_run" || writeAllowed) ? "pending" : "disabled";
+  // Phase D D-1, 做法1 (see the twin comment on the catalog-scan enqueue
+  // above): no more dry_run exemption from the write gate.
+  const taskStatus = enabled && writeAllowed ? "pending" : "disabled";
   await db.channelSyncTask.create({
     data: {
       id: taskId,
