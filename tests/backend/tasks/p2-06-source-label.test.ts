@@ -90,8 +90,10 @@ describe("P2-06 source label write planning", () => {
   it("keeps task anomaly results operator-readable without exposing source raw_payload", () => {
     const root = resolve(import.meta.dirname, "../../..");
     const grants = readFileSync(resolve(root, "infra/postgres/grants.sql"), "utf8");
-    expect(grants).toMatch(/catalog_scan_task,[\s\S]*operation_audit,[\s\S]*TO web_app, analyst_ro;/);
-    expect(grants).toMatch(/GRANT SELECT \([\s\S]*result, error,[\s\S]*\) ON catalog_scan_task_item TO analyst_ro;/);
+    expect(grants).toMatch(
+      /GRANT SELECT ON TABLE[^;]*generic_task,\s*generic_task_item,\s*operation_audit,[^;]*TO web_app, analyst_ro;/,
+    );
+    expect(grants).not.toMatch(/\bcatalog_scan_task(?:_item)?\b/);
     const sourceProjection = grants.match(/GRANT SELECT \([\s\S]*?\) ON novel_source_item TO web_app, analyst_ro;/)?.[0];
     expect(sourceProjection).toBeDefined();
     expect(sourceProjection).not.toContain("raw_payload");

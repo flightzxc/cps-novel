@@ -49,7 +49,6 @@ GRANT SELECT ON TABLE
   source_label,
   novel_source_item_label,
   tracking_event,
-  catalog_scan_task,
   channel_sync_task,
   channel_sync_task_item,
   generic_task,
@@ -82,14 +81,6 @@ GRANT SELECT ON TABLE admin_identity, admin_session, admin_two_factor,
 GRANT INSERT, UPDATE ON TABLE admin_identity, admin_session, admin_two_factor,
   admin_two_factor_challenge, admin_recovery_code, admin_login_attempt TO web_app;
 GRANT DELETE ON TABLE admin_recovery_code, admin_login_attempt TO web_app;
-
--- Web may inspect task request fingerprints; Analyst may not.
-GRANT SELECT ON TABLE catalog_scan_task_item TO web_app;
-GRANT SELECT (
-  id, task_id, page_index, page_range_end, status, attempt_count, execution_token,
-  lease_epoch, locked_by, locked_until, heartbeat_at, returned_count, payload,
-  result, error, started_at, finished_at, created_at, updated_at
-) ON catalog_scan_task_item TO analyst_ro;
 
 -- Credential metadata is visible, ciphertext and complete fingerprints are not.
 GRANT SELECT (
@@ -170,8 +161,7 @@ GRANT INSERT, UPDATE ON TABLE
   article_template, article, home_carousel_manual_slot, tracking_event,
   canonical_tag, canonical_tag_translation, canonical_tag_keyword,
   source_label_mapping, novel_tag_state, novel_canonical_tag, tag_classification_run,
-  catalog_scan_task, catalog_scan_task_item, channel_sync_task,
-  channel_sync_task_item, generic_task, generic_task_item, schedule_run,
+  channel_sync_task, channel_sync_task_item, generic_task, generic_task_item, schedule_run,
   cron_run, indexnow_outbox
 TO web_app;
 -- Content creation links an already-sanitized source row to its new Novel.
@@ -203,8 +193,8 @@ GRANT INSERT, UPDATE ON TABLE
   channel_account_credential, channel_credential_active_fingerprint,
   novel, novel_source_item, novel_chapter, novel_chapter_source_item,
   novel_chapter_content, novel_preview_policy, source_label,
-  novel_source_item_label, promo_link, tracking_event, catalog_scan_task,
-  catalog_scan_task_item, channel_sync_task, channel_sync_task_item,
+  novel_source_item_label, promo_link, tracking_event, channel_sync_task,
+  channel_sync_task_item,
   generic_task, generic_task_item, side_effect_intent, indexnow_outbox,
   schedule_run, cron_run, article_template, article,
   home_carousel_manual_slot, home_carousel_auto_batch,
@@ -231,8 +221,7 @@ GRANT SELECT ON TABLE channel_account, channel_account_credential,
 GRANT SELECT ON TABLE channel, source_app, channel_app, channel_capability,
   novel, novel_source_item, novel_chapter, novel_chapter_source_item,
   novel_chapter_content, novel_preview_policy, source_label,
-  novel_source_item_label, catalog_scan_task, catalog_scan_task_item,
-  channel_sync_task, channel_sync_task_item, promo_link, article,
+  novel_source_item_label, channel_sync_task, channel_sync_task_item, promo_link, article,
   canonical_tag, canonical_tag_translation, canonical_tag_keyword,
   source_label_mapping, novel_tag_state, novel_canonical_tag, tag_classification_run TO worker_app;
 -- PR6 lane E: computeHomeCarouselInTx reads the manual-slot roster and its
