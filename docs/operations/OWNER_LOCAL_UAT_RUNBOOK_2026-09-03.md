@@ -77,6 +77,14 @@ claim/sitemap/indexnow 八项双闸 flag 及 `PROMO_CLAIM_ROLES` 互不冲突，
    该文件缺失、损坏，或解析不出合法级别时，`gate` 直接失败并提示先跑 `up`——不会
    静默回落到 Level 0。命令行里即使带上 `X8_LEVEL=uat` 前缀也对 `gate` 没有任何
    效果——这正是本条修复要消灭的"忘记前缀就悄悄按别的级别重建"问题。
+   级别的**配置表**同样被身份文件绑定（2026-09-06 补丁）：`up` 把当时所用级别表的
+   路径与内容摘要一并记入身份，`gate` 每次执行前重新计算摘要并比对。**部署之后若该
+   表被修改，`gate` 会因摘要不一致 fail-closed**；正确的恢复方式是重新执行一次完整
+   `up` 建立新的部署身份，不要设法绕过摘要检查。此外，表里的安全不变量
+   （`AUTO_WRITE_AUTHORIZED` 必须是 `NO`、`FEATURE_NOVEL_TAG_AUTO` 必须是 `false`）
+   会在 `gate` 路径上独立重新断言一次——摘要只能证明表没被改过，证明不了表里的值
+   本身是安全的。该断言与合规校验脚本共用同一份定义
+   （`scripts/lib/x8-level-safety-invariants.mjs`），不存在两份副本。
 2. **部署身份分"候选"与"已提交"两段（2026-09-06 补丁，决策二）**：`up`
    在镜像构建成功、起任何容器之前，先把身份写成候选文件
    （`.tmp/x8-production-like/release-identity.candidate.json`）；等数据库准备、
