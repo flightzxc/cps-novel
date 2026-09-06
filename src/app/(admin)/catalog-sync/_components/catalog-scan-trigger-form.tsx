@@ -1,9 +1,12 @@
 "use client";
 
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useMemo, useState, type FormEvent } from "react";
 
 import { buttonClassName } from "@/components/ui/button";
 import { errorEnvelopeCopy } from "@/features/admin-ui/error-copy";
+import { ImportProgress } from "@/features/admin-ui/import-progress";
 import { SITE_LOCALES, SITE_LOCALE_LABELS } from "@/lib/locale/locale-canonical";
 
 import { applyCatalogScanTaskAction } from "../_actions";
@@ -108,6 +111,29 @@ function ResultPanel({ result }: { result: CatalogScanOutcome }) {
   );
 }
 
+/**
+ * C-6: 提交成功且拿到 taskId 时（"created" 或 "created_disabled" —— 后者的任务
+ * 会立即停在 disabled/已暂停，ImportProgress 首次轮询即终态，这本身就是正确反馈,
+ * 不需要额外分支）内联渲染进度卡；`onTerminal` 刷新来源条目列表（同页
+ * server component 重新取数），旁置「前往任务中心 →」「查看推广链接 →」——
+ * 对齐 CPS 目录同步提交后的路径,见工单 §三表格最后一行。
+ */
+function TaskProgressCard({ taskId, onTerminal }: { taskId: string; onTerminal: () => void }) {
+  return (
+    <div className="mt-3 space-y-3 rounded-lg border border-gray-200 bg-gray-50 p-4">
+      <ImportProgress taskId={taskId} onTerminal={onTerminal} />
+      <div className="flex items-center gap-4 border-t border-gray-200 pt-3 text-sm">
+        <Link href="/tasks" className="font-medium text-blue-600 hover:text-blue-700">
+          前往任务中心 →
+        </Link>
+        <Link href="/promo-links" className="font-medium text-blue-600 hover:text-blue-700">
+          查看推广链接 →
+        </Link>
+      </div>
+    </div>
+  );
+}
+
 function chipButtonClassName(selected: boolean): string {
   return `rounded-lg border px-4 py-2 text-sm font-medium transition-colors ${
     selected
@@ -127,6 +153,7 @@ export function CatalogScanTriggerForm({
   contentPublishBlockedReason: string | null;
   safetyMaxPages: number;
 }) {
+  const router = useRouter();
   const firstChannel = channels[0] ?? null;
   const [channelId, setChannelId] = useState(firstChannel?.id ?? "");
   const [channelAppId, setChannelAppId] = useState(firstChannel?.channelApps[0]?.id ?? "");
@@ -350,7 +377,17 @@ export function CatalogScanTriggerForm({
               {stage.message}
             </p>
           )}
-          {stage.kind === "result" && <ResultPanel result={stage.result} />}
+          {stage.kind === "result" && (
+            <>
+              <ResultPanel result={stage.result} />
+              {(stage.result.outcome === "created" || stage.result.outcome === "created_disabled") && (
+                <TaskProgressCard
+                  taskId={stage.result.taskId}
+                  onTerminal={() => router.refresh()}
+                />
+              )}
+            </>
+          )}
         </form>
       )}
     </section>

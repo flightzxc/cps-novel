@@ -86,6 +86,12 @@ export const ADMIN_TASK_ROUTES = [
   { id: "admin.api.task.list", path: "/api/admin/tasks", methods: ["GET"], capability: "task:manage" },
   { id: "admin.api.task.detail", path: "/api/admin/tasks/detail", methods: ["GET"], capability: "task:manage" },
   { id: "admin.api.task.items", path: "/api/admin/tasks/items", methods: ["GET"], capability: "task:manage" },
+  // C-6 (ImportProgress port): fixed path + `?taskId=` query, same reason
+  // `/detail` and `/items` above are fixed-path -- `resolveAdminRoute`
+  // matches `path` by exact string equality with no dynamic-segment support,
+  // so a CPS-shaped `/api/admin/tasks/{id}/progress` could never be
+  // registered for a fixed capability.
+  { id: "admin.api.task.progress", path: "/api/admin/tasks/progress", methods: ["GET"], capability: "task:manage" },
   { id: "admin.api.task.retry_failed", path: "/api/admin/tasks/retry-failed", methods: ["POST"], capability: "task:manage" },
   { id: "admin.api.task.manual_reviews", path: "/api/admin/tasks/manual-reviews", methods: ["GET"], capability: "task:manage" },
   { id: "admin.api.task.manual_review.resolve", path: "/api/admin/tasks/manual-reviews/resolve", methods: ["POST"], capability: "task:manage" },

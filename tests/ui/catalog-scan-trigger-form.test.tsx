@@ -23,6 +23,13 @@ const actions = vi.hoisted(() => ({
 }));
 
 vi.mock("@/app/(admin)/catalog-sync/_actions", () => actions);
+// C-6: the form now calls useRouter() (router.refresh() is ImportProgress's
+// onTerminal callback) -- same double-mock shape admin-task-detail-panel.test.tsx
+// already uses for the same reason. `routerRefresh` is hoisted (not a fresh
+// vi.fn() per useRouter() call) so tests can assert on the exact instance the
+// component actually invoked.
+const routerRefresh = vi.hoisted(() => vi.fn());
+vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: routerRefresh }) }));
 
 const { CatalogScanTriggerForm } = await import(
   "@/app/(admin)/catalog-sync/_components/catalog-scan-trigger-form"
@@ -96,6 +103,7 @@ function languageChip(label: string): HTMLElement {
 beforeEach(() => {
   actions.dryRunCatalogScanTaskAction.mockReset();
   actions.applyCatalogScanTaskAction.mockReset();
+  routerRefresh.mockClear();
 });
 
 afterEach(() => {
@@ -288,6 +296,62 @@ describe("四种结果分支各自独立呈现", () => {
     expect(panel.textContent).toContain("disabled");
     expect(screen.getByTestId("flag-row-FEATURE_NOVEL_CATALOG_SYNC").textContent).toContain("未开启");
     expect(screen.getByTestId("flag-row-NOVEL_CATALOG_SYNC_ALLOW_WRITE").textContent).toContain("未开启");
+  });
+
+  it("created：内联渲染 ImportProgress 进度卡，并给出「前往任务中心」「查看推广链接」入口 (C-6)", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("network stub: not exercised by this assertion")));
+    actions.applyCatalogScanTaskAction.mockResolvedValue(
+      okResult({ outcome: "created", taskId: "task-created-progress", mode: "apply" }),
+    );
+    await submit();
+
+    expect(screen.getByTestId("import-progress-task-id").textContent).toContain("task-created-progress");
+    expect(screen.getByRole("link", { name: "前往任务中心 →" }).getAttribute("href")).toBe("/tasks");
+    expect(screen.getByRole("link", { name: "查看推广链接 →" }).getAttribute("href")).toBe("/promo-links");
+  });
+
+  it("created_disabled：同样携带 taskId，也内联渲染进度卡 (C-6)", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("network stub: not exercised by this assertion")));
+    actions.applyCatalogScanTaskAction.mockResolvedValue(
+      okResult({
+        outcome: "created_disabled",
+        taskId: "task-disabled-progress",
+        mode: "apply",
+        flags: { featureEnabled: false, writeAllowed: false },
+      }),
+    );
+    await submit();
+
+    expect(screen.getByTestId("import-progress-task-id").textContent).toContain("task-disabled-progress");
+  });
+
+  it("进度卡到达终态时调用 router.refresh() 刷新来源条目列表 (C-6 onTerminal)", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          taskType: "catalog_scan",
+          status: "completed",
+          total: 1,
+          success: 1,
+          failed: 0,
+          skip: 0,
+          processed: 1,
+          percent: 100,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          taskErrors: [],
+          items: [],
+        }),
+      }),
+    );
+    actions.applyCatalogScanTaskAction.mockResolvedValue(
+      okResult({ outcome: "created", taskId: "task-terminal-progress", mode: "apply" }),
+    );
+    await submit();
+
+    await waitFor(() => expect(routerRefresh).toHaveBeenCalledTimes(1));
   });
 
   it("duplicate：幂等提示，不是失败语气", async () => {
