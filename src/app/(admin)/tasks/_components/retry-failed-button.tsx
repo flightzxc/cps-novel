@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
@@ -10,19 +9,9 @@ import type { TaskFamily } from "@/lib/tasks";
 import { adminFetch } from "@/features/admin-ui/admin-fetch";
 import { errorEnvelopeCopy } from "@/features/admin-ui/error-copy";
 
-/**
- * `originTaskId` (Phase C step C-7): non-null only for the `generic`
- * family's CPS-parity path, where `taskId` is a brand-new sibling task and
- * `originTaskId` points back at the task the operator actually clicked
- * "重试失败项" on. `null` for `channel_sync`, which keeps the pre-C-7
- * in-place-reset semantics (`taskId` is the SAME task, reset to pending) —
- * see `src/server/task-admin/service.ts`'s `RetryFailedTaskResult` doc
- * comment for why the two families still diverge here.
- */
 type RetryFailedTaskResult = {
   readonly family: TaskFamily;
   readonly taskId: string;
-  readonly originTaskId?: string | null;
   readonly status: "pending";
   readonly retriedItemCount: number;
   readonly totalCount: number;
@@ -108,17 +97,7 @@ export function RetryFailedButton({ family, taskId }: { family: TaskFamily; task
           data-testid="retry-failed-result"
           className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800"
         >
-          {result.originTaskId ? (
-            <>
-              已创建重试任务 #{result.taskId}，携带原任务的 {result.retriedItemCount} 个失败子项；原任务 #{result.originTaskId}{" "}
-              保留完整失败记录，不做原地覆盖。{" "}
-              <Link href={`/tasks?taskId=${result.taskId}&taskFamily=${result.family}`} className="font-medium underline">
-                查看重试任务 →
-              </Link>
-            </>
-          ) : (
-            <>已将 {result.retriedItemCount} 个失败子项重置为 pending，任务状态回到 pending，等待下一轮调度重试。</>
-          )}
+          已将 {result.retriedItemCount} 个失败子项重置为 pending，任务状态回到 pending，等待下一轮调度重试。
           {result.wrote === false && "（这是对同一请求标识的重复提交，本次未再次写入，返回的是首次执行的结果。）"}
         </p>
       )}
@@ -132,10 +111,8 @@ export function RetryFailedButton({ family, taskId }: { family: TaskFamily; task
         body={
           <>
             <p>
-              {family === "generic"
-                ? "会新建一个重试任务，只装入当前处于 failed 的子项；原任务保留不变（状态、计数、失败记录都不动）。"
-                : "只会把当前处于 failed 的子项重置为 pending 并重新计数；已成功或已跳过的子项不受影响。"}
-              {" "}如果这个任务还挂着未裁决的人工审查项，本次提交会被拒绝——需要先去下方&ldquo;人工审查区&rdquo;裁决。
+              只会把当前处于 failed 的子项重置为 pending 并重新计数；已成功或已跳过的子项不受影响。
+              如果这个任务还挂着未裁决的人工审查项，本次提交会被拒绝——需要先去下方&ldquo;人工审查区&rdquo;裁决。
             </p>
             <label className="block">
               <span className="mb-1 block text-xs text-gray-500">重试原因（必填，写入审计）</span>

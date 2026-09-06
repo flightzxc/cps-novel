@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import { Prisma, type PrismaClient } from "@prisma/client";
+import type { Prisma, PrismaClient } from "@prisma/client";
 
 import { P2_04_ADMIN_REGISTRY } from "@/app/api/admin/_lib/registry";
 import { ADMIN_ABSOLUTE_TIMEOUT_MS, hashAdminSessionToken } from "@/lib/auth/session";
@@ -94,10 +94,6 @@ export type FakeItem = {
   novelSourceItemId?: string;
   targetType?: string;
   targetId?: string;
-  // Phase C step C-7: `createGenericRetryTask` copies this onto the new
-  // sibling task's item so the worker can actually reprocess it (see the
-  // doc comment on that function in service.ts for why).
-  payload?: Prisma.JsonValue;
 };
 
 type FakeParent = {
@@ -112,19 +108,6 @@ type FakeParent = {
   completedAt: Date | null;
   result: unknown;
   error: unknown;
-  // Phase C step C-7: read by `lockParent`'s SELECT (service.ts) so the
-  // `generic`-family retry path can stand up a full sibling `GenericTask`.
-  taskType: string;
-  operationScopeHash: string;
-  mode: string;
-  params: Prisma.JsonValue;
-};
-
-type FakeGenericTaskRow = {
-  id: string;
-  taskType: string;
-  originTaskId: string;
-  requestToken: string;
 };
 
 type FakeIntent = {
@@ -165,7 +148,6 @@ function item(id: string, status: string, targetId?: string): FakeItem {
     novelSourceItemId: targetId,
     targetType: targetId ? "novel_source_item" : undefined,
     targetId,
-    payload: targetId ? { seededFrom: targetId } : undefined,
   };
 }
 
@@ -180,16 +162,6 @@ export class TaskAdminFakeDb {
   readonly itemUpdateCalls = new Map<TaskFamily, number>();
   readonly parentUpdateCalls = new Map<TaskFamily, number>();
   promoMutationCalls = 0;
-  // Phase C step C-7: created `GenericTask` rows from `createGenericRetryTask`
-  // (`genericTask.create` below), including their own items, plus a
-  // `(taskType, originTaskId)` index that simulates the real
-  // `generic_task_origin_key` UNIQUE constraint -- a second `create` for the
-  // same pair throws the same `PrismaClientKnownRequestError` (P2002) shape
-  // a live Postgres would, so `retryFailedTask`'s existing
-  // `isUniqueConstraintViolation` catch is exercised for real, not stubbed.
-  readonly createdGenericTasks: FakeGenericTaskRow[] = [];
-  readonly createdGenericTaskItems = new Map<string, FakeItem[]>();
-  private readonly genericOriginKeys = new Set<string>();
 
   private manualReads = 0;
   private releaseManualReads: (() => void) | null = null;
@@ -211,10 +183,6 @@ export class TaskAdminFakeDb {
         completedAt: NOW,
         result: { raw: "parent result" },
         error: { raw: "parent error" },
-        taskType: family === "generic" ? "catalog_scan" : "moboreader.preview_refresh.v1",
-        operationScopeHash: "a".repeat(64),
-        mode: "apply",
-        params: { seed: true },
       });
       this.items.set(family, [
         item("60000000-0000-4000-8000-000000000001", "failed", "source-1"),
@@ -281,10 +249,6 @@ export class TaskAdminFakeDb {
               status: row.status,
               channel_account_id: row.channelAccountId,
               channel_app_id: row.channelAppId,
-              task_type: row.taskType,
-              operation_scope_hash: row.operationScopeHash,
-              mode: row.mode,
-              params: row.params,
             }];
           }
         }
@@ -294,71 +258,9 @@ export class TaskAdminFakeDb {
         throw new Error(`unexpected query: ${sql}`);
       },
       channelSyncTaskItem: channelItems,
-      genericTaskItem: {
-        ...genericItems,
-        // Phase C step C-7: `createGenericRetryTask`'s sibling-task items.
-        // Stored under the NEW task's own id (`createdGenericTaskItems`),
-        // separate from `this.items.get("generic")` (the origin task's
-        // fixture rows), the same separation two distinct `generic_task`
-        // rows would have in real Postgres.
-        createMany: async (args: { data: Array<Record<string, unknown>> }) => {
-          for (const row of args.data) {
-            const taskId = String(row.taskId);
-            const list = this.createdGenericTaskItems.get(taskId) ?? [];
-            list.push({
-              id: randomUUID(),
-              taskId,
-              status: String(row.status),
-              attemptCount: 0,
-              leaseEpoch: 0n,
-              executionToken: null,
-              lockedBy: null,
-              lockedUntil: null,
-              heartbeatAt: null,
-              result: null,
-              error: null,
-              finishedAt: null,
-              targetType: String(row.targetType),
-              targetId: String(row.targetId),
-              payload: row.payload as Prisma.JsonValue,
-            });
-            this.createdGenericTaskItems.set(taskId, list);
-          }
-          return { count: args.data.length };
-        },
-      },
+      genericTaskItem: genericItems,
       channelSyncTask: this.parentDelegate("channel_sync"),
-      genericTask: {
-        ...this.parentDelegate("generic"),
-        // Phase C step C-7: simulates `generic_task_origin_key`
-        // (`@@unique([taskType, originTaskId])`) -- a second `create` for
-        // the same `(taskType, originTaskId)` pair throws the same
-        // `PrismaClientKnownRequestError` shape (P2002) a live Postgres
-        // unique-violation would, so `retryFailedTask`'s existing
-        // `isUniqueConstraintViolation` catch is exercised for real.
-        create: async (args: { data: Record<string, unknown> }) => {
-          const taskType = String(args.data.taskType);
-          const originTaskId = args.data.originTaskId as string | undefined;
-          if (originTaskId) {
-            const key = `${taskType}:${originTaskId}`;
-            if (this.genericOriginKeys.has(key)) {
-              throw new Prisma.PrismaClientKnownRequestError(
-                "Unique constraint failed on the fields: (`task_type`,`origin_task_id`)",
-                { code: "P2002", clientVersion: "test", meta: { target: ["task_type", "origin_task_id"] } },
-              );
-            }
-            this.genericOriginKeys.add(key);
-          }
-          const id = randomUUID();
-          this.createdGenericTasks.push({
-            id,
-            taskType,
-            originTaskId: originTaskId ?? "",
-            requestToken: String(args.data.requestToken),
-          });
-          return { id };
-        },
-      },
+      genericTask: this.parentDelegate("generic"),
       sideEffectIntent: {
         findFirst: async () => this.unresolvedStatus ? { id: "blocked-intent" } : null,
         findUnique: async (args: { where: { id: string } }) => {
