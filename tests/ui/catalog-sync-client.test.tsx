@@ -114,12 +114,13 @@ function renderPage(
     promoClaimGranted?: boolean;
     promoClaimBlockedReason?: string | null;
     contentCreationBatchMaxSize?: number;
+    featureEnabled?: boolean;
   } = {},
 ) {
   return render(
     <CatalogSyncClient
       items={options.items ?? ROWS}
-      catalogGate={{ featureEnabled: true, writeAllowed: true }}
+      catalogGate={{ featureEnabled: options.featureEnabled ?? true }}
       contentPublish={options.contentPublish ?? "granted"}
       claimChannelApps={options.claimChannelApps ?? [claimApp()]}
       promoClaimMaxBatchSize={options.promoClaimMaxBatchSize ?? 50}
@@ -165,14 +166,15 @@ afterEach(() => {
 });
 
 describe("来源条目表格 · 渲染", () => {
-  it("CPS sync-panel 语义：目录写闸三态始终可见", () => {
-    const { rerender } = renderPage();
-    expect(screen.getByTestId("catalog-write-gate-status").getAttribute("data-state")).toBe("apply");
+  it("Phase B：CPS sync-panel 回归一条横幅，只反映总闸——不再展示写闸", () => {
+    const { rerender } = renderPage({ featureEnabled: true });
+    expect(screen.getByTestId("catalog-sync-gate-status").getAttribute("data-state")).toBe("enabled");
+    expect(screen.getByTestId("catalog-sync-gate-status").textContent).toContain("已启用");
 
     rerender(
       <CatalogSyncClient
         items={ROWS}
-        catalogGate={{ featureEnabled: true, writeAllowed: false }}
+        catalogGate={{ featureEnabled: false }}
         contentPublish="granted"
         claimChannelApps={[claimApp()]}
         promoClaimMaxBatchSize={50}
@@ -181,21 +183,8 @@ describe("来源条目表格 · 渲染", () => {
         contentCreationBatchMaxSize={50}
       />,
     );
-    expect(screen.getByTestId("catalog-write-gate-status").getAttribute("data-state")).toBe("dry_run");
-
-    rerender(
-      <CatalogSyncClient
-        items={ROWS}
-        catalogGate={{ featureEnabled: false, writeAllowed: true }}
-        contentPublish="granted"
-        claimChannelApps={[claimApp()]}
-        promoClaimMaxBatchSize={50}
-        promoClaimGranted
-        promoClaimBlockedReason={null}
-        contentCreationBatchMaxSize={50}
-      />,
-    );
-    expect(screen.getByTestId("catalog-write-gate-status").getAttribute("data-state")).toBe("closed");
+    expect(screen.getByTestId("catalog-sync-gate-status").getAttribute("data-state")).toBe("disabled");
+    expect(screen.getByTestId("catalog-sync-gate-status").textContent).toContain("FEATURE_NOVEL_CATALOG_SYNC");
   });
 
   it("列出标题、语种识别、渠道、章节数与状态徽标", () => {

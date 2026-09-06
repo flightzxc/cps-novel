@@ -273,10 +273,12 @@ const HAPPY_STUB_ENV = {
     "PROMO_CLAIM_ROLES=",
     "ADMIN_TWO_FACTOR_ENFORCEMENT=true",
     // Matches the stub `config` render's defaults (Level 0: preview source
-    // apps default "changdu", FEATURE_PROMO_LINK_CLAIM default "false") --
+    // apps default "moboreader" as of the Phase B entity fix -- 施工工单_
+    // PhaseB_实体订正与运营表单Parity_2026-09-06.md §二 --, FEATURE_PROMO_LINK_CLAIM
+    // default "false") --
     // P0-3/P0-4 coverage lives in the "no curated whitelist" describe block
     // below, which deliberately mismatches one of these.
-    "MOBOREADER_PREVIEW_SOURCE_APP_CODES=changdu",
+    "MOBOREADER_PREVIEW_SOURCE_APP_CODES=moboreader",
     "FEATURE_PROMO_LINK_CLAIM=false",
   ]),
   STUB_WORKER_ENV_JSON: JSON.stringify([
@@ -844,9 +846,10 @@ describe("X8 gate command: the three-way pre-check catches drift the reference i
     // MOBOREADER_PREVIEW_SOURCE_APP_CODES is exactly the kind of key that
     // list silently ignored -- and it is the very variable 施工项二 of the
     // original work order had to wire into Web in the first place. The
-    // baseline renders "changdu" (prepare_x8_gate_environment()'s constant
-    // default); the container fixture below reports an empty allowlist,
-    // reproducing that exact prior incident as a three-way-check failure.
+    // baseline renders "moboreader" (prepare_x8_gate_environment()'s constant
+    // default, Phase B entity fix); the container fixture below reports an
+    // empty allowlist, reproducing that exact prior incident as a
+    // three-way-check failure.
     writeIdentity();
     writeGateState("closed");
     const result = runGate(["on"], {
@@ -855,7 +858,7 @@ describe("X8 gate command: the three-way pre-check catches drift the reference i
         "NOVEL_CATALOG_SYNC_ALLOW_WRITE=false",
         "PROMO_CLAIM_ROLES=",
         "ADMIN_TWO_FACTOR_ENFORCEMENT=true",
-        "MOBOREADER_PREVIEW_SOURCE_APP_CODES=", // drifted: baseline says "changdu"
+        "MOBOREADER_PREVIEW_SOURCE_APP_CODES=", // drifted: baseline says "moboreader"
         "FEATURE_PROMO_LINK_CLAIM=false",
       ]),
     });
@@ -907,7 +910,7 @@ describe("X8 gate command: the three-way pre-check catches drift the reference i
         "NOVEL_CATALOG_SYNC_ALLOW_WRITE=false",
         "PROMO_CLAIM_ROLES=",
         "ADMIN_TWO_FACTOR_ENFORCEMENT=true",
-        "MOBOREADER_PREVIEW_SOURCE_APP_CODES=changdu",
+        "MOBOREADER_PREVIEW_SOURCE_APP_CODES=moboreader",
         "FEATURE_PROMO_LINK_CLAIM=false",
         "SOME_UNEXPECTED_RUNTIME_VAR=surprise", // never declared by compose at all
       ]),
@@ -941,7 +944,7 @@ describe("X8 gate command: the three-way pre-check catches drift the reference i
         "NOVEL_CATALOG_SYNC_ALLOW_WRITE=false",
         "PROMO_CLAIM_ROLES=",
         "ADMIN_TWO_FACTOR_ENFORCEMENT=true",
-        "MOBOREADER_PREVIEW_SOURCE_APP_CODES=changdu",
+        "MOBOREADER_PREVIEW_SOURCE_APP_CODES=moboreader",
         "FEATURE_PROMO_LINK_CLAIM=false",
         // Baked into the base image, never declared by docker-compose.yml's
         // `environment:` block for at least one of web/worker -- see
@@ -972,7 +975,7 @@ describe("X8 gate command: the three-way pre-check catches drift the reference i
         "NOVEL_CATALOG_SYNC_ALLOW_WRITE=false",
         "PROMO_CLAIM_ROLES=",
         "ADMIN_TWO_FACTOR_ENFORCEMENT=true",
-        "MOBOREADER_PREVIEW_SOURCE_APP_CODES=changdu",
+        "MOBOREADER_PREVIEW_SOURCE_APP_CODES=moboreader",
         "FEATURE_PROMO_LINK_CLAIM=false",
         "NODE_VERSION=20.20.2",
         "YARN_VERSION=1.22.22",

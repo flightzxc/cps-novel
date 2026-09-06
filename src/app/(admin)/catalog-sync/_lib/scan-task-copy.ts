@@ -14,17 +14,6 @@ export type CatalogScanOutcome = Extract<CatalogScanActionResult, { ok: true }>[
 export type OutcomeTone = "success" | "info" | "warning" | "danger";
 export type OutcomeCopy = { readonly tone: OutcomeTone; readonly title: string; readonly body: string };
 
-export type CatalogWriteGateState = "closed" | "dry_run" | "apply";
-
-/** CPS v8.3.6 sync-panel parity: worker/write readiness is always visible. */
-export function catalogWriteGateState(input: {
-  readonly featureEnabled: boolean;
-  readonly writeAllowed: boolean;
-}): CatalogWriteGateState {
-  if (!input.featureEnabled) return "closed";
-  return input.writeAllowed ? "apply" : "dry_run";
-}
-
 const MODE_LABEL: Readonly<Record<"dry_run" | "apply", string>> = Object.freeze({
   dry_run: "dry_run（试运行）",
   apply: "apply（正式写入）",
@@ -93,23 +82,4 @@ export function catalogScanFlagChecklist(
       note: "写闸：仅 apply 模式需要；dry_run 任务不受此闸影响。",
     },
   ];
-}
-
-/**
- * Item 4 of the PR-C2 brief: tell the operator where the task goes next.
- * `catalog_scan` is channel-scoped (`channelAccountId` + `channelAppId`), not
- * novel-scoped — it is what *discovers* new `NovelSourceItem` rows, so there
- * is no novel yet to host a "sync panel" on. `/tasks` ("任务中心") is
- * registered in `ADMIN_PAGE_ROOTS` but has no `page.tsx` yet (PR-C5), so the
- * only thing this can honestly point to today is a read-only SQL check.
- */
-export const CATALOG_SCAN_NEXT_STEPS_NOTE =
-  "任务由后台 worker 异步轮询消费，创建后不会立即看到结果。当前后台还没有任务列表页（/tasks，PR-C5 建设中）；如需现在确认状态，可用下面的只读查询直接核对（也可以把 taskId 交给工程同学查）：";
-
-export function catalogScanStatusQuery(taskId: string): string {
-  return [
-    "select status, total_count, success_count, failed_count, requested_at, started_at, completed_at, error",
-    "from catalog_scan_task",
-    `where id = '${taskId}';`,
-  ].join("\n");
 }

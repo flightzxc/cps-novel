@@ -229,7 +229,12 @@ if [[ "${1:-}" == "compose" ]]; then
         // (the promo-link double-gate and the preview source allowlist),
         // so an integration-level test can prove the three-way check now
         // catches drift in them too, not just at the pure-function level.
-        const previewSourceApps = process.env.MOBOREADER_PREVIEW_SOURCE_APP_CODES ?? "changdu";
+        // Phase B (2026-09-06): the real docker-compose.yml default flipped
+        // from "changdu" to "moboreader" (Channel/SourceApp entity swap --
+        // 施工工单_PhaseB_实体订正与运营表单Parity_2026-09-06.md §二), so this
+        // simulated `docker compose config` baseline has to track it or every
+        // no-override happy path reports a false ambient drift.
+        const previewSourceApps = process.env.MOBOREADER_PREVIEW_SOURCE_APP_CODES ?? "moboreader";
         const promoLinkClaim = process.env.FEATURE_PROMO_LINK_CLAIM ?? "false";
         console.log(JSON.stringify({
           name: process.env.STUB_CONFIG_TOP_LEVEL_NAME ?? "cps-novel-x8-local",
@@ -302,7 +307,7 @@ if [[ "${1:-}" == "compose" ]]; then
                 # post-recreate reconciliation now checks them too, so the
                 # fixture has to actually report them, not just the two keys
                 # the OLD hand-checked verification looked at.
-                echo "WEB_OTHER=PROMO_CLAIM_ROLES=${PROMO_CLAIM_ROLES:-};ADMIN_TWO_FACTOR_ENFORCEMENT=${ADMIN_TWO_FACTOR_ENFORCEMENT:-true};MOBOREADER_PREVIEW_SOURCE_APP_CODES=${MOBOREADER_PREVIEW_SOURCE_APP_CODES:-changdu};FEATURE_PROMO_LINK_CLAIM=${FEATURE_PROMO_LINK_CLAIM:-false}"
+                echo "WEB_OTHER=PROMO_CLAIM_ROLES=${PROMO_CLAIM_ROLES:-};ADMIN_TWO_FACTOR_ENFORCEMENT=${ADMIN_TWO_FACTOR_ENFORCEMENT:-true};MOBOREADER_PREVIEW_SOURCE_APP_CODES=${MOBOREADER_PREVIEW_SOURCE_APP_CODES:-moboreader};FEATURE_PROMO_LINK_CLAIM=${FEATURE_PROMO_LINK_CLAIM:-false}"
               } >>"$marker"
               ;;
             worker)

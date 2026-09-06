@@ -37,7 +37,7 @@ const gates = {
   NODE_ENV: "test",
   FEATURE_NOVEL_CATALOG_SYNC: "true",
   NOVEL_CATALOG_SYNC_ALLOW_WRITE: "true",
-  MOBOREADER_PREVIEW_SOURCE_APP_CODES: "changdu",
+  MOBOREADER_PREVIEW_SOURCE_APP_CODES: "moboreader",
 } satisfies NodeJS.ProcessEnv;
 
 function page(
@@ -112,8 +112,13 @@ async function truncateDatabase() {
 }
 
 async function seedFoundation() {
-  await owner.channel.create({ data: { id: ids.channel, code: "moboreader", name: "MoboReader" } });
-  await owner.sourceApp.create({ data: { id: ids.sourceApp, code: "changdu", name: "Changdu" } });
+  // Phase B entity fix: Channel is the changdu channel, SourceApp is the
+  // moboreader theater — see 施工工单_PhaseB_实体订正与运营表单Parity_2026-09-06.md
+  // §二. Previously reversed here (and in production); ChannelApp.externalAppId
+  // stays "moboreader" (unaffected — it names the upstream app id, not either
+  // entity's own code).
+  await owner.channel.create({ data: { id: ids.channel, code: "changdu", name: "Changdu" } });
+  await owner.sourceApp.create({ data: { id: ids.sourceApp, code: "moboreader", name: "MoboReader" } });
   await owner.channelApp.create({
     data: { id: ids.channelApp, channelId: ids.channel, sourceAppId: ids.sourceApp, externalAppId: "moboreader", projectType: 1 },
   });
@@ -275,7 +280,7 @@ describe.skipIf(!enabled).sequential("P2-05 PostgreSQL 16.14 write paths", () =>
       NODE_ENV: "test",
       FEATURE_NOVEL_CATALOG_SYNC: "true",
       NOVEL_CATALOG_SYNC_ALLOW_WRITE: "false",
-      MOBOREADER_PREVIEW_SOURCE_APP_CODES: "changdu",
+      MOBOREADER_PREVIEW_SOURCE_APP_CODES: "moboreader",
     } satisfies NodeJS.ProcessEnv;
     const created = await enqueue("dry_run", randomUUID(), dryRunOnly);
     expect(created.status).toBe("enqueued");

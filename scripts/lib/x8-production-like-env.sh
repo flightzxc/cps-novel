@@ -490,7 +490,7 @@ x8_export_static_topology() {
   export ADMIN_CANONICAL_ORIGIN="https://${X8_ADMIN_DOMAIN}"
   export SITE_URL=https://novel.test
   export TZ=Asia/Tokyo
-  export MOBOREADER_PREVIEW_SOURCE_APP_CODES=changdu
+  export MOBOREADER_PREVIEW_SOURCE_APP_CODES=moboreader
   export X8_HTTP_PORT="${X8_HTTP_PORT:-80}"
   export X8_HTTPS_PORT="${X8_HTTPS_PORT:-443}"
   export X8_NGINX_IMAGE="${X8_NGINX_IMAGE:-nginx:1.28.0-alpine}"

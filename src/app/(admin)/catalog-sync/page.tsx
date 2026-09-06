@@ -1,7 +1,7 @@
 import { capabilityBlockReason, findCapabilityState } from "@/features/admin-ui/capability-view";
 import { AdminTimeZoneNote } from "@/features/admin-ui/time-zone-note";
-import { isNovelCatalogSyncEnabled, isNovelCatalogSyncWriteAllowed } from "@/lib/flags";
-import { MOBOREADER_CATALOG_LIMITS, resolveMoboreaderCatalogSafetyMaxPages } from "@/lib/tasks/moboreader";
+import { isNovelCatalogSyncEnabled } from "@/lib/flags";
+import { resolveMoboreaderCatalogSafetyMaxPages } from "@/lib/tasks/moboreader";
 import { PROMO_LINK_CLAIM_LIMITS } from "@/lib/tasks/promo-link-claim-limits";
 import { CONTENT_CREATION_BATCH_MAX_SELECTION } from "@/server/content-creation/batch";
 import { listActiveArticleTemplateOptions } from "@/server/article-templates";
@@ -15,7 +15,7 @@ import { requireContentPage } from "../novels/_lib/content-page-guard";
 import { CatalogScanTriggerForm } from "./_components/catalog-scan-trigger-form";
 import { CatalogSyncClient } from "./_components/catalog-sync-client";
 import { SourceItemFilters } from "./_components/source-item-filters";
-import { readActiveChannelAppOptions, readClaimEligibleChannelAppOptions } from "./_lib/read-channel-apps";
+import { readActiveChannelScanOptions, readClaimEligibleChannelAppOptions } from "./_lib/read-channel-apps";
 import { readSourceItemsPage } from "./_lib/read-source-items";
 
 export const dynamic = "force-dynamic";
@@ -57,7 +57,7 @@ export default async function CatalogSyncPage({
   const page = granted
     ? await readSourceItemsPage({ page: params.page, status: params.status, search: params.search })
     : null;
-  const channelApps = granted ? await readActiveChannelAppOptions() : [];
+  const channels = granted ? await readActiveChannelScanOptions() : [];
   const claimChannelApps = granted ? await readClaimEligibleChannelAppOptions() : [];
   const templateOptions = granted ? await listActiveArticleTemplateOptions(prisma, "en") : [];
 
@@ -75,10 +75,9 @@ export default async function CatalogSyncPage({
         {granted && page ? (
           <>
             <CatalogScanTriggerForm
-              channelApps={channelApps}
+              channels={channels}
               contentPublishGranted={contentPublishBlockedReason === null}
               contentPublishBlockedReason={contentPublishBlockedReason}
-              maxPageSize={MOBOREADER_CATALOG_LIMITS.maxPageSize}
               safetyMaxPages={resolveMoboreaderCatalogSafetyMaxPages()}
             />
             <SourceItemFilters values={{ search: params.search, status: params.status }} />
@@ -86,10 +85,7 @@ export default async function CatalogSyncPage({
               <AdminTimeZoneNote />
               <CatalogSyncClient
                 items={page.items}
-                catalogGate={{
-                  featureEnabled: isNovelCatalogSyncEnabled(),
-                  writeAllowed: isNovelCatalogSyncWriteAllowed(),
-                }}
+                catalogGate={{ featureEnabled: isNovelCatalogSyncEnabled() }}
                 contentPublish={contentPublish}
                 claimChannelApps={claimChannelApps}
                 promoClaimMaxBatchSize={PROMO_LINK_CLAIM_LIMITS.maxBatchSize}

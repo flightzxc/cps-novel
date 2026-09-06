@@ -81,6 +81,18 @@ export interface CreateMoboreaderCatalogScanTaskInput {
   mode?: "dry_run" | "apply";
   name?: string;
   orderType?: number;
+  /**
+   * Phase B (`施工工单_PhaseB_实体订正与运营表单Parity_2026-09-06.md` §三):
+   * CPS parity for the "同步语种" chip row on `changdu-sync-panel.tsx`.
+   * Same semantics there as here — the upstream `getlistpc` list call has no
+   * per-language filter, so this is never sent upstream and never narrows
+   * what a page fetches; it is a plain record of which languages the
+   * operator meant this run to be *about*, stored on the task for `/tasks`
+   * detail and result filtering (Phase C). Optional and unvalidated in
+   * shape beyond "non-empty trimmed strings" so existing non-UI callers
+   * (scripts, tests) that never pass it keep working unchanged.
+   */
+  languages?: readonly string[];
 }
 
 export type MoboreaderTaskCreationResult =
@@ -178,6 +190,29 @@ export interface ValidatedCatalogScanInput {
   mode: "dry_run" | "apply";
   name: string;
   orderType: number;
+  languages: readonly string[];
+}
+
+/**
+ * Trims/dedupes; throws `languages_invalid` on anything not a non-empty
+ * string (see {@link CreateMoboreaderCatalogScanTaskInput.languages}).
+ *
+ * Deliberately not named with a `normalize*Language*` shape — this is a
+ * plain array sanitizer, not a locale-canonicalization function, and
+ * `tests/ui/locale-canonical.test.ts`'s "no second locale-normalize
+ * implementation" scan flags names matching that shape by pattern alone.
+ */
+function sanitizeLanguageList(value: readonly string[] | undefined): readonly string[] {
+  if (value === undefined) return [];
+  if (!Array.isArray(value)) throw new MoboreaderTaskInputError("languages_invalid");
+  const seen = new Set<string>();
+  for (const entry of value) {
+    if (typeof entry !== "string") throw new MoboreaderTaskInputError("languages_invalid");
+    const trimmed = entry.trim();
+    if (!trimmed || trimmed.length > 32) throw new MoboreaderTaskInputError("languages_invalid");
+    seen.add(trimmed);
+  }
+  return Array.from(seen);
 }
 
 export function validateMoboreaderCatalogScanInput(
@@ -198,6 +233,7 @@ export function validateMoboreaderCatalogScanInput(
   if (input.orderType !== undefined && !Number.isSafeInteger(input.orderType)) {
     throw new MoboreaderTaskInputError("order_type_invalid");
   }
+  const languages = sanitizeLanguageList(input.languages);
   return {
     channelAccountId: required(input.channelAccountId, "channel_account_required"),
     channelAppId: required(input.channelAppId, "channel_app_required"),
@@ -211,6 +247,7 @@ export function validateMoboreaderCatalogScanInput(
     mode,
     name: input.name ?? "",
     orderType: input.orderType ?? 0,
+    languages,
   };
 }
 
@@ -273,6 +310,9 @@ export async function createMoboreaderCatalogScanTask(
     expiresAt: expiresAt.toISOString(),
     featureFlagEnabled: enabled,
     allowWriteEnabled: writeAllowed,
+    // Phase B: recorded, never sent upstream — see `languages` doc on
+    // `CreateMoboreaderCatalogScanTaskInput` above.
+    languages: [...input.languages],
     registeredDetailStatus: MOBOREADER_PREVIEW_RUNTIME_STATUS,
   } satisfies Prisma.InputJsonObject;
   try {

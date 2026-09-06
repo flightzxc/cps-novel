@@ -122,7 +122,7 @@ services:
       # process.env. Only Worker had it wired before; an unset allowlist
       # resolves to an empty set and the task is rejected as
       # "no_eligible_sources" before it ever reaches the double-gate.
-      MOBOREADER_PREVIEW_SOURCE_APP_CODES: ${MOBOREADER_PREVIEW_SOURCE_APP_CODES:-changdu}
+      MOBOREADER_PREVIEW_SOURCE_APP_CODES: ${MOBOREADER_PREVIEW_SOURCE_APP_CODES:-moboreader}
       # PR6 lane F: P2-06.5 tagging double-gate (plus auto-classify's own
       # pair). FEATURE_P2_06_5_TAGGING is the master read gate consumed by
       # src/server/tagging/admin-service.ts's requireTaggingRead -- with it
@@ -188,7 +188,7 @@ services:
       MOBOREADER_PREVIEW_CONCURRENCY: ${MOBOREADER_PREVIEW_CONCURRENCY:-2}
       MOBOREADER_PREVIEW_TIMEOUT_MS: ${MOBOREADER_PREVIEW_TIMEOUT_MS:-20000}
       MOBOREADER_PREVIEW_FRESHNESS_MS: ${MOBOREADER_PREVIEW_FRESHNESS_MS:-86400000}
-      MOBOREADER_PREVIEW_SOURCE_APP_CODES: ${MOBOREADER_PREVIEW_SOURCE_APP_CODES:-changdu}
+      MOBOREADER_PREVIEW_SOURCE_APP_CODES: ${MOBOREADER_PREVIEW_SOURCE_APP_CODES:-moboreader}
       MOBOREADER_PREVIEW_SOURCE_ITEM_ALLOWLIST: ${MOBOREADER_PREVIEW_SOURCE_ITEM_ALLOWLIST:-}
       PROMO_LINK_CLAIM_READBACK_ATTEMPTS: ${PROMO_LINK_CLAIM_READBACK_ATTEMPTS:-3}
       PROMO_LINK_CLAIM_READBACK_INTERVAL_MS: ${PROMO_LINK_CLAIM_READBACK_INTERVAL_MS:-2000}

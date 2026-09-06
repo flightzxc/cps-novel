@@ -13,8 +13,10 @@ import {
   isPromoLinkClaimWriteAllowed,
 } from "@/lib/flags";
 import {
+  MOBOREADER_UPSTREAM_RECOMMENDED_PAGE_SIZE,
   MoboreaderTaskInputError,
   createMoboreaderCatalogScanTask,
+  resolveMoboreaderCatalogSafetyMaxPages,
   type MoboreaderTaskCreationResult,
 } from "@/lib/tasks/moboreader";
 import {
@@ -222,14 +224,25 @@ export async function applyContentCreationAction(input: {
  * (`active_conflict`), not requestToken replay — a double submit from this
  * form produces two distinct tokens but still only one live task, because the
  * second call observes the first one still `pending`/`processing`.
+ *
+ * Phase B (`施工工单_PhaseB_实体订正与运营表单Parity_2026-09-06.md` §三):
+ * `pageStart`/`pageEnd`/`pageSize` are no longer part of this action's own
+ * input — CPS's `changdu-sync-panel.tsx` never exposes page mechanics to an
+ * operator either, it just scans to its own safety ceiling every time. This
+ * action now resolves the same three values the old form used to collect —
+ * page 1 through the factory's own configured safety ceiling
+ * (`resolveMoboreaderCatalogSafetyMaxPages`), at the factory's own
+ * CPS-parity recommended page size (`MOBOREADER_UPSTREAM_RECOMMENDED_PAGE_SIZE`)
+ * — as fixed server-side constants instead. `languages` replaces them as the
+ * one thing the operator does choose: recorded on the task for `/tasks`
+ * detail and result filtering (Phase C), never sent upstream as a filter
+ * (see the doc on `CreateMoboreaderCatalogScanTaskInput.languages`).
  */
 
 export type CatalogScanTriggerInput = {
   readonly channelAccountId: string;
   readonly channelAppId: string;
-  readonly pageStart: number;
-  readonly pageEnd: number;
-  readonly pageSize: number;
+  readonly languages: readonly string[];
   readonly requestId: string;
 };
 
@@ -319,9 +332,10 @@ async function runCatalogScanTrigger(
     const result = await createMoboreaderCatalogScanTask(prisma, {
       channelAccountId: input.channelAccountId,
       channelAppId: input.channelAppId,
-      pageStart: input.pageStart,
-      pageEnd: input.pageEnd,
-      pageSize: input.pageSize,
+      pageStart: 1,
+      pageEnd: resolveMoboreaderCatalogSafetyMaxPages(),
+      pageSize: MOBOREADER_UPSTREAM_RECOMMENDED_PAGE_SIZE,
+      languages: input.languages,
       requestToken: randomUUID(),
       actorId,
       requestId: input.requestId,

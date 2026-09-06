@@ -13,7 +13,6 @@ import { CreateContentDialog } from "./create-content-dialog";
 import { PromoLinkClaimDialog } from "./promo-link-claim-dialog";
 import type { ClaimChannelAppOption } from "../_lib/read-channel-apps";
 import type { SourceItemRow } from "../_lib/read-source-items";
-import { catalogWriteGateState } from "../_lib/scan-task-copy";
 
 /**
  * `/catalog-sync` table + the actions this screen exists for: opening the
@@ -55,7 +54,7 @@ export function CatalogSyncClient({
   templateOptions = [],
 }: {
   items: readonly SourceItemRow[];
-  catalogGate: { readonly featureEnabled: boolean; readonly writeAllowed: boolean };
+  catalogGate: { readonly featureEnabled: boolean };
   contentPublish: AdminCapabilityState;
   claimChannelApps: readonly ClaimChannelAppOption[];
   promoClaimMaxBatchSize: number;
@@ -70,7 +69,6 @@ export function CatalogSyncClient({
   const [batchCreateDialogOpen, setBatchCreateDialogOpen] = useState(false);
   const blockedReason = capabilityBlockReason("content:publish", contentPublish);
   const granted = blockedReason === null;
-  const gateState = catalogWriteGateState(catalogGate);
 
   const selectedItems = items.filter((item) => selectedIds.has(item.id));
 
@@ -86,20 +84,17 @@ export function CatalogSyncClient({
   return (
     <div className="space-y-4">
       <div
-        data-testid="catalog-write-gate-status"
-        data-state={gateState}
+        data-testid="catalog-sync-gate-status"
+        data-state={catalogGate.featureEnabled ? "enabled" : "disabled"}
         className={`rounded-lg border px-3 py-2 text-sm ${
-          gateState === "apply"
+          catalogGate.featureEnabled
             ? "border-green-200 bg-green-50 text-green-800"
-            : gateState === "dry_run"
-              ? "border-amber-200 bg-amber-50 text-amber-800"
-              : "border-red-200 bg-red-50 text-red-800"
+            : "border-red-200 bg-red-50 text-red-800"
         }`}
       >
-        <span className="font-medium">目录写闸：</span>
-        {gateState === "apply" && "apply（正式写入已开启）"}
-        {gateState === "dry_run" && "dry-run（仅试运行，正式写入关闭）"}
-        {gateState === "closed" && "closed（目录同步总闸关闭）"}
+        {catalogGate.featureEnabled
+          ? "目录同步总闸已启用。"
+          : "FEATURE_NOVEL_CATALOG_SYNC 未启用，后台暂不允许创建目录扫描任务。"}
       </div>
 
       {blockedReason && (

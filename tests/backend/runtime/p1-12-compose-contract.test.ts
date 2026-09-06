@@ -192,7 +192,10 @@ describe("P1-12 Compose and image contracts", () => {
     // resolved an empty allowlist and every preview task was rejected as
     // "no_eligible_sources" before the double-gate was ever consulted.
     const web = serviceBlock("web");
-    expect(web).toContain("MOBOREADER_PREVIEW_SOURCE_APP_CODES: ${MOBOREADER_PREVIEW_SOURCE_APP_CODES:-changdu}");
+    // Phase B entity fix (2026-09-06): default flipped to "moboreader" --
+    // Channel is the changdu channel, SourceApp is the moboreader theater
+    // (施工工单_PhaseB_实体订正与运营表单Parity_2026-09-06.md §二).
+    expect(web).toContain("MOBOREADER_PREVIEW_SOURCE_APP_CODES: ${MOBOREADER_PREVIEW_SOURCE_APP_CODES:-moboreader}");
   });
 
   it("documents the exact staged worker allowlist and X11 delivery hard gate", () => {

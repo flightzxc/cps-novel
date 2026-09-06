@@ -33,8 +33,15 @@ export class MoboreaderFoundationError extends Error {
 }
 
 export const MOBOREADER_FOUNDATION = Object.freeze({
-  channel: Object.freeze({ code: "moboreader", name: "MoboReader", status: "active" }),
-  sourceApp: Object.freeze({ code: "changdu", name: "Changdu", status: "active" }),
+  // Phase B entity fix (施工工单_PhaseB_实体订正与运营表单Parity_2026-09-06.md
+  // §二): Channel is the changdu channel (渠道), SourceApp is the moboreader
+  // theater (剧场) — CPS shape is `Channel` 1—N `ChannelApp` N—1 `SourceApp`,
+  // channel-account-scoped, source-app source-agnostic. These two lines were
+  // previously reversed here and in production; `channelApp.externalAppId`
+  // below is unaffected (it names the upstream app id, not either entity's
+  // own code) and stays "moboreader".
+  channel: Object.freeze({ code: "changdu", name: "Changdu", status: "active" }),
+  sourceApp: Object.freeze({ code: "moboreader", name: "MoboReader", status: "active" }),
   channelApp: Object.freeze({
     externalAppId: "moboreader",
     projectType: 1,

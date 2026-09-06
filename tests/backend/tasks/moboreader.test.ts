@@ -59,6 +59,38 @@ describe("MoboReader catalog safety and parity", () => {
     expect(() => validateMoboreaderCatalogScanInput({ ...validInput, pageSize: 21 }, { NODE_ENV: "test" })).toThrow("page_size_exceeded");
   });
 
+  it("Phase B: `languages` defaults to [], trims/dedupes when provided, and rejects non-empty-string entries", () => {
+    // 施工工单_PhaseB_实体订正与运营表单Parity_2026-09-06.md §三: the operator
+    // no longer picks page mechanics, only languages -- recorded for
+    // `/tasks` detail and result filtering, never sent upstream as a
+    // filter (see the doc comment on `CreateMoboreaderCatalogScanTaskInput`).
+    expect(validateMoboreaderCatalogScanInput(validInput, { NODE_ENV: "test" }).languages).toEqual([]);
+
+    expect(
+      validateMoboreaderCatalogScanInput({ ...validInput, languages: [" en ", "ja", "en"] }, { NODE_ENV: "test" })
+        .languages,
+    ).toEqual(["en", "ja"]);
+
+    expect(() =>
+      validateMoboreaderCatalogScanInput({ ...validInput, languages: [""] }, { NODE_ENV: "test" }),
+    ).toThrow("languages_invalid");
+    expect(() =>
+      validateMoboreaderCatalogScanInput({ ...validInput, languages: ["   "] }, { NODE_ENV: "test" }),
+    ).toThrow("languages_invalid");
+    expect(() =>
+      validateMoboreaderCatalogScanInput(
+        { ...validInput, languages: [123 as unknown as string] },
+        { NODE_ENV: "test" },
+      ),
+    ).toThrow("languages_invalid");
+    expect(() =>
+      validateMoboreaderCatalogScanInput(
+        { ...validInput, languages: "en" as unknown as string[] },
+        { NODE_ENV: "test" },
+      ),
+    ).toThrow("languages_invalid");
+  });
+
   it("removes the retired item quota from production catalog code", () => {
     const source = [
       readFileSync(new URL("../../../src/lib/tasks/moboreader.ts", import.meta.url), "utf8"),
