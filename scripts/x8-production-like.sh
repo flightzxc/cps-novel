@@ -50,7 +50,19 @@ usage() {
     '     `gate catalog-write on|off|dry-run` defaults to plan mode (prints' \
     '     the diff, touches nothing); pass --apply to actually recreate. A' \
     '     recreate that does not fully verify is rolled back to the values' \
-    '     it started from and the state file is never left half-written.' >&2
+    '     it started from and the state file is never left half-written.' \
+    '' \
+    '     2026-09-06 Phase D (施工工单_PhaseD_安全与运行态收口): `up` now' \
+    '     force-aligns all six PostgreSQL roles'"'"' passwords to this' \
+    '     worktree'"'"'s own secret files (idempotent ALTER ROLE) and proves' \
+    '     each one over the network (scram-sha-256) before starting' \
+    '     web/worker/scheduler -- this is no longer a manual step; never' \
+    '     hand-run `ALTER ROLE ... PASSWORD` against the running postgres' \
+    '     container. `up` and `gate catalog-write` also both refuse outright' \
+    '     if the compose project is already running from a different' \
+    '     worktree (the error names that worktree'"'"'s path) -- run the' \
+    '     command from that worktree instead, or `down` the stack there' \
+    '     first.' >&2
   exit 64
 }
 
@@ -646,6 +658,15 @@ prepare_database() {
       }
   done
 
+  # 施工工单_PhaseD_安全与运行态收口_2026-09-06.md D-2, 做法1: force-align every
+  # role's actual database password to this worktree's own secret files,
+  # right after roles.sql and before migrate deploy (which is itself the
+  # first thing that actually needs migration_owner's password to be
+  # right). See x8_align_db_role_passwords()'s own comment in
+  # scripts/lib/x8-production-like-env.sh for why this can no longer be
+  # left to init-roles.sh alone.
+  x8_align_db_role_passwords || return 65
+
   local migration_env
   migration_env="$(mktemp "$X8_RUNTIME_DIR/migrate.XXXXXX")"
   chmod 600 "$migration_env"
@@ -667,6 +688,15 @@ prepare_database() {
     <"$X8_PROJECT_ROOT/infra/postgres/grants.sql" >/dev/null
   x8_compose exec -T postgres psql --no-psqlrc -v ON_ERROR_STOP=1 -U postgres -d cps_novel \
     --command 'CREATE EXTENSION IF NOT EXISTS pg_stat_statements;' >/dev/null
+
+  # 施工工单_PhaseD_安全与运行态收口_2026-09-06.md D-2, 做法2: prove all six
+  # roles' passwords actually work over the network (scram-sha-256, the same
+  # auth path web/worker/scheduler use) before any of those application
+  # containers start. Deliberately after grants.sql/CREATE EXTENSION (both
+  # already exercised migration_owner's own network path via `prisma migrate
+  # deploy` above) so this is the one place that also covers the other five
+  # roles migrate deploy never touches.
+  x8_verify_db_role_passwords_via_network || return 65
 }
 
 wait_for_url() {
@@ -713,6 +743,12 @@ ensure_local_certificate() {
 up_x8() {
   prepare_x8_environment
   require_command docker
+  # 施工工单_PhaseD_安全与运行态收口_2026-09-06.md D-4: as early as possible,
+  # before any docker mutation -- refuses outright if the compose project is
+  # already running from a different worktree, rather than quietly adopting
+  # (and recreating) another worktree's containers/volume with this
+  # worktree's own secrets.
+  x8_assert_worktree_stack_binding "$P1_12_COMPOSE_PROJECT" "$X8_PROJECT_ROOT" "$(x8_expected_compose_config_files)" || exit 65
   require_command node
   require_command curl
   require_command openssl
@@ -1069,6 +1105,10 @@ gate_catalog_status() {
   # failing on the compose call it needed that identity for anyway.
   prepare_x8_gate_environment || return 65
   require_command docker
+  # 施工工单_PhaseD_安全与运行态收口_2026-09-06.md D-4: same pre-flight as
+  # up_x8() -- refuses if the running stack belongs to a different worktree,
+  # before this queries or touches any container.
+  x8_assert_worktree_stack_binding "$P1_12_COMPOSE_PROJECT" "$X8_PROJECT_ROOT" "$(x8_expected_compose_config_files)" || return 65
 
   # P1-9: both services are checked, and a query failure (as opposed to a
   # confirmed absence) is a hard error -- fail-closed instead of the
@@ -1287,6 +1327,9 @@ gate_catalog_recreate() {
 
   require_command docker
   require_command node
+  # 施工工单_PhaseD_安全与运行态收口_2026-09-06.md D-4: same pre-flight as
+  # up_x8()/gate_catalog_status() -- before touching any image or container.
+  x8_assert_worktree_stack_binding "$P1_12_COMPOSE_PROJECT" "$X8_PROJECT_ROOT" "$(x8_expected_compose_config_files)" || return 65
 
   # 4.3(二): never build, never pull -- the frozen image must already exist
   # locally and match the identity's digest exactly.

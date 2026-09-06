@@ -784,3 +784,161 @@ prepare_x8_gate_environment() {
   X8_GATE_PERSISTED_STATE="$gate_state"
   export X8_GATE_PERSISTED_STATE
 }
+
+# 施工工单_PhaseD_安全与运行态收口_2026-09-06.md D-4: the compose project name
+# (X8_COMPOSE_PROJECT_NAME, a fixed literal) is shared by every worktree that
+# ever runs this script -- nothing before this stamped which worktree
+# actually started the containers currently running under that name. A
+# second worktree's `up` or `gate` would happily reuse (recreate/inspect)
+# containers another worktree started, against the SAME named Postgres
+# volume, using ITS OWN secrets -- the exact db-role-password-mismatch shape
+# D-2 also closes. This is the minimal, additive pre-flight both D-2 and D-4
+# ask for: read the label Docker Compose itself already stamps on every
+# container it creates (`com.docker.compose.project.working_dir` /
+# `...project.config_files`) and compare against what starting fresh FROM
+# THIS worktree would use. No new indirection (lock file, pointer file) --
+# the labels already ARE the record.
+#
+# Deliberately plain `docker ps`/`docker inspect`, never the `docker compose`
+# CLI wrapper: a `docker compose ... ps` invocation needs its own `-f` files
+# to parse (and their env-var interpolation to succeed) before it can even
+# get to listing containers, which would make this check depend on exactly
+# the kind of environment setup it must run ahead of. Label lookups need
+# none of that -- they work against whatever is actually running, regardless
+# of which worktree's compose files happen to be on hand right now.
+#
+# Zero running containers under this project name is not a conflict (a
+# caller starting the very first `up`, or one running after a clean `down`)
+# -- passes silently. A mismatch fails closed with the other worktree's
+# recorded path in the message, per the doc's exact wording ("该栈由 <path>
+# 起，请从那里操作或先 down").
+x8_assert_worktree_stack_binding() {
+  local project="$1"
+  local expected_working_dir="$2"
+  local expected_config_files="$3"
+  local ps_output container
+  # Fail-closed on a `docker ps` failure itself (a broken/unreachable daemon,
+  # say) rather than silently treating "the query errored" the same as "zero
+  # containers are running" -- `ps_output` captures stderr too so the
+  # message names the real cause.
+  if ! ps_output="$(docker ps --filter "label=com.docker.compose.project=${project}" --format '{{.ID}}' 2>&1)"; then
+    echo "ERROR: unable to query running containers for compose project '$project': $ps_output" >&2
+    return 65
+  fi
+  container="$(printf '%s\n' "$ps_output" | head -n 1)"
+  [[ -n "$container" ]] || return 0
+
+  local running_working_dir running_config_files
+  running_working_dir="$(docker inspect "$container" --format '{{index .Config.Labels "com.docker.compose.project.working_dir"}}' 2>/dev/null || true)"
+  running_config_files="$(docker inspect "$container" --format '{{index .Config.Labels "com.docker.compose.project.config_files"}}' 2>/dev/null || true)"
+
+  if [[ "$running_working_dir" != "$expected_working_dir" || "$running_config_files" != "$expected_config_files" ]]; then
+    echo "ERROR: compose project '$project' is already running from a different worktree ($running_working_dir) -- please run this command from that worktree, or 'down' the stack there first." >&2
+    return 65
+  fi
+  return 0
+}
+
+# The two-file list x8_compose() itself always passes, in the same order --
+# the single place both x8_assert_worktree_stack_binding() call sites below
+# and any future caller compute the "starting fresh from this worktree"
+# expectation, so they can never drift apart from what x8_compose() actually
+# invokes.
+x8_expected_compose_config_files() {
+  printf '%s,%s' "$X8_PROJECT_ROOT/docker-compose.yml" "$X8_PROJECT_ROOT/infra/production-like/docker-compose.yml"
+}
+
+# 施工工单_PhaseD_安全与运行态收口_2026-09-06.md D-2, 做法1: `init-roles.sh`
+# (infra/postgres/init-roles.sh) only ever runs once, on a brand-new Postgres
+# data directory (it is a docker-entrypoint-initdb.d script) -- so on a
+# volume some OTHER worktree's `up` originally initialized, the six roles'
+# actual passwords in the database are still THAT worktree's, while this
+# worktree's own freshly-generated (or merely different) local secret files
+# never touch them. The app containers this worktree starts next read THIS
+# worktree's secret files for their DATABASE_URLs -- an immediate auth
+# failure, and previously only discoverable by watching web/worker fail to
+# come up. Idempotent (ALTER ROLE unconditionally sets the desired value
+# regardless of the role's current password) and safe to run on every `up`,
+# including the very first one (setting the same value `init-roles.sh` just
+# set is a no-op). Superuser-executed (same `postgres` bootstrap role
+# prepare_database() already uses for roles.sql/grants.sql), so it needs no
+# role's own current password.
+x8_align_db_role_passwords() {
+  local role variable password
+  for role in migration_owner web_app worker_app scheduler_app analyst_ro backup_role; do
+    # `${role^^}` (bash 4+ case conversion) is deliberately not used here --
+    # the host's `/usr/bin/env bash` this script actually runs under is
+    # macOS's stock bash (3.2, frozen there for licensing reasons), which
+    # does not support it and fails the whole function with "bad
+    # substitution". `tr` is the portable equivalent every other case-
+    # sensitive lookup in this file already avoids needing.
+    variable="P1_12_$(printf '%s' "$role" | tr '[:lower:]' '[:upper:]')_PASSWORD_FILE"
+    password="$(read_secret_value "${!variable}")" || {
+      echo "ERROR: unable to read the local secret file for role $role (\$$variable)" >&2
+      return 65
+    }
+    [[ "$password" =~ ^[0-9a-f]{48}$ ]] || {
+      echo "ERROR: invalid local password material for role $role" >&2
+      return 65
+    }
+    x8_compose exec -T postgres psql --no-psqlrc -v ON_ERROR_STOP=1 -U postgres -d cps_novel \
+      --set=role_name="$role" --set=role_password="$password" <<'SQL' >/dev/null
+ALTER ROLE :"role_name" PASSWORD :'role_password';
+SQL
+  done
+}
+
+# 施工工单_PhaseD_安全与运行态收口_2026-09-06.md D-2, 做法2: proves the six
+# roles' passwords ACTUALLY match this worktree's secret files, over the
+# network, with the same auth path the web/worker/scheduler containers
+# themselves use -- never `docker exec ... psql` into the postgres
+# container, which reaches Postgres over the local Unix socket and, per this
+# repo's default pg_hba.conf (the stock postgres:16.14 entrypoint's, unless
+# POSTGRES_HOST_AUTH_METHOD is overridden -- it is not here), authenticates
+# `local` connections by `trust`: a wrong password would still connect, so
+# that path can never actually verify anything. `postgres:16.14 psql` run as
+# a disposable, `--rm` container on the SAME `cps_novel_x8_runtime` network,
+# resolving the `postgres` service by its compose network-alias exactly like
+# the real app containers do, is what forces the connection over TCP and
+# through the server's normal `host` pg_hba.conf entries -- `scram-sha-256`
+# by that same default. The image is expected to already be present locally
+# (prepare_database() itself never pulls); this reuses whatever `docker run
+# --pull never` already relies on elsewhere in this file.
+#
+# fail-closed: the first role whose network connection does not succeed
+# aborts with its name so an operator is never left guessing which of the
+# six is wrong.
+x8_verify_db_role_passwords_via_network() {
+  local role variable role_upper password env_file status
+  # X8_ROLE_VERIFY_NETWORK exists solely so
+  # scripts/run-phase-d-role-password-postgres-verification.sh can point
+  # this at its own disposable network instead of the real
+  # cps_novel_x8_runtime -- that verification script must never join the
+  # network the real cps-novel-x8-local stack uses. No real caller (`up`)
+  # ever sets this, so production behavior is unchanged.
+  local network="${X8_ROLE_VERIFY_NETWORK:-cps_novel_x8_runtime}"
+  for role in migration_owner web_app worker_app scheduler_app analyst_ro backup_role; do
+    # Portable uppercase -- see the matching comment on x8_align_db_role_passwords().
+    role_upper="$(printf '%s' "$role" | tr '[:lower:]' '[:upper:]')"
+    variable="P1_12_${role_upper}_PASSWORD_FILE"
+    password="$(read_secret_value "${!variable}")" || {
+      echo "ERROR: unable to read the local secret file for role $role (\$$variable)" >&2
+      return 65
+    }
+    env_file="$(mktemp "$X8_RUNTIME_DIR/role-verify.XXXXXX")"
+    chmod 600 "$env_file"
+    printf 'PGPASSWORD=%s\n' "$password" >"$env_file"
+    status=0
+    docker run --rm --pull never \
+      --network "$network" \
+      --env-file "$env_file" \
+      --entrypoint psql \
+      postgres:16.14 \
+      --no-psqlrc -h postgres -p 5432 -U "$role" -d cps_novel -v ON_ERROR_STOP=1 -tAc 'SELECT 1' >/dev/null || status=$?
+    rm -f "$env_file"
+    [[ "$status" -eq 0 ]] || {
+      echo "ERROR: network-side scram-sha-256 verification failed for PostgreSQL role '$role' -- its password file no longer matches the database (run 'up' again to re-align, or check \$P1_12_${role_upper}_PASSWORD_FILE)" >&2
+      return 65
+    }
+  done
+}

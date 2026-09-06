@@ -23,6 +23,34 @@ read_marker_flag() {
   grep "^${key}=" "$marker" | tail -1 | cut -d= -f2-
 }
 
+# Phase D D-2/D-4 test support: `docker ps --filter "label=com.docker.compose.project=<name>"
+# --format {{.ID}}`, used by x8_assert_worktree_stack_binding() in
+# scripts/lib/x8-production-like-env.sh. By default (no STUB_FOREIGN_PROJECT_*
+# vars set) this answers "no running container" for every project name --
+# every existing test in this suite models a stack already running under
+# the SAME worktree it is testing, so the worktree-binding check must stay a
+# no-op for them; only a test that explicitly sets these two vars exercises
+# the "a different worktree owns this project" branch.
+if [[ "${1:-}" == "ps" ]]; then
+  shift
+  filter_project=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --filter)
+        case "$2" in
+          label=com.docker.compose.project=*) filter_project="${2#label=com.docker.compose.project=}" ;;
+        esac
+        shift 2
+        ;;
+      *) shift ;;
+    esac
+  done
+  if [[ -n "${STUB_FOREIGN_PROJECT_CONTAINER_ID:-}" && "$filter_project" == "${STUB_FOREIGN_PROJECT_NAME:-}" ]]; then
+    echo "$STUB_FOREIGN_PROJECT_CONTAINER_ID"
+  fi
+  exit 0
+fi
+
 if [[ "${1:-}" == "image" && "${2:-}" == "inspect" ]]; then
   shift 2
   ref="$1"
@@ -88,6 +116,17 @@ if [[ "${1:-}" == "inspect" ]]; then
       label_working_dir="${STUB_SCHEDULER_LABEL_WORKING_DIR:-/fixture}"
       pre_image="${STUB_SCHEDULER_LABEL_IMAGE:-}"; marker_key=SCHEDULER
       health="${STUB_SCHEDULER_HEALTH:-healthy}"
+      ;;
+    # Phase D D-4 test support: a container `docker ps --filter
+    # label=com.docker.compose.project=...` (above) can report, standing in
+    # for a stack another worktree started under the same compose project
+    # name. Only working_dir/config_files are ever read for this one --
+    # x8_assert_worktree_stack_binding() looks at nothing else.
+    "${STUB_FOREIGN_PROJECT_CONTAINER_ID:-__none__}")
+      label_working_dir="${STUB_FOREIGN_PROJECT_LABEL_WORKING_DIR:-/other-worktree}"
+      label_config_files="${STUB_FOREIGN_PROJECT_LABEL_CONFIG_FILES:-/other-worktree/docker-compose.yml,/other-worktree/infra/production-like/docker-compose.yml}"
+      label_project=""; env_json="[]"; pre_image=""; marker_key=FOREIGN
+      health="healthy"
       ;;
     *)
       echo "Error: No such object: $container" >&2
