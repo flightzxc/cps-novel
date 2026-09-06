@@ -79,8 +79,13 @@ export type ForeignKeyCounts = {
   readonly channelApps: number;
   readonly novelSourceItems: number;
   readonly promoLinks: number;
-  readonly catalogScanTasks: number;
   readonly channelSyncTasks: number;
+  /**
+   * Phase C (`施工工单_PhaseC_任务模型迁移与ImportProgress_2026-09-06.md`):
+   * CatalogScanTask folded into GenericTask (taskType = "catalog_scan"), so
+   * this count naturally includes what used to be a separate
+   * `catalogScanTasks` field -- there is no longer a distinct table to count.
+   */
   readonly genericTasks: number;
 };
 
@@ -109,7 +114,6 @@ type FoundationDb = {
   channelApp: { findMany(args: unknown): Promise<Array<{ id: string; externalAppId: string }>> };
   novelSourceItem: { count(args: unknown): Promise<number> };
   promoLink: { count(args: unknown): Promise<number> };
-  catalogScanTask: { count(args: unknown): Promise<number> };
   channelSyncTask: { count(args: unknown): Promise<number> };
   genericTask: { count(args: unknown): Promise<number> };
 };
@@ -163,10 +167,9 @@ async function loadFoundationSnapshot(
   const channelAppIds = channelApps.map((row) => row.id);
   const channelAccountIds = channelAccounts.map((row) => row.id).sort();
 
-  const [novelSourceItems, promoLinks, catalogScanTasks, channelSyncTasks, genericTasks] = await Promise.all([
+  const [novelSourceItems, promoLinks, channelSyncTasks, genericTasks] = await Promise.all([
     db.novelSourceItem.count({ where: { channelAppId: { in: channelAppIds } } }),
     db.promoLink.count({ where: { channelAppId: { in: channelAppIds } } }),
-    db.catalogScanTask.count({ where: { channelAccountId: { in: channelAccountIds } } }),
     db.channelSyncTask.count({ where: { channelAccountId: { in: channelAccountIds } } }),
     db.genericTask.count({ where: { channelAccountId: { in: channelAccountIds } } }),
   ]);
@@ -181,7 +184,6 @@ async function loadFoundationSnapshot(
       channelApps: channelAppIds.length,
       novelSourceItems,
       promoLinks,
-      catalogScanTasks,
       channelSyncTasks,
       genericTasks,
     },
@@ -194,7 +196,6 @@ function countsEqual(a: ForeignKeyCounts, b: ForeignKeyCounts): boolean {
     a.channelApps === b.channelApps &&
     a.novelSourceItems === b.novelSourceItems &&
     a.promoLinks === b.promoLinks &&
-    a.catalogScanTasks === b.catalogScanTasks &&
     a.channelSyncTasks === b.channelSyncTasks &&
     a.genericTasks === b.genericTasks
   );

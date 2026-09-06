@@ -45,7 +45,8 @@ const ids = {
   novel: "b0000000-0000-4000-8000-000000000007",
   sourceItem: "b0000000-0000-4000-8000-000000000008",
   promoLink: "b0000000-0000-4000-8000-000000000009",
-  catalogScanTask: "b0000000-0000-4000-8000-00000000000a",
+  // Phase C: CatalogScanTask folded into GenericTask (taskType = "catalog_scan").
+  catalogScanGenericTask: "b0000000-0000-4000-8000-00000000000a",
   channelSyncTask: "b0000000-0000-4000-8000-00000000000b",
   genericTask: "b0000000-0000-4000-8000-00000000000c",
 } as const;
@@ -120,16 +121,15 @@ async function seedPreFixFoundation() {
       status: "pending",
     },
   });
-  await prisma.catalogScanTask.create({
+  await prisma.genericTask.create({
     data: {
-      id: ids.catalogScanTask,
+      id: ids.catalogScanGenericTask,
+      taskType: "catalog_scan",
       channelAccountId: ids.account1,
       channelAppId: ids.channelApp,
-      projectType: 1,
+      operationScopeHash: "d".repeat(64),
       requestToken: `catalog-scan-${randomUUID()}`,
-      pageStart: 1,
-      pageEnd: 1,
-      pageSize: 20,
+      params: { projectType: 1, pageStart: 1, pageEnd: 1, pageSize: 20 },
     },
   });
   await prisma.channelSyncTask.create({
@@ -186,9 +186,10 @@ describe.skipIf(!enabled).sequential("Phase B entity fix — Channel/SourceApp s
       channelApps: 1,
       novelSourceItems: 1,
       promoLinks: 1,
-      catalogScanTasks: 1,
       channelSyncTasks: 1,
-      genericTasks: 1,
+      // Phase C: includes both the catalog_scan row (account1) and the
+      // promo_link.claim.v1 row (account3) seeded above.
+      genericTasks: 2,
     });
 
     // Confirms zero writes: still exactly the pre-fix values afterward.
@@ -221,9 +222,8 @@ describe.skipIf(!enabled).sequential("Phase B entity fix — Channel/SourceApp s
     expect(report.after.counts).toEqual(report.before.counts);
     expect(await prisma.novelSourceItem.count({ where: { channelAppId: ids.channelApp } })).toBe(1);
     expect(await prisma.promoLink.count({ where: { channelAppId: ids.channelApp } })).toBe(1);
-    expect(await prisma.catalogScanTask.count({ where: { channelAccountId: { in: accounts.map((a) => a.id) } } })).toBe(1);
     expect(await prisma.channelSyncTask.count({ where: { channelAccountId: { in: accounts.map((a) => a.id) } } })).toBe(1);
-    expect(await prisma.genericTask.count({ where: { channelAccountId: { in: accounts.map((a) => a.id) } } })).toBe(1);
+    expect(await prisma.genericTask.count({ where: { channelAccountId: { in: accounts.map((a) => a.id) } } })).toBe(2);
   });
 
   it("rollback: reverses a committed apply exactly, round-tripping ids and counts", async () => {

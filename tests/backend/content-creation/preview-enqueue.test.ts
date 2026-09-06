@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const taskFactory = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/tasks/moboreader", () => ({
   enqueueMoboreaderPreviewRefreshTask: taskFactory,
+  MOBOREADER_TASK_TYPES: Object.freeze({ catalogScan: "catalog_scan", previewRefresh: "moboreader.preview_refresh.v1" }),
 }));
 
 const { enqueueContentCreationPreview } = await import(
@@ -18,7 +19,7 @@ function fakeDb(options: { scanAccount?: string | null; fallbackAccounts?: strin
     novelSourceItem: {
       findMany: vi.fn(async () => [{ id: SOURCE_ID, channelAppId: APP_ID }]),
     },
-    catalogScanTask: {
+    genericTask: {
       findFirst: vi.fn(async () => options.scanAccount === undefined
         ? { channelAccountId: "scan-account" }
         : options.scanAccount === null

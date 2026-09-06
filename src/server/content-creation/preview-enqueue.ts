@@ -8,6 +8,7 @@ import type { PrismaClient } from "@prisma/client";
 
 import {
   enqueueMoboreaderPreviewRefreshTask,
+  MOBOREADER_TASK_TYPES,
   type MoboreaderPreviewTaskCreationResult,
 } from "@/lib/tasks/moboreader";
 
@@ -33,7 +34,7 @@ export async function enqueueContentCreationPreview(
   // Lightweight fakes used by the existing content-creation unit suite do
   // not model catalog/account tables. Treat that exactly like an unavailable
   // account; production Prisma always has these delegates.
-  if (!("catalogScanTask" in db) || !("channelAccount" in db)) {
+  if (!("genericTask" in db) || !("channelAccount" in db)) {
     return { queued: false, reason: "no_channel_account" };
   }
 
@@ -50,8 +51,9 @@ export async function enqueueContentCreationPreview(
   }
   const channelAppId = channelAppIds[0]!;
 
-  const latestScan = await db.catalogScanTask.findFirst({
-    where: { channelAppId, status: "completed" },
+  // Phase C: CatalogScanTask folded into GenericTask (taskType = "catalog_scan").
+  const latestScan = await db.genericTask.findFirst({
+    where: { taskType: MOBOREADER_TASK_TYPES.catalogScan, channelAppId, status: "completed" },
     select: { channelAccountId: true },
     orderBy: [{ completedAt: "desc" }, { createdAt: "desc" }],
   });

@@ -31,8 +31,10 @@ type FakeState = {
   channelApps: { id: string; channelId: string; sourceAppId: string; externalAppId: string }[];
   novelSourceItems: { channelAppId: string }[];
   promoLinks: { channelAppId: string }[];
-  catalogScanTasks: { channelAccountId: string }[];
   channelSyncTasks: { channelAccountId: string }[];
+  // Phase C: CatalogScanTask folded into GenericTask (taskType =
+  // "catalog_scan") -- what used to be a separate catalogScanTasks
+  // fixture array is now just another row in genericTasks.
   genericTasks: { channelAccountId: string }[];
 };
 
@@ -48,9 +50,12 @@ function defaultState(): FakeState {
     channelApps: [{ id: "app-1", channelId: "channel-1", sourceAppId: "source-1", externalAppId: "moboreader" }],
     novelSourceItems: [{ channelAppId: "app-1" }, { channelAppId: "app-1" }],
     promoLinks: [{ channelAppId: "app-1" }],
-    catalogScanTasks: [{ channelAccountId: "account-1" }],
     channelSyncTasks: [{ channelAccountId: "account-2" }],
-    genericTasks: [{ channelAccountId: "account-3" }, { channelAccountId: "account-3" }],
+    genericTasks: [
+      { channelAccountId: "account-1" },
+      { channelAccountId: "account-3" },
+      { channelAccountId: "account-3" },
+    ],
   };
 }
 
@@ -131,12 +136,6 @@ function fakeDb(state: FakeState) {
         return state.promoLinks.filter((row) => inFilter(args.where.channelAppId.in)(row.channelAppId)).length;
       },
     },
-    catalogScanTask: {
-      async count(args: { where: { channelAccountId: { in: string[] } } }) {
-        return state.catalogScanTasks.filter((row) => inFilter(args.where.channelAccountId.in)(row.channelAccountId))
-          .length;
-      },
-    },
     channelSyncTask: {
       async count(args: { where: { channelAccountId: { in: string[] } } }) {
         return state.channelSyncTasks.filter((row) => inFilter(args.where.channelAccountId.in)(row.channelAccountId))
@@ -195,9 +194,8 @@ describe("planFoundationSwap (read-only)", () => {
       channelApps: 1,
       novelSourceItems: 2,
       promoLinks: 1,
-      catalogScanTasks: 1,
       channelSyncTasks: 1,
-      genericTasks: 2,
+      genericTasks: 3,
     });
     expect(plan.snapshot.channelAppExternalAppIds).toEqual(["moboreader"]);
   });
@@ -325,9 +323,8 @@ describe("assertFoundationInvariantsPreserved", () => {
         channelApps: 1,
         novelSourceItems: 2,
         promoLinks: 1,
-        catalogScanTasks: 1,
         channelSyncTasks: 1,
-        genericTasks: 2,
+        genericTasks: 3,
       },
       ...overrides,
     };
