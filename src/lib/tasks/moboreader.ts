@@ -264,13 +264,30 @@ function digest(value: unknown): string {
   return createHash("sha256").update(JSON.stringify(value)).digest("hex");
 }
 
+/**
+ * Phase C (`施工工单_PhaseC_任务模型迁移与ImportProgress_2026-09-06.md` C-1/C-2):
+ * `CatalogScanTask` is folded into `GenericTask` (`taskType =
+ * MOBOREADER_TASK_TYPES.catalogScan`). `project_type` is not a physical
+ * column on `GenericTask`, so the single-active-scan-per-scope exclusivity
+ * `catalog_scan_active_scope_uidx` used to provide is now expressed by
+ * folding `projectType` into `operationScopeHash` and relying on the
+ * existing `generic_task_active_scope_uidx` UNIQUE(task_type,
+ * channel_account_id, channel_app_id, operation_scope_hash) WHERE status IN
+ * ('pending','processing') — the same mechanism every other GenericTask
+ * taskType already uses for its own active-scope exclusivity, not a new
+ * mechanism invented for catalog scan.
+ */
+function catalogScanOperationScopeHash(projectType: number): string {
+  return digest({ projectType });
+}
+
 export async function createMoboreaderCatalogScanTask(
   prisma: PrismaClient,
   rawInput: CreateMoboreaderCatalogScanTaskInput,
   env: NodeJS.ProcessEnv = process.env,
 ): Promise<MoboreaderTaskCreationResult> {
   const input = validateMoboreaderCatalogScanInput(rawInput, env);
-  const duplicate = await prisma.catalogScanTask.findUnique({ where: { requestToken: input.requestToken } });
+  const duplicate = await prisma.genericTask.findUnique({ where: { requestToken: input.requestToken } });
   if (duplicate) return { status: "duplicate", taskId: duplicate.id };
 
   const binding = await prisma.channelApp.findFirst({
@@ -282,11 +299,13 @@ export async function createMoboreaderCatalogScanTask(
     select: { id: true, projectType: true },
   });
   if (!binding) throw new MoboreaderTaskInputError("active_channel_binding_required");
-  const existing = await prisma.catalogScanTask.findFirst({
+  const operationScopeHash = catalogScanOperationScopeHash(binding.projectType);
+  const existing = await prisma.genericTask.findFirst({
     where: {
+      taskType: MOBOREADER_TASK_TYPES.catalogScan,
       channelAccountId: input.channelAccountId,
       channelAppId: input.channelAppId,
-      projectType: binding.projectType,
+      operationScopeHash,
       status: { in: ["pending", "processing"] },
     },
     orderBy: { createdAt: "asc" },
@@ -304,6 +323,14 @@ export async function createMoboreaderCatalogScanTask(
     source: "manual",
     actorId: input.actorId,
     requestId: input.requestId,
+    // CatalogScan's former physical task-level columns (Phase C: no longer
+    // columns on GenericTask, carried here instead — see
+    // `parseCatalogScanTaskParams` in `worker/handlers/moboreader.ts`, the
+    // sole reader).
+    projectType: binding.projectType,
+    pageStart: input.pageStart,
+    pageEnd: input.pageEnd,
+    pageSize: input.pageSize,
     safetyMaxPages: input.safetyMaxPages,
     requestedPageEnd: input.pageEnd,
     scheduledPageEnd,
@@ -317,18 +344,16 @@ export async function createMoboreaderCatalogScanTask(
   } satisfies Prisma.InputJsonObject;
   try {
     return await prisma.$transaction(async (tx) => {
-      await tx.catalogScanTask.create({
+      await tx.genericTask.create({
         data: {
           id: taskId,
+          taskType: MOBOREADER_TASK_TYPES.catalogScan,
           channelAccountId: input.channelAccountId,
           channelAppId: input.channelAppId,
-          projectType: binding.projectType,
+          operationScopeHash,
           mode: input.mode,
           status: taskStatus,
           requestToken: input.requestToken,
-          pageStart: input.pageStart,
-          pageEnd: input.pageEnd,
-          pageSize: input.pageSize,
           totalCount: pages.length,
           params: safeParams,
           items: {
@@ -347,7 +372,15 @@ export async function createMoboreaderCatalogScanTask(
                 actorId: input.actorId,
                 requestId: input.requestId,
               };
-              return { pageIndex, requestFingerprint: digest(payload), payload };
+              return {
+                targetType: "catalog_page",
+                targetId: String(pageIndex),
+                // `requestFingerprint` was a physical CatalogScanTaskItem
+                // column (a digest of this same payload, never compared
+                // against anything downstream — see the Phase C worktree
+                // audit). Folded into payload verbatim, no semantic loss.
+                payload: { ...payload, requestFingerprint: digest(payload) },
+              };
             }),
           },
         },
@@ -357,7 +390,7 @@ export async function createMoboreaderCatalogScanTask(
           actorType: "admin",
           actorId: input.actorId,
           action: "moboreader.catalog_scan.queued",
-          entityType: "CatalogScanTask",
+          entityType: "GenericTask",
           entityId: taskId,
           requestId: input.requestId,
           taskType: MOBOREADER_TASK_TYPES.catalogScan,
@@ -379,13 +412,14 @@ export async function createMoboreaderCatalogScanTask(
     });
   } catch (error) {
     if (!isUniqueViolation(error)) throw error;
-    const exact = await prisma.catalogScanTask.findUnique({ where: { requestToken: input.requestToken } });
+    const exact = await prisma.genericTask.findUnique({ where: { requestToken: input.requestToken } });
     if (exact) return { status: "duplicate", taskId: exact.id };
-    const active = await prisma.catalogScanTask.findFirst({
+    const active = await prisma.genericTask.findFirst({
       where: {
+        taskType: MOBOREADER_TASK_TYPES.catalogScan,
         channelAccountId: input.channelAccountId,
         channelAppId: input.channelAppId,
-        projectType: binding.projectType,
+        operationScopeHash,
         status: { in: ["pending", "processing"] },
       },
       orderBy: { createdAt: "asc" },

@@ -9,11 +9,17 @@ import type { TaskFamily } from "@/lib/tasks";
  * server's private lists ever change, the mismatch surfaces as a
  * `task_admin_invalid_request` from a filter this page still offers; that is
  * a visible, recoverable failure, not a silent drift.
+ *
+ * Phase C (`施工工单_PhaseC_任务模型迁移与ImportProgress_2026-09-06.md`):
+ * `catalog_scan` is no longer a family — it is a `GenericTask.taskType`
+ * value under `"generic"`, exactly like every other GenericTask taskType.
+ * There is no per-taskType filter on this page (family is the only axis),
+ * so a "目录扫描" quick-filter is a natural, accepted casualty of the
+ * migration — CPS's own `/tasks` has the same granularity.
  */
-export const TASK_FAMILIES: readonly TaskFamily[] = ["catalog_scan", "channel_sync", "generic"];
+export const TASK_FAMILIES: readonly TaskFamily[] = ["channel_sync", "generic"];
 
 export const TASK_FAMILY_LABELS: Readonly<Record<TaskFamily, string>> = Object.freeze({
-  catalog_scan: "目录扫描",
   channel_sync: "渠道同步",
   generic: "通用任务",
 });
@@ -38,16 +44,18 @@ export const TASK_ITEM_STATUSES = ["pending", "processing", "success", "skipped"
 export type TaskItemStatusFilter = (typeof TASK_ITEM_STATUSES)[number];
 
 /**
- * `getAdminTaskItems` throws `task_admin_invalid_request` for
- * `family=catalog_scan&status=skipped` — `CatalogScanTaskItem` has no
- * `skipped` status in its own lifecycle (only `channel_sync`/`generic`
- * items do). Offering that combination in the filter would just be a
- * guaranteed 400 the operator did not cause.
+ * Phase C: the pre-migration `catalog_scan` family never had a `skipped`
+ * item status, which used to make `family=catalog_scan&status=skipped` a
+ * guaranteed `task_admin_invalid_request`. `catalog_scan` is now a
+ * `GenericTask.taskType` value, and the item-status filter operates at the
+ * family granularity only — both remaining families (`channel_sync`,
+ * `generic`) genuinely support `skipped` — so there is no longer a
+ * family-level exclusion to express here. Kept as a thin passthrough
+ * (rather than inlining `TASK_ITEM_STATUSES` at the one call site) so a
+ * future family-specific carve-out has one place to land.
  */
-export function itemStatusOptionsFor(family: TaskFamily): readonly TaskItemStatusFilter[] {
-  return family === "catalog_scan"
-    ? TASK_ITEM_STATUSES.filter((status) => status !== "skipped")
-    : TASK_ITEM_STATUSES;
+export function itemStatusOptionsFor(_family: TaskFamily): readonly TaskItemStatusFilter[] {
+  return TASK_ITEM_STATUSES;
 }
 
 /**

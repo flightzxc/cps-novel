@@ -117,37 +117,70 @@ interface CatalogTaskScope {
   pageSize: number;
 }
 
+/**
+ * Phase C: `CatalogScanTask`'s former physical task-level columns
+ * (`projectType`/`pageStart`/`pageEnd`/`pageSize`) are no longer columns —
+ * `GenericTask` has no such fields — they live in `GenericTask.params`
+ * (written once, at creation, by `createMoboreaderCatalogScanTask` in
+ * `src/lib/tasks/moboreader.ts`, the sole writer). This is the sole reader.
+ */
+export function parseCatalogScanTaskParams(value: unknown): {
+  projectType: number;
+  pageStart: number;
+  pageEnd: number;
+  pageSize: number;
+} {
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("catalog_task_missing");
+  const params = value as Record<string, unknown>;
+  const { projectType, pageStart, pageEnd, pageSize } = params;
+  if (
+    !Number.isSafeInteger(projectType)
+    || !Number.isSafeInteger(pageStart)
+    || !Number.isSafeInteger(pageEnd)
+    || !Number.isSafeInteger(pageSize)
+  ) {
+    throw new Error("catalog_task_missing");
+  }
+  return {
+    projectType: projectType as number,
+    pageStart: pageStart as number,
+    pageEnd: pageEnd as number,
+    pageSize: pageSize as number,
+  };
+}
+
 async function loadAndValidateTaskScope(
   db: PrismaClient,
   taskId: string,
   payload: MoboreaderCatalogPayload,
 ): Promise<CatalogTaskScope> {
-  const task = await db.catalogScanTask.findUnique({
+  const task = await db.genericTask.findUnique({
     where: { id: taskId },
-    select: {
-      channelAccountId: true,
-      channelAppId: true,
-      projectType: true,
-      pageStart: true,
-      pageEnd: true,
-      pageSize: true,
-    },
+    select: { channelAccountId: true, channelAppId: true, params: true },
   });
-  if (!task) throw new Error("catalog_task_missing");
-  const pageCount = task.pageEnd - task.pageStart + 1;
+  if (!task || !task.channelAccountId || !task.channelAppId) throw new Error("catalog_task_missing");
+  const { projectType, pageStart, pageEnd, pageSize } = parseCatalogScanTaskParams(task.params);
+  const pageCount = pageEnd - pageStart + 1;
   if (
     pageCount < 1
-    || task.pageSize !== payload.pageSize
-    || task.projectType !== payload.projectType
-    || task.pageEnd !== payload.requestedPageEnd
-    || payload.scheduledPageEnd > task.pageEnd
-    || payload.scheduledPageEnd - task.pageStart + 1 > payload.safetyMaxPages
-    || payload.pageIndex < task.pageStart
+    || pageSize !== payload.pageSize
+    || projectType !== payload.projectType
+    || pageEnd !== payload.requestedPageEnd
+    || payload.scheduledPageEnd > pageEnd
+    || payload.scheduledPageEnd - pageStart + 1 > payload.safetyMaxPages
+    || payload.pageIndex < pageStart
     || payload.pageIndex > payload.scheduledPageEnd
   ) {
     throw new Error("catalog_task_bounds_mismatch");
   }
-  return task;
+  return {
+    channelAccountId: task.channelAccountId,
+    channelAppId: task.channelAppId,
+    projectType,
+    pageStart,
+    pageEnd,
+    pageSize,
+  };
 }
 
 async function loadBinding(db: PrismaClient, payload: MoboreaderCatalogPayload, accountId: string, appId: string) {
@@ -316,8 +349,8 @@ async function loadTaskLabelSummary(
   tx: Prisma.TransactionClient,
   taskId: string,
 ): Promise<TaskLabelSummary> {
-  const results = await tx.catalogScanTaskItem.findMany({
-    where: { taskId },
+  const results = await tx.genericTaskItem.findMany({
+    where: { taskId, targetType: "catalog_page" },
     select: { result: true },
   });
   const droppedLabels = mergeDroppedLabels(results.map(({ result }) => {
@@ -462,11 +495,16 @@ async function persistCatalogPage(
     now: Date;
   },
 ) {
-  await tx.$queryRaw(Prisma.sql`SELECT id FROM catalog_scan_task WHERE id = ${input.taskId}::uuid FOR UPDATE`);
-  await tx.catalogScanTaskItem.update({
-    where: { id: input.itemId },
-    data: { returnedCount: input.response.items.length },
-  });
+  await tx.$queryRaw(Prisma.sql`SELECT id FROM generic_task WHERE id = ${input.taskId}::uuid FOR UPDATE`);
+  // Phase C: the pre-Phase-C code wrote `returnedCount` here as a separate
+  // early physical-column update, before this same item's own `result` JSON
+  // (below) carried the identical value. That column no longer exists on
+  // `GenericTaskItem` (Phase C folds it into `result.returnedCount`), and
+  // the early write was provably redundant even before this migration: this
+  // item's own status stays 'processing' until `guardedFinalize` runs after
+  // this whole `protectedWrite` returns, so neither `beforeStop` nor
+  // `afterStop` below (both scoped to sibling item aggregates) ever see it
+  // in between. Folded into the one `result` write later in this function.
   const now = input.now;
   const sourceItemIds: string[] = [];
   const droppedLabels: DroppedLabelsSummary[] = [];
@@ -549,20 +587,21 @@ async function persistCatalogPage(
   const pageDroppedLabels = mergeDroppedLabels(droppedLabels);
 
   const [beforeStop] = await tx.$queryRaw<Array<{ total: bigint; max_page: number }>>(Prisma.sql`
-    SELECT COALESCE(SUM(returned_count), 0)::bigint AS total,
-           COALESCE(MAX(page_index) FILTER (
+    SELECT COALESCE(SUM((result->>'returnedCount')::int), 0)::bigint AS total,
+           COALESCE(MAX((target_id)::int) FILTER (
              WHERE status = 'success' AND COALESCE((result->>'stoppedBeforeFetch')::boolean, false) = false
            ), ${input.payload.pageIndex})::int AS max_page
-    FROM catalog_scan_task_item
-    WHERE task_id = ${input.taskId}::uuid AND status = 'success'
+    FROM generic_task_item
+    WHERE task_id = ${input.taskId}::uuid AND target_type = 'catalog_page' AND status = 'success'
   `);
   const fetchedRaw = Number(beforeStop.total);
-  const task = await tx.catalogScanTask.findUniqueOrThrow({
+  const task = await tx.genericTask.findUniqueOrThrow({
     where: { id: input.taskId },
-    select: { pageStart: true, pageEnd: true, pageSize: true },
+    select: { params: true },
   });
-  const requestedCapacity = (task.pageEnd - task.pageStart + 1) * task.pageSize;
-  const upstreamRemaining = Math.max(0, input.response.totalCount - (task.pageStart - 1) * task.pageSize);
+  const { pageStart, pageEnd, pageSize } = parseCatalogScanTaskParams(task.params);
+  const requestedCapacity = (pageEnd - pageStart + 1) * pageSize;
+  const upstreamRemaining = Math.max(0, input.response.totalCount - (pageStart - 1) * pageSize);
   const batchExpectedCount = Math.min(requestedCapacity, upstreamRemaining);
   const stopReason = determineMoboreaderCatalogStopReason({
     returnedCount: input.response.items.length,
@@ -574,7 +613,7 @@ async function persistCatalogPage(
     scheduledPageEnd: input.payload.scheduledPageEnd,
   });
 
-  await tx.catalogScanTaskItem.update({
+  await tx.genericTaskItem.update({
     where: { id: input.itemId },
     data: {
       result: {
@@ -591,23 +630,28 @@ async function persistCatalogPage(
     },
   });
   if (stopReason) {
-    await tx.catalogScanTaskItem.updateMany({
-      where: { taskId: input.taskId, status: "pending", pageIndex: { gt: input.payload.pageIndex } },
-      data: {
-        status: "success",
-        returnedCount: 0,
-        result: { stoppedBeforeFetch: true, stopReason },
-        finishedAt: now,
-      },
-    });
+    // `target_id` is a page index encoded as text (`GenericTaskItem.targetId`
+    // is `VARCHAR`) — comparing it numerically against `input.payload.pageIndex`
+    // needs an explicit cast Prisma's typed `updateMany` filter cannot express
+    // (page indices exceed one digit, so a plain string `gt` would sort
+    // lexically and misorder "10" before "9"). Raw SQL, same predicate shape
+    // the pre-Phase-C `pageIndex: { gt: ... }` filter expressed.
+    await tx.$executeRaw(Prisma.sql`
+      UPDATE generic_task_item SET
+        status = 'success',
+        result = jsonb_build_object('stoppedBeforeFetch', true, 'stopReason', ${stopReason}, 'returnedCount', 0),
+        finished_at = ${now}, updated_at = transaction_timestamp()
+      WHERE task_id = ${input.taskId}::uuid AND target_type = 'catalog_page' AND status = 'pending'
+        AND (target_id)::int > ${input.payload.pageIndex}
+    `);
   }
 
   const [afterStop] = await tx.$queryRaw<Array<{ actual: bigint; pending: bigint; processing: bigint; failed: bigint }>>(Prisma.sql`
-    SELECT COALESCE(SUM(returned_count), 0)::bigint AS actual,
+    SELECT COALESCE(SUM((result->>'returnedCount')::int), 0)::bigint AS actual,
            COUNT(*) FILTER (WHERE status = 'pending')::bigint AS pending,
            COUNT(*) FILTER (WHERE status = 'processing')::bigint AS processing,
            COUNT(*) FILTER (WHERE status = 'failed')::bigint AS failed
-    FROM catalog_scan_task_item WHERE task_id = ${input.taskId}::uuid
+    FROM generic_task_item WHERE task_id = ${input.taskId}::uuid AND target_type = 'catalog_page'
   `);
   const batchActualCount = Number(afterStop.actual);
   const terminal = Number(afterStop.pending) === 0 && Number(afterStop.processing) === 0;
@@ -624,8 +668,8 @@ async function persistCatalogPage(
   let taskDroppedLabels = pageDroppedLabels;
   let taskIncompleteLabelSnapshots = pageIncompleteLabelSnapshots;
   if (terminal) {
-    const itemResults = await tx.catalogScanTaskItem.findMany({
-      where: { taskId: input.taskId },
+    const itemResults = await tx.genericTaskItem.findMany({
+      where: { taskId: input.taskId, targetType: "catalog_page" },
       select: { result: true },
     });
     touchedSourceItemIds = Array.from(new Set(itemResults.flatMap(({ result }) => {
@@ -637,10 +681,15 @@ async function persistCatalogPage(
     taskDroppedLabels = labelSummary.droppedLabels;
     taskIncompleteLabelSnapshots = labelSummary.incompleteLabelSnapshots;
     if (touchedSourceItemIds.length > 0) {
+      // Phase C: `input.channelAccountId` is already this same task's
+      // channel account (the handler's own scope, threaded straight
+      // through from `loadAndValidateTaskScope`) — no need for the
+      // pre-Phase-C extra `GenericTask` re-read just to read back the
+      // same column this function was already called with.
       const preview = await enqueueMoboreaderPreviewRefreshTask(tx, {
         trigger: "auto",
         catalogScanTaskId: input.taskId,
-        channelAccountId: (await tx.catalogScanTask.findUniqueOrThrow({ where: { id: input.taskId } })).channelAccountId,
+        channelAccountId: input.channelAccountId,
         channelAppId: input.channelAppId,
         novelSourceItemIds: touchedSourceItemIds,
         requestToken: `moboreader.preview_refresh.v1:${input.taskId}`,
@@ -651,13 +700,18 @@ async function persistCatalogPage(
       previewEnqueue = preview as unknown as Prisma.InputJsonObject;
     }
   }
-  await tx.catalogScanTask.update({
+  await tx.genericTask.update({
     where: { id: input.taskId },
     data: {
-      catalogObservedTotal: input.response.totalCount,
-      batchExpectedCount,
-      batchActualCount,
       result: {
+        // Phase C: `catalogObservedTotal`/`batchExpectedCount`/
+        // `batchActualCount` were physical `CatalogScanTask` columns
+        // mutated on every page; folded into this same `result` write
+        // (which already fully replaces the field on every call, so there
+        // is no partial-merge hazard from moving them here).
+        catalogObservedTotal: input.response.totalCount,
+        batchExpectedCount,
+        batchActualCount,
         checkpoint: {
           lastCompletedPage: beforeStop.max_page,
           returnedCount: input.response.items.length,
@@ -683,7 +737,7 @@ async function persistCatalogPage(
       actorType: "admin",
       actorId: input.payload.actorId,
       action: `moboreader.catalog_page.applied.${input.payload.pageIndex}`,
-      entityType: "CatalogScanTaskItem",
+      entityType: "GenericTaskItem",
       entityId: input.itemId,
       requestId: input.payload.requestId,
       taskType: MOBOREADER_TASK_TYPES.catalogScan,
@@ -708,32 +762,46 @@ async function persistCatalogUpstreamFailure(
     itemId: string;
     payload: MoboreaderCatalogPayload;
     channelAppId: string;
+    channelAccountId: string;
     env: NodeJS.ProcessEnv;
     now: Date;
   },
 ) {
-  await tx.$queryRaw(Prisma.sql`SELECT id FROM catalog_scan_task WHERE id = ${input.taskId}::uuid FOR UPDATE`);
+  await tx.$queryRaw(Prisma.sql`SELECT id FROM generic_task WHERE id = ${input.taskId}::uuid FOR UPDATE`);
   const now = input.now;
-  await tx.catalogScanTaskItem.updateMany({
-    where: { taskId: input.taskId, status: "pending", pageIndex: { gt: input.payload.pageIndex } },
-    data: {
-      status: "failed",
-      error: { code: "upstream_error", message: "Catalog scan stopped after an upstream error" },
-      result: { stoppedBeforeFetch: true, stopReason: "upstream_error" },
-      finishedAt: now,
-    },
-  });
-  const [totals] = await tx.$queryRaw<Array<{ actual: bigint; expected: number | null }>>(Prisma.sql`
-    SELECT COALESCE(SUM(i.returned_count), 0)::bigint AS actual, t.batch_expected_count AS expected
-    FROM catalog_scan_task t
-    LEFT JOIN catalog_scan_task_item i ON i.task_id = t.id
+  // Same numeric-`target_id` cast reasoning as the stop-cascade in
+  // `persistCatalogPage` above — raw SQL, not Prisma's typed `updateMany`.
+  await tx.$executeRaw(Prisma.sql`
+    UPDATE generic_task_item SET
+      status = 'failed',
+      error = ${JSON.stringify({ code: "upstream_error", message: "Catalog scan stopped after an upstream error" })}::jsonb,
+      result = ${JSON.stringify({ stoppedBeforeFetch: true, stopReason: "upstream_error" })}::jsonb,
+      finished_at = ${now}, updated_at = transaction_timestamp()
+    WHERE task_id = ${input.taskId}::uuid AND target_type = 'catalog_page' AND status = 'pending'
+      AND (target_id)::int > ${input.payload.pageIndex}
+  `);
+  const [totals] = await tx.$queryRaw<Array<{ actual: bigint; expected: number | null; observed_total: number | null }>>(Prisma.sql`
+    SELECT COALESCE(SUM((i.result->>'returnedCount')::int), 0)::bigint AS actual,
+           (t.result->>'batchExpectedCount')::int AS expected,
+           (t.result->>'catalogObservedTotal')::int AS observed_total
+    FROM generic_task t
+    LEFT JOIN generic_task_item i ON i.task_id = t.id AND i.target_type = 'catalog_page'
     WHERE t.id = ${input.taskId}::uuid
-    GROUP BY t.batch_expected_count
+    GROUP BY t.id
   `);
   const actual = Number(totals.actual);
   const expected = totals.expected ?? actual;
-  const itemResults = await tx.catalogScanTaskItem.findMany({
-    where: { taskId: input.taskId },
+  // Phase C: `catalogObservedTotal`/`batchExpectedCount` used to be separate
+  // physical `CatalogScanTask` columns this failure path never touched, so a
+  // failed page after an earlier successful one kept whatever those columns
+  // already held. Now that both live inside the same `result` JSON blob this
+  // function replaces wholesale, they must be explicitly carried forward
+  // from the prior `result` (read above) instead of silently dropping to
+  // `undefined`.
+  const priorObservedTotal = totals.observed_total;
+  const priorBatchExpectedCount = totals.expected;
+  const itemResults = await tx.genericTaskItem.findMany({
+    where: { taskId: input.taskId, targetType: "catalog_page" },
     select: { result: true },
   });
   const touchedSourceItemIds = Array.from(new Set(itemResults.flatMap(({ result }) => {
@@ -744,11 +812,10 @@ async function persistCatalogUpstreamFailure(
   const taskLabelSummary = await loadTaskLabelSummary(tx, input.taskId);
   let previewEnqueue: Prisma.InputJsonObject | null = null;
   if (touchedSourceItemIds.length > 0) {
-    const task = await tx.catalogScanTask.findUniqueOrThrow({ where: { id: input.taskId } });
     const preview = await enqueueMoboreaderPreviewRefreshTask(tx, {
       trigger: "auto",
       catalogScanTaskId: input.taskId,
-      channelAccountId: task.channelAccountId,
+      channelAccountId: input.channelAccountId,
       channelAppId: input.channelAppId,
       novelSourceItemIds: touchedSourceItemIds,
       requestToken: `moboreader.preview_refresh.v1:${input.taskId}`,
@@ -758,11 +825,17 @@ async function persistCatalogUpstreamFailure(
     }, input.env, now);
     previewEnqueue = preview as unknown as Prisma.InputJsonObject;
   }
-  await tx.catalogScanTask.update({
+  await tx.genericTask.update({
     where: { id: input.taskId },
     data: {
-      batchActualCount: actual,
       result: {
+        // Phase C: `catalogObservedTotal`/`batchExpectedCount`/
+        // `batchActualCount` folded into `result` (no physical columns on
+        // `GenericTask`) — see `persistCatalogPage` above. The first two are
+        // carried forward from the prior `result` rather than dropped.
+        catalogObservedTotal: priorObservedTotal,
+        batchExpectedCount: priorBatchExpectedCount,
+        batchActualCount: actual,
         stopReason: "upstream_error",
         terminalState: "partial_failed",
         completeness: { expected, actual },
@@ -966,7 +1039,7 @@ export function createMoboreaderCatalogHandler(
       // message for operators, but the outcome shape (`status: "failed"`,
       // `result.stopReason: "upstream_error"`, same `protectedWrite`) is
       // byte-identical to the pre-existing generic-error path below — this
-      // task's item is a page, so `catalog_scan_task_item` already lets an
+      // task's item is a page, so `generic_task_item` already lets an
       // operator resume from `payload.pageIndex` with a fresh scan task; no
       // new recovery mechanism.
       const rateLimited = error instanceof MoboreaderRateLimitedError;
@@ -986,6 +1059,7 @@ export function createMoboreaderCatalogHandler(
           itemId: lease.itemId,
           payload,
           channelAppId: scope.channelAppId,
+          channelAccountId: scope.channelAccountId,
           env,
           now: now(),
         }),
@@ -1001,6 +1075,7 @@ export function createMoboreaderCatalogHandler(
           itemId: lease.itemId,
           payload,
           channelAppId: scope.channelAppId,
+          channelAccountId: scope.channelAccountId,
           env,
           now: now(),
         }),
@@ -1119,7 +1194,9 @@ export function createMoboreaderWorkerHandlers(
 ) {
   return createHandlerRegistry({
     [MOBOREADER_TASK_TYPES.catalogScan]: {
-      family: "catalog_scan",
+      // Phase C: CatalogScan is now a GenericTask taskType, not its own
+      // family — TASK_FAMILIES has shrunk to ["channel_sync", "generic"].
+      family: "generic",
       maxAttempts: 3,
       handler: createMoboreaderCatalogHandler(db, dependencies),
     },

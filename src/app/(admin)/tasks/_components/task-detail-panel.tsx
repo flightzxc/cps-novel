@@ -160,12 +160,6 @@ export function TaskDetailPanel({
           </button>
         </form>
 
-        {detail.family === "catalog_scan" && itemStatusValue === "skipped" ? (
-          <p role="alert" className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-            目录扫描（catalog_scan）子项没有 skipped 状态，接口会拒绝这个组合——已自动忽略该筛选。
-          </p>
-        ) : null}
-
         {items.length === 0 ? (
           <div data-testid="task-items-empty-state" className="rounded-lg border border-gray-200 bg-white px-4 py-8 text-center text-sm text-gray-400">
             没有符合条件的子项。

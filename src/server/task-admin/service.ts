@@ -18,7 +18,9 @@ export const MANUAL_REVIEW_RESOLVE_ENTRY_ID = "admin.api.task.manual_review.reso
 export const TASK_RETRY_AUDIT_ACTION = "task.retry_failed";
 export const MANUAL_REVIEW_AUDIT_ACTION = "side_effect_intent.manual_resolve";
 
-const TASK_FAMILIES = ["catalog_scan", "channel_sync", "generic"] as const;
+// Phase C: catalog_scan folded into GenericTask (taskType = "catalog_scan");
+// it is no longer a physical family.
+const TASK_FAMILIES = ["channel_sync", "generic"] as const;
 const TASK_STATUSES = [
   "pending",
   "processing",
@@ -256,14 +258,6 @@ export async function listAdminTasks(
   const take = limit(input.limit);
   const rows = await db.$queryRaw<TaskListRow[]>(Prisma.sql`
     SELECT * FROM (
-      SELECT 'catalog_scan'::text AS family, id AS task_id,
-        'catalog_scan'::text AS task_type, status, total_count, success_count,
-        failed_count, 0::int AS skipped_count, error IS NOT NULL AS has_error,
-        created_at
-      FROM catalog_scan_task
-      WHERE (${family}::text IS NULL OR ${family} = 'catalog_scan')
-        AND (${status}::text IS NULL OR status = ${status})
-      UNION ALL
       SELECT 'channel_sync'::text AS family, id AS task_id, task_type, status,
         total_count, success_count, failed_count, skipped_count,
         error IS NOT NULL AS has_error, created_at
@@ -294,16 +288,13 @@ export async function getAdminTaskDetail(
   authorizeRead(context, env);
   const family = oneOf(input.family, TASK_FAMILIES);
   const taskId = uuid(input.taskId);
-  const table = family === "catalog_scan"
-    ? Prisma.raw("catalog_scan_task")
-    : family === "channel_sync"
-      ? Prisma.raw("channel_sync_task")
-      : Prisma.raw("generic_task");
+  const table = family === "channel_sync"
+    ? Prisma.raw("channel_sync_task")
+    : Prisma.raw("generic_task");
   const rows = await db.$queryRaw<TaskListRow[]>(Prisma.sql`
-    SELECT ${family}::text AS family, id AS task_id,
-      ${family === "catalog_scan" ? "catalog_scan" : Prisma.raw("task_type")} AS task_type,
+    SELECT ${family}::text AS family, id AS task_id, task_type,
       status, total_count, success_count, failed_count,
-      ${family === "catalog_scan" ? 0 : Prisma.raw("skipped_count")}::int AS skipped_count,
+      skipped_count::int AS skipped_count,
       error IS NOT NULL AS has_error, created_at
     FROM ${table}
     WHERE id = ${taskId}::uuid
@@ -322,26 +313,10 @@ export async function listAdminTaskItems(
   const family = oneOf(input.family, TASK_FAMILIES);
   const taskId = uuid(input.taskId);
   const status = optionalOneOf(input.status, ITEM_STATUSES);
-  if (family === "catalog_scan" && status === "skipped") return invalid();
   const take = limit(input.limit);
   const where = { taskId, ...(status ? { status } : {}) };
   let items: TaskItemDto[];
-  if (family === "catalog_scan") {
-    const rows = await db.catalogScanTaskItem.findMany({
-      where,
-      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
-      take,
-      select: {
-        id: true, taskId: true, status: true, attemptCount: true,
-        leaseEpoch: true, lockedUntil: true, error: true,
-      },
-    });
-    items = rows.map((row) => Object.freeze({
-      family, itemId: row.id, taskId: row.taskId, status: row.status,
-      attemptCount: row.attemptCount, leaseEpoch: row.leaseEpoch.toString(),
-      lockedUntil: iso(row.lockedUntil), errorSummary: row.error === null ? null : "redacted",
-    }));
-  } else if (family === "channel_sync") {
+  if (family === "channel_sync") {
     const rows = await db.channelSyncTaskItem.findMany({
       where,
       orderBy: [{ createdAt: "asc" }, { id: "asc" }],
@@ -468,12 +443,7 @@ async function lockParent(
   taskId: string,
 ): Promise<LockedParentRow | null> {
   let rows: LockedParentRow[];
-  if (family === "catalog_scan") {
-    rows = await tx.$queryRaw(Prisma.sql`
-      SELECT id, status, channel_account_id, channel_app_id
-      FROM catalog_scan_task WHERE id = ${taskId}::uuid FOR UPDATE
-    `);
-  } else if (family === "channel_sync") {
+  if (family === "channel_sync") {
     rows = await tx.$queryRaw(Prisma.sql`
       SELECT id, status, channel_account_id, channel_app_id
       FROM channel_sync_task WHERE id = ${taskId}::uuid FOR UPDATE
@@ -550,12 +520,6 @@ async function failedBindings(
   family: TaskFamily,
   taskId: string,
 ): Promise<FailedBinding[]> {
-  if (family === "catalog_scan") {
-    return tx.catalogScanTaskItem.findMany({
-      where: { taskId, status: "failed" },
-      select: { id: true },
-    });
-  }
   if (family === "channel_sync") {
     return tx.channelSyncTaskItem.findMany({
       where: { taskId, status: "failed" },
@@ -614,13 +578,6 @@ async function retryItems(
     error: Prisma.DbNull,
     finishedAt: null,
   } as const;
-  if (family === "catalog_scan") {
-    const changed = await tx.catalogScanTaskItem.updateMany({
-      where: { taskId, status: "failed" },
-      data: { ...data, returnedCount: null },
-    });
-    return changed.count;
-  }
   if (family === "channel_sync") {
     return (await tx.channelSyncTaskItem.updateMany({
       where: { taskId, status: "failed" }, data,
@@ -644,14 +601,7 @@ async function recountAndResetParent(
   taskId: string,
 ): Promise<ItemCounts> {
   let counts: ItemCounts;
-  if (family === "catalog_scan") {
-    const [totalCount, successCount, failedCount] = await Promise.all([
-      tx.catalogScanTaskItem.count({ where: { taskId } }),
-      tx.catalogScanTaskItem.count({ where: { taskId, status: "success" } }),
-      tx.catalogScanTaskItem.count({ where: { taskId, status: "failed" } }),
-    ]);
-    counts = { totalCount, successCount, failedCount, skippedCount: 0 };
-  } else if (family === "channel_sync") {
+  if (family === "channel_sync") {
     const [totalCount, successCount, failedCount, skippedCount] = await Promise.all([
       tx.channelSyncTaskItem.count({ where: { taskId } }),
       tx.channelSyncTaskItem.count({ where: { taskId, status: "success" } }),
@@ -677,9 +627,7 @@ async function recountAndResetParent(
     result: Prisma.DbNull,
     error: Prisma.DbNull,
   } as const;
-  if (family === "catalog_scan") {
-    await tx.catalogScanTask.update({ where: { id: taskId }, data });
-  } else if (family === "channel_sync") {
+  if (family === "channel_sync") {
     await tx.channelSyncTask.update({
       where: { id: taskId }, data: { ...data, skippedCount: counts.skippedCount },
     });
