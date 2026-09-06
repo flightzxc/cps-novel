@@ -10,14 +10,18 @@ import {
 
 /**
  * `_lib/task-copy.ts` mirrors private enums from
- * `src/server/task-admin/service.ts` (`TASK_FAMILIES`, `RETRYABLE_PARENT_STATUSES`,
- * the `catalog_scan` × `skipped` exclusion). These are pure-logic assertions
- * that the mirror agrees with the service's actual behaviour, independent of
- * any component rendering it.
+ * `src/server/task-admin/service.ts` (`TASK_FAMILIES`,
+ * `RETRYABLE_PARENT_STATUSES`). These are pure-logic assertions that the
+ * mirror agrees with the service's actual behaviour, independent of any
+ * component rendering it.
+ *
+ * Phase C: `catalog_scan` folded into GenericTask (`taskType =
+ * "catalog_scan"`); it is no longer a family, so there is no third label and
+ * no `skipped` exclusion to test here anymore — both remaining families
+ * genuinely support `skipped`.
  */
 describe("task-copy · family labels", () => {
-  it("labels all three known families in Chinese", () => {
-    expect(taskFamilyLabel("catalog_scan")).toBe("目录扫描");
+  it("labels both known families in Chinese", () => {
     expect(taskFamilyLabel("channel_sync")).toBe("渠道同步");
     expect(taskFamilyLabel("generic")).toBe("通用任务");
   });
@@ -41,11 +45,7 @@ describe("task-copy · retryable status gate", () => {
 });
 
 describe("task-copy · item status options per family", () => {
-  it("drops `skipped` for catalog_scan — CatalogScanTaskItem has no such status", () => {
-    expect(itemStatusOptionsFor("catalog_scan")).not.toContain("skipped");
-  });
-
-  it("keeps `skipped` for channel_sync and generic", () => {
+  it("keeps `skipped` for both channel_sync and generic", () => {
     expect(itemStatusOptionsFor("channel_sync")).toContain("skipped");
     expect(itemStatusOptionsFor("generic")).toContain("skipped");
   });

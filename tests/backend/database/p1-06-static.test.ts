@@ -90,9 +90,12 @@ describe("P1-06 database operations static contracts", () => {
     // meta_keywords_template) plus the applicable_article_type CHECK. The status column and
     // article_template_status_check records were rewritten in place, not added, because that
     // CHECK changed value sets ('retired' -> 'inactive') rather than gaining a new object.
+    // Phase C step C-1 (施工工单_PhaseC_任务模型迁移与ImportProgress_2026-09-06.md)
+    // adds two more: the generic_task partial indexes equivalent to
+    // catalog_scan_task's catalog_scan_status_created_idx/catalog_scan_scope_idx.
     // The exact count still guards duplicate keys.
-    expect(records).toHaveLength(1119);
-    expect(new Set(records.map((line) => JSON.parse(line).stable_key)).size).toBe(1119);
+    expect(records).toHaveLength(1121);
+    expect(new Set(records.map((line) => JSON.parse(line).stable_key)).size).toBe(1121);
     const intents = records.map((line) => JSON.parse(line)).filter(
       (record) => record.table_name === "side_effect_intent"
         && ["status", "response_shape", "confirmed_at"].includes(record.field_name),

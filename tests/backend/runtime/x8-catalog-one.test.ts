@@ -52,12 +52,13 @@ describe("X8 Path-A catalog-one boundary", () => {
   it("requires the exact task coordinates before consumption", async () => {
     const db = {
       $queryRaw: vi.fn().mockResolvedValue([{ role: "worker_app" }]),
-      catalogScanTaskItem: {
+      genericTaskItem: {
         findUnique: vi.fn().mockResolvedValue({
           taskId: options.taskId,
-          pageIndex: 2,
+          targetType: "catalog_page",
+          targetId: "2",
           status: "pending",
-          task: { mode: "apply", status: "pending", pageStart: 2, pageEnd: 2, pageSize: 20, projectType: 1 },
+          task: { mode: "apply", status: "pending", params: { pageStart: 2, pageEnd: 2, pageSize: 20, projectType: 1 } },
         }),
       },
     };

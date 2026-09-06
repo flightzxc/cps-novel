@@ -96,7 +96,7 @@ describe("X9 read DTO allowlists", () => {
     for (const key of FORBIDDEN_KEYS) expect(allKeys(result).has(key)).toBe(false);
   });
 
-  it.each(["catalog_scan", "channel_sync", "generic"] as const)(
+  it.each(["channel_sync", "generic"] as const)(
     "returns a uniform lease-only item DTO for %s without item targets or raw worker state",
     async (family) => {
       const context = await readContext("/api/admin/tasks/items");
@@ -117,7 +117,6 @@ describe("X9 read DTO allowlists", () => {
       };
       const delegate = { findMany: async () => [raw] };
       const db = {
-        catalogScanTaskItem: delegate,
         channelSyncTaskItem: delegate,
         genericTaskItem: delegate,
       } as unknown as PrismaClient;

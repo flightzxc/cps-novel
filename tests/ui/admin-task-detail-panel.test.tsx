@@ -70,38 +70,11 @@ describe("TaskDetailPanel · detail + items", () => {
     expect(row.textContent).not.toMatch(/UTC|GMT/);
   });
 
-  it("catalog_scan + itemStatus=skipped 组合时给出「已自动忽略该筛选」提示", () => {
-    render(
-      <TaskDetailPanel
-        detail={detail({ family: "catalog_scan" })}
-        items={[]}
-        itemStatusValue="skipped"
-        baseSearch={new URLSearchParams()}
-      />,
-    );
-    expect(screen.getByText(/已自动忽略该筛选/)).toBeTruthy();
-  });
-
-  it("非 catalog_scan family 不展示 skipped 排除提示", () => {
-    render(
-      <TaskDetailPanel
-        detail={detail({ family: "channel_sync" })}
-        items={[]}
-        itemStatusValue="skipped"
-        baseSearch={new URLSearchParams()}
-      />,
-    );
-    expect(screen.queryByText(/已自动忽略该筛选/)).toBeNull();
-  });
-
-  it("子项状态筛选下拉：catalog_scan 不含 skipped 选项", () => {
-    render(
-      <TaskDetailPanel detail={detail({ family: "catalog_scan" })} items={[]} baseSearch={new URLSearchParams()} />,
-    );
-    const select = screen.getByLabelText("子项状态") as HTMLSelectElement;
-    const values = Array.from(select.options).map((option) => option.value);
-    expect(values).not.toContain("skipped");
-  });
+  // Phase C: catalog_scan folded into GenericTask (taskType = "catalog_scan");
+  // TaskFamily no longer has a third value, so the pre-migration
+  // "catalog_scan family + itemStatus=skipped" exclusion hint (and its two
+  // sibling tests) is now an impossible combination and has been removed
+  // from both task-detail-panel.tsx and this test file.
 
   it("errorSummary 为 redacted 时子项展示脱敏说明", () => {
     render(

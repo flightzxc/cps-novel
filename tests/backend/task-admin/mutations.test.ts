@@ -21,7 +21,7 @@ import {
 const REASON = "operator checked the failed task evidence";
 
 describe("X9 failed-item retry", () => {
-  it.each(["catalog_scan", "channel_sync", "generic"] as const)(
+  it.each(["channel_sync", "generic"] as const)(
     "requeues every failed %s item, preserves fencing counters, recounts parent, and audits in the transaction",
     async (family) => {
       const stores = newStores();
@@ -131,13 +131,13 @@ describe("X9 failed-item retry", () => {
     });
     const fake = new TaskAdminFakeDb();
     const dependencies = { db: fake.asPrismaClient(), identities: stores, sessions: stores, now: NOW };
-    const input = { ...ticket, family: "catalog_scan" as const, taskId: TASK_ID, reason: REASON };
+    const input = { ...ticket, family: "generic" as const, taskId: TASK_ID, reason: REASON };
 
     const first = await retryFailedTask(input, dependencies);
     const replay = await retryFailedTask(input, dependencies);
     expect(first.wrote).toBe(true);
     expect(replay).toMatchObject({ wrote: false, auditId: first.auditId, retriedItemCount: 2 });
-    expect(fake.itemUpdateCalls.get("catalog_scan")).toBe(1);
+    expect(fake.itemUpdateCalls.get("generic")).toBe(1);
     expect(fake.audits).toHaveLength(1);
 
     await expect(retryFailedTask({ ...input, reason: "different binding" }, dependencies))

@@ -121,7 +121,7 @@ describe("MoboReader catalog safety and parity", () => {
 
   it("registers catalog and preview in the reused worker", () => {
     const handlers = createMoboreaderWorkerHandlers({} as never);
-    expect(handlers.catalog_scan).toMatchObject({ family: "catalog_scan", maxAttempts: 3 });
+    expect(handlers.catalog_scan).toMatchObject({ family: "generic", maxAttempts: 3 });
     expect(handlers["moboreader.preview_refresh.v1"]).toMatchObject({ family: "channel_sync", maxAttempts: 1 });
   });
 
@@ -140,7 +140,7 @@ describe("MoboReader catalog safety and parity", () => {
     const adapter = { listBooks: vi.fn(), fetchBookMaterial: vi.fn(), fetchPreviewChapters: vi.fn() };
     const handler = createMoboreaderCatalogHandler({} as never, { adapter, env: { NODE_ENV: "test" } });
     const outcome = await handler({
-      lease: { family: "catalog_scan", taskType: "catalog_scan", mode: "dry_run", itemId: "item", taskId: "task", workerId: "worker", executionToken: "token", leaseEpoch: 1n, attemptCount: 1, lockedUntil: new Date(), payload },
+      lease: { family: "generic", taskType: "catalog_scan", mode: "dry_run", itemId: "item", taskId: "task", workerId: "worker", executionToken: "token", leaseEpoch: 1n, attemptCount: 1, lockedUntil: new Date(), payload },
       mode: "dry_run",
       signal: new AbortController().signal,
       heartbeat: async () => true,
@@ -156,7 +156,7 @@ describe("MoboReader catalog safety and parity", () => {
       env: { NODE_ENV: "test", FEATURE_NOVEL_CATALOG_SYNC: "true", NOVEL_CATALOG_SYNC_ALLOW_WRITE: "false" },
     });
     const outcome = await handler({
-      lease: { family: "catalog_scan", taskType: "catalog_scan", mode: "apply", itemId: "item", taskId: "task", workerId: "worker", executionToken: "token", leaseEpoch: 1n, attemptCount: 1, lockedUntil: new Date(), payload },
+      lease: { family: "generic", taskType: "catalog_scan", mode: "apply", itemId: "item", taskId: "task", workerId: "worker", executionToken: "token", leaseEpoch: 1n, attemptCount: 1, lockedUntil: new Date(), payload },
       mode: "apply",
       signal: new AbortController().signal,
       heartbeat: async () => true,

@@ -304,21 +304,22 @@ describe.skipIf(!enabled).sequential("P1-07 PostgreSQL 16 runtime", () => {
       .toMatchObject({ status: "pending", attemptCount: 0 });
   });
 
-  it("executes the fixed claim SQL for all three task families", async () => {
+  it("executes the fixed claim SQL for both task families", async () => {
+    // Phase C: catalog_scan is a GenericTask taskType (targetType =
+    // 'catalog_page'), not its own family — created through the ordinary
+    // Prisma delegate exactly like any other GenericTask, not raw SQL
+    // against a dedicated table.
+    await prisma.genericTask.create({
+      data: {
+        id: "a7100000-0000-4000-8000-000000000001",
+        taskType: "catalog_scan",
+        channelAccountId: ids.account, channelAppId: ids.app,
+        operationScopeHash: "c".repeat(64),
+        requestToken: "p107-claim-catalog",
+        items: { create: [{ id: "b7100000-0000-4000-8000-000000000001", targetType: "catalog_page", targetId: "1" }] },
+      },
+    });
     await executeBatch(`
-      INSERT INTO catalog_scan_task (
-        id, channel_account_id, channel_app_id, project_type, request_token,
-        page_start, page_end, page_size, updated_at
-      ) VALUES (
-        'a7100000-0000-4000-8000-000000000001', '${ids.account}', '${ids.app}', 8,
-        'p107-claim-catalog', 1, 1, 20, now()
-      );
-      INSERT INTO catalog_scan_task_item (
-        id, task_id, page_index, request_fingerprint, updated_at
-      ) VALUES (
-        'b7100000-0000-4000-8000-000000000001',
-        'a7100000-0000-4000-8000-000000000001', 1, repeat('a', 64), now()
-      );
       INSERT INTO channel_sync_task (
         id, task_type, channel_account_id, channel_app_id, operation_scope_hash,
         request_token, updated_at
@@ -335,7 +336,7 @@ describe.skipIf(!enabled).sequential("P1-07 PostgreSQL 16 runtime", () => {
     `);
     await createGenericTask();
     const catalog = await claimPendingItem(prisma, {
-      family: "catalog_scan", taskTypes: ["catalog_scan"], workerId: "worker-catalog", leaseMs: 60_000,
+      family: "generic", taskTypes: ["catalog_scan"], workerId: "worker-catalog", leaseMs: 60_000,
     });
     const channel = await claimPendingItem(prisma, {
       family: "channel_sync", taskTypes: ["runtime.channel"], workerId: "worker-channel", leaseMs: 60_000,
@@ -343,24 +344,26 @@ describe.skipIf(!enabled).sequential("P1-07 PostgreSQL 16 runtime", () => {
     const generic = await claimPendingItem(prisma, {
       family: "generic", taskTypes: ["runtime.test"], workerId: "worker-generic", leaseMs: 60_000,
     });
-    expect(catalog).toMatchObject({ family: "catalog_scan", taskType: "catalog_scan", attemptCount: 1 });
+    expect(catalog).toMatchObject({ family: "generic", taskType: "catalog_scan", attemptCount: 1 });
     expect(channel).toMatchObject({ family: "channel_sync", taskType: "runtime.channel", attemptCount: 1 });
     expect(generic).toMatchObject({ family: "generic", taskType: "runtime.test", attemptCount: 1 });
   });
 
   it("keeps catalog page ordering even when the later page is explicitly targeted", async () => {
-    const task = await prisma.catalogScanTask.create({
+    const task = await prisma.genericTask.create({
       data: {
-        channelAccountId: ids.account, channelAppId: ids.app, projectType: 2,
-        requestToken: randomUUID(), pageStart: 1, pageEnd: 2, pageSize: 20,
-        items: { create: [1, 2].map((pageIndex) => ({ pageIndex, requestFingerprint: String(pageIndex).repeat(64) })) },
+        taskType: "catalog_scan",
+        channelAccountId: ids.account, channelAppId: ids.app,
+        operationScopeHash: "d".repeat(64),
+        requestToken: randomUUID(),
+        items: { create: [1, 2].map((pageIndex) => ({ targetType: "catalog_page", targetId: String(pageIndex) })) },
       },
-      include: { items: { orderBy: { pageIndex: "asc" } } },
+      include: { items: { orderBy: { targetId: "asc" } } },
     });
-    const input = { family: "catalog_scan" as const, taskTypes: ["catalog_scan"], workerId: "page-worker", leaseMs: 60_000 };
-    const claimTarget = { family: "catalog_scan" as const, taskId: task.id, itemId: task.items[1].id };
+    const input = { family: "generic" as const, taskTypes: ["catalog_scan"], workerId: "page-worker", leaseMs: 60_000 };
+    const claimTarget = { family: "generic" as const, taskId: task.id, itemId: task.items[1].id };
     expect(await claimPendingItem(prisma, { ...input, claimTarget })).toBeNull();
-    for (const item of await prisma.catalogScanTaskItem.findMany({ where: { taskId: task.id } })) {
+    for (const item of await prisma.genericTaskItem.findMany({ where: { taskId: task.id } })) {
       expect(item).toMatchObject({ status: "pending", attemptCount: 0 });
     }
     const first = await claimPendingItem(prisma, input);
