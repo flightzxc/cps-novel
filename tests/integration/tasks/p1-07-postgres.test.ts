@@ -803,10 +803,6 @@ describe.skipIf(!enabled).sequential("P1-07 PostgreSQL 16 runtime", () => {
       .toMatchObject({ status: "claim_retry_blocked" });
   });
 
-  it("uses all four independent pending and expired indexes", async () => {
-    // Phase C: catalog_scan_task(_item) dropped -- there is no third table
-    // to seed/explain anymore, only channel_sync_task_item and
-    // generic_task_item.
   it("confirms a blocked intent only through the readback boundary and keeps the result terminal", async () => {
     const input = {
       effectKey: "e".repeat(64), idempotencyKey: "f".repeat(64),
@@ -840,7 +836,10 @@ describe.skipIf(!enabled).sequential("P1-07 PostgreSQL 16 runtime", () => {
     }))).rejects.toThrow("Illegal side-effect readback confirmation: confirmed -> confirmed");
   });
 
-  it("uses all six independent pending and expired indexes", async () => {
+  it("uses all four independent pending and expired indexes", async () => {
+    // Phase C: catalog_scan_task(_item) dropped -- there is no third table
+    // to seed/explain anymore, only channel_sync_task_item and
+    // generic_task_item.
     await executeBatch(`
       INSERT INTO channel_sync_task (
         id, task_type, channel_account_id, channel_app_id, operation_scope_hash,
