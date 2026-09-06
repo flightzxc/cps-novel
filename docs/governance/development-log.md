@@ -522,6 +522,26 @@
   `.tmp/x8-production-like/evidence/`，不进入 Git。远端 push、PR、部署与 tag 均未执行。
 
 详见 `docs/p2/LAUNCH_PARITY_OPERATING_SURFACES_2026-09-05.md`。
+## 2026-09-07 · SideEffectIntent 通用状态机收口（KTF-001 处置）
+
+- 背景：`31d4723`（2026-09-01 claim lifecycle 加固）为 readback-only recovery 在通用
+  `isAllowedSideEffectTransition` 上打开了 `claim_retry_blocked -> confirmed`，同时只改了单测
+  `side-effect-state.test.ts`，没改 P1-07 集成测试 `commits side-effect intent independently and
+  blocks unknown retry`，该用例自此在一次性 PostgreSQL 上稳定失败并被登记为 KTF-001。通用
+  `transitionSideEffectIntent()` 因而允许任意调用方在没有任何证据的情况下把“结果未知”的副作用
+  标成 confirmed。
+- 处置：通用图恢复 P1-07 原始形状（`claim_retry_blocked` 只能到 `manual_review_required`）；新增
+  `confirmSideEffectIntentByReadbackInTransaction(tx, { effectKey, evidence })` 作为 readback 确认
+  的唯一边界（只接受 `prepared`/`claim_retry_blocked`，强制 `hasWebUrl/hasAppUrl` 布尔证据，
+  `responseShape` 合并既有 ambiguity 证据并记 `source=readback`/`confirmedFrom`，状态限定 CAS）；
+  `worker/handlers/promo-link-claim.ts` 的 `writePromoLinkClaimed` 改走该边界。X9
+  `resolveManualReview` 与 `manual_review_required` 终态语义不变。
+- 测试：`side-effect-state.test.ts` 重写为三边界矩阵 + 专用边界 fake-tx 用例；claim handler 新增
+  `claim_retry_blocked` 崩溃窗口的 readback 恢复与 readback 失败转人工两用例；新增
+  `side-effect-readback-boundary.test.ts` 源码钉子（唯一调用点 = claim handler；task-admin 不引用）；
+  P1-07 集成测试原用例不改并新增专用边界用例。
+- 明确没做：不改 `SideEffectIntentTransition` 类型、不改 `prepared -> confirmed` 通用边、不改 X9、
+  不改 `docs/operations/MOBOREADER_PROMO_CLAIM_CONTRACT_2026-08-31.md`（历史记录）。
 
 ## 2026-09-04 · RC-11 本地管理员认证恢复 + 2FA 首次绑定 QR
 
