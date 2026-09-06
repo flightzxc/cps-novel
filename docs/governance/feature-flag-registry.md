@@ -3,7 +3,7 @@
 | Name | Default | Readers | Scope |
 | --- | --- | --- | --- |
 | `FEATURE_NOVEL_CATALOG_SYNC` | `false` | manual task factory, MoboReader catalog Worker handler | Allows the proven read-only `getlistpc` catalog workflow to be queued/consumed. |
-| `NOVEL_CATALOG_SYNC_ALLOW_WRITE` | `false` | manual task factory, MoboReader catalog Worker handler | Allows protected business writes only when the feature flag is also true and task mode is `apply`. |
+| `NOVEL_CATALOG_SYNC_ALLOW_WRITE` | `false` | manual task factory, MoboReader catalog Worker handler | Allows protected business writes only when the feature flag is also true and task mode is `apply`. As of Phase D (2026-09-06 施工工单_PhaseD_安全与运行态收口), the manual task factory's enqueue gate (`taskStatus`) also requires this to be `true` uniformly for `dry_run` and `apply` alike -- neither mode is claimable/consumed while it is `false`. |
 | `FEATURE_P2_06_5_TAGGING` | `false` | Tagging resolver、Admin routes、bootstrap/backfill | CanonicalTag 总闸；仅 exact `"true"` 开启读取与管理面。 |
 | `FEATURE_P2_06_5_TAG_ADMIN_WRITE` | `false` | CanonicalTag/mapping/manual snapshot Admin services | taxonomy、mapping 与 manual snapshot 写闸；仍需 `tag:manage`、2FA、request ID 与审计。 |
 | `FEATURE_NOVEL_TAG_AUTO` | `false` | resolver、tagging task factory/worker | 允许读取 auto layer 与创建 auto task；不等于授权生产写入。 |
@@ -13,7 +13,7 @@
 | `FEATURE_INDEXNOW_DELIVERY` | `false` | `src/lib/indexnow/sweep.ts`'s `sweepDueIndexNowDeliveries`, `worker/handlers/indexnow-delivery.ts` | Allows the delivery sweep to create `GenericTaskItem`s and the worker handler to run at all. |
 | `INDEXNOW_DELIVERY_ALLOW_WRITE` | `false` | same as above | Allows the worker handler to call the real IndexNow API and write attempt/outcome data; both this and `FEATURE_INDEXNOW_DELIVERY` must be `true`. |
 
-Both `FEATURE_NOVEL_CATALOG_SYNC`/`NOVEL_CATALOG_SYNC_ALLOW_WRITE` use exact `=== "true"` parsing. A `dry_run` may read and build a plan when the feature flag is true, but the P1 runtime strips its protected write before finalization.
+Both `FEATURE_NOVEL_CATALOG_SYNC`/`NOVEL_CATALOG_SYNC_ALLOW_WRITE` use exact `=== "true"` parsing. A `dry_run` may read and build a plan when the feature flag is true, but the P1 runtime strips its protected write before finalization. Phase D (2026-09-06 施工工单_PhaseD_安全与运行态收口) adds two independent layers on top of that pre-existing runtime strip: the MoboReader catalog/preview Worker handlers themselves never attach a `protectedWrite` closure at all when `mode === "dry_run"` (so there is nothing left for the runtime to strip, and a direct handler call outside the normal worker loop is covered too), and `finalizeTaskItem` (`src/lib/tasks/store.ts`) fail-closed refuses to invoke any `protectedWrite` a handler still attaches under a `dry_run` lease, forcing the item to `failed` with a `dry_run_protected_write_blocked` error/audit reason instead. `dry_run` never upserts a source item, writes a label, creates/binds a `PromoLink`, or materializes a preview, under any of the three layers.
 
 Tagging 的三层开关独立：master 关闭时全体 fail closed；Admin write 只控制人工治理写；auto flag
 只控制 auto layer/task。auto apply 必须同时满足 master、auto flag 与
