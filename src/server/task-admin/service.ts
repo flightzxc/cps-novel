@@ -8,6 +8,7 @@ import {
 } from "@/lib/auth";
 import { isUniqueConstraintViolation, withDbRetry } from "@/lib/db/db-retry";
 import type { TaskFamily } from "@/lib/tasks";
+import { TASK_ITEM_STATUSES, TASK_STATUSES } from "@/domain/database-statuses";
 import {
   requireFreshAdminServiceMutation,
   type AdminServiceAuthorization,
@@ -21,15 +22,10 @@ export const MANUAL_REVIEW_AUDIT_ACTION = "side_effect_intent.manual_resolve";
 // Phase C: catalog_scan folded into GenericTask (taskType = "catalog_scan");
 // it is no longer a physical family.
 const TASK_FAMILIES = ["channel_sync", "generic"] as const;
-const TASK_STATUSES = [
-  "pending",
-  "processing",
-  "completed",
-  "completed_with_errors",
-  "failed",
-  "disabled",
-] as const;
-const ITEM_STATUSES = ["pending", "processing", "success", "skipped", "failed"] as const;
+// Phase C step C-5: TASK_STATUSES/TASK_ITEM_STATUSES (formerly a third
+// literal copy here, alongside task-copy.ts and database-statuses.ts) are
+// now sourced from @/domain/database-statuses, the single source of truth.
+const ITEM_STATUSES = TASK_ITEM_STATUSES;
 const PROMO_STATUSES = ["pending", "fetched", "failed", "registered_disabled"] as const;
 const RETRYABLE_PARENT_STATUSES = new Set(["failed", "completed_with_errors"]);
 const UNRESOLVED_INTENT_STATUSES = [

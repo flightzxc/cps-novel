@@ -5,8 +5,14 @@ import {
   itemStatusOptionsFor,
   LIST_LIMIT_NOTE,
   taskFamilyLabel,
+  TASK_ITEM_STATUSES,
   TASK_LIST_MAX_LIMIT,
+  TASK_STATUSES,
 } from "@/app/(admin)/tasks/_lib/task-copy";
+import {
+  TASK_ITEM_STATUSES as DOMAIN_TASK_ITEM_STATUSES,
+  TASK_STATUSES as DOMAIN_TASK_STATUSES,
+} from "@/domain/database-statuses";
 
 /**
  * `_lib/task-copy.ts` mirrors private enums from
@@ -41,6 +47,35 @@ describe("task-copy · retryable status gate", () => {
     for (const status of ["pending", "processing", "completed", "disabled"]) {
       expect(isRetryableTaskStatus(status)).toBe(false);
     }
+  });
+});
+
+describe("task-copy · TASK_STATUSES/TASK_ITEM_STATUSES single source of truth (C-5)", () => {
+  it("matches the frozen 6-value task-status set the generic_task/channel_sync_task CHECK constraints enforce", () => {
+    // Matches database-governance.md §4's Task line and the
+    // generic_task_status_check/channel_sync_task_status_check CHECK clauses
+    // verified live in tests/integration/tasks/p1-13-postgres-acceptance.test.ts's
+    // frozenChecks. A drift here (e.g. someone dropping "disabled" from one
+    // copy but not the CHECK) would previously have gone unnoticed at the
+    // unit-test layer -- there was no test asserting this exact set.
+    expect(TASK_STATUSES).toEqual([
+      "pending",
+      "processing",
+      "completed",
+      "completed_with_errors",
+      "failed",
+      "disabled",
+    ]);
+  });
+
+  it("re-exports @/domain/database-statuses's TASK_STATUSES/TASK_ITEM_STATUSES verbatim, not a second copy", () => {
+    // Phase C step C-5: task-copy.ts and src/server/task-admin/service.ts
+    // both import these from database-statuses.ts instead of each keeping
+    // their own literal array. Asserting reference equality (not just deep
+    // equality) is what actually distinguishes "single source of truth" from
+    // "two arrays that currently happen to match".
+    expect(TASK_STATUSES).toBe(DOMAIN_TASK_STATUSES);
+    expect(TASK_ITEM_STATUSES).toBe(DOMAIN_TASK_ITEM_STATUSES);
   });
 });
 

@@ -1,14 +1,21 @@
 import type { TaskFamily } from "@/lib/tasks";
+import {
+  TASK_ITEM_STATUSES as DATABASE_TASK_ITEM_STATUSES,
+  TASK_STATUSES as DATABASE_TASK_STATUSES,
+} from "@/domain/database-statuses";
 
 /**
  * Mirrors the private enums in `src/server/task-admin/service.ts`
- * (`TASK_FAMILIES`, `TASK_STATUSES`, `ITEM_STATUSES`,
- * `RETRYABLE_PARENT_STATUSES`). None of those four are exported — the module
+ * (`TASK_FAMILIES` and `RETRYABLE_PARENT_STATUSES` stay local copies here;
+ * `TASK_STATUSES`/`ITEM_STATUSES` are no longer duplicated — both this file
+ * and the service import them from `@/domain/database-statuses`, the single
+ * source of truth as of Phase C step C-5). `TASK_FAMILIES`/
+ * `RETRYABLE_PARENT_STATUSES` are not exported by the service — the module
  * only exports the DTOs and the service functions — so this file keeps its
- * own copy rather than reaching into `src/server/**` internals. If the
- * server's private lists ever change, the mismatch surfaces as a
- * `task_admin_invalid_request` from a filter this page still offers; that is
- * a visible, recoverable failure, not a silent drift.
+ * own copy of those two rather than reaching into `src/server/**` internals.
+ * If the server's private `TASK_FAMILIES` ever changes, the mismatch
+ * surfaces as a `task_admin_invalid_request` from a filter this page still
+ * offers; that is a visible, recoverable failure, not a silent drift.
  *
  * Phase C (`施工工单_PhaseC_任务模型迁移与ImportProgress_2026-09-06.md`):
  * `catalog_scan` is no longer a family — it is a `GenericTask.taskType`
@@ -28,18 +35,13 @@ export function taskFamilyLabel(family: string): string {
   return TASK_FAMILY_LABELS[family as TaskFamily] ?? family;
 }
 
-export const TASK_STATUSES = [
-  "pending",
-  "processing",
-  "completed",
-  "completed_with_errors",
-  "failed",
-  "disabled",
-] as const;
+// Phase C step C-5: sourced from @/domain/database-statuses (the single
+// source of truth) instead of a third local literal copy.
+export const TASK_STATUSES = DATABASE_TASK_STATUSES;
 
 export type TaskStatusFilter = (typeof TASK_STATUSES)[number];
 
-export const TASK_ITEM_STATUSES = ["pending", "processing", "success", "skipped", "failed"] as const;
+export const TASK_ITEM_STATUSES = DATABASE_TASK_ITEM_STATUSES;
 
 export type TaskItemStatusFilter = (typeof TASK_ITEM_STATUSES)[number];
 
