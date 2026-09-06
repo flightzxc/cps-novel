@@ -4,6 +4,16 @@
 
 ---
 
+## 2026-09-07 · Tagging V3 FK 具名对齐（零 schema migration，仅 Prisma `map:`）
+
+- 根因：`20260816160000_p2_06_5_tagging_v3` 手写迁移给 6 条 FK 取了短名，`schema.prisma` 对应 `@relation` 未写 `map:`，致 `prisma migrate diff --exit-code` 恒 exit 2，`scripts/p1-13-postgres-verification.sh` 等脚本从未跑到 grants/测试。
+- 修复：只给 `CanonicalTagTranslation`/`CanonicalTagKeyword`/`SourceLabelMapping`/`NovelTagState`/`NovelCanonicalTag`（两处）共 6 个 `@relation` 补 `map:` 指回已落地物理名（先例 `database-governance.md` §5 第 12 条，登记为第 19 条）；不改 Migration、不新增 migration、不改 JSONL。
+- 验证（生产路径）：一次性 PostgreSQL 16.14 容器 `migrate deploy` 后两方向 `migrate diff --exit-code` 均 `No difference detected.` / `EXIT_CODE=0`，字典 drift checker PASS（`{"status":"ok","models":49,…}`，`DRIFT_EXIT=0`），活库 6 条 FK 名仍为短名。`scripts/p1-13-postgres-verification.sh` **未作任何修改、原样运行**：diff 门禁通过（此前恒 exit 2 的阻塞解除），随后于 `npm run test:integration` 命中既有基线失败 `KTF-001`（`tests/integration/tasks/p1-07-postgres.test.ts` >「commits side-effect intent independently and blocks unknown retry」，测试文件、用例名、失败断言完全命中；该步 1 failed / 114 passed / 41 skipped），脚本 `set -e` 于此中止：`P1_13_POSTGRES_ERROR line=141 status=1`、`P1_13_POSTGRES_CLEANUP=PASS`（容器/卷/网络自清理）。`git stash` A/B（同一测试文件、各起一次性库）修复前后均 `1 failed | 25 passed (26)`、失败断言逐字相同，证明该失败与本改动无关。
+- 补充证据（**非生产路径补充证据，不替代原样脚本**）：把 p1-13 脚本各 `npm run …`/`npm test` 行追加 `|| printf 'STEP_FAILED=…'`（其余不动）后跑完全部步骤，结果为 `BUILD=PASS`、`TYPECHECK=PASS`、`LINT=PASS`；`npm run test:backend` 唯一失败为既有基线 `tests/backend/publish-gate/no-bypass.test.ts`（`1 failed | 172 passed (173)` 文件、`1 failed | 1719 passed (1720)` 用例）；完整 `npm test` = `2 failed | 3669 passed | 41 skipped (3712)`，失败集恰为 `KTF-001` 与 `publish-gate/no-bypass` 这两条既有基线失败，无任何新增失败。注：该跑法下 `|| printf` 不阻断其后的 `*=PASS` printf，故 `STEP_FAILED=` 与 `INTEGRATION_TESTS=PASS`/`BACKEND_TESTS=PASS` 会同时出现，判读以 `STEP_FAILED=` 为准。
+- 明确没做的：未改 Migration、未新增 migration、未改 `database-schema-dictionary.jsonl`、未补 §3.2 Tagging V3 七表词典行；`KTF-001` 与 `tests/backend/publish-gate/no-bypass.test.ts` 两条既有基线失败均未修改、未绕过、未从登记中移除，本轮只按编号/登记引用。
+
+---
+
 ## 2026-09-06 · PR6 fix lane F — P2-06.5 标签管理 feature flag 接线缺口修复
 
 - 背景：运行中的 X8 uat（`cps-novel-x8-local`）web 日志出现

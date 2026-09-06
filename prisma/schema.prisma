@@ -504,7 +504,7 @@ model CanonicalTagTranslation {
   createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  canonicalTag CanonicalTag @relation(fields: [canonicalTagId], references: [id], onDelete: Cascade)
+  canonicalTag CanonicalTag @relation(fields: [canonicalTagId], references: [id], onDelete: Cascade, map: "canonical_tag_translation_tag_id_fkey")
 
   @@unique([canonicalTagId, locale], map: "canonical_tag_translation_locale_key")
   @@index([locale, displayName], map: "canonical_tag_translation_locale_name_idx")
@@ -524,7 +524,7 @@ model CanonicalTagKeyword {
   createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  canonicalTag CanonicalTag @relation(fields: [canonicalTagId], references: [id], onDelete: Cascade)
+  canonicalTag CanonicalTag @relation(fields: [canonicalTagId], references: [id], onDelete: Cascade, map: "canonical_tag_keyword_tag_id_fkey")
 
   @@index([canonicalTagId, active], map: "canonical_tag_keyword_tag_active_idx")
   @@index([lexiconVersion, active], map: "canonical_tag_keyword_version_active_idx")
@@ -545,7 +545,7 @@ model SourceLabelMapping {
   updatedAt        DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   channelApp   ChannelApp   @relation(fields: [channelAppId], references: [id], onDelete: Restrict)
-  canonicalTag CanonicalTag @relation(fields: [canonicalTagId], references: [id], onDelete: Restrict)
+  canonicalTag CanonicalTag @relation(fields: [canonicalTagId], references: [id], onDelete: Restrict, map: "source_label_mapping_tag_id_fkey")
   approver     AdminIdentity @relation("SourceLabelMappingApprover", fields: [approvedBy], references: [id], onDelete: Restrict)
 
   @@unique([channelAppId, rawLanguageScope, rawToken, canonicalTagId], map: "source_label_mapping_edge_key")
@@ -562,7 +562,7 @@ model NovelTagState {
   updatedAt        DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   novel          Novel                 @relation(fields: [novelId], references: [id], onDelete: Cascade)
-  currentAutoRun TagClassificationRun? @relation("CurrentAutoRun", fields: [currentAutoRunId, novelId], references: [id, novelId], onDelete: Restrict)
+  currentAutoRun TagClassificationRun? @relation("CurrentAutoRun", fields: [currentAutoRunId, novelId], references: [id, novelId], onDelete: Restrict, map: "novel_tag_state_current_auto_run_id_fkey")
 
   @@unique([currentAutoRunId, novelId], map: "novel_tag_state_current_auto_run_key")
   @@index([mode, updatedAt], map: "novel_tag_state_mode_updated_idx")
@@ -614,8 +614,8 @@ model NovelCanonicalTag {
   updatedAt             DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   novel            Novel                 @relation(fields: [novelId], references: [id], onDelete: Cascade)
-  canonicalTag      CanonicalTag          @relation(fields: [canonicalTagId], references: [id], onDelete: Restrict)
-  classificationRun TagClassificationRun? @relation(fields: [classificationRunId, novelId], references: [id, novelId], onDelete: Restrict)
+  canonicalTag      CanonicalTag          @relation(fields: [canonicalTagId], references: [id], onDelete: Restrict, map: "novel_canonical_tag_tag_id_fkey")
+  classificationRun TagClassificationRun? @relation(fields: [classificationRunId, novelId], references: [id, novelId], onDelete: Restrict, map: "novel_canonical_tag_run_id_fkey")
   decider           AdminIdentity?        @relation("NovelCanonicalTagDecider", fields: [decidedBy], references: [id], onDelete: Restrict)
 
   @@unique([novelId, canonicalTagId, source], map: "novel_canonical_tag_source_key")
