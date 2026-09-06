@@ -15,14 +15,14 @@ BEGIN TRANSACTION READ ONLY;
 This is the broad queue/parent overview. A growing `pending` or `processing`
 count is a prompt to inspect the later queries, not permission to mutate rows.
 
+Phase C (`施工工单_PhaseC_任务模型迁移与ImportProgress_2026-09-06.md`) folded
+`catalog_scan_task`/`catalog_scan_task_item` into `generic_task`/
+`generic_task_item` (`task_type = 'catalog_scan'`); the queries below now
+have two family branches instead of three.
+
 ```sql
 WITH states AS (
-  SELECT 'catalog_scan'::text AS family, 'task'::text AS level, status
-  FROM catalog_scan_task
-  UNION ALL
-  SELECT 'catalog_scan', 'item', status FROM catalog_scan_task_item
-  UNION ALL
-  SELECT 'channel_sync', 'task', status FROM channel_sync_task
+  SELECT 'channel_sync'::text AS family, 'task'::text AS level, status FROM channel_sync_task
   UNION ALL
   SELECT 'channel_sync', 'item', status FROM channel_sync_task_item
   UNION ALL
@@ -44,12 +44,7 @@ recoveries create `task_item.failed / stale_processing` audit facts.
 
 ```sql
 WITH expired AS (
-  SELECT 'catalog_scan'::text AS family, 'catalog_scan'::text AS task_type,
-         i.locked_until
-  FROM catalog_scan_task_item i
-  WHERE i.status = 'processing' AND i.locked_until < transaction_timestamp()
-  UNION ALL
-  SELECT 'channel_sync', t.task_type, i.locked_until
+  SELECT 'channel_sync'::text AS family, t.task_type, i.locked_until
   FROM channel_sync_task_item i
   JOIN channel_sync_task t ON t.id = i.task_id
   WHERE i.status = 'processing' AND i.locked_until < transaction_timestamp()
