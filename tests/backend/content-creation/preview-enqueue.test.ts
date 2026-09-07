@@ -15,9 +15,17 @@ const APP_ID = "20000000-0000-4000-8000-000000000001";
 
 function fakeDb(options: { scanAccount?: string | null; fallbackAccounts?: string[] } = {}) {
   const transaction = vi.fn(async (callback: (tx: object) => unknown) => callback({ tx: true }));
+  const findManyCallSizes: number[] = [];
   return {
     novelSourceItem: {
-      findMany: vi.fn(async () => [{ id: SOURCE_ID, channelAppId: APP_ID }]),
+      // Id-aware (not a fixed single-row stub) so both the existing
+      // single-id tests and the C-15 40,000-id chunking test below see
+      // correctly shaped results for whatever ids `findNovelSourceItemsByIds`
+      // actually queries.
+      findMany: vi.fn(async (args: { where: { id: { in: string[] } } }) => {
+        findManyCallSizes.push(args.where.id.in.length);
+        return args.where.id.in.map((id) => ({ id, channelAppId: APP_ID }));
+      }),
     },
     genericTask: {
       findFirst: vi.fn(async () => options.scanAccount === undefined
@@ -30,6 +38,7 @@ function fakeDb(options: { scanAccount?: string | null; fallbackAccounts?: strin
       findMany: vi.fn(async () => (options.fallbackAccounts ?? []).map((id) => ({ id }))),
     },
     $transaction: transaction,
+    __findManyCallSizes: findManyCallSizes,
   };
 }
 
@@ -101,5 +110,38 @@ describe("content creation -> Moboreader preview enqueue", () => {
     await expect(enqueueContentCreationPreview(db as never, {
       novelSourceItemIds: [SOURCE_ID], requestToken: "token-1", requestId: "req-2", actorId: "admin",
     })).resolves.toEqual({ queued: true, status: "duplicate", taskId: "existing" });
+  });
+
+  /**
+   * C-15 (施工工单_C15_终态扫描绑定变量溢出_2026-09-07.md §二.2): this module's
+   * own `id: { in: Array.from(new Set(input.novelSourceItemIds)) } }`
+   * findMany had the exact same unbounded-bind-variable shape as
+   * `enqueueMoboreaderPreviewRefreshTask`'s. Proves the fix -- routed through
+   * `findNovelSourceItemsByIds` -- chunks a 40,000-id request into multiple
+   * findMany calls instead of one, and does not throw.
+   */
+  it("C-15: 40,000 ids are looked up in chunks, not one unbounded findMany, and the call does not throw", async () => {
+    const ids = Array.from({ length: 40_000 }, (_, i) => {
+      const h = i.toString(16).padStart(30, "0").slice(-30);
+      return `${h.slice(0, 8)}-${h.slice(8, 12)}-4${h.slice(12, 15)}-8${h.slice(15, 18)}-${h.slice(18, 30)}`;
+    });
+    const db = fakeDb({ scanAccount: "recent-account" });
+
+    await expect(enqueueContentCreationPreview(db as never, {
+      novelSourceItemIds: ids,
+      requestToken: "c15-40k-token",
+      requestId: "req-40k",
+      actorId: "admin",
+    })).resolves.toMatchObject({ queued: true, status: "enqueued" });
+
+    expect(db.__findManyCallSizes.length).toBeGreaterThan(1);
+    for (const size of db.__findManyCallSizes) expect(size).toBeLessThanOrEqual(5_000);
+    expect(db.__findManyCallSizes.reduce((a, b) => a + b, 0)).toBe(40_000);
+    expect(taskFactory).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ novelSourceItemIds: expect.arrayContaining([ids[0]]) }),
+      expect.anything(),
+      expect.anything(),
+    );
   });
 });

@@ -6,6 +6,7 @@
  */
 import type { PrismaClient } from "@prisma/client";
 
+import { findNovelSourceItemsByIds } from "@/lib/db/chunked-id-lookup";
 import {
   enqueueMoboreaderPreviewRefreshTask,
   MOBOREADER_TASK_TYPES,
@@ -38,8 +39,9 @@ export async function enqueueContentCreationPreview(
     return { queued: false, reason: "no_channel_account" };
   }
 
-  const sourceItems = await db.novelSourceItem.findMany({
-    where: { id: { in: Array.from(new Set(input.novelSourceItemIds)) } },
+  // C-15: chunked lookup -- see `src/lib/db/chunked-id-lookup.ts` header for
+  // why an unbounded `id: { in: ... } }` findMany is unsafe here too.
+  const sourceItems = await findNovelSourceItemsByIds(db, input.novelSourceItemIds, {
     select: { id: true, channelAppId: true },
   });
   const channelAppIds = Array.from(new Set(sourceItems.map((item) => item.channelAppId)));

@@ -25,6 +25,7 @@ import { createHash, randomUUID } from "node:crypto";
 
 import { Prisma, type PrismaClient } from "@prisma/client";
 
+import { chunkIds } from "@/lib/db/chunked-id-lookup";
 import { isUniqueConstraintViolation } from "@/lib/db/db-retry";
 import { isIndexNowOutboxEnabled, isIndexNowOutboxWriteAllowed } from "@/lib/flags";
 
@@ -178,30 +179,43 @@ export async function releaseDeferredIndexNowOutbox(
   const ids = [...new Set(input.outboxIds)];
   if (ids.length === 0) return { released: 0 };
 
-  const result = await db.indexNowOutbox.updateMany({
-    where: {
-      id: { in: ids },
-      status: "pending",
-      deferReason: { not: null },
-      availableAt: { gt: now },
-    },
-    data: {
-      availableAt: now,
-      releasedAt: now,
-      releaseReason: input.reason,
-      releaseCommit,
-    },
-  });
-  if (result.count === 0) return { released: 0 };
-
-  const released = await db.indexNowOutbox.findMany({
-    where: { id: { in: ids }, releasedAt: now, releaseReason: input.reason },
-    select: { id: true },
-  });
-  for (const row of released) {
-    await createIndexNowDeliveryTaskItem(db, row.id, { reason: "review_defer_release", triggeredBy: input.reason });
+  // C-15 audit (施工工单_C15 §二.4): this is a manual admin action with no
+  // caller wired up yet anywhere in this codebase, so unlike
+  // `promo-link-claim.ts`'s enforced `maxBatchSize` there is no code-level
+  // cap on `outboxIds.length` to cite as a hard bound -- chunked
+  // defensively rather than recorded as bounded.
+  let releasedCount = 0;
+  const releasedIds: string[] = [];
+  for (const idChunk of chunkIds(ids)) {
+    const result = await db.indexNowOutbox.updateMany({
+      where: {
+        id: { in: idChunk },
+        status: "pending",
+        deferReason: { not: null },
+        availableAt: { gt: now },
+      },
+      data: {
+        availableAt: now,
+        releasedAt: now,
+        releaseReason: input.reason,
+        releaseCommit,
+      },
+    });
+    releasedCount += result.count;
+    if (result.count > 0) releasedIds.push(...idChunk);
   }
-  return { released: result.count };
+  if (releasedCount === 0) return { released: 0 };
+
+  for (const idChunk of chunkIds(releasedIds)) {
+    const released = await db.indexNowOutbox.findMany({
+      where: { id: { in: idChunk }, releasedAt: now, releaseReason: input.reason },
+      select: { id: true },
+    });
+    for (const row of released) {
+      await createIndexNowDeliveryTaskItem(db, row.id, { reason: "review_defer_release", triggeredBy: input.reason });
+    }
+  }
+  return { released: releasedCount };
 }
 
 /**

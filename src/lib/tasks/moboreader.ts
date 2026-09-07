@@ -5,6 +5,7 @@ import {
   isNovelCatalogSyncWriteAllowed,
 } from "../flags";
 import { isUniqueConstraintViolation as isUniqueViolation } from "@/lib/db/db-retry";
+import { findNovelSourceItemsByIds } from "@/lib/db/chunked-id-lookup";
 
 export const MOBOREADER_TASK_TYPES = Object.freeze({
   catalogScan: "catalog_scan",
@@ -614,8 +615,12 @@ async function enqueueMoboreaderPreviewRefreshTaskInDb(
 
   const runtime = resolveMoboreaderPreviewRuntimeConfig(env);
   const optionalAllowlist = csvSet(env[MOBOREADER_PREVIEW_ENV.sourceItemAllowlist]);
-  const sources = await db.novelSourceItem.findMany({
-    where: { id: { in: input.novelSourceItemIds }, channelAppId: input.channelAppId },
+  // C-15: a "whole task scan" trigger can hand this up to ~96,660 ids in one
+  // call (施工工单_C15) -- well past Postgres's 32,767 bind-variable cap for
+  // a plain `id: { in: ... } }` findMany. Chunked via
+  // `findNovelSourceItemsByIds` instead of a single unbounded findMany.
+  const sources = await findNovelSourceItemsByIds(db, input.novelSourceItemIds, {
+    where: { channelAppId: input.channelAppId },
     select: {
       id: true,
       novelId: true,

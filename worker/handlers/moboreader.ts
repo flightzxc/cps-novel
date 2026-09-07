@@ -682,6 +682,15 @@ async function persistCatalogPage(
   let taskDroppedLabels = pageDroppedLabels;
   let taskIncompleteLabelSnapshots = pageIncompleteLabelSnapshots;
   if (terminal) {
+    // C-15 (施工工单_C15): loads every `catalog_page` item's `result` for this
+    // task and flatMaps out its `sourceItemIds` -- up to `MOBOREADER_CATALOG_LIMITS`'
+    // 6,000-page ceiling per task, each page carrying at most its `pageSize`
+    // (<=100, C-13) ids, so up to ~6,000 x 100 = 600,000 raw entries in
+    // memory before the `Set` dedupes them down to the task's actual touched
+    // source-item count (96,660 in the incident this work order documents).
+    // Kept as-is here -- not in scope for this work order -- but the
+    // downstream `enqueueMoboreaderPreviewRefreshTask` call this feeds *is*
+    // the fixed unbounded-bind-list call (see `findNovelSourceItemsByIds`).
     const itemResults = await tx.genericTaskItem.findMany({
       where: { taskId: input.taskId, targetType: "catalog_page" },
       select: { result: true },
@@ -824,6 +833,11 @@ async function persistCatalogUpstreamFailure(
   const priorTaskResult = totals.prior_result && typeof totals.prior_result === "object" && !Array.isArray(totals.prior_result)
     ? totals.prior_result
     : {};
+  // C-15 (施工工单_C15): same in-memory scale note as the terminal-page branch
+  // above -- up to 6,000 `catalog_page` items x <=100 ids each (C-13) before
+  // the `Set` dedupes. Kept as-is; the fix lives in
+  // `findNovelSourceItemsByIds`, which this feeds via
+  // `enqueueMoboreaderPreviewRefreshTask` below.
   const itemResults = await tx.genericTaskItem.findMany({
     where: { taskId: input.taskId, targetType: "catalog_page" },
     select: { result: true },

@@ -6,8 +6,11 @@ import type { PrismaClient } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
 
 import { MoboreaderAdapterError } from "@/lib/adapters";
+import { ID_IN_LIST_CHUNK_SIZE } from "@/lib/db/chunked-id-lookup";
 import {
+  enqueueMoboreaderPreviewRefreshTask,
   MOBOREADER_CATALOG_LIMITS,
+  MOBOREADER_PREVIEW_ENV,
   MOBOREADER_PREVIEW_RUNTIME_DEFAULTS,
   resolveMoboreaderPreviewRuntimeConfig,
   validateMoboreaderCatalogScanInput,
@@ -427,5 +430,91 @@ describe("MoboReader catalog handler: adapter error visibility (C-10)", () => {
     } finally {
       keys.cleanup();
     }
+  });
+});
+
+/**
+ * C-15 (施工工单_C15_终态扫描绑定变量溢出_2026-09-07.md): before this,
+ * `enqueueMoboreaderPreviewRefreshTask`'s `novelSourceItem.findMany({ where:
+ * { id: { in: input.novelSourceItemIds } } })` bound one Postgres prepared-
+ * statement parameter per id -- a single "whole task scan" trigger touching
+ * more than 32,767 ids (the incident this work order documents hit 96,660)
+ * blew that cap and rolled back the entire enqueue transaction. This test
+ * proves the fixed path -- `findNovelSourceItemsByIds` inside
+ * `enqueueMoboreaderPreviewRefreshTask` -- no longer builds one unbounded
+ * `findMany` call: 40,000 ids (comfortably past 32,767, and past
+ * `ID_IN_LIST_CHUNK_SIZE` eight times over) must be served by multiple
+ * `findMany` calls, each at most `ID_IN_LIST_CHUNK_SIZE` ids, and the
+ * function must complete without throwing.
+ */
+describe("MoboReader preview enqueue: chunked id lookup (C-15)", () => {
+  function uuidFromIndex(i: number): string {
+    // Deterministic RFC-4122-shaped v4/variant-8 UUID satisfying
+    // `validatedPreviewInput`'s strict format regex, unique per index.
+    const h = i.toString(16).padStart(30, "0").slice(-30);
+    return `${h.slice(0, 8)}-${h.slice(8, 12)}-4${h.slice(12, 15)}-8${h.slice(15, 18)}-${h.slice(18, 30)}`;
+  }
+
+  function fakeEnqueueDb() {
+    const findManyCallSizes: number[] = [];
+    const findMany = vi.fn(async (args: { where: { id: { in: string[] }; channelAppId?: string } }) => {
+      const batch = args.where.id.in;
+      findManyCallSizes.push(batch.length);
+      return batch.map((id) => ({
+        id,
+        novelId: "11111111-1111-4111-8111-111111111111",
+        deletedAt: null,
+        novel: { previewPolicy: null },
+      }));
+    });
+    const db = {
+      channelSyncTask: {
+        findUnique: async () => null,
+        findFirst: async () => null,
+        create: async () => undefined,
+      },
+      channelApp: {
+        findFirst: async () => ({ id: "app-1", sourceApp: { code: "moboreader" } }),
+      },
+      channelAccount: {
+        findFirst: async () => ({ id: "account-1", credentials: [{ id: "cred-1" }] }),
+      },
+      novelSourceItem: { findMany },
+      operationAudit: { create: async () => undefined },
+    };
+    return { db, findManyCallSizes };
+  }
+
+  const ENV = Object.freeze({
+    NODE_ENV: "test",
+    FEATURE_NOVEL_CATALOG_SYNC: "true",
+    NOVEL_CATALOG_SYNC_ALLOW_WRITE: "true",
+    [MOBOREADER_PREVIEW_ENV.sourceAppCodes]: "moboreader",
+  });
+
+  it("40,000 ids: multiple findMany calls, each <= ID_IN_LIST_CHUNK_SIZE, and no throw", async () => {
+    const ids = Array.from({ length: 40_000 }, (_, i) => uuidFromIndex(i));
+    const { db, findManyCallSizes } = fakeEnqueueDb();
+
+    const result = await enqueueMoboreaderPreviewRefreshTask(
+      db as never,
+      {
+        trigger: "manual",
+        channelAccountId: "account-1",
+        channelAppId: "app-1",
+        novelSourceItemIds: ids,
+        requestToken: "c15-40k-request-token",
+        actorId: "actor-1",
+        requestId: "request-1",
+        mode: "apply",
+      },
+      ENV,
+      new Date("2026-09-07T00:00:00.000Z"),
+    );
+
+    expect(result).toMatchObject({ status: "enqueued", eligibleCount: 40_000 });
+    expect(findManyCallSizes.length).toBeGreaterThan(1);
+    for (const size of findManyCallSizes) expect(size).toBeLessThanOrEqual(ID_IN_LIST_CHUNK_SIZE);
+    expect(findManyCallSizes.reduce((a, b) => a + b, 0)).toBe(40_000);
   });
 });

@@ -122,6 +122,7 @@ import type { PrismaClient } from "@prisma/client";
 import type { AdminIdentityStore, SessionStore } from "@/lib/auth/ports";
 import type { NovelStatus } from "@/domain/database-statuses";
 import type { SiteLocale } from "@/lib/locale/locale-canonical";
+import { chunkIds } from "@/lib/db/chunked-id-lookup";
 import { withDbRetry } from "@/lib/db/db-retry";
 import { enqueueIndexNow } from "@/lib/indexnow/dispatch-handler";
 import { enqueueSitemapRefreshForPublication } from "@/lib/tasks/sitemap-refresh";
@@ -722,8 +723,18 @@ async function applyNovelRightsTransition(
         // deletes NovelChapterContent (`database-statuses.ts` doc comment) —
         // content deletion happens because of this rights transition, not as
         // an independent step a caller could forget.
-        await tx.novelChapterContent.deleteMany({ where: { novelChapterId: { in: chapterIds } } });
-        await tx.novelChapter.updateMany({ where: { id: { in: chapterIds } }, data: { status: "withdrawn" } });
+        //
+        // C-15 audit (施工工单_C15 §二.4): unlike `affectedArticleIds` above
+        // (hard-bounded by the `novelId`+`locale` unique constraint, so it
+        // can never exceed the small supported-locale count),
+        // `total_chapter_count` has no schema-enforced ceiling -- a single
+        // long-running web novel is not guaranteed to stay under the
+        // chunking threshold. Chunked defensively even though no real novel
+        // has hit this yet.
+        for (const idChunk of chunkIds(chapterIds)) {
+          await tx.novelChapterContent.deleteMany({ where: { novelChapterId: { in: idChunk } } });
+          await tx.novelChapter.updateMany({ where: { id: { in: idChunk } }, data: { status: "withdrawn" } });
+        }
       }
     }
 

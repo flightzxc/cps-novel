@@ -6,6 +6,7 @@ import {
   type AdminIdentityStore,
   type SessionStore,
 } from "@/lib/auth";
+import { chunkIds } from "@/lib/db/chunked-id-lookup";
 import { isUniqueConstraintViolation, withDbRetry } from "@/lib/db/db-retry";
 import { MOBOREADER_TASK_TYPES, type TaskFamily } from "@/lib/tasks";
 import { TASK_ITEM_STATUSES, TASK_STATUSES } from "@/domain/database-statuses";
@@ -1110,13 +1111,26 @@ async function hasUnresolvedIntent(
   bindings: FailedBinding[],
 ): Promise<boolean> {
   const itemIds = bindings.map((item) => item.id);
-  const linked = await tx.sideEffectIntent.findFirst({
-    where: {
-      status: { in: [...UNRESOLVED_INTENT_STATUSES] },
-      taskItemId: { in: itemIds },
-    },
-    select: { id: true },
-  });
+  // C-15 audit (施工工单_C15 §二.4): `itemIds` here is every *failed* item of
+  // one task. `channel_sync` failed-item counts are no longer bounded well
+  // under Postgres's 32,767 bind-variable cap once C-15 lets
+  // `enqueueMoboreaderPreviewRefreshTask` actually create a
+  // `moboreader.preview_refresh.v1` task spanning a full catalog (up to
+  // ~96,660 items) -- if every item of such a task failed, an operator's
+  // "failed retry" click would rebuild the exact same overflow this work
+  // order fixes, just in this query instead. Chunked defensively even though
+  // no single incident has hit this path yet.
+  let linked = false;
+  for (const idChunk of chunkIds(itemIds)) {
+    const found = await tx.sideEffectIntent.findFirst({
+      where: {
+        status: { in: [...UNRESOLVED_INTENT_STATUSES] },
+        taskItemId: { in: idChunk },
+      },
+      select: { id: true },
+    });
+    if (found) { linked = true; break; }
+  }
   if (linked) return true;
   if (family !== "generic") return false;
   const targetIds = bindings.flatMap((item) => item.targetId ? [item.targetId] : []);
