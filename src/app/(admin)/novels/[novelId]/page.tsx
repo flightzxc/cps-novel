@@ -102,12 +102,31 @@ export default async function NovelDetailPage({
       title={novel.title}
       description={`业务 ID ${novel.businessId}`}
       actions={
-        <Link
-          href="/novels"
-          className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
-        >
-          返回列表
-        </Link>
+        <div className="flex gap-2">
+          {/*
+            C-19 (`分析_文章管理Parity缺口_2026-09-08.md` §三 "书目筛选"): the
+            only entry point into `/articles?novelId=…` — that filter is
+            deliberately not a picker (see `ArticleFilters`'s own header), so
+            without this link an operator would have no way to reach a
+            book's article short of typing its UUID by hand. Placed on the
+            detail page, not the list row: `novels-table.tsx` already has a
+            test (`每行只提供查看入口，不提供任何写操作控件`) pinning exactly
+            one "查看" link per row, and the analysis doc's "书目列表/详情"
+            phrasing only requires the entry point exist somewhere, not both.
+          */}
+          <Link
+            href={`/articles?novelId=${novel.novelId}`}
+            className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
+          >
+            查看该书目的文章
+          </Link>
+          <Link
+            href="/novels"
+            className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
+          >
+            返回列表
+          </Link>
+        </div>
       }
     >
       <div className="space-y-6">

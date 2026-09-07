@@ -12,6 +12,7 @@ import {
   ARTICLE_REGENERATE_BUDGET_MS,
   ArticleConflictError,
   listArticles,
+  listDistinctArticleLocales,
   regenerateArticle,
   regenerateArticlesBatch,
   updateArticleContent,
@@ -82,6 +83,8 @@ class FakeArticlesDb {
   readonly promoLinks = new Map<string, PromoLinkRow>();
   readonly templates: TemplateRow[] = [];
   readonly audits: Array<Record<string, unknown>> = [];
+  /** C-19: `NovelCanonicalTag` links — only what `canonicalTagId`'s EXISTS filter needs. */
+  readonly novelCanonicalTags: Array<{ novelId: string; canonicalTagId: string }> = [];
 
   private fullRow(row: ArticleRow) {
     const novel = this.novels.get(row.novelId)!;
@@ -122,14 +125,25 @@ class FakeArticlesDb {
         // is ignored — this fake always returns the same list-row shape
         // `listArticles` actually selects (id/title/locale/slug/
         // publicPageShortId/status/summary/updatedAt/template.templateKey).
+        // C-19: `distinct`/`orderBy.locale` added for `listDistinctArticleLocales`.
         findMany: async (args: {
           where: Record<string, unknown>;
-          orderBy?: { updatedAt?: "asc" | "desc" };
+          orderBy?: { updatedAt?: "asc" | "desc"; locale?: "asc" | "desc" };
           skip?: number;
           take?: number;
+          distinct?: readonly string[];
         }) => {
           let rows = this.articles.filter((candidate) => this.matches(candidate, args.where));
-          if (args.orderBy?.updatedAt === "asc") {
+          if (args.distinct?.includes("locale")) {
+            const seen = new Set<string>();
+            rows = rows.filter((row) => (seen.has(row.locale) ? false : (seen.add(row.locale), true)));
+          }
+          if (args.orderBy?.locale) {
+            const direction = args.orderBy.locale;
+            rows = [...rows].sort((a, b) =>
+              direction === "asc" ? a.locale.localeCompare(b.locale) : b.locale.localeCompare(a.locale),
+            );
+          } else if (args.orderBy?.updatedAt === "asc") {
             rows = [...rows].sort((a, b) => a.updatedAt.getTime() - b.updatedAt.getTime());
           } else {
             rows = [...rows].sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
@@ -172,6 +186,39 @@ class FakeArticlesDb {
     // M7 `listArticles` filters — plain equality, same as Prisma's `where: { locale }` etc.
     for (const key of ["locale", "status", "novelId", "templateId"] as const) {
       if (where[key] !== undefined && row[key] !== where[key]) return false;
+    }
+    // C-19 `search`: each of `buildArticleSearchOr`'s OR branches is either a
+    // plain-string exact match (the shortId branch) or a `{contains, mode}`
+    // clause (title/slug/publicPageShortId) — mirrors Prisma's own `StringFilter`.
+    for (const key of ["title", "slug", "publicPageShortId"] as const) {
+      const clause = where[key] as { contains?: string; mode?: string } | string | undefined;
+      if (clause === undefined) continue;
+      if (typeof clause === "string") {
+        if (row[key] !== clause) return false;
+      } else if (clause.contains !== undefined) {
+        const insensitive = clause.mode === "insensitive";
+        const haystack = insensitive ? row[key].toLowerCase() : row[key];
+        const needle = insensitive ? clause.contains.toLowerCase() : clause.contains;
+        if (!haystack.includes(needle)) return false;
+      }
+    }
+    // `OR` — recurses into `matches` itself so any of the clause shapes above
+    // (or a further nested `OR`) evaluate correctly inside each branch.
+    if (where.OR) {
+      const options = where.OR as ReadonlyArray<Record<string, unknown>>;
+      if (!options.some((option) => this.matches(row, option))) return false;
+    }
+    // C-19 `canonicalTagId`: `novel: { canonicalTags: { some: { canonicalTagId } } }`,
+    // Prisma's EXISTS-style relation filter — evaluated against `novelCanonicalTags`.
+    if (where.novel) {
+      const novelWhere = where.novel as { canonicalTags?: { some?: { canonicalTagId?: string } } };
+      const wantedTagId = novelWhere.canonicalTags?.some?.canonicalTagId;
+      if (wantedTagId !== undefined) {
+        const hasTag = this.novelCanonicalTags.some(
+          (link) => link.novelId === row.novelId && link.canonicalTagId === wantedTagId,
+        );
+        if (!hasTag) return false;
+      }
     }
     return true;
   }
@@ -248,6 +295,11 @@ function seedNovel(db: FakeArticlesDb, id: string, overrides: Partial<NovelRow> 
   const novel: NovelRow = { id, title: "Some Novel", description: "A description", coverUrl: null, totalChapterCount: 10, ...overrides };
   db.novels.set(id, novel);
   return novel;
+}
+
+/** C-19: links a novel to a Canonical Tag id, for `canonicalTagId`'s EXISTS filter. */
+function linkNovelCanonicalTag(db: FakeArticlesDb, novelId: string, canonicalTagId: string): void {
+  db.novelCanonicalTags.push({ novelId, canonicalTagId });
 }
 
 function seedTemplate(db: FakeArticlesDb, overrides: Partial<TemplateRow> & { id: string; templateKey: string }): TemplateRow {
@@ -571,7 +623,9 @@ describe("listArticles (M7 ①)", () => {
 
     const page = await listArticles(db.asPrismaClient(), {
       // @ts-expect-error — deliberately passing an unregistered key to prove it is ignored, not rejected.
-      search: "should be ignored",
+      // C-19: `search` itself is now a registered filter (see the `listArticles · search / canonicalTagId (C-19)`
+      // block below), so this test switched to a key that stays unregistered.
+      unregisteredFilterKey: "should be ignored",
     });
 
     expect(page.items.map((item) => item.id)).toEqual(["article-1"]);
@@ -644,5 +698,125 @@ describe("listArticles (M7 ①)", () => {
     await expect(
       listArticles(db.asPrismaClient(), { pageSize: ARTICLE_LIST_MAX_PAGE_SIZE + 1 }),
     ).rejects.toMatchObject({ code: "invalid_page_size" });
+  });
+});
+
+/**
+ * C-19 (`分析_文章管理Parity缺口_2026-09-08.md` §六 "C-19"): `search` and
+ * `canonicalTagId`, the two new `ArticleListInput` fields that replace the
+ * filter bar's raw-UUID `novelId`/`templateId` text inputs with CPS-parity
+ * alternatives (see `../../../src/app/(admin)/articles/_components/article-filters.tsx`'s
+ * own header for the UI side).
+ */
+describe("listArticles · search / canonicalTagId (C-19)", () => {
+  const TAG_ROMANCE = "55555555-5555-4555-8555-555555555555";
+  const TAG_UNUSED = "66666666-6666-4666-8666-666666666666";
+
+  it("search 命中标题 / slug / 短码三者之一（contains，大小写不敏感）", async () => {
+    const db = new FakeArticlesDb();
+    seedNovel(db, "novel-1");
+    seedArticle(db, { id: "by-title", novelId: "novel-1", title: "Moonlight Romance", slug: "moonlight-romance", publicPageShortId: "shortid01" });
+    seedArticle(db, { id: "by-slug", novelId: "novel-1", title: "Second Article", slug: "unique-slug-token", publicPageShortId: "shortid02" });
+    seedArticle(db, { id: "by-shortid", novelId: "novel-1", title: "Third Article", slug: "third-article", publicPageShortId: "findablecode99" });
+    seedArticle(db, { id: "no-match", novelId: "novel-1", title: "Unrelated", slug: "unrelated", publicPageShortId: "zzz00000" });
+
+    const byTitle = await listArticles(db.asPrismaClient(), { search: "moonlight" });
+    expect(byTitle.items.map((item) => item.id)).toEqual(["by-title"]);
+
+    // 大小写不敏感：同一个查询词全大写也命中。
+    const byTitleUpper = await listArticles(db.asPrismaClient(), { search: "MOONLIGHT" });
+    expect(byTitleUpper.items.map((item) => item.id)).toEqual(["by-title"]);
+
+    const bySlug = await listArticles(db.asPrismaClient(), { search: "unique-slug-token" });
+    expect(bySlug.items.map((item) => item.id)).toEqual(["by-slug"]);
+
+    const byShortId = await listArticles(db.asPrismaClient(), { search: "findablecode99" });
+    expect(byShortId.items.map((item) => item.id)).toEqual(["by-shortid"]);
+  });
+
+  it("粘贴完整前台 URL 时，按解析出的短码精确命中（不靠 contains 命中整段 URL）", async () => {
+    const db = new FakeArticlesDb();
+    seedNovel(db, "novel-1");
+    seedArticle(db, { id: "url-hit", novelId: "novel-1", slug: "my-story", publicPageShortId: "abc123xy" });
+    seedArticle(db, { id: "other", novelId: "novel-1", slug: "other-story", publicPageShortId: "zzz99999" });
+
+    const page = await listArticles(db.asPrismaClient(), {
+      search: "https://novel.test/novel/my-story-pabc123xy",
+    });
+
+    expect(page.items.map((item) => item.id)).toEqual(["url-hit"]);
+  });
+
+  it("粘贴裸路径（无协议/域名）也能按短码命中", async () => {
+    const db = new FakeArticlesDb();
+    seedNovel(db, "novel-1");
+    seedArticle(db, { id: "path-hit", novelId: "novel-1", slug: "another-story", publicPageShortId: "def456uv" });
+
+    const page = await listArticles(db.asPrismaClient(), { search: "/fr/novel/another-story-pdef456uv" });
+
+    expect(page.items.map((item) => item.id)).toEqual(["path-hit"]);
+  });
+
+  it("超长 search 被 invalid_search 拒绝（复用既有长度上限与错误码）", async () => {
+    const db = new FakeArticlesDb();
+    await expect(listArticles(db.asPrismaClient(), { search: "x".repeat(161) })).rejects.toMatchObject({
+      code: "invalid_search",
+    });
+  });
+
+  it("按 canonicalTagId 筛选：命中该书目挂了这个标签的文章（EXISTS 语义）", async () => {
+    const db = new FakeArticlesDb();
+    seedNovel(db, "novel-tagged");
+    seedNovel(db, "novel-untagged");
+    linkNovelCanonicalTag(db, "novel-tagged", TAG_ROMANCE);
+    seedArticle(db, { id: "tagged-article", novelId: "novel-tagged" });
+    seedArticle(db, { id: "untagged-article", novelId: "novel-untagged", slug: "untagged-article" });
+
+    const page = await listArticles(db.asPrismaClient(), { canonicalTagId: TAG_ROMANCE });
+
+    expect(page.items.map((item) => item.id)).toEqual(["tagged-article"]);
+  });
+
+  it("按 canonicalTagId 筛选：该标签没有任何书目挂载时返回空", async () => {
+    const db = new FakeArticlesDb();
+    seedNovel(db, "novel-tagged");
+    linkNovelCanonicalTag(db, "novel-tagged", TAG_ROMANCE);
+    seedArticle(db, { id: "tagged-article", novelId: "novel-tagged" });
+
+    const page = await listArticles(db.asPrismaClient(), { canonicalTagId: TAG_UNUSED });
+
+    expect(page.items).toEqual([]);
+  });
+
+  it("非法 canonicalTagId（不是 UUID）被 invalid_identifier 拒绝", async () => {
+    const db = new FakeArticlesDb();
+    await expect(listArticles(db.asPrismaClient(), { canonicalTagId: "not-a-uuid" })).rejects.toMatchObject({
+      code: "invalid_identifier",
+    });
+  });
+});
+
+describe("listDistinctArticleLocales (C-19)", () => {
+  it("只返回库里真实出现过的语种，去重且按字母排序", async () => {
+    const db = new FakeArticlesDb();
+    seedNovel(db, "novel-en");
+    seedNovel(db, "novel-fr");
+    seedArticle(db, { id: "en-1", novelId: "novel-en", locale: "en" });
+    seedArticle(db, { id: "en-2", novelId: "novel-en", locale: "en", slug: "en-2" });
+    seedArticle(db, { id: "fr-1", novelId: "novel-fr", locale: "fr", slug: "fr-1" });
+
+    const locales = await listDistinctArticleLocales(db.asPrismaClient());
+
+    expect(locales).toEqual(["en", "fr"]);
+  });
+
+  it("软删除的文章不贡献语种", async () => {
+    const db = new FakeArticlesDb();
+    seedNovel(db, "novel-1");
+    seedArticle(db, { id: "deleted-ru", novelId: "novel-1", locale: "ru", deletedAt: new Date(NOW) });
+
+    const locales = await listDistinctArticleLocales(db.asPrismaClient());
+
+    expect(locales).toEqual([]);
   });
 });

@@ -202,38 +202,175 @@ describe("ArticleEditor · 编辑与预览", () => {
   });
 });
 
-describe("ArticleFilters · M7 filters", () => {
-  it("四个字段的 name 属性与 page.tsx 读取的 query-string key 一致", () => {
-    render(<ArticleFilters values={{}} />);
+const LOCALES = ["en", "fr"];
+const CATEGORY_OPTIONS = [
+  { id: "11111111-1111-4111-8111-111111111111", label: "言情" },
+  { id: "22222222-2222-4222-8222-222222222222", label: "romance-no-zh" },
+];
+const TEMPLATE_OPTIONS = [
+  { id: "33333333-3333-4333-8333-333333333333", templateKey: "tpl-a", locale: "en", version: 2 },
+  { id: "44444444-4444-4444-8444-444444444444", templateKey: "tpl-b", locale: null, version: 1 },
+];
+
+describe("ArticleFilters · C-19 filters", () => {
+  it("字段 name 属性与 page.tsx 读取的 query-string key 一致（含新增的 search/canonicalTagId）", () => {
+    render(
+      <ArticleFilters
+        values={{}}
+        locales={LOCALES}
+        categoryOptions={CATEGORY_OPTIONS}
+        templateOptions={TEMPLATE_OPTIONS}
+      />,
+    );
+    expect((screen.getByLabelText("搜索") as HTMLInputElement).name).toBe("search");
     expect((screen.getByLabelText("语种") as HTMLSelectElement).name).toBe("locale");
     expect((screen.getByLabelText("状态") as HTMLSelectElement).name).toBe("status");
-    expect((screen.getByLabelText("书目 ID") as HTMLInputElement).name).toBe("novelId");
-    expect((screen.getByLabelText("模板 ID") as HTMLInputElement).name).toBe("templateId");
+    expect((screen.getByLabelText("分类") as HTMLSelectElement).name).toBe("canonicalTagId");
+    expect((screen.getByLabelText("模板") as HTMLSelectElement).name).toBe("templateId");
   });
 
   it("当前筛选值回填为 defaultValue，而不是每次都从空表单开始", () => {
     render(
       <ArticleFilters
-        values={{ locale: "en", status: "published", novelId: "novel-1", templateId: "template-1" }}
+        values={{
+          search: "moonlight",
+          locale: "en",
+          status: "published",
+          canonicalTagId: CATEGORY_OPTIONS[0]!.id,
+          templateId: TEMPLATE_OPTIONS[0]!.id,
+        }}
+        locales={LOCALES}
+        categoryOptions={CATEGORY_OPTIONS}
+        templateOptions={TEMPLATE_OPTIONS}
       />,
     );
+    expect((screen.getByLabelText("搜索") as HTMLInputElement).value).toBe("moonlight");
     expect((screen.getByLabelText("语种") as HTMLSelectElement).value).toBe("en");
     expect((screen.getByLabelText("状态") as HTMLSelectElement).value).toBe("published");
-    expect((screen.getByLabelText("书目 ID") as HTMLInputElement).value).toBe("novel-1");
-    expect((screen.getByLabelText("模板 ID") as HTMLInputElement).value).toBe("template-1");
+    expect((screen.getByLabelText("分类") as HTMLSelectElement).value).toBe(CATEGORY_OPTIONS[0]!.id);
+    expect((screen.getByLabelText("模板") as HTMLSelectElement).value).toBe(TEMPLATE_OPTIONS[0]!.id);
   });
 
   it("状态下拉渲染文章四态而不是书目五态（没有 ready）", () => {
-    render(<ArticleFilters values={{}} />);
+    render(
+      <ArticleFilters values={{}} locales={LOCALES} categoryOptions={CATEGORY_OPTIONS} templateOptions={TEMPLATE_OPTIONS} />,
+    );
     const select = screen.getByLabelText("状态") as HTMLSelectElement;
     const optionLabels = Array.from(select.options).map((option) => option.textContent);
     expect(optionLabels).toEqual(["全部状态", "草稿", "已发布", "已下线", "已撤回"]);
   });
 
+  it("语种下拉只渲染传入的 locales（库里真实出现过的），不是全量注册表", () => {
+    render(
+      <ArticleFilters values={{}} locales={["en"]} categoryOptions={CATEGORY_OPTIONS} templateOptions={TEMPLATE_OPTIONS} />,
+    );
+    const select = screen.getByLabelText("语种") as HTMLSelectElement;
+    const optionLabels = Array.from(select.options).map((option) => option.textContent);
+    expect(optionLabels).toEqual(["全部语种", "en"]);
+  });
+
+  it("模板下拉 value 是模板 UUID，文本是 templateKey · v版本号", () => {
+    render(
+      <ArticleFilters values={{}} locales={LOCALES} categoryOptions={CATEGORY_OPTIONS} templateOptions={TEMPLATE_OPTIONS} />,
+    );
+    const select = screen.getByLabelText("模板") as HTMLSelectElement;
+    const options = Array.from(select.options).slice(1); // 跳过 "全部模板"
+    expect(options.map((option) => option.value)).toEqual(TEMPLATE_OPTIONS.map((t) => t.id));
+    expect(options.map((option) => option.textContent)).toEqual(["tpl-a · v2", "tpl-b · v1"]);
+  });
+
+  it("分类下拉 value 是 Canonical Tag UUID，无 zh 译名时回退 stableId/label", () => {
+    render(
+      <ArticleFilters values={{}} locales={LOCALES} categoryOptions={CATEGORY_OPTIONS} templateOptions={TEMPLATE_OPTIONS} />,
+    );
+    const select = screen.getByLabelText("分类") as HTMLSelectElement;
+    const options = Array.from(select.options).slice(1); // 跳过 "全部分类"
+    expect(options.map((option) => option.value)).toEqual(CATEGORY_OPTIONS.map((tag) => tag.id));
+    expect(options.map((option) => option.textContent)).toEqual(["言情", "romance-no-zh"]);
+  });
+
   it("提交是纯 GET 表单，没有 page 字段——切换筛选会把分页重置回第 1 页", () => {
-    render(<ArticleFilters values={{ locale: "en" }} />);
+    render(
+      <ArticleFilters
+        values={{ locale: "en" }}
+        locales={LOCALES}
+        categoryOptions={CATEGORY_OPTIONS}
+        templateOptions={TEMPLATE_OPTIONS}
+      />,
+    );
     const form = screen.getByRole("search") as HTMLFormElement;
     expect(form.method).toBe("get");
     expect(form.querySelector('input[name="page"]')).toBeNull();
+  });
+
+  it("页面上不再存在要求手打 UUID 的输入框——唯一的文本输入是搜索框", () => {
+    const { container } = render(
+      <ArticleFilters
+        values={{ novelId: "novel-1" }}
+        locales={LOCALES}
+        categoryOptions={CATEGORY_OPTIONS}
+        templateOptions={TEMPLATE_OPTIONS}
+      />,
+    );
+    const textInputs = Array.from(container.querySelectorAll('input[type="text"]'));
+    expect(textInputs).toHaveLength(1);
+    expect(textInputs[0]!.getAttribute("name")).toBe("search");
+    // novelId only ever travels as a hidden field once the banner is showing — never as a visible text box.
+    expect(container.querySelector('input[name="novelId"]')?.getAttribute("type")).toBe("hidden");
+  });
+
+  describe("novelId 提示条（跳转带入 + 清除，代替裸 UUID 输入框）", () => {
+    it("novelId 缺失时不渲染提示条，也不带隐藏字段", () => {
+      const { container } = render(
+        <ArticleFilters values={{}} locales={LOCALES} categoryOptions={CATEGORY_OPTIONS} templateOptions={TEMPLATE_OPTIONS} />,
+      );
+      expect(screen.queryByTestId("article-novel-filter-banner")).toBeNull();
+      expect(container.querySelector('input[name="novelId"]')).toBeNull();
+    });
+
+    it("novelId 存在时渲染《书名》提示条，并把 novelId 作为隐藏字段带入表单", () => {
+      const { container } = render(
+        <ArticleFilters
+          values={{ novelId: "novel-1" }}
+          novelTitle="重生之名"
+          locales={LOCALES}
+          categoryOptions={CATEGORY_OPTIONS}
+          templateOptions={TEMPLATE_OPTIONS}
+        />,
+      );
+      expect(screen.getByTestId("article-novel-filter-banner").textContent).toContain("《重生之名》");
+      const hidden = container.querySelector('input[name="novelId"]') as HTMLInputElement;
+      expect(hidden.type).toBe("hidden");
+      expect(hidden.value).toBe("novel-1");
+    });
+
+    it("novelTitle 未解析出时提示条回退显示原始 novelId，而不是空白", () => {
+      render(
+        <ArticleFilters
+          values={{ novelId: "missing-novel" }}
+          novelTitle={null}
+          locales={LOCALES}
+          categoryOptions={CATEGORY_OPTIONS}
+          templateOptions={TEMPLATE_OPTIONS}
+        />,
+      );
+      expect(screen.getByTestId("article-novel-filter-banner").textContent).toContain("《missing-novel》");
+    });
+
+    it("清除链接保留其它筛选值，只去掉 novelId", () => {
+      render(
+        <ArticleFilters
+          values={{ novelId: "novel-1", search: "moonlight", status: "published" }}
+          locales={LOCALES}
+          categoryOptions={CATEGORY_OPTIONS}
+          templateOptions={TEMPLATE_OPTIONS}
+        />,
+      );
+      const clear = screen.getByTestId("article-novel-filter-clear") as HTMLAnchorElement;
+      const href = clear.getAttribute("href")!;
+      expect(href).not.toContain("novelId");
+      expect(href).toContain("search=moonlight");
+      expect(href).toContain("status=published");
+    });
   });
 });

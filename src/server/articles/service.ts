@@ -1,9 +1,10 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
 
-import type { AdminContentPage } from "@/domain/admin-content";
+import { ADMIN_CONTENT_MAX_SEARCH_LENGTH, type AdminContentPage } from "@/domain/admin-content";
 import { ARTICLE_STATUSES, type ArticleStatus } from "@/domain/database-statuses";
 import { SITE_LOCALES } from "@/lib/locale/locale-canonical";
 import { buildNovelTemplateValues, isTemplateRenderError, renderArticleDraft } from "@/lib/seo/template";
+import { parseArticleSlugParam } from "@/lib/slug/article-path";
 import type { AdminIdentityStore, SessionStore } from "@/lib/auth/ports";
 import { requireFreshAdminServiceMutation, type AdminServiceAuthorization } from "@/server/auth/guards";
 import { AdminContentQueryError } from "@/server/admin-content";
@@ -285,6 +286,10 @@ export type ArticleListInput = {
   status?: string;
   novelId?: string;
   templateId?: string;
+  /** C-19: title/slug/short-code substring match, plus a shortId exact match when this parses as a front-end URL — see {@link buildArticleSearchOr}. */
+  search?: string;
+  /** C-19: EXISTS-style filter on the article's novel's Canonical Tag assignments — see {@link listArticles}'s `where.novel`. */
+  canonicalTagId?: string;
 };
 
 export const ARTICLE_LIST_DEFAULT_PAGE_SIZE = 20;
@@ -308,7 +313,67 @@ type NormalizedArticleList = {
   status?: ArticleStatus;
   novelId?: string;
   templateId?: string;
+  search?: string;
+  canonicalTagId?: string;
 };
+
+/**
+ * C-19 (`分析_文章管理Parity缺口_2026-09-08.md` §三): inverse of
+ * `buildArticleRouteSlug` (`@/lib/slug/article-path`), applied to a pasted
+ * search value instead of a route param. CPS parity —
+ * `git show v8.3.6:src/actions/article-actions.ts:100-123`'s
+ * `extractSearchShortId` — down to the "try `new URL(...)`, fall back to
+ * stripping `?`/`#` by hand" trick for a bare path. `null` means "does not
+ * parse as a front-end URL/slug", not "invalid": the caller still runs the
+ * plain `contains` matches below.
+ *
+ * One deliberate CPS departure: no bare-shortId fast path
+ * (`/^[a-z0-9]{8}$/`). CPS's `publicPageShortId` is a fixed 8 characters;
+ * cps-novel's is not (`article-path.ts`'s own header), and a raw pasted
+ * shortId is already covered by `buildArticleSearchOr`'s
+ * `publicPageShortId: { contains }` branch — reusing `parseArticleSlugParam`
+ * (the exact function the public route itself uses to invert a slug) rather
+ * than a second hand-rolled regex, per the analysis doc's "不另写正则".
+ */
+function extractSearchShortId(search: string): string | null {
+  const trimmed = search.trim();
+  if (!trimmed) return null;
+  const pathCandidate = (() => {
+    try {
+      return new URL(trimmed).pathname;
+    } catch {
+      return trimmed.split(/[?#]/)[0] ?? trimmed;
+    }
+  })();
+  const lastSegment = pathCandidate.split("/").filter(Boolean).pop() ?? pathCandidate;
+  let decoded = lastSegment;
+  try {
+    decoded = decodeURIComponent(lastSegment);
+  } catch {
+    // Keep the raw segment — a malformed pasted URL should still degrade to
+    // the plain `contains` matches rather than throw.
+  }
+  return parseArticleSlugParam(decoded)?.shortId ?? null;
+}
+
+/**
+ * CPS parity — `buildArticleSearchOr` (same file/lines as
+ * {@link extractSearchShortId} above). Title/slug/short-code substring match
+ * (case-insensitive, `Prisma`'s `mode: "insensitive"` — the same mechanism
+ * `@/server/article-templates`'s `listArticleTemplates` and
+ * `catalog-sync/_lib/read-source-items.ts` already use for their own search
+ * boxes), plus the exact shortId match when the pasted value parses as a
+ * URL/slug.
+ */
+function buildArticleSearchOr(search: string): Prisma.ArticleWhereInput[] {
+  const shortId = extractSearchShortId(search);
+  return [
+    { title: { contains: search, mode: "insensitive" as const } },
+    { slug: { contains: search, mode: "insensitive" as const } },
+    { publicPageShortId: { contains: search, mode: "insensitive" as const } },
+    ...(shortId ? [{ publicPageShortId: shortId }] : []),
+  ];
+}
 
 /**
  * M7 ①: filter semantics mirror CPS `getArticles`
@@ -355,6 +420,20 @@ function normalizeArticleListInput(input: ArticleListInput = {}): NormalizedArti
   }
   const novelId = input.novelId !== undefined ? requireArticleUuid(input.novelId) : undefined;
   const templateId = input.templateId !== undefined ? requireArticleUuid(input.templateId) : undefined;
+  // C-19: same `invalid_search` code and `ADMIN_CONTENT_MAX_SEARCH_LENGTH`
+  // constant as `@/server/admin-content`'s `normalizeAdminNovelListInput` —
+  // reused verbatim rather than re-derived, per the analysis doc's "不新增".
+  if (input.search !== undefined && typeof input.search !== "string") {
+    throw new AdminContentQueryError("invalid_search", "Search must be a string");
+  }
+  const trimmedSearch = input.search?.trim();
+  if (trimmedSearch && trimmedSearch.length > ADMIN_CONTENT_MAX_SEARCH_LENGTH) {
+    throw new AdminContentQueryError(
+      "invalid_search",
+      `Search must not exceed ${ADMIN_CONTENT_MAX_SEARCH_LENGTH} characters`,
+    );
+  }
+  const canonicalTagId = input.canonicalTagId !== undefined ? requireArticleUuid(input.canonicalTagId) : undefined;
   return {
     page,
     pageSize,
@@ -364,6 +443,8 @@ function normalizeArticleListInput(input: ArticleListInput = {}): NormalizedArti
     status: input.status as ArticleStatus | undefined,
     novelId,
     templateId,
+    search: trimmedSearch || undefined,
+    canonicalTagId,
   };
 }
 
@@ -391,12 +472,22 @@ export async function listArticles(
   input: ArticleListInput = {},
 ): Promise<AdminContentPage<ArticleListItem>> {
   const normalized = normalizeArticleListInput(input);
+  const searchOr = normalized.search ? buildArticleSearchOr(normalized.search) : undefined;
   const where: Prisma.ArticleWhereInput = {
     deletedAt: null,
     ...(normalized.locale ? { locale: normalized.locale } : {}),
     ...(normalized.status ? { status: normalized.status } : {}),
     ...(normalized.novelId ? { novelId: normalized.novelId } : {}),
     ...(normalized.templateId ? { templateId: normalized.templateId } : {}),
+    ...(searchOr ? { OR: searchOr } : {}),
+    // C-19: "分类" filter — the article has no category column of its own
+    // (see the analysis doc's §零 third correction), so this reads as an
+    // EXISTS over the article's *novel*'s Canonical Tag assignments rather
+    // than a scalar equality. Prisma's `some` on a to-many relation compiles
+    // to `EXISTS (...)`, not a `JOIN`, so this cannot fan out `count()`.
+    ...(normalized.canonicalTagId
+      ? { novel: { canonicalTags: { some: { canonicalTagId: normalized.canonicalTagId } } } }
+      : {}),
   };
   const [total, rows] = await Promise.all([
     db.article.count({ where }),
@@ -426,4 +517,24 @@ export async function listArticles(
     total,
     totalPages: Math.ceil(total / normalized.pageSize),
   };
+}
+
+/**
+ * C-19 (item #9, ADAPT): the filter bar's locale options, sourced from
+ * distinct live `Article.locale` values instead of all 15 registered
+ * `SITE_LOCALES` — with the site at (today) one populated locale, the other
+ * 14 were dead options that only added noise. `distinct` runs at the
+ * database (a single indexed query), not by fetching every row and
+ * de-duplicating in application code.
+ */
+export async function listDistinctArticleLocales(
+  db: Pick<PrismaClient, "article">,
+): Promise<readonly string[]> {
+  const rows = await db.article.findMany({
+    where: { deletedAt: null },
+    select: { locale: true },
+    distinct: ["locale"],
+    orderBy: { locale: "asc" },
+  });
+  return rows.map((row) => row.locale);
 }

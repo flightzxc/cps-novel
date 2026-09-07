@@ -1,7 +1,8 @@
 import { findCapabilityState } from "@/features/admin-ui/capability-view";
 import { errorEnvelopeCopy } from "@/features/admin-ui/error-copy";
 import type { ErrorEnvelope } from "@/contracts";
-import { listArticles, type ArticleListItem } from "@/server/articles";
+import { listArticles, listDistinctArticleLocales, type ArticleListItem } from "@/server/articles";
+import { listActiveArticleTemplateOptions } from "@/server/article-templates";
 import { getSiteUrl } from "@/lib/seo/site-url";
 
 import { prisma } from "../../api/admin/_lib/deps";
@@ -12,6 +13,7 @@ import { ContentPagination } from "../novels/_components/content-pagination";
 import { requireContentPage } from "../novels/_lib/content-page-guard";
 import { ArticleFilters, type ArticleFilterValues } from "./_components/article-filters";
 import { ArticleList } from "./_components/article-list";
+import { listArticleCategoryOptions } from "./_lib/category-options";
 import { articleQueryErrorEnvelope } from "./_lib/query-errors";
 
 export const dynamic = "force-dynamic";
@@ -36,12 +38,38 @@ function resolvePublicOrigin(): string | null {
   }
 }
 
+/**
+ * C-19 book-title banner (analysis doc §三 "书目筛选"): resolves the book
+ * title for the "已按书目筛选：《书名》· 清除" banner, never a raw UUID —
+ * unlike the novel list's `labelId` banner precedent
+ * (`../novels/_components/novel-filters.tsx`), which never embeds the
+ * label's own name at all, this filter's whole point is "which book", so the
+ * banner needs the title.
+ *
+ * Deliberately independent of `listArticles`'s own `novelId` validation: a
+ * malformed `novelId` still surfaces through the list's `invalid_identifier`
+ * error panel exactly as before; this lookup only degrades the *banner text*
+ * (falls back to the raw id) so a bad or since-deleted novelId cannot itself
+ * crash the page.
+ */
+async function resolveNovelBannerTitle(novelId: string | undefined): Promise<string | null> {
+  if (!novelId) return null;
+  try {
+    const novel = await prisma.novel.findFirst({ where: { id: novelId, deletedAt: null }, select: { title: true } });
+    return novel?.title ?? null;
+  } catch {
+    return null;
+  }
+}
+
 type SearchParams = {
   page?: string;
   locale?: string;
   status?: string;
   novelId?: string;
   templateId?: string;
+  search?: string;
+  canonicalTagId?: string;
 };
 
 /**
@@ -76,6 +104,8 @@ export default async function ArticlesPage({
         status: params.status || undefined,
         novelId: params.novelId || undefined,
         templateId: params.templateId || undefined,
+        search: params.search || undefined,
+        canonicalTagId: params.canonicalTagId || undefined,
       });
       rows = result.items;
       page = result.page;
@@ -87,11 +117,29 @@ export default async function ArticlesPage({
     }
   }
 
+  // C-19: filter-bar option sources. Every read here is independent of the
+  // list query above — a broken category taxonomy or a locale-distinct
+  // query error must not blank the list itself, so none of these
+  // participate in `listError`. Same "one `granted ? await … : []` per
+  // source" shape as `../catalog-sync/page.tsx`'s `channels`/
+  // `claimChannelApps`/`templateOptions`, not a `Promise.all` — a plain
+  // array-literal fallback loses each promise's distinct element type once
+  // it sits in the same conditional expression as `Promise.all(...)`.
+  const locales = granted ? await listDistinctArticleLocales(prisma) : [];
+  // Hardcoded "en", same as `../catalog-sync/page.tsx`'s own call to this
+  // function — the site has effectively one populated locale today (see
+  // `listDistinctArticleLocales`'s own header).
+  const templateOptions = granted ? await listActiveArticleTemplateOptions(prisma, "en") : [];
+  const categoryOptions = granted ? await listArticleCategoryOptions() : [];
+  const novelTitle = granted ? await resolveNovelBannerTitle(params.novelId) : null;
+
   const filterValues: ArticleFilterValues = {
+    search: params.search,
     locale: params.locale,
     status: params.status,
     novelId: params.novelId,
     templateId: params.templateId,
+    canonicalTagId: params.canonicalTagId,
   };
 
   return (
@@ -102,7 +150,13 @@ export default async function ArticlesPage({
     >
       {granted ? (
         <div className="space-y-4">
-          <ArticleFilters values={filterValues} />
+          <ArticleFilters
+            values={filterValues}
+            novelTitle={novelTitle}
+            locales={locales}
+            categoryOptions={categoryOptions}
+            templateOptions={templateOptions}
+          />
           {listError ? (
             <ContentErrorPanel message={errorEnvelopeCopy(listError)} />
           ) : (
