@@ -491,10 +491,37 @@ x8_export_static_topology() {
   export SITE_URL=https://novel.test
   export TZ=Asia/Tokyo
   export MOBOREADER_PREVIEW_SOURCE_APP_CODES=moboreader
-  # Phase E (2026-09-07, Owner-approved business exception): the MoboReader
-  # catalog reports ~97k books (4,859 pages at 20/page), above the CPS-inherited
-  # 2000-page default; 6000 pages covers it with headroom. Pages, not books.
-  export MOBOREADER_CATALOG_SAFETY_MAX_PAGES="${MOBOREADER_CATALOG_SAFETY_MAX_PAGES:-6000}"
+  # C-13 (2026-09-07, 施工工单_C13_每页100本与节流余量_2026-09-07.md,
+  # Owner-approved business exception, superseding Phase E's same-day
+  # 6000-page workaround below): the MoboReader catalog reports ~97k books.
+  # Phase E had raised the safety cap alone (2000 -> 6000 pages, at the
+  # CPS-inherited 20 books/page) to cover that at an unchanged page size.
+  # C-13 instead raised the *page size* ceiling after probing this repo's
+  # own upstream host directly: `getlistpc` responses to a 20-row and a
+  # 100-row page each consumed exactly one unit of the observed
+  # `x-ratelimit-limit: 60`/minute Kong quota (`x-ratelimit-remaining` fell
+  # by 1 either way, not by row count) -- so upstream bills by request
+  # count, not row count, and a bigger page is not a bigger ask of the rate
+  # limiter. These three values now move together:
+  #   - MOBOREADER_UPSTREAM_RECOMMENDED_PAGE_SIZE=100 (probed maximum; see
+  #     MOBOREADER_CATALOG_LIMITS.maxPageSize in src/lib/tasks/moboreader.ts
+  #     -- page sizes above 100 were never probed and are not assumed safe)
+  #     cuts the request count for the same catalog roughly 5x (~4,859
+  #     requests at 20/page -> ~973 at 100/page).
+  #   - MOBOREADER_UPSTREAM_MIN_REQUEST_INTERVAL_MS=1500 paces those fewer
+  #     requests at ~40/minute -- well under the observed 60/minute ceiling,
+  #     wider margin than CPS's own 1100ms (~55/minute) pacing, kept as
+  #     insurance against the residual unknown of application-level (not
+  #     Kong-level) anomaly detection this repo cannot see from response
+  #     headers alone.
+  #   - MOBOREADER_CATALOG_SAFETY_MAX_PAGES reverts to the CPS default 2000
+  #     (pages, not books): at 100 books/page, 2000 pages = 200k books of
+  #     capacity, still comfortably covering the ~97k catalog, so the
+  #     Phase E page-count increase is no longer needed once the page size
+  #     itself carries more books per request.
+  export MOBOREADER_UPSTREAM_RECOMMENDED_PAGE_SIZE="${MOBOREADER_UPSTREAM_RECOMMENDED_PAGE_SIZE:-100}"
+  export MOBOREADER_UPSTREAM_MIN_REQUEST_INTERVAL_MS="${MOBOREADER_UPSTREAM_MIN_REQUEST_INTERVAL_MS:-1500}"
+  export MOBOREADER_CATALOG_SAFETY_MAX_PAGES="${MOBOREADER_CATALOG_SAFETY_MAX_PAGES:-2000}"
   export X8_HTTP_PORT="${X8_HTTP_PORT:-80}"
   export X8_HTTPS_PORT="${X8_HTTPS_PORT:-443}"
   export X8_NGINX_IMAGE="${X8_NGINX_IMAGE:-nginx:1.28.0-alpine}"

@@ -127,6 +127,12 @@ services:
       # (catalog-sync/_actions.ts), so it must see the same value the worker uses
       # for its safety_limit stop -- previously only the worker received it.
       MOBOREADER_CATALOG_SAFETY_MAX_PAGES: ${MOBOREADER_CATALOG_SAFETY_MAX_PAGES:-2000}
+      # C-13 (施工工单_C13_每页100本与节流余量_2026-09-07.md): web resolves a
+      # catalog task's pageSize via resolveMoboreaderUpstreamRecommendedPageSize()
+      # (catalog-sync/_actions.ts), which reads this env var; default 20 stays
+      # CPS parity. Set alongside worker's copy so an operator opting into the
+      # probed-safe 100 changes both processes together.
+      MOBOREADER_UPSTREAM_RECOMMENDED_PAGE_SIZE: ${MOBOREADER_UPSTREAM_RECOMMENDED_PAGE_SIZE:-20}
       # PR6 lane F: P2-06.5 tagging double-gate (plus auto-classify's own
       # pair). FEATURE_P2_06_5_TAGGING is the master read gate consumed by
       # src/server/tagging/admin-service.ts's requireTaggingRead -- with it
@@ -188,6 +194,21 @@ services:
       FEATURE_NOVEL_TAG_AUTO: ${FEATURE_NOVEL_TAG_AUTO:-false}
       AUTO_WRITE_AUTHORIZED: ${AUTO_WRITE_AUTHORIZED:-NO}
       MOBOREADER_CATALOG_SAFETY_MAX_PAGES: ${MOBOREADER_CATALOG_SAFETY_MAX_PAGES:-2000}
+      # C-13 (施工工单_C13_每页100本与节流余量_2026-09-07.md): worker validates
+      # each catalog_scan item's pageSize against MOBOREADER_CATALOG_LIMITS
+      # .maxPageSize (worker/handlers/moboreader.ts), and paces requests to
+      # the upstream host via resolveMoboreaderUpstreamRateLimitConfig
+      # (src/lib/adapters/moboreader-rate-limit.ts). Neither reads this
+      # RECOMMENDED_PAGE_SIZE value directly -- it is set here only so
+      # worker's env matches web's for operational visibility (`docker
+      # compose config` / `docker inspect` show the same value on both
+      # services) -- but the MIN_REQUEST_INTERVAL_MS pacing knob below is
+      # read by worker directly and matters here. Defaults stay CPS values
+      # (20 / 1100ms); see scripts/lib/x8-production-like-env.sh for the
+      # non-default probed-safe values (100 / 1500ms) used in the X8
+      # production-like rehearsal environment.
+      MOBOREADER_UPSTREAM_RECOMMENDED_PAGE_SIZE: ${MOBOREADER_UPSTREAM_RECOMMENDED_PAGE_SIZE:-20}
+      MOBOREADER_UPSTREAM_MIN_REQUEST_INTERVAL_MS: ${MOBOREADER_UPSTREAM_MIN_REQUEST_INTERVAL_MS:-1100}
       MOBOREADER_PREVIEW_CHUNK_SIZE: ${MOBOREADER_PREVIEW_CHUNK_SIZE:-25}
       MOBOREADER_PREVIEW_CONCURRENCY: ${MOBOREADER_PREVIEW_CONCURRENCY:-2}
       MOBOREADER_PREVIEW_TIMEOUT_MS: ${MOBOREADER_PREVIEW_TIMEOUT_MS:-20000}

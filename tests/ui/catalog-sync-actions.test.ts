@@ -70,11 +70,15 @@ const moboreader = vi.hoisted(() => {
     createMoboreaderCatalogScanTask: vi.fn(),
     MoboreaderTaskInputError,
     // Phase B: `_actions.ts` now resolves the safety-max-pages / recommended
-    // page-size constants itself (the operator no longer supplies page
+    // page-size values itself (the operator no longer supplies page
     // params — see `施工工单_PhaseB_实体订正与运营表单Parity_2026-09-06.md`
     // §三), so the fully-mocked module needs these two real exports stubbed.
+    // C-13 (`施工工单_C13_每页100本与节流余量_2026-09-07.md`): the action now
+    // calls `resolveMoboreaderUpstreamRecommendedPageSize()` (the env
+    // resolver) rather than reading the bare `MOBOREADER_UPSTREAM_RECOMMENDED_PAGE_SIZE`
+    // constant, so the mock stubs the resolver instead.
     resolveMoboreaderCatalogSafetyMaxPages: vi.fn(() => 2000),
-    MOBOREADER_UPSTREAM_RECOMMENDED_PAGE_SIZE: 20,
+    resolveMoboreaderUpstreamRecommendedPageSize: vi.fn(() => 20),
   };
 });
 

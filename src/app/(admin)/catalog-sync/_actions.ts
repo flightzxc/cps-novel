@@ -13,10 +13,10 @@ import {
   isPromoLinkClaimWriteAllowed,
 } from "@/lib/flags";
 import {
-  MOBOREADER_UPSTREAM_RECOMMENDED_PAGE_SIZE,
   MoboreaderTaskInputError,
   createMoboreaderCatalogScanTask,
   resolveMoboreaderCatalogSafetyMaxPages,
+  resolveMoboreaderUpstreamRecommendedPageSize,
   type MoboreaderTaskCreationResult,
 } from "@/lib/tasks/moboreader";
 import {
@@ -232,8 +232,12 @@ export async function applyContentCreationAction(input: {
  * action now resolves the same three values the old form used to collect —
  * page 1 through the factory's own configured safety ceiling
  * (`resolveMoboreaderCatalogSafetyMaxPages`), at the factory's own
- * CPS-parity recommended page size (`MOBOREADER_UPSTREAM_RECOMMENDED_PAGE_SIZE`)
- * — as fixed server-side constants instead. `languages` replaces them as the
+ * env-resolved recommended page size (`resolveMoboreaderUpstreamRecommendedPageSize`
+ * — C-13, `施工工单_C13_每页100本与节流余量_2026-09-07.md`: reads the
+ * `MOBOREADER_UPSTREAM_RECOMMENDED_PAGE_SIZE` env var instead of the bare
+ * CPS-parity constant, so an operator can opt a task into the probed-safe
+ * larger page size without a code change; still defaults to 20 when unset)
+ * — as fixed server-side values instead. `languages` replaces them as the
  * one thing the operator does choose: recorded on the task for `/tasks`
  * detail and result filtering (Phase C), never sent upstream as a filter
  * (see the doc on `CreateMoboreaderCatalogScanTaskInput.languages`).
@@ -334,7 +338,7 @@ async function runCatalogScanTrigger(
       channelAppId: input.channelAppId,
       pageStart: 1,
       pageEnd: resolveMoboreaderCatalogSafetyMaxPages(),
-      pageSize: MOBOREADER_UPSTREAM_RECOMMENDED_PAGE_SIZE,
+      pageSize: resolveMoboreaderUpstreamRecommendedPageSize(),
       languages: input.languages,
       requestToken: randomUUID(),
       actorId,

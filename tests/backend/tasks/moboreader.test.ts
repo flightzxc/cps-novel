@@ -63,7 +63,13 @@ describe("MoboReader catalog safety and parity", () => {
       NODE_ENV: "test",
       MOBOREADER_CATALOG_SAFETY_MAX_PAGES: "0",
     })).toThrow("safety_max_pages_invalid");
-    expect(() => validateMoboreaderCatalogScanInput({ ...validInput, pageSize: 21 }, { NODE_ENV: "test" })).toThrow("page_size_exceeded");
+    // C-13 (`施工工单_C13_每页100本与节流余量_2026-09-07.md`): ceiling raised
+    // 20 -> 100 after probing the upstream host directly (request-count rate
+    // limit, not row-count -- see the doc comment on
+    // `MOBOREADER_CATALOG_LIMITS.maxPageSize`). 100 itself must still be
+    // accepted; 101 -- one past the probed ceiling -- must still be rejected.
+    expect(() => validateMoboreaderCatalogScanInput({ ...validInput, pageSize: 101 }, { NODE_ENV: "test" })).toThrow("page_size_exceeded");
+    expect(validateMoboreaderCatalogScanInput({ ...validInput, pageSize: 100 }, { NODE_ENV: "test" }).pageSize).toBe(100);
   });
 
   it("Phase B: `languages` defaults to [], trims/dedupes when provided, and rejects non-empty-string entries", () => {
@@ -114,6 +120,11 @@ describe("MoboReader catalog safety and parity", () => {
       safetyMaxPages: 2_000,
     });
     expect(() => parseMoboreaderCatalogPayload({ ...payload, source: "scheduler" })).toThrow("manual_source_required");
+  });
+
+  it("C-13: the worker item-level pageSize check (`item.pageSize > MOBOREADER_CATALOG_LIMITS.maxPageSize` in worker/handlers/moboreader.ts) accepts the new 100 ceiling and still rejects one past it", () => {
+    expect(parseMoboreaderCatalogPayload({ ...payload, pageSize: 100 })).toMatchObject({ pageSize: 100 });
+    expect(() => parseMoboreaderCatalogPayload({ ...payload, pageSize: 101 })).toThrow("catalog_payload_invalid");
   });
 
   it.each([
