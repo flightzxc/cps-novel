@@ -27,26 +27,31 @@ function formatAuditValue(value: number | string | undefined): string {
  * fields (`src/server/task-admin/service.ts`) — this component never sees
  * raw `params`/`result`.
  *
- * `stopReason` is the task-level derived code (`TaskSummaryDto.stopReason`,
- * e.g. `"upstream_error"`) — not the richer *origin-item* stop-reason line
- * (with HTTP status/page) the items section below shows. That richer line
- * depends on which item happens to be on the currently-loaded items page,
- * so it cannot be a reliable always-present audit field once the items
- * table is paginated; the task-level code is always available regardless
- * of item pagination/filtering, and is the same code the `/tasks` list
- * page already shows in its own "失败原因" column, so it reads consistently
- * across both screens.
+ * C-10b (Phase E rework, 2026-09-07): "停止原因" prefers `originStopReason` —
+ * `TaskDetailDto.originStopReason`, the richer *origin-item* line (with HTTP
+ * status/page, e.g. `"upstream_error (HTTP 401) @ 第 1 页"`) that
+ * `getAdminTaskDetail` now derives itself via one extra query, so it is
+ * always available regardless of which items page happens to be currently
+ * loaded — unlike the per-item `TaskItemDto.stopReason` the items section
+ * below shows, which only exists for whichever row is on the loaded page.
+ * Falls back to `stopReason` (the task-level bare code, `TaskSummaryDto.
+ * stopReason`) when `originStopReason` is absent — e.g. a task that hasn't
+ * finished persisting an item yet, or (defensively) any other case this
+ * component can't otherwise account for — so the cell still shows the same
+ * code the `/tasks` list page's own "失败原因" column reads.
  */
 export function TaskConfigSummary({
   mode,
   catalogScanConfig,
   catalogScanAudit,
   stopReason,
+  originStopReason,
 }: {
   mode?: string;
   catalogScanConfig?: CatalogScanConfigView;
   catalogScanAudit?: CatalogScanAuditView;
   stopReason?: string;
+  originStopReason?: string;
 }) {
   const hasConfig = mode !== undefined || catalogScanConfig !== undefined;
   if (!hasConfig) return null;
@@ -55,7 +60,7 @@ export function TaskConfigSummary({
     ? [
         { label: "上游返回 total", value: catalogScanAudit.observedTotal },
         { label: "实际抓取条数", value: catalogScanAudit.actualFetchedCount },
-        { label: "停止原因", value: stopReason },
+        { label: "停止原因", value: originStopReason ?? stopReason },
         { label: "最后一页", value: catalogScanAudit.lastCompletedPage },
         { label: "保险丝页数", value: catalogScanConfig?.safetyMaxPages },
       ]

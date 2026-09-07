@@ -258,6 +258,7 @@ export default async function TaskDetailPage({
           catalogScanConfig={detail.catalogScanConfig}
           catalogScanAudit={detail.catalogScanAudit}
           stopReason={detail.stopReason}
+          originStopReason={detail.originStopReason}
         />
 
         <AdminTimeZoneNote />

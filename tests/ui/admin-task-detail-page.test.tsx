@@ -301,6 +301,24 @@ describe("/tasks/[id] · catalog_scan 单位与派生审计字段", () => {
     expect(config.textContent).toContain("en、ja");
   });
 
+  it("originStopReason 存在时，停止原因展示更丰富的 origin-item 行而非任务级裸码（C-10b）", async () => {
+    getAdminTaskDetail.mockResolvedValue(
+      detail({
+        taskType: "catalog_scan",
+        stopReason: "upstream_error",
+        originStopReason: "upstream_error (HTTP 401) @ 第 1 页",
+        catalogScanAudit: { observedTotal: 4823, actualFetchedCount: 88, lastCompletedPage: 4 },
+      }),
+    );
+    listAdminTaskItems.mockResolvedValue(itemsResult([]));
+
+    const element = await renderPage();
+    render(element);
+
+    const audit = screen.getByTestId("task-catalog-audit");
+    expect(audit.textContent).toContain("upstream_error (HTTP 401) @ 第 1 页");
+  });
+
   it("目录任务子项行展示页号（第 N 页），非目录任务不展示该列", async () => {
     getAdminTaskDetail.mockResolvedValue(detail({ taskType: "catalog_scan" }));
     listAdminTaskItems.mockResolvedValue(

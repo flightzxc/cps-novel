@@ -140,9 +140,23 @@ function jsonPlainObject(value: unknown): Record<string, unknown> | null {
     : null;
 }
 
-/** Task-level derived stop reason for the tasks-list "失败原因" column — a bare stable code, e.g. `"upstream_error"`. */
-function deriveTaskStopReason(hasError: boolean, result: unknown): string | undefined {
-  if (!hasError) return undefined;
+/**
+ * Task-level derived stop reason for the tasks-list "失败原因" column — a bare
+ * stable code, e.g. `"upstream_error"`.
+ *
+ * C-10b (Phase E rework, 2026-09-07): eligibility is `hasError === true` OR
+ * `status === "failed"` OR `status === "completed_with_errors"` (the two
+ * terminal-with-failure members of `TASK_STATUSES`,
+ * `src/domain/database-statuses.ts`) — not `hasError` alone. A
+ * `completed_with_errors` catalog_scan task can finish with `error IS NULL`
+ * (only `result.stopReason` records why it stopped short), so gating on
+ * `hasError` alone withheld a real, well-formed stop reason. `completed`/
+ * `pending`/`processing`/`disabled` with `hasError === false` are still
+ * withheld — this only widens the two already-failure-shaped statuses.
+ */
+function deriveTaskStopReason(status: string, hasError: boolean, result: unknown): string | undefined {
+  const eligible = hasError || status === "failed" || status === "completed_with_errors";
+  if (!eligible) return undefined;
   const stopReason = jsonPlainObject(result)?.stopReason;
   return typeof stopReason === "string" && CATALOG_SCAN_STOP_REASONS.has(stopReason)
     ? stopReason
@@ -464,10 +478,24 @@ export type TaskDetailDto = TaskSummaryDto & Readonly<{
   updatedAt?: string;
   catalogScanConfig?: CatalogScanConfigDto;
   catalogScanAudit?: CatalogScanAuditDto;
+  /**
+   * C-10b: the *origin* failed item's richer derived stop-reason line (e.g.
+   * `"upstream_error (HTTP 401) @ 第 1 页"`, the same `deriveItemStopReason`
+   * output `TaskItemDto.stopReason` uses) — read via one extra query in
+   * `getAdminTaskDetail` itself, so it is always available regardless of
+   * which items page happens to be currently loaded (unlike the per-item
+   * `TaskItemDto.stopReason`, which only exists for whichever row is on the
+   * loaded page). Only ever populated for a `family === "generic"` task
+   * whose `taskType` is `MOBOREADER_TASK_TYPES.catalogScan`; every other
+   * task leaves this absent and pays no extra query. Never the raw
+   * `error`/`result` blob — same allowlisted-derivation discipline as every
+   * other field here.
+   */
+  originStopReason?: string;
 }>;
 
 function taskSummary(row: TaskListRow): TaskSummaryDto {
-  const stopReason = deriveTaskStopReason(row.has_error, row.result);
+  const stopReason = deriveTaskStopReason(row.status, row.has_error, row.result);
   return Object.freeze({
     family: row.family,
     taskId: row.task_id,
@@ -515,6 +543,37 @@ export async function listAdminTasks(
   return Object.freeze({ items: Object.freeze(rows.map(taskSummary)), limit: take });
 }
 
+type OriginTaskItemRow = {
+  status: string;
+  result: Prisma.JsonValue | null;
+  error: Prisma.JsonValue | null;
+};
+
+/**
+ * C-10b: the *origin* catalog_scan item — the one `catalog_page` item that
+ * actually hit the upstream failure, as opposed to every later page the
+ * worker cascaded to `failed` with `result.stoppedBeforeFetch === true`
+ * (`persistCatalogUpstreamFailure`, `worker/handlers/moboreader.ts`) without
+ * ever attempting them. Ordered by `target_id` (the page index, stored as
+ * text) cast to int ascending, so the earliest page — the one that was
+ * actually fetched and failed — sorts first even though `target_id` is a
+ * VARCHAR column. Never called for a non-catalog_scan task (see the
+ * `family`/`taskType` guard at the call site in `getAdminTaskDetail`).
+ */
+async function deriveOriginStopReason(db: PrismaClient, taskId: string): Promise<string | undefined> {
+  const rows = await db.$queryRaw<OriginTaskItemRow[]>(Prisma.sql`
+    SELECT status, result, error FROM generic_task_item
+    WHERE task_id = ${taskId}::uuid
+      AND target_type = 'catalog_page'
+      AND status = 'failed'
+      AND COALESCE(result->>'stoppedBeforeFetch', 'false') <> 'true'
+    ORDER BY (target_id)::int ASC
+    LIMIT 1
+  `);
+  const origin = rows[0];
+  return origin ? deriveItemStopReason(origin.status, origin.result, origin.error) : undefined;
+}
+
 export async function getAdminTaskDetail(
   db: PrismaClient,
   context: AdminAuthContext,
@@ -540,6 +599,9 @@ export async function getAdminTaskDetail(
   if (!row) throw new TaskAdminError("task_admin_not_found", 404);
   const catalogScanConfig = deriveCatalogScanConfig(row.task_type, row.params);
   const catalogScanAudit = deriveCatalogScanAudit(row.task_type, row.result);
+  const originStopReason = family === "generic" && row.task_type === MOBOREADER_TASK_TYPES.catalogScan
+    ? await deriveOriginStopReason(db, taskId)
+    : undefined;
   return Object.freeze({
     ...taskSummary(row),
     ...(row.mode !== undefined ? { mode: row.mode } : {}),
@@ -548,6 +610,7 @@ export async function getAdminTaskDetail(
     ...(row.updated_at ? { updatedAt: iso(row.updated_at) } : {}),
     ...(catalogScanConfig ? { catalogScanConfig } : {}),
     ...(catalogScanAudit ? { catalogScanAudit } : {}),
+    ...(originStopReason !== undefined ? { originStopReason } : {}),
   });
 }
 

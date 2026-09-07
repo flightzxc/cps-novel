@@ -255,7 +255,7 @@ describe("X9 adjudication isolation", () => {
  * this same test run).
  */
 describe("C-10 derived stop reason", () => {
-  it("listAdminTasks: surfaces the task's own result.stopReason only when it is both has_error and an enumerated value", async () => {
+  it("listAdminTasks: surfaces the task's own result.stopReason when has_error, or when status is failed/completed_with_errors", async () => {
     const context = await readContext("/api/admin/tasks");
     const rowWithReason = {
       family: "generic", task_id: TASK_ID, task_type: "catalog_scan", status: "completed_with_errors",
@@ -273,11 +273,24 @@ describe("C-10 derived stop reason", () => {
     const result2 = await listAdminTasks(db2, context, {}, {} as NodeJS.ProcessEnv);
     expect(result2.items[0]).not.toHaveProperty("stopReason");
 
-    // has_error: false — even a well-formed result.stopReason is withheld.
-    const rowWithoutError = { ...rowWithReason, has_error: false };
-    const db3 = { $queryRaw: async () => [rowWithoutError] } as unknown as PrismaClient;
+    // C-10b: has_error: false but status: completed_with_errors — a
+    // well-formed result.stopReason is now shown. This is the real defect
+    // this work order fixes: a catalog_scan task that ended
+    // completed_with_errors can have error IS NULL (only result.stopReason
+    // records why it stopped short), and the old has_error-only gate
+    // withheld it.
+    const rowWithoutErrorButPartialStatus = { ...rowWithReason, has_error: false };
+    const db3 = { $queryRaw: async () => [rowWithoutErrorButPartialStatus] } as unknown as PrismaClient;
     const result3 = await listAdminTasks(db3, context, {}, {} as NodeJS.ProcessEnv);
-    expect(result3.items[0]).not.toHaveProperty("stopReason");
+    expect(result3.items[0].stopReason).toBe("upstream_error");
+
+    // has_error: false and status: completed — still withheld. A
+    // well-formed result.stopReason on a cleanly-completed row must not
+    // surface just because the JSON happens to contain one.
+    const rowWithoutErrorCompleted = { ...rowWithReason, has_error: false, status: "completed" };
+    const db4 = { $queryRaw: async () => [rowWithoutErrorCompleted] } as unknown as PrismaClient;
+    const result4 = await listAdminTasks(db4, context, {}, {} as NodeJS.ProcessEnv);
+    expect(result4.items[0]).not.toHaveProperty("stopReason");
   });
 
   it("listAdminTaskItems: derives the full stop-reason line only for the origin item, not a cascaded stoppedBeforeFetch item", async () => {
@@ -385,10 +398,21 @@ describe("C-9 task-detail route derivations", () => {
         checkpoint: { lastCompletedPage: 4, returnedCount: 20 },
       },
     };
-    const db = { $queryRaw: async () => [row] } as unknown as PrismaClient;
+    // Sequence-aware: family "generic" + taskType "catalog_scan" means
+    // getAdminTaskDetail now also issues a second query (the origin
+    // catalog_scan item lookup, C-10b) — the first call returns the task
+    // row, the second the origin-item rows (none here).
+    let queryCall = 0;
+    const db = {
+      $queryRaw: async () => {
+        queryCall += 1;
+        return queryCall === 1 ? [row] : [];
+      },
+    } as unknown as PrismaClient;
 
     const detail = await getAdminTaskDetail(db, context, { family: "generic", taskId: TASK_ID }, {} as NodeJS.ProcessEnv);
 
+    expect(detail).not.toHaveProperty("originStopReason");
     expect(detail.mode).toBe("apply");
     expect(detail.channelAccountId).toBe("40000000-0000-4000-8000-000000000001");
     expect(detail.createdAt).toBe(NOW.toISOString());
@@ -433,14 +457,111 @@ describe("C-9 task-detail route derivations", () => {
       params: { pageStart: 1, pageEnd: 5, safetyMaxPages: 2000 },
       result: { catalogObservedTotal: 99, batchActualCount: 99, checkpoint: { lastCompletedPage: 5 } },
     };
-    const db = { $queryRaw: async () => [row] } as unknown as PrismaClient;
+    // C-10b: a channel_sync task never qualifies for the origin-item query
+    // (the `family === "generic"` guard in getAdminTaskDetail excludes it
+    // outright, regardless of taskType) — assert only one $queryRaw call.
+    let queryCallCount = 0;
+    const db = {
+      $queryRaw: async () => {
+        queryCallCount += 1;
+        return [row];
+      },
+    } as unknown as PrismaClient;
 
     const detail = await getAdminTaskDetail(db, context, { family: "channel_sync", taskId: TASK_ID }, {} as NodeJS.ProcessEnv);
 
     expect(detail).not.toHaveProperty("catalogScanConfig");
     expect(detail).not.toHaveProperty("catalogScanAudit");
     expect(detail).not.toHaveProperty("channelAccountId");
+    expect(detail).not.toHaveProperty("originStopReason");
     expect(detail.mode).toBe("apply");
+    expect(queryCallCount).toBe(1);
+  });
+
+  it("getAdminTaskDetail: derives originStopReason from the origin catalog_scan item's richer stop-reason line (C-10b)", async () => {
+    const context = await readContext("/api/admin/tasks/detail");
+    const row = {
+      family: "generic",
+      task_id: TASK_ID,
+      task_type: "catalog_scan",
+      status: "completed_with_errors",
+      total_count: 5,
+      success_count: 3,
+      failed_count: 2,
+      skipped_count: 0,
+      has_error: false,
+      created_at: NOW,
+      updated_at: NOW,
+      mode: "apply",
+      channel_account_id: null,
+      params: {},
+      result: { stopReason: "upstream_error" },
+    };
+    const originItemRow = {
+      status: "failed",
+      result: { stopReason: "upstream_error", terminalState: "partial_failed" },
+      error: {
+        code: "upstream_error",
+        message: "MoboReader catalog read failed: upstream_http_error (HTTP 401) at page 1",
+        detail: { adapterCode: "upstream_http_error", httpStatus: 401, retryable: false, pageIndex: 1 },
+      },
+    };
+    let queryCall = 0;
+    const db = {
+      $queryRaw: async () => {
+        queryCall += 1;
+        return queryCall === 1 ? [row] : [originItemRow];
+      },
+    } as unknown as PrismaClient;
+
+    const detail = await getAdminTaskDetail(db, context, { family: "generic", taskId: TASK_ID }, {} as NodeJS.ProcessEnv);
+
+    expect(detail.originStopReason).toBe("upstream_error (HTTP 401) @ 第 1 页");
+    expect(queryCall).toBe(2);
+    for (const key of FORBIDDEN_KEYS) expect(allKeys(detail).has(key)).toBe(false);
+  });
+
+  it("getAdminTaskDetail: withholds originStopReason when the only failed catalog_scan items are cascaded (stoppedBeforeFetch: true)", async () => {
+    const context = await readContext("/api/admin/tasks/detail");
+    const row = {
+      family: "generic",
+      task_id: TASK_ID,
+      task_type: "catalog_scan",
+      status: "completed_with_errors",
+      total_count: 5,
+      success_count: 3,
+      failed_count: 2,
+      skipped_count: 0,
+      has_error: false,
+      created_at: NOW,
+      updated_at: NOW,
+      mode: "apply",
+      channel_account_id: null,
+      params: {},
+      result: { stopReason: "upstream_error" },
+    };
+    // Defense-in-depth: even if a cascaded item (result.stoppedBeforeFetch
+    // === true, never attempted — persistCatalogUpstreamFailure,
+    // worker/handlers/moboreader.ts) were ever returned by the origin-item
+    // query (whose own SQL WHERE clause is meant to exclude it),
+    // deriveItemStopReason's stoppedBeforeFetch guard still withholds it.
+    const cascadedItemRow = {
+      status: "failed",
+      result: { stoppedBeforeFetch: true, stopReason: "upstream_error", returnedCount: 0 },
+      error: { code: "upstream_error", message: "Catalog scan stopped after an upstream error" },
+    };
+    let queryCall = 0;
+    const db = {
+      $queryRaw: async () => {
+        queryCall += 1;
+        return queryCall === 1 ? [row] : [cascadedItemRow];
+      },
+    } as unknown as PrismaClient;
+
+    const detail = await getAdminTaskDetail(db, context, { family: "generic", taskId: TASK_ID }, {} as NodeJS.ProcessEnv);
+
+    expect(detail).not.toHaveProperty("originStopReason");
+    expect(queryCall).toBe(2);
   });
 
   it("getAdminTaskDetail: throws task_admin_not_found when the row does not exist, so the page's per-family probe can fall through", async () => {
