@@ -1,3 +1,27 @@
+/**
+ * Ported from CPS `src/lib/channel-account/jwt.ts`'s `normalizeJwtInput`
+ * (identical semantics, renamed for this codebase's credential module):
+ * strips an operator's copy-pasted `Authorization: Bearer <token>` header or
+ * bare `Bearer <token>` prefix before the value is validated, fingerprinted,
+ * or encrypted, so a pasted-with-prefix credential does not silently become
+ * a different (invalid) token than the one the operator intended to store.
+ * Case-insensitive; trims both the outer value and the captured group.
+ */
+export function normalizeCredentialJwtInput(value: string): string {
+  const trimmed = value.trim();
+  const authorizationMatch = /^Authorization\s*:\s*Bearer\s+(.+)$/i.exec(trimmed);
+  if (authorizationMatch) {
+    return authorizationMatch[1].trim();
+  }
+
+  const bearerMatch = /^Bearer\s+(.+)$/i.exec(trimmed);
+  if (bearerMatch) {
+    return bearerMatch[1].trim();
+  }
+
+  return trimmed;
+}
+
 export type LocalCredentialValidation =
   | { status: "active"; expiresAt: Date }
   | { status: "expired"; expiresAt: Date }

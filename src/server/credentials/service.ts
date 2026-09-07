@@ -3,7 +3,7 @@ import { Prisma, type PrismaClient } from "@prisma/client";
 
 import { CREDENTIAL_TASK_TYPES, type CredentialContractCode, type CredentialMetadata, type CredentialQueuedResult, type CredentialRedactedResult } from "@/lib/credentials/contracts";
 import { CredentialLifecycleError } from "@/lib/credentials/lifecycle";
-import { validateCredentialJwtLocally } from "@/lib/credentials/jwt";
+import { normalizeCredentialJwtInput, validateCredentialJwtLocally } from "@/lib/credentials/jwt";
 import { assertReasonFreeOfCredentialMaterial } from "@/lib/credentials/reason-guard";
 import {
   encryptNewCredentialSecret,
@@ -234,9 +234,21 @@ export async function addOrReplaceCredential(input: {
   }
   const context = await actor(input.authorization, "admin.credential.replace", input.requestId, deps);
   const why = reason(input.reason, true);
-  if (why !== null) assertReasonFreeOfCredentialMaterial(why, input.secret);
+  // Normalized once, here: an operator-pasted `Authorization: Bearer <jwt>`
+  // header or bare `Bearer <jwt>` prefix must resolve to the exact same
+  // stored/validated/fingerprinted value as the bare token, mirroring CPS's
+  // `normalizeJwtInput` intake (`src/lib/channel-account/jwt.ts:40-53`,
+  // applied at `service.ts:185`). Every downstream use of the submitted
+  // secret in this function must read `secret`, never `input.secret`.
+  const secret = normalizeCredentialJwtInput(input.secret);
+  if (why !== null) {
+    // Guard against both the raw submission and the normalized value: a
+    // reason echoing either shape of the credential must still be rejected.
+    assertReasonFreeOfCredentialMaterial(why, input.secret);
+    assertReasonFreeOfCredentialMaterial(why, secret);
+  }
   const now = deps.now ?? new Date();
-  const validation = validateCredentialJwtLocally(input.secret, now);
+  const validation = validateCredentialJwtLocally(secret, now);
   if (validation.status === "invalid") {
     throw new CredentialLifecycleError(
       "credential_validation_failed",
@@ -244,7 +256,7 @@ export async function addOrReplaceCredential(input: {
     );
   }
 
-  const fingerprint = fingerprintNewCredentialSecret(input.secret, deps.env);
+  const fingerprint = fingerprintNewCredentialSecret(secret, deps.env);
   const idempotencyBinding: CredentialReplacementBinding = Object.freeze({
     requestId: input.requestId,
     actorId: context.identity.id,
@@ -257,7 +269,7 @@ export async function addOrReplaceCredential(input: {
   const credentialId = randomUUID();
   const credentialType = input.credentialType ?? "bearer_jwt";
   const encrypted = encryptNewCredentialSecret({
-    secret: input.secret,
+    secret,
     channelAccountId: input.channelAccountId,
     credentialId,
     env: deps.env,
