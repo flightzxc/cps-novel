@@ -260,6 +260,63 @@ export function resolveMoboreaderCatalogSafetyMaxPages(
   return positiveInteger(parsed, "safety_max_pages_invalid");
 }
 
+/**
+ * Normalizes an upstream `payEpisFrom` to the `paid_from_chapter` column's
+ * semantics: the DB CHECK on both `novel` and `novel_source_item` is
+ * `paid_from_chapter IS NULL OR paid_from_chapter > 0` — `NULL` means
+ * "free / no paywall". MoboReader returns `0` (sometimes negative) for a
+ * book with no paywall, which must fold to `null` rather than being
+ * written literally. This mirrors CPS's own lower-bound clamp for the
+ * same upstream field — `clampFreeEpisodeCount(payEpisFrom - 1, allEpis)`,
+ * `Math.max(0, value)` in
+ * cps-admin `src/lib/adapters/changdu.ts:124-126,368-371` — adapted to
+ * this schema's "store the cut chapter directly" shape instead of CPS's
+ * "store a free-episode count" shape.
+ *
+ * `null` stays `null` (upstream did not report a value at all, which is
+ * distinct from "reported free"); callers that need "leave the existing
+ * column unchanged on an update" must express that themselves (`null` ->
+ * `undefined`) rather than relying on this function, since this function's
+ * `null -> null` is a value, not an omission.
+ */
+export function normalizePaidFromChapter(value: number | null): number | null {
+  if (value === null) return null;
+  return value > 0 ? value : null;
+}
+
+/**
+ * Clamps an upstream `allEpis` to the `total_chapter_count` column's `>=
+ * 0` DB CHECK (same two tables as `normalizePaidFromChapter` above).
+ * Operates on a definite number; callers decide how to handle a `null`
+ * `allEpis` (default to `0` on create, `undefined`/leave-unchanged on
+ * update) since that policy differs by call site.
+ */
+export function clampTotalChapterCount(value: number): number {
+  return Math.max(0, value);
+}
+
+/**
+ * `paidFromChapter` value for an UPDATE `data` object (two call sites:
+ * `persistCatalogPage`'s `novelSourceItem.upsert.update` in
+ * `worker/handlers/moboreader.ts`, and `materializeChangduPreview`'s
+ * `novelSourceItem.update` in `src/lib/preview/changdu-materialization.ts`).
+ * An absent upstream value (`null`/`undefined`) means "leave the existing
+ * column unchanged", expressed to Prisma as `undefined`. A *reported*
+ * value — including `0` or negative — is normalized and written
+ * explicitly, so an upstream `0` can overwrite a previously-stored
+ * positive value with `NULL` instead of being silently swallowed by a
+ * bare `?? undefined` (which only substitutes on nullish, so `0` would
+ * pass straight through to the `paid_from_chapter > 0` DB CHECK).
+ */
+export function paidFromChapterForUpdate(value: number | null | undefined): number | null | undefined {
+  return value == null ? undefined : normalizePaidFromChapter(value);
+}
+
+/** `totalChapterCount` counterpart to `paidFromChapterForUpdate` above. */
+export function totalChapterCountForUpdate(value: number | null | undefined): number | undefined {
+  return value == null ? undefined : clampTotalChapterCount(value);
+}
+
 function digest(value: unknown): string {
   return createHash("sha256").update(JSON.stringify(value)).digest("hex");
 }

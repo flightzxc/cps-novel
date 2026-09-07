@@ -17,10 +17,14 @@ import {
   isNovelCatalogSyncWriteAllowed,
 } from "../../src/lib/flags";
 import {
+  clampTotalChapterCount,
   enqueueMoboreaderPreviewRefreshTask,
   MOBOREADER_CATALOG_LIMITS,
   MOBOREADER_PREVIEW_ENV,
+  normalizePaidFromChapter,
+  paidFromChapterForUpdate,
   resolveMoboreaderPreviewRuntimeConfig,
+  totalChapterCountForUpdate,
   MOBOREADER_TASK_TYPES,
 } from "../../src/lib/tasks/moboreader";
 import { materializeChangduPreview } from "../../src/lib/preview";
@@ -540,8 +544,8 @@ async function persistCatalogPage(
         title: book.title,
         description: book.description ?? "",
         coverUrl: book.coverUrl,
-        totalChapterCount: book.allEpis ?? 0,
-        paidFromChapter: book.payEpisFrom,
+        totalChapterCount: book.allEpis === null ? 0 : clampTotalChapterCount(book.allEpis),
+        paidFromChapter: normalizePaidFromChapter(book.payEpisFrom),
         splitRatio: decimal(book.splitRatio),
         ttoSplitRatio: decimal(book.ttoSplitRatio),
         externalAgencyId: book.agencyId,
@@ -556,8 +560,14 @@ async function persistCatalogPage(
         title: book.title,
         description: book.description ?? undefined,
         coverUrl: book.coverUrl ?? undefined,
-        totalChapterCount: book.allEpis ?? undefined,
-        paidFromChapter: book.payEpisFrom ?? undefined,
+        totalChapterCount: totalChapterCountForUpdate(book.allEpis),
+        // An upstream 0 (or negative) must explicitly overwrite a previous
+        // positive value with NULL ("free now"); see
+        // `paidFromChapterForUpdate` for why this cannot be
+        // `book.payEpisFrom ?? undefined` (that would pass 0 straight
+        // through to the `paid_from_chapter > 0` DB CHECK — the crash this
+        // fix removes).
+        paidFromChapter: paidFromChapterForUpdate(book.payEpisFrom),
         splitRatio: book.splitRatio === null ? undefined : decimal(book.splitRatio),
         ttoSplitRatio: book.ttoSplitRatio === null ? undefined : decimal(book.ttoSplitRatio),
         externalAgencyId: book.agencyId ?? undefined,
