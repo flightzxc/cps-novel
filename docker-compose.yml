@@ -123,6 +123,10 @@ services:
       # resolves to an empty set and the task is rejected as
       # "no_eligible_sources" before it ever reaches the double-gate.
       MOBOREADER_PREVIEW_SOURCE_APP_CODES: ${MOBOREADER_PREVIEW_SOURCE_APP_CODES:-moboreader}
+      # Phase E (2026-09-07): web computes a catalog task's pageEnd from this cap
+      # (catalog-sync/_actions.ts), so it must see the same value the worker uses
+      # for its safety_limit stop -- previously only the worker received it.
+      MOBOREADER_CATALOG_SAFETY_MAX_PAGES: ${MOBOREADER_CATALOG_SAFETY_MAX_PAGES:-2000}
       # PR6 lane F: P2-06.5 tagging double-gate (plus auto-classify's own
       # pair). FEATURE_P2_06_5_TAGGING is the master read gate consumed by
       # src/server/tagging/admin-service.ts's requireTaggingRead -- with it

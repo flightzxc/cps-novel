@@ -491,6 +491,10 @@ x8_export_static_topology() {
   export SITE_URL=https://novel.test
   export TZ=Asia/Tokyo
   export MOBOREADER_PREVIEW_SOURCE_APP_CODES=moboreader
+  # Phase E (2026-09-07, Owner-approved business exception): the MoboReader
+  # catalog reports ~97k books (4,859 pages at 20/page), above the CPS-inherited
+  # 2000-page default; 6000 pages covers it with headroom. Pages, not books.
+  export MOBOREADER_CATALOG_SAFETY_MAX_PAGES="${MOBOREADER_CATALOG_SAFETY_MAX_PAGES:-6000}"
   export X8_HTTP_PORT="${X8_HTTP_PORT:-80}"
   export X8_HTTPS_PORT="${X8_HTTPS_PORT:-443}"
   export X8_NGINX_IMAGE="${X8_NGINX_IMAGE:-nginx:1.28.0-alpine}"
