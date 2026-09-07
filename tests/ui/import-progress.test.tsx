@@ -156,4 +156,77 @@ describe("ImportProgress 轮询与终态 (C-6)", () => {
     });
     expect(screen.getByText("第 3 页抓取失败")).toBeTruthy();
   });
+
+  /**
+   * C-12 (`施工工单_C12_目录任务计量口径改为本_2026-09-07.md`): `ImportProgress`
+   * itself is untouched by C-12 — it renders whatever `total`/`success`/
+   * `failed`/`percent`/`currentItem.message` the flat progress API sends,
+   * and the book-vs-page unit switch lives entirely server-side
+   * (`src/server/task-admin/progress.ts`). These tests feed the
+   * book-denominated payload shape that API now returns for a catalog_scan
+   * task once its bookCounts is derivable, proving the component is a pure
+   * pass-through with no page-unit assumption baked in.
+   */
+  it("本口径 payload：统计格与百分比直接渲染 total/success/failed/percent，附加的 pageCounts 字段被忽略", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () =>
+          progressPayload({
+            status: "processing",
+            total: 89,
+            success: 80,
+            failed: 0,
+            skip: 0,
+            processed: 80,
+            percent: 90,
+            pageCounts: { total: 2000, success: 4, failed: 0, percent: 0, pagesScanned: 4, pagesTotalExpected: 5 },
+          }),
+      }),
+    );
+
+    render(<ImportProgress taskId="task-book-counts-1" />);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    expect(screen.getByText("89")).toBeTruthy();
+    expect(screen.getByText("80")).toBeTruthy();
+    expect(screen.getByText("90%")).toBeTruthy();
+    // The page-based pageCounts payload is not itself rendered anywhere —
+    // this component has no knowledge of that field.
+    expect(screen.queryByText("2000")).toBeNull();
+  });
+
+  it("本口径 payload：正在抓取文案展示「第 N / 总页数 页（已获取 X / Y 本）」", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () =>
+          progressPayload({
+            status: "processing",
+            total: 97238,
+            success: 7100,
+            failed: 0,
+            processed: 7100,
+            percent: 7,
+            currentItem: {
+              targetType: "catalog_page",
+              targetId: "375",
+              status: "processing",
+              message: "正在抓取目录第 375 / 4,859 页（已获取 7,100 / 97,238 本）",
+            },
+          }),
+      }),
+    );
+
+    render(<ImportProgress taskId="task-book-counts-2" />);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    expect(screen.getByText("正在抓取目录第 375 / 4,859 页（已获取 7,100 / 97,238 本）")).toBeTruthy();
+  });
 });

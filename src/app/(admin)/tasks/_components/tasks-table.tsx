@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { taskStatusLabel } from "@/features/admin-ui/content-view";
+import type { CatalogBookCountsDto } from "@/server/task-admin";
 
 import { taskFamilyLabel } from "../_lib/task-copy";
 
@@ -24,6 +25,13 @@ export type TaskSummaryRow = {
    * pre-existing fixture there keeps matching unmodified.
    */
   readonly stopReason?: string;
+  /**
+   * C-12 (`施工工单_C12_目录任务计量口径改为本_2026-09-07.md`): present only
+   * for a `catalog_scan` row once its book counts are derivable
+   * (`TaskSummaryDto.bookCounts`) — see `countCell` below for how it
+   * switches the 总数/成功/失败 columns to "本" units.
+   */
+  readonly bookCounts?: CatalogBookCountsDto;
 };
 
 /**
@@ -75,6 +83,21 @@ function countSuffix(taskType: string, count: number): string {
   return taskType === "catalog_scan" ? `${count} 页` : String(count);
 }
 
+/**
+ * C-12 (`施工工单_C12_目录任务计量口径改为本_2026-09-07.md`): once a
+ * catalog_scan row's book counts are derivable, its 总数/成功/失败 columns
+ * switch to "本" (book) units instead of the page-based `countSuffix`
+ * above — an operator reading this list wants "how many books", not "how
+ * many pages". Falls back to `countSuffix` (unchanged「页」display) when
+ * `bookCounts` is undefined (no page has completed yet) or for any other
+ * taskType.
+ */
+function countCell(task: TaskSummaryRow, pageValue: number, bookValue: number): string {
+  if (task.taskType !== "catalog_scan") return String(pageValue);
+  if (task.bookCounts) return `${bookValue} 本`;
+  return `${pageValue} 页`;
+}
+
 export function TasksTable({
   tasks,
 }: {
@@ -120,11 +143,15 @@ export function TasksTable({
               <td className="px-4 py-3" data-testid={`task-status-${task.taskId}`}>
                 {taskStatusLabel(task.status)}
               </td>
-              <td className="px-4 py-3 text-right text-gray-600">{countSuffix(task.taskType, task.totalCount)}</td>
-              <td className="px-4 py-3 text-right text-emerald-700">
-                {countSuffix(task.taskType, task.successCount)}
+              <td className="px-4 py-3 text-right text-gray-600">
+                {countCell(task, task.totalCount, task.bookCounts?.upstreamTotal ?? 0)}
               </td>
-              <td className="px-4 py-3 text-right text-red-700">{countSuffix(task.taskType, task.failedCount)}</td>
+              <td className="px-4 py-3 text-right text-emerald-700">
+                {countCell(task, task.successCount, task.bookCounts?.fetched ?? 0)}
+              </td>
+              <td className="px-4 py-3 text-right text-red-700">
+                {countCell(task, task.failedCount, task.bookCounts?.failedBooks ?? 0)}
+              </td>
               <td className="px-4 py-3 text-right text-gray-500">
                 {countSuffix(task.taskType, task.skippedCount)}
               </td>

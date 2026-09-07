@@ -344,3 +344,79 @@ describe("/tasks/[id] · catalog_scan 单位与派生审计字段", () => {
     expect(row.textContent).not.toContain("第");
   });
 });
+
+describe("/tasks/[id] · C-12 bookCounts 单位切换", () => {
+  const BOOK_COUNTS = {
+    upstreamTotal: 89,
+    fetched: 80,
+    failedBooks: 20,
+    pagesScanned: 5,
+    pagesTotalExpected: 5,
+    percent: 90,
+  };
+
+  it("bookCounts 存在时，汇总卡片展示「本」单位与派生数值，不再展示跳过卡片", async () => {
+    getAdminTaskDetail.mockResolvedValue(
+      detail({
+        taskType: "catalog_scan",
+        totalCount: 2000,
+        successCount: 4,
+        failedCount: 1997,
+        skippedCount: 0,
+        bookCounts: BOOK_COUNTS,
+      }),
+    );
+    listAdminTaskItems.mockResolvedValue(itemsResult([]));
+
+    const element = await renderPage();
+    render(element);
+
+    expect(screen.getByText("总计（本）")).toBeTruthy();
+    expect(screen.getByText("成功（本）")).toBeTruthy();
+    expect(screen.getByText("失败（本）")).toBeTruthy();
+    expect(screen.getByText("89")).toBeTruthy();
+    expect(screen.getByText("80")).toBeTruthy();
+    expect(screen.getByText("20")).toBeTruthy();
+    expect(screen.getByText("90%")).toBeTruthy();
+    expect(screen.queryByText("总计（页）")).toBeNull();
+    // The skip card itself (labeled "跳过（页）"/"跳过（本）") is gone — the
+    // bare "跳过" item-status filter tab elsewhere on the page is unrelated
+    // and unaffected, so this checks the parenthetical-unit label specifically.
+    expect(screen.queryByText("跳过（页）")).toBeNull();
+    expect(screen.queryByText("跳过（本）")).toBeNull();
+  });
+
+  it("bookCounts 存在时，任务进度条的分子/分母改为本口径", async () => {
+    getAdminTaskDetail.mockResolvedValue(
+      detail({
+        taskType: "catalog_scan",
+        status: "completed_with_errors",
+        totalCount: 2000,
+        successCount: 4,
+        failedCount: 1997,
+        skippedCount: 0,
+        bookCounts: BOOK_COUNTS,
+      }),
+    );
+    listAdminTaskItems.mockResolvedValue(itemsResult([]));
+
+    const element = await renderPage();
+    render(element);
+
+    expect(screen.getByText("100 / 89 本")).toBeTruthy(); // (fetched 80 + failedBooks 20) / upstreamTotal 89
+  });
+
+  it("bookCounts 缺失时（尚未拿到首页），汇总卡片与进度条维持既有页口径展示", async () => {
+    getAdminTaskDetail.mockResolvedValue(
+      detail({ taskType: "catalog_scan", totalCount: 2000, successCount: 4, failedCount: 0, skippedCount: 0 }),
+    );
+    listAdminTaskItems.mockResolvedValue(itemsResult([]));
+
+    const element = await renderPage();
+    render(element);
+
+    expect(screen.getByText("总计（页）")).toBeTruthy();
+    expect(screen.queryByText("总计（本）")).toBeNull();
+    expect(screen.getByText("4 / 2000")).toBeTruthy();
+  });
+});

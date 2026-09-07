@@ -2,7 +2,7 @@ import type { PrismaClient } from "@prisma/client";
 
 import { requireHighRiskAdminCapability, type AdminAuthContext } from "@/lib/auth";
 
-import { TaskAdminError } from "./service";
+import { loadCatalogBookCounts, TaskAdminError, type CatalogBookCountsDto } from "./service";
 
 /**
  * C-6 (`施工工单_PhaseC_任务模型迁移与ImportProgress_2026-09-06.md`
@@ -51,6 +51,15 @@ export type TaskProgressCurrentItem = Readonly<{
   message: string;
 }>;
 
+export type TaskProgressPageCounts = Readonly<{
+  total: number;
+  success: number;
+  failed: number;
+  percent: number;
+  pagesScanned: number;
+  pagesTotalExpected: number;
+}>;
+
 export type TaskProgressDto = Readonly<{
   taskType: string;
   status: TaskProgressStatus;
@@ -65,6 +74,19 @@ export type TaskProgressDto = Readonly<{
   taskErrors: readonly string[];
   items: readonly TaskProgressItemError[];
   currentItem?: TaskProgressCurrentItem;
+  /**
+   * C-12 (`施工工单_C12_目录任务计量口径改为本_2026-09-07.md`): once a
+   * `catalog_scan` task's book counts are derivable (`CatalogBookCountsDto`,
+   * `./service.ts`), `total`/`success`/`failed`/`percent` above switch to
+   * book ("本") units — `upstreamTotal`/`fetched`/`failedBooks`/`percent` —
+   * per the work order's "同样对目录任务返回本口径的 total/success/failed/
+   * percent"; the pre-C-12 page-based figures move here instead ("页口径保留
+   * 在附加字段里"), so nothing this DTO used to report is lost. Absent for
+   * every other taskType, and absent for a catalog_scan task before its
+   * first page completes — `total`/`success`/`failed`/`percent` above stay
+   * page-based in that case, byte-identical to the pre-C-12 shape.
+   */
+  pageCounts?: TaskProgressPageCounts;
 }>;
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -115,16 +137,33 @@ type GenericTaskRow = {
   updatedAt: Date;
 };
 
-function toDto(task: GenericTaskRow, items: readonly TaskProgressItemError[], currentItem?: TaskProgressCurrentItem): TaskProgressDto {
-  const processed = task.successCount + task.failedCount + task.skippedCount;
-  const percent = task.totalCount > 0 ? Math.round((processed / task.totalCount) * 100) : 0;
+/**
+ * C-12: `bookCounts` present switches `total`/`success`/`failed`/`percent`
+ * to book ("本") units and moves the pre-C-12 page-based figures to
+ * `pageCounts` instead; absent, this is byte-identical to the pre-C-12
+ * shape (page-based throughout, no `pageCounts`).
+ */
+function toDto(
+  task: GenericTaskRow,
+  items: readonly TaskProgressItemError[],
+  currentItem?: TaskProgressCurrentItem,
+  bookCounts?: CatalogBookCountsDto,
+): TaskProgressDto {
+  const pagesProcessed = task.successCount + task.failedCount + task.skippedCount;
+  const pagesPercent = task.totalCount > 0 ? Math.round((pagesProcessed / task.totalCount) * 100) : 0;
+  const total = bookCounts ? bookCounts.upstreamTotal : task.totalCount;
+  const success = bookCounts ? bookCounts.fetched : task.successCount;
+  const failed = bookCounts ? bookCounts.failedBooks : task.failedCount;
+  const skip = task.skippedCount;
+  const processed = bookCounts ? success + failed + skip : pagesProcessed;
+  const percent = bookCounts ? bookCounts.percent : pagesPercent;
   return Object.freeze({
     taskType: task.taskType,
     status: mapStatus(task.status),
-    total: task.totalCount,
-    success: task.successCount,
-    failed: task.failedCount,
-    skip: task.skippedCount,
+    total,
+    success,
+    failed,
+    skip,
     processed,
     percent,
     createdAt: iso(task.createdAt),
@@ -132,6 +171,16 @@ function toDto(task: GenericTaskRow, items: readonly TaskProgressItemError[], cu
     taskErrors: taskErrorsFrom(task.error),
     items,
     ...(currentItem ? { currentItem } : {}),
+    ...(bookCounts ? {
+      pageCounts: Object.freeze({
+        total: task.totalCount,
+        success: task.successCount,
+        failed: task.failedCount,
+        percent: pagesPercent,
+        pagesScanned: bookCounts.pagesScanned,
+        pagesTotalExpected: bookCounts.pagesTotalExpected,
+      }),
+    } : {}),
   });
 }
 
@@ -142,9 +191,22 @@ function toDto(task: GenericTaskRow, items: readonly TaskProgressItemError[], cu
  * "target #id" phrasing rather than guessing a domain-specific one -- adding
  * a per-taskType message table is not this task's job and would only ever
  * be exercised by the one host page C-6 actually wires up (catalog-sync).
+ *
+ * C-12: once `bookCounts` is derivable, the message grows the real page
+ * total and the book-denominated progress the work order specifies —
+ * "正在抓取目录第 375 / 4,859 页（已获取 7,100 / 97,238 本）" — `targetId`
+ * (the page currently in flight) stays the numerator on the page side, same
+ * as before. Falls back to the bare pre-C-12 phrasing when `bookCounts` is
+ * undefined (no page has completed yet).
  */
-function genericCurrentItemMessage(targetType: string, targetId: string): string {
-  if (targetType === "catalog_page") return `正在抓取目录第 ${targetId} 页`;
+function genericCurrentItemMessage(targetType: string, targetId: string, bookCounts?: CatalogBookCountsDto): string {
+  if (targetType === "catalog_page") {
+    if (bookCounts) {
+      return `正在抓取目录第 ${targetId} / ${bookCounts.pagesTotalExpected.toLocaleString("zh-CN")} 页`
+        + `（已获取 ${bookCounts.fetched.toLocaleString("zh-CN")} / ${bookCounts.upstreamTotal.toLocaleString("zh-CN")} 本）`;
+    }
+    return `正在抓取目录第 ${targetId} 页`;
+  }
   return `正在处理 ${targetType} #${targetId}`;
 }
 
@@ -154,10 +216,11 @@ async function loadGenericProgress(db: PrismaClient, taskId: string): Promise<Ta
     select: {
       taskType: true, status: true, totalCount: true, successCount: true,
       failedCount: true, skippedCount: true, error: true, createdAt: true, updatedAt: true,
+      result: true, params: true,
     },
   });
   if (!task) return null;
-  const [failedItems, processingItem] = await Promise.all([
+  const [failedItems, processingItem, bookCounts] = await Promise.all([
     db.genericTaskItem.findMany({
       where: { taskId, status: "failed" },
       orderBy: [{ createdAt: "asc" }, { id: "asc" }],
@@ -169,6 +232,10 @@ async function loadGenericProgress(db: PrismaClient, taskId: string): Promise<Ta
       orderBy: [{ createdAt: "asc" }, { id: "asc" }],
       select: { targetType: true, targetId: true },
     }),
+    // C-12: only ever issues its own aggregate query when this taskType is
+    // catalog_scan AND result.catalogObservedTotal/params.pageSize are
+    // already known — see `loadCatalogBookCounts` (`./service.ts`).
+    loadCatalogBookCounts(db, { taskId, taskType: task.taskType, result: task.result, params: task.params }),
   ]);
   const items = failedItems.map((item) => Object.freeze({
     id: item.id,
@@ -181,10 +248,10 @@ async function loadGenericProgress(db: PrismaClient, taskId: string): Promise<Ta
       targetType: processingItem.targetType,
       targetId: processingItem.targetId,
       status: "processing" as const,
-      message: genericCurrentItemMessage(processingItem.targetType, processingItem.targetId),
+      message: genericCurrentItemMessage(processingItem.targetType, processingItem.targetId, bookCounts),
     })
     : undefined;
-  return toDto(task, items, currentItem);
+  return toDto(task, items, currentItem, bookCounts);
 }
 
 async function loadChannelSyncProgress(db: PrismaClient, taskId: string): Promise<TaskProgressDto | null> {

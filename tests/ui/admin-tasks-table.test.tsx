@@ -89,4 +89,55 @@ describe("TasksTable · 两类任务统一列表", () => {
     expect(screen.getByText("10")).toBeTruthy();
     expect(screen.queryByText("10 页")).toBeNull();
   });
+
+  // C-12 (`施工工单_C12_目录任务计量口径改为本_2026-09-07.md`): once bookCounts
+  // is derivable, the 总数/成功/失败 columns switch from page units to book
+  // ("本") units — 跳过 stays page-based (catalog_scan items are never
+  // skipped either way, so the unit is moot there).
+  it("bookCounts 存在时，目录任务的总数/成功/失败列改用「本」单位", () => {
+    render(
+      <TasksTable
+        tasks={[
+          task({
+            taskId: "22222222-2222-4222-8222-222222222222",
+            taskType: "catalog_scan",
+            totalCount: 2000,
+            successCount: 4,
+            failedCount: 1997,
+            bookCounts: {
+              upstreamTotal: 89,
+              fetched: 80,
+              failedBooks: 20,
+              pagesScanned: 5,
+              pagesTotalExpected: 5,
+              percent: 90,
+            },
+          }),
+        ]}
+      />,
+    );
+    expect(screen.getByText("89 本")).toBeTruthy();
+    expect(screen.getByText("80 本")).toBeTruthy();
+    expect(screen.getByText("20 本")).toBeTruthy();
+    expect(screen.queryByText("2000 页")).toBeNull();
+    expect(screen.queryByText("4 页")).toBeNull();
+    expect(screen.queryByText("1997 页")).toBeNull();
+  });
+
+  it("bookCounts 缺失时（尚未拿到首页），目录任务的计数列维持既有「页」单位展示", () => {
+    render(
+      <TasksTable
+        tasks={[
+          task({
+            taskId: "22222222-2222-4222-8222-222222222222",
+            taskType: "catalog_scan",
+            totalCount: 2000,
+            successCount: 0,
+          }),
+        ]}
+      />,
+    );
+    expect(screen.getByText("2000 页")).toBeTruthy();
+    expect(screen.queryByText(/本$/)).toBeNull();
+  });
 });

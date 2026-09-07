@@ -130,6 +130,16 @@ export default async function TaskDetailPage({
   const percent = detail.totalCount > 0 ? Math.round((processed / detail.totalCount) * 100) : 0;
   const isCatalogScan = detail.taskType === "catalog_scan";
   const countUnit = isCatalogScan ? "页" : "";
+  /**
+   * C-12 (`施工工单_C12_目录任务计量口径改为本_2026-09-07.md`): once the
+   * task's book counts are derivable, the summary cards and the static
+   * progress bar below switch to "本" (book) units — `detail.totalCount`/
+   * `successCount`/`failedCount`/`percent` above stay exactly as they were
+   * (page-denominated, Phase C's frozen task shape) and are still what
+   * renders when `bookCounts` is undefined — "before catalogObservedTotal is
+   * known, fall back to the current page-based display" (work order §二).
+   */
+  const bookCounts = detail.bookCounts;
 
   const itemRows: readonly TaskDetailItemRow[] = items.items;
 
@@ -189,28 +199,49 @@ export default async function TaskDetailPage({
         </div>
 
         {/* 汇总卡片 */}
-        <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
-          <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-            <p className="text-xs text-gray-400">总计{countUnit ? `（${countUnit}）` : ""}</p>
-            <p className="mt-1 text-2xl font-bold text-gray-900">{detail.totalCount}</p>
+        {bookCounts ? (
+          <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+            <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+              <p className="text-xs text-gray-400">总计（本）</p>
+              <p className="mt-1 text-2xl font-bold text-gray-900">{bookCounts.upstreamTotal.toLocaleString("zh-CN")}</p>
+            </div>
+            <div className="rounded-xl border border-green-100 bg-green-50/50 p-4 shadow-sm">
+              <p className="text-xs text-green-600">成功（本）</p>
+              <p className="mt-1 text-2xl font-bold text-green-700">{bookCounts.fetched.toLocaleString("zh-CN")}</p>
+            </div>
+            <div className="rounded-xl border border-red-100 bg-red-50/50 p-4 shadow-sm">
+              <p className="text-xs text-red-600">失败（本）</p>
+              <p className="mt-1 text-2xl font-bold text-red-700">{bookCounts.failedBooks.toLocaleString("zh-CN")}</p>
+            </div>
+            <div className="rounded-xl border border-blue-100 bg-blue-50/50 p-4 shadow-sm">
+              <p className="text-xs text-blue-600">完成度</p>
+              <p className="mt-1 text-2xl font-bold text-blue-700">{bookCounts.percent}%</p>
+            </div>
           </div>
-          <div className="rounded-xl border border-green-100 bg-green-50/50 p-4 shadow-sm">
-            <p className="text-xs text-green-600">成功{countUnit ? `（${countUnit}）` : ""}</p>
-            <p className="mt-1 text-2xl font-bold text-green-700">{detail.successCount}</p>
+        ) : (
+          <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
+            <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+              <p className="text-xs text-gray-400">总计{countUnit ? `（${countUnit}）` : ""}</p>
+              <p className="mt-1 text-2xl font-bold text-gray-900">{detail.totalCount}</p>
+            </div>
+            <div className="rounded-xl border border-green-100 bg-green-50/50 p-4 shadow-sm">
+              <p className="text-xs text-green-600">成功{countUnit ? `（${countUnit}）` : ""}</p>
+              <p className="mt-1 text-2xl font-bold text-green-700">{detail.successCount}</p>
+            </div>
+            <div className="rounded-xl border border-yellow-100 bg-yellow-50/50 p-4 shadow-sm">
+              <p className="text-xs text-yellow-600">跳过{countUnit ? `（${countUnit}）` : ""}</p>
+              <p className="mt-1 text-2xl font-bold text-yellow-700">{detail.skippedCount}</p>
+            </div>
+            <div className="rounded-xl border border-red-100 bg-red-50/50 p-4 shadow-sm">
+              <p className="text-xs text-red-600">失败{countUnit ? `（${countUnit}）` : ""}</p>
+              <p className="mt-1 text-2xl font-bold text-red-700">{detail.failedCount}</p>
+            </div>
+            <div className="rounded-xl border border-blue-100 bg-blue-50/50 p-4 shadow-sm">
+              <p className="text-xs text-blue-600">完成度</p>
+              <p className="mt-1 text-2xl font-bold text-blue-700">{percent}%</p>
+            </div>
           </div>
-          <div className="rounded-xl border border-yellow-100 bg-yellow-50/50 p-4 shadow-sm">
-            <p className="text-xs text-yellow-600">跳过{countUnit ? `（${countUnit}）` : ""}</p>
-            <p className="mt-1 text-2xl font-bold text-yellow-700">{detail.skippedCount}</p>
-          </div>
-          <div className="rounded-xl border border-red-100 bg-red-50/50 p-4 shadow-sm">
-            <p className="text-xs text-red-600">失败{countUnit ? `（${countUnit}）` : ""}</p>
-            <p className="mt-1 text-2xl font-bold text-red-700">{detail.failedCount}</p>
-          </div>
-          <div className="rounded-xl border border-blue-100 bg-blue-50/50 p-4 shadow-sm">
-            <p className="text-xs text-blue-600">完成度</p>
-            <p className="mt-1 text-2xl font-bold text-blue-700">{percent}%</p>
-          </div>
-        </div>
+        )}
 
         {/* 非终态时的实时进度轮询（Phase C 移植的 ImportProgress） */}
         {!isTerminal && (
@@ -225,28 +256,49 @@ export default async function TaskDetailPage({
           <div className="mb-2 flex items-center justify-between">
             <p className="text-sm font-medium text-gray-700">任务进度</p>
             <p className="text-xs text-gray-400">
-              {processed} / {detail.totalCount}
+              {bookCounts
+                ? `${(bookCounts.fetched + bookCounts.failedBooks).toLocaleString("zh-CN")} / ${bookCounts.upstreamTotal.toLocaleString("zh-CN")} 本`
+                : `${processed} / ${detail.totalCount}`}
             </p>
           </div>
           <div className="h-3 overflow-hidden rounded-full bg-gray-100">
             <div className="flex h-full">
-              {detail.totalCount > 0 && detail.successCount > 0 && (
-                <div
-                  className="h-full bg-green-500 transition-all"
-                  style={{ width: `${(detail.successCount / detail.totalCount) * 100}%` }}
-                />
-              )}
-              {detail.totalCount > 0 && detail.skippedCount > 0 && (
-                <div
-                  className="h-full bg-yellow-400 transition-all"
-                  style={{ width: `${(detail.skippedCount / detail.totalCount) * 100}%` }}
-                />
-              )}
-              {detail.totalCount > 0 && detail.failedCount > 0 && (
-                <div
-                  className="h-full bg-red-400 transition-all"
-                  style={{ width: `${(detail.failedCount / detail.totalCount) * 100}%` }}
-                />
+              {bookCounts ? (
+                <>
+                  {bookCounts.upstreamTotal > 0 && bookCounts.fetched > 0 && (
+                    <div
+                      className="h-full bg-green-500 transition-all"
+                      style={{ width: `${(bookCounts.fetched / bookCounts.upstreamTotal) * 100}%` }}
+                    />
+                  )}
+                  {bookCounts.upstreamTotal > 0 && bookCounts.failedBooks > 0 && (
+                    <div
+                      className="h-full bg-red-400 transition-all"
+                      style={{ width: `${(bookCounts.failedBooks / bookCounts.upstreamTotal) * 100}%` }}
+                    />
+                  )}
+                </>
+              ) : (
+                <>
+                  {detail.totalCount > 0 && detail.successCount > 0 && (
+                    <div
+                      className="h-full bg-green-500 transition-all"
+                      style={{ width: `${(detail.successCount / detail.totalCount) * 100}%` }}
+                    />
+                  )}
+                  {detail.totalCount > 0 && detail.skippedCount > 0 && (
+                    <div
+                      className="h-full bg-yellow-400 transition-all"
+                      style={{ width: `${(detail.skippedCount / detail.totalCount) * 100}%` }}
+                    />
+                  )}
+                  {detail.totalCount > 0 && detail.failedCount > 0 && (
+                    <div
+                      className="h-full bg-red-400 transition-all"
+                      style={{ width: `${(detail.failedCount / detail.totalCount) * 100}%` }}
+                    />
+                  )}
+                </>
               )}
             </div>
           </div>

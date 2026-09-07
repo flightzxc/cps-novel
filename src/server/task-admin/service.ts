@@ -77,6 +77,20 @@ export type TaskSummaryDto = Readonly<{
    * matches without modification.
    */
   stopReason?: string;
+  /**
+   * C-12 (`施工工单_C12_目录任务计量口径改为本_2026-09-07.md`): for a
+   * `catalog_scan` task, the operator-facing "本" (book) counts —
+   * `totalCount`/`successCount`/`failedCount` above stay page-denominated
+   * (Phase C's frozen task shape, one item = one page, is unchanged), but an
+   * operator reading "总计 6000 / 成功 355" cannot tell how many books that
+   * is, and 6000 is the safety-fuse page count, not the real one. See
+   * `computeCatalogBookCounts`/`loadCatalogBookCountsBatch` below for the
+   * derivation. Absent — not a partially-filled object — whenever
+   * `result.catalogObservedTotal` (no page has completed yet) or
+   * `params.pageSize` is not yet known; every other taskType never gets
+   * this field at all.
+   */
+  bookCounts?: CatalogBookCountsDto;
 }>;
 
 export type TaskItemDto = Readonly<{
@@ -287,20 +301,32 @@ type TaskListRow = {
   skipped_count: number;
   has_error: boolean;
   created_at: Date;
-  /** C-10: read only to derive `TaskSummaryDto.stopReason` — never itself exposed. */
+  /**
+   * C-10: read to derive `TaskSummaryDto.stopReason`. C-12: also read (only
+   * for a `catalog_scan` row) to derive `TaskSummaryDto.bookCounts` via
+   * `catalogObservedTotalOf`/`loadCatalogBookCountsBatch`. Never itself
+   * exposed.
+   */
   result: Prisma.JsonValue | null;
   /**
-   * C-9 (task-detail route): the four fields below are only ever selected by
-   * `getAdminTaskDetail`'s own query — `listAdminTasks`'s query never adds
-   * them to its SELECT list, so they stay `undefined` there and every
+   * C-9 (task-detail route): the three fields below are only ever selected
+   * by `getAdminTaskDetail`'s own query — `listAdminTasks`'s query never
+   * adds them to its SELECT list, so they stay `undefined` there and every
    * pre-existing `listAdminTasks` fixture (including the "X9 read DTO
-   * allowlists" contract test's poisoned rows) is unaffected. `params` is
-   * read only to derive `TaskDetailDto.catalogScanConfig` — never itself
-   * exposed, same discipline as `result` above.
+   * allowlists" contract test's poisoned rows) is unaffected.
    */
   updated_at?: Date;
   mode?: string;
   channel_account_id?: string | null;
+  /**
+   * C-9: read only to derive `TaskDetailDto.catalogScanConfig` — never
+   * itself exposed, same discipline as `result` above. C-12
+   * (`施工工单_C12_目录任务计量口径改为本_2026-09-07.md`): unlike the four
+   * fields above, `listAdminTasks`'s own query now also selects this (both
+   * `channel_sync_task` and `generic_task` already carry the column) to
+   * derive `TaskSummaryDto.bookCounts`'s `pageSize` — still never exposed
+   * raw, still curated exclusively through `deriveCatalogScanConfig`.
+   */
   params?: Prisma.JsonValue | null;
 };
 
@@ -475,6 +501,158 @@ function deriveCatalogScanAudit(taskType: string, result: unknown): CatalogScanA
 }
 
 /**
+ * C-12 (`施工工单_C12_目录任务计量口径改为本_2026-09-07.md`): the
+ * operator-facing "本" (book) counts for a `catalog_scan` task, all derived
+ * from data this file already reads for other reasons plus one aggregate
+ * SQL query (`loadCatalogBookAggregates` below) — never a schema change,
+ * never a per-item `findMany` + JS-side reduce over however many thousand
+ * `generic_task_item` rows a scan created.
+ */
+export type CatalogBookCountsDto = Readonly<{
+  /** `result.catalogObservedTotal` — the upstream-reported book total. */
+  upstreamTotal: number;
+  /** Σ `result.returnedCount` over this task's successful, non-cascaded catalog pages. */
+  fetched: number;
+  /** (failed, non-cascaded pages) × `pageSize` — a cascaded `stoppedBeforeFetch` failure never counts. */
+  failedBooks: number;
+  /** Pages actually fetched from upstream (success or failure), excluding any `stoppedBeforeFetch` cascade. */
+  pagesScanned: number;
+  /** `ceil(upstreamTotal / pageSize)` — the real page count, never the safety-fuse pre-created count. */
+  pagesTotalExpected: number;
+  /** `fetched / upstreamTotal`, rounded and capped at 100. */
+  percent: number;
+}>;
+
+type CatalogBookAggregateRow = {
+  task_id: string;
+  fetched: bigint;
+  pages_scanned: bigint;
+  failed_pages: bigint;
+};
+
+/**
+ * C-12: one aggregate SQL query for however many catalog_scan task ids are
+ * passed — `GROUP BY task_id` so `listAdminTasks` (potentially several
+ * catalog_scan rows on one page) pays for exactly one extra query for the
+ * whole list, not one per row. `stoppedBeforeFetch` (set by both
+ * `persistCatalogPage`'s normal end-of-scan cascade and
+ * `persistCatalogUpstreamFailure`'s upstream-error cascade,
+ * `worker/handlers/moboreader.ts`) is excluded from every aggregate here:
+ * those items were pre-created by the safety fuse but never actually
+ * fetched, so they contribute to neither "pages scanned" nor "failed
+ * pages" — the work order's "保险丝预建的多余页项...不得计入失败或跳过".
+ * A normal-cascade item is `status = 'success'` with `returnedCount: 0`
+ * already, so `fetched`'s sum needs no separate exclusion for it.
+ */
+async function loadCatalogBookAggregates(
+  db: PrismaClient,
+  taskIds: readonly string[],
+): Promise<Map<string, { fetched: number; pagesScanned: number; failedPages: number }>> {
+  if (taskIds.length === 0) return new Map();
+  const rows = await db.$queryRaw<CatalogBookAggregateRow[]>(Prisma.sql`
+    SELECT
+      task_id,
+      COALESCE(SUM((result->>'returnedCount')::int) FILTER (WHERE status = 'success'), 0)::bigint AS fetched,
+      COUNT(*) FILTER (
+        WHERE status IN ('success', 'failed')
+          AND COALESCE(result->>'stoppedBeforeFetch', 'false') <> 'true'
+      )::bigint AS pages_scanned,
+      COUNT(*) FILTER (
+        WHERE status = 'failed'
+          AND COALESCE(result->>'stoppedBeforeFetch', 'false') <> 'true'
+      )::bigint AS failed_pages
+    FROM generic_task_item
+    WHERE task_id = ANY(${taskIds}::uuid[]) AND target_type = 'catalog_page'
+    GROUP BY task_id
+  `);
+  return new Map(rows.map((row) => [row.task_id, {
+    fetched: Number(row.fetched),
+    pagesScanned: Number(row.pages_scanned),
+    failedPages: Number(row.failed_pages),
+  }]));
+}
+
+function catalogObservedTotalOf(result: unknown): number | undefined {
+  const value = jsonPlainObject(result)?.catalogObservedTotal;
+  return typeof value === "number" ? value : undefined;
+}
+
+function deriveBookCounts(
+  observedTotal: number,
+  pageSize: number,
+  aggregate: { fetched: number; pagesScanned: number; failedPages: number } | undefined,
+): CatalogBookCountsDto {
+  const fetched = aggregate?.fetched ?? 0;
+  const pagesScanned = aggregate?.pagesScanned ?? 0;
+  const failedPages = aggregate?.failedPages ?? 0;
+  return Object.freeze({
+    upstreamTotal: observedTotal,
+    fetched,
+    failedBooks: failedPages * pageSize,
+    pagesScanned,
+    pagesTotalExpected: Math.ceil(observedTotal / pageSize),
+    percent: observedTotal > 0 ? Math.min(100, Math.round((fetched / observedTotal) * 100)) : 0,
+  });
+}
+
+export type CatalogBookCountsInput = {
+  taskId: string;
+  taskType: string;
+  result: unknown;
+  params: unknown;
+};
+
+function catalogBookCountsPrerequisites(
+  input: CatalogBookCountsInput,
+): { observedTotal: number; pageSize: number } | undefined {
+  if (input.taskType !== MOBOREADER_TASK_TYPES.catalogScan) return undefined;
+  const observedTotal = catalogObservedTotalOf(input.result);
+  const pageSize = deriveCatalogScanConfig(input.taskType, input.params)?.pageSize;
+  if (observedTotal === undefined || pageSize === undefined || pageSize <= 0) return undefined;
+  return { observedTotal, pageSize };
+}
+
+/**
+ * C-12: batched entry point `listAdminTasks` uses — issues at most one
+ * aggregate SQL query total (`loadCatalogBookAggregates`), regardless of
+ * how many catalog_scan rows are on the page, and zero queries at all when
+ * none of them have both `catalogObservedTotal` and `pageSize` known yet.
+ * Every non-catalog_scan / not-yet-derivable input is simply absent from
+ * the returned map (never a partially-filled `CatalogBookCountsDto`).
+ */
+export async function loadCatalogBookCountsBatch(
+  db: PrismaClient,
+  inputs: readonly CatalogBookCountsInput[],
+): Promise<Map<string, CatalogBookCountsDto>> {
+  const prerequisites = new Map<string, { observedTotal: number; pageSize: number }>();
+  for (const input of inputs) {
+    const prereq = catalogBookCountsPrerequisites(input);
+    if (prereq) prerequisites.set(input.taskId, prereq);
+  }
+  const aggregates = await loadCatalogBookAggregates(db, Array.from(prerequisites.keys()));
+  const result = new Map<string, CatalogBookCountsDto>();
+  for (const [taskId, prereq] of prerequisites) {
+    result.set(taskId, deriveBookCounts(prereq.observedTotal, prereq.pageSize, aggregates.get(taskId)));
+  }
+  return result;
+}
+
+/**
+ * C-12: single-task convenience wrapper around
+ * `loadCatalogBookCountsBatch` — used by `getAdminTaskDetail` (this file)
+ * and `getAdminTaskProgress` (`./progress.ts`), both of which already have
+ * `result`/`params` in hand from their own primary query and only need one
+ * task's worth of aggregation.
+ */
+export async function loadCatalogBookCounts(
+  db: PrismaClient,
+  input: CatalogBookCountsInput,
+): Promise<CatalogBookCountsDto | undefined> {
+  const map = await loadCatalogBookCountsBatch(db, [input]);
+  return map.get(input.taskId);
+}
+
+/**
  * C-9: `getAdminTaskDetail`'s richer return shape — every added field is
  * additive/optional on top of `TaskSummaryDto`, so every existing caller
  * that only knows about `TaskSummaryDto` keeps compiling and every existing
@@ -504,7 +682,7 @@ export type TaskDetailDto = TaskSummaryDto & Readonly<{
   originStopReason?: string;
 }>;
 
-function taskSummary(row: TaskListRow): TaskSummaryDto {
+function taskSummary(row: TaskListRow, bookCounts?: CatalogBookCountsDto): TaskSummaryDto {
   const stopReason = deriveTaskStopReason(row.status, row.has_error, row.result);
   return Object.freeze({
     family: row.family,
@@ -517,6 +695,7 @@ function taskSummary(row: TaskListRow): TaskSummaryDto {
     skippedCount: row.skipped_count,
     errorSummary: row.has_error ? "redacted" : null,
     ...(stopReason !== undefined ? { stopReason } : {}),
+    ...(bookCounts !== undefined ? { bookCounts } : {}),
   });
 }
 
@@ -534,14 +713,14 @@ export async function listAdminTasks(
     SELECT * FROM (
       SELECT 'channel_sync'::text AS family, id AS task_id, task_type, status,
         total_count, success_count, failed_count, skipped_count,
-        error IS NOT NULL AS has_error, created_at, result
+        error IS NOT NULL AS has_error, created_at, result, params
       FROM channel_sync_task
       WHERE (${family}::text IS NULL OR ${family} = 'channel_sync')
         AND (${status}::text IS NULL OR status = ${status})
       UNION ALL
       SELECT 'generic'::text AS family, id AS task_id, task_type, status,
         total_count, success_count, failed_count, skipped_count,
-        error IS NOT NULL AS has_error, created_at, result
+        error IS NOT NULL AS has_error, created_at, result, params
       FROM generic_task
       WHERE (${family}::text IS NULL OR ${family} = 'generic')
         AND (${status}::text IS NULL OR status = ${status})
@@ -550,7 +729,19 @@ export async function listAdminTasks(
       created_at DESC, task_id DESC
     LIMIT ${take}
   `);
-  return Object.freeze({ items: Object.freeze(rows.map(taskSummary)), limit: take });
+  // C-12: batched — at most one extra aggregate query for the whole page,
+  // regardless of how many catalog_scan rows it contains (never one query
+  // per row, and zero when none has both catalogObservedTotal/pageSize yet).
+  const bookCounts = await loadCatalogBookCountsBatch(
+    db,
+    rows
+      .filter((row) => row.family === "generic" && row.task_type === MOBOREADER_TASK_TYPES.catalogScan)
+      .map((row) => ({ taskId: row.task_id, taskType: row.task_type, result: row.result, params: row.params })),
+  );
+  return Object.freeze({
+    items: Object.freeze(rows.map((row) => taskSummary(row, bookCounts.get(row.task_id)))),
+    limit: take,
+  });
 }
 
 type OriginTaskItemRow = {
@@ -609,11 +800,17 @@ export async function getAdminTaskDetail(
   if (!row) throw new TaskAdminError("task_admin_not_found", 404);
   const catalogScanConfig = deriveCatalogScanConfig(row.task_type, row.params);
   const catalogScanAudit = deriveCatalogScanAudit(row.task_type, row.result);
-  const originStopReason = family === "generic" && row.task_type === MOBOREADER_TASK_TYPES.catalogScan
-    ? await deriveOriginStopReason(db, taskId)
+  const isCatalogScan = family === "generic" && row.task_type === MOBOREADER_TASK_TYPES.catalogScan;
+  const originStopReason = isCatalogScan ? await deriveOriginStopReason(db, taskId) : undefined;
+  // C-12: only issues its aggregate SQL query when catalogObservedTotal/
+  // pageSize are already known (both read from `row.result`/`row.params`
+  // this function already fetched) — a catalog_scan task with no completed
+  // page yet costs no extra query, same as a non-catalog_scan task.
+  const bookCounts = isCatalogScan
+    ? await loadCatalogBookCounts(db, { taskId, taskType: row.task_type, result: row.result, params: row.params })
     : undefined;
   return Object.freeze({
-    ...taskSummary(row),
+    ...taskSummary(row, bookCounts),
     ...(row.mode !== undefined ? { mode: row.mode } : {}),
     ...(row.channel_account_id ? { channelAccountId: row.channel_account_id } : {}),
     createdAt: iso(row.created_at),
