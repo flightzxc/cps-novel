@@ -47,6 +47,11 @@ const DRAFT_ROW: ArticleListRow = {
   summary: "A draft summary",
   templateKey: "tpl-1",
   updatedAt: "2026-09-05T02:00:00.000Z",
+  // C-20 additions
+  createdAt: "2026-09-01T00:00:00.000Z",
+  templateName: "标准模板",
+  novel: { id: "novel-1", title: "重生之名" },
+  canonicalTags: ["言情", "重生"],
 };
 
 const PUBLISHED_ROW: ArticleListRow = {
@@ -69,11 +74,25 @@ afterEach(() => {
 });
 
 describe("ArticleList · 列表与批量", () => {
-  it("渲染标题/状态/模板，未发布文章不出现公开页链接，已发布出现", () => {
+  it("渲染标题/状态/模板", () => {
     render(<ArticleList rows={[DRAFT_ROW, PUBLISHED_ROW]} canWrite publicOrigin={PUBLIC_ORIGIN} />);
     expect(screen.getByText("Draft Article")).toBeTruthy();
     expect(screen.getByText("Published Article")).toBeTruthy();
-    expect(screen.getAllByText("公开页")).toHaveLength(1);
+  });
+
+  /**
+   * C-20 (`分析_文章管理Parity缺口_2026-09-08.md` §六, item #20): CPS renders
+   * the 前台 URL column regardless of status — drafts can be previewed too —
+   * so the old `row.status === "published"` gate on this column is gone.
+   * Pins that a draft row's "打开" link and path text render exactly like a
+   * published row's.
+   */
+  it("草稿行也渲染前台 URL 列（打开链接 + 路径文本），不再要求已发布", () => {
+    render(<ArticleList rows={[DRAFT_ROW]} canWrite publicOrigin={PUBLIC_ORIGIN} />);
+    expect(screen.getByText("打开")).toBeTruthy();
+    expect(screen.getByTestId(`article-url-path-${DRAFT_ROW.id}`).textContent).toBe(
+      `/novel/${DRAFT_ROW.slug}-p${DRAFT_ROW.publicPageShortId}`,
+    );
   });
 
   /**
@@ -81,9 +100,9 @@ describe("ArticleList · 列表与批量", () => {
    * and the admin origin 404s every public content path. A site-relative href
    * would resolve against the admin host — exactly the 404 this pins against.
    */
-  it("公开页链接指向 SITE_URL 公开域，而非当前后台域（RC-9）", () => {
-    render(<ArticleList rows={[DRAFT_ROW, PUBLISHED_ROW]} canWrite publicOrigin={PUBLIC_ORIGIN} />);
-    const link = screen.getByText("公开页") as HTMLAnchorElement;
+  it("前台 URL「打开」链接指向 SITE_URL 公开域，而非当前后台域（RC-9）", () => {
+    render(<ArticleList rows={[PUBLISHED_ROW]} canWrite publicOrigin={PUBLIC_ORIGIN} />);
+    const link = screen.getByText("打开") as HTMLAnchorElement;
     expect(link.getAttribute("href")).toBe(
       `${PUBLIC_ORIGIN}/novel/${PUBLISHED_ROW.slug}-p${PUBLISHED_ROW.publicPageShortId}`,
     );
@@ -91,10 +110,89 @@ describe("ArticleList · 列表与批量", () => {
 
   it("publicOrigin 缺失时退回站内相对路径，不渲染 null 前缀", () => {
     render(<ArticleList rows={[PUBLISHED_ROW]} canWrite publicOrigin={null} />);
-    const link = screen.getByText("公开页") as HTMLAnchorElement;
+    const link = screen.getByText("打开") as HTMLAnchorElement;
     expect(link.getAttribute("href")).toBe(
       `/novel/${PUBLISHED_ROW.slug}-p${PUBLISHED_ROW.publicPageShortId}`,
     );
+  });
+
+  /**
+   * 复制按钮复制的是**服务端解析下来的公开源**拼出的绝对 URL，而不是浏览器
+   * 当前 origin（后台跑在独立的管理主机上，那个 origin 对所有公开路径都返
+   * 404 —— C-18/RC-9 已经确立的约束）。`navigator.clipboard` 在 jsdom 里
+   * 默认不存在，这里手动挂一个可断言的 spy。
+   */
+  it("复制按钮调用剪贴板，且内容以公开源开头（不是后台 origin）", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(window.navigator, "clipboard", { value: { writeText }, configurable: true });
+
+    render(<ArticleList rows={[PUBLISHED_ROW]} canWrite publicOrigin={PUBLIC_ORIGIN} />);
+    fireEvent.click(screen.getByText("复制"));
+
+    await vi.waitFor(() => expect(writeText).toHaveBeenCalledTimes(1));
+    const copied = writeText.mock.calls[0]![0] as string;
+    expect(copied.startsWith(PUBLIC_ORIGIN)).toBe(true);
+    expect(copied).toBe(`${PUBLIC_ORIGIN}/novel/${PUBLISHED_ROW.slug}-p${PUBLISHED_ROW.publicPageShortId}`);
+  });
+
+  it("状态列渲染中文徽章而不是裸英文状态码", () => {
+    render(<ArticleList rows={[DRAFT_ROW, PUBLISHED_ROW]} canWrite publicOrigin={PUBLIC_ORIGIN} />);
+    expect(screen.getByTestId("article-status-draft").textContent).toBe("草稿");
+    expect(screen.getByTestId("article-status-published").textContent).toBe("已发布");
+    expect(screen.queryByText("draft")).toBeNull();
+    expect(screen.queryByText("published")).toBeNull();
+  });
+
+  it("模板列显示模板名，缺失时回退 key，再缺失显示未绑定", () => {
+    render(
+      <ArticleList
+        rows={[
+          DRAFT_ROW,
+          { ...DRAFT_ROW, id: "no-name", templateName: null },
+          { ...DRAFT_ROW, id: "no-template", templateKey: null, templateName: undefined },
+        ]}
+        canWrite
+        publicOrigin={PUBLIC_ORIGIN}
+      />,
+    );
+    expect(screen.getByText("标准模板")).toBeTruthy();
+    expect(screen.getByText("tpl-1")).toBeTruthy();
+    expect(screen.getByText("未绑定")).toBeTruthy();
+  });
+
+  it("书目列显示书名并链接到书目详情页；分类列显示标签，无分类时显示「无分类」", () => {
+    render(
+      <ArticleList
+        rows={[DRAFT_ROW, { ...DRAFT_ROW, id: "no-tags", novel: { id: "novel-2", title: "另一本书" }, canonicalTags: [] }]}
+        canWrite
+        publicOrigin={PUBLIC_ORIGIN}
+      />,
+    );
+    const novelLink = screen.getByTestId(`article-novel-link-${DRAFT_ROW.id}`) as HTMLAnchorElement;
+    expect(novelLink.textContent).toBe("重生之名");
+    expect(novelLink.getAttribute("href")).toBe(`/novels/${DRAFT_ROW.novel!.id}`);
+    expect(screen.getByText("言情")).toBeTruthy();
+    expect(screen.getByText("重生")).toBeTruthy();
+    expect(screen.getByText("无分类")).toBeTruthy();
+  });
+
+  it("标题格下补 slug 与短码", () => {
+    render(<ArticleList rows={[DRAFT_ROW]} canWrite publicOrigin={PUBLIC_ORIGIN} />);
+    expect(screen.getByText(`/${DRAFT_ROW.slug}`)).toBeTruthy();
+    expect(screen.getByTestId(`article-short-id-${DRAFT_ROW.id}`).textContent).toBe(DRAFT_ROW.publicPageShortId);
+  });
+
+  it("创建时间列用统一的时间格式化渲染（Asia/Shanghai）", () => {
+    render(<ArticleList rows={[DRAFT_ROW]} canWrite publicOrigin={PUBLIC_ORIGIN} />);
+    // DRAFT_ROW.createdAt = 2026-09-01T00:00:00.000Z → Shanghai 08:00。
+    expect(screen.getByText(/08:00/)).toBeTruthy();
+  });
+
+  it("八列表头齐全（标题/书目/模板/分类/状态/前台 URL/创建时间/操作）", () => {
+    const { container } = render(<ArticleList rows={[DRAFT_ROW]} canWrite publicOrigin={PUBLIC_ORIGIN} />);
+    const headers = Array.from(container.querySelectorAll("thead th")).map((th) => th.textContent);
+    // 第一列是表头全选 checkbox（无文本），其余八列依次对应。
+    expect(headers.slice(1)).toEqual(["标题", "书目", "模板", "分类", "状态", "前台 URL", "创建时间", "操作"]);
   });
 
   it("勾选行驱动已选计数，上限 50", () => {

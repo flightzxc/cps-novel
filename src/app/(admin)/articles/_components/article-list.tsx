@@ -5,12 +5,33 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { buttonClassName } from "@/components/ui/button";
+import { CopyButton } from "@/components/ui/copy-button";
 import { EmptyRow, TBody, TD, TH, THead, Table } from "@/components/ui/table";
+import type { ArticleStatus } from "@/domain/database-statuses";
+import { formatDateTime } from "@/features/admin-ui/content-view";
 import { buildArticlePath } from "@/lib/slug/article-path";
 
 import { regenerateArticleAction, regenerateArticlesBatchAction } from "../_actions";
+import { ArticleStatusBadge } from "./article-status-badge";
 
-export type ArticleListRow = { id: string; title: string; locale: string; slug: string; publicPageShortId: string; status: string; summary: string | null; templateKey: string | null; updatedAt: string };
+export type ArticleListRow = {
+  id: string;
+  title: string;
+  locale: string;
+  slug: string;
+  publicPageShortId: string;
+  status: string;
+  summary: string | null;
+  templateKey: string | null;
+  updatedAt: string;
+  // C-20 additions — see `@/server/articles`'s `ArticleListItem` for why
+  // these are optional (additive contract discipline) despite `novel` and
+  // `createdAt` always being present in practice.
+  createdAt?: string;
+  templateName?: string | null;
+  novel?: { id: string; title: string };
+  canonicalTags?: readonly string[];
+};
 
 /**
  * RC-9 admin-host isolation (2026-09-03, Owner): the admin console is served
@@ -29,30 +50,223 @@ export type ArticleListRow = { id: string; title: string; locale: string; slug: 
  * link anywhere else — a misconfigured `SITE_URL` must not blank out the
  * whole list.
  */
+function publicArticlePath(row: ArticleListRow): string {
+  return buildArticlePath({ locale: row.locale as "en", slug: row.slug, shortId: row.publicPageShortId });
+}
+
 function publicPageHref(publicOrigin: string | null, row: ArticleListRow): string {
-  const path = buildArticlePath({ locale: row.locale as "en", slug: row.slug, shortId: row.publicPageShortId });
+  const path = publicArticlePath(row);
   return publicOrigin ? `${publicOrigin}${path}` : path;
 }
 
-export function ArticleList({ rows, canWrite, publicOrigin }: { rows: readonly ArticleListRow[]; canWrite: boolean; publicOrigin: string | null }) {
+/**
+ * C-20 (`分析_文章管理Parity缺口_2026-09-08.md` §六, item #20): 前台 URL
+ * column. CPS renders this column regardless of status (drafts can be
+ * previewed too), so the old `row.status === "published"` gate on the "公开页"
+ * link is gone — every row now shows the relative path, an "打开" link, and a
+ * copy button.
+ *
+ * The copy button copies the same value the "打开" link points at
+ * (`publicPageHref`) — the *absolute* URL against `publicOrigin` when
+ * `SITE_URL` resolved, degrading to the site-relative path otherwise. That
+ * degradation is C-18/RC-9's own established fallback (see the header above),
+ * carried over here rather than re-decided: a misconfigured `SITE_URL` must
+ * not blank out the copy button any more than it blanks out the open link.
+ */
+function ArticleUrlCell({ row, publicOrigin }: { row: ArticleListRow; publicOrigin: string | null }) {
+  const href = publicPageHref(publicOrigin, row);
+  return (
+    <div className="space-y-1.5">
+      <p className="break-all text-xs text-gray-600" data-testid={`article-url-path-${row.id}`}>
+        {publicArticlePath(row)}
+      </p>
+      <div className="flex gap-1.5">
+        <a
+          href={href}
+          target="_blank"
+          rel="noreferrer"
+          className={buttonClassName("secondary", "px-2 py-1 text-xs")}
+        >
+          打开
+        </a>
+        <CopyButton value={href} />
+      </div>
+    </div>
+  );
+}
+
+export function ArticleList({
+  rows,
+  canWrite,
+  publicOrigin,
+}: {
+  rows: readonly ArticleListRow[];
+  canWrite: boolean;
+  publicOrigin: string | null;
+}) {
   const router = useRouter();
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
   const [message, setMessage] = useState<string | null>(null);
   const allSelected = rows.length > 0 && rows.every((r) => selected.has(r.id));
   function toggleAll() {
-    setSelected((current) => { const next = new Set(current); const allVisible = rows.length > 0 && rows.every((r) => next.has(r.id)); if (allVisible) { rows.forEach((r) => next.delete(r.id)); } else { rows.forEach((r) => next.add(r.id)); } return next; });
+    setSelected((current) => {
+      const next = new Set(current);
+      const allVisible = rows.length > 0 && rows.every((r) => next.has(r.id));
+      if (allVisible) {
+        rows.forEach((r) => next.delete(r.id));
+      } else {
+        rows.forEach((r) => next.add(r.id));
+      }
+      return next;
+    });
   }
   async function batch() {
     const result = await regenerateArticlesBatchAction({ requestId: crypto.randomUUID(), articleIds: [...selected] });
-    setMessage(result.ok ? `再生成完成：成功 ${result.data.counts.regenerated}，跳过 ${result.data.counts.skipped}，失败 ${result.data.counts.failed}，未处理 ${result.data.counts.not_processed}` : result.code);
-    if (result.ok) { setSelected(new Set()); router.refresh(); }
+    setMessage(
+      result.ok
+        ? `再生成完成：成功 ${result.data.counts.regenerated}，跳过 ${result.data.counts.skipped}，失败 ${result.data.counts.failed}，未处理 ${result.data.counts.not_processed}`
+        : result.code,
+    );
+    if (result.ok) {
+      setSelected(new Set());
+      router.refresh();
+    }
   }
-  return <div className="space-y-4">
-    <div className="flex items-center justify-between"><p className="text-sm text-gray-600">已选择 {selected.size} / 50</p><button disabled={!canWrite || selected.size === 0 || selected.size > 50} className={buttonClassName("primary")} onClick={() => void batch()}>批量再生成</button></div>
-    {message && <p role="status" className="rounded border bg-gray-50 p-3 text-sm">{message}</p>}
-    <Table><THead><tr><TH><input type="checkbox" aria-label="选择当前页" checked={allSelected} ref={(el) => { if (el) el.indeterminate = selected.size > 0 && !allSelected; }} onChange={toggleAll} /></TH><TH>文章</TH><TH>状态</TH><TH>模板</TH><TH>操作</TH></tr></THead><TBody>
-      {rows.map((row) => <tr key={row.id}><TD><input type="checkbox" aria-label={`选择 ${row.title}`} checked={selected.has(row.id)} onChange={() => setSelected((current) => { const next = new Set(current); if (next.has(row.id)) next.delete(row.id); else next.add(row.id); return next; })} /></TD><TD><p className="font-medium">{row.title}</p><p className="line-clamp-2 text-xs text-gray-500">{row.summary ?? "无摘要"}</p></TD><TD>{row.status}</TD><TD>{row.templateKey ?? "未绑定"}</TD><TD><div className="flex gap-2"><Link href={`/articles/${row.id}`} className={buttonClassName("secondary", "px-2 py-1 text-xs")}>编辑/预览</Link>{row.status === "published" && <a target="_blank" rel="noreferrer" href={publicPageHref(publicOrigin, row)} className={buttonClassName("secondary", "px-2 py-1 text-xs")}>公开页</a>}<button disabled={!canWrite} className={buttonClassName("secondary", "px-2 py-1 text-xs")} onClick={() => void regenerateArticleAction({ requestId: crypto.randomUUID(), articleId: row.id, expectedUpdatedAt: row.updatedAt }).then((result) => { setMessage(result.ok ? (result.data.outcome === "conflict" ? "该文章已被其他操作人修改，请刷新后重试。" : result.data.outcome) : result.code); router.refresh(); })}>再生成</button></div></TD></tr>)}
-      {rows.length === 0 && <EmptyRow colSpan={5}>暂无文章</EmptyRow>}
-    </TBody></Table>
-  </div>;
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-gray-600">已选择 {selected.size} / 50</p>
+        <button
+          disabled={!canWrite || selected.size === 0 || selected.size > 50}
+          className={buttonClassName("primary")}
+          onClick={() => void batch()}
+        >
+          批量再生成
+        </button>
+      </div>
+      {message && (
+        <p role="status" className="rounded border bg-gray-50 p-3 text-sm">
+          {message}
+        </p>
+      )}
+      <Table>
+        <THead>
+          <tr>
+            <TH>
+              <input
+                type="checkbox"
+                aria-label="选择当前页"
+                checked={allSelected}
+                ref={(el) => {
+                  if (el) el.indeterminate = selected.size > 0 && !allSelected;
+                }}
+                onChange={toggleAll}
+              />
+            </TH>
+            <TH>标题</TH>
+            <TH>书目</TH>
+            <TH>模板</TH>
+            <TH>分类</TH>
+            <TH>状态</TH>
+            <TH>前台 URL</TH>
+            <TH>创建时间</TH>
+            <TH>操作</TH>
+          </tr>
+        </THead>
+        <TBody>
+          {rows.map((row) => (
+            <tr key={row.id}>
+              <TD>
+                <input
+                  type="checkbox"
+                  aria-label={`选择 ${row.title}`}
+                  checked={selected.has(row.id)}
+                  onChange={() =>
+                    setSelected((current) => {
+                      const next = new Set(current);
+                      if (next.has(row.id)) next.delete(row.id);
+                      else next.add(row.id);
+                      return next;
+                    })
+                  }
+                />
+              </TD>
+              <TD>
+                <p className="font-medium">{row.title}</p>
+                <p className="line-clamp-2 text-xs text-gray-500">{row.summary ?? "无摘要"}</p>
+                <p className="text-xs text-gray-400">/{row.slug}</p>
+                <p className="text-xs text-gray-400" data-testid={`article-short-id-${row.id}`}>
+                  {row.publicPageShortId}
+                </p>
+              </TD>
+              <TD>
+                {row.novel ? (
+                  <Link
+                    href={`/novels/${row.novel.id}`}
+                    className="text-blue-700 hover:underline"
+                    data-testid={`article-novel-link-${row.id}`}
+                  >
+                    {row.novel.title}
+                  </Link>
+                ) : (
+                  <span className="text-gray-400">—</span>
+                )}
+              </TD>
+              <TD>{row.templateName ?? row.templateKey ?? "未绑定"}</TD>
+              <TD>
+                {row.canonicalTags && row.canonicalTags.length > 0 ? (
+                  <div className="flex flex-wrap gap-1">
+                    {row.canonicalTags.map((name) => (
+                      <span key={name} className="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-600">
+                        {name}
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <span className="text-xs text-gray-400">无分类</span>
+                )}
+              </TD>
+              <TD>
+                <ArticleStatusBadge status={row.status as ArticleStatus} />
+              </TD>
+              <TD>
+                <ArticleUrlCell row={row} publicOrigin={publicOrigin} />
+              </TD>
+              <TD className="text-gray-500">{formatDateTime(row.createdAt)}</TD>
+              <TD>
+                <div className="flex gap-2">
+                  <Link href={`/articles/${row.id}`} className={buttonClassName("secondary", "px-2 py-1 text-xs")}>
+                    编辑/预览
+                  </Link>
+                  <button
+                    disabled={!canWrite}
+                    className={buttonClassName("secondary", "px-2 py-1 text-xs")}
+                    onClick={() =>
+                      void regenerateArticleAction({
+                        requestId: crypto.randomUUID(),
+                        articleId: row.id,
+                        expectedUpdatedAt: row.updatedAt,
+                      }).then((result) => {
+                        setMessage(
+                          result.ok
+                            ? result.data.outcome === "conflict"
+                              ? "该文章已被其他操作人修改，请刷新后重试。"
+                              : result.data.outcome
+                            : result.code,
+                        );
+                        router.refresh();
+                      })
+                    }
+                  >
+                    再生成
+                  </button>
+                </div>
+              </TD>
+            </tr>
+          ))}
+          {rows.length === 0 && <EmptyRow colSpan={9}>暂无文章</EmptyRow>}
+        </TBody>
+      </Table>
+    </div>
+  );
 }

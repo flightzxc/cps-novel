@@ -1,6 +1,7 @@
 import Link from "next/link";
 
-import { ARTICLE_STATUSES, type ArticleStatus } from "@/domain/database-statuses";
+import { ARTICLE_STATUSES } from "@/domain/database-statuses";
+import { ARTICLE_STATUS_BADGES } from "@/features/admin-ui/content-view";
 
 export type ArticleTemplateOption = Readonly<{
   id: string;
@@ -19,28 +20,6 @@ export type ArticleFilterValues = {
   readonly templateId?: string;
   readonly canonicalTagId?: string;
 };
-
-/**
- * Chinese labels for the four `Article.status` values (M7). Same wording as
- * `@/features/admin-ui/content-view`'s `NOVEL_STATUS_BADGES` for the three
- * names the two lifecycles share (`draft`/`published`/`unpublished`/
- * `takedown`) — not re-imported, because that module sits outside this
- * lane's file boundary and Article has no `ready` state to carry a badge
- * color scheme for.
- *
- * C-20 moves this table's *table cell* twin (`ArticleStatusBadge`) to
- * `@/features/admin-ui/content-view`'s `ARTICLE_STATUS_BADGES` so the filter
- * dropdown and the list column share one source; this file still keeps its
- * own label-only copy because a `<select>` option has no color to carry and
- * importing the full badge map for four label strings would pull the
- * dropdown across that same file boundary for no benefit.
- */
-const ARTICLE_STATUS_LABELS: Readonly<Record<ArticleStatus, string>> = Object.freeze({
-  draft: "草稿",
-  published: "已发布",
-  unpublished: "已下线",
-  takedown: "已撤回",
-});
 
 /**
  * Builds the "清除" href by re-serialising the *other* filter values this
@@ -91,6 +70,12 @@ function clearNovelHref(values: ArticleFilterValues): string {
  * live articles), passed down from the page rather than the full 15-entry
  * `SITE_LOCALES` registry this file used to import directly (CPS parity
  * item #9, ADAPT).
+ *
+ * C-20 moved **状态**'s option labels from a map that used to live only in
+ * this file (`ARTICLE_STATUS_LABELS`) to `@/features/admin-ui/content-view`'s
+ * `ARTICLE_STATUS_BADGES`, the same source `article-status-badge.tsx`'s
+ * table-column badge now reads — one shared spot for both, not two copies of
+ * the same four Chinese strings (item #19).
  */
 export function ArticleFilters({
   values,
@@ -149,7 +134,7 @@ export function ArticleFilters({
               <option value="">全部状态</option>
               {ARTICLE_STATUSES.map((status) => (
                 <option key={status} value={status}>
-                  {ARTICLE_STATUS_LABELS[status]}
+                  {ARTICLE_STATUS_BADGES[status].label}
                 </option>
               ))}
             </select>

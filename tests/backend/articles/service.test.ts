@@ -61,6 +61,7 @@ type PromoLinkRow = { id: string; publicRedirectCode: string };
 type TemplateRow = {
   id: string;
   templateKey: string;
+  templateName: string;
   locale: string | null;
   version: number;
   schemaVersion: number;
@@ -69,6 +70,8 @@ type TemplateRow = {
   seoTemplate: unknown;
   deletedAt: Date | null;
 };
+/** C-20: `CanonicalTag` catalog entry — only what `listRow`'s 分类 projection needs. */
+type CanonicalTagRow = { stableId: string; zhDisplayName: string | null };
 
 let nextUpdatedAt = NOW.getTime();
 function bumpedNow(): Date {
@@ -85,6 +88,8 @@ class FakeArticlesDb {
   readonly audits: Array<Record<string, unknown>> = [];
   /** C-19: `NovelCanonicalTag` links — only what `canonicalTagId`'s EXISTS filter needs. */
   readonly novelCanonicalTags: Array<{ novelId: string; canonicalTagId: string }> = [];
+  /** C-20: `CanonicalTag` catalog, keyed by id — resolves `novelCanonicalTags`' ids to display names in `listRow`. */
+  readonly canonicalTagCatalog = new Map<string, CanonicalTagRow>();
 
   private fullRow(row: ArticleRow) {
     const novel = this.novels.get(row.novelId)!;
@@ -223,9 +228,30 @@ class FakeArticlesDb {
     return true;
   }
 
-  /** `listArticles`'s row shape: id/title/locale/slug/publicPageShortId/status/summary/updatedAt + template.templateKey. */
+  /**
+   * `listArticles`'s row shape post-C-20: id/title/locale/slug/
+   * publicPageShortId/status/summary/updatedAt/createdAt +
+   * template.{templateKey,templateName} + novel.{id,title,canonicalTags}.
+   * `novel.canonicalTags` mirrors the real nested Prisma select exactly
+   * (`canonicalTagId` + `canonicalTag.{stableId,translations}`) so
+   * `listArticles`'s own `articleCanonicalTagNames` row-mapping code runs
+   * unmodified against this fake, the same way it runs against Prisma.
+   */
   private listRow(row: ArticleRow) {
     const template = row.templateId ? this.templates.find((candidate) => candidate.id === row.templateId) ?? null : null;
+    const novel = this.novels.get(row.novelId)!;
+    const novelCanonicalTags = this.novelCanonicalTags
+      .filter((link) => link.novelId === row.novelId)
+      .map((link) => {
+        const tag = this.canonicalTagCatalog.get(link.canonicalTagId);
+        return {
+          canonicalTagId: link.canonicalTagId,
+          canonicalTag: {
+            stableId: tag?.stableId ?? link.canonicalTagId,
+            translations: tag?.zhDisplayName ? [{ displayName: tag.zhDisplayName }] : [],
+          },
+        };
+      });
     return {
       id: row.id,
       title: row.title,
@@ -235,7 +261,9 @@ class FakeArticlesDb {
       status: row.status,
       summary: row.summary,
       updatedAt: row.updatedAt,
-      template: template ? { templateKey: template.templateKey } : null,
+      createdAt: row.createdAt,
+      template: template ? { templateKey: template.templateKey, templateName: template.templateName } : null,
+      novel: { id: row.novelId, title: novel.title, canonicalTags: novelCanonicalTags },
     };
   }
 
@@ -302,8 +330,14 @@ function linkNovelCanonicalTag(db: FakeArticlesDb, novelId: string, canonicalTag
   db.novelCanonicalTags.push({ novelId, canonicalTagId });
 }
 
+/** C-20: registers a Canonical Tag's display info, resolved by `listRow` for the 分类 column. */
+function seedCanonicalTag(db: FakeArticlesDb, id: string, overrides: Partial<CanonicalTagRow> & { stableId: string }): void {
+  db.canonicalTagCatalog.set(id, { zhDisplayName: null, ...overrides });
+}
+
 function seedTemplate(db: FakeArticlesDb, overrides: Partial<TemplateRow> & { id: string; templateKey: string }): TemplateRow {
   const row: TemplateRow = {
+    templateName: overrides.templateKey,
     locale: "en",
     version: 1,
     schemaVersion: 1,
@@ -818,5 +852,94 @@ describe("listDistinctArticleLocales (C-19)", () => {
     const locales = await listDistinctArticleLocales(db.asPrismaClient());
 
     expect(locales).toEqual([]);
+  });
+});
+
+/**
+ * C-20 (`分析_文章管理Parity缺口_2026-09-08.md` §六 "C-20"): the list
+ * projection additions — 创建时间/书目/模板名/分类 — plus their fallback
+ * values when the underlying relation is absent (`templateName`) or empty
+ * (`canonicalTags`).
+ */
+describe("listArticles · 投影新增字段 (C-20)", () => {
+  const TAG_ROMANCE = "77777777-7777-4777-8777-777777777777";
+  const TAG_REBIRTH = "88888888-8888-4888-8888-888888888888";
+  const TAG_NO_ZH = "99999999-9999-4999-8999-999999999999";
+  const TAG_EXTRA = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+
+  it("投影包含 createdAt / 书目 id+title / 模板名", async () => {
+    const db = new FakeArticlesDb();
+    seedNovel(db, "novel-1", { title: "重生之名" });
+    seedTemplate(db, { id: "template-1", templateKey: "tpl-1", templateName: "标准模板" });
+    const row = seedArticle(db, {
+      id: "article-1",
+      novelId: "novel-1",
+      templateId: "template-1",
+      createdAt: new Date("2026-08-20T00:00:00.000Z"),
+    });
+
+    const page = await listArticles(db.asPrismaClient());
+
+    expect(page.items).toHaveLength(1);
+    const item = page.items[0]!;
+    expect(item.createdAt).toBe(row.createdAt.toISOString());
+    expect(item.novel).toEqual({ id: "novel-1", title: "重生之名" });
+    expect(item.templateName).toBe("标准模板");
+    expect(item.templateKey).toBe("tpl-1");
+  });
+
+  it("无关联模板时 templateName 与 templateKey 都回退为 null", async () => {
+    const db = new FakeArticlesDb();
+    seedNovel(db, "novel-1");
+    seedArticle(db, { id: "article-1", novelId: "novel-1", templateId: null });
+
+    const page = await listArticles(db.asPrismaClient());
+
+    expect(page.items[0]!.templateName).toBeNull();
+    expect(page.items[0]!.templateKey).toBeNull();
+  });
+
+  it("书目没有任何 Canonical Tag 时 canonicalTags 为空数组，不是 undefined", async () => {
+    const db = new FakeArticlesDb();
+    seedNovel(db, "novel-untagged");
+    seedArticle(db, { id: "article-1", novelId: "novel-untagged" });
+
+    const page = await listArticles(db.asPrismaClient());
+
+    expect(page.items[0]!.canonicalTags).toEqual([]);
+  });
+
+  it("分类显示 zh 译名，没有译名时回退 stableId；同一标签的重复关联去重", async () => {
+    const db = new FakeArticlesDb();
+    seedNovel(db, "novel-1");
+    seedCanonicalTag(db, TAG_ROMANCE, { stableId: "romance", zhDisplayName: "言情" });
+    seedCanonicalTag(db, TAG_NO_ZH, { stableId: "no-zh-stable-id", zhDisplayName: null });
+    linkNovelCanonicalTag(db, "novel-1", TAG_ROMANCE);
+    // 同一 canonicalTagId 出现两次（例如一次 auto、一次 manual）——去重后只应出现一次。
+    linkNovelCanonicalTag(db, "novel-1", TAG_ROMANCE);
+    linkNovelCanonicalTag(db, "novel-1", TAG_NO_ZH);
+    seedArticle(db, { id: "article-1", novelId: "novel-1" });
+
+    const page = await listArticles(db.asPrismaClient());
+
+    expect(page.items[0]!.canonicalTags).toEqual(["言情", "no-zh-stable-id"]);
+  });
+
+  it("分类超过展示上限时按插入顺序截断", async () => {
+    const db = new FakeArticlesDb();
+    seedNovel(db, "novel-1");
+    seedCanonicalTag(db, TAG_ROMANCE, { stableId: "romance", zhDisplayName: "言情" });
+    seedCanonicalTag(db, TAG_REBIRTH, { stableId: "rebirth", zhDisplayName: "重生" });
+    seedCanonicalTag(db, TAG_NO_ZH, { stableId: "sweet", zhDisplayName: "甜宠" });
+    seedCanonicalTag(db, TAG_EXTRA, { stableId: "extra", zhDisplayName: "第四个应被截断" });
+    linkNovelCanonicalTag(db, "novel-1", TAG_ROMANCE);
+    linkNovelCanonicalTag(db, "novel-1", TAG_REBIRTH);
+    linkNovelCanonicalTag(db, "novel-1", TAG_NO_ZH);
+    linkNovelCanonicalTag(db, "novel-1", TAG_EXTRA);
+    seedArticle(db, { id: "article-1", novelId: "novel-1" });
+
+    const page = await listArticles(db.asPrismaClient());
+
+    expect(page.items[0]!.canonicalTags).toEqual(["言情", "重生", "甜宠"]);
   });
 });

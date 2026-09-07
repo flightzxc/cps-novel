@@ -277,6 +277,18 @@ export type ArticleListItem = {
   summary: string | null;
   templateKey: string | null;
   updatedAt: string;
+  /**
+   * C-20 additions (`分析_文章管理Parity缺口_2026-09-08.md` §六). Additive/
+   * optional per this round's contract discipline — no existing field's
+   * shape or meaning changes.
+   */
+  createdAt?: string;
+  /** The bound template's human name (`ArticleTemplate.templateName`); `null` when no template is bound, same as `templateKey`. */
+  templateName?: string | null;
+  /** The article's (required, `novelId` is `NOT NULL`) novel — id + title, for the 书目 column's link. */
+  novel?: { id: string; title: string };
+  /** Up to `ARTICLE_CATEGORY_DISPLAY_LIMIT` display names from the novel's Canonical Tag assignments, de-duplicated by tag id. Empty when the novel has none. */
+  canonicalTags?: readonly string[];
 };
 
 export type ArticleListInput = {
@@ -448,6 +460,15 @@ function normalizeArticleListInput(input: ArticleListInput = {}): NormalizedArti
   };
 }
 
+/**
+ * C-20: how many de-duplicated Canonical Tag names the 分类 list column
+ * shows per row. A compact-cell display cap, not a data-completeness limit —
+ * the analysis doc's own wording is "多值时截取前若干个" with no fixed
+ * number; 3 is chosen the same way `NovelTagsPanel`'s chip rows already read
+ * (several, not a scroll of them) for a single-line table cell.
+ */
+const ARTICLE_CATEGORY_DISPLAY_LIMIT = 3;
+
 const ARTICLE_LIST_SELECT = {
   id: true,
   title: true,
@@ -457,8 +478,58 @@ const ARTICLE_LIST_SELECT = {
   status: true,
   summary: true,
   updatedAt: true,
-  template: { select: { templateKey: true } },
+  createdAt: true,
+  template: { select: { templateKey: true, templateName: true } },
+  // C-20: 书目 column (id + title, links to `/novels/{id}`) and 分类 column
+  // (via the novel's Canonical Tag assignments — see the analysis doc's §零
+  // third correction on why "分类" is not a column on Article itself). No
+  // `take` on `canonicalTags`: a novel's own tag count is small, and capping
+  // display happens in `articleCanonicalTagNames` below, after de-duplicating
+  // by `canonicalTagId` (`NovelCanonicalTag`'s unique key is
+  // `(novelId, canonicalTagId, source)`, so the *same* tag can appear more
+  // than once — e.g. once `auto`, once `manual` — and a `take` here could
+  // silently discard the one relevant duplicate before dedup ever runs).
+  novel: {
+    select: {
+      id: true,
+      title: true,
+      canonicalTags: {
+        select: {
+          canonicalTagId: true,
+          canonicalTag: {
+            select: {
+              stableId: true,
+              translations: { where: { locale: "zh" }, select: { displayName: true } },
+            },
+          },
+        },
+      },
+    },
+  },
 } satisfies Prisma.ArticleSelect;
+
+type ArticleListSelectCanonicalTag = {
+  canonicalTagId: string;
+  canonicalTag: { stableId: string; translations: readonly { displayName: string }[] };
+};
+
+/**
+ * De-duplicates a novel's raw `NovelCanonicalTag` rows by `canonicalTagId`
+ * (see `ARTICLE_LIST_SELECT`'s comment on why a duplicate tag id is
+ * possible), resolves each to a display name — the `zh` translation
+ * (queried pre-filtered by `ARTICLE_LIST_SELECT`), falling back to
+ * `stableId` when there is none, same fallback rule as
+ * `../_lib/category-options.ts`'s dropdown labels — and caps the result at
+ * `ARTICLE_CATEGORY_DISPLAY_LIMIT`.
+ */
+function articleCanonicalTagNames(tags: readonly ArticleListSelectCanonicalTag[]): readonly string[] {
+  const names = new Map<string, string>();
+  for (const link of tags) {
+    if (names.has(link.canonicalTagId)) continue;
+    names.set(link.canonicalTagId, link.canonicalTag.translations[0]?.displayName ?? link.canonicalTag.stableId);
+  }
+  return Array.from(names.values()).slice(0, ARTICLE_CATEGORY_DISPLAY_LIMIT);
+}
 
 /**
  * Article list for `/articles` (M7). A plain read, not a service mutation —
@@ -509,6 +580,10 @@ export async function listArticles(
     summary: row.summary,
     templateKey: row.template?.templateKey ?? null,
     updatedAt: row.updatedAt.toISOString(),
+    createdAt: row.createdAt.toISOString(),
+    templateName: row.template?.templateName ?? null,
+    novel: { id: row.novel.id, title: row.novel.title },
+    canonicalTags: articleCanonicalTagNames(row.novel.canonicalTags),
   }));
   return {
     items,

@@ -1,5 +1,6 @@
 import type { AdminContentExceptionCode } from "@/contracts";
 import type {
+  ArticleStatus,
   LabelKind,
   NovelChapterStatus,
   NovelSourceItemStatus,
@@ -21,6 +22,26 @@ export type StatusBadge = { readonly label: string; readonly color: string };
 export const NOVEL_STATUS_BADGES: Readonly<Record<NovelStatus, StatusBadge>> = Object.freeze({
   draft: { label: "草稿", color: "bg-gray-100 text-gray-800" },
   ready: { label: "就绪未公开", color: "bg-blue-100 text-blue-800" },
+  published: { label: "已发布", color: "bg-green-100 text-green-800" },
+  unpublished: { label: "已下线", color: "bg-amber-100 text-amber-800" },
+  takedown: { label: "已撤回", color: "bg-red-100 text-red-800" },
+});
+
+/**
+ * C-20 (`分析_文章管理Parity缺口_2026-09-08.md` §六): the table-cell twin of
+ * `article-filters.tsx`'s `ARTICLE_STATUS_LABELS`, and the shared spot both
+ * that filter dropdown's option labels and `article-status-badge.tsx`'s
+ * table-column badge now read from — replacing a Chinese label that used to
+ * live only in the filter component with one location for both.
+ *
+ * Same four names as `NOVEL_STATUS_BADGES`'s `draft`/`published`/
+ * `unpublished`/`takedown` (Article has no `ready` state), and the same
+ * colors for each — the analysis doc's item #19 is a straight PORT (裸英文
+ * 状态码 → 中文徽章), not an ADAPT, so there is no reason for the two
+ * lifecycles' shared state names to read differently.
+ */
+export const ARTICLE_STATUS_BADGES: Readonly<Record<ArticleStatus, StatusBadge>> = Object.freeze({
+  draft: { label: "草稿", color: "bg-gray-100 text-gray-800" },
   published: { label: "已发布", color: "bg-green-100 text-green-800" },
   unpublished: { label: "已下线", color: "bg-amber-100 text-amber-800" },
   takedown: { label: "已撤回", color: "bg-red-100 text-red-800" },

@@ -1,5 +1,6 @@
 import { findCapabilityState } from "@/features/admin-ui/capability-view";
 import { errorEnvelopeCopy } from "@/features/admin-ui/error-copy";
+import { AdminTimeZoneNote } from "@/features/admin-ui/time-zone-note";
 import type { ErrorEnvelope } from "@/contracts";
 import { listArticles, listDistinctArticleLocales, type ArticleListItem } from "@/server/articles";
 import { listActiveArticleTemplateOptions } from "@/server/article-templates";
@@ -161,6 +162,8 @@ export default async function ArticlesPage({
             <ContentErrorPanel message={errorEnvelopeCopy(listError)} />
           ) : (
             <>
+              {/* C-20: 创建时间 column needs one page-level UTC+8 declaration, same placement as `../novels/page.tsx`'s own `AdminTimeZoneNote`. */}
+              <AdminTimeZoneNote />
               <ArticleList canWrite={canWrite} publicOrigin={publicOrigin} rows={rows} />
               <ContentPagination
                 basePath="/articles"
