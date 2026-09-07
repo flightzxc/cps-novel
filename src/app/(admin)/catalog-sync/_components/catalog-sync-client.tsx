@@ -36,12 +36,23 @@ import type { SourceItemRow } from "../_lib/read-source-items";
  * always enabled once something is selected, and `BatchCreateContentDialog`
  * gates only its own "确认创建" step on `contentPublish`.
  *
- * The selection checkbox column has no "select all" control, deliberately —
- * this screen never offers a filter-driven bulk-select shortcut, mirroring
- * the factory's own "explicit ids only, never a filter descriptor" contract
- * (`createPromoLinkClaimTask`'s doc comment) and CPS's own hard rule
- * ("畅读推广码领取只支持显式勾选剧目，不支持当前筛选全量领取") — RC-4's batch
- * creation reuses this same explicit-selection discipline.
+ * The selection checkbox column has a header "select current page" control
+ * (C-17) that toggles every row in `items` — i.e. the current page — on or
+ * off; it never reaches past the page into a filter-driven bulk-select. That
+ * stays true to the factory's "explicit ids only, never a filter descriptor"
+ * contract (`createPromoLinkClaimTask`'s doc comment) and CPS's own hard rule
+ * ("畅读推广码领取只支持显式勾选剧目，不支持当前筛选全量领取") — both are about
+ * refusing to promote a *filter* into an implicit selection, not about
+ * refusing a header checkbox. CPS's own equivalent screen
+ * (`changdu-sync-panel.tsx:1038-1046`) has exactly this "选择当前页" control
+ * alongside that same hard rule (`changdu-sync-panel.tsx:608-613`), and its
+ * `toggleVisibleRows` (`changdu-sync-panel.tsx:479-488`) likewise selects the
+ * whole visible page regardless of claim eligibility — "只看可领取" there is a
+ * *filter* (`changdu-sync-panel.tsx:858-870`), not a selection limit. Here the
+ * selected set is shared by both the "批量创建内容" and "领取推广链接"
+ * launchers, so selecting past ineligible rows is required for the former to
+ * be usable via the header control; eligibility is still enforced downstream
+ * by `PromoLinkClaimDialog` and the server-side guard.
  */
 export function CatalogSyncClient({
   items,
@@ -72,12 +83,27 @@ export function CatalogSyncClient({
   const granted = blockedReason === null;
 
   const selectedItems = items.filter((item) => selectedIds.has(item.id));
+  const allSelected = items.length > 0 && items.every((item) => selectedIds.has(item.id));
+  const someSelected = selectedItems.length > 0 && !allSelected;
 
   function toggleSelected(id: string) {
     setSelectedIds((current) => {
       const next = new Set(current);
       if (next.has(id)) next.delete(id);
       else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleAllVisible() {
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      const allCurrentlyVisible = items.length > 0 && items.every((item) => next.has(item.id));
+      if (allCurrentlyVisible) {
+        items.forEach((item) => next.delete(item.id));
+      } else {
+        items.forEach((item) => next.add(item.id));
+      }
       return next;
     });
   }
@@ -132,7 +158,18 @@ export function CatalogSyncClient({
       <Table>
         <THead>
           <tr>
-            <TH className="w-8" />
+            <TH className="w-8">
+              <input
+                type="checkbox"
+                aria-label="选择当前页"
+                checked={allSelected}
+                ref={(el) => {
+                  if (el) el.indeterminate = someSelected;
+                }}
+                onChange={toggleAllVisible}
+                className="h-4 w-4 rounded border-gray-300"
+              />
+            </TH>
             <TH>来源条目</TH>
             <TH>语种识别</TH>
             <TH>渠道</TH>

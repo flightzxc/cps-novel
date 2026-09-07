@@ -117,6 +117,15 @@ describe("ArticleList · 列表与批量", () => {
     render(<ArticleList rows={[DRAFT_ROW]} canWrite={false} />);
     expect((screen.getByText("批量再生成") as HTMLButtonElement).disabled).toBe(true);
   });
+
+  it("表头「选择当前页」全选后已选择 2 / 50，再点一次归零（C-17）", () => {
+    render(<ArticleList rows={[DRAFT_ROW, PUBLISHED_ROW]} canWrite />);
+    const header = screen.getByLabelText("选择当前页");
+    fireEvent.click(header);
+    expect(screen.getByText("已选择 2 / 50")).toBeTruthy();
+    fireEvent.click(header);
+    expect(screen.getByText("已选择 0 / 50")).toBeTruthy();
+  });
 });
 
 const ARTICLE = {

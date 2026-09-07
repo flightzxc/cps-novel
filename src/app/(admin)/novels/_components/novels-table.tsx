@@ -18,6 +18,9 @@ export type NovelsTableSelection = {
   readonly onToggle: (novelId: string) => void;
   /** True disables (not hides) that row's checkbox — a row mid-request, for instance. */
   readonly disabled?: (novel: AdminNovelListItemView) => boolean;
+  readonly allSelected: boolean;
+  readonly someSelected: boolean;
+  readonly onToggleAll: () => void;
 };
 
 /**
@@ -36,7 +39,10 @@ export type NovelsTableSelection = {
  * mutation, so a checkbox column would be a control that selects rows for
  * nothing." PR-C3 is that mutation (batch publish), so the column exists now,
  * strictly opt-in via {@link NovelsTableSelection} — see that type's doc
- * comment for why every pre-existing call site is unaffected.
+ * comment for why every pre-existing call site is unaffected. The header
+ * checkbox (C-17, 2026-09-08) is also aligned with CPS
+ * `dramas-list-client.tsx:202-211`: `checked`/`indeterminate` driven by the
+ * caller's `allSelected`/`someSelected`, `onChange` wired to `onToggleAll`.
  *
  * The columns themselves are `CPS_PARITY_ADAPTED`. CPS shows 平台/题材/分类/集数;
  * a novel's operational questions are different — how many chapters actually
@@ -63,7 +69,21 @@ export function NovelsTable({
       <table className="w-full text-sm">
         <thead className="border-b border-gray-200 bg-gray-50">
           <tr>
-            {selection && <th className="w-10 px-4 py-3" aria-hidden="true" />}
+            {selection && (
+              <th className="w-10 px-4 py-3">
+                <input
+                  type="checkbox"
+                  aria-label="选择当前页"
+                  checked={selection.allSelected}
+                  disabled={selection.disabled?.(novels[0]) ?? false}
+                  ref={(el) => {
+                    if (el) el.indeterminate = selection.someSelected && !selection.allSelected;
+                  }}
+                  onChange={selection.onToggleAll}
+                  className="h-4 w-4 rounded border-gray-300"
+                />
+              </th>
+            )}
             <th className="px-4 py-3 text-left font-medium text-gray-500">书目</th>
             <th className="px-4 py-3 text-left font-medium text-gray-500">语种</th>
             <th className="px-4 py-3 text-left font-medium text-gray-500">状态</th>

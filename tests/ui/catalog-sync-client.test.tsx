@@ -532,6 +532,25 @@ describe("领取推广链接 · 选择工具栏", () => {
     await click(claimToolbarButton());
     expect(dialog()).toBeNull();
   });
+
+  it("表头「选择当前页」把计数推到本页条数，再点一次归零（C-17）", async () => {
+    renderPage();
+    const header = screen.getByLabelText("选择当前页") as HTMLInputElement;
+    await click(header);
+    expect(screen.getByTestId("promo-claim-toolbar-count").textContent).toContain(String(ROWS.length));
+    await click(header);
+    expect(screen.getByTestId("promo-claim-toolbar-count").textContent).toContain("0");
+  });
+
+  it("表头全选同时选中「不可领取」的行（C-17，钉死可选行范围=当前页全部）", async () => {
+    renderPage();
+    const header = screen.getByLabelText("选择当前页") as HTMLInputElement;
+    await click(header);
+    // "示例小说 A" (src-1) is the ineligible fixture: status "pending",
+    // promoClaimEligible: false, promoClaimIneligibleReason: "source_not_linked".
+    expect(checkboxFor("示例小说 A").checked).toBe(true);
+    expect(checkboxFor("已建立的条目").checked).toBe(true);
+  });
 });
 
 describe("领取推广链接 · 对话框基础渲染与取消", () => {

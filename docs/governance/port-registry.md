@@ -362,6 +362,43 @@ Owner 没有验证器/恢复码，密码通过验证后被 `/two-factor/challeng
 | N-7 `Article` 编辑/单条再生成乐观锁（`expectedUpdatedAt` 往返校验 + `[expected, expected+1ms)` 窗口 `updateMany` CAS，同 `SiteSettingMutationConflictError` 的 409 语义） | `src/server/site-settings/service.ts`（`expectedTimestamp`/`updateAdminSiteSetting` 的 CAS 窗口）→ `src/server/articles/service.ts`（`expectedArticleTimestamp`/`updateArticleContent`/`regenerateCore` 的 `ArticleConflictError`） | 窗口 CAS 模式 `560-612` | （本仓内部模式复用，非 CPS 搬运；CPS 无 Article 级乐观锁） | `PATTERN_ONLY` | 只借"往返校验 + 窄窗口 `updateMany` 计数判冲突"的形状；不搬 settings 的幂等重放指纹（`requestFingerprint`/`findCommittedUpdate`）——Article 单条编辑/再生成不需要重放去重；批量再生成（`regenerateArticlesBatch`）不接 CAS，见 `service.ts` 该函数上方注释的理由。`article_conflict` 错误码已由 PR6 fix lane D 登记进 `src/contracts/errors.ts` 的 `AdminErrorCode` 与 `src/features/admin-ui/error-copy.ts` 的 `COPY`（`Readonly<Record<AdminErrorCode, string>>`，漏登即编译期报错），并由 `tests/ui/admin-error-copy.test.ts` 锁定 | Claude |
 | N-8 `Article.body` 管理员编辑白名单清洗（`sanitizeArticleBody`：p/br/h2/h3/ul/ol/li/strong/em/a[href https-only]/img[src https-only,alt]/blockquote，`script`/`style`/`on*`/`javascript:` 剥除） | — | — | — | `ORIGINAL_REQUIRED` | CPS `article-actions.ts` 的 `updateArticle` 同样把管理员提交的正文原样落库、不做任何标签白名单——本条目登记的是"本仓比 CPS 更严格"的加固，不是搬运；零依赖手写白名单解析器（`src/server/articles/sanitize-body.ts`），只作用于管理员手工编辑路径（`updateArticleContent`），模板引擎生成/再生成路径（`regenerateCore`）不受影响 | Claude |
 
+### C-17 v8.5.1 参照基线（2026-09-08）
+
+C-17（`/novels`、`/catalog-sync`、`/articles` 三个多选列表补表头「全选本页」）依据 Owner 裁决
+「CPS v8.5.1 是默认真身」的口径，引用了本表此前从未登记过的第三条只读参照路径：
+`/Users/chenweifeng/Documents/产品原型及文档/cps项目/cps-admin-v851-admin-host`，
+tag `pulsedrama-v8.5.1-freeze-20260906` 的 peeled commit 固定登记为
+`c37602c3933ca97adad0281deb6c75e71e550412`（`git rev-parse HEAD` 在该只读工作区实测，工作区
+本身 `git status --porcelain` 为空、施工前后未变）。仓库 `CLAUDE.md` 第 23/34 行把只读参照冻结
+在另外两条路径（`cps-admin-v811-search-ux`@`d77c3b9…` 与 `cps-admin`@`v8.2.18`/`v8.3.6`），第三条
+路径与 `CLAUDE.md` 现状冲突；照本表既有先例（X 系列、RC-1 均以独立小节追加新的冻结基线，而不
+回改上一条基线的登记），本节只新增基线记录，`CLAUDE.md` 的更新留给 Owner 另行处理。
+
+C-17 只搬运 UI 交互形态（表头 checkbox 的 `checked`/`indeterminate`/`onChange` 接线与判满算法），
+不搬任何数据库模式或服务端代码。`port_kind` 统一为 `ADAPT`：CPS 三处参照里，剧集列表
+(`dramas-list-client.tsx`) 与换剧计划表 (`batch-drama-switch-client.tsx`) 是不分页的全量列表，
+「全选」即选中 `dramas`/`items` 整个数组；本仓三个列表都是服务端分页（每页 20 条），故统一改为
+「只管当前页」语义，判满算法从 `selected.size === dramas.length` 改成
+`rows.length > 0 && rows.every((r) => selected.has(r.id))`（贴 `batch-drama-switch-client.tsx:227`
+与`changdu-sync-panel.tsx:444-445` 的写法，而非 `dramas-list-client.tsx:65` 的 `size` 比较——分页
+路由是 `<Link>` 导航，`size` 比较在 React 按位置复用组件、选择集残留其他页 id 时会误判）。
+
+**不搬 CPS `changdu-sync-panel.tsx` 的 `selectionMode='filtered'` 提级机制**
+（`canPromoteToFiltered`/"勾满一页后可再提级为『按当前筛选条件全选』"，`changdu-sync-panel.tsx:466-467`）：
+这是"当前页已全选"之后的第二级动作，把选择语义从"这些显式 id"换成"这个筛选条件命中的全部行"，
+需要选择集额外携带一个筛选描述符状态且改变提交时的语义。三个本仓列表里，`/catalog-sync` 的
+两个消费方（批量创建内容、领取推广链接）都要求"调用方显式枚举 id，不接受筛选描述符"——工单
+3.1/3.4②已引用的 `createPromoLinkClaimTask` 纪律与 CPS 自己的硬规则（"畅读推广码领取只支持显式
+勾选剧目，不支持当前筛选全量领取"）同源；`/novels`、`/articles` 没有对应的筛选提级 UI 也没有
+这层服务端契约。C-17 的范围是「表头全选本页」这一件事，不新增选择状态字段、不新增跨页/按筛选
+的选择机制（工单 3.3「不新增机制」与三.5「不做」均已注明），故提级机制不在移植范围内。
+
+| symbol | source_file | source_lines | baseline_commit | port_kind | changed_what | owner |
+| --- | --- | --- | --- | --- | --- | --- |
+| 表头全选 checkbox（`checked`/`ref` 回调设 `indeterminate`/`onChange`）→ `NovelsTable` 表头格 + `NovelsBatchPublish.toggleAll` | `src/components/dramas/dramas-list-client.tsx` | `202-211`（半选态 ref 回调形态）；`65-66,68-72`（`allSelected`/`partial`/`toggleAll` 判满写法，仅借鉴 `every`/`size` 取舍，未直接采用其 `size` 比较） | `c37602c3933ca97adad0281deb6c75e71e550412` | `ADAPT` | 保留 `ref={(el) => { if (el) el.indeterminate = ... }}` 的半选态设置手法与表头 `input[type=checkbox]` 位置；判满改用 `batch-drama-switch-client.tsx:227` 的 `every` 写法（见下一行），因为 `/novels` 是服务端分页，`toggleAll` 只增删当前页 `novels` 数组里的 id，不做跨页全选；新增 `disabled={selection.disabled?.(novels[0]) ?? false}` 复用既有行级 `disabled` 回调表达"提交中禁用整个表头"，CPS 该组件无提交中禁用语义 | Claude |
+| 判满用 `every` 而非 `size` 比较 → `CatalogSyncClient` 的 `allSelected`/`someSelected` + `toggleAllVisible` | `src/components/articles/batch-drama-switch-client.tsx` | `227`（`allSelected = items.length > 0 && items.every(...)`）；`244-251`（表头 checkbox JSX）；`588-592`（`toggleAllOkItems`：`every` 判满则清空，否则全选） | `c37602c3933ca97adad0281deb6c75e71e550412` | `ADAPT` | 保留 `every` 判满与"满则清空/不满则全选"的 `toggle` 逻辑；`aria-label` 从 CPS 的 `"全选 ok 项"` 改为本仓统一措辞 `"选择当前页"`；可选行范围不按 `ok`/领取资格过滤——CPS 该组件的 `okItems` 子集在本仓没有对应概念，选择集覆盖 `items`（当前页）全部行，含"不可领取"行（见工单 3.4②与本节上方"不搬 `selectionMode='filtered'`"说明） | Claude |
+| 分页型「选择当前页」+ 不看上限 → `NovelsTable`/`CatalogSyncClient`/`ArticleList` 的表头 checkbox 与 `toggleAll`/`toggleAllVisible` | `src/app/(admin)/sync/_components/changdu-sync-panel.tsx` | `444-445`（`allVisibleSelected = rows.length > 0 && rows.every(...)`）；`479-488`（`toggleVisibleRows`：只增删当前页 `rows`，不清空跨页选择）；`1038-1046`（表头 `aria-label="选择当前页"` 与 `className` 形态） | `c37602c3933ca97adad0281deb6c75e71e550412` | `ADAPT` | 三处目标文件均按此形态：`every` 判满、`aria-label="选择当前页"` 逐字复用、`onChange` 只增删当前页数组里的 id、不清空其他页已选、不与批量上限（200/50/50）交互——三个上限都 ≥ 每页 20 行，全选一页在数学上不会越限，越限判定继续留给既有提交侧逻辑（`overCap`/`selected.size > 50` 等），未改动；**不搬** CPS `submitTooMany`/`MAX_LINK_SELECTION` 一类"全选后再判断是否超限并禁用提交"的耦合逻辑，因为本仓选择上限判定本就与全选动作解耦 | Claude |
+
 ## 使用说明
 
 - `symbol`：被搬运的具体符号名（函数名/类型名/表名/字段名/组件名等），一行一个符号，不得用文件级粗粒度笼统登记；
