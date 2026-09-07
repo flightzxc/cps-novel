@@ -8,6 +8,7 @@ import { P2_04_ADMIN_REGISTRY } from "@/app/api/admin/_lib/registry";
 import { isAllowedSideEffectTransition } from "@/lib/tasks/side-effect-intent";
 import { requireAdminRouteAccess } from "@/server/auth/guards";
 import {
+  getAdminTaskDetail,
   listAdminPromoLinks,
   listAdminTaskItems,
   listAdminTasks,
@@ -332,5 +333,179 @@ describe("C-10 derived stop reason", () => {
     const dbSuccess = { channelSyncTaskItem: delegateSuccess, genericTaskItem: delegateSuccess } as unknown as PrismaClient;
     const successResult = await listAdminTaskItems(dbSuccess, context, { family: "generic", taskId: TASK_ID }, {} as NodeJS.ProcessEnv);
     expect(successResult.items[0]).not.toHaveProperty("stopReason");
+  });
+});
+
+/**
+ * C-9 (`施工工单_C9_任务详情独立路由对齐CPS_2026-09-07.md`): `/tasks/[id]`'s
+ * additive projection fields — the task-configuration summary and
+ * catalog-scan audit block, both derived from `params`/`result` (never a
+ * pass-through, same discipline as C-10's `stopReason` above), plus item
+ * pagination and the catalog-page `pageNumber` derivation. Every field here
+ * is optional-only on top of the existing `TaskSummaryDto`/`TaskItemDto`
+ * contracts the "X9 read DTO allowlists" tests above pin, and `params`
+ * stays on FORBIDDEN_KEYS — this file's own poisoned-row test above already
+ * proves `taskSummary()` never surfaces it, and `getAdminTaskDetail`'s own
+ * `params` read is exercised nowhere except through the two curated derive
+ * functions below.
+ */
+describe("C-9 task-detail route derivations", () => {
+  it("getAdminTaskDetail: derives catalogScanConfig/catalogScanAudit only for taskType catalog_scan, plus mode/channelAccountId/createdAt/updatedAt", async () => {
+    const context = await readContext("/api/admin/tasks/detail");
+    const row = {
+      family: "generic",
+      task_id: TASK_ID,
+      task_type: "catalog_scan",
+      status: "completed_with_errors",
+      total_count: 5,
+      success_count: 3,
+      failed_count: 2,
+      skipped_count: 0,
+      has_error: true,
+      created_at: NOW,
+      updated_at: new Date(NOW.getTime() + 60_000),
+      mode: "apply",
+      channel_account_id: "40000000-0000-4000-8000-000000000001",
+      params: {
+        source: "manual",
+        actorId: "admin-1",
+        requestId: "req-c9-1",
+        projectType: 7,
+        pageStart: 1,
+        pageEnd: 5,
+        pageSize: 20,
+        safetyMaxPages: 2000,
+        languages: ["en", "ja", "en"],
+        secret: "must-not-leak",
+      },
+      result: {
+        stopReason: "upstream_error",
+        catalogObservedTotal: 4823,
+        batchActualCount: 88,
+        checkpoint: { lastCompletedPage: 4, returnedCount: 20 },
+      },
+    };
+    const db = { $queryRaw: async () => [row] } as unknown as PrismaClient;
+
+    const detail = await getAdminTaskDetail(db, context, { family: "generic", taskId: TASK_ID }, {} as NodeJS.ProcessEnv);
+
+    expect(detail.mode).toBe("apply");
+    expect(detail.channelAccountId).toBe("40000000-0000-4000-8000-000000000001");
+    expect(detail.createdAt).toBe(NOW.toISOString());
+    expect(detail.updatedAt).toBe(new Date(NOW.getTime() + 60_000).toISOString());
+    expect(detail.catalogScanConfig).toEqual({
+      pageStart: 1,
+      pageEnd: 5,
+      pageSize: 20,
+      safetyMaxPages: 2000,
+      requestId: "req-c9-1",
+      source: "manual",
+      // De-duplicated, never a raw pass-through of the params array.
+      languages: ["en", "ja"],
+    });
+    expect(detail.catalogScanAudit).toEqual({
+      observedTotal: 4823,
+      actualFetchedCount: 88,
+      lastCompletedPage: 4,
+    });
+    for (const key of FORBIDDEN_KEYS) expect(allKeys(detail).has(key)).toBe(false);
+    expect(allKeys(detail)).not.toContain("secret");
+    expect(allKeys(detail)).not.toContain("projectType");
+    expect(allKeys(detail)).not.toContain("actorId");
+  });
+
+  it("getAdminTaskDetail: withholds catalogScanConfig/catalogScanAudit for a non-catalog_scan taskType even when params/result are present", async () => {
+    const context = await readContext("/api/admin/tasks/detail");
+    const row = {
+      family: "channel_sync",
+      task_id: TASK_ID,
+      task_type: "moboreader.preview_refresh.v1",
+      status: "completed",
+      total_count: 2,
+      success_count: 2,
+      failed_count: 0,
+      skipped_count: 0,
+      has_error: false,
+      created_at: NOW,
+      updated_at: NOW,
+      mode: "apply",
+      channel_account_id: null,
+      params: { pageStart: 1, pageEnd: 5, safetyMaxPages: 2000 },
+      result: { catalogObservedTotal: 99, batchActualCount: 99, checkpoint: { lastCompletedPage: 5 } },
+    };
+    const db = { $queryRaw: async () => [row] } as unknown as PrismaClient;
+
+    const detail = await getAdminTaskDetail(db, context, { family: "channel_sync", taskId: TASK_ID }, {} as NodeJS.ProcessEnv);
+
+    expect(detail).not.toHaveProperty("catalogScanConfig");
+    expect(detail).not.toHaveProperty("catalogScanAudit");
+    expect(detail).not.toHaveProperty("channelAccountId");
+    expect(detail.mode).toBe("apply");
+  });
+
+  it("getAdminTaskDetail: throws task_admin_not_found when the row does not exist, so the page's per-family probe can fall through", async () => {
+    const context = await readContext("/api/admin/tasks/detail");
+    const db = { $queryRaw: async () => [] } as unknown as PrismaClient;
+    await expect(
+      getAdminTaskDetail(db, context, { family: "generic", taskId: TASK_ID }, {} as NodeJS.ProcessEnv),
+    ).rejects.toMatchObject({ code: "task_admin_not_found", status: 404 });
+  });
+
+  it("listAdminTaskItems: page/pageSize/total/totalPages are absent when `page` is not passed (byte-identical to the pre-C-9 flat-limit shape)", async () => {
+    const context = await readContext("/api/admin/tasks/items");
+    const row = {
+      id: "60000000-0000-4000-8000-000000000001", taskId: TASK_ID, status: "success",
+      attemptCount: 1, leaseEpoch: 1n, lockedUntil: null, result: { returnedCount: 20 }, error: null,
+    };
+    const delegate = { findMany: async () => [row] };
+    const db = { channelSyncTaskItem: delegate, genericTaskItem: delegate } as unknown as PrismaClient;
+    const result = await listAdminTaskItems(db, context, { family: "generic", taskId: TASK_ID }, {} as NodeJS.ProcessEnv);
+    expect(result).not.toHaveProperty("page");
+    expect(result).not.toHaveProperty("total");
+    expect(result).not.toHaveProperty("totalPages");
+  });
+
+  it("listAdminTaskItems: with `page`, paginates via skip/take and returns page/pageSize/total/totalPages from a real count", async () => {
+    const context = await readContext("/api/admin/tasks/items");
+    const row = {
+      id: "60000000-0000-4000-8000-000000000001", taskId: TASK_ID, status: "success",
+      attemptCount: 1, leaseEpoch: 1n, lockedUntil: null, result: { returnedCount: 20 }, error: null,
+      targetType: "catalog_page", targetId: "3",
+    };
+    const findManyArgs: unknown[] = [];
+    const delegate = {
+      findMany: async (args: unknown) => { findManyArgs.push(args); return [row]; },
+      count: async () => 137,
+    };
+    const db = { channelSyncTaskItem: delegate, genericTaskItem: delegate } as unknown as PrismaClient;
+
+    const result = await listAdminTaskItems(
+      db, context, { family: "generic", taskId: TASK_ID, limit: "50", page: "3" }, {} as NodeJS.ProcessEnv,
+    );
+
+    expect(result.page).toBe(3);
+    expect(result.pageSize).toBe(50);
+    expect(result.total).toBe(137);
+    expect(result.totalPages).toBe(Math.ceil(137 / 50));
+    expect(findManyArgs[0]).toMatchObject({ skip: 100, take: 50 });
+    // The catalog-page item's page number is derived and re-validated —
+    // never the raw `targetId` string under its own key.
+    expect(result.items[0].pageNumber).toBe(3);
+    expect(allKeys(result)).not.toContain("targetId");
+  });
+
+  it("listAdminTaskItems: derives pageNumber only for a catalog_page targetType with a positive-integer targetId", async () => {
+    const context = await readContext("/api/admin/tasks/items");
+    const rows = [
+      { id: "a", taskId: TASK_ID, status: "success", attemptCount: 1, leaseEpoch: 1n, lockedUntil: null, result: null, error: null, targetType: "catalog_page", targetId: "12" },
+      { id: "b", taskId: TASK_ID, status: "success", attemptCount: 1, leaseEpoch: 1n, lockedUntil: null, result: null, error: null, targetType: "catalog_page", targetId: "not-a-number" },
+      { id: "c", taskId: TASK_ID, status: "success", attemptCount: 1, leaseEpoch: 1n, lockedUntil: null, result: null, error: null, targetType: "novel_source_item", targetId: "12" },
+    ];
+    const delegate = { findMany: async () => rows };
+    const db = { channelSyncTaskItem: delegate, genericTaskItem: delegate } as unknown as PrismaClient;
+    const result = await listAdminTaskItems(db, context, { family: "generic", taskId: TASK_ID }, {} as NodeJS.ProcessEnv);
+    expect(result.items[0].pageNumber).toBe(12);
+    expect(result.items[1]).not.toHaveProperty("pageNumber");
+    expect(result.items[2]).not.toHaveProperty("pageNumber");
   });
 });

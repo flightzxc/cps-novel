@@ -73,6 +73,54 @@ export function isRetryableTaskStatus(status: string): boolean {
 }
 
 /**
+ * C-9 (task-detail route): gates the ImportProgress polling widget on
+ * `/tasks/[id]` — non-terminal (`pending`/`processing`) polls every 2s,
+ * terminal renders the final counts once and stops. `TASK_STATUSES` is
+ * `["pending", "processing", "completed", "completed_with_errors",
+ * "failed", "disabled"]` (`@/domain/database-statuses`); everything but the
+ * first two is terminal.
+ */
+const NON_TERMINAL_TASK_STATUSES = new Set<string>(["pending", "processing"]);
+
+export function isTerminalTaskStatus(status: string): boolean {
+  return !NON_TERMINAL_TASK_STATUSES.has(status);
+}
+
+/**
+ * C-9: item-status tabs for the `/tasks/[id]` items table, CPS-parity
+ * labels/order (`STATUS_TABS` in the CPS reference `tasks/[id]/page.tsx`).
+ * `key: ""` means "no `status` filter" (all statuses), matching how the URL
+ * omits `status` entirely for the "全部" tab.
+ */
+export const ITEM_STATUS_TABS: readonly Readonly<{ key: string; label: string }>[] = Object.freeze([
+  Object.freeze({ key: "", label: "全部" }),
+  Object.freeze({ key: "success", label: "成功" }),
+  Object.freeze({ key: "failed", label: "失败" }),
+  Object.freeze({ key: "skipped", label: "跳过" }),
+  Object.freeze({ key: "processing", label: "处理中" }),
+  Object.freeze({ key: "pending", label: "待处理" }),
+]);
+
+/**
+ * C-9: moved from the old same-page panel's `page.tsx:70-77` and corrected
+ * in the move — the pre-Phase-C guard compared the task *family* to
+ * `"catalog_scan"`, which was meaningful when catalog_scan was its own
+ * physical family but has been unreachable ever since Phase C folded it
+ * into `GenericTask` (`family` only ever has `"channel_sync"`/`"generic"`
+ * values — see `TASK_FAMILIES` above). The real fact this guard exists to
+ * protect against — a catalog-scan item is never `skipped`, per the
+ * worker's own `guardedFinalize` invariant (`src/lib/tasks/store.ts`) — is
+ * keyed on the task's *taskType*, not its family, so this checks that
+ * instead. `listAdminTaskItems` itself no longer rejects this combination
+ * either way (Phase C's `generic` family genuinely supports `skipped` for
+ * every other taskType) — this is UX-only, dropping a filter that would
+ * silently return zero rows rather than showing a confusing empty state.
+ */
+export function shouldDropSkippedFilterForTaskType(taskType: string, itemStatus: string | undefined): boolean {
+  return taskType === "catalog_scan" && itemStatus === "skipped";
+}
+
+/**
  * The list route's hard cap (`limit()` in the service: default 50, min 1,
  * max 100). There is no cursor, no `hasMore`, no total count independent of
  * `items.length` — a result at exactly `limit` items does not distinguish

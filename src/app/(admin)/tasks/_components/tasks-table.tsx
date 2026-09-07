@@ -58,26 +58,27 @@ function errorSummaryCell(value: "redacted" | null, stopReason: string | undefin
   );
 }
 
-/** Builds `/tasks?<preserved list filters>&taskId=…&taskFamily=…`, dropping any stale detail params first. */
-function detailHref(baseSearch: URLSearchParams, family: string, taskId: string): string {
-  const params = new URLSearchParams(baseSearch);
-  params.delete("taskId");
-  params.delete("taskFamily");
-  params.delete("itemStatus");
-  params.delete("itemLimit");
-  params.set("taskId", taskId);
-  params.set("taskFamily", family);
-  return `/tasks?${params.toString()}`;
+/**
+ * C-9 (`施工工单_C9_任务详情独立路由对齐CPS_2026-09-07.md`): `/tasks/<taskId>` —
+ * a CPS-parity independent detail route, replacing the old same-page panel
+ * this table used to link to via `/tasks?taskId=…&taskFamily=…` on this same
+ * list URL. `?family=` is only a resolution hint the detail route's server
+ * component uses to skip its first probe query (`generic` vs `channel_sync`)
+ * — never required, a bare `/tasks/<taskId>` still resolves.
+ */
+function detailHref(family: string, taskId: string): string {
+  return `/tasks/${taskId}?family=${encodeURIComponent(family)}`;
+}
+
+/** C-9: a `catalog_scan` task's item is a page, not a novel — its list-row counts need the same「页」unit the detail route's summary cards use (§一 of the work order). */
+function countSuffix(taskType: string, count: number): string {
+  return taskType === "catalog_scan" ? `${count} 页` : String(count);
 }
 
 export function TasksTable({
   tasks,
-  baseSearch,
-  selectedTaskId,
 }: {
   tasks: readonly TaskSummaryRow[];
-  baseSearch: URLSearchParams;
-  selectedTaskId?: string;
 }) {
   if (tasks.length === 0) {
     return (
@@ -110,10 +111,7 @@ export function TasksTable({
         </thead>
         <tbody className="divide-y divide-gray-100">
           {tasks.map((task) => (
-            <tr
-              key={`${task.family}:${task.taskId}`}
-              className={`hover:bg-gray-50 ${task.taskId === selectedTaskId ? "bg-blue-50/60" : ""}`}
-            >
+            <tr key={`${task.family}:${task.taskId}`} className="hover:bg-gray-50">
               <td className="px-4 py-3 text-gray-700">{taskFamilyLabel(task.family)}</td>
               <td className="px-4 py-3">
                 <span className="font-mono text-xs text-gray-600">{task.taskType}</span>
@@ -122,14 +120,18 @@ export function TasksTable({
               <td className="px-4 py-3" data-testid={`task-status-${task.taskId}`}>
                 {taskStatusLabel(task.status)}
               </td>
-              <td className="px-4 py-3 text-right text-gray-600">{task.totalCount}</td>
-              <td className="px-4 py-3 text-right text-emerald-700">{task.successCount}</td>
-              <td className="px-4 py-3 text-right text-red-700">{task.failedCount}</td>
-              <td className="px-4 py-3 text-right text-gray-500">{task.skippedCount}</td>
+              <td className="px-4 py-3 text-right text-gray-600">{countSuffix(task.taskType, task.totalCount)}</td>
+              <td className="px-4 py-3 text-right text-emerald-700">
+                {countSuffix(task.taskType, task.successCount)}
+              </td>
+              <td className="px-4 py-3 text-right text-red-700">{countSuffix(task.taskType, task.failedCount)}</td>
+              <td className="px-4 py-3 text-right text-gray-500">
+                {countSuffix(task.taskType, task.skippedCount)}
+              </td>
               <td className="px-4 py-3">{errorSummaryCell(task.errorSummary, task.stopReason)}</td>
               <td className="px-4 py-3 text-right">
                 <Link
-                  href={detailHref(baseSearch, task.family, task.taskId)}
+                  href={detailHref(task.family, task.taskId)}
                   className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
                   data-testid={`view-task-detail-${task.taskId}`}
                 >

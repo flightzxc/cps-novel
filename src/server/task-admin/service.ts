@@ -7,7 +7,7 @@ import {
   type SessionStore,
 } from "@/lib/auth";
 import { isUniqueConstraintViolation, withDbRetry } from "@/lib/db/db-retry";
-import type { TaskFamily } from "@/lib/tasks";
+import { MOBOREADER_TASK_TYPES, type TaskFamily } from "@/lib/tasks";
 import { TASK_ITEM_STATUSES, TASK_STATUSES } from "@/domain/database-statuses";
 import {
   requireFreshAdminServiceMutation,
@@ -101,6 +101,19 @@ export type TaskItemDto = Readonly<{
    * frozen-contract-test reason as `TaskSummaryDto.stopReason` above.
    */
   stopReason?: string;
+  /**
+   * C-9 (task-detail route, Phase E rework, 2026-09-07): a catalog-scan
+   * item's page number, e.g. `5` — derived from `GenericTaskItem.targetId`
+   * (the page index, stored as text) only when `targetType` is exactly
+   * `"catalog_page"`, and only after re-parsing it as a positive integer.
+   * Deliberately never named `targetId`/`pageIndex` — both are on the "X9
+   * read DTO allowlists" contract test's forbidden-key list this file's
+   * other derived fields already respect; this is a distinctly-named,
+   * re-validated value, the same discipline as `stopReason` above, not a
+   * raw pass-through of the target identifier. Absent for every other
+   * item (channel_sync items have no `targetId` at all).
+   */
+  pageNumber?: number;
 }>;
 
 /**
@@ -156,6 +169,18 @@ function deriveItemStopReason(status: string, result: unknown, error: unknown): 
   const statusPart = typeof httpStatus === "number" ? ` (HTTP ${httpStatus})` : "";
   const pagePart = typeof pageIndex === "number" ? ` @ 第 ${pageIndex} 页` : "";
   return `${code}${statusPart}${pagePart}`;
+}
+
+/**
+ * C-9: `GenericTaskItem.targetId` is the page index encoded as text — see
+ * `TaskItemDto.pageNumber`'s doc comment above for why this is re-validated
+ * (never a raw pass-through) and never surfaced under a `targetId`/
+ * `pageIndex` key.
+ */
+function derivePageNumber(targetType: string | undefined, targetId: string | undefined): number | undefined {
+  if (targetType !== "catalog_page" || targetId === undefined) return undefined;
+  const parsed = Number(targetId);
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : undefined;
 }
 
 export type PromoLinkAdminDto = Readonly<{
@@ -240,6 +265,19 @@ type TaskListRow = {
   created_at: Date;
   /** C-10: read only to derive `TaskSummaryDto.stopReason` — never itself exposed. */
   result: Prisma.JsonValue | null;
+  /**
+   * C-9 (task-detail route): the four fields below are only ever selected by
+   * `getAdminTaskDetail`'s own query — `listAdminTasks`'s query never adds
+   * them to its SELECT list, so they stay `undefined` there and every
+   * pre-existing `listAdminTasks` fixture (including the "X9 read DTO
+   * allowlists" contract test's poisoned rows) is unaffected. `params` is
+   * read only to derive `TaskDetailDto.catalogScanConfig` — never itself
+   * exposed, same discipline as `result` above.
+   */
+  updated_at?: Date;
+  mode?: string;
+  channel_account_id?: string | null;
+  params?: Prisma.JsonValue | null;
 };
 
 type LockedParentRow = {
@@ -310,6 +348,124 @@ function authorizeRead(context: AdminAuthContext, env?: NodeJS.ProcessEnv): void
   requireHighRiskAdminCapability(context, "task:manage", env);
 }
 
+function pageNumberInput(value: unknown): number {
+  const parsed = typeof value === "number" ? value : Number(value);
+  if (!Number.isSafeInteger(parsed) || parsed < 1) return invalid();
+  return parsed;
+}
+
+function optionalPageNumberInput(value: unknown): number | undefined {
+  if (value === null || value === undefined || value === "") return undefined;
+  return pageNumberInput(value);
+}
+
+/**
+ * C-9 (task-detail route, Phase E rework, 2026-09-07): CPS-style
+ * task-configuration summary for `/tasks/[id]`, extracted field by field
+ * from `GenericTask.params` — the raw blob itself never leaves this
+ * function (`params` stays on the "X9 read DTO allowlists" contract test's
+ * FORBIDDEN_KEYS list; this returns a curated, individually re-typed
+ * subset, the same discipline `deriveTaskStopReason`/`deriveItemStopReason`
+ * already apply to `result`/`error`). Only ever populated for a
+ * `catalog_scan` task — every other taskType's `params` shape is out of
+ * scope for this work order.
+ */
+export type CatalogScanConfigDto = Readonly<{
+  pageStart?: number;
+  pageEnd?: number;
+  pageSize?: number;
+  safetyMaxPages?: number;
+  languages?: readonly string[];
+  source?: "manual";
+  requestId?: string;
+}>;
+
+function deriveCatalogScanConfig(taskType: string, params: unknown): CatalogScanConfigDto | undefined {
+  if (taskType !== MOBOREADER_TASK_TYPES.catalogScan) return undefined;
+  const paramsObject = jsonPlainObject(params);
+  if (!paramsObject) return undefined;
+  const pageStart = typeof paramsObject.pageStart === "number" ? paramsObject.pageStart : undefined;
+  const pageEnd = typeof paramsObject.pageEnd === "number" ? paramsObject.pageEnd : undefined;
+  const pageSize = typeof paramsObject.pageSize === "number" ? paramsObject.pageSize : undefined;
+  const safetyMaxPages = typeof paramsObject.safetyMaxPages === "number" ? paramsObject.safetyMaxPages : undefined;
+  const requestId = typeof paramsObject.requestId === "string" ? paramsObject.requestId.slice(0, 200) : undefined;
+  const source = paramsObject.source === "manual" ? "manual" as const : undefined;
+  const languagesRaw = paramsObject.languages;
+  // `sanitizeLanguageList` (`src/lib/tasks/moboreader.ts`) already dedupes
+  // before writing `params.languages` — re-deduping here too is cheap
+  // defense-in-depth against a future writer regressing that guarantee,
+  // not a correction of anything this codebase's own writer currently does.
+  const languages = Array.isArray(languagesRaw)
+    ? Object.freeze(Array.from(new Set(
+        languagesRaw.filter((value): value is string => typeof value === "string"),
+      )).slice(0, 64))
+    : undefined;
+  if (
+    pageStart === undefined && pageEnd === undefined && pageSize === undefined
+    && safetyMaxPages === undefined && requestId === undefined && source === undefined
+    && (languages === undefined || languages.length === 0)
+  ) {
+    return undefined;
+  }
+  return Object.freeze({ pageStart, pageEnd, pageSize, safetyMaxPages, requestId, source, languages });
+}
+
+/**
+ * C-9: CPS-style catalog-scan audit summary — 上游返回 total / 实际抓取条数 /
+ * 最后一页 — derived only from the task's own `result` JSON, never a
+ * pass-through. `observedTotal`/`actualFetchedCount` reuse the exact
+ * aggregates `persistCatalogPage`/`persistCatalogUpstreamFailure`
+ * (`worker/handlers/moboreader.ts`) already computed and stored
+ * (`catalogObservedTotal`, the SQL-summed `batchActualCount`) rather than
+ * re-deriving a `Σ returnedCount` scan over every item here.
+ * `lastCompletedPage` reuses the worker's own `result.checkpoint.
+ * lastCompletedPage` (set on every successful page, carried forward through
+ * a later failure) as "the max page actually fetched". Only ever populated
+ * for a `catalog_scan` task.
+ */
+export type CatalogScanAuditDto = Readonly<{
+  observedTotal?: number;
+  actualFetchedCount?: number;
+  lastCompletedPage?: number;
+}>;
+
+function deriveCatalogScanAudit(taskType: string, result: unknown): CatalogScanAuditDto | undefined {
+  if (taskType !== MOBOREADER_TASK_TYPES.catalogScan) return undefined;
+  const resultObject = jsonPlainObject(result);
+  if (!resultObject) return undefined;
+  const observedTotal = typeof resultObject.catalogObservedTotal === "number"
+    ? resultObject.catalogObservedTotal
+    : undefined;
+  const actualFetchedCount = typeof resultObject.batchActualCount === "number"
+    ? resultObject.batchActualCount
+    : undefined;
+  const checkpoint = jsonPlainObject(resultObject.checkpoint);
+  const lastCompletedPageRaw = checkpoint?.lastCompletedPage;
+  const lastCompletedPage = typeof lastCompletedPageRaw === "number" && Number.isSafeInteger(lastCompletedPageRaw)
+    ? lastCompletedPageRaw
+    : undefined;
+  if (observedTotal === undefined && actualFetchedCount === undefined && lastCompletedPage === undefined) {
+    return undefined;
+  }
+  return Object.freeze({ observedTotal, actualFetchedCount, lastCompletedPage });
+}
+
+/**
+ * C-9: `getAdminTaskDetail`'s richer return shape — every added field is
+ * additive/optional on top of `TaskSummaryDto`, so every existing caller
+ * that only knows about `TaskSummaryDto` keeps compiling and every existing
+ * `listAdminTasks`/`taskSummary` fixture is untouched (this type is never
+ * produced by `listAdminTasks`).
+ */
+export type TaskDetailDto = TaskSummaryDto & Readonly<{
+  mode?: string;
+  channelAccountId?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  catalogScanConfig?: CatalogScanConfigDto;
+  catalogScanAudit?: CatalogScanAuditDto;
+}>;
+
 function taskSummary(row: TaskListRow): TaskSummaryDto {
   const stopReason = deriveTaskStopReason(row.has_error, row.result);
   return Object.freeze({
@@ -364,7 +520,7 @@ export async function getAdminTaskDetail(
   context: AdminAuthContext,
   input: { family: unknown; taskId: unknown },
   env?: NodeJS.ProcessEnv,
-): Promise<TaskSummaryDto> {
+): Promise<TaskDetailDto> {
   authorizeRead(context, env);
   const family = oneOf(input.family, TASK_FAMILIES);
   const taskId = uuid(input.taskId);
@@ -375,37 +531,75 @@ export async function getAdminTaskDetail(
     SELECT ${family}::text AS family, id AS task_id, task_type,
       status, total_count, success_count, failed_count,
       skipped_count::int AS skipped_count,
-      error IS NOT NULL AS has_error, created_at, result
+      error IS NOT NULL AS has_error, created_at, updated_at,
+      mode, channel_account_id, params, result
     FROM ${table}
     WHERE id = ${taskId}::uuid
   `);
-  if (!rows[0]) throw new TaskAdminError("task_admin_not_found", 404);
-  return taskSummary(rows[0]);
+  const row = rows[0];
+  if (!row) throw new TaskAdminError("task_admin_not_found", 404);
+  const catalogScanConfig = deriveCatalogScanConfig(row.task_type, row.params);
+  const catalogScanAudit = deriveCatalogScanAudit(row.task_type, row.result);
+  return Object.freeze({
+    ...taskSummary(row),
+    ...(row.mode !== undefined ? { mode: row.mode } : {}),
+    ...(row.channel_account_id ? { channelAccountId: row.channel_account_id } : {}),
+    createdAt: iso(row.created_at),
+    ...(row.updated_at ? { updatedAt: iso(row.updated_at) } : {}),
+    ...(catalogScanConfig ? { catalogScanConfig } : {}),
+    ...(catalogScanAudit ? { catalogScanAudit } : {}),
+  });
 }
 
 export async function listAdminTaskItems(
   db: PrismaClient,
   context: AdminAuthContext,
-  input: { family: unknown; taskId: unknown; status?: unknown; limit?: unknown },
+  input: { family: unknown; taskId: unknown; status?: unknown; limit?: unknown; page?: unknown },
   env?: NodeJS.ProcessEnv,
-): Promise<{ family: TaskFamily; taskId: string; items: readonly TaskItemDto[]; limit: number }> {
+): Promise<{
+  family: TaskFamily;
+  taskId: string;
+  items: readonly TaskItemDto[];
+  limit: number;
+  /**
+   * C-9 (task-detail route): `page`/`pageSize`/`total`/`totalPages` are
+   * populated only when the caller passes `page` — the pre-existing
+   * flat-`limit` callers (the old same-page panel, `/api/admin/tasks/items`)
+   * never do, so this stays absent for them, byte-identical to the prior
+   * return shape. Same `{page,total,totalPages}` field names as
+   * `AdminContentPage<T>` (`src/domain/admin-content.ts`) so the detail
+   * page can reuse the existing `ContentPagination` component verbatim.
+   */
+  page?: number;
+  pageSize?: number;
+  total?: number;
+  totalPages?: number;
+}> {
   authorizeRead(context, env);
   const family = oneOf(input.family, TASK_FAMILIES);
   const taskId = uuid(input.taskId);
   const status = optionalOneOf(input.status, ITEM_STATUSES);
   const take = limit(input.limit);
+  const page = optionalPageNumberInput(input.page);
+  const skip = page !== undefined ? (page - 1) * take : undefined;
   const where = { taskId, ...(status ? { status } : {}) };
   let items: TaskItemDto[];
+  let total: number | undefined;
   if (family === "channel_sync") {
-    const rows = await db.channelSyncTaskItem.findMany({
-      where,
-      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
-      take,
-      select: {
-        id: true, taskId: true, status: true, attemptCount: true,
-        leaseEpoch: true, lockedUntil: true, error: true, result: true,
-      },
-    });
+    const [rows, count] = await Promise.all([
+      db.channelSyncTaskItem.findMany({
+        where,
+        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+        ...(skip !== undefined ? { skip } : {}),
+        take,
+        select: {
+          id: true, taskId: true, status: true, attemptCount: true,
+          leaseEpoch: true, lockedUntil: true, error: true, result: true,
+        },
+      }),
+      page !== undefined ? db.channelSyncTaskItem.count({ where }) : Promise.resolve(undefined),
+    ]);
+    total = count;
     items = rows.map((row) => {
       const stopReason = deriveItemStopReason(row.status, row.result, row.error);
       return Object.freeze({
@@ -416,26 +610,45 @@ export async function listAdminTaskItems(
       });
     });
   } else {
-    const rows = await db.genericTaskItem.findMany({
-      where,
-      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
-      take,
-      select: {
-        id: true, taskId: true, status: true, attemptCount: true,
-        leaseEpoch: true, lockedUntil: true, error: true, result: true,
-      },
-    });
+    const [rows, count] = await Promise.all([
+      db.genericTaskItem.findMany({
+        where,
+        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+        ...(skip !== undefined ? { skip } : {}),
+        take,
+        select: {
+          id: true, taskId: true, status: true, attemptCount: true,
+          leaseEpoch: true, lockedUntil: true, error: true, result: true,
+          targetType: true, targetId: true,
+        },
+      }),
+      page !== undefined ? db.genericTaskItem.count({ where }) : Promise.resolve(undefined),
+    ]);
+    total = count;
     items = rows.map((row) => {
       const stopReason = deriveItemStopReason(row.status, row.result, row.error);
+      const pageNumber = derivePageNumber(row.targetType, row.targetId);
       return Object.freeze({
         family, itemId: row.id, taskId: row.taskId, status: row.status,
         attemptCount: row.attemptCount, leaseEpoch: row.leaseEpoch.toString(),
         lockedUntil: iso(row.lockedUntil), errorSummary: row.error === null ? null : "redacted",
         ...(stopReason !== undefined ? { stopReason } : {}),
+        ...(pageNumber !== undefined ? { pageNumber } : {}),
       });
     });
   }
-  return Object.freeze({ family, taskId, items: Object.freeze(items), limit: take });
+  return Object.freeze({
+    family,
+    taskId,
+    items: Object.freeze(items),
+    limit: take,
+    ...(page !== undefined ? {
+      page,
+      pageSize: take,
+      total: total ?? 0,
+      totalPages: Math.ceil((total ?? 0) / take),
+    } : {}),
+  });
 }
 
 export async function listAdminPromoLinks(
