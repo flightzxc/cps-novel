@@ -2,6 +2,7 @@ import { findCapabilityState } from "@/features/admin-ui/capability-view";
 import { errorEnvelopeCopy } from "@/features/admin-ui/error-copy";
 import type { ErrorEnvelope } from "@/contracts";
 import { listArticles, type ArticleListItem } from "@/server/articles";
+import { getSiteUrl } from "@/lib/seo/site-url";
 
 import { prisma } from "../../api/admin/_lib/deps";
 import { AdminShell } from "../_components/admin-shell";
@@ -14,6 +15,26 @@ import { ArticleList } from "./_components/article-list";
 import { articleQueryErrorEnvelope } from "./_lib/query-errors";
 
 export const dynamic = "force-dynamic";
+
+/**
+ * Public origin for this page's "公开页" links. Under RC-9 admin-host
+ * isolation the console runs on `ADMIN_CANONICAL_ORIGIN`, which 404s every
+ * public content path, so the link has to be absolute against `SITE_URL`
+ * (see `./_components/article-list.tsx`'s `publicPageHref`). Resolved here
+ * because `SITE_URL` is a server-only env var.
+ *
+ * Degrades to `null` instead of throwing when `SITE_URL` is unset/malformed —
+ * same rationale as `../settings/page.tsx`'s `resolveIndexNowGuidance`: a
+ * local/dev environment without `SITE_URL` is not this page's failure and must
+ * not take the whole article list down.
+ */
+function resolvePublicOrigin(): string | null {
+  try {
+    return getSiteUrl();
+  } catch {
+    return null;
+  }
+}
 
 type SearchParams = {
   page?: string;
@@ -40,6 +61,7 @@ export default async function ArticlesPage({
   const params = await searchParams;
   const { context, granted } = await requireContentPage("/articles", "content:view");
   const canWrite = findCapabilityState(capabilityViews(context), "content:publish") === "granted";
+  const publicOrigin = resolvePublicOrigin();
 
   let rows: readonly ArticleListItem[] = [];
   let page = 1;
@@ -85,7 +107,7 @@ export default async function ArticlesPage({
             <ContentErrorPanel message={errorEnvelopeCopy(listError)} />
           ) : (
             <>
-              <ArticleList canWrite={canWrite} rows={rows} />
+              <ArticleList canWrite={canWrite} publicOrigin={publicOrigin} rows={rows} />
               <ContentPagination
                 basePath="/articles"
                 params={params}

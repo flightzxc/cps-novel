@@ -35,6 +35,8 @@ import { ArticleList, type ArticleListRow } from "@/app/(admin)/articles/_compon
 import { ArticleEditor } from "@/app/(admin)/articles/_components/article-editor";
 import { ArticleFilters } from "@/app/(admin)/articles/_components/article-filters";
 
+const PUBLIC_ORIGIN = "https://novel.test";
+
 const DRAFT_ROW: ArticleListRow = {
   id: "article-1",
   title: "Draft Article",
@@ -68,14 +70,35 @@ afterEach(() => {
 
 describe("ArticleList · 列表与批量", () => {
   it("渲染标题/状态/模板，未发布文章不出现公开页链接，已发布出现", () => {
-    render(<ArticleList rows={[DRAFT_ROW, PUBLISHED_ROW]} canWrite />);
+    render(<ArticleList rows={[DRAFT_ROW, PUBLISHED_ROW]} canWrite publicOrigin={PUBLIC_ORIGIN} />);
     expect(screen.getByText("Draft Article")).toBeTruthy();
     expect(screen.getByText("Published Article")).toBeTruthy();
     expect(screen.getAllByText("公开页")).toHaveLength(1);
   });
 
+  /**
+   * RC-9 regression: the console and the public site are different origins,
+   * and the admin origin 404s every public content path. A site-relative href
+   * would resolve against the admin host — exactly the 404 this pins against.
+   */
+  it("公开页链接指向 SITE_URL 公开域，而非当前后台域（RC-9）", () => {
+    render(<ArticleList rows={[DRAFT_ROW, PUBLISHED_ROW]} canWrite publicOrigin={PUBLIC_ORIGIN} />);
+    const link = screen.getByText("公开页") as HTMLAnchorElement;
+    expect(link.getAttribute("href")).toBe(
+      `${PUBLIC_ORIGIN}/novel/${PUBLISHED_ROW.slug}-p${PUBLISHED_ROW.publicPageShortId}`,
+    );
+  });
+
+  it("publicOrigin 缺失时退回站内相对路径，不渲染 null 前缀", () => {
+    render(<ArticleList rows={[PUBLISHED_ROW]} canWrite publicOrigin={null} />);
+    const link = screen.getByText("公开页") as HTMLAnchorElement;
+    expect(link.getAttribute("href")).toBe(
+      `/novel/${PUBLISHED_ROW.slug}-p${PUBLISHED_ROW.publicPageShortId}`,
+    );
+  });
+
   it("勾选行驱动已选计数，上限 50", () => {
-    render(<ArticleList rows={[DRAFT_ROW, PUBLISHED_ROW]} canWrite />);
+    render(<ArticleList rows={[DRAFT_ROW, PUBLISHED_ROW]} canWrite publicOrigin={PUBLIC_ORIGIN} />);
     expect(screen.getByText("已选择 0 / 50")).toBeTruthy();
     fireEvent.click(screen.getByLabelText(`选择 ${DRAFT_ROW.title}`));
     expect(screen.getByText("已选择 1 / 50")).toBeTruthy();
@@ -83,7 +106,7 @@ describe("ArticleList · 列表与批量", () => {
 
   it("单行再生成：expectedUpdatedAt 取该行的 updatedAt（N-7）", async () => {
     listActions.regenerateArticleAction.mockResolvedValue({ ok: true, data: { outcome: "regenerated" } });
-    render(<ArticleList rows={[DRAFT_ROW]} canWrite />);
+    render(<ArticleList rows={[DRAFT_ROW]} canWrite publicOrigin={PUBLIC_ORIGIN} />);
     fireEvent.click(screen.getByText("再生成"));
     await vi.waitFor(() => expect(listActions.regenerateArticleAction).toHaveBeenCalledTimes(1));
     expect(listActions.regenerateArticleAction.mock.calls[0]![0]).toMatchObject({
@@ -95,7 +118,7 @@ describe("ArticleList · 列表与批量", () => {
 
   it("单行再生成遇到 conflict outcome 时给出可读提示", async () => {
     listActions.regenerateArticleAction.mockResolvedValue({ ok: true, data: { outcome: "conflict" } });
-    render(<ArticleList rows={[DRAFT_ROW]} canWrite />);
+    render(<ArticleList rows={[DRAFT_ROW]} canWrite publicOrigin={PUBLIC_ORIGIN} />);
     fireEvent.click(screen.getByText("再生成"));
     await vi.waitFor(() => expect(screen.getByRole("status").textContent).toContain("已被其他操作人修改"));
   });
@@ -105,7 +128,7 @@ describe("ArticleList · 列表与批量", () => {
       ok: true,
       data: { counts: { regenerated: 1, skipped: 0, failed: 0, not_processed: 0 } },
     });
-    render(<ArticleList rows={[DRAFT_ROW, PUBLISHED_ROW]} canWrite />);
+    render(<ArticleList rows={[DRAFT_ROW, PUBLISHED_ROW]} canWrite publicOrigin={PUBLIC_ORIGIN} />);
     fireEvent.click(screen.getByLabelText(`选择 ${DRAFT_ROW.title}`));
     fireEvent.click(screen.getByText("批量再生成"));
     await vi.waitFor(() => expect(listActions.regenerateArticlesBatchAction).toHaveBeenCalledTimes(1));
@@ -114,12 +137,12 @@ describe("ArticleList · 列表与批量", () => {
   });
 
   it("canWrite=false 时批量按钮禁用", () => {
-    render(<ArticleList rows={[DRAFT_ROW]} canWrite={false} />);
+    render(<ArticleList rows={[DRAFT_ROW]} canWrite={false} publicOrigin={PUBLIC_ORIGIN} />);
     expect((screen.getByText("批量再生成") as HTMLButtonElement).disabled).toBe(true);
   });
 
   it("表头「选择当前页」全选后已选择 2 / 50，再点一次归零（C-17）", () => {
-    render(<ArticleList rows={[DRAFT_ROW, PUBLISHED_ROW]} canWrite />);
+    render(<ArticleList rows={[DRAFT_ROW, PUBLISHED_ROW]} canWrite publicOrigin={PUBLIC_ORIGIN} />);
     const header = screen.getByLabelText("选择当前页");
     fireEvent.click(header);
     expect(screen.getByText("已选择 2 / 50")).toBeTruthy();
