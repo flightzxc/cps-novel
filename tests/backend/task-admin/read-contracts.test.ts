@@ -324,6 +324,42 @@ describe("C-10 derived stop reason", () => {
     expect(cascadedResult.items[0]).not.toHaveProperty("stopReason");
   });
 
+  /**
+   * D-7 (Phase E rework 2, 2026-09-07): `"finalize_failed"` — written by
+   * `worker/runtime/worker.ts`'s `handleFinalizeFailure` when
+   * `finalizeTaskItem`'s own write transaction fails outside the handler
+   * (e.g. a DB CHECK violation) — is now in `CATALOG_SCAN_STOP_REASONS`, so
+   * it surfaces through this same `error.code`-driven derivation as
+   * `upstream_error` does. Its `detail` shape carries no `httpStatus`/
+   * `pageIndex` (only `sqlState`/`prismaCode`/`constraint`, none of which
+   * this derivation reads), so the line is the bare code with neither
+   * suffix — still never a raw pass-through of `detail` itself.
+   */
+  it("listAdminTaskItems: derives the bare 'finalize_failed' stop-reason code (D-7), with no HTTP/page suffix since that detail shape carries neither", async () => {
+    const context = await readContext("/api/admin/tasks/items");
+    const finalizeFailedRow = {
+      id: "60000000-0000-4000-8000-000000000005", taskId: TASK_ID, status: "failed",
+      attemptCount: 3, leaseEpoch: 2n, lockedUntil: null,
+      result: {},
+      error: {
+        code: "finalize_failed",
+        message: "Item finalize failed: 23514",
+        detail: { sqlState: "23514", prismaCode: "P2010", constraint: "novel_source_item_metadata_check" },
+      },
+    };
+    const delegateFinalizeFailed = { findMany: async () => [finalizeFailedRow] };
+    const dbFinalizeFailed = {
+      channelSyncTaskItem: delegateFinalizeFailed,
+      genericTaskItem: delegateFinalizeFailed,
+    } as unknown as PrismaClient;
+    const finalizeFailedResult = await listAdminTaskItems(
+      dbFinalizeFailed, context, { family: "generic", taskId: TASK_ID }, {} as NodeJS.ProcessEnv,
+    );
+    expect(finalizeFailedResult.items[0].stopReason).toBe("finalize_failed");
+    expect(finalizeFailedResult.items[0].errorSummary).toBe("redacted");
+    for (const key of FORBIDDEN_KEYS) expect(allKeys(finalizeFailedResult).has(key)).toBe(false);
+  });
+
   it("listAdminTaskItems: withholds stopReason for a non-upstream_error contract code and for a successful item", async () => {
     const context = await readContext("/api/admin/tasks/items");
     const otherCodeRow = {

@@ -119,11 +119,20 @@ export type TaskItemDto = Readonly<{
 /**
  * The finite set of `GenericTaskItem.result.stopReason` / `GenericTask.
  * result.stopReason` values this codebase's catalog-scan handler
- * (`worker/handlers/moboreader.ts`) ever writes — see the identical literal
- * array in `src/lib/tasks/store.ts`'s `finalizeTaskItem`. Read back here as
- * an explicit allowlist (not a blind pass-through of whatever string is in
- * the JSONB column) so a future handler bug can never smuggle free text
- * into this admin-read projection through `result.stopReason`.
+ * (`worker/handlers/moboreader.ts`) ever writes, PLUS (D-7, Phase E rework
+ * 2, 2026-09-07) `"finalize_failed"` — a distinct kind of value read from
+ * `error.code` rather than `result.stopReason` by `deriveItemStopReason`
+ * below, written by `worker/runtime/worker.ts`'s `handleFinalizeFailure`
+ * when `finalizeTaskItem`'s own write transaction fails outside the
+ * handler. The first six are still the identical literal array in
+ * `src/lib/tasks/store.ts`'s `finalizeTaskItem` (that array governs a
+ * different thing — the sibling-page cascade-stop mechanism, which
+ * `finalize_failed` deliberately does not participate in: one item's
+ * finalize failing is not a reason to stop reading the rest of a catalog
+ * scan). Read back here as an explicit allowlist (not a blind pass-through
+ * of whatever string is in the JSONB column) so a future handler/runtime
+ * bug can never smuggle free text into this admin-read projection through
+ * `result.stopReason` / `error.code`.
  */
 const CATALOG_SCAN_STOP_REASONS = new Set([
   "expected_total_reached",
@@ -132,6 +141,7 @@ const CATALOG_SCAN_STOP_REASONS = new Set([
   "short_page",
   "safety_limit",
   "upstream_error",
+  "finalize_failed",
 ]);
 
 function jsonPlainObject(value: unknown): Record<string, unknown> | null {
