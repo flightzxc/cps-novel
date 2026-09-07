@@ -31,7 +31,14 @@ function sanitizeCode(value: unknown, fallback: string): string {
   return normalized.slice(0, PERSISTED_TASK_ERROR_CODE_MAX_LENGTH) || fallback;
 }
 
-function redactSecrets(message: string): string {
+/**
+ * Exported for D-7b (`worker/runtime/worker.ts`'s `handleFinalizeFailure`
+ * engineering-log line): the same redaction this module already applies to
+ * every persisted `message`/`detail` string, reused so a log-only field can
+ * carry more of the raw database error text without becoming a second,
+ * unredacted secret-leak surface.
+ */
+export function redactSecrets(message: string): string {
   return message
     .replace(/\b(authorization\s*:\s*)bearer\s+[^\s,;]+/gi, "$1Bearer [REDACTED]")
     .replace(/\bbearer\s+[a-z0-9._~+/=-]+/gi, "Bearer [REDACTED]")

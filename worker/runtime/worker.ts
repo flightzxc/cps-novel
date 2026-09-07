@@ -6,6 +6,7 @@ import {
   finalizeTaskItem,
   heartbeatTaskItem,
   recoverExpiredItem,
+  redactSecrets,
   requireHandler,
   sanitizePersistedTaskError,
   validateTaskClaimTarget,
@@ -176,6 +177,37 @@ function extractFinalizeFailureDetail(error: unknown): FinalizeFailureDetail {
   };
 }
 
+const FINALIZE_FAILURE_DATABASE_ERROR_HEAD_MAX_LENGTH = 160;
+const FINALIZE_FAILURE_DATABASE_ERROR_TRUNCATION_MARKER = "Failing row";
+
+/**
+ * D-7b (施工工单_C15_终态扫描绑定变量溢出_2026-09-07.md §D-7b): a
+ * worker-log-only value carrying more of the raw database error text than
+ * `FinalizeFailureDetail`'s three allowlisted fields — never persisted to
+ * the task item (`item.error.detail` stays the C-10 allowlist set in
+ * `buildFinalizeFailedOutcome`, unchanged by this function), only written to
+ * the process log via `handleFinalizeFailure`'s `worker_finalize_failed`
+ * line for an engineer to grep. Still passed through the same
+ * `redactSecrets` every persisted string goes through, *and* truncated at
+ * the first "Failing row" clause — Postgres's own convention for embedding
+ * the actual violating row's column values in a CHECK/constraint error
+ * message — before the final length cap, so this stays safe to log even
+ * though it is deliberately more permissive than `detail`.
+ */
+function extractFinalizeFailureDatabaseErrorHead(error: unknown): string {
+  const candidate = error && typeof error === "object" ? (error as Record<string, unknown>) : {};
+  const meta = candidate.meta && typeof candidate.meta === "object"
+    ? (candidate.meta as Record<string, unknown>)
+    : undefined;
+  const raw = meta && typeof meta.database_error === "string"
+    ? meta.database_error
+    : (typeof candidate.message === "string" ? candidate.message : "");
+  const redacted = redactSecrets(raw);
+  const markerIndex = redacted.indexOf(FINALIZE_FAILURE_DATABASE_ERROR_TRUNCATION_MARKER);
+  const truncated = markerIndex === -1 ? redacted : redacted.slice(0, markerIndex);
+  return truncated.slice(0, FINALIZE_FAILURE_DATABASE_ERROR_HEAD_MAX_LENGTH);
+}
+
 function buildFinalizeFailedOutcome(error: unknown): TaskOutcome {
   const detail = extractFinalizeFailureDetail(error);
   return {
@@ -220,6 +252,20 @@ async function handleFinalizeFailure(
   finalizeError: unknown,
 ): Promise<void> {
   const failedOutcome = buildFinalizeFailedOutcome(finalizeError);
+  // D-7b: engineering-side-only traceability line, deliberately separate
+  // from `failedOutcome.error.detail` (which stays the C-10
+  // operator-visible allowlist, untouched by this addition). This is the
+  // one place the fuller `databaseErrorHead` text is ever written down.
+  const finalizeFailureDetail = extractFinalizeFailureDetail(finalizeError);
+  console.error(JSON.stringify({
+    event: "worker_finalize_failed",
+    itemId: lease.itemId,
+    attempt: lease.attemptCount,
+    prismaCode: finalizeFailureDetail.prismaCode,
+    sqlState: finalizeFailureDetail.sqlState,
+    constraint: finalizeFailureDetail.constraint,
+    databaseErrorHead: extractFinalizeFailureDatabaseErrorHead(finalizeError),
+  }));
   try {
     await finalizeTaskItem(options.prisma, lease, failedOutcome);
     await emitWorkerTaskFailure({
