@@ -14,6 +14,16 @@ export type TaskSummaryRow = {
   readonly failedCount: number;
   readonly skippedCount: number;
   readonly errorSummary: "redacted" | null;
+  /**
+   * C-10 (Phase E rework, 2026-09-07): a stable, allowlisted stop-reason
+   * code (e.g. `"upstream_error"`), never free text — see
+   * `TaskSummaryDto.stopReason`'s doc comment in
+   * `src/server/task-admin/service.ts`. Absent whenever the task has none,
+   * not just on success: the "X9 read DTO allowlists" contract test
+   * requires the field to be omitted entirely rather than `null` so every
+   * pre-existing fixture there keeps matching unmodified.
+   */
+  readonly stopReason?: string;
 };
 
 /**
@@ -24,8 +34,20 @@ export type TaskSummaryRow = {
  * read-side kept the payload out of the browser entirely). The column says so
  * in the operator's own words instead of leaving `"redacted"` to read like a
  * broken string.
+ *
+ * C-10: when the service *did* manage to derive a stable stop-reason code
+ * for this task (`stopReason`, an allowlisted enum value — never free
+ * text), show that instead of the generic "已脱敏" line — it is strictly
+ * more useful and still not raw error content.
  */
-function errorSummaryCell(value: "redacted" | null) {
+function errorSummaryCell(value: "redacted" | null, stopReason: string | undefined) {
+  if (stopReason !== undefined) {
+    return (
+      <span className="font-mono text-amber-700" title="从任务的停止原因派生，稳定枚举码，非原始错误文本">
+        {stopReason}
+      </span>
+    );
+  }
   if (value === null) {
     return <span className="text-gray-400">—</span>;
   }
@@ -104,7 +126,7 @@ export function TasksTable({
               <td className="px-4 py-3 text-right text-emerald-700">{task.successCount}</td>
               <td className="px-4 py-3 text-right text-red-700">{task.failedCount}</td>
               <td className="px-4 py-3 text-right text-gray-500">{task.skippedCount}</td>
-              <td className="px-4 py-3">{errorSummaryCell(task.errorSummary)}</td>
+              <td className="px-4 py-3">{errorSummaryCell(task.errorSummary, task.stopReason)}</td>
               <td className="px-4 py-3 text-right">
                 <Link
                   href={detailHref(baseSearch, task.family, task.taskId)}

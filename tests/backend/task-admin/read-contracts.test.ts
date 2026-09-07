@@ -240,3 +240,97 @@ describe("X9 adjudication isolation", () => {
     expect(adjudicator).not.toMatch(/promoLink\.|fetch\(|adapter|upstream/i);
   });
 });
+
+/**
+ * C-10 (Phase E rework, 2026-09-07): `stopReason` is a narrow, allowlisted
+ * exception to the "never leak raw result/error" rule the tests above
+ * enforce — it is derived (never a pass-through) from `result`/`error`, and
+ * only ever a value from `CATALOG_SCAN_STOP_REASONS`
+ * (`src/server/task-admin/service.ts`), never the raw string a handler
+ * happened to write. Optional-field-only, per the work order: it must be
+ * entirely *absent* (not `null`) whenever there is nothing to derive, so
+ * every pre-existing `toEqual` fixture in "X9 read DTO allowlists" above
+ * keeps matching without modification (already re-verified unchanged by
+ * this same test run).
+ */
+describe("C-10 derived stop reason", () => {
+  it("listAdminTasks: surfaces the task's own result.stopReason only when it is both has_error and an enumerated value", async () => {
+    const context = await readContext("/api/admin/tasks");
+    const rowWithReason = {
+      family: "generic", task_id: TASK_ID, task_type: "catalog_scan", status: "completed_with_errors",
+      total_count: 3, success_count: 1, failed_count: 2, skipped_count: 0,
+      has_error: true, created_at: NOW,
+      result: { stopReason: "upstream_error", terminalState: "partial_failed" },
+    };
+    const db1 = { $queryRaw: async () => [rowWithReason] } as unknown as PrismaClient;
+    const result1 = await listAdminTasks(db1, context, {}, {} as NodeJS.ProcessEnv);
+    expect(result1.items[0].stopReason).toBe("upstream_error");
+
+    // Not an enumerated stop reason — must never pass through verbatim.
+    const rowWithBogusReason = { ...rowWithReason, result: { stopReason: "not-a-real-reason<script>" } };
+    const db2 = { $queryRaw: async () => [rowWithBogusReason] } as unknown as PrismaClient;
+    const result2 = await listAdminTasks(db2, context, {}, {} as NodeJS.ProcessEnv);
+    expect(result2.items[0]).not.toHaveProperty("stopReason");
+
+    // has_error: false — even a well-formed result.stopReason is withheld.
+    const rowWithoutError = { ...rowWithReason, has_error: false };
+    const db3 = { $queryRaw: async () => [rowWithoutError] } as unknown as PrismaClient;
+    const result3 = await listAdminTasks(db3, context, {}, {} as NodeJS.ProcessEnv);
+    expect(result3.items[0]).not.toHaveProperty("stopReason");
+  });
+
+  it("listAdminTaskItems: derives the full stop-reason line only for the origin item, not a cascaded stoppedBeforeFetch item", async () => {
+    const context = await readContext("/api/admin/tasks/items");
+    const originRow = {
+      id: "60000000-0000-4000-8000-000000000001", taskId: TASK_ID, status: "failed",
+      attemptCount: 1, leaseEpoch: 5n, lockedUntil: null,
+      result: { stopReason: "upstream_error", terminalState: "partial_failed" },
+      error: {
+        code: "upstream_error",
+        message: "MoboReader catalog read failed: upstream_http_error (HTTP 401) at page 1",
+        detail: { adapterCode: "upstream_http_error", httpStatus: 401, retryable: false, pageIndex: 1 },
+      },
+    };
+    const delegateOrigin = { findMany: async () => [originRow] };
+    const dbOrigin = { channelSyncTaskItem: delegateOrigin, genericTaskItem: delegateOrigin } as unknown as PrismaClient;
+    const originResult = await listAdminTaskItems(dbOrigin, context, { family: "generic", taskId: TASK_ID }, {} as NodeJS.ProcessEnv);
+    expect(originResult.items[0].stopReason).toBe("upstream_error (HTTP 401) @ 第 1 页");
+    expect(originResult.items[0].errorSummary).toBe("redacted");
+    for (const key of FORBIDDEN_KEYS) expect(allKeys(originResult).has(key)).toBe(false);
+
+    const cascadedRow = {
+      id: "60000000-0000-4000-8000-000000000002", taskId: TASK_ID, status: "failed",
+      attemptCount: 0, leaseEpoch: 0n, lockedUntil: null,
+      result: { stoppedBeforeFetch: true, stopReason: "upstream_error", returnedCount: 0 },
+      error: { code: "upstream_error", message: "Catalog scan stopped after an upstream error" },
+    };
+    const delegateCascaded = { findMany: async () => [cascadedRow] };
+    const dbCascaded = { channelSyncTaskItem: delegateCascaded, genericTaskItem: delegateCascaded } as unknown as PrismaClient;
+    const cascadedResult = await listAdminTaskItems(dbCascaded, context, { family: "generic", taskId: TASK_ID }, {} as NodeJS.ProcessEnv);
+    expect(cascadedResult.items[0]).not.toHaveProperty("stopReason");
+  });
+
+  it("listAdminTaskItems: withholds stopReason for a non-upstream_error contract code and for a successful item", async () => {
+    const context = await readContext("/api/admin/tasks/items");
+    const otherCodeRow = {
+      id: "60000000-0000-4000-8000-000000000003", taskId: TASK_ID, status: "failed",
+      attemptCount: 1, leaseEpoch: 1n, lockedUntil: null,
+      result: { stopReason: "upstream_error", terminalState: "partial_failed" },
+      error: { code: "account_inactive", message: "The channel account is not active" },
+    };
+    const delegateOther = { findMany: async () => [otherCodeRow] };
+    const dbOther = { channelSyncTaskItem: delegateOther, genericTaskItem: delegateOther } as unknown as PrismaClient;
+    const otherResult = await listAdminTaskItems(dbOther, context, { family: "generic", taskId: TASK_ID }, {} as NodeJS.ProcessEnv);
+    expect(otherResult.items[0]).not.toHaveProperty("stopReason");
+
+    const successRow = {
+      id: "60000000-0000-4000-8000-000000000004", taskId: TASK_ID, status: "success",
+      attemptCount: 1, leaseEpoch: 1n, lockedUntil: null,
+      result: { returnedCount: 20 }, error: null,
+    };
+    const delegateSuccess = { findMany: async () => [successRow] };
+    const dbSuccess = { channelSyncTaskItem: delegateSuccess, genericTaskItem: delegateSuccess } as unknown as PrismaClient;
+    const successResult = await listAdminTaskItems(dbSuccess, context, { family: "generic", taskId: TASK_ID }, {} as NodeJS.ProcessEnv);
+    expect(successResult.items[0]).not.toHaveProperty("stopReason");
+  });
+});

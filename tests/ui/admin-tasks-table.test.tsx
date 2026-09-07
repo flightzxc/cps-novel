@@ -45,6 +45,30 @@ describe("TasksTable · 三类任务统一列表", () => {
     expect(screen.queryByText("已脱敏，详情见审计/日志")).toBeNull();
   });
 
+  // C-10 (Phase E rework, 2026-09-07): a derived stop reason is a stable
+  // enum code, not free text — it replaces "已脱敏" in this column when the
+  // service could derive one for the task.
+  it("stopReason 存在时展示该稳定码，替代「已脱敏」", () => {
+    render(
+      <TasksTable
+        tasks={[task({ errorSummary: "redacted", stopReason: "upstream_error" })]}
+        baseSearch={new URLSearchParams()}
+      />,
+    );
+    expect(screen.getByText("upstream_error")).toBeTruthy();
+    expect(screen.queryByText("已脱敏，详情见审计/日志")).toBeNull();
+  });
+
+  it("stopReason 缺失时（undefined）维持既有的脱敏说明", () => {
+    render(
+      <TasksTable
+        tasks={[task({ errorSummary: "redacted", stopReason: undefined })]}
+        baseSearch={new URLSearchParams()}
+      />,
+    );
+    expect(screen.getByText("已脱敏，详情见审计/日志")).toBeTruthy();
+  });
+
   it("查看详情链接携带 taskId 与 taskFamily，并保留已有的列表筛选参数", () => {
     const baseSearch = new URLSearchParams({ family: "channel_sync", status: "failed", limit: "50" });
     render(<TasksTable tasks={[task()]} baseSearch={baseSearch} />);

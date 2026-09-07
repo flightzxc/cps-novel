@@ -33,6 +33,14 @@ export type TaskItemRow = {
   readonly leaseEpoch: string;
   readonly lockedUntil: string | null;
   readonly errorSummary: "redacted" | null;
+  /**
+   * C-10 (Phase E rework, 2026-09-07): the origin failed item's derived
+   * stop reason, e.g. `"upstream_error (HTTP 401) @ 第 1 页"` — a fixed,
+   * allowlisted string from `TaskItemDto.stopReason`
+   * (`src/server/task-admin/service.ts`), never free text. Absent on every
+   * other item, including a cascaded `stoppedBeforeFetch` one.
+   */
+  readonly stopReason?: string;
 };
 
 function errorSummaryCell(value: "redacted" | null) {
@@ -41,6 +49,19 @@ function errorSummaryCell(value: "redacted" | null) {
   ) : (
     <span className="text-amber-700">已脱敏，详情见审计/日志</span>
   );
+}
+
+/**
+ * C-10: the task-level "停止原因" line at the top of the panel is derived
+ * from the *origin* item — the one failed item whose `stopReason` the
+ * projection actually populated (a cascaded `stoppedBeforeFetch` item never
+ * gets one, see `TaskItemDto.stopReason`'s doc comment). `items` here is
+ * already the current page of the item list/filter, so this can come back
+ * `undefined` when that item isn't in view — the line simply doesn't render
+ * then, it never falls back to guessing.
+ */
+function deriveOriginStopReason(items: readonly TaskItemRow[]): string | undefined {
+  return items.find((item) => item.stopReason !== undefined)?.stopReason;
 }
 
 /** Preserves the list filters, replaces only the item-scoped query params, keeps the same task selected. */
@@ -72,6 +93,7 @@ export function TaskDetailPanel({
 
   const itemStatusOptions = itemStatusOptionsFor(detail.family);
   const { href: filterAction, hidden } = itemsFilterAction(baseSearch);
+  const originStopReason = deriveOriginStopReason(items);
 
   return (
     <section
@@ -90,6 +112,13 @@ export function TaskDetailPanel({
           收起详情
         </Link>
       </div>
+
+      {originStopReason !== undefined && (
+        <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800" data-testid="task-detail-stop-reason">
+          <span className="font-medium">停止原因</span>
+          <span className="ml-2 font-mono">{originStopReason}</span>
+        </p>
+      )}
 
       <dl className="grid grid-cols-2 gap-3 sm:grid-cols-5">
         <div>

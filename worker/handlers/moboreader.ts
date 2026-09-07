@@ -5,6 +5,7 @@ import {
   createMoboreaderReadAdapter,
   moboreaderUpstreamRateGate,
   resolveMoboreaderUpstreamRateLimitConfig,
+  MoboreaderAdapterError,
   MoboreaderRateLimitedError,
   type ListBooksResponse,
   type MoboreaderBook,
@@ -1062,6 +1063,19 @@ export function createMoboreaderCatalogHandler(
       // operator resume from `payload.pageIndex` with a fresh scan task; no
       // new recovery mechanism.
       const rateLimited = error instanceof MoboreaderRateLimitedError;
+      // C-10 (Phase E rework, 2026-09-07): before this, a `MoboreaderAdapterError`
+      // (e.g. an upstream HTTP 401) fell into the generic
+      // `{ code: "upstream_error", message: "MoboReader catalog read failed" }`
+      // branch below, discarding the adapter's own code/HTTP status/retryable
+      // flag — the exact information an operator needs to tell "bad
+      // credential" (401) apart from "transient upstream failure" (5xx)
+      // without reproducing the call in a container. `detail` carries only
+      // the enumerated adapter code, HTTP status, retryable flag, and page
+      // index — never the upstream response body, a token, or a URL — and is
+      // itself narrowed again by `sanitizePersistedTaskError`'s allowlist
+      // projection (`src/lib/tasks/errors.ts`) before persistence. The
+      // outer contract `code` stays `"upstream_error"`, unchanged.
+      const adapterError = error instanceof MoboreaderAdapterError ? error : null;
       return {
         status: "failed",
         result: { stopReason: "upstream_error", terminalState: "partial_failed" },
@@ -1072,7 +1086,20 @@ export function createMoboreaderCatalogHandler(
                 + `(HTTP ${error.status}, ${error.reason}, retried ${error.attempts} time(s), `
                 + `elapsed ${error.elapsedMs}ms). Resume a new scan from page ${payload.pageIndex}.`,
             }
-          : { code: "upstream_error", message: "MoboReader catalog read failed" },
+          : adapterError
+            ? {
+                code: "upstream_error",
+                message: `MoboReader catalog read failed: ${adapterError.code}`
+                  + `${adapterError.status != null ? ` (HTTP ${adapterError.status})` : ""}`
+                  + ` at page ${payload.pageIndex}`,
+                detail: {
+                  adapterCode: adapterError.code,
+                  httpStatus: adapterError.status ?? null,
+                  retryable: adapterError.retryable,
+                  pageIndex: payload.pageIndex,
+                },
+              }
+            : { code: "upstream_error", message: "MoboReader catalog read failed" },
         // Phase D D-1, 做法2: dry_run runs the real upstream call and the
         // real judgement above (`result.stopReason` etc. are unconditional),
         // but must never attach a `protectedWrite` — `persistCatalogUpstreamFailure`

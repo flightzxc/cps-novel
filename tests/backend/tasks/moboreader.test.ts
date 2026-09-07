@@ -1,11 +1,18 @@
-import { readFileSync } from "node:fs";
+import { randomBytes } from "node:crypto";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import type { PrismaClient } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
+
+import { MoboreaderAdapterError } from "@/lib/adapters";
 import {
   MOBOREADER_CATALOG_LIMITS,
   MOBOREADER_PREVIEW_RUNTIME_DEFAULTS,
   resolveMoboreaderPreviewRuntimeConfig,
   validateMoboreaderCatalogScanInput,
 } from "@/lib/tasks";
+import { encryptCredentialSecretForWorker } from "../../../worker/credentials/crypto";
 import {
   createMoboreaderCatalogHandler,
   createMoboreaderPreviewHandler,
@@ -176,5 +183,238 @@ describe("MoboReader catalog safety and parity", () => {
     expect(outcome).toMatchObject({ status: "failed", error: { code: "feature_disabled" } });
     expect(adapter.fetchBookMaterial).not.toHaveBeenCalled();
     expect(adapter.fetchPreviewChapters).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * C-10 (Phase E rework, 2026-09-07): before this, a `MoboreaderAdapterError`
+ * thrown by `adapter.listBooks` fell into the same generic
+ * `{ code: "upstream_error", message: "MoboReader catalog read failed" }`
+ * branch as any other error — discarding the adapter's own code/HTTP
+ * status/retryable flag. This is a real diagnosis-time regression: the
+ * 09-05 incident this work order documents took a container-level
+ * reproduction to surface "HTTP 401" that should have been readable
+ * straight from the failed item.
+ *
+ * Reaches `adapter.listBooks` through the handler's real
+ * `loadAndValidateTaskScope` → `loadBinding` → `decryptCredentialSecretForWorker`
+ * chain, using a minimal hand-rolled Prisma double (only the two calls this
+ * path issues: `genericTask.findUnique` and one `$queryRaw` binding lookup)
+ * and a real encrypt/decrypt round trip through temp keyring files — same
+ * conventions as `tests/backend/credentials/db-retry-wiring.test.ts` and
+ * `tests/backend/credentials/jwt-normalization-service.test.ts`
+ * respectively. `mode: "dry_run"` so no `protectedWrite` runs and no
+ * further DB call shapes need faking.
+ */
+describe("MoboReader catalog handler: adapter error visibility (C-10)", () => {
+  const ACCOUNT_ID = "11111111-1111-4111-8111-111111111111";
+  const APP_ID = "22222222-2222-4222-8222-222222222222";
+  const CREDENTIAL_ID = "33333333-3333-4333-8333-333333333333";
+
+  function credentialKeyring(): { env: NodeJS.ProcessEnv; cleanup(): void } {
+    const directory = mkdtempSync(path.join(tmpdir(), "cps-novel-moboreader-keys-"));
+    const v1 = path.join(directory, "v1");
+    const fingerprint = path.join(directory, "fingerprint");
+    writeFileSync(v1, randomBytes(32).toString("base64"), { mode: 0o600 });
+    writeFileSync(fingerprint, randomBytes(32).toString("base64"), { mode: 0o600 });
+    return {
+      env: {
+        NODE_ENV: "test",
+        CHANNEL_CREDENTIAL_ACTIVE_KEY_VERSION: "1",
+        CHANNEL_CREDENTIAL_ENCRYPTION_KEY_V1_FILE: v1,
+        CHANNEL_CREDENTIAL_FINGERPRINT_KEY_FILE: fingerprint,
+      },
+      cleanup: () => rmSync(directory, { recursive: true, force: true }),
+    };
+  }
+
+  /**
+   * `decryptCredentialSecretForWorker` is called by the handler with no
+   * `env` argument, so it always reads `process.env` — there is no
+   * dependency-injection seam for it. This helper temporarily overlays the
+   * keyring vars onto the real `process.env` for the duration of one test
+   * and restores exactly what was there before, including deleting keys
+   * that did not previously exist.
+   */
+  async function withProcessEnvOverlay<T>(overlay: NodeJS.ProcessEnv, run: () => Promise<T>): Promise<T> {
+    const previous = new Map<string, string | undefined>();
+    for (const key of Object.keys(overlay)) previous.set(key, process.env[key]);
+    Object.assign(process.env, overlay);
+    try {
+      return await run();
+    } finally {
+      for (const [key, value] of previous) {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
+    }
+  }
+
+  /** Minimal Prisma double for exactly the two calls this handler issues before `adapter.listBooks`. */
+  function fakeDb(encryptedSecret: Uint8Array): PrismaClient {
+    return {
+      genericTask: {
+        findUnique: async () => ({
+          channelAccountId: ACCOUNT_ID,
+          channelAppId: APP_ID,
+          params: { projectType: payload.projectType, pageStart: 1, pageEnd: payload.requestedPageEnd, pageSize: payload.pageSize },
+        }),
+      },
+      $queryRaw: async () => [{
+        project_type: payload.projectType,
+        credential_id: CREDENTIAL_ID,
+        encrypted_secret: encryptedSecret,
+        key_version: 1,
+      }],
+    } as unknown as PrismaClient;
+  }
+
+  function baseLease(mode: "dry_run" | "apply" = "dry_run") {
+    return {
+      family: "generic" as const,
+      taskType: "catalog_scan",
+      mode,
+      itemId: "item",
+      taskId: "task",
+      workerId: "worker",
+      executionToken: "token",
+      leaseEpoch: 1n,
+      attemptCount: 1,
+      lockedUntil: new Date(),
+      payload,
+    };
+  }
+
+  it("MoboreaderAdapterError: message carries adapter code + HTTP status + page, detail carries the enumerated fields", async () => {
+    const keys = credentialKeyring();
+    try {
+      await withProcessEnvOverlay(keys.env, async () => {
+        const encryptedSecret = new Uint8Array(
+          encryptCredentialSecretForWorker("bare-token", ACCOUNT_ID, CREDENTIAL_ID, 1),
+        );
+        const db = fakeDb(encryptedSecret);
+
+        const adapter = {
+          listBooks: vi.fn(async () => {
+            throw new MoboreaderAdapterError("upstream_http_error", false, 401);
+          }),
+          fetchBookMaterial: vi.fn(),
+          fetchPreviewChapters: vi.fn(),
+        };
+        const handler = createMoboreaderCatalogHandler(db, {
+          adapter,
+          env: { NODE_ENV: "test", FEATURE_NOVEL_CATALOG_SYNC: "true", NOVEL_CATALOG_SYNC_ALLOW_WRITE: "true" },
+        });
+
+        const outcome = await handler({
+          lease: baseLease("dry_run"),
+          mode: "dry_run",
+          signal: new AbortController().signal,
+          heartbeat: async () => true,
+        });
+
+        expect(adapter.listBooks).toHaveBeenCalledTimes(1);
+        expect(outcome).toMatchObject({
+          status: "failed",
+          result: { stopReason: "upstream_error", terminalState: "partial_failed" },
+          error: {
+            code: "upstream_error",
+            message: "MoboReader catalog read failed: upstream_http_error (HTTP 401) at page 1",
+            detail: {
+              adapterCode: "upstream_http_error",
+              httpStatus: 401,
+              retryable: false,
+              pageIndex: 1,
+            },
+          },
+        });
+        // No `protectedWrite` in dry_run mode — nothing left to persist for
+        // this test to accidentally assert against a mocked transaction.
+        expect(outcome.protectedWrite).toBeUndefined();
+      });
+    } finally {
+      keys.cleanup();
+    }
+  });
+
+  it("MoboreaderAdapterError without an HTTP status omits the '(HTTP …)' segment but still carries httpStatus: null", async () => {
+    const keys = credentialKeyring();
+    try {
+      await withProcessEnvOverlay(keys.env, async () => {
+        const encryptedSecret = new Uint8Array(
+          encryptCredentialSecretForWorker("bare-token", ACCOUNT_ID, CREDENTIAL_ID, 1),
+        );
+        const db = fakeDb(encryptedSecret);
+
+        const adapter = {
+          listBooks: vi.fn(async () => {
+            throw new MoboreaderAdapterError("transport_error", true);
+          }),
+          fetchBookMaterial: vi.fn(),
+          fetchPreviewChapters: vi.fn(),
+        };
+        const handler = createMoboreaderCatalogHandler(db, {
+          adapter,
+          env: { NODE_ENV: "test", FEATURE_NOVEL_CATALOG_SYNC: "true", NOVEL_CATALOG_SYNC_ALLOW_WRITE: "true" },
+        });
+
+        const outcome = await handler({
+          lease: baseLease("dry_run"),
+          mode: "dry_run",
+          signal: new AbortController().signal,
+          heartbeat: async () => true,
+        });
+
+        expect(outcome).toMatchObject({
+          status: "failed",
+          error: {
+            code: "upstream_error",
+            message: "MoboReader catalog read failed: transport_error at page 1",
+            detail: { adapterCode: "transport_error", httpStatus: null, retryable: true, pageIndex: 1 },
+          },
+        });
+      });
+    } finally {
+      keys.cleanup();
+    }
+  });
+
+  it("a plain (non-adapter) error still gets the pre-existing generic message — byte-identical to before C-10", async () => {
+    const keys = credentialKeyring();
+    try {
+      await withProcessEnvOverlay(keys.env, async () => {
+        const encryptedSecret = new Uint8Array(
+          encryptCredentialSecretForWorker("bare-token", ACCOUNT_ID, CREDENTIAL_ID, 1),
+        );
+        const db = fakeDb(encryptedSecret);
+
+        const adapter = {
+          listBooks: vi.fn(async () => {
+            throw new Error("some non-adapter failure, e.g. a bug elsewhere in the call chain");
+          }),
+          fetchBookMaterial: vi.fn(),
+          fetchPreviewChapters: vi.fn(),
+        };
+        const handler = createMoboreaderCatalogHandler(db, {
+          adapter,
+          env: { NODE_ENV: "test", FEATURE_NOVEL_CATALOG_SYNC: "true", NOVEL_CATALOG_SYNC_ALLOW_WRITE: "true" },
+        });
+
+        const outcome = await handler({
+          lease: baseLease("dry_run"),
+          mode: "dry_run",
+          signal: new AbortController().signal,
+          heartbeat: async () => true,
+        });
+
+        expect(outcome).toMatchObject({
+          status: "failed",
+          error: { code: "upstream_error", message: "MoboReader catalog read failed" },
+        });
+        expect((outcome.error as { detail?: unknown }).detail).toBeUndefined();
+      });
+    } finally {
+      keys.cleanup();
+    }
   });
 });

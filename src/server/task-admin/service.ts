@@ -65,6 +65,18 @@ export type TaskSummaryDto = Readonly<{
   failedCount: number;
   skippedCount: number;
   errorSummary: "redacted" | null;
+  /**
+   * C-10 (Phase E rework, 2026-09-07): the task's own stable stop-reason
+   * code (e.g. `"upstream_error"`), read from `result.stopReason` — never
+   * the raw `result`/`error` blob the "X9 read DTO allowlists" contract
+   * test (`tests/backend/task-admin/read-contracts.test.ts`) forbids this
+   * projection from leaking. Optional and only present when the task
+   * actually has one, from a fixed enum (`CATALOG_SCAN_STOP_REASONS`
+   * below) — never free text. Absent (not `null`) when there is none, so
+   * every pre-existing `toEqual` fixture in that contract test still
+   * matches without modification.
+   */
+  stopReason?: string;
 }>;
 
 export type TaskItemDto = Readonly<{
@@ -76,7 +88,75 @@ export type TaskItemDto = Readonly<{
   leaseEpoch: string;
   lockedUntil: string | null;
   errorSummary: "redacted" | null;
+  /**
+   * C-10: the *origin* failed item's derived stop reason, e.g.
+   * `"upstream_error (HTTP 401) @ 第 1 页"` — built from the item's own
+   * `error.code` (only ever surfaced when it is exactly `"upstream_error"`)
+   * plus the numeric `error.detail.httpStatus` / `error.detail.pageIndex`
+   * `sanitizePersistedTaskError` (`src/lib/tasks/errors.ts`) already
+   * allowlisted before persistence. A cascaded item (`result.stoppedBeforeFetch
+   * === true`, set by `persistCatalogUpstreamFailure` in
+   * `worker/handlers/moboreader.ts`) never gets one — only the one item that
+   * actually hit the upstream failure does. Optional for the same
+   * frozen-contract-test reason as `TaskSummaryDto.stopReason` above.
+   */
+  stopReason?: string;
 }>;
+
+/**
+ * The finite set of `GenericTaskItem.result.stopReason` / `GenericTask.
+ * result.stopReason` values this codebase's catalog-scan handler
+ * (`worker/handlers/moboreader.ts`) ever writes — see the identical literal
+ * array in `src/lib/tasks/store.ts`'s `finalizeTaskItem`. Read back here as
+ * an explicit allowlist (not a blind pass-through of whatever string is in
+ * the JSONB column) so a future handler bug can never smuggle free text
+ * into this admin-read projection through `result.stopReason`.
+ */
+const CATALOG_SCAN_STOP_REASONS = new Set([
+  "expected_total_reached",
+  "expected_pages_reached",
+  "empty_page",
+  "short_page",
+  "safety_limit",
+  "upstream_error",
+]);
+
+function jsonPlainObject(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+/** Task-level derived stop reason for the tasks-list "失败原因" column — a bare stable code, e.g. `"upstream_error"`. */
+function deriveTaskStopReason(hasError: boolean, result: unknown): string | undefined {
+  if (!hasError) return undefined;
+  const stopReason = jsonPlainObject(result)?.stopReason;
+  return typeof stopReason === "string" && CATALOG_SCAN_STOP_REASONS.has(stopReason)
+    ? stopReason
+    : undefined;
+}
+
+/**
+ * Item-level derived stop reason for the task-detail panel's "停止原因"
+ * line — only for the *origin* failed item (not a cascaded
+ * `stoppedBeforeFetch` item), and only for the `"upstream_error"` contract
+ * code, the sole case C-10 covers. `httpStatus`/`pageIndex` are read only
+ * as `number`, never interpolated as free text.
+ */
+function deriveItemStopReason(status: string, result: unknown, error: unknown): string | undefined {
+  if (status !== "failed") return undefined;
+  const resultObject = jsonPlainObject(result);
+  if (!resultObject || resultObject.stoppedBeforeFetch === true) return undefined;
+  const errorObject = jsonPlainObject(error);
+  const code = errorObject?.code;
+  if (typeof code !== "string" || !CATALOG_SCAN_STOP_REASONS.has(code)) return undefined;
+  const detail = jsonPlainObject(errorObject?.detail);
+  const httpStatus = detail?.httpStatus;
+  const pageIndex = detail?.pageIndex;
+  const statusPart = typeof httpStatus === "number" ? ` (HTTP ${httpStatus})` : "";
+  const pagePart = typeof pageIndex === "number" ? ` @ 第 ${pageIndex} 页` : "";
+  return `${code}${statusPart}${pagePart}`;
+}
 
 export type PromoLinkAdminDto = Readonly<{
   promoLinkId: string;
@@ -158,6 +238,8 @@ type TaskListRow = {
   skipped_count: number;
   has_error: boolean;
   created_at: Date;
+  /** C-10: read only to derive `TaskSummaryDto.stopReason` — never itself exposed. */
+  result: Prisma.JsonValue | null;
 };
 
 type LockedParentRow = {
@@ -229,6 +311,7 @@ function authorizeRead(context: AdminAuthContext, env?: NodeJS.ProcessEnv): void
 }
 
 function taskSummary(row: TaskListRow): TaskSummaryDto {
+  const stopReason = deriveTaskStopReason(row.has_error, row.result);
   return Object.freeze({
     family: row.family,
     taskId: row.task_id,
@@ -239,6 +322,7 @@ function taskSummary(row: TaskListRow): TaskSummaryDto {
     failedCount: row.failed_count,
     skippedCount: row.skipped_count,
     errorSummary: row.has_error ? "redacted" : null,
+    ...(stopReason !== undefined ? { stopReason } : {}),
   });
 }
 
@@ -256,14 +340,14 @@ export async function listAdminTasks(
     SELECT * FROM (
       SELECT 'channel_sync'::text AS family, id AS task_id, task_type, status,
         total_count, success_count, failed_count, skipped_count,
-        error IS NOT NULL AS has_error, created_at
+        error IS NOT NULL AS has_error, created_at, result
       FROM channel_sync_task
       WHERE (${family}::text IS NULL OR ${family} = 'channel_sync')
         AND (${status}::text IS NULL OR status = ${status})
       UNION ALL
       SELECT 'generic'::text AS family, id AS task_id, task_type, status,
         total_count, success_count, failed_count, skipped_count,
-        error IS NOT NULL AS has_error, created_at
+        error IS NOT NULL AS has_error, created_at, result
       FROM generic_task
       WHERE (${family}::text IS NULL OR ${family} = 'generic')
         AND (${status}::text IS NULL OR status = ${status})
@@ -291,7 +375,7 @@ export async function getAdminTaskDetail(
     SELECT ${family}::text AS family, id AS task_id, task_type,
       status, total_count, success_count, failed_count,
       skipped_count::int AS skipped_count,
-      error IS NOT NULL AS has_error, created_at
+      error IS NOT NULL AS has_error, created_at, result
     FROM ${table}
     WHERE id = ${taskId}::uuid
   `);
@@ -319,14 +403,18 @@ export async function listAdminTaskItems(
       take,
       select: {
         id: true, taskId: true, status: true, attemptCount: true,
-        leaseEpoch: true, lockedUntil: true, error: true,
+        leaseEpoch: true, lockedUntil: true, error: true, result: true,
       },
     });
-    items = rows.map((row) => Object.freeze({
-      family, itemId: row.id, taskId: row.taskId, status: row.status,
-      attemptCount: row.attemptCount, leaseEpoch: row.leaseEpoch.toString(),
-      lockedUntil: iso(row.lockedUntil), errorSummary: row.error === null ? null : "redacted",
-    }));
+    items = rows.map((row) => {
+      const stopReason = deriveItemStopReason(row.status, row.result, row.error);
+      return Object.freeze({
+        family, itemId: row.id, taskId: row.taskId, status: row.status,
+        attemptCount: row.attemptCount, leaseEpoch: row.leaseEpoch.toString(),
+        lockedUntil: iso(row.lockedUntil), errorSummary: row.error === null ? null : "redacted",
+        ...(stopReason !== undefined ? { stopReason } : {}),
+      });
+    });
   } else {
     const rows = await db.genericTaskItem.findMany({
       where,
@@ -334,14 +422,18 @@ export async function listAdminTaskItems(
       take,
       select: {
         id: true, taskId: true, status: true, attemptCount: true,
-        leaseEpoch: true, lockedUntil: true, error: true,
+        leaseEpoch: true, lockedUntil: true, error: true, result: true,
       },
     });
-    items = rows.map((row) => Object.freeze({
-      family, itemId: row.id, taskId: row.taskId, status: row.status,
-      attemptCount: row.attemptCount, leaseEpoch: row.leaseEpoch.toString(),
-      lockedUntil: iso(row.lockedUntil), errorSummary: row.error === null ? null : "redacted",
-    }));
+    items = rows.map((row) => {
+      const stopReason = deriveItemStopReason(row.status, row.result, row.error);
+      return Object.freeze({
+        family, itemId: row.id, taskId: row.taskId, status: row.status,
+        attemptCount: row.attemptCount, leaseEpoch: row.leaseEpoch.toString(),
+        lockedUntil: iso(row.lockedUntil), errorSummary: row.error === null ? null : "redacted",
+        ...(stopReason !== undefined ? { stopReason } : {}),
+      });
+    });
   }
   return Object.freeze({ family, taskId, items: Object.freeze(items), limit: take });
 }

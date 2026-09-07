@@ -87,4 +87,46 @@ describe("TaskDetailPanel · detail + items", () => {
     render(<TaskDetailPanel detail={detail()} items={[]} baseSearch={new URLSearchParams()} />);
     expect(screen.getByTestId("task-items-empty-state")).toBeTruthy();
   });
+
+  // C-10 (Phase E rework, 2026-09-07): "停止原因" is derived from the one
+  // item whose `stopReason` the projection populated (the origin failed
+  // item), not from any free-text field.
+  describe("停止原因（C-10）", () => {
+    it("起源项带 stopReason 时，顶部展示「停止原因」行", () => {
+      render(
+        <TaskDetailPanel
+          detail={detail()}
+          items={[item({ stopReason: "upstream_error (HTTP 401) @ 第 1 页" })]}
+          baseSearch={new URLSearchParams()}
+        />,
+      );
+      const stopReasonRow = screen.getByTestId("task-detail-stop-reason");
+      expect(stopReasonRow.textContent).toContain("停止原因");
+      expect(stopReasonRow.textContent).toContain("upstream_error (HTTP 401) @ 第 1 页");
+    });
+
+    it("没有任何子项带 stopReason 时，不展示「停止原因」行", () => {
+      render(
+        <TaskDetailPanel detail={detail()} items={[item()]} baseSearch={new URLSearchParams()} />,
+      );
+      expect(screen.queryByTestId("task-detail-stop-reason")).toBeNull();
+    });
+
+    it("级联被标记的子项（无 stopReason）与起源项并存时，仍只显示起源项的停止原因", () => {
+      render(
+        <TaskDetailPanel
+          detail={detail()}
+          items={[
+            item({ itemId: "cascaded-item", status: "failed" }), // no stopReason: cascaded stoppedBeforeFetch item
+            item({ itemId: "origin-item", stopReason: "upstream_error (HTTP 401) @ 第 1 页" }),
+          ]}
+          baseSearch={new URLSearchParams()}
+        />,
+      );
+      const stopReasonRow = screen.getByTestId("task-detail-stop-reason");
+      expect(stopReasonRow.textContent).toContain("upstream_error (HTTP 401) @ 第 1 页");
+      // Exactly one "停止原因" line, not one per item.
+      expect(screen.getAllByTestId("task-detail-stop-reason")).toHaveLength(1);
+    });
+  });
 });
