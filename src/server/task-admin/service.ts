@@ -382,6 +382,15 @@ function boundedText(value: unknown, maxLength: number): string {
   return normalized;
 }
 
+function optionalBoundedText(value: unknown, maxLength: number): string | null {
+  if (value === null || value === undefined) return null;
+  if (typeof value !== "string") return invalid();
+  const normalized = value.trim();
+  if (!normalized) return null;
+  if (normalized.length > maxLength) return invalid();
+  return normalized;
+}
+
 function limit(value: unknown): number {
   if (value === null || value === undefined || value === "") return 50;
   const parsed = typeof value === "number" ? value : Number(value);
@@ -1054,7 +1063,7 @@ function replayRetry(
   actorId: string,
   family: TaskFamily,
   taskId: string,
-  reason: string,
+  reason: string | null,
 ): RetryFailedTaskResult {
   const after = jsonObject(audit.afterSnapshot);
   if (
@@ -1230,7 +1239,7 @@ export async function retryFailedTask(
     requestId: string;
     family: unknown;
     taskId: unknown;
-    reason: unknown;
+    reason?: unknown;
   },
   dependencies: TaskAdminMutationDependencies,
 ): Promise<RetryFailedTaskResult> {
@@ -1244,7 +1253,7 @@ export async function retryFailedTask(
   });
   const family = oneOf(input.family, TASK_FAMILIES);
   const taskId = uuid(input.taskId);
-  const reason = boundedText(input.reason, 2_000);
+  const reason = optionalBoundedText(input.reason, 2_000);
 
   try {
     return await withDbRetry(

@@ -194,7 +194,7 @@ export default async function TaskDetailPage({
             )}
           </div>
           {isRetryableTaskStatus(detail.status) && (
-            <RetryFailedButton family={detail.family} taskId={detail.taskId} />
+            <RetryFailedButton family={detail.family} taskId={detail.taskId} failedCount={detail.failedCount} />
           )}
         </div>
 
