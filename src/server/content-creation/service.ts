@@ -83,6 +83,11 @@ import { isHealthySlug, textToSlug } from "@/lib/slug/text-to-slug";
 import { createWithPublicPageShortIdRetry, generatePublicPageShortIdCandidate } from "@/lib/slug/short-id";
 import { withDbRetry } from "@/lib/db/db-retry";
 import { SITE_LOCALES, type SiteLocale } from "@/lib/locale/locale-canonical";
+// C-30A (施工工单_C30_换小说_移植CPS换租客_2026-09-08.md §4A.1): write point 1
+// of 2 for `Novel.titleNormalized` — see that function's own header for why
+// write point 2 (a Novel title-update path) does not exist in this
+// codebase today.
+import { normalizeNovelTitle } from "@/lib/novel/novel-identity";
 import {
   buildNovelTemplateValues,
   isTemplateRenderError,
@@ -514,6 +519,10 @@ async function runCreateTransaction(
       data: {
         businessId,
         title: sourceItem.title,
+        // C-30A: maintained alongside `title` at this, the only write point
+        // that sets `Novel.title` in this codebase today — see
+        // `normalizeNovelTitle`'s own doc comment.
+        titleNormalized: normalizeNovelTitle(sourceItem.title),
         description: sourceItem.description,
         coverUrl: sourceItem.coverUrl,
         locale: input.locale,

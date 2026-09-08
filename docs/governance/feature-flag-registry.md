@@ -53,6 +53,23 @@ All flags use exact `=== "true"` parsing and default off. A catalog `dry_run` ma
 
 `FEATURE_ARTICLE_BLOG`/`ARTICLE_BLOG_ALLOW_WRITE` follow the same "一 flag 一函数、双闸" discipline and exact `=== "true"` parsing as every other pair in this table — unlike `FEATURE_ARTICLE_SEO_VISIBILITY` above, this one genuinely is a pair, because "新建博客" is a protected business *write* (the first write path in this codebase that can create an Article with `novel_id IS NULL`), not a read-side gate. `ARTICLE_BLOG_ALLOW_WRITE` stays **web-only** — `createBlogArticle`'s only caller is the admin Server Action, no worker/scheduler caller (grepped before registering). `FEATURE_ARTICLE_BLOG` itself is **NOT web-only as of C-29** — `src/lib/seo/sitemap.ts`'s `createSitemapFamilyBuilder` also reads `isArticleBlogEnabled(env)` (default `process.env`) to decide whether to emit the `blogpage` family, the same shape `FEATURE_ARTICLE_SEO_VISIBILITY`'s worker consumption already has, so `docker-compose.yml`'s `worker` service block now carries `FEATURE_ARTICLE_BLOG` too (NOT `ARTICLE_BLOG_ALLOW_WRITE` — the worker never performs the blog write, only reads the flag to gate sitemap emission). `src/lib/indexnow/eligibility.ts`'s `isBlogIndexNowEligible` also reads this flag but is not yet called from any file under `worker/` — the natural call site (`worker/handlers/indexnow-delivery.ts`'s drift-recheck) has no blog `IndexNowOutbox` row to ever recheck this round, because the enqueue-on-publish call for a blog Article is still skipped by `publish-gate/service.ts`'s `dispatchFirstPublicPublication` guard (`txResult.novelId !== null`) — that file was out of scope this round (reserved for a concurrent workstream), so only the standalone, independently-tested eligibility predicate ships; wiring the actual enqueue is a follow-up. `tests/backend/flags/article-blog-flags-passthrough.test.ts` asserts the current registration shape (web-only `ARTICLE_BLOG_ALLOW_WRITE`, worker-registered `FEATURE_ARTICLE_BLOG`).
 
+| `FEATURE_ARTICLE_NOVEL_REBIND` | `false` | `src/app/(admin)/articles/_components/article-rebind-panel.tsx`（编辑页面板渲染开关）、`src/server/article-rebind/service.ts`（服务层 fail-closed）、（C-30B）批量换绑页面 `notFound()` 与批量服务 | C-30A/C-30B（施工工单_C30_换小说_移植CPS换租客_2026-09-08.md §4A.5/附录 E）总闸：换绑能力（单篇 + 批量）是否存在。关闭时编辑页不渲染换绑面板、批量页 404、服务层对直接调用也 fail-closed。 |
+| `ARTICLE_NOVEL_REBIND_ALLOW_WRITE` | `false` | 同上（单篇换绑服务的写入路径；C-30B 批量执行/续跑） | 第二把钥匙：即使总闸打开，换绑本身（单篇写入两字段、批量执行/续跑）在这把钥匙也打开之前零写入。🔴 **不覆盖**批量预览快照自身的写入——见下一行的单闸例外。 |
+
+`FEATURE_ARTICLE_NOVEL_REBIND`/`ARTICLE_NOVEL_REBIND_ALLOW_WRITE` 遵循与本表其余每一对相同的
+"一 flag 一函数、双闸"纪律与精确 `=== "true"` 判定——换绑是一次保护性业务写入（两字段原子替换），
+不是只读能力。🔴 **一处明写的单闸例外（施工工单 §4A.5 明确要求"执行方不得静默改成双闸或改成无
+闸"）**：C-30B 的批量预览快照写入（`article_novel_rebind_preview` 行）只受总闸 `FEATURE_ARTICLE_
+NOVEL_REBIND` 保护，**不**受 `ARTICLE_NOVEL_REBIND_ALLOW_WRITE` 约束——理由与本表 `FEATURE_
+ARTICLE_SEO_VISIBILITY` 那条单闸说明同形：预览快照由运营自己触发、带 30 分钟过期、没有任何业务
+副作用（从不触碰 `Article.novelId`/`promoLinkId`，也从不调用单篇换绑服务），而"先看清楚再看开
+写"对渠道故障切换这个场景有真实运营价值——同"后台先行、公开后开"（`FEATURE_ARTICLE_SEO_
+VISIBILITY`）/"enqueue 先行、worker 后开"（IndexNow outbox/delivery 两对）同一节奏。该例外由一对
+正/负向测试钉死，禁止被"优化"成双闸或无闸。C-30A（单 1）只登记这两把钥匙与本行说明；预览快照
+写入代码本身是 C-30B（单 2），本行提前把契约写清楚，避免那段代码落地时临时决定。两把钥匙均**仅
+Web 进程消费**——`worker`/`scheduler` 无任何调用点（换绑能力全部经 Server Action 触发，grep 后确
+认无消费方），故 `docker-compose.yml` 只在 `web` 服务块登记，不进 `worker`/`scheduler`。
+
 | `PUBLIC_TRACKING_WRITE_DISABLED` | `false`（未设置 = 写入开启） | `src/lib/flags/feature-flags.ts` 的 `isPublicTrackingWriteDisabled`，唯一调用方为 `src/app/go/_lib/tracking-guard.ts` 的 `shouldRecordGoRedirect`（再由 `src/app/go/[code]/route.ts` 调用） | RC-6 安全阀：置真时 `GET /go/[code]` 不再写 `TrackingEvent` 行，跳转行为（302/404、目标 URL、`Cache-Control: no-store`）完全不受影响。用于刷量高峰或数据库写压力下的临时止血。 |
 
 | `ADMIN_TWO_FACTOR_ENFORCEMENT` | `true`（未设置 = 强制） | `src/lib/auth/two-factor-enforcement.ts` 的 `readTwoFactorEnforcement`/`isTwoFactorEnforced`，调用方遍布 `src/lib/auth/capabilities.ts`（`requireAdminTwoFactor`）、`src/server/auth/guards.ts`（`enforceAdminSessionTwoFactor`）、`src/app/(admin)/_lib/page-guard.ts`、`src/app/(admin-auth)/login/_actions.ts`、`src/app/(admin-auth)/_lib/auth-session.ts`（`postAuthDestination`） | RC-10 全局开关：`false` 时后台跳过强制 2FA 注册/挑战，任何未完成 2FA 的会话都被当作已完成；`true`（默认）时行为与 RC-10 之前逐字相同。 |

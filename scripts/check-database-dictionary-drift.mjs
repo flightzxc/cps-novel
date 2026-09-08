@@ -119,8 +119,12 @@ function assertStaticConsistency(schemaTables, records) {
     }
   }
 
-  if (schemaTables.size !== 49) {
-    problems.push(`expected 49 Prisma models, found ${schemaTables.size}`);
+  // C-30A (施工工单_C30_換小说_移植CPS換租客_2026-09-08.md §4A.1): three new
+  // models (ArticleNovelRebindPreview/Batch/BatchItem) push the count from
+  // 49 to 52 -- updated alongside the migration that adds them, same as the
+  // 51->49 update Phase C's C-4 DROP made when it removed two models.
+  if (schemaTables.size !== 52) {
+    problems.push(`expected 52 Prisma models, found ${schemaTables.size}`);
   }
   if (problems.length) fail(problems);
   return { recordCount: records.length, activeCount: active.length };

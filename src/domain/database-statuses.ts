@@ -64,6 +64,22 @@ export const BLOG_FAMILY_ARTICLE_TYPES = ARTICLE_TYPES.filter(
 export const ARTICLE_CONTENT_MODES = ["manual", "template"] as const;
 /** `article.seo_visibility` (C-24 article axes foundation). CPS parity, copied verbatim. */
 export const ARTICLE_SEO_VISIBILITIES = ["public", "seo_only", "hidden"] as const;
+/**
+ * C-30A (施工工单_C30_换小说_移植CPS换租客_2026-09-08.md §4A.1). CPS parity:
+ * `ArticleDramaSwitchBatch.status` value set, copied verbatim (`ready` is
+ * this repo's own naming — CPS's own physical default is likewise "the
+ * batch has a plan but has not started executing").
+ */
+export const REBIND_BATCH_STATUSES = ["ready", "processing", "completed", "partial", "failed"] as const;
+/** C-30A. CPS parity: `ArticleDramaSwitchBatchItem.status` value set, copied verbatim. */
+export const REBIND_ITEM_STATUSES = ["pending", "processing", "applied", "skipped", "failed"] as const;
+/**
+ * C-30A. Nullable column — `NULL` means "no error recorded yet, or this
+ * item's terminal state is not `failed`". CPS parity: collapses CPS's
+ * `classifyDurableSwitchError` six-way classification into the same six
+ * physical values.
+ */
+export const REBIND_ERROR_KINDS = ["drift", "not_found", "blocked", "ineligible", "fence_lost", "unknown"] as const;
 export const SCHEDULE_RUN_STATUSES = ["due", "enqueued", "misfired", "skipped", "failed"] as const;
 export const CRON_RUN_STATUSES = ["created", "task_created", "failed"] as const;
 export const SCHEDULE_TRIGGER_KINDS = ["scheduled", "manual"] as const;
@@ -253,6 +269,31 @@ export const DATABASE_STATUS_SEMANTICS = {
     automatic: "Effective Tags are the union of exact read-derived mapped Tags and the current qualified auto snapshot.",
     manual: "The complete manual snapshot owns the effective result, including an explicit empty snapshot.",
   },
+  /** `article_novel_rebind_batch.status` (C-30A). See `article_type` above for why this is a top-level entry rather than nested under `article`. */
+  article_novel_rebind_batch: {
+    ready: "Batch was durably created from an owned, unexpired preview and has not started executing.",
+    processing: "An execution holds the batch's current, unexpired lease and is working through its items.",
+    completed: "Every item reached a successful terminal outcome (applied); no skipped or failed items.",
+    partial: "Batch reached a terminal state with a mix of applied and skipped/failed items.",
+    failed: "Every item ended skipped or failed; zero items applied.",
+  },
+  /** `article_novel_rebind_batch_item.status` (C-30A). */
+  article_novel_rebind_batch_item: {
+    pending: "Item is claimable only by the batch's own execution loop (not the generic task claim query).",
+    processing: "Item holds a current `processing_token` and is inside the single-article rebind service's own transaction.",
+    applied: "The two-field (novel_id, promo_link_id) atomic swap committed and its OperationAudit row was written.",
+    skipped: "Item was judged non-executable at batch-creation time (e.g. the article was already locked by another batch) and never entered execution.",
+    failed: "Execution attempted the swap and it did not commit; see the item's own `error_kind`/`error_message`.",
+  },
+  /** `article_novel_rebind_batch_item.error_kind` (C-30A, nullable — see the constant's own doc comment in `src/domain/database-statuses.ts`). */
+  article_novel_rebind_batch_item_error_kind: {
+    drift: "The article's current (novel_id, promo_link_id) no longer matched the item's `old_novel_id`/`old_promo_link_id` snapshot at execution time (optimistic-concurrency CAS miss).",
+    not_found: "The article or its target Novel could not be loaded at execution time (soft-deleted or removed after the preview was generated).",
+    blocked: "A hard guard (see `src/server/article-rebind/guards.ts`) rejected the swap at execution time, re-evaluated fresh rather than trusted from the preview.",
+    ineligible: "The item was not in the `executable` preview category and the batch-apply submission guard should have excluded it; recorded defensively if it is ever reached anyway.",
+    fence_lost: "The batch or item execution fence (lease/processing_token) was lost mid-attempt — a concurrent execution or a lease expiry raced this one.",
+    unknown: "An unclassified failure occurred; see `error_message` for detail.",
+  },
 } as const;
 
 export type ValueOf<T extends readonly string[]> = T[number];
@@ -277,6 +318,9 @@ export type ArticleStatus = ValueOf<typeof ARTICLE_STATUSES>;
 export type ArticleType = ValueOf<typeof ARTICLE_TYPES>;
 export type ArticleContentMode = ValueOf<typeof ARTICLE_CONTENT_MODES>;
 export type ArticleSeoVisibility = ValueOf<typeof ARTICLE_SEO_VISIBILITIES>;
+export type RebindBatchStatus = ValueOf<typeof REBIND_BATCH_STATUSES>;
+export type RebindItemStatus = ValueOf<typeof REBIND_ITEM_STATUSES>;
+export type RebindErrorKind = ValueOf<typeof REBIND_ERROR_KINDS>;
 export type CanonicalTagStatus = ValueOf<typeof CANONICAL_TAG_STATUSES>;
 export type NovelTagMode = ValueOf<typeof NOVEL_TAG_MODES>;
 export type NovelTagSource = ValueOf<typeof NOVEL_TAG_SOURCES>;

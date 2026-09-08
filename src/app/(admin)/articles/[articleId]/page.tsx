@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { findCapabilityState } from "@/features/admin-ui/capability-view";
+import { isArticleNovelRebindEnabled } from "@/lib/flags";
+import { getRebindView } from "@/server/article-rebind";
 
 import { prisma } from "../../../api/admin/_lib/deps";
 import { AdminShell } from "../../_components/admin-shell";
@@ -8,6 +10,7 @@ import { capabilityViews, sessionView } from "../../_lib/page-guard";
 import { requireContentPage } from "../../novels/_lib/content-page-guard";
 import { ArticleBlogEditor } from "../_components/article-blog-editor";
 import { ArticleEditor } from "../_components/article-editor";
+import { ArticleRebindPanel } from "../_components/article-rebind-panel";
 
 export const dynamic = "force-dynamic";
 
@@ -56,6 +59,20 @@ export default async function ArticleEditPage({ params }: { params: Promise<{ ar
   if (!article) notFound();
   const canWrite = findCapabilityState(capabilityViews(context), "content:publish") === "granted";
   const updatedAt = article.updatedAt.toISOString();
+
+  /**
+   * C-30A (施工工单_C30_换小说_移植CPS换租客_2026-09-08.md §4A.7): rebind
+   * panel data, loaded server-side (same "server component loads, client
+   * component only re-fetches on interaction" shape `article`/`canWrite`
+   * above already use) — total-gate checked here so the panel is not even
+   * attempted when `FEATURE_ARTICLE_NOVEL_REBIND` is off, and rendered only
+   * in the `novel_article` branch below (blog articles have no Novel to
+   * rebind — same structural fork the page already makes for the editor
+   * itself).
+   */
+  const rebindEnabled = article.novel !== null && isArticleNovelRebindEnabled(process.env);
+  const canRebind = findCapabilityState(capabilityViews(context), "content:rebind") === "granted";
+  const rebindView = rebindEnabled ? await getRebindView(prisma, { articleId: article.id }) : null;
   // Keyed by `updatedAt` (N-7): a `router.refresh()` after save/conflict
   // re-runs this server component with a fresh row, and the new key remounts
   // `ArticleEditor` so its optimistic-lock state and `defaultValue` fields
@@ -99,7 +116,19 @@ export default async function ArticleEditPage({ params }: { params: Promise<{ ar
       {article.novel === null ? (
         <ArticleBlogEditor key={updatedAt} article={{ ...article, updatedAt }} canWrite={canWrite} />
       ) : (
-        <ArticleEditor key={updatedAt} article={{ ...article, updatedAt }} canWrite={canWrite} />
+        <>
+          <ArticleEditor key={updatedAt} article={{ ...article, updatedAt }} canWrite={canWrite} />
+          {/*
+            C-30A: novel_article branch only — blog articles have no Novel to
+            rebind. `rebindView` is `null` whenever `FEATURE_ARTICLE_NOVEL_
+            REBIND` is off (service layer fail-closed, `rebindEnabled` above
+            mirrors that check before even calling it), so the panel does not
+            render at all while the total gate is closed — 施工工单 §4A.5.
+          */}
+          {rebindView && (
+            <ArticleRebindPanel articleId={article.id} initialView={rebindView} canRebind={canRebind} />
+          )}
+        </>
       )}
     </AdminShell>
   );

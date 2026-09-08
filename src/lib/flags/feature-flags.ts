@@ -242,3 +242,55 @@ export function isArticleBlogEnabled(env: NodeJS.ProcessEnv = process.env): bool
 export function isArticleBlogWriteAllowed(env: NodeJS.ProcessEnv = process.env): boolean {
   return env[ARTICLE_BLOG_ALLOW_WRITE_FLAG] === "true";
 }
+
+// -----------------------------------------------------------------------
+// C-30A/C-30B (施工工单_C30_换小说_移植CPS换租客_2026-09-08.md §4A.5/附录 E).
+// "换小说" (rebind) is a protected business write — a two-field
+// (`Article.novelId` + `Article.promoLinkId`) atomic rewrite — so per this
+// file's "一 flag 一函数、双闸" discipline it gets a pair, same shape as
+// `FEATURE_ARTICLE_BLOG`/`ARTICLE_BLOG_ALLOW_WRITE` above. `FEATURE_ARTICLE_
+// NOVEL_REBIND` off means the whole capability is invisible: the editor-page
+// rebind panel (C-30A) does not render, the batch-rebind page (C-30B) 404s,
+// and the service layer fail-closes even on a direct call.
+// `ARTICLE_NOVEL_REBIND_ALLOW_WRITE` is the second key: even with the
+// feature on, the rebind itself (single-article write, and — C-30B — batch
+// apply/resume) performs zero writes unless this is also true.
+//
+// 🔴 One deliberate, explicit exception (施工工单 §4A.5's own words: "执行方
+// 不得静默改成双闸或改成无闸"): a batch-rebind PREVIEW's write (the
+// `article_novel_rebind_preview` row itself, C-30B) needs only the total
+// gate `FEATURE_ARTICLE_NOVEL_REBIND` — NOT `ARTICLE_NOVEL_REBIND_ALLOW_
+// WRITE`. Reasoning, same shape as `FEATURE_ARTICLE_SEO_VISIBILITY`'s own
+// single-gate note above: a preview snapshot is operator-triggered, bounded-
+// lifetime (30-minute expiry + bounded cleanup sweep), and has zero business
+// side effect of its own — it never touches `Article.novelId`/`promoLinkId`,
+// never calls the single-article rebind service, and cannot be replayed into
+// one (applying a batch is a *separate* write, gated by both flags as
+// normal). Letting an operator generate and inspect a preview before the
+// write gate is opened has real operational value for the channel-outage
+// scenario this whole capability exists for ("先看清楚再开写") — same
+// rollout convention this repo's IndexNow outbox/delivery pair and
+// `FEATURE_ARTICLE_BLOG`'s sitemap consumption already use ("后台先行、公开
+// 后开" / "enqueue 先行、worker 后开"). This exception is registered here,
+// in `docs/governance/feature-flag-registry.md`, and pinned by a dedicated
+// positive/negative test pair — it must never be silently turned into a
+// double-gate or a no-gate.
+//
+// C-30A registers both flags and both read functions now (schema + single-
+// article service order); the preview single-gate exception's *consumer*
+// (the actual preview-write code path) does not exist until C-30B — this
+// comment documents the contract in advance so the exception is not
+// introduced ad hoc when that code lands.
+// -----------------------------------------------------------------------
+export const ARTICLE_NOVEL_REBIND_FEATURE_FLAG = "FEATURE_ARTICLE_NOVEL_REBIND";
+export const ARTICLE_NOVEL_REBIND_ALLOW_WRITE_FLAG = "ARTICLE_NOVEL_REBIND_ALLOW_WRITE";
+
+/** Gates whether the rebind capability exists at all (editor-page panel renders, batch page resolves, service layer accepts calls). Exact `=== "true"` parsing, default off. */
+export function isArticleNovelRebindEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+  return env[ARTICLE_NOVEL_REBIND_FEATURE_FLAG] === "true";
+}
+
+/** Second key: even with the feature on, the rebind write itself (single-article, and C-30B's batch apply/resume) performs zero writes unless this is also true. Does NOT gate a batch preview's own write — see this file's C-30A/C-30B header comment for that deliberate single-gate exception. */
+export function isArticleNovelRebindWriteAllowed(env: NodeJS.ProcessEnv = process.env): boolean {
+  return env[ARTICLE_NOVEL_REBIND_ALLOW_WRITE_FLAG] === "true";
+}

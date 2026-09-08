@@ -297,6 +297,24 @@ export const ADMIN_ARTICLE_ACTIONS = [
   { id: "admin.article.create_blog", capability: "content:publish", mutation: true },
 ] as const satisfies AdminRegistry["actions"];
 
+/**
+ * C-30A (施工工单_C30_换小说_移植CPS换租客_2026-09-08.md §4A.4): the single-
+ * article rebind trigger — `content:rebind`, a dedicated capability distinct
+ * from `content:publish` (Owner 2026-09-08: CPS parity, two granularities,
+ * do not merge single/batch either). Every action here — including the
+ * read-only candidate search — is registered with a capability, unlike
+ * CPS's own two read-only Server Actions
+ * (`listArticleDramaSwitchCandidates`/`getArticleDramaSwitchView`), which
+ * only check for a logged-in session and let any admin enumerate the full
+ * switch plan (article/drama ids, promo codes) — a real CPS authorization
+ * gap this port does not carry over (施工工单 §2.3 item 20).
+ */
+export const ADMIN_ARTICLE_REBIND_ACTIONS = [
+  { id: "admin.article.rebind_novel", capability: "content:rebind", mutation: true },
+  { id: "admin.article.rebind_rollback", capability: "content:rebind", mutation: true },
+  { id: "admin.article.rebind_candidates", capability: "content:rebind", mutation: false },
+] as const satisfies AdminRegistry["actions"];
+
 export const ADMIN_HOME_CAROUSEL_ACTIONS = [
   { id: "admin.home_carousel.config", capability: "settings:manage", mutation: true },
   { id: "admin.home_carousel.manual_upsert", capability: "settings:manage", mutation: true },
@@ -340,6 +358,7 @@ export const P2_04_ADMIN_REGISTRY: AdminRegistry = Object.freeze({
     ...ADMIN_CONTENT_CREATION_BATCH_ACTIONS,
     ...ADMIN_ARTICLE_TEMPLATE_ACTIONS,
     ...ADMIN_ARTICLE_ACTIONS,
+    ...ADMIN_ARTICLE_REBIND_ACTIONS,
     ...ADMIN_HOME_CAROUSEL_ACTIONS,
     ...ADMIN_SECURITY_ACTIONS,
   ]),

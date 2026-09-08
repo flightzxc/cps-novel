@@ -103,9 +103,15 @@ describe("P1-06 database operations static contracts", () => {
     // (nullable flag / forked predicate), not added, same "same-field semantic
     // evolution, not replacement" treatment C-24's header cites for
     // article_template_status_check's earlier in-place rewrite.
+    // Phase E — C-30A (施工工单_C30_换小说_移植CPS换租客_2026-09-08.md §4A.1,
+    // 20260911090000_c30_novel_rebind_foundation) adds 79 more: one field
+    // record (novel.title_normalized), three table records and their 60
+    // field records for the three new tables (ArticleNovelRebindPreview/
+    // Batch/BatchItem), and 16 constraint records (indexes/uniques/FKs/
+    // CHECKs) for those same objects — 1130 + 79 = 1209.
     // The exact count still guards duplicate keys.
-    expect(records).toHaveLength(1130);
-    expect(new Set(records.map((line) => JSON.parse(line).stable_key)).size).toBe(1130);
+    expect(records).toHaveLength(1209);
+    expect(new Set(records.map((line) => JSON.parse(line).stable_key)).size).toBe(1209);
     const intents = records.map((line) => JSON.parse(line)).filter(
       (record) => record.table_name === "side_effect_intent"
         && ["status", "response_shape", "confirmed_at"].includes(record.field_name),

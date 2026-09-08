@@ -137,6 +137,14 @@ for (const flag of [
   // family also reads it, so it ALSO appears in the worker loop below now.
   "FEATURE_ARTICLE_BLOG",
   "ARTICLE_BLOG_ALLOW_WRITE",
+  // C-30A (施工工单_C30_换小说_移植CPS换租客_2026-09-08.md §4A.5/附录 E): a
+  // genuine double-gate (protected two-field Article.novelId+promoLinkId
+  // atomic write), web-only -- the rebind capability is entirely
+  // Server-Action-driven, grepped for a worker/scheduler consumer before
+  // registering, none exists, so neither flag appears in the worker loop
+  // below.
+  "FEATURE_ARTICLE_NOVEL_REBIND",
+  "ARTICLE_NOVEL_REBIND_ALLOW_WRITE",
 ]) {
   const expected = levelEntry.flags[flag];
   if (web.environment?.[flag] !== expected) {

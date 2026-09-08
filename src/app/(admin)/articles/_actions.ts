@@ -25,6 +25,31 @@ import {
   type PublishArticlesBatchResult,
   type RightsTransitionResult,
 } from "@/server/publish-gate";
+import {
+  RebindArticleNotEligibleError,
+  RebindDriftError,
+  RebindFeatureDisabledError,
+  RebindGuardBlockedError,
+  RebindInputError,
+  RebindRollbackNotFoundError,
+  RebindWriteDisabledError,
+  getRebindView,
+  rollbackArticleNovel,
+  searchRebindCandidates,
+  switchArticleNovel,
+  type RebindCandidate,
+  type RebindGuardFinding,
+  type RebindView,
+  type SwitchArticleNovelResult,
+} from "@/server/article-rebind";
+// Re-exported (not just imported) so Client Components can pull these types
+// from this Server Action file instead of `@/server/article-rebind`
+// directly — `tests/ui/admin-secret-boundary.test.tsx`'s "keeps Client
+// Components away from Prisma and server services" scan forbids ANY
+// `from "@/server/..."` import in a `"use client"` file, type-only imports
+// included, same boundary `../_components/article-editor.tsx` and every
+// other client component in this directory already respects.
+export type { RebindCandidate, RebindGuardFinding, RebindView };
 
 import { canonicalOrigin, guardDependencies, prisma, readSessionToken } from "../../api/admin/_lib/deps";
 
@@ -58,6 +83,138 @@ async function authorization(actionId: `admin.${string}`, requestId: string) {
 function deps() {
   const guards = guardDependencies();
   return { db: prisma, identities: guards.identities, sessions: guards.sessions };
+}
+
+/**
+ * C-30A: read-only counterpart to `authorization()` above, for
+ * `admin.article.rebind_candidates` (`mutation: false` — 施工工单 §4A.4).
+ * `requireAdminActionAccess` still runs `enforceCapability` (`content:rebind`
+ * + that capability's own `requiresTwoFactor`) for a `mutation: false`
+ * action, it just never issues a `serviceAuthorization` ticket (same-origin/
+ * rate-limit/request-id enforcement is a mutation-only concern) — so this
+ * helper returns `context` directly rather than throwing on a missing
+ * ticket, the same shape `../catalog-sync/_actions.ts`'s own
+ * `authorizeAction`/`dryRunContentCreationAction` pair already uses for
+ * `admin.content_creation.dry_run`.
+ */
+async function authorizeRead(actionId: `admin.${string}`, requestId: string) {
+  const requestHeaders = await headers();
+  const { context } = await requireAdminActionAccess(
+    { actionId, sessionToken: await readSessionToken(), origin: requestHeaders.get("origin"), canonicalOrigin: await canonicalOrigin(), requestId },
+    guardDependencies(),
+  );
+  return context;
+}
+
+/**
+ * C-30A (施工工单_C30_换小说_移植CPS换租客_2026-09-08.md §4A.6/§4A.7). Every
+ * write goes through `switchArticleNovel`/`rollbackArticleNovel`
+ * (`@/server/article-rebind`), which already re-validates the double gate
+ * and every guard fresh — these actions are thin wrappers, same shape as
+ * every other action in this file. `RebindGuardBlockedError`'s `findings`
+ * are forwarded verbatim so the panel can render the exact three-tier
+ * banner the write path actually evaluated (施工工单 §4A.6: "重新跑一遍，不
+ * 信任预览时的判定").
+ */
+export type RebindArticleActionResult =
+  | { ok: true; data: SwitchArticleNovelResult }
+  | { ok: false; code: string; findings?: readonly RebindGuardFinding[] };
+
+function rebindErrorCode(error: unknown): RebindArticleActionResult {
+  if (error instanceof RebindGuardBlockedError) {
+    return { ok: false, code: "rebind_guard_blocked", findings: error.findings };
+  }
+  if (error instanceof RebindDriftError) return { ok: false, code: "rebind_drift" };
+  if (error instanceof RebindInputError) return { ok: false, code: error.code };
+  if (error instanceof RebindFeatureDisabledError) return { ok: false, code: error.code };
+  if (error instanceof RebindWriteDisabledError) return { ok: false, code: error.code };
+  if (error instanceof RebindArticleNotEligibleError) return { ok: false, code: error.code };
+  if (error instanceof RebindRollbackNotFoundError) return { ok: false, code: error.code };
+  return { ok: false, code: writeErrorCode(error, "article_rebind_failed") };
+}
+
+export async function rebindArticleNovelAction(input: {
+  requestId: string;
+  articleId: string;
+  expectedOldNovelId: string;
+  expectedUpdatedAt?: string;
+  targetNovelId: string;
+  reason: string;
+  acknowledgeRisks?: boolean;
+}): Promise<RebindArticleActionResult> {
+  try {
+    const auth = await authorization("admin.article.rebind_novel", input.requestId);
+    const data = await switchArticleNovel({ authorization: auth, ...input }, deps());
+    revalidatePath("/articles");
+    revalidatePath(`/articles/${input.articleId}`);
+    return { ok: true, data };
+  } catch (error) {
+    return rebindErrorCode(error);
+  }
+}
+
+/**
+ * "换回上一次" (施工工单 §4A.7). `articleId` + `reason` only — no
+ * `targetNovelId`/`expectedOldNovelId`: `rollbackArticleNovel` derives both
+ * itself (the most recent `article.rebind_novel` audit row's `before`
+ * snapshot, and the article's current `novelId`, respectively). Risks are
+ * auto-acknowledged inside the service; only a hard `blocked` guard can
+ * still refuse a rollback.
+ */
+export async function rollbackArticleNovelAction(input: {
+  requestId: string;
+  articleId: string;
+  reason: string;
+}): Promise<RebindArticleActionResult> {
+  try {
+    const auth = await authorization("admin.article.rebind_rollback", input.requestId);
+    const data = await rollbackArticleNovel({ authorization: auth, ...input }, deps());
+    revalidatePath("/articles");
+    revalidatePath(`/articles/${input.articleId}`);
+    return { ok: true, data };
+  } catch (error) {
+    return rebindErrorCode(error);
+  }
+}
+
+export type SearchRebindCandidatesActionResult =
+  | { ok: true; data: readonly RebindCandidate[] }
+  | { ok: false; code: string };
+
+/** Read-only: 🔴 the panel's target selector is search-based, never a bare UUID input (施工工单 §4A.7). */
+export async function searchRebindCandidatesAction(input: {
+  requestId: string;
+  articleId: string;
+  query: string;
+}): Promise<SearchRebindCandidatesActionResult> {
+  try {
+    await authorizeRead("admin.article.rebind_candidates", input.requestId);
+    const data = await searchRebindCandidates(prisma, { articleId: input.articleId, query: input.query });
+    return { ok: true, data };
+  } catch (error) {
+    if (error instanceof RebindFeatureDisabledError) return { ok: false, code: error.code };
+    if (error instanceof RebindInputError) return { ok: false, code: error.code };
+    if (error instanceof RebindArticleNotEligibleError) return { ok: false, code: error.code };
+    return { ok: false, code: writeErrorCode(error, "article_rebind_candidates_failed") };
+  }
+}
+
+export type GetRebindViewActionResult = { ok: true; data: RebindView } | { ok: false; code: string };
+
+/** Read-only editor-page panel bootstrap: current book card + rebind history. */
+export async function getRebindViewAction(input: {
+  requestId: string;
+  articleId: string;
+}): Promise<GetRebindViewActionResult> {
+  try {
+    await authorizeRead("admin.article.rebind_candidates", input.requestId);
+    const data = await getRebindView(prisma, { articleId: input.articleId });
+    return { ok: true, data };
+  } catch (error) {
+    if (error instanceof RebindFeatureDisabledError) return { ok: false, code: error.code };
+    if (error instanceof RebindArticleNotEligibleError) return { ok: false, code: error.code };
+    return { ok: false, code: writeErrorCode(error, "article_rebind_view_failed") };
+  }
 }
 
 /**
