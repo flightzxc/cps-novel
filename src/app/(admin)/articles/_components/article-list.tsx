@@ -441,7 +441,22 @@ export function ArticleList({
               </TD>
             </tr>
           ))}
-          {rows.length === 0 && <EmptyRow colSpan={9}>暂无文章</EmptyRow>}
+          {rows.length === 0 && (
+            <EmptyRow colSpan={9}>
+              {/*
+                C-22 (`分析_文章管理Parity缺口_2026-09-08.md` §六, item #31,
+                PORT): CPS's empty state is "暂无文章" + "去生成第一篇文章" →
+                `/articles/generate` (`cps-admin-v851-admin-host`'s
+                `articles-client.tsx:559-572`). cps-novel's ADAPTed creation
+                entry is `/catalog-sync` (same route the header's "新建文章"/
+                "批量新建" buttons above point at — see `../page.tsx`).
+              */}
+              <p>暂无文章</p>
+              <Link href="/catalog-sync" className="text-sm text-blue-600 hover:underline">
+                去创建第一篇文章
+              </Link>
+            </EmptyRow>
+          )}
         </TBody>
       </Table>
 

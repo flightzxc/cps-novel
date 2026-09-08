@@ -1,4 +1,7 @@
 import "./setup-cleanup";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -465,6 +468,19 @@ describe("ArticleList · 列表与批量", () => {
     expect(screen.queryByText("批量删除")).toBeNull();
     expect(screen.queryByText(/^删除/)).toBeNull();
   });
+
+  /**
+   * C-22 (`分析_文章管理Parity缺口_2026-09-08.md` §六, item #31, PORT): CPS's
+   * empty state is "暂无文章" + "去生成第一篇文章" → `/articles/generate`.
+   * cps-novel's ADAPTed creation entry is `/catalog-sync` (same route the
+   * page header's "新建文章"/"批量新建" buttons point at, `../page.tsx`).
+   */
+  it("空列表展示「去创建第一篇文章」引导链接，指向目录同步", () => {
+    render(<ArticleList rows={[]} canWrite publicOrigin={PUBLIC_ORIGIN} />);
+    expect(screen.getByText("暂无文章")).toBeTruthy();
+    const link = screen.getByText("去创建第一篇文章") as HTMLAnchorElement;
+    expect(link.getAttribute("href")).toBe("/catalog-sync");
+  });
 });
 
 const ARTICLE = {
@@ -688,5 +704,52 @@ describe("ArticleFilters · C-19 filters", () => {
       expect(href).toContain("search=moonlight");
       expect(href).toContain("status=published");
     });
+  });
+});
+
+/**
+ * ArticlesPage (`../page.tsx`) is an async Server Component that queries
+ * Prisma and `requireContentPage` directly — like every other admin page in
+ * this repo, it has no render-based unit test (nothing under `tests/ui/`
+ * imports and renders a `(admin)/**\/page.tsx`; only its client components
+ * and services get that treatment, e.g. this file's own `ArticleList`/
+ * `ArticleFilters` blocks above). C-22's header-copy and entry-button `href`
+ * requirements (`分析_文章管理Parity缺口_2026-09-08.md` §六, items #1/#3/#4)
+ * are still worth pinning against silent drift, so this is a source-text
+ * assertion in the same spirit as `tests/ui/admin-path-roots-parity.test.ts`
+ * — narrower in scope (one page's literal copy, not a cross-file registry),
+ * but the same "read the file, assert on its text" mechanism rather than a
+ * new one.
+ */
+describe("ArticlesPage 抬头文案与入口按钮（C-22，源码级断言）", () => {
+  const source = readFileSync(
+    resolve(import.meta.dirname, "../../src/app/(admin)/articles/page.tsx"),
+    "utf8",
+  );
+
+  it("抬头文案照抄 CPS 的「管理所有生成的文章，共 N 篇」，不再夹带 50 条/25 秒预算说明", () => {
+    const descriptionMatch = source.match(/description=\{granted \? `([^`]*)` : undefined\}/);
+    expect(descriptionMatch?.[1]).toBe("管理所有生成的文章，共 ${total} 篇");
+    // The budget note itself only appears in this file's *explanatory
+    // comment* about where it moved to — not literally banned from the
+    // source text, just from ever landing back inside the `description`
+    // template above (asserted precisely, not by a whole-file substring
+    // scan that a comment could trivially fail).
+  });
+
+  it("「新建文章」与「批量新建」两个入口按钮都指向 /catalog-sync", () => {
+    const newArticleIdx = source.indexOf("新建文章");
+    const batchNewIdx = source.indexOf("批量新建");
+    expect(newArticleIdx).toBeGreaterThan(-1);
+    expect(batchNewIdx).toBeGreaterThan(-1);
+    // Each label's nearest preceding `href` must be "/catalog-sync" — walks
+    // backward from the label text to the `href="..."` that renders it,
+    // rather than just counting `/catalog-sync` occurrences (which would
+    // pass even if a label drifted onto some other route by accident).
+    for (const labelIdx of [newArticleIdx, batchNewIdx]) {
+      const before = source.slice(0, labelIdx);
+      const hrefMatch = before.match(/href="([^"]*)"(?!.*href=")/s);
+      expect(hrefMatch?.[1]).toBe("/catalog-sync");
+    }
   });
 });

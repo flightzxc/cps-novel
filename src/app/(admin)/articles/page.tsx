@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 import { findCapabilityState } from "@/features/admin-ui/capability-view";
 import { errorEnvelopeCopy } from "@/features/admin-ui/error-copy";
 import { AdminTimeZoneNote } from "@/features/admin-ui/time-zone-note";
@@ -147,7 +149,42 @@ export default async function ArticlesPage({
     <AdminShell
       session={sessionView(context)}
       title="文章管理"
-      description={granted ? `共 ${total} 篇；编辑文章正文与 SEO 元数据，或在 50 条/25 秒预算内批量再生成。` : "编辑文章正文与 SEO 元数据，或在 50 条/25 秒预算内批量再生成。"}
+      // C-22 (`分析_文章管理Parity缺口_2026-09-08.md` §六, item #1, PORT):
+      // CPS's exact header wording (`cps-admin-v851-admin-host`'s
+      // `src/app/(admin)/articles/page.tsx:62-66`) is "管理所有生成的文章，共
+      // N 篇" — nothing else. The "50 条/25 秒预算" note that used to be
+      // appended here now lives next to the "批量再生成" button it actually
+      // describes (`./_components/article-list.tsx`), not in the header.
+      description={granted ? `管理所有生成的文章，共 ${total} 篇` : undefined}
+      actions={
+        <div className="flex gap-2">
+          {/*
+            C-22 (item #3/#4, ADAPT): CPS's header carries "生成文章"/"批量
+            生成" entry buttons that open a drama+template picker on this same
+            page. cps-novel has no such picker here — a text-strong-bound
+            Article is created by "从渠道来源条目建书目并顺带建落地页", whose
+            only entry point is `/catalog-sync` (`../catalog-sync/page.tsx`).
+            Both buttons point at that one route (there is no distinct
+            single-vs-batch sub-route to split them across — batch creation
+            is a dialog on the same page, see that page's own `_components/
+            batch-create-content-dialog.tsx`), matching the doc's "均指向目录
+            同步" instruction literally rather than inventing a query-param
+            mode this page does not read.
+          */}
+          <Link
+            href="/catalog-sync"
+            className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
+          >
+            新建文章
+          </Link>
+          <Link
+            href="/catalog-sync"
+            className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
+          >
+            批量新建
+          </Link>
+        </div>
+      }
     >
       {granted ? (
         <div className="space-y-4">
