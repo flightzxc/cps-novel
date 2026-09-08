@@ -1247,8 +1247,6 @@ model ArticleNovelRebindPreview {
   expiresAt             DateTime @map("expires_at") @db.Timestamptz(6)
   createdAt              DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
-  batches ArticleNovelRebindBatch[]
-
   @@index([createdBy, createdAt], map: "article_novel_rebind_preview_created_by_created_idx")
   @@index([expiresAt], map: "article_novel_rebind_preview_expires_idx")
   @@map("article_novel_rebind_preview")
@@ -1289,8 +1287,7 @@ model ArticleNovelRebindBatch {
   createdAt           DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt           DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  preview ArticleNovelRebindPreview     @relation(fields: [previewId], references: [id], onDelete: Restrict)
-  items   ArticleNovelRebindBatchItem[]
+  items ArticleNovelRebindBatchItem[]
 
   @@index([status, createdAt], map: "article_novel_rebind_batch_status_created_idx")
   @@index([createdBy, createdAt], map: "article_novel_rebind_batch_created_by_created_idx")

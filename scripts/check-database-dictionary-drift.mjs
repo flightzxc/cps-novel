@@ -119,7 +119,7 @@ function assertStaticConsistency(schemaTables, records) {
     }
   }
 
-  // C-30A (施工工单_C30_換小说_移植CPS換租客_2026-09-08.md §4A.1): three new
+  // C-30A (施工工单_C30_换小说_移植CPS换租客_2026-09-08.md §4A.1): three new
   // models (ArticleNovelRebindPreview/Batch/BatchItem) push the count from
   // 49 to 52 -- updated alongside the migration that adds them, same as the
   // 51->49 update Phase C's C-4 DROP made when it removed two models.

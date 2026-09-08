@@ -86,7 +86,7 @@ Migration 演进，当前 Credential 状态增量为
 | `source_label` | ORIGINAL_REQUIRED | 未解释的上游原始标签字典 | app+kind+value 唯一 | V1 canonical tag |
 | `novel_source_item_label` | ORIGINAL_REQUIRED | 来源条目标签出现历史与 active 状态 | source item+label 唯一 | recommend 直接成为 SEO 分类 |
 | `article_novel_rebind_preview` | CPS_PARITY_ADAPTED | 换小说批量换绑（C-30，`article_drama_switch_preview` 平移）：有界扫描 + 二分图配对后的冻结预览快照，30 分钟有效期 | `expires_at` 索引供有界清理扫描回收；无 FK 约束业务列（见表说明） | — |
-| `article_novel_rebind_batch` | CPS_PARITY_ADAPTED | 换小说批量换绑（`article_drama_switch_batch` 平移）：持久化批次头——提交幂等令牌、执行租约、五态计数、终态 | `id` 为可读批次编号非裸 UUID；`request_token` 全局唯一；`status` 五值 CHECK；`preview_id` FK → `article_novel_rebind_preview.id`（`ON DELETE RESTRICT`） | — |
+| `article_novel_rebind_batch` | CPS_PARITY_ADAPTED | 换小说批量换绑（`article_drama_switch_batch` 平移）：持久化批次头——提交幂等令牌、执行租约、五态计数、终态 | `id` 为可读批次编号非裸 UUID；`request_token` 全局唯一；`status` 五值 CHECK；`preview_id` 无 FK 约束（CPS `ArticleDramaSwitchBatch.previewId` 同构，同样无 FK；预览行 30 分钟有界清理可能早于本批次行被回收） | — |
 | `article_novel_rebind_batch_item` | CPS_PARITY_ADAPTED | 换小说批量换绑（`article_drama_switch_batch_item` 平移）：批次内逐条文章的执行状态与前后 (novel_id, promo_link_id) 两字段快照——海阅特有的"两字段原子换绑"三元组翻倍（CPS 只有单字段 `drama_id` 三元组） | `(batch_id, article_id)` 唯一；`status` 五值 CHECK；`error_kind` 六值 CHECK（含 NULL）；`batch_id` FK → `article_novel_rebind_batch.id`（`ON DELETE CASCADE`）；`article_id`/`old_novel_id`/`old_promo_link_id`/`expected_new_novel_id`/`expected_new_promo_link_id`/`applied_new_novel_id`/`applied_new_promo_link_id`/`audit_id` 均为无 FK 的审计形状列（CPS 同构列同样无 FK） | — |
 
 ### 3.3 推广、发布与流量
@@ -345,16 +345,18 @@ C-30A（换小说地基，`20260911090000_c30_novel_rebind_foundation`）新增�
         `UNIQUE(request_token)`（提交幂等令牌，CPS `ArticleDramaSwitchBatch.requestToken` 平移）；
       - `db:public:article_novel_rebind_batch_item:article_novel_rebind_batch_item_batch_article_key`
         = `UNIQUE(batch_id, article_id)`（同一批次内每篇文章至多一条条目）；
-      - `db:public:article_novel_rebind_batch:article_novel_rebind_batch_preview_id_fkey` =
-        `(preview_id)` → `article_novel_rebind_preview(id)`，`ON DELETE RESTRICT`；
       - `db:public:article_novel_rebind_batch_item:article_novel_rebind_batch_item_batch_id_fkey` =
         `(batch_id)` → `article_novel_rebind_batch(id)`，`ON DELETE CASCADE`。
-      `batch_id` 是这三张表之间唯一的硬 FK；`article_id`/`old_novel_id`/`old_promo_link_id`/
-      `expected_new_novel_id`/`expected_new_promo_link_id`/`applied_new_novel_id`/
-      `applied_new_promo_link_id`/`audit_id`（→ `operation_audit.id`）均为无 FK 的审计形状列——
-      CPS 同构列（`ArticleDramaSwitchBatchItem.articleId`/`oldDramaId`/`expectedNewDramaId`/
-      `appliedNewDramaId`）同样无 FK：这三张表记录的是"计划/尝试过什么"，即使对应的 article/
-      novel/promo_link 行之后被另一条路径软删或硬删，记录也必须继续可读。
+      `batch_id` 是这三张表之间唯一的硬 FK；`preview_id`/`article_id`/`old_novel_id`/
+      `old_promo_link_id`/`expected_new_novel_id`/`expected_new_promo_link_id`/
+      `applied_new_novel_id`/`applied_new_promo_link_id`/`audit_id`（→ `operation_audit.id`）均为
+      无 FK 的审计形状列——CPS 同构列（`ArticleDramaSwitchBatch.previewId`/
+      `ArticleDramaSwitchBatchItem.articleId`/`oldDramaId`/`expectedNewDramaId`/
+      `appliedNewDramaId`）同样无 FK：这三张表记录的是"计划/尝试过什么"，即使对应的
+      article/novel/promo_link/preview 行之后被另一条路径软删、硬删或有界清理回收，记录也必须
+      继续可读——`preview_id` 尤其如此：预览行 30 分钟有界清理（`cleanupExpiredBatchSwitchPreviews`，
+      C-30B）可能早于批次行自己的长期保留结束，若给 `preview_id` 挂硬 FK 且 `ON DELETE RESTRICT`，
+      清理任务会因为存在引用它的批次行而报错，反而阻塞了这张表自己的有界清理契约。
     - 本单（C-30A，施工工单单 1）范围内三张新表均为空表、零调用点读写——批量预览/持久化执行/
       批量界面的读写代码是 C-30B（单 2），故本单**未**在 `infra/postgres/grants.sql` 里为这三张
       表登记任何角色 GRANT（沿用本仓库既有"地基迁移先加表/列、读写代码接线时再登记 GRANT"的顺序，

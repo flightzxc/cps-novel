@@ -2,15 +2,41 @@
 --
 -- CPS parity: `article_drama_switch_preview` / `article_drama_switch_batch` /
 -- `article_drama_switch_batch_item` (cps-admin-v851-admin-host HEAD c37602c,
--- prisma/schema.prisma:626-746). Field lists copied verbatim except two
--- 海阅-specific adaptations that hold across all three tables:
+-- prisma/schema.prisma:626-746). Field lists copied verbatim except the
+-- following 海阅-specific deviations:
 --   (a) UUID primary keys where this repo's own convention already uses
 --       UUID (CPS uses integer autoincrement / cuid);
 --   (b) the batch item's "old / expected / applied" triad is doubled to
 --       cover BOTH novel_id AND promo_link_id, because 海阅's rebind is a
 --       two-field atomic swap (novel + its promo link, tied together by the
 --       existing composite FK `article_promo_link_novel_fkey`) where CPS's
---       switch is a single `drama_id` column.
+--       switch is a single `drama_id` column;
+--   (c) CPS's single `direction VARCHAR` column (present on both its
+--       preview and batch tables) is split here into two explicit columns,
+--       `source_channel_code`/`target_channel_code`, matching this repo's
+--       own multi-channel vocabulary instead of CPS's implicit direction
+--       string;
+--   (d) `filters_json`/`matches_json` are `JSONB` here, not CPS's `TEXT`
+--       columns of the same name, each paired with its own
+--       `*_schema_version INTEGER NOT NULL DEFAULT 1` column (three such
+--       pairs across these tables: preview.filters_json,
+--       preview.matches_json, batch.filters_json) — this repo's own
+--       JSONB-plus-version-column convention (§9 of
+--       `docs/governance/database-governance.md`), which predates CPS's
+--       schema and which CPS does not use;
+--   (e) CPS's `ArticleDramaSwitchBatch.errorLog` column is dropped: this
+--       repo keeps no per-batch inline error log, only each item's own
+--       `error_kind`/`error_message`;
+--   (f) CPS's `ArticleDramaSwitchBatchItem.switchLogId` (a pointer into
+--       CPS's own dedicated `article_drama_switch_log` table) is renamed
+--       `audit_id` here and points at this repo's existing
+--       `operation_audit.id` instead — this repo has no dedicated
+--       switch-log table (see `audit_id`'s own column comment below);
+--   (g) `preview_id` carries no FK to `article_novel_rebind_preview` — CPS
+--       parity with `ArticleDramaSwitchBatch.previewId`, which is likewise
+--       FK-less: the preview row is bounded-lifetime (30-minute expiry +
+--       bounded cleanup sweep) and may legitimately be gone long before
+--       this batch row's own long-term retention ends.
 --
 -- Four things this migration does:
 --   1. `novel.title_normalized` (nullable VARCHAR(500)) + a
@@ -136,9 +162,6 @@ ALTER TABLE "article_novel_rebind_batch" ADD CONSTRAINT "article_novel_rebind_ba
 -- plain VARCHAR(128), not an FK" convention for exactly this reason — an
 -- audit-shaped record must remain legible even if the identity row is later
 -- removed.
-
-ALTER TABLE "article_novel_rebind_batch" ADD CONSTRAINT "article_novel_rebind_batch_preview_id_fkey"
-  FOREIGN KEY ("preview_id") REFERENCES "article_novel_rebind_preview"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- ---------------------------------------------------------------------
 -- 4. article_novel_rebind_batch_item

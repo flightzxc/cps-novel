@@ -104,14 +104,21 @@ describe("P1-06 database operations static contracts", () => {
     // evolution, not replacement" treatment C-24's header cites for
     // article_template_status_check's earlier in-place rewrite.
     // Phase E — C-30A (施工工单_C30_换小说_移植CPS换租客_2026-09-08.md §4A.1,
-    // 20260911090000_c30_novel_rebind_foundation) adds 79 more: one field
-    // record (novel.title_normalized), three table records and their 60
-    // field records for the three new tables (ArticleNovelRebindPreview/
-    // Batch/BatchItem), and 16 constraint records (indexes/uniques/FKs/
-    // CHECKs) for those same objects — 1130 + 79 = 1209.
+    // 20260911090000_c30_novel_rebind_foundation) adds 78 more: one field
+    // record (novel.title_normalized), three table records, 59 more field
+    // records across the three new tables (ArticleNovelRebindPreview/Batch/
+    // BatchItem — 60 field records total for this migration), and 15
+    // constraint records (indexes/uniques/FKs/CHECKs) for those same
+    // objects — 1130 + 78 = 1208. `article_novel_rebind_batch.preview_id`
+    // carries no FK (CPS parity with `ArticleDramaSwitchBatch.previewId`,
+    // itself FK-less, since the referenced preview row is bounded-lifetime
+    // and may legitimately be gone before the batch row's own retention
+    // ends) — a review fix removed the FK constraint record this migration
+    // originally, incorrectly, shipped with, dropping the constraint count
+    // from 16 to 15 and the running total from 1209 to 1208.
     // The exact count still guards duplicate keys.
-    expect(records).toHaveLength(1209);
-    expect(new Set(records.map((line) => JSON.parse(line).stable_key)).size).toBe(1209);
+    expect(records).toHaveLength(1208);
+    expect(new Set(records.map((line) => JSON.parse(line).stable_key)).size).toBe(1208);
     const intents = records.map((line) => JSON.parse(line)).filter(
       (record) => record.table_name === "side_effect_intent"
         && ["status", "response_shape", "confirmed_at"].includes(record.field_name),
