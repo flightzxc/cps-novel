@@ -117,6 +117,31 @@ describe("createContentFromSourceItem — apply, success path", () => {
     expect(fake.lastNovelCreateArgs).not.toHaveProperty("status");
   });
 
+  /**
+   * C-26 (`规划_文章管理能力补齐_博客类型可见性换小说_2026-09-08.md` §三/C-26):
+   * "模板渲染路径（创建服务里的文章插入...）：写成 template" — this insert is
+   * one of exactly two authorized `Article.contentMode` write sites (the
+   * other is `src/server/articles/service.ts`'s `updateArticleContent`/
+   * `regenerateCore` — see `tests/backend/articles/
+   * content-mode-sole-write-paths.test.ts`). Asserted on the raw write args,
+   * same as the `templateId`/`status` assertions immediately above, because
+   * this fake's `FakeArticle` storage type does not carry `contentMode`.
+   */
+  it("writes contentMode: \"template\" on the created Article", async () => {
+    const fake = new FakeContentCreationDb();
+    const sourceItem = fake.seedSourceItem({ title: "Content Mode Check" });
+
+    const result = await createContentFromSourceItem(fake.asPrismaClient(), {
+      novelSourceItemId: sourceItem.id,
+      mode: "apply",
+      actor: ADMIN_ACTOR,
+      requestId: "req-content-mode",
+    });
+
+    expect(result.outcome).toBe("created");
+    expect(fake.lastArticleCreateArgs).toMatchObject({ contentMode: "template" });
+  });
+
   it("uses one explicitly selected active template and persists its id", async () => {
     const fake = new FakeContentCreationDb();
     fake.seedArticleTemplate({

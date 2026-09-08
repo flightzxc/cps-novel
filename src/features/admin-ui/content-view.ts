@@ -1,11 +1,15 @@
 import type { AdminContentExceptionCode } from "@/contracts";
-import type {
-  ArticleSeoVisibility,
-  ArticleStatus,
-  LabelKind,
-  NovelChapterStatus,
-  NovelSourceItemStatus,
-  NovelStatus,
+import {
+  ARTICLE_CONTENT_MODES,
+  ARTICLE_TYPES,
+  type ArticleContentMode,
+  type ArticleSeoVisibility,
+  type ArticleStatus,
+  type ArticleType,
+  type LabelKind,
+  type NovelChapterStatus,
+  type NovelSourceItemStatus,
+  type NovelStatus,
 } from "@/domain/database-statuses";
 
 /**
@@ -79,6 +83,85 @@ export const ARTICLE_SEO_VISIBILITY_OPTIONS: ReadonlyArray<
   { value: "seo_only", label: "仅 SEO（不展示）" },
   { value: "hidden", label: "隐藏（noindex）" },
 ]);
+
+/**
+ * C-26 (`规划_文章管理能力补齐_博客类型可见性换小说_2026-09-08.md` §三/C-26):
+ * `Article.articleType` vocabulary — filter dropdown option labels AND the
+ * list's new "类型" badge column, both sourced from this one label map.
+ * Unlike `ARTICLE_SEO_VISIBILITY_BADGES`/`ARTICLE_SEO_VISIBILITY_OPTIONS`
+ * above (which deliberately keep CPS's own two *different* label sets — a
+ * short badge vocabulary vs. a longer filter/editor one), there is only one
+ * CPS label set here (`article-v2-contract.ts`'s `ARTICLE_TYPE_OPTIONS`) —
+ * CPS never renders `articleType` as a list badge at all (this column is a
+ * cps-novel-only display increment, see the plan's own "这一处是超出 CPS
+ * 的展示增量" note), so there is no second CPS wording to preserve
+ * separately. One label per value, reused for both surfaces.
+ *
+ * Labels are copied verbatim from CPS's `ARTICLE_TYPE_OPTIONS`
+ * (`cps-admin-v851-admin-host`'s `src/lib/article-v2-contract.ts:182-187`),
+ * with the one rename the plan calls out: CPS's `drama_article` → `novel_article`
+ * relabels "剧集文章" → "小说文章" (aligning with the template-side rename
+ * `src/lib/article-templates/applicable-article-type.ts` already made for
+ * P2-02B). `listicle`/`guide` keep CPS's own slash-joined wording
+ * ("榜单 / Listicle" / "指南 / Guide") verbatim — the plan's own prose
+ * abbreviates these to "榜单 Listicle"/"指南 Guide" only because it is using
+ * "/" as the *enumeration* separator between all four option names in one
+ * sentence, not as a literal label edit; "选项文案照抄 CPS" and this round's
+ * binding "copy CPS wording/values verbatim" instruction both point at the
+ * actual CPS source string, not the plan's own inline shorthand for listing
+ * it.
+ */
+export const ARTICLE_TYPE_LABELS: Readonly<Record<ArticleType, string>> = Object.freeze({
+  novel_article: "小说文章",
+  blog_article: "博客文章",
+  listicle: "榜单 / Listicle",
+  guide: "指南 / Guide",
+});
+
+export const ARTICLE_TYPE_OPTIONS: ReadonlyArray<Readonly<{ value: ArticleType; label: string }>> = Object.freeze(
+  ARTICLE_TYPES.map((value) => Object.freeze({ value, label: ARTICLE_TYPE_LABELS[value] })),
+);
+
+/**
+ * Colors are this repo's own choice (CPS has none to copy here — see the
+ * doc comment on {@link ARTICLE_TYPE_LABELS} above): four visually distinct
+ * hues not already used together on this same table row
+ * ({@link ARTICLE_STATUS_BADGES}/{@link ARTICLE_SEO_VISIBILITY_BADGES} occupy
+ * gray/green/amber/red and green/blue/gray respectively).
+ */
+export const ARTICLE_TYPE_BADGES: Readonly<Record<ArticleType, StatusBadge>> = Object.freeze({
+  novel_article: { label: ARTICLE_TYPE_LABELS.novel_article, color: "bg-blue-100 text-blue-800" },
+  blog_article: { label: ARTICLE_TYPE_LABELS.blog_article, color: "bg-purple-100 text-purple-800" },
+  listicle: { label: ARTICLE_TYPE_LABELS.listicle, color: "bg-pink-100 text-pink-800" },
+  guide: { label: ARTICLE_TYPE_LABELS.guide, color: "bg-cyan-100 text-cyan-800" },
+});
+
+/**
+ * C-26: `Article.contentMode` vocabulary — same "one label map feeds both
+ * the filter dropdown and the list badge column" shape as
+ * {@link ARTICLE_TYPE_LABELS} above, for the same reason (CPS never renders
+ * `contentMode` as a list badge either). Labels copied verbatim from CPS's
+ * `CONTENT_MODE_OPTIONS` (`article-v2-contract.ts:209-212`).
+ */
+export const ARTICLE_CONTENT_MODE_LABELS: Readonly<Record<ArticleContentMode, string>> = Object.freeze({
+  manual: "手动编辑",
+  template: "使用模板",
+});
+
+export const ARTICLE_CONTENT_MODE_OPTIONS: ReadonlyArray<Readonly<{ value: ArticleContentMode; label: string }>> =
+  Object.freeze(ARTICLE_CONTENT_MODES.map((value) => Object.freeze({ value, label: ARTICLE_CONTENT_MODE_LABELS[value] })));
+
+/**
+ * `manual` gets the amber "needs attention" color deliberately, not an
+ * arbitrary pick: it is the same value the batch-再生成 "含手动编辑" warning
+ * (`../../app/(admin)/articles/_components/article-list.tsx`) exists to flag
+ * before an operator overwrites a human's hand edit — the badge and the
+ * warning should read as the same signal at a glance.
+ */
+export const ARTICLE_CONTENT_MODE_BADGES: Readonly<Record<ArticleContentMode, StatusBadge>> = Object.freeze({
+  manual: { label: ARTICLE_CONTENT_MODE_LABELS.manual, color: "bg-amber-100 text-amber-800" },
+  template: { label: ARTICLE_CONTENT_MODE_LABELS.template, color: "bg-gray-100 text-gray-600" },
+});
 
 export const CHAPTER_STATUS_BADGES: Readonly<Record<NovelChapterStatus, StatusBadge>> =
   Object.freeze({

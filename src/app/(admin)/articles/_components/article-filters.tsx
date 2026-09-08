@@ -1,7 +1,12 @@
 import Link from "next/link";
 
 import { ARTICLE_STATUSES } from "@/domain/database-statuses";
-import { ARTICLE_SEO_VISIBILITY_OPTIONS, ARTICLE_STATUS_BADGES } from "@/features/admin-ui/content-view";
+import {
+  ARTICLE_CONTENT_MODE_OPTIONS,
+  ARTICLE_SEO_VISIBILITY_OPTIONS,
+  ARTICLE_STATUS_BADGES,
+  ARTICLE_TYPE_OPTIONS,
+} from "@/features/admin-ui/content-view";
 
 export type ArticleTemplateOption = Readonly<{
   id: string;
@@ -21,6 +26,10 @@ export type ArticleFilterValues = {
   readonly canonicalTagId?: string;
   /** C-25: exact-match on `Article.seoVisibility` — the "全部可见性" dropdown below. */
   readonly seoVisibility?: string;
+  /** C-26: exact-match on `Article.articleType` — the "全部类型" dropdown below. */
+  readonly articleType?: string;
+  /** C-26: exact-match on `Article.contentMode` — the "全部内容模式" dropdown below. */
+  readonly contentMode?: string;
 };
 
 /**
@@ -38,6 +47,8 @@ function clearNovelHref(values: ArticleFilterValues): string {
   if (values.templateId) next.set("templateId", values.templateId);
   if (values.canonicalTagId) next.set("canonicalTagId", values.canonicalTagId);
   if (values.seoVisibility) next.set("seoVisibility", values.seoVisibility);
+  if (values.articleType) next.set("articleType", values.articleType);
+  if (values.contentMode) next.set("contentMode", values.contentMode);
   const query = next.toString();
   return query ? `/articles?${query}` : "/articles";
 }
@@ -147,6 +158,47 @@ export function ArticleFilters({
               {ARTICLE_STATUSES.map((status) => (
                 <option key={status} value={status}>
                   {ARTICLE_STATUS_BADGES[status].label}
+                </option>
+              ))}
+            </select>
+          </label>
+          {/*
+            C-26 (`规划_文章管理能力补齐_博客类型可见性换小说_2026-09-08.md`
+            §三/C-26): "全部类型"/"全部内容模式" dropdowns, CPS wording verbatim
+            (`ARTICLE_TYPE_OPTIONS`/`ARTICLE_CONTENT_MODE_OPTIONS`, see
+            `@/features/admin-ui/content-view`'s own doc comments on each).
+            Same "" empty-value + `article-actions.ts`-style ordering CPS's own
+            `articles-client.tsx` uses (类型 → 内容模式, immediately before
+            可见性 in that file's own filter row).
+          */}
+          <label className="text-sm">
+            <span className="mb-1 block text-gray-600">类型</span>
+            <select
+              name="articleType"
+              defaultValue={values.articleType ?? ""}
+              aria-label="类型"
+              className="rounded-lg border border-gray-300 py-2 pl-3 pr-8 text-sm focus:border-blue-500 focus:outline-none"
+            >
+              <option value="">全部类型</option>
+              {ARTICLE_TYPE_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="text-sm">
+            <span className="mb-1 block text-gray-600">内容模式</span>
+            <select
+              name="contentMode"
+              defaultValue={values.contentMode ?? ""}
+              aria-label="内容模式"
+              className="rounded-lg border border-gray-300 py-2 pl-3 pr-8 text-sm focus:border-blue-500 focus:outline-none"
+            >
+              <option value="">全部内容模式</option>
+              {ARTICLE_CONTENT_MODE_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
                 </option>
               ))}
             </select>

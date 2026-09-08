@@ -3,8 +3,12 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { buttonClassName } from "@/components/ui/button";
-import type { ArticleSeoVisibility } from "@/domain/database-statuses";
-import { ARTICLE_SEO_VISIBILITY_OPTIONS } from "@/features/admin-ui/content-view";
+import type { ArticleContentMode, ArticleSeoVisibility, ArticleType } from "@/domain/database-statuses";
+import {
+  ARTICLE_CONTENT_MODE_LABELS,
+  ARTICLE_SEO_VISIBILITY_OPTIONS,
+  ARTICLE_TYPE_LABELS,
+} from "@/features/admin-ui/content-view";
 import { updateArticleAction } from "../_actions";
 
 /**
@@ -20,7 +24,7 @@ import { updateArticleAction } from "../_actions";
  * lock and every `defaultValue` field at once rather than requiring a
  * render-phase sync effect for just this one field.
  */
-export function ArticleEditor({ article, canWrite }: { article: { id: string; title: string; summary: string | null; body: string; seoMetadata: unknown; slug: string; publicPageShortId: string; seoVisibility: string; updatedAt: string }; canWrite: boolean }) {
+export function ArticleEditor({ article, canWrite }: { article: { id: string; title: string; summary: string | null; body: string; seoMetadata: unknown; slug: string; publicPageShortId: string; seoVisibility: string; articleType: string; contentMode: string; updatedAt: string }; canWrite: boolean }) {
   const router = useRouter();
   const meta = article.seoMetadata && typeof article.seoMetadata === "object" && !Array.isArray(article.seoMetadata) ? article.seoMetadata as Record<string, unknown> : {};
   const [preview, setPreview] = useState(article.body);
@@ -86,6 +90,23 @@ export function ArticleEditor({ article, canWrite }: { article: { id: string; ti
         ))}
       </div>
     </div>
+    {/*
+      C-26 (`规划_文章管理能力补齐_博客类型可见性换小说_2026-09-08.md` §三/C-26):
+      read-only display of 类型/内容模式, deliberately not a form control — the
+      plan's own "不移植 CPS 的内容模式与模板选择器的联动" exception: in this
+      repo `contentMode` is a system-observed fact about which write path last
+      touched the body (`updateArticleContent` → manual, creation/regenerate →
+      template — see that function's own doc comment), not an operator
+      choice, so giving it an editable control would let an operator claim
+      "template" over a body that is actually hand-edited (or vice versa) —
+      exactly the "说谎数据" failure mode the plan calls out. `articleType`
+      has no editing surface anywhere in this round either (blog creation,
+      the only thing that would ever set it to something other than
+      `novel_article`, is C-27/C-28 — out of this round's scope).
+    */}
+    <p className="text-xs text-gray-500" data-testid="article-editor-type-content-mode">
+      类型: {ARTICLE_TYPE_LABELS[article.articleType as ArticleType] ?? article.articleType} · 内容模式: {ARTICLE_CONTENT_MODE_LABELS[article.contentMode as ArticleContentMode] ?? article.contentMode}
+    </p>
     <p className="text-xs text-gray-500">slug: {article.slug} · shortId: {article.publicPageShortId}</p>{message && <p role="status" className="text-sm">{message}</p>}
     <button disabled={!canWrite} className={buttonClassName("primary")}>保存</button>
   </form><section className="rounded-xl border bg-white p-5"><h2 className="mb-4 font-semibold">正文预览</h2><div className="prose max-w-none" dangerouslySetInnerHTML={{ __html: preview }} /></section></div>;

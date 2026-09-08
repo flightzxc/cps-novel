@@ -576,6 +576,22 @@ async function runCreateTransaction(
         seoMetadata: rendered.seoMetadata,
         seoSchemaVersion: rendered.seoSchemaVersion,
         templateId: template.id,
+        /**
+         * C-26 (`规划_文章管理能力补齐_博客类型可见性换小说_2026-09-08.md`
+         * §三/C-26): this insert IS "创建服务里的文章插入" — the plan's other
+         * authorized `Article.contentMode` write site (the first is
+         * `src/server/articles/service.ts`'s `updateArticleContent`/
+         * `regenerateCore`). Written explicitly even though
+         * `content_mode`'s column default is already `"template"` (C-24) and
+         * this insert would land there unwritten — spelled out the same way
+         * `publicPageShortId` above is spelled out rather than shorthand: so
+         * this stays the one other textually-greppable, self-documenting
+         * write site the static scan
+         * (`tests/backend/articles/content-mode-sole-write-paths.test.ts`)
+         * expects to find, and so a future change to the column's default
+         * cannot silently change this path's behavior.
+         */
+        contentMode: "template" as const,
         // status intentionally omitted — see module header, "Never writes status".
       },
     }),

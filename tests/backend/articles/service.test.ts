@@ -53,6 +53,9 @@ type ArticleRow = {
   status: string;
   /** C-25: `Article.seoVisibility` (C-24 axes foundation). */
   seoVisibility: string;
+  /** C-26: `Article.articleType`/`Article.contentMode` (C-24 axes foundation, maintained by C-26). */
+  articleType: string;
+  contentMode: string;
   deletedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
@@ -191,8 +194,8 @@ class FakeArticlesDb {
       if (updatedAt.lt && row.updatedAt.getTime() >= updatedAt.lt.getTime()) return false;
     }
     // M7 `listArticles` filters — plain equality, same as Prisma's `where: { locale }` etc.
-    // C-25 added `seoVisibility` to this same equality family.
-    for (const key of ["locale", "status", "novelId", "templateId", "seoVisibility"] as const) {
+    // C-25 added `seoVisibility`; C-26 added `articleType`/`contentMode` to this same equality family.
+    for (const key of ["locale", "status", "novelId", "templateId", "seoVisibility", "articleType", "contentMode"] as const) {
       if (where[key] !== undefined && row[key] !== where[key]) return false;
     }
     // C-19 `search`: each of `buildArticleSearchOr`'s OR branches is either a
@@ -263,6 +266,8 @@ class FakeArticlesDb {
       publicPageShortId: row.publicPageShortId,
       status: row.status,
       seoVisibility: row.seoVisibility,
+      articleType: row.articleType,
+      contentMode: row.contentMode,
       summary: row.summary,
       updatedAt: row.updatedAt,
       createdAt: row.createdAt,
@@ -315,6 +320,8 @@ function seedArticle(db: FakeArticlesDb, overrides: Partial<ArticleRow> & { id: 
     seoSchemaVersion: 1,
     status: "draft",
     seoVisibility: "public",
+    articleType: "novel_article",
+    contentMode: "template",
     deletedAt: null,
     createdAt: new Date(NOW),
     updatedAt: new Date(NOW),
@@ -544,6 +551,59 @@ describe("updateArticleContent", () => {
     expect(db.articles.find((candidate) => candidate.id === row.id)!.seoVisibility).toBe("public");
     expect(db.audits).toHaveLength(0);
   });
+
+  /**
+   * C-26 (`规划_文章管理能力补齐_博客类型可见性换小说_2026-09-08.md` §三/C-26):
+   * "运营手改正文的写入服务：把 contentMode 写成 manual（与正文、摘要、SEO
+   * 元数据同一个乐观锁事务，审计前后快照带上）" — unconditional (unlike
+   * `seoVisibility`, there is no patch flag gating this): every call to this
+   * function is, by definition, a human hand-edit, so `contentMode` always
+   * flips to `"manual"`, even starting from `"template"`.
+   */
+  it("把 contentMode 写成 manual（无条件，与正文同一事务，审计前后快照带上）", async () => {
+    const db = new FakeArticlesDb();
+    seedNovel(db, "novel-1");
+    const row = seedArticle(db, { id: "article-1", novelId: "novel-1", contentMode: "template" });
+    const stores = authFixture();
+    const guarded = await authorization(stores, "admin.article.update");
+
+    const updated = await updateArticleContent(
+      {
+        ...guarded,
+        articleId: row.id,
+        expectedUpdatedAt: row.updatedAt.toISOString(),
+        patch: { title: "New Title", summary: "New summary", body: "<p>hand-edited</p>", metaTitle: "", metaDescription: "" },
+      },
+      deps(db, stores),
+    );
+
+    expect(updated.contentMode).toBe("manual");
+    expect(db.audits).toHaveLength(1);
+    expect(db.audits[0]).toMatchObject({
+      beforeSnapshot: expect.objectContaining({ contentMode: "template" }),
+      afterSnapshot: expect.objectContaining({ contentMode: "manual" }),
+    });
+  });
+
+  it("即使文章已经是 manual，再次手改仍保持 manual（幂等）", async () => {
+    const db = new FakeArticlesDb();
+    seedNovel(db, "novel-1");
+    const row = seedArticle(db, { id: "article-1", novelId: "novel-1", contentMode: "manual" });
+    const stores = authFixture();
+    const guarded = await authorization(stores, "admin.article.update");
+
+    const updated = await updateArticleContent(
+      {
+        ...guarded,
+        articleId: row.id,
+        expectedUpdatedAt: row.updatedAt.toISOString(),
+        patch: { title: "Another edit", summary: "", body: "<p>x</p>", metaTitle: "", metaDescription: "" },
+      },
+      deps(db, stores),
+    );
+
+    expect(updated.contentMode).toBe("manual");
+  });
 });
 
 describe("regenerateArticle", () => {
@@ -600,6 +660,31 @@ describe("regenerateArticle", () => {
     );
     expect(result.outcome).toBe("article_not_found");
   });
+
+  /**
+   * C-26: "模板渲染路径（创建服务里的文章插入、再生成服务的正文覆盖）：写成
+   * template" — the N-7 CAS branch (`expectedUpdatedAt` supplied, this
+   * function's own always-on contract). Pins that a re-render always
+   * reasserts `"template"` even over an article a human had previously
+   * hand-edited to `"manual"` — re-rendering from the template means the
+   * body is no longer "last written by an operator".
+   */
+  it("再生成把 contentMode 写回 template，即使原先是 manual（CAS 分支）", async () => {
+    const db = new FakeArticlesDb();
+    seedNovel(db, "novel-1");
+    seedTemplate(db, { id: "template-1", templateKey: "tpl-1" });
+    const row = seedArticle(db, { id: "article-1", novelId: "novel-1", templateId: "template-1", contentMode: "manual" });
+    const stores = authFixture();
+    const guarded = await authorization(stores, "admin.article.regenerate");
+
+    const result = await regenerateArticle(
+      { ...guarded, articleId: row.id, expectedUpdatedAt: row.updatedAt.toISOString() },
+      deps(db, stores),
+    );
+
+    expect(result.outcome).toBe("regenerated");
+    expect(db.articles.find((candidate) => candidate.id === row.id)!.contentMode).toBe("template");
+  });
 });
 
 describe("regenerateArticlesBatch", () => {
@@ -649,6 +734,38 @@ describe("regenerateArticlesBatch", () => {
       { articleId: "budget-exceeded", status: "not_processed" },
     ]);
     expect(result.counts).toEqual({ regenerated: 1, skipped: 1, failed: 1, not_processed: 1 });
+  });
+
+  /**
+   * C-26: same claim as `regenerateArticle`'s own contentMode test above, but
+   * exercised through the *other* branch of `regenerateCore` — the batch
+   * path never supplies `expectedUpdatedAt` (see that function's own doc
+   * comment on why), so this is the one test in this file that actually
+   * reaches the plain `tx.article.update(...)` write rather than the N-7
+   * `updateMany` CAS write. Both branches are authorized `contentMode:`
+   * write sites (see `content-mode-sole-write-paths.test.ts`), and both must
+   * actually write it.
+   */
+  it("批量再生成（非 CAS 分支）也把 contentMode 写回 template", async () => {
+    const db = new FakeArticlesDb();
+    seedNovel(db, "novel-manual");
+    seedTemplate(db, { id: "template-1", templateKey: "tpl-1", locale: "en" });
+    const row = seedArticle(db, {
+      id: "manual-article",
+      novelId: "novel-manual",
+      templateId: "template-1",
+      locale: "en",
+      contentMode: "manual",
+    });
+    const stores = authFixture();
+    const guarded = await authorization(stores, "admin.article.regenerate_batch");
+
+    const result = await regenerateArticlesBatch({ ...guarded, articleIds: [row.id] }, deps(db, stores));
+
+    expect(result.items).toEqual([
+      { articleId: row.id, status: "regenerated", result: expect.objectContaining({ outcome: "regenerated" }) },
+    ]);
+    expect(db.articles.find((candidate) => candidate.id === row.id)!.contentMode).toBe("template");
   });
 });
 
@@ -744,6 +861,74 @@ describe("listArticles (M7 ①)", () => {
       { code: "invalid_status" },
     );
     await expect(listArticles(db.asPrismaClient(), { seoVisibility: "bogus" })).rejects.toBeInstanceOf(
+      AdminContentQueryError,
+    );
+  });
+
+  /**
+   * C-26 (`规划_文章管理能力补齐_博客类型可见性换小说_2026-09-08.md` §三/C-26):
+   * "文章列表入参新增可选的 articleType 与 contentMode；规范化按取值域校验；
+   * where 各加一条相等条件" — same exact-match shape as `seoVisibility` above.
+   */
+  it("按 articleType 筛选：只返回该类型的行", async () => {
+    const db = new FakeArticlesDb();
+    seedNovel(db, "novel-1");
+    seedArticle(db, { id: "novel-article-1", novelId: "novel-1", articleType: "novel_article" });
+    seedArticle(db, { id: "blog-article-1", novelId: "novel-1", articleType: "blog_article", slug: "blog-article-1" });
+
+    const page = await listArticles(db.asPrismaClient(), { articleType: "blog_article" });
+
+    expect(page.items.map((item) => item.id)).toEqual(["blog-article-1"]);
+    expect(page.total).toBe(1);
+  });
+
+  it("按 contentMode 筛选：只返回该内容模式的行", async () => {
+    const db = new FakeArticlesDb();
+    seedNovel(db, "novel-1");
+    seedArticle(db, { id: "template-1", novelId: "novel-1", contentMode: "template" });
+    seedArticle(db, { id: "manual-1", novelId: "novel-1", contentMode: "manual", slug: "manual-1" });
+
+    const page = await listArticles(db.asPrismaClient(), { contentMode: "manual" });
+
+    expect(page.items.map((item) => item.id)).toEqual(["manual-1"]);
+    expect(page.total).toBe(1);
+  });
+
+  /**
+   * C-26: "取值为空串或 all 时不筛...海阅统一对所有筛选做归一" — pins that
+   * both spellings ("" and "all") normalize to "no filter" for these two
+   * axes, matching the filter bar's own empty-option value (`""`) and the
+   * literal CPS's service layer accepts for these newer axes ("all").
+   */
+  it("articleType/contentMode 传空串或 'all' 时视为不筛，不报错", async () => {
+    const db = new FakeArticlesDb();
+    seedNovel(db, "novel-1");
+    seedArticle(db, { id: "a-1", novelId: "novel-1", articleType: "novel_article", contentMode: "template" });
+    seedArticle(db, { id: "a-2", novelId: "novel-1", articleType: "blog_article", contentMode: "manual", slug: "a-2" });
+
+    const empty = await listArticles(db.asPrismaClient(), { articleType: "", contentMode: "" });
+    expect(empty.items.map((item) => item.id).sort()).toEqual(["a-1", "a-2"]);
+
+    const all = await listArticles(db.asPrismaClient(), { articleType: "all", contentMode: "all" });
+    expect(all.items.map((item) => item.id).sort()).toEqual(["a-1", "a-2"]);
+  });
+
+  it("非法 articleType 被 invalid_status 拒绝（复用同族错误码）", async () => {
+    const db = new FakeArticlesDb();
+    await expect(listArticles(db.asPrismaClient(), { articleType: "bogus" })).rejects.toMatchObject({
+      code: "invalid_status",
+    });
+    await expect(listArticles(db.asPrismaClient(), { articleType: "bogus" })).rejects.toBeInstanceOf(
+      AdminContentQueryError,
+    );
+  });
+
+  it("非法 contentMode 被 invalid_status 拒绝（复用同族错误码）", async () => {
+    const db = new FakeArticlesDb();
+    await expect(listArticles(db.asPrismaClient(), { contentMode: "bogus" })).rejects.toMatchObject({
+      code: "invalid_status",
+    });
+    await expect(listArticles(db.asPrismaClient(), { contentMode: "bogus" })).rejects.toBeInstanceOf(
       AdminContentQueryError,
     );
   });
@@ -1022,6 +1207,21 @@ describe("listArticles · 投影新增字段 (C-20)", () => {
     const page = await listArticles(db.asPrismaClient());
 
     expect(page.items[0]!.seoVisibility).toBe("seo_only");
+  });
+
+  /**
+   * C-26: "列表投影新增两列，列表项类型新增两个可选字段" — same shape as the
+   * `seoVisibility` projection test immediately above.
+   */
+  it("投影包含 articleType / contentMode", async () => {
+    const db = new FakeArticlesDb();
+    seedNovel(db, "novel-1");
+    seedArticle(db, { id: "article-1", novelId: "novel-1", articleType: "blog_article", contentMode: "manual" });
+
+    const page = await listArticles(db.asPrismaClient());
+
+    expect(page.items[0]!.articleType).toBe("blog_article");
+    expect(page.items[0]!.contentMode).toBe("manual");
   });
 
   it("无关联模板时 templateName 与 templateKey 都回退为 null", async () => {

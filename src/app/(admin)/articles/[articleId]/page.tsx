@@ -41,6 +41,11 @@ export default async function ArticleEditPage({ params }: { params: Promise<{ ar
       publicPageShortId: true,
       // C-25: read by `ArticleEditor`'s three-pill SEO 可见性 selector below.
       seoVisibility: true,
+      // C-26: read-only 类型/内容模式 display line below — see that
+      // component's own doc comment on why these are display-only here
+      // (system-observed facts, not operator-facing form fields).
+      articleType: true,
+      contentMode: true,
       updatedAt: true,
       novel: { select: { id: true, title: true } },
     },

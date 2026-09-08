@@ -1,7 +1,16 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
 
 import { ADMIN_CONTENT_MAX_SEARCH_LENGTH, type AdminContentPage } from "@/domain/admin-content";
-import { ARTICLE_SEO_VISIBILITIES, ARTICLE_STATUSES, type ArticleSeoVisibility, type ArticleStatus } from "@/domain/database-statuses";
+import {
+  ARTICLE_CONTENT_MODES,
+  ARTICLE_SEO_VISIBILITIES,
+  ARTICLE_STATUSES,
+  ARTICLE_TYPES,
+  type ArticleContentMode,
+  type ArticleSeoVisibility,
+  type ArticleStatus,
+  type ArticleType,
+} from "@/domain/database-statuses";
 import { SITE_LOCALES } from "@/lib/locale/locale-canonical";
 import { buildNovelTemplateValues, isTemplateRenderError, renderArticleDraft } from "@/lib/seo/template";
 import { parseArticleSlugParam } from "@/lib/slug/article-path";
@@ -130,6 +139,27 @@ export async function updateArticleContent(input: {
       ...(input.patch.metaTitle?.trim() ? { metaTitle: input.patch.metaTitle.trim() } : {}),
       ...(input.patch.metaDescription?.trim() ? { metaDescription: input.patch.metaDescription.trim() } : {}),
     } as Prisma.InputJsonValue,
+    /**
+     * C-26 (`规划_文章管理能力补齐_博客类型可见性换小说_2026-09-08.md` §三/C-26):
+     * this function IS "运营手改正文的写入服务" — the plan's first of exactly
+     * two authorized `Article.contentMode` write sites. Unconditional, unlike
+     * `seoVisibility` below: there is no "operator chose manual" input field to
+     * gate on — running this function at all means a human just hand-edited
+     * `title`/`summary`/`body`/`seoMetadata` in the same transaction, so the
+     * column always flips to `"manual"` here, every call, no patch flag.
+     * `contentMode` is a system-observed fact about *which code path last
+     * wrote the body*, not an operator-facing choice (see the plan's "不移植
+     * CPS 的内容模式与模板选择器的联动" exception) — `ArticleEditInput` has no
+     * `contentMode` field for exactly that reason.
+     *
+     * The second authorized site is the template-render path: the creation
+     * insert (`src/server/content-creation/service.ts`) and `regenerateCore`
+     * below both write `contentMode: "template"`. A static scan
+     * (`tests/backend/articles/content-mode-sole-write-paths.test.ts`) forbids
+     * a third `contentMode:` write site anywhere else in `src`/`worker`/
+     * `scheduler`/`scripts`.
+     */
+    contentMode: "manual" as const,
     // C-25: omitted entirely (not even `undefined`-spread) when the caller
     // does not send it, so the column is left untouched rather than reset to
     // a default — same "optional patch field, absent = don't touch" shape as
@@ -144,7 +174,7 @@ export async function updateArticleContent(input: {
   // `[expected, expected + 1ms)` window rather than strict equality.
   const expectedExclusive = new Date(expected.getTime() + 1);
   return deps.db.$transaction(async (tx) => {
-    const before = await tx.article.findFirstOrThrow({ where: { id: input.articleId, deletedAt: null }, select: { id: true, title: true, summary: true, templateId: true, seoVisibility: true, updatedAt: true } });
+    const before = await tx.article.findFirstOrThrow({ where: { id: input.articleId, deletedAt: null }, select: { id: true, title: true, summary: true, templateId: true, seoVisibility: true, contentMode: true, updatedAt: true } });
     const now = deps.now ?? new Date();
     const updatedAt = new Date(Math.max(now.getTime(), expected.getTime() + 1));
     const write = await tx.article.updateMany({
@@ -156,8 +186,8 @@ export async function updateArticleContent(input: {
     await tx.operationAudit.create({ data: {
       actorType: "admin", actorId: context.identity.id, action: "article.update",
       entityType: "Article", entityId: row.id, requestId: input.requestId,
-      beforeSnapshot: { title: before.title, summary: before.summary, templateId: before.templateId, seoVisibility: before.seoVisibility },
-      afterSnapshot: { title: row.title, summary: row.summary, templateId: row.templateId, seoVisibility: row.seoVisibility },
+      beforeSnapshot: { title: before.title, summary: before.summary, templateId: before.templateId, seoVisibility: before.seoVisibility, contentMode: before.contentMode },
+      afterSnapshot: { title: row.title, summary: row.summary, templateId: row.templateId, seoVisibility: row.seoVisibility, contentMode: row.contentMode },
     } });
     return row;
   });
@@ -219,6 +249,14 @@ async function regenerateCore(
       // this write straddle the (possibly slow) template render, which is
       // exactly the race window `updateArticleContent`'s single findFirstOrThrow
       // + updateMany doesn't have to worry about.
+      // C-26: the plan's "再生成服务的正文覆盖" — the second half of the
+      // template-render authorized write site (the first half is the
+      // creation insert in `src/server/content-creation/service.ts`). Written
+      // in both branches below (the N-7 CAS `updateMany` and the batch path's
+      // plain `update`) so a template re-render always reasserts
+      // `contentMode: "template"` even over an article a human had
+      // previously hand-edited to `"manual"` — re-rendering from the template
+      // is, by construction, no longer "last written by an operator".
       if (expectedUpdatedAt !== undefined) {
         const expected = expectedArticleTimestamp(expectedUpdatedAt);
         const write = await tx.article.updateMany({
@@ -227,6 +265,7 @@ async function regenerateCore(
             title: rendered.title, body: rendered.body,
             seoMetadata: rendered.seoMetadata as Prisma.InputJsonValue,
             seoSchemaVersion: rendered.seoSchemaVersion, templateId: template.id,
+            contentMode: "template" as const,
           },
         });
         if (write.count !== 1) return true;
@@ -235,6 +274,7 @@ async function regenerateCore(
           title: rendered.title, body: rendered.body,
           seoMetadata: rendered.seoMetadata as Prisma.InputJsonValue,
           seoSchemaVersion: rendered.seoSchemaVersion, templateId: template.id,
+          contentMode: "template" as const,
         } });
       }
       await tx.operationAudit.create({ data: {
@@ -320,6 +360,14 @@ export type ArticleListItem = {
    * above.
    */
   seoVisibility?: string;
+  /**
+   * C-26 (`规划_文章管理能力补齐_博客类型可见性换小说_2026-09-08.md` §三/C-26):
+   * `Article.articleType`/`Article.contentMode`, for the list's "类型"/"内容
+   * 模式" badge columns. Optional per this round's additive-contract
+   * discipline, same as `seoVisibility` above.
+   */
+  articleType?: string;
+  contentMode?: string;
 };
 
 export type ArticleListInput = {
@@ -335,6 +383,10 @@ export type ArticleListInput = {
   canonicalTagId?: string;
   /** C-25: exact-match filter on `Article.seoVisibility` (`public`/`seo_only`/`hidden`). */
   seoVisibility?: string;
+  /** C-26: exact-match filter on `Article.articleType` (`novel_article`/`blog_article`/`listicle`/`guide`). */
+  articleType?: string;
+  /** C-26: exact-match filter on `Article.contentMode` (`manual`/`template`). */
+  contentMode?: string;
 };
 
 export const ARTICLE_LIST_DEFAULT_PAGE_SIZE = 20;
@@ -361,6 +413,8 @@ type NormalizedArticleList = {
   search?: string;
   canonicalTagId?: string;
   seoVisibility?: ArticleSeoVisibility;
+  articleType?: ArticleType;
+  contentMode?: ArticleContentMode;
 };
 
 /**
@@ -470,6 +524,32 @@ function normalizeArticleListInput(input: ArticleListInput = {}): NormalizedArti
   if (input.seoVisibility !== undefined && !ARTICLE_SEO_VISIBILITIES.includes(input.seoVisibility as ArticleSeoVisibility)) {
     throw new AdminContentQueryError("invalid_status", "Article SEO visibility is not registered");
   }
+  /**
+   * C-26: "取值为空串或 all 时不筛...海阅统一对所有筛选做归一，这是修 CPS 的
+   * 一处明显失误" — CPS's own filter `<select>` already uses `value=""` for
+   * its "全部类型"/"全部内容模式" option (`articles-client.tsx`), matching
+   * every other dropdown in this file's own `article-filters.tsx`, so `""`
+   * is the value that actually reaches this function in practice (the page
+   * boundary's `params.articleType || undefined` already drops it before
+   * this call, same as every other filter). `"all"` is accepted too — CPS's
+   * own service layer (`article-actions.ts:443`) normalizes exactly that
+   * literal for these newer axes — so a caller that sends either spelling
+   * gets "no filter", not a rejected/registered-value error. This
+   * normalization is scoped to these two new fields only: the plan's
+   * complaint is specifically about `articleType`/`contentMode`/
+   * `seoVisibility` (CPS normalizes those three, inconsistently, but never
+   * `status`/`locale`); widening `status`/`locale`/`novelId`/`templateId`/
+   * `canonicalTagId`/`seoVisibility` to also accept `"all"` is out of this
+   * round's scope and left untouched.
+   */
+  const articleTypeRaw = input.articleType === "" || input.articleType === "all" ? undefined : input.articleType;
+  const contentModeRaw = input.contentMode === "" || input.contentMode === "all" ? undefined : input.contentMode;
+  if (articleTypeRaw !== undefined && !ARTICLE_TYPES.includes(articleTypeRaw as ArticleType)) {
+    throw new AdminContentQueryError("invalid_status", "Article type is not registered");
+  }
+  if (contentModeRaw !== undefined && !ARTICLE_CONTENT_MODES.includes(contentModeRaw as ArticleContentMode)) {
+    throw new AdminContentQueryError("invalid_status", "Article content mode is not registered");
+  }
   const novelId = input.novelId !== undefined ? requireArticleUuid(input.novelId) : undefined;
   const templateId = input.templateId !== undefined ? requireArticleUuid(input.templateId) : undefined;
   // C-19: same `invalid_search` code and `ADMIN_CONTENT_MAX_SEARCH_LENGTH`
@@ -498,6 +578,8 @@ function normalizeArticleListInput(input: ArticleListInput = {}): NormalizedArti
     search: trimmedSearch || undefined,
     canonicalTagId,
     seoVisibility: input.seoVisibility as ArticleSeoVisibility | undefined,
+    articleType: articleTypeRaw as ArticleType | undefined,
+    contentMode: contentModeRaw as ArticleContentMode | undefined,
   };
 }
 
@@ -521,6 +603,9 @@ const ARTICLE_LIST_SELECT = {
   updatedAt: true,
   createdAt: true,
   seoVisibility: true,
+  // C-26: 类型/内容模式 badge columns.
+  articleType: true,
+  contentMode: true,
   template: { select: { templateKey: true, templateName: true } },
   // C-20: 书目 column (id + title, links to `/novels/{id}`) and 分类 column
   // (via the novel's Canonical Tag assignments — see the analysis doc's §零
@@ -598,6 +683,10 @@ export async function listArticles(
     // different question (what the public site may show) than this one
     // (what the operator asked to see in the admin list).
     ...(normalized.seoVisibility ? { seoVisibility: normalized.seoVisibility } : {}),
+    // C-26: exact-match filters on the admin's own type/content-mode axes —
+    // same shape as `seoVisibility` immediately above.
+    ...(normalized.articleType ? { articleType: normalized.articleType } : {}),
+    ...(normalized.contentMode ? { contentMode: normalized.contentMode } : {}),
     ...(searchOr ? { OR: searchOr } : {}),
     // C-19: "分类" filter — the article has no category column of its own
     // (see the analysis doc's §零 third correction), so this reads as an
@@ -633,6 +722,8 @@ export async function listArticles(
     novel: { id: row.novel.id, title: row.novel.title },
     canonicalTags: articleCanonicalTagNames(row.novel.canonicalTags),
     seoVisibility: row.seoVisibility,
+    articleType: row.articleType,
+    contentMode: row.contentMode,
   }));
   return {
     items,

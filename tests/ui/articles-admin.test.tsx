@@ -221,16 +221,19 @@ describe("ArticleList · 列表与批量", () => {
     expect(screen.getByText(/08:00/)).toBeTruthy();
   });
 
-  it("九列表头齐全（标题/书目/模板/分类/状态/SEO 可见性/前台 URL/创建时间/操作）", () => {
+  it("十一列表头齐全（标题/书目/模板/分类/类型/内容模式/状态/SEO 可见性/前台 URL/创建时间/操作）", () => {
     const { container } = render(<ArticleList rows={[DRAFT_ROW]} canWrite publicOrigin={PUBLIC_ORIGIN} />);
     const headers = Array.from(container.querySelectorAll("thead th")).map((th) => th.textContent);
-    // 第一列是表头全选 checkbox（无文本），其余九列依次对应。C-25 在「状态」与「前台
-    // URL」之间插入了「SEO 可见性」列。
+    // 第一列是表头全选 checkbox（无文本），其余十一列依次对应。C-25 在「状态」与
+    // 「前台 URL」之间插入了「SEO 可见性」列；C-26 在「分类」与「状态」之间插入了
+    // 「类型」「内容模式」两列。
     expect(headers.slice(1)).toEqual([
       "标题",
       "书目",
       "模板",
       "分类",
+      "类型",
+      "内容模式",
       "状态",
       "SEO 可见性",
       "前台 URL",
@@ -264,6 +267,54 @@ describe("ArticleList · 列表与批量", () => {
     expect(screen.getByTestId("article-seo-visibility-hidden").textContent).toBe("隐藏");
     expect(screen.queryByText("seo_only")).toBeNull();
     expect(screen.queryByText("hidden")).toBeNull();
+  });
+
+  /**
+   * C-26 (`规划_文章管理能力补齐_博客类型可见性换小说_2026-09-08.md` §三/C-26):
+   * "表格新增「类型」和「内容模式」两个徽章列" — pins CPS-wording Chinese
+   * badges (not raw codes) plus the additive-contract fallback: a row built
+   * without `articleType`/`contentMode` must still render, defaulting to the
+   * same values the DB column itself defaults to (`novel_article`/
+   * `template`, C-24) rather than crashing or showing blank.
+   */
+  it("类型列渲染 CPS 中文徽章，缺字段时回退为「小说文章」", () => {
+    render(
+      <ArticleList
+        rows={[
+          { ...DRAFT_ROW, id: "row-novel", articleType: "novel_article" },
+          { ...DRAFT_ROW, id: "row-blog", articleType: "blog_article" },
+          { ...DRAFT_ROW, id: "row-listicle", articleType: "listicle" },
+          { ...DRAFT_ROW, id: "row-guide", articleType: "guide" },
+          { ...DRAFT_ROW, id: "row-missing", articleType: undefined },
+        ]}
+        canWrite
+        publicOrigin={PUBLIC_ORIGIN}
+      />,
+    );
+    expect(screen.getAllByTestId("article-type-novel_article")).toHaveLength(2); // row-novel + row-missing fallback
+    expect(screen.getByTestId("article-type-blog_article").textContent).toBe("博客文章");
+    expect(screen.getByTestId("article-type-listicle").textContent).toBe("榜单 / Listicle");
+    expect(screen.getByTestId("article-type-guide").textContent).toBe("指南 / Guide");
+    expect(screen.queryByText("novel_article")).toBeNull();
+    expect(screen.queryByText("blog_article")).toBeNull();
+  });
+
+  it("内容模式列渲染 CPS 中文徽章，缺字段时回退为「使用模板」", () => {
+    render(
+      <ArticleList
+        rows={[
+          { ...DRAFT_ROW, id: "row-template", contentMode: "template" },
+          { ...DRAFT_ROW, id: "row-manual", contentMode: "manual" },
+          { ...DRAFT_ROW, id: "row-missing", contentMode: undefined },
+        ]}
+        canWrite
+        publicOrigin={PUBLIC_ORIGIN}
+      />,
+    );
+    expect(screen.getAllByTestId("article-content-mode-template")).toHaveLength(2); // row-template + row-missing fallback
+    expect(screen.getByTestId("article-content-mode-manual").textContent).toBe("手动编辑");
+    expect(screen.queryByText("template")).toBeNull();
+    expect(screen.queryByText("manual")).toBeNull();
   });
 
   it("勾选行驱动已选计数", () => {
@@ -320,6 +371,47 @@ describe("ArticleList · 列表与批量", () => {
     await vi.waitFor(() => expect(listActions.regenerateArticlesBatchAction).toHaveBeenCalledTimes(1));
     expect(listActions.regenerateArticlesBatchAction.mock.calls[0]![0].articleIds).toEqual([DRAFT_ROW.id]);
     await vi.waitFor(() => expect(screen.getByText(/成功 1/)).toBeTruthy());
+  });
+
+  /**
+   * C-26 (`规划_文章管理能力补齐_博客类型可见性换小说_2026-09-08.md` §三/C-26):
+   * "批量再生成按钮旁增加一行提示：当选中项里含有'手动编辑'的文章时，明确
+   * 提示'其中 N 篇为手动编辑，再生成会覆盖运营正文'". Three cases: none
+   * selected are manual (no warning), some are (warning with the exact
+   * count), and the count only reflects *selected* manual rows, not every
+   * manual row in the list.
+   */
+  it("未选中手动编辑文章时不展示「含手动编辑」提示", () => {
+    render(
+      <ArticleList
+        rows={[{ ...DRAFT_ROW, contentMode: "template" }]}
+        canWrite
+        publicOrigin={PUBLIC_ORIGIN}
+      />,
+    );
+    fireEvent.click(screen.getByLabelText(`选择 ${DRAFT_ROW.title}`));
+    expect(screen.queryByTestId("articles-batch-regenerate-manual-warning")).toBeNull();
+  });
+
+  it("选中的文章含手动编辑时展示提示，并给出精确计数", () => {
+    const manualRow = { ...DRAFT_ROW, id: "manual-row", title: "Manual Row", contentMode: "manual" };
+    const templateRow = { ...PUBLISHED_ROW, contentMode: "template" };
+    render(<ArticleList rows={[manualRow, templateRow]} canWrite publicOrigin={PUBLIC_ORIGIN} />);
+    fireEvent.click(screen.getByLabelText(`选择 ${manualRow.title}`));
+    expect(screen.getByTestId("articles-batch-regenerate-manual-warning").textContent).toBe(
+      "其中 1 篇为手动编辑，再生成会覆盖运营正文",
+    );
+    // 再勾选一个非手动编辑的行——计数只反映已选中的 manual 行，不随之增长。
+    fireEvent.click(screen.getByLabelText(`选择 ${templateRow.title}`));
+    expect(screen.getByTestId("articles-batch-regenerate-manual-warning").textContent).toBe(
+      "其中 1 篇为手动编辑，再生成会覆盖运营正文",
+    );
+  });
+
+  it("contentMode 缺字段时回退为 template，不计入「含手动编辑」提示", () => {
+    render(<ArticleList rows={[{ ...DRAFT_ROW, contentMode: undefined }]} canWrite publicOrigin={PUBLIC_ORIGIN} />);
+    fireEvent.click(screen.getByLabelText(`选择 ${DRAFT_ROW.title}`));
+    expect(screen.queryByTestId("articles-batch-regenerate-manual-warning")).toBeNull();
   });
 
   it("canWrite=false 时批量按钮禁用", () => {
@@ -665,6 +757,11 @@ const ARTICLE = {
   slug: "some-slug",
   publicPageShortId: "AbCdEf12",
   seoVisibility: "public",
+  // C-26: required fields on `ArticleEditor`'s `article` prop (see that
+  // component's own header comment on why these are read-only display, not
+  // form fields).
+  articleType: "novel_article",
+  contentMode: "template",
   updatedAt: "2026-09-05T02:00:00.000Z",
 };
 
@@ -674,6 +771,22 @@ describe("ArticleEditor · 编辑与预览", () => {
     expect(screen.getByText(/slug: some-slug/)).toBeTruthy();
     expect(screen.getByText(/shortId: AbCdEf12/)).toBeTruthy();
     expect(screen.getByText("Body content")).toBeTruthy();
+  });
+
+  /**
+   * C-26 (`规划_文章管理能力补齐_博客类型可见性换小说_2026-09-08.md` §三/C-26):
+   * 类型/内容模式 render as read-only text (CPS-wording Chinese labels, not
+   * raw codes) — no form control, no `name` attribute, nothing that could
+   * feed `updateArticleAction`'s patch. This is the plan's own "不移植 CPS
+   * 的内容模式与模板选择器的联动" exception in the UI: these are
+   * system-observed facts, not operator-editable fields.
+   */
+  it("类型/内容模式以只读中文文案展示，不是可编辑控件", () => {
+    render(<ArticleEditor article={{ ...ARTICLE, articleType: "blog_article", contentMode: "manual" }} canWrite />);
+    const line = screen.getByTestId("article-editor-type-content-mode");
+    expect(line.textContent).toBe("类型: 博客文章 · 内容模式: 手动编辑");
+    expect(line.tagName).toBe("P");
+    expect(line.querySelector("select, input, button")).toBeNull();
   });
 
   it("提交时把 article.updatedAt 作为 expectedUpdatedAt 传给 updateArticleAction（N-7）", async () => {
@@ -758,7 +871,7 @@ const TEMPLATE_OPTIONS = [
 ];
 
 describe("ArticleFilters · C-19 filters", () => {
-  it("字段 name 属性与 page.tsx 读取的 query-string key 一致（含新增的 search/canonicalTagId/seoVisibility）", () => {
+  it("字段 name 属性与 page.tsx 读取的 query-string key 一致（含新增的 search/canonicalTagId/seoVisibility/articleType/contentMode）", () => {
     render(
       <ArticleFilters
         values={{}}
@@ -773,6 +886,8 @@ describe("ArticleFilters · C-19 filters", () => {
     expect((screen.getByLabelText("分类") as HTMLSelectElement).name).toBe("canonicalTagId");
     expect((screen.getByLabelText("模板") as HTMLSelectElement).name).toBe("templateId");
     expect((screen.getByLabelText("SEO 可见性") as HTMLSelectElement).name).toBe("seoVisibility");
+    expect((screen.getByLabelText("类型") as HTMLSelectElement).name).toBe("articleType");
+    expect((screen.getByLabelText("内容模式") as HTMLSelectElement).name).toBe("contentMode");
   });
 
   it("当前筛选值回填为 defaultValue，而不是每次都从空表单开始", () => {
@@ -785,6 +900,8 @@ describe("ArticleFilters · C-19 filters", () => {
           canonicalTagId: CATEGORY_OPTIONS[0]!.id,
           templateId: TEMPLATE_OPTIONS[0]!.id,
           seoVisibility: "seo_only",
+          articleType: "blog_article",
+          contentMode: "manual",
         }}
         locales={LOCALES}
         categoryOptions={CATEGORY_OPTIONS}
@@ -797,6 +914,8 @@ describe("ArticleFilters · C-19 filters", () => {
     expect((screen.getByLabelText("分类") as HTMLSelectElement).value).toBe(CATEGORY_OPTIONS[0]!.id);
     expect((screen.getByLabelText("模板") as HTMLSelectElement).value).toBe(TEMPLATE_OPTIONS[0]!.id);
     expect((screen.getByLabelText("SEO 可见性") as HTMLSelectElement).value).toBe("seo_only");
+    expect((screen.getByLabelText("类型") as HTMLSelectElement).value).toBe("blog_article");
+    expect((screen.getByLabelText("内容模式") as HTMLSelectElement).value).toBe("manual");
   });
 
   /**
@@ -812,6 +931,39 @@ describe("ArticleFilters · C-19 filters", () => {
     const select = screen.getByLabelText("SEO 可见性") as HTMLSelectElement;
     const optionLabels = Array.from(select.options).map((option) => option.textContent);
     expect(optionLabels).toEqual(["全部可见性", "公开收录", "仅 SEO（不展示）", "隐藏（noindex）"]);
+  });
+
+  /**
+   * C-26 (`规划_文章管理能力补齐_博客类型可见性换小说_2026-09-08.md` §三/C-26):
+   * "选项文案照抄 CPS：剧集文章→小说文章（唯一的改名...）/ 博客文章 / 榜单
+   * Listicle / 指南 Guide；手动编辑 / 使用模板". Labels are CPS's own strings
+   * verbatim (`ARTICLE_TYPE_OPTIONS`/`CONTENT_MODE_OPTIONS` in
+   * `article-v2-contract.ts`), with the one rename the plan calls out.
+   */
+  it("类型下拉选项文案照抄 CPS（含 novel_article 改名为「小说文章」）", () => {
+    render(
+      <ArticleFilters values={{}} locales={LOCALES} categoryOptions={CATEGORY_OPTIONS} templateOptions={TEMPLATE_OPTIONS} />,
+    );
+    const select = screen.getByLabelText("类型") as HTMLSelectElement;
+    const options = Array.from(select.options);
+    expect(options.map((option) => option.textContent)).toEqual([
+      "全部类型",
+      "小说文章",
+      "博客文章",
+      "榜单 / Listicle",
+      "指南 / Guide",
+    ]);
+    expect(options.map((option) => option.value)).toEqual(["", "novel_article", "blog_article", "listicle", "guide"]);
+  });
+
+  it("内容模式下拉选项文案照抄 CPS（手动编辑 / 使用模板）", () => {
+    render(
+      <ArticleFilters values={{}} locales={LOCALES} categoryOptions={CATEGORY_OPTIONS} templateOptions={TEMPLATE_OPTIONS} />,
+    );
+    const select = screen.getByLabelText("内容模式") as HTMLSelectElement;
+    const options = Array.from(select.options);
+    expect(options.map((option) => option.textContent)).toEqual(["全部内容模式", "手动编辑", "使用模板"]);
+    expect(options.map((option) => option.value)).toEqual(["", "manual", "template"]);
   });
 
   it("状态下拉渲染文章四态而不是书目五态（没有 ready）", () => {

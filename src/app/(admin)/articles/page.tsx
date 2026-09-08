@@ -75,6 +75,10 @@ type SearchParams = {
   canonicalTagId?: string;
   /** C-25: `Article.seoVisibility` exact-match filter. */
   seoVisibility?: string;
+  /** C-26: `Article.articleType` exact-match filter. */
+  articleType?: string;
+  /** C-26: `Article.contentMode` exact-match filter. */
+  contentMode?: string;
 };
 
 /**
@@ -112,6 +116,8 @@ export default async function ArticlesPage({
         search: params.search || undefined,
         canonicalTagId: params.canonicalTagId || undefined,
         seoVisibility: params.seoVisibility || undefined,
+        articleType: params.articleType || undefined,
+        contentMode: params.contentMode || undefined,
       });
       rows = result.items;
       page = result.page;
@@ -147,6 +153,8 @@ export default async function ArticlesPage({
     templateId: params.templateId,
     canonicalTagId: params.canonicalTagId,
     seoVisibility: params.seoVisibility,
+    articleType: params.articleType,
+    contentMode: params.contentMode,
   };
 
   return (
