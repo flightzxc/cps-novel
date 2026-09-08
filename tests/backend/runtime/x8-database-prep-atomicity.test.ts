@@ -310,7 +310,15 @@ describe("D-9a: gate A (disk preflight before build) x8_gc handoff seam", () => 
         return 0
       }
     `
-      : "";
+      : // D-9 merge: after D-9b landed on this same branch the launcher
+        // DEFINES x8_gc, so "not defined" can no longer be simulated by
+        // simply not declaring a stub -- it has to be unset explicitly.
+        // This branch models the structural fallback (D-9a cherry-picked
+        // without D-9b, or a future split), which the `declare -F` guard
+        // exists for.
+        `
+      unset -f x8_gc
+    `;
     return `
       source "${launcher}"
       ${stub}
@@ -356,14 +364,47 @@ describe("D-9a: gate A (disk preflight before build) x8_gc handoff seam", () => 
     expect(calls[0]).toContain("--auto");
   });
 
-  it("refuses at the hard line without calling x8_gc when it is not defined (this branch does not ship D-9b's function)", () => {
+  it("refuses at the hard line without calling x8_gc when it is not defined (structural degradation, D-9a cherry-picked without D-9b)", () => {
     const result = run(callDiskPreflight(false), {
       X8_MIN_FREE_KIB_BUILD: HARD_MIN_KIB,
       X8_WARN_FREE_KIB_BUILD: WARN_KIB,
       STUB_DF_AVAILABLE_KIB: "1000000",
     });
     expect(result.status, `stdout:\n${result.stdout}\nstderr:\n${result.stderr}`).toBe(69);
-    expect(result.stderr).toContain("not available on this branch");
+    expect(result.stderr).toContain("not available in this build of the script");
+    expect(gcCallLines()).toHaveLength(0);
+  });
+
+  // D-9 merge (复核_D9a_与_D9合成_2026-09-09.md (B)): D-9b's X8_GC_ON_UP kill
+  // switch was folded into gate A's guard when D-9b's own unconditional
+  // inline `x8_gc --auto` splice in up_x8() was deleted. Until the Owner
+  // rules on 施工工单 §7-3 ("up 是否允许自动删镜像"), X8_GC_ON_UP=0 is the
+  // documented way to run `up` with the disk gates active but every
+  // automatic deletion off -- these two cases are the evidence for that
+  // claim in the deployment acceptance checklist.
+  it("does not call x8_gc when X8_GC_ON_UP=0, even below the warn threshold", () => {
+    const result = run(callDiskPreflight(true), {
+      X8_MIN_FREE_KIB_BUILD: HARD_MIN_KIB,
+      X8_WARN_FREE_KIB_BUILD: WARN_KIB,
+      STUB_DF_AVAILABLE_KIB: "10000000",
+      X8_GC_ON_UP: "0",
+    });
+    // Still above the hard line, so the run itself must still succeed --
+    // switching automatic reclamation off must not turn into a refusal.
+    expect(result.status, `stdout:\n${result.stdout}\nstderr:\n${result.stderr}`).toBe(0);
+    expect(result.stderr).toContain("below the warn threshold");
+    expect(result.stderr).toContain("Automatic reclamation is disabled for this run (X8_GC_ON_UP=0)");
+    expect(gcCallLines(), "X8_GC_ON_UP=0 must suppress the automatic gc entirely").toHaveLength(0);
+  });
+
+  it("still refuses at the hard line with X8_GC_ON_UP=0, without ever calling x8_gc", () => {
+    const result = run(callDiskPreflight(true), {
+      X8_MIN_FREE_KIB_BUILD: HARD_MIN_KIB,
+      X8_WARN_FREE_KIB_BUILD: WARN_KIB,
+      STUB_DF_AVAILABLE_KIB: "1000000",
+      X8_GC_ON_UP: "0",
+    });
+    expect(result.status, `stdout:\n${result.stdout}\nstderr:\n${result.stderr}`).toBe(69);
     expect(gcCallLines()).toHaveLength(0);
   });
 

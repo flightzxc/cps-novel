@@ -28,6 +28,17 @@ X8_BACKUP_PGPASS_FILE="$X8_SECRET_DIR/backup.pgpass"
 X8_IDENTITY_FILE="$X8_RUNTIME_DIR/release-identity.json"
 X8_IDENTITY_CANDIDATE_FILE="$X8_RUNTIME_DIR/release-identity.candidate.json"
 X8_IDENTITY_FAILURE_MARKER="$X8_RUNTIME_DIR/release-identity.failed.txt"
+# 施工工单_D9_up数据库准备原子化与镜像保留_2026-09-09.md, D-9b §4.3: a ledger
+# of the PREVIOUS committed identity, written by promote_x8_identity_candidate()
+# (scripts/x8-production-like.sh) right before it overwrites X8_IDENTITY_FILE
+# with the new one. This is a read-only account for x8_gc() to know which
+# release image the currently-running (soon to be superseded) deploy used, so
+# a gc round never deletes it out from under the stack `up` is in the middle
+# of replacing -- it is NOT part of the identity/gate read contract:
+# resolve_x8_identity() and every gate-command code path never read this
+# file, and never will. Absent on a worktree where `up` has never succeeded
+# twice yet; x8_gc() tolerates that (see its own header comment).
+X8_IDENTITY_PREVIOUS_FILE="$X8_RUNTIME_DIR/release-identity.previous.json"
 # Single source of truth for the compose project name so gate_catalog_status()
 # (which must do zero environment prep, see 4.3(9)) doesn't need to call
 # prepare_x8_environment() just to know it.
@@ -538,7 +549,7 @@ x8_export_static_topology() {
   export X8_WARN_FREE_KIB_BUILD="${X8_WARN_FREE_KIB_BUILD:-15728640}"
   export X8_MIN_FREE_KIB_DB="${X8_MIN_FREE_KIB_DB:-2097152}"
   export X8_RUNTIME_DIR X8_SECRET_DIR X8_TLS_DIR X8_NGINX_RUNTIME_DIR X8_BACKUP_DIR X8_EVIDENCE_DIR
-  export X8_GATE_STATE_FILE X8_BACKUP_PGPASS_FILE X8_IDENTITY_FILE X8_IDENTITY_CANDIDATE_FILE X8_IDENTITY_FAILURE_MARKER
+  export X8_GATE_STATE_FILE X8_BACKUP_PGPASS_FILE X8_IDENTITY_FILE X8_IDENTITY_CANDIDATE_FILE X8_IDENTITY_FAILURE_MARKER X8_IDENTITY_PREVIOUS_FILE
 }
 
 # Maps a persisted/target catalog-gate tri-state onto the two double-gate

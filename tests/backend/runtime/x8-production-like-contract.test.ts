@@ -224,6 +224,90 @@ describe("X8 local production-like contracts", () => {
       .toContain("return 0");
   });
 
+  // 施工工单_D9_up数据库准备原子化与镜像保留_2026-09-09.md, D-9b §4.4/§4.5/§4.6
+  // bullet 7: static assertions for the `gc` subcommand's wiring, kept as a
+  // dedicated it() (rather than folded into the grants-focused one above) so
+  // it never collides line-for-line with D-9a's own edits to that block --
+  // the two work items were built in separate worktrees in parallel.
+  it("wires the D-9b `gc` subcommand into usage(), the dispatcher, and up_x8()'s own call site", () => {
+    expect(launcher).toContain("scripts/x8-production-like.sh gc [--apply] [--keep N] [--json]");
+    expect(launcher).toContain('gc) shift; x8_gc "$@" ;;');
+    expect(launcher).toMatch(/\nx8_gc\(\) \{/);
+    // D-9 merge (复核_D9a_与_D9合成_2026-09-09.md (B)): D-9b originally spliced
+    // an UNCONDITIONAL `x8_gc --auto` into up_x8() at this call site, and
+    // asserted its position here. That splice was DELETED when D-9a and
+    // D-9b were merged -- it would have made every `up` delete images
+    // regardless of free space, which is the 施工工单 §7-3 decision the Owner
+    // has reserved. What occupies the call site now is D-9a's
+    // x8_disk_preflight_before_build(), which calls x8_gc --auto ONLY when
+    // free space is already below the warn tier, so the string "x8_gc
+    // --auto" no longer appears inside up_x8() at all -- it lives in that
+    // helper, which is defined ABOVE up_x8() and therefore outside this
+    // slice. Asserting on the helper's name is what actually pins the
+    // ordering now.
+    const upFlow = launcher.slice(launcher.indexOf("\nup_x8()"), launcher.indexOf("\nverify_postgres()"));
+    // Guard every anchor against indexOf's -1: a missing needle would
+    // otherwise make "-1 < someIndex" pass and silently assert nothing.
+    for (const anchor of ["validate_rendered_topology", "x8_disk_preflight_before_build", "build_app_image"]) {
+      expect(upFlow.indexOf(anchor), `up_x8() no longer mentions ${anchor}`).toBeGreaterThan(-1);
+    }
+    expect(upFlow.indexOf("validate_rendered_topology")).toBeLessThan(
+      upFlow.indexOf("x8_disk_preflight_before_build"),
+    );
+    expect(upFlow.indexOf("x8_disk_preflight_before_build")).toBeLessThan(upFlow.indexOf("build_app_image"));
+    // The deleted splice must stay deleted: up_x8() itself must never call
+    // gc directly, conditionally or otherwise. Reverting the merge decision
+    // (pasting D-9b's inline `[[ "${X8_GC_ON_UP:-1}" == "1" ]] && { x8_gc
+    // --auto ...; }` back into up_x8()) turns this assertion red.
+    // Comment lines are stripped first: the merge deliberately LEFT a
+    // comment in up_x8() explaining that the inline splice was removed, and
+    // that prose names x8_gc. Only executable lines may not mention it.
+    const upFlowCode = upFlow
+      .split("\n")
+      .filter((line) => !line.trim().startsWith("#"))
+      .join("\n");
+    expect(upFlowCode).not.toContain("x8_gc");
+    // ...and the kill switch D-9b shipped with that splice must survive the
+    // deletion, now guarding the warn-tier call inside gate A instead.
+    const gateABody = launcher.slice(
+      launcher.indexOf("\nx8_disk_preflight_before_build() {"),
+      launcher.indexOf("\nbuild_app_image() {"),
+    );
+    expect(gateABody).toContain('[[ "${X8_GC_ON_UP:-1}" == "1" ]] && declare -F x8_gc >/dev/null');
+    expect(gateABody).toContain("x8_gc --auto");
+    // Absolute prohibitions (§4.2), checked statically as a second,
+    // independent line of defense alongside the runtime-behavior assertions
+    // in tests/backend/runtime/x8-image-retention.test.ts: the gc function's
+    // own source text must never contain any of these substrings, full stop.
+    const gcBody = launcher.slice(launcher.indexOf("\nx8_gc() {"), launcher.indexOf("\npromote_x8_identity_candidate()"));
+    expect(gcBody).not.toContain("rmi -f");
+    expect(gcBody).not.toContain("rmi \"$tag\" -f");
+    expect(gcBody).not.toMatch(/prune\s+-a\b/);
+    expect(gcBody).not.toContain("-af");
+    expect(gcBody).not.toContain("system prune");
+    expect(gcBody).toContain("docker rmi");
+    expect(gcBody).toContain("docker image prune -f");
+  });
+
+  // 施工工单_D9..., D-9b §4.3: the previous-identity ledger constant must
+  // exist as a plain, always-set variable (not behind prepare_x8_environment())
+  // and must be part of the same export list the other three identity file
+  // constants already ride on.
+  it("declares the D-9b previous-identity ledger constant alongside the other identity file constants", () => {
+    expect(envHelper).toContain('X8_IDENTITY_PREVIOUS_FILE="$X8_RUNTIME_DIR/release-identity.previous.json"');
+    expect(envHelper).toContain(
+      "export X8_GATE_STATE_FILE X8_BACKUP_PGPASS_FILE X8_IDENTITY_FILE X8_IDENTITY_CANDIDATE_FILE X8_IDENTITY_FAILURE_MARKER X8_IDENTITY_PREVIOUS_FILE",
+    );
+    // resolve_x8_identity() (the gate command's sole identity read path)
+    // must never mention it -- the ledger is gc's own account, not part of
+    // the identity/gate read contract.
+    const resolveFn = envHelper.slice(
+      envHelper.indexOf("\nresolve_x8_identity() {"),
+      envHelper.indexOf("\nwrite_x8_gate_state()"),
+    );
+    expect(resolveFn).not.toContain("X8_IDENTITY_PREVIOUS_FILE");
+  });
+
   it("implements the three-stage local TLS transition without a production fallback", () => {
     expect(bootstrapNginx).toContain("listen 80;");
     expect(bootstrapNginx).not.toContain("listen 443");

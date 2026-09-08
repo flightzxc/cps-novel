@@ -112,6 +112,11 @@ function failureMarkerPath() {
   return join(runtimeDir, "release-identity.failed.txt");
 }
 
+// 施工工单_D9_up数据库准备原子化与镜像保留_2026-09-09.md, D-9b §4.3.
+function previousIdentityFilePath() {
+  return join(runtimeDir, "release-identity.previous.json");
+}
+
 describe("X8 release identity lifecycle: candidate write -> health check -> promote (group 1)", () => {
   it("promotes the candidate to the committed identity once every service reports healthy", () => {
     const script = `
@@ -308,6 +313,110 @@ describe("X8 release identity lifecycle: candidate write -> health check -> prom
         // Candidate was never created (an unrelated failure) -- nothing to restore.
       }
     }
+  });
+
+  // 施工工单_D9_up数据库准备原子化与镜像保留_2026-09-09.md, D-9b §4.3: the
+  // previous-identity ledger promote_x8_identity_candidate() now writes right
+  // before its own `mv`, so x8_gc() (scripts/x8-production-like.sh, D-9b §4)
+  // can know which release image the stack THIS deploy is superseding was
+  // still running, and never delete it out from under that still-live stack.
+  describe("D-9b §4.3: the previous-identity ledger", () => {
+    const PREVIOUS_IMAGE_REF = "cps-novel:1.0.0-previous";
+
+    it("archives the pre-existing committed identity to the previous ledger before promoting the new one", () => {
+      writeFileSync(
+        identityFilePath(),
+        JSON.stringify({ schemaVersion: 3, imageRef: PREVIOUS_IMAGE_REF, gitCommit: "b".repeat(40) }, null, 2),
+      );
+      const script = `
+        set -euo pipefail
+        source "${launcher}"
+        write_x8_identity_candidate
+        X8_IDENTITY_DEPLOY_IN_PROGRESS=1
+        trap 'x8_up_exit_trap' EXIT
+        x8_wait_services_healthy web worker scheduler
+        promote_x8_identity_candidate
+        echo "LIFECYCLE_DONE=1"
+      `;
+      const result = runLifecycle(script);
+      expect(result.status, `stdout:\n${result.stdout}\nstderr:\n${result.stderr}`).toBe(0);
+      expect(result.stdout).toContain("LIFECYCLE_DONE=1");
+      // The ledger now names the OLD (about-to-be-superseded) image...
+      const previousLedger = JSON.parse(readFileSync(previousIdentityFilePath(), "utf8"));
+      expect(previousLedger.imageRef).toBe(PREVIOUS_IMAGE_REF);
+      // ...while the committed identity itself has already moved on to the
+      // new one -- the ledger is a side record, never the read contract.
+      const committed = JSON.parse(readFileSync(identityFilePath(), "utf8"));
+      expect(committed.imageRef).toBe(IMAGE_REF);
+    });
+
+    it("does not write a previous ledger on the very first ever promotion (no pre-existing committed identity)", () => {
+      const script = `
+        set -euo pipefail
+        source "${launcher}"
+        write_x8_identity_candidate
+        X8_IDENTITY_DEPLOY_IN_PROGRESS=1
+        trap 'x8_up_exit_trap' EXIT
+        x8_wait_services_healthy web worker scheduler
+        promote_x8_identity_candidate
+        echo "LIFECYCLE_DONE=1"
+      `;
+      const result = runLifecycle(script);
+      expect(result.status, `stdout:\n${result.stdout}\nstderr:\n${result.stderr}`).toBe(0);
+      expect(result.stdout).toContain("LIFECYCLE_DONE=1");
+      // Nothing to archive -- there was no prior committed identity.
+      expect(() => statSync(previousIdentityFilePath())).toThrow();
+    });
+
+    // The core D-9b §4.3 guarantee: "复制失败绝不能让提级失败". Forces the
+    // `cp` that reads the OLD committed identity to fail (chmod 000 on that
+    // one file -- same technique the group 1 bullet 3 test above already
+    // uses, and for the same reason: it fails only the read of that single
+    // file, not the directory `mv` needs write access to for the real
+    // promotion a few lines later, which is what actually discriminates this
+    // test from a directory-wide permission failure that would trivially
+    // break both operations at once and prove nothing).
+    it("a failure archiving the previous ledger never blocks promotion -- promotion still succeeds and commits the new identity", () => {
+      writeFileSync(
+        identityFilePath(),
+        JSON.stringify({ schemaVersion: 3, imageRef: PREVIOUS_IMAGE_REF, gitCommit: "b".repeat(40) }, null, 2),
+      );
+      chmodSync(identityFilePath(), 0o000);
+      const script = `
+        set -euo pipefail
+        source "${launcher}"
+        write_x8_identity_candidate
+        X8_IDENTITY_DEPLOY_IN_PROGRESS=1
+        trap 'x8_up_exit_trap' EXIT
+        x8_wait_services_healthy web worker scheduler
+        promote_x8_identity_candidate
+        echo "LIFECYCLE_DONE=1"
+      `;
+      const result = runLifecycle(script);
+      try {
+        expect(result.status, `stdout:\n${result.stdout}\nstderr:\n${result.stderr}`).toBe(0);
+        expect(result.stdout).toContain("LIFECYCLE_DONE=1");
+        // Promotion itself is unaffected: the new identity is committed.
+        const committed = JSON.parse(readFileSync(identityFilePath(), "utf8"));
+        expect(committed.imageRef).toBe(IMAGE_REF);
+        // The ledger write is what failed -- no usable ledger exists (never
+        // a corrupt or partial one either: the temp-file-then-rename shape
+        // means the failure happens before anything is ever renamed onto
+        // the final path).
+        expect(() => statSync(previousIdentityFilePath())).toThrow();
+      } finally {
+        // Restore read/write so afterEach's rmSync can delete the work dir.
+        // (identityFilePath() itself was already replaced by the `mv` with
+        // the new, readable candidate content by this point, but doing this
+        // unconditionally costs nothing and mirrors the group 1 bullet 3
+        // test's own cleanup discipline above.)
+        try {
+          chmodSync(identityFilePath(), 0o600);
+        } catch {
+          // Nothing to restore.
+        }
+      }
+    });
   });
 
   it("ships valid shell (sourcing this file must never itself dispatch a subcommand)", () => {

@@ -33,6 +33,7 @@ usage() {
     '       scripts/x8-production-like.sh admin-secret set <admin|admin2>' \
     '       scripts/x8-production-like.sh admin-seed [--reset-password]' \
     '       scripts/x8-production-like.sh admin-reset <username> [--deactivate] [--apply] [--break-glass] [--ip <ip>]' \
+    '       scripts/x8-production-like.sh gc [--apply] [--keep N] [--json]' \
     '' \
     'env: X8_LEVEL=0|uat|r (default 0) selects the WORKER_TASK_ALLOWLIST /' \
     '     double-gate rung from scripts/lib/x8-levels.json; invalid values' \
@@ -62,7 +63,20 @@ usage() {
     '     if the compose project is already running from a different' \
     '     worktree (the error names that worktree'"'"'s path) -- run the' \
     '     command from that worktree instead, or `down` the stack there' \
-    '     first.' >&2
+    '     first.' \
+    '' \
+    '     施工工单_D9_up数据库准备原子化与镜像保留_2026-09-09.md, D-9b: `gc`' \
+    '     deletes stale `cps-novel:0.1.0-*` release-image tags. Defaults to' \
+    '     dry-run (prints the keep/delete plan, deletes nothing); --apply' \
+    '     actually runs it. Keeps: the currently committed release image, the' \
+    '     previous one, the most recent N by creation time (N: --keep, or' \
+    '     $X8_GC_KEEP / $X8_GC_KEEP_RECENT, default 5), and any image any' \
+    '     container still references (running or stopped) -- never `docker' \
+    '     rmi -f`, never `system prune -a` / `image prune -a`. `up` calls' \
+    '     `gc --auto` itself right before building a new image (disable with' \
+    '     X8_GC_ON_UP=0); that automatic run never touches dangling layers' \
+    '     unless $X8_GC_PRUNE_DANGLING=1 is set explicitly -- a manual `gc`' \
+    '     still does by default.' >&2
   exit 64
 }
 
@@ -419,16 +433,25 @@ assert_ports_available() {
 # below the hard line, refuse and print the manual gc command.
 #
 # D-9a and D-9b were built in separate worktrees in parallel (2026-09-09
-# split) and land as two independent commits; x8_gc() itself is entirely
-# D-9b's function and does not exist on this branch. `declare -F x8_gc
-# >/dev/null` is the guard that makes this call site safe on EITHER side of
-# that merge: today, on this branch alone, it always finds nothing, and this
-# reduces to "log the warning, then let the hard check below decide" (an
-# operator who hits the warn line reclaims space by hand -- see 施工工单第六节's
-# reviewed docker rmi command, or 'docker image prune -f' for dangling layers
-# only, never '-a'/'-af', which would also delete other stacks' images on
-# this host); once D-9b's x8_gc() lands on the same branch, this exact same
-# code starts actually invoking it, with no further change needed here.
+# split); this branch is the merge of both, so x8_gc() (D-9b) IS defined
+# here and this warn tier really does call it. Two guards sit on that call,
+# and they mean different things -- keep both:
+#
+#   * `declare -F x8_gc >/dev/null` -- structural. It keeps this call site
+#     valid if x8_gc() is ever absent (D-9a cherry-picked alone, a future
+#     split of the file), degrading to "log the warning, let the hard check
+#     below decide" instead of dying on an unbound function.
+#   * `[[ "${X8_GC_ON_UP:-1}" == "1" ]]` -- D-9b's operator kill switch,
+#     folded in here at merge time. D-9b originally spliced an
+#     UNCONDITIONAL `x8_gc --auto` straight into up_x8() at the
+#     build_app_image() call site; that was deleted during the merge
+#     (see up_x8()'s own comment) because it would have made every `up`
+#     delete images regardless of free space -- exactly the decision
+#     施工工单 §7-3 reserves for the Owner. Keeping the switch here preserves
+#     the operator's ability to say "never let `up` delete anything"
+#     (X8_GC_ON_UP=0) while the default (1) still only ever deletes when
+#     space is ALREADY below the warn tier, per §4.5.
+#
 # Best-effort on purpose (`|| true`): a failure inside gc must never itself
 # cause a refusal that a successful gc run would have avoided -- the hard
 # check below is what decides whether to refuse, not gc's own exit status.
@@ -437,11 +460,13 @@ x8_disk_preflight_before_build() {
   free_kib="$(x8_free_disk_kib)" || return 69
   if [[ "$free_kib" -lt "$X8_WARN_FREE_KIB_BUILD" ]]; then
     echo "WARN: free disk space (${free_kib} KiB) is below the warn threshold (${X8_WARN_FREE_KIB_BUILD} KiB) for building a new X8 release image." >&2
-    if declare -F x8_gc >/dev/null; then
+    if [[ "${X8_GC_ON_UP:-1}" == "1" ]] && declare -F x8_gc >/dev/null; then
       echo "Attempting automatic reclamation via 'gc --auto' before deciding whether to refuse..." >&2
       x8_gc --auto >&2 || true
+    elif [[ "${X8_GC_ON_UP:-1}" != "1" ]]; then
+      echo "Automatic reclamation is disabled for this run (X8_GC_ON_UP=${X8_GC_ON_UP}); reclaim space by hand -- 'scripts/x8-production-like.sh gc --keep ${X8_GC_KEEP:-5}' to review, then the same with --apply -- if the hard check below ends up refusing." >&2
     else
-      echo "Automatic reclamation ('gc', D-9b) is not available on this branch; reclaim space by hand if the hard check below ends up refusing." >&2
+      echo "Automatic reclamation ('gc', D-9b) is not available in this build of the script; reclaim space by hand if the hard check below ends up refusing." >&2
     fi
   fi
   x8_require_free_disk_kib "$X8_MIN_FREE_KIB_BUILD" "building the release image"
@@ -458,6 +483,372 @@ build_app_image() {
   else
     x8_compose build web
   fi
+}
+
+# 施工工单_D9_up数据库准备原子化与镜像保留_2026-09-09.md, D-9b §4: explicit
+# retention gc for `cps-novel:0.1.0-*` release images. Every `up` bakes a new
+# ~1.2GB tag and nothing in this repo ever deleted one -- 36 tags/~43GB and
+# ~30GB of dangling layers had accumulated by the time this work order was
+# written, entirely because cleanup was a thing a human had to remember, and
+# usually only remembered once the disk was already full.
+#
+# §4.2's retention set (implemented verbatim below, five categories, union):
+#   1. the image the CURRENTLY COMMITTED release identity points at
+#   2. the image the PREVIOUS committed identity pointed at (§4.3)
+#   3. the most recent N tags by creation time (N: --keep / $X8_GC_KEEP /
+#      $X8_GC_KEEP_RECENT, default 5 -- see the flag-parsing block below for
+#      why both env var names are honored)
+#   4. any image referenced by ANY container, running or stopped (`docker ps
+#      -a`) -- this is the safety floor, not a nice-to-have: this repo's own
+#      2026-09-09 audit found the OLDEST tag on the box (2026-08-07) still
+#      backing a separate compose project's worker/scheduler containers. A
+#      naive "keep the last N" rule would have deleted it out from under a
+#      running stack.
+#   5. the image THIS `up` is about to build/reuse ($CPS_NOVEL_APP_IMAGE),
+#      when gc runs as part of `up` -- it may not have any container
+#      referencing it yet.
+#
+# Absolute prohibitions (§4.2), each with its own guard below:
+#   - NEVER `docker system prune -a` / `docker image prune -a` (not even via
+#     `-af`): a `-a` flag on this host would delete the CPS short-drama
+#     side's own `cps-admin-*` rollback images -- this is not hypothetical,
+#     see docs/release-v8.3.x-handoff.md:116 ("禁止 docker system prune -a
+#     —— 会删掉 v8.2.18 / v8.3.0 的回滚镜像") on the CPS reference repo,
+#     quoted verbatim because that repo has already lost a rollback image to
+#     exactly this flag once. Dangling cleanup below is `prune -f` ONLY.
+#   - NEVER `docker rmi -f`: `-f` force-untags an image even while a
+#     container still references it. This function's own category-4 in-use
+#     check is supposed to keep that from ever being attempted in the first
+#     place, but omitting `-f` is what makes docker itself the second,
+#     independent line of defense if that check is ever wrong.
+#   - NEVER touch anything outside `cps-novel:0.1.0-*` -- `postgres:16.14`,
+#     `nginx:1.28.0-alpine`, and every `cps-admin-*` tag are filtered out
+#     twice: once by the `--filter=reference=...` docker itself is asked to
+#     apply, and again by a plain bash-side tag-shape check on whatever comes
+#     back, so a `--filter` that were ever dropped or misbehaved could not
+#     silently widen the deletion candidate set.
+#
+# Deliberately does NOT call prepare_x8_environment() (§4.4): a stray `gc`
+# invocation (a human running it standalone, not through `up`) must never
+# mutate git-derived state, create directories, or generate secrets. It only
+# reads $X8_IDENTITY_FILE / $X8_IDENTITY_PREVIOUS_FILE (both plain, always-
+# set variables from scripts/lib/x8-production-like-env.sh's top level, not
+# behind that function) and $CPS_NOVEL_APP_IMAGE (which IS only exported by
+# prepare_x8_environment() -- when gc runs standalone it is simply unset and
+# category 5 above degrades to a no-op, exactly as intended).
+#
+# Deliberately does NOT log a "gc 前后的可用空间" (available disk space
+# before/after) line, unlike §4.2's literal log spec. The disk-probe
+# mechanism this would need (a containerized `df -P -k /`, see
+# x8_free_disk_kib() in scripts/lib/x8-production-like-env.sh) is D-9a's
+# exclusive scope under the 2026-09-09 D-9a/D-9b split -- this branch was
+# built in a separate worktree/session in parallel with it, before that
+# helper existed, and duplicating its probe here under a different name
+# would only leave a second, divergent copy for a human to reconcile at
+# merge time. `up_x8()`'s own disk-preflight gate (D-9a, wired immediately
+# before this function's call site below) already logs available space
+# directly around when it calls `x8_gc --auto`; see the D-9b construction
+# report for this explicitly-accepted gap.
+#
+# No associative arrays anywhere in this function: the host's stock
+# `/usr/bin/env bash` is macOS's frozen bash 3.2, which has no `declare -A`
+# (see x8_align_db_role_passwords()'s own comment for the matching
+# `${var^^}` constraint) -- every "does tag X have reason Y" check below is a
+# small linear scan against a handful of plain indexed arrays instead.
+x8_gc() {
+  local apply=0 auto=0 json=0
+  # §4.3/§4.4 named two different env var spellings for the same Owner
+  # parameter across two sections of the same work order (§4.2/orchestrator
+  # brief: X8_GC_KEEP_RECENT; §4.4's own CLI-flag sentence: X8_GC_KEEP).
+  # Rather than pick one and silently ignore whichever a reader expects,
+  # both are honored, with CLI --keep taking priority over either: precedence
+  # is --keep > $X8_GC_KEEP > $X8_GC_KEEP_RECENT > the hard default of 5.
+  local keep="${X8_GC_KEEP:-${X8_GC_KEEP_RECENT:-5}}"
+  local prune_dangling_explicit="${X8_GC_PRUNE_DANGLING:-}"
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --apply)
+        apply=1
+        shift
+        ;;
+      --dry-run)
+        apply=0
+        shift
+        ;;
+      --auto)
+        # 4.5: the non-interactive mode `up_x8()`'s own wiring calls -- never
+        # asks questions (nothing below this function ever calls `read`
+        # anyway), and actually deletes (auto implies --apply): a `gc` that
+        # only ever printed a plan would never actually recover any space
+        # for `up` to build into.
+        auto=1
+        apply=1
+        shift
+        ;;
+      --keep)
+        [[ $# -ge 2 ]] || {
+          echo "ERROR: gc --keep requires a value" >&2
+          return 64
+        }
+        keep="$2"
+        shift 2
+        ;;
+      --keep=*)
+        keep="${1#--keep=}"
+        shift
+        ;;
+      --json)
+        json=1
+        shift
+        ;;
+      *)
+        echo "ERROR: unrecognized gc argument: $1" >&2
+        return 64
+        ;;
+    esac
+  done
+
+  # Fail-closed on a non-positive/non-integer N -- an Owner parameter with no
+  # sane auto-correction (silently clamping to 1, or to the default, would
+  # both hide a typo'd invocation behind "gc ran but kept way more/fewer
+  # images than intended").
+  [[ "$keep" =~ ^[0-9]+$ && "$keep" -ge 1 ]] || {
+    echo "ERROR: gc --keep must be a positive integer (got '$keep')" >&2
+    return 64
+  }
+
+  # §4.5: auto mode's own default is to NOT clean dangling layers (cross-
+  # project blast radius is bigger than a single release tag) unless the
+  # operator has explicitly set $X8_GC_PRUNE_DANGLING either way; a manual
+  # `gc` (no --auto) still defaults to cleaning them.
+  local prune_dangling
+  if [[ -n "$prune_dangling_explicit" ]]; then
+    prune_dangling="$prune_dangling_explicit"
+  elif [[ "$auto" == "1" ]]; then
+    prune_dangling=0
+  else
+    prune_dangling=1
+  fi
+
+  require_command docker
+  require_command node
+
+  echo "X8_GC_STARTED_AT=$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+  echo "X8_GC_KEEP=$keep"
+  if [[ "$apply" == "1" ]]; then
+    echo "X8_GC_MODE=apply$([[ "$auto" == "1" ]] && echo ' (auto)')"
+  else
+    echo "X8_GC_MODE=dry-run"
+  fi
+
+  # ---- gather candidate tags, newest first ---------------------------------
+  # `sort -r` on docker's own CreatedAt format (fixed-width "YYYY-MM-DD
+  # HH:MM:SS +ZZZZ TZ", the same field the Owner-approved manual command in
+  # 施工工单 §6 already sorts this exact way) is lexicographically correct as
+  # long as every entry came from the same daemon/timezone, which they did.
+  local -a raw_lines=()
+  local line
+  while IFS= read -r line; do
+    [[ -n "$line" ]] && raw_lines+=("$line")
+  done < <(docker images --filter="reference=cps-novel:0.1.0-*" --format '{{.CreatedAt}}|{{.Repository}}:{{.Tag}}' 2>/dev/null | sort -r)
+
+  local -a all_tags=()
+  local candidate_tag
+  # Bash 3.2 (this host's stock `/usr/bin/env bash`, see x8_align_db_role_passwords()'s
+  # comment) treats `"${arr[@]}"` on a ZERO-element array as an unset
+  # parameter reference under `set -u` -- it aborts the whole function with
+  # "unbound variable" instead of simply iterating zero times. Every loop in
+  # this function over an array that can legitimately be empty (no images at
+  # all, no containers, nothing left to delete, ...) is guarded by a length
+  # check first for exactly this reason; this is not defensive over-caution,
+  # it is a real crash this repo's own test suite reproduces without it.
+  if [[ "${#raw_lines[@]}" -gt 0 ]]; then
+    for line in "${raw_lines[@]}"; do
+      candidate_tag="${line#*|}"
+      # Second, bash-side filter -- see this function's header comment on
+      # why this is deliberate defense-in-depth, not redundant with
+      # --filter above.
+      case "$candidate_tag" in
+        cps-novel:0.1.0-*) all_tags+=("$candidate_tag") ;;
+      esac
+    done
+  fi
+
+  if [[ "${#all_tags[@]}" -eq 0 ]]; then
+    echo "X8_GC_CANDIDATES=0"
+    echo "X8_GC_FINISHED_AT=$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+    return 0
+  fi
+  echo "X8_GC_CANDIDATES=${#all_tags[@]}"
+
+  # ---- category 1: currently committed identity ----------------------------
+  local committed_ref=""
+  if [[ -f "$X8_IDENTITY_FILE" ]]; then
+    committed_ref="$(node -e '
+      try {
+        const data = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
+        if (typeof data.imageRef === "string") process.stdout.write(data.imageRef);
+      } catch {}
+    ' "$X8_IDENTITY_FILE" 2>/dev/null || true)"
+  fi
+
+  # ---- category 2: previous committed identity (§4.3) ----------------------
+  # Ledger-first; falls back to "second newest by creation time" during the
+  # transition period before any `up` has ever written the ledger file, and
+  # says so in the keep-reason log line so an operator never mistakes an
+  # inferred value for a recorded one.
+  local previous_ref="" previous_inferred=0
+  if [[ -f "$X8_IDENTITY_PREVIOUS_FILE" ]]; then
+    previous_ref="$(node -e '
+      try {
+        const data = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
+        if (typeof data.imageRef === "string") process.stdout.write(data.imageRef);
+      } catch {}
+    ' "$X8_IDENTITY_PREVIOUS_FILE" 2>/dev/null || true)"
+  fi
+  if [[ -z "$previous_ref" && -n "${all_tags[1]:-}" ]]; then
+    previous_ref="${all_tags[1]}"
+    previous_inferred=1
+  fi
+
+  # ---- category 3: most recent N by creation time --------------------------
+  local -a recent_tags=("${all_tags[@]:0:keep}")
+
+  # ---- category 4: referenced by any container, running or stopped ---------
+  local -a in_use_images=()
+  while IFS= read -r line; do
+    [[ -n "$line" ]] && in_use_images+=("$line")
+  done < <(docker ps -a --format '{{.Image}}' 2>/dev/null)
+
+  # ---- split into keep/delete, one linear pass, logging every reason -------
+  local -a delete_list=()
+  local tag reason r used keep_count=0
+  for tag in "${all_tags[@]}"; do
+    reason=""
+    if [[ -n "$committed_ref" && "$tag" == "$committed_ref" ]]; then
+      reason="${reason:+$reason,}committed"
+    fi
+    if [[ -n "$previous_ref" && "$tag" == "$previous_ref" ]]; then
+      if [[ "$previous_inferred" == "1" ]]; then
+        reason="${reason:+$reason,}previous(inferred: no ledger file yet)"
+      else
+        reason="${reason:+$reason,}previous"
+      fi
+    fi
+    if [[ "${#recent_tags[@]}" -gt 0 ]]; then
+      for r in "${recent_tags[@]}"; do
+        if [[ "$tag" == "$r" ]]; then
+          reason="${reason:+$reason,}recent"
+          break
+        fi
+      done
+    fi
+    if [[ "${#in_use_images[@]}" -gt 0 ]]; then
+      for used in "${in_use_images[@]}"; do
+        if [[ "$tag" == "$used" ]]; then
+          reason="${reason:+$reason,}in-use"
+          break
+        fi
+      done
+    fi
+    if [[ -n "${CPS_NOVEL_APP_IMAGE:-}" && "$tag" == "$CPS_NOVEL_APP_IMAGE" ]]; then
+      reason="${reason:+$reason,}current-build"
+    fi
+
+    if [[ -n "$reason" ]]; then
+      echo "X8_GC_KEEP_IMAGE=$tag reason=$reason"
+      keep_count=$((keep_count + 1))
+    else
+      echo "X8_GC_DELETE_IMAGE=$tag"
+      delete_list+=("$tag")
+    fi
+  done
+  echo "X8_GC_KEEP_COUNT=$keep_count"
+  echo "X8_GC_DELETE_COUNT=${#delete_list[@]}"
+
+  # ---- size accounting (informational; never gates a decision) -------------
+  # `docker image inspect --format '{{.Size}}'` returns a raw byte count
+  # (unlike `docker images`' own human-readable "1.21GB" Size column, which
+  # cannot be summed reliably) -- only queried for tags actually slated for
+  # deletion, never for the whole candidate set.
+  local freed_bytes=0 size
+  if [[ "${#delete_list[@]}" -gt 0 ]]; then
+    for tag in "${delete_list[@]}"; do
+      size="$(docker image inspect "$tag" --format '{{.Size}}' 2>/dev/null || true)"
+      [[ "$size" =~ ^[0-9]+$ ]] || size=0
+      freed_bytes=$((freed_bytes + size))
+    done
+  fi
+  echo "X8_GC_RECLAIMABLE_BYTES=$freed_bytes"
+
+  # ---- dangling layers: listed always, deleted only under --apply ----------
+  local -a dangling_ids=()
+  if [[ "$prune_dangling" == "1" ]]; then
+    while IFS= read -r line; do
+      [[ -n "$line" ]] && dangling_ids+=("$line")
+    done < <(docker images --filter="dangling=true" --format '{{.ID}}' 2>/dev/null)
+    echo "X8_GC_DANGLING_COUNT=${#dangling_ids[@]}"
+  else
+    echo "X8_GC_DANGLING_SKIPPED=X8_GC_PRUNE_DANGLING=0"
+  fi
+
+  if [[ "$json" == "1" ]]; then
+    node -e '
+      const [, keepCount, deleteList, freedBytes, danglingCount] = process.argv;
+      process.stdout.write(
+        "X8_GC_SUMMARY_JSON=" +
+          JSON.stringify({
+            keepCount: Number(keepCount),
+            deleteList: deleteList.length ? deleteList.split(",") : [],
+            reclaimableBytes: Number(freedBytes),
+            danglingCount: danglingCount === "" ? null : Number(danglingCount),
+          }) +
+          "\n",
+      );
+    ' "$keep_count" "$(
+      IFS=,
+      echo "${delete_list[*]:-}"
+    )" "$freed_bytes" "$([[ "$prune_dangling" == "1" ]] && echo "${#dangling_ids[@]}" || echo "")"
+  fi
+
+  if [[ "$apply" == "0" ]]; then
+    echo "X8_GC_DRY_RUN=yes -- pass --apply to actually delete the images listed above"
+    echo "X8_GC_FINISHED_AT=$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+    return 0
+  fi
+
+  # ---- actually delete -------------------------------------------------------
+  local removed=0 failed=0
+  if [[ "${#delete_list[@]}" -gt 0 ]]; then
+    for tag in "${delete_list[@]}"; do
+      # NEVER -f (see header comment): an image docker itself still
+      # considers in-use makes `rmi` refuse on its own, as the second line
+      # of defense behind the category-4 in-use check above. A single
+      # failure here is a WARN, not an abort -- the rest of this round must
+      # still run (照 prune-backups.sh 的降级风格, CPS 参照仓
+      # scripts/ops/prune-backups.sh).
+      if docker rmi "$tag" >/dev/null 2>&1; then
+        echo "X8_GC_REMOVED=$tag"
+        removed=$((removed + 1))
+      else
+        echo "WARN: gc failed to remove image $tag (docker rmi refused or errored); continuing with the rest of this round" >&2
+        failed=$((failed + 1))
+      fi
+    done
+  fi
+  echo "X8_GC_REMOVED_COUNT=$removed"
+  echo "X8_GC_REMOVE_FAILED_COUNT=$failed"
+
+  if [[ "$prune_dangling" == "1" && "${#dangling_ids[@]}" -gt 0 ]]; then
+    # `-f` only, NEVER `-a` (see header comment) -- only dangling (untagged)
+    # layers, never a tagged-but-currently-unused image belonging to this or
+    # any other project on the host.
+    if ! docker image prune -f >/dev/null 2>&1; then
+      echo "WARN: gc: 'docker image prune -f' (dangling layers only) failed; continuing" >&2
+    fi
+  fi
+
+  echo "X8_GC_FINISHED_AT=$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
 }
 
 # X8 release-identity gate work order (2026-09-05), 施工项一 4.3(一), rewritten
@@ -597,6 +988,29 @@ promote_x8_identity_candidate() {
     echo "ERROR: no X8 deploy identity candidate to promote at $X8_IDENTITY_CANDIDATE_FILE (write_x8_identity_candidate must run first)" >&2
     return 65
   }
+  # 施工工单_D9_up数据库准备原子化与镜像保留_2026-09-09.md, D-9b §4.3: archive
+  # the identity ABOUT TO BE OVERWRITTEN into the previous-identity ledger,
+  # before the `mv` below replaces it -- x8_gc() reads this so a gc round
+  # never deletes the release image the stack THIS deploy is in the middle of
+  # superseding is still running on. Best-effort, deliberately: a failure
+  # here must never block promotion -- exactly the "mv succeeds, the very
+  # next statement fails, and something downstream misreports what actually
+  # happened" trap this function's own header comment already documents (for
+  # the failure-marker cleanup a few lines down); this is the same class of
+  # bug, guarded the same way. Temp-file-then-rename + chmod 400, matching
+  # every other identity file write in this file; failing at ANY step here
+  # (`cp`, `chmod`, `mv`) is swallowed all the way down to `|| true`, so the
+  # worst outcome is "gc knows one fewer keep-reason [and infers `previous`
+  # from creation-time order instead]", never a blocked or corrupted deploy.
+  if [[ -f "$X8_IDENTITY_FILE" ]]; then
+    local previous_temporary="${X8_IDENTITY_PREVIOUS_FILE}.tmp.$$"
+    if cp "$X8_IDENTITY_FILE" "$previous_temporary" 2>/dev/null; then
+      chmod 400 "$previous_temporary" 2>/dev/null || true
+      mv -f "$previous_temporary" "$X8_IDENTITY_PREVIOUS_FILE" 2>/dev/null || rm -f "$previous_temporary" 2>/dev/null || true
+    else
+      rm -f "$previous_temporary" 2>/dev/null || true
+    fi
+  fi
   chmod 400 "$X8_IDENTITY_CANDIDATE_FILE" 2>/dev/null || true
   mv -f "$X8_IDENTITY_CANDIDATE_FILE" "$X8_IDENTITY_FILE"
   X8_IDENTITY_DEPLOY_IN_PROGRESS=""
@@ -1026,7 +1440,15 @@ up_x8() {
   assert_ports_available
   render_nginx_configs
   validate_rendered_topology
-  # D-9a 三.3.2① 闸A: see x8_disk_preflight_before_build()'s own comment.
+  # D-9a 三.3.2① 闸A / D-9b §4.5: see x8_disk_preflight_before_build()'s own
+  # comment. D-9b's own minimal inline splice at this same line (an
+  # unconditional `x8_gc --auto`) was DELETED at merge time, deliberately:
+  # it would have made every `up` delete images regardless of free space,
+  # which is precisely the 施工工单 §7-3 decision the Owner has reserved.
+  # D-9b's X8_GC_ON_UP kill switch survives the deletion -- it now guards
+  # the gc call inside x8_disk_preflight_before_build(), where gc only runs
+  # when free space is already below the warn tier (施工工单 §4.5's actual
+  # wording: "测空间 → 低于告警线就调 gc → 再测 → 仍低于硬线则退 69").
   x8_disk_preflight_before_build || exit 69
   build_app_image
   # X8 release-identity gate work order (2026-09-05), 施工项一 4.3(一), amended
@@ -2090,6 +2512,7 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     admin-secret) shift; [[ $# -eq 2 && "${1:-}" == "set" ]] || usage; shift; admin_secret_set "$@" ;;
     admin-seed) shift; admin_seed "$@" ;;
     admin-reset) shift; [[ $# -ge 1 ]] || usage; admin_reset "$@" ;;
+    gc) shift; x8_gc "$@" ;;
     *) usage ;;
   esac
 fi
