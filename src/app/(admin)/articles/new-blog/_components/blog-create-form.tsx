@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { buttonClassName } from "@/components/ui/button";
 import type { ArticleSeoVisibility } from "@/domain/database-statuses";
 import { ARTICLE_SEO_VISIBILITY_OPTIONS } from "@/features/admin-ui/content-view";
-import { SITE_LOCALES, SITE_LOCALE_LABELS, type SiteLocale } from "@/lib/locale/locale-canonical";
+import { SITE_LOCALE_LABELS, listPublishableLocales, type SiteLocale } from "@/lib/locale/locale-canonical";
 import { textToSlug } from "@/lib/slug/text-to-slug";
 
 import { createBlogArticleAction } from "../../_actions";
@@ -37,6 +37,18 @@ import { createBlogArticleAction } from "../../_actions";
  * sees here is guaranteed byte-identical to what the server will accept,
  * rather than two independently-maintained slugifiers that could drift.
  */
+// Owner decision (2026-09-08, C-29b commit 3): the locale dropdown offers
+// only `listPublishableLocales()` (today `["en"]`), not the full
+// `SITE_LOCALES` — 海阅's public site has no per-locale leaf pages yet, so a
+// blog Article created in a locale the public site cannot serve would be
+// application-valid but permanently unreachable. Widen this back to
+// `SITE_LOCALES` once the multi-locale public-site work lands.
+// `createBlogArticleAction` (`../../_actions.ts` → `createBlogArticle`,
+// `src/server/content-creation/blog.ts`'s `requireLocale`) enforces the same
+// restriction server-side as defense in depth, so this is a UX narrowing,
+// not the only gate.
+const PUBLISHABLE_LOCALE_OPTIONS = listPublishableLocales();
+
 export function BlogCreateForm() {
   const router = useRouter();
   const [locale, setLocale] = useState<SiteLocale>("en");
@@ -132,7 +144,7 @@ export function BlogCreateForm() {
             data-testid="blog-create-locale"
             className="mt-1 w-full rounded border border-gray-300 p-2"
           >
-            {SITE_LOCALES.map((item) => (
+            {PUBLISHABLE_LOCALE_OPTIONS.map((item) => (
               <option key={item} value={item}>
                 {SITE_LOCALE_LABELS[item]}
               </option>

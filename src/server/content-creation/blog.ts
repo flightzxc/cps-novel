@@ -46,7 +46,7 @@ import { Prisma, type PrismaClient } from "@prisma/client";
 import { ARTICLE_SEO_VISIBILITIES, type ArticleSeoVisibility } from "@/domain/database-statuses";
 import { isUniqueConstraintViolation } from "@/lib/db/db-retry";
 import { isArticleBlogEnabled, isArticleBlogWriteAllowed } from "@/lib/flags";
-import { SITE_LOCALES, type SiteLocale } from "@/lib/locale/locale-canonical";
+import { isPublishableLocale, type SiteLocale } from "@/lib/locale/locale-canonical";
 import { createWithPublicPageShortIdRetry, isPublicPageShortIdConflict } from "@/lib/slug/short-id";
 import { sanitizeArticleBody } from "@/server/articles/sanitize-body";
 
@@ -91,9 +91,25 @@ const ARTICLE_SLUG_MAX_LENGTH = 240; // Article.slug @db.VarChar(240)
  */
 const SLUG_FORMAT_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
+/**
+ * Owner decision (2026-09-08, C-29b commit 3): narrowed from "any
+ * registered `SiteLocale`" to "publishable locale" (`isPublishableLocale` —
+ * today `{en}`, `listPublishableLocales()`) as defense in depth. The admin
+ * form (`../new-blog/_components/blog-create-form.tsx`) already restricts
+ * its `<select>` to `listPublishableLocales()` for the same reason cited
+ * there: 海阅's public site has no per-locale leaf pages yet, so creating a
+ * blog Article in a locale the public site cannot yet serve would produce
+ * an article that is application-valid but permanently unreachable. This
+ * function is the server-side backstop for that constraint — reused here
+ * verbatim from `SiteLocale` because a request that bypasses the form
+ * (a hand-crafted Server Action call, a future API caller) must not be able
+ * to create one either. To be widened once the multi-locale public-site
+ * work lands (`isPublishableLocale`'s own doc comment / `PUBLISHABLE_LOCALES`
+ * — a single choke point, not duplicated here).
+ */
 function requireLocale(value: unknown): SiteLocale {
-  if (typeof value !== "string" || !SITE_LOCALES.includes(value as SiteLocale)) {
-    throw new BlogArticleInputError("invalid_locale", "Locale is not a registered SiteLocale");
+  if (!isPublishableLocale(value)) {
+    throw new BlogArticleInputError("invalid_locale", "Locale is not a publishable SiteLocale");
   }
   return value as SiteLocale;
 }

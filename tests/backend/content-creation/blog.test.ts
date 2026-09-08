@@ -156,6 +156,19 @@ describe("createBlogArticle", () => {
       expect(db.createCalls).toHaveLength(0);
     });
 
+    it("Owner decision (2026-09-08, C-29b commit 3): rejects a registered but non-publishable locale (defense in depth — the admin form's dropdown already restricts to listPublishableLocales(), but a caller that bypasses the form must not be able to create one either)", async () => {
+      const db = new FakeBlogArticleDb();
+      // "ja" is a real, registered SiteLocale (SITE_LOCALES) — unlike
+      // "not-a-real-locale" above — but not in PUBLISHABLE_LOCALES (today
+      // just {"en"}), so this exercises the publishability check
+      // specifically, not the plain registered-locale check.
+      await expect(createBlogArticle(db.asPrismaClient(), baseInput({ locale: "ja" }), ENABLED)).rejects.toMatchObject({
+        name: "BlogArticleInputError",
+        code: "invalid_locale",
+      });
+      expect(db.createCalls).toHaveLength(0);
+    });
+
     it("rejects a slug carrying stray uppercase instead of silently lower-casing it (would otherwise save something the operator never typed)", async () => {
       const db = new FakeBlogArticleDb();
       await expect(createBlogArticle(db.asPrismaClient(), baseInput({ slug: "MySlug" }), ENABLED)).rejects.toMatchObject({
