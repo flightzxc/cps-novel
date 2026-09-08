@@ -228,11 +228,28 @@ describe("ArticleList · 列表与批量", () => {
     expect(headers.slice(1)).toEqual(["标题", "书目", "模板", "分类", "状态", "前台 URL", "创建时间", "操作"]);
   });
 
-  it("勾选行驱动已选计数，上限 50", () => {
+  it("勾选行驱动已选计数", () => {
     render(<ArticleList rows={[DRAFT_ROW, PUBLISHED_ROW]} canWrite publicOrigin={PUBLIC_ORIGIN} />);
-    expect(screen.getByText("已选择 0 / 50")).toBeTruthy();
+    expect(screen.getByText("已选择 0")).toBeTruthy();
     fireEvent.click(screen.getByLabelText(`选择 ${DRAFT_ROW.title}`));
-    expect(screen.getByText("已选择 1 / 50")).toBeTruthy();
+    expect(screen.getByText("已选择 1")).toBeTruthy();
+  });
+
+  /**
+   * Fix 5 (Opus review of C-21/22/23): the toolbar's single "已选择 N" count
+   * used to render as "已选择 N / 50" — a denominator that only ever named
+   * the re-generate cap, sitting above two buttons with two different caps
+   * (50 re-generate, 200 publish). Each cap now sits next to its own button
+   * instead of the shared count.
+   */
+  it("批量再生成按钮旁标注「/ 50」，批量发布按钮旁标注「/ 200」，而不是挂在已选计数上", () => {
+    render(<ArticleList rows={[DRAFT_ROW]} canWrite publicOrigin={PUBLIC_ORIGIN} />);
+    expect(screen.getByText("已选择 0")).toBeTruthy();
+    expect(screen.queryByText("已选择 0 / 50")).toBeNull();
+    const regenerateButton = screen.getByText("批量再生成");
+    expect(regenerateButton.parentElement?.textContent).toContain("/ 50");
+    const publishButton = screen.getByTestId("articles-batch-publish");
+    expect(publishButton.parentElement?.textContent).toContain("/ 200");
   });
 
   it("单行再生成：expectedUpdatedAt 取该行的 updatedAt（N-7）", async () => {
@@ -272,13 +289,13 @@ describe("ArticleList · 列表与批量", () => {
     expect((screen.getByText("批量再生成") as HTMLButtonElement).disabled).toBe(true);
   });
 
-  it("表头「选择当前页」全选后已选择 2 / 50，再点一次归零（C-17）", () => {
+  it("表头「选择当前页」全选后已选择 2，再点一次归零（C-17）", () => {
     render(<ArticleList rows={[DRAFT_ROW, PUBLISHED_ROW]} canWrite publicOrigin={PUBLIC_ORIGIN} />);
     const header = screen.getByLabelText("选择当前页");
     fireEvent.click(header);
-    expect(screen.getByText("已选择 2 / 50")).toBeTruthy();
+    expect(screen.getByText("已选择 2")).toBeTruthy();
     fireEvent.click(header);
-    expect(screen.getByText("已选择 0 / 50")).toBeTruthy();
+    expect(screen.getByText("已选择 0")).toBeTruthy();
   });
 
   /**
@@ -347,11 +364,29 @@ describe("ArticleList · 列表与批量", () => {
       expect(routerRefresh).not.toHaveBeenCalled();
     });
 
-    it("Server Action 返回 ok:false 时展示错误码", async () => {
+    it("Server Action 返回 ok:false 且 code 是不透明的 *_failed fallback 时，仍展示原始错误码（没有对应译文可映射）", async () => {
       listActions.publishArticleAction.mockResolvedValue({ ok: false, code: "article_publish_failed" });
       render(<ArticleList rows={[DRAFT_ROW]} canWrite publicOrigin={PUBLIC_ORIGIN} />);
       fireEvent.click(screen.getByTestId(`article-publish-${DRAFT_ROW.id}`));
       await vi.waitFor(() => expect(screen.getByRole("status").textContent).toContain("article_publish_failed"));
+    });
+
+    /**
+     * Fix 1 (Opus review of C-21/22/23, MUST): this call site used to render
+     * `发布失败：${result.code}` verbatim — a `PublishLifecycleError.code`
+     * (e.g. `novel_not_found`) is operator-meaningless on its own. It must
+     * now go through `describePublishLifecycleError`
+     * (`../../novels/_lib/publish-outcome-copy.ts`), the same function the
+     * `/novels` detail page's publish button already uses.
+     */
+    it("Server Action 返回 PublishLifecycleError 的 code 时，展示中文译文而不是裸标识符", async () => {
+      listActions.publishArticleAction.mockResolvedValue({ ok: false, code: "novel_not_found" });
+      render(<ArticleList rows={[DRAFT_ROW]} canWrite publicOrigin={PUBLIC_ORIGIN} />);
+      fireEvent.click(screen.getByTestId(`article-publish-${DRAFT_ROW.id}`));
+      await vi.waitFor(() =>
+        expect(screen.getByRole("status").textContent).toContain("该书目不存在或已被删除，请刷新列表后重试。"),
+      );
+      expect(screen.queryByText(/novel_not_found/)).toBeNull();
     });
   });
 
@@ -418,6 +453,63 @@ describe("ArticleList · 列表与批量", () => {
       expect(dialog()?.open).toBe(false);
       expect(listActions.withdrawArticleAction).not.toHaveBeenCalled();
     });
+
+    /**
+     * Fix 3 (Opus review of C-21/22/23, SHOULD): mirrors the novel-detail
+     * lifecycle panel's own reason-length guard
+     * (`../../novels/_components/publish-lifecycle-panel.tsx`'s
+     * `runRightsTransition`, backed by `../../novels/_lib/reason-guard.ts`'s
+     * `validateReason`). Before this fix, an over-1000-char reason sailed
+     * through to `withdrawArticleAction`, where `withdrawNovel`'s own
+     * `trimmedReason` throws a bare `Error` that collapses to the opaque
+     * `article_withdraw_failed` fallback (`tests/ui/articles-actions.test.ts`
+     * pins that collapse at the Server Action layer) — this test pins that
+     * the client now catches it first with a readable message and never
+     * calls the action at all.
+     */
+    it("下线原因超过 1000 字时不提交，展示清晰的长度提示而不是走到通用 article_withdraw_failed", async () => {
+      render(<ArticleList rows={[PUBLISHED_ROW]} canWrite publicOrigin={PUBLIC_ORIGIN} />);
+      await act(async () => {
+        fireEvent.click(screen.getByTestId(`article-withdraw-${PUBLISHED_ROW.id}`));
+      });
+      await waitFor(() => expect(dialog()?.open).toBe(true));
+      fireEvent.change(screen.getByLabelText("下线原因"), { target: { value: "字".repeat(1001) } });
+      await act(async () => {
+        fireEvent.click(within(dialog()!).getByRole("button", { name: "下线" }));
+      });
+      expect(listActions.withdrawArticleAction).not.toHaveBeenCalled();
+      expect(dialog()?.open).toBe(true);
+      expect(screen.getByTestId("article-withdraw-reason-error").textContent).toContain("1000 字以内");
+      expect(screen.queryByText(/article_withdraw_failed/)).toBeNull();
+    });
+
+    /**
+     * Fix 1 (Opus review of C-21/22/23, MUST): the "row-level code" case —
+     * `withdrawNovel` really can throw `PublishLifecycleError`
+     * (`novel_not_currently_published`, when the novel's status changed out
+     * from under this row between page load and click), unlike the row-level
+     * publish button above whose lifecycle-error path is currently
+     * unreachable in practice. Same mapping requirement either way: the
+     * operator must see the Chinese copy, not the identifier.
+     */
+    it("withdrawArticleAction 返回 PublishLifecycleError 的 code 时，展示中文译文而不是裸标识符", async () => {
+      listActions.withdrawArticleAction.mockResolvedValue({ ok: false, code: "novel_not_currently_published" });
+      render(<ArticleList rows={[PUBLISHED_ROW]} canWrite publicOrigin={PUBLIC_ORIGIN} />);
+      await act(async () => {
+        fireEvent.click(screen.getByTestId(`article-withdraw-${PUBLISHED_ROW.id}`));
+      });
+      await waitFor(() => expect(dialog()?.open).toBe(true));
+      fireEvent.change(screen.getByLabelText("下线原因"), { target: { value: "运营决定临时下线" } });
+      await act(async () => {
+        fireEvent.click(within(dialog()!).getByRole("button", { name: "下线" }));
+      });
+      await vi.waitFor(() =>
+        expect(screen.getByRole("status").textContent).toContain(
+          "该书目当前不是「已发布」状态，无法执行下架。",
+        ),
+      );
+      expect(screen.queryByText(/novel_not_currently_published/)).toBeNull();
+    });
   });
 
   describe("列表批量发布（C-21）", () => {
@@ -436,7 +528,7 @@ describe("ArticleList · 列表与批量", () => {
       await vi.waitFor(() => expect(listActions.publishArticlesBatchAction).toHaveBeenCalledTimes(1));
       expect(listActions.publishArticlesBatchAction.mock.calls[0]![0].articleIds).toEqual([DRAFT_ROW.id]);
       await vi.waitFor(() => expect(screen.getByText(/成功 1/)).toBeTruthy());
-      expect(screen.getByText("已选择 0 / 50")).toBeTruthy();
+      expect(screen.getByText("已选择 0")).toBeTruthy();
       expect(routerRefresh).toHaveBeenCalled();
     });
 
@@ -448,6 +540,49 @@ describe("ArticleList · 列表与批量", () => {
     it("50 条/25 秒预算说明紧邻批量再生成按钮（C-22），而不是抬头文案", () => {
       render(<ArticleList rows={[DRAFT_ROW]} canWrite publicOrigin={PUBLIC_ORIGIN} />);
       expect(screen.getByText("50 条/25 秒预算")).toBeTruthy();
+    });
+
+    /**
+     * Fix 1 (Opus review of C-21/22/23, MUST): the required `batch_too_large`
+     * case — `publishArticlesBatchAsAdmin` really does throw
+     * `PublishLifecycleError("batch_too_large", …)` when the selection
+     * exceeds `MAX_BATCH_PUBLISH_SELECTION`, and this call site used to
+     * render `批量发布失败：batch_too_large` verbatim.
+     */
+    it("批量发布返回 batch_too_large 时展示中文译文而不是裸标识符", async () => {
+      listActions.publishArticlesBatchAction.mockResolvedValue({ ok: false, code: "batch_too_large" });
+      render(<ArticleList rows={[DRAFT_ROW]} canWrite publicOrigin={PUBLIC_ORIGIN} />);
+      fireEvent.click(screen.getByLabelText(`选择 ${DRAFT_ROW.title}`));
+      fireEvent.click(screen.getByTestId("articles-batch-publish"));
+      await vi.waitFor(() =>
+        expect(screen.getByRole("status").textContent).toContain(
+          "本次选择的书目数超过批量发布上限（200 部），请分批提交。",
+        ),
+      );
+      expect(screen.queryByText(/batch_too_large/)).toBeNull();
+    });
+
+    /**
+     * Fix 2 (Opus review of C-21/22/23, SHOULD): pins the batch-publish cap
+     * guard that already existed in the component (`overPublishCap`) but had
+     * no test of its own — mirrors `tests/ui/novels-batch-publish.test.tsx`'s
+     * "选择超过上限时展示提示并禁用提交按钮". Selects via the header "选择当
+     * 前页" checkbox (one click, `toggleAll`) rather than clicking all 201
+     * row checkboxes individually — same end state (`selected.size`-driven),
+     * far cheaper under jsdom.
+     */
+    it("勾选超过上限（200 篇）时展示提示并禁用批量发布按钮", () => {
+      const many = Array.from({ length: 201 }, (_, index) => ({
+        ...DRAFT_ROW,
+        id: `over-cap-${index}`,
+        title: `Over Cap Article ${index}`,
+      }));
+      render(<ArticleList rows={many} canWrite publicOrigin={PUBLIC_ORIGIN} />);
+      fireEvent.click(screen.getByLabelText("选择当前页"));
+      expect(screen.getByText("已选择 201")).toBeTruthy();
+      expect(screen.getByText(/超过批量发布上限（200 篇），请减少选择后再提交/)).toBeTruthy();
+      const submit = screen.getByTestId("articles-batch-publish") as HTMLButtonElement;
+      expect(submit.disabled).toBe(true);
     });
   });
 

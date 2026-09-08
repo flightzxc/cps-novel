@@ -66,11 +66,18 @@ function deps() {
  *
  * C-21 extends this with `PublishLifecycleError` (`@/server/publish-gate`):
  * its `code` union (`novel_not_found`, `novel_not_currently_published`,
- * `batch_too_large`, …) is already operator-meaningful on its own — see
- * `../novels/_lib/publish-outcome-copy.ts`'s `describePublishLifecycleError`
- * for the Chinese copy the client component maps it through — so it is
+ * `batch_too_large`, …) is already operator-meaningful on its own, so it is
  * forwarded the same way `ArticleConflictError`'s code already is, instead of
- * collapsing to the generic fallback.
+ * collapsing to the generic fallback. This function itself returns a bare
+ * `string` — it cannot know at this layer which of those two families (or
+ * the plain opaque `*_failed` fallback) a given code came from — so the
+ * actual Chinese-copy mapping is the caller's job:
+ * `../articles/_components/article-list.tsx` runs every `code` it gets back
+ * through `../novels/_lib/publish-outcome-copy.ts`'s
+ * `isPublishLifecycleErrorCode` guard before calling
+ * `describePublishLifecycleError`, and falls back to rendering the raw code
+ * only for the two families that guard can't (and isn't meant to) translate:
+ * `article_conflict` and the opaque `*_failed` codes above.
  */
 function writeErrorCode(error: unknown, fallback: string): string {
   if (error instanceof ArticleConflictError) return error.code;
@@ -172,12 +179,28 @@ export async function withdrawArticleAction(input: { requestId: string; novelId:
  * by `../novels/_lib/batch-publish-constants.ts`'s
  * `MAX_BATCH_PUBLISH_SELECTION`, reused as-is per the analysis doc's "批量发布
  * 复用书目列表已有的批量上限常量" rather than inventing a second constant).
+ *
+ * Fix 4 (Opus review of C-21/22/23): mirrors `publishNovelsBatchAction`'s own
+ * `Array.from(new Set(...))` dedupe and empty-selection rejection —
+ * `selected` is a `Set` in `article-list.tsx` so a duplicate id should never
+ * reach this action in practice, but this action has no other caller-side
+ * guarantee of that, and a duplicate id would otherwise make
+ * `publishArticlesBatch`'s per-id loop apply the same publish transition
+ * twice (each iteration idempotent on its own, but doubling the batch's
+ * effective size against the `batch_too_large` cap for no operator-visible
+ * reason). The empty-selection check runs before `authorization()` for the
+ * same reason `runNovelAction`'s `validate` callback does in
+ * `../novels/_actions.ts`: a request that was never going to do anything
+ * should not spend the per-action rate-limit allowance or the `requestId`
+ * idempotency key first.
  */
 export async function publishArticlesBatchAction(input: { requestId: string; articleIds: readonly string[] }) {
+  const articleIds = Array.from(new Set(input.articleIds));
+  if (articleIds.length === 0) return { ok: false as const, code: "selection_required" };
   try {
     const auth = await authorization("admin.article.publish_batch", input.requestId);
     const data: PublishArticlesBatchResult = await publishArticlesBatchAsAdmin(
-      { authorization: auth, requestId: input.requestId, articleIds: input.articleIds },
+      { authorization: auth, requestId: input.requestId, articleIds },
       deps(),
     );
     revalidatePath("/articles");

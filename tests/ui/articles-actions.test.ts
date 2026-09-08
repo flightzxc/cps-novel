@@ -230,4 +230,42 @@ describe("publishArticlesBatchAction · 鉴权与透传", () => {
     const result = await publishArticlesBatchAction({ requestId: "req-3", articleIds: ["a1", "a2"] });
     expect(result).toEqual({ ok: false, code: "batch_too_large" });
   });
+
+  /**
+   * Fix 4 (Opus review of C-21/22/23, NIT): mirrors
+   * `../../src/app/(admin)/novels/_actions.ts`'s `publishNovelsBatchAction`,
+   * which already does `Array.from(new Set(input.novelIds))` before calling
+   * the gated primitive. A duplicate id reaching `publishArticlesBatchAsAdmin`
+   * would make `publishArticlesBatch`'s per-id loop apply the same publish
+   * transition twice — each iteration is idempotent on its own, but it
+   * silently doubles the batch's effective size against the
+   * `batch_too_large` cap for no operator-visible reason.
+   */
+  it("articleIds 去重后再转发给 publishArticlesBatchAsAdmin", async () => {
+    guards.requireAdminActionAccess.mockResolvedValue(granted());
+    publishGate.publishArticlesBatchAsAdmin.mockResolvedValue({ results: [] });
+
+    await publishArticlesBatchAction({ requestId: "req-3", articleIds: ["a1", "a2", "a1"] });
+
+    const [call] = publishGate.publishArticlesBatchAsAdmin.mock.calls[0];
+    expect(call.articleIds).toEqual(["a1", "a2"]);
+  });
+
+  /**
+   * Fix 4 (Opus review of C-21/22/23, NIT): same `selection_required` code
+   * `publishNovelsBatchAction` throws (via `PublishActionInputError`) for an
+   * empty selection — this file's flat result shape has no `kind` field, so
+   * it surfaces as the bare `code` this action already uses for every other
+   * failure. Checked before `authorization()` for the same reason
+   * `runNovelAction`'s `validate` callback runs first in
+   * `../../src/app/(admin)/novels/_actions.ts`: a request that was never
+   * going to do anything should not spend the per-action rate-limit
+   * allowance or the `requestId` idempotency key.
+   */
+  it("空选择时返回 selection_required，且从不请求授权、从不调用 publishArticlesBatchAsAdmin", async () => {
+    const result = await publishArticlesBatchAction({ requestId: "req-3", articleIds: [] });
+    expect(result).toEqual({ ok: false, code: "selection_required" });
+    expect(guards.requireAdminActionAccess).not.toHaveBeenCalled();
+    expect(publishGate.publishArticlesBatchAsAdmin).not.toHaveBeenCalled();
+  });
 });

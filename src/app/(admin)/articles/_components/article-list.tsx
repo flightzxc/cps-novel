@@ -14,6 +14,8 @@ import { buildArticlePath } from "@/lib/slug/article-path";
 
 import { MAX_BATCH_PUBLISH_SELECTION } from "../../novels/_lib/batch-publish-constants";
 import { describePublishGateReason } from "../../novels/_lib/publish-gate-copy";
+import { describePublishLifecycleError, isPublishLifecycleErrorCode } from "../../novels/_lib/publish-outcome-copy";
+import { validateReason } from "../../novels/_lib/reason-guard";
 import {
   publishArticleAction,
   publishArticlesBatchAction,
@@ -22,6 +24,21 @@ import {
   withdrawArticleAction,
 } from "../_actions";
 import { ArticleStatusBadge } from "./article-status-badge";
+
+/**
+ * Fix 1 (Opus review of C-21/22/23): `../_actions.ts`'s write actions return
+ * a flat `{ ok: false, code: string }` — `code` may be a
+ * `PublishLifecycleErrorCode` (`novel_not_found`, `batch_too_large`, …,
+ * forwarded verbatim by that file's `writeErrorCode`) or an opaque code this
+ * component has no Chinese copy for (`article_conflict`, the `*_failed`
+ * fallbacks — see that file's own doc comment on `writeErrorCode`). Only the
+ * former has a translation (`describePublishLifecycleError`); anything else
+ * still renders as the raw code, exactly as before this fix, because that is
+ * genuinely all there is to show for it.
+ */
+function describeArticleActionErrorCode(code: string): string {
+  return isPublishLifecycleErrorCode(code) ? describePublishLifecycleError(code) : code;
+}
 
 export type ArticleListRow = {
   id: string;
@@ -156,7 +173,7 @@ export function ArticleList({
   async function handlePublish(row: ArticleListRow) {
     const result = await publishArticleAction({ requestId: crypto.randomUUID(), articleId: row.id });
     if (!result.ok) {
-      setMessage(`发布失败：${result.code}`);
+      setMessage(`发布失败：${describeArticleActionErrorCode(result.code)}`);
       return;
     }
     const { data } = result;
@@ -200,12 +217,28 @@ export function ArticleList({
    * `runRightsTransition` — the doc's own UI test ("下线在未填理由时不提交")
    * is this branch: the dialog stays open and shows `withdrawReasonError`
    * instead of firing `withdrawArticleAction`.
+   *
+   * Fix 3 (Opus review of C-21/22/23): the blank-reason guard used to be the
+   * only check here — an over-1000-char reason sailed through to
+   * `withdrawArticleAction`, where `withdrawNovel`'s own `trimmedReason`
+   * throws a bare `Error("Reason is too long")` that `writeErrorCode`
+   * (`../_actions.ts`) can only fold into the generic `article_withdraw_failed`
+   * fallback, same as `tests/ui/articles-actions.test.ts`'s "空理由…折叠为
+   * article_withdraw_failed" test already pins for the blank case. Now both
+   * conditions are checked client-side via `../../novels/_lib/reason-guard.ts`'s
+   * `validateReason` — the same function `../../novels/_actions.ts`'s
+   * `requireNonBlankReason` wraps for the novel-detail rights-transition
+   * dialogs — before this component ever calls the Server Action.
    */
   async function confirmWithdraw() {
     if (!withdrawTarget) return;
-    const reason = withdrawReason.trim();
-    if (!reason) {
-      setWithdrawReasonError("请填写下线原因后再提交（会写入审计记录）。");
+    const validation = validateReason(withdrawReason);
+    if (!validation.ok) {
+      setWithdrawReasonError(
+        validation.code === "reason_too_long"
+          ? "下线原因过长，请控制在 1000 字以内。"
+          : "请填写下线原因后再提交（会写入审计记录）。",
+      );
       return;
     }
     setWithdrawReasonError(null);
@@ -213,13 +246,13 @@ export function ArticleList({
     const result = await withdrawArticleAction({
       requestId: crypto.randomUUID(),
       novelId: withdrawTarget.novelId,
-      reason,
+      reason: validation.reason,
     });
     setWithdrawBusy(false);
     setWithdrawTarget(null);
     setWithdrawReason("");
     if (!result.ok) {
-      setMessage(`下线失败：${result.code}`);
+      setMessage(`下线失败：${describeArticleActionErrorCode(result.code)}`);
       return;
     }
     setMessage(`已下线，受影响文章数：${result.data.affectedArticleIds.length}`);
@@ -236,7 +269,7 @@ export function ArticleList({
   async function batchPublish() {
     const result = await publishArticlesBatchAction({ requestId: crypto.randomUUID(), articleIds: [...selected] });
     if (!result.ok) {
-      setMessage(`批量发布失败：${result.code}`);
+      setMessage(`批量发布失败：${describeArticleActionErrorCode(result.code)}`);
       return;
     }
     let published = 0;
@@ -259,7 +292,17 @@ export function ArticleList({
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-sm text-gray-600">已选择 {selected.size} / 50</p>
+        {/*
+          Fix 5 (Opus review of C-21/22/23): this single count used to render
+          as "已选择 N / 50" — a denominator that only ever named the
+          re-generate cap, sitting above two buttons with two *different*
+          caps (50 for 批量再生成, 200 for 批量发布 — `MAX_BATCH_PUBLISH_SELECTION`
+          below). An operator selecting, say, 120 rows would read "/ 50" here
+          and have no way to tell whether that number describes the button
+          they are about to click. Each cap now sits next to its own button
+          instead.
+        */}
+        <p className="text-sm text-gray-600">已选择 {selected.size}</p>
         <div className="flex flex-wrap items-center gap-4">
           <div className="flex items-center gap-2">
             <button
@@ -270,6 +313,7 @@ export function ArticleList({
             >
               批量发布
             </button>
+            <span className="text-xs text-gray-500">/ {MAX_BATCH_PUBLISH_SELECTION}</span>
             {overPublishCap && (
               <span className="text-xs text-red-600">
                 超过批量发布上限（{MAX_BATCH_PUBLISH_SELECTION} 篇），请减少选择后再提交
@@ -284,6 +328,7 @@ export function ArticleList({
             >
               批量再生成
             </button>
+            <span className="text-xs text-gray-500">/ 50</span>
             {/* C-22 (`分析_文章管理Parity缺口_2026-09-08.md` §六): the "50 条/25
                 秒预算" note used to live in the page header's description —
                 moved here, next to the button it actually describes. */}
