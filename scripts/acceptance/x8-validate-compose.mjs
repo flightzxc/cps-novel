@@ -129,6 +129,12 @@ for (const flag of [
   // C-25 review fix: single gate, no ALLOW_WRITE partner (read-only, see
   // docs/governance/feature-flag-registry.md's own note on why).
   "FEATURE_ARTICLE_SEO_VISIBILITY",
+  // C-28: a genuine double-gate (protected write), but web-only -- neither
+  // flag function has a worker/scheduler caller (grepped before adding,
+  // see src/lib/flags/feature-flags.ts's own comment on this pair), so
+  // these two do NOT also appear in the worker loop below.
+  "FEATURE_ARTICLE_BLOG",
+  "ARTICLE_BLOG_ALLOW_WRITE",
 ]) {
   const expected = levelEntry.flags[flag];
   if (web.environment?.[flag] !== expected) {

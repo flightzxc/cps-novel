@@ -34,6 +34,47 @@ describe("checkNovelArticlePublicAccess", () => {
     expect(result).toEqual({ kind: "not_found" });
   });
 
+  /**
+   * C-28 (`规划_文章管理能力补齐_博客类型可见性换小说_2026-09-08.md` §三/C-28):
+   * "Public routes are C-29 — a created blog must remain invisible
+   * publicly (C-27's access.ts not_found), covered by a test." C-27 already
+   * added the `article.novelId === null || article.novel === null`
+   * short-circuit (this file previously had zero coverage of that branch —
+   * a real gap, not merely an omission this task chooses to leave); this is
+   * that missing test, using the exact shape `createBlogArticle`
+   * (`src/server/content-creation/blog.ts`) produces and the publish gate
+   * can legally advance to `published`: `novelId`/`novel` both `null`,
+   * `promoLink` `null`, status `published`. The published status is the
+   * point — without the C-27 short-circuit, a published, otherwise-normal-
+   * looking row would fall through toward `isPubliclyAccessible`, which
+   * needs a real `NovelPublicationState` this row does not have.
+   */
+  it("C-28: a published blog Article (novelId/novel both null) is not_found, not published — public routes are C-29's job, not yet built", async () => {
+    const db = dbReturning({
+      id: "blog-article-1",
+      novelId: null,
+      status: "published",
+      novel: null,
+      promoLink: null,
+      seoVisibility: "public",
+    });
+    const result = await checkNovelArticlePublicAccess(db, { locale: "en", slug: "a-blog-post" });
+    expect(result).toEqual({ kind: "not_found" });
+  });
+
+  it("C-28: still not_found for a draft blog Article (the common case immediately after creation)", async () => {
+    const db = dbReturning({
+      id: "blog-article-2",
+      novelId: null,
+      status: "draft",
+      novel: null,
+      promoLink: null,
+      seoVisibility: "public",
+    });
+    const result = await checkNovelArticlePublicAccess(db, { locale: "en", slug: "a-draft-blog-post" });
+    expect(result).toEqual({ kind: "not_found" });
+  });
+
   it("queries by locale and slug via the primary (non-deleted) where fragment", async () => {
     const db = dbReturning(null);
     await checkNovelArticlePublicAccess(db, { locale: "en", slug: "some-slug" });

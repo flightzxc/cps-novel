@@ -4,6 +4,7 @@ import { findCapabilityState } from "@/features/admin-ui/capability-view";
 import { errorEnvelopeCopy } from "@/features/admin-ui/error-copy";
 import { AdminTimeZoneNote } from "@/features/admin-ui/time-zone-note";
 import type { ErrorEnvelope } from "@/contracts";
+import { isArticleBlogEnabled } from "@/lib/flags";
 import { listArticles, listDistinctArticleLocales, type ArticleListItem } from "@/server/articles";
 import { listActiveArticleTemplateOptions } from "@/server/article-templates";
 import { getSiteUrl } from "@/lib/seo/site-url";
@@ -170,6 +171,27 @@ export default async function ArticlesPage({
       description={granted ? `管理所有生成的文章，共 ${total} 篇` : undefined}
       actions={
         <div className="flex gap-2">
+          {/*
+            C-28 (`规划_文章管理能力补齐_博客类型可见性换小说_2026-09-08.md`
+            §三/C-28): "新建博客" — CPS wording/position ADAPTed
+            (`cps-admin-v851-admin-host`'s
+            `src/app/(admin)/articles/page.tsx`: first button in this same
+            actions row, emerald fill, → `/articles/new-blog`). Gated by
+            `FEATURE_ARTICLE_BLOG` at the render level (not just the
+            `/articles/new-blog` page's own 404 kill switch) — "关闭时抬头
+            按钮不渲染" is this flag's own registered behavior
+            (`docs/governance/feature-flag-registry.md`), so a disabled
+            capability leaves no dangling link to a page that would 404.
+          */}
+          {isArticleBlogEnabled(process.env) && (
+            <Link
+              href="/articles/new-blog"
+              data-testid="articles-new-blog-entry"
+              className="rounded-lg bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-700"
+            >
+              新建博客
+            </Link>
+          )}
           {/*
             C-22 (item #3/#4, ADAPT): CPS's header carries "生成文章"/"批量
             生成" entry buttons that open a drama+template picker on this same

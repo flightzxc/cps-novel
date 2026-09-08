@@ -88,6 +88,26 @@ export type ArticleEditInput = {
    * untouched — see `updateArticleContent`'s `data` assembly below.
    */
   seoVisibility?: string;
+  /**
+   * C-28 (`规划_文章管理能力补齐_博客类型可见性换小说_2026-09-08.md` §三/C-28):
+   * blog-only fields, stored inside the same `seoMetadata` JSON column as
+   * `metaTitle`/`metaDescription` above (no schema change this round — see
+   * `src/server/content-creation/blog.ts`'s header on why `coverUrl` lives
+   * here rather than on a dedicated column). Optional per this file's own
+   * additive-contract discipline: the novel-article editor
+   * (`../_components/article-editor.tsx`) never sends either, so this
+   * function's behavior for a `novel_article` is byte-identical to before
+   * this round. The blog editor
+   * (`../_components/article-blog-editor.tsx`) always sends its current
+   * form value for both (pre-filled from the loaded row, resubmitted
+   * verbatim unless the operator changes it) — same "whole-object replace
+   * on every save" semantics `seoMetadata` already had for `metaTitle`/
+   * `metaDescription`, just widened to four keys instead of two, so a plain
+   * body/title edit through the blog editor never silently drops a
+   * previously-set cover URL or keywords string.
+   */
+  metaKeywords?: string;
+  coverUrl?: string;
 };
 
 function text(value: string, code: string, max?: number) {
@@ -138,6 +158,9 @@ export async function updateArticleContent(input: {
     seoMetadata: {
       ...(input.patch.metaTitle?.trim() ? { metaTitle: input.patch.metaTitle.trim() } : {}),
       ...(input.patch.metaDescription?.trim() ? { metaDescription: input.patch.metaDescription.trim() } : {}),
+      // C-28: blog-only, see `ArticleEditInput`'s own doc comment above.
+      ...(input.patch.metaKeywords?.trim() ? { metaKeywords: input.patch.metaKeywords.trim() } : {}),
+      ...(input.patch.coverUrl?.trim() ? { coverUrl: input.patch.coverUrl.trim() } : {}),
     } as Prisma.InputJsonValue,
     /**
      * C-26 (`规划_文章管理能力补齐_博客类型可见性换小说_2026-09-08.md` §三/C-26):

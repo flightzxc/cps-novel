@@ -179,3 +179,44 @@ export const ARTICLE_SEO_VISIBILITY_FEATURE_FLAG = "FEATURE_ARTICLE_SEO_VISIBILI
 export function isArticleSeoVisibilityEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
   return env[ARTICLE_SEO_VISIBILITY_FEATURE_FLAG] === "true";
 }
+
+// -----------------------------------------------------------------------
+// C-28 (`规划_文章管理能力补齐_博客类型可见性换小说_2026-09-08.md` §三/C-28).
+// "新建博客" is a protected business write (the first write path in this
+// codebase that can create an Article with `novelId: null`) — per this
+// file's own "一 flag 一函数、双闸" discipline that means a *pair*, unlike
+// `FEATURE_ARTICLE_SEO_VISIBILITY` above (a read-only gate, deliberately
+// single). `FEATURE_ARTICLE_BLOG` off means the whole capability is
+// invisible: the "新建博客" header button does not render
+// (`src/app/(admin)/articles/page.tsx`), `/articles/new-blog` 404s
+// (`src/app/(admin)/articles/new-blog/page.tsx`, same `notFound()` +
+// `force-dynamic` kill-switch shape as `src/app/dev-preview/layout.tsx`),
+// and the creation service itself
+// (`src/server/content-creation/blog.ts`'s `createBlogArticle`) fail-closes
+// even if called directly. `ARTICLE_BLOG_ALLOW_WRITE` is the second key:
+// even with the feature flag on, the creation service performs zero writes
+// unless this is also true — "功能开了也不写库".
+//
+// Web-only: `createBlogArticle`'s only caller is the admin Server Action
+// (`src/app/(admin)/articles/_actions.ts`'s `createBlogArticleAction`), an
+// interactive write triggered from the new-blog form — no worker or
+// scheduler task chain ever creates a blog Article. Grepped before writing
+// this comment: neither flag function below has any caller under `worker/`
+// or `scheduler/`, unlike `FEATURE_ARTICLE_SEO_VISIBILITY` (which the
+// sitemap-refresh/indexnow-delivery worker handlers do read). Registered in
+// `docker-compose.yml`'s `web` service only — see
+// `docs/governance/feature-flag-registry.md` and
+// `tests/backend/flags/article-blog-flags-passthrough.test.ts`.
+// -----------------------------------------------------------------------
+export const ARTICLE_BLOG_FEATURE_FLAG = "FEATURE_ARTICLE_BLOG";
+export const ARTICLE_BLOG_ALLOW_WRITE_FLAG = "ARTICLE_BLOG_ALLOW_WRITE";
+
+/** Gates whether the "新建博客" entry (header button, `/articles/new-blog` page, creation service) exists at all. Exact `=== "true"` parsing, default off. */
+export function isArticleBlogEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+  return env[ARTICLE_BLOG_FEATURE_FLAG] === "true";
+}
+
+/** Second key: even with the feature on, `createBlogArticle` performs zero writes unless this is also true. */
+export function isArticleBlogWriteAllowed(env: NodeJS.ProcessEnv = process.env): boolean {
+  return env[ARTICLE_BLOG_ALLOW_WRITE_FLAG] === "true";
+}

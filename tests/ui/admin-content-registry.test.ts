@@ -175,6 +175,7 @@ describe("P2-04 内容路由登记", () => {
       "admin.article.update",
       "admin.article.regenerate",
       "admin.article.regenerate_batch",
+      "admin.article.create_blog",
       "admin.home_carousel.config",
       "admin.home_carousel.manual_upsert",
       "admin.home_carousel.manual_delete",

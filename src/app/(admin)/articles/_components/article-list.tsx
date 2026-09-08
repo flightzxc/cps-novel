@@ -324,6 +324,18 @@ export function ArticleList({
     (row) => selected.has(row.id) && (row.contentMode ?? "template") === "manual",
   ).length;
 
+  /**
+   * C-28: the same warning shape as `manualSelectedCount` above, for the
+   * other reason a selected row can never actually regenerate — no Novel to
+   * render template values from (`article_not_regenerable`,
+   * `src/server/articles/service.ts`). Informational only, not blocking: a
+   * mixed selection is still allowed (the per-row disabled state above is
+   * the hard stop), same posture the manual-edit warning already takes.
+   */
+  const blogSelectedCount = rows.filter(
+    (row) => selected.has(row.id) && (row.articleType ?? "novel_article") !== "novel_article",
+  ).length;
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -371,6 +383,11 @@ export function ArticleList({
             {manualSelectedCount > 0 && (
               <span className="text-xs text-amber-700" data-testid="articles-batch-regenerate-manual-warning">
                 其中 {manualSelectedCount} 篇为手动编辑，再生成会覆盖运营正文
+              </span>
+            )}
+            {blogSelectedCount > 0 && (
+              <span className="text-xs text-amber-700" data-testid="articles-batch-regenerate-blog-warning">
+                其中 {blogSelectedCount} 篇为博客文章，没有绑定模板，再生成会失败
               </span>
             )}
           </div>
@@ -520,9 +537,30 @@ export function ArticleList({
                       下线
                     </button>
                   )}
+                  {/*
+                    C-28 (`规划_文章管理能力补齐_博客类型可见性换小说_2026-09-08.md`
+                    §三/C-28): "the C-27 article_not_regenerable outcome
+                    surfaces as a disabled 再生成" — `regenerateCore`
+                    (`src/server/articles/service.ts`) already returns that
+                    outcome (folded into the batch button's "失败" bucket,
+                    see the warning above) for any Article with no Novel to
+                    render template values from; a blog row disables the
+                    button up front instead of letting an operator click it
+                    into a guaranteed failure. `row.articleType` falls back
+                    to `"novel_article"` for the same reason every other
+                    optional C-26 field on this row does (the column's own
+                    DB default) — a row built without it must read as
+                    regenerable, not the other way around.
+                  */}
                   <button
-                    disabled={!canWrite}
+                    disabled={!canWrite || (row.articleType ?? "novel_article") !== "novel_article"}
+                    title={
+                      (row.articleType ?? "novel_article") !== "novel_article"
+                        ? "博客文章没有绑定模板，不支持再生成"
+                        : undefined
+                    }
                     className={buttonClassName("secondary", "px-2 py-1 text-xs")}
+                    data-testid={`article-regenerate-${row.id}`}
                     onClick={() =>
                       void regenerateArticleAction({
                         requestId: crypto.randomUUID(),

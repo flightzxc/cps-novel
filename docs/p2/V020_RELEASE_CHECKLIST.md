@@ -112,6 +112,8 @@
 - [ ] `AUTO_WRITE_AUTHORIZED=NO`（ADR 门；精确字符串，非布尔——任何 level 都不得是 `YES`）。
 - [ ] `FEATURE_ARTICLE_SEO_VISIBILITY=false`（C-25；单闸，只读侧，见
       `docs/governance/feature-flag-registry.md`）。
+- [ ] `FEATURE_ARTICLE_BLOG=false` / `ARTICLE_BLOG_ALLOW_WRITE=false`（C-28；双闸，仅 `web` 服务
+      消费——`worker`/`scheduler` 均无调用点，见 `docs/governance/feature-flag-registry.md`）。
 - [ ] Worker Level 0 allowlist 精确为 `credential.validate.v1,credential.supersede.v1,catalog_scan`。
 - [x] C2b parser 修复验收前不消费 `moboreader.preview_refresh.v1`；让 preview item 留在 pending，不把可恢复工作消费成 failed。
   - **验收证据**：commit `5a6addf`（`fix(adapter): normalize numeric preview bookId`，

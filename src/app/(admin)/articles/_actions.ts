@@ -3,7 +3,7 @@
 import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 
-import { requireAdminActionAccess } from "@/server/auth/guards";
+import { requireAdminActionAccess, requireFreshAdminServiceMutation } from "@/server/auth/guards";
 import {
   ArticleConflictError,
   regenerateArticle,
@@ -11,6 +11,11 @@ import {
   updateArticleContent,
   type ArticleEditInput,
 } from "@/server/articles";
+import {
+  BlogArticleInputError,
+  createBlogArticle,
+  type CreateBlogArticleResult,
+} from "@/server/content-creation";
 import {
   publishArticleAsAdmin,
   publishArticlesBatchAsAdmin,
@@ -206,4 +211,68 @@ export async function publishArticlesBatchAction(input: { requestId: string; art
     revalidatePath("/articles");
     return { ok: true as const, data };
   } catch (error) { return { ok: false as const, code: writeErrorCode(error, "article_batch_publish_failed") }; }
+}
+
+/**
+ * C-28 (`规划_文章管理能力补齐_博客类型可见性换小说_2026-09-08.md` §三/C-28):
+ * "新建博客" trigger. `createBlogArticle` (`@/server/content-creation`) does
+ * not follow this file's `authorization()`-shortcut convention — it lives in
+ * `src/server/content-creation/`, whose own established shape (see
+ * `../catalog-sync/_actions.ts`'s `applyContentCreationAction`) is for the
+ * *action* to resolve a fresh `AdminServiceAuthorization` into an
+ * `AdminAuthContext` itself and pass a plain `CreateContentActor` down,
+ * rather than threading the ticket itself into the service the way
+ * `updateArticleContent` does. This action follows that precedent instead
+ * of the `authorization()` helper above, so the two content-creation write
+ * paths (novel-article and blog) stay in the same shape.
+ *
+ * `createBlogArticle` never throws for a business-state outcome
+ * (`feature_disabled`/`write_disabled`/`slug_conflict`) — only for malformed
+ * input (`BlogArticleInputError`, forwarded verbatim so the form's slug/
+ * title/body-specific messages actually reach the operator) or a genuinely
+ * unexpected failure (falls into the generic `article_create_blog_failed`
+ * fallback, same as every other action in this file).
+ */
+export async function createBlogArticleAction(input: {
+  requestId: string;
+  locale: string;
+  title: string;
+  slug: string;
+  summary?: string;
+  body: string;
+  seoVisibility: string;
+  metaTitle?: string;
+  metaDescription?: string;
+  metaKeywords?: string;
+  coverUrl?: string;
+}): Promise<{ ok: true; data: CreateBlogArticleResult } | { ok: false; code: string }> {
+  try {
+    const auth = await authorization("admin.article.create_blog", input.requestId);
+    const guards = guardDependencies();
+    const context = await requireFreshAdminServiceMutation(auth, "content:publish", {
+      identities: guards.identities,
+      sessions: guards.sessions,
+      entryId: "admin.article.create_blog",
+      requestId: input.requestId,
+    });
+    const data = await createBlogArticle(prisma, {
+      locale: input.locale,
+      title: input.title,
+      slug: input.slug,
+      summary: input.summary,
+      body: input.body,
+      seoVisibility: input.seoVisibility,
+      metaTitle: input.metaTitle,
+      metaDescription: input.metaDescription,
+      metaKeywords: input.metaKeywords,
+      coverUrl: input.coverUrl,
+      actor: { type: "admin", adminId: context.identity.id },
+      requestId: input.requestId,
+    });
+    if (data.outcome === "created") revalidatePath("/articles");
+    return { ok: true as const, data };
+  } catch (error) {
+    if (error instanceof BlogArticleInputError) return { ok: false as const, code: error.code };
+    return { ok: false as const, code: writeErrorCode(error, "article_create_blog_failed") };
+  }
 }

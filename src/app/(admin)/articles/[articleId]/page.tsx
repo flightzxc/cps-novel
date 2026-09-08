@@ -6,6 +6,7 @@ import { prisma } from "../../../api/admin/_lib/deps";
 import { AdminShell } from "../../_components/admin-shell";
 import { capabilityViews, sessionView } from "../../_lib/page-guard";
 import { requireContentPage } from "../../novels/_lib/content-page-guard";
+import { ArticleBlogEditor } from "../_components/article-blog-editor";
 import { ArticleEditor } from "../_components/article-editor";
 
 export const dynamic = "force-dynamic";
@@ -84,7 +85,22 @@ export default async function ArticleEditPage({ params }: { params: Promise<{ ar
         </div>
       }
     >
-      <ArticleEditor key={updatedAt} article={{ ...article, updatedAt }} canWrite={canWrite} />
+      {/*
+        C-28 (`规划_文章管理能力补齐_博客类型可见性换小说_2026-09-08.md`
+        §三/C-28): the fork itself — decided here, in the server component,
+        not inside a shared client component branching on type at render
+        time (see `ArticleBlogEditor`'s own doc comment for why). Keyed on
+        `article.novel === null`, the same structural signal
+        `src/server/publish-gate/evaluator.ts` forks on (guaranteed
+        equivalent to `article_type <> 'novel_article'` by the
+        `article_novel_id_by_type_check` CHECK) — not a second, independent
+        `articleType === "blog_article"` check that could drift from it.
+      */}
+      {article.novel === null ? (
+        <ArticleBlogEditor key={updatedAt} article={{ ...article, updatedAt }} canWrite={canWrite} />
+      ) : (
+        <ArticleEditor key={updatedAt} article={{ ...article, updatedAt }} canWrite={canWrite} />
+      )}
     </AdminShell>
   );
 }

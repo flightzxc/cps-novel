@@ -282,6 +282,19 @@ export const ADMIN_ARTICLE_ACTIONS = [
   { id: "admin.article.update", capability: "content:publish", mutation: true },
   { id: "admin.article.regenerate", capability: "content:publish", mutation: true },
   { id: "admin.article.regenerate_batch", capability: "content:publish", mutation: true },
+  /**
+   * C-28 (`规划_文章管理能力补齐_博客类型可见性换小说_2026-09-08.md` §三/C-28):
+   * "新建博客" — same capability as `admin.article.update` (the plan's own
+   * words: "能力沿用 content:publish（与 admin.article.update 同级）"), not a
+   * new `content:create` capability. `AdminCapability`
+   * (`src/lib/auth/capabilities.ts`) has no such capability and adding one
+   * is outside this file's write scope; `content:publish` already carries
+   * the right bar (`requiresTwoFactor: true` + `super_admin` default) for a
+   * call that inserts a brand-new `Article` row, same reasoning
+   * `ADMIN_CONTENT_CREATION_ACTIONS`'s own `apply` entry documents for the
+   * novel-article creation pipeline.
+   */
+  { id: "admin.article.create_blog", capability: "content:publish", mutation: true },
 ] as const satisfies AdminRegistry["actions"];
 
 export const ADMIN_HOME_CAROUSEL_ACTIONS = [

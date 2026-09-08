@@ -42,6 +42,7 @@ vi.mock("@/app/(admin)/articles/_actions", () => ({ ...listActions, ...editorAct
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: routerRefresh }) }));
 
 import { ArticleList, type ArticleListRow } from "@/app/(admin)/articles/_components/article-list";
+import { ArticleBlogEditor } from "@/app/(admin)/articles/_components/article-blog-editor";
 import { ArticleEditor } from "@/app/(admin)/articles/_components/article-editor";
 import { ArticleFilters } from "@/app/(admin)/articles/_components/article-filters";
 
@@ -417,6 +418,50 @@ describe("ArticleList · 列表与批量", () => {
   it("canWrite=false 时批量按钮禁用", () => {
     render(<ArticleList rows={[DRAFT_ROW]} canWrite={false} publicOrigin={PUBLIC_ORIGIN} />);
     expect((screen.getByText("批量再生成") as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  /**
+   * C-28 (`规划_文章管理能力补齐_博客类型可见性换小说_2026-09-08.md` §三/C-28):
+   * "the C-27 article_not_regenerable outcome surfaces as a disabled
+   * 再生成". Single-row button + batch warning, same shape as the
+   * manual-edit warning tests above.
+   */
+  describe("再生成对博客文章禁用（C-28）", () => {
+    it("博客行（articleType=blog_article）的单行再生成按钮被禁用并带提示", () => {
+      const blogRow = { ...DRAFT_ROW, id: "blog-row", title: "Blog Row", articleType: "blog_article", novel: undefined };
+      render(<ArticleList rows={[blogRow]} canWrite publicOrigin={PUBLIC_ORIGIN} />);
+      const button = screen.getByTestId(`article-regenerate-${blogRow.id}`) as HTMLButtonElement;
+      expect(button.disabled).toBe(true);
+      expect(button.title).toBe("博客文章没有绑定模板，不支持再生成");
+    });
+
+    it("小说文章行（articleType=novel_article）的单行再生成按钮不受影响", () => {
+      render(<ArticleList rows={[{ ...DRAFT_ROW, articleType: "novel_article" }]} canWrite publicOrigin={PUBLIC_ORIGIN} />);
+      const button = screen.getByTestId(`article-regenerate-${DRAFT_ROW.id}`) as HTMLButtonElement;
+      expect(button.disabled).toBe(false);
+      expect(button.title).toBe("");
+    });
+
+    it("articleType 缺字段时回退为 novel_article，再生成按钮不禁用", () => {
+      render(<ArticleList rows={[{ ...DRAFT_ROW, articleType: undefined }]} canWrite publicOrigin={PUBLIC_ORIGIN} />);
+      const button = screen.getByTestId(`article-regenerate-${DRAFT_ROW.id}`) as HTMLButtonElement;
+      expect(button.disabled).toBe(false);
+    });
+
+    it("选中含博客文章的行时，批量再生成按钮旁展示提示，计数只反映已选中的博客行", () => {
+      const blogRow = { ...DRAFT_ROW, id: "blog-row", title: "Blog Row", articleType: "blog_article" };
+      const novelRow = { ...PUBLISHED_ROW, articleType: "novel_article" };
+      render(<ArticleList rows={[blogRow, novelRow]} canWrite publicOrigin={PUBLIC_ORIGIN} />);
+      expect(screen.queryByTestId("articles-batch-regenerate-blog-warning")).toBeNull();
+      fireEvent.click(screen.getByLabelText(`选择 ${blogRow.title}`));
+      expect(screen.getByTestId("articles-batch-regenerate-blog-warning").textContent).toBe(
+        "其中 1 篇为博客文章，没有绑定模板，再生成会失败",
+      );
+      fireEvent.click(screen.getByLabelText(`选择 ${novelRow.title}`));
+      expect(screen.getByTestId("articles-batch-regenerate-blog-warning").textContent).toBe(
+        "其中 1 篇为博客文章，没有绑定模板，再生成会失败",
+      );
+    });
   });
 
   it("表头「选择当前页」全选后已选择 2，再点一次归零（C-17）", () => {
@@ -857,6 +902,76 @@ describe("ArticleEditor · 编辑与预览", () => {
     expect(editorActions.updateArticleAction.mock.calls[0]![0]).toMatchObject({
       patch: expect.objectContaining({ seoVisibility: "hidden" }),
     });
+  });
+});
+
+/**
+ * C-28 (`规划_文章管理能力补齐_博客类型可见性换小说_2026-09-08.md` §三/C-28):
+ * "编辑页按文章类型分叉:博客走一套没有模板绑定、没有再生成按钮的编辑器".
+ * `ArticleBlogEditor` has no template/regenerate control at all (same as
+ * `ArticleEditor`, which never had one either — see that component's own
+ * header) — what this block actually pins is the two blog-only fields
+ * (`coverUrl`/`metaKeywords`) round-tripping through the same
+ * `updateArticleAction` write口, and the type/content-mode line reading
+ * real values rather than a hardcoded "博客文章" string.
+ */
+const BLOG_ARTICLE = {
+  id: "blog-article-1",
+  title: "Blog Title",
+  summary: "Blog summary",
+  body: "<p>Blog body</p>",
+  seoMetadata: {
+    metaTitle: "Blog meta title",
+    metaDescription: "Blog meta description",
+    metaKeywords: "keyword-a, keyword-b",
+    coverUrl: "https://example.com/cover.jpg",
+  },
+  slug: "blog-slug",
+  publicPageShortId: "BlgShrt1",
+  seoVisibility: "public",
+  articleType: "blog_article",
+  contentMode: "manual",
+  updatedAt: "2026-09-05T02:00:00.000Z",
+};
+
+describe("ArticleBlogEditor · 博客编辑（C-28）", () => {
+  it("渲染封面 URL 与 SEO 关键词字段，预填自 seoMetadata", () => {
+    render(<ArticleBlogEditor article={BLOG_ARTICLE} canWrite />);
+    expect(screen.getByDisplayValue("https://example.com/cover.jpg")).toBeTruthy();
+    expect(screen.getByDisplayValue("keyword-a, keyword-b")).toBeTruthy();
+  });
+
+  it("类型/内容模式读取真实字段值，而不是写死「博客文章」", () => {
+    render(<ArticleBlogEditor article={BLOG_ARTICLE} canWrite />);
+    const line = screen.getByTestId("article-blog-editor-type-line");
+    expect(line.textContent).toBe("类型: 博客文章 · 内容模式: 手动编辑");
+  });
+
+  it("没有小说/推广链接相关字段或书目跳转链接", () => {
+    render(<ArticleBlogEditor article={BLOG_ARTICLE} canWrite />);
+    expect(screen.queryByText(/查看所属书目/)).toBeNull();
+    expect(screen.queryByText(/推广链接/)).toBeNull();
+    expect(screen.queryByText(/模板/)).toBeNull();
+  });
+
+  it("保存时把 coverUrl/metaKeywords 与其它字段一起送入 updateArticleAction 的 patch（避免被整体替换的 seoMetadata 静默清空）", async () => {
+    editorActions.updateArticleAction.mockResolvedValue({ ok: true });
+    render(<ArticleBlogEditor article={BLOG_ARTICLE} canWrite />);
+    fireEvent.click(screen.getByText("保存"));
+    await vi.waitFor(() => expect(editorActions.updateArticleAction).toHaveBeenCalledTimes(1));
+    expect(editorActions.updateArticleAction.mock.calls[0]![0]).toMatchObject({
+      articleId: BLOG_ARTICLE.id,
+      expectedUpdatedAt: BLOG_ARTICLE.updatedAt,
+      patch: expect.objectContaining({
+        coverUrl: "https://example.com/cover.jpg",
+        metaKeywords: "keyword-a, keyword-b",
+      }),
+    });
+  });
+
+  it("canWrite=false 时保存按钮禁用", () => {
+    render(<ArticleBlogEditor article={BLOG_ARTICLE} canWrite={false} />);
+    expect((screen.getByText("保存") as HTMLButtonElement).disabled).toBe(true);
   });
 });
 

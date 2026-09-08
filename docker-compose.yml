@@ -157,6 +157,15 @@ services:
       # below, in this file's worker service block) -- only the scheduler
       # is enqueue-only and has no public-site read path to gate.
       FEATURE_ARTICLE_SEO_VISIBILITY: ${FEATURE_ARTICLE_SEO_VISIBILITY:-false}
+      # C-28 (规划_文章管理能力补齐_博客类型可见性换小说_2026-09-08.md §三/C-28):
+      # "新建博客" double-gate -- a genuine protected write, unlike
+      # FEATURE_ARTICLE_SEO_VISIBILITY above, but web-only: neither flag
+      # function has a worker or scheduler caller (grepped before adding,
+      # see src/lib/flags/feature-flags.ts's own comment on this pair), so
+      # this pair is registered here only, not in the worker/scheduler
+      # blocks below.
+      FEATURE_ARTICLE_BLOG: ${FEATURE_ARTICLE_BLOG:-false}
+      ARTICLE_BLOG_ALLOW_WRITE: ${ARTICLE_BLOG_ALLOW_WRITE:-false}
     volumes:
       - sitemap_static:/app/runtime/static-sitemaps
     secrets:
