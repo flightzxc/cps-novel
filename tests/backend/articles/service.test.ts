@@ -51,6 +51,8 @@ type ArticleRow = {
   seoMetadata: unknown;
   seoSchemaVersion: number;
   status: string;
+  /** C-25: `Article.seoVisibility` (C-24 axes foundation). */
+  seoVisibility: string;
   deletedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
@@ -189,7 +191,8 @@ class FakeArticlesDb {
       if (updatedAt.lt && row.updatedAt.getTime() >= updatedAt.lt.getTime()) return false;
     }
     // M7 `listArticles` filters — plain equality, same as Prisma's `where: { locale }` etc.
-    for (const key of ["locale", "status", "novelId", "templateId"] as const) {
+    // C-25 added `seoVisibility` to this same equality family.
+    for (const key of ["locale", "status", "novelId", "templateId", "seoVisibility"] as const) {
       if (where[key] !== undefined && row[key] !== where[key]) return false;
     }
     // C-19 `search`: each of `buildArticleSearchOr`'s OR branches is either a
@@ -259,6 +262,7 @@ class FakeArticlesDb {
       slug: row.slug,
       publicPageShortId: row.publicPageShortId,
       status: row.status,
+      seoVisibility: row.seoVisibility,
       summary: row.summary,
       updatedAt: row.updatedAt,
       createdAt: row.createdAt,
@@ -310,6 +314,7 @@ function seedArticle(db: FakeArticlesDb, overrides: Partial<ArticleRow> & { id: 
     seoMetadata: {},
     seoSchemaVersion: 1,
     status: "draft",
+    seoVisibility: "public",
     deletedAt: null,
     createdAt: new Date(NOW),
     updatedAt: new Date(NOW),
@@ -449,6 +454,94 @@ describe("updateArticleContent", () => {
     ).rejects.toBeInstanceOf(ArticleConflictError);
 
     expect(db.articles.find((candidate) => candidate.id === row.id)!.title).toBe(row.title);
+    expect(db.audits).toHaveLength(0);
+  });
+
+  /**
+   * C-25 (`规划_文章管理能力补齐_博客类型可见性换小说_2026-09-08.md` §三/C-25):
+   * "文章编辑写入服务在补丁里接受可选的 seoVisibility，落库前按取值域校验，写入
+   * 进既有的乐观锁事务，审计前后快照里带上该字段" — this test pins all four
+   * clauses at once.
+   */
+  it("接受可选的 seoVisibility，写入并在审计前后快照中都带上它", async () => {
+    const db = new FakeArticlesDb();
+    seedNovel(db, "novel-1");
+    const row = seedArticle(db, { id: "article-1", novelId: "novel-1", seoVisibility: "public" });
+    const stores = authFixture();
+    const guarded = await authorization(stores, "admin.article.update");
+
+    const updated = await updateArticleContent(
+      {
+        ...guarded,
+        articleId: row.id,
+        expectedUpdatedAt: row.updatedAt.toISOString(),
+        patch: {
+          title: row.title,
+          summary: row.summary ?? "",
+          body: row.body,
+          metaTitle: "",
+          metaDescription: "",
+          seoVisibility: "hidden",
+        },
+      },
+      deps(db, stores),
+    );
+
+    expect(updated.seoVisibility).toBe("hidden");
+    expect(db.audits).toHaveLength(1);
+    expect(db.audits[0]).toMatchObject({
+      beforeSnapshot: expect.objectContaining({ seoVisibility: "public" }),
+      afterSnapshot: expect.objectContaining({ seoVisibility: "hidden" }),
+    });
+  });
+
+  it("省略 seoVisibility 时保持原值不变（补丁字段缺省 = 不动该列）", async () => {
+    const db = new FakeArticlesDb();
+    seedNovel(db, "novel-1");
+    const row = seedArticle(db, { id: "article-1", novelId: "novel-1", seoVisibility: "seo_only" });
+    const stores = authFixture();
+    const guarded = await authorization(stores, "admin.article.update");
+
+    const updated = await updateArticleContent(
+      {
+        ...guarded,
+        articleId: row.id,
+        expectedUpdatedAt: row.updatedAt.toISOString(),
+        patch: { title: "New Title", summary: "", body: "<p>x</p>", metaTitle: "", metaDescription: "" },
+      },
+      deps(db, stores),
+    );
+
+    expect(updated.seoVisibility).toBe("seo_only");
+  });
+
+  it("非法 seoVisibility 被拒绝，不写入、不落审计", async () => {
+    const db = new FakeArticlesDb();
+    seedNovel(db, "novel-1");
+    const row = seedArticle(db, { id: "article-1", novelId: "novel-1", seoVisibility: "public" });
+    const stores = authFixture();
+    const guarded = await authorization(stores, "admin.article.update");
+
+    await expect(
+      updateArticleContent(
+        {
+          ...guarded,
+          articleId: row.id,
+          expectedUpdatedAt: row.updatedAt.toISOString(),
+          patch: {
+            title: row.title,
+            summary: row.summary ?? "",
+            body: row.body,
+            metaTitle: "",
+            metaDescription: "",
+            seoVisibility: "bogus",
+          },
+        },
+        deps(db, stores),
+      ),
+    ).rejects.toThrow("article_seo_visibility_invalid");
+
+    expect(db.articles.find((candidate) => candidate.id === row.id)!.seoVisibility).toBe("public");
     expect(db.audits).toHaveLength(0);
   });
 });
@@ -625,6 +718,34 @@ describe("listArticles (M7 ①)", () => {
 
     expect(page.items.map((item) => item.id)).toEqual(["tpl-a-article"]);
     expect(page.items[0]!.templateKey).toBe("tpl-a");
+  });
+
+  /**
+   * C-25 (`规划_文章管理能力补齐_博客类型可见性换小说_2026-09-08.md` §三/C-25):
+   * "文章列表入参新增可选的 seoVisibility" — exact-match filter, same shape as
+   * every other filter in this describe block.
+   */
+  it("按 seoVisibility 筛选：只返回该可见性的行", async () => {
+    const db = new FakeArticlesDb();
+    seedNovel(db, "novel-1");
+    seedArticle(db, { id: "pub-1", novelId: "novel-1", seoVisibility: "public" });
+    seedArticle(db, { id: "seo-only-1", novelId: "novel-1", seoVisibility: "seo_only", slug: "seo-only-1" });
+    seedArticle(db, { id: "hidden-1", novelId: "novel-1", seoVisibility: "hidden", slug: "hidden-1" });
+
+    const page = await listArticles(db.asPrismaClient(), { seoVisibility: "seo_only" });
+
+    expect(page.items.map((item) => item.id)).toEqual(["seo-only-1"]);
+    expect(page.total).toBe(1);
+  });
+
+  it("非法 seoVisibility 被 invalid_status 拒绝（复用同族错误码，本工单唯一允许的错误码复用）", async () => {
+    const db = new FakeArticlesDb();
+    await expect(listArticles(db.asPrismaClient(), { seoVisibility: "bogus" })).rejects.toMatchObject(
+      { code: "invalid_status" },
+    );
+    await expect(listArticles(db.asPrismaClient(), { seoVisibility: "bogus" })).rejects.toBeInstanceOf(
+      AdminContentQueryError,
+    );
   });
 
   it("组合筛选（locale + status）：两个条件都要满足", async () => {
@@ -886,6 +1007,21 @@ describe("listArticles · 投影新增字段 (C-20)", () => {
     expect(item.novel).toEqual({ id: "novel-1", title: "重生之名" });
     expect(item.templateName).toBe("标准模板");
     expect(item.templateKey).toBe("tpl-1");
+  });
+
+  /**
+   * C-25: "列表投影新增 seoVisibility；列表项类型新增可选字段" — pins that the
+   * new column reaches `ArticleListItem` (this is `article-list.tsx`'s "SEO
+   * 可见性" badge column's only data source).
+   */
+  it("投影包含 seoVisibility", async () => {
+    const db = new FakeArticlesDb();
+    seedNovel(db, "novel-1");
+    seedArticle(db, { id: "article-1", novelId: "novel-1", seoVisibility: "seo_only" });
+
+    const page = await listArticles(db.asPrismaClient());
+
+    expect(page.items[0]!.seoVisibility).toBe("seo_only");
   });
 
   it("无关联模板时 templateName 与 templateKey 都回退为 null", async () => {

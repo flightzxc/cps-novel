@@ -7,7 +7,7 @@ import { parseArticleSlugParam } from "@/lib/slug/article-path";
 import { checkNovelArticlePublicAccess } from "@/server/publication/access";
 import {
   buildPrimaryArticleWhere,
-  buildPublicArticleWhere,
+  buildPublicListArticleWhere,
   isPromoReady,
 } from "@/server/publication/visibility";
 import { getSiteSetting, type SiteSettingSnapshot } from "@/server/site-settings/service";
@@ -171,7 +171,11 @@ export async function listPublicArticles(
   locale: SiteLocale,
 ): Promise<NovelCardView[]> {
   const rows = await db.article.findMany({
-    where: buildPublicArticleWhere({ locale }),
+    // C-25: on-site listing excludes both `hidden` and `seo_only` — the
+    // stricter "list" fragment, distinct from `buildPublicArticleWhere`'s
+    // collectability fragment (sitemap/IndexNow/hreflang, which keep
+    // `seo_only`). See `@/server/publication/visibility.ts`'s header.
+    where: buildPublicListArticleWhere({ locale }),
     orderBy: [{ publishedAt: "desc" }, { id: "asc" }],
     take: PUBLIC_LIST_CAP,
     select: ARTICLE_CARD_SELECT,
@@ -196,7 +200,10 @@ export async function listPublicCategories(
   locale: SiteLocale,
 ): Promise<readonly PublicTaxonomyTag[]> {
   const rows = await db.article.findMany({
-    where: buildPublicArticleWhere({ locale }),
+    // C-25: same "list" fragment as `listPublicArticles` above — the
+    // category enumeration must not surface a category that only exists
+    // because of a `seo_only`/`hidden` Article that never appears on-site.
+    where: buildPublicListArticleWhere({ locale }),
     orderBy: [{ publishedAt: "desc" }, { id: "asc" }],
     take: PUBLIC_LIST_CAP,
     select: ARTICLE_CARD_SELECT,

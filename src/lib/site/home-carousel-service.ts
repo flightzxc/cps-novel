@@ -3,7 +3,7 @@ import type { PrismaClient } from "@prisma/client";
 import type { FeaturedEntry } from "@/features/public-ui/home/HomeScreen";
 import type { SiteLocale } from "@/lib/locale/locale-canonical";
 import { buildArticlePath } from "@/lib/slug/article-path";
-import { buildPublicArticleWhere, isPromoReady } from "@/server/publication/visibility";
+import { buildPublicListArticleWhere, isPromoReady } from "@/server/publication/visibility";
 
 import { toNovelDetailView, type PublicArticleDetailRecord } from "./mappers";
 import { listPreviewChapterRefs } from "./queries";
@@ -33,7 +33,10 @@ const SELECT = {
 } as const;
 
 async function fallbackRows(db: PrismaClient, locale: SiteLocale) {
-  return db.article.findMany({ where: { ...buildPublicArticleWhere({ locale }), novel: { status: "published", deletedAt: null, coverUrl: { not: null } } }, orderBy: [{ updatedAt: "desc" }, { publishedAt: "desc" }, { id: "asc" }], take: 500, select: SELECT });
+  // C-25: the carousel is a list surface (it is a home-page listing, not a
+  // detail/collectability boundary) — it uses the same stricter "list"
+  // fragment as `listPublicArticles`, excluding both `hidden` and `seo_only`.
+  return db.article.findMany({ where: { ...buildPublicListArticleWhere({ locale }), novel: { status: "published", deletedAt: null, coverUrl: { not: null } } }, orderBy: [{ updatedAt: "desc" }, { publishedAt: "desc" }, { id: "asc" }], take: 500, select: SELECT });
 }
 
 async function toFeatured(db: PrismaClient, row: Awaited<ReturnType<typeof fallbackRows>>[number]): Promise<HomeCarouselItem | null> {
@@ -47,7 +50,7 @@ async function toFeatured(db: PrismaClient, row: Awaited<ReturnType<typeof fallb
 
 export async function getHomeCarouselItems(locale: SiteLocale, db?: PrismaClient): Promise<HomeCarouselItem[]> {
   if (!db) return [];
-  const serving = await db.homeCarouselServing.findMany({ where: { locale, article: buildPublicArticleWhere({ locale }) }, orderBy: { position: "asc" }, take: 5, select: { article: { select: SELECT } } });
+  const serving = await db.homeCarouselServing.findMany({ where: { locale, article: buildPublicListArticleWhere({ locale }) }, orderBy: { position: "asc" }, take: 5, select: { article: { select: SELECT } } });
   const rows = serving.length > 0 ? serving.map((entry) => entry.article) : await fallbackRows(db, locale);
   const unique = new Set<string>();
   const result: HomeCarouselItem[] = [];

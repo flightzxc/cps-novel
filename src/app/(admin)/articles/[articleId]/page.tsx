@@ -39,6 +39,8 @@ export default async function ArticleEditPage({ params }: { params: Promise<{ ar
       seoMetadata: true,
       slug: true,
       publicPageShortId: true,
+      // C-25: read by `ArticleEditor`'s three-pill SEO 可见性 selector below.
+      seoVisibility: true,
       updatedAt: true,
       novel: { select: { id: true, title: true } },
     },

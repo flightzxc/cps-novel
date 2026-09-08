@@ -31,6 +31,7 @@ import type { Prisma, PrismaClient } from "@prisma/client";
 
 import {
   buildPrimaryArticleWhere,
+  isHiddenFromPublicView,
   isNoIndexRemovalState,
   isPublicationStatePublic,
   isPubliclyAccessible,
@@ -56,14 +57,17 @@ export type NovelArticleAccessInput = {
  * partial unique index `article(locale, slug) WHERE deleted_at IS NULL`
  * (docs/governance/database-governance.md §5 item 5) — and classifies public
  * accessibility. Precedence (most severe first): rights-blocked always wins;
- * then full public access; then the stable noindex removal state (either
- * side literally `unpublished`, or both sides `published` but the promo link
+ * then `seoVisibility: "hidden"` (C-25 — a plain 404, checked before public
+ * access so a hidden-but-otherwise-published Article never renders); then
+ * full public access; then the stable noindex removal state (either side
+ * literally `unpublished`, or both sides `published` but the promo link
  * degraded after the publish-time gate passed); everything else (draft/ready,
  * or simply no matching row) is a plain 404.
  */
 export async function checkNovelArticlePublicAccess(
   db: PrismaClient | Prisma.TransactionClient,
   input: NovelArticleAccessInput,
+  env: NodeJS.ProcessEnv = process.env,
 ): Promise<NovelArticleAccessResult> {
   const article = await db.article.findFirst({
     where: buildPrimaryArticleWhere({ locale: input.locale, slug: input.slug }),
@@ -71,6 +75,7 @@ export async function checkNovelArticlePublicAccess(
       id: true,
       novelId: true,
       status: true,
+      seoVisibility: true,
       novel: { select: { status: true } },
       promoLink: { select: { status: true, webUrl: true, appUrl: true } },
     },
@@ -82,6 +87,13 @@ export async function checkNovelArticlePublicAccess(
 
   if (isRightsBlocked(novelState, articleState)) {
     return { kind: "takedown" };
+  }
+  // C-25: hidden is a pure 404 — deliberately checked before
+  // `isPubliclyAccessible` so a published, promo-ready Article that has been
+  // marked `hidden` still 404s instead of rendering. See `visibility.ts`'s
+  // `isHiddenFromPublicView` doc comment for why this is not "noindex".
+  if (isHiddenFromPublicView(article, env)) {
+    return { kind: "not_found" };
   }
   if (isPubliclyAccessible(novelState, articleState, article.promoLink)) {
     return { kind: "published", articleId: article.id, novelId: article.novelId };

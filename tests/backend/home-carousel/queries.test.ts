@@ -12,6 +12,7 @@ import type { PrismaClient } from "@prisma/client";
 import { describe, expect, it } from "vitest";
 
 import { getHomeCarouselItems } from "@/lib/site/home-carousel-service";
+import { buildPublicListArticleWhere } from "@/server/publication/visibility";
 
 type PromoLink = { status: string; webUrl: string | null; appUrl: string | null; publicRedirectCode: string | null };
 type Row = {
@@ -51,16 +52,23 @@ class FakePublicCarouselDb {
   articleRows: Row[] = [];
   lastArticleFindManyTake: number | null = null;
   articleFindManyCallCount = 0;
+  /** C-25: captures the `where` each call site actually sent Prisma, for the where-fragment assertions below. */
+  lastArticleFindManyWhere: unknown = null;
+  lastServingFindManyWhere: unknown = null;
 
   private client() {
     return {
       homeCarouselServing: {
-        findMany: async () => this.servingRows.map((article) => ({ article })),
+        findMany: async (args: { where?: { article?: unknown } }) => {
+          this.lastServingFindManyWhere = args.where?.article ?? null;
+          return this.servingRows.map((article) => ({ article }));
+        },
       },
       article: {
-        findMany: async (args: { take: number }) => {
+        findMany: async (args: { take: number; where?: unknown }) => {
           this.articleFindManyCallCount += 1;
           this.lastArticleFindManyTake = args.take;
+          this.lastArticleFindManyWhere = args.where ?? null;
           return this.articleRows;
         },
       },
@@ -137,5 +145,33 @@ describe("getHomeCarouselItems (src/lib/site/home-carousel-service.ts)", () => {
     db.articleRows = Array.from({ length: 8 }, (_, index) => row({ id: `a${index}`, novelId: `novel-${index}` }));
     const result = await getHomeCarouselItems("en", db.asPrismaClient());
     expect(result).toHaveLength(5);
+  });
+
+  /**
+   * C-25 (`规划_文章管理能力补齐_博客类型可见性换小说_2026-09-08.md` §三/C-25, 🟡
+   * risk: "轮播的两个调用点容易漏。轮播不在「列表页」的直觉范围内，但它在首页露出，
+   * 属于列表语义"): both the serving-snapshot query and the recency-fallback
+   * scan must use the same stricter `buildPublicListArticleWhere` fragment
+   * `listPublicArticles` uses — not `buildPublicArticleWhere`'s collectability
+   * fragment, which would let a `seo_only` Article slip onto the home page.
+   */
+  it("both the serving query and the recency-fallback scan use buildPublicListArticleWhere (not the collectability fragment)", async () => {
+    const db = new FakePublicCarouselDb();
+    db.servingRows = [row({ id: "a1", novelId: "novel-a" })];
+    await getHomeCarouselItems("en", db.asPrismaClient());
+    expect(db.lastServingFindManyWhere).toEqual(buildPublicListArticleWhere({ locale: "en" }));
+
+    const fallbackDb = new FakePublicCarouselDb();
+    fallbackDb.servingRows = [];
+    fallbackDb.articleRows = [row({ id: "a1", novelId: "novel-a" })];
+    await getHomeCarouselItems("en", fallbackDb.asPrismaClient());
+    const fallbackWhere = fallbackDb.lastArticleFindManyWhere as { novel?: unknown };
+    // fallbackRows also ANDs in a `novel: {...}` clause alongside the spread
+    // list-fragment keys — assert the list-fragment's own keys are present
+    // rather than exact-equality (this call site merges two objects rather
+    // than nesting a single `AND`, see `home-carousel-service.ts`'s own
+    // `fallbackRows`).
+    const listFragment = buildPublicListArticleWhere({ locale: "en" }) as { AND: unknown };
+    expect(fallbackWhere).toMatchObject({ AND: listFragment.AND });
   });
 });

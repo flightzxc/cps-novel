@@ -11,6 +11,8 @@ function row(overrides: {
   articleStatus?: string;
   novelStatus?: string;
   promoLink?: { status: string; webUrl: string | null; appUrl: string | null } | null;
+  /** C-25: `Article.seoVisibility`; omitted defaults to the pre-C-25 shape (no column value at all). */
+  seoVisibility?: string;
 }) {
   return {
     id: "article-1",
@@ -21,6 +23,7 @@ function row(overrides: {
       "promoLink" in overrides
         ? overrides.promoLink
         : { status: "fetched", webUrl: "https://a", appUrl: null },
+    ...("seoVisibility" in overrides ? { seoVisibility: overrides.seoVisibility } : {}),
   };
 }
 
@@ -106,5 +109,45 @@ describe("checkNovelArticlePublicAccess", () => {
     const db = dbReturning(row({ novelStatus: "ready" }));
     const result = await checkNovelArticlePublicAccess(db, { locale: "en", slug: "x" });
     expect(result).toEqual({ kind: "not_found" });
+  });
+
+  /**
+   * C-25 (`规划_文章管理能力补齐_博客类型可见性换小说_2026-09-08.md` §三/C-25):
+   * "公开访问判定函数在 hidden 时返回「未找到」（纯 404），置于权利阻断判定之后、
+   * 公开可达判定之前" — a `hidden` Article is a plain 404, not the
+   * `unavailable` (stable removal page) `isNoIndexRemovalState` produces, even
+   * though the row is otherwise fully published + promo-ready.
+   */
+  describe("C-25: seoVisibility=hidden", () => {
+    // Same `as unknown as NodeJS.ProcessEnv` convention as this repo's other
+    // env-override tests (e.g. `tests/ui/admin-two-factor-enforcement-switch.test.ts`):
+    // Next.js's global augmentation makes `NodeJS.ProcessEnv` require `NODE_ENV`,
+    // which a plain single-key test literal never carries.
+    const FLAG_ON = { FEATURE_ARTICLE_SEO_VISIBILITY: "true" } as unknown as NodeJS.ProcessEnv;
+    const FLAG_OFF = {} as unknown as NodeJS.ProcessEnv;
+
+    it("returns not_found for an otherwise fully publishable article when the flag is on", async () => {
+      const db = dbReturning(row({ seoVisibility: "hidden" }));
+      const result = await checkNovelArticlePublicAccess(db, { locale: "en", slug: "x" }, FLAG_ON);
+      expect(result).toEqual({ kind: "not_found" });
+    });
+
+    it("has no effect while the flag is off (pre-C-25 behavior — still published)", async () => {
+      const db = dbReturning(row({ seoVisibility: "hidden" }));
+      const result = await checkNovelArticlePublicAccess(db, { locale: "en", slug: "x" }, FLAG_OFF);
+      expect(result).toEqual({ kind: "published", articleId: "article-1", novelId: "novel-1" });
+    });
+
+    it("seo_only is NOT treated as hidden — still published (this is the 🔴 risk case: swapping this would turn seo_only into hidden)", async () => {
+      const db = dbReturning(row({ seoVisibility: "seo_only" }));
+      const result = await checkNovelArticlePublicAccess(db, { locale: "en", slug: "x" }, FLAG_ON);
+      expect(result).toEqual({ kind: "published", articleId: "article-1", novelId: "novel-1" });
+    });
+
+    it("takedown still wins over hidden (rights-blocked is checked first)", async () => {
+      const db = dbReturning(row({ articleStatus: "takedown", seoVisibility: "hidden" }));
+      const result = await checkNovelArticlePublicAccess(db, { locale: "en", slug: "x" }, FLAG_ON);
+      expect(result).toEqual({ kind: "takedown" });
+    });
   });
 });

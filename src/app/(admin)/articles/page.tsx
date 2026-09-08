@@ -73,6 +73,8 @@ type SearchParams = {
   templateId?: string;
   search?: string;
   canonicalTagId?: string;
+  /** C-25: `Article.seoVisibility` exact-match filter. */
+  seoVisibility?: string;
 };
 
 /**
@@ -109,6 +111,7 @@ export default async function ArticlesPage({
         templateId: params.templateId || undefined,
         search: params.search || undefined,
         canonicalTagId: params.canonicalTagId || undefined,
+        seoVisibility: params.seoVisibility || undefined,
       });
       rows = result.items;
       page = result.page;
@@ -143,6 +146,7 @@ export default async function ArticlesPage({
     novelId: params.novelId,
     templateId: params.templateId,
     canonicalTagId: params.canonicalTagId,
+    seoVisibility: params.seoVisibility,
   };
 
   return (

@@ -1,7 +1,7 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
 
 import { ADMIN_CONTENT_MAX_SEARCH_LENGTH, type AdminContentPage } from "@/domain/admin-content";
-import { ARTICLE_STATUSES, type ArticleStatus } from "@/domain/database-statuses";
+import { ARTICLE_SEO_VISIBILITIES, ARTICLE_STATUSES, type ArticleSeoVisibility, type ArticleStatus } from "@/domain/database-statuses";
 import { SITE_LOCALES } from "@/lib/locale/locale-canonical";
 import { buildNovelTemplateValues, isTemplateRenderError, renderArticleDraft } from "@/lib/seo/template";
 import { parseArticleSlugParam } from "@/lib/slug/article-path";
@@ -70,12 +70,29 @@ export type ArticleEditInput = {
   body: string;
   metaTitle?: string;
   metaDescription?: string;
+  /**
+   * C-25 (`规划_文章管理能力补齐_博客类型可见性换小说_2026-09-08.md` §三/C-25):
+   * optional per this round's "contract types gain optional fields only"
+   * discipline. The editor's three-pill selector always sends the article's
+   * current value (never omits it), but an existing/future caller that does
+   * not know about this field must keep compiling and keep the column
+   * untouched — see `updateArticleContent`'s `data` assembly below.
+   */
+  seoVisibility?: string;
 };
 
 function text(value: string, code: string, max?: number) {
   const normalized = value.trim();
   if (!normalized || (max !== undefined && normalized.length > max)) throw new Error(code);
   return normalized;
+}
+
+/** Same "throw a bare `Error(code)`" convention as {@link text} above — `_actions.ts`'s `writeErrorCode` folds any code it does not specifically recognize into the generic `article_update_failed` fallback, same as an invalid title/body already does. */
+function validateSeoVisibility(value: string): ArticleSeoVisibility {
+  if (!ARTICLE_SEO_VISIBILITIES.includes(value as ArticleSeoVisibility)) {
+    throw new Error("article_seo_visibility_invalid");
+  }
+  return value as ArticleSeoVisibility;
 }
 
 async function authorize(
@@ -113,6 +130,13 @@ export async function updateArticleContent(input: {
       ...(input.patch.metaTitle?.trim() ? { metaTitle: input.patch.metaTitle.trim() } : {}),
       ...(input.patch.metaDescription?.trim() ? { metaDescription: input.patch.metaDescription.trim() } : {}),
     } as Prisma.InputJsonValue,
+    // C-25: omitted entirely (not even `undefined`-spread) when the caller
+    // does not send it, so the column is left untouched rather than reset to
+    // a default — same "optional patch field, absent = don't touch" shape as
+    // `metaTitle`/`metaDescription` above.
+    ...(input.patch.seoVisibility !== undefined
+      ? { seoVisibility: validateSeoVisibility(input.patch.seoVisibility) }
+      : {}),
   };
   // Same narrow-window CAS discipline as `site-settings/service.ts`'s
   // `updateAdminSiteSetting`: Postgres timestamptz(6) can carry sub-millisecond
@@ -120,7 +144,7 @@ export async function updateArticleContent(input: {
   // `[expected, expected + 1ms)` window rather than strict equality.
   const expectedExclusive = new Date(expected.getTime() + 1);
   return deps.db.$transaction(async (tx) => {
-    const before = await tx.article.findFirstOrThrow({ where: { id: input.articleId, deletedAt: null }, select: { id: true, title: true, summary: true, templateId: true, updatedAt: true } });
+    const before = await tx.article.findFirstOrThrow({ where: { id: input.articleId, deletedAt: null }, select: { id: true, title: true, summary: true, templateId: true, seoVisibility: true, updatedAt: true } });
     const now = deps.now ?? new Date();
     const updatedAt = new Date(Math.max(now.getTime(), expected.getTime() + 1));
     const write = await tx.article.updateMany({
@@ -132,8 +156,8 @@ export async function updateArticleContent(input: {
     await tx.operationAudit.create({ data: {
       actorType: "admin", actorId: context.identity.id, action: "article.update",
       entityType: "Article", entityId: row.id, requestId: input.requestId,
-      beforeSnapshot: { title: before.title, summary: before.summary, templateId: before.templateId },
-      afterSnapshot: { title: row.title, summary: row.summary, templateId: row.templateId },
+      beforeSnapshot: { title: before.title, summary: before.summary, templateId: before.templateId, seoVisibility: before.seoVisibility },
+      afterSnapshot: { title: row.title, summary: row.summary, templateId: row.templateId, seoVisibility: row.seoVisibility },
     } });
     return row;
   });
@@ -289,6 +313,13 @@ export type ArticleListItem = {
   novel?: { id: string; title: string };
   /** Up to `ARTICLE_CATEGORY_DISPLAY_LIMIT` display names from the novel's Canonical Tag assignments, de-duplicated by tag id. Empty when the novel has none. */
   canonicalTags?: readonly string[];
+  /**
+   * C-25 (`规划_文章管理能力补齐_博客类型可见性换小说_2026-09-08.md` §三/C-25):
+   * `Article.seoVisibility`, for the list's "SEO 可见性" badge column. Optional
+   * per this round's additive-contract discipline, same as the C-20 fields
+   * above.
+   */
+  seoVisibility?: string;
 };
 
 export type ArticleListInput = {
@@ -302,6 +333,8 @@ export type ArticleListInput = {
   search?: string;
   /** C-19: EXISTS-style filter on the article's novel's Canonical Tag assignments — see {@link listArticles}'s `where.novel`. */
   canonicalTagId?: string;
+  /** C-25: exact-match filter on `Article.seoVisibility` (`public`/`seo_only`/`hidden`). */
+  seoVisibility?: string;
 };
 
 export const ARTICLE_LIST_DEFAULT_PAGE_SIZE = 20;
@@ -327,6 +360,7 @@ type NormalizedArticleList = {
   templateId?: string;
   search?: string;
   canonicalTagId?: string;
+  seoVisibility?: ArticleSeoVisibility;
 };
 
 /**
@@ -430,6 +464,12 @@ function normalizeArticleListInput(input: ArticleListInput = {}): NormalizedArti
   if (input.locale !== undefined && !SITE_LOCALES.includes(input.locale as never)) {
     throw new AdminContentQueryError("invalid_locale", "Locale is not registered");
   }
+  // C-25: reuses `invalid_status` (same code family the plan calls for —
+  // "status 取值未登记" reads equally well for a SEO-visibility value) rather
+  // than minting a new error code, per this round's contract discipline.
+  if (input.seoVisibility !== undefined && !ARTICLE_SEO_VISIBILITIES.includes(input.seoVisibility as ArticleSeoVisibility)) {
+    throw new AdminContentQueryError("invalid_status", "Article SEO visibility is not registered");
+  }
   const novelId = input.novelId !== undefined ? requireArticleUuid(input.novelId) : undefined;
   const templateId = input.templateId !== undefined ? requireArticleUuid(input.templateId) : undefined;
   // C-19: same `invalid_search` code and `ADMIN_CONTENT_MAX_SEARCH_LENGTH`
@@ -457,6 +497,7 @@ function normalizeArticleListInput(input: ArticleListInput = {}): NormalizedArti
     templateId,
     search: trimmedSearch || undefined,
     canonicalTagId,
+    seoVisibility: input.seoVisibility as ArticleSeoVisibility | undefined,
   };
 }
 
@@ -479,6 +520,7 @@ const ARTICLE_LIST_SELECT = {
   summary: true,
   updatedAt: true,
   createdAt: true,
+  seoVisibility: true,
   template: { select: { templateKey: true, templateName: true } },
   // C-20: 书目 column (id + title, links to `/novels/{id}`) and 分类 column
   // (via the novel's Canonical Tag assignments — see the analysis doc's §零
@@ -550,6 +592,12 @@ export async function listArticles(
     ...(normalized.status ? { status: normalized.status } : {}),
     ...(normalized.novelId ? { novelId: normalized.novelId } : {}),
     ...(normalized.templateId ? { templateId: normalized.templateId } : {}),
+    // C-25: exact-match filter on the admin's own SEO-visibility axis — not
+    // to be confused with the public-site "list"/"collectability" where
+    // fragments in `@/server/publication/visibility.ts`, which answer a
+    // different question (what the public site may show) than this one
+    // (what the operator asked to see in the admin list).
+    ...(normalized.seoVisibility ? { seoVisibility: normalized.seoVisibility } : {}),
     ...(searchOr ? { OR: searchOr } : {}),
     // C-19: "分类" filter — the article has no category column of its own
     // (see the analysis doc's §零 third correction), so this reads as an
@@ -584,6 +632,7 @@ export async function listArticles(
     templateName: row.template?.templateName ?? null,
     novel: { id: row.novel.id, title: row.novel.title },
     canonicalTags: articleCanonicalTagNames(row.novel.canonicalTags),
+    seoVisibility: row.seoVisibility,
   }));
   return {
     items,

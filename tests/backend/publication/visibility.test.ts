@@ -1,10 +1,13 @@
+import type { Prisma } from "@prisma/client";
 import { describe, expect, it } from "vitest";
 
 import {
   buildPrimaryArticleWhere,
   buildPrimaryNovelWhere,
   buildPublicArticleWhere,
+  buildPublicListArticleWhere,
   buildPublicNovelWhere,
+  isHiddenFromPublicView,
   isIndexNowEligible,
   isNoIndexRemovalState,
   isPromoReady,
@@ -15,6 +18,7 @@ import {
   PRIMARY_NOVEL_RECORD,
   PUBLIC_ARTICLE_RECORD,
   PUBLIC_NOVEL_RECORD,
+  type ArticleSeoVisibilityState,
   type PromoLinkReadinessState,
 } from "@/server/publication/visibility";
 
@@ -194,5 +198,97 @@ describe("DB pre-filter where-fragment helpers", () => {
     });
     expect(PUBLIC_ARTICLE_RECORD.status).toBe("published");
     expect(PUBLIC_ARTICLE_RECORD.promoLink).toEqual({ is: { status: "fetched" } });
+  });
+});
+
+/**
+ * C-25 (`规划_文章管理能力补齐_博客类型可见性换小说_2026-09-08.md` §三/C-25):
+ * "这是本工单的承重测试，务必写成表驱动，把三个取值 × 三个层次九格全覆盖" — the
+ * three `Article.seoVisibility` values (`public`/`seo_only`/`hidden`) against
+ * the three layers this module's own header distinguishes:
+ *   - 详情层 (`isHiddenFromPublicView`, consumed by `access.ts`'s
+ *     `checkNovelArticlePublicAccess`): only `hidden` is unreachable.
+ *   - 列表层 (`buildPublicListArticleWhere`, consumed by `queries.ts`'s
+ *     `listPublicArticles`/`listPublicCategories` and the home carousel):
+ *     both `hidden` and `seo_only` are excluded — only `public` is listed.
+ *   - 收录层 (`buildPublicArticleWhere`, consumed by `sitemap.ts`/
+ *     `eligibility.ts`): only `hidden` is excluded — `seo_only` stays
+ *     collectable, same as `public`.
+ *
+ * The 🔴 risk this whole test exists for: swapping which layer excludes
+ * `seo_only` turns "仅 SEO" into "隐藏" (worse than not shipping the feature —
+ * search engines index a page that then 404s on click-through).
+ */
+describe("C-25: SEO 可见性三层真值表 (public / seo_only / hidden × 详情 / 列表 / 收录)", () => {
+  const FLAG_ON = Object.freeze({ FEATURE_ARTICLE_SEO_VISIBILITY: "true" }) as unknown as NodeJS.ProcessEnv;
+  const FLAG_OFF = Object.freeze({}) as unknown as NodeJS.ProcessEnv;
+  const VALUES = ["public", "seo_only", "hidden"] as const;
+
+  /**
+   * Reads the `seoVisibility` sub-clause off `{AND:[base, extra]}`'s `base`
+   * half and evaluates it the same way Prisma's `WhereInput` would against
+   * one candidate value: no clause at all (flag off) means unconstrained
+   * (every value passes), a bare string clause is equality, and `{ not }` is
+   * inequality — the exact two shapes `buildPublicArticleWhere`/
+   * `buildPublicListArticleWhere` emit.
+   */
+  function seoVisibilityClauseAllows(where: Prisma.ArticleWhereInput, value: string): boolean {
+    const base = (where as { AND: [Record<string, unknown>, unknown] }).AND[0];
+    const clause = base.seoVisibility as string | { not?: string } | undefined;
+    if (clause === undefined) return true;
+    if (typeof clause === "string") return clause === value;
+    return clause.not !== value;
+  }
+
+  const EXPECTED_WHEN_ON: Readonly<Record<(typeof VALUES)[number], { detail: boolean; list: boolean; collect: boolean }>> =
+    Object.freeze({
+      public: { detail: true, list: true, collect: true },
+      seo_only: { detail: true, list: false, collect: true },
+      hidden: { detail: false, list: false, collect: false },
+    });
+
+  it.each(VALUES)("flag 开启时，%s 的三层可达性符合契约", (value) => {
+    const article: ArticleSeoVisibilityState = { seoVisibility: value };
+    const detail = !isHiddenFromPublicView(article, FLAG_ON);
+    const list = seoVisibilityClauseAllows(buildPublicListArticleWhere({}, FLAG_ON), value);
+    // Collectability is the DB pre-filter clause AND the app-layer recheck
+    // together (`sitemap.ts`'s `isVisibleCandidate`, `eligibility.ts`'s
+    // `isNovelIndexNowEligible`, both of which call `isHiddenFromPublicView`
+    // in addition to relying on the `where` fragment) — see those files' own
+    // dedicated tests for the two-sided defense-in-depth proof; this table
+    // only needs the composed boolean to be right.
+    const collect = seoVisibilityClauseAllows(buildPublicArticleWhere({}, FLAG_ON), value)
+      && !isHiddenFromPublicView(article, FLAG_ON);
+    expect({ detail, list, collect }).toEqual(EXPECTED_WHEN_ON[value]);
+  });
+
+  it.each(VALUES)(
+    "flag 关闭时，%s 一律按 public 处理（详情可达、列表可见、可收录——即 C-25 之前的行为）",
+    (value) => {
+      const article: ArticleSeoVisibilityState = { seoVisibility: value };
+      expect(isHiddenFromPublicView(article, FLAG_OFF)).toBe(false);
+      expect(seoVisibilityClauseAllows(buildPublicListArticleWhere({}, FLAG_OFF), value)).toBe(true);
+      expect(seoVisibilityClauseAllows(buildPublicArticleWhere({}, FLAG_OFF), value)).toBe(true);
+    },
+  );
+
+  it("flag 关闭时两个片段的形状与 C-25 之前逐字相同（未定义 seoVisibility 子句）", () => {
+    expect(buildPublicArticleWhere({ locale: "en" }, FLAG_OFF)).toEqual({
+      AND: [PUBLIC_ARTICLE_RECORD, { locale: "en" }],
+    });
+    expect(buildPublicListArticleWhere({ locale: "en" }, FLAG_OFF)).toEqual({
+      AND: [PUBLIC_ARTICLE_RECORD, { locale: "en" }],
+    });
+  });
+
+  it("列表层片段比收录层片段更严格：收录层保留 seo_only，列表层不保留", () => {
+    const listWhere = buildPublicListArticleWhere({}, FLAG_ON) as { AND: [Record<string, unknown>, unknown] };
+    const collectWhere = buildPublicArticleWhere({}, FLAG_ON) as { AND: [Record<string, unknown>, unknown] };
+    expect(listWhere.AND[0]).toMatchObject({ seoVisibility: "public" });
+    expect(collectWhere.AND[0]).toMatchObject({ seoVisibility: { not: "hidden" } });
+  });
+
+  it("isHiddenFromPublicView 缺省值（未携带 seoVisibility 字段）按未隐藏处理", () => {
+    expect(isHiddenFromPublicView({}, FLAG_ON)).toBe(false);
   });
 });

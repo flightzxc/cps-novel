@@ -38,6 +38,8 @@
  */
 import type { Prisma } from "@prisma/client";
 
+import { isArticleSeoVisibilityEnabled } from "@/lib/flags";
+
 // ---------------------------------------------------------------------------
 // Narrow input shapes. Callers pass whatever Prisma `select` projection they
 // already have; these types intentionally accept a structural subset rather
@@ -50,6 +52,19 @@ export type NovelPublicationState = {
 
 export type ArticlePublicationState = {
   readonly status: string;
+};
+
+/**
+ * C-25: `Article.seoVisibility` (C-24 axes foundation) as a structural
+ * subset, same discipline as {@link ArticlePublicationState} above. Optional
+ * (not `readonly seoVisibility: string`) so every existing caller that builds
+ * an `ArticlePublicationState`-shaped literal without this field (this
+ * module's own tests included) keeps compiling — per this round's "contract
+ * types gain optional fields only" discipline. A missing value reads as "not
+ * hidden", i.e. today's behavior.
+ */
+export type ArticleSeoVisibilityState = {
+  readonly seoVisibility?: string;
 };
 
 export type PromoLinkReadinessState = {
@@ -162,6 +177,35 @@ export function isIndexNowEligible(
   return isPubliclyAccessible(novel, article, promoLink);
 }
 
+/**
+ * C-25 (`规划_文章管理能力补齐_博客类型可见性换小说_2026-09-08.md` §三/C-25):
+ * true only when an Article's `seoVisibility` is `hidden` AND
+ * `FEATURE_ARTICLE_SEO_VISIBILITY` is on. `hidden` means "unreachable on the
+ * public site" project-wide — 404 at the detail boundary
+ * (`access.ts`'s `checkNovelArticlePublicAccess`), excluded from sitemap
+ * (`@/lib/seo/sitemap.ts`'s `isVisibleCandidate`), and excluded from IndexNow
+ * (`@/lib/indexnow/eligibility.ts`'s `isNovelIndexNowEligible`) — this is the
+ * one place all three callers ask the question, per this module's header
+ * discipline against reimplementing the same predicate at each boundary.
+ *
+ * Deliberately NOT "CPS's hidden = noindex" (CPS's dropdown label says
+ * `noindex` but no CPS code path ever emits it — see this file's header and
+ * `docs/governance/database-governance.md` §4's `seo_visibility` row). This
+ * project implements the behavior CPS's blog side actually has (404 + excluded
+ * from sitemap/IndexNow), not the behavior its label merely promises.
+ *
+ * While the flag is off, every Article reads as not-hidden regardless of its
+ * actual column value — see `@/lib/flags`'s `isArticleSeoVisibilityEnabled`
+ * doc comment for why ("后台先行、公开后开").
+ */
+export function isHiddenFromPublicView(
+  article: ArticleSeoVisibilityState,
+  env: NodeJS.ProcessEnv = process.env,
+): boolean {
+  if (!isArticleSeoVisibilityEnabled(env)) return false;
+  return article.seoVisibility === "hidden";
+}
+
 // ---------------------------------------------------------------------------
 // DB pre-filter where-fragment helpers (composable, CPS drama-query-helpers
 // pattern). These are cheap, index-friendly SUPERSETS meant to shrink a
@@ -216,8 +260,50 @@ export function buildPrimaryArticleWhere(
   return { AND: [PRIMARY_ARTICLE_RECORD, extra] };
 }
 
+/**
+ * C-25: the "collectability" layer — everything that is allowed to be
+ * discovered/collected by a search engine (sitemap emission, IndexNow
+ * submission, hreflang sibling advertising), which per this round's contract
+ * excludes `hidden` but keeps `seo_only` (CPS's blog-side "仅 SEO" semantics:
+ * indexable, in sitemap, just not on-site listed — see this module's header
+ * and `docs/governance/database-governance.md` §4's `seo_visibility` row).
+ *
+ * `buildPublicArticleWhere` used to be this project's only public-record
+ * fragment, shared by list pages, the home carousel, sitemap candidates, and
+ * hreflang siblings alike. C-25 splits it: this function keeps that name and
+ * stays the fragment for the collectability callers (`@/lib/seo/sitemap.ts`,
+ * `@/lib/seo/novel-hreflang.ts`); on-site listing moved to the new, stricter
+ * {@link buildPublicListArticleWhere} below. While
+ * `FEATURE_ARTICLE_SEO_VISIBILITY` is off, this degrades to exactly its
+ * pre-C-25 shape (`PUBLIC_ARTICLE_RECORD` unmodified) — see `@/lib/flags`'s
+ * `isArticleSeoVisibilityEnabled` doc comment.
+ */
 export function buildPublicArticleWhere(
   extra: Prisma.ArticleWhereInput = {},
+  env: NodeJS.ProcessEnv = process.env,
 ): Prisma.ArticleWhereInput {
-  return { AND: [PUBLIC_ARTICLE_RECORD, extra] };
+  const base: Prisma.ArticleWhereInput = isArticleSeoVisibilityEnabled(env)
+    ? { ...PUBLIC_ARTICLE_RECORD, seoVisibility: { not: "hidden" } }
+    : PUBLIC_ARTICLE_RECORD;
+  return { AND: [base, extra] };
+}
+
+/**
+ * C-25: the "on-site listing" layer — home/browse/category listing and the
+ * home carousel (candidate pool and current serving snapshot alike; the
+ * carousel is a list surface even though it is not literally `/browse`).
+ * Stricter than {@link buildPublicArticleWhere}: excludes both `hidden` AND
+ * `seo_only`, matching CPS's blog-side "仅 SEO 不进列表" semantics. While
+ * `FEATURE_ARTICLE_SEO_VISIBILITY` is off, this degrades to exactly
+ * `buildPublicArticleWhere`'s pre-C-25 shape — same rationale as that
+ * function's doc comment.
+ */
+export function buildPublicListArticleWhere(
+  extra: Prisma.ArticleWhereInput = {},
+  env: NodeJS.ProcessEnv = process.env,
+): Prisma.ArticleWhereInput {
+  const base: Prisma.ArticleWhereInput = isArticleSeoVisibilityEnabled(env)
+    ? { ...PUBLIC_ARTICLE_RECORD, seoVisibility: "public" }
+    : PUBLIC_ARTICLE_RECORD;
+  return { AND: [base, extra] };
 }

@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { buttonClassName } from "@/components/ui/button";
+import type { ArticleSeoVisibility } from "@/domain/database-statuses";
+import { ARTICLE_SEO_VISIBILITY_OPTIONS } from "@/features/admin-ui/content-view";
 import { updateArticleAction } from "../_actions";
 
 /**
@@ -18,17 +20,27 @@ import { updateArticleAction } from "../_actions";
  * lock and every `defaultValue` field at once rather than requiring a
  * render-phase sync effect for just this one field.
  */
-export function ArticleEditor({ article, canWrite }: { article: { id: string; title: string; summary: string | null; body: string; seoMetadata: unknown; slug: string; publicPageShortId: string; updatedAt: string }; canWrite: boolean }) {
+export function ArticleEditor({ article, canWrite }: { article: { id: string; title: string; summary: string | null; body: string; seoMetadata: unknown; slug: string; publicPageShortId: string; seoVisibility: string; updatedAt: string }; canWrite: boolean }) {
   const router = useRouter();
   const meta = article.seoMetadata && typeof article.seoMetadata === "object" && !Array.isArray(article.seoMetadata) ? article.seoMetadata as Record<string, unknown> : {};
   const [preview, setPreview] = useState(article.body);
   const [message, setMessage] = useState<string | null>(null);
   const [expectedUpdatedAt] = useState(article.updatedAt);
+  // C-25: the three-pill selector below is a button group, not a native
+  // form control with its own `name`/`value` — it needs controlled state
+  // read directly by `submit` (same reason `body`'s own edits flow through
+  // `preview` state above for the right-hand panel, though `body` itself
+  // still round-trips via `formData.get` since its control IS a native
+  // `<textarea name="body">`).
+  const [seoVisibility, setSeoVisibility] = useState<ArticleSeoVisibility>(
+    article.seoVisibility as ArticleSeoVisibility,
+  );
   async function submit(formData: FormData) {
     const body = String(formData.get("body") ?? "");
     const result = await updateArticleAction({ requestId: crypto.randomUUID(), articleId: article.id, expectedUpdatedAt, patch: {
       title: String(formData.get("title") ?? ""), summary: String(formData.get("summary") ?? ""), body,
       metaTitle: String(formData.get("metaTitle") ?? ""), metaDescription: String(formData.get("metaDescription") ?? ""),
+      seoVisibility,
     } });
     if (!result.ok) {
       setMessage(result.code === "article_conflict" ? "该文章已被其他操作人修改，请刷新后重试。" : result.code);
@@ -45,6 +57,35 @@ export function ArticleEditor({ article, canWrite }: { article: { id: string; ti
     <label className="block text-sm">正文 HTML<textarea name="body" defaultValue={article.body} required rows={16} className="mt-1 w-full rounded border p-2 font-mono text-xs" onChange={(event) => setPreview(event.target.value)} /></label>
     <label className="block text-sm">SEO 标题<input name="metaTitle" defaultValue={String(meta.metaTitle ?? "")} className="mt-1 w-full rounded border p-2" /></label>
     <label className="block text-sm">SEO 描述<textarea name="metaDescription" defaultValue={String(meta.metaDescription ?? "")} rows={3} className="mt-1 w-full rounded border p-2" /></label>
+    {/*
+      C-25 (`规划_文章管理能力补齐_博客类型可见性换小说_2026-09-08.md` §三/C-25):
+      three-pill selector, same information structure as CPS's own
+      `article-form-v2/featured-fields.tsx` "SEO 可见性" pills (照抄 CPS 那三颗
+      药丸按钮的信息结构) — a `role="radiogroup"` of buttons rather than a
+      native `<select>`, matching that CPS component's own control shape.
+    */}
+    <div className="block text-sm" role="radiogroup" aria-label="SEO 可见性">
+      <span className="mb-1 block">SEO 可见性</span>
+      <div className="flex flex-wrap gap-2">
+        {ARTICLE_SEO_VISIBILITY_OPTIONS.map((option) => (
+          <button
+            key={option.value}
+            type="button"
+            role="radio"
+            aria-checked={seoVisibility === option.value}
+            data-testid={`article-seo-visibility-option-${option.value}`}
+            onClick={() => setSeoVisibility(option.value)}
+            className={
+              seoVisibility === option.value
+                ? "rounded-full border border-green-600 bg-green-600 px-4 py-1.5 text-sm font-medium text-white"
+                : "rounded-full border border-gray-300 bg-white px-4 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            }
+          >
+            {option.label}
+          </button>
+        ))}
+      </div>
+    </div>
     <p className="text-xs text-gray-500">slug: {article.slug} · shortId: {article.publicPageShortId}</p>{message && <p role="status" className="text-sm">{message}</p>}
     <button disabled={!canWrite} className={buttonClassName("primary")}>保存</button>
   </form><section className="rounded-xl border bg-white p-5"><h2 className="mb-4 font-semibold">正文预览</h2><div className="prose max-w-none" dangerouslySetInnerHTML={{ __html: preview }} /></section></div>;

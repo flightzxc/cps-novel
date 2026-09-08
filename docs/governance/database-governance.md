@@ -205,6 +205,14 @@ carousel serving source 和 ArticleTemplate 的 `applicable_article_type`
   sitemap，但不出现在站内任何列表页；`hidden` = 公开侧一律不可达（404），不进 sitemap，不进
   IndexNow。**这两个值截至 C-24 均未被任何调用点读取**（C-24 只加列不接线，是零行为变化的地基
   迁移）；上述语义是 C-25 落地时必须实现成的目标行为，不是 C-24 之后立即生效的行为。
+  **C-25（`规划_文章管理能力补齐_博客类型可见性换小说_2026-09-08.md` §三/C-25）已按此冻结语义
+  接线**：`src/server/publication/visibility.ts` 新增 `isHiddenFromPublicView`/
+  `buildPublicListArticleWhere`（列表层，排除 `hidden` 与 `seo_only`）并把
+  `buildPublicArticleWhere` 收口为收录层（排除 `hidden`，保留 `seo_only`）；三层调用点
+  （详情 `access.ts`、sitemap、IndexNow、后台文章列表/编辑）全部读取该列，读取本身受单闸
+  `FEATURE_ARTICLE_SEO_VISIBILITY`（默认 `false`）保护——关闸时公开侧仍按 C-24 落地时的
+  "零行为变化" 运行，后台的筛选/列/编辑控件不受此闸门控。列本身无 schema 改动，本行只是把
+  上一段的"目标行为"更新为"已实现，待开闸"。
 
 ## 5. Migration-only 物理约束清单
 

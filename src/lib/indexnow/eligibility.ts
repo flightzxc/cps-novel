@@ -21,8 +21,10 @@ import type { PrismaClient, Prisma } from "@prisma/client";
 import { buildArticlePath } from "@/lib/slug/article-path";
 import { SITE_LOCALES, isPublishableLocale, type SiteLocale } from "@/lib/locale/locale-canonical";
 import {
+  isHiddenFromPublicView,
   isIndexNowEligible,
   type ArticlePublicationState,
+  type ArticleSeoVisibilityState,
   type NovelPublicationState,
   type PromoLinkReadinessState,
 } from "@/server/publication/visibility";
@@ -38,6 +40,8 @@ export type IndexNowCandidateArticle = {
   readonly slug: string;
   readonly publicPageShortId: string;
   readonly status: string;
+  /** C-25: `Article.seoVisibility` — a `hidden` Article must never reach IndexNow. See `isNovelIndexNowEligible` below. */
+  readonly seoVisibility: string;
   readonly updatedAt: Date;
   readonly novel: NovelPublicationState;
   readonly promoLink: PromoLinkReadinessState;
@@ -50,6 +54,7 @@ const ARTICLE_ELIGIBILITY_SELECT = {
   slug: true,
   publicPageShortId: true,
   status: true,
+  seoVisibility: true,
   updatedAt: true,
   novel: { select: { status: true } },
   promoLink: { select: { status: true, webUrl: true, appUrl: true } },
@@ -84,16 +89,39 @@ export async function loadIndexNowCandidateArticle(
  * The optional predicate lets tests isolate these conditions; production
  * callers use the real whitelist.
  */
-export type IndexNowEligibilityOptions = { isLocalePublishable?: (locale: string) => boolean };
+/**
+ * `env` (C-25) is the same override pattern as `isLocalePublishable`: threaded
+ * to `isHiddenFromPublicView` below so tests can exercise the
+ * `FEATURE_ARTICLE_SEO_VISIBILITY`-on path without mutating global
+ * `process.env`. Production callers (`outbox.ts`) never pass it.
+ */
+export type IndexNowEligibilityOptions = {
+  isLocalePublishable?: (locale: string) => boolean;
+  env?: NodeJS.ProcessEnv;
+};
 
+/**
+ * `article`'s `locale`/`status` stay a plain `Pick` (unchanged contract);
+ * `seoVisibility` is intersected in as *optional* rather than folded into
+ * that `Pick` so every existing call site that does not carry it (this
+ * file's own tests included) keeps compiling — "contract types gain optional
+ * fields only". A missing value reads as "not hidden" (today's behavior),
+ * same as `visibility.ts`'s `ArticleSeoVisibilityState`.
+ */
 export function isNovelIndexNowEligible(
-  article: Pick<IndexNowCandidateArticle, "locale" | "status">,
+  article: Pick<IndexNowCandidateArticle, "locale" | "status"> & ArticleSeoVisibilityState,
   novel: NovelPublicationState,
   promoLink: PromoLinkReadinessState,
   options: IndexNowEligibilityOptions = {},
 ): boolean {
   const localeGate = options.isLocalePublishable ?? isPublishableLocale;
   if (!localeGate(article.locale)) return false;
+  // C-25: IndexNow is a collectability boundary — `hidden` must never be
+  // submitted, `seo_only` still is. This lives here (this module's own
+  // eligibility layer), not inside the shared `isIndexNowEligible`, per
+  // `visibility.ts`'s own doc comment reserving this layer for IndexNow-
+  // specific conditions (the locale allowlist above is the same pattern).
+  if (isHiddenFromPublicView(article, options.env)) return false;
   return isIndexNowEligible(novel, article as ArticlePublicationState, promoLink);
 }
 

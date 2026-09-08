@@ -23,7 +23,13 @@ describe("public wiring source boundaries", () => {
       await readFile(path.resolve(process.cwd(), "src/lib/site/home-carousel-service.ts"), "utf8"),
     );
     expect(source).toContain("homeCarouselServing.findMany");
-    expect(source).toContain("buildPublicArticleWhere");
+    // C-25 (`规划_文章管理能力补齐_博客类型可见性换小说_2026-09-08.md` §三/C-25):
+    // the carousel is a list surface, so both call sites here now use the
+    // stricter `buildPublicListArticleWhere` fragment (excludes both `hidden`
+    // and `seo_only`), not `buildPublicArticleWhere`'s collectability
+    // fragment — see `@/server/publication/visibility.ts`'s header and this
+    // file's own `../home-carousel/queries.test.ts` C-25 where-shape test.
+    expect(source).toContain("buildPublicListArticleWhere");
     expect(source).not.toMatch(/upstreamCode|rawPayload|raw_payload/);
     // PR6 fix B-1/B-2: `heroImageUrl` has no DB column (see the module's own
     // doc comment) — this file must never select/alias/assign it, only

@@ -137,3 +137,33 @@ export function isPublicTrackingWriteDisabled(env: NodeJS.ProcessEnv = process.e
     env[PUBLIC_TRACKING_WRITE_DISABLED_FLAG]?.trim() ?? "",
   );
 }
+
+// -----------------------------------------------------------------------
+// C-25 (`规划_文章管理能力补齐_博客类型可见性换小说_2026-09-08.md` §三/C-25).
+// `Article.seoVisibility` (C-24 axes foundation) only affects public-site
+// *reads* (list exclusion, sitemap/IndexNow collectability, detail 404 for
+// `hidden`) -- there is no protected business write this flag needs to gate,
+// the admin filter/column/editor controls read and write the column
+// regardless of this flag's value. Per this round's "一 flag 一函数、双闸"
+// discipline, a double-gate is for *protected writes*; a read-only capability
+// like this one is deliberately single-gated (documented here and in
+// `docs/governance/feature-flag-registry.md` so it is not mistaken for a
+// missed second gate).
+//
+// Default `false` reproduces this project's pre-C-25 public-site behavior
+// exactly: `src/server/publication/visibility.ts`'s `buildPublicArticleWhere`/
+// `buildPublicListArticleWhere`/`isHiddenFromPublicView`, `src/server/
+// publication/access.ts`'s `checkNovelArticlePublicAccess`, `src/lib/seo/
+// sitemap.ts`'s `isVisibleCandidate`, and `src/lib/indexnow/eligibility.ts`'s
+// `isNovelIndexNowEligible` all treat every Article as if `seoVisibility`
+// were `"public"` while this is off -- letting operators pre-stage
+// `seo_only`/`hidden` values in the admin editor before the public-facing
+// behavior is switched on ("后台先行、公开后开", the same rollout convention
+// this repo's IndexNow enqueue/delivery pair already uses).
+// -----------------------------------------------------------------------
+export const ARTICLE_SEO_VISIBILITY_FEATURE_FLAG = "FEATURE_ARTICLE_SEO_VISIBILITY";
+
+/** Gates whether public-site reads (list/sitemap/IndexNow/detail) honor `Article.seoVisibility` at all. Exact `=== "true"` parsing, default off. */
+export function isArticleSeoVisibilityEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+  return env[ARTICLE_SEO_VISIBILITY_FEATURE_FLAG] === "true";
+}

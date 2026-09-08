@@ -1,7 +1,7 @@
 import Link from "next/link";
 
 import { ARTICLE_STATUSES } from "@/domain/database-statuses";
-import { ARTICLE_STATUS_BADGES } from "@/features/admin-ui/content-view";
+import { ARTICLE_SEO_VISIBILITY_OPTIONS, ARTICLE_STATUS_BADGES } from "@/features/admin-ui/content-view";
 
 export type ArticleTemplateOption = Readonly<{
   id: string;
@@ -19,6 +19,8 @@ export type ArticleFilterValues = {
   readonly novelId?: string;
   readonly templateId?: string;
   readonly canonicalTagId?: string;
+  /** C-25: exact-match on `Article.seoVisibility` — the "全部可见性" dropdown below. */
+  readonly seoVisibility?: string;
 };
 
 /**
@@ -35,6 +37,7 @@ function clearNovelHref(values: ArticleFilterValues): string {
   if (values.status) next.set("status", values.status);
   if (values.templateId) next.set("templateId", values.templateId);
   if (values.canonicalTagId) next.set("canonicalTagId", values.canonicalTagId);
+  if (values.seoVisibility) next.set("seoVisibility", values.seoVisibility);
   const query = next.toString();
   return query ? `/articles?${query}` : "/articles";
 }
@@ -76,6 +79,15 @@ function clearNovelHref(values: ArticleFilterValues): string {
  * `ARTICLE_STATUS_BADGES`, the same source `article-status-badge.tsx`'s
  * table-column badge now reads — one shared spot for both, not two copies of
  * the same four Chinese strings (item #19).
+ *
+ * **SEO 可见性**（"全部可见性"下拉，见业务叙述）is new (C-25, `规划_文章管理能力补齐_博客类型可见性换小说_2026-09-08.md`
+ * §三/C-25): a `<select name="seoVisibility">`, options from
+ * `@/features/admin-ui/content-view`'s `ARTICLE_SEO_VISIBILITY_OPTIONS` (CPS's
+ * own longer filter-dropdown wording, verbatim). This is a **read-only list
+ * filter**, not the row-level toggle CPS never had either — the value is
+ * edited only in the article editor form (`./article-editor.tsx`'s three-pill
+ * selector), per the analysis doc's explicit "CPS 全站没有行内改可见性的控件"
+ * correction and this round's binding Owner decision against adding one.
  */
 export function ArticleFilters({
   values,
@@ -135,6 +147,22 @@ export function ArticleFilters({
               {ARTICLE_STATUSES.map((status) => (
                 <option key={status} value={status}>
                   {ARTICLE_STATUS_BADGES[status].label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="text-sm">
+            <span className="mb-1 block text-gray-600">SEO 可见性</span>
+            <select
+              name="seoVisibility"
+              defaultValue={values.seoVisibility ?? ""}
+              aria-label="SEO 可见性"
+              className="rounded-lg border border-gray-300 py-2 pl-3 pr-8 text-sm focus:border-blue-500 focus:outline-none"
+            >
+              <option value="">全部可见性</option>
+              {ARTICLE_SEO_VISIBILITY_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
                 </option>
               ))}
             </select>

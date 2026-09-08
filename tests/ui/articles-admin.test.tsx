@@ -221,11 +221,49 @@ describe("ArticleList · 列表与批量", () => {
     expect(screen.getByText(/08:00/)).toBeTruthy();
   });
 
-  it("八列表头齐全（标题/书目/模板/分类/状态/前台 URL/创建时间/操作）", () => {
+  it("九列表头齐全（标题/书目/模板/分类/状态/SEO 可见性/前台 URL/创建时间/操作）", () => {
     const { container } = render(<ArticleList rows={[DRAFT_ROW]} canWrite publicOrigin={PUBLIC_ORIGIN} />);
     const headers = Array.from(container.querySelectorAll("thead th")).map((th) => th.textContent);
-    // 第一列是表头全选 checkbox（无文本），其余八列依次对应。
-    expect(headers.slice(1)).toEqual(["标题", "书目", "模板", "分类", "状态", "前台 URL", "创建时间", "操作"]);
+    // 第一列是表头全选 checkbox（无文本），其余九列依次对应。C-25 在「状态」与「前台
+    // URL」之间插入了「SEO 可见性」列。
+    expect(headers.slice(1)).toEqual([
+      "标题",
+      "书目",
+      "模板",
+      "分类",
+      "状态",
+      "SEO 可见性",
+      "前台 URL",
+      "创建时间",
+      "操作",
+    ]);
+  });
+
+  /**
+   * C-25 (`规划_文章管理能力补齐_博客类型可见性换小说_2026-09-08.md` §三/C-25):
+   * "表格新增「SEO 可见性」徽章列" — CPS wording (公开/仅 SEO/隐藏), not the raw
+   * column value. Also pins the `seoVisibility` field's additive-contract
+   * fallback: a row built without it (pre-C-25 caller shape) must still
+   * render, defaulting to `public` rather than crashing or showing blank.
+   */
+  it("SEO 可见性列渲染 CPS 中文徽章，缺字段时回退为「公开」", () => {
+    render(
+      <ArticleList
+        rows={[
+          { ...DRAFT_ROW, id: "row-public", seoVisibility: "public" },
+          { ...DRAFT_ROW, id: "row-seo-only", seoVisibility: "seo_only" },
+          { ...DRAFT_ROW, id: "row-hidden", seoVisibility: "hidden" },
+          { ...DRAFT_ROW, id: "row-missing", seoVisibility: undefined },
+        ]}
+        canWrite
+        publicOrigin={PUBLIC_ORIGIN}
+      />,
+    );
+    expect(screen.getAllByTestId("article-seo-visibility-public")).toHaveLength(2); // row-public + row-missing fallback
+    expect(screen.getByTestId("article-seo-visibility-seo_only").textContent).toBe("仅 SEO");
+    expect(screen.getByTestId("article-seo-visibility-hidden").textContent).toBe("隐藏");
+    expect(screen.queryByText("seo_only")).toBeNull();
+    expect(screen.queryByText("hidden")).toBeNull();
   });
 
   it("勾选行驱动已选计数", () => {
@@ -626,6 +664,7 @@ const ARTICLE = {
   seoMetadata: { metaTitle: "Meta title", metaDescription: "Meta description" },
   slug: "some-slug",
   publicPageShortId: "AbCdEf12",
+  seoVisibility: "public",
   updatedAt: "2026-09-05T02:00:00.000Z",
 };
 
@@ -667,6 +706,45 @@ describe("ArticleEditor · 编辑与预览", () => {
     render(<ArticleEditor article={ARTICLE} canWrite={false} />);
     expect((screen.getByText("保存") as HTMLButtonElement).disabled).toBe(true);
   });
+
+  /**
+   * C-25 (`规划_文章管理能力补齐_博客类型可见性换小说_2026-09-08.md` §三/C-25):
+   * "文章编辑页 SEO 区块新增三选一单选…默认值来自数据行" — pins that all three
+   * CPS-wording pills render and that the row's own `seoVisibility` (not a
+   * hardcoded default) drives which one starts selected.
+   */
+  it("SEO 可见性三选一渲染三颗药丸，默认选中值来自数据行", () => {
+    render(<ArticleEditor article={{ ...ARTICLE, seoVisibility: "seo_only" }} canWrite />);
+    const publicPill = screen.getByTestId("article-seo-visibility-option-public");
+    const seoOnlyPill = screen.getByTestId("article-seo-visibility-option-seo_only");
+    const hiddenPill = screen.getByTestId("article-seo-visibility-option-hidden");
+    expect(publicPill.textContent).toBe("公开收录");
+    expect(seoOnlyPill.textContent).toBe("仅 SEO（不展示）");
+    expect(hiddenPill.textContent).toBe("隐藏（noindex）");
+    expect(seoOnlyPill.getAttribute("aria-checked")).toBe("true");
+    expect(publicPill.getAttribute("aria-checked")).toBe("false");
+    expect(hiddenPill.getAttribute("aria-checked")).toBe("false");
+  });
+
+  /**
+   * C-25: the row-level "行内三选一小下拉" from the plan's discussion is
+   * explicitly OUT per this round's binding Owner decision (no row toggle in
+   * the list) — the editor form's three-pill selector is the *only* write
+   * surface, and it must reach `updateArticleAction` (the exact same Server
+   * Action `_actions.ts` wires for every other field on this form) rather
+   * than a second endpoint, per the analysis doc's "同一个 action id" framing
+   * even though this round never builds the row-level control at all.
+   */
+  it("切换 SEO 可见性药丸后保存，seoVisibility 随其它字段一起进入 updateArticleAction 的 patch", async () => {
+    editorActions.updateArticleAction.mockResolvedValue({ ok: true });
+    render(<ArticleEditor article={{ ...ARTICLE, seoVisibility: "public" }} canWrite />);
+    fireEvent.click(screen.getByTestId("article-seo-visibility-option-hidden"));
+    fireEvent.click(screen.getByText("保存"));
+    await vi.waitFor(() => expect(editorActions.updateArticleAction).toHaveBeenCalledTimes(1));
+    expect(editorActions.updateArticleAction.mock.calls[0]![0]).toMatchObject({
+      patch: expect.objectContaining({ seoVisibility: "hidden" }),
+    });
+  });
 });
 
 const LOCALES = ["en", "fr"];
@@ -680,7 +758,7 @@ const TEMPLATE_OPTIONS = [
 ];
 
 describe("ArticleFilters · C-19 filters", () => {
-  it("字段 name 属性与 page.tsx 读取的 query-string key 一致（含新增的 search/canonicalTagId）", () => {
+  it("字段 name 属性与 page.tsx 读取的 query-string key 一致（含新增的 search/canonicalTagId/seoVisibility）", () => {
     render(
       <ArticleFilters
         values={{}}
@@ -694,6 +772,7 @@ describe("ArticleFilters · C-19 filters", () => {
     expect((screen.getByLabelText("状态") as HTMLSelectElement).name).toBe("status");
     expect((screen.getByLabelText("分类") as HTMLSelectElement).name).toBe("canonicalTagId");
     expect((screen.getByLabelText("模板") as HTMLSelectElement).name).toBe("templateId");
+    expect((screen.getByLabelText("SEO 可见性") as HTMLSelectElement).name).toBe("seoVisibility");
   });
 
   it("当前筛选值回填为 defaultValue，而不是每次都从空表单开始", () => {
@@ -705,6 +784,7 @@ describe("ArticleFilters · C-19 filters", () => {
           status: "published",
           canonicalTagId: CATEGORY_OPTIONS[0]!.id,
           templateId: TEMPLATE_OPTIONS[0]!.id,
+          seoVisibility: "seo_only",
         }}
         locales={LOCALES}
         categoryOptions={CATEGORY_OPTIONS}
@@ -716,6 +796,22 @@ describe("ArticleFilters · C-19 filters", () => {
     expect((screen.getByLabelText("状态") as HTMLSelectElement).value).toBe("published");
     expect((screen.getByLabelText("分类") as HTMLSelectElement).value).toBe(CATEGORY_OPTIONS[0]!.id);
     expect((screen.getByLabelText("模板") as HTMLSelectElement).value).toBe(TEMPLATE_OPTIONS[0]!.id);
+    expect((screen.getByLabelText("SEO 可见性") as HTMLSelectElement).value).toBe("seo_only");
+  });
+
+  /**
+   * C-25: "选项文案照抄 CPS：公开收录 / 仅 SEO（不展示）/ 隐藏（noindex）" — the
+   * filter dropdown's option labels are the longer CPS wording, distinct
+   * from the table badge's shorter "公开/仅 SEO/隐藏" (see
+   * `article-seo-visibility-badge.tsx`'s own test).
+   */
+  it("SEO 可见性下拉选项文案照抄 CPS（公开收录 / 仅 SEO（不展示）/ 隐藏（noindex））", () => {
+    render(
+      <ArticleFilters values={{}} locales={LOCALES} categoryOptions={CATEGORY_OPTIONS} templateOptions={TEMPLATE_OPTIONS} />,
+    );
+    const select = screen.getByLabelText("SEO 可见性") as HTMLSelectElement;
+    const optionLabels = Array.from(select.options).map((option) => option.textContent);
+    expect(optionLabels).toEqual(["全部可见性", "公开收录", "仅 SEO（不展示）", "隐藏（noindex）"]);
   });
 
   it("状态下拉渲染文章四态而不是书目五态（没有 ready）", () => {

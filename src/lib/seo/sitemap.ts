@@ -8,6 +8,7 @@ import { getSiteUrl, toAbsoluteUrl } from "@/lib/seo/site-url";
 import { buildArticlePath } from "@/lib/slug/article-path";
 import {
   buildPublicArticleWhere,
+  isHiddenFromPublicView,
   isPromoReady,
   isPublicationStatePublic,
 } from "@/server/publication/visibility";
@@ -64,6 +65,7 @@ const ARTICLE_SITEMAP_SELECT = {
   publicPageShortId: true,
   title: true,
   status: true,
+  seoVisibility: true,
   deletedAt: true,
   updatedAt: true,
   novel: {
@@ -88,7 +90,12 @@ type ArticleSitemapCandidate = Prisma.ArticleGetPayload<{
   select: typeof ARTICLE_SITEMAP_SELECT;
 }>;
 
-function articleSitemapWhere(locale: SiteLocale): Prisma.ArticleWhereInput {
+function articleSitemapWhere(locale: SiteLocale, env: NodeJS.ProcessEnv): Prisma.ArticleWhereInput {
+  // C-25: `buildPublicArticleWhere` is the "collectability" fragment —
+  // excludes `hidden`, keeps `seo_only` (sitemap is exactly a collectability
+  // boundary, same as IndexNow). This DB-side condition is a pre-filter only;
+  // `isVisibleCandidate` below re-checks it per row, per this file's own
+  // "DB filter is a superset, application layer is authoritative" discipline.
   return buildPublicArticleWhere({
     locale,
     promoLink: {
@@ -99,15 +106,19 @@ function articleSitemapWhere(locale: SiteLocale): Prisma.ArticleWhereInput {
         OR: [{ webUrl: { not: "" } }, { appUrl: { not: "" } }],
       },
     },
-  });
+  }, env);
 }
 
-function isVisibleCandidate(candidate: ArticleSitemapCandidate): boolean {
+function isVisibleCandidate(candidate: ArticleSitemapCandidate, env: NodeJS.ProcessEnv): boolean {
   return candidate.deletedAt === null
     && candidate.novel.deletedAt === null
     && candidate.promoLink?.deletedAt === null
     && isPublicationStatePublic(candidate.novel, candidate)
-    && isPromoReady(candidate.promoLink);
+    && isPromoReady(candidate.promoLink)
+    // C-25: application-layer recheck for `hidden` — the DB `where` above is
+    // only a pre-filter (never authoritative alone, per this file's header
+    // convention), so a `hidden` row must also be caught here.
+    && !isHiddenFromPublicView(candidate, env);
 }
 
 function latestDate(dates: readonly Date[]): Date {
@@ -205,17 +216,25 @@ async function buildCategoryPageFiles(
 /**
  * Production DB builder injected into the PR1 filesystem generator. Database
  * reads happen only in the refresh worker; request routes remain static-only.
+ *
+ * `env` (C-25, default `process.env`) threads `FEATURE_ARTICLE_SEO_VISIBILITY`
+ * down to both the DB pre-filter and the per-row recheck — an explicit
+ * override lets tests exercise the flag-on path without mutating global
+ * `process.env`.
  */
-export function createSitemapFamilyBuilder(db: SitemapDb): BuildSitemapFamily {
+export function createSitemapFamilyBuilder(
+  db: SitemapDb,
+  env: NodeJS.ProcessEnv = process.env,
+): BuildSitemapFamily {
   const candidateCacheByRoute = new Map<SiteLocale, Promise<ArticleSitemapCandidate[]>>();
   const loadVisible = (locale: SiteLocale) => {
     const existing = candidateCacheByRoute.get(locale);
     if (existing) return existing;
     const pending = db.article.findMany({
-      where: articleSitemapWhere(locale),
+      where: articleSitemapWhere(locale, env),
       select: ARTICLE_SITEMAP_SELECT,
       orderBy: { id: "asc" },
-    }).then((rows) => rows.filter(isVisibleCandidate));
+    }).then((rows) => rows.filter((row) => isVisibleCandidate(row, env)));
     candidateCacheByRoute.set(locale, pending);
     return pending;
   };

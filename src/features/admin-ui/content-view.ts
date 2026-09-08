@@ -1,5 +1,6 @@
 import type { AdminContentExceptionCode } from "@/contracts";
 import type {
+  ArticleSeoVisibility,
   ArticleStatus,
   LabelKind,
   NovelChapterStatus,
@@ -46,6 +47,38 @@ export const ARTICLE_STATUS_BADGES: Readonly<Record<ArticleStatus, StatusBadge>>
   unpublished: { label: "已下线", color: "bg-amber-100 text-amber-800" },
   takedown: { label: "已撤回", color: "bg-red-100 text-red-800" },
 });
+
+/**
+ * C-25 (`规划_文章管理能力补齐_博客类型可见性换小说_2026-09-08.md` §三/C-25):
+ * table-column badge vocabulary for `Article.seoVisibility`. Labels and
+ * colors are copied verbatim from CPS's own two mapping tables
+ * (`cps-admin-v851-admin-host`'s `src/lib/constants.ts`'s
+ * `SEO_VISIBILITY_LABEL`/`SEO_VISIBILITY_COLORS`) per the analysis doc's
+ * explicit "标签与配色照抄 CPS" instruction — this is why these three colors
+ * use CPS's own `text-700`/`text-600` shades rather than this file's usual
+ * `text-800` convention (see {@link NOVEL_STATUS_BADGES}/
+ * {@link ARTICLE_STATUS_BADGES} above): a verbatim-copy instruction takes
+ * precedence over this file's own house style for this one vocabulary.
+ *
+ * `ARTICLE_SEO_VISIBILITY_OPTIONS` below carries the *longer* CPS filter/editor
+ * wording (`SEO_VISIBILITY_OPTIONS` in CPS's `src/lib/article-v2-contract.ts`)
+ * — CPS deliberately uses two different label sets for the same three values
+ * (short badge vs. longer filter-dropdown/editor-pill copy), and this project
+ * keeps that same split rather than collapsing it to one.
+ */
+export const ARTICLE_SEO_VISIBILITY_BADGES: Readonly<Record<ArticleSeoVisibility, StatusBadge>> = Object.freeze({
+  public: { label: "公开", color: "bg-green-100 text-green-700" },
+  seo_only: { label: "仅 SEO", color: "bg-blue-100 text-blue-700" },
+  hidden: { label: "隐藏", color: "bg-gray-100 text-gray-600" },
+});
+
+export const ARTICLE_SEO_VISIBILITY_OPTIONS: ReadonlyArray<
+  Readonly<{ value: ArticleSeoVisibility; label: string }>
+> = Object.freeze([
+  { value: "public", label: "公开收录" },
+  { value: "seo_only", label: "仅 SEO（不展示）" },
+  { value: "hidden", label: "隐藏（noindex）" },
+]);
 
 export const CHAPTER_STATUS_BADGES: Readonly<Record<NovelChapterStatus, StatusBadge>> =
   Object.freeze({

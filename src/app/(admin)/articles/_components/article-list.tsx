@@ -8,7 +8,7 @@ import { buttonClassName } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { CopyButton } from "@/components/ui/copy-button";
 import { EmptyRow, TBody, TD, TH, THead, Table } from "@/components/ui/table";
-import type { ArticleStatus } from "@/domain/database-statuses";
+import type { ArticleSeoVisibility, ArticleStatus } from "@/domain/database-statuses";
 import { formatDateTime } from "@/features/admin-ui/content-view";
 import { buildArticlePath } from "@/lib/slug/article-path";
 
@@ -23,6 +23,7 @@ import {
   regenerateArticlesBatchAction,
   withdrawArticleAction,
 } from "../_actions";
+import { ArticleSeoVisibilityBadge } from "./article-seo-visibility-badge";
 import { ArticleStatusBadge } from "./article-status-badge";
 
 /**
@@ -57,6 +58,14 @@ export type ArticleListRow = {
   templateName?: string | null;
   novel?: { id: string; title: string };
   canonicalTags?: readonly string[];
+  /**
+   * C-25 (`规划_文章管理能力补齐_博客类型可见性换小说_2026-09-08.md` §三/C-25):
+   * `Article.seoVisibility`, for the "SEO 可见性" badge column. Optional per
+   * this round's additive-contract discipline, same as the C-20 fields
+   * above — falls back to `"public"` at render time (`./article-seo-visibility-badge.tsx`'s
+   * caller below) for any row a caller built without it.
+   */
+  seoVisibility?: string;
 };
 
 /**
@@ -360,6 +369,7 @@ export function ArticleList({
             <TH>模板</TH>
             <TH>分类</TH>
             <TH>状态</TH>
+            <TH>SEO 可见性</TH>
             <TH>前台 URL</TH>
             <TH>创建时间</TH>
             <TH>操作</TH>
@@ -420,6 +430,9 @@ export function ArticleList({
               </TD>
               <TD>
                 <ArticleStatusBadge status={row.status as ArticleStatus} />
+              </TD>
+              <TD>
+                <ArticleSeoVisibilityBadge seoVisibility={(row.seoVisibility ?? "public") as ArticleSeoVisibility} />
               </TD>
               <TD>
                 <ArticleUrlCell row={row} publicOrigin={publicOrigin} />
@@ -487,7 +500,7 @@ export function ArticleList({
             </tr>
           ))}
           {rows.length === 0 && (
-            <EmptyRow colSpan={9}>
+            <EmptyRow colSpan={10}>
               {/*
                 C-22 (`分析_文章管理Parity缺口_2026-09-08.md` §六, item #31,
                 PORT): CPS's empty state is "暂无文章" + "去生成第一篇文章" →
