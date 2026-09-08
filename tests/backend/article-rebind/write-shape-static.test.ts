@@ -31,7 +31,7 @@
  * below fail loudly (by design — see the first `it`), rather than silently
  * being ignored.
  */
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 
 import { describe, expect, it } from "vitest";
@@ -88,6 +88,47 @@ function findArticleUpdateManyWriteShape(text: string): { where: string; data: s
   }
   return { where: whereMatch[1]!, data: dataMatch[1]! };
 }
+
+/**
+ * Review follow-up (复核_C30施工单2, 2026-09-09). The scan above pins the write
+ * shape by reading `service.ts` ONLY. C-30B's批量 path reaches that same write
+ * through `runRebindTransactionalWrite`, which is exactly right — but nothing
+ * forced it to stay that way: `batch.ts` could grow its own
+ * `tx.article.updateMany({...})` (or an `update`/`updateManyAndReturn`) and
+ * every test in this file would stay green while the批量 path quietly stopped
+ * sharing the single-article write shape — the "两套判定漂移" 施工工单 §4B.5
+ * warns about, in its write-side form.
+ *
+ * So: assert structurally that the whole `src/server/article-rebind/`
+ * directory has its Article writes in one file. `service.ts` owns the write;
+ * every other module in the directory must have zero Article write call
+ * sites of its own.
+ */
+describe("批量路径不得自建 Article 写入（写形状的唯一入口仍是 service.ts）", () => {
+  const dir = path.join(process.cwd(), "src/server/article-rebind");
+  const others = readdirSync(dir).filter((name) => name.endsWith(".ts") && name !== "service.ts");
+
+  it("被扫描的兄弟模块集合非空（防止 glob 写错后测试空转变成永远绿）", () => {
+    expect(others).toEqual(expect.arrayContaining(["batch.ts", "preview.ts", "guards.ts"]));
+  });
+
+  it.each(["batch.ts", "preview.ts", "guards.ts", "errors.ts", "index.ts", "batch-constants.ts"])(
+    "%s 不含任何 .article.update / .article.updateMany / .article.create / .article.delete 调用",
+    (name) => {
+      const text = stripBlockComments(readFileSync(path.join(dir, name), "utf8"));
+      const writes = [...text.matchAll(/\.article\.(updateMany|updateManyAndReturn|update|create|createMany|delete|deleteMany|upsert)\(/g)];
+      expect(writes.map((match) => match[0])).toEqual([]);
+    },
+  );
+
+  it("sanity (mutation guard): the same scan flags a synthetic Article write in a sibling module", () => {
+    const synthetic = stripBlockComments(`
+      const write = await tx.article.updateMany({ where: { id }, data: { novelId, promoLinkId } });
+    `);
+    const writes = [...synthetic.matchAll(/\.article\.(updateMany|updateManyAndReturn|update|create|createMany|delete|deleteMany|upsert)\(/g)];
+    expect(writes.map((match) => match[0])).toEqual([".article.updateMany("]);
+  });
+});
 
 describe("article-rebind write-shape pin (source-static, complements the runtime fake-db test)", () => {
   it("service.ts contains exactly one .article.updateMany( call site", () => {

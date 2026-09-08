@@ -71,6 +71,50 @@ describe("批量换绑动作族已在注册表登记，且每一个都过能力�
   });
 });
 
+/**
+ * Review follow-up (复核_C30施工单2, 2026-09-09). The client component may not
+ * import from `@/server/**` (`tests/ui/admin-secret-boundary.test.tsx`), so
+ * its `REBIND_BATCH_APPLY_CAP` is a hand-copied duplicate of
+ * `REBIND_BATCH_LIMITS.apply` — and nothing pinned the two together. A
+ * mutation run during review proved it: flipping the server constant to 201
+ * turned ZERO tests red, including the UI test that asserts the literal
+ * copy「已超过单次执行上限（200 篇）」, because that string is produced from the
+ * client's own copy of the number.
+ *
+ * That matters here more than it usually would: 施工工单 §7 item 2 explicitly
+ * schedules this constant to be RE-TUNED once
+ * `tests/integration/article-rebind/batch-200.test.ts` measures a real
+ * 200-item run. Whoever re-tunes it would otherwise silently desync the two
+ * halves — the client refusing at 200 while the server accepts more, or the
+ * client permitting a selection the server then rejects wholesale with
+ * INVALID_SELECTION after the operator has already written a recovery token.
+ */
+describe("客户端上限常量与服务端 REBIND_BATCH_LIMITS.apply 必须同值（手抄副本的防漂移锁）", () => {
+  it("batch-rebind-client.tsx 的 REBIND_BATCH_APPLY_CAP 等于 REBIND_BATCH_LIMITS.apply", async () => {
+    const { REBIND_BATCH_LIMITS } = await import("@/server/article-rebind/batch-constants");
+    const clientSource = readFileSync(
+      resolve(root, "src/app/(admin)/articles/batch-novel-rebind/_components/batch-rebind-client.tsx"),
+      "utf8",
+    );
+    const match = clientSource.match(/const REBIND_BATCH_APPLY_CAP = (\d+);/);
+    expect(match, "REBIND_BATCH_APPLY_CAP declaration not found in the client component").toBeTruthy();
+    expect(Number(match![1])).toBe(REBIND_BATCH_LIMITS.apply);
+  });
+
+  it("客户端超限提示文案里的数字也来自同一个常量，不是又一份手写字面量", async () => {
+    const { REBIND_BATCH_LIMITS } = await import("@/server/article-rebind/batch-constants");
+    const clientSource = readFileSync(
+      resolve(root, "src/app/(admin)/articles/batch-novel-rebind/_components/batch-rebind-client.tsx"),
+      "utf8",
+    );
+    // The rendered copy must interpolate the constant rather than repeat the
+    // literal — otherwise re-tuning the cap leaves the operator-facing number
+    // stale even after the two constants above agree.
+    expect(clientSource).not.toMatch(new RegExp(`上限（${REBIND_BATCH_LIMITS.apply} 篇）`));
+    expect(clientSource).toMatch(/上限（\{REBIND_BATCH_APPLY_CAP\} 篇）/);
+  });
+});
+
 describe("ArticlesPage 「批量换小说」入口按钮（C-30B，源码级断言）", () => {
   const source = readFileSync(resolve(root, "src/app/(admin)/articles/page.tsx"), "utf8");
   const anchorIdx = source.indexOf('data-testid="articles-batch-novel-rebind-entry"');
