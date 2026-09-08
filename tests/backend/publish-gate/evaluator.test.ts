@@ -8,7 +8,7 @@ const NEVER_PUBLISHABLE = () => false;
 
 function facts(overrides: Partial<PublishGateFacts> = {}): PublishGateFacts {
   return {
-    novel: { status: "ready", locale: "en" },
+    novel: { status: "ready" },
     article: { status: "draft", locale: "en", title: "Title", slug: "slug", body: "Body text" },
     promoLink: { status: "fetched", webUrl: "https://example.com/a", appUrl: null },
     preview: { hasPreviewChapter: true, hasPreviewBody: true },
@@ -23,16 +23,24 @@ describe("evaluatePublishGate", () => {
     expect(result).toEqual({ publishable: true, reasons: [], requiredMetadataMissing: null });
   });
 
-  it("defaults to the real isPublishableLocale when no override is given", () => {
-    // U6 admitted `en`. The default path must not inject an override, so
-    // locale-en facts that otherwise pass the gate are now publishable.
+  it("defaults to the real isRegisteredSiteLocale check when no override is given", () => {
+    // Owner decision 2026-09-08 (see `evaluator.ts`'s header): the default
+    // path checks registration against SITE_LOCALES, not a narrower
+    // publish whitelist. The default path must not inject an override, so
+    // locale-en facts that otherwise pass the gate are publishable.
     const result = evaluatePublishGate(facts());
     expect(result.publishable).toBe(true);
     expect(result.reasons).not.toContain("locale_not_publishable");
   });
 
-  it("still fail-closes locales that have not cleared D-7", () => {
-    const result = evaluatePublishGate(facts({ novel: { status: "ready", locale: "es" } }));
+  it("any registered SITE_LOCALES member publishes by default — the old {en}-only publish whitelist is gone (Owner decision 2026-09-08)", () => {
+    const result = evaluatePublishGate(facts({ article: { status: "draft", locale: "es", title: "Title", slug: "slug", body: "Body text" } }));
+    expect(result.publishable).toBe(true);
+    expect(result.reasons).not.toContain("locale_not_publishable");
+  });
+
+  it("still rejects a locale that is not a registered SITE_LOCALES member, by default — kept as defense-in-depth even though content-creation already blocks this at write time", () => {
+    const result = evaluatePublishGate(facts({ article: { status: "draft", locale: "xx-not-real", title: "Title", slug: "slug", body: "Body text" } }));
     expect(result.publishable).toBe(false);
     expect(result.reasons).toContain("locale_not_publishable");
   });
@@ -148,7 +156,7 @@ describe("evaluatePublishGate", () => {
 
   describe("rights_blocked", () => {
     it("flags rights_blocked when the Novel is takedown", () => {
-      const result = evaluatePublishGate(facts({ novel: { status: "takedown", locale: "en" } }), {
+      const result = evaluatePublishGate(facts({ novel: { status: "takedown" } }), {
         isPublishableLocale: ALWAYS_PUBLISHABLE,
       });
       expect(result.reasons).toEqual(["rights_blocked"]);

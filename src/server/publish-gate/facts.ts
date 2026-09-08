@@ -60,7 +60,7 @@ export async function loadPublishGateFacts(
       title: true,
       body: true,
       publishedAt: true,
-      novel: { select: { status: true, locale: true, deletedAt: true } },
+      novel: { select: { status: true, deletedAt: true } },
       promoLink: { select: { status: true, webUrl: true, appUrl: true } },
     },
   });
@@ -116,11 +116,15 @@ export async function loadPublishGateFacts(
   const facts: PublishGateFacts = {
     // C-27: `null` exactly when `article.novelId` is `null` (blog/listicle/
     // guide) — see `evaluator.ts`'s header for how the fork on this reads.
-    novel: article.novel ? { status: article.novel.status, locale: article.novel.locale } : null,
+    // Owner decision 2026-09-08 (`evaluator.ts`'s header): the evaluator's
+    // locale check reads `article.locale` for every branch now, so
+    // `PublishGateNovelFacts` no longer carries `locale` — nothing here
+    // needs to select `Novel.locale`.
+    novel: article.novel ? { status: article.novel.status } : null,
     article: {
       status: article.status,
-      // C-27: only read by the evaluator's locale check when `facts.novel`
-      // is `null` — see `evaluator.ts`.
+      // Read by the evaluator's locale check for every Article — see
+      // `evaluator.ts`'s header (2026-09-08 Owner decision).
       locale: article.locale,
       title: article.title,
       slug: article.slug,

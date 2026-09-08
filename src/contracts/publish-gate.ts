@@ -41,7 +41,7 @@ export function narrowPublishIntent(value: unknown): PublishIntent | null {
  * P2 V1 没有任何豁免机制可以绕过这些理由。
  */
 export const PUBLISH_GATE_REASONS = Object.freeze([
-  "locale_not_publishable", // isPublishableLocale 为 false（D-7 fail-closed）
+  "locale_not_publishable", // Article.locale 不在 SITE_LOCALES 15 项登记表内（Owner 2026-09-08 起不再是 D-7 {en} 白名单；见 evaluator.ts，实践中不可达，仅防御性保留）
   "required_metadata_missing", // Article 发布产物的 title/slug/body 缺失；可携带 RequiredMetadataMissingDetail
   "preview_chapter_missing", // 无可信已物化、可公开的试读章节（章节真源边界）
   "preview_body_missing", // 已物化试读章节存在，但正文为空

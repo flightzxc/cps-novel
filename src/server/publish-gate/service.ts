@@ -37,12 +37,15 @@
  * `visibility.ts`'s `isPublicationStatePublic` requires *both*
  * `Novel.status === "published"` and `Article.status === "published"`.
  * `Article` is a locale page snapshot of `Novel`
- * (`docs/governance/database-governance.md` §4) and today there is exactly
- * one Article per Novel (`SITE_LOCALES` has 15 registered entries, but
- * `PUBLISHABLE_LOCALES` — the subset a template CRUD landing actually
- * permits — is `{en}` only; see `@/lib/locale/locale-canonical.ts`) — so
- * "publish the page" and "publish the work" are the same admin action in V1.
- * This module
+ * (`docs/governance/database-governance.md` §4). What keeps "publish the
+ * page" and "publish the work" the same admin action today is not a locale
+ * whitelist (Owner decision 2026-09-08 removed the publish gate's locale
+ * whitelist entirely — see `evaluator.ts`'s header) but `@@unique([novelId,
+ * locale])` (`article_novel_locale_key`) plus this module's own batch-publish
+ * shape: `publishArticlesBatch`/`publishArticlesBatchAsAdmin` only ever act
+ * on caller-selected Article ids, never a blanket "publish every Article of
+ * this Novel" sweep. The Novel-side write below stays conditional on
+ * `facts.novel.status !== "published"` regardless. This module
  * gates once and writes both sides in the same transaction. A future
  * multi-locale world, where a Novel could have several Articles publishing
  * on independent schedules, only needs `Novel.status` promotion to become
