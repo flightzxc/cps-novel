@@ -53,8 +53,8 @@ export type BlogCardView = {
 };
 
 /**
- * `Article.seoMetadata`'s blog-only keys (`coverUrl`/`metaTitle`/
- * `metaDescription`/`metaKeywords`) — same free-form JSON shape
+ * `Article.seoMetadata`'s blog-only keys consumed by the public read side:
+ * `coverUrl`/`metaTitle`/`metaDescription` — same free-form JSON shape
  * `src/server/content-creation/blog.ts`'s `createBlogArticle` writes and
  * `src/app/(admin)/articles/_components/article-blog-editor.tsx` reads,
  * copied here rather than imported because both of those live under admin
@@ -63,12 +63,24 @@ export type BlogCardView = {
  * self-contained). Blank/missing keys normalize to `undefined`, never an
  * empty string, matching this codebase's "optional means omitted, not
  * blank" convention (`MetaList`'s own doc comment).
+ *
+ * C-29b review low: `metaKeywords` is a fourth key the admin editor writes,
+ * but no public render path ever reads it — `src/app/blog/[slug]/page.tsx`'s
+ * `generateMetadata` only consumes `metaTitle`/`metaDescription`/`coverUrl`,
+ * and `src/lib/seo/seo-templates/blog.ts`'s `buildBlogSeoMeta`/`BlogSeoData`
+ * has no `keywords` field at all — verified against CPS's own blog SEO
+ * (`cps-admin-v851-admin-host/src/lib/blog-seo.ts` and its
+ * `[locale]/(site)/blog/[slug]/page.tsx`'s `generateMetadata`): CPS's blog
+ * detail page never emits a `keywords` meta tag either (unlike its Drama
+ * detail page, which does — a different page family, not a precedent this
+ * one follows). Parsing and carrying a value nothing ever renders was dead
+ * code; dropped rather than wired to a `keywords` field CPS's own blog SEO
+ * does not have.
  */
 function parseBlogSeoMetadata(value: unknown): {
   coverUrl?: string;
   metaTitle?: string;
   metaDescription?: string;
-  metaKeywords?: string;
 } {
   if (!value || typeof value !== "object" || Array.isArray(value)) return {};
   const record = value as Record<string, unknown>;
@@ -82,7 +94,6 @@ function parseBlogSeoMetadata(value: unknown): {
     coverUrl: pick("coverUrl"),
     metaTitle: pick("metaTitle"),
     metaDescription: pick("metaDescription"),
-    metaKeywords: pick("metaKeywords"),
   };
 }
 
@@ -92,7 +103,6 @@ export type BlogDetailView = BlogCardView & {
   coverUrl?: string;
   metaTitle?: string;
   metaDescription?: string;
-  metaKeywords?: string;
 };
 
 function hrefFor(row: Pick<BlogCardRow, "locale" | "slug">): string {

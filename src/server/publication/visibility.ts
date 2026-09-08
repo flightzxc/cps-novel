@@ -131,12 +131,21 @@ export function isPublicationStatePublic(
  * readable at the public-access boundary. A takedown Novel forces every one
  * of its Articles to read as rights-blocked regardless of the Article's own
  * status column (rights removal cascades down, never up).
+ *
+ * C-29b: `novel` accepts `null` for a Novel-less (blog/listicle/guide, C-27)
+ * Article — there is no Novel-side half of the OR to read for one, so only
+ * the Article-side half (`article.status === "takedown"`) applies, same
+ * "an Owner/ops takedown on a blog post is exactly as real as on a
+ * novel_article" reasoning `publish-gate/evaluator.ts`'s header already
+ * gives for its own (inlined, pre-C-29b) version of this same check. Every
+ * `novel_article` caller keeps passing a real `NovelPublicationState`
+ * unchanged.
  */
 export function isRightsBlocked(
-  novel: NovelPublicationState,
+  novel: NovelPublicationState | null,
   article: ArticlePublicationState,
 ): boolean {
-  return novel.status === "takedown" || article.status === "takedown";
+  return novel?.status === "takedown" || article.status === "takedown";
 }
 
 /**

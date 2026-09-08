@@ -163,6 +163,20 @@ describe("public browse", () => {
       expect.objectContaining({ canonical: `${ORIGIN}/browse?page=2` }),
     );
   });
+
+  it("C-29 review low fix: 404s for page=2 when there are zero novels, instead of silently rendering as page 1", async () => {
+    loadBrowseNovels.mockResolvedValue([]);
+    await expect(
+      browseModule.default({ searchParams: Promise.resolve({ page: "2" }) }),
+    ).rejects.toBe(NOT_FOUND);
+  });
+
+  it("page=1 with zero novels still renders the empty state (not a 404)", async () => {
+    loadBrowseNovels.mockResolvedValue([]);
+    const tree = await browseModule.default({ searchParams: Promise.resolve({ page: "1" }) });
+    render(tree);
+    expect(screen.getByTestId("book-grid-empty")).toBeTruthy();
+  });
 });
 
 describe("public novel detail", () => {

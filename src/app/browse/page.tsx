@@ -43,7 +43,16 @@ async function loadBrowsePage(
     loadBrowseNovels(PUBLIC_SITE_LOCALE),
   ]);
   const paged = paginateCards(cards, requested);
-  if (requested > paged.totalPages && paged.totalCount > 0) return null;
+  // C-29 review low (found while auditing this route's `/blog` counterpart):
+  // `paginateCards` forces `totalPages` to 1 when `totalCount === 0` (its
+  // own doc comment), so `requested > totalPages` alone already 404s
+  // `page=2` against zero novels — the previous `&& totalCount > 0` clause
+  // suppressed exactly that case (page 1 always passes regardless, since
+  // `1 > 1` is false). `getPublicCategoryPage`'s own guard above already
+  // gets this right (`cards.length === 0` returns not-found unconditionally
+  // before it ever computes `totalPages`), so only this non-category branch
+  // needed the fix.
+  if (requested > paged.totalPages) return null;
 
   return { settings, chrome, paged, category: null };
 }

@@ -7,6 +7,7 @@ import { toNextMetadata } from "@/app/_lib/seo-metadata";
 import { BlogListScreen } from "@/features/public-ui/blog/BlogListScreen";
 import { Pagination } from "@/features/public-ui/collection/Pagination";
 import { isArticleBlogEnabled } from "@/lib/flags";
+import { getPublicT } from "@/lib/locale/messages";
 import { generateSeoMeta } from "@/lib/seo/seo-meta-generator";
 import { PUBLIC_SITE_LOCALE } from "@/lib/site/locale-label";
 import { paginateBlogCards } from "@/lib/site/blog-queries";
@@ -41,7 +42,13 @@ async function loadBlogListPage(rawPage: string | string[] | undefined) {
     loadBlogList(PUBLIC_SITE_LOCALE),
   ]);
   const paged = paginateBlogCards(cards, requested);
-  if (requested > paged.totalPages && paged.totalCount > 0) return null;
+  // C-29 review low: `paginateBlogCards` forces `totalPages` to 1 when
+  // `totalCount === 0` (its own doc comment), so `requested > totalPages`
+  // alone already 404s `page=2` against zero posts — the previous `&&
+  // totalCount > 0` clause suppressed exactly that case (page 1 always
+  // passes regardless, since `1 > 1` is false). See `src/app/browse/page.tsx`'s
+  // identical fix.
+  if (requested > paged.totalPages) return null;
 
   return { settings, chrome, paged };
 }
@@ -57,13 +64,14 @@ export async function generateMetadata({
     return { title: "Not found", robots: { index: false, follow: false } };
   }
 
+  const t = getPublicT(PUBLIC_SITE_LOCALE);
   const seo = generateSeoMeta({
     entity: "collection",
     locale: PUBLIC_SITE_LOCALE,
     pageNumber: loaded.paged.page,
     data: {
-      title: "Blog",
-      description: loaded.settings.siteDescription || "Articles and updates from this site.",
+      title: t("blog.listTitle"),
+      description: loaded.settings.siteDescription || t("blog.listDescription"),
       canonicalPath: "/blog",
       items: loaded.paged.posts.map((post) => ({ name: post.title, url: post.href })),
       siteName: loaded.settings.siteName,
@@ -82,13 +90,14 @@ export default async function BlogListPage({
   const loaded = await loadBlogListPage(page);
   if (!loaded) notFound();
 
+  const t = getPublicT(PUBLIC_SITE_LOCALE);
   const seo = generateSeoMeta({
     entity: "collection",
     locale: PUBLIC_SITE_LOCALE,
     pageNumber: loaded.paged.page,
     data: {
-      title: "Blog",
-      description: loaded.settings.siteDescription || "Articles and updates from this site.",
+      title: t("blog.listTitle"),
+      description: loaded.settings.siteDescription || t("blog.listDescription"),
       canonicalPath: "/blog",
       items: loaded.paged.posts.map((post) => ({ name: post.title, url: post.href })),
       siteName: loaded.settings.siteName,

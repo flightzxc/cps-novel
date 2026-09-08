@@ -194,10 +194,19 @@ export async function checkBlogArticlePublicAccess(
   if (!article || article.articleType !== "blog_article") return { kind: "not_found" };
 
   // Rights-blocked always wins, same precedence as the Novel-article branch
-  // above (checked before `hidden`, before publication state).
-  if (article.status === "takedown") return { kind: "takedown", title: article.title };
+  // above (checked before `hidden`, before publication state). C-29b:
+  // routed through `visibility.ts`'s `isRightsBlocked` (with a `null`
+  // Novel — a blog Article has none, C-27) instead of an inline
+  // `article.status === "takedown"` comparison, same predicate the
+  // Novel-article branch above already calls — this file's own header
+  // discipline ("Do not add a fifth ad hoc visibility check anywhere else
+  // in the codebase — extend this module instead") applied to this
+  // function too. Behavior unchanged: `isRightsBlocked(null, article)` is
+  // exactly `article.status === "takedown"`.
+  if (isRightsBlocked(null, article)) return { kind: "takedown", title: article.title };
   // C-25: hidden is a pure 404 — see `checkNovelArticlePublicAccess`'s
-  // identical check above for why this is not "noindex".
+  // identical check above for why this is not "noindex". Already routed
+  // through `visibility.ts`'s `isHiddenFromPublicView`, unchanged by C-29b.
   if (isHiddenFromPublicView(article, env)) return { kind: "not_found" };
   if (article.status === "published") return { kind: "published", articleId: article.id, title: article.title };
   if (article.status === "unpublished") return { kind: "unavailable", title: article.title };

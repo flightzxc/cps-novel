@@ -95,13 +95,12 @@ describe("paginateBlogCards", () => {
 });
 
 describe("getPublicBlogDetail", () => {
-  it("parses seoMetadata's blog-only keys (coverUrl/metaTitle/metaDescription/metaKeywords)", async () => {
+  it("parses seoMetadata's blog-only keys (coverUrl/metaTitle/metaDescription)", async () => {
     const findFirst = vi.fn().mockResolvedValue(row({
       seoMetadata: {
         coverUrl: "https://cdn.example/cover.jpg",
         metaTitle: "Meta title",
         metaDescription: "Meta description",
-        metaKeywords: "a, b, c",
       },
     }));
     const db = { article: { findFirst } } as unknown as PrismaClient;
@@ -112,9 +111,28 @@ describe("getPublicBlogDetail", () => {
       coverUrl: "https://cdn.example/cover.jpg",
       metaTitle: "Meta title",
       metaDescription: "Meta description",
-      metaKeywords: "a, b, c",
       body: "<p>Body</p>",
     });
+  });
+
+  // C-29b review low: `metaKeywords` is a key the admin editor still writes
+  // into `seoMetadata` (`src/server/content-creation/blog.ts`), but no
+  // public render path ever reads it (see `parseBlogSeoMetadata`'s own doc
+  // comment — CPS's blog SEO has no `keywords` field either). A stored
+  // `metaKeywords` value must not leak onto `BlogDetailView`.
+  it("does not carry a stored metaKeywords value onto the detail view (dead key, dropped)", async () => {
+    const findFirst = vi.fn().mockResolvedValue(row({
+      seoMetadata: {
+        coverUrl: "https://cdn.example/cover.jpg",
+        metaKeywords: "a, b, c",
+      },
+    }));
+    const db = { article: { findFirst } } as unknown as PrismaClient;
+
+    const detail = await getPublicBlogDetail(db, "blog-1");
+
+    expect(detail).toBeDefined();
+    expect("metaKeywords" in (detail ?? {})).toBe(false);
   });
 
   it("blank/whitespace-only seoMetadata keys normalize to undefined, not empty strings", async () => {
