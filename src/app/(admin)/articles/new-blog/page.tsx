@@ -32,7 +32,7 @@ import { BlogCreateForm } from "./_components/blog-create-form";
  * same way `/articles/[articleId]` already relies on that same prefix match
  * without its own root entry. The plan explicitly calls this out as
  * something to "显式复核一次" rather than assume —
- * `tests/ui/articles-new-blog-entry.test.ts` asserts
+ * `tests/ui/articles-new-blog.test.tsx` asserts
  * `resolveAdminPage("/articles/new-blog") === "/articles"` directly so this
  * stays checked, not just believed.
  */

@@ -11,10 +11,12 @@ export interface ArticleBindingResult {
  * Existing bindings to another PromoLink are never overwritten; repeated
  * calls are zero-write for already-correct rows.
  *
- * L-1 (C-27 review): this is the only write path in the codebase that ever
+ * L-1 (C-27 review): this is the only production write path that ever
  * sets `Article.promoLinkId` after row creation (`src/server/content-
  * creation/service.ts` always creates with it `null` — see that module's
- * header). Since C-27 made `Article.novel_id` nullable, `novel_id IS NULL
+ * header; `scripts/x8-promo-fixture.ts`'s acceptance fixture also writes it
+ * directly, but that is a one-off ops script, not a production path).
+ * Since C-27 made `Article.novel_id` nullable, `novel_id IS NULL
  * AND promo_link_id IS NOT NULL` is a schema-legal shape (the composite FK
  * `article_promo_link_novel_fkey` is `MATCH SIMPLE`, so it does not check
  * anything when either column is NULL) — but it is never a *business*-legal

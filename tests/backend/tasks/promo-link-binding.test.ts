@@ -22,8 +22,8 @@ import { bindPromoLinkToArticles } from "../../../worker/handlers/promo-link-bin
 type FakeRow = { id: string; novelId: string | null; promoLinkId: string | null };
 
 function fakeTx(rows: FakeRow[]) {
-  const update = vi.fn(async (..._args: [{ where: { id: string }; data: { promoLinkId: string } }]) => ({}));
-  const findMany = vi.fn(async (..._args: unknown[]) => rows.map(({ id, novelId, promoLinkId }) => ({ id, novelId, promoLinkId })));
+  const update = vi.fn(async () => ({}));
+  const findMany = vi.fn(async () => rows.map(({ id, novelId, promoLinkId }) => ({ id, novelId, promoLinkId })));
   const tx = {
     article: { findMany, update },
   } as unknown as Parameters<typeof bindPromoLinkToArticles>[0];
