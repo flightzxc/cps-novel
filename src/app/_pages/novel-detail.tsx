@@ -17,7 +17,7 @@ import { buildFaqJsonLd } from "@/lib/seo/faq-extract";
 import { buildNovelHreflangAlternates, type NovelHreflangSibling } from "@/lib/seo/novel-hreflang";
 import { generateSeoMeta } from "@/lib/seo/seo-meta-generator";
 import { canonicalUrl } from "@/lib/seo/seo-utils";
-import { buildArticlePath, buildArticleRoutePath } from "@/lib/slug/article-path";
+import { buildArticlePath, buildArticleRoutePath, localePrefix } from "@/lib/slug/article-path";
 
 /**
  * Novel detail page shared body (WO-1 §6.1): extracted verbatim out of
@@ -115,7 +115,7 @@ export async function NovelBody({
         chrome={chrome}
         reason="unpublished"
         novelTitle={access.title}
-        homeHref="/"
+        homeHref={localePrefix(locale) || "/"}
       />
     );
   }

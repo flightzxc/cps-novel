@@ -5,6 +5,7 @@ import { BrandLockup } from "@/components/BrandMark";
 import { Container } from "@/components/Container";
 import type { NavItem } from "@/features/public-ui/types";
 import { useT } from "@/lib/locale/messages/MessagesProvider";
+import { LocaleSwitcher } from "./LocaleSwitcher";
 
 /** 页头高度（h-16）。overlay 模式下滚过这个距离就落回实底。 */
 const HEADER_HEIGHT_PX = 64;
@@ -110,16 +111,24 @@ export function SiteHeader({
         <Container className="flex h-16 items-center justify-between gap-4">
           <BrandLockup size={32} href={brandHref} name={brandName} />
 
-          {/* 桌面导航 */}
-          <nav aria-label={t("nav.mainNav")} className="hidden md:block">
-            <ul className="flex list-none items-center gap-7 p-0">
-              {allItems.map((item) => (
-                <li key={item.href + item.label}>
-                  <NavLink item={item} />
-                </li>
-              ))}
-            </ul>
-          </nav>
+          <div className="flex items-center gap-3">
+            {/* 桌面导航 */}
+            <nav aria-label={t("nav.mainNav")} className="hidden md:block">
+              <ul className="flex list-none items-center gap-7 p-0">
+                {allItems.map((item) => (
+                  <li key={item.href + item.label}>
+                    <NavLink item={item} />
+                  </li>
+                ))}
+              </ul>
+            </nav>
+
+            {/* 语言入口。只有在确实存在多个可发布语种时才渲染任何 DOM
+                （`LocaleSwitcher` 组件自身在 `listPublishableLocales().length
+                <= 1` 时返回 null）——首发只有 en 一个可发布语种时，这里不
+                改变页头的可见结构。 */}
+            <LocaleSwitcher />
+          </div>
 
           {/* 移动端开关 */}
           <button

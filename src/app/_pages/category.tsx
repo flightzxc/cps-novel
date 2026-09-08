@@ -10,6 +10,7 @@ import { Pagination } from "@/features/public-ui/collection/Pagination";
 import type { SiteLocale } from "@/lib/locale/locale-canonical";
 import { getPublicT } from "@/lib/locale/messages";
 import { generateSeoMeta } from "@/lib/seo/seo-meta-generator";
+import { localePrefix } from "@/lib/slug/article-path";
 import { getPublicCategoryPage } from "@/lib/site/category-queries";
 
 /**
@@ -97,7 +98,7 @@ export async function CategoryBody({
       locale={locale}
       currentPage={loaded.category.page}
       totalPages={loaded.category.totalPages}
-      basePath={`/category/${loaded.category.category.slug}`}
+      basePath={`${localePrefix(locale)}/category/${loaded.category.category.slug}`}
     />
   </>;
 }

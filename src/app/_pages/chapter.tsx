@@ -17,6 +17,7 @@ import { buildChapterPath, buildChapterRoutePath } from "@/lib/seo/chapter-path"
 import { buildNovelHreflangAlternates, type NovelHreflangSibling } from "@/lib/seo/novel-hreflang";
 import { generateSeoMeta } from "@/lib/seo/seo-meta-generator";
 import { canonicalUrl } from "@/lib/seo/seo-utils";
+import { localePrefix } from "@/lib/slug/article-path";
 
 /**
  * Chapter page shared body (WO-1 §6.1): extracted verbatim out of
@@ -128,7 +129,7 @@ export async function ChapterBody({
         chrome={chrome}
         reason="unpublished"
         novelTitle={access.title}
-        homeHref="/"
+        homeHref={localePrefix(locale) || "/"}
       />
     );
   }

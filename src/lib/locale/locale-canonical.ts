@@ -109,6 +109,36 @@ export const SITE_LOCALE_LABELS: Readonly<Record<SiteLocale, string>> = Object.f
 });
 
 /**
+ * `SiteLocale` → 该语种的本族语自称（"Français"、"日本語"……），供公开站的
+ * 语言切换器（WO-2 `施工工单_WO1-3_多语种公开站地基_2026-09-08.md` §8.3）
+ * 显示——与上面 `SITE_LOCALE_LABELS`（后台运营看的中文标签）是两张不同的表：
+ * 那张给后台操作员，这张给读者本人在切换器里认出自己的语言。
+ *
+ * 🔴 只能加在这个唯一真源文件里，理由与 `SITE_LOCALE_LABELS` 完全一样：
+ * `tests/ui/locale-canonical.test.ts` 的"没有第二张语种映射表"扫描按
+ * 名字（含 LOCALE/LANGUAGE）+ 字面量集合声明识别，排除的只有本文件；
+ * `tests/ui/public-copy-cjk.test.ts` 的公开面 CJK 扫描也不覆盖本文件——这张
+ * 表本身就是"本族语文字"，两条既有门禁都只认这一个安全存放点。
+ */
+export const SITE_LOCALE_NATIVE_NAMES: Readonly<Record<SiteLocale, string>> = Object.freeze({
+  en: "English",
+  es: "Español",
+  "pt-BR": "Português",
+  id: "Bahasa Indonesia",
+  vi: "Tiếng Việt",
+  th: "ไทย",
+  ja: "日本語",
+  ko: "한국어",
+  "zh-Hant": "繁體中文",
+  ar: "العربية",
+  fr: "Français",
+  de: "Deutsch",
+  pl: "Polski",
+  cs: "Čeština",
+  ru: "Русский",
+});
+
+/**
  * 上游语种登记表：一个站点 locale ← 一组上游取值。
  *
  * P0-S15（2026-08-26）：**已按真实上游证据填入子集，不再是空表。** 来源是

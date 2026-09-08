@@ -8,6 +8,7 @@ import {
 } from "@/lib/site/admin-origin";
 import { getSiteUrl } from "@/lib/seo/site-url";
 import { PUBLIC_SITE_LOCALE } from "@/lib/site/locale-label";
+import { pickPublishableLocale, SITE_LOCALE_REQUEST_HEADER } from "@/lib/site/request-locale";
 
 /**
  * RC-9 admin-host isolation (2026-09-03, Owner).
@@ -138,7 +139,23 @@ export function proxy(request: NextRequest): NextResponse {
     }
   }
 
-  return NextResponse.next();
+  // WO-2 §8.2: forward the request's resolved site locale as a header so
+  // `src/app/layout.tsx` — which sits above both public route trees (and
+  // the admin/dev-preview segments) and has no `[locale]` route param of
+  // its own to read — can set `<html lang>`/`dir` without re-deriving this
+  // path-parsing rule. Only the path's first segment is consulted, and only
+  // when it's in the OPEN locale set (`pickPublishableLocale` ->
+  // `isPublishableLocale`, the same gate every other exit point reads) —
+  // never `SITE_LOCALES`, so this cannot advertise an unopened locale.
+  // Today that set is `{"en"}`, `en` is never itself a path prefix (D-8),
+  // and any `/en/*` request was already redirected away above — so this
+  // resolves to `"en"` for every request that reaches here, matching the
+  // root layout's existing hardcoded `lang="en"` exactly.
+  const [, firstPathSegment] = request.nextUrl.pathname.split("/");
+  const requestLocale = pickPublishableLocale(firstPathSegment);
+  const forwardedHeaders = new Headers(request.headers);
+  forwardedHeaders.set(SITE_LOCALE_REQUEST_HEADER, requestLocale);
+  return NextResponse.next({ request: { headers: forwardedHeaders } });
 }
 
 // Excludes Next's own build-time static assets — nothing this proxy decides

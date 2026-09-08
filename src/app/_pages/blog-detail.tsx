@@ -9,7 +9,7 @@ import { BlogUnavailableScreen } from "@/features/public-ui/blog/BlogUnavailable
 import type { SiteLocale } from "@/lib/locale/locale-canonical";
 import { getPublicT } from "@/lib/locale/messages";
 import { generateSeoMeta } from "@/lib/seo/seo-meta-generator";
-import { buildBlogRoutePath } from "@/lib/slug/article-path";
+import { buildBlogRoutePath, localePrefix } from "@/lib/slug/article-path";
 import type { BlogDetailView } from "@/lib/site/blog-queries";
 import type { BlogArticleAccessResult } from "@/server/publication/access";
 
@@ -101,7 +101,14 @@ export async function BlogDetailBody({
 
   if (access.kind === "not_found" || access.kind === "takedown") notFound();
   if (access.kind === "unavailable" || !post) {
-    return <BlogUnavailableScreen locale={locale} chrome={chrome} postTitle={access.title} />;
+    return (
+      <BlogUnavailableScreen
+        locale={locale}
+        chrome={chrome}
+        postTitle={access.title}
+        homeHref={localePrefix(locale) || "/"}
+      />
+    );
   }
 
   const routePath = buildBlogRoutePath({ slug: post.slug });

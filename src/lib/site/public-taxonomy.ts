@@ -11,6 +11,9 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
 
 import type { SiteTag } from "@/features/public-ui/types";
+import { localePrefix } from "@/lib/slug/article-path";
+
+import { asSiteLocale } from "./locale-label";
 
 type Db = PrismaClient | Prisma.TransactionClient;
 
@@ -31,12 +34,27 @@ type PublicTaxonomyRow = {
   updated_at: Date;
 };
 
-function project(row: PublicTaxonomyRow): PublicTaxonomyTag {
+/**
+ * WO-2 §8.1: `href` is now locale-prefixed via `localePrefix`, the site's
+ * sole prefix-building rule (`src/lib/slug/article-path.ts`), keyed off the
+ * caller's own `locale` argument (this function's caller,
+ * `loadPublicTaxonomyByNovelIds`, already received it — see that function's
+ * doc comment). `locale` arrives here as a plain `string` (it doubles as a
+ * raw SQL filter value in that caller, so its exported signature stays
+ * loose); `asSiteLocale` validates it defensively the same way
+ * `src/lib/site/mappers.ts` already does for content-locale values, and
+ * falls back to no prefix (bare path) rather than throwing if it is ever
+ * something else — a taxonomy link degrading to the default-locale path is
+ * a far safer failure than a served page ever throwing.
+ */
+function project(row: PublicTaxonomyRow, locale: string): PublicTaxonomyTag {
+  const siteLocale = asSiteLocale(locale);
+  const prefix = siteLocale ? localePrefix(siteLocale) : "";
   return Object.freeze({
     id: row.id,
     slug: row.slug,
     label: row.display_name,
-    href: `/category/${row.slug}`,
+    href: `${prefix}/category/${row.slug}`,
     description: row.canonical_definition,
     sortOrder: row.sort_order,
     updatedAt: row.updated_at,
@@ -98,7 +116,7 @@ export async function loadPublicTaxonomyByNovelIds(
   const grouped = new Map<string, PublicTaxonomyTag[]>();
   for (const row of rows) {
     const tags = grouped.get(row.novel_id) ?? [];
-    tags.push(project(row));
+    tags.push(project(row, locale));
     grouped.set(row.novel_id, tags);
   }
   return grouped;

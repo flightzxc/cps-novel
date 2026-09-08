@@ -10,6 +10,7 @@ import { Pagination } from "@/features/public-ui/collection/Pagination";
 import type { SiteLocale } from "@/lib/locale/locale-canonical";
 import { getPublicT } from "@/lib/locale/messages";
 import { generateSeoMeta } from "@/lib/seo/seo-meta-generator";
+import { localePrefix } from "@/lib/slug/article-path";
 import { getPublicCategoryPage } from "@/lib/site/category-queries";
 import { paginateCards } from "@/lib/site/queries";
 
@@ -150,7 +151,7 @@ export async function BrowseBody({
         locale={locale}
         currentPage={loaded.paged.page}
         totalPages={loaded.paged.totalPages}
-        basePath="/browse"
+        basePath={`${localePrefix(locale)}/browse`}
         searchParams={loaded.category ? { category: loaded.category.slug } : undefined}
       />
     </>

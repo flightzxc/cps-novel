@@ -42,7 +42,18 @@ export type ArticleRoutePathInput = {
   readonly shortId: string;
 };
 
-function localePrefix(locale: SiteLocale): string {
+/**
+ * As-needed locale URL prefix: empty for the default locale (`en`), `/{locale}`
+ * for every other registered locale.
+ *
+ * 🔴 Sole prefix-building implementation (D-8). WO-2
+ * (`施工工单_WO1-3_多语种公开站地基_2026-09-08.md` §8.1) exports it for reuse
+ * by every other in-site link that must react to the currently-served
+ * locale — `chromeFromSiteSetting`'s nav/brand hrefs, the category taxonomy
+ * projection, the `_pages/*` basePath/homeHref props, and the locale
+ * switcher — rather than writing a second copy of this rule.
+ */
+export function localePrefix(locale: SiteLocale): string {
   return locale === "en" ? "" : `/${locale}`;
 }
 

@@ -10,6 +10,7 @@ import type { SiteLocale } from "@/lib/locale/locale-canonical";
 import { getPublicT } from "@/lib/locale/messages";
 import { isArticleBlogEnabled } from "@/lib/flags";
 import { generateSeoMeta } from "@/lib/seo/seo-meta-generator";
+import { localePrefix } from "@/lib/slug/article-path";
 import { paginateBlogCards } from "@/lib/site/blog-queries";
 
 /**
@@ -129,7 +130,7 @@ export async function BlogListBody({
         locale={locale}
         currentPage={loaded.paged.page}
         totalPages={loaded.paged.totalPages}
-        basePath="/blog"
+        basePath={`${localePrefix(locale)}/blog`}
       />
     </>
   );

@@ -1,9 +1,12 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
+import { headers } from "next/headers";
 import { GoogleAnalytics } from "@next/third-parties/google";
 import "@/styles/globals.css";
 import { getPublicT } from "@/lib/locale/messages";
 import { PUBLIC_SITE_LOCALE } from "@/lib/site/locale-label";
+import { pickPublishableLocale, SITE_LOCALE_REQUEST_HEADER } from "@/lib/site/request-locale";
+import { getTextDirection } from "@/lib/site/text-direction";
 import { prisma } from "@/app/_lib/public-deps";
 import { getSiteSetting } from "@/server/site-settings/service";
 
@@ -28,11 +31,34 @@ export const metadata: Metadata = {
  *
  * .site 加在 body 上：站点作用域恒为深色，不跟随系统。
  * 阅读作用域（.reader）只包住章节正文，由章节页自己开。
+ *
+ * WO-2 (`施工工单_WO1-3_多语种公开站地基_2026-09-08.md` §8.2): `<html lang>`
+ * now reacts to the request locale `src/proxy.ts` forwards via
+ * `SITE_LOCALE_REQUEST_HEADER`, and `<html dir>` is newly set alongside it
+ * (via the shared `getTextDirection` helper) — this layout previously
+ * emitted no `dir` attribute at all. The whole read is wrapped in try/catch:
+ * a missing header, an invalid value, or `headers()` itself throwing all
+ * fall back to `PUBLIC_SITE_LOCALE` ("en") rather than ever failing this
+ * request. For every request today that resolves to anything other than
+ * `"en"` — which is all of them, since `PUBLISHABLE_LOCALES` is still
+ * `{"en"}` — `lang` stays exactly `"en"` as before; `dir="ltr"` is the one
+ * new, explicitly accepted DOM difference on the English site (see this
+ * work order's own regression checklist item for it).
  */
 export default async function RootLayout({ children }: { children: ReactNode }) {
   const settings = await getSiteSetting(prisma);
+
+  let locale = PUBLIC_SITE_LOCALE;
+  try {
+    const requestHeaders = await headers();
+    locale = pickPublishableLocale(requestHeaders.get(SITE_LOCALE_REQUEST_HEADER));
+  } catch {
+    locale = PUBLIC_SITE_LOCALE;
+  }
+  const dir = getTextDirection(locale);
+
   return (
-    <html lang="en">
+    <html lang={locale} dir={dir}>
       {settings.googleSearchConsoleVerification ? (
         <head><meta name="google-site-verification" content={settings.googleSearchConsoleVerification} /></head>
       ) : null}

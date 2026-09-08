@@ -35,3 +35,18 @@ export function useT(): Translator {
   }
   return ctx.t;
 }
+
+/**
+ * WO-2 (`施工工单_WO1-3_多语种公开站地基_2026-09-08.md` §8.3): lets a client
+ * component nested under `SiteShell`'s `MessagesProvider` (e.g. the locale
+ * switcher) read the currently-served `SiteLocale` from context instead of
+ * needing it threaded down as an extra prop through every intermediate
+ * component — the same context already carries it for `useT()` above.
+ */
+export function useLocale(): SiteLocale {
+  const ctx = useContext(MessagesContext);
+  if (!ctx) {
+    throw new Error("useLocale() requires MessagesProvider");
+  }
+  return ctx.locale;
+}

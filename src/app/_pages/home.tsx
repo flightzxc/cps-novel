@@ -6,6 +6,7 @@ import { toNextMetadata } from "@/app/_lib/seo-metadata";
 import { HomeScreen } from "@/features/public-ui/home/HomeScreen";
 import type { SiteLocale } from "@/lib/locale/locale-canonical";
 import { generateSeoMeta } from "@/lib/seo/seo-meta-generator";
+import { localePrefix } from "@/lib/slug/article-path";
 
 /**
  * Home page shared body (WO-1 `施工工单_WO1-3_多语种公开站地基_2026-09-08.md`
@@ -72,7 +73,7 @@ export async function HomeBody({ locale }: { locale: SiteLocale }) {
         chrome={chrome}
         featuredList={featuredList}
         novels={novels}
-        browseAllHref="/browse"
+        browseAllHref={`${localePrefix(locale)}/browse`}
         categories={categories}
       />
     </>

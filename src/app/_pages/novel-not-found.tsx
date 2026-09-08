@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 
 import { UnavailableScreen } from "@/features/public-ui/status/UnavailableScreen";
 import type { SiteLocale } from "@/lib/locale/locale-canonical";
+import { localePrefix } from "@/lib/slug/article-path";
 
 /**
  * Novel-segment not-found shared body (WO-1 §6.1): extracted verbatim out of
@@ -33,5 +34,7 @@ export const notFoundMetadata: Metadata = {
 };
 
 export function NovelNotFoundBody({ locale }: { locale: SiteLocale }) {
-  return <UnavailableScreen locale={locale} reason="unpublished" homeHref="/" />;
+  return (
+    <UnavailableScreen locale={locale} reason="unpublished" homeHref={localePrefix(locale) || "/"} />
+  );
 }
