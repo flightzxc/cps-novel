@@ -182,7 +182,7 @@ unknown_outcome`，机器真源 `INDEXNOW_ATTEMPT_RECOVERY_STATES`，与 `outcom
 不得混淆）、ScheduleRun trigger kind、misfire policy、preview materialization policy、
 carousel serving source 和 ArticleTemplate 的 `applicable_article_type`
 （`novel_article | blog_article | listicle | guide | any`，机器真源
-`src/server/article-templates/service.ts` 的 `APPLICABLE_ARTICLE_TYPES`；`novel_article`
+`src/lib/article-templates/applicable-article-type.ts` 的 `APPLICABLE_ARTICLE_TYPES`；`novel_article`
 是 CPS `drama_article` 的直接改名，其余四值逐字照搬）。C-24 新增的 Article 三轴同样在此列：
 `article_type`（机器真源 `src/domain/database-statuses.ts` 的 `ARTICLE_TYPES`，与
 `APPLICABLE_ARTICLE_TYPES` 同源去掉 `any`）、`content_mode`（机器真源
