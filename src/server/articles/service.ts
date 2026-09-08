@@ -518,12 +518,6 @@ function normalizeArticleListInput(input: ArticleListInput = {}): NormalizedArti
   if (input.locale !== undefined && !SITE_LOCALES.includes(input.locale as never)) {
     throw new AdminContentQueryError("invalid_locale", "Locale is not registered");
   }
-  // C-25: reuses `invalid_status` (same code family the plan calls for —
-  // "status 取值未登记" reads equally well for a SEO-visibility value) rather
-  // than minting a new error code, per this round's contract discipline.
-  if (input.seoVisibility !== undefined && !ARTICLE_SEO_VISIBILITIES.includes(input.seoVisibility as ArticleSeoVisibility)) {
-    throw new AdminContentQueryError("invalid_status", "Article SEO visibility is not registered");
-  }
   /**
    * C-26: "取值为空串或 all 时不筛...海阅统一对所有筛选做归一，这是修 CPS 的
    * 一处明显失误" — CPS's own filter `<select>` already uses `value=""` for
@@ -534,21 +528,33 @@ function normalizeArticleListInput(input: ArticleListInput = {}): NormalizedArti
    * this call, same as every other filter). `"all"` is accepted too — CPS's
    * own service layer (`article-actions.ts:443`) normalizes exactly that
    * literal for these newer axes — so a caller that sends either spelling
-   * gets "no filter", not a rejected/registered-value error. This
-   * normalization is scoped to these two new fields only: the plan's
-   * complaint is specifically about `articleType`/`contentMode`/
-   * `seoVisibility` (CPS normalizes those three, inconsistently, but never
-   * `status`/`locale`); widening `status`/`locale`/`novelId`/`templateId`/
-   * `canonicalTagId`/`seoVisibility` to also accept `"all"` is out of this
-   * round's scope and left untouched.
+   * gets "no filter", not a rejected/registered-value error. C-27 review
+   * (Low finding) widened this from "these two new fields only" to also
+   * cover `seoVisibility` (C-25): the plan's own words are "海阅统一对所有
+   * 筛选做归一", and leaving `seoVisibility` out was under-applying that
+   * instruction, not a deliberate scope line — CPS itself normalizes
+   * `seoVisibility` the same inconsistent way it normalizes `articleType`/
+   * `contentMode` (`article-actions.ts:443`), so bringing `seoVisibility` in
+   * line is still "do what the plan already asked for", not new scope.
+   * `status`/`locale`/`novelId`/`templateId`/`canonicalTagId` remain
+   * untouched — CPS never normalizes those either, and the plan's complaint
+   * was scoped to the three axes CPS itself normalizes (inconsistently).
    */
   const articleTypeRaw = input.articleType === "" || input.articleType === "all" ? undefined : input.articleType;
   const contentModeRaw = input.contentMode === "" || input.contentMode === "all" ? undefined : input.contentMode;
+  const seoVisibilityRaw =
+    input.seoVisibility === "" || input.seoVisibility === "all" ? undefined : input.seoVisibility;
   if (articleTypeRaw !== undefined && !ARTICLE_TYPES.includes(articleTypeRaw as ArticleType)) {
     throw new AdminContentQueryError("invalid_status", "Article type is not registered");
   }
   if (contentModeRaw !== undefined && !ARTICLE_CONTENT_MODES.includes(contentModeRaw as ArticleContentMode)) {
     throw new AdminContentQueryError("invalid_status", "Article content mode is not registered");
+  }
+  // C-25: reuses `invalid_status` (same code family the plan calls for —
+  // "status 取值未登记" reads equally well for a SEO-visibility value) rather
+  // than minting a new error code, per this round's contract discipline.
+  if (seoVisibilityRaw !== undefined && !ARTICLE_SEO_VISIBILITIES.includes(seoVisibilityRaw as ArticleSeoVisibility)) {
+    throw new AdminContentQueryError("invalid_status", "Article SEO visibility is not registered");
   }
   const novelId = input.novelId !== undefined ? requireArticleUuid(input.novelId) : undefined;
   const templateId = input.templateId !== undefined ? requireArticleUuid(input.templateId) : undefined;
@@ -577,7 +583,7 @@ function normalizeArticleListInput(input: ArticleListInput = {}): NormalizedArti
     templateId,
     search: trimmedSearch || undefined,
     canonicalTagId,
-    seoVisibility: input.seoVisibility as ArticleSeoVisibility | undefined,
+    seoVisibility: seoVisibilityRaw as ArticleSeoVisibility | undefined,
     articleType: articleTypeRaw as ArticleType | undefined,
     contentMode: contentModeRaw as ArticleContentMode | undefined,
   };

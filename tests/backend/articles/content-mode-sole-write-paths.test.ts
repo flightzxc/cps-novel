@@ -30,17 +30,30 @@
  *   model's own field that happens to be named `contentMode` (none exists
  *   today, but the scope discipline is the same one both sibling scans
  *   already apply for their own target field/column).
+ * - **Signal — raw SQL**: `$executeRaw`/`$executeRawUnsafe` call sites
+ *   (parenthesized or tagged-template form) are flagged if a fixed window of
+ *   source after the call mentions `article` together with `content_mode`
+ *   (the physical column name, since a raw statement is talking to
+ *   PostgreSQL directly, not to a Prisma field) — same coarse,
+ *   deliberately-over-inclusive shape as `no-bypass.test.ts`'s
+ *   `MENTIONS_ARTICLE_OR_NOVEL_TABLE_AND_STATUS`, `$queryRaw`/
+ *   `$queryRawUnsafe` excluded for the same reason (read path, not write).
  *
  * 🔴 Known coverage, not a full-coverage guarantee — same caveat both sibling
- * scans state explicitly: dynamically computed model/method names, raw SQL
- * (`$executeRaw`/`$executeRawUnsafe`) writing this column via a string-built
- * query, or any other run-time obfuscation sit outside what this source scan
- * can see. Unlike `no-bypass.test.ts`, this scan does not add a raw-SQL
- * signal of its own — there is no existing raw-SQL write path anywhere near
- * `Article` in this codebase to model one against (the one real
- * `$executeRaw` write in this repo, `worker/handlers/credential.ts`, is
- * unrelated to `Article`), and inventing one un-mirrored by any real usage
- * would just be untested code. A clean scan narrows the search space; it
+ * scans state explicitly: dynamically computed model/method names, a
+ * raw-SQL write whose nearby source does not happen to mention both
+ * `article` and `content_mode` within the scan window, or any other
+ * run-time obfuscation sit outside what this source scan can see. This scan
+ * *does* add a raw-SQL signal of its own, mirroring `no-bypass.test.ts`'s —
+ * an earlier revision of this header claimed no raw-SQL precedent existed to
+ * model one against; that was wrong. `no-bypass.test.ts`'s own
+ * `$executeRaw`/`$executeRawUnsafe`-plus-nearby-status-mention detector *is*
+ * that precedent: it too has no real matching Article-status raw-SQL write
+ * anywhere in this repo (the one real `$executeRaw` write,
+ * `worker/handlers/credential.ts`, is unrelated to `Article`) and is kept
+ * anyway as defense-in-depth against a bypass that has not happened yet, not
+ * as a detector for one that has. This scan follows the identical
+ * reasoning for `content_mode`. A clean scan narrows the search space; it
  * does not prove no bypass exists.
  */
 import { readFile, readdir } from "node:fs/promises";
@@ -81,12 +94,27 @@ function extractCallArgs(source: string, matchEnd: number): string {
 const ARTICLE_WRITE_CALL = /\.article\.(update|updateMany|updateManyAndReturn|create|createMany|createManyAndReturn|upsert)\(/g;
 const SETS_CONTENT_MODE_KEY = /\bcontentMode\s*:/;
 
+// Raw SQL escape hatches that bypass the Prisma model delegate entirely —
+// same two call forms `no-bypass.test.ts` scans for. `$queryRaw`/
+// `$queryRawUnsafe` deliberately excluded — see module header.
+const RAW_SQL_CALL = /\.(\$executeRawUnsafe|\$executeRaw)\b/g;
+const RAW_SQL_WINDOW = 800;
+const MENTIONS_ARTICLE_TABLE_AND_CONTENT_MODE =
+  /(\barticle\b[\s\S]{0,200}\bcontent_mode\b)|(\bcontent_mode\b[\s\S]{0,200}\barticle\b)/i;
+
 function findWriteSiteViolations(source: string): string[] {
   const hits: string[] = [];
   for (const match of source.matchAll(ARTICLE_WRITE_CALL)) {
     const args = extractCallArgs(source, (match.index ?? 0) + match[0].length);
     if (SETS_CONTENT_MODE_KEY.test(args)) {
       hits.push(`.article.${match[1]}(...) writes a contentMode key`);
+    }
+  }
+  for (const match of source.matchAll(RAW_SQL_CALL)) {
+    const start = (match.index ?? 0) + match[0].length;
+    const window = source.slice(start, start + RAW_SQL_WINDOW);
+    if (MENTIONS_ARTICLE_TABLE_AND_CONTENT_MODE.test(window)) {
+      hits.push(`.${match[1]}(...) mentions article content_mode nearby (raw SQL)`);
     }
   }
   return hits;
@@ -160,6 +188,33 @@ describe("Article.contentMode sole-maintenance-points regression (C-26)", () => 
       const rows = await db.article.findMany({ where: { contentMode: input.contentMode } });
     `;
     expect(findWriteSiteViolations(readFilter)).toEqual([]);
+  });
+
+  /**
+   * The raw-SQL signal added alongside this test's header correction (see
+   * module header, "Signal — raw SQL"): a synthetic `UPDATE article SET
+   * content_mode=...` outside the two allowed roots must be flagged, the
+   * same way `no-bypass.test.ts`'s own raw-SQL sanity test proves its
+   * detector catches the literal `UPDATE article SET status = 'published'`
+   * shape.
+   */
+  it("sanity: detects raw SQL writing article content_mode, both call forms", () => {
+    const executeRaw =
+      "await tx.$executeRaw(Prisma.sql`UPDATE article SET content_mode = 'manual' WHERE id = ${id}::uuid`);";
+    expect(findWriteSiteViolations(executeRaw)).toEqual([
+      ".$executeRaw(...) mentions article content_mode nearby (raw SQL)",
+    ]);
+
+    const taggedTemplate = "await tx.$executeRawUnsafe`UPDATE article SET content_mode='template' WHERE id=${id}`;";
+    expect(findWriteSiteViolations(taggedTemplate)).toEqual([
+      ".$executeRawUnsafe(...) mentions article content_mode nearby (raw SQL)",
+    ]);
+  });
+
+  it("sanity: does not false-positive on raw SQL for an unrelated table/column", () => {
+    const unrelatedRawSql =
+      "await tx.$executeRaw(Prisma.sql`UPDATE novel SET status = 'published' WHERE id = ${id}::uuid`);";
+    expect(findWriteSiteViolations(unrelatedRawSql)).toEqual([]);
   });
 
   it("src/server/articles/service.ts is one of exactly the two places allowed to contain the write-site pattern", async () => {

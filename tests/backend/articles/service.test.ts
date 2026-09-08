@@ -866,6 +866,25 @@ describe("listArticles (M7 ①)", () => {
   });
 
   /**
+   * C-27 review (Low finding): the ""/"all" → no-filter normalization
+   * originally landed only for `articleType`/`contentMode`; the plan's own
+   * words ("海阅统一对所有筛选做归一") cover `seoVisibility` too. Same shape
+   * as the `articleType`/`contentMode` normalization test below.
+   */
+  it("seoVisibility 传空串或 'all' 时视为不筛，不报错", async () => {
+    const db = new FakeArticlesDb();
+    seedNovel(db, "novel-1");
+    seedArticle(db, { id: "pub-1", novelId: "novel-1", seoVisibility: "public" });
+    seedArticle(db, { id: "seo-only-1", novelId: "novel-1", seoVisibility: "seo_only", slug: "seo-only-1" });
+
+    const empty = await listArticles(db.asPrismaClient(), { seoVisibility: "" });
+    expect(empty.items.map((item) => item.id).sort()).toEqual(["pub-1", "seo-only-1"]);
+
+    const all = await listArticles(db.asPrismaClient(), { seoVisibility: "all" });
+    expect(all.items.map((item) => item.id).sort()).toEqual(["pub-1", "seo-only-1"]);
+  });
+
+  /**
    * C-26 (`规划_文章管理能力补齐_博客类型可见性换小说_2026-09-08.md` §三/C-26):
    * "文章列表入参新增可选的 articleType 与 contentMode；规范化按取值域校验；
    * where 各加一条相等条件" — same exact-match shape as `seoVisibility` above.
@@ -899,6 +918,8 @@ describe("listArticles (M7 ①)", () => {
    * both spellings ("" and "all") normalize to "no filter" for these two
    * axes, matching the filter bar's own empty-option value (`""`) and the
    * literal CPS's service layer accepts for these newer axes ("all").
+   * `seoVisibility` gets the identical treatment — see the C-27-review test
+   * above, right after `seoVisibility`'s own filter tests.
    */
   it("articleType/contentMode 传空串或 'all' 时视为不筛，不报错", async () => {
     const db = new FakeArticlesDb();
