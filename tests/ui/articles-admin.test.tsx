@@ -753,3 +753,34 @@ describe("ArticlesPage 抬头文案与入口按钮（C-22，源码级断言）",
     }
   });
 });
+
+/**
+ * C-23 (`分析_文章管理Parity缺口_2026-09-08.md` §六): the remaining
+ * navigation-closure leg — an article → novel link back. Novel-detail →
+ * article-list (C-19) and article-list → novel-detail (C-20, the 书目
+ * column) both already exist; this pins that the article *edit* page
+ * (`/articles/[articleId]`, the screen "编辑/预览" actually lands on) also
+ * has a way back to the novel and to the list, not just the browser's own
+ * Back button. Same source-text-assertion mechanism as the C-22 block above,
+ * for the same reason (async Server Component, no render-based unit test
+ * precedent for `(admin)/**\/page.tsx` in this repo).
+ */
+describe("ArticleEditPage 返回导航（C-23）", () => {
+  const source = readFileSync(
+    resolve(import.meta.dirname, "../../src/app/(admin)/articles/[articleId]/page.tsx"),
+    "utf8",
+  );
+
+  it("提供「查看所属书目」链接，指向该文章的 novelId", () => {
+    expect(source).toContain('href={`/novels/${article.novel.id}`}');
+    expect(source).toContain("查看所属书目");
+  });
+
+  it("提供「返回文章列表」链接，指向 /articles", () => {
+    const labelIdx = source.indexOf("返回文章列表");
+    expect(labelIdx).toBeGreaterThan(-1);
+    const before = source.slice(0, labelIdx);
+    const hrefMatch = before.match(/href="([^"]*)"(?!.*href=")/s);
+    expect(hrefMatch?.[1]).toBe("/articles");
+  });
+});

@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { findCapabilityState } from "@/features/admin-ui/capability-view";
 
@@ -9,11 +10,39 @@ import { ArticleEditor } from "../_components/article-editor";
 
 export const dynamic = "force-dynamic";
 
+/**
+ * C-23 (`分析_文章管理Parity缺口_2026-09-08.md` §六): navigation closure's
+ * remaining leg. The novel-detail page has had a "查看该书目的文章" link
+ * into `/articles?novelId=…` since C-19, and the article *list*'s 书目
+ * column has linked back to `/novels/{novelId}` since C-20 — but this edit
+ * page, the screen an operator actually lands on after clicking "编辑/预览"
+ * from that list, had no way back to either the list or the book short of
+ * the browser's own Back button. `novel: { select: { id: true, title: true } }`
+ * is a plain relation include, not a new query: `Article.novelId` is `NOT
+ * NULL` with `onDelete: Restrict` (`prisma/schema.prisma`), so
+ * `article.novel` always resolves for any Article row that itself
+ * resolved — no defensive fallback needed here the way `../page.tsx`'s
+ * `resolveNovelBannerTitle` needs one for an arbitrary, unvalidated
+ * `?novelId=` query param.
+ */
 export default async function ArticleEditPage({ params }: { params: Promise<{ articleId: string }> }) {
   const { articleId } = await params;
   const { context, granted } = await requireContentPage("/articles/[articleId]", "content:view");
   if (!granted) notFound();
-  const article = await prisma.article.findFirst({ where: { id: articleId, deletedAt: null }, select: { id: true, title: true, summary: true, body: true, seoMetadata: true, slug: true, publicPageShortId: true, updatedAt: true } });
+  const article = await prisma.article.findFirst({
+    where: { id: articleId, deletedAt: null },
+    select: {
+      id: true,
+      title: true,
+      summary: true,
+      body: true,
+      seoMetadata: true,
+      slug: true,
+      publicPageShortId: true,
+      updatedAt: true,
+      novel: { select: { id: true, title: true } },
+    },
+  });
   if (!article) notFound();
   const canWrite = findCapabilityState(capabilityViews(context), "content:publish") === "granted";
   const updatedAt = article.updatedAt.toISOString();
@@ -22,5 +51,29 @@ export default async function ArticleEditPage({ params }: { params: Promise<{ ar
   // `ArticleEditor` so its optimistic-lock state and `defaultValue` fields
   // pick up the fresh row instead of a stale one from the first mount — see
   // that component's doc comment.
-  return <AdminShell session={sessionView(context)} title={`编辑文章 · ${article.title}`} description="预览并保存运营正文与文章级 SEO 元数据。"><ArticleEditor key={updatedAt} article={{ ...article, updatedAt }} canWrite={canWrite} /></AdminShell>;
+  return (
+    <AdminShell
+      session={sessionView(context)}
+      title={`编辑文章 · ${article.title}`}
+      description="预览并保存运营正文与文章级 SEO 元数据。"
+      actions={
+        <div className="flex gap-2">
+          <Link
+            href={`/novels/${article.novel.id}`}
+            className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
+          >
+            查看所属书目
+          </Link>
+          <Link
+            href="/articles"
+            className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
+          >
+            返回文章列表
+          </Link>
+        </div>
+      }
+    >
+      <ArticleEditor key={updatedAt} article={{ ...article, updatedAt }} canWrite={canWrite} />
+    </AdminShell>
+  );
 }
