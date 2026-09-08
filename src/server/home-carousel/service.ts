@@ -4,6 +4,7 @@ import { Prisma, type PrismaClient } from "@prisma/client";
 import type { AdminIdentityStore, SessionStore } from "@/lib/auth/ports";
 import { requireFreshAdminServiceMutation, type AdminServiceAuthorization } from "@/server/auth/guards";
 import { enqueueScheduledTask, type ScheduleDefinition, type ScheduledTaskInput, type TaskHandlerRegistry } from "@/lib/tasks";
+import { buildPublicListArticleWhere } from "@/server/publication/visibility";
 
 /** CPS v8.3.6 config/compute/merge parity, adapted to Novel/PostgreSQL. */
 export const HOME_CAROUSEL_TASK_TYPE = "home_carousel.compute.v1";
@@ -74,8 +75,14 @@ export function homeCarouselBusinessDate(now: Date, timezone: string) {
 
 type CarouselTx = Prisma.TransactionClient;
 
-export async function computeHomeCarouselInTx(tx: CarouselTx, input: { locale: string; source: "manual" | "cron"; actorId?: string; now?: Date }) {
+export async function computeHomeCarouselInTx(tx: CarouselTx, input: { locale: string; source: "manual" | "cron"; actorId?: string; now?: Date; env?: NodeJS.ProcessEnv }) {
   const now = input.now ?? new Date();
+  // C-25 review fix: `env` (default `process.env`) threads
+  // `FEATURE_ARTICLE_SEO_VISIBILITY` down to `buildPublicListArticleWhere`
+  // below — an explicit override lets tests exercise the flag-on path
+  // without mutating global `process.env`, same convention as
+  // `createSitemapFamilyBuilder`/`isNovelIndexNowEligible`.
+  const env = input.env ?? process.env;
   const configRow = await tx.siteSetting.findUnique({ where: { id: 1 }, select: { carouselConfigJson: true } });
   const config = normalizeHomeCarouselConfig(configRow?.carouselConfigJson);
   const businessDate = homeCarouselBusinessDate(now, config.cronTimezone);
@@ -91,8 +98,15 @@ export async function computeHomeCarouselInTx(tx: CarouselTx, input: { locale: s
     if (input.source === "cron" && error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") return { status: "skipped_duplicate" as const };
     throw error;
   }
+  // C-25 review fix: the carousel is a list surface (candidate pool and
+  // serving snapshot alike — see `buildPublicListArticleWhere`'s own doc
+  // comment), so candidate selection uses the same stricter "list" fragment
+  // as `src/lib/site/home-carousel-service.ts`'s `fallbackRows`, excluding
+  // both `hidden` and `seo_only` Articles from ever being written into
+  // `home_carousel_serving`. While `FEATURE_ARTICLE_SEO_VISIBILITY` is off
+  // this degrades to exactly the pre-C-25 where-shape below.
   const rows = await tx.article.findMany({
-    where: { locale: input.locale, status: "published", deletedAt: null, novel: { status: "published", deletedAt: null, coverUrl: { not: null } } },
+    where: { ...buildPublicListArticleWhere({ locale: input.locale }, env), novel: { status: "published", deletedAt: null, coverUrl: { not: null } } },
     orderBy: [{ updatedAt: "desc" }, { publishedAt: "desc" }, { id: "asc" }],
     take: HOME_CAROUSEL_SCAN_LIMIT,
     select: { id: true, novelId: true, publishedAt: true, updatedAt: true, novel: { select: { coverUrl: true } } },

@@ -28,6 +28,8 @@ export type FakeArticle = {
   deletedAt: Date | null;
   publishedAt: Date | null;
   updatedAt: Date;
+  /** C-25. Optional — defaults to `"public"` so every pre-existing fixture in this suite is unaffected. */
+  seoVisibility?: "public" | "seo_only" | "hidden";
   novel: { title: string; status: string; deletedAt: Date | null; coverUrl: string | null };
 };
 
@@ -100,10 +102,22 @@ export class FakeHomeCarouselDb {
         },
       },
       article: {
-        findMany: async (args: { take: number }) => {
+        findMany: async (args: { where?: { AND?: Array<Record<string, unknown>> }; take: number }) => {
           this.calls.push("article.findMany");
+          // C-25 review fix: `computeHomeCarouselInTx` now spreads
+          // `buildPublicListArticleWhere(...)` into this call's `where` —
+          // that helper only adds a `seoVisibility: "public"` clause to its
+          // `AND` array while `FEATURE_ARTICLE_SEO_VISIBILITY` is on (see
+          // `src/server/publication/visibility.ts`). This fake has no real
+          // Prisma engine to evaluate `where` against, so it detects that
+          // clause the same way the rest of this hand-rolled double mirrors
+          // the production query shape, rather than re-implementing generic
+          // Prisma `where` matching.
+          const seoVisibilityGated = Array.isArray(args.where?.AND)
+            && args.where.AND.some((clause) => clause.seoVisibility === "public");
           const rows = [...this.articles.values()]
             .filter((row) => row.status === "published" && row.deletedAt === null && row.novel.status === "published" && row.novel.deletedAt === null && !!row.novel.coverUrl)
+            .filter((row) => !seoVisibilityGated || (row.seoVisibility ?? "public") === "public")
             .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime() || (b.publishedAt?.getTime() ?? 0) - (a.publishedAt?.getTime() ?? 0) || a.id.localeCompare(b.id));
           return rows.slice(0, args.take).map((row) => ({ id: row.id, novelId: row.novelId, publishedAt: row.publishedAt, updatedAt: row.updatedAt, novel: { coverUrl: row.novel.coverUrl } }));
         },

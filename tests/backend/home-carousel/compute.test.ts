@@ -92,6 +92,42 @@ describe("computeHomeCarouselInTx honors carouselConfigJson (PR6 fix B-1 #3)", (
   });
 });
 
+// C-25 review fix: the candidate query now applies `buildPublicListArticleWhere`
+// (same "list surface" fragment as `src/lib/site/home-carousel-service.ts`'s
+// `fallbackRows`) so a `hidden`/`seo_only` Article can never be written into
+// `home_carousel_serving` — see `src/server/home-carousel/service.ts`'s
+// `computeHomeCarouselInTx`.
+describe("computeHomeCarouselInTx honors Article.seoVisibility (C-25 review fix)", () => {
+  // Same `as unknown as NodeJS.ProcessEnv` convention as this repo's other
+  // C-25 flag tests (tests/backend/publication/visibility.test.ts,
+  // tests/backend/publication/access.test.ts).
+  const FLAG_ON = { FEATURE_ARTICLE_SEO_VISIBILITY: "true" } as unknown as NodeJS.ProcessEnv;
+
+  function seedVisibilityFixture(db: FakeHomeCarouselDb) {
+    db.seedArticle(article({ id: "article-public", novelId: "novel-public", seoVisibility: "public" }));
+    db.seedArticle(article({ id: "article-hidden", novelId: "novel-hidden", seoVisibility: "hidden" }));
+    db.seedArticle(article({ id: "article-seo-only", novelId: "novel-seo-only", seoVisibility: "seo_only" }));
+  }
+
+  it("flag on: excludes hidden and seo_only candidates from the batch and from serving", async () => {
+    const db = new FakeHomeCarouselDb();
+    seedVisibilityFixture(db);
+    const result = await computeHomeCarouselInTx(db.asTransactionClient(), { locale: "en", source: "manual", now: NOW, env: FLAG_ON });
+    expect(result.status).toBe("success");
+    expect(db.candidates.map((row) => row.novelId)).toEqual(["novel-public"]);
+    expect(db.serving.map((row) => row.novelId)).toEqual(["novel-public"]);
+  });
+
+  it("flag off (default): hidden/seo_only Articles are read as public, matching pre-C-25 behavior", async () => {
+    const db = new FakeHomeCarouselDb();
+    seedVisibilityFixture(db);
+    const result = await computeHomeCarouselInTx(db.asTransactionClient(), { locale: "en", source: "manual", now: NOW });
+    expect(result.status).toBe("success");
+    expect(db.candidates.map((row) => row.novelId).sort()).toEqual(["novel-hidden", "novel-public", "novel-seo-only"]);
+    expect(db.serving.map((row) => row.novelId).sort()).toEqual(["novel-hidden", "novel-public", "novel-seo-only"]);
+  });
+});
+
 function dbBatchParams(db: FakeHomeCarouselDb) {
   const [batch] = [...db.batches.values()];
   return batch.params as Record<string, unknown>;

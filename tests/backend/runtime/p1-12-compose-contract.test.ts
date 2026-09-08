@@ -137,6 +137,25 @@ describe("P1-12 Compose and image contracts", () => {
     }
   });
 
+  it("C-25 review fix (P0): passes FEATURE_ARTICLE_SEO_VISIBILITY to both Web and Worker, not Web-only", () => {
+    // worker/handlers/sitemap-refresh.ts's createSitemapFamilyBuilder(db) and
+    // worker/handlers/indexnow-delivery.ts's isNovelIndexNowEligible ->
+    // isHiddenFromPublicView both default their `env` param to `process.env`
+    // -- the WORKER process's own env. Before this fix the compose worker
+    // block never set this var, so the worker's read of it was silently
+    // pinned to "false" regardless of Web's value: a hidden/seo_only
+    // Article's stale sitemap entry or IndexNow submission would survive
+    // past the toggle. Scheduler is exempt -- enqueue-only, no public-site
+    // read path to gate.
+    const web = serviceBlock("web");
+    const worker = serviceBlock("worker");
+    const scheduler = serviceBlock("scheduler");
+    expect(web).toContain("FEATURE_ARTICLE_SEO_VISIBILITY: ${FEATURE_ARTICLE_SEO_VISIBILITY:-false}");
+    expect(worker).toContain("FEATURE_ARTICLE_SEO_VISIBILITY: ${FEATURE_ARTICLE_SEO_VISIBILITY:-false}");
+    expect(scheduler).not.toContain("FEATURE_ARTICLE_SEO_VISIBILITY");
+    expect(envExample).toContain("FEATURE_ARTICLE_SEO_VISIBILITY=false");
+  });
+
   it("starts content, settings, and task capabilities at super_admin", () => {
     const web = serviceBlock("web");
     for (const capability of [

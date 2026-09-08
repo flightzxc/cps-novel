@@ -152,8 +152,10 @@ services:
       # C-25 (规划_文章管理能力补齐_博客类型可见性换小说_2026-09-08.md §三/C-25):
       # single gate (no ALLOW_WRITE partner -- read-only, see
       # docs/governance/feature-flag-registry.md's own note on why) for
-      # whether public-site reads honor Article.seoVisibility. web only --
-      # worker/scheduler have no public-site read path to gate.
+      # whether public-site reads honor Article.seoVisibility. web AND
+      # worker both consume it (worker's own copy is registered further
+      # below, in this file's worker service block) -- only the scheduler
+      # is enqueue-only and has no public-site read path to gate.
       FEATURE_ARTICLE_SEO_VISIBILITY: ${FEATURE_ARTICLE_SEO_VISIBILITY:-false}
     volumes:
       - sitemap_static:/app/runtime/static-sitemaps
@@ -191,6 +193,18 @@ services:
       SITEMAP_AUTO_REFRESH_ALLOW_WRITE: ${SITEMAP_AUTO_REFRESH_ALLOW_WRITE:-false}
       FEATURE_PROMO_LINK_CLAIM: ${FEATURE_PROMO_LINK_CLAIM:-false}
       PROMO_LINK_CLAIM_ALLOW_WRITE: ${PROMO_LINK_CLAIM_ALLOW_WRITE:-false}
+      # C-25 review fix (P0): `worker/handlers/sitemap-refresh.ts`'s
+      # `createSitemapFamilyBuilder(db)` and `worker/handlers/indexnow-
+      # delivery.ts`'s `isNovelIndexNowEligible` -> `isHiddenFromPublicView`
+      # both default their `env` param to `process.env` -- i.e. the WORKER
+      # process's own env, not the web service's. Omitting this var here
+      # silently pinned the worker's read of the flag to "false" regardless
+      # of what web had, letting a hidden/seo_only Article's stale sitemap
+      # entry or IndexNow submission survive past the toggle. web AND worker
+      # both consume this flag; only the scheduler is enqueue-only and has
+      # no public-site read path to gate. registered:
+      # docs/governance/feature-flag-registry.md.
+      FEATURE_ARTICLE_SEO_VISIBILITY: ${FEATURE_ARTICLE_SEO_VISIBILITY:-false}
       # PR6 lane F: same P2-06.5 tagging double-gate as the web service --
       # worker/handlers/novel-tag-backfill.ts reads all four directly via
       # process.env (isTaggingEnabled/isAutoTaggingEnabled/

@@ -160,6 +160,18 @@ export function isPublicTrackingWriteDisabled(env: NodeJS.ProcessEnv = process.e
 // `seo_only`/`hidden` values in the admin editor before the public-facing
 // behavior is switched on ("后台先行、公开后开", the same rollout convention
 // this repo's IndexNow enqueue/delivery pair already uses).
+//
+// Consumed by BOTH the web and worker processes, not web-only: every
+// function above defaults its own `env` param to `process.env`, and the
+// sitemap-refresh/indexnow-delivery worker handlers
+// (`worker/handlers/sitemap-refresh.ts`'s `createSitemapFamilyBuilder`,
+// `worker/handlers/indexnow-delivery.ts`'s `isNovelIndexNowEligible` call)
+// never pass an override -- so each reads the WORKER process's own copy of
+// this var. `docker-compose.yml` must register it in both the web and
+// worker service blocks (a P0 gap this round's review caught: the worker
+// block was missing it, silently pinning the worker's read to "false"
+// regardless of web's value). Only the scheduler is exempt -- it only
+// enqueues tasks and has no public-site read path to gate.
 // -----------------------------------------------------------------------
 export const ARTICLE_SEO_VISIBILITY_FEATURE_FLAG = "FEATURE_ARTICLE_SEO_VISIBILITY";
 

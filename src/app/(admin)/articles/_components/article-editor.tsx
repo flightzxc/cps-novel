@@ -60,7 +60,7 @@ export function ArticleEditor({ article, canWrite }: { article: { id: string; ti
     {/*
       C-25 (`规划_文章管理能力补齐_博客类型可见性换小说_2026-09-08.md` §三/C-25):
       three-pill selector, same information structure as CPS's own
-      `article-form-v2/featured-fields.tsx` "SEO 可见性" pills (照抄 CPS 那三颗
+      `articles/article-form-v2/featured-fields.tsx` "SEO 可见性" pills (照抄 CPS 那三颗
       药丸按钮的信息结构) — a `role="radiogroup"` of buttons rather than a
       native `<select>`, matching that CPS component's own control shape.
     */}

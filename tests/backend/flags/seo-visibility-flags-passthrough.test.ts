@@ -23,10 +23,15 @@ import {
  *   2. `docs/governance/feature-flag-registry.md` — the table row.
  *   3. `scripts/lib/x8-levels.json` — Level 0/UAT/R.
  *   4. `docs/p2/V020_RELEASE_CHECKLIST.md` §3 Level 0 — the checkbox item.
- *   5. `.env.example` + `docker-compose.yml`'s `web` service — the runtime
- *      passthrough (deliberately web-only: this flag only gates public-site
- *      *reads*, and worker/scheduler have no public-site read path to gate,
- *      per the analysis doc's own "worker/scheduler 不消费本开关，不接").
+ *   5. `.env.example` + `docker-compose.yml`'s `web` AND `worker` services —
+ *      the runtime passthrough. NOT web-only (a P0 review fix corrected this
+ *      file's own prior claim to the contrary): `worker/handlers/sitemap-
+ *      refresh.ts`'s `createSitemapFamilyBuilder` and `worker/handlers/
+ *      indexnow-delivery.ts`'s `isNovelIndexNowEligible` -> `isHiddenFrom
+ *      PublicView` both default their `env` param to `process.env` -- the
+ *      WORKER process's own env -- so the worker service block must carry
+ *      this var too. Only `scheduler` is exempt: it is enqueue-only and has
+ *      no public-site read path to gate.
  */
 const root = resolve(import.meta.dirname, "../../..");
 
@@ -75,7 +80,7 @@ describe("C-25: FEATURE_ARTICLE_SEO_VISIBILITY is registered in all five require
     expect(level0Section).toContain("FEATURE_ARTICLE_SEO_VISIBILITY=false");
   });
 
-  describe("5. .env.example + docker-compose.yml's web service", () => {
+  describe("5. .env.example + docker-compose.yml's web AND worker services", () => {
     const envExample = readFileSync(resolve(root, ".env.example"), "utf8");
     const compose = readFileSync(resolve(root, "docker-compose.yml"), "utf8");
 
@@ -98,14 +103,19 @@ describe("C-25: FEATURE_ARTICLE_SEO_VISIBILITY is registered in all five require
       expect(envExample).toContain("FEATURE_ARTICLE_SEO_VISIBILITY=false");
     });
 
-    it("docker-compose.yml passes the flag to web with the exact fail-closed default", () => {
+    it("docker-compose.yml passes the flag to web AND worker with the exact fail-closed default (P0 review fix)", () => {
+      // Both processes default their `env` param to their OWN `process.env`
+      // (see this file's header) -- omitting worker here silently pinned its
+      // read of the flag to "false" no matter what web had.
       expect(serviceBlock("web")).toContain(
+        "FEATURE_ARTICLE_SEO_VISIBILITY: ${FEATURE_ARTICLE_SEO_VISIBILITY:-false}",
+      );
+      expect(serviceBlock("worker")).toContain(
         "FEATURE_ARTICLE_SEO_VISIBILITY: ${FEATURE_ARTICLE_SEO_VISIBILITY:-false}",
       );
     });
 
-    it("docker-compose.yml does NOT pass the flag to worker or scheduler (they have no public-site read path)", () => {
-      expect(serviceBlock("worker")).not.toContain("FEATURE_ARTICLE_SEO_VISIBILITY");
+    it("docker-compose.yml does NOT pass the flag to scheduler (enqueue-only, no public-site read path)", () => {
       expect(serviceBlock("scheduler")).not.toContain("FEATURE_ARTICLE_SEO_VISIBILITY");
     });
   });

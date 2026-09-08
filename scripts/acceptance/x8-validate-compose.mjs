@@ -126,6 +126,9 @@ for (const flag of [
   "INDEXNOW_OUTBOX_ALLOW_WRITE",
   "FEATURE_P2_06_5_TAGGING",
   "FEATURE_P2_06_5_TAG_ADMIN_WRITE",
+  // C-25 review fix: single gate, no ALLOW_WRITE partner (read-only, see
+  // docs/governance/feature-flag-registry.md's own note on why).
+  "FEATURE_ARTICLE_SEO_VISIBILITY",
 ]) {
   const expected = levelEntry.flags[flag];
   if (web.environment?.[flag] !== expected) {
@@ -141,6 +144,12 @@ for (const flag of [
   "INDEXNOW_DELIVERY_ALLOW_WRITE",
   "FEATURE_P2_06_5_TAGGING",
   "FEATURE_P2_06_5_TAG_ADMIN_WRITE",
+  // C-25 review fix (P0): worker/handlers/sitemap-refresh.ts's
+  // createSitemapFamilyBuilder and worker/handlers/indexnow-delivery.ts's
+  // isNovelIndexNowEligible->isHiddenFromPublicView both default env to
+  // process.env -- the WORKER process's own env -- so this must be
+  // registered in docker-compose.yml's worker block too, not web-only.
+  "FEATURE_ARTICLE_SEO_VISIBILITY",
 ]) {
   const expected = levelEntry.flags[flag];
   if (worker.environment?.[flag] !== expected) {
