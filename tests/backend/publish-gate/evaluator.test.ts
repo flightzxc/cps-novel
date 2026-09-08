@@ -9,7 +9,7 @@ const NEVER_PUBLISHABLE = () => false;
 function facts(overrides: Partial<PublishGateFacts> = {}): PublishGateFacts {
   return {
     novel: { status: "ready", locale: "en" },
-    article: { status: "draft", title: "Title", slug: "slug", body: "Body text" },
+    article: { status: "draft", locale: "en", title: "Title", slug: "slug", body: "Body text" },
     promoLink: { status: "fetched", webUrl: "https://example.com/a", appUrl: null },
     preview: { hasPreviewChapter: true, hasPreviewBody: true },
     pageIdentity: { conflicting: false },
@@ -45,7 +45,7 @@ describe("evaluatePublishGate", () => {
 
   describe("required_metadata_missing", () => {
     it("flags a blank title", () => {
-      const result = evaluatePublishGate(facts({ article: { status: "draft", title: "  ", slug: "s", body: "b" } }), {
+      const result = evaluatePublishGate(facts({ article: { status: "draft", locale: "en", title: "  ", slug: "s", body: "b" } }), {
         isPublishableLocale: ALWAYS_PUBLISHABLE,
       });
       expect(result.reasons).toEqual(["required_metadata_missing"]);
@@ -56,21 +56,21 @@ describe("evaluatePublishGate", () => {
     });
 
     it("flags a blank slug", () => {
-      const result = evaluatePublishGate(facts({ article: { status: "draft", title: "t", slug: "\t", body: "b" } }), {
+      const result = evaluatePublishGate(facts({ article: { status: "draft", locale: "en", title: "t", slug: "\t", body: "b" } }), {
         isPublishableLocale: ALWAYS_PUBLISHABLE,
       });
       expect(result.requiredMetadataMissing?.missingFields).toEqual(["slug"]);
     });
 
     it("flags a blank body", () => {
-      const result = evaluatePublishGate(facts({ article: { status: "draft", title: "t", slug: "s", body: "" } }), {
+      const result = evaluatePublishGate(facts({ article: { status: "draft", locale: "en", title: "t", slug: "s", body: "" } }), {
         isPublishableLocale: ALWAYS_PUBLISHABLE,
       });
       expect(result.requiredMetadataMissing?.missingFields).toEqual(["body"]);
     });
 
     it("accumulates every missing field, not just the first", () => {
-      const result = evaluatePublishGate(facts({ article: { status: "draft", title: "", slug: "", body: "" } }), {
+      const result = evaluatePublishGate(facts({ article: { status: "draft", locale: "en", title: "", slug: "", body: "" } }), {
         isPublishableLocale: ALWAYS_PUBLISHABLE,
       });
       expect(result.requiredMetadataMissing?.missingFields).toEqual(["title", "slug", "body"]);
@@ -156,7 +156,7 @@ describe("evaluatePublishGate", () => {
 
     it("flags rights_blocked when the Article itself is takedown", () => {
       const result = evaluatePublishGate(
-        facts({ article: { status: "takedown", title: "t", slug: "s", body: "b" } }),
+        facts({ article: { status: "takedown", locale: "en", title: "t", slug: "s", body: "b" } }),
         { isPublishableLocale: ALWAYS_PUBLISHABLE },
       );
       expect(result.reasons).toEqual(["rights_blocked"]);
@@ -168,7 +168,7 @@ describe("evaluatePublishGate", () => {
       facts({
         promoLink: null,
         preview: { hasPreviewChapter: false, hasPreviewBody: false },
-        article: { status: "draft", title: "", slug: "s", body: "b" },
+        article: { status: "draft", locale: "en", title: "", slug: "s", body: "b" },
       }),
       { isPublishableLocale: NEVER_PUBLISHABLE },
     );
@@ -188,5 +188,82 @@ describe("evaluatePublishGate", () => {
   it("never returns blocking_sync_exception — that code is createPublishGateResult's own fail-closed hygiene, not something this evaluator decides to emit", () => {
     const result = evaluatePublishGate(facts(), { isPublishableLocale: ALWAYS_PUBLISHABLE });
     expect(result.reasons).not.toContain("blocking_sync_exception");
+  });
+
+  /**
+   * C-27 (`规划_文章管理能力补齐_博客类型可见性换小说_2026-09-08.md` §三/C-27):
+   * "判定器按文章类型分叉——novel_article 走今天这六条；非 novel_article 只走
+   * '语种可发布 + 必要元数据齐全 + 页面身份不冲突' 三条，跳过 '推广链接缺失 /
+   * 推广链接未就绪 / 试读章节缺失 / 试读正文缺失 / 权利阻断' 五条". `facts.novel
+   * === null` is this evaluator's fork signal (guaranteed equivalent to
+   * "article_type <> 'novel_article'" by `article_novel_id_by_type_check`,
+   * see `evaluator.ts`'s header) — these tests exercise that branch directly
+   * without needing a real blog Article row.
+   */
+  describe("C-27: non-novel_article fork (facts.novel === null)", () => {
+    function blogFacts(overrides: Partial<PublishGateFacts> = {}): PublishGateFacts {
+      return facts({
+        novel: null,
+        // A blog Article has no PromoLink/preview chapters by construction
+        // (C-28 always writes `promoLinkId: null`, and preview chapters
+        // belong to a Novel this Article does not have) — modeled here as
+        // absent/empty so these tests assert the fork skips them rather
+        // than happening to pass them.
+        promoLink: null,
+        preview: { hasPreviewChapter: false, hasPreviewBody: false },
+        ...overrides,
+      });
+    }
+
+    it("is publishable with no Novel, no PromoLink, and no preview chapters — the three skipped conditions never fire", () => {
+      const result = evaluatePublishGate(blogFacts(), { isPublishableLocale: ALWAYS_PUBLISHABLE });
+      expect(result).toEqual({ publishable: true, reasons: [], requiredMetadataMissing: null });
+    });
+
+    it("reads locale off facts.article.locale, not facts.novel.locale, when there is no Novel", () => {
+      const result = evaluatePublishGate(
+        blogFacts({ article: { status: "draft", locale: "es", title: "t", slug: "s", body: "b" } }),
+        { isPublishableLocale: (locale) => locale === "en" },
+      );
+      expect(result.reasons).toEqual(["locale_not_publishable"]);
+    });
+
+    it("still flags required_metadata_missing", () => {
+      const result = evaluatePublishGate(
+        blogFacts({ article: { status: "draft", locale: "en", title: "", slug: "s", body: "b" } }),
+        { isPublishableLocale: ALWAYS_PUBLISHABLE },
+      );
+      expect(result.reasons).toEqual(["required_metadata_missing"]);
+    });
+
+    it("still flags page_identity_conflict", () => {
+      const result = evaluatePublishGate(blogFacts({ pageIdentity: { conflicting: true } }), {
+        isPublishableLocale: ALWAYS_PUBLISHABLE,
+      });
+      expect(result.reasons).toEqual(["page_identity_conflict"]);
+    });
+
+    it("never flags preview_chapter_missing/preview_body_missing even though preview facts say both are missing", () => {
+      const result = evaluatePublishGate(
+        blogFacts({ preview: { hasPreviewChapter: false, hasPreviewBody: false } }),
+        { isPublishableLocale: ALWAYS_PUBLISHABLE },
+      );
+      expect(result.reasons).not.toContain("preview_chapter_missing");
+      expect(result.reasons).not.toContain("preview_body_missing");
+    });
+
+    it("never flags promo_link_missing/promo_link_not_ready even though promoLink is null", () => {
+      const result = evaluatePublishGate(blogFacts({ promoLink: null }), { isPublishableLocale: ALWAYS_PUBLISHABLE });
+      expect(result.reasons).not.toContain("promo_link_missing");
+      expect(result.reasons).not.toContain("promo_link_not_ready");
+    });
+
+    it("never flags rights_blocked even when the Article's own status is takedown — rights_blocked is a Novel-side concept this branch skips entirely", () => {
+      const result = evaluatePublishGate(
+        blogFacts({ article: { status: "takedown", locale: "en", title: "t", slug: "s", body: "b" } }),
+        { isPublishableLocale: ALWAYS_PUBLISHABLE },
+      );
+      expect(result.reasons).not.toContain("rights_blocked");
+    });
   });
 });

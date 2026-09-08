@@ -39,7 +39,21 @@ async function fallbackRows(db: PrismaClient, locale: SiteLocale) {
   return db.article.findMany({ where: { ...buildPublicListArticleWhere({ locale }), novel: { status: "published", deletedAt: null, coverUrl: { not: null } } }, orderBy: [{ updatedAt: "desc" }, { publishedAt: "desc" }, { id: "asc" }], take: 500, select: SELECT });
 }
 
-async function toFeatured(db: PrismaClient, row: Awaited<ReturnType<typeof fallbackRows>>[number]): Promise<HomeCarouselItem | null> {
+type CarouselRow = Awaited<ReturnType<typeof fallbackRows>>[number];
+/**
+ * C-27: `Article.novel` is nullable as of this round (blog articles have
+ * none). The home carousel is a Novel-only surface both here (`fallbackRows`
+ * filters `novel: { status: "published", ... }`, which excludes a null
+ * relation) and via `buildPublicListArticleWhere`'s own `novel: { is:
+ * PUBLIC_NOVEL_RECORD }` requirement for the `homeCarouselServing` path — a
+ * row with no novel can never actually reach `getHomeCarouselItems`'s loop.
+ * Narrowed here (guard below) so `toFeatured` can keep reading `row.novel.*`
+ * without a `!` assertion; blog carousel eligibility, if ever wanted, is out
+ * of this round's scope.
+ */
+type CarouselRowWithNovel = CarouselRow & { novel: NonNullable<CarouselRow["novel"]> };
+
+async function toFeatured(db: PrismaClient, row: CarouselRowWithNovel): Promise<HomeCarouselItem | null> {
   if (!isPromoReady(row.promoLink) || !row.novel.coverUrl?.trim()) return null;
   const record: PublicArticleDetailRecord = { ...row, promoLink: row.promoLink ? { publicRedirectCode: row.promoLink.publicRedirectCode } : null };
   const novel = toNovelDetailView(record, await listPreviewChapterRefs(db, row.novel.id));
@@ -55,10 +69,18 @@ export async function getHomeCarouselItems(locale: SiteLocale, db?: PrismaClient
   const unique = new Set<string>();
   const result: HomeCarouselItem[] = [];
   for (const row of rows) {
-    if (unique.has(row.novel.id)) continue;
-    const item = await toFeatured(db, row);
+    // C-27: see `CarouselRowWithNovel` doc comment — cannot actually happen
+    // given this function's two query paths, kept as a type-level guard.
+    // Rebuilt into `rowWithNovel` (rather than passing `row` straight
+    // through) because TS narrows the `row.novel` property access, not the
+    // declared type of `row` itself — `toFeatured`'s `CarouselRowWithNovel`
+    // parameter needs the rebuild to see that narrowing.
+    if (row.novel === null) continue;
+    const rowWithNovel: CarouselRowWithNovel = { ...row, novel: row.novel };
+    if (unique.has(rowWithNovel.novel.id)) continue;
+    const item = await toFeatured(db, rowWithNovel);
     if (!item) continue;
-    unique.add(row.novel.id);
+    unique.add(rowWithNovel.novel.id);
     result.push(item);
     if (result.length === 5) break;
   }

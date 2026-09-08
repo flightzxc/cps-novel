@@ -105,13 +105,30 @@ export async function computeHomeCarouselInTx(tx: CarouselTx, input: { locale: s
   // both `hidden` and `seo_only` Articles from ever being written into
   // `home_carousel_serving`. While `FEATURE_ARTICLE_SEO_VISIBILITY` is off
   // this degrades to exactly the pre-C-25 where-shape below.
-  const rows = await tx.article.findMany({
+  const rawRows = await tx.article.findMany({
     where: { ...buildPublicListArticleWhere({ locale: input.locale }, env), novel: { status: "published", deletedAt: null, coverUrl: { not: null } } },
     orderBy: [{ updatedAt: "desc" }, { publishedAt: "desc" }, { id: "asc" }],
     take: HOME_CAROUSEL_SCAN_LIMIT,
     select: { id: true, novelId: true, publishedAt: true, updatedAt: true, novel: { select: { coverUrl: true } } },
   });
-  const byNovel = new Map<string, typeof rows[number]>();
+  type CarouselCandidateRow = (typeof rawRows)[number];
+  // C-27: `novelId`/`novel` are nullable at the type level (blog articles),
+  // but the `novel: { status: "published", ... }` filter above can only
+  // ever match a row whose `novel` relation actually resolves — a null
+  // relation cannot satisfy an `is`-style nested filter — so `novelId` is
+  // structurally non-null in every row this query returns too (the two are
+  // always in sync per `article_novel_id_by_type_check`). Narrowed here so
+  // the rest of this function can keep reading `row.novelId`/`row.novel.*`
+  // without a `!` assertion; the carousel stays Novel-only until a future
+  // round gives blog its own candidate source.
+  type CarouselCandidateRowWithNovel = CarouselCandidateRow & {
+    novelId: string;
+    novel: NonNullable<CarouselCandidateRow["novel"]>;
+  };
+  const rows = rawRows.filter(
+    (row): row is CarouselCandidateRowWithNovel => row.novelId !== null && row.novel !== null,
+  );
+  const byNovel = new Map<string, CarouselCandidateRowWithNovel>();
   for (const row of rows) if (row.novel.coverUrl?.trim() && !byNovel.has(row.novelId)) byNovel.set(row.novelId, row);
   // PR6 fix (B-1 #3): slotCount/newSlotCount/newNovelWindowDays now drive the
   // reserved new_novel slot count and the recency fill, instead of the
@@ -154,9 +171,20 @@ export async function upsertHomeCarouselManualSlot(input: { authorization: Admin
   const config = await getHomeCarouselConfig(deps.db);
   if (!Number.isInteger(input.position) || input.position < 1 || input.position > config.slotCount) throw new Error("carousel_position_invalid");
   const article = await deps.db.article.findFirst({ where: { id: input.articleId, locale: input.locale, status: "published", deletedAt: null, novel: { status: "published", deletedAt: null, coverUrl: { not: null } } }, select: { id: true, novelId: true } });
-  if (!article) throw new Error("carousel_article_ineligible");
+  // C-27: `novelId` is nullable at the type level, but the `novel: {
+  // status: "published", ... }` filter above can only match a row whose
+  // novel relation resolves (same reasoning as `computeHomeCarouselInTx`'s
+  // `CarouselCandidateRowWithNovel` above) — this manual slot feature is
+  // Novel-only, same as the auto-candidate path.
+  if (!article || article.novelId === null) throw new Error("carousel_article_ineligible");
+  // Captured into its own `const` (rather than reading `article.novelId`
+  // inside the transaction closure below) so its non-null narrowing from the
+  // guard above survives crossing the closure boundary — TS narrows a
+  // property access, not the declared type of the object it came from, once
+  // that access is re-evaluated inside a nested function.
+  const novelId = article.novelId;
   return deps.db.$transaction(async (tx) => {
-    const data = { locale: input.locale, position: input.position, articleId: article.id, novelId: article.novelId, enabled: input.enabled, updatedBy: context.identity.id };
+    const data = { locale: input.locale, position: input.position, articleId: article.id, novelId, enabled: input.enabled, updatedBy: context.identity.id };
     const row = input.id ? await tx.homeCarouselManualSlot.update({ where: { id: input.id }, data }) : await tx.homeCarouselManualSlot.create({ data: { ...data, createdBy: context.identity.id } });
     await tx.homeCarouselChangeLog.create({ data: { locale: input.locale, action: input.id ? "manual.update" : "manual.create", manualSlotId: row.id, actorType: "admin", actorId: context.identity.id, afterState: { position: row.position, articleId: row.articleId, enabled: row.enabled } } });
     return row;

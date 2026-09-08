@@ -78,7 +78,7 @@ function makePayload() {
 function buildFacts(article: FakeArticle, promoLink: FakePromoLink | null): PublishGateFacts {
   return {
     novel: { status: "draft", locale: "en" },
-    article: { status: "draft", title: "A Publishable Title", slug: "a-publishable-title", body: "Real chapter body content." },
+    article: { status: "draft", locale: "en", title: "A Publishable Title", slug: "a-publishable-title", body: "Real chapter body content." },
     promoLink: promoLink ? { status: promoLink.status, webUrl: promoLink.webUrl, appUrl: promoLink.appUrl } : null,
     preview: { hasPreviewChapter: true, hasPreviewBody: true },
     pageIdentity: { conflicting: false },

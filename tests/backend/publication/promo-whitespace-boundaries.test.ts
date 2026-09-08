@@ -42,7 +42,7 @@ describe("P2-12 promo whitespace regression", () => {
   it("rejects promoUrl='   ' at publish, public access, sitemap, and IndexNow boundaries", async () => {
     const facts: PublishGateFacts = {
       novel: { status: "ready", locale: "en" },
-      article: { status: "draft", title: "Blank promo", slug: "blank-promo", body: "body" },
+      article: { status: "draft", locale: "en", title: "Blank promo", slug: "blank-promo", body: "body" },
       promoLink: WHITESPACE_PROMO,
       preview: { hasPreviewChapter: true, hasPreviewBody: true },
       pageIdentity: { conflicting: false },

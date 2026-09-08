@@ -23,7 +23,13 @@ export type FakeNovel = { id: string; status: string; locale: string; deletedAt:
 export type FakePromoLink = { id: string; status: string; webUrl: string | null; appUrl: string | null } | null;
 export type FakeArticle = {
   id: string;
-  novelId: string;
+  /**
+   * C-27: nullable — a blog/listicle/guide Article has no Novel. Every
+   * pre-C-27 seeded fixture in this repo's tests supplies a real novel id
+   * (nothing here defaults it), so this widening is additive: existing
+   * tests are unaffected.
+   */
+  novelId: string | null;
   locale: string;
   slug: string;
   status: string;
@@ -106,8 +112,14 @@ export class FakePublishGateDb {
     if ("id" in where && typeof where.id === "string") {
       const article = this.articles.get(where.id);
       if (!article || article.deletedAt !== null) return null;
-      const novel = this.novels.get(article.novelId);
-      if (!novel) return null;
+      // C-27: a null `novelId` (blog/listicle/guide) means "no Novel to
+      // join" -- mirroring Prisma's own behavior for an optional relation,
+      // this is `novel: null` on the returned row, not "article not found".
+      // A non-null `novelId` with no matching seeded Novel stays treated as
+      // not-found (pre-existing behavior, unreachable on a real DB given the
+      // RESTRICT FK, kept as-is for novel_article fixtures).
+      const novel = article.novelId !== null ? this.novels.get(article.novelId) : null;
+      if (article.novelId !== null && !novel) return null;
       const result = {
         id: article.id,
         novelId: article.novelId,
@@ -118,7 +130,7 @@ export class FakePublishGateDb {
         title: article.title,
         body: article.body,
         publishedAt: article.publishedAt,
-        novel: { status: novel.status, locale: novel.locale, deletedAt: novel.deletedAt },
+        novel: novel ? { status: novel.status, locale: novel.locale, deletedAt: novel.deletedAt } : null,
         promoLink: article.promoLink,
       };
       if (this.onFactsLoaded) {

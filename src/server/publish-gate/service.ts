@@ -220,7 +220,8 @@ export type ApplyPublishTransitionResult =
   | {
       readonly outcome: "published";
       readonly articleId: string;
-      readonly novelId: string;
+      /** C-27: `null` for a non-`novel_article` (blog/listicle/guide) — this Article has no Novel. */
+      readonly novelId: string | null;
       readonly locale: string;
       /** True only the first time this Article ever reached `published`. */
       readonly firstPublish: boolean;
@@ -260,7 +261,8 @@ type TxPublishOutcome =
   | {
       readonly outcome: "published";
       readonly articleId: string;
-      readonly novelId: string;
+      /** C-27: `null` for a non-`novel_article` (blog/listicle/guide) — see this module's "Why Novel and Article publish together" section below. */
+      readonly novelId: string | null;
       readonly locale: string;
       /**
        * Carried through purely to build the invalidated path after commit
@@ -382,11 +384,15 @@ export async function applyPublishTransition(
         throw new PublishConflictSignal();
       }
 
-      // Idempotent: only writes when the Novel is not already published —
-      // see this module's header for why Novel and Article publish
-      // together. Same conditional-updateMany shape as the Article write
-      // above, same throw-to-roll-back reasoning.
-      if (facts.novel.status !== "published") {
+      // Idempotent: only writes when there is a Novel to promote (see this
+      // module's header, "Why Novel and Article publish together") and it
+      // is not already published. Same conditional-updateMany shape as the
+      // Article write above, same throw-to-roll-back reasoning. C-27: a
+      // non-novel_article (blog/listicle/guide) has no Novel at all —
+      // `facts.novel`/`article.novelId` are both `null` for it (guaranteed
+      // to travel together by `article_novel_id_by_type_check`), and this
+      // whole block is skipped; only the Article side is written for it.
+      if (facts.novel && article.novelId !== null && facts.novel.status !== "published") {
         const novelWrite = await tx.novel.updateMany({
           where: { id: article.novelId, status: facts.novel.status, deletedAt: null },
           data: { status: "published" },
@@ -404,8 +410,14 @@ export async function applyPublishTransition(
           entityType: "Article",
           entityId: article.id,
           requestId: input.requestId,
-          beforeSnapshot: { articleStatus: facts.article.status, novelStatus: facts.novel.status },
-          afterSnapshot: { articleStatus: "published", novelStatus: "published" },
+          // C-27: a non-novel_article has no Novel to snapshot a status for
+          // — see this module's "Why Novel and Article publish together".
+          beforeSnapshot: facts.novel
+            ? { articleStatus: facts.article.status, novelStatus: facts.novel.status }
+            : { articleStatus: facts.article.status },
+          afterSnapshot: facts.novel
+            ? { articleStatus: "published", novelStatus: "published" }
+            : { articleStatus: "published" },
         },
       });
 
@@ -429,7 +441,15 @@ export async function applyPublishTransition(
     throw error;
   }
 
-  if (txResult.outcome === "published" && txResult.wrote && txResult.firstPublish) {
+  // C-27: `dispatchFirstPublicPublication`'s IndexNow/sitemap enqueue
+  // handlers are Novel-article concepts today (both key off `novelId`,
+  // which a non-novel_article does not have) — skipped for `novelId ===
+  // null` rather than passed a value that isn't there. Blog's own
+  // IndexNow/sitemap wiring is C-29's job (this Article stays unreachable
+  // on the public site until then regardless — see
+  // `docs/governance/database-governance.md` §4/C-27's own "no public-side
+  // change" scope note), so this is a no-op skip, not a missing feature.
+  if (txResult.outcome === "published" && txResult.wrote && txResult.firstPublish && txResult.novelId !== null) {
     await dispatchFirstPublicPublication(
       {
         articleId: txResult.articleId,

@@ -198,7 +198,17 @@ export type ArticleRegenerateResult =
   | { outcome: "article_not_found" }
   | { outcome: "conflict" }
   | { outcome: "template_not_available" }
-  | { outcome: "template_render_failed"; code: string };
+  | { outcome: "template_render_failed"; code: string }
+  /**
+   * C-27: regeneration renders Novel template values (title/description/
+   * coverUrl/totalChapterCount/previewChapterCount) into the article body —
+   * structurally a `novel_article`-only operation. An Article with no Novel
+   * (blog/listicle/guide) cannot be regenerated this way. Unreachable today:
+   * no blog creation path exists yet in this codebase (that is C-28), so
+   * every Article that can currently reach this function has a Novel — this
+   * is a type-level safety net, not an observed outcome.
+   */
+  | { outcome: "article_not_regenerable" };
 
 /**
  * `expectedUpdatedAt` is optional: the single-article regenerate path
@@ -230,6 +240,10 @@ async function regenerateCore(
     const expected = expectedArticleTimestamp(expectedUpdatedAt);
     if (article.updatedAt.getTime() !== expected.getTime()) return { outcome: "conflict" };
   }
+  // C-27: see `ArticleRegenerateResult`'s `article_not_regenerable` doc
+  // comment — rendering below needs Novel template values this Article
+  // does not have.
+  if (article.novel === null) return { outcome: "article_not_regenerable" };
   const linked = article.templateId ? await db.articleTemplate.findFirst({ where: { id: article.templateId, status: "active", deletedAt: null } }) : null;
   const template = linked ?? await selectActiveArticleTemplate(db, { locale: article.locale });
   if (!template) return { outcome: "template_not_available" };
@@ -349,7 +363,12 @@ export type ArticleListItem = {
   createdAt?: string;
   /** The bound template's human name (`ArticleTemplate.templateName`); `null` when no template is bound, same as `templateKey`. */
   templateName?: string | null;
-  /** The article's (required, `novelId` is `NOT NULL`) novel — id + title, for the 书目 column's link. */
+  /**
+   * The article's novel — id + title, for the 书目 column's link. C-27:
+   * `novelId` is nullable as of this round (blog/listicle/guide articles
+   * have no Novel); this field is already optional (unset, not `null`) so
+   * a novel-less row just omits it, no shape change needed.
+   */
   novel?: { id: string; title: string };
   /** Up to `ARTICLE_CATEGORY_DISPLAY_LIMIT` display names from the novel's Canonical Tag assignments, de-duplicated by tag id. Empty when the novel has none. */
   canonicalTags?: readonly string[];
@@ -725,8 +744,11 @@ export async function listArticles(
     updatedAt: row.updatedAt.toISOString(),
     createdAt: row.createdAt.toISOString(),
     templateName: row.template?.templateName ?? null,
-    novel: { id: row.novel.id, title: row.novel.title },
-    canonicalTags: articleCanonicalTagNames(row.novel.canonicalTags),
+    // C-27: `row.novel` is nullable (blog/listicle/guide have none) — both
+    // fields are already optional (`ArticleListItem.novel`/`canonicalTags`),
+    // so a novel-less row simply omits them rather than needing a `!`.
+    novel: row.novel ? { id: row.novel.id, title: row.novel.title } : undefined,
+    canonicalTags: row.novel ? articleCanonicalTagNames(row.novel.canonicalTags) : undefined,
     seoVisibility: row.seoVisibility,
     articleType: row.articleType,
     contentMode: row.contentMode,

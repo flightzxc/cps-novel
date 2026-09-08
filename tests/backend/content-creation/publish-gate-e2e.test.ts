@@ -61,7 +61,7 @@ describe("P0-S9 end-to-end: content creation → real evaluatePublishGate", () =
     // that), so "draft" is what a real DB row would hold here too.
     const facts: PublishGateFacts = {
       novel: { status: "draft", locale: novel.locale },
-      article: { status: "draft", title: article.title, slug: article.slug, body: article.body },
+      article: { status: "draft", locale: article.locale, title: article.title, slug: article.slug, body: article.body },
       // Nothing downstream of S9 has run yet: S5 (PromoLink claiming) hasn't
       // created a PromoLink, and P2-05 (preview chapter materialization)
       // hasn't materialized any preview chapters. Both are genuinely absent
@@ -115,7 +115,7 @@ describe("P0-S9 end-to-end: content creation → real evaluatePublishGate", () =
     // unclearable before this task.
     const blankBodyFacts: PublishGateFacts = {
       novel: { status: "draft", locale: "en" },
-      article: { status: "draft", title: article.title, slug: article.slug, body: "" },
+      article: { status: "draft", locale: article.locale, title: article.title, slug: article.slug, body: "" },
       promoLink: null,
       preview: { hasPreviewChapter: false, hasPreviewBody: false },
       pageIdentity: { conflicting: false },

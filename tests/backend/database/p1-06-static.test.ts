@@ -97,9 +97,15 @@ describe("P1-06 database operations static contracts", () => {
     // adds eight more: three new field records (article_type, content_mode,
     // seo_visibility), their three CHECK constraint records, and two index
     // records (article_seo_visibility_idx, article_type_locale_status_published_idx).
+    // Phase E — C-27 (blog article foundation, 20260910090000_c27_blog_article_foundation)
+    // adds one more: the article_novel_id_by_type_check CHECK constraint record.
+    // novel_id and article_published_promo_link_check were rewritten in place
+    // (nullable flag / forked predicate), not added, same "same-field semantic
+    // evolution, not replacement" treatment C-24's header cites for
+    // article_template_status_check's earlier in-place rewrite.
     // The exact count still guards duplicate keys.
-    expect(records).toHaveLength(1129);
-    expect(new Set(records.map((line) => JSON.parse(line).stable_key)).size).toBe(1129);
+    expect(records).toHaveLength(1130);
+    expect(new Set(records.map((line) => JSON.parse(line).stable_key)).size).toBe(1130);
     const intents = records.map((line) => JSON.parse(line)).filter(
       (record) => record.table_name === "side_effect_intent"
         && ["status", "response_shape", "confirmed_at"].includes(record.field_name),

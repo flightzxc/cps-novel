@@ -82,6 +82,14 @@ type NovelHreflangCandidate = Prisma.ArticleGetPayload<{ select: typeof NOVEL_HR
  * what actually decides whether a sibling locale is safe to link to.
  */
 function isVisibleSibling(candidate: NovelHreflangCandidate): boolean {
+  // C-27: `Article.novel` is nullable as of this round (blog articles have
+  // none). This module is specifically about *Novel* hreflang siblings — a
+  // row with no Novel cannot be one, so it is correctly not visible here
+  // regardless of why `novel` came back null. The caller's `where` clause
+  // already narrows to one `novelId`, so in practice every row this
+  // function sees still has a Novel; this guard is a type-level safety net,
+  // not a behavior change.
+  if (candidate.novel === null) return false;
   return (
     candidate.deletedAt === null
     && candidate.novel.deletedAt === null

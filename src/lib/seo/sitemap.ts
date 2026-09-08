@@ -90,6 +90,19 @@ type ArticleSitemapCandidate = Prisma.ArticleGetPayload<{
   select: typeof ARTICLE_SITEMAP_SELECT;
 }>;
 
+/**
+ * C-27: `Article.novel` is nullable as of this round (blog articles have
+ * none). Novel/category sitemap families are specifically Novel-page
+ * families — a row with no Novel is out of scope for both, the same way
+ * `isVisibleCandidate` below already excludes it. Narrowing here (a type
+ * predicate `isVisibleCandidate` filters into) lets `buildNovelPageFiles`/
+ * `buildCategoryPageFiles` keep reading `candidate.novel.*` without a `!`
+ * assertion — blog sitemap coverage is C-29's job, on its own family.
+ */
+type ArticleSitemapCandidateWithNovel = ArticleSitemapCandidate & {
+  novel: NonNullable<ArticleSitemapCandidate["novel"]>;
+};
+
 function articleSitemapWhere(locale: SiteLocale, env: NodeJS.ProcessEnv): Prisma.ArticleWhereInput {
   // C-25: `buildPublicArticleWhere` is the "collectability" fragment —
   // excludes `hidden`, keeps `seo_only` (sitemap is exactly a collectability
@@ -109,7 +122,13 @@ function articleSitemapWhere(locale: SiteLocale, env: NodeJS.ProcessEnv): Prisma
   }, env);
 }
 
-function isVisibleCandidate(candidate: ArticleSitemapCandidate, env: NodeJS.ProcessEnv): boolean {
+function isVisibleCandidate(
+  candidate: ArticleSitemapCandidate,
+  env: NodeJS.ProcessEnv,
+): candidate is ArticleSitemapCandidateWithNovel {
+  // C-27: no Novel means this cannot be a novel-page sitemap candidate,
+  // full stop — see `ArticleSitemapCandidateWithNovel`'s doc comment.
+  if (candidate.novel === null) return false;
   return candidate.deletedAt === null
     && candidate.novel.deletedAt === null
     && candidate.promoLink?.deletedAt === null
@@ -140,7 +159,7 @@ function chunks<T>(values: readonly T[], size: number): T[][] {
 
 function buildNovelPageFiles(
   locale: SiteLocale,
-  candidates: readonly ArticleSitemapCandidate[],
+  candidates: readonly ArticleSitemapCandidateWithNovel[],
 ): SitemapFile[] {
   const entries = candidates.map((candidate): SitemapEntry => ({
     loc: toAbsoluteUrl(buildArticlePath({
@@ -169,7 +188,7 @@ function buildNovelPageFiles(
 async function buildCategoryPageFiles(
   db: SitemapDb,
   locale: SiteLocale,
-  candidates: readonly ArticleSitemapCandidate[],
+  candidates: readonly ArticleSitemapCandidateWithNovel[],
 ): Promise<SitemapFile[]> {
   const tagsByNovel = await loadPublicTaxonomyByNovelIds(
     db,
@@ -226,7 +245,7 @@ export function createSitemapFamilyBuilder(
   db: SitemapDb,
   env: NodeJS.ProcessEnv = process.env,
 ): BuildSitemapFamily {
-  const candidateCacheByRoute = new Map<SiteLocale, Promise<ArticleSitemapCandidate[]>>();
+  const candidateCacheByRoute = new Map<SiteLocale, Promise<ArticleSitemapCandidateWithNovel[]>>();
   const loadVisible = (locale: SiteLocale) => {
     const existing = candidateCacheByRoute.get(locale);
     if (existing) return existing;

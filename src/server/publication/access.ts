@@ -82,6 +82,23 @@ export async function checkNovelArticlePublicAccess(
   });
   if (!article) return { kind: "not_found" };
 
+  // C-27: `Article.novel` is nullable as of this round (blog/listicle/guide
+  // articles have no Novel). This access-check boundary is Novel-article-only
+  // until C-29 builds a blog-specific public path — per the plan, "C-27/C-28
+  // 落地后博客可以创建、可以走门禁发布，但公开侧仍然看不见，直到 C-29 打开"
+  // (规划_文章管理能力补齐_博客类型可见性换小说_2026-09-08.md §三/C-27). A
+  // non-novel Article therefore resolves as a plain 404 here — the same
+  // final outcome every downstream branch below would produce for it anyway
+  // (it cannot be rights-blocked via a Novel it does not have, and
+  // `isPubliclyAccessible`/`isNoIndexRemovalState`/`isPublicationStatePublic`
+  // all require a real `NovelPublicationState`), just resolved before
+  // needing one. Every existing row today is `novel_article` with a Novel,
+  // so this is a no-op for all of them. Checked on both `novelId` and
+  // `novel` (always in sync per the `article_novel_id_by_type_check` CHECK)
+  // so both are narrowed non-null below — `novelId` feeds the "published"
+  // result, `novel` feeds the rights/visibility predicates.
+  if (article.novelId === null || article.novel === null) return { kind: "not_found" };
+
   const novelState = article.novel;
   const articleState = { status: article.status };
 

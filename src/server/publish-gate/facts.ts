@@ -12,7 +12,12 @@ type FactsDb = PrismaClient | Prisma.TransactionClient;
 
 export type LoadedArticle = {
   readonly id: string;
-  readonly novelId: string;
+  /**
+   * C-27: nullable — blog/listicle/guide Articles have no Novel. Always
+   * non-null for `novel_article` (the new `article_novel_id_by_type_check`
+   * CHECK guarantees the two travel together, see `evaluator.ts`'s header).
+   */
+  readonly novelId: string | null;
   readonly locale: string;
   readonly slug: string;
   /**
@@ -59,13 +64,23 @@ export async function loadPublishGateFacts(
       promoLink: { select: { status: true, webUrl: true, appUrl: true } },
     },
   });
-  if (!article || article.novel.deletedAt !== null) return null;
+  if (!article) return null;
+  // C-27: a blog/listicle/guide Article has no Novel to be soft-deleted —
+  // this check is novel_article-only, same scope as every other Novel-side
+  // fact below.
+  if (article.novel && article.novel.deletedAt !== null) return null;
 
   const [previewChapters, conflictingArticle] = await Promise.all([
-    db.novelChapter.findMany({
-      where: { novelId: article.novelId, deletedAt: null, status: "preview" },
-      select: { content: { select: { body: true } } },
-    }),
+    // C-27: only queried for `novel_article` — a null `novelId` cannot be
+    // passed to `NovelChapter.novelId` (that column is `NOT NULL`, unrelated
+    // to Article), and preview-chapter facts are never read by the
+    // evaluator for a non-novel Article anyway (see `evaluator.ts`'s fork).
+    article.novelId
+      ? db.novelChapter.findMany({
+          where: { novelId: article.novelId, deletedAt: null, status: "preview" },
+          select: { content: { select: { body: true } } },
+        })
+      : Promise.resolve([]),
     // 🔴 Defense-in-depth, currently unreachable in V1 (merge-time review,
     // `scratchpad/reports/A-REVIEW.md` §2 信息项): this query looks for a
     // different, non-deleted Article already occupying this Article's own
@@ -85,7 +100,8 @@ export async function loadPublishGateFacts(
     // could reintroduce a reachable case the DB constraint alone would not
     // cover the same way. Do not delete this query on the assumption it is
     // dead — it is deliberately redundant with the DB constraint, not
-    // superseded by it.
+    // superseded by it. Applies uniformly to every article type (the
+    // `(locale, slug)` unique index is not scoped by `article_type`).
     db.article.findFirst({
       where: {
         id: { not: article.id },
@@ -98,9 +114,14 @@ export async function loadPublishGateFacts(
   ]);
 
   const facts: PublishGateFacts = {
-    novel: { status: article.novel.status, locale: article.novel.locale },
+    // C-27: `null` exactly when `article.novelId` is `null` (blog/listicle/
+    // guide) — see `evaluator.ts`'s header for how the fork on this reads.
+    novel: article.novel ? { status: article.novel.status, locale: article.novel.locale } : null,
     article: {
       status: article.status,
+      // C-27: only read by the evaluator's locale check when `facts.novel`
+      // is `null` — see `evaluator.ts`.
+      locale: article.locale,
       title: article.title,
       slug: article.slug,
       body: article.body,

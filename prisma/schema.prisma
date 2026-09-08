@@ -1028,7 +1028,15 @@ model ArticleTemplate {
 
 model Article {
   id                String    @id @default(uuid()) @db.Uuid
-  novelId           String    @map("novel_id") @db.Uuid
+  /// C-27: nullable since blog_article/listicle/guide have no Novel; non-null
+  /// required for novel_article by the migration_sql CHECK
+  /// article_novel_id_by_type_check (article_type <> 'novel_article' rows
+  /// must have this NULL, the same CHECK's other half). `article_novel_locale_key`
+  /// (UNIQUE(novelId, locale)) is unaffected: PostgreSQL treats every NULL as
+  /// distinct from every other NULL, so many novelId-NULL blog rows can share
+  /// a locale — do not add NULLS NOT DISTINCT here, see
+  /// docs/governance/database-governance.md §5 item 21.
+  novelId           String?   @map("novel_id") @db.Uuid
   templateId        String?   @map("template_id") @db.Uuid
   promoLinkId       String?   @map("promo_link_id") @db.Uuid
   locale            String    @db.VarChar(16)
@@ -1049,7 +1057,7 @@ model Article {
   createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt         DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  novel              Novel                       @relation(fields: [novelId], references: [id], onDelete: Restrict)
+  novel              Novel?                      @relation(fields: [novelId], references: [id], onDelete: Restrict)
   template           ArticleTemplate?            @relation(fields: [templateId], references: [id], onDelete: SetNull)
   promoLink          PromoLink?                  @relation("ArticlePromoLinkByNovel", fields: [promoLinkId, novelId], references: [id, novelId], onDelete: Restrict, map: "article_promo_link_novel_fkey")
   trackingEvents     TrackingEvent[]

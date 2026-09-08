@@ -18,12 +18,14 @@ export const dynamic = "force-dynamic";
  * page, the screen an operator actually lands on after clicking "编辑/预览"
  * from that list, had no way back to either the list or the book short of
  * the browser's own Back button. `novel: { select: { id: true, title: true } }`
- * is a plain relation include, not a new query: `Article.novelId` is `NOT
- * NULL` with `onDelete: Restrict` (`prisma/schema.prisma`), so
- * `article.novel` always resolves for any Article row that itself
- * resolved — no defensive fallback needed here the way `../page.tsx`'s
- * `resolveNovelBannerTitle` needs one for an arbitrary, unvalidated
- * `?novelId=` query param.
+ * is a plain relation include, not a new query.
+ *
+ * C-27: `Article.novelId`/`novel` are nullable as of this round (blog
+ * articles have no Novel — this page does not build a blog editor yet, that
+ * is C-28, but any Article row this query can load may now legitimately have
+ * a null `novel`). The "查看所属书目" link is therefore rendered only when
+ * `article.novel` is present; every existing row today is `novel_article`
+ * with a Novel, so this is a no-op for all of them.
  */
 export default async function ArticleEditPage({ params }: { params: Promise<{ articleId: string }> }) {
   const { articleId } = await params;
@@ -65,12 +67,14 @@ export default async function ArticleEditPage({ params }: { params: Promise<{ ar
       description="预览并保存运营正文与文章级 SEO 元数据。"
       actions={
         <div className="flex gap-2">
-          <Link
-            href={`/novels/${article.novel.id}`}
-            className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
-          >
-            查看所属书目
-          </Link>
+          {article.novel ? (
+            <Link
+              href={`/novels/${article.novel.id}`}
+              className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
+            >
+              查看所属书目
+            </Link>
+          ) : null}
           <Link
             href="/articles"
             className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50"

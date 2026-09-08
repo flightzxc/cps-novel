@@ -87,6 +87,22 @@ const ARTICLE_DETAIL_SELECT = {
 type ListedArticle = Prisma.ArticleGetPayload<{ select: typeof ARTICLE_CARD_SELECT }>;
 type ListedArticleDetail = Prisma.ArticleGetPayload<{ select: typeof ARTICLE_DETAIL_SELECT }>;
 
+/**
+ * C-27: `Article.novel` is nullable as of this round (blog articles have
+ * none). Every function in this module renders a `NovelCardView`/
+ * `NovelDetailView`/`ChapterView` — all Novel-shaped view models — so a row
+ * with no Novel is out of scope for all of them until C-29 gives blog its
+ * own view model family. `listPublicArticles`/`listPublicCategories` get
+ * this for free from `buildPublicListArticleWhere`'s own `novel: { is:
+ * PUBLIC_NOVEL_RECORD }` requirement (a null-novel row cannot match);
+ * `getPublicNovelDetail`/`getPublicChapterView` load by bare `articleId`
+ * (`buildPrimaryArticleWhere` has no novel/status/promo requirement), so
+ * they add an explicit `row.novel === null` check and return `null` — the
+ * same "not this view model" answer they already give for promo-not-ready.
+ */
+type ListedArticleWithNovel = ListedArticle & { novel: NonNullable<ListedArticle["novel"]> };
+type ListedArticleDetailWithNovel = ListedArticleDetail & { novel: NonNullable<ListedArticleDetail["novel"]> };
+
 export type PublicArticleAccess =
   | {
       kind: "published";
@@ -134,7 +150,7 @@ export async function resolvePublicArticleBySlugParam(
 }
 
 function toPublicArticle(
-  row: ListedArticle,
+  row: ListedArticleWithNovel,
   tags: readonly PublicTaxonomyTag[] = [],
 ): PublicArticleRecord {
   return {
@@ -151,7 +167,7 @@ function toPublicArticle(
 }
 
 function toPublicArticleDetail(
-  row: ListedArticleDetail,
+  row: ListedArticleDetailWithNovel,
   tags: readonly PublicTaxonomyTag[] = [],
 ): PublicArticleDetailRecord {
   return {
@@ -162,8 +178,13 @@ function toPublicArticleDetail(
   };
 }
 
-function filterPromoReady(rows: ListedArticle[]): ListedArticle[] {
-  return rows.filter((row) => isPromoReady(row.promoLink));
+// C-27: also excludes a null `novel` — see `ListedArticleWithNovel`'s doc
+// comment above. `buildPublicListArticleWhere`'s own `novel: { is:
+// PUBLIC_NOVEL_RECORD }` requirement already makes this unreachable for
+// `listPublicArticles`/`listPublicCategories`'s query today; the check here
+// is what lets the type checker see that instead of a `!` assertion.
+function filterPromoReady(rows: ListedArticle[]): ListedArticleWithNovel[] {
+  return rows.filter((row): row is ListedArticleWithNovel => row.novel !== null && isPromoReady(row.promoLink));
 }
 
 export async function listPublicArticles(
@@ -252,11 +273,24 @@ export async function getPublicNovelDetail(
     where: buildPrimaryArticleWhere({ id: articleId }),
     select: ARTICLE_DETAIL_SELECT,
   });
-  if (!row || !isPromoReady(row.promoLink)) return null;
+  // C-27: `buildPrimaryArticleWhere` has no novel/status/promo requirement,
+  // unlike `buildPublicListArticleWhere` — a blog article's id could reach
+  // this query. `NovelDetailView` is Novel-shaped; a null-novel row is "not
+  // this view model", same non-render outcome as promo-not-ready today. See
+  // `ListedArticleWithNovel`'s doc comment above. `novel` is re-captured
+  // into a fresh object (rather than passing `row` straight through) because
+  // TS narrows a property *access* (`row.novel`), not the declared type of
+  // `row` itself, so a downstream call expecting `ListedArticleDetailWithNovel`
+  // still needs this rebuild to see the narrowing.
+  if (!row || !isPromoReady(row.promoLink) || row.novel === null) return null;
+  const rowWithNovel: ListedArticleDetailWithNovel = { ...row, novel: row.novel };
 
-  const previewChapters = await listPreviewChapterRefs(db, row.novel.id);
-  const tags = await loadPublicTaxonomyByNovelIds(db, [row.novel.id], row.locale);
-  return toNovelDetailView(toPublicArticleDetail(row, tags.get(row.novel.id) ?? []), previewChapters);
+  const previewChapters = await listPreviewChapterRefs(db, rowWithNovel.novel.id);
+  const tags = await loadPublicTaxonomyByNovelIds(db, [rowWithNovel.novel.id], rowWithNovel.locale);
+  return toNovelDetailView(
+    toPublicArticleDetail(rowWithNovel, tags.get(rowWithNovel.novel.id) ?? []),
+    previewChapters,
+  );
 }
 
 export async function listPreviewChapterRefs(
@@ -288,15 +322,18 @@ export async function getPublicChapterView(
     where: buildPrimaryArticleWhere({ id: articleId }),
     select: ARTICLE_DETAIL_SELECT,
   });
-  if (!row || !isPromoReady(row.promoLink)) return null;
+  // C-27: see `getPublicNovelDetail`'s identical guard above — `ChapterView`
+  // is also Novel-shaped, and `row` is re-captured for the same reason.
+  if (!row || !isPromoReady(row.promoLink) || row.novel === null) return null;
+  const rowWithNovel: ListedArticleDetailWithNovel = { ...row, novel: row.novel };
 
-  const previewChapters = await listPreviewChapterRefs(db, row.novel.id);
+  const previewChapters = await listPreviewChapterRefs(db, rowWithNovel.novel.id);
   const match = previewChapters.find((chapter) => chapter.canonicalChapterNumber === chapterNumber);
   if (!match) return null;
 
   const chapter = await db.novelChapter.findFirst({
     where: {
-      novelId: row.novel.id,
+      novelId: rowWithNovel.novel.id,
       canonicalChapterNumber: chapterNumber,
       deletedAt: null,
       status: "preview",
@@ -311,9 +348,9 @@ export async function getPublicChapterView(
   const body = chapter?.content?.body;
   if (!chapter || !body?.trim()) return null;
 
-  const tags = await loadPublicTaxonomyByNovelIds(db, [row.novel.id], row.locale);
+  const tags = await loadPublicTaxonomyByNovelIds(db, [rowWithNovel.novel.id], rowWithNovel.locale);
   return toChapterView(
-    toPublicArticleDetail(row, tags.get(row.novel.id) ?? []),
+    toPublicArticleDetail(rowWithNovel, tags.get(rowWithNovel.novel.id) ?? []),
     { ...match, body },
     previewChapters,
   );
