@@ -34,16 +34,22 @@
  * `*.test.ts` under `tests/integration/database/`
  * (`c27-blog-article-postgres.test.ts` in particular).
  *
- * I did not run this file — this worktree has no PostgreSQL connection
- * available (no `DATABASE_URL` pointed at a real database, no container
- * runtime permitted by this task's constraints: "NEVER run docker... or
- * `prisma migrate` against a database"). It is written against the same
- * conventions as `tests/integration/database/c27-blog-article-postgres.test.ts`
- * (raw-SQL `execute`/`executeBatch`/`expectDatabaseFailure` helpers,
- * TRUNCATE-based reset, a foundation seed) and reviewed carefully against
- * the C-30A migration SQL and `prisma/schema.prisma`'s `Article`/`Novel`/
- * `PromoLink` shapes, but it has not been executed — it must be run by
- * whoever next has a real PostgreSQL 16 container available.
+ * First real run: 2026-09-09, PostgreSQL 16.14 (Debian 16.14-1.pgdg13+1,
+ * aarch64) on a disposable `c30_it` database migrated with `prisma migrate
+ * deploy` up to and including `20260911090000_c30_novel_rebind_foundation` —
+ * 4 passed, 0 failed, 0 skipped in ~250ms, and 8 passed / 0 failed for the
+ * whole directory, reproduced five times back to back. Two fixture
+ * corrections were needed, neither under `src/` and neither touching an
+ * assertion:
+ *   (a) `promoLinkInsert` used to derive `idempotency_key` from
+ *       `repeat(<first letter of the redirect code>, 64)`, which is the same
+ *       value for any two promo links whose codes share a first letter — and
+ *       `promo_link_idempotency_key_key` is a real UNIQUE index, so the seed
+ *       aborted on its second insert with `23505`. The key is now derived
+ *       from the (already unique) redirect code itself.
+ *   (b) 🔴 this suite ran concurrently with `batch-200.test.ts` against the
+ *       same database and corrupted it — see `SUITE_LOCK_KEY` below.
+ * Every assertion below is the one originally written.
  */
 import { PrismaClient } from "@prisma/client";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -70,6 +76,48 @@ const ids = {
   softDeletedOccupant: "70000000-0000-4000-8000-0000000c3002",
 } as const;
 
+/**
+ * 🔴 Suite-level mutual exclusion, shared verbatim with `batch-200.test.ts`
+ * — every destructive suite in this directory MUST take this lock for its
+ * whole lifetime. Both files `TRUNCATE` every table in `public` against the
+ * SAME database and `vitest.config.ts` sets no `fileParallelism: false`, so
+ * vitest runs them concurrently in separate workers. This file is the
+ * aggressor of the pair: test 4 deliberately runs `UPDATE novel SET
+ * title_normalized = NULL` across the WHOLE table and then re-derives the
+ * column from `Novel.title`, which — measured on 2026-09-09, before this
+ * lock existed — silently rewrote whichever of `batch-200.test.ts`'s 200
+ * seeded pairs happened to exist at that instant and cost that suite 3–5 of
+ * its pairs, differently on every run. See `batch-200.test.ts`'s own
+ * `SUITE_LOCK_KEY` comment for the full diagnosis. The lock is session-
+ * scoped, hence its own one-connection client: Prisma's default pool could
+ * otherwise release it from a different connection than the one holding it.
+ */
+const SUITE_LOCK_KEY = 3020260909;
+let suiteLock: PrismaClient | null = null;
+
+async function acquireSuiteLock(): Promise<void> {
+  const url = process.env.DATABASE_URL ?? "";
+  suiteLock = new PrismaClient({ datasourceUrl: `${url}${url.includes("?") ? "&" : "?"}connection_limit=1` });
+  // `PERFORM` inside a DO block, not `SELECT pg_advisory_lock(...)`:
+  // the function returns `void`, and Prisma's raw-result deserializer
+  // rejects a `void` column with P2010. The lock is session-scoped either
+  // way — `pg_advisory_lock` is never transaction-scoped.
+  await suiteLock.$executeRawUnsafe(`DO $suite$ BEGIN PERFORM pg_advisory_lock(${SUITE_LOCK_KEY}); END $suite$`);
+}
+
+async function releaseSuiteLock(): Promise<void> {
+  if (!suiteLock) return;
+  // `pg_advisory_unlock` returns boolean — `false` would mean this client's
+  // connection was NOT the lock holder, i.e. the one-connection assumption
+  // above broke; fail loudly rather than leak the lock to the next run.
+  const [released] = await suiteLock.$queryRawUnsafe<Array<{ released: boolean }>>(
+    `SELECT pg_advisory_unlock(${SUITE_LOCK_KEY}) AS released`,
+  );
+  await suiteLock.$disconnect();
+  suiteLock = null;
+  expect(released?.released).toBe(true);
+}
+
 async function execute(sql: string) {
   return prisma.$executeRawUnsafe(sql);
 }
@@ -92,6 +140,16 @@ async function expectDatabaseFailure(sql: string, marker?: string) {
     return;
   }
   throw new Error("Expected PostgreSQL to reject the statement");
+}
+
+/**
+ * `promo_link.idempotency_key` is `CHAR(64)` under a real UNIQUE index
+ * (`promo_link_idempotency_key_key`), so every seeded promo link needs its
+ * own value — derive it from `public_redirect_code`, which carries its own
+ * UNIQUE index and is therefore already distinct per row.
+ */
+function idempotencyKey(redirectCode: string): string {
+  return `rpad(lower('${redirectCode}'), 64, '0')`;
 }
 
 function novelInsert({ id, businessId, slug, locale = "en-US" }: { id: string; businessId: string; slug: string; locale?: string }) {
@@ -120,7 +178,7 @@ function promoLinkInsert({ id, novelId, sourceItemId, redirectCode }: { id: stri
       offer_type, public_redirect_code, idempotency_key, status, web_url, updated_at
     ) VALUES (
       '${id}', '${novelId}', '${sourceItemId}', '${ids.channelApp}', '${ids.channelAccount}',
-      'read', '${redirectCode}', repeat('${redirectCode.slice(0, 1).toLowerCase()}', 64), 'fetched', 'https://example.com/${redirectCode}', now()
+      'read', '${redirectCode}', ${idempotencyKey(redirectCode)}, 'fetched', 'https://example.com/${redirectCode}', now()
     )
   `;
 }
@@ -200,6 +258,11 @@ describe.skipIf(!enabled).sequential("C-30A (施工工单 单 1): 两字段原�
     if (!databaseName.includes("c30")) {
       throw new Error(`Refusing destructive test setup against ${databaseName}`);
     }
+    // Taken AFTER the refusal guard (refuse fast, without queueing behind the
+    // other suite) and held until `afterAll` — see `SUITE_LOCK_KEY`. The
+    // generous timeout is the wait for `batch-200.test.ts` to finish its own
+    // turn (~30s of seeding + 200 real batch items), not this file's own work.
+    await acquireSuiteLock();
     const tables = await prisma.$queryRawUnsafe<Array<{ tablename: string }>>(`
       SELECT tablename FROM pg_tables
       WHERE schemaname = 'public' AND tablename <> '_prisma_migrations'
@@ -207,9 +270,10 @@ describe.skipIf(!enabled).sequential("C-30A (施工工单 单 1): 两字段原�
     const names = tables.map(({ tablename }) => `"${tablename}"`).join(", ");
     await execute(`TRUNCATE TABLE ${names} RESTART IDENTITY CASCADE`);
     await seedFoundation();
-  }, 30_000);
+  }, 180_000);
 
   afterAll(async () => {
+    await releaseSuiteLock();
     await prisma.$disconnect();
   });
 

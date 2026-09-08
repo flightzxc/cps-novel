@@ -44,12 +44,45 @@
  * `describe.skipIf` + `databaseName.includes(...)` refusal-guard discipline
  * as `two-field-atomic.test.ts`.
  *
- * I did not run this file — no PostgreSQL connection is available in this
- * worktree (this order's own constraints forbid `docker`/`prisma migrate`).
- * Written against the real `src/server/article-rebind` service surface and
- * reviewed carefully against the C-30A migration SQL, but not executed —
- * whoever next has a real PostgreSQL 16 container must run it and record the
- * timing this file logs.
+ * First real run of the WHOLE directory (`tests/integration/article-rebind/`,
+ * both files at once — the shape CI actually runs): 2026-09-09, PostgreSQL
+ * 16.14 (Debian 16.14-1.pgdg13+1, aarch64) on a disposable `c30_it` database
+ * migrated with `prisma migrate deploy` up to and including
+ * `20260911090000_c30_novel_rebind_foundation` — 2 files, 8 passed, 0
+ * failed, 0 skipped, reproduced five times back to back. This file's own
+ * numbers, read straight out of the database afterwards: 200 submitted, 199
+ * applied, 1 failed (`error_kind = blocked`, `rebind blocked:
+ * TARGET_PROMO_NOT_READY` — the engineered item #100), and 200
+ * `article.rebind_novel` audit rows over 200 distinct `entity_id` and 200
+ * distinct `request_id` (199 from this batch + 1 from test 4's resume).
+ * Timing across those five green runs: preview 38–47ms; apply 1,776–2,219ms
+ * wall for 200 items (8.9–11.1ms/item); per-item claim→terminal span p50
+ * 6–8ms, avg 6.3–8.1ms, p95 8–11ms, max 14–19ms. (The very first run against
+ * a cold database was 3–5× slower — 9,438ms wall, 47.2ms/item, max 286ms —
+ * so read the range above as warm-cache, and the cold figure as the one a
+ * first-of-the-day production batch is closer to.) `apply: 200` was NOT
+ * changed on the strength of that — see the delivery report for the
+ * reasoning (the limiter is the synchronous request path, not the per-item
+ * transaction cost).
+ *
+ * Four fixture corrections were needed to get there, none of them under
+ * `src/` and none touching an assertion:
+ *   (a) the seeded Article pointed its `promo_link_id` at a placeholder uuid
+ *       that existed in no table, which `article_promo_link_novel_fkey` —
+ *       the composite FK this whole order is about — rejected with `23503`.
+ *       Each pair now seeds a real source-side PromoLink on the source
+ *       Novel, so the article starts life FK-consistent and the rebind is a
+ *       genuine two-field move rather than a first-time fill-in.
+ *   (b) `idempotency_key` was `repeat(<first letter>, 64)`, identical for
+ *       every promo link, against a real UNIQUE index (`23505`).
+ *   (c) `public_page_short_id` was the uuid's last 12 characters, which
+ *       collide between the 200-pair and the resume id families under
+ *       `article_public_page_short_id_key`.
+ *   (d) 🔴 (a)–(c) got this FILE green in isolation, but the directory-level
+ *       run stayed red at `executableCount` 195/196/197 — a different number
+ *       every time — because the two suites TRUNCATE and rewrite the same
+ *       database in parallel workers. See `SUITE_LOCK_KEY` below for the
+ *       diagnosis and the fix; nothing under `src/` was at fault.
  */
 import { PrismaClient } from "@prisma/client";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -70,8 +103,78 @@ const ids = {
   sourceApp: "10000000-0000-4000-8000-0000000c3b01",
   channelAppSource: "20000000-0000-4000-8000-0000000c3b01",
   channelAppTarget: "20000000-0000-4000-8000-0000000c3b02",
+  channelAccountSource: "30000000-0000-4000-8000-0000000c3b00",
   channelAccount: "30000000-0000-4000-8000-0000000c3b01",
 } as const;
+
+/**
+ * Extra `novel` rows that belong to NEITHER channel and carry no
+ * `NovelSourceItem` and no `Article`, so they are invisible to every query
+ * the rebind path issues (`loadSourceUniverse` starts from Articles;
+ * `loadRelevantDestinations` requires both a matching `title_normalized`
+ * and a target-channel source item). Their only job is test 6: at the
+ * 400-novel scale this fixture's own pairs produce, PostgreSQL is *right*
+ * to seq-scan a 13-page table, and it does — measured on this database,
+ * 400 rows + `ANALYZE` yields `Seq Scan on novel`, and 400 rows *without*
+ * `ANALYZE` yields an index scan on the unrelated `novel_locale_status_idx`.
+ * The crossover into the plan production actually runs sits between 400 and
+ * 2,000 rows; this filler puts the table clearly past it so test 6 asserts
+ * a planner decision rather than a small-table artifact.
+ */
+const PLANNER_SCALE_FILLER_ROWS = 5_000;
+
+/**
+ * 🔴 Suite-level mutual exclusion, shared verbatim with
+ * `two-field-atomic.test.ts` — every destructive suite in this directory
+ * MUST take this lock for its whole lifetime.
+ *
+ * Both files `TRUNCATE` every table in `public` and then run whole-table
+ * statements against the SAME database, and `vitest.config.ts` sets no
+ * `fileParallelism: false`, so vitest hands each file its own worker and
+ * runs them at the same time. Measured on 2026-09-09 before this lock
+ * existed: the combined run non-deterministically lost 3–5 of the 200 pairs
+ * (`executableCount` came back 195 / 196 / 197 instead of 200, a different
+ * number per run) while each file ALONE passed. Cause, from the preview
+ * snapshot itself — the lost rows were `category: "skipped"`,
+ * `skipReason: "unresolved"`, `candidateCount: 0`, `findings: []` (no guard
+ * fired at all), and the pairs behind them had had their `title_normalized`
+ * rewritten from the seeded `c30b batch book 3` to `c 30b novel c30b src 3`:
+ * `two-field-atomic.test.ts`'s test 4 runs `UPDATE novel SET
+ * title_normalized = NULL` across the WHOLE table and then re-derives it
+ * from `Novel.title` via `backfillNovelTitleNormalized`, which lands on
+ * whichever of this file's pairs had already been seeded at that instant and
+ * un-pairs source from target. Nothing under `src/` is involved.
+ *
+ * The lock is session-scoped, so it is taken on its OWN one-connection
+ * client: Prisma's default pool could otherwise hand the release a different
+ * connection than the one holding the lock, and a lock client kept separate
+ * from `prisma` cannot perturb the pool the service layer under test uses.
+ */
+const SUITE_LOCK_KEY = 3020260909;
+let suiteLock: PrismaClient | null = null;
+
+async function acquireSuiteLock(): Promise<void> {
+  const url = process.env.DATABASE_URL ?? "";
+  suiteLock = new PrismaClient({ datasourceUrl: `${url}${url.includes("?") ? "&" : "?"}connection_limit=1` });
+  // `PERFORM` inside a DO block, not `SELECT pg_advisory_lock(...)`:
+  // the function returns `void`, and Prisma's raw-result deserializer
+  // rejects a `void` column with P2010. The lock is session-scoped either
+  // way — `pg_advisory_lock` is never transaction-scoped.
+  await suiteLock.$executeRawUnsafe(`DO $suite$ BEGIN PERFORM pg_advisory_lock(${SUITE_LOCK_KEY}); END $suite$`);
+}
+
+async function releaseSuiteLock(): Promise<void> {
+  if (!suiteLock) return;
+  // `pg_advisory_unlock` returns boolean — `false` would mean this client's
+  // connection was NOT the lock holder, i.e. the one-connection assumption
+  // above broke; fail loudly rather than leak the lock to the next run.
+  const [released] = await suiteLock.$queryRawUnsafe<Array<{ released: boolean }>>(
+    `SELECT pg_advisory_unlock(${SUITE_LOCK_KEY}) AS released`,
+  );
+  await suiteLock.$disconnect();
+  suiteLock = null;
+  expect(released?.released).toBe(true);
+}
 
 function pairUuid(prefix: string, index: number): string {
   return `${prefix}-0000-4000-8000-${String(index).padStart(12, "0")}`;
@@ -106,31 +209,67 @@ function novelSourceItemInsert(input: { id: string; channelAppId: string; novelI
   `;
 }
 
-function promoLinkInsert(input: { id: string; novelId: string; sourceItemId: string; redirectCode: string }) {
+/**
+ * `promo_link.idempotency_key` is `CHAR(64)` under a real UNIQUE index
+ * (`promo_link_idempotency_key_key`), so every seeded promo link needs its
+ * own value — derive it from `public_redirect_code`, which carries its own
+ * UNIQUE index and is therefore already distinct per row.
+ */
+function idempotencyKey(redirectCode: string): string {
+  return `rpad(lower('${redirectCode}'), 64, '0')`;
+}
+
+function promoLinkInsert(input: {
+  id: string;
+  novelId: string;
+  sourceItemId: string;
+  redirectCode: string;
+  channelAppId: string;
+  channelAccountId: string;
+}) {
   return `
     INSERT INTO promo_link (
       id, novel_id, novel_source_item_id, channel_app_id, channel_account_id,
       offer_type, public_redirect_code, idempotency_key, status, web_url, updated_at
     ) VALUES (
-      '${input.id}', '${input.novelId}', '${input.sourceItemId}', '${ids.channelAppTarget}', '${ids.channelAccount}',
-      'read', '${input.redirectCode}', repeat('${input.redirectCode.slice(0, 1).toLowerCase()}', 64), 'fetched', 'https://example.com/${input.redirectCode}', now()
+      '${input.id}', '${input.novelId}', '${input.sourceItemId}', '${input.channelAppId}', '${input.channelAccountId}',
+      'read', '${input.redirectCode}', ${idempotencyKey(input.redirectCode)}, 'fetched', 'https://example.com/${input.redirectCode}', now()
     )
   `;
 }
 
-function articleInsert(input: { id: string; novelId: string; promoLinkId: string; slug: string }) {
+/**
+ * 🔴 `promoLinkId` is not optional and is not a free-floating id: the
+ * article table carries the composite FK `article_promo_link_novel_fkey`
+ * (`(promo_link_id, novel_id)` → `promo_link(id, novel_id)`) — the very
+ * constraint this whole order exists to honour — so a seeded published
+ * novel article must point at a promo link that belongs to *its own*
+ * novel. `public_page_short_id` is passed explicitly rather than sliced off
+ * the uuid: `article_public_page_short_id_key` is UNIQUE, and two uuids
+ * from different id families can share their last 12 characters.
+ */
+function articleInsert(input: { id: string; novelId: string; promoLinkId: string; slug: string; shortId: string }) {
   return `
     INSERT INTO article (
       id, novel_id, promo_link_id, article_type, locale, slug,
       public_page_short_id, title, body, status, published_at, updated_at
     ) VALUES (
       '${input.id}', '${input.novelId}', '${input.promoLinkId}', 'novel_article', 'en-US', '${input.slug}',
-      '${input.id.slice(-12)}', 'Title', 'Rendered body', 'published', now(), now()
+      '${input.shortId}', 'Title', 'Rendered body', 'published', now(), now()
     )
   `;
 }
 
-type Pair = { index: number; sourceNovelId: string; targetNovelId: string; articleId: string; promoLinkId: string };
+type Pair = {
+  index: number;
+  sourceNovelId: string;
+  targetNovelId: string;
+  articleId: string;
+  /** The article's CURRENT (source-side) promo link — the other half of the composite FK before the rebind. */
+  sourcePromoLinkId: string;
+  /** The promo link the rebind is expected to land on (target-side). */
+  promoLinkId: string;
+};
 
 async function seedFoundation(): Promise<Pair[]> {
   await executeBatch(`
@@ -142,6 +281,8 @@ async function seedFoundation(): Promise<Pair[]> {
     INSERT INTO channel_app (id, channel_id, source_app_id, external_app_id, project_type, updated_at)
       VALUES ('${ids.channelAppTarget}', '${ids.channelTarget}', '${ids.sourceApp}', 'c30b-app-target', 2, now());
     INSERT INTO channel_account (id, channel_id, business_id, account_name, updated_at)
+      VALUES ('${ids.channelAccountSource}', '${ids.channelSource}', 'c30b-account-source', 'C-30B Source Account', now());
+    INSERT INTO channel_account (id, channel_id, business_id, account_name, updated_at)
       VALUES ('${ids.channelAccount}', '${ids.channelTarget}', 'c30b-account', 'C-30B Account', now());
   `);
 
@@ -151,20 +292,36 @@ async function seedFoundation(): Promise<Pair[]> {
     const targetNovelId = pairUuid("40200000", index);
     const sourceItemSourceId = pairUuid("50100000", index);
     const sourceItemTargetId = pairUuid("50200000", index);
+    const sourcePromoLinkId = pairUuid("60000000", index);
     const promoLinkId = pairUuid("60100000", index);
     const articleId = pairUuid("70100000", index);
     const titleNormalized = `c30b batch book ${index}`;
+    const suffix = String(index).padStart(4, "0");
 
     await executeBatch(`
       ${novelInsert({ id: sourceNovelId, businessId: `c30b-src-${index}`, slug: `c30b-src-${index}`, titleNormalized })};
       ${novelInsert({ id: targetNovelId, businessId: `c30b-tgt-${index}`, slug: `c30b-tgt-${index}`, titleNormalized })};
       ${novelSourceItemInsert({ id: sourceItemSourceId, channelAppId: ids.channelAppSource, novelId: sourceNovelId, externalBookId: `c30b-book-src-${index}` })};
       ${novelSourceItemInsert({ id: sourceItemTargetId, channelAppId: ids.channelAppTarget, novelId: targetNovelId, externalBookId: `c30b-book-tgt-${index}` })};
-      ${promoLinkInsert({ id: promoLinkId, novelId: targetNovelId, sourceItemId: sourceItemTargetId, redirectCode: `PB30B${String(index).padStart(4, "0")}` })};
-      ${articleInsert({ id: articleId, novelId: sourceNovelId, promoLinkId: pairUuid("60900000", index) /* placeholder, article has no source-side promo for this fixture */, slug: `c30b-article-${index}` })};
+      ${promoLinkInsert({ id: sourcePromoLinkId, novelId: sourceNovelId, sourceItemId: sourceItemSourceId, redirectCode: `PB30BS${suffix}`, channelAppId: ids.channelAppSource, channelAccountId: ids.channelAccountSource })};
+      ${promoLinkInsert({ id: promoLinkId, novelId: targetNovelId, sourceItemId: sourceItemTargetId, redirectCode: `PB30BT${suffix}`, channelAppId: ids.channelAppTarget, channelAccountId: ids.channelAccount })};
+      ${articleInsert({ id: articleId, novelId: sourceNovelId, promoLinkId: sourcePromoLinkId, slug: `c30b-article-${index}`, shortId: `c30b-a-${suffix}` })};
     `);
-    pairs.push({ index, sourceNovelId, targetNovelId, articleId, promoLinkId });
+    pairs.push({ index, sourceNovelId, targetNovelId, articleId, sourcePromoLinkId, promoLinkId });
   }
+
+  // See PLANNER_SCALE_FILLER_ROWS — test 6 only means something on a table
+  // big enough that an index scan is the cheaper plan. `ANALYZE` afterwards
+  // so every plan this file exercises is chosen from real statistics rather
+  // than from PostgreSQL's never-analyzed-table defaults.
+  await execute(`
+    INSERT INTO novel (id, business_id, title, description, locale, slug, status, title_normalized, updated_at)
+    SELECT gen_random_uuid(), 'c30b-filler-' || g, 'C-30B Filler ' || g, 'Description', 'en-US',
+           'c30b-filler-' || g, 'published', 'c30b filler book ' || g, now()
+      FROM generate_series(1, ${PLANNER_SCALE_FILLER_ROWS}) AS g
+  `);
+  await execute("ANALYZE");
+
   return pairs;
 }
 
@@ -184,6 +341,9 @@ describe.skipIf(!enabled).sequential("C-30B (施工工单 单 2 主验收): 200 
     if (!databaseName.includes("c30")) {
       throw new Error(`Refusing destructive test setup against ${databaseName}`);
     }
+    // Taken AFTER the refusal guard (refuse fast, without queueing behind the
+    // other suite) and held until `afterAll` — see `SUITE_LOCK_KEY`.
+    await acquireSuiteLock();
     const tables = await prisma.$queryRawUnsafe<Array<{ tablename: string }>>(`
       SELECT tablename FROM pg_tables
       WHERE schemaname = 'public' AND tablename <> '_prisma_migrations'
@@ -191,9 +351,10 @@ describe.skipIf(!enabled).sequential("C-30B (施工工单 单 2 主验收): 200 
     const names = tables.map(({ tablename }) => `"${tablename}"`).join(", ");
     await execute(`TRUNCATE TABLE ${names} RESTART IDENTITY CASCADE`);
     pairs = await seedFoundation();
-  }, 120_000);
+  }, 180_000);
 
   afterAll(async () => {
+    await releaseSuiteLock();
     await prisma.$disconnect();
   });
 
@@ -206,6 +367,7 @@ describe.skipIf(!enabled).sequential("C-30B (施工工单 单 2 主验收): 200 
          AND title_normalized IN ('c30b batch book 1', 'c30b batch book 2')
     `);
     const text = plan.map((row) => row["QUERY PLAN"]).join("\n");
+    console.log(`[C-30B plan] destination lookup:\n${text}`);
     expect(text).toMatch(/novel_locale_title_normalized_idx/);
   });
 
@@ -243,6 +405,31 @@ describe.skipIf(!enabled).sequential("C-30B (施工工单 单 2 主验收): 200 
     );
     const applyMs = Date.now() - t1;
     console.log(`[C-30B timing] preview=${previewMs}ms apply(${BATCH_SIZE} items)=${applyMs}ms (${(applyMs / BATCH_SIZE).toFixed(1)}ms/item)`);
+
+    // 🔴 逐条事务耗时 (施工工单 §7 item 2 — the data `REBIND_BATCH_LIMITS.apply`
+    // is supposed to be calibrated against). Each item's own
+    // `started_at`/`finished_at` are written by `claimRebindBatchItem` and by
+    // `processRebindBatchItem`'s terminal update respectively, so this
+    // distribution is the real claim→commit span of one item's transaction
+    // pair, not a wall-clock average smeared over the whole run.
+    const [perItem] = await prisma.$queryRawUnsafe<
+      Array<{ items: number; min_ms: number; p50_ms: number; avg_ms: number; p95_ms: number; max_ms: number; sum_ms: number }>
+    >(`
+      SELECT count(*)::int AS items,
+             round(min(ms)::numeric, 1)::float8 AS min_ms,
+             round((percentile_cont(0.5) WITHIN GROUP (ORDER BY ms))::numeric, 1)::float8 AS p50_ms,
+             round(avg(ms)::numeric, 1)::float8 AS avg_ms,
+             round((percentile_cont(0.95) WITHIN GROUP (ORDER BY ms))::numeric, 1)::float8 AS p95_ms,
+             round(max(ms)::numeric, 1)::float8 AS max_ms,
+             round(sum(ms)::numeric, 1)::float8 AS sum_ms
+        FROM (
+          SELECT extract(epoch FROM (finished_at - started_at)) * 1000 AS ms
+            FROM article_novel_rebind_batch_item
+           WHERE batch_id = '${result.detail.batchId}'
+             AND started_at IS NOT NULL AND finished_at IS NOT NULL
+        ) AS spans
+    `);
+    console.log(`[C-30B timing] per-item claim→terminal: ${JSON.stringify(perItem)}`);
 
     expect(result.detail.status).toBe("partial");
     expect(result.detail.counts).toMatchObject({ submitted: BATCH_SIZE, applied: BATCH_SIZE - 1, failed: 1, skipped: 0, pending: 0, processing: 0 });
@@ -302,16 +489,27 @@ describe.skipIf(!enabled).sequential("C-30B (施工工单 单 2 主验收): 200 
     // write is done directly via SQL (standing in for "already committed by
     // the killed process before it died"); Article R2 is left un-migrated —
     // `resumeRebindBatch` must finish R2 and must NOT re-touch R1.
-    const r1 = { source: pairUuid("41100000", 1), target: pairUuid("41200000", 1), sourceItemSrc: pairUuid("51100000", 1), sourceItemTgt: pairUuid("51200000", 1), promo: pairUuid("61100000", 1), article: pairUuid("71100000", 1) };
-    const r2 = { source: pairUuid("41100000", 2), target: pairUuid("41200000", 2), sourceItemSrc: pairUuid("51100000", 2), sourceItemTgt: pairUuid("51200000", 2), promo: pairUuid("61100000", 2), article: pairUuid("71100000", 2) };
+    const resumePair = (n: 1 | 2) => ({
+      n,
+      source: pairUuid("41100000", n),
+      target: pairUuid("41200000", n),
+      sourceItemSrc: pairUuid("51100000", n),
+      sourceItemTgt: pairUuid("51200000", n),
+      sourcePromo: pairUuid("61000000", n),
+      promo: pairUuid("61100000", n),
+      article: pairUuid("71100000", n),
+    });
+    const r1 = resumePair(1);
+    const r2 = resumePair(2);
     for (const r of [r1, r2]) {
       await executeBatch(`
-        ${novelInsert({ id: r.source, businessId: `c30b-resume-src-${r.article.slice(-1)}`, slug: `c30b-resume-src-${r.article.slice(-1)}`, titleNormalized: `c30b resume book ${r.article.slice(-1)}` })};
-        ${novelInsert({ id: r.target, businessId: `c30b-resume-tgt-${r.article.slice(-1)}`, slug: `c30b-resume-tgt-${r.article.slice(-1)}`, titleNormalized: `c30b resume book ${r.article.slice(-1)}` })};
-        ${novelSourceItemInsert({ id: r.sourceItemSrc, channelAppId: ids.channelAppSource, novelId: r.source, externalBookId: `c30b-resume-book-src-${r.article.slice(-1)}` })};
-        ${novelSourceItemInsert({ id: r.sourceItemTgt, channelAppId: ids.channelAppTarget, novelId: r.target, externalBookId: `c30b-resume-book-tgt-${r.article.slice(-1)}` })};
-        ${promoLinkInsert({ id: r.promo, novelId: r.target, sourceItemId: r.sourceItemTgt, redirectCode: `PB30BR00${r.article.slice(-1)}` })};
-        ${articleInsert({ id: r.article, novelId: r.source, promoLinkId: pairUuid("61900000", Number(r.article.slice(-1))), slug: `c30b-resume-article-${r.article.slice(-1)}` })};
+        ${novelInsert({ id: r.source, businessId: `c30b-resume-src-${r.n}`, slug: `c30b-resume-src-${r.n}`, titleNormalized: `c30b resume book ${r.n}` })};
+        ${novelInsert({ id: r.target, businessId: `c30b-resume-tgt-${r.n}`, slug: `c30b-resume-tgt-${r.n}`, titleNormalized: `c30b resume book ${r.n}` })};
+        ${novelSourceItemInsert({ id: r.sourceItemSrc, channelAppId: ids.channelAppSource, novelId: r.source, externalBookId: `c30b-resume-book-src-${r.n}` })};
+        ${novelSourceItemInsert({ id: r.sourceItemTgt, channelAppId: ids.channelAppTarget, novelId: r.target, externalBookId: `c30b-resume-book-tgt-${r.n}` })};
+        ${promoLinkInsert({ id: r.sourcePromo, novelId: r.source, sourceItemId: r.sourceItemSrc, redirectCode: `PB30BRS00${r.n}`, channelAppId: ids.channelAppSource, channelAccountId: ids.channelAccountSource })};
+        ${promoLinkInsert({ id: r.promo, novelId: r.target, sourceItemId: r.sourceItemTgt, redirectCode: `PB30BRT00${r.n}`, channelAppId: ids.channelAppTarget, channelAccountId: ids.channelAccount })};
+        ${articleInsert({ id: r.article, novelId: r.source, promoLinkId: r.sourcePromo, slug: `c30b-resume-article-${r.n}`, shortId: `c30b-r-${r.n}` })};
       `);
     }
 
