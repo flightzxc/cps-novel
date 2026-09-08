@@ -38,8 +38,11 @@
  * `Novel.status === "published"` and `Article.status === "published"`.
  * `Article` is a locale page snapshot of `Novel`
  * (`docs/governance/database-governance.md` §4) and today there is exactly
- * one Article per Novel (`SITE_LOCALES` has one member) — so "publish the
- * page" and "publish the work" are the same admin action in V1. This module
+ * one Article per Novel (`SITE_LOCALES` has 15 registered entries, but
+ * `PUBLISHABLE_LOCALES` — the subset a template CRUD landing actually
+ * permits — is `{en}` only; see `@/lib/locale/locale-canonical.ts`) — so
+ * "publish the page" and "publish the work" are the same admin action in V1.
+ * This module
  * gates once and writes both sides in the same transaction. A future
  * multi-locale world, where a Novel could have several Articles publishing
  * on independent schedules, only needs `Novel.status` promotion to become

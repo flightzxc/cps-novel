@@ -5,13 +5,22 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { buttonClassName } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { CopyButton } from "@/components/ui/copy-button";
 import { EmptyRow, TBody, TD, TH, THead, Table } from "@/components/ui/table";
 import type { ArticleStatus } from "@/domain/database-statuses";
 import { formatDateTime } from "@/features/admin-ui/content-view";
 import { buildArticlePath } from "@/lib/slug/article-path";
 
-import { regenerateArticleAction, regenerateArticlesBatchAction } from "../_actions";
+import { MAX_BATCH_PUBLISH_SELECTION } from "../../novels/_lib/batch-publish-constants";
+import { describePublishGateReason } from "../../novels/_lib/publish-gate-copy";
+import {
+  publishArticleAction,
+  publishArticlesBatchAction,
+  regenerateArticleAction,
+  regenerateArticlesBatchAction,
+  withdrawArticleAction,
+} from "../_actions";
 import { ArticleStatusBadge } from "./article-status-badge";
 
 export type ArticleListRow = {
@@ -107,6 +116,10 @@ export function ArticleList({
   const router = useRouter();
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
   const [message, setMessage] = useState<string | null>(null);
+  const [withdrawTarget, setWithdrawTarget] = useState<{ articleId: string; novelId: string; title: string } | null>(null);
+  const [withdrawReason, setWithdrawReason] = useState("");
+  const [withdrawReasonError, setWithdrawReasonError] = useState<string | null>(null);
+  const [withdrawBusy, setWithdrawBusy] = useState(false);
   const allSelected = rows.length > 0 && rows.every((r) => selected.has(r.id));
   function toggleAll() {
     setSelected((current) => {
@@ -132,17 +145,151 @@ export function ArticleList({
       router.refresh();
     }
   }
+
+  /**
+   * C-21 row-level "发布" (analysis doc item #24). `publishArticleAsAdmin`
+   * never throws for a gate rejection/conflict/not-found — those come back as
+   * `data.outcome`, exactly like the existing "再生成" button's `conflict`
+   * branch above already handles — so only a genuinely unexpected failure
+   * (auth, network) hits the `!result.ok` branch.
+   */
+  async function handlePublish(row: ArticleListRow) {
+    const result = await publishArticleAction({ requestId: crypto.randomUUID(), articleId: row.id });
+    if (!result.ok) {
+      setMessage(`发布失败：${result.code}`);
+      return;
+    }
+    const { data } = result;
+    if (data.outcome === "published") {
+      setMessage(data.firstPublish ? "已发布（首次公开）" : "已发布");
+      router.refresh();
+      return;
+    }
+    if (data.outcome === "conflict") {
+      setMessage("检测到并发修改，发布已安全放弃、未写入，可重试。");
+      return;
+    }
+    if (data.outcome === "not_found") {
+      setMessage("对应文章不存在，请刷新页面后重试。");
+      return;
+    }
+    // rejected — reuse the novel-detail lifecycle panel's own gate-reason copy
+    // (`../../novels/_lib/publish-gate-copy.ts`) rather than showing the raw
+    // `PublishGateReason` identifiers.
+    const labels = data.gate.reasons.map((reason) => describePublishGateReason(reason).label);
+    setMessage(`未通过发布门禁：${labels.join("、")}`);
+  }
+
+  /**
+   * C-21 row-level "下线" (analysis doc item #25 — "隐藏"=下线, not SEO
+   * visibility; §零 correction). Only offered when the row still carries its
+   * `novel` relation (C-20; always true in practice, `novelId` is `NOT
+   * NULL`) — `withdrawArticleAction` is Novel-keyed (see that action's own
+   * doc comment for why).
+   */
+  function openWithdraw(row: ArticleListRow) {
+    if (!row.novel) return;
+    setWithdrawReasonError(null);
+    setWithdrawReason("");
+    setWithdrawTarget({ articleId: row.id, novelId: row.novel.id, title: row.title });
+  }
+
+  /**
+   * Same "reject blank reason before ever calling the Server Action" shape
+   * as `../../novels/_components/publish-lifecycle-panel.tsx`'s
+   * `runRightsTransition` — the doc's own UI test ("下线在未填理由时不提交")
+   * is this branch: the dialog stays open and shows `withdrawReasonError`
+   * instead of firing `withdrawArticleAction`.
+   */
+  async function confirmWithdraw() {
+    if (!withdrawTarget) return;
+    const reason = withdrawReason.trim();
+    if (!reason) {
+      setWithdrawReasonError("请填写下线原因后再提交（会写入审计记录）。");
+      return;
+    }
+    setWithdrawReasonError(null);
+    setWithdrawBusy(true);
+    const result = await withdrawArticleAction({
+      requestId: crypto.randomUUID(),
+      novelId: withdrawTarget.novelId,
+      reason,
+    });
+    setWithdrawBusy(false);
+    setWithdrawTarget(null);
+    setWithdrawReason("");
+    if (!result.ok) {
+      setMessage(`下线失败：${result.code}`);
+      return;
+    }
+    setMessage(`已下线，受影响文章数：${result.data.affectedArticleIds.length}`);
+    router.refresh();
+  }
+
+  /**
+   * C-21 list-level "批量发布" (analysis doc item #28). Article-keyed
+   * directly from `selected` — no novelId resolution needed, unlike
+   * `../../novels/_components/novels-batch-publish.tsx`'s
+   * `publishNovelsBatchAction`, since this list's checkboxes already are
+   * article ids.
+   */
+  async function batchPublish() {
+    const result = await publishArticlesBatchAction({ requestId: crypto.randomUUID(), articleIds: [...selected] });
+    if (!result.ok) {
+      setMessage(`批量发布失败：${result.code}`);
+      return;
+    }
+    let published = 0;
+    let rejected = 0;
+    let conflict = 0;
+    let notFound = 0;
+    for (const { result: outcome } of result.data.results) {
+      if (outcome.outcome === "published") published += 1;
+      else if (outcome.outcome === "rejected") rejected += 1;
+      else if (outcome.outcome === "conflict") conflict += 1;
+      else if (outcome.outcome === "not_found") notFound += 1;
+    }
+    setMessage(`批量发布完成：成功 ${published}，拒绝 ${rejected}，冲突 ${conflict}，不存在 ${notFound}`);
+    setSelected(new Set());
+    router.refresh();
+  }
+
+  const overPublishCap = selected.size > MAX_BATCH_PUBLISH_SELECTION;
+
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-gray-600">已选择 {selected.size} / 50</p>
-        <button
-          disabled={!canWrite || selected.size === 0 || selected.size > 50}
-          className={buttonClassName("primary")}
-          onClick={() => void batch()}
-        >
-          批量再生成
-        </button>
+        <div className="flex flex-wrap items-center gap-4">
+          <div className="flex items-center gap-2">
+            <button
+              disabled={!canWrite || selected.size === 0 || overPublishCap}
+              className={buttonClassName("primary")}
+              onClick={() => void batchPublish()}
+              data-testid="articles-batch-publish"
+            >
+              批量发布
+            </button>
+            {overPublishCap && (
+              <span className="text-xs text-red-600">
+                超过批量发布上限（{MAX_BATCH_PUBLISH_SELECTION} 篇），请减少选择后再提交
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              disabled={!canWrite || selected.size === 0 || selected.size > 50}
+              className={buttonClassName("primary")}
+              onClick={() => void batch()}
+            >
+              批量再生成
+            </button>
+            {/* C-22 (`分析_文章管理Parity缺口_2026-09-08.md` §六): the "50 条/25
+                秒预算" note used to live in the page header's description —
+                moved here, next to the button it actually describes. */}
+            <span className="text-xs text-gray-500">50 条/25 秒预算</span>
+          </div>
+        </div>
       </div>
       {message && (
         <p role="status" className="rounded border bg-gray-50 p-3 text-sm">
@@ -234,10 +381,40 @@ export function ArticleList({
               </TD>
               <TD className="text-gray-500">{formatDateTime(row.createdAt)}</TD>
               <TD>
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2">
                   <Link href={`/articles/${row.id}`} className={buttonClassName("secondary", "px-2 py-1 text-xs")}>
                     编辑/预览
                   </Link>
+                  {/*
+                    C-21 (analysis doc items #24/#25): CPS parity is "草稿显示
+                    发布，已发布显示下线" — same status-gated visibility as
+                    `../../novels/_components/publish-lifecycle-panel.tsx`'s
+                    `showPublish`/`showWithdraw`. No row-level delete control
+                    exists here or anywhere else in this file — item #27 is an
+                    EXCLUDE (一对一绑定，删除即永久失去公开页), pinned by
+                    `tests/ui/articles-admin.test.tsx`'s "列表中不存在删除
+                    按钮" assertion.
+                  */}
+                  {row.status === "draft" && (
+                    <button
+                      disabled={!canWrite}
+                      className={buttonClassName("secondary", "px-2 py-1 text-xs")}
+                      onClick={() => void handlePublish(row)}
+                      data-testid={`article-publish-${row.id}`}
+                    >
+                      发布
+                    </button>
+                  )}
+                  {row.status === "published" && row.novel && (
+                    <button
+                      disabled={!canWrite}
+                      className={buttonClassName("secondary", "px-2 py-1 text-xs")}
+                      onClick={() => openWithdraw(row)}
+                      data-testid={`article-withdraw-${row.id}`}
+                    >
+                      下线
+                    </button>
+                  )}
                   <button
                     disabled={!canWrite}
                     className={buttonClassName("secondary", "px-2 py-1 text-xs")}
@@ -267,6 +444,47 @@ export function ArticleList({
           {rows.length === 0 && <EmptyRow colSpan={9}>暂无文章</EmptyRow>}
         </TBody>
       </Table>
+
+      <ConfirmDialog
+        open={withdrawTarget !== null}
+        pending={withdrawBusy}
+        title={`确认下线《${withdrawTarget?.title ?? ""}》？`}
+        confirmLabel="下线"
+        confirmVariant="secondary"
+        body={
+          <>
+            <p>
+              下线后该文章对外呈现为稳定的移除页，正文与前台 URL 均保留，可随时再次发布——不是删除。
+            </p>
+            <label className="block">
+              <span className="mb-1 block text-xs text-gray-500">下线原因（必填，写入审计）</span>
+              <input
+                value={withdrawReason}
+                onChange={(event) => {
+                  setWithdrawReason(event.target.value);
+                  if (withdrawReasonError) setWithdrawReasonError(null);
+                }}
+                aria-label="下线原因"
+                aria-invalid={withdrawReasonError !== null}
+                className="w-full rounded-lg border border-gray-300 px-2 py-1.5 text-sm"
+                placeholder="例如：运营决定临时下线"
+              />
+            </label>
+            {withdrawReasonError && (
+              <p role="alert" data-testid="article-withdraw-reason-error" className="text-xs text-red-700">
+                {withdrawReasonError}
+              </p>
+            )}
+          </>
+        }
+        onCancel={() => {
+          if (withdrawBusy) return;
+          setWithdrawTarget(null);
+          setWithdrawReason("");
+          setWithdrawReasonError(null);
+        }}
+        onConfirm={() => void confirmWithdraw()}
+      />
     </div>
   );
 }

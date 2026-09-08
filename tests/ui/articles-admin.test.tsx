@@ -1,6 +1,10 @@
 import "./setup-cleanup";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+import { installDialogShim } from "./jsdom-dialog";
+
+installDialogShim();
 
 /**
  * M7 admin UI bite tests (交接提示词 B-2) + N-7 (optimistic lock threaded
@@ -20,6 +24,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const listActions = vi.hoisted(() => ({
   regenerateArticleAction: vi.fn(),
   regenerateArticlesBatchAction: vi.fn(),
+  publishArticleAction: vi.fn(),
+  withdrawArticleAction: vi.fn(),
+  publishArticlesBatchAction: vi.fn(),
 }));
 
 const editorActions = vi.hoisted(() => ({
@@ -62,12 +69,35 @@ const PUBLISHED_ROW: ArticleListRow = {
   updatedAt: "2026-09-05T02:30:00.000Z",
 };
 
+const UNPUBLISHED_ROW: ArticleListRow = {
+  ...DRAFT_ROW,
+  id: "article-3",
+  title: "Unpublished Article",
+  status: "unpublished",
+  updatedAt: "2026-09-05T03:00:00.000Z",
+};
+
+const TAKEDOWN_ROW: ArticleListRow = {
+  ...DRAFT_ROW,
+  id: "article-4",
+  title: "Takedown Article",
+  status: "takedown",
+  updatedAt: "2026-09-05T03:30:00.000Z",
+};
+
 beforeEach(() => {
   listActions.regenerateArticleAction.mockReset();
   listActions.regenerateArticlesBatchAction.mockReset();
+  listActions.publishArticleAction.mockReset();
+  listActions.withdrawArticleAction.mockReset();
+  listActions.publishArticlesBatchAction.mockReset();
   editorActions.updateArticleAction.mockReset();
   routerRefresh.mockReset();
 });
+
+function dialog(): HTMLDialogElement | null {
+  return document.querySelector("dialog");
+}
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -246,6 +276,194 @@ describe("ArticleList · 列表与批量", () => {
     expect(screen.getByText("已选择 2 / 50")).toBeTruthy();
     fireEvent.click(header);
     expect(screen.getByText("已选择 0 / 50")).toBeTruthy();
+  });
+
+  /**
+   * C-21 (`分析_文章管理Parity缺口_2026-09-08.md` §六, items #24/#25): CPS
+   * parity is "草稿显示发布，已发布显示下线" — 已下线/已撤回两态两个按钮都不
+   * 出现（既不是可发布的草稿，也不是可下线的已发布）。
+   */
+  describe("行内 发布 / 下线 按钮可见性（C-21）", () => {
+    it("草稿行只显示发布按钮，不显示下线", () => {
+      render(<ArticleList rows={[DRAFT_ROW]} canWrite publicOrigin={PUBLIC_ORIGIN} />);
+      expect(screen.getByTestId(`article-publish-${DRAFT_ROW.id}`)).toBeTruthy();
+      expect(screen.queryByTestId(`article-withdraw-${DRAFT_ROW.id}`)).toBeNull();
+    });
+
+    it("已发布行只显示下线按钮，不显示发布", () => {
+      render(<ArticleList rows={[PUBLISHED_ROW]} canWrite publicOrigin={PUBLIC_ORIGIN} />);
+      expect(screen.getByTestId(`article-withdraw-${PUBLISHED_ROW.id}`)).toBeTruthy();
+      expect(screen.queryByTestId(`article-publish-${PUBLISHED_ROW.id}`)).toBeNull();
+    });
+
+    it("已下线 / 已撤回行两个按钮都不显示", () => {
+      render(<ArticleList rows={[UNPUBLISHED_ROW, TAKEDOWN_ROW]} canWrite publicOrigin={PUBLIC_ORIGIN} />);
+      for (const row of [UNPUBLISHED_ROW, TAKEDOWN_ROW]) {
+        expect(screen.queryByTestId(`article-publish-${row.id}`)).toBeNull();
+        expect(screen.queryByTestId(`article-withdraw-${row.id}`)).toBeNull();
+      }
+    });
+
+    it("canWrite=false 时发布/下线按钮均禁用", () => {
+      render(<ArticleList rows={[DRAFT_ROW, PUBLISHED_ROW]} canWrite={false} publicOrigin={PUBLIC_ORIGIN} />);
+      expect((screen.getByTestId(`article-publish-${DRAFT_ROW.id}`) as HTMLButtonElement).disabled).toBe(true);
+      expect((screen.getByTestId(`article-withdraw-${PUBLISHED_ROW.id}`) as HTMLButtonElement).disabled).toBe(true);
+    });
+  });
+
+  describe("行内「发布」（C-21）", () => {
+    it("发布成功（首次公开）：调用 publishArticleAction 并携带 articleId，刷新列表", async () => {
+      listActions.publishArticleAction.mockResolvedValue({
+        ok: true,
+        data: { outcome: "published", articleId: DRAFT_ROW.id, novelId: "novel-1", locale: "en", firstPublish: true },
+      });
+      render(<ArticleList rows={[DRAFT_ROW]} canWrite publicOrigin={PUBLIC_ORIGIN} />);
+      fireEvent.click(screen.getByTestId(`article-publish-${DRAFT_ROW.id}`));
+      await vi.waitFor(() => expect(listActions.publishArticleAction).toHaveBeenCalledTimes(1));
+      expect(listActions.publishArticleAction.mock.calls[0]![0]).toMatchObject({ articleId: DRAFT_ROW.id });
+      await vi.waitFor(() => expect(screen.getByText(/首次公开/)).toBeTruthy());
+      await vi.waitFor(() => expect(routerRefresh).toHaveBeenCalledTimes(1));
+    });
+
+    it("发布被门禁拒绝（rejected outcome）时展示可读的拒绝原因，而不是裸 reason 码", async () => {
+      listActions.publishArticleAction.mockResolvedValue({
+        ok: true,
+        data: { outcome: "rejected", gate: { publishable: false, reasons: ["preview_chapter_missing"] } },
+      });
+      render(<ArticleList rows={[DRAFT_ROW]} canWrite publicOrigin={PUBLIC_ORIGIN} />);
+      fireEvent.click(screen.getByTestId(`article-publish-${DRAFT_ROW.id}`));
+      await vi.waitFor(() => expect(screen.getByRole("status").textContent).toContain("没有可信试读章节"));
+      expect(screen.queryByText(/preview_chapter_missing/)).toBeNull();
+    });
+
+    it("发布遇到 conflict outcome 时给出可读提示，不刷新", async () => {
+      listActions.publishArticleAction.mockResolvedValue({ ok: true, data: { outcome: "conflict" } });
+      render(<ArticleList rows={[DRAFT_ROW]} canWrite publicOrigin={PUBLIC_ORIGIN} />);
+      fireEvent.click(screen.getByTestId(`article-publish-${DRAFT_ROW.id}`));
+      await vi.waitFor(() => expect(screen.getByRole("status").textContent).toContain("并发修改"));
+      expect(routerRefresh).not.toHaveBeenCalled();
+    });
+
+    it("Server Action 返回 ok:false 时展示错误码", async () => {
+      listActions.publishArticleAction.mockResolvedValue({ ok: false, code: "article_publish_failed" });
+      render(<ArticleList rows={[DRAFT_ROW]} canWrite publicOrigin={PUBLIC_ORIGIN} />);
+      fireEvent.click(screen.getByTestId(`article-publish-${DRAFT_ROW.id}`));
+      await vi.waitFor(() => expect(screen.getByRole("status").textContent).toContain("article_publish_failed"));
+    });
+  });
+
+  /**
+   * C-21 row-level "下线" (analysis doc item #25 — ADAPT: 带审计理由的对话
+   * 框，不是 CPS 那种点了就切换). Same "未填理由不提交" discipline as
+   * `tests/ui/novel-publish-lifecycle-panel.test.tsx`'s takedown/withdraw
+   * dialog tests, copied onto this row-level control.
+   */
+  describe("行内「下线」确认对话框（C-21）", () => {
+    it("点击下线打开确认对话框，展示书名", async () => {
+      render(<ArticleList rows={[PUBLISHED_ROW]} canWrite publicOrigin={PUBLIC_ORIGIN} />);
+      await act(async () => {
+        fireEvent.click(screen.getByTestId(`article-withdraw-${PUBLISHED_ROW.id}`));
+      });
+      await waitFor(() => expect(dialog()?.open).toBe(true));
+      expect(dialog()!.textContent).toContain(PUBLISHED_ROW.title);
+    });
+
+    it("未填理由点击确认不提交，不调用 withdrawArticleAction，对话框保持打开并展示校验提示", async () => {
+      render(<ArticleList rows={[PUBLISHED_ROW]} canWrite publicOrigin={PUBLIC_ORIGIN} />);
+      await act(async () => {
+        fireEvent.click(screen.getByTestId(`article-withdraw-${PUBLISHED_ROW.id}`));
+      });
+      await waitFor(() => expect(dialog()?.open).toBe(true));
+      await act(async () => {
+        fireEvent.click(within(dialog()!).getByRole("button", { name: "下线" }));
+      });
+      expect(listActions.withdrawArticleAction).not.toHaveBeenCalled();
+      expect(dialog()?.open).toBe(true);
+      expect(screen.getByTestId("article-withdraw-reason-error")).toBeTruthy();
+    });
+
+    it("填写理由后确认，调用 withdrawArticleAction 并携带 trim 后的理由与该行的 novelId，成功后刷新", async () => {
+      listActions.withdrawArticleAction.mockResolvedValue({
+        ok: true,
+        data: { novelId: "novel-1", novelStatus: "unpublished", affectedArticleIds: [PUBLISHED_ROW.id] },
+      });
+      render(<ArticleList rows={[PUBLISHED_ROW]} canWrite publicOrigin={PUBLIC_ORIGIN} />);
+      await act(async () => {
+        fireEvent.click(screen.getByTestId(`article-withdraw-${PUBLISHED_ROW.id}`));
+      });
+      await waitFor(() => expect(dialog()?.open).toBe(true));
+      fireEvent.change(screen.getByLabelText("下线原因"), { target: { value: "  运营决定临时下线  " } });
+      await act(async () => {
+        fireEvent.click(within(dialog()!).getByRole("button", { name: "下线" }));
+      });
+      expect(listActions.withdrawArticleAction).toHaveBeenCalledWith(
+        expect.objectContaining({ novelId: "novel-1", reason: "运营决定临时下线" }),
+      );
+      await vi.waitFor(() => expect(screen.getByText(/受影响文章数：1/)).toBeTruthy());
+      expect(routerRefresh).toHaveBeenCalled();
+    });
+
+    it("取消关闭确认框且不调用 Action", async () => {
+      render(<ArticleList rows={[PUBLISHED_ROW]} canWrite publicOrigin={PUBLIC_ORIGIN} />);
+      await act(async () => {
+        fireEvent.click(screen.getByTestId(`article-withdraw-${PUBLISHED_ROW.id}`));
+      });
+      await waitFor(() => expect(dialog()?.open).toBe(true));
+      await act(async () => {
+        fireEvent.click(within(dialog()!).getByRole("button", { name: "取消" }));
+      });
+      expect(dialog()?.open).toBe(false);
+      expect(listActions.withdrawArticleAction).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("列表批量发布（C-21）", () => {
+    it("批量发布调用 publishArticlesBatchAction 并携带已选 id，成功后清空选择并刷新", async () => {
+      listActions.publishArticlesBatchAction.mockResolvedValue({
+        ok: true,
+        data: {
+          results: [
+            { articleId: DRAFT_ROW.id, result: { outcome: "published", articleId: DRAFT_ROW.id, novelId: "novel-1", locale: "en", firstPublish: false } },
+          ],
+        },
+      });
+      render(<ArticleList rows={[DRAFT_ROW, PUBLISHED_ROW]} canWrite publicOrigin={PUBLIC_ORIGIN} />);
+      fireEvent.click(screen.getByLabelText(`选择 ${DRAFT_ROW.title}`));
+      fireEvent.click(screen.getByTestId("articles-batch-publish"));
+      await vi.waitFor(() => expect(listActions.publishArticlesBatchAction).toHaveBeenCalledTimes(1));
+      expect(listActions.publishArticlesBatchAction.mock.calls[0]![0].articleIds).toEqual([DRAFT_ROW.id]);
+      await vi.waitFor(() => expect(screen.getByText(/成功 1/)).toBeTruthy());
+      expect(screen.getByText("已选择 0 / 50")).toBeTruthy();
+      expect(routerRefresh).toHaveBeenCalled();
+    });
+
+    it("canWrite=false 时批量发布按钮禁用", () => {
+      render(<ArticleList rows={[DRAFT_ROW]} canWrite={false} publicOrigin={PUBLIC_ORIGIN} />);
+      expect((screen.getByTestId("articles-batch-publish") as HTMLButtonElement).disabled).toBe(true);
+    });
+
+    it("50 条/25 秒预算说明紧邻批量再生成按钮（C-22），而不是抬头文案", () => {
+      render(<ArticleList rows={[DRAFT_ROW]} canWrite publicOrigin={PUBLIC_ORIGIN} />);
+      expect(screen.getByText("50 条/25 秒预算")).toBeTruthy();
+    });
+  });
+
+  /**
+   * C-21 EXCLUDE (analysis doc item #27): "一对一绑定，删除即永久失去公开页
+   * 且无法从目录同步重建" — pins the decision so a future change cannot
+   * "顺手补上" a delete control without this test failing first.
+   */
+  it("列表中不存在任何删除按钮（C-21 EXCLUDE，含批量删除）", () => {
+    render(
+      <ArticleList
+        rows={[DRAFT_ROW, PUBLISHED_ROW, UNPUBLISHED_ROW, TAKEDOWN_ROW]}
+        canWrite
+        publicOrigin={PUBLIC_ORIGIN}
+      />,
+    );
+    expect(screen.queryByText("删除")).toBeNull();
+    expect(screen.queryByText("批量删除")).toBeNull();
+    expect(screen.queryByText(/^删除/)).toBeNull();
   });
 });
 
