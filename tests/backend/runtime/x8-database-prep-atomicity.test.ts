@@ -207,6 +207,10 @@ describe("D-9a: prepare_database() atomicity", () => {
     expect(result.stderr).toContain("X8_DB_PREP_FAILED_AT=disk_preflight");
     const dumps = stdinDumpNames();
     expect(dumps, `expected zero stdin-fed psql calls once gate B refuses; got: ${dumps.join(", ")}`).toHaveLength(0);
+    // D-9 merge follow-up: every gate decision emits one machine-readable
+    // reading, refusals included -- this is the line the deployment
+    // acceptance checklist greps for.
+    expect(result.stderr).toContain('X8_DISK_PREFLIGHT=refused scenario="database preparation');
     // Broader than the stdin-only dumps above: covers the --file (roles.sql)
     // and --command (role-existence check) shapes too, which never get a
     // numbered psql-stdin-*/psql-argv-* pair of their own -- this is the
@@ -221,6 +225,12 @@ describe("D-9a: prepare_database() atomicity", () => {
     const result = run(CALL_PREPARE_DATABASE, { STUB_DF_AVAILABLE_KIB: "9999999", STUB_MIGRATE_EXIT: "1" });
     expect(result.stderr).not.toContain("X8_DB_PREP_FAILED_AT=disk_preflight");
     expect(result.stderr).toContain("X8_DB_PREP_FAILED_AT=migrate_deploy");
+    // D-9 merge follow-up: a HEALTHY gate must still leave a reading in the
+    // log. Before this, a passing `up` printed nothing from either gate, so
+    // there was no way to confirm from the output that they ran at all.
+    // Revert self-check: deleting the success-path echo in
+    // x8_require_free_disk_kib() turns this assertion red.
+    expect(result.stderr).toContain('X8_DISK_PREFLIGHT=ok scenario="database preparation');
   });
 
   it("records the step reached and the grants-intact status in the failure marker", () => {
@@ -348,6 +358,7 @@ describe("D-9a: gate A (disk preflight before build) x8_gc handoff seam", () => 
     });
     expect(result.status, `stdout:\n${result.stdout}\nstderr:\n${result.stderr}`).toBe(0);
     expect(result.stderr).not.toContain("below the warn threshold");
+    expect(result.stderr).toContain('X8_DISK_PREFLIGHT=ok scenario="building the release image"');
     expect(gcCallLines(), "x8_gc must not be called when space is already healthy").toHaveLength(0);
   });
 

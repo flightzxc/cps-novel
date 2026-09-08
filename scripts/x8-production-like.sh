@@ -73,8 +73,10 @@ usage() {
     '     $X8_GC_KEEP / $X8_GC_KEEP_RECENT, default 5), and any image any' \
     '     container still references (running or stopped) -- never `docker' \
     '     rmi -f`, never `system prune -a` / `image prune -a`. `up` calls' \
-    '     `gc --auto` itself right before building a new image (disable with' \
-    '     X8_GC_ON_UP=0); that automatic run never touches dangling layers' \
+    '     `gc --auto` itself right before building a new image, but ONLY' \
+    '     when free disk space is already below $X8_WARN_FREE_KIB_BUILD' \
+    '     (disable that automatic run entirely with X8_GC_ON_UP=0);' \
+    '     the automatic run never touches dangling layers' \
     '     unless $X8_GC_PRUNE_DANGLING=1 is set explicitly -- a manual `gc`' \
     '     still does by default.' >&2
   exit 64
@@ -545,10 +547,12 @@ build_app_image() {
 # built in a separate worktree/session in parallel with it, before that
 # helper existed, and duplicating its probe here under a different name
 # would only leave a second, divergent copy for a human to reconcile at
-# merge time. `up_x8()`'s own disk-preflight gate (D-9a, wired immediately
-# before this function's call site below) already logs available space
-# directly around when it calls `x8_gc --auto`; see the D-9b construction
-# report for this explicitly-accepted gap.
+# merge time. That split is now merged: D-9a's x8_disk_preflight_before_build()
+# is what calls this function, and it logs the free-space reading before the
+# call (its own WARN line) and again after it (X8_DISK_PREFLIGHT=... from
+# x8_require_free_disk_kib(), which re-measures on both the pass and the
+# refuse path), so §4.2's "gc 前后可用空间" requirement is met by the gate
+# rather than by a second probe implementation inside this function.
 #
 # No associative arrays anywhere in this function: the host's stock
 # `/usr/bin/env bash` is macOS's frozen bash 3.2, which has no `declare -A`

@@ -234,6 +234,19 @@ D-9（2026-09-09）：`up` 会先做磁盘可用空间检查（fail-closed，不
 权限重放（`grants.sql`）也已改为单事务，一次失败不会剥夺仍在跑的旧版本的数据库权限，也不会静默
 失败在数据库准备或 admin-seed 中间。
 
+验收时按这几个键去 `up` 的 stderr 里抓（两道闸各一行，成功路径也会打）：
+
+```
+X8_DISK_PREFLIGHT=ok scenario="building the release image" free_kib=… min_kib=8388608        # 闸A
+X8_DISK_PREFLIGHT=ok scenario="database preparation (roles/passwords/migrate/grants)" …      # 闸B
+```
+
+失败时同一个键变成 `X8_DISK_PREFLIGHT=refused …`，并额外打两行
+`X8_DB_PREP_FAILED_AT=<步骤>` / `X8_DB_PREP_GRANTS_INTACT=<yes|no|n/a>`；
+`intact=no` 时再多一行 `X8_DB_PREP_RECOVERY_COMMAND=…`（可直接复制执行）。
+`gc` 自己每轮打 `X8_GC_STARTED_AT` / `X8_GC_KEEP_IMAGE=<tag> reason=…` /
+`X8_GC_DELETE_IMAGE=` / `X8_GC_FINISHED_AT`。
+
 若 `up` 时 secret 文件还不存在，`admin-seed` 会被跳过并打印提示（不会让 `up` 失败）；
 之后单独补跑 `scripts/x8-production-like.sh admin-seed` 即可。`admin-seed` 幂等——
 账户已存在时默认跳过，只有再加 `--reset-password` 才更新密码哈希。
