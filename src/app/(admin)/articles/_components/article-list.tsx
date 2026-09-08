@@ -10,7 +10,7 @@ import { CopyButton } from "@/components/ui/copy-button";
 import { EmptyRow, TBody, TD, TH, THead, Table } from "@/components/ui/table";
 import type { ArticleContentMode, ArticleSeoVisibility, ArticleStatus, ArticleType } from "@/domain/database-statuses";
 import { formatDateTime } from "@/features/admin-ui/content-view";
-import { buildArticlePath } from "@/lib/slug/article-path";
+import { buildArticlePath, buildBlogPath } from "@/lib/slug/article-path";
 
 import { MAX_BATCH_PUBLISH_SELECTION } from "../../novels/_lib/batch-publish-constants";
 import { describePublishGateReason } from "../../novels/_lib/publish-gate-copy";
@@ -98,8 +98,26 @@ export type ArticleListRow = {
  * the dev same-origin branch of the rule table and is no worse than today's
  * link anywhere else — a misconfigured `SITE_URL` must not blank out the
  * whole list.
+ *
+ * C-29 (`规划_文章管理能力补齐_博客类型可见性换小说_2026-09-08.md` §三/C-29):
+ * "仅需确认列表里博客行的'前台 URL'列渲染的是 /blog/{slug}，这由前台路径
+ * 构造器的分支自动兑现" — checking that claim against the actual code found
+ * it did NOT hold: this function unconditionally called `buildArticlePath`
+ * (the `/novel/{slug}-p{shortId}` family) for every row regardless of
+ * `row.articleType`, which C-26 had already added to `ArticleListRow` but
+ * this function never read. A blog row's short id (still generated —
+ * `createBlogArticle` uses the same `publicPageShortId` retry generator) is
+ * a red herring: the blog family's route never includes it
+ * (`buildBlogPath`'s own header). Branches the same way
+ * `access.ts`/`sitemap.ts`/`eligibility.ts` all do — `articleType !==
+ * "novel_article"` is the blog family, falling back to `"novel_article"`
+ * for a row without the field at all (same optional-field default C-26's
+ * own doc comment on `ArticleListRow.articleType` establishes).
  */
 function publicArticlePath(row: ArticleListRow): string {
+  if ((row.articleType ?? "novel_article") !== "novel_article") {
+    return buildBlogPath({ locale: row.locale as "en", slug: row.slug });
+  }
   return buildArticlePath({ locale: row.locale as "en", slug: row.slug, shortId: row.publicPageShortId });
 }
 

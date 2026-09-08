@@ -29,15 +29,30 @@
  * (`isPublicationStatePublic`, `isPubliclyAccessible`, etc.) — they only see
  * `status`, never `deletedAt`. The `buildPrimary*Where`/`buildPublic*Where`
  * fragments below are what enforce `deletedAt: null`. This is safe today
- * because this module's only caller, `access.ts`'s
- * `checkNovelArticlePublicAccess`, always loads its row through
- * `buildPrimaryArticleWhere` first. A future caller that loads a row by id
- * directly (skipping the where-builder) and then calls a predicate function
- * on it would incorrectly treat a soft-deleted row as publicly accessible —
- * always route through a `build*Where` fragment before calling a predicate.
+ * because this module's callers, `access.ts`'s
+ * `checkNovelArticlePublicAccess`/`checkBlogArticlePublicAccess` (C-29),
+ * always load their row through `buildPrimaryArticleWhere` first. A future
+ * caller that loads a row by id directly (skipping the where-builder) and
+ * then calls a predicate function on it would incorrectly treat a
+ * soft-deleted row as publicly accessible — always route through a
+ * `build*Where` fragment before calling a predicate.
+ *
+ * C-29 (`规划_文章管理能力补齐_博客类型可见性换小说_2026-09-08.md` §三/C-29)
+ * adds a second, parallel record family below (`PUBLIC_BLOG_ARTICLE_RECORD`/
+ * `buildPublicBlogArticleWhere`/`buildPublicListBlogArticleWhere`) for
+ * `blog_article`/listicle/guide Articles — the Novel-shaped fragments above
+ * (`PUBLIC_ARTICLE_RECORD` and friends) structurally cannot match a
+ * null-`novelId` row at all (`novel: { is: ... }` requires a related Novel
+ * to exist), so a second family is not an inconsistency, it is the only way
+ * to express "publicly visible" for a row that was never Novel-shaped in
+ * the first place. Both families still share the exact same `isHiddenFrom
+ * PublicView` (`hidden`) semantics and `FEATURE_ARTICLE_SEO_VISIBILITY`
+ * degrade-when-off behavior — the split is only about the Novel/PromoLink
+ * requirement, never about `seoVisibility` growing a second meaning.
  */
 import type { Prisma } from "@prisma/client";
 
+import { BLOG_FAMILY_ARTICLE_TYPES } from "@/domain/database-statuses";
 import { isArticleSeoVisibilityEnabled } from "@/lib/flags";
 
 // ---------------------------------------------------------------------------
@@ -305,5 +320,63 @@ export function buildPublicListArticleWhere(
   const base: Prisma.ArticleWhereInput = isArticleSeoVisibilityEnabled(env)
     ? { ...PUBLIC_ARTICLE_RECORD, seoVisibility: "public" }
     : PUBLIC_ARTICLE_RECORD;
+  return { AND: [base, extra] };
+}
+
+// ---------------------------------------------------------------------------
+// C-29 blog family. Mirrors the Novel-article record/where pair above
+// exactly (same `deletedAt`/`status`/`seoVisibility` shape, same
+// flag-degrade rule), minus the Novel/PromoLink requirement a blog Article
+// structurally does not have. `FEATURE_ARTICLE_BLOG` (whether the blog
+// capability is reachable at all) is deliberately NOT checked here — that
+// is an entry-point concern (`access.ts`'s `checkBlogArticlePublicAccess`,
+// `src/lib/seo/sitemap.ts`'s blog family branch, `/blog` route loaders),
+// the same layering `FEATURE_ARTICLE_SEO_VISIBILITY` already uses (this
+// module answers "what does seoVisibility mean", never "is this capability
+// switched on").
+// ---------------------------------------------------------------------------
+
+/**
+ * `novelId: null` is redundant with `articleType: { in: BLOG_FAMILY_ARTICLE_TYPES }`
+ * under the `article_novel_id_by_type_check` CHECK (C-27: the two are always
+ * in sync) — kept anyway as the same defense-in-depth `access.ts`'s own
+ * null-novel short-circuit already applies ("Checked on both `novelId` and
+ * `novel` ... so both are narrowed non-null below", mirrored here in the
+ * opposite direction).
+ */
+export const PUBLIC_BLOG_ARTICLE_RECORD = {
+  deletedAt: null,
+  status: "published",
+  novelId: null,
+  articleType: { in: [...BLOG_FAMILY_ARTICLE_TYPES] },
+} satisfies Prisma.ArticleWhereInput;
+
+/**
+ * C-29 collectability fragment for the blog family — the blog-side
+ * counterpart to `buildPublicArticleWhere` above (sitemap/IndexNow/detail
+ * reachability: excludes `hidden`, keeps `seo_only`).
+ */
+export function buildPublicBlogArticleWhere(
+  extra: Prisma.ArticleWhereInput = {},
+  env: NodeJS.ProcessEnv = process.env,
+): Prisma.ArticleWhereInput {
+  const base: Prisma.ArticleWhereInput = isArticleSeoVisibilityEnabled(env)
+    ? { ...PUBLIC_BLOG_ARTICLE_RECORD, seoVisibility: { not: "hidden" } }
+    : PUBLIC_BLOG_ARTICLE_RECORD;
+  return { AND: [base, extra] };
+}
+
+/**
+ * C-29 on-site listing fragment for the blog family — the blog-side
+ * counterpart to `buildPublicListArticleWhere` above (`/blog`'s list page:
+ * excludes both `hidden` AND `seo_only`).
+ */
+export function buildPublicListBlogArticleWhere(
+  extra: Prisma.ArticleWhereInput = {},
+  env: NodeJS.ProcessEnv = process.env,
+): Prisma.ArticleWhereInput {
+  const base: Prisma.ArticleWhereInput = isArticleSeoVisibilityEnabled(env)
+    ? { ...PUBLIC_BLOG_ARTICLE_RECORD, seoVisibility: "public" }
+    : PUBLIC_BLOG_ARTICLE_RECORD;
   return { AND: [base, extra] };
 }

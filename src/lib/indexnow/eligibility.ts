@@ -18,7 +18,8 @@
  */
 import type { PrismaClient, Prisma } from "@prisma/client";
 
-import { buildArticlePath } from "@/lib/slug/article-path";
+import { isArticleBlogEnabled } from "@/lib/flags";
+import { buildArticlePath, buildBlogPath } from "@/lib/slug/article-path";
 import { SITE_LOCALES, isPublishableLocale, type SiteLocale } from "@/lib/locale/locale-canonical";
 import {
   isHiddenFromPublicView,
@@ -126,6 +127,54 @@ export function isNovelIndexNowEligible(
 }
 
 /**
+ * C-29 (`规划_文章管理能力补齐_博客类型可见性换小说_2026-09-08.md` §三/C-29):
+ * "IndexNow 投递资格：博客走同一个语种白名单 + 可见性判定，但跳过书目/推广
+ * 链接判定。落点在 IndexNow 自己那层...不下沉到通用谓词族" — this is that
+ * predicate. Parallel to `isNovelIndexNowEligible` above rather than a
+ * branch inside it: a blog Article has no `NovelPublicationState`/
+ * `PromoLinkReadinessState` to pass in at all, so the two functions cannot
+ * share a signature. Eligibility reduces to exactly `status === "published"`
+ * (no promo-readiness re-check — a blog Article has no PromoLink, C-27),
+ * gated by the same locale allowlist and `hidden` exclusion the Novel-side
+ * function already applies.
+ *
+ * `FEATURE_ARTICLE_BLOG` is checked here too (unlike `isNovelIndexNowEligible`,
+ * which carries no such flag — Novel-article IndexNow predates C-28/C-29
+ * entirely) so this predicate is fail-closed by construction wherever it is
+ * eventually wired to a live enqueue/recheck call site.
+ *
+ * 🟡 Not yet wired to a production call site this round. The natural wiring
+ * point — `src/server/publish-gate/service.ts`'s `dispatchFirstPublicPublication`
+ * call — is currently guarded by `txResult.novelId !== null` (skipping the
+ * enqueue entirely for a blog Article's first publish; that file's own
+ * inline comment already flags "Blog's own IndexNow/sitemap wiring is
+ * C-29's job"). `publish-gate/{facts,evaluator,service}.ts` are reserved
+ * for a concurrently-running workstream this round and were left untouched
+ * per this round's own file-boundary rule — so the actual enqueue call
+ * remains unwired; only this standalone, independently-tested predicate
+ * ships. `worker/handlers/indexnow-delivery.ts`'s own drift-recheck
+ * (`isNovelIndexNowEligible`) is likewise not extended to blog rows this
+ * round, since no blog `IndexNowOutbox` row can exist yet for it to ever
+ * recheck. Wiring this in is a mechanical follow-up once that file opens up.
+ */
+export type BlogIndexNowCandidateArticle = {
+  readonly locale: string;
+  readonly slug: string;
+  readonly status: string;
+};
+
+export function isBlogIndexNowEligible(
+  article: Pick<BlogIndexNowCandidateArticle, "locale" | "status"> & ArticleSeoVisibilityState,
+  options: IndexNowEligibilityOptions = {},
+): boolean {
+  if (!isArticleBlogEnabled(options.env)) return false;
+  const localeGate = options.isLocalePublishable ?? isPublishableLocale;
+  if (!localeGate(article.locale)) return false;
+  if (isHiddenFromPublicView(article, options.env)) return false;
+  return article.status === "published";
+}
+
+/**
  * Revision is a net-new concept versus CPS — CPS's `idempotencyKey` was
  * `sha256(eventType\ncanonicalUrl)` with revision deliberately excluded
  * (`DECISION-CHECK.md` 核查1). This codebase's frozen idempotent identity is
@@ -184,6 +233,12 @@ export function buildIndexNowCanonicalUrl(article: Pick<IndexNowCandidateArticle
     slug: article.slug,
     shortId: article.publicPageShortId,
   });
+  return normalizeCanonicalUrl(path);
+}
+
+/** `buildBlogPath` + `normalizeCanonicalUrl` — the blog-family counterpart to `buildIndexNowCanonicalUrl` above. No short id (see `article-path.ts`'s header on why the blog family never carries one). */
+export function buildBlogIndexNowCanonicalUrl(article: Pick<BlogIndexNowCandidateArticle, "locale" | "slug">): string {
+  const path = buildBlogPath({ locale: article.locale as SiteLocale, slug: article.slug });
   return normalizeCanonicalUrl(path);
 }
 

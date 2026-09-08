@@ -14,10 +14,20 @@
  * Route segment is `/novel/` (matching `src/app/dev-preview/novel/`), not
  * CPS's `/drama/`.
  *
- * 🔴 Sole URL-construction entry point for public Article pages — sitemap,
- * IndexNow, CTA links, admin preview links, and structured data must all
- * call these functions rather than concatenating paths inline (see
- * `src/lib/slug/README.md`).
+ * C-29 (`规划_文章管理能力补齐_博客类型可见性换小说_2026-09-08.md` §三/C-29)
+ * adds a second, parallel path family below: `buildBlogPath`/
+ * `buildBlogRoutePath`, route segment `/blog/`. Deliberately no short id
+ * suffix on the blog family — "注意博客路径不带短码" per the plan, matching
+ * CPS's own blog routing (the short id there is a `novel_article`-only
+ * concept; a blog Article's route primary key is its slug alone, and this
+ * codebase's `Article.slug` is already unique per `(locale)` among
+ * non-deleted rows regardless of type — see
+ * `docs/governance/database-governance.md` §5 item 5).
+ *
+ * 🔴 Sole URL-construction entry point for public Article pages (both
+ * families) — sitemap, IndexNow, CTA links, admin preview links, and
+ * structured data must all call these functions rather than concatenating
+ * paths inline (see `src/lib/slug/README.md`).
  */
 import type { SiteLocale } from "@/lib/locale/locale-canonical";
 
@@ -75,4 +85,29 @@ export function parseArticleSlugParam(param: string): ParsedArticleSlugParam | n
     slugPart: param.slice(0, match.index),
     shortId: match[1]!,
   };
+}
+
+// ---------------------------------------------------------------------------
+// C-29 blog family. No short id, no route-param parsing needed — the `[slug]`
+// dynamic segment IS the Article's `slug` column directly (Next.js already
+// URL-decodes route params for us on the read side).
+// ---------------------------------------------------------------------------
+
+export type BlogRoutePathInput = {
+  readonly slug: string;
+};
+
+export type BlogPathInput = {
+  readonly locale: SiteLocale;
+  readonly slug: string;
+};
+
+/** Locale-independent path segment, e.g. `/blog/my-post-title`. */
+export function buildBlogRoutePath(input: BlogRoutePathInput): string {
+  return `/blog/${encodeURIComponent(input.slug)}`;
+}
+
+/** Full site-relative path including the locale prefix (empty for `en`). */
+export function buildBlogPath(input: BlogPathInput): string {
+  return `${localePrefix(input.locale)}${buildBlogRoutePath(input)}`;
 }

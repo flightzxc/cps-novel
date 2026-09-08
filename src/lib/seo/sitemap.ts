@@ -4,10 +4,13 @@ import {
 } from "@/lib/locale/locale-canonical";
 import type { Prisma, PrismaClient } from "@prisma/client";
 
+import { BLOG_FAMILY_ARTICLE_TYPES } from "@/domain/database-statuses";
+import { isArticleBlogEnabled } from "@/lib/flags";
 import { getSiteUrl, toAbsoluteUrl } from "@/lib/seo/site-url";
-import { buildArticlePath } from "@/lib/slug/article-path";
+import { buildArticlePath, buildBlogPath } from "@/lib/slug/article-path";
 import {
   buildPublicArticleWhere,
+  buildPublicBlogArticleWhere,
   isHiddenFromPublicView,
   isPromoReady,
   isPublicationStatePublic,
@@ -19,7 +22,18 @@ import {
 } from "@/lib/site/public-taxonomy";
 import { BROWSE_PAGE_SIZE } from "@/lib/site/queries";
 
-export const SITEMAP_TYPES = ["mainpage", "novelpage", "categorypage"] as const;
+/**
+ * C-29 (`规划_文章管理能力补齐_博客类型可见性换小说_2026-09-08.md` §三/C-29):
+ * `blogpage` is the fourth sitemap family — the blog-family counterpart to
+ * `novelpage`. File-name pattern (`getSitemapFileName`/
+ * `parseSitemapFileName` below) and family dispatch
+ * (`createSitemapFamilyBuilder`) both had to change in lockstep — the plan's
+ * own risk note for this exact spot: "sitemap 文件名正则改漏一处（解析、
+ * 分发、生成三处），表现是 sitemap 索引里有博客家族但请求那个文件返回
+ * 404，或者反过来。三处必须同改并有测试。" `tests/backend/seo/
+ * sitemap-blog.test.ts` covers all three.
+ */
+export const SITEMAP_TYPES = ["mainpage", "novelpage", "categorypage", "blogpage"] as const;
 export type SitemapType = (typeof SITEMAP_TYPES)[number];
 
 export interface SitemapFamilySpec {
@@ -232,6 +246,76 @@ async function buildCategoryPageFiles(
   });
 }
 
+// ---------------------------------------------------------------------------
+// C-29 blog family. Separate SELECT/candidate-type/where/filter/builder set
+// from the Novel-page family above — a blog Article structurally cannot
+// satisfy `ArticleSitemapCandidateWithNovel` (no Novel, no PromoLink), same
+// reasoning `access.ts`'s `checkBlogArticlePublicAccess` documents for why
+// it is a parallel function rather than a branch inside the Novel one.
+// ---------------------------------------------------------------------------
+
+const BLOG_ARTICLE_SITEMAP_SELECT = {
+  id: true,
+  locale: true,
+  slug: true,
+  title: true,
+  status: true,
+  articleType: true,
+  seoVisibility: true,
+  deletedAt: true,
+  updatedAt: true,
+} as const satisfies Prisma.ArticleSelect;
+
+type BlogArticleSitemapCandidate = Prisma.ArticleGetPayload<{
+  select: typeof BLOG_ARTICLE_SITEMAP_SELECT;
+}>;
+
+function blogArticleSitemapWhere(locale: SiteLocale, env: NodeJS.ProcessEnv): Prisma.ArticleWhereInput {
+  // C-25: same "collectability" fragment discipline as `articleSitemapWhere`
+  // above (excludes `hidden`, keeps `seo_only`) — just the blog-family
+  // record shape (`PUBLIC_BLOG_ARTICLE_RECORD`) instead of the Novel one.
+  return buildPublicBlogArticleWhere({ locale }, env);
+}
+
+function isVisibleBlogCandidate(
+  candidate: BlogArticleSitemapCandidate,
+  env: NodeJS.ProcessEnv,
+): boolean {
+  return candidate.deletedAt === null
+    && candidate.status === "published"
+    && (BLOG_FAMILY_ARTICLE_TYPES as readonly string[]).includes(candidate.articleType)
+    // C-25: application-layer recheck for `hidden`, same "DB filter is a
+    // superset, application layer is authoritative" discipline as
+    // `isVisibleCandidate` above.
+    && !isHiddenFromPublicView(candidate, env);
+}
+
+function buildBlogPageFiles(
+  locale: SiteLocale,
+  candidates: readonly BlogArticleSitemapCandidate[],
+): SitemapFile[] {
+  const entries = candidates.map((candidate): SitemapEntry => ({
+    loc: toAbsoluteUrl(buildBlogPath({ locale, slug: candidate.slug })),
+    lastmod: candidate.updatedAt.toISOString(),
+    changefreq: "weekly",
+    priority: 0.6,
+    // No `imageUrl`/`imageTitle` — a blog Article's optional cover (C-28's
+    // `seoMetadata.coverUrl`) is not selected here; `renderUrlSetXml` only
+    // emits the `<image:image>` block when `imageUrl` is present, so this
+    // is simply "no image", not a gap versus the Novel family above.
+  }));
+
+  return chunks(entries, SITEMAP_SHARD_SIZE).map((shardEntries, index) => {
+    const name = getSitemapFileName("blogpage", locale, index);
+    return {
+      name,
+      url: toAbsoluteUrl(`/sitemap/${name}`),
+      lastmod: latestDate(shardEntries.map((entry) => new Date(entry.lastmod))).toISOString(),
+      entries: shardEntries,
+    };
+  });
+}
+
 /**
  * Production DB builder injected into the PR1 filesystem generator. Database
  * reads happen only in the refresh worker; request routes remain static-only.
@@ -258,7 +342,36 @@ export function createSitemapFamilyBuilder(
     return pending;
   };
 
+  // C-29: separate cache from the Novel-page one above — different SELECT
+  // shape, different candidate type, never shares a Map key/value shape
+  // with `candidateCacheByRoute`.
+  const blogCandidateCacheByRoute = new Map<SiteLocale, Promise<BlogArticleSitemapCandidate[]>>();
+  const loadVisibleBlog = (locale: SiteLocale) => {
+    const existing = blogCandidateCacheByRoute.get(locale);
+    if (existing) return existing;
+    const pending = db.article.findMany({
+      where: blogArticleSitemapWhere(locale, env),
+      select: BLOG_ARTICLE_SITEMAP_SELECT,
+      orderBy: { id: "asc" },
+    }).then((rows) => rows.filter((row) => isVisibleBlogCandidate(row, env)));
+    blogCandidateCacheByRoute.set(locale, pending);
+    return pending;
+  };
+
   return async ({ type, locale }) => {
+    if (type === "blogpage") {
+      // C-29 "开关": `FEATURE_ARTICLE_BLOG` off -> the blog family emits
+      // zero files (not merely zero URLs inside one empty file) — matching
+      // the plan's "关闭时 ... sitemap 不生成博客家族" and keeping the
+      // sitemap in lockstep with `access.ts`'s `checkBlogArticlePublicAccess`
+      // (which also fails closed on this same flag before querying), so a
+      // `/blog/{slug}` URL is never listed in a sitemap while the route
+      // that URL points at would itself 404.
+      if (!isArticleBlogEnabled(env)) return [];
+      const blogCandidates = await loadVisibleBlog(locale);
+      return buildBlogPageFiles(locale, blogCandidates);
+    }
+
     const candidates = await loadVisible(locale);
     if (type === "novelpage") return buildNovelPageFiles(locale, candidates);
     if (type === "categorypage") return buildCategoryPageFiles(db, locale, candidates);
@@ -306,7 +419,7 @@ export function parseSitemapFileName(fileName: string): {
   locale: SiteLocale;
   index: number;
 } | null {
-  const match = /^site_(mainpage|novelpage|categorypage)_([a-zA-Z-]+)(?:_(\d+))?\.xml$/.exec(fileName);
+  const match = /^site_(mainpage|novelpage|categorypage|blogpage)_([a-zA-Z-]+)(?:_(\d+))?\.xml$/.exec(fileName);
   if (!match) return null;
 
   const locale = match[2];

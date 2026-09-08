@@ -130,6 +130,28 @@ describe("ArticleList · 列表与批量", () => {
   });
 
   /**
+   * C-29 (`规划_文章管理能力补齐_博客类型可见性换小说_2026-09-08.md` §三/C-29):
+   * "仅需确认列表里博客行的'前台 URL'列渲染的是 /blog/{slug}" — this pins
+   * that confirmation. Before this round's fix, `publicArticlePath` always
+   * called `buildArticlePath` (the `/novel/{slug}-p{shortId}` family)
+   * regardless of `row.articleType`, which would have rendered a broken
+   * `/novel/{blog-slug}-p{shortId}` link for a blog row — no short code,
+   * wrong route.
+   */
+  it("博客行的前台 URL 列渲染 /blog/{slug}（无短码），而不是 /novel/{slug}-p{shortId}", () => {
+    const blogRow: ArticleListRow = {
+      ...DRAFT_ROW,
+      id: "blog-article-1",
+      title: "A blog post",
+      slug: "a-blog-post",
+      articleType: "blog_article",
+      novel: undefined,
+    };
+    render(<ArticleList rows={[blogRow]} canWrite publicOrigin={PUBLIC_ORIGIN} />);
+    expect(screen.getByTestId(`article-url-path-${blogRow.id}`).textContent).toBe("/blog/a-blog-post");
+  });
+
+  /**
    * RC-9 regression: the console and the public site are different origins,
    * and the admin origin 404s every public content path. A site-relative href
    * would resolve against the admin host — exactly the 404 this pins against.

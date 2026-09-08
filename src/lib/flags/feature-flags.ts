@@ -197,15 +197,37 @@ export function isArticleSeoVisibilityEnabled(env: NodeJS.ProcessEnv = process.e
 // even with the feature flag on, the creation service performs zero writes
 // unless this is also true — "功能开了也不写库".
 //
-// Web-only: `createBlogArticle`'s only caller is the admin Server Action
+// `ARTICLE_BLOG_ALLOW_WRITE` stays web-only, unchanged since C-28:
+// `createBlogArticle`'s only caller is the admin Server Action
 // (`src/app/(admin)/articles/_actions.ts`'s `createBlogArticleAction`), an
 // interactive write triggered from the new-blog form — no worker or
-// scheduler task chain ever creates a blog Article. Grepped before writing
-// this comment: neither flag function below has any caller under `worker/`
-// or `scheduler/`, unlike `FEATURE_ARTICLE_SEO_VISIBILITY` (which the
-// sitemap-refresh/indexnow-delivery worker handlers do read). Registered in
-// `docker-compose.yml`'s `web` service only — see
-// `docs/governance/feature-flag-registry.md` and
+// scheduler task chain ever creates a blog Article, and `isArticleBlogWriteAllowed`
+// has no caller under `worker/`/`scheduler/`. Registered in
+// `docker-compose.yml`'s `web` service only.
+//
+// `FEATURE_ARTICLE_BLOG` (the read gate above `isArticleBlogEnabled`) is
+// DIFFERENT as of C-29 (`规划_文章管理能力补齐_博客类型可见性换小说_2026-09-08.md`
+// §三/C-29) — it is now ALSO consumed by the worker process, the same shape
+// `FEATURE_ARTICLE_SEO_VISIBILITY` above already has: `src/lib/seo/sitemap.ts`'s
+// `createSitemapFamilyBuilder` calls `isArticleBlogEnabled(env)` to decide
+// whether to emit the `blogpage` sitemap family at all (`env` defaults to
+// `process.env`, so `worker/handlers/sitemap-refresh.ts`'s call site reads
+// the WORKER process's own copy), and `docker-compose.yml`'s `worker`
+// service block must therefore carry `FEATURE_ARTICLE_BLOG` too (registered
+// this round). `src/lib/indexnow/eligibility.ts`'s `isBlogIndexNowEligible`
+// also checks this flag but is NOT yet called from any file under `worker/`
+// — the natural call site (`worker/handlers/indexnow-delivery.ts`'s
+// drift-recheck) has nothing to recheck yet, since no blog `IndexNowOutbox`
+// row can be enqueued this round (`publish-gate/service.ts`'s
+// `dispatchFirstPublicPublication` call still skips `novelId === null`
+// Articles — see that file's own inline comment and `eligibility.ts`'s
+// `isBlogIndexNowEligible` doc comment for the full explanation). So: the
+// worker's `docker-compose.yml`/`scripts/lib/x8-levels.json`/
+// `scripts/acceptance/x8-validate-compose.mjs` registration for
+// `FEATURE_ARTICLE_BLOG` reflects the sitemap consumer only, not an
+// IndexNow one yet. `ARTICLE_BLOG_ALLOW_WRITE` is unaffected by any of this
+// — it is a write gate, and neither new C-29 consumer performs a write.
+// See `docs/governance/feature-flag-registry.md` and
 // `tests/backend/flags/article-blog-flags-passthrough.test.ts`.
 // -----------------------------------------------------------------------
 export const ARTICLE_BLOG_FEATURE_FLAG = "FEATURE_ARTICLE_BLOG";

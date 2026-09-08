@@ -23,21 +23,30 @@ import {
  *   3. `scripts/lib/x8-levels.json` — `false`/`false` at every level (0/uat/r
  *      — this capability has no Owner-approved open-the-gate step yet).
  *   4. `docs/p2/V020_RELEASE_CHECKLIST.md` §3 Level 0 — the checkbox line.
- *   5. `.env.example` + `docker-compose.yml`'s `web` service only.
+ *   5. `.env.example` + `docker-compose.yml`'s `web` service (both flags),
+ *      PLUS `docker-compose.yml`'s `worker` service (`FEATURE_ARTICLE_BLOG`
+ *      only, as of C-29 below).
  *
- * Unlike `FEATURE_ARTICLE_SEO_VISIBILITY` (single-gate, web AND worker),
- * this pair is a genuine double-gate (a protected write) but **web-only** —
- * `createBlogArticle`'s only caller is the admin Server Action
- * (`src/app/(admin)/articles/_actions.ts`'s `createBlogArticleAction`); no
- * worker or scheduler task chain ever creates a blog Article. This file's
- * own §5 assertions therefore check the *absence* from `worker`/`scheduler`
- * as explicitly as the presence in `web` — the exact inverse of what
- * `seo-visibility-flags-passthrough.test.ts` checks for its own (worker-
- * consuming) flag.
+ * REVISED at C-29 (`规划_文章管理能力补齐_博客类型可见性换小说_2026-09-08.md`
+ * §三/C-29): this file's original claim — that the whole pair is web-only,
+ * "unlike `FEATURE_ARTICLE_SEO_VISIBILITY`'s worker-side sitemap/IndexNow
+ * handlers" — no longer holds for `FEATURE_ARTICLE_BLOG` alone.
+ * `src/lib/seo/sitemap.ts`'s `createSitemapFamilyBuilder` now reads
+ * `isArticleBlogEnabled(env)` to decide whether to emit the `blogpage`
+ * sitemap family at all (`env` defaults to `process.env`, so
+ * `worker/handlers/sitemap-refresh.ts`'s call site reads the WORKER
+ * process's own copy) — the exact same worker-consumption shape
+ * `FEATURE_ARTICLE_SEO_VISIBILITY` already has, and it required the exact
+ * same fix: `docker-compose.yml`'s `worker` service block now carries
+ * `FEATURE_ARTICLE_BLOG` too. `ARTICLE_BLOG_ALLOW_WRITE` is UNCHANGED and
+ * stays genuinely web-only (the worker never performs the blog write, only
+ * reads the sibling flag to gate sitemap emission) — this file's §5/
+ * consumers assertions below now check each flag's OWN worker footprint
+ * separately instead of treating the pair as one unit.
  */
 const root = resolve(import.meta.dirname, "../../..");
 
-describe("C-28: FEATURE_ARTICLE_BLOG / ARTICLE_BLOG_ALLOW_WRITE are registered in all five required places", () => {
+describe("C-28/C-29: FEATURE_ARTICLE_BLOG / ARTICLE_BLOG_ALLOW_WRITE are registered in all required places", () => {
   it("1. src/lib/flags/feature-flags.ts: exact `=== \"true\"` parsing, default off, for both flags", () => {
     const env = (values: Record<string, string | undefined>) =>
       values as unknown as NodeJS.ProcessEnv;
@@ -54,15 +63,16 @@ describe("C-28: FEATURE_ARTICLE_BLOG / ARTICLE_BLOG_ALLOW_WRITE are registered i
     expect(isArticleBlogWriteAllowed(env({ ARTICLE_BLOG_ALLOW_WRITE: "true" }))).toBe(true);
   });
 
-  it("2. docs/governance/feature-flag-registry.md documents both flags and the web-only rationale", () => {
+  it("2. docs/governance/feature-flag-registry.md documents both flags and each flag's own worker-footprint rationale", () => {
     const registry = readFileSync(resolve(root, "docs/governance/feature-flag-registry.md"), "utf8");
     expect(registry).toContain("FEATURE_ARTICLE_BLOG");
     expect(registry).toContain("ARTICLE_BLOG_ALLOW_WRITE");
-    // The registry's own precedent (C-25's single-gate row) already carries
-    // a "why is this different from every double-gate pair above" note —
-    // this pair needs the mirror-image note: "why is this pair, unlike
-    // every OTHER double-gate pair, web-only".
-    expect(registry).toMatch(/FEATURE_ARTICLE_BLOG[\s\S]{0,3000}web-only/i);
+    // ARTICLE_BLOG_ALLOW_WRITE is still the one that needs the "why is this
+    // web-only" note (C-25's single-gate row precedent, mirrored).
+    expect(registry).toMatch(/ARTICLE_BLOG_ALLOW_WRITE[\s\S]{0,600}web-only/i);
+    // FEATURE_ARTICLE_BLOG needs the mirror-image note as of C-29: it is
+    // explicitly NOT web-only anymore.
+    expect(registry).toMatch(/FEATURE_ARTICLE_BLOG[\s\S]{0,600}NOT web-only/i);
   });
 
   it("3. scripts/lib/x8-levels.json: false/false at every level (0/uat/r) — no Owner-approved open-the-gate step yet", () => {
@@ -86,7 +96,7 @@ describe("C-28: FEATURE_ARTICLE_BLOG / ARTICLE_BLOG_ALLOW_WRITE are registered i
     expect(level0Section).toContain("ARTICLE_BLOG_ALLOW_WRITE=false");
   });
 
-  describe("5. .env.example + docker-compose.yml's web service only (not worker, not scheduler)", () => {
+  describe("5. .env.example + docker-compose.yml passthrough", () => {
     const envExample = readFileSync(resolve(root, ".env.example"), "utf8");
     const compose = readFileSync(resolve(root, "docker-compose.yml"), "utf8");
 
@@ -110,15 +120,22 @@ describe("C-28: FEATURE_ARTICLE_BLOG / ARTICLE_BLOG_ALLOW_WRITE are registered i
       expect(serviceBlock("web")).toContain("ARTICLE_BLOG_ALLOW_WRITE: ${ARTICLE_BLOG_ALLOW_WRITE:-false}");
     });
 
-    it("docker-compose.yml does NOT pass either flag to worker or scheduler — no task/worker chain ever creates a blog Article", () => {
-      expect(serviceBlock("worker")).not.toContain("FEATURE_ARTICLE_BLOG");
+    it("C-29: docker-compose.yml ALSO passes FEATURE_ARTICLE_BLOG to worker (sitemap blog family gate)", () => {
+      expect(serviceBlock("worker")).toContain("FEATURE_ARTICLE_BLOG: ${FEATURE_ARTICLE_BLOG:-false}");
+    });
+
+    it("docker-compose.yml does NOT pass ARTICLE_BLOG_ALLOW_WRITE to worker or scheduler — the worker never performs the blog write", () => {
       expect(serviceBlock("worker")).not.toContain("ARTICLE_BLOG_ALLOW_WRITE");
+      expect(serviceBlock("scheduler")).not.toContain("ARTICLE_BLOG_ALLOW_WRITE");
+    });
+
+    it("docker-compose.yml does NOT pass either flag to scheduler — enqueue-only, no read or write path to gate", () => {
       expect(serviceBlock("scheduler")).not.toContain("FEATURE_ARTICLE_BLOG");
       expect(serviceBlock("scheduler")).not.toContain("ARTICLE_BLOG_ALLOW_WRITE");
     });
   });
 
-  it("consumers: grep confirms neither flag function is imported under worker/ or scheduler/", async () => {
+  it("consumers: isArticleBlogWriteAllowed has zero occurrences under worker/ or scheduler/ (unchanged since C-28 — grepped before adding any C-29 code)", async () => {
     const { readFile, readdir } = await import("node:fs/promises");
     const path = await import("node:path");
     async function collect(dir: string): Promise<string[]> {
@@ -136,7 +153,26 @@ describe("C-28: FEATURE_ARTICLE_BLOG / ARTICLE_BLOG_ALLOW_WRITE are registered i
     const files = [...(await collect(resolve(root, "worker"))), ...(await collect(resolve(root, "scheduler")))];
     for (const file of files) {
       const source = await readFile(file, "utf8");
-      expect(source, file).not.toMatch(/isArticleBlogEnabled|isArticleBlogWriteAllowed/);
+      expect(source, file).not.toMatch(/isArticleBlogWriteAllowed/);
     }
+  });
+
+  it("consumers (C-29): worker/handlers/sitemap-refresh.ts's dependency chain reaches isArticleBlogEnabled indirectly, via createSitemapFamilyBuilder — this is intentional, NOT a direct-import claim like the write-gate check above", () => {
+    // Direct grep under worker/ would find nothing for `isArticleBlogEnabled`
+    // (the handler only imports `createSitemapFamilyBuilder` from
+    // `src/lib/seo/sitemap.ts`, which lives outside `worker/`), so a
+    // literal-string absence assertion here would be true but MISLEADING —
+    // it would look identical to genuine non-consumption. The actual
+    // behavioral proof that FEATURE_ARTICLE_BLOG gates the worker's sitemap
+    // output lives in `tests/backend/seo/sitemap-blog.test.ts` (flag-off ->
+    // zero blogpage files even with eligible candidates in the DB). This
+    // test only pins the textual wiring point so a future refactor that
+    // removes the `createSitemapFamilyBuilder` call from the handler (and
+    // silently drops the flag dependency with it) is caught here too.
+    const handlerSource = readFileSync(
+      resolve(root, "worker/handlers/sitemap-refresh.ts"),
+      "utf8",
+    );
+    expect(handlerSource).toContain("createSitemapFamilyBuilder");
   });
 });

@@ -129,10 +129,12 @@ for (const flag of [
   // C-25 review fix: single gate, no ALLOW_WRITE partner (read-only, see
   // docs/governance/feature-flag-registry.md's own note on why).
   "FEATURE_ARTICLE_SEO_VISIBILITY",
-  // C-28: a genuine double-gate (protected write), but web-only -- neither
-  // flag function has a worker/scheduler caller (grepped before adding,
-  // see src/lib/flags/feature-flags.ts's own comment on this pair), so
-  // these two do NOT also appear in the worker loop below.
+  // C-28: a genuine double-gate (protected write). ARTICLE_BLOG_ALLOW_WRITE
+  // stays web-only (createBlogArticle's only caller is the admin Server
+  // Action, no worker/scheduler caller). FEATURE_ARTICLE_BLOG itself is
+  // NOT web-only as of C-29 (规划_文章管理能力补齐_博客类型可见性换小说_
+  // 2026-09-08.md §三/C-29) -- src/lib/seo/sitemap.ts's blog sitemap
+  // family also reads it, so it ALSO appears in the worker loop below now.
   "FEATURE_ARTICLE_BLOG",
   "ARTICLE_BLOG_ALLOW_WRITE",
 ]) {
@@ -156,6 +158,13 @@ for (const flag of [
   // process.env -- the WORKER process's own env -- so this must be
   // registered in docker-compose.yml's worker block too, not web-only.
   "FEATURE_ARTICLE_SEO_VISIBILITY",
+  // C-29: src/lib/seo/sitemap.ts's createSitemapFamilyBuilder reads
+  // isArticleBlogEnabled(env) (also process.env-default) to decide whether
+  // to emit the blogpage sitemap family -- same worker-registration
+  // requirement as FEATURE_ARTICLE_SEO_VISIBILITY above. NOT paired with
+  // ARTICLE_BLOG_ALLOW_WRITE here -- the worker never performs the blog
+  // write, only reads this flag to gate sitemap emission.
+  "FEATURE_ARTICLE_BLOG",
 ]) {
   const expected = levelEntry.flags[flag];
   if (worker.environment?.[flag] !== expected) {

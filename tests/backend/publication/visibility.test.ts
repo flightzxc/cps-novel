@@ -5,7 +5,9 @@ import {
   buildPrimaryArticleWhere,
   buildPrimaryNovelWhere,
   buildPublicArticleWhere,
+  buildPublicBlogArticleWhere,
   buildPublicListArticleWhere,
+  buildPublicListBlogArticleWhere,
   buildPublicNovelWhere,
   isHiddenFromPublicView,
   isIndexNowEligible,
@@ -17,6 +19,7 @@ import {
   PRIMARY_ARTICLE_RECORD,
   PRIMARY_NOVEL_RECORD,
   PUBLIC_ARTICLE_RECORD,
+  PUBLIC_BLOG_ARTICLE_RECORD,
   PUBLIC_NOVEL_RECORD,
   type ArticleSeoVisibilityState,
   type PromoLinkReadinessState,
@@ -290,5 +293,80 @@ describe("C-25: SEO 可见性三层真值表 (public / seo_only / hidden × 详�
 
   it("isHiddenFromPublicView 缺省值（未携带 seoVisibility 字段）按未隐藏处理", () => {
     expect(isHiddenFromPublicView({}, FLAG_ON)).toBe(false);
+  });
+});
+
+/**
+ * C-29 (`规划_文章管理能力补齐_博客类型可见性换小说_2026-09-08.md` §三/C-29):
+ * the blog-family mirror of the C-25 nine-cell truth table above — same
+ * `seoVisibilityClauseAllows` structural inspection (not a mock-`findMany`
+ * round-trip, which cannot distinguish a correct `where` fragment from a
+ * broken one when the mock ignores `where` entirely — this is the layer
+ * that actually catches a broken `buildPublicListBlogArticleWhere`, unlike
+ * `tests/backend/site/blog-queries.test.ts`'s own where-equality check,
+ * which only proves the right function was *called*, not that the
+ * function's own body is correct).
+ */
+describe("C-29: 博客系列 SEO 可见性三层真值表 (public / seo_only / hidden × 详情 / 列表 / 收录)", () => {
+  const FLAG_ON = Object.freeze({ FEATURE_ARTICLE_SEO_VISIBILITY: "true" }) as unknown as NodeJS.ProcessEnv;
+  const FLAG_OFF = Object.freeze({}) as unknown as NodeJS.ProcessEnv;
+  const VALUES = ["public", "seo_only", "hidden"] as const;
+
+  function seoVisibilityClauseAllows(where: Prisma.ArticleWhereInput, value: string): boolean {
+    const base = (where as { AND: [Record<string, unknown>, unknown] }).AND[0];
+    const clause = base.seoVisibility as string | { not?: string } | undefined;
+    if (clause === undefined) return true;
+    if (typeof clause === "string") return clause === value;
+    return clause.not !== value;
+  }
+
+  const EXPECTED_WHEN_ON: Readonly<Record<(typeof VALUES)[number], { detail: boolean; list: boolean; collect: boolean }>> =
+    Object.freeze({
+      public: { detail: true, list: true, collect: true },
+      seo_only: { detail: true, list: false, collect: true },
+      hidden: { detail: false, list: false, collect: false },
+    });
+
+  it.each(VALUES)("flag 开启时，博客 %s 的三层可达性符合契约（与小说系列同一张表）", (value) => {
+    const article: ArticleSeoVisibilityState = { seoVisibility: value };
+    const detail = !isHiddenFromPublicView(article, FLAG_ON);
+    const list = seoVisibilityClauseAllows(buildPublicListBlogArticleWhere({}, FLAG_ON), value);
+    const collect = seoVisibilityClauseAllows(buildPublicBlogArticleWhere({}, FLAG_ON), value)
+      && !isHiddenFromPublicView(article, FLAG_ON);
+    expect({ detail, list, collect }).toEqual(EXPECTED_WHEN_ON[value]);
+  });
+
+  it.each(VALUES)(
+    "flag 关闭时，博客 %s 一律按 public 处理（详情可达、列表可见、可收录）",
+    (value) => {
+      const article: ArticleSeoVisibilityState = { seoVisibility: value };
+      expect(isHiddenFromPublicView(article, FLAG_OFF)).toBe(false);
+      expect(seoVisibilityClauseAllows(buildPublicListBlogArticleWhere({}, FLAG_OFF), value)).toBe(true);
+      expect(seoVisibilityClauseAllows(buildPublicBlogArticleWhere({}, FLAG_OFF), value)).toBe(true);
+    },
+  );
+
+  it("flag 关闭时两个博客片段的形状与 flag 未加时逐字相同（未定义 seoVisibility 子句）", () => {
+    expect(buildPublicBlogArticleWhere({ locale: "en" }, FLAG_OFF)).toEqual({
+      AND: [PUBLIC_BLOG_ARTICLE_RECORD, { locale: "en" }],
+    });
+    expect(buildPublicListBlogArticleWhere({ locale: "en" }, FLAG_OFF)).toEqual({
+      AND: [PUBLIC_BLOG_ARTICLE_RECORD, { locale: "en" }],
+    });
+  });
+
+  it("博客列表层片段比博客收录层片段更严格：收录层保留 seo_only，列表层不保留", () => {
+    const listWhere = buildPublicListBlogArticleWhere({}, FLAG_ON) as { AND: [Record<string, unknown>, unknown] };
+    const collectWhere = buildPublicBlogArticleWhere({}, FLAG_ON) as { AND: [Record<string, unknown>, unknown] };
+    expect(listWhere.AND[0]).toMatchObject({ seoVisibility: "public" });
+    expect(collectWhere.AND[0]).toMatchObject({ seoVisibility: { not: "hidden" } });
+  });
+
+  it("PUBLIC_BLOG_ARTICLE_RECORD requires status=published, novelId=null, and articleType in the blog family — never the Novel-shaped novel/promoLink relation filters", () => {
+    expect(PUBLIC_BLOG_ARTICLE_RECORD.status).toBe("published");
+    expect(PUBLIC_BLOG_ARTICLE_RECORD.novelId).toBeNull();
+    expect(PUBLIC_BLOG_ARTICLE_RECORD.articleType).toEqual({ in: ["blog_article", "listicle", "guide"] });
+    expect(PUBLIC_BLOG_ARTICLE_RECORD).not.toHaveProperty("novel");
+    expect(PUBLIC_BLOG_ARTICLE_RECORD).not.toHaveProperty("promoLink");
   });
 });

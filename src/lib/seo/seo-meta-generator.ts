@@ -1,15 +1,18 @@
+import { buildBlogSeoMeta, type BlogSeoData } from "./seo-templates/blog";
 import { buildCollectionSeoMeta, type CollectionSeoData } from "./seo-templates/collection";
 import { buildCategorySeoMeta, type CategorySeoData } from "./seo-templates/category";
 import { buildHomeSeoMeta, type HomeSeoData } from "./seo-templates/home";
 import { buildNovelSeoMeta, type NovelSeoData } from "./seo-templates/novel";
 
-export type { CategorySeoData, CollectionSeoData, HomeSeoData, NovelSeoData };
+export type { BlogSeoData, CategorySeoData, CollectionSeoData, HomeSeoData, NovelSeoData };
 
 export type SeoInput =
   | { entity: "novel"; data: NovelSeoData; locale?: string }
   | { entity: "home"; data: HomeSeoData; locale?: string }
   | { entity: "collection"; data: CollectionSeoData; pageNumber?: number; locale?: string }
-  | { entity: "category"; data: CategorySeoData; pageNumber?: number; locale?: string };
+  | { entity: "category"; data: CategorySeoData; pageNumber?: number; locale?: string }
+  /** C-29: the `/blog/{slug}` detail page. No `pageNumber` — a blog detail page is never paginated. */
+  | { entity: "blog"; data: BlogSeoData; locale?: string };
 
 export interface SeoOutput {
   title: string;
@@ -76,5 +79,7 @@ export function generateSeoMeta(input: SeoInput): SeoOutput {
       return buildCollectionSeoMeta(input.data, input.pageNumber, locale);
     case "category":
       return buildCategorySeoMeta(input.data, input.pageNumber, locale);
+    case "blog":
+      return buildBlogSeoMeta(input.data, locale);
   }
 }

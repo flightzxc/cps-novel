@@ -97,6 +97,15 @@ export const en = {
       "At the rights holder's request, this site no longer offers this book. This withdrawal is permanent.",
     returnHome: "Back to home",
   },
+  blog: {
+    listTitle: "Blog",
+    listDescription: "Articles and updates from this site.",
+    empty: "No blog posts yet.",
+    publishedOn: "Published {date}",
+    unpublishedTitle: "This post is temporarily unavailable",
+    unpublishedBody:
+      "It has been removed from this site. If it returns, this address will still work.",
+  },
   errorPage: {
     title: "Something went wrong",
     body: "This page could not be loaded. You can try again, or go back home.",

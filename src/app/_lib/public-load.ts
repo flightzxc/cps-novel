@@ -4,6 +4,10 @@ import { prisma } from "@/app/_lib/public-deps";
 import type { SiteLocale } from "@/lib/locale/locale-canonical";
 import { loadNovelHreflangSiblings } from "@/lib/seo/novel-hreflang";
 import {
+  getPublicBlogDetail,
+  listPublicBlogArticles,
+} from "@/lib/site/blog-queries";
+import {
   getPublicChapterView,
   getPublicNovelDetail,
   listHomeNovels,
@@ -15,6 +19,7 @@ import {
 } from "@/lib/site/queries";
 import type { PublicTaxonomyTag } from "@/lib/site/public-taxonomy";
 import { getHomeCarouselItems } from "@/lib/site/home-carousel-service";
+import { checkBlogArticlePublicAccess } from "@/server/publication/access";
 
 
 /**
@@ -72,3 +77,16 @@ export const loadChapterView = cache(async (articleId: string, chapterNumber: nu
 export const loadHreflangSiblings = cache(async (novelId: string) =>
   loadNovelHreflangSiblings(prisma, novelId),
 );
+
+// ---------------------------------------------------------------------------
+// C-29 (`规划_文章管理能力补齐_博客类型可见性换小说_2026-09-08.md` §三/C-29):
+// blog family loaders, parallel to the Novel-article ones above.
+// ---------------------------------------------------------------------------
+
+export const loadBlogList = cache(async (locale: SiteLocale) => listPublicBlogArticles(prisma, locale));
+
+export const loadBlogAccess = cache(async (locale: string, slug: string) =>
+  checkBlogArticlePublicAccess(prisma, { locale, slug }),
+);
+
+export const loadBlogDetail = cache(async (articleId: string) => getPublicBlogDetail(prisma, articleId));

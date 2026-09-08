@@ -38,6 +38,28 @@ export const ARTICLE_STATUSES = ["draft", "published", "unpublished", "takedown"
  * asserts this set stays exactly `APPLICABLE_ARTICLE_TYPES` minus `any`.
  */
 export const ARTICLE_TYPES = ["novel_article", "blog_article", "listicle", "guide"] as const;
+/**
+ * C-29 (`规划_文章管理能力补齐_博客类型可见性换小说_2026-09-08.md` §三/C-29):
+ * "类型属于博客系列" -- every `ArticleType` except `novel_article`. Derived
+ * from `ARTICLE_TYPES` (filter, not a second hand-typed literal array) so a
+ * future addition to that set is automatically included here without a
+ * second edit -- same "avoid a drift-prone duplicate enumeration"
+ * discipline `tests/backend/database/c24-article-axes-static.test.ts`
+ * already applies to `APPLICABLE_ARTICLE_TYPES` vs `ARTICLE_TYPES` above.
+ * Consumed by `src/server/publication/visibility.ts`'s
+ * `PUBLIC_BLOG_ARTICLE_RECORD` (the blog-family public where-fragment) and
+ * `src/lib/seo/sitemap.ts`'s blog sitemap family -- both need "is this
+ * Article a blog/listicle/guide" as an index-friendly `{ in: [...] }`
+ * clause rather than a `{ not: "novel_article" }` negation, matching
+ * `article_type_locale_status_published_idx`'s (C-24) own intent ("供 ...
+ * C-29 的博客列表走索引"). `listicle`/`guide` have no creation path yet
+ * (C-26's own "不建任何入口、不建任何专属渲染" exception) so this set is
+ * `["blog_article"]`-equivalent in practice today, but the derivation keeps
+ * it correct if that ever changes.
+ */
+export const BLOG_FAMILY_ARTICLE_TYPES = ARTICLE_TYPES.filter(
+  (type): type is Exclude<(typeof ARTICLE_TYPES)[number], "novel_article"> => type !== "novel_article",
+);
 /** `article.content_mode` (C-24 article axes foundation). CPS parity, copied verbatim. */
 export const ARTICLE_CONTENT_MODES = ["manual", "template"] as const;
 /** `article.seo_visibility` (C-24 article axes foundation). CPS parity, copied verbatim. */
