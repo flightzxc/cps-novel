@@ -27,10 +27,15 @@ import { paginateBlogCards } from "@/lib/site/blog-queries";
  * extracted verbatim out of `src/app/blog/page.tsx`, `PUBLIC_SITE_LOCALE`
  * swapped for the `locale` parameter. One literal replacement lands here
  * per WO-1 §6.4 (byte-identical English output): the bare `"Not found"`
- * early-return in `buildBlogListMetadata` becomes `t("meta.notFound")` —
- * `t` is hoisted above that early return (it previously existed only after
- * it, for the success path's `t("blog.listTitle")`) purely to support that
- * substitution. No other line's semantics changed.
+ * early-return in `buildBlogListMetadata` becomes
+ * `getPublicT(locale)("meta.notFound")`, called inline at that early return
+ * exactly where the literal used to sit. `t` itself stays declared only
+ * after that branch (as in the original, for the success path's
+ * `t("blog.listTitle")`) rather than hoisted above it — once stub locales
+ * exist, `getPublicT`/`loadMessages` throws on an incomplete catalog, and
+ * hoisting it above `loadBlogListPage` would move that throw onto every
+ * metadata call instead of only the not-found one that actually reaches it.
+ * No other line's semantics changed.
  */
 
 export type BlogListSearchParams = { page?: string | string[] };
@@ -68,12 +73,12 @@ export async function buildBlogListMetadata(
   searchParams: Promise<BlogListSearchParams>,
 ): Promise<Metadata> {
   const { page } = await searchParams;
-  const t = getPublicT(locale);
   const loaded = await loadBlogListPage(locale, page);
   if (!loaded) {
-    return { title: t("meta.notFound"), robots: { index: false, follow: false } };
+    return { title: getPublicT(locale)("meta.notFound"), robots: { index: false, follow: false } };
   }
 
+  const t = getPublicT(locale);
   const seo = generateSeoMeta({
     entity: "collection",
     locale,

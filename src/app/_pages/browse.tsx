@@ -25,7 +25,13 @@ import { paginateCards } from "@/lib/site/queries";
  * purely to support those two replacements — no other line's semantics
  * changed (query order, `Promise.all` grouping, the C-29 review-low
  * `totalPages` fix comment, `notFound()` timing, and SEO field construction
- * are all otherwise untouched).
+ * are all otherwise untouched). `getPublicT(locale)` stays called inline in
+ * the not-found branch (matching the original's `getPublicT(PUBLIC_SITE_
+ * LOCALE)("meta.notFound")` call) and the `t` used by the success path is
+ * declared after that branch, not hoisted above `loadBrowsePage` — once
+ * stub locales exist, `getPublicT`/`loadMessages` throws on an incomplete
+ * catalog, and hoisting it above the early return would move that throw
+ * onto every metadata call instead of only the ones that actually reach it.
  */
 
 export type BrowseSearchParams = { page?: string | string[]; category?: string | string[] };
@@ -78,15 +84,15 @@ export async function buildBrowseMetadata(
   searchParams: Promise<BrowseSearchParams>,
 ): Promise<Metadata> {
   const { page, category } = await searchParams;
-  const t = getPublicT(locale);
   const loaded = await loadBrowsePage(locale, page, category);
   if (!loaded) {
     return {
-      title: t("meta.notFound"),
+      title: getPublicT(locale)("meta.notFound"),
       robots: { index: false, follow: false },
     };
   }
 
+  const t = getPublicT(locale);
   const seo = generateSeoMeta({
     entity: "collection",
     locale,

@@ -79,7 +79,25 @@ export function buildDefaultLocaleRedirectTarget(pathname: string, search: strin
   const prefix = `/${PUBLIC_SITE_LOCALE}`;
   if (pathname !== prefix && !pathname.startsWith(`${prefix}/`)) return null;
   const rest = pathname.slice(prefix.length);
-  return `${!rest || rest === "/" ? "/" : rest}${search}`;
+  if (!rest || rest === "/") return `/${search}`;
+  // L2 hardening: refuse to redirect into a protocol-relative or
+  // backslash-prefixed remainder (`/en//evil.com/...`, `/en/\evil.com`).
+  // `new URL(target, base)` below treats a leading `//` as scheme-relative
+  // (keeps `base`'s protocol, swaps in the new host) — confirmed directly:
+  // `new URL("//evil.com/x", "https://site.com")` resolves to
+  // `https://evil.com/x` — and a leading `\` normalizes the same way once
+  // it reaches a WHATWG URL parser (both `new URL()` and browsers treat `\`
+  // as `/` for a special scheme). Either shape would turn this same-origin
+  // 308 into an open redirect to an attacker-controlled host. This function
+  // has no `NextRequest` context of its own to lean on, so it stays safe on
+  // whatever `pathname` string it is given — see
+  // `tests/ui/default-locale-redirect.test.ts` for both the pure-function
+  // cases and an end-to-end `proxy()` case confirming a real `NextRequest`
+  // does not strip a `//` out of `nextUrl.pathname` on its own, so this
+  // guard is load-bearing through the real call site too, not just
+  // speculative hardening.
+  if (rest.startsWith("//") || rest.startsWith("/\\")) return null;
+  return `${rest}${search}`;
 }
 
 export function proxy(request: NextRequest): NextResponse {

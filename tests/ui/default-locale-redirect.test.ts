@@ -42,6 +42,28 @@ describe("buildDefaultLocaleRedirectTarget — pure function", () => {
     expect(buildDefaultLocaleRedirectTarget("/browse", "")).toBeNull();
     expect(buildDefaultLocaleRedirectTarget("/", "")).toBeNull();
   });
+
+  // L2 review hardening: `new URL(target, base)` treats a leading `//` as
+  // scheme-relative (keeps `base`'s protocol, swaps in the new host) — so
+  // without this guard, `/en//evil.com/x` would turn this same-origin 308
+  // into an open redirect to an attacker-controlled host. Confirmed against
+  // Node's own WHATWG URL parser: `new URL("//evil.com/x", "https://site.com")`
+  // and `new URL("/\\evil.com/x", "https://site.com")` both resolve to
+  // `https://evil.com/x` (a leading `\` also normalizes to scheme-relative
+  // for a special scheme). See the "end to end" describe block below for
+  // the same guarantee through `proxy()` itself — including confirmation
+  // that a real `NextRequest` does NOT strip `//` out of `nextUrl.pathname`
+  // on its own, so this is not a merely-theoretical input at that call site
+  // either.
+  it("refuses to redirect a protocol-relative or backslash-prefixed remainder (open-redirect shape)", () => {
+    expect(buildDefaultLocaleRedirectTarget("/en//evil.com", "")).toBeNull();
+    expect(buildDefaultLocaleRedirectTarget("/en//evil.com/x", "?y=1")).toBeNull();
+    expect(buildDefaultLocaleRedirectTarget("/en/\\evil.com", "")).toBeNull();
+    expect(buildDefaultLocaleRedirectTarget("/en/\\\\evil.com", "")).toBeNull();
+    // A single interior slash/backslash (not right after the /en prefix)
+    // stays a normal, safe same-origin redirect.
+    expect(buildDefaultLocaleRedirectTarget("/en/browse/a//b", "")).toBe("/browse/a//b");
+  });
 });
 
 describe("src/proxy.ts — /en/* 308 redirect, end to end via NextRequest/NextResponse", () => {
@@ -67,6 +89,26 @@ describe("src/proxy.ts — /en/* 308 redirect, end to end via NextRequest/NextRe
       const location = response.headers.get("location");
       expect(location, path).toBe(expectedLocation);
       expect(location).not.toMatch(/localhost|127\.0\.0\.1|:3000/);
+    }
+  });
+
+  it("L2: never redirects a protocol-relative or backslash-prefixed /en/* remainder off-origin, even though NextRequest itself does not normalize `//`/`\\` out of the pathname", async () => {
+    vi.stubEnv("SITE_URL", ORIGIN);
+    vi.stubEnv("ADMIN_CANONICAL_ORIGIN", `https://${ADMIN_HOST}`);
+    vi.stubEnv("NODE_ENV", "production");
+
+    const { proxy } = await import("@/proxy");
+
+    for (const path of ["/en//evil.com/x", "/en/\\evil.com"]) {
+      const request = new NextRequest(`${ORIGIN}${path}`, { headers: { host: SITE_HOST } });
+      // Confirms the premise this guard defends against: a crafted request
+      // really can reach `proxy()` with an un-normalized `//`/`\` pathname
+      // (see `buildDefaultLocaleRedirectTarget`'s doc comment) — this is
+      // not a hypothetical input.
+      expect(request.nextUrl.pathname, path).toMatch(/^\/en[/\\]/);
+      const response = proxy(request);
+      expect(response.status, path).toBe(200);
+      expect(response.headers.get("location"), path).toBeNull();
     }
   });
 

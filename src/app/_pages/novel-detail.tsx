@@ -22,12 +22,19 @@ import { buildArticlePath, buildArticleRoutePath } from "@/lib/slug/article-path
 /**
  * Novel detail page shared body (WO-1 §6.1): extracted verbatim out of
  * `src/app/novel/[slugParam]/page.tsx`, `PUBLIC_SITE_LOCALE` swapped for the
- * `locale` parameter. Two `"Not found"` literals become `t("meta.notFound")`
- * per WO-1 §6.4 (byte-identical English output) — `t` is threaded into
- * `buildNovelMetadata` purely to support that. No other line's semantics
- * changed: query order, `notFound()` timing (`not_found`/`takedown` both
- * still 404 here, `unavailable` still renders `UnavailableScreen`), and SEO
- * field construction (including the hreflang-sibling helper) are untouched.
+ * `locale` parameter. Two `"Not found"` literals become
+ * `getPublicT(locale)("meta.notFound")` per WO-1 §6.4 (byte-identical
+ * English output), called inline at each site exactly where the literal
+ * used to sit — never hoisted into a shared `const t` above them, since
+ * `buildNovelMetadata`'s success path never needs `t` at all (unlike
+ * `buildBrowseMetadata`'s). Once stub locales exist, `getPublicT`/
+ * `loadMessages` throws on an incomplete catalog; hoisting the call above
+ * `loadArticleAccess` would move that throw onto every metadata call
+ * instead of only the not-found ones that actually reach it. No other
+ * line's semantics changed: query order, `notFound()` timing
+ * (`not_found`/`takedown` both still 404 here, `unavailable` still renders
+ * `UnavailableScreen`), and SEO field construction (including the
+ * hreflang-sibling helper) are untouched.
  */
 
 export type NovelRouteParams = { slugParam: string };
@@ -58,17 +65,16 @@ export async function buildNovelMetadata(
   params: Promise<NovelRouteParams>,
 ): Promise<Metadata> {
   const { slugParam } = await params;
-  const t = getPublicT(locale);
   const access = await loadArticleAccess(slugParam, locale);
   if (access.kind === "not_found") {
-    return noIndexMetadata(t("meta.notFound"));
+    return noIndexMetadata(getPublicT(locale)("meta.notFound"));
   }
   if (access.kind === "unavailable" || access.kind === "takedown") {
     return noIndexMetadata(access.title);
   }
 
   const [{ settings }, novel] = await Promise.all([loadChrome(locale), loadNovelDetail(access.articleId)]);
-  if (!novel) return noIndexMetadata(t("meta.notFound"));
+  if (!novel) return noIndexMetadata(getPublicT(locale)("meta.notFound"));
 
   const routePath = buildArticleRoutePath({ slug: access.slugPart, shortId: access.shortId });
   const seo = generateSeoMeta({

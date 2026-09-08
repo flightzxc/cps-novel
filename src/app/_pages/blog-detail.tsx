@@ -33,8 +33,13 @@ import type { BlogArticleAccessResult } from "@/server/publication/access";
  * extracted verbatim out of `src/app/blog/[slug]/page.tsx`,
  * `PUBLIC_SITE_LOCALE` swapped for the `locale` parameter. Two
  * `"Not found"` literals in `buildBlogDetailMetadata` become
- * `t("meta.notFound")` per WO-1 §6.4 (byte-identical English output) — `t`
- * is threaded into `buildBlogDetailMetadata` purely to support that. No
+ * `getPublicT(locale)("meta.notFound")` per WO-1 §6.4 (byte-identical
+ * English output), called inline at each site exactly where the literal
+ * used to sit — `buildBlogDetailMetadata`'s success path never needs `t`,
+ * so no shared `const t` is declared at all. Once stub locales exist,
+ * `getPublicT`/`loadMessages` throws on an incomplete catalog; hoisting the
+ * call above `loadBlogPage` would move that throw onto every metadata call
+ * instead of only the not-found/takedown ones that actually reach it. No
  * other line's semantics changed.
  */
 
@@ -57,10 +62,9 @@ export async function buildBlogDetailMetadata(
   params: Promise<BlogDetailRouteParams>,
 ): Promise<Metadata> {
   const { slug } = await params;
-  const t = getPublicT(locale);
   const { access, post } = await loadBlogPage(locale, slug);
-  if (access.kind === "not_found") return noIndexMetadata(t("meta.notFound"));
-  if (access.kind === "takedown") return noIndexMetadata(t("meta.notFound"));
+  if (access.kind === "not_found") return noIndexMetadata(getPublicT(locale)("meta.notFound"));
+  if (access.kind === "takedown") return noIndexMetadata(getPublicT(locale)("meta.notFound"));
   if (access.kind === "unavailable" || !post) return noIndexMetadata(access.title);
 
   const { settings } = await loadChrome(locale);
