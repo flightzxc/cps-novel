@@ -4,7 +4,7 @@ import { findCapabilityState } from "@/features/admin-ui/capability-view";
 import { errorEnvelopeCopy } from "@/features/admin-ui/error-copy";
 import { AdminTimeZoneNote } from "@/features/admin-ui/time-zone-note";
 import type { ErrorEnvelope } from "@/contracts";
-import { isArticleBlogEnabled } from "@/lib/flags";
+import { isArticleBlogEnabled, isArticleNovelRebindEnabled } from "@/lib/flags";
 import { listArticles, listDistinctArticleLocales, type ArticleListItem } from "@/server/articles";
 import { listActiveArticleTemplateOptions } from "@/server/article-templates";
 import { getSiteUrl } from "@/lib/seo/site-url";
@@ -99,6 +99,10 @@ export default async function ArticlesPage({
   const params = await searchParams;
   const { context, granted } = await requireContentPage("/articles", "content:view");
   const canWrite = findCapabilityState(capabilityViews(context), "content:publish") === "granted";
+  // C-30B (施工工单_C30_换小说_移植CPS换租客_2026-09-08.md §4B.4): "在 /articles
+  // 列表页抬头加入口按钮，仅在总闸开启且具备 content:batch-rebind 时渲染".
+  const canBatchRebind =
+    isArticleNovelRebindEnabled(process.env) && findCapabilityState(capabilityViews(context), "content:batch-rebind") === "granted";
   const publicOrigin = resolvePublicOrigin();
 
   let rows: readonly ArticleListItem[] = [];
@@ -217,6 +221,21 @@ export default async function ArticlesPage({
           >
             批量新建
           </Link>
+          {/*
+            C-30B (施工工单_C30_换小说_移植CPS换租客_2026-09-08.md §4B.4):
+            "在 /articles 列表页抬头加入口按钮，仅在总闸开启且具备
+            content:batch-rebind 时渲染" — same render-level double-gate
+            (flag + capability) shape as the "新建博客" button above.
+          */}
+          {canBatchRebind && (
+            <Link
+              href="/articles/batch-novel-rebind"
+              data-testid="articles-batch-novel-rebind-entry"
+              className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
+            >
+              批量换小说
+            </Link>
+          )}
         </div>
       }
     >

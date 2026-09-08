@@ -315,6 +315,38 @@ export const ADMIN_ARTICLE_REBIND_ACTIONS = [
   { id: "admin.article.rebind_candidates", capability: "content:rebind", mutation: false },
 ] as const satisfies AdminRegistry["actions"];
 
+/**
+ * C-30B (施工工单_C30_换小说_移植CPS换租客_2026-09-08.md §4B.3): the batch-
+ * rebind trigger family — a distinct capability from the single-article
+ * family above (`content:batch-rebind`, Owner 2026-09-08: two granularities,
+ * do not merge). 🔴 Every action here is capability-gated, including every
+ * read-only one — CPS's own two read-only batch Server Actions
+ * (`getBatchSwitchFacetsV2`/`getBatchSwitchPage`) DO check
+ * `article:batch-rebind-drama` today (unlike the single-article family's own
+ * gap noted above `ADMIN_ARTICLE_REBIND_ACTIONS`), so there is no CPS gap to
+ * avoid porting here — this repo simply keeps that same posture consistent
+ * across all seven ids.
+ *
+ * `admin.article.rebind_preview`'s `mutation: true` (despite `content:batch-
+ * rebind`, not a `content:publish`-shaped write capability) is the "预览单闸
+ * 例外" this construction order pre-documents in
+ * `src/lib/flags/feature-flags.ts`: a preview snapshot IS a write (one
+ * `article_novel_rebind_preview` row), but it never touches
+ * `Article.novelId`/`promoLinkId` and needs only the total gate
+ * (`FEATURE_ARTICLE_NOVEL_REBIND`), not `ARTICLE_NOVEL_REBIND_ALLOW_WRITE` —
+ * same shape `admin.catalog_scan.dry_run` already uses (`content:view` +
+ * `mutation: true`, 施工工单 §4B.3's own "同 catalog-scan dry_run 的先例").
+ */
+export const ADMIN_ARTICLE_BATCH_REBIND_ACTIONS = [
+  { id: "admin.article.rebind_facets", capability: "content:batch-rebind", mutation: false },
+  { id: "admin.article.rebind_preview", capability: "content:batch-rebind", mutation: true },
+  { id: "admin.article.rebind_preview_page", capability: "content:batch-rebind", mutation: false },
+  { id: "admin.article.rebind_batch_apply", capability: "content:batch-rebind", mutation: true },
+  { id: "admin.article.rebind_batch_resume", capability: "content:batch-rebind", mutation: true },
+  { id: "admin.article.rebind_batch_detail", capability: "content:batch-rebind", mutation: false },
+  { id: "admin.article.rebind_batch_by_token", capability: "content:batch-rebind", mutation: false },
+] as const satisfies AdminRegistry["actions"];
+
 export const ADMIN_HOME_CAROUSEL_ACTIONS = [
   { id: "admin.home_carousel.config", capability: "settings:manage", mutation: true },
   { id: "admin.home_carousel.manual_upsert", capability: "settings:manage", mutation: true },
@@ -359,6 +391,7 @@ export const P2_04_ADMIN_REGISTRY: AdminRegistry = Object.freeze({
     ...ADMIN_ARTICLE_TEMPLATE_ACTIONS,
     ...ADMIN_ARTICLE_ACTIONS,
     ...ADMIN_ARTICLE_REBIND_ACTIONS,
+    ...ADMIN_ARTICLE_BATCH_REBIND_ACTIONS,
     ...ADMIN_HOME_CAROUSEL_ACTIONS,
     ...ADMIN_SECURITY_ACTIONS,
   ]),

@@ -27,18 +27,31 @@ import {
 } from "@/server/publish-gate";
 import {
   RebindArticleNotEligibleError,
+  RebindBatchDomainError,
   RebindDriftError,
   RebindFeatureDisabledError,
   RebindGuardBlockedError,
   RebindInputError,
   RebindRollbackNotFoundError,
   RebindWriteDisabledError,
+  buildRebindBatchFacets,
+  buildRebindBatchPreview,
+  getRebindBatchByRequestToken,
+  getRebindBatchDetail,
+  getRebindBatchPage,
   getRebindView,
+  resumeRebindBatch,
   rollbackArticleNovel,
   searchRebindCandidates,
+  submitRebindBatch,
   switchArticleNovel,
+  type RebindBatchDetail,
+  type RebindBatchFacets,
+  type RebindBatchSummary,
   type RebindCandidate,
   type RebindGuardFinding,
+  type RebindPreviewCategory,
+  type RebindPreviewPage,
   type RebindView,
   type SwitchArticleNovelResult,
 } from "@/server/article-rebind";
@@ -49,7 +62,16 @@ import {
 // `from "@/server/..."` import in a `"use client"` file, type-only imports
 // included, same boundary `../_components/article-editor.tsx` and every
 // other client component in this directory already respects.
-export type { RebindCandidate, RebindGuardFinding, RebindView };
+export type {
+  RebindBatchDetail,
+  RebindBatchFacets,
+  RebindBatchSummary,
+  RebindCandidate,
+  RebindGuardFinding,
+  RebindPreviewCategory,
+  RebindPreviewPage,
+  RebindView,
+};
 
 import { canonicalOrigin, guardDependencies, prisma, readSessionToken } from "../../api/admin/_lib/deps";
 
@@ -214,6 +236,173 @@ export async function getRebindViewAction(input: {
     if (error instanceof RebindFeatureDisabledError) return { ok: false, code: error.code };
     if (error instanceof RebindArticleNotEligibleError) return { ok: false, code: error.code };
     return { ok: false, code: writeErrorCode(error, "article_rebind_view_failed") };
+  }
+}
+
+/**
+ * C-30B (施工工单_C30_换小说_移植CPS换租客_2026-09-08.md §4B.3). Thin Server
+ * Action wrappers around `@/server/article-rebind`'s batch functions —
+ * `RebindBatchDomainError`'s `code` (施工工单's CPS-parity `BatchSwitchDomainError`)
+ * is forwarded verbatim so the client can distinguish e.g.
+ * `SOURCE_SCAN_CEILING_EXCEEDED` from `PREVIEW_EXPIRED` from
+ * `IDEMPOTENCY_KEY_REUSED_WITH_DIFFERENT_PAYLOAD` — collapsing all of these
+ * into one opaque `*_failed` would defeat the entire "查批次编号，不要重复
+ * 提交" recovery story the batch UI panel is built around.
+ */
+export type RebindBatchActionResult<T> = { ok: true; data: T } | { ok: false; code: string };
+
+function rebindBatchErrorCode<T>(error: unknown): RebindBatchActionResult<T> {
+  if (error instanceof RebindBatchDomainError) return { ok: false, code: error.code };
+  if (error instanceof RebindFeatureDisabledError) return { ok: false, code: error.code };
+  if (error instanceof RebindWriteDisabledError) return { ok: false, code: error.code };
+  return { ok: false, code: writeErrorCode(error, "article_rebind_batch_failed") };
+}
+
+/** Read-only: 语种/来源应用分面，仅列已登记渠道 (施工工单 §4B.1/§2.3 item 1). */
+export async function getRebindBatchFacetsAction(input: {
+  requestId: string;
+  sourceChannelCode: string;
+  targetChannelCode: string;
+  locale?: string;
+}): Promise<RebindBatchActionResult<RebindBatchFacets>> {
+  try {
+    await authorizeRead("admin.article.rebind_facets", input.requestId);
+    const data = await buildRebindBatchFacets(prisma, {
+      sourceChannelCode: input.sourceChannelCode,
+      targetChannelCode: input.targetChannelCode,
+      locale: input.locale,
+    });
+    return { ok: true, data };
+  } catch (error) {
+    return rebindBatchErrorCode(error);
+  }
+}
+
+/**
+ * 🔴 The preview single-gate exception's actual write (`src/lib/flags/feature-flags.ts`'s
+ * own header comment): `admin.article.rebind_preview` is registered
+ * `mutation: true` (it writes one `article_novel_rebind_preview` row) but
+ * `buildRebindBatchPreview` itself checks only `FEATURE_ARTICLE_NOVEL_REBIND`,
+ * not `ARTICLE_NOVEL_REBIND_ALLOW_WRITE` — see that function's own doc
+ * comment.
+ */
+export async function generateRebindBatchPreviewAction(input: {
+  requestId: string;
+  sourceChannelCode: string;
+  targetChannelCode: string;
+  locale: string;
+  sourceApp?: string;
+}): Promise<RebindBatchActionResult<RebindBatchSummary>> {
+  try {
+    const auth = await authorization("admin.article.rebind_preview", input.requestId);
+    const data = await buildRebindBatchPreview(prisma, {
+      sourceChannelCode: input.sourceChannelCode,
+      targetChannelCode: input.targetChannelCode,
+      locale: input.locale,
+      sourceApp: input.sourceApp,
+      createdBy: auth.context.identity.id,
+    });
+    return { ok: true, data };
+  } catch (error) {
+    return rebindBatchErrorCode(error);
+  }
+}
+
+/** Read-only: paginated, category-filtered read of an already-frozen preview snapshot. */
+export async function getRebindBatchPreviewPageAction(input: {
+  requestId: string;
+  previewId: string;
+  category?: RebindPreviewCategory;
+  page?: number;
+  pageSize?: number;
+}): Promise<RebindBatchActionResult<RebindPreviewPage>> {
+  try {
+    const context = await authorizeRead("admin.article.rebind_preview_page", input.requestId);
+    const data = await getRebindBatchPage(prisma, {
+      previewId: input.previewId,
+      category: input.category,
+      page: input.page,
+      pageSize: input.pageSize,
+      createdBy: context.identity.id,
+    });
+    return { ok: true, data };
+  } catch (error) {
+    return rebindBatchErrorCode(error);
+  }
+}
+
+/**
+ * Submits (idempotent on `requestToken`) and runs the batch to completion
+ * or until the lease/time budget runs out. 🔴 The client must save its
+ * `requestToken` to recovery storage BEFORE calling this action — see
+ * `../_lib/rebind-recovery.ts`'s own header for why (this is the CPS-
+ * parity "令牌先落存储再发请求" mechanism, 施工工单 §4B.4).
+ */
+export async function submitRebindBatchAction(input: {
+  requestId: string;
+  previewId: string;
+  selectedArticleIds: readonly string[];
+  reason: string;
+  acknowledgeRisks: boolean;
+  requestToken: string;
+}): Promise<RebindBatchActionResult<RebindBatchDetail>> {
+  try {
+    const auth = await authorization("admin.article.rebind_batch_apply", input.requestId);
+    const { detail } = await submitRebindBatch(prisma, {
+      previewId: input.previewId,
+      selectedArticleIds: [...input.selectedArticleIds],
+      reason: input.reason,
+      acknowledgeRisks: input.acknowledgeRisks,
+      requestToken: input.requestToken,
+      createdBy: auth.context.identity.id,
+    });
+    revalidatePath("/articles");
+    return { ok: true, data: detail };
+  } catch (error) {
+    return rebindBatchErrorCode(error);
+  }
+}
+
+/** Continues an interrupted batch (lease expired with pending/processing items remaining) — never a rollback, only forward progress (施工工单 §2.1 row 3 / §4B.2). */
+export async function resumeRebindBatchAction(input: {
+  requestId: string;
+  batchId: string;
+}): Promise<RebindBatchActionResult<RebindBatchDetail>> {
+  try {
+    const auth = await authorization("admin.article.rebind_batch_resume", input.requestId);
+    const data = await resumeRebindBatch(prisma, { batchId: input.batchId, createdBy: auth.context.identity.id });
+    revalidatePath("/articles");
+    return { ok: true, data };
+  } catch (error) {
+    return rebindBatchErrorCode(error);
+  }
+}
+
+/** Read-only: batch detail by its human-readable batch id. */
+export async function getRebindBatchDetailAction(input: {
+  requestId: string;
+  batchId: string;
+}): Promise<RebindBatchActionResult<RebindBatchDetail>> {
+  try {
+    const context = await authorizeRead("admin.article.rebind_batch_detail", input.requestId);
+    const data = await getRebindBatchDetail(prisma, { batchId: input.batchId, createdBy: context.identity.id });
+    return { ok: true, data };
+  } catch (error) {
+    return rebindBatchErrorCode(error);
+  }
+}
+
+/** Read-only: the recovery lookup — `../_lib/rebind-recovery.ts`'s "查批次编号，不要重复提交" path when a submit request itself failed or timed out. Returns `null` (not an error) when the token was never actually written. */
+export async function getRebindBatchByTokenAction(input: {
+  requestId: string;
+  requestToken: string;
+}): Promise<RebindBatchActionResult<RebindBatchDetail | null>> {
+  try {
+    const context = await authorizeRead("admin.article.rebind_batch_by_token", input.requestId);
+    const data = await getRebindBatchByRequestToken(prisma, { requestToken: input.requestToken, createdBy: context.identity.id });
+    return { ok: true, data };
+  } catch (error) {
+    return rebindBatchErrorCode(error);
   }
 }
 
