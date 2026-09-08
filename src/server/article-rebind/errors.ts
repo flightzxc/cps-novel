@@ -96,3 +96,51 @@ export class RebindArticleNotEligibleError extends Error {
     this.code = code;
   }
 }
+
+/**
+ * C-30B (施工工单 §4B, batch preview/apply). CPS parity —
+ * `BatchSwitchDomainError`/`domainError` (`article-drama-batch-switch-service.ts:1080-1096`):
+ * one machine-readable error family for every batch-shaped domain failure
+ * (ceilings, ownership/expiry, idempotency conflicts, fence loss, malformed
+ * selection), so `./preview.ts`/`./batch.ts` never have to invent bespoke
+ * `Error` subclasses per failure and the action layer has exactly one
+ * `instanceof` check to make (`../_actions.ts`'s `rebindBatchErrorCode`).
+ */
+export type RebindBatchErrorCode =
+  | "INVALID_LOCALE"
+  | "INVALID_SOURCE_APP"
+  | "SOURCE_SCAN_CEILING_EXCEEDED"
+  | "DESTINATION_SCAN_CEILING_EXCEEDED"
+  | "CANDIDATE_CEILING_EXCEEDED"
+  | "PREVIEW_NOT_FOUND"
+  | "PREVIEW_FORBIDDEN"
+  | "PREVIEW_EXPIRED"
+  | "PREVIEW_DRIFT"
+  | "INVALID_PREVIEW_CATEGORY"
+  | "INVALID_PAGE"
+  | "INVALID_PAGE_SIZE"
+  | "INVALID_CURSOR"
+  | "INVALID_REQUEST_TOKEN"
+  | "INVALID_REASON"
+  | "INVALID_SELECTION"
+  | "IDEMPOTENCY_KEY_REUSED_WITH_DIFFERENT_PAYLOAD"
+  | "ACTIVE_ARTICLE_CONFLICT_RETRY"
+  | "BATCH_NOT_FOUND"
+  | "BATCH_FORBIDDEN"
+  | "BATCH_ALREADY_RUNNING"
+  | "BATCH_TERMINAL"
+  | "BATCH_ACCOUNTING_MISMATCH"
+  | "EXECUTION_FENCE_LOST";
+
+export class RebindBatchDomainError extends Error {
+  readonly code: RebindBatchErrorCode;
+  constructor(code: RebindBatchErrorCode, message: string = code) {
+    super(message);
+    this.name = "RebindBatchDomainError";
+    this.code = code;
+  }
+}
+
+export function rebindBatchDomainError(code: RebindBatchErrorCode, message?: string): never {
+  throw new RebindBatchDomainError(code, message);
+}
