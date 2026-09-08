@@ -40,7 +40,7 @@ import { isArticleNovelRebindEnabled, isArticleNovelRebindWriteAllowed } from "@
 
 import { REBIND_BATCH_LIMITS } from "./batch-constants";
 import { RebindArticleNotEligibleError, RebindDriftError, RebindGuardBlockedError, rebindBatchDomainError } from "./errors";
-import { loadOwnedRebindPreview, type RebindPreviewDb, type RebindPreviewSnapshot } from "./preview";
+import { cleanupExpiredRebindPreviews, loadOwnedRebindPreview, type RebindPreviewDb, type RebindPreviewSnapshot } from "./preview";
 import {
   RebindFeatureDisabledError,
   RebindWriteDisabledError,
@@ -627,6 +627,17 @@ export async function submitRebindBatch(
     return { detail: await getRebindBatchDetail(db, { batchId: existing.id, createdBy: normalized.createdBy }, env), created: false };
   }
 
+  // CPS parity: `applyDurableBatch` runs the bounded expired-preview sweep at
+  // exactly this point, immediately before loading the owned preview
+  // (`article-drama-batch-switch-service.ts:2961`,
+  // `await cleanupExpiredBatchSwitchPreviews(db).catch(() => 0)`). This is the
+  // ONLY call site the reference implementation has, so without it
+  // `cleanupExpiredRebindPreviews` is dead code and
+  // `article_novel_rebind_preview` — whose `matches_json` holds every
+  // classified row of a scan bounded only by `sourceScan: 20_000` — grows
+  // without bound. Never allowed to fail the submit: the sweep is
+  // housekeeping, the batch is the operator's actual request.
+  await cleanupExpiredRebindPreviews(db).catch(() => 0);
   const preview = await loadOwnedRebindPreview(db, normalized.previewId, normalized.createdBy);
   const snapshot = preview.matchesJson as RebindPreviewSnapshot;
   const rowsByArticle = new Map<string, { oldNovelId: string; targetNovelId: string; targetPromoLinkId: string | null }>();

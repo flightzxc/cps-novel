@@ -420,6 +420,45 @@ describe("🔴 IndexNow: batch rebind must never enqueue (negative, CPS parity)"
   });
 });
 
+/**
+ * Review follow-up (复核_C30施工单2, 2026-09-09). `cleanupExpiredRebindPreviews`
+ * was implemented and unit-tested but never called from any production path,
+ * so it was dead code and `article_novel_rebind_preview` — whose
+ * `matches_json` holds every classified row of a scan bounded only by
+ * `sourceScan: 20_000` — grew without bound. CPS runs the sweep in exactly
+ * one place, `applyDurableBatch` immediately before `loadOwnedPreview`
+ * (`article-drama-batch-switch-service.ts:2961`); these two tests pin that
+ * the海阅 submit path now does the same, behaviorally and structurally.
+ */
+describe("过期预览快照的有界清理已接线（CPS parity: applyDurableBatch:2961）", () => {
+  it("submitRebindBatch 会顺带删掉已过期的预览行，且不碰未过期的行", async () => {
+    const fixture = baseFixture();
+    const { pairs, summary } = await seedPreview(fixture, ["1"]);
+
+    // A stale preview left behind by an earlier session, already past its TTL.
+    fixture.db.previews.push({
+      ...fixture.db.previews.find((row) => row.id === summary.previewId)!,
+      id: "00000000-0000-4000-8000-00000000dead",
+      expiresAt: new Date(Date.now() - 60 * 60 * 1_000),
+    });
+    expect(fixture.db.previews).toHaveLength(2);
+
+    const result = await submitRebindBatch(
+      fixture.db.asPrismaClient(),
+      { previewId: summary.previewId, selectedArticleIds: [pairs[0]!.article.id], reason: "r", acknowledgeRisks: false, requestToken: TOKEN_A, createdBy: "admin-1" },
+      ENABLED_ENV,
+    );
+
+    expect(result.detail.status).toBe("completed");
+    expect(fixture.db.previews.map((row) => row.id)).toEqual([summary.previewId]);
+  });
+
+  it("结构性：batch.ts 确实调用了 cleanupExpiredRebindPreviews（防止再次被摘掉后只剩一条行为测试）", async () => {
+    const source = await readFile(path.resolve(process.cwd(), "src/server/article-rebind/batch.ts"), "utf8");
+    expect(source).toMatch(/await cleanupExpiredRebindPreviews\(db\)\.catch\(/);
+  });
+});
+
 describe("fail-closed: capability × flag combinations", () => {
   it("submitRebindBatch: FEATURE off -> RebindFeatureDisabledError regardless of write-allow", async () => {
     const fixture = baseFixture();
