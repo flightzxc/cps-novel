@@ -162,10 +162,14 @@ const UPSTREAM_LANGUAGE_REGISTRY: readonly UpstreamLanguageRegistration[] = Obje
  *
  * U6（2026-08-27）：Owner 明示 D-7 放行 `en`。D-7 五项准入按现状重写：
  *
- * 1. 前台 messages 无 fallback——**已满足（U3）**。`src/lib/locale/messages/en.ts`
- *    是完整英文目录；公开渲染树不再混中文占位。他语是 `Partial<Messages>`，
- *    `loadMessages` 对不完整目录抛错而不是静默拼 en——这是 fail-closed，不是
- *    把中文塞进 en 页。
+ * 1. 前台 messages 无 fallback——**已满足（U3，口径由工单三 2026-09-08 重写）**。
+ *    `src/lib/locale/messages/en.ts` 是完整英文目录；公开渲染树不再混中文占位。
+ *    他语目录经 `loadMessages` **深合并回落到英文**（Owner 修正一：缺一个键、
+ *    或该键是空串，一律拿英文补上，绝不因为缺一条译文把整页抛错）——`en` 本身
+ *    短路直接返回，不参与合并。完整性（键集合、非空值、插值变量、禁 ICU）改在
+ *    **测试期**由 `tests/ui/messages-completeness.test.ts` 强制，不再是运行时
+ *    抛错。这仍然是 fail-closed：闸门不在渲染路径上，在 CI 上——译文不完整会
+ *    让门禁变红,不会让用户看见中文或裸键名。
  * 2. 后台模板语种枚举已登记——**已满足（S9）**。内置模板覆盖 `en`；
  *    `ARTICLE_TEMPLATE_CRUD_LANDED` 仍为 `false`，所以 S14 守卫仍只允许空集
  *    或 `{"en"}` 的子集——本次放行正好是这个子集，不会触发守卫。

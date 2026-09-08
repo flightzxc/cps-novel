@@ -1,6 +1,7 @@
 import type { SiteLocale } from "@/lib/locale/locale-canonical";
+import { PUBLIC_SITE_LOCALE } from "@/lib/site/locale-label";
 
-import { en, type Messages } from "./en";
+import { en, type LocaleMessages, type Messages } from "./en";
 import ar from "./ar";
 import cs from "./cs";
 import de from "./de";
@@ -39,7 +40,15 @@ export class MissingMessagesError extends Error {
   }
 }
 
-const CATALOGS: Record<SiteLocale, Messages | Partial<Messages>> = {
+/**
+ * Raw per-locale catalogs, keyed by `SiteLocale`, **before** the English
+ * fallback merge in `loadMessages` runs. Exported only for
+ * `tests/ui/messages-completeness.test.ts` (and any future translation-
+ * coverage tooling) — production code must go through `loadMessages` /
+ * `getPublicT`, never read this map directly, or it sees raw gaps instead
+ * of the English fallback text a real page renders.
+ */
+export const CATALOGS: Readonly<Record<SiteLocale, Messages | Partial<LocaleMessages>>> = {
   en,
   es,
   "pt-BR": ptBR,
@@ -70,30 +79,64 @@ function lookup(tree: unknown, path: string[]): unknown {
   return current;
 }
 
-function assertComplete(catalog: unknown, locale: SiteLocale, node: unknown, path: string[]): void {
-  if (typeof node === "string") {
-    const value = lookup(catalog, path);
-    if (typeof value !== "string" || value.trim().length === 0) {
-      throw new MissingMessagesError(locale, path.join("."));
+/**
+ * Deep-merge `override` onto `base` (English), key by key, following the
+ * shape of `base`. A value in `override` only wins when it is a non-empty,
+ * non-whitespace string — anything else (missing key, `undefined`, an empty
+ * string, a stray non-string) silently keeps the English value. Traversal
+ * follows `base`'s keys, not `override`'s, so an incomplete or even
+ * structurally-wrong translation catalog can never introduce a key that
+ * isn't in `Messages`, and can never remove one either.
+ *
+ * This is the runtime half of Owner 修正一 (2026-09-08 施工工单 §十.1):
+ * a missing/blank translation falls back to English at render time and the
+ * page renders — it is never a thrown error. Completeness (every key
+ * present, every value non-empty, interpolation variables matching, no ICU
+ * syntax) is enforced separately, at test time, by
+ * `tests/ui/messages-completeness.test.ts`.
+ */
+function deepMergeOntoEnglish<T>(base: T, override: unknown): T {
+  if (!isRecord(base)) return base;
+  const overrideRecord = isRecord(override) ? override : {};
+  const merged: Record<string, unknown> = {};
+  for (const [key, baseValue] of Object.entries(base)) {
+    const overrideValue = overrideRecord[key];
+    if (isRecord(baseValue)) {
+      merged[key] = deepMergeOntoEnglish(baseValue, overrideValue);
+    } else if (typeof overrideValue === "string" && overrideValue.trim().length > 0) {
+      merged[key] = overrideValue;
+    } else {
+      merged[key] = baseValue;
     }
-    return;
   }
-  if (!isRecord(node)) {
-    throw new MissingMessagesError(locale, path.join(".") || "<root>");
-  }
-  for (const [key, child] of Object.entries(node)) {
-    assertComplete(catalog, locale, child, [...path, key]);
-  }
+  return merged as T;
 }
 
-/** Load a locale catalog. Incomplete catalogs throw — never merge onto `en`. */
+/** Per-locale memoized merge result — `loadMessages` runs on every `SiteShell` render (`SiteShell.tsx:46`); the deep merge itself doesn't need to redo on every call. */
+const mergedMessagesCache = new Map<SiteLocale, Messages>();
+
+/**
+ * Load a locale catalog, deep-merged onto English (Owner 修正一).
+ *
+ * `en` short-circuits and returns the `en` object itself (no merge, no
+ * allocation) — `loadMessages("en") === en` stays a reference-equality
+ * fact any caller can rely on. Every other locale gets `en` deep-merged
+ * with that locale's (possibly incomplete) catalog, memoized so repeated
+ * calls for the same locale don't reallocate. A missing entry in
+ * `CATALOGS` (should not happen for a registered `SiteLocale`, but the
+ * lookup is still a plain object index) falls back to an empty override,
+ * i.e. the full English catalog — never a thrown error at render time.
+ */
 export function loadMessages(locale: SiteLocale): Messages {
+  if (locale === PUBLIC_SITE_LOCALE) return en;
+
+  const cached = mergedMessagesCache.get(locale);
+  if (cached) return cached;
+
   const catalog = CATALOGS[locale];
-  if (catalog == null) {
-    throw new MissingMessagesError(locale);
-  }
-  assertComplete(catalog, locale, en, []);
-  return catalog as Messages;
+  const merged = deepMergeOntoEnglish(en, catalog);
+  mergedMessagesCache.set(locale, merged);
+  return merged;
 }
 
 export function t(messages: Messages, key: MessageKey, vars?: MessageVars): string {

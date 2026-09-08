@@ -144,3 +144,19 @@ export const en = {
 } as const;
 
 export type Messages = typeof en;
+
+/**
+ * Same keys and nesting as `Messages`, but every leaf is widened from a
+ * string-literal type to plain `string`.
+ *
+ * `Messages` is `typeof en`, and `en` is declared `as const`, so every leaf
+ * of `Messages` is typed as that exact English sentence (e.g. `nav.home`
+ * is the literal type `"Home"`, not `string`) — only the English catalog
+ * itself can ever satisfy that. Translated catalogs (`ar.ts`, `es.ts`,
+ * `fr.ts`, ...) use `LocaleMessages` instead: the same required keys in
+ * the same shape, but any non-empty string value is allowed. Keeping the
+ * `satisfies` check (rather than dropping it) still buys full compile-time
+ * key-set coverage for every locale file — WO-3 §10.2/§10.3.
+ */
+type WidenLeaves<T> = T extends string ? string : { [K in keyof T]: WidenLeaves<T[K]> };
+export type LocaleMessages = WidenLeaves<Messages>;

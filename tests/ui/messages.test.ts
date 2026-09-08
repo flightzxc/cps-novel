@@ -1,4 +1,23 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+
+// WO-3 §10.1/§10.4 (Owner 修正一): `loadMessages` deep-merges onto English
+// instead of throwing on an incomplete catalog. The real `es.ts` shipped in
+// this repo is now a complete 98-key catalog (see `tests/ui/messages-
+// completeness.test.ts`), so to exercise the *fallback* path itself — a
+// missing key, and a key whose value is an empty/whitespace string — this
+// mocks the `es` catalog module with a small, deliberately incomplete
+// fixture. This only affects this test file's module graph.
+vi.mock("@/lib/locale/messages/es", () => ({
+  default: {
+    nav: {
+      home: "Inicio",
+      // "browse" intentionally omitted → falls back to English "All works".
+      footerNote: "   ", // whitespace-only → treated as missing, not as a value.
+    },
+    // Every other namespace (novel, chapter, collection, ...) is entirely
+    // absent from this fixture → every leaf under them falls back to English.
+  },
+}));
 
 import {
   loadMessages,
@@ -24,14 +43,34 @@ describe("loadMessages", () => {
     expect(() => t(loadMessages("en"), "nav.missing" as never)).toThrow(MissingMessagesError);
   });
 
-  it("throws for an incomplete placeholder locale and does not merge onto en", () => {
-    expect(() => loadMessages("es")).toThrow(MissingMessagesError);
-    try {
-      loadMessages("es");
-    } catch (error) {
-      expect(error).toBeInstanceOf(MissingMessagesError);
-      expect((error as MissingMessagesError).locale).toBe("es");
-      expect((error as MissingMessagesError).message).not.toContain("Home");
-    }
+  it("loadMessages(\"en\") returns the en module object itself (reference equality)", () => {
+    expect(loadMessages("en")).toBe(en);
+  });
+
+  it("deep-merges an incomplete locale onto English instead of throwing (Owner 修正一)", () => {
+    // A complete catalog's own values win.
+    expect(() => loadMessages("es")).not.toThrow();
+    const es = loadMessages("es");
+    expect(t(es, "nav.home")).toBe("Inicio");
+  });
+
+  it("falls back to English for a key missing from the target locale, keeping the rest of the locale", () => {
+    const es = loadMessages("es");
+    expect(t(es, "nav.browse")).toBe("All works");
+    // Sibling key from the same namespace still uses the target locale.
+    expect(t(es, "nav.home")).toBe("Inicio");
+  });
+
+  it("treats an empty/whitespace-only value in the target locale as missing and falls back to English", () => {
+    const es = loadMessages("es");
+    expect(t(es, "nav.footerNote")).toBe(
+      "This site offers free preview chapters. The full story is on the original platform.",
+    );
+  });
+
+  it("falls back wholesale to English for a namespace the target locale never touched", () => {
+    const es = loadMessages("es");
+    expect(t(es, "chapter.theme")).toBe("Theme");
+    expect(t(es, "collection.workCount", { count: 3 })).toBe("3 works");
   });
 });
