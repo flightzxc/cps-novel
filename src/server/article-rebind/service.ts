@@ -274,6 +274,159 @@ export type SwitchArticleNovelResult = {
 };
 
 /**
+ * C-30B (施工工单 §4B.2: "调 单 1 的单篇换绑服务（守卫在写入时刻重新跑一遍，
+ * 不信任预览时的判定）"). The guard-then-write-then-audit core, extracted out
+ * of `switchArticleNovel` so `./batch.ts`'s per-item execution can reuse the
+ * exact same logic — same guard evaluator, same 🔴 two-field write shape,
+ * same audit shape — inside its OWN already-open per-item transaction,
+ * instead of `switchArticleNovel` opening a second, nested one.
+ *
+ * `switchArticleNovel` below is unchanged in behavior: it still resolves an
+ * `AdminServiceAuthorization` ticket first (a single-article, human-operator
+ * mutation) and opens its own `db.$transaction` around this function.
+ * `./batch.ts`'s per-item processor does NOT resolve a fresh ticket per item
+ * — the batch's OWN submit-time ticket (`admin.article.rebind_batch_apply`/
+ * `admin.article.rebind_batch_resume`) already authorized the whole
+ * operation once; per-item integrity instead comes from the batch/item
+ * *fence* tokens (施工工单 §4B.2), which is why this function takes a plain
+ * `actorId`/`requestId` pair rather than a ticket.
+ *
+ * 🔴 Still the ONLY Article `updateMany` call site in this file (the write
+ * below) — `tests/backend/article-rebind/write-shape-static.test.ts` pins
+ * that invariant by source-scanning this exact file, so this write must
+ * stay here rather than move to `./batch.ts`.
+ */
+export async function runRebindTransactionalWrite(
+  tx: ArticleRebindTxClient,
+  params: {
+    articleId: string;
+    expectedOldNovelId: string;
+    /** Single-article CAS pre-flight only (施工工单 §4A.6's own note — the true CAS is the `novelId`-keyed `updateMany` below). Batch execution never passes this: a batch item's own fence tokens are its concurrency guard, and the batch's `expectedNewNovelId`/`expectedOldNovelId` pairing IS the equivalent staleness check via `expectedOldNovelId` above. */
+    expectedUpdatedAt?: Date | null;
+    targetNovelId: string;
+    reason: string;
+    acknowledgeRisks: boolean;
+    actorId: string;
+    requestId: string;
+    action: typeof REBIND_ACTION | typeof REBIND_ROLLBACK_ACTION;
+  },
+): Promise<SwitchArticleNovelResult> {
+  const article = await loadArticleOrThrow(tx, params.articleId);
+
+  if (params.expectedUpdatedAt && article.updatedAt.getTime() !== params.expectedUpdatedAt.getTime()) {
+    throw new RebindDriftError("Article.updatedAt no longer matches expectedUpdatedAt");
+  }
+
+  const evaluation = await evaluateRebindGuards(tx, {
+    article: {
+      id: article.id,
+      novelId: article.novelId,
+      locale: article.locale,
+      status: article.status,
+      articleType: article.articleType,
+      deletedAt: article.deletedAt,
+    },
+    expectedOldNovelId: params.expectedOldNovelId,
+    targetNovelId: params.targetNovelId,
+  });
+
+  const blockedFindings = evaluation.findings.filter((finding) => finding.level === "blocked");
+  if (blockedFindings.length > 0) {
+    throw new RebindGuardBlockedError(evaluation.findings);
+  }
+  if (evaluation.level === "needs_ack" && !params.acknowledgeRisks) {
+    throw new RebindGuardBlockedError(evaluation.findings);
+  }
+
+  const targetNovel = evaluation.targetNovel;
+  if (!targetNovel) {
+    // Unreachable given the blocked-findings check above (TARGET_NOT_FOUND
+    // is always `blocked`), kept as a type-narrowing guard.
+    throw new RebindGuardBlockedError(evaluation.findings);
+  }
+
+  const beforeSnapshot = snapshotOf(
+    article.novelId,
+    article.novel?.title ?? null,
+    article.promoLinkId,
+    article.promoLink?.publicRedirectCode ?? null,
+  );
+
+  let newPromoRedirectCode: string | null = null;
+  if (evaluation.resolvedPromoLinkId) {
+    const [resolved] = await tx.promoLink.findMany({
+      where: { id: evaluation.resolvedPromoLinkId },
+      select: { id: true, publicRedirectCode: true },
+    });
+    newPromoRedirectCode = resolved?.publicRedirectCode ?? null;
+  }
+  const afterSnapshot = snapshotOf(targetNovel.id, targetNovel.title, evaluation.resolvedPromoLinkId, newPromoRedirectCode);
+
+  // 🔴 The write shape — see this module's header. Exactly two fields.
+  const write = await tx.article.updateMany({
+    where: { id: article.id, novelId: params.expectedOldNovelId },
+    data: { novelId: targetNovel.id, promoLinkId: evaluation.resolvedPromoLinkId },
+  });
+  if (write.count !== 1) {
+    throw new RebindDriftError();
+  }
+
+  const audit = await tx.operationAudit.create({
+    data: {
+      actorType: "admin",
+      actorId: params.actorId,
+      action: params.action,
+      entityType: "Article",
+      entityId: article.id,
+      requestId: params.requestId,
+      reason: params.reason,
+      beforeSnapshot,
+      afterSnapshot,
+    },
+  });
+
+  return {
+    articleId: article.id,
+    oldNovelId: article.novelId!,
+    newNovelId: targetNovel.id,
+    oldPromoLinkId: article.promoLinkId,
+    newPromoLinkId: evaluation.resolvedPromoLinkId,
+    guardLevel: evaluation.level,
+    findings: evaluation.findings,
+    auditId: String(audit.id),
+    locale: article.locale,
+    slug: article.slug,
+    publicPageShortId: article.publicPageShortId,
+  };
+}
+
+/**
+ * Cache invalidation AFTER the transaction commits, never inside it — see
+ * this module's header / 施工工单 §4A.6 "缓存失效". The URL is unchanged by a
+ * rebind (slug/shortId are never touched), so the paths are identical to
+ * what they were before the switch. Exported so `./batch.ts` can call the
+ * exact same invalidation for each of a batch's successfully-applied items
+ * (施工工单 §4B.2: "对本批成功条目的文章路径顺序调既有安全失效包装") without
+ * re-deriving the try/catch-around-`revalidatePublicArticlePaths` shape.
+ */
+export function invalidateRebindArticleCache(result: Pick<SwitchArticleNovelResult, "locale" | "slug" | "publicPageShortId">): void {
+  try {
+    revalidatePublicArticlePaths({
+      locale: result.locale as SiteLocale,
+      slug: result.slug,
+      shortId: result.publicPageShortId,
+    });
+  } catch (error) {
+    // Defense-in-depth on top of `revalidatePublicArticlePaths`'s own
+    // internal `safeRevalidatePath` swallow — same posture
+    // `publish-gate/service.ts`'s `safeInvalidatePublicCache` takes. Never
+    // let a cache-invalidation failure surface as a rebind failure; the
+    // write already committed.
+    console.error("[article-rebind] public cache invalidation failed after a committed write:", error);
+  }
+}
+
+/**
  * Writes the two-field atomic swap inside one transaction, re-evaluating
  * every guard fresh (never trusting a caller-supplied preview) — see this
  * module's header for the exact write shape.
@@ -304,113 +457,20 @@ export async function switchArticleNovel(
 
   const db = deps.db as unknown as ArticleRebindDb;
 
-  return db.$transaction(async (tx) => {
-    const article = await loadArticleOrThrow(tx, articleId);
-
-    if (expectedUpdatedAt && article.updatedAt.getTime() !== expectedUpdatedAt.getTime()) {
-      throw new RebindDriftError("Article.updatedAt no longer matches expectedUpdatedAt");
-    }
-
-    const evaluation = await evaluateRebindGuards(tx, {
-      article: {
-        id: article.id,
-        novelId: article.novelId,
-        locale: article.locale,
-        status: article.status,
-        articleType: article.articleType,
-        deletedAt: article.deletedAt,
-      },
+  return db.$transaction((tx) =>
+    runRebindTransactionalWrite(tx, {
+      articleId,
       expectedOldNovelId,
+      expectedUpdatedAt,
       targetNovelId,
-    });
-
-    const blockedFindings = evaluation.findings.filter((finding) => finding.level === "blocked");
-    if (blockedFindings.length > 0) {
-      throw new RebindGuardBlockedError(evaluation.findings);
-    }
-    if (evaluation.level === "needs_ack" && !acknowledgeRisks) {
-      throw new RebindGuardBlockedError(evaluation.findings);
-    }
-
-    const targetNovel = evaluation.targetNovel;
-    if (!targetNovel) {
-      // Unreachable given the blocked-findings check above (TARGET_NOT_FOUND
-      // is always `blocked`), kept as a type-narrowing guard.
-      throw new RebindGuardBlockedError(evaluation.findings);
-    }
-
-    const beforeSnapshot = snapshotOf(
-      article.novelId,
-      article.novel?.title ?? null,
-      article.promoLinkId,
-      article.promoLink?.publicRedirectCode ?? null,
-    );
-
-    let newPromoRedirectCode: string | null = null;
-    if (evaluation.resolvedPromoLinkId) {
-      const [resolved] = await tx.promoLink.findMany({
-        where: { id: evaluation.resolvedPromoLinkId },
-        select: { id: true, publicRedirectCode: true },
-      });
-      newPromoRedirectCode = resolved?.publicRedirectCode ?? null;
-    }
-    const afterSnapshot = snapshotOf(targetNovel.id, targetNovel.title, evaluation.resolvedPromoLinkId, newPromoRedirectCode);
-
-    // 🔴 The write shape — see this module's header. Exactly two fields.
-    const write = await tx.article.updateMany({
-      where: { id: article.id, novelId: expectedOldNovelId },
-      data: { novelId: targetNovel.id, promoLinkId: evaluation.resolvedPromoLinkId },
-    });
-    if (write.count !== 1) {
-      throw new RebindDriftError();
-    }
-
-    const audit = await tx.operationAudit.create({
-      data: {
-        actorType: "admin",
-        actorId: context.identity.id,
-        action: source === "rollback" ? REBIND_ROLLBACK_ACTION : REBIND_ACTION,
-        entityType: "Article",
-        entityId: article.id,
-        requestId: input.requestId,
-        reason,
-        beforeSnapshot,
-        afterSnapshot,
-      },
-    });
-
-    return {
-      articleId: article.id,
-      oldNovelId: article.novelId!,
-      newNovelId: targetNovel.id,
-      oldPromoLinkId: article.promoLinkId,
-      newPromoLinkId: evaluation.resolvedPromoLinkId,
-      guardLevel: evaluation.level,
-      findings: evaluation.findings,
-      auditId: String(audit.id),
-      locale: article.locale,
-      slug: article.slug,
-      publicPageShortId: article.publicPageShortId,
-    };
-  }).then((result) => {
-    // Cache invalidation happens AFTER the transaction commits, never
-    // inside it — see module header / 施工工单 §4A.6 "缓存失效". The URL is
-    // unchanged by a rebind (slug/shortId are never touched), so the paths
-    // are identical to what they were before the switch.
-    try {
-      revalidatePublicArticlePaths({
-        locale: result.locale as SiteLocale,
-        slug: result.slug,
-        shortId: result.publicPageShortId,
-      });
-    } catch (error) {
-      // Defense-in-depth on top of `revalidatePublicArticlePaths`'s own
-      // internal `safeRevalidatePath` swallow — same posture
-      // `publish-gate/service.ts`'s `safeInvalidatePublicCache` takes. Never
-      // let a cache-invalidation failure surface as a rebind failure; the
-      // write already committed.
-      console.error("[article-rebind] public cache invalidation failed after a committed write:", error);
-    }
+      reason,
+      acknowledgeRisks,
+      actorId: context.identity.id,
+      requestId: input.requestId,
+      action: source === "rollback" ? REBIND_ROLLBACK_ACTION : REBIND_ACTION,
+    }),
+  ).then((result) => {
+    invalidateRebindArticleCache(result);
     return result;
   });
 }

@@ -64,7 +64,7 @@ export type RebindTargetNovel = {
   deletedAt: Date | string | null;
 };
 
-type PromoLinkCandidate = {
+export type PromoLinkCandidate = {
   id: string;
   status: string;
   webUrl: string | null;
@@ -98,15 +98,22 @@ function isSoftDeleted(value: Date | string | null): boolean {
 }
 
 /**
- * Guard 7's deterministic pick: "先 status = fetched 且 URL 非空，再按
- * fetched_at DESC, id ASC" (施工工单 §4A.6). The DB `orderBy` below already
- * sorts candidates that way; `isPromoReady` (the one authoritative
- * promo-readiness predicate, `src/server/publication/visibility.ts`) is
- * still re-applied in application code rather than trusted from the `status
- * = 'fetched'` DB filter alone — same "DB filter narrows, isPromoReady has
- * the final word" discipline that function's own doc comment requires of
- * every caller.
+ * Guard 7's deterministic pick, factored out so `./preview.ts`'s bulk
+ * resolution (one `IN (...)` query across every candidate target Novel,
+ * grouped by `novelId` client-side, each group pre-sorted the same way) can
+ * apply the exact same selection rule per group instead of re-deriving it.
+ * `isPromoReady` (the one authoritative promo-readiness predicate,
+ * `src/server/publication/visibility.ts`) is re-applied here rather than
+ * trusted from a `status = 'fetched'` DB filter alone — same "DB filter
+ * narrows, isPromoReady has the final word" discipline that function's own
+ * doc comment requires of every caller. `candidates` must already be sorted
+ * `fetchedAt DESC, id ASC` (施工工单 §4A.6) — both call sites below produce
+ * that order via their own `orderBy`.
  */
+export function pickReadyPromoLink(candidates: readonly PromoLinkCandidate[]): PromoLinkCandidate | null {
+  return candidates.find((candidate) => isPromoReady(candidate)) ?? null;
+}
+
 async function resolveTargetPromoLink(
   db: RebindGuardDb,
   targetNovelId: string,
@@ -116,7 +123,7 @@ async function resolveTargetPromoLink(
     select: { id: true, status: true, webUrl: true, appUrl: true, fetchedAt: true },
     orderBy: [{ fetchedAt: "desc" }, { id: "asc" }],
   });
-  return candidates.find((candidate) => isPromoReady(candidate)) ?? null;
+  return pickReadyPromoLink(candidates);
 }
 
 export type EvaluateRebindGuardsInput = {
@@ -133,25 +140,45 @@ export type EvaluateRebindGuardsInput = {
 };
 
 /**
- * Runs all nine guards and returns a single classified result: `blocked` if
- * any hard-reject guard fired, else `needs_ack` if any confirm-required
- * guard fired, else `ok` (施工工单 附录 D "分档规则"). Never throws for a
- * business-state failure — every guard failure is a `finding` in the
- * result, matching `src/server/publish-gate/evaluator.ts`'s "pure
- * classifier, caller decides what to do with it" shape. Malformed input
- * (missing ids) is the caller's responsibility to validate before calling
- * this (see `./service.ts`'s own input validation).
+ * C-30B (施工工单 §4B.1 "集合化守卫"). The nine guards' pure decision logic,
+ * factored out of {@link evaluateRebindGuards} so there is exactly ONE place
+ * that decides "given these facts, what are the findings" — `evaluateRebindGuards`
+ * below resolves each fact with one row-scoped Prisma call per guard (single-
+ * article path); `./preview.ts`'s batch classifier resolves the identical
+ * facts with a handful of *bulk* (`IN (...)`) queries covering an entire
+ * preview's candidate set, then calls this same function once per candidate
+ * row. Two different I/O strategies, one decision function — this is what
+ * makes the "集合化守卫与单篇守卫逐条相同" test (施工工单 §4B.5) true by
+ * construction rather than by hoping two hand-written copies stay in sync.
+ *
+ * Every field here is a *fact already resolved by the caller* — this
+ * function performs no I/O and never throws for a business-state failure.
  */
-export async function evaluateRebindGuards(
-  db: RebindGuardDb,
-  input: EvaluateRebindGuardsInput,
-): Promise<RebindGuardEvaluation> {
+export type RebindGuardFacts = {
+  articleId: string;
+  articleType: string;
+  articleLocale: string;
+  articleStatus: string;
+  /** The article's actually-current `novelId`, freshly loaded (or re-derived from bulk data) by the caller — compared against `expectedOldNovelId` for guard 2. */
+  currentNovelId: string | null;
+  expectedOldNovelId: string;
+  targetNovelId: string;
+  /** The target Novel row, already loaded and known non-soft-deleted by the caller — `null` means guard 4 (TARGET_NOT_FOUND) fires and every later guard is skipped, exactly like a per-row `db.novel.findFirst` miss. */
+  targetNovel: RebindTargetNovel | null;
+  /** Guard 7's already-resolved pick (`resolveTargetPromoLink` for the single-row path; a bulk-grouped equivalent for the batch path) — `null` means no ready `PromoLink` was found for the target. */
+  resolvedPromoLinkId: string | null;
+  /** Guard 8's already-resolved fact: does the target Novel have an existing Article (any status, 🔴 including soft-deleted — see this guard's own note below) at `articleLocale`, other than this article itself? */
+  targetLocaleOccupied: boolean;
+  /** Guard 9's already-resolved fact: does `currentNovelId` have another published, non-deleted Article in a locale other than `articleLocale`? */
+  crossLocaleSiblingExists: boolean;
+};
+
+export function classifyRebindGuardFindings(facts: RebindGuardFacts): RebindGuardEvaluation {
   const findings: RebindGuardFinding[] = [];
-  const { article, expectedOldNovelId, targetNovelId } = input;
 
   // Guard 1: only novel_article can rebind. Short-circuits everything else
   // — a non-novel_article has no current Novel binding to reason about.
-  if (article.articleType !== "novel_article") {
+  if (facts.articleType !== "novel_article") {
     return {
       level: "blocked",
       findings: [{ code: "NOT_NOVEL_ARTICLE", level: "blocked", message: "只有小说文章能换绑" }],
@@ -161,7 +188,7 @@ export async function evaluateRebindGuards(
   }
 
   // Guard 2: current binding drift (optimistic-concurrency signal).
-  if (article.novelId !== expectedOldNovelId) {
+  if (facts.currentNovelId !== facts.expectedOldNovelId) {
     findings.push({
       code: "REBIND_DRIFT",
       level: "blocked",
@@ -170,26 +197,23 @@ export async function evaluateRebindGuards(
   }
 
   // Guard 3: self-rebind.
-  if (article.novelId === targetNovelId) {
+  if (facts.currentNovelId === facts.targetNovelId) {
     findings.push({ code: "TARGET_ALREADY_BOUND", level: "blocked", message: "目标书目与当前书目相同" });
   }
 
   // Guard 4: target exists and is not soft-deleted.
-  const targetNovel = await db.novel.findFirst({
-    where: { id: targetNovelId },
-    select: { id: true, title: true, locale: true, status: true, deletedAt: true },
-  });
+  const targetNovel = facts.targetNovel;
   if (!targetNovel || isSoftDeleted(targetNovel.deletedAt)) {
     findings.push({ code: "TARGET_NOT_FOUND", level: "blocked", message: "目标书目不存在或已删除" });
     return { level: "blocked", findings, targetNovel: null, resolvedPromoLinkId: null };
   }
 
   // Guard 5: target locale must match the article's own locale.
-  if (targetNovel.locale !== article.locale) {
+  if (targetNovel.locale !== facts.articleLocale) {
     findings.push({
       code: "TARGET_LOCALE_MISMATCH",
       level: "blocked",
-      message: `目标书目语种（${targetNovel.locale}）与文章语种（${article.locale}）不一致`,
+      message: `目标书目语种（${targetNovel.locale}）与文章语种（${facts.articleLocale}）不一致`,
     });
   }
 
@@ -204,9 +228,8 @@ export async function evaluateRebindGuards(
   // otherwise reject the write outright); a non-published article (draft,
   // unpublished, takedown) is allowed to proceed with `promoLinkId: null`,
   // surfaced as a confirm-required finding rather than a silent gap.
-  const resolvedPromoLink = await resolveTargetPromoLink(db, targetNovel.id);
-  if (!resolvedPromoLink) {
-    if (article.status === "published") {
+  if (!facts.resolvedPromoLinkId) {
+    if (facts.articleStatus === "published") {
       findings.push({
         code: "TARGET_PROMO_NOT_READY",
         level: "blocked",
@@ -225,16 +248,7 @@ export async function evaluateRebindGuards(
   // soft-deleted Article too (`article_novel_locale_key` has no soft-delete
   // exemption, unlike `article_locale_slug_active_uidx` — see
   // docs/governance/database-governance.md §5 item 22 / §4's C-30A note).
-  // Deliberately omits `deletedAt: null` from this `where`.
-  const occupying = await db.article.findFirst({
-    where: {
-      id: { not: article.id },
-      novelId: targetNovel.id,
-      locale: article.locale,
-    },
-    select: { id: true },
-  });
-  if (occupying) {
+  if (facts.targetLocaleOccupied) {
     findings.push({
       code: "TARGET_LOCALE_OCCUPIED",
       level: "blocked",
@@ -246,6 +260,99 @@ export async function evaluateRebindGuards(
   // another published, non-deleted Article in a different locale. A
   // confirm-required warning (not a hard block): rebinding away may break
   // that hreflang group, but the operator may have a reason to proceed.
+  if (facts.currentNovelId && facts.crossLocaleSiblingExists) {
+    findings.push({
+      code: "CROSS_LOCALE_SIBLINGS",
+      level: "needs_ack",
+      message: "本文章所属书目在其他语种下另有已发布文章，换绑可能影响该书目的跨语种关联",
+    });
+  }
+
+  const blocked = findings.filter((finding) => finding.level === "blocked");
+  const level: RebindGuardLevel = blocked.length > 0 ? "blocked" : findings.length > 0 ? "needs_ack" : "ok";
+
+  return {
+    level,
+    findings,
+    targetNovel,
+    resolvedPromoLinkId: facts.resolvedPromoLinkId,
+  };
+}
+
+/**
+ * Runs all nine guards and returns a single classified result: `blocked` if
+ * any hard-reject guard fired, else `needs_ack` if any confirm-required
+ * guard fired, else `ok` (施工工单 附录 D "分档规则"). Never throws for a
+ * business-state failure — every guard failure is a `finding` in the
+ * result, matching `src/server/publish-gate/evaluator.ts`'s "pure
+ * classifier, caller decides what to do with it" shape. Malformed input
+ * (missing ids) is the caller's responsibility to validate before calling
+ * this (see `./service.ts`'s own input validation).
+ *
+ * Resolves each of {@link classifyRebindGuardFindings}'s facts with one
+ * row-scoped query apiece, then delegates the actual decision to that pure
+ * function — see its own doc comment for why.
+ */
+export async function evaluateRebindGuards(
+  db: RebindGuardDb,
+  input: EvaluateRebindGuardsInput,
+): Promise<RebindGuardEvaluation> {
+  const { article, expectedOldNovelId, targetNovelId } = input;
+
+  if (article.articleType !== "novel_article") {
+    return classifyRebindGuardFindings({
+      articleId: article.id,
+      articleType: article.articleType,
+      articleLocale: article.locale,
+      articleStatus: article.status,
+      currentNovelId: article.novelId,
+      expectedOldNovelId,
+      targetNovelId,
+      targetNovel: null,
+      resolvedPromoLinkId: null,
+      targetLocaleOccupied: false,
+      crossLocaleSiblingExists: false,
+    });
+  }
+
+  // Guard 4's fact: target exists and is not soft-deleted.
+  const targetNovel = await db.novel.findFirst({
+    where: { id: targetNovelId },
+    select: { id: true, title: true, locale: true, status: true, deletedAt: true },
+  });
+  const targetExists = Boolean(targetNovel) && !isSoftDeleted(targetNovel!.deletedAt);
+  if (!targetExists) {
+    return classifyRebindGuardFindings({
+      articleId: article.id,
+      articleType: article.articleType,
+      articleLocale: article.locale,
+      articleStatus: article.status,
+      currentNovelId: article.novelId,
+      expectedOldNovelId,
+      targetNovelId,
+      targetNovel: null,
+      resolvedPromoLinkId: null,
+      targetLocaleOccupied: false,
+      crossLocaleSiblingExists: false,
+    });
+  }
+
+  // Guard 7's fact.
+  const resolvedPromoLink = await resolveTargetPromoLink(db, targetNovel!.id);
+
+  // Guard 8's fact — 🔴 deliberately omits `deletedAt: null` from this
+  // `where`, see the guard's own note in `classifyRebindGuardFindings`.
+  const occupying = await db.article.findFirst({
+    where: {
+      id: { not: article.id },
+      novelId: targetNovel!.id,
+      locale: article.locale,
+    },
+    select: { id: true },
+  });
+
+  // Guard 9's fact.
+  let siblingExists = false;
   if (article.novelId) {
     const sibling = await db.article.findFirst({
       where: {
@@ -257,23 +364,21 @@ export async function evaluateRebindGuards(
       },
       select: { id: true },
     });
-    if (sibling) {
-      findings.push({
-        code: "CROSS_LOCALE_SIBLINGS",
-        level: "needs_ack",
-        message: "本文章所属书目在其他语种下另有已发布文章，换绑可能影响该书目的跨语种关联",
-      });
-    }
+    siblingExists = Boolean(sibling);
   }
 
-  const blocked = findings.filter((finding) => finding.level === "blocked");
-  const level: RebindGuardLevel = blocked.length > 0 ? "blocked" : findings.length > 0 ? "needs_ack" : "ok";
-
-  return {
-    level,
-    findings,
-    targetNovel,
+  return classifyRebindGuardFindings({
+    articleId: article.id,
+    articleType: article.articleType,
+    articleLocale: article.locale,
+    articleStatus: article.status,
+    currentNovelId: article.novelId,
+    expectedOldNovelId,
+    targetNovelId,
+    targetNovel: targetNovel!,
     resolvedPromoLinkId: resolvedPromoLink?.id ?? null,
-  };
+    targetLocaleOccupied: Boolean(occupying),
+    crossLocaleSiblingExists: siblingExists,
+  });
 }
 
