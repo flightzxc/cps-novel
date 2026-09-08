@@ -28,6 +28,20 @@ export const INDEXNOW_ATTEMPT_OUTCOMES = ["started", "accepted", "retryable_fail
 export const INDEXNOW_ATTEMPT_RECOVERY_STATES = ["started", "completed", "unknown_outcome"] as const;
 export const ARTICLE_TEMPLATE_STATUSES = ["draft", "active", "inactive"] as const;
 export const ARTICLE_STATUSES = ["draft", "published", "unpublished", "takedown"] as const;
+/**
+ * `article.article_type` (C-24 article axes foundation). Deliberately the
+ * same machine source as `ArticleTemplate.applicable_article_type`
+ * (`src/lib/article-templates/applicable-article-type.ts`'s
+ * `APPLICABLE_ARTICLE_TYPES`) with `any` removed -- `any` only means "this
+ * template applies to every article type"; it is not a value an article
+ * itself can hold. `tests/backend/database/c24-article-axes-static.test.ts`
+ * asserts this set stays exactly `APPLICABLE_ARTICLE_TYPES` minus `any`.
+ */
+export const ARTICLE_TYPES = ["novel_article", "blog_article", "listicle", "guide"] as const;
+/** `article.content_mode` (C-24 article axes foundation). CPS parity, copied verbatim. */
+export const ARTICLE_CONTENT_MODES = ["manual", "template"] as const;
+/** `article.seo_visibility` (C-24 article axes foundation). CPS parity, copied verbatim. */
+export const ARTICLE_SEO_VISIBILITIES = ["public", "seo_only", "hidden"] as const;
 export const SCHEDULE_RUN_STATUSES = ["due", "enqueued", "misfired", "skipped", "failed"] as const;
 export const CRON_RUN_STATUSES = ["created", "task_created", "failed"] as const;
 export const SCHEDULE_TRIGGER_KINDS = ["scheduled", "manual"] as const;
@@ -178,6 +192,31 @@ export const DATABASE_STATUS_SEMANTICS = {
     unpublished: "Article keeps its stable URL as a noindex removal page; HTTP behavior differs from takedown and content remains retained.",
     takedown: "Article is removed for rights or safety reasons; its public route returns HTTP 410 Gone and is removed from index feeds.",
   },
+  /**
+   * `article.article_type` (C-24 article axes foundation). Kept as its own
+   * top-level entry rather than nested under `article` above so that key
+   * keeps its existing flat status-value shape; none of these three column
+   * names collides with an existing table name. As of C-24 this column has
+   * no reader anywhere in the codebase (schema-only, zero behavior change);
+   * these are the intended business meanings C-25/C-26/C-27 wire up.
+   */
+  article_type: {
+    novel_article: "Article renders one Novel's SEO landing page; requires a Novel and, once published, a same-Novel PromoLink (enforced by the composite FK and the published-row CHECKs).",
+    blog_article: "Article is a standalone editorial page with no Novel binding (novel_id is null once C-27 relaxes that column).",
+    listicle: "Legacy CPS type carried for enum parity only; no dedicated public route or admin entry point in this repo.",
+    guide: "Legacy CPS type carried for enum parity only; no dedicated public route or admin entry point in this repo.",
+  },
+  /** `article.content_mode` (C-24 article axes foundation). See note on `article_type` above about why this is a top-level entry. */
+  content_mode: {
+    manual: "Body was last written by an operator through the manual-edit path and template re-generation must not silently overwrite it.",
+    template: "Body was last written by the template engine (creation or re-generation) and re-generation may overwrite it freely.",
+  },
+  /** `article.seo_visibility` (C-24 article axes foundation). See note on `article_type` above about why this is a top-level entry. */
+  seo_visibility: {
+    public: "Article is indexable and appears in every site list (home, browse, category) it would otherwise qualify for.",
+    seo_only: "Article is indexable (index,follow) and stays in sitemap/IndexNow, but is excluded from every on-site list.",
+    hidden: "Article is unreachable on the public site (404), excluded from sitemap, and excluded from IndexNow.",
+  },
   home_carousel_auto_batch: {
     pending: "Batch is durable and waiting for candidate computation.",
     processing: "Candidate computation is in progress.",
@@ -213,6 +252,9 @@ export type IndexNowStatus = ValueOf<typeof INDEXNOW_STATUSES>;
 export type IndexNowAttemptOutcome = ValueOf<typeof INDEXNOW_ATTEMPT_OUTCOMES>;
 export type IndexNowAttemptRecoveryState = ValueOf<typeof INDEXNOW_ATTEMPT_RECOVERY_STATES>;
 export type ArticleStatus = ValueOf<typeof ARTICLE_STATUSES>;
+export type ArticleType = ValueOf<typeof ARTICLE_TYPES>;
+export type ArticleContentMode = ValueOf<typeof ARTICLE_CONTENT_MODES>;
+export type ArticleSeoVisibility = ValueOf<typeof ARTICLE_SEO_VISIBILITIES>;
 export type CanonicalTagStatus = ValueOf<typeof CANONICAL_TAG_STATUSES>;
 export type NovelTagMode = ValueOf<typeof NOVEL_TAG_MODES>;
 export type NovelTagSource = ValueOf<typeof NOVEL_TAG_SOURCES>;

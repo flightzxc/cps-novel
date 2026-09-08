@@ -93,9 +93,13 @@ describe("P1-06 database operations static contracts", () => {
     // Phase C step C-1 (施工工单_PhaseC_任务模型迁移与ImportProgress_2026-09-06.md)
     // adds two more: the generic_task partial indexes equivalent to
     // catalog_scan_task's catalog_scan_status_created_idx/catalog_scan_scope_idx.
+    // Phase E — C-24 (article axes foundation, 20260909090000_c24_article_axes)
+    // adds eight more: three new field records (article_type, content_mode,
+    // seo_visibility), their three CHECK constraint records, and two index
+    // records (article_seo_visibility_idx, article_type_locale_status_published_idx).
     // The exact count still guards duplicate keys.
-    expect(records).toHaveLength(1121);
-    expect(new Set(records.map((line) => JSON.parse(line).stable_key)).size).toBe(1121);
+    expect(records).toHaveLength(1129);
+    expect(new Set(records.map((line) => JSON.parse(line).stable_key)).size).toBe(1129);
     const intents = records.map((line) => JSON.parse(line)).filter(
       (record) => record.table_name === "side_effect_intent"
         && ["status", "response_shape", "confirmed_at"].includes(record.field_name),

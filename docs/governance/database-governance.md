@@ -166,6 +166,9 @@ X6 只开放 `default_og_image` 与 IndexNow 三字段的管理写口：单例�
   `inactive` 不一致——真实 PostgreSQL 上会让每次停用/软删除写入以 23514 报错；已在
   `20260906090000_p2_02b_article_template_cps_parity` 一并修正）
 - Article：`draft | published | unpublished | takedown`
+- ArticleType（C-24 文章三轴地基）：`novel_article | blog_article | listicle | guide`
+- ContentMode（C-24 文章三轴地基）：`manual | template`
+- SeoVisibility（C-24 文章三轴地基）：`public | seo_only | hidden`
 - ScheduleRun：`due | enqueued | misfired | skipped | failed`
 - CronRun：`created | task_created | failed`
 - Carousel batch：`pending | processing | completed | failed`
@@ -180,7 +183,14 @@ unknown_outcome`，机器真源 `INDEXNOW_ATTEMPT_RECOVERY_STATES`，与 `outcom
 carousel serving source 和 ArticleTemplate 的 `applicable_article_type`
 （`novel_article | blog_article | listicle | guide | any`，机器真源
 `src/server/article-templates/service.ts` 的 `APPLICABLE_ARTICLE_TYPES`；`novel_article`
-是 CPS `drama_article` 的直接改名，其余四值逐字照搬）。
+是 CPS `drama_article` 的直接改名，其余四值逐字照搬）。C-24 新增的 Article 三轴同样在此列：
+`article_type`（机器真源 `src/domain/database-statuses.ts` 的 `ARTICLE_TYPES`，与
+`APPLICABLE_ARTICLE_TYPES` 同源去掉 `any`）、`content_mode`（机器真源
+`ARTICLE_CONTENT_MODES`，CPS 逐字照搬）、`seo_visibility`（机器真源
+`ARTICLE_SEO_VISIBILITIES`，CPS 逐字照搬）。三列均由
+`20260909090000_c24_article_axes` 一次性加列 + CHECK + 索引落地，本迁移零行为改变——
+三列在本仓库任何查询里都还没有读取点，读取与生效留给 C-25（SEO 可见性）、C-26（类型/内容模式
+筛选）、C-27（博客地基）。
 
 逐值业务语义以 `src/domain/database-statuses.ts` 的 `DATABASE_STATUS_SEMANTICS`（`indexnow_outbox_attempt`
 条目按列名 `outcome`/`attemptState` 二级嵌套，因为该表没有单一 `status` 列）和 JSONL 字典为机器真源。特别冻结：
@@ -191,6 +201,10 @@ carousel serving source 和 ArticleTemplate 的 `applicable_article_type`
 - 失败、结构异常或异常空列表等不可信响应不改变章节状态；`stale` 章节可信重现后自动恢复 `preview`。
 - `withdrawn` 是人工/版权撤回并返回 404，是唯一会通过版权流程删除 `novel_chapter_content` 的章节状态。
 - Credential、PromoLink、Task/Item、SideEffectIntent、IndexNow、ScheduleRun/CronRun 与 Carousel 的逐值术语不得退化为“实体当前状态”。
+- Article `seo_visibility`（C-24）的逐值语义冻结为：`seo_only` = 页面 `index,follow` 且进
+  sitemap，但不出现在站内任何列表页；`hidden` = 公开侧一律不可达（404），不进 sitemap，不进
+  IndexNow。**这两个值截至 C-24 均未被任何调用点读取**（C-24 只加列不接线，是零行为变化的地基
+  迁移）；上述语义是 C-25 落地时必须实现成的目标行为，不是 C-24 之后立即生效的行为。
 
 ## 5. Migration-only 物理约束清单
 
@@ -241,6 +255,20 @@ carousel serving source 和 ArticleTemplate 的 `applicable_article_type`
     `db:public:novel_canonical_tag:novel_canonical_tag_run_id_fkey`。
     该迁移其余 6 条 FK 的手写名恰与 Prisma 默认名相同，Prisma 侧不写 `map:`。
     今后若要改这 6 条 FK 的物理名，必须走新 Migration 的 `RENAME CONSTRAINT` 并同步 `map:` 与 JSONL 三处，禁止只改一侧。
+20. `20260909090000_c24_article_axes`（C-24 文章三轴地基）新增 `article_type`/`content_mode`/
+    `seo_visibility` 三列（均 `NOT NULL DEFAULT`，默认值分别为 `novel_article`/`template`/`public`，
+    与迁移前每一行的隐含行为逐字等价，零回填脚本、零行为变化）与三条命名 CHECK：
+    - `db:public:article:article_article_type_check`：
+      `article_type IN ('novel_article', 'blog_article', 'listicle', 'guide')`；
+    - `db:public:article:article_content_mode_check`：`content_mode IN ('manual', 'template')`；
+    - `db:public:article:article_seo_visibility_check`：
+      `seo_visibility IN ('public', 'seo_only', 'hidden')`。
+    同一迁移新增两条索引：`db:public:article:article_seo_visibility_idx` = `INDEX (seo_visibility)`
+    （对齐 CPS 的同名索引）、`db:public:article:article_type_locale_status_published_idx` =
+    `INDEX (article_type, locale, status, published_at)`（对齐 CPS 的复合索引）。迁移末尾附一条
+    `DO $c24_article_axes_guard$` 自证守卫：统计三列偏离上述默认值的行数，非零即
+    `RAISE EXCEPTION`（ERRCODE `23514`）；因为 `ADD COLUMN ... DEFAULT` 在同一 DDL 语句内就把既存行
+    回填成该默认值，这个计数在本迁移下机械恒为零，守卫只是防止未来有人误改这个文件时静默改变既存行为。
 
 ### P1-05B Migration 注意事项
 
@@ -359,6 +387,7 @@ P1-08B 新增独立 `scheduler_app`，只授予 schedule/generic task 元数据�
 | 2026-09-06 | Phase C — C-4 DROP catalog_scan_task(_item)（`20260907091500_p3_drop_catalog_scan_task`） | C-2/C-3（应用层与测试已全部切至 `generic_task`/`generic_task_item`，`task_type='catalog_scan'`、`target_type='catalog_page'`）合入后，DROP 两表；Prisma model `CatalogScanTask`/`CatalogScanTaskItem` 一并移除（含 `ChannelAccount`/`ChannelApp` 上的 `catalogScanTasks` 反向关系字段）；无生产历史（102 行 UAT、零活体），非回填式迁移。`database-schema-dictionary.jsonl` 68 条记录改 `status=superseded`（不删除，遵 §10）；`check-database-dictionary-drift.mjs` 的 Prisma model/数据库表计数断言 51→49；`scripts/entity-fix/moboreader-foundation-swap.ts` 的前后快照去掉独立 `catalogScanTasks` 计数（并入 `genericTasks`）。 | Claude（Sonnet，Phase C 施工） | 待一次性 PostgreSQL 16 容器验证；详见本轮 Phase C 报告 |
 | 2026-09-07 | Tagging V3 FK 具名对齐（零 schema migration，仅 Prisma `map:`） | `prisma migrate diff --from-migrations … --exit-code` 自 `20260816160000_p2_06_5_tagging_v3` 合入起即报 6 条 `Renamed the foreign key`（`canonical_tag_translation_tag_id_fkey`、`canonical_tag_keyword_tag_id_fkey`、`source_label_mapping_tag_id_fkey`、`novel_tag_state_current_auto_run_id_fkey`、`novel_canonical_tag_tag_id_fkey`、`novel_canonical_tag_run_id_fkey`）：手写 Migration 取了短名，而 `schema.prisma` 对应 `@relation` 未写 `map:`，Prisma 按默认规则期望 `<table>_<columns>_fkey` 长名。后果：`scripts/p1-13-postgres-verification.sh`（以及同样内置该 diff 门禁的 `run-p1-05b`/`run-p1-08b`）在任何分支都于 diff 门禁 exit 2，跑不到 grants 与测试。裁决依据 §1「已执行 Migration > 当前 Schema/SQL」与 §13「未经 Owner 批准不得抢跑新增 migration」：不改 Migration、不新增 `RENAME CONSTRAINT` 迁移，只给 6 条 `@relation` 补 `map:` 指向 Migration 已落地的物理名（先例 §5 第 12 条 `article_promo_link_novel_fkey`；本次登记为 §5 第 19 条）。已应用该 Migration 的 X8 uat（`cps-novel-x8-local`）与 tplsmoke 两库现场 `pg_constraint` 均为短名，本改动对活库零影响、无需任何 SQL。`database-schema-dictionary.jsonl` 12 条 FK 记录 `physical_name` 本就是短名，不改；`managed_by` 保持 `migration_sql`（对象由手写 Migration 创建，`map:` 只是让 Prisma 认领同名）。§3.2 至今没有 Tagging V3 七表的词典行（2026-09-05 登记时遗留），本轮不代写，待 Codex/Owner 补。 | Claude（Sonnet 编码/Opus 复核） | `prisma/schema.prisma` 恰 6 行变化，`npx prisma validate` PASS；一次性 PostgreSQL 16.14 容器（`repro-diff-v2.sh`）验证 `migrate deploy` 幂等重放后两方向 `migrate diff --exit-code` 均 `No difference detected` / `EXIT_CODE=0`，`check-database-dictionary-drift.mjs` 通过（`{"status":"ok","models":49,...}`，`DRIFT_EXIT=0`），活库 6 条 FK 名仍为短名；生产路径 `scripts/p1-13-postgres-verification.sh`（未修改）diff 门禁本身已通过（此前 exit 2 的阻塞已解除），但在 `npm run test:integration` 步命中既有基线失败 `KTF-001`（`tests/integration/tasks/p1-07-postgres.test.ts` > "commits side-effect intent independently and blocks unknown retry"，完全命中，1 failed / 25 passed，脚本 `set -e` 于该步中止，未跑到 build/typecheck/lint/test:backend/`npm test`，故生产路径本身不回答 `publish-gate/no-bypass` 是否命中，其结果见本行末的补充证据）；`P1_13_POSTGRES_ERROR line=141 status=1`、`P1_13_POSTGRES_CLEANUP=PASS`、容器/卷/网络自清理（`docker ps -a \| grep p1-13` 为空）。为证明该失败与本改动无关，对同一测试文件单独起一次性库做 A/B：`git stash` 前（含本次 `map:` 修复）与 `git stash` 后（回到修复前的 2e81d18 基线）跑同一条 `npx vitest run tests/integration/tasks/p1-07-postgres.test.ts`，两次均是同一用例 1 failed / 25 passed、断言内容逐字相同；`git stash pop` 后 `git stash list` 为空、`git diff --stat` 恢复到本行变更前的状态。补充非生产路径证据（p1-13 脚本各 `npm run/test` 行追加 `\|\| printf STEP_FAILED=…` 后完整跑一遍）见开发日志同日条目 |
 | 2026-09-07 | SideEffectIntent 通用状态机收口（KTF-001） | 零 schema migration。`isAllowedSideEffectTransition` 关闭 31d4723 引入的通用 `claim_retry_blocked -> confirmed` 出边，恢复 P1-07 原始迁移图；新增 `confirmSideEffectIntentByReadbackInTransaction` 作为 readback-recovery 唯一确认边界（强制 readback 证据、合并既有 ambiguity 证据、同事务 CAS），claim handler 的 `writePromoLinkClaimed` 改走该边界；X9 `resolveManualReview` 不变 | Claude（Sonnet 编码/Opus 复核） | hermetic backend + 一次性 PostgreSQL 16 容器 p1-07/x9 集成验证；见本轮报告 |
+| 2026-09-08 | Phase E — C-24 文章三轴地基（`20260909090000_c24_article_axes`） | `article` 新增 `article_type`/`content_mode`/`seo_visibility` 三列（各配一条命名 CHECK：`article_article_type_check`/`article_content_mode_check`/`article_seo_visibility_check`）与两条索引（`article_seo_visibility_idx`、`article_type_locale_status_published_idx`）；全部由 `NOT NULL DEFAULT`（`novel_article`/`template`/`public`）回填，零回填脚本、零行为变化——本迁移不改任何查询、不改任何写路径，三列截至本行在仓库任何调用点均未被读取。`src/domain/database-statuses.ts` 新增 `ARTICLE_TYPES`/`ARTICLE_CONTENT_MODES`/`ARTICLE_SEO_VISIBILITIES` 三个机器真源常量集合（`ARTICLE_TYPES` 与 `ArticleTemplate.applicable_article_type` 的 `APPLICABLE_ARTICLE_TYPES` 同源去掉 `any`）及 `DATABASE_STATUS_SEMANTICS` 对应逐值语义；`database-schema-dictionary.jsonl` 新增 3 条 `record_kind: "field"`（`db:public:article:article_type`/`content_mode`/`seo_visibility`，`managed_by: "prisma_schema"`）+ 3 条 CHECK 约束记录（`managed_by: "migration_sql"`）+ 2 条索引记录（`managed_by: "prisma_schema"`），本行同步登记（策划文档原文只点名"两条"索引/约束记录，是对既有惯例——每条 CHECK 与索引各自成一条独立字典记录，如 P2-02B 的 `article_template_applicable_article_type_check`——的计数疏漏；本次按惯例足额登记 3+2=5 条，以避免未来一次性 PostgreSQL 16 容器跑 `check-database-dictionary-drift.mjs` 的非 `--static` 目录漂移分支时报缺失数据库对象） | Claude（Sonnet，C-24 施工） | 本轮按工单边界未连接任何数据库：`npx prisma validate`（schema 语法，无 DB）+ `npm run typecheck` + `npm run lint` + `npx vitest run --project node --project ui` 全绿（唯一允许的既有基线失败 `tests/backend/publish-gate/no-bypass.test.ts` 不受影响）。**一次性 PostgreSQL 16 容器 `migrate deploy` 幂等重放 + 双向 `migrate diff --exit-code` 零差异 + `check-database-dictionary-drift.mjs`（非 `--static`）均待后续执行方补跑**，本行状态到那之前不得视为"已验证" |
 
 ## 13. 待跟进项（Schema 变更队列，Owner 待批）
 
