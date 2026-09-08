@@ -1,4 +1,20 @@
 \set ON_ERROR_STOP on
+-- D-9a (施工工单_D9_up数据库准备原子化与镜像保留_2026-09-09.md 三.3.2②): every
+-- caller of this file now wraps the whole thing in one --single-transaction
+-- (scripts/x8-production-like.sh:924-925 -- 687-688 in the work order's own
+-- baseline commit 0a8f150, before this change's earlier additions to that
+-- file pushed the same invocation further down; scripts/db/restore-logical.sh:60,
+-- scripts/p1-13-restore-smoke.sh:100), so the REVOKE block below and the
+-- GRANT block that follows either land together or roll back together --
+-- never REVOKE-committed-but-GRANT-failed. Holding one transaction's worth
+-- of catalog locks for the whole file (instead of releasing them statement
+-- by statement, as the old no-single-transaction invocation did) is exactly
+-- what makes that atomicity possible, but it also means those locks are now
+-- held for the file's full duration -- this timeout is what stops that from
+-- turning into an indefinite stall against a long-running query elsewhere
+-- (worker) instead of failing fast and rolling back cleanly like every other
+-- failure mode this file already handles.
+SET lock_timeout = '10s';
 
 -- Run in the application database as migration_owner after every migration.
 -- No runtime role receives schema ownership or DDL privileges.

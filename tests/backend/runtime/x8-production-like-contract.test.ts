@@ -162,19 +162,63 @@ describe("X8 local production-like contracts", () => {
     expect(read("infra/production-like/backup-timer.sh")).toContain(
       "/opt/cps-novel-x8/backup-logical.sh --output",
     );
-    expect(launcher.indexOf("infra/postgres/grants.sql")).toBeLessThan(
-      launcher.indexOf("CREATE EXTENSION IF NOT EXISTS pg_stat_statements"),
+    // D-9a (施工工单_D9_up数据库准备原子化与镜像保留_2026-09-09.md 三.3.2③) added
+    // several EARLIER mentions of the literal string "infra/postgres/grants.sql"
+    // before the real invocation below -- inside a doc-comment right above it
+    // ("See infra/postgres/grants.sql's own `SET lock_timeout` comment...")
+    // and inside x8_print_db_prep_failure_status()'s printed recovery-command
+    // text, both of which intentionally spell out the real path (for a human
+    // reader / for an operator to copy-paste). "X8_DB_PREP_STEP=grants" is
+    // the one line prepare_database() itself sets immediately before the
+    // REAL invocation and appears nowhere else in the file, so anchoring on
+    // it (rather than on the grants.sql path text, which now has multiple
+    // decorative occurrences) is what reliably finds the actual `psql` call
+    // every `up` runs, not a comment or a printed diagnostic string.
+    const grantsStepIndex = launcher.indexOf("X8_DB_PREP_STEP=grants");
+    expect(grantsStepIndex).toBeGreaterThan(0);
+    expect(launcher.indexOf("infra/postgres/grants.sql", grantsStepIndex)).toBeLessThan(
+      launcher.indexOf("CREATE EXTENSION IF NOT EXISTS pg_stat_statements", grantsStepIndex),
     );
     const grantsInvocation = launcher.slice(
-      launcher.lastIndexOf("x8_compose exec", launcher.indexOf("infra/postgres/grants.sql")),
-      launcher.indexOf("infra/postgres/grants.sql"),
+      launcher.indexOf("x8_compose exec", grantsStepIndex),
+      launcher.indexOf("infra/postgres/grants.sql", grantsStepIndex),
     );
     expect(grantsInvocation).toContain("-U postgres -d cps_novel");
     expect(grantsInvocation).not.toContain("-U migration_owner");
+    // D-9a 三.3.2② ("最关键的一处"): --single-transaction is the actual
+    // root-cause fix for the 2026-09-08 outage (施工工单一/2.2) -- REVOKE and
+    // re-GRANT now either both land or both roll back, never
+    // REVOKE-committed-but-GRANT-failed. Revert self-check: removing this
+    // flag from scripts/x8-production-like.sh's grants.sql invocation turns
+    // this assertion red.
+    expect(grantsInvocation).toContain("--single-transaction");
     expect(grants).toContain(
       "GRANT UPDATE (novel_id, status, updated_at) ON novel_source_item TO web_app;",
     );
     expect(grants).not.toContain("GRANT UPDATE ON TABLE novel_source_item TO web_app");
+    // D-9a 三.3.2① 闸B ("这道闸是本工单的核心"): the disk-preflight gate inside
+    // prepare_database() must run before roles.sql is ever replayed --
+    // fail-closed before this attempt sends a single DDL/role statement.
+    // Anchored to prepare_database()'s own definition, not searched from the
+    // start of the file: gate A (up_x8(), before build_app_image()) calls
+    // the same x8_require_free_disk_kib() helper much earlier in the file,
+    // and an unanchored indexOf would find THAT call every time regardless
+    // of where gate B actually sits -- silently testing nothing about gate
+    // B's position. Revert self-check: moving the gate B call after the
+    // roles.sql exec line inside prepare_database() turns this assertion
+    // red (verified by temporarily reordering them and re-running this
+    // suite; restored immediately after).
+    const prepareDatabaseIndex = launcher.indexOf("\nprepare_database()");
+    expect(prepareDatabaseIndex).toBeGreaterThan(0);
+    expect(launcher.indexOf("x8_require_free_disk_kib", prepareDatabaseIndex)).toBeLessThan(
+      launcher.indexOf("/opt/cps-novel-postgres/roles.sql", prepareDatabaseIndex),
+    );
+    // D-9a 三.3.2②: SET lock_timeout is required precisely BECAUSE grants.sql
+    // now runs inside one transaction and therefore holds its catalog locks
+    // for the whole file's duration instead of releasing them statement by
+    // statement -- this is what stops that from becoming an indefinite
+    // stall against a long-running query elsewhere.
+    expect(grants).toContain("SET lock_timeout");
     expect(launcher).toMatch(/function render_nginx_configs|render_nginx_configs\(\)/);
     expect(launcher.slice(launcher.indexOf("render_nginx_configs()"), launcher.indexOf("validate_rendered_topology()")))
       .toContain("return 0");

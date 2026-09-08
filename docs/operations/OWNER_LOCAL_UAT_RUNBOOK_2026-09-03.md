@@ -63,6 +63,14 @@ scripts/x8-production-like.sh up          # 起六服务；WORKER_TASK_ALLOWLIST
                                            # healthy、nginx 起后两个域名的 HTTP 探活都过，才把
                                            # 本次部署身份从候选提交为正式——这是五个服务，不是六个：
                                            # backup-timer 在身份提交之后才起（见下方"发布身份"说明）
+                                           # D-9a（2026-09-09）：`up` 在建镜像前与碰数据库前
+                                           # 各做一次磁盘可用空间检查，fail-closed（退出码 69，
+                                           # 打印手工清理命令；建镜像前那道闸低于告警线时会尝试
+                                           # 调用 D-9b 的 `gc --auto`，本分支未接入 D-9b 时该调用
+                                           # 是空操作，等价于只记日志）；grants.sql 权限重放已改
+                                           # 单事务，一次失败的部署不会剥夺仍在跑的旧版本的数据库
+                                           # 权限（镜像自动保留/gc 子命令本身是另一项工单 D-9b，
+                                           # 未随本轮上线）
 scripts/x8-production-like.sh status      # 只读查询：确认六服务健康,零写入;需要 up 已经成功
                                            # 提交过一次身份,否则会失败并提示先跑 up
 scripts/x8-production-like.sh verify      # 拓扑/allowlist/nginx 反模式静态校验，按 X8_LEVEL=uat 的期望值断言
@@ -220,6 +228,9 @@ scripts/x8-production-like.sh admin-secret set admin2   # 同上
 scripts/x8-production-like.sh up                        # 两个 secret 文件已就绪，自动 admin-seed
 ```
 
+D-9a（2026-09-09）：`up` 会先做磁盘可用空间检查（fail-closed，不足退出码 69 并打印手工清理命令），
+数据库准备阶段的权限重放（`grants.sql`）也已改为单事务，一次失败不会剥夺仍在跑的旧版本的数据库权限。
+
 若 `up` 时 secret 文件还不存在，`admin-seed` 会被跳过并打印提示（不会让 `up` 失败）；
 之后单独补跑 `scripts/x8-production-like.sh admin-seed` 即可。`admin-seed` 幂等——
 账户已存在时默认跳过，只有再加 `--reset-password` 才更新密码哈希。
@@ -244,7 +255,8 @@ edge），确认无误后 `--apply` 一次。`--channel-app` 必须显式绑定
 
 ```bash
 export X8_LEVEL=uat
-scripts/x8-production-like.sh up   # 已起则跳过
+scripts/x8-production-like.sh up   # 已起则跳过；D-9a：磁盘不够会 fail-closed（退出码 69），
+                                    # 不会碰数据库；权限重放已改单事务
 
 source scripts/lib/x8-production-like-env.sh
 prepare_x8_environment
@@ -300,7 +312,9 @@ export X8_LEVEL=uat
 scripts/x8-production-like.sh down                       # 保留 volume，不加 --purge
 scripts/x8-production-like.sh admin-secret set admin      # Owner 当面输入
 scripts/x8-production-like.sh admin-secret set admin2
-scripts/x8-production-like.sh up                          # 自动 admin-seed
+scripts/x8-production-like.sh up                          # 自动 admin-seed；D-9a：磁盘不够会
+                                                            # fail-closed，不碰数据库；grants.sql
+                                                            # 单事务重放
 scripts/x8-production-like.sh admin-reset x8-owner --deactivate            # dry-run 先看影响行数
 scripts/x8-production-like.sh admin-reset x8-owner --deactivate --apply    # 确认无误后 apply
 ```

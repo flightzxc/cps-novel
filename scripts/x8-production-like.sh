@@ -407,6 +407,46 @@ assert_ports_available() {
   done
 }
 
+# D-9a (施工工单_D9_up数据库准备原子化与镜像保留_2026-09-09.md 三.3.2① 闸A):
+# before build_app_image() ever creates a new ~1.2GB release image, refuse
+# outright if the Docker VM filesystem is already too low to safely hold
+# one. Fail-closed at exit 69, matching every other "environment isn't ready
+# for `up`" refusal in this file (see e.g. line 405/758/762/766-ish above).
+#
+# Sequence per 施工工单 3.2①: measure once -> below the warn tier, try D-9b's
+# `x8_gc --auto` -> measure again (x8_require_free_disk_kib below always
+# re-measures on its own rather than trusting a stale reading) -> still
+# below the hard line, refuse and print the manual gc command.
+#
+# D-9a and D-9b were built in separate worktrees in parallel (2026-09-09
+# split) and land as two independent commits; x8_gc() itself is entirely
+# D-9b's function and does not exist on this branch. `declare -F x8_gc
+# >/dev/null` is the guard that makes this call site safe on EITHER side of
+# that merge: today, on this branch alone, it always finds nothing, and this
+# reduces to "log the warning, then let the hard check below decide" (an
+# operator who hits the warn line reclaims space by hand -- see 施工工单第六节's
+# reviewed docker rmi command, or 'docker image prune -f' for dangling layers
+# only, never '-a'/'-af', which would also delete other stacks' images on
+# this host); once D-9b's x8_gc() lands on the same branch, this exact same
+# code starts actually invoking it, with no further change needed here.
+# Best-effort on purpose (`|| true`): a failure inside gc must never itself
+# cause a refusal that a successful gc run would have avoided -- the hard
+# check below is what decides whether to refuse, not gc's own exit status.
+x8_disk_preflight_before_build() {
+  local free_kib
+  free_kib="$(x8_free_disk_kib)" || return 69
+  if [[ "$free_kib" -lt "$X8_WARN_FREE_KIB_BUILD" ]]; then
+    echo "WARN: free disk space (${free_kib} KiB) is below the warn threshold (${X8_WARN_FREE_KIB_BUILD} KiB) for building a new X8 release image." >&2
+    if declare -F x8_gc >/dev/null; then
+      echo "Attempting automatic reclamation via 'gc --auto' before deciding whether to refuse..." >&2
+      x8_gc --auto >&2 || true
+    else
+      echo "Automatic reclamation ('gc', D-9b) is not available on this branch; reclaim space by hand if the hard check below ends up refusing." >&2
+    fi
+  fi
+  x8_require_free_disk_kib "$X8_MIN_FREE_KIB_BUILD" "building the release image"
+}
+
 build_app_image() {
   if docker image inspect "$CPS_NOVEL_APP_IMAGE" >/dev/null 2>&1; then
     local identity
@@ -596,6 +636,19 @@ x8_mark_identity_deploy_failed() {
     printf 'timestamp=%s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
     printf 'reason=%s\n' "$reason"
     printf 'candidate_file=%s\n' "$X8_IDENTITY_CANDIDATE_FILE"
+    # D-9a (施工工单_D9_up数据库准备原子化与镜像保留_2026-09-09.md 三.3.2⑤): which
+    # of the prepare_database() steps this attempt actually reached, and
+    # whether the running release's grants were confirmed intact afterward --
+    # X8_DB_PREP_STEP/X8_DB_GRANTS_INTACT are set by prepare_database() and
+    # its helpers (scripts/x8-production-like.sh) and survive past that
+    # function's own return (they are deliberately not `local`) specifically
+    # so they are still readable here when the EXIT trap fires. Unset for any
+    # failure that never reached database preparation at all (e.g. a
+    # build_app_image()/write_x8_identity_candidate() failure, both of which
+    # run before prepare_database() in up_x8()) -- the defaults below make
+    # that distinction explicit rather than silently omitting the fields.
+    printf 'db_prep_step=%s\n' "${X8_DB_PREP_STEP:-<not reached>}"
+    printf 'db_prep_grants_intact=%s\n' "${X8_DB_GRANTS_INTACT:-unknown}"
     if [[ -f "$X8_IDENTITY_FILE" ]]; then
       printf 'previously_committed_identity_left_untouched_at=%s\n' "$X8_IDENTITY_FILE"
     else
@@ -643,19 +696,170 @@ wait_for_postgres() {
   [[ "$ready" == "yes" ]] || { echo "ERROR: X8 PostgreSQL did not become ready" >&2; exit 1; }
 }
 
+# D-9a (施工工单_D9_up数据库准备原子化与镜像保留_2026-09-09.md 三.3.2④): the
+# two-line status block every prepare_database() failure path below prints to
+# stderr, in exactly this KEY=VALUE shape --
+# tests/backend/runtime/x8-database-prep-atomicity.test.ts asserts these
+# lines verbatim, so preserve the format if this ever changes. Must only run
+# after X8_DB_PREP_STEP and X8_DB_GRANTS_INTACT have already been set for the
+# step that just failed. When grants could not be confirmed intact, also
+# prints a copy-pasteable recovery command that replays the PREVIOUSLY
+# COMMITTED release's own grants.sql -- documented here as a command an
+# operator reviews and runs by hand; this function never executes it itself
+# (施工工单 3.2③: "implement the recovery as a documented command, not an
+# automatic action").
+x8_print_db_prep_failure_status() {
+  echo "X8_DB_PREP_FAILED_AT=${X8_DB_PREP_STEP:-unknown}" >&2
+  echo "X8_DB_PREP_GRANTS_INTACT=${X8_DB_GRANTS_INTACT:-unknown}" >&2
+  [[ "${X8_DB_GRANTS_INTACT:-}" == "no" ]] || return 0
+  local recovery_commit="${X8_DB_PREP_RESTORE_COMMIT:-}"
+  if [[ -n "$recovery_commit" ]]; then
+    echo "X8_DB_PREP_RECOVERY_COMMAND=git -C \"$X8_PROJECT_ROOT\" show ${recovery_commit}:infra/postgres/grants.sql | docker compose -p \"$P1_12_COMPOSE_PROJECT\" -f \"$X8_PROJECT_ROOT/docker-compose.yml\" -f \"$X8_PROJECT_ROOT/infra/production-like/docker-compose.yml\" exec -T postgres psql --no-psqlrc -v ON_ERROR_STOP=1 --single-transaction -U postgres -d cps_novel" >&2
+  else
+    echo "X8_DB_PREP_RECOVERY_COMMAND=<could not determine the running release's commit from $X8_IDENTITY_FILE -- inspect that file by hand, then replay ITS recorded gitCommit's infra/postgres/grants.sql: git -C \"$X8_PROJECT_ROOT\" show <that commit>:infra/postgres/grants.sql | docker compose -p \"$P1_12_COMPOSE_PROJECT\" -f \"$X8_PROJECT_ROOT/docker-compose.yml\" -f \"$X8_PROJECT_ROOT/infra/production-like/docker-compose.yml\" exec -T postgres psql --no-psqlrc -v ON_ERROR_STOP=1 --single-transaction -U postgres -d cps_novel>" >&2
+  fi
+}
+
+# D-9a 三.3.2③: called from a prepare_database() failure path at or after the
+# point this attempt could plausibly have disturbed grants (migrate deploy
+# onward -- see the call sites in prepare_database() below) to guarantee the
+# release CURRENTLY RUNNING keeps exactly the grants it had before this
+# attempt started. $X8_IDENTITY_FILE is still the PREVIOUSLY COMMITTED
+# identity at this point in `up` -- promotion only happens after every
+# health probe in up_x8() passes, far later than prepare_database() runs
+# (see promote_x8_identity_candidate()). Deliberately replays THAT release's
+# grants.sql, never this worktree's own copy: this worktree's grants.sql may
+# reference tables/columns this deploy's own (possibly incomplete) migration
+# was supposed to add, which would just fail again against the schema the
+# running release actually understands (施工工单 2.3's documented boundary --
+# grants.sql is only idempotent for the schema it was written against, and
+# "run it before AND after migrate" is explicitly not viable for that
+# reason). Sets X8_DB_GRANTS_INTACT to yes/no/n/a and X8_DB_PREP_RESTORE_COMMIT
+# to whatever commit it attempted (empty if it never got that far); never
+# itself changes prepare_database()'s return status.
+x8_restore_grants_for_running_release() {
+  X8_DB_GRANTS_INTACT=unknown
+  X8_DB_PREP_RESTORE_COMMIT=""
+  if [[ ! -f "$X8_IDENTITY_FILE" ]]; then
+    # No previously committed release -- this is the first `up` ever run
+    # against this worktree/runtime dir, so there is no running old version
+    # whose grants are at risk.
+    X8_DB_GRANTS_INTACT=n/a
+    return 0
+  fi
+  local running_commit
+  running_commit="$(node -e '
+    const fs = require("fs");
+    let data;
+    try {
+      data = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+    } catch {
+      process.exit(1);
+    }
+    if (typeof data.gitCommit !== "string" || data.gitCommit.trim().length === 0) process.exit(1);
+    process.stdout.write(data.gitCommit);
+  ' "$X8_IDENTITY_FILE" 2>/dev/null || true)"
+  if [[ -z "$running_commit" ]]; then
+    X8_DB_GRANTS_INTACT=no
+    echo "ERROR: could not read a gitCommit out of the committed release identity at $X8_IDENTITY_FILE while restoring grants for the running release -- it may be corrupt" >&2
+    return 0
+  fi
+  X8_DB_PREP_RESTORE_COMMIT="$running_commit"
+  local restore_status=0
+  if git -C "$X8_PROJECT_ROOT" cat-file -e "${running_commit}:infra/postgres/grants.sql" 2>/dev/null; then
+    git -C "$X8_PROJECT_ROOT" show "${running_commit}:infra/postgres/grants.sql" | \
+      x8_compose exec -T postgres psql --no-psqlrc -v ON_ERROR_STOP=1 --single-transaction \
+        -U postgres -d cps_novel >/dev/null || restore_status=$?
+  else
+    # 施工工单 3.2③(3): the running release's commit is no longer reachable
+    # in this git repository (shallow clone, gc'd object) -- fall back to
+    # this worktree's own copy. Not the ideal source (see this function's
+    # own comment above), but a stale protection attempt beats none, and
+    # this is logged loudly so an operator knows the replay may not exactly
+    # match what the running containers expect.
+    echo "WARN: commit $running_commit (the currently running release) is not reachable in this git repository -- falling back to this worktree's own infra/postgres/grants.sql to restore grants, which may not exactly match the running release's schema" >&2
+    x8_compose exec -T postgres psql --no-psqlrc -v ON_ERROR_STOP=1 --single-transaction \
+      -U postgres -d cps_novel <"$X8_PROJECT_ROOT/infra/postgres/grants.sql" >/dev/null || restore_status=$?
+  fi
+  if [[ "$restore_status" -eq 0 ]]; then
+    X8_DB_GRANTS_INTACT=yes
+  else
+    X8_DB_GRANTS_INTACT=no
+    echo "ERROR: replaying grants.sql for the currently running release (commit $running_commit) itself failed while recovering from a failed 'up' -- the running release's database permissions may now be incomplete; see the recovery command below and docs/governance/database-governance.md" >&2
+  fi
+  return 0
+}
+
+# D-9a 三.3.2③, first paragraph: nothing between wait_for_postgres() and
+# migrate_deploy in prepare_database() ever runs REVOKE/GRANT -- roles.sql
+# has none (施工工单 2.2) and x8_align_db_role_passwords() only ever runs
+# ALTER ROLE ... PASSWORD -- so a failure at the disk-preflight gate, at
+# roles.sql, at the role-existence check, or while aligning passwords cannot
+# itself have disturbed the running release's grants. This records that fact
+# without touching the database at all, mirroring the disk-preflight gate's
+# own "zero DDL on the failure path" property, rather than calling
+# x8_restore_grants_for_running_release() (which would issue a real, if
+# harmless and idempotent, psql replay for a release whose grants were never
+# actually at risk).
+x8_note_grants_untouched() {
+  if [[ -f "$X8_IDENTITY_FILE" ]]; then
+    X8_DB_GRANTS_INTACT=yes
+  else
+    X8_DB_GRANTS_INTACT=n/a
+  fi
+  X8_DB_PREP_RESTORE_COMMIT=""
+}
+
 prepare_database() {
+  # D-9a 三.3.2④: deliberately NOT `local` -- x8_mark_identity_deploy_failed()
+  # is called later, from the EXIT trap up_x8() installs, well after this
+  # function has already returned (and any `local` here would already be
+  # gone by then). Reset at the top of every call so a stale value from an
+  # earlier attempt in the same process can never leak into a fresh one's
+  # failure report; exported for good measure, though nothing outside this
+  # bash process needs to read them.
+  X8_DB_PREP_STEP="<not reached>"
+  X8_DB_GRANTS_INTACT="unknown"
+  X8_DB_PREP_RESTORE_COMMIT=""
+  export X8_DB_PREP_STEP X8_DB_GRANTS_INTACT X8_DB_PREP_RESTORE_COMMIT
+
   x8_compose up -d postgres
   wait_for_postgres
-  x8_compose exec -T postgres psql --no-psqlrc -v ON_ERROR_STOP=1 -U postgres -d cps_novel \
-    --file /opt/cps-novel-postgres/roles.sql >/dev/null
+
+  # D-9a 三.3.2① 闸B ("这道闸是本工单的核心"): fail-closed before this attempt
+  # sends a single DDL or role statement. Gate A (see up_x8(), before
+  # build_app_image()) already checked space for building a new release
+  # image; this is the second, independent check that actually protects the
+  # database the running release depends on -- gate A's image build happens
+  # long before the candidate identity is even written, let alone before any
+  # of this function runs.
+  X8_DB_PREP_STEP=disk_preflight
+  if ! x8_require_free_disk_kib "$X8_MIN_FREE_KIB_DB" "database preparation (roles/passwords/migrate/grants)"; then
+    x8_note_grants_untouched
+    x8_print_db_prep_failure_status
+    return 69
+  fi
+
+  X8_DB_PREP_STEP=roles
+  if ! x8_compose exec -T postgres psql --no-psqlrc -v ON_ERROR_STOP=1 -U postgres -d cps_novel \
+    --file /opt/cps-novel-postgres/roles.sql >/dev/null; then
+    echo "ERROR: replaying roles.sql failed" >&2
+    x8_note_grants_untouched
+    x8_print_db_prep_failure_status
+    return 65
+  fi
+
+  X8_DB_PREP_STEP=role_check
   local role
   for role in migration_owner web_app worker_app scheduler_app analyst_ro backup_role; do
-    x8_compose exec -T postgres psql --no-psqlrc -U postgres -d cps_novel \
+    if ! x8_compose exec -T postgres psql --no-psqlrc -U postgres -d cps_novel \
       --tuples-only --no-align --command="SELECT 1 FROM pg_roles WHERE rolname='${role}'" \
-      | grep -Fx 1 >/dev/null || {
-        echo "ERROR: required X8 PostgreSQL role is missing: $role" >&2
-        exit 1
-      }
+      | grep -Fx 1 >/dev/null; then
+      echo "ERROR: required X8 PostgreSQL role is missing: $role" >&2
+      x8_note_grants_untouched
+      x8_print_db_prep_failure_status
+      return 1
+    fi
   done
 
   # 施工工单_PhaseD_安全与运行态收口_2026-09-06.md D-2, 做法1: force-align every
@@ -665,8 +869,14 @@ prepare_database() {
   # right). See x8_align_db_role_passwords()'s own comment in
   # scripts/lib/x8-production-like-env.sh for why this can no longer be
   # left to init-roles.sh alone.
-  x8_align_db_role_passwords || return 65
+  X8_DB_PREP_STEP=align_passwords
+  if ! x8_align_db_role_passwords; then
+    x8_note_grants_untouched
+    x8_print_db_prep_failure_status
+    return 65
+  fi
 
+  X8_DB_PREP_STEP=migrate_deploy
   local migration_env
   migration_env="$(mktemp "$X8_RUNTIME_DIR/migrate.XXXXXX")"
   chmod 600 "$migration_env"
@@ -679,15 +889,58 @@ prepare_database() {
     "$CPS_NOVEL_APP_IMAGE" \
     --no-install prisma migrate deploy || migration_status=$?
   rm -f "$migration_env"
-  [[ "$migration_status" -eq 0 ]] || return "$migration_status"
+  if [[ "$migration_status" -ne 0 ]]; then
+    # D-9a 三.3.2③: prisma migrate deploy runs each migration file as its own
+    # transaction (施工工单 2.2 路径二) -- a partial failure here can leave
+    # newly-created objects at their (closed) default privileges. Restoring
+    # the running release's own grants.sql is cheap insurance that its
+    # pre-existing objects are provably unchanged, even though it cannot
+    # grant anything on objects only this attempt's own migration would have
+    # created (see x8_restore_grants_for_running_release()'s own comment).
+    x8_restore_grants_for_running_release
+    x8_print_db_prep_failure_status
+    return "$migration_status"
+  fi
 
   # grants.sql revokes privileges across the whole public schema. On repeat
   # launches, that includes postgres-owned extension functions, so the
   # operation must run as the bootstrap superuser to remain idempotent.
-  x8_compose exec -T postgres psql --no-psqlrc -v ON_ERROR_STOP=1 -U postgres -d cps_novel \
-    <"$X8_PROJECT_ROOT/infra/postgres/grants.sql" >/dev/null
-  x8_compose exec -T postgres psql --no-psqlrc -v ON_ERROR_STOP=1 -U postgres -d cps_novel \
-    --command 'CREATE EXTENSION IF NOT EXISTS pg_stat_statements;' >/dev/null
+  #
+  # D-9a (施工工单_D9_up数据库准备原子化与镜像保留_2026-09-09.md 三.3.2②,
+  # "最关键的一处"): --single-transaction is what closes the actual root cause
+  # of the 2026-09-08 outage. grants.sql REVOKEs everything up front and then
+  # re-GRANTs it line by line (see the file's own comment) -- without this
+  # flag, psql commits each statement as it runs, so a mid-file failure
+  # (disk full, connection drop, a target table that migrate deploy never
+  # finished creating) could leave the REVOKE half committed and the GRANT
+  # half never applied: every application role left at zero privileges on a
+  # database the STILL-RUNNING previous release's containers were actively
+  # reading from. With --single-transaction the REVOKE block and the GRANT
+  # block either both land or both roll back -- there is no window where
+  # only the REVOKE half is durable. See infra/postgres/grants.sql's own
+  # `SET lock_timeout` comment for why holding those locks for the whole
+  # transaction is safe.
+  X8_DB_PREP_STEP=grants
+  if ! x8_compose exec -T postgres psql --no-psqlrc -v ON_ERROR_STOP=1 --single-transaction -U postgres -d cps_novel \
+    <"$X8_PROJECT_ROOT/infra/postgres/grants.sql" >/dev/null; then
+    # --single-transaction means a failure here has ALREADY been rolled back
+    # by postgres itself, atomically, back to whatever grants.sql found in
+    # place when it started (施工工单 3.2③, explicit instruction: "不要再重放
+    # 一次"). Calling x8_restore_grants_for_running_release() here would
+    # replay a SECOND, entirely redundant transaction on top of a state that
+    # was never actually altered -- do not "helpfully" add it back.
+    X8_DB_GRANTS_INTACT=yes
+    x8_print_db_prep_failure_status
+    return 65
+  fi
+
+  X8_DB_PREP_STEP=extension
+  if ! x8_compose exec -T postgres psql --no-psqlrc -v ON_ERROR_STOP=1 -U postgres -d cps_novel \
+    --command 'CREATE EXTENSION IF NOT EXISTS pg_stat_statements;' >/dev/null; then
+    x8_restore_grants_for_running_release
+    x8_print_db_prep_failure_status
+    return 65
+  fi
 
   # 施工工单_PhaseD_安全与运行态收口_2026-09-06.md D-2, 做法2: prove all six
   # roles' passwords actually work over the network (scram-sha-256, the same
@@ -696,7 +949,12 @@ prepare_database() {
   # already exercised migration_owner's own network path via `prisma migrate
   # deploy` above) so this is the one place that also covers the other five
   # roles migrate deploy never touches.
-  x8_verify_db_role_passwords_via_network || return 65
+  X8_DB_PREP_STEP=role_network_verify
+  if ! x8_verify_db_role_passwords_via_network; then
+    x8_restore_grants_for_running_release
+    x8_print_db_prep_failure_status
+    return 65
+  fi
 }
 
 wait_for_url() {
@@ -768,6 +1026,8 @@ up_x8() {
   assert_ports_available
   render_nginx_configs
   validate_rendered_topology
+  # D-9a 三.3.2① 闸A: see x8_disk_preflight_before_build()'s own comment.
+  x8_disk_preflight_before_build || exit 69
   build_app_image
   # X8 release-identity gate work order (2026-09-05), 施工项一 4.3(一), amended
   # by the 2026-09-06 patch work order (决策二): the CANDIDATE deploy identity

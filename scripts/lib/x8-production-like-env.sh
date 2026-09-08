@@ -527,6 +527,16 @@ x8_export_static_topology() {
   export X8_NGINX_IMAGE="${X8_NGINX_IMAGE:-nginx:1.28.0-alpine}"
   export X8_BACKUP_INTERVAL_SECONDS="${X8_BACKUP_INTERVAL_SECONDS:-86400}"
   export X8_BACKUP_RUN_ON_START="${X8_BACKUP_RUN_ON_START:-true}"
+  # D-9a (施工工单_D9_up数据库准备原子化与镜像保留_2026-09-09.md 三.3.2①): Owner
+  # parameters, defaulted to the work order's own suggested values (第七节).
+  # X8_MIN_FREE_KIB_BUILD/X8_WARN_FREE_KIB_BUILD gate build_app_image() (闸A,
+  # x8_disk_preflight_before_build() in scripts/x8-production-like.sh);
+  # X8_MIN_FREE_KIB_DB gates prepare_database() (闸B, the core protection this
+  # work order adds -- see that function). All three are plain KiB integers,
+  # read by x8_free_disk_kib()/x8_require_free_disk_kib() below.
+  export X8_MIN_FREE_KIB_BUILD="${X8_MIN_FREE_KIB_BUILD:-8388608}"
+  export X8_WARN_FREE_KIB_BUILD="${X8_WARN_FREE_KIB_BUILD:-15728640}"
+  export X8_MIN_FREE_KIB_DB="${X8_MIN_FREE_KIB_DB:-2097152}"
   export X8_RUNTIME_DIR X8_SECRET_DIR X8_TLS_DIR X8_NGINX_RUNTIME_DIR X8_BACKUP_DIR X8_EVIDENCE_DIR
   export X8_GATE_STATE_FILE X8_BACKUP_PGPASS_FILE X8_IDENTITY_FILE X8_IDENTITY_CANDIDATE_FILE X8_IDENTITY_FAILURE_MARKER
 }
@@ -972,4 +982,58 @@ x8_verify_db_role_passwords_via_network() {
       return 65
     }
   done
+}
+
+# D-9a (施工工单_D9_up数据库准备原子化与镜像保留_2026-09-09.md 三.3.2①): echoes
+# the Docker VM filesystem's available space in KiB. Real-machine probe
+# (2026-09-09 调研, 附录A "本次只读实测数据"): `df -P -k /` run inside a
+# container reports the SAME numbers as `df -P -k /var/lib/postgresql/data`
+# on that same container -- both resolve to the Docker VM's own root
+# filesystem (/dev/vda1 on the machine this was verified against), which is
+# the one filesystem every image layer, container writable layer, and
+# Postgres data file this stack creates actually shares. Prefers the
+# already-running postgres container (no extra container start); falls back
+# to a disposable one-shot postgres:16.14 container -- the same image/pull
+# policy x8_verify_db_role_passwords_via_network() above already depends on,
+# so a machine that cannot run that one-shot container could not have run
+# `up` at all regardless of this check. Both paths failing is itself
+# fail-closed: callers of x8_require_free_disk_kib() below always treat a
+# non-zero return here as "cannot proceed", never as "assume space is fine".
+x8_free_disk_kib() {
+  local df_output free_kib
+  if ! df_output="$(x8_compose exec -T postgres df -P -k / 2>/dev/null)"; then
+    if ! df_output="$(docker run --rm --pull never postgres:16.14 df -P -k / 2>/dev/null)"; then
+      echo "ERROR: unable to determine free disk space via the running postgres container or a one-shot postgres:16.14 container -- this host likely cannot run 'up' at all right now" >&2
+      return 69
+    fi
+  fi
+  # `df -P` (POSIX output format) is a fixed two-line, whitespace-separated
+  # table: header, then one data line with Filesystem/1024-blocks/Used/
+  # Available/Capacity/"Mounted on" -- Available is the 4th field.
+  free_kib="$(printf '%s\n' "$df_output" | awk 'NR==2 { print $4 }')"
+  [[ "$free_kib" =~ ^[0-9]+$ ]] || {
+    echo "ERROR: could not parse 'df -P -k /' output while checking free disk space: $df_output" >&2
+    return 69
+  }
+  printf '%s\n' "$free_kib"
+}
+
+# D-9a 三.3.2①: fails closed (return 69, the same code every other
+# "environment isn't ready for `up`" refusal in scripts/x8-production-like.sh
+# already uses) when fewer than $1 KiB are free, naming $2 (a short scenario
+# description) in the message so an operator immediately knows which of the
+# two call sites (闸A before building a release image, 闸B before touching
+# the database) refused. Never partially executes its caller's next step:
+# every call site in scripts/x8-production-like.sh treats a non-zero return
+# here as "stop before doing anything else".
+x8_require_free_disk_kib() {
+  local min_kib="$1" scenario="$2"
+  local free_kib
+  free_kib="$(x8_free_disk_kib)" || return 69
+  if [[ "$free_kib" -lt "$min_kib" ]]; then
+    echo "ERROR: insufficient free disk space for $scenario -- ${free_kib} KiB available, ${min_kib} KiB required." >&2
+    echo "Reclaim space manually before retrying, e.g.: docker image prune -f   # dangling layers only -- never 'docker image prune -a' or 'docker system prune -a', which would also delete OTHER stacks' images on this host (see 施工工单_D9_up数据库准备原子化与镜像保留_2026-09-09.md 第六节 for the reviewed docker rmi command that only targets this stack's own old cps-novel:0.1.0-* release images)." >&2
+    return 69
+  fi
+  return 0
 }
