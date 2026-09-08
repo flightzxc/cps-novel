@@ -141,18 +141,29 @@ function requiredMetadataMissingFields(article: PublishGateArticleFacts): Publis
  * same fail-closed posture as the rest of this codebase's gates.
  *
  * C-27 fork: `facts.novel` is `null` for a non-`novel_article` (blog/
- * listicle/guide — see this file's header). For that branch, only three
+ * listicle/guide — see this file's header). For that branch, four
  * conditions apply — `locale_not_publishable` (read off `facts.article.locale`
- * instead), `required_metadata_missing`, `page_identity_conflict` — all
- * Article-level concepts a Novel-less row still has. The other five reasons
+ * instead), `required_metadata_missing`, `page_identity_conflict`, and
+ * `rights_blocked` (read off `facts.article.status` only — see below) — all
+ * Article-level concepts a Novel-less row still has. The other four reasons
  * (`preview_chapter_missing`/`preview_body_missing`/`promo_link_missing`/
- * `promo_link_not_ready`/`rights_blocked`) are entirely Novel-side concepts
- * (试读章节 belongs to the Novel; PromoLink readiness and rights removal are
- * both keyed off the Novel too) that a Novel-less Article cannot fail or
- * pass — they are skipped, not evaluated-and-cleared, for that branch. A
- * `novel_article` (`facts.novel` present) keeps exactly today's eight-reason
- * behavior, byte-for-byte — this fork only ever *narrows* what gets checked,
- * never changes a `novel_article`'s own evaluation.
+ * `promo_link_not_ready`) are entirely Novel-side concepts (试读章节 belongs
+ * to the Novel; PromoLink readiness is keyed off the Novel too) that a
+ * Novel-less Article cannot fail or pass — they are skipped, not
+ * evaluated-and-cleared, for that branch. A `novel_article` (`facts.novel`
+ * present) keeps exactly today's eight-reason behavior, byte-for-byte — this
+ * fork only ever *narrows* what gets checked, never changes a
+ * `novel_article`'s own evaluation.
+ *
+ * `rights_blocked` specifically: `visibility.ts`'s `isRightsBlocked` is
+ * `novel.status === "takedown" || article.status === "takedown"` — an OR of
+ * a Novel-side half and an Article-side half. A Novel-less Article has no
+ * Novel-side half to read, but it still has its own `status` column and can
+ * still be set to `takedown` (an Owner/ops rights-removal action on a blog
+ * post is exactly as real as on a novel_article) — a takedown blog must not
+ * publish. So this branch keeps the Article-side half of that OR
+ * (`facts.article.status === "takedown"`) rather than skipping
+ * `rights_blocked` entirely; only the Novel-side half is inapplicable here.
  */
 export function evaluatePublishGate(
   facts: PublishGateFacts,
@@ -189,6 +200,13 @@ export function evaluatePublishGate(
     if (isRightsBlocked(novel, { status: facts.article.status })) {
       reasons.push("rights_blocked");
     }
+  } else if (facts.article.status === "takedown") {
+    // Novel-less (non-novel_article) branch: only the Article-side half of
+    // `isRightsBlocked`'s OR applies (there is no Novel to read the other
+    // half from) — see this function's header. Inlined rather than calling
+    // `isRightsBlocked` itself, which requires a `NovelPublicationState`
+    // this branch does not have.
+    reasons.push("rights_blocked");
   }
 
   if (facts.pageIdentity.conflicting) {

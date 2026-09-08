@@ -192,13 +192,23 @@ describe("evaluatePublishGate", () => {
 
   /**
    * C-27 (`规划_文章管理能力补齐_博客类型可见性换小说_2026-09-08.md` §三/C-27):
-   * "判定器按文章类型分叉——novel_article 走今天这六条；非 novel_article 只走
-   * '语种可发布 + 必要元数据齐全 + 页面身份不冲突' 三条，跳过 '推广链接缺失 /
-   * 推广链接未就绪 / 试读章节缺失 / 试读正文缺失 / 权利阻断' 五条". `facts.novel
-   * === null` is this evaluator's fork signal (guaranteed equivalent to
-   * "article_type <> 'novel_article'" by `article_novel_id_by_type_check`,
-   * see `evaluator.ts`'s header) — these tests exercise that branch directly
-   * without needing a real blog Article row.
+   * "判定器按文章类型分叉——novel_article 走今天这六条；非 novel_article 走
+   * '语种可发布 + 必要元数据齐全 + 页面身份不冲突 + 权利阻断(仅 Article 侧)'
+   * 四条，跳过 '推广链接缺失 / 推广链接未就绪 / 试读章节缺失 / 试读正文缺失'
+   * 四条". `facts.novel === null` is this evaluator's fork signal (guaranteed
+   * equivalent to "article_type <> 'novel_article'" by
+   * `article_novel_id_by_type_check`, see `evaluator.ts`'s header) — these
+   * tests exercise that branch directly without needing a real blog Article
+   * row.
+   *
+   * M-1 (C-27 review closure): an earlier version of the `rights_blocked`
+   * test below asserted the reason is skipped entirely in this branch —
+   * that enshrined the wrong premise. `isRightsBlocked` (`visibility.ts`) is
+   * `novel.status === "takedown" || article.status === "takedown"`; a
+   * Novel-less Article has no Novel-side half to evaluate, but it still has
+   * its own `status`, and a takedown blog must not publish. See both
+   * `rights_blocked` tests below (fires on Article takedown; stays silent
+   * otherwise).
    */
   describe("C-27: non-novel_article fork (facts.novel === null)", () => {
     function blogFacts(overrides: Partial<PublishGateFacts> = {}): PublishGateFacts {
@@ -215,7 +225,7 @@ describe("evaluatePublishGate", () => {
       });
     }
 
-    it("is publishable with no Novel, no PromoLink, and no preview chapters — the three skipped conditions never fire", () => {
+    it("is publishable with no Novel, no PromoLink, no preview chapters, and a non-takedown status — every skipped/inapplicable condition stays silent", () => {
       const result = evaluatePublishGate(blogFacts(), { isPublishableLocale: ALWAYS_PUBLISHABLE });
       expect(result).toEqual({ publishable: true, reasons: [], requiredMetadataMissing: null });
     });
@@ -258,12 +268,21 @@ describe("evaluatePublishGate", () => {
       expect(result.reasons).not.toContain("promo_link_not_ready");
     });
 
-    it("never flags rights_blocked even when the Article's own status is takedown — rights_blocked is a Novel-side concept this branch skips entirely", () => {
+    it("M-1: still flags rights_blocked when the Article's own status is takedown — the Article-side half of isRightsBlocked's OR is not a Novel-side concept and is not skipped", () => {
       const result = evaluatePublishGate(
         blogFacts({ article: { status: "takedown", locale: "en", title: "t", slug: "s", body: "b" } }),
         { isPublishableLocale: ALWAYS_PUBLISHABLE },
       );
+      expect(result.reasons).toEqual(["rights_blocked"]);
+    });
+
+    it("M-1: does not flag rights_blocked for a non-takedown status — only the Article-side takedown case fires it in this branch", () => {
+      const result = evaluatePublishGate(
+        blogFacts({ article: { status: "ready", locale: "en", title: "t", slug: "s", body: "b" } }),
+        { isPublishableLocale: ALWAYS_PUBLISHABLE },
+      );
       expect(result.reasons).not.toContain("rights_blocked");
+      expect(result.publishable).toBe(true);
     });
   });
 });

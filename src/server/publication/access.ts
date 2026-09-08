@@ -56,13 +56,17 @@ export type NovelArticleAccessInput = {
  * Looks up the Article by (locale, slug) — matching the migration-only
  * partial unique index `article(locale, slug) WHERE deleted_at IS NULL`
  * (docs/governance/database-governance.md §5 item 5) — and classifies public
- * accessibility. Precedence (most severe first): rights-blocked always wins;
- * then `seoVisibility: "hidden"` (C-25 — a plain 404, checked before public
- * access so a hidden-but-otherwise-published Article never renders); then
- * full public access; then the stable noindex removal state (either side
- * literally `unpublished`, or both sides `published` but the promo link
- * degraded after the publish-time gate passed); everything else (draft/ready,
- * or simply no matching row) is a plain 404.
+ * accessibility. Precedence (most severe/earliest-checked first): a
+ * null-novel (non-`novel_article`) Article resolves as a plain 404 before
+ * any of the steps below even run (C-27 — this boundary is Novel-article-
+ * only until C-29, see the inline comment at that check); then, for a
+ * `novel_article`, rights-blocked always wins; then `seoVisibility: "hidden"`
+ * (C-25 — a plain 404, checked before public access so a
+ * hidden-but-otherwise-published Article never renders); then full public
+ * access; then the stable noindex removal state (either side literally
+ * `unpublished`, or both sides `published` but the promo link degraded after
+ * the publish-time gate passed); everything else (draft/ready, or simply no
+ * matching row) is a plain 404.
  */
 export async function checkNovelArticlePublicAccess(
   db: PrismaClient | Prisma.TransactionClient,
