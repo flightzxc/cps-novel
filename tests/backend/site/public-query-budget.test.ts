@@ -191,14 +191,21 @@ describe("公开侧一次渲染的查询数（cold cache）", () => {
 
     // Mirrors `src/app/page.tsx` as it now calls `@/app/_lib/public-load`
     // after lane D's wiring: `loadPublicCategories(locale)` once, whose
-    // result is handed to `loadChrome("home", categories)` (here simulated
-    // directly against `queries.ts` as `loadPublicChrome(client, "home",
-    // categories)`) instead of `loadChrome("home")` re-querying categories
-    // internally. `generateMetadata` and the page body both do this same
-    // pair of calls in production, but `React.cache()` request-scoping
-    // dedupes them to exactly the one round-trip each modelled here.
+    // result is handed to `loadChrome(locale, "home", categories)` (here
+    // simulated directly against `queries.ts` as `loadPublicChrome(client,
+    // PUBLIC_SITE_LOCALE, "home", categories)`) instead of `loadChrome
+    // (locale, "home")` re-querying categories internally. `generateMetadata`
+    // and the page body both do this same pair of calls in production, but
+    // `React.cache()` request-scoping dedupes them to exactly the one
+    // round-trip each modelled here.
+    //
+    // WO-1 (`施工工单_WO1-3_多语种公开站地基_2026-09-08.md` §6.3/§12.2):
+    // `loadPublicChrome` gained a required `locale` second positional
+    // argument (WO-1 §6.3's `src/lib/site/queries.ts` change) — the calls
+    // below are mechanically updated to pass `PUBLIC_SITE_LOCALE`; none of
+    // this file's assertion numbers changed.
     const categories = await listPublicCategories(client, PUBLIC_SITE_LOCALE);
-    await loadPublicChrome(client, "home", categories);
+    await loadPublicChrome(client, PUBLIC_SITE_LOCALE, "home", categories);
     await listHomeNovels(client, PUBLIC_SITE_LOCALE);
 
     const settingAndCategoryCalls =
@@ -223,7 +230,7 @@ describe("公开侧一次渲染的查询数（cold cache）", () => {
     const categories = await listPublicCategories(client, PUBLIC_SITE_LOCALE);
     expect(db.countOf("article.findMany")).toBe(1);
 
-    await loadPublicChrome(client, "home", categories);
+    await loadPublicChrome(client, PUBLIC_SITE_LOCALE, "home", categories);
     // `loadPublicChrome` must not have queried categories again.
     expect(db.countOf("article.findMany")).toBe(1);
   });
@@ -233,7 +240,7 @@ describe("公开侧一次渲染的查询数（cold cache）", () => {
     const client = db.asPrismaClient();
 
     await getPublicNovelDetail(client, "article-1");
-    await loadPublicChrome(client); // detail page's footer chrome call — no shared categories to pass in
+    await loadPublicChrome(client, PUBLIC_SITE_LOCALE); // detail page's footer chrome call — no shared categories to pass in
 
     expect(db.calls.length).toBeLessThanOrEqual(6);
   });
@@ -243,7 +250,7 @@ describe("公开侧一次渲染的查询数（cold cache）", () => {
     const client = db.asPrismaClient();
 
     await getPublicChapterView(client, "article-1", 1);
-    await loadPublicChrome(client);
+    await loadPublicChrome(client, PUBLIC_SITE_LOCALE);
 
     expect(db.calls.length).toBeLessThanOrEqual(7);
   });

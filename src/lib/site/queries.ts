@@ -2,7 +2,6 @@ import type { Prisma, PrismaClient } from "@prisma/client";
 
 import type { NovelCardView, NovelDetailView, ChapterView } from "@/features/public-ui/types";
 import type { SiteLocale } from "@/lib/locale/locale-canonical";
-import { PUBLIC_SITE_LOCALE } from "@/lib/site/locale-label";
 import { parseArticleSlugParam } from "@/lib/slug/article-path";
 import { checkNovelArticlePublicAccess } from "@/server/publication/access";
 import {
@@ -382,17 +381,24 @@ export async function getPublicChapterView(
  * factory would be `undefined` at render time.
  * `tests/backend/site/public-query-budget.test.ts` pins the resulting
  * per-render query count.
+ *
+ * WO-1 (`施工工单_WO1-3_多语种公开站地基_2026-09-08.md` §6.3): `locale` is now
+ * a required second positional argument (right after `db`, no default —
+ * same P0-S14 rule `chromeFromSiteSetting` follows). Every caller —
+ * `@/app/_lib/public-load`'s `loadChrome` included — must pass it
+ * explicitly now.
  */
 export async function loadPublicChrome(
   db: PrismaClient | Prisma.TransactionClient,
+  locale: SiteLocale,
   current?: PublicChromeCurrent,
   categories?: readonly PublicTaxonomyTag[],
 ) {
   const [settings, resolvedCategories] = await Promise.all([
     getSiteSetting(db),
-    categories ?? listPublicCategories(db, PUBLIC_SITE_LOCALE),
+    categories ?? listPublicCategories(db, locale),
   ]);
-  return { settings, chrome: chromeFromSiteSetting(settings, current, resolvedCategories) };
+  return { settings, chrome: chromeFromSiteSetting(settings, locale, current, resolvedCategories) };
 }
 
 export type { SiteSettingSnapshot };

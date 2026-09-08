@@ -45,16 +45,26 @@ import { checkBlogArticlePublicAccess } from "@/server/publication/access";
  *
  * Both this and `loadPublicCategories` are `React.cache()`-scoped per
  * request: when `src/app/page.tsx`'s `generateMetadata` and its default
- * export each call `loadPublicCategories(locale)` then `loadChrome("home",
- * categories)` with the same locale and the same (cache-deduped,
+ * export each call `loadPublicCategories(locale)` then `loadChrome(locale,
+ * "home", categories)` with the same locale and the same (cache-deduped,
  * reference-equal) categories array, the pair collapses to one underlying
  * `getSiteSetting` + one `listPublicCategories` round-trip for the whole
  * render, not two of each. See `tests/backend/site/public-query-budget.test.ts`
  * for the query-count regression gate.
+ *
+ * WO-1 (`施工工单_WO1-3_多语种公开站地基_2026-09-08.md` §6.3): `locale` is now
+ * a required first argument, no default (P0-S14 — see `messages/index.ts`'s
+ * `getPublicT` doc comment for the full rationale: a default here would let
+ * a caller silently render English chrome under a non-English locale prefix
+ * once a second locale opens). Every one of the 8 public page bodies under
+ * `src/app/_pages/` now passes its own `locale` param through explicitly.
  */
 export const loadChrome = cache(
-  async (current?: PublicChromeCurrent, categories?: readonly PublicTaxonomyTag[]) =>
-    loadPublicChrome(prisma, current, categories),
+  async (
+    locale: SiteLocale,
+    current?: PublicChromeCurrent,
+    categories?: readonly PublicTaxonomyTag[],
+  ) => loadPublicChrome(prisma, locale, current, categories),
 );
 
 export const loadHomeNovels = cache(async (locale: SiteLocale) => listHomeNovels(prisma, locale));

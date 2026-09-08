@@ -1,17 +1,27 @@
 import type { SiteChrome } from "@/features/public-ui/layout/SiteShell";
+import type { SiteLocale } from "@/lib/locale/locale-canonical";
 import { getPublicT } from "@/lib/locale/messages";
-import { PUBLIC_SITE_LOCALE } from "@/lib/site/locale-label";
 import type { SiteSettingSnapshot } from "@/server/site-settings/service";
 import type { PublicTaxonomyTag } from "./public-taxonomy";
 
 export type PublicChromeCurrent = "home" | "browse";
 
+/**
+ * WO-1 (`施工工单_WO1-3_多语种公开站地基_2026-09-08.md` §6.3): `locale` is now
+ * a required second argument (inserted right after `settings`, no default —
+ * P0-S14's "no default locale" rule, see `messages/index.ts`'s
+ * `getPublicT` doc comment). Every call site must now pass it explicitly.
+ * Link fields below (`brandHref`, nav `href`s) stay bare-path literals on
+ * purpose — locale-prefixing those is WO-2's job, not this one's; only the
+ * text lookup (`getPublicT`) reacts to `locale` in this pass.
+ */
 export function chromeFromSiteSetting(
   settings: SiteSettingSnapshot,
+  locale: SiteLocale,
   current?: PublicChromeCurrent,
   categories: readonly PublicTaxonomyTag[] = [],
 ): SiteChrome {
-  const t = getPublicT(PUBLIC_SITE_LOCALE);
+  const t = getPublicT(locale);
   const footerNote = [settings.footerCopyrightText, settings.footerDisclaimerText]
     .map((value) => value.trim())
     .filter(Boolean)

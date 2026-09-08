@@ -6,6 +6,8 @@ import {
   resolveAdminHost,
   resolveSiteHostSafely,
 } from "@/lib/site/admin-origin";
+import { getSiteUrl } from "@/lib/seo/site-url";
+import { PUBLIC_SITE_LOCALE } from "@/lib/site/locale-label";
 
 /**
  * RC-9 admin-host isolation (2026-09-03, Owner).
@@ -58,6 +60,28 @@ function denied(): NextResponse {
   return new NextResponse(null, { status: 404 });
 }
 
+/**
+ * WO-1 (`施工工单_WO1-3_多语种公开站地基_2026-09-08.md` §6.5): `/en`, `/en/`,
+ * `/en/anything` -> the bare-path equivalent (query string preserved).
+ * `/enterprise` and friends must NOT match — the prefix must be exactly
+ * `/en` or start with `/en/`. Ported from the short-drama sister site's
+ * `src/i18n/default-locale-redirect.ts` (`getDefaultLocaleRedirectPath`),
+ * generalized from its hardcoded `routing.defaultLocale` to this site's own
+ * `PUBLIC_SITE_LOCALE`. Deliberately does NOT replicate that sister site's
+ * `/en/blog` 301 special case (`src/proxy.ts:261-265` there) — that is a
+ * documented, unexplained historical inconsistency (see this work order's
+ * §十三 item 3); every `/en/*` path here gets the same 308.
+ *
+ * Pure function, no `NextRequest`/`NextResponse` dependency, so it is
+ * directly unit-testable (`tests/ui/default-locale-redirect.test.ts`).
+ */
+export function buildDefaultLocaleRedirectTarget(pathname: string, search: string): string | null {
+  const prefix = `/${PUBLIC_SITE_LOCALE}`;
+  if (pathname !== prefix && !pathname.startsWith(`${prefix}/`)) return null;
+  const rest = pathname.slice(prefix.length);
+  return `${!rest || rest === "/" ? "/" : rest}${search}`;
+}
+
 export function proxy(request: NextRequest): NextResponse {
   const result = evaluateAdminHostAccess(
     {
@@ -73,7 +97,30 @@ export function proxy(request: NextRequest): NextResponse {
 
   if (result.sameOriginProductionMisconfig) warnSameOriginProductionMisconfigOnce();
 
-  return result.allow ? NextResponse.next() : denied();
+  if (!result.allow) return denied();
+
+  // WO-1 §6.5: only reached once the admin-host isolation check above has
+  // already allowed the request — the 404 priority above must never be
+  // bypassed by this redirect.
+  const redirectTarget = buildDefaultLocaleRedirectTarget(request.nextUrl.pathname, request.nextUrl.search);
+  if (redirectTarget) {
+    try {
+      // Built from the site's own configured canonical origin
+      // (`getSiteUrl()`), never from the request's own Host header — the
+      // same discipline `resolveSiteHostSafely()` above documents (a
+      // request-controlled Location would let a spoofed Host leak into a
+      // redirect response, e.g. `Location: http://localhost:3000/...`).
+      return NextResponse.redirect(new URL(redirectTarget, getSiteUrl()), 308);
+    } catch {
+      // SITE_URL misconfigured (`SiteUrlConfigurationError`): fail closed on
+      // this redirect specifically — `/en/*` keeps 404ing exactly as it did
+      // before this pass — rather than letting a config error take down the
+      // whole request the way `resolveSiteHostSafely()` avoids for the
+      // admin-host check above.
+    }
+  }
+
+  return NextResponse.next();
 }
 
 // Excludes Next's own build-time static assets — nothing this proxy decides

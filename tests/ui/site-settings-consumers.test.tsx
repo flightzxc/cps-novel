@@ -19,7 +19,9 @@ describe("SiteSetting public consumers", () => {
   });
 
   it("projects friend links and copyright/disclaimer into footer chrome", () => {
-    const chrome = chromeFromSiteSetting(setting);
+    // WO-1 (`施工工单_WO1-3_多语种公开站地基_2026-09-08.md` §6.3): `locale`
+    // became a required second positional argument, mechanically added here.
+    const chrome = chromeFromSiteSetting(setting, "en");
     expect(chrome.footerLinks).toEqual([expect.objectContaining({ label: "Partner", href: "https://partner.example", external: true, nofollow: true })]);
     expect(chrome.footerNote).toContain("© Haiyue");
     expect(chrome.footerNote).toContain("Disclaimer");

@@ -19,6 +19,10 @@ export const en = {
     copyright: "Content and copyright",
     footerNote:
       "This site offers free preview chapters. The full story is on the original platform.",
+    // WO-1 §5.4/§6.4 (new key): the locale switcher's trigger-button aria
+    // label. Consumed starting WO-2 — this key only exists so WO-2/WO-3
+    // don't both need to touch en.ts (see the work order's rationale).
+    language: "Language",
   },
   home: {
     works: "Works",
@@ -87,6 +91,16 @@ export const en = {
     allWorksEmpty: "No publicly available works yet.",
     genreDescription: "Works you can read in this collection.",
     genreEmpty: "No works in this collection yet.",
+    // WO-1 §5.4/§6.4 (new keys): frozen verbatim from the bare string
+    // literals they replace in `src/app/browse/page.tsx` and
+    // `src/app/category/[slug]/page.tsx` — English output is byte-identical
+    // before/after. Deliberately new keys, not aliases onto `genreEmpty`
+    // ("No works in this collection yet.") — that is a different sentence
+    // that is already visible elsewhere; reusing it here would change what
+    // the category empty-state actually says.
+    categoryTitle: "{name} novels",
+    browseSeoDescription: "Published novels.",
+    categoryEmpty: "No published novels in this category.",
   },
   unavailable: {
     unpublishedTitle: "This book is temporarily unavailable",
