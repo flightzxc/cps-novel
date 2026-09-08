@@ -66,6 +66,27 @@ describe("src/proxy.ts — locale request header forwarding", () => {
     expect(forwardedLocale(response)).toBe("en");
   });
 
+  it("overwrites a client-supplied x-novel-locale header with the proxy's own derivation, rather than trusting it", () => {
+    vi.stubEnv("SITE_URL", ORIGIN);
+    vi.stubEnv("ADMIN_CANONICAL_ORIGIN", `https://${ADMIN_HOST}`);
+    vi.stubEnv("NODE_ENV", "production");
+
+    // "ja" is registered (`SITE_LOCALES`) but not (yet) open
+    // (`PUBLISHABLE_LOCALES` is still `{"en"}`) — an inbound request that
+    // already carries this header (a client, a misbehaving proxy hop, or an
+    // attacker probing for locale smuggling) must not have it trusted:
+    // `new Headers(request.headers)` copies the client's value in first,
+    // and only the subsequent `.set(SITE_LOCALE_REQUEST_HEADER, ...)`
+    // (proxy.ts, right below the WO-2 §8.2 comment) makes the proxy's own
+    // derivation win instead.
+    const request = new NextRequest(`${ORIGIN}/`, {
+      headers: { host: SITE_HOST, [SITE_LOCALE_REQUEST_HEADER]: "ja" },
+    });
+    const response = proxy(request);
+    expect(response.status).toBe(200);
+    expect(forwardedLocale(response)).toBe("en");
+  });
+
   it("does not attach the locale header to a 404 admin-host denial (that response never carries a forwarded request)", () => {
     vi.stubEnv("SITE_URL", ORIGIN);
     vi.stubEnv("ADMIN_CANONICAL_ORIGIN", `https://${ADMIN_HOST}`);

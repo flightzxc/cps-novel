@@ -22,15 +22,12 @@ export function SiteHeader({
   brandHref = "/",
   brandName,
   navItems = [],
-  localeNav,
   overlay = false,
 }: {
   brandHref?: string;
   /** 站点品牌名。缺失或空白时 `BrandLockup` 回落到占位符。 */
   brandName?: string;
   navItems?: NavItem[];
-  /** 语言入口。只有在确实存在多个可发布语种时才由调用方传入。 */
-  localeNav?: NavItem[];
   /**
    * 浮在主视觉 Hero 之上：无底色、无毛玻璃、无分隔线，仅靠 Hero 的纵向压黑保证可读。
    * 滚出 Hero 后自动恢复底色与分隔线。不传时行为与普通页头完全一致。
@@ -77,9 +74,6 @@ export function SiteHeader({
   // 展开移动端菜单时必须落回实底，否则菜单会压在主视觉图上读不清
   const transparent = overlay && !pinned && !menuOpen;
 
-  const allItems =
-    localeNav && localeNav.length > 0 ? [...navItems, ...localeNav] : navItems;
-
   // Esc 关闭并把焦点交还给触发按钮，否则键盘用户会掉进页面顶部
   useEffect(() => {
     if (!menuOpen) {
@@ -115,7 +109,7 @@ export function SiteHeader({
             {/* 桌面导航 */}
             <nav aria-label={t("nav.mainNav")} className="hidden md:block">
               <ul className="flex list-none items-center gap-7 p-0">
-                {allItems.map((item) => (
+                {navItems.map((item) => (
                   <li key={item.href + item.label}>
                     <NavLink item={item} />
                   </li>
@@ -126,7 +120,9 @@ export function SiteHeader({
             {/* 语言入口。只有在确实存在多个可发布语种时才渲染任何 DOM
                 （`LocaleSwitcher` 组件自身在 `listPublishableLocales().length
                 <= 1` 时返回 null）——首发只有 en 一个可发布语种时，这里不
-                改变页头的可见结构。 */}
+                改变页头的可见结构。这是本站唯一的语种切换入口——没有第二个
+                通过 `navItems` 注入的旁路（WO-2 review：移除了此前从未被
+                任何调用方填充过的 `SiteChrome.localeNav` 槽位）。 */}
             <LocaleSwitcher />
           </div>
 
@@ -174,7 +170,7 @@ export function SiteHeader({
           >
             <Container as="nav" className="py-2">
               <ul className="flex list-none flex-col p-0">
-                {allItems.map((item) => (
+                {navItems.map((item) => (
                   <li
                     key={item.href + item.label}
                     className="border-b border-novel-border last:border-b-0"

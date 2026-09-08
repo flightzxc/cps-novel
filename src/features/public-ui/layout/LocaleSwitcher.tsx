@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 
 import { useLocale, useT } from "@/lib/locale/messages/MessagesProvider";
 import {
@@ -64,11 +64,24 @@ function normalizePathname(pathname: string): string {
  * parsing, not a servability decision, and a link built from the result is
  * always re-prefixed against the caller's OWN target locale afterward, so a
  * broader recognition set here cannot widen what ends up rendered.
+ *
+ * `decodeURIComponent` throws a `URIError` on a malformed percent-escape
+ * (`/%zz`, a truncated `/%E0%A4%A`) — this runs on every render (`usePathname()`
+ * feeds straight into `buildLocaleSwitchHref` below, called once per menu
+ * item), so a malformed segment must never crash the switcher. Caught and
+ * treated exactly like "not a recognized locale prefix": no prefix
+ * stripped, the raw path passes through untouched.
  */
 export function stripLocalePrefix(pathname: string): string {
   const normalized = normalizePathname(pathname);
   const [, firstSegment = "", ...rest] = normalized.split("/");
-  if (!RECOGNIZED_PATH_PREFIXES.has(decodeURIComponent(firstSegment))) {
+  let decodedFirstSegment: string;
+  try {
+    decodedFirstSegment = decodeURIComponent(firstSegment);
+  } catch {
+    return normalized;
+  }
+  if (!RECOGNIZED_PATH_PREFIXES.has(decodedFirstSegment)) {
     return normalized;
   }
   return rest.length > 0 ? `/${rest.join("/")}` : "/";
@@ -121,6 +134,7 @@ function LocaleSwitcherMenu({ selectable }: { selectable: readonly SiteLocale[] 
   const t = useT();
   const locale = useLocale();
   const pathname = usePathname();
+  const router = useRouter();
   const menuId = useId();
   const rootRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -150,7 +164,33 @@ function LocaleSwitcherMenu({ selectable }: { selectable: readonly SiteLocale[] 
     };
   }, [isOpen]);
 
-  const search = typeof window === "undefined" ? "" : window.location.search;
+  /**
+   * `window.location.search` is deliberately NOT read here, in the render
+   * body — CPS's own switcher (`src/components/site/locale-switcher.tsx`'s
+   * `switchLocale`) never touches `location` synchronously during render
+   * either, only inside its click handler. Reading it here would also be a
+   * real hydration bug: `window` is undefined during the server render (so
+   * the SSR'd `href`s never carry a query string), but defined on the very
+   * first CLIENT render of this "use client" component, so any real query
+   * string would make that first client render's `href`s disagree with
+   * what the server sent — a genuine markup mismatch, not just an SSR
+   * fallback that later catches up. `handleSwitchClick` below reads it
+   * fresh at click time instead, when there is no server/client value to
+   * disagree with.
+   */
+  function handleSwitchClick(event: ReactMouseEvent<HTMLAnchorElement>, target: SiteLocale) {
+    setIsOpen(false);
+    // Let the browser handle its own default gesture (open in new tab/
+    // window, "save link as", etc.) untouched — only a plain, unmodified
+    // left click gets the query-string-preserving override below.
+    if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+      return;
+    }
+    const search = window.location.search;
+    if (!search) return; // the rendered href is already correct with no query string
+    event.preventDefault();
+    router.push(buildLocaleSwitchHref(pathname ?? "/", target, search));
+  }
 
   return (
     <div ref={rootRef} className="relative inline-flex">
@@ -191,8 +231,8 @@ function LocaleSwitcherMenu({ selectable }: { selectable: readonly SiteLocale[] 
                 key={item}
                 role="menuitem"
                 aria-current={isCurrent ? "true" : undefined}
-                href={buildLocaleSwitchHref(pathname ?? "/", item, search)}
-                onClick={() => setIsOpen(false)}
+                href={buildLocaleSwitchHref(pathname ?? "/", item)}
+                onClick={(event) => handleSwitchClick(event, item)}
                 className={`block w-full rounded-novel-sm px-3 py-2 text-left text-sm transition-colors ${
                   isCurrent
                     ? "bg-novel-bg text-novel-primary"

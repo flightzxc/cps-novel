@@ -14,9 +14,11 @@ import { loadPublicTaxonomyByNovelIds } from "@/lib/site/public-taxonomy";
  * `expect.objectContaining` without `href`).
  *
  * No message-catalog dependency here — `public-taxonomy.ts` never calls
- * `getPublicT`/`loadMessages`, so this exercises a genuinely non-"en"
- * `SiteLocale` value without needing WO-3's not-yet-landed deep-merge
- * fallback (`es.ts` etc. are still empty placeholders in this worktree).
+ * `getPublicT`/`loadMessages` at all, so this file has no reason to mock
+ * `@/lib/locale/messages` (unlike its `locale-aware-page-links.test.tsx`/
+ * `locale-aware-chrome-links.test.ts` siblings): the `href` this module
+ * builds never goes through a translation lookup, regardless of whether a
+ * locale's catalog (e.g. `es.ts`) is complete.
  */
 
 const NOVEL_ID = "11111111-1111-4111-8111-111111111111";

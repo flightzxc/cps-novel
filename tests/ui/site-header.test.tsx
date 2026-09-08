@@ -39,19 +39,9 @@ describe("页头", () => {
     expect(active.className).toContain("text-novel-primary");
   });
 
-  it("语种入口在只有一个可发布语种时不出现", () => {
+  it("语种入口在只有一个可发布语种时不出现（唯一的语种切换机制是 LocaleSwitcher，见 locale-switcher(-multi-locale).test.tsx）", () => {
     renderWithMessages(<SiteHeader navItems={NAV} />);
     expect(screen.queryByRole("link", { name: "English" })).toBeNull();
-  });
-
-  it("有多个可发布语种时才渲染语种入口", () => {
-    renderWithMessages(
-      <SiteHeader
-        navItems={NAV}
-        localeNav={[{ label: "English", href: "/en" }]}
-      />,
-    );
-    expect(screen.getAllByRole("link", { name: "English" }).length).toBeGreaterThan(0);
   });
 
   it("传入品牌名时渲染该品牌名，不再是占位符", () => {

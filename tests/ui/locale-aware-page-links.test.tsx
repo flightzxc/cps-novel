@@ -13,29 +13,16 @@ import type { NovelCardView } from "@/features/public-ui/types";
  * and a genuinely non-default `SiteLocale` (proving the prefix is really
  * threaded through).
  *
- * 🔴 The `@/lib/locale/messages` mock below is the reason this file can use
- * a non-"en" locale at all today. WO-2 does NOT implement WO-3's
- * deep-merge-to-English fallback — `src/lib/locale/messages/es.ts` (and
- * every other non-"en" catalog) is still an intentionally empty placeholder
- * in this worktree, and the real `loadMessages`/`getPublicT` throw
- * `MissingMessagesError` for any locale but `"en"` (`index.ts`'s own doc
- * comment: "Incomplete catalogs throw — never merge onto en"). That
- * completeness gap is WO-3's job, not this file's concern — this override
- * exists purely to let a `"es"` `SiteLocale` value flow far enough through
- * these page bodies to observe the prop it actually changed (an href
- * string), without needing real Spanish copy to exist yet. For `"en"`
- * itself the override is a no-op passthrough to the real, unmocked
- * `loadMessages("en")`/`getPublicT("en")` — so every `"en"` assertion below
- * is still a faithful regression check, not weakened by this mock.
+ * No mock on `@/lib/locale/messages`: WO-3 shipped a real, complete Spanish
+ * catalog (`src/lib/locale/messages/es.ts`) and `loadMessages`/`getPublicT`
+ * deep-merge onto `en` rather than throwing on an incomplete catalog, so
+ * `"es"` renders its own real strings end to end here. Each `es` case below
+ * queries by the actual Spanish accessible name (e.g. "Ver todo",
+ * "Siguiente", "Volver al inicio") instead of the English one — that
+ * doubles as a live check that WO-3's catalog is actually wired up, not
+ * just that the href prefix changed. The `en` assertions are untouched and
+ * stay byte-identical to before this pass.
  */
-vi.mock("@/lib/locale/messages", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/lib/locale/messages")>();
-  return {
-    ...actual,
-    loadMessages: () => actual.loadMessages("en"),
-    getPublicT: () => actual.getPublicT("en"),
-  };
-});
 
 vi.mock("next/navigation", () => ({
   notFound: () => {
@@ -140,34 +127,34 @@ afterEach(() => {
 });
 
 describe.each([
-  { locale: "en" as const, prefix: "" },
-  { locale: "es" as const, prefix: "/es" },
-])("home.tsx · HomeBody — browseAllHref ($locale)", ({ locale, prefix }) => {
-  it(`"View all" links to ${prefix || ""}/browse`, async () => {
+  { locale: "en" as const, prefix: "", name: "View all" },
+  { locale: "es" as const, prefix: "/es", name: "Ver todo" },
+])("home.tsx · HomeBody — browseAllHref ($locale)", ({ locale, prefix, name }) => {
+  it(`"${name}" links to ${prefix || ""}/browse`, async () => {
     const tree = await HomeBody({ locale });
     render(tree);
-    const link = screen.getByRole("link", { name: "View all" });
+    const link = screen.getByRole("link", { name });
     expect(link.getAttribute("href")).toBe(`${prefix}/browse`);
   });
 });
 
 describe.each([
-  { locale: "en" as const, prefix: "" },
-  { locale: "es" as const, prefix: "/es" },
-])("browse.tsx · BrowseBody — Pagination basePath ($locale)", ({ locale, prefix }) => {
-  it(`paginator's Next link starts with ${prefix || ""}/browse`, async () => {
+  { locale: "en" as const, prefix: "", name: "Next" },
+  { locale: "es" as const, prefix: "/es", name: "Siguiente" },
+])("browse.tsx · BrowseBody — Pagination basePath ($locale)", ({ locale, prefix, name }) => {
+  it(`paginator's "${name}" link starts with ${prefix || ""}/browse`, async () => {
     const tree = await BrowseBody({ locale, searchParams: Promise.resolve({ page: "1" }) });
     render(tree);
-    const next = screen.getByRole("link", { name: "Next" });
+    const next = screen.getByRole("link", { name });
     expect(next.getAttribute("href")).toBe(`${prefix}/browse?page=2`);
   });
 });
 
 describe.each([
-  { locale: "en" as const, prefix: "" },
-  { locale: "es" as const, prefix: "/es" },
-])("category.tsx · CategoryBody — Pagination basePath ($locale)", ({ locale, prefix }) => {
-  it(`paginator's Next link starts with ${prefix || ""}/category/fantasy`, async () => {
+  { locale: "en" as const, prefix: "", name: "Next" },
+  { locale: "es" as const, prefix: "/es", name: "Siguiente" },
+])("category.tsx · CategoryBody — Pagination basePath ($locale)", ({ locale, prefix, name }) => {
+  it(`paginator's "${name}" link starts with ${prefix || ""}/category/fantasy`, async () => {
     getPublicCategoryPage.mockResolvedValue({
       novels: Array.from({ length: 20 }, (_, i) => card(`c${i}`)),
       page: 1,
@@ -188,56 +175,56 @@ describe.each([
       searchParams: Promise.resolve({ page: "1" }),
     });
     render(tree);
-    const next = screen.getByRole("link", { name: "Next" });
+    const next = screen.getByRole("link", { name });
     expect(next.getAttribute("href")).toBe(`${prefix}/category/fantasy?page=2`);
   });
 });
 
 describe.each([
-  { locale: "en" as const, prefix: "" },
-  { locale: "es" as const, prefix: "/es" },
-])("novel-not-found.tsx · NovelNotFoundBody — homeHref ($locale)", ({ locale, prefix }) => {
-  it(`"Back to home" links to ${prefix || "/"}`, () => {
+  { locale: "en" as const, prefix: "", name: "Back to home" },
+  { locale: "es" as const, prefix: "/es", name: "Volver al inicio" },
+])("novel-not-found.tsx · NovelNotFoundBody — homeHref ($locale)", ({ locale, prefix, name }) => {
+  it(`"${name}" links to ${prefix || "/"}`, () => {
     render(NovelNotFoundBody({ locale }));
-    const link = screen.getByRole("link", { name: "Back to home" });
+    const link = screen.getByRole("link", { name });
     expect(link.getAttribute("href")).toBe(prefix ? prefix : "/");
   });
 });
 
 describe.each([
-  { locale: "en" as const, prefix: "" },
-  { locale: "es" as const, prefix: "/es" },
-])("novel-detail.tsx · NovelBody unavailable branch — homeHref ($locale)", ({ locale, prefix }) => {
-  it(`"Back to home" links to ${prefix || "/"}`, async () => {
+  { locale: "en" as const, prefix: "", name: "Back to home" },
+  { locale: "es" as const, prefix: "/es", name: "Volver al inicio" },
+])("novel-detail.tsx · NovelBody unavailable branch — homeHref ($locale)", ({ locale, prefix, name }) => {
+  it(`"${name}" links to ${prefix || "/"}`, async () => {
     loadArticleAccess.mockResolvedValue({ kind: "unavailable", title: "A Novel" });
     const tree = await NovelBody({ locale, params: Promise.resolve({ slugParam: "a-novel-pabc123" }) });
     render(tree);
-    const link = screen.getByRole("link", { name: "Back to home" });
+    const link = screen.getByRole("link", { name });
     expect(link.getAttribute("href")).toBe(prefix ? prefix : "/");
   });
 });
 
 describe.each([
-  { locale: "en" as const, prefix: "" },
-  { locale: "es" as const, prefix: "/es" },
-])("chapter.tsx · ChapterBody unavailable branch — homeHref ($locale)", ({ locale, prefix }) => {
-  it(`"Back to home" links to ${prefix || "/"}`, async () => {
+  { locale: "en" as const, prefix: "", name: "Back to home" },
+  { locale: "es" as const, prefix: "/es", name: "Volver al inicio" },
+])("chapter.tsx · ChapterBody unavailable branch — homeHref ($locale)", ({ locale, prefix, name }) => {
+  it(`"${name}" links to ${prefix || "/"}`, async () => {
     loadArticleAccess.mockResolvedValue({ kind: "unavailable", title: "A Novel" });
     const tree = await ChapterBody({
       locale,
       params: Promise.resolve({ slugParam: "a-novel-pabc123", chapterNumber: "1" }),
     });
     render(tree);
-    const link = screen.getByRole("link", { name: "Back to home" });
+    const link = screen.getByRole("link", { name });
     expect(link.getAttribute("href")).toBe(prefix ? prefix : "/");
   });
 });
 
 describe.each([
-  { locale: "en" as const, prefix: "" },
-  { locale: "es" as const, prefix: "/es" },
-])("blog-list.tsx · BlogListBody — Pagination basePath ($locale)", ({ locale, prefix }) => {
-  it(`paginator's Next link starts with ${prefix || ""}/blog`, async () => {
+  { locale: "en" as const, prefix: "", name: "Next" },
+  { locale: "es" as const, prefix: "/es", name: "Siguiente" },
+])("blog-list.tsx · BlogListBody — Pagination basePath ($locale)", ({ locale, prefix, name }) => {
+  it(`paginator's "${name}" link starts with ${prefix || ""}/blog`, async () => {
     loadBlogList.mockResolvedValue(
       Array.from({ length: 21 }, (_, i) => ({
         id: `p${i}`,
@@ -250,20 +237,20 @@ describe.each([
     );
     const tree = await BlogListBody({ locale, searchParams: Promise.resolve({ page: "1" }) });
     render(tree);
-    const next = screen.getByRole("link", { name: "Next" });
+    const next = screen.getByRole("link", { name });
     expect(next.getAttribute("href")).toBe(`${prefix}/blog?page=2`);
   });
 });
 
 describe.each([
-  { locale: "en" as const, prefix: "" },
-  { locale: "es" as const, prefix: "/es" },
-])("blog-detail.tsx · BlogDetailBody unavailable branch — homeHref ($locale)", ({ locale, prefix }) => {
-  it(`"Back to home" links to ${prefix || "/"}`, async () => {
+  { locale: "en" as const, prefix: "", name: "Back to home" },
+  { locale: "es" as const, prefix: "/es", name: "Volver al inicio" },
+])("blog-detail.tsx · BlogDetailBody unavailable branch — homeHref ($locale)", ({ locale, prefix, name }) => {
+  it(`"${name}" links to ${prefix || "/"}`, async () => {
     loadBlogAccess.mockResolvedValue({ kind: "unavailable", title: "A Post" });
     const tree = await BlogDetailBody({ locale, params: Promise.resolve({ slug: "a-post" }) });
     render(tree);
-    const link = screen.getByRole("link", { name: "Back to home" });
+    const link = screen.getByRole("link", { name });
     expect(link.getAttribute("href")).toBe(prefix ? prefix : "/");
   });
 });

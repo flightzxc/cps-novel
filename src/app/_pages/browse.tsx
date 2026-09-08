@@ -29,10 +29,10 @@ import { paginateCards } from "@/lib/site/queries";
  * are all otherwise untouched). `getPublicT(locale)` stays called inline in
  * the not-found branch (matching the original's `getPublicT(PUBLIC_SITE_
  * LOCALE)("meta.notFound")` call) and the `t` used by the success path is
- * declared after that branch, not hoisted above `loadBrowsePage` — once
- * stub locales exist, `getPublicT`/`loadMessages` throws on an incomplete
- * catalog, and hoisting it above the early return would move that throw
- * onto every metadata call instead of only the ones that actually reach it.
+ * declared after that branch, not hoisted above `loadBrowsePage` — WO-1's
+ * verbatim extraction keeps the call at the literal's original spot; there
+ * is no throw to scope by hoisting (WO-3's `loadMessages` deep-merges onto
+ * `en` and never throws on an incomplete catalog).
  */
 
 export type BrowseSearchParams = { page?: string | string[]; category?: string | string[] };

@@ -27,11 +27,11 @@ import { buildArticlePath, buildArticleRoutePath, localePrefix } from "@/lib/slu
  * English output), called inline at each site exactly where the literal
  * used to sit — never hoisted into a shared `const t` above them, since
  * `buildNovelMetadata`'s success path never needs `t` at all (unlike
- * `buildBrowseMetadata`'s). Once stub locales exist, `getPublicT`/
- * `loadMessages` throws on an incomplete catalog; hoisting the call above
- * `loadArticleAccess` would move that throw onto every metadata call
- * instead of only the not-found ones that actually reach it. No other
- * line's semantics changed: query order, `notFound()` timing
+ * `buildBrowseMetadata`'s). WO-1's verbatim extraction keeps each call at
+ * the literal's original spot; there is no throw to scope by hoisting
+ * above `loadArticleAccess` (WO-3's `loadMessages` deep-merges onto `en`
+ * and never throws on an incomplete catalog). No other line's semantics
+ * changed: query order, `notFound()` timing
  * (`not_found`/`takedown` both still 404 here, `unavailable` still renders
  * `UnavailableScreen`), and SEO field construction (including the
  * hreflang-sibling helper) are untouched.

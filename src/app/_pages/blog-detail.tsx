@@ -36,11 +36,13 @@ import type { BlogArticleAccessResult } from "@/server/publication/access";
  * `getPublicT(locale)("meta.notFound")` per WO-1 §6.4 (byte-identical
  * English output), called inline at each site exactly where the literal
  * used to sit — `buildBlogDetailMetadata`'s success path never needs `t`,
- * so no shared `const t` is declared at all. Once stub locales exist,
- * `getPublicT`/`loadMessages` throws on an incomplete catalog; hoisting the
- * call above `loadBlogPage` would move that throw onto every metadata call
- * instead of only the not-found/takedown ones that actually reach it. No
- * other line's semantics changed.
+ * so no shared `const t` is declared at all. `getPublicT(locale)` stays
+ * called inline at each not-found/takedown site rather than hoisted above
+ * `loadBlogPage` — WO-1 §6.1 extracted this body verbatim out of the
+ * original page.tsx, literal-for-literal, so each call sits exactly where
+ * the literal it replaces used to sit; there is no throw left to scope by
+ * hoisting (WO-3's `loadMessages` deep-merges onto `en` and never throws).
+ * No other line's semantics changed.
  */
 
 export type BlogDetailRouteParams = { slug: string };

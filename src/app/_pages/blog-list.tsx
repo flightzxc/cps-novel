@@ -32,11 +32,11 @@ import { paginateBlogCards } from "@/lib/site/blog-queries";
  * `getPublicT(locale)("meta.notFound")`, called inline at that early return
  * exactly where the literal used to sit. `t` itself stays declared only
  * after that branch (as in the original, for the success path's
- * `t("blog.listTitle")`) rather than hoisted above it — once stub locales
- * exist, `getPublicT`/`loadMessages` throws on an incomplete catalog, and
- * hoisting it above `loadBlogListPage` would move that throw onto every
- * metadata call instead of only the not-found one that actually reaches it.
- * No other line's semantics changed.
+ * `t("blog.listTitle")`) rather than hoisted above it — WO-1's verbatim
+ * extraction keeps each call at the literal's original spot; there is no
+ * throw to scope by hoisting (WO-3's `loadMessages` deep-merges onto `en`
+ * and never throws on an incomplete catalog). No other line's semantics
+ * changed.
  */
 
 export type BlogListSearchParams = { page?: string | string[] };

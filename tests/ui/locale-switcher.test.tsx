@@ -24,8 +24,19 @@ import { renderWithMessages } from "./render-with-messages";
  *
  * 🔴 The single most load-bearing assertion in this file is the first one:
  * with the real (unmocked) `listPublishableLocales()` — today `["en"]` —
- * `<LocaleSwitcher />` renders NOTHING. That is what makes "the English
- * site's visible header structure is unchanged by this work order" true.
+ * `<LocaleSwitcher />` itself renders NOTHING. That is what makes the
+ * English site's rendered CONTENT unchanged by this work order.
+ *
+ * Accepted DOM change (part of the WO-2 commit message's own accepted-DOM-
+ * change list, alongside `<html dir="ltr">`): `SiteHeader.tsx` now
+ * unconditionally wraps its desktop `<nav>` and this switcher's slot (empty
+ * here) in one `<div className="flex items-center gap-3">`, which replaces
+ * `<nav>` as `Container`'s direct flex child. A div wrapping a single child
+ * changes no visible layout — `Container`'s own `justify-between` still
+ * sees the same three top-level items (brand, this wrapper, the mobile
+ * toggle) — but it IS a real, permanent addition to the DOM tree, present
+ * regardless of how many locales are open, not something this file's
+ * "renders NOTHING" assertion covers or contradicts.
  */
 describe("LocaleSwitcher — renders null while only one locale is open", () => {
   it("renders no DOM at all against the real, unmocked open locale set", () => {
@@ -50,6 +61,24 @@ describe("stripLocalePrefix / sanitizePathOnlyHref / buildLocaleSwitchHref — p
 
   it("does not strip a path that merely resembles a locale prefix", () => {
     expect(stripLocalePrefix("/enterprise")).toBe("/enterprise");
+  });
+
+  it("treats a malformed percent-escape as no prefix, rather than throwing", () => {
+    // `decodeURIComponent("%zz")` throws a `URIError` ("URI malformed") —
+    // this must not crash the switcher on render; it falls back to the
+    // normalized, unstripped path, same as any other unrecognized segment.
+    expect(stripLocalePrefix("/%zz")).toBe("/%zz");
+    expect(stripLocalePrefix("/%zz/browse")).toBe("/%zz/browse");
+    expect(() => stripLocalePrefix("/%zz")).not.toThrow();
+
+    // A truncated escape sequence at the end of the segment throws for the
+    // same reason ("%E0" needs two more hex digits after it).
+    expect(stripLocalePrefix("/%E0%A4%A")).toBe("/%E0%A4%A");
+    // `buildLocaleSwitchHref` composes on top of `stripLocalePrefix`, so the
+    // malformed segment is treated as ordinary path content, not a prefix
+    // to replace — it survives, prefixed with the target locale.
+    expect(buildLocaleSwitchHref("/%zz", "es")).toBe("/es/%zz");
+    expect(() => buildLocaleSwitchHref("/%zz", "es")).not.toThrow();
   });
 
   it("sanitizePathOnlyHref collapses anything off-origin or non-path-relative to /", () => {
