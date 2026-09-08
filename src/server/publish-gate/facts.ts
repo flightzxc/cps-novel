@@ -30,6 +30,14 @@ export type LoadedArticle = {
   readonly publicPageShortId: string;
   readonly status: string;
   readonly publishedAt: Date | null;
+  /**
+   * C-29b: carried through purely so `service.ts` can pick the right public
+   * cache-invalidation path after commit (`revalidatePublicArticlePaths` for
+   * `novel_article`, `revalidatePublicBlogPaths` for the blog family) —
+   * same "not read by the gate itself" posture as `publicPageShortId`
+   * above.
+   */
+  readonly articleType: string;
 };
 
 export type PublishGateFactsResult = {
@@ -60,6 +68,7 @@ export async function loadPublishGateFacts(
       title: true,
       body: true,
       publishedAt: true,
+      articleType: true,
       novel: { select: { status: true, deletedAt: true } },
       promoLink: { select: { status: true, webUrl: true, appUrl: true } },
     },
@@ -148,6 +157,7 @@ export async function loadPublishGateFacts(
       publicPageShortId: article.publicPageShortId,
       status: article.status,
       publishedAt: article.publishedAt,
+      articleType: article.articleType,
     },
   };
 }

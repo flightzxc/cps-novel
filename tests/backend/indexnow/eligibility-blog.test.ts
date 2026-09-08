@@ -4,6 +4,9 @@ import {
   buildBlogIndexNowCanonicalUrl,
   isBlogIndexNowEligible,
 } from "@/lib/indexnow/eligibility";
+import { enqueueIndexNowFirstPublish } from "@/lib/indexnow/outbox";
+
+import { FakeIndexNowDb, testEnv } from "./fake-db";
 
 const TEST_SITE_URL = "https://cps-novel.example";
 
@@ -109,5 +112,100 @@ describe("buildBlogIndexNowCanonicalUrl", () => {
   it("adds a locale prefix for a non-default locale", () => {
     const url = buildBlogIndexNowCanonicalUrl({ locale: "ja", slug: "my-post" });
     expect(url).toBe("https://cps-novel.example/ja/blog/my-post");
+  });
+});
+
+/**
+ * C-29b outbox round-trip: `outbox.ts`'s `enqueueIndexNowFirstPublish` now
+ * branches by `articleType` (`loadIndexNowCandidateArticle`'s discriminated
+ * `IndexNowCandidateArticleRow`) — a blog Article takes the
+ * `isBlogIndexNowEligible`/`buildBlogIndexNowCanonicalUrl` path this file's
+ * other `describe` blocks test in isolation, all the way through to a real
+ * `IndexNowOutbox` row. This is the end-to-end proof that the wiring holds:
+ * before C-29b, `publish-gate/service.ts` never called
+ * `dispatchFirstPublicPublication` at all for a `novelId === null` Article
+ * (see that file's now-removed guard), so this code path was unreachable in
+ * production even though `isBlogIndexNowEligible` itself already had unit
+ * coverage above.
+ */
+describe("enqueueIndexNowFirstPublish — blog outbox round-trip (C-29b)", () => {
+  const BLOG_ENABLED_ENV = testEnv({
+    FEATURE_INDEXNOW_OUTBOX: "true",
+    INDEXNOW_OUTBOX_ALLOW_WRITE: "true",
+    FEATURE_ARTICLE_BLOG: "true",
+  });
+  // `env` (3rd positional arg to `enqueueIndexNowFirstPublish`, gating
+  // `isIndexNowOutboxEnabled`/`isIndexNowOutboxWriteAllowed`) and
+  // `eligibilityOptions.env` (4th arg, gating `isBlogIndexNowEligible`'s own
+  // `isArticleBlogEnabled` read) are two independent env sources — in
+  // production both default to the same live `process.env` (`dispatch-
+  // handler.ts` passes neither), but a test that fakes one without the
+  // other silently falls back to the real `process.env.FEATURE_ARTICLE_BLOG`
+  // for the eligibility check. Threading the same fake env into both below
+  // (rather than a single shared `LOCALE_OK` with no `env` at all) is what
+  // makes `FEATURE_ARTICLE_BLOG` actually toggle these tests' outcome.
+  function eligibilityOptions(env: NodeJS.ProcessEnv) {
+    return { isLocalePublishable: () => true, env };
+  }
+
+  function seedBlogArticle(fake: FakeIndexNowDb, overrides: Partial<Parameters<FakeIndexNowDb["seedArticle"]>[0]> = {}) {
+    fake.seedArticle({
+      id: "blog-1",
+      articleType: "blog_article",
+      locale: "en",
+      slug: "my-post",
+      status: "published",
+      updatedAt: new Date("2026-01-01T00:00:00.000Z"),
+      ...overrides,
+    });
+  }
+
+  it("enqueues a blog Article's first publish with a /blog/{slug} canonical URL — no Novel/PromoLink involved", async () => {
+    const fake = new FakeIndexNowDb();
+    seedBlogArticle(fake);
+
+    const result = await enqueueIndexNowFirstPublish(
+      fake.asPrismaClient(),
+      { articleId: "blog-1", source: "test" },
+      BLOG_ENABLED_ENV,
+      eligibilityOptions(BLOG_ENABLED_ENV),
+    );
+
+    expect(result.outcome).toBe("enqueued");
+    expect(fake.outbox.size).toBe(1);
+    const row = [...fake.outbox.values()][0]!;
+    expect(row.url).toBe(`${TEST_SITE_URL}/blog/my-post`);
+    expect(row.articleId).toBe("blog-1");
+  });
+
+  it("C-29 开关: FEATURE_ARTICLE_BLOG off -> ineligible even though status/locale/hidden all qualify", async () => {
+    const fake = new FakeIndexNowDb();
+    seedBlogArticle(fake);
+
+    const offEnv = testEnv({ FEATURE_INDEXNOW_OUTBOX: "true", INDEXNOW_OUTBOX_ALLOW_WRITE: "true" });
+    const result = await enqueueIndexNowFirstPublish(
+      fake.asPrismaClient(),
+      { articleId: "blog-1", source: "test" },
+      offEnv,
+      eligibilityOptions(offEnv),
+    );
+
+    expect(result).toEqual({ outcome: "ineligible" });
+    expect(fake.outbox.size).toBe(0);
+  });
+
+  it("a draft blog Article is ineligible (never reaches the outbox)", async () => {
+    const fake = new FakeIndexNowDb();
+    seedBlogArticle(fake, { status: "draft" });
+
+    const result = await enqueueIndexNowFirstPublish(
+      fake.asPrismaClient(),
+      { articleId: "blog-1", source: "test" },
+      BLOG_ENABLED_ENV,
+      eligibilityOptions(BLOG_ENABLED_ENV),
+    );
+
+    expect(result).toEqual({ outcome: "ineligible" });
+    expect(fake.outbox.size).toBe(0);
   });
 });

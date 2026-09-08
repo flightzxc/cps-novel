@@ -32,7 +32,8 @@ import type { Prisma, PrismaClient } from "@prisma/client";
 
 export type DispatchFirstPublicPublicationInput = Readonly<{
   articleId: string;
-  novelId: string;
+  /** C-29b: `null` for a non-`novel_article` (blog/listicle/guide) — the handlers below are opaque to this value (see `dispatch-handler.ts`), so widening it here is what lets `service.ts` dispatch a blog Article's first publish at all. */
+  novelId: string | null;
   locale: string;
   /** Free-form origin tag for audit/troubleshooting, e.g. "admin.article.publish" or a task type. */
   source: string;

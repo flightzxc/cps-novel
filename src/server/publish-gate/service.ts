@@ -136,6 +136,7 @@ import { dispatchFirstPublicPublication } from "@/server/publication/dispatcher"
 import {
   revalidatePublicArticlePaths,
   revalidatePublicArticleSet,
+  revalidatePublicBlogPaths,
   type ArticlePublicPathInput,
 } from "@/server/publication/revalidate";
 import { requireFreshAdminServiceMutation, type AdminServiceAuthorization } from "@/server/auth/guards";
@@ -277,6 +278,14 @@ type TxPublishOutcome =
       readonly publicPageShortId: string;
       readonly firstPublish: boolean;
       readonly wrote: boolean;
+      /**
+       * C-29b: carried through purely so the post-commit cache-invalidation
+       * branch below can pick `revalidatePublicArticlePaths` (`novel_article`)
+       * vs. `revalidatePublicBlogPaths` (blog family) — not part of the
+       * public `ApplyPublishTransitionResult` shape, same "internal only"
+       * posture `publicPageShortId` above already documents.
+       */
+      readonly articleType: string;
     };
 
 /**
@@ -362,6 +371,7 @@ export async function applyPublishTransition(
           publicPageShortId: article.publicPageShortId,
           firstPublish: false,
           wrote: false,
+          articleType: article.articleType,
         };
       }
 
@@ -433,6 +443,7 @@ export async function applyPublishTransition(
         publicPageShortId: article.publicPageShortId,
         firstPublish,
         wrote: true,
+        articleType: article.articleType,
       };
         }),
       { op: "publish-gate.applyPublishTransition", itemId: input.articleId, idempotencyKey: input.requestId },
@@ -444,15 +455,15 @@ export async function applyPublishTransition(
     throw error;
   }
 
-  // C-27: `dispatchFirstPublicPublication`'s IndexNow/sitemap enqueue
-  // handlers are Novel-article concepts today (both key off `novelId`,
-  // which a non-novel_article does not have) — skipped for `novelId ===
-  // null` rather than passed a value that isn't there. Blog's own
-  // IndexNow/sitemap wiring is C-29's job (this Article stays unreachable
-  // on the public site until then regardless — see
-  // `docs/governance/database-governance.md` §4/C-27's own "no public-side
-  // change" scope note), so this is a no-op skip, not a missing feature.
-  if (txResult.outcome === "published" && txResult.wrote && txResult.firstPublish && txResult.novelId !== null) {
+  // C-27/C-29b: `dispatchFirstPublicPublication`'s handlers are opaque to
+  // `novelId` (`dispatcher.ts` — `enqueueIndexNow` re-derives eligibility
+  // from `articleId` alone via `loadIndexNowCandidateArticle`, and
+  // `enqueueSitemapRefresh` is a global refresh trigger that never reads
+  // `novelId` at all), so a `null` `novelId` (blog/listicle/guide, C-27) is
+  // no longer a reason to skip dispatch entirely — C-29b wires the blog
+  // family's own IndexNow eligibility path (`isBlogIndexNowEligible`) and
+  // sitemap refresh through unchanged from here.
+  if (txResult.outcome === "published" && txResult.wrote && txResult.firstPublish) {
     await dispatchFirstPublicPublication(
       {
         articleId: txResult.articleId,
@@ -478,12 +489,23 @@ export async function applyPublishTransition(
   // → publish again) also changes what the public page renders and must
   // invalidate the same way. See this module's header, "Cache invalidation".
   if (txResult.outcome === "published" && txResult.wrote) {
-    const pathInput: ArticlePublicPathInput = {
-      locale: txResult.locale as SiteLocale,
-      slug: txResult.slug,
-      shortId: txResult.publicPageShortId,
-    };
-    safeInvalidatePublicCache(() => revalidatePublicArticlePaths(pathInput));
+    // C-29b: `novel_article` keeps the pre-C-29b invalidation shape
+    // (sitewide listings + this Article's own detail/chapter pages) byte-
+    // identical; the blog family (`articleType !== "novel_article"`, C-27's
+    // `novelId === null` travels with it under
+    // `article_novel_id_by_type_check`) has no chapter subtree and is not
+    // part of `/`/`/browse` at all — `revalidatePublicBlogPaths` only ever
+    // touches `/blog/{slug}` and `/blog` (see that function's doc comment).
+    if (txResult.articleType === "novel_article") {
+      const pathInput: ArticlePublicPathInput = {
+        locale: txResult.locale as SiteLocale,
+        slug: txResult.slug,
+        shortId: txResult.publicPageShortId,
+      };
+      safeInvalidatePublicCache(() => revalidatePublicArticlePaths(pathInput));
+    } else {
+      safeInvalidatePublicCache(() => revalidatePublicBlogPaths({ slug: txResult.slug }));
+    }
   }
 
   if (txResult.outcome === "published") {

@@ -23,10 +23,17 @@ import { FakePublishGateDb } from "./fake-db";
  * `facts.novel === null`, not on an `articleType` string, and `facts.novel`
  * is derived entirely from whether `Article.novelId` resolves to a seeded
  * Novel (see `evaluator.ts`'s header on why the two are structurally
- * equivalent). This fake DB has no `articleType` field at all, by design —
- * the real Prisma layer's CHECK (`article_novel_id_by_type_check`) is what
- * keeps the two in lockstep on a real database; this test only needs to
- * model the novelId side of that equivalence.
+ * equivalent). This file's own fixtures leave `articleType` unset — the fake
+ * DB (`fake-db.ts`, widened for C-29b) defaults it to `"novel_article"` when
+ * omitted, so `txResult.articleType` here does not itself model the blog
+ * family; the real Prisma layer's CHECK (`article_novel_id_by_type_check`)
+ * is what keeps the two in lockstep on a real database, and this test only
+ * needs the `novelId` side of that equivalence — the gate fork
+ * (`evaluatePublishGate`) and the dispatch-call assertion below both key off
+ * `novelId`/`facts.novel`, not `articleType`. `invalidation-wiring.test.ts`'s
+ * "blog first-publish invalidation wiring (C-29b)" describe block is what
+ * covers the `articleType`-keyed cache-invalidation branch this file does
+ * not.
  */
 vi.mock("@/lib/locale/locale-canonical", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/locale/locale-canonical")>();
@@ -106,9 +113,17 @@ describe("C-27: applyPublishTransition forks by article type end-to-end", () => 
     });
     // No Novel write of any kind — there is no Novel to promote.
     expect(db.calls.filter((c) => c === "novel.updateMany" || c === "novel.update")).toHaveLength(0);
-    // IndexNow/sitemap first-publish dispatch is a Novel-article concept
-    // today (both key off novelId) — skipped, not called with a null id.
-    expect(dispatchFirstPublicPublication).not.toHaveBeenCalled();
+    // C-29b: IndexNow/sitemap first-publish dispatch is no longer skipped
+    // for a `novelId === null` Article (`service.ts`'s now-removed
+    // `txResult.novelId !== null` guard) — both handlers are opaque to
+    // `novelId` (see that call site's own comment), so dispatch fires with
+    // `novelId: null` passed straight through rather than being withheld.
+    expect(dispatchFirstPublicPublication).toHaveBeenCalledTimes(1);
+    expect(dispatchFirstPublicPublication).toHaveBeenCalledWith(
+      expect.objectContaining({ articleId: "blog-1", novelId: null, locale: "en" }),
+      expect.anything(),
+      expect.anything(),
+    );
   });
 
   it("still rejects a novel_article missing its PromoLink — the C-27 relaxation does not weaken novel_article's own gate (regression check)", async () => {

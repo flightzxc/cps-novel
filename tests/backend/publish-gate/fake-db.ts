@@ -47,6 +47,15 @@ export type FakeArticle = {
    * tests that don't care about it.
    */
   publicPageShortId?: string;
+  /**
+   * C-29b: defaults to `"novel_article"` when omitted — every pre-C-29b
+   * fixture in this repo's tests gets that default and is unaffected. Set
+   * to `"blog_article"` (or another blog-family value) alongside
+   * `novelId: null`/`promoLink: null` to seed a blog Article; `service.ts`
+   * reads this to pick `revalidatePublicArticlePaths` vs.
+   * `revalidatePublicBlogPaths` after a publish commits.
+   */
+  articleType?: string;
 };
 
 /** Deterministic fallback for `FakeArticle.publicPageShortId` when a test doesn't set one. */
@@ -130,6 +139,7 @@ export class FakePublishGateDb {
         title: article.title,
         body: article.body,
         publishedAt: article.publishedAt,
+        articleType: article.articleType ?? "novel_article",
         novel: novel ? { status: novel.status, locale: novel.locale, deletedAt: novel.deletedAt } : null,
         promoLink: article.promoLink,
       };

@@ -18,6 +18,7 @@
  */
 import type { PrismaClient, Prisma } from "@prisma/client";
 
+import type { ArticleType } from "@/domain/database-statuses";
 import { isArticleBlogEnabled } from "@/lib/flags";
 import { buildArticlePath, buildBlogPath } from "@/lib/slug/article-path";
 import { SITE_LOCALES, isPublishableLocale, type SiteLocale } from "@/lib/locale/locale-canonical";
@@ -48,6 +49,36 @@ export type IndexNowCandidateArticle = {
   readonly promoLink: PromoLinkReadinessState;
 };
 
+/**
+ * C-29b: blog-family counterpart (`blog_article`/`listicle`/`guide`) — a
+ * null-`novelId` row never has a Novel or PromoLink to select at all
+ * (`article_novel_id_by_type_check`), so this shape omits both fields
+ * entirely rather than carrying them as always-null placeholders a caller
+ * could forget to check.
+ */
+export type IndexNowCandidateBlogArticle = {
+  readonly id: string;
+  readonly locale: string;
+  readonly slug: string;
+  readonly status: string;
+  readonly seoVisibility: string;
+  readonly updatedAt: Date;
+};
+
+/**
+ * C-29b: discriminated on `articleType` — `"novel_article"` carries the
+ * pre-C-29b `IndexNowCandidateArticle` shape byte-identical (`.novel`/
+ * `.promoLink` included); every other value (the blog family) carries
+ * `IndexNowCandidateBlogArticle` instead. Callers must narrow on
+ * `articleType` before touching `.novel`/`.promoLink` — see
+ * `outbox.ts`'s `enqueueIndexNowFirstPublish` and
+ * `worker/handlers/indexnow-delivery.ts` for the two production call sites
+ * that do.
+ */
+export type IndexNowCandidateArticleRow =
+  | (Readonly<{ articleType: "novel_article" }> & IndexNowCandidateArticle)
+  | (Readonly<{ articleType: Exclude<ArticleType, "novel_article"> }> & IndexNowCandidateBlogArticle);
+
 const ARTICLE_ELIGIBILITY_SELECT = {
   id: true,
   novelId: true,
@@ -57,6 +88,7 @@ const ARTICLE_ELIGIBILITY_SELECT = {
   status: true,
   seoVisibility: true,
   updatedAt: true,
+  articleType: true,
   novel: { select: { status: true } },
   promoLink: { select: { status: true, webUrl: true, appUrl: true } },
 } satisfies Prisma.ArticleSelect;
@@ -64,12 +96,42 @@ const ARTICLE_ELIGIBILITY_SELECT = {
 export async function loadIndexNowCandidateArticle(
   db: Db,
   articleId: string,
-): Promise<IndexNowCandidateArticle | null> {
+): Promise<IndexNowCandidateArticleRow | null> {
   const row = await db.article.findFirst({
     where: { id: articleId, deletedAt: null },
     select: ARTICLE_ELIGIBILITY_SELECT,
   });
-  return row as IndexNowCandidateArticle | null;
+  if (!row) return null;
+  if (row.articleType === "novel_article") {
+    return {
+      articleType: "novel_article",
+      id: row.id,
+      novelId: row.novelId as string,
+      locale: row.locale,
+      slug: row.slug,
+      publicPageShortId: row.publicPageShortId,
+      status: row.status,
+      seoVisibility: row.seoVisibility,
+      updatedAt: row.updatedAt,
+      novel: row.novel as NovelPublicationState,
+      promoLink: row.promoLink,
+    };
+  }
+  // Blog family (blog_article/listicle/guide) — no Novel/PromoLink to carry.
+  // Cast: `Article.articleType` is a plain `VarChar(32)` column (not a DB
+  // enum), so Prisma's generated type is `string`, not the literal
+  // `ArticleType` union — narrowed here on the same trust basis every write
+  // path already relies on (`ARTICLE_TYPES`/`APPLICABLE_ARTICLE_TYPES` is
+  // the sole application-layer vocabulary, `database-statuses.ts`'s header).
+  return {
+    articleType: row.articleType as Exclude<ArticleType, "novel_article">,
+    id: row.id,
+    locale: row.locale,
+    slug: row.slug,
+    status: row.status,
+    seoVisibility: row.seoVisibility,
+    updatedAt: row.updatedAt,
+  };
 }
 
 /**

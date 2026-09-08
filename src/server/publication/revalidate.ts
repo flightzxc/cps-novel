@@ -57,8 +57,10 @@ import { revalidatePath } from "next/cache";
 import {
   buildArticlePath,
   buildArticleRoutePath,
+  buildBlogPath,
   type ArticlePathInput,
 } from "@/lib/slug/article-path";
+import { PUBLIC_SITE_LOCALE } from "@/lib/site/locale-label";
 
 function safeRevalidatePath(path: string, type?: "layout" | "page"): void {
   try {
@@ -121,6 +123,24 @@ function revalidateOneArticlePaths(input: ArticlePublicPathInput): void {
 export function revalidatePublicArticlePaths(input: ArticlePublicPathInput): void {
   revalidatePublicListings();
   revalidateOneArticlePaths(input);
+}
+
+export type BlogPublicPathInput = Readonly<{ slug: string }>;
+
+/**
+ * C-29b: blog-family counterpart to `revalidatePublicArticlePaths` above,
+ * wired from `publish-gate/service.ts`'s `applyPublishTransition` once a
+ * blog Article's own first-publish/republish commits. Deliberately not
+ * `revalidatePublicListings()` + `revalidateOneArticlePaths` — a blog
+ * Article is not part of `/`/`/browse` (those list Novels only) and has no
+ * chapter subtree, so the fan-out here is exactly the two blog surfaces:
+ * this post's own `/blog/{slug}` detail page (`buildBlogPath`, locale-
+ * invariant in practice — `PUBLIC_SITE_LOCALE`, same single-locale posture
+ * `src/app/blog/page.tsx` already takes) and the `/blog` list page itself.
+ */
+export function revalidatePublicBlogPaths(input: BlogPublicPathInput): void {
+  safeRevalidatePath(buildBlogPath({ locale: PUBLIC_SITE_LOCALE, slug: input.slug }));
+  safeRevalidatePath("/blog");
 }
 
 /**

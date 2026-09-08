@@ -149,4 +149,45 @@ describe.skipIf(!enabled).sequential("C-29: real PostgreSQL — create blog → 
     const files = await createSitemapFamilyBuilder(prisma, flagOffEnv)({ type: "blogpage", locale: "en" });
     expect(files).toEqual([]);
   });
+
+  /**
+   * C-29b: `applyPublishTransition`'s post-commit `dispatchFirstPublicPublication`
+   * call (`publish-gate/service.ts`) no longer skips a `novelId === null`
+   * Article — this is the real-DB proof that a blog Article's own
+   * first-publish actually reaches `IndexNowOutbox` end to end (create
+   * blog → publish → real `enqueueIndexNow` handler → `IndexNowOutbox` row
+   * with a `/blog/{slug}` URL), not merely `dispatchFirstPublicPublication`
+   * being *called* (that much is already covered by the mocked
+   * `tests/backend/publish-gate/service.test.ts`/`invalidation-wiring.test.ts`).
+   * `applyPublishTransition` takes no `env` parameter of its own — the
+   * dispatcher's handlers (`enqueueIndexNow`/`enqueueSitemapRefreshForPublication`)
+   * read `process.env` directly by default (same as production), so the
+   * double-gate flags are set on the real `process.env` here, same pattern
+   * this file's own `process.env.SITE_URL ??= ...` line above already uses,
+   * and restored afterward so it cannot leak into a later test in this
+   * file.
+   */
+  it("a blog Article's first publish enqueues a real IndexNowOutbox row with a /blog/{slug} canonical URL", async () => {
+    const savedFlags = {
+      FEATURE_INDEXNOW_OUTBOX: process.env.FEATURE_INDEXNOW_OUTBOX,
+      INDEXNOW_OUTBOX_ALLOW_WRITE: process.env.INDEXNOW_OUTBOX_ALLOW_WRITE,
+      FEATURE_ARTICLE_BLOG: process.env.FEATURE_ARTICLE_BLOG,
+    };
+    process.env.FEATURE_INDEXNOW_OUTBOX = "true";
+    process.env.INDEXNOW_OUTBOX_ALLOW_WRITE = "true";
+    process.env.FEATURE_ARTICLE_BLOG = "true";
+    process.env.SITE_URL ??= "https://c29-integration.example";
+    try {
+      const { slug, articleId } = await createAndPublish("public");
+
+      const row = await prisma.indexNowOutbox.findFirst({ where: { articleId } });
+      expect(row).not.toBeNull();
+      expect(row?.url.endsWith(`/blog/${slug}`)).toBe(true);
+    } finally {
+      for (const [key, value] of Object.entries(savedFlags)) {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
+    }
+  });
 });
