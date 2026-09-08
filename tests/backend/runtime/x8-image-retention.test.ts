@@ -235,6 +235,14 @@ describe("X8 D-9b release-image retention gc (x8_gc)", () => {
       });
       expect(result.status, result.stderr).toBe(0);
       expect(result.stdout).toContain("X8_GC_DANGLING_COUNT=2");
+      // §4.2 asks for the id AND size of each dangling layer, not just a
+      // count: `docker image prune -f` is the one host-wide action in this
+      // function (it is not restricted to cps-novel:0.1.0-* the way every
+      // `rmi` is), so a dry-run has to make that blast radius reviewable
+      // before an --apply is ever run. The stub returns bare ids with no
+      // "|size" field, which also pins the missing-size fallback.
+      expect(result.stdout).toContain("X8_GC_DANGLING_IMAGE=sha256:dangling1 size=unknown");
+      expect(result.stdout).toContain("X8_GC_DANGLING_IMAGE=sha256:dangling2 size=unknown");
       const pruneCalls = stubLogLines().filter((line) => line.includes("image prune"));
       expect(pruneCalls).toEqual([]);
     });
@@ -365,6 +373,19 @@ describe("X8 D-9b release-image retention gc (x8_gc)", () => {
       expect(result.status, result.stderr).toBe(0);
       expect(result.stdout).toContain("X8_GC_CANDIDATES=0");
       expect(stubLogLines().some((line) => line.includes(" rmi "))).toBe(false);
+    });
+
+    it("still emits the --json summary on the zero-candidate path, so a parser never sees a silent round", () => {
+      const result = run("x8_gc --apply --json", { STUB_GC_PS_IMAGES: "", STUB_GC_IMAGES: "" });
+      expect(result.status, result.stderr).toBe(0);
+      const jsonLine = result.stdout.split("\n").find((line) => line.startsWith("X8_GC_SUMMARY_JSON="));
+      expect(jsonLine, `no summary line in:\n${result.stdout}`).toBeTruthy();
+      expect(JSON.parse(jsonLine!.slice("X8_GC_SUMMARY_JSON=".length))).toEqual({
+        keepCount: 0,
+        deleteList: [],
+        reclaimableBytes: 0,
+        danglingCount: null,
+      });
     });
   });
 

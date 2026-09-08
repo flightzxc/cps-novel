@@ -676,6 +676,13 @@ x8_gc() {
 
   if [[ "${#all_tags[@]}" -eq 0 ]]; then
     echo "X8_GC_CANDIDATES=0"
+    # --json is a machine-readable contract: a consumer that parses this
+    # output must get its summary line on EVERY completed round, including
+    # the "nothing to do" one. Emitting nothing here would make an empty
+    # host indistinguishable from a gc that crashed before reaching the
+    # summary. Hand-built rather than routed through the node helper below:
+    # every field is a known constant on this path.
+    [[ "$json" == "1" ]] && echo 'X8_GC_SUMMARY_JSON={"keepCount":0,"deleteList":[],"reclaimableBytes":0,"danglingCount":null}'
     echo "X8_GC_FINISHED_AT=$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
     return 0
   fi
@@ -782,12 +789,29 @@ x8_gc() {
   echo "X8_GC_RECLAIMABLE_BYTES=$freed_bytes"
 
   # ---- dangling layers: listed always, deleted only under --apply ----------
-  local -a dangling_ids=()
+  local -a dangling_entries=()
+  local dangling_id dangling_size
   if [[ "$prune_dangling" == "1" ]]; then
     while IFS= read -r line; do
-      [[ -n "$line" ]] && dangling_ids+=("$line")
-    done < <(docker images --filter="dangling=true" --format '{{.ID}}' 2>/dev/null)
-    echo "X8_GC_DANGLING_COUNT=${#dangling_ids[@]}"
+      [[ -n "$line" ]] && dangling_entries+=("$line")
+    done < <(docker images --filter="dangling=true" --format '{{.ID}}|{{.Size}}' 2>/dev/null)
+    echo "X8_GC_DANGLING_COUNT=${#dangling_entries[@]}"
+    # §4.2 requires a dry-run to list the dangling layers' id AND size --
+    # "how many" is not enough for an operator to decide whether a later
+    # --apply is safe to run, because `docker image prune -f` is the one
+    # host-wide (cross-project) action in this whole function: the layers it
+    # reclaims are not restricted to cps-novel:0.1.0-* the way every `rmi`
+    # above is. Listing them is what makes that blast radius reviewable
+    # BEFORE anything is deleted. Size is whatever `docker images` reports
+    # ("143MB"), not a raw byte count -- it is never summed, only shown.
+    if [[ "${#dangling_entries[@]}" -gt 0 ]]; then
+      for line in "${dangling_entries[@]}"; do
+        dangling_id="${line%%|*}"
+        dangling_size="${line#*|}"
+        [[ -n "$dangling_size" && "$dangling_size" != "$line" ]] || dangling_size="unknown"
+        echo "X8_GC_DANGLING_IMAGE=$dangling_id size=$dangling_size"
+      done
+    fi
   else
     echo "X8_GC_DANGLING_SKIPPED=X8_GC_PRUNE_DANGLING=0"
   fi
@@ -808,7 +832,7 @@ x8_gc() {
     ' "$keep_count" "$(
       IFS=,
       echo "${delete_list[*]:-}"
-    )" "$freed_bytes" "$([[ "$prune_dangling" == "1" ]] && echo "${#dangling_ids[@]}" || echo "")"
+    )" "$freed_bytes" "$([[ "$prune_dangling" == "1" ]] && echo "${#dangling_entries[@]}" || echo "")"
   fi
 
   if [[ "$apply" == "0" ]]; then
@@ -839,7 +863,7 @@ x8_gc() {
   echo "X8_GC_REMOVED_COUNT=$removed"
   echo "X8_GC_REMOVE_FAILED_COUNT=$failed"
 
-  if [[ "$prune_dangling" == "1" && "${#dangling_ids[@]}" -gt 0 ]]; then
+  if [[ "$prune_dangling" == "1" && "${#dangling_entries[@]}" -gt 0 ]]; then
     # `-f` only, NEVER `-a` (see header comment) -- only dangling (untagged)
     # layers, never a tagged-but-currently-unused image belonging to this or
     # any other project on the host.
