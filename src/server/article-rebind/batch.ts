@@ -556,8 +556,32 @@ export async function releaseRebindBatchLease(db: RebindBatchDb, input: { batchI
  * for every item that actually applied so the caller can invalidate the
  * public cache once, sequentially, AFTER this whole run (施工工单 §4B.2 —
  * never inside any per-item transaction, no outbox table).
+ *
+ * C-30 单 3 W-2 (施工工单_C30单3..._2026-09-09.md §3.2/§3.4) — CPS has no
+ * equivalent of this gate (CPS's own proxy window is double this repo's;
+ * see `REBIND_BATCH_LIMITS`'s own comment for the derivation). The loop
+ * now also stops once it has spent `REBIND_BATCH_LIMITS.requestBudgetMs`
+ * of wall clock since entering it, so a request that would otherwise run
+ * past nginx's `proxy_read_timeout 30s` and get its connection cut — while
+ * the write loop keeps running server-side, unseen by the operator — stops
+ * itself first and lands in the SAME "interrupted, resumable" state as any
+ * other lease/claim `break` below. `resumeRebindBatch` calls this same
+ * function, unchanged, so a resumed run is bound by the identical budget —
+ * a multi-round batch just means the operator clicks "继续执行" more than
+ * once, each round advancing one budget window's worth of items.
+ *
+ * `now` is the one test-only signature extension this order allows
+ * (施工工单 §5.1): optional, defaults to `Date.now`, so every non-test call
+ * site is byte-for-byte unchanged. Deliberately NOT a global `Date.now`
+ * mock in tests — `leaseRemainingMs` below does its own real-time query
+ * against the lease row, and mocking the global clock would drag that
+ * along with it.
  */
-export async function executeRebindBatch(db: RebindBatchDb, input: { batchId: string; attempt?: string }): Promise<ProcessedRebindBatchItemResult[]> {
+export async function executeRebindBatch(
+  db: RebindBatchDb,
+  input: { batchId: string; attempt?: string },
+  now: () => number = Date.now,
+): Promise<ProcessedRebindBatchItemResult[]> {
   const attempt = input.attempt ?? randomUUID();
   const invalidations: ProcessedRebindBatchItemResult[] = [];
   if (!(await acquireRebindBatchLease(db, input.batchId, attempt))) {
@@ -571,7 +595,15 @@ export async function executeRebindBatch(db: RebindBatchDb, input: { batchId: st
   let processedSinceRenew = 0;
   try {
     const items = await db.articleNovelRebindBatchItem.findMany({ where: { batchId: input.batchId, status: { in: ["pending", "processing"] } }, orderBy: { id: "asc" } });
+    const startedAt = now();
     for (const item of items as DelegateArgs[]) {
+      // W-2's only new stop condition. Checked BEFORE the renew/claim
+      // steps below — i.e. before claiming the next item, never after —
+      // and between items only, never inside `processRebindBatchItem`'s
+      // own transaction: an in-flight item always finishes. `break` (not
+      // `return`) so this falls into the exact same finalize path the
+      // three pre-existing lease/claim `break`s already use.
+      if (now() - startedAt >= REBIND_BATCH_LIMITS.requestBudgetMs) break;
       if (processedSinceRenew >= REBIND_BATCH_LIMITS.leaseRenewEvery || (await leaseRemainingMs(db, input.batchId, attempt)) < REBIND_BATCH_LIMITS.leaseRenewThresholdMs) {
         if (!(await renewRebindBatchLease(db, input.batchId, attempt))) break;
         processedSinceRenew = 0;
