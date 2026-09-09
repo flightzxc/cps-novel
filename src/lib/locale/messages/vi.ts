@@ -65,6 +65,7 @@ const messages = {
     synopsis: "Tóm tắt",
     previewChapters: "Chương xem trước",
     previewChaptersDescription: "{count} chương xem trước trên trang này, tất cả do nền tảng gốc cung cấp.",
+    previewChaptersDescriptionOne: "1 chương xem trước trên trang này, do nền tảng gốc cung cấp.",
     noPreviewChapters: "Cuốn sách này chưa có chương xem trước.",
     relatedWorks: "Tác phẩm liên quan",
     chapterHeading: "Chương {number}",

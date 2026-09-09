@@ -65,6 +65,7 @@ const messages = {
     synopsis: "Sinopsis",
     previewChapters: "Bab pratinjau",
     previewChaptersDescription: "{count} bab pratinjau di situs ini, semuanya disediakan oleh platform asli.",
+    previewChaptersDescriptionOne: "1 bab pratinjau di situs ini, disediakan oleh platform asli.",
     noPreviewChapters: "Buku ini belum memiliki bab pratinjau.",
     relatedWorks: "Karya terkait",
     chapterHeading: "Bab {number}",

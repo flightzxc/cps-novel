@@ -116,24 +116,55 @@ function deepMergeOntoEnglish<T>(base: T, override: unknown): T {
 const mergedMessagesCache = new Map<SiteLocale, Messages>();
 
 /**
+ * Test/dev-only escape hatch: clears the merged-messages memoization cache.
+ *
+ * Production code must never call this — the production path always serves
+ * from (and populates) `mergedMessagesCache`, and this function has no
+ * effect on it beyond emptying the map. It exists for the rare test that
+ * needs to observe the *cache itself* (e.g. stubbing `NODE_ENV` to
+ * `"production"` to exercise the memoized branch below) — without a reset,
+ * a merge cached under a stubbed env would otherwise leak into whichever
+ * test runs next, since `mergedMessagesCache` is module-level state shared
+ * across the whole test file/process.
+ */
+export function resetMessagesCacheForTests(): void {
+  mergedMessagesCache.clear();
+}
+
+/**
  * Load a locale catalog, deep-merged onto English (Owner 修正一).
  *
  * `en` short-circuits and returns the `en` object itself (no merge, no
  * allocation) — `loadMessages("en") === en` stays a reference-equality
  * fact any caller can rely on. Every other locale gets `en` deep-merged
- * with that locale's (possibly incomplete) catalog, memoized so repeated
- * calls for the same locale don't reallocate. A missing entry in
+ * with that locale's (possibly incomplete) catalog. A missing entry in
  * `CATALOGS` (should not happen for a registered `SiteLocale`, but the
  * lookup is still a plain object index) falls back to an empty override,
  * i.e. the full English catalog — never a thrown error at render time.
+ *
+ * Memoization only runs when `NODE_ENV === "production"`. Outside of that
+ * (`development`, `test`, anything else) every call recomputes the merge
+ * instead of reading `mergedMessagesCache` — a locale file edited during
+ * `next dev` must be reflected without a full server restart, and this
+ * module's cache is plain module-level state that a Fast Refresh boundary
+ * is not guaranteed to reset. Recomputing is cheap (a handful of small
+ * object merges) and `deepMergeOntoEnglish` is pure, so skipping the cache
+ * changes nothing about the result — only the production hot path keeps
+ * the memoized fast path, where a Next.js server process's module graph is
+ * loaded once and correctly expected to stay put for its lifetime.
  */
 export function loadMessages(locale: SiteLocale): Messages {
   if (locale === PUBLIC_SITE_LOCALE) return en;
 
+  const catalog = CATALOGS[locale];
+
+  if (process.env.NODE_ENV !== "production") {
+    return deepMergeOntoEnglish(en, catalog);
+  }
+
   const cached = mergedMessagesCache.get(locale);
   if (cached) return cached;
 
-  const catalog = CATALOGS[locale];
   const merged = deepMergeOntoEnglish(en, catalog);
   mergedMessagesCache.set(locale, merged);
   return merged;

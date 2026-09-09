@@ -40,7 +40,12 @@ export function PreviewChapterList({
         title={t("novel.previewChapters")}
         description={
           hasChapters
-            ? t("novel.previewChaptersDescription", { count: chapters.length })
+            ? // 低危清扫第 1 批 · item D-⑥: t() 不支持 ICU 复数，count=1 时改走
+              // 专门的单数键（`en.ts` 该键旁的注释有完整说明），避免 "1 preview
+              // chapters" 这类英文复数缺陷。
+              chapters.length === 1
+              ? t("novel.previewChaptersDescriptionOne")
+              : t("novel.previewChaptersDescription", { count: chapters.length })
             : undefined
         }
       />

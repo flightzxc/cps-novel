@@ -65,6 +65,7 @@ const messages = {
     synopsis: "Описание",
     previewChapters: "Ознакомительные главы",
     previewChaptersDescription: "{count} ознакомительных глав на этом сайте — все предоставлены оригинальной платформой.",
+    previewChaptersDescriptionOne: "1 ознакомительная глава на этом сайте — предоставлена оригинальной платформой.",
     noPreviewChapters: "У этой книги пока нет ознакомительных глав.",
     relatedWorks: "Похожие произведения",
     chapterHeading: "Глава {number}",

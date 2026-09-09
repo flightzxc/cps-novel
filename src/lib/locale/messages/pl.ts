@@ -65,6 +65,7 @@ const messages = {
     synopsis: "Opis fabuły",
     previewChapters: "Rozdziały podglądu",
     previewChaptersDescription: "{count} rozdziałów podglądu na tej stronie, wszystkie dostarczone przez oryginalną platformę.",
+    previewChaptersDescriptionOne: "1 rozdział podglądu na tej stronie, dostarczony przez oryginalną platformę.",
     noPreviewChapters: "Ta książka nie ma jeszcze rozdziałów podglądu.",
     relatedWorks: "Powiązane dzieła",
     chapterHeading: "Rozdział {number}",

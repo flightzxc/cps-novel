@@ -65,6 +65,7 @@ const messages = {
     synopsis: "Zusammenfassung",
     previewChapters: "Vorschaukapitel",
     previewChaptersDescription: "{count} Vorschaukapitel auf dieser Website, alle bereitgestellt von der Originalplattform.",
+    previewChaptersDescriptionOne: "1 Vorschaukapitel auf dieser Website, bereitgestellt von der Originalplattform.",
     noPreviewChapters: "Für dieses Buch gibt es noch keine Vorschaukapitel.",
     relatedWorks: "Verwandte Werke",
     chapterHeading: "Kapitel {number}",

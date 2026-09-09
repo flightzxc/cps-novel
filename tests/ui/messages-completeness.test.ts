@@ -47,6 +47,20 @@ function interpolationVars(value: string): Set<string> {
   return new Set(Array.from(value.matchAll(/\{([a-zA-Z0-9_]+)\}/g), (m) => m[1]));
 }
 
+/**
+ * 低危清扫第 1 批 · item D-②: the leftover-English check used to compare
+ * `localeValue !== enValue` byte-for-byte. Two values that only differ by
+ * incidental whitespace (a trailing space, a doubled interior space) or by
+ * case are still the same untranslated English sentence — byte equality let
+ * those slip past undetected while genuinely translated text that happens
+ * to share a value with English (the `ALLOW_SAME_AS_EN`/`_SCOPED`
+ * allowlists below) was never at risk of a false positive either way, so
+ * relaxing the comparison only ever *tightens* the check, never loosens it.
+ */
+function normalizeForResidueComparison(value: string): string {
+  return value.trim().replace(/\s+/g, " ").toLowerCase();
+}
+
 /** `{var, plural, ...}` / `{var, select, ...}` / `{var, selectordinal, ...}` — the ICU syntax `t()` cannot parse (index.ts:105's regex only matches bare `{name}`). */
 const ICU_SYNTAX_RE = /\{\s*\w+\s*,\s*(plural|select|selectordinal)\b/;
 
@@ -73,6 +87,38 @@ const NON_EN_LOCALES = SITE_LOCALES.filter((locale) => locale !== "en");
 describe("message catalog completeness (all 15 registered locales)", () => {
   it("SITE_LOCALES and CATALOGS agree on the set of registered locales", () => {
     expect(new Set(Object.keys(CATALOGS))).toEqual(new Set(SITE_LOCALES));
+  });
+
+  /**
+   * 低危清扫第 1 批 · item D-①: a dedicated guard on the `CATALOGS` export
+   * itself, scoped narrower than the key-set assertion above.
+   *
+   * The 15-vs-15/no-extra-keys claim is already covered above via
+   * `Object.keys(CATALOGS)` vs `SITE_LOCALES` — this block adds the one
+   * thing that check can't see: that `CATALOGS.en` is the *exact same
+   * object* as `en` (not a structurally-equal duplicate some future edit
+   * could accidentally re-declare), since every other assertion in this
+   * file — `EN_LEAVES`/`EN_KEYS` included — is built from `en` directly and
+   * silently trusts that `CATALOGS.en` is that same reference.
+   */
+  describe("CATALOGS export guard", () => {
+    it("has exactly SITE_LOCALES.length entries, no more, no fewer", () => {
+      expect(Object.keys(CATALOGS).length).toBe(SITE_LOCALES.length);
+    });
+
+    it("every SITE_LOCALES entry has a corresponding CATALOGS entry, and vice versa", () => {
+      const catalogKeys = new Set(Object.keys(CATALOGS));
+      for (const locale of SITE_LOCALES) {
+        expect(catalogKeys.has(locale)).toBe(true);
+      }
+      for (const key of catalogKeys) {
+        expect(SITE_LOCALES).toContain(key);
+      }
+    });
+
+    it("CATALOGS.en is the same object reference as the en module's own export", () => {
+      expect(CATALOGS.en).toBe(en);
+    });
   });
 
   it.each(SITE_LOCALES)("%s: key set matches the English catalog exactly (no missing, no extra)", (locale) => {
@@ -113,7 +159,18 @@ describe("message catalog completeness (all 15 registered locales)", () => {
     expect(mismatches).toEqual([]);
   });
 
-  it.each(NON_EN_LOCALES)("%s: no ICU plural/select/selectordinal syntax (t() only does {name} substitution)", (locale) => {
+  /**
+   * 低危清扫第 1 批 · item D-⑦: this scan used to run only over
+   * `NON_EN_LOCALES` — `en.ts` itself, the source of truth every other
+   * catalog is translated from and deep-merged onto, was never checked for
+   * ICU syntax. A stray `{count, plural, ...}` typo'd into `en.ts` would
+   * both (a) render literally on the English site (`t()` only does bare
+   * `{name}` substitution, `index.ts`'s regex) and (b) silently become the
+   * fallback text for every locale whose own translation is blank/missing —
+   * i.e. the one catalog most worth banning ICU from was the one this test
+   * skipped. Scoped to `SITE_LOCALES` (all 15, `en` included) instead.
+   */
+  it.each(SITE_LOCALES)("%s: no ICU plural/select/selectordinal syntax (t() only does {name} substitution)", (locale) => {
     const leaves = flattenLeaves(CATALOGS[locale]);
     const offenders: string[] = [];
     for (const [key, value] of leaves) {
@@ -160,7 +217,7 @@ describe("message catalog completeness (all 15 registered locales)", () => {
         const enValue = EN_LEAVES.get(key) as string;
         const localeValue = leaves.get(key);
         if (typeof localeValue !== "string") continue;
-        if (localeValue !== enValue) continue;
+        if (normalizeForResidueComparison(localeValue) !== normalizeForResidueComparison(enValue)) continue;
         if (ALLOW_SAME_AS_EN.has(key)) continue;
         if (ALLOW_SAME_AS_EN_SCOPED.has(`${locale}:${key}`)) continue;
         unexplained.push(key);

@@ -65,6 +65,7 @@ const messages = {
     synopsis: "เรื่องย่อ",
     previewChapters: "ตอนตัวอย่าง",
     previewChaptersDescription: "ตอนตัวอย่าง {count} ตอนบนเว็บไซต์นี้ ทั้งหมดจัดหาโดยแพลตฟอร์มต้นฉบับ",
+    previewChaptersDescriptionOne: "ตอนตัวอย่าง 1 ตอนบนเว็บไซต์นี้ จัดหาโดยแพลตฟอร์มต้นฉบับ",
     noPreviewChapters: "หนังสือเล่มนี้ยังไม่มีตอนตัวอย่าง",
     relatedWorks: "ผลงานที่เกี่ยวข้อง",
     chapterHeading: "ตอนที่ {number}",

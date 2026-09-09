@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 // WO-3 §10.1/§10.4 (Owner 修正一): `loadMessages` deep-merges onto English
 // instead of throwing on an incomplete catalog. The real `es.ts` shipped in
@@ -22,6 +22,7 @@ vi.mock("@/lib/locale/messages/es", () => ({
 import {
   loadMessages,
   MissingMessagesError,
+  resetMessagesCacheForTests,
   t,
 } from "@/lib/locale/messages";
 import { en } from "@/lib/locale/messages/en";
@@ -72,5 +73,51 @@ describe("loadMessages", () => {
     const es = loadMessages("es");
     expect(t(es, "chapter.theme")).toBe("Theme");
     expect(t(es, "collection.workCount", { count: 3 })).toBe("3 works");
+  });
+});
+
+/**
+ * 低危清扫第 1 批 · item D-③: `mergedMessagesCache` only memoizes under
+ * `NODE_ENV === "production"` — everywhere else (this test file's ambient
+ * `NODE_ENV=test` included) `loadMessages` recomputes on every call, so a
+ * locale file edited during `next dev` shows up without a server restart.
+ * `resetMessagesCacheForTests` is the escape hatch for a test that needs to
+ * exercise the memoized branch without leaking a production-stubbed merge
+ * into whichever test runs next.
+ */
+describe("loadMessages caching (低危清扫第 1 批, item D-③)", () => {
+  afterEach(() => {
+    resetMessagesCacheForTests();
+    vi.unstubAllEnvs();
+  });
+
+  it("outside production (the ambient test env), every call recomputes — no shared cache entry", () => {
+    expect(process.env.NODE_ENV).not.toBe("production");
+    const first = loadMessages("es");
+    const second = loadMessages("es");
+    expect(first).not.toBe(second); // distinct objects — not served from a cache
+    expect(first).toEqual(second); // same merged content regardless
+  });
+
+  it("under NODE_ENV=production, repeated calls are served from the memoized cache", () => {
+    vi.stubEnv("NODE_ENV", "production");
+    resetMessagesCacheForTests();
+    const first = loadMessages("es");
+    const second = loadMessages("es");
+    expect(first).toBe(second); // same object — the memoized fast path
+  });
+
+  it("resetMessagesCacheForTests clears a production-memoized entry instead of leaking it", () => {
+    vi.stubEnv("NODE_ENV", "production");
+    const cachedBefore = loadMessages("es");
+    resetMessagesCacheForTests();
+    const afterReset = loadMessages("es");
+    expect(afterReset).not.toBe(cachedBefore); // recomputed, not the stale cached object
+    expect(afterReset).toEqual(cachedBefore); // content is still identical
+  });
+
+  it("loadMessages(\"en\") always returns the en module object itself, in production or not", () => {
+    vi.stubEnv("NODE_ENV", "production");
+    expect(loadMessages("en")).toBe(en);
   });
 });

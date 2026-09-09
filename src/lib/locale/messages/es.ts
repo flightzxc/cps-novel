@@ -65,6 +65,7 @@ const messages = {
     synopsis: "Sinopsis",
     previewChapters: "Capítulos de muestra",
     previewChaptersDescription: "{count} capítulos de muestra en este sitio, todos proporcionados por la plataforma original.",
+    previewChaptersDescriptionOne: "1 capítulo de muestra en este sitio, proporcionado por la plataforma original.",
     noPreviewChapters: "Este libro aún no tiene capítulos de muestra.",
     relatedWorks: "Obras relacionadas",
     chapterHeading: "Capítulo {number}",

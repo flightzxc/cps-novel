@@ -65,6 +65,7 @@ const messages = {
     synopsis: "Synopse",
     previewChapters: "Ukázkové kapitoly",
     previewChaptersDescription: "{count} ukázkových kapitol na tomto webu, všechny poskytnuté původní platformou.",
+    previewChaptersDescriptionOne: "1 ukázková kapitola na tomto webu, poskytnutá původní platformou.",
     noPreviewChapters: "Tato kniha zatím nemá žádné ukázkové kapitoly.",
     relatedWorks: "Související díla",
     chapterHeading: "Kapitola {number}",

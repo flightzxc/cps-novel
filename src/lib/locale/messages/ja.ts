@@ -65,6 +65,7 @@ const messages = {
     synopsis: "あらすじ",
     previewChapters: "プレビュー章",
     previewChaptersDescription: "本サイトでは{count}章のプレビューをお読みいただけます。すべて原作プラットフォームより提供されています。",
+    previewChaptersDescriptionOne: "本サイトでは1章のプレビューをお読みいただけます。原作プラットフォームより提供されています。",
     noPreviewChapters: "この作品にはまだプレビュー章がありません。",
     relatedWorks: "関連作品",
     chapterHeading: "第{number}章",

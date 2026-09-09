@@ -65,6 +65,7 @@ const messages = {
     synopsis: "劇情簡介",
     previewChapters: "試讀章節",
     previewChaptersDescription: "本站提供{count}章試讀,均由原始平台提供。",
+    previewChaptersDescriptionOne: "本站提供1章試讀,由原始平台提供。",
     noPreviewChapters: "本書目前尚無試讀章節。",
     relatedWorks: "相關作品",
     chapterHeading: "第{number}章",

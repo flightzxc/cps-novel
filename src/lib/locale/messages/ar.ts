@@ -65,6 +65,7 @@ const messages = {
     synopsis: "القصة",
     previewChapters: "فصول المعاينة",
     previewChaptersDescription: "يوفر هذا الموقع {count} فصلاً للمعاينة، جميعها مقدَّمة من المنصة الأصلية.",
+    previewChaptersDescriptionOne: "يوفر هذا الموقع فصلاً واحدًا للمعاينة، مقدَّمًا من المنصة الأصلية.",
     noPreviewChapters: "لا توجد فصول معاينة لهذا الكتاب بعد.",
     relatedWorks: "أعمال ذات صلة",
     chapterHeading: "الفصل {number}",

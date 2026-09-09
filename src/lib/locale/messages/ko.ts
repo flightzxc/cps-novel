@@ -65,6 +65,7 @@ const messages = {
     synopsis: "줄거리",
     previewChapters: "미리보기 챕터",
     previewChaptersDescription: "이 사이트에서 미리보기 챕터 {count}개를 볼 수 있으며, 모두 원작 플랫폼에서 제공합니다.",
+    previewChaptersDescriptionOne: "이 사이트에서 미리보기 챕터 1개를 볼 수 있으며, 원작 플랫폼에서 제공합니다.",
     noPreviewChapters: "이 작품은 아직 미리보기 챕터가 없습니다.",
     relatedWorks: "관련 작품",
     chapterHeading: "{number}장",
