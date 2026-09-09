@@ -33,7 +33,7 @@ const messages = {
     genres: "الأنواع",
     mainNav: "التنقل الرئيسي",
     footerNav: "تنقل التذييل",
-    skipToContent: "تخطى إلى المحتوى الرئيسي",
+    skipToContent: "تخطَّ إلى المحتوى الرئيسي",
     openMenu: "افتح القائمة",
     closeMenu: "أغلق القائمة",
     about: "حول الموقع",

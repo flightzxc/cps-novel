@@ -84,7 +84,7 @@ const messages = {
     continuePrompt: "Möchtest du weiterlesen?",
     remainingOnOrigin: "Weitere Kapitel gibt es auf der Originalplattform.",
     readOnUpstream: "Weiterlesen",
-    theme: "Thema",
+    theme: "Design",
     fontSize: "Schriftgröße",
     lineHeight: "Zeilenabstand",
     measure: "Seitenbreite",
@@ -122,7 +122,7 @@ const messages = {
   blog: {
     listTitle: "Blog",
     listDescription: "Artikel und Neuigkeiten von dieser Website.",
-    empty: "Noch keine Blogbeiträge.",
+    empty: "Noch keine Blogbeiträge verfügbar.",
     publishedOn: "Veröffentlicht am {date}",
     unpublishedTitle: "Dieser Beitrag ist vorübergehend nicht verfügbar",
     unpublishedBody: "Er wurde von dieser Website entfernt. Falls er zurückkehrt, funktioniert diese Adresse weiterhin.",

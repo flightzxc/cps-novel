@@ -62,7 +62,7 @@ const messages = {
     previewCount: "미리보기 {count}장",
     startPreview: "미리보기 시작",
     readOnUpstream: "이어서 읽기",
-    synopsis: "줄거리",
+    synopsis: "시놉시스",
     previewChapters: "미리보기 챕터",
     previewChaptersDescription: "이 사이트에서 미리보기 챕터 {count}개를 볼 수 있으며, 모두 원작 플랫폼에서 제공합니다.",
     previewChaptersDescriptionOne: "이 사이트에서 미리보기 챕터 1개를 볼 수 있으며, 원작 플랫폼에서 제공합니다.",

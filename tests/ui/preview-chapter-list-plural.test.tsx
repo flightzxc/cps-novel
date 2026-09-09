@@ -44,14 +44,14 @@ describe("PreviewChapterList · previewChaptersDescription 的单复数分支", 
   it("count=1 时（fr）用 fr 的单数键，而不是英文兜底", () => {
     render(<PreviewChapterList locale="fr" chapters={chapters(1)} />);
     expect(
-      screen.getByText("1 chapitre d'aperçu sur ce site, fourni par la plateforme d'origine."),
+      screen.getByText("1 chapitre est proposé en extrait sur ce site, fourni par la plateforme d'origine."),
     ).toBeTruthy();
   });
 
   it("count=3 时（fr）仍用 fr 的 {count} 复数句", () => {
     render(<PreviewChapterList locale="fr" chapters={chapters(3)} />);
     expect(
-      screen.getByText("3 chapitres d'aperçu sur ce site, tous fournis par la plateforme d'origine."),
+      screen.getByText("3 chapitres sont proposés en extrait sur ce site, tous fournis par la plateforme d'origine."),
     ).toBeTruthy();
   });
 });

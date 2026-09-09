@@ -80,7 +80,7 @@ const messages = {
     readerSettings: "Cài đặt đọc",
     closeReaderSettings: "Đóng cài đặt đọc",
     previewPosition: "Xem trước {index} / {total}",
-    endOfPreview: "Đây là hết phần xem trước trên trang này.",
+    endOfPreview: "Phần xem trước trên trang này kết thúc tại đây.",
     continuePrompt: "Bạn muốn đọc tiếp không?",
     remainingOnOrigin: "Các chương sau tiếp tục trên nền tảng gốc.",
     readOnUpstream: "Tiếp tục đọc",

@@ -43,7 +43,7 @@ const messages = {
   },
   home: {
     works: "Karya",
-    viewAll: "Lihat semua",
+    viewAll: "Lihat Semua",
     featuredEyebrow: "Unggulan",
     startPreview: "Mulai pratinjau",
     viewDetails: "Lihat detail",
