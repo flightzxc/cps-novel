@@ -290,7 +290,7 @@ export class FakeBatchRebindDb {
           this.queryCount += 1;
           return this.articles.filter((row) => this.articleMatchesRebindSourceWhere(row, args.where)).length;
         },
-        findMany: async (args: { where: WhereClause; select?: Record<string, unknown>; orderBy?: unknown; take?: number }) => {
+        findMany: async (args: { where: WhereClause; select?: Record<string, unknown>; orderBy?: unknown; take?: number; distinct?: string[] }) => {
           this.queryCount += 1;
           // Two shapes share this method: the bounded-scan source-universe
           // query (articleType/status/locale/novel.is.sourceItems.some) and
@@ -300,6 +300,19 @@ export class FakeBatchRebindDb {
           // it does not recognize.
           let rows = this.articles.filter((row) => this.articleMatchesRebindSourceWhere(row, args.where));
           rows = [...rows].sort((a, b) => a.id.localeCompare(b.id));
+          // `distinct: ["novelId"]` (guard 9's sibling lookup,
+          // `preview.ts`'s `buildCandidateFindings` — C-30 施工单2复核 §6.3
+          // item 2): keep only the first (lowest `id`, since `rows` is
+          // already id-sorted above) row per `novelId`, same semantics as
+          // Prisma's own DISTINCT ON without an explicit `orderBy`.
+          if (args.distinct?.includes("novelId")) {
+            const seen = new Set<string | null>();
+            rows = rows.filter((row) => {
+              if (seen.has(row.novelId)) return false;
+              seen.add(row.novelId);
+              return true;
+            });
+          }
           if (args.take !== undefined) rows = rows.slice(0, args.take);
           return rows.map((row) => this.projectArticle(row, args.select));
         },

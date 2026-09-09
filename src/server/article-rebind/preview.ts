@@ -309,14 +309,30 @@ async function buildCandidateFindings(
   // Guard 7's fact, bulk: every ready PromoLink for every candidate target,
   // pre-sorted `fetchedAt DESC, id ASC` (施工工单 §4A.6) so `pickReadyPromoLink`
   // can apply the exact same pick per group `resolveTargetPromoLink` (the
-  // single-row path, `./guards.ts`) applies per call.
-  const promoRows = await db.promoLink.findMany({
-    where: { novelId: { in: targetNovelIds }, status: "fetched", deletedAt: null },
-    select: { id: true, novelId: true, status: true, webUrl: true, appUrl: true, fetchedAt: true },
-    orderBy: [{ fetchedAt: "desc" }, { id: "asc" }],
-  });
+  // single-row path, `./guards.ts`) applies per call. Chunked like every
+  // other bulk `{ in: [...] } }` lookup in this file (C-30 施工单2复核 §6.3
+  // item 1 — this call was the odd one out, unchunked while
+  // `loadTheaterEvidence`/`loadRelevantDestinations` both already chunk).
+  // `targetNovelIds.length` is bounded by `REBIND_BATCH_LIMITS.candidate`
+  // (1,600 today, checked by this function's only caller BEFORE it calls
+  // in — see `buildRebindBatchPreview`'s own `CANDIDATE_CEILING_EXCEEDED`
+  // check), well under the repo's 5,000 unchunked-`in` convention, but
+  // chunking here keeps this call consistent with its siblings and stays
+  // correct if `candidate` is ever raised. Per-chunk ordering is preserved:
+  // chunks partition `targetNovelIds` into disjoint id sets, so every row
+  // for a given novelId still arrives from exactly one chunk query, sorted
+  // `fetchedAt DESC, id ASC` within that query same as before.
+  const promoRows: Array<PromoLinkCandidate & { novelId: string }> = [];
+  for (const chunk of chunked(targetNovelIds)) {
+    const rows = await db.promoLink.findMany({
+      where: { novelId: { in: chunk }, status: "fetched", deletedAt: null },
+      select: { id: true, novelId: true, status: true, webUrl: true, appUrl: true, fetchedAt: true },
+      orderBy: [{ fetchedAt: "desc" }, { id: "asc" }],
+    });
+    promoRows.push(...(rows as Array<PromoLinkCandidate & { novelId: string }>));
+  }
   const promoByNovel = new Map<string, PromoLinkCandidate[]>();
-  for (const row of promoRows as Array<PromoLinkCandidate & { novelId: string }>) {
+  for (const row of promoRows) {
     const list = promoByNovel.get(row.novelId) ?? [];
     list.push(row);
     promoByNovel.set(row.novelId, list);
@@ -328,13 +344,18 @@ async function buildCandidateFindings(
 
   // Guard 8's fact, bulk: 🔴 no `deletedAt: null` — an existing Article at
   // (targetNovelId, filters.locale), soft-deleted or not, still occupies the
-  // slot (`docs/governance/database-governance.md` §5 item 22).
-  const occupyingRows = await db.article.findMany({
-    where: { novelId: { in: targetNovelIds }, locale: filters.locale },
-    select: { id: true, title: true, locale: true, novelId: true },
-  });
+  // slot (`docs/governance/database-governance.md` §5 item 22). Chunked —
+  // same rationale as the promoLink query above.
+  const occupyingRows: Array<{ id: string; title: string; locale: string; novelId: string | null }> = [];
+  for (const chunk of chunked(targetNovelIds)) {
+    const rows = await db.article.findMany({
+      where: { novelId: { in: chunk }, locale: filters.locale },
+      select: { id: true, title: true, locale: true, novelId: true },
+    });
+    occupyingRows.push(...(rows as Array<{ id: string; title: string; locale: string; novelId: string | null }>));
+  }
   const conflictByTargetNovel = new Map<string, { articleId: string; title: string; locale: string }>();
-  for (const row of occupyingRows as Array<{ id: string; title: string; locale: string; novelId: string | null }>) {
+  for (const row of occupyingRows) {
     if (!row.novelId) continue;
     if (!conflictByTargetNovel.has(row.novelId)) {
       conflictByTargetNovel.set(row.novelId, { articleId: row.id, title: row.title, locale: row.locale });
@@ -344,12 +365,32 @@ async function buildCandidateFindings(
   // Guard 9's fact, bulk: does the SOURCE (current) Novel have another
   // published, non-deleted Article outside `filters.locale`? Independent of
   // the target — a property of the article's own current binding.
-  const siblingRows = await db.article.findMany({
-    where: { novelId: { in: sourceNovelIds }, locale: { not: filters.locale }, status: "published", deletedAt: null },
-    select: { novelId: true },
-  });
+  //
+  // 🔴 Bound (C-30 施工单2复核 §6.3 item 2): without `distinct`, this query's
+  // worst case is `sourceNovelIds.length × (site locale count − 1)` rows —
+  // ≈22,400 for 1,600 source novels across ~15 site locales — because a
+  // source novel can have one sibling Article per OTHER locale. Only the
+  // SET of novelIds that have >=1 such sibling is ever consulted below
+  // (`siblingNovelIds.has(...)`), so `distinct: ["novelId"]` pushes that
+  // dedup into the query itself: it caps the rows THIS query can return at
+  // `sourceNovelIds.length` (≤ `REBIND_BATCH_LIMITS.candidate`, 1,600 today
+  // — already enforced by this function's caller, see the promoLink comment
+  // above), same order of magnitude as every other bulk lookup in this
+  // function and structurally incapable of the 22k blowup regardless of how
+  // many locales the site adds. No separate truncation/rejection branch is
+  // needed: the bound is a property of `distinct` (rows ≤ distinct input
+  // ids), not a runtime check that could silently drop data.
+  const siblingRows: Array<{ novelId: string | null }> = [];
+  for (const chunk of chunked(sourceNovelIds)) {
+    const rows = await db.article.findMany({
+      where: { novelId: { in: chunk }, locale: { not: filters.locale }, status: "published", deletedAt: null },
+      select: { novelId: true },
+      distinct: ["novelId"],
+    });
+    siblingRows.push(...(rows as Array<{ novelId: string | null }>));
+  }
   const siblingNovelIds = new Set(
-    (siblingRows as Array<{ novelId: string | null }>).map((row) => row.novelId).filter((id): id is string => Boolean(id)),
+    siblingRows.map((row) => row.novelId).filter((id): id is string => Boolean(id)),
   );
 
   for (const { article, target } of candidates) {
