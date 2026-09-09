@@ -118,6 +118,13 @@ export function BatchRebindClient() {
   const [submitError, setSubmitError] = useState<string | null>(null);
 
   const [batchDetail, setBatchDetail] = useState<RebindBatchDetail | null>(null);
+  // C-30 单 3 W-1 — CPS parity (`batch-drama-switch-v2-client.tsx:407-421`
+  // `DetailCard`'s own `leaseExpired` local state). Local-only: true once
+  // this batch's lease should have expired, even before the next `刷新状态`
+  // click re-derives `status === "interrupted"` server-side. See the effect
+  // below and `canResume` near the resume button for the CPS-identical
+  // three-way OR this feeds.
+  const [leaseExpired, setLeaseExpired] = useState(false);
   // 🔴 recovery affordance: an unresolved pending token from a previous
   // failed/timed-out submit surfaces immediately on mount, before the
   // operator does anything else. A lazy `useState` initializer (not an
@@ -164,6 +171,27 @@ export function BatchRebindClient() {
     // Only ever runs once on mount — channel/locale changes below re-fetch explicitly via `loadFacets`.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // C-30 单 3 W-1 — VERBATIM CPS parity, `batch-drama-switch-v2-client.tsx:
+  // 407-421` (`DetailCard`'s lease-expiry `useEffect`, deps `[detail.
+  // leaseExpiresAt, detail.persistedStatus]`). Every dependency change first
+  // schedules a 0-delay reset back to `false` (handles a refreshed detail
+  // whose lease is alive again — see the "详情刷新后租约又活了" UI test), then,
+  // only while the PERSISTED status is `"processing"`, schedules a second
+  // timer for `leaseExpiresAt - now` (floored at 0) that flips `leaseExpired`
+  // true. No polling: this fires once, at most, per dependency change; it
+  // never itself calls a Server Action.
+  useEffect(() => {
+    const isProcessing = batchDetail?.persistedStatus === "processing";
+    const resetTimer = window.setTimeout(() => setLeaseExpired(false), 0);
+    if (!isProcessing) return () => window.clearTimeout(resetTimer);
+    const expiresAt = batchDetail?.leaseExpiresAt ? new Date(batchDetail.leaseExpiresAt).getTime() : 0;
+    const expiryTimer = window.setTimeout(() => setLeaseExpired(true), Math.max(0, expiresAt - Date.now()));
+    return () => {
+      window.clearTimeout(resetTimer);
+      window.clearTimeout(expiryTimer);
+    };
+  }, [batchDetail?.leaseExpiresAt, batchDetail?.persistedStatus]);
 
   function onSourceChannelChange(value: string) {
     setSourceChannelCode(value);
@@ -353,6 +381,20 @@ export function BatchRebindClient() {
     const result = await getRebindBatchDetailAction({ requestId: requestId(), batchId: batchDetail.batchId });
     if (result.ok) setBatchDetail(result.data);
   }
+
+  // C-30 单 3 W-1 — VERBATIM CPS parity, `batch-drama-switch-v2-client.tsx:
+  // 424` (`canResume`). Was `status === "interrupted"` only, which misses
+  // two real cases: (a) the batch never even got to "processing" — the
+  // process died between the atomic create and the first execute call, so
+  // `persistedStatus` is stuck at `"ready"` and the server-derived
+  // `interrupted` state (which requires `persistedStatus === "processing"`)
+  // can never fire; (b) the operator's own detail fetch landed while the
+  // lease was still alive, so the server-derived state hasn't flipped yet
+  // even though the lease has since expired — `leaseExpired` (the timer
+  // above) covers that window without requiring a manual "刷新状态" click
+  // first. `resumeRebindBatch` already accepts a `"ready"` batch (it only
+  // rejects terminal ones), so this needs no server-side change.
+  const canResume = batchDetail !== null && (batchDetail.status === "ready" || batchDetail.status === "interrupted" || leaseExpired);
 
   return (
     <div className="space-y-6" data-testid="batch-rebind-client">
@@ -658,7 +700,7 @@ export function BatchRebindClient() {
             <button type="button" className={buttonClassName("secondary")} onClick={() => void refreshBatchDetail()}>
               刷新状态
             </button>
-            {batchDetail.status === "interrupted" && (
+            {canResume && (
               <button
                 type="button"
                 data-testid="rebind-batch-resume"
@@ -670,6 +712,17 @@ export function BatchRebindClient() {
               </button>
             )}
           </div>
+          {/* C-30 单 3 §3.6 — static caption for the window between the lease
+              timer firing locally and the next 刷新状态/续跑 round-trip
+              re-deriving `status === "interrupted"` from the server. Only
+              shown in that gap (`leaseExpired` true, server status not yet
+              caught up) so it never duplicates the "已中断，可续跑" label the
+              status line above already shows once the server does catch up. */}
+          {leaseExpired && batchDetail.status !== "interrupted" && (
+            <p className="text-xs text-amber-700" data-testid="rebind-batch-lease-expired-note">
+              这批的执行租约已过期，可以续跑；点击后从未处理的那一条继续，已完成的不会重做。
+            </p>
+          )}
           <div className="overflow-x-auto">
             <Table>
               <THead>

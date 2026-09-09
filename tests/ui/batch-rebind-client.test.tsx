@@ -1,5 +1,5 @@
 import "./setup-cleanup";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type {
@@ -161,6 +161,46 @@ function batchDetail(overrides: Partial<RebindBatchDetail> = {}): RebindBatchDet
     items: [],
     ...overrides,
   };
+}
+
+function seedPendingRecovery(token = "tok-lease-1") {
+  window.sessionStorage.setItem(
+    `novel-rebind:batch:pending:${token}`,
+    JSON.stringify({
+      requestToken: token,
+      previewId: "11111111-1111-4111-8111-111111111111",
+      sourceChannelCode: "changdu",
+      targetChannelCode: "beidou",
+      selectedArticleIds: ["article-exec-1"],
+      reason: "r",
+      acknowledgeRisks: false,
+      savedAt: Date.now(),
+    }),
+  );
+}
+
+/**
+ * Reaches a populated `batchDetail` via the "查询该次提交结果" recovery banner
+ * (`rebind-batch-recovery-lookup`) instead of the full preview → select →
+ * submit flow every other describe block in this file uses. Shorter, and —
+ * for the lease-timer tests below, which run under `vi.useFakeTimers()` —
+ * it keeps every `Date.now()` the component's effect reads under this
+ * file's own control via `vi.advanceTimersByTimeAsync`, rather than
+ * threading fake-timer advances through `setupToPreview`'s own chain of
+ * real-timer `waitFor` polls.
+ */
+async function renderWithRecoveredDetail(detail: RebindBatchDetail) {
+  actions.getRebindBatchFacetsAction.mockResolvedValue({ ok: true, data: facets() });
+  seedPendingRecovery();
+  actions.getRebindBatchByTokenAction.mockResolvedValue({ ok: true, data: detail });
+  render(<BatchRebindClient />);
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(0);
+  });
+  await act(async () => {
+    fireEvent.click(screen.getByTestId("rebind-batch-recovery-lookup"));
+    await vi.advanceTimersByTimeAsync(0);
+  });
 }
 
 async function setupToPreview(options: { executableCount?: number } = {}) {
@@ -357,5 +397,173 @@ describe("BatchRebindClient · 续跑按钮仅在中断态出现", () => {
     fireEvent.click(screen.getByText("提交"));
     await waitFor(() => expect(screen.getByTestId("rebind-batch-detail")).toBeTruthy());
     expect(screen.getByTestId("rebind-batch-resume")).toBeTruthy();
+  });
+});
+
+/**
+ * 施工工单_C30单3_批量换小说分块执行_移植CPS_V2_2026-09-09.md §5.2 — W-1's own
+ * test spec (items 1-7). CPS parity source: `batch-drama-switch-v2-client.
+ * tsx:407-421` (lease-expiry timer) and `:424` (`canResume`). This describe
+ * block runs entirely under fake timers so `renderWithRecoveredDetail`
+ * (above) and every `vi.advanceTimersByTimeAsync` call below have full
+ * control over what "now" the component's effect sees — none of these
+ * cases wait on real wall-clock time.
+ */
+describe("BatchRebindClient · C-30 单 3 W-1 续跑入口补齐（租约到期定时器 + canResume）", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("§5.2-1 持久态 processing 且租约未到期时，续跑按钮不渲染", async () => {
+    await renderWithRecoveredDetail(
+      batchDetail({
+        status: "processing",
+        persistedStatus: "processing",
+        leaseExpiresAt: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+        counts: { submitted: 2, resolvable: 2, applied: 0, skipped: 0, failed: 0, pending: 2, processing: 0 },
+      }),
+    );
+    expect(screen.getByTestId("rebind-batch-detail")).toBeTruthy();
+    expect(screen.queryByTestId("rebind-batch-resume")).toBeNull();
+  });
+
+  it("§5.2-2 推进假定时器越过租约到期时刻后，续跑按钮出现", async () => {
+    await renderWithRecoveredDetail(
+      batchDetail({
+        status: "processing",
+        persistedStatus: "processing",
+        leaseExpiresAt: new Date(Date.now() + 5000).toISOString(),
+        counts: { submitted: 2, resolvable: 2, applied: 0, skipped: 0, failed: 0, pending: 2, processing: 0 },
+      }),
+    );
+    expect(screen.queryByTestId("rebind-batch-resume")).toBeNull();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5000);
+    });
+    expect(screen.getByTestId("rebind-batch-resume")).toBeTruthy();
+  });
+
+  it("§5.2-3 持久态 ready 时续跑按钮渲染（覆盖「批次已建好、执行未开始」的卡死态）", async () => {
+    await renderWithRecoveredDetail(
+      batchDetail({
+        status: "ready",
+        persistedStatus: "ready",
+        leaseExpiresAt: null,
+        counts: { submitted: 2, resolvable: 2, applied: 0, skipped: 0, failed: 0, pending: 2, processing: 0 },
+      }),
+    );
+    expect(screen.getByTestId("rebind-batch-resume")).toBeTruthy();
+  });
+
+  it("§5.2-4 终态（completed/partial/failed）时续跑按钮不渲染，且推进大量时间后依旧不出现（无残留的到期定时器）", async () => {
+    await renderWithRecoveredDetail(
+      batchDetail({ status: "completed", persistedStatus: "completed", leaseExpiresAt: null }),
+    );
+    expect(screen.queryByTestId("rebind-batch-resume")).toBeNull();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10_000_000);
+    });
+    expect(screen.queryByTestId("rebind-batch-resume")).toBeNull();
+  });
+
+  it("§5.2-5 详情刷新后租约又活了：leaseExpired 被重置，续跑按钮收回", async () => {
+    await renderWithRecoveredDetail(
+      batchDetail({
+        status: "processing",
+        persistedStatus: "processing",
+        leaseExpiresAt: new Date(Date.now() + 1000).toISOString(),
+        counts: { submitted: 2, resolvable: 2, applied: 0, skipped: 0, failed: 0, pending: 2, processing: 0 },
+      }),
+    );
+    expect(screen.queryByTestId("rebind-batch-resume")).toBeNull();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1000);
+    });
+    expect(screen.getByTestId("rebind-batch-resume")).toBeTruthy();
+
+    actions.getRebindBatchDetailAction.mockResolvedValue({
+      ok: true,
+      data: batchDetail({
+        status: "processing",
+        persistedStatus: "processing",
+        leaseExpiresAt: new Date(Date.now() + 60_000).toISOString(),
+        counts: { submitted: 2, resolvable: 2, applied: 0, skipped: 0, failed: 0, pending: 2, processing: 0 },
+      }),
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByText("刷新状态"));
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    // A second 0ms flush: the refresh's `setBatchDetail` re-runs the lease
+    // effect (new `leaseExpiresAt`), which itself schedules a fresh 0ms
+    // reset timer — that timer is registered by an effect flush that lands
+    // just outside the first `advanceTimersByTimeAsync` window above, so it
+    // needs its own tick to fire.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(screen.queryByTestId("rebind-batch-resume")).toBeNull();
+  });
+
+  it("§5.2-6 点击续跑只调用一次续跑动作，调用期间按钮禁用、二次点击不产生第二次调用", async () => {
+    await renderWithRecoveredDetail(
+      batchDetail({
+        status: "interrupted",
+        persistedStatus: "processing",
+        leaseExpiresAt: null,
+        counts: { submitted: 2, resolvable: 2, applied: 1, skipped: 0, failed: 0, pending: 1, processing: 0 },
+      }),
+    );
+    expect(screen.getByTestId("rebind-batch-resume")).toBeTruthy();
+
+    let resolveResume!: (value: { ok: true; data: RebindBatchDetail }) => void;
+    const resumeGate = new Promise<{ ok: true; data: RebindBatchDetail }>((resolve) => {
+      resolveResume = resolve;
+    });
+    actions.resumeRebindBatchAction.mockReturnValue(resumeGate);
+
+    fireEvent.click(screen.getByTestId("rebind-batch-resume"));
+    expect(actions.resumeRebindBatchAction).toHaveBeenCalledTimes(1);
+    expect((screen.getByTestId("rebind-batch-resume") as HTMLButtonElement).disabled).toBe(true);
+
+    // Disabled buttons do not dispatch `click` handlers in jsdom (matches
+    // real browsers) — this is the "二次点击不产生第二次调用" half of the
+    // assertion, exercised while the first call is still in flight.
+    fireEvent.click(screen.getByTestId("rebind-batch-resume"));
+    expect(actions.resumeRebindBatchAction).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      resolveResume({ ok: true, data: batchDetail({ status: "completed", persistedStatus: "completed" }) });
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    // Same second-tick flush as §5.2-5 — the resolved detail's persisted
+    // status change re-runs the lease effect, whose fresh 0ms reset timer
+    // needs its own `advanceTimersByTimeAsync` window to fire.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(actions.resumeRebindBatchAction).toHaveBeenCalledTimes(1);
+    // Terminal status now — the button leaves the DOM entirely rather than
+    // merely re-enabling, which also confirms `submitting` was cleared.
+    expect(screen.queryByTestId("rebind-batch-resume")).toBeNull();
+  });
+
+  it("§5.2-7 不轮询：挂载后推进大量假时间，取详情动作不会被自动调用", async () => {
+    actions.getRebindBatchFacetsAction.mockResolvedValue({ ok: true, data: facets() });
+    render(<BatchRebindClient />);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10_000_000);
+    });
+    expect(actions.getRebindBatchDetailAction).not.toHaveBeenCalled();
   });
 });
