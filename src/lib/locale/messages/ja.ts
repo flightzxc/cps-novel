@@ -64,8 +64,13 @@ const messages = {
     readOnUpstream: "続きを読む",
     synopsis: "あらすじ",
     previewChapters: "試し読みできる章",
-    previewChaptersDescription: "本サイトでは{count}章を試し読みいただけます。すべて原作プラットフォームより提供されています。",
-    previewChaptersDescriptionOne: "本サイトでは1章を試し読みいただけます。原作プラットフォームより提供されています。",
+    // 施工工单_I18N_复数能力 §6.2 折键：ja 的 Intl.PluralRules 只解出 other 一档
+    // （no one category），one 分支在 ja 永远选不中，会被门禁的 CLDR
+    // 类别覆盖检查判为多余分支——因此这里只保留原 previewChaptersDescription
+    // 一句（已含 {count}，任意数量下都语法正确），原 …One 版本"すべて"
+    // 省略的单数措辞变体停用，不再单独出现。
+    previewChaptersDescription:
+      "{count, plural, other {本サイトでは{count}章を試し読みいただけます。すべて原作プラットフォームより提供されています。}}",
     noPreviewChapters: "この作品にはまだ試し読みできる章がありません。",
     relatedWorks: "関連作品",
     chapterHeading: "第{number}章",

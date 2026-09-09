@@ -47,22 +47,28 @@ export const en = {
     readOnUpstream: "Continue reading",
     synopsis: "Synopsis",
     previewChapters: "Preview chapters",
-    previewChaptersDescription:
-      "{count} preview chapters on this site, all provided by the original platform.",
     /**
-     * 低危清扫第 1 批 · item D-⑥: the count=1 case of
-     * `previewChaptersDescription` above ("1 preview chapter**s**...") is a
-     * plural-agreement defect — `t()` only does bare `{name}` substitution
-     * (no ICU `plural`), so the sentence can't self-correct for a count of
-     * exactly one the way `next-intl`'s ICU could. `PreviewChapterList.tsx`
-     * only ever calls this description when `chapters.length > 0`, so
-     * `chapters.length === 1` is the one case this key exists to cover;
-     * `previewChaptersDescription` above still handles every count ≥ 2.
-     * (CPS's own analogous key, `preview.previewSubtitle`, sidesteps the
-     * whole problem by never stating a count at all — not an option here,
-     * since the count itself is the promise this sentence makes.)
+     * 施工工单_I18N_复数能力_移植CPS_next-intl_plural_2026-09-10.md §6.2:
+     * folds the former two-key count===1 workaround (this key used to sit
+     * alongside a separate `previewChaptersDescriptionOne`, picked by a
+     * ternary in `PreviewChapterList.tsx`) into one ICU `plural` message,
+     * now that `t()` (`src/lib/locale/messages/index.ts`) renders through
+     * `intl-messageformat` instead of bare `{name}` substitution. Both
+     * branch texts are the pre-fold originals moved verbatim, not
+     * retranslated: `one` is the old `...One` key's exact sentence
+     * (including its literal `1` — correct, since English's `one` category
+     * only ever means exactly 1), `other` is this key's old sentence
+     * unchanged. Every locale catalog folds the same way — except
+     * `id`/`ja`/`ko`/`th`/`vi`/`zh-Hant`, whose `Intl.PluralRules` resolves
+     * only the single `other` category (`new
+     * Intl.PluralRules("ja").resolvedOptions().pluralCategories` is
+     * `["other"]`), so a `one` branch there is unreachable dead ICU content
+     * that the completeness gate's exact-CLDR-category-coverage check would
+     * reject; those six keep only their base (`other`) text — see the
+     * comment in each of those six catalog files for the one-line note.
      */
-    previewChaptersDescriptionOne: "1 preview chapter on this site, provided by the original platform.",
+    previewChaptersDescription:
+      "{count, plural, one {1 preview chapter on this site, provided by the original platform.} other {{count} preview chapters on this site, all provided by the original platform.}}",
     noPreviewChapters: "This book has no preview chapters yet.",
     relatedWorks: "Related works",
     chapterHeading: "Chapter {number}",

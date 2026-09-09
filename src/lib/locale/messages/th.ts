@@ -64,8 +64,13 @@ const messages = {
     readOnUpstream: "อ่านต่อ",
     synopsis: "เรื่องย่อ",
     previewChapters: "ตอนตัวอย่าง",
-    previewChaptersDescription: "ตอนตัวอย่าง {count} ตอนบนเว็บไซต์นี้ ทั้งหมดจัดหาโดยแพลตฟอร์มต้นฉบับ",
-    previewChaptersDescriptionOne: "ตอนตัวอย่าง 1 ตอนบนเว็บไซต์นี้ จัดหาโดยแพลตฟอร์มต้นฉบับ",
+    // 施工工单_I18N_复数能力 §6.2 折键：th 的 Intl.PluralRules 只解出 other 一档
+    // （no one category），one 分支在 th 永远选不中，会被门禁的 CLDR
+    // 类别覆盖检查判为多余分支——因此这里只保留原 previewChaptersDescription
+    // 一句（已含 {count}，任意数量下都语法正确），原 …One 的单数措辞变体停用，
+    // 不再单独出现。
+    previewChaptersDescription:
+      "{count, plural, other {ตอนตัวอย่าง {count} ตอนบนเว็บไซต์นี้ ทั้งหมดจัดหาโดยแพลตฟอร์มต้นฉบับ}}",
     noPreviewChapters: "หนังสือเล่มนี้ยังไม่มีตอนตัวอย่าง",
     relatedWorks: "ผลงานที่เกี่ยวข้อง",
     chapterHeading: "ตอนที่ {number}",

@@ -64,8 +64,10 @@ const messages = {
     readOnUpstream: "Продолжить чтение",
     synopsis: "Описание",
     previewChapters: "Ознакомительные главы",
-    previewChaptersDescription: "{count} ознакомительных глав на этом сайте — все предоставлены оригинальной платформой.",
-    previewChaptersDescriptionOne: "1 ознакомительная глава на этом сайте — предоставлена оригинальной платформой.",
+    // 施工工单_I18N_复数能力 §6.2 折键（逐字保留，未改写文案）；ru 的 few/many 两档
+    // 在此步骤尚未补全，由步骤 3（ru/pl/cs/ar 译文）统一完成。
+    previewChaptersDescription:
+      "{count, plural, one {1 ознакомительная глава на этом сайте — предоставлена оригинальной платформой.} other {{count} ознакомительных глав на этом сайте — все предоставлены оригинальной платформой.}}",
     noPreviewChapters: "У этой книги пока нет ознакомительных глав.",
     relatedWorks: "Похожие произведения",
     chapterHeading: "Глава {number}",

@@ -64,8 +64,10 @@ const messages = {
     readOnUpstream: "متابعة القراءة",
     synopsis: "القصة",
     previewChapters: "فصول المعاينة",
-    previewChaptersDescription: "يوفر هذا الموقع {count} فصلاً للمعاينة، جميعها مقدَّمة من المنصة الأصلية.",
-    previewChaptersDescriptionOne: "يوفر هذا الموقع فصلاً واحدًا للمعاينة، مقدَّمًا من المنصة الأصلية.",
+    // 施工工单_I18N_复数能力 §6.2 折键（逐字保留，未改写文案）；ar 的 zero/two/few/many
+    // 四档在此步骤尚未补全，由步骤 3（ru/pl/cs/ar 译文）统一完成。
+    previewChaptersDescription:
+      "{count, plural, one {يوفر هذا الموقع فصلاً واحدًا للمعاينة، مقدَّمًا من المنصة الأصلية.} other {يوفر هذا الموقع {count} فصلاً للمعاينة، جميعها مقدَّمة من المنصة الأصلية.}}",
     noPreviewChapters: "لا توجد فصول معاينة لهذا الكتاب بعد.",
     relatedWorks: "أعمال ذات صلة",
     chapterHeading: "الفصل {number}",

@@ -64,8 +64,13 @@ const messages = {
     readOnUpstream: "이어서 읽기",
     synopsis: "시놉시스",
     previewChapters: "미리보기 챕터",
-    previewChaptersDescription: "이 사이트에서 미리보기 챕터 {count}개를 볼 수 있으며, 모두 원작 플랫폼에서 제공합니다.",
-    previewChaptersDescriptionOne: "이 사이트에서 미리보기 챕터 1개를 볼 수 있으며, 원작 플랫폼에서 제공합니다.",
+    // 施工工单_I18N_复数能力 §6.2 折键：ko 的 Intl.PluralRules 只解出 other 一档
+    // （no one category），one 分支在 ko 永远选不中，会被门禁的 CLDR
+    // 类别覆盖检查判为多余分支——因此这里只保留原 previewChaptersDescription
+    // 一句（已含 {count}，任意数量下都语法正确），原 …One 的单数措辞变体停用，
+    // 不再单独出现。
+    previewChaptersDescription:
+      "{count, plural, other {이 사이트에서 미리보기 챕터 {count}개를 볼 수 있으며, 모두 원작 플랫폼에서 제공합니다.}}",
     noPreviewChapters: "이 작품은 아직 미리보기 챕터가 없습니다.",
     relatedWorks: "관련 작품",
     chapterHeading: "{number}장",

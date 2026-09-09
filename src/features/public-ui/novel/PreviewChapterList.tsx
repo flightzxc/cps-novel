@@ -40,12 +40,11 @@ export function PreviewChapterList({
         title={t("novel.previewChapters")}
         description={
           hasChapters
-            ? // 低危清扫第 1 批 · item D-⑥: t() 不支持 ICU 复数，count=1 时改走
-              // 专门的单数键（`en.ts` 该键旁的注释有完整说明），避免 "1 preview
-              // chapters" 这类英文复数缺陷。
-              chapters.length === 1
-              ? t("novel.previewChaptersDescriptionOne")
-              : t("novel.previewChaptersDescription", { count: chapters.length })
+            ? // 施工工单_I18N_复数能力 §6.2: t() 现在经 intl-messageformat 渲染
+              // ICU plural，`novel.previewChaptersDescription` 自己按 count 选
+              // 分支（`one`/`other`，语种按各自 CLDR 类别），不再需要在调用点
+              // 用 length===1 三元式挑一个单独的 `...One` 键。
+              t("novel.previewChaptersDescription", { count: chapters.length })
             : undefined
         }
       />

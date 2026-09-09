@@ -64,8 +64,13 @@ const messages = {
     readOnUpstream: "Tiếp tục đọc",
     synopsis: "Tóm tắt",
     previewChapters: "Chương xem trước",
-    previewChaptersDescription: "{count} chương xem trước trên trang này, tất cả do nền tảng gốc cung cấp.",
-    previewChaptersDescriptionOne: "1 chương xem trước trên trang này, do nền tảng gốc cung cấp.",
+    // 施工工单_I18N_复数能力 §6.2 折键：vi 的 Intl.PluralRules 只解出 other 一档
+    // （no one category），one 分支在 vi 永远选不中，会被门禁的 CLDR
+    // 类别覆盖检查判为多余分支——因此这里只保留原 previewChaptersDescription
+    // 一句（已含 {count}，任意数量下都语法正确），原 …One 的单数措辞变体停用，
+    // 不再单独出现。
+    previewChaptersDescription:
+      "{count, plural, other {{count} chương xem trước trên trang này, tất cả do nền tảng gốc cung cấp.}}",
     noPreviewChapters: "Cuốn sách này chưa có chương xem trước.",
     relatedWorks: "Tác phẩm liên quan",
     chapterHeading: "Chương {number}",

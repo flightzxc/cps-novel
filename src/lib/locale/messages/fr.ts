@@ -64,8 +64,11 @@ const messages = {
     readOnUpstream: "Continuer la lecture",
     synopsis: "Résumé",
     previewChapters: "Chapitres proposés en extrait",
-    previewChaptersDescription: "{count} chapitres sont proposés en extrait sur ce site, tous fournis par la plateforme d'origine.",
-    previewChaptersDescriptionOne: "1 chapitre est proposé en extrait sur ce site, fourni par la plateforme d'origine.",
+    // 施工工单_I18N_复数能力 §6.2 折键（逐字保留，未改写文案）+ §5.1 第二条：fr 的
+    // CLDR 类别含 many（仅整百万命中，如 1000000/2000000），门禁要求必须写，
+    // 文本与 other 分支相同，不是漏翻译。
+    previewChaptersDescription:
+      "{count, plural, one {1 chapitre est proposé en extrait sur ce site, fourni par la plateforme d'origine.} many {{count} chapitres sont proposés en extrait sur ce site, tous fournis par la plateforme d'origine.} other {{count} chapitres sont proposés en extrait sur ce site, tous fournis par la plateforme d'origine.}}",
     noPreviewChapters: "Aucun chapitre de ce livre n'est encore proposé en extrait.",
     relatedWorks: "Œuvres associées",
     chapterHeading: "Chapitre {number}",

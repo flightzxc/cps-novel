@@ -64,8 +64,10 @@ const messages = {
     readOnUpstream: "Czytaj dalej",
     synopsis: "Opis fabuły",
     previewChapters: "Przykładowe rozdziały",
-    previewChaptersDescription: "{count} przykładowych rozdziałów na tej stronie, wszystkie dostarczone przez oryginalną platformę.",
-    previewChaptersDescriptionOne: "1 przykładowy rozdział na tej stronie, dostarczony przez oryginalną platformę.",
+    // 施工工单_I18N_复数能力 §6.2 折键（逐字保留，未改写文案）；pl 的 few/many 两档
+    // 在此步骤尚未补全，由步骤 3（ru/pl/cs/ar 译文）统一完成。
+    previewChaptersDescription:
+      "{count, plural, one {1 przykładowy rozdział na tej stronie, dostarczony przez oryginalną platformę.} other {{count} przykładowych rozdziałów na tej stronie, wszystkie dostarczone przez oryginalną platformę.}}",
     noPreviewChapters: "Ta książka nie ma jeszcze przykładowych rozdziałów.",
     relatedWorks: "Powiązane dzieła",
     chapterHeading: "Rozdział {number}",

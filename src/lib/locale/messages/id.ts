@@ -64,8 +64,13 @@ const messages = {
     readOnUpstream: "Lanjutkan membaca",
     synopsis: "Sinopsis",
     previewChapters: "Bab pratinjau",
-    previewChaptersDescription: "{count} bab pratinjau di situs ini, semuanya disediakan oleh platform asli.",
-    previewChaptersDescriptionOne: "1 bab pratinjau di situs ini, disediakan oleh platform asli.",
+    // 施工工单_I18N_复数能力 §6.2 折键：id 的 Intl.PluralRules 只解出 other 一档
+    // （no one category），一个 one 分支在 id 永远选不中，会被门禁的 CLDR
+    // 类别覆盖检查判为多余分支——因此这里只保留原 previewChaptersDescription
+    // 一句（已含 {count}，任意数量下都语法正确），原 …One 的" disediakan"
+    // 单数措辞变体停用，不再单独出现。
+    previewChaptersDescription:
+      "{count, plural, other {{count} bab pratinjau di situs ini, semuanya disediakan oleh platform asli.}}",
     noPreviewChapters: "Buku ini belum memiliki bab pratinjau.",
     relatedWorks: "Karya terkait",
     chapterHeading: "Bab {number}",

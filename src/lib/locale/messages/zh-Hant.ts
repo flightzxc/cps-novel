@@ -64,8 +64,13 @@ const messages = {
     readOnUpstream: "繼續閱讀",
     synopsis: "劇情簡介",
     previewChapters: "試讀章節",
-    previewChaptersDescription: "本站提供{count}章試讀,均由原始平台提供。",
-    previewChaptersDescriptionOne: "本站提供1章試讀,由原始平台提供。",
+    // 施工工单_I18N_复数能力 §6.2 折键：zh-Hant 的 Intl.PluralRules 只解出 other
+    // 一档（no one category），one 分支在 zh-Hant 永远选不中，会被门禁的 CLDR
+    // 类别覆盖检查判为多余分支——因此这里只保留原 previewChaptersDescription
+    // 一句（已含 {count}，任意数量下都语法正确），原 …One 的单数措辞变体停用，
+    // 不再单独出现。
+    previewChaptersDescription:
+      "{count, plural, other {本站提供{count}章試讀,均由原始平台提供。}}",
     noPreviewChapters: "本書目前尚無試讀章節。",
     relatedWorks: "相關作品",
     chapterHeading: "第{number}章",

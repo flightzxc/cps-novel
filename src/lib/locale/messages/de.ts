@@ -64,8 +64,9 @@ const messages = {
     readOnUpstream: "Weiterlesen",
     synopsis: "Zusammenfassung",
     previewChapters: "Vorschaukapitel",
-    previewChaptersDescription: "{count} Vorschaukapitel auf dieser Website, alle bereitgestellt von der Originalplattform.",
-    previewChaptersDescriptionOne: "1 Vorschaukapitel auf dieser Website, bereitgestellt von der Originalplattform.",
+    // 施工工单_I18N_复数能力 §6.2 折键（逐字保留，未改写文案）；de 只有 one/other 两档，折完即完整。
+    previewChaptersDescription:
+      "{count, plural, one {1 Vorschaukapitel auf dieser Website, bereitgestellt von der Originalplattform.} other {{count} Vorschaukapitel auf dieser Website, alle bereitgestellt von der Originalplattform.}}",
     noPreviewChapters: "Für dieses Buch gibt es noch keine Vorschaukapitel.",
     relatedWorks: "Verwandte Werke",
     chapterHeading: "Kapitel {number}",

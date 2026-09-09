@@ -64,8 +64,10 @@ const messages = {
     readOnUpstream: "Pokračovat ve čtení",
     synopsis: "Synopse",
     previewChapters: "Ukázkové kapitoly",
-    previewChaptersDescription: "{count} ukázkových kapitol na tomto webu, všechny poskytnuté původní platformou.",
-    previewChaptersDescriptionOne: "1 ukázková kapitola na tomto webu, poskytnutá původní platformou.",
+    // 施工工单_I18N_复数能力 §6.2 折键（逐字保留，未改写文案）；cs 的 few/many 两档
+    // 在此步骤尚未补全，由步骤 3（ru/pl/cs/ar 译文）统一完成。
+    previewChaptersDescription:
+      "{count, plural, one {1 ukázková kapitola na tomto webu, poskytnutá původní platformou.} other {{count} ukázkových kapitol na tomto webu, všechny poskytnuté původní platformou.}}",
     noPreviewChapters: "Tato kniha zatím nemá žádné ukázkové kapitoly.",
     relatedWorks: "Související díla",
     chapterHeading: "Kapitola {number}",

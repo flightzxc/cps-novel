@@ -64,8 +64,11 @@ const messages = {
     readOnUpstream: "Continuar leyendo",
     synopsis: "Sinopsis",
     previewChapters: "Capítulos de muestra",
-    previewChaptersDescription: "{count} capítulos de muestra en este sitio, todos proporcionados por la plataforma original.",
-    previewChaptersDescriptionOne: "1 capítulo de muestra en este sitio, proporcionado por la plataforma original.",
+    // 施工工单_I18N_复数能力 §6.2 折键（逐字保留，未改写文案）+ §5.1 第二条：es 的
+    // CLDR 类别含 many（仅整百万命中，如 1000000/2000000），门禁要求必须写，
+    // 文本与 other 分支相同，不是漏翻译。
+    previewChaptersDescription:
+      "{count, plural, one {1 capítulo de muestra en este sitio, proporcionado por la plataforma original.} many {{count} capítulos de muestra en este sitio, todos proporcionados por la plataforma original.} other {{count} capítulos de muestra en este sitio, todos proporcionados por la plataforma original.}}",
     noPreviewChapters: "Este libro aún no tiene capítulos de muestra.",
     relatedWorks: "Obras relacionadas",
     chapterHeading: "Capítulo {number}",
