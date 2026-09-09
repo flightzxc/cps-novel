@@ -407,6 +407,46 @@ C-17 只搬运 UI 交互形态（表头 checkbox 的 `checked`/`indeterminate`/`
 | 分页型「选择当前页」+ 不看上限 → `NovelsTable`/`CatalogSyncClient`/`ArticleList` 的表头 checkbox 与 `toggleAll`/`toggleAllVisible` | `src/app/(admin)/sync/_components/changdu-sync-panel.tsx` | `444-445`（`allVisibleSelected = rows.length > 0 && rows.every(...)`）；`479-488`（`toggleVisibleRows`：只增删当前页 `rows`，不清空跨页选择）；`1038-1046`（表头 `aria-label="选择当前页"` 与 `className` 形态） | `c37602c3933ca97adad0281deb6c75e71e550412` | `ADAPT` | 三处目标文件均按此形态：`every` 判满、`aria-label="选择当前页"` 逐字复用、`onChange` 只增删当前页数组里的 id、不清空其他页已选、不与批量上限（200/50/50）交互——三个上限都 ≥ 每页 20 行，全选一页在数学上不会越限，越限判定继续留给既有提交侧逻辑（`overCap`/`selected.size > 50` 等），未改动；**不搬** CPS `submitTooMany`/`MAX_LINK_SELECTION` 一类"全选后再判断是否超限并禁用提交"的耦合逻辑，因为本仓选择上限判定本就与全选动作解耦 | Claude |
 | 备份份数下限+陈旧保护的保留纪律形态 → `x8_gc()` 的镜像保留规则 | `scripts/ops/prune-backups.sh` | `1-49`（顶部纪律注释：并集条件、sidecar 标记、mtime 排序理由、退出码含义）；`66-67,83-86`（`FLOOR`/`STALE_HOURS`/`--label` 参数定义）；`142,165`（陈旧保护触发时 `exit 2`，本轮只告警不删） | `c37602c3933ca97adad0281deb6c75e71e550412` | `ADAPT` | 借鉴对象是"保留纪律该有的形状"，不是逐句代码：`--floor N`（份数下限，不论多旧最近 N 份永不删）对应到 `x8_gc()` 就是 §4.2 的"最近 N 个"这一类；按 mtime（这里是 `docker images` 的 CreatedAt）而非文件名排序、`--label` 式的可归因日志、顶部大段注释写清"这条保护为什么存在、降级时会怎样"三点原样借鉴。**明确不搬 `--stale-hours` 陈旧保护**（"上游备份管线疑似停摆时本轮放弃删除、只告警、退出码 2"）：这条保护解决的是"产出方停摆、消费方却继续按计划删"这个时间错位问题，镜像场景没有对应的"上游"概念——每次 `up` 是否新打一个 tag 完全由这次部署本身决定，不存在一个独立的、可能静默停摆的"生产方"。`x8_gc()` 里语义对等、且实测更强的保护是 §4.2 第 4 类"被任何容器引用（含已停止）的镜像永不删"——这是本工单 2026-09-09 审计实证过的真实场景（最老的 `0.1.0-62453d2` 仍在被另一 compose 项目的 worker/scheduler 使用），比"距今多久没更新"更精确地回答了"删了会不会打断正在跑的东西"这个问题，所以镜像侧选它作为等价保护，而不是移植一个没有对应现实场景的陈旧检测。同理**不搬**"情况 A/情况 B 标记文件降级"整套机制——镜像没有"验证通过"这个中间态，`docker images` 报出来的标签本身就是权威事实，无需 sidecar 标记佐证 | Claude |
 
+### I18N 复数能力（intl-messageformat 解析引擎，v8.5.1 基线，2026-09-10）
+
+依据 `施工工单_I18N_复数能力_移植CPS_next-intl_plural_2026-09-10.md`。沿用 C-17 已登记的第三条只读
+参照路径 `cps-admin-v851-admin-host`（`baseline_commit` = `c37602c3933ca97adad0281deb6c75e71e550412`），
+不新增参照仓。
+
+**搬的是哪一层，登记为什么是 `ADAPT` 而不是 `COPY`：** 本条目搬运的不是仓库源码里的某个符号，
+而是 CPS 复数能力实际落脚的第三方依赖版本——从 CPS 的 `node_modules` 逐层读 `package.json` 得到
+真实 resolve 出来的调用链 `next-intl 4.11.0 → use-intl 4.11.0 → intl-messageformat 11.2.3 →
+@formatjs/icu-messageformat-parser 3.5.6`，复数判定本身不在这条链的任何一层，最终调的是平台内置
+`Intl.PluralRules`。本仓把 `intl-messageformat@11.2.3` / `@formatjs/icu-messageformat-parser@3.5.6`
+两个版本号原样对齐 CPS 生产树引入为依赖（`package.json`），`t()`/`createTranslator`/`getPublicT`
+三个函数本身是本仓既有函数的原地改造（替换内部渲染实现、新增 `locale` 参数与编译缓存），不是从
+CPS 抄来的 wrapper 代码——CPS 那层 wrapper 是 `next-intl`/`use-intl`，本条目明确不搬。因此
+`port_kind` 登记为 `ADAPT`：搬的是"引擎版本对齐"这个事实，改的是"整个调用方式与错误语义"。
+
+**为什么不搬 `next-intl`/`use-intl` 框架层（详见工单 §4.1/§4.2）：** ①路由归属权冲突——
+`next-intl` 的 `defineRouting`/`createNavigation`/中间件要接管语种前缀、`Link`、`redirect`，
+与本仓自管的 `src/proxy.ts` + `src/app/[locale]/*` 薄壳正面冲突；②回落语义方向相反——CPS
+`deepMergeMessages` 遍历 override 的键、允许译文引入英文没有的新键，本仓 `deepMergeOntoEnglish`
+遍历 base（英文）的键、只接受非空字符串覆盖，这是"Owner 修正一"的既定方向，接 next-intl 要么
+放弃这条要么在 `getRequestConfig` 里重新实现一遍；③类型安全退化——本仓 `MessageKey` 从 `en.ts`
+的 `as const` 对象推出字面量联合，写错键名是编译错误，next-intl 的 key 类型推导走另一套
+（`@schummar/icu-type-parser`），要接就得把 `en.ts` 从 TS 对象改成 JSON；④不必要的运行时——
+next-intl 4.11 依赖里有 `@swc/core`/`@parcel/watcher`/`po-parser`/`negotiator`/`icu-minify`，
+为一个复数功能量级不对。
+
+**为什么不选 `use-intl` 而是裸 `intl-messageformat`（工单 §4.2 决定性证据）：** 海阅 `t()` 的
+一条承重语义是"缺变量就抛"（fail-loud）。实测 `use-intl`（即便把 `onError` 配成直接 `throw`）
+在"缺变量但不传第二个参数"这一格会**静默跳过格式化**、直接返回原始模板 `"{count} preview
+chapters"`——`onError` 根本不会被调用；而裸 `intl-messageformat` 在同样场景下正确抛
+`MissingValueError`。裸引擎比 `use-intl` **和**本仓原有的手写正则 `t()` 都更严格，方向正是海阅
+既定的 fail-loud 纪律要求的方向（§4.4 收紧，见下）；`use-intl` 相对多出来的 React
+hooks/number/date/list/relativeTime 格式化器/命名空间管理/错误兜底策略，本仓要么已有
+（命名空间由 `MessageKey` 类型管）要么明确不想要（错误兜底）。
+
+| symbol | source_file | source_lines | baseline_commit | port_kind | changed_what | owner |
+| --- | --- | --- | --- | --- | --- | --- |
+| `intl-messageformat@11.2.3` + `@formatjs/icu-messageformat-parser@3.5.6`（CPS 复数能力依赖链的解析引擎层，非 `next-intl`/`use-intl` 框架层） | CPS `node_modules` 递归 `package.json` resolve 得到的真实版本（非仓库源码路径；`next-intl 4.11.0 → use-intl 4.11.0 → intl-messageformat 11.2.3 → @formatjs/icu-messageformat-parser 3.5.6`） | N/A（依赖版本对齐，非代码行搬运） | `c37602c3933ca97adad0281deb6c75e71e550412` | `ADAPT` | 只对齐引擎版本号作为本仓生产依赖（`intl-messageformat` production dep）+ 门禁专用 dev 依赖（`@formatjs/icu-messageformat-parser`）引入；不引入 `next-intl`/`use-intl` 框架层（路由/Link/redirect/usePathname、React hooks、messages 命名空间管理、`onError` 兜底策略）——理由见上方两段说明；`t()`/`createTranslator`/`getPublicT` 是本仓 `src/lib/locale/messages/index.ts` 既有函数原地改造为调用该引擎（新增 `locale` 参数、`Map<string, IntlMessageFormat>` 编译缓存、`MissingValueError` 重新包装为既有 `MissingMessagesError`），不是从 CPS 抄的 wrapper 代码 | Claude |
+
 ## 使用说明
 
 - `symbol`：被搬运的具体符号名（函数名/类型名/表名/字段名/组件名等），一行一个符号，不得用文件级粗粒度笼统登记；

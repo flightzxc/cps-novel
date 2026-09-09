@@ -1,3 +1,5 @@
+import IntlMessageFormat, { MissingValueError } from "intl-messageformat";
+
 import type { SiteLocale } from "@/lib/locale/locale-canonical";
 import { PUBLIC_SITE_LOCALE } from "@/lib/site/locale-label";
 
@@ -170,24 +172,84 @@ export function loadMessages(locale: SiteLocale): Messages {
   return merged;
 }
 
-export function t(messages: Messages, key: MessageKey, vars?: MessageVars): string {
+/**
+ * `t()` is invoked dozens of times per render (`SiteShell.tsx` alone touches
+ * every nav/footer key), and `new IntlMessageFormat(...)` re-parses the ICU
+ * string into an AST plus compiled plural/number-format closures on every
+ * construction — work worth memoizing rather than repeating per call.
+ *
+ * Cache key is `${locale} ${message}`. This cannot collide across distinct
+ * `(locale, message)` pairs: `locale` is always exactly one of the 15
+ * `SiteLocale` string literals (`"en"`, `"pt-BR"`, `"zh-Hant"`, ...), none of
+ * which contain a space, so the leading `"<locale> "` segment of the key
+ * unambiguously identifies which locale a given cached instance belongs to
+ * regardless of what the message text itself contains.
+ */
+const messageFormatCache = new Map<string, IntlMessageFormat>();
+
+function getMessageFormat(locale: SiteLocale, message: string): IntlMessageFormat {
+  const cacheKey = `${locale} ${message}`;
+  const cached = messageFormatCache.get(cacheKey);
+  if (cached) return cached;
+  const format = new IntlMessageFormat(message, locale);
+  messageFormatCache.set(cacheKey, format);
+  return format;
+}
+
+/**
+ * Renders `messages[key]` through `intl-messageformat` (CPS's own plural
+ * engine — 施工工单_I18N_复数能力 §三/§4.2), so a catalog value written as
+ * plain `{name}` interpolation or as an ICU `{count, plural, ...}` block
+ * renders identically through this one function; which form a given locale
+ * uses is a per-message choice made in that locale's catalog file, not
+ * something callers of `t()` need to know about.
+ *
+ * Two failure modes, both fail-loud by design (no silent degrade to raw
+ * `{braces}` on the page):
+ *
+ *  - Missing/blank key → `MissingMessagesError`, unchanged from before this
+ *    engine swap.
+ *  - A variable the message needs was not supplied → `intl-messageformat`
+ *    throws `MissingValueError`; caught here and re-wrapped as
+ *    `MissingMessagesError` so the error type this module exposes stays the
+ *    same regardless of which engine is doing the rendering underneath.
+ *    This is strictly *stricter* than the old hand-rolled regex replace
+ *    (which silently returned the raw template when `vars` was omitted,
+ *    施工工单 §4.4) — the one prior call site that relied on the loose
+ *    behavior (`PreviewChapterList.tsx`'s no-placeholder `...One` key) is
+ *    folded away in this same change (§6.2), so nothing depends on it.
+ */
+export function t(messages: Messages, key: MessageKey, locale: SiteLocale, vars?: MessageVars): string {
   const value = lookup(messages, key.split("."));
   if (typeof value !== "string" || value.length === 0) {
     throw new MissingMessagesError("en", key);
   }
-  if (!vars) return value;
-  return value.replace(/\{([a-zA-Z0-9_]+)\}/g, (match, name: string) => {
-    if (!(name in vars)) {
-      throw new MissingMessagesError("en", `${key} missing interpolation "{${name}}"`);
+
+  const format = getMessageFormat(locale, value);
+  let result: ReturnType<IntlMessageFormat["format"]>;
+  try {
+    result = format.format(vars ?? {});
+  } catch (error) {
+    if (error instanceof MissingValueError) {
+      throw new MissingMessagesError("en", `${key}: ${error.message}`);
     }
-    return String(vars[name]);
-  });
+    throw error;
+  }
+
+  // Defensive assertion, not a reachable path today: the completeness gate
+  // (`tests/ui/messages-completeness.test.ts`) bans the ICU `tag` form that
+  // is the only way `format()` can return non-string parts, so this should
+  // never fire against a catalog that passes the gate.
+  if (typeof result !== "string") {
+    throw new Error(`${key}: message did not resolve to a string (rich-text interpolation is not supported)`);
+  }
+  return result;
 }
 
 export type Translator = (key: MessageKey, vars?: MessageVars) => string;
 
-export function createTranslator(messages: Messages): Translator {
-  return (key, vars) => t(messages, key, vars);
+export function createTranslator(messages: Messages, locale: SiteLocale): Translator {
+  return (key, vars) => t(messages, key, locale, vars);
 }
 
 /**
@@ -199,5 +261,5 @@ export function createTranslator(messages: Messages): Translator {
  * 静默降级。
  */
 export function getPublicT(locale: SiteLocale): Translator {
-  return createTranslator(loadMessages(locale));
+  return createTranslator(loadMessages(locale), locale);
 }

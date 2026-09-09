@@ -22,7 +22,7 @@ export function MessagesProvider({
   children: ReactNode;
 }) {
   return (
-    <MessagesContext.Provider value={{ locale, messages, t: createTranslator(messages) }}>
+    <MessagesContext.Provider value={{ locale, messages, t: createTranslator(messages, locale) }}>
       {children}
     </MessagesContext.Provider>
   );

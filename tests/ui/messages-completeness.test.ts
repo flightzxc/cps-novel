@@ -200,7 +200,7 @@ describe("message catalog completeness (all 15 registered locales)", () => {
       const enValue = EN_LEAVES.get(key) as string;
       const vars = interpolationVars(enValue);
       if (vars.size === 0) continue;
-      const rendered = t(messages, key as MessageKey, sampleVars);
+      const rendered = t(messages, key as MessageKey, locale, sampleVars);
       if (/\{[a-zA-Z0-9_]+\}/.test(rendered)) {
         leftoverBraces.push(`${key}: ${rendered}`);
       }

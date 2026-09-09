@@ -30,18 +30,18 @@ import { en } from "@/lib/locale/messages/en";
 describe("loadMessages", () => {
   it("loads the complete English catalog", () => {
     expect(loadMessages("en")).toBe(en);
-    expect(t(loadMessages("en"), "nav.home")).toBe("Home");
+    expect(t(loadMessages("en"), "nav.home", "en")).toBe("Home");
   });
 
   it("interpolates dotted keys", () => {
-    expect(t(loadMessages("en"), "novel.coverAlt", { title: "Lantern" })).toBe("Cover of Lantern");
-    expect(t(loadMessages("en"), "home.slideStatus", { n: 2, count: 4, title: "Lantern" })).toBe(
+    expect(t(loadMessages("en"), "novel.coverAlt", "en", { title: "Lantern" })).toBe("Cover of Lantern");
+    expect(t(loadMessages("en"), "home.slideStatus", "en", { n: 2, count: 4, title: "Lantern" })).toBe(
       "Work 2 of 4: Lantern",
     );
   });
 
   it("throws on a missing key instead of returning the key", () => {
-    expect(() => t(loadMessages("en"), "nav.missing" as never)).toThrow(MissingMessagesError);
+    expect(() => t(loadMessages("en"), "nav.missing" as never, "en")).toThrow(MissingMessagesError);
   });
 
   it("loadMessages(\"en\") returns the en module object itself (reference equality)", () => {
@@ -52,27 +52,46 @@ describe("loadMessages", () => {
     // A complete catalog's own values win.
     expect(() => loadMessages("es")).not.toThrow();
     const es = loadMessages("es");
-    expect(t(es, "nav.home")).toBe("Inicio");
+    expect(t(es, "nav.home", "es")).toBe("Inicio");
   });
 
   it("falls back to English for a key missing from the target locale, keeping the rest of the locale", () => {
     const es = loadMessages("es");
-    expect(t(es, "nav.browse")).toBe("All works");
+    expect(t(es, "nav.browse", "es")).toBe("All works");
     // Sibling key from the same namespace still uses the target locale.
-    expect(t(es, "nav.home")).toBe("Inicio");
+    expect(t(es, "nav.home", "es")).toBe("Inicio");
   });
 
   it("treats an empty/whitespace-only value in the target locale as missing and falls back to English", () => {
     const es = loadMessages("es");
-    expect(t(es, "nav.footerNote")).toBe(
+    expect(t(es, "nav.footerNote", "es")).toBe(
       "This site offers free preview chapters. The full story is on the original platform.",
     );
   });
 
   it("falls back wholesale to English for a namespace the target locale never touched", () => {
     const es = loadMessages("es");
-    expect(t(es, "chapter.theme")).toBe("Theme");
-    expect(t(es, "collection.workCount", { count: 3 })).toBe("3 works");
+    expect(t(es, "chapter.theme", "es")).toBe("Theme");
+    expect(t(es, "collection.workCount", "es", { count: 3 })).toBe("3 works");
+  });
+});
+
+/**
+ * 施工工单_I18N_复数能力 §4.4: switching the render engine to
+ * `intl-messageformat` tightens one behavior — a call site that omits a
+ * variable a message actually needs now throws `MissingMessagesError`
+ * instead of silently printing the raw `{name}` template. The one call site
+ * that used to rely on the loose behavior (`PreviewChapterList.tsx`'s
+ * no-placeholder `...One` key) is folded away in the same work order (§6.2),
+ * so this tightening has no surviving caller to break.
+ */
+describe("t() fail-loud on a missing interpolation variable (施工工单_I18N_复数能力 §4.4)", () => {
+  it("throws MissingMessagesError when a required variable is omitted entirely", () => {
+    expect(() => t(loadMessages("en"), "novel.coverAlt", "en")).toThrow(MissingMessagesError);
+  });
+
+  it("throws MissingMessagesError when vars is an empty object missing the required key", () => {
+    expect(() => t(loadMessages("en"), "novel.coverAlt", "en", {})).toThrow(MissingMessagesError);
   });
 });
 
