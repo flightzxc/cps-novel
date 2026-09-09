@@ -290,7 +290,7 @@ export class FakeBatchRebindDb {
           this.queryCount += 1;
           return this.articles.filter((row) => this.articleMatchesRebindSourceWhere(row, args.where)).length;
         },
-        findMany: async (args: { where: WhereClause; select?: Record<string, unknown>; orderBy?: unknown; take?: number; distinct?: string[] }) => {
+        findMany: async (args: { where: WhereClause; select?: Record<string, unknown>; orderBy?: unknown; take?: number }) => {
           this.queryCount += 1;
           // Two shapes share this method: the bounded-scan source-universe
           // query (articleType/status/locale/novel.is.sourceItems.some) and
@@ -300,28 +300,33 @@ export class FakeBatchRebindDb {
           // it does not recognize.
           let rows = this.articles.filter((row) => this.articleMatchesRebindSourceWhere(row, args.where));
           rows = [...rows].sort((a, b) => a.id.localeCompare(b.id));
-          // `distinct: ["novelId"]` (guard 9's sibling lookup,
-          // `preview.ts`'s `buildCandidateFindings` — C-30 施工单2复核 §6.3
-          // item 2): keep only the first (lowest `id`, since `rows` is
-          // already id-sorted above) row per `novelId`, same semantics as
-          // Prisma's own DISTINCT ON without an explicit `orderBy`.
-          if (args.distinct?.includes("novelId")) {
-            const seen = new Set<string | null>();
-            rows = rows.filter((row) => {
-              if (seen.has(row.novelId)) return false;
-              seen.add(row.novelId);
-              return true;
-            });
-          }
           if (args.take !== undefined) rows = rows.slice(0, args.take);
           return rows.map((row) => this.projectArticle(row, args.select));
         },
-        groupBy: async (args: { by: string[]; where: WhereClause; _count: { _all: true } }) => {
+        groupBy: async (args: { by: string[]; where: WhereClause; _count?: { _all: true } }) => {
           this.queryCount += 1;
           const rows = this.articles.filter((row) => this.articleMatchesRebindSourceWhere(row, args.where));
-          const counts = new Map<string, number>();
-          for (const row of rows) counts.set(row.locale, (counts.get(row.locale) ?? 0) + 1);
-          return [...counts.entries()].map(([locale, count]) => ({ locale, _count: { _all: count } }));
+          // Honor `args.by` rather than assuming `locale`: two call sites now
+          // share this delegate — `buildRebindBatchFacets` groups by `locale`
+          // WITH `_count`, and `buildCandidateFindings`' guard-9 sibling
+          // lookup groups by `novelId` with NO aggregate (C-30 施工单2复核
+          // §6.3 item 2). Prisma returns one row per distinct combination of
+          // the `by` fields carrying only those fields plus any requested
+          // aggregate; mirror exactly that, and refuse anything this fake
+          // has not actually been taught, so a future multi-field groupBy
+          // fails loudly instead of silently returning wrong groups.
+          if (args.by.length !== 1 || (args.by[0] !== "locale" && args.by[0] !== "novelId")) {
+            throw new Error(`FakeBatchRebindDb.article.groupBy: unsupported by=${JSON.stringify(args.by)}`);
+          }
+          const key = args.by[0] as "locale" | "novelId";
+          const counts = new Map<string | null, number>();
+          for (const row of rows) {
+            const value = row[key] ?? null;
+            counts.set(value, (counts.get(value) ?? 0) + 1);
+          }
+          return [...counts.entries()].map(([value, count]) =>
+            args._count ? { [key]: value, _count: { _all: count } } : { [key]: value },
+          );
         },
         findFirst: async (args: { where: WhereClause; select?: Record<string, unknown> }) => {
           this.queryCount += 1;

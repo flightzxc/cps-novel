@@ -366,26 +366,38 @@ async function buildCandidateFindings(
   // published, non-deleted Article outside `filters.locale`? Independent of
   // the target — a property of the article's own current binding.
   //
-  // 🔴 Bound (C-30 施工单2复核 §6.3 item 2): without `distinct`, this query's
-  // worst case is `sourceNovelIds.length × (site locale count − 1)` rows —
-  // ≈22,400 for 1,600 source novels across ~15 site locales — because a
-  // source novel can have one sibling Article per OTHER locale. Only the
+  // 🔴 Bound (C-30 施工单2复核 §6.3 item 2): read as a plain `findMany`, this
+  // query's worst case is `sourceNovelIds.length × (site locale count − 1)`
+  // rows — ≈22,400 for 1,600 source novels across ~15 site locales — because
+  // a source novel can have one sibling Article per OTHER locale. Only the
   // SET of novelIds that have >=1 such sibling is ever consulted below
-  // (`siblingNovelIds.has(...)`), so `distinct: ["novelId"]` pushes that
-  // dedup into the query itself: it caps the rows THIS query can return at
-  // `sourceNovelIds.length` (≤ `REBIND_BATCH_LIMITS.candidate`, 1,600 today
-  // — already enforced by this function's caller, see the promoLink comment
-  // above), same order of magnitude as every other bulk lookup in this
-  // function and structurally incapable of the 22k blowup regardless of how
-  // many locales the site adds. No separate truncation/rejection branch is
-  // needed: the bound is a property of `distinct` (rows ≤ distinct input
-  // ids), not a runtime check that could silently drop data.
+  // (`siblingNovelIds.has(...)`), never any other column, so the dedup can
+  // be pushed all the way into SQL.
+  //
+  // 🔴 It is `groupBy`, NOT `findMany({ distinct: ["novelId"] })`, and the
+  // difference is not stylistic. Prisma's `distinct` is an IN-MEMORY filter
+  // applied by the query engine AFTER Postgres has already produced and
+  // shipped every row: database-level `DISTINCT ON` is gated behind the
+  // `nativeDistinct` preview feature, which this schema does not enable
+  // (`prisma/schema.prisma` declares no `previewFeatures` at all). Measured
+  // on this repo's own Prisma 6.19.2 against a wire-capturing listener, the
+  // SQL emitted for this `where` with `distinct` is byte-identical to the
+  // SQL emitted without it — `distinct` would have shrunk only the
+  // engine→JS handoff and left all ~22,400 rows to be scanned and
+  // transferred by Postgres. `groupBy` emits a real
+  // `... GROUP BY "public"."article"."novel_id"`, which caps the rows
+  // Postgres itself returns at the chunk's distinct novelId count
+  // (≤ `SQL_BIND_CHUNK_SIZE`), and selects only `novel_id` instead of
+  // `id, novel_id`. Semantics are unchanged: `novelId: { in: chunk }` admits
+  // no NULL novelId rows, so grouping cannot merge unrelated rows, and the
+  // consumer is a Set either way. No truncation/rejection branch is needed
+  // or reachable — the bound is a property of the grouping, not a runtime
+  // check that could silently drop data.
   const siblingRows: Array<{ novelId: string | null }> = [];
   for (const chunk of chunked(sourceNovelIds)) {
-    const rows = await db.article.findMany({
+    const rows = await db.article.groupBy({
+      by: ["novelId"],
       where: { novelId: { in: chunk }, locale: { not: filters.locale }, status: "published", deletedAt: null },
-      select: { novelId: true },
-      distinct: ["novelId"],
     });
     siblingRows.push(...(rows as Array<{ novelId: string | null }>));
   }
