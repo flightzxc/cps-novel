@@ -52,22 +52,37 @@ const messages = {
     switchFeatured: "تبديل العمل المميز",
     slideLabel: "العمل {n}",
     slideStatus: "العمل {n} من {count}: {title}",
-    chapterCount: "الفصول: {count}",
+    // 施工工单_I18N_复数能力 §六.1: 名词随数量变形（zero/one/two/few/many/other，
+    // Intl.PluralRules("ar") 实测六档全覆盖；数词-名词一致规则：0 无数词+复数名词，
+    // 1/2 用单数/双数名词不带 {count}，3-10 用复数名词，11-99 用宾格不定单数带
+    // tanwin，100+ 用裸单数名词）。
+    chapterCount:
+      "{count, plural, zero {لا فصول} one {فصل واحد} two {فصلان} few {{count} فصول} many {{count} فصلاً} other {{count} فصل}}",
   },
   novel: {
     coverAlt: "غلاف {title}",
     tagsLabel: "العلامات",
     genreTags: "علامات النوع",
-    chapterCount: "الفصول: {count}",
-    previewCount: "فصول المعاينة: {count}",
+    // 施工工单_I18N_复数能力 §六.1: 名词随数量变形（zero/one/two/few/many/other，
+    // Intl.PluralRules("ar") 实测六档全覆盖；数词-名词一致规则：0 无数词+复数名词，
+    // 1/2 用单数/双数名词不带 {count}，3-10 用复数名词，11-99 用宾格不定单数带
+    // tanwin，100+ 用裸单数名词）。
+    chapterCount:
+      "{count, plural, zero {لا فصول} one {فصل واحد} two {فصلان} few {{count} فصول} many {{count} فصلاً} other {{count} فصل}}",
+    // 施工工单_I18N_复数能力 §六.1: 六档全覆盖，数词-名词一致规则同上，用介词
+    // للمعاينة（供试读）代替属格结构。
+    previewCount:
+      "{count, plural, zero {لا فصول للمعاينة} one {فصل واحد للمعاينة} two {فصلان للمعاينة} few {{count} فصول للمعاينة} many {{count} فصلاً للمعاينة} other {{count} فصل للمعاينة}}",
     startPreview: "ابدأ المعاينة",
     readOnUpstream: "متابعة القراءة",
     synopsis: "القصة",
     previewChapters: "فصول المعاينة",
-    // 施工工单_I18N_复数能力 §6.2 折键（逐字保留，未改写文案）；ar 的 zero/two/few/many
-    // 四档在此步骤尚未补全，由步骤 3（ru/pl/cs/ar 译文）统一完成。
+    // 施工工单_I18N_复数能力 §六.1/步骤 3: 承诺句，六档全补全。one/many 两分支
+    // 沿用步骤 2 折键时逐字保留的原文；zero/two/few/other 为步骤 3 新译，句式
+    // 与既有 one/many 分支保持一致（"يوفر هذا الموقع ... للمعاينة، ... من المنصة
+    // الأصلية"），只替换计数短语与呼应的谓语/代词数。
     previewChaptersDescription:
-      "{count, plural, one {يوفر هذا الموقع فصلاً واحدًا للمعاينة، مقدَّمًا من المنصة الأصلية.} other {يوفر هذا الموقع {count} فصلاً للمعاينة، جميعها مقدَّمة من المنصة الأصلية.}}",
+      "{count, plural, zero {لا يوفر هذا الموقع أي فصول للمعاينة، وجميع المحتوى مقدَّم من المنصة الأصلية.} one {يوفر هذا الموقع فصلاً واحدًا للمعاينة، مقدَّمًا من المنصة الأصلية.} two {يوفر هذا الموقع فصلين للمعاينة، وكلاهما مقدَّم من المنصة الأصلية.} few {يوفر هذا الموقع {count} فصول للمعاينة، جميعها مقدَّمة من المنصة الأصلية.} many {يوفر هذا الموقع {count} فصلاً للمعاينة، جميعها مقدَّمة من المنصة الأصلية.} other {يوفر هذا الموقع {count} فصل للمعاينة، جميعها مقدَّمة من المنصة الأصلية.}}",
     noPreviewChapters: "لا توجد فصول معاينة لهذا الكتاب بعد.",
     relatedWorks: "أعمال ذات صلة",
     chapterHeading: "الفصل {number}",
@@ -103,7 +118,9 @@ const messages = {
     measureWide: "عريض",
   },
   collection: {
-    workCount: "الأعمال: {count}",
+    // 施工工单_I18N_复数能力 §六.1: 六档全覆盖，数词-名词一致规则同 chapterCount。
+    workCount:
+      "{count, plural, zero {لا أعمال} one {عمل واحد} two {عملان} few {{count} أعمال} many {{count} عملاً} other {{count} عمل}}",
     empty: "لا توجد أعمال للقراءة هنا بعد.",
     allWorksTitle: "جميع الأعمال",
     allWorksDescription: "الأعمال المتاحة حاليًا للقراءة على هذا الموقع.",

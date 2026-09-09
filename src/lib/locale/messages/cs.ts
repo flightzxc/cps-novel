@@ -52,22 +52,32 @@ const messages = {
     switchFeatured: "Přepnout doporučené dílo",
     slideLabel: "Dílo {n}",
     slideStatus: "Dílo {n} z {count}: {title}",
-    chapterCount: "Kapitol: {count}",
+    // 施工工单_I18N_复数能力 §六.1: 名词随数量变形（one/few/many/other，Intl.PluralRules("cs") 实测；
+    // many 为小数专用罕见分支，与 few 同文，非漏翻译）。
+    chapterCount:
+      "{count, plural, one {{count} kapitola} few {{count} kapitoly} many {{count} kapitoly} other {{count} kapitol}}",
   },
   novel: {
     coverAlt: "Obálka {title}",
     tagsLabel: "Tagy",
     genreTags: "Žánrové tagy",
-    chapterCount: "Kapitol: {count}",
-    previewCount: "Ukázkových kapitol: {count}",
+    // 施工工单_I18N_复数能力 §六.1: 名词随数量变形（one/few/many/other，Intl.PluralRules("cs") 实测；
+    // many 为小数专用罕见分支，与 few 同文，非漏翻译）。
+    chapterCount:
+      "{count, plural, one {{count} kapitola} few {{count} kapitoly} many {{count} kapitoly} other {{count} kapitol}}",
+    // 施工工单_I18N_复数能力 §六.1: 名词随数量变形（one/few/many/other）。
+    previewCount:
+      "{count, plural, one {{count} ukázková kapitola} few {{count} ukázkové kapitoly} many {{count} ukázkové kapitoly} other {{count} ukázkových kapitol}}",
     startPreview: "Spustit ukázku",
     readOnUpstream: "Pokračovat ve čtení",
     synopsis: "Synopse",
     previewChapters: "Ukázkové kapitoly",
-    // 施工工单_I18N_复数能力 §6.2 折键（逐字保留，未改写文案）；cs 的 few/many 两档
-    // 在此步骤尚未补全，由步骤 3（ru/pl/cs/ar 译文）统一完成。
+    // 施工工单_I18N_复数能力 §六.1/步骤 3: 承诺句，四档补全（one 分支沿用步骤 2
+    // 折键时逐字保留的原文；other 沿用步骤 2 已保留的旧 base 原文（属格复数，
+    // 恰好是 cs 的 other 类别正确形态）；few 为步骤 3 新译，many 与 few 同文——
+    // 小数专用罕见分支，非漏翻译）。
     previewChaptersDescription:
-      "{count, plural, one {1 ukázková kapitola na tomto webu, poskytnutá původní platformou.} other {{count} ukázkových kapitol na tomto webu, všechny poskytnuté původní platformou.}}",
+      "{count, plural, one {1 ukázková kapitola na tomto webu, poskytnutá původní platformou.} few {{count} ukázkové kapitoly na tomto webu, poskytnuté původní platformou.} many {{count} ukázkové kapitoly na tomto webu, poskytnuté původní platformou.} other {{count} ukázkových kapitol na tomto webu, všechny poskytnuté původní platformou.}}",
     noPreviewChapters: "Tato kniha zatím nemá žádné ukázkové kapitoly.",
     relatedWorks: "Související díla",
     chapterHeading: "Kapitola {number}",
@@ -103,7 +113,9 @@ const messages = {
     measureWide: "Široká",
   },
   collection: {
-    workCount: "Děl: {count}",
+    // 施工工单_I18N_复数能力 §六.1: 名词随数量变形（one/few/many/other）。
+    workCount:
+      "{count, plural, one {{count} dílo} few {{count} díla} many {{count} díla} other {{count} děl}}",
     empty: "Zatím zde nejsou žádná díla ke čtení.",
     allWorksTitle: "Všechna díla",
     allWorksDescription: "Díla, která lze na tomto webu aktuálně číst.",

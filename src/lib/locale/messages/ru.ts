@@ -52,22 +52,32 @@ const messages = {
     switchFeatured: "Переключить избранное произведение",
     slideLabel: "Произведение {n}",
     slideStatus: "Произведение {n} из {count}: {title}",
-    chapterCount: "Глав: {count}",
+    // 施工工单_I18N_复数能力 §六.1: 名词随数量变形（one/few/many/other，Intl.PluralRules("ru") 实测）。
+    chapterCount:
+      "{count, plural, one {{count} глава} few {{count} главы} many {{count} глав} other {{count} главы}}",
   },
   novel: {
     coverAlt: "Обложка «{title}»",
     tagsLabel: "Теги",
     genreTags: "Теги жанра",
-    chapterCount: "Глав: {count}",
-    previewCount: "Ознакомительных глав: {count}",
+    // 施工工单_I18N_复数能力 §六.1: 名词随数量变形（one/few/many/other，Intl.PluralRules("ru") 实测）。
+    chapterCount:
+      "{count, plural, one {{count} глава} few {{count} главы} many {{count} глав} other {{count} главы}}",
+    // 施工工单_I18N_复数能力 §六.1: 名词随数量变形（one/few/many/other）。
+    previewCount:
+      "{count, plural, one {{count} ознакомительная глава} few {{count} ознакомительные главы} many {{count} ознакомительных глав} other {{count} ознакомительные главы}}",
     startPreview: "Начать ознакомление",
     readOnUpstream: "Продолжить чтение",
     synopsis: "Описание",
     previewChapters: "Ознакомительные главы",
-    // 施工工单_I18N_复数能力 §6.2 折键（逐字保留，未改写文案）；ru 的 few/many 两档
-    // 在此步骤尚未补全，由步骤 3（ru/pl/cs/ar 译文）统一完成。
+    // 施工工单_I18N_复数能力 §六.1/步骤 3: 承诺句，四档补全；few/many/other 为
+    // 步骤 3 新译。one 分支改用 {count}，不沿用步骤 2 折键时保留的硬编码「1」
+    // ——与英语不同，ru 的 one 类别不止对应字面 1（21/101/121 等个位为 1、
+    // 十位非 1 的数同样落在 one，实测 Intl.PluralRules("ru").select(21) ===
+    // "one"），硬编码「1」在 count=21/101 时会显示错误的「1 ознакомительная
+    // глава」。
     previewChaptersDescription:
-      "{count, plural, one {1 ознакомительная глава на этом сайте — предоставлена оригинальной платформой.} other {{count} ознакомительных глав на этом сайте — все предоставлены оригинальной платформой.}}",
+      "{count, plural, one {{count} ознакомительная глава на этом сайте — предоставлена оригинальной платформой.} few {{count} ознакомительные главы на этом сайте — предоставлены оригинальной платформой.} many {{count} ознакомительных глав на этом сайте — все предоставлены оригинальной платформой.} other {{count} ознакомительные главы на этом сайте — предоставлены оригинальной платформой.}}",
     noPreviewChapters: "У этой книги пока нет ознакомительных глав.",
     relatedWorks: "Похожие произведения",
     chapterHeading: "Глава {number}",
@@ -103,7 +113,9 @@ const messages = {
     measureWide: "Широкая",
   },
   collection: {
-    workCount: "Произведений: {count}",
+    // 施工工单_I18N_复数能力 §六.1: 名词随数量变形（one/few/many/other）。
+    workCount:
+      "{count, plural, one {{count} произведение} few {{count} произведения} many {{count} произведений} other {{count} произведения}}",
     empty: "Здесь пока нет произведений для чтения.",
     allWorksTitle: "Все произведения",
     allWorksDescription: "Произведения, доступные для чтения на этом сайте сейчас.",

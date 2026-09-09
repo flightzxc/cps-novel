@@ -52,22 +52,31 @@ const messages = {
     switchFeatured: "Zmień wyróżnione dzieło",
     slideLabel: "Dzieło {n}",
     slideStatus: "Dzieło {n} z {count}: {title}",
-    chapterCount: "Rozdziałów: {count}",
+    // 施工工单_I18N_复数能力 §六.1: 名词随数量变形（one/few/many/other，Intl.PluralRules("pl") 实测；
+    // other 为小数专用罕见分支，与 many 同文，非漏翻译）。
+    chapterCount:
+      "{count, plural, one {{count} rozdział} few {{count} rozdziały} many {{count} rozdziałów} other {{count} rozdziałów}}",
   },
   novel: {
     coverAlt: "Okładka {title}",
     tagsLabel: "Tagi",
     genreTags: "Tagi gatunku",
-    chapterCount: "Rozdziałów: {count}",
-    previewCount: "Przykładowych rozdziałów: {count}",
+    // 施工工单_I18N_复数能力 §六.1: 名词随数量变形（one/few/many/other，Intl.PluralRules("pl") 实测；
+    // other 为小数专用罕见分支，与 many 同文，非漏翻译）。
+    chapterCount:
+      "{count, plural, one {{count} rozdział} few {{count} rozdziały} many {{count} rozdziałów} other {{count} rozdziałów}}",
+    // 施工工单_I18N_复数能力 §六.1: 名词随数量变形（one/few/many/other）。
+    previewCount:
+      "{count, plural, one {{count} przykładowy rozdział} few {{count} przykładowe rozdziały} many {{count} przykładowych rozdziałów} other {{count} przykładowych rozdziałów}}",
     startPreview: "Rozpocznij przykład",
     readOnUpstream: "Czytaj dalej",
     synopsis: "Opis fabuły",
     previewChapters: "Przykładowe rozdziały",
-    // 施工工单_I18N_复数能力 §6.2 折键（逐字保留，未改写文案）；pl 的 few/many 两档
-    // 在此步骤尚未补全，由步骤 3（ru/pl/cs/ar 译文）统一完成。
+    // 施工工单_I18N_复数能力 §六.1/步骤 3: 承诺句，四档补全（one 分支沿用步骤 2
+    // 折键时逐字保留的原文；few/many 为步骤 3 新译，other 与 many 同文——
+    // 小数专用罕见分支，非漏翻译）。
     previewChaptersDescription:
-      "{count, plural, one {1 przykładowy rozdział na tej stronie, dostarczony przez oryginalną platformę.} other {{count} przykładowych rozdziałów na tej stronie, wszystkie dostarczone przez oryginalną platformę.}}",
+      "{count, plural, one {1 przykładowy rozdział na tej stronie, dostarczony przez oryginalną platformę.} few {{count} przykładowe rozdziały na tej stronie, dostarczone przez oryginalną platformę.} many {{count} przykładowych rozdziałów na tej stronie, wszystkie dostarczone przez oryginalną platformę.} other {{count} przykładowych rozdziałów na tej stronie, wszystkie dostarczone przez oryginalną platformę.}}",
     noPreviewChapters: "Ta książka nie ma jeszcze przykładowych rozdziałów.",
     relatedWorks: "Powiązane dzieła",
     chapterHeading: "Rozdział {number}",
@@ -103,7 +112,9 @@ const messages = {
     measureWide: "Szeroka",
   },
   collection: {
-    workCount: "Dzieł: {count}",
+    // 施工工单_I18N_复数能力 §六.1: 名词随数量变形（one/few/many/other）。
+    workCount:
+      "{count, plural, one {{count} dzieło} few {{count} dzieła} many {{count} dzieł} other {{count} dzieł}}",
     empty: "Nie ma tu jeszcze żadnych dzieł do przeczytania.",
     allWorksTitle: "Wszystkie dzieła",
     allWorksDescription: "Dzieła obecnie dostępne do czytania na tej stronie.",
