@@ -583,12 +583,15 @@ describe.skipIf(!enabled).sequential("C-30B (施工工单 单 2 主验收): 200 
   /**
    * 7. 🔴 C-30 单 3 W-2 (施工工单_C30单3..._2026-09-09.md §5.3) — added in a
    * LATER session than the rest of this file (which was last verified
-   * 2026-09-09 per this file's own header). 🔴 NOT RUN in that later
-   * session: no PostgreSQL instance was available there (施工工单 §6 item 3
-   * — no docker, no `prisma migrate`, no DB connection in that session).
-   * Written to the same conventions as tests 1-6 above and reasoned through
-   * carefully, but unverified against a real database — treat it as
-   * untested until someone with `C30_DATABASE_TEST=1` runs it for real.
+   * 2026-09-09 per this file's own header), and NOT run in that session
+   * (no PostgreSQL instance was available there).
+   *
+   * ✅ VERIFIED 2026-09-09 by the reviewer against a real PostgreSQL 16.14
+   * (`C30_DATABASE_TEST=1`, throwaway `c30_it` database, 12 migrations
+   * applied): 200 rounds, batch `completed`, exactly 200 audit rows, one
+   * per article, 4.7s. One test-fixture defect was found and fixed in that
+   * first real run — see the `attempt`/UUID note in the round loop below;
+   * `src/` was not touched.
    *
    * "把预算临时压到一个小值...不要改常量" (§5.3): `REBIND_BATCH_LIMITS.
    * requestBudgetMs` itself is untouched (still the real 24_000 from
@@ -696,7 +699,18 @@ describe.skipIf(!enabled).sequential("C-30B (施工工单 单 2 主验收): 200 
         return value;
       };
       const t0 = Date.now();
-      await executeRebindBatch(executeDb, { batchId, attempt: `budget-attempt-${rounds}` }, clock);
+      // 🔴 复核修正 (2026-09-09, 复核者): `attempt` is written straight into
+      // `article_novel_rebind_batch.execution_token`, which is `@db.Uuid`
+      // (`prisma/schema.prisma` — `ArticleNovelRebindBatch.executionToken`).
+      // A readable label like `budget-attempt-1` is happily accepted by the
+      // in-memory fake db that `tests/backend/article-rebind/batch.test.ts`
+      // uses, but real PostgreSQL rejects it from `acquireRebindBatchLease`
+      // ("Inconsistent column data: Error creating UUID ... found `u` at 2").
+      // Test 4 above already had to use a real UUID for this same column.
+      // Omitting `attempt` is the most faithful shape anyway:
+      // `executeRebindBatch` then mints its own `randomUUID()` per round —
+      // exactly what a real 「继续执行」 click does through `resumeRebindBatch`.
+      await executeRebindBatch(executeDb, { batchId }, clock);
       const roundMs = Date.now() - t0;
       const [row] = await prisma.$queryRawUnsafe<Array<{ status: string; applied_count: number; failed_count: number; skipped_count: number }>>(
         `SELECT status, applied_count, failed_count, skipped_count FROM article_novel_rebind_batch WHERE id = '${batchId}'`,

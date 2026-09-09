@@ -804,6 +804,36 @@ describe("🔴 反向自检一：没有引入分块接口（每请求条数）",
     }
   });
 
+  /**
+   * 🔴 复核补强 (2026-09-09, 复核者) — 施工工单 §5.4 反证一 says 「全仓搜索」,
+   * and the first case above only walks `src/server/article-rebind/`. This
+   * one is the genuinely repo-wide half: every `.ts`/`.tsx` under `src/`,
+   * `worker/` and `scripts/`.
+   *
+   * Identifier patterns ONLY. The Chinese phrases stay scoped to the rebind
+   * directory above on purpose — 「分批提交」/「每次请求」 legitimately appear
+   * today as unrelated, pre-existing user-facing copy in three other
+   * features (`catalog-sync/_components/promo-link-claim-dialog.tsx:66`,
+   * `novels/_lib/publish-outcome-copy.ts:42`, `dev-preview/layout.tsx:15`),
+   * none of them touched by this branch; a repo-wide phrase ban would fail
+   * on those and say nothing about this order.
+   */
+  it("🔴 全仓（src/ + worker/ + scripts/）零命中 perRequestLimit / itemsPerRequest / advanceRound / itemsPerRound / perRequestItems", async () => {
+    const banned = /perRequestLimit|itemsPerRequest|advanceRound|itemsPerRound|perRequestItems/i;
+    const hits: string[] = [];
+    for (const dir of ["src", "worker", "scripts"]) {
+      const root = path.resolve(process.cwd(), dir);
+      const entries = await readdir(root, { recursive: true, withFileTypes: true });
+      for (const entry of entries) {
+        if (!entry.isFile()) continue;
+        if (!entry.name.endsWith(".ts") && !entry.name.endsWith(".tsx")) continue;
+        const full = path.join(entry.parentPath ?? root, entry.name);
+        if (banned.test(await readFile(full, "utf8"))) hits.push(path.relative(process.cwd(), full));
+      }
+    }
+    expect(hits).toEqual([]);
+  });
+
   it("REBIND_BATCH_LIMITS 只新增了两个字段（proxyWindowMs/requestBudgetMs），字段总数是 15", () => {
     expect(Object.keys(REBIND_BATCH_LIMITS)).toHaveLength(15);
     expect(REBIND_BATCH_LIMITS).toMatchObject({
