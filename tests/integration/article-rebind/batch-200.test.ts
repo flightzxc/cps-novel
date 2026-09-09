@@ -88,7 +88,7 @@ import { PrismaClient } from "@prisma/client";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { REBIND_BATCH_LIMITS } from "../../../src/server/article-rebind/batch-constants";
-import { resumeRebindBatch, submitRebindBatch } from "../../../src/server/article-rebind/batch";
+import { executeRebindBatch, resumeRebindBatch, submitRebindBatch } from "../../../src/server/article-rebind/batch";
 import { buildRebindBatchPreview } from "../../../src/server/article-rebind/preview";
 
 const enabled = process.env.C30_DATABASE_TEST === "1";
@@ -579,4 +579,161 @@ describe.skipIf(!enabled).sequential("C-30B (施工工单 单 2 主验收): 200 
     // A terminal batch cannot be resumed again — 施工工单's own "resume 不是回滚" contract.
     await expect(resumeRebindBatch(prisma, { batchId, createdBy: "c30b-admin-resume" }, ENABLED_ENV)).rejects.toMatchObject({ code: "BATCH_TERMINAL" });
   });
+
+  /**
+   * 7. 🔴 C-30 单 3 W-2 (施工工单_C30单3..._2026-09-09.md §5.3) — added in a
+   * LATER session than the rest of this file (which was last verified
+   * 2026-09-09 per this file's own header). 🔴 NOT RUN in that later
+   * session: no PostgreSQL instance was available there (施工工单 §6 item 3
+   * — no docker, no `prisma migrate`, no DB connection in that session).
+   * Written to the same conventions as tests 1-6 above and reasoned through
+   * carefully, but unverified against a real database — treat it as
+   * untested until someone with `C30_DATABASE_TEST=1` runs it for real.
+   *
+   * "把预算临时压到一个小值...不要改常量" (§5.3): `REBIND_BATCH_LIMITS.
+   * requestBudgetMs` itself is untouched (still the real 24_000 from
+   * `batch-constants.ts`) — what's compressed here is the INJECTED clock's
+   * own deltas, via `executeRebindBatch`'s test-only `now` parameter
+   * (施工工单 §5.1's one allowed signature extension). `submitRebindBatch`'s
+   * own internal `executeRebindBatch` call takes no clock argument (§3.4
+   * forbids touching that call site — "resumeRebindBatch 里那句执行调用不
+   * 改"), so this test builds its own fresh 200-item "ready" batch directly
+   * (same manual-INSERT shape as test 4 above) and drives it round by round
+   * via `executeRebindBatch` itself — the exact function both
+   * `submitRebindBatch`'s first round and every "继续执行" click call.
+   *
+   * Clock shape: call #0 (`startedAt`) returns 0; call #1 (the first
+   * pending item's budget check) returns 1 — 1ms elapsed, under ANY
+   * threshold, so that item is always claimed; every call after that
+   * returns `requestBudgetMs + 1` — comfortably over the REAL 24_000ms
+   * threshold, so the loop breaks before claiming a second item. Net effect:
+   * exactly one item processed per `executeRebindBatch` call, so a fresh
+   * 200-item batch takes exactly 200 rounds to reach a terminal state —
+   * this is the "预算闸 1ms 时" the construction order asks for, produced
+   * without editing the real constant.
+   */
+  it("7. W-2 预算闸：预算(经由注入时钟)压到 1ms 量级时，200 条分多轮续跑到终态，且写入(审计)恰好 200 次", async () => {
+    // A fresh 200-pair id family (`43.../53.../63.../73...` prefixes),
+    // isolated from `pairs` (test 1's own 200 items, already migrated to
+    // `partial` by the time this test runs) and from `resumePair`'s `41.../
+    // 51.../61.../71...` family (test 4) — this test needs 200 UNTOUCHED
+    // articles of its own. Same per-pair shape `seedFoundation` uses above,
+    // duplicated inline rather than factored out, so this addition cannot
+    // perturb tests 1/4/5/6's own already-verified seeding.
+    const budgetPairs: Pair[] = [];
+    for (let index = 1; index <= BATCH_SIZE; index += 1) {
+      const sourceNovelId = pairUuid("43100000", index);
+      const targetNovelId = pairUuid("43200000", index);
+      const sourceItemSourceId = pairUuid("53100000", index);
+      const sourceItemTargetId = pairUuid("53200000", index);
+      const sourcePromoLinkId = pairUuid("63000000", index);
+      const promoLinkId = pairUuid("63100000", index);
+      const articleId = pairUuid("73100000", index);
+      const titleNormalized = `c30b budget book ${index}`;
+      const suffix = String(index).padStart(4, "0");
+
+      await executeBatch(`
+        ${novelInsert({ id: sourceNovelId, businessId: `c30b-budget-src-${index}`, slug: `c30b-budget-src-${index}`, titleNormalized })};
+        ${novelInsert({ id: targetNovelId, businessId: `c30b-budget-tgt-${index}`, slug: `c30b-budget-tgt-${index}`, titleNormalized })};
+        ${novelSourceItemInsert({ id: sourceItemSourceId, channelAppId: ids.channelAppSource, novelId: sourceNovelId, externalBookId: `c30b-budget-book-src-${index}` })};
+        ${novelSourceItemInsert({ id: sourceItemTargetId, channelAppId: ids.channelAppTarget, novelId: targetNovelId, externalBookId: `c30b-budget-book-tgt-${index}` })};
+        ${promoLinkInsert({ id: sourcePromoLinkId, novelId: sourceNovelId, sourceItemId: sourceItemSourceId, redirectCode: `PB30BBS${suffix}`, channelAppId: ids.channelAppSource, channelAccountId: ids.channelAccountSource })};
+        ${promoLinkInsert({ id: promoLinkId, novelId: targetNovelId, sourceItemId: sourceItemTargetId, redirectCode: `PB30BBT${suffix}`, channelAppId: ids.channelAppTarget, channelAccountId: ids.channelAccount })};
+        ${articleInsert({ id: articleId, novelId: sourceNovelId, promoLinkId: sourcePromoLinkId, slug: `c30b-budget-article-${index}`, shortId: `c30b-b-${suffix}` })};
+      `);
+      budgetPairs.push({ index, sourceNovelId, targetNovelId, articleId, sourcePromoLinkId, promoLinkId });
+    }
+
+    const batchId = "rebind-c30b-budget-gate-test";
+    const requestToken = "550e8400-e29b-41d4-a716-4466554b3099";
+    const itemInserts = budgetPairs
+      .map(
+        (pair) => `
+      INSERT INTO article_novel_rebind_batch_item (
+        id, batch_id, article_id, old_novel_id, expected_new_novel_id, expected_new_promo_link_id, status, updated_at
+      ) VALUES (
+        gen_random_uuid(), '${batchId}', '${pair.articleId}', '${pair.sourceNovelId}', '${pair.targetNovelId}', '${pair.promoLinkId}', 'pending', now()
+      );`,
+      )
+      .join("\n");
+    // 🔴 `preview_id` has no FK (施工工单第四节不变量 6 — "预览 ID 无外键") —
+    // this placeholder never needs to resolve to a real preview row.
+    await executeBatch(`
+      INSERT INTO article_novel_rebind_batch (
+        id, created_by, request_token, preview_id, selection_hash, request_payload_hash,
+        source_channel_code, target_channel_code, status, acknowledge_risks,
+        submitted_count, resolvable_count, applied_count, skipped_count, failed_count,
+        filters_json, plan_hash, reason, execution_token, lease_expires_at, heartbeat_at, started_at, updated_at
+      ) VALUES (
+        '${batchId}', 'c30b-admin-budget', '${requestToken}', '00000000-0000-4000-8000-0000000c30b9', repeat('b', 64), repeat('b', 64),
+        'c30b-source-channel', 'c30b-target-channel', 'ready', false,
+        ${BATCH_SIZE}, ${BATCH_SIZE}, 0, 0, 0,
+        '{}', repeat('b', 64), 'C-30B W-2 预算闸验收', NULL, NULL, NULL, NULL, now()
+      );
+      ${itemInserts}
+    `);
+
+    const auditCountBefore = await prisma.operationAudit.count({ where: { action: "article.rebind_novel" } });
+
+    // `executeRebindBatch`'s own exported signature takes `RebindBatchDb`
+    // (not the `PrismaClient | RebindBatchDb` union `submitRebindBatch`/
+    // `resumeRebindBatch` accept — those cast internally before delegating
+    // to it) — same cast `tests/backend/article-rebind/batch.test.ts` already
+    // uses for this exact function against its fake db.
+    const executeDb = prisma as unknown as Parameters<typeof executeRebindBatch>[0];
+
+    let rounds = 0;
+    const maxRounds = BATCH_SIZE + 5; // generous ceiling — a real regression (e.g. the gate never tripping) fails loudly here instead of hanging.
+    for (;;) {
+      rounds += 1;
+      if (rounds > maxRounds) {
+        throw new Error(`W-2 budget-gate test exceeded ${maxRounds} rounds (${BATCH_SIZE} items) without reaching a terminal state — the gate likely stopped tripping`);
+      }
+      let call = 0;
+      const clock = () => {
+        const value = call === 0 ? 0 : call === 1 ? 1 : REBIND_BATCH_LIMITS.requestBudgetMs + 1;
+        call += 1;
+        return value;
+      };
+      const t0 = Date.now();
+      await executeRebindBatch(executeDb, { batchId, attempt: `budget-attempt-${rounds}` }, clock);
+      const roundMs = Date.now() - t0;
+      const [row] = await prisma.$queryRawUnsafe<Array<{ status: string; applied_count: number; failed_count: number; skipped_count: number }>>(
+        `SELECT status, applied_count, failed_count, skipped_count FROM article_novel_rebind_batch WHERE id = '${batchId}'`,
+      );
+      // 施工工单 §3.1/§5.3 — "本轮墙钟 / 预算 / 占比", for future capacity review.
+      console.log(
+        `[C-30B W-2 timing] round=${rounds} wall=${roundMs}ms budget=${REBIND_BATCH_LIMITS.requestBudgetMs}ms ratio=${((roundMs / REBIND_BATCH_LIMITS.requestBudgetMs) * 100).toFixed(2)}% status=${row?.status} applied=${row?.applied_count}`,
+      );
+      if (row && ["completed", "partial", "failed"].includes(row.status)) break;
+    }
+
+    // Exactly one item per round by this clock's own construction (see the
+    // doc comment above) — a fresh 200-item batch takes exactly 200 rounds.
+    expect(rounds).toBe(BATCH_SIZE);
+
+    const [finalBatch] = await prisma.$queryRawUnsafe<Array<{ status: string; applied_count: number; skipped_count: number; failed_count: number }>>(
+      `SELECT status, applied_count, skipped_count, failed_count FROM article_novel_rebind_batch WHERE id = '${batchId}'`,
+    );
+    expect(finalBatch?.status).toBe("completed");
+    expect((finalBatch?.applied_count ?? 0) + (finalBatch?.skipped_count ?? 0) + (finalBatch?.failed_count ?? 0)).toBe(BATCH_SIZE);
+
+    // 🔴 "写入次数=200" 的可靠口径 (施工工单 §5.3 — "比统计更新次数可靠"): the
+    // audit table's row count for these 200 articles' rebind action, not a
+    // Prisma `updateMany` count.
+    const auditCountAfter = await prisma.operationAudit.count({ where: { action: "article.rebind_novel" } });
+    expect(auditCountAfter - auditCountBefore).toBe(BATCH_SIZE);
+
+    // No article was written a second time — one audit row each, no more.
+    const perArticleAuditCounts = await prisma.$queryRawUnsafe<Array<{ article_id: string; audits: number }>>(`
+      SELECT entity_id AS article_id, count(*)::int AS audits
+        FROM operation_audit
+       WHERE action = 'article.rebind_novel'
+         AND entity_type = 'Article'
+         AND entity_id = ANY(ARRAY[${budgetPairs.map((p) => `'${p.articleId}'`).join(",")}]::text[])
+       GROUP BY entity_id
+    `);
+    expect(perArticleAuditCounts).toHaveLength(BATCH_SIZE);
+    expect(perArticleAuditCounts.every((row) => row.audits === 1)).toBe(true);
+  }, 300_000);
 });

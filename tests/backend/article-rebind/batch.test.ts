@@ -4,11 +4,13 @@ import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  REBIND_BATCH_LIMITS,
   RebindBatchDomainError,
   RebindFeatureDisabledError,
   RebindWriteDisabledError,
   acquireRebindBatchLease,
   buildRebindBatchPreview,
+  executeRebindBatch,
   getRebindBatchByRequestToken,
   getRebindBatchDetail,
   resumeRebindBatch,
@@ -47,6 +49,96 @@ async function seedPreview(fixture: ReturnType<typeof baseFixture>, ids: string[
   const pairs = ids.map((id) => seedUniquePair(fixture, id));
   const summary = await buildRebindBatchPreview(fixture.db.asPrismaClient(), { sourceChannelCode: "changdu", targetChannelCode: "beidou", locale: "en", createdBy: "admin-1" }, ENABLED_ENV);
   return { pairs, summary };
+}
+
+/**
+ * C-30 单 3 W-2 test fixture — a fresh, never-started ("ready") durable
+ * batch with N pending items, built directly (no `submitRebindBatch`
+ * round-trip, no preview needed) so `executeRebindBatch` can be called
+ * directly with an injected clock. Field shapes mirror the "resume: ...”
+ * describe block's own manual batch/item construction above (the one
+ * pre-existing place in this file that already pokes rows into
+ * `fixture.db.batches`/`batchItems` directly) — `status: "ready"`,
+ * `executionToken`/`leaseExpiresAt`/`startedAt` all null is simply what
+ * `createBatchAtomically` itself would have written before its own first
+ * `executeRebindBatch` call.
+ */
+function seedReadyBatch(
+  fixture: ReturnType<typeof baseFixture>,
+  pairs: ReturnType<typeof seedUniquePair>[],
+  options: { batchId?: string } = {},
+): string {
+  const batchId = options.batchId ?? `rebind-budget-${pairs.length}`;
+  const now = new Date();
+  fixture.db.batches.push({
+    id: batchId,
+    createdBy: "admin-1",
+    requestToken: `token-${batchId}`,
+    previewId: "preview-budget-gate",
+    selectionHash: "h",
+    requestPayloadHash: "h",
+    sourceChannelCode: "changdu",
+    targetChannelCode: "beidou",
+    status: "ready",
+    acknowledgeRisks: false,
+    submittedCount: pairs.length,
+    resolvableCount: pairs.length,
+    appliedCount: 0,
+    skippedCount: 0,
+    failedCount: 0,
+    filtersJson: {},
+    planHash: "h",
+    reason: "C-30 单 3 W-2 预算闸测试",
+    executionToken: null,
+    leaseExpiresAt: null,
+    heartbeatAt: null,
+    startedAt: null,
+    finishedAt: null,
+    createdAt: now,
+    updatedAt: now,
+  });
+  pairs.forEach((pair, index) => {
+    fixture.db.batchItems.push({
+      id: `${batchId}-item-${index}`,
+      batchId,
+      articleId: pair.article.id,
+      oldNovelId: pair.sourceNovel.id,
+      oldPromoLinkId: null,
+      expectedNewNovelId: pair.targetNovel.id,
+      expectedNewPromoLinkId: pair.promo.id,
+      appliedNewNovelId: null,
+      appliedNewPromoLinkId: null,
+      status: "pending",
+      processingToken: null,
+      errorKind: null,
+      errorMessage: null,
+      auditId: null,
+      startedAt: null,
+      finishedAt: null,
+      createdAt: now,
+      updatedAt: now,
+    });
+  });
+  return batchId;
+}
+
+/**
+ * A deterministic clock for `executeRebindBatch`'s optional `now` param
+ * (施工工单 §5.1 — the one test-only signature extension this order
+ * allows). `executeRebindBatch` calls it once for `startedAt` (call #0)
+ * and once per loop iteration thereafter (call #1 for item 1's check, #2
+ * for item 2's, ...), so with a fixed `stepMs` the elapsed time the gate
+ * sees right before item *i*'s check is exactly `i * stepMs` — deliberately
+ * NOT wall-clock-driven, so a test's outcome never depends on how fast this
+ * machine happens to run the fake db.
+ */
+function steppingClock(stepMs: number): () => number {
+  let calls = 0;
+  return () => {
+    const value = calls * stepMs;
+    calls += 1;
+    return value;
+  };
 }
 
 describe("submitRebindBatch: idempotency", () => {
@@ -522,5 +614,214 @@ describe("RebindBatchDomainError sanity", () => {
       expect(error).toBeInstanceOf(RebindBatchDomainError);
       expect((error as RebindBatchDomainError).code).toBe("INVALID_SELECTION");
     }
+  });
+});
+
+/**
+ * 施工工单_C30单3_批量换小说分块执行_移植CPS_V2_2026-09-09.md §5.1 — W-2's own
+ * test spec (items 1-8). CPS has no equivalent of this gate at all (see
+ * `REBIND_BATCH_LIMITS`'s own comment on `requestBudgetMs`); every case
+ * below drives `executeRebindBatch` directly with the injected `now` clock
+ * rather than the global `Date.now` — per §5.1's own instruction, since
+ * `leaseRemainingMs` (called from the SAME loop) does its own real-time
+ * lease query and a global mock would drag that along with it.
+ */
+describe("C-30 单 3 W-2: executeRebindBatch 的墙钟预算闸", () => {
+  it("§5.1-1 预算闸在条与条之间触发：断点之后的条目仍是 pending，不是 processing", async () => {
+    const fixture = baseFixture();
+    const pairs = ["1", "2", "3"].map((id) => seedUniquePair(fixture, id));
+    const batchId = seedReadyBatch(fixture, pairs);
+    const db = fixture.db.asPrismaClient() as unknown as Parameters<typeof executeRebindBatch>[0];
+
+    // stepMs=10_000, budget=24_000: item1 check@10s (proceeds), item2
+    // check@20s (proceeds), item3 check@30s (>=24s, breaks before claiming).
+    await executeRebindBatch(db, { batchId, attempt: "attempt-1" }, steppingClock(10_000));
+
+    const items = fixture.db.batchItems.filter((item) => item.batchId === batchId);
+    const item1 = items.find((item) => item.articleId === pairs[0]!.article.id)!;
+    const item2 = items.find((item) => item.articleId === pairs[1]!.article.id)!;
+    const item3 = items.find((item) => item.articleId === pairs[2]!.article.id)!;
+    expect(item1.status).toBe("applied");
+    expect(item2.status).toBe("applied");
+    expect(item3.status).toBe("pending");
+    expect(item3.processingToken).toBeNull();
+  });
+
+  it("§5.1-2 不打断在飞事务：跨过预算的那一条仍写成终态，写入真的落了地", async () => {
+    const fixture = baseFixture();
+    const pairs = ["1", "2"].map((id) => seedUniquePair(fixture, id));
+    const batchId = seedReadyBatch(fixture, pairs);
+    const db = fixture.db.asPrismaClient() as unknown as Parameters<typeof executeRebindBatch>[0];
+
+    // item1's check passes at 5s; the jump to 60s on the NEXT call
+    // represents item1's own processing having (hypothetically) taken that
+    // long — the gate never re-checks mid-item, so item1 still runs to a
+    // terminal write, and only item2's check (the next one) sees the
+    // overrun and stops.
+    let call = 0;
+    const clock = () => {
+      const value = call === 0 ? 0 : call === 1 ? 5_000 : 60_000;
+      call += 1;
+      return value;
+    };
+    await executeRebindBatch(db, { batchId, attempt: "attempt-1" }, clock);
+
+    const items = fixture.db.batchItems.filter((item) => item.batchId === batchId);
+    const item1 = items.find((item) => item.articleId === pairs[0]!.article.id)!;
+    const item2 = items.find((item) => item.articleId === pairs[1]!.article.id)!;
+    expect(item1.status).toBe("applied");
+    expect(item1.finishedAt).not.toBeNull();
+    expect(item2.status).toBe("pending");
+    // The write itself landed on the article row — not just bookkeeping.
+    const article1 = fixture.db.articles.find((a) => a.id === pairs[0]!.article.id)!;
+    expect(article1.novelId).toBe(pairs[0]!.targetNovel.id);
+  });
+
+  it("§5.1-3 停下后的状态：收尾返回未终态、批次仍是 processing、执行令牌已释放", async () => {
+    const fixture = baseFixture();
+    const pairs = ["1", "2", "3"].map((id) => seedUniquePair(fixture, id));
+    const batchId = seedReadyBatch(fixture, pairs);
+    const db = fixture.db.asPrismaClient() as unknown as Parameters<typeof executeRebindBatch>[0];
+
+    await executeRebindBatch(db, { batchId, attempt: "attempt-1" }, steppingClock(10_000));
+
+    const batch = fixture.db.batches.find((b) => b.id === batchId)!;
+    expect(batch.status).toBe("processing");
+    expect(batch.executionToken).toBeNull();
+    expect(batch.leaseExpiresAt).toBeNull();
+    expect(batch.appliedCount).toBe(2);
+  });
+
+  it("§5.1-4 派生出已中断：取详情时 status 是 interrupted", async () => {
+    const fixture = baseFixture();
+    const pairs = ["1", "2", "3"].map((id) => seedUniquePair(fixture, id));
+    const batchId = seedReadyBatch(fixture, pairs);
+    const db = fixture.db.asPrismaClient() as unknown as Parameters<typeof executeRebindBatch>[0];
+
+    await executeRebindBatch(db, { batchId, attempt: "attempt-1" }, steppingClock(10_000));
+
+    const detail = await getRebindBatchDetail(db, { batchId, createdBy: "admin-1" }, ENABLED_ENV);
+    expect(detail.status).toBe("interrupted");
+    expect(detail.persistedStatus).toBe("processing");
+    expect(detail.counts.pending).toBe(1);
+  });
+
+  it("§5.1-5 续跑接得上：剩余条目跑完，已完成的条目不会被再写一次", async () => {
+    const fixture = baseFixture();
+    const pairs = ["1", "2", "3"].map((id) => seedUniquePair(fixture, id));
+    const batchId = seedReadyBatch(fixture, pairs);
+    const db = fixture.db.asPrismaClient() as unknown as Parameters<typeof executeRebindBatch>[0];
+
+    await executeRebindBatch(db, { batchId, attempt: "attempt-1" }, steppingClock(10_000));
+    const auditCountAfterFirstRound = fixture.db.audits.length;
+    expect(auditCountAfterFirstRound).toBe(2);
+
+    const resumed = await resumeRebindBatch(db, { batchId, createdBy: "admin-1" }, ENABLED_ENV);
+    expect(resumed.status).toBe("completed");
+    expect(resumed.counts.applied).toBe(3);
+    // Exactly one new audit row (item 3) — items 1/2 were not re-written.
+    expect(fixture.db.audits.length).toBe(auditCountAfterFirstRound + 1);
+  });
+
+  it("§5.1-6 续跑自己也吃预算闸：一次续跑同样在预算处停下，仍可再续", async () => {
+    const fixture = baseFixture();
+    const pairs = ["1", "2", "3", "4"].map((id) => seedUniquePair(fixture, id));
+    const batchId = seedReadyBatch(fixture, pairs);
+    const db = fixture.db.asPrismaClient() as unknown as Parameters<typeof executeRebindBatch>[0];
+
+    // `resumeRebindBatch`'s own call to `executeRebindBatch` (`batch.ts`'s
+    // `resumeRebindBatch`) cannot take a test clock without touching that
+    // call site, which 施工工单 §3.4 forbids ("resumeRebindBatch 里那句执行
+    // 调用不改 —— 续跑同样吃这个预算闸"). `executeRebindBatch` is the exact,
+    // unmodified function `resumeRebindBatch` calls with a fresh `attempt`
+    // — calling it again directly here, a second time with its own fresh
+    // clock, exercises the identical shared code path a real "继续执行"
+    // click would run, without needing a clock to reach through the wrapper.
+    await executeRebindBatch(db, { batchId, attempt: "attempt-1" }, steppingClock(15_000));
+    let items = fixture.db.batchItems.filter((item) => item.batchId === batchId);
+    expect(items.filter((item) => item.status === "applied")).toHaveLength(1);
+    expect(items.filter((item) => item.status === "pending")).toHaveLength(3);
+    let detail = await getRebindBatchDetail(db, { batchId, createdBy: "admin-1" }, ENABLED_ENV);
+    expect(detail.status).toBe("interrupted");
+
+    await executeRebindBatch(db, { batchId, attempt: "attempt-2" }, steppingClock(15_000));
+    items = fixture.db.batchItems.filter((item) => item.batchId === batchId);
+    expect(items.filter((item) => item.status === "applied")).toHaveLength(2);
+    expect(items.filter((item) => item.status === "pending")).toHaveLength(2);
+    detail = await getRebindBatchDetail(db, { batchId, createdBy: "admin-1" }, ENABLED_ENV);
+    expect(detail.status).toBe("interrupted");
+  });
+
+  it("§5.1-7 预算不影响小批：总耗时远低于预算时闸一次都不触发，批次一次跑到终态", async () => {
+    const fixture = baseFixture();
+    const pairs = ["1", "2", "3"].map((id) => seedUniquePair(fixture, id));
+    const batchId = seedReadyBatch(fixture, pairs);
+    const db = fixture.db.asPrismaClient() as unknown as Parameters<typeof executeRebindBatch>[0];
+
+    await executeRebindBatch(db, { batchId, attempt: "attempt-1" }, steppingClock(10));
+
+    const batch = fixture.db.batches.find((b) => b.id === batchId)!;
+    expect(batch.status).toBe("completed");
+    const items = fixture.db.batchItems.filter((item) => item.batchId === batchId);
+    expect(items.every((item) => item.status === "applied")).toBe(true);
+  });
+
+  it("§5.1-8 常量断言：requestBudgetMs === 24_000 === proxyWindowMs × 0.80；apply 仍是 200", () => {
+    expect(REBIND_BATCH_LIMITS.requestBudgetMs).toBe(24_000);
+    expect(REBIND_BATCH_LIMITS.requestBudgetMs).toBe(REBIND_BATCH_LIMITS.proxyWindowMs * 0.8);
+    expect(REBIND_BATCH_LIMITS.apply).toBe(200);
+  });
+});
+
+/**
+ * 反向自检一（施工工单 §5.4）— 全仓静态断言零「每请求条数」相关的新常量/新
+ * 参数/新动作签名。W-2 只新增了时间维的 `requestBudgetMs`；条数维的唯一上限
+ * 仍是 `apply: 200`，且没有任何形如「一次请求处理 N 条」的新东西。
+ */
+describe("🔴 反向自检一：没有引入分块接口（每请求条数）", () => {
+  it("src/server/article-rebind/ 全目录零命中 perRequestLimit / itemsPerRequest / advanceRound，以及工单点名的中文说法", async () => {
+    const root = path.resolve(process.cwd(), "src/server/article-rebind");
+    const entries = await readdir(root);
+    // 🔴 Deliberately does NOT include bare "chunk" here — `preview.ts`
+    // legitimately has `SQL_BIND_CHUNK_SIZE`/`chunked()` (SQL bind-variable
+    // chunking to stay under a `IN (...)` size limit), which 施工工单 §2.2
+    // explicitly says is a different thing from HTTP-request chunking and
+    // must not be confused with it. That pre-existing, unrelated usage is
+    // scoped out precisely by the next test instead.
+    const banned = /perrequestlimit|itemsperrequest|advanceround|每请求|单次请求|每次请求|分批提交|分批执行|分轮执行|推进一轮/i;
+    for (const entry of entries) {
+      if (!entry.endsWith(".ts")) continue;
+      const source = await readFile(path.join(root, entry), "utf8");
+      expect(source).not.toMatch(banned);
+    }
+  });
+
+  it("W-2/W-3 的落点（batch.ts / batch-constants.ts）零 chunk 相关标识——「chunk」只允许出现在 preview.ts 既有的 SQL 绑定变量分块里，与本单无关", async () => {
+    const root = path.resolve(process.cwd(), "src/server/article-rebind");
+    for (const file of ["batch.ts", "batch-constants.ts"]) {
+      const source = await readFile(path.join(root, file), "utf8");
+      expect(source.toLowerCase()).not.toMatch(/chunk/);
+    }
+  });
+
+  it("REBIND_BATCH_LIMITS 只新增了两个字段（proxyWindowMs/requestBudgetMs），字段总数是 15", () => {
+    expect(Object.keys(REBIND_BATCH_LIMITS)).toHaveLength(15);
+    expect(REBIND_BATCH_LIMITS).toMatchObject({
+      sourceScan: 20_000,
+      destinationScan: 20_000,
+      candidate: 1_600,
+      apply: 200,
+      pageSize: 50,
+      defaultPageSize: 25,
+      ambiguousDisplayCandidates: 20,
+      previewTtlMs: 30 * 60 * 1_000,
+      leaseMs: 90 * 1_000,
+      leaseRenewEvery: 25,
+      leaseRenewThresholdMs: 30 * 1_000,
+      cleanupRows: 100,
+      cleanupMs: 100,
+      proxyWindowMs: 30_000,
+      requestBudgetMs: 24_000,
+    });
   });
 });

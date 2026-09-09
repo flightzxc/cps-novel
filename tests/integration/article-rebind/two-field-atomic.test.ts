@@ -261,7 +261,22 @@ describe.skipIf(!enabled).sequential("C-30A (施工工单 单 1): 两字段原�
     // Taken AFTER the refusal guard (refuse fast, without queueing behind the
     // other suite) and held until `afterAll` — see `SUITE_LOCK_KEY`. The
     // generous timeout is the wait for `batch-200.test.ts` to finish its own
-    // turn (~30s of seeding + 200 real batch items), not this file's own work.
+    // turn, not this file's own work.
+    //
+    // 🔴 C-30 单 3 W-2 (施工工单_C30单3..._2026-09-09.md §5.3 — "追加用例后必须
+    // 重新确认这个数够用，不够就一起提高"): raised from 180_000 to 300_000 when
+    // that file's own §5.3 test (#7, the W-2 budget-gate case) was added —
+    // it drives `executeRebindBatch` in a loop that, by its own clock's
+    // construction, takes exactly `REBIND_BATCH_LIMITS.apply` (200) real
+    // round-trips (lease acquire/release + per-item claim/process/finalize
+    // each round) to finish a fresh 200-item batch, on top of that file's
+    // existing seeding + 200-item batch + resume/replay work — this file's
+    // own `beforeAll` blocks on `acquireSuiteLock()` for the whole of that,
+    // so its budget has to cover it too. Matches test #7's own 300_000ms
+    // per-test timeout (施工工单 §6 item 5 — this is one of the explicit,
+    // in-scope hook-timeout adjustments that instruction calls for, not an
+    // unrelated change; the CLI's own `--testTimeout` is NOT sufficient on
+    // its own here since an explicit hook timeout argument overrides it).
     await acquireSuiteLock();
     const tables = await prisma.$queryRawUnsafe<Array<{ tablename: string }>>(`
       SELECT tablename FROM pg_tables
@@ -270,7 +285,7 @@ describe.skipIf(!enabled).sequential("C-30A (施工工单 单 1): 两字段原�
     const names = tables.map(({ tablename }) => `"${tablename}"`).join(", ");
     await execute(`TRUNCATE TABLE ${names} RESTART IDENTITY CASCADE`);
     await seedFoundation();
-  }, 180_000);
+  }, 300_000);
 
   afterAll(async () => {
     await releaseSuiteLock();
