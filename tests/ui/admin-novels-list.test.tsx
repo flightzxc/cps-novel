@@ -11,7 +11,7 @@ import {
 import { NovelFilters } from "@/app/(admin)/novels/_components/novel-filters";
 import { NovelsTable } from "@/app/(admin)/novels/_components/novels-table";
 
-import { novelListItem, page, troubledNovelListItem } from "./fixtures/admin-content";
+import { NOVEL_ID, NOVEL_ID_B, novelListItem, page, troubledNovelListItem } from "./fixtures/admin-content";
 
 /**
  * 书目列表的渲染验收（P2-04）。
@@ -114,6 +114,45 @@ describe("P2-04 书目列表", () => {
       expect(link.textContent).toBe("查看");
       expect(link.getAttribute("href")).toMatch(/^\/novels\/[0-9a-f-]+$/);
     }
+  });
+
+  /**
+   * 低危清扫第 1 批 · item C：表头「选择当前页」的 `disabled` 曾经只读
+   * `selection.disabled?.(novels[0])`——只问第 0 行。修复后按「当前页可选行
+   * 集合」判定：只要还有一行没被禁用，表头就不该被禁用；只有当前页全部行
+   * 都被禁用时，表头才跟着禁用。用一个按 novelId 取值的 `disabled` 回调（而
+   * 非既有测试里那种忽略参数、恒定返回 `busy` 的回调）才能把 row-0-only 的
+   * 旧写法与「当前页全部禁用」的新写法区分开来。
+   */
+  describe("P2-04/C-17 表头 checkbox 的 disabled 按当前页可选行判定", () => {
+    const selection = (disabledIds: ReadonlySet<string>) => ({
+      selected: new Set<string>(),
+      onToggle: () => {},
+      disabled: (novel: (typeof NOVELS)[number]) => disabledIds.has(novel.novelId),
+      allSelected: false,
+      someSelected: false,
+      onToggleAll: () => {},
+    });
+
+    it("第 0 行被禁用、其余行可选时，表头不禁用（曾经的 bug：只问 novels[0]）", () => {
+      render(<NovelsTable novels={NOVELS} selection={selection(new Set([NOVEL_ID]))} />);
+      const header = screen.getByLabelText("选择当前页") as HTMLInputElement;
+      expect(header.disabled).toBe(false);
+    });
+
+    it("当前页全部行都被禁用时，表头才禁用", () => {
+      render(
+        <NovelsTable novels={NOVELS} selection={selection(new Set([NOVEL_ID, NOVEL_ID_B]))} />,
+      );
+      const header = screen.getByLabelText("选择当前页") as HTMLInputElement;
+      expect(header.disabled).toBe(true);
+    });
+
+    it("没有任何行被禁用时，表头不禁用", () => {
+      render(<NovelsTable novels={NOVELS} selection={selection(new Set())} />);
+      const header = screen.getByLabelText("选择当前页") as HTMLInputElement;
+      expect(header.disabled).toBe(false);
+    });
   });
 
   it("表格骨架沿用 CPS 的列表外观", () => {

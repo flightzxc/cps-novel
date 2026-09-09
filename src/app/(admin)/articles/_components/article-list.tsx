@@ -179,6 +179,21 @@ export function ArticleList({
   const [withdrawReasonError, setWithdrawReasonError] = useState<string | null>(null);
   const [withdrawBusy, setWithdrawBusy] = useState(false);
   const allSelected = rows.length > 0 && rows.every((r) => selected.has(r.id));
+  /**
+   * Fix (低危清扫第 1 批, item B): the indeterminate calc used to read
+   * `selected.size > 0 && !allSelected` — CPS's own un-paginated
+   * `dramas-list-client.tsx:65-66` shape, valid there because `selected` can
+   * never contain an id outside `dramas`. `/articles` is server-paginated
+   * (C-17, `施工工单_C16_C17_重试一键化与列表全选_2026-09-08.md` line 181
+   * prescribes exactly this `someSelected` shape), so `selected` can carry
+   * ids from a page the operator already left. Scoping to `rows` — same
+   * pattern `../../novels/_components/novels-batch-publish.tsx`'s
+   * `someSelected` and `../../catalog-sync/_components/catalog-sync-client.tsx`'s
+   * `someSelected` already use — means the header only shows "半选" when
+   * some (not all) of the *current page's* rows are selected, not whenever
+   * any row anywhere is.
+   */
+  const someSelected = rows.some((r) => selected.has(r.id)) && !allSelected;
   function toggleAll() {
     setSelected((current) => {
       const next = new Set(current);
@@ -425,7 +440,7 @@ export function ArticleList({
                 aria-label="选择当前页"
                 checked={allSelected}
                 ref={(el) => {
-                  if (el) el.indeterminate = selected.size > 0 && !allSelected;
+                  if (el) el.indeterminate = someSelected;
                 }}
                 onChange={toggleAll}
               />

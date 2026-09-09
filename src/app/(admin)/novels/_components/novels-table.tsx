@@ -16,7 +16,20 @@ import { ExceptionBadges, NovelStatusBadge } from "./content-badges";
 export type NovelsTableSelection = {
   readonly selected: ReadonlySet<string>;
   readonly onToggle: (novelId: string) => void;
-  /** True disables (not hides) that row's checkbox — a row mid-request, for instance. */
+  /**
+   * True disables (not hides) that row's checkbox — a row mid-request, for
+   * instance. The header "选择当前页" checkbox has no single row to ask, so
+   * it disables only when *every* row on the current page is disabled
+   * (`novels.every((novel) => disabled(novel))`, fixed from an earlier
+   * `disabled?.(novels[0])` that only ever consulted row 0 — harmless today
+   * because every call site's `disabled` ignores its argument, but wrong for
+   * any future per-row predicate). Mirrors CPS's own posture: none of the
+   * three C-17 reference components (`dramas-list-client.tsx`,
+   * `batch-drama-switch-client.tsx`, `changdu-sync-panel.tsx`) put a
+   * `disabled` on their header checkbox at all — this repo's addition (see
+   * `NovelsBatchPublish`'s `disabled: () => busy`) has no CPS precedent to
+   * copy the aggregation shape from.
+   */
   readonly disabled?: (novel: AdminNovelListItemView) => boolean;
   readonly allSelected: boolean;
   readonly someSelected: boolean;
@@ -75,7 +88,9 @@ export function NovelsTable({
                   type="checkbox"
                   aria-label="选择当前页"
                   checked={selection.allSelected}
-                  disabled={selection.disabled?.(novels[0]) ?? false}
+                  disabled={
+                    selection.disabled ? novels.every((novel) => selection.disabled!(novel)) : false
+                  }
                   ref={(el) => {
                     if (el) el.indeterminate = selection.someSelected && !selection.allSelected;
                   }}

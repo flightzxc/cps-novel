@@ -495,6 +495,41 @@ describe("ArticleList · 列表与批量", () => {
     expect(screen.getByText("已选择 0")).toBeTruthy();
   });
 
+  it("只勾一行时表头呈半选态；勾满后为满选态（C-17，对齐 novels-batch-publish 同名用例）", () => {
+    render(<ArticleList rows={[DRAFT_ROW, PUBLISHED_ROW]} canWrite publicOrigin={PUBLIC_ORIGIN} />);
+    const header = screen.getByLabelText("选择当前页") as HTMLInputElement;
+    fireEvent.click(screen.getByLabelText(`选择 ${DRAFT_ROW.title}`));
+    expect(header.checked).toBe(false);
+    expect(header.indeterminate).toBe(true);
+    fireEvent.click(screen.getByLabelText(`选择 ${PUBLISHED_ROW.title}`));
+    expect(header.checked).toBe(true);
+    expect(header.indeterminate).toBe(false);
+  });
+
+  /**
+   * 低危清扫第 1 批 · item B：半选态曾经读 `selected.size > 0 &&
+   * !allSelected`——CPS `dramas-list-client.tsx:65-66` 的写法，在那个不分页
+   * 的列表里成立（`selected` 不可能装着 `dramas` 之外的 id）。`/articles`
+   * 是服务端分页（`ArticleList` 本身不在 rows 变化时清空 `selected`，与
+   * `articles-client.tsx` 的 `filterKey` 重置不同），所以选择集完全可能带着
+   * "上一页选过、这一页已经看不到"的 id。用 `rerender` 换一批 rows 模拟翻页
+   * ——不清空选择、也不给组件换 key，这正是当前代码的真实使用形态：
+   * `../page.tsx` 按查询参数分页时不会把 `<ArticleList key=... />` 重新挂载。
+   */
+  it("翻页后残留的跨页选择不应让新一页的表头误报半选态", () => {
+    const { rerender } = render(
+      <ArticleList rows={[DRAFT_ROW, PUBLISHED_ROW]} canWrite publicOrigin={PUBLIC_ORIGIN} />,
+    );
+    fireEvent.click(screen.getByLabelText(`选择 ${DRAFT_ROW.title}`));
+    expect(screen.getByText("已选择 1")).toBeTruthy();
+
+    // 翻到不包含 DRAFT_ROW 的下一页，选择状态原样保留（组件未重新挂载）。
+    rerender(<ArticleList rows={[UNPUBLISHED_ROW, TAKEDOWN_ROW]} canWrite publicOrigin={PUBLIC_ORIGIN} />);
+    const header = screen.getByLabelText("选择当前页") as HTMLInputElement;
+    expect(header.checked).toBe(false);
+    expect(header.indeterminate).toBe(false);
+  });
+
   /**
    * C-21 (`分析_文章管理Parity缺口_2026-09-08.md` §六, items #24/#25): CPS
    * parity is "草稿显示发布，已发布显示下线" — 已下线/已撤回两态两个按钮都不
