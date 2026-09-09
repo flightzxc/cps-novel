@@ -367,9 +367,16 @@ Owner 没有验证器/恢复码，密码通过验证后被 `/two-factor/challeng
 C-17（`/novels`、`/catalog-sync`、`/articles` 三个多选列表补表头「全选本页」）依据 Owner 裁决
 「CPS v8.5.1 是默认真身」的口径，引用了本表此前从未登记过的第三条只读参照路径：
 `/Users/chenweifeng/Documents/产品原型及文档/cps项目/cps-admin-v851-admin-host`，
-tag `pulsedrama-v8.5.1-freeze-20260906` 的 peeled commit 固定登记为
-`c37602c3933ca97adad0281deb6c75e71e550412`（`git rev-parse HEAD` 在该只读工作区实测，工作区
-本身 `git status --porcelain` 为空、施工前后未变）。仓库 `CLAUDE.md` 第 23/34 行把只读参照冻结
+该只读工作区当时 `git rev-parse HEAD` 实测为
+`c37602c3933ca97adad0281deb6c75e71e550412`（工作区本身 `git status --porcelain` 为空、施工前后
+未变）。该 sha **不是** tag `pulsedrama-v8.5.1-freeze-20260906` 的 peeled commit——tag 的 peeled
+commit 是 `3a76877af27c6247ad94be946b44e9cc5c1cb9ce`（`chore(release): prepare v8.5.1`）；
+`c37602c` 是该 tag 之上另外 2 个 docs-only commit 之后的只读工作区 HEAD（`057e0c1`
+`docs(release): record v8.5.1 production rollout` → `c37602c`
+`docs(release): sync v8.5.1 developer logs`）。下表 `baseline_commit` 列固定登记的正是这个
+只读工作区 HEAD sha（`c37602c`），不是 tag 本身的 peeled commit——本节标题沿用 v8.5.1 冻结快照
+基线的通称，但登记值指向的是「tag 之上 2 个 docs-only commit」这一精确坐标，行文不应混称为
+"tag 的 peeled commit"。仓库 `CLAUDE.md` 第 23/34 行把只读参照冻结
 在另外两条路径（`cps-admin-v811-search-ux`@`d77c3b9…` 与 `cps-admin`@`v8.2.18`/`v8.3.6`），第三条
 路径与 `CLAUDE.md` 现状冲突；照本表既有先例（X 系列、RC-1 均以独立小节追加新的冻结基线，而不
 回改上一条基线的登记），本节只新增基线记录，`CLAUDE.md` 的更新留给 Owner 另行处理。
