@@ -118,19 +118,32 @@ function deepMergeOntoEnglish<T>(base: T, override: unknown): T {
 const mergedMessagesCache = new Map<SiteLocale, Messages>();
 
 /**
- * Test/dev-only escape hatch: clears the merged-messages memoization cache.
+ * Test/dev-only escape hatch: clears *every* module-level cache in this file
+ * — both `mergedMessagesCache` (the per-locale deep-merge result) and
+ * `messageFormatCache` (the compiled `IntlMessageFormat` instances declared
+ * further down).
  *
  * Production code must never call this — the production path always serves
- * from (and populates) `mergedMessagesCache`, and this function has no
- * effect on it beyond emptying the map. It exists for the rare test that
- * needs to observe the *cache itself* (e.g. stubbing `NODE_ENV` to
- * `"production"` to exercise the memoized branch below) — without a reset,
- * a merge cached under a stubbed env would otherwise leak into whichever
- * test runs next, since `mergedMessagesCache` is module-level state shared
- * across the whole test file/process.
+ * from (and populates) those maps, and this function has no effect on them
+ * beyond emptying them. It exists for the rare test that needs to observe
+ * the *cache itself* (e.g. stubbing `NODE_ENV` to `"production"` to
+ * exercise the memoized branch below) — without a reset, a merge cached
+ * under a stubbed env would otherwise leak into whichever test runs next,
+ * since both maps are module-level state shared across the whole test
+ * file/process.
+ *
+ * `messageFormatCache` is cleared here even though no test observes it today
+ * and no stale read is reachable through it (its key embeds the full message
+ * text, so a changed message is a different key, and the key space is
+ * bounded by the static catalogs). The point is that a function named "reset
+ * the messages cache" should leave this module holding no retained state at
+ * all: once there are two caches and the reset only empties one, the next
+ * person to stub a catalog value and call this has to read the
+ * implementation to find out which half actually reset.
  */
 export function resetMessagesCacheForTests(): void {
   mergedMessagesCache.clear();
+  messageFormatCache.clear();
 }
 
 /**

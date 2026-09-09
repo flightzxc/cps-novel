@@ -290,8 +290,11 @@ describe("message catalog completeness (all 15 registered locales)", () => {
       const enValue = EN_LEAVES.get(key) as string;
       const localeValue = leaves.get(key);
       if (typeof localeValue !== "string") continue; // already reported by the previous check
-      const en = inspect(enValue);
-      if ("parseError" in en) {
+      // Deliberately not named `en`: that is the imported English catalog at
+      // module scope, and shadowing it inside this loop makes any later use of
+      // the catalog here silently resolve to an `InspectResult` instead.
+      const enInspected = inspect(enValue);
+      if ("parseError" in enInspected) {
         // en.ts's own parseability is already asserted by the banned-ICU-form
         // test below (scoped to all SITE_LOCALES, en included) — skip here to
         // avoid reporting the same underlying problem once per non-en locale.
@@ -302,7 +305,7 @@ describe("message catalog completeness (all 15 registered locales)", () => {
         mismatches.push(`${key}: ${locale} unparseable: ${lo.parseError}`);
         continue;
       }
-      const a = [...en.args].sort().join(",");
+      const a = [...enInspected.args].sort().join(",");
       const b = [...lo.args].sort().join(",");
       if (a !== b) {
         mismatches.push(`${key}: en={${a}} ${locale}={${b}}`);
