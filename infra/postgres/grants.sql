@@ -250,6 +250,22 @@ GRANT SELECT ON TABLE home_carousel_manual_slot, home_carousel_auto_batch,
 -- Scheduler only creates scheduling and GenericTask metadata. It never reads Credential/Auth secrets.
 GRANT SELECT, INSERT, UPDATE ON TABLE schedule_run, cron_run, generic_task, generic_task_item TO scheduler_app;
 
+-- L10N P5.2: scheduler now resolves the home-carousel cron's active-locale
+-- fan-out itself every tick (`queryActiveLocales`, src/lib/locale/
+-- active-locales.ts) via a `prisma.article.groupBy` reusing sitemap.ts's
+-- `activePublicArticleWhere` collectability filter over Article/Novel/
+-- PromoLink -- same "scheduler is not exempt from least privilege" carve-out
+-- discipline PR6 lane E already set for `site_setting` above, not a table-
+-- wide SELECT. The three column lists below are the exact set the generated
+-- SQL references (bookkeeping columns the WHERE/JOIN touch, verified against
+-- a live `DEBUG=prisma:query` capture of this exact call, not derived from
+-- reading the Prisma schema alone) -- never `article.body`/`novel.title`/
+-- `promo_link.upstream_code` or any other content/business column, and never
+-- a write.
+GRANT SELECT (locale, deleted_at, status, novel_id, promo_link_id) ON article TO scheduler_app;
+GRANT SELECT (id, deleted_at, status) ON novel TO scheduler_app;
+GRANT SELECT (id, novel_id, status, deleted_at, web_url, app_url) ON promo_link TO scheduler_app;
+
 GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO web_app, worker_app, scheduler_app;
 
 -- Future objects start closed. P1 grants must be revised explicitly when a
