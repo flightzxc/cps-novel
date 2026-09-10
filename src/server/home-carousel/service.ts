@@ -5,6 +5,7 @@ import type { AdminIdentityStore, SessionStore } from "@/lib/auth/ports";
 import { requireFreshAdminServiceMutation, type AdminServiceAuthorization } from "@/server/auth/guards";
 import { enqueueScheduledTask, type ScheduleDefinition, type ScheduledTaskInput, type TaskHandlerRegistry } from "@/lib/tasks";
 import { buildPublicListArticleWhere } from "@/server/publication/visibility";
+import { queryActiveLocales } from "@/lib/locale/active-locales";
 
 /** CPS v8.3.6 config/compute/merge parity, adapted to Novel/PostgreSQL. */
 export const HOME_CAROUSEL_TASK_TYPE = "home_carousel.compute.v1";
@@ -86,7 +87,14 @@ export async function computeHomeCarouselInTx(tx: CarouselTx, input: { locale: s
   const configRow = await tx.siteSetting.findUnique({ where: { id: 1 }, select: { carouselConfigJson: true } });
   const config = normalizeHomeCarouselConfig(configRow?.carouselConfigJson);
   const businessDate = homeCarouselBusinessDate(now, config.cronTimezone);
-  const uniqueKey = input.source === "cron" ? `cron:${businessDate}` : `manual:${randomUUID()}`;
+  // L10N P5 (矩阵 #13): includes `input.locale` — a cron run now enqueues
+  // one item per active locale (`buildHomeCarouselCronTaskInput` below),
+  // each of which reaches this function independently; without `locale` in
+  // the key, the second locale processed on a given business date would
+  // collide with the first's `HomeCarouselAutoBatch` row and be wrongly
+  // treated as a same-day repeat (`skipped_duplicate`) instead of its own
+  // distinct compute.
+  const uniqueKey = input.source === "cron" ? `cron:${businessDate}:${input.locale}` : `manual:${randomUUID()}`;
   let batch;
   try {
     batch = await tx.homeCarouselAutoBatch.create({ data: {
@@ -303,17 +311,58 @@ function floorToMinute(date: Date): Date {
   return new Date(Math.floor(date.getTime() / 60_000) * 60_000);
 }
 
-/** Pure builder shared by the `ScheduleDefinition.build` path and `enqueueHomeCarouselCron`, so both produce byte-identical `ScheduledTaskInput`s. */
-export function buildHomeCarouselCronTaskInput(config: HomeCarouselConfig, scheduledFor: Date): ScheduledTaskInput {
+/**
+ * Pure builder shared by the `ScheduleDefinition.build` path and
+ * `enqueueHomeCarouselCron`, so both produce byte-identical
+ * `ScheduledTaskInput`s. Deliberately still fully SYNCHRONOUS and free of
+ * any DB handle — `ScheduleDefinition.build` (`@/lib/tasks/scheduler.ts`)
+ * is a synchronous contract by design (see `buildHomeCarouselScheduleDefinition`'s
+ * own doc comment and `scheduler/index.ts`'s header on why), and
+ * `getActiveLocales()`'s own `unstable_cache` wrapper depends on Next.js
+ * request/build-time runtime machinery this standalone scheduler process
+ * does not have (same reason `queryActiveLocales` exists as an separately
+ * exported, un-cached core — see `active-locales.ts`'s own doc comment).
+ *
+ * L10N P5 (矩阵 #13): `activeLocales` is a plain array parameter, not a
+ * `getActiveLocales()` call made here — the caller (`buildHomeCarouselScheduleDefinition`'s
+ * `getActiveLocales` closure, refreshed once per tick exactly like
+ * `getConfig` already is; `enqueueHomeCarouselCron` below, which has its
+ * own already-open `db` handle) is responsible for resolving the live
+ * active-locale set via `queryActiveLocales(db)` ahead of time and handing
+ * it in as data. Defaults to `["en"]` when omitted — the pre-P5 behavior —
+ * so a caller that has not been updated to supply a snapshot yet (or a
+ * test exercising this function directly) still gets a valid single-item
+ * task input instead of an empty one `enqueueScheduledTask` would reject.
+ * One `GenericTaskItem` per active locale, sharing ONE `GenericTask`/
+ * `ScheduleRun` for the day (`enqueueScheduledTask`'s own `ON CONFLICT
+ * (schedule_key, scheduled_for) DO NOTHING` is keyed on the day, not the
+ * locale) — `targetId` therefore includes the locale
+ * (`${businessDate}:${locale}`) to satisfy `GenericTaskItem`'s own
+ * `@@unique([taskId, targetType, targetId])`; the worker
+ * (`worker/handlers/home-carousel.ts`) claims and processes each item
+ * independently, and `computeHomeCarouselInTx`'s own `cron:<businessDate>:
+ * <locale>` idempotency key (above) is what actually de-dupes a same-day
+ * re-run per locale.
+ */
+export function buildHomeCarouselCronTaskInput(
+  config: HomeCarouselConfig,
+  scheduledFor: Date,
+  activeLocales: readonly string[] = ["en"],
+): ScheduledTaskInput {
   const businessDate = homeCarouselBusinessDate(scheduledFor, config.cronTimezone);
+  const locales = activeLocales.length > 0 ? activeLocales : ["en"];
   return {
     scheduleKey: HOME_CAROUSEL_SCHEDULE_KEY,
     scheduleRevision: 1,
     scheduledFor,
     timezone: config.cronTimezone,
     taskType: HOME_CAROUSEL_TASK_TYPE,
-    params: { locale: "en" },
-    items: [{ targetType: "home_carousel", targetId: businessDate, payload: { locale: "en", source: "cron" } }],
+    params: { locales },
+    items: locales.map((locale) => ({
+      targetType: "home_carousel",
+      targetId: `${businessDate}:${locale}`,
+      payload: { locale, source: "cron" },
+    })),
   };
 }
 
@@ -323,8 +372,26 @@ export function buildHomeCarouselCronTaskInput(config: HomeCarouselConfig, sched
  * `dueInstants` return no instants at all, so `runSchedulerOnce` never
  * reaches `enqueueScheduledTask` for this schedule — no ScheduleRun,
  * CronRun, or GenericTask row is created (nothing to skip after the fact).
+ *
+ * L10N P5: `getActiveLocales` is a second closure parameter, same shape as
+ * `getConfig` — `scheduler/index.ts`'s `main()` refreshes both a
+ * `homeCarouselConfig` snapshot AND a `homeCarouselActiveLocales` snapshot
+ * once per tick, immediately before calling `runSchedulerOnce`, by calling
+ * `queryActiveLocales(prisma)` (the un-cached core, against the scheduler
+ * process's own already-open Prisma client — see `buildHomeCarouselCronTaskInput`'s
+ * doc comment on why not the cached `getActiveLocales()` wrapper). `build`
+ * itself stays synchronous and reads only the closed-over snapshot, exactly
+ * like it already does for `getConfig()` — no change to the
+ * `ScheduleDefinition` interface or `runSchedulerOnce` in
+ * `@/lib/tasks/scheduler.ts` was needed. Defaults to `() => ["en"]` so a
+ * caller that never refreshed the snapshot (a test constructing this
+ * definition directly, or `scheduler/index.ts` before its first tick) still
+ * gets the pre-P5 single-`en`-item behavior instead of an empty task.
  */
-export function buildHomeCarouselScheduleDefinition(getConfig: () => HomeCarouselConfig): ScheduleDefinition {
+export function buildHomeCarouselScheduleDefinition(
+  getConfig: () => HomeCarouselConfig,
+  getActiveLocales: () => readonly string[] = () => ["en"],
+): ScheduleDefinition {
   return {
     scheduleKey: HOME_CAROUSEL_SCHEDULE_KEY,
     dueInstants(now: Date): Date[] {
@@ -334,7 +401,7 @@ export function buildHomeCarouselScheduleDefinition(getConfig: () => HomeCarouse
       return isHomeCarouselCronDue(config.cronSchedule, config.cronTimezone, tick) ? [tick] : [];
     },
     build(scheduledFor: Date): ScheduledTaskInput {
-      return buildHomeCarouselCronTaskInput(getConfig(), scheduledFor);
+      return buildHomeCarouselCronTaskInput(getConfig(), scheduledFor, getActiveLocales());
     },
   };
 }
@@ -345,11 +412,16 @@ export function buildHomeCarouselScheduleDefinition(getConfig: () => HomeCarouse
  * minute tick. Reads config itself (rather than requiring a caller to fetch
  * it first) and honors the same `cronEnabled` gate as `dueInstants` above;
  * shares `buildHomeCarouselCronTaskInput` so the two paths can never drift.
+ * L10N P5: also resolves the live active-locale set via `queryActiveLocales(db)`
+ * (this function already has its own open `db` handle) before building the
+ * task input — same reasoning as `buildHomeCarouselScheduleDefinition`'s own
+ * doc comment on why the un-cached core, not `getActiveLocales()`.
  */
 export async function enqueueHomeCarouselCron(db: PrismaClient, registry: TaskHandlerRegistry, scheduledFor: Date) {
   const config = await getHomeCarouselConfig(db);
   if (!config.cronEnabled) return { status: "skipped_disabled" as const };
-  return enqueueScheduledTask(db, registry, buildHomeCarouselCronTaskInput(config, scheduledFor));
+  const activeLocales = await queryActiveLocales(db);
+  return enqueueScheduledTask(db, registry, buildHomeCarouselCronTaskInput(config, scheduledFor, activeLocales));
 }
 
 // --- N-6: admin page read models -------------------------------------------

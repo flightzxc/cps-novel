@@ -82,6 +82,34 @@ describe("computeHomeCarouselInTx honors carouselConfigJson (PR6 fix B-1 #3)", (
     expect(db.batches.size).toBe(1);
   });
 
+  // L10N P5 (矩阵 #13, F). Mutation ② target: dropping `locale` from the
+  // cron idempotency key (`cron:<businessDate>` instead of
+  // `cron:<businessDate>:<locale>`) — that would make this test fail with
+  // `second.status !== "success"` (the ru compute would collide with en's
+  // already-created HomeCarouselAutoBatch row and get wrongly classified
+  // as a same-day repeat).
+  it("cron:<businessDate>:<locale> is per-locale: en and ru computes on the same business date do NOT collide with each other", async () => {
+    const db = new FakeHomeCarouselDb();
+    db.seedArticle(article({ id: "article-en", novelId: "novel-en", locale: "en" }));
+    db.seedArticle(article({ id: "article-ru", novelId: "novel-ru", locale: "ru" }));
+
+    const en = await computeHomeCarouselInTx(db.asTransactionClient(), { locale: "en", source: "cron", now: NOW });
+    expect(en.status).toBe("success");
+    const ru = await computeHomeCarouselInTx(db.asTransactionClient(), { locale: "ru", source: "cron", now: NOW });
+    expect(ru.status).toBe("success");
+
+    expect(db.batches.size).toBe(2);
+    const uniqueKeys = [...db.batches.values()].map((batch) => batch.uniqueKey).sort();
+    expect(uniqueKeys).toEqual(["cron:2026-09-06:en", "cron:2026-09-06:ru"]);
+
+    // Each locale's own repeat still correctly dedupes against itself.
+    const enRepeat = await computeHomeCarouselInTx(db.asTransactionClient(), { locale: "en", source: "cron", now: NOW });
+    expect(enRepeat).toEqual({ status: "skipped_duplicate" });
+    const ruRepeat = await computeHomeCarouselInTx(db.asTransactionClient(), { locale: "ru", source: "cron", now: NOW });
+    expect(ruRepeat).toEqual({ status: "skipped_duplicate" });
+    expect(db.batches.size).toBe(2);
+  });
+
   it("revenueEnabled cannot be turned on through stored config (compute never sees a revenue branch)", async () => {
     const db = new FakeHomeCarouselDb();
     db.carouselConfigJson = { revenueEnabled: true };

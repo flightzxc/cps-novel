@@ -128,6 +128,33 @@ export class FakeHomeCarouselDb {
           if (row.novel.status !== "published" || row.novel.deletedAt !== null || !row.novel.coverUrl) return null;
           return { id: row.id, novelId: row.novelId };
         },
+        /**
+         * L10N P5 (矩阵 #13): `queryActiveLocales` (`@/lib/locale/active-locales`)
+         * — the cron scheduler's own active-locale source, see
+         * `service.ts`'s `buildHomeCarouselCronTaskInput` — issues one
+         * `article.groupBy({ by: ["locale"], where: activePublicArticleWhere(...) })`.
+         * This fake mirrors this file's own existing "published,
+         * non-deleted, novel published non-deleted, optional seoVisibility
+         * gate" fidelity (the same subset `article.findMany` above already
+         * simulates) — it deliberately does NOT model promo-link
+         * readiness (`isPromoReady`'s DB-level superset), since none of
+         * this suite's fixtures set one up. Full predicate-shape coverage
+         * of `queryActiveLocales` itself lives in
+         * `tests/backend/locale/active-locales.test.ts`; this fake only
+         * needs to produce a plausible active-locale set for the cron
+         * tests in this directory, not re-verify that predicate.
+         */
+        groupBy: async (args: { where?: { AND?: Array<Record<string, unknown>> } }) => {
+          this.calls.push("article.groupBy");
+          const seoVisibilityGated = Array.isArray(args.where?.AND)
+            && args.where.AND.some((clause) => clause.seoVisibility === "public");
+          const rows = [...this.articles.values()]
+            .filter((row) => row.status === "published" && row.deletedAt === null && row.novel.status === "published" && row.novel.deletedAt === null)
+            .filter((row) => !seoVisibilityGated || (row.seoVisibility ?? "public") === "public");
+          const counts = new Map<string, number>();
+          for (const row of rows) counts.set(row.locale, (counts.get(row.locale) ?? 0) + 1);
+          return [...counts.entries()].map(([locale, count]) => ({ locale, _count: { _all: count } }));
+        },
       },
       homeCarouselManualSlot: {
         findMany: async (args: { where: { locale: string }; take: number }) => {

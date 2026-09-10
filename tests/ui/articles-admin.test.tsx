@@ -1037,9 +1037,15 @@ const CATEGORY_OPTIONS = [
   { id: "11111111-1111-4111-8111-111111111111", label: "言情" },
   { id: "22222222-2222-4222-8222-222222222222", label: "romance-no-zh" },
 ];
+// L10N P5: `locale: null` was a stale second-template fixture predating
+// L10N P3's `ArticleTemplate.locale` NOT NULL migration — real rows can no
+// longer have a null locale (`article-filters.tsx`'s own
+// `ArticleTemplateOption.locale` is `string`, not `string | null`, since
+// that migration). `"fr"` doubles as exercising a second real locale
+// already present in `LOCALES` above.
 const TEMPLATE_OPTIONS = [
   { id: "33333333-3333-4333-8333-333333333333", templateKey: "tpl-a", locale: "en", version: 2 },
-  { id: "44444444-4444-4444-8444-444444444444", templateKey: "tpl-b", locale: null, version: 1 },
+  { id: "44444444-4444-4444-8444-444444444444", templateKey: "tpl-b", locale: "fr", version: 1 },
 ];
 
 describe("ArticleFilters · C-19 filters", () => {
