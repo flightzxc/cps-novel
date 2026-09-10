@@ -24,6 +24,7 @@ type SearchParams = {
   page?: string;
   status?: string;
   search?: string;
+  sourceLocale?: string;
 };
 
 /**
@@ -55,7 +56,12 @@ export default async function CatalogSyncPage({
   const promoClaimBlockedReason = capabilityBlockReason("promo:claim", promoClaim);
 
   const page = granted
-    ? await readSourceItemsPage({ page: params.page, status: params.status, search: params.search })
+    ? await readSourceItemsPage({
+        page: params.page,
+        status: params.status,
+        search: params.search,
+        sourceLocale: params.sourceLocale,
+      })
     : null;
   const channels = granted ? await readActiveChannelScanOptions() : [];
   const claimChannelApps = granted ? await readClaimEligibleChannelAppOptions() : [];
@@ -80,7 +86,9 @@ export default async function CatalogSyncPage({
               contentPublishBlockedReason={contentPublishBlockedReason}
               safetyMaxPages={resolveMoboreaderCatalogSafetyMaxPages()}
             />
-            <SourceItemFilters values={{ search: params.search, status: params.status }} />
+            <SourceItemFilters
+              values={{ search: params.search, status: params.status, sourceLocale: params.sourceLocale }}
+            />
             <div className="space-y-2">
               <AdminTimeZoneNote />
               <CatalogSyncClient
@@ -97,7 +105,7 @@ export default async function CatalogSyncPage({
             </div>
             <ContentPagination
               basePath="/catalog-sync"
-              params={{ status: params.status, search: params.search }}
+              params={{ status: params.status, search: params.search, sourceLocale: params.sourceLocale }}
               page={page.page}
               totalPages={page.totalPages}
               total={page.total}

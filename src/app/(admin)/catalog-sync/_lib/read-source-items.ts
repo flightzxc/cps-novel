@@ -1,4 +1,5 @@
 import { NOVEL_SOURCE_ITEM_STATUSES, type NovelSourceItemStatus } from "@/domain/database-statuses";
+import { UNKNOWN_SOURCE_LOCALE_FILTER } from "@/lib/locale/channel-language";
 import { PROMO_LINK_CLAIM_TARGET_TYPE, PROMO_LINK_CLAIM_TASK_TYPE } from "@/lib/tasks/promo-link-claim-limits";
 
 import { prisma } from "@/app/api/admin/_lib/deps";
@@ -79,9 +80,21 @@ export type SourceItemFilters = {
   readonly page?: string;
   readonly status?: string;
   readonly search?: string;
+  /**
+   * L10N P1 (`施工提示词_Sonnet_L10N_P1_语言归一与存量重算_2026-09-10.md`
+   * §1.E): a resolved `SiteLocale`/non-site locale value (`"ru"`, `"it"`, …),
+   * or the `UNKNOWN_SOURCE_LOCALE_FILTER` sentinel (`"__unknown"`, aligned
+   * with CPS `3a76877:src/lib/channel-language.ts:57`'s
+   * `UNKNOWN_SOURCE_LOCALE_FILTER` and its `changdu-sync-panel.tsx`
+   * "全部语种/未知语种" `<select>` shape) meaning `sourceLocale IS NULL`.
+   * Absent/empty means "全部语种" — no filter.
+   */
+  readonly sourceLocale?: string;
 };
 
 const MAX_SEARCH_LENGTH = 200;
+/** `NovelSourceItem.sourceLocale` is `@db.VarChar(16)` — reject anything longer outright rather than let Prisma's own error surface. */
+const MAX_SOURCE_LOCALE_LENGTH = 16;
 
 function normalizePage(value: string | undefined): number {
   const parsed = value ? Number.parseInt(value, 10) : 1;
@@ -100,6 +113,24 @@ function normalizeSearch(value: string | undefined): string | undefined {
 }
 
 /**
+ * `undefined` = no filter ("全部语种"); `{ isUnknown: true }` = `sourceLocale
+ * IS NULL`; `{ locale }` = `sourceLocale = <locale>`. Deliberately does NOT
+ * validate `locale` against `SITE_LOCALES`/the moboreader code table — a
+ * source item's `sourceLocale` can legally be a non-site locale
+ * (`it`/`fil`/`ms`/`tr`), and this is a read-side equality filter, not a
+ * write-side registration check; an operator filtering by a value that
+ * matches zero rows just sees an empty list, same as any other filter typo.
+ */
+function parseSourceLocaleFilter(
+  value: string | undefined,
+): { isUnknown: true } | { locale: string } | undefined {
+  const trimmed = value?.trim();
+  if (!trimmed) return undefined;
+  if (trimmed === UNKNOWN_SOURCE_LOCALE_FILTER) return { isUnknown: true };
+  return trimmed.length <= MAX_SOURCE_LOCALE_LENGTH ? { locale: trimmed } : undefined;
+}
+
+/**
  * Defaults to `status=pending` — that is the only status this screen's whole
  * purpose (triggering creation) applies to, and an operator landing here cold
  * should see the actionable queue first. The status filter still offers the
@@ -110,11 +141,17 @@ export async function readSourceItemsPage(filters: SourceItemFilters): Promise<S
   const page = normalizePage(filters.page);
   const status = normalizeStatus(filters.status) ?? "pending";
   const search = normalizeSearch(filters.search);
+  const sourceLocaleFilter = parseSourceLocaleFilter(filters.sourceLocale);
 
   const where = {
     deletedAt: null,
     status,
     ...(search ? { title: { contains: search, mode: "insensitive" as const } } : {}),
+    ...(sourceLocaleFilter
+      ? "isUnknown" in sourceLocaleFilter
+        ? { sourceLocale: null }
+        : { sourceLocale: sourceLocaleFilter.locale }
+      : {}),
   };
 
   const [rows, total] = await Promise.all([
