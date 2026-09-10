@@ -544,6 +544,117 @@ territory，本轮不改）的前提下拆成两次独立判定去复刻单篇�
 | bootstrap CLI 的 dry-run/SHA-pin/`--apply --approver`/幂等 + 自建 `OperationAudit` 形状 → `scripts/l10n/article-template-bootstrap.ts` | `scripts/p2-06-5-production/tagging-bootstrap.ts` | `1-79`（文件头设计说明）、`156-227`（错误类型/CLI 解析）、`651-657`（`resolveApprover`）、`774-859`（apply 事务与审计写入） | 本仓内部模式复用，非 CPS 搬运 | `PATTERN_ONLY` | 只借"dry-run 默认 + hash 钉死输入 + `--apply` 需 `--approver`（`AdminIdentity` 存在且 active）+ 落库走独立 `OperationAudit`、不经 `mutateAdmin*` 语义层"的整体形状；不搬 `--channel-app` 绑定校验（本脚本没有对应的外部绑定概念）、不搬 `pg_advisory_xact_lock` + `--request-id` 请求级重放去重（tagging-bootstrap 的 196 条映射边需要跨进程互斥防止重复审计；本脚本 15 行数据量小，幂等性直接靠 `(templateKey, version)` 唯一键 upsert 收敛，每次 `--apply` 允许各自记一条 provenance 审计行，不做重放去重）；也不搬 keyword 词表三条过滤规则（本脚本无关键词词典概念） |
 | 每语种独立 `templateKey`（`system-default-v1` / `system-default-<locale>-v1`）→ 15 份 `assets/article-templates/*.json` + `article-template-bootstrap.ts` | `scripts/ops/tkd-dryrun-paginated.sh` | `85-93`（`TEMPLATE_LOCALE` 关联数组：`RUTPL01`→`ru`、`FRTPL01`→`fr`、`PTTPL01`→`pt-BR`、`ESTPL01`→`es`、`FTTPL01`→`zh-Hant`、`TPL001`→`en`） | `3a76877af27c6247ad94be946b44e9cc5c1cb9ce` | `PATTERN_ONLY` | 只借"每个语种一个独立业务标识、不共用一份带通配语义的模板行"这条组织形态；不搬 CPS 该脚本的具体 6 个短码值（本仓 15 语种的 `templateKey` 由 §1.D 命名约定 `system-default[-<locale>]-v1` 独立生成，不复用 `RUTPL01` 这类简写） |
 
+### L10N P4 公开面两层分层、根路径协商、白名单层删除（2026-09-10）
+
+依据 `施工提示词_Sonnet_L10N_P4_公开面两层分层与白名单删除_2026-09-10.md`（§0–§5），
+规划矩阵 #9/#10/#12（#11 JUSTIFIED_DEVIATION 不动）。`baseline_commit` 沿用
+L10N P1/P2 同一坐标 `3a76877af27c6247ad94be946b44e9cc5c1cb9ce`。
+
+#### §1 施工前取证（四张清单，先于代码改动产出）
+
+**清单①：CPS 动态层（`getActiveLocales`/`active-locales`）消费点**
+——`git -C <cps> grep -n "getActiveLocales\|active-locales" 3a76877 -- src`：
+
+| 文件 | 用途 |
+| --- | --- |
+| `src/lib/active-locales.ts` | 定义本身（`unstable_cache(queryActiveLocales, ["active-locales-v1"], {revalidate:300, tags:["active-locales"]})`，`Drama.groupBy({by:["locale"], where:{status:"active", locale:{not:null}}})`，`en` 恒含，按 `locales` 顺序返回） |
+| `src/components/site/site-header.tsx` | **唯一真实消费点**：`await getActiveLocales()`，结果传给 `<LocaleSwitcher availableLocales={activeLocales} />` |
+
+CPS 动态层的消费面极窄——只有 `SiteHeader`→`LocaleSwitcher` 这一条链路读它；sitemap/hreflang/IndexNow/路由/canonical 全部读静态层（见清单②）。海阅动态层的消费点必须同样只对齐这一条链路，不得因为"反正已经有异步函数了"就顺手扩大到 sitemap 等静态层地盘（矩阵 #9 施工要点原话："CPS 用静态集的地方不得换动态集"）。
+
+**清单②：CPS 静态层（`SUPPORTED_SITE_LOCALES`/`isSupportedSiteLocale`/`routing.locales`）消费点**
+——`git -C <cps> grep -n "SUPPORTED_SITE_LOCALES\|isSupportedSiteLocale\|routing.locales" 3a76877 -- src`，
+共 70 余处命中，按海阅有无对应落点分两类：
+
+有海阅对应落点、本轮需要改的（与 §2 范围逐一对应）：
+| CPS 文件/符号 | 语义 | 海阅对应落点 |
+| --- | --- | --- |
+| `src/i18n/routing.ts`（`locales = SUPPORTED_SITE_LOCALES`，`isSupportedLocale`） | 路由层 locale 集合 | `src/proxy.ts` 路径段解析、`src/app/[locale]/_guard.ts` |
+| `src/app/[locale]/(site)/layout.tsx:15,35,46`（`hasLocale(routing.locales,...)`） | 注册即路由 | `src/app/[locale]/_guard.ts` `getRoutableLocale` |
+| `src/lib/static-sitemap-generator.ts:190`（`routeLocales = options.routeLocales ?? locales`） | sitemap 分片默认全量 | `src/lib/seo/static-sitemap-generator.ts:190` |
+| `src/lib/indexnow-outbox.ts:70-82`（`isSupportedSiteLocale`） | IndexNow 资格 | `src/lib/indexnow/eligibility.ts`（已有等价 `isRegisteredSiteLocale`，只是默认门未切换） |
+| `src/lib/drama-hreflang.ts:17-31`（静态 `locales`） | hreflang sibling 查询范围 | `src/lib/seo/novel-hreflang.ts` `loadNovelHreflangSiblings` |
+| `src/lib/supported-site-locales.ts:21`（`BLOG_ARTICLE_LOCALE_OPTIONS = SUPPORTED_SITE_LOCALES`，`article-blog-create-form.tsx:15`） | 博客创建表单语种下拉 | `blog-create-form.tsx`、`content-creation/blog.ts` `requireLocale` |
+
+无海阅对应落点（CPS 特有能力，本轮不搬、不登记为 GAP）：`(admin)/articles/faq-workbench/**`（FAQ 工作台，海阅无此功能）、`(admin)/home-carousel/page.tsx`/`home-carousel-config-write.ts`（轮播 locale，P5 范围，本轮"不做"清单已列）、`(admin)/tags/_components/locale-field-editor.tsx`（对应海阅 `TAG_TRANSLATION_LOCALES`，独立域不动）、`api/admin/blog/drama-search/route.ts`、`lib/blog-seo.ts`、`lib/faq/**`、`lib/seo-utils.ts:132`（海阅 `seo-utils.ts` 已用 `listPublishableLocales()`，见清单③）、`lib/site-search/site-search-service.ts`。
+
+**清单③：海阅待删白名单层（`PUBLISHABLE_LOCALES`/`listPublishableLocales`/`isPublishableLocale`/`pickPublishableLocale`/`ARTICLE_TEMPLATE_CRUD_LANDED`）全部消费点**
+——`grep -rn "PUBLISHABLE_LOCALES\|listPublishableLocales\|isPublishableLocale\|pickPublishableLocale\|ARTICLE_TEMPLATE_CRUD_LANDED" src worker scripts tests`：
+
+真实运行时调用点（非注释/非纯文档）：
+
+| 文件:行 | 符号 | 改向 |
+| --- | --- | --- |
+| `src/proxy.ts:155` | `pickPublishableLocale(firstPathSegment)` | 改 `SITE_LOCALES` 成员判定（静态层） |
+| `src/app/layout.tsx:54` | `pickPublishableLocale(header)` | 改读请求 locale（`x-novel-locale`，`SITE_LOCALES` 校验，静态层） |
+| `src/app/[locale]/_guard.ts:66` | `isPublishableLocale(locale)` | 删（保留 `SITE_LOCALES` 成员判定 + 默认语种排除两道，静态层） |
+| `src/app/(admin)/articles/new-blog/_components/blog-create-form.tsx:50` | `listPublishableLocales()` | 改 `SITE_LOCALES`（对齐 CPS `BLOG_ARTICLE_LOCALE_OPTIONS`，静态层） |
+| `src/features/public-ui/layout/LocaleSwitcher.tsx:128` | `listPublishableLocales()` | 改由服务端传入 `activeLocales` prop（动态层） |
+| `src/server/content-creation/blog.ts:111` | `isPublishableLocale(value)` | 改 `SITE_LOCALES` 成员判定（静态层，对齐 CPS `requireLocale` 用 `isSupportedSiteLocale`） |
+| `src/lib/site/request-locale.ts:39-44` | `pickPublishableLocale` 定义（内部调 `isPublishableLocale`） | 改为 `SITE_LOCALES` 成员判定，函数改名去 `Publishable` 措辞 |
+| `src/lib/seo/seo-utils.ts:133` | `listPublishableLocales()` | 改 `SITE_LOCALES`（`buildHreflangAlternates` 的枚举范围，对齐清单②未搬项——`seo-utils.ts` 是 hreflang 的"无过滤盲枚举"分支，不是 `novel-hreflang.ts` 的"过滤 sibling"分支，语义上更贴近 CPS 静态 `locales` 枚举） |
+| `src/lib/seo/novel-hreflang.ts:113` | `listPublishableLocales()` | 改 `SITE_LOCALES`（静态层，可见性谓词 `isVisibleSibling` 不动） |
+| `src/lib/seo/static-sitemap-generator.ts:190` | `listPublishableLocales()` | 改 `SITE_LOCALES`（静态层，对齐 CPS `locales` 默认） |
+| `src/lib/seo/sitemap.ts:426` | `listPublishableLocales().includes(...)` | 改 `SITE_LOCALES.includes(...)`（`parseSitemapFileName` 的文件名合法性判定，静态层） |
+| `src/lib/indexnow/eligibility.ts:180,233` | `isPublishableLocale` 缺省 `localeGate` | 改 `isRegisteredSiteLocale`（已有的 `SITE_LOCALES` 成员判定，对齐 CPS `isSupportedSiteLocale`） |
+| `src/lib/locale/locale-canonical.ts` | `PUBLISHABLE_LOCALES`/`isPublishableLocale`/`listPublishableLocales`/`ARTICLE_TEMPLATE_CRUD_LANDED`/`assertPublishableLocalesFailClosed` 定义本身 | 删除（§2.A） |
+
+9 个测试文件的死 mock（覆盖 `isPublishableLocale`/`listPublishableLocales`，导出消失后 `importOriginal` 展开会 TS 报错）：
+`tests/backend/publish-gate/{admin-wrappers,invalidation-wiring,service,db-retry-wiring,c27-article-type-fork}.test.ts`、
+`tests/backend/seo/{novel-hreflang,sitemap-multi-locale}.test.ts`、
+`tests/ui/locale-switcher-multi-locale.test.tsx`、
+`tests/integration/p2-12-vertical-acceptance.test.ts`——逐一删 mock 键或改指向新接口，见 §改动清单。
+
+**清单④：`PUBLIC_SITE_LOCALE` 消费点分类**
+——`grep -rn "PUBLIC_SITE_LOCALE" src`（76 处非注释代码引用，import 语句与实际使用各算一处）：
+
+| 分类 | 文件 | 结论 |
+| --- | --- | --- |
+| **默认语种常量（保留）** | `src/app/page.tsx`、`src/app/category/[slug]/page.tsx`、`src/app/blog/page.tsx`、`src/app/blog/[slug]/page.tsx`、`src/app/novel/[slugParam]/page.tsx`、`src/app/novel/[slugParam]/not-found.tsx`、`src/app/novel/[slugParam]/chapter/[chapterNumber]/page.tsx`、`src/app/browse/page.tsx`、`src/app/[locale]/novel/[slugParam]/not-found.tsx` | 这些是**裸路径路由树**（D-8 定案：默认语种在无前缀路径落地），`PUBLIC_SITE_LOCALE` 在这里不是"唯一语种假设"的 bug，是路由结构本身——裸路径树与 `[locale]` 前缀树是两棵并行路由树，各自服务固定的语种范围，不因本轮 guard 放开前缀树而改变 |
+| **默认语种常量（保留，dev-only）** | `src/app/dev-preview/**/*`、`src/features/public-ui/fixtures/mock-chrome.ts` | 开发预览路由，非生产可达路径，`mockChrome` 本身注释明示"语言入口只在确实存在多个可发布语种时才传入"——本轮验证单语种隐藏态的既有测试夹具 |
+| **默认语种常量（保留）** | `src/features/public-ui/status/PublicErrorStatus.tsx`、`src/features/public-ui/status/PublicNotFoundStatus.tsx`、`src/lib/site/blog-queries.ts:109`（`asSiteLocale(row.locale) ?? PUBLIC_SITE_LOCALE` 兜底）、`src/lib/locale/messages/index.ts:172`（`en` 消息目录短路判定） | 无请求上下文或本就是"哪个 locale 缺失就兜底默认语种"的语义，不是遗漏 |
+| **唯一语种假设（改读请求 locale）** | `src/app/layout.tsx:17,51,56` | 根布局 `<html lang dir>` 与顶层 `<title>` 兜底文案——之前恒定 `PUBLIC_SITE_LOCALE`，因为 `pickPublishableLocale` 白名单只放行 `en`；白名单删除后必须真正读 `x-novel-locale` 请求头（§2.E，已在清单③单独登记） |
+| **唯一语种假设（改读请求 locale）** | `src/proxy.ts:80`（`buildDefaultLocaleRedirectTarget` 的 `/en/*` → 裸路径前缀） | 不是 bug——这个用法是"默认语种是谁"这一个静态问题，`/en/*` 规整不因协商或白名单删除而变化，保留 `PUBLIC_SITE_LOCALE` 引用不动 |
+| **唯一语种假设（改读请求 locale）** | `src/app/[locale]/_guard.ts:65`（`locale === PUBLIC_SITE_LOCALE` 排除默认语种前缀） | 同上，D-8 结构性判定，不是遗漏，保留不动 |
+| **无需改动** | `src/server/publication/revalidate.ts:142` | `revalidatePublicBlogPaths` 的博客详情页失效路径——博客当前仍是单语种产出面（`blog-create-form.tsx` 语种下拉扩到 `SITE_LOCALES` 不改变"当前只有 en 数据"的事实），失效路径构造维持 `PUBLIC_SITE_LOCALE`，非本轮范围 |
+
+结论：38 处（或本次重新核实的 76 处非注释引用，含 import 语句）中，仅
+`src/app/layout.tsx` 一处属于"唯一语种假设"需要改为读请求 locale（§2.E），
+其余全部是裸路径路由树/默认值兜底/开发预览等结构性用法，本身正确，不是遗漏。
+
+#### §2 范围改动清单（文件 → CPS 参照）
+
+| 海阅文件 | CPS 参照 | 改动 |
+| --- | --- | --- |
+| `src/lib/locale/locale-canonical.ts` | 不适用（删除） | 删 `PUBLISHABLE_LOCALES`/`isPublishableLocale`/`listPublishableLocales`/`ARTICLE_TEMPLATE_CRUD_LANDED`/`assertPublishableLocalesFailClosed`，`SITE_LOCALES`/`SITE_LOCALE_LABELS`/`SITE_LOCALE_NATIVE_NAMES`/`resolveSiteLocale`/`TAG_TRANSLATION_LOCALES` 三元组不动 |
+| `src/lib/locale/active-locales.ts`（新增） | `3a76877:src/lib/active-locales.ts:12-41` | `ADAPT`：`Drama.groupBy({status:"active"})` 换成 `Article.groupBy({by:["locale"]})` + 本仓公开可见谓词族（`buildPublicArticleWhere` 复用自 `sitemap.ts`），`en` 恒含、按 `SITE_LOCALES` 顺序返回、`unstable_cache` 300s tag `active-locales` |
+| `src/lib/site/chrome.ts` + `src/lib/site/queries.ts`（`loadPublicChrome`） | 不适用（本仓新设计的传递路径） | `SiteChrome` 新增可选字段 `activeLocales`，`loadPublicChrome` 并行拉取 `getActiveLocales()` 塞入——8 个 `_pages/*.tsx` 页面体已经把 `chrome` 原样传给 `SiteShell`，借这条既有管道，不新增 prop 穿透 |
+| `src/features/public-ui/layout/SiteShell.tsx`/`SiteHeader.tsx`/`LocaleSwitcher.tsx` | `3a76877:src/components/site/site-header.tsx`、`locale-switcher.tsx` | `LocaleSwitcher` 从内部调 `listPublishableLocales()` 改为接收 `activeLocales` prop（海阅 `SiteHeader`/`LocaleSwitcher` 是 `"use client"`，`ChapterScreen.tsx` 直接静态导入 `SiteShell`——`getActiveLocales()` 不能像 CPS 那样放进 `SiteHeader` 内部 await，否则把 `prisma`/`unstable_cache` 拖进客户端包，必须走 prop 传递） |
+| `src/server/publication/revalidate.ts` | 不适用（本仓既有机制） | `revalidatePublicListings()`（发布状态迁移的既有唯一广播点）追加 `revalidateTag("active-locales")`，`safeRevalidateTag` 包一层同 `safeRevalidatePath` 的 try/catch 纪律 |
+| `src/proxy.ts` | `3a76877:src/i18n/routing.ts:6-25`、`src/i18n/root-negotiation.ts`、`src/proxy.ts:287` | 路径段解析改 `SITE_LOCALES` 成员判定；新增根路径协商调用（仅 admin-host 判定放行后、`/en/*` 规整之后、header 转发之前，且只对公开主机生效） |
+| `src/lib/locale/root-negotiation.ts`（新增） | `3a76877:src/i18n/root-negotiation.ts:1-41` | `COPY`：`match`/`parseAcceptLanguage`/bot UA 排除/cookie 优先/307 + Set-Cookie，`isSupportedLocale`→`SITE_LOCALES` 成员判定，`routing.defaultLocale`→`PUBLIC_SITE_LOCALE`，cookie `maxAge/path/sameSite` 逐字同 `3a76877:src/i18n/routing.ts:6-25` |
+| `src/lib/site/request-locale.ts` | 不适用（本仓已有文件的改造） | `pickPublishableLocale` 改名 `pickSiteLocale`，内部改 `SITE_LOCALES` 成员判定；`SITE_LOCALE_REQUEST_HEADER` 不动 |
+| `src/app/[locale]/_guard.ts` | `3a76877:src/app/[locale]/(site)/layout.tsx:43-48` | `getRoutableLocale` 删 `isPublishableLocale` 门，保留 `SITE_LOCALES` 成员判定 + 默认语种排除两道 |
+| `src/app/layout.tsx` | 同上 request-locale 改造 | `lang`/`dir`/`getPublicT` 改读 `pickSiteLocale(header)` 而非固定 `PUBLIC_SITE_LOCALE` |
+| `src/lib/seo/sitemap.ts` | `3a76877:src/lib/static-sitemap-generator.ts:190` | `parseSitemapFileName` 的合法性判定改 `SITE_LOCALES` |
+| `src/lib/seo/static-sitemap-generator.ts` | 同上 | `routeLocales` 默认改 `SITE_LOCALES` |
+| `src/lib/seo/seo-utils.ts` | `3a76877:src/lib/seo-utils.ts:132` | `buildHreflangAlternates` 枚举范围改 `SITE_LOCALES` |
+| `src/lib/seo/novel-hreflang.ts` | `3a76877:src/lib/drama-hreflang.ts:17-31` | `loadNovelHreflangSiblings` 的 `locale: {in: ...}` 改 `SITE_LOCALES`，`isVisibleSibling` 可见性谓词不动 |
+| `src/lib/indexnow/eligibility.ts` | `3a76877:src/lib/indexnow-outbox.ts:70-82` | `isNovelIndexNowEligible`/`isBlogIndexNowEligible` 的缺省 `localeGate` 改 `isRegisteredSiteLocale`（已有符号，本轮只切换默认引用） |
+| `src/app/(admin)/articles/new-blog/_components/blog-create-form.tsx` | `3a76877:src/lib/supported-site-locales.ts:21`（`BLOG_ARTICLE_LOCALE_OPTIONS`） | 语种下拉改 `SITE_LOCALES` |
+| `src/server/content-creation/blog.ts` | 同上 | `requireLocale` 改 `SITE_LOCALES` 成员判定 |
+| `src/lib/slug/text-to-slug.ts` | 不适用（注释修正） | §5：删除失实的"本轮无非 en 调用方"表述，改为 P2 之后来源事实可以是任意 `SITE_LOCALES` 成员，`latin-word-segmentation` 占位规则现实可达 |
+| `package.json` | 不适用 | 新增 `@formatjs/intl-localematcher`，精确版本钉死 |
+
+#### 未搬项说明（明确记录，避免被误判为漏登）
+
+`seo-utils.ts` 的 `buildHreflangAlternates`（"无过滤盲枚举"分支）与
+`novel-hreflang.ts` 的 `loadNovelHreflangSiblings`（"按 Novel 过滤 sibling"
+分支）本轮都从 `listPublishableLocales()` 改 `SITE_LOCALES`，但对应不同的
+CPS 参照文件（前者对应 `lib/seo-utils.ts` 的静态 `SUPPORTED_SITE_LOCALES`
+枚举，后者对应 `lib/drama-hreflang.ts` 的静态 `locales` sibling 查询范围）
+——两者语义不同，登记为两条独立改动，不合并。
+
 ## 使用说明
 
 - `symbol`：被搬运的具体符号名（函数名/类型名/表名/字段名/组件名等），一行一个符号，不得用文件级粗粒度笼统登记；
