@@ -65,9 +65,17 @@ describe("home-carousel runtime grants (PR6 lane E)", () => {
     }
   });
 
-  it("keeps home_carousel_change_log INSERT-only for worker_app", () => {
+  it("keeps home_carousel_change_log INSERT-only (no UPDATE/DELETE) for worker_app, but now also grants it SELECT", () => {
+    // Grants-RETURNING fix (X8 uat real-transaction repro, tests/backend/
+    // database/grants-returning.test.ts): this test used to assert the
+    // *opposite* of the SELECT line below -- "INSERT-only" was read as
+    // "no SELECT either", which is exactly the gap that broke
+    // `computeHomeCarouselInTx`'s `homeCarouselChangeLog.create()` in
+    // production. Prisma's `.create()` always compiles to `INSERT ...
+    // RETURNING <every column>`, and PostgreSQL checks SELECT privilege on
+    // every RETURNING column -- so INSERT alone was never sufficient.
     expect(grants).toMatch(/GRANT INSERT ON TABLE\s*\n\s*credential_change_log, operation_audit, indexnow_outbox_attempt,\s*\n\s*home_carousel_change_log\s*\nTO worker_app;/);
-    expect(grants).not.toMatch(/GRANT SELECT[^;]*home_carousel_change_log[^;]*worker_app/s);
+    expect(grants).toMatch(/GRANT SELECT ON TABLE home_carousel_change_log,[^;]*worker_app;/s);
     expect(grants).not.toMatch(/GRANT (?:UPDATE|DELETE)[^;]*home_carousel_change_log[^;]*worker_app/s);
   });
 

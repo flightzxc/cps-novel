@@ -247,6 +247,46 @@ GRANT SELECT ON TABLE channel, source_app, channel_app, channel_capability,
 GRANT SELECT ON TABLE home_carousel_manual_slot, home_carousel_auto_batch,
   home_carousel_auto_candidate, home_carousel_serving TO worker_app;
 
+-- RETURNING fix (X8 uat real-transaction repro on `home_carousel_change_log`,
+-- plus a full-repo audit of every worker_app INSERT/UPDATE/DELETE grant
+-- above that had no matching SELECT): Prisma's `.create()`/`.update()`/
+-- `.upsert()`/`.delete()` compile to SQL carrying an implicit
+-- `RETURNING <every scalar column>` unless the call site passes its own
+-- narrow `select`, and PostgreSQL checks SELECT privilege on every
+-- RETURNING column -- not just the columns actually written. A role with
+-- INSERT/UPDATE but zero SELECT on the target table therefore cannot
+-- execute a bare `.create()`/`.update()` at all: the very first row fails
+-- with `permission denied for table ...` and rolls back its whole
+-- transaction. `worker_app` already had INSERT (and for four of these six,
+-- UPDATE) on the tables below with no SELECT of any kind:
+--   - `home_carousel_change_log`: confirmed root cause. `worker/handlers/
+--     home-carousel.ts` -> `computeHomeCarouselInTx`'s
+--     `homeCarouselChangeLog.create()` (src/server/home-carousel/
+--     service.ts) is exactly this failure, reproduced read-only against X8
+--     uat before this fix (see database-governance.md's changelog entry).
+--   - `indexnow_outbox` / `indexnow_outbox_attempt`: also currently live --
+--     `worker/handlers/indexnow-delivery.ts`'s `indexNowOutbox.update()`
+--     (four call sites) and `indexNowOutboxAttempt.create()` hit the
+--     identical failure on every delivery attempt the worker processes.
+--   - `tracking_event` / `schedule_run` / `cron_run` / `article_template`:
+--     no worker-side `.create()`/`.update()`/`.upsert()`/`.delete()` call
+--     site exists in this codebase today (the only current writers are
+--     `web_app` for `tracking_event`/`article_template`, already SELECT-
+--     complete there, and `scheduler_app` for `schedule_run`/`cron_run`,
+--     already self-granted SELECT+INSERT+UPDATE above) -- but the
+--     worker_app INSERT/UPDATE grant already exists for all four, so the
+--     identical RETURNING trap is waiting for the first worker code that
+--     uses it. Closed the same way rather than left as a live landmine;
+--     `tests/backend/database/grants-returning.test.ts` guards all seven
+--     (and any future same-shape gap) going forward.
+-- Table-level SELECT matches worker_app's existing style for every other
+-- table it can read (no column-scoped SELECT is used for worker_app
+-- anywhere in this file) -- none of these six tables carries a
+-- worker-hidden sensitive column the way credential/side-effect tables do.
+GRANT SELECT ON TABLE home_carousel_change_log, indexnow_outbox_attempt,
+  tracking_event, indexnow_outbox, schedule_run, cron_run, article_template
+TO worker_app;
+
 -- Scheduler only creates scheduling and GenericTask metadata. It never reads Credential/Auth secrets.
 GRANT SELECT, INSERT, UPDATE ON TABLE schedule_run, cron_run, generic_task, generic_task_item TO scheduler_app;
 
