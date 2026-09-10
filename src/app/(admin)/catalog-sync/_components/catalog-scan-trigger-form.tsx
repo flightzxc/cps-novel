@@ -29,11 +29,11 @@ import {
  * `docs/governance/L10N_UPSTREAM_LANGUAGE_EVIDENCE_2026-09-10.md`), same
  * "reshape the canonical table for display, not a second mapping table"
  * shape as `../_lib/../catalog-sync/_components/source-item-filters.tsx`'s
- * `SOURCE_LOCALE_FILTER_OPTIONS` (`tests/ui/locale-canonical.test.ts`'s "no
- * second locale mapping table" scan only flags a literal `{...}`/`[...]`
- * collection, not a value built by `Array.from(...).map(...)`, so this is
- * not a violation — it never resolves anything, it only reshapes the
- * already-resolved constant). CPS reference: `changdu-sync-panel.tsx`
+ * `SOURCE_LOCALE_FILTER_OPTIONS` — it never resolves anything, it only
+ * reshapes the already-resolved constant; registered as such in
+ * `tests/ui/locale-canonical.test.ts`'s `LOCALE_DECLARATION_EXEMPTIONS`
+ * (file `catalog-scan-trigger-form.tsx`, identifier
+ * `CATALOG_SCAN_LANGUAGE_CHIP_OPTIONS`). CPS reference: `changdu-sync-panel.tsx`
  * derives its own chip list per-source-app the same way
  * (`getChangduSelectableLanguageOptionsForSourceApp`), rather than off the
  * site's own registered-locale list.

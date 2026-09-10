@@ -114,6 +114,46 @@ const LOCALE_NAME_EXEMPTIONS: readonly LocaleNameExemption[] = [
   },
 ];
 
+/**
+ * L10N P5.1（Opus 复核 NON_BLOCKING b）：`LOCALE_NAME_EXEMPTIONS` 的声明级
+ * 对应物。下方「没有第二张语种映射表」扫描只抓「名字带 Locale/Language 且值
+ * 紧跟字面量初始化（`new Map`/`new Set`/`{`/`[`）」这一种形状——L10N P5 落地
+ * 的三处 Locale/Language 命名声明刻意用了别的写法（`Object.freeze([...])` /
+ * `Array.from(...)`）避开这个形状，各自的注释原先也只是就地写「躲开了扫描」。
+ * 这跟 `LOCALE_NAME_EXEMPTIONS` 已经点出的函数级问题是同一件事：靠初始化写
+ * 法凑巧不命中正则，不是一条经过审查的豁免，也会让真正的第二份映射表借同一
+ * 招数藏起来。这张表把它显式化、可自检——跟 `LOCALE_NAME_EXEMPTIONS` 自己的
+ * 双向自检同一形状：`LOCALE_DECLARATION_EXEMPTION_SCOPE` 范围内任何带
+ * Locale/Language 的 `const`/`let`/`var` 声明（不论初始化写法，不只是会命中
+ * 字面量正则的那些）都必须在这里登记理由，登记项也必须真实存在。
+ */
+type LocaleDeclarationExemption = { file: string; identifier: string; reason: string };
+const LOCALE_DECLARATION_EXEMPTION_SCOPE: readonly string[] = [
+  "scheduler/index.ts",
+  "src/app/(admin)/catalog-sync/_components/catalog-scan-trigger-form.tsx",
+  "src/app/(admin)/catalog-sync/_components/batch-create-content-dialog.tsx",
+];
+const LOCALE_DECLARATION_EXEMPTIONS: readonly LocaleDeclarationExemption[] = [
+  {
+    file: "scheduler/index.ts",
+    identifier: "homeCarouselActiveLocales",
+    reason:
+      "调度器每 tick 刷新前的默认快照值（Object.freeze([\"en\"])），不是语种解析表；真正的活跃语种集合来自 main() 里的 queryActiveLocales(prisma)，见 tests/backend/home-carousel/scheduler-wiring.test.ts 的结构与行为双重断言。",
+  },
+  {
+    file: "src/app/(admin)/catalog-sync/_components/catalog-scan-trigger-form.tsx",
+    identifier: "CATALOG_SCAN_LANGUAGE_CHIP_OPTIONS",
+    reason:
+      "把既有 MOBOREADER_LANGUAGE_CODE_TO_LOCALE 表（channel-language.ts 唯一真源的一部分）重塑成 chip 展示项（value/label/isSiteLocale），不解析任何码、不新增任何映射内容，只是换一种形状展示已解析结果。",
+  },
+  {
+    file: "src/app/(admin)/catalog-sync/_components/batch-create-content-dialog.tsx",
+    identifier: "selectedLocales",
+    reason:
+      "把已解析的 item.sourceLocale 去重成一个集合（Array.from(new Set(...))），不做码→locale 映射、不引入新的解析规则，只是对已解析值的去重收集。",
+  },
+];
+
 /** 递归收集一批目录下的 .ts / .tsx。 */
 function sourceFiles(roots: readonly string[]): string[] {
   const found: string[] = [];
@@ -424,6 +464,40 @@ describe("locale 唯一真源 · 全仓不得有第二份映射", () => {
 
     for (const entry of LOCALE_NAME_EXEMPTIONS) {
       expect(entry.reason.trim().length, `${entry.file} → ${entry.name} 缺一句理由`).toBeGreaterThan(0);
+    }
+  });
+
+  it("locale-named 声明登记表：豁免范围内任何带 Locale/Language 的 const/let/var 声明都必须登记理由，且登记项必须真实存在（L10N P5.1，Opus 复核 NON_BLOCKING b）", () => {
+    // 不同于上面「没有第二张语种映射表」的 mappingDeclaration（只抓字面量
+    // 初始化），这里故意不限定初始化写法——就是要连 Object.freeze([...])、
+    // Array.from(...) 这类躲开了字面量正则的声明也一并抓到，登记表才有意义。
+    const declarationNamePattern = /(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*(?::[^=]+)?=/g;
+    const localeOrLanguageNamed = /LOCALE|LANGUAGE|Locale|Language/;
+
+    for (const relativePath of LOCALE_DECLARATION_EXEMPTION_SCOPE) {
+      const source = readFileSync(resolve(repoRoot, relativePath), "utf8");
+      const foundNames = new Set<string>();
+      for (const match of source.matchAll(declarationNamePattern)) {
+        if (localeOrLanguageNamed.test(match[1])) foundNames.add(match[1]);
+      }
+      const exemptedNames = new Set(
+        LOCALE_DECLARATION_EXEMPTIONS.filter((entry) => entry.file === relativePath).map((entry) => entry.identifier),
+      );
+
+      // 范围内找到的每个 Locale/Language 命名声明都必须登记——不能悄悄新增
+      // 一个未经审查的同类声明（哪怕它今天靠写法躲得过上面的字面量正则）。
+      for (const name of foundNames) {
+        expect([...exemptedNames], `${relativePath} → ${name} 未登记豁免理由`).toContain(name);
+      }
+      // 登记表里的每一条也必须真实存在于文件里——防止声明改名/删除后登记表
+      // 悄悄腐烂成一张空对空白名单。
+      for (const name of exemptedNames) {
+        expect([...foundNames], `${relativePath} → ${name} 登记表已过期：文件里已不存在该声明`).toContain(name);
+      }
+    }
+
+    for (const entry of LOCALE_DECLARATION_EXEMPTIONS) {
+      expect(entry.reason.trim().length, `${entry.file} → ${entry.identifier} 缺一句理由`).toBeGreaterThan(0);
     }
   });
 

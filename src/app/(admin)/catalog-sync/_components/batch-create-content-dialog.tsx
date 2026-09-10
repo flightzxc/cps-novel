@@ -175,6 +175,11 @@ export function BatchCreateContentDialog({
    * inline locale tag so this dialog never renders an option whose locale
    * is invisible to the operator).
    */
+  // `Array.from(new Set(...))`, not a bare array literal — a plain dedupe
+  // of already-resolved `item.sourceLocale` values, not a locale
+  // resolution table; registered as such in
+  // `tests/ui/locale-canonical.test.ts`'s `LOCALE_DECLARATION_EXEMPTIONS`
+  // (file `batch-create-content-dialog.tsx`, identifier `selectedLocales`).
   const selectedLocales = Array.from(
     new Set(selectedItems.map((item) => item.sourceLocale).filter((locale): locale is string => locale !== null)),
   );
@@ -182,13 +187,11 @@ export function BatchCreateContentDialog({
   // Insertion order here already tracks `listActiveArticleTemplateOptionsForLocales`'s
   // own `orderBy: [{ locale: "asc" }, ...]` — grouping via `Map` preserves
   // that order instead of re-sorting. Named `templateOptionGroups` (not
-  // e.g. `groupedByLocale`) — this is a plain re-shaping of already-
-  // resolved `locale` values into a `Map`, not a locale resolution table,
-  // but `tests/ui/locale-canonical.test.ts`'s "no second mapping table"
-  // scan matches on name-contains-Locale/Language plus a literal
-  // `{}`/`[]`/`new Map`/`new Set` initializer regardless of what the
-  // declaration actually does, so a `Locale`-named `new Map(...)` here
-  // would still be flagged.
+  // e.g. `groupedByLocale`) so it stays outside `LOCALE_DECLARATION_
+  // EXEMPTIONS`'s scope of Locale/Language-named declarations (see
+  // `selectedLocales` above for the one declaration in this file that IS
+  // in scope) — this is a plain re-shaping of already-resolved `locale`
+  // values into a `Map`, not a locale resolution table.
   const templateOptionGroups = new Map<string, BatchTemplateOption[]>();
   for (const template of matchingTemplateOptions) {
     const group = templateOptionGroups.get(template.locale) ?? [];

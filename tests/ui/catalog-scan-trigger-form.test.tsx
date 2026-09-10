@@ -202,6 +202,20 @@ describe("同步语种 chip 由 moboreader 18 码派生（L10N P5 矩阵 #13）"
     expect(chip.getAttribute("aria-pressed")).toBe("true");
     expect(screen.getByRole("button", { name: "开始同步 · 1 语种" })).toBeTruthy();
   });
+
+  // L10N P5.1 (port-registry P5 反方向登记): moboreader 18 码交集 SITE_LOCALES
+  // 15 语只得 14 个——`cs` 是唯一「站点已注册、上游却没有对应码」的语种
+  // （MOBOREADER_LANGUAGE_CODE_TO_LOCALE 没有任何码映射到 cs），所以它不该
+  // 出现在这个 chip 组里。这不是"cs 没内容"的既有场景（active-locales.ts 的
+  // "cs 无内容"是另一件事：cs 有上游文章但站点侧判定为空），是"上游压根没有
+  // 这个语种的码"，chip 组渲染的是渠道源码表，不是站点语种注册表。
+  it("chip 组不含 cs——moboreader 码表没有任何码映射到 cs（NO_SOURCE_SAMPLE，反方向验证）", () => {
+    renderForm();
+    const group = screen.getByRole("group", { name: "同步语种" });
+    const chips = within(group).getAllByRole("button");
+    expect(chips.map((chip) => chip.textContent)).not.toContain("捷克文");
+    expect(screen.queryByRole("button", { name: "捷克文" })).toBeNull();
+  });
 });
 
 describe("表单校验：不合法输入拦在提交之前，Action 不会被调用", () => {
