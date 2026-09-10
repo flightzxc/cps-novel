@@ -7,7 +7,8 @@ import { useMemo, useState, type FormEvent } from "react";
 import { buttonClassName } from "@/components/ui/button";
 import { errorEnvelopeCopy } from "@/features/admin-ui/error-copy";
 import { ImportProgress } from "@/features/admin-ui/import-progress";
-import { SITE_LOCALES, SITE_LOCALE_LABELS } from "@/lib/locale/locale-canonical";
+import { MOBOREADER_LANGUAGE_CODE_TO_LOCALE } from "@/lib/locale/channel-language";
+import { SITE_LOCALES, SITE_LOCALE_LABELS, type SiteLocale } from "@/lib/locale/locale-canonical";
 
 import { applyCatalogScanTaskAction } from "../_actions";
 import type { ChannelScanOption } from "../_lib/read-channel-apps";
@@ -17,6 +18,45 @@ import {
   type CatalogScanOutcome,
   type OutcomeTone,
 } from "../_lib/scan-task-copy";
+
+/**
+ * L10N P5 (矩阵 #13): this chip used to render one button per `SITE_LOCALES`
+ * member (15, a *site* concept — "does this project have routes for this
+ * locale"), which is the wrong axis for a *catalog scan* trigger — the
+ * question here is "which upstream moboreader codes exist", independent of
+ * whether this project serves that locale as a registered site locale.
+ * Derived from `MOBOREADER_LANGUAGE_CODE_TO_LOCALE` (18 codes — see
+ * `docs/governance/L10N_UPSTREAM_LANGUAGE_EVIDENCE_2026-09-10.md`), same
+ * "reshape the canonical table for display, not a second mapping table"
+ * shape as `../_lib/../catalog-sync/_components/source-item-filters.tsx`'s
+ * `SOURCE_LOCALE_FILTER_OPTIONS` (`tests/ui/locale-canonical.test.ts`'s "no
+ * second locale mapping table" scan only flags a literal `{...}`/`[...]`
+ * collection, not a value built by `Array.from(...).map(...)`, so this is
+ * not a violation — it never resolves anything, it only reshapes the
+ * already-resolved constant). CPS reference: `changdu-sync-panel.tsx`
+ * derives its own chip list per-source-app the same way
+ * (`getChangduSelectableLanguageOptionsForSourceApp`), rather than off the
+ * site's own registered-locale list.
+ *
+ * Non-site locales (`it`/`fil`/`ms`/`tr`) keep their bare code as the label
+ * (no `SITE_LOCALE_LABELS` entry exists for them) plus an explicit "仅索引
+ * 不建内容" annotation: `languages[]` stays scan-task metadata only (see
+ * this form's own "上游目录接口不支持按语种过滤" note below — selecting one
+ * of these four is legitimate, the scan indexes every language regardless
+ * of selection), but content creation for a source item resolved to one of
+ * them will later hard-block on `unsupported_locale`
+ * (`content-creation/service.ts`'s `deriveLocale`) — the annotation sets
+ * that expectation up front instead of surprising the operator later.
+ */
+const CATALOG_SCAN_LANGUAGE_CHIP_OPTIONS: ReadonlyArray<{ value: string; label: string; isSiteLocale: boolean }> = Array.from(
+  new Set(Object.values(MOBOREADER_LANGUAGE_CODE_TO_LOCALE)),
+)
+  .sort()
+  .map((locale) => ({
+    value: locale,
+    label: SITE_LOCALE_LABELS[locale as SiteLocale] ?? locale,
+    isSiteLocale: (SITE_LOCALES as readonly string[]).includes(locale),
+  }));
 
 /**
  * "新建目录扫描任务" block on `/catalog-sync` (PR-C2; reshaped by Phase B —
@@ -304,16 +344,19 @@ export function CatalogScanTriggerForm({
             <span className="mb-2 block text-sm font-medium text-gray-700">
               同步语种 <span className="text-red-500">*</span>
             </span>
-            <div className="flex flex-wrap gap-2">
-              {SITE_LOCALES.map((locale) => (
+            <div role="group" aria-label="同步语种" className="flex flex-wrap gap-2">
+              {CATALOG_SCAN_LANGUAGE_CHIP_OPTIONS.map((option) => (
                 <button
-                  key={locale}
+                  key={option.value}
                   type="button"
-                  onClick={() => flipLanguageChip(locale)}
-                  aria-pressed={languages.has(locale)}
-                  className={chipButtonClassName(languages.has(locale))}
+                  onClick={() => flipLanguageChip(option.value)}
+                  aria-pressed={languages.has(option.value)}
+                  className={chipButtonClassName(languages.has(option.value))}
                 >
-                  {SITE_LOCALE_LABELS[locale]}
+                  {option.label}
+                  {!option.isSiteLocale && (
+                    <span className="ml-1 text-[10px] font-normal text-gray-400">（仅索引不建内容）</span>
+                  )}
                 </button>
               ))}
             </div>

@@ -1,5 +1,5 @@
 import "./setup-cleanup";
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { ChannelScanOption } from "@/app/(admin)/catalog-sync/_lib/read-channel-apps";
@@ -161,6 +161,45 @@ describe("默认态：渠道 → 剧场 → 语种 → 账户 依次生效", () 
     await click(languageChip("日文"));
     expect(screen.getByRole("button", { name: "开始同步 · 2 语种" })).toBeTruthy();
     await click(languageChip("英文"));
+    expect(screen.getByRole("button", { name: "开始同步 · 1 语种" })).toBeTruthy();
+  });
+});
+
+// L10N P5 (矩阵 #13): the chip list is now derived from the moboreader
+// 18-code table (`channel-language.ts`'s `MOBOREADER_LANGUAGE_CODE_TO_LOCALE`),
+// not the 15-entry `SITE_LOCALES` registry — a *source-app* concept, not a
+// *site* concept. Mutation ③ (chip reverted to the static 15-item
+// `SITE_LOCALES` render) is exactly what the first assertion below catches.
+describe("同步语种 chip 由 moboreader 18 码派生（L10N P5 矩阵 #13）", () => {
+  it("渲染 18 个语种 chip，不是 SITE_LOCALES 的 15 个", () => {
+    renderForm();
+    const group = screen.getByRole("group", { name: "同步语种" });
+    const chips = within(group).getAllByRole("button");
+    expect(chips).toHaveLength(18);
+  });
+
+  it("非站点语种（it/fil/ms/tr）标注「仅索引不建内容」，站点语种不带该标注", () => {
+    renderForm();
+    // Non-site locales fall back to their bare upstream code as the label
+    // (no SITE_LOCALE_LABELS entry exists for them) — see
+    // `catalog-scan-trigger-form.tsx`'s `CATALOG_SCAN_LANGUAGE_CHIP_OPTIONS`.
+    // The accessible name joins the label text node and the nested
+    // annotation `<span>` with a space (RTL's accessible-name computation),
+    // hence the space before the full-width parenthesis below.
+    for (const code of ["it", "fil", "ms", "tr"]) {
+      const chip = screen.getByRole("button", { name: new RegExp(`^${code} （仅索引不建内容）$`) });
+      expect(chip).toBeTruthy();
+    }
+    // A registered site locale (already covered above via label "英文") must
+    // never carry the annotation.
+    expect(screen.getByRole("button", { name: "英文" }).textContent).not.toContain("仅索引不建内容");
+  });
+
+  it("非站点语种 chip 仍可选中并计入语种数（languages[] 只是任务元数据，从不发上游）", async () => {
+    renderForm();
+    const chip = screen.getByRole("button", { name: /^it （仅索引不建内容）$/ });
+    await click(chip);
+    expect(chip.getAttribute("aria-pressed")).toBe("true");
     expect(screen.getByRole("button", { name: "开始同步 · 1 语种" })).toBeTruthy();
   });
 });
