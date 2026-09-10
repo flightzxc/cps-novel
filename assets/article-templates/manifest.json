@@ -1,0 +1,96 @@
+{
+  "generatedAt": "2026-09-10",
+  "schemaVersion": 1,
+  "files": {
+    "en.json": {
+      "locale": "en",
+      "templateKey": "system-default-v1",
+      "sha256": "0aeb9785413eab59c4d74b1b80d4474d51be48f67a3a6e573074187766a9f012",
+      "bytes": 1379
+    },
+    "es.json": {
+      "locale": "es",
+      "templateKey": "system-default-es-v1",
+      "sha256": "e1ddacaec75d18398ca4aead41d49a952553c5a1164aea01882fa019228f4fee",
+      "bytes": 1446
+    },
+    "pt-BR.json": {
+      "locale": "pt-BR",
+      "templateKey": "system-default-pt-BR-v1",
+      "sha256": "5496eacae1f07a2ed8909d442a448246669411c676bb7d7a8c21eff0ab26d748",
+      "bytes": 1465
+    },
+    "id.json": {
+      "locale": "id",
+      "templateKey": "system-default-id-v1",
+      "sha256": "37c3a4d6d37ebc5ec654c8388294b167b0020ab4af41f5ebf392d89f666a0d03",
+      "bytes": 1382
+    },
+    "vi.json": {
+      "locale": "vi",
+      "templateKey": "system-default-vi-v1",
+      "sha256": "4f1c56afbae8ccda8e66a6299d6302708acff870001dd0f523780fab70df2ccd",
+      "bytes": 1438
+    },
+    "th.json": {
+      "locale": "th",
+      "templateKey": "system-default-th-v1",
+      "sha256": "6480cc3329ab8f3416a520d75b0ab9bcee2be0aa3d612270a320b48c011377a0",
+      "bytes": 1535
+    },
+    "ja.json": {
+      "locale": "ja",
+      "templateKey": "system-default-ja-v1",
+      "sha256": "4de3e6d3b4051133d6a4756ee989b01e47b8a1e63fb7688dde96fdee5c57a61b",
+      "bytes": 1367
+    },
+    "ko.json": {
+      "locale": "ko",
+      "templateKey": "system-default-ko-v1",
+      "sha256": "8df1cb9d4d1b2cb26e57cbef4eb86238135392a353d7a3b5e12dae222c60ef0c",
+      "bytes": 1375
+    },
+    "zh-Hant.json": {
+      "locale": "zh-Hant",
+      "templateKey": "system-default-zh-Hant-v1",
+      "sha256": "4bc6bc34a2947031f0b671acf55da24df53a0bec4b67b855384bde1e7cc3da13",
+      "bytes": 1393
+    },
+    "ar.json": {
+      "locale": "ar",
+      "templateKey": "system-default-ar-v1",
+      "sha256": "1ed5a5da70478a32275cedfa4f96a467ffcafc108ebcaf5c5f47a42f180b6e91",
+      "bytes": 1499
+    },
+    "fr.json": {
+      "locale": "fr",
+      "templateKey": "system-default-fr-v1",
+      "sha256": "741a47700726abb5e7f5cac43f356fa4d4c39ac71caa28ada17ceb72393b7fcf",
+      "bytes": 1455
+    },
+    "de.json": {
+      "locale": "de",
+      "templateKey": "system-default-de-v1",
+      "sha256": "864d2e3a1ba3027e377589e116f0de373041af8e631be07c38121524a1c6299c",
+      "bytes": 1406
+    },
+    "pl.json": {
+      "locale": "pl",
+      "templateKey": "system-default-pl-v1",
+      "sha256": "cd2084f2cbd3347572963623fb9901b596bcac9b36d5a9d182b9443b400820c8",
+      "bytes": 1444
+    },
+    "cs.json": {
+      "locale": "cs",
+      "templateKey": "system-default-cs-v1",
+      "sha256": "704d16a7b0adcadac64b00f5e4c7e2eca9b422460b38d1773e5d4bc00f31b7d6",
+      "bytes": 1435
+    },
+    "ru.json": {
+      "locale": "ru",
+      "templateKey": "system-default-ru-v1",
+      "sha256": "f4144b67ee7470a1dda376ba23d59198e32d6a818e7922640a2b3aec630b71a9",
+      "bytes": 1527
+    }
+  }
+}

@@ -1,0 +1,43 @@
+{
+  "templateKey": "system-default-cs-v1",
+  "templateName": "系统默认模板 · 捷克文",
+  "locale": "cs",
+  "version": 1,
+  "schemaVersion": 1,
+  "status": "active",
+  "applicableArticleType": "novel_article",
+  "bodyTemplate": "<article><h1>{novel_title}</h1>{if cover_url}<p><img src=\"{cover_url}\" alt=\"Obálka\"></p>{endif}<p>{novel_description}</p>{if total_chapter_count}<p>Celkový počet kapitol: {total_chapter_count}</p>{endif}{if preview_chapter_count}<p>Dostupné bezplatné ukázkové kapitoly: {preview_chapter_count}</p>{endif}{if promo_redirect_url}<p><a href=\"{promo_redirect_url}\">Začít číst</a></p>{endif}</article>",
+  "contentTemplate": [
+    {
+      "type": "heading",
+      "content": "{novel_title}"
+    },
+    {
+      "type": "image",
+      "content": ""
+    },
+    {
+      "type": "paragraph",
+      "content": "{novel_description}"
+    },
+    {
+      "type": "paragraph",
+      "content": "{if total_chapter_count}Celkový počet kapitol: {total_chapter_count}{endif}"
+    },
+    {
+      "type": "paragraph",
+      "content": "{if preview_chapter_count}Dostupné bezplatné ukázkové kapitoly: {preview_chapter_count}{endif}"
+    },
+    {
+      "type": "cta",
+      "content": "Začít číst"
+    }
+  ],
+  "seoTemplate": {
+    "title": "{novel_title}",
+    "metaTitle": "{novel_title}",
+    "metaDescription": "{novel_description}"
+  },
+  "slugTemplate": "",
+  "metaKeywordsTemplate": ""
+}

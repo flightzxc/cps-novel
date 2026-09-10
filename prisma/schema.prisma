@@ -1021,7 +1021,7 @@ model ArticleTemplate {
   id                    String    @id @default(uuid()) @db.Uuid
   templateKey           String    @map("template_key") @db.VarChar(96)
   templateName          String    @map("template_name") @db.VarChar(191)
-  locale                String?   @db.VarChar(16)
+  locale                String    @default("en") @db.VarChar(16)
   version               Int
   schemaVersion         Int       @default(1) @map("schema_version")
   status                String    @default("draft") @db.VarChar(32)

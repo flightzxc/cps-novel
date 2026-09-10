@@ -526,6 +526,23 @@ territory，本轮不改）的前提下拆成两次独立判定去复刻单篇�
 | `getTemplateDramaLocaleMismatch` 的"模板不存在"与"语种不匹配"两次独立判定 | `src/actions/article-actions.ts` | `569-576` | `3a76877af27c6247ad94be946b44e9cc5c1cb9ce` | 不搬（仅作对照说明，不登记为 port） | 见上方"范围说明"——本仓创建=单事务无单篇/批量之分，取批量语义，不取这个单篇路径的两阶段错误码 |
 | 发布门禁删除语种检查（Owner 明示例外） → `src/server/publish-gate/evaluator.ts` 删 `checkLocale`/`isRegisteredSiteLocale`/`locale_not_publishable` push/deps 注入位 | 不适用（本条是删除，非搬运） | 不适用 | 不适用 | 不适用（DELETE，非 COPY/ADAPT/PATTERN_ONLY） | **Owner 2026-09-10 明示例外**：`docs/p2/P2_01_PUBLISH_GATE_CONTRACT.md`/`evaluator.ts` 自身 2026-09-08 曾登记的"发布门禁只允许改这一处"的禁区，本轮 Owner 再次明示允许触碰、仅此一处、仅删除语种注册检查；`src/contracts/publish-gate.ts` 的 `locale_not_publishable` 理由码本身不删（该文件本轮不改，P2-01 FROZEN 契约），只是 evaluator 不再产出它；`tests/backend/publish-gate/no-bypass.test.ts` 的既有失败签名（`scripts/s1-exact-target-structural-smoke.ts` 一条 `.$executeRawUnsafe` 命中）改前改后逐字相同，已实测核对 | Claude |
 
+### L10N P3 模板 locale 非空化 + 15 语默认模板资产（2026-09-10）
+
+`施工提示词_Sonnet_L10N_P3_模板locale非空化与15语模板资产_2026-09-10.md` §1，矩阵 #5。CPS
+参照仍是同一个冻结快照 `3a76877af27c6247ad94be946b44e9cc5c1cb9ce`（`git -C
+/Users/chenweifeng/Documents/产品原型及文档/cps项目/cps-admin-v851-admin-host show
+3a76877:<path>`）。`ArticleTemplate.locale` 的 `NOT NULL DEFAULT 'en'` 形状与
+`scripts/l10n/article-template-bootstrap.ts` 的 dry-run/SHA-pin/审批门/幂等 CLI 形状均登记于
+下表；`template-manager.tsx` 的 `TEMPLATE_LOCALE_OPTIONS`（CPS 17 项，含 `pt`/`zh-TW` 别名折叠）
+**未搬运**——本仓沿用既有唯一真源 `SITE_LOCALES`（15 项），只是删掉了旧实现里那条「全部语种」
+选项，不是从 CPS 搬入一张新表，故不在此登记为 port。
+
+| symbol | source_file | source_lines | baseline_commit | port_kind | changed_what | owner |
+| --- | --- | --- | --- | --- | --- | --- |
+| `ArticleTemplate.locale` 非空默认形状 → `prisma/schema.prisma`（`ArticleTemplate` model） | `prisma/schema.prisma` | `518`（`locale String @default("en")`） | `3a76877af27c6247ad94be946b44e9cc5c1cb9ce` | `ADAPT` | 列类型/长度不变（`VarChar(16)`），只把 CPS 的"非空 + 默认 en，无通用模板语义"这一约束形状对齐过来；本仓额外走一条 `UPDATE ... WHERE locale IS NULL` 防御性回填（X8 今日实测 0 行，生产未核实、迁移仍保留该 UPDATE 作为安全网），CPS 原始迁移无此回填（CPS 该列从建表起就是非空，没有历史 NULL 行要处理） |
+| bootstrap CLI 的 dry-run/SHA-pin/`--apply --approver`/幂等 + 自建 `OperationAudit` 形状 → `scripts/l10n/article-template-bootstrap.ts` | `scripts/p2-06-5-production/tagging-bootstrap.ts` | `1-79`（文件头设计说明）、`156-227`（错误类型/CLI 解析）、`651-657`（`resolveApprover`）、`774-859`（apply 事务与审计写入） | 本仓内部模式复用，非 CPS 搬运 | `PATTERN_ONLY` | 只借"dry-run 默认 + hash 钉死输入 + `--apply` 需 `--approver`（`AdminIdentity` 存在且 active）+ 落库走独立 `OperationAudit`、不经 `mutateAdmin*` 语义层"的整体形状；不搬 `--channel-app` 绑定校验（本脚本没有对应的外部绑定概念）、不搬 `pg_advisory_xact_lock` + `--request-id` 请求级重放去重（tagging-bootstrap 的 196 条映射边需要跨进程互斥防止重复审计；本脚本 15 行数据量小，幂等性直接靠 `(templateKey, version)` 唯一键 upsert 收敛，每次 `--apply` 允许各自记一条 provenance 审计行，不做重放去重）；也不搬 keyword 词表三条过滤规则（本脚本无关键词词典概念） |
+| 每语种独立 `templateKey`（`system-default-v1` / `system-default-<locale>-v1`）→ 15 份 `assets/article-templates/*.json` + `article-template-bootstrap.ts` | `scripts/ops/tkd-dryrun-paginated.sh` | `85-93`（`TEMPLATE_LOCALE` 关联数组：`RUTPL01`→`ru`、`FRTPL01`→`fr`、`PTTPL01`→`pt-BR`、`ESTPL01`→`es`、`FTTPL01`→`zh-Hant`、`TPL001`→`en`） | `3a76877af27c6247ad94be946b44e9cc5c1cb9ce` | `PATTERN_ONLY` | 只借"每个语种一个独立业务标识、不共用一份带通配语义的模板行"这条组织形态；不搬 CPS 该脚本的具体 6 个短码值（本仓 15 语种的 `templateKey` 由 §1.D 命名约定 `system-default[-<locale>]-v1` 独立生成，不复用 `RUTPL01` 这类简写） |
+
 ## 使用说明
 
 - `symbol`：被搬运的具体符号名（函数名/类型名/表名/字段名/组件名等），一行一个符号，不得用文件级粗粒度笼统登记；

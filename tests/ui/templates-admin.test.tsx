@@ -84,10 +84,11 @@ describe("TemplateManager · 列表", () => {
     expect(screen.queryByText("active")).toBeNull();
   });
 
-  it("locale 为 null 时显示「全部」", () => {
-    render(<TemplateManager rows={[{ ...ROW, locale: null }]} canWrite />);
-    expect(screen.getByText("全部")).toBeTruthy();
-  });
+  // L10N P3: `ArticleTemplate.locale` is `NOT NULL` now — the "locale 为
+  // null 时显示「全部」" case this test used to cover no longer exists as a
+  // legal `TemplateRow` shape (`locale: string`, not `string | null`); the
+  // preceding "渲染每一行的...locale...中文标签" test already covers every
+  // real row rendering a concrete `SITE_LOCALE_LABELS` value.
 
   it("空列表显示提示文案", () => {
     render(<TemplateManager rows={[]} canWrite />);
@@ -110,14 +111,19 @@ describe("TemplateManager · 基本信息表单", () => {
     expect(screen.queryByText("版本")).toBeNull();
   });
 
-  it("语种下拉渲染 15 个 SITE_LOCALES 选项 + 「全部语种」，选「英文」提交的是 en", async () => {
+  it("语种下拉只渲染 15 个 SITE_LOCALES 选项（无「全部语种」），是 required，选「英文」提交的是 en", async () => {
     actions.createTemplateAction.mockResolvedValue({ ok: true });
     render(<TemplateManager rows={[]} canWrite />);
     fireEvent.click(screen.getByText("新建模板"));
 
+    // L10N P3 (矩阵 #5): `ArticleTemplate.locale` is `NOT NULL` now — no more
+    // "all locales" third state. The dropdown collapses to exactly
+    // `SITE_LOCALES.length` options and is `required`, CPS parity
+    // `3a76877:src/components/templates/template-form.tsx:251-258`.
     const localeSelect = screen.getByLabelText("模板语种") as HTMLSelectElement;
-    expect(localeSelect.options.length).toBe(SITE_LOCALES.length + 1);
-    expect(within(localeSelect).getByRole("option", { name: "全部语种" })).toBeTruthy();
+    expect(localeSelect.options.length).toBe(SITE_LOCALES.length);
+    expect(localeSelect.required).toBe(true);
+    expect(within(localeSelect).queryByRole("option", { name: "全部语种" })).toBeNull();
     for (const locale of SITE_LOCALES) {
       expect(within(localeSelect).getByRole("option", { name: SITE_LOCALE_LABELS[locale] })).toBeTruthy();
     }
@@ -132,18 +138,18 @@ describe("TemplateManager · 基本信息表单", () => {
     expect(input.template.locale).toBe("en");
   });
 
-  it("选「全部语种」提交的 locale 是 null", async () => {
+  it("选「俄文」提交的 locale 是 ru（无通配、逐语种精确提交）", async () => {
     actions.createTemplateAction.mockResolvedValue({ ok: true });
     render(<TemplateManager rows={[]} canWrite />);
     fireEvent.click(screen.getByText("新建模板"));
-    fillBasicFields("tpl-locale-all");
-    fireEvent.change(screen.getByLabelText("模板语种"), { target: { value: "" } });
+    fillBasicFields("tpl-locale-ru");
+    fireEvent.change(screen.getByLabelText("模板语种"), { target: { value: "ru" } });
     addBlock("段落");
     fireEvent.click(screen.getByText("保存并校验"));
 
     await vi.waitFor(() => expect(actions.createTemplateAction).toHaveBeenCalledTimes(1));
     const [input] = actions.createTemplateAction.mock.calls[0];
-    expect(input.template.locale).toBeNull();
+    expect(input.template.locale).toBe("ru");
   });
 
   it("适用文章类型下拉渲染 5 个中文选项", () => {
