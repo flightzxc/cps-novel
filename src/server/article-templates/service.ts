@@ -92,8 +92,15 @@ function required(value: string, code: string, max: number): string {
  * 这种宽松兜底，任何拼错的字符串（`"eng"`、`"En"`、多打一个空格之外的形态
  * 错误……）都会原样落库，产出一个 `selectActiveArticleTemplate` 永远匹配不到的
  * 孤儿模板——保存时不报错，用到时才发现模板"不见了"。
+ *
+ * 参数类型是 `unknown` 而不是 `string | null | undefined`：`ArticleTemplateWrite.
+ * locale`（`src/lib/article-templates/contract.ts`）在 L10N P3 已收紧成必填
+ * `string`，类型系统本该保证这里永远拿到字符串——但 `unknown` 让这条运行期校验
+ * 继续对"绕过类型系统传进来的东西"生效（`storage()` 的输入终究来自 server
+ * action 反序列化的调用体，TS 类型标注不是运行时保证），同款防御性收窄见
+ * `src/server/content-creation/blog.ts` 的同名 `requireLocale(value: unknown)`。
  */
-function requireLocale(locale: string | null | undefined): string {
+function requireLocale(locale: unknown): string {
   const trimmed = typeof locale === "string" ? locale.trim() : "";
   // 直接查 SITE_LOCALES 数组，不额外派生一份 Set/Map——`tests/ui/locale-canonical.test.ts`
   // 的"没有第二张语种映射表"扫描按名字（含 LOCALE/LANGUAGE）+ 字面量集合声明识别，

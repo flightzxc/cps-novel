@@ -301,7 +301,16 @@ describe("createArticleTemplate · 未登记变量必须被引擎拒绝", () => 
     for (const locale of [null, undefined] as const) {
       await expect(
         createArticleTemplate(
-          { ...guarded, template: { ...VALID_TEMPLATE, templateKey: "tpl-null-locale", locale } },
+          {
+            ...guarded,
+            // L10N P3: `ArticleTemplateWrite.locale` is now a required `string`
+            // (contract.ts), so a real caller can no longer construct this
+            // object at all — the cast below deliberately bypasses the type
+            // system to keep exercising `requireLocale`'s runtime rejection of
+            // null/undefined (defense against non-TS callers), same rationale
+            // as the `unknown`-typed parameter in service.ts.
+            template: { ...VALID_TEMPLATE, templateKey: "tpl-null-locale", locale: locale as unknown as string },
+          },
           deps(db, stores),
         ),
       ).rejects.toSatisfy((error: unknown) => error instanceof ArticleTemplateInputError && error.code === "template_locale_invalid");

@@ -39,20 +39,19 @@
  *    for token. Two assets can only differ in the natural-language text
  *    sitting *between* those tokens (and in `templateName`, which is an
  *    operator-facing Chinese label, not reader-facing copy).
+ *  - the ordered sequence of HTML tag names (open/close, attribute values
+ *    stripped) inside `bodyTemplate` and inside each `contentTemplate`
+ *    block's `content` — identical to en's, tag for tag. This is a
+ *    narrower net than the token check above: a translation that silently
+ *    rewrites `<h1>` to `<h2>` (or drops/reorders/adds a tag) while leaving
+ *    every `{...}` token untouched would sail past the token-sequence check
+ *    alone, so both checks run independently.
  *  - `seoTemplate`/`slugTemplate`/`metaKeywordsTemplate` — deep-equal to
  *    en's (this repo's built-in default template has no natural-language
  *    SEO copy to translate: `title`/`metaTitle` are the bare variable
  *    `{novel_title}`, `metaDescription` is the bare variable
  *    `{novel_description}`, `slugTemplate`/`metaKeywordsTemplate` are both
  *    `""` — see `src/server/content-creation/default-article-template.ts`).
- *
- * Not enforced: full HTML-tag-skeleton diffing of `bodyTemplate` (e.g.
- * catching a `<h1>` silently rewritten to `<h2>` while every `{...}` token
- * stays in place). The token-sequence + block-type-sequence checks above
- * already catch the mutation this task's acceptance matrix names ("任一译文
- * 删一个变量占位符 → dry-run 红"); a bare HTML-tag rewrite with no token
- * disturbance is a narrower residual gap, called out in the construction
- * report rather than silently left unmentioned.
  */
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
@@ -158,6 +157,25 @@ function tokenSequence(text: string): readonly string[] {
   return text.match(/\{[^}]*\}/g) ?? [];
 }
 
+/**
+ * Ordered HTML tag-name sequence, attribute values stripped — a narrower net
+ * than `tokenSequence`, catching a bare tag rewrite (e.g. `<h1>` → `<h2>`,
+ * a dropped/reordered/added tag) that leaves every `{...}` token untouched.
+ * Closing tags are prefixed `/` (`<h1>` → `"h1"`, `</h1>` → `"/h1"`) so a
+ * swapped tag name still shows up on both the opening and closing side.
+ * Tag names are lower-cased; attributes (including their values, which
+ * legitimately vary per locale — e.g. `alt="Cover"`'s translated value) are
+ * discarded entirely.
+ */
+function htmlTagSequence(text: string): readonly string[] {
+  const matches = text.match(/<\/?[a-zA-Z][a-zA-Z0-9]*(?:\s[^>]*)?>/g) ?? [];
+  return matches.map((tag) => {
+    const closing = tag.startsWith("</");
+    const name = /^<\/?([a-zA-Z][a-zA-Z0-9]*)/.exec(tag)![1]!.toLowerCase();
+    return closing ? `/${name}` : name;
+  });
+}
+
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -240,11 +258,21 @@ function checkInvariantsAgainstReference(asset: ArticleTemplateAsset, reference:
     if (blockTokens !== refBlockTokens) {
       fail("asset_invariant_violation", `${asset.locale}.json: contentTemplate[${index}] placeholder/control-token sequence differs from en.json`);
     }
+    const blockTags = JSON.stringify(htmlTagSequence(block.content));
+    const refBlockTags = JSON.stringify(htmlTagSequence(refBlock.content));
+    if (blockTags !== refBlockTags) {
+      fail("asset_invariant_violation", `${asset.locale}.json: contentTemplate[${index}] HTML tag-name sequence differs from en.json`);
+    }
   }
   const bodyTokens = JSON.stringify(tokenSequence(asset.bodyTemplate));
   const refBodyTokens = JSON.stringify(tokenSequence(reference.bodyTemplate));
   if (bodyTokens !== refBodyTokens) {
     fail("asset_invariant_violation", `${asset.locale}.json: bodyTemplate placeholder/control-token sequence differs from en.json`);
+  }
+  const bodyTags = JSON.stringify(htmlTagSequence(asset.bodyTemplate));
+  const refBodyTags = JSON.stringify(htmlTagSequence(reference.bodyTemplate));
+  if (bodyTags !== refBodyTags) {
+    fail("asset_invariant_violation", `${asset.locale}.json: bodyTemplate HTML tag-name sequence differs from en.json`);
   }
   if (JSON.stringify(asset.seoTemplate) !== JSON.stringify(reference.seoTemplate)) {
     fail("asset_invariant_violation", `${asset.locale}.json: seoTemplate differs from en.json (this repo's default template carries no translatable SEO copy — every seoTemplate field is a bare variable)`);
@@ -359,6 +387,14 @@ type TemplateRow = {
   seoTemplate: unknown;
   slugTemplate: string;
   metaKeywordsTemplate: string;
+  /**
+   * Soft-delete marker. `unknown` (not `Date | null`) on purpose — the real
+   * Prisma client returns a `Date`, the fake test double stores whatever it
+   * was given (a `Date`, an ISO string, or `null`); only the null/non-null
+   * distinction matters here (`isSoftDeletedRow` below), never the value's
+   * shape.
+   */
+  deletedAt: unknown;
 };
 
 type ApproverRow = { id: string; username: string; status: string };
@@ -394,10 +430,30 @@ const TEMPLATE_SELECT = {
   seoTemplate: true,
   slugTemplate: true,
   metaKeywordsTemplate: true,
+  deletedAt: true,
 } as const;
 
+/**
+ * `deletedAt != null` means someone soft-deleted this row through the admin
+ * CRUD path. Not `!== null` — the fake test double may store `undefined`
+ * pre-init, and `null == undefined` is the one loose-equality case this file
+ * intentionally relies on.
+ */
+function isSoftDeletedRow(row: TemplateRow): boolean {
+  return row.deletedAt != null;
+}
+
+/**
+ * "Is this row already exactly what the asset would write." A soft-deleted
+ * row is never content-equal — even if every other field matches byte for
+ * byte — so a caller can't accidentally fall through to the "unchanged, skip
+ * it" branch for a row that actually needs the separate soft-deleted
+ * handling in `categorizeRow` below (fail-closed: soft-deleted always routes
+ * through its own branch, never silently treated as "already in sync").
+ */
 function assetContentEqualsRow(asset: ArticleTemplateAsset, row: TemplateRow | undefined): boolean {
   if (!row) return false;
+  if (isSoftDeletedRow(row)) return false;
   return (
     row.templateName === asset.templateName
     && row.locale === asset.locale
@@ -411,6 +467,21 @@ function assetContentEqualsRow(asset: ArticleTemplateAsset, row: TemplateRow | u
     && row.slugTemplate === asset.slugTemplate
     && row.metaKeywordsTemplate === asset.metaKeywordsTemplate
   );
+}
+
+type RowCategory = "create" | "update" | "unchanged" | "soft_deleted";
+
+/**
+ * Single classification used by both the dry-run planning pass and the
+ * apply pass, so the two can never diverge on what counts as "needs a
+ * write" — n1/n2's fix (skip the upsert call entirely for `unchanged` and
+ * `soft_deleted`) only holds if both passes agree on the category.
+ */
+function categorizeRow(asset: ArticleTemplateAsset, row: TemplateRow | undefined): RowCategory {
+  if (!row) return "create";
+  if (isSoftDeletedRow(row)) return "soft_deleted";
+  if (assetContentEqualsRow(asset, row)) return "unchanged";
+  return "update";
 }
 
 async function resolveApprover(db: Pick<ArticleTemplateBootstrapDb, "adminIdentity">, approver: string): Promise<ApproverRow> {
@@ -428,8 +499,12 @@ export type ArticleTemplateBootstrapReport = {
   manifestSha256: string;
   assetShaByLocale: Record<string, string>;
   locales: readonly string[];
-  planned: { create: number; update: number; unchanged: number };
-  applied: { created: number; updated: number; unchanged: number } | null;
+  planned: { create: number; update: number; unchanged: number; softDeleted: number };
+  applied: { created: number; updated: number; unchanged: number; softDeleted: number } | null;
+  /** `templateKey`s found soft-deleted (`deletedAt` set) — always skipped, never revived/recreated. */
+  softDeletedTemplateKeys: readonly string[];
+  /** Human-readable notices, e.g. one per soft-deleted skip. Empty when there's nothing to flag. */
+  warnings: readonly string[];
 };
 
 export async function runArticleTemplateBootstrapCli(
@@ -444,12 +519,21 @@ export async function runArticleTemplateBootstrapCli(
   let plannedCreate = 0;
   let plannedUpdate = 0;
   let plannedUnchanged = 0;
+  let plannedSoftDeleted = 0;
+  const softDeletedTemplateKeys: string[] = [];
+  const warnings: string[] = [];
   for (const locale of SITE_LOCALES) {
     const asset = artifacts.assetsByLocale.get(locale)!;
     const row = existingByKey.get(asset.templateKey);
-    if (!row) plannedCreate += 1;
-    else if (assetContentEqualsRow(asset, row)) plannedUnchanged += 1;
-    else plannedUpdate += 1;
+    const category = categorizeRow(asset, row);
+    if (category === "create") plannedCreate += 1;
+    else if (category === "update") plannedUpdate += 1;
+    else if (category === "unchanged") plannedUnchanged += 1;
+    else {
+      plannedSoftDeleted += 1;
+      softDeletedTemplateKeys.push(asset.templateKey);
+      warnings.push(`${asset.templateKey} (${locale}) is soft-deleted (deletedAt set) — skipped, not revived or recreated`);
+    }
   }
 
   const assetShaByLocale = Object.fromEntries(
@@ -464,8 +548,10 @@ export async function runArticleTemplateBootstrapCli(
       manifestSha256: artifacts.manifestSha256,
       assetShaByLocale,
       locales: SITE_LOCALES,
-      planned: { create: plannedCreate, update: plannedUpdate, unchanged: plannedUnchanged },
+      planned: { create: plannedCreate, update: plannedUpdate, unchanged: plannedUnchanged, softDeleted: plannedSoftDeleted },
       applied: null,
+      softDeletedTemplateKeys: Object.freeze(softDeletedTemplateKeys),
+      warnings: Object.freeze(warnings),
     });
   }
 
@@ -475,10 +561,28 @@ export async function runArticleTemplateBootstrapCli(
     let created = 0;
     let updated = 0;
     let unchanged = 0;
+    let softDeleted = 0;
     for (const locale of SITE_LOCALES) {
       const asset = artifacts.assetsByLocale.get(locale)!;
       const before = existingByKey.get(asset.templateKey);
-      const wasUnchanged = assetContentEqualsRow(asset, before);
+      const category = categorizeRow(asset, before);
+
+      // n1/n2 (L10N P3 fix lane): `unchanged` and `soft_deleted` rows never
+      // reach `upsert` at all — not just "upsert but count them separately".
+      // For `unchanged` this stops every apply run from churning `updatedAt`
+      // (`@updatedAt` refreshes on any Prisma `update`, content-identical or
+      // not) on rows nothing actually changed about. For `soft_deleted` this
+      // is the fail-closed contract itself: bootstrap must never silently
+      // revive an operator's soft-delete by writing through it.
+      if (category === "unchanged") {
+        unchanged += 1;
+        continue;
+      }
+      if (category === "soft_deleted") {
+        softDeleted += 1;
+        continue;
+      }
+
       await tx.articleTemplate.upsert({
         where: { templateKey_version: { templateKey: asset.templateKey, version: asset.version } },
         create: {
@@ -508,8 +612,7 @@ export async function runArticleTemplateBootstrapCli(
           metaKeywordsTemplate: asset.metaKeywordsTemplate,
         },
       });
-      if (!before) created += 1;
-      else if (wasUnchanged) unchanged += 1;
+      if (category === "create") created += 1;
       else updated += 1;
     }
 
@@ -527,6 +630,8 @@ export async function runArticleTemplateBootstrapCli(
           created,
           updated,
           unchanged,
+          softDeleted,
+          softDeletedTemplateKeys,
           approverUsername: approver.username,
         } as Prisma.InputJsonValue,
       },
@@ -539,8 +644,10 @@ export async function runArticleTemplateBootstrapCli(
       manifestSha256: artifacts.manifestSha256,
       assetShaByLocale,
       locales: SITE_LOCALES,
-      planned: { create: plannedCreate, update: plannedUpdate, unchanged: plannedUnchanged },
-      applied: { created, updated, unchanged },
+      planned: { create: plannedCreate, update: plannedUpdate, unchanged: plannedUnchanged, softDeleted: plannedSoftDeleted },
+      applied: { created, updated, unchanged, softDeleted },
+      softDeletedTemplateKeys: Object.freeze(softDeletedTemplateKeys),
+      warnings: Object.freeze(warnings),
     });
   });
 }
@@ -557,6 +664,9 @@ async function main(): Promise<void> {
     const report = await runArticleTemplateBootstrapCli(prisma as unknown as ArticleTemplateBootstrapDb, options, artifacts);
     if (report.mode === "dry-run") {
       console.log("[DRY RUN — no changes written; pass --apply --approver <AdminIdentity uuid|username> to bootstrap]");
+    }
+    for (const warning of report.warnings) {
+      console.warn(`[WARN] ${warning}`);
     }
     console.log(JSON.stringify(report, null, 2));
   } finally {

@@ -104,6 +104,12 @@ function granted() {
 const TEMPLATE_FIXTURE = {
   templateKey: "tpl-1",
   templateName: "模板 1",
+  // L10N P3: `ArticleTemplateWrite.locale` is now a required `string`
+  // (contract.ts) — this fixture is only used to reach
+  // `requireFreshAdminServiceMutation` (which the beforeEach hook rejects
+  // before any DB access), so the exact value doesn't matter, but it must be
+  // present for the object to satisfy the type.
+  locale: "en",
   status: "active" as const,
   titleTemplate: "{novel_title}",
   contentTemplate: [{ type: "paragraph", content: "{novel_title}" }],

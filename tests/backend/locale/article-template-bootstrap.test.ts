@@ -36,6 +36,8 @@ type Row = {
   seoTemplate: unknown;
   slugTemplate: string;
   metaKeywordsTemplate: string;
+  /** Soft-delete marker (n2 fix lane) — `null` unless a test seeds a pre-soft-deleted row. */
+  deletedAt: string | null;
 };
 
 class FakeArticleTemplateBootstrapDb implements ArticleTemplateBootstrapDb {
@@ -66,11 +68,16 @@ class FakeArticleTemplateBootstrapDb implements ArticleTemplateBootstrapDb {
         Object.assign(existing, args.update);
         return structuredClone(existing);
       }
+      const created = args.create as Omit<Row, "id" | "templateKey" | "version">;
       const row: Row = {
         id: `template-${this.rows.length + 1}`,
         templateKey,
         version,
-        ...(args.create as Omit<Row, "id" | "templateKey" | "version">),
+        ...created,
+        // `runArticleTemplateBootstrapCli`'s `create` payload never sets
+        // `deletedAt` (Prisma defaults it to `null` for a fresh row) —
+        // default it here too so `Row` always has the field.
+        deletedAt: created.deletedAt ?? null,
       };
       this.rows.push(row);
       return structuredClone(row);
@@ -193,19 +200,44 @@ describe("article-template-bootstrap artifact loading (fixture-sized, mirrors th
       expect((error as ArticleTemplateBootstrapError).code).toBe("asset_invariant_violation");
     }
   });
+
+  // n3 (L10N P3 fix lane, CHANGES_REQUIRED review): a bare HTML-tag rewrite
+  // that leaves every `{...}` token untouched used to sail past every
+  // invariant check above — `tokenSequence` only looks inside `{...}`, and
+  // the block-type-sequence check never looks at `bodyTemplate`'s markup at
+  // all. `ru.json`'s `<h1>{novel_title}</h1>` → `<h2>{novel_title}</h2>`
+  // (manifest SHA recomputed so this exercises the invariant check, not the
+  // unrelated SHA-pin check) must now be caught by `htmlTagSequence`.
+  it("rejects a translation whose bodyTemplate silently rewrites <h1> to <h2> with every {...} token untouched", () => {
+    const dir = mkdtempSync(join(tmpdir(), "l10n-p3-assets-html-tag-"));
+    mirrorRealAssetsWithOverride(dir, { locale: "ru", swapHeadingTagInBody: true });
+    expect(() => loadArticleTemplateBootstrapArtifacts(dir, ".")).toThrowError(ArticleTemplateBootstrapError);
+    try {
+      loadArticleTemplateBootstrapArtifacts(dir, ".");
+    } catch (error) {
+      expect((error as ArticleTemplateBootstrapError).code).toBe("asset_invariant_violation");
+      expect((error as ArticleTemplateBootstrapError).message).toContain("HTML tag-name sequence");
+    }
+  });
 });
 
 /**
  * Copies the repository's real 15 assets/article-templates/*.json + manifest.json
  * into `targetDir`, optionally corrupting one locale's file (dropping a
- * `{total_chapter_count}` placeholder from its bodyTemplate, and/or
- * recomputing/overriding the manifest SHA for that file) before writing it
- * back out — used to exercise the full 15-locale loader's negative paths
- * without hand-building all 15 fixture files per test.
+ * `{total_chapter_count}` placeholder from its bodyTemplate, swapping its
+ * `<h1>`/`</h1>` heading tag for `<h2>`/`</h2>` with every `{...}` token left
+ * untouched, and/or recomputing/overriding the manifest SHA for that file)
+ * before writing it back out — used to exercise the full 15-locale loader's
+ * negative paths without hand-building all 15 fixture files per test.
  */
 function mirrorRealAssetsWithOverride(
   targetDir: string,
-  opts: { locale: string; dropPlaceholderInBody?: boolean; manifestShaOverride?: string },
+  opts: {
+    locale: string;
+    dropPlaceholderInBody?: boolean;
+    swapHeadingTagInBody?: boolean;
+    manifestShaOverride?: string;
+  },
 ) {
   const REAL_DIR = join(process.cwd(), "assets/article-templates");
   mkdirSync(targetDir, { recursive: true });
@@ -217,6 +249,16 @@ function mirrorRealAssetsWithOverride(
     if (entry.locale === opts.locale && opts.dropPlaceholderInBody) {
       const doc = JSON.parse(bytes.toString("utf8")) as { bodyTemplate: string };
       doc.bodyTemplate = doc.bodyTemplate.replace("{total_chapter_count}", "");
+      const json = JSON.stringify(doc, null, 2) + "\n";
+      bytes = Buffer.from(json, "utf8");
+      entry.sha256 = sha256(bytes);
+      entry.bytes = bytes.byteLength;
+    } else if (entry.locale === opts.locale && opts.swapHeadingTagInBody) {
+      const doc = JSON.parse(bytes.toString("utf8")) as { bodyTemplate: string };
+      // Every `{...}` token (`{novel_title}` included) stays byte-identical —
+      // only the surrounding tag name changes, so this mutation is invisible
+      // to `tokenSequence` and must be caught by `htmlTagSequence` alone.
+      doc.bodyTemplate = doc.bodyTemplate.replace("<h1>", "<h2>").replace("</h1>", "</h2>");
       const json = JSON.stringify(doc, null, 2) + "\n";
       bytes = Buffer.from(json, "utf8");
       entry.sha256 = sha256(bytes);
@@ -238,12 +280,47 @@ describe("article-template-bootstrap dry-run", () => {
       mode: "dry-run",
       wrote: false,
       auditId: null,
-      planned: { create: SITE_LOCALES.length, update: 0, unchanged: 0 },
+      planned: { create: SITE_LOCALES.length, update: 0, unchanged: 0, softDeleted: 0 },
       applied: null,
+      softDeletedTemplateKeys: [],
+      warnings: [],
     });
     expect(db.rows).toHaveLength(0);
     expect(db.calls).not.toContain("articleTemplate.upsert");
     expect(db.calls).not.toContain("operationAudit.create");
+  });
+
+  // n2 (L10N P3 fix lane): a soft-deleted row must be classified separately
+  // from "unchanged"/"update", both so the report is honest about what's
+  // sitting behind a `deletedAt` and so apply (next describe block) knows to
+  // skip it rather than treat it as a normal update target.
+  it("classifies a soft-deleted row as soft_deleted, not unchanged/update, and lists its templateKey", async () => {
+    const db = new FakeArticleTemplateBootstrapDb();
+    const artifacts = loadArticleTemplateBootstrapArtifacts();
+    db.rows.push({
+      id: "existing-ru",
+      templateKey: "system-default-ru-v1",
+      templateName: "系统默认模板 · 俄文",
+      locale: "ru",
+      version: 1,
+      schemaVersion: 1,
+      status: "active",
+      applicableArticleType: "novel_article",
+      bodyTemplate: "<article>stale</article>",
+      contentTemplate: [],
+      seoTemplate: {},
+      slugTemplate: "",
+      metaKeywordsTemplate: "",
+      deletedAt: "2026-09-01T00:00:00.000Z",
+    });
+
+    const report = await runArticleTemplateBootstrapCli(db, { apply: false, approver: null }, artifacts);
+
+    expect(report.planned).toEqual({ create: SITE_LOCALES.length - 1, update: 0, unchanged: 0, softDeleted: 1 });
+    expect(report.softDeletedTemplateKeys).toEqual(["system-default-ru-v1"]);
+    expect(report.warnings).toHaveLength(1);
+    expect(report.warnings[0]).toContain("system-default-ru-v1");
+    expect(report.warnings[0]).toContain("soft-deleted");
   });
 });
 
@@ -274,7 +351,7 @@ describe("article-template-bootstrap apply", () => {
     expect(report).toMatchObject({
       mode: "apply",
       wrote: true,
-      applied: { created: SITE_LOCALES.length, updated: 0, unchanged: 0 },
+      applied: { created: SITE_LOCALES.length, updated: 0, unchanged: 0, softDeleted: 0 },
     });
     expect(db.rows).toHaveLength(SITE_LOCALES.length);
     expect(db.audits).toHaveLength(1);
@@ -299,10 +376,11 @@ describe("article-template-bootstrap apply", () => {
     const artifacts = loadArticleTemplateBootstrapArtifacts();
     await runArticleTemplateBootstrapCli(db, { apply: true, approver: "approver-1" }, artifacts);
     const snapshotAfterFirst = structuredClone(db.rows).sort((a, b) => a.templateKey.localeCompare(b.templateKey));
+    const callsAfterFirst = db.calls.length;
 
     const secondReport = await runArticleTemplateBootstrapCli(db, { apply: true, approver: "approver-1" }, artifacts);
 
-    expect(secondReport.applied).toEqual({ created: 0, updated: 0, unchanged: SITE_LOCALES.length });
+    expect(secondReport.applied).toEqual({ created: 0, updated: 0, unchanged: SITE_LOCALES.length, softDeleted: 0 });
     expect(db.rows).toHaveLength(SITE_LOCALES.length);
     const snapshotAfterSecond = structuredClone(db.rows).sort((a, b) => a.templateKey.localeCompare(b.templateKey));
     expect(snapshotAfterSecond).toEqual(snapshotAfterFirst);
@@ -310,5 +388,58 @@ describe("article-template-bootstrap apply", () => {
     // run) — idempotency is a claim about the ArticleTemplate rows, not
     // about how many times bootstrap has ever been run.
     expect(db.audits).toHaveLength(2);
+
+    // n1 (L10N P3 fix lane, CHANGES_REQUIRED review): idempotency used to be
+    // checked only by "no net row diff", which a naive unconditional
+    // `upsert` on every row would also satisfy while still calling `upsert`
+    // 15 times and (on the real Prisma client, whose `updatedAt` carries
+    // `@updatedAt`) silently bumping every row's `updatedAt` on every run.
+    // The second apply must make zero `articleTemplate.upsert` calls at all.
+    const callsDuringSecondRun = db.calls.slice(callsAfterFirst);
+    expect(callsDuringSecondRun).not.toContain("articleTemplate.upsert");
+    expect(callsDuringSecondRun).toContain("articleTemplate.findMany");
+    expect(callsDuringSecondRun).toContain("operationAudit.create");
+  });
+
+  // n2 (L10N P3 fix lane): apply must skip a soft-deleted row entirely — not
+  // revive it (no `deletedAt` reset), not recreate/overwrite its content via
+  // `upsert` — and report it separately with a warning, fail-closed.
+  it("skips a soft-deleted row on apply — no revival, no upsert call, reported + warned separately (mutation ④'s target)", async () => {
+    const db = new FakeArticleTemplateBootstrapDb();
+    const artifacts = loadArticleTemplateBootstrapArtifacts();
+    const softDeletedAt = "2026-09-01T00:00:00.000Z";
+    db.rows.push({
+      id: "existing-ru",
+      templateKey: "system-default-ru-v1",
+      templateName: "系统默认模板 · 俄文",
+      locale: "ru",
+      version: 1,
+      schemaVersion: 1,
+      status: "active",
+      applicableArticleType: "novel_article",
+      bodyTemplate: "<article>stale</article>",
+      contentTemplate: [],
+      seoTemplate: {},
+      slugTemplate: "",
+      metaKeywordsTemplate: "",
+      deletedAt: softDeletedAt,
+    });
+
+    const report = await runArticleTemplateBootstrapCli(db, { apply: true, approver: "approver-1" }, artifacts);
+
+    expect(report.applied).toEqual({ created: SITE_LOCALES.length - 1, updated: 0, unchanged: 0, softDeleted: 1 });
+    expect(report.softDeletedTemplateKeys).toEqual(["system-default-ru-v1"]);
+    expect(report.warnings).toHaveLength(1);
+
+    const ruRow = db.rows.find((row) => row.templateKey === "system-default-ru-v1");
+    expect(ruRow).toBeDefined();
+    // Untouched: still soft-deleted, still the stale content — bootstrap
+    // never wrote through it.
+    expect(ruRow!.deletedAt).toBe(softDeletedAt);
+    expect(ruRow!.bodyTemplate).toBe("<article>stale</article>");
+    // No second row was created for the same templateKey either (fail-closed
+    // means "leave it alone", not "recreate a live sibling next to it").
+    expect(db.rows.filter((row) => row.templateKey === "system-default-ru-v1")).toHaveLength(1);
+    expect(db.rows).toHaveLength(SITE_LOCALES.length);
   });
 });

@@ -533,7 +533,8 @@ territory，本轮不改）的前提下拆成两次独立判定去复刻单篇�
 /Users/chenweifeng/Documents/产品原型及文档/cps项目/cps-admin-v851-admin-host show
 3a76877:<path>`）。`ArticleTemplate.locale` 的 `NOT NULL DEFAULT 'en'` 形状与
 `scripts/l10n/article-template-bootstrap.ts` 的 dry-run/SHA-pin/审批门/幂等 CLI 形状均登记于
-下表；`template-manager.tsx` 的 `TEMPLATE_LOCALE_OPTIONS`（CPS 17 项，含 `pt`/`zh-TW` 别名折叠）
+下表；`template-manager.tsx` 的 `TEMPLATE_LOCALE_OPTIONS`（CPS 17 项，相对本仓 `SITE_LOCALES`
+多出 `it`/`tr` 两个真实但未登记为站点语种的 BCP-47 码，不是 `pt`/`zh-TW` 别名折叠）
 **未搬运**——本仓沿用既有唯一真源 `SITE_LOCALES`（15 项），只是删掉了旧实现里那条「全部语种」
 选项，不是从 CPS 搬入一张新表，故不在此登记为 port。
 

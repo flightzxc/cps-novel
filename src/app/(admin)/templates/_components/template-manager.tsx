@@ -229,9 +229,11 @@ export function TemplateManager({ rows, canWrite }: { rows: readonly TemplateRow
               {/*
                * L10N P3: `locale` 不再有"全部语种"这个第三态——`ArticleTemplate.locale`
                * 现在是 `NOT NULL`，选项收窄成 `SITE_LOCALES` 15 项（CPS 参照
-               * `3a76877:src/components/templates/template-form.tsx:251-258` 的
-               * `TEMPLATE_LOCALE_OPTIONS` 是 17 项，含 CPS 的 `pt`/`zh-TW` 别名折叠，
-               * 本仓不抄，登记表 15 项即 `SITE_LOCALES` 本身），`required` 与 CPS 同款。
+               * `3a76877:src/lib/constants.ts:74-92` 的 `TEMPLATE_LOCALE_OPTIONS` 是
+               * 17 项，相对本仓 `SITE_LOCALES` 多出 `it`/`tr` 两个真实但未登记为站点
+               * 语种的 BCP-47 码——不是 `pt`/`zh-TW` 别名折叠，本仓核对过 CPS 源码，
+               * 那 17 项里没有裸 `pt`/裸 `zh-TW`，本仓不登记为独立 locale），
+               * `required` 与 CPS 同款。
                */}
               <select
                 name="locale"

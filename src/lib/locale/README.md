@@ -147,6 +147,31 @@ X8 库的真实成对证据，18 码全部有证据；CPS moboreader 无对应�
 D-7 fail-closed 守卫全部未改——18 码扩表只是让更多上游码"解析成功"，不改变
 "解析成功"与"可发布"之间那道独立的闸。
 
+### L10N P3（2026-09-10）更新：ArticleTemplate.locale 非空化 + 15 语默认模板资产
+
+`施工提示词_Sonnet_L10N_P3_模板locale非空化与15语模板资产_2026-09-10.md` §1，矩阵 #5。这一轮不碰
+`locale-canonical.ts`/`channel-language.ts` 的任何一处唯一真源——`SITE_LOCALES`（15 项，登记表）
+本身没变，改的是**另一张表**（`ArticleTemplate`）如何使用它：
+
+- `ArticleTemplate.locale` 从可空收口为数据库层 `NOT NULL DEFAULT 'en'`
+  （`prisma/migrations/20260912090000_l10n_article_template_locale_not_null`），应用层
+  `ArticleTemplateWrite.locale`（`src/lib/article-templates/contract.ts`）同步从
+  `string | null` 收紧为必填 `string`，后台表单 `select[name=locale]` 加 `required`——三层对齐。
+  `requireLocale`（`src/server/article-templates/service.ts`）删掉了旧版本"`null`/空白 = 全部语种"
+  这个本仓自己发明、CPS 没有的第三态，只接受 `SITE_LOCALES` 成员；`selectActiveArticleTemplate`/
+  `listActiveArticleTemplateOptions` 同步删掉各自那条 `{locale: null}` 通配 `OR` 分支，改精确匹配。
+- 新增 `assets/article-templates/*.json`（15 份，每个 `SITE_LOCALES` 成员一份）+
+  `manifest.json`（SHA-256 逐份钉死）+ `scripts/l10n/article-template-bootstrap.ts`
+  （dry-run 默认、SHA 校验、结构不变量交叉校验——占位符/控制标记序列 + HTML 标签名序列都与
+  `en.json` 逐一比对、`--apply --approver` 落库、按 `(templateKey, version)` 幂等 upsert、遇软删行
+  跳过并告警、不复活不重建）。`en` 沿用既有 `system-default-v1`，其余 14 语各自独立
+  `system-default-<locale>-v1`——每语种一个独立业务标识，不共用一份带通配语义的模板行。
+- `ARTICLE_TEMPLATE_CRUD_LANDED`（本文件上一节，`locale-canonical.ts`）**今天仍是 `false`**，
+  本轮完全没有改它，也不受本轮影响——它管的是"`ArticleTemplate` CRUD 是否已经是真实机制"这道
+  D-7 条件二 fail-closed 守卫，跟"`ArticleTemplate.locale` 这一列本身是否非空"是两件事。翻转
+  `ARTICLE_TEMPLATE_CRUD_LANDED` 仍需 P4 把 `PUBLISHABLE_LOCALES`/`proxy.ts` 那一整层按 Owner 决策
+  打开，不是这一轮迁移或资产文件能单独触发的。
+
 ## 硬前置
 
 `locale-canonical.ts` 是 P1 的**硬前置 2**：必须在写入任何多语言数据之前建好，早于 P1-05 之后的任何内容写入链路。
