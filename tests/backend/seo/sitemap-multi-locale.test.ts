@@ -180,4 +180,42 @@ describe("generateStaticSitemaps · multi-locale release", () => {
       types: ["mainpage"],
     })).rejects.toThrow("No sitemap child files were generated");
   });
+
+  it("L10N P4: with no routeLocales override, generates over the default SITE_LOCALES registry (15 locales), and a locale with zero candidates (cs) produces zero shard files without failing the whole release", async () => {
+    process.env.SITE_URL = "https://fixture.example";
+    const root = await temporaryRoot();
+    const buildFamily = vi.fn(async ({ type, locale }: { type: string; locale: string }) => {
+      // "cs" has no visible content — the only-已发布 filter upstream
+      // (isVisibleCandidate) already excluded every candidate before this
+      // builder is even reached, so it legitimately returns zero files, not
+      // one file with zero entries.
+      if (locale === "cs") return [];
+      return [{
+        name: getSitemapFileName(type as "mainpage", locale as never, 0),
+        url: `https://fixture.example/sitemap/site_${type}_${locale}.xml`,
+        lastmod: "2026-08-01T00:00:00.000Z",
+        entries: [{ loc: `https://fixture.example/novel/${locale}-fixture`, lastmod: "2026-08-01T00:00:00.000Z" }],
+      }];
+    });
+
+    const result = await generateStaticSitemaps({
+      buildFamily,
+      rootDir: root,
+      runId: "default-locales-release",
+      types: ["mainpage"],
+      // routeLocales intentionally omitted — exercises the default.
+    });
+
+    const seenLangSet = new Set(buildFamily.mock.calls.map(([spec]: [{ locale: string }]) => spec.locale));
+    expect(seenLangSet.size).toBe(15);
+    expect(seenLangSet.has("cs")).toBe(true);
+    expect(seenLangSet.has("ru")).toBe(true);
+
+    // cs contributed zero shard files (not a file with zero entries), every
+    // other locale contributed exactly one — 14 shards total, generation
+    // still succeeds as a whole (no thrown error reaches this point).
+    expect(result.manifest.sitemapFiles.some((name) => name.includes("_cs."))).toBe(false);
+    expect(result.manifest.sitemapFiles).toHaveLength(14);
+    expect(result.fileCount).toBe(15); // 14 shards + the index itself
+  });
 });
