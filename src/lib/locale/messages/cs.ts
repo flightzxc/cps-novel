@@ -130,7 +130,7 @@ const messages = {
     unpublishedTitle: "Tato kniha je dočasně nedostupná",
     unpublishedBody: "Byla odstraněna z tohoto webu. Pokud se vrátí, tato adresa bude nadále fungovat.",
     takedownTitle: "Tato kniha byla stažena",
-    takedownBody: "Na žádost držitele práv tento web tuto knihu již nenabízí. Toto stažení je trvalé.",
+    takedownBody: "Na žádost držitele práv tento web tuto knihu již nenabízí.",
     returnHome: "Zpět domů",
   },
   blog: {
@@ -160,7 +160,7 @@ const messages = {
   meta: {
     notFound: "Nenalezeno",
     chapterNotFound: "Kapitola nenalezena",
-    siteDescription: "Web pro distribuci románů v zahraničí",
+    siteDescription: "Objevujte romány a čtěte ukázkové kapitoly.",
   },
 } satisfies LocaleMessages;
 

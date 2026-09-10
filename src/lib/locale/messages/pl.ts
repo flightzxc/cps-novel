@@ -129,7 +129,7 @@ const messages = {
     unpublishedTitle: "Ta książka jest tymczasowo niedostępna",
     unpublishedBody: "Została usunięta z tej strony. Jeśli powróci, ten adres nadal będzie działać.",
     takedownTitle: "Ta książka została wycofana",
-    takedownBody: "Na prośbę właściciela praw ta strona nie oferuje już tej książki. To wycofanie jest trwałe.",
+    takedownBody: "Na prośbę właściciela praw ta strona nie oferuje już tej książki.",
     returnHome: "Powrót do strony głównej",
   },
   blog: {
@@ -159,7 +159,7 @@ const messages = {
   meta: {
     notFound: "Nie znaleziono",
     chapterNotFound: "Nie znaleziono rozdziału",
-    siteDescription: "Strona dystrybucji powieści za granicą",
+    siteDescription: "Odkryj powieści i czytaj przykładowe rozdziały.",
   },
 } satisfies LocaleMessages;
 

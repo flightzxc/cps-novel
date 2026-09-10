@@ -121,7 +121,7 @@ const messages = {
     unpublishedTitle: "Cuốn sách này tạm thời không có sẵn",
     unpublishedBody: "Cuốn sách đã bị gỡ khỏi trang này. Nếu quay lại, địa chỉ này vẫn sẽ hoạt động.",
     takedownTitle: "Cuốn sách này đã bị gỡ bỏ",
-    takedownBody: "Theo yêu cầu của chủ sở hữu bản quyền, trang này không còn cung cấp cuốn sách này nữa. Việc gỡ bỏ này là vĩnh viễn.",
+    takedownBody: "Theo yêu cầu của chủ sở hữu bản quyền, trang này không còn cung cấp cuốn sách này nữa.",
     returnHome: "Về trang chủ",
   },
   blog: {
@@ -151,7 +151,7 @@ const messages = {
   meta: {
     notFound: "Không tìm thấy",
     chapterNotFound: "Không tìm thấy chương",
-    siteDescription: "Trang phân phối tiểu thuyết ở nước ngoài",
+    siteDescription: "Khám phá tiểu thuyết và đọc chương xem trước.",
   },
 } satisfies LocaleMessages;
 

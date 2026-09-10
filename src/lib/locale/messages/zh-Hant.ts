@@ -121,7 +121,7 @@ const messages = {
     unpublishedTitle: "本書暫時無法閱讀",
     unpublishedBody: "本書已從本站下架。若日後恢復,此網址仍可使用。",
     takedownTitle: "本書已被撤回",
-    takedownBody: "應版權方要求,本站不再提供本書。此次下架為永久性處理。",
+    takedownBody: "應版權方要求,本站不再提供本書。",
     returnHome: "回首頁",
   },
   blog: {
@@ -151,7 +151,7 @@ const messages = {
   meta: {
     notFound: "找不到頁面",
     chapterNotFound: "找不到章節",
-    siteDescription: "海外小說發行網站",
+    siteDescription: "探索小說,閱讀試讀章節。",
   },
 } satisfies LocaleMessages;
 

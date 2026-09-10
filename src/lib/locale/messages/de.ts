@@ -117,7 +117,7 @@ const messages = {
     unpublishedTitle: "Dieses Buch ist vorübergehend nicht verfügbar",
     unpublishedBody: "Es wurde von dieser Website entfernt. Falls es zurückkehrt, funktioniert diese Adresse weiterhin.",
     takedownTitle: "Dieses Buch wurde zurückgezogen",
-    takedownBody: "Auf Wunsch des Rechteinhabers bietet diese Website dieses Buch nicht mehr an. Dieser Rückzug ist endgültig.",
+    takedownBody: "Auf Wunsch des Rechteinhabers bietet diese Website dieses Buch nicht mehr an.",
     returnHome: "Zurück zur Startseite",
   },
   blog: {
@@ -147,7 +147,7 @@ const messages = {
   meta: {
     notFound: "Nicht gefunden",
     chapterNotFound: "Kapitel nicht gefunden",
-    siteDescription: "Website für den internationalen Vertrieb von Romanen",
+    siteDescription: "Romane entdecken und Vorschaukapitel lesen.",
   },
 } satisfies LocaleMessages;
 

@@ -135,7 +135,7 @@ const messages = {
     unpublishedTitle: "هذا الكتاب غير متاح مؤقتًا",
     unpublishedBody: "تمت إزالته من هذا الموقع. إذا عاد، سيظل هذا العنوان يعمل.",
     takedownTitle: "تم سحب هذا الكتاب",
-    takedownBody: "بناءً على طلب صاحب الحقوق، لم يعد هذا الموقع يقدم هذا الكتاب. هذا السحب نهائي.",
+    takedownBody: "بناءً على طلب صاحب الحقوق، لم يعد هذا الموقع يقدم هذا الكتاب.",
     returnHome: "العودة إلى الرئيسية",
   },
   blog: {
@@ -165,7 +165,7 @@ const messages = {
   meta: {
     notFound: "غير موجود",
     chapterNotFound: "الفصل غير موجود",
-    siteDescription: "موقع لتوزيع الروايات في الخارج",
+    siteDescription: "استكشف الروايات واقرأ فصول المعاينة.",
   },
 } satisfies LocaleMessages;
 

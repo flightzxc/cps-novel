@@ -121,7 +121,7 @@ const messages = {
     unpublishedTitle: "この作品は一時的にご利用いただけません",
     unpublishedBody: "本サイトから削除されました。復帰した場合、このアドレスは引き続きご利用いただけます。",
     takedownTitle: "この作品は取り下げられました",
-    takedownBody: "権利者からの要請により、本サイトではこの作品の提供を終了しました。この取り下げは永久的なものです。",
+    takedownBody: "権利者からの要請により、本サイトではこの作品の提供を終了しました。",
     returnHome: "ホームに戻る",
   },
   blog: {
@@ -151,7 +151,7 @@ const messages = {
   meta: {
     notFound: "見つかりません",
     chapterNotFound: "章が見つかりません",
-    siteDescription: "海外向け小説配信サイト",
+    siteDescription: "小説を探して試し読みしよう。",
   },
 } satisfies LocaleMessages;
 

@@ -128,7 +128,7 @@ export const en = {
       "It has been removed from this site. If it returns, this address will still work.",
     takedownTitle: "This book has been withdrawn",
     takedownBody:
-      "At the rights holder's request, this site no longer offers this book. This withdrawal is permanent.",
+      "At the rights holder's request, this site no longer offers this book.",
     returnHome: "Back to home",
   },
   blog: {
@@ -159,7 +159,7 @@ export const en = {
   meta: {
     notFound: "Not found",
     chapterNotFound: "Chapter not found",
-    siteDescription: "Overseas novel distribution site",
+    siteDescription: "Discover novels and read preview chapters.",
   },
 } as const;
 

@@ -119,7 +119,7 @@ const messages = {
     unpublishedTitle: "Ce livre est temporairement indisponible",
     unpublishedBody: "Il a été retiré de ce site. S'il revient, cette adresse fonctionnera toujours.",
     takedownTitle: "Ce livre a été retiré",
-    takedownBody: "À la demande du titulaire des droits, ce site ne propose plus ce livre. Ce retrait est définitif.",
+    takedownBody: "À la demande du titulaire des droits, ce site ne propose plus ce livre.",
     returnHome: "Retour à l'accueil",
   },
   blog: {
@@ -149,7 +149,7 @@ const messages = {
   meta: {
     notFound: "Introuvable",
     chapterNotFound: "Chapitre introuvable",
-    siteDescription: "Site de distribution de romans à l'étranger",
+    siteDescription: "Découvrez des romans et lisez des extraits.",
   },
 } satisfies LocaleMessages;
 

@@ -121,7 +121,7 @@ const messages = {
     unpublishedTitle: "Buku ini untuk sementara tidak tersedia",
     unpublishedBody: "Buku ini telah dihapus dari situs ini. Jika kembali, alamat ini akan tetap berfungsi.",
     takedownTitle: "Buku ini telah ditarik",
-    takedownBody: "Atas permintaan pemegang hak, situs ini tidak lagi menyediakan buku ini. Penarikan ini bersifat permanen.",
+    takedownBody: "Atas permintaan pemegang hak, situs ini tidak lagi menyediakan buku ini.",
     returnHome: "Kembali ke beranda",
   },
   blog: {
@@ -151,7 +151,7 @@ const messages = {
   meta: {
     notFound: "Tidak ditemukan",
     chapterNotFound: "Bab tidak ditemukan",
-    siteDescription: "Situs distribusi novel luar negeri",
+    siteDescription: "Temukan novel dan baca bab pratinjau.",
   },
 } satisfies LocaleMessages;
 

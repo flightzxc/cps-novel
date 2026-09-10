@@ -121,7 +121,7 @@ const messages = {
     unpublishedTitle: "이 작품은 일시적으로 이용할 수 없습니다",
     unpublishedBody: "이 사이트에서 삭제되었습니다. 다시 게시되면 이 주소는 계속 작동합니다.",
     takedownTitle: "이 작품은 내려졌습니다",
-    takedownBody: "저작권자의 요청에 따라 이 사이트는 더 이상 이 작품을 제공하지 않습니다. 이 조치는 영구적입니다.",
+    takedownBody: "저작권자의 요청에 따라 이 사이트는 더 이상 이 작품을 제공하지 않습니다.",
     returnHome: "홈으로 돌아가기",
   },
   blog: {
@@ -151,7 +151,7 @@ const messages = {
   meta: {
     notFound: "찾을 수 없음",
     chapterNotFound: "챕터를 찾을 수 없음",
-    siteDescription: "해외 소설 유통 사이트",
+    siteDescription: "소설을 찾아보고 미리보기 챕터를 읽어보세요.",
   },
 } satisfies LocaleMessages;
 
