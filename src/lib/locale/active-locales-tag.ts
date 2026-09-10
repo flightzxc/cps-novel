@@ -3,7 +3,7 @@
  * (`./active-locales.ts`), split into its own zero-dependency module.
  *
  * `src/server/publication/revalidate.ts` needs only this string literal to
- * call `revalidateTag(ACTIVE_LOCALES_CACHE_TAG, "max")` — it must NOT import
+ * call `revalidateTag(ACTIVE_LOCALES_CACHE_TAG, { expire: 0 })` — it must NOT import
  * it from `./active-locales.ts` directly, because that module calls
  * `unstable_cache(...)` at module-eval time (`export const getActiveLocales
  * = unstable_cache(...)`), which throws in any test that mocks `next/cache`

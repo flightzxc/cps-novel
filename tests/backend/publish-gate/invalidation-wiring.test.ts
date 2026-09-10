@@ -188,7 +188,22 @@ describe("blog first-publish invalidation wiring (C-29b)", () => {
 
     expect(result.outcome).toBe("published");
     expect(revalidatePublicBlogPaths).toHaveBeenCalledTimes(1);
-    expect(revalidatePublicBlogPaths).toHaveBeenCalledWith({ slug: "a-blog-post" });
+    expect(revalidatePublicBlogPaths).toHaveBeenCalledWith({ slug: "a-blog-post", locale: "en" });
+    expect(revalidatePublicArticlePaths).not.toHaveBeenCalled();
+    expect(revalidatePublicArticleSet).not.toHaveBeenCalled();
+  });
+
+  it("calls revalidatePublicBlogPaths with the post's own non-en locale, not the PUBLIC_SITE_LOCALE default", async () => {
+    const db = seedDraftBlogArticle({ id: "blog-ru-1", slug: "a-blog-post-ru", locale: "ru" });
+    const result = await applyPublishTransition(db.asPrismaClient(), {
+      articleId: "blog-ru-1",
+      requestId: "req-1",
+      actor: { type: "admin", adminId: "admin-1" },
+    });
+
+    expect(result.outcome).toBe("published");
+    expect(revalidatePublicBlogPaths).toHaveBeenCalledTimes(1);
+    expect(revalidatePublicBlogPaths).toHaveBeenCalledWith({ slug: "a-blog-post-ru", locale: "ru" });
     expect(revalidatePublicArticlePaths).not.toHaveBeenCalled();
     expect(revalidatePublicArticleSet).not.toHaveBeenCalled();
   });

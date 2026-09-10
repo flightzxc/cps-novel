@@ -504,7 +504,7 @@ export async function applyPublishTransition(
       };
       safeInvalidatePublicCache(() => revalidatePublicArticlePaths(pathInput));
     } else {
-      safeInvalidatePublicCache(() => revalidatePublicBlogPaths({ slug: txResult.slug }));
+      safeInvalidatePublicCache(() => revalidatePublicBlogPaths({ slug: txResult.slug, locale: txResult.locale as SiteLocale }));
     }
   }
 
