@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
 import { JsonLd } from "@/app/_components/json-ld";
-import { loadBlogAccess, loadBlogDetail, loadChrome } from "@/app/_lib/public-load";
+import { loadActiveLocales, loadBlogAccess, loadBlogDetail, loadChrome } from "@/app/_lib/public-load";
 import { noIndexMetadata, toNextMetadata } from "@/app/_lib/seo-metadata";
 import { BlogDetailScreen } from "@/features/public-ui/blog/BlogDetailScreen";
 import { BlogUnavailableScreen } from "@/features/public-ui/blog/BlogUnavailableScreen";
@@ -96,9 +96,10 @@ export async function BlogDetailBody({
   params: Promise<BlogDetailRouteParams>;
 }) {
   const { slug } = await params;
+  const activeLocales = await loadActiveLocales();
   const [{ access, post }, { chrome, settings }] = await Promise.all([
     loadBlogPage(locale, slug),
-    loadChrome(locale),
+    loadChrome(locale, undefined, undefined, activeLocales),
   ]);
 
   if (access.kind === "not_found" || access.kind === "takedown") notFound();

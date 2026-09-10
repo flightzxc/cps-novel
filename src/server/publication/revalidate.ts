@@ -52,8 +52,9 @@
  * section for the full explanation of why this PR does not flip `dynamic`
  * itself.
  */
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
 
+import { ACTIVE_LOCALES_CACHE_TAG } from "@/lib/locale/active-locales";
 import {
   buildArticlePath,
   buildArticleRoutePath,
@@ -77,6 +78,27 @@ function safeRevalidatePath(path: string, type?: "layout" | "page"): void {
 }
 
 /**
+ * Same isolation discipline as `safeRevalidatePath` above, for the L10N P4
+ * tag-based cache. Next 16's `revalidateTag` now takes a mandatory second
+ * "profile" argument (`node_modules/next/dist/server/web/spec-extension/
+ * revalidate.d.ts`) — omitting it still works at runtime but logs a
+ * deprecation warning recommending exactly this fix ("add second argument
+ * of 'max'"). `"max"` reproduces the classic single-arg `revalidateTag`
+ * behavior (immediate, unconditional purge of every cache entry under this
+ * tag) rather than a bounded expiry window — the right match for
+ * `getActiveLocales()`'s `unstable_cache` entry, which has no Next 16
+ * "cache profile" of its own to align with.
+ */
+function safeRevalidateTag(tag: string): void {
+  try {
+    revalidateTag(tag, "max");
+  } catch {
+    // See `safeRevalidatePath` above — never let a cache-invalidation
+    // failure surface as a write-path failure.
+  }
+}
+
+/**
  * The two sitewide surfaces that list or feature Novels:
  * `/` (home — featured grid, `src/app/page.tsx`) and `/browse` (the
  * paginated all-works listing, `src/app/browse/page.tsx`). Any write that
@@ -93,6 +115,13 @@ function safeRevalidatePath(path: string, type?: "layout" | "page"): void {
 export function revalidatePublicListings(): void {
   safeRevalidatePath("/");
   safeRevalidatePath("/browse");
+  // L10N P4: this is the existing publish-state-transition broadcast point
+  // every visibility-changing write already funnels through (directly or
+  // via `revalidatePublicArticlePaths`/`revalidatePublicArticleSet` below) —
+  // reused here, not a new invalidation mechanism, to expire
+  // `getActiveLocales()`'s 300s `unstable_cache` entry whenever a write
+  // could have changed which locales have publicly-visible content.
+  safeRevalidateTag(ACTIVE_LOCALES_CACHE_TAG);
 }
 
 export type ArticlePublicPathInput = ArticlePathInput;

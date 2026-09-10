@@ -5,6 +5,16 @@ import { localePrefix } from "@/lib/slug/article-path";
 import type { SiteSettingSnapshot } from "@/server/site-settings/service";
 import type { PublicTaxonomyTag } from "./public-taxonomy";
 
+/**
+ * L10N P4: `activeLocales` (from `getActiveLocales()`, threaded in by
+ * `loadPublicChrome` below) is optional here — not because a production
+ * caller may legitimately omit it (`loadPublicChrome` always supplies it),
+ * but because `mockChrome` (`src/features/public-ui/fixtures/mock-chrome.ts`,
+ * dev-preview only) deliberately does not, to exercise `LocaleSwitcher`'s
+ * own "<=1 selectable locale renders nothing" branch. `SiteHeader` defaults
+ * a missing value to `[]`, which reads the same way (hidden switcher).
+ */
+
 export type PublicChromeCurrent = "home" | "browse";
 
 /**
@@ -16,15 +26,16 @@ export type PublicChromeCurrent = "home" | "browse";
  * WO-2 §8.1: the link fields below (`brandHref`, nav `href`s) are no longer
  * bare-path literals — they're built with `localePrefix(locale)`, the site's
  * sole prefix-building rule (`src/lib/slug/article-path.ts`). `localePrefix("en")`
- * returns `""`, so every one of these hrefs stays byte-identical to before
- * this pass for every real call today (`locale` is always `"en"`, since
- * `PUBLISHABLE_LOCALES` is still `{"en"}`).
+ * returns `""`, so an `en`-locale caller's hrefs stay byte-identical to
+ * before this pass; a non-`en` caller now gets that locale's own prefix
+ * (L10N P4 opened routing to every `SITE_LOCALES` member, not just `en`).
  */
 export function chromeFromSiteSetting(
   settings: SiteSettingSnapshot,
   locale: SiteLocale,
   current?: PublicChromeCurrent,
   categories: readonly PublicTaxonomyTag[] = [],
+  activeLocales?: readonly SiteLocale[],
 ): SiteChrome {
   const t = getPublicT(locale);
   const footerNote = [settings.footerCopyrightText, settings.footerDisclaimerText]
@@ -66,5 +77,6 @@ export function chromeFromSiteSetting(
       ...friendLinks,
     ],
     footerNote: footerNote || undefined,
+    activeLocales,
   };
 }

@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 
 import { JsonLd } from "@/app/_components/json-ld";
 import {
+  loadActiveLocales,
   loadArticleAccess,
   loadChrome,
   loadHreflangSiblings,
@@ -102,9 +103,10 @@ export async function NovelBody({
   params: Promise<NovelRouteParams>;
 }) {
   const { slugParam } = await params;
+  const activeLocales = await loadActiveLocales();
   const [access, { chrome, settings }] = await Promise.all([
     loadArticleAccess(slugParam, locale),
-    loadChrome(locale),
+    loadChrome(locale, undefined, undefined, activeLocales),
   ]);
 
   if (access.kind === "not_found" || access.kind === "takedown") notFound();

@@ -1,4 +1,4 @@
-import { isPublishableLocale, type SiteLocale } from "@/lib/locale/locale-canonical";
+import { SITE_LOCALES, type SiteLocale } from "@/lib/locale/locale-canonical";
 
 import { PUBLIC_SITE_LOCALE } from "./locale-label";
 
@@ -15,17 +15,18 @@ export const SITE_LOCALE_REQUEST_HEADER = "x-novel-locale";
 
 /**
  * Picks a `SiteLocale` for a request out of an untrusted `candidate` value,
- * checked against the SAME open/publishable locale set every other exit
- * gate reads (`isPublishableLocale` — `PUBLISHABLE_LOCALES` in
- * `src/lib/locale/locale-canonical.ts`). Anything that fails — missing, not
- * a string, a registered-but-unopened locale, or outright garbage — falls
- * back to `PUBLIC_SITE_LOCALE` ("en"). Never throws.
+ * checked against `SITE_LOCALES` — the static registration gate, L10N P4's
+ * replacement for the deleted `isPublishableLocale`/`PUBLISHABLE_LOCALES`
+ * whitelist (the narrower gate this function used to read was removed this
+ * round; `SITE_LOCALES` membership is now the only static-layer check any
+ * exit gate reads). Anything that fails — missing, not a string, or outright
+ * garbage — falls back to `PUBLIC_SITE_LOCALE` ("en"). Never throws.
  *
  * 🔴 Deliberately NOT named with a `resolve`/`normalize`/`to`/`map`/`coerce`
  * prefix (see `tests/ui/locale-canonical.test.ts`'s "no second locale
  * normalize implementation" scan) — this function does no independent
- * mapping of its own; it only checks membership via the canonical
- * `isPublishableLocale` and substitutes the canonical default otherwise.
+ * mapping of its own; it only checks membership in the canonical
+ * `SITE_LOCALES` registry and substitutes the canonical default otherwise.
  *
  * Two callers share this one rule rather than each re-deriving it:
  *
@@ -36,14 +37,8 @@ export const SITE_LOCALE_REQUEST_HEADER = "x-novel-locale";
  *   by the time it reaches a Server Component — this function doesn't care
  *   which side is calling it).
  */
-export function pickPublishableLocale(candidate: unknown): SiteLocale {
-  if (typeof candidate === "string" && isPublishableLocale(candidate)) {
-    // `isPublishableLocale` returns a plain `boolean`, not a `candidate is
-    // SiteLocale` type predicate (its own doc comment: callers may pass
-    // arbitrary external input) — the narrowing here is a deliberate cast,
-    // not implicit, and is safe because membership in `PUBLISHABLE_LOCALES`
-    // (a `readonly SiteLocale[]`) is exactly what the call above just
-    // confirmed.
+export function pickSiteLocale(candidate: unknown): SiteLocale {
+  if (typeof candidate === "string" && (SITE_LOCALES as readonly string[]).includes(candidate)) {
     return candidate as SiteLocale;
   }
   return PUBLIC_SITE_LOCALE;

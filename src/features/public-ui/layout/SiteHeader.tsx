@@ -4,6 +4,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import { BrandLockup } from "@/components/BrandMark";
 import { Container } from "@/components/Container";
 import type { NavItem } from "@/features/public-ui/types";
+import type { SiteLocale } from "@/lib/locale/locale-canonical";
 import { useT } from "@/lib/locale/messages/MessagesProvider";
 import { LocaleSwitcher } from "./LocaleSwitcher";
 
@@ -23,6 +24,7 @@ export function SiteHeader({
   brandName,
   navItems = [],
   overlay = false,
+  activeLocales = [],
 }: {
   brandHref?: string;
   /** 站点品牌名。缺失或空白时 `BrandLockup` 回落到占位符。 */
@@ -33,6 +35,12 @@ export function SiteHeader({
    * 滚出 Hero 后自动恢复底色与分隔线。不传时行为与普通页头完全一致。
    */
   overlay?: boolean;
+  /**
+   * L10N P4：动态层 `getActiveLocales()` 结果，透传给 `LocaleSwitcher`。
+   * 缺省按空数组处理——`LocaleSwitcher` 在 `activeLocales.length <= 1` 时
+   * 不渲染任何 DOM，空数组与"只有 en 一个"效果相同（都隐藏切换器）。
+   */
+  activeLocales?: readonly SiteLocale[];
 }) {
   const t = useT();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -117,13 +125,13 @@ export function SiteHeader({
               </ul>
             </nav>
 
-            {/* 语言入口。只有在确实存在多个可发布语种时才渲染任何 DOM
-                （`LocaleSwitcher` 组件自身在 `listPublishableLocales().length
-                <= 1` 时返回 null）——首发只有 en 一个可发布语种时，这里不
-                改变页头的可见结构。这是本站唯一的语种切换入口——没有第二个
-                通过 `navItems` 注入的旁路（WO-2 review：移除了此前从未被
-                任何调用方填充过的 `SiteChrome.localeNav` 槽位）。 */}
-            <LocaleSwitcher />
+            {/* 语言入口。只有在确实存在多个活跃语种时才渲染任何 DOM
+                （`LocaleSwitcher` 组件自身在 `activeLocales.length <= 1`
+                时返回 null，L10N P4：活跃集由动态层 `getActiveLocales()`
+                决定，不再是静态白名单）。这是本站唯一的语种切换入口——
+                没有第二个通过 `navItems` 注入的旁路（WO-2 review：移除了
+                此前从未被任何调用方填充过的 `SiteChrome.localeNav` 槽位）。 */}
+            <LocaleSwitcher activeLocales={activeLocales} />
           </div>
 
           {/* 移动端开关 */}

@@ -1,6 +1,7 @@
 import { cache } from "react";
 
 import { prisma } from "@/app/_lib/public-deps";
+import { getActiveLocales } from "@/lib/locale/active-locales";
 import type { SiteLocale } from "@/lib/locale/locale-canonical";
 import { loadNovelHreflangSiblings } from "@/lib/seo/novel-hreflang";
 import {
@@ -58,14 +59,31 @@ import { checkBlogArticlePublicAccess } from "@/server/publication/access";
  * a caller silently render English chrome under a non-English locale prefix
  * once a second locale opens). Every one of the 8 public page bodies under
  * `src/app/_pages/` now passes its own `locale` param through explicitly.
+ *
+ * L10N P4: `activeLocales` is an optional 4th argument, same "caller who
+ * already has it can pass it in" shape as `categories` above. Callers that
+ * care about the LocaleSwitcher rendering correctly (every `_pages/*.tsx`
+ * body that renders a `SiteShell`) fetch it via `loadActiveLocales()` below
+ * and pass it through; callers that don't (none today) can omit it.
  */
 export const loadChrome = cache(
   async (
     locale: SiteLocale,
     current?: PublicChromeCurrent,
     categories?: readonly PublicTaxonomyTag[],
-  ) => loadPublicChrome(prisma, locale, current, categories),
+    activeLocales?: readonly SiteLocale[],
+  ) => loadPublicChrome(prisma, locale, current, categories, activeLocales),
 );
+
+/**
+ * L10N P4: the dynamic locale layer's `React.cache()`-scoped, request-deduped
+ * entry point — mirrors every other loader in this file (`loadHomeNovels`
+ * etc.), wrapping the module-level `unstable_cache`d `getActiveLocales()`
+ * (`@/lib/locale/active-locales`) so a render that calls it more than once
+ * (e.g. `generateMetadata` and the page body both wanting it) still only
+ * evaluates it once per request.
+ */
+export const loadActiveLocales = cache(() => getActiveLocales());
 
 export const loadHomeNovels = cache(async (locale: SiteLocale) => listHomeNovels(prisma, locale));
 export const loadPublicCategories = cache(async (locale: SiteLocale) => queryPublicCategories(prisma, locale));

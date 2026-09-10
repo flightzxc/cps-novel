@@ -2,13 +2,15 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import {
   evaluateAdminHostAccess,
+  normalizeRequestHost,
   readAdminCanonicalOrigin,
   resolveAdminHost,
   resolveSiteHostSafely,
 } from "@/lib/site/admin-origin";
 import { getSiteUrl } from "@/lib/seo/site-url";
+import { negotiateRootLocale } from "@/lib/locale/root-negotiation";
 import { PUBLIC_SITE_LOCALE } from "@/lib/site/locale-label";
-import { pickPublishableLocale, SITE_LOCALE_REQUEST_HEADER } from "@/lib/site/request-locale";
+import { pickSiteLocale, SITE_LOCALE_REQUEST_HEADER } from "@/lib/site/request-locale";
 
 /**
  * RC-9 admin-host isolation (2026-09-03, Owner).
@@ -102,6 +104,7 @@ export function buildDefaultLocaleRedirectTarget(pathname: string, search: strin
 }
 
 export function proxy(request: NextRequest): NextResponse {
+  const siteHost = resolveSiteHostSafely();
   const result = evaluateAdminHostAccess(
     {
       requestHostHeader: request.headers.get("host"),
@@ -109,7 +112,7 @@ export function proxy(request: NextRequest): NextResponse {
       nodeEnv: process.env.NODE_ENV,
     },
     {
-      siteHost: resolveSiteHostSafely(),
+      siteHost,
       adminHostResolution: resolveAdminHost(readAdminCanonicalOrigin()),
     },
   );
@@ -139,20 +142,35 @@ export function proxy(request: NextRequest): NextResponse {
     }
   }
 
+  // L10N P4 (矩阵 #9): root-path (`/`) Accept-Language/cookie negotiation —
+  // reached only once the admin-host gate above has already allowed the
+  // request AND only on the PUBLIC site host, never the admin host (an
+  // admin-host request never reaches here with an admin path anyway, since
+  // the gate above would have denied it; this check additionally excludes
+  // the "unrecognised/missing Host header" fail-open case the admin gate
+  // treats as public-ish — negotiation only runs when the host is
+  // affirmatively the configured public site host). `negotiateRootLocale`
+  // itself further restricts to `pathname === "/"` and excludes bot UAs.
+  const requestHost = normalizeRequestHost(request.headers.get("host"));
+  if (requestHost !== null && requestHost === siteHost) {
+    const negotiated = negotiateRootLocale(request);
+    if (negotiated) return negotiated;
+  }
+
   // WO-2 §8.2: forward the request's resolved site locale as a header so
   // `src/app/layout.tsx` — which sits above both public route trees (and
   // the admin/dev-preview segments) and has no `[locale]` route param of
   // its own to read — can set `<html lang>`/`dir` without re-deriving this
-  // path-parsing rule. Only the path's first segment is consulted, and only
-  // when it's in the OPEN locale set (`pickPublishableLocale` ->
-  // `isPublishableLocale`, the same gate every other exit point reads) —
-  // never `SITE_LOCALES`, so this cannot advertise an unopened locale.
-  // Today that set is `{"en"}`, `en` is never itself a path prefix (D-8),
-  // and any `/en/*` request was already redirected away above — so this
-  // resolves to `"en"` for every request that reaches here, matching the
-  // root layout's existing hardcoded `lang="en"` exactly.
+  // path-parsing rule. Only the path's first segment is consulted, checked
+  // against `SITE_LOCALES` (`pickSiteLocale` — L10N P4: the static
+  // registration gate, replacing the deleted `isPublishableLocale` publish
+  // whitelist every exit point used to read). `en` is never itself a path
+  // prefix (D-8) and any `/en/*` request was already redirected away above,
+  // so a bare-path request still resolves to `"en"` here exactly as before;
+  // a `/{locale}/...` request now forwards that locale's own header value
+  // instead of always falling back to `"en"`.
   const [, firstPathSegment] = request.nextUrl.pathname.split("/");
-  const requestLocale = pickPublishableLocale(firstPathSegment);
+  const requestLocale = pickSiteLocale(firstPathSegment);
   const forwardedHeaders = new Headers(request.headers);
   forwardedHeaders.set(SITE_LOCALE_REQUEST_HEADER, requestLocale);
   return NextResponse.next({ request: { headers: forwardedHeaders } });

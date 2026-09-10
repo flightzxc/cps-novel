@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 
 import { JsonLd } from "@/app/_components/json-ld";
 import { prisma } from "@/app/_lib/public-deps";
-import { loadBrowseNovels, loadChrome } from "@/app/_lib/public-load";
+import { loadActiveLocales, loadBrowseNovels, loadChrome } from "@/app/_lib/public-load";
 import { toNextMetadata } from "@/app/_lib/seo-metadata";
 import { CollectionScreen } from "@/features/public-ui/collection/CollectionScreen";
 import { Pagination } from "@/features/public-ui/collection/Pagination";
@@ -52,17 +52,19 @@ async function loadBrowsePage(
   const requested = parseBrowsePageParam(rawPage);
   if (requested === null) return null;
 
+  const activeLocales = await loadActiveLocales();
+
   const category = Array.isArray(rawCategory) ? rawCategory[0] : rawCategory;
   if (category) {
     const [{ settings, chrome }, result] = await Promise.all([
-      loadChrome(locale, "browse"),
+      loadChrome(locale, "browse", undefined, activeLocales),
       getPublicCategoryPage(prisma, locale, category, requested),
     ]);
     return result ? { settings, chrome, paged: result, category: result.category } : null;
   }
 
   const [{ settings, chrome }, cards] = await Promise.all([
-    loadChrome(locale, "browse"),
+    loadChrome(locale, "browse", undefined, activeLocales),
     loadBrowseNovels(locale),
   ]);
   const paged = paginateCards(cards, requested);

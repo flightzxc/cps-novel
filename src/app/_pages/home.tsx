@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 
 import { JsonLd } from "@/app/_components/json-ld";
-import { loadChrome, loadHomeCarousel, loadHomeNovels, loadPublicCategories } from "@/app/_lib/public-load";
+import { loadActiveLocales, loadChrome, loadHomeCarousel, loadHomeNovels, loadPublicCategories } from "@/app/_lib/public-load";
 import { toNextMetadata } from "@/app/_lib/seo-metadata";
 import { HomeScreen } from "@/features/public-ui/home/HomeScreen";
 import type { SiteLocale } from "@/lib/locale/locale-canonical";
@@ -71,8 +71,9 @@ export async function buildHomeMetadata(locale: SiteLocale): Promise<Metadata> {
 
 export async function HomeBody({ locale }: { locale: SiteLocale }) {
   const categories = await loadPublicCategories(locale);
+  const activeLocales = await loadActiveLocales();
   const [{ settings, chrome }, novels, featuredList] = await Promise.all([
-    loadChrome(locale, "home", categories),
+    loadChrome(locale, "home", categories, activeLocales),
     loadHomeNovels(locale),
     loadHomeCarousel(locale),
   ]);

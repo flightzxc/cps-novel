@@ -41,15 +41,16 @@
  * bespoke `ARTICLE_STATUS.PUBLISHED` + `publishTime <= now` check (this
  * project has no publish-time gate at the read boundary — see
  * `src/server/publication/access.ts`'s header comment), and additionally
- * intersects with `listPublishableLocales()` so a locale that is technically
- * live in the DB but has not cleared the D-7 publish whitelist can never
- * appear in a hreflang alternate (CPS's `locales`/`isLocale` guard is the
- * "registered" gate only; this project keeps "registered" and "publishable"
- * as two independent gates everywhere else, so this module does too).
+ * intersects with `SITE_LOCALES` (L10N P4: the D-7 publish whitelist —
+ * `PUBLISHABLE_LOCALES`/`listPublishableLocales()` — was deleted; the
+ * registered-locale set is now the only static-layer gate) so a locale that
+ * is not even registered can never appear in a hreflang alternate. This
+ * matches CPS's own `locales`/`isLocale` static-registration gate exactly —
+ * CPS never had a second, narrower "publishable" gate on top of it.
  */
 import type { Prisma, PrismaClient } from "@prisma/client";
 
-import { listPublishableLocales, type SiteLocale } from "@/lib/locale/locale-canonical";
+import { SITE_LOCALES, type SiteLocale } from "@/lib/locale/locale-canonical";
 import {
   buildPublicArticleWhere,
   isPromoReady,
@@ -102,28 +103,24 @@ function isVisibleSibling(candidate: NovelHreflangCandidate): boolean {
 /**
  * Loads every publicly-visible Article sibling for one Novel, restricted to
  * locales that are BOTH actually published (row-level check above, not a DB
- * pre-filter alone) and currently on the D-7 publish whitelist (`{en}` as of
- * U6). Still returns `[]` without touching the DB if the whitelist were
- * empty (defensive); today's common path queries with `locale in ["en"]`.
+ * pre-filter alone) and registered in `SITE_LOCALES` (L10N P4: the narrower
+ * D-7 publish whitelist this used to also intersect with was deleted).
  */
 export async function loadNovelHreflangSiblings(
   db: PrismaClient | Prisma.TransactionClient,
   novelId: string,
 ): Promise<NovelHreflangSibling[]> {
-  const publishableLocales = listPublishableLocales();
-  if (publishableLocales.length === 0) return [];
-
   const rows = await db.article.findMany({
     where: buildPublicArticleWhere({
       novelId,
-      locale: { in: publishableLocales },
+      locale: { in: [...SITE_LOCALES] },
     }),
     select: NOVEL_HREFLANG_SELECT,
   });
 
   return rows.filter(isVisibleSibling).map((row) => ({
     // Safe: the `where` clause above already restricts `locale` to
-    // `publishableLocales`, which is typed `SiteLocale[]`.
+    // `SITE_LOCALES`, which is typed `SiteLocale[]`.
     locale: row.locale as SiteLocale,
     slug: row.slug,
     publicPageShortId: row.publicPageShortId,

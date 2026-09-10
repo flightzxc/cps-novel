@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { buttonClassName } from "@/components/ui/button";
 import type { ArticleSeoVisibility } from "@/domain/database-statuses";
 import { ARTICLE_SEO_VISIBILITY_OPTIONS } from "@/features/admin-ui/content-view";
-import { SITE_LOCALE_LABELS, listPublishableLocales, type SiteLocale } from "@/lib/locale/locale-canonical";
+import { SITE_LOCALE_LABELS, SITE_LOCALES, type SiteLocale } from "@/lib/locale/locale-canonical";
 import { textToSlug } from "@/lib/slug/text-to-slug";
 
 import { createBlogArticleAction } from "../../_actions";
@@ -37,17 +37,19 @@ import { createBlogArticleAction } from "../../_actions";
  * sees here is guaranteed byte-identical to what the server will accept,
  * rather than two independently-maintained slugifiers that could drift.
  */
-// Owner decision (2026-09-08, C-29b commit 3): the locale dropdown offers
-// only `listPublishableLocales()` (today `["en"]`), not the full
-// `SITE_LOCALES` — 海阅's public site has no per-locale leaf pages yet, so a
-// blog Article created in a locale the public site cannot serve would be
-// application-valid but permanently unreachable. Widen this back to
-// `SITE_LOCALES` once the multi-locale public-site work lands.
-// `createBlogArticleAction` (`../../_actions.ts` → `createBlogArticle`,
-// `src/server/content-creation/blog.ts`'s `requireLocale`) enforces the same
-// restriction server-side as defense in depth, so this is a UX narrowing,
-// not the only gate.
-const PUBLISHABLE_LOCALE_OPTIONS = listPublishableLocales();
+// L10N P4: the locale dropdown now offers the full `SITE_LOCALES` registry,
+// matching CPS's own `BLOG_ARTICLE_LOCALE_OPTIONS = SUPPORTED_SITE_LOCALES`
+// (`3a76877:src/lib/supported-site-locales.ts:21`). The Owner decision this
+// superseded (2026-09-08, C-29b commit 3, narrowing to `listPublishableLocales()`
+// — then `{"en"}`) was scoped to "海阅's public site has no per-locale leaf
+// pages yet"; that condition no longer holds — `[locale]/_guard.ts` now
+// routes every registered locale (P4 §2.B), so a blog Article created in any
+// `SITE_LOCALES` member is reachable. `createBlogArticleAction`
+// (`../../_actions.ts` → `createBlogArticle`, `src/server/content-creation/
+// blog.ts`'s `requireLocale`) enforces the same `SITE_LOCALES` membership
+// server-side as defense in depth, so this is a UX convenience, not the only
+// gate.
+const BLOG_LOCALE_OPTIONS = SITE_LOCALES;
 
 export function BlogCreateForm() {
   const router = useRouter();
@@ -144,7 +146,7 @@ export function BlogCreateForm() {
             data-testid="blog-create-locale"
             className="mt-1 w-full rounded border border-gray-300 p-2"
           >
-            {PUBLISHABLE_LOCALE_OPTIONS.map((item) => (
+            {BLOG_LOCALE_OPTIONS.map((item) => (
               <option key={item} value={item}>
                 {SITE_LOCALE_LABELS[item]}
               </option>

@@ -387,18 +387,33 @@ export async function getPublicChapterView(
  * same P0-S14 rule `chromeFromSiteSetting` follows). Every caller —
  * `@/app/_lib/public-load`'s `loadChrome` included — must pass it
  * explicitly now.
+ *
+ * L10N P4: `activeLocales` (5th argument, optional) is the dynamic layer's
+ * result (`getActiveLocales()`) — passed IN, not fetched here. This function
+ * stays dependency-injected on `db` for testability
+ * (`tests/backend/site/public-query-budget.test.ts` counts exact
+ * `article.findMany` calls against a fixture db); `getActiveLocales()` is a
+ * fixed, `unstable_cache`-wrapped singleton bound to the real production
+ * `prisma` client with its own `Article.groupBy` call shape, which that
+ * fixture db does not implement. `@/app/_lib/public-load`'s `loadChrome`
+ * fetches it (via the new `loadActiveLocales` loader there) and forwards it
+ * down to this function, the same way it already forwards `categories`.
  */
 export async function loadPublicChrome(
   db: PrismaClient | Prisma.TransactionClient,
   locale: SiteLocale,
   current?: PublicChromeCurrent,
   categories?: readonly PublicTaxonomyTag[],
+  activeLocales?: readonly SiteLocale[],
 ) {
   const [settings, resolvedCategories] = await Promise.all([
     getSiteSetting(db),
     categories ?? listPublicCategories(db, locale),
   ]);
-  return { settings, chrome: chromeFromSiteSetting(settings, locale, current, resolvedCategories) };
+  return {
+    settings,
+    chrome: chromeFromSiteSetting(settings, locale, current, resolvedCategories, activeLocales),
+  };
 }
 
 export type { SiteSettingSnapshot };

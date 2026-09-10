@@ -6,7 +6,6 @@ import { usePathname, useRouter } from "next/navigation";
 
 import { useLocale, useT } from "@/lib/locale/messages/MessagesProvider";
 import {
-  listPublishableLocales,
   SITE_LOCALE_NATIVE_NAMES,
   SITE_LOCALES,
   type SiteLocale,
@@ -21,21 +20,22 @@ import { localePrefix } from "@/lib/slug/article-path";
  * strip/build/sanitize functions, same same-origin href guard, same menu
  * semantics (`role="menu"`/`menuitem`, `aria-current`, `aria-haspopup`,
  * `aria-expanded`, `useId()`-built `aria-controls`, Esc closes and returns
- * focus to the trigger, an outside click closes). Two things are
- * deliberately NOT ported, per the work order:
+ * focus to the trigger, an outside click closes). One thing is deliberately
+ * NOT ported: no `HIDDEN_LOCALES` second table and no drama/article
+ * same-page sibling lookup. A per-page "does the target locale even have
+ * this page" downgrade prompt is out of scope.
  *
- * - No `NEXT_LOCALE` cookie. This site has none today; adding one here
- *   would be a real behavior change to the English site and would touch
- *   the cache layer, neither of which this round is scoped to do.
- * - No `HIDDEN_LOCALES` second table and no drama/article same-page
- *   sibling lookup. The site's OPEN locale set (`listPublishableLocales()`)
- *   already *is* the "what's selectable" answer — building a second,
- *   narrower list on top of it would be exactly the kind of second gate
- *   Owner correction two forbids (`locale-canonical.ts`'s `PUBLISHABLE_LOCALES`
- *   / `isPublishableLocale` / `listPublishableLocales` is read by routing,
- *   sitemap, hreflang, IndexNow, and this switcher — one set, no bypass).
- *   A per-page "does the target locale even have this page" downgrade
- *   prompt is out of scope until a second locale actually opens.
+ * L10N P4 (2026-09-10): the selectable set is now the `activeLocales` prop
+ * (from `getActiveLocales()`, the dynamic layer — see
+ * `src/lib/locale/active-locales.ts`), passed down from a server component
+ * ancestor, rather than this component calling `listPublishableLocales()`
+ * itself. `getActiveLocales()` is async (Prisma + `unstable_cache`) and
+ * this component is `"use client"` (`ChapterScreen.tsx` statically imports
+ * `SiteShell` from inside a client boundary) — calling it here directly
+ * would drag `prisma`/`unstable_cache` into the client bundle. `NEXT_LOCALE`
+ * cookie: still not read/written by this component — the root-path
+ * negotiation flow (`src/lib/locale/root-negotiation.ts`, added this round)
+ * owns that cookie's read/write; this switcher only builds plain hrefs.
  */
 
 // Native self-names ("Français", "日本語", …) live in `locale-canonical.ts`
@@ -117,17 +117,17 @@ export function buildLocaleSwitchHref(pathname: string, target: SiteLocale, sear
   return sanitizePathOnlyHref(`${withPrefix}${search ?? ""}`);
 }
 
-export function LocaleSwitcher() {
+export function LocaleSwitcher({ activeLocales = [] }: { activeLocales?: readonly SiteLocale[] }) {
   // Deliberately checked BEFORE any hook runs (see the file-level comment on
   // why: `usePathname()` needs real App Router context, which existing
   // tests that render `SiteHeader`/`SiteShell` do not provide — and don't
-  // need to, since `listPublishableLocales()` returns a single entry
-  // (`["en"]"`) in every one of them today). Safe under the rules of hooks
+  // need to, since callers that don't care about the switcher pass no
+  // `activeLocales` prop, defaulting to `[]`). Safe under the rules of hooks
   // because this early return does not change between renders of the same
-  // mounted instance: `PUBLISHABLE_LOCALES` is a module-level constant.
-  const selectable = listPublishableLocales();
-  if (selectable.length <= 1) return null;
-  return <LocaleSwitcherMenu selectable={selectable} />;
+  // mounted instance: `activeLocales` is a prop, stable for the component's
+  // whole lifetime the same way the old module-level constant was.
+  if (activeLocales.length <= 1) return null;
+  return <LocaleSwitcherMenu selectable={activeLocales} />;
 }
 
 function LocaleSwitcherMenu({ selectable }: { selectable: readonly SiteLocale[] }) {

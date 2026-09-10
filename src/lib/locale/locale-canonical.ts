@@ -1,31 +1,31 @@
 /**
- * 上游语种码 → 站点 locale 的**唯一**映射，以及发布白名单的查询入口。
+ * 上游语种码 → 站点 locale 的**唯一**映射，以及站点 locale 登记表的唯一真源。
  *
- * L10N P1（2026-09-10，`施工提示词_Sonnet_L10N_P1_语言归一与存量重算_2026-09-10.md`
- * §1.C）：`resolveSiteLocale` 收口为委托 `./channel-language.ts`（CPS
- * `3a76877:src/lib/channel-language.ts` 的 COPY/ADAPT）算法，返回值从旧的
- * `SiteLocale | "unknown"` 闭合联合改为 CPS 形状
- * `{ locale: string | null; confidence }`——`docs/p1/P1_SHARED_CONTRACTS.md` §2
- * 曾把旧签名标记 `FROZEN`，本次变更是预研文档矩阵 #1/#2 已裁决的 GAP 收口，由
- * Owner 批准的施工提示词直接指定新形状；该契约文档本身也已同步更新，不再是
- * 与本文件冲突的第二份口径。旧形状之所以必须让位：`sourceLocale` 现在可以是
- * "映射成功但非站点语种"（`it`/`fil`/`ms`/`tr`），这类值在旧的
- * `SiteLocale | "unknown"` 闭合联合里根本表达不出来，继续伪装成
- * `SiteLocale` 就是在编造一个 CPS 没有的第三层语义。
+ * L10N P4（2026-09-10，`施工提示词_Sonnet_L10N_P4_公开面两层分层与白名单删除_2026-09-10.md`）：
+ * 发布白名单层（`PUBLISHABLE_LOCALES`/`isPublishableLocale`/
+ * `listPublishableLocales`/`pickPublishableLocale`/`ARTICLE_TEMPLATE_CRUD_LANDED`/
+ * `assertPublishableLocalesFailClosed`）已整体删除，不是改造。公开面从"三层"
+ * （登记 → 可发布白名单 → 实际路由）收口为 CPS 同构的"两层"：
  *
- * 对外三个函数：
+ * - **静态层** = `SITE_LOCALES`（本文件，同步、常量）——供路由/guard/canonical/
+ *   sitemap 默认/IndexNow 资格/hreflang 枚举读。
+ * - **动态层** = `getActiveLocales()`（`./active-locales.ts`，异步、按公开可见
+ *   谓词族 + `unstable_cache` 300s）——供 LocaleSwitcher 等"这个语种现在有没有
+ *   真实内容"的消费点读。
+ *
+ * 两层不是"登记 vs 可发布"的重新命名——白名单层是一道独立于两者的第三层
+ * fail-closed 闸门（D-7 五项准入 + S14 模块加载期断言），本身已随删除一并
+ * 撤销；两层各自的语义边界见 `./active-locales.ts` 模块头。
+ *
+ * 对外两个函数：
  *
  * ```
  * resolveSiteLocale(upstreamLanguageCode, upstreamLanguageName?)
  *   → { locale: string | null; confidence: "code" | "name_alias" | "unknown" }
- * isPublishableLocale(locale) → boolean
- * listPublishableLocales() → SiteLocale[]
  * ```
  *
- * `isPublishableLocale` / `listPublishableLocales` / `PUBLISHABLE_LOCALES` /
- * `ARTICLE_TEMPLATE_CRUD_LANDED` / `assertPublishableLocalesFailClosed` 与
- * `SITE_LOCALES` 成员判定完全不受本次改动影响——发布白名单是独立于上游码映射
- * 的第二道闸，这一点没有变，P1 也没有改这几个符号的行为（P4 范围）。
+ * （`getActiveLocales()` 是第二个对外接口，住在 `./active-locales.ts`，不在
+ * 本文件——它需要 `unstable_cache`/Prisma，本文件保持同步、零 IO。）
  *
  * 🔴 **全项目唯一的语种映射实现。** 任何其他位置出现第二份语种映射硬编码都是违规：
  * CPS 因映射散落四处，付过两次全库 normalize 的代价。上游码表本身现在住在
@@ -42,11 +42,13 @@
  *    `locale: null` 恒等价——不存在 `locale` 非空但 `confidence` 是
  *    `"unknown"` 的组合，也不存在 `locale` 为 `null` 但 `confidence` 非
  *    `"unknown"` 的组合。
- * 2. **映射成功 ≠ 可发布**。白名单（`PUBLISHABLE_LOCALES`/`isPublishableLocale`）
- *    是独立的第二道闸，且 fail-closed；映射成功也不等于"是站点语种"——
- *    `SITE_LOCALES` 成员判定是第三道独立的闸，`resolveSiteLocale` 可以合法
- *    返回一个非 `SITE_LOCALES` 成员的 locale（`it`/`fil`/`ms`/`tr`）。三道闸
- *    互不隐含，调用方必须分别检查。
+ * 2. **映射成功 ≠ 是站点语种**。`SITE_LOCALES` 成员判定是独立的第二道闸，
+ *    `resolveSiteLocale` 可以合法返回一个非 `SITE_LOCALES` 成员的 locale
+ *    （`it`/`fil`/`ms`/`tr`）。两道闸互不隐含，调用方必须分别检查。（L10N P4：
+ *    曾经的第三道闸——发布白名单 `PUBLISHABLE_LOCALES`/`isPublishableLocale`
+ *    ——已整体删除；"这个 `SITE_LOCALES` 成员现在有没有真实内容"改由动态层
+ *    `./active-locales.ts` 的 `getActiveLocales()` 回答，不再是一道 fail-closed
+ *    准入闸。）
  * 3. **认的是登记过的取值，不是长得像 locale 的字符串**。`"en"` 作为上游码传
  *    进来也不会被认成 `en`——上游给的是数值码，认字符串就是在猜。
  */
@@ -59,7 +61,7 @@ import {
  * 站点 locale。
  *
  * P0-S7a（2026-08-20）：Owner 已裁决——首批注册即对齐短剧站 15 语（登记 ≠
- * 可发布，见下方 `PUBLISHABLE_LOCALES`）。列表逐字取自 CPS 短剧站
+ * 活跃，见 `./active-locales.ts` 的动态层）。列表逐字取自 CPS 短剧站
  * `src/lib/supported-site-locales.ts` 的 `SUPPORTED_SITE_LOCALES`
  * （`git show v8.2.10:src/lib/supported-site-locales.ts`，仓库路径
  * `/Users/chenweifeng/Documents/产品原型及文档/cps项目/cps-admin`，只读参考，
@@ -86,7 +88,7 @@ export type SiteLocale =
   | "cs"
   | "ru";
 
-/** 站点已登记的全部 locale（15 语，对齐短剧站）。发布白名单是它的子集。 */
+/** 站点已登记的全部 locale（15 语，对齐短剧站）。动态层活跃集是它的子集（见 `./active-locales.ts`）。 */
 export const SITE_LOCALES: readonly SiteLocale[] = Object.freeze([
   "en",
   "es",
@@ -164,81 +166,6 @@ export const SITE_LOCALE_NATIVE_NAMES: Readonly<Record<SiteLocale, string>> = Ob
 });
 
 /**
- * 发布白名单。
- *
- * U6（2026-08-27）：Owner 明示 D-7 放行 `en`。D-7 五项准入按现状重写：
- *
- * 1. 前台 messages 无 fallback——**已满足（U3，口径由工单三 2026-09-08 重写）**。
- *    `src/lib/locale/messages/en.ts` 是完整英文目录；公开渲染树不再混中文占位。
- *    他语目录经 `loadMessages` **深合并回落到英文**（Owner 修正一：缺一个键、
- *    或该键是空串，一律拿英文补上，绝不因为缺一条译文把整页抛错）——`en` 本身
- *    短路直接返回，不参与合并。完整性（键集合、非空值、插值变量、禁 ICU）改在
- *    **测试期**由 `tests/ui/messages-completeness.test.ts` 强制，不再是运行时
- *    抛错。这仍然是 fail-closed：闸门不在渲染路径上，在 CI 上——译文不完整会
- *    让门禁变红,不会让用户看见中文或裸键名。
- * 2. 后台模板语种枚举已登记——**已满足（S9）**。内置模板覆盖 `en`；
- *    `ARTICLE_TEMPLATE_CRUD_LANDED` 仍为 `false`，所以 S14 守卫仍只允许空集
- *    或 `{"en"}` 的子集——本次放行正好是这个子集，不会触发守卫。
- * 3. 该语种模板已跑通真实渲染——**已满足（S9 端到端）**。
- * 4. SEO 元数据齐全——**已满足（S7a）**：hreflang 发布状态过滤、sitemap 分语种
- *    分片、canonical 单一源。
- * 5. sitemap 分片已验证——**已满足（X8 真实拓扑）**。
- *
- * 映射成功 ≠ 可发布：`3 → en` 现可发布；`7 → ru` 仍映射成功、仍不在白名单。
- * 非 `en` 语种在 `ARTICLE_TEMPLATE_CRUD_LANDED` 翻转前仍不得进入本表。
- */
-const PUBLISHABLE_LOCALES: readonly SiteLocale[] = Object.freeze(["en"]);
-
-/**
- * D-7 条件二 fail-closed 守卫（模块加载即断言，不是运行时才发现）。
- *
- * 背景：CPS `v6.0.4` 事故——只注册了前台 locale，漏了后台模板枚举，某语种
- * 页面裸奔上线才被发现。本仓库 D-7 条件二（"后台模板语种枚举已登记"）今天
- * 对 `en` 之所以不炸，是因为消息目录里内置了 `en` 默认文案——Opus 终审的
- * 裁定原话是：这份安全**是巧合，不是机制**，`ArticleTemplate` CRUD 一旦落地、
- * 有人往 `PUBLISHABLE_LOCALES` 里加一个非 `en` 语种，没有任何东西会拦住它，
- * 直到模板引擎在生产渲染时找不到模板才会现形。
- *
- * 这道守卫把"巧合"钉成"机制"：只要模板 CRUD 没落地，`PUBLISHABLE_LOCALES`
- * 就只能是空集，或者是 `{"en"}` 的子集；越界的化，模块一加载就抛，不允许
- * 悄悄发布到运行时才炸。
- */
-export function assertPublishableLocalesFailClosed(
-  locales: readonly SiteLocale[],
-  articleTemplateCrudLanded: boolean,
-): void {
-  if (articleTemplateCrudLanded) {
-    // 条件二已经有真实机制兜底（模板引擎读真实枚举），不再需要这道临时闸。
-    return;
-  }
-  const outOfBounds = locales.filter((locale) => locale !== "en");
-  if (outOfBounds.length > 0) {
-    throw new Error(
-      "D-7 条件二 fail-closed 守卫触发：ARTICLE_TEMPLATE_CRUD_LANDED=false 时，" +
-        `PUBLISHABLE_LOCALES 只能是空集或 {"en"} 的子集，发现越界 locale：` +
-        `${outOfBounds.join(", ")}。ArticleTemplate CRUD 未落地前，任何非 en ` +
-        "语种都不得进入发布白名单——这正是 CPS v6.0.4 事故的形状（只注册前台 " +
-        "locale，漏了后台模板枚举），不要在本仓库重演。",
-    );
-  }
-}
-
-/**
- * `ArticleTemplate` CRUD 是否已经落地为真实机制（表有数据、且模板引擎在渲染时
- * 真的读它，不是"表存在于 schema"这种字面意义的落地）。
- *
- * 🔴 翻转条件：等 P2-02 模板引擎接线、且某 locale 在 `ArticleTemplate` 里有
- * 真实枚举记录并被渲染路径实际读取之后，由那次改动的作者把这个常量改成
- * `true`——同一次改动必须在 PR/commit 描述里说明是哪次改动让 D-7 条件二/三
- * 成立，不能只改一个布尔值就算数。改的时候只能改这一处，不能在别处另开关。
- */
-export const ARTICLE_TEMPLATE_CRUD_LANDED = false;
-
-assertPublishableLocalesFailClosed(PUBLISHABLE_LOCALES, ARTICLE_TEMPLATE_CRUD_LANDED);
-
-const PUBLISHABLE_INDEX: ReadonlySet<string> = new Set(PUBLISHABLE_LOCALES);
-
-/**
  * `resolveSiteLocale`'s return shape — CPS `ChannelLanguageResolution`
  * narrowed to just the two fields any caller actually needs: the resolved
  * locale (or `null` when unresolved) and how it was resolved. `warning`
@@ -282,26 +209,6 @@ export function resolveSiteLocale(
     sourceLanguageName: asChannelLanguageName(upstreamLanguageName),
   });
   return { locale: resolution.locale, confidence: resolution.confidence };
-}
-
-/**
- * 该 locale 是否可以公开发布。
- *
- * 逐字精确匹配：`"EN"`、`"en-US"`、`"en_US"` 都是 `false`。大小写折叠与区域回退
- * 都属于「替调用方猜」，而这道闸的默认必须是拒绝——站内生产者本来就只产出
- * 规范 locale，能走到这里的变体只可能来自外部输入。
- */
-export function isPublishableLocale(locale: unknown): boolean {
-  return typeof locale === "string" && PUBLISHABLE_INDEX.has(locale);
-}
-
-/**
- * 全部可发布 locale，供 sitemap 分片与语言聚合使用。
- *
- * 返回副本：调用方拿到的数组改不动真源。
- */
-export function listPublishableLocales(): SiteLocale[] {
-  return [...PUBLISHABLE_LOCALES];
 }
 
 /**

@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 
 import { JsonLd } from "@/app/_components/json-ld";
 import {
+  loadActiveLocales,
   loadArticleAccess,
   loadChapterView,
   loadChrome,
@@ -116,9 +117,10 @@ export async function ChapterBody({
   const chapterNumber = parseChapterNumber(rawNumber);
   if (chapterNumber === null) notFound();
 
+  const activeLocales = await loadActiveLocales();
   const [access, { chrome, settings }] = await Promise.all([
     loadArticleAccess(slugParam, locale),
-    loadChrome(locale),
+    loadChrome(locale, undefined, undefined, activeLocales),
   ]);
 
   if (access.kind === "not_found" || access.kind === "takedown") notFound();
