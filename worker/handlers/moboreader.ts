@@ -34,7 +34,12 @@ import {
   buildPromoLinkIdempotencyKey,
   UPSTREAM_EXISTING_PROMO_OFFER_TYPE,
 } from "../../src/lib/tasks/promo-link-claim";
-import { resolveSiteLocale } from "../../src/lib/locale/locale-canonical";
+import {
+  evaluateLanguageMappingSuspensions,
+  resolveChannelLanguage,
+  MOBOREADER_SOURCE_APP_CODE,
+  type ChannelLanguageResolution,
+} from "../../src/lib/locale/channel-language";
 import { createPublicRedirectCode } from "../../src/lib/redirect";
 import { decryptCredentialSecretForWorker } from "../credentials/crypto";
 import { bindPromoLinkToArticles } from "./promo-link-binding";
@@ -487,6 +492,23 @@ async function persistExistingCatalogPromo(
   };
 }
 
+/**
+ * L10N P1 write-site rule: `NovelSourceItem.sourceLocale` is either an
+ * already-resolved locale string or `null` — **never** the literal string
+ * `"unknown"` (the pre-P1 behavior this rule replaces). A code suspended by
+ * this page's `evaluateLanguageMappingSuspensions` circuit-breaker is forced
+ * to `null` regardless of what `resolveChannelLanguage` returned for it.
+ * Pure/exported so this exact write-site expression has its own regression
+ * test (`tests/backend/tasks/moboreader.test.ts`) independent of the full
+ * `persistCatalogPage` transaction plumbing.
+ */
+export function pickBookSourceLocale(
+  resolution: ChannelLanguageResolution,
+  suspendedLanguageCodes: ReadonlySet<string>,
+): string | null {
+  return suspendedLanguageCodes.has(resolution.sourceLanguageCode) ? null : (resolution.locale ?? null);
+}
+
 async function persistCatalogPage(
   tx: Prisma.TransactionClient,
   input: {
@@ -522,8 +544,34 @@ async function persistCatalogPage(
     articlesConflicted: 0,
   };
   let pageIncompleteLabelSnapshots = 0;
-  for (const book of input.response.items) {
-    const sourceLocale = resolveSiteLocale(book.language, book.languageName ?? undefined);
+  // L10N P1: resolve every book's language up front (pass 1) so
+  // `evaluateLanguageMappingSuspensions` (CPS `changdu-dry-run.ts:429-450`
+  // shape, ported to `src/lib/locale/channel-language.ts`) can see the whole
+  // page's code/name-conflict signal before any row is persisted — a code
+  // whose resolutions disagree with their own paired `languageName` often
+  // enough *in this page* gets its `sourceLocale` force-nulled for every
+  // book on this page, not just the individual books that triggered the
+  // conflict. Suspension is evaluated per `catalog_page` task item (one
+  // upstream page fetch), the same granularity CPS's `resolveChannelLanguage`
+  // call site uses.
+  const pageLanguageResolutions: readonly ChannelLanguageResolution[] = input.response.items.map((book) =>
+    resolveChannelLanguage({
+      sourceAppCode: MOBOREADER_SOURCE_APP_CODE,
+      sourceLanguageCode: book.language,
+      sourceLanguageName: book.languageName,
+    }),
+  );
+  const suspendedLanguageCodes = evaluateLanguageMappingSuspensions(
+    pageLanguageResolutions.map((resolution) => ({
+      sourceLanguageCode: resolution.sourceLanguageCode,
+      warning: resolution.warning,
+    })),
+  );
+  let pageUnknownLocaleCount = 0;
+  for (const [bookIndex, book] of input.response.items.entries()) {
+    const languageResolution = pageLanguageResolutions[bookIndex];
+    const sourceLocale = pickBookSourceLocale(languageResolution, suspendedLanguageCodes);
+    if (sourceLocale === null) pageUnknownLocaleCount += 1;
     const rawLanguageScope = rawLanguageScopeFromPayload(book.rawEvidence);
     if (rawLanguageScope === null) throw new Error("MoboReader raw language scope is not reliably derivable");
     const source = await tx.novelSourceItem.upsert({
@@ -633,6 +681,12 @@ async function persistCatalogPage(
     droppedLabels: droppedLabelsJson(pageDroppedLabels),
     incompleteLabelSnapshots: pageIncompleteLabelSnapshots,
     promoCapture: catalogPromoSummaryJson(promoSummary),
+    // L10N P1 (施工提示词_Sonnet_L10N_P1_语言归一与存量重算_2026-09-10.md §1.D):
+    // additive-only fields, same convention as `droppedLabels`/
+    // `incompleteLabelSnapshots` above — this page's own count/codes, rolled
+    // up into the task-level `result` at `terminal` below.
+    unknownLocaleCount: pageUnknownLocaleCount,
+    suspendedLanguageCodes: Array.from(suspendedLanguageCodes),
   } satisfies Prisma.InputJsonObject;
 
   // This provisional write makes the current page visible to the task-level
@@ -681,6 +735,11 @@ async function persistCatalogPage(
   // the one full-task scan that recomputes the durable, idempotent task-level summary.
   let taskDroppedLabels = pageDroppedLabels;
   let taskIncompleteLabelSnapshots = pageIncompleteLabelSnapshots;
+  // L10N P1: same non-terminal/terminal convention as the fields above —
+  // non-terminal pages carry this page's own value, terminal rolls up every
+  // `catalog_page` item's `result` (additive fields only, see `enrichedResult`).
+  let taskUnknownLocaleCount = pageUnknownLocaleCount;
+  let taskSuspendedLanguageCodes: string[] = Array.from(suspendedLanguageCodes);
   if (terminal) {
     // C-15 (施工工单_C15): loads every `catalog_page` item's `result` for this
     // task and flatMaps out its `sourceItemIds` -- up to `MOBOREADER_CATALOG_LIMITS`'
@@ -703,6 +762,22 @@ async function persistCatalogPage(
     const labelSummary = await loadTaskLabelSummary(tx, input.taskId);
     taskDroppedLabels = labelSummary.droppedLabels;
     taskIncompleteLabelSnapshots = labelSummary.incompleteLabelSnapshots;
+    // L10N P1: reuses the same `itemResults` read above — no extra query.
+    // `unknownLocaleCount` sums across every page; `suspendedLanguageCodes`
+    // unions (a code suspended on any one page of this task is worth
+    // surfacing at the task level even if a different page never saw
+    // enough volume of that code to trip the per-page threshold itself).
+    const suspendedCodesUnion = new Set<string>();
+    taskUnknownLocaleCount = itemResults.reduce((sum, { result }) => {
+      if (!result || typeof result !== "object" || Array.isArray(result)) return sum;
+      const value = (result as Record<string, unknown>).unknownLocaleCount;
+      const codes = (result as Record<string, unknown>).suspendedLanguageCodes;
+      if (Array.isArray(codes)) {
+        for (const code of codes) if (typeof code === "string") suspendedCodesUnion.add(code);
+      }
+      return sum + (typeof value === "number" && Number.isFinite(value) ? value : 0);
+    }, 0);
+    taskSuspendedLanguageCodes = Array.from(suspendedCodesUnion);
     if (touchedSourceItemIds.length > 0) {
       // Phase C: `input.channelAccountId` is already this same task's
       // channel account (the handler's own scope, threaded straight
@@ -749,6 +824,9 @@ async function persistCatalogPage(
           fetchedUniqueSourceItems: touchedSourceItemIds.length,
           duplicateObservations: Math.max(0, batchActualCount - touchedSourceItemIds.length),
         },
+        // L10N P1: additive-only task-level fields, see `enrichedResult` above.
+        unknownLocaleCount: taskUnknownLocaleCount,
+        suspendedLanguageCodes: taskSuspendedLanguageCodes,
         previewEnqueue,
         droppedLabels: droppedLabelsJson(taskDroppedLabels),
         incompleteLabelSnapshots: taskIncompleteLabelSnapshots,

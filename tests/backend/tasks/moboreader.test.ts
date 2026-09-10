@@ -15,6 +15,7 @@ import {
   resolveMoboreaderPreviewRuntimeConfig,
   validateMoboreaderCatalogScanInput,
 } from "@/lib/tasks";
+import { resolveChannelLanguage } from "@/lib/locale/channel-language";
 import { encryptCredentialSecretForWorker } from "../../../worker/credentials/crypto";
 import {
   createMoboreaderCatalogHandler,
@@ -22,6 +23,7 @@ import {
   createMoboreaderWorkerHandlers,
   determineMoboreaderCatalogStopReason,
   parseMoboreaderCatalogPayload,
+  pickBookSourceLocale,
 } from "../../../worker/handlers/moboreader";
 
 const validInput = {
@@ -516,5 +518,31 @@ describe("MoboReader preview enqueue: chunked id lookup (C-15)", () => {
     expect(findManyCallSizes.length).toBeGreaterThan(1);
     for (const size of findManyCallSizes) expect(size).toBeLessThanOrEqual(ID_IN_LIST_CHUNK_SIZE);
     expect(findManyCallSizes.reduce((a, b) => a + b, 0)).toBe(40_000);
+  });
+});
+
+describe("pickBookSourceLocale · L10N P1 write-site invariant", () => {
+  it("resolved code → the resolved locale string, never a literal \"unknown\"", () => {
+    const resolution = resolveChannelLanguage({ sourceLanguageCode: "3" });
+    expect(pickBookSourceLocale(resolution, new Set())).toBe("en");
+  });
+
+  it("unresolved code (e.g. 19/20, MAPPING_EVIDENCE_MISSING) → null, not the string \"unknown\"", () => {
+    for (const code of ["19", "20", "1"]) {
+      const resolution = resolveChannelLanguage({ sourceLanguageCode: code });
+      const sourceLocale = pickBookSourceLocale(resolution, new Set());
+      expect(sourceLocale).toBeNull();
+      expect(sourceLocale).not.toBe("unknown");
+    }
+  });
+
+  it("a suspended code is force-nulled even though resolveChannelLanguage itself found a mapping", () => {
+    const resolution = resolveChannelLanguage({ sourceLanguageCode: "3" }); // resolves to "en"
+    expect(pickBookSourceLocale(resolution, new Set(["3"]))).toBeNull();
+  });
+
+  it("suspension only affects the matching sourceLanguageCode, not others in the same set", () => {
+    const resolution = resolveChannelLanguage({ sourceLanguageCode: "3" });
+    expect(pickBookSourceLocale(resolution, new Set(["7", "9"]))).toBe("en");
   });
 });

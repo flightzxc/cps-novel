@@ -563,7 +563,7 @@ describe.skipIf(!enabled).sequential("P2-05 PostgreSQL 16.14 write paths", () =>
     expect(await consume({ ...adapter(), listBooks: async () => response })).toBe(true);
 
     const source = await owner.novelSourceItem.findUniqueOrThrow({ where: { id: linked.source.id } });
-    expect(source.sourceLocale).toBe(resolveSiteLocale("3", "英语"));
+    expect(source.sourceLocale).toBe(resolveSiteLocale("3", "英语").locale);
     expect(JSON.stringify(source.rawPayload)).not.toContain(secretCode);
     expect(JSON.stringify(source.rawPayload)).not.toContain(secretUrl);
     expect(source.rawPayload).toMatchObject({
