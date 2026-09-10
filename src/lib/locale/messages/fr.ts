@@ -104,7 +104,10 @@ const messages = {
     measureWide: "Large",
   },
   collection: {
-    workCount: "Œuvres : {count}",
+    // Owner 拍板 2026-09-10: plural ICU (one/many/other), wording unchanged
+    // from the prior bare translation — only the singular `Œuvre` branch is
+    // new; `many` shares `other`'s text (same plural noun form in French).
+    workCount: "{count, plural, one {Œuvre : {count}} many {Œuvres : {count}} other {Œuvres : {count}}}",
     empty: "Aucune œuvre à lire ici pour le moment.",
     allWorksTitle: "Toutes les œuvres",
     allWorksDescription: "Œuvres actuellement disponibles à la lecture sur ce site.",

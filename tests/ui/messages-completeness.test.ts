@@ -87,8 +87,25 @@ type InspectResult =
   | { parseError: string }
   | { args: Set<string>; plurals: PluralInfo[]; banned: string[] };
 
-/** ICU node types this gate allows to appear anywhere in a catalog value. Everything else (select/selectordinal/number/date/time/tag) is banned — see the `banned` collection below. */
-const ALLOWED_TYPES: ReadonlySet<TYPE> = new Set([TYPE.literal, TYPE.argument, TYPE.plural, TYPE.pound]);
+/**
+ * ICU node types this gate allows to appear anywhere in a catalog value.
+ * Everything else (select/selectordinal/number/date/time/tag) is banned —
+ * see the `banned` collection below.
+ *
+ * `TYPE.pound` (the bare `#` element, ICU shorthand for "substitute the
+ * plural's own number here") is deliberately *not* in this set — Owner
+ * 拍板 2026-09-10: every plural branch must spell out `{count}` instead of
+ * `#`, so the catalog stays greppable/diffable by argument name and every
+ * branch's number formatting goes through the one documented path
+ * (`{count}` substitution), not a second implicit one. `walk()` below still
+ * recurses into a plural node's branches (`for (const option of
+ * Object.values(node.options)) walk(option.value)`), so a `#` living inside
+ * a branch reaches this same allow/ban check like any other node — the
+ * generic `if (!ALLOWED_TYPES.has(node.type))` branch below catches it and
+ * reports it as `"pound"` (via `TYPE_NAME`), exactly like any other banned
+ * ICU form. No separate pound-specific check was needed.
+ */
+const ALLOWED_TYPES: ReadonlySet<TYPE> = new Set([TYPE.literal, TYPE.argument, TYPE.plural]);
 const TYPE_NAME: Readonly<Record<number, string>> = {
   [TYPE.literal]: "literal",
   [TYPE.argument]: "argument",
@@ -318,8 +335,9 @@ describe("message catalog completeness (all 15 registered locales)", () => {
    * 施工工单_I18N_复数能力 §5 point 1 / 附录 D: replaces the pre-step-4
    * `ICU_SYNTAX_RE` blanket ban (which rejected `plural` outright — now
    * wrong, catalogs legitimately use it) with an AST walk that allows only
-   * cardinal `plural` among ICU argument forms, plus three related bans
-   * called out in the work order:
+   * cardinal `plural` among ICU argument forms, plus four related bans
+   * called out in the work order (the fourth — `#` — added by Owner 拍板
+   * 2026-09-10, 承诺句英文口径 item 6):
    *
    *  - `select` / `selectordinal` / `number` / `date` / `time` / tag —
    *    forms `t()` never supported and still doesn't (施工工单 §5.1 point 1;
@@ -330,13 +348,20 @@ describe("message catalog completeness (all 15 registered locales)", () => {
    *    exactly `N` a *second*, higher-priority route to a branch alongside
    *    its CLDR category, which would make the "categories match exactly,
    *    no more no less" gate below meaningless (施工工单 §5.1 point 1).
+   *  - `#` (the ICU `pound` element) inside a plural branch — legal ICU
+   *    shorthand for "insert the plural's own number here," but a second,
+   *    silent path to number substitution alongside `{count}`. Every
+   *    catalog branch must spell out `{count}` instead (Owner 拍板
+   *    2026-09-10) — `ALLOWED_TYPES` above no longer includes `TYPE.pound`,
+   *    so `walk()`'s existing recursion into plural branches routes any `#`
+   *    through the same generic ban path as `select`/`tag`/etc.
    *  - doubled apostrophe `''` — ICU's escape for a literal apostrophe
    *    (`don''t` → `don't`). No catalog value uses it today (施工工单
    *    §3.2), and banning it now keeps that true, since it is a second,
    *    behaviorally-different way to write what a plain `'` already writes
    *    correctly under formatjs's DOUBLE_OPTIONAL apostrophe rule.
    */
-  it.each(SITE_LOCALES)("%s: no banned ICU form (only cardinal plural allowed; select/selectordinal/number/date/time/tag, `=N` exact-match branches, and doubled apostrophes are banned)", (locale) => {
+  it.each(SITE_LOCALES)("%s: no banned ICU form (only cardinal plural allowed; select/selectordinal/number/date/time/tag, `=N` exact-match branches, `#` inside a plural branch, and doubled apostrophes are banned)", (locale) => {
     const leaves = flattenLeaves(CATALOGS[locale]);
     const offenders: string[] = [];
     for (const [key, value] of leaves) {
@@ -359,6 +384,39 @@ describe("message catalog completeness (all 15 registered locales)", () => {
       }
     }
     expect(offenders).toEqual([]);
+  });
+
+  /**
+   * Owner 拍板 2026-09-10 (承诺句英文口径 item 6) — the red-proof half of
+   * the `#`-inside-plural ban directly above: exercises `inspect()` on a
+   * synthetic message rather than planting a `#` in a real catalog file
+   * (which would need reverting immediately after). Confirms the ban fires
+   * exactly where it should (inside a plural branch), stays silent where it
+   * shouldn't (a literal `#` outside any plural has no special ICU meaning
+   * and is plain text), and that `{count}` — the required replacement —
+   * never trips it.
+   */
+  describe("`#` inside a plural branch — red-proof for the ban added above", () => {
+    it("a plural branch using `#` is reported as a banned `pound` form", () => {
+      const result = inspect("{count, plural, one {# x} other {# y}}");
+      expect("parseError" in result).toBe(false);
+      if ("parseError" in result) return;
+      expect(result.banned).toEqual(["pound", "pound"]);
+    });
+
+    it("the same message rewritten with `{count}` instead of `#` is clean (no banned forms)", () => {
+      const result = inspect("{count, plural, one {{count} x} other {{count} y}}");
+      expect("parseError" in result).toBe(false);
+      if ("parseError" in result) return;
+      expect(result.banned).toEqual([]);
+    });
+
+    it("a literal `#` outside any plural is plain text, not banned", () => {
+      const result = inspect("Room #{count}");
+      expect("parseError" in result).toBe(false);
+      if ("parseError" in result) return;
+      expect(result.banned).toEqual([]);
+    });
   });
 
   /**

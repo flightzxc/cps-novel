@@ -102,7 +102,9 @@ const messages = {
     measureWide: "Breit",
   },
   collection: {
-    workCount: "Werke: {count}",
+    // Owner 拍板 2026-09-10: plural ICU (one/other), wording unchanged from
+    // the prior bare translation — only the singular `Werk` branch is new.
+    workCount: "{count, plural, one {Werk: {count}} other {Werke: {count}}}",
     empty: "Hier gibt es noch keine Werke zu lesen.",
     allWorksTitle: "Alle Werke",
     allWorksDescription: "Werke, die derzeit auf dieser Website gelesen werden können.",

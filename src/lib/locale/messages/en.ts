@@ -104,7 +104,9 @@ export const en = {
     measureWide: "Wide",
   },
   collection: {
-    workCount: "{count} works",
+    // Owner 拍板 2026-09-10: plural ICU, verbatim per Owner's own text —
+    // the `one` branch hardcodes "1 work" rather than echoing {count}.
+    workCount: "{count, plural, one {1 work} other {{count} works}}",
     empty: "No works to read here yet.",
     allWorksTitle: "All works",
     allWorksDescription: "Works currently available to read on this site.",
