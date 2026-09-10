@@ -21,8 +21,8 @@ const schemaSource = readFileSync(resolve(root, "prisma/schema.prisma"), "utf8")
  * all: the very first row fails and rolls back the whole transaction.
  *
  * This file is a general, self-updating guard against the same shape of
- * gap recurring anywhere in `worker_app`'s or `scheduler_app`'s real
- * (executed) Prisma write surface -- not a one-off pin on
+ * gap recurring anywhere in `worker_app`'s, `web_app`'s, or `scheduler_app`'s
+ * real (executed) Prisma write surface -- not a one-off pin on
  * `home_carousel_change_log`. It:
  *
  *   1. Parses `infra/postgres/grants.sql` into a per-role
@@ -32,12 +32,15 @@ const schemaSource = readFileSync(resolve(root, "prisma/schema.prisma"), "utf8")
  *      a column-scoped SELECT that is missing just one RETURNING column is
  *      a real but separate risk this file does not attempt to catch).
  *   2. Walks the real import graph starting from every file under
- *      `worker/` (`worker_app`'s entrypoint set) -- not a hand-maintained
- *      file list -- resolving relative imports and the `@/*` -> `src/*`
- *      tsconfig alias, so a new file added to worker's call graph is
- *      picked up automatically. (`scheduler_app`'s write surface is
- *      covered separately below; see the "Scoped to worker_app only"
- *      paragraph.)
+ *      `worker/` (`worker_app`'s entrypoint set) -- and, in the second
+ *      `describe` block below, from every file under `src/app/(admin)/`
+ *      and `src/app/api/admin/` (`web_app`'s Server Action / route entrypoint
+ *      set, i.e. everything Next.js can reach for the admin surface) -- not
+ *      a hand-maintained file list -- resolving relative imports and the
+ *      `@/*` -> `src/*` tsconfig alias, so a new file added to either call
+ *      graph is picked up automatically. (`scheduler_app`'s write surface is
+ *      covered separately below; see the "Scoped to worker_app and web_app,
+ *      not scheduler_app" paragraph.)
  *   3. Scans every reachable file for `<prismaAccessor>.create(` /
  *      `.update(` / `.upsert(` / `.delete(` / `.createManyAndReturn(` --
  *      `createMany`/`updateMany`/`deleteMany` are deliberately excluded:
@@ -46,7 +49,15 @@ const schemaSource = readFileSync(resolve(root, "prisma/schema.prisma"), "utf8")
  *      risk.
  *   4. Asserts every table any such call site's accessor maps to (via
  *      `prisma/schema.prisma`'s own `@@map`) has `select: true` for that
- *      role in the grants.sql parse from step 1.
+ *      role in the grants.sql parse from step 1. For `web_app` the second
+ *      `describe` block also asserts `hasAnyWrite` (INSERT/UPDATE/DELETE --
+ *      whichever the role already needs, matching the `hasAnyWrite` helper
+ *      the `scheduler_app` narrow pin below already established) is `true`,
+ *      not just SELECT -- `web_app`'s write surface was largely ungranted
+ *      before this file's own follow-up fix (`home_carousel_change_log` had
+ *      SELECT but no INSERT; the three `article_novel_rebind_*` tables had
+ *      neither), so checking SELECT alone would have passed vacuously on
+ *      exactly the gaps this change closes.
  *
  * Distinguishes from the existing grants guards in this directory:
  * `active-locales-grants.test.ts` checks `scheduler_app`'s *column*-level
@@ -54,33 +65,57 @@ const schemaSource = readFileSync(resolve(root, "prisma/schema.prisma"), "utf8")
  * `carousel-grants.test.ts` pins the exact grant text for the home-carousel
  * feature's five tables. Neither one is about RETURNING, and neither
  * generalizes past the tables/roles it names. This file is the general
- * "write implies SELECT" invariant, computed fresh from the real code and
- * the real grants file every run.
+ * "write implies (SELECT, and for web_app also the matching write grant)"
+ * invariant, computed fresh from the real code and the real grants file
+ * every run.
  *
- * Scoped to `worker_app` only, deliberately: a plain file-level BFS (no
- * per-declaration slicing) is precise there -- every table it flags below
- * really is written by worker-reachable code, confirmed against the full
- * audit in this change's construction-order report, zero false positives.
- * The same file-level BFS over `scheduler/` produces one false positive
- * (`operation_audit`, via `src/server/home-carousel/service.ts`'s
- * `updateHomeCarouselConfig`/`upsertHomeCarouselManualSlot` -- web_app-only
- * functions that merely happen to share a file with the `getHomeCarouselConfig`
- * export `scheduler/index.ts` actually imports) because Prisma call sites in
- * a file scheduler reaches are not necessarily on a code path scheduler's
- * `main()` itself executes. Fixing that precisely needs per-declaration
- * import-name slicing (a full mini bundler's worth of work: default/
- * namespace imports, `export { x } from` re-export chains through barrel
- * files, `as` aliasing) that `active-locales-grants.test.ts` already built
- * and hand-verified for exactly this purpose on scheduler's *read* surface
- * (`SCHEDULER_PRISMA_SURFACE`). Duplicating that machinery here for the
- * write side would violate this task's own "not overlapping" instruction
- * for no new coverage: scheduler_app's actual write surface is `schedule_run`/
+ * Scoped to `worker_app` and `web_app`, not `scheduler_app`, deliberately: a
+ * plain file-level BFS (no per-declaration slicing) is precise for the first
+ * two -- every table either flags below really is written by that role's
+ * reachable code -- but each has exactly one documented false positive from
+ * the same underlying limitation (a shared file pulls in a Prisma call site
+ * that belongs to a *different* process's function, not the scanning
+ * process's own):
+ *   - `worker_app` via `scheduler/`: `operation_audit`, via
+ *     `src/server/home-carousel/service.ts`'s `updateHomeCarouselConfig`/
+ *     `upsertHomeCarouselManualSlot` -- web_app-only functions that merely
+ *     happen to share a file with the `getHomeCarouselConfig` export
+ *     `scheduler/index.ts` actually imports. (This is why `scheduler_app`
+ *     itself is not BFS-scanned at all below -- see the next paragraph.)
+ *   - `web_app` via `src/app/(admin)/home-carousel/`: `home_carousel_auto_batch`
+ *     (and, for the same reason, `home_carousel_auto_candidate`/
+ *     `home_carousel_serving`, except those two are never flagged in the
+ *     first place because their only writes are `createMany`/`deleteMany`,
+ *     outside this file's scanned method set), via
+ *     `src/server/home-carousel/service.ts`'s `computeHomeCarouselInTx` --
+ *     reachable ONLY from `worker/handlers/home-carousel.ts`'s
+ *     `createHomeCarouselHandler`, never from any `web_app`-callable export
+ *     in the same file (confirmed: `grep -rl computeHomeCarouselInTx src/
+ *     worker/ scheduler/` returns only `service.ts`'s own definition and
+ *     `worker/handlers/home-carousel.ts`'s call site). See
+ *     `WEB_APP_WRITE_EXEMPTIONS` below for the registered, reasoned
+ *     exemption (explicit per this task's own instruction not to silently
+ *     skip a false positive).
+ * Fixing either precisely needs per-declaration import-name slicing (a full
+ * mini bundler's worth of work: default/namespace imports, `export { x }
+ * from` re-export chains through barrel files, `as` aliasing) that
+ * `active-locales-grants.test.ts` already built and hand-verified for
+ * exactly this purpose on scheduler's *read* surface
+ * (`SCHEDULER_PRISMA_SURFACE`). Duplicating that machinery here would
+ * violate this task's own "not overlapping" instruction for no new
+ * coverage: `scheduler_app`'s actual write surface is `schedule_run`/
  * `cron_run`/`generic_task`/`generic_task_item` only (`src/lib/tasks/
  * scheduler.ts`, invoked from `scheduler/index.ts`'s `main()` via
  * `enqueueScheduledTask`/`runSchedulerOnce`), and grants.sql already
  * self-grants scheduler_app `SELECT, INSERT, UPDATE` on exactly those four
  * tables in one statement -- confirmed by manual audit (this change's
- * report), not by an automated scan here.
+ * report), not by an automated scan here. `article_novel_rebind_batch_item`
+ * gets the same narrow-pin treatment for a different reason: every write to
+ * it in this repo is `createMany`/`updateMany` (never bare `create`/
+ * `update`), which this file's BFS deliberately never flags (see point 3
+ * above) -- so it needs a hand-verified pin, not because a shared-file BFS
+ * false positive needs suppressing, but because the BFS's own method scope
+ * has nothing to say about it either way.
  */
 
 // ---------------------------------------------------------------------------
@@ -318,5 +353,123 @@ describe("grants.sql RETURNING invariant: any table a role writes via create/upd
     expect(workerWrites.has("home_carousel_change_log"), "expected computeHomeCarouselInTx's homeCarouselChangeLog.create() to be reachable from worker/").toBe(true);
     expect(workerWrites.has("indexnow_outbox"), "expected indexnow-delivery.ts's indexNowOutbox.update() to be reachable from worker/").toBe(true);
     expect(workerWrites.has("indexnow_outbox_attempt"), "expected indexnow-delivery.ts's indexNowOutboxAttempt.create() to be reachable from worker/").toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// web_app coverage (grants-returning follow-up, X8 轮 2c 后续): same BFS +
+// scan machinery as worker_app above, rooted at web_app's own entrypoint set
+// instead of worker/'s.
+// ---------------------------------------------------------------------------
+
+/**
+ * `src/app/(admin)/**` (Server Actions and pages under the admin route
+ * group) and `src/app/api/admin/**` (admin API routes, including
+ * `_lib/deps.ts`'s shared `prisma` client every action above imports) are
+ * together `web_app`'s complete reachable-from-a-request entrypoint set for
+ * the admin surface -- there is no third directory a Next.js admin request
+ * can start from. Both root dirs are walked by the same `reachableFiles`
+ * BFS `workerFiles` above uses; nothing about the BFS itself is web_app-
+ * specific.
+ */
+const webAppFiles = reachableFiles(["src/app/(admin)", "src/app/api/admin"]);
+const webAppWrites = detectWriteTables(webAppFiles);
+
+/**
+ * Registered, reasoned exemptions for tables the BFS above flags as
+ * "web_app-reachable write" that are not actually written by web_app --
+ * per this task's own instruction, false positives are declared here with
+ * a reason, never silently filtered out inline. Each entry is checked
+ * against the live scan below (not just declared and forgotten): the test
+ * suite asserts the table really is present in `webAppWrites` (so a
+ * stale/no-longer-applicable exemption would itself go red) and that
+ * `web_app` truly holds no write grant on it (so the exemption cannot mask
+ * a real, since-introduced gap).
+ */
+const WEB_APP_WRITE_EXEMPTIONS: ReadonlyArray<{ readonly table: string; readonly reason: string }> = [
+  {
+    table: "home_carousel_auto_batch",
+    reason:
+      "src/server/home-carousel/service.ts is imported by web_app's src/app/(admin)/home-carousel/_actions.ts " +
+      "(for updateHomeCarouselConfig/upsertHomeCarouselManualSlot/deleteHomeCarouselManualSlot/enqueueHomeCarouselCompute), " +
+      "but the file's only .create()/.update() calls on home_carousel_auto_batch live inside computeHomeCarouselInTx " +
+      "(service.ts, a worker-only function), reachable ONLY from worker/handlers/home-carousel.ts's createHomeCarouselHandler. " +
+      "No web_app-callable export in this file ever calls computeHomeCarouselInTx -- confirmed by " +
+      "`grep -rl computeHomeCarouselInTx src/ worker/ scheduler/`, which returns only service.ts's own definition and " +
+      "worker/handlers/home-carousel.ts's call site. web_app correctly holds no INSERT/UPDATE grant on this table " +
+      "(grants.sql's home_carousel_auto_batch INSERT/UPDATE is worker_app-only); this is a file-level-BFS false positive, " +
+      "the same class of gap as the operation_audit/scheduler_app false positive documented in this file's header comment.",
+  },
+];
+const webAppExemptTables = new Set(WEB_APP_WRITE_EXEMPTIONS.map((e) => e.table));
+
+describe("grants.sql RETURNING invariant, web_app entrypoints (src/app/(admin)/** + src/app/api/admin/**)", () => {
+  it("web_app's real (imported) Prisma write surface is non-trivial -- sanity check that the import-graph walk actually found something", () => {
+    // Same canary shape as the worker_app sanity check above: `article` and
+    // `generic_task` are long-standing, unrelated-to-this-fix web_app
+    // writes (article CRUD, task-admin enqueueing), cheap to pin so a
+    // silently-broken BFS/regex (e.g. a tsconfig alias change, or the
+    // `(admin)` route-group directory getting renamed) can't make every
+    // assertion below pass vacuously.
+    expect(webAppWrites.get("article")?.size ?? 0).toBeGreaterThan(0);
+    expect(webAppWrites.get("generic_task")?.size ?? 0).toBeGreaterThan(0);
+  });
+
+  it("web_app has both SELECT and its matching INSERT/UPDATE/DELETE grant on every non-exempt table its real code creates/updates/upserts/deletes", () => {
+    for (const [table, evidence] of webAppWrites) {
+      if (webAppExemptTables.has(table)) continue;
+      expect(
+        hasSelect("web_app", table),
+        `web_app's reachable code calls create/update/upsert/delete on "${table}" (e.g. ${[...evidence][0]}) but infra/postgres/grants.sql grants web_app no SELECT there -- Prisma's implicit RETURNING will fail with "permission denied for table ${table}" on the very first such call`,
+      ).toBe(true);
+      expect(
+        hasAnyWrite("web_app", table),
+        `web_app's reachable code calls create/update/upsert/delete on "${table}" (e.g. ${[...evidence][0]}) but infra/postgres/grants.sql grants web_app no INSERT/UPDATE/DELETE there at all -- the write itself, not just its RETURNING clause, will fail with "permission denied for table ${table}"`,
+      ).toBe(true);
+    }
+  });
+
+  it("every declared web_app write exemption is a live, correctly-reasoned false positive -- not stale, and not masking a real gap", () => {
+    for (const { table, reason } of WEB_APP_WRITE_EXEMPTIONS) {
+      expect(webAppWrites.has(table), `exemption for "${table}" is declared but the BFS no longer flags it at all -- the exemption is stale and should be removed (reason on file: ${reason})`).toBe(true);
+      expect(hasAnyWrite("web_app", table), `exemption for "${table}" assumes web_app has no write grant there, but grants.sql now grants one -- either the exemption is obsolete (promote it to a real assertion) or this is a genuine new gap (reason on file: ${reason})`).toBe(false);
+    }
+  });
+
+  it("locks in this follow-up's two fixes: web_app now has INSERT on home_carousel_change_log, and SELECT+INSERT+UPDATE+DELETE (per-table, matching the real call graph) on the three article_novel_rebind_* tables", () => {
+    expect(hasSelect("web_app", "home_carousel_change_log"), "web_app already had SELECT on home_carousel_change_log before this follow-up").toBe(true);
+    expect(hasAnyWrite("web_app", "home_carousel_change_log"), "web_app is expected to now have INSERT on home_carousel_change_log").toBe(true);
+
+    for (const table of ["article_novel_rebind_preview", "article_novel_rebind_batch"]) {
+      expect(hasSelect("web_app", table), `web_app is expected to now have SELECT on ${table}`).toBe(true);
+      expect(hasAnyWrite("web_app", table), `web_app is expected to now have a write grant on ${table}`).toBe(true);
+    }
+    // article_novel_rebind_preview: create() + deleteMany() only, no update().
+    expect(grantsByRole.get("web_app")?.get("article_novel_rebind_preview")?.insert).toBe(true);
+    expect(grantsByRole.get("web_app")?.get("article_novel_rebind_preview")?.delete).toBe(true);
+    expect(grantsByRole.get("web_app")?.get("article_novel_rebind_preview")?.update).toBe(false);
+    // article_novel_rebind_batch: create() + updateMany() only, no delete().
+    expect(grantsByRole.get("web_app")?.get("article_novel_rebind_batch")?.insert).toBe(true);
+    expect(grantsByRole.get("web_app")?.get("article_novel_rebind_batch")?.update).toBe(true);
+    expect(grantsByRole.get("web_app")?.get("article_novel_rebind_batch")?.delete).toBe(false);
+  });
+
+  it("confirms the live call sites this follow-up unblocks are still detected by the scan (home_carousel_change_log via upsertHomeCarouselManualSlot/deleteHomeCarouselManualSlot, article_novel_rebind_preview via buildRebindBatchPreview, article_novel_rebind_batch via submitRebindBatch)", () => {
+    expect(webAppWrites.has("home_carousel_change_log"), "expected upsertHomeCarouselManualSlot's/deleteHomeCarouselManualSlot's homeCarouselChangeLog.create() to be reachable from src/app/(admin)/").toBe(true);
+    expect(webAppWrites.has("article_novel_rebind_preview"), "expected buildRebindBatchPreview's articleNovelRebindPreview.create() to be reachable from src/app/(admin)/").toBe(true);
+    expect(webAppWrites.has("article_novel_rebind_batch"), "expected submitRebindBatch's articleNovelRebindBatch.create() to be reachable from src/app/(admin)/").toBe(true);
+  });
+
+  it("article_novel_rebind_batch_item: narrow, hand-verified pin -- every write to it (createMany/updateMany only, batch.ts:237,319,351,374,391) is outside this file's BFS-scanned method set (see header comment), so it needs the same treatment as scheduler_app's known write surface above, not a BFS assertion", () => {
+    expect(hasSelect("web_app", "article_novel_rebind_batch_item"), "web_app is expected to have SELECT on article_novel_rebind_batch_item").toBe(true);
+    expect(grantsByRole.get("web_app")?.get("article_novel_rebind_batch_item")?.insert, "web_app is expected to have INSERT on article_novel_rebind_batch_item (createMany at batch.ts:237)").toBe(true);
+    expect(grantsByRole.get("web_app")?.get("article_novel_rebind_batch_item")?.update, "web_app is expected to have UPDATE on article_novel_rebind_batch_item (updateMany at batch.ts:319,351,374,391)").toBe(true);
+    expect(grantsByRole.get("web_app")?.get("article_novel_rebind_batch_item")?.delete, "article_novel_rebind_batch_item has no delete call site anywhere in this repo -- web_app should not have DELETE here").toBe(false);
+  });
+
+  it("web_app's analyst_ro-parity SELECT convention holds for the three article_novel_rebind_* tables, matching every other web_app-owned business table in this file", () => {
+    for (const table of ["article_novel_rebind_preview", "article_novel_rebind_batch", "article_novel_rebind_batch_item"]) {
+      expect(hasSelect("analyst_ro", table), `analyst_ro is expected to have SELECT on ${table}, matching web_app's SELECT there`).toBe(true);
+    }
   });
 });

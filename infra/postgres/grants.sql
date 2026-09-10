@@ -180,6 +180,25 @@ GRANT INSERT, UPDATE ON TABLE
   channel_sync_task, channel_sync_task_item, generic_task, generic_task_item, schedule_run,
   cron_run, indexnow_outbox
 TO web_app;
+-- Grants-returning follow-up (X8 轮 2c, `fix/grants-returning-select`'s own
+-- audit flagged this and deliberately deferred it -- see this file's
+-- commit history and database-governance.md's X8 轮 2c changelog row,
+-- "追加发现、未在本行修复" item (a)): `home_carousel_change_log` was left
+-- out of the INSERT/UPDATE list above on purpose (it is append-only, same
+-- shape as `operation_audit` just below -- INSERT only, no UPDATE ever),
+-- but it was never granted INSERT for `web_app` at all.
+-- `upsertHomeCarouselManualSlot`/`deleteHomeCarouselManualSlot`
+-- (src/server/home-carousel/service.ts:212,235, reached only via
+-- src/app/(admin)/home-carousel/_actions.ts's
+-- saveManualCarouselSlotAction/deleteManualCarouselSlotAction, i.e.
+-- web_app) each call `tx.homeCarouselChangeLog.create()` inside the same
+-- `$transaction` that writes `home_carousel_manual_slot` -- with zero
+-- INSERT grant this fails immediately with `permission denied for table
+-- home_carousel_change_log` (confirmed read-only against X8 uat before
+-- this fix; the RETURNING mechanism from the `worker_app` fix above is not
+-- even reached). `web_app` already has table-level SELECT on this table
+-- (see the SELECT list above), so INSERT alone closes the gap.
+GRANT INSERT ON TABLE home_carousel_change_log TO web_app;
 -- Content creation links an already-sanitized source row to its new Novel.
 -- Keep this column-scoped: Web must not be able to alter raw_payload or any
 -- other upstream evidence maintained exclusively by Worker.
@@ -201,6 +220,63 @@ GRANT INSERT (
   channel_account_id, credential_id, actor_type, actor_id, action,
   old_fingerprint, new_fingerprint, reason, detail, created_at
 ) ON credential_change_log TO web_app;
+
+-- C-30 / FEATURE_ARTICLE_NOVEL_REBIND (X8 轮 2c 后续, `fix/grants-returning-
+-- select`'s own audit flagged this and deliberately deferred it -- see
+-- database-governance.md's X8 轮 2c changelog row, "追加发现、未在本行修复"
+-- item (b)): `article_novel_rebind_preview`/`_batch`/`_batch_item` had zero
+-- grants of any kind for any role, even though `src/server/article-rebind/
+-- {preview,batch}.ts` is fully implemented and already wired into
+-- `src/app/(admin)/articles/_actions.ts` -- the feature is held back only
+-- by `FEATURE_ARTICLE_NOVEL_REBIND` (fail-closed; see
+-- `isArticleNovelRebindEnabled`/`isArticleNovelRebindWriteAllowed`,
+-- `src/server/article-rebind/guards.ts`), not by grants. Every call site
+-- runs through the shared `web_app` PrismaClient exported by
+-- `src/app/api/admin/_lib/deps.ts` (`_actions.ts` imports `prisma` from
+-- there and passes it into every rebind function it calls, e.g.
+-- `submitRebindBatch(prisma, ...)`) -- there is no worker/scheduler
+-- entrypoint anywhere in this feature's call graph (confirmed: no file
+-- under `worker/` or `scheduler/` references anything rebind-related).
+-- `database-schema-dictionary.jsonl` already records
+-- `read_roles:[web_app,analyst_ro]` / `write_roles:[migration_owner,
+-- web_app]` for all three tables at both table- and field-level (verified
+-- before this change; not modified by it, same "grants.sql trails the
+-- dictionary's already-declared intent" shape as the two RETURNING gaps
+-- closed above). Per-table privilege set below matches the real call
+-- graph, not a blanket INSERT/UPDATE/DELETE for all three:
+--   - article_novel_rebind_preview: `buildRebindBatchPreview`'s
+--     `.create()` (preview.ts:749) and `cleanupExpiredRebindPreviews`'s
+--     `.deleteMany()` (preview.ts:889, invoked from `submitRebindBatch`,
+--     batch.ts:672) -- INSERT + DELETE; no `.update()`/`.upsert()`
+--     anywhere on this model.
+--   - article_novel_rebind_batch: `submitRebindBatch`'s `.create()`
+--     (batch.ts:218) plus seven `.updateMany()` lease/status-transition
+--     call sites (batch.ts:275,284,289,302,534,538,547) -- INSERT +
+--     UPDATE; no `.delete()`/`.deleteMany()` anywhere on this model.
+--   - article_novel_rebind_batch_item: `submitRebindBatch`'s
+--     `.createMany()` (batch.ts:237, no RETURNING risk -- see the
+--     RETURNING-fix comment above for why createMany/updateMany/deleteMany
+--     are exempt) plus four `.updateMany()` claim/fence/terminal call
+--     sites (batch.ts:319,351,374,391) -- INSERT + UPDATE; no
+--     `.delete()`/`.deleteMany()` anywhere on this model.
+-- All three also need SELECT for `web_app`, for two independent reasons:
+-- every function above reads via findUnique/findFirst/findMany before or
+-- interleaved with its writes (ordinary SELECT, nothing to do with
+-- RETURNING), and each table's own `.create()` call additionally carries
+-- the implicit RETURNING this file's header comment describes (its
+-- `.updateMany()` calls do not -- see that same comment for why -- but the
+-- plain reads already require SELECT regardless). `analyst_ro` gets the
+-- same SELECT, matching this file's existing web_app+analyst_ro pairing
+-- convention for every other web_app-owned business table.
+GRANT SELECT ON TABLE article_novel_rebind_preview, article_novel_rebind_batch,
+  article_novel_rebind_batch_item
+TO web_app, analyst_ro;
+GRANT INSERT ON TABLE article_novel_rebind_preview, article_novel_rebind_batch,
+  article_novel_rebind_batch_item
+TO web_app;
+GRANT UPDATE ON TABLE article_novel_rebind_batch, article_novel_rebind_batch_item
+TO web_app;
+GRANT DELETE ON TABLE article_novel_rebind_preview TO web_app;
 
 -- Worker can mutate business/task state. Append-only tables are INSERT-only;
 -- hard delete is limited to withdrawn chapter content.
