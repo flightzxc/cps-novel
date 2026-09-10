@@ -58,8 +58,21 @@ type ActiveLocalesDb = PrismaClient | Prisma.TransactionClient;
  * Un-cached core query — exported separately from `getActiveLocales` so
  * tests can call it directly against a fixture `db`, bypassing
  * `unstable_cache` entirely (which depends on Next.js request/build-time
- * runtime machinery `vitest` does not provide). Production code should call
- * `getActiveLocales()` below, never this function directly.
+ * runtime machinery `vitest` does not provide).
+ *
+ * L10N P5 (矩阵 #13): that same "no Next.js runtime" reasoning is also why
+ * `scheduler/index.ts`'s standalone process (`node scheduler/index.ts`,
+ * no Next.js request/build-time context of its own) calls THIS function
+ * directly — once per scheduler tick, via its own already-open `PrismaClient`
+ * — instead of `getActiveLocales()`, to resolve the home-carousel cron's
+ * active-locale set (`buildHomeCarouselCronTaskInput`'s own doc comment,
+ * `src/server/home-carousel/service.ts`). Within the Next.js app itself
+ * (any Server Component, Route Handler, or Server Action), still call
+ * `getActiveLocales()` below, never this function directly — the "never"
+ * in the previous version of this comment was written before the
+ * scheduler process existed as a second, legitimately non-Next-runtime
+ * caller class; it was never meant to rule that class out, only to keep
+ * ordinary in-app code on the cached path.
  */
 export async function queryActiveLocales(
   db: ActiveLocalesDb = prisma,

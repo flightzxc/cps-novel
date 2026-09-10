@@ -683,6 +683,53 @@ CPS 参照文件（前者对应 `lib/seo-utils.ts` 的静态 `SUPPORTED_SITE_LOC
 枚举，后者对应 `lib/drama-hreflang.ts` 的静态 `locales` sibling 查询范围）
 ——两者语义不同，登记为两条独立改动，不合并。
 
+### L10N P5 后台运营面 locale 收口 + 轮播按语种（2026-09-11）
+
+依据 `施工提示词_Sonnet_L10N_P5_后台运营面收口与轮播_2026-09-10.md`，矩阵 #13。
+`baseline_commit` 沿用 L10N P1-P4 同一坐标
+`3a76877af27c6247ad94be946b44e9cc5c1cb9ce`（CPS `changdu-sync-panel.tsx`/
+`channel-language.ts` 部分）；轮播部分参照 CPS v7.7 轮播定稿（"locale 白名单
+fail-closed"），该轮定稿不落在 3a76877 这一快照里，逐行 CPS 引用见下表各自
+登记。**未改变**的一点先澄清：P4 交付的 `getActiveLocales()`（`unstable_cache`
+包装的缓存层）本身仍然只有 `SiteChrome.activeLocales → SiteHeader →
+LocaleSwitcher` 这一个消费点——`README.md`/`active-locales.ts` 头注释里那句
+"是动态层唯一消费点"没有被打破，本轮 cron 侧调用的不是它。真正新增的第二个消
+费点是**未缓存核心** `queryActiveLocales`：此前只有测试单独导出调用它
+（绕开 `unstable_cache` 依赖的 Next.js 运行时），`active-locales.ts` 原话是
+"Production code should call `getActiveLocales()` below, **never** this
+function directly"；`scheduler/index.ts`（独立进程，无 Next.js 请求/构建期
+运行时）现在也直接调用它，这处"never"已随本轮改写为区分"应用内代码走缓存
+层"与"非 Next 运行时的独立进程走未缓存核心"两种合法调用方。
+
+| symbol | source_file | source_lines | baseline_commit | port_kind | changed_what | owner |
+| --- | --- | --- | --- | --- | --- | --- |
+| cron 侧按 active locales 逐语种入队（`buildHomeCarouselCronTaskInput`/`buildHomeCarouselScheduleDefinition`，`src/server/home-carousel/service.ts`） | `src/lib/home-carousel-compute.ts`（`runCarouselCronTick`） | `195-280`（`listEligibleLocales`/`for (const locale of locales)` 循环） | CPS v7.7 轮播定稿（非 3a76877 快照内，独立 `git show v7.7.0:...` 读取） | `PATTERN_ONLY` | 只借"cron 按活跃语种集合逐个处理，不是单一硬编码语种"这条语义；不搬 CPS 的具体实现——CPS 用 `node-cron` 直接在应用进程内跑一个 async 回调、循环内联处理每个 locale（无队列），本仓已有独立的 `ScheduleDefinition`/`GenericTask`/Worker 三进程任务队列架构（P1-07 既定），改法是让 `build()` 的 `items[]` 按 active locale 数组展开成多个 `GenericTaskItem`（每语种一条），`worker/handlers/home-carousel.ts` 逐条独立处理——用本仓已有的排队机制表达"多语种"，不是把 CPS 的直接循环搬进来 |
+| cron 幂等键含 locale（`cron:<businessDate>:<locale>`，`computeHomeCarouselInTx`） | 不适用（本仓 `HomeCarouselAutoBatch.uniqueKey` 是本仓自建的幂等机制，CPS 无对应字段） | 不适用 | 不适用 | `PATTERN_ONLY` | 只借"同一 locale 同一天只处理一次，不同 locale 互不影响"这条语义（对应 CPS "每个 locale 各自跑一次 `mergeCarouselServingInTx`"的效果）；具体的 `uniqueKey` 字符串形状是本仓既有 `HomeCarouselAutoBatch` 表设计的自然延伸，不是搬运 |
+| 活跃语种集合来源（`getActiveLocales()`/`queryActiveLocales`，供 cron 与后台页共同使用） | 不适用（复用本仓 L10N P4 已交付的 `active-locales.ts`，非新搬运） | 不适用 | 不适用 | 不适用（复用既有内部接口，非 port） | `scheduler/index.ts` 的 `main()` 调用 `queryActiveLocales(prisma)`（未缓存核心查询），不调用 `unstable_cache` 包装的 `getActiveLocales()`——独立调度器进程没有 Next.js 请求/构建期运行时，`unstable_cache` 依赖该运行时（`active-locales.ts`/`README.md` 原文已明确这是 `queryActiveLocales` 单独导出的理由：给测试与"非 Next 运行时调用方"用）。规划文档原文写的是 `await getActiveLocales()`；本轮按最贴近规划意图但技术可行的方式落地为 `queryActiveLocales(db)` + 关闭捕获快照（同 `getConfig()` 现有模式），已在报告"存疑项"记录 | Claude |
+| worker 语种校验从字面量 `"en"` 改注册表成员判定（`worker/handlers/home-carousel.ts`） | 不适用（本仓既有 handler 自身的既有缺口，非搬运） | 不适用 | 不适用 | 不适用（就地修复，非 port） | 派单未点名这一处，是接线 cron 多语种时发现的直接阻断（否则 worker 会把 cron 新入队的每一条非 `en` item 都判 `home_carousel_payload_invalid`）；改法与本仓已有的 `enqueueHomeCarouselCompute`（手工触发路径）对 `locale` 的校验粒度对齐（`SITE_LOCALES` 成员判定，无更严的闸） | Claude |
+| 同步语种 chip 由 moboreader 码表派生（`CATALOG_SCAN_LANGUAGE_CHIP_OPTIONS`，`catalog-scan-trigger-form.tsx`） | `src/app/(admin)/sync/_components/changdu-sync-panel.tsx` | `765-806`（`sourceLanguageOptions`/`buildLanguageOptions`，按 `getChangduSelectableLanguageOptionsForSourceApp(sourceAppCode)` 派生） | `3a76877af27c6247ad94be946b44e9cc5c1cb9ce` | `PATTERN_ONLY` | 只借"scan chip 是渠道源码表的概念，不是站点语种注册表的概念"这条语义；不搬 CPS 的具体实现——CPS 按 `channelAppKey`/`sourceAppCode` 分支出不同的可选语种子集（`moboreels`/`shortmax`/其余），且对"简体待确认"给一个禁用态占位选项；本仓只有单一上游源（`moboreader`），码表本身已在 L10N P1 落地（`channel-language.ts` 的 `MOBOREADER_LANGUAGE_CODE_TO_LOCALE`，18 码），本轮只是把这张既有表接到 chip 渲染上，不新增任何码表内容；非站点语种（it/fil/ms/tr）不禁用（不同于 CPS 的"简体待确认"禁用态），仍可勾选（`languages[]` 只是任务元数据，upstream 本就返回全部语种，选择只影响本次任务计数），额外标注"仅索引不建内容"文案 | Claude |
+| 模板选项按语种批量查询（`listActiveArticleTemplateOptionsForLocales`，`article-templates/service.ts`；`catalog-sync/page.tsx`、`articles/page.tsx` 调用点） | 不适用（P2 复核 C5-a 内部发现项，无对应 CPS 文件） | 不适用 | 不适用 | 不适用（内部效率修复，非 port） | P2 轮已经把"模板选项按语种"这条语义本身做对了（`listActiveArticleTemplateOptions(prisma, locale)`），本轮只是把 `catalog-sync/page.tsx` 循环调用该函数（每页面 distinct locale 一次查询）收拢成一条 `locale: {in}` 查询，`articles/page.tsx` 同款收口；CPS 单篇路径本就是单条 locale 精确查询，没有"批量收拢"这个中间态可比对 | Claude |
+| 批量创建对话框模板下拉按语种过滤/分组（`batch-create-content-dialog.tsx`） | 不适用（P2 复核 C5-b 内部发现项，无对应 CPS 文件） | 不适用 | 不适用 | 不适用（内部一致性修复，非 port） | 复用本仓 `create-content-dialog.tsx`（单篇创建对话框，P2 轮已交付）已有的"按来源条目派生 locale 过滤模板选项"模式，扩展到批量场景的"选中条目可能跨多个 locale"情形；CPS 批量创建路径的语种处理是"整批一次性校验，不匹配即整批拒绝"（已在 L10N P2 小节登记为 `batch-actions-core.ts:167-183` 的 `PATTERN_ONLY`），与本仓这里"挑选阶段就把跨语种的选项都摆出来，写入阶段仍是逐条各自校验"的 UI 形状不是同一件事，不重复登记 |
+| `deriveLocale` 空白值判定改 `!sourceLocale?.trim()`（`content-creation/service.ts`） | `src/lib/changdu-promote-drama-dry-run.ts` | `531` | `3a76877af27c6247ad94be946b44e9cc5c1cb9ce` | `ADAPT` | 只借"`!source.sourceLocale?.trim()`（可选链 + trim 判空）"这一条件写法本身，不借 CPS 该行所在的多原因累积数组写法（`blockReasons.push(...)`，本函数是单错误码 `throw`，形状已在 L10N P2 登记为 `ADAPT`，本轮不改那条登记，只是把这一处判空条件的严谨度提上来） | Claude |
+| 探针 `--apply` 错误分支保留已捕获原始响应（`applyProbeUnnamedLanguageCodes`，`scripts/l10n/probe-unnamed-language-codes.ts`） | 不适用（本仓自建探针脚本自身的缺口，X-2 实跑发现，无对应 CPS 文件） | 不适用 | 不适用 | 不适用（就地修复，非 port） | 见施工提示词 §4.H；`capturedRaw` 原先声明在 `try` 块内部，`catch` 分支够不到，只能硬编码 `languageFields: {}`——X-2 实跑 20/20 次都落进这个分支（`malformed_payload`），意味着这条探针此前从未真正收集到任何诊断证据。改法是把声明提到 `try` 外部，`catch`/成功路径共享同一套提取逻辑 | Claude |
+
+**存疑项（规划原文 vs 落地方式的偏离，记录不擅自发明）**：施工提示词原文
+"cron 调度遍历 `await getActiveLocales()`"字面点名的是 P4 交付的 `unstable_cache`
+包装函数。`scheduler/index.ts` 是独立进程（`node scheduler/index.ts`），没有
+Next.js 请求/构建期运行时——`active-locales.ts`/`README.md` 自己的头注释已经
+为这个理由单独导出了未缓存核心 `queryActiveLocales`（"so tests can call it
+directly... bypassing `unstable_cache` entirely (which depends on Next.js
+request/build-time runtime machinery vitest does not provide)"），且
+`ScheduleDefinition.build`（`@/lib/tasks/scheduler.ts`）是文档化的同步契约，
+`scheduler/index.ts` 自己的头注释也解释了这是"不改动共享调度器框架"的刻意设
+计。本轮按"改动最小、贴合两处既有设计意图"的方向落地：`build()` 保持同步，
+活跃语种集合通过第二个闭包参数 `getActiveLocales: () => readonly string[]`
+（与既有 `getConfig` 完全同款）注入，`scheduler/index.ts` 的 `main()` 每 tick
+用 `queryActiveLocales(prisma)`（调度器自己已打开的 Prisma 连接）刷新一次快
+照——这不是新发明一层兼容壳，是复用 P4 已经为"非 Next 运行时调用方"专门导出
+的那个函数。`enqueueHomeCarouselCron`（ops 手工强制入队的便捷包装）同理，用
+它自己已有的 `db` 句柄调用 `queryActiveLocales`。
+
 ## 使用说明
 
 - `symbol`：被搬运的具体符号名（函数名/类型名/表名/字段名/组件名等），一行一个符号，不得用文件级粗粒度笼统登记；
