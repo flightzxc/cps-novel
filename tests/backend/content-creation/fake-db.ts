@@ -56,7 +56,11 @@ export type FakeArticle = {
 export type FakeArticleTemplate = {
   id: string;
   templateKey: string;
-  locale: string | null;
+  // L10N P3: `ArticleTemplate.locale` is database-level `NOT NULL` now
+  // (`prisma/schema.prisma`'s `ArticleTemplate.locale String @default("en")`)
+  // — no seeded row can legitimately be a null-locale "all locales"
+  // template any more, so this fake no longer types the column as nullable.
+  locale: string;
   version: number;
   schemaVersion: number;
   status: string;
@@ -344,21 +348,37 @@ export class FakeContentCreationDb {
     this.calls.push("articleTemplate.findFirst");
     const where = args.where;
     /**
-     * L10N P2 fix: `selectActiveArticleTemplate` (`src/server/
-     * article-templates/service.ts`) builds its locale `OR` clause nested
-     * inside a top-level `AND` array (`{ ..., AND: [{ OR: [{locale: X},
-     * {locale: null}] }, ...] }`) — see that function's own "🔴 locale 与
-     * applicableArticleType 各自是一条 OR 子句" comment for why. This fake
-     * used to look only at a top-level `where.OR`, which that real query
-     * shape never sets, so `localeOr` was always `undefined` and every
-     * `findFirst` here silently ignored locale entirely — any seeded
-     * template matched regardless of locale. Reading `where.AND`'s nested
-     * `OR` clauses (in addition to a flat top-level `where.OR`, still
-     * supported for the simpler `createArticleTemplate`/`getArticleTemplate`
-     * call shapes that use neither) makes this fake actually enforce the
-     * same locale filter production does — required for
-     * `template_locale_mismatch` tests to mean anything.
+     * L10N P3 fix: `selectActiveArticleTemplate`/`listActiveArticleTemplateOptions`
+     * (`src/server/article-templates/service.ts`) no longer emit a `locale`
+     * `OR` clause at all — since `ArticleTemplate.locale` is `NOT NULL`,
+     * P3 replaced the old `{ OR: [{locale: X}, {locale: null}] }` wildcard
+     * with a plain equality condition, `{ locale: input.locale }`, pushed as
+     * one element of the top-level `AND` array (`{ ..., AND: [{ locale: X },
+     * ...] }` — see that function's own "L10N P3：`locale` 精确匹配" comment).
+     *
+     * This fake used to look ONLY for `locale` nested inside an `OR` group
+     * (either a top-level `where.OR` or an `AND[].OR`). Since P3 stopped
+     * emitting that shape, `orClauseGroups` was always empty here, so the
+     * locale filter silently degraded to "match any locale" — the exact bug
+     * this fix closes (a `ru` request was matching a seeded `en`/`fr`
+     * template). Collecting plain `{ locale: X }` equality conditions from
+     * both the top level and `AND[]` — in addition to the OR-group form,
+     * still checked below — makes this fake enforce the same locale scoping
+     * production's exact-match query now does.
      */
+    const localeEqualityValues: string[] = [];
+    if (typeof where.locale === "string") localeEqualityValues.push(where.locale);
+    if (Array.isArray(where.AND)) {
+      for (const clause of where.AND as Array<Record<string, unknown>>) {
+        if (typeof clause.locale === "string") localeEqualityValues.push(clause.locale);
+      }
+    }
+
+    // Back-compat only: production has not emitted an `OR`-wrapped locale
+    // clause since P3 (see comment above), but this fake keeps recognizing
+    // the shape so it doesn't silently stop enforcing locale if a caller
+    // ever reintroduces an `OR` form (e.g. a future "also match a fallback
+    // locale" query) without this fake being updated in lockstep.
     const orClauseGroups: Array<Array<{ locale?: string | null }>> = [];
     if (Array.isArray(where.OR)) orClauseGroups.push(where.OR as Array<{ locale?: string | null }>);
     if (Array.isArray(where.AND)) {
@@ -368,11 +388,16 @@ export class FakeContentCreationDb {
     }
     const localeOrGroup = orClauseGroups.find((group) => group.some((entry) => "locale" in entry));
     const localeOr = localeOrGroup?.map((entry) => entry.locale ?? null);
+
+    const hasLocaleFilter = localeEqualityValues.length > 0 || localeOr !== undefined;
+    const matchesLocale = (rowLocale: string | null) =>
+      localeEqualityValues.includes(rowLocale as string) || (localeOr?.includes(rowLocale) ?? false);
+
     const rows = Array.from(this.articleTemplates.values()).filter((row) =>
       row.deletedAt === null &&
       (where.templateKey === undefined || row.templateKey === where.templateKey) &&
       (where.status === undefined || row.status === where.status) &&
-      (localeOr === undefined || localeOr.includes(row.locale)),
+      (!hasLocaleFilter || matchesLocale(row.locale)),
     );
     rows.sort((left, right) => left.createdAt.getTime() - right.createdAt.getTime() || right.version - left.version);
     return rows.length > 0 ? { ...rows[0] } : null;

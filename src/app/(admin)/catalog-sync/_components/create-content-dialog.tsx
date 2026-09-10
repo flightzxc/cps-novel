@@ -202,19 +202,26 @@ export function CreateContentDialog({
    * every distinct `sourceLocale` present on the current page — see that
    * file's own comment), not pre-filtered to this one item. Filtered down
    * to `matchingTemplateOptions` below so the picker only ever offers a
-   * template whose own `locale` actually matches this item's derived
-   * locale (or the `{locale: null}` "all locales" wildcard
-   * `article-templates/service.ts` still honors — P3's territory, not
-   * removed here) — matrix #13's "模板选项按来源条目语种" requirement.
+   * template whose own `locale` exactly matches this item's derived
+   * locale — matrix #13's "模板选项按来源条目语种" requirement.
+   *
+   * L10N P3: dropped the `{locale: null}` "all locales" wildcard branch
+   * this filter used to also accept. `ArticleTemplate.locale` is now
+   * database-level `NOT NULL` (`article-templates/service.ts`'s own
+   * `selectActiveArticleTemplate`/`listActiveArticleTemplateOptions` no
+   * longer emit that `OR` at all — see that file's header comment), so no
+   * row can ever have `locale === null` any more; keeping the wildcard
+   * branch here would have been dead code reintroducing the exact
+   * "generic template" semantics P3 removed from the query layer.
    */
-  templateOptions?: readonly { readonly templateKey: string; readonly locale: string | null; readonly version: number }[];
+  templateOptions?: readonly { readonly templateKey: string; readonly locale: string; readonly version: number }[];
 }) {
   const router = useRouter();
   const dialogRef = useRef<HTMLDialogElement>(null);
   const [stage, setStage] = useState<Stage>({ kind: "loading" });
   const [applying, setApplying] = useState(false);
   const matchingTemplateOptions = templateOptions.filter(
-    (template) => template.locale === null || template.locale === item.sourceLocale,
+    (template) => template.locale === item.sourceLocale,
   );
   const [templateKey, setTemplateKey] = useState(matchingTemplateOptions[0]?.templateKey ?? "system-default-v1");
 

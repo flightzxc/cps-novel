@@ -73,7 +73,10 @@ export function CatalogSyncClient({
   promoClaimGranted: boolean;
   promoClaimBlockedReason: string | null;
   contentCreationBatchMaxSize: number;
-  templateOptions?: readonly { readonly id: string; readonly templateKey: string; readonly locale: string | null; readonly version: number }[];
+  // L10N P3: `locale` is database-level `NOT NULL` now (see
+  // `create-content-dialog.tsx`'s own prop-type comment) — no row this ever
+  // receives can have a null locale, so the type no longer carries `| null`.
+  templateOptions?: readonly { readonly id: string; readonly templateKey: string; readonly locale: string; readonly version: number }[];
 }) {
   const [activeItem, setActiveItem] = useState<SourceItemRow | null>(null);
   const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(new Set());

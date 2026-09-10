@@ -84,9 +84,16 @@ export default async function CatalogSyncPage({
    * (see its own doc comment) is what actually narrows this down to the one
    * locale a given row's dialog needs; this fetch only has to make sure that
    * every locale any row on the page could need is present at all.
-   * Deduplicated by `id` because a `{locale: null}` "all locales" template
-   * (still legal — P3's territory to remove) would otherwise appear once per
-   * distinct locale queried.
+   * L10N P3: `listActiveArticleTemplateOptions` no longer has a
+   * `{locale: null}` "all locales" wildcard branch to match (it's an exact
+   * `locale` equality query now — see that function's own comment), so a
+   * given template row can only ever appear under the one locale it
+   * actually has and this `id`-keyed dedup can no longer find a real
+   * collision. Left in place anyway as cheap, harmless insurance rather
+   * than removed outright — flattening several per-locale arrays into one
+   * list is exactly the shape a future change (e.g. a fallback-locale
+   * query) could reintroduce overlap into without anyone revisiting this
+   * comment first.
    */
   const sourceLocalesOnPage = granted
     ? Array.from(new Set(page?.items.map((item) => item.sourceLocale).filter((locale): locale is string => locale !== null) ?? []))

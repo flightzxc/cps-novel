@@ -128,6 +128,7 @@ function renderPage(
     promoClaimBlockedReason?: string | null;
     contentCreationBatchMaxSize?: number;
     featureEnabled?: boolean;
+    templateOptions?: readonly { readonly id: string; readonly templateKey: string; readonly locale: string; readonly version: number }[];
   } = {},
 ) {
   return render(
@@ -140,6 +141,7 @@ function renderPage(
       promoClaimGranted={options.promoClaimGranted ?? true}
       promoClaimBlockedReason={options.promoClaimBlockedReason ?? null}
       contentCreationBatchMaxSize={options.contentCreationBatchMaxSize ?? 50}
+      templateOptions={options.templateOptions}
     />,
   );
 }
@@ -321,6 +323,50 @@ describe("创建内容对话框 · dry-run 自动触发", () => {
     const dlg = within(dialog());
     expect(dlg.getByRole("alert").textContent).toContain("不是本站已登记的语种");
     expect(dlg.queryByRole("button", { name: "确认创建" })).toBeNull();
+  });
+});
+
+/**
+ * L10N P3 regression coverage: `create-content-dialog.tsx`'s template picker
+ * used to also accept a `template.locale === null` "all locales" wildcard
+ * (P2-era — `article-templates/service.ts` still ran a `{locale: null}` OR
+ * clause back then). P3 removed that wildcard from the query layer
+ * (`ArticleTemplate.locale` is `NOT NULL` now), and this dialog's own filter
+ * was updated to match — `matchingTemplateOptions` is exact-locale-only.
+ * These tests pin that at the render layer so a future regression (e.g.
+ * someone re-adding `|| template.locale === null` "to be safe") fails here,
+ * not just in the backend `template_locale_mismatch` suite.
+ */
+describe("创建内容对话框 · 模板选项按来源条目语种精确匹配（L10N P3，不再有 locale===null 通配）", () => {
+  it("只展示与来源条目语种完全一致的模板，语种不同的模板即便存在也不出现在下拉里", async () => {
+    actions.dryRunContentCreationAction.mockResolvedValue(okResult({ outcome: "dry_run", plan: PLAN }));
+    renderPage({
+      items: [row({ sourceLocale: "en" })],
+      templateOptions: [
+        { id: "tpl-en", templateKey: "system-default-v1", locale: "en", version: 1 },
+        { id: "tpl-ru", templateKey: "system-default-ru-v1", locale: "ru", version: 1 },
+      ],
+    });
+
+    await openDialog();
+
+    const select = within(dialog()).getByLabelText("文章模板") as HTMLSelectElement;
+    const optionTexts = Array.from(select.options).map((option) => option.textContent);
+    expect(optionTexts).toEqual(["system-default-v1 · v1"]);
+  });
+
+  it("没有任何模板匹配来源条目语种时，回退到硬编码的 system-default-v1 占位项——不会借用别的语种的模板", async () => {
+    actions.dryRunContentCreationAction.mockResolvedValue(okResult({ outcome: "dry_run", plan: PLAN }));
+    renderPage({
+      items: [row({ sourceLocale: "en" })],
+      templateOptions: [{ id: "tpl-fr", templateKey: "system-default-fr-v1", locale: "fr", version: 1 }],
+    });
+
+    await openDialog();
+
+    const select = within(dialog()).getByLabelText("文章模板") as HTMLSelectElement;
+    const optionTexts = Array.from(select.options).map((option) => option.textContent);
+    expect(optionTexts).toEqual(["system-default-v1（系统默认）"]);
   });
 });
 
