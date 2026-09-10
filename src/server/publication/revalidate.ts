@@ -200,18 +200,17 @@ export type BlogPublicPathInput = Readonly<{ slug: string; locale?: SiteLocale }
  * that post never renders at) while its real `/{locale}/blog/{slug}` page
  * kept serving a stale cache entry.
  *
- * 🔴 `locale` stays OPTIONAL here (falling back to `PUBLIC_SITE_LOCALE`)
- * purely to keep this function's sole production caller —
- * `publish-gate/service.ts:507`'s `revalidatePublicBlogPaths({ slug:
- * txResult.slug })`, inside this round's declared 禁改区 — compiling
- * unchanged. `txResult.locale` is already available right there (used two
- * lines above this call site for the sibling `novel_article` branch), so
- * closing this for real needs only `revalidatePublicBlogPaths({ slug:
- * txResult.slug, locale: txResult.locale as SiteLocale })` — a one-line,
- * out-of-scope follow-up, not an unknown. Until that lands, a non-`en` blog
- * publish still falls through to this default and under-invalidates exactly
- * as before; every other caller (and this file's own tests) can and should
- * pass `locale` explicitly.
+ * L10N P4.1 (2026-09-11, `b5de04b`): closed for real. This function's sole
+ * production caller — `publish-gate/service.ts:507` — now passes
+ * `revalidatePublicBlogPaths({ slug: txResult.slug, locale: txResult.locale
+ * as SiteLocale })`, exercising the non-`en` branch below instead of
+ * falling through to the default (`invalidation-wiring.test.ts` asserts
+ * this with both an `en` and a `ru` fixture). `locale` stays OPTIONAL here
+ * regardless — not because production still needs the fallback, but
+ * because it documents a real, load-bearing behavior for any OTHER caller
+ * that genuinely has no locale to give this function (this file's own
+ * "falls back to en when locale is omitted" test below pins that
+ * fallback, it is not a stand-in for a still-missing call site).
  */
 export function revalidatePublicBlogPaths(input: BlogPublicPathInput): void {
   safeRevalidatePath(buildBlogPath({ locale: input.locale ?? PUBLIC_SITE_LOCALE, slug: input.slug }));

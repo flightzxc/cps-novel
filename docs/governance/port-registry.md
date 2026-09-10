@@ -620,13 +620,14 @@ CPS 动态层的消费面极窄——只有 `SiteHeader`→`LocaleSwitcher` 这�
 | **唯一语种假设（改读请求 locale，review fix B-1 已修，2026-09-10）** | `src/app/[locale]/novel/[slugParam]/not-found.tsx` | 这份文件住在 **`[locale]` 前缀树**（不是裸路径树），Next 16.1.6 以零 props 渲染 `not-found.tsx` 边界（该文件自己的头注释已实测确认，见 `create-component-tree.js`），拿不到路由的 `locale` 参数，此前只能跟裸路径 shell 一样调用 `NovelNotFoundBody({ locale: PUBLIC_SITE_LOCALE })`。P4 首轮之前这条子树整体不可达（旧 guard 恒 404），这个"假装是 en"的缺口无副作用；guard 改为"注册即路由"后，`/ru/novel/...` 这类路径下命中 not-found 边界会真的执行到这份文件，应显示 `ru` 却显示 `en`——是 P4 首轮 guard 改动新暴露的真实唯一语种假设。Opus 复核标为 BLOCKING（B-1），已修：跟 `app/layout.tsx` 同法，读 `headers().get(SITE_LOCALE_REQUEST_HEADER)` → `pickSiteLocale(...)`，try/catch 兜底 `PUBLIC_SITE_LOCALE`；全仓核查确认 `[locale]` 子树下不存在第二个同形文件（`error.tsx`/`not-found.tsx`），无需扩大修法范围 |
 | **唯一语种假设（改读请求 locale）** | `src/proxy.ts:80`（`buildDefaultLocaleRedirectTarget` 的 `/en/*` → 裸路径前缀） | 不是 bug——这个用法是"默认语种是谁"这一个静态问题，`/en/*` 规整不因协商或白名单删除而变化，保留 `PUBLIC_SITE_LOCALE` 引用不动 |
 | **唯一语种假设（改读请求 locale）** | `src/app/[locale]/_guard.ts:65`（`locale === PUBLIC_SITE_LOCALE` 排除默认语种前缀） | 同上，D-8 结构性判定，不是遗漏，保留不动 |
-| **部分修复（review fix n3，2026-09-10）** | `src/server/publication/revalidate.ts` `revalidatePublicBlogPaths` | 原表述"博客当前仍是单语种产出面"已失实——`blog-create-form.tsx`/`content-creation/blog.ts`'s `requireLocale` 已开放全部 `SITE_LOCALES`。函数本身已改为按调用方传入的 `locale` 构造路径（`buildBlogPath({ locale: input.locale ?? PUBLIC_SITE_LOCALE, ... })`），非 `en` 路径的失效现在函数级别是正确的。但唯一生产调用点 `publish-gate/service.ts:507` 在本轮 **禁改区**（`src/server/publish-gate/**`）内，仍是 `revalidatePublicBlogPaths({ slug: txResult.slug })`——不传 `locale`，落到向后兼容的 `en` 默认值，实际生效行为未变。closes 需要该调用点补一行 `locale: txResult.locale as SiteLocale`（`txResult.locale` 在同一函数里两行之上已经在用），留给 Owner 决定谁来做这个禁改区内的收尾 |
+| **已修复（review fix n3 函数级 2026-09-10 + 调用点 L10N P4.1 `b5de04b` 2026-09-11）** | `src/server/publication/revalidate.ts` `revalidatePublicBlogPaths` | 原表述"博客当前仍是单语种产出面"已失实——`blog-create-form.tsx`/`content-creation/blog.ts`'s `requireLocale` 已开放全部 `SITE_LOCALES`。函数本身已改为按调用方传入的 `locale` 构造路径（`buildBlogPath({ locale: input.locale ?? PUBLIC_SITE_LOCALE, ... })`），非 `en` 路径的失效函数级别早已正确。唯一生产调用点 `publish-gate/service.ts:507` 当时仍在 P4 **禁改区**内、传不了 `locale`——L10N P4.1（`b5de04b`，该行已退出禁改区后收尾）补上了这一行，现在是 `revalidatePublicBlogPaths({ slug: txResult.slug, locale: txResult.locale as SiteLocale })`；`tests/backend/publish-gate/invalidation-wiring.test.ts` 用 `en`/`ru` 两个夹具断言这条调用真的带上了 locale。`locale` 参数本身仍保留可选（`?? PUBLIC_SITE_LOCALE` 兜底）——不再是"唯一调用点还没传"的遗留缺口，而是给"确实没有 locale 可给"的调用方留的文档化行为，`revalidate.test.ts` 的"falls back to en when locale is omitted"用例现在验的是这条兜底本身，不是生产路径的当前状态 |
 
 结论：76 处非注释引用（import 语句与实际使用各算一处）中，
 `src/app/layout.tsx` 一处、`src/app/[locale]/novel/[slugParam]/not-found.tsx`
 一处属于"唯一语种假设"，均已修复（后者是 review fix B-1，本轮新修）；
-`revalidatePublicBlogPaths` 一处函数级别已修（review fix n3），但受禁改区
-限制未能改到唯一调用点，实际行为待 Owner 后续收尾；其余全部是裸路径路由树/
+`revalidatePublicBlogPaths` 一处函数级别与其唯一调用点均已修复（review fix n3 +
+L10N P4.1 `b5de04b`），实际生效行为已随之改变（非 `en` 博客发布现在正确失效
+`/{locale}/blog/{slug}`，不再落到 `en` 默认路径）；其余全部是裸路径路由树/
 默认值兜底/开发预览等结构性用法，本身正确，不是遗漏。
 
 #### §2 范围改动清单（文件 → CPS 参照）

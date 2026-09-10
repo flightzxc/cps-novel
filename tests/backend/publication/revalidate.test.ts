@@ -78,11 +78,12 @@ describe("revalidatePublicBlogPaths", () => {
     expect(revalidatePath.mock.calls).toEqual([["/blog/a-blog-post"], ["/blog"]]);
   });
 
-  // Sole production caller today (`publish-gate/service.ts:507`, out of this
-  // round's edit surface — see this function's own doc comment) still omits
-  // `locale` entirely; this must keep behaving exactly as it did before this
-  // fix (en) rather than throwing or drifting, until that one-line follow-up
-  // lands.
+  // L10N P4.1 (`b5de04b`): the production caller (`publish-gate/service.ts:507`)
+  // now always passes `locale` explicitly (`invalidation-wiring.test.ts`
+  // covers it with `en`/`ru` fixtures) — this is no longer "the sole
+  // production caller still omits it" but a documented fallback for any
+  // OTHER caller that genuinely has no locale to give, pinning the default
+  // (en) it falls back to.
   it("falls back to en when locale is omitted, matching the pre-fix default", () => {
     revalidatePublicBlogPaths({ slug: "a-blog-post" });
     expect(revalidatePath.mock.calls).toEqual([["/blog/a-blog-post"], ["/blog"]]);
