@@ -50,11 +50,13 @@ const FIXTURES: readonly CreateContentResult[] = [
     reason: "source_item_already_linked_to_different_locale",
     existingNovelId: "novel-9",
     existingLocale: "ja",
+    derivedLocale: "en",
   },
   { outcome: "slug_unhealthy", field: "novel", baseSlug: "" },
   { outcome: "slug_conflict_exhausted", field: "article", baseSlug: "duplicate-title" },
   { outcome: "concurrent_creation_conflict" },
   { outcome: "template_render_failed", code: "ERR_TEMPLATE_OUTPUT_INVALID", slot: "title", constraint: "too_long" },
+  { outcome: "template_locale_mismatch", locale: "ru", templateKey: "campaign-v2" },
 ];
 
 describe("describeCreateContentOutcome · 穷举覆盖", () => {
@@ -67,7 +69,7 @@ describe("describeCreateContentOutcome · 穷举覆盖", () => {
     }
   });
 
-  it("13 种 outcome 的标题互不相同——没有两种坏法共用一句话", () => {
+  it("14 种 outcome 的标题互不相同——没有两种坏法共用一句话", () => {
     const titles = FIXTURES.map((fixture) => describeCreateContentOutcome(fixture).title);
     expect(new Set(titles).size).toBe(FIXTURES.length);
   });
@@ -86,10 +88,36 @@ describe("describeCreateContentOutcome · 穷举覆盖", () => {
       reason: "source_item_already_linked_to_different_locale",
       existingNovelId: "novel-42",
       existingLocale: "ko",
+      derivedLocale: "en",
     });
     expect(copy.body).toContain("ko");
     expect(copy.body).toContain("novel-42");
     expect(copy.tone).toBe("danger");
+  });
+
+  it("locale_conflict 正文里的语种是本次识别出的 derivedLocale，不是写死的 en", () => {
+    const copy = describeCreateContentOutcome({
+      outcome: "locale_conflict",
+      reason: "source_item_already_linked_to_different_locale",
+      existingNovelId: "novel-42",
+      existingLocale: "en",
+      derivedLocale: "ru",
+    });
+    expect(copy.body).toContain("ru");
+  });
+
+  it("template_locale_mismatch 带出 locale，templateKey 存在时也带出", () => {
+    const withKey = describeCreateContentOutcome({
+      outcome: "template_locale_mismatch",
+      locale: "ru",
+      templateKey: "campaign-v2",
+    });
+    expect(withKey.body).toContain("ru");
+    expect(withKey.body).toContain("campaign-v2");
+
+    const withoutKey = describeCreateContentOutcome({ outcome: "template_locale_mismatch", locale: "fr" });
+    expect(withoutKey.body).toContain("fr");
+    expect(withoutKey.body).not.toContain("undefined");
   });
 
   it.each(["novel", "article"] as const)(

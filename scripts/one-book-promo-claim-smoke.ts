@@ -183,9 +183,10 @@ async function run() {
       },
     });
     if (!["pending", "linked"].includes(source.status)) blocked("book_b_source_status_invalid");
+    // L10N P2: locale is derived server-side from the `sourceLocale` just
+    // upserted above — no longer a caller-supplied field.
     const content = await createContentFromSourceItem(prisma, {
       novelSourceItemId: source.id,
-      locale,
       mode: "apply",
       actor: { type: "system", source: "one-book-promo-claim-smoke" },
       requestId: randomUUID(),

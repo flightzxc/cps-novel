@@ -31,7 +31,6 @@ import {
   type PublishRequiredMetadataField,
   type RequiredMetadataMissingDetail,
 } from "@/contracts/publish-gate";
-import { SITE_LOCALES } from "@/lib/locale/locale-canonical";
 import {
   isPromoReady,
   isRightsBlocked,
@@ -39,28 +38,27 @@ import {
 } from "@/server/publication/visibility";
 
 /**
- * Owner decision (2026-09-08, "移除可发布语种门禁" — CPS parity: "an
- * article's locale is the article's own field ... there is no
+ * Locale history (kept so a future reader does not "fix" this back in as a
+ * well-intentioned readd): a 2026-09-08 Owner decision first replaced the
+ * old `PUBLISHABLE_LOCALES`/`isPublishableLocale` D-7 whitelist check here
+ * with a `checkLocale` defaulting to `isRegisteredSiteLocale` (registration
+ * against the full `SITE_LOCALES` registry, `locale_not_publishable` on
+ * failure). L10N P2 (2026-09-10, `施工提示词_Sonnet_L10N_P2_创建链语种强制
+ * 继承_2026-09-10.md` §1.E, matrix #8 — an explicit, one-time Owner
+ * exception to this codebase's "evaluator.ts is otherwise untouchable"
+ * rule) removed that check entirely: `src/server/content-creation/
+ * service.ts` now derives and hard-blocks an unregistered locale
+ * (`missing_locale`/`unsupported_locale`) at Article-*creation* time, before
+ * a row can even exist with a bad locale, so a second, redundant check here
+ * at *publish* time — on data that can no longer occur — is pure CPS parity
+ * ("an article's locale is the article's own field ... there is no
  * publishable-locale gate and no article/drama locale consistency
- * assertion"). This supersedes `docs/p2/P2_01_PUBLISH_GATE_CONTRACT.md` §3's
- * old "对应 `isPublishableLocale(novel.locale)` 为 `false`" pin and resolves
- * the "should `novel_article` read `article.locale` too" question
- * `规划_文章管理能力补齐_博客类型可见性换小说_2026-09-08.md` §4.4/§六 item 6
- * had registered as pending Owner sign-off: both branches below now read
- * `facts.article.locale` — never `facts.novel.locale` — so
- * `PublishGateNovelFacts` no longer carries a `locale` field at all (see
- * that type below).
- *
- * The gate no longer consults `locale-canonical.ts`'s `PUBLISHABLE_LOCALES`
- * / `isPublishableLocale` either. That whitelist remains a *separate*, still
- * real gate — whether the public site's `[locale]/...` route tree, sitemap,
- * and IndexNow are actually ready to serve a locale (`src/app/[locale]/
- * _guard.ts`; today only `en` clears it, and widening it requires shipping
- * that locale's leaf pages in the same batch) — which is not what "may an
- * admin publish this Article" should gate on. The default `checkLocale`
- * below (see `isRegisteredSiteLocale`) only checks registration against
- * `SITE_LOCALES`, the full 15-entry site registry, matching how CPS accepts
- * any of its registered locales.
+ * assertion"). `locale_not_publishable` remains a registered
+ * `PublishGateReason` in the frozen `src/contracts/publish-gate.ts` (not
+ * modified by this change) purely as defensive DTO-layer hygiene — this
+ * evaluator itself now never produces it, and `tests/backend/publish-gate/
+ * evaluator.test.ts` asserts the returned `reasons` set never contains any
+ * locale-shaped code.
  */
 export type PublishGateNovelFacts = {
   readonly status: string;
@@ -68,7 +66,6 @@ export type PublishGateNovelFacts = {
 
 export type PublishGateArticleFacts = {
   readonly status: string;
-  /** Read by the locale check for every Article, novel_article or not — see this file's header. */
   readonly locale: string;
   readonly title: string;
   readonly slug: string;
@@ -107,34 +104,17 @@ export type PublishGateFacts = {
   readonly pageIdentity: PublishGatePageIdentityFacts;
 };
 
-export type PublishGateEvaluatorDeps = {
-  /** Injectable for tests only — production callers must not override this. */
-  readonly isPublishableLocale?: (locale: unknown) => boolean;
-};
+// No locale check remains here to inject — see this file's header, "Locale
+// history". `Record<string, never>` (not `{}`, which `@typescript-eslint/
+// no-empty-object-type` correctly rejects as "allows any non-nullish
+// value") is kept as a genuinely-empty extension point rather than deleted
+// outright, so `evaluatePublishGate(facts, deps)`'s own signature does not
+// have to change again for some future, unrelated test-only override.
+export type PublishGateEvaluatorDeps = Record<string, never>;
 
 export type PublishGateEvaluation = PublishGateResult & {
   readonly requiredMetadataMissing: RequiredMetadataMissingDetail | null;
 };
-
-/**
- * Default `checkLocale` when no test override is supplied (see this file's
- * header on the 2026-09-08 Owner decision). Only checks registration against
- * `SITE_LOCALES` — the full 15-entry site registry — never the narrower,
- * front-end-readiness `PUBLISHABLE_LOCALES` whitelist. Reads `SITE_LOCALES`
- * directly (same `.includes` shape `_guard.ts` and `content-creation/
- * service.ts` already use) rather than caching it in a second local
- * collection — `tests/ui/locale-canonical.test.ts`'s "没有第二张语种映射表"
- * scan treats any `LOCALE`-named `const`/`let`/`var` collection outside
- * `locale-canonical.ts` itself as exactly that. `src/server/
- * content-creation/service.ts` already rejects any non-registered locale at
- * Article-creation time, so this should be unreachable for a real Article in
- * production; kept as defense-in-depth (same posture `facts.ts` documents
- * for `page_identity_conflict`) since `Article.locale` itself is a free-text
- * `VarChar(16)` column with no DB-level CHECK tying it to `SITE_LOCALES`.
- */
-function isRegisteredSiteLocale(locale: unknown): boolean {
-  return typeof locale === "string" && (SITE_LOCALES as readonly string[]).includes(locale);
-}
 
 function isBlank(value: string): boolean {
   return value.trim().length === 0;
@@ -158,19 +138,16 @@ function requiredMetadataMissingFields(article: PublishGateArticleFacts): Publis
  * same fail-closed posture as the rest of this codebase's gates.
  *
  * C-27 fork: `facts.novel` is `null` for a non-`novel_article` (blog/
- * listicle/guide — see this file's header). For that branch, four
- * conditions apply — `locale_not_publishable` (reads `facts.article.locale`,
- * same as the `novel_article` branch does since the 2026-09-08 Owner
- * decision — see this file's header), `required_metadata_missing`,
- * `page_identity_conflict`, and `rights_blocked` (read off
- * `facts.article.status` only — see below) — all
- * Article-level concepts a Novel-less row still has. The other four reasons
+ * listicle/guide — see this file's header). For that branch, three
+ * conditions apply — `required_metadata_missing`, `page_identity_conflict`,
+ * and `rights_blocked` (read off `facts.article.status` only — see below) —
+ * all Article-level concepts a Novel-less row still has. The other four reasons
  * (`preview_chapter_missing`/`preview_body_missing`/`promo_link_missing`/
  * `promo_link_not_ready`) are entirely Novel-side concepts (试读章节 belongs
  * to the Novel; PromoLink readiness is keyed off the Novel too) that a
  * Novel-less Article cannot fail or pass — they are skipped, not
  * evaluated-and-cleared, for that branch. A `novel_article` (`facts.novel`
- * present) keeps exactly today's eight-reason behavior, byte-for-byte — this
+ * present) keeps exactly today's seven-reason behavior, byte-for-byte — this
  * fork only ever *narrows* what gets checked, never changes a
  * `novel_article`'s own evaluation.
  *
@@ -186,15 +163,11 @@ function requiredMetadataMissingFields(article: PublishGateArticleFacts): Publis
  */
 export function evaluatePublishGate(
   facts: PublishGateFacts,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- kept as an extension point, see `PublishGateEvaluatorDeps`'s own doc comment
   deps: PublishGateEvaluatorDeps = {},
 ): PublishGateEvaluation {
-  const checkLocale = deps.isPublishableLocale ?? isRegisteredSiteLocale;
   const reasons: PublishGateReason[] = [];
   const novel = facts.novel;
-
-  if (!checkLocale(facts.article.locale)) {
-    reasons.push("locale_not_publishable");
-  }
 
   const missingFields = requiredMetadataMissingFields(facts.article);
   if (missingFields.length > 0) {

@@ -47,7 +47,7 @@ describe("P2-12 promo whitespace regression", () => {
       preview: { hasPreviewChapter: true, hasPreviewBody: true },
       pageIdentity: { conflicting: false },
     };
-    const publishGate = evaluatePublishGate(facts, { isPublishableLocale: () => true });
+    const publishGate = evaluatePublishGate(facts);
     expect(publishGate).toMatchObject({ publishable: false, reasons: ["promo_link_not_ready"] });
 
     const publicDb = {

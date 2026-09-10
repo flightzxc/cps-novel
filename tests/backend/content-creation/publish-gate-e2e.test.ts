@@ -42,7 +42,6 @@ describe("P0-S9 end-to-end: content creation → real evaluatePublishGate", () =
 
     const result = await createContentFromSourceItem(fake.asPrismaClient(), {
       novelSourceItemId: sourceItem.id,
-      locale: "en",
       mode: "apply",
       actor: ADMIN_ACTOR,
       requestId: "req-e2e-1",
@@ -85,9 +84,11 @@ describe("P0-S9 end-to-end: content creation → real evaluatePublishGate", () =
     //   territory, untouched by S9).
     // - `promo_link_missing`: no PromoLink exists yet (S5's territory,
     //   untouched by S9 — this service never touches PromoLink at all).
-    // `locale_not_publishable` no longer fires: the publish gate's locale
-    // check only requires a registered `SITE_LOCALES` member (Owner decision
-    // 2026-09-08, see `evaluator.ts`), and `en` is registered.
+    // `locale_not_publishable` never fires: L10N P2 (2026-09-10, matrix #8)
+    // deleted the publish gate's locale check entirely — `evaluator.ts` no
+    // longer reads `facts.article.locale` for any decision, since
+    // `src/server/content-creation/service.ts` already hard-blocks an
+    // unregistered locale at Article-creation time.
     expect(evaluation.reasons).toEqual(["preview_chapter_missing", "promo_link_missing"]);
     expect(evaluation.publishable).toBe(false);
   });
@@ -98,7 +99,6 @@ describe("P0-S9 end-to-end: content creation → real evaluatePublishGate", () =
 
     const result = await createContentFromSourceItem(fake.asPrismaClient(), {
       novelSourceItemId: sourceItem.id,
-      locale: "en",
       mode: "apply",
       actor: ADMIN_ACTOR,
       requestId: "req-e2e-control",

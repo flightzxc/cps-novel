@@ -499,6 +499,33 @@ Resolutions` 预解析 → `suspendedLanguageCodes` 判定 → 逐行落库时�
 | `backfillSourceItemLocale` 核心循环（cursor 分页、dry-run 默认、`--re-resolve`、条件 `updateMany`）→ `scripts/l10n/backfill-source-item-locale.ts` | `scripts/backfill-drama-source-item-locale.ts` | `1-173`（全文件） | `3a76877af27c6247ad94be946b44e9cc5c1cb9ce` | `ADAPT` | 删 `channelAppKey` 派生步骤（多渠道概念，本仓不适用）；`--apply` 从"无门禁直接写"改为"需 `--approver`（`AdminIdentity` 存在且 active）+ `OperationAudit` 审计行"，同款方式见 `scripts/p2-06-5-production/tagging-bootstrap.ts` 的 `resolveApprover`/审计写入模式；报告形状从"扁平计数"改为"按 `sourceLanguageCode` 分桶的 before/after locale 直方图"（施工提示词 §1.F 明确要求"每码 before/after 计数"）；无 `NovelSourceItem` 对应的 mapping-version DB 列（核对 `3a76877:prisma/schema.prisma` 的 `DramaSourceItem` 同样没有该列），故不加迁移，`MAPPING_VERSION` 只记在报告/审计快照里 |
 | CanonicalTag bootstrap 的 approver 校验/审计写入形状 → `resolveApprover`/`OperationAudit` 写入 | `scripts/p2-06-5-production/tagging-bootstrap.ts` | `651-657`（`resolveApprover`）、`841-859`（`OperationAudit.create`） | 本仓内部模式复用，非 CPS 搬运 | `PATTERN_ONLY` | 只借"UUID 或 username 双形态查找 + status=active 校验失败即 fail() + OperationAudit 记录 actorType/action/entityType/requestId/reason/before-after snapshot"的形状；不搬 `pg_advisory_xact_lock`（backfill 场景不需要跨进程互斥，`--request-id` 重放判定已足够）与 `--channel-app` 绑定校验（本脚本没有对应概念） |
 
+### L10N P2 创建链语种强制继承 + 发布层 locale 检查删除（content-creation/service.ts + publish-gate/evaluator.ts，2026-09-10）
+
+依据 `施工提示词_Sonnet_L10N_P2_创建链语种强制继承_2026-09-10.md`。`baseline_commit`
+沿用 L10N P1 小节同一坐标 `3a76877af27c6247ad94be946b44e9cc5c1cb9ce`。
+
+**范围说明**：矩阵 #3/#4（创建链语种强制继承）与矩阵 #8（发布门禁语种条件删除）。
+CPS 参照的 `changdu-promote-drama-dry-run.ts`/`changdu-promote-drama.ts` 是一次批量
+"上游来源 → Drama 提级" 的 dry-run/apply 流水线，产出 `blockReasons: string[]` 数组；
+本仓的 `createContentFromSourceItem` 是单条来源条目、单事务、结构化返回值（非
+`blockReasons` 数组）的创建路径，形状本就不同，因此下表大多数条目登记为
+`ADAPT`/`PATTERN_ONLY`（借语义/借顺序），不是逐行 `COPY`——`missing_locale`/
+`unsupported_locale` 两个错误码名称本身是逐字复用（CPS parity 的落点是"码名一致"，
+不是"实现逐字一致"）。模板同语种硬阻断取 CPS **批量**路径的语义
+（`batch-actions-core.ts:167-183`：模板存在性与语种匹配合并成一次判定），不取
+CPS 单篇路径的语义（`article-actions.ts:569-576`：先判"模板不存在"再单独判
+"语种不匹配"两次独立判定）——因为 `selectActiveArticleTemplate` 的查询本身就是
+locale-过滤在内的单次组合查询，无法在不改 `article-templates/service.ts`（P3
+territory，本轮不改）的前提下拆成两次独立判定去复刻单篇路径的两阶段错误码。
+
+| symbol | source_file | source_lines | baseline_commit | port_kind | changed_what | owner |
+| --- | --- | --- | --- | --- | --- | --- |
+| `missing_locale`/`unsupported_locale` 阻断语义（locale 只来自来源事实、无人工覆盖）→ `deriveLocale`（`src/server/content-creation/service.ts`） | `src/lib/changdu-promote-drama-dry-run.ts` | `514-534` | `3a76877af27c6247ad94be946b44e9cc5c1cb9ce` | `ADAPT` | CPS 用 `blockReasons.push("missing_locale", "unsupported_locale")` 累积进批量 dry-run 报告数组；本仓改为 `ContentCreationInputError` 抛出（单条创建路径本就是"guard 即失败"的形状，`src/app/(admin)/catalog-sync/_actions.ts` 与 `./batch.ts` 已有的 `ContentCreationInputError` 捕获链路可直接复用），错误码名称逐字复用 CPS 的两个码名；`normalizeBcp47Locale`/`isSupportedSiteLocale` 两步判定合并为一次 `SITE_LOCALES.includes` 成员检查，因为本仓 `NovelSourceItem.sourceLocale` 落库时已经是 L10N P1 worker 写路径解析好的 BCP-47 值或 `NULL`（`src/lib/locale/channel-language.ts`），不需要在读取时再跑一次 `normalizeBcp47Locale` |
+| locale 只来自来源事实，不接受调用方覆盖 → `Novel.locale`/`Article.locale` 写入点（`runCreateTransaction`） | `src/lib/changdu-promote-drama.ts` | `360-361`、`674-677` | `3a76877af27c6247ad94be946b44e9cc5c1cb9ce` | `PATTERN_ONLY` | 只借"locale 是从 `sample.resolvedSiteLocale`/`plannedDramaFields.locale` 读出来的派生值，`createPlannedDramaFields` 找不到 locale 直接 `throw`，没有任何入参能覆盖它"这条设计原则；不搬 `ChangduPromotionSample`/`createPlannedDramaFields` 的具体实现（分类器接线、`generateDramaId`/`generateSlug` 等与本仓 `createNovelWithBusinessIdRetry`/`resolveUniqueSlug` 完全不同构） |
+| 模板同语种硬阻断（找不到匹配语种模板即硬错，批量语义）→ `template_locale_mismatch`（`runCreateTransaction`/`runDryRun`） | `src/lib/batch-actions-core.ts` | `167-183` | `3a76877af27c6247ad94be946b44e9cc5c1cb9ce` | `PATTERN_ONLY` | 只借"模板语种与内容语种不匹配是一次硬阻断，且不区分'模板不存在'与'模板语种不对'两种子情形"的批量语义；不搬 CPS 的两步实现（先 `Set` 去重模板语种检查同批模板是否单一语种，再逐个 `drama.locale` 比对）——本仓 `selectActiveArticleTemplate` 已经是"给定 locale 取单个模板"的单次查询，语种筛选在查询内部完成，没有"同批多模板语种是否一致"这个中间态需要复刻 |
+| `getTemplateDramaLocaleMismatch` 的"模板不存在"与"语种不匹配"两次独立判定 | `src/actions/article-actions.ts` | `569-576` | `3a76877af27c6247ad94be946b44e9cc5c1cb9ce` | 不搬（仅作对照说明，不登记为 port） | 见上方"范围说明"——本仓创建=单事务无单篇/批量之分，取批量语义，不取这个单篇路径的两阶段错误码 |
+| 发布门禁删除语种检查（Owner 明示例外） → `src/server/publish-gate/evaluator.ts` 删 `checkLocale`/`isRegisteredSiteLocale`/`locale_not_publishable` push/deps 注入位 | 不适用（本条是删除，非搬运） | 不适用 | 不适用 | 不适用（DELETE，非 COPY/ADAPT/PATTERN_ONLY） | **Owner 2026-09-10 明示例外**：`docs/p2/P2_01_PUBLISH_GATE_CONTRACT.md`/`evaluator.ts` 自身 2026-09-08 曾登记的"发布门禁只允许改这一处"的禁区，本轮 Owner 再次明示允许触碰、仅此一处、仅删除语种注册检查；`src/contracts/publish-gate.ts` 的 `locale_not_publishable` 理由码本身不删（该文件本轮不改，P2-01 FROZEN 契约），只是 evaluator 不再产出它；`tests/backend/publish-gate/no-bypass.test.ts` 的既有失败签名（`scripts/s1-exact-target-structural-smoke.ts` 一条 `.$executeRawUnsafe` 命中）改前改后逐字相同，已实测核对 | Claude |
+
 ## 使用说明
 
 - `symbol`：被搬运的具体符号名（函数名/类型名/表名/字段名/组件名等），一行一个符号，不得用文件级粗粒度笼统登记；

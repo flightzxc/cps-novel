@@ -21,6 +21,8 @@ export type FakeSourceItem = {
   totalChapterCount: number;
   paidFromChapter: number | null;
   splitRatio: Prisma.Decimal | null;
+  /** L10N P2: `Novel.locale`/`Article.locale` are now derived from this field — see `service.ts`'s `deriveLocale`. Defaults to `"en"` in `seedSourceItem` below so every pre-P2 test (none of which set this) keeps deriving the same `"en"` locale it used to pass in explicitly. */
+  sourceLocale: string | null;
   deletedAt: Date | null;
 };
 
@@ -137,6 +139,9 @@ export class FakeContentCreationDb {
       totalChapterCount: item.totalChapterCount ?? 12,
       paidFromChapter: item.paidFromChapter ?? null,
       splitRatio: item.splitRatio ?? null,
+      // `undefined` (not passed) defaults to "en"; explicitly passing `null`
+      // seeds a genuinely unresolved source item (`missing_locale` tests).
+      sourceLocale: item.sourceLocale === undefined ? "en" : item.sourceLocale,
       deletedAt: item.deletedAt ?? null,
     };
     this.sourceItems.set(full.id, full);
@@ -338,7 +343,31 @@ export class FakeContentCreationDb {
   private articleTemplateFindFirst = async (args: { where: Record<string, unknown> }) => {
     this.calls.push("articleTemplate.findFirst");
     const where = args.where;
-    const localeOr = (where.OR as Array<{ locale: string | null }> | undefined)?.map((entry) => entry.locale);
+    /**
+     * L10N P2 fix: `selectActiveArticleTemplate` (`src/server/
+     * article-templates/service.ts`) builds its locale `OR` clause nested
+     * inside a top-level `AND` array (`{ ..., AND: [{ OR: [{locale: X},
+     * {locale: null}] }, ...] }`) — see that function's own "🔴 locale 与
+     * applicableArticleType 各自是一条 OR 子句" comment for why. This fake
+     * used to look only at a top-level `where.OR`, which that real query
+     * shape never sets, so `localeOr` was always `undefined` and every
+     * `findFirst` here silently ignored locale entirely — any seeded
+     * template matched regardless of locale. Reading `where.AND`'s nested
+     * `OR` clauses (in addition to a flat top-level `where.OR`, still
+     * supported for the simpler `createArticleTemplate`/`getArticleTemplate`
+     * call shapes that use neither) makes this fake actually enforce the
+     * same locale filter production does — required for
+     * `template_locale_mismatch` tests to mean anything.
+     */
+    const orClauseGroups: Array<Array<{ locale?: string | null }>> = [];
+    if (Array.isArray(where.OR)) orClauseGroups.push(where.OR as Array<{ locale?: string | null }>);
+    if (Array.isArray(where.AND)) {
+      for (const clause of where.AND as Array<Record<string, unknown>>) {
+        if (Array.isArray(clause.OR)) orClauseGroups.push(clause.OR as Array<{ locale?: string | null }>);
+      }
+    }
+    const localeOrGroup = orClauseGroups.find((group) => group.some((entry) => "locale" in entry));
+    const localeOr = localeOrGroup?.map((entry) => entry.locale ?? null);
     const rows = Array.from(this.articleTemplates.values()).filter((row) =>
       row.deletedAt === null &&
       (where.templateKey === undefined || row.templateKey === where.templateKey) &&

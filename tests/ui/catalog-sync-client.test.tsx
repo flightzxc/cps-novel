@@ -263,7 +263,7 @@ describe("创建内容对话框 · dry-run 自动触发", () => {
     expect(actions.applyContentCreationAction).not.toHaveBeenCalled();
   });
 
-  it("加载中展示状态文案，计划到达后渲染字段与语种一致时不显示不匹配提示", async () => {
+  it("加载中展示状态文案，计划到达后只读展示已识别语种（L10N P2：不再有不匹配提示这一概念）", async () => {
     actions.dryRunContentCreationAction.mockResolvedValue(okResult({ outcome: "dry_run", plan: PLAN }));
     renderPage();
     await openDialog();
@@ -274,22 +274,53 @@ describe("创建内容对话框 · dry-run 自动触发", () => {
     expect(dlg.getByText(/prov001/)).toBeTruthy();
     expect(dlg.getByText("120")).toBeTruthy();
     expect(dlg.queryByTestId("locale-mismatch-notice")).toBeNull();
+    expect(dlg.getByTestId("derived-locale-display").textContent).toContain("en");
   });
 
-  it("来源条目语种不是 en 时显示不匹配提示", async () => {
-    actions.dryRunContentCreationAction.mockResolvedValue(okResult({ outcome: "dry_run", plan: PLAN }));
+  it("来源条目语种是 ja 时，计划态只读展示 ja（不再是与 en 比较的不匹配提示）", async () => {
+    actions.dryRunContentCreationAction.mockResolvedValue(
+      okResult({ outcome: "dry_run", plan: { ...PLAN, locale: "ja" } }),
+    );
     renderPage({ items: [row({ sourceLocale: "ja" })] });
     await openDialog();
-    expect(within(dialog()).getByTestId("locale-mismatch-notice").textContent).toContain("ja");
+    expect(within(dialog()).getByTestId("derived-locale-display").textContent).toContain("ja");
   });
 
-  it("来源条目尚未识别出语种时显示另一句提示", async () => {
-    actions.dryRunContentCreationAction.mockResolvedValue(okResult({ outcome: "dry_run", plan: PLAN }));
+  /**
+   * L10N P2: a `NULL`/unresolved `sourceLocale` no longer reaches the plan
+   * stage at all — `createContentFromSourceItem` throws
+   * `ContentCreationInputError("missing_locale")` inside `loadPlan` before
+   * a plan can ever be built, and `dryRunContentCreationAction` converts
+   * that into `{ ok: false, kind: "invalid_input", code: "missing_locale" }`
+   * (same catch this action already has for every other
+   * `ContentCreationInputError` code). The dialog's existing `stage: "error"`
+   * branch renders it — there is no plan preview, and (because `canConfirm`
+   * is only ever true for `stage.kind === "plan"`) no "确认创建" button either.
+   */
+  it("来源条目尚未识别出语种时，dry-run 以 missing_locale 失败，对话框进入错误态且没有确认按钮", async () => {
+    actions.dryRunContentCreationAction.mockResolvedValue({
+      ok: false,
+      kind: "invalid_input",
+      code: "missing_locale",
+    });
     renderPage({ items: [row({ sourceLocale: null })] });
     await openDialog();
-    expect(within(dialog()).getByTestId("locale-mismatch-notice").textContent).toContain(
-      "语种归一 S7a 未接线",
-    );
+    const dlg = within(dialog());
+    expect(dlg.getByRole("alert").textContent).toContain("sourceLocale 为空");
+    expect(dlg.queryByRole("button", { name: "确认创建" })).toBeNull();
+  });
+
+  it("来源条目语种不是站点语种（unsupported_locale）时同样进入错误态且没有确认按钮", async () => {
+    actions.dryRunContentCreationAction.mockResolvedValue({
+      ok: false,
+      kind: "invalid_input",
+      code: "unsupported_locale",
+    });
+    renderPage({ items: [row({ sourceLocale: "it" })] });
+    await openDialog();
+    const dlg = within(dialog());
+    expect(dlg.getByRole("alert").textContent).toContain("不是本站已登记的语种");
+    expect(dlg.queryByRole("button", { name: "确认创建" })).toBeNull();
   });
 });
 
@@ -375,6 +406,7 @@ describe("每种结果分类都有独立呈现（不静默吞掉任何一种）"
       reason: "source_item_already_linked_to_different_locale",
       existingNovelId: "novel-7",
       existingLocale: "ja",
+      derivedLocale: "en",
     },
     { outcome: "slug_unhealthy", field: "novel", baseSlug: "" },
     { outcome: "slug_conflict_exhausted", field: "article", baseSlug: "dup-title" },

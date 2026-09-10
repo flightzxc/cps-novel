@@ -65,7 +65,38 @@ export default async function CatalogSyncPage({
     : null;
   const channels = granted ? await readActiveChannelScanOptions() : [];
   const claimChannelApps = granted ? await readClaimEligibleChannelAppOptions() : [];
-  const templateOptions = granted ? await listActiveArticleTemplateOptions(prisma, "en") : [];
+  /**
+   * L10N P2 (matrix #13's dialog-scoped part, P2 段): was a single
+   * hardcoded `listActiveArticleTemplateOptions(prisma, "en")` call — every
+   * row's create-content dialog offered the same `en`-only template list
+   * regardless of that row's own derived locale. Content creation no longer
+   * writes a hardcoded `"en"` locale at all (`src/server/content-creation/
+   * service.ts` derives it from `NovelSourceItem.sourceLocale`), so the
+   * template picker must not stay pinned to one locale either.
+   *
+   * Reuses the exact same page-level data-fetching shape (`await
+   * listActiveArticleTemplateOptions(prisma, <locale>)`, this page's own
+   * existing call pattern — not a new mechanism), just looped once per
+   * distinct `sourceLocale` actually present on this page of results, then
+   * flattened into the same flat array shape `CatalogSyncClient` /
+   * `CreateContentDialog` / `BatchCreateContentDialog` already accept — no
+   * prop-shape change ripples through those components. `CreateContentDialog`
+   * (see its own doc comment) is what actually narrows this down to the one
+   * locale a given row's dialog needs; this fetch only has to make sure that
+   * every locale any row on the page could need is present at all.
+   * Deduplicated by `id` because a `{locale: null}` "all locales" template
+   * (still legal — P3's territory to remove) would otherwise appear once per
+   * distinct locale queried.
+   */
+  const sourceLocalesOnPage = granted
+    ? Array.from(new Set(page?.items.map((item) => item.sourceLocale).filter((locale): locale is string => locale !== null) ?? []))
+    : [];
+  const templateOptionsByLocale = granted
+    ? await Promise.all(sourceLocalesOnPage.map((locale) => listActiveArticleTemplateOptions(prisma, locale)))
+    : [];
+  const templateOptions = Array.from(
+    new Map(templateOptionsByLocale.flat().map((template) => [template.id, template])).values(),
+  );
 
   return (
     <AdminShell

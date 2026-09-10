@@ -68,18 +68,23 @@ export function batchItemStatusTone(status: ContentCreationBatchItemStatus): Out
 
 /**
  * `ContentCreationInputErrorCode` values `createContentFromSourceItem`
- * throws on malformed input — a defensive branch (see
- * `@/server/content-creation/batch`'s `CoreItemOutcome.inputErrorCode` doc
- * comment): every id here comes from an already-loaded `SourceItemRow`, so
- * a real UUID, and `locale`/`actor`/`requestId` are filled in server-side,
- * never by this dialog. Seeing one of these in practice would mean an
- * internal bug, not a bad selection — same posture
+ * throws — see `@/server/content-creation/batch`'s `CoreItemOutcome.
+ * inputErrorCode` doc comment. Most of these are defensive (every id here
+ * comes from an already-loaded `SourceItemRow`, so a real UUID, and
+ * `actor`/`requestId` are filled in server-side, never by this dialog —
+ * seeing one of those in practice would mean an internal bug, same posture
  * `promo-link-claim-dialog.tsx`'s own `INVALID_INPUT_COPY` fallback comment
- * takes for the codes it never expects to see either.
+ * takes). `missing_locale`/`unsupported_locale` are the two exceptions
+ * (L10N P2, matrix #3): these are real, reachable outcomes — the batch's
+ * selected source items can genuinely include one whose `sourceLocale` is
+ * `NULL` or resolves outside `SITE_LOCALES` (e.g. `it`/`fil`/`ms`/`tr`) —
+ * so their copy explains the actual situation to the operator rather than
+ * pointing at engineering.
  */
 const INPUT_ERROR_CODE_COPY: Readonly<Record<string, string>> = Object.freeze({
   invalid_novel_source_item_id: "来源条目标识无效（内部错误），请刷新页面后重试",
-  invalid_locale: "语种参数无效（内部错误），请联系工程排查",
+  missing_locale: "该来源条目尚未识别出语种（sourceLocale 为空），无法创建内容",
+  unsupported_locale: "该来源条目识别出的语种不是本站已登记的语种，无法创建内容",
   invalid_actor: "无法确认当前操作者身份，请重新登录后重试",
   invalid_request_id: "请求标识无效（内部错误），请刷新页面后重试",
 });
