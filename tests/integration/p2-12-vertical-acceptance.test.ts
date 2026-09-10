@@ -1,5 +1,5 @@
 import type { PrismaClient } from "@prisma/client";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { createSitemapFamilyBuilder } from "@/lib/seo/sitemap";
 import { resolvePublicArticleBySlugParam } from "@/lib/site/queries";
