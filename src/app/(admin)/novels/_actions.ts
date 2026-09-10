@@ -24,6 +24,7 @@ import { canonicalOrigin, guardDependencies, readSessionToken } from "../../api/
 import { serviceDependencies } from "../../api/admin/_lib/route";
 import { toErrorEnvelope } from "../../api/admin/_lib/respond";
 import { readPrimaryArticlesForNovels } from "./_lib/read-primary-article";
+import { validateReason } from "./_lib/reason-guard";
 
 /**
  * Re-exported, not re-declared: `tests/ui/admin-secret-boundary.test.tsx`
@@ -101,11 +102,18 @@ class PublishActionInputError extends Error {
   }
 }
 
+/**
+ * Thin throwing wrapper around `./_lib/reason-guard.ts`'s `validateReason` —
+ * that module is the shared source of truth (also used by
+ * `../../articles/_components/article-list.tsx`'s row-level "下线" dialog,
+ * fix 3 of the C-21/22/23 review); this function just adapts its
+ * discriminated result to the throw-based control flow `runNovelAction`
+ * below already has for `PublishActionInputError`.
+ */
 function requireNonBlankReason(reason: string): string {
-  const trimmed = reason.trim();
-  if (!trimmed) throw new PublishActionInputError("reason_required");
-  if (trimmed.length > 1000) throw new PublishActionInputError("reason_too_long");
-  return trimmed;
+  const result = validateReason(reason);
+  if (!result.ok) throw new PublishActionInputError(result.code);
+  return result.reason;
 }
 
 async function authorize(actionId: `admin.${string}`, requestId: string) {

@@ -49,19 +49,100 @@ UAT / Level R 段）。把 `X8_LEVEL=uat` 放在环境里，就可以一路用�
 拓扑真正起到 Level UAT，Owner 全程零手工：
 
 ```bash
-export X8_LEVEL=uat                       # 之后本 shell 里的每条命令都在 Level UAT 下运行
+export X8_LEVEL=uat                       # 之后本 shell 里读取 X8_LEVEL 的命令都在 Level UAT 下运行——
+                                           # 即 up/down/verify/accept/backup-now/restore-smoke/
+                                           # catalog-one/preview-one/promo-fixture/health-sql/
+                                           # admin-secret/admin-seed/admin-reset；`gate catalog-write`
+                                           # 与不带参数的 `status` 不读这个变量,见下方 2026-09-05
+                                           # 之后的行为变化说明
 scripts/x8-production-like.sh setup       # 一次性：mkcert 信任 + /etc/hosts，仅 setup 允许改宿主机
 scripts/x8-production-like.sh up          # 起六服务；WORKER_TASK_ALLOWLIST、八项双闸 flag 与
                                            # PROMO_CLAIM_ROLES 均为 Level UAT 值；
-                                           # catalog-write 门首启默认落在 apply（写闸 true），无需额外开闸
-scripts/x8-production-like.sh status      # docker compose ps，确认六服务健康
+                                           # catalog-write 门首启默认落在 apply（写闸 true），无需额外开闸；
+                                           # postgres 就绪、web/worker/scheduler 三容器均探到
+                                           # healthy、nginx 起后两个域名的 HTTP 探活都过，才把
+                                           # 本次部署身份从候选提交为正式——这是五个服务，不是六个：
+                                           # backup-timer 在身份提交之后才起（见下方"发布身份"说明）
+                                           # D-9（2026-09-09，D-9a+D-9b 合并后）：`up` 在建镜像前
+                                           # 与碰数据库前各做一次磁盘可用空间检查，fail-closed
+                                           # （退出码 69，打印手工清理命令）；建镜像前那道闸只在
+                                           # 低于告警线时才调用 `gc --auto` 清理旧发布镜像，
+                                           # `X8_GC_ON_UP=0` 可整轮关掉这次自动清理（此时只告警，
+                                           # 由硬线决定是否拒绝）。grants.sql 权限重放已改单事务，
+                                           # 一次失败的部署不会剥夺仍在跑的旧版本的数据库权限。
+                                           # 不带参数运行 `scripts/x8-production-like.sh` 会打印
+                                           # 含 `gc` 子命令的完整 usage
+scripts/x8-production-like.sh status      # 只读查询：确认六服务健康,零写入;需要 up 已经成功
+                                           # 提交过一次身份,否则会失败并提示先跑 up
 scripts/x8-production-like.sh verify      # 拓扑/allowlist/nginx 反模式静态校验，按 X8_LEVEL=uat 的期望值断言
 ```
 
-需要临时收紧 catalog 写闸时，既有 `gate catalog-write on|off|dry-run` 子命令不受
-影响，在 Level UAT 下依然可用、依然只管 `FEATURE_NOVEL_CATALOG_SYNC` /
-`NOVEL_CATALOG_SYNC_ALLOW_WRITE` 这一对，与 claim/sitemap/indexnow 八项双闸 flag
-及 `PROMO_CLAIM_ROLES`（由 `X8_LEVEL` 决定）互不冲突。
+需要临时收紧 catalog 写闸时，既有 `gate catalog-write on|off|dry-run` 子命令依然
+只管 `FEATURE_NOVEL_CATALOG_SYNC` / `NOVEL_CATALOG_SYNC_ALLOW_WRITE` 这一对，与
+claim/sitemap/indexnow 八项双闸 flag 及 `PROMO_CLAIM_ROLES` 互不冲突，但 X8
+发布身份固化工单（2026-09-05，2026-09-06 补丁终审后再修）之后有几点行为变化：
+
+1. **运行级别不再读调用现场的 `X8_LEVEL`**，而是读部署身份文件里记录的级别（见下条）。
+   该文件缺失、损坏，或解析不出合法级别时，`gate` 直接失败并提示先跑 `up`——不会
+   静默回落到 Level 0。命令行里即使带上 `X8_LEVEL=uat` 前缀也对 `gate` 没有任何
+   效果——这正是本条修复要消灭的"忘记前缀就悄悄按别的级别重建"问题。
+   级别的**配置表**同样被身份文件绑定（2026-09-06 补丁）：`up` 把当时所用级别表的
+   路径与内容摘要一并记入身份，`gate` 每次执行前重新计算摘要并比对。**部署之后若该
+   表被修改，`gate` 会因摘要不一致 fail-closed**；正确的恢复方式是重新执行一次完整
+   `up` 建立新的部署身份，不要设法绕过摘要检查。此外，表里的安全不变量
+   （`AUTO_WRITE_AUTHORIZED` 必须是 `NO`、`FEATURE_NOVEL_TAG_AUTO` 必须是 `false`）
+   会在 `gate` 路径上独立重新断言一次——摘要只能证明表没被改过，证明不了表里的值
+   本身是安全的。该断言与合规校验脚本共用同一份定义
+   （`scripts/lib/x8-level-safety-invariants.mjs`），不存在两份副本。
+2. **部署身份分"候选"与"已提交"两段（2026-09-06 补丁，决策二）**：`up`
+   在镜像构建成功、起任何容器之前，先把身份写成候选文件
+   （`.tmp/x8-production-like/release-identity.candidate.json`）；等数据库准备、
+   web/worker/scheduler 三容器均探到 healthy、nginx 起后两个域名的 HTTP(S)
+   探活都通过之后，才把候选提交为正式文件（`.tmp/x8-production-like/release-identity.json`，
+   `gate` 与 `status` 唯一会读的文件，不得手工编辑）——这一步不等 backup-timer，
+   它是身份提交**之后**才起的第六个服务。**提交之前**的任何一步失败（数据库
+   准备、三容器 healthy 探测、两个域名的 HTTP(S) 探活等），正式文件保持上一次
+   成功部署时的内容不动，磁盘上会留下一个 `release-identity.failed.txt` 说明
+   这次失败在哪一步、候选文件的内容是什么；此时 `gate`/`status` 会明确提示
+   "上一次部署未完成"而不是笼统的"没有身份文件"，恢复方式就是把 `up` 重新跑完。
+   **提交之后**才失败（例如身份已经落地，但紧接着的 `backup-timer` 起容器或
+   `admin-seed` 出错），正式文件已经是**这次**的新身份，不会退回上一次内容，
+   也不会留下 `release-identity.failed.txt`——这属于"关键部署已经成功、后续
+   收尾步骤单独出了问题"，按 `up` 打印的具体报错去单独处理 backup-timer/
+   admin-seed，不要按"身份没提交上"去重跑整套 `up`。
+3. **实测对账不再是一张写死的键名单（2026-09-06 补丁，决策一）**：`gate` 执行前的
+   三方比对（状态文件 / 渲染候选 / 容器实测）现在核对渲染基线里该服务声明的**全部**
+   环境变量，而不是旧版本硬编码的 7 个键——promo 双闸、预览来源白名单等旧版本会
+   漏检的键，现在都在对账范围内；基线有而容器没有、容器有而基线没有，同样算漂移。
+   唯一豁免的是几个烘焙进基础镜像、docker-compose.yml 从未声明过的常量键
+   （`PATH`/`NODE_VERSION`/`YARN_VERSION`/`NEXT_TELEMETRY_DISABLED`/`PORT`/
+   `HOSTNAME`，见 `scripts/lib/x8-gate-diff.mjs` 的 `BASE_IMAGE_BAKED_KEYS`）。
+4. **部分成功会自动回滚（2026-09-06 补丁，P0-2；2026-09-06 补丁第二轮，收窄了
+   触发条件的口径）**：`--apply` 重建 web/worker 时，只要重建本身失败、事后校验
+   发现漂移、**或者两个服务都已确认到达目标值但最终写状态文件本身失败**这三种
+   情况中的任意一种，命令都会自动尝试把两个服务一起重新拉回**操作前**的取值。
+   回滚后的重新校验与前置三方比对用的是**同一套全量对账**（第 3 条），不是只看
+   两个闸门变量或摘要/任务白名单几个挑出来的字段——只有两个服务的**全部**声明
+   环境变量都确认回到操作前状态，才报"已回滚"并结束（状态文件全程不写）。如果
+   连回滚都验证不了，会用 `FATAL`/`INCONSISTENT` 显著标出，并把两个服务当前
+   各自的真实取值打印出来，提示手工介入——这种情况下不要凭直觉重试 `gate`，先按
+   打印的取值和下方"发布身份"逐项核对。
+5. **计划模式是默认行为**：`gate catalog-write on|off|dry-run` 不带 `--apply` 时
+   只打印三方比对与将要发生的变化，不触碰容器、不写状态文件、不在
+   `.tmp/x8-production-like/` 下留下任何新文件或改动任何文件的 mtime；要真正生效
+   必须显式加 `--apply`，例如 `scripts/x8-production-like.sh gate catalog-write
+   on --apply`。只想查看当前状态、不想有任何写入时用 `gate catalog-write
+   status`，它是纯只读路径；不带子命令的顶层 `status` 现在也是纯只读路径
+   （2026-09-06 补丁，P2-10），同样要求已经有一次成功提交的部署身份。
+6. **漂移告警打印的"修复命令"实际上从来不会成功（2026-09-06 补丁第二轮，纠正上一版
+   措辞）**：`up` 结束时如果发现容器实测与状态文件不一致会打印 `WARNING`，之前的
+   文案暗示"只要漂移只涉及那两个闸门变量，`gate catalog-write on --apply` 就能修
+   好"——这是错的：`gate` 自己的三方前置检查核对的正是**同一份**持久化状态渲染
+   与**同一批**容器，这条警告能触发，就意味着那份前置检查一定会发现同样的
+   不一致而拒绝执行，不存在"漂移够窄就能修"的情况。**唯一**的恢复路径是重新跑一次
+   `up`——而且必须带上这个环境上次起时用的**同一个** `X8_LEVEL`：`up` 在
+   `X8_LEVEL` 未设置时默认落到 Level 0，裸跑会把 Level UAT/R 环境静默降级，而不是
+   把它修复回原状态。
 
 进入 Level UAT 前，本地若已经以 `X8_LEVEL=0`（或未设置，即默认 0）跑过
 `up`，需要先 `scripts/x8-production-like.sh down` 再以 `X8_LEVEL=uat`
@@ -148,9 +229,94 @@ scripts/x8-production-like.sh admin-secret set admin2   # 同上
 scripts/x8-production-like.sh up                        # 两个 secret 文件已就绪，自动 admin-seed
 ```
 
+D-9（2026-09-09）：`up` 会先做磁盘可用空间检查（fail-closed，不足退出码 69 并打印手工清理命令），
+低于告警线时按保留规则清理旧发布镜像（`X8_GC_ON_UP=0` 可关掉这次自动清理）；数据库准备阶段的
+权限重放（`grants.sql`）也已改为单事务，一次失败不会剥夺仍在跑的旧版本的数据库权限，也不会静默
+失败在数据库准备或 admin-seed 中间。
+
+验收时按这几个键去 `up` 的 stderr 里抓（两道闸各一行，成功路径也会打）：
+
+```
+X8_DISK_PREFLIGHT=ok scenario="building the release image" free_kib=… min_kib=8388608        # 闸A
+X8_DISK_PREFLIGHT=ok scenario="database preparation (roles/passwords/migrate/grants)" …      # 闸B
+```
+
+失败时同一个键变成 `X8_DISK_PREFLIGHT=refused …`，并额外打两行
+`X8_DB_PREP_FAILED_AT=<步骤>` / `X8_DB_PREP_GRANTS_INTACT=<yes|no|n/a>`；
+`intact=no` 时再多一行 `X8_DB_PREP_RECOVERY_COMMAND=…`（可直接复制执行）。
+`gc` 自己每轮打 `X8_GC_STARTED_AT` / `X8_GC_KEEP_IMAGE=<tag> reason=…` /
+`X8_GC_DELETE_IMAGE=` / `X8_GC_FINISHED_AT`。
+
 若 `up` 时 secret 文件还不存在，`admin-seed` 会被跳过并打印提示（不会让 `up` 失败）；
 之后单独补跑 `scripts/x8-production-like.sh admin-seed` 即可。`admin-seed` 幂等——
 账户已存在时默认跳过，只有再加 `--reset-password` 才更新密码哈希。
+
+### 2.6 分类词典 bootstrap（CanonicalTag v1，PR6 fix B-3）
+
+步骤 20（分类公开链）需要 `canonical_tag` 表非空——additive migration 不带 seed，
+`mutateAdminCanonicalTag` 只支持 update 不支持 create（ADR-P2-06-5-TAGGING-V3 §12
+"schema migration + explicit bootstrap CLI"），所以 UAT 前必须先跑一次
+`scripts/p2-06-5-production/tagging-bootstrap.ts`：dry-run 核对计数与两份权威文件的
+SHA-256（CanonicalTag v1 Final 123 条、B2 Owner Final 194 组/196 条 approved mapping
+edge），确认无误后 `--apply` 一次。`--channel-app` 必须显式绑定
+`changdu-app -> ChannelApp UUID`（不得按名字/唯一候选猜测，见 ADR §12 步骤 3）；
+`--approver` 必须是 X8 已存在的 `active` `admin_identity`（用于
+`source_label_mapping.approved_by`；`canonical_tag` 本身没有 actor 列）。默认走
+`web` 镜像内一次性进程，DB 用 `$P1_12_MIGRATION_DATABASE_URL`
+（`web_app` 对这些表只有列级授权，写权限在 `migration_owner`）：
+
+一次性进程复用 `x8_compose`（`scripts/lib/x8-production-like-env.sh` 里
+`prepare_x8_environment` 已导出的 `$P1_12_MIGRATION_DATABASE_URL`/
+`$P1_12_COMPOSE_PROJECT`），形态与 `admin_seed()`/`admin_reset()` 相同：
+
+```bash
+export X8_LEVEL=uat
+scripts/x8-production-like.sh up   # 已起则跳过；D-9（2026-09-09）：磁盘不够会 fail-closed
+                                    # （退出码 69），不会碰数据库；低于告警线时先按保留规则清理
+                                    # 旧镜像；权限重放已改单事务。见上文 §2.1 说明
+
+source scripts/lib/x8-production-like-env.sh
+prepare_x8_environment
+x8_compose() {
+  docker compose -p "$P1_12_COMPOSE_PROJECT" \
+    -f "$X8_PROJECT_ROOT/docker-compose.yml" \
+    -f "$X8_PROJECT_ROOT/infra/production-like/docker-compose.yml" "$@"
+}
+IMAGE="$(docker inspect --format '{{.Config.Image}}' "$(x8_compose ps -q web)")"
+
+# dry-run：只读，零写入
+CPS_NOVEL_APP_IMAGE="$IMAGE" x8_compose run --rm --no-deps -T \
+  -e DATABASE_URL="$P1_12_MIGRATION_DATABASE_URL" \
+  web tsx scripts/p2-06-5-production/tagging-bootstrap.ts \
+  --request-id x8-uat-tagging-bootstrap-$(date -u '+%Y%m%dT%H%M%SZ') \
+  --reason "owner local uat bootstrap" \
+  --channel-app changdu-app=<ChannelApp UUID>
+
+# 全部通过后原样加 --approver/--apply 跑一次
+... --approver <admin identity UUID 或 username> --apply
+```
+
+`<ChannelApp UUID>` 查 `SELECT ca.id FROM channel_app ca JOIN source_app sa ON
+sa.id=ca.source_app_id WHERE sa.code='changdu';`（X8 本地实测为
+`5e9aa528-88ab-43d4-97de-a0d9ff5e9862`，projectType=1，经 MoboReader 渠道接入，
+不要按名字/唯一候选猜测——上面这条查询本身就是"显式绑定"的核实步骤，不是自动推断）。
+`--approver` 用已存在的 `active` 身份（如 `admin`）。
+
+**PR6 Lane C 未合并前的本地验证**：`tagging-bootstrap.ts` 与两份权威文件不在已构建
+的 X8 镜像内（`docs/` 目录本就不打进生产镜像），额外加三个只读 volume 挂载到上面
+`run` 命令（脚本本身 + 两份 SHA 已核对的权威文件，路径与仓库相对路径一致）：
+`-v <lane-c-worktree>/scripts/p2-06-5-production/tagging-bootstrap.ts:/app/scripts/p2-06-5-production/tagging-bootstrap.ts:ro`、
+`-v <lane-c-worktree>/docs/p2/p2-06-5-lane-a/canonical-tag-v1-final/2026-08-16/canonical-tag-v1.0.0-final.json:/app/docs/p2/p2-06-5-lane-a/canonical-tag-v1-final/2026-08-16/canonical-tag-v1.0.0-final.json:ro`、
+`-v <lane-c-worktree>/docs/p2/p2-06-5-lane-b/b2-owner-final/2026-08-16/mapping-candidates-final.csv:/app/docs/p2/p2-06-5-lane-b/b2-owner-final/2026-08-16/mapping-candidates-final.csv:ro`。
+合并后镜像自带 `scripts/` 与 `docs/`（若发布流程也复制 `docs/`；否则两份权威文件的
+挂载仍需保留——这三行挂载不修改 X8 worktree 本身，只是运行时叠加）。已在 X8
+uat（`cps-novel-x8-local`，基线 `a05e41b`）验证：dry-run 与 apply 均通过，
+`--request-id` 相同的第二次 `--apply` 是纯 replay（`outcome=replayed`,
+`wrote=false`，计数不变）。
+
+幂等——同一 `--request-id` 重跑是纯 replay（零写入）；不同 `--request-id` 但内容不变
+的重跑按各表唯一键 upsert，不产生重复行。**从不写 `novel_canonical_tag`**——manual
+打标仍然只能在步骤 20 里通过后台 UI 完成，bootstrap 只负责词典本身。
 
 **事故与恢复**：2026-09-04 X8 复用旧 PostgreSQL volume 后，遗留管理员 `x8-owner`
 已完成 2FA 绑定但 Owner 无验证器/恢复码，密码通过验证后卡死在
@@ -163,7 +329,10 @@ export X8_LEVEL=uat
 scripts/x8-production-like.sh down                       # 保留 volume，不加 --purge
 scripts/x8-production-like.sh admin-secret set admin      # Owner 当面输入
 scripts/x8-production-like.sh admin-secret set admin2
-scripts/x8-production-like.sh up                          # 自动 admin-seed
+scripts/x8-production-like.sh up                          # 自动 admin-seed；D-9（2026-09-09）：
+                                                            # 磁盘不够会 fail-closed，不碰数据库；
+                                                            # 低于告警线先按保留规则清理旧镜像；
+                                                            # grants.sql 单事务重放
 scripts/x8-production-like.sh admin-reset x8-owner --deactivate            # dry-run 先看影响行数
 scripts/x8-production-like.sh admin-reset x8-owner --deactivate --apply    # 确认无误后 apply
 ```
@@ -205,6 +374,12 @@ scripts/x8-production-like.sh admin-reset x8-owner --deactivate --apply    # 确
 | 14 | 无效码与软删码返回 404 | `/go/{不存在的码}`、`/go/{已软删的码}` | 两者均 HTTP 404（`src/app/go/[code]/route.ts` 对 `deletedAt != null` 和未命中记录均返回 `notFound()`） | 截图或 `curl -I` |
 | 15（Claude/Codex 操作） | 停止 postgres 容器，验证故障可见性 | `/api/health`；再次点击步骤 13 的 CTA | `/api/health` 返回 503（`src/app/api/health/route.ts` 对 `report.ok=false` 返回 503，已核实）。**关于 CTA 302 的说明见下方脚注** | 截图 + `/api/health` 响应体 |
 | 16 | 下架并 takedown | `/novels/{novelId}`（发布生命周期面板，`publish-lifecycle-panel`） | 公开页 `/novel/{slug}` 返回 404 且响应头 `X-Robots-Tag`/meta 带 `noindex`；已物化章节被撤回（不可读） | 截图（公开页 404）+ 截图（后台撤回状态） |
+| 17 | 首页轮播运营 | `/home-carousel` | 配置可保存；人工位写入后首页 Hero 命中；清空 serving 时回退到最近 5 本有封面的已发布书 | 后台与首页截图 |
+| 18 | 模板管理与选择 | `/templates`、`/catalog-sync` | 新模板通过 fail-closed 校验后启用；创建内容显式选择该模板，Article.templateId 命中 | 后台截图 + 只读 SQL |
+| 19 | 文章编辑与 SEO | `/articles`、`/novel/{slug}` | 编辑 title/summary/body/SEO，单篇及批量再生成保留 slug/shortId；公开 head/body/FAQ JSON-LD 使用文章值 | 后台与公开页截图 |
+| 20 | 分类公开链 | `/categories`、`/browse?category=...`、`/category/{slug}` | manual 分类与 mapped 派生均可读，空分类 404；首页/footer 与 sitemap generator 按 sortOrder | 后台、browse、category 截图 |
+| 21 | 站点设置 consumer | `/settings`、公开首页 | 13 字段可编辑；GSC、GA4、OG site_name、home metadata、友链、版权与免责声明进入公开输出 | 后台截图 + head/footer 截图 |
+| 22（最后执行） | 账号安全 | `/settings/security` | 四态正确；regenerate 必须当前 TOTP，旧恢复码失效且 sessionVersion+1；新码只显示一次，无自助禁用 | 一次性码不得截图/落日志；只记录脱敏 PASS |
 
 **步骤 15 脚注（核实结论，非假设）**：`src/app/go/[code]/route.ts` 对每次请求
 都直接 `prisma.promoLink.findUnique(...)`，文件顶部显式 `export const dynamic =
@@ -219,7 +394,7 @@ stale-if-error 配置。据此代码路径，PostgreSQL 真的停止后，`/go/{
 
 ## 4. 通过判定
 
-16 步全部完成，且过程中：
+22 步全部完成，且过程中：
 
 - Owner 没有手工改任何 `.env`/compose 覆盖值；
 - Owner 没有直接执行任何脚本（`scripts/*.ts`、`scripts/*.sh`）——脚本类操作
@@ -270,7 +445,15 @@ stale-if-error 配置。据此代码路径，PostgreSQL 真的停止后，`/go/{
   `/go/{code}` 在 PostgreSQL 停止时预期不会返回 302；本项以真实观测结果为准。
 - **`X8_LEVEL` 是进程环境变量，不持久化**：每次新开 shell 或新起容器都要重新
   `export X8_LEVEL=uat`；容器一旦以某个 level 跑起来，切换 level 需要
-  `down` 后以新 level 重新 `up`（见 §2.1），不支持热切换。
+  `down` 后以新 level 重新 `up`（见 §2.1），不支持热切换。这条只对会调用
+  `prepare_x8_environment()` 的命令成立（`up`/`down`/`verify`/`accept` 等，见
+  §2.1 顶部列表）；`gate catalog-write` 与不带子命令的 `status` 完全不读这个
+  变量，它们的"级别"来自已提交的部署身份文件，不存在"忘记 export"这一类问题，
+  但也因此不支持"临时用另一个级别跑一次 gate"——那需要先用目标级别重新 `up`。
+- **部署身份候选/已提交两段同样不做跨 `up` 的合并**：某次 `up` 失败留下的候选或
+  失败标记，不会被下一次成功的 `up` "追溯修补"——下一次 `up` 从头重新构建、重新
+  探活，成功后整体覆盖为新的已提交身份；候选/失败标记只是"上一次没走完"的证据，
+  不是可恢复的中间状态。
 - **RC-2b 只验证了不起容器的渲染路径**：`x8_level_config`/
   `x8_expected_worker_allowlist` 三级渲染值，以及 `x8-validate-compose.mjs`
   对三级合成 `docker compose config` 片段的正反向断言，均已在本轮核实（见

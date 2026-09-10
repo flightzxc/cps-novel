@@ -68,6 +68,23 @@
       与 Level R 不得声明这个变量（`docker-compose.yml`/`.env.example` 均不含它）。
       未设置时该脚本 fail-fast 拒绝执行，且是 `hashAdminPassword` 12 位密码下限的
       唯一豁免路径——生产从不触达这条豁免。
+- [ ] **P2-06.5 标签管理双闸 + 自动分类双闸（PR6 fix lane F，2026-09-06）。** 生产/X8 曾
+      经 `grep -i TAGGING docker-compose.yml .env.example scripts/lib/x8-levels.json`
+      零命中——`FEATURE_P2_06_5_TAGGING` 等四个变量从未接入运行配置，`/categories`
+      与 `/tags` 的 Canonical/Mappings 页在生产读到未设置的 flag 时以
+      `TaggingAdminError("tagging_disabled")` 崩到错误边界。四个变量现已接入
+      `docker-compose.yml` 的 `web`/`worker`（`scheduler` 不需要，未接）：
+      `FEATURE_P2_06_5_TAGGING`（主读闸，`src/server/tagging/admin-service.ts` 的
+      `requireTaggingRead`）、`FEATURE_P2_06_5_TAG_ADMIN_WRITE`（Admin V1 UI 写闸）、
+      `FEATURE_NOVEL_TAG_AUTO`（auto 分类闸）、`AUTO_WRITE_AUTHORIZED`（ADR 门，精确
+      字符串 `YES`/`NO`，非布尔）。完整分级见下方 §3 Level 0 / Level UAT / Level R
+      各节；`AUTO_WRITE_AUTHORIZED` 在**任何** level 都必须是 `NO`——`scripts/
+      acceptance/x8-validate-compose.mjs` 对此有独立于 `scripts/lib/x8-levels.json`
+      取值的硬编码断言（ADR guard），改成 `YES` 会直接 FAIL。页面侧：flag 关闭时
+      `/categories`、`/tags/canonical`、`/tags/mappings` 与小说详情标签面板均改为
+      渲染禁用态面板（列出两个 flag 当前值与需开项），不再依赖错误边界兜底；写闸关
+      读闸开时页面保持只读，编辑按钮预先禁用并附说明。`/tags` 的"来源标签字典"
+      tab 走独立服务，不受这组 flag 影响。
 
   ```bash
   SITE_URL= npm test -- --project node tests/backend/seo/static-sitemap.test.ts tests/backend/indexnow/eligibility.test.ts
@@ -89,6 +106,16 @@
 - [ ] `SITEMAP_AUTO_REFRESH_ALLOW_WRITE=false`
 - [ ] `FEATURE_PROMO_LINK_CLAIM=false`
 - [ ] `PROMO_LINK_CLAIM_ALLOW_WRITE=false`
+- [ ] `FEATURE_P2_06_5_TAGGING=false`（PR6 fix lane F；见 §2 说明）。
+- [ ] `FEATURE_P2_06_5_TAG_ADMIN_WRITE=false`
+- [ ] `FEATURE_NOVEL_TAG_AUTO=false`
+- [ ] `AUTO_WRITE_AUTHORIZED=NO`（ADR 门；精确字符串，非布尔——任何 level 都不得是 `YES`）。
+- [ ] `FEATURE_ARTICLE_SEO_VISIBILITY=false`（C-25；单闸，只读侧，见
+      `docs/governance/feature-flag-registry.md`）。
+- [ ] `FEATURE_ARTICLE_BLOG=false` / `ARTICLE_BLOG_ALLOW_WRITE=false`（C-28 双闸；C-29 起
+      `FEATURE_ARTICLE_BLOG` 同时被 `web` 与 `worker` 消费——`src/lib/seo/sitemap.ts` 的博客
+      sitemap 家族生成也读这个 flag；`ARTICLE_BLOG_ALLOW_WRITE` 仍仅 `web` 消费，
+      `worker`/`scheduler` 无调用点，见 `docs/governance/feature-flag-registry.md`）。
 - [ ] Worker Level 0 allowlist 精确为 `credential.validate.v1,credential.supersede.v1,catalog_scan`。
 - [x] C2b parser 修复验收前不消费 `moboreader.preview_refresh.v1`；让 preview item 留在 pending，不把可恢复工作消费成 failed。
   - **验收证据**：commit `5a6addf`（`fix(adapter): normalize numeric preview bookId`，
@@ -134,13 +161,27 @@
       内一起改，任务消费原子规则见本节开头）。
 - [ ] `FEATURE_PROMO_LINK_CLAIM=true` / `PROMO_LINK_CLAIM_ALLOW_WRITE=true`（同一次变更内
       一起改）。
-- [ ] `WORKER_TASK_ALLOWLIST=credential.validate.v1,credential.supersede.v1,catalog_scan,moboreader.preview_refresh.v1,promo_link.claim.v1`
+- [ ] `WORKER_TASK_ALLOWLIST=credential.validate.v1,credential.supersede.v1,catalog_scan,home_carousel.compute.v1,moboreader.preview_refresh.v1,promo_link.claim.v1`
       与上面两对双闸在**同一次变更**中一起生效；C2b 已验收（见上），
       `moboreader.preview_refresh.v1` 不再需要保持 pending-only。
+- [ ] `home_carousel.compute.v1` 已在 Web action、Scheduler、Worker handler 和 X8 UAT/R allowlist
+      四处登记（PR6 fix lane A 前，Scheduler 一项实际未登记——`scheduler/index.ts` 的
+      `SCHEDULES` 恒为空数组、`enqueueHomeCarouselCron` 零调用者，本行当时属于文档失实；
+      已在 `fix/pr6-lane-a-carousel` 分支补齐首条 `ScheduleDefinition` 并纳入
+      `tests/backend/home-carousel/cron.test.ts` 断言，发布时仍需按下方核对）；
+      `cronEnabled=false` 不建任务，同一 business date 重复调度返回
+      `skipped_duplicate`。
 - [ ] IndexNow / Sitemap 双闸维持 Level 0 原值：`FEATURE_INDEXNOW_OUTBOX=false`、
       `INDEXNOW_OUTBOX_ALLOW_WRITE=false`、`FEATURE_INDEXNOW_DELIVERY=false`、
       `INDEXNOW_DELIVERY_ALLOW_WRITE=false`、`FEATURE_SITEMAP_AUTO_REFRESH=false`、
       `SITEMAP_AUTO_REFRESH_ALLOW_WRITE=false`。
+- [ ] `FEATURE_P2_06_5_TAGGING=true` / `FEATURE_P2_06_5_TAG_ADMIN_WRITE=true`（PR6 fix
+      lane F；同一次变更内一起改）——本地 UAT 需要能真实读写 Canonical Tag / 来源映射 /
+      小说标签，验证 `/categories`、`/tags/canonical`、`/tags/mappings` 的禁用态面板已
+      在生产链路上换成正常界面。
+- [ ] `FEATURE_NOVEL_TAG_AUTO=false` / `AUTO_WRITE_AUTHORIZED=NO` 维持 Level 0 原值——
+      本轮 UAT 不验收自动分类任务链，`AUTO_WRITE_AUTHORIZED` 在任何 level 都不得设为
+      `YES`（ADR 门，Owner 未授权）。
 - [ ] `PROMO_CLAIM_ROLES=super_admin`（`PROMO_CLAIM_USER_IDS` 留空）。这是 admin 能力位
       `promo:claim`（`src/lib/auth/capabilities.ts`），**不是**上面的双闸，两者缺一都
       无法真正领取：双闸开着但能力位为空时，`/catalog-sync` 的领取弹窗只能选 `dry_run`，
@@ -193,6 +234,13 @@
       **同一次发布变更**中一起生效，对应 §3.1 表步骤 6。
 - [ ] IndexNow 双闸维持 `false`：`FEATURE_INDEXNOW_OUTBOX`、`INDEXNOW_OUTBOX_ALLOW_WRITE`、
       `FEATURE_INDEXNOW_DELIVERY`、`INDEXNOW_DELIVERY_ALLOW_WRITE`（X11 硬前置未满足）。
+- [ ] `FEATURE_P2_06_5_TAGGING=true` / `FEATURE_P2_06_5_TAG_ADMIN_WRITE=true`（PR6 fix
+      lane F；由 Level UAT 延续，生产同样需要 Canonical Tag / 来源映射 / 小说标签的
+      正常读写，而不是禁用态面板）。
+- [ ] **`FEATURE_NOVEL_TAG_AUTO=false` / `AUTO_WRITE_AUTHORIZED=NO`（必勾项，ADR 门）。**
+      本轮上线不授权自动分类写入——`AUTO_WRITE_AUTHORIZED` 是精确字符串门（非布尔），
+      唯一放行值是字面 `YES`，且需要独立的 Owner 授权变更；上线前用
+      `docker compose config` 核对渲染出的 `web`/`worker` 两处都不是 `YES`/`true`。
 - [ ] 上线日验证 sitemap 首刷成功，并对 `${SITE_URL}/sitemap.xml` 执行 §4 的 HTTP route
       验收命令，确认 200。
 - [ ] 结算账号口径 = **admin1**（Owner 2026-09-03 决定）。

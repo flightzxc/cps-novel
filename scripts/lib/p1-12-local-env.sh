@@ -81,6 +81,6 @@ prepare_p1_12_local_environment() {
   export ADMIN_CANONICAL_ORIGIN="${ADMIN_CANONICAL_ORIGIN:-http://127.0.0.1:${P1_12_WEB_PORT:-3000}}"
   export SITE_URL="${SITE_URL:-$ADMIN_CANONICAL_ORIGIN}"
   export TZ="${TZ:-Asia/Tokyo}"
-  export WORKER_TASK_ALLOWLIST="${WORKER_TASK_ALLOWLIST:-credential.validate.v1,credential.supersede.v1,catalog_scan}"
-  export MOBOREADER_PREVIEW_SOURCE_APP_CODES="${MOBOREADER_PREVIEW_SOURCE_APP_CODES:-changdu}"
+  export WORKER_TASK_ALLOWLIST="${WORKER_TASK_ALLOWLIST:-credential.validate.v1,credential.supersede.v1,catalog_scan,home_carousel.compute.v1}"
+  export MOBOREADER_PREVIEW_SOURCE_APP_CODES="${MOBOREADER_PREVIEW_SOURCE_APP_CODES:-moboreader}"
 }

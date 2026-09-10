@@ -37,9 +37,15 @@
  * `visibility.ts`'s `isPublicationStatePublic` requires *both*
  * `Novel.status === "published"` and `Article.status === "published"`.
  * `Article` is a locale page snapshot of `Novel`
- * (`docs/governance/database-governance.md` §4) and today there is exactly
- * one Article per Novel (`SITE_LOCALES` has one member) — so "publish the
- * page" and "publish the work" are the same admin action in V1. This module
+ * (`docs/governance/database-governance.md` §4). What keeps "publish the
+ * page" and "publish the work" the same admin action today is not a locale
+ * whitelist (Owner decision 2026-09-08 removed the publish gate's locale
+ * whitelist entirely — see `evaluator.ts`'s header) but `@@unique([novelId,
+ * locale])` (`article_novel_locale_key`) plus this module's own batch-publish
+ * shape: `publishArticlesBatch`/`publishArticlesBatchAsAdmin` only ever act
+ * on caller-selected Article ids, never a blanket "publish every Article of
+ * this Novel" sweep. The Novel-side write below stays conditional on
+ * `facts.novel.status !== "published"` regardless. This module
  * gates once and writes both sides in the same transaction. A future
  * multi-locale world, where a Novel could have several Articles publishing
  * on independent schedules, only needs `Novel.status` promotion to become
@@ -122,6 +128,7 @@ import type { PrismaClient } from "@prisma/client";
 import type { AdminIdentityStore, SessionStore } from "@/lib/auth/ports";
 import type { NovelStatus } from "@/domain/database-statuses";
 import type { SiteLocale } from "@/lib/locale/locale-canonical";
+import { chunkIds } from "@/lib/db/chunked-id-lookup";
 import { withDbRetry } from "@/lib/db/db-retry";
 import { enqueueIndexNow } from "@/lib/indexnow/dispatch-handler";
 import { enqueueSitemapRefreshForPublication } from "@/lib/tasks/sitemap-refresh";
@@ -129,6 +136,7 @@ import { dispatchFirstPublicPublication } from "@/server/publication/dispatcher"
 import {
   revalidatePublicArticlePaths,
   revalidatePublicArticleSet,
+  revalidatePublicBlogPaths,
   type ArticlePublicPathInput,
 } from "@/server/publication/revalidate";
 import { requireFreshAdminServiceMutation, type AdminServiceAuthorization } from "@/server/auth/guards";
@@ -216,7 +224,8 @@ export type ApplyPublishTransitionResult =
   | {
       readonly outcome: "published";
       readonly articleId: string;
-      readonly novelId: string;
+      /** C-27: `null` for a non-`novel_article` (blog/listicle/guide) — this Article has no Novel. */
+      readonly novelId: string | null;
       readonly locale: string;
       /** True only the first time this Article ever reached `published`. */
       readonly firstPublish: boolean;
@@ -256,7 +265,8 @@ type TxPublishOutcome =
   | {
       readonly outcome: "published";
       readonly articleId: string;
-      readonly novelId: string;
+      /** C-27: `null` for a non-`novel_article` (blog/listicle/guide) — see this module's "Why Novel and Article publish together" section below. */
+      readonly novelId: string | null;
       readonly locale: string;
       /**
        * Carried through purely to build the invalidated path after commit
@@ -268,6 +278,14 @@ type TxPublishOutcome =
       readonly publicPageShortId: string;
       readonly firstPublish: boolean;
       readonly wrote: boolean;
+      /**
+       * C-29b: carried through purely so the post-commit cache-invalidation
+       * branch below can pick `revalidatePublicArticlePaths` (`novel_article`)
+       * vs. `revalidatePublicBlogPaths` (blog family) — not part of the
+       * public `ApplyPublishTransitionResult` shape, same "internal only"
+       * posture `publicPageShortId` above already documents.
+       */
+      readonly articleType: string;
     };
 
 /**
@@ -353,6 +371,7 @@ export async function applyPublishTransition(
           publicPageShortId: article.publicPageShortId,
           firstPublish: false,
           wrote: false,
+          articleType: article.articleType,
         };
       }
 
@@ -378,11 +397,15 @@ export async function applyPublishTransition(
         throw new PublishConflictSignal();
       }
 
-      // Idempotent: only writes when the Novel is not already published —
-      // see this module's header for why Novel and Article publish
-      // together. Same conditional-updateMany shape as the Article write
-      // above, same throw-to-roll-back reasoning.
-      if (facts.novel.status !== "published") {
+      // Idempotent: only writes when there is a Novel to promote (see this
+      // module's header, "Why Novel and Article publish together") and it
+      // is not already published. Same conditional-updateMany shape as the
+      // Article write above, same throw-to-roll-back reasoning. C-27: a
+      // non-novel_article (blog/listicle/guide) has no Novel at all —
+      // `facts.novel`/`article.novelId` are both `null` for it (guaranteed
+      // to travel together by `article_novel_id_by_type_check`), and this
+      // whole block is skipped; only the Article side is written for it.
+      if (facts.novel && article.novelId !== null && facts.novel.status !== "published") {
         const novelWrite = await tx.novel.updateMany({
           where: { id: article.novelId, status: facts.novel.status, deletedAt: null },
           data: { status: "published" },
@@ -400,8 +423,14 @@ export async function applyPublishTransition(
           entityType: "Article",
           entityId: article.id,
           requestId: input.requestId,
-          beforeSnapshot: { articleStatus: facts.article.status, novelStatus: facts.novel.status },
-          afterSnapshot: { articleStatus: "published", novelStatus: "published" },
+          // C-27: a non-novel_article has no Novel to snapshot a status for
+          // — see this module's "Why Novel and Article publish together".
+          beforeSnapshot: facts.novel
+            ? { articleStatus: facts.article.status, novelStatus: facts.novel.status }
+            : { articleStatus: facts.article.status },
+          afterSnapshot: facts.novel
+            ? { articleStatus: "published", novelStatus: "published" }
+            : { articleStatus: "published" },
         },
       });
 
@@ -414,6 +443,7 @@ export async function applyPublishTransition(
         publicPageShortId: article.publicPageShortId,
         firstPublish,
         wrote: true,
+        articleType: article.articleType,
       };
         }),
       { op: "publish-gate.applyPublishTransition", itemId: input.articleId, idempotencyKey: input.requestId },
@@ -425,6 +455,14 @@ export async function applyPublishTransition(
     throw error;
   }
 
+  // C-27/C-29b: `dispatchFirstPublicPublication`'s handlers are opaque to
+  // `novelId` (`dispatcher.ts` — `enqueueIndexNow` re-derives eligibility
+  // from `articleId` alone via `loadIndexNowCandidateArticle`, and
+  // `enqueueSitemapRefresh` is a global refresh trigger that never reads
+  // `novelId` at all), so a `null` `novelId` (blog/listicle/guide, C-27) is
+  // no longer a reason to skip dispatch entirely — C-29b wires the blog
+  // family's own IndexNow eligibility path (`isBlogIndexNowEligible`) and
+  // sitemap refresh through unchanged from here.
   if (txResult.outcome === "published" && txResult.wrote && txResult.firstPublish) {
     await dispatchFirstPublicPublication(
       {
@@ -451,12 +489,23 @@ export async function applyPublishTransition(
   // → publish again) also changes what the public page renders and must
   // invalidate the same way. See this module's header, "Cache invalidation".
   if (txResult.outcome === "published" && txResult.wrote) {
-    const pathInput: ArticlePublicPathInput = {
-      locale: txResult.locale as SiteLocale,
-      slug: txResult.slug,
-      shortId: txResult.publicPageShortId,
-    };
-    safeInvalidatePublicCache(() => revalidatePublicArticlePaths(pathInput));
+    // C-29b: `novel_article` keeps the pre-C-29b invalidation shape
+    // (sitewide listings + this Article's own detail/chapter pages) byte-
+    // identical; the blog family (`articleType !== "novel_article"`, C-27's
+    // `novelId === null` travels with it under
+    // `article_novel_id_by_type_check`) has no chapter subtree and is not
+    // part of `/`/`/browse` at all — `revalidatePublicBlogPaths` only ever
+    // touches `/blog/{slug}` and `/blog` (see that function's doc comment).
+    if (txResult.articleType === "novel_article") {
+      const pathInput: ArticlePublicPathInput = {
+        locale: txResult.locale as SiteLocale,
+        slug: txResult.slug,
+        shortId: txResult.publicPageShortId,
+      };
+      safeInvalidatePublicCache(() => revalidatePublicArticlePaths(pathInput));
+    } else {
+      safeInvalidatePublicCache(() => revalidatePublicBlogPaths({ slug: txResult.slug }));
+    }
   }
 
   if (txResult.outcome === "published") {
@@ -722,8 +771,18 @@ async function applyNovelRightsTransition(
         // deletes NovelChapterContent (`database-statuses.ts` doc comment) —
         // content deletion happens because of this rights transition, not as
         // an independent step a caller could forget.
-        await tx.novelChapterContent.deleteMany({ where: { novelChapterId: { in: chapterIds } } });
-        await tx.novelChapter.updateMany({ where: { id: { in: chapterIds } }, data: { status: "withdrawn" } });
+        //
+        // C-15 audit (施工工单_C15 §二.4): unlike `affectedArticleIds` above
+        // (hard-bounded by the `novelId`+`locale` unique constraint, so it
+        // can never exceed the small supported-locale count),
+        // `total_chapter_count` has no schema-enforced ceiling -- a single
+        // long-running web novel is not guaranteed to stay under the
+        // chunking threshold. Chunked defensively even though no real novel
+        // has hit this yet.
+        for (const idChunk of chunkIds(chapterIds)) {
+          await tx.novelChapterContent.deleteMany({ where: { novelChapterId: { in: idChunk } } });
+          await tx.novelChapter.updateMany({ where: { id: { in: idChunk } }, data: { status: "withdrawn" } });
+        }
       }
     }
 

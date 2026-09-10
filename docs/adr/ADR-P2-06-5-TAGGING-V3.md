@@ -12,15 +12,28 @@ B2_STATUS                      = FINAL
 B2_MAPPING_KEYS                = 285
 B2_APPROVED_MAPPING_GROUPS     = 194
 B2_APPROVED_MAPPING_EDGES      = 196
-C1_PARAMETER_STATUS            = OWNER_REVIEW_PENDING
+C1_PARAMETER_STATUS            = FROZEN
+C1_FINAL_RUN_ID                = 2026-08-17-owner-final-c1-final
+TEXT_PARAMETERS                = title=30; description=30; threshold=30; maxTextTags=3
+KEYWORD_ELIGIBILITY_VERSION    = keyword-eligibility-v2
+KEYWORD_ELIGIBILITY_SHA256     = e796ba1ed79b344f790a70853d2e9773d6265e307615b2a60da28b90a6164854
 AUTO_WRITE_AUTHORIZED          = NO
 PRODUCTION_IMPLEMENTATION_AUTHORIZED = YES
-PRODUCTION_IMPLEMENTATION_STATUS     = IN_PROGRESS
+PRODUCTION_IMPLEMENTATION_STATUS     = COMPLETE
 ```
 
 本 ADR 是 P2-06.5 Tagging 的唯一权威工程合同。旧
 `docs/p2/P2_06_5_ADR_TAGGING.md` 已被本文件 supersede；与本文件冲突的旧短路、locale Tag
 identity、mapping FK 或 auto 生命周期描述全部失效。
+
+## 2026-09-05 Owner amendment · public category projection
+
+Owner 将 CanonicalTag 的公开只读投影纳入首发范围，supersede 原决定 10 中“不是本期 public
+SEO contract”的时间范围，不改变其余 Tagging V3 语义。`/categories` 复用 CanonicalTag 管理；
+公开 `/category/[slug]`、`/browse?category=`、首页/页脚入口与 category sitemap 只消费 active
+CanonicalTag，并按 `sortOrder, stableId` 排序。有效分类仍是 manual FULL_SNAPSHOT 或 automatic
+mode 下的 mapped read-derived 结果；公开路径不物化 mapped、不执行任何 auto write。空分类 404
+且不进 sitemap。`AUTO_WRITE_AUTHORIZED=NO` 保持冻结。
 
 ## 1. Context
 
@@ -287,7 +300,9 @@ type ClassifierConfig = {
 };
 ```
 
-pending 配置在 production loader 中返回 `CONFIG_NOT_READY`；测试通过显式 fixture 注入完整配置。
+Owner Final 已冻结 production config 为 `30 / 30 / 30 / 3`，production loader 直接消费
+`classifier-config-final.json` 并验证 taxonomy 与 `keyword-eligibility-v2` authority。任何 artifact
+状态、版本或 SHA 不一致仍 fail closed 为 `CONFIG_NOT_READY`；`AUTO_WRITE_AUTHORIZED=NO` 是独立写闸。
 Worker、service、CLI 和测试不得各自保存候选 production 数值。
 
 ## 9. Lifecycle
@@ -350,6 +365,35 @@ auto apply 必须 master、auto 与 Owner gate 同时开放；任何 CLI/Admin/W
 不得 `db push`、不得在 migration 内运行 classifier、外部 API 或库存 backfill，也不得将 123 tags
 和 B2 mappings 硬编码进 migration SQL。回滚优先关闭 flags/停用 edge/tag；不在本期设计 destructive
 down migration。
+
+### 2026-09-05 bootstrap CLI 落地（PR6 fix B-3）
+
+`scripts/p2-06-5-production/tagging-bootstrap.ts` 实现本节裁决，闭合 PR #6 验收 B-3
+（"CanonicalTag 无任何落库途径，公开分类链在 UAT 不可执行"）。对齐步骤 1-4：
+
+- 权威输入锁定为 CanonicalTag v1 Final JSON（`docs/p2/p2-06-5-lane-a/canonical-tag-v1-final/2026-08-16/canonical-tag-v1.0.0-final.json`，SHA-256
+  `8bc8cdae8be2176bde170173e98bad2b9fa0e1770818174a57320816eefdccad`，复用
+  `src/lib/tagging/keyword-artifact.ts` 的 `CANONICAL_TAG_V1_SHA256` 常量）与 B2 Owner
+  Final mapping candidates CSV（`docs/p2/p2-06-5-lane-b/b2-owner-final/2026-08-16/mapping-candidates-final.csv`，SHA-256
+  `140057fea8e09980ab465c4eb780e228d07d69dab37d54bbab312da9cab82c38`）；字节不符即拒。
+- dry-run 打印 123/123 翻译/314 alias（内联 `canonical_tag.aliases` JSONB，非独立表）/
+  360 keyword（对 438 条原始 `keyword_seeds` 应用去重+跨 tag 冲突+非 Latin/CJK 脚本+
+  `keyword-eligibility-v2` overlay 禁用后的结果，算法与 Lane C 校准脚本
+  `scripts/p2-06-5-lane-c/owner-final-c1.mjs` 的 `buildLexicon` 一致）/194 组 196 条
+  approved mapping edge，并核对数据库当前计数，零写入。
+- `--channel-app changdu-app=<ChannelApp UUID>` 由 operator 显式提供（不猜测名字/唯一
+  候选），dry-run 与 apply 都对 DB 校验该 UUID 存在且 `active`。`--apply --approver`
+  要求已存在且 `active` 的 `admin_identity`（只用于 `source_label_mapping.approved_by`；
+  `canonical_tag` 无 actor 列），事务 + `pg_advisory_xact_lock`，按各表唯一键幂等
+  upsert，写 `OperationAudit`（`actorType=system`，`action=canonical_tag.bootstrap`，
+  `afterSnapshot` 含 `canonicalV1Sha256`/`mappingArtifactSha256`/`taxonomyVersion`/
+  各表计数）。同 `--request-id` 重放零写入（复用
+  `scripts/bootstrap-admin-identity.ts` 的 replay 模式）；不产生 `mutateAdmin*` 调用、
+  不写 `novel_canonical_tag`。
+- 2026-09-05 在 X8 uat（`cps-novel-x8-local`，基线 `a05e41b`）实跑通过：dry-run 与
+  apply 计数与本节一致，`canonical_tag`/`canonical_tag_translation`/
+  `canonical_tag_keyword`/`source_label_mapping` 分别落地 123/123/360/196 行，
+  `novel_canonical_tag` 保持 0；同 `--request-id` 二次 `--apply` 为纯 replay。
 
 ## 13. Admin Behavior
 
@@ -458,7 +502,7 @@ CANONICAL_TAG_V1_COUNT=123
 CANONICAL_TAG_V1_SHA256=8bc8cdae8be2176bde170173e98bad2b9fa0e1770818174a57320816eefdccad
 B2_STATUS=FINAL
 B2_MAPPING_KEYS=285
-C1_PARAMETER_STATUS=OWNER_REVIEW_PENDING
+C1_PARAMETER_STATUS=FROZEN
 C1_DESCRIPTION_ONLY_BLIND_REVIEW=IN_PARALLEL
 CHAPTER_EVIDENCE_STATUS=DEFER
 OFFLINE_LLM_ENRICHMENT=FUTURE_EXTENSION_NON_BLOCKING

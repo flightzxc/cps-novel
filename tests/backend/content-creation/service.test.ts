@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { TEMPLATE_SEO_SCHEMA_VERSION } from "@/lib/seo/template";
 import { ContentCreationInputError, createContentFromSourceItem } from "@/server/content-creation/service";
 
 import { FakeContentCreationDb } from "./fake-db";
@@ -70,7 +71,9 @@ describe("createContentFromSourceItem — apply, success path", () => {
       metaTitle: "The Great Adventure Begins",
       metaDescription: "A sweeping tale of courage.",
     });
-    expect(fake.lastArticleCreateArgs?.seoSchemaVersion).toBe(1);
+    // P2-02B bumped this to 2 (metaKeywords/slug slots) — assert against the live
+    // constant rather than a hardcoded literal so this test doesn't rot on the next bump.
+    expect(fake.lastArticleCreateArgs?.seoSchemaVersion).toBe(TEMPLATE_SEO_SCHEMA_VERSION);
 
     // NovelSourceItem is linked and transitioned.
     const linkedSourceItem = fake.sourceItems.get(sourceItem.id);
@@ -89,7 +92,7 @@ describe("createContentFromSourceItem — apply, success path", () => {
     });
   });
 
-  it("never sets promoLinkId/templateId/status keys on the created rows (red-line boundaries)", async () => {
+  it("sets templateId but never promoLinkId/status on the created rows", async () => {
     const fake = new FakeContentCreationDb();
     const sourceItem = fake.seedSourceItem({ title: "Some Title Here" });
 
@@ -109,9 +112,76 @@ describe("createContentFromSourceItem — apply, success path", () => {
     // whole suite if a literal `status:` key ever appeared outside
     // src/server/publish-gate/).
     expect(fake.lastArticleCreateArgs).not.toHaveProperty("promoLinkId");
-    expect(fake.lastArticleCreateArgs).not.toHaveProperty("templateId");
+    expect(fake.lastArticleCreateArgs?.templateId).toEqual(expect.any(String));
     expect(fake.lastArticleCreateArgs).not.toHaveProperty("status");
     expect(fake.lastNovelCreateArgs).not.toHaveProperty("status");
+  });
+
+  /**
+   * C-26 (`规划_文章管理能力补齐_博客类型可见性换小说_2026-09-08.md` §三/C-26):
+   * "模板渲染路径（创建服务里的文章插入...）：写成 template" — this insert is
+   * one of exactly two authorized `Article.contentMode` write sites (the
+   * other is `src/server/articles/service.ts`'s `updateArticleContent`/
+   * `regenerateCore` — see `tests/backend/articles/
+   * content-mode-sole-write-paths.test.ts`). Asserted on the raw write args,
+   * same as the `templateId`/`status` assertions immediately above, because
+   * this fake's `FakeArticle` storage type does not carry `contentMode`.
+   */
+  it("writes contentMode: \"template\" on the created Article", async () => {
+    const fake = new FakeContentCreationDb();
+    const sourceItem = fake.seedSourceItem({ title: "Content Mode Check" });
+
+    const result = await createContentFromSourceItem(fake.asPrismaClient(), {
+      novelSourceItemId: sourceItem.id,
+      mode: "apply",
+      actor: ADMIN_ACTOR,
+      requestId: "req-content-mode",
+    });
+
+    expect(result.outcome).toBe("created");
+    expect(fake.lastArticleCreateArgs).toMatchObject({ contentMode: "template" });
+  });
+
+  it("uses one explicitly selected active template and persists its id", async () => {
+    const fake = new FakeContentCreationDb();
+    fake.seedArticleTemplate({
+      templateKey: "campaign-v2",
+      bodyTemplate: "<article>Campaign: {novel_title}</article>",
+      seoTemplate: { title: "Campaign {novel_title}" },
+    });
+    const sourceItem = fake.seedSourceItem({ title: "Selected Story" });
+
+    const result = await createContentFromSourceItem(fake.asPrismaClient(), {
+      novelSourceItemId: sourceItem.id,
+      templateKey: "campaign-v2",
+      mode: "apply",
+      actor: ADMIN_ACTOR,
+      requestId: "req-template-selected",
+    });
+
+    expect(result.outcome).toBe("created");
+    const selected = Array.from(fake.articleTemplates.values()).find((row) => row.templateKey === "campaign-v2");
+    expect(fake.lastArticleCreateArgs).toMatchObject({
+      templateId: selected?.id,
+      title: "Campaign Selected Story",
+      body: "<article>Campaign: Selected Story</article>",
+    });
+  });
+
+  it("fails closed when an explicit template is not active", async () => {
+    const fake = new FakeContentCreationDb();
+    fake.seedArticleTemplate({ templateKey: "inactive-v1", status: "inactive" });
+    const sourceItem = fake.seedSourceItem({ title: "Blocked Story" });
+
+    await expect(createContentFromSourceItem(fake.asPrismaClient(), {
+      novelSourceItemId: sourceItem.id,
+      templateKey: "inactive-v1",
+      mode: "apply",
+      actor: ADMIN_ACTOR,
+      requestId: "req-template-inactive",
+    })).resolves.toEqual({ outcome: "template_not_available", templateKey: "inactive-v1" });
+    expect(fake.novels.size).toBe(0);
+    expect(fake.articles.size).toBe(0);
   });
 });
 

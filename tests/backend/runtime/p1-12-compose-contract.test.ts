@@ -137,6 +137,25 @@ describe("P1-12 Compose and image contracts", () => {
     }
   });
 
+  it("C-25 review fix (P0): passes FEATURE_ARTICLE_SEO_VISIBILITY to both Web and Worker, not Web-only", () => {
+    // worker/handlers/sitemap-refresh.ts's createSitemapFamilyBuilder(db) and
+    // worker/handlers/indexnow-delivery.ts's isNovelIndexNowEligible ->
+    // isHiddenFromPublicView both default their `env` param to `process.env`
+    // -- the WORKER process's own env. Before this fix the compose worker
+    // block never set this var, so the worker's read of it was silently
+    // pinned to "false" regardless of Web's value: a hidden/seo_only
+    // Article's stale sitemap entry or IndexNow submission would survive
+    // past the toggle. Scheduler is exempt -- enqueue-only, no public-site
+    // read path to gate.
+    const web = serviceBlock("web");
+    const worker = serviceBlock("worker");
+    const scheduler = serviceBlock("scheduler");
+    expect(web).toContain("FEATURE_ARTICLE_SEO_VISIBILITY: ${FEATURE_ARTICLE_SEO_VISIBILITY:-false}");
+    expect(worker).toContain("FEATURE_ARTICLE_SEO_VISIBILITY: ${FEATURE_ARTICLE_SEO_VISIBILITY:-false}");
+    expect(scheduler).not.toContain("FEATURE_ARTICLE_SEO_VISIBILITY");
+    expect(envExample).toContain("FEATURE_ARTICLE_SEO_VISIBILITY=false");
+  });
+
   it("starts content, settings, and task capabilities at super_admin", () => {
     const web = serviceBlock("web");
     for (const capability of [
@@ -169,6 +188,8 @@ describe("P1-12 Compose and image contracts", () => {
     const worker = serviceBlock("worker");
     for (const variable of [
       "MOBOREADER_CATALOG_SAFETY_MAX_PAGES",
+      "MOBOREADER_UPSTREAM_RECOMMENDED_PAGE_SIZE",
+      "MOBOREADER_UPSTREAM_MIN_REQUEST_INTERVAL_MS",
       "MOBOREADER_PREVIEW_CHUNK_SIZE",
       "MOBOREADER_PREVIEW_CONCURRENCY",
       "MOBOREADER_PREVIEW_TIMEOUT_MS",
@@ -183,9 +204,52 @@ describe("P1-12 Compose and image contracts", () => {
     }
   });
 
+  it("C-13 (施工工单_C13_每页100本与节流余量_2026-09-07.md): passes the recommended page size to both Web and Worker, and the request-pacing interval to Worker only, both at CPS-default values", () => {
+    // Web resolves a catalog task's pageSize via
+    // resolveMoboreaderUpstreamRecommendedPageSize() (catalog-sync/_actions.ts);
+    // Worker validates each item's pageSize against MOBOREADER_CATALOG_LIMITS
+    // .maxPageSize (worker/handlers/moboreader.ts) and paces upstream requests
+    // via resolveMoboreaderUpstreamRateLimitConfig
+    // (src/lib/adapters/moboreader-rate-limit.ts) -- only Worker dispatches
+    // upstream HTTP calls, so only Worker needs the pacing interval.
+    const web = serviceBlock("web");
+    const worker = serviceBlock("worker");
+    expect(web).toContain(
+      "MOBOREADER_UPSTREAM_RECOMMENDED_PAGE_SIZE: ${MOBOREADER_UPSTREAM_RECOMMENDED_PAGE_SIZE:-20}",
+    );
+    expect(worker).toContain(
+      "MOBOREADER_UPSTREAM_RECOMMENDED_PAGE_SIZE: ${MOBOREADER_UPSTREAM_RECOMMENDED_PAGE_SIZE:-20}",
+    );
+    expect(worker).toContain(
+      "MOBOREADER_UPSTREAM_MIN_REQUEST_INTERVAL_MS: ${MOBOREADER_UPSTREAM_MIN_REQUEST_INTERVAL_MS:-1100}",
+    );
+    expect(web).not.toContain("MOBOREADER_UPSTREAM_MIN_REQUEST_INTERVAL_MS");
+    // The compose default is deliberately the conservative CPS value (20 /
+    // 1100ms), not C-13's probed-safe rehearsal value (100 / 1500ms) --
+    // that pairing lives only in scripts/lib/x8-production-like-env.sh,
+    // which an operator opts into explicitly.
+    expect(compose).not.toMatch(/MOBOREADER_UPSTREAM_RECOMMENDED_PAGE_SIZE:-100/);
+    expect(compose).not.toMatch(/MOBOREADER_UPSTREAM_MIN_REQUEST_INTERVAL_MS:-1500/);
+  });
+
+  it("wires the preview source allowlist to Web as well as Worker (X8 gate identity work order, 2026-09-05)", () => {
+    // src/server/content-creation/preview-enqueue.ts enqueues
+    // moboreader.preview_refresh.v1 from the Web service, and the
+    // eligibility check in src/lib/tasks/moboreader.ts reads
+    // MOBOREADER_PREVIEW_SOURCE_APP_CODES from process.env at the call
+    // site. Before this fix only Worker's compose block set it, so Web
+    // resolved an empty allowlist and every preview task was rejected as
+    // "no_eligible_sources" before the double-gate was ever consulted.
+    const web = serviceBlock("web");
+    // Phase B entity fix (2026-09-06): default flipped to "moboreader" --
+    // Channel is the changdu channel, SourceApp is the moboreader theater
+    // (施工工单_PhaseB_实体订正与运营表单Parity_2026-09-06.md §二).
+    expect(web).toContain("MOBOREADER_PREVIEW_SOURCE_APP_CODES: ${MOBOREADER_PREVIEW_SOURCE_APP_CODES:-moboreader}");
+  });
+
   it("documents the exact staged worker allowlist and X11 delivery hard gate", () => {
     expect(envExample).toContain(
-      "WORKER_TASK_ALLOWLIST=credential.validate.v1,credential.supersede.v1,catalog_scan",
+      "WORKER_TASK_ALLOWLIST=credential.validate.v1,credential.supersede.v1,catalog_scan,home_carousel.compute.v1",
     );
     expect(envExample).toContain("After the C2b parser fix is accepted, append: moboreader.preview_refresh.v1");
     expect(envExample).toContain("With the claim double-gates in the SAME release change, append: promo_link.claim.v1");

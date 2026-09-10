@@ -1,0 +1,22 @@
+-- Phase C (task model migration), step C-4: drop CatalogScanTask/Item.
+--
+-- `TASK_ARCHITECTURE_DECISION = MIGRATE_TO_CPS_TASK_MODEL`
+-- (`CPS海阅_短剧到小说全链路Parity审计与收敛规划_2026-09-06.md` §4/§0). C-2/C-3
+-- (application code + tests) already switched entirely off `catalog_scan_task`
+-- / `catalog_scan_task_item` onto `generic_task`/`generic_task_item`
+-- (`task_type = 'catalog_scan'`, `target_type = 'catalog_page'`). This
+-- migration is deliberately separate from C-1 (which only added indexes) so
+-- a reviewer can audit "adds capacity" and "removes the old tables" as two
+-- independent, individually revertible changes.
+--
+-- No production history exists for these two tables (102-row UAT dataset,
+-- zero live traffic -- see the work order's Phase A quantification); this is
+-- a straight DROP, not a backfill/migration of row data.
+--
+-- catalog_scan_task_item has a FK to catalog_scan_task
+-- (catalog_scan_task_item_task_id_fkey, ON DELETE CASCADE) and is the only
+-- table anywhere in the schema that references catalog_scan_task
+-- (verified: no other `REFERENCES "catalog_scan_task"` in any migration).
+-- Drop the child first for clarity, even though CASCADE would handle it.
+DROP TABLE "catalog_scan_task_item";
+DROP TABLE "catalog_scan_task";

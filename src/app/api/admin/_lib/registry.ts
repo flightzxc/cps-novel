@@ -86,10 +86,25 @@ export const ADMIN_TASK_ROUTES = [
   { id: "admin.api.task.list", path: "/api/admin/tasks", methods: ["GET"], capability: "task:manage" },
   { id: "admin.api.task.detail", path: "/api/admin/tasks/detail", methods: ["GET"], capability: "task:manage" },
   { id: "admin.api.task.items", path: "/api/admin/tasks/items", methods: ["GET"], capability: "task:manage" },
+  // C-6 (ImportProgress port): fixed path + `?taskId=` query, same reason
+  // `/detail` and `/items` above are fixed-path -- `resolveAdminRoute`
+  // matches `path` by exact string equality with no dynamic-segment support,
+  // so a CPS-shaped `/api/admin/tasks/{id}/progress` could never be
+  // registered for a fixed capability.
+  { id: "admin.api.task.progress", path: "/api/admin/tasks/progress", methods: ["GET"], capability: "task:manage" },
   { id: "admin.api.task.retry_failed", path: "/api/admin/tasks/retry-failed", methods: ["POST"], capability: "task:manage" },
   { id: "admin.api.task.manual_reviews", path: "/api/admin/tasks/manual-reviews", methods: ["GET"], capability: "task:manage" },
   { id: "admin.api.task.manual_review.resolve", path: "/api/admin/tasks/manual-reviews/resolve", methods: ["POST"], capability: "task:manage" },
   { id: "admin.api.promo_link.list", path: "/api/admin/promo-links", methods: ["GET"], capability: "task:manage" },
+] as const satisfies AdminRegistry["routes"];
+
+export const ADMIN_TAGGING_ROUTES = [
+  { id: "admin.api.canonical_tag.read", path: "/api/admin/canonical-tags", methods: ["GET"], capability: "content:view" },
+  { id: "admin.api.canonical_tag.write", path: "/api/admin/canonical-tags", methods: ["PUT"], capability: "tag:manage" },
+  { id: "admin.api.tag_mapping.read", path: "/api/admin/tag-mappings", methods: ["GET"], capability: "content:view" },
+  { id: "admin.api.tag_mapping.write", path: "/api/admin/tag-mappings", methods: ["PUT"], capability: "tag:manage" },
+  { id: "admin.api.novel_tag.read", path: "/api/admin/novels/tags", methods: ["GET"], capability: "content:view" },
+  { id: "admin.api.novel_tag.write", path: "/api/admin/novels/tags", methods: ["PUT"], capability: "tag:manage" },
 ] as const satisfies AdminRegistry["routes"];
 
 export type AdminContentRouteId = (typeof ADMIN_CONTENT_ROUTES)[number]["id"];
@@ -256,6 +271,96 @@ export const ADMIN_CONTENT_CREATION_BATCH_ACTIONS = [
   { id: "admin.content_creation.batch_apply", capability: "content:publish", mutation: true },
 ] as const satisfies AdminRegistry["actions"];
 
+export const ADMIN_ARTICLE_TEMPLATE_ACTIONS = [
+  { id: "admin.article_template.create", capability: "content:publish", mutation: true },
+  { id: "admin.article_template.update", capability: "content:publish", mutation: true },
+  { id: "admin.article_template.status", capability: "content:publish", mutation: true },
+  { id: "admin.article_template.delete", capability: "content:publish", mutation: true },
+] as const satisfies AdminRegistry["actions"];
+
+export const ADMIN_ARTICLE_ACTIONS = [
+  { id: "admin.article.update", capability: "content:publish", mutation: true },
+  { id: "admin.article.regenerate", capability: "content:publish", mutation: true },
+  { id: "admin.article.regenerate_batch", capability: "content:publish", mutation: true },
+  /**
+   * C-28 (`规划_文章管理能力补齐_博客类型可见性换小说_2026-09-08.md` §三/C-28):
+   * "新建博客" — same capability as `admin.article.update` (the plan's own
+   * words: "能力沿用 content:publish（与 admin.article.update 同级）"), not a
+   * new `content:create` capability. `AdminCapability`
+   * (`src/lib/auth/capabilities.ts`) has no such capability and adding one
+   * is outside this file's write scope; `content:publish` already carries
+   * the right bar (`requiresTwoFactor: true` + `super_admin` default) for a
+   * call that inserts a brand-new `Article` row, same reasoning
+   * `ADMIN_CONTENT_CREATION_ACTIONS`'s own `apply` entry documents for the
+   * novel-article creation pipeline.
+   */
+  { id: "admin.article.create_blog", capability: "content:publish", mutation: true },
+] as const satisfies AdminRegistry["actions"];
+
+/**
+ * C-30A (施工工单_C30_换小说_移植CPS换租客_2026-09-08.md §4A.4): the single-
+ * article rebind trigger — `content:rebind`, a dedicated capability distinct
+ * from `content:publish` (Owner 2026-09-08: CPS parity, two granularities,
+ * do not merge single/batch either). Every action here — including the
+ * read-only candidate search — is registered with a capability, unlike
+ * CPS's own two read-only Server Actions
+ * (`listArticleDramaSwitchCandidates`/`getArticleDramaSwitchView`), which
+ * only check for a logged-in session and let any admin enumerate the full
+ * switch plan (article/drama ids, promo codes) — a real CPS authorization
+ * gap this port does not carry over (施工工单 §2.3 item 20).
+ */
+export const ADMIN_ARTICLE_REBIND_ACTIONS = [
+  { id: "admin.article.rebind_novel", capability: "content:rebind", mutation: true },
+  { id: "admin.article.rebind_rollback", capability: "content:rebind", mutation: true },
+  { id: "admin.article.rebind_candidates", capability: "content:rebind", mutation: false },
+] as const satisfies AdminRegistry["actions"];
+
+/**
+ * C-30B (施工工单_C30_换小说_移植CPS换租客_2026-09-08.md §4B.3): the batch-
+ * rebind trigger family — a distinct capability from the single-article
+ * family above (`content:batch-rebind`, Owner 2026-09-08: two granularities,
+ * do not merge). 🔴 Every action here is capability-gated, including every
+ * read-only one — CPS's own two read-only batch Server Actions
+ * (`getBatchSwitchFacetsV2`/`getBatchSwitchPage`) DO check
+ * `article:batch-rebind-drama` today (unlike the single-article family's own
+ * gap noted above `ADMIN_ARTICLE_REBIND_ACTIONS`), so there is no CPS gap to
+ * avoid porting here — this repo simply keeps that same posture consistent
+ * across all seven ids.
+ *
+ * `admin.article.rebind_preview`'s `mutation: true` (despite `content:batch-
+ * rebind`, not a `content:publish`-shaped write capability) is the "预览单闸
+ * 例外" this construction order pre-documents in
+ * `src/lib/flags/feature-flags.ts`: a preview snapshot IS a write (one
+ * `article_novel_rebind_preview` row), but it never touches
+ * `Article.novelId`/`promoLinkId` and needs only the total gate
+ * (`FEATURE_ARTICLE_NOVEL_REBIND`), not `ARTICLE_NOVEL_REBIND_ALLOW_WRITE` —
+ * same shape `admin.catalog_scan.dry_run` already uses (`content:view` +
+ * `mutation: true`, 施工工单 §4B.3's own "同 catalog-scan dry_run 的先例").
+ */
+export const ADMIN_ARTICLE_BATCH_REBIND_ACTIONS = [
+  { id: "admin.article.rebind_facets", capability: "content:batch-rebind", mutation: false },
+  { id: "admin.article.rebind_preview", capability: "content:batch-rebind", mutation: true },
+  { id: "admin.article.rebind_preview_page", capability: "content:batch-rebind", mutation: false },
+  { id: "admin.article.rebind_batch_apply", capability: "content:batch-rebind", mutation: true },
+  { id: "admin.article.rebind_batch_resume", capability: "content:batch-rebind", mutation: true },
+  { id: "admin.article.rebind_batch_detail", capability: "content:batch-rebind", mutation: false },
+  { id: "admin.article.rebind_batch_by_token", capability: "content:batch-rebind", mutation: false },
+] as const satisfies AdminRegistry["actions"];
+
+export const ADMIN_HOME_CAROUSEL_ACTIONS = [
+  { id: "admin.home_carousel.config", capability: "settings:manage", mutation: true },
+  { id: "admin.home_carousel.manual_upsert", capability: "settings:manage", mutation: true },
+  { id: "admin.home_carousel.manual_delete", capability: "settings:manage", mutation: true },
+  { id: "admin.home_carousel.compute", capability: "settings:manage", mutation: true },
+] as const satisfies AdminRegistry["actions"];
+
+/** Personal-account security mutations: authenticated session, no role grant. */
+export const ADMIN_SECURITY_ACTIONS = [
+  { id: "admin.security.two_factor.start", mutation: true },
+  { id: "admin.security.two_factor.confirm", mutation: true },
+  { id: "admin.security.recovery_codes.regenerate", mutation: true },
+] as const satisfies AdminRegistry["actions"];
+
 export const P2_04_ADMIN_REGISTRY: AdminRegistry = Object.freeze({
   pageRoots: ADMIN_PAGE_ROOTS,
   // Routes: the union of every composed group. P1-08B's credential surface,
@@ -266,6 +371,7 @@ export const P2_04_ADMIN_REGISTRY: AdminRegistry = Object.freeze({
     ...ADMIN_CONTENT_ROUTES,
     ...ADMIN_SITE_SETTING_ROUTES,
     ...ADMIN_TASK_ROUTES,
+    ...ADMIN_TAGGING_ROUTES,
   ]),
   // Actions: P2-04 itself registered no Server Action (a read slice, by
   // construction). P0-S13 added the first two mutation Actions on top of
@@ -282,5 +388,11 @@ export const P2_04_ADMIN_REGISTRY: AdminRegistry = Object.freeze({
     ...ADMIN_PUBLISH_LIFECYCLE_ACTIONS,
     ...ADMIN_PROMO_LINK_CLAIM_ACTIONS,
     ...ADMIN_CONTENT_CREATION_BATCH_ACTIONS,
+    ...ADMIN_ARTICLE_TEMPLATE_ACTIONS,
+    ...ADMIN_ARTICLE_ACTIONS,
+    ...ADMIN_ARTICLE_REBIND_ACTIONS,
+    ...ADMIN_ARTICLE_BATCH_REBIND_ACTIONS,
+    ...ADMIN_HOME_CAROUSEL_ACTIONS,
+    ...ADMIN_SECURITY_ACTIONS,
   ]),
 });

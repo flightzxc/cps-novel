@@ -25,12 +25,15 @@ import { createHash, randomUUID } from "node:crypto";
 
 import { Prisma, type PrismaClient } from "@prisma/client";
 
+import { chunkIds } from "@/lib/db/chunked-id-lookup";
 import { isUniqueConstraintViolation } from "@/lib/db/db-retry";
 import { isIndexNowOutboxEnabled, isIndexNowOutboxWriteAllowed } from "@/lib/flags";
 
 import {
+  buildBlogIndexNowCanonicalUrl,
   buildIndexNowCanonicalUrl,
   computeIndexNowRevision,
+  isBlogIndexNowEligible,
   isNovelIndexNowEligible,
   loadIndexNowCandidateArticle,
   type IndexNowEligibilityOptions,
@@ -107,11 +110,25 @@ export async function enqueueIndexNowFirstPublish(
 
   const article = await loadIndexNowCandidateArticle(db, input.articleId);
   if (!article) return { outcome: "ineligible" };
-  if (!isNovelIndexNowEligible(article, article.novel, article.promoLink, eligibilityOptions)) {
-    return { outcome: "ineligible" };
-  }
 
-  const url = buildIndexNowCanonicalUrl(article);
+  // C-29b: branch by article family — `novel_article` keeps the exact
+  // pre-C-29b eligibility/URL calls (`isNovelIndexNowEligible`/
+  // `buildIndexNowCanonicalUrl`); the blog family (`articleType !==
+  // "novel_article"`, no Novel/PromoLink to pass in, see
+  // `eligibility.ts`'s `IndexNowCandidateBlogArticle`) uses the parallel
+  // `isBlogIndexNowEligible`/`buildBlogIndexNowCanonicalUrl` pair instead.
+  let url: string;
+  if (article.articleType === "novel_article") {
+    if (!isNovelIndexNowEligible(article, article.novel, article.promoLink, eligibilityOptions)) {
+      return { outcome: "ineligible" };
+    }
+    url = buildIndexNowCanonicalUrl(article);
+  } else {
+    if (!isBlogIndexNowEligible(article, eligibilityOptions)) {
+      return { outcome: "ineligible" };
+    }
+    url = buildBlogIndexNowCanonicalUrl(article);
+  }
   const revision = computeIndexNowRevision(article.updatedAt);
   const eventType = input.eventType ?? INDEXNOW_EVENT_TYPE_DEFAULT;
   const now = new Date();
@@ -178,30 +195,43 @@ export async function releaseDeferredIndexNowOutbox(
   const ids = [...new Set(input.outboxIds)];
   if (ids.length === 0) return { released: 0 };
 
-  const result = await db.indexNowOutbox.updateMany({
-    where: {
-      id: { in: ids },
-      status: "pending",
-      deferReason: { not: null },
-      availableAt: { gt: now },
-    },
-    data: {
-      availableAt: now,
-      releasedAt: now,
-      releaseReason: input.reason,
-      releaseCommit,
-    },
-  });
-  if (result.count === 0) return { released: 0 };
-
-  const released = await db.indexNowOutbox.findMany({
-    where: { id: { in: ids }, releasedAt: now, releaseReason: input.reason },
-    select: { id: true },
-  });
-  for (const row of released) {
-    await createIndexNowDeliveryTaskItem(db, row.id, { reason: "review_defer_release", triggeredBy: input.reason });
+  // C-15 audit (施工工单_C15 §二.4): this is a manual admin action with no
+  // caller wired up yet anywhere in this codebase, so unlike
+  // `promo-link-claim.ts`'s enforced `maxBatchSize` there is no code-level
+  // cap on `outboxIds.length` to cite as a hard bound -- chunked
+  // defensively rather than recorded as bounded.
+  let releasedCount = 0;
+  const releasedIds: string[] = [];
+  for (const idChunk of chunkIds(ids)) {
+    const result = await db.indexNowOutbox.updateMany({
+      where: {
+        id: { in: idChunk },
+        status: "pending",
+        deferReason: { not: null },
+        availableAt: { gt: now },
+      },
+      data: {
+        availableAt: now,
+        releasedAt: now,
+        releaseReason: input.reason,
+        releaseCommit,
+      },
+    });
+    releasedCount += result.count;
+    if (result.count > 0) releasedIds.push(...idChunk);
   }
-  return { released: result.count };
+  if (releasedCount === 0) return { released: 0 };
+
+  for (const idChunk of chunkIds(releasedIds)) {
+    const released = await db.indexNowOutbox.findMany({
+      where: { id: { in: idChunk }, releasedAt: now, releaseReason: input.reason },
+      select: { id: true },
+    });
+    for (const row of released) {
+      await createIndexNowDeliveryTaskItem(db, row.id, { reason: "review_defer_release", triggeredBy: input.reason });
+    }
+  }
+  return { released: releasedCount };
 }
 
 /**
@@ -222,7 +252,16 @@ export async function findPublishedWithoutIndexNowDelivery(
 ): Promise<Array<{ articleId: string; novelId: string; locale: string; canonicalUrl: string }>> {
   const boundedLimit = Math.max(1, Math.min(limit, 5000));
   const candidates = await db.article.findMany({
-    where: { status: "published", deletedAt: null },
+    // C-29b: scoped to `novel_article` — this backfill's output
+    // (`IndexNowBackfillEntry.novel_id`, non-null,
+    // `scripts/indexnow-backfill-manifest.ts`) is a `novel_article`-only
+    // concept. A blog Article's own outbox row is already produced at
+    // first-publish time by `enqueueIndexNowFirstPublish` above (wired from
+    // `publish-gate/service.ts`'s `dispatchFirstPublicPublication` call);
+    // extending this offline manifest tool to the blog family (a null
+    // `novel_id`) is a separate, unscoped schema/contract change, not part
+    // of C-29b.
+    where: { status: "published", deletedAt: null, articleType: "novel_article" },
     orderBy: { id: "asc" },
     take: boundedLimit,
     select: { id: true },
@@ -239,7 +278,13 @@ export async function findPublishedWithoutIndexNowDelivery(
   const results: Array<{ articleId: string; novelId: string; locale: string; canonicalUrl: string }> = [];
   for (const id of missingIds) {
     const article = await loadIndexNowCandidateArticle(db, id);
-    if (!article) continue;
+    // Defense-in-depth narrowing: the query above already scopes to
+    // `novel_article`, but `loadIndexNowCandidateArticle`'s return type is
+    // the shared `IndexNowCandidateArticleRow` union — narrow explicitly
+    // rather than casting, so a future change to that query's `where`
+    // cannot silently start passing a blog-shaped row into
+    // `isNovelIndexNowEligible`/`buildIndexNowCanonicalUrl` below.
+    if (!article || article.articleType !== "novel_article") continue;
     if (!isNovelIndexNowEligible(article, article.novel, article.promoLink, eligibilityOptions)) continue;
     results.push({
       articleId: article.id,

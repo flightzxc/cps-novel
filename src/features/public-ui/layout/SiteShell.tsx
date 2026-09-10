@@ -11,7 +11,6 @@ export interface SiteChrome {
   /** 站点品牌名（`SiteSetting.siteName`）。缺失或空白时页头/页脚回落到占位符。 */
   siteName?: string;
   navItems?: NavItem[];
-  localeNav?: NavItem[];
   footerLinks?: NavItem[];
   footerNote?: string;
 }
@@ -60,7 +59,6 @@ export function SiteShell({
           brandHref={chrome.brandHref}
           brandName={chrome.siteName}
           navItems={chrome.navItems}
-          localeNav={chrome.localeNav}
           overlay={headerOverlay}
         />
 

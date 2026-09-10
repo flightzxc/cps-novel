@@ -83,22 +83,3 @@ export function catalogScanFlagChecklist(
     },
   ];
 }
-
-/**
- * Item 4 of the PR-C2 brief: tell the operator where the task goes next.
- * `catalog_scan` is channel-scoped (`channelAccountId` + `channelAppId`), not
- * novel-scoped — it is what *discovers* new `NovelSourceItem` rows, so there
- * is no novel yet to host a "sync panel" on. `/tasks` ("任务中心") is
- * registered in `ADMIN_PAGE_ROOTS` but has no `page.tsx` yet (PR-C5), so the
- * only thing this can honestly point to today is a read-only SQL check.
- */
-export const CATALOG_SCAN_NEXT_STEPS_NOTE =
-  "任务由后台 worker 异步轮询消费，创建后不会立即看到结果。当前后台还没有任务列表页（/tasks，PR-C5 建设中）；如需现在确认状态，可用下面的只读查询直接核对（也可以把 taskId 交给工程同学查）：";
-
-export function catalogScanStatusQuery(taskId: string): string {
-  return [
-    "select status, total_count, success_count, failed_count, requested_at, started_at, completed_at, error",
-    "from catalog_scan_task",
-    `where id = '${taskId}';`,
-  ].join("\n");
-}

@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { Prisma, type PrismaClient } from "@prisma/client";
 import type { MoboreaderPreviewChapter } from "../adapters";
+import { paidFromChapterForUpdate, totalChapterCountForUpdate } from "../tasks/moboreader";
 
 /** Changdu-only initialization value. Generic publish/read gates must read the policy row. */
 export const CHANGDU_INITIAL_MAX_MATERIALIZED_CHAPTERS = 3;
@@ -265,8 +266,12 @@ export async function materializeChangduPreview(
     await tx.novelSourceItem.update({
       where: { id: input.novelSourceItemId },
       data: {
-        totalChapterCount: input.allEpis ?? undefined,
-        paidFromChapter: input.payEpisFrom ?? undefined,
+        totalChapterCount: totalChapterCountForUpdate(input.allEpis),
+        // See worker/handlers/moboreader.ts / `paidFromChapterForUpdate` for
+        // why this cannot be `input.payEpisFrom ?? undefined`: an upstream 0
+        // must overwrite an existing positive value with NULL ("free now"),
+        // not be swallowed into "leave unchanged".
+        paidFromChapter: paidFromChapterForUpdate(input.payEpisFrom),
         lastSeenAt: now,
       },
     });

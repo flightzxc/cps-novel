@@ -69,6 +69,16 @@ const moboreader = vi.hoisted(() => {
   return {
     createMoboreaderCatalogScanTask: vi.fn(),
     MoboreaderTaskInputError,
+    // Phase B: `_actions.ts` now resolves the safety-max-pages / recommended
+    // page-size values itself (the operator no longer supplies page
+    // params — see `施工工单_PhaseB_实体订正与运营表单Parity_2026-09-06.md`
+    // §三), so the fully-mocked module needs these two real exports stubbed.
+    // C-13 (`施工工单_C13_每页100本与节流余量_2026-09-07.md`): the action now
+    // calls `resolveMoboreaderUpstreamRecommendedPageSize()` (the env
+    // resolver) rather than reading the bare `MOBOREADER_UPSTREAM_RECOMMENDED_PAGE_SIZE`
+    // constant, so the mock stubs the resolver instead.
+    resolveMoboreaderCatalogSafetyMaxPages: vi.fn(() => 2000),
+    resolveMoboreaderUpstreamRecommendedPageSize: vi.fn(() => 20),
   };
 });
 
@@ -363,9 +373,7 @@ describe("applyContentCreationAction · 鉴权与参数", () => {
 const SCAN_INPUT = {
   channelAccountId: "acct-1",
   channelAppId: "app-1",
-  pageStart: 1,
-  pageEnd: 5,
-  pageSize: 20,
+  languages: ["en", "ja"],
   requestId: "req-scan-1",
 };
 
@@ -411,8 +419,9 @@ describe("dryRunCatalogScanTaskAction · 鉴权与参数", () => {
       channelAccountId: "acct-1",
       channelAppId: "app-1",
       pageStart: 1,
-      pageEnd: 5,
+      pageEnd: 2000,
       pageSize: 20,
+      languages: ["en", "ja"],
       actorId: "admin-1",
       requestId: "req-scan-1",
       mode: "dry_run",

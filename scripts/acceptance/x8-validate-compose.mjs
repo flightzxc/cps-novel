@@ -3,6 +3,8 @@ import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 
+import { findLevelSafetyInvariantViolations } from "../lib/x8-level-safety-invariants.mjs";
+
 function fail(message) {
   throw new Error(`X8 compose isolation violation: ${message}`);
 }
@@ -112,6 +114,9 @@ for (const [key, name] of Object.entries({
 // flag now comes from levelEntry.flags instead of a hard-coded "false", so
 // X8_LEVEL=uat/r can assert their own frozen true/false combination while
 // X8_LEVEL=0 keeps asserting exactly what this file asserted before.
+// PR6 lane F added FEATURE_P2_06_5_TAGGING / FEATURE_P2_06_5_TAG_ADMIN_WRITE
+// to both loops below -- like the other pairs here, they vary per level
+// (false at Level 0, true at UAT/R).
 for (const flag of [
   "FEATURE_PROMO_LINK_CLAIM",
   "PROMO_LINK_CLAIM_ALLOW_WRITE",
@@ -119,6 +124,27 @@ for (const flag of [
   "SITEMAP_AUTO_REFRESH_ALLOW_WRITE",
   "FEATURE_INDEXNOW_OUTBOX",
   "INDEXNOW_OUTBOX_ALLOW_WRITE",
+  "FEATURE_P2_06_5_TAGGING",
+  "FEATURE_P2_06_5_TAG_ADMIN_WRITE",
+  // C-25 review fix: single gate, no ALLOW_WRITE partner (read-only, see
+  // docs/governance/feature-flag-registry.md's own note on why).
+  "FEATURE_ARTICLE_SEO_VISIBILITY",
+  // C-28: a genuine double-gate (protected write). ARTICLE_BLOG_ALLOW_WRITE
+  // stays web-only (createBlogArticle's only caller is the admin Server
+  // Action, no worker/scheduler caller). FEATURE_ARTICLE_BLOG itself is
+  // NOT web-only as of C-29 (规划_文章管理能力补齐_博客类型可见性换小说_
+  // 2026-09-08.md §三/C-29) -- src/lib/seo/sitemap.ts's blog sitemap
+  // family also reads it, so it ALSO appears in the worker loop below now.
+  "FEATURE_ARTICLE_BLOG",
+  "ARTICLE_BLOG_ALLOW_WRITE",
+  // C-30A (施工工单_C30_换小说_移植CPS换租客_2026-09-08.md §4A.5/附录 E): a
+  // genuine double-gate (protected two-field Article.novelId+promoLinkId
+  // atomic write), web-only -- the rebind capability is entirely
+  // Server-Action-driven, grepped for a worker/scheduler consumer before
+  // registering, none exists, so neither flag appears in the worker loop
+  // below.
+  "FEATURE_ARTICLE_NOVEL_REBIND",
+  "ARTICLE_NOVEL_REBIND_ALLOW_WRITE",
 ]) {
   const expected = levelEntry.flags[flag];
   if (web.environment?.[flag] !== expected) {
@@ -132,10 +158,53 @@ for (const flag of [
   "SITEMAP_AUTO_REFRESH_ALLOW_WRITE",
   "FEATURE_INDEXNOW_DELIVERY",
   "INDEXNOW_DELIVERY_ALLOW_WRITE",
+  "FEATURE_P2_06_5_TAGGING",
+  "FEATURE_P2_06_5_TAG_ADMIN_WRITE",
+  // C-25 review fix (P0): worker/handlers/sitemap-refresh.ts's
+  // createSitemapFamilyBuilder and worker/handlers/indexnow-delivery.ts's
+  // isNovelIndexNowEligible->isHiddenFromPublicView both default env to
+  // process.env -- the WORKER process's own env -- so this must be
+  // registered in docker-compose.yml's worker block too, not web-only.
+  "FEATURE_ARTICLE_SEO_VISIBILITY",
+  // C-29: src/lib/seo/sitemap.ts's createSitemapFamilyBuilder reads
+  // isArticleBlogEnabled(env) (also process.env-default) to decide whether
+  // to emit the blogpage sitemap family -- same worker-registration
+  // requirement as FEATURE_ARTICLE_SEO_VISIBILITY above. NOT paired with
+  // ARTICLE_BLOG_ALLOW_WRITE here -- the worker never performs the blog
+  // write, only reads this flag to gate sitemap emission.
+  "FEATURE_ARTICLE_BLOG",
 ]) {
   const expected = levelEntry.flags[flag];
   if (worker.environment?.[flag] !== expected) {
     fail(`${flag} must be ${expected} in worker for X8_LEVEL=${level} (got ${worker.environment?.[flag]})`);
+  }
+}
+// ADR guard (P2-06.5 auto-classification): FEATURE_NOVEL_TAG_AUTO and
+// AUTO_WRITE_AUTHORIZED are deliberately NOT checked against
+// levelEntry.flags above -- unlike every other pair, these two must be
+// frozen at "false"/"NO" for every X8_LEVEL until Owner explicitly
+// authorizes auto-write. The expected values live in exactly one place
+// (scripts/lib/x8-level-safety-invariants.mjs, also read by the gate
+// command's own safety-invariant check) so a table edit that flips
+// x8-levels.json's own flags to "true"/"YES" cannot slip past this
+// validator by also "agreeing" with itself -- both the source table and the
+// rendered compose config are checked independently against that literal,
+// frozen value.
+for (const violation of findLevelSafetyInvariantViolations(levelEntry.flags)) {
+  fail(
+    `x8-levels.json flags.${violation.key} must be "${violation.expected}" at every X8_LEVEL (ADR guard), got "${violation.actual}"`,
+  );
+}
+for (const [name, service] of [["web", web], ["worker", worker]]) {
+  if (service.environment?.FEATURE_NOVEL_TAG_AUTO !== "false") {
+    fail(
+      `FEATURE_NOVEL_TAG_AUTO must be "false" in ${name} for every X8_LEVEL (ADR guard), got "${service.environment?.FEATURE_NOVEL_TAG_AUTO}"`,
+    );
+  }
+  if (service.environment?.AUTO_WRITE_AUTHORIZED !== "NO") {
+    fail(
+      `AUTO_WRITE_AUTHORIZED must be "NO" in ${name} for every X8_LEVEL (ADR guard), got "${service.environment?.AUTO_WRITE_AUTHORIZED}"`,
+    );
   }
 }
 console.log(`X8_COMPOSE_ISOLATION=PASS (X8_LEVEL=${level})`);

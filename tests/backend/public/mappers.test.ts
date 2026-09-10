@@ -11,6 +11,12 @@ const article = {
   locale: "en",
   publicPageShortId: "abc123",
   publishedAt: new Date("2026-01-01T00:00:00Z"),
+  summary: "A concise article summary.",
+  body: "Editorial body copy.",
+  seoMetadata: {
+    metaTitle: "Lantern Keeper SEO title",
+    metaDescription: "Lantern Keeper SEO description",
+  },
   novel: {
     id: "novel-1",
     businessId: "biz-1",
@@ -37,6 +43,7 @@ describe("public view mappers", () => {
       tags: [],
       locale: { code: "en", label: "English" },
       href: buildArticlePath({ locale: "en", slug: article.slug, shortId: article.publicPageShortId }),
+      summary: "A concise article summary.",
     });
     expect(JSON.stringify(card)).not.toMatch(/webUrl|upstreamCode|author|readOnUpstreamHref/);
   });
@@ -54,6 +61,12 @@ describe("public view mappers", () => {
     expect(detail?.readOnUpstreamHref).toBeUndefined();
     expect(detail?.heroImageUrl).toBeUndefined();
     expect(detail?.tags).toEqual([]);
+    expect(detail).toMatchObject({
+      description: "A concise article summary.",
+      contentBody: "Editorial body copy.",
+      seoTitle: "Lantern Keeper SEO title",
+      seoDescription: "Lantern Keeper SEO description",
+    });
   });
 
   it("splits chapter body and wires prev/next without a go-link", () => {

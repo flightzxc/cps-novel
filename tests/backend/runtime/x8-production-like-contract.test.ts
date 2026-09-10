@@ -17,6 +17,8 @@ const launcher = read("scripts/x8-production-like.sh");
 const envHelper = read("scripts/lib/x8-production-like-env.sh");
 const grants = read("infra/postgres/grants.sql");
 const dockerignore = read(".dockerignore");
+const classifierConfigSource = read("src/lib/tagging/classifier-config.ts");
+const keywordEligibilitySource = read("src/lib/tagging/keyword-eligibility.ts");
 const acceptanceReport = read("docs/operations/X8_LOCAL_PRODUCTION_LIKE_ACCEPTANCE_2026-08-26.md");
 
 /**
@@ -37,7 +39,7 @@ const x8Levels = JSON.parse(read("scripts/lib/x8-levels.json")) as Record<
     flags: Record<string, string>;
   }
 >;
-const LEVEL_0_ALLOWLIST = "credential.validate.v1,credential.supersede.v1,catalog_scan";
+const LEVEL_0_ALLOWLIST = "credential.validate.v1,credential.supersede.v1,catalog_scan,home_carousel.compute.v1";
 
 describe("X8 targeted preview operator boundary", () => {
   const options = {
@@ -123,6 +125,23 @@ describe("X8 local production-like contracts", () => {
     }
   });
 
+  it("keeps frozen tagging runtime authorities inside the production image context", () => {
+    expect(dockerignore.split(/\r?\n/)).toContain("docs");
+    for (const source of [classifierConfigSource, keywordEligibilitySource]) {
+      expect(source).not.toMatch(/\.\.\/\.\.\/\.\.\/docs\//);
+      expect(source).toContain("./artifacts/");
+    }
+    expect(JSON.parse(read("src/lib/tagging/artifacts/classifier-config-final.json"))).toEqual(
+      JSON.parse(read("docs/p2/p2-06-5-lane-c/final/2026-08-17/classifier-config-final.json")),
+    );
+    expect(JSON.parse(read("src/lib/tagging/artifacts/keyword-eligibility-v1.json"))).toEqual(
+      JSON.parse(read("docs/p2/p2-06-5-lane-c/lexicon-overrides/2026-08-16/keyword-eligibility-v1.json")),
+    );
+    expect(JSON.parse(read("src/lib/tagging/artifacts/keyword-eligibility-v2.json"))).toEqual(
+      JSON.parse(read("docs/p2/p2-06-5-lane-c/lexicon-overrides/2026-08-17/keyword-eligibility-v2.json")),
+    );
+  });
+
   it("keeps the durable acceptance report free of credential-shaped material", () => {
     expect(acceptanceReport).not.toMatch(/postgres(?:ql)?:\/\//i);
     expect(acceptanceReport).not.toMatch(/otpauth:\/\//i);
@@ -143,22 +162,150 @@ describe("X8 local production-like contracts", () => {
     expect(read("infra/production-like/backup-timer.sh")).toContain(
       "/opt/cps-novel-x8/backup-logical.sh --output",
     );
-    expect(launcher.indexOf("infra/postgres/grants.sql")).toBeLessThan(
-      launcher.indexOf("CREATE EXTENSION IF NOT EXISTS pg_stat_statements"),
+    // D-9a (施工工单_D9_up数据库准备原子化与镜像保留_2026-09-09.md 三.3.2③) added
+    // several EARLIER mentions of the literal string "infra/postgres/grants.sql"
+    // before the real invocation below -- inside a doc-comment right above it
+    // ("See infra/postgres/grants.sql's own `SET lock_timeout` comment...")
+    // and inside x8_print_db_prep_failure_status()'s printed recovery-command
+    // text, both of which intentionally spell out the real path (for a human
+    // reader / for an operator to copy-paste). "X8_DB_PREP_STEP=grants" is
+    // the one line prepare_database() itself sets immediately before the
+    // REAL invocation and appears nowhere else in the file, so anchoring on
+    // it (rather than on the grants.sql path text, which now has multiple
+    // decorative occurrences) is what reliably finds the actual `psql` call
+    // every `up` runs, not a comment or a printed diagnostic string.
+    const grantsStepIndex = launcher.indexOf("X8_DB_PREP_STEP=grants");
+    expect(grantsStepIndex).toBeGreaterThan(0);
+    expect(launcher.indexOf("infra/postgres/grants.sql", grantsStepIndex)).toBeLessThan(
+      launcher.indexOf("CREATE EXTENSION IF NOT EXISTS pg_stat_statements", grantsStepIndex),
     );
     const grantsInvocation = launcher.slice(
-      launcher.lastIndexOf("x8_compose exec", launcher.indexOf("infra/postgres/grants.sql")),
-      launcher.indexOf("infra/postgres/grants.sql"),
+      launcher.indexOf("x8_compose exec", grantsStepIndex),
+      launcher.indexOf("infra/postgres/grants.sql", grantsStepIndex),
     );
     expect(grantsInvocation).toContain("-U postgres -d cps_novel");
     expect(grantsInvocation).not.toContain("-U migration_owner");
+    // D-9a 三.3.2② ("最关键的一处"): --single-transaction is the actual
+    // root-cause fix for the 2026-09-08 outage (施工工单一/2.2) -- REVOKE and
+    // re-GRANT now either both land or both roll back, never
+    // REVOKE-committed-but-GRANT-failed. Revert self-check: removing this
+    // flag from scripts/x8-production-like.sh's grants.sql invocation turns
+    // this assertion red.
+    expect(grantsInvocation).toContain("--single-transaction");
     expect(grants).toContain(
       "GRANT UPDATE (novel_id, status, updated_at) ON novel_source_item TO web_app;",
     );
     expect(grants).not.toContain("GRANT UPDATE ON TABLE novel_source_item TO web_app");
+    // D-9a 三.3.2① 闸B ("这道闸是本工单的核心"): the disk-preflight gate inside
+    // prepare_database() must run before roles.sql is ever replayed --
+    // fail-closed before this attempt sends a single DDL/role statement.
+    // Anchored to prepare_database()'s own definition, not searched from the
+    // start of the file: gate A (up_x8(), before build_app_image()) calls
+    // the same x8_require_free_disk_kib() helper much earlier in the file,
+    // and an unanchored indexOf would find THAT call every time regardless
+    // of where gate B actually sits -- silently testing nothing about gate
+    // B's position. Revert self-check: moving the gate B call after the
+    // roles.sql exec line inside prepare_database() turns this assertion
+    // red (verified by temporarily reordering them and re-running this
+    // suite; restored immediately after).
+    const prepareDatabaseIndex = launcher.indexOf("\nprepare_database()");
+    expect(prepareDatabaseIndex).toBeGreaterThan(0);
+    expect(launcher.indexOf("x8_require_free_disk_kib", prepareDatabaseIndex)).toBeLessThan(
+      launcher.indexOf("/opt/cps-novel-postgres/roles.sql", prepareDatabaseIndex),
+    );
+    // D-9a 三.3.2②: SET lock_timeout is required precisely BECAUSE grants.sql
+    // now runs inside one transaction and therefore holds its catalog locks
+    // for the whole file's duration instead of releasing them statement by
+    // statement -- this is what stops that from becoming an indefinite
+    // stall against a long-running query elsewhere.
+    expect(grants).toContain("SET lock_timeout");
     expect(launcher).toMatch(/function render_nginx_configs|render_nginx_configs\(\)/);
     expect(launcher.slice(launcher.indexOf("render_nginx_configs()"), launcher.indexOf("validate_rendered_topology()")))
       .toContain("return 0");
+  });
+
+  // 施工工单_D9_up数据库准备原子化与镜像保留_2026-09-09.md, D-9b §4.4/§4.5/§4.6
+  // bullet 7: static assertions for the `gc` subcommand's wiring, kept as a
+  // dedicated it() (rather than folded into the grants-focused one above) so
+  // it never collides line-for-line with D-9a's own edits to that block --
+  // the two work items were built in separate worktrees in parallel.
+  it("wires the D-9b `gc` subcommand into usage(), the dispatcher, and up_x8()'s own call site", () => {
+    expect(launcher).toContain("scripts/x8-production-like.sh gc [--apply] [--keep N] [--json]");
+    expect(launcher).toContain('gc) shift; x8_gc "$@" ;;');
+    expect(launcher).toMatch(/\nx8_gc\(\) \{/);
+    // D-9 merge (复核_D9a_与_D9合成_2026-09-09.md (B)): D-9b originally spliced
+    // an UNCONDITIONAL `x8_gc --auto` into up_x8() at this call site, and
+    // asserted its position here. That splice was DELETED when D-9a and
+    // D-9b were merged -- it would have made every `up` delete images
+    // regardless of free space, which is the 施工工单 §7-3 decision the Owner
+    // has reserved. What occupies the call site now is D-9a's
+    // x8_disk_preflight_before_build(), which calls x8_gc --auto ONLY when
+    // free space is already below the warn tier, so the string "x8_gc
+    // --auto" no longer appears inside up_x8() at all -- it lives in that
+    // helper, which is defined ABOVE up_x8() and therefore outside this
+    // slice. Asserting on the helper's name is what actually pins the
+    // ordering now.
+    const upFlow = launcher.slice(launcher.indexOf("\nup_x8()"), launcher.indexOf("\nverify_postgres()"));
+    // Guard every anchor against indexOf's -1: a missing needle would
+    // otherwise make "-1 < someIndex" pass and silently assert nothing.
+    for (const anchor of ["validate_rendered_topology", "x8_disk_preflight_before_build", "build_app_image"]) {
+      expect(upFlow.indexOf(anchor), `up_x8() no longer mentions ${anchor}`).toBeGreaterThan(-1);
+    }
+    expect(upFlow.indexOf("validate_rendered_topology")).toBeLessThan(
+      upFlow.indexOf("x8_disk_preflight_before_build"),
+    );
+    expect(upFlow.indexOf("x8_disk_preflight_before_build")).toBeLessThan(upFlow.indexOf("build_app_image"));
+    // The deleted splice must stay deleted: up_x8() itself must never call
+    // gc directly, conditionally or otherwise. Reverting the merge decision
+    // (pasting D-9b's inline `[[ "${X8_GC_ON_UP:-1}" == "1" ]] && { x8_gc
+    // --auto ...; }` back into up_x8()) turns this assertion red.
+    // Comment lines are stripped first: the merge deliberately LEFT a
+    // comment in up_x8() explaining that the inline splice was removed, and
+    // that prose names x8_gc. Only executable lines may not mention it.
+    const upFlowCode = upFlow
+      .split("\n")
+      .filter((line) => !line.trim().startsWith("#"))
+      .join("\n");
+    expect(upFlowCode).not.toContain("x8_gc");
+    // ...and the kill switch D-9b shipped with that splice must survive the
+    // deletion, now guarding the warn-tier call inside gate A instead.
+    const gateABody = launcher.slice(
+      launcher.indexOf("\nx8_disk_preflight_before_build() {"),
+      launcher.indexOf("\nbuild_app_image() {"),
+    );
+    expect(gateABody).toContain('[[ "${X8_GC_ON_UP:-1}" == "1" ]] && declare -F x8_gc >/dev/null');
+    expect(gateABody).toContain("x8_gc --auto");
+    // Absolute prohibitions (§4.2), checked statically as a second,
+    // independent line of defense alongside the runtime-behavior assertions
+    // in tests/backend/runtime/x8-image-retention.test.ts: the gc function's
+    // own source text must never contain any of these substrings, full stop.
+    const gcBody = launcher.slice(launcher.indexOf("\nx8_gc() {"), launcher.indexOf("\npromote_x8_identity_candidate()"));
+    expect(gcBody).not.toContain("rmi -f");
+    expect(gcBody).not.toContain("rmi \"$tag\" -f");
+    expect(gcBody).not.toMatch(/prune\s+-a\b/);
+    expect(gcBody).not.toContain("-af");
+    expect(gcBody).not.toContain("system prune");
+    expect(gcBody).toContain("docker rmi");
+    expect(gcBody).toContain("docker image prune -f");
+  });
+
+  // 施工工单_D9..., D-9b §4.3: the previous-identity ledger constant must
+  // exist as a plain, always-set variable (not behind prepare_x8_environment())
+  // and must be part of the same export list the other three identity file
+  // constants already ride on.
+  it("declares the D-9b previous-identity ledger constant alongside the other identity file constants", () => {
+    expect(envHelper).toContain('X8_IDENTITY_PREVIOUS_FILE="$X8_RUNTIME_DIR/release-identity.previous.json"');
+    expect(envHelper).toContain(
+      "export X8_GATE_STATE_FILE X8_BACKUP_PGPASS_FILE X8_IDENTITY_FILE X8_IDENTITY_CANDIDATE_FILE X8_IDENTITY_FAILURE_MARKER X8_IDENTITY_PREVIOUS_FILE",
+    );
+    // resolve_x8_identity() (the gate command's sole identity read path)
+    // must never mention it -- the ledger is gc's own account, not part of
+    // the identity/gate read contract.
+    const resolveFn = envHelper.slice(
+      envHelper.indexOf("\nresolve_x8_identity() {"),
+      envHelper.indexOf("\nwrite_x8_gate_state()"),
+    );
+    expect(resolveFn).not.toContain("X8_IDENTITY_PREVIOUS_FILE");
   });
 
   it("implements the three-stage local TLS transition without a production fallback", () => {
@@ -252,6 +399,21 @@ describe("X8 local production-like contracts", () => {
     }
     expect(x8Levels.uat.workerTaskAllowlist).not.toContain("sitemap_refresh");
     expect(x8Levels.r.workerTaskAllowlist).toContain("sitemap_refresh");
+    for (const level of ["0", "uat", "r"]) expect(x8Levels[level].workerTaskAllowlist).toContain("home_carousel.compute.v1");
+  });
+
+  it("PR6 fix B-1 #4: the scheduler actually registers the schedule the allowlist reserves a slot for", async () => {
+    // `home_carousel.compute.v1` sat in every level's WORKER_TASK_ALLOWLIST
+    // while scheduler/index.ts's SCHEDULES was still frozen empty (P1-07
+    // shipped the runtime with zero production schedules) — the allowlist
+    // let the worker consume the task type, but nothing ever produced one.
+    const { SCHEDULES } = await import("../../../scheduler/index");
+    const { HOME_CAROUSEL_SCHEDULE_KEY, HOME_CAROUSEL_TASK_TYPE } = await import("../../../src/server/home-carousel");
+    const definition = SCHEDULES.find((schedule) => schedule.scheduleKey === HOME_CAROUSEL_SCHEDULE_KEY);
+    expect(definition).toBeDefined();
+    const sample = definition!.build(new Date("2026-09-05T19:00:00.000Z"));
+    expect(sample.taskType).toBe(HOME_CAROUSEL_TASK_TYPE);
+    for (const level of ["0", "uat", "r"]) expect(x8Levels[level].workerTaskAllowlist).toContain(sample.taskType);
   });
 
   it("RC-10: disables ADMIN_TWO_FACTOR_ENFORCEMENT only at Level UAT, and exports/asserts it end to end", () => {
@@ -296,6 +458,14 @@ describe("X8 local production-like contracts", () => {
     expect(healthSql.trimEnd().endsWith("COMMIT;")).toBe(true);
   });
 
+  it("M2 warns on UAT/R catalog gate drift without overwriting operator state", () => {
+    expect(envHelper).toContain("warn_x8_gate_drift()");
+    expect(envHelper).toContain("X8 catalog-write gate drift");
+    expect(envHelper).toContain("gate catalog-write on");
+    expect(envHelper).not.toMatch(/warn_x8_gate_drift\(\)[\s\S]*write_x8_gate_state "\$expected"/);
+    expect(launcher).toMatch(/up_x8\(\)[\s\S]*prepare_x8_environment[\s\S]*warn_x8_gate_drift/);
+  });
+
   it("uses the real PostgreSQL two-int advisory lock signature", () => {
     const bootstrap = read("scripts/bootstrap-admin-identity.ts");
     const foundation = read("scripts/register-moboreader-foundation.ts");
@@ -334,4 +504,113 @@ describe("X8 local production-like contracts", () => {
     expect(validate.status, validate.stderr).toBe(0);
     expect(validate.stdout).toContain("X8_COMPOSE_ISOLATION=PASS");
   });
+
+  /**
+   * PR6 fix (lane F): renders all three X8_LEVEL rungs (not just the
+   * default "0" the test above covers) and checks the P2-06.5 tagging
+   * double-gate lands on web + worker with exactly the values
+   * `scripts/lib/x8-levels.json` promises for that level -- the same
+   * table-driven double-check `x8-validate-compose.mjs` itself does, run
+   * here independently so a bug in the validator's own flag list can't
+   * hide a real passthrough gap.
+   */
+  it.skipIf(!composeAvailable)(
+    "renders the P2-06.5 tagging double-gate across Level 0 / UAT / R with the frozen per-level values",
+    () => {
+      const taggingFlagNames = [
+        "FEATURE_P2_06_5_TAGGING",
+        "FEATURE_P2_06_5_TAG_ADMIN_WRITE",
+        "FEATURE_NOVEL_TAG_AUTO",
+        "AUTO_WRITE_AUTHORIZED",
+      ] as const;
+      for (const level of ["0", "uat", "r"] as const) {
+        const result = spawnSync(
+          "bash",
+          [
+            "-c",
+            [
+              "source scripts/lib/x8-production-like-env.sh",
+              "prepare_x8_environment",
+              "docker compose -p \"$P1_12_COMPOSE_PROJECT\" -f docker-compose.yml -f infra/production-like/docker-compose.yml config --format json",
+            ].join("; "),
+          ],
+          { cwd: root, encoding: "utf8", env: { ...process.env, X8_LEVEL: level } },
+        );
+        expect(result.status, `${level}: ${result.stderr}`).toBe(0);
+        const validate = spawnSync("node", [resolve(root, "scripts/acceptance/x8-validate-compose.mjs")], {
+          cwd: root,
+          input: result.stdout,
+          encoding: "utf8",
+          env: { ...process.env, X8_LEVEL: level },
+        });
+        expect(validate.status, `${level}: ${validate.stderr}`).toBe(0);
+        const rendered = JSON.parse(result.stdout) as {
+          services: { web: { environment: Record<string, string> }; worker: { environment: Record<string, string> } };
+        };
+        for (const flag of taggingFlagNames) {
+          expect(rendered.services.web.environment[flag], `${level} web ${flag}`).toBe(x8Levels[level].flags[flag]);
+          expect(rendered.services.worker.environment[flag], `${level} worker ${flag}`).toBe(
+            x8Levels[level].flags[flag],
+          );
+        }
+      }
+    },
+  );
+
+  /**
+   * PR6 fix (lane F) mutation coverage: `x8-validate-compose.mjs`'s ADR
+   * guard hard-codes the expected value for `FEATURE_NOVEL_TAG_AUTO` /
+   * `AUTO_WRITE_AUTHORIZED` instead of reading it from
+   * `levelEntry.flags` -- this proves that guard actually fires by taking
+   * one real Level UAT render and mutating just the rendered JSON in
+   * memory (never touching `scripts/lib/x8-levels.json` on disk), so a
+   * future edit that flips either value to "true"/"YES" at any X8_LEVEL
+   * cannot silently pass by also "agreeing" with a correspondingly edited
+   * table.
+   */
+  it.skipIf(!composeAvailable)(
+    "ADR guard: the validator fails closed if FEATURE_NOVEL_TAG_AUTO or AUTO_WRITE_AUTHORIZED is ever not false/NO",
+    () => {
+      const result = spawnSync(
+        "bash",
+        [
+          "-c",
+          [
+            "source scripts/lib/x8-production-like-env.sh",
+            "prepare_x8_environment",
+            "docker compose -p \"$P1_12_COMPOSE_PROJECT\" -f docker-compose.yml -f infra/production-like/docker-compose.yml config --format json",
+          ].join("; "),
+        ],
+        { cwd: root, encoding: "utf8", env: { ...process.env, X8_LEVEL: "uat" } },
+      );
+      expect(result.status, result.stderr).toBe(0);
+      const rendered = JSON.parse(result.stdout);
+
+      const mutateAutoTrue = structuredClone(rendered);
+      mutateAutoTrue.services.web.environment.FEATURE_NOVEL_TAG_AUTO = "true";
+      mutateAutoTrue.services.worker.environment.FEATURE_NOVEL_TAG_AUTO = "true";
+      const autoTrueResult = spawnSync("node", [resolve(root, "scripts/acceptance/x8-validate-compose.mjs")], {
+        cwd: root,
+        input: JSON.stringify(mutateAutoTrue),
+        encoding: "utf8",
+        env: { ...process.env, X8_LEVEL: "uat" },
+      });
+      expect(autoTrueResult.status).not.toBe(0);
+      expect(autoTrueResult.stderr).toContain("ADR guard");
+      expect(autoTrueResult.stderr).toContain("FEATURE_NOVEL_TAG_AUTO");
+
+      const mutateAuthorizedYes = structuredClone(rendered);
+      mutateAuthorizedYes.services.web.environment.AUTO_WRITE_AUTHORIZED = "YES";
+      mutateAuthorizedYes.services.worker.environment.AUTO_WRITE_AUTHORIZED = "YES";
+      const authorizedYesResult = spawnSync("node", [resolve(root, "scripts/acceptance/x8-validate-compose.mjs")], {
+        cwd: root,
+        input: JSON.stringify(mutateAuthorizedYes),
+        encoding: "utf8",
+        env: { ...process.env, X8_LEVEL: "uat" },
+      });
+      expect(authorizedYesResult.status).not.toBe(0);
+      expect(authorizedYesResult.stderr).toContain("ADR guard");
+      expect(authorizedYesResult.stderr).toContain("AUTO_WRITE_AUTHORIZED");
+    },
+  );
 });

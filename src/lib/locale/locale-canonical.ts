@@ -81,6 +81,64 @@ export const SITE_LOCALES: readonly SiteLocale[] = Object.freeze([
 ]);
 
 /**
+ * `SiteLocale` → 后台展示用中文标签。P2-02B（模板管理表单）新增：语种下拉需要
+ * 给运营看中文而不是裸 BCP-47 码，但下拉**提交**的值仍是 `SiteLocale` 字符串本身
+ * （与 CPS `src/lib/constants.ts` 的 `LOCALE_LABEL` 同一约定——文案只影响展示，
+ * 从不影响传输/存储的取值）。
+ *
+ * 🔴 只能加在这个唯一真源文件里，不建第二张表——`tests/ui/locale-canonical.test.ts`
+ * 的"没有第二张语种映射表"扫描按名字（含 LOCALE/LANGUAGE）+ 字面量集合声明识别，
+ * 排除的只有 `CANONICAL_PATH` 本身这一个文件。
+ */
+export const SITE_LOCALE_LABELS: Readonly<Record<SiteLocale, string>> = Object.freeze({
+  en: "英文",
+  es: "西班牙文",
+  "pt-BR": "葡萄牙文",
+  id: "印尼文",
+  vi: "越南文",
+  th: "泰文",
+  ja: "日文",
+  ko: "韩文",
+  "zh-Hant": "繁体中文",
+  ar: "阿拉伯文",
+  fr: "法文",
+  de: "德文",
+  pl: "波兰文",
+  cs: "捷克文",
+  ru: "俄文",
+});
+
+/**
+ * `SiteLocale` → 该语种的本族语自称（"Français"、"日本語"……），供公开站的
+ * 语言切换器（WO-2 `施工工单_WO1-3_多语种公开站地基_2026-09-08.md` §8.3）
+ * 显示——与上面 `SITE_LOCALE_LABELS`（后台运营看的中文标签）是两张不同的表：
+ * 那张给后台操作员，这张给读者本人在切换器里认出自己的语言。
+ *
+ * 🔴 只能加在这个唯一真源文件里，理由与 `SITE_LOCALE_LABELS` 完全一样：
+ * `tests/ui/locale-canonical.test.ts` 的"没有第二张语种映射表"扫描按
+ * 名字（含 LOCALE/LANGUAGE）+ 字面量集合声明识别，排除的只有本文件；
+ * `tests/ui/public-copy-cjk.test.ts` 的公开面 CJK 扫描也不覆盖本文件——这张
+ * 表本身就是"本族语文字"，两条既有门禁都只认这一个安全存放点。
+ */
+export const SITE_LOCALE_NATIVE_NAMES: Readonly<Record<SiteLocale, string>> = Object.freeze({
+  en: "English",
+  es: "Español",
+  "pt-BR": "Português",
+  id: "Bahasa Indonesia",
+  vi: "Tiếng Việt",
+  th: "ไทย",
+  ja: "日本語",
+  ko: "한국어",
+  "zh-Hant": "繁體中文",
+  ar: "العربية",
+  fr: "Français",
+  de: "Deutsch",
+  pl: "Polski",
+  cs: "Čeština",
+  ru: "Русский",
+});
+
+/**
  * 上游语种登记表：一个站点 locale ← 一组上游取值。
  *
  * P0-S15（2026-08-26）：**已按真实上游证据填入子集，不再是空表。** 来源是
@@ -134,10 +192,14 @@ const UPSTREAM_LANGUAGE_REGISTRY: readonly UpstreamLanguageRegistration[] = Obje
  *
  * U6（2026-08-27）：Owner 明示 D-7 放行 `en`。D-7 五项准入按现状重写：
  *
- * 1. 前台 messages 无 fallback——**已满足（U3）**。`src/lib/locale/messages/en.ts`
- *    是完整英文目录；公开渲染树不再混中文占位。他语是 `Partial<Messages>`，
- *    `loadMessages` 对不完整目录抛错而不是静默拼 en——这是 fail-closed，不是
- *    把中文塞进 en 页。
+ * 1. 前台 messages 无 fallback——**已满足（U3，口径由工单三 2026-09-08 重写）**。
+ *    `src/lib/locale/messages/en.ts` 是完整英文目录；公开渲染树不再混中文占位。
+ *    他语目录经 `loadMessages` **深合并回落到英文**（Owner 修正一：缺一个键、
+ *    或该键是空串，一律拿英文补上，绝不因为缺一条译文把整页抛错）——`en` 本身
+ *    短路直接返回，不参与合并。完整性（键集合、非空值、插值变量、禁 ICU）改在
+ *    **测试期**由 `tests/ui/messages-completeness.test.ts` 强制，不再是运行时
+ *    抛错。这仍然是 fail-closed：闸门不在渲染路径上，在 CI 上——译文不完整会
+ *    让门禁变红,不会让用户看见中文或裸键名。
  * 2. 后台模板语种枚举已登记——**已满足（S9）**。内置模板覆盖 `en`；
  *    `ARTICLE_TEMPLATE_CRUD_LANDED` 仍为 `false`，所以 S14 守卫仍只允许空集
  *    或 `{"en"}` 的子集——本次放行正好是这个子集，不会触发守卫。
@@ -282,3 +344,59 @@ export function isPublishableLocale(locale: unknown): boolean {
 export function listPublishableLocales(): SiteLocale[] {
   return [...PUBLISHABLE_LOCALES];
 }
+
+/**
+ * ---------------------------------------------------------------------------
+ * 标签译名域（Tag Translation Domain）—— P2-06.5 F3。
+ *
+ * 🔴 这是与上面 `SiteLocale` / `SITE_LOCALES` **完全不同的第二个域**，不要合并
+ * 也不要互相推导：
+ *
+ * - `SITE_LOCALES` 回答「本站现在可以把哪个 locale 的页面发布给读者」——
+ *   fail-closed，目前只有 `en` 一项，且新增需要 Owner 决策（见上文）。
+ * - `TAG_TRANSLATION_LOCALES` 回答「CanonicalTag 的译名可以录入哪些语种」——
+ *   这是运营在后台给标签（一个未来面向用户检索/浏览的公共 taxonomy）录入
+ *   多语展示名时能选的固定语种表，跟站点发布白名单没有从属或推导关系：
+ *   一个 locale 完全可以在这张表里、却不在 `SITE_LOCALES`（甚至永远不会进
+ *   入后者），反之亦然。
+ *
+ * 用途是 admin 端 CanonicalTag 编辑器（`LocaleFieldEditor`）：把原来的自由
+ * 文本 locale 输入换成这张固定列表，从结构上消灭「运营手打错一个字母，
+ * 静默产生一个没有任何校验拦截的孤儿语种译名」这类错误——CPS 生产实现
+ * （`tags/_components/locale-field-editor.tsx`）已验证过这个交互模式。
+ *
+ * 20 项 = CPS 现行 19 码 + Novel 所需的 `zh`。
+ *
+ * 🔴 `zh` 在这张表里不是普通一项：它是 canonical taxonomy v1 目前**唯一**
+ * 实际有数据的语种，也是查询 resolver 的全局回退——
+ * `src/server/tagging/service.ts:141,254` 的
+ * `COALESCE(requested.display_name, zh.display_name, ct.slug)` 把 `'zh'`
+ * 硬编码成兜底键。这张表里少了 `zh`，admin 就没有任何入口能编辑这个兜底
+ * 语种；一旦某个标签的 `zh` 译名缺失或需要改，整条标签的中文展示名会退化
+ * 成 slug。所以 `zh` 必须始终可达、可编辑，不能被「默认收起」逻辑挡住编辑
+ * 入口——它就在 `TAG_TRANSLATION_DEFAULT_EXPANDED` 里，默认展开。
+ * ---------------------------------------------------------------------------
+ */
+
+/** CanonicalTag 译名可以录入的固定语种表。admin 端不提供此列表之外的输入。 */
+export const TAG_TRANSLATION_LOCALES = [
+  "en", "zh", "zh-CN", "zh-TW", "ja", "ko", "es", "fr", "de", "pt",
+  "it", "ru", "ar", "th", "vi", "id", "ms", "tr", "pl", "nl",
+] as const; // 20 项 = CPS 现行 19 码 + Novel 所需 zh
+
+/**
+ * 默认展开的语种（其余折叠，按钮渐进展开）。`zh` 必须在这里——见上方关于
+ * resolver 回退的说明；`en` 是 CPS 参考实现里同样默认展开的第二语种。除这
+ * 两项外，任何已有非空译名的语种也会在渲染时被强制展开，见
+ * `LocaleFieldEditor` 的实现。
+ */
+export const TAG_TRANSLATION_DEFAULT_EXPANDED = ["zh", "en"] as const;
+
+/** 语种码 → 该语种的母语名。用作 admin 输入框的 placeholder，不是选项文案。 */
+export const TAG_LOCALE_LABELS: Readonly<Record<string, string>> = Object.freeze({
+  en: "English", zh: "中文", "zh-CN": "简体中文", "zh-TW": "繁體中文",
+  ja: "日本語", ko: "한국어", es: "Español", fr: "Français", de: "Deutsch",
+  pt: "Português", it: "Italiano", ru: "Русский", ar: "العربية", th: "ไทย",
+  vi: "Tiếng Việt", id: "Bahasa Indonesia", ms: "Bahasa Melayu",
+  tr: "Türkçe", pl: "Polski", nl: "Nederlands",
+});

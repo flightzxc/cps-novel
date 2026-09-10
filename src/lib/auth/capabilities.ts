@@ -10,8 +10,18 @@ export type AdminCapability =
   | "content:takedown"
   | "content:view"
   | "content:read"
+  | "tag:manage"
   | "promo:claim"
-  | "revenue:view";
+  | "revenue:view"
+  /**
+   * C-30A (施工工单_C30_换小说_移植CPS换租客_2026-09-08.md §4A.3): single-
+   * article rebind — CPS parity with `article:rebind-drama`, two granularities
+   * per Owner 2026-09-08 decision (do not merge single/batch into one
+   * capability).
+   */
+  | "content:rebind"
+  /** C-30A: batch rebind — CPS parity `article:batch-rebind-drama`. Wired by C-30B (order 2); the capability itself is registered now so both orders share one grant surface. */
+  | "content:batch-rebind";
 
 type CapabilityConfig = {
   rolesEnv: string;
@@ -64,6 +74,12 @@ export const ADMIN_CAPABILITY_CONFIG: Readonly<Record<AdminCapability, Capabilit
       defaultRoles: [],
       requiresTwoFactor: false,
     },
+    "tag:manage": {
+      rolesEnv: "TAG_MANAGE_ROLES",
+      userIdsEnv: "TAG_MANAGE_USER_IDS",
+      defaultRoles: ["super_admin"],
+      requiresTwoFactor: true,
+    },
     "promo:claim": {
       rolesEnv: "PROMO_CLAIM_ROLES",
       userIdsEnv: "PROMO_CLAIM_USER_IDS",
@@ -74,6 +90,23 @@ export const ADMIN_CAPABILITY_CONFIG: Readonly<Record<AdminCapability, Capabilit
       rolesEnv: "REVENUE_VIEW_ROLES",
       userIdsEnv: "REVENUE_VIEW_USER_IDS",
       defaultRoles: [],
+      requiresTwoFactor: true,
+    },
+    // C-30A (施工工单_C30_换小说_移植CPS换租客_2026-09-08.md §4A.3): both
+    // rebind capabilities default to `["super_admin"]` + `requiresTwoFactor:
+    // true` — same tier as `content:publish`. CPS has no 2FA concept at all;
+    // this repo's own capability table carries it, and a two-field atomic
+    // Article rewrite is at least as sensitive as a publish transition.
+    "content:rebind": {
+      rolesEnv: "CONTENT_REBIND_ROLES",
+      userIdsEnv: "CONTENT_REBIND_USER_IDS",
+      defaultRoles: ["super_admin"],
+      requiresTwoFactor: true,
+    },
+    "content:batch-rebind": {
+      rolesEnv: "CONTENT_BATCH_REBIND_ROLES",
+      userIdsEnv: "CONTENT_BATCH_REBIND_USER_IDS",
+      defaultRoles: ["super_admin"],
       requiresTwoFactor: true,
     },
   });

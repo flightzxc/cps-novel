@@ -39,10 +39,16 @@ const EXPECTED_TASK_ROUTES = [
   { path: "/api/admin/tasks", methods: ["GET"] },
   { path: "/api/admin/tasks/detail", methods: ["GET"] },
   { path: "/api/admin/tasks/items", methods: ["GET"] },
+  { path: "/api/admin/tasks/progress", methods: ["GET"] },
   { path: "/api/admin/tasks/retry-failed", methods: ["POST"] },
   { path: "/api/admin/tasks/manual-reviews", methods: ["GET"] },
   { path: "/api/admin/tasks/manual-reviews/resolve", methods: ["POST"] },
   { path: "/api/admin/promo-links", methods: ["GET"] },
+] as const;
+const EXPECTED_TAGGING_ROUTES = [
+  { path: "/api/admin/canonical-tags", methods: ["GET", "PUT"] },
+  { path: "/api/admin/novels/tags", methods: ["GET", "PUT"] },
+  { path: "/api/admin/tag-mappings", methods: ["GET", "PUT"] },
 ] as const;
 
 const EXPECTED_ACTIONS = [
@@ -82,9 +88,20 @@ describe("P1-09 Admin registry parity", () => {
       ...EXPECTED_CONTENT_GET_ROUTES.map((routePath) => ({ path: routePath, methods: ["GET"] })),
       ...EXPECTED_SITE_SETTING_ROUTES.map((route) => ({ path: route.path, methods: [...route.methods] })),
       ...EXPECTED_TASK_ROUTES.map((route) => ({ path: route.path, methods: [...route.methods] })),
+      ...EXPECTED_TAGGING_ROUTES.map((route) => ({ path: route.path, methods: [...route.methods] })),
     ].sort((left, right) => left.path.localeCompare(right.path));
-    const registered = P2_04_ADMIN_REGISTRY.routes
-      .map((route) => ({ path: route.path, methods: [...route.methods].sort() }))
+    const registered = Object.values(
+      P2_04_ADMIN_REGISTRY.routes.reduce<Record<string, { path: string; methods: string[] }>>(
+        (routes, route) => {
+          const current = routes[route.path] ?? { path: route.path, methods: [] };
+          current.methods.push(...route.methods);
+          routes[route.path] = current;
+          return routes;
+        },
+        {},
+      ),
+    )
+      .map((route) => ({ ...route, methods: [...new Set(route.methods)].sort() }))
       .sort((left, right) => left.path.localeCompare(right.path));
     expect(actual).toEqual(expected);
     expect(registered).toEqual(actual);

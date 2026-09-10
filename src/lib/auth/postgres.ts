@@ -4,6 +4,7 @@ import { withDbRetry } from "@/lib/db/db-retry";
 import type {
   AdminIdentityStore, AuthUnitOfWork, CompleteTwoFactorChallengeTransactionResult,
   ConfirmTwoFactorSetupTransactionResult, LoginAttemptStore, RecoveryCodeStore,
+  RegenerateRecoveryCodesTransactionResult,
   SessionStore, TwoFactorStore,
 } from "./ports";
 import type {
@@ -174,6 +175,7 @@ export class PostgreSQLLoginAttemptStore implements LoginAttemptStore {
 
 export type AuthTransactionStage =
   | "setup_enabled" | "setup_recovery" | "setup_version"
+  | "regenerate_recovery" | "regenerate_version"
   | "recovery_code" | "challenge_consumed" | "identity_session_version"
   | "bound_session_version" | "two_factor_completed";
 
@@ -226,6 +228,52 @@ export class PostgreSQLAuthUnitOfWork implements AuthUnitOfWork {
       return { status: "committed", nextSessionVersion: identity.sessionVersion } as const;
         }),
       { op: "auth.twoFactor.confirmTwoFactorSetup", itemId: input.identityId },
+    );
+  }
+
+  /**
+   * CPS v8.3.6 regenerate semantics: lock the enabled secret and identity
+   * version, replace every old code in the same transaction, stamp rotation,
+   * then increment sessionVersion so all extant sessions become stale.
+   */
+  async regenerateRecoveryCodes(input: {
+    identityId: string;
+    expectedSessionVersion: number;
+    expectedEncryptedSecret: string;
+    rotatedAt: Date;
+    recoveryCodes: ReadonlyArray<{ id: string; codeHash: string }>;
+  }): Promise<RegenerateRecoveryCodesTransactionResult> {
+    return withDbRetry(
+      () => this.db.$transaction(async (tx) => {
+        const locked = await tx.$queryRaw<Array<{ session_version: number }>>`
+          SELECT i.session_version
+          FROM admin_identity i
+          JOIN admin_two_factor f ON f.identity_id = i.id
+          WHERE i.id=${input.identityId}::uuid
+            AND i.status='active'
+            AND i.session_version=${input.expectedSessionVersion}
+            AND f.enabled IS TRUE
+            AND f.encrypted_secret=${input.expectedEncryptedSecret}
+          FOR UPDATE OF i,f
+        `;
+        if (locked.length !== 1) return { status: "conflict" } as const;
+        await tx.adminRecoveryCode.deleteMany({ where: { identityId: input.identityId } });
+        await tx.adminRecoveryCode.createMany({
+          data: input.recoveryCodes.map((code) => ({ ...code, identityId: input.identityId })),
+        });
+        await tx.adminTwoFactor.update({
+          where: { identityId: input.identityId },
+          data: { recoveryCodesRotatedAt: input.rotatedAt },
+        });
+        this.stage("regenerate_recovery");
+        const identity = await tx.adminIdentity.update({
+          where: { id: input.identityId },
+          data: { sessionVersion: { increment: 1 } },
+        });
+        this.stage("regenerate_version");
+        return { status: "committed", nextSessionVersion: identity.sessionVersion } as const;
+      }),
+      { op: "auth.twoFactor.regenerateRecoveryCodes", itemId: input.identityId },
     );
   }
 

@@ -45,10 +45,10 @@ import {
 import { isPromoLinkClaimEnabled, isPromoLinkClaimWriteAllowed } from "../../src/lib/flags";
 import {
   buildPromoLinkIdempotencyKey,
+  confirmSideEffectIntentByReadbackInTransaction,
   createHandlerRegistry,
   prepareSideEffectIntent,
   transitionSideEffectIntent,
-  transitionSideEffectIntentInTransaction,
   type TaskHandler,
 } from "../../src/lib/tasks";
 export { buildPromoLinkIdempotencyKey } from "../../src/lib/tasks/promo-link-claim";
@@ -472,14 +472,9 @@ async function writePromoLinkClaimed(
     },
   });
   if (options.intentEffectKey) {
-    await transitionSideEffectIntentInTransaction(tx, {
+    await confirmSideEffectIntentByReadbackInTransaction(tx, {
       effectKey: options.intentEffectKey,
-      status: "confirmed",
-      responseShape: {
-        source: "readback",
-        hasWebUrl: Boolean(result.webUrl),
-        hasAppUrl: Boolean(result.appUrl),
-      },
+      evidence: { hasWebUrl: Boolean(result.webUrl), hasAppUrl: Boolean(result.appUrl) },
     });
   }
   return row.id;

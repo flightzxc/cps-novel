@@ -102,10 +102,15 @@ export const ADMIN_IMPLEMENTED_PAGES: readonly string[] = Object.freeze([
   "/channel-accounts",
   "/novels",
   "/catalog-sync",
+  "/templates",
+  "/articles",
+  "/home-carousel",
+  "/categories",
   "/tags",
   "/tasks",
   "/promo-links",
   "/settings",
+  "/settings/security",
 ]);
 
 export function isNavItemActive(pathname: string, item: AdminNavItem): boolean {

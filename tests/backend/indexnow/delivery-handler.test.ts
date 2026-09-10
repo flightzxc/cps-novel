@@ -229,3 +229,82 @@ describe("createIndexNowDeliveryHandler — pre-flight skip paths never call fet
     expect(fetchImpl).not.toHaveBeenCalled();
   });
 });
+
+/**
+ * C-29b 🟠 review fix: before this fix, the eligibility-drift recheck above
+ * null-checked `article` but not `article.novel` before calling
+ * `isNovelIndexNowEligible` — a blog Article has no Novel at all (C-27), so
+ * `isNovelIndexNowEligible(article, undefined, ...)` would throw
+ * (`isPublicationStatePublic` dereferences `novel.status` unconditionally)
+ * the first time a blog outbox row ever reached this recheck. These tests
+ * seed a blog Article (`articleType: "blog_article"`) with a due outbox row
+ * and assert the handler completes normally in both directions — eligible
+ * (delivers) and ineligible (cancels) — never throwing.
+ */
+describe("createIndexNowDeliveryHandler — C-29b blog family", () => {
+  const BLOG_ENABLED_ENV = testEnv({
+    FEATURE_INDEXNOW_DELIVERY: "true",
+    INDEXNOW_DELIVERY_ALLOW_WRITE: "true",
+    FEATURE_ARTICLE_BLOG: "true",
+  });
+
+  function seedDueBlogRow(fake: FakeIndexNowDb, overrides: Partial<Parameters<FakeIndexNowDb["seedOutbox"]>[0]> = {}) {
+    fake.seedArticle({
+      id: "blog-1",
+      articleType: "blog_article",
+      locale: "en",
+      slug: "my-post",
+      status: "published",
+      updatedAt: new Date("2026-01-01T00:00:00.000Z"),
+    });
+    fake.seedOutbox({
+      id: "outbox-1",
+      articleId: "blog-1",
+      url: `${TEST_SITE_URL}/blog/my-post`,
+      revision: BigInt(new Date("2026-01-01T00:00:00.000Z").getTime()),
+      status: "pending",
+      attemptCount: 0,
+      maxAttempts: 5,
+      ...overrides,
+    });
+  }
+
+  it("an eligible blog outbox row survives the drift recheck and delivers normally (no throw)", async () => {
+    const fake = new FakeIndexNowDb();
+    seedDueBlogRow(fake);
+    const fetchImpl = vi.fn(async () => new Response("ok", { status: 200 }));
+    // `env` (gates `isIndexNowDeliveryEnabled`/`isIndexNowDeliveryWriteAllowed`)
+    // and `eligibilityOptions.env` (gates `isBlogIndexNowEligible`'s own
+    // `isArticleBlogEnabled` read inside the drift recheck) are independent
+    // env sources. `LOCALE_OK` alone (no `.env`) would silently fall back
+    // to the real `process.env.FEATURE_ARTICLE_BLOG` here, so thread
+    // `BLOG_ENABLED_ENV` into both.
+    const handler = createIndexNowDeliveryHandler(fake.asPrismaClient(), fetchImpl, BLOG_ENABLED_ENV, {
+      ...LOCALE_OK,
+      env: BLOG_ENABLED_ENV,
+    });
+
+    const outcome = await handler(context("outbox-1"));
+
+    expect(outcome.status).toBe("success");
+    expect(fetchImpl).toHaveBeenCalledOnce();
+    expect(fake.outbox.get("outbox-1")!.status).toBe("accepted");
+  });
+
+  it("a blog outbox row whose Article drifted out of eligibility (takedown) is cancelled, not thrown", async () => {
+    const fake = new FakeIndexNowDb();
+    seedDueBlogRow(fake);
+    fake.articles.get("blog-1")!.status = "takedown";
+    const fetchImpl = vi.fn();
+    const handler = createIndexNowDeliveryHandler(fake.asPrismaClient(), fetchImpl, BLOG_ENABLED_ENV, {
+      ...LOCALE_OK,
+      env: BLOG_ENABLED_ENV,
+    });
+
+    const outcome = await handler(context("outbox-1"));
+
+    expect(outcome).toEqual({ status: "skipped", result: { reason: "eligibility_drift" } });
+    expect(fetchImpl).not.toHaveBeenCalled();
+    expect(fake.outbox.get("outbox-1")!.status).toBe("cancelled");
+  });
+});

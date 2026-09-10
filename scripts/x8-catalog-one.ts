@@ -12,7 +12,7 @@ import {
   validateTaskClaimTarget,
   type TaskHandlerRegistry,
 } from "../src/lib/tasks";
-import { createMoboreaderCatalogHandler } from "../worker/handlers/moboreader";
+import { createMoboreaderCatalogHandler, parseCatalogScanTaskParams } from "../worker/handlers/moboreader";
 import { parseShutdownDrainTimeoutEnv, processOneWorkerCycle } from "../worker/runtime";
 
 export const PATH_A_CATALOG_COORDINATES = Object.freeze({
@@ -43,7 +43,8 @@ export interface CatalogOneResult {
 }
 
 function validateOptions(options: CatalogOneOptions): void {
-  validateTaskClaimTarget({ family: "catalog_scan", taskId: options.taskId, itemId: options.itemId });
+  // Phase C: catalog_scan is a GenericTask taskType, not its own family.
+  validateTaskClaimTarget({ family: "generic", taskId: options.taskId, itemId: options.itemId });
   if (typeof options.actor !== "string" || !/^[A-Za-z][A-Za-z0-9_-]{0,63}$/.test(options.actor)) {
     throw new Error("catalog_one_actor_invalid");
   }
@@ -68,11 +69,19 @@ function fixedRegistry(db: PrismaClient, env: NodeJS.ProcessEnv): TaskHandlerReg
   const adapter = createMoboreaderReadAdapter({ maxAttempts: PATH_A_CATALOG_COORDINATES.maxAttempts });
   return createHandlerRegistry({
     [MOBOREADER_TASK_TYPES.catalogScan]: {
-      family: "catalog_scan",
+      family: "generic",
       maxAttempts: PATH_A_CATALOG_COORDINATES.maxAttempts,
       handler: createMoboreaderCatalogHandler(db, { adapter, env }),
     },
   });
+}
+
+// Phase C: `returnedCount` was a physical CatalogScanTaskItem column; it now
+// lives inside the same `result` JSON `promoCapture` reads from.
+function returnedCount(value: unknown): number | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const raw = (value as Record<string, unknown>).returnedCount;
+  return Number.isSafeInteger(raw) ? (raw as number) : undefined;
 }
 
 function promoCapture(value: unknown): CatalogOneResult["promoCapture"] | undefined {
@@ -130,22 +139,36 @@ export async function runCatalogOne(
   try {
     const [role] = await db.$queryRaw<Array<{ role: string }>>`SELECT current_user::text AS role`;
     if (role?.role !== "worker_app") return finish({ outcome: "blocked", reason: "worker_role_required" });
-    const before = await db.catalogScanTaskItem.findUnique({
+    // Phase C: CatalogScanTaskItem's physical `pageIndex` is now
+    // `targetId` (text), and CatalogScanTask's physical `pageStart`/
+    // `pageEnd`/`pageSize`/`projectType` now live in `GenericTask.params`
+    // (see `parseCatalogScanTaskParams`, the same parser the worker handler
+    // uses).
+    const before = await db.genericTaskItem.findUnique({
       where: { id: options.itemId },
       select: {
         taskId: true,
-        pageIndex: true,
+        targetType: true,
+        targetId: true,
         status: true,
-        task: { select: { mode: true, status: true, pageStart: true, pageEnd: true, pageSize: true, projectType: true } },
+        task: { select: { mode: true, status: true, params: true } },
       },
     });
+    let beforeParams: ReturnType<typeof parseCatalogScanTaskParams> | undefined;
+    try {
+      beforeParams = before ? parseCatalogScanTaskParams(before.task.params) : undefined;
+    } catch {
+      beforeParams = undefined;
+    }
     if (!before || before.taskId !== options.taskId || before.status !== "pending"
-      || before.pageIndex !== PATH_A_CATALOG_COORDINATES.page
+      || before.targetType !== "catalog_page"
+      || before.targetId !== String(PATH_A_CATALOG_COORDINATES.page)
       || before.task.mode !== "apply" || !["pending", "processing"].includes(before.task.status)
-      || before.task.pageStart !== PATH_A_CATALOG_COORDINATES.page
-      || before.task.pageEnd !== PATH_A_CATALOG_COORDINATES.page
-      || before.task.pageSize !== PATH_A_CATALOG_COORDINATES.pageSize
-      || before.task.projectType !== PATH_A_CATALOG_COORDINATES.projectType) {
+      || !beforeParams
+      || beforeParams.pageStart !== PATH_A_CATALOG_COORDINATES.page
+      || beforeParams.pageEnd !== PATH_A_CATALOG_COORDINATES.page
+      || beforeParams.pageSize !== PATH_A_CATALOG_COORDINATES.pageSize
+      || beforeParams.projectType !== PATH_A_CATALOG_COORDINATES.projectType) {
       return finish({ outcome: "not_consumed", reason: "target_or_coordinates_not_eligible" });
     }
     await processOneWorkerCycle({
@@ -155,11 +178,11 @@ export async function runCatalogOne(
       allowlist,
       signal: dependencies.signal ?? new AbortController().signal,
       shutdownDrainTimeoutMs: parseShutdownDrainTimeoutEnv(env.WORKER_SHUTDOWN_DRAIN_TIMEOUT_MS),
-      claimTarget: { family: "catalog_scan", taskId: options.taskId, itemId: options.itemId },
+      claimTarget: { family: "generic", taskId: options.taskId, itemId: options.itemId },
     });
-    const after = await db.catalogScanTaskItem.findUnique({
+    const after = await db.genericTaskItem.findUnique({
       where: { id: options.itemId },
-      select: { status: true, attemptCount: true, returnedCount: true, result: true },
+      select: { status: true, attemptCount: true, result: true },
     });
     const status = after?.status;
     if (!after || (status !== "success" && status !== "failed" && status !== "skipped")) {
@@ -168,7 +191,7 @@ export async function runCatalogOne(
     const committed = await db.operationAudit.findFirst({
       where: {
         actorType: "worker", actorId: workerId,
-        action: `task_item.${status}`, entityType: "catalog_scan_task_item",
+        action: `task_item.${status}`, entityType: "generic_task_item",
         entityId: options.itemId, taskId: options.taskId,
       },
       select: { id: true },
@@ -179,7 +202,7 @@ export async function runCatalogOne(
       outcome: status,
       reason: "target_terminal",
       attemptCount: after.attemptCount,
-      returnedCount: after.returnedCount ?? undefined,
+      returnedCount: returnedCount(after.result),
       promoCapture: promoCapture(after.result),
     });
   } catch {

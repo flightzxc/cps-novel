@@ -2,10 +2,10 @@
 BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY;
 
 \echo 'X8_HEALTH_SQL_GROUP_1_TASK_DISTRIBUTION'
+-- Phase C: catalog_scan_task(_item) dropped -- CatalogScan is now
+-- GenericTask(taskType='catalog_scan'), covered by the generic branches below.
 WITH states AS (
-  SELECT 'catalog_scan'::text AS family, 'task'::text AS level, status FROM catalog_scan_task
-  UNION ALL SELECT 'catalog_scan', 'item', status FROM catalog_scan_task_item
-  UNION ALL SELECT 'channel_sync', 'task', status FROM channel_sync_task
+  SELECT 'channel_sync'::text AS family, 'task'::text AS level, status FROM channel_sync_task
   UNION ALL SELECT 'channel_sync', 'item', status FROM channel_sync_task_item
   UNION ALL SELECT 'generic', 'task', status FROM generic_task
   UNION ALL SELECT 'generic', 'item', status FROM generic_task_item
@@ -15,11 +15,7 @@ FROM states GROUP BY family, level, status ORDER BY family, level, status;
 
 \echo 'X8_HEALTH_SQL_GROUP_2_EXPIRED_LOCKS'
 WITH expired AS (
-  SELECT 'catalog_scan'::text AS family, 'catalog_scan'::text AS task_type, i.locked_until
-  FROM catalog_scan_task_item i
-  WHERE i.status = 'processing' AND i.locked_until < transaction_timestamp()
-  UNION ALL
-  SELECT 'channel_sync', t.task_type, i.locked_until
+  SELECT 'channel_sync'::text AS family, t.task_type, i.locked_until
   FROM channel_sync_task_item i JOIN channel_sync_task t ON t.id = i.task_id
   WHERE i.status = 'processing' AND i.locked_until < transaction_timestamp()
   UNION ALL

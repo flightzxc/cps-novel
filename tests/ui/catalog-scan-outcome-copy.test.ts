@@ -2,9 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   catalogScanFlagChecklist,
-  catalogScanStatusQuery,
   describeCatalogScanOutcome,
-  CATALOG_SCAN_NEXT_STEPS_NOTE,
   type CatalogScanOutcome,
 } from "@/app/(admin)/catalog-sync/_lib/scan-task-copy";
 import {
@@ -117,20 +115,5 @@ describe("catalogScanFlagChecklist · 两个闸各自独立上报，从不静默
     const rows = catalogScanFlagChecklist({ featureEnabled: true, writeAllowed: false });
     const writeRow = rows.find((row) => row.envName === NOVEL_CATALOG_SYNC_ALLOW_WRITE_FLAG);
     expect(writeRow?.note).toContain("apply");
-  });
-});
-
-describe("catalogScanStatusQuery / CATALOG_SCAN_NEXT_STEPS_NOTE · 任务去向提示", () => {
-  it("生成的只读查询把 taskId 嵌进 WHERE 子句，指向 catalog_scan_task 表", () => {
-    const sql = catalogScanStatusQuery("task-abc-123");
-    expect(sql).toContain("catalog_scan_task");
-    expect(sql).toContain("task-abc-123");
-    expect(sql).toMatch(/^select /);
-    expect(sql).not.toMatch(/\b(update|delete|insert|drop)\b/i);
-  });
-
-  it("提示文案说明当前没有任务列表页，并给出 /tasks 的名字，而不是指向一个不存在的详情页", () => {
-    expect(CATALOG_SCAN_NEXT_STEPS_NOTE).toContain("/tasks");
-    expect(CATALOG_SCAN_NEXT_STEPS_NOTE.trim().length).toBeGreaterThan(0);
   });
 });

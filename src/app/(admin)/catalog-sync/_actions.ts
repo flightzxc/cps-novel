@@ -15,6 +15,8 @@ import {
 import {
   MoboreaderTaskInputError,
   createMoboreaderCatalogScanTask,
+  resolveMoboreaderCatalogSafetyMaxPages,
+  resolveMoboreaderUpstreamRecommendedPageSize,
   type MoboreaderTaskCreationResult,
 } from "@/lib/tasks/moboreader";
 import {
@@ -114,6 +116,7 @@ async function authorizeAction(actionId: `admin.${string}`, requestId: string) {
 export async function dryRunContentCreationAction(input: {
   novelSourceItemId: string;
   requestId: string;
+  templateKey?: string;
 }): Promise<ContentCreationActionResult> {
   try {
     const { context } = await authorizeAction("admin.content_creation.dry_run", input.requestId);
@@ -123,6 +126,7 @@ export async function dryRunContentCreationAction(input: {
       mode: "dry_run",
       actor: { type: "admin", adminId: context.identity.id },
       requestId: input.requestId,
+      templateKey: input.templateKey,
     });
     return { ok: true, data };
   } catch (error) {
@@ -148,6 +152,7 @@ export async function dryRunContentCreationAction(input: {
 export async function applyContentCreationAction(input: {
   novelSourceItemId: string;
   requestId: string;
+  templateKey?: string;
 }): Promise<ContentCreationActionResult> {
   try {
     const { serviceAuthorization } = await authorizeAction(
@@ -179,6 +184,7 @@ export async function applyContentCreationAction(input: {
       mode: "apply",
       actor: { type: "admin", adminId: context.identity.id },
       requestId: input.requestId,
+      templateKey: input.templateKey,
     });
     if (data.outcome === "created") {
       // The source item's own status flipped (`pending` → `linked`) and a
@@ -218,14 +224,29 @@ export async function applyContentCreationAction(input: {
  * (`active_conflict`), not requestToken replay — a double submit from this
  * form produces two distinct tokens but still only one live task, because the
  * second call observes the first one still `pending`/`processing`.
+ *
+ * Phase B (`施工工单_PhaseB_实体订正与运营表单Parity_2026-09-06.md` §三):
+ * `pageStart`/`pageEnd`/`pageSize` are no longer part of this action's own
+ * input — CPS's `changdu-sync-panel.tsx` never exposes page mechanics to an
+ * operator either, it just scans to its own safety ceiling every time. This
+ * action now resolves the same three values the old form used to collect —
+ * page 1 through the factory's own configured safety ceiling
+ * (`resolveMoboreaderCatalogSafetyMaxPages`), at the factory's own
+ * env-resolved recommended page size (`resolveMoboreaderUpstreamRecommendedPageSize`
+ * — C-13, `施工工单_C13_每页100本与节流余量_2026-09-07.md`: reads the
+ * `MOBOREADER_UPSTREAM_RECOMMENDED_PAGE_SIZE` env var instead of the bare
+ * CPS-parity constant, so an operator can opt a task into the probed-safe
+ * larger page size without a code change; still defaults to 20 when unset)
+ * — as fixed server-side values instead. `languages` replaces them as the
+ * one thing the operator does choose: recorded on the task for `/tasks`
+ * detail and result filtering (Phase C), never sent upstream as a filter
+ * (see the doc on `CreateMoboreaderCatalogScanTaskInput.languages`).
  */
 
 export type CatalogScanTriggerInput = {
   readonly channelAccountId: string;
   readonly channelAppId: string;
-  readonly pageStart: number;
-  readonly pageEnd: number;
-  readonly pageSize: number;
+  readonly languages: readonly string[];
   readonly requestId: string;
 };
 
@@ -315,9 +336,10 @@ async function runCatalogScanTrigger(
     const result = await createMoboreaderCatalogScanTask(prisma, {
       channelAccountId: input.channelAccountId,
       channelAppId: input.channelAppId,
-      pageStart: input.pageStart,
-      pageEnd: input.pageEnd,
-      pageSize: input.pageSize,
+      pageStart: 1,
+      pageEnd: resolveMoboreaderCatalogSafetyMaxPages(),
+      pageSize: resolveMoboreaderUpstreamRecommendedPageSize(),
+      languages: input.languages,
       requestToken: randomUUID(),
       actorId,
       requestId: input.requestId,
@@ -624,6 +646,7 @@ function requireBatchSelection(
 export async function dryRunContentCreationBatchAction(input: {
   novelSourceItemIds: readonly string[];
   requestId: string;
+  templateKey?: string;
 }): Promise<ContentCreationBatchDryRunActionResult> {
   try {
     const { context } = await authorizeAction("admin.content_creation.batch_dry_run", input.requestId);
@@ -636,6 +659,7 @@ export async function dryRunContentCreationBatchAction(input: {
       actor: { type: "admin", adminId: context.identity.id },
       requestId: input.requestId,
       budgetMs: CONTENT_CREATION_BATCH_BUDGET_MS,
+      templateKey: input.templateKey,
     });
     return { ok: true, data };
   } catch (error) {
@@ -658,6 +682,7 @@ export async function dryRunContentCreationBatchAction(input: {
 export async function applyContentCreationBatchAction(input: {
   novelSourceItemIds: readonly string[];
   requestId: string;
+  templateKey?: string;
 }): Promise<ContentCreationBatchApplyActionResult> {
   try {
     const { serviceAuthorization } = await authorizeAction(
@@ -693,6 +718,7 @@ export async function applyContentCreationBatchAction(input: {
       actor: { type: "admin", adminId: context.identity.id },
       requestId: input.requestId,
       budgetMs: CONTENT_CREATION_BATCH_BUDGET_MS,
+      templateKey: input.templateKey,
     });
     if (data.counts.created > 0) {
       revalidatePath("/catalog-sync");

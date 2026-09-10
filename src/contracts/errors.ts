@@ -1,6 +1,7 @@
 import type { AdminContentQueryErrorCode } from "@/server/admin-content";
 import type { AdminAccessErrorCode } from "@/lib/auth/errors";
 import type { CredentialContractCode } from "@/lib/credentials/contracts";
+import type { TaggingAdminErrorCode } from "@/domain/tagging-admin";
 
 /**
  * Every stable code the browser is allowed to branch on.
@@ -17,12 +18,24 @@ export type AdminErrorCode =
   | AdminAccessErrorCode
   | CredentialContractCode
   | AdminContentQueryErrorCode
+  | TaggingAdminErrorCode
   | "credential_task_not_found"
   | "site_setting_invalid"
   | "site_setting_conflict"
   | "site_setting_not_seeded"
   /** A well-formed novel or chapter id that matches no live row. */
   | "admin_content_not_found"
+  /**
+   * Optimistic-lock conflict on `Article.update`/`regenerate` (N-7,
+   * `src/server/articles/service.ts`'s `ArticleConflictError`): the row's
+   * `updatedAt` no longer matches the `expectedUpdatedAt` a prior read
+   * produced. Distinct from every other write failure — it means "reload and
+   * re-apply your edit", not "retry the same request" — same family as
+   * `site_setting_conflict` above. Reaches the browser only through
+   * `src/app/(admin)/articles/_actions.ts`'s own `writeErrorCode` (articles
+   * have no HTTP route; there is no `respond.ts` boundary to also update).
+   */
+  | "article_conflict"
   /**
    * The route boundary's catch-all: an unrecognised, non-`AdminAccessError`,
    * non-domain exception. Previously silently coerced to `admin_capability_denied`

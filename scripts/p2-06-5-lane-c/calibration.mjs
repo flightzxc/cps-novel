@@ -566,7 +566,7 @@ export function scoreCalibration({
   runId = "UNSPECIFIED",
   generatedAt = "UNSPECIFIED",
   mode = "C1",
-  lexiconOverride = null,
+  lexiconOverride = /** @type {{ version: string, sha256: string } | null} */ (null),
 }) {
   const taxonomy = rawTaxonomy?.fingerprint && rawTaxonomy?.canonicalTags ? rawTaxonomy : validateTaxonomy(rawTaxonomy);
   const sampleBundle = Array.isArray(rawSamples) ? validateSamples(rawSamples) : rawSamples;

@@ -61,13 +61,26 @@ function row(overrides: Partial<SourceItemRow> = {}): SourceItemRow {
     channelName: "Moboreader",
     sourceAppCode: "mobo-app-1",
     sourceAppName: "Mobo App",
+    // Matches the default `status: "pending"` above -- not yet `linked`, so
+    // ineligible by the same `source_not_linked` rule `readSourceItemsPage`
+    // applies (C-8). Callers overriding `status` to `"linked"` must also
+    // override these two.
+    promoClaimEligible: false,
+    promoClaimIneligibleReason: "source_not_linked",
     ...overrides,
   };
 }
 
 const ROWS: readonly SourceItemRow[] = [
   row(),
-  row({ id: "src-2", title: "已建立的条目", status: "linked", novelId: "novel-9" }),
+  row({
+    id: "src-2",
+    title: "已建立的条目",
+    status: "linked",
+    novelId: "novel-9",
+    promoClaimEligible: true,
+    promoClaimIneligibleReason: null,
+  }),
 ];
 
 function claimApp(overrides: Partial<ClaimChannelAppOption> = {}): ClaimChannelAppOption {
@@ -114,11 +127,13 @@ function renderPage(
     promoClaimGranted?: boolean;
     promoClaimBlockedReason?: string | null;
     contentCreationBatchMaxSize?: number;
+    featureEnabled?: boolean;
   } = {},
 ) {
   return render(
     <CatalogSyncClient
       items={options.items ?? ROWS}
+      catalogGate={{ featureEnabled: options.featureEnabled ?? true }}
       contentPublish={options.contentPublish ?? "granted"}
       claimChannelApps={options.claimChannelApps ?? [claimApp()]}
       promoClaimMaxBatchSize={options.promoClaimMaxBatchSize ?? 50}
@@ -164,6 +179,27 @@ afterEach(() => {
 });
 
 describe("来源条目表格 · 渲染", () => {
+  it("Phase B：CPS sync-panel 回归一条横幅，只反映总闸——不再展示写闸", () => {
+    const { rerender } = renderPage({ featureEnabled: true });
+    expect(screen.getByTestId("catalog-sync-gate-status").getAttribute("data-state")).toBe("enabled");
+    expect(screen.getByTestId("catalog-sync-gate-status").textContent).toContain("已启用");
+
+    rerender(
+      <CatalogSyncClient
+        items={ROWS}
+        catalogGate={{ featureEnabled: false }}
+        contentPublish="granted"
+        claimChannelApps={[claimApp()]}
+        promoClaimMaxBatchSize={50}
+        promoClaimGranted
+        promoClaimBlockedReason={null}
+        contentCreationBatchMaxSize={50}
+      />,
+    );
+    expect(screen.getByTestId("catalog-sync-gate-status").getAttribute("data-state")).toBe("disabled");
+    expect(screen.getByTestId("catalog-sync-gate-status").textContent).toContain("FEATURE_NOVEL_CATALOG_SYNC");
+  });
+
   it("列出标题、语种识别、渠道、章节数与状态徽标", () => {
     renderPage();
     expect(screen.getByText("示例小说 A")).toBeTruthy();
@@ -177,6 +213,34 @@ describe("来源条目表格 · 渲染", () => {
   it("空表渲染空状态", () => {
     renderPage({ items: [] });
     expect(screen.getByText("没有符合条件的来源条目")).toBeTruthy();
+  });
+
+  it("领取资格列 (C-8)：可领取渲染绿色徽标，不可领取渲染红色徽标并带 reason 中文", () => {
+    renderPage({
+      items: [
+        row({ id: "src-eligible", promoClaimEligible: true, promoClaimIneligibleReason: null }),
+        row({
+          id: "src-not-linked",
+          promoClaimEligible: false,
+          promoClaimIneligibleReason: "source_not_linked",
+        }),
+        row({
+          id: "src-active-elsewhere",
+          promoClaimEligible: false,
+          promoClaimIneligibleReason: "item_already_active_elsewhere",
+        }),
+      ],
+    });
+    const eligible = screen.getAllByTestId("promo-claim-eligibility-eligible");
+    expect(eligible).toHaveLength(1);
+    expect(eligible[0].textContent).toBe("可领取");
+
+    const ineligible = screen.getAllByTestId("promo-claim-eligibility-ineligible");
+    expect(ineligible).toHaveLength(2);
+    expect(ineligible.map((el) => el.textContent)).toEqual([
+      "不可领取 · 来源条目尚未关联书目（未处于 linked 状态）",
+      "不可领取 · 该来源条目已经在另一个进行中的领取任务里",
+    ]);
   });
 
   it("每一行都有创建内容按钮，即便该条目已经 linked——点开会看到 already_exists 而不是被隐藏", () => {
@@ -236,7 +300,18 @@ describe("确认创建 → apply", () => {
 
   it("成功创建：调用 applyContentCreationAction、展示成功摘要与详情链接、并刷新数据", async () => {
     actions.applyContentCreationAction.mockResolvedValue(
-      okResult({ outcome: "created", ...CREATED_SUMMARY }),
+      okResult({
+        outcome: "created",
+        ...CREATED_SUMMARY,
+        previewEnqueue: {
+          queued: true,
+          status: "enqueued",
+          taskId: "preview-1",
+          taskStatus: "pending",
+          eligibleCount: 1,
+          skipReasonCounts: {},
+        },
+      }),
     );
     renderPage();
     await openDialog();
@@ -253,6 +328,7 @@ describe("确认创建 → apply", () => {
     expect(dlg.getByRole("link", { name: "查看书目详情" }).getAttribute("href")).toBe(
       "/novels/novel-1",
     );
+    expect(dlg.getByTestId("preview-enqueue-result").textContent).toContain("预览刷新任务已入队");
     await waitFor(() => expect(routerRefresh).toHaveBeenCalledTimes(1));
   });
 
@@ -455,6 +531,25 @@ describe("领取推广链接 · 选择工具栏", () => {
     renderPage();
     await click(claimToolbarButton());
     expect(dialog()).toBeNull();
+  });
+
+  it("表头「选择当前页」把计数推到本页条数，再点一次归零（C-17）", async () => {
+    renderPage();
+    const header = screen.getByLabelText("选择当前页") as HTMLInputElement;
+    await click(header);
+    expect(screen.getByTestId("promo-claim-toolbar-count").textContent).toContain(String(ROWS.length));
+    await click(header);
+    expect(screen.getByTestId("promo-claim-toolbar-count").textContent).toContain("0");
+  });
+
+  it("表头全选同时选中「不可领取」的行（C-17，钉死可选行范围=当前页全部）", async () => {
+    renderPage();
+    const header = screen.getByLabelText("选择当前页") as HTMLInputElement;
+    await click(header);
+    // "示例小说 A" (src-1) is the ineligible fixture: status "pending",
+    // promoClaimEligible: false, promoClaimIneligibleReason: "source_not_linked".
+    expect(checkboxFor("示例小说 A").checked).toBe(true);
+    expect(checkboxFor("已建立的条目").checked).toBe(true);
   });
 });
 
@@ -693,6 +788,72 @@ describe("领取推广链接 · 提交与结果分支", () => {
 });
 
 /**
+ * C-8 (`施工工单_PhaseC_任务模型迁移与ImportProgress_2026-09-06.md` §五):
+ * CPS-parity "预演" button + typed apply confirmation, copying
+ * `changdu-sync-panel.tsx`'s `submitPromoClaim` shape -- a one-click
+ * dry_run regardless of the `模式` dropdown, and a `window.prompt` gate
+ * (must literally type "确认领取") before any `apply` submission fires.
+ */
+describe("领取推广链接 · C-8 dry-run 预演按钮与 apply 前 window.prompt 确认", () => {
+  it("「推广码领取 dry-run」按钮无视下拉框的模式，始终以 dry_run 提交，且不会弹 window.prompt", async () => {
+    const promptSpy = vi.spyOn(window, "prompt");
+    actions.enqueuePromoLinkClaimAction.mockResolvedValue(
+      okResult({ outcome: "enqueued", taskId: "task-1", mode: "dry_run", eligibleCount: 1, skipReasonCounts: {} }),
+    );
+    renderPage();
+    await click(checkboxFor("示例小说 A"));
+    await click(claimToolbarButton());
+
+    const dlg = within(dialog());
+    // Switch the dropdown to apply -- the preview button must still force dry_run.
+    fireEvent.change(dlg.getByLabelText("模式") as HTMLSelectElement, { target: { value: "apply" } });
+    await click(dlg.getByTestId("promo-claim-dry-run-preview"));
+
+    expect(promptSpy).not.toHaveBeenCalled();
+    expect(actions.enqueuePromoLinkClaimAction).toHaveBeenCalledTimes(1);
+    expect(actions.enqueuePromoLinkClaimAction.mock.calls[0][0]).toMatchObject({ mode: "dry_run" });
+    promptSpy.mockRestore();
+  });
+
+  it("apply 提交前会弹 window.prompt；输入非「确认领取」时不调用 action", async () => {
+    const promptSpy = vi.spyOn(window, "prompt").mockReturnValue("算了");
+    renderPage();
+    await click(checkboxFor("示例小说 A"));
+    await click(claimToolbarButton());
+
+    const dlg = within(dialog());
+    fireEvent.change(dlg.getByLabelText("模式") as HTMLSelectElement, { target: { value: "apply" } });
+    await click(dlg.getByRole("button", { name: "确认领取（apply）" }));
+
+    expect(promptSpy).toHaveBeenCalledTimes(1);
+    expect(promptSpy.mock.calls[0][0]).toContain("确认领取");
+    expect(actions.enqueuePromoLinkClaimAction).not.toHaveBeenCalled();
+    // Dialog stays on the form stage -- no result panel rendered from a call that never happened.
+    expect(dlg.queryByTestId(/promo-claim-outcome-/)).toBeNull();
+    promptSpy.mockRestore();
+  });
+
+  it("apply 提交前输入「确认领取」时才真正提交，携带 mode: apply", async () => {
+    const promptSpy = vi.spyOn(window, "prompt").mockReturnValue("确认领取");
+    actions.enqueuePromoLinkClaimAction.mockResolvedValue(
+      okResult({ outcome: "enqueued", taskId: "task-2", mode: "apply", eligibleCount: 1, skipReasonCounts: {} }),
+    );
+    renderPage();
+    await click(checkboxFor("示例小说 A"));
+    await click(claimToolbarButton());
+
+    const dlg = within(dialog());
+    fireEvent.change(dlg.getByLabelText("模式") as HTMLSelectElement, { target: { value: "apply" } });
+    await click(dlg.getByRole("button", { name: "确认领取（apply）" }));
+
+    expect(promptSpy).toHaveBeenCalledTimes(1);
+    expect(actions.enqueuePromoLinkClaimAction).toHaveBeenCalledTimes(1);
+    expect(actions.enqueuePromoLinkClaimAction.mock.calls[0][0]).toMatchObject({ mode: "apply" });
+    promptSpy.mockRestore();
+  });
+});
+
+/**
  * RC-4 「批量创建内容」多选工具栏 + `BatchCreateContentDialog`.
  *
  * Same discipline as the RC-1 suite above: `dryRunContentCreationBatchAction`/
@@ -798,6 +959,14 @@ describe("批量创建内容 · 确认创建 → apply", () => {
           { novelSourceItemId: "src-2", status: "skipped_already_linked", result: { outcome: "already_exists", ...CREATED_SUMMARY } },
         ],
         counts: { created: 1, skipped_already_linked: 1, failed: 0, not_processed: 0 },
+        previewEnqueue: {
+          queued: true,
+          status: "enqueued",
+          taskId: "preview-batch",
+          taskStatus: "disabled",
+          eligibleCount: 1,
+          skipReasonCounts: {},
+        },
       }),
     );
     renderPage();
@@ -816,6 +985,7 @@ describe("批量创建内容 · 确认创建 → apply", () => {
       expect(dlg.getByTestId("batch-create-result-summary").textContent).toContain("已创建 1 条");
     });
     expect(dlg.getByTestId("batch-create-item-status-src-1").textContent).toBe("已创建");
+    expect(dlg.getByTestId("batch-preview-enqueue-result").textContent).toContain("disabled");
     await waitFor(() => expect(routerRefresh).toHaveBeenCalledTimes(1));
   });
 

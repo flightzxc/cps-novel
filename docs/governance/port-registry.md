@@ -335,6 +335,118 @@ Owner 没有验证器/恢复码，密码通过验证后被 `/two-factor/challeng
 | `createTotpQrCodeDataUrl`（`QRCode.toDataURL(uri,{errorCorrectionLevel:"M",margin:1,width:256})`） → `src/lib/auth/totp.ts` 同名函数 | `src/lib/totp.ts` | `63-68` | `16f2e4cfca51f46af0dede899ecf6242a770bbd0` | `ADAPT` | 三个渲染参数逐字照搬；**不搬** CPS 用 `otpauth` 包构造 URI/issuer/label 的方式——本仓 `createTotpUri`（既有，RC-11 未改）已用自实现 base32/HMAC-SHA1 独立构造 otpauth URI，`createTotpQrCodeDataUrl` 只接收现成 URI 字符串渲染成图，不改 TOTP 算法或 issuer/label 形态 | Claude |
 | `admin.username` 单一 `super_admin` 种子形态 → `scripts/ensure-local-admin-identities.ts` | `scripts/seed-admin.ts` | `8,15,23` | `16f2e4cfca51f46af0dede899ecf6242a770bbd0` | `PATTERN_ONLY` | 只借"env 注入密码、已存在则跳过、无 argv 明文"的形态；**不搬** CPS 单账户/无长度校验/bcrypt cost 12——本仓固定 `admin`+`admin2` 两账户、scrypt（复用既有 `hashAdminPassword`）、`ADMIN_LOCAL_IDENTITY_SEED=allow` 硬门禁下才允许 <12 位、写 `OperationAudit`、`--reset-password` 才更新既有账户 | Codex |
 
+### 2026-09-05 · Launch parity operating surfaces（v8.3.6）
+
+以下实现先记录 CPS 原始语义，再作 Drama/Episode→Novel/Chapter 与 PostgreSQL 必要适配；没有
+越过冻结 tag 读取 CPS 工作树。
+
+| symbol | source_file | source_lines | baseline_commit | port_kind | changed_what | owner |
+| --- | --- | --- | --- | --- | --- | --- |
+| Home carousel config/compute/merge/queries | `src/lib/home-carousel-config.ts`; `src/lib/home-carousel-compute.ts`; `src/lib/home-carousel-merge.ts`; `src/lib/home-carousel-queries.ts` | config 全文件；compute `357-425,586-639`; merge `126-204`; queries `78-236` | `16f2e4cfca51f46af0dede899ecf6242a770bbd0` | `ADAPT` | slot/new/window/500 上限、去重、无封面过滤不变；Drama→Novel，收入分支恒禁用，SQLite 访问改 Prisma/PostgreSQL | Codex |
+| Template CRUD/default selection | `src/lib/template-actions.ts`; `src/lib/article-generation.ts` | `1-183`; `168-250` | `16f2e4cfca51f46af0dede899ecf6242a770bbd0` | `ADAPT` | 复用本仓 fail-closed engine；fallback key 固定 system-default-v1；选择改 templateKey 并持久化 templateId | Codex |
+| Article edit/regenerate/public SEO | `src/lib/article-actions.ts`; `src/app/drama/[slug]/page.tsx`; `src/lib/blog-seo.ts` | `296-416,535-770`; `126-197`; `215-231` | `16f2e4cfca51f46af0dede899ecf6242a770bbd0` | `ADAPT` | Drama→Novel；保 slug/shortId；批量增加 50/25s 预算；公开只消费安全 Article 字段 | Codex |
+| Category page/SEO/sitemap projection | `src/app/category/[slug]/page.tsx`; `src/lib/seo-templates/category.ts`; `src/lib/sitemap.ts` | `38-130`; 全文件；`295-367` | `16f2e4cfca51f46af0dede899ecf6242a770bbd0` | `PATTERN_ONLY` | 不搬 Category 表；投影 CanonicalTag manual/mapped，按 sortOrder，空分类 fail closed | Codex |
+| Site settings 13 fields and consumers | `src/components/admin/settings-form.tsx`; `src/app/layout.tsx`; `src/components/site-footer.tsx` | `17-32`; `33-38,55-57,99`; `36-53` | `16f2e4cfca51f46af0dede899ecf6242a770bbd0` | `ADAPT` | 沿用 13 字段、GA4/GSC/footer 消费；friendLinks 改 jsonb，写入继续乐观锁/审计 | Codex |
+| Security state and recovery regeneration | `src/app/settings/security/page.tsx`; `src/components/security-panel.tsx`; `src/lib/two-factor-settings.ts` | `1-21`; 状态/动作；`115-240` | `16f2e4cfca51f46af0dede899ecf6242a770bbd0` | `ADAPT` | 四态、当前 TOTP、事务替换与 sessionVersion++ 不变；复用端口化 Auth store，无自助禁用 | Codex |
+| **N-3（PR6 fix lane A 显式偏离）** `CarouselConfig.windowDays`/`tauDays`/`alpha`（收入评分算法的 W/τ/α 三参数） — Novel 侧 `HomeCarouselConfig` 类型不含这三个字段 | `src/lib/home-carousel-config.ts` | `41-43` | `16f2e4cfca51f46af0dede899ecf6242a770bbd0` | `ADAPT` | **不搬**：三字段只服务于 `revenueEnabled=true` 时的收入加权候选算法；Novel 无收入来源，`revenueEnabled` 恒 `false`（见上表 Home carousel 行），该算法分支从未被调用，字段本身也一并从类型里删除而非"读了不用"——`normalizeHomeCarouselConfig` 因此没有这三个键，也没有对应的默认值/校验逻辑。规格 M5 行原文列了 `W30/τ7/α2` 但未随之登记删减，此处补登记 | Claude |
+| **N-4（PR6 fix lane A 显式偏离）** `WRITABLE_CAROUSEL_CONFIG_KEYS`（5 字段：`revenueEnabled`/`revenueLocaleWhitelist`/`revenueSourceBeidouEnabled`/`revenueSourceChangduEnabled`/`cronEnabled`） → Novel `updateHomeCarouselConfig` 的可写字段（3 个：`cronSchedule`/`cronTimezone`/`cronEnabled`） | `src/lib/home-carousel-config-write.ts` | `9-15` | `16f2e4cfca51f46af0dede899ecf6242a770bbd0` | `ADAPT` | CPS 的 5 个可写字段里 4 个（`revenueEnabled`/`revenueLocaleWhitelist`/`revenueSourceBeidouEnabled`/`revenueSourceChangduEnabled`）在 Novel 无意义（同 N-3，无收入来源）；只有 `cronEnabled` 有对应语义。Novel 侧改为让管理员写 `cronSchedule`/`cronTimezone`/`cronEnabled` 三项（CPS 把前两者当固定运维值，不经 UI 可写）——这是本仓自己的选择，不是 CPS 语义的直接迁移，故单独登记而非归入上表 `ADAPT` 行的笼统描述 | Claude |
+
+### 2026-09-05 · PR6 fix lane B（M6/M7 咬合测试 + N-7/N-8/N-9）
+
+以下两条不是从 CPS 搬运的符号——CPS `article-actions.ts` 的 `updateArticle` 本身既无
+`expectedUpdatedAt` 乐观锁、也不对正文做标签白名单，两条都是本仓在 CPS 之上主动加固，登记为
+"与 CPS 同源风险"的接受/收口记录，而非 `ADAPT`/`COPY` 搬运。
+
+| symbol | source_file | source_lines | baseline_commit | port_kind | changed_what | owner |
+| --- | --- | --- | --- | --- | --- | --- |
+| N-7 `Article` 编辑/单条再生成乐观锁（`expectedUpdatedAt` 往返校验 + `[expected, expected+1ms)` 窗口 `updateMany` CAS，同 `SiteSettingMutationConflictError` 的 409 语义） | `src/server/site-settings/service.ts`（`expectedTimestamp`/`updateAdminSiteSetting` 的 CAS 窗口）→ `src/server/articles/service.ts`（`expectedArticleTimestamp`/`updateArticleContent`/`regenerateCore` 的 `ArticleConflictError`） | 窗口 CAS 模式 `560-612` | （本仓内部模式复用，非 CPS 搬运；CPS 无 Article 级乐观锁） | `PATTERN_ONLY` | 只借"往返校验 + 窄窗口 `updateMany` 计数判冲突"的形状；不搬 settings 的幂等重放指纹（`requestFingerprint`/`findCommittedUpdate`）——Article 单条编辑/再生成不需要重放去重；批量再生成（`regenerateArticlesBatch`）不接 CAS，见 `service.ts` 该函数上方注释的理由。`article_conflict` 错误码已由 PR6 fix lane D 登记进 `src/contracts/errors.ts` 的 `AdminErrorCode` 与 `src/features/admin-ui/error-copy.ts` 的 `COPY`（`Readonly<Record<AdminErrorCode, string>>`，漏登即编译期报错），并由 `tests/ui/admin-error-copy.test.ts` 锁定 | Claude |
+| N-8 `Article.body` 管理员编辑白名单清洗（`sanitizeArticleBody`：p/br/h2/h3/ul/ol/li/strong/em/a[href https-only]/img[src https-only,alt]/blockquote，`script`/`style`/`on*`/`javascript:` 剥除） | — | — | — | `ORIGINAL_REQUIRED` | CPS `article-actions.ts` 的 `updateArticle` 同样把管理员提交的正文原样落库、不做任何标签白名单——本条目登记的是"本仓比 CPS 更严格"的加固，不是搬运；零依赖手写白名单解析器（`src/server/articles/sanitize-body.ts`），只作用于管理员手工编辑路径（`updateArticleContent`），模板引擎生成/再生成路径（`regenerateCore`）不受影响 | Claude |
+
+### C-17 v8.5.1 参照基线（2026-09-08）
+
+C-17（`/novels`、`/catalog-sync`、`/articles` 三个多选列表补表头「全选本页」）依据 Owner 裁决
+「CPS v8.5.1 是默认真身」的口径，引用了本表此前从未登记过的第三条只读参照路径：
+`/Users/chenweifeng/Documents/产品原型及文档/cps项目/cps-admin-v851-admin-host`，
+该只读工作区当时 `git rev-parse HEAD` 实测为
+`c37602c3933ca97adad0281deb6c75e71e550412`（工作区本身 `git status --porcelain` 为空、施工前后
+未变）。该 sha **不是** tag `pulsedrama-v8.5.1-freeze-20260906` 的 peeled commit——tag 的 peeled
+commit 是 `3a76877af27c6247ad94be946b44e9cc5c1cb9ce`（`chore(release): prepare v8.5.1`）；
+`c37602c` 是该 tag 之上另外 2 个 docs-only commit 之后的只读工作区 HEAD（`057e0c1`
+`docs(release): record v8.5.1 production rollout` → `c37602c`
+`docs(release): sync v8.5.1 developer logs`）。下表 `baseline_commit` 列固定登记的正是这个
+只读工作区 HEAD sha（`c37602c`），不是 tag 本身的 peeled commit——本节标题沿用 v8.5.1 冻结快照
+基线的通称，但登记值指向的是「tag 之上 2 个 docs-only commit」这一精确坐标，行文不应混称为
+"tag 的 peeled commit"。仓库 `CLAUDE.md` 第 23/34 行把只读参照冻结
+在另外两条路径（`cps-admin-v811-search-ux`@`d77c3b9…` 与 `cps-admin`@`v8.2.18`/`v8.3.6`），第三条
+路径与 `CLAUDE.md` 现状冲突；照本表既有先例（X 系列、RC-1 均以独立小节追加新的冻结基线，而不
+回改上一条基线的登记），本节只新增基线记录，`CLAUDE.md` 的更新留给 Owner 另行处理。
+
+C-17 只搬运 UI 交互形态（表头 checkbox 的 `checked`/`indeterminate`/`onChange` 接线与判满算法），
+不搬任何数据库模式或服务端代码。`port_kind` 统一为 `ADAPT`：CPS 三处参照里，剧集列表
+(`dramas-list-client.tsx`) 与换剧计划表 (`batch-drama-switch-client.tsx`) 是不分页的全量列表，
+「全选」即选中 `dramas`/`items` 整个数组；本仓三个列表都是服务端分页（每页 20 条），故统一改为
+「只管当前页」语义，判满算法从 `selected.size === dramas.length` 改成
+`rows.length > 0 && rows.every((r) => selected.has(r.id))`（贴 `batch-drama-switch-client.tsx:227`
+与`changdu-sync-panel.tsx:444-445` 的写法，而非 `dramas-list-client.tsx:65` 的 `size` 比较——分页
+路由是 `<Link>` 导航，`size` 比较在 React 按位置复用组件、选择集残留其他页 id 时会误判）。
+
+**不搬 CPS `changdu-sync-panel.tsx` 的 `selectionMode='filtered'` 提级机制**
+（`canPromoteToFiltered`/"勾满一页后可再提级为『按当前筛选条件全选』"，`changdu-sync-panel.tsx:466-467`）：
+这是"当前页已全选"之后的第二级动作，把选择语义从"这些显式 id"换成"这个筛选条件命中的全部行"，
+需要选择集额外携带一个筛选描述符状态且改变提交时的语义。三个本仓列表里，`/catalog-sync` 的
+两个消费方（批量创建内容、领取推广链接）都要求"调用方显式枚举 id，不接受筛选描述符"——工单
+3.1/3.4②已引用的 `createPromoLinkClaimTask` 纪律与 CPS 自己的硬规则（"畅读推广码领取只支持显式
+勾选剧目，不支持当前筛选全量领取"）同源；`/novels`、`/articles` 没有对应的筛选提级 UI 也没有
+这层服务端契约。C-17 的范围是「表头全选本页」这一件事，不新增选择状态字段、不新增跨页/按筛选
+的选择机制（工单 3.3「不新增机制」与三.5「不做」均已注明），故提级机制不在移植范围内。
+
+| symbol | source_file | source_lines | baseline_commit | port_kind | changed_what | owner |
+| --- | --- | --- | --- | --- | --- | --- |
+| 表头全选 checkbox（`checked`/`ref` 回调设 `indeterminate`/`onChange`）→ `NovelsTable` 表头格 + `NovelsBatchPublish.toggleAll` | `src/components/dramas/dramas-list-client.tsx` | `202-211`（半选态 ref 回调形态）；`65-66,68-72`（`allSelected`/`partial`/`toggleAll` 判满写法，仅借鉴 `every`/`size` 取舍，未直接采用其 `size` 比较） | `c37602c3933ca97adad0281deb6c75e71e550412` | `ADAPT` | 保留 `ref={(el) => { if (el) el.indeterminate = ... }}` 的半选态设置手法与表头 `input[type=checkbox]` 位置；判满改用 `batch-drama-switch-client.tsx:227` 的 `every` 写法（见下一行），因为 `/novels` 是服务端分页，`toggleAll` 只增删当前页 `novels` 数组里的 id，不做跨页全选；新增 `disabled={selection.disabled?.(novels[0]) ?? false}` 复用既有行级 `disabled` 回调表达"提交中禁用整个表头"，CPS 该组件无提交中禁用语义 | Claude |
+| 判满用 `every` 而非 `size` 比较 → `CatalogSyncClient` 的 `allSelected`/`someSelected` + `toggleAllVisible` | `src/components/articles/batch-drama-switch-client.tsx` | `227`（`allSelected = items.length > 0 && items.every(...)`）；`244-251`（表头 checkbox JSX）；`588-592`（`toggleAllOkItems`：`every` 判满则清空，否则全选） | `c37602c3933ca97adad0281deb6c75e71e550412` | `ADAPT` | 保留 `every` 判满与"满则清空/不满则全选"的 `toggle` 逻辑；`aria-label` 从 CPS 的 `"全选 ok 项"` 改为本仓统一措辞 `"选择当前页"`；可选行范围不按 `ok`/领取资格过滤——CPS 该组件的 `okItems` 子集在本仓没有对应概念，选择集覆盖 `items`（当前页）全部行，含"不可领取"行（见工单 3.4②与本节上方"不搬 `selectionMode='filtered'`"说明） | Claude |
+| 分页型「选择当前页」+ 不看上限 → `NovelsTable`/`CatalogSyncClient`/`ArticleList` 的表头 checkbox 与 `toggleAll`/`toggleAllVisible` | `src/app/(admin)/sync/_components/changdu-sync-panel.tsx` | `444-445`（`allVisibleSelected = rows.length > 0 && rows.every(...)`）；`479-488`（`toggleVisibleRows`：只增删当前页 `rows`，不清空跨页选择）；`1038-1046`（表头 `aria-label="选择当前页"` 与 `className` 形态） | `c37602c3933ca97adad0281deb6c75e71e550412` | `ADAPT` | 三处目标文件均按此形态：`every` 判满、`aria-label="选择当前页"` 逐字复用、`onChange` 只增删当前页数组里的 id、不清空其他页已选、不与批量上限（200/50/50）交互——三个上限都 ≥ 每页 20 行，全选一页在数学上不会越限，越限判定继续留给既有提交侧逻辑（`overCap`/`selected.size > 50` 等），未改动；**不搬** CPS `submitTooMany`/`MAX_LINK_SELECTION` 一类"全选后再判断是否超限并禁用提交"的耦合逻辑，因为本仓选择上限判定本就与全选动作解耦 | Claude |
+| 备份份数下限+陈旧保护的保留纪律形态 → `x8_gc()` 的镜像保留规则 | `scripts/ops/prune-backups.sh` | `1-49`（顶部纪律注释：并集条件、sidecar 标记、mtime 排序理由、退出码含义）；`66-67,83-86`（`FLOOR`/`STALE_HOURS`/`--label` 参数定义）；`142,165`（陈旧保护触发时 `exit 2`，本轮只告警不删） | `c37602c3933ca97adad0281deb6c75e71e550412` | `ADAPT` | 借鉴对象是"保留纪律该有的形状"，不是逐句代码：`--floor N`（份数下限，不论多旧最近 N 份永不删）对应到 `x8_gc()` 就是 §4.2 的"最近 N 个"这一类；按 mtime（这里是 `docker images` 的 CreatedAt）而非文件名排序、`--label` 式的可归因日志、顶部大段注释写清"这条保护为什么存在、降级时会怎样"三点原样借鉴。**明确不搬 `--stale-hours` 陈旧保护**（"上游备份管线疑似停摆时本轮放弃删除、只告警、退出码 2"）：这条保护解决的是"产出方停摆、消费方却继续按计划删"这个时间错位问题，镜像场景没有对应的"上游"概念——每次 `up` 是否新打一个 tag 完全由这次部署本身决定，不存在一个独立的、可能静默停摆的"生产方"。`x8_gc()` 里语义对等、且实测更强的保护是 §4.2 第 4 类"被任何容器引用（含已停止）的镜像永不删"——这是本工单 2026-09-09 审计实证过的真实场景（最老的 `0.1.0-62453d2` 仍在被另一 compose 项目的 worker/scheduler 使用），比"距今多久没更新"更精确地回答了"删了会不会打断正在跑的东西"这个问题，所以镜像侧选它作为等价保护，而不是移植一个没有对应现实场景的陈旧检测。同理**不搬**"情况 A/情况 B 标记文件降级"整套机制——镜像没有"验证通过"这个中间态，`docker images` 报出来的标签本身就是权威事实，无需 sidecar 标记佐证 | Claude |
+
+### I18N 复数能力（intl-messageformat 解析引擎，v8.5.1 基线，2026-09-10）
+
+依据 `施工工单_I18N_复数能力_移植CPS_next-intl_plural_2026-09-10.md`。沿用 C-17 已登记的第三条只读
+参照路径 `cps-admin-v851-admin-host`（`baseline_commit` = `c37602c3933ca97adad0281deb6c75e71e550412`），
+不新增参照仓。
+
+**搬的是哪一层，登记为什么是 `ADAPT` 而不是 `COPY`：** 本条目搬运的不是仓库源码里的某个符号，
+而是 CPS 复数能力实际落脚的第三方依赖版本——从 CPS 的 `node_modules` 逐层读 `package.json` 得到
+真实 resolve 出来的调用链 `next-intl 4.11.0 → use-intl 4.11.0 → intl-messageformat 11.2.3 →
+@formatjs/icu-messageformat-parser 3.5.6`，复数判定本身不在这条链的任何一层，最终调的是平台内置
+`Intl.PluralRules`。本仓把 `intl-messageformat@11.2.3` / `@formatjs/icu-messageformat-parser@3.5.6`
+两个版本号原样对齐 CPS 生产树引入为依赖（`package.json`），`t()`/`createTranslator`/`getPublicT`
+三个函数本身是本仓既有函数的原地改造（替换内部渲染实现、新增 `locale` 参数与编译缓存），不是从
+CPS 抄来的 wrapper 代码——CPS 那层 wrapper 是 `next-intl`/`use-intl`，本条目明确不搬。因此
+`port_kind` 登记为 `ADAPT`：搬的是"引擎版本对齐"这个事实，改的是"整个调用方式与错误语义"。
+
+**为什么不搬 `next-intl`/`use-intl` 框架层（详见工单 §4.1/§4.2）：** ①路由归属权冲突——
+`next-intl` 的 `defineRouting`/`createNavigation`/中间件要接管语种前缀、`Link`、`redirect`，
+与本仓自管的 `src/proxy.ts` + `src/app/[locale]/*` 薄壳正面冲突；②回落语义方向相反——CPS
+`deepMergeMessages` 遍历 override 的键、允许译文引入英文没有的新键，本仓 `deepMergeOntoEnglish`
+遍历 base（英文）的键、只接受非空字符串覆盖，这是"Owner 修正一"的既定方向，接 next-intl 要么
+放弃这条要么在 `getRequestConfig` 里重新实现一遍；③类型安全退化——本仓 `MessageKey` 从 `en.ts`
+的 `as const` 对象推出字面量联合，写错键名是编译错误，next-intl 的 key 类型推导走另一套
+（`@schummar/icu-type-parser`），要接就得把 `en.ts` 从 TS 对象改成 JSON；④不必要的运行时——
+next-intl 4.11 依赖里有 `@swc/core`/`@parcel/watcher`/`po-parser`/`negotiator`/`icu-minify`，
+为一个复数功能量级不对。
+
+**为什么不选 `use-intl` 而是裸 `intl-messageformat`（工单 §4.2 决定性证据）：** 海阅 `t()` 的
+一条承重语义是"缺变量就抛"（fail-loud）。实测 `use-intl`（即便把 `onError` 配成直接 `throw`）
+在"缺变量但不传第二个参数"这一格会**静默跳过格式化**、直接返回原始模板 `"{count} preview
+chapters"`——`onError` 根本不会被调用；而裸 `intl-messageformat` 在同样场景下正确抛
+`MissingValueError`。裸引擎比 `use-intl` **和**本仓原有的手写正则 `t()` 都更严格，方向正是海阅
+既定的 fail-loud 纪律要求的方向（§4.4 收紧，见下）；`use-intl` 相对多出来的 React
+hooks/number/date/list/relativeTime 格式化器/命名空间管理/错误兜底策略，本仓要么已有
+（命名空间由 `MessageKey` 类型管）要么明确不想要（错误兜底）。
+
+| symbol | source_file | source_lines | baseline_commit | port_kind | changed_what | owner |
+| --- | --- | --- | --- | --- | --- | --- |
+| `intl-messageformat@11.2.3` + `@formatjs/icu-messageformat-parser@3.5.6`（CPS 复数能力依赖链的解析引擎层，非 `next-intl`/`use-intl` 框架层） | CPS `node_modules` 递归 `package.json` resolve 得到的真实版本（非仓库源码路径；`next-intl 4.11.0 → use-intl 4.11.0 → intl-messageformat 11.2.3 → @formatjs/icu-messageformat-parser 3.5.6`） | N/A（依赖版本对齐，非代码行搬运） | `c37602c3933ca97adad0281deb6c75e71e550412` | `ADAPT` | 只对齐引擎版本号作为本仓生产依赖（`intl-messageformat` production dep）+ 门禁专用 dev 依赖（`@formatjs/icu-messageformat-parser`）引入；不引入 `next-intl`/`use-intl` 框架层（路由/Link/redirect/usePathname、React hooks、messages 命名空间管理、`onError` 兜底策略）——理由见上方两段说明；`t()`/`createTranslator`/`getPublicT` 是本仓 `src/lib/locale/messages/index.ts` 既有函数原地改造为调用该引擎（新增 `locale` 参数、`Map<string, IntlMessageFormat>` 编译缓存、`MissingValueError` 重新包装为既有 `MissingMessagesError`），不是从 CPS 抄的 wrapper 代码 | Claude |
+
 ## 使用说明
 
 - `symbol`：被搬运的具体符号名（函数名/类型名/表名/字段名/组件名等），一行一个符号，不得用文件级粗粒度笼统登记；

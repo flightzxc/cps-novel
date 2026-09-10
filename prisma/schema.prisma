@@ -58,10 +58,10 @@ model ChannelApp {
   sourceItems      NovelSourceItem[]
   sourceLabels     SourceLabel[]
   promoLinks       PromoLink[]
-  catalogScanTasks CatalogScanTask[]
   channelSyncTasks ChannelSyncTask[]
   genericTasks     GenericTask[]
   sideEffects      SideEffectIntent[]
+  sourceTagMappings SourceLabelMapping[]
 
   @@unique([channelId, sourceAppId, externalAppId], map: "channel_app_binding_key")
   @@index([status], map: "channel_app_status_idx")
@@ -108,7 +108,6 @@ model ChannelAccount {
   activeFingerprints   ChannelCredentialActiveFingerprint[]
   credentialChangeLogs CredentialChangeLog[]
   promoLinks           PromoLink[]
-  catalogScanTasks     CatalogScanTask[]
   channelSyncTasks     ChannelSyncTask[]
   genericTasks         GenericTask[]
   sideEffects          SideEffectIntent[]
@@ -194,6 +193,8 @@ model AdminIdentity {
   twoFactor     AdminTwoFactor?
   challenges    AdminTwoFactorChallenge[]
   recoveryCodes AdminRecoveryCode[]
+  approvedSourceTagMappings SourceLabelMapping[] @relation("SourceLabelMappingApprover")
+  manualTagDecisions        NovelCanonicalTag[]  @relation("NovelCanonicalTagDecider")
 
   @@index([status, updatedAt], map: "admin_identity_status_updated_idx")
   @@map("admin_identity")
@@ -293,6 +294,21 @@ model Novel {
   paidFromChapter   Int?      @map("paid_from_chapter")
   splitRatio        Decimal?  @map("split_ratio") @db.Decimal(9, 4)
   status            String    @default("draft") @db.VarChar(32)
+  /**
+   * C-30A (施工工单_C30_换小说_移植CPS换租客_2026-09-08.md §4A.1/附录 A):
+   * CPS parity — copied physical shape from `Drama.nameNormalized`
+   * (`normalizeName`, `src/lib/drama-identity.ts`, 10 lines). Maintained by
+   * `normalizeNovelTitle` (`src/lib/novel/novel-identity.ts`) at exactly two
+   * write points — Novel creation (`src/server/content-creation/service.ts`'s
+   * `novel.create`) and the Novel title-update path — plus the one-time
+   * idempotent backfill (`scripts/backfill-novel-title-normalized.ts`) for
+   * pre-existing rows. Nullable: a row written before this column existed, or
+   * before either write point runs its update, reads NULL rather than a stale
+   * derived value. Not read by any query yet in this migration — the
+   * `(locale, title_normalized)` index below exists for the C-30B bipartite
+   * pairing (`buildTheaterIndexedDests`), which is out of this order's scope.
+   */
+  titleNormalized   String?   @map("title_normalized") @db.VarChar(500)
   deletedAt         DateTime? @map("deleted_at") @db.Timestamptz(6)
   createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt         DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
@@ -306,9 +322,13 @@ model Novel {
   carouselSlots      HomeCarouselManualSlot[]
   carouselCandidates HomeCarouselAutoCandidate[]
   carouselServing    HomeCarouselServing[]
+  tagState           NovelTagState?
+  canonicalTags      NovelCanonicalTag[]
+  tagClassificationRuns TagClassificationRun[]
 
   @@index([status, updatedAt], map: "novel_status_updated_idx")
   @@index([locale, status], map: "novel_locale_status_idx")
+  @@index([locale, titleNormalized], map: "novel_locale_title_normalized_idx")
   @@map("novel")
 }
 
@@ -320,6 +340,7 @@ model NovelSourceItem {
   sourceLanguageCode      String    @map("source_language_code") @db.VarChar(64)
   sourceLanguageName      String?   @map("source_language_name") @db.VarChar(160)
   sourceLocale            String?   @map("source_locale") @db.VarChar(16)
+  rawLanguageScope        String?   @map("raw_language_scope") @db.Text
   title                   String    @db.VarChar(500)
   description             String    @db.Text
   coverUrl                String?   @map("cover_url") @db.Text
@@ -469,6 +490,157 @@ model NovelSourceItemLabel {
   @@map("novel_source_item_label")
 }
 
+model CanonicalTag {
+  id                  String   @id @default(uuid()) @db.Uuid
+  stableId            String   @unique(map: "canonical_tag_stable_id_key") @map("stable_id") @db.VarChar(160)
+  slug                String   @unique(map: "canonical_tag_slug_key") @db.VarChar(160)
+  canonicalDefinition String   @map("canonical_definition") @db.Text
+  aliases             Json     @default("[]") @db.JsonB
+  facet               String?  @db.VarChar(64)
+  status              String   @default("active") @db.VarChar(32)
+  sortOrder           Int      @map("sort_order")
+  taxonomyVersion     String   @map("taxonomy_version") @db.VarChar(64)
+  createdAt           DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  translations  CanonicalTagTranslation[]
+  keywords      CanonicalTagKeyword[]
+  sourceMappings SourceLabelMapping[]
+  novelTags      NovelCanonicalTag[]
+
+  @@index([status, sortOrder, stableId], map: "canonical_tag_status_sort_idx")
+  @@map("canonical_tag")
+}
+
+model CanonicalTagTranslation {
+  id             String   @id @default(uuid()) @db.Uuid
+  canonicalTagId String   @map("canonical_tag_id") @db.Uuid
+  locale         String   @db.VarChar(16)
+  displayName    String   @map("display_name") @db.VarChar(160)
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  canonicalTag CanonicalTag @relation(fields: [canonicalTagId], references: [id], onDelete: Cascade, map: "canonical_tag_translation_tag_id_fkey")
+
+  @@unique([canonicalTagId, locale], map: "canonical_tag_translation_locale_key")
+  @@index([locale, displayName], map: "canonical_tag_translation_locale_name_idx")
+  @@map("canonical_tag_translation")
+}
+
+model CanonicalTagKeyword {
+  id             String   @id @default(uuid()) @db.Uuid
+  keywordId      String   @unique(map: "canonical_tag_keyword_stable_key") @map("keyword_id") @db.VarChar(200)
+  canonicalTagId String   @map("canonical_tag_id") @db.Uuid
+  value          String   @db.Text
+  scriptBuckets  Json     @default("[]") @map("script_buckets") @db.JsonB
+  matchMode      String   @map("match_mode") @db.VarChar(32)
+  riskFlags      Json     @default("[]") @map("risk_flags") @db.JsonB
+  active         Boolean  @default(true)
+  lexiconVersion String   @map("lexicon_version") @db.VarChar(64)
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  canonicalTag CanonicalTag @relation(fields: [canonicalTagId], references: [id], onDelete: Cascade, map: "canonical_tag_keyword_tag_id_fkey")
+
+  @@index([canonicalTagId, active], map: "canonical_tag_keyword_tag_active_idx")
+  @@index([lexiconVersion, active], map: "canonical_tag_keyword_version_active_idx")
+  @@map("canonical_tag_keyword")
+}
+
+model SourceLabelMapping {
+  id               String   @id @default(uuid()) @db.Uuid
+  channelAppId     String   @map("channel_app_id") @db.Uuid
+  rawLanguageScope String   @map("raw_language_scope") @db.Text
+  rawToken         String   @map("raw_token") @db.Text
+  canonicalTagId   String   @map("canonical_tag_id") @db.Uuid
+  mappingVersion   String   @map("mapping_version") @db.VarChar(96)
+  active           Boolean  @default(true)
+  approvedBy       String   @map("approved_by") @db.Uuid
+  approvedAt       DateTime @default(now()) @map("approved_at") @db.Timestamptz(6)
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  channelApp   ChannelApp   @relation(fields: [channelAppId], references: [id], onDelete: Restrict)
+  canonicalTag CanonicalTag @relation(fields: [canonicalTagId], references: [id], onDelete: Restrict, map: "source_label_mapping_tag_id_fkey")
+  approver     AdminIdentity @relation("SourceLabelMappingApprover", fields: [approvedBy], references: [id], onDelete: Restrict)
+
+  @@unique([channelAppId, rawLanguageScope, rawToken, canonicalTagId], map: "source_label_mapping_edge_key")
+  @@index([canonicalTagId, active], map: "source_label_mapping_tag_active_idx")
+  @@map("source_label_mapping")
+}
+
+model NovelTagState {
+  novelId          String    @id @map("novel_id") @db.Uuid
+  mode             String    @default("automatic") @db.VarChar(16)
+  revision         BigInt    @default(0) @db.BigInt
+  currentAutoRunId String?   @map("current_auto_run_id") @db.Uuid
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  novel          Novel                 @relation(fields: [novelId], references: [id], onDelete: Cascade)
+  currentAutoRun TagClassificationRun? @relation("CurrentAutoRun", fields: [currentAutoRunId, novelId], references: [id, novelId], onDelete: Restrict, map: "novel_tag_state_current_auto_run_id_fkey")
+
+  @@unique([currentAutoRunId, novelId], map: "novel_tag_state_current_auto_run_key")
+  @@index([mode, updatedAt], map: "novel_tag_state_mode_updated_idx")
+  @@map("novel_tag_state")
+}
+
+model TagClassificationRun {
+  id                     String    @id @default(uuid()) @db.Uuid
+  novelId                String    @map("novel_id") @db.Uuid
+  method                 String    @db.VarChar(32)
+  taxonomyVersion        String    @map("taxonomy_version") @db.VarChar(64)
+  taxonomySha256         String    @map("taxonomy_sha256") @db.Char(64)
+  keywordLexiconVersion  String    @map("keyword_lexicon_version") @db.VarChar(64)
+  keywordFingerprint     String    @map("keyword_fingerprint") @db.Char(64)
+  classifierConfigVersion String   @map("classifier_config_version") @db.VarChar(64)
+  classifierConfigFingerprint String @map("classifier_config_fingerprint") @db.Char(64)
+  contentSha256          String    @map("content_sha256") @db.Char(64)
+  requestId              String    @map("request_id") @db.VarChar(160)
+  taskType               String?   @map("task_type") @db.VarChar(96)
+  taskId                 String?   @map("task_id") @db.Uuid
+  resultSummary          Json      @default("{}") @map("result_summary") @db.JsonB
+  resultSchemaVersion    Int       @default(1) @map("result_schema_version")
+  appliedAt              DateTime  @default(now()) @map("applied_at") @db.Timestamptz(6)
+  createdAt              DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  novel       Novel               @relation(fields: [novelId], references: [id], onDelete: Cascade)
+  currentForState NovelTagState?  @relation("CurrentAutoRun")
+  novelTags    NovelCanonicalTag[]
+
+  @@unique([novelId, requestId], map: "tag_classification_run_novel_request_key")
+  @@unique([id, novelId], map: "tag_classification_run_id_novel_key")
+  @@index([novelId, createdAt], map: "tag_classification_run_novel_created_idx")
+  @@index([taskType, taskId], map: "tag_classification_run_task_idx")
+  @@map("tag_classification_run")
+}
+
+model NovelCanonicalTag {
+  id                    String    @id @default(uuid()) @db.Uuid
+  novelId               String    @map("novel_id") @db.Uuid
+  canonicalTagId        String    @map("canonical_tag_id") @db.Uuid
+  source                String    @db.VarChar(16)
+  score                 Int?
+  classificationRunId   String?   @map("classification_run_id") @db.Uuid
+  evidence              Json      @default("{}") @db.JsonB
+  evidenceSchemaVersion Int       @default(1) @map("evidence_schema_version")
+  decidedBy             String?   @map("decided_by") @db.Uuid
+  decidedAt             DateTime  @default(now()) @map("decided_at") @db.Timestamptz(6)
+  createdAt             DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt             DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  novel            Novel                 @relation(fields: [novelId], references: [id], onDelete: Cascade)
+  canonicalTag      CanonicalTag          @relation(fields: [canonicalTagId], references: [id], onDelete: Restrict, map: "novel_canonical_tag_tag_id_fkey")
+  classificationRun TagClassificationRun? @relation(fields: [classificationRunId, novelId], references: [id, novelId], onDelete: Restrict, map: "novel_canonical_tag_run_id_fkey")
+  decider           AdminIdentity?        @relation("NovelCanonicalTagDecider", fields: [decidedBy], references: [id], onDelete: Restrict)
+
+  @@unique([novelId, canonicalTagId, source], map: "novel_canonical_tag_source_key")
+  @@index([novelId, source], map: "novel_canonical_tag_novel_source_idx")
+  @@index([canonicalTagId, source], map: "novel_canonical_tag_tag_source_idx")
+  @@index([classificationRunId], map: "novel_canonical_tag_run_idx")
+  @@map("novel_canonical_tag")
+}
+
 model PromoLink {
   id                    String    @id @default(uuid()) @db.Uuid
   novelId               String    @map("novel_id") @db.Uuid
@@ -535,70 +707,6 @@ model TrackingEvent {
   @@index([promoLinkId, occurredAt], map: "tracking_promo_time_idx")
   @@index([novelId, occurredAt], map: "tracking_novel_time_idx")
   @@map("tracking_event")
-}
-
-model CatalogScanTask {
-  id                   String    @id @default(uuid()) @db.Uuid
-  channelAccountId     String    @map("channel_account_id") @db.Uuid
-  channelAppId         String    @map("channel_app_id") @db.Uuid
-  projectType          Int       @map("project_type") @db.SmallInt
-  mode                 String    @default("apply") @db.VarChar(16)
-  status               String    @default("pending") @db.VarChar(32)
-  requestToken         String    @unique @map("request_token") @db.VarChar(160)
-  pageStart            Int       @map("page_start")
-  pageEnd              Int       @map("page_end")
-  pageSize             Int       @map("page_size")
-  catalogObservedTotal Int?      @map("catalog_observed_total")
-  batchExpectedCount   Int?      @map("batch_expected_count")
-  batchActualCount     Int?      @map("batch_actual_count")
-  totalCount           Int       @default(0) @map("total_count")
-  successCount         Int       @default(0) @map("success_count")
-  failedCount          Int       @default(0) @map("failed_count")
-  params               Json      @default("{}") @db.JsonB
-  result               Json?     @db.JsonB
-  error                Json?     @db.JsonB
-  requestedAt          DateTime  @default(now()) @map("requested_at") @db.Timestamptz(6)
-  startedAt            DateTime? @map("started_at") @db.Timestamptz(6)
-  completedAt          DateTime? @map("completed_at") @db.Timestamptz(6)
-  createdAt            DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt            DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
-
-  channelAccount ChannelAccount        @relation(fields: [channelAccountId], references: [id], onDelete: Restrict)
-  channelApp     ChannelApp            @relation(fields: [channelAppId], references: [id], onDelete: Restrict)
-  items          CatalogScanTaskItem[]
-
-  @@index([status, createdAt], map: "catalog_scan_status_created_idx")
-  @@index([channelAccountId, channelAppId, projectType], map: "catalog_scan_scope_idx")
-  @@map("catalog_scan_task")
-}
-
-model CatalogScanTaskItem {
-  id                 String    @id @default(uuid()) @db.Uuid
-  taskId             String    @map("task_id") @db.Uuid
-  pageIndex          Int       @map("page_index")
-  pageRangeEnd       Int?      @map("page_range_end")
-  requestFingerprint String    @map("request_fingerprint") @db.Char(64)
-  status             String    @default("pending") @db.VarChar(32)
-  attemptCount       Int       @default(0) @map("attempt_count")
-  executionToken     String?   @map("execution_token") @db.Uuid
-  leaseEpoch         BigInt    @default(0) @map("lease_epoch") @db.BigInt
-  lockedBy           String?   @map("locked_by") @db.VarChar(160)
-  lockedUntil        DateTime? @map("locked_until") @db.Timestamptz(6)
-  heartbeatAt        DateTime? @map("heartbeat_at") @db.Timestamptz(6)
-  returnedCount      Int?      @map("returned_count")
-  payload            Json      @default("{}") @db.JsonB
-  result             Json?     @db.JsonB
-  error              Json?     @db.JsonB
-  startedAt          DateTime? @map("started_at") @db.Timestamptz(6)
-  finishedAt         DateTime? @map("finished_at") @db.Timestamptz(6)
-  createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt          DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
-
-  task CatalogScanTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
-
-  @@unique([taskId, pageIndex], map: "catalog_scan_item_page_key")
-  @@index([taskId, status], map: "catalog_scan_item_task_status_idx")
-  @@map("catalog_scan_task_item")
 }
 
 model ChannelSyncTask {
@@ -864,6 +972,7 @@ model SiteSetting {
   indexNowKey                     String   @default("") @map("indexnow_key") @db.VarChar(255)
   indexNowKeyLocation             String   @default("") @map("indexnow_key_location") @db.VarChar(255)
   ga4MeasurementId                String?  @map("ga4_measurement_id") @db.VarChar(64)
+  carouselConfigJson              Json     @default("{}") @map("carousel_config_json") @db.JsonB
   updatedAt                       DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   @@map("site_setting")
@@ -909,17 +1018,22 @@ model CronRun {
 }
 
 model ArticleTemplate {
-  id            String    @id @default(uuid()) @db.Uuid
-  templateKey   String    @map("template_key") @db.VarChar(96)
-  locale        String?   @db.VarChar(16)
-  version       Int
-  schemaVersion Int       @default(1) @map("schema_version")
-  status        String    @default("draft") @db.VarChar(32)
-  bodyTemplate  String    @map("body_template") @db.Text
-  seoTemplate   Json      @default("{}") @map("seo_template") @db.JsonB
-  deletedAt     DateTime? @map("deleted_at") @db.Timestamptz(6)
-  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt     DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  id                    String    @id @default(uuid()) @db.Uuid
+  templateKey           String    @map("template_key") @db.VarChar(96)
+  templateName          String    @map("template_name") @db.VarChar(191)
+  locale                String?   @db.VarChar(16)
+  version               Int
+  schemaVersion         Int       @default(1) @map("schema_version")
+  status                String    @default("draft") @db.VarChar(32)
+  applicableArticleType String    @default("novel_article") @map("applicable_article_type") @db.VarChar(32)
+  bodyTemplate          String    @map("body_template") @db.Text
+  contentTemplate       Json      @default("[]") @map("content_template") @db.JsonB
+  seoTemplate           Json      @default("{}") @map("seo_template") @db.JsonB
+  slugTemplate          String    @default("") @map("slug_template") @db.Text
+  metaKeywordsTemplate  String    @default("") @map("meta_keywords_template") @db.Text
+  deletedAt             DateTime? @map("deleted_at") @db.Timestamptz(6)
+  createdAt             DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt             DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   articles Article[]
 
@@ -930,7 +1044,15 @@ model ArticleTemplate {
 
 model Article {
   id                String    @id @default(uuid()) @db.Uuid
-  novelId           String    @map("novel_id") @db.Uuid
+  /// C-27: nullable since blog_article/listicle/guide have no Novel; non-null
+  /// required for novel_article by the migration_sql CHECK
+  /// article_novel_id_by_type_check (article_type <> 'novel_article' rows
+  /// must have this NULL, the same CHECK's other half). `article_novel_locale_key`
+  /// (UNIQUE(novelId, locale)) is unaffected: PostgreSQL treats every NULL as
+  /// distinct from every other NULL, so many novelId-NULL blog rows can share
+  /// a locale — do not add NULLS NOT DISTINCT here, see
+  /// docs/governance/database-governance.md §5 item 21.
+  novelId           String?   @map("novel_id") @db.Uuid
   templateId        String?   @map("template_id") @db.Uuid
   promoLinkId       String?   @map("promo_link_id") @db.Uuid
   locale            String    @db.VarChar(16)
@@ -942,13 +1064,16 @@ model Article {
   seoMetadata       Json      @default("{}") @map("seo_metadata") @db.JsonB
   seoSchemaVersion  Int       @default(1) @map("seo_schema_version")
   status            String    @default("draft") @db.VarChar(32)
+  articleType       String    @default("novel_article") @map("article_type") @db.VarChar(32)
+  contentMode       String    @default("template") @map("content_mode") @db.VarChar(32)
+  seoVisibility     String    @default("public") @map("seo_visibility") @db.VarChar(32)
   publishAt         DateTime? @map("publish_at") @db.Timestamptz(6)
   publishedAt       DateTime? @map("published_at") @db.Timestamptz(6)
   deletedAt         DateTime? @map("deleted_at") @db.Timestamptz(6)
   createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt         DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  novel              Novel                       @relation(fields: [novelId], references: [id], onDelete: Restrict)
+  novel              Novel?                      @relation(fields: [novelId], references: [id], onDelete: Restrict)
   template           ArticleTemplate?            @relation(fields: [templateId], references: [id], onDelete: SetNull)
   promoLink          PromoLink?                  @relation("ArticlePromoLinkByNovel", fields: [promoLinkId, novelId], references: [id, novelId], onDelete: Restrict, map: "article_promo_link_novel_fkey")
   trackingEvents     TrackingEvent[]
@@ -961,6 +1086,8 @@ model Article {
   @@index([status, publishedAt], map: "article_status_published_idx")
   @@index([locale, status], map: "article_locale_status_idx")
   @@index([promoLinkId], map: "article_promo_link_idx")
+  @@index([seoVisibility], map: "article_seo_visibility_idx")
+  @@index([articleType, locale, status, publishedAt], map: "article_type_locale_status_published_idx")
   @@map("article")
 }
 
@@ -1069,4 +1196,139 @@ model HomeCarouselChangeLog {
   @@index([locale, createdAt], map: "carousel_change_locale_created_idx")
   @@index([manualSlotId], map: "carousel_change_manual_slot_idx")
   @@map("home_carousel_change_log")
+}
+
+// ============================================
+// C-30A 换小说：单篇换绑地基（施工工单_C30_换小说_移植CPS换租客_2026-09-08.md）
+//
+// Three tables, CPS parity (`article_drama_switch_preview` /
+// `article_drama_switch_batch` / `article_drama_switch_batch_item`,
+// `cps-admin-v851-admin-host` HEAD c37602c, prisma/schema.prisma:626-746).
+// Field lists copied verbatim; two 海阅-specific adaptations carried through
+// all three: (a) UUID primary keys instead of CPS's integer/cuid ids where
+// this repo's own convention already uses UUID, (b) the batch item's
+// "old/expected/applied" triad is doubled to cover BOTH `novel_id` AND
+// `promo_link_id` (海阅's rebind is a two-field atomic swap — see
+// `article_promo_link_novel_fkey`, the composite FK this repo already has
+// and CPS does not) rather than CPS's single `drama_id` triad.
+//
+// None of these three tables carries a live FK to `article`/`novel`/
+// `promo_link` for the id columns below other than `batch_id` — this is
+// deliberate CPS parity (CPS's own `ArticleDramaSwitchBatchItem.articleId`/
+// `oldDramaId`/`expectedNewDramaId`/`appliedNewDramaId` carry no `@relation`
+// either): a preview/batch/item row is an audit-shaped record of what was
+// planned/attempted, and it must stay legible even after the article or
+// novel it names is later soft-deleted or hard-deleted by an unrelated path.
+//
+// Order 1 (C-30A) scope: schema only. The service code that reads/writes
+// `ArticleNovelRebindPreview`/`Batch`/`BatchItem` is C-30B (order 2, batch
+// preview/apply) — out of scope for this migration's companion service
+// layer. `ArticleNovelRebindBatch`/`BatchItem`'s status/error-kind CHECK
+// values are nonetheless registered now in
+// `src/domain/database-statuses.ts` per the construction order, so the
+// physical CHECK and the machine source of truth land in the same commit as
+// the migration that creates them.
+// ============================================
+
+model ArticleNovelRebindPreview {
+  id                    String   @id @default(uuid()) @db.Uuid
+  createdBy             String   @map("created_by") @db.VarChar(128)
+  sourceChannelCode     String   @map("source_channel_code") @db.VarChar(64)
+  targetChannelCode     String   @map("target_channel_code") @db.VarChar(64)
+  filtersJson           Json     @map("filters_json") @db.JsonB
+  filtersJsonSchemaVersion Int   @default(1) @map("filters_json_schema_version")
+  planHash              String   @map("plan_hash") @db.Char(64)
+  sourceScanned         Int      @map("source_scanned")
+  matchedCount          Int      @map("matched_count")
+  ambiguousCount        Int      @map("ambiguous_count")
+  skippedCount          Int      @map("skipped_count")
+  matchesJson           Json     @map("matches_json") @db.JsonB
+  matchesJsonSchemaVersion Int   @default(1) @map("matches_json_schema_version")
+  expiresAt             DateTime @map("expires_at") @db.Timestamptz(6)
+  createdAt              DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([createdBy, createdAt], map: "article_novel_rebind_preview_created_by_created_idx")
+  @@index([expiresAt], map: "article_novel_rebind_preview_expires_idx")
+  @@map("article_novel_rebind_preview")
+}
+
+model ArticleNovelRebindBatch {
+  /// Human-readable batch number (`rebind-{yyyymmddhhmmss}-{8 random}`),
+  /// never a bare UUID — 施工工单 §4B.4 "零裸 UUID". Application-supplied,
+  /// not `@default(uuid())`.
+  id                  String    @id @db.VarChar(64)
+  createdBy           String    @map("created_by") @db.VarChar(128)
+  requestToken        String    @unique(map: "article_novel_rebind_batch_request_token_key") @map("request_token") @db.VarChar(160)
+  /// Not a Prisma relation on purpose — see this file's C-30A section header.
+  /// The referenced preview row can legitimately be gone (30-minute expiry +
+  /// bounded cleanup, `cleanupExpiredBatchSwitchPreviews`) while this batch
+  /// row, its counts, and its audit trail must remain readable forever.
+  previewId           String    @map("preview_id") @db.Uuid
+  selectionHash       String    @map("selection_hash") @db.Char(64)
+  requestPayloadHash  String    @map("request_payload_hash") @db.Char(64)
+  sourceChannelCode   String    @map("source_channel_code") @db.VarChar(64)
+  targetChannelCode   String    @map("target_channel_code") @db.VarChar(64)
+  status              String    @default("ready") @db.VarChar(32)
+  acknowledgeRisks    Boolean   @default(false) @map("acknowledge_risks")
+  submittedCount      Int       @default(0) @map("submitted_count")
+  resolvableCount     Int       @default(0) @map("resolvable_count")
+  appliedCount        Int       @default(0) @map("applied_count")
+  skippedCount        Int       @default(0) @map("skipped_count")
+  failedCount         Int       @default(0) @map("failed_count")
+  filtersJson         Json      @map("filters_json") @db.JsonB
+  filtersJsonSchemaVersion Int  @default(1) @map("filters_json_schema_version")
+  planHash            String    @map("plan_hash") @db.Char(64)
+  reason              String    @db.Text
+  executionToken      String?   @map("execution_token") @db.Uuid
+  leaseExpiresAt      DateTime? @map("lease_expires_at") @db.Timestamptz(6)
+  heartbeatAt         DateTime? @map("heartbeat_at") @db.Timestamptz(6)
+  startedAt           DateTime? @map("started_at") @db.Timestamptz(6)
+  finishedAt          DateTime? @map("finished_at") @db.Timestamptz(6)
+  createdAt           DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  items ArticleNovelRebindBatchItem[]
+
+  @@index([status, createdAt], map: "article_novel_rebind_batch_status_created_idx")
+  @@index([createdBy, createdAt], map: "article_novel_rebind_batch_created_by_created_idx")
+  @@index([previewId], map: "article_novel_rebind_batch_preview_idx")
+  @@map("article_novel_rebind_batch")
+}
+
+model ArticleNovelRebindBatchItem {
+  id                        String    @id @default(uuid()) @db.Uuid
+  batchId                   String    @map("batch_id") @db.VarChar(64)
+  /// No `@relation` to `Article`/`Novel`/`PromoLink` — see this file's
+  /// C-30A section header. Plain UUID columns, CPS parity
+  /// (`ArticleDramaSwitchBatchItem.articleId`/`oldDramaId`/
+  /// `expectedNewDramaId`/`appliedNewDramaId` carry none either).
+  articleId                 String    @map("article_id") @db.Uuid
+  oldNovelId                String    @map("old_novel_id") @db.Uuid
+  oldPromoLinkId             String?   @map("old_promo_link_id") @db.Uuid
+  expectedNewNovelId         String    @map("expected_new_novel_id") @db.Uuid
+  expectedNewPromoLinkId      String?   @map("expected_new_promo_link_id") @db.Uuid
+  appliedNewNovelId          String?   @map("applied_new_novel_id") @db.Uuid
+  appliedNewPromoLinkId       String?   @map("applied_new_promo_link_id") @db.Uuid
+  status                     String    @default("pending") @db.VarChar(32)
+  processingToken            String?   @map("processing_token") @db.Uuid
+  errorKind                  String?   @map("error_kind") @db.VarChar(32)
+  errorMessage                String?   @map("error_message") @db.Text
+  /// References `OperationAudit.id` (BigInt) — the C-30A single-article
+  /// rebind service's audit row for this item's applied write. No
+  /// `@relation`: `OperationAudit` carries no back-relation anywhere in this
+  /// schema (append-only log table, P1-06), same reason `task_id`/
+  /// `request_id` on that model are plain columns rather than relations.
+  auditId                     BigInt?   @map("audit_id")
+  startedAt                   DateTime? @map("started_at") @db.Timestamptz(6)
+  finishedAt                  DateTime? @map("finished_at") @db.Timestamptz(6)
+  createdAt                   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  batch ArticleNovelRebindBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+
+  @@unique([batchId, articleId], map: "article_novel_rebind_batch_item_batch_article_key")
+  @@index([batchId, status, id], map: "article_novel_rebind_batch_item_batch_status_id_idx")
+  @@index([articleId, status], map: "article_novel_rebind_batch_item_article_status_idx")
+  @@index([processingToken], map: "article_novel_rebind_batch_item_processing_token_idx")
+  @@map("article_novel_rebind_batch_item")
 }

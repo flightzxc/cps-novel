@@ -1,4 +1,20 @@
 \set ON_ERROR_STOP on
+-- D-9a (施工工单_D9_up数据库准备原子化与镜像保留_2026-09-09.md 三.3.2②): every
+-- caller of this file now wraps the whole thing in one --single-transaction
+-- (scripts/x8-production-like.sh:924-925 -- 687-688 in the work order's own
+-- baseline commit 0a8f150, before this change's earlier additions to that
+-- file pushed the same invocation further down; scripts/db/restore-logical.sh:60,
+-- scripts/p1-13-restore-smoke.sh:100), so the REVOKE block below and the
+-- GRANT block that follows either land together or roll back together --
+-- never REVOKE-committed-but-GRANT-failed. Holding one transaction's worth
+-- of catalog locks for the whole file (instead of releasing them statement
+-- by statement, as the old no-single-transaction invocation did) is exactly
+-- what makes that atomicity possible, but it also means those locks are now
+-- held for the file's full duration -- this timeout is what stops that from
+-- turning into an indefinite stall against a long-running query elsewhere
+-- (worker) instead of failing fast and rolling back cleanly like every other
+-- failure mode this file already handles.
+SET lock_timeout = '10s';
 
 -- Run in the application database as migration_owner after every migration.
 -- No runtime role receives schema ownership or DDL privileges.
@@ -49,7 +65,6 @@ GRANT SELECT ON TABLE
   source_label,
   novel_source_item_label,
   tracking_event,
-  catalog_scan_task,
   channel_sync_task,
   channel_sync_task_item,
   generic_task,
@@ -66,6 +81,13 @@ GRANT SELECT ON TABLE
   home_carousel_auto_candidate,
   home_carousel_serving,
   home_carousel_change_log,
+  canonical_tag,
+  canonical_tag_translation,
+  canonical_tag_keyword,
+  source_label_mapping,
+  novel_tag_state,
+  novel_canonical_tag,
+  tag_classification_run,
   _prisma_migrations
 TO web_app, analyst_ro;
 
@@ -75,14 +97,6 @@ GRANT SELECT ON TABLE admin_identity, admin_session, admin_two_factor,
 GRANT INSERT, UPDATE ON TABLE admin_identity, admin_session, admin_two_factor,
   admin_two_factor_challenge, admin_recovery_code, admin_login_attempt TO web_app;
 GRANT DELETE ON TABLE admin_recovery_code, admin_login_attempt TO web_app;
-
--- Web may inspect task request fingerprints; Analyst may not.
-GRANT SELECT ON TABLE catalog_scan_task_item TO web_app;
-GRANT SELECT (
-  id, task_id, page_index, page_range_end, status, attempt_count, execution_token,
-  lease_epoch, locked_by, locked_until, heartbeat_at, returned_count, payload,
-  result, error, started_at, finished_at, created_at, updated_at
-) ON catalog_scan_task_item TO analyst_ro;
 
 -- Credential metadata is visible, ciphertext and complete fingerprints are not.
 GRANT SELECT (
@@ -102,7 +116,7 @@ GRANT SELECT (
 -- public /go route must test/resolve them. Analyst never receives them.
 GRANT SELECT (
   id, channel_app_id, novel_id, external_book_id, source_language_code,
-  source_language_name, source_locale, title, description, cover_url,
+  source_language_name, source_locale, raw_language_scope, title, description, cover_url,
   total_chapter_count, paid_from_chapter, split_ratio, tto_split_ratio,
   external_agency_id, source_created_at_raw, source_created_at,
   source_updated_at, last_seen_at, status, deleted_at, created_at, updated_at
@@ -130,15 +144,23 @@ GRANT SELECT (
   status, request_summary, response_shape, committed_at, confirmed_at, created_at
 ) ON side_effect_intent TO web_app, analyst_ro;
 
--- X6 SiteSetting boundary. Web serves the public configuration and owns the
--- guarded admin write service; Worker reads IndexNow/SEO execution config.
--- Analyst and Scheduler deliberately receive no access because the singleton
--- contains the S2 IndexNow key. Web can update only the four X6 fields plus
--- the optimistic-lock timestamp; INSERT/DELETE and every other column remain
--- migration_owner-only.
+-- SiteSetting boundary. Web serves public configuration and owns the guarded
+-- admin write service; Worker reads IndexNow/SEO execution config. Analyst
+-- deliberately receives no access because the singleton contains the S2
+-- IndexNow key. Scheduler is not exempt from that boundary either: PR6 lane E
+-- gives it a column-scoped exception limited to the two columns it needs to
+-- time the home-carousel cron (`id` is required too, since it appears in the
+-- `WHERE id = 1` lookup) -- it still cannot see `indexnow_key` or any other
+-- column. Carousel config is owned by the same settings capability.
+-- INSERT/DELETE remain migration_owner-only.
 GRANT SELECT ON TABLE site_setting TO web_app, worker_app;
+GRANT SELECT (id, carousel_config_json) ON site_setting TO scheduler_app;
 GRANT UPDATE (
-  default_og_image, indexnow_host, indexnow_key, indexnow_key_location, updated_at
+  site_name, site_description, home_meta_title, home_meta_description,
+  default_og_image, google_search_console_verification,
+  footer_copyright_text, footer_disclaimer_text, friend_links,
+  indexnow_host, indexnow_key, indexnow_key_location, ga4_measurement_id,
+  carousel_config_json, updated_at
 ) ON site_setting TO web_app;
 
 -- X9: Web may adjudicate a manual-review intent only through the guarded
@@ -153,14 +175,17 @@ GRANT INSERT, UPDATE ON TABLE
   channel, source_app, channel_app, channel_capability, channel_account,
   novel, novel_preview_policy, source_label, novel_source_item_label,
   article_template, article, home_carousel_manual_slot, tracking_event,
-  catalog_scan_task, catalog_scan_task_item, channel_sync_task,
-  channel_sync_task_item, generic_task, generic_task_item, schedule_run,
+  canonical_tag, canonical_tag_translation, canonical_tag_keyword,
+  source_label_mapping, novel_tag_state, novel_canonical_tag, tag_classification_run,
+  channel_sync_task, channel_sync_task_item, generic_task, generic_task_item, schedule_run,
   cron_run, indexnow_outbox
 TO web_app;
 -- Content creation links an already-sanitized source row to its new Novel.
 -- Keep this column-scoped: Web must not be able to alter raw_payload or any
 -- other upstream evidence maintained exclusively by Worker.
 GRANT UPDATE (novel_id, status, updated_at) ON novel_source_item TO web_app;
+GRANT DELETE ON TABLE canonical_tag_translation, canonical_tag_keyword,
+  source_label_mapping, novel_canonical_tag TO web_app;
 GRANT INSERT ON TABLE operation_audit TO web_app;
 GRANT INSERT (
   id, channel_account_id, credential_type, encrypted_secret, key_version,
@@ -184,15 +209,22 @@ GRANT INSERT, UPDATE ON TABLE
   channel_account_credential, channel_credential_active_fingerprint,
   novel, novel_source_item, novel_chapter, novel_chapter_source_item,
   novel_chapter_content, novel_preview_policy, source_label,
-  novel_source_item_label, promo_link, tracking_event, catalog_scan_task,
-  catalog_scan_task_item, channel_sync_task, channel_sync_task_item,
+  novel_source_item_label, promo_link, tracking_event, channel_sync_task,
+  channel_sync_task_item,
   generic_task, generic_task_item, side_effect_intent, indexnow_outbox,
   schedule_run, cron_run, article_template, article,
   home_carousel_manual_slot, home_carousel_auto_batch,
-  home_carousel_auto_candidate, home_carousel_serving
+  home_carousel_auto_candidate, home_carousel_serving,
+  canonical_tag, canonical_tag_translation, canonical_tag_keyword,
+  source_label_mapping, novel_tag_state, novel_canonical_tag, tag_classification_run
 TO worker_app;
 GRANT DELETE ON TABLE novel_chapter_content TO worker_app;
 GRANT DELETE ON TABLE channel_credential_active_fingerprint TO worker_app;
+-- PR6 lane E: computeHomeCarouselInTx (src/server/home-carousel/service.ts)
+-- fully replaces the serving snapshot each run with `deleteMany` followed by
+-- `createMany` -- there is no fixed row set to UPDATE in place, so DELETE is
+-- the only way to express "clear this locale's current serving rows".
+GRANT DELETE ON TABLE home_carousel_serving TO worker_app;
 GRANT INSERT ON TABLE
   credential_change_log, operation_audit, indexnow_outbox_attempt,
   home_carousel_change_log
@@ -205,8 +237,15 @@ GRANT SELECT ON TABLE channel_account, channel_account_credential,
 GRANT SELECT ON TABLE channel, source_app, channel_app, channel_capability,
   novel, novel_source_item, novel_chapter, novel_chapter_source_item,
   novel_chapter_content, novel_preview_policy, source_label,
-  novel_source_item_label, catalog_scan_task, catalog_scan_task_item,
-  channel_sync_task, channel_sync_task_item, promo_link, article TO worker_app;
+  novel_source_item_label, channel_sync_task, channel_sync_task_item, promo_link, article,
+  canonical_tag, canonical_tag_translation, canonical_tag_keyword,
+  source_label_mapping, novel_tag_state, novel_canonical_tag, tag_classification_run TO worker_app;
+-- PR6 lane E: computeHomeCarouselInTx reads the manual-slot roster and its
+-- own prior batch/candidate/serving rows within the same transaction
+-- (findMany/update/deleteMany all evaluate a WHERE clause), which needs
+-- SELECT, not just the INSERT/UPDATE granted above.
+GRANT SELECT ON TABLE home_carousel_manual_slot, home_carousel_auto_batch,
+  home_carousel_auto_candidate, home_carousel_serving TO worker_app;
 
 -- Scheduler only creates scheduling and GenericTask metadata. It never reads Credential/Auth secrets.
 GRANT SELECT, INSERT, UPDATE ON TABLE schedule_run, cron_run, generic_task, generic_task_item TO scheduler_app;

@@ -77,7 +77,7 @@ Migration 演进，当前 Credential 状态增量为
 
 | 表 | 分类 | 字段责任 | 关键约束 | DROP |
 | --- | --- | --- | --- | --- |
-| `novel` | CPS_PARITY_ADAPTED | 站内作品身份与发布状态；canonical 字段普通同步只补空 | `business_id` 全局唯一；活跃 locale+slug 部分唯一；locale 必须是站点 canonical locale | 视频、剧集资源字段 |
+| `novel` | CPS_PARITY_ADAPTED | 站内作品身份与发布状态；canonical 字段普通同步只补空；C-30A 起另有 `title_normalized`（书名归一化形态，CPS `Drama.nameNormalized` 平移，NFKC+小写+去引号+标点转空格+压空白，`src/lib/novel/novel-identity.ts` 的 `normalizeNovelTitle`）供换小说批量二分图配对使用 | `business_id` 全局唯一；活跃 locale+slug 部分唯一；locale 必须是站点 canonical locale | 视频、剧集资源字段 |
 | `novel_source_item` | CPS_PARITY_ADAPTED | 上游书目行的忠实镜像；未知语种保留原值且 mapped locale 可空 | app+book+language 唯一；novel 可空；unknown 不创建或发布 Novel | 跨语言自动合并、数据库第二套 locale 映射 |
 | `novel_chapter_source_item` | ORIGINAL_REQUIRED | `chapterList[]` 元素镜像，不含正文 | source item+external chapter 唯一 | `consecutive_miss_count` |
 | `novel_chapter` | ORIGINAL_REQUIRED | 站内章号、标题和展示状态 | 活跃 novel+chapter number 部分唯一 | 用 `allEpis` 生成章节占位 |
@@ -85,6 +85,9 @@ Migration 演进，当前 Credential 状态增量为
 | `novel_preview_policy` | ORIGINAL_REQUIRED | 物化策略、安全上限、单本展示/索引/缓存授权 | novel 1:1；计数非负 | paid_from_chapter 触发删除 |
 | `source_label` | ORIGINAL_REQUIRED | 未解释的上游原始标签字典 | app+kind+value 唯一 | V1 canonical tag |
 | `novel_source_item_label` | ORIGINAL_REQUIRED | 来源条目标签出现历史与 active 状态 | source item+label 唯一 | recommend 直接成为 SEO 分类 |
+| `article_novel_rebind_preview` | CPS_PARITY_ADAPTED | 换小说批量换绑（C-30，`article_drama_switch_preview` 平移）：有界扫描 + 二分图配对后的冻结预览快照，30 分钟有效期 | `expires_at` 索引供有界清理扫描回收；无 FK 约束业务列（见表说明） | — |
+| `article_novel_rebind_batch` | CPS_PARITY_ADAPTED | 换小说批量换绑（`article_drama_switch_batch` 平移）：持久化批次头——提交幂等令牌、执行租约、五态计数、终态 | `id` 为可读批次编号非裸 UUID；`request_token` 全局唯一；`status` 五值 CHECK；`preview_id` 无 FK 约束（CPS `ArticleDramaSwitchBatch.previewId` 同构，同样无 FK；预览行 30 分钟有界清理可能早于本批次行被回收） | — |
+| `article_novel_rebind_batch_item` | CPS_PARITY_ADAPTED | 换小说批量换绑（`article_drama_switch_batch_item` 平移）：批次内逐条文章的执行状态与前后 (novel_id, promo_link_id) 两字段快照——海阅特有的"两字段原子换绑"三元组翻倍（CPS 只有单字段 `drama_id` 三元组） | `(batch_id, article_id)` 唯一；`status` 五值 CHECK；`error_kind` 六值 CHECK（含 NULL）；`batch_id` FK → `article_novel_rebind_batch.id`（`ON DELETE CASCADE`）；`article_id`/`old_novel_id`/`old_promo_link_id`/`expected_new_novel_id`/`expected_new_promo_link_id`/`applied_new_novel_id`/`applied_new_promo_link_id`/`audit_id` 均为无 FK 的审计形状列（CPS 同构列同样无 FK） | — |
 
 ### 3.3 推广、发布与流量
 
@@ -92,16 +95,16 @@ Migration 演进，当前 Credential 状态增量为
 | --- | --- | --- | --- | --- |
 | `promo_link` | CPS_PARITY_ADAPTED | 上游真实推广资产、所属 Novel 和我方永久公开码 | idempotency key 唯一；public code 全局非部分 UNIQUE；`(id, novel_id)` 复合唯一 | 上游码用于公开 URL |
 | `tracking_event` | CPS_PARITY_ADAPTED | 公开码点击/页面事件；只存盐哈希 | 时间查询索引；原始事件 90 天 | 每事件同步写、IP/UA 原值 |
-| `article_template` | CPS_PARITY_ADAPTED | 模板版本与 SEO 模板 | template key+version 唯一 | 作者/国家/完结模板变量 |
+| `article_template` | CPS_PARITY_ADAPTED | 模板版本与 SEO 模板；P2-02B 补 template_name/applicable_article_type/content_template/slug_template/meta_keywords_template 五列，body_template 改由 content_template 编译得到 | template key+version 唯一；applicable_article_type 五值 CHECK | 作者/国家/完结模板变量；slug_template 只是候选字符串，不是最终 Article.slug |
 | `article` | CPS_PARITY_ADAPTED | Novel 的 locale 页面快照、模板渲染 SEO 正文、页面身份和确定 PromoLink | novel+locale 唯一；复合 FK 保证 Article 与 PromoLink 属于同一 Novel；published 行内 CHECK | 换租客、评论生成、跨 Novel hreflang、渠道版权试读正文 |
 
 ### 3.4 任务、外部副作用与调度
 
 | 表 | 分类 | 字段责任 | 关键约束 | DROP |
 | --- | --- | --- | --- | --- |
-| `catalog_scan_task` / `_item` | ORIGINAL_REQUIRED | 页区间目录扫描及租约 | account+app+project_type 单 active；item fencing | SQLite 伪写锁 |
+| ~~`catalog_scan_task` / `_item`~~ | **已 DROP（Phase C step C-4）**：并入 `generic_task`，见下方 `generic_task` 行 | ~~页区间目录扫描及租约~~ | ~~account+app+project_type 单 active；item fencing~~ | 已执行：`prisma/migrations/20260907091500_p3_drop_catalog_scan_task` |
 | `channel_sync_task` / `_item` | CPS_PARITY_ADAPTED | 已有 SourceItem 的定向作业 | 规范化 scope 单 active；item 指向 SourceItem | item 指向 Novel |
-| `generic_task` / `_item` | CPS_PARITY_ADAPTED | 非渠道批量任务与多态目标 | 规范化 scope 单 active；target 二元唯一 | `drama_id` 非空固定目标 |
+| `generic_task` / `_item` | CPS_PARITY_ADAPTED；Phase C 起承载 `task_type='catalog_scan'` 行（`施工工单_PhaseC_任务模型迁移与ImportProgress_2026-09-06.md`），11 个原 CatalogScan 专属字段落 `params`/`result`/item `payload` JSON，item 用 `target_type='catalog_page'`、`target_id=页码字符串` | 规范化 scope 单 active（`operation_scope_hash` 对 catalog_scan 行折入 `project_type`）；target 二元唯一；C-1 新增两条 `WHERE task_type='catalog_scan'` partial index（`generic_task_catalog_scan_status_created_idx`、`generic_task_catalog_scan_scope_idx`），等价旧 `catalog_scan_status_created_idx`/`catalog_scan_scope_idx` | `drama_id` 非空固定目标 |
 | `side_effect_intent` | ORIGINAL_REQUIRED | 外部调用前永久 effect key 和独立已提交意图 | `effect_key` 永久唯一；operation+idempotency 唯一 | 与业务写同一未提交事务 |
 | `operation_audit` | ORIGINAL_REQUIRED | 本地业务变更审计 | append-only；与业务写同事务 | 业务提交后补写 |
 | `schedule_run` | ORIGINAL_REQUIRED | 确定 scheduled instant、revision、DST/misfire 语义 | schedule+scheduled_for 唯一；manual trigger 独立唯一 | `globalThis` 去重 |
@@ -158,11 +161,23 @@ X6 只开放 `default_og_image` 与 IndexNow 三字段的管理写口：单例�
 - ChapterSourceItem：`pending | materialized | failed`
 - PromoLink：`pending | fetched | failed | registered_disabled`
 - Task：`pending | processing | completed | completed_with_errors | failed | disabled`
-- Catalog Item：`pending | processing | success | failed`
+- ~~Catalog Item：`pending | processing | success | failed`~~（Phase C 起随 `catalog_scan_task_item` 一并 DROP；`task_type='catalog_scan'` 的 GenericTaskItem 走下面的 Other Item 六值集合，worker 侧仍保持“从不产生 skipped”的运行期不变量，但这不再是独立物理状态集）
 - Other Item：`pending | processing | success | skipped | failed`
 - SideEffectIntent：`prepared | confirmed | failed | claim_retry_blocked | manual_review_required`
 - IndexNow：`pending | processing | accepted | retry_wait | permanent_failed | dead_letter | cancelled`
+- ArticleTemplate：`draft | active | inactive`（P2-02B 前 CHECK 误写 `retired`，与应用层实际写入的
+  `inactive` 不一致——真实 PostgreSQL 上会让每次停用/软删除写入以 23514 报错；已在
+  `20260906090000_p2_02b_article_template_cps_parity` 一并修正）
 - Article：`draft | published | unpublished | takedown`
+- ArticleType（C-24 文章三轴地基）：`novel_article | blog_article | listicle | guide`
+- ContentMode（C-24 文章三轴地基）：`manual | template`
+- SeoVisibility（C-24 文章三轴地基）：`public | seo_only | hidden`
+- ArticleNovelRebindBatch（C-30A 换小说批量换绑，`article_novel_rebind_batch.status`）：
+  `ready | processing | completed | partial | failed`
+- ArticleNovelRebindBatchItem（C-30A，`article_novel_rebind_batch_item.status`）：
+  `pending | processing | applied | skipped | failed`
+- ArticleNovelRebindBatchItem error kind（C-30A，`article_novel_rebind_batch_item.error_kind`，可空）：
+  `drift | not_found | blocked | ineligible | fence_lost | unknown`
 - ScheduleRun：`due | enqueued | misfired | skipped | failed`
 - CronRun：`created | task_created | failed`
 - Carousel batch：`pending | processing | completed | failed`
@@ -173,18 +188,62 @@ X6 只开放 `default_og_image` 与 IndexNow 三字段的管理写口：单例�
 `src/domain/database-statuses.ts` 的 `INDEXNOW_ATTEMPT_OUTCOMES`）、IndexNow attempt
 `attempt_state`（v0.2.0 foundation 新增，CPS 崩溃恢复语义：`started | completed |
 unknown_outcome`，机器真源 `INDEXNOW_ATTEMPT_RECOVERY_STATES`，与 `outcome` 是两个独立字段，
-不得混淆）、ScheduleRun trigger kind、misfire policy、preview materialization policy 和
-carousel serving source。
+不得混淆）、ScheduleRun trigger kind、misfire policy、preview materialization policy、
+carousel serving source 和 ArticleTemplate 的 `applicable_article_type`
+（`novel_article | blog_article | listicle | guide | any`，机器真源
+`src/lib/article-templates/applicable-article-type.ts` 的 `APPLICABLE_ARTICLE_TYPES`；`novel_article`
+是 CPS `drama_article` 的直接改名，其余四值逐字照搬）。C-24 新增的 Article 三轴同样在此列：
+`article_type`（机器真源 `src/domain/database-statuses.ts` 的 `ARTICLE_TYPES`，与
+`APPLICABLE_ARTICLE_TYPES` 同源去掉 `any`）、`content_mode`（机器真源
+`ARTICLE_CONTENT_MODES`，CPS 逐字照搬）、`seo_visibility`（机器真源
+`ARTICLE_SEO_VISIBILITIES`，CPS 逐字照搬）。三列均由
+`20260909090000_c24_article_axes` 一次性加列 + CHECK + 索引落地，本迁移零行为改变——
+三列在本仓库任何查询里都还没有读取点，读取与生效留给 C-25（SEO 可见性）、C-26（类型/内容模式
+筛选）、C-27（博客地基）。
+
+C-30A（换小说地基，`20260911090000_c30_novel_rebind_foundation`）新增的两个五值状态与一个可空
+六值错误分类同样在此列：`article_novel_rebind_batch.status`（机器真源
+`src/domain/database-statuses.ts` 的 `REBIND_BATCH_STATUSES`，CPS `ArticleDramaSwitchBatch.status`
+同构值集平移）、`article_novel_rebind_batch_item.status`（机器真源 `REBIND_ITEM_STATUSES`，CPS
+`ArticleDramaSwitchBatchItem.status` 同构值集平移）、`article_novel_rebind_batch_item.error_kind`
+（机器真源 `REBIND_ERROR_KINDS`，可空——`NULL` 表示尚未记录错误或终态非失败）。三者均由
+`20260911090000_c30_novel_rebind_foundation` 一次性建表 + CHECK + 索引落地；本迁移创建的三张表
+（`article_novel_rebind_preview`/`article_novel_rebind_batch`/`article_novel_rebind_batch_item`）
+在本单（C-30A，施工工单单 1）内均为空表、零现存行、零调用点读取——批量预览/持久化执行/批量界面
+的读写代码是 C-30B（单 2，本文档所指施工工单的第二单），不在本单范围内。C-30A 单篇换绑范围内
+真正接线的只有既有 `Article.novel_id`/`Article.promo_link_id` 两列的原子换绑写入（不新增列、不
+新增 CHECK，走既有 `article_novel_id_by_type_check` 与 `article_promo_link_novel_fkey`）与既有
+`operation_audit` 表的追加写入。
 
 逐值业务语义以 `src/domain/database-statuses.ts` 的 `DATABASE_STATUS_SEMANTICS`（`indexnow_outbox_attempt`
 条目按列名 `outcome`/`attemptState` 二级嵌套，因为该表没有单一 `status` 列）和 JSONL 字典为机器真源。特别冻结：
 
-- Novel/Article `draft`、Novel `ready` 对公众为 404；`published` 才进入公开读取。
+- Novel/Article `draft`、Novel `ready` 对公众为 404；`published` 才进入公开读取。`published` 的四条行内必要条件（§5 第 11 条：title/slug/body 非空 + 推广链接）中，推广链接一条自 C-27（`20260910090000_c27_blog_article_foundation`）起只对 `article_type = 'novel_article'` 成立——博客/listicle/guide 已发布可以没有推广链接，因为它们根本没有 Novel 可挂推广链接。
 - `unpublished` 保留稳定下架页并退出索引，内容继续保留；`takedown` 是版权或安全移除，两者不得合并。公开路由 **V1 = HTTP 404**（页面层 `notFound()`）；**HTTP 410 为 post-V1，由 proxy 层实现**，本轮不在 RSC 里用自定义 digest 打 410。
 - Chapter `preview` 可展示和索引，`locked` 在 V1 不物化；可信且结构完整、非空的响应中缺席才进入 `stale`，立即停展并退出 sitemap，但正文保留。
 - 失败、结构异常或异常空列表等不可信响应不改变章节状态；`stale` 章节可信重现后自动恢复 `preview`。
 - `withdrawn` 是人工/版权撤回并返回 404，是唯一会通过版权流程删除 `novel_chapter_content` 的章节状态。
 - Credential、PromoLink、Task/Item、SideEffectIntent、IndexNow、ScheduleRun/CronRun 与 Carousel 的逐值术语不得退化为“实体当前状态”。
+- Article `seo_visibility`（C-24）的逐值语义冻结为：`seo_only` = 页面 `index,follow` 且进
+  sitemap，但不出现在站内任何列表页；`hidden` = 公开侧一律不可达（404），不进 sitemap，不进
+  IndexNow。**这两个值截至 C-24 均未被任何调用点读取**（C-24 只加列不接线，是零行为变化的地基
+  迁移）；上述语义是 C-25 落地时必须实现成的目标行为，不是 C-24 之后立即生效的行为。
+  **C-25（`规划_文章管理能力补齐_博客类型可见性换小说_2026-09-08.md` §三/C-25）已按此冻结语义
+  接线**：`src/server/publication/visibility.ts` 新增 `isHiddenFromPublicView`/
+  `buildPublicListArticleWhere`（列表层，排除 `hidden` 与 `seo_only`）并把
+  `buildPublicArticleWhere` 收口为收录层（排除 `hidden`，保留 `seo_only`）；三层调用点
+  （详情 `access.ts`、sitemap、IndexNow、后台文章列表/编辑）全部读取该列，读取本身受单闸
+  `FEATURE_ARTICLE_SEO_VISIBILITY`（默认 `false`）保护——关闸时公开侧仍按 C-24 落地时的
+  "零行为变化" 运行，后台的筛选/列/编辑控件不受此闸门控。列本身无 schema 改动，本行只是把
+  上一段的"目标行为"更新为"已实现，待开闸"。
+- 换小说（C-30A）：`Article` 的换绑是 `novel_id` + `promo_link_id` 两字段的原子替换，一条 `UPDATE`
+  必须同时改到目标那一侧，少改一个就撞既有复合 FK `article_promo_link_novel_fkey`（`(promo_link_id,
+  novel_id)` → `promo_link(id, novel_id)`）——数据库层面直接拒绝"只换书目不换推广链接"的半吊子写
+  入。🔴 `article_novel_locale_key`（`UNIQUE(novel_id, locale)`，§5 第 5/21 条）是**不含软删豁免**
+  的普通唯一约束（对照同表 `article_locale_slug_active_uidx` 是带 `WHERE deleted_at IS NULL` 的部
+  分索引）：目标书目哪怕只有一篇**已软删**的同语种文章，那个槽位仍然占着，换绑照样撞唯一冲突。
+  应用层守卫（`src/server/article-rebind/guards.ts` 第 8 条"同语种页面冲突"）必须按"含软删"判
+  定，集成测试须专门覆盖这一格。
 
 ## 5. Migration-only 物理约束清单
 
@@ -195,17 +254,25 @@ carousel serving source。
 3. `novel(locale, slug) WHERE deleted_at IS NULL`。
 4. `novel_chapter(novel_id, canonical_chapter_number) WHERE deleted_at IS NULL`。
 5. `article(locale, slug) WHERE deleted_at IS NULL`。
-6. `catalog_scan_task(channel_account_id, channel_app_id, project_type) WHERE status IN ('pending','processing')`。
+6. ~~`catalog_scan_task(channel_account_id, channel_app_id, project_type) WHERE status IN ('pending','processing')`~~（Phase C step C-4 已 DROP；等效排他性现由 `generic_task_active_scope_uidx` 提供——`operation_scope_hash` 对 `task_type='catalog_scan'` 行折入 `project_type`）。
 7. ChannelSync active scope 部分唯一；GenericTask 使用 PostgreSQL `NULLS NOT DISTINCT` 对 nullable account/app 建立 active 唯一，不使用 UUID sentinel 或 `COALESCE` 表达式。
-8. 三类 Item 分别建立 pending claim 与 expired lease recovery 两套部分索引；查询不得使用 OR。
+8. ~~三类~~两类（Phase C 起 `catalog_scan_task_item` 已 DROP）Item 分别建立 pending claim 与 expired lease recovery 两套部分索引；查询不得使用 OR。
 9. `home_carousel_manual_slot` 的 enabled+未软删 position/novel 两个部分唯一索引，PostgreSQL 谓词使用 `enabled IS TRUE`。
 10. `promo_link.public_redirect_code` 使用全局非部分 UNIQUE、byte-wise/case-sensitive 语义和不可变 trigger；软删行继续占位。
 11. published Article 的行内必要条件拆为四条命名 CHECK，禁止空字符串绕过：
     - `db:public:article:article_published_title_check`: `status <> 'published' OR btrim(title) <> ''`；
     - `db:public:article:article_published_slug_check`: `status <> 'published' OR btrim(slug) <> ''`；
     - `db:public:article:article_published_body_check`: `status <> 'published' OR btrim(body) <> ''`；
-    - `db:public:article:article_published_promo_link_check`: `status <> 'published' OR promo_link_id IS NOT NULL`；
+    - `db:public:article:article_published_promo_link_check`（C-27 起分叉，`20260910090000_c27_blog_article_foundation` DROP + 同名 ADD）：
+      `status <> 'published' OR article_type <> 'novel_article' OR promo_link_id IS NOT NULL`——原谓词对所有文章类型一律要求推广链接；博客/listicle/guide 没有 Novel，也就没有推广链接可要求，分叉后只对 `novel_article` 保留原有强度，novel_article 的保护一格不降；
     - `db:public:article:article_published_published_at_check`: `status <> 'published' OR published_at IS NOT NULL`。
+
+    另新增一条不受 `status` 限制、全时段成立的结构性 CHECK（C-27，同一迁移）：
+    - `db:public:article:article_novel_id_by_type_check`：
+      `(article_type = 'novel_article' AND novel_id IS NOT NULL) OR (article_type <> 'novel_article' AND novel_id IS NULL)`——
+      把 `novel_id` 收窄为可空（见本节末尾迁移清单第 20 条与 C-27 迁移文件本身）之后，用这条 CHECK 把 `novel_article` 必须有 Novel 的保护补回来，同时把非 `novel_article` 的 `novel_id` 钉死为 NULL（禁止"半挂"状态——`docs/governance/database-governance.md` 认定这一格比 CPS 更严是有意的，见 C-27 工单"明确不移植"一节）。
+
+    **L-1（C-27 review，服务层补的防护，非新 CHECK）**：`novel_id` 可空之后，`novel_id IS NULL AND promo_link_id IS NOT NULL` 是一个 schema 合法但业务上永不该出现的形状——`article_promo_link_novel_fkey`（本节第 12 条）是 `MATCH SIMPLE`，任一列 NULL 即不检查，所以数据库这一层本身不会拒绝它；真正挡住它的是应用层：`worker/handlers/promo-link-binding.ts` 的 `bindPromoLinkToArticles` 是这个代码库里唯一会在 Article 创建之后再写 `promo_link_id` 的**生产**写口（创建时——`src/server/content-creation/service.ts`——恒写 `null`；`scripts/x8-promo-fixture.ts:124` 的验收脚本也会直接写这一列，但那是一次性运维脚本，不是生产路径），它的 `where: { novelId, ... }` 过滤天然不会选中 `novel_id` 为 NULL 的行，但那只是查询形状带来的隐性保证；本次 review 在函数体内加了一条显式断言（`article.novelId === null` 时直接 `throw`，绝不调用 `article.update`），把这条不变量从"隐含在查询里"变成"代码里可读的断言"，防的是未来这条查询被改写（例如换成 join）之后隐性保证跟着失效。见 `tests/backend/tasks/promo-link-binding.test.ts`。
 12. `promo_link` 提供 `db:public:promo_link:promo_link_id_novel_key` = `UNIQUE(id, novel_id)`；Article 以 `db:public:article:article_promo_link_novel_fkey` = `(promo_link_id, novel_id)` 复合 FK 引用该键，数据库保证所选 PromoLink 与 Article 属于同一 Novel。Prisma 和初始 Migration 均保留该具名复合 FK。
 13. Article locale 与 Novel locale 一致仍由写事务和集成测试保证；数据库不建立第二套 locale 映射。
 14. `operation_audit`、IndexNow attempt、credential/carousel log 禁止普通 UPDATE/DELETE；权限落地归 P1-06。
@@ -226,6 +293,81 @@ carousel serving source。
       `scripts/check-database-dictionary-drift.mjs` 全量校验（44 张表、950 条 active 字典记录、
       零孤儿/幽灵）。
 
+19. `20260816160000_p2_06_5_tagging_v3` 手写的 6 条非默认名 FK 由 Prisma `@relation(..., map:)` 具名认领（与第 12 条同一做法）：
+    `db:public:canonical_tag_translation:canonical_tag_translation_tag_id_fkey`、
+    `db:public:canonical_tag_keyword:canonical_tag_keyword_tag_id_fkey`、
+    `db:public:source_label_mapping:source_label_mapping_tag_id_fkey`、
+    `db:public:novel_tag_state:novel_tag_state_current_auto_run_id_fkey`、
+    `db:public:novel_canonical_tag:novel_canonical_tag_tag_id_fkey`、
+    `db:public:novel_canonical_tag:novel_canonical_tag_run_id_fkey`。
+    该迁移其余 6 条 FK 的手写名恰与 Prisma 默认名相同，Prisma 侧不写 `map:`。
+    今后若要改这 6 条 FK 的物理名，必须走新 Migration 的 `RENAME CONSTRAINT` 并同步 `map:` 与 JSONL 三处，禁止只改一侧。
+20. `20260909090000_c24_article_axes`（C-24 文章三轴地基）新增 `article_type`/`content_mode`/
+    `seo_visibility` 三列（均 `NOT NULL DEFAULT`，默认值分别为 `novel_article`/`template`/`public`，
+    与迁移前每一行的隐含行为逐字等价，零回填脚本、零行为变化）与三条命名 CHECK：
+    - `db:public:article:article_article_type_check`：
+      `article_type IN ('novel_article', 'blog_article', 'listicle', 'guide')`；
+    - `db:public:article:article_content_mode_check`：`content_mode IN ('manual', 'template')`；
+    - `db:public:article:article_seo_visibility_check`：
+      `seo_visibility IN ('public', 'seo_only', 'hidden')`。
+    同一迁移新增两条索引：`db:public:article:article_seo_visibility_idx` = `INDEX (seo_visibility)`
+    （对齐 CPS 的同名索引）、`db:public:article:article_type_locale_status_published_idx` =
+    `INDEX (article_type, locale, status, published_at)`（对齐 CPS 的复合索引）。迁移末尾附一条
+    `DO $c24_article_axes_guard$` 自证守卫：统计三列偏离上述默认值的行数，非零即
+    `RAISE EXCEPTION`（ERRCODE `23514`）；因为 `ADD COLUMN ... DEFAULT` 在同一 DDL 语句内就把既存行
+    回填成该默认值，这个计数在本迁移下机械恒为零，守卫只是防止未来有人误改这个文件时静默改变既存行为。
+21. `db:public:article:article_novel_locale_key`（`UNIQUE(novel_id, locale)`）在 C-27
+    （`20260910090000_c27_blog_article_foundation`）把 `novel_id` 收窄为可空之后的 NULL 语义登记：
+    **依赖 PostgreSQL 默认的 NULL 互不相同语义，禁止改为 `NULLS NOT DISTINCT`**。PostgreSQL 的普通
+    UNIQUE 约束把每个 NULL 视为与其他任何 NULL 都不同，所以任意多篇 `novel_id IS NULL` 的博客文章
+    可以在同一 `locale` 下共存，这正是博客需要的行为（一个 `locale` 下当然要能发多篇博客）。若误加
+    `NULLS NOT DISTINCT`，效果是把博客锁死成每 `locale` 全站只能有一篇，而且失败是静默的——第二篇
+    博客创建时只会报一个莫名其妙的唯一冲突，运营看不出这是约束选错了写法。这条约束本身（物理名、
+    列组成）**不改**，本条只是把"为什么不能加 NULLS NOT DISTINCT"这条否定性决策钉在字典里。
+22. `20260911090000_c30_novel_rebind_foundation`（C-30A 换小说地基）新增：
+    - `db:public:novel:title_normalized`：可空 `VARCHAR(500)`，CPS `Drama.nameNormalized` 平移，
+      `db:public:novel:novel_locale_title_normalized_idx` = `INDEX (locale, title_normalized)`。
+      本迁移不回填任何存量行（回填是独立、幂等、可重跑的
+      `scripts/backfill-novel-title-normalized.ts`，不折进本 DDL），迁移末尾附
+      `DO $c30_novel_rebind_foundation_guard$` 自证守卫：统计
+      `title_normalized IS NOT NULL` 的行数，非零即 `RAISE EXCEPTION`（ERRCODE `23514`）——因为
+      新列无 `DEFAULT`，`ADD COLUMN` 本身机械保证这个计数为零，守卫只防未来有人误把回填逻辑塞进
+      这个文件。
+    - 三张新表（`article_novel_rebind_preview`/`article_novel_rebind_batch`/
+      `article_novel_rebind_batch_item`，字段清单见 §3.2）：
+      - `db:public:article_novel_rebind_batch:article_novel_rebind_batch_status_check` =
+        `status IN ('ready','processing','completed','partial','failed')`；
+      - `db:public:article_novel_rebind_batch_item:article_novel_rebind_batch_item_status_check` =
+        `status IN ('pending','processing','applied','skipped','failed')`；
+      - `db:public:article_novel_rebind_batch_item:article_novel_rebind_batch_item_error_kind_check` =
+        `error_kind IS NULL OR error_kind IN ('drift','not_found','blocked','ineligible','fence_lost','unknown')`；
+      - `db:public:article_novel_rebind_batch:article_novel_rebind_batch_request_token_key` =
+        `UNIQUE(request_token)`（提交幂等令牌，CPS `ArticleDramaSwitchBatch.requestToken` 平移）；
+      - `db:public:article_novel_rebind_batch_item:article_novel_rebind_batch_item_batch_article_key`
+        = `UNIQUE(batch_id, article_id)`（同一批次内每篇文章至多一条条目）；
+      - `db:public:article_novel_rebind_batch_item:article_novel_rebind_batch_item_batch_id_fkey` =
+        `(batch_id)` → `article_novel_rebind_batch(id)`，`ON DELETE CASCADE`。
+      `batch_id` 是这三张表之间唯一的硬 FK；`preview_id`/`article_id`/`old_novel_id`/
+      `old_promo_link_id`/`expected_new_novel_id`/`expected_new_promo_link_id`/
+      `applied_new_novel_id`/`applied_new_promo_link_id`/`audit_id`（→ `operation_audit.id`）均为
+      无 FK 的审计形状列——CPS 同构列（`ArticleDramaSwitchBatch.previewId`/
+      `ArticleDramaSwitchBatchItem.articleId`/`oldDramaId`/`expectedNewDramaId`/
+      `appliedNewDramaId`）同样无 FK：这三张表记录的是"计划/尝试过什么"，即使对应的
+      article/novel/promo_link/preview 行之后被另一条路径软删、硬删或有界清理回收，记录也必须
+      继续可读——`preview_id` 尤其如此：预览行 30 分钟有界清理（`cleanupExpiredBatchSwitchPreviews`，
+      C-30B）可能早于批次行自己的长期保留结束，若给 `preview_id` 挂硬 FK 且 `ON DELETE RESTRICT`，
+      清理任务会因为存在引用它的批次行而报错，反而阻塞了这张表自己的有界清理契约。
+    - 本单（C-30A，施工工单单 1）范围内三张新表均为空表、零调用点读写——批量预览/持久化执行/
+      批量界面的读写代码是 C-30B（单 2），故本单**未**在 `infra/postgres/grants.sql` 里为这三张
+      表登记任何角色 GRANT（沿用本仓库既有"地基迁移先加表/列、读写代码接线时再登记 GRANT"的顺序，
+      同 C-24 文章三轴地基先例）；C-30B 落地读写代码时必须同时补齐 `web_app` 对三张表的
+      `SELECT`/`INSERT`/`UPDATE` GRANT，否则真实 PostgreSQL 上会 `42501 permission denied`（参见
+      本文件 2026-09-05 "PR6 fix lane E" 一行记录的同类事故）。
+    - C-30A 单篇换绑本身**不**新增任何列或 CHECK——它只原子写入 `Article` 既有的 `novel_id`/
+      `promo_link_id` 两列，受既有 `article_novel_id_by_type_check`（§5 第 11 条）与
+      `article_promo_link_novel_fkey`（§5 第 12 条）约束，且这两列的 JSONL 字典记录已在 C-24/
+      P1-05B 落地，本迁移不重复登记。
+
 ### P1-05B Migration 注意事项
 
 - Article 进入 `published` 前必须在同一原子写入中设置 `published_at`；draft 及其他非 published 状态允许 `published_at IS NULL`。
@@ -239,7 +381,7 @@ carousel serving source。
 - Worker 是 at-least-once。claim 或过期回收每次易主都生成新 token 并令 epoch +1；heartbeat 不改变 epoch。
 - pending claim 使用 `status='pending'` 专用查询；recovery 使用 `status='processing' AND locked_until < transaction_timestamp()` 专用查询。
 - public code 和 credential fingerprint 的应用层预查只用于提示，正确性由数据库唯一约束保证。
-- `side_effect_intent` 在外部调用前独立事务提交；未确认结果进入 `claim_retry_blocked`。
+- `side_effect_intent` 在外部调用前独立事务提交；未确认结果进入 `claim_retry_blocked`。通用 worker 迁移图中 `claim_retry_blocked` 只能进入 `manual_review_required`；由 readback 证据确认（`prepared`/`claim_retry_blocked` → `confirmed`）只经 `confirmSideEffectIntentByReadbackInTransaction` 专用边界并与业务写同事务；`manual_review_required` 的出边只属于 X9 人工裁决。
 - `operation_audit` 和本地业务写同事务；不建立独立审计库。
 - `(url, revision)` 是 IndexNow 唯一幂等身份。
 - ScheduleRun 与 CronRun/Task 的 marker 和 enqueue 在同一事务完成，禁止“只有 marker 没有 task”。
@@ -263,7 +405,7 @@ carousel serving source。
 | --- | --- | --- | --- | --- |
 | `migration_owner` | 唯一应用对象 Owner；执行 Migration | 全部 | 全部 | 不作为应用运行身份 |
 | `web_app` | 无 | S0/S1 与公开章节正文；凭证仅元数据；`site_setting`；仅为发布门禁与公开 `/go` 读取 `promo_link.web_url/app_url` | 后台元数据、任务入队、Audit 追加；同步 add/replace 可 INSERT 新密文及轮换元数据；`site_setting` 仅四字段 + `updated_at` UPDATE；X9 人工裁决仅可 UPDATE `side_effect_intent(status,response_shape,confirmed_at)` | 禁止 SELECT/解密已保存 `encrypted_secret`、完整 fingerprint、`promo_link.upstream_code` 与原始上游 payload；目的 URL 只供受控发布/跳转服务使用，不进入通用后台投影或审计；SiteSetting 禁止 INSERT/DELETE/其他列 UPDATE；人工裁决不得改 intent identity/evidence/linkage；超时 `30s / 5s / 60s`（statement / lock / idle transaction） |
-| `worker_app` | 无 | 完成任务与凭证处理所需全部列，显式包括 `side_effect_intent`（含 attempt fingerprint）；`site_setting` | 业务/任务状态与追加日志；仅章节撤回正文允许 DELETE | `operation_audit` 等追加日志禁止 UPDATE/DELETE；SiteSetting 只读；通用 intent transition 无 `manual_review_required` 出边；超时 `5min / 15s / 5min` |
+| `worker_app` | 无 | 完成任务与凭证处理所需全部列，显式包括 `side_effect_intent`（含 attempt fingerprint）；`site_setting` | 业务/任务状态与追加日志；仅章节撤回正文允许 DELETE | `operation_audit` 等追加日志禁止 UPDATE/DELETE；SiteSetting 只读；通用 intent transition 无 `manual_review_required` 出边，且 `claim_retry_blocked` 无 `confirmed` 出边（readback 确认走专用边界）；超时 `5min / 15s / 5min` |
 | `analyst_ro` | 无 | S0/S1 列 | 无 | `default_transaction_read_only=on`；`statement_timeout=30s`；禁止 S2/S3 |
 | `backup_role` | 无 | 完整逻辑/物理备份所需全部表、序列 | 无 | `REPLICATION` 仅用于 `pg_basebackup`；凭证仅由备份系统托管 |
 | `scheduler_app` | 无 | schedule/generic task 元数据 | 仅创建/更新 schedule 与 GenericTask 元数据 | 禁止 Auth/Credential secret；不导入 Worker handler registry；无 Credential key；超时 `1min / 5s / 60s` |
@@ -293,6 +435,14 @@ P1-08B 新增独立 `scheduler_app`，只授予 schedule/generic task 元数据�
 - JSONB 不得包含明文凭证、Cookie、完整 JWT、章节正文。
 - Promo/Source raw payload 可能包含真实码或 URL，按 S2 处理，不进入审计和 Notion。
 - Audit JSON 只能保存脱敏后的 before/after、request summary、response shape。
+- C-30A（换小说）新增两对 JSONB + 固定版本列：`article_novel_rebind_preview.filters_json` /
+  `filters_json_schema_version`（生成预览时使用的筛选条件——语种、来源应用等）与
+  `article_novel_rebind_preview.matches_json` / `matches_json_schema_version`（二分图四分类配对
+  结果的冻结快照）；`article_novel_rebind_batch` 复制同一对 `filters_json` /
+  `filters_json_schema_version`（批次落库时对预览筛选条件的快照，与预览行各自独立版本演进）。三对
+  版本列均从 `1` 起步——CPS 参照物的 `schemaVersion 1` 兼容路径不移植（海阅没有历史快照需要兼容，
+  见施工工单 §2.4/§3.3），因此这里没有"版本 0"或历史迁移分支要登记。四个 JSONB 列均不得写入明文
+  凭证；`matches_json` 可能包含文章标题/书名等 S1 内部信息，不含章节正文。
 
 ## 10. 数据字典一致性
 
@@ -335,6 +485,18 @@ P1-08B 新增独立 `scheduler_app`，只授予 schedule/generic task 元数据�
 | 2026-08-26 | X9 Task Admin | 零 migration；新增 `task:manage` + 当前会话 2FA 的三族任务读取/失败重试与 SideEffectIntent 人工裁决。Web 仅获得 `side_effect_intent(status,response_shape,confirmed_at)` 列级 UPDATE；裁决 CAS 与 OperationAudit 同事务，不触发上游、PromoLink 自动对账或 worker 通用 transition 出边 | Codex | PostgreSQL 16.14 disposable role/CAS/audit/worker-negative verification PASS；零 dictionary drift；容器已清理 |
 | 2026-09-01 | Book B E2E PromoLink 目的 URL 读取 | 零 schema migration；`web_app` 增加且仅增加 `promo_link.web_url/app_url` 的列级 SELECT，供发布门禁与公开 `/go` 跳转使用；不开放 `upstream_code`、原始上游 payload 或 Analyst/Scheduler 读取 | Codex | X8 Book B E2E 已验证发布门禁与 `/go`；Web 两列可读、Analyst 两列拒绝 |
 | 2026-09-03 | Book C SideEffectIntent Worker 读取 | 零 schema migration；`worker_app` 增加 `side_effect_intent` 表级 SELECT，使正式 claim handler 可执行 intent 预查、独立 prepare、状态迁移与 readback-only recovery；不扩张 Web/Scheduler 权限 | Codex | Book C 首次启动在 mutation 前发现缺口；补权后正式 handler PASS，`getcode=1`、intent `confirmed`、capability 已恢复关闭 |
+| 2026-09-05 | P2-06.5 Tagging V3 | 增加七表 Tagging V3 foundation、exact raw-language scope、角色权限与治理合同；无 taxonomy auto-write | Codex | 集成冻结提交历史；AUTO_WRITE_AUTHORIZED=NO |
+| 2026-09-05 | Launch parity M5 home carousel（`20260905090000_site_setting_carousel_config`） | `site_setting` 加一列 `carousel_config_json JSONB NOT NULL DEFAULT '{}'`（首页人工位/新剧位/衰减排序运营配置；收益排序对 Novel V1 恒禁用，见列注释） | Codex | 已在 X8 uat（`cps-novel-x8-local`）应用；补记本行前 §12 遗漏此条 |
+| 2026-09-05 | PR6 fix lane C — migration 时间戳顺序治理记录 | `20260816160000_p2_06_5_tagging_v3` 的目录名字面序排在 `20260818120000_v020_foundation_shared` 之前，但两者在同一 X8 长期卷上的实际 `migrate deploy` 应用顺序与目录名序不一致（`_prisma_migrations` 记录的 apply 顺序早于目录名对比结果）——`prisma migrate deploy` 只按"是否已记录在 `_prisma_migrations`"决定要不要应用，与目录名字面序无关，因此**安全**；`prisma migrate dev` 的 shadow-DB 重放假定目录名序即预期应用序，对这条历史会报漂移（drift），**不安全**、不能在这套 X8 卷上跑。两个目录都不改名——改名会使已落盘的 `_prisma_migrations.migration_name` 与磁盘目录名不一致，制造新的漂移而不是修复旧漂移。生产/新库从空库开始 `migrate deploy` 时两迁移严格按目录名序连续应用，不受此限制影响 | Claude（Sonnet，PR6 B-3 修复附带发现） | 只读记录，未执行任何 migration 操作；本行是 N-11 的登记，不是新变更 |
+| 2026-09-05 | PR6 fix lane E — carousel 权限缺口 | 零 schema migration。真机 X8 uat 暴露 `scheduler` 容器因 `42501 permission denied for table site_setting` 崩溃重启（`scheduler` 读 `carouselConfigJson` 判定 cron 是否到点，但 `scheduler_app` 对 `site_setting` 无任何授权）；`information_schema.role_table_grants` 复核同时发现 `worker_app` 对 `home_carousel_manual_slot/auto_batch/auto_candidate/serving` 只有 INSERT/UPDATE 无 SELECT（`computeHomeCarouselInTx` 的 `findMany`/`update`/`deleteMany` 均需 SELECT），且对 `home_carousel_serving` 无 DELETE（merge 用 `deleteMany` 整体收缩后 `createMany` 重建，非 UPDATE 语义）。修复：`GRANT SELECT (id, carousel_config_json) ON site_setting TO scheduler_app`（列级，`indexnow_key` 等其余列/`analyst_ro` 依旧零可见性）；`worker_app` 补四表 SELECT + `home_carousel_serving` DELETE；`home_carousel_change_log` 保持 INSERT-only 不变。`src/server/home-carousel/service.ts` 的 `getHomeCarouselConfig`/`computeHomeCarouselInTx` 已是列级 `select:{carouselConfigJson:true}`，代码侧无需改动。同步更新 `database-schema-dictionary.jsonl` 中 `site_setting.id`/`site_setting.carousel_config_json` 两条记录的 `read_roles`（加 `scheduler_app`），以及 `tests/backend/database/x6-site-setting-grants.test.ts` 原先"scheduler_app 对 site_setting 零访问"的契约断言（收窄为"零全表 SELECT/INSERT/UPDATE/DELETE，仅允许既定列级 SELECT"），使其与新授权一致 | Claude（Sonnet，PR6 fix lane E） | 新增 `tests/backend/database/carousel-grants.test.ts`（6 用例，含对列级 grant 的变异测试：删除该行断言立即转红）；`npm run typecheck && npm run lint && npm run test:backend`（163/164 文件通过，唯一失败为既有 `publish-gate/no-bypass` 基线失败）+ `npm run test:ui`（113/113 通过）全绿；X8 uat（`cps-novel-x8-local`）复现修复前崩溃（`docker ps` 显示 `scheduler` 持续 `Restarting`）后，以 postgres 超级用户重跑修复后的 `grants.sql`（自带 REVOKE 重置，幂等）并 `docker compose restart scheduler`：容器转为持续 `Up ... (healthy)`（`RestartCount` 维持 0，观察窗覆盖至少两次 60s cron tick，`docker logs` 自重启后再无 42501）；`role_table_grants`/`role_column_grants` 复核与预期矩阵完全一致（`scheduler_app` 仅 `site_setting(id, carousel_config_json)` 列级 SELECT、对 `home_carousel_*` 零访问；`worker_app` 四表新增 SELECT + `home_carousel_serving` 新增 DELETE）；`/api/health` 200 `ok:true` |
+| 2026-09-06 | Phase C — C-1 任务模型迁移 schema 先行（`20260907090000_p3_generic_task_catalog_scan_indexes`） | `TASK_ARCHITECTURE_DECISION = MIGRATE_TO_CPS_TASK_MODEL`（`CPS海阅_短剧到小说全链路Parity审计与收敛规划_2026-09-06.md` §4/§0）第一步：给 `generic_task` 补两条 `WHERE task_type='catalog_scan'` partial index，等价现有 `catalog_scan_status_created_idx`/`catalog_scan_scope_idx`；本步不删任何表、不改任何 CHECK/FK，`catalog_scan_task(_item)` 原样保留。`database-schema-dictionary.jsonl` 新增两条 `managed_by=migration_sql` 记录 | Claude（Sonnet，Phase C 施工） | 待一次性 PostgreSQL 16 容器验证（migrate deploy 幂等重放 + `check-database-dictionary-drift.mjs`）；详见本轮 Phase C 报告 |
+| 2026-09-06 | Phase C — C-4 DROP catalog_scan_task(_item)（`20260907091500_p3_drop_catalog_scan_task`） | C-2/C-3（应用层与测试已全部切至 `generic_task`/`generic_task_item`，`task_type='catalog_scan'`、`target_type='catalog_page'`）合入后，DROP 两表；Prisma model `CatalogScanTask`/`CatalogScanTaskItem` 一并移除（含 `ChannelAccount`/`ChannelApp` 上的 `catalogScanTasks` 反向关系字段）；无生产历史（102 行 UAT、零活体），非回填式迁移。`database-schema-dictionary.jsonl` 68 条记录改 `status=superseded`（不删除，遵 §10）；`check-database-dictionary-drift.mjs` 的 Prisma model/数据库表计数断言 51→49；`scripts/entity-fix/moboreader-foundation-swap.ts` 的前后快照去掉独立 `catalogScanTasks` 计数（并入 `genericTasks`）。 | Claude（Sonnet，Phase C 施工） | 待一次性 PostgreSQL 16 容器验证；详见本轮 Phase C 报告 |
+| 2026-09-07 | Tagging V3 FK 具名对齐（零 schema migration，仅 Prisma `map:`） | `prisma migrate diff --from-migrations … --exit-code` 自 `20260816160000_p2_06_5_tagging_v3` 合入起即报 6 条 `Renamed the foreign key`（`canonical_tag_translation_tag_id_fkey`、`canonical_tag_keyword_tag_id_fkey`、`source_label_mapping_tag_id_fkey`、`novel_tag_state_current_auto_run_id_fkey`、`novel_canonical_tag_tag_id_fkey`、`novel_canonical_tag_run_id_fkey`）：手写 Migration 取了短名，而 `schema.prisma` 对应 `@relation` 未写 `map:`，Prisma 按默认规则期望 `<table>_<columns>_fkey` 长名。后果：`scripts/p1-13-postgres-verification.sh`（以及同样内置该 diff 门禁的 `run-p1-05b`/`run-p1-08b`）在任何分支都于 diff 门禁 exit 2，跑不到 grants 与测试。裁决依据 §1「已执行 Migration > 当前 Schema/SQL」与 §13「未经 Owner 批准不得抢跑新增 migration」：不改 Migration、不新增 `RENAME CONSTRAINT` 迁移，只给 6 条 `@relation` 补 `map:` 指向 Migration 已落地的物理名（先例 §5 第 12 条 `article_promo_link_novel_fkey`；本次登记为 §5 第 19 条）。已应用该 Migration 的 X8 uat（`cps-novel-x8-local`）与 tplsmoke 两库现场 `pg_constraint` 均为短名，本改动对活库零影响、无需任何 SQL。`database-schema-dictionary.jsonl` 12 条 FK 记录 `physical_name` 本就是短名，不改；`managed_by` 保持 `migration_sql`（对象由手写 Migration 创建，`map:` 只是让 Prisma 认领同名）。§3.2 至今没有 Tagging V3 七表的词典行（2026-09-05 登记时遗留），本轮不代写，待 Codex/Owner 补。 | Claude（Sonnet 编码/Opus 复核） | `prisma/schema.prisma` 恰 6 行变化，`npx prisma validate` PASS；一次性 PostgreSQL 16.14 容器（`repro-diff-v2.sh`）验证 `migrate deploy` 幂等重放后两方向 `migrate diff --exit-code` 均 `No difference detected` / `EXIT_CODE=0`，`check-database-dictionary-drift.mjs` 通过（`{"status":"ok","models":49,...}`，`DRIFT_EXIT=0`），活库 6 条 FK 名仍为短名；生产路径 `scripts/p1-13-postgres-verification.sh`（未修改）diff 门禁本身已通过（此前 exit 2 的阻塞已解除），但在 `npm run test:integration` 步命中既有基线失败 `KTF-001`（`tests/integration/tasks/p1-07-postgres.test.ts` > "commits side-effect intent independently and blocks unknown retry"，完全命中，1 failed / 25 passed，脚本 `set -e` 于该步中止，未跑到 build/typecheck/lint/test:backend/`npm test`，故生产路径本身不回答 `publish-gate/no-bypass` 是否命中，其结果见本行末的补充证据）；`P1_13_POSTGRES_ERROR line=141 status=1`、`P1_13_POSTGRES_CLEANUP=PASS`、容器/卷/网络自清理（`docker ps -a \| grep p1-13` 为空）。为证明该失败与本改动无关，对同一测试文件单独起一次性库做 A/B：`git stash` 前（含本次 `map:` 修复）与 `git stash` 后（回到修复前的 2e81d18 基线）跑同一条 `npx vitest run tests/integration/tasks/p1-07-postgres.test.ts`，两次均是同一用例 1 failed / 25 passed、断言内容逐字相同；`git stash pop` 后 `git stash list` 为空、`git diff --stat` 恢复到本行变更前的状态。补充非生产路径证据（p1-13 脚本各 `npm run/test` 行追加 `\|\| printf STEP_FAILED=…` 后完整跑一遍）见开发日志同日条目 |
+| 2026-09-07 | SideEffectIntent 通用状态机收口（KTF-001） | 零 schema migration。`isAllowedSideEffectTransition` 关闭 31d4723 引入的通用 `claim_retry_blocked -> confirmed` 出边，恢复 P1-07 原始迁移图；新增 `confirmSideEffectIntentByReadbackInTransaction` 作为 readback-recovery 唯一确认边界（强制 readback 证据、合并既有 ambiguity 证据、同事务 CAS），claim handler 的 `writePromoLinkClaimed` 改走该边界；X9 `resolveManualReview` 不变 | Claude（Sonnet 编码/Opus 复核） | hermetic backend + 一次性 PostgreSQL 16 容器 p1-07/x9 集成验证；见本轮报告 |
+| 2026-09-08 | Phase E — C-24 文章三轴地基（`20260909090000_c24_article_axes`） | `article` 新增 `article_type`/`content_mode`/`seo_visibility` 三列（各配一条命名 CHECK：`article_article_type_check`/`article_content_mode_check`/`article_seo_visibility_check`）与两条索引（`article_seo_visibility_idx`、`article_type_locale_status_published_idx`）；全部由 `NOT NULL DEFAULT`（`novel_article`/`template`/`public`）回填，零回填脚本、零行为变化——本迁移不改任何查询、不改任何写路径，三列截至本行在仓库任何调用点均未被读取。`src/domain/database-statuses.ts` 新增 `ARTICLE_TYPES`/`ARTICLE_CONTENT_MODES`/`ARTICLE_SEO_VISIBILITIES` 三个机器真源常量集合（`ARTICLE_TYPES` 与 `ArticleTemplate.applicable_article_type` 的 `APPLICABLE_ARTICLE_TYPES` 同源去掉 `any`）及 `DATABASE_STATUS_SEMANTICS` 对应逐值语义；`database-schema-dictionary.jsonl` 新增 3 条 `record_kind: "field"`（`db:public:article:article_type`/`content_mode`/`seo_visibility`，`managed_by: "prisma_schema"`）+ 3 条 CHECK 约束记录（`managed_by: "migration_sql"`）+ 2 条索引记录（`managed_by: "prisma_schema"`），本行同步登记（策划文档原文只点名"两条"索引/约束记录，是对既有惯例——每条 CHECK 与索引各自成一条独立字典记录，如 P2-02B 的 `article_template_applicable_article_type_check`——的计数疏漏；本次按惯例足额登记 3+2=5 条，以避免未来一次性 PostgreSQL 16 容器跑 `check-database-dictionary-drift.mjs` 的非 `--static` 目录漂移分支时报缺失数据库对象） | Claude（Sonnet，C-24 施工） | 本轮按工单边界未连接任何数据库：`npx prisma validate`（schema 语法，无 DB）+ `npm run typecheck` + `npm run lint` + `npx vitest run --project node --project ui` 全绿（唯一允许的既有基线失败 `tests/backend/publish-gate/no-bypass.test.ts` 不受影响）。**一次性 PostgreSQL 16 容器 `migrate deploy` 幂等重放 + 双向 `migrate diff --exit-code` 零差异 + `check-database-dictionary-drift.mjs`（非 `--static`）均待后续执行方补跑**，本行状态到那之前不得视为"已验证" |
+| 2026-09-08 | Phase E — C-27 博客数据地基（`20260910090000_c27_blog_article_foundation`） | 本迁移净效果是**放宽 + 补强**：放宽 `novel_id` 与推广链接 CHECK，同时新增按类型的 `novel_id` 存在性 CHECK，使小说文章的保护强度与迁移前完全等价。具体三步：(1) `article.novel_id` 由 `NOT NULL` 改为可空（`ALTER COLUMN ... DROP NOT NULL`），零数据改动，存量行全部保持原值；(2) `db:public:article:article_published_promo_link_check` DROP + 同名 ADD，谓词从 `status <> 'published' OR promo_link_id IS NOT NULL` 改为 `status <> 'published' OR article_type <> 'novel_article' OR promo_link_id IS NOT NULL`（§5 第 11 条已同步改写）；(3) 新增 `db:public:article:article_novel_id_by_type_check`（§5 第 11 条新增行）：`(article_type = 'novel_article' AND novel_id IS NOT NULL) OR (article_type <> 'novel_article' AND novel_id IS NULL)`——这是"补强"的那一半，没有它，(1) 会让 `novel_article` 也能在没有 Novel 的情况下发布，是净变松而不是净等价。**不动**的两处按 §一 结构事实与 P1-05B 注意事项裁决：`article_novel_locale_key`（`UNIQUE(novel_id, locale)`）依赖 PostgreSQL 默认 NULL 互不相同语义天然支持多篇博客共存同 `locale`，误加 `NULLS NOT DISTINCT` 会把博客锁死成每 locale 一篇（§5 第 21 条新增登记）；`article_promo_link_novel_fkey`（`(promo_link_id, novel_id)` 复合 FK）保持 PostgreSQL 默认 `MATCH SIMPLE`，任一列 NULL 即不检查，博客两列皆 NULL 天然合法（P1-05B 注意事项"禁止手写为 MATCH FULL"的第二个受益场景）。迁移末尾附 `DO $c27_blog_article_foundation_guard$` 自证守卫：统计 `article_type='novel_article' AND novel_id IS NULL` 的行数，非零即 `RAISE EXCEPTION`（ERRCODE `23514`）——因为本迁移不含任何回填，存量行（全部 `novel_article` 且 `novel_id` 非空）在新 CHECK 下机械恒为零，守卫只防未来误改。**L-3（C-27 review 已登记，migration.sql 本身未改）**：该 `DO` 块内部的 PL/pgSQL 变量名 `non_novel_article_with_novel_count` 命名有误导性——它实际统计的是"`article_type='novel_article'` 但 `novel_id IS NULL`"的行数（即"该有 Novel 却没有"），变量名读起来却像是反过来的"非 `novel_article` 却有 Novel"。这个变量声明与赋值都在 `DO $c27_blog_article_foundation_guard$` 块内，属于可执行 PL/pgSQL 语句而非纯注释，改名会改变 `migration.sql` 的文件字节，进而改变 Prisma 记录在 `_prisma_migrations` 表里的该迁移 checksum；该迁移已在本地栈应用过（checksum 已落库），改名会被下一次 `prisma migrate status`/`migrate deploy` 判定为"迁移文件在应用后被修改"从而报漂移。因此本次**不改动 `migration.sql` 文件本身**，只在此处的治理文档描述文字里记录这个命名缺陷，供以后任何新迁移里如需复用同一条真值统计逻辑时改用更准确的命名（例如 `novel_article_missing_novel_count`）；`migration.sql` 文件里的实际变量名与本迁移的 SQL 语义保持逐字节不变。发布门禁按类型分叉：`src/server/publish-gate/facts.ts`（`loadPublishGateFacts`）在 Novel 不存在时跳过 Novel 软删检查与试读章节查询（`NovelChapter.novelId` 是 `NOT NULL` 列，不能塞可空值）；`src/server/publish-gate/evaluator.ts`（`evaluatePublishGate`）按 `facts.novel === null`（结构上与 `article_type <> 'novel_article'` 等价，由新 CHECK 保证）分叉，非 `novel_article` 只走 locale（读 `facts.article.locale` 而非 `facts.novel.locale`，`facts.novel` 为 `null` 时别无选择，novel_article 分支本身逐字未改——是否把 novel_article 也改读 `article.locale` 仍是待 Owner 签字的独立问题，`规划_...` §4.4/§六 item 6，本迁移不动它）+ 必要元数据 + 页面身份 + 权利阻断（仅 Article 侧，见 C-27 review M-1 修正）四条，跳过试读章节/试读正文/推广链接缺失/推广链接未就绪四条（全部是 Novel 侧概念）——**M-1 修正（C-27 review，本次一并登记）**：C-27 落地时判定器把 `rights_blocked` 整条归入"Novel 侧概念"一并跳过，但 `isRightsBlocked`（`visibility.ts`）是 `novel.status === 'takedown' OR article.status === 'takedown'` 的析取，Article 侧半条与 Novel 是否存在无关——一篇被下架（`takedown`）的博客同样不得发布。评审后改为：非 `novel_article` 分支单独判 `facts.article.status === 'takedown'`（不经 `isRightsBlocked` 本身，因为该函数要求一个 `NovelPublicationState` 入参，这一分支没有 Novel 可传），保留 `rights_blocked` 这一条原因码，只跳过其 Novel 侧半条；`tests/backend/publish-gate/evaluator.test.ts` 里原先断言"该分支下 `rights_blocked` 恒不触发"的用例同步改为断言 Article 侧 takedown 会触发、非 takedown 不触发；`src/server/publish-gate/service.ts`（`applyPublishTransition`）把 Novel 提级、Novel 状态审计快照两处包进"有 Novel"条件，博客只写 Article 一侧；IndexNow/Sitemap 首发派发（`dispatchFirstPublicPublication`）在 `novelId` 为 `null` 时整体跳过（两者今天都是 Novel-only 概念，博客自己的 IndexNow/Sitemap 接线是 C-29 的工作）。公开侧（`src/server/publication/visibility.ts` 的谓词族）**零改动**——公开可见性谓词族此时仍然把博客判为不可见（硬要求 Novel 已发布 + 推广链接已就绪），这是有意的中间态，直到 C-29 打开。`article.novelId`/`article.novel` 可空化后类型层面浮出的每一处非空假设调用点（`src/app/(admin)/articles/[articleId]/page.tsx`、`src/app/(admin)/novels/_lib/read-primary-article.ts`、`src/lib/seo/novel-hreflang.ts`、`src/lib/seo/sitemap.ts`、`src/lib/site/home-carousel-service.ts`、`src/lib/site/queries.ts`、`src/server/articles/service.ts`、`src/server/home-carousel/service.ts`、`src/server/publication/access.ts`）逐一按最小改动收口（条件渲染、类型收窄辅助类型、`article_not_regenerable` 新结果分支等），无一使用 `!` 断言。`database-schema-dictionary.jsonl`：`db:public:article:novel_id` 就地改 `nullable: true` 并补 `llm_constraints`（与字典 Owner 对齐后按§10"同字段语义演进"就地更新，未 supersede，见本行末状态列）；新增 `db:public:article:article_novel_id_by_type_check` 记录（`managed_by: "migration_sql"`）；更新 `db:public:article:article_published_promo_link_check` 既有记录的 `enum_or_check`/`notes`（`introduced_in_migration` 保持原值不变，`evidence` 追加本迁移文件引用，同 P2-02B 对 `article_template_status_check` 的先例）——**计数疏漏说明（同 C-24 那一行的先例）**：策划文档 C-27 节"治理文档与字典的确切条目"第 5 条原文写"新增两条 `managed_by: "migration_sql"` 的 CHECK 记录，更新 `article_published_promo_link_check` 那条既有记录的谓词"，字面读作"两条新增 + 一条更新"；实际落地是**一条全新记录（`article_novel_id_by_type_check`）+ 一条既有记录原地更新（`article_published_promo_link_check`，DROP+ADD 同名不改变量数不算新增）**，即"一新一更新"而非"两新一更新"——本行按实际执行的动作登记，不按策划文档的字面计数。 | Claude（Sonnet，C-27 施工） | 本轮按工单边界未连接任何数据库：`DATABASE_URL=postgresql://x:y@localhost:5432/z npx prisma validate`（schema 语法，无 DB）+ `npm run typecheck` + `npm run lint`（0 error）+ `npx vitest run --project node --project ui` + `node scripts/check-database-dictionary-drift.mjs --static` 全绿（唯一允许的既有基线失败 `tests/backend/publish-gate/no-bypass.test.ts` 不受影响，与 C-24 同一基线失败，非本轮引入）。**一次性 PostgreSQL 16 容器 `migrate deploy` 幂等重放 + 双向 `migrate diff --exit-code` 零差异 + `check-database-dictionary-drift.mjs`（非 `--static`）均待后续执行方补跑**，本行状态到那之前不得视为"已验证"，与 C-24 那一行同一措辞、同一约束 |
+| 2026-09-09 | C-30A 换小说地基 + 单篇换绑（施工工单_C30_换小说_移植CPS换租客_2026-09-08.md 单 1，`20260911090000_c30_novel_rebind_foundation`） | 一条迁移，四件事：(1) `novel.title_normalized`（可空 VARCHAR(500)）+ `novel_locale_title_normalized_idx`，CPS `Drama.nameNormalized`/`normalizeName` 平移为 `src/lib/novel/novel-identity.ts` 的 `normalizeNovelTitle`；本迁移不回填，独立幂等脚本 `scripts/backfill-novel-title-normalized.ts` 负责历史行，DO-guard 自证零数据改动。写入维护点截至本轮**只有一处**（`src/server/content-creation/service.ts` 的 `runCreateTransaction`）——施工工单预期的"两处"（创建 + 标题更新）里，标题更新路径在本仓库当前**不存在**（grep 全仓 `\.novel\.(create\|update\|updateMany\|upsert)` 只命中一处会写 `title` 的调用），按工单"发现与事实不符时停下来上报"原样如实登记，未自行新增写入点。(2)(3)(4) 三张新表 `article_novel_rebind_preview`/`article_novel_rebind_batch`/`article_novel_rebind_batch_item`（字段清单、CHECK/唯一/FK 详见 §3.2 与 §5 第 22 条），C-30A 本单范围内均为空表零读写——批量预览/持久化执行的读写代码是 C-30B（单 2，未施工），故本单**未**给这三张表登记 `infra/postgres/grants.sql` 的角色 GRANT（沿用 C-24"先加表/列、读写接线时再登记 GRANT"的顺序）。同一提交内落地：`src/domain/database-statuses.ts` 新增 `REBIND_BATCH_STATUSES`/`REBIND_ITEM_STATUSES`/`REBIND_ERROR_KINDS`（及 `DATABASE_STATUS_SEMANTICS` 对应语义）；两个新能力 `content:rebind`/`content:batch-rebind`（`src/lib/auth/capabilities.ts`，`super_admin` 默认 + `requiresTwoFactor: true`，与 `content:publish` 同档，Owner 2026-09-08 裁决两粒度不合并）；动作注册 `ADMIN_ARTICLE_REBIND_ACTIONS`（`admin.article.rebind_novel`/`rebind_rollback` 写、`rebind_candidates` 读，均登记能力，不复制 CPS 那两个只读漏能力校验的历史缺口）；双闸 `FEATURE_ARTICLE_NOVEL_REBIND`/`ARTICLE_NOVEL_REBIND_ALLOW_WRITE`（五处登记：`src/lib/flags/feature-flags.ts`、`docs/governance/feature-flag-registry.md`、`docker-compose.yml` web 服务块、`scripts/lib/x8-levels.json` 三档全 `false`、`scripts/acceptance/x8-validate-compose.mjs`；C-30B 批量预览快照写入的单闸例外已提前在这五处写清楚，本单不落地该例外的消费代码）；单篇换绑服务 `src/server/article-rebind/`（`errors.ts`/`guards.ts`/`service.ts`/`index.ts`）——九条守卫（附录 D）、恰好两字段的原子 `updateMany`（`{novelId, promoLinkId}`，🔴 由 `tests/backend/article-rebind/service.test.ts` 逐字断言锁死）、审计改用既有 `operation_audit`（`action: "article.rebind_novel"`/`"article.rebind_rollback"`）、事务外安全失效（`revalidatePublicArticlePaths`，URL 不变路径不变）；编辑页面板 `src/app/(admin)/articles/_components/article-rebind-panel.tsx`（搜索式目标选择器、零裸 UUID、三档守卫横幅、"分类将随之变更"常显提示）经 `[articleId]/page.tsx` 接线，仅在 `article.novel !== null` 分支渲染。IndexNow：单篇换绑**不入队**——CPS 自身的 `switchArticleDrama`/`switchArticleDramaAction` 全文 grep 零 "indexnow" 命中，只调用 `revalidatePath`，本单据此镜像不入队并落一条源码扫描负向测试锁死。`src/lib/flags/README.md` 标注"Owner: Codex（独占写入）"未拦这次编辑——施工工单显式把 `src/lib/flags/feature-flags.ts` 列入本单五处登记之一，按工单要求执行。 | Claude（Sonnet，C-30A 施工） | 本轮未连接任何数据库：`DATABASE_URL=postgresql://x:y@localhost:5432/z npx prisma validate` PASS；`npm run typecheck`（0 error）；`npm run lint`（0 error，4 条既有警告，与本轮改动前的基线数量逐字相同）；`npx vitest run --project node --project ui`（4138 passed / 171 skipped，唯一失败 `tests/backend/publish-gate/no-bypass.test.ts`——已用 A/B 复核：同一条命令在未改动的 `215b109` 基线上跑，命中同一用例、同一 `scripts/s1-exact-target-structural-smoke.ts` 命中点，逐字相同，与本轮改动无关）；`node scripts/check-database-dictionary-drift.mjs --static`（`{"status":"ok","models":52,"recordCount":1209,"activeCount":1139}`，脚本内两处硬编码模型计数 49→52 一并更新）。新增测试：`tests/backend/article-rebind/`（guards.test.ts 18 例、service.test.ts 25 例含 IndexNow 负向 3 例、backfill-novel-title-normalized.test.ts 6 例）、`tests/backend/flags/article-novel-rebind-flags-passthrough.test.ts`（6 例）、`tests/ui/article-rebind-panel.test.tsx`（12 例）、`tests/ui/article-rebind-page-wiring.test.ts`（3 例）、`tests/ui/article-rebind-capability-projection.test.ts`（5 例）、`tests/integration/article-rebind/two-field-atomic.test.ts`（`C30_DATABASE_TEST=1` 门控，4 例，**未执行**——本 worktree 无 PostgreSQL 连接，按 `c27-blog-article-postgres.test.ts` 先例如实登记待执行）。因既有 schema 变化导致三处既有静态测试的硬编码计数同步更新（`tests/backend/database/p1-05b-static.test.ts` 49→52、`tests/backend/database/p1-06-static.test.ts` 1130→1209、`tests/backend/tagging/p2-06-5-governance.test.ts` 49→52）与一处既有列表断言追加三个新 action id（`tests/ui/admin-content-registry.test.ts`）。**一次性 PostgreSQL 16 容器 `migrate deploy` 幂等重放 + 双向 `migrate diff --exit-code` 零差异 + `check-database-dictionary-drift.mjs`（非 `--static`）+ 本行登记的集成测试均待后续执行方补跑**，本行状态到那之前不得视为"已验证"，与 C-24/C-27 两行同一措辞、同一约束。C-30B（批量预览/持久化执行/批量界面，施工工单单 2）不在本轮范围。 |
+| 2026-09-09 | D-9a `up` 数据库准备原子化（施工工单_D9_up数据库准备原子化与镜像保留_2026-09-09.md 三.3，`fix/d9a-prepare-database-atomic`） | 零 schema migration，纯运维可靠性加固。根因（2026-09-08 事故复盘）：`infra/postgres/grants.sql` 先无条件 REVOKE 六个应用角色在 `public` 下的一切、再逐条重新 GRANT，而 `scripts/x8-production-like.sh` 原先以 psql 默认"每句话各自提交"模式重放它——REVOKE 半段可独立提交成功、GRANT 半段可完全未跑，使**仍在对外服务的旧版本**六个角色对全库零权限。修复：①`infra/postgres/grants.sql` 第 1 行后加 `SET lock_timeout = '10s'`，`scripts/x8-production-like.sh:908-909` 重放它的 `psql` 调用加 `--single-transaction`——REVOKE 段与 GRANT 段现在要么一起生效要么一起回滚，不存在只提交一半的窗口；`scripts/db/restore-logical.sh`/`scripts/p1-13-restore-smoke.sh` 两个既有 `grants.sql` 调用点顺带受益（未改动这两个文件本身）。②`prepare_database()` 新增磁盘前置闸：闸 B（`wait_for_postgres` 之后、`roles.sql` 之前，`X8_MIN_FREE_KIB_DB` 默认 2GiB）fail-closed 且在拒绝时零 DDL/角色语句发出；闸 A（`build_app_image` 之前，`X8_MIN_FREE_KIB_BUILD`/`X8_WARN_FREE_KIB_BUILD` 默认 8GiB/15GiB）同样 fail-closed，告警线时尝试调用 D-9b 的 `x8_gc --auto`（用 `declare -F x8_gc >/dev/null` 守护——D-9b 的 `x8_gc()` 本身不在本分支，两项各自独立一个 commit，合并前该调用点在本分支上恒为空操作，等价于只记日志；一旦合并 D-9b，同一段代码无需改动即开始真正触发 gc）。两闸探测方式相同：优先 `docker compose exec postgres df -P -k /`，退化到一次性 `postgres:16.14` 容器同一探测。③新增 `x8_restore_grants_for_running_release()`：`prepare_database()` 在 roles/role_check/align_passwords 三步失败时（这三步从不触碰权限，见事故复盘）只记录"未触碰、trivially intact"，在 migrate_deploy/extension/role_network_verify 三步失败时改按**上一版已提交身份的 gitCommit**（`git show <commit>:infra/postgres/grants.sql`，绝非本 worktree 当前版本——当前版本可能引用本次迁移未跑完的新表/新列，重放会再次失败）单事务重放；grants.sql 自身在单事务下失败时直接记 intact=yes 且不重放（失败已由事务自动回滚，重放属多余）。④`up` 在失败路径打印固定两行 `X8_DB_PREP_FAILED_AT=<roles\|role_check\|align_passwords\|migrate_deploy\|grants\|extension\|role_network_verify\|disk_preflight>` / `X8_DB_PREP_GRANTS_INTACT=<yes\|no\|n/a>`，intact=no 时附一行可直接复制执行的补救命令（documented command，非自动执行）；⑤`x8_mark_identity_deploy_failed()` 的失败标记文件新增 `db_prep_step=`/`db_prep_grants_intact=` 两行。身份机制（候选/已提交两段式、`resolve_x8_identity()` 读取契约、`promote_x8_identity_candidate()` 提级顺序）逐字未改。D-9b（发布镜像保留 `gc` 子命令与 previous 身份归档）不在本轮范围，另立工单。 | Claude Fable 5.1（编排）/Sonnet 5（施工） | 待发布方回填：本轮未跑 docker、未连接任何数据库、未跑 `prisma migrate`、未跑 `scripts/x8-production-like.sh` 任何子命令，全部验证为 bash 级 stub 契约测试（`tests/backend/runtime/x8-database-prep-atomicity.test.ts` 新增 14 例（含 4 例覆盖闸 A 的 D-9b `x8_gc` 接缝：stub `x8_gc` 函数验证告警线以上不调用/告警线以下调用一次且带 `--auto`/`x8_gc` 未定义时按 `declare -F` 守护降级不报错/gc 调用不吞掉硬线拒绝）+ `x8-production-like-contract.test.ts` 补 3 条静态断言）；`npm run typecheck`/`npm run lint`（0 error，既有 4 条 warning 数量不变）/`npx vitest run --project node --project ui` 全绿（唯一允许失败 `tests/backend/publish-gate/no-bypass.test.ts`，本工单授权放行，非已登记既有失败）；`bash -n` 通过。真机 X8 uat 的 grants.sql 单事务重放与磁盘闸实测由下一位在 `cps-novel-launch-parity` 主 worktree 上执行 `up` 的人补跑。 |
 
 ## 13. 待跟进项（Schema 变更队列，Owner 待批）
 

@@ -21,9 +21,11 @@ vi.mock("@/lib/locale/locale-canonical", async (importOriginal) => {
 
 const revalidatePublicArticlePaths = vi.fn();
 const revalidatePublicArticleSet = vi.fn();
+const revalidatePublicBlogPaths = vi.fn();
 vi.mock("@/server/publication/revalidate", () => ({
   revalidatePublicArticlePaths: (...args: unknown[]) => revalidatePublicArticlePaths(...args),
   revalidatePublicArticleSet: (...args: unknown[]) => revalidatePublicArticleSet(...args),
+  revalidatePublicBlogPaths: (...args: unknown[]) => revalidatePublicBlogPaths(...args),
 }));
 
 import { applyPublishTransition, restoreNovel, takedownNovel, withdrawNovel } from "@/server/publish-gate/service";
@@ -82,10 +84,11 @@ function seedPublishedNovel(overrides: Partial<Parameters<InstanceType<typeof Fa
 beforeEach(() => {
   revalidatePublicArticlePaths.mockReset();
   revalidatePublicArticleSet.mockReset();
+  revalidatePublicBlogPaths.mockReset();
 });
 
 describe("applyPublishTransition invalidation wiring", () => {
-  it("calls revalidatePublicArticlePaths with the Article's public path on a real publish write", async () => {
+  it("calls revalidatePublicArticlePaths with the Article's public path on a real publish write — byte-identical to pre-C-29b (novel_article never calls revalidatePublicBlogPaths)", async () => {
     const db = seedDraftArticle();
     const result = await applyPublishTransition(db.asPrismaClient(), {
       articleId: "article-1",
@@ -100,6 +103,7 @@ describe("applyPublishTransition invalidation wiring", () => {
       slug: "dragon-throne",
       shortId: "abc123",
     });
+    expect(revalidatePublicBlogPaths).not.toHaveBeenCalled();
   });
 
   it("does not invalidate anything when the gate rejects (no write happened)", async () => {
@@ -141,6 +145,67 @@ describe("applyPublishTransition invalidation wiring", () => {
     expect(result.outcome).toBe("published");
     expect(db.articles.get("article-1")?.status).toBe("published");
     expect(db.novels.get("novel-1")?.status).toBe("published");
+  });
+});
+
+/**
+ * C-29b: a blog/listicle/guide Article (`novelId: null`, C-27) has no
+ * chapter subtree and is not part of `/`/`/browse` — `revalidatePublicBlogPaths`
+ * is the only invalidation call it should ever trigger. No `seedNovel`/
+ * `seedChapter` needed here: `facts.novel` is `null` for this fixture (same
+ * shape `evaluator.ts`'s header documents), so none of the Novel-side gate
+ * conditions apply.
+ */
+function seedDraftBlogArticle(overrides: Partial<Parameters<InstanceType<typeof FakePublishGateDb>["seedArticle"]>[0]> = {}) {
+  const db = new FakePublishGateDb();
+  db.seedArticle({
+    id: "blog-1",
+    novelId: null,
+    articleType: "blog_article",
+    locale: "en",
+    slug: "a-blog-post",
+    status: "draft",
+    title: "A Blog Post",
+    body: "Body",
+    publishedAt: null,
+    publishAt: null,
+    deletedAt: null,
+    promoLink: null,
+    publicPageShortId: "blogshort1",
+    ...overrides,
+  });
+  return db;
+}
+
+describe("blog first-publish invalidation wiring (C-29b)", () => {
+  it("calls revalidatePublicBlogPaths with the post's slug, never revalidatePublicArticlePaths/Set", async () => {
+    const db = seedDraftBlogArticle();
+    const result = await applyPublishTransition(db.asPrismaClient(), {
+      articleId: "blog-1",
+      requestId: "req-1",
+      actor: { type: "admin", adminId: "admin-1" },
+    });
+
+    expect(result.outcome).toBe("published");
+    expect(revalidatePublicBlogPaths).toHaveBeenCalledTimes(1);
+    expect(revalidatePublicBlogPaths).toHaveBeenCalledWith({ slug: "a-blog-post" });
+    expect(revalidatePublicArticlePaths).not.toHaveBeenCalled();
+    expect(revalidatePublicArticleSet).not.toHaveBeenCalled();
+  });
+
+  it("a thrown blog invalidation failure does not block the write or its returned outcome", async () => {
+    revalidatePublicBlogPaths.mockImplementationOnce(() => {
+      throw new Error("simulated cache invalidation failure");
+    });
+    const db = seedDraftBlogArticle();
+    const result = await applyPublishTransition(db.asPrismaClient(), {
+      articleId: "blog-1",
+      requestId: "req-1",
+      actor: { type: "admin", adminId: "admin-1" },
+    });
+
+    expect(result.outcome).toBe("published");
+    expect(db.articles.get("blog-1")?.status).toBe("published");
   });
 });
 

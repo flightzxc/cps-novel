@@ -60,8 +60,8 @@ describe("P0-S9 end-to-end: content creation → real evaluatePublishGate", () =
     // tests/backend/publish-gate/no-bypass.test.ts, which enforces exactly
     // that), so "draft" is what a real DB row would hold here too.
     const facts: PublishGateFacts = {
-      novel: { status: "draft", locale: novel.locale },
-      article: { status: "draft", title: article.title, slug: article.slug, body: article.body },
+      novel: { status: "draft" },
+      article: { status: "draft", locale: article.locale, title: article.title, slug: article.slug, body: article.body },
       // Nothing downstream of S9 has run yet: S5 (PromoLink claiming) hasn't
       // created a PromoLink, and P2-05 (preview chapter materialization)
       // hasn't materialized any preview chapters. Both are genuinely absent
@@ -85,8 +85,9 @@ describe("P0-S9 end-to-end: content creation → real evaluatePublishGate", () =
     //   territory, untouched by S9).
     // - `promo_link_missing`: no PromoLink exists yet (S5's territory,
     //   untouched by S9 — this service never touches PromoLink at all).
-    // `locale_not_publishable` no longer fires: U6 admitted `en` to
-    // `PUBLISHABLE_LOCALES`.
+    // `locale_not_publishable` no longer fires: the publish gate's locale
+    // check only requires a registered `SITE_LOCALES` member (Owner decision
+    // 2026-09-08, see `evaluator.ts`), and `en` is registered.
     expect(evaluation.reasons).toEqual(["preview_chapter_missing", "promo_link_missing"]);
     expect(evaluation.publishable).toBe(false);
   });
@@ -114,8 +115,8 @@ describe("P0-S9 end-to-end: content creation → real evaluatePublishGate", () =
     // would have flagged it — this is what made the P0 publish gate
     // unclearable before this task.
     const blankBodyFacts: PublishGateFacts = {
-      novel: { status: "draft", locale: "en" },
-      article: { status: "draft", title: article.title, slug: article.slug, body: "" },
+      novel: { status: "draft" },
+      article: { status: "draft", locale: article.locale, title: article.title, slug: article.slug, body: "" },
       promoLink: null,
       preview: { hasPreviewChapter: false, hasPreviewBody: false },
       pageIdentity: { conflicting: false },

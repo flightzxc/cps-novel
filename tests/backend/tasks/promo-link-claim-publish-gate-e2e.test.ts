@@ -35,10 +35,12 @@ const APPLY_ENV: NodeJS.ProcessEnv = {
   PROMO_LINK_CLAIM_ALLOW_WRITE: "true",
 };
 
-// U6 admitted en under D-7. These tests use the explicit locale predicate
-// to isolate promo state transitions from whitelist policy. The evaluator
-// and content-creation suites separately exercise the real whitelist;
-// production publishing must not inject this override.
+// `en` clears the gate's default registered-locale check on its own (Owner
+// decision 2026-09-08 — see `evaluator.ts`), but these tests still inject an
+// explicit locale predicate to isolate promo state transitions from that
+// check entirely. The evaluator and content-creation suites separately
+// exercise the real default; production publishing must not inject this
+// override.
 const GATE_DEPS_SKIP_LAUNCH_WHITELIST = { isPublishableLocale: () => true };
 
 function baseLease(overrides: Partial<{ mode: "dry_run" | "apply" }> = {}) {
@@ -77,8 +79,8 @@ function makePayload() {
  */
 function buildFacts(article: FakeArticle, promoLink: FakePromoLink | null): PublishGateFacts {
   return {
-    novel: { status: "draft", locale: "en" },
-    article: { status: "draft", title: "A Publishable Title", slug: "a-publishable-title", body: "Real chapter body content." },
+    novel: { status: "draft" },
+    article: { status: "draft", locale: "en", title: "A Publishable Title", slug: "a-publishable-title", body: "Real chapter body content." },
     promoLink: promoLink ? { status: promoLink.status, webUrl: promoLink.webUrl, appUrl: promoLink.appUrl } : null,
     preview: { hasPreviewChapter: true, hasPreviewBody: true },
     pageIdentity: { conflicting: false },

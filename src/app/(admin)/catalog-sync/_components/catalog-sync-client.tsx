@@ -12,6 +12,7 @@ import { BatchCreateContentDialog } from "./batch-create-content-dialog";
 import { CreateContentDialog } from "./create-content-dialog";
 import { PromoLinkClaimDialog } from "./promo-link-claim-dialog";
 import type { ClaimChannelAppOption } from "../_lib/read-channel-apps";
+import { skipReasonLabel } from "../_lib/promo-claim-copy";
 import type { SourceItemRow } from "../_lib/read-source-items";
 
 /**
@@ -35,29 +36,44 @@ import type { SourceItemRow } from "../_lib/read-source-items";
  * always enabled once something is selected, and `BatchCreateContentDialog`
  * gates only its own "确认创建" step on `contentPublish`.
  *
- * The selection checkbox column has no "select all" control, deliberately —
- * this screen never offers a filter-driven bulk-select shortcut, mirroring
- * the factory's own "explicit ids only, never a filter descriptor" contract
- * (`createPromoLinkClaimTask`'s doc comment) and CPS's own hard rule
- * ("畅读推广码领取只支持显式勾选剧目，不支持当前筛选全量领取") — RC-4's batch
- * creation reuses this same explicit-selection discipline.
+ * The selection checkbox column has a header "select current page" control
+ * (C-17) that toggles every row in `items` — i.e. the current page — on or
+ * off; it never reaches past the page into a filter-driven bulk-select. That
+ * stays true to the factory's "explicit ids only, never a filter descriptor"
+ * contract (`createPromoLinkClaimTask`'s doc comment) and CPS's own hard rule
+ * ("畅读推广码领取只支持显式勾选剧目，不支持当前筛选全量领取") — both are about
+ * refusing to promote a *filter* into an implicit selection, not about
+ * refusing a header checkbox. CPS's own equivalent screen
+ * (`changdu-sync-panel.tsx:1038-1046`) has exactly this "选择当前页" control
+ * alongside that same hard rule (`changdu-sync-panel.tsx:608-613`), and its
+ * `toggleVisibleRows` (`changdu-sync-panel.tsx:479-488`) likewise selects the
+ * whole visible page regardless of claim eligibility — "只看可领取" there is a
+ * *filter* (`changdu-sync-panel.tsx:858-870`), not a selection limit. Here the
+ * selected set is shared by both the "批量创建内容" and "领取推广链接"
+ * launchers, so selecting past ineligible rows is required for the former to
+ * be usable via the header control; eligibility is still enforced downstream
+ * by `PromoLinkClaimDialog` and the server-side guard.
  */
 export function CatalogSyncClient({
   items,
+  catalogGate,
   contentPublish,
   claimChannelApps,
   promoClaimMaxBatchSize,
   promoClaimGranted,
   promoClaimBlockedReason,
   contentCreationBatchMaxSize,
+  templateOptions = [],
 }: {
   items: readonly SourceItemRow[];
+  catalogGate: { readonly featureEnabled: boolean };
   contentPublish: AdminCapabilityState;
   claimChannelApps: readonly ClaimChannelAppOption[];
   promoClaimMaxBatchSize: number;
   promoClaimGranted: boolean;
   promoClaimBlockedReason: string | null;
   contentCreationBatchMaxSize: number;
+  templateOptions?: readonly { readonly id: string; readonly templateKey: string; readonly locale: string | null; readonly version: number }[];
 }) {
   const [activeItem, setActiveItem] = useState<SourceItemRow | null>(null);
   const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(new Set());
@@ -67,6 +83,8 @@ export function CatalogSyncClient({
   const granted = blockedReason === null;
 
   const selectedItems = items.filter((item) => selectedIds.has(item.id));
+  const allSelected = items.length > 0 && items.every((item) => selectedIds.has(item.id));
+  const someSelected = selectedItems.length > 0 && !allSelected;
 
   function toggleSelected(id: string) {
     setSelectedIds((current) => {
@@ -77,8 +95,35 @@ export function CatalogSyncClient({
     });
   }
 
+  function toggleAllVisible() {
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      const allCurrentlyVisible = items.length > 0 && items.every((item) => next.has(item.id));
+      if (allCurrentlyVisible) {
+        items.forEach((item) => next.delete(item.id));
+      } else {
+        items.forEach((item) => next.add(item.id));
+      }
+      return next;
+    });
+  }
+
   return (
     <div className="space-y-4">
+      <div
+        data-testid="catalog-sync-gate-status"
+        data-state={catalogGate.featureEnabled ? "enabled" : "disabled"}
+        className={`rounded-lg border px-3 py-2 text-sm ${
+          catalogGate.featureEnabled
+            ? "border-green-200 bg-green-50 text-green-800"
+            : "border-red-200 bg-red-50 text-red-800"
+        }`}
+      >
+        {catalogGate.featureEnabled
+          ? "目录同步总闸已启用。"
+          : "FEATURE_NOVEL_CATALOG_SYNC 未启用，后台暂不允许创建目录扫描任务。"}
+      </div>
+
       {blockedReason && (
         <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
           {blockedReason}
@@ -113,12 +158,24 @@ export function CatalogSyncClient({
       <Table>
         <THead>
           <tr>
-            <TH className="w-8" />
+            <TH className="w-8">
+              <input
+                type="checkbox"
+                aria-label="选择当前页"
+                checked={allSelected}
+                ref={(el) => {
+                  if (el) el.indeterminate = someSelected;
+                }}
+                onChange={toggleAllVisible}
+                className="h-4 w-4 rounded border-gray-300"
+              />
+            </TH>
             <TH>来源条目</TH>
             <TH>语种识别</TH>
             <TH>渠道</TH>
             <TH>章节</TH>
             <TH>状态</TH>
+            <TH>领取资格</TH>
             <TH>最近可见</TH>
             <TH>操作</TH>
           </tr>
@@ -154,6 +211,12 @@ export function CatalogSyncClient({
               <TD>
                 <SourceItemStatusBadge status={item.status} />
               </TD>
+              <TD>
+                <ClaimEligibilityBadge
+                  eligible={item.promoClaimEligible}
+                  reason={item.promoClaimIneligibleReason}
+                />
+              </TD>
               <TD className="text-xs text-gray-500">{formatDateTime(item.lastSeenAt)}</TD>
               <TD>
                 <button
@@ -166,7 +229,7 @@ export function CatalogSyncClient({
               </TD>
             </tr>
           ))}
-          {items.length === 0 && <EmptyRow colSpan={8}>没有符合条件的来源条目</EmptyRow>}
+          {items.length === 0 && <EmptyRow colSpan={9}>没有符合条件的来源条目</EmptyRow>}
         </TBody>
       </Table>
 
@@ -176,6 +239,7 @@ export function CatalogSyncClient({
           contentPublishGranted={granted}
           contentPublishBlockedReason={blockedReason}
           onClose={() => setActiveItem(null)}
+          templateOptions={templateOptions}
         />
       )}
 
@@ -199,6 +263,7 @@ export function CatalogSyncClient({
           contentPublishBlockedReason={blockedReason}
           onClose={() => setBatchCreateDialogOpen(false)}
           onSubmitted={() => setSelectedIds(new Set())}
+          templateOptions={templateOptions}
         />
       )}
     </div>
@@ -213,6 +278,46 @@ function SourceItemStatusBadge({ status }: { status: SourceItemRow["status"] }) 
       data-testid={`source-item-status-${status}`}
     >
       {badge.label}
+    </span>
+  );
+}
+
+/**
+ * "领取资格" column (C-8, CPS-parity with `changdu-sync-panel.tsx`'s
+ * `ClaimEligibilityBadge`): driven by `SourceItemRow.promoClaimEligible` /
+ * `promoClaimIneligibleReason`, which `readSourceItemsPage` computes from
+ * the SAME guard `createPromoLinkClaimTask` runs at claim time -- never a
+ * separate judgment, so this badge cannot promise "可领取" for a row the
+ * factory would actually skip. `reason` labels reuse 海阅's own existing
+ * `skipReasonLabel` map (`../_lib/promo-claim-copy.ts`) rather than CPS's
+ * domain-specific reason vocabulary (drama binding, changdu channel type,
+ * etc.) -- 海阅 doesn't have those concepts, only the three skip reasons
+ * `createPromoLinkClaimTask` already names.
+ */
+function ClaimEligibilityBadge({
+  eligible,
+  reason,
+}: {
+  eligible: SourceItemRow["promoClaimEligible"];
+  reason: SourceItemRow["promoClaimIneligibleReason"];
+}) {
+  if (eligible) {
+    return (
+      <span
+        className="inline-flex rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700"
+        data-testid="promo-claim-eligibility-eligible"
+      >
+        可领取
+      </span>
+    );
+  }
+  return (
+    <span
+      className="inline-flex rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700"
+      data-testid="promo-claim-eligibility-ineligible"
+      title={reason ?? undefined}
+    >
+      不可领取{reason ? ` · ${skipReasonLabel(reason)}` : ""}
     </span>
   );
 }

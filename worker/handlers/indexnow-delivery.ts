@@ -39,7 +39,9 @@ import { isIndexNowDeliveryEnabled, isIndexNowDeliveryWriteAllowed } from "../..
 import { getIndexNowDeliveryConfig, isIndexNowConfigured } from "../../src/server/site-settings/service";
 
 import {
+  buildBlogIndexNowCanonicalUrl,
   buildIndexNowCanonicalUrl,
+  isBlogIndexNowEligible,
   isNovelIndexNowEligible,
   loadIndexNowCandidateArticle,
   type IndexNowEligibilityOptions,
@@ -106,11 +108,28 @@ export function createIndexNowDeliveryHandler(
     // have been due for a while — reverify the Article is still eligible and
     // its canonical URL has not changed (e.g. a slug edit) before spending a
     // submission on it.
+    //
+    // C-29b 🟠 fix: this used to null-check `article` but not `article.novel`
+    // before calling `isNovelIndexNowEligible` — the first blog outbox row
+    // to reach this recheck would have thrown (`isPubliclyAccessible` reads
+    // `novel.status` unconditionally), since a blog Article has no Novel at
+    // all (C-27). Branch by article family instead, same split
+    // `outbox.ts`'s `enqueueIndexNowFirstPublish` uses: `novel_article`
+    // keeps the exact pre-C-29b `isNovelIndexNowEligible`/
+    // `buildIndexNowCanonicalUrl` calls; the blog family uses
+    // `isBlogIndexNowEligible`/`buildBlogIndexNowCanonicalUrl` instead.
     const article = row.articleId ? await loadIndexNowCandidateArticle(db, row.articleId) : null;
-    const stillEligible = article
-      ? isNovelIndexNowEligible(article, article.novel, article.promoLink, eligibilityOptions)
-      : false;
-    const currentCanonical = stillEligible && article ? buildIndexNowCanonicalUrl(article) : null;
+    let stillEligible = false;
+    let currentCanonical: string | null = null;
+    if (article) {
+      if (article.articleType === "novel_article") {
+        stillEligible = isNovelIndexNowEligible(article, article.novel, article.promoLink, eligibilityOptions);
+        currentCanonical = stillEligible ? buildIndexNowCanonicalUrl(article) : null;
+      } else {
+        stillEligible = isBlogIndexNowEligible(article, eligibilityOptions);
+        currentCanonical = stillEligible ? buildBlogIndexNowCanonicalUrl(article) : null;
+      }
+    }
     if (!stillEligible || currentCanonical !== row.url) {
       await db.indexNowOutbox.update({
         where: { id: row.id },

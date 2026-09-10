@@ -191,23 +191,44 @@ export function PromoLinkClaimDialog({
   const overLimit = selectedItems.length > maxBatchSize;
   const applyBlocked = mode === "apply" && !promoClaimGranted;
   const capabilityDisabled = singleChannelApp !== null && !singleChannelApp.claimCapabilityEnabled;
-  const canSubmit =
+  // Shared by both buttons -- dry_run never needs `promo:claim`, so the
+  // preview button below is never gated on `applyBlocked`.
+  const baseSubmittable =
     isFormStage
     && !crossChannelApp
     && singleChannelApp !== null
     && !capabilityDisabled
     && !overLimit
-    && channelAccountId !== ""
-    && !applyBlocked;
+    && channelAccountId !== "";
+  const canPreview = baseSubmittable;
+  const canSubmit = baseSubmittable && !applyBlocked;
 
-  async function onSubmit() {
+  /**
+   * C-8 (`施工工单_PhaseC_任务模型迁移与ImportProgress_2026-09-06.md` §五):
+   * CPS parity for `submitPromoClaim` in `changdu-sync-panel.tsx` — the one
+   * dry-run/typed-confirmation shape CPS gives operators anywhere in its
+   * admin. `claimMode` is always explicit here (never read off the `mode`
+   * dropdown state) so the "预演" button below is a one-click dry_run
+   * regardless of whatever the dropdown currently shows.
+   */
+  async function submitClaim(claimMode: "dry_run" | "apply") {
     if (!singleChannelApp) return;
+    if (claimMode === "apply") {
+      const account = singleChannelApp.channelAccounts.find((row) => row.id === channelAccountId);
+      const accountLabel = account ? `${account.accountName}（${account.businessId}）` : channelAccountId;
+      const confirmed = window.prompt(
+        `如果所选来源条目在上游还没有可复用的推广码，本次会发起一次 claimPromo 领取——这是不可逆操作。\n` +
+          `渠道账户：${accountLabel}\n` +
+          `请输入“确认领取”继续。`,
+      );
+      if (confirmed !== "确认领取") return;
+    }
     setStage({ kind: "submitting" });
     const result = await enqueuePromoLinkClaimAction({
       channelAccountId,
       channelAppId: singleChannelApp.id,
       novelSourceItemIds: selectedItems.map((item) => item.id),
-      mode,
+      mode: claimMode,
       requestId: crypto.randomUUID(),
     });
     if (!result.ok) {
@@ -220,6 +241,14 @@ export function PromoLinkClaimDialog({
     }
     setStage({ kind: "result", result: result.data });
     onSubmitted();
+  }
+
+  function onPreview() {
+    void submitClaim("dry_run");
+  }
+
+  function onSubmit() {
+    void submitClaim(mode);
   }
 
   const showForm = isFormStage || isSubmitting || stage.kind === "invalid_input" || stage.kind === "access_denied";
@@ -347,6 +376,18 @@ export function PromoLinkClaimDialog({
           >
             {stage.kind === "result" ? "关闭" : "取消"}
           </button>
+          {showForm && (
+            <button
+              type="button"
+              disabled={!canPreview || isSubmitting}
+              onClick={onPreview}
+              data-testid="promo-claim-dry-run-preview"
+              className={buttonClassName("secondary")}
+              title="一键 dry_run 预演，不受下方「模式」选择影响，也不会调用 claimPromo"
+            >
+              推广码领取 dry-run
+            </button>
+          )}
           {showForm && (
             <button
               type="button"

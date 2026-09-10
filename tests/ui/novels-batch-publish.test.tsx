@@ -55,6 +55,46 @@ describe("选择 · NovelsTable 的既有 0-input 断言不受影响", () => {
     fireEvent.click(screen.getByTestId("batch-publish-clear-selection"));
     expect(screen.getByText("已选择 0 部")).toBeTruthy();
   });
+
+  it("点表头「选择当前页」→ 计数变为本页行数；再点一次 → 归零（C-17）", () => {
+    render(<NovelsBatchPublish novels={NOVELS} canPublish="granted" />);
+    const header = screen.getByLabelText("选择当前页");
+    fireEvent.click(header);
+    expect(screen.getByText("已选择 2 部")).toBeTruthy();
+    fireEvent.click(header);
+    expect(screen.getByText("已选择 0 部")).toBeTruthy();
+  });
+
+  it("只勾一行时表头呈半选态；勾满后为满选态（C-17）", () => {
+    render(<NovelsBatchPublish novels={NOVELS} canPublish="granted" />);
+    const header = screen.getByLabelText("选择当前页") as HTMLInputElement;
+    fireEvent.click(screen.getByTestId(`novel-select-${NOVEL_ID}`));
+    expect(header.checked).toBe(false);
+    expect(header.indeterminate).toBe(true);
+    fireEvent.click(screen.getByTestId(`novel-select-${NOVEL_ID_B}`));
+    expect(header.checked).toBe(true);
+    expect(header.indeterminate).toBe(false);
+  });
+
+  it("提交中（busy）时表头 checkbox 被禁用（C-17）", async () => {
+    let resolveAction!: (value: unknown) => void;
+    actions.publishNovelsBatchAction.mockImplementation(
+      () => new Promise((resolve) => { resolveAction = resolve; }),
+    );
+    render(<NovelsBatchPublish novels={NOVELS} canPublish="granted" />);
+    fireEvent.click(screen.getByTestId(`novel-select-${NOVEL_ID}`));
+    fireEvent.click(screen.getByTestId("batch-publish-submit"));
+
+    const header = screen.getByLabelText("选择当前页") as HTMLInputElement;
+    expect(header.disabled).toBe(true);
+
+    await act(async () => {
+      resolveAction({
+        ok: true,
+        data: { items: [], summary: { published: 0, rejected: 0, conflict: 0, notFound: 0, noArticle: 0 } },
+      });
+    });
+  });
 });
 
 describe("能力位闸门", () => {

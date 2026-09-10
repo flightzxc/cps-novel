@@ -82,9 +82,9 @@ const frozenChecks: Record<string, readonly string[]> = {
   source_label_label_kind_check: ["series_type", "recommend", "language", "agency"],
   promo_link_status_check: ["pending", "fetched", "failed", "registered_disabled"],
   promo_link_origin_check: ["upstream_existing", "claimed"],
-  catalog_scan_task_status_check: ["pending", "processing", "completed", "completed_with_errors", "failed", "disabled"],
-  catalog_scan_task_mode_check: ["dry_run", "apply"],
-  catalog_scan_task_item_status_check: ["pending", "processing", "success", "failed"],
+  // Phase C: catalog_scan_task(_item) dropped -- CatalogScan is now
+  // GenericTask(taskType='catalog_scan'), covered by the generic_task_*
+  // entries below.
   channel_sync_task_status_check: ["pending", "processing", "completed", "completed_with_errors", "failed", "disabled"],
   channel_sync_task_mode_check: ["dry_run", "apply"],
   channel_sync_task_item_status_check: ["pending", "processing", "success", "skipped", "failed"],
@@ -99,7 +99,8 @@ const frozenChecks: Record<string, readonly string[]> = {
   schedule_run_trigger_kind_check: ["scheduled", "manual"],
   schedule_run_misfire_policy_check: ["bounded_catch_up", "skip", "mark_failed"],
   cron_run_status_check: ["created", "task_created", "failed"],
-  article_template_status_check: ["draft", "active", "retired"],
+  article_template_status_check: ["draft", "active", "inactive"],
+  article_template_applicable_article_type_check: ["novel_article", "blog_article", "listicle", "guide", "any"],
   article_status_check: ["draft", "published", "unpublished", "takedown"],
   home_carousel_auto_batch_status_check: ["pending", "processing", "completed", "failed"],
   home_carousel_serving_source_check: ["manual", "automatic"],
@@ -157,21 +158,31 @@ describe.skipIf(!enabled).sequential("P1-13 PostgreSQL acceptance gaps", () => {
   });
 
   it("allows exactly one concurrent active CatalogScan for account × app × projectType", async () => {
+    // Phase C: CatalogScanTask folded into GenericTask (taskType =
+    // "catalog_scan"). project_type is not a physical GenericTask column
+    // (it lives in params JSON), so the exclusivity this test checks is now
+    // provided by generic_task_active_scope_uidx UNIQUE(task_type,
+    // channel_account_id, channel_app_id, operation_scope_hash) WHERE
+    // status IN ('pending','processing') -- the same mechanism every other
+    // GenericTask taskType already relies on -- with both contenders using
+    // an identical operationScopeHash standing in for "same projectType".
     const contenders = [client(), client()];
-    const settled = await Promise.allSettled(contenders.map((db, index) => db.catalogScanTask.create({
+    const operationScopeHash = "2".repeat(64);
+    const settled = await Promise.allSettled(contenders.map((db, index) => db.genericTask.create({
       data: {
+        taskType: "catalog_scan",
         channelAccountId: ids.account,
         channelAppId: ids.channelApp,
-        projectType: 2,
+        operationScopeHash,
         requestToken: `p1-13-catalog-${index}`,
-        pageStart: 1,
-        pageEnd: 1,
-        pageSize: 20,
+        params: { projectType: 2, pageStart: 1, pageEnd: 1, pageSize: 20 },
       },
     })));
     expect(settled.filter(({ status }) => status === "fulfilled")).toHaveLength(1);
     expect(settled.filter(({ status }) => status === "rejected")).toHaveLength(1);
-    expect(await prisma.catalogScanTask.count({ where: { status: { in: ["pending", "processing"] } } })).toBe(1);
+    expect(await prisma.genericTask.count({
+      where: { taskType: "catalog_scan", status: { in: ["pending", "processing"] } },
+    })).toBe(1);
   });
 
   it("rejects a stale execution_token and a stale lease_epoch independently", async () => {

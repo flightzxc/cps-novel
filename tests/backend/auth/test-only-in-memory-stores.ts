@@ -11,6 +11,7 @@ import type {
   ConfirmTwoFactorSetupTransactionResult,
   LoginAttemptStore,
   RecoveryCodeStore,
+  RegenerateRecoveryCodesTransactionResult,
   SessionStore,
   TwoFactorStore,
 } from "@/lib/auth/ports";
@@ -243,6 +244,33 @@ export class TestOnlyInMemoryAuthStores
     this.recovery.clear();
     for (const [id, record] of nextRecovery) this.recovery.set(id, record);
     return { status: "committed", nextSessionVersion: nextVersion };
+  }
+
+  async regenerateRecoveryCodes(input: {
+    identityId: string;
+    expectedSessionVersion: number;
+    expectedEncryptedSecret: string;
+    rotatedAt: Date;
+    recoveryCodes: ReadonlyArray<{ id: string; codeHash: string }>;
+  }): Promise<RegenerateRecoveryCodesTransactionResult> {
+    const identity = this.identities.get(input.identityId);
+    const state = this.twoFactorStates.get(input.identityId);
+    if (
+      !identity
+      || identity.sessionVersion !== input.expectedSessionVersion
+      || !state?.enabled
+      || state.encryptedSecret !== input.expectedEncryptedSecret
+    ) return { status: "conflict" };
+    for (const [id, record] of this.recovery) {
+      if (record.identityId === input.identityId) this.recovery.delete(id);
+    }
+    for (const code of input.recoveryCodes) {
+      this.recovery.set(code.id, { ...code, identityId: input.identityId, usedAt: null });
+    }
+    state.recoveryCodesRotatedAt = new Date(input.rotatedAt);
+    const nextSessionVersion = identity.sessionVersion + 1;
+    this.identities.set(identity.id, { ...identity, sessionVersion: nextSessionVersion });
+    return { status: "committed", nextSessionVersion };
   }
 
   async completeTwoFactorChallenge(input: {

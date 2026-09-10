@@ -173,6 +173,42 @@ function dependencies(db: FakeSiteSettingDb, stores: TestOnlyInMemoryAuthStores)
 beforeEach(() => invalidateSiteSettingCache());
 
 describe("updateAdminSiteSetting", () => {
+  it("writes all 13 fields, validates friend links, and normalizes GA4", async () => {
+    const db = new FakeSiteSettingDb();
+    const { stores } = authFixture();
+    const guarded = await authorization(stores);
+    const result = await updateAdminSiteSetting({
+      ...guarded,
+      expectedUpdatedAt: BEFORE.toISOString(),
+      reason: "complete CPS settings parity",
+      siteName: "Haiyue",
+      siteDescription: "Novels",
+      homeMetaTitle: "Haiyue novels",
+      homeMetaDescription: "Read novels",
+      defaultOgImage: "https://novel.example.com/og.jpg",
+      googleSearchConsoleVerification: "google-code",
+      footerCopyrightText: "© Haiyue",
+      footerDisclaimerText: "Disclaimer",
+      friendLinks: [{ name: "Partner", url: "https://partner.example", nofollow: true }],
+      indexNowHost: "",
+      indexNowKey: "",
+      indexNowKeyLocation: "",
+      ga4MeasurementId: " G-ABC123 ",
+    }, dependencies(db, stores));
+    expect(result.setting).toMatchObject({
+      siteName: "Haiyue", googleSearchConsoleVerification: "google-code", ga4MeasurementId: "G-ABC123",
+      friendLinks: [{ name: "Partner", url: "https://partner.example/", nofollow: true }],
+    });
+  });
+
+  it("rejects a non-empty invalid GA4 id instead of silently clearing it", async () => {
+    const db = new FakeSiteSettingDb();
+    const { stores } = authFixture();
+    const guarded = await authorization(stores);
+    await expect(updateAdminSiteSetting({ ...guarded, expectedUpdatedAt: BEFORE.toISOString(), reason: "r", ga4MeasurementId: "UA-123" }, dependencies(db, stores))).rejects.toBeInstanceOf(SiteSettingValidationError);
+    expect(db.updateCalls).toBe(0);
+  });
+
   it("trims, conditionally updates, audits without the raw key, then invalidates the read cache", async () => {
     const db = new FakeSiteSettingDb();
     const { stores } = authFixture();

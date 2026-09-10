@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { taskStatusLabel } from "@/features/admin-ui/content-view";
+import type { CatalogBookCountsDto } from "@/server/task-admin";
 
 import { taskFamilyLabel } from "../_lib/task-copy";
 
@@ -14,6 +15,23 @@ export type TaskSummaryRow = {
   readonly failedCount: number;
   readonly skippedCount: number;
   readonly errorSummary: "redacted" | null;
+  /**
+   * C-10 (Phase E rework, 2026-09-07): a stable, allowlisted stop-reason
+   * code (e.g. `"upstream_error"`), never free text — see
+   * `TaskSummaryDto.stopReason`'s doc comment in
+   * `src/server/task-admin/service.ts`. Absent whenever the task has none,
+   * not just on success: the "X9 read DTO allowlists" contract test
+   * requires the field to be omitted entirely rather than `null` so every
+   * pre-existing fixture there keeps matching unmodified.
+   */
+  readonly stopReason?: string;
+  /**
+   * C-12 (`施工工单_C12_目录任务计量口径改为本_2026-09-07.md`): present only
+   * for a `catalog_scan` row once its book counts are derivable
+   * (`TaskSummaryDto.bookCounts`) — see `countCell` below for how it
+   * switches the 总数/成功/失败 columns to "本" units.
+   */
+  readonly bookCounts?: CatalogBookCountsDto;
 };
 
 /**
@@ -24,8 +42,20 @@ export type TaskSummaryRow = {
  * read-side kept the payload out of the browser entirely). The column says so
  * in the operator's own words instead of leaving `"redacted"` to read like a
  * broken string.
+ *
+ * C-10: when the service *did* manage to derive a stable stop-reason code
+ * for this task (`stopReason`, an allowlisted enum value — never free
+ * text), show that instead of the generic "已脱敏" line — it is strictly
+ * more useful and still not raw error content.
  */
-function errorSummaryCell(value: "redacted" | null) {
+function errorSummaryCell(value: "redacted" | null, stopReason: string | undefined) {
+  if (stopReason !== undefined) {
+    return (
+      <span className="font-mono text-amber-700" title="从任务的停止原因派生，稳定枚举码，非原始错误文本">
+        {stopReason}
+      </span>
+    );
+  }
   if (value === null) {
     return <span className="text-gray-400">—</span>;
   }
@@ -36,26 +66,42 @@ function errorSummaryCell(value: "redacted" | null) {
   );
 }
 
-/** Builds `/tasks?<preserved list filters>&taskId=…&taskFamily=…`, dropping any stale detail params first. */
-function detailHref(baseSearch: URLSearchParams, family: string, taskId: string): string {
-  const params = new URLSearchParams(baseSearch);
-  params.delete("taskId");
-  params.delete("taskFamily");
-  params.delete("itemStatus");
-  params.delete("itemLimit");
-  params.set("taskId", taskId);
-  params.set("taskFamily", family);
-  return `/tasks?${params.toString()}`;
+/**
+ * C-9 (`施工工单_C9_任务详情独立路由对齐CPS_2026-09-07.md`): `/tasks/<taskId>` —
+ * a CPS-parity independent detail route, replacing the old same-page panel
+ * this table used to link to via `/tasks?taskId=…&taskFamily=…` on this same
+ * list URL. `?family=` is only a resolution hint the detail route's server
+ * component uses to skip its first probe query (`generic` vs `channel_sync`)
+ * — never required, a bare `/tasks/<taskId>` still resolves.
+ */
+function detailHref(family: string, taskId: string): string {
+  return `/tasks/${taskId}?family=${encodeURIComponent(family)}`;
+}
+
+/** C-9: a `catalog_scan` task's item is a page, not a novel — its list-row counts need the same「页」unit the detail route's summary cards use (§一 of the work order). */
+function countSuffix(taskType: string, count: number): string {
+  return taskType === "catalog_scan" ? `${count} 页` : String(count);
+}
+
+/**
+ * C-12 (`施工工单_C12_目录任务计量口径改为本_2026-09-07.md`): once a
+ * catalog_scan row's book counts are derivable, its 总数/成功/失败 columns
+ * switch to "本" (book) units instead of the page-based `countSuffix`
+ * above — an operator reading this list wants "how many books", not "how
+ * many pages". Falls back to `countSuffix` (unchanged「页」display) when
+ * `bookCounts` is undefined (no page has completed yet) or for any other
+ * taskType.
+ */
+function countCell(task: TaskSummaryRow, pageValue: number, bookValue: number): string {
+  if (task.taskType !== "catalog_scan") return String(pageValue);
+  if (task.bookCounts) return `${bookValue} 本`;
+  return `${pageValue} 页`;
 }
 
 export function TasksTable({
   tasks,
-  baseSearch,
-  selectedTaskId,
 }: {
   tasks: readonly TaskSummaryRow[];
-  baseSearch: URLSearchParams;
-  selectedTaskId?: string;
 }) {
   if (tasks.length === 0) {
     return (
@@ -88,10 +134,7 @@ export function TasksTable({
         </thead>
         <tbody className="divide-y divide-gray-100">
           {tasks.map((task) => (
-            <tr
-              key={`${task.family}:${task.taskId}`}
-              className={`hover:bg-gray-50 ${task.taskId === selectedTaskId ? "bg-blue-50/60" : ""}`}
-            >
+            <tr key={`${task.family}:${task.taskId}`} className="hover:bg-gray-50">
               <td className="px-4 py-3 text-gray-700">{taskFamilyLabel(task.family)}</td>
               <td className="px-4 py-3">
                 <span className="font-mono text-xs text-gray-600">{task.taskType}</span>
@@ -100,14 +143,22 @@ export function TasksTable({
               <td className="px-4 py-3" data-testid={`task-status-${task.taskId}`}>
                 {taskStatusLabel(task.status)}
               </td>
-              <td className="px-4 py-3 text-right text-gray-600">{task.totalCount}</td>
-              <td className="px-4 py-3 text-right text-emerald-700">{task.successCount}</td>
-              <td className="px-4 py-3 text-right text-red-700">{task.failedCount}</td>
-              <td className="px-4 py-3 text-right text-gray-500">{task.skippedCount}</td>
-              <td className="px-4 py-3">{errorSummaryCell(task.errorSummary)}</td>
+              <td className="px-4 py-3 text-right text-gray-600">
+                {countCell(task, task.totalCount, task.bookCounts?.upstreamTotal ?? 0)}
+              </td>
+              <td className="px-4 py-3 text-right text-emerald-700">
+                {countCell(task, task.successCount, task.bookCounts?.fetched ?? 0)}
+              </td>
+              <td className="px-4 py-3 text-right text-red-700">
+                {countCell(task, task.failedCount, task.bookCounts?.failedBooks ?? 0)}
+              </td>
+              <td className="px-4 py-3 text-right text-gray-500">
+                {countSuffix(task.taskType, task.skippedCount)}
+              </td>
+              <td className="px-4 py-3">{errorSummaryCell(task.errorSummary, task.stopReason)}</td>
               <td className="px-4 py-3 text-right">
                 <Link
-                  href={detailHref(baseSearch, task.family, task.taskId)}
+                  href={detailHref(task.family, task.taskId)}
                   className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
                   data-testid={`view-task-detail-${task.taskId}`}
                 >

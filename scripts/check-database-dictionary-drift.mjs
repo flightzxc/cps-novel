@@ -119,8 +119,12 @@ function assertStaticConsistency(schemaTables, records) {
     }
   }
 
-  if (schemaTables.size !== 44) {
-    problems.push(`expected 44 Prisma models, found ${schemaTables.size}`);
+  // C-30A (施工工单_C30_换小说_移植CPS换租客_2026-09-08.md §4A.1): three new
+  // models (ArticleNovelRebindPreview/Batch/BatchItem) push the count from
+  // 49 to 52 -- updated alongside the migration that adds them, same as the
+  // 51->49 update Phase C's C-4 DROP made when it removed two models.
+  if (schemaTables.size !== 52) {
+    problems.push(`expected 52 Prisma models, found ${schemaTables.size}`);
   }
   if (problems.length) fail(problems);
   return { recordCount: records.length, activeCount: active.length };
@@ -198,7 +202,7 @@ async function assertCatalogConsistency(records) {
     for (const name of [...actualConstraints, ...actualIndexes, ...actualTriggers]) {
       if (!expectedPhysical.has(name)) problems.push(`database object missing from dictionary ${name}`);
     }
-    if (actualTables.size !== 44) problems.push(`expected 44 database tables, found ${actualTables.size}`);
+    if (actualTables.size !== 49) problems.push(`expected 49 database tables, found ${actualTables.size}`);
     if (problems.length) fail(problems);
     return {
       tableCount: actualTables.size,

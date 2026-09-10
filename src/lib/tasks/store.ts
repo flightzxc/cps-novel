@@ -60,7 +60,6 @@ async function selectPending(
   taskTypes: string[],
   target?: TaskClaimTarget,
 ): Promise<CandidateRow | null> {
-  if (family === "catalog_scan" && !taskTypes.includes("catalog_scan")) return null;
   const targetClause = target
     ? Prisma.sql`AND i.task_id = ${target.taskId}::uuid AND i.id = ${target.itemId}::uuid`
     : Prisma.empty;
@@ -70,28 +69,7 @@ async function selectPending(
       ? Prisma.sql`AND (i.created_at, i.id) > (${cursor.at}, ${cursor.id}::uuid)`
       : Prisma.empty;
     let rows: CandidateRow[];
-    if (family === "catalog_scan") {
-      rows = await tx.$queryRaw<CandidateRow[]>(Prisma.sql`
-        WITH candidates AS MATERIALIZED (
-          SELECT i.id, i.task_id, i.payload, i.attempt_count, i.lease_epoch,
-                 i.created_at AS cursor_at
-          FROM catalog_scan_task_item i
-          WHERE i.status = 'pending' ${cursorClause} ${targetClause}
-            AND NOT EXISTS (
-              SELECT 1 FROM catalog_scan_task_item earlier
-              WHERE earlier.task_id = i.task_id AND earlier.page_index < i.page_index
-                AND earlier.status IN ('pending', 'processing')
-            )
-          ORDER BY i.created_at, i.id
-          LIMIT 128
-          FOR UPDATE OF i SKIP LOCKED
-        )
-        SELECT c.*, 'catalog_scan'::text AS task_type,
-               (t.status IN ('pending', 'processing')) AS eligible
-        FROM candidates c JOIN catalog_scan_task t ON t.id = c.task_id
-        ORDER BY c.cursor_at, c.id
-      `);
-    } else if (family === "channel_sync") {
+    if (family === "channel_sync") {
       rows = await tx.$queryRaw<CandidateRow[]>(Prisma.sql`
         WITH candidates AS MATERIALIZED (
           SELECT i.id, i.task_id, i.payload, i.attempt_count, i.lease_epoch,
@@ -114,6 +92,21 @@ async function selectPending(
                  i.created_at AS cursor_at
           FROM generic_task_item i
           WHERE i.status = 'pending' ${cursorClause} ${targetClause}
+            AND (
+              -- Phase C: catalog-scan pages must still be claimed strictly in
+              -- order (the CatalogScan family used to enforce this itself);
+              -- a page is only claimable once every earlier page of the same
+              -- task has left the pending/processing state. Every other
+              -- GenericTask targetType is unaffected -- this clause is a
+              -- no-op for anything that is not target_type = 'catalog_page'.
+              i.target_type <> 'catalog_page'
+              OR NOT EXISTS (
+                SELECT 1 FROM generic_task_item earlier
+                WHERE earlier.task_id = i.task_id AND earlier.target_type = 'catalog_page'
+                  AND (earlier.target_id)::int < (i.target_id)::int
+                  AND earlier.status IN ('pending', 'processing')
+              )
+            )
           ORDER BY i.created_at, i.id
           LIMIT 128
           FOR UPDATE OF i SKIP LOCKED
@@ -141,22 +134,7 @@ async function assignLease(
   leaseMs: number,
 ): Promise<LeaseRow> {
   let rows: LeaseRow[];
-  if (family === "catalog_scan") {
-    rows = await tx.$queryRaw<LeaseRow[]>(Prisma.sql`
-      UPDATE catalog_scan_task_item i
-      SET status = 'processing', attempt_count = i.attempt_count + 1,
-          execution_token = ${executionToken}::uuid, lease_epoch = lease_epoch + 1,
-          locked_by = ${workerId},
-          locked_until = transaction_timestamp() + (${leaseMs} * interval '1 millisecond'),
-          heartbeat_at = transaction_timestamp(),
-          started_at = COALESCE(i.started_at, transaction_timestamp()),
-          finished_at = NULL, updated_at = transaction_timestamp()
-      FROM catalog_scan_task t
-      WHERE i.id = ${itemId}::uuid AND i.status = 'pending' AND t.id = i.task_id
-      RETURNING i.id, i.task_id, 'catalog_scan'::text AS task_type, t.mode, i.payload,
-                i.attempt_count, i.lease_epoch, i.execution_token, i.locked_until
-    `);
-  } else if (family === "channel_sync") {
+  if (family === "channel_sync") {
     rows = await tx.$queryRaw<LeaseRow[]>(Prisma.sql`
       UPDATE channel_sync_task_item i
       SET status = 'processing', attempt_count = i.attempt_count + 1,
@@ -196,38 +174,7 @@ export async function recomputeParentTask(
   family: TaskFamily,
   taskId: string,
 ): Promise<void> {
-  if (family === "catalog_scan") {
-    await tx.$queryRaw(Prisma.sql`
-      SELECT id FROM catalog_scan_task WHERE id = ${taskId}::uuid FOR UPDATE
-    `);
-    await tx.$executeRaw(Prisma.sql`
-      WITH counts AS (
-        SELECT COUNT(*)::int AS total,
-          COUNT(*) FILTER (WHERE status = 'pending')::int AS pending,
-          COUNT(*) FILTER (WHERE status = 'processing')::int AS processing,
-          COUNT(*) FILTER (WHERE status = 'success')::int AS success,
-          COUNT(*) FILTER (WHERE status = 'failed')::int AS failed
-        FROM catalog_scan_task_item WHERE task_id = ${taskId}::uuid
-      )
-      UPDATE catalog_scan_task t SET
-        total_count = c.total, success_count = c.success, failed_count = c.failed,
-        status = CASE
-          WHEN c.pending + c.processing > 0 THEN 'processing'
-          WHEN t.result->>'terminalState' = 'partial_failed'
-            OR EXISTS (
-              SELECT 1 FROM catalog_scan_task_item terminal_item
-              WHERE terminal_item.task_id = t.id
-                AND terminal_item.result->>'terminalState' = 'partial_failed'
-            ) THEN 'completed_with_errors'
-          WHEN c.failed > 0 AND c.success = 0 THEN 'failed'
-          WHEN c.failed > 0 THEN 'completed_with_errors'
-          ELSE 'completed' END,
-        started_at = COALESCE(t.started_at, transaction_timestamp()),
-        completed_at = CASE WHEN c.pending + c.processing = 0 THEN transaction_timestamp() ELSE NULL END,
-        updated_at = transaction_timestamp()
-      FROM counts c WHERE t.id = ${taskId}::uuid
-    `);
-  } else if (family === "channel_sync") {
+  if (family === "channel_sync") {
     await tx.$queryRaw(Prisma.sql`
       SELECT id FROM channel_sync_task WHERE id = ${taskId}::uuid FOR UPDATE
     `);
@@ -273,6 +220,19 @@ export async function recomputeParentTask(
         failed_count = c.failed, skipped_count = c.skipped,
         status = CASE
           WHEN c.pending + c.processing > 0 THEN 'processing'
+          -- Phase C: CatalogScan's own former recomputeParentTask branch
+          -- treated an early, non-error stop (e.g. safety_limit) as
+          -- 'completed_with_errors' even when zero items are literally
+          -- 'failed' -- the handler records that via result.terminalState
+          -- on the task and/or a terminal item. Folded in here as a plain
+          -- additive clause: every other GenericTask taskType never sets
+          -- terminalState, so this is a no-op for them.
+          WHEN t.result->>'terminalState' = 'partial_failed'
+            OR EXISTS (
+              SELECT 1 FROM generic_task_item terminal_item
+              WHERE terminal_item.task_id = t.id
+                AND terminal_item.result->>'terminalState' = 'partial_failed'
+            ) THEN 'completed_with_errors'
           WHEN c.failed > 0 AND c.success = 0 AND c.skipped = 0 THEN 'failed'
           WHEN c.failed > 0 THEN 'completed_with_errors'
           ELSE 'completed' END,
@@ -354,29 +314,13 @@ async function selectExpired(
   family: TaskFamily,
   taskTypes: string[],
 ): Promise<CandidateRow | null> {
-  if (family === "catalog_scan" && !taskTypes.includes("catalog_scan")) return null;
   let cursor: { at: Date; id: string } | null = null;
   while (true) {
     const cursorClause = cursor
       ? Prisma.sql`AND (i.locked_until, i.id) > (${cursor.at}, ${cursor.id}::uuid)`
       : Prisma.empty;
     let rows: CandidateRow[];
-    if (family === "catalog_scan") {
-      rows = await tx.$queryRaw<CandidateRow[]>(Prisma.sql`
-        WITH candidates AS MATERIALIZED (
-          SELECT i.id, i.task_id, i.payload, i.attempt_count, i.lease_epoch,
-                 i.locked_until AS cursor_at
-          FROM catalog_scan_task_item i
-          WHERE i.status = 'processing'
-            AND i.locked_until < transaction_timestamp() ${cursorClause}
-          ORDER BY i.locked_until, i.id
-          LIMIT 128
-          FOR UPDATE OF i SKIP LOCKED
-        )
-        SELECT c.*, 'catalog_scan'::text AS task_type, true AS eligible
-        FROM candidates c ORDER BY c.cursor_at, c.id
-      `);
-    } else if (family === "channel_sync") {
+    if (family === "channel_sync") {
       rows = await tx.$queryRaw<CandidateRow[]>(Prisma.sql`
         WITH candidates AS MATERIALIZED (
           SELECT i.id, i.task_id, i.payload, i.attempt_count, i.lease_epoch,
@@ -444,17 +388,7 @@ export async function recoverExpiredItem(
       code: "stale_processing",
       message: `Processing lease expired at attempt ${row.attempt_count} of ${maxAttempts}`,
     }));
-    if (input.family === "catalog_scan") {
-      await tx.$executeRaw(Prisma.sql`
-        UPDATE catalog_scan_task_item SET
-          status = ${terminal ? "failed" : "pending"}, execution_token = NULL,
-          locked_by = NULL, locked_until = NULL, heartbeat_at = NULL,
-          error = ${terminal ? error : null}::jsonb,
-          finished_at = ${terminal ? Prisma.sql`transaction_timestamp()` : Prisma.sql`NULL`},
-          updated_at = transaction_timestamp()
-        WHERE id = ${row.id}::uuid AND status = 'processing'
-      `);
-    } else if (input.family === "channel_sync") {
+    if (input.family === "channel_sync") {
       await tx.$executeRaw(Prisma.sql`
         UPDATE channel_sync_task_item SET
           status = ${terminal ? "failed" : "pending"}, execution_token = NULL,
@@ -516,29 +450,19 @@ export async function heartbeatTaskItem(
     AND lease_epoch = ${lease.leaseEpoch}
     AND locked_until > transaction_timestamp()
   `;
-  let statement: Prisma.Sql;
-  if (lease.family === "catalog_scan") {
-    statement = Prisma.sql`
-      UPDATE catalog_scan_task_item SET
-        locked_until = transaction_timestamp() + (${leaseMs} * interval '1 millisecond'),
-        heartbeat_at = transaction_timestamp(), updated_at = transaction_timestamp()
-      WHERE ${predicate}
-    `;
-  } else if (lease.family === "channel_sync") {
-    statement = Prisma.sql`
+  const statement = lease.family === "channel_sync"
+    ? Prisma.sql`
       UPDATE channel_sync_task_item SET
         locked_until = transaction_timestamp() + (${leaseMs} * interval '1 millisecond'),
         heartbeat_at = transaction_timestamp(), updated_at = transaction_timestamp()
       WHERE ${predicate}
-    `;
-  } else {
-    statement = Prisma.sql`
+    `
+    : Prisma.sql`
       UPDATE generic_task_item SET
         locked_until = transaction_timestamp() + (${leaseMs} * interval '1 millisecond'),
         heartbeat_at = transaction_timestamp(), updated_at = transaction_timestamp()
       WHERE ${predicate}
     `;
-  }
   // A single `$executeRaw` statement is its own implicit transaction — no
   // multi-statement transaction to worry about retrying part of. Re-running
   // this exact conditional UPDATE (fencing on `execution_token`/
@@ -561,7 +485,9 @@ async function guardedFinalize(
   lease: TaskLease,
   outcome: TaskOutcome,
 ): Promise<number> {
-  if (lease.family === "catalog_scan" && outcome.status === "skipped") {
+  if (lease.family === "generic" && lease.taskType === "catalog_scan" && outcome.status === "skipped") {
+    // Phase C parity with the pre-migration `family === "catalog_scan"`
+    // guard: catalog-page items are success/failed only, never skipped.
     throw new Error("CatalogScan items do not support skipped");
   }
   const result = json(outcome.result);
@@ -575,16 +501,6 @@ async function guardedFinalize(
     AND lease_epoch = ${lease.leaseEpoch}
     AND locked_until > transaction_timestamp()
   `;
-  if (lease.family === "catalog_scan") {
-    return tx.$executeRaw(Prisma.sql`
-      UPDATE catalog_scan_task_item SET status = ${outcome.status},
-        result = ${result}::jsonb, error = ${error}::jsonb,
-        execution_token = NULL, locked_by = NULL, locked_until = NULL,
-        heartbeat_at = NULL, finished_at = transaction_timestamp(),
-        updated_at = transaction_timestamp()
-      WHERE ${predicate}
-    `);
-  }
   if (lease.family === "channel_sync") {
     return tx.$executeRaw(Prisma.sql`
       UPDATE channel_sync_task_item SET status = ${outcome.status},
@@ -603,6 +519,23 @@ async function guardedFinalize(
       updated_at = transaction_timestamp()
     WHERE ${predicate}
   `);
+}
+
+async function assertProtectedWriteLease(
+  tx: Prisma.TransactionClient,
+  lease: TaskLease,
+): Promise<void> {
+  const predicate = Prisma.sql`
+    id = ${lease.itemId}::uuid AND status = 'processing'
+    AND locked_by = ${lease.workerId}
+    AND execution_token = ${lease.executionToken}::uuid
+    AND lease_epoch = ${lease.leaseEpoch}
+    AND locked_until > transaction_timestamp()
+  `;
+  const rows = lease.family === "channel_sync"
+    ? await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`SELECT id FROM channel_sync_task_item WHERE ${predicate} FOR UPDATE`)
+    : await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`SELECT id FROM generic_task_item WHERE ${predicate} FOR UPDATE`);
+  if (rows.length !== 1) throw new LeaseLostError(lease);
 }
 
 export async function finalizeTaskItem(
@@ -630,10 +563,43 @@ export async function finalizeTaskItem(
   await withDbRetry(
     () =>
       prisma.$transaction(async (tx) => {
-    const affected = await guardedFinalize(tx, lease, outcome);
+        let terminalOutcome = outcome;
+        // Phase D (施工工单_PhaseD_安全与运行态收口_2026-09-06.md D-1, 做法3): a
+        // fail-closed backstop for the dry_run-writes-nothing contract —
+        // independent of whether every handler actually got its own mode
+        // branching right (worker/handlers/moboreader.ts's catalog/preview
+        // handlers do, as of this same doc's 做法2, but this guards against
+        // a future handler regressing). Checked BEFORE `protectedWrite` is
+        // ever invoked: once a write has run there is nothing left to
+        // "block". A handler that is well-behaved for dry_run never sets
+        // `protectedWrite` in the first place, so this only fires for a
+        // handler bug — and when it does, the item is forced `failed` with
+        // an explicit, greppable error/audit reason instead of silently
+        // letting the write through.
+        let dryRunProtectedWriteBlocked = false;
+        if (outcome.protectedWrite) {
+          if (lease.mode === "dry_run") {
+            dryRunProtectedWriteBlocked = true;
+            terminalOutcome = {
+              status: "failed",
+              error: {
+                code: "dry_run_protected_write_blocked",
+                message: "Task handler attempted a protected write while the task lease mode is dry_run; the write was blocked before it ran",
+              },
+            };
+          } else {
+            await assertProtectedWriteLease(tx, lease);
+            const override = await outcome.protectedWrite(tx);
+            if (override) terminalOutcome = { ...override };
+          }
+        }
+        const affected = await guardedFinalize(tx, lease, terminalOutcome);
     if (affected !== 1) throw new LeaseLostError(lease);
-    if (lease.family === "catalog_scan" && outcome.result && typeof outcome.result === "object" && !Array.isArray(outcome.result)) {
-      const stopReason = (outcome.result as Record<string, unknown>).stopReason;
+    if (
+      lease.family === "generic" && lease.taskType === "catalog_scan"
+      && terminalOutcome.result && typeof terminalOutcome.result === "object" && !Array.isArray(terminalOutcome.result)
+    ) {
+      const stopReason = (terminalOutcome.result as Record<string, unknown>).stopReason;
       if (typeof stopReason === "string" && [
         "expected_total_reached",
         "expected_pages_reached",
@@ -643,33 +609,41 @@ export async function finalizeTaskItem(
         "upstream_error",
       ].includes(stopReason)) {
         const terminalStatus = stopReason === "upstream_error" ? "failed" : "success";
+        // Numeric `target_id` cast, same reasoning as
+        // `worker/handlers/moboreader.ts`'s own stop-cascade writes: page
+        // indices are stored as text and a plain string comparison would
+        // sort lexically ("10" < "9").
         await tx.$executeRaw(Prisma.sql`
-          UPDATE catalog_scan_task_item remaining
-          SET status = ${terminalStatus}, returned_count = COALESCE(returned_count, 0),
-              result = jsonb_build_object('stoppedBeforeFetch', true, 'stopReason', ${stopReason}),
+          UPDATE generic_task_item remaining
+          SET status = ${terminalStatus},
+              result = jsonb_build_object(
+                'stoppedBeforeFetch', true, 'stopReason', ${stopReason}, 'returnedCount', 0
+              ),
               error = ${stopReason === "upstream_error"
                 ? JSON.stringify(sanitizePersistedTaskError({ code: "upstream_error", message: "Catalog scan stopped after an upstream error" }))
                 : null}::jsonb,
               finished_at = transaction_timestamp(), updated_at = transaction_timestamp()
-          WHERE remaining.task_id = ${lease.taskId}::uuid AND remaining.status = 'pending'
-            AND remaining.page_index > (
-              SELECT current_item.page_index FROM catalog_scan_task_item current_item
+          WHERE remaining.task_id = ${lease.taskId}::uuid AND remaining.target_type = 'catalog_page'
+            AND remaining.status = 'pending'
+            AND (remaining.target_id)::int > (
+              SELECT (current_item.target_id)::int FROM generic_task_item current_item
               WHERE current_item.id = ${lease.itemId}::uuid
             )
         `);
       }
     }
-    if (outcome.protectedWrite) await outcome.protectedWrite(tx);
     await tx.operationAudit.create({
       data: {
         actorType: "worker",
         actorId: lease.workerId,
-        action: `task_item.${outcome.status}`,
+        action: `task_item.${terminalOutcome.status}`,
         entityType: `${lease.family}_task_item`,
         entityId: lease.itemId,
         taskType: lease.taskType,
         taskId: lease.taskId,
-        reason: outcome.status === "failed" ? "worker_terminal_failure" : null,
+        reason: dryRunProtectedWriteBlocked
+          ? "dry_run_protected_write_blocked"
+          : (terminalOutcome.status === "failed" ? "worker_terminal_failure" : null),
       },
     });
     await recomputeParentTask(tx, lease.family, lease.taskId);

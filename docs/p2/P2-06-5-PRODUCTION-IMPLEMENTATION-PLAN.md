@@ -218,8 +218,8 @@ Tests：Latin whole-word、CJK contiguous ≥2 code points、title/description o
 maxTextTags、tie order、empty snapshot、config pending、write gates、task fencing/idempotency、manual
 skip、dry-run、scoped/all execution、无 scheduler。
 
-Risks：C1 参数仍 pending。架构以 nullable/fail-closed config 消除阻塞；Owner freeze 只改唯一配置源
-与 fingerprint，不改 schema/service/tests 结构。
+Lane C Owner Final 已冻结 `30 / 30 / 30 / 3` 与 `keyword-eligibility-v2`；production 仍通过唯一
+versioned authority loader 与 fingerprint 消费，artifact/version/SHA 不一致时 fail closed。
 
 ### Stream D · Admin contracts and APIs
 
@@ -382,7 +382,7 @@ CANONICAL_TAG_V1_COUNT=123
 CANONICAL_TAG_V1_SHA256=8bc8cdae8be2176bde170173e98bad2b9fa0e1770818174a57320816eefdccad
 B2_STATUS=FINAL
 B2_MAPPING_KEYS=285
-C1_PARAMETER_STATUS=OWNER_REVIEW_PENDING
+C1_PARAMETER_STATUS=FROZEN
 C1_DESCRIPTION_ONLY_BLIND_REVIEW=IN_PARALLEL
 CHAPTER_EVIDENCE_STATUS=DEFER
 OFFLINE_LLM_ENRICHMENT=FUTURE_EXTENSION_NON_BLOCKING

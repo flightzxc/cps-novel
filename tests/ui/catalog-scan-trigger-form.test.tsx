@@ -1,17 +1,20 @@
 import "./setup-cleanup";
-import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { ChannelAppScanOption } from "@/app/(admin)/catalog-sync/_lib/read-channel-apps";
+import type { ChannelScanOption } from "@/app/(admin)/catalog-sync/_lib/read-channel-apps";
 
 /**
- * `CatalogScanTriggerForm` (PR-C2) — the "新建目录扫描任务" block on
- * `/catalog-sync`. Same double-replacement discipline as
- * `catalog-sync-client.test.tsx`: only the Server Action module
- * (`../_actions`) is mocked, so this file only records which action got
- * called with what, and what the component renders back — every branch
- * (validation, mode default, four outcomes, access-denied, flag-off copy)
- * is driven by the real component and the real `scan-task-copy.ts`.
+ * `CatalogScanTriggerForm` (PR-C2; reshaped by Phase B —
+ * `施工工单_PhaseB_实体订正与运营表单Parity_2026-09-06.md` §三 — into CPS
+ * `changdu-sync-panel.tsx` parity: 渠道 → 剧场 chips → 语种 chips → 渠道账号 →
+ * 「开始同步」, apply-only, no page-mechanics fields, no mode picker).
+ *
+ * Same double-replacement discipline as `catalog-sync-client.test.tsx`: only
+ * the Server Action module (`../_actions`) is mocked, so this file only
+ * records which action got called with what, and what the component renders
+ * back — every branch (validation, four outcomes, access-denied, flag-off
+ * copy) is driven by the real component and the real `scan-task-copy.ts`.
  */
 
 const actions = vi.hoisted(() => ({
@@ -20,34 +23,39 @@ const actions = vi.hoisted(() => ({
 }));
 
 vi.mock("@/app/(admin)/catalog-sync/_actions", () => actions);
+// C-6: the form now calls useRouter() (router.refresh() is ImportProgress's
+// onTerminal callback) -- same double-mock shape admin-task-detail-panel.test.tsx
+// already uses for the same reason. `routerRefresh` is hoisted (not a fresh
+// vi.fn() per useRouter() call) so tests can assert on the exact instance the
+// component actually invoked.
+const routerRefresh = vi.hoisted(() => vi.fn());
+vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: routerRefresh }) }));
 
 const { CatalogScanTriggerForm } = await import(
   "@/app/(admin)/catalog-sync/_components/catalog-scan-trigger-form"
 );
 
-function app(overrides: Partial<ChannelAppScanOption> = {}): ChannelAppScanOption {
+function channel(overrides: Partial<ChannelScanOption> = {}): ChannelScanOption {
   return {
-    id: "app-1",
-    channelCode: "moboreader",
-    channelName: "Moboreader",
-    sourceAppCode: "mobo-app-1",
-    sourceAppName: "Mobo App",
+    id: "channel-1",
+    code: "changdu",
+    name: "Changdu",
+    channelApps: [{ id: "app-1", sourceAppCode: "moboreader", sourceAppName: "MoboReader" }],
     channelAccounts: [{ id: "acct-1", businessId: "biz-1", accountName: "主账户" }],
     ...overrides,
   };
 }
 
-const APPS: readonly ChannelAppScanOption[] = [
-  app(),
-  app({
-    id: "app-2",
-    channelCode: "changdu",
-    channelName: "畅读",
-    sourceAppCode: "cd-app-1",
-    sourceAppName: "CD App",
+const CHANNELS: readonly ChannelScanOption[] = [
+  channel(),
+  channel({
+    id: "channel-2",
+    code: "second-channel",
+    name: "第二渠道",
+    channelApps: [{ id: "app-2a", sourceAppCode: "app-2a", sourceAppName: "剧场 2A" }],
     channelAccounts: [
-      { id: "acct-2a", businessId: "biz-2a", accountName: "畅读账户 A" },
-      { id: "acct-2b", businessId: "biz-2b", accountName: "畅读账户 B" },
+      { id: "acct-2a", businessId: "biz-2a", accountName: "第二渠道账户 A" },
+      { id: "acct-2b", businessId: "biz-2b", accountName: "第二渠道账户 B" },
     ],
   }),
 ];
@@ -58,19 +66,17 @@ function okResult<T>(data: T) {
 
 function renderForm(
   options: {
-    channelApps?: readonly ChannelAppScanOption[];
+    channels?: readonly ChannelScanOption[];
     contentPublishGranted?: boolean;
     contentPublishBlockedReason?: string | null;
-    maxPageSize?: number;
     safetyMaxPages?: number;
   } = {},
 ) {
   return render(
     <CatalogScanTriggerForm
-      channelApps={options.channelApps ?? APPS}
+      channels={options.channels ?? CHANNELS}
       contentPublishGranted={options.contentPublishGranted ?? true}
       contentPublishBlockedReason={options.contentPublishBlockedReason ?? null}
-      maxPageSize={options.maxPageSize ?? 100}
       safetyMaxPages={options.safetyMaxPages ?? 2000}
     />,
   );
@@ -83,224 +89,204 @@ async function click(element: Element): Promise<void> {
 }
 
 function submitButton(): HTMLButtonElement {
-  return screen.getByRole("button", { name: /创建扫描任务/ }) as HTMLButtonElement;
+  return screen.getByRole("button", { name: /开始同步/ }) as HTMLButtonElement;
 }
 
 async function submit(): Promise<void> {
   await click(submitButton());
 }
 
+function languageChip(label: string): HTMLElement {
+  return screen.getByRole("button", { name: label });
+}
+
 beforeEach(() => {
   actions.dryRunCatalogScanTaskAction.mockReset();
   actions.applyCatalogScanTaskAction.mockReset();
+  routerRefresh.mockClear();
 });
 
 afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe("没有可用的活跃渠道应用", () => {
+describe("没有可用的活跃渠道", () => {
   it("不渲染表单，只给出去配置渠道账户的指引，且不触碰任何 Action", async () => {
-    renderForm({ channelApps: [] });
+    renderForm({ channels: [] });
     expect(screen.getByTestId("catalog-scan-no-channel-apps")).toBeTruthy();
-    expect(screen.queryByRole("button", { name: /创建扫描任务/ })).toBeNull();
-    expect(actions.dryRunCatalogScanTaskAction).not.toHaveBeenCalled();
+    expect(screen.queryByRole("button", { name: /开始同步/ })).toBeNull();
+    expect(actions.applyCatalogScanTaskAction).not.toHaveBeenCalled();
   });
 });
 
-describe("默认态：dry_run 缺省，字段有合理初值", () => {
-  it("模式默认是 dry_run，提交按钮文案随之显示 dry_run", () => {
+describe("默认态：渠道 → 剧场 → 语种 → 账户 依次生效", () => {
+  it("渠道、账户默认选中第一项；语种默认一个都不选", () => {
     renderForm();
-    expect((screen.getByLabelText("模式") as HTMLSelectElement).value).toBe("dry_run");
-    expect(screen.getByRole("button", { name: "创建扫描任务（dry_run）" })).toBeTruthy();
-  });
-
-  it("渠道应用与渠道账户默认选中第一项", () => {
-    renderForm();
-    expect((screen.getByLabelText("渠道应用") as HTMLSelectElement).value).toBe("app-1");
+    expect((screen.getByLabelText("渠道") as HTMLSelectElement).value).toBe("channel-1");
     expect((screen.getByLabelText("渠道账户") as HTMLSelectElement).value).toBe("acct-1");
+    expect(languageChip("英文").getAttribute("aria-pressed")).toBe("false");
   });
 
-  it("切换渠道应用会把渠道账户重置为新应用的第一个账户", () => {
+  it("剧场 chips 来自所选渠道下的 active ChannelApp", () => {
     renderForm();
-    fireEvent.change(screen.getByLabelText("渠道应用"), { target: { value: "app-2" } });
+    expect(screen.getByRole("button", { name: "MoboReader" })).toBeTruthy();
+  });
+
+  it("切换渠道会把剧场与账户都重置为新渠道的第一项", () => {
+    renderForm();
+    fireEvent.change(screen.getByLabelText("渠道"), { target: { value: "channel-2" } });
+    expect(screen.getByRole("button", { name: "剧场 2A" })).toBeTruthy();
     expect((screen.getByLabelText("渠道账户") as HTMLSelectElement).value).toBe("acct-2a");
-    expect(within(screen.getByLabelText("渠道账户") as HTMLElement).getAllByRole("option")).toHaveLength(2);
+    expect(screen.getByLabelText("渠道账户").querySelectorAll("option")).toHaveLength(2);
   });
 
   it("渠道下没有启用中的账户时，账户下拉禁用并显示占位项", () => {
-    renderForm({ channelApps: [app({ channelAccounts: [] })] });
+    renderForm({ channels: [channel({ channelAccounts: [] })] });
     const select = screen.getByLabelText("渠道账户") as HTMLSelectElement;
     expect(select.disabled).toBe(true);
-    expect(within(select).getByText("（该渠道下没有启用中的账户）")).toBeTruthy();
+    expect(screen.getByText("（该渠道下没有启用中的账户）")).toBeTruthy();
   });
 
   it("安全页数上限会显示在说明文案里", () => {
     renderForm({ safetyMaxPages: 500 });
     expect(screen.getByText(/500 页/)).toBeTruthy();
   });
+
+  it("点击语种 chip 切换选中态，并体现在按钮文案上", async () => {
+    renderForm();
+    expect(screen.getByRole("button", { name: /开始同步$/ })).toBeTruthy();
+    await click(languageChip("英文"));
+    expect(languageChip("英文").getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByRole("button", { name: "开始同步 · 1 语种" })).toBeTruthy();
+    await click(languageChip("日文"));
+    expect(screen.getByRole("button", { name: "开始同步 · 2 语种" })).toBeTruthy();
+    await click(languageChip("英文"));
+    expect(screen.getByRole("button", { name: "开始同步 · 1 语种" })).toBeTruthy();
+  });
 });
 
 describe("表单校验：不合法输入拦在提交之前，Action 不会被调用", () => {
-  it("结束页小于起始页 → 报错在结束页字段，不提交", async () => {
+  it("一个语种都没选 → 报错，不提交", async () => {
     renderForm();
-    fireEvent.change(screen.getByLabelText("起始页"), { target: { value: "5" } });
-    fireEvent.change(screen.getByLabelText("结束页"), { target: { value: "2" } });
     await submit();
-
-    expect(screen.getByText("结束页码不能小于起始页码")).toBeTruthy();
-    expect(actions.dryRunCatalogScanTaskAction).not.toHaveBeenCalled();
-  });
-
-  it("每页条数超过上限 → 报错带出具体上限数字", async () => {
-    renderForm({ maxPageSize: 50 });
-    fireEvent.change(screen.getByLabelText("每页条数"), { target: { value: "999" } });
-    await submit();
-
-    expect(screen.getByText("每页条数不能超过 50")).toBeTruthy();
-    expect(actions.dryRunCatalogScanTaskAction).not.toHaveBeenCalled();
-  });
-
-  it("起始页为 0 或负数 → 报错，视为非法整数", async () => {
-    renderForm();
-    fireEvent.change(screen.getByLabelText("起始页"), { target: { value: "0" } });
-    await submit();
-
-    expect(screen.getByText("起始页码必须是大于 0 的整数")).toBeTruthy();
-    expect(actions.dryRunCatalogScanTaskAction).not.toHaveBeenCalled();
-  });
-
-  it("每页条数留空 → 报错，视为非法整数", async () => {
-    renderForm();
-    fireEvent.change(screen.getByLabelText("每页条数"), { target: { value: "" } });
-    await submit();
-
-    expect(screen.getByText("每页条数必须是大于 0 的整数")).toBeTruthy();
-    expect(actions.dryRunCatalogScanTaskAction).not.toHaveBeenCalled();
-  });
-
-  it("修正后重新提交，错误提示消失", async () => {
-    renderForm();
-    fireEvent.change(screen.getByLabelText("起始页"), { target: { value: "5" } });
-    fireEvent.change(screen.getByLabelText("结束页"), { target: { value: "2" } });
-    await submit();
-    expect(screen.getByText("结束页码不能小于起始页码")).toBeTruthy();
-
-    actions.dryRunCatalogScanTaskAction.mockResolvedValue(
-      okResult({ outcome: "created", taskId: "task-1", mode: "dry_run" }),
-    );
-    fireEvent.change(screen.getByLabelText("结束页"), { target: { value: "10" } });
-    await submit();
-
-    expect(screen.queryByText("结束页码不能小于起始页码")).toBeNull();
-    expect(actions.dryRunCatalogScanTaskAction).toHaveBeenCalledTimes(1);
-  });
-});
-
-describe("提交 · dry_run（默认模式）", () => {
-  it("以正确参数调用 dryRunCatalogScanTaskAction，且从不调用 applyCatalogScanTaskAction", async () => {
-    actions.dryRunCatalogScanTaskAction.mockResolvedValue(
-      okResult({ outcome: "created", taskId: "task-1", mode: "dry_run" }),
-    );
-    renderForm();
-    fireEvent.change(screen.getByLabelText("起始页"), { target: { value: "2" } });
-    fireEvent.change(screen.getByLabelText("结束页"), { target: { value: "6" } });
-    fireEvent.change(screen.getByLabelText("每页条数"), { target: { value: "30" } });
-    await submit();
-
-    expect(actions.dryRunCatalogScanTaskAction).toHaveBeenCalledTimes(1);
-    const call = actions.dryRunCatalogScanTaskAction.mock.calls[0][0];
-    expect(call).toMatchObject({
-      channelAccountId: "acct-1",
-      channelAppId: "app-1",
-      pageStart: 2,
-      pageEnd: 6,
-      pageSize: 30,
-    });
-    expect(call.requestId).toMatch(/^[0-9a-f-]{36}$/i);
+    expect(screen.getByText("请至少选择一种语种")).toBeTruthy();
     expect(actions.applyCatalogScanTaskAction).not.toHaveBeenCalled();
   });
 
-  it("提交中禁用按钮并显示「创建中…」", async () => {
+  it("选中语种后重新提交，错误提示消失", async () => {
+    actions.applyCatalogScanTaskAction.mockResolvedValue(
+      okResult({ outcome: "created", taskId: "task-1", mode: "apply" }),
+    );
+    renderForm();
+    await submit();
+    expect(screen.getByText("请至少选择一种语种")).toBeTruthy();
+
+    await click(languageChip("英文"));
+    await submit();
+
+    expect(screen.queryByText("请至少选择一种语种")).toBeNull();
+    expect(actions.applyCatalogScanTaskAction).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("提交只走 apply，语种数组进入 payload", () => {
+  it("以正确参数调用 applyCatalogScanTaskAction，且从不调用 dryRunCatalogScanTaskAction", async () => {
+    actions.applyCatalogScanTaskAction.mockResolvedValue(
+      okResult({ outcome: "created", taskId: "task-1", mode: "apply" }),
+    );
+    renderForm();
+    await click(languageChip("英文"));
+    await click(languageChip("日文"));
+    await submit();
+
+    expect(actions.applyCatalogScanTaskAction).toHaveBeenCalledTimes(1);
+    const call = actions.applyCatalogScanTaskAction.mock.calls[0][0];
+    expect(call.channelAccountId).toBe("acct-1");
+    expect(call.channelAppId).toBe("app-1");
+    expect(new Set(call.languages)).toEqual(new Set(["en", "ja"]));
+    expect(call.requestId).toMatch(/^[0-9a-f-]{36}$/i);
+    expect(actions.dryRunCatalogScanTaskAction).not.toHaveBeenCalled();
+    // Phase B removed page mechanics from the client-supplied contract —
+    // this form must never (re-)introduce them.
+    expect(call).not.toHaveProperty("pageStart");
+    expect(call).not.toHaveProperty("pageEnd");
+    expect(call).not.toHaveProperty("pageSize");
+    expect(call).not.toHaveProperty("mode");
+  });
+
+  it("提交中禁用按钮并显示「同步中…」", async () => {
     let resolve!: (value: unknown) => void;
-    actions.dryRunCatalogScanTaskAction.mockReturnValue(
+    actions.applyCatalogScanTaskAction.mockReturnValue(
       new Promise((res) => {
         resolve = res;
       }),
     );
     renderForm();
+    await click(languageChip("英文"));
 
-    fireEvent.submit(screen.getByRole("button", { name: /创建扫描任务/ }).closest("form")!);
-    await waitFor(() => expect(screen.getByRole("button", { name: "创建中…" })).toBeTruthy());
-    expect((screen.getByRole("button", { name: "创建中…" }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.submit(submitButton().closest("form")!);
+    await waitFor(() => expect(screen.getByRole("button", { name: "同步中…" })).toBeTruthy());
+    expect((screen.getByRole("button", { name: "同步中…" }) as HTMLButtonElement).disabled).toBe(true);
 
     await act(async () => {
-      resolve(okResult({ outcome: "created", taskId: "task-1", mode: "dry_run" }));
+      resolve(okResult({ outcome: "created", taskId: "task-1", mode: "apply" }));
       await Promise.resolve();
     });
     expect(screen.getByTestId("scan-outcome-created")).toBeTruthy();
   });
 });
 
-describe("提交 · apply（切换模式后）", () => {
-  it("有 content:publish 时调用 applyCatalogScanTaskAction，不调用 dry_run", async () => {
-    actions.applyCatalogScanTaskAction.mockResolvedValue(
-      okResult({ outcome: "created", taskId: "task-9", mode: "apply" }),
-    );
-    renderForm({ contentPublishGranted: true });
-    fireEvent.change(screen.getByLabelText("模式"), { target: { value: "apply" } });
-    await submit();
-
-    expect(actions.applyCatalogScanTaskAction).toHaveBeenCalledTimes(1);
-    expect(actions.dryRunCatalogScanTaskAction).not.toHaveBeenCalled();
+describe("表单不再渲染模式 / 分页字段", () => {
+  it("没有「模式」下拉，也没有起始页/结束页/每页条数输入框", () => {
+    renderForm();
+    expect(screen.queryByLabelText("模式")).toBeNull();
+    expect(screen.queryByLabelText("起始页")).toBeNull();
+    expect(screen.queryByLabelText("结束页")).toBeNull();
+    expect(screen.queryByLabelText("每页条数")).toBeNull();
+    expect(screen.queryByText(/dry_run/)).toBeNull();
   });
+});
 
-  it("缺少 content:publish 时切到 apply 会禁用提交按钮，并说明原因；点不动也就调不到 Action", async () => {
+describe("缺少 content:publish", () => {
+  it("按钮禁用，并说明原因", async () => {
     renderForm({
       contentPublishGranted: false,
       contentPublishBlockedReason: "缺少能力位 内容发布（content:publish），请联系管理员授予",
     });
-    fireEvent.change(screen.getByLabelText("模式"), { target: { value: "apply" } });
+    await click(languageChip("英文"));
 
-    const button = screen.getByRole("button", { name: "创建扫描任务（apply）" }) as HTMLButtonElement;
+    const button = submitButton();
     expect(button.disabled).toBe(true);
     expect(screen.getByText(/缺少能力位 内容发布/)).toBeTruthy();
-    expect(screen.getByText("仍可创建 dry_run 任务。")).toBeTruthy();
 
     await click(button);
     expect(actions.applyCatalogScanTaskAction).not.toHaveBeenCalled();
   });
-
-  it("缺少 content:publish 但仍是 dry_run 模式时，提交按钮不受影响", () => {
-    renderForm({ contentPublishGranted: false, contentPublishBlockedReason: "缺少能力位 内容发布" });
-    const button = screen.getByRole("button", { name: "创建扫描任务（dry_run）" }) as HTMLButtonElement;
-    expect(button.disabled).toBe(false);
-  });
 });
 
 describe("四种结果分支各自独立呈现", () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     renderForm();
+    await click(languageChip("英文"));
   });
 
-  it("created：成功语气，展示模式与后续查询指引", async () => {
-    actions.dryRunCatalogScanTaskAction.mockResolvedValue(
-      okResult({ outcome: "created", taskId: "task-created-1", mode: "dry_run" }),
+  it("created：成功语气", async () => {
+    actions.applyCatalogScanTaskAction.mockResolvedValue(
+      okResult({ outcome: "created", taskId: "task-created-1", mode: "apply" }),
     );
     await submit();
 
     const panel = screen.getByTestId("scan-outcome-created");
     expect(panel.getAttribute("role")).toBe("status");
     expect(panel.textContent).toContain("已入队");
-    expect(panel.textContent).toContain("task-created-1");
   });
 
   it("created_disabled：展示两个 flag 各自的开关状态，且都能在 DOM 里找到", async () => {
-    actions.dryRunCatalogScanTaskAction.mockResolvedValue(
+    actions.applyCatalogScanTaskAction.mockResolvedValue(
       okResult({
         outcome: "created_disabled",
         taskId: "task-disabled-1",
-        mode: "dry_run",
+        mode: "apply",
         flags: { featureEnabled: false, writeAllowed: false },
       }),
     );
@@ -312,23 +298,64 @@ describe("四种结果分支各自独立呈现", () => {
     expect(screen.getByTestId("flag-row-NOVEL_CATALOG_SYNC_ALLOW_WRITE").textContent).toContain("未开启");
   });
 
-  it("created_disabled：两个闸各自独立展示，不是绑在一起——总闸开、写闸关的组合也要如实呈现", async () => {
-    actions.dryRunCatalogScanTaskAction.mockResolvedValue(
+  it("created：内联渲染 ImportProgress 进度卡，并给出「前往任务中心」「查看推广链接」入口 (C-6)", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("network stub: not exercised by this assertion")));
+    actions.applyCatalogScanTaskAction.mockResolvedValue(
+      okResult({ outcome: "created", taskId: "task-created-progress", mode: "apply" }),
+    );
+    await submit();
+
+    expect(screen.getByTestId("import-progress-task-id").textContent).toContain("task-created-progress");
+    expect(screen.getByRole("link", { name: "前往任务中心 →" }).getAttribute("href")).toBe("/tasks");
+    expect(screen.getByRole("link", { name: "查看推广链接 →" }).getAttribute("href")).toBe("/promo-links");
+  });
+
+  it("created_disabled：同样携带 taskId，也内联渲染进度卡 (C-6)", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("network stub: not exercised by this assertion")));
+    actions.applyCatalogScanTaskAction.mockResolvedValue(
       okResult({
         outcome: "created_disabled",
-        taskId: "task-disabled-2",
+        taskId: "task-disabled-progress",
         mode: "apply",
-        flags: { featureEnabled: true, writeAllowed: false },
+        flags: { featureEnabled: false, writeAllowed: false },
       }),
     );
     await submit();
 
-    expect(screen.getByTestId("flag-row-FEATURE_NOVEL_CATALOG_SYNC").textContent).toContain("已开启");
-    expect(screen.getByTestId("flag-row-NOVEL_CATALOG_SYNC_ALLOW_WRITE").textContent).toContain("未开启");
+    expect(screen.getByTestId("import-progress-task-id").textContent).toContain("task-disabled-progress");
+  });
+
+  it("进度卡到达终态时调用 router.refresh() 刷新来源条目列表 (C-6 onTerminal)", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          taskType: "catalog_scan",
+          status: "completed",
+          total: 1,
+          success: 1,
+          failed: 0,
+          skip: 0,
+          processed: 1,
+          percent: 100,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          taskErrors: [],
+          items: [],
+        }),
+      }),
+    );
+    actions.applyCatalogScanTaskAction.mockResolvedValue(
+      okResult({ outcome: "created", taskId: "task-terminal-progress", mode: "apply" }),
+    );
+    await submit();
+
+    await waitFor(() => expect(routerRefresh).toHaveBeenCalledTimes(1));
   });
 
   it("duplicate：幂等提示，不是失败语气", async () => {
-    actions.dryRunCatalogScanTaskAction.mockResolvedValue(
+    actions.applyCatalogScanTaskAction.mockResolvedValue(
       okResult({ outcome: "duplicate", taskId: "task-dup-1" }),
     );
     await submit();
@@ -337,30 +364,32 @@ describe("四种结果分支各自独立呈现", () => {
     expect(panel.textContent).toContain("幂等");
   });
 
-  it("active_conflict：说明已有进行中任务，提示等待或稍后重试", async () => {
-    actions.dryRunCatalogScanTaskAction.mockResolvedValue(
+  it("active_conflict：说明已有进行中任务", async () => {
+    actions.applyCatalogScanTaskAction.mockResolvedValue(
       okResult({ outcome: "active_conflict", taskId: "task-conflict-1" }),
     );
     await submit();
 
     const panel = screen.getByTestId("scan-outcome-active_conflict");
-    expect(panel.textContent).toContain("task-conflict-1");
+    expect(panel.textContent).toContain("进行中");
   });
 
-  it("每种结果都带出只读 SQL 查询指引，taskId 出现在 WHERE 子句里", async () => {
-    actions.dryRunCatalogScanTaskAction.mockResolvedValue(
-      okResult({ outcome: "created", taskId: "task-sql-check", mode: "dry_run" }),
+  it("不再渲染「建设中」文案或 SQL 查询指引", async () => {
+    actions.applyCatalogScanTaskAction.mockResolvedValue(
+      okResult({ outcome: "created", taskId: "task-sql-check", mode: "apply" }),
     );
     await submit();
 
     const panel = screen.getByTestId("scan-outcome-created");
-    expect(within(panel).getByText(/catalog_scan_task/).textContent).toContain("task-sql-check");
+    expect(panel.textContent).not.toContain("catalog_scan_task");
+    expect(panel.textContent).not.toContain("建设中");
+    expect(screen.queryByText(/select /)).toBeNull();
   });
 });
 
 describe("守卫失败 / 输入校验失败——各自独立呈现，不是笼统的失败提示", () => {
   it("access_denied：文案来自 errorEnvelopeCopy，能力位名称清晰可读", async () => {
-    actions.dryRunCatalogScanTaskAction.mockResolvedValue({
+    actions.applyCatalogScanTaskAction.mockResolvedValue({
       ok: false,
       kind: "access_denied",
       envelope: {
@@ -371,30 +400,33 @@ describe("守卫失败 / 输入校验失败——各自独立呈现，不是笼�
       },
     });
     renderForm();
+    await click(languageChip("英文"));
     await submit();
 
     expect(screen.getByRole("alert").textContent).toContain("缺少能力位 内容查看（content:view）");
   });
 
   it("invalid_input：已知 code 翻成可操作的中文提示", async () => {
-    actions.dryRunCatalogScanTaskAction.mockResolvedValue({
+    actions.applyCatalogScanTaskAction.mockResolvedValue({
       ok: false,
       kind: "invalid_input",
-      code: "page_size_exceeded",
+      code: "languages_invalid",
     });
     renderForm();
+    await click(languageChip("英文"));
     await submit();
 
-    expect(screen.getByRole("alert").textContent).toContain("每页条数超过上限");
+    expect(screen.getByRole("alert").textContent).toContain("语种选择无效");
   });
 
   it("invalid_input：未知 code 也不裸打代码——落到兜底文案且原样带出 code 供排查", async () => {
-    actions.dryRunCatalogScanTaskAction.mockResolvedValue({
+    actions.applyCatalogScanTaskAction.mockResolvedValue({
       ok: false,
       kind: "invalid_input",
       code: "some_future_code",
     });
     renderForm();
+    await click(languageChip("英文"));
     await submit();
 
     const alert = screen.getByRole("alert");

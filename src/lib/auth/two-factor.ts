@@ -17,6 +17,48 @@ export const TWO_FACTOR_PENDING_SETUP_TTL_MS = 10 * 60 * 1000;
 export const TWO_FACTOR_CHALLENGE_TTL_MS = 5 * 60 * 1000;
 export const TWO_FACTOR_CHALLENGE_MAX_ATTEMPTS = 5;
 
+export type TwoFactorSecurityState = Readonly<{
+  username: string;
+  status: "disabled" | "pending" | "pending_expired" | "enabled";
+  confirmedAt: string | null;
+  recoveryCodesRemaining: number;
+  recoveryCodesRotatedAt: string | null;
+  pendingExpiresAt: string | null;
+}>;
+
+/** CPS v8.3.6 four-state security-card projection; no secret leaves this function. */
+export async function getTwoFactorSecurityState(input: {
+  identityId: string;
+  identities: AdminIdentityStore;
+  twoFactor: TwoFactorStore;
+  recoveryCodes: RecoveryCodeStore;
+  now?: Date;
+}): Promise<TwoFactorSecurityState> {
+  const now = input.now ?? new Date();
+  const [identity, state, unused] = await Promise.all([
+    input.identities.findById(input.identityId),
+    input.twoFactor.findByIdentityId(input.identityId),
+    input.recoveryCodes.listUnused(input.identityId),
+  ]);
+  if (!identity || identity.status !== "active") throw new Error("Admin identity not found");
+  const pending = Boolean(state?.pendingEncryptedSecret && state.pendingExpiresAt);
+  const status = state?.enabled
+    ? "enabled"
+    : pending && state!.pendingExpiresAt!.getTime() > now.getTime()
+      ? "pending"
+      : pending
+        ? "pending_expired"
+        : "disabled";
+  return Object.freeze({
+    username: identity.username,
+    status,
+    confirmedAt: state?.confirmedAt?.toISOString() ?? null,
+    recoveryCodesRemaining: state?.enabled ? unused.length : 0,
+    recoveryCodesRotatedAt: state?.recoveryCodesRotatedAt?.toISOString() ?? null,
+    pendingExpiresAt: state?.pendingExpiresAt?.toISOString() ?? null,
+  });
+}
+
 export function hashTwoFactorChallengeToken(token: string): string {
   return createHash("sha256").update(token).digest("hex");
 }

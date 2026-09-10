@@ -8,6 +8,7 @@ import {
   PERSISTED_TASK_ERROR_MESSAGE_MAX_LENGTH,
   buildWorkerAllowlist,
   claimPendingItem,
+  confirmSideEffectIntentByReadbackInTransaction,
   createHandlerRegistry,
   enqueueScheduledTask,
   finalizeTaskItem,
@@ -304,21 +305,22 @@ describe.skipIf(!enabled).sequential("P1-07 PostgreSQL 16 runtime", () => {
       .toMatchObject({ status: "pending", attemptCount: 0 });
   });
 
-  it("executes the fixed claim SQL for all three task families", async () => {
+  it("executes the fixed claim SQL for both task families", async () => {
+    // Phase C: catalog_scan is a GenericTask taskType (targetType =
+    // 'catalog_page'), not its own family — created through the ordinary
+    // Prisma delegate exactly like any other GenericTask, not raw SQL
+    // against a dedicated table.
+    await prisma.genericTask.create({
+      data: {
+        id: "a7100000-0000-4000-8000-000000000001",
+        taskType: "catalog_scan",
+        channelAccountId: ids.account, channelAppId: ids.app,
+        operationScopeHash: "c".repeat(64),
+        requestToken: "p107-claim-catalog",
+        items: { create: [{ id: "b7100000-0000-4000-8000-000000000001", targetType: "catalog_page", targetId: "1" }] },
+      },
+    });
     await executeBatch(`
-      INSERT INTO catalog_scan_task (
-        id, channel_account_id, channel_app_id, project_type, request_token,
-        page_start, page_end, page_size, updated_at
-      ) VALUES (
-        'a7100000-0000-4000-8000-000000000001', '${ids.account}', '${ids.app}', 8,
-        'p107-claim-catalog', 1, 1, 20, now()
-      );
-      INSERT INTO catalog_scan_task_item (
-        id, task_id, page_index, request_fingerprint, updated_at
-      ) VALUES (
-        'b7100000-0000-4000-8000-000000000001',
-        'a7100000-0000-4000-8000-000000000001', 1, repeat('a', 64), now()
-      );
       INSERT INTO channel_sync_task (
         id, task_type, channel_account_id, channel_app_id, operation_scope_hash,
         request_token, updated_at
@@ -335,7 +337,7 @@ describe.skipIf(!enabled).sequential("P1-07 PostgreSQL 16 runtime", () => {
     `);
     await createGenericTask();
     const catalog = await claimPendingItem(prisma, {
-      family: "catalog_scan", taskTypes: ["catalog_scan"], workerId: "worker-catalog", leaseMs: 60_000,
+      family: "generic", taskTypes: ["catalog_scan"], workerId: "worker-catalog", leaseMs: 60_000,
     });
     const channel = await claimPendingItem(prisma, {
       family: "channel_sync", taskTypes: ["runtime.channel"], workerId: "worker-channel", leaseMs: 60_000,
@@ -343,24 +345,26 @@ describe.skipIf(!enabled).sequential("P1-07 PostgreSQL 16 runtime", () => {
     const generic = await claimPendingItem(prisma, {
       family: "generic", taskTypes: ["runtime.test"], workerId: "worker-generic", leaseMs: 60_000,
     });
-    expect(catalog).toMatchObject({ family: "catalog_scan", taskType: "catalog_scan", attemptCount: 1 });
+    expect(catalog).toMatchObject({ family: "generic", taskType: "catalog_scan", attemptCount: 1 });
     expect(channel).toMatchObject({ family: "channel_sync", taskType: "runtime.channel", attemptCount: 1 });
     expect(generic).toMatchObject({ family: "generic", taskType: "runtime.test", attemptCount: 1 });
   });
 
   it("keeps catalog page ordering even when the later page is explicitly targeted", async () => {
-    const task = await prisma.catalogScanTask.create({
+    const task = await prisma.genericTask.create({
       data: {
-        channelAccountId: ids.account, channelAppId: ids.app, projectType: 2,
-        requestToken: randomUUID(), pageStart: 1, pageEnd: 2, pageSize: 20,
-        items: { create: [1, 2].map((pageIndex) => ({ pageIndex, requestFingerprint: String(pageIndex).repeat(64) })) },
+        taskType: "catalog_scan",
+        channelAccountId: ids.account, channelAppId: ids.app,
+        operationScopeHash: "d".repeat(64),
+        requestToken: randomUUID(),
+        items: { create: [1, 2].map((pageIndex) => ({ targetType: "catalog_page", targetId: String(pageIndex) })) },
       },
-      include: { items: { orderBy: { pageIndex: "asc" } } },
+      include: { items: { orderBy: { targetId: "asc" } } },
     });
-    const input = { family: "catalog_scan" as const, taskTypes: ["catalog_scan"], workerId: "page-worker", leaseMs: 60_000 };
-    const claimTarget = { family: "catalog_scan" as const, taskId: task.id, itemId: task.items[1].id };
+    const input = { family: "generic" as const, taskTypes: ["catalog_scan"], workerId: "page-worker", leaseMs: 60_000 };
+    const claimTarget = { family: "generic" as const, taskId: task.id, itemId: task.items[1].id };
     expect(await claimPendingItem(prisma, { ...input, claimTarget })).toBeNull();
-    for (const item of await prisma.catalogScanTaskItem.findMany({ where: { taskId: task.id } })) {
+    for (const item of await prisma.genericTaskItem.findMany({ where: { taskId: task.id } })) {
       expect(item).toMatchObject({ status: "pending", attemptCount: 0 });
     }
     const first = await claimPendingItem(prisma, input);
@@ -532,6 +536,49 @@ describe.skipIf(!enabled).sequential("P1-07 PostgreSQL 16 runtime", () => {
     expect(error.message.length).toBeLessThanOrEqual(PERSISTED_TASK_ERROR_MESSAGE_MAX_LENGTH);
     expect(JSON.stringify(error)).not.toContain("abc-secret");
     expect(error).not.toHaveProperty("stack");
+  });
+
+  it("Phase D D-1: blocks a protectedWrite a handler wrongly attaches under a dry_run lease, before it ever runs", async () => {
+    // 施工工单_PhaseD_安全与运行态收口_2026-09-06.md D-1, 做法3: this is the
+    // fail-closed backstop in `finalizeTaskItem` (src/lib/tasks/store.ts),
+    // independent of any specific handler's own mode branching. Simulates a
+    // hypothetical regressed handler that (incorrectly) still attaches
+    // `protectedWrite` while the claimed lease's mode is "dry_run".
+    const task = await prisma.genericTask.create({
+      data: {
+        taskType: "runtime.test",
+        mode: "dry_run",
+        operationScopeHash: randomUUID().replaceAll("-", "").padEnd(64, "0"),
+        requestToken: randomUUID(),
+        totalCount: 1,
+        items: { create: [{ targetType: "test", targetId: randomUUID(), payload: {} }] },
+      },
+      include: { items: true },
+    });
+    const lease = await claimPendingItem(prisma, {
+      family: "generic", taskTypes: ["runtime.test"], workerId: "worker-dry-run-guard", leaseMs: 60_000,
+    });
+    expect(lease!.mode).toBe("dry_run");
+
+    let protectedWriteRan = false;
+    await finalizeTaskItem(prisma, lease!, {
+      status: "success",
+      result: { wouldWrite: true },
+      protectedWrite: async () => {
+        protectedWriteRan = true;
+      },
+    });
+    expect(protectedWriteRan).toBe(false);
+
+    const item = await prisma.genericTaskItem.findUniqueOrThrow({ where: { id: lease!.itemId } });
+    expect(item.status).toBe("failed");
+    expect(item.error).toMatchObject({ code: "dry_run_protected_write_blocked" });
+
+    const audit = await prisma.operationAudit.findFirst({
+      where: { taskId: task.id, entityId: lease!.itemId, action: "task_item.failed" },
+      orderBy: { createdAt: "desc" },
+    });
+    expect(audit).toMatchObject({ reason: "dry_run_protected_write_blocked" });
   });
 
   it("terminalizes poison items when the claim budget is exhausted", async () => {
@@ -756,15 +803,44 @@ describe.skipIf(!enabled).sequential("P1-07 PostgreSQL 16 runtime", () => {
       .toMatchObject({ status: "claim_retry_blocked" });
   });
 
-  it("uses all six independent pending and expired indexes", async () => {
+  it("confirms a blocked intent only through the readback boundary and keeps the result terminal", async () => {
+    const input = {
+      effectKey: "e".repeat(64), idempotencyKey: "f".repeat(64),
+      operationType: "test.effect", targetType: "test", targetId: "target-2",
+    };
+    await prepareSideEffectIntent(prisma, input);
+    await markSideEffectUnknown(prisma, input.effectKey, { failureCategory: "upstream_timeout" });
+
+    const confirmed = await prisma.$transaction((tx) => confirmSideEffectIntentByReadbackInTransaction(tx, {
+      effectKey: input.effectKey,
+      evidence: { hasWebUrl: true, hasAppUrl: false },
+    }));
+    expect(confirmed).toMatchObject({
+      status: "confirmed",
+      responseShape: {
+        failureCategory: "upstream_timeout",
+        source: "readback",
+        confirmedFrom: "claim_retry_blocked",
+        hasWebUrl: true,
+        hasAppUrl: false,
+      },
+    });
+    expect(confirmed.confirmedAt).not.toBeNull();
+
+    await expect(transitionSideEffectIntent(prisma, {
+      effectKey: input.effectKey, status: "manual_review_required",
+    })).rejects.toThrow("Illegal side-effect transition: confirmed -> manual_review_required");
+    await expect(prisma.$transaction((tx) => confirmSideEffectIntentByReadbackInTransaction(tx, {
+      effectKey: input.effectKey,
+      evidence: { hasWebUrl: true, hasAppUrl: false },
+    }))).rejects.toThrow("Illegal side-effect readback confirmation: confirmed -> confirmed");
+  });
+
+  it("uses all four independent pending and expired indexes", async () => {
+    // Phase C: catalog_scan_task(_item) dropped -- there is no third table
+    // to seed/explain anymore, only channel_sync_task_item and
+    // generic_task_item.
     await executeBatch(`
-      INSERT INTO catalog_scan_task (
-        id, channel_account_id, channel_app_id, project_type, request_token,
-        page_start, page_end, page_size, status, updated_at
-      ) VALUES (
-        'a7000000-0000-4000-8000-000000000001', '${ids.account}', '${ids.app}', 7,
-        'p107-explain-catalog', 1, 6000, 20, 'processing', now()
-      );
       INSERT INTO channel_sync_task (
         id, task_type, channel_account_id, channel_app_id, operation_scope_hash,
         request_token, status, updated_at
@@ -785,19 +861,6 @@ describe.skipIf(!enabled).sequential("P1-07 PostgreSQL 16 runtime", () => {
         ('e7000000-0000-4000-8000-' || lpad(gs::text, 12, '0'))::uuid,
         '${ids.app}', 'p107-explain-' || gs, 'en', 'Explain ' || gs,
         '', 'pending', '{}', now()
-      FROM generate_series(1, 6000) gs;
-      INSERT INTO catalog_scan_task_item (
-        id, task_id, page_index, request_fingerprint, status, attempt_count,
-        execution_token, lease_epoch, locked_by, locked_until, updated_at
-      ) SELECT
-        ('b7000000-0000-4000-8000-' || lpad(gs::text, 12, '0'))::uuid,
-        'a7000000-0000-4000-8000-000000000001', gs, repeat(md5(gs::text), 2),
-        CASE WHEN gs <= 20 THEN 'pending' WHEN gs <= 40 THEN 'processing' ELSE 'success' END,
-        CASE WHEN gs BETWEEN 21 AND 40 THEN 1 ELSE 0 END,
-        CASE WHEN gs BETWEEN 21 AND 40 THEN ('c7000000-0000-4000-8000-' || lpad(gs::text, 12, '0'))::uuid END,
-        CASE WHEN gs BETWEEN 21 AND 40 THEN 1 ELSE 0 END,
-        CASE WHEN gs BETWEEN 21 AND 40 THEN 'worker' END,
-        CASE WHEN gs BETWEEN 21 AND 40 THEN now() - interval '1 hour' END, now()
       FROM generate_series(1, 6000) gs;
       INSERT INTO channel_sync_task_item (
         id, task_id, novel_source_item_id, status, attempt_count, execution_token,
@@ -826,29 +889,10 @@ describe.skipIf(!enabled).sequential("P1-07 PostgreSQL 16 runtime", () => {
         CASE WHEN gs BETWEEN 21 AND 40 THEN 'worker' END,
         CASE WHEN gs BETWEEN 21 AND 40 THEN now() - interval '1 hour' END, now()
       FROM generate_series(1, 6000) gs;
-      ANALYZE catalog_scan_task_item;
       ANALYZE channel_sync_task_item;
       ANALYZE generic_task_item
     `);
     const plans: Record<string, { pending: string[]; expired: string[] }> = {
-      catalog_scan_task_item: {
-        pending: await explainIndex(`
-          WITH candidates AS MATERIALIZED (
-            SELECT i.id, i.task_id, i.created_at AS cursor_at
-            FROM catalog_scan_task_item i WHERE i.status = 'pending'
-            ORDER BY i.created_at, i.id LIMIT 128 FOR UPDATE OF i SKIP LOCKED
-          )
-          SELECT c.id FROM candidates c JOIN catalog_scan_task t ON t.id = c.task_id
-          WHERE t.status IN ('pending', 'processing') ORDER BY c.cursor_at, c.id LIMIT 1
-        `, "catalog_scan_task_item_pending_global_idx"),
-        expired: await explainIndex(`
-          WITH candidates AS MATERIALIZED (
-            SELECT i.id, i.locked_until AS cursor_at FROM catalog_scan_task_item i
-            WHERE i.status = 'processing' AND i.locked_until < transaction_timestamp()
-            ORDER BY i.locked_until, i.id LIMIT 128 FOR UPDATE OF i SKIP LOCKED
-          ) SELECT id FROM candidates ORDER BY cursor_at, id LIMIT 1
-        `, "catalog_scan_task_item_expired_lease_idx"),
-      },
       channel_sync_task_item: {
         pending: await explainIndex(`
           WITH candidates AS MATERIALIZED (

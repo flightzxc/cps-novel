@@ -57,6 +57,7 @@ function db(rows: ReturnType<typeof candidate>[]) {
 
 afterEach(() => {
   delete process.env.SITE_URL;
+  delete process.env.FEATURE_ARTICLE_SEO_VISIBILITY;
   invalidateSiteSettingCache();
 });
 
@@ -93,6 +94,57 @@ describe("Sitemap DB family builder", () => {
     const query = fixtureDb.article.findMany.mock.calls[0]![0];
     expect(JSON.stringify(query.where)).toContain('"not":""');
     expect(JSON.stringify(query.where)).toContain('"deletedAt":null');
+  });
+
+  /**
+   * C-25 (`规划_文章管理能力补齐_博客类型可见性换小说_2026-09-08.md` §三/C-25):
+   * "sitemap：候选 where 追加「排除 hidden」，seo_only 照常进；同时在该文件的可见性
+   * 逐行复核函数里补一条对应断言…新条件必须两侧都加，不能只加 DB 侧" — this fixture's
+   * `findMany` mock ignores `where` and returns every row verbatim (same as
+   * every other test in this file), so a `hidden` row surviving into
+   * `files[0].entries` would only happen if the per-row `isVisibleCandidate`
+   * recheck were missing; the `where`-string assertion below independently
+   * pins the DB pre-filter side.
+   */
+  it("C-25: excludes seoVisibility=hidden (both the DB pre-filter and the per-row recheck), keeps seo_only", async () => {
+    process.env.SITE_URL = "https://novel.example";
+    process.env.FEATURE_ARTICLE_SEO_VISIBILITY = "true";
+    const fixtureDb = db([
+      candidate({ seoVisibility: "public" }),
+      candidate({ id: "seo-only", slug: "seo-only", publicPageShortId: "seoonly1", seoVisibility: "seo_only" }),
+      candidate({ id: "hidden", slug: "hidden-article", publicPageShortId: "hidden001", seoVisibility: "hidden" }),
+    ]);
+
+    const files = await createSitemapFamilyBuilder(fixtureDb as never)({
+      type: "novelpage",
+      locale: "en",
+    });
+
+    expect(files[0]!.entries.map((entry) => entry.loc)).toEqual([
+      "https://novel.example/novel/visible-title-pabc123",
+      "https://novel.example/novel/seo-only-pseoonly1",
+    ]);
+
+    const query = fixtureDb.article.findMany.mock.calls[0]![0];
+    expect(JSON.stringify(query.where)).toContain('"seoVisibility":{"not":"hidden"}');
+  });
+
+  it("C-25: the flag off degrades to pre-C-25 behavior — hidden is NOT excluded", async () => {
+    process.env.SITE_URL = "https://novel.example";
+    // FEATURE_ARTICLE_SEO_VISIBILITY deliberately left unset.
+    const fixtureDb = db([
+      candidate({ seoVisibility: "public" }),
+      candidate({ id: "hidden", slug: "hidden-article", publicPageShortId: "hidden001", seoVisibility: "hidden" }),
+    ]);
+
+    const files = await createSitemapFamilyBuilder(fixtureDb as never)({
+      type: "novelpage",
+      locale: "en",
+    });
+
+    expect(files[0]!.entries).toHaveLength(2);
+    const query = fixtureDb.article.findMany.mock.calls[0]![0];
+    expect(JSON.stringify(query.where)).not.toContain("seoVisibility");
   });
 
   it("uses PG Date values for home, Article, and shard lastmod", async () => {

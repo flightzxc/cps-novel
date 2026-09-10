@@ -108,8 +108,17 @@ async function main(): Promise<void> {
 
     for (const entry of selected) {
       const article = await loadIndexNowCandidateArticle(prisma, entry.article_id);
-      const eligible = article ? isNovelIndexNowEligible(article, article.novel, article.promoLink) : false;
-      const canonical = eligible && article ? buildIndexNowCanonicalUrl(article) : null;
+      // C-29b: this manifest format is `novel_article`-only (`novel_id` is
+      // non-null; `src/lib/indexnow/outbox.ts`'s `findPublishedWithoutIndexNowDelivery`
+      // — this manifest's own candidate source — is scoped to `articleType:
+      // "novel_article"` for exactly this reason) — narrow explicitly
+      // rather than casting, so a manifest entry that somehow points at a
+      // blog Article (a hand-edited/stale manifest) is treated as
+      // ineligible/drifted, not passed into the Novel-only eligibility/URL
+      // functions below.
+      const novelArticle = article && article.articleType === "novel_article" ? article : null;
+      const eligible = novelArticle ? isNovelIndexNowEligible(novelArticle, novelArticle.novel, novelArticle.promoLink) : false;
+      const canonical = eligible && novelArticle ? buildIndexNowCanonicalUrl(novelArticle) : null;
       if (!canonical || canonical !== entry.canonical_url) {
         report.drifted++;
         continue;

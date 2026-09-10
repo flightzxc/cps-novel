@@ -40,7 +40,11 @@ export function PreviewChapterList({
         title={t("novel.previewChapters")}
         description={
           hasChapters
-            ? t("novel.previewChaptersDescription", { count: chapters.length })
+            ? // 施工工单_I18N_复数能力 §6.2: t() 现在经 intl-messageformat 渲染
+              // ICU plural，`novel.previewChaptersDescription` 自己按 count 选
+              // 分支（`one`/`other`，语种按各自 CLDR 类别），不再需要在调用点
+              // 用 length===1 三元式挑一个单独的 `...One` 键。
+              t("novel.previewChaptersDescription", { count: chapters.length })
             : undefined
         }
       />

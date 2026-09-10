@@ -133,6 +133,28 @@ function CreatedSummary({ summary }: { summary: CreatedContentSummary }) {
   );
 }
 
+function PreviewEnqueueNotice({ result }: { result: Extract<CreateContentResult, { outcome: "created" }> }) {
+  const preview = result.previewEnqueue;
+  if (!preview) return null;
+  let message: string;
+  if (!preview.queued) {
+    message = preview.reason === "no_channel_account"
+      ? "预览未入队：没有可唯一确定的有效渠道账户；内容已创建，可稍后人工补发。"
+      : preview.reason === "mixed_channel_apps"
+        ? "预览未入队：所选来源跨越多个渠道应用；内容已创建，可分渠道补发。"
+        : preview.reason === "no_eligible_sources"
+          ? "预览未入队：当前没有符合条件的来源条目。"
+        : "预览未入队：提交后的入队步骤失败；内容已创建，可稍后人工补发。";
+  } else if (preview.status === "enqueued" && preview.taskStatus === "disabled") {
+    message = "预览任务已创建，但目录写闸关闭，任务状态为 disabled。";
+  } else if (preview.status === "duplicate" || preview.status === "active_conflict") {
+    message = "预览任务未重复创建：已存在相同或进行中的任务。";
+  } else {
+    message = "预览刷新任务已入队。";
+  }
+  return <p data-testid="preview-enqueue-result" className={`rounded-lg border px-3 py-2 text-sm ${TONE_STYLE.info}`}>{message}</p>;
+}
+
 function ResultPanel({ result }: { result: CreateContentResult }) {
   const copy = describeCreateContentOutcome(result);
   return (
@@ -148,6 +170,7 @@ function ResultPanel({ result }: { result: CreateContentResult }) {
       {(result.outcome === "created" || result.outcome === "already_exists") && (
         <CreatedSummary summary={result} />
       )}
+      {result.outcome === "created" && <PreviewEnqueueNotice result={result} />}
     </div>
   );
 }
@@ -157,16 +180,19 @@ export function CreateContentDialog({
   contentPublishGranted,
   contentPublishBlockedReason,
   onClose,
+  templateOptions = [],
 }: {
   item: SourceItemRow;
   contentPublishGranted: boolean;
   contentPublishBlockedReason: string | null;
   onClose: () => void;
+  templateOptions?: readonly { readonly templateKey: string; readonly version: number }[];
 }) {
   const router = useRouter();
   const dialogRef = useRef<HTMLDialogElement>(null);
   const [stage, setStage] = useState<Stage>({ kind: "loading" });
   const [applying, setApplying] = useState(false);
+  const [templateKey, setTemplateKey] = useState(templateOptions[0]?.templateKey ?? "system-default-v1");
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -185,6 +211,7 @@ export function CreateContentDialog({
     const result = await dryRunContentCreationAction({
       novelSourceItemId: item.id,
       requestId: crypto.randomUUID(),
+      templateKey,
     });
     if (!result.ok) return { kind: "error", message: failureMessage(result) };
     return result.data.outcome === "dry_run"
@@ -204,7 +231,7 @@ export function CreateContentDialog({
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- item.id is the only input that should re-trigger a dry run
-  }, [item.id]);
+  }, [item.id, templateKey]);
 
   function retryDryRun() {
     // A click handler, not an effect body — setting loading synchronously
@@ -218,6 +245,7 @@ export function CreateContentDialog({
     const result = await applyContentCreationAction({
       novelSourceItemId: item.id,
       requestId: crypto.randomUUID(),
+      templateKey,
     });
     setApplying(false);
     if (!result.ok) {
@@ -245,6 +273,12 @@ export function CreateContentDialog({
     >
       <div className="space-y-4 p-5">
         <h2 className="text-base font-semibold">创建内容 · {item.title}</h2>
+        <label className="block text-sm text-gray-700">文章模板
+          <select value={templateKey} onChange={(event) => setTemplateKey(event.target.value)} disabled={applying} className="mt-1 w-full rounded border border-gray-300 p-2">
+            {templateOptions.length === 0 && <option value="system-default-v1">system-default-v1（系统默认）</option>}
+            {templateOptions.map((template) => <option key={`${template.templateKey}:${template.version}`} value={template.templateKey}>{template.templateKey} · v{template.version}</option>)}
+          </select>
+        </label>
 
         {stage.kind === "loading" && (
           <p role="status" className="text-sm text-gray-500">

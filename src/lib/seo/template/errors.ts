@@ -50,7 +50,7 @@ export type TemplateErrorCode = (typeof TEMPLATE_ERROR_CODES)[number];
 
 /** 错误定位信息。全部可选：不同失败点能提供的上下文不一样。 */
 export type TemplateErrorContext = {
-  /** 出错的槽位名（title / body / metaTitle / metaDescription）。 */
+  /** 出错的槽位名（title / body / metaTitle / metaDescription / metaKeywords / slug）。 */
   readonly slot?: string;
   /** 出错的模板变量名。未登记字段这里放模板里写的那个原始名字。 */
   readonly field?: string;

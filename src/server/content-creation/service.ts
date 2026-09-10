@@ -83,15 +83,28 @@ import { isHealthySlug, textToSlug } from "@/lib/slug/text-to-slug";
 import { createWithPublicPageShortIdRetry, generatePublicPageShortIdCandidate } from "@/lib/slug/short-id";
 import { withDbRetry } from "@/lib/db/db-retry";
 import { SITE_LOCALES, type SiteLocale } from "@/lib/locale/locale-canonical";
+// C-30A (施工工单_C30_换小说_移植CPS换租客_2026-09-08.md §4A.1): write point 1
+// of 2 for `Novel.titleNormalized` — see that function's own header for why
+// write point 2 (a Novel title-update path) does not exist in this
+// codebase today.
+import { normalizeNovelTitle } from "@/lib/novel/novel-identity";
 import {
   buildNovelTemplateValues,
   isTemplateRenderError,
   renderArticleDraft,
   type TemplateErrorCode,
 } from "@/lib/seo/template";
+import {
+  ensureDefaultArticleTemplate,
+  selectActiveArticleTemplate,
+  validateStoredArticleTemplate,
+} from "@/server/article-templates";
 
 import { createNovelWithBusinessIdRetry } from "./business-id";
-import { DEFAULT_ARTICLE_TEMPLATE, DEFAULT_ARTICLE_TEMPLATE_KEY } from "./default-article-template";
+import {
+  enqueueContentCreationPreview,
+  type ContentCreationPreviewEnqueueResult,
+} from "./preview-enqueue";
 
 // ---------------------------------------------------------------------------
 // Actor / audit
@@ -187,13 +200,14 @@ export type ContentCreationPlan = {
 };
 
 export type CreateContentResult =
-  | ({ readonly outcome: "created" } & CreatedContentSummary)
+  | ({ readonly outcome: "created"; readonly previewEnqueue?: ContentCreationPreviewEnqueueResult } & CreatedContentSummary)
   | ({ readonly outcome: "already_exists" } & CreatedContentSummary)
   | { readonly outcome: "dry_run"; readonly plan: ContentCreationPlan }
   | { readonly outcome: "source_item_not_found" }
   | { readonly outcome: "source_item_deleted" }
   | { readonly outcome: "source_item_ignored" }
   | { readonly outcome: "source_item_stale" }
+  | { readonly outcome: "template_not_available"; readonly templateKey?: string }
   /** Defensive: the source item's `novelId`/`status` combination doesn't match any state this service's state machine expects (e.g. `status === "linked"` but `novelId` is `null`, or `novelId` points at a missing/soft-deleted Novel, or a linked Novel has no Article for its own locale). Not this call's job to repair — surfaced for manual review. */
   | { readonly outcome: "source_item_inconsistent_state" }
   | {
@@ -228,10 +242,14 @@ export type CreateContentFromSourceItemInput = {
   readonly novelSourceItemId: string;
   /** Defaults to `"en"` — see module header, "Locale is caller-supplied, not derived." */
   readonly locale?: SiteLocale;
+  /** Explicit active template selection; omitted uses the fixed system-default-v1 preference, then the oldest active compatible template. */
+  readonly templateKey?: string;
   /** Defaults to `"dry_run"` — same safety-first default `src/lib/tasks/moboreader.ts` uses for its own `mode` parameter. */
   readonly mode?: "dry_run" | "apply";
   readonly actor: CreateContentActor;
   readonly requestId: string;
+  /** Batch orchestration defers preview enqueue so one aggregate task is created. */
+  readonly deferPreviewEnqueue?: boolean;
 };
 
 /** Thrown only to force `$transaction` to roll back a losing attempt's just-inserted rows — never crosses this module's public boundary. See module header. */
@@ -469,11 +487,12 @@ type WriteClient = ReadClient & {
     }) => Promise<{ count: number }>;
   };
   operationAudit: { create: (args: { data: Record<string, unknown> }) => Promise<unknown> };
+  articleTemplate: Prisma.TransactionClient["articleTemplate"];
 };
 
 async function runCreateTransaction(
   tx: WriteClient,
-  input: { novelSourceItemId: string; locale: SiteLocale; actorType: "admin" | "system"; actorId: string; requestId: string },
+  input: { novelSourceItemId: string; locale: SiteLocale; templateKey?: string; actorType: "admin" | "system"; actorId: string; requestId: string },
 ): Promise<CreateContentResult> {
   const plan = await loadPlan(tx, input.novelSourceItemId, input.locale);
   if (plan.stage === "blocked") return plan.result;
@@ -481,11 +500,29 @@ async function runCreateTransaction(
 
   const { sourceItem, novelSlug, articleSlug } = plan;
 
+  await ensureDefaultArticleTemplate(tx);
+  const template = await selectActiveArticleTemplate(tx as unknown as PrismaClient, {
+    locale: input.locale,
+    applicableArticleType: "novel_article",
+    ...(input.templateKey ? { templateKey: input.templateKey } : {}),
+  });
+  if (!template) {
+    return {
+      outcome: "template_not_available",
+      ...(input.templateKey ? { templateKey: input.templateKey } : {}),
+    };
+  }
+  const templateSource = validateStoredArticleTemplate(template);
+
   const novel = await createNovelWithBusinessIdRetry((businessId) =>
     tx.novel.create({
       data: {
         businessId,
         title: sourceItem.title,
+        // C-30A: maintained alongside `title` at this, the only write point
+        // that sets `Novel.title` in this codebase today — see
+        // `normalizeNovelTitle`'s own doc comment.
+        titleNormalized: normalizeNovelTitle(sourceItem.title),
         description: sourceItem.description,
         coverUrl: sourceItem.coverUrl,
         locale: input.locale,
@@ -515,8 +552,8 @@ async function runCreateTransaction(
     coverUrl: sourceItem.coverUrl,
     totalChapterCount: sourceItem.totalChapterCount,
   });
-  const rendered = renderArticleDraft(DEFAULT_ARTICLE_TEMPLATE, templateValues, {
-    templateKey: DEFAULT_ARTICLE_TEMPLATE_KEY,
+  const rendered = renderArticleDraft(templateSource, templateValues, {
+    templateKey: template.templateKey,
     novelId: novel.id,
   });
 
@@ -547,8 +584,23 @@ async function runCreateTransaction(
         body: rendered.body,
         seoMetadata: rendered.seoMetadata,
         seoSchemaVersion: rendered.seoSchemaVersion,
-        // templateId intentionally left unset (column default `null`) — no
-        // `ArticleTemplate` row exists; see default-article-template.ts.
+        templateId: template.id,
+        /**
+         * C-26 (`规划_文章管理能力补齐_博客类型可见性换小说_2026-09-08.md`
+         * §三/C-26): this insert IS "创建服务里的文章插入" — the plan's other
+         * authorized `Article.contentMode` write site (the first is
+         * `src/server/articles/service.ts`'s `updateArticleContent`/
+         * `regenerateCore`). Written explicitly even though
+         * `content_mode`'s column default is already `"template"` (C-24) and
+         * this insert would land there unwritten — spelled out the same way
+         * `publicPageShortId` above is spelled out rather than shorthand: so
+         * this stays the one other textually-greppable, self-documenting
+         * write site the static scan
+         * (`tests/backend/articles/content-mode-sole-write-paths.test.ts`)
+         * expects to find, and so a future change to the column's default
+         * cannot silently change this path's behavior.
+         */
+        contentMode: "template" as const,
         // status intentionally omitted — see module header, "Never writes status".
       },
     }),
@@ -618,6 +670,15 @@ export async function createContentFromSourceItem(
   const requestId = requireRequestId(input.requestId);
 
   if (mode === "dry_run") {
+    if (input.templateKey) {
+      const template = await selectActiveArticleTemplate(db, {
+        locale,
+        templateKey: input.templateKey,
+        applicableArticleType: "novel_article",
+      });
+      if (!template) return { outcome: "template_not_available", templateKey: input.templateKey };
+      validateStoredArticleTemplate(template);
+    }
     return runDryRun(db, novelSourceItemId, locale);
   }
 
@@ -625,13 +686,28 @@ export async function createContentFromSourceItem(
   const actorId = auditActorId(input.actor);
 
   try {
-    return await withDbRetry(
+    const result = await withDbRetry(
       () =>
         db.$transaction((tx) =>
-          runCreateTransaction(tx as unknown as WriteClient, { novelSourceItemId, locale, actorType, actorId, requestId }),
+          runCreateTransaction(tx as unknown as WriteClient, {
+            novelSourceItemId,
+            locale,
+            ...(input.templateKey ? { templateKey: input.templateKey } : {}),
+            actorType,
+            actorId,
+            requestId,
+          }),
         ),
       { op: "content-creation.createContentFromSourceItem", sourceItemId: novelSourceItemId, idempotencyKey: requestId },
     );
+    if (result.outcome !== "created" || input.deferPreviewEnqueue) return result;
+    const previewEnqueue = await enqueueContentCreationPreview(db, {
+      novelSourceItemIds: [novelSourceItemId],
+      requestToken: `moboreader.preview_refresh.v1:content_create:${novelSourceItemId}`,
+      requestId,
+      actorId,
+    });
+    return { ...result, previewEnqueue };
   } catch (error) {
     if (error instanceof ContentCreationConflictSignal) {
       return { outcome: "concurrent_creation_conflict" };

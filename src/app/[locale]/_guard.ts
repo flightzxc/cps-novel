@@ -37,20 +37,25 @@
  * pages in the same batch.
  *
  * 🔴 P0-S10 correction: adding a locale to `PUBLISHABLE_LOCALES` is
- * necessary but NOT sufficient to make that locale routable — this file and
- * `[locale]/layout.tsx` are the *only* two files in this subtree today
- * (`src/app/[locale]/`), and neither is a `page.tsx`. There are zero leaf
- * pages here. Making `getRoutableLocale` return non-null for a locale
- * before its own `page.tsx` set exists under this segment (mirroring the
- * bare-path tree: `src/app/page.tsx`, `src/app/browse/page.tsx`,
- * `src/app/novel/...`) does not restore access — Next's router still 404s
- * every route under that locale, just via "no matching `page.tsx`" instead
- * of via this guard, and any hreflang/sitemap entries already pointing at
- * `/{locale}/...` become dead links pointing at nothing. Publishing any
- * second locale therefore MUST ship its full `[locale]/...` leaf-page set in
- * the same batch as the `PUBLISHABLE_LOCALES` change — not as a follow-up —
- * or hreflang/sitemap will advertise URLs this router does not yet serve.
+ * necessary but NOT sufficient to make that locale routable. WO-1
+ * (`施工工单_WO1-3_多语种公开站地基_2026-09-08.md` §6.2) shipped this
+ * subtree's leaf-page *shape* — thin `page.tsx`/`not-found.tsx` shells under
+ * `src/app/[locale]/...` that each resolve their `locale` route param and
+ * delegate to the shared bodies in `src/app/_pages/*` — but this does not by
+ * itself make anything reachable: `getRoutableLocale` still returns `null`
+ * for every input (see above), so `[locale]/layout.tsx` 404s every request
+ * before any leaf page's own code ever runs. Making `getRoutableLocale`
+ * return non-null for a locale before its `PUBLISHABLE_LOCALES` entry is
+ * genuinely admitted would not restore access either — the leaf pages exist
+ * now, but any hreflang/sitemap entries pointing at `/{locale}/...` before
+ * that locale is actually admitted would still be dead links pointing at a
+ * page whose data layer has nothing published for that locale. Publishing
+ * any second locale therefore MUST land alongside its
+ * `PUBLISHABLE_LOCALES` admission — not as a follow-up — or hreflang/sitemap
+ * will advertise URLs with no real content behind them yet.
  */
+import { notFound } from "next/navigation";
+
 import { isPublishableLocale, SITE_LOCALES, type SiteLocale } from "@/lib/locale/locale-canonical";
 import { PUBLIC_SITE_LOCALE } from "@/lib/site/locale-label";
 
@@ -59,5 +64,28 @@ export function getRoutableLocale(rawLocale: string): SiteLocale | null {
   const locale = rawLocale as SiteLocale;
   if (locale === PUBLIC_SITE_LOCALE) return null;
   if (!isPublishableLocale(locale)) return null;
+  return locale;
+}
+
+/**
+ * Type-narrowing helper for the `[locale]/...` leaf pages (WO-1 §6.2) — NOT
+ * a second policy gate. The one and only policy decision ("is this locale
+ * routable") still happens exactly once, in `[locale]/layout.tsx`, via
+ * `getRoutableLocale` above; every leaf page under this segment renders only
+ * after that layout has already let the request through. A leaf page still
+ * receives its `locale` route param as a bare `string`, though, and needs a
+ * real `SiteLocale` to hand down to `src/app/_pages/*`'s shared bodies — this
+ * function exists purely to perform that type narrowing via the SAME source
+ * of truth `layout.tsx` already consulted, so a leaf page never re-derives
+ * or duplicates the eligibility decision itself. Because the layout has
+ * already 404'd anything `getRoutableLocale` would reject, the `notFound()`
+ * call below is normally unreachable in production — it exists as a
+ * defensive fallback (e.g. a leaf page invoked in isolation, such as a unit
+ * test that skips the layout) rather than as this file's real enforcement
+ * point.
+ */
+export function requireRoutableLocale(rawLocale: string): SiteLocale {
+  const locale = getRoutableLocale(rawLocale);
+  if (!locale) notFound();
   return locale;
 }

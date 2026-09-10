@@ -6,12 +6,15 @@ import {
   finalizeTaskItem,
   heartbeatTaskItem,
   recoverExpiredItem,
+  redactSecrets,
   requireHandler,
   sanitizePersistedTaskError,
   validateTaskClaimTarget,
   type TaskClaimTarget,
   type TaskFamily,
   type TaskHandlerRegistry,
+  type TaskLease,
+  type TaskOutcome,
   type WorkerAllowlistConfig,
 } from "../../src/lib/tasks";
 import {
@@ -122,6 +125,174 @@ function waitForHandlerDrain<T>(
     if (signal.aborted) startDeadline();
     else signal.addEventListener("abort", startDeadline, { once: true });
   });
+}
+
+/**
+ * D-7 (`施工工单_PhaseE返工2_坏页不崩worker与免费书归一_2026-09-07.md`): the
+ * incident this fixes is `finalizeTaskItem`'s own write transaction failing
+ * (e.g. a DB CHECK violation on a business write nested inside it, such as
+ * C-11's `paid_from_chapter` bug) with something other than `LeaseLostError`
+ * — before this fix, that error was indistinguishable from any other
+ * `processOneWorkerCycle` bug and was rethrown past every catch, crashing
+ * the whole worker process. Extracted here as three narrow, allowlisted
+ * fields only — never the raw error/message — matching the C-10 `detail`
+ * channel's own contract (`src/lib/tasks/errors.ts`): `sanitizeDetail` there
+ * still redacts and length-caps every string that passes through, but this
+ * function is the first line of defense, since it never even reads the
+ * fields (row data, SQL text) that channel wasn't designed to carry.
+ */
+interface FinalizeFailureDetail {
+  sqlState: string | null;
+  prismaCode: string | null;
+  constraint: string | null;
+  errorName: string;
+}
+
+function extractFinalizeFailureDetail(error: unknown): FinalizeFailureDetail {
+  const candidate = error && typeof error === "object" ? (error as Record<string, unknown>) : {};
+  const prismaCode = typeof candidate.code === "string" ? candidate.code : null;
+  const meta = candidate.meta && typeof candidate.meta === "object"
+    ? (candidate.meta as Record<string, unknown>)
+    : undefined;
+  // Postgres SQLSTATE (e.g. "23514") surfaces as `meta.code` on Prisma's
+  // P2010 "raw query failed" wrapper — see `rawSqlErrorCode` in
+  // `src/lib/db/db-retry.ts`, the existing single source of truth for this
+  // same extraction (reused here in spirit, not imported, since that
+  // helper is typed for `Prisma.PrismaClientKnownRequestError` specifically
+  // and this call site must also tolerate a plain non-Prisma `Error`).
+  const sqlState = meta && typeof meta.code === "string" ? meta.code : null;
+  const metaMessage = meta && typeof meta.message === "string" ? meta.message : "";
+  const topMessage = typeof candidate.message === "string" ? candidate.message : "";
+  // Only the matched constraint *identifier* (the regex capture group) is
+  // ever kept — the surrounding message text (which is exactly where a
+  // "Failing row contains (...)" clause would live) is discarded here and
+  // never reaches `detail`.
+  const constraintMatch = /constraint "([A-Za-z0-9_]+)"/.exec(`${metaMessage} ${topMessage}`);
+  const errorName = typeof candidate.name === "string" ? candidate.name : "Error";
+  return {
+    sqlState,
+    prismaCode,
+    constraint: constraintMatch ? constraintMatch[1] : null,
+    errorName,
+  };
+}
+
+const FINALIZE_FAILURE_DATABASE_ERROR_HEAD_MAX_LENGTH = 160;
+const FINALIZE_FAILURE_DATABASE_ERROR_TRUNCATION_MARKER = "Failing row";
+
+/**
+ * D-7b (施工工单_C15_终态扫描绑定变量溢出_2026-09-07.md §D-7b): a
+ * worker-log-only value carrying more of the raw database error text than
+ * `FinalizeFailureDetail`'s three allowlisted fields — never persisted to
+ * the task item (`item.error.detail` stays the C-10 allowlist set in
+ * `buildFinalizeFailedOutcome`, unchanged by this function), only written to
+ * the process log via `handleFinalizeFailure`'s `worker_finalize_failed`
+ * line for an engineer to grep. Still passed through the same
+ * `redactSecrets` every persisted string goes through, *and* truncated at
+ * the first "Failing row" clause — Postgres's own convention for embedding
+ * the actual violating row's column values in a CHECK/constraint error
+ * message — before the final length cap, so this stays safe to log even
+ * though it is deliberately more permissive than `detail`.
+ */
+function extractFinalizeFailureDatabaseErrorHead(error: unknown): string {
+  const candidate = error && typeof error === "object" ? (error as Record<string, unknown>) : {};
+  const meta = candidate.meta && typeof candidate.meta === "object"
+    ? (candidate.meta as Record<string, unknown>)
+    : undefined;
+  const raw = meta && typeof meta.database_error === "string"
+    ? meta.database_error
+    : (typeof candidate.message === "string" ? candidate.message : "");
+  const redacted = redactSecrets(raw);
+  const markerIndex = redacted.indexOf(FINALIZE_FAILURE_DATABASE_ERROR_TRUNCATION_MARKER);
+  const truncated = markerIndex === -1 ? redacted : redacted.slice(0, markerIndex);
+  return truncated.slice(0, FINALIZE_FAILURE_DATABASE_ERROR_HEAD_MAX_LENGTH);
+}
+
+function buildFinalizeFailedOutcome(error: unknown): TaskOutcome {
+  const detail = extractFinalizeFailureDetail(error);
+  return {
+    status: "failed",
+    // A plain (non-null) object, not omitted: the admin task-detail read
+    // projection's item-level stop-reason derivation only derives a line
+    // once `result` is present and not `{ stoppedBeforeFetch: true }` — an
+    // absent/null `result` would silently withhold this code from that
+    // projection even after `"finalize_failed"` is added to its
+    // `CATALOG_SCAN_STOP_REASONS` allowlist. (That admin module is
+    // deliberately not named by path in this comment — this file is one of
+    // the ones an X9 isolation test asserts can never even mention it.)
+    result: {},
+    error: {
+      code: "finalize_failed",
+      message: `Item finalize failed: ${detail.sqlState ?? detail.errorName}`,
+      detail: {
+        sqlState: detail.sqlState,
+        prismaCode: detail.prismaCode,
+        constraint: detail.constraint,
+      },
+    },
+  };
+}
+
+/**
+ * Handles a `finalizeTaskItem` failure that is not `LeaseLostError`: records
+ * the item as `failed` with the redacted `finalize_failed` outcome above
+ * (a second `finalizeTaskItem` call, deliberately without `protectedWrite`
+ * — the business write already ran once inside the first, failed attempt;
+ * this call only needs to set the terminal status/error columns) and emits
+ * the usual worker-failure notification. If even that second write throws,
+ * this logs one structured, itemId/attempt/errorKind-only line and returns
+ * normally either way — the caller (`processOneWorkerCycle`) always
+ * continues the loop rather than let the exception propagate and kill the
+ * process; the existing lease-expiry recovery path is the backstop for a
+ * item stuck `processing` after this.
+ */
+async function handleFinalizeFailure(
+  options: WorkerRuntimeOptions,
+  lease: TaskLease,
+  finalizeError: unknown,
+): Promise<void> {
+  const failedOutcome = buildFinalizeFailedOutcome(finalizeError);
+  // D-7b: engineering-side-only traceability line, deliberately separate
+  // from `failedOutcome.error.detail` (which stays the C-10
+  // operator-visible allowlist, untouched by this addition). This is the
+  // one place the fuller `databaseErrorHead` text is ever written down.
+  const finalizeFailureDetail = extractFinalizeFailureDetail(finalizeError);
+  console.error(JSON.stringify({
+    event: "worker_finalize_failed",
+    itemId: lease.itemId,
+    attempt: lease.attemptCount,
+    prismaCode: finalizeFailureDetail.prismaCode,
+    sqlState: finalizeFailureDetail.sqlState,
+    constraint: finalizeFailureDetail.constraint,
+    databaseErrorHead: extractFinalizeFailureDatabaseErrorHead(finalizeError),
+  }));
+  try {
+    await finalizeTaskItem(options.prisma, lease, failedOutcome);
+    await emitWorkerTaskFailure({
+      family: lease.family,
+      taskType: lease.taskType,
+      taskId: lease.taskId,
+      itemId: lease.itemId,
+      workerId: lease.workerId,
+      errorKind: "finalize_failed",
+      attempt: lease.attemptCount,
+      source: "finalize",
+      occurredAt: occurredAt(options),
+    }, options);
+  } catch {
+    // The retried finalize itself failed too. Never rethrow from here —
+    // that would reintroduce exactly the process-crashing failure mode
+    // this whole function exists to remove. The item is left `processing`
+    // under its current lease; `recoverExpiredItem`'s stale-lease recovery
+    // (already exercised elsewhere in this file) is the backstop that
+    // eventually terminalizes it.
+    console.error(JSON.stringify({
+      event: "worker_finalize_failed_twice",
+      itemId: lease.itemId,
+      attempt: lease.attemptCount,
+      errorKind: "finalize_failed",
+    }));
+  }
 }
 
 export async function processOneWorkerCycle(options: WorkerRuntimeOptions): Promise<boolean> {
@@ -247,7 +418,20 @@ export async function processOneWorkerCycle(options: WorkerRuntimeOptions): Prom
       const outcome = lease.mode === "dry_run"
         ? { ...drainResult.value, protectedWrite: undefined }
         : drainResult.value;
-      await finalizeTaskItem(options.prisma, lease, outcome);
+      try {
+        await finalizeTaskItem(options.prisma, lease, outcome);
+      } catch (finalizeError) {
+        // `LeaseLostError` keeps its pre-existing meaning (someone else now
+        // owns this item's fencing token) and pre-existing handling: rethrow
+        // so the unchanged outer `catch` below swallows it exactly as
+        // before. Every other error here is D-7's target — a genuine write
+        // failure inside `finalizeTaskItem`'s own transaction (e.g. C-11's
+        // `paid_from_chapter` CHECK violation) that must fail this one item,
+        // never the worker process.
+        if (finalizeError instanceof LeaseLostError) throw finalizeError;
+        await handleFinalizeFailure(options, lease, finalizeError);
+        return true;
+      }
       if (outcome.status === "failed") {
         await emitWorkerTaskFailure({
           family: lease.family,

@@ -58,6 +58,7 @@ import {
   type CreateContentActor,
   type CreateContentResult,
 } from "./service";
+import { enqueueContentCreationPreview, type ContentCreationPreviewEnqueueResult } from "./preview-enqueue";
 
 // ---------------------------------------------------------------------------
 // Batch-level input validation (throws — malformed caller input, mirrors
@@ -103,6 +104,8 @@ export type ContentCreationBatchInput = {
   readonly requestId: string;
   /** Forwarded to `createContentFromSourceItem` unchanged — defaults to `"en"` there. */
   readonly locale?: SiteLocale;
+  /** One template is fixed for the entire same-locale batch. */
+  readonly templateKey?: string;
   /** Defaults to {@link CONTENT_CREATION_BATCH_BUDGET_MS}; overridable only for tests. */
   readonly budgetMs?: number;
 };
@@ -184,9 +187,11 @@ async function runSequentialBudgetedBatch<TPrimaryStatus extends string>(
       const result = await createContentFromSourceItem(db, {
         novelSourceItemId,
         locale: input.locale,
+        templateKey: input.templateKey,
         mode,
         actor: input.actor,
         requestId: `${input.requestId}:${novelSourceItemId}`,
+        deferPreviewEnqueue: mode === "apply",
       });
       items.push({ novelSourceItemId, status: classify(result), result });
     } catch (error) {
@@ -234,6 +239,7 @@ export type ContentCreationBatchApplyCounts = Readonly<Record<ContentCreationBat
 export type ContentCreationBatchApplyResult = {
   readonly items: readonly ContentCreationBatchApplyItemOutcome[];
   readonly counts: ContentCreationBatchApplyCounts;
+  readonly previewEnqueue?: ContentCreationPreviewEnqueueResult;
 };
 
 const APPLY_STATUSES = ["created", "skipped_already_linked", "failed", "not_processed"] as const;
@@ -260,7 +266,18 @@ export async function applyContentCreationBatch(
   input: ContentCreationBatchInput,
 ): Promise<ContentCreationBatchApplyResult> {
   const items = await runSequentialBudgetedBatch(db, "apply", input, classifyApplyOutcome);
-  return { items, counts: countBy(items, APPLY_STATUSES) };
+  const createdIds = items
+    .filter((item) => item.status === "created")
+    .map((item) => item.novelSourceItemId);
+  const previewEnqueue = createdIds.length > 0
+    ? await enqueueContentCreationPreview(db, {
+        novelSourceItemIds: createdIds,
+        requestToken: `moboreader.preview_refresh.v1:content_create_batch:${input.requestId}`,
+        requestId: input.requestId,
+        actorId: input.actor.type === "admin" ? input.actor.adminId : input.actor.source,
+      })
+    : undefined;
+  return { items, counts: countBy(items, APPLY_STATUSES), ...(previewEnqueue ? { previewEnqueue } : {}) };
 }
 
 // ---------------------------------------------------------------------------

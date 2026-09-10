@@ -20,9 +20,12 @@ describe("P1-05B static database contracts", () => {
       [path.join(root, "scripts/check-database-dictionary-drift.mjs"), "--static"],
       { encoding: "utf8" },
     );
-    // v0.2.0 foundation added the SiteSetting table (Stream F, migration
-    // 20260818120000_v020_foundation_shared): 43 -> 44 Prisma models.
-    expect(JSON.parse(output)).toMatchObject({ status: "ok", models: 44 });
+    // SiteSetting plus the seven Tagging V3 models brought the schema to 51
+    // models; Phase C step C-4 dropped CatalogScanTask/CatalogScanTaskItem,
+    // bringing it back down to 49. C-30A (施工工单_C30_换小说_移植CPS换租客_
+    // 2026-09-08.md §4A.1) adds three more (ArticleNovelRebindPreview/
+    // Batch/BatchItem), bringing it to 52.
+    expect(JSON.parse(output)).toMatchObject({ status: "ok", models: 52 });
   });
 
   it("keeps stable keys globally unique and records physical ownership", () => {
@@ -43,14 +46,24 @@ describe("P1-05B static database contracts", () => {
       "db:public:indexnow_outbox_attempt:attempt_state",
       "db:public:indexnow_outbox_attempt:indexnow_outbox_attempt_attempt_state_check",
     ]);
+    // Phase C step C-4 (`prisma/migrations/20260907091500_p3_drop_catalog_scan_task`)
+    // dropped catalog_scan_task/catalog_scan_task_item wholesale; every one of
+    // their table/field/constraint records moved to `superseded` per §10 (no
+    // deletion on removal). Matched by table_name rather than an enumerated
+    // list of 68 stable_keys -- still a narrow, table-scoped predicate, not
+    // an open allowlist that could silently swallow an unrelated mistake.
+    const SUPERSEDED_TABLE_NAMES = new Set(["catalog_scan_task", "catalog_scan_task_item"]);
+    let catalogScanSupersededCount = 0;
     for (const record of records) {
-      const expectedStatus = SUPERSEDED_STABLE_KEYS.has(record.stable_key as string)
+      const isDroppedCatalogScan = SUPERSEDED_TABLE_NAMES.has(record.table_name as string);
+      if (isDroppedCatalogScan) catalogScanSupersededCount += 1;
+      const expectedStatus = SUPERSEDED_STABLE_KEYS.has(record.stable_key as string) || isDroppedCatalogScan
         ? "superseded"
         : "active";
       expect(record.status).toBe(expectedStatus);
     }
     expect(records.filter((record) => record.status === "superseded")).toHaveLength(
-      SUPERSEDED_STABLE_KEYS.size,
+      SUPERSEDED_STABLE_KEYS.size + catalogScanSupersededCount,
     );
     expect(
       records

@@ -21,7 +21,7 @@ import {
 const REASON = "operator checked the failed task evidence";
 
 describe("X9 failed-item retry", () => {
-  it.each(["catalog_scan", "channel_sync", "generic"] as const)(
+  it.each(["channel_sync", "generic"] as const)(
     "requeues every failed %s item, preserves fencing counters, recounts parent, and audits in the transaction",
     async (family) => {
       const stores = newStores();
@@ -35,7 +35,7 @@ describe("X9 failed-item retry", () => {
         .map((row) => ({ id: row.id, attemptCount: row.attemptCount, leaseEpoch: row.leaseEpoch }));
 
       const result = await retryFailedTask(
-        { ...ticket, family, taskId: TASK_ID, reason: REASON },
+        { ...ticket, family, taskId: TASK_ID },
         { db: fake.asPrismaClient(), identities: stores, sessions: stores, now: NOW },
       );
 
@@ -78,7 +78,7 @@ describe("X9 failed-item retry", () => {
         actorId: admin.identity.id,
         entityId: TASK_ID,
         taskType: family,
-        reason: REASON,
+        reason: null,
       });
     },
   );
@@ -96,7 +96,7 @@ describe("X9 failed-item retry", () => {
       fake.unresolvedStatus = unresolvedStatus;
 
       await expect(retryFailedTask(
-        { ...ticket, family: "channel_sync", taskId: TASK_ID, reason: REASON },
+        { ...ticket, family: "channel_sync", taskId: TASK_ID },
         { db: fake.asPrismaClient(), identities: stores, sessions: stores, now: NOW },
       )).rejects.toMatchObject({ code: "task_admin_unresolved_intent", status: 409 });
       expect(fake.itemUpdateCalls.size).toBe(0);
@@ -116,13 +116,13 @@ describe("X9 failed-item retry", () => {
     fake.genericUnlinkedBlocked = true;
 
     await expect(retryFailedTask(
-      { ...ticket, family: "generic", taskId: TASK_ID, reason: REASON },
+      { ...ticket, family: "generic", taskId: TASK_ID },
       { db: fake.asPrismaClient(), identities: stores, sessions: stores, now: NOW },
     )).rejects.toMatchObject({ code: "task_admin_unresolved_intent", status: 409 });
     expect(fake.itemUpdateCalls.size).toBe(0);
   });
 
-  it("safely replays the same committed request id and rejects a changed replay binding", async () => {
+  it("safely replays the same committed request id when no reason was supplied", async () => {
     const stores = newStores();
     const admin = seedTaskAdmin(stores);
     const ticket = await issueTaskAuthorization(stores, {
@@ -131,14 +131,31 @@ describe("X9 failed-item retry", () => {
     });
     const fake = new TaskAdminFakeDb();
     const dependencies = { db: fake.asPrismaClient(), identities: stores, sessions: stores, now: NOW };
-    const input = { ...ticket, family: "catalog_scan" as const, taskId: TASK_ID, reason: REASON };
+    const input = { ...ticket, family: "generic" as const, taskId: TASK_ID };
 
     const first = await retryFailedTask(input, dependencies);
     const replay = await retryFailedTask(input, dependencies);
     expect(first.wrote).toBe(true);
     expect(replay).toMatchObject({ wrote: false, auditId: first.auditId, retriedItemCount: 2 });
-    expect(fake.itemUpdateCalls.get("catalog_scan")).toBe(1);
+    expect(fake.itemUpdateCalls.get("generic")).toBe(1);
     expect(fake.audits).toHaveLength(1);
+    expect(fake.audits[0]).toMatchObject({ reason: null });
+  });
+
+  it("still accepts an explicit reason on first write and rejects a replay whose reason binding changed", async () => {
+    const stores = newStores();
+    const admin = seedTaskAdmin(stores);
+    const ticket = await issueTaskAuthorization(stores, {
+      token: admin.token,
+      pathname: "/api/admin/tasks/retry-failed",
+    });
+    const fake = new TaskAdminFakeDb();
+    const dependencies = { db: fake.asPrismaClient(), identities: stores, sessions: stores, now: NOW };
+    const input = { ...ticket, family: "generic" as const, taskId: TASK_ID, reason: REASON };
+
+    const first = await retryFailedTask(input, dependencies);
+    expect(first.wrote).toBe(true);
+    expect(fake.audits[0]).toMatchObject({ reason: REASON });
 
     await expect(retryFailedTask({ ...input, reason: "different binding" }, dependencies))
       .rejects.toMatchObject({ code: "task_admin_idempotency_conflict", status: 409 });
@@ -154,7 +171,7 @@ describe("X9 failed-item retry", () => {
     const fake = new TaskAdminFakeDb();
     fake.parents.get("channel_sync")!.status = "processing";
     await expect(retryFailedTask(
-      { ...ticket, family: "channel_sync", taskId: TASK_ID, reason: REASON },
+      { ...ticket, family: "channel_sync", taskId: TASK_ID },
       { db: fake.asPrismaClient(), identities: stores, sessions: stores, now: NOW },
     )).rejects.toBeInstanceOf(TaskAdminError);
     expect(fake.itemUpdateCalls.size).toBe(0);

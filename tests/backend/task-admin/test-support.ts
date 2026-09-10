@@ -170,7 +170,7 @@ export class TaskAdminFakeDb {
   });
 
   constructor() {
-    for (const family of ["catalog_scan", "channel_sync", "generic"] as const) {
+    for (const family of ["channel_sync", "generic"] as const) {
       this.parents.set(family, {
         id: TASK_ID,
         status: "completed_with_errors",
@@ -232,7 +232,6 @@ export class TaskAdminFakeDb {
   }
 
   asPrismaClient(): PrismaClient {
-    const catalogItems = this.familyDelegate("catalog_scan");
     const channelItems = this.familyDelegate("channel_sync");
     const genericItems = this.familyDelegate("generic");
     const client = {
@@ -240,10 +239,8 @@ export class TaskAdminFakeDb {
       $queryRaw: async (query: { strings: readonly string[]; values: readonly unknown[] }) => {
         const sql = query.strings.join("?");
         if (sql.includes("pg_advisory_xact_lock")) return [];
-        for (const family of ["catalog_scan", "channel_sync", "generic"] as const) {
-          const table = family === "catalog_scan"
-            ? "catalog_scan_task"
-            : family === "channel_sync" ? "channel_sync_task" : "generic_task";
+        for (const family of ["channel_sync", "generic"] as const) {
+          const table = family === "channel_sync" ? "channel_sync_task" : "generic_task";
           if (sql.includes(`FROM ${table} WHERE id`)) {
             const row = this.parents.get(family);
             if (!row || row.id !== query.values[0]) return [];
@@ -260,10 +257,8 @@ export class TaskAdminFakeDb {
         }
         throw new Error(`unexpected query: ${sql}`);
       },
-      catalogScanTaskItem: catalogItems,
       channelSyncTaskItem: channelItems,
       genericTaskItem: genericItems,
-      catalogScanTask: this.parentDelegate("catalog_scan"),
       channelSyncTask: this.parentDelegate("channel_sync"),
       genericTask: this.parentDelegate("generic"),
       sideEffectIntent: {

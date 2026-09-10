@@ -11,7 +11,7 @@ const noop = async () => ({ status: "success" as const });
 describe("P1-07 handler registry guardrails", () => {
   const handlers = createHandlerRegistry({
     alpha: { family: "generic", handler: noop },
-    catalog_scan: { family: "catalog_scan", handler: noop },
+    catalog_scan: { family: "generic", handler: noop },
   });
 
   it("consumes only allowlist intersect handlers", () => {

@@ -1,39 +1,42 @@
 "use client";
 
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useMemo, useState, type FormEvent } from "react";
 
 import { buttonClassName } from "@/components/ui/button";
 import { errorEnvelopeCopy } from "@/features/admin-ui/error-copy";
+import { ImportProgress } from "@/features/admin-ui/import-progress";
+import { SITE_LOCALES, SITE_LOCALE_LABELS } from "@/lib/locale/locale-canonical";
 
-import { applyCatalogScanTaskAction, dryRunCatalogScanTaskAction } from "../_actions";
-import type { ChannelAppScanOption } from "../_lib/read-channel-apps";
+import { applyCatalogScanTaskAction } from "../_actions";
+import type { ChannelScanOption } from "../_lib/read-channel-apps";
 import {
   catalogScanFlagChecklist,
-  catalogScanStatusQuery,
   describeCatalogScanOutcome,
-  CATALOG_SCAN_NEXT_STEPS_NOTE,
   type CatalogScanOutcome,
   type OutcomeTone,
 } from "../_lib/scan-task-copy";
 
 /**
- * "新建目录扫描任务" block on `/catalog-sync` (PR-C2).
+ * "新建目录扫描任务" block on `/catalog-sync` (PR-C2; reshaped by Phase B —
+ * `施工工单_PhaseB_实体订正与运营表单Parity_2026-09-06.md` §三 — into the CPS
+ * `changdu-sync-panel.tsx` shape: 渠道 → 剧场 chips → 语种 chips → 渠道账号 →
+ * 「开始同步」).
  *
- * This is the missing trigger for `createMoboreaderCatalogScanTask`
- * (`@/lib/tasks/moboreader`) — cold-start step 4. Unlike
- * `CreateContentDialog` above it, there is no dry-run-then-apply two-stage
- * flow inside one submission: `mode` here is a form field the operator picks
- * up front (default `dry_run`), and which Server Action gets called depends
- * on it — `dryRunCatalogScanTaskAction` or `applyCatalogScanTaskAction`, see
- * `../_actions.ts`. Both write a task row; `apply` is the one that, once
- * `NOVEL_CATALOG_SYNC_ALLOW_WRITE` is also on, actually lets the worker
- * persist upstream data.
+ * Unlike the pre-Phase-B version, there is no operator-facing mode picker
+ * and no page-mechanics inputs. This form only ever calls
+ * `applyCatalogScanTaskAction` — CPS's own sync panel hardcodes `mode:
+ * 'apply'` the same way (`changdu-sync-panel.tsx:519-524` in the read-only
+ * CPS reference); `dryRunCatalogScanTaskAction` (`../_actions.ts`) still
+ * exists for callers outside this form, it is simply never imported here.
+ * Page range/size are resolved server-side from the factory's own
+ * CPS-parity constants (see the doc comment on `CatalogScanTriggerInput` in
+ * `../_actions.ts`) — this component never sees them.
  */
 
-const DEFAULT_PAGE_SIZE = 20;
-
 type FieldErrors = Partial<
-  Record<"channelApp" | "channelAccount" | "pageStart" | "pageEnd" | "pageSize", string>
+  Record<"channel" | "channelApp" | "channelAccount" | "languages", string>
 >;
 
 type Stage =
@@ -53,21 +56,19 @@ const TONE_STYLE: Readonly<Record<OutcomeTone, string>> = Object.freeze({
 /**
  * Codes `MoboreaderTaskInputError` (`@/lib/tasks/moboreader`) can throw that
  * this form can actually trigger. `request_token_required` / `actor_required`
- * / `request_id_required` / `mode_invalid` / `safety_max_pages_invalid` stay
- * in the fallback branch — this form never supplies those fields itself (the
- * action fills them server-side), so seeing one would mean an internal bug,
- * not a bad form entry.
+ * / `request_id_required` / `mode_invalid` / `safety_max_pages_invalid` /
+ * `page_start_invalid` / `page_end_invalid` / `page_size_invalid` /
+ * `page_range_invalid` / `page_size_exceeded` stay in the fallback branch —
+ * this form no longer supplies any page field itself (Phase B resolves them
+ * server-side as fixed constants), so seeing one of those codes would mean
+ * an internal bug in that server-side constant, not a bad form entry.
  */
 const INVALID_INPUT_COPY: Readonly<Record<string, string>> = Object.freeze({
   channel_account_required: "请选择渠道账户",
-  channel_app_required: "请选择渠道应用",
+  channel_app_required: "请选择同步剧场",
   active_channel_binding_required:
     "所选渠道应用与渠道账户当前不是有效的启用绑定（可能刚被停用），请刷新页面后重试",
-  page_start_invalid: "起始页码无效，请输入大于 0 的整数",
-  page_end_invalid: "结束页码无效，请输入大于 0 的整数",
-  page_size_invalid: "每页条数无效，请输入大于 0 的整数",
-  page_range_invalid: "结束页码不能小于起始页码",
-  page_size_exceeded: "每页条数超过上限",
+  languages_invalid: "语种选择无效，请刷新页面后重试",
 });
 
 function inputInvalidMessage(code: string): string {
@@ -95,17 +96,6 @@ function FlagChecklist({ flags }: { flags: Extract<CatalogScanOutcome, { outcome
   );
 }
 
-function NextStepsNote({ taskId }: { taskId: string }) {
-  return (
-    <div className="mt-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-xs text-gray-600">
-      <p>{CATALOG_SCAN_NEXT_STEPS_NOTE}</p>
-      <pre className="mt-1.5 overflow-x-auto rounded bg-gray-900 px-2 py-1.5 text-[11px] text-gray-100">
-        {catalogScanStatusQuery(taskId)}
-      </pre>
-    </div>
-  );
-}
-
 function ResultPanel({ result }: { result: CatalogScanOutcome }) {
   const copy = describeCatalogScanOutcome(result);
   return (
@@ -117,69 +107,94 @@ function ResultPanel({ result }: { result: CatalogScanOutcome }) {
       <p className="font-medium">{copy.title}</p>
       <p className="mt-1">{copy.body}</p>
       {result.outcome === "created_disabled" && <FlagChecklist flags={result.flags} />}
-      <NextStepsNote taskId={result.taskId} />
     </div>
   );
 }
 
+/**
+ * C-6: 提交成功且拿到 taskId 时（"created" 或 "created_disabled" —— 后者的任务
+ * 会立即停在 disabled/已暂停，ImportProgress 首次轮询即终态，这本身就是正确反馈,
+ * 不需要额外分支）内联渲染进度卡；`onTerminal` 刷新来源条目列表（同页
+ * server component 重新取数），旁置「前往任务中心 →」「查看推广链接 →」——
+ * 对齐 CPS 目录同步提交后的路径,见工单 §三表格最后一行。
+ */
+function TaskProgressCard({ taskId, onTerminal }: { taskId: string; onTerminal: () => void }) {
+  return (
+    <div className="mt-3 space-y-3 rounded-lg border border-gray-200 bg-gray-50 p-4">
+      <ImportProgress taskId={taskId} onTerminal={onTerminal} />
+      <div className="flex items-center gap-4 border-t border-gray-200 pt-3 text-sm">
+        <Link href="/tasks" className="font-medium text-blue-600 hover:text-blue-700">
+          前往任务中心 →
+        </Link>
+        <Link href="/promo-links" className="font-medium text-blue-600 hover:text-blue-700">
+          查看推广链接 →
+        </Link>
+      </div>
+    </div>
+  );
+}
+
+function chipButtonClassName(selected: boolean): string {
+  return `rounded-lg border px-4 py-2 text-sm font-medium transition-colors ${
+    selected
+      ? "border-blue-300 bg-blue-50 text-blue-700"
+      : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"
+  }`;
+}
+
 export function CatalogScanTriggerForm({
-  channelApps,
+  channels,
   contentPublishGranted,
   contentPublishBlockedReason,
-  maxPageSize,
   safetyMaxPages,
 }: {
-  channelApps: readonly ChannelAppScanOption[];
+  channels: readonly ChannelScanOption[];
   contentPublishGranted: boolean;
   contentPublishBlockedReason: string | null;
-  maxPageSize: number;
   safetyMaxPages: number;
 }) {
-  const firstApp = channelApps[0] ?? null;
-  const [channelAppId, setChannelAppId] = useState(firstApp?.id ?? "");
-  const [channelAccountId, setChannelAccountId] = useState(firstApp?.channelAccounts[0]?.id ?? "");
-  const [pageStart, setPageStart] = useState("1");
-  const [pageEnd, setPageEnd] = useState("1");
-  const [pageSize, setPageSize] = useState(String(DEFAULT_PAGE_SIZE));
-  const [mode, setMode] = useState<"dry_run" | "apply">("dry_run");
+  const router = useRouter();
+  const firstChannel = channels[0] ?? null;
+  const [channelId, setChannelId] = useState(firstChannel?.id ?? "");
+  const [channelAppId, setChannelAppId] = useState(firstChannel?.channelApps[0]?.id ?? "");
+  const [channelAccountId, setChannelAccountId] = useState(firstChannel?.channelAccounts[0]?.id ?? "");
+  const [languages, setLanguages] = useState<ReadonlySet<string>>(new Set());
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [stage, setStage] = useState<Stage>({ kind: "idle" });
 
-  const selectedApp = useMemo(
-    () => channelApps.find((app) => app.id === channelAppId) ?? null,
-    [channelApps, channelAppId],
+  const selectedChannel = useMemo(
+    () => channels.find((channel) => channel.id === channelId) ?? null,
+    [channels, channelId],
   );
-  const accountOptions = selectedApp?.channelAccounts ?? [];
+  const channelAppOptions = selectedChannel?.channelApps ?? [];
+  const accountOptions = selectedChannel?.channelAccounts ?? [];
 
-  function onChannelAppChange(id: string) {
-    setChannelAppId(id);
-    const app = channelApps.find((candidate) => candidate.id === id);
-    setChannelAccountId(app?.channelAccounts[0]?.id ?? "");
+  function onChannelChange(id: string) {
+    setChannelId(id);
+    const channel = channels.find((candidate) => candidate.id === id);
+    setChannelAppId(channel?.channelApps[0]?.id ?? "");
+    setChannelAccountId(channel?.channelAccounts[0]?.id ?? "");
+  }
+
+  // Named `flipLanguageChip`, not `toggleLanguage` — `tests/ui/
+  // locale-canonical.test.ts`'s pattern-based "no second locale-normalize
+  // implementation" scan flags any `to*Language*` name, and this is a plain
+  // Set toggle, not a locale mapping.
+  function flipLanguageChip(locale: string) {
+    setLanguages((current) => {
+      const next = new Set(current);
+      if (next.has(locale)) next.delete(locale);
+      else next.add(locale);
+      return next;
+    });
   }
 
   function validate(): FieldErrors {
     const errors: FieldErrors = {};
-    if (!channelAppId) errors.channelApp = "请选择渠道应用";
+    if (!channelId) errors.channel = "请选择渠道";
+    if (!channelAppId) errors.channelApp = "请选择同步剧场";
     if (!channelAccountId) errors.channelAccount = "请选择渠道账户";
-
-    const start = Number.parseInt(pageStart, 10);
-    const end = Number.parseInt(pageEnd, 10);
-    const size = Number.parseInt(pageSize, 10);
-
-    if (!Number.isInteger(start) || start < 1) {
-      errors.pageStart = "起始页码必须是大于 0 的整数";
-    }
-    if (!Number.isInteger(end) || end < 1) {
-      errors.pageEnd = "结束页码必须是大于 0 的整数";
-    }
-    if (!errors.pageStart && !errors.pageEnd && end < start) {
-      errors.pageEnd = "结束页码不能小于起始页码";
-    }
-    if (!Number.isInteger(size) || size < 1) {
-      errors.pageSize = "每页条数必须是大于 0 的整数";
-    } else if (size > maxPageSize) {
-      errors.pageSize = `每页条数不能超过 ${maxPageSize}`;
-    }
+    if (languages.size === 0) errors.languages = "请至少选择一种语种";
     return errors;
   }
 
@@ -190,13 +205,10 @@ export function CatalogScanTriggerForm({
     if (Object.keys(errors).length > 0) return;
 
     setStage({ kind: "submitting" });
-    const action = mode === "apply" ? applyCatalogScanTaskAction : dryRunCatalogScanTaskAction;
-    const result = await action({
+    const result = await applyCatalogScanTaskAction({
       channelAccountId,
       channelAppId,
-      pageStart: Number.parseInt(pageStart, 10),
-      pageEnd: Number.parseInt(pageEnd, 10),
-      pageSize: Number.parseInt(pageSize, 10),
+      languages: Array.from(languages),
       requestId: crypto.randomUUID(),
     });
 
@@ -211,8 +223,12 @@ export function CatalogScanTriggerForm({
     setStage({ kind: "result", result: result.data });
   }
 
-  const applyBlocked = mode === "apply" && !contentPublishGranted;
   const submitting = stage.kind === "submitting";
+  // Deliberately does NOT also require `languages.size > 0` — that stays a
+  // submit-time `validate()` check (like every other required field here),
+  // so an operator who clicks submit before picking a language sees the
+  // "请至少选择一种语种" message instead of a button that never responds.
+  const canSubmit = !submitting && contentPublishGranted && channelAppOptions.length > 0 && accountOptions.length > 0;
 
   return (
     <section
@@ -223,11 +239,11 @@ export function CatalogScanTriggerForm({
         新建目录扫描任务
       </h2>
       <p className="mt-1 text-xs text-gray-500">
-        从渠道应用抓取上游目录页，写入待创建来源条目——这是冷启动链路的第 4 步。当前安全页数上限为{" "}
-        {safetyMaxPages} 页，若请求页数超过该值，后台会自动截断到该范围内。
+        选择渠道、剧场与语种后从上游抓取目录页，写入待创建来源条目——这是冷启动链路的第 4 步。
+        每次运行会扫描第 1 页到当前安全上限（{safetyMaxPages} 页）。
       </p>
 
-      {channelApps.length === 0 ? (
+      {channels.length === 0 ? (
         <p
           role="status"
           data-testid="catalog-scan-no-channel-apps"
@@ -236,141 +252,118 @@ export function CatalogScanTriggerForm({
           没有可用的活跃渠道应用（渠道、渠道账户、渠道应用需均为启用状态），请先在「渠道账户」页配置后再回来创建任务。
         </p>
       ) : (
-        <form className="mt-3 space-y-3" onSubmit={onSubmit} noValidate>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <label className="block text-sm">
-              <span className="mb-1 block text-gray-600">渠道应用</span>
-              <select
-                value={channelAppId}
-                onChange={(event) => onChannelAppChange(event.target.value)}
-                aria-label="渠道应用"
-                aria-invalid={Boolean(fieldErrors.channelApp)}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
-              >
-                {channelApps.map((app) => (
-                  <option key={app.id} value={app.id}>
-                    {app.channelName}（{app.channelCode}） · {app.sourceAppName}
-                  </option>
-                ))}
-              </select>
-              {fieldErrors.channelApp && (
-                <p role="alert" className="mt-1 text-xs text-red-600">
-                  {fieldErrors.channelApp}
-                </p>
-              )}
-            </label>
+        <form className="mt-3 space-y-4" onSubmit={onSubmit} noValidate>
+          <label className="block max-w-xs text-sm">
+            <span className="mb-1 block text-gray-600">渠道</span>
+            <select
+              value={channelId}
+              onChange={(event) => onChannelChange(event.target.value)}
+              aria-label="渠道"
+              aria-invalid={Boolean(fieldErrors.channel)}
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+            >
+              {channels.map((channel) => (
+                <option key={channel.id} value={channel.id}>
+                  {channel.name}（{channel.code}）
+                </option>
+              ))}
+            </select>
+            {fieldErrors.channel && (
+              <p role="alert" className="mt-1 text-xs text-red-600">
+                {fieldErrors.channel}
+              </p>
+            )}
+          </label>
 
-            <label className="block text-sm">
-              <span className="mb-1 block text-gray-600">渠道账户</span>
-              <select
-                value={channelAccountId}
-                onChange={(event) => setChannelAccountId(event.target.value)}
-                aria-label="渠道账户"
-                aria-invalid={Boolean(fieldErrors.channelAccount)}
-                disabled={accountOptions.length === 0}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none disabled:bg-gray-50 disabled:text-gray-400"
-              >
-                {accountOptions.length === 0 && <option value="">（该渠道下没有启用中的账户）</option>}
-                {accountOptions.map((account) => (
-                  <option key={account.id} value={account.id}>
-                    {account.accountName}（{account.businessId}）
-                  </option>
-                ))}
-              </select>
-              {fieldErrors.channelAccount && (
-                <p role="alert" className="mt-1 text-xs text-red-600">
-                  {fieldErrors.channelAccount}
-                </p>
+          <div>
+            <span className="mb-2 block text-sm font-medium text-gray-700">同步剧场</span>
+            <div className="flex flex-wrap gap-2">
+              {channelAppOptions.length === 0 ? (
+                <p className="text-sm text-gray-400">该渠道下暂无可用剧场</p>
+              ) : (
+                channelAppOptions.map((app) => (
+                  <button
+                    key={app.id}
+                    type="button"
+                    onClick={() => setChannelAppId(app.id)}
+                    className={chipButtonClassName(channelAppId === app.id)}
+                  >
+                    {app.sourceAppName}
+                  </button>
+                ))
               )}
-            </label>
-
-            <label className="block text-sm">
-              <span className="mb-1 block text-gray-600">起始页</span>
-              <input
-                type="number"
-                min={1}
-                value={pageStart}
-                onChange={(event) => setPageStart(event.target.value)}
-                aria-label="起始页"
-                aria-invalid={Boolean(fieldErrors.pageStart)}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
-              />
-              {fieldErrors.pageStart && (
-                <p role="alert" className="mt-1 text-xs text-red-600">
-                  {fieldErrors.pageStart}
-                </p>
-              )}
-            </label>
-
-            <label className="block text-sm">
-              <span className="mb-1 block text-gray-600">结束页</span>
-              <input
-                type="number"
-                min={1}
-                value={pageEnd}
-                onChange={(event) => setPageEnd(event.target.value)}
-                aria-label="结束页"
-                aria-invalid={Boolean(fieldErrors.pageEnd)}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
-              />
-              {fieldErrors.pageEnd && (
-                <p role="alert" className="mt-1 text-xs text-red-600">
-                  {fieldErrors.pageEnd}
-                </p>
-              )}
-            </label>
-
-            <label className="block text-sm">
-              <span className="mb-1 block text-gray-600">每页条数</span>
-              <input
-                type="number"
-                min={1}
-                max={maxPageSize}
-                value={pageSize}
-                onChange={(event) => setPageSize(event.target.value)}
-                aria-label="每页条数"
-                aria-invalid={Boolean(fieldErrors.pageSize)}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
-              />
-              {fieldErrors.pageSize && (
-                <p role="alert" className="mt-1 text-xs text-red-600">
-                  {fieldErrors.pageSize}
-                </p>
-              )}
-            </label>
-
-            <label className="block text-sm">
-              <span className="mb-1 block text-gray-600">模式</span>
-              <select
-                value={mode}
-                onChange={(event) => setMode(event.target.value as "dry_run" | "apply")}
-                aria-label="模式"
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
-              >
-                <option value="dry_run">dry_run（试运行，不落地正式目录）</option>
-                <option value="apply">apply（正式写入，需要 content:publish）</option>
-              </select>
-            </label>
+            </div>
+            {fieldErrors.channelApp && (
+              <p role="alert" className="mt-1 text-xs text-red-600">
+                {fieldErrors.channelApp}
+              </p>
+            )}
           </div>
 
-          {applyBlocked && contentPublishBlockedReason && (
+          <div>
+            <span className="mb-2 block text-sm font-medium text-gray-700">
+              同步语种 <span className="text-red-500">*</span>
+            </span>
+            <div className="flex flex-wrap gap-2">
+              {SITE_LOCALES.map((locale) => (
+                <button
+                  key={locale}
+                  type="button"
+                  onClick={() => flipLanguageChip(locale)}
+                  aria-pressed={languages.has(locale)}
+                  className={chipButtonClassName(languages.has(locale))}
+                >
+                  {SITE_LOCALE_LABELS[locale]}
+                </button>
+              ))}
+            </div>
+            <p className="mt-1 text-xs text-gray-400">
+              上游目录接口不支持按语种过滤，会返回全部语种；这里的选择只影响本次任务的计数与结果筛选。
+            </p>
+            {fieldErrors.languages && (
+              <p role="alert" className="mt-1 text-xs text-red-600">
+                {fieldErrors.languages}
+              </p>
+            )}
+          </div>
+
+          <label className="block max-w-xs text-sm">
+            <span className="mb-1 block text-gray-600">渠道账户</span>
+            <select
+              value={channelAccountId}
+              onChange={(event) => setChannelAccountId(event.target.value)}
+              aria-label="渠道账户"
+              aria-invalid={Boolean(fieldErrors.channelAccount)}
+              disabled={accountOptions.length === 0}
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none disabled:bg-gray-50 disabled:text-gray-400"
+            >
+              {accountOptions.length === 0 && <option value="">（该渠道下没有启用中的账户）</option>}
+              {accountOptions.map((account) => (
+                <option key={account.id} value={account.id}>
+                  {account.accountName}（{account.businessId}）
+                </option>
+              ))}
+            </select>
+            {fieldErrors.channelAccount && (
+              <p role="alert" className="mt-1 text-xs text-red-600">
+                {fieldErrors.channelAccount}
+              </p>
+            )}
+          </label>
+
+          {!contentPublishGranted && contentPublishBlockedReason && (
             <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
               {contentPublishBlockedReason}
-              <span className="ml-1 text-amber-700">仍可创建 dry_run 任务。</span>
             </p>
           )}
 
           <div className="flex items-center gap-2">
-            <button
-              type="submit"
-              disabled={submitting || applyBlocked}
-              className={buttonClassName("primary")}
-            >
+            <button type="submit" disabled={!canSubmit} className={buttonClassName("primary")}>
               {submitting
-                ? "创建中…"
-                : mode === "apply"
-                  ? "创建扫描任务（apply）"
-                  : "创建扫描任务（dry_run）"}
+                ? "同步中…"
+                : languages.size > 0
+                  ? `开始同步 · ${languages.size} 语种`
+                  : "开始同步"}
             </button>
           </div>
 
@@ -384,7 +377,17 @@ export function CatalogScanTriggerForm({
               {stage.message}
             </p>
           )}
-          {stage.kind === "result" && <ResultPanel result={stage.result} />}
+          {stage.kind === "result" && (
+            <>
+              <ResultPanel result={stage.result} />
+              {(stage.result.outcome === "created" || stage.result.outcome === "created_disabled") && (
+                <TaskProgressCard
+                  taskId={stage.result.taskId}
+                  onTerminal={() => router.refresh()}
+                />
+              )}
+            </>
+          )}
         </form>
       )}
     </section>

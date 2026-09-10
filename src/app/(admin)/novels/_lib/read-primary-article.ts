@@ -67,6 +67,13 @@ export async function readPrimaryArticlesForNovels(
   });
   const byNovelId = new Map<string, PrimaryArticleRef>();
   for (const article of articles) {
+    // C-27: `Article.novelId` is nullable at the type level (blog articles),
+    // but the `where: { novelId: { in: [...novelIds] } }` clause above can
+    // only ever match rows whose `novelId` is one of the caller-supplied,
+    // non-null ids — a null `novelId` row is structurally excluded from this
+    // result set. This guard makes that provable to the type checker without
+    // a `!` assertion; it is not expected to ever actually skip a row.
+    if (article.novelId === null) continue;
     // Today there is exactly one live Article per Novel (see module header);
     // `orderBy: createdAt asc` plus first-write-wins here means a future
     // regression of that invariant fails safe (picks the oldest row) instead

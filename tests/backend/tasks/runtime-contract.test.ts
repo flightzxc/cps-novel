@@ -8,7 +8,8 @@ describe("P1-07 SQL and shutdown contracts", () => {
   const workerSource = readFileSync(path.join(process.cwd(), "worker/runtime/worker.ts"), "utf8");
 
   it("keeps pending and expired SKIP LOCKED paths separate", () => {
-    expect(source.match(/FOR UPDATE OF i SKIP LOCKED/g)).toHaveLength(6);
+    // Phase C: two families (channel_sync, generic), pending + expired each = 4.
+    expect(source.match(/FOR UPDATE OF i SKIP LOCKED/g)).toHaveLength(4);
     expect(source).not.toMatch(/status\s*=\s*'pending'[\s\S]{0,160}\bOR\b[\s\S]{0,160}locked_until/i);
     expect(source).toContain("ORDER BY i.created_at, i.id");
     expect(source).toContain("ORDER BY i.locked_until, i.id");
@@ -22,7 +23,8 @@ describe("P1-07 SQL and shutdown contracts", () => {
   });
 
   it("propagates task mode on every lease and suppresses only dry-run protected writes", () => {
-    expect(source.match(/t\.mode/g)).toHaveLength(3);
+    // Phase C: two families (channel_sync, generic).
+    expect(source.match(/t\.mode/g)).toHaveLength(2);
     expect(source).toContain("mode: row.mode");
     expect(workerSource).toContain("mode: lease.mode");
     expect(workerSource).toContain('lease.mode === "dry_run"');
@@ -30,7 +32,6 @@ describe("P1-07 SQL and shutdown contracts", () => {
   });
 
   it("locks each parent before taking the aggregate statement snapshot", () => {
-    expect(source).toContain("SELECT id FROM catalog_scan_task WHERE id = ${taskId}::uuid FOR UPDATE");
     expect(source).toContain("SELECT id FROM channel_sync_task WHERE id = ${taskId}::uuid FOR UPDATE");
     expect(source).toContain("SELECT id FROM generic_task WHERE id = ${taskId}::uuid FOR UPDATE");
     expect(source.indexOf("SELECT id FROM generic_task WHERE")).toBeLessThan(

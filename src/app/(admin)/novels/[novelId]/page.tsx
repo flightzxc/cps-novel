@@ -29,6 +29,7 @@ import {
   NovelSyncPanel,
 } from "../_components/novel-detail-panels";
 import { PublishLifecyclePanel } from "../_components/publish-lifecycle-panel";
+import { NovelTagsPanel } from "../_components/novel-tags-panel";
 import { requireContentPage } from "../_lib/content-page-guard";
 import { readPrimaryArticleForNovel } from "../_lib/read-primary-article";
 
@@ -93,6 +94,7 @@ export default async function NovelDetailPage({
     if (!chapterError) throw error;
   }
   const novel = projectAdminNovelDetail(detail);
+  const tagManageCapability = findCapabilityState(capabilityViews(context), "tag:manage");
 
   return (
     <AdminShell
@@ -100,12 +102,31 @@ export default async function NovelDetailPage({
       title={novel.title}
       description={`业务 ID ${novel.businessId}`}
       actions={
-        <Link
-          href="/novels"
-          className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
-        >
-          返回列表
-        </Link>
+        <div className="flex gap-2">
+          {/*
+            C-19 (`分析_文章管理Parity缺口_2026-09-08.md` §三 "书目筛选"): the
+            only entry point into `/articles?novelId=…` — that filter is
+            deliberately not a picker (see `ArticleFilters`'s own header), so
+            without this link an operator would have no way to reach a
+            book's article short of typing its UUID by hand. Placed on the
+            detail page, not the list row: `novels-table.tsx` already has a
+            test (`每行只提供查看入口，不提供任何写操作控件`) pinning exactly
+            one "查看" link per row, and the analysis doc's "书目列表/详情"
+            phrasing only requires the entry point exist somewhere, not both.
+          */}
+          <Link
+            href={`/articles?novelId=${novel.novelId}`}
+            className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
+          >
+            查看该书目的文章
+          </Link>
+          <Link
+            href="/novels"
+            className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
+          >
+            返回列表
+          </Link>
+        </div>
       }
     >
       <div className="space-y-6">
@@ -133,6 +154,11 @@ export default async function NovelDetailPage({
             directly under the upstream-sources panel rather than with the
             identity fields — it describes what the channel said, not what we own. */}
         <NovelLabelsPanel novel={novel} />
+
+        {/* What we finally decided, versus what the channel said above — same
+            reading order as `NovelSourcesPanel` → `NovelLabelsPanel`, one
+            level more resolved. */}
+        <NovelTagsPanel novelId={novel.novelId} locale={novel.locale} capability={tagManageCapability} />
 
         <section className="space-y-3">
           <h2 className="text-sm font-semibold text-gray-900">

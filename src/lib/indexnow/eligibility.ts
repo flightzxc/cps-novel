@@ -18,11 +18,15 @@
  */
 import type { PrismaClient, Prisma } from "@prisma/client";
 
-import { buildArticlePath } from "@/lib/slug/article-path";
+import type { ArticleType } from "@/domain/database-statuses";
+import { isArticleBlogEnabled } from "@/lib/flags";
+import { buildArticlePath, buildBlogPath } from "@/lib/slug/article-path";
 import { SITE_LOCALES, isPublishableLocale, type SiteLocale } from "@/lib/locale/locale-canonical";
 import {
+  isHiddenFromPublicView,
   isIndexNowEligible,
   type ArticlePublicationState,
+  type ArticleSeoVisibilityState,
   type NovelPublicationState,
   type PromoLinkReadinessState,
 } from "@/server/publication/visibility";
@@ -38,10 +42,42 @@ export type IndexNowCandidateArticle = {
   readonly slug: string;
   readonly publicPageShortId: string;
   readonly status: string;
+  /** C-25: `Article.seoVisibility` — a `hidden` Article must never reach IndexNow. See `isNovelIndexNowEligible` below. */
+  readonly seoVisibility: string;
   readonly updatedAt: Date;
   readonly novel: NovelPublicationState;
   readonly promoLink: PromoLinkReadinessState;
 };
+
+/**
+ * C-29b: blog-family counterpart (`blog_article`/`listicle`/`guide`) — a
+ * null-`novelId` row never has a Novel or PromoLink to select at all
+ * (`article_novel_id_by_type_check`), so this shape omits both fields
+ * entirely rather than carrying them as always-null placeholders a caller
+ * could forget to check.
+ */
+export type IndexNowCandidateBlogArticle = {
+  readonly id: string;
+  readonly locale: string;
+  readonly slug: string;
+  readonly status: string;
+  readonly seoVisibility: string;
+  readonly updatedAt: Date;
+};
+
+/**
+ * C-29b: discriminated on `articleType` — `"novel_article"` carries the
+ * pre-C-29b `IndexNowCandidateArticle` shape byte-identical (`.novel`/
+ * `.promoLink` included); every other value (the blog family) carries
+ * `IndexNowCandidateBlogArticle` instead. Callers must narrow on
+ * `articleType` before touching `.novel`/`.promoLink` — see
+ * `outbox.ts`'s `enqueueIndexNowFirstPublish` and
+ * `worker/handlers/indexnow-delivery.ts` for the two production call sites
+ * that do.
+ */
+export type IndexNowCandidateArticleRow =
+  | (Readonly<{ articleType: "novel_article" }> & IndexNowCandidateArticle)
+  | (Readonly<{ articleType: Exclude<ArticleType, "novel_article"> }> & IndexNowCandidateBlogArticle);
 
 const ARTICLE_ELIGIBILITY_SELECT = {
   id: true,
@@ -50,7 +86,9 @@ const ARTICLE_ELIGIBILITY_SELECT = {
   slug: true,
   publicPageShortId: true,
   status: true,
+  seoVisibility: true,
   updatedAt: true,
+  articleType: true,
   novel: { select: { status: true } },
   promoLink: { select: { status: true, webUrl: true, appUrl: true } },
 } satisfies Prisma.ArticleSelect;
@@ -58,12 +96,42 @@ const ARTICLE_ELIGIBILITY_SELECT = {
 export async function loadIndexNowCandidateArticle(
   db: Db,
   articleId: string,
-): Promise<IndexNowCandidateArticle | null> {
+): Promise<IndexNowCandidateArticleRow | null> {
   const row = await db.article.findFirst({
     where: { id: articleId, deletedAt: null },
     select: ARTICLE_ELIGIBILITY_SELECT,
   });
-  return row as IndexNowCandidateArticle | null;
+  if (!row) return null;
+  if (row.articleType === "novel_article") {
+    return {
+      articleType: "novel_article",
+      id: row.id,
+      novelId: row.novelId as string,
+      locale: row.locale,
+      slug: row.slug,
+      publicPageShortId: row.publicPageShortId,
+      status: row.status,
+      seoVisibility: row.seoVisibility,
+      updatedAt: row.updatedAt,
+      novel: row.novel as NovelPublicationState,
+      promoLink: row.promoLink,
+    };
+  }
+  // Blog family (blog_article/listicle/guide) — no Novel/PromoLink to carry.
+  // Cast: `Article.articleType` is a plain `VarChar(32)` column (not a DB
+  // enum), so Prisma's generated type is `string`, not the literal
+  // `ArticleType` union — narrowed here on the same trust basis every write
+  // path already relies on (`ARTICLE_TYPES`/`APPLICABLE_ARTICLE_TYPES` is
+  // the sole application-layer vocabulary, `database-statuses.ts`'s header).
+  return {
+    articleType: row.articleType as Exclude<ArticleType, "novel_article">,
+    id: row.id,
+    locale: row.locale,
+    slug: row.slug,
+    status: row.status,
+    seoVisibility: row.seoVisibility,
+    updatedAt: row.updatedAt,
+  };
 }
 
 /**
@@ -84,17 +152,88 @@ export async function loadIndexNowCandidateArticle(
  * The optional predicate lets tests isolate these conditions; production
  * callers use the real whitelist.
  */
-export type IndexNowEligibilityOptions = { isLocalePublishable?: (locale: string) => boolean };
+/**
+ * `env` (C-25) is the same override pattern as `isLocalePublishable`: threaded
+ * to `isHiddenFromPublicView` below so tests can exercise the
+ * `FEATURE_ARTICLE_SEO_VISIBILITY`-on path without mutating global
+ * `process.env`. Production callers (`outbox.ts`) never pass it.
+ */
+export type IndexNowEligibilityOptions = {
+  isLocalePublishable?: (locale: string) => boolean;
+  env?: NodeJS.ProcessEnv;
+};
 
+/**
+ * `article`'s `locale`/`status` stay a plain `Pick` (unchanged contract);
+ * `seoVisibility` is intersected in as *optional* rather than folded into
+ * that `Pick` so every existing call site that does not carry it (this
+ * file's own tests included) keeps compiling — "contract types gain optional
+ * fields only". A missing value reads as "not hidden" (today's behavior),
+ * same as `visibility.ts`'s `ArticleSeoVisibilityState`.
+ */
 export function isNovelIndexNowEligible(
-  article: Pick<IndexNowCandidateArticle, "locale" | "status">,
+  article: Pick<IndexNowCandidateArticle, "locale" | "status"> & ArticleSeoVisibilityState,
   novel: NovelPublicationState,
   promoLink: PromoLinkReadinessState,
   options: IndexNowEligibilityOptions = {},
 ): boolean {
   const localeGate = options.isLocalePublishable ?? isPublishableLocale;
   if (!localeGate(article.locale)) return false;
+  // C-25: IndexNow is a collectability boundary — `hidden` must never be
+  // submitted, `seo_only` still is. This lives here (this module's own
+  // eligibility layer), not inside the shared `isIndexNowEligible`, per
+  // `visibility.ts`'s own doc comment reserving this layer for IndexNow-
+  // specific conditions (the locale allowlist above is the same pattern).
+  if (isHiddenFromPublicView(article, options.env)) return false;
   return isIndexNowEligible(novel, article as ArticlePublicationState, promoLink);
+}
+
+/**
+ * C-29 (`规划_文章管理能力补齐_博客类型可见性换小说_2026-09-08.md` §三/C-29):
+ * "IndexNow 投递资格：博客走同一个语种白名单 + 可见性判定，但跳过书目/推广
+ * 链接判定。落点在 IndexNow 自己那层...不下沉到通用谓词族" — this is that
+ * predicate. Parallel to `isNovelIndexNowEligible` above rather than a
+ * branch inside it: a blog Article has no `NovelPublicationState`/
+ * `PromoLinkReadinessState` to pass in at all, so the two functions cannot
+ * share a signature. Eligibility reduces to exactly `status === "published"`
+ * (no promo-readiness re-check — a blog Article has no PromoLink, C-27),
+ * gated by the same locale allowlist and `hidden` exclusion the Novel-side
+ * function already applies.
+ *
+ * `FEATURE_ARTICLE_BLOG` is checked here too (unlike `isNovelIndexNowEligible`,
+ * which carries no such flag — Novel-article IndexNow predates C-28/C-29
+ * entirely) so this predicate is fail-closed by construction wherever it is
+ * eventually wired to a live enqueue/recheck call site.
+ *
+ * 🟡 Not yet wired to a production call site this round. The natural wiring
+ * point — `src/server/publish-gate/service.ts`'s `dispatchFirstPublicPublication`
+ * call — is currently guarded by `txResult.novelId !== null` (skipping the
+ * enqueue entirely for a blog Article's first publish; that file's own
+ * inline comment already flags "Blog's own IndexNow/sitemap wiring is
+ * C-29's job"). `publish-gate/{facts,evaluator,service}.ts` are reserved
+ * for a concurrently-running workstream this round and were left untouched
+ * per this round's own file-boundary rule — so the actual enqueue call
+ * remains unwired; only this standalone, independently-tested predicate
+ * ships. `worker/handlers/indexnow-delivery.ts`'s own drift-recheck
+ * (`isNovelIndexNowEligible`) is likewise not extended to blog rows this
+ * round, since no blog `IndexNowOutbox` row can exist yet for it to ever
+ * recheck. Wiring this in is a mechanical follow-up once that file opens up.
+ */
+export type BlogIndexNowCandidateArticle = {
+  readonly locale: string;
+  readonly slug: string;
+  readonly status: string;
+};
+
+export function isBlogIndexNowEligible(
+  article: Pick<BlogIndexNowCandidateArticle, "locale" | "status"> & ArticleSeoVisibilityState,
+  options: IndexNowEligibilityOptions = {},
+): boolean {
+  if (!isArticleBlogEnabled(options.env)) return false;
+  const localeGate = options.isLocalePublishable ?? isPublishableLocale;
+  if (!localeGate(article.locale)) return false;
+  if (isHiddenFromPublicView(article, options.env)) return false;
+  return article.status === "published";
 }
 
 /**
@@ -156,6 +295,12 @@ export function buildIndexNowCanonicalUrl(article: Pick<IndexNowCandidateArticle
     slug: article.slug,
     shortId: article.publicPageShortId,
   });
+  return normalizeCanonicalUrl(path);
+}
+
+/** `buildBlogPath` + `normalizeCanonicalUrl` — the blog-family counterpart to `buildIndexNowCanonicalUrl` above. No short id (see `article-path.ts`'s header on why the blog family never carries one). */
+export function buildBlogIndexNowCanonicalUrl(article: Pick<BlogIndexNowCandidateArticle, "locale" | "slug">): string {
+  const path = buildBlogPath({ locale: article.locale as SiteLocale, slug: article.slug });
   return normalizeCanonicalUrl(path);
 }
 

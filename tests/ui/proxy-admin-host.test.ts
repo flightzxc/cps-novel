@@ -263,8 +263,16 @@ describe("src/proxy.ts", () => {
   });
 
   it("never redirects a denial — a bare status-only 404, so the admin hostname never leaks to a public-host visitor", () => {
-    expect(proxySource).not.toMatch(/NextResponse\.redirect/);
-    expect(proxySource).toContain("new NextResponse(null, { status: 404 })");
+    // WO-1 (`施工工单_WO1-3_多语种公开站地基_2026-09-08.md` §6.5) added a
+    // legitimate `NextResponse.redirect` elsewhere in this file (the `/en/*`
+    // default-locale 308), reached only once `result.allow` is true — so the
+    // no-redirect guarantee this test protects is scoped to the `denied()`
+    // function specifically, not to the whole file's source text anymore.
+    const deniedFnMatch = proxySource.match(/function denied\(\)[^]*?\n\}/);
+    expect(deniedFnMatch, "expected to find `function denied() { ... }` in src/proxy.ts").not.toBeNull();
+    const deniedFnSource = deniedFnMatch![0];
+    expect(deniedFnSource).not.toMatch(/NextResponse\.redirect/);
+    expect(deniedFnSource).toContain("new NextResponse(null, { status: 404 })");
   });
 
   it("excludes only Next's own static-asset conventions from the matcher — every app/API route still runs through it", () => {
