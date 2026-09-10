@@ -13,6 +13,7 @@ import { hashAdminSessionToken } from "@/lib/auth/session";
 import type { AdminIdentity, AdminSessionRecord } from "@/lib/auth/types";
 import { requireAdminActionAccess, type AdminServiceAuthorization } from "@/server/auth/guards";
 import { P2_04_ADMIN_REGISTRY } from "@/app/api/admin/_lib/registry";
+import { CAROUSEL_SOURCES } from "@/domain/database-statuses";
 
 import { TestOnlyInMemoryAuthStores } from "../auth/test-only-in-memory-stores";
 
@@ -53,6 +54,26 @@ function prismaUniqueError(target: string): InstanceType<typeof Prisma.PrismaCli
     clientVersion: "test",
     meta: { target: [target] },
   });
+}
+
+/**
+ * Mirrors what a real PostgreSQL CHECK-constraint violation looks like once
+ * Prisma has surfaced it: an *unmapped* connector error, not a known `P*`
+ * code — this is the exact shape the production incident this fake is
+ * guarding against showed (`docs/governance/database-governance.md` §12's
+ * 2026-09-11 L10N P5.2 changelog row: `sqlState`/`prismaCode`/`constraint`
+ * all `null` in the Worker's own error capture). Unlike `prismaUniqueError`
+ * above (a real `PrismaClientKnownRequestError` with code `P2002`, Prisma's
+ * own mapping for a UNIQUE violation), Prisma has no dedicated `P*` code for
+ * a raw CHECK violation raised by a plain `createMany` (as opposed to a
+ * `$queryRaw`), so it comes back as `Prisma.PrismaClientUnknownRequestError`
+ * — no `.code` at all.
+ */
+function prismaCheckViolationError(constraintName: string, detail: string): InstanceType<typeof Prisma.PrismaClientUnknownRequestError> {
+  return new Prisma.PrismaClientUnknownRequestError(
+    `Invalid \`prisma.homeCarouselServing.createMany()\` invocation: new row for relation "home_carousel_serving" violates check constraint "${constraintName}" (${detail})`,
+    { clientVersion: "test" },
+  );
 }
 
 /**
@@ -214,8 +235,38 @@ export class FakeHomeCarouselDb {
           for (let i = this.serving.length - 1; i >= 0; i -= 1) if (this.serving[i].locale === args.where.locale) this.serving.splice(i, 1);
           return { count: before - this.serving.length };
         },
+        /**
+         * Mirrors the three constraints `20260803090000_p1_initial_schema`
+         * (position/uniqueness) and `20260912100000_carousel_serving_source_check_fix`
+         * (source) install on `home_carousel_serving`, in the same
+         * all-or-nothing shape a real single multi-row PostgreSQL `INSERT`
+         * has: every row in `args.data` is validated *before* any row is
+         * committed to `this.serving`, so a batch with one bad row leaves
+         * the fake's state completely unchanged — same as a real `INSERT`
+         * whose CHECK/unique violation aborts the whole statement, taking
+         * any otherwise-valid rows in the same `createMany` call down with
+         * it (this is exactly how the production bug this fake now guards
+         * against manifested: one `new_novel`/`recency` row poisoned the
+         * entire compute, including its `manual` rows in the same call).
+         */
         createMany: async (args: { data: Array<Omit<FakeServingRow, "id">> }) => {
           this.calls.push("homeCarouselServing.createMany");
+          const existingKeys = new Set(this.serving.map((row) => `${row.locale} ${row.position}`));
+          const seenInBatch = new Set<string>();
+          for (const row of args.data) {
+            if (!(CAROUSEL_SOURCES as readonly string[]).includes(row.source)) {
+              throw prismaCheckViolationError(
+                "home_carousel_serving_source_check",
+                `source in CHECK ("source"::text = ANY (ARRAY[${CAROUSEL_SOURCES.map((value) => `'${value}'::character varying`).join(", ")}]::text[])), got '${row.source}'`,
+              );
+            }
+            if (!Number.isInteger(row.position) || row.position <= 0) {
+              throw prismaCheckViolationError("carousel_serving_position_check", `position > 0, got ${row.position}`);
+            }
+            const key = `${row.locale} ${row.position}`;
+            if (existingKeys.has(key) || seenInBatch.has(key)) throw prismaUniqueError("carousel_serving_locale_position_key");
+            seenInBatch.add(key);
+          }
           for (const row of args.data) this.serving.push({ id: randomUUID(), ...row });
           return { count: args.data.length };
         },

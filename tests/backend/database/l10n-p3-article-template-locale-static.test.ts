@@ -42,12 +42,38 @@ describe("L10N P3 ArticleTemplate.locale non-null (static, no DB connection)", (
     expect(migration).toContain('ALTER COLUMN "locale" SET NOT NULL');
   });
 
-  it("migration timestamp sorts after every other migration directory (no N-11-style timestamp inversion)", () => {
+  it("migration timestamp sorts after every migration directory that existed before it (no N-11-style timestamp inversion)", () => {
+    // Pins this migration's position relative to every directory that
+    // existed when it landed, not "is the newest migration in the repo
+    // forever" — `20260912100000_carousel_serving_source_check_fix` legitimately
+    // landed later and correctly sorts after it, the same way this migration
+    // once landed after everything before it. A future migration sorting
+    // after this one is expected and must not fail this guard; a *directory
+    // that predates this one on disk* sorting after it would be the actual
+    // N-11-style inversion this test guards against.
     const migrationsDir = path.join(root, "prisma/migrations");
     const dirNames = readdirSync(migrationsDir, { withFileTypes: true })
       .filter((entry) => entry.isDirectory())
       .map((entry) => entry.name)
       .sort();
-    expect(dirNames[dirNames.length - 1]).toBe("20260912090000_l10n_article_template_locale_not_null");
+    const thisMigration = "20260912090000_l10n_article_template_locale_not_null";
+    const priorMigrations = [
+      "20260803090000_p1_initial_schema",
+      "20260804090000_p1_08_credential_status_parity",
+      "20260804140000_p1_08b_admin_auth_persistence",
+      "20260816160000_p2_06_5_tagging_v3",
+      "20260818120000_v020_foundation_shared",
+      "20260906090000_p2_02b_article_template_cps_parity",
+      "20260907090000_p3_generic_task_catalog_scan_indexes",
+      "20260907091500_p3_drop_catalog_scan_task",
+      "20260909090000_c24_article_axes",
+      "20260910090000_c27_blog_article_foundation",
+      "20260911090000_c30_novel_rebind_foundation",
+    ];
+    expect(dirNames).toContain(thisMigration);
+    const thisIndex = dirNames.indexOf(thisMigration);
+    for (const prior of priorMigrations) {
+      expect(dirNames.indexOf(prior), `${prior} must sort before ${thisMigration}`).toBeLessThan(thisIndex);
+    }
   });
 });

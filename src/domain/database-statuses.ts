@@ -86,7 +86,24 @@ export const SCHEDULE_TRIGGER_KINDS = ["scheduled", "manual"] as const;
 export const MISFIRE_POLICIES = ["bounded_catch_up", "skip", "mark_failed"] as const;
 export const PREVIEW_MATERIALIZATION_POLICIES = ["upstream_returned_preview"] as const;
 export const CAROUSEL_BATCH_STATUSES = ["pending", "processing", "completed", "failed"] as const;
-export const CAROUSEL_SOURCES = ["manual", "automatic"] as const;
+/**
+ * `home_carousel_serving.source` (and, as a subset, `home_carousel_auto_candidate.source`,
+ * which never writes `"manual"`). Schema-contract-drift fix
+ * (`20260912100000_carousel_serving_source_check_fix`): this used to be
+ * `["manual", "automatic"]`, a two-bucket set nothing in this repo ever
+ * wrote -- `src/server/home-carousel/service.ts`'s `computeHomeCarouselInTx`
+ * has always written the finer-grained `"manual" | "new_novel" | "recency"`
+ * (matching CPS `3a76877:src/lib/home-carousel-merge.ts:134,154`'s own
+ * `manual`/`candidate.source` write into the CPS equivalent column, which has
+ * no restricting CHECK at all), so every automatic compute's
+ * `homeCarouselServing.createMany()` failed PostgreSQL's CHECK with 23514.
+ * `tests/backend/database/carousel-serving-source-check-static.test.ts`
+ * pins this constant, the migration's CHECK clause, and `service.ts`'s
+ * written literals to the same three values so the two sides cannot drift
+ * apart again. No `"revenue"` value (CPS has one) -- Novel V1 has no
+ * revenue-scored candidate branch (`revenueEnabled` is hard-wired `false`).
+ */
+export const CAROUSEL_SOURCES = ["manual", "new_novel", "recency"] as const;
 export const CANONICAL_TAG_STATUSES = ["active", "inactive"] as const;
 export const NOVEL_TAG_MODES = ["automatic", "manual"] as const;
 export const NOVEL_TAG_SOURCES = ["manual", "auto"] as const;

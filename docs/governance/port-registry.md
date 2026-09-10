@@ -730,6 +730,19 @@ request/build-time runtime machinery vitest does not provide)"），且
 的那个函数。`enqueueHomeCarouselCron`（ops 手工强制入队的便捷包装）同理，用
 它自己已有的 `db` 句柄调用 `queryActiveLocales`。
 
+### 2026-09-11 · `home_carousel_serving.source` schema-contract-drift 修复
+
+`20260803090000_p1_initial_schema:1247` 装的 `home_carousel_serving_source_check`
+CHECK 只放行 `manual`/`automatic` 两桶，但 `src/server/home-carousel/service.ts`
+的 `computeHomeCarouselInTx`（`154-157` 行区间）从落地起就只写细分值
+`manual`/`new_novel`/`recency`，`automatic` 从未被任何代码路径产出——是本仓
+自己的数据库契约层漂移，不是搬运偏差本身，因此本节只登记"核对 CPS 基线得出
+哪条改法"这一步的证据，实际根因/修复内容详见 `database-governance.md` §4/§12。
+
+| symbol | source_file | source_lines | baseline_commit | port_kind | changed_what | owner |
+| --- | --- | --- | --- | --- | --- | --- |
+| **N-10（schema-contract-drift 修复，核对 CPS 基线）** `home_carousel_serving.source` 的允许值集 — 本仓 `CAROUSEL_SOURCES`（`src/domain/database-statuses.ts`） | `src/lib/home-carousel-merge.ts`（`134`,`154`）；`prisma/schema.prisma`（`808-826`）；`prisma/migrations/20260705090000_v770_home_carousel_pr1b/migration.sql` | `134`,`154`；`808-826`；`CREATE TABLE "home_carousel_serving"` 区块 | `3a76877af27c6247ad94be946b44e9cc5c1cb9ce` | `PG_REIMPLEMENT` | 核对结论：CPS 的 `home_carousel_serving.source` 是 SQLite `TEXT NOT NULL`，**没有任何 CHECK 约束**；`mergeCarouselServingInTx` 直接把 `source: "manual"`（134 行）或 `source: candidate.source`（154 行，取值 `new_drama\|recency\|revenue`）写进该列——CPS 自己的 serving 表本就承载细分来源值，不存在"serving 只分 manual/automatic 两桶、细分值留给候选表"的先例。本仓 `20260803090000_p1_initial_schema` 却给 `home_carousel_serving.source` 装了 PostgreSQL CHECK `IN ('manual','automatic')`，与本仓 `computeHomeCarouselInTx` 从落地起就一直在写的 `manual\|new_novel\|recency` 三值不符（`automatic` 从未被写入过）——按此核对结论选择"放宽 CHECK 对齐 CPS 语义"而非"收窄代码写入去凑 CHECK"：`20260912100000_carousel_serving_source_check_fix` 把 CHECK 改为 `IN ('manual','new_novel','recency')`；不搬 CPS 的 `revenue` 值——Novel V1 无收入评分候选分支（`revenueEnabled` 恒 `false`，见上表 Home carousel 行/N-3）。`home_carousel_auto_candidate.source`（CPS 与本仓均无 CHECK）未受影响 | Claude |
+
 ## 使用说明
 
 - `symbol`：被搬运的具体符号名（函数名/类型名/表名/字段名/组件名等），一行一个符号，不得用文件级粗粒度笼统登记；
