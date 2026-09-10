@@ -222,6 +222,116 @@ const ALLOW_SAME_AS_EN_SCOPED: ReadonlySet<string> = new Set(["fr:nav.genres", "
 
 const NON_EN_LOCALES = SITE_LOCALES.filter((locale) => locale !== "en");
 
+/**
+ * Sentence-count parity gate (施工报告_公开页description与句数门禁_2026-09-10
+ * 任务 2). Motivation: a prior sentence-trimming pass removed one sentence
+ * too many from a single locale's translation with nothing to catch it —
+ * `loadMessages`'s runtime fallback (see this file's own header comment)
+ * only guards against a *missing* key, not a key that is present but says
+ * less than the English original.
+ *
+ * Sentence-terminator character sets, grouped by script convention rather
+ * than per-locale (fewer places to keep in sync, and every locale in a
+ * group genuinely shares the convention):
+ *  - Latin/Cyrillic (en, es, pt-BR, id, vi, ko, fr, de, pl, cs, ru): `. ! ? …`
+ *  - ja / zh-Hant: fullwidth `。！？…`, and — because both catalogs mix in
+ *    halfwidth ASCII punctuation for embedded Latin terms/numbers — the
+ *    halfwidth `. ! ? …` forms are accepted too.
+ *  - ar: `. ! ؟ …` (Arabic question mark `؟`, not `?`; period/exclamation/
+ *    ellipsis are the same characters as Latin).
+ *  - th: EXEMPT — Thai prose has no sentence-final punctuation convention
+ *    (no obligatory period at a sentence boundary), so a terminator count
+ *    would not measure sentences at all. Registered explicitly via
+ *    `SENTENCE_COUNT_LOCALES` below, not silently skipped.
+ */
+type SentenceGroup = "latin-cyrillic" | "cjk-fullwidth" | "arabic" | "exempt";
+
+function sentenceGroupFor(locale: SiteLocale): SentenceGroup {
+  if (locale === "th") return "exempt";
+  if (locale === "ja" || locale === "zh-Hant") return "cjk-fullwidth";
+  if (locale === "ar") return "arabic";
+  return "latin-cyrillic";
+}
+
+const TERMINATOR_CHARS: Readonly<Record<Exclude<SentenceGroup, "exempt">, ReadonlySet<string>>> = {
+  "latin-cyrillic": new Set([".", "!", "?", "…"]),
+  "cjk-fullwidth": new Set(["。", "！", "？", "…", ".", "!", "?"]),
+  arabic: new Set([".", "!", "؟", "…"]),
+};
+
+/**
+ * Minimal-rule sentence counter. Two disambiguation rules, both named in
+ * the work order and nothing beyond them (no abbreviation dictionary —
+ * "e.g."/"Mr."-style lists are out of scope by the spec's own "最小规则"
+ * instruction, and none of the 15 catalogs' actual leaf values need one
+ * today — verified by inspection, see the construction report):
+ *
+ *  - a run of consecutive terminator characters counts as ONE boundary
+ *    (handles "?!"  and the three-ASCII-period spelling of an ellipsis,
+ *    "...", identically to a single "…");
+ *  - a "." with a digit on both sides (a decimal point, e.g. "3.5") is
+ *    never a boundary.
+ *
+ * Returns `-1` for an exempt locale (`th`) — callers must check for that
+ * sentinel rather than comparing it as a real count.
+ */
+function countSentences(text: string, locale: SiteLocale): number {
+  const group = sentenceGroupFor(locale);
+  if (group === "exempt") return -1;
+  const terminators = TERMINATOR_CHARS[group];
+  const chars = Array.from(text);
+  let count = 0;
+  let i = 0;
+  while (i < chars.length) {
+    const ch = chars[i];
+    if (!terminators.has(ch)) {
+      i++;
+      continue;
+    }
+    const isDecimalPoint =
+      ch === "." &&
+      i > 0 &&
+      i < chars.length - 1 &&
+      /[0-9]/.test(chars[i - 1]) &&
+      /[0-9]/.test(chars[i + 1]);
+    if (isDecimalPoint) {
+      i++;
+      continue;
+    }
+    count++;
+    let j = i + 1;
+    while (j < chars.length && terminators.has(chars[j])) j++;
+    i = j;
+  }
+  return count;
+}
+
+/**
+ * `th` is excluded up front (see `sentenceGroupFor`'s doc comment) — this
+ * is the "显式登记" the work order asks for, not a silent filter.
+ */
+const SENTENCE_COUNT_LOCALES = NON_EN_LOCALES.filter((locale) => locale !== "th");
+
+/**
+ * Pre-existing, reviewed sentence-count divergences from English — "登记，
+ * 不改译文" (任务 2 point 2). Each entry needs a reason; this is not a place
+ * to silently swallow a real translation gap. Scoped `locale:key`, same
+ * shape as `ALLOW_SAME_AS_EN_SCOPED` above.
+ *
+ *  - `zh-Hant:nav.footerNote`: the English source is two short sentences
+ *    ("This site offers free preview chapters. The full story is on the
+ *    original platform."); the Traditional Chinese translation joins them
+ *    with a comma into one sentence ("本站提供免費試讀章節,完整故事請前往原始平台閱讀。")
+ *    — an ordinary, idiomatic Chinese construction for two short related
+ *    clauses (every English clause is represented; nothing is truncated).
+ *    The other three multi-sentence keys in this same zh-Hant catalog
+ *    (`unavailable.unpublishedBody`, `blog.unpublishedBody`, `errorPage.
+ *    body`) all keep the 2-sentence split, so this is a one-off per-key
+ *    style choice, not a systemic zh-Hant rule gap. Pre-existing at
+ *    `f1ccf6f`; not touched by this pass (施工纪律：不改任何译文措辞).
+ */
+const SENTENCE_COUNT_EXCEPTIONS: ReadonlySet<string> = new Set(["zh-Hant:nav.footerNote"]);
+
 describe("message catalog completeness (all 15 registered locales)", () => {
   it("SITE_LOCALES and CATALOGS agree on the set of registered locales", () => {
     expect(new Set(Object.keys(CATALOGS))).toEqual(new Set(SITE_LOCALES));
@@ -518,6 +628,50 @@ describe("message catalog completeness (all 15 registered locales)", () => {
         unexplained.push(key);
       }
       expect(unexplained).toEqual([]);
+    },
+  );
+
+  /**
+   * Sentence-count parity gate — see `SENTENCE_COUNT_LOCALES`'s own doc
+   * comment above for the terminator sets, the two minimal disambiguation
+   * rules, the `th` exemption, and the plural-key exclusion rationale.
+   *
+   * Red-proof (施工报告_公开页description与句数门禁_2026-09-10 任务 2 point
+   * 3): temporarily deleting the second sentence from `ar.ts`'s
+   * `unavailable.unpublishedBody` (a real 2-sentence key in both en and ar
+   * today) turns the `ar` case of the test below red with exactly the
+   * `unavailable.unpublishedBody: en=2 ar=1` mismatch line, and reverting
+   * the file turns it back green — see the construction report for the
+   * captured before/after run.
+   */
+  it("th is explicitly exempted from the sentence-count gate (no sentence-final punctuation convention)", () => {
+    expect(NON_EN_LOCALES).toContain("th");
+    expect(SENTENCE_COUNT_LOCALES).not.toContain("th");
+  });
+
+  it.each(SENTENCE_COUNT_LOCALES)(
+    "%s: sentence count matches English for every multi-sentence key (en has >= 2 sentences, non-plural)",
+    (locale) => {
+      const leaves = flattenLeaves(CATALOGS[locale]);
+      const mismatches: string[] = [];
+      for (const key of EN_KEYS) {
+        const enValue = EN_LEAVES.get(key);
+        if (typeof enValue !== "string") continue;
+        const enInspected = inspect(enValue);
+        // Unparseable English is already reported by the banned-ICU-form
+        // test above; a plural key is out of scope (see the doc comment on
+        // `SENTENCE_COUNT_LOCALES`).
+        if ("parseError" in enInspected || enInspected.plurals.length > 0) continue;
+        const enCount = countSentences(enValue, "en");
+        if (enCount < 2) continue; // single-sentence keys have no count to diverge on
+        const localeValue = leaves.get(key);
+        if (typeof localeValue !== "string") continue; // already reported by the key-set/blank-value checks above
+        const localeCount = countSentences(localeValue, locale);
+        if (localeCount === enCount) continue;
+        if (SENTENCE_COUNT_EXCEPTIONS.has(`${locale}:${key}`)) continue;
+        mismatches.push(`${key}: en=${enCount} ${locale}=${localeCount} — en="${enValue}" ${locale}="${localeValue}"`);
+      }
+      expect(mismatches).toEqual([]);
     },
   );
 });
