@@ -14,10 +14,10 @@
  */
 import { describe, expect, it, vi, beforeEach } from "vitest";
 
-vi.mock("@/lib/locale/locale-canonical", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/lib/locale/locale-canonical")>();
-  return { ...actual, isPublishableLocale: () => true };
-});
+// L10N P4: the `@/lib/locale/locale-canonical` mock that used to live here
+// (overriding `isPublishableLocale: () => true`) is dead — the publish-gate
+// evaluator's own locale check was already removed in L10N P2, before
+// `isPublishableLocale` itself was deleted in P4.
 
 const revalidatePublicArticlePaths = vi.fn();
 const revalidatePublicArticleSet = vi.fn();

@@ -85,11 +85,18 @@ describe("RootLayout — <html lang>/<html dir> (WO-2 §8.2)", () => {
     expect(tree.props.dir).toBe("ltr");
   });
 
-  it("falls back to en/ltr when the header carries a registered-but-unopened locale (never trusts it blindly)", async () => {
+  it("L10N P4: reflects any registered SITE_LOCALES member the header carries — the D-7 publish whitelist this used to fall back through was deleted", async () => {
     state.headerValue = "ja";
     const tree = await renderRootLayout();
-    expect(tree.props.lang).toBe("en");
+    expect(tree.props.lang).toBe("ja");
     expect(tree.props.dir).toBe("ltr");
+  });
+
+  it("reflects ar with dir=rtl when the header carries it", async () => {
+    state.headerValue = "ar";
+    const tree = await renderRootLayout();
+    expect(tree.props.lang).toBe("ar");
+    expect(tree.props.dir).toBe("rtl");
   });
 
   it("falls back to en/ltr when the header carries outright garbage", async () => {

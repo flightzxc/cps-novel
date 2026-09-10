@@ -78,6 +78,7 @@ vi.mock("@/lib/site/category-queries", () => ({
 
 vi.mock("@/app/_lib/public-load", () => ({
   loadChrome: vi.fn(),
+  loadActiveLocales: vi.fn(),
   loadHomeNovels: vi.fn(),
   loadHomeCarousel: vi.fn(),
   loadPublicCategories: vi.fn(),
@@ -610,21 +611,24 @@ describe("[locale]/... shells 404 with the guard UNMOCKED — the one routabilit
     restoreRealGuard();
   });
 
-  // "en": rejected by the D-8 structural rule (default locale stays at the
-  // bare path — see _guard.ts's doc comment). "fr": registered in
-  // SITE_LOCALES but not (yet) on PUBLISHABLE_LOCALES — rejected by the
-  // separate D-7 publish-whitelist gate. Both are real, independent
-  // rejection paths through the same real, unmocked getRoutableLocale.
-  const locales = ["en", "fr"] as const;
+  // L10N P4 (矩阵 #9): "registered即路由" — the D-7 publish whitelist
+  // (`PUBLISHABLE_LOCALES`/`isPublishableLocale`) that used to reject every
+  // non-`en` `SITE_LOCALES` member here was deleted this round. "en" is
+  // still rejected — that is the SEPARATE, unchanged D-8 structural rule
+  // (default locale stays at the bare path — see _guard.ts's doc comment),
+  // not the deleted whitelist. Every other registered locale (e.g. "fr")
+  // now routes through — see the "registered, non-default locale is
+  // routable again" block below.
+  const rejectedLocales = ["en"] as const;
 
-  it.each(locales)("home shell 404s for rawLocale=%s", async (rawLocale) => {
+  it.each(rejectedLocales)("home shell 404s for rawLocale=%s (D-8 default-locale exclusion)", async (rawLocale) => {
     const prefixed = await import("@/app/[locale]/page");
     const params = Promise.resolve({ locale: rawLocale });
     await expect(prefixed.generateMetadata({ params })).rejects.toBe(NOT_FOUND);
     await expect(prefixed.default({ params })).rejects.toBe(NOT_FOUND);
   });
 
-  it.each(locales)("browse shell 404s for rawLocale=%s", async (rawLocale) => {
+  it.each(rejectedLocales)("browse shell 404s for rawLocale=%s (D-8 default-locale exclusion)", async (rawLocale) => {
     const prefixed = await import("@/app/[locale]/browse/page");
     const params = Promise.resolve({ locale: rawLocale });
     const searchParams = Promise.resolve({});
@@ -632,7 +636,7 @@ describe("[locale]/... shells 404 with the guard UNMOCKED — the one routabilit
     await expect(prefixed.default({ params, searchParams })).rejects.toBe(NOT_FOUND);
   });
 
-  it.each(locales)("category shell 404s for rawLocale=%s", async (rawLocale) => {
+  it.each(rejectedLocales)("category shell 404s for rawLocale=%s (D-8 default-locale exclusion)", async (rawLocale) => {
     const prefixed = await import("@/app/[locale]/category/[slug]/page");
     const params = Promise.resolve({ locale: rawLocale, slug: "fantasy" });
     const searchParams = Promise.resolve({});
@@ -640,14 +644,14 @@ describe("[locale]/... shells 404 with the guard UNMOCKED — the one routabilit
     await expect(prefixed.default({ params, searchParams })).rejects.toBe(NOT_FOUND);
   });
 
-  it.each(locales)("novel detail shell 404s for rawLocale=%s", async (rawLocale) => {
+  it.each(rejectedLocales)("novel detail shell 404s for rawLocale=%s (D-8 default-locale exclusion)", async (rawLocale) => {
     const prefixed = await import("@/app/[locale]/novel/[slugParam]/page");
     const params = Promise.resolve({ locale: rawLocale, slugParam: "lantern-keepers-daughter-pabc123" });
     await expect(prefixed.generateMetadata({ params })).rejects.toBe(NOT_FOUND);
     await expect(prefixed.default({ params })).rejects.toBe(NOT_FOUND);
   });
 
-  it.each(locales)("chapter shell 404s for rawLocale=%s", async (rawLocale) => {
+  it.each(rejectedLocales)("chapter shell 404s for rawLocale=%s (D-8 default-locale exclusion)", async (rawLocale) => {
     const prefixed = await import("@/app/[locale]/novel/[slugParam]/chapter/[chapterNumber]/page");
     const params = Promise.resolve({
       locale: rawLocale,
@@ -658,7 +662,7 @@ describe("[locale]/... shells 404 with the guard UNMOCKED — the one routabilit
     await expect(prefixed.default({ params })).rejects.toBe(NOT_FOUND);
   });
 
-  it.each(locales)("blog list shell 404s for rawLocale=%s", async (rawLocale) => {
+  it.each(rejectedLocales)("blog list shell 404s for rawLocale=%s (D-8 default-locale exclusion)", async (rawLocale) => {
     const prefixed = await import("@/app/[locale]/blog/page");
     const params = Promise.resolve({ locale: rawLocale });
     const searchParams = Promise.resolve({});
@@ -666,7 +670,7 @@ describe("[locale]/... shells 404 with the guard UNMOCKED — the one routabilit
     await expect(prefixed.default({ params, searchParams })).rejects.toBe(NOT_FOUND);
   });
 
-  it.each(locales)("blog detail shell 404s for rawLocale=%s", async (rawLocale) => {
+  it.each(rejectedLocales)("blog detail shell 404s for rawLocale=%s (D-8 default-locale exclusion)", async (rawLocale) => {
     const prefixed = await import("@/app/[locale]/blog/[slug]/page");
     const params = Promise.resolve({ locale: rawLocale, slug: "a-blog-post" });
     await expect(prefixed.generateMetadata({ params })).rejects.toBe(NOT_FOUND);
@@ -677,4 +681,34 @@ describe("[locale]/... shells 404 with the guard UNMOCKED — the one routabilit
   // is deliberately excluded here — it never calls requireRoutableLocale
   // (see its own describe block above and its doc comment: Next renders
   // not-found.tsx with zero props, so it cannot read the route's locale).
+
+  // L10N P4 mutation-guard: a registered, non-default locale must NOT 404
+  // anymore. Two layers of proof — the guard's own decision (unit-level,
+  // catches the whitelist gate being re-added inside getRoutableLocale
+  // itself) and one full shell end-to-end (catches the change failing to
+  // actually reach production wiring). Home is the representative shell
+  // here because its data dependencies (loadChrome/loadHomeNovels/
+  // loadHomeCarousel/loadPublicCategories) are already populated with valid
+  // values by the file-level `beforeEach` above, unconditionally — no
+  // extra per-test mock setup needed to prove a real render succeeds.
+  describe("a registered, non-default locale is routable again (矩阵 #9 GAP closed)", () => {
+    it("getRoutableLocale/requireRoutableLocale accept every non-en SITE_LOCALES member", () => {
+      for (const locale of ["fr", "ru", "ja", "zh-Hant", "ar", "pt-BR"] as const) {
+        expect(guardActual.getRoutableLocale(locale), locale).toBe(locale);
+        expect(() => guardActual.requireRoutableLocale(locale), locale).not.toThrow();
+      }
+      // "en" and an unregistered code both still reject.
+      expect(guardActual.getRoutableLocale("en")).toBeNull();
+      expect(guardActual.getRoutableLocale("xx")).toBeNull();
+    });
+
+    it("home shell no longer 404s for rawLocale=fr — it renders the same tree the bare/en shells render", async () => {
+      const prefixed = await import("@/app/[locale]/page");
+      const params = Promise.resolve({ locale: "fr" });
+      const meta = await prefixed.generateMetadata({ params });
+      expect(meta.robots).toEqual({ index: true, follow: true });
+      const tree = await prefixed.default({ params });
+      expect(tree).toBeTruthy();
+    });
+  });
 });

@@ -5,10 +5,11 @@ import { publishArticleAsAdmin, publishArticlesBatchAsAdmin } from "@/server/pub
 import { FakePublishGateDb } from "./fake-db";
 import { NOW, issueAuthorization, newStores, seedAdmin } from "./test-support";
 
-vi.mock("@/lib/locale/locale-canonical", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/lib/locale/locale-canonical")>();
-  return { ...actual, isPublishableLocale: () => true };
-});
+// L10N P4: the `@/lib/locale/locale-canonical` mock that used to live here
+// (overriding `isPublishableLocale: () => true`) is dead — the publish-gate
+// evaluator's own locale check (`checkLocale`/`isRegisteredSiteLocale`) was
+// already removed in L10N P2, before `isPublishableLocale` itself was
+// deleted in P4. Nothing in this file's call path reads either symbol.
 vi.mock("@/server/publication/dispatcher", () => ({
   dispatchFirstPublicPublication: vi.fn().mockResolvedValue({ errors: [] }),
 }));

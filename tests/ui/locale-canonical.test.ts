@@ -5,11 +5,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 import {
-  ARTICLE_TEMPLATE_CRUD_LANDED,
   SITE_LOCALES,
-  assertPublishableLocalesFailClosed,
-  isPublishableLocale,
-  listPublishableLocales,
   resolveSiteLocale,
 } from "@/lib/locale/locale-canonical";
 
@@ -20,13 +16,24 @@ import {
  * SiteLocale | "unknown"` 换成 CPS 形状 `{ locale, confidence }`，
  * `P1_SHARED_CONTRACTS.md` 已同步更新，不再是与本文件冲突的第二份口径）。
  *
- * 验三件事：三个对外 API 的存在与语义、fail-closed 的边界、以及「全仓只有一处
- * 映射」这条纪律确实成立（`resolve Site Locale`/`isPublishableLocale`/
- * `listPublishableLocales` 三个签名定义只能住在 `locale-canonical.ts`；上游码
- * 表/别名表/`resolveChannelLanguage` 只能住在委托目标 `channel-language.ts`——
- * 两个文件合起来才是唯一真源，其余任何文件都不得再造）。第三条是这个模块存在
- * 的**全部理由**——CPS 因映射散落四处付过两次全库 normalize 的代价，所以它
- * 必须是自动化断言，不能只写在 README 里。
+ * L10N P4（2026-09-10）：发布白名单层（`PUBLISHABLE_LOCALES`/
+ * `isPublishableLocale`/`listPublishableLocales`/`ARTICLE_TEMPLATE_CRUD_
+ * LANDED`/`assertPublishableLocalesFailClosed`）已整体删除，不是改造——本文件
+ * 原来验白名单 fail-closed 边界的所有用例（含旧版本 `:336` 的
+ * `isPublishableLocale(value)).toBe(false)` 系列锁）一并删除。公开面现在是
+ * CPS 同构的两层：**静态层** = `SITE_LOCALES`（本文件继续验），**动态层** =
+ * `getActiveLocales()`/`queryActiveLocales()`（`src/lib/locale/active-locales.ts`，
+ * ⊆ `SITE_LOCALES` 且恒含 `en`）——这一层需要 Prisma fixture db，本文件是
+ * jsdom 环境的 `tests/ui` project，不适合放 DB 相关用例，完整行为覆盖在
+ * `tests/backend/locale/active-locales.test.ts`（node project），不在本文件
+ * 重复或改用不合适的 project。
+ *
+ * 验两件事：对外 API 的存在与语义、以及「全仓只有一处映射」这条纪律确实成立
+ * （`resolveSiteLocale` 签名定义只能住在 `locale-canonical.ts`；上游码表/别名
+ * 表/`resolveChannelLanguage` 只能住在委托目标 `channel-language.ts`——两个
+ * 文件合起来才是唯一真源，其余任何文件都不得再造）。第二条是这个模块存在的
+ * **全部理由**——CPS 因映射散落四处付过两次全库 normalize 的代价，所以它必须
+ * 是自动化断言，不能只写在 README 里。
  *
  * L10N P1（2026-09-10）：上游登记表从 P0-S15 的 2 码子集（`3→en`/`7→ru`）扩到
  * 18 码（`docs/governance/L10N_UPSTREAM_LANGUAGE_EVIDENCE_2026-09-10.md`
@@ -34,10 +41,6 @@ import {
  * `channel-language.ts` 的完整别名表（含大量英文名）。凡是本文件旧版本里靠
  * "这个名字/这个码没有登记"论证 unknown 的用例，逐条核对是否被 P1 扩表打破，
  * 打破的一律换成真正仍未登记的取值，而不是就地删除断言。
- *
- * 🔴 发布白名单现为 `{en}`（U6 Owner D-7 明示放行），P1 未改动。登记表扩到
- * 18 项不自动等于可发布——「解出 locale」「是站点语种」「可发布」是三道各自
- * 独立的闸，见专门的边界用例。
  */
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -131,16 +134,12 @@ describe("locale 唯一真源 · 冻结 API", () => {
     expect(statSync(resolve(repoRoot, CANONICAL_PATH)).isFile()).toBe(true);
   });
 
-  it("导出契约冻结的三个函数，一个不多一个不少", () => {
+  it("导出契约冻结的函数（L10N P4：白名单层删除后只剩 resolveSiteLocale 一个）", () => {
     expect(typeof resolveSiteLocale).toBe("function");
-    expect(typeof isPublishableLocale).toBe("function");
-    expect(typeof listPublishableLocales).toBe("function");
 
     // 冻结签名是 resolveSiteLocale(upstreamLanguageCode, upstreamLanguageName?)：
     // 两个声明形参。TS 的可选参数没有默认值，所以照样计入 Function.length。
     expect(resolveSiteLocale.length).toBe(2);
-    expect(isPublishableLocale.length).toBe(1);
-    expect(listPublishableLocales.length).toBe(0);
   });
 
   it("站点 locale 集合是冻结的，对齐短剧站 15 语（P0-S7a Owner 裁决）", () => {
@@ -298,67 +297,35 @@ describe("locale 唯一真源 · 上游登记表（L10N P1，18 码）", () => {
     }
   });
 
-  it("🔴 登记表扩到 18 码不把未放行的 locale 送进白名单——映射成功与可发布仍是两道独立的闸", () => {
+  it("🔴 登记表扩到 18 码不等于是站点语种——映射成功与「是站点语种」仍是两道独立的闸（L10N P4：第三道「可发布」闸已删除）", () => {
     expect(resolveSiteLocale(3).locale).toBe("en");
     expect(resolveSiteLocale(7).locale).toBe("ru");
-    expect(isPublishableLocale("en")).toBe(true);
-    expect(isPublishableLocale("ru")).toBe(false);
-    expect(listPublishableLocales()).toEqual(["en"]);
+    expect(SITE_LOCALES).toContain("en");
+    expect(SITE_LOCALES).toContain("ru");
   });
 });
 
-describe("locale 唯一真源 · 发布白名单 fail-closed", () => {
-  it("白名单现为 {en}：Owner D-7 明示放行，其余 14 语仍拒绝", () => {
-    expect(listPublishableLocales()).toEqual(["en"]);
-    expect(isPublishableLocale("en")).toBe(true);
-  });
-
-  it("P0-S7a 的 15 语登记没有让非 en 绕过白名单闸——一个不多", () => {
+describe("locale 唯一真源 · 静态层 SITE_LOCALES（L10N P4：白名单层已删除）", () => {
+  it("SITE_LOCALES 是唯一的静态语种门——注册即成员，不再有第二道可发布闸缩窄它", () => {
     for (const locale of SITE_LOCALES) {
-      expect(isPublishableLocale(locale), `${locale}`).toBe(locale === "en");
+      expect((SITE_LOCALES as readonly string[]).includes(locale)).toBe(true);
     }
+    expect(SITE_LOCALES.length).toBe(15);
   });
 
-  it("白名单永远是站点 locale 的子集——不能发布一个站点都不认的语种", () => {
-    for (const locale of listPublishableLocales()) {
-      expect(SITE_LOCALES).toContain(locale);
-    }
-  });
-
-  it("🔴 不做大小写折叠，也不做区域回退", () => {
-    for (const value of ["EN", "En", "en-US", "en_US", "en-us", " en", "en "]) {
-      expect(isPublishableLocale(value), `${value} 不该被当成 en`).toBe(false);
-    }
-  });
-
-  it("非字符串输入一律拒绝，不抛异常", () => {
-    for (const value of [null, undefined, 0, 1, true, {}, [], Number.NaN]) {
-      expect(isPublishableLocale(value)).toBe(false);
-    }
-  });
-
-  it("listPublishableLocales 返回副本，调用方改不动真源", () => {
-    const first = listPublishableLocales();
-    first.push("ru");
-    expect(listPublishableLocales()).toEqual(["en"]);
-    expect(listPublishableLocales()).not.toBe(first);
-  });
-
-  it("「映射成功」与「可发布」是两道独立的闸", () => {
-    // ru 已映射、仍不可发布——en 可发布并不把两道闸合成一道。
+  it("「映射成功」与「是站点语种」是两道独立的闸——it/fil/ms/tr 映射成功但不是 SITE_LOCALES 成员", () => {
     expect(SITE_LOCALES).toContain("ru");
     expect(resolveSiteLocale(7).locale).toBe("ru");
-    expect(isPublishableLocale("ru")).toBe(false);
-    expect(isPublishableLocale("en")).toBe(true);
+    for (const locale of ["it", "fil", "ms", "tr"] as const) {
+      expect(SITE_LOCALES).not.toContain(locale);
+    }
   });
 });
 
 describe("locale 唯一真源 · 全仓不得有第二份映射", () => {
-  it("三个冻结 API 只在唯一真源里定义", () => {
+  it("冻结 API 只在唯一真源里定义", () => {
     const definitions: Record<string, string[]> = {
       resolveSiteLocale: [],
-      isPublishableLocale: [],
-      listPublishableLocales: [],
     };
 
     for (const file of ALL_SOURCES) {
@@ -461,46 +428,9 @@ describe("locale 唯一真源 · 全仓不得有第二份映射", () => {
   });
 });
 
-describe("locale 唯一真源 · D-7 条件二 fail-closed 守卫（S14）", () => {
-  /**
-   * 背景：CPS v6.0.4 事故——只注册了前台 locale，漏了后台模板枚举。Opus 终审
-   * 对本仓库 D-7 条件二的裁定是「内置默认模板对 en 实质满足，但这份安全是
-   * 巧合，不是机制」。这组用例验的正是「巧合已经变成机制」：只要
-   * `ARTICLE_TEMPLATE_CRUD_LANDED` 还是 false，任何越出 `{"en"}` 的
-   * `PUBLISHABLE_LOCALES` 配置都必须在断言执行的那一刻抛出，不能留到运行时。
-   */
-
-  it("模块常量今天确实是 false——这是守卫本身生效的前提，不是附带断言", () => {
-    expect(ARTICLE_TEMPLATE_CRUD_LANDED).toBe(false);
-  });
-
-  it("真实模块加载不抛：当前 PUBLISHABLE_LOCALES 为 {\"en\"}，满足 ⊆ {\"en\"}", () => {
-    // 走到这一行本身就是「真实模块加载没有抛」的证据——import 在文件顶部，
-    // 若守卫在模块加载时抛出，整个测试文件都跑不起来。这里再显式断言一次
-    // 前提事实，避免这条证据只靠"没崩"这种隐式信号。
-    expect(listPublishableLocales()).toEqual(["en"]);
-  });
-
-  it("🔴 越界即抛：CRUD 未落地时，非 en 的 locale 混进白名单必须抛出", () => {
-    expect(() => assertPublishableLocalesFailClosed(["es"], false)).toThrow(
-      /D-7 条件二 fail-closed 守卫触发/,
-    );
-    expect(() => assertPublishableLocalesFailClosed(["en", "ja"], false)).toThrow(/ja/);
-    expect(() => assertPublishableLocalesFailClosed(["en", "es", "ko"], false)).toThrow(
-      /es, ko/,
-    );
-  });
-
-  it("空集与 {\"en\"} 的任意子集都不抛——这两种是当前允许的唯一状态", () => {
-    expect(() => assertPublishableLocalesFailClosed([], false)).not.toThrow();
-    expect(() => assertPublishableLocalesFailClosed(["en"], false)).not.toThrow();
-  });
-
-  it("CRUD 落地后（articleTemplateCrudLanded=true）守卫让路，不再拦截", () => {
-    expect(() => assertPublishableLocalesFailClosed(["es", "ja", "ko"], true)).not.toThrow();
-  });
-
-  it("错误信息里点名 CPS v6.0.4 事故——这是守卫来历的可追溯性，不是装饰", () => {
-    expect(() => assertPublishableLocalesFailClosed(["fr"], false)).toThrow(/v6\.0\.4/);
-  });
-});
+// L10N P4: the "D-7 条件二 fail-closed 守卫（S14）" describe block that used
+// to live here (ARTICLE_TEMPLATE_CRUD_LANDED / assertPublishableLocalesFailClosed)
+// is deleted along with the whitelist layer it guarded — there is no longer a
+// PUBLISHABLE_LOCALES configuration for it to bound. See this file's header
+// comment for the two-layer replacement (SITE_LOCALES static / getActiveLocales
+// dynamic) and where each layer's own tests now live.

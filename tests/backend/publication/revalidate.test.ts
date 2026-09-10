@@ -1,8 +1,10 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 
 const revalidatePath = vi.fn();
+const revalidateTag = vi.fn();
 vi.mock("next/cache", () => ({
   revalidatePath: (...args: unknown[]) => revalidatePath(...args),
+  revalidateTag: (...args: unknown[]) => revalidateTag(...args),
 }));
 
 import {
@@ -10,18 +12,31 @@ import {
   revalidatePublicArticleSet,
   revalidatePublicListings,
 } from "@/server/publication/revalidate";
+import { ACTIVE_LOCALES_CACHE_TAG } from "@/lib/locale/active-locales";
 
 describe("revalidatePublicListings", () => {
-  beforeEach(() => revalidatePath.mockClear());
+  beforeEach(() => {
+    revalidatePath.mockClear();
+    revalidateTag.mockClear();
+  });
 
   it("revalidates the home page and the browse listing, nothing else", () => {
     revalidatePublicListings();
     expect(revalidatePath.mock.calls).toEqual([["/"], ["/browse"]]);
   });
+
+  it("L10N P4: also revalidates the active-locales cache tag — the existing publish-state broadcast point, not a new mechanism", () => {
+    revalidatePublicListings();
+    expect(revalidateTag).toHaveBeenCalledExactlyOnceWith(ACTIVE_LOCALES_CACHE_TAG, "max");
+    expect(ACTIVE_LOCALES_CACHE_TAG).toBe("active-locales");
+  });
 });
 
 describe("revalidatePublicArticlePaths", () => {
-  beforeEach(() => revalidatePath.mockClear());
+  beforeEach(() => {
+    revalidatePath.mockClear();
+    revalidateTag.mockClear();
+  });
 
   it("revalidates listings, the article detail page, and the whole chapter subtree as a layout", () => {
     revalidatePublicArticlePaths({ locale: "en", slug: "dragon-throne", shortId: "abc123" });
@@ -31,6 +46,7 @@ describe("revalidatePublicArticlePaths", () => {
       ["/novel/dragon-throne-pabc123"],
       ["/novel/dragon-throne-pabc123/chapter", "layout"],
     ]);
+    expect(revalidateTag).toHaveBeenCalledExactlyOnceWith(ACTIVE_LOCALES_CACHE_TAG, "max");
   });
 
   it("URL-encodes a slug that needs it, matching buildArticleRoutePath", () => {
@@ -41,7 +57,10 @@ describe("revalidatePublicArticlePaths", () => {
 });
 
 describe("revalidatePublicArticleSet", () => {
-  beforeEach(() => revalidatePath.mockClear());
+  beforeEach(() => {
+    revalidatePath.mockClear();
+    revalidateTag.mockClear();
+  });
 
   it("revalidates listings exactly once regardless of how many articles are affected", () => {
     revalidatePublicArticleSet([
@@ -56,16 +75,21 @@ describe("revalidatePublicArticleSet", () => {
     expect(revalidatePath).toHaveBeenCalledWith("/novel/one-paaa/chapter", "layout");
     expect(revalidatePath).toHaveBeenCalledWith("/novel/two-pbbb");
     expect(revalidatePath).toHaveBeenCalledWith("/novel/two-pbbb/chapter", "layout");
+    expect(revalidateTag).toHaveBeenCalledExactlyOnceWith(ACTIVE_LOCALES_CACHE_TAG, "max");
   });
 
   it("still revalidates listings when the article list is empty (a Novel-level change with no affected Articles)", () => {
     revalidatePublicArticleSet([]);
     expect(revalidatePath.mock.calls).toEqual([["/"], ["/browse"]]);
+    expect(revalidateTag).toHaveBeenCalledExactlyOnceWith(ACTIVE_LOCALES_CACHE_TAG, "max");
   });
 });
 
 describe("isolation: revalidatePath throwing outside a request-scoped context", () => {
-  beforeEach(() => revalidatePath.mockClear());
+  beforeEach(() => {
+    revalidatePath.mockClear();
+    revalidateTag.mockClear();
+  });
 
   it("swallows a throw from any individual revalidatePath call and still attempts the rest", () => {
     revalidatePath.mockImplementation((path: string) => {
@@ -84,5 +108,13 @@ describe("isolation: revalidatePath throwing outside a request-scoped context", 
       ["/novel/s-pid1"],
       ["/novel/s-pid1/chapter", "layout"],
     ]);
+  });
+
+  it("swallows a throw from revalidateTag too, without blocking the path revalidations", () => {
+    revalidateTag.mockImplementation(() => {
+      throw new Error("Invariant: static generation store missing (simulated out-of-request-scope call)");
+    });
+    expect(() => revalidatePublicListings()).not.toThrow();
+    expect(revalidatePath.mock.calls).toEqual([["/"], ["/browse"]]);
   });
 });
