@@ -49,10 +49,59 @@ const CHANNEL_LANGUAGE_PATH = "src/lib/locale/channel-language.ts";
  * live in `channel-language.ts`, which `locale-canonical.ts` delegates to —
  * together they are the one true source, so both paths are excluded from the
  * "no second mapping table" / "no second normalize implementation" scans
- * below. Anything outside these two files is still a violation.
+ * below. `channel-language.ts` is legitimately the *second* file in this
+ * list (not a violation of "only one true source") precisely because
+ * `locale-canonical.ts` delegates to it rather than reimplementing anything
+ * — there is still exactly one mapping decision, it just lives across two
+ * files by construction, the same way `README.md`'s "唯一真源" section
+ * documents "两个文件合起来算一处". Anything outside these two files is
+ * still a violation.
  */
 const CANONICAL_SOURCE_PATHS: readonly string[] = [CANONICAL_PATH, CHANNEL_LANGUAGE_PATH];
 const canonicalSource = readFileSync(resolve(repoRoot, CANONICAL_PATH), "utf8");
+
+/**
+ * Opus 复核 NON_BLOCKING a: `read-source-items.ts`'s `parseSourceLocaleFilter`
+ * and `worker/handlers/moboreader.ts`'s `pickBookSourceLocale` both have
+ * `Locale` in their name and live outside `CANONICAL_SOURCE_PATHS`, but
+ * neither is a second locale-mapping/normalize implementation —
+ * `parseSourceLocaleFilter` only classifies an already-resolved
+ * `sourceLocale` string into an equality-filter shape (`__unknown` sentinel
+ * / exact value / no filter); it never maps a code or name to a locale.
+ * `pickBookSourceLocale` only picks between an already-resolved
+ * `ChannelLanguageResolution.locale` and `null` based on the circuit
+ * breaker's suspended-code set; it never calls the code table or alias
+ * table either. The narrow `suspicious` verb-prefix regex below
+ * (`normalize|canonical|.../resolve|to|map|coerce` + `Locale|Language|Lang`)
+ * happens not to match either name — that is an accident of naming, not a
+ * reviewed exemption, and relying on it silently would let a genuinely new
+ * mapping table hide behind a regex-dodging name. This registry makes the
+ * exemption explicit and self-checking: every function in `LOCALE_NAME_
+ * EXEMPTION_SCOPE` whose name contains `Locale`/`Language`/`Lang` must
+ * appear here with a one-line reason (see the dedicated test below), and
+ * every registered entry must still exist in its named file (so the
+ * registry cannot rot into a stale rubber stamp for a function that was
+ * since renamed or removed).
+ */
+type LocaleNameExemption = { file: string; name: string; reason: string };
+const LOCALE_NAME_EXEMPTION_SCOPE: readonly string[] = [
+  "src/app/(admin)/catalog-sync/_lib/read-source-items.ts",
+  "worker/handlers/moboreader.ts",
+];
+const LOCALE_NAME_EXEMPTIONS: readonly LocaleNameExemption[] = [
+  {
+    file: "src/app/(admin)/catalog-sync/_lib/read-source-items.ts",
+    name: "parseSourceLocaleFilter",
+    reason:
+      "只把已解析的 sourceLocale 值分类成等值查询过滤器（精确值 / __unknown 哨兵 / 无过滤），不做码→locale映射、别名匹配或大小写折叠。",
+  },
+  {
+    file: "worker/handlers/moboreader.ts",
+    name: "pickBookSourceLocale",
+    reason:
+      "只在已解析的 ChannelLanguageResolution.locale 与熔断挂起集合之间二选一（挂起则 null，否则原样透传），不调用码表/别名表，不是第二份归一实现。",
+  },
+];
 
 /** 递归收集一批目录下的 .ts / .tsx。 */
 function sourceFiles(roots: readonly string[]): string[] {
@@ -356,13 +405,51 @@ describe("locale 唯一真源 · 全仓不得有第二份映射", () => {
       if (CANONICAL_SOURCE_PATHS.includes(relativePath)) continue;
       const source = readFileSync(file, "utf8");
       for (const match of source.matchAll(normalizeDeclaration)) {
-        if (suspicious.test(match[1])) {
-          offenders.push(`${relativePath} → ${match[1]}`);
-        }
+        if (!suspicious.test(match[1])) continue;
+        // Defense in depth: even though today's narrow verb-prefix regex
+        // does not actually match `parseSourceLocaleFilter`/
+        // `pickBookSourceLocale` (see `LOCALE_NAME_EXEMPTIONS` above), a
+        // future broadening of `suspicious` should not silently start
+        // failing on functions this registry already reviewed and cleared.
+        const exempted = LOCALE_NAME_EXEMPTIONS.some(
+          (entry) => entry.file === relativePath && entry.name === match[1],
+        );
+        if (!exempted) offenders.push(`${relativePath} → ${match[1]}`);
       }
     }
 
-    expect(offenders, "locale 归一只能有一处实现").toEqual([]);
+    expect(offenders, "locale 归一只能有一处实现，未登记豁免的第二份实现在这里").toEqual([]);
+  });
+
+  it("locale-named 函数登记表：豁免范围内任何带 Locale/Language/Lang 的函数都必须登记理由，且登记项必须真实存在（Opus 复核 NON_BLOCKING a）", () => {
+    const nameDeclaration = /(?:function|const|let|var)\s+([A-Za-z_$][\w$]*)\s*(?:=\s*(?:\([^)]*\)|[\w$]+)\s*=>|\()/g;
+    const localeNamed = /Locale|Language|Lang/i;
+
+    for (const relativePath of LOCALE_NAME_EXEMPTION_SCOPE) {
+      const source = readFileSync(resolve(repoRoot, relativePath), "utf8");
+      const foundNames = new Set<string>();
+      for (const match of source.matchAll(nameDeclaration)) {
+        if (localeNamed.test(match[1])) foundNames.add(match[1]);
+      }
+      const exemptedNames = new Set(
+        LOCALE_NAME_EXEMPTIONS.filter((entry) => entry.file === relativePath).map((entry) => entry.name),
+      );
+
+      // 每个在文件里找到的 Locale/Language/Lang 命名函数都必须登记在册——不能
+      // 悄悄新增一个未经审查的同类函数（哪怕它今天躲得过上面的窄正则）。
+      for (const name of foundNames) {
+        expect([...exemptedNames], `${relativePath} → ${name} 未登记豁免理由`).toContain(name);
+      }
+      // 登记表里的每一条也必须真实存在于文件里——防止函数改名/删除后登记表
+      // 悄悄腐烂成一张空对空白名单。
+      for (const name of exemptedNames) {
+        expect([...foundNames], `${relativePath} → ${name} 登记表已过期：文件里已不存在该函数`).toContain(name);
+      }
+    }
+
+    for (const entry of LOCALE_NAME_EXEMPTIONS) {
+      expect(entry.reason.trim().length, `${entry.file} → ${entry.name} 缺一句理由`).toBeGreaterThan(0);
+    }
   });
 
   it("唯一真源自己不含区域回退或大小写折叠——那是最容易长出来的猜测", () => {

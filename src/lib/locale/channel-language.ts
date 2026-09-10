@@ -143,8 +143,17 @@ const LANGUAGE_REGISTRY_BY_SOURCE_APP: Readonly<Record<string, Readonly<Record<s
  * locale) — see `resolveLanguageNameAlias`'s doc comment for why that still
  * surfaces as `confidence: "unknown"`, not a distinct "recognized but
  * intentionally unmapped" state.
+ *
+ * Exported (not just module-private) so
+ * `tests/backend/locale/channel-language.test.ts` can snapshot-pin the
+ * simplified-Chinese explicit-`null` entries directly against this table,
+ * rather than only indirectly through `resolveLanguageNameAlias`'s
+ * normalize-then-lookup behavior (Opus 复核 NON_BLOCKING b②) — exporting it
+ * does not create a second mapping table: this file is one of the two
+ * `CANONICAL_SOURCE_PATHS` `tests/ui/locale-canonical.test.ts` already
+ * excludes from its "no second mapping table" scan.
  */
-const LANGUAGE_NAME_ALIAS_TO_LOCALE: Readonly<Record<string, string | null>> = Object.freeze({
+export const LANGUAGE_NAME_ALIAS_TO_LOCALE: Readonly<Record<string, string | null>> = Object.freeze({
   english: "en",
   en: "en",
   英语: "en",

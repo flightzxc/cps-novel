@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  LANGUAGE_NAME_ALIAS_TO_LOCALE,
   MAPPING_VERSION,
   MOBOREADER_LANGUAGE_CODE_TO_LOCALE,
   MOBOREADER_SOURCE_APP_CODE,
@@ -193,6 +194,39 @@ describe("channel-language · 从不返回字面串 \"unknown\"——unknown 只
       const sourceLocale = resolution.locale ?? null;
       expect(sourceLocale).not.toBe("unknown");
     }
+  });
+});
+
+describe("channel-language · 别名表保真：9 条简体中文显式 null 快照（Opus 复核 NON_BLOCKING b②）", () => {
+  /**
+   * 钉死 `LANGUAGE_NAME_ALIAS_TO_LOCALE` 里恰好这 9 条简体中文变体显式映射到
+   * `null`（不是"未登记因而落 unknown"，是"登记了、显式拒绝映射成任何
+   * locale"）——CPS 原表逐字搬运的部分，任何一条被误删/误改成某个 locale
+   * 都必须让这组测试变红。
+   */
+  const SIMPLIFIED_CHINESE_NULL_KEYS = [
+    "simplified chinese",
+    "chinese",
+    "chinese_simplified",
+    "zh",
+    "zh-cn",
+    "中文简体",
+    "简体中文",
+    "简体",
+    "簡體",
+  ] as const;
+
+  it("表里显式 null 的条目恰好是这 9 条，一个不多一个不少", () => {
+    const nullKeys = Object.entries(LANGUAGE_NAME_ALIAS_TO_LOCALE)
+      .filter(([, locale]) => locale === null)
+      .map(([key]) => key)
+      .sort();
+    expect(nullKeys).toEqual([...SIMPLIFIED_CHINESE_NULL_KEYS].sort());
+  });
+
+  it.each(SIMPLIFIED_CHINESE_NULL_KEYS)("键 %s → null（不是 zh-Hant，也不是任何其它 locale）", (key) => {
+    expect(Object.hasOwn(LANGUAGE_NAME_ALIAS_TO_LOCALE, key)).toBe(true);
+    expect(LANGUAGE_NAME_ALIAS_TO_LOCALE[key]).toBeNull();
   });
 });
 

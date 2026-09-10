@@ -16,9 +16,14 @@
  * `docs/governance/L10N_UPSTREAM_LANGUAGE_EVIDENCE_2026-09-10.md`'s sample
  * dump). Zero upstream HTTP calls — the exported `probeUnnamedLanguageCodes`
  * core function does not import or reference any adapter/credential/network
- * code on the dry-run path, and this file's only top-level network-capable
- * import (`worker/credentials/crypto`, `src/lib/adapters`) is only ever
- * *called* from the `--apply` branch.
+ * code on the dry-run path, and this file has NO top-level import of either
+ * (Opus 复核 NON_BLOCKING d: the previous wording here was wrong).
+ * `worker/credentials/crypto` and `src/lib/adapters` are only ever pulled in
+ * by a `Promise.all([import(...), import(...)])` **deferred dynamic
+ * import**, statically located inside `applyProbeUnnamedLanguageCodes`
+ * itself (the `--apply` branch, see below) — not a top-level `import`
+ * statement anywhere in this file — so the module graph for the dry-run
+ * path never even resolves those modules, let alone calls into them.
  *
  * `--apply`: reuses the exact same binding/capability/credential/rate-limit
  * machinery `worker/handlers/moboreader.ts`'s preview-refresh handler uses
