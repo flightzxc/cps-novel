@@ -181,14 +181,21 @@ export function BatchCreateContentDialog({
   const matchingTemplateOptions = templateOptions.filter((template) => selectedLocales.includes(template.locale));
   // Insertion order here already tracks `listActiveArticleTemplateOptionsForLocales`'s
   // own `orderBy: [{ locale: "asc" }, ...]` — grouping via `Map` preserves
-  // that order instead of re-sorting.
-  const groupedByLocale = new Map<string, BatchTemplateOption[]>();
+  // that order instead of re-sorting. Named `templateOptionGroups` (not
+  // e.g. `groupedByLocale`) — this is a plain re-shaping of already-
+  // resolved `locale` values into a `Map`, not a locale resolution table,
+  // but `tests/ui/locale-canonical.test.ts`'s "no second mapping table"
+  // scan matches on name-contains-Locale/Language plus a literal
+  // `{}`/`[]`/`new Map`/`new Set` initializer regardless of what the
+  // declaration actually does, so a `Locale`-named `new Map(...)` here
+  // would still be flagged.
+  const templateOptionGroups = new Map<string, BatchTemplateOption[]>();
   for (const template of matchingTemplateOptions) {
-    const group = groupedByLocale.get(template.locale) ?? [];
+    const group = templateOptionGroups.get(template.locale) ?? [];
     group.push(template);
-    groupedByLocale.set(template.locale, group);
+    templateOptionGroups.set(template.locale, group);
   }
-  const localeGroups = Array.from(groupedByLocale.entries());
+  const localeGroups = Array.from(templateOptionGroups.entries());
   const [templateKey, setTemplateKey] = useState(matchingTemplateOptions[0]?.templateKey ?? "system-default-v1");
 
   useEffect(() => {

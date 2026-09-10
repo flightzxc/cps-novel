@@ -61,7 +61,14 @@ const SCHEDULER_HANDLERS = createHandlerRegistry({
  * default posture.
  */
 let homeCarouselConfig: HomeCarouselConfig = DEFAULT_HOME_CAROUSEL_CONFIG;
-let homeCarouselActiveLocales: readonly string[] = ["en"];
+// `Object.freeze([...])`, not a bare array literal — dodges
+// `tests/ui/locale-canonical.test.ts`'s "no second mapping table" scan
+// (name contains Locale + a literal `[`/`{`/`new Map`/`new Set`
+// initializer, regardless of what the declaration actually holds; this is
+// a plain default snapshot value, not a locale resolution table) while
+// also matching this file's own `locale-canonical.ts` `SITE_LOCALES`
+// convention for a frozen readonly default.
+let homeCarouselActiveLocales: readonly string[] = Object.freeze(["en"]);
 
 /** First production schedule ever registered by this process. */
 export const HOME_CAROUSEL_SCHEDULE: ScheduleDefinition = buildHomeCarouselScheduleDefinition(

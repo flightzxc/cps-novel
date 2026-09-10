@@ -90,6 +90,7 @@ type LocaleNameExemption = { file: string; name: string; reason: string };
 const LOCALE_NAME_EXEMPTION_SCOPE: readonly string[] = [
   "src/app/(admin)/catalog-sync/_lib/read-source-items.ts",
   "worker/handlers/moboreader.ts",
+  "src/app/(admin)/home-carousel/page.tsx",
 ];
 const LOCALE_NAME_EXEMPTIONS: readonly LocaleNameExemption[] = [
   {
@@ -103,6 +104,13 @@ const LOCALE_NAME_EXEMPTIONS: readonly LocaleNameExemption[] = [
     name: "pickBookSourceLocale",
     reason:
       "只在已解析的 ChannelLanguageResolution.locale 与熔断挂起集合之间二选一（挂起则 null，否则原样透传），不调用码表/别名表，不是第二份归一实现。",
+  },
+  {
+    // L10N P5 (矩阵 #13): `?locale=` query-param selector for `/home-carousel`.
+    file: "src/app/(admin)/home-carousel/page.tsx",
+    name: "resolveRequestedLocale",
+    reason:
+      "只对一个已经是字符串的 query-param 值做 SITE_LOCALES 成员判定，不匹配则回退默认 en——跟 publish-gate/evaluator.ts 的 isRegisteredSiteLocale、[locale]/_guard.ts 同款成员检查，不调用码表/别名表，不做码→locale 映射，不是第二份归一实现。",
   },
 ];
 
