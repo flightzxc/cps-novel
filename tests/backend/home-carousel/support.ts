@@ -95,6 +95,17 @@ export type FakeServingRow = { id: string; locale: string; position: number; nov
 
 export class FakeHomeCarouselDb {
   carouselConfigJson: unknown = {};
+  /**
+   * X8 轮 2d ⑦: lets `grants-returning`-style tests in this suite simulate
+   * an unseeded `site_setting` singleton (migration rolled back / seed row
+   * manually deleted) without a real database — `findUnique`/`update`
+   * below both key off this flag, mirroring `src/server/site-settings/
+   * service.ts`'s own `SiteSettingNotSeededError` fail-closed contract.
+   * `true` by default: every other fixture in this suite assumes the
+   * bootstrap-seeded row is present, same as production outside that one
+   * broken-migration case.
+   */
+  siteSettingSeeded = true;
   readonly articles = new Map<string, FakeArticle>();
   readonly manualSlots = new Map<string, FakeManualSlot>();
   readonly batches = new Map<string, { id: string; uniqueKey: string; status: string; finishedAt: Date | null; [key: string]: unknown }>();
@@ -170,11 +181,27 @@ export class FakeHomeCarouselDb {
       siteSetting: {
         findUnique: async () => {
           this.calls.push("siteSetting.findUnique");
-          return { carouselConfigJson: this.carouselConfigJson };
+          if (!this.siteSettingSeeded) return null;
+          return { id: 1, carouselConfigJson: this.carouselConfigJson };
         },
-        upsert: async (args: { create: { carouselConfigJson: unknown }; update: { carouselConfigJson: unknown } }) => {
-          this.calls.push("siteSetting.upsert");
-          this.carouselConfigJson = args.update.carouselConfigJson ?? args.create.carouselConfigJson;
+        /**
+         * X8 轮 2d ⑦ fix: replaces the old `upsert` double. Mirrors real
+         * Prisma/Postgres `update` behavior -- a `WHERE` that matches zero
+         * rows throws `P2025` (`RecordNotFound`), not a silent insert.
+         * `updateHomeCarouselConfig`'s own `findUnique` guard already
+         * throws `SiteSettingNotSeededError` before this would ever be
+         * reached in that case; this branch exists so the fake stays
+         * faithful even if a future edit calls `update` directly.
+         */
+        update: async (args: { where: { id: number }; data: { carouselConfigJson: unknown } }) => {
+          this.calls.push("siteSetting.update");
+          if (!this.siteSettingSeeded) {
+            throw new Prisma.PrismaClientKnownRequestError(
+              "An operation failed because it depends on one or more records that were required but not found. Record to update not found.",
+              { code: "P2025", clientVersion: "test" },
+            );
+          }
+          this.carouselConfigJson = args.data.carouselConfigJson;
           return { id: 1, carouselConfigJson: this.carouselConfigJson };
         },
       },
@@ -292,6 +319,44 @@ export class FakeHomeCarouselDb {
           const row = { id: randomUUID(), finishedAt: null as Date | null, ...args.data, status } as { id: string; uniqueKey: string; status: string; finishedAt: Date | null; [key: string]: unknown };
           this.batches.set(row.id, row);
           return row;
+        },
+        /**
+         * X8 轮 2d ⑥ fix: `computeHomeCarouselInTx` now calls
+         * `createMany({ data: [row], skipDuplicates: true })` instead of
+         * `create` + catch-P2002, to avoid PostgreSQL's open-transaction-
+         * abort hazard on a caught unique-constraint violation (see that
+         * function's own header comment for the full reasoning). Real
+         * Postgres `skipDuplicates` compiles to `INSERT ... ON CONFLICT DO
+         * NOTHING`: it resolves a `unique_key` collision silently -- no
+         * thrown error, the skipped row is simply absent from `count` --
+         * but does NOT suppress a CHECK violation, a different failure
+         * class this fake still must simulate the same way `.create`
+         * above does (`home_carousel_auto_batch_status_check` is checked
+         * per-row, same as `.create`, before that row is ever considered
+         * for the uniqueness skip).
+         */
+        createMany: async (args: { data: Array<{ uniqueKey: string; status?: string; [key: string]: unknown }>; skipDuplicates?: boolean }) => {
+          this.calls.push("homeCarouselAutoBatch.createMany");
+          let created = 0;
+          for (const data of args.data) {
+            const isDuplicate = [...this.batches.values()].some((batch) => batch.uniqueKey === data.uniqueKey);
+            if (isDuplicate) {
+              if (args.skipDuplicates) continue;
+              throw prismaUniqueError("home_carousel_auto_batch_unique_key_key");
+            }
+            const status = data.status ?? "pending";
+            if (!(CAROUSEL_BATCH_STATUSES as readonly string[]).includes(status)) {
+              throw prismaCheckViolationError(
+                "home_carousel_auto_batch", "homeCarouselAutoBatch.createMany",
+                "home_carousel_auto_batch_status_check",
+                `status in CHECK ("status"::text = ANY (ARRAY[${CAROUSEL_BATCH_STATUSES.map((value) => `'${value}'::character varying`).join(", ")}]::text[])), got '${status}'`,
+              );
+            }
+            const row = { id: randomUUID(), finishedAt: null as Date | null, ...data, status } as { id: string; uniqueKey: string; status: string; finishedAt: Date | null; [key: string]: unknown };
+            this.batches.set(row.id, row);
+            created += 1;
+          }
+          return { count: created };
         },
         update: async (args: { where: { id: string }; data: Record<string, unknown> }) => {
           this.calls.push("homeCarouselAutoBatch.update");

@@ -6,6 +6,7 @@ import { requireFreshAdminServiceMutation, type AdminServiceAuthorization } from
 import { enqueueScheduledTask, type ScheduleDefinition, type ScheduledTaskInput, type TaskHandlerRegistry } from "@/lib/tasks";
 import { buildPublicListArticleWhere } from "@/server/publication/visibility";
 import { queryActiveLocales } from "@/lib/locale/active-locales";
+import { SiteSettingNotSeededError } from "@/server/site-settings/service";
 import type { CarouselBatchStatus, CarouselSource } from "@/domain/database-statuses";
 
 /** CPS v8.3.6 config/compute/merge parity, adapted to Novel/PostgreSQL. */
@@ -96,17 +97,51 @@ export async function computeHomeCarouselInTx(tx: CarouselTx, input: { locale: s
   // treated as a same-day repeat (`skipped_duplicate`) instead of its own
   // distinct compute.
   const uniqueKey = input.source === "cron" ? `cron:${businessDate}:${input.locale}` : `manual:${randomUUID()}`;
-  let batch;
-  try {
-    batch = await tx.homeCarouselAutoBatch.create({ data: {
-      uniqueKey, runDate: new Date(`${businessDate}T00:00:00.000Z`), triggerSource: input.source,
+  // X8 轮 2d ⑥ fix: this used to be a plain `create` wrapped in a
+  // `try/catch` that special-cased Prisma P2002 (unique-constraint
+  // violation on `uniqueKey`) into `skipped_duplicate`. CPS's own
+  // `runCarouselAutoComputeWithDb` does the exact same catch-P2002 shape
+  // (`git show 3a76877:src/lib/home-carousel-compute.ts`, lines ~219-241)
+  // — but CPS runs on SQLite, where a statement that fails inside an open
+  // transaction does not poison the rest of that transaction. On
+  // PostgreSQL it does: once one statement on a connection raises (a
+  // UNIQUE violation included), every later statement on that same open
+  // transaction fails with `25P02 current transaction is aborted` until
+  // the transaction rolls back. `computeHomeCarouselInTx` always runs
+  // inside the worker's shared `protectedWrite` transaction
+  // (`worker/handlers/home-carousel.ts` -> `src/lib/tasks/store.ts`'s
+  // `finalizeTaskItem`), which unconditionally writes again *after* this
+  // function returns (`guardedFinalize`'s own `tx.$executeRaw` UPDATE on
+  // `generic_task_item`) — a caught P2002 here left that outer transaction
+  // aborted, so finalize's own write failed with 25P02 on every same-day
+  // cron repeat. Registered as a PG/SQLite CPS-parity divergence, not a
+  // portable fix, in `docs/governance/port-registry.md`'s home-carousel
+  // section.
+  //
+  // `createMany` + `skipDuplicates: true` compiles to `INSERT ... ON
+  // CONFLICT DO NOTHING` on PostgreSQL, which resolves the conflict at the
+  // SQL level without raising an exception at all — the transaction stays
+  // fully usable either way, `count === 0` on a conflict instead of a
+  // catchable error. Same fix shape (a Postgres verb that resolves a
+  // conflict without an exception, used precisely to stay safe inside an
+  // already-open transaction) as `worker/handlers/promo-link-claim.ts`'s
+  // `ensurePromoLinkRow` (`upsert` / `ON CONFLICT DO UPDATE` — see that
+  // function's own header comment for the identical open-transaction-abort
+  // reasoning), just with `DO NOTHING` instead of `DO UPDATE` since a
+  // duplicate batch key has nothing to merge. The batch id is minted here
+  // (not read back from the insert) so the `count === 1` success path
+  // needs no follow-up `findUnique` — nothing later in this function reads
+  // any other column off the freshly created row, only its id.
+  const batchId = randomUUID();
+  const { count: createdBatchCount } = await tx.homeCarouselAutoBatch.createMany({
+    data: [{
+      id: batchId, uniqueKey, runDate: new Date(`${businessDate}T00:00:00.000Z`), triggerSource: input.source,
       localeScope: input.locale, algorithmVersion: "novel-recency-v1", params: config,
       status: "pending" satisfies CarouselBatchStatus, startedAt: now, createdBy: input.actorId ?? null,
-    } });
-  } catch (error) {
-    if (input.source === "cron" && error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") return { status: "skipped_duplicate" as const };
-    throw error;
-  }
+    }],
+    skipDuplicates: true,
+  });
+  if (createdBatchCount === 0) return { status: "skipped_duplicate" as const };
   // C-25 review fix: the carousel is a list surface (candidate pool and
   // serving snapshot alike — see `buildPublicListArticleWhere`'s own doc
   // comment), so candidate selection uses the same stricter "list" fragment
@@ -148,12 +183,12 @@ export async function computeHomeCarouselInTx(tx: CarouselTx, input: { locale: s
   const newest = pool.filter((row) => (row.publishedAt?.valueOf() ?? 0) >= cutoff).slice(0, newDramaLimit);
   const selectedIds = new Set(newest.map((row) => row.novelId));
   const selected = [...newest, ...pool.filter((row) => !selectedIds.has(row.novelId)).slice(0, Math.max(config.slotCount - newest.length, 0))];
-  if (selected.length > 0) await tx.homeCarouselAutoCandidate.createMany({ data: selected.map((row, index) => ({ batchId: batch.id, locale: input.locale, novelId: row.novelId, articleId: row.id, source: (index < newest.length ? "new_novel" : "recency") satisfies CarouselSource, rank: index + 1, reason: { updatedAt: row.updatedAt.toISOString() } })) });
+  if (selected.length > 0) await tx.homeCarouselAutoCandidate.createMany({ data: selected.map((row, index) => ({ batchId, locale: input.locale, novelId: row.novelId, articleId: row.id, source: (index < newest.length ? "new_novel" : "recency") satisfies CarouselSource, rank: index + 1, reason: { updatedAt: row.updatedAt.toISOString() } })) });
   const manual = await tx.homeCarouselManualSlot.findMany({ where: { locale: input.locale, enabled: true, deletedAt: null, OR: [{ startsAt: null }, { startsAt: { lte: now } }], AND: [{ OR: [{ endsAt: null }, { endsAt: { gt: now } }] }] }, orderBy: { position: "asc" }, take: config.slotCount });
   const merged: Array<{ novelId: string; articleId: string; source: CarouselSource; manualSlotId: string | null; batchId: string | null }> = [];
   const seen = new Set<string>();
   for (const row of manual) if (!seen.has(row.novelId)) { seen.add(row.novelId); merged.push({ novelId: row.novelId, articleId: row.articleId, source: "manual" satisfies CarouselSource, manualSlotId: row.id, batchId: null }); }
-  for (const row of selected) if (merged.length < config.slotCount && !seen.has(row.novelId)) { seen.add(row.novelId); merged.push({ novelId: row.novelId, articleId: row.id, source: (newest.some((item) => item.id === row.id) ? "new_novel" : "recency") satisfies CarouselSource, manualSlotId: null, batchId: batch.id }); }
+  for (const row of selected) if (merged.length < config.slotCount && !seen.has(row.novelId)) { seen.add(row.novelId); merged.push({ novelId: row.novelId, articleId: row.id, source: (newest.some((item) => item.id === row.id) ? "new_novel" : "recency") satisfies CarouselSource, manualSlotId: null, batchId }); }
   await tx.homeCarouselServing.deleteMany({ where: { locale: input.locale } });
   if (merged.length > 0) await tx.homeCarouselServing.createMany({ data: merged.map((row, index) => ({ ...row, locale: input.locale, position: index + 1, mergedAt: now })) });
   // Schema-contract-drift fix (sibling to `20260912100000_carousel_serving_source_check_fix`):
@@ -168,11 +203,14 @@ export async function computeHomeCarouselInTx(tx: CarouselTx, input: { locale: s
   // member; there is no separate `processing` transition write in this function (the batch goes
   // straight from `pending` to its terminal status within the same transaction) and no `failed`
   // write path either (an error thrown before this line aborts the transaction instead of
-  // persisting a `failed` batch row — see the `catch` block above, which only handles the
-  // `uniqueKey` P2002 case and rethrows everything else unpersisted).
-  await tx.homeCarouselAutoBatch.update({ where: { id: batch.id }, data: { status: "completed" satisfies CarouselBatchStatus, finishedAt: now } });
-  await tx.homeCarouselChangeLog.create({ data: { locale: input.locale, action: "serving.compute", actorType: input.source === "cron" ? "system" : "admin", actorId: input.actorId ?? null, afterState: { batchId: batch.id, count: merged.length } } });
-  return { status: "success" as const, batchId: batch.id, count: merged.length };
+  // persisting a `failed` batch row — X8 轮 2d ⑥ fix: the once-`try/catch`
+  // that special-cased `create`'s P2002 into `skipped_duplicate` is gone
+  // (see the `createMany`/`skipDuplicates` comment above); any error
+  // thrown from here on still aborts the transaction and leaves no
+  // persisted batch row, same as before).
+  await tx.homeCarouselAutoBatch.update({ where: { id: batchId }, data: { status: "completed" satisfies CarouselBatchStatus, finishedAt: now } });
+  await tx.homeCarouselChangeLog.create({ data: { locale: input.locale, action: "serving.compute", actorType: input.source === "cron" ? "system" : "admin", actorId: input.actorId ?? null, afterState: { batchId, count: merged.length } } });
+  return { status: "success" as const, batchId, count: merged.length };
 }
 
 async function auth(authorization: AdminServiceAuthorization, entryId: string, requestId: string, deps: HomeCarouselDependencies) {
@@ -183,7 +221,27 @@ export async function updateHomeCarouselConfig(input: { authorization: AdminServ
   const context = await auth(input.authorization, "admin.home_carousel.config", input.requestId, deps);
   const config = normalizeHomeCarouselConfig(input);
   return deps.db.$transaction(async (tx) => {
-    await tx.siteSetting.upsert({ where: { id: 1 }, create: { id: 1, carouselConfigJson: config }, update: { carouselConfigJson: config } });
+    // X8 轮 2d ⑦ fix: this used to call Prisma's `upsert` here. Postgres
+    // compiles `upsert` to `INSERT ... ON CONFLICT (id) DO UPDATE`, which
+    // requires INSERT privilege on the table even on the path that ends up
+    // resolving as an UPDATE — but `infra/postgres/grants.sql` gives
+    // `web_app` (the role this function runs as, called only from the
+    // admin surface's `_actions.ts`) column-scoped UPDATE on `site_setting`
+    // and nothing else; INSERT/DELETE are `migration_owner`-only by design
+    // (see that file's own "SiteSetting boundary" comment). X8 confirmed
+    // `permission denied for table site_setting` reproducing this against
+    // the real role. `site_setting` is a bootstrap-seeded singleton (`id`
+    // fixed at 1, `site_setting_singleton_check` CHECK forbids any other
+    // row — see `src/server/site-settings/service.ts`'s own
+    // `SiteSettingNotSeededError`), so there is no legitimate case where
+    // this function needs to *create* the row; reusing that same error
+    // class here (rather than inventing a parallel one) keeps "row is
+    // missing" a single, already-integrated failure mode (it is already
+    // wired into `src/app/api/admin/_lib/respond.ts`'s admin error
+    // envelope for any route that surfaces it) instead of two.
+    const existing = await tx.siteSetting.findUnique({ where: { id: 1 }, select: { id: true } });
+    if (!existing) throw new SiteSettingNotSeededError();
+    await tx.siteSetting.update({ where: { id: 1 }, data: { carouselConfigJson: config } });
     await tx.operationAudit.create({ data: { actorType: "admin", actorId: context.identity.id, action: "home_carousel.config", entityType: "SiteSetting", entityId: "1", requestId: input.requestId, afterSnapshot: config } });
     return config;
   });

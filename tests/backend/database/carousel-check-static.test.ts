@@ -120,7 +120,7 @@ function candidateSourceLiteralsWrittenByService(): string[] {
 
 /**
  * Every `status:` literal written at the two `home_carousel_auto_batch`
- * write sites (`homeCarouselAutoBatch.create`'s initial `"pending"`,
+ * write sites (`homeCarouselAutoBatch.createMany`'s initial `"pending"`,
  * `homeCarouselAutoBatch.update`'s terminal write), each extracted from its
  * own statement's text (from the call to its terminating `;`) rather than a
  * whole-file scan — `service.ts` writes several *other* `status:` fields
@@ -128,10 +128,17 @@ function candidateSourceLiteralsWrittenByService(): string[] {
  * `status: "success" as const` at the end of this same function, the
  * `article`/`novel` publication-status filters, `genericTask`'s task
  * status) which a whole-file regex would also (wrongly) sweep in.
+ *
+ * X8 轮 2d ⑥ fix: the initial-write marker was `homeCarouselAutoBatch.create(`
+ * — `computeHomeCarouselInTx` now calls `createMany` instead (`ON CONFLICT
+ * DO NOTHING` instead of a catchable P2002, see that function's own header
+ * comment), so the marker follows. A plain `.create(` substring match would
+ * NOT find `.createMany(` (`create` is immediately followed by `Many`, not
+ * `\(`), so this rename is required, not cosmetic.
  */
 function autoBatchStatusLiteralsWrittenByService(): string[] {
   const literals: string[] = [];
-  for (const marker of ["homeCarouselAutoBatch.create(", "homeCarouselAutoBatch.update("]) {
+  for (const marker of ["homeCarouselAutoBatch.createMany(", "homeCarouselAutoBatch.update("]) {
     const start = service.indexOf(marker);
     const end = service.indexOf(";", start);
     if (start === -1 || end === -1) {
@@ -262,5 +269,57 @@ describe("all four home_carousel_* tables' CHECK constraints are fully inventori
     for (const delegate of ["homeCarouselManualSlot", "homeCarouselAutoBatch", "homeCarouselAutoCandidate", "homeCarouselServing"]) {
       expect(workerHandler).not.toContain(`${delegate}.`);
     }
+  });
+});
+
+/**
+ * X8 轮 2d ⑥ fix static guard: `computeHomeCarouselInTx` used to resolve its
+ * `home_carousel_auto_batch.unique_key` idempotency conflict with a plain
+ * `create` wrapped in `try { ... } catch (error) { if (...error.code ===
+ * "P2002") return skipped_duplicate; throw error; }`. Safe on SQLite (CPS's
+ * own `runCarouselAutoComputeWithDb` does the same thing — `git show
+ * 3a76877:src/lib/home-carousel-compute.ts`), unsafe on PostgreSQL: once one
+ * statement on an open transaction raises, every later statement on that
+ * same transaction fails with `25P02 current transaction is aborted` until
+ * rollback — and this function always runs inside the worker's shared
+ * `protectedWrite` transaction, whose own `finalizeTaskItem` write comes
+ * right after this function returns. The fix (`createMany` +
+ * `skipDuplicates: true`, `ON CONFLICT DO NOTHING` on real Postgres)
+ * resolves the same conflict without ever raising an exception at all, so
+ * there is nothing left to catch — a reverted `catch (P2002)` is therefore
+ * the exact regression this guard exists to catch, structurally, not just
+ * via the compute.test.ts behavioral pin.
+ */
+describe("computeHomeCarouselInTx's home_carousel_auto_batch write never catches a Prisma P2002 error as executable code (X8 轮 2d ⑥ static guard)", () => {
+  /**
+   * Naive `//`-line and `/* *\/`-block comment stripper — does not
+   * understand string literals containing `//` or `/*` (a real tokenizer
+   * would be overkill for a single-file greppable guard); safe here because
+   * service.ts has no such string literal near any P2002-mentioning line
+   * (this file's own doc comment above explains why the string appears in
+   * prose at all: the historical bug and the CPS-parity note both name it).
+   * Stripping only ever removes text from consideration, so at worst this
+   * under-flags a violation moved onto a comment-adjacent line — it can
+   * never manufacture a false failure out of a prose mention.
+   */
+  function stripTsComments(source: string): string {
+    return source
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .split("\n")
+      .map((line) => {
+        const idx = line.indexOf("//");
+        return idx === -1 ? line : line.slice(0, idx);
+      })
+      .join("\n");
+  }
+
+  it('service.ts contains the string "P2002" only inside comments (explaining the historical bug/CPS-parity divergence), never as executable code', () => {
+    const executableSource = stripTsComments(service);
+    expect(executableSource).not.toContain("P2002");
+    // Sanity check that this guard isn't vacuous: the string really is
+    // still present somewhere in the file (in prose), so the assertion
+    // above is actually exercising the comment-stripper, not just testing
+    // an absent string trivially.
+    expect(service).toContain("P2002");
   });
 });

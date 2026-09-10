@@ -392,13 +392,15 @@ const WEB_APP_WRITE_EXEMPTIONS: ReadonlyArray<{ readonly table: string; readonly
     reason:
       "src/server/home-carousel/service.ts is imported by web_app's src/app/(admin)/home-carousel/_actions.ts " +
       "(for updateHomeCarouselConfig/upsertHomeCarouselManualSlot/deleteHomeCarouselManualSlot/enqueueHomeCarouselCompute), " +
-      "but the file's only .create()/.update() calls on home_carousel_auto_batch live inside computeHomeCarouselInTx " +
-      "(service.ts, a worker-only function), reachable ONLY from worker/handlers/home-carousel.ts's createHomeCarouselHandler. " +
-      "No web_app-callable export in this file ever calls computeHomeCarouselInTx -- confirmed by " +
-      "`grep -rl computeHomeCarouselInTx src/ worker/ scheduler/`, which returns only service.ts's own definition and " +
-      "worker/handlers/home-carousel.ts's call site. web_app correctly holds no INSERT/UPDATE grant on this table " +
-      "(grants.sql's home_carousel_auto_batch INSERT/UPDATE is worker_app-only); this is a file-level-BFS false positive, " +
-      "the same class of gap as the operation_audit/scheduler_app false positive documented in this file's header comment.",
+      "but the file's only .update() call on home_carousel_auto_batch (its .create() became .createMany() in the X8 轮 2d ⑥ " +
+      "fix -- createMany is outside this file's WRITE_METHODS scan, see the header comment -- so only .update() is still " +
+      "detected here at all) lives inside computeHomeCarouselInTx (service.ts, a worker-only function), reachable ONLY " +
+      "from worker/handlers/home-carousel.ts's createHomeCarouselHandler. No web_app-callable export in this file ever " +
+      "calls computeHomeCarouselInTx -- confirmed by `grep -rl computeHomeCarouselInTx src/ worker/ scheduler/`, which " +
+      "returns only service.ts's own definition and worker/handlers/home-carousel.ts's call site. web_app correctly " +
+      "holds no INSERT/UPDATE grant on this table (grants.sql's home_carousel_auto_batch INSERT/UPDATE is worker_app-only); " +
+      "this is a file-level-BFS false positive, the same class of gap as the operation_audit/scheduler_app false positive " +
+      "documented in this file's header comment.",
   },
 ];
 const webAppExemptTables = new Set(WEB_APP_WRITE_EXEMPTIONS.map((e) => e.table));
@@ -471,5 +473,135 @@ describe("grants.sql RETURNING invariant, web_app entrypoints (src/app/(admin)/*
     for (const table of ["article_novel_rebind_preview", "article_novel_rebind_batch", "article_novel_rebind_batch_item"]) {
       expect(hasSelect("analyst_ro", table), `analyst_ro is expected to have SELECT on ${table}, matching web_app's SELECT there`).toBe(true);
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// X8 轮 2d ⑦ follow-up: per-method precision, web_app only. `hasAnyWrite`
+// above is deliberately coarse (true if the role holds ANY of INSERT/UPDATE/
+// DELETE on the table) -- which is exactly why it did NOT catch the pre-fix
+// `updateHomeCarouselConfig`'s `tx.siteSetting.upsert(...)`: web_app holds
+// column-scoped UPDATE (not INSERT) on `site_setting`
+// (`infra/postgres/grants.sql`'s "SiteSetting boundary" block --
+// INSERT/DELETE are `migration_owner`-only there by design), so
+// `hasAnyWrite("web_app", "site_setting")` was, and still is, `true` --
+// `upsert` compiles to `INSERT ... ON CONFLICT (id) DO UPDATE`, which
+// PostgreSQL rejects for lack of INSERT privilege even though the statement
+// almost always resolves as an UPDATE. X8 reproduced `permission denied for
+// table site_setting` against the real role. This block re-scans web_app's
+// write surface at per-method granularity -- a bare `.create(`/`.upsert(`
+// call site requires INSERT specifically, `.update(` requires UPDATE
+// specifically, `.delete(` requires DELETE specifically -- matching what
+// Postgres itself checks for each statement shape, not just "some write
+// privilege exists somewhere on this table". Every existing assertion above
+// (including `hasAnyWrite`'s own tests) is unchanged; this is a narrower,
+// additional invariant layered on the same `webAppFiles` BFS and the same
+// `WEB_APP_WRITE_EXEMPTIONS` registry, not a replacement.
+// ---------------------------------------------------------------------------
+
+type WebAppWriteMethod = "create" | "update" | "upsert" | "delete";
+
+/** `upsert`/`create` need INSERT (Postgres's `ON CONFLICT` clause is still an INSERT statement at heart); `update` needs UPDATE; `delete` needs DELETE. */
+const REQUIRED_GRANT_FOR_METHOD: Record<WebAppWriteMethod, keyof TableAccess> = {
+  create: "insert",
+  upsert: "insert",
+  update: "update",
+  delete: "delete",
+};
+
+/**
+ * Same accessor/table map and same `\b<accessor>\s*\.\s*<method>\s*\(`
+ * boundary discipline `detectWriteTables` above documents (so
+ * `siteSetting.update(` is found while `siteSetting.updateMany(` is not),
+ * but keyed by (table, method) instead of just table -- this is what lets
+ * the assertion below require the *specific* privilege each method shape
+ * actually needs, instead of `hasAnyWrite`'s "some write privilege" check.
+ */
+function detectWriteMethodsByTable(files: Set<string>): Map<string, Map<WebAppWriteMethod, Set<string>>> {
+  const result = new Map<string, Map<WebAppWriteMethod, Set<string>>>();
+  const methods: WebAppWriteMethod[] = ["create", "update", "upsert", "delete"];
+  for (const file of files) {
+    const source = readFileSync(file, "utf8");
+    for (const [accessor, table] of modelTableMap) {
+      for (const method of methods) {
+        const re = new RegExp(`\\b${accessor}\\s*\\.\\s*${method}\\s*\\(`);
+        if (!re.test(source)) continue;
+        if (!result.has(table)) result.set(table, new Map());
+        const byMethod = result.get(table)!;
+        if (!byMethod.has(method)) byMethod.set(method, new Set());
+        byMethod.get(method)!.add(file);
+      }
+    }
+  }
+  return result;
+}
+
+const webAppWriteMethods = detectWriteMethodsByTable(webAppFiles);
+
+/**
+ * Method-scoped false positives -- separate from `WEB_APP_WRITE_EXEMPTIONS`
+ * above (which asserts the *table* has no write grant at all: not true here,
+ * `side_effect_intent` legitimately carries a column-scoped web_app UPDATE
+ * grant, so it doesn't belong in that list — reusing it would make the
+ * "hasAnyWrite must be false" check in that list's own verification test
+ * fail for a table that correctly has a grant, just not the INSERT this one
+ * unreachable-from-web_app method would need).
+ */
+const WEB_APP_METHOD_EXEMPTIONS: ReadonlyArray<{ readonly table: string; readonly method: WebAppWriteMethod; readonly reason: string }> = [
+  {
+    table: "side_effect_intent",
+    method: "create",
+    reason:
+      "src/server/home-carousel/service.ts imports `@/lib/tasks` (the barrel src/lib/tasks/index.ts, for " +
+      "enqueueScheduledTask/ScheduleDefinition/ScheduledTaskInput/TaskHandlerRegistry) and that barrel " +
+      "`export * from`s every sibling module, side-effect-intent.ts included -- so this file's whole-file-reachability " +
+      "BFS (not per-export slicing; see header comment) treats sideEffectIntent.create() (prepareSideEffectIntent, " +
+      "side-effect-intent.ts:64) as web_app-reachable even though no web_app-callable export anywhere under " +
+      "src/app/(admin)/** or src/app/api/admin/** ever calls prepareSideEffectIntent -- confirmed by " +
+      "`grep -rl prepareSideEffectIntent src/ worker/`, which returns only side-effect-intent.ts's own definition, " +
+      "its barrel re-export (src/lib/tasks/index.ts), and worker/handlers/promo-link-claim.ts's real call site. " +
+      "web_app correctly holds no INSERT on side_effect_intent (X9 Task Admin, database-governance.md §12: " +
+      "'Web 仅获得 side_effect_intent(status,response_shape,confirmed_at) 列级 UPDATE' -- creation is worker-only, via " +
+      "prepareSideEffectIntent inside worker/handlers/promo-link-claim.ts); this is the same shared-file BFS false " +
+      "positive class as the home_carousel_auto_batch/operation_audit exemptions above, just reached through a barrel " +
+      "export instead of a directly shared file. Unrelated to this task's own ⑥/⑦ fix -- surfaced only because this " +
+      "block's per-method precision is strictly narrower than `hasAnyWrite` above (side_effect_intent's existing " +
+      "column-scoped UPDATE already satisfied hasAnyWrite, masking this gap from the coarser check).",
+  },
+];
+const webAppMethodExempt = new Set(WEB_APP_METHOD_EXEMPTIONS.map((e) => `${e.table}::${e.method}`));
+
+describe("grants.sql per-method invariant (web_app): create/upsert need INSERT, update needs UPDATE, delete needs DELETE -- catches a wrong-verb call site hasAnyWrite cannot (X8 轮 2d ⑦)", () => {
+  it("site_setting regression pin: web_app holds UPDATE but not INSERT there -- the exact grant shape that let the pre-fix siteSetting.upsert() reach production undetected by hasAnyWrite alone", () => {
+    expect(grantsByRole.get("web_app")?.get("site_setting")?.update).toBe(true);
+    expect(grantsByRole.get("web_app")?.get("site_setting")?.insert).toBe(false);
+  });
+
+  it("web_app's real code holds the exact grant each write method it calls actually needs, for every (table, method) pair the BFS finds (excluding the same table-level exemptions registered above, plus the method-scoped exemptions registered just below)", () => {
+    for (const [table, byMethod] of webAppWriteMethods) {
+      if (webAppExemptTables.has(table)) continue;
+      for (const [method, evidence] of byMethod) {
+        if (webAppMethodExempt.has(`${table}::${method}`)) continue;
+        const requiredPriv = REQUIRED_GRANT_FOR_METHOD[method];
+        const entry = grantsByRole.get("web_app")?.get(table);
+        expect(
+          entry?.[requiredPriv] === true,
+          `web_app's reachable code calls .${method}( on "${table}" (e.g. ${[...evidence][0]}) but infra/postgres/grants.sql grants web_app no ${requiredPriv.toUpperCase()} there -- PostgreSQL will reject this exact statement shape with "permission denied for table ${table}" even though hasAnyWrite() may report some other write privilege exists`,
+        ).toBe(true);
+      }
+    }
+  });
+
+  it("every declared method-scoped exemption is live and not masking a real gap: the (table, method) pair is still detected, and web_app still holds no matching grant for it", () => {
+    for (const { table, method, reason } of WEB_APP_METHOD_EXEMPTIONS) {
+      expect(webAppWriteMethods.get(table)?.has(method), `exemption for "${table}"::"${method}" is declared but the BFS no longer flags it at all -- the exemption is stale and should be removed (reason on file: ${reason})`).toBe(true);
+      const requiredPriv = REQUIRED_GRANT_FOR_METHOD[method];
+      expect(grantsByRole.get("web_app")?.get(table)?.[requiredPriv] === true, `exemption for "${table}"::"${method}" assumes web_app has no ${requiredPriv.toUpperCase()} there, but grants.sql now grants one -- either the exemption is obsolete (promote it to a real assertion) or this is a genuine new gap (reason on file: ${reason})`).toBe(false);
+    }
+  });
+
+  it("confirms updateHomeCarouselConfig's fixed call site is still detected as .update( (not .upsert() any more) against site_setting", () => {
+    expect(webAppWriteMethods.get("site_setting")?.has("update"), "expected updateHomeCarouselConfig's tx.siteSetting.update(...) to be reachable from src/app/(admin)/").toBe(true);
+    expect(webAppWriteMethods.get("site_setting")?.has("upsert"), "site_setting should have no remaining .upsert( call site anywhere in web_app's reachable code").toBe(false);
   });
 });

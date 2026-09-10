@@ -72,14 +72,44 @@ describe("computeHomeCarouselInTx honors carouselConfigJson (PR6 fix B-1 #3)", (
     expect(db.candidates.some((row) => row.source === "new_novel")).toBe(false);
   });
 
-  it("cron:<businessDate> is idempotent: a same-day repeat hits P2002 and returns skipped_duplicate", async () => {
+  // X8 轮 2d ⑥ fix: was "a same-day repeat hits P2002 and returns
+  // skipped_duplicate" (plain `create` + caught P2002 — safe on this fake,
+  // which has no real transaction-abort semantics, but not on production
+  // PostgreSQL: a caught unique-violation there leaves the whole open
+  // transaction `25P02 aborted`, and `computeHomeCarouselInTx` always runs
+  // inside the worker's shared `protectedWrite` transaction, whose own
+  // `finalizeTaskItem` write comes right after — see this function's own
+  // header comment). Retitled + extended to pin the fixed mechanism itself.
+  it("cron:<businessDate> is idempotent: a same-day repeat resolves via createMany+skipDuplicates (never a caught P2002) and returns skipped_duplicate without raising", async () => {
     const db = new FakeHomeCarouselDb();
     seedSixOldArticles(db);
     const first = await computeHomeCarouselInTx(db.asTransactionClient(), { locale: "en", source: "cron", now: NOW });
     expect(first.status).toBe("success");
+    db.calls.length = 0; // isolate the second call's own call trace below
     const second = await computeHomeCarouselInTx(db.asTransactionClient(), { locale: "en", source: "cron", now: NOW });
     expect(second).toEqual({ status: "skipped_duplicate" });
     expect(db.batches.size).toBe(1);
+    // Mutation pin: reverting `computeHomeCarouselInTx` to `create` + `catch
+    // (P2002)` flips this call trace back to `homeCarouselAutoBatch.create`
+    // — failing this assertion (in addition to
+    // `tests/backend/database/carousel-check-static.test.ts`'s literal-marker
+    // guard, which would also throw outright since it greps for the
+    // `.createMany(` marker specifically).
+    expect(db.calls).toContain("homeCarouselAutoBatch.createMany");
+    expect(db.calls).not.toContain("homeCarouselAutoBatch.create");
+    // Proves the `skipped_duplicate` early return never threw inside the
+    // transaction: the same handle is still fully usable for a further
+    // write immediately after — the exact shape `finalizeTaskItem`'s own
+    // `guardedFinalize` write relies on in production. This fake has no
+    // real PostgreSQL transaction-abort semantics to reproduce (a thrown/
+    // caught exception here would instead reject the `await` above and
+    // fail this test before ever reaching this line), so this assertion
+    // documents the intended no-throw contract rather than reproducing
+    // `25P02` itself — that reproduction is X8's own real-database probe.
+    const tx = db.asTransactionClient();
+    await expect(
+      tx.homeCarouselChangeLog.create({ data: { locale: "en", action: "probe.no_throw", actorType: "system", actorId: null, afterState: {} } }),
+    ).resolves.toBeDefined();
   });
 
   // L10N P5 (矩阵 #13, F). Mutation ② target: dropping `locale` from the
