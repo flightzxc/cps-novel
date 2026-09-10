@@ -15,17 +15,17 @@ import { renderWithMessages } from "./render-with-messages";
  * — same pure strip/build/sanitize functions, same same-origin href guard,
  * same menu semantics. Multi-locale rendering behavior (the dropdown, aria
  * semantics, Esc/click-outside) lives in the sibling file
- * `locale-switcher-multi-locale.test.tsx`, which needs to mock
- * `listPublishableLocales()` — `vi.mock` is hoisted to the top of its whole
- * file regardless of which `describe` block it's textually written in, so
- * that mock cannot coexist in the same file as this one's "renders nothing
- * against the REAL open locale set" assertion below without silently
- * applying to it too.
+ * `locale-switcher-multi-locale.test.tsx`.
  *
- * 🔴 The single most load-bearing assertion in this file is the first one:
- * with the real (unmocked) `listPublishableLocales()` — today `["en"]` —
- * `<LocaleSwitcher />` itself renders NOTHING. That is what makes the
- * English site's rendered CONTENT unchanged by this work order.
+ * L10N P4: the "open locale set" is now a plain `activeLocales` prop (the
+ * dynamic layer's output — see `LocaleSwitcher.tsx`'s own header comment),
+ * not something this component reads itself via the deleted
+ * `listPublishableLocales()`. `<LocaleSwitcher />` with no prop at all
+ * defaults `activeLocales` to `[]`, which renders nothing — the same "≤1
+ * selectable locale, hide the switcher" branch the old real-unmocked-`{en}`
+ * case exercised, reached here by the prop's own default rather than by a
+ * module-level constant a caller could no longer widen out from under this
+ * test.
  *
  * Accepted DOM change (part of the WO-2 commit message's own accepted-DOM-
  * change list, alongside `<html dir="ltr">`): `SiteHeader.tsx` now
@@ -39,8 +39,13 @@ import { renderWithMessages } from "./render-with-messages";
  * "renders NOTHING" assertion covers or contradicts.
  */
 describe("LocaleSwitcher — renders null while only one locale is open", () => {
-  it("renders no DOM at all against the real, unmocked open locale set", () => {
+  it("renders no DOM at all when activeLocales is omitted (defaults to [])", () => {
     const { container } = renderWithMessages(<LocaleSwitcher />);
+    expect(container.innerHTML).toBe("");
+  });
+
+  it("renders no DOM at all when activeLocales has exactly one entry", () => {
+    const { container } = renderWithMessages(<LocaleSwitcher activeLocales={["en"]} />);
     expect(container.innerHTML).toBe("");
   });
 });

@@ -6,22 +6,26 @@ import { renderWithMessages } from "./render-with-messages";
 
 /**
  * WO-2 (`施工工单_WO1-3_多语种公开站地基_2026-09-08.md` §8.3): `LocaleSwitcher`
- * behavior once more than one locale is open. This is a hypothetical state
- * this round never actually reaches in production (`listPublishableLocales()`
- * stays `["en"]`), so `listPublishableLocales` is mocked here to prove the
- * component's rendering/interaction logic independent of the codebase's
- * current open-set size — separate file from `locale-switcher.test.tsx`
- * because `vi.mock` is hoisted file-wide and would otherwise also apply to
- * that file's "renders nothing against the REAL open set" assertion.
+ * behavior once more than one locale is open.
+ *
+ * L10N P4: the "open locale set" is now a plain `activeLocales` prop (the
+ * dynamic layer's output, threaded down from a server component — see
+ * `LocaleSwitcher.tsx`'s own header comment), not something this component
+ * reads itself via `listPublishableLocales()`. That deletion is exactly what
+ * simplified this file — no more `vi.mock("@/lib/locale/locale-canonical")`
+ * needed to force a hypothetical multi-locale state; passing
+ * `activeLocales={["en", "es"]}` directly is the real, supported way any
+ * caller (a `SiteChrome.activeLocales` from `getActiveLocales()`) would
+ * reach this state. Separate file from `locale-switcher.test.tsx` only
+ * because that file's own header explains its "renders nothing against
+ * activeLocales=[] / a single entry" assertions belong together.
  */
-vi.mock("@/lib/locale/locale-canonical", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/lib/locale/locale-canonical")>();
-  return { ...actual, listPublishableLocales: () => ["en", "es"] };
-});
 const routerPush = vi.fn();
 vi.mock("next/navigation", () => ({ usePathname: () => "/browse", useRouter: () => ({ push: routerPush }) }));
 
 const { LocaleSwitcher } = await import("@/features/public-ui/layout/LocaleSwitcher");
+
+const OPEN_LANG_SET = ["en", "es"] as const;
 
 describe("LocaleSwitcher — with more than one locale open", () => {
   beforeEach(() => {
@@ -35,7 +39,7 @@ describe("LocaleSwitcher — with more than one locale open", () => {
   });
 
   it("renders a trigger button labelled with the current locale's native name and Language aria-label", () => {
-    renderWithMessages(<LocaleSwitcher />);
+    renderWithMessages(<LocaleSwitcher activeLocales={OPEN_LANG_SET} />);
     const trigger = screen.getByRole("button", { name: "Language" });
     expect(within(trigger).getByText("English")).toBeTruthy();
     expect(trigger.getAttribute("aria-haspopup")).toBe("menu");
@@ -43,7 +47,7 @@ describe("LocaleSwitcher — with more than one locale open", () => {
   });
 
   it("opens a role=menu with a menuitem per open locale, aria-current on the active one, and correct prefixed hrefs", () => {
-    renderWithMessages(<LocaleSwitcher />);
+    renderWithMessages(<LocaleSwitcher activeLocales={OPEN_LANG_SET} />);
 
     const trigger = screen.getByRole("button", { name: "Language" });
     fireEvent.click(trigger);
@@ -65,7 +69,7 @@ describe("LocaleSwitcher — with more than one locale open", () => {
   });
 
   it("Esc closes the menu and returns focus to the trigger", () => {
-    renderWithMessages(<LocaleSwitcher />);
+    renderWithMessages(<LocaleSwitcher activeLocales={OPEN_LANG_SET} />);
 
     const trigger = screen.getByRole("button", { name: "Language" });
     fireEvent.click(trigger);
@@ -80,7 +84,7 @@ describe("LocaleSwitcher — with more than one locale open", () => {
   it("closes when clicking outside the switcher", () => {
     renderWithMessages(
       <div>
-        <LocaleSwitcher />
+        <LocaleSwitcher activeLocales={OPEN_LANG_SET} />
         <p data-testid="outside">outside</p>
       </div>,
     );
@@ -93,7 +97,7 @@ describe("LocaleSwitcher — with more than one locale open", () => {
   });
 
   it("closes when a menuitem is clicked", () => {
-    renderWithMessages(<LocaleSwitcher />);
+    renderWithMessages(<LocaleSwitcher activeLocales={OPEN_LANG_SET} />);
 
     fireEvent.click(screen.getByRole("button", { name: "Language" }));
     const es = within(screen.getByRole("menu")).getByRole("menuitem", { name: "Español" });
@@ -113,7 +117,7 @@ describe("LocaleSwitcher — with more than one locale open", () => {
     // navigation happens once a real click supplies a `window.location`
     // value to read.
     window.history.pushState({}, "", "/browse?page=2");
-    renderWithMessages(<LocaleSwitcher />);
+    renderWithMessages(<LocaleSwitcher activeLocales={OPEN_LANG_SET} />);
 
     fireEvent.click(screen.getByRole("button", { name: "Language" }));
     const es = within(screen.getByRole("menu")).getByRole("menuitem", { name: "Español" });
@@ -126,7 +130,7 @@ describe("LocaleSwitcher — with more than one locale open", () => {
 
   it("leaves a modified click (ctrl/cmd/shift/alt, or a non-primary button) to the browser's own default gesture instead of overriding navigation", () => {
     window.history.pushState({}, "", "/browse?page=2");
-    renderWithMessages(<LocaleSwitcher />);
+    renderWithMessages(<LocaleSwitcher activeLocales={OPEN_LANG_SET} />);
 
     fireEvent.click(screen.getByRole("button", { name: "Language" }));
     const es = within(screen.getByRole("menu")).getByRole("menuitem", { name: "Español" });

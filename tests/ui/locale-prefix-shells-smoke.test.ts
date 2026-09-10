@@ -619,16 +619,16 @@ describe("[locale]/... shells 404 with the guard UNMOCKED — the one routabilit
   // not the deleted whitelist. Every other registered locale (e.g. "fr")
   // now routes through — see the "registered, non-default locale is
   // routable again" block below.
-  const rejectedLocales = ["en"] as const;
+  const d8ExcludedInputs = ["en"] as const;
 
-  it.each(rejectedLocales)("home shell 404s for rawLocale=%s (D-8 default-locale exclusion)", async (rawLocale) => {
+  it.each(d8ExcludedInputs)("home shell 404s for rawLocale=%s (D-8 default-locale exclusion)", async (rawLocale) => {
     const prefixed = await import("@/app/[locale]/page");
     const params = Promise.resolve({ locale: rawLocale });
     await expect(prefixed.generateMetadata({ params })).rejects.toBe(NOT_FOUND);
     await expect(prefixed.default({ params })).rejects.toBe(NOT_FOUND);
   });
 
-  it.each(rejectedLocales)("browse shell 404s for rawLocale=%s (D-8 default-locale exclusion)", async (rawLocale) => {
+  it.each(d8ExcludedInputs)("browse shell 404s for rawLocale=%s (D-8 default-locale exclusion)", async (rawLocale) => {
     const prefixed = await import("@/app/[locale]/browse/page");
     const params = Promise.resolve({ locale: rawLocale });
     const searchParams = Promise.resolve({});
@@ -636,7 +636,7 @@ describe("[locale]/... shells 404 with the guard UNMOCKED — the one routabilit
     await expect(prefixed.default({ params, searchParams })).rejects.toBe(NOT_FOUND);
   });
 
-  it.each(rejectedLocales)("category shell 404s for rawLocale=%s (D-8 default-locale exclusion)", async (rawLocale) => {
+  it.each(d8ExcludedInputs)("category shell 404s for rawLocale=%s (D-8 default-locale exclusion)", async (rawLocale) => {
     const prefixed = await import("@/app/[locale]/category/[slug]/page");
     const params = Promise.resolve({ locale: rawLocale, slug: "fantasy" });
     const searchParams = Promise.resolve({});
@@ -644,14 +644,14 @@ describe("[locale]/... shells 404 with the guard UNMOCKED — the one routabilit
     await expect(prefixed.default({ params, searchParams })).rejects.toBe(NOT_FOUND);
   });
 
-  it.each(rejectedLocales)("novel detail shell 404s for rawLocale=%s (D-8 default-locale exclusion)", async (rawLocale) => {
+  it.each(d8ExcludedInputs)("novel detail shell 404s for rawLocale=%s (D-8 default-locale exclusion)", async (rawLocale) => {
     const prefixed = await import("@/app/[locale]/novel/[slugParam]/page");
     const params = Promise.resolve({ locale: rawLocale, slugParam: "lantern-keepers-daughter-pabc123" });
     await expect(prefixed.generateMetadata({ params })).rejects.toBe(NOT_FOUND);
     await expect(prefixed.default({ params })).rejects.toBe(NOT_FOUND);
   });
 
-  it.each(rejectedLocales)("chapter shell 404s for rawLocale=%s (D-8 default-locale exclusion)", async (rawLocale) => {
+  it.each(d8ExcludedInputs)("chapter shell 404s for rawLocale=%s (D-8 default-locale exclusion)", async (rawLocale) => {
     const prefixed = await import("@/app/[locale]/novel/[slugParam]/chapter/[chapterNumber]/page");
     const params = Promise.resolve({
       locale: rawLocale,
@@ -662,7 +662,7 @@ describe("[locale]/... shells 404 with the guard UNMOCKED — the one routabilit
     await expect(prefixed.default({ params })).rejects.toBe(NOT_FOUND);
   });
 
-  it.each(rejectedLocales)("blog list shell 404s for rawLocale=%s (D-8 default-locale exclusion)", async (rawLocale) => {
+  it.each(d8ExcludedInputs)("blog list shell 404s for rawLocale=%s (D-8 default-locale exclusion)", async (rawLocale) => {
     const prefixed = await import("@/app/[locale]/blog/page");
     const params = Promise.resolve({ locale: rawLocale });
     const searchParams = Promise.resolve({});
@@ -670,7 +670,7 @@ describe("[locale]/... shells 404 with the guard UNMOCKED — the one routabilit
     await expect(prefixed.default({ params, searchParams })).rejects.toBe(NOT_FOUND);
   });
 
-  it.each(rejectedLocales)("blog detail shell 404s for rawLocale=%s (D-8 default-locale exclusion)", async (rawLocale) => {
+  it.each(d8ExcludedInputs)("blog detail shell 404s for rawLocale=%s (D-8 default-locale exclusion)", async (rawLocale) => {
     const prefixed = await import("@/app/[locale]/blog/[slug]/page");
     const params = Promise.resolve({ locale: rawLocale, slug: "a-blog-post" });
     await expect(prefixed.generateMetadata({ params })).rejects.toBe(NOT_FOUND);

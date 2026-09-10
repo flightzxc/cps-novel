@@ -136,9 +136,9 @@ describe("static sitemap generation and refresh state", () => {
     expect(buildFamily).toHaveBeenCalled();
     // No routeLocales override was passed — generateStaticSitemaps' default
     // is now SITE_LOCALES (15 entries), not the deleted 1-entry whitelist.
-    const calledLocales = new Set(buildFamily.mock.calls.map(([spec]) => spec.locale));
-    expect(calledLocales.size).toBe(15);
-    expect(calledLocales.has("ru")).toBe(true);
+    const perLangCallSet = new Set(buildFamily.mock.calls.map(([spec]) => spec.locale));
+    expect(perLangCallSet.size).toBe(15);
+    expect(perLangCallSet.has("ru")).toBe(true);
     expect(result.state.current.kind).not.toBe("missing");
     await expect(fs.lstat(path.join(root, "sitemap-generation.lock")))
       .rejects.toMatchObject({ code: "ENOENT" });

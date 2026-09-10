@@ -12,7 +12,7 @@ import {
   revalidatePublicArticleSet,
   revalidatePublicListings,
 } from "@/server/publication/revalidate";
-import { ACTIVE_LOCALES_CACHE_TAG } from "@/lib/locale/active-locales";
+import { ACTIVE_LOCALES_CACHE_TAG } from "@/lib/locale/active-locales-tag";
 
 describe("revalidatePublicListings", () => {
   beforeEach(() => {

@@ -54,7 +54,7 @@
  */
 import { revalidatePath, revalidateTag } from "next/cache";
 
-import { ACTIVE_LOCALES_CACHE_TAG } from "@/lib/locale/active-locales";
+import { ACTIVE_LOCALES_CACHE_TAG } from "@/lib/locale/active-locales-tag";
 import {
   buildArticlePath,
   buildArticleRoutePath,

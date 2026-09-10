@@ -44,9 +44,10 @@ import type { Prisma, PrismaClient } from "@prisma/client";
 
 import { prisma } from "@/app/_lib/public-deps";
 import { activePublicArticleWhere } from "@/lib/seo/sitemap";
+import { ACTIVE_LOCALES_CACHE_TAG } from "./active-locales-tag";
 import { SITE_LOCALES, type SiteLocale } from "./locale-canonical";
 
-export const ACTIVE_LOCALES_CACHE_TAG = "active-locales";
+export { ACTIVE_LOCALES_CACHE_TAG };
 
 type ActiveLocalesDb = PrismaClient | Prisma.TransactionClient;
 
