@@ -610,17 +610,21 @@ CPS 动态层的消费面极窄——只有 `SiteHeader`→`LocaleSwitcher` 这�
 
 | 分类 | 文件 | 结论 |
 | --- | --- | --- |
-| **默认语种常量（保留）** | `src/app/page.tsx`、`src/app/category/[slug]/page.tsx`、`src/app/blog/page.tsx`、`src/app/blog/[slug]/page.tsx`、`src/app/novel/[slugParam]/page.tsx`、`src/app/novel/[slugParam]/not-found.tsx`、`src/app/novel/[slugParam]/chapter/[chapterNumber]/page.tsx`、`src/app/browse/page.tsx`、`src/app/[locale]/novel/[slugParam]/not-found.tsx` | 这些是**裸路径路由树**（D-8 定案：默认语种在无前缀路径落地），`PUBLIC_SITE_LOCALE` 在这里不是"唯一语种假设"的 bug，是路由结构本身——裸路径树与 `[locale]` 前缀树是两棵并行路由树，各自服务固定的语种范围，不因本轮 guard 放开前缀树而改变 |
+| **默认语种常量（保留）** | `src/app/page.tsx`、`src/app/category/[slug]/page.tsx`、`src/app/blog/page.tsx`、`src/app/blog/[slug]/page.tsx`、`src/app/novel/[slugParam]/page.tsx`、`src/app/novel/[slugParam]/not-found.tsx`、`src/app/novel/[slugParam]/chapter/[chapterNumber]/page.tsx`、`src/app/browse/page.tsx` | 这些是**裸路径路由树**（D-8 定案：默认语种在无前缀路径落地），`PUBLIC_SITE_LOCALE` 在这里不是"唯一语种假设"的 bug，是路由结构本身——裸路径树与 `[locale]` 前缀树是两棵并行路由树，各自服务固定的语种范围，不因本轮 guard 放开前缀树而改变 |
 | **默认语种常量（保留，dev-only）** | `src/app/dev-preview/**/*`、`src/features/public-ui/fixtures/mock-chrome.ts` | 开发预览路由，非生产可达路径，`mockChrome` 本身注释明示"语言入口只在确实存在多个可发布语种时才传入"——本轮验证单语种隐藏态的既有测试夹具 |
 | **默认语种常量（保留）** | `src/features/public-ui/status/PublicErrorStatus.tsx`、`src/features/public-ui/status/PublicNotFoundStatus.tsx`、`src/lib/site/blog-queries.ts:109`（`asSiteLocale(row.locale) ?? PUBLIC_SITE_LOCALE` 兜底）、`src/lib/locale/messages/index.ts:172`（`en` 消息目录短路判定） | 无请求上下文或本就是"哪个 locale 缺失就兜底默认语种"的语义，不是遗漏 |
-| **唯一语种假设（改读请求 locale）** | `src/app/layout.tsx:17,51,56` | 根布局 `<html lang dir>` 与顶层 `<title>` 兜底文案——之前恒定 `PUBLIC_SITE_LOCALE`，因为 `pickPublishableLocale` 白名单只放行 `en`；白名单删除后必须真正读 `x-novel-locale` 请求头（§2.E，已在清单③单独登记） |
+| **唯一语种假设（改读请求 locale）** | `src/app/layout.tsx:17,51,56` | 根布局 `<html lang dir>` 与顶层 `<title>` 兜底文案——之前恒定 `PUBLIC_SITE_LOCALE`，因为 `pickPublishableLocale` 白名单只放行 `en`；白名单删除后必须真正读 `x-novel-locale` 请求头（§2.E，已在清单③单独登记，已修） |
 | **唯一语种假设（改读请求 locale）** | `src/proxy.ts:80`（`buildDefaultLocaleRedirectTarget` 的 `/en/*` → 裸路径前缀） | 不是 bug——这个用法是"默认语种是谁"这一个静态问题，`/en/*` 规整不因协商或白名单删除而变化，保留 `PUBLIC_SITE_LOCALE` 引用不动 |
 | **唯一语种假设（改读请求 locale）** | `src/app/[locale]/_guard.ts:65`（`locale === PUBLIC_SITE_LOCALE` 排除默认语种前缀） | 同上，D-8 结构性判定，不是遗漏，保留不动 |
 | **无需改动** | `src/server/publication/revalidate.ts:142` | `revalidatePublicBlogPaths` 的博客详情页失效路径——博客当前仍是单语种产出面（`blog-create-form.tsx` 语种下拉扩到 `SITE_LOCALES` 不改变"当前只有 en 数据"的事实），失效路径构造维持 `PUBLIC_SITE_LOCALE`，非本轮范围 |
+| 🔴 **存疑：唯一语种假设，本轮未修（初次分类曾误归入裸路径树一档，已订正）** | `src/app/[locale]/novel/[slugParam]/not-found.tsx` | 这份文件住在 **`[locale]` 前缀树**（不是裸路径树），但因 Next 16.1.6 以零 props 渲染 `not-found.tsx` 边界（该文件自己的头注释已实测确认，见 `create-component-tree.js`），拿不到路由的 `locale` 参数，只能跟裸路径 shell 一样调用 `NovelNotFoundBody({ locale: PUBLIC_SITE_LOCALE })`。P4 之前这条子树整体不可达（旧 guard 恒 404），这个"假装是 en"的缺口无副作用；guard 改为"注册即路由"后，`/ru/novel/...` 这类路径下命中 not-found 边界会真的执行到这份文件，此时应显示 `ru` 却显示 `en`——是本轮 guard 改动新暴露的真实唯一语种假设，不是历史遗留。修法需要一个不依赖路由参数的 locale 信号（该文件自己的注释已经点名 `src/proxy.ts` 转发的 `x-novel-locale` 请求头，`app/layout.tsx` 本轮已示范同一读法），但施工提示词 §2.E 明确只点名 `app/layout.tsx` 一处，未把这份文件列入范围——本轮不擅自扩大，留给 Owner 决定是否补一个后续小改动 |
 
-结论：38 处（或本次重新核实的 76 处非注释引用，含 import 语句）中，仅
-`src/app/layout.tsx` 一处属于"唯一语种假设"需要改为读请求 locale（§2.E），
-其余全部是裸路径路由树/默认值兜底/开发预览等结构性用法，本身正确，不是遗漏。
+结论：38 处（或本次重新核实的 76 处非注释引用，含 import 语句）中，
+`src/app/layout.tsx` 一处属于"唯一语种假设"、本轮已按 §2.E 修复；
+`src/app/[locale]/novel/[slugParam]/not-found.tsx` 一处是本轮 guard 改动
+新暴露的同类假设，但不在施工提示词点名范围内，本轮不擅自修，登记为存疑项
+（见报告"未做/存疑项"）；其余全部是裸路径路由树/默认值兜底/开发预览等
+结构性用法，本身正确，不是遗漏。
 
 #### §2 范围改动清单（文件 → CPS 参照）
 
