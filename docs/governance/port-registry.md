@@ -526,6 +526,8 @@ territory，本轮不改）的前提下拆成两次独立判定去复刻单篇�
 | `getTemplateDramaLocaleMismatch` 的"模板不存在"与"语种不匹配"两次独立判定 | `src/actions/article-actions.ts` | `569-576` | `3a76877af27c6247ad94be946b44e9cc5c1cb9ce` | 不搬（仅作对照说明，不登记为 port） | 见上方"范围说明"——本仓创建=单事务无单篇/批量之分，取批量语义，不取这个单篇路径的两阶段错误码 |
 | 发布门禁删除语种检查（Owner 明示例外） → `src/server/publish-gate/evaluator.ts` 删 `checkLocale`/`isRegisteredSiteLocale`/`locale_not_publishable` push/deps 注入位 | 不适用（本条是删除，非搬运） | 不适用 | 不适用 | 不适用（DELETE，非 COPY/ADAPT/PATTERN_ONLY） | **Owner 2026-09-10 明示例外**：`docs/p2/P2_01_PUBLISH_GATE_CONTRACT.md`/`evaluator.ts` 自身 2026-09-08 曾登记的"发布门禁只允许改这一处"的禁区，本轮 Owner 再次明示允许触碰、仅此一处、仅删除语种注册检查；`src/contracts/publish-gate.ts` 的 `locale_not_publishable` 理由码本身不删（该文件本轮不改，P2-01 FROZEN 契约），只是 evaluator 不再产出它；`tests/backend/publish-gate/no-bypass.test.ts` 的既有失败签名（`scripts/s1-exact-target-structural-smoke.ts` 一条 `.$executeRawUnsafe` 命中）改前改后逐字相同，已实测核对 | Claude |
 
+**P2 遗留小项补登记（L10N P5 §1.E，2026-09-11）**：批量创建的**失败时机**是一处刻意保留的语义偏离，不是待收口的 gap——CPS `batch-actions-core.ts:167-183` 在写入前对整批做一次性语种一致性扫描，任何一条不满足即**事前**整批拒绝（零写入）；本仓 `applyContentCreationBatch`（`src/server/content-creation/batch.ts`）逐条走独立事务，一条 `template_locale_mismatch`/`missing_locale`/`unsupported_locale` 只让**该条**在 `runDryRun`/`runCreateTransaction` 内部以 `事后`（每条自己的事务边界内）报错并计入 `failed`，同批其余条目不受影响、各自继续尝试。两者对"模板语种不匹配"这条判定本身的语义一致（找不到匹配语种模板即硬错，不区分"模板不存在"与"语种不匹配"两种子情形），偏离仅在"整批同生共死"（CPS）与"逐条独立成败"（本仓）——本仓从 P0 起就没有 CPS 意义上的"一批 = 一次事前校验通过的写入窗口"这个概念（`batch.ts` 本身就是逐条事务循环，不是单个大事务），裁决为 `PARITY` 可接受，不倒退去为了逐字复刻 CPS 的整批拒绝语义而牺牲本仓已有的"部分成功、逐条可查"体验。
+
 ### L10N P3 模板 locale 非空化 + 15 语默认模板资产（2026-09-10）
 
 `施工提示词_Sonnet_L10N_P3_模板locale非空化与15语模板资产_2026-09-10.md` §1，矩阵 #5。CPS

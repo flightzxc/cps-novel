@@ -279,13 +279,26 @@ describe("创建内容对话框 · dry-run 自动触发", () => {
     expect(dlg.getByTestId("derived-locale-display").textContent).toContain("en");
   });
 
+  // L10N P5 §1.E (C7-②): a precise regression assertion for "模板闸整段
+  //删除" — this `ja` scenario is exactly `item.sourceLocale !== "en"`, the
+  // one condition the deleted `localeMismatchNotice` (P0-S13,
+  // `create-content-dialog.tsx`'s pre-e6aa388 history) used to trigger the
+  // warning banner on. The line above this comment already existed before
+  // L10N P2 removed the gate and only proves "no mismatch banner in THIS
+  // fixture" — it would pass just as well if the gate still existed but
+  // simply wasn't reached by this particular test setup. Asserting
+  // `queryByTestId("locale-mismatch-notice")).toBeNull()` specifically in
+  // the one scenario that used to trip it is what actually proves the gate
+  // is gone, not merely untriggered.
   it("来源条目语种是 ja 时，计划态只读展示 ja（不再是与 en 比较的不匹配提示）", async () => {
     actions.dryRunContentCreationAction.mockResolvedValue(
       okResult({ outcome: "dry_run", plan: { ...PLAN, locale: "ja" } }),
     );
     renderPage({ items: [row({ sourceLocale: "ja" })] });
     await openDialog();
-    expect(within(dialog()).getByTestId("derived-locale-display").textContent).toContain("ja");
+    const dlg = within(dialog());
+    expect(dlg.getByTestId("derived-locale-display").textContent).toContain("ja");
+    expect(dlg.queryByTestId("locale-mismatch-notice")).toBeNull();
   });
 
   /**

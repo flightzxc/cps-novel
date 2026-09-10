@@ -251,6 +251,27 @@ describe("createContentFromSourceItem — locale derivation (L10N P2)", () => {
     expect(fake.sourceItems.get(sourceItem.id)?.status).toBe("pending");
   });
 
+  // L10N P5 §1.E: deriveLocale's missing-value check used to be a strict
+  // `=== null`, so a blank (non-null) sourceLocale fell through to the
+  // SITE_LOCALES membership check and was misclassified as
+  // unsupported_locale — see service.ts's deriveLocale doc comment.
+  it("blank/whitespace-only sourceLocale (not null) also throws 'missing_locale', not 'unsupported_locale'", async () => {
+    const fake = new FakeContentCreationDb();
+    const sourceItem = fake.seedSourceItem({ title: "Blank Locale Source", sourceLocale: "  " });
+
+    const error = await createContentFromSourceItem(fake.asPrismaClient(), {
+      novelSourceItemId: sourceItem.id,
+      mode: "apply",
+      actor: ADMIN_ACTOR,
+      requestId: "req-blank-locale",
+    }).catch((caught: unknown) => caught);
+
+    expect(error).toBeInstanceOf(ContentCreationInputError);
+    expect((error as ContentCreationInputError).code).toBe("missing_locale");
+    expect(fake.novels.size).toBe(0);
+    expect(fake.articles.size).toBe(0);
+  });
+
   it("a resolved locale that is not a registered SITE_LOCALES member (it) throws ContentCreationInputError('unsupported_locale') — no writes", async () => {
     const fake = new FakeContentCreationDb();
     const sourceItem = fake.seedSourceItem({ title: "Italian Source, Not A Site Locale", sourceLocale: "it" });

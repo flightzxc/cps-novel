@@ -188,12 +188,26 @@ function requireUuid(value: unknown): string {
  * against `SITE_LOCALES`, the same membership test
  * `src/server/publish-gate/evaluator.ts`'s `isRegisteredSiteLocale` and
  * `src/app/[locale]/_guard.ts` already use elsewhere in this codebase.
+ *
+ * L10N P5 §1.E: the missing-value check was a strict `=== null`, which let
+ * a non-null-but-blank `sourceLocale` (`""`/whitespace-only) fall through
+ * to the `SITE_LOCALES` membership check below and get misclassified as
+ * `unsupported_locale` instead of `missing_locale` — the wrong diagnosis
+ * for "there was never a value to check membership for" (L10N P1's worker
+ * write path never writes a blank string today, but this function must not
+ * depend on that upstream discipline to classify correctly). Changed to
+ * `!sourceLocale?.trim()`, aligned with CPS
+ * `changdu-promote-drama-dry-run.ts:531`'s own
+ * `if (!source.sourceLocale?.trim()) blockReasons.push("missing_locale", ...)`
+ * blank check — same condition shape, not CPS's multi-reason-array push
+ * (this function throws a single error, matching its own existing
+ * single-error-code contract).
  */
 function deriveLocale(sourceLocale: string | null): SiteLocale {
-  if (sourceLocale === null) {
+  if (!sourceLocale?.trim()) {
     throw new ContentCreationInputError(
       "missing_locale",
-      "NovelSourceItem.sourceLocale is NULL — cannot derive a content locale without human/vendor-code correction upstream",
+      "NovelSourceItem.sourceLocale is NULL/blank — cannot derive a content locale without human/vendor-code correction upstream",
     );
   }
   if (!(SITE_LOCALES as readonly string[]).includes(sourceLocale)) {
