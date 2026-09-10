@@ -5,6 +5,7 @@ import { loadChrome, loadHomeCarousel, loadHomeNovels, loadPublicCategories } fr
 import { toNextMetadata } from "@/app/_lib/seo-metadata";
 import { HomeScreen } from "@/features/public-ui/home/HomeScreen";
 import type { SiteLocale } from "@/lib/locale/locale-canonical";
+import { getPublicT } from "@/lib/locale/messages";
 import { generateSeoMeta } from "@/lib/seo/seo-meta-generator";
 import { localePrefix } from "@/lib/slug/article-path";
 
@@ -28,19 +29,40 @@ import { localePrefix } from "@/lib/slug/article-path";
  * `listPublicCategories` round-trips for identical data. See
  * `tests/backend/site/public-query-budget.test.ts` for the regression gate.
  */
+/**
+ * CPS parity fix (公开页 description 补齐, 2026-09-10): CPS's
+ * `[locale]/(site)/layout.tsx` `generateMetadata` guarantees a non-empty
+ * home description via `(useSettingsMetadata && settings?.homeMetaDescription)
+ * || t("homeDescriptionFallback")` — a message-catalog string is always the
+ * last fallback tier. This file's own two-tier chain (`settings.
+ * homeMetaDescription || settings.siteDescription`) had no such floor: with
+ * both SiteSetting fields empty (the actual production state today),
+ * `description` resolved to `""`. Next's `Meta()` helper
+ * (`node_modules/next/dist/lib/metadata/generate/meta.js`) explicitly skips
+ * rendering a tag whose `content` is `""` — not just `null`/`undefined` — so
+ * the emitted `<head>` had no `<meta name="description">` at all, even
+ * though the root layout (`src/app/layout.tsx`) sets one: a child segment's
+ * `generateMetadata` returning `description: ""` overrides the parent's
+ * value with that empty string rather than being skipped (`resolve-
+ * metadata.js`'s per-field merge is `metadata[key] ?? null`, and `"" ?? null`
+ * is `""`). Threading the existing `meta.siteDescription` catalog key in as
+ * a third tier closes that gap without inventing new copy — the same
+ * sentence root layout already uses.
+ */
 export async function buildHomeMetadata(locale: SiteLocale): Promise<Metadata> {
   const categories = await loadPublicCategories(locale);
   const [{ settings }, novels] = await Promise.all([
     loadChrome(locale, "home", categories),
     loadHomeNovels(locale),
   ]);
+  const t = getPublicT(locale);
   const seo = generateSeoMeta({
     entity: "home",
     locale,
     data: {
       siteName: settings.siteName,
       title: settings.homeMetaTitle || settings.siteName,
-      description: settings.homeMetaDescription || settings.siteDescription,
+      description: settings.homeMetaDescription || settings.siteDescription || t("meta.siteDescription"),
       defaultOgImage: settings.defaultOgImage.trim() || novels[0]?.coverUrl || null,
     },
   });
@@ -54,13 +76,14 @@ export async function HomeBody({ locale }: { locale: SiteLocale }) {
     loadHomeNovels(locale),
     loadHomeCarousel(locale),
   ]);
+  const t = getPublicT(locale);
   const seo = generateSeoMeta({
     entity: "home",
     locale,
     data: {
       siteName: settings.siteName,
       title: settings.homeMetaTitle || settings.siteName,
-      description: settings.homeMetaDescription || settings.siteDescription,
+      description: settings.homeMetaDescription || settings.siteDescription || t("meta.siteDescription"),
       defaultOgImage: settings.defaultOgImage.trim() || novels[0]?.coverUrl || null,
     },
   });
