@@ -2,6 +2,7 @@ import type { Prisma } from "@prisma/client";
 import { describe, expect, it } from "vitest";
 
 import {
+  extractLanguageFields,
   PROBE_DEFAULT_SAMPLE_SIZE,
   probeUnnamedLanguageCodes,
   type ProbeSourceItemDb,
@@ -111,5 +112,44 @@ describe("probeUnnamedLanguageCodes · dry-run", () => {
       { code: "19", sampleSize: 0, samples: [] },
       { code: "20", sampleSize: 0, samples: [] },
     ]);
+  });
+});
+
+/**
+ * `extractLanguageFields` is a pure function with no adapter/credential/
+ * network dependency of its own (it only ever reads an already-in-memory
+ * JS value) — importing it here does not pull `applyProbeUnnamedLanguageCodes`
+ * or anything from `src/lib/adapters`/`worker/credentials` into this file's
+ * module graph, so the header comment's "structurally zero upstream calls"
+ * property for this file still holds. The full `--apply` catch-branch fix
+ * (P5 §4.H: the error path used to discard an already-captured raw body)
+ * needs a real credential/fetch round trip and lives in its own file,
+ * `probe-unnamed-language-codes-apply.test.ts`, precisely so it does not
+ * have to compromise this file's "never touches adapter/credential/network
+ * code" guarantee.
+ */
+describe("extractLanguageFields — X-2 real-run shape (data.chapterList non-array, data.currentLanguage present)", () => {
+  it("scans .data's own keys (not the envelope's) for /lang/i-matching scalars", () => {
+    const raw = {
+      code: 0,
+      msg: "success",
+      data: { bookId: "b1", chapterList: "not-an-array", currentLanguage: "3" },
+    };
+    expect(extractLanguageFields(raw)).toEqual({ currentLanguage: "3" });
+  });
+
+  it("falls back to the envelope's own keys when there is no .data object", () => {
+    expect(extractLanguageFields({ currentLanguage: "7", chapterList: [] })).toEqual({ currentLanguage: "7" });
+  });
+
+  it("null/non-object/array input all extract to {}, never throw", () => {
+    expect(extractLanguageFields(null)).toEqual({});
+    expect(extractLanguageFields(undefined)).toEqual({});
+    expect(extractLanguageFields("not-an-object")).toEqual({});
+    expect(extractLanguageFields([1, 2, 3])).toEqual({});
+  });
+
+  it("drops a lang-named key whose value is itself an object/array (not a scalar/null)", () => {
+    expect(extractLanguageFields({ data: { languageList: [1, 2], currentLanguage: "3" } })).toEqual({ currentLanguage: "3" });
   });
 });

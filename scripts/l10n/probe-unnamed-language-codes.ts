@@ -33,10 +33,18 @@
  * adapter result only exposes `currentLanguage`, but this probe is also
  * asked to record "any key containing lang" in the *raw* response — so
  * `--apply` wraps `fetchImpl` to capture the raw JSON body alongside the
- * parsed call, without touching the adapter itself. Output is written to
- * `.tmp/l10n-probe/<timestamp>.json` (gitignored, not committed) — never to
- * the repo, never with promo fields (`existingPromo`/upstream codes/URLs
- * are stripped before writing), never with chapter body text.
+ * parsed call, without touching the adapter itself. This capture (and the
+ * extraction/key-census below) happens on BOTH the success path and the
+ * `catch` branch — X-2's real run hit `malformed_payload` on 20/20 samples
+ * (2xx responses the adapter's own validation rejected), and the raw body
+ * was captured every time regardless; discarding it in the error branch
+ * would throw away exactly the evidence this probe exists to collect (P5
+ * §4.H fix). Output is written to `.tmp/l10n-probe/<timestamp>.json`
+ * (gitignored, not committed) — never to the repo, never with promo fields
+ * (`existingPromo`/upstream codes/URLs are stripped before writing), never
+ * with chapter body text or any value from the response body other than
+ * `/lang/i`-matching scalars; the top-level/`.data` key census records key
+ * NAMES only, never values.
  *
  * P1 does NOT execute `--apply` — see the construction prompt §1.G/§3 and
  * plan doc §X-2 ("复核通过后在 X8 执行 --apply...Fable 派 Sonnet 执行并回报
@@ -248,8 +256,12 @@ function rawCoordinate(rawPayload: Prisma.JsonValue): { agencyId: string | null;
  * text and anything that looks like a promo field, keeps only
  * `currentLanguage` and any other key whose name contains "lang"
  * (case-insensitive) — exactly the evidence this probe exists to collect.
+ * Exported (not just module-private) so
+ * `tests/backend/locale/probe-unnamed-language-codes.test.ts` can pin its
+ * exact extraction behavior against the X-2 real-run shape without going
+ * through the full credential/fetch/adapter round trip for every case.
  */
-function extractLanguageFields(rawResponse: unknown): Record<string, unknown> {
+export function extractLanguageFields(rawResponse: unknown): Record<string, unknown> {
   if (!rawResponse || typeof rawResponse !== "object" || Array.isArray(rawResponse)) return {};
   const data = (rawResponse as { data?: unknown }).data;
   const source = data && typeof data === "object" && !Array.isArray(data) ? (data as Record<string, unknown>) : (rawResponse as Record<string, unknown>);
@@ -262,12 +274,43 @@ function extractLanguageFields(rawResponse: unknown): Record<string, unknown> {
   return out;
 }
 
+/** Key NAMES only (never values) of a plain-object-shaped value — `null`/array/non-object all extract as `[]`. */
+function extractKeyNames(value: unknown): string[] {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return [];
+  return Object.keys(value as Record<string, unknown>);
+}
+
+/**
+ * Diagnostic-only key-name census (never values — no promo/body leakage),
+ * added per `施工提示词_Sonnet_L10N_P5_...md` §4.H: the raw response's own
+ * top-level key set, so a future probe run can see "what shape did this
+ * envelope actually have" even when none of its keys happen to match
+ * `extractLanguageFields`'s `/lang/i` filter.
+ */
+function extractTopLevelKeyNames(rawResponse: unknown): string[] {
+  return extractKeyNames(rawResponse);
+}
+
+/** Same, for the raw response's `.data` object (if any) — the object `extractLanguageFields` actually scans when present. */
+function extractDataKeyNames(rawResponse: unknown): string[] {
+  if (!rawResponse || typeof rawResponse !== "object" || Array.isArray(rawResponse)) return [];
+  return extractKeyNames((rawResponse as { data?: unknown }).data);
+}
+
 export type ProbeApplyResultRow = {
   code: string;
   externalBookId: string;
   currentLanguage: string | null;
   languageFields: Record<string, unknown>;
+  /** Key names only (§4.H) — the raw response envelope's own top-level keys, populated on both the success and failure path whenever a raw body was actually captured. */
+  topLevelKeys: string[];
+  /** Key names only (§4.H) — the raw response's `.data` object's keys, same population rule. */
+  dataKeys: string[];
   error: string | null;
+  /** `MoboreaderAdapterError.code` when the failure came from the adapter's own typed error (e.g. `"malformed_payload"`); `null` on success or a non-adapter throw. */
+  errorCode: string | null;
+  /** `MoboreaderAdapterError.status` (HTTP status) when the adapter captured one; `null` otherwise. */
+  httpStatus: number | null;
 };
 
 /**
@@ -289,7 +332,7 @@ export async function applyProbeUnnamedLanguageCodes(
 
   // Deferred imports: only pulled in on the `--apply` path, keeping the
   // dry-run path free of any adapter/credential/network module.
-  const [{ createMoboreaderReadAdapter, moboreaderUpstreamRateGate }, { decryptCredentialSecretForWorker }] =
+  const [{ createMoboreaderReadAdapter, moboreaderUpstreamRateGate, MoboreaderAdapterError }, { decryptCredentialSecretForWorker }] =
     await Promise.all([import("../../src/lib/adapters"), import("../../worker/credentials/crypto")]);
 
   const results: ProbeApplyResultRow[] = [];
@@ -297,6 +340,14 @@ export async function applyProbeUnnamedLanguageCodes(
   const tokenCache = new Map<string, string>();
 
   for (const row of rows) {
+    // Hoisted above the `try` (not declared inside it) — §4.H fix: the
+    // whole point of capturing the raw response is to keep it available to
+    // the `catch` branch below, which is exactly the branch X-2's real run
+    // hit on every one of its 20/20 samples (`malformed_payload` — see this
+    // function's own header). A `let` declared inside `try { ... }` would
+    // be out of scope in `catch`, silently forcing the old "discard
+    // whatever was captured" bug back the moment anyone touched this code.
+    let capturedRaw: unknown = null;
     try {
       const binding = bindingCache.get(row.channelAppId) ?? (await loadApplyBinding(prisma, row.channelAppId));
       bindingCache.set(row.channelAppId, binding);
@@ -307,11 +358,20 @@ export async function applyProbeUnnamedLanguageCodes(
 
       const { agencyId, seriesId, projectType } = rawCoordinate(row.rawPayload);
       if (!agencyId || !seriesId || projectType === null) {
-        results.push({ code: row.code, externalBookId: row.externalBookId, currentLanguage: null, languageFields: {}, error: "coordinate_missing" });
+        results.push({
+          code: row.code,
+          externalBookId: row.externalBookId,
+          currentLanguage: null,
+          languageFields: {},
+          topLevelKeys: [],
+          dataKeys: [],
+          error: "coordinate_missing",
+          errorCode: null,
+          httpStatus: null,
+        });
         continue;
       }
 
-      let capturedRaw: unknown = null;
       const capturingFetch: typeof fetch = async (input, init) => {
         const response = await fetch(input, init);
         const clone = response.clone();
@@ -333,15 +393,35 @@ export async function applyProbeUnnamedLanguageCodes(
         externalBookId: row.externalBookId,
         currentLanguage: parsed.currentLanguage,
         languageFields: extractLanguageFields(capturedRaw),
+        topLevelKeys: extractTopLevelKeyNames(capturedRaw),
+        dataKeys: extractDataKeyNames(capturedRaw),
         error: null,
+        errorCode: null,
+        httpStatus: null,
       });
     } catch (error) {
+      // §4.H fix: previously hardcoded `languageFields: {}` here, discarding
+      // `capturedRaw` even when the adapter's own `capturingFetch` wrapper
+      // had already captured a full raw body before the adapter's parser
+      // threw (X-2's real run: 20/20 samples were 2xx responses that failed
+      // adapter-side validation, not transport failures — the raw body was
+      // sitting right there every single time). Extract from it exactly
+      // like the success path does; `extractLanguageFields`/
+      // `extractTopLevelKeyNames`/`extractDataKeyNames` all degrade to
+      // empty output on `null` input, so this is safe even when the error
+      // happened before any body was ever captured (a real transport
+      // failure, timeout, or non-JSON body).
+      const adapterError = error instanceof MoboreaderAdapterError ? error : null;
       results.push({
         code: row.code,
         externalBookId: row.externalBookId,
         currentLanguage: null,
-        languageFields: {},
+        languageFields: extractLanguageFields(capturedRaw),
+        topLevelKeys: extractTopLevelKeyNames(capturedRaw),
+        dataKeys: extractDataKeyNames(capturedRaw),
         error: error instanceof Error ? error.message : String(error),
+        errorCode: adapterError?.code ?? null,
+        httpStatus: adapterError?.status ?? null,
       });
     }
   }
