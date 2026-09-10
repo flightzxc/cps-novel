@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   BackfillSourceItemLocaleError,
+  LEGACY_UNKNOWN_LOCALE_LITERAL,
   backfillSourceItemLocale,
   type AdminIdentityLookupRow,
   type BackfillSourceItemLocaleDb,
@@ -32,10 +33,13 @@ class FakeBackfillDb implements BackfillSourceItemLocaleDb {
       orderBy: { id: "asc" };
       take: number;
     }): Promise<BackfillSourceItemLocaleRow[]> => {
-      const where = args.where as { id?: { gt: string }; sourceLocale?: null };
+      // Mirrors the real `where` shape: no `OR` clause = full scan
+      // (`--re-resolve`); an `OR` clause = default target set (`sourceLocale
+      // IS NULL OR = 'unknown'`), any one of whose branches must match.
+      const where = args.where as { id?: { gt: string }; OR?: Array<{ sourceLocale: string | null }> };
       return this.rows
         .filter((row) => (where.id ? row.id > where.id.gt : true))
-        .filter((row) => ("sourceLocale" in where ? row.sourceLocale === null : true))
+        .filter((row) => (where.OR ? where.OR.some((clause) => row.sourceLocale === clause.sourceLocale) : true))
         .sort((a, b) => a.id.localeCompare(b.id))
         .slice(0, args.take)
         .map((row) => ({ ...row }));
@@ -123,17 +127,120 @@ describe("backfillSourceItemLocale · dry-run", () => {
     expect(report.byCode["19"]).toEqual({ total: 1, before: { null: 1 }, after: { null: 1 }, changed: 0 });
   });
 
-  it("默认只扫 sourceLocale IS NULL 的行；--re-resolve 才重算已有值的行", async () => {
+  it("默认扫 sourceLocale IS NULL 或遗留字面串 'unknown' 的行，不扫已有真实值的行；--re-resolve 才重算全部三类（Opus 复核 BLOCKING #1 — X8 实测 IS NULL=0 行/='unknown'=50625 行，默认过滤曾恒等扫 0 行）", async () => {
     const db = new FakeBackfillDb();
-    seed(db, "1", "3", "英语", "en"); // 已经是 en，且已正确
-    seed(db, "2", "19", null, "some-stale-literal"); // 已有陈旧值，需要 --re-resolve 才会被扫到
+    seed(db, "1", "4", "西语", LEGACY_UNKNOWN_LOCALE_LITERAL); // 旧 worker 遗留字面串 'unknown'
+    seed(db, "2", "7", "俄语", null); // SQL NULL
+    seed(db, "3", "3", "英语", "en"); // 已有真实值，默认不该被扫到
 
     const defaultReport = await backfillSourceItemLocale(db);
-    expect(defaultReport.scanned).toBe(0); // 两行 sourceLocale 都非 NULL，默认不扫
+    expect(defaultReport.scanned).toBe(2); // 只扫行 1（'unknown'）与行 2（NULL）
+    expect(defaultReport.changed).toBe(2); // 'unknown'→es，NULL→ru
+    // dry-run：一律不落库。
+    expect(db.rows.find((row) => row.id === "1")!.sourceLocale).toBe(LEGACY_UNKNOWN_LOCALE_LITERAL);
+    expect(db.rows.find((row) => row.id === "2")!.sourceLocale).toBeNull();
+    expect(db.rows.find((row) => row.id === "3")!.sourceLocale).toBe("en"); // 未被触碰/未被扫描
 
     const reResolveReport = await backfillSourceItemLocale(db, { reResolve: true });
-    expect(reResolveReport.scanned).toBe(2);
-    expect(reResolveReport.changed).toBe(1); // 只有第 2 行（stale → null）算变更
+    expect(reResolveReport.scanned).toBe(3); // 三类全扫，包括已有真实值的行 3
+    expect(reResolveReport.changed).toBe(2); // 行 1、行 2 变更；行 3（英语→en）本就正确，不计变更
+  });
+});
+
+describe("backfillSourceItemLocale · scanned=0 不写审计；scanned>0 changed=0 仍写审计（Opus 复核 BLOCKING #2）", () => {
+  it("--apply 命中 0 行（未给 --re-resolve 时目标集为空）→ 不写 OperationAudit，wrote=false，auditId=null", async () => {
+    const db = new FakeBackfillDb();
+    db.admins.push({ id: "admin-1", username: "ops", status: "active" });
+    seed(db, "1", "3", "英语", "en"); // 已是真实值，默认目标集扫不到
+
+    const report = await backfillSourceItemLocale(db, { apply: true, approver: "ops" });
+    expect(report.scanned).toBe(0);
+    expect(report.scannedZero).toBe(true);
+    expect(report.wrote).toBe(false);
+    expect(report.auditId).toBeNull();
+    expect(db.audits).toHaveLength(0);
+  });
+
+  it("scanned>0 但 changed=0（扫到的行核对后无需变更）→ 仍写 OperationAudit", async () => {
+    const db = new FakeBackfillDb();
+    db.admins.push({ id: "admin-1", username: "ops", status: "active" });
+    seed(db, "1", "19", null, null); // 无成对证据（MAPPING_EVIDENCE_MISSING）：NULL → NULL，scanned=1 但 changed=0
+
+    const report = await backfillSourceItemLocale(db, { apply: true, approver: "ops" });
+    expect(report.scanned).toBe(1);
+    expect(report.changed).toBe(0);
+    expect(report.scannedZero).toBe(false);
+    expect(report.wrote).toBe(true);
+    expect(report.auditId).not.toBeNull();
+    expect(db.audits).toHaveLength(1);
+  });
+
+  it("dry-run 下 scanned=0 同样标出 scannedZero=true（供 CLI 打印告警）；dry-run 本来就不写审计", async () => {
+    const db = new FakeBackfillDb();
+    seed(db, "1", "3", "英语", "en");
+
+    const report = await backfillSourceItemLocale(db);
+    expect(report.scannedZero).toBe(true);
+    expect(report.wrote).toBe(false);
+    expect(report.auditId).toBeNull();
+  });
+
+  it("--request-id 重放优先于 scannedZero：第一轮真实写入命中的目标集耗尽后重放，仍能找回原 auditId 而不新写一条", async () => {
+    const db = new FakeBackfillDb();
+    db.admins.push({ id: "admin-1", username: "ops", status: "active" });
+    seed(db, "1", "3", "英语", null); // 首轮默认目标集命中（NULL）
+
+    const first = await backfillSourceItemLocale(db, { apply: true, approver: "ops", requestId: "req-zero-replay" });
+    expect(first.scannedZero).toBe(false);
+    expect(first.wrote).toBe(true);
+    expect(db.rows[0]!.sourceLocale).toBe("en"); // 首轮已把行 1 写成 en
+
+    // 重放：同一 request-id，但此刻默认目标集已经空了（行 1 已经是真实值 en）。
+    const replay = await backfillSourceItemLocale(db, { apply: true, approver: "ops", requestId: "req-zero-replay" });
+    expect(replay.scanned).toBe(0);
+    expect(replay.scannedZero).toBe(true);
+    expect(replay.wrote).toBe(false);
+    expect(replay.auditId).toBe(first.auditId); // 找回原审计，不是 null
+    expect(db.audits).toHaveLength(1); // 没有新增第二条
+  });
+});
+
+describe("backfillSourceItemLocale · --batch-size 校验（Opus 复核 NON_BLOCKING c）", () => {
+  it.each([0, -1, -100, 1.5, Number.NaN])(
+    "非正整数/非整数 batchSize=%s → invalid_batch_size，且从不触达 db 读",
+    async (batchSize) => {
+      const db = new FakeBackfillDb();
+      seed(db, "1", "3", "英语");
+      let findManyCalled = false;
+      const originalFindMany = db.novelSourceItem.findMany.bind(db.novelSourceItem);
+      (db.novelSourceItem as unknown as { findMany: typeof db.novelSourceItem.findMany }).findMany = async (
+        args,
+      ) => {
+        findManyCalled = true;
+        return originalFindMany(args);
+      };
+
+      const error = await backfillSourceItemLocale(db, { batchSize }).catch((e) => e);
+      expect(error).toBeInstanceOf(BackfillSourceItemLocaleError);
+      expect((error as BackfillSourceItemLocaleError).code).toBe("invalid_batch_size");
+      expect(findManyCalled).toBe(false);
+    },
+  );
+
+  it("合法正整数 batchSize 不受影响，report.batchSize 原样回显", async () => {
+    const db = new FakeBackfillDb();
+    seed(db, "1", "3", "英语");
+
+    const report = await backfillSourceItemLocale(db, { batchSize: 10 });
+    expect(report.batchSize).toBe(10);
+  });
+
+  it("越过 MAX_BATCH_SIZE 的正整数仍被钳制，不算校验失败", async () => {
+    const db = new FakeBackfillDb();
+    seed(db, "1", "3", "英语");
+
+    const report = await backfillSourceItemLocale(db, { batchSize: 999_999 });
+    expect(report.batchSize).toBe(5000);
   });
 });
 

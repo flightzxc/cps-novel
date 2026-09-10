@@ -105,10 +105,36 @@ X8 库的真实成对证据，18 码全部有证据；CPS moboreader 无对应�
   形状做一次熔断评估（`evaluateLanguageMappingSuspensions`），命中的码本批
   强制 `NULL`；任务结果 JSON 追加 `unknownLocaleCount`/
   `suspendedLanguageCodes`（只追加字段，不改既有字段）。
-- `scripts/l10n/backfill-source-item-locale.ts`：对已入库的 96 267 行按新码表
-  重算 `sourceLocale`，默认 dry-run，`--apply` 需 `--approver`（存在且
+- `scripts/l10n/backfill-source-item-locale.ts`：对已入库行按新码表重算
+  `sourceLocale`，默认 dry-run，`--apply` 需 `--approver`（存在且
   `status=active` 的 `AdminIdentity`）；幂等；本阶段（P1）不对生产/X8 执行
   `--apply`。
+
+  🔴 **默认目标集是「从未被本轮码表重算过」的行，不是「全部 96 267 行」**（复核
+  修复，2026-09-10）：X8 只读实测证明 `source_locale` 从来没有 SQL `NULL`
+  过——`WHERE source_locale IS NULL` = **0** 行；P0-S15 之前的旧 worker 把"解析
+  不出 locale"写成**字面串** `'unknown'`，不是 `NULL`。今天（2026-09-10）X8
+  的真实分布：
+
+  | `source_locale` 取值 | 行数 |
+  | --- | ---: |
+  | `'unknown'`（旧 worker 遗留字面串） | 50 625 |
+  | `'en'` | 42 702 |
+  | `'ru'` | 2 940 |
+  | 合计 | 96 267 |
+
+  （`en`/`ru` 恰好等于证据文档里 code 3/7 的样本数——P0-S15 的旧登记表只有这
+  两码，其余全落 `'unknown'`。）默认（不给 `--re-resolve`）只扫
+  `sourceLocale IS NULL OR sourceLocale = 'unknown'` 这两类，在今天的 X8 上
+  即上表的 50 625 行；`--apply` 重算后无论是否解得出 locale，都不会再写回字面
+  串 `'unknown'`——解不出就写 `NULL`（`resolveChannelLanguage` 本身就不返回
+  `"unknown"`），字面串在这条路径上被顺带清除。`--re-resolve` 才会连同已经是
+  真实 locale 值（如 `en`/`ru`）的行一并重算，用于码表本身发生变更之后的全量
+  校验。
+  `scanned === 0`（目标集本来就是空的）时 CLI 打印显式告警，且**不写**
+  `OperationAudit`（一条 `scanned:0, changed:0` 的审计行会是"这轮工作从未真正
+  发生"的假 provenance）；`scanned > 0` 但 `changed === 0`（扫到的行核对后确实
+  不需要改）仍然写审计——这是一条真实的"已核对、无漂移"结论，不是空转。
 - `scripts/l10n/probe-unnamed-language-codes.ts`：code 19/20（合计 15 970 行，
   16.6%，零成对证据）的认领探针，默认 dry-run 只读 DB 抽样，`--apply` 才会
   调用真实上游 `getchapterinfo`——P1 本身不执行 `--apply`。
