@@ -612,19 +612,20 @@ CPS 动态层的消费面极窄——只有 `SiteHeader`→`LocaleSwitcher` 这�
 | --- | --- | --- |
 | **默认语种常量（保留）** | `src/app/page.tsx`、`src/app/category/[slug]/page.tsx`、`src/app/blog/page.tsx`、`src/app/blog/[slug]/page.tsx`、`src/app/novel/[slugParam]/page.tsx`、`src/app/novel/[slugParam]/not-found.tsx`、`src/app/novel/[slugParam]/chapter/[chapterNumber]/page.tsx`、`src/app/browse/page.tsx` | 这些是**裸路径路由树**（D-8 定案：默认语种在无前缀路径落地），`PUBLIC_SITE_LOCALE` 在这里不是"唯一语种假设"的 bug，是路由结构本身——裸路径树与 `[locale]` 前缀树是两棵并行路由树，各自服务固定的语种范围，不因本轮 guard 放开前缀树而改变 |
 | **默认语种常量（保留，dev-only）** | `src/app/dev-preview/**/*`、`src/features/public-ui/fixtures/mock-chrome.ts` | 开发预览路由，非生产可达路径，`mockChrome` 本身注释明示"语言入口只在确实存在多个可发布语种时才传入"——本轮验证单语种隐藏态的既有测试夹具 |
-| **默认语种常量（保留）** | `src/features/public-ui/status/PublicErrorStatus.tsx`、`src/features/public-ui/status/PublicNotFoundStatus.tsx`、`src/lib/site/blog-queries.ts:109`（`asSiteLocale(row.locale) ?? PUBLIC_SITE_LOCALE` 兜底）、`src/lib/locale/messages/index.ts:172`（`en` 消息目录短路判定） | 无请求上下文或本就是"哪个 locale 缺失就兜底默认语种"的语义，不是遗漏 |
+| **默认语种常量（保留，根树/裸路径 404·error 边界，404 边界零 props，`headers()` 可用但结构性不读）** | `src/features/public-ui/status/PublicErrorStatus.tsx`、`src/features/public-ui/status/PublicNotFoundStatus.tsx` | 分类理由订正（review fix n4，2026-09-10）：原表述"无请求上下文"不准确——`src/app/not-found.tsx`（根 404 边界）是 Server Component，`headers()` 技术上是可读的（跟 `src/app/[locale]/novel/[slugParam]/not-found.tsx` 的 B-1 修复一样可以读 `x-novel-locale`）；`src/app/error.tsx` 是 `"use client"`，才是真正读不到 `headers()` 的一侧。两者共同的真实理由是**结构性**的，不是技术限制：这两个文件是根/裸路径树自己的 404/error 边界（不在 `[locale]` 前缀树下），裸路径树按 D-8 定案本就只服务默认语种，`PUBLIC_SITE_LOCALE` 在这里与该文件所在路由树的语种范围一致，不是遗漏——跟 B-1 修的 `[locale]` 子树 not-found（该文件确实需要显示请求方语种，因为它住在会路由到任意 `SITE_LOCALES` 成员的前缀树下）是两种不同处境，不能同法处理 |
+| **默认语种常量（保留）** | `src/lib/site/blog-queries.ts:109`（`asSiteLocale(row.locale) ?? PUBLIC_SITE_LOCALE` 兜底）、`src/lib/locale/messages/index.ts:172`（`en` 消息目录短路判定） | 本就是"哪个 locale 缺失就兜底默认语种"的语义，不是遗漏 |
 | **唯一语种假设（改读请求 locale）** | `src/app/layout.tsx:17,51,56` | 根布局 `<html lang dir>` 与顶层 `<title>` 兜底文案——之前恒定 `PUBLIC_SITE_LOCALE`，因为 `pickPublishableLocale` 白名单只放行 `en`；白名单删除后必须真正读 `x-novel-locale` 请求头（§2.E，已在清单③单独登记，已修） |
+| **唯一语种假设（改读请求 locale，review fix B-1 已修，2026-09-10）** | `src/app/[locale]/novel/[slugParam]/not-found.tsx` | 这份文件住在 **`[locale]` 前缀树**（不是裸路径树），Next 16.1.6 以零 props 渲染 `not-found.tsx` 边界（该文件自己的头注释已实测确认，见 `create-component-tree.js`），拿不到路由的 `locale` 参数，此前只能跟裸路径 shell 一样调用 `NovelNotFoundBody({ locale: PUBLIC_SITE_LOCALE })`。P4 首轮之前这条子树整体不可达（旧 guard 恒 404），这个"假装是 en"的缺口无副作用；guard 改为"注册即路由"后，`/ru/novel/...` 这类路径下命中 not-found 边界会真的执行到这份文件，应显示 `ru` 却显示 `en`——是 P4 首轮 guard 改动新暴露的真实唯一语种假设。Opus 复核标为 BLOCKING（B-1），已修：跟 `app/layout.tsx` 同法，读 `headers().get(SITE_LOCALE_REQUEST_HEADER)` → `pickSiteLocale(...)`，try/catch 兜底 `PUBLIC_SITE_LOCALE`；全仓核查确认 `[locale]` 子树下不存在第二个同形文件（`error.tsx`/`not-found.tsx`），无需扩大修法范围 |
 | **唯一语种假设（改读请求 locale）** | `src/proxy.ts:80`（`buildDefaultLocaleRedirectTarget` 的 `/en/*` → 裸路径前缀） | 不是 bug——这个用法是"默认语种是谁"这一个静态问题，`/en/*` 规整不因协商或白名单删除而变化，保留 `PUBLIC_SITE_LOCALE` 引用不动 |
 | **唯一语种假设（改读请求 locale）** | `src/app/[locale]/_guard.ts:65`（`locale === PUBLIC_SITE_LOCALE` 排除默认语种前缀） | 同上，D-8 结构性判定，不是遗漏，保留不动 |
-| **无需改动** | `src/server/publication/revalidate.ts:142` | `revalidatePublicBlogPaths` 的博客详情页失效路径——博客当前仍是单语种产出面（`blog-create-form.tsx` 语种下拉扩到 `SITE_LOCALES` 不改变"当前只有 en 数据"的事实），失效路径构造维持 `PUBLIC_SITE_LOCALE`，非本轮范围 |
-| 🔴 **存疑：唯一语种假设，本轮未修（初次分类曾误归入裸路径树一档，已订正）** | `src/app/[locale]/novel/[slugParam]/not-found.tsx` | 这份文件住在 **`[locale]` 前缀树**（不是裸路径树），但因 Next 16.1.6 以零 props 渲染 `not-found.tsx` 边界（该文件自己的头注释已实测确认，见 `create-component-tree.js`），拿不到路由的 `locale` 参数，只能跟裸路径 shell 一样调用 `NovelNotFoundBody({ locale: PUBLIC_SITE_LOCALE })`。P4 之前这条子树整体不可达（旧 guard 恒 404），这个"假装是 en"的缺口无副作用；guard 改为"注册即路由"后，`/ru/novel/...` 这类路径下命中 not-found 边界会真的执行到这份文件，此时应显示 `ru` 却显示 `en`——是本轮 guard 改动新暴露的真实唯一语种假设，不是历史遗留。修法需要一个不依赖路由参数的 locale 信号（该文件自己的注释已经点名 `src/proxy.ts` 转发的 `x-novel-locale` 请求头，`app/layout.tsx` 本轮已示范同一读法），但施工提示词 §2.E 明确只点名 `app/layout.tsx` 一处，未把这份文件列入范围——本轮不擅自扩大，留给 Owner 决定是否补一个后续小改动 |
+| **部分修复（review fix n3，2026-09-10）** | `src/server/publication/revalidate.ts` `revalidatePublicBlogPaths` | 原表述"博客当前仍是单语种产出面"已失实——`blog-create-form.tsx`/`content-creation/blog.ts`'s `requireLocale` 已开放全部 `SITE_LOCALES`。函数本身已改为按调用方传入的 `locale` 构造路径（`buildBlogPath({ locale: input.locale ?? PUBLIC_SITE_LOCALE, ... })`），非 `en` 路径的失效现在函数级别是正确的。但唯一生产调用点 `publish-gate/service.ts:507` 在本轮 **禁改区**（`src/server/publish-gate/**`）内，仍是 `revalidatePublicBlogPaths({ slug: txResult.slug })`——不传 `locale`，落到向后兼容的 `en` 默认值，实际生效行为未变。closes 需要该调用点补一行 `locale: txResult.locale as SiteLocale`（`txResult.locale` 在同一函数里两行之上已经在用），留给 Owner 决定谁来做这个禁改区内的收尾 |
 
-结论：38 处（或本次重新核实的 76 处非注释引用，含 import 语句）中，
-`src/app/layout.tsx` 一处属于"唯一语种假设"、本轮已按 §2.E 修复；
-`src/app/[locale]/novel/[slugParam]/not-found.tsx` 一处是本轮 guard 改动
-新暴露的同类假设，但不在施工提示词点名范围内，本轮不擅自修，登记为存疑项
-（见报告"未做/存疑项"）；其余全部是裸路径路由树/默认值兜底/开发预览等
-结构性用法，本身正确，不是遗漏。
+结论：76 处非注释引用（import 语句与实际使用各算一处）中，
+`src/app/layout.tsx` 一处、`src/app/[locale]/novel/[slugParam]/not-found.tsx`
+一处属于"唯一语种假设"，均已修复（后者是 review fix B-1，本轮新修）；
+`revalidatePublicBlogPaths` 一处函数级别已修（review fix n3），但受禁改区
+限制未能改到唯一调用点，实际行为待 Owner 后续收尾；其余全部是裸路径路由树/
+默认值兜底/开发预览等结构性用法，本身正确，不是遗漏。
 
 #### §2 范围改动清单（文件 → CPS 参照）
 
@@ -632,7 +633,7 @@ CPS 动态层的消费面极窄——只有 `SiteHeader`→`LocaleSwitcher` 这�
 | --- | --- | --- |
 | `src/lib/locale/locale-canonical.ts` | 不适用（删除） | 删 `PUBLISHABLE_LOCALES`/`isPublishableLocale`/`listPublishableLocales`/`ARTICLE_TEMPLATE_CRUD_LANDED`/`assertPublishableLocalesFailClosed`，`SITE_LOCALES`/`SITE_LOCALE_LABELS`/`SITE_LOCALE_NATIVE_NAMES`/`resolveSiteLocale`/`TAG_TRANSLATION_LOCALES` 三元组不动 |
 | `src/lib/locale/active-locales.ts`（新增） | `3a76877:src/lib/active-locales.ts:12-41` | `ADAPT`：`Drama.groupBy({status:"active"})` 换成 `Article.groupBy({by:["locale"]})` + 本仓公开可见谓词族（`buildPublicArticleWhere` 复用自 `sitemap.ts`），`en` 恒含、按 `SITE_LOCALES` 顺序返回、`unstable_cache` 300s tag `active-locales` |
-| `src/lib/site/chrome.ts` + `src/lib/site/queries.ts`（`loadPublicChrome`） | 不适用（本仓新设计的传递路径） | `SiteChrome` 新增可选字段 `activeLocales`，`loadPublicChrome` 并行拉取 `getActiveLocales()` 塞入——8 个 `_pages/*.tsx` 页面体已经把 `chrome` 原样传给 `SiteShell`，借这条既有管道，不新增 prop 穿透 |
+| `src/lib/site/chrome.ts` + `src/lib/site/queries.ts`（`loadPublicChrome`） | 不适用（本仓新设计的传递路径） | `SiteChrome` 新增可选字段 `activeLocales`。实码口径订正（review fix n4，2026-09-10）：不是 `loadPublicChrome` 自己并行拉取——`getActiveLocales()` 由 `src/app/_lib/public-load.ts` 新增的 `loadActiveLocales`（`React.cache()` 包一层 `getActiveLocales()`）承担，调用方是每个 `_pages/*.tsx` 页面体，先 `await loadActiveLocales()` 再作为第 4 个参数传给 `loadChrome(locale, current?, categories?, activeLocales?)`，`loadChrome` 再原样转发给 `loadPublicChrome(prisma, locale, current, categories, activeLocales)`——`loadPublicChrome` 自身不发起这次查询，只接收已取好的结果。8 个 `_pages/*.tsx` 页面体已经把 `chrome` 原样传给 `SiteShell`，借这条既有管道，不新增 prop 穿透 |
 | `src/features/public-ui/layout/SiteShell.tsx`/`SiteHeader.tsx`/`LocaleSwitcher.tsx` | `3a76877:src/components/site/site-header.tsx`、`locale-switcher.tsx` | `LocaleSwitcher` 从内部调 `listPublishableLocales()` 改为接收 `activeLocales` prop（海阅 `SiteHeader`/`LocaleSwitcher` 是 `"use client"`，`ChapterScreen.tsx` 直接静态导入 `SiteShell`——`getActiveLocales()` 不能像 CPS 那样放进 `SiteHeader` 内部 await，否则把 `prisma`/`unstable_cache` 拖进客户端包，必须走 prop 传递） |
 | `src/server/publication/revalidate.ts` | 不适用（本仓既有机制） | `revalidatePublicListings()`（发布状态迁移的既有唯一广播点）追加 `revalidateTag("active-locales")`，`safeRevalidateTag` 包一层同 `safeRevalidatePath` 的 try/catch 纪律 |
 | `src/proxy.ts` | `3a76877:src/i18n/routing.ts:6-25`、`src/i18n/root-negotiation.ts`、`src/proxy.ts:287` | 路径段解析改 `SITE_LOCALES` 成员判定；新增根路径协商调用（仅 admin-host 判定放行后、`/en/*` 规整之后、header 转发之前，且只对公开主机生效） |
@@ -649,6 +650,26 @@ CPS 动态层的消费面极窄——只有 `SiteHeader`→`LocaleSwitcher` 这�
 | `src/server/content-creation/blog.ts` | 同上 | `requireLocale` 改 `SITE_LOCALES` 成员判定 |
 | `src/lib/slug/text-to-slug.ts` | 不适用（注释修正） | §5：删除失实的"本轮无非 en 调用方"表述，改为 P2 之后来源事实可以是任意 `SITE_LOCALES` 成员，`latin-word-segmentation` 占位规则现实可达 |
 | `package.json` | 不适用 | 新增 `@formatjs/intl-localematcher`，精确版本钉死 |
+
+#### §2.G nginx 对读结论（review fix n4，2026-09-10 补）
+
+施工提示词 §2.G 要求对读 `3a876877:nginx/cps-admin.conf` 与海阅
+`infra/production-like/nginx/full.conf.template` 关于 `/` 与 `Set-Cookie` 的
+缓存行为，差异写进本节；已核对：**无差异，无需改模板**。
+
+海阅 `infra/production-like/nginx/full.conf.template` 全文没有任何
+`proxy_cache`/`proxy_cache_path` 指令（`grep -n "proxy_cache"` 零命中）。
+公开 server 块的根路径落在 `location /`（`full.conf.template:141-144`），
+配置只有 `include .../snippets/proxy-headers.conf; proxy_pass
+http://app_backend;`，不带任何缓存层；同目录 `capacity-locations.conf`
+snippet 里的三条 location（`^~ /novel/`、`^~ /go/`、`= /browse`）都不匹配
+`/` 本身，根路径协商（`negotiateRootLocale`，本轮矩阵 #9/§2.D）落地后的
+`307 + Set-Cookie` 响应因此直接透传到客户端，没有 nginx 层缓存会把这个
+per-request 协商结果错误地缓存/复用给下一个访客的风险。CPS 冻结 tag
+`nginx/cps-admin.conf` 本身在这份对读之前就已经在
+`docs/governance/port-registry.md` 早前条目里记录过"未搬短剧主页面 proxy
+cache"（见上文 "CPS nginx 安全头、gzip、静态缓存..." 一行）——两边独立确认
+都不给根路径挂缓存，结论一致，不存在需要协调的差异。
 
 #### 未搬项说明（明确记录，避免被误判为漏登）
 

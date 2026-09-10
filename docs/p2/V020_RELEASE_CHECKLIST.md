@@ -290,8 +290,16 @@ Level UAT（步骤 0）与 Level R（步骤 6 的收益上线开闸）分别在�
   npm test -- --project node tests/backend/seo/static-sitemap-acceptance.test.ts tests/integration/p2-12-vertical-acceptance.test.ts
   ```
 
-- [ ] 仅在 fixture PASS 后，由 Owner 正式关闭 D-7，将首发 locale 写入唯一白名单真源。
-- [ ] D-7 关闭后，在 Sitemap flags 仍全 off 时跑正式 locale dry-run，核对分片、`lastmod`、真实 `SITE_URL` 和目录权限。
+- [ ] **L10N P4 更新（2026-09-10）**：本条原文的"唯一白名单真源"已随 P4 删除
+      （`PUBLISHABLE_LOCALES`/`isPublishableLocale`/`listPublishableLocales`，
+      `docs/governance/port-registry.md` P4 §2.A），不存在可写入的白名单了。
+      现行两层模型下，静态层 `SITE_LOCALES`（15 个）从代码层面即已全部注册、
+      无需逐个"写入"；本条实际等价物是 Owner 确认首发 locale 已具备真实可发布
+      内容（该 locale 下存在真正公开可见的 Article），届时它会自动出现在动态层
+      `getActiveLocales()` 里——不是改配置，是数据本身就绪。
+- [ ] 仅在 fixture PASS 且 Owner 确认首发 locale 具备真实可发布内容后，在
+      Sitemap flags 仍全 off 时跑正式 locale dry-run，核对分片、`lastmod`、
+      真实 `SITE_URL` 和目录权限。
 - [ ] dry-run PASS 后做 HTTP route 验收：
 
   ```bash

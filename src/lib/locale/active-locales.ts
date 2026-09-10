@@ -31,8 +31,11 @@
  * `sitemap.ts`'s own per-locale `isVisibleCandidate` (which additionally
  * re-verifies `isPromoReady`'s exact whitespace-trim semantics per row) —
  * `getActiveLocales()` only answers "is this locale worth showing at all"
- * (gates the LocaleSwitcher entry, feeds sitemap/hreflang consumers that
- * want an active-locale list), never "which exact URLs exist". A locale
+ * (gates the LocaleSwitcher entry — its sole consumer, per this round's §1
+ * 清单① evidence pass; sitemap/hreflang/IndexNow stay on the STATIC layer,
+ * `SITE_LOCALES`, exactly like their CPS counterparts do — see
+ * `docs/governance/port-registry.md`'s P4 section, 清单① note: "CPS 用静态集
+ * 的地方海阅不得换动态集"), never "which exact URLs exist". A locale
  * that clears this coarser bar but turns out to have zero rows that also
  * pass the row-level recheck simply renders an empty listing/empty sitemap
  * shard for that locale — a valid, already-anticipated state (see

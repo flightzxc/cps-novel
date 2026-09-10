@@ -90,15 +90,27 @@ shared call site twice.
   (parallel to `scripts/indexnow-backfill-apply.ts` existing as a CLI without
   an admin-UI equivalent).
 
-## Known, already-documented shared blocker: D-7 empty locale whitelist
+## Known, already-documented shared blocker: D-7 empty locale whitelist (SUPERSEDED — see L10N P4 note below)
 
-`isNovelIndexNowEligible` (`src/lib/indexnow/eligibility.ts`) gates on
-`isPublishableLocale`, which is `Object.freeze([])` today pending the D-7
+`isNovelIndexNowEligible` (`src/lib/indexnow/eligibility.ts`) used to gate on
+`isPublishableLocale`, which was `Object.freeze([])` pending the D-7
 first-locale-whitelist decision (`src/lib/locale/locale-canonical.ts`). This
-means **`enqueueIndexNowFirstPublish` returns `{ outcome: "ineligible" }` for
-every Article right now**, by the same shared, already-documented mechanism
-Stream D's sitemap generator is blocked by
-(`P2-07-12-移植审计-2026-08-12/P2-11.md` §9, `DECISION-CHECK.md` 核查4). This is
-not a defect introduced by this Stream — it resolves automatically the day
-D-7 is decided and `PUBLISHABLE_LOCALES` gets its first entry, with zero code
-change in this Stream's modules.
+meant **`enqueueIndexNowFirstPublish` returned `{ outcome: "ineligible" }` for
+every Article**, by the same shared mechanism Stream D's sitemap generator
+was blocked by (`P2-07-12-移植审计-2026-08-12/P2-11.md` §9, `DECISION-CHECK.md`
+核查4). This was not a defect introduced by this Stream — the paragraph below
+records what actually resolved it.
+
+**L10N P4 (2026-09-10):** the D-7 whitelist decision point this section is
+about never got a "first entry" — instead the whitelist layer itself
+(`PUBLISHABLE_LOCALES`/`isPublishableLocale`/`listPublishableLocales`) was
+deleted outright (`docs/governance/port-registry.md` P4 §2.A) and replaced
+with a two-layer model: a static registry `SITE_LOCALES` (15 members today)
+and a dynamic `getActiveLocales()` (which locales actually have publicly-
+visible content). `isNovelIndexNowEligible`/`isBlogIndexNowEligible` now gate
+on `isRegisteredSiteLocale` (`SITE_LOCALES` membership, `src/lib/indexnow/
+eligibility.ts:179-180,232-233`) by default — non-empty from day one, so this
+blocker is closed as described; eligibility for a given Article now turns on
+that Article's own locale being a registered `SITE_LOCALES` member (true for
+all 15 today) plus its other eligibility conditions, not on any whitelist
+state.
