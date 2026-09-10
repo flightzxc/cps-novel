@@ -1,5 +1,5 @@
 import type { Prisma, PrismaClient } from "@prisma/client";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { hashAdminSessionToken } from "@/lib/auth/session";
 import type { AdminIdentity, AdminSessionRecord } from "@/lib/auth/types";
@@ -10,6 +10,7 @@ import {
   createArticleTemplate,
   ensureDefaultArticleTemplate,
   listActiveArticleTemplateOptions,
+  listActiveArticleTemplateOptionsForLocales,
   selectActiveArticleTemplate,
 } from "@/server/article-templates";
 import { DEFAULT_ARTICLE_TEMPLATE_KEY } from "@/server/content-creation/default-article-template";
@@ -75,7 +76,17 @@ class FakeArticleTemplateDb {
     if (where.id !== undefined && row.id !== where.id) return false;
     if (where.templateKey !== undefined && row.templateKey !== where.templateKey) return false;
     if (where.status !== undefined && row.status !== where.status) return false;
-    if (where.locale !== undefined && row.locale !== where.locale) return false;
+    if (where.locale !== undefined) {
+      // L10N P5: `listActiveArticleTemplateOptionsForLocales` queries
+      // `{ locale: { in: [...] } }` (a set), not just a bare string equality
+      // — same recursive-`matches` extension shape as `OR`/`AND` below.
+      if (where.locale !== null && typeof where.locale === "object" && "in" in (where.locale as Record<string, unknown>)) {
+        const allowed = (where.locale as { in: readonly (string | null)[] }).in;
+        if (!allowed.includes(row.locale)) return false;
+      } else if (row.locale !== where.locale) {
+        return false;
+      }
+    }
     if (where.applicableArticleType !== undefined && row.applicableArticleType !== where.applicableArticleType) return false;
     if ("deletedAt" in where && where.deletedAt === null && row.deletedAt !== null) return false;
     if (where.OR) {
@@ -552,5 +563,113 @@ describe("ensureDefaultArticleTemplate · 表空时落 system-default-v1，幂�
     const second = await ensureDefaultArticleTemplate(db.asTransactionClient());
     expect(second).toBeNull();
     expect(db.rows).toHaveLength(1);
+  });
+});
+
+// L10N P5 (矩阵 #13, P2 复核 C5-a): `listActiveArticleTemplateOptionsForLocales`
+// collapses N per-locale `listActiveArticleTemplateOptions` queries into one
+// `locale: { in: [...] }` round trip — same locale-exact-match semantics
+// (no wildcard), plus a multi-locale-safe `distinct` (see that function's
+// own doc comment on why it's `["templateKey", "locale"]`, not just
+// `["templateKey"]`).
+describe("listActiveArticleTemplateOptionsForLocales", () => {
+  it("一次查询返回多个语种各自的模板，不互相污染", async () => {
+    const db = new FakeArticleTemplateDb();
+    const stores = authFixture();
+    const guarded = await authorization(stores, "admin.article_template.create");
+    await createArticleTemplate(
+      { ...guarded, template: { ...VALID_TEMPLATE, templateKey: "tpl-en-only", locale: "en" } },
+      deps(db, stores),
+    );
+    await createArticleTemplate(
+      { ...guarded, template: { ...VALID_TEMPLATE, templateKey: "tpl-ru-only", locale: "ru" } },
+      deps(db, stores),
+    );
+    await createArticleTemplate(
+      { ...guarded, template: { ...VALID_TEMPLATE, templateKey: "tpl-ja-only", locale: "ja" } },
+      deps(db, stores),
+    );
+
+    const options = await listActiveArticleTemplateOptionsForLocales(db.asPrismaClient(), ["en", "ru"]);
+    const keys = options.map((option) => option.templateKey);
+    expect(keys).toContain("tpl-en-only");
+    expect(keys).toContain("tpl-ru-only");
+    // ja was never in the requested set — a single `{in: [...]}` query must
+    // not silently widen to "every locale that happens to have a template".
+    expect(keys).not.toContain("tpl-ja-only");
+  });
+
+  it("空数组直接返回 []，不发起零条件查询", async () => {
+    const db = new FakeArticleTemplateDb();
+    expect(await listActiveArticleTemplateOptionsForLocales(db.asPrismaClient(), [])).toEqual([]);
+  });
+
+  it("每份结果都带上自己的 locale（供调用方按语种过滤/分组，不是扁平化后就丢失语种信息）", async () => {
+    const db = new FakeArticleTemplateDb();
+    const stores = authFixture();
+    const guarded = await authorization(stores, "admin.article_template.create");
+    await createArticleTemplate(
+      { ...guarded, template: { ...VALID_TEMPLATE, templateKey: "tpl-en-x", locale: "en" } },
+      deps(db, stores),
+    );
+    await createArticleTemplate(
+      { ...guarded, template: { ...VALID_TEMPLATE, templateKey: "tpl-ru-x", locale: "ru" } },
+      deps(db, stores),
+    );
+
+    const options = await listActiveArticleTemplateOptionsForLocales(db.asPrismaClient(), ["en", "ru"]);
+    const byKey = new Map(options.map((option) => [option.templateKey, option.locale]));
+    expect(byKey.get("tpl-en-x")).toBe("en");
+    expect(byKey.get("tpl-ru-x")).toBe("ru");
+  });
+
+  it("无通配：locale 为 null 的孤儿行不会被任何 in 集合命中", async () => {
+    const db = new FakeArticleTemplateDb();
+    db.rows.push({
+      id: "template-orphan-multi",
+      templateKey: "tpl-orphan-multi",
+      templateName: "孤儿模板",
+      locale: null,
+      version: 1,
+      schemaVersion: 1,
+      status: "active",
+      applicableArticleType: "novel_article",
+      bodyTemplate: "<p>{novel_title}</p>",
+      contentTemplate: [{ type: "paragraph", content: "{novel_title}" }],
+      seoTemplate: { title: "{novel_title}" },
+      slugTemplate: "",
+      metaKeywordsTemplate: "",
+      deletedAt: null,
+      createdAt: new Date(NOW),
+      updatedAt: new Date(NOW),
+    });
+
+    const options = await listActiveArticleTemplateOptionsForLocales(db.asPrismaClient(), ["en", "ru"]);
+    expect(options.map((option) => option.templateKey)).not.toContain("tpl-orphan-multi");
+  });
+
+  // P2 复核 C5-a's whole point: `catalog-sync/page.tsx` used to issue one
+  // `findMany` per distinct `sourceLocale` on the page (`Promise.all(...)`).
+  // This asserts the collapsed call count directly against the service
+  // layer both callers (`catalog-sync/page.tsx`, `articles/page.tsx`) now
+  // share — a page-level render test would only prove "the page still
+  // works", not "it stopped issuing N queries".
+  it("三个语种、任意数量模板，只发一条 findMany（不是逐语种循环）", async () => {
+    const db = new FakeArticleTemplateDb();
+    const stores = authFixture();
+    const guarded = await authorization(stores, "admin.article_template.create");
+    for (const locale of ["en", "ru", "ja"]) {
+      await createArticleTemplate(
+        { ...guarded, template: { ...VALID_TEMPLATE, templateKey: `tpl-${locale}`, locale } },
+        deps(db, stores),
+      );
+    }
+    const client = db.asPrismaClient();
+    const findManySpy = vi.spyOn(client.articleTemplate, "findMany");
+
+    const options = await listActiveArticleTemplateOptionsForLocales(client, ["en", "ru", "ja"]);
+
+    expect(findManySpy).toHaveBeenCalledTimes(1);
+    expect(options.map((option) => option.templateKey).sort()).toEqual(["tpl-en", "tpl-ja", "tpl-ru"]);
   });
 });

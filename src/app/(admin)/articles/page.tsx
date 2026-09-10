@@ -6,7 +6,7 @@ import { AdminTimeZoneNote } from "@/features/admin-ui/time-zone-note";
 import type { ErrorEnvelope } from "@/contracts";
 import { isArticleBlogEnabled, isArticleNovelRebindEnabled } from "@/lib/flags";
 import { listArticles, listDistinctArticleLocales, type ArticleListItem } from "@/server/articles";
-import { listActiveArticleTemplateOptions } from "@/server/article-templates";
+import { listActiveArticleTemplateOptionsForLocales } from "@/server/article-templates";
 import { getSiteUrl } from "@/lib/seo/site-url";
 
 import { prisma } from "../../api/admin/_lib/deps";
@@ -143,10 +143,28 @@ export default async function ArticlesPage({
   // array-literal fallback loses each promise's distinct element type once
   // it sits in the same conditional expression as `Promise.all(...)`.
   const locales = granted ? await listDistinctArticleLocales(prisma) : [];
-  // Hardcoded "en", same as `../catalog-sync/page.tsx`'s own call to this
-  // function — the site has effectively one populated locale today (see
-  // `listDistinctArticleLocales`'s own header).
-  const templateOptions = granted ? await listActiveArticleTemplateOptions(prisma, "en") : [];
+  /**
+   * L10N P5 (矩阵 #13): was a single hardcoded
+   * `listActiveArticleTemplateOptions(prisma, "en")` call — the "模板"
+   * filter dropdown only ever offered `en` templates regardless of which
+   * locale(s) the listed articles actually have. This is a list-level
+   * filter (not a single article's own picker — there is no per-article
+   * template dropdown on this page, see `../catalog-sync/page.tsx`'s and
+   * `create-content-dialog.tsx`'s comments for that one), so "该文章
+   * locale" here means: every locale any row on the CURRENT view could
+   * need. When the operator has already narrowed the list to one locale
+   * via the `locale` filter (`params.locale`), that is the only locale
+   * relevant — narrow the query to it so `ru`'s template options don't
+   * clutter an `en`-only view. Unfiltered, fall back to every distinct
+   * locale actually present among articles (`locales`, already fetched
+   * above), same single-round-trip shape
+   * `listActiveArticleTemplateOptionsForLocales` gives `../catalog-sync/
+   * page.tsx` (P2 复核 C5-a).
+   */
+  const templateLocales = params.locale ? [params.locale] : locales;
+  const templateOptions = granted && templateLocales.length > 0
+    ? await listActiveArticleTemplateOptionsForLocales(prisma, templateLocales)
+    : [];
   const categoryOptions = granted ? await listArticleCategoryOptions() : [];
   const novelTitle = granted ? await resolveNovelBannerTitle(params.novelId) : null;
 

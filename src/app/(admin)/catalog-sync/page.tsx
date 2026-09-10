@@ -4,7 +4,7 @@ import { isNovelCatalogSyncEnabled } from "@/lib/flags";
 import { resolveMoboreaderCatalogSafetyMaxPages } from "@/lib/tasks/moboreader";
 import { PROMO_LINK_CLAIM_LIMITS } from "@/lib/tasks/promo-link-claim-limits";
 import { CONTENT_CREATION_BATCH_MAX_SELECTION } from "@/server/content-creation/batch";
-import { listActiveArticleTemplateOptions } from "@/server/article-templates";
+import { listActiveArticleTemplateOptionsForLocales } from "@/server/article-templates";
 import { prisma } from "../../api/admin/_lib/deps";
 
 import { AdminShell } from "../_components/admin-shell";
@@ -74,36 +74,26 @@ export default async function CatalogSyncPage({
    * service.ts` derives it from `NovelSourceItem.sourceLocale`), so the
    * template picker must not stay pinned to one locale either.
    *
-   * Reuses the exact same page-level data-fetching shape (`await
-   * listActiveArticleTemplateOptions(prisma, <locale>)`, this page's own
-   * existing call pattern — not a new mechanism), just looped once per
-   * distinct `sourceLocale` actually present on this page of results, then
-   * flattened into the same flat array shape `CatalogSyncClient` /
-   * `CreateContentDialog` / `BatchCreateContentDialog` already accept — no
-   * prop-shape change ripples through those components. `CreateContentDialog`
-   * (see its own doc comment) is what actually narrows this down to the one
-   * locale a given row's dialog needs; this fetch only has to make sure that
-   * every locale any row on the page could need is present at all.
-   * L10N P3: `listActiveArticleTemplateOptions` no longer has a
-   * `{locale: null}` "all locales" wildcard branch to match (it's an exact
-   * `locale` equality query now — see that function's own comment), so a
-   * given template row can only ever appear under the one locale it
-   * actually has and this `id`-keyed dedup can no longer find a real
-   * collision. Left in place anyway as cheap, harmless insurance rather
-   * than removed outright — flattening several per-locale arrays into one
-   * list is exactly the shape a future change (e.g. a fallback-locale
-   * query) could reintroduce overlap into without anyone revisiting this
-   * comment first.
+   * L10N P5 (P2 复核 C5-a): the P2 round fixed the *locale* but did it with
+   * N separate `listActiveArticleTemplateOptions(prisma, locale)` queries
+   * (one per distinct `sourceLocale` on the page) flattened client-side —
+   * collapsed here into the single `locale: { in: sourceLocalesOnPage }`
+   * query `listActiveArticleTemplateOptionsForLocales` runs
+   * (`article-templates/service.ts`, own doc comment on why its `distinct`
+   * is `["templateKey", "locale"]` and not just `["templateKey"]`). Same
+   * flat array shape `CatalogSyncClient`/`CreateContentDialog`/
+   * `BatchCreateContentDialog` already accept — no prop-shape change
+   * ripples through those components; `CreateContentDialog` (see its own
+   * doc comment) is what actually narrows this down to the one locale a
+   * given row's dialog needs, this fetch only has to make sure every
+   * locale any row on the page could need is present at all.
    */
   const sourceLocalesOnPage = granted
     ? Array.from(new Set(page?.items.map((item) => item.sourceLocale).filter((locale): locale is string => locale !== null) ?? []))
     : [];
-  const templateOptionsByLocale = granted
-    ? await Promise.all(sourceLocalesOnPage.map((locale) => listActiveArticleTemplateOptions(prisma, locale)))
+  const templateOptions = granted && sourceLocalesOnPage.length > 0
+    ? await listActiveArticleTemplateOptionsForLocales(prisma, sourceLocalesOnPage)
     : [];
-  const templateOptions = Array.from(
-    new Map(templateOptionsByLocale.flat().map((template) => [template.id, template])).values(),
-  );
 
   return (
     <AdminShell

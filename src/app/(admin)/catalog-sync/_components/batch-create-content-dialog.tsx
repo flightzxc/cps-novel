@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import { buttonClassName } from "@/components/ui/button";
 import { EmptyRow, TBody, TD, TH, THead, Table } from "@/components/ui/table";
 import { errorEnvelopeCopy } from "@/features/admin-ui/error-copy";
+import { SITE_LOCALE_LABELS, type SiteLocale } from "@/lib/locale/locale-canonical";
 
 import { applyContentCreationBatchAction, dryRunContentCreationBatchAction } from "../_actions";
 import {
@@ -123,6 +124,17 @@ function ItemsTable({
   );
 }
 
+/** Shape `catalog-sync-client.tsx` already threads down from `catalog-sync/page.tsx`'s `listActiveArticleTemplateOptionsForLocales` result — `id` is accepted but unused here (kept so the prop type matches the shared array verbatim, no `Omit<>` gymnastics at the call site). */
+type BatchTemplateOption = { readonly id?: string; readonly templateKey: string; readonly locale: string; readonly version: number };
+
+function templateOptionLabel(template: BatchTemplateOption): string {
+  return `${template.templateKey} · v${template.version}`;
+}
+
+function localeDisplayLabel(locale: string): string {
+  return `${locale}（${SITE_LOCALE_LABELS[locale as SiteLocale] ?? locale}）`;
+}
+
 export function BatchCreateContentDialog({
   selectedItems,
   maxBatchSize,
@@ -139,16 +151,45 @@ export function BatchCreateContentDialog({
   onClose: () => void;
   /** Called once an apply submission returns (any outcome) so the parent can clear the row selection — same contract as `PromoLinkClaimDialog`'s `onSubmitted`. */
   onSubmitted: () => void;
-  templateOptions?: readonly { readonly templateKey: string; readonly version: number }[];
+  templateOptions?: readonly BatchTemplateOption[];
 }) {
   const router = useRouter();
   const dialogRef = useRef<HTMLDialogElement>(null);
   const [stage, setStage] = useState<Stage>({ kind: "loading" });
-  const [templateKey, setTemplateKey] = useState(templateOptions[0]?.templateKey ?? "system-default-v1");
 
   const itemsById = new Map(selectedItems.map((item) => [item.id, item] as const));
   const overLimit = selectedItems.length > maxBatchSize;
   const empty = selectedItems.length === 0;
+
+  /**
+   * P2 复核 C5-b: the whole selected batch shares ONE `templateKey`
+   * (`confirmApply`/the auto-dry-run effect below both submit a single
+   * `templateKey` for every item in the batch — the server still enforces
+   * `template_locale_mismatch` per item, this is only the *picker*), but a
+   * selection can legitimately span more than one derived locale. The
+   * picker must offer every template that could apply to ANY selected
+   * item — not silently stay pinned to whichever locale `templateOptions[0]`
+   * happened to be — while making which locale each option belongs to
+   * unambiguous (grouped by locale once there is more than one; a single
+   * locale keeps the flat list `CreateContentDialog` already uses, with an
+   * inline locale tag so this dialog never renders an option whose locale
+   * is invisible to the operator).
+   */
+  const selectedLocales = Array.from(
+    new Set(selectedItems.map((item) => item.sourceLocale).filter((locale): locale is string => locale !== null)),
+  );
+  const matchingTemplateOptions = templateOptions.filter((template) => selectedLocales.includes(template.locale));
+  // Insertion order here already tracks `listActiveArticleTemplateOptionsForLocales`'s
+  // own `orderBy: [{ locale: "asc" }, ...]` — grouping via `Map` preserves
+  // that order instead of re-sorting.
+  const groupedByLocale = new Map<string, BatchTemplateOption[]>();
+  for (const template of matchingTemplateOptions) {
+    const group = groupedByLocale.get(template.locale) ?? [];
+    group.push(template);
+    groupedByLocale.set(template.locale, group);
+  }
+  const localeGroups = Array.from(groupedByLocale.entries());
+  const [templateKey, setTemplateKey] = useState(matchingTemplateOptions[0]?.templateKey ?? "system-default-v1");
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -224,9 +265,29 @@ export function BatchCreateContentDialog({
         <h2 className="text-base font-semibold">批量创建内容</h2>
         <label className="block text-sm text-gray-700">本批次固定模板
           <select value={templateKey} onChange={(event) => setTemplateKey(event.target.value)} disabled={stage.kind === "applying"} className="mt-1 w-full rounded border border-gray-300 p-2">
-            {templateOptions.length === 0 && <option value="system-default-v1">system-default-v1（系统默认）</option>}
-            {templateOptions.map((template) => <option key={`${template.templateKey}:${template.version}`} value={template.templateKey}>{template.templateKey} · v{template.version}</option>)}
+            {matchingTemplateOptions.length === 0 && <option value="system-default-v1">system-default-v1（系统默认）</option>}
+            {localeGroups.length > 1
+              ? localeGroups.map(([locale, options]) => (
+                  <optgroup key={locale} label={localeDisplayLabel(locale)}>
+                    {options.map((template) => (
+                      <option key={`${template.templateKey}:${template.version}:${template.locale}`} value={template.templateKey}>
+                        {templateOptionLabel(template)}
+                      </option>
+                    ))}
+                  </optgroup>
+                ))
+              : matchingTemplateOptions.map((template) => (
+                  <option key={`${template.templateKey}:${template.version}:${template.locale}`} value={template.templateKey}>
+                    {templateOptionLabel(template)}（{localeDisplayLabel(template.locale)}）
+                  </option>
+                ))}
           </select>
+          {selectedLocales.length > 1 && (
+            <p className="mt-1 text-xs text-gray-400" data-testid="batch-create-multi-locale-hint">
+              所选来源条目跨 {selectedLocales.length} 个语种，下拉已按语种分组；所选模板的语种与某条来源不一致时，该条会单独报
+              template_locale_mismatch，不影响同批其余条目。
+            </p>
+          )}
         </label>
 
         <p className="text-sm text-gray-600" data-testid="batch-create-selection-count">

@@ -325,6 +325,47 @@ export async function listActiveArticleTemplateOptions(
   });
 }
 
+/**
+ * L10N P5 (P2 复核 C5-a): multi-locale sibling of `listActiveArticleTemplateOptions`
+ * above, for callers that need template options spanning more than one
+ * locale in one page render — `articles/page.tsx`'s template filter and
+ * `catalog-sync/page.tsx`'s per-row create-content picker both used to loop
+ * `listActiveArticleTemplateOptions(prisma, locale)` once per distinct
+ * locale actually present on the page and flatten the results client-side
+ * (N queries for N locales). This is the same query shape collapsed into
+ * one round trip via `locale: { in: locales }`.
+ *
+ * `distinct` here is `["templateKey", "locale"]`, NOT just `["templateKey"]`
+ * like the single-locale function above — with only one `locale` value in
+ * the `where`, distinct-by-templateKey and distinct-by-(templateKey,locale)
+ * are equivalent (every matched row already shares that one locale), but
+ * once `locale` is a set with more than one member, distinct-by-templateKey
+ * alone would silently collapse two DIFFERENT locales' rows into one
+ * option whenever they happen to share a `templateKey` string (globally
+ * possible in principle — `@@unique([templateKey, version])` on
+ * `ArticleTemplate` scopes uniqueness to templateKey+version, not
+ * templateKey+locale), picking whichever sorts first per `orderBy` and
+ * silently dropping the other locale's option out of the result entirely.
+ */
+export async function listActiveArticleTemplateOptionsForLocales(
+  db: PrismaClient,
+  locales: readonly string[],
+  applicableArticleType?: string,
+) {
+  const uniqueLocales = Array.from(new Set(locales));
+  if (uniqueLocales.length === 0) return [];
+  const conditions: Prisma.ArticleTemplateWhereInput[] = [{ locale: { in: uniqueLocales } }];
+  if (applicableArticleType) {
+    conditions.push({ OR: [{ applicableArticleType }, { applicableArticleType: "any" }] });
+  }
+  return db.articleTemplate.findMany({
+    where: { status: "active", deletedAt: null, AND: conditions },
+    select: { id: true, templateKey: true, locale: true, version: true },
+    orderBy: [{ locale: "asc" }, { templateKey: "asc" }, { version: "desc" }],
+    distinct: ["templateKey", "locale"],
+  });
+}
+
 async function authorize(
   authorization: AdminServiceAuthorization,
   entryId: string,
