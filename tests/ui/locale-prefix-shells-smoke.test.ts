@@ -72,6 +72,16 @@ vi.mock("next/navigation", () => ({
   },
 }));
 
+// L10N P4 review fix (B-1): `src/app/[locale]/novel/[slugParam]/not-found.tsx`
+// now reads the request's resolved locale out of the `x-novel-locale` header
+// (same mechanism as `src/app/layout.tsx` — see `tests/ui/root-layout-locale-dir.test.tsx`
+// for the sibling pattern this mirrors) instead of pinning `PUBLIC_SITE_LOCALE`.
+const notFoundHeaderState = vi.hoisted(() => ({ headerValue: null as string | null }));
+
+vi.mock("next/headers", () => ({
+  headers: async () => ({ get: () => notFoundHeaderState.headerValue }),
+}));
+
 vi.mock("@/lib/site/category-queries", () => ({
   getPublicCategoryPage: vi.fn(),
 }));
@@ -431,18 +441,60 @@ describe("novel detail: bare-path and [locale]-prefixed shells agree", () => {
   });
 });
 
-describe("novel not-found: bare-path and [locale]-prefixed shells agree", () => {
-  it("both pin PUBLIC_SITE_LOCALE (Next's zero-prop not-found.tsx constraint), metadata re-exported verbatim", async () => {
+describe("novel not-found: bare-path and [locale]-prefixed shells", () => {
+  beforeEach(() => {
+    notFoundHeaderState.headerValue = null;
+  });
+
+  it("metadata re-exported verbatim on both shells", async () => {
     const bare = await import("@/app/novel/[slugParam]/not-found");
     const prefixed = await import("@/app/[locale]/novel/[slugParam]/not-found");
     const pages = await import("@/app/_pages/novel-not-found");
 
     expect(bare.metadata).toEqual(pages.notFoundMetadata);
     expect(prefixed.metadata).toEqual(pages.notFoundMetadata);
+  });
 
+  it("bare-path shell still pins PUBLIC_SITE_LOCALE (a bare path has no request locale to read)", async () => {
+    const bare = await import("@/app/novel/[slugParam]/not-found");
     const fromBare = bare.default();
-    const fromPrefixed = prefixed.default();
-    expect(fromPrefixed).toEqual(fromBare);
+    expect(fromBare.props.locale).toBe("en");
+    expect(fromBare.props.homeHref).toBe("/");
+  });
+
+  // L10N P4 review fix (B-1): the `[locale]`-prefixed shell used to pin
+  // `PUBLIC_SITE_LOCALE` unconditionally (identical to the bare-path shell
+  // above) even though Next actually routes every registered `SITE_LOCALES`
+  // member down this subtree now — a genuinely-missing `/ru/novel/...` used
+  // to render English copy. It now reads the `x-novel-locale` header
+  // `src/proxy.ts` forwards, the same way `src/app/layout.tsx` does.
+  it("[locale]-prefixed shell falls back to en/'/' (matching the bare shell) when the header is absent", async () => {
+    const bare = await import("@/app/novel/[slugParam]/not-found");
+    const prefixed = await import("@/app/[locale]/novel/[slugParam]/not-found");
+
+    notFoundHeaderState.headerValue = null;
+    const fromPrefixed = await prefixed.default();
+    expect(fromPrefixed.props.locale).toBe("en");
+    expect(fromPrefixed.props.homeHref).toBe("/");
+    expect(fromPrefixed).toEqual(bare.default());
+  });
+
+  it("[locale]-prefixed shell renders ru copy with homeHref /ru when x-novel-locale: ru is present", async () => {
+    const prefixed = await import("@/app/[locale]/novel/[slugParam]/not-found");
+
+    notFoundHeaderState.headerValue = "ru";
+    const fromPrefixed = await prefixed.default();
+    expect(fromPrefixed.props.locale).toBe("ru");
+    expect(fromPrefixed.props.homeHref).toBe("/ru");
+  });
+
+  it("[locale]-prefixed shell falls back to en when the header carries an unregistered/garbage locale", async () => {
+    const prefixed = await import("@/app/[locale]/novel/[slugParam]/not-found");
+
+    notFoundHeaderState.headerValue = "<script>";
+    const fromPrefixed = await prefixed.default();
+    expect(fromPrefixed.props.locale).toBe("en");
+    expect(fromPrefixed.props.homeHref).toBe("/");
   });
 });
 
