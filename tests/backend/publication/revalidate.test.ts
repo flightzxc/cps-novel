@@ -10,6 +10,7 @@ vi.mock("next/cache", () => ({
 import {
   revalidatePublicArticlePaths,
   revalidatePublicArticleSet,
+  revalidatePublicBlogPaths,
   revalidatePublicListings,
 } from "@/server/publication/revalidate";
 import { ACTIVE_LOCALES_CACHE_TAG } from "@/lib/locale/active-locales-tag";
@@ -27,7 +28,7 @@ describe("revalidatePublicListings", () => {
 
   it("L10N P4: also revalidates the active-locales cache tag — the existing publish-state broadcast point, not a new mechanism", () => {
     revalidatePublicListings();
-    expect(revalidateTag).toHaveBeenCalledExactlyOnceWith(ACTIVE_LOCALES_CACHE_TAG, "max");
+    expect(revalidateTag).toHaveBeenCalledExactlyOnceWith(ACTIVE_LOCALES_CACHE_TAG, { expire: 0 });
     expect(ACTIVE_LOCALES_CACHE_TAG).toBe("active-locales");
   });
 });
@@ -46,13 +47,45 @@ describe("revalidatePublicArticlePaths", () => {
       ["/novel/dragon-throne-pabc123"],
       ["/novel/dragon-throne-pabc123/chapter", "layout"],
     ]);
-    expect(revalidateTag).toHaveBeenCalledExactlyOnceWith(ACTIVE_LOCALES_CACHE_TAG, "max");
+    expect(revalidateTag).toHaveBeenCalledExactlyOnceWith(ACTIVE_LOCALES_CACHE_TAG, { expire: 0 });
   });
 
   it("URL-encodes a slug that needs it, matching buildArticleRoutePath", () => {
     revalidatePublicArticlePaths({ locale: "en", slug: "a b", shortId: "xyz" });
     expect(revalidatePath).toHaveBeenCalledWith("/novel/a%20b-pxyz");
     expect(revalidatePath).toHaveBeenCalledWith("/novel/a%20b-pxyz/chapter", "layout");
+  });
+});
+
+// L10N P4 review fix (n3): `revalidatePublicBlogPaths` used to always
+// construct the `en` path (`buildBlogPath({ locale: PUBLIC_SITE_LOCALE, ...
+// })`) regardless of the post's own locale, even though blog creation
+// (`src/server/content-creation/blog.ts`'s `requireLocale`) accepts every
+// `SITE_LOCALES` member. It now reads `locale` off its input.
+describe("revalidatePublicBlogPaths", () => {
+  beforeEach(() => {
+    revalidatePath.mockClear();
+    revalidateTag.mockClear();
+  });
+
+  it("invalidates /{locale}/blog/{slug} and the /blog list page for a ru post", () => {
+    revalidatePublicBlogPaths({ slug: "a-blog-post", locale: "ru" });
+    expect(revalidatePath.mock.calls).toEqual([["/ru/blog/a-blog-post"], ["/blog"]]);
+  });
+
+  it("invalidates the bare /blog/{slug} path for an en post", () => {
+    revalidatePublicBlogPaths({ slug: "a-blog-post", locale: "en" });
+    expect(revalidatePath.mock.calls).toEqual([["/blog/a-blog-post"], ["/blog"]]);
+  });
+
+  // Sole production caller today (`publish-gate/service.ts:507`, out of this
+  // round's edit surface — see this function's own doc comment) still omits
+  // `locale` entirely; this must keep behaving exactly as it did before this
+  // fix (en) rather than throwing or drifting, until that one-line follow-up
+  // lands.
+  it("falls back to en when locale is omitted, matching the pre-fix default", () => {
+    revalidatePublicBlogPaths({ slug: "a-blog-post" });
+    expect(revalidatePath.mock.calls).toEqual([["/blog/a-blog-post"], ["/blog"]]);
   });
 });
 
@@ -75,13 +108,13 @@ describe("revalidatePublicArticleSet", () => {
     expect(revalidatePath).toHaveBeenCalledWith("/novel/one-paaa/chapter", "layout");
     expect(revalidatePath).toHaveBeenCalledWith("/novel/two-pbbb");
     expect(revalidatePath).toHaveBeenCalledWith("/novel/two-pbbb/chapter", "layout");
-    expect(revalidateTag).toHaveBeenCalledExactlyOnceWith(ACTIVE_LOCALES_CACHE_TAG, "max");
+    expect(revalidateTag).toHaveBeenCalledExactlyOnceWith(ACTIVE_LOCALES_CACHE_TAG, { expire: 0 });
   });
 
   it("still revalidates listings when the article list is empty (a Novel-level change with no affected Articles)", () => {
     revalidatePublicArticleSet([]);
     expect(revalidatePath.mock.calls).toEqual([["/"], ["/browse"]]);
-    expect(revalidateTag).toHaveBeenCalledExactlyOnceWith(ACTIVE_LOCALES_CACHE_TAG, "max");
+    expect(revalidateTag).toHaveBeenCalledExactlyOnceWith(ACTIVE_LOCALES_CACHE_TAG, { expire: 0 });
   });
 });
 

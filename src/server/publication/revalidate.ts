@@ -55,6 +55,7 @@
 import { revalidatePath, revalidateTag } from "next/cache";
 
 import { ACTIVE_LOCALES_CACHE_TAG } from "@/lib/locale/active-locales-tag";
+import type { SiteLocale } from "@/lib/locale/locale-canonical";
 import {
   buildArticlePath,
   buildArticleRoutePath,
@@ -82,16 +83,41 @@ function safeRevalidatePath(path: string, type?: "layout" | "page"): void {
  * tag-based cache. Next 16's `revalidateTag` now takes a mandatory second
  * "profile" argument (`node_modules/next/dist/server/web/spec-extension/
  * revalidate.d.ts`) — omitting it still works at runtime but logs a
- * deprecation warning recommending exactly this fix ("add second argument
- * of 'max'"). `"max"` reproduces the classic single-arg `revalidateTag`
- * behavior (immediate, unconditional purge of every cache entry under this
- * tag) rather than a bounded expiry window — the right match for
- * `getActiveLocales()`'s `unstable_cache` entry, which has no Next 16
- * "cache profile" of its own to align with.
+ * deprecation warning recommending a second argument.
+ *
+ * Review fix (n1, 2026-09-10): that second argument is NOT a free-form
+ * "how urgent" hint — `revalidateTag(tag, "max")` does NOT reproduce the
+ * classic single-arg immediate-purge behavior, despite the deprecation
+ * warning's own wording suggesting `"max"` as the generic replacement.
+ * Traced through `node_modules/next/dist/server/web/spec-extension/
+ * revalidate.js`'s `revalidate()`: passing a string profile looks it up in
+ * `workStore.cacheLifeProfiles[profile]` and only marks the request
+ * "immediately revalidated" when that profile's `expire === 0`. The `"max"`
+ * profile (`node_modules/next/dist/server/config-shared.js`'s default
+ * `cacheLife` registry) is `{ stale: 300, revalidate: 2_592_000, expire:
+ * 31_536_000 }` — a **stale-while-revalidate** profile whose cache entries
+ * stay servable for up to a year, not an immediate purge. `revalidation-
+ * utils.js`'s `revalidateTags()` confirms the same thing from the consumer
+ * side: it forwards `durations = { expire: cacheLife.expire }` to the cache
+ * handler, and only an `expire` of exactly `0` triggers the handler's
+ * immediate-expiration path (its own comment: "If profile is not found and
+ * not 'max', durations will be undefined which will trigger immediate
+ * expiration in the cache handler" — "max" is explicitly named as one of
+ * the profiles that does NOT do that).
+ *
+ * The actual classic-equivalent replacement is the object form
+ * `{ expire: 0 }`: `revalidate()` takes the `typeof profile === 'object'`
+ * branch, uses it as the cache-life config directly, and its `expire === 0`
+ * satisfies the immediate-revalidation check — the same `durations.expire
+ * === 0` the cache handler treats as "already expired". This is the right
+ * match for `getActiveLocales()`'s `unstable_cache` entry: a write that
+ * could change the active-locales set must invalidate it immediately, not
+ * let stale reads (up to `revalidate: 2_592_000`s / 30 days under `"max"`)
+ * keep serving for a year.
  */
 function safeRevalidateTag(tag: string): void {
   try {
-    revalidateTag(tag, "max");
+    revalidateTag(tag, { expire: 0 });
   } catch {
     // See `safeRevalidatePath` above — never let a cache-invalidation
     // failure surface as a write-path failure.
@@ -154,7 +180,7 @@ export function revalidatePublicArticlePaths(input: ArticlePublicPathInput): voi
   revalidateOneArticlePaths(input);
 }
 
-export type BlogPublicPathInput = Readonly<{ slug: string }>;
+export type BlogPublicPathInput = Readonly<{ slug: string; locale?: SiteLocale }>;
 
 /**
  * C-29b: blog-family counterpart to `revalidatePublicArticlePaths` above,
@@ -163,12 +189,32 @@ export type BlogPublicPathInput = Readonly<{ slug: string }>;
  * `revalidatePublicListings()` + `revalidateOneArticlePaths` — a blog
  * Article is not part of `/`/`/browse` (those list Novels only) and has no
  * chapter subtree, so the fan-out here is exactly the two blog surfaces:
- * this post's own `/blog/{slug}` detail page (`buildBlogPath`, locale-
- * invariant in practice — `PUBLIC_SITE_LOCALE`, same single-locale posture
- * `src/app/blog/page.tsx` already takes) and the `/blog` list page itself.
+ * this post's own `/blog/{slug}` detail page (`buildBlogPath`) and the
+ * `/blog` list page itself.
+ *
+ * Review fix (n3, 2026-09-10): `locale` is now read from the caller instead
+ * of always constructing `en`'s path. The blog creation surface
+ * (`src/server/content-creation/blog.ts`'s `requireLocale`) has been open to
+ * every `SITE_LOCALES` member since P4 §2.B — a non-`en` blog post's own
+ * publish/republish used to invalidate `/blog/{slug}` (the `en` path, which
+ * that post never renders at) while its real `/{locale}/blog/{slug}` page
+ * kept serving a stale cache entry.
+ *
+ * 🔴 `locale` stays OPTIONAL here (falling back to `PUBLIC_SITE_LOCALE`)
+ * purely to keep this function's sole production caller —
+ * `publish-gate/service.ts:507`'s `revalidatePublicBlogPaths({ slug:
+ * txResult.slug })`, inside this round's declared 禁改区 — compiling
+ * unchanged. `txResult.locale` is already available right there (used two
+ * lines above this call site for the sibling `novel_article` branch), so
+ * closing this for real needs only `revalidatePublicBlogPaths({ slug:
+ * txResult.slug, locale: txResult.locale as SiteLocale })` — a one-line,
+ * out-of-scope follow-up, not an unknown. Until that lands, a non-`en` blog
+ * publish still falls through to this default and under-invalidates exactly
+ * as before; every other caller (and this file's own tests) can and should
+ * pass `locale` explicitly.
  */
 export function revalidatePublicBlogPaths(input: BlogPublicPathInput): void {
-  safeRevalidatePath(buildBlogPath({ locale: PUBLIC_SITE_LOCALE, slug: input.slug }));
+  safeRevalidatePath(buildBlogPath({ locale: input.locale ?? PUBLIC_SITE_LOCALE, slug: input.slug }));
   safeRevalidatePath("/blog");
 }
 
