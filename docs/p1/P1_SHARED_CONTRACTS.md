@@ -34,26 +34,44 @@ Claude 拿前台、Codex 拿后台与渠道层，两侧真正的交汇点只有�
 
 ## 2. Locale 契约 🔴
 
-**级别：`FROZEN`**（硬前置 2）
+**级别：`FROZEN`**（硬前置 2）——**L10N P1（2026-09-10）修订**：`resolveSiteLocale`
+的返回形状变更，已由 Owner 批准的
+`施工提示词_Sonnet_L10N_P1_语言归一与存量重算_2026-09-10.md` §1.C 直接指定，
+详见下方"2026-09-10 修订说明"。级别标记本身不变（改动仍需 Owner 确认，本次
+即该确认），唯一真源仍只此一处，禁止第二处映射的纪律不变。
 
 | 项 | 约定 |
 | --- | --- |
-| 唯一真源 | `src/lib/locale-canonical.ts`，Owner = Claude |
+| 唯一真源 | `src/lib/locale/locale-canonical.ts` + `src/lib/locale/channel-language.ts`（L10N P1 新增，前者委托后者），Owner = Claude |
 | 职责 | 上游语种码（数值/名称）→ 站点 locale 的**唯一**映射 |
-| 映射失败 | 返回 `unknown`，**不得猜测、不得用上游原值当 locale** |
-| `unknown` 的后果 | SourceItem 可建，**Novel 不建**，进人工队列 |
+| 映射失败 | 返回 `{ locale: null, confidence: "unknown" }`，**不得猜测、不得用上游原值当 locale**（2026-09-10 前：字面串 `"unknown"`，已废弃） |
+| `locale: null` 的后果 | SourceItem 可建，**Novel 不建**，进人工队列 |
 | 发布白名单 | 独立于映射：映射成功 ≠ 可发布；白名单 fail-closed |
 | 禁止 | 🔴 **全仓第二处语种映射硬编码**。lint 规则卡住新增映射表 |
 
 **双方接口**：
 
 ```
-resolveSiteLocale(upstreamLanguageCode, upstreamLanguageName?) → SiteLocale | "unknown"
+resolveSiteLocale(upstreamLanguageCode, upstreamLanguageName?)
+  → { locale: string | null; confidence: "code" | "name_alias" | "unknown" }   // 2026-09-10 起
 isPublishableLocale(locale) → boolean            // 读发布白名单
 listPublishableLocales() → SiteLocale[]          // sitemap 分片、语言聚合用
 ```
 
 Codex 在归一化阶段调 `resolveSiteLocale`；Claude 在前台路由与 sitemap 分片调后两个。**两侧都不得自己维护语种表。**
+
+### 2026-09-10 修订说明
+
+旧签名 `resolveSiteLocale(...) → SiteLocale | "unknown"` 是一个闭合联合，装不下
+"上游码解析成功、但解出的 locale 不是站点已注册 `SiteLocale`"这个真实存在的
+状态（`it`/`fil`/`ms`/`tr`——海阅自己 X8 证据里就有这四个码，见
+`docs/governance/L10N_UPSTREAM_LANGUAGE_EVIDENCE_2026-09-10.md`）。继续用旧
+签名，要么把这类值也硬塞进 `SiteLocale`（污染站点 locale 登记表），要么把它
+们全部拍扁成 `"unknown"`（丢失"其实已经认出语种，只是这语种还没在站点注册"
+这个信息，且与真正"完全没认出来"的 code 19/20 混为一谈）。新形状
+`{ locale: string | null; confidence }` 把"解析结果"和"是否站点语种"彻底
+拆成两个独立问题，站点语种判定仍然只能查 `SITE_LOCALES`（不因这次改动而
+改变，这道闸继续在 `locale-canonical.ts` 里独立存在）。
 
 ---
 

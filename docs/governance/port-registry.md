@@ -447,6 +447,58 @@ hooks/number/date/list/relativeTime 格式化器/命名空间管理/错误兜底
 | --- | --- | --- | --- | --- | --- | --- |
 | `intl-messageformat@11.2.3` + `@formatjs/icu-messageformat-parser@3.5.6`（CPS 复数能力依赖链的解析引擎层，非 `next-intl`/`use-intl` 框架层） | CPS `node_modules` 递归 `package.json` resolve 得到的真实版本（非仓库源码路径；`next-intl 4.11.0 → use-intl 4.11.0 → intl-messageformat 11.2.3 → @formatjs/icu-messageformat-parser 3.5.6`） | N/A（依赖版本对齐，非代码行搬运） | `c37602c3933ca97adad0281deb6c75e71e550412` | `ADAPT` | 只对齐引擎版本号作为本仓生产依赖（`intl-messageformat` production dep）+ 门禁专用 dev 依赖（`@formatjs/icu-messageformat-parser`）引入；不引入 `next-intl`/`use-intl` 框架层（路由/Link/redirect/usePathname、React hooks、messages 命名空间管理、`onError` 兜底策略）——理由见上方两段说明；`t()`/`createTranslator`/`getPublicT` 是本仓 `src/lib/locale/messages/index.ts` 既有函数原地改造为调用该引擎（新增 `locale` 参数、`Map<string, IntlMessageFormat>` 编译缓存、`MissingValueError` 重新包装为既有 `MissingMessagesError`），不是从 CPS 抄的 wrapper 代码 | Claude |
 
+### L10N P1 语言归一与存量重算（channel-language.ts，2026-09-10）
+
+依据 `施工提示词_Sonnet_L10N_P1_语言归一与存量重算_2026-09-10.md`。`baseline_commit`
+固定为构建施工提示词本身指定的 `3a76877af27c6247ad94be946b44e9cc5c1cb9ce`——即 tag
+`pulsedrama-v8.5.1-freeze-20260906` 自身的 peeled commit（`chore(release): prepare
+v8.5.1`），**不是**上方 C-17/I18N 两节登记的 `c37602c...`（那是同一只读工作区上
+`3a76877` 之上另外 2 个 docs-only commit 之后的 HEAD，见上方 C-17 小节的说明）。
+两者是同一只读路径 `cps-admin-v851-admin-host` 上的两个不同坐标，本节明确使用
+前者，与上方两节各自独立、互不覆盖。
+
+**范围说明**：`src/lib/locale/channel-language.ts` 是新文件，COPY/ADAPT 自 CPS
+`src/lib/channel-language.ts`——CPS 该文件服务多渠道多上游 app（`beidou`/
+`changdu_moboreels`/`changdu_shortmax`/…），本仓只有一个上游来源 app
+（`moboreader`），所以按 sourceApp 索引的结构（`LANGUAGE_REGISTRY_BY_SOURCE_APP`）
+保留，但简化为单 key；`channel`/`channelAppKey`/`label`
+（`LOCALE_LABEL` 依赖）字段丢弃——没有调用方需要，非"顺手精简"，是"CPS
+多渠道维度在本仓不存在"。moboreader 18 码的**取值**来自海阅自己 X8 库的真实
+证据（`docs/governance/L10N_UPSTREAM_LANGUAGE_EVIDENCE_2026-09-10.md`），CPS
+`CHANGDU_SHORTMAX_LANGUAGE_CODE_TO_LOCALE` 只作交叉核对，不是取值来源，因此
+该常量本身不登记为 COPY 对象（下表只登记算法/别名表/熔断函数的 COPY）。
+
+`scripts/l10n/backfill-source-item-locale.ts` ADAPT 自 CPS
+`scripts/backfill-drama-source-item-locale.ts`：CPS 版本按 `channelApp.channel.
+code`/`channelApp.sourceApp.code` 派生 `channelAppKey`（多渠道场景），本仓单
+source app 场景该步骤整段删除；CPS 的 `--apply` 无审批门禁，本仓按
+`scripts/p2-06-5-production/tagging-bootstrap.ts` 同款方式加了 `--approver`
+（须为 `status=active` 的 `AdminIdentity`）+ `OperationAudit` 审计行（详见脚本
+文件头注释）。`scripts/l10n/probe-unnamed-language-codes.ts` 是新增证据线 X
+工具，无 CPS 对应文件（`PATTERN_ONLY`：借用既有 `getchapterinfo` 适配器与
+凭证/保险丝路径的调用形状，不是搬运 CPS 某个探针脚本——CPS 没有等价物）。
+`worker/handlers/moboreader.ts` 的熔断接线 ADAPT 自 CPS
+`src/lib/changdu-dry-run.ts:429-450`：CPS 在一次 `changdu-dry-run` 调用（对应
+一次上游分页拉取）粒度内评估熔断，本仓按 `persistCatalogPage`（同样对应一次
+`catalog_page` 任务项 = 一次上游分页拉取）粒度调用，语义对齐、粒度同构；CPS
+熔断命中后在同一函数作用域内重写 `parsedItems`，本仓分两段（`pageLanguage
+Resolutions` 预解析 → `suspendedLanguageCodes` 判定 → 逐行落库时读判定结果），
+因为本仓的持久化是逐行 upsert 而非 CPS 那种整批 `parsedItems` 数组重写。
+
+| symbol | source_file | source_lines | baseline_commit | port_kind | changed_what | owner |
+| --- | --- | --- | --- | --- | --- | --- |
+| `ChannelLanguageConfidence`/`ResolvedChannelLanguageConfidence` 类型 → `src/lib/locale/channel-language.ts` | `src/lib/channel-language.ts` | `3-9` | `3a76877af27c6247ad94be946b44e9cc5c1cb9ce` | `COPY` | 原样复制两个类型别名 |
+| `ChannelLanguageWarning` 类型 → 同上（去 `channel`/`channelAppKey` 字段） | `src/lib/channel-language.ts` | `11-23` | `3a76877af27c6247ad94be946b44e9cc5c1cb9ce` | `ADAPT` | 删 `channel`/`channelAppKey` 两个多渠道字段，其余字段名/类型逐字保留 |
+| `ChannelLanguageResolution` 类型 → 同上（去 `channel`/`channelAppKey`/`label`） | `src/lib/channel-language.ts` | `25-35` | `3a76877af27c6247ad94be946b44e9cc5c1cb9ce` | `ADAPT` | 删 `channel`/`channelAppKey`/`label`（`label` 依赖 `LOCALE_LABEL`，本仓无调用方，不搬），其余字段名/类型逐字保留 |
+| `UNKNOWN_SOURCE_LOCALE_FILTER` 常量 → 同上 | `src/lib/channel-language.ts` | `57` | `3a76877af27c6247ad94be946b44e9cc5c1cb9ce` | `COPY` | 原样复制（`"__unknown"`） |
+| `LANGUAGE_NAME_ALIAS_TO_LOCALE` 别名表 → 同上（私有常量，未导出） | `src/lib/channel-language.ts` | `184-266` | `3a76877af27c6247ad94be946b44e9cc5c1cb9ce` | `COPY` | 原样复制全表（含简体中文变体显式 `null`），不是过滤子集——本仓 18 码的全部上游 `languageName` 恰好都已在这张全表里，未新增任何条目 |
+| `normalizeLanguageAlias`/`resolveLanguageNameAlias` 函数 → 同上 | `src/lib/channel-language.ts` | `269-281` | `3a76877af27c6247ad94be946b44e9cc5c1cb9ce` | `COPY` | 原样复制（NFKC 归一 + trim + 折叠空白 + 小写；别名表查不到与显式 `null` 两种情况均返回 `null`，不做区分） |
+| `resolveChannelLanguage` 函数 → 同上（去多渠道 `channel`/`channelAppKey`/`explicitSourceAppCode` 派生逻辑） | `src/lib/channel-language.ts` | `283-361` | `3a76877af27c6247ad94be946b44e9cc5c1cb9ce` | `ADAPT` | code→name 解析优先级、`code_name_conflict` 告警产出逻辑、三态返回（code/name_alias/unknown）逐字保留；`sourceAppCode` 默认值固定为 `"moboreader"` 取代 CPS 从 `channelAppKey` 派生 `changdu_<sourceApp>`/`beidou` 的多分支逻辑（本仓无此维度）；`resolveChannelCode`/`deriveSourceAppCodeFromChannelAppKey`/`normalizeSourceAppCode` 三个多渠道辅助函数不搬 |
+| `evaluateLanguageMappingSuspensions` 函数 → 同上 | `src/lib/channel-language.ts` | `496-520` | `3a76877af27c6247ad94be946b44e9cc5c1cb9ce` | `COPY` | 原样复制，含 `total>=10 && conflicts>=3 && rate>=0.2` 三阈值逐字不变 |
+| 熔断接线粒度（每次上游分页拉取评估一次、命中即本批强制 `locale=null`）→ `persistCatalogPage` | `src/lib/changdu-dry-run.ts` | `380-450` | `3a76877af27c6247ad94be946b44e9cc5c1cb9ce` | `ADAPT` | 语义/粒度对齐（见上方范围说明段落最后一段）；持久化结构从"整批数组重写"改为"逐行 upsert 前读判定结果"，因为本仓落库路径本就是逐行 `tx.novelSourceItem.upsert`，不是 CPS 那种批量构造后统一写入 |
+| `backfillSourceItemLocale` 核心循环（cursor 分页、dry-run 默认、`--re-resolve`、条件 `updateMany`）→ `scripts/l10n/backfill-source-item-locale.ts` | `scripts/backfill-drama-source-item-locale.ts` | `1-173`（全文件） | `3a76877af27c6247ad94be946b44e9cc5c1cb9ce` | `ADAPT` | 删 `channelAppKey` 派生步骤（多渠道概念，本仓不适用）；`--apply` 从"无门禁直接写"改为"需 `--approver`（`AdminIdentity` 存在且 active）+ `OperationAudit` 审计行"，同款方式见 `scripts/p2-06-5-production/tagging-bootstrap.ts` 的 `resolveApprover`/审计写入模式；报告形状从"扁平计数"改为"按 `sourceLanguageCode` 分桶的 before/after locale 直方图"（施工提示词 §1.F 明确要求"每码 before/after 计数"）；无 `NovelSourceItem` 对应的 mapping-version DB 列（核对 `3a76877:prisma/schema.prisma` 的 `DramaSourceItem` 同样没有该列），故不加迁移，`MAPPING_VERSION` 只记在报告/审计快照里 |
+| CanonicalTag bootstrap 的 approver 校验/审计写入形状 → `resolveApprover`/`OperationAudit` 写入 | `scripts/p2-06-5-production/tagging-bootstrap.ts` | `651-657`（`resolveApprover`）、`841-859`（`OperationAudit.create`） | 本仓内部模式复用，非 CPS 搬运 | `PATTERN_ONLY` | 只借"UUID 或 username 双形态查找 + status=active 校验失败即 fail() + OperationAudit 记录 actorType/action/entityType/requestId/reason/before-after snapshot"的形状；不搬 `pg_advisory_xact_lock`（backfill 场景不需要跨进程互斥，`--request-id` 重放判定已足够）与 `--channel-app` 绑定校验（本脚本没有对应概念） |
+
 ## 使用说明
 
 - `symbol`：被搬运的具体符号名（函数名/类型名/表名/字段名/组件名等），一行一个符号，不得用文件级粗粒度笼统登记；

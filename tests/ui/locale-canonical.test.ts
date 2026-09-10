@@ -14,25 +14,44 @@ import {
 } from "@/lib/locale/locale-canonical";
 
 /**
- * 语种归一唯一真源（`docs/p1/P1_SHARED_CONTRACTS.md` §2，级别 FROZEN，硬前置 2）。
+ * 语种归一唯一真源（曾在 `docs/p1/P1_SHARED_CONTRACTS.md` §2 标记 `FROZEN`；
+ * L10N P1〔`施工提示词_Sonnet_L10N_P1_语言归一与存量重算_2026-09-10.md`〕已按
+ * Owner 批准的预研裁决改造该契约本身——旧签名 `resolveSiteLocale(...) →
+ * SiteLocale | "unknown"` 换成 CPS 形状 `{ locale, confidence }`，
+ * `P1_SHARED_CONTRACTS.md` 已同步更新，不再是与本文件冲突的第二份口径）。
  *
- * 验三件事：三个冻结 API 的存在与语义、fail-closed 的边界、以及「全仓只有一处
- * 映射」这条纪律确实成立。第三条是这个模块存在的**全部理由**——CPS 因映射散落
- * 四处付过两次全库 normalize 的代价，所以它必须是自动化断言，不能只写在 README 里。
+ * 验三件事：三个对外 API 的存在与语义、fail-closed 的边界、以及「全仓只有一处
+ * 映射」这条纪律确实成立（`resolve Site Locale`/`isPublishableLocale`/
+ * `listPublishableLocales` 三个签名定义只能住在 `locale-canonical.ts`；上游码
+ * 表/别名表/`resolveChannelLanguage` 只能住在委托目标 `channel-language.ts`——
+ * 两个文件合起来才是唯一真源，其余任何文件都不得再造）。第三条是这个模块存在
+ * 的**全部理由**——CPS 因映射散落四处付过两次全库 normalize 的代价，所以它
+ * 必须是自动化断言，不能只写在 README 里。
  *
- * P0-S15（2026-08-26）：上游登记表首次填入子集——依据《C2 真上游只读诊断
- * 报告 2026-08-26》真实成对证据登记了 `3 → en`、`7 → ru`。这只是 20 条样本
- * 覆盖到的子集，不是完整上游枚举，所以下面既有「已登记码解得出 locale」的
- * 用例，也保留「未登记码依旧 unknown」的用例——两者都是回归网的一部分。
+ * L10N P1（2026-09-10）：上游登记表从 P0-S15 的 2 码子集（`3→en`/`7→ru`）扩到
+ * 18 码（`docs/governance/L10N_UPSTREAM_LANGUAGE_EVIDENCE_2026-09-10.md`
+ * 的真实成对证据），别名表从"只登记过'英语'/'俄语'两个中文名"扩为 CPS
+ * `channel-language.ts` 的完整别名表（含大量英文名）。凡是本文件旧版本里靠
+ * "这个名字/这个码没有登记"论证 unknown 的用例，逐条核对是否被 P1 扩表打破，
+ * 打破的一律换成真正仍未登记的取值，而不是就地删除断言。
  *
- * 🔴 发布白名单现为 `{en}`（U6 Owner D-7 明示放行）。登记表从空到有 2 项
- * 不自动等于可发布——「返回 unknown/映射出 locale」与「是否在白名单」仍是
- * 两件独立的事，见专门的边界用例。
+ * 🔴 发布白名单现为 `{en}`（U6 Owner D-7 明示放行），P1 未改动。登记表扩到
+ * 18 项不自动等于可发布——「解出 locale」「是站点语种」「可发布」是三道各自
+ * 独立的闸，见专门的边界用例。
  */
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(here, "../..");
 const CANONICAL_PATH = "src/lib/locale/locale-canonical.ts";
+const CHANNEL_LANGUAGE_PATH = "src/lib/locale/channel-language.ts";
+/**
+ * L10N P1: the upstream code/alias tables and `resolveChannelLanguage` now
+ * live in `channel-language.ts`, which `locale-canonical.ts` delegates to —
+ * together they are the one true source, so both paths are excluded from the
+ * "no second mapping table" / "no second normalize implementation" scans
+ * below. Anything outside these two files is still a violation.
+ */
+const CANONICAL_SOURCE_PATHS: readonly string[] = [CANONICAL_PATH, CHANNEL_LANGUAGE_PATH];
 const canonicalSource = readFileSync(resolve(repoRoot, CANONICAL_PATH), "utf8");
 
 /** 递归收集一批目录下的 .ts / .tsx。 */
@@ -102,19 +121,21 @@ describe("locale 唯一真源 · 冻结 API", () => {
   });
 });
 
-describe("locale 唯一真源 · resolveSiteLocale 映射不到就是 unknown", () => {
+describe("locale 唯一真源 · resolveSiteLocale 映射不到就是 { locale: null, confidence: \"unknown\" }", () => {
   it.each([
     ["null", null],
     ["undefined", undefined],
     ["空串", ""],
-    // 3、7 已在 P0-S15 登记为 en/ru（见下方专门的 describe 块），
-    // 这里改用登记表未覆盖的数值码，验的仍是「未登记就是 unknown」。
+    // L10N P1 把登记表从 {3,7} 扩到 18 码（见下方专门的 describe 块），
+    // 这里改用登记表仍未覆盖的数值码，验的仍是「未登记就是 unknown」。
     ["未登记的数值码 · 1", 1],
     ["未登记数值码的字符串写法 · 1", "1"],
-    ["未登记的数值码 · 2", 2],
-    ["未登记数值码的字符串写法 · 2", "2"],
-    ["未登记的数值码 · 5", 5],
-    ["未登记数值码的字符串写法 · 5", "5"],
+    ["未登记的数值码 · 17（CPS changdu_moboreels 有 17→hi，moboreader 无此码）", 17],
+    ["未登记的数值码 · 18", 18],
+    ["未登记的数值码 · 24（CPS 北斗表有 24→cs，moboreader 无此码）", 24],
+    // 19/20：上游 languageName 为 JSON null，零成对证据，MAPPING_EVIDENCE_MISSING。
+    ["无名码 19（MAPPING_EVIDENCE_MISSING）", 19],
+    ["无名码 20（MAPPING_EVIDENCE_MISSING）", 20],
     ["负数", -1],
     ["小数", 1.5],
     ["NaN", Number.NaN],
@@ -122,85 +143,115 @@ describe("locale 唯一真源 · resolveSiteLocale 映射不到就是 unknown", 
     ["布尔", true],
     ["对象", {}],
     ["数组", []],
-    // 以下三项特意用「登记表里真实存在的码 3」拼出非法形态，证明即便码本身
-    // 已登记，不精确匹配十进制整数写法照样不认——这比用未登记码更能说明
-    // codeKey() 的形态校验独立于登记表内容生效。
+    // 以下两项特意用「登记表里真实存在的码 3」拼出非法形态，证明即便码本身
+    // 已登记，不精确匹配十进制整数写法照样不认。前导空格的情形不在这里——
+    // 见下方专门用例，委托 channel-language.ts 后该写法已改为可识别。
     ["前导零写法（码本身已登记）", "03"],
-    ["带空格（码本身已登记）", " 3"],
     ["十六进制写法（码本身已登记）", "0x3"],
   ])("%s → unknown", (_label, input) => {
-    expect(resolveSiteLocale(input)).toBe("unknown");
+    expect(resolveSiteLocale(input)).toEqual({ locale: null, confidence: "unknown" });
   });
 
-  it("🔴 长得像 locale 的字符串也不认——上游给的是数值码，认字符串就是在猜", () => {
-    for (const value of ["en", "EN", "en-US", "en_US", "eng", "english"]) {
-      expect(resolveSiteLocale(value), `${value} 不该被认成 locale`).toBe("unknown");
+  it("🔴 前导/尾随空白会被裁剪后精确匹配（委托 channel-language.ts 的 `String(...).trim()`，与旧版 codeKey() 的行为差异——COPY CPS 算法时的已知、刻意变更）", () => {
+    expect(resolveSiteLocale(" 3")).toEqual({ locale: "en", confidence: "code" });
+    expect(resolveSiteLocale("3 ")).toEqual({ locale: "en", confidence: "code" });
+  });
+
+  it("🔴 长得像 locale 的字符串当作『码』传入也不认——上游码位给的是数值码，认字符串就是在猜（作为 languageName 传入是另一件事，见下方别名用例）", () => {
+    for (const value of ["en", "EN", "en-US", "en_US", "eng"]) {
+      expect(resolveSiteLocale(value), `${value} 不该被当码认成 locale`).toEqual({
+        locale: null,
+        confidence: "unknown",
+      });
     }
   });
 
-  it("🔴 不拿上游原值当 locale：返回值只可能是已登记 locale 或 unknown", () => {
-    const inputs: unknown[] = ["zh", 7, "Français", { locale: "en" }, "en"];
-    for (const input of inputs) {
-      const resolved = resolveSiteLocale(input);
-      expect(resolved === "unknown" || SITE_LOCALES.includes(resolved)).toBe(true);
-      expect(resolved).not.toBe(input);
+  it("languageName 精确匹配的别名之外，未登记文案一律 unknown", () => {
+    // L10N P1 COPY 了 CPS 完整别名表（不只是「英语」「俄语」两个中文名），
+    // 这里换成表里真正没有的取值：不精确的中文变体、法语的非规范写法、空串。
+    for (const name of ["俄罗斯语", "Français", "法蘭西語", ""]) {
+      expect(resolveSiteLocale(0, name)).toEqual({ locale: null, confidence: "unknown" });
     }
   });
 
-  it("languageName 不做模糊匹配——未登记的文案一律 unknown", () => {
-    // 「英语」「俄语」自 P0-S15 起是已登记文案（见下方专门的 describe 块），
-    // 这里换成近似但不逐字相同的变体，验的仍是「精确匹配，不模糊」。
-    for (const name of ["English", "english", "英文", "俄罗斯语", "Français", ""]) {
-      expect(resolveSiteLocale(0, name)).toBe("unknown");
-    }
-  });
-
-  it("两个参数都给也不会拼出一个 locale", () => {
-    expect(resolveSiteLocale(1, "English")).toBe("unknown");
+  it("两个参数都给、且两者均未登记，也不会拼出一个 locale", () => {
+    expect(resolveSiteLocale(1, "Foobarese")).toEqual({ locale: null, confidence: "unknown" });
   });
 });
 
-describe("locale 唯一真源 · 上游登记表（P0-S15 首次填充）", () => {
+describe("locale 唯一真源 · 上游登记表（L10N P1，18 码）", () => {
   /**
-   * 证据来源：《C2 真上游只读诊断报告 2026-08-26》（执行基线 `d103cf2`，
-   * 真实 `getlistpc` 接口 20 条样本）。`language`/`languageName` 逐条成对
-   * 出现，且与已归档 Lane B 证据一致：`3 → 英语 → en`，`7 → 俄语 → ru`。
-   * 这组用例既锁定「已证子集能解出 locale」，也锁定「未证数值码依旧
-   * unknown、不得推测补齐」——两者缺一都不能证明本轮改动的边界正确。
+   * 证据来源：`docs/governance/L10N_UPSTREAM_LANGUAGE_EVIDENCE_2026-09-10.md`
+   * ——海阅自己 X8 库 `novel_source_item` 的真实成对 `(source_language_code,
+   * source_language_name)` 样本，18 码全部有证据；CPS 表只做交叉核对。
+   * 这组用例既锁定「已证 18 码全部解得出正确 locale、正确 confidence」，也
+   * 锁定「code 19/20（无成对证据）依旧 unknown、不得推测补齐」——见上一个
+   * describe 块。`it/fil/ms/tr` 解析成功但不是 `SITE_LOCALES` 成员，这里一并
+   * 钉死，避免"能解析"被误当成"是站点语种"。
    */
 
-  it("3（及其字符串写法）→ en", () => {
-    expect(resolveSiteLocale(3)).toBe("en");
-    expect(resolveSiteLocale("3")).toBe("en");
+  it.each([
+    [2, "zh-Hant"],
+    [3, "en"],
+    [4, "es"],
+    [5, "pt-BR"],
+    [6, "fr"],
+    [7, "ru"],
+    [8, "it"],
+    [9, "ja"],
+    [10, "ar"],
+    [11, "id"],
+    [12, "th"],
+    [13, "vi"],
+    [14, "ko"],
+    [15, "fil"],
+    [16, "de"],
+    [21, "ms"],
+    [22, "tr"],
+    [23, "pl"],
+  ] as const)("code %i（及其字符串写法）→ %s，confidence=code", (code, locale) => {
+    expect(resolveSiteLocale(code)).toEqual({ locale, confidence: "code" });
+    expect(resolveSiteLocale(String(code))).toEqual({ locale, confidence: "code" });
   });
 
-  it("7（及其字符串写法）→ ru", () => {
-    expect(resolveSiteLocale(7)).toBe("ru");
-    expect(resolveSiteLocale("7")).toBe("ru");
+  it("🔴 it/fil/ms/tr 解析成功但不是 SITE_LOCALES 成员——「解析成功」≠「是站点语种」", () => {
+    for (const locale of ["it", "fil", "ms", "tr"] as const) {
+      expect(SITE_LOCALES).not.toContain(locale);
+    }
+    expect(resolveSiteLocale(8).locale).toBe("it");
+    expect(resolveSiteLocale(15).locale).toBe("fil");
+    expect(resolveSiteLocale(21).locale).toBe("ms");
+    expect(resolveSiteLocale(22).locale).toBe("tr");
   });
 
-  it("languageName 备用键：已登记文案精确匹配也能解出 locale", () => {
+  it("languageName 备用键：已登记文案精确匹配也能解出 locale，confidence=name_alias", () => {
     // code 传一个不在登记表里的值，逼 resolveSiteLocale 落到 name 兜底路径。
-    expect(resolveSiteLocale(99, "英语")).toBe("en");
-    expect(resolveSiteLocale(99, "俄语")).toBe("ru");
+    expect(resolveSiteLocale(99, "英语")).toEqual({ locale: "en", confidence: "name_alias" });
+    expect(resolveSiteLocale(99, "俄语")).toEqual({ locale: "ru", confidence: "name_alias" });
+  });
+
+  it("简体中文文案显式落 null——不猜成 zh-Hant 或任何其它 locale", () => {
+    for (const name of ["简体中文", "简体", "簡體", "zh", "zh-CN"]) {
+      expect(resolveSiteLocale(99, name)).toEqual({ locale: null, confidence: "unknown" });
+    }
   });
 
   it("code 命中优先于 name：两者都给时不看 name", () => {
     // code=3 已经命中 en，name="俄语" 不会被查——name 只是 code 未命中时的
-    // 备用键，不是覆盖，也不是二次校验。
-    expect(resolveSiteLocale(3, "俄语")).toBe("en");
+    // 备用键，不是覆盖，也不是二次校验。confidence 仍是 code。
+    expect(resolveSiteLocale(3, "俄语")).toEqual({ locale: "en", confidence: "code" });
   });
 
-  it("🔴 未证数值码依旧 unknown——C2 样本只覆盖 {3, 7}；X8 getlistpc 见过 5 但无名", () => {
-    for (const code of [1, 2, 5]) {
-      expect(resolveSiteLocale(code)).toBe("unknown");
-      expect(resolveSiteLocale(String(code))).toBe("unknown");
+  it("🔴 无名码 19/20 依旧 unknown——零成对证据，MAPPING_EVIDENCE_MISSING，不得推测补齐", () => {
+    for (const code of [19, 20]) {
+      expect(resolveSiteLocale(code)).toEqual({ locale: null, confidence: "unknown" });
+      expect(resolveSiteLocale(String(code))).toEqual({ locale: null, confidence: "unknown" });
     }
   });
 
-  it("🔴 登记表填充不把未放行的 locale 送进白名单——映射成功与可发布仍是两道独立的闸", () => {
-    expect(resolveSiteLocale(3)).toBe("en");
-    expect(resolveSiteLocale(7)).toBe("ru");
+  it("🔴 登记表扩到 18 码不把未放行的 locale 送进白名单——映射成功与可发布仍是两道独立的闸", () => {
+    expect(resolveSiteLocale(3).locale).toBe("en");
+    expect(resolveSiteLocale(7).locale).toBe("ru");
     expect(isPublishableLocale("en")).toBe(true);
     expect(isPublishableLocale("ru")).toBe(false);
     expect(listPublishableLocales()).toEqual(["en"]);
@@ -247,7 +298,7 @@ describe("locale 唯一真源 · 发布白名单 fail-closed", () => {
   it("「映射成功」与「可发布」是两道独立的闸", () => {
     // ru 已映射、仍不可发布——en 可发布并不把两道闸合成一道。
     expect(SITE_LOCALES).toContain("ru");
-    expect(resolveSiteLocale(7)).toBe("ru");
+    expect(resolveSiteLocale(7).locale).toBe("ru");
     expect(isPublishableLocale("ru")).toBe(false);
     expect(isPublishableLocale("en")).toBe(true);
   });
@@ -284,7 +335,7 @@ describe("locale 唯一真源 · 全仓不得有第二份映射", () => {
     const offenders: string[] = [];
     for (const file of ALL_SOURCES) {
       const relativePath = relative(repoRoot, file);
-      if (relativePath === CANONICAL_PATH) continue;
+      if (CANONICAL_SOURCE_PATHS.includes(relativePath)) continue;
       const source = readFileSync(file, "utf8");
       for (const match of source.matchAll(mappingDeclaration)) {
         offenders.push(`${relativePath} → ${match[1]}`);
@@ -302,7 +353,7 @@ describe("locale 唯一真源 · 全仓不得有第二份映射", () => {
     const offenders: string[] = [];
     for (const file of ALL_SOURCES) {
       const relativePath = relative(repoRoot, file);
-      if (relativePath === CANONICAL_PATH) continue;
+      if (CANONICAL_SOURCE_PATHS.includes(relativePath)) continue;
       const source = readFileSync(file, "utf8");
       for (const match of source.matchAll(normalizeDeclaration)) {
         if (suspicious.test(match[1])) {

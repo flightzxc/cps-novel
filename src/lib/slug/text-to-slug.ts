@@ -13,10 +13,14 @@
  * transliteration branch (`shouldTransliterateChinese`/`pushChineseTokens`).
  * `SiteLocale` (`src/lib/locale/locale-canonical.ts`) is registered for 15
  * locales as of P0-S10, but `PUBLISHABLE_LOCALES` is `{en}` only (U6 / D-7).
- * The upstream registry that drives `resolveSiteLocale` only has `3 → en`
- * and `7 → ru`. There is no exercised call site in this round that would
- * ever route CJK/Thai/Arabic text through this module for a locale content
- * can actually publish under. Non-Latin scripts are preserved as their own
+ * `resolveSiteLocale` (L10N P1, 2026-09-10) now resolves 18 upstream codes —
+ * see `docs/governance/L10N_UPSTREAM_LANGUAGE_EVIDENCE_2026-09-10.md` —
+ * including CJK/Thai/Arabic-scripted locales (`zh-Hant`/`ja`/`ko`/`th`/`ar`).
+ * That widened the set of `NovelSourceItem.sourceLocale` values a source
+ * item can carry, but content creation still only publishes under
+ * `PUBLISHABLE_LOCALES` (`{en}`), so there is still no exercised call site
+ * in this round that would route CJK/Thai/Arabic text through this module
+ * for a locale content can actually publish under. Non-Latin scripts are preserved as their own
  * Unicode slug segments instead — the same fallback CPS itself uses for
  * "other" scripts, and exactly what a browser/HTTP stack percent-encodes at
  * the URL layer regardless. That keeps this module at zero new dependencies.
