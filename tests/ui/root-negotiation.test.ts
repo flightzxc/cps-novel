@@ -127,4 +127,31 @@ describe("proxy() — negotiation wiring", () => {
     expect(response.status).toBe(200);
     expect(response.headers.get("location")).toBeNull();
   });
+
+  // L10N P4 review fix (n2): an unrecognised Host header takes the
+  // `evaluateAdminHostAccess` fail-open branch for a non-admin path
+  // (`src/lib/site/admin-origin.ts:215-220` — "fail closed the same way as
+  // the public host for everything that isn't an admin path") and so is
+  // ALLOWED through the admin-host gate at `/`. That allow must not be
+  // conflated with "this is the public site host" for negotiation purposes:
+  // `proxy()`'s own `requestHost === siteHost` check
+  // (`src/proxy.ts:154-155`) is a second, stricter gate specifically for
+  // `negotiateRootLocale`, and this request — Host not equal to either the
+  // configured site host or admin host — must fail it.
+  it("does not negotiate when the Host header is unrecognised, even though the admin-host gate fail-opens it through", () => {
+    vi.stubEnv("SITE_URL", ORIGIN);
+    vi.stubEnv("ADMIN_CANONICAL_ORIGIN", `https://${ADMIN_HOST}`);
+    vi.stubEnv("NODE_ENV", "production");
+
+    const UNRECOGNISED_HOST = "203.0.113.9";
+    const request = new NextRequest(`http://${UNRECOGNISED_HOST}/`, {
+      headers: { host: UNRECOGNISED_HOST, "accept-language": "ru" },
+    });
+    const response = proxy(request);
+    // Fail-open on the admin gate -> reaches this far without a 404, but
+    // never negotiates: no 307, no redirect Location, no locale cookie.
+    expect(response.status).not.toBe(307);
+    expect(response.headers.get("location")).toBeNull();
+    expect(response.headers.get("set-cookie")).toBeNull();
+  });
 });
