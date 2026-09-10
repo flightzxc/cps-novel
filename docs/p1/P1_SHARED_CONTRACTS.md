@@ -37,16 +37,17 @@ Claude 拿前台、Codex 拿后台与渠道层，两侧真正的交汇点只有�
 **级别：`FROZEN`**（硬前置 2）——**L10N P1（2026-09-10）修订**：`resolveSiteLocale`
 的返回形状变更，已由 Owner 批准的
 `施工提示词_Sonnet_L10N_P1_语言归一与存量重算_2026-09-10.md` §1.C 直接指定，
-详见下方"2026-09-10 修订说明"。级别标记本身不变（改动仍需 Owner 确认，本次
-即该确认），唯一真源仍只此一处，禁止第二处映射的纪律不变。
+详见下方"2026-09-10 修订说明"。**L10N P4（2026-09-10）修订**：发布白名单层
+整体删除，公开面两层分层，详见下方"2026-09-10 P4 修订说明"。级别标记本身
+不变（改动仍需 Owner 确认，两次均已确认），唯一真源仍只此一处，禁止第二处
+映射的纪律不变。
 
 | 项 | 约定 |
 | --- | --- |
 | 唯一真源 | `src/lib/locale/locale-canonical.ts` + `src/lib/locale/channel-language.ts`（L10N P1 新增，前者委托后者），Owner = Claude |
 | 职责 | 上游语种码（数值/名称）→ 站点 locale 的**唯一**映射 |
 | 映射失败 | 返回 `{ locale: null, confidence: "unknown" }`，**不得猜测、不得用上游原值当 locale**（2026-09-10 前：字面串 `"unknown"`，已废弃） |
-| `locale: null` 的后果 | SourceItem 可建，**Novel 不建**，进人工队列 |
-| 发布白名单 | 独立于映射：映射成功 ≠ 可发布；白名单 fail-closed |
+| 公开面语种模型 | 两层（L10N P4）：静态层 `SITE_LOCALES`（登记，同步）+ 动态层 `getActiveLocales()`（`active-locales.ts`，按公开可见谓词族算出，异步，⊆ 静态层）。曾经的第三层"发布白名单"已删除，不是改造 |
 | 禁止 | 🔴 **全仓第二处语种映射硬编码**。lint 规则卡住新增映射表 |
 
 **双方接口**：
@@ -54,11 +55,10 @@ Claude 拿前台、Codex 拿后台与渠道层，两侧真正的交汇点只有�
 ```
 resolveSiteLocale(upstreamLanguageCode, upstreamLanguageName?)
   → { locale: string | null; confidence: "code" | "name_alias" | "unknown" }   // 2026-09-10 起
-isPublishableLocale(locale) → boolean            // 读发布白名单
-listPublishableLocales() → SiteLocale[]          // sitemap 分片、语言聚合用
+getActiveLocales() → Promise<SiteLocale[]>       // L10N P4 新增，src/lib/locale/active-locales.ts；动态层，⊆ SITE_LOCALES 且恒含 en
 ```
 
-Codex 在归一化阶段调 `resolveSiteLocale`；Claude 在前台路由与 sitemap 分片调后两个。**两侧都不得自己维护语种表。**
+Codex 在归一化阶段调 `resolveSiteLocale`；Claude 在前台路由/sitemap 分片/IndexNow 资格/hreflang 枚举读 `SITE_LOCALES`（静态层，`locale-canonical.ts` 直接导出，非函数），只有 `LocaleSwitcher`（经 `SiteChrome.activeLocales`）读 `getActiveLocales()`（动态层）。**两侧都不得自己维护语种表；CPS 用静态集的地方海阅不得换动态集，反之亦然。**
 
 ### 2026-09-10 修订说明
 
@@ -72,6 +72,28 @@ Codex 在归一化阶段调 `resolveSiteLocale`；Claude 在前台路由与 site
 `{ locale: string | null; confidence }` 把"解析结果"和"是否站点语种"彻底
 拆成两个独立问题，站点语种判定仍然只能查 `SITE_LOCALES`（不因这次改动而
 改变，这道闸继续在 `locale-canonical.ts` 里独立存在）。
+
+### 2026-09-10 P4 修订说明
+
+`施工提示词_Sonnet_L10N_P4_公开面两层分层与白名单删除_2026-09-10.md`，矩阵
+#9/#10/#12。上一节把"解析结果"和"是否站点语种"拆成两个问题时，特意留了一句
+"站点语种判定仍然只能查 `SITE_LOCALES`"——这句话没变；变的是**它之上曾经还有
+第三道闸**（发布白名单 `PUBLISHABLE_LOCALES`/`isPublishableLocale`/
+`listPublishableLocales`）。这道闸本轮**整体删除**，不是放宽或改造：
+
+1. **公开面收口为两层**，对齐 CPS 自己的分层：静态层 `SITE_LOCALES`（登记，
+   供路由/canonical/sitemap 默认/IndexNow 资格/hreflang 枚举读）+ 新增动态层
+   `getActiveLocales()`（"这个已注册语种现在有没有真实公开内容"，供
+   `LocaleSwitcher` 读）。动态层按既有公开可见谓词族（`isPublicationStatePublic`
+   ∧ `isPromoReady` ∧ Novel/PromoLink 未软删）算出，不是新造一份可见性判定。
+2. `[locale]/_guard.ts` 改为"注册即路由"（CPS `[locale]/(site)/layout.tsx`
+   同构语义）——一个 `SITE_LOCALES` 成员不再需要额外清一道可发布白名单才能
+   路由到，默认语种 `en` 仍走裸路径这条 D-8 结构性规则不变。
+3. 根路径新增 Accept-Language/cookie 协商（`root-negotiation.ts`，COPY 自
+   CPS），只在公开主机的 `/` 生效。
+4. 这条修订发生在"双方接口"表格与"唯一真源"表格本身（已在上文更新），不是
+   仅加在本节末尾的旁注——任何还在引用 `isPublishableLocale`/
+   `listPublishableLocales` 的代码或文档都是过期状态。
 
 ---
 

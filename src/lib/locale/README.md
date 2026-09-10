@@ -4,14 +4,31 @@
 
 ## 用途
 
-上游语种码 → 站点 locale 的映射，以及发布语种白名单的查询入口。
+上游语种码 → 站点 locale 的映射，以及公开面两层 locale 模型（静态登记表 + 动态活跃集）的查询入口。
 
 ## 唯一真源
 
 ```
-src/lib/locale/locale-canonical.ts   ← 对外三个 API（resolveSiteLocale / isPublishableLocale / listPublishableLocales）+ 站点 locale 登记表 + 发布白名单
+src/lib/locale/locale-canonical.ts   ← 对外 API（resolveSiteLocale）+ 站点 locale 登记表 SITE_LOCALES（静态层）
 src/lib/locale/channel-language.ts   ← L10N P1 新增：上游 moboreader 码表/别名表/resolveChannelLanguage/熔断评估，locale-canonical.ts 委托这里
+src/lib/locale/active-locales.ts     ← L10N P4 新增：动态层 getActiveLocales()/queryActiveLocales()——SITE_LOCALES 的子集，按公开可见谓词族算出
+src/lib/locale/active-locales-tag.ts ← L10N P4 新增：动态层 unstable_cache 标签名 ACTIVE_LOCALES_CACHE_TAG 单独拆出的零依赖模块（见该层小节说明为什么不能直接从 active-locales.ts 导入）
+src/lib/locale/root-negotiation.ts   ← L10N P4 新增：根路径 Accept-Language/cookie 协商，COPY 自 CPS root-negotiation.ts
 ```
+
+🔴 **L10N P4（2026-09-10）：发布白名单层已整体删除，不是改造。** `PUBLISHABLE_LOCALES`/
+`isPublishableLocale`/`listPublishableLocales`/`pickPublishableLocale`/
+`ARTICLE_TEMPLATE_CRUD_LANDED`/`assertPublishableLocalesFailClosed` 全部从
+`locale-canonical.ts`/`request-locale.ts` 删除，不留别名壳。公开面从"三层"
+（登记 → 可发布白名单 → 实际路由）收口为 CPS 同构的"两层"：
+
+| 层 | 定义 | 住在哪 | 供谁读 |
+| --- | --- | --- | --- |
+| 静态层 | `SITE_LOCALES`（同步、常量、15 语） | `locale-canonical.ts` | 路由（`proxy.ts`/`[locale]/_guard.ts`）、sitemap 默认、IndexNow 资格、hreflang 枚举、后台语种下拉 |
+| 动态层 | `getActiveLocales()`（异步、按公开可见谓词族算出、⊆ 静态层、`en` 恒含） | `active-locales.ts` | 目前只有一处：`SiteChrome.activeLocales` → `SiteHeader` → `LocaleSwitcher` |
+
+**CPS 用静态集的地方海阅不得换动态集，反之亦然**——两层各自的消费点边界见
+`docs/governance/port-registry.md` 的 L10N P4 小节 §1 清单①②。
 
 🔴 **全项目唯一的语种映射实现，两个文件合起来算一处。** 禁止在这两个文件之外的任何位置出现第二处语种映射硬编码——CPS 因语种映射散落四处，付过两次全库 normalize 的代价。`tests/ui/locale-canonical.test.ts`「没有第二张语种映射表」/「没有第二份 normalize 实现」两条扫描已把排除范围从单文件扩到这两个文件。
 
@@ -172,6 +189,30 @@ D-7 fail-closed 守卫全部未改——18 码扩表只是让更多上游码"解
   `ARTICLE_TEMPLATE_CRUD_LANDED` 仍需 P4 把 `PUBLISHABLE_LOCALES`/`proxy.ts` 那一整层按 Owner 决策
   打开，不是这一轮迁移或资产文件能单独触发的。
 
+### L10N P4（2026-09-10）更新：公开面两层分层、根路径协商、白名单层删除
+
+`施工提示词_Sonnet_L10N_P4_公开面两层分层与白名单删除_2026-09-10.md`，矩阵 #9/#10/#12。上一节
+末尾提到"翻转 `ARTICLE_TEMPLATE_CRUD_LANDED` 仍需 P4 把 `PUBLISHABLE_LOCALES`/`proxy.ts` 那一整层
+按 Owner 决策打开"——这就是那一轮，但结果不是"打开"而是**整层删除**：
+
+- `PUBLISHABLE_LOCALES`/`isPublishableLocale`/`listPublishableLocales`/`pickPublishableLocale`/
+  `ARTICLE_TEMPLATE_CRUD_LANDED`/`assertPublishableLocalesFailClosed` 全部从
+  `locale-canonical.ts`/`request-locale.ts` 删除，不留别名壳。上一节"`ARTICLE_TEMPLATE_CRUD_LANDED`
+  今天仍是 `false`"这句话因此也随之作废——这个符号已经不存在，不是"翻转成 `true`"。
+- 公开面从"三层"（登记 `SITE_LOCALES` → 可发布白名单 `PUBLISHABLE_LOCALES` → 实际路由）收口为
+  CPS 同构的"两层"：静态层 `SITE_LOCALES`（不变，仍是本文件唯一真源）+ 新增动态层
+  `getActiveLocales()`（`active-locales.ts`，按既有公开可见谓词族——`isPublicationStatePublic` ∧
+  `isPromoReady` ∧ Novel/PromoLink 未软删——算出，不是新造第二份可见性 where）。
+  `[locale]/_guard.ts`/`proxy.ts`/sitemap 默认/IndexNow 资格/hreflang 枚举/blog 创建表单全部改读
+  `SITE_LOCALES`（静态层）；`SiteChrome.activeLocales`（→ `SiteHeader` → `LocaleSwitcher`）是动态层
+  唯一消费点，对齐 CPS 自己 `getActiveLocales()` 的唯一真实消费点（`site-header.tsx`）。
+- 新增 `root-negotiation.ts`（根路径 Accept-Language/cookie 协商，COPY 自 CPS）与
+  `active-locales-tag.ts`（`unstable_cache` 标签名单独拆出的零依赖模块——见该文件自己的头注释，
+  `revalidate.ts` 若直接从 `active-locales.ts` 导入会把该模块整个的 `unstable_cache(...)`
+  模块加载期副作用一并拖进来，破坏了好几个只 mock `next/cache` 里 `revalidatePath` 的既有测试）。
+- 完整的四张取证清单、改动清单、六条变异见
+  `docs/governance/port-registry.md` 的 L10N P4 小节。
+
 ## 硬前置
 
 `locale-canonical.ts` 是 P1 的**硬前置 2**：必须在写入任何多语言数据之前建好，早于 P1-05 之后的任何内容写入链路。
@@ -180,5 +221,5 @@ D-7 fail-closed 守卫全部未改——18 码扩表只是让更多上游码"解
 
 - 映射失败返回 `{ locale: null, confidence: "unknown" }`，**不得猜测、不得用上游原值当 locale**；
 - `locale: null` 的后果：来源条目可建，**canonical 内容实体不建**，进人工队列；
-- 「解析出 locale」≠「是站点语种」≠「可发布」——三道独立的闸，`it`/`fil`/`ms`/`tr` 解析成功但不是 `SITE_LOCALES` 成员；
-- 对外接口形状见 `src/contracts/`：`resolveSiteLocale` / `isPublishableLocale` / `listPublishableLocales`；上游码表/别名表/熔断评估的唯一真源是 `channel-language.ts`，不在别处重复。
+- 「解析出 locale」≠「是站点语种」——两道独立的闸，`it`/`fil`/`ms`/`tr` 解析成功但不是 `SITE_LOCALES` 成员（L10N P4：曾经的第三道闸"可发布"已随白名单层删除，"这个 `SITE_LOCALES` 成员现在有没有真实内容"改由动态层 `active-locales.ts` 的 `getActiveLocales()` 回答，不再是一道 fail-closed 准入闸）；
+- 对外接口形状见 `src/contracts/`：`resolveSiteLocale`；上游码表/别名表/熔断评估的唯一真源是 `channel-language.ts`，不在别处重复；`getActiveLocales()` 的对外形状见 `active-locales.ts` 自己的头注释，不在本文件重复。
