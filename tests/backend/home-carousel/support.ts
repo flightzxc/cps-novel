@@ -13,7 +13,7 @@ import { hashAdminSessionToken } from "@/lib/auth/session";
 import type { AdminIdentity, AdminSessionRecord } from "@/lib/auth/types";
 import { requireAdminActionAccess, type AdminServiceAuthorization } from "@/server/auth/guards";
 import { P2_04_ADMIN_REGISTRY } from "@/app/api/admin/_lib/registry";
-import { CAROUSEL_SOURCES } from "@/domain/database-statuses";
+import { CAROUSEL_BATCH_STATUSES, CAROUSEL_SOURCES } from "@/domain/database-statuses";
 
 import { TestOnlyInMemoryAuthStores } from "../auth/test-only-in-memory-stores";
 
@@ -68,10 +68,16 @@ function prismaUniqueError(target: string): InstanceType<typeof Prisma.PrismaCli
  * a raw CHECK violation raised by a plain `createMany` (as opposed to a
  * `$queryRaw`), so it comes back as `Prisma.PrismaClientUnknownRequestError`
  * — no `.code` at all.
+ *
+ * Generalized (carousel batch-status schema-contract-drift fix, sibling to
+ * `20260912100000_carousel_serving_source_check_fix`) to take `relation`/
+ * `method` instead of hardcoding `home_carousel_serving`/`createMany` — this
+ * now backs the CHECK simulation on all four `home_carousel_*` tables this
+ * fake models, not just `home_carousel_serving`.
  */
-function prismaCheckViolationError(constraintName: string, detail: string): InstanceType<typeof Prisma.PrismaClientUnknownRequestError> {
+function prismaCheckViolationError(relation: string, method: string, constraintName: string, detail: string): InstanceType<typeof Prisma.PrismaClientUnknownRequestError> {
   return new Prisma.PrismaClientUnknownRequestError(
-    `Invalid \`prisma.homeCarouselServing.createMany()\` invocation: new row for relation "home_carousel_serving" violates check constraint "${constraintName}" (${detail})`,
+    `Invalid \`prisma.${method}()\` invocation: new row for relation "${relation}" violates check constraint "${constraintName}" (${detail})`,
     { clientVersion: "test" },
   );
 }
@@ -107,6 +113,56 @@ export class FakeHomeCarouselDb {
   seedManualSlot(slot: FakeManualSlot): this {
     this.manualSlots.set(slot.id, slot);
     return this;
+  }
+
+  /**
+   * Mirrors `carousel_manual_position_check` (`position` > 0) and
+   * `carousel_manual_window_check` (`starts_at` IS NULL OR `ends_at` IS
+   * NULL OR `starts_at` < `ends_at`), both from
+   * `20260803090000_p1_initial_schema`. `upsertHomeCarouselManualSlot`
+   * (`src/server/home-carousel/service.ts`) already rejects an out-of-range
+   * `position` before ever reaching the database (`carousel_position_invalid`)
+   * and never sets `startsAt`/`endsAt` at all, so neither of these should
+   * ever actually fire through that code path today — this exists so the
+   * fake stays a faithful CHECK simulation for any write path (present or
+   * future) that reaches `homeCarouselManualSlot.create`/`.update` directly,
+   * same discipline as the other three tables' CHECK mirrors below.
+   */
+  private assertManualSlotChecks(row: FakeManualSlot): void {
+    if (!Number.isInteger(row.position) || row.position <= 0) {
+      throw prismaCheckViolationError("home_carousel_manual_slot", "homeCarouselManualSlot", "carousel_manual_position_check", `position > 0, got ${row.position}`);
+    }
+    if (row.startsAt !== null && row.endsAt !== null && row.startsAt.getTime() >= row.endsAt.getTime()) {
+      throw prismaCheckViolationError(
+        "home_carousel_manual_slot", "homeCarouselManualSlot",
+        "carousel_manual_window_check",
+        `starts_at (${row.startsAt.toISOString()}) must be before ends_at (${row.endsAt.toISOString()})`,
+      );
+    }
+  }
+
+  /**
+   * Mirrors the two partial unique indexes `20260803090000_p1_initial_schema`
+   * installs on this table — `carousel_manual_position_active_uidx`
+   * (locale, position) and `carousel_manual_novel_active_uidx` (locale,
+   * novel_id), both `WHERE enabled IS TRUE AND deleted_at IS NULL` — so only
+   * active (enabled, non-deleted) rows can collide, matching real Postgres
+   * partial-index semantics. Skips the row's own current entry (same `id`)
+   * so re-saving an unchanged active row, or the position-in-range check
+   * inside `upsertHomeCarouselManualSlot` itself, never self-collides.
+   */
+  private assertManualSlotUniqueness(row: FakeManualSlot): void {
+    if (!row.enabled || row.deletedAt !== null) return;
+    for (const other of this.manualSlots.values()) {
+      if (other.id === row.id) continue;
+      if (!other.enabled || other.deletedAt !== null) continue;
+      if (other.locale === row.locale && other.position === row.position) {
+        throw prismaUniqueError("carousel_manual_position_active_uidx");
+      }
+      if (other.locale === row.locale && other.novelId === row.novelId) {
+        throw prismaUniqueError("carousel_manual_novel_active_uidx");
+      }
+    }
   }
 
   private client() {
@@ -191,6 +247,8 @@ export class FakeHomeCarouselDb {
         create: async (args: { data: Omit<FakeManualSlot, "id" | "deletedAt" | "startsAt" | "endsAt"> & Partial<Pick<FakeManualSlot, "startsAt" | "endsAt">> }) => {
           this.calls.push("homeCarouselManualSlot.create");
           const row: FakeManualSlot = { id: randomUUID(), deletedAt: null, startsAt: null, endsAt: null, ...args.data };
+          this.assertManualSlotChecks(row);
+          this.assertManualSlotUniqueness(row);
           this.manualSlots.set(row.id, row);
           return row;
         },
@@ -199,17 +257,39 @@ export class FakeHomeCarouselDb {
           const existing = this.manualSlots.get(args.where.id);
           if (!existing) throw new Error(`manual slot not found: ${args.where.id}`);
           const updated = { ...existing, ...args.data };
+          this.assertManualSlotChecks(updated);
+          this.assertManualSlotUniqueness(updated);
           this.manualSlots.set(existing.id, updated);
           return updated;
         },
       },
       homeCarouselAutoBatch: {
-        create: async (args: { data: { uniqueKey: string; [key: string]: unknown } }) => {
+        /**
+         * Mirrors `home_carousel_auto_batch_status_check`
+         * (`20260803090000_p1_initial_schema` — `pending`/`processing`/
+         * `completed`/`failed`, unchanged since) in addition to the
+         * pre-existing `unique_key` uniqueness. Carousel batch-status
+         * schema-contract-drift fix: this is the CHECK
+         * `computeHomeCarouselInTx`'s pre-fix `status: "success"` terminal
+         * write violated — `"success"` was never a member of this set,
+         * same class of bug as the sibling `home_carousel_serving.source`
+         * fix (`20260912100000_carousel_serving_source_check_fix`), just on
+         * this table's own status column instead of a row it produces.
+         */
+        create: async (args: { data: { uniqueKey: string; status?: string; [key: string]: unknown } }) => {
           this.calls.push("homeCarouselAutoBatch.create");
           if ([...this.batches.values()].some((batch) => batch.uniqueKey === args.data.uniqueKey)) {
             throw prismaUniqueError("home_carousel_auto_batch_unique_key_key");
           }
-          const row = { id: randomUUID(), finishedAt: null as Date | null, ...args.data } as { id: string; uniqueKey: string; status: string; finishedAt: Date | null; [key: string]: unknown };
+          const status = args.data.status ?? "pending";
+          if (!(CAROUSEL_BATCH_STATUSES as readonly string[]).includes(status)) {
+            throw prismaCheckViolationError(
+              "home_carousel_auto_batch", "homeCarouselAutoBatch.create",
+              "home_carousel_auto_batch_status_check",
+              `status in CHECK ("status"::text = ANY (ARRAY[${CAROUSEL_BATCH_STATUSES.map((value) => `'${value}'::character varying`).join(", ")}]::text[])), got '${status}'`,
+            );
+          }
+          const row = { id: randomUUID(), finishedAt: null as Date | null, ...args.data, status } as { id: string; uniqueKey: string; status: string; finishedAt: Date | null; [key: string]: unknown };
           this.batches.set(row.id, row);
           return row;
         },
@@ -217,13 +297,65 @@ export class FakeHomeCarouselDb {
           this.calls.push("homeCarouselAutoBatch.update");
           const existing = this.batches.get(args.where.id);
           if (!existing) throw new Error(`batch not found: ${args.where.id}`);
+          if (typeof args.data.status === "string" && !(CAROUSEL_BATCH_STATUSES as readonly string[]).includes(args.data.status)) {
+            throw prismaCheckViolationError(
+              "home_carousel_auto_batch", "homeCarouselAutoBatch.update",
+              "home_carousel_auto_batch_status_check",
+              `status in CHECK ("status"::text = ANY (ARRAY[${CAROUSEL_BATCH_STATUSES.map((value) => `'${value}'::character varying`).join(", ")}]::text[])), got '${args.data.status}'`,
+            );
+          }
           Object.assign(existing, args.data);
           return existing;
         },
       },
       homeCarouselAutoCandidate: {
+        /**
+         * Mirrors `carousel_candidate_rank_check` (`rank` > 0) and the two
+         * unique indexes `20260803090000_p1_initial_schema` installs on
+         * this table — `carousel_candidate_batch_locale_rank_key`
+         * (batch_id, locale, rank) and `carousel_candidate_batch_novel_key`
+         * (batch_id, novel_id) — with the same all-or-nothing, validate-
+         * before-commit shape `homeCarouselServing.createMany` above uses
+         * (every row in `args.data` is checked against both the existing
+         * table state and the rest of the same batch before any row is
+         * written). No CHECK on `source` here: unlike
+         * `home_carousel_serving.source`, `home_carousel_auto_candidate.source`
+         * has no CHECK constraint in either migration (verified against
+         * both migration files) — `CAROUSEL_SOURCES` governs it only as a
+         * documented application-level convention (see that constant's doc
+         * comment in `database-statuses.ts`), enforced by the static guard
+         * (`tests/backend/database/carousel-check-static.test.ts`'s
+         * write-site literal scan), not by this fake mirroring a
+         * nonexistent database CHECK.
+         */
         createMany: async (args: { data: Array<Record<string, unknown>> }) => {
           this.calls.push("homeCarouselAutoCandidate.createMany");
+          // Note: deliberately not named `*LocaleRankKeys*` / `*LocaleRank*`
+          // — `tests/ui/locale-canonical.test.ts`'s "没有第二张语种映射表"
+          // guard flags any `const <name containing Locale> = new Set/Map/{/[`
+          // declaration outside the canonical locale-registry file, and a
+          // composite dedupe key that happens to *include* `locale` as one
+          // of its components is not a second locale mapping table.
+          const existingRankKeys = new Set(this.candidates.map((row) => `${row.batchId} ${row.locale} ${row.rank}`));
+          const existingNovelKeys = new Set(this.candidates.map((row) => `${row.batchId} ${row.novelId}`));
+          const seenRankKeys = new Set<string>();
+          const seenNovel = new Set<string>();
+          for (const row of args.data) {
+            const rank = row.rank as number;
+            if (!Number.isInteger(rank) || rank <= 0) {
+              throw prismaCheckViolationError("home_carousel_auto_candidate", "homeCarouselAutoCandidate.createMany", "carousel_candidate_rank_check", `rank > 0, got ${rank}`);
+            }
+            const rankKey = `${row.batchId} ${row.locale} ${rank}`;
+            if (existingRankKeys.has(rankKey) || seenRankKeys.has(rankKey)) {
+              throw prismaUniqueError("carousel_candidate_batch_locale_rank_key");
+            }
+            seenRankKeys.add(rankKey);
+            const novelKey = `${row.batchId} ${row.novelId}`;
+            if (existingNovelKeys.has(novelKey) || seenNovel.has(novelKey)) {
+              throw prismaUniqueError("carousel_candidate_batch_novel_key");
+            }
+            seenNovel.add(novelKey);
+          }
           this.candidates.push(...args.data);
           return { count: args.data.length };
         },
@@ -256,12 +388,13 @@ export class FakeHomeCarouselDb {
           for (const row of args.data) {
             if (!(CAROUSEL_SOURCES as readonly string[]).includes(row.source)) {
               throw prismaCheckViolationError(
+                "home_carousel_serving", "homeCarouselServing.createMany",
                 "home_carousel_serving_source_check",
                 `source in CHECK ("source"::text = ANY (ARRAY[${CAROUSEL_SOURCES.map((value) => `'${value}'::character varying`).join(", ")}]::text[])), got '${row.source}'`,
               );
             }
             if (!Number.isInteger(row.position) || row.position <= 0) {
-              throw prismaCheckViolationError("carousel_serving_position_check", `position > 0, got ${row.position}`);
+              throw prismaCheckViolationError("home_carousel_serving", "homeCarouselServing.createMany", "carousel_serving_position_check", `position > 0, got ${row.position}`);
             }
             const key = `${row.locale} ${row.position}`;
             if (existingKeys.has(key) || seenInBatch.has(key)) throw prismaUniqueError("carousel_serving_locale_position_key");

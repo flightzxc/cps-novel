@@ -120,6 +120,33 @@ describe("computeHomeCarouselInTx honors carouselConfigJson (PR6 fix B-1 #3)", (
   });
 });
 
+// Carousel batch-status schema-contract-drift fix, sibling to the
+// `20260912100000_carousel_serving_source_check_fix` (`home_carousel_serving.source`)
+// fix: `computeHomeCarouselInTx` used to write the terminal
+// `home_carousel_auto_batch.status` value as the literal `"success"`, which
+// `home_carousel_auto_batch_status_check` (`pending`/`processing`/
+// `completed`/`failed`, `20260803090000_p1_initial_schema`, unchanged since)
+// has never allowed — every compute's own final UPDATE was itself a 23514,
+// rolling back the whole transaction (including the `homeCarouselServing`/
+// `homeCarouselAutoCandidate` rows the same call had just written). Every
+// other assertion in this file only checks `result.status` — the function's
+// own `{ status: "success" as const, ... }` *return value*, a separate,
+// unrelated API contract that was never the bug and is untouched by this
+// fix — so this is the one test in the suite that actually reads the
+// persisted `home_carousel_auto_batch` row back out of the fake and checks
+// its `status` column landed on a CHECK-valid value.
+describe("computeHomeCarouselInTx home_carousel_auto_batch.status schema-contract-drift fix", () => {
+  it("persists the terminal batch row with status 'completed' (a CAROUSEL_BATCH_STATUSES member), not the stale CHECK-violating 'success' literal", async () => {
+    const db = new FakeHomeCarouselDb();
+    seedSixOldArticles(db);
+    const result = await computeHomeCarouselInTx(db.asTransactionClient(), { locale: "en", source: "manual", now: NOW });
+    expect(result.status).toBe("success"); // computeHomeCarouselInTx's own return-value contract — unchanged, unrelated to the DB column below.
+    const [batch] = [...db.batches.values()];
+    expect(batch.status).toBe("completed");
+    expect(batch.finishedAt).toEqual(NOW);
+  });
+});
+
 // C-25 review fix: the candidate query now applies `buildPublicListArticleWhere`
 // (same "list surface" fragment as `src/lib/site/home-carousel-service.ts`'s
 // `fallbackRows`) so a `hidden`/`seo_only` Article can never be written into

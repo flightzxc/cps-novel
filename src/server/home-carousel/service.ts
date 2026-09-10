@@ -6,6 +6,7 @@ import { requireFreshAdminServiceMutation, type AdminServiceAuthorization } from
 import { enqueueScheduledTask, type ScheduleDefinition, type ScheduledTaskInput, type TaskHandlerRegistry } from "@/lib/tasks";
 import { buildPublicListArticleWhere } from "@/server/publication/visibility";
 import { queryActiveLocales } from "@/lib/locale/active-locales";
+import type { CarouselBatchStatus, CarouselSource } from "@/domain/database-statuses";
 
 /** CPS v8.3.6 config/compute/merge parity, adapted to Novel/PostgreSQL. */
 export const HOME_CAROUSEL_TASK_TYPE = "home_carousel.compute.v1";
@@ -100,7 +101,7 @@ export async function computeHomeCarouselInTx(tx: CarouselTx, input: { locale: s
     batch = await tx.homeCarouselAutoBatch.create({ data: {
       uniqueKey, runDate: new Date(`${businessDate}T00:00:00.000Z`), triggerSource: input.source,
       localeScope: input.locale, algorithmVersion: "novel-recency-v1", params: config,
-      status: "pending", startedAt: now, createdBy: input.actorId ?? null,
+      status: "pending" satisfies CarouselBatchStatus, startedAt: now, createdBy: input.actorId ?? null,
     } });
   } catch (error) {
     if (input.source === "cron" && error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") return { status: "skipped_duplicate" as const };
@@ -147,15 +148,29 @@ export async function computeHomeCarouselInTx(tx: CarouselTx, input: { locale: s
   const newest = pool.filter((row) => (row.publishedAt?.valueOf() ?? 0) >= cutoff).slice(0, newDramaLimit);
   const selectedIds = new Set(newest.map((row) => row.novelId));
   const selected = [...newest, ...pool.filter((row) => !selectedIds.has(row.novelId)).slice(0, Math.max(config.slotCount - newest.length, 0))];
-  if (selected.length > 0) await tx.homeCarouselAutoCandidate.createMany({ data: selected.map((row, index) => ({ batchId: batch.id, locale: input.locale, novelId: row.novelId, articleId: row.id, source: index < newest.length ? "new_novel" : "recency", rank: index + 1, reason: { updatedAt: row.updatedAt.toISOString() } })) });
+  if (selected.length > 0) await tx.homeCarouselAutoCandidate.createMany({ data: selected.map((row, index) => ({ batchId: batch.id, locale: input.locale, novelId: row.novelId, articleId: row.id, source: (index < newest.length ? "new_novel" : "recency") satisfies CarouselSource, rank: index + 1, reason: { updatedAt: row.updatedAt.toISOString() } })) });
   const manual = await tx.homeCarouselManualSlot.findMany({ where: { locale: input.locale, enabled: true, deletedAt: null, OR: [{ startsAt: null }, { startsAt: { lte: now } }], AND: [{ OR: [{ endsAt: null }, { endsAt: { gt: now } }] }] }, orderBy: { position: "asc" }, take: config.slotCount });
-  const merged: Array<{ novelId: string; articleId: string; source: string; manualSlotId: string | null; batchId: string | null }> = [];
+  const merged: Array<{ novelId: string; articleId: string; source: CarouselSource; manualSlotId: string | null; batchId: string | null }> = [];
   const seen = new Set<string>();
-  for (const row of manual) if (!seen.has(row.novelId)) { seen.add(row.novelId); merged.push({ novelId: row.novelId, articleId: row.articleId, source: "manual", manualSlotId: row.id, batchId: null }); }
-  for (const row of selected) if (merged.length < config.slotCount && !seen.has(row.novelId)) { seen.add(row.novelId); merged.push({ novelId: row.novelId, articleId: row.id, source: newest.some((item) => item.id === row.id) ? "new_novel" : "recency", manualSlotId: null, batchId: batch.id }); }
+  for (const row of manual) if (!seen.has(row.novelId)) { seen.add(row.novelId); merged.push({ novelId: row.novelId, articleId: row.articleId, source: "manual" satisfies CarouselSource, manualSlotId: row.id, batchId: null }); }
+  for (const row of selected) if (merged.length < config.slotCount && !seen.has(row.novelId)) { seen.add(row.novelId); merged.push({ novelId: row.novelId, articleId: row.id, source: (newest.some((item) => item.id === row.id) ? "new_novel" : "recency") satisfies CarouselSource, manualSlotId: null, batchId: batch.id }); }
   await tx.homeCarouselServing.deleteMany({ where: { locale: input.locale } });
   if (merged.length > 0) await tx.homeCarouselServing.createMany({ data: merged.map((row, index) => ({ ...row, locale: input.locale, position: index + 1, mergedAt: now })) });
-  await tx.homeCarouselAutoBatch.update({ where: { id: batch.id }, data: { status: "success", finishedAt: now } });
+  // Schema-contract-drift fix (sibling to `20260912100000_carousel_serving_source_check_fix`):
+  // this used to write `status: "success"`, a value `home_carousel_auto_batch_status_check`
+  // (`pending`/`processing`/`completed`/`failed` — P1 initial schema, unchanged since)
+  // has never allowed. `computeHomeCarouselInTx` builds one multi-statement transaction, so
+  // this single invalid UPDATE's 23514 rolled back everything the same transaction had
+  // already written above (`homeCarouselServing.createMany`, `homeCarouselAutoCandidate.createMany`,
+  // the batch row itself) — the exact same "one bad write poisons the whole compute" shape as the
+  // `serving.source` bug the sibling migration fixed, just on the batch row's own terminal write
+  // instead of a row it produces. `"completed"` is `CAROUSEL_BATCH_STATUSES`' terminal-success
+  // member; there is no separate `processing` transition write in this function (the batch goes
+  // straight from `pending` to its terminal status within the same transaction) and no `failed`
+  // write path either (an error thrown before this line aborts the transaction instead of
+  // persisting a `failed` batch row — see the `catch` block above, which only handles the
+  // `uniqueKey` P2002 case and rethrows everything else unpersisted).
+  await tx.homeCarouselAutoBatch.update({ where: { id: batch.id }, data: { status: "completed" satisfies CarouselBatchStatus, finishedAt: now } });
   await tx.homeCarouselChangeLog.create({ data: { locale: input.locale, action: "serving.compute", actorType: input.source === "cron" ? "system" : "admin", actorId: input.actorId ?? null, afterState: { batchId: batch.id, count: merged.length } } });
   return { status: "success" as const, batchId: batch.id, count: merged.length };
 }

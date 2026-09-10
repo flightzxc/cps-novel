@@ -743,6 +743,18 @@ CHECK 只放行 `manual`/`automatic` 两桶，但 `src/server/home-carousel/serv
 | --- | --- | --- | --- | --- | --- | --- |
 | **N-10（schema-contract-drift 修复，核对 CPS 基线）** `home_carousel_serving.source` 的允许值集 — 本仓 `CAROUSEL_SOURCES`（`src/domain/database-statuses.ts`） | `src/lib/home-carousel-merge.ts`（`134`,`154`）；`prisma/schema.prisma`（`808-826`）；`prisma/migrations/20260705090000_v770_home_carousel_pr1b/migration.sql` | `134`,`154`；`808-826`；`CREATE TABLE "home_carousel_serving"` 区块 | `3a76877af27c6247ad94be946b44e9cc5c1cb9ce` | `PG_REIMPLEMENT` | 核对结论：CPS 的 `home_carousel_serving.source` 是 SQLite `TEXT NOT NULL`，**没有任何 CHECK 约束**；`mergeCarouselServingInTx` 直接把 `source: "manual"`（134 行）或 `source: candidate.source`（154 行，取值 `new_drama\|recency\|revenue`）写进该列——CPS 自己的 serving 表本就承载细分来源值，不存在"serving 只分 manual/automatic 两桶、细分值留给候选表"的先例。本仓 `20260803090000_p1_initial_schema` 却给 `home_carousel_serving.source` 装了 PostgreSQL CHECK `IN ('manual','automatic')`，与本仓 `computeHomeCarouselInTx` 从落地起就一直在写的 `manual\|new_novel\|recency` 三值不符（`automatic` 从未被写入过）——按此核对结论选择"放宽 CHECK 对齐 CPS 语义"而非"收窄代码写入去凑 CHECK"：`20260912100000_carousel_serving_source_check_fix` 把 CHECK 改为 `IN ('manual','new_novel','recency')`；不搬 CPS 的 `revenue` 值——Novel V1 无收入评分候选分支（`revenueEnabled` 恒 `false`，见上表 Home carousel 行/N-3）。`home_carousel_auto_candidate.source`（CPS 与本仓均无 CHECK）未受影响 | Claude |
 
+### 2026-09-11 · `home_carousel_auto_batch.status` schema-contract-drift 修复（X8 轮 2a 实证，`fix/carousel-batch-status-check`）
+
+`20260803090000_p1_initial_schema:1246` 装的 `home_carousel_auto_batch_status_check`
+CHECK 只放行 `pending`/`processing`/`completed`/`failed` 四态（自 P1 建库未改），但
+`src/server/home-carousel/service.ts` 的 `computeHomeCarouselInTx`（原 158 行）把
+终态写成字面量 `"success"`——同类漂移的第二例（第一例是上一条 N-10 的
+`home_carousel_serving.source`），同一份数据库契约层漂移，不是搬运偏差本身。
+
+| symbol | source_file | source_lines | baseline_commit | port_kind | changed_what | owner |
+| --- | --- | --- | --- | --- | --- | --- |
+| **N-11（schema-contract-drift 修复，核对 CPS 基线）** `home_carousel_auto_batch.status` 的允许值集 — 本仓 `CAROUSEL_BATCH_STATUSES`（`src/domain/database-statuses.ts`，本轮补 `CarouselBatchStatus`/`CarouselSource` 两个 `ValueOf` 类型，此前有值集常量却没有对应类型，四表里唯独 `home_carousel_serving`/`home_carousel_auto_candidate` 的 `source` 有） | `src/lib/home-carousel-compute.ts`（`228`,`272`,`284`）；`prisma/migrations/20260705090000_v770_home_carousel_pr1b/migration.sql`（`33-43` `CREATE TABLE "home_carousel_auto_batch"`） | `228`,`272`,`284`；`33-43` | `3a76877af27c6247ad94be946b44e9cc5c1cb9ce` | `ADAPT`（与 N-10 决策方向相反，非同款 `PG_REIMPLEMENT`） | 核对结论：CPS 的 `home_carousel_auto_batch.status` 也是 SQLite `TEXT NOT NULL DEFAULT 'pending'`，**没有任何 CHECK 约束**；`homeCarouselAutoBatch.update` 终态直接写 `status: "success"`（272 行，成功路径）/`status: "failed"`（284 行，失败路径，本仓当前无对应持久化失败路径——见 `database-governance.md` 本行 changed_what 说明）。若照搬 N-10 的处理方式（"CPS 无 CHECK 就放宽本仓 CHECK 对齐 CPS 字面量"），这里就该把 CHECK 改成放行 `success`。但本仓 `home_carousel_auto_batch.status` 四态（`pending`/`processing`/`completed`/`failed`）是 P1 数据字典冻结口径（`reference_data_dictionary_location.md`），与 `home_carousel_serving.source`（P1 落地后才发现"CHECK 从未被任何代码路径正确使用过、纯属发明"）不是同一种情形——四态本身在 P1 落地时就是深思熟虑的枚举（`pending→processing→completed\|failed` 状态机形状，`carousel_batch_status_created_idx` 索引也按这四态设计），只是 `computeHomeCarouselInTx` 写终态时手误/沿用了别处 `"success"` 字面量的习惯，从未真正走过 CHECK 校验（此前每次都在同一 UPDATE 里 23514、整个事务回滚）。故**不放宽 CHECK**，选择四态里语义最贴近 CPS `"success"` 的 `"completed"`（终态、成功）——这是本仓自己在"CHECK 已冻结"前提下做的选择，不是照搬 CPS 的字面量，故标 `ADAPT` 而非 `PG_REIMPLEMENT`。CPS 的 `"failed"` 路径未被搬运：本仓 `computeHomeCarouselInTx` 里 `homeCarouselAutoBatch.create` 之后的任何抛错都直接向上抛、不落盘 `failed` 状态的批次行（`catch` 块只处理 `create` 自身的 `P2002` 幂等冲突），维持既有行为不变，不在本轮范围内新增 | Claude |
+
 ## 使用说明
 
 - `symbol`：被搬运的具体符号名（函数名/类型名/表名/字段名/组件名等），一行一个符号，不得用文件级粗粒度笼统登记；
