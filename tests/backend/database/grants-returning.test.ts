@@ -605,3 +605,301 @@ describe("grants.sql per-method invariant (web_app): create/upsert need INSERT, 
     expect(webAppWriteMethods.get("site_setting")?.has("upsert"), "site_setting should have no remaining .upsert( call site anywhere in web_app's reachable code").toBe(false);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Owner-approved 窄范围修复 lane (2026-09-11, "施工工单_Withdraw-UI-Guard-与-
+// Takedown-Grants"): statement-level bulk-method invariant, both processes.
+// `createMany`/`updateMany`/`deleteMany` are exactly the three method names
+// `WRITE_METHODS`/`detectWriteTables` above and `REQUIRED_GRANT_FOR_METHOD`/
+// `detectWriteMethodsByTable` just above this block both deliberately never
+// match (their regexes require the bare method name immediately followed by
+// `\s*\(`, and `createMany(`/`updateMany(`/`deleteMany(` all have the extra
+// "Many" text in between) -- because none of the three carry an implicit
+// RETURNING clause (the driver's `rowCount` answers `{count}` directly, see
+// this file's header comment), so neither guard above's SELECT/verb-specific
+// privilege check has anything to say about them. That is a real, separate
+// risk layer PostgreSQL still enforces: the base UPDATE/INSERT/DELETE
+// *statement* privilege, independent of RETURNING.
+//
+// `applyNovelRightsTransition`'s takedown branch
+// (`src/server/publish-gate/service.ts:763-786`), inside the same
+// `$transaction` that flips Novel/Article status, chunks every
+// non-withdrawn `NovelChapter` and per chunk runs
+// `tx.novelChapterContent.deleteMany({ where: { novelChapterId: { in:
+// idChunk } } })` followed by `tx.novelChapter.updateMany({ where: { id: {
+// in: idChunk } }, data: { status: "withdrawn" } })` -- reached only via
+// `web`'s `takedownNovelAction -> takedownNovel -> applyNovelRightsTransition`
+// (`grep -rn "takedownNovel|applyNovelRightsTransition" src worker scheduler`
+// returns zero worker/scheduler references), i.e. `web_app`'s shared
+// PrismaClient. `web_app` had SELECT on both tables but no UPDATE on
+// `novel_chapter` and no DELETE on `novel_chapter_content` (the latter was
+// `worker_app`-only) -- Owner-reported UI symptom was a permanently
+// "处理中" withdraw dialog; the underlying backend symptom, confirmed
+// read-only against X8 uat before the `infra/postgres/grants.sql` fix
+// above, was `42501 permission denied for table novel_chapter` on the first
+// chunk of any takedown of a published Novel with chapters. This block is
+// the general, self-updating guard against the same shape recurring
+// anywhere in either process's real bulk-write surface -- not a one-off pin
+// on these two tables (the mutation this block is built to catch, per this
+// lane's own work order, is exactly "add a `.deleteMany(` in web-reachable
+// code against a table with no DELETE grant").
+// ---------------------------------------------------------------------------
+
+type BulkWriteMethod = "createMany" | "updateMany" | "deleteMany";
+
+/** `createMany` needs INSERT, `updateMany` needs UPDATE, `deleteMany` needs DELETE -- the base statement privilege each compiles to, independent of any RETURNING clause (none of the three ever carry one). */
+const REQUIRED_GRANT_FOR_BULK_METHOD: Record<BulkWriteMethod, keyof TableAccess> = {
+  createMany: "insert",
+  updateMany: "update",
+  deleteMany: "delete",
+};
+
+/**
+ * Same accessor/table map and file set as `detectWriteMethodsByTable` above,
+ * but scanning for the three bulk method names that function's own regex
+ * (and `detectWriteTables`'s) structurally excludes -- see this block's
+ * header comment for why. Deliberately its own function rather than a
+ * parameterized reuse of `detectWriteMethodsByTable`: that function's
+ * `WebAppWriteMethod` type and this one's `BulkWriteMethod` type are
+ * disjoint on purpose (a `.create(` and a `.createMany(` are different SQL
+ * shapes requiring the same privilege for different reasons -- INSERT
+ * either way, but one carries RETURNING and one does not), and keeping the
+ * two scans separate keeps each one's regex simple and easy to audit against
+ * its own header comment.
+ */
+function detectBulkWriteMethodsByTable(files: Set<string>): Map<string, Map<BulkWriteMethod, Set<string>>> {
+  const result = new Map<string, Map<BulkWriteMethod, Set<string>>>();
+  const methods: BulkWriteMethod[] = ["createMany", "updateMany", "deleteMany"];
+  for (const file of files) {
+    const source = readFileSync(file, "utf8");
+    for (const [accessor, table] of modelTableMap) {
+      for (const method of methods) {
+        const re = new RegExp(`\\b${accessor}\\s*\\.\\s*${method}\\s*\\(`);
+        if (!re.test(source)) continue;
+        if (!result.has(table)) result.set(table, new Map());
+        const byMethod = result.get(table)!;
+        if (!byMethod.has(method)) byMethod.set(method, new Set());
+        byMethod.get(method)!.add(file);
+      }
+    }
+  }
+  return result;
+}
+
+// Reuses `workerFiles`/`webAppFiles` (the same BFS results the two guards
+// above already computed) -- both processes, per this lane's own work order
+// ("按既有 BFS import 图对 worker_app 与 web_app 两进程判定").
+const workerBulkWriteMethods = detectBulkWriteMethodsByTable(workerFiles);
+const webAppBulkWriteMethods = detectBulkWriteMethodsByTable(webAppFiles);
+
+/**
+ * Registered false positives -- the bulk-method scan's own version of
+ * `WEB_APP_WRITE_EXEMPTIONS`/`WEB_APP_METHOD_EXEMPTIONS` above, same
+ * "declare with a reason, verify it stays live" discipline, but keyed by
+ * (table, bulkMethod) because a table can be a false positive for one bulk
+ * method and a genuine hit for another (not the case for any entry below
+ * today, but the shape should not assume otherwise). All four entries here
+ * share one root cause already established by `WEB_APP_WRITE_EXEMPTIONS`'s
+ * `home_carousel_auto_batch` entry above: every one of these bulk calls
+ * lives inside `computeHomeCarouselInTx` (`src/server/home-carousel/
+ * service.ts:81-199`), reachable ONLY from `worker/handlers/
+ * home-carousel.ts`'s `createHomeCarouselHandler` -- independently
+ * re-verified for this lane (not assumed from the earlier exemption):
+ * `grep -rl computeHomeCarouselInTx src/ worker/ scheduler/` returns three
+ * files -- `service.ts` (its own definition), `worker/handlers/
+ * home-carousel.ts` (the one real call site), and `src/domain/
+ * database-statuses.ts` (mentions the function only in doc-comment prose at
+ * lines 94 and 349, confirmed by `grep -n computeHomeCarouselInTx
+ * src/domain/database-statuses.ts` -- neither line calls it). That last file
+ * is exactly why `home_carousel_serving`/`home_carousel_auto_candidate` are
+ * flagged as web_app-reachable at all: it is walked by the same BFS (it is
+ * `@/domain/database-statuses`, imported by web_app-reachable files) and
+ * its prose happens to name the two tables' bulk methods in passing.
+ */
+const WEB_APP_BULK_METHOD_EXEMPTIONS: ReadonlyArray<{ readonly table: string; readonly method: BulkWriteMethod; readonly reason: string }> = [
+  {
+    table: "home_carousel_serving",
+    method: "createMany",
+    reason:
+      "tx.homeCarouselServing.createMany(...) (service.ts:193) lives inside computeHomeCarouselInTx, worker-only " +
+      "reachable (see this block's header comment for the independently-reverified grep). web_app correctly holds no " +
+      "INSERT on home_carousel_serving (grants.sql grants it worker_app-only INSERT/UPDATE and, separately, DELETE).",
+  },
+  {
+    table: "home_carousel_serving",
+    method: "deleteMany",
+    reason:
+      "tx.homeCarouselServing.deleteMany(...) (service.ts:192) -- same computeHomeCarouselInTx call, same table, " +
+      "same reasoning as the createMany entry directly above.",
+  },
+  {
+    table: "home_carousel_auto_batch",
+    method: "createMany",
+    reason:
+      "tx.homeCarouselAutoBatch.createMany(...) (service.ts:136) -- same computeHomeCarouselInTx root cause as this " +
+      "table's existing WEB_APP_WRITE_EXEMPTIONS entry above (that entry's own text notes the table's `.create()` " +
+      "call became `.createMany()` in an earlier round, which is exactly why this block's bulk-specific scan flags " +
+      "it again under a different method name than that entry covers).",
+  },
+  {
+    table: "home_carousel_auto_candidate",
+    method: "createMany",
+    reason:
+      "tx.homeCarouselAutoCandidate.createMany(...) (service.ts:186) -- same computeHomeCarouselInTx call, same " +
+      "root cause as the three entries above; this table has no other write call site anywhere in this repo.",
+  },
+];
+const webAppBulkMethodExempt = new Set(WEB_APP_BULK_METHOD_EXEMPTIONS.map((e) => `${e.table}::${e.method}`));
+
+/**
+ * `worker_app`'s own false-positive registry for this block -- first needed
+ * here; the two RETURNING-era `worker_app` guards above (`describe` block at
+ * the top of this file) had zero false positives at the time they were
+ * written, so no such list existed for that role before this lane.
+ */
+const WORKER_APP_BULK_METHOD_EXEMPTIONS: ReadonlyArray<{ readonly table: string; readonly method: BulkWriteMethod; readonly reason: string }> = [
+  {
+    table: "site_setting",
+    method: "updateMany",
+    reason:
+      "worker/handlers/indexnow-delivery.ts imports only getIndexNowDeliveryConfig and isIndexNowConfigured from " +
+      "src/server/site-settings/service.ts (grep -n \"site-settings/service\" worker/handlers/indexnow-delivery.ts " +
+      "confirms exactly those two named imports, nothing else) -- never updateAdminSiteSetting, whose own " +
+      "tx.siteSetting.updateMany(...) (service.ts:605) is this table's only bulk write call site in the whole repo. " +
+      "grep -rn updateAdminSiteSetting src confirms its only caller is src/app/api/admin/site-settings/route.ts " +
+      "(web_app). Same shared-file BFS false-positive class as this file's other exemptions above -- a file-level " +
+      "walk cannot see that worker only imports two of this file's many exports.",
+  },
+];
+const workerBulkMethodExempt = new Set(WORKER_APP_BULK_METHOD_EXEMPTIONS.map((e) => `${e.table}::${e.method}`));
+
+/**
+ * Genuine, independently-verified, OUT-OF-SCOPE gaps this block's
+ * construction newly surfaced -- deliberately NOT filed as false positives
+ * above (the call sites really are worker_app-reachable and grants.sql
+ * really grants nothing matching; masking that as a "false positive" would
+ * misrepresent a real risk as verified-safe). Both predate and are
+ * unrelated to this lane's own novel-takedown fix, and this lane's own
+ * Owner-approved scope is explicit ("仅收 confirmWithdraw/
+ * runRightsTransition ... 以及已实证的 takedown grants 与 *Many 守卫；不要扩成
+ * 全局 stale Server Action 基础设施改造") -- fixing either would need its own
+ * column-level verification and read-only repro against a real gap this
+ * lane did not set out to find. Reported via spawn_task instead of being
+ * silently left for a future scan to rediscover from scratch; each entry's
+ * liveness is still self-checked below (same discipline as the false-
+ * positive registries) so this list cannot silently mask a fix that already
+ * landed, nor quietly expand to cover an unrelated new gap under the same
+ * excuse.
+ */
+const WORKER_APP_BULK_METHOD_KNOWN_GAPS: ReadonlyArray<{ readonly table: string; readonly method: BulkWriteMethod; readonly reason: string }> = [
+  {
+    table: "novel_canonical_tag",
+    method: "deleteMany",
+    reason:
+      "worker/handlers/novel-tag-backfill.ts imports replaceAutoTagSnapshotInTransaction " +
+      "(src/server/tagging/service.ts), whose own tx.novelCanonicalTag.deleteMany({ where: { novelId, " +
+      "source: \"auto\" } }) (service.ts:425) worker_app has never held DELETE for -- only INSERT/UPDATE " +
+      "(grants.sql's worker_app INSERT,UPDATE list) and SELECT. web_app's own two deleteMany call sites on this " +
+      "table (service.ts:302,352, source:\"manual\", inside replaceManualTagSnapshot/exitManualTagMode) are " +
+      "unaffected -- web_app already holds table-level DELETE there. Pre-existing, unrelated to novel takedown.",
+  },
+  {
+    table: "indexnow_outbox_attempt",
+    method: "updateMany",
+    reason:
+      "worker/handlers/indexnow-delivery.ts's own indexNowOutboxAttempt.updateMany(...) (line 210) -- worker_app " +
+      "has only ever held INSERT on this table (grants.sql's worker_app INSERT-only list; the X8 轮 2c RETURNING " +
+      "audit documented in this file's header comment and database-governance.md only added SELECT alongside it, " +
+      "never checked this separate bulk-method statement-privilege layer because that guard did not exist yet). " +
+      "Pre-existing, unrelated to novel takedown.",
+  },
+];
+const workerBulkKnownGaps = new Set(WORKER_APP_BULK_METHOD_KNOWN_GAPS.map((e) => `${e.table}::${e.method}`));
+
+describe("grants.sql bulk-method invariant (createMany/updateMany/deleteMany, worker_app + web_app): no implicit RETURNING, but PostgreSQL still enforces the base INSERT/UPDATE/DELETE statement privilege", () => {
+  it("both processes' real (imported) bulk-write surface is non-trivial -- sanity check that the scan actually found something, on top of the non-bulk canaries above", () => {
+    // novel_chapter::updateMany (worker, via src/lib/preview/changdu-materialization.ts)
+    // and article_novel_rebind_batch::updateMany (web_app, via
+    // src/server/article-rebind/batch.ts) are long-standing, already-granted
+    // writes untouched by this lane -- cheap canaries so a silently-broken
+    // scan (e.g. a tsconfig alias change) can't make every assertion below
+    // pass vacuously.
+    expect(workerBulkWriteMethods.get("novel_chapter")?.get("updateMany")?.size ?? 0).toBeGreaterThan(0);
+    expect(webAppBulkWriteMethods.get("article_novel_rebind_batch")?.get("updateMany")?.size ?? 0).toBeGreaterThan(0);
+  });
+
+  it("worker_app holds the exact grant every non-exempt, non-deferred (table, bulkMethod) pair its real code calls actually needs", () => {
+    for (const [table, byMethod] of workerBulkWriteMethods) {
+      for (const [method, evidence] of byMethod) {
+        const key = `${table}::${method}`;
+        if (workerBulkMethodExempt.has(key) || workerBulkKnownGaps.has(key)) continue;
+        const requiredPriv = REQUIRED_GRANT_FOR_BULK_METHOD[method];
+        const entry = grantsByRole.get("worker_app")?.get(table);
+        expect(
+          entry?.[requiredPriv] === true,
+          `worker_app's reachable code calls .${method}( on "${table}" (e.g. ${[...evidence][0]}) but infra/postgres/grants.sql grants worker_app no ${requiredPriv.toUpperCase()} there -- PostgreSQL will reject this exact statement with "permission denied for table ${table}" even though it carries no RETURNING clause`,
+        ).toBe(true);
+      }
+    }
+  });
+
+  it("web_app holds the exact grant every non-exempt, non-deferred (table, bulkMethod) pair its real code calls actually needs", () => {
+    for (const [table, byMethod] of webAppBulkWriteMethods) {
+      for (const [method, evidence] of byMethod) {
+        const key = `${table}::${method}`;
+        if (webAppBulkMethodExempt.has(key)) continue;
+        const requiredPriv = REQUIRED_GRANT_FOR_BULK_METHOD[method];
+        const entry = grantsByRole.get("web_app")?.get(table);
+        expect(
+          entry?.[requiredPriv] === true,
+          `web_app's reachable code calls .${method}( on "${table}" (e.g. ${[...evidence][0]}) but infra/postgres/grants.sql grants web_app no ${requiredPriv.toUpperCase()} there -- PostgreSQL will reject this exact statement with "permission denied for table ${table}" even though it carries no RETURNING clause`,
+        ).toBe(true);
+      }
+    }
+  });
+
+  it("locks in this lane's own fix: web_app now holds column-scoped UPDATE(status, updated_at) on novel_chapter and table-level DELETE on novel_chapter_content, and nothing broader", () => {
+    expect(grantsByRole.get("web_app")?.get("novel_chapter")?.update, "web_app is expected to now have UPDATE on novel_chapter").toBe(true);
+    expect(grantsByRole.get("web_app")?.get("novel_chapter")?.insert, "web_app should not have INSERT on novel_chapter -- chapters are worker-materialized, takedown never creates one").toBe(false);
+    expect(grantsByRole.get("web_app")?.get("novel_chapter")?.delete, "web_app should not have DELETE on novel_chapter -- takedown withdraws the row via UPDATE, it never deletes it").toBe(false);
+    expect(grants).toMatch(/GRANT UPDATE \(status, updated_at\) ON novel_chapter TO web_app;/);
+
+    expect(grantsByRole.get("web_app")?.get("novel_chapter_content")?.delete, "web_app is expected to now have DELETE on novel_chapter_content").toBe(true);
+    expect(grantsByRole.get("web_app")?.get("novel_chapter_content")?.insert, "web_app should not have INSERT on novel_chapter_content -- content is worker-materialized, takedown never creates one").toBe(false);
+    expect(grantsByRole.get("web_app")?.get("novel_chapter_content")?.update, "web_app should not have UPDATE on novel_chapter_content -- takedown only deletes rows, it never edits body/metadata in place").toBe(false);
+    expect(grants).toMatch(/GRANT DELETE ON TABLE novel_chapter_content TO web_app;/);
+
+    // worker_app's pre-existing DELETE on novel_chapter_content (PR6 lane E)
+    // must stay untouched by this lane.
+    expect(grantsByRole.get("worker_app")?.get("novel_chapter_content")?.delete, "this lane must not touch worker_app's existing DELETE on novel_chapter_content").toBe(true);
+  });
+
+  it("confirms applyNovelRightsTransition's takedown call sites are still detected by the scan (novel_chapter::updateMany and novel_chapter_content::deleteMany, both via src/server/publish-gate/service.ts, web_app-reachable)", () => {
+    expect(webAppBulkWriteMethods.get("novel_chapter")?.has("updateMany"), "expected applyNovelRightsTransition's tx.novelChapter.updateMany(...) to be reachable from src/app/(admin)/ + src/app/api/admin/").toBe(true);
+    expect(webAppBulkWriteMethods.get("novel_chapter_content")?.has("deleteMany"), "expected applyNovelRightsTransition's tx.novelChapterContent.deleteMany(...) to be reachable from src/app/(admin)/ + src/app/api/admin/").toBe(true);
+  });
+
+  it("every declared web_app bulk-method exemption is live and not masking a real gap", () => {
+    for (const { table, method, reason } of WEB_APP_BULK_METHOD_EXEMPTIONS) {
+      expect(webAppBulkWriteMethods.get(table)?.has(method), `exemption for "${table}"::"${method}" is declared but the scan no longer flags it -- stale, should be removed (reason on file: ${reason})`).toBe(true);
+      const requiredPriv = REQUIRED_GRANT_FOR_BULK_METHOD[method];
+      expect(grantsByRole.get("web_app")?.get(table)?.[requiredPriv] === true, `exemption for "${table}"::"${method}" assumes web_app has no ${requiredPriv.toUpperCase()} there, but grants.sql now grants one -- either promote it to a real assertion or this is a genuine new gap (reason on file: ${reason})`).toBe(false);
+    }
+  });
+
+  it("every declared worker_app bulk-method exemption is live and not masking a real gap", () => {
+    for (const { table, method, reason } of WORKER_APP_BULK_METHOD_EXEMPTIONS) {
+      expect(workerBulkWriteMethods.get(table)?.has(method), `exemption for "${table}"::"${method}" is declared but the scan no longer flags it -- stale, should be removed (reason on file: ${reason})`).toBe(true);
+      const requiredPriv = REQUIRED_GRANT_FOR_BULK_METHOD[method];
+      expect(grantsByRole.get("worker_app")?.get(table)?.[requiredPriv] === true, `exemption for "${table}"::"${method}" assumes worker_app has no ${requiredPriv.toUpperCase()} there, but grants.sql now grants one -- either promote it to a real assertion or this is a genuine new gap (reason on file: ${reason})`).toBe(false);
+    }
+  });
+
+  it("every declared worker_app deferred (out-of-scope, spawn_task-tracked) gap is still live -- not stale (already fixed elsewhere) and not silently widened", () => {
+    for (const { table, method, reason } of WORKER_APP_BULK_METHOD_KNOWN_GAPS) {
+      expect(workerBulkWriteMethods.get(table)?.has(method), `deferred gap for "${table}"::"${method}" is declared but the scan no longer flags it -- either already fixed (remove this entry) or the scan regressed (reason on file: ${reason})`).toBe(true);
+      const requiredPriv = REQUIRED_GRANT_FOR_BULK_METHOD[method];
+      expect(grantsByRole.get("worker_app")?.get(table)?.[requiredPriv] === true, `deferred gap for "${table}"::"${method}" is declared unresolved, but grants.sql now grants ${requiredPriv.toUpperCase()} there -- this entry is stale, remove it and let the main loop assert it directly (reason on file: ${reason})`).toBe(false);
+    }
+  });
+});

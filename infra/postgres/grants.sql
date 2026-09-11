@@ -278,6 +278,32 @@ GRANT UPDATE ON TABLE article_novel_rebind_batch, article_novel_rebind_batch_ite
 TO web_app;
 GRANT DELETE ON TABLE article_novel_rebind_preview TO web_app;
 
+-- Novel takedown (Owner-approved 窄范围修复 lane, 2026-09-11):
+-- `applyNovelRightsTransition`'s takedown branch (`src/server/publish-gate/
+-- service.ts:763-786`), inside the same `$transaction` that flips
+-- Novel/Article status, chunks every non-withdrawn `NovelChapter` and per
+-- chunk runs `tx.novelChapterContent.deleteMany({ where: { novelChapterId:
+-- { in: idChunk } } })` followed by `tx.novelChapter.updateMany({ where: {
+-- id: { in: idChunk } }, data: { status: "withdrawn" } })`. The schema's
+-- `NovelChapter.updatedAt` carries `@updatedAt`, so that `updateMany`'s
+-- UPDATE statement also touches `updated_at`, not just `status`.
+-- `web_app` had neither grant: `novel_chapter` only had the table-level
+-- SELECT above (no UPDATE at all), and `novel_chapter_content`'s only
+-- `web_app` grant anywhere in this file was the SELECT a few lines above
+-- (DELETE was `worker_app`-only, see below). `grep -rn
+-- "novelChapter\.\(create\|update\|upsert\|delete\)\|novelChapterContent\."
+-- src/app/(admin) src/app/api/admin src/server` confirms these are the only
+-- writes either table needs from `web_app` -- `deleteMany` then
+-- `updateMany({data:{status}})`, nothing else, no `createMany`. Without
+-- these two grants, takedown of any published Novel that has chapters fails
+-- on the very first chunk with `42501 permission denied`; this is not a
+-- RETURNING gap (bulk methods carry no implicit RETURNING -- see this file's
+-- and grants-returning.test.ts's header comments) but a missing base
+-- UPDATE/DELETE statement privilege, a layer the existing RETURNING guard
+-- never covered.
+GRANT UPDATE (status, updated_at) ON novel_chapter TO web_app;
+GRANT DELETE ON TABLE novel_chapter_content TO web_app;
+
 -- Worker can mutate business/task state. Append-only tables are INSERT-only;
 -- hard delete is limited to withdrawn chapter content.
 GRANT INSERT, UPDATE ON TABLE

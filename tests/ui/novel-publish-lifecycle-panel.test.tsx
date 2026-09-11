@@ -407,6 +407,85 @@ describe("takedown · 二次确认与版权/安全移除的警示文案", () => 
     });
     expect(actions.takedownNovelAction).not.toHaveBeenCalled();
   });
+
+  /**
+   * Fix (Owner-approved 窄范围修复 lane, 2026-09-11): `runRightsTransition`
+   * shares this exact bug shape with `../../articles/_components/
+   * article-list.tsx`'s `confirmWithdraw` (that component's own doc comment
+   * calls out this file by name as sharing the shape) — `await call` used
+   * to sit outside any try/catch while `onConfirm` fires this function as
+   * `void runRightsTransition(pending)`, so a *rejected* promise (e.g. a
+   * stale Next.js build throwing "Failed to find Server Action" after a
+   * deploy) skipped every line after the `await`, including
+   * `setBusy(false)`, leaving `pending={busy}` stuck `true` and the confirm
+   * button permanently reading "处理中…", disabled. Pins the fix: the button
+   * becomes clickable again with its normal confirmLabel ("确认移除"), a
+   * readable refresh-prompting notice appears, the dialog is deliberately
+   * left open (reason preserved, retry-able after a refresh), and no
+   * premature `router.refresh()` fires.
+   */
+  it("takedownNovelAction 因 stale bundle 而 reject（Failed to find Server Action）时，按钮恢复可点击并展示刷新提示，而不是永久卡在「处理中」", async () => {
+    actions.takedownNovelAction.mockRejectedValue(
+      new Error('Failed to find Server Action "abc123def456". This request might be from an older or newer deployment.'),
+    );
+    render(
+      <PublishLifecyclePanel
+        novelId="n1"
+        novelStatus="draft"
+        article={ARTICLE_DRAFT}
+        canPublish="granted"
+        canTakedown="granted"
+      />,
+    );
+    await act(async () => {
+      fireEvent.click(screen.getByTestId("publish-action-takedown"));
+    });
+    await waitFor(() => expect(dialog()?.open).toBe(true));
+    const input = screen.getByPlaceholderText("例如：版权方要求下线");
+    fireEvent.change(input, { target: { value: "版权方要求下线" } });
+    const confirmButton = () => screen.getByRole("button", { name: /^(确认移除|处理中…)$/ });
+    await act(async () => {
+      fireEvent.click(confirmButton());
+    });
+    await waitFor(() => expect((confirmButton() as HTMLButtonElement).disabled).toBe(false));
+    expect(confirmButton().textContent).toBe("确认移除");
+    expect(dialog()?.open).toBe(true);
+    await vi.waitFor(() =>
+      expect(screen.getByRole("status").textContent).toContain(
+        "版权/安全移除请求未完成（页面版本已过期），请刷新页面后重试",
+      ),
+    );
+    expect(routerRefresh).not.toHaveBeenCalled();
+  });
+
+  it("takedownNovelAction 因普通网络错误 reject 时，同样恢复可点击并展示（非 stale-bundle 措辞的）刷新提示", async () => {
+    actions.takedownNovelAction.mockRejectedValue(new Error("Network request failed"));
+    render(
+      <PublishLifecyclePanel
+        novelId="n1"
+        novelStatus="draft"
+        article={ARTICLE_DRAFT}
+        canPublish="granted"
+        canTakedown="granted"
+      />,
+    );
+    await act(async () => {
+      fireEvent.click(screen.getByTestId("publish-action-takedown"));
+    });
+    await waitFor(() => expect(dialog()?.open).toBe(true));
+    const input = screen.getByPlaceholderText("例如：版权方要求下线");
+    fireEvent.change(input, { target: { value: "版权方要求下线" } });
+    const confirmButton = () => screen.getByRole("button", { name: /^(确认移除|处理中…)$/ });
+    await act(async () => {
+      fireEvent.click(confirmButton());
+    });
+    await waitFor(() => expect((confirmButton() as HTMLButtonElement).disabled).toBe(false));
+    await vi.waitFor(() =>
+      expect(screen.getByRole("status").textContent).toContain(
+        "版权/安全移除请求未完成（网络或页面版本已过期），请刷新页面后重试",
+      ),
+    );
+  });
 });
 
 describe("restore · 警示明确说明恒落 draft", () => {

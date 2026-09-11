@@ -179,27 +179,60 @@ export function PublishLifecyclePanel({
     setBusy(true);
     setNotice(null);
     const requestId = crypto.randomUUID();
-    const call =
-      kind === "withdraw"
-        ? withdrawNovelAction({ novelId, requestId, reason: trimmed })
-        : kind === "takedown"
-          ? takedownNovelAction({ novelId, requestId, reason: trimmed })
-          : restoreNovelAction({ novelId, requestId, reason: trimmed });
-    const result = await call;
-    setBusy(false);
-    setPending(null);
-    setReason("");
     const label = describeRightsTransition(kind).actionLabel;
-    if (!result.ok) {
-      setNotice({ tone: "error", text: `${label}失败：${actionErrorMessage(result)}` });
-      return;
+    /**
+     * Fix (Owner-approved 窄范围修复 lane, 2026-09-11): `await call` used to
+     * sit outside any try/catch, while `onConfirm` below fires this function
+     * as `void runRightsTransition(pending)` — noted in this component's own
+     * doc comment as sharing this shape with `../../articles/_components/
+     * article-list.tsx`'s `confirmWithdraw`. A rejected promise (e.g. a
+     * stale Next.js build throwing "Failed to find Server Action" after a
+     * deploy) skipped every line after the `await`, including
+     * `setBusy(false)`, leaving the confirm dialog permanently stuck in its
+     * pending state. `finally` now always resets busy regardless of how the
+     * call settles; `catch` only decides what message to show. The dialog is
+     * deliberately left open on this path (unlike the settled-call branch
+     * below, which always closes it) so the operator can just press the
+     * confirm button again once they've refreshed, rather than losing the
+     * reason they typed.
+     */
+    try {
+      const call =
+        kind === "withdraw"
+          ? withdrawNovelAction({ novelId, requestId, reason: trimmed })
+          : kind === "takedown"
+            ? takedownNovelAction({ novelId, requestId, reason: trimmed })
+            : restoreNovelAction({ novelId, requestId, reason: trimmed });
+      const result = await call;
+      setPending(null);
+      setReason("");
+      if (!result.ok) {
+        setNotice({ tone: "error", text: `${label}失败：${actionErrorMessage(result)}` });
+        return;
+      }
+      setNotice({
+        tone: "ok",
+        text: `${describeRightsTransition(kind).successMessage}（受影响文章数：${result.data.affectedArticleIds.length}）`,
+      });
+      setPublishResult(null);
+      router.refresh();
+    } catch (error) {
+      // Same `String(error)` shape as `../../articles/_components/
+      // article-list.tsx`'s `confirmWithdraw` catch -- `tests/ui/
+      // admin-secret-boundary.test.tsx`'s "never reads a server-authored
+      // message off an error" guard bans a literal `error.message` source
+      // occurrence anywhere under the admin UI directories, and this branch
+      // only ever selects between two already-curated Chinese strings, never
+      // the raw text itself.
+      setNotice({
+        tone: "error",
+        text: String(error).includes("Failed to find Server Action")
+          ? `${label}请求未完成（页面版本已过期），请刷新页面后重试`
+          : `${label}请求未完成（网络或页面版本已过期），请刷新页面后重试`,
+      });
+    } finally {
+      setBusy(false);
     }
-    setNotice({
-      tone: "ok",
-      text: `${describeRightsTransition(kind).successMessage}（受影响文章数：${result.data.affectedArticleIds.length}）`,
-    });
-    setPublishResult(null);
-    router.refresh();
   }
 
   const copy = pending ? describeRightsTransition(pending) : null;

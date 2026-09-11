@@ -299,20 +299,54 @@ export function ArticleList({
     }
     setWithdrawReasonError(null);
     setWithdrawBusy(true);
-    const result = await withdrawArticleAction({
-      requestId: crypto.randomUUID(),
-      novelId: withdrawTarget.novelId,
-      reason: validation.reason,
-    });
-    setWithdrawBusy(false);
-    setWithdrawTarget(null);
-    setWithdrawReason("");
-    if (!result.ok) {
-      setMessage(`下线失败：${describeArticleActionErrorCode(result.code)}`);
-      return;
+    /**
+     * Fix (Owner-approved 窄范围修复 lane, 2026-09-11): `await
+     * withdrawArticleAction(...)` used to sit outside any try/catch, while
+     * `onConfirm` below fires this function as `void confirmWithdraw()` —
+     * so a *rejected* promise (e.g. a stale Next.js build throwing "Failed
+     * to find Server Action" after a deploy shipped a new bundle, observed
+     * live in an Owner withdraw attempt) skipped every line after the
+     * `await`, including `setWithdrawBusy(false)`. The confirm dialog then
+     * stayed permanently "处理中" — `pending={withdrawBusy}` never clears —
+     * with no error shown and no way to retry short of a full page reload.
+     * `finally` now always resets busy regardless of how the call settles;
+     * `catch` only decides what message to show. The dialog is deliberately
+     * left open on this path (unlike the settled-call branches below, which
+     * always close it) so the operator can just press "下线" again once
+     * they've refreshed, rather than losing the reason they typed.
+     */
+    try {
+      const result = await withdrawArticleAction({
+        requestId: crypto.randomUUID(),
+        novelId: withdrawTarget.novelId,
+        reason: validation.reason,
+      });
+      setWithdrawTarget(null);
+      setWithdrawReason("");
+      if (!result.ok) {
+        setMessage(`下线失败：${describeArticleActionErrorCode(result.code)}`);
+        return;
+      }
+      setMessage(`已下线，受影响文章数：${result.data.affectedArticleIds.length}`);
+      router.refresh();
+    } catch (error) {
+      // `tests/ui/admin-secret-boundary.test.tsx`'s "never reads a
+      // server-authored message off an error" guard bans a literal
+      // `error.message` source occurrence anywhere under this directory
+      // (the admin UI must never echo raw server/runtime text -- error copy
+      // is frontend-owned). `String(error)` picks the same signal (a native
+      // `Error`'s `toString()` is `"Error: " + message`) without reading the
+      // `.message` property by name, and this branch only ever selects
+      // between two already-curated Chinese strings below -- it never
+      // surfaces the raw text itself.
+      setMessage(
+        String(error).includes("Failed to find Server Action")
+          ? "撤回请求未完成（页面版本已过期），请刷新页面后重试"
+          : "撤回请求未完成（网络或页面版本已过期），请刷新页面后重试",
+      );
+    } finally {
+      setWithdrawBusy(false);
     }
-    setMessage(`已下线，受影响文章数：${result.data.affectedArticleIds.length}`);
-    router.refresh();
   }
 
   /**

@@ -742,6 +742,65 @@ describe("ArticleList · 列表与批量", () => {
       );
       expect(screen.queryByText(/novel_not_currently_published/)).toBeNull();
     });
+
+    /**
+     * Fix (Owner-approved 窄范围修复 lane, 2026-09-11 —
+     * feedback_delegate_to_sonnet.md 施工工单): before this fix, `await
+     * withdrawArticleAction(...)` in `confirmWithdraw` sat outside any
+     * try/catch while `onConfirm` fires it as `void confirmWithdraw()` — a
+     * *rejected* promise (observed live as a stale Next.js build's "Failed
+     * to find Server Action" after a deploy shipped a new bundle) skipped
+     * every line after the `await`, including `setWithdrawBusy(false)`,
+     * leaving `pending={withdrawBusy}` stuck `true` and the confirm button
+     * permanently reading "处理中…", disabled, with no error surfaced and no
+     * way to retry short of a full page reload. Pins the fix at the
+     * component level (not just "the promise resolved"): the button becomes
+     * clickable again and shows its normal "下线" label, a readable
+     * refresh-prompting message appears, the dialog is deliberately left
+     * open (so the reason the operator typed isn't lost and they can just
+     * press the button again after refreshing), and no premature
+     * `router.refresh()` fires.
+     */
+    it("withdrawArticleAction 因 stale bundle 而 reject（Failed to find Server Action）时，按钮恢复可点击并展示刷新提示，而不是永久卡在「处理中」", async () => {
+      listActions.withdrawArticleAction.mockRejectedValue(
+        new Error('Failed to find Server Action "abc123def456". This request might be from an older or newer deployment.'),
+      );
+      render(<ArticleList rows={[PUBLISHED_ROW]} canWrite publicOrigin={PUBLIC_ORIGIN} />);
+      await act(async () => {
+        fireEvent.click(screen.getByTestId(`article-withdraw-${PUBLISHED_ROW.id}`));
+      });
+      await waitFor(() => expect(dialog()?.open).toBe(true));
+      fireEvent.change(screen.getByLabelText("下线原因"), { target: { value: "运营决定临时下线" } });
+      const confirmButton = () => within(dialog()!).getByRole("button", { name: /^(下线|处理中…)$/ });
+      await act(async () => {
+        fireEvent.click(confirmButton());
+      });
+      await waitFor(() => expect((confirmButton() as HTMLButtonElement).disabled).toBe(false));
+      expect(confirmButton().textContent).toBe("下线");
+      expect(dialog()?.open).toBe(true);
+      await vi.waitFor(() =>
+        expect(screen.getByRole("status").textContent).toContain("撤回请求未完成（页面版本已过期），请刷新页面后重试"),
+      );
+      expect(routerRefresh).not.toHaveBeenCalled();
+    });
+
+    it("withdrawArticleAction 因普通网络错误 reject 时，同样恢复可点击并展示（非 stale-bundle 措辞的）刷新提示", async () => {
+      listActions.withdrawArticleAction.mockRejectedValue(new Error("Network request failed"));
+      render(<ArticleList rows={[PUBLISHED_ROW]} canWrite publicOrigin={PUBLIC_ORIGIN} />);
+      await act(async () => {
+        fireEvent.click(screen.getByTestId(`article-withdraw-${PUBLISHED_ROW.id}`));
+      });
+      await waitFor(() => expect(dialog()?.open).toBe(true));
+      fireEvent.change(screen.getByLabelText("下线原因"), { target: { value: "运营决定临时下线" } });
+      const confirmButton = () => within(dialog()!).getByRole("button", { name: /^(下线|处理中…)$/ });
+      await act(async () => {
+        fireEvent.click(confirmButton());
+      });
+      await waitFor(() => expect((confirmButton() as HTMLButtonElement).disabled).toBe(false));
+      await vi.waitFor(() =>
+        expect(screen.getByRole("status").textContent).toContain("撤回请求未完成（网络或页面版本已过期），请刷新页面后重试"),
+      );
+    });
   });
 
   describe("列表批量发布（C-21）", () => {
