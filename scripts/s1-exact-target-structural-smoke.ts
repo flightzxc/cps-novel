@@ -16,6 +16,8 @@ import {
 import { validateCredentialJwtLocally } from "../src/lib/credentials/jwt";
 import { decryptCredentialSecretForWorker } from "../worker/credentials/crypto";
 
+import { setTransactionReadOnly } from "./lib/set-transaction-read-only";
+
 const OWNER_GATE = "S1_EXACT_TARGET_STRUCTURAL_SMOKE_APPROVED";
 const ACCOUNT_ID = "45e89c67-b160-4ae6-95e3-c85f98b5a010";
 const BUSINESS_ID = "88fcfefdfac246d48408c72b749f5272";
@@ -53,7 +55,7 @@ async function run(): Promise<Record<string, unknown>> {
   let token: string | undefined;
   try {
     return await prisma.$transaction(async (tx) => {
-      await tx.$executeRawUnsafe("SET TRANSACTION READ ONLY");
+      await setTransactionReadOnly(tx);
       const [roleRows, account, app, credentials, capability, source] = await Promise.all([
         tx.$queryRaw<Array<{ role: string }>>`SELECT current_user::text AS role`,
         tx.channelAccount.findUnique({ where: { id: ACCOUNT_ID } }),
