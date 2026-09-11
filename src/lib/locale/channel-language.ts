@@ -16,19 +16,20 @@
  * nothing in this repo consumes them yet; add them back only when a real
  * caller needs them, not preemptively.
  *
- * Code-table values come ONLY from
- * `docs/governance/L10N_UPSTREAM_LANGUAGE_EVIDENCE_2026-09-10.md` — real
- * paired `(language, languageName)` evidence read from this repo's own X8
- * database (`novel_source_item`), not copied wholesale from CPS's changdu
- * table. The 18 codes registered below happen to have the same code→locale
- * values as CPS's `CHANGDU_SHORTMAX_LANGUAGE_CODE_TO_LOCALE`
- * (`changdu_moboreels`'s registry minus codes 17/23 plus 23, i.e. the
- * "common changdu + pl" set) — that is a same-vendor cross-check, not the
- * source of truth. Codes `19`/`20` (upstream `languageName` is JSON `null`
- * for both, 5,577 and 10,393 rows respectively) have zero paired evidence
- * and are deliberately NOT registered — `resolveChannelLanguage` falls
- * through to `locale: null, confidence: "unknown"` for them, exactly like
- * any other unregistered code.
+ * Code-table evidence: 畅读官方语种编号表（2026-09-11） + 海阅 X8 成对样本
+ * (`docs/governance/L10N_UPSTREAM_LANGUAGE_EVIDENCE_2026-09-10.md`'s "§
+ * 畅读官方语种编号表（Owner 2026-09-11 提供）" section is now the tier-1
+ * source — Owner-relayed, verbatim-from-vendor code table; the doc's
+ * original X8 database paired `(language, languageName)` evidence
+ * (`novel_source_item`) and the CPS same-vendor cross-check are both
+ * downgraded to corroborating evidence, not the source of truth). The 18
+ * codes registered below are confirmed against the vendor table 18/18, no
+ * conflicts. Codes `19`/`20` (upstream `languageName` is JSON `null` for
+ * both, 5,577 and 10,393 rows respectively) are absent from the vendor
+ * table itself — not merely unevidenced — and are deliberately,
+ * permanently NOT registered — `resolveChannelLanguage` falls through to
+ * `locale: null, confidence: "unknown"` for them, exactly like any other
+ * unregistered code.
  */
 
 export type ChannelLanguageConfidence =
@@ -72,12 +73,16 @@ type CodeMapping = {
 };
 
 /**
- * `code → locale`, moboreader source app. Values are transcribed verbatim
- * from `docs/governance/L10N_UPSTREAM_LANGUAGE_EVIDENCE_2026-09-10.md`'s
- * evidence table — every entry here has a real paired
- * `(source_language_code, source_language_name)` sample in this repo's own
- * X8 database. Codes `19`/`20` (paired `languageName` is `null`) are
- * deliberately absent — see this file's header.
+ * `code → locale`, moboreader source app. Values are transcribed from
+ * `docs/governance/L10N_UPSTREAM_LANGUAGE_EVIDENCE_2026-09-10.md`'s
+ * evidence table, now confirmed 18/18 against that doc's "§ 畅读官方语种
+ * 编号表（Owner 2026-09-11 提供）" section — the vendor's own code table,
+ * this repo's tier-1 evidence source (this repo's X8 database paired
+ * `(source_language_code, source_language_name)` samples remain as
+ * corroborating evidence, not the source of truth). Codes `19`/`20`
+ * (paired `languageName` is `null`) are absent from the vendor table
+ * itself, not merely unevidenced — permanently NOT registered — see this
+ * file's header.
  *
  * `it`/`fil`/`ms`/`tr` resolve successfully here but are NOT `SiteLocale`
  * members (`src/lib/locale/locale-canonical.ts`'s `SITE_LOCALES`) — "mapped

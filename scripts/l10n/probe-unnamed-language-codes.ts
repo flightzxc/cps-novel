@@ -50,6 +50,15 @@
  * plan doc §X-2 ("复核通过后在 X8 执行 --apply...Fable 派 Sonnet 执行并回报
  * 脱敏结果" — a later, explicitly authorized round).
  *
+ * X-4 已结论（2026-09-11）：Owner 转述的畅读官方语种编号表（一级来源，见
+ * `docs/governance/L10N_UPSTREAM_LANGUAGE_EVIDENCE_2026-09-10.md`"§ 畅读官方
+ * 语种编号表"一节）确认官方枚举里没有 19/20 这两个码——不是本仓证据不够，是
+ * 这两个码本来就不存在于畅读的官方语种表里。19/20 已钉死为
+ * `VENDOR_TABLE_ABSENT`，永久不登记。本探针脚本继续保留在仓库里作为诊断工具
+ * （核实上游 `getchapterinfo` 响应体里是否有 `getlistpc` 未暴露的语种线索，
+ * 仍有独立的数据探索价值），但不再作为 19/20 登记状态的认领依据——不需要再
+ * 靠这个探针的 `--apply` 结果去"补齐"这两个码。
+ *
  * Usage:
  *   npx tsx scripts/l10n/probe-unnamed-language-codes.ts [--sample-size N]
  *   npx tsx scripts/l10n/probe-unnamed-language-codes.ts --apply [--sample-size N]

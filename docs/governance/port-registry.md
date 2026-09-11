@@ -499,6 +499,14 @@ Resolutions` 预解析 → `suspendedLanguageCodes` 判定 → 逐行落库时�
 | `backfillSourceItemLocale` 核心循环（cursor 分页、dry-run 默认、`--re-resolve`、条件 `updateMany`）→ `scripts/l10n/backfill-source-item-locale.ts` | `scripts/backfill-drama-source-item-locale.ts` | `1-173`（全文件） | `3a76877af27c6247ad94be946b44e9cc5c1cb9ce` | `ADAPT` | 删 `channelAppKey` 派生步骤（多渠道概念，本仓不适用）；`--apply` 从"无门禁直接写"改为"需 `--approver`（`AdminIdentity` 存在且 active）+ `OperationAudit` 审计行"，同款方式见 `scripts/p2-06-5-production/tagging-bootstrap.ts` 的 `resolveApprover`/审计写入模式；报告形状从"扁平计数"改为"按 `sourceLanguageCode` 分桶的 before/after locale 直方图"（施工提示词 §1.F 明确要求"每码 before/after 计数"）；无 `NovelSourceItem` 对应的 mapping-version DB 列（核对 `3a76877:prisma/schema.prisma` 的 `DramaSourceItem` 同样没有该列），故不加迁移，`MAPPING_VERSION` 只记在报告/审计快照里 |
 | CanonicalTag bootstrap 的 approver 校验/审计写入形状 → `resolveApprover`/`OperationAudit` 写入 | `scripts/p2-06-5-production/tagging-bootstrap.ts` | `651-657`（`resolveApprover`）、`841-859`（`OperationAudit.create`） | 本仓内部模式复用，非 CPS 搬运 | `PATTERN_ONLY` | 只借"UUID 或 username 双形态查找 + status=active 校验失败即 fail() + OperationAudit 记录 actorType/action/entityType/requestId/reason/before-after snapshot"的形状；不搬 `pg_advisory_xact_lock`（backfill 场景不需要跨进程互斥，`--request-id` 重放判定已足够）与 `--channel-app` 绑定校验（本脚本没有对应概念） |
 
+**L10N P1 补登记（2026-09-11）**：码表证据升级为畅读官方语种编号表（Owner
+2026-09-11 转述，一级来源，18/18 与本仓登记表逐条核对一致，18 码取值不变）；原
+X8 数据库成对样本与 CPS 交叉核对降为佐证。19/20 结论由"证据缺失待补"
+（`MAPPING_EVIDENCE_MISSING`）改为确定性结论 `VENDOR_TABLE_ABSENT`（官方表本身
+没有这两个码，永久不登记，不再等待探针补证据）。详见
+`docs/governance/L10N_UPSTREAM_LANGUAGE_EVIDENCE_2026-09-10.md`"§ 畅读官方语种
+编号表（Owner 2026-09-11 提供）"一节；本条为纯文档更新，不涉及代码/schema 改动。
+
 ### L10N P2 创建链语种强制继承 + 发布层 locale 检查删除（content-creation/service.ts + publish-gate/evaluator.ts，2026-09-10）
 
 依据 `施工提示词_Sonnet_L10N_P2_创建链语种强制继承_2026-09-10.md`。`baseline_commit`
