@@ -202,7 +202,11 @@ async function assertCatalogConsistency(records) {
     for (const name of [...actualConstraints, ...actualIndexes, ...actualTriggers]) {
       if (!expectedPhysical.has(name)) problems.push(`database object missing from dictionary ${name}`);
     }
-    if (actualTables.size !== 49) problems.push(`expected 49 database tables, found ${actualTables.size}`);
+    // C-30A (施工工单_C30_换小说_移植CPS换租客_2026-09-08.md §4A.1): three new
+    // rebind tables (article_novel_rebind_preview/_batch/_batch_item) push the
+    // live-catalog baseline from 49 to 52, mirroring the 52-model constant
+    // assertStaticConsistency already carries above.
+    if (actualTables.size !== 52) problems.push(`expected 52 database tables, found ${actualTables.size}`);
     if (problems.length) fail(problems);
     return {
       tableCount: actualTables.size,

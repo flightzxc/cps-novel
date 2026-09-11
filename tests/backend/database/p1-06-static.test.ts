@@ -116,9 +116,15 @@ describe("P1-06 database operations static contracts", () => {
     // ends) — a review fix removed the FK constraint record this migration
     // originally, incorrectly, shipped with, dropping the constraint count
     // from 16 to 15 and the running total from 1209 to 1208.
+    // PR #7 CI dictionary drift fix (fix/dictionary-drift-rebind-tables) adds
+    // 3 more: the article_novel_rebind_preview/_batch/_batch_item primary-key
+    // constraint records the C-30A migration should have shipped alongside
+    // the FK/index/CHECK records above -- their absence is exactly what the
+    // live-catalog drift check (assertCatalogConsistency) flagged, running
+    // total 1208 + 3 = 1211.
     // The exact count still guards duplicate keys.
-    expect(records).toHaveLength(1208);
-    expect(new Set(records.map((line) => JSON.parse(line).stable_key)).size).toBe(1208);
+    expect(records).toHaveLength(1211);
+    expect(new Set(records.map((line) => JSON.parse(line).stable_key)).size).toBe(1211);
     const intents = records.map((line) => JSON.parse(line)).filter(
       (record) => record.table_name === "side_effect_intent"
         && ["status", "response_shape", "confirmed_at"].includes(record.field_name),
