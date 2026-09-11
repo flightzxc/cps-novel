@@ -9,7 +9,7 @@ import { BlogUnavailableScreen } from "@/features/public-ui/blog/BlogUnavailable
 import type { SiteLocale } from "@/lib/locale/locale-canonical";
 import { getPublicT } from "@/lib/locale/messages";
 import { generateSeoMeta } from "@/lib/seo/seo-meta-generator";
-import { buildBlogRoutePath, localePrefix } from "@/lib/slug/article-path";
+import { buildBlogPath, decodeSlugParam, localePrefix } from "@/lib/slug/article-path";
 import type { BlogDetailView } from "@/lib/site/blog-queries";
 import type { BlogArticleAccessResult } from "@/server/publication/access";
 
@@ -63,14 +63,19 @@ export async function buildBlogDetailMetadata(
   locale: SiteLocale,
   params: Promise<BlogDetailRouteParams>,
 ): Promise<Metadata> {
-  const { slug } = await params;
+  // Decode once, right after destructuring `params` — same shape as
+  // `novel-detail.tsx`'s `buildNovelMetadata` (see `decodeSlugParam`'s own
+  // doc comment, `src/lib/slug/article-path.ts`): a `force-dynamic` App
+  // Router segment arrives with non-ASCII percent-escapes undecoded.
+  const { slug: rawSlug } = await params;
+  const slug = decodeSlugParam(rawSlug);
   const { access, post } = await loadBlogPage(locale, slug);
   if (access.kind === "not_found") return noIndexMetadata(getPublicT(locale)("meta.notFound"));
   if (access.kind === "takedown") return noIndexMetadata(getPublicT(locale)("meta.notFound"));
   if (access.kind === "unavailable" || !post) return noIndexMetadata(access.title);
 
   const { settings } = await loadChrome(locale);
-  const routePath = buildBlogRoutePath({ slug: post.slug });
+  const routePath = buildBlogPath({ locale, slug: post.slug });
   const seo = generateSeoMeta({
     entity: "blog",
     locale,
@@ -95,7 +100,8 @@ export async function BlogDetailBody({
   locale: SiteLocale;
   params: Promise<BlogDetailRouteParams>;
 }) {
-  const { slug } = await params;
+  const { slug: rawSlug } = await params;
+  const slug = decodeSlugParam(rawSlug);
   const activeLocales = await loadActiveLocales();
   const [{ access, post }, { chrome, settings }] = await Promise.all([
     loadBlogPage(locale, slug),
@@ -114,7 +120,7 @@ export async function BlogDetailBody({
     );
   }
 
-  const routePath = buildBlogRoutePath({ slug: post.slug });
+  const routePath = buildBlogPath({ locale, slug: post.slug });
   const seo = generateSeoMeta({
     entity: "blog",
     locale,

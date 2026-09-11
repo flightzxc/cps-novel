@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { NovelDetailView } from "@/features/public-ui/types";
-import { decodeSlugParam } from "@/lib/slug/article-path";
+import { buildArticlePath, decodeSlugParam } from "@/lib/slug/article-path";
 
 /**
  * X8 轮 2f 阻塞①②的回归覆盖（`l10n-uat-progress.md` 轮 2f 小节）。
@@ -9,10 +9,11 @@ import { decodeSlugParam } from "@/lib/slug/article-path";
  * ① 非 ASCII slug 详情页 404：`src/app/[locale]/novel/[slugParam]/page.tsx`
  * 是 `force-dynamic`（非 SSG）App Router 页面。用固定的 `next@16.1.6`
  * （`output: "standalone"`）真实构建 + `node server.js` 直连实测确认：
- * Next 对这种非 SSG 动态段**不解码**——`params.slugParam` 到达页面时仍是
- * 百分号编码原文（例如 82 字符的 `%D1%82%D0%B0...`，而不是 57 字符的解码后
- * 西里尔文本）。`node_modules/next/dist/server/lib/router-utils/
- * decode-path-params.js` 自己的头注释印证了这一点："We only encode path
+ * Next 对这种非 SSG 动态段的解码不是"全都不做"：ASCII 百分号转义会被规范化
+ * 解码，只有非 ASCII 转义原样到达——`params.slugParam`（本例的西里尔文
+ * slug）到达页面时仍是百分号编码原文（例如 82 字符的 `%D1%82%D0%B0...`，
+ * 而不是 57 字符的解码后西里尔文本）。`node_modules/next/dist/server/lib/
+ * router-utils/decode-path-params.js` 自己的头注释印证了这一点："We only encode path
  * delimiters for path segments from getStaticPaths... TODO: investigate
  * adding this handling for non-SSG pages so non-ascii names also work
  * there."——这不是本仓库代码/nginx/DB 的缺陷，是这个 Next 版本对非 SSG 页面
@@ -233,6 +234,40 @@ describe("① 非 ASCII slugParam：decodeSlugParam 在解析前解码一次", (
     await buildNovelMetadata("ja", Promise.resolve({ slugParam: jaEncoded }));
     expect(loadArticleAccess).toHaveBeenCalledWith(jaPlain, "ja");
   });
+
+  it("ar（阿拉伯文，另一个非拉丁字母表）非 ASCII slug 同样成功解码解析", async () => {
+    const arPlain = "روايتي-الأولى-pnaa1b2c3";
+    const arEncoded = encodeURIComponent(arPlain);
+    loadArticleAccess.mockResolvedValue({
+      kind: "published" as const,
+      articleId: "article-3",
+      novelId: "novel-3",
+      slugPart: "روايتي-الأولى",
+      shortId: "naa1b2c3",
+      title: "روايتي الأولى",
+    });
+    loadNovelDetail.mockResolvedValue({ ...DETAIL, title: "روايتي الأولى", locale: { code: "ar", label: "العربية" } });
+
+    const metadata = await buildNovelMetadata("ar", Promise.resolve({ slugParam: arEncoded }));
+    expect(loadArticleAccess).toHaveBeenCalledWith(arPlain, "ar");
+    expect(loadArticleAccess).not.toHaveBeenCalledWith(arEncoded, "ar");
+    expect(metadata.title).toBe("روايتي الأولى");
+  });
+
+  it("非 ASCII slugPart 的 canonical：slug 段是百分号编码，与 buildArticlePath 直接调用的输出字节一致（不是原样非 ASCII 字符）", async () => {
+    loadArticleAccess.mockResolvedValue(ACCESS);
+    loadNovelDetail.mockResolvedValue({ ...DETAIL, title: ACCESS.title });
+
+    const metadata = await buildNovelMetadata("ru", Promise.resolve({ slugParam: rawEncodedParam }));
+
+    const canonicalStr = String(metadata.alternates?.canonical);
+    const expected = `${ORIGIN}${buildArticlePath({ locale: "ru", slug: ACCESS.slugPart, shortId: ACCESS.shortId })}`;
+    expect(canonicalStr).toBe(expected);
+    expect(canonicalStr).toBe(`${ORIGIN}/ru/novel/${encodeURIComponent(`${ACCESS.slugPart}-p${ACCESS.shortId}`)}`);
+    // 反证：canonical 里不能出现原样未编码的西里尔字符。
+    expect(canonicalStr).not.toContain("таинственный");
+    expect(canonicalStr).toContain("%D1%82%D0%B0");
+  });
 });
 
 describe("非法/损坏的百分号编码：优雅降级到 notFound()，不抛未捕获异常", () => {
@@ -313,6 +348,19 @@ describe("② canonical / hreflang 自引用：非 en locale 必须带 /{locale}
     );
 
     expect(metadata.alternates?.canonical).toBe(`${ORIGIN}/novel/lantern-keepers-daughter-pabc123`);
+  });
+
+  it("de 不回归：ASCII-only slug（非默认 locale，有真实前缀）解码是 no-op，canonical 带 /de 前缀", async () => {
+    loadArticleAccess.mockResolvedValue(ACCESS);
+    loadNovelDetail.mockResolvedValue({ ...DETAIL, locale: { code: "de", label: "Deutsch" } });
+
+    const metadata = await buildNovelMetadata(
+      "de",
+      Promise.resolve({ slugParam: "lantern-keepers-daughter-pabc123" }),
+    );
+
+    expect(loadArticleAccess).toHaveBeenCalledWith("lantern-keepers-daughter-pabc123", "de");
+    expect(metadata.alternates?.canonical).toBe(`${ORIGIN}/de/novel/lantern-keepers-daughter-pabc123`);
   });
 });
 

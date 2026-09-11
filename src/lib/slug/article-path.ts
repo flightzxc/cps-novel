@@ -112,17 +112,22 @@ export function parseArticleSlugParam(param: string): ParsedArticleSlugParam | n
  * double-decode that caller. This is the sibling boundary for the public
  * route's own raw `params.slugParam`.
  *
- * Not a parity gap versus CPS's own `normalizeRouteSlug`: Next.js does not
- * URL-decode a dynamic route segment for a `force-dynamic` (non-SSG) App
- * Router page — confirmed empirically against the pinned `next@16.1.6`
- * (`output: "standalone"`) build, not merely inferred from the framework's
- * `getStaticPaths`-era decode path
+ * Not a parity gap versus CPS's own `normalizeRouteSlug`, and not a blanket
+ * "Next never decodes a dynamic route segment" claim either — confirmed
+ * empirically against the pinned `next@16.1.6` (`output: "standalone"`)
+ * build, not merely inferred from the framework's `getStaticPaths`-era
+ * decode path
  * (`node_modules/next/dist/server/lib/router-utils/decode-path-params.js`'s
  * own header comment: "We only encode path delimiters for path segments
  * from getStaticPaths... TODO: investigate adding this handling for
- * non-SSG pages so non-ascii names also work there"). A percent-encoded
- * non-ASCII slug therefore reaches `params.slugParam` still encoded; every
- * public Article/chapter page must decode it itself before resolving.
+ * non-SSG pages so non-ascii names also work there"). For a `force-dynamic`
+ * (non-SSG) App Router page, an ASCII percent-escape in the segment DOES get
+ * normalized/decoded by Next itself before `params` is handed to the page;
+ * only a non-ASCII percent-escape survives undecoded. This function is
+ * therefore an idempotent no-op on an already-decoded, pure-ASCII slug and
+ * decodes exactly once on a non-ASCII one — safe to call unconditionally at
+ * every public Article/chapter page entry point regardless of which case
+ * the raw segment turns out to be.
  */
 export function decodeSlugParam(raw: string): string {
   try {
@@ -133,9 +138,15 @@ export function decodeSlugParam(raw: string): string {
 }
 
 // ---------------------------------------------------------------------------
-// C-29 blog family. No short id, no route-param parsing needed — the `[slug]`
-// dynamic segment IS the Article's `slug` column directly (Next.js already
-// URL-decodes route params for us on the read side).
+// C-29 blog family. No short id, no `-p{shortId}` suffix to split off — the
+// `[slug]` dynamic segment IS the Article's `slug` column directly, so there
+// is no `parseArticleSlugParam`-equivalent to call. That does NOT exempt
+// this family from `decodeSlugParam`, though: per that function's own doc
+// comment, Next.js does not decode a non-ASCII-percent-escaped
+// `force-dynamic` route segment on its own, and this holds regardless of
+// whether the segment still needs splitting afterward — `blog-detail.tsx`
+// calls `decodeSlugParam` on the raw `[slug]` right after destructuring
+// `params`, same as the novel/chapter families.
 // ---------------------------------------------------------------------------
 
 export type BlogRoutePathInput = {
