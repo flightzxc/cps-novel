@@ -98,6 +98,40 @@ export function parseArticleSlugParam(param: string): ParsedArticleSlugParam | n
   };
 }
 
+/**
+ * Safe decode for a raw `[slugParam]`/`[slug]` dynamic-route segment, called
+ * once at each page-body entry point right after destructuring `params` —
+ * CPS parity: `normalizeRouteSlug`,
+ * `git show 3a76877:src/app/[locale]/(site)/drama/[slug]/page.tsx:84-89`
+ * (`try { return decodeURIComponent(slug); } catch { return slug; }`,
+ * called independently from both `generateMetadata` and the page body).
+ * `parseArticleSlugParam`/CPS's `parseDramaArticleSlugParam` both
+ * deliberately do NOT decode internally — `src/server/articles/service.ts`'s
+ * `extractSearchShortId` already decodes an admin-pasted URL *before*
+ * calling `parseArticleSlugParam`, so decoding a second time inside it would
+ * double-decode that caller. This is the sibling boundary for the public
+ * route's own raw `params.slugParam`.
+ *
+ * Not a parity gap versus CPS's own `normalizeRouteSlug`: Next.js does not
+ * URL-decode a dynamic route segment for a `force-dynamic` (non-SSG) App
+ * Router page — confirmed empirically against the pinned `next@16.1.6`
+ * (`output: "standalone"`) build, not merely inferred from the framework's
+ * `getStaticPaths`-era decode path
+ * (`node_modules/next/dist/server/lib/router-utils/decode-path-params.js`'s
+ * own header comment: "We only encode path delimiters for path segments
+ * from getStaticPaths... TODO: investigate adding this handling for
+ * non-SSG pages so non-ascii names also work there"). A percent-encoded
+ * non-ASCII slug therefore reaches `params.slugParam` still encoded; every
+ * public Article/chapter page must decode it itself before resolving.
+ */
+export function decodeSlugParam(raw: string): string {
+  try {
+    return decodeURIComponent(raw);
+  } catch {
+    return raw;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // C-29 blog family. No short id, no route-param parsing needed — the `[slug]`
 // dynamic segment IS the Article's `slug` column directly (Next.js already
