@@ -147,21 +147,56 @@ export function PublishLifecyclePanel({
 
   async function runPublish() {
     if (!article) return;
-    setBusy(true);
     setNotice(null);
     setPublishResult(null);
-    const result = await publishArticleAction({
-      novelId,
-      articleId: article.articleId,
-      requestId: crypto.randomUUID(),
-    });
-    setBusy(false);
-    if (!result.ok) {
-      setNotice({ tone: "error", text: `发布失败：${actionErrorMessage(result)}` });
-      return;
+    /**
+     * Fix (Owner-approved 窄范围修复 lane, 2026-09-12 follow-up to the
+     * 2026-09-11 withdraw/takedown lane): mirrors `runRightsTransition`'s
+     * own try/catch/finally shape just below (itself mirroring `../../
+     * articles/_components/article-list.tsx`'s `confirmWithdraw`) --
+     * `await publishArticleAction(...)` used to sit outside any try/catch
+     * while the "发布" button fires this as `onClick={runPublish}` (an
+     * unawaited handler), so a rejected promise (e.g. the same stale-bundle
+     * "Failed to find Server Action" failure already documented on the
+     * other two call sites) skipped every line after the `await`, including
+     * `setBusy(false)`, leaving the publish button permanently disabled
+     * with no feedback and no way to retry short of a full page reload.
+     * `finally` now always resets busy regardless of how the call settles;
+     * `catch` only decides what message to show, reusing the same
+     * `setNotice` mechanism the settled-call branch below already uses.
+     * `setBusy(true)` is placed inside `try` (not before it), same
+     * positioning `runRightsTransition`'s own fix below uses, so that
+     * nothing between it and the `finally` can skip the reset.
+     */
+    try {
+      setBusy(true);
+      const result = await publishArticleAction({
+        novelId,
+        articleId: article.articleId,
+        requestId: crypto.randomUUID(),
+      });
+      if (!result.ok) {
+        setNotice({ tone: "error", text: `发布失败：${actionErrorMessage(result)}` });
+        return;
+      }
+      setPublishResult(result.data);
+      if (result.data.outcome === "published") router.refresh();
+    } catch (error) {
+      // Same `String(error)` shape as `runRightsTransition`/`confirmWithdraw`
+      // just below/in article-list.tsx -- `tests/ui/
+      // admin-secret-boundary.test.tsx`'s "never reads a server-authored
+      // message off an error" guard bans a literal `error.message` source
+      // occurrence anywhere under the admin UI directories, and this branch
+      // only ever selects between two already-curated Chinese strings.
+      setNotice({
+        tone: "error",
+        text: String(error).includes("Failed to find Server Action")
+          ? "页面版本已过期，请刷新后重试"
+          : "发布请求未完成（网络或页面版本已过期），请刷新页面后重试",
+      });
+    } finally {
+      setBusy(false);
     }
-    setPublishResult(result.data);
-    if (result.data.outcome === "published") router.refresh();
   }
 
   async function runRightsTransition(kind: RightsTransitionKind) {
@@ -176,27 +211,35 @@ export function PublishLifecyclePanel({
       return;
     }
     setReasonError(null);
-    setBusy(true);
     setNotice(null);
-    const requestId = crypto.randomUUID();
     const label = describeRightsTransition(kind).actionLabel;
     /**
-     * Fix (Owner-approved 窄范围修复 lane, 2026-09-11): `await call` used to
-     * sit outside any try/catch, while `onConfirm` below fires this function
-     * as `void runRightsTransition(pending)` — noted in this component's own
-     * doc comment as sharing this shape with `../../articles/_components/
-     * article-list.tsx`'s `confirmWithdraw`. A rejected promise (e.g. a
-     * stale Next.js build throwing "Failed to find Server Action" after a
-     * deploy) skipped every line after the `await`, including
-     * `setBusy(false)`, leaving the confirm dialog permanently stuck in its
-     * pending state. `finally` now always resets busy regardless of how the
-     * call settles; `catch` only decides what message to show. The dialog is
-     * deliberately left open on this path (unlike the settled-call branch
-     * below, which always closes it) so the operator can just press the
-     * confirm button again once they've refreshed, rather than losing the
-     * reason they typed.
+     * Fix (Owner-approved 窄范围修复 lane, 2026-09-11; 2026-09-12 follow-up
+     * moved `setBusy(true)`/`crypto.randomUUID()` below into `try` too):
+     * `await call` used to sit outside any try/catch, while `onConfirm`
+     * below fires this function as `void runRightsTransition(pending)` —
+     * noted in this component's own doc comment as sharing this shape with
+     * `../../articles/_components/article-list.tsx`'s `confirmWithdraw`. A
+     * rejected promise (e.g. a stale Next.js build throwing "Failed to find
+     * Server Action" after a deploy) skipped every line after the `await`,
+     * including `setBusy(false)`, leaving the confirm dialog permanently
+     * stuck in its pending state. `finally` now always resets busy
+     * regardless of how the call settles; `catch` only decides what message
+     * to show. The dialog is deliberately left open on this path (unlike the
+     * settled-call branch below, which always closes it) so the operator can
+     * just press the confirm button again once they've refreshed, rather
+     * than losing the reason they typed. `setBusy(true)` and
+     * `crypto.randomUUID()` originally sat between the two comments above
+     * (i.e. before `try`) -- `crypto.randomUUID()` throwing there (it is not
+     * guaranteed side-effect-free; `article-list.tsx`'s own `confirmWithdraw`
+     * already calls it from inside its own try) would skip `try` entirely
+     * and leave `busy` stuck exactly the same way the original bug did, just
+     * one statement earlier. Both are now the first two lines inside `try`
+     * so nothing between `setBusy(true)` and `finally` can escape the reset.
      */
     try {
+      setBusy(true);
+      const requestId = crypto.randomUUID();
       const call =
         kind === "withdraw"
           ? withdrawNovelAction({ novelId, requestId, reason: trimmed })

@@ -275,6 +275,72 @@ describe("发布 · 直接点击，不经过二次确认", () => {
     expect(await screen.findByText(/发布失败/)).toBeTruthy();
     expect(routerRefresh).not.toHaveBeenCalled();
   });
+
+  /**
+   * Fix (Owner-approved 窄范围修复 lane, 2026-09-12 follow-up):
+   * `runPublish` shares the exact bug shape the 2026-09-11 lane already
+   * fixed on `runRightsTransition`/`confirmWithdraw` (see those functions'
+   * own doc comments and the two "因 ... reject" tests in the takedown
+   * describe block below, which this pair mirrors) — `await
+   * publishArticleAction(...)` used to sit outside any try/catch while the
+   * "发布" button fires this as an unawaited `onClick={runPublish}`, so a
+   * *rejected* promise (e.g. a stale Next.js build throwing "Failed to find
+   * Server Action" after a deploy) skipped every line after the `await`,
+   * including `setBusy(false)`, leaving the button permanently `disabled`
+   * with zero feedback. Pins the fix: the button becomes clickable again,
+   * a readable refresh-prompting notice appears, and no premature
+   * `router.refresh()` fires. The `{ok:false}`/`{ok:true}` settled-result
+   * branches (access_denied/rejected/conflict/not_found/published above)
+   * are exercised by the five tests already in this describe block — they
+   * are unchanged by this fix and serve as this pair's non-regression
+   * check for the settled path.
+   */
+  it("publishArticleAction 因 stale bundle 而 reject（Failed to find Server Action）时，按钮恢复可点击并展示「页面版本已过期，请刷新后重试」，而不是永久禁用", async () => {
+    actions.publishArticleAction.mockRejectedValue(
+      new Error('Failed to find Server Action "abc123def456". This request might be from an older or newer deployment.'),
+    );
+    render(
+      <PublishLifecyclePanel
+        novelId="n1"
+        novelStatus="draft"
+        article={ARTICLE_DRAFT}
+        canPublish="granted"
+        canTakedown="granted"
+      />,
+    );
+    const button = () => screen.getByTestId("publish-action-publish") as HTMLButtonElement;
+    await act(async () => {
+      fireEvent.click(button());
+    });
+    await waitFor(() => expect(button().disabled).toBe(false));
+    await vi.waitFor(() =>
+      expect(screen.getByRole("status").textContent).toContain("页面版本已过期，请刷新后重试"),
+    );
+    expect(routerRefresh).not.toHaveBeenCalled();
+  });
+
+  it("publishArticleAction 因普通网络错误 reject 时，同样恢复可点击并展示（非 stale-bundle 措辞的）刷新提示", async () => {
+    actions.publishArticleAction.mockRejectedValue(new Error("Network request failed"));
+    render(
+      <PublishLifecyclePanel
+        novelId="n1"
+        novelStatus="draft"
+        article={ARTICLE_DRAFT}
+        canPublish="granted"
+        canTakedown="granted"
+      />,
+    );
+    const button = () => screen.getByTestId("publish-action-publish") as HTMLButtonElement;
+    await act(async () => {
+      fireEvent.click(button());
+    });
+    await waitFor(() => expect(button().disabled).toBe(false));
+    await vi.waitFor(() =>
+      expect(screen.getByRole("status").textContent).toContain(
+        "发布请求未完成（网络或页面版本已过期），请刷新页面后重试",
+      ),
+    );
+  });
 });
 
 describe("takedown · 二次确认与版权/安全移除的警示文案", () => {
@@ -485,6 +551,59 @@ describe("takedown · 二次确认与版权/安全移除的警示文案", () => 
         "版权/安全移除请求未完成（网络或页面版本已过期），请刷新页面后重试",
       ),
     );
+  });
+
+  /**
+   * Fix (Owner-approved 窄范围修复 lane, 2026-09-12 follow-up): before this
+   * fix, `setBusy(true)` and `crypto.randomUUID()` both ran *before* `try`
+   * in `runRightsTransition` — if `crypto.randomUUID()` itself threw, the
+   * throw happened outside the try/catch/finally entirely, so `finally`'s
+   * `setBusy(false)` never ran and the confirm button stayed permanently
+   * `disabled`/"处理中…", the exact same symptom as the two `Server Action`
+   * reject tests above, just one statement earlier and with the Server
+   * Action itself never even invoked. Both statements are now the first two
+   * lines inside `try`. Pins the fix by making `crypto.randomUUID` throw
+   * directly (not the Server Action) and asserting the Server Action is
+   * never called (proving the throw happened before it) while busy still
+   * resets and the generic (non-stale-bundle) refresh notice appears.
+   */
+  it("crypto.randomUUID 在 runRightsTransition 内部抛错时（Server Action 从未被调用），busy 仍会复位，不会永久卡在「处理中」", async () => {
+    const randomUUIDSpy = vi.spyOn(crypto, "randomUUID").mockImplementation(() => {
+      throw new Error("randomUUID unavailable");
+    });
+    try {
+      render(
+        <PublishLifecyclePanel
+          novelId="n1"
+          novelStatus="draft"
+          article={ARTICLE_DRAFT}
+          canPublish="granted"
+          canTakedown="granted"
+        />,
+      );
+      await act(async () => {
+        fireEvent.click(screen.getByTestId("publish-action-takedown"));
+      });
+      await waitFor(() => expect(dialog()?.open).toBe(true));
+      const input = screen.getByPlaceholderText("例如：版权方要求下线");
+      fireEvent.change(input, { target: { value: "版权方要求下线" } });
+      const confirmButton = () => screen.getByRole("button", { name: /^(确认移除|处理中…)$/ });
+      await act(async () => {
+        fireEvent.click(confirmButton());
+      });
+      expect(actions.takedownNovelAction).not.toHaveBeenCalled();
+      await waitFor(() => expect((confirmButton() as HTMLButtonElement).disabled).toBe(false));
+      expect(confirmButton().textContent).toBe("确认移除");
+      expect(dialog()?.open).toBe(true);
+      await vi.waitFor(() =>
+        expect(screen.getByRole("status").textContent).toContain(
+          "版权/安全移除请求未完成（网络或页面版本已过期），请刷新页面后重试",
+        ),
+      );
+      expect(routerRefresh).not.toHaveBeenCalled();
+    } finally {
+      randomUUIDSpy.mockRestore();
+    }
   });
 });
 

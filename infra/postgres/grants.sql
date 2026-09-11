@@ -322,6 +322,26 @@ GRANT INSERT, UPDATE ON TABLE
 TO worker_app;
 GRANT DELETE ON TABLE novel_chapter_content TO worker_app;
 GRANT DELETE ON TABLE channel_credential_active_fingerprint TO worker_app;
+-- Follow-up (Owner-approved 2026-09-11, grants+runPublish micro-fix lane):
+-- `replaceAutoTagSnapshotInTransaction`'s `tx.novelCanonicalTag.deleteMany({
+-- where: { novelId, source: "auto" } })` (src/server/tagging/service.ts:425),
+-- reached only via `worker/handlers/novel-tag-backfill.ts`'s auto-classify
+-- handler (i.e. `worker_app`'s shared PrismaClient, never web_app/scheduler_app
+-- -- `grep -rn replaceAutoTagSnapshotInTransaction src worker` returns only
+-- service.ts's own definition and this one handler's call site), is a bulk
+-- `deleteMany` and so carries no implicit RETURNING (see the RETURNING-fix
+-- comment above), but PostgreSQL still enforces the base DELETE statement
+-- privilege independent of that. `worker_app` already had INSERT/UPDATE and
+-- table-level SELECT on `novel_canonical_tag` (see the two blocks below) but
+-- had never held DELETE -- this was `tests/backend/database/
+-- grants-returning.test.ts`'s registered, Owner-deferred
+-- `WORKER_APP_BULK_METHOD_KNOWN_GAPS` entry for
+-- `novel_canonical_tag::deleteMany`, now closed by this grant (that
+-- registry entry is removed in the same change). `web_app`'s own two
+-- `deleteMany` call sites on this table (source: "manual", inside
+-- `replaceManualTagSnapshot`/`exitManualTagMode`) are unaffected -- web_app
+-- already holds table-level DELETE there (see the DELETE list above).
+GRANT DELETE ON TABLE novel_canonical_tag TO worker_app;
 -- PR6 lane E: computeHomeCarouselInTx (src/server/home-carousel/service.ts)
 -- fully replaces the serving snapshot each run with `deleteMany` followed by
 -- `createMany` -- there is no fixed row set to UPDATE in place, so DELETE is
@@ -331,6 +351,31 @@ GRANT INSERT ON TABLE
   credential_change_log, operation_audit, indexnow_outbox_attempt,
   home_carousel_change_log
 TO worker_app;
+-- Follow-up (Owner-approved 2026-09-11, same lane as the DELETE grant just
+-- above): `worker/handlers/indexnow-delivery.ts:210`'s
+-- `db.indexNowOutboxAttempt.updateMany({ where: { outboxId, attemptNo },
+-- data: { attemptState, outcome, responseAt, httpStatus, errorKind,
+-- responseSummary } })` is the table's only bulk write call site in the
+-- whole repo (`grep -rn "indexNowOutboxAttempt\." worker src` confirms the
+-- table's only other call is the `.create()` a few lines above, already
+-- INSERT-granted). `worker_app` had INSERT (immediately above) and
+-- table-level SELECT (the RETURNING-fix grant further below) but no UPDATE
+-- of any kind -- this was `grants-returning.test.ts`'s registered
+-- `WORKER_APP_BULK_METHOD_KNOWN_GAPS` entry for
+-- `indexnow_outbox_attempt::updateMany`, now closed (that registry entry is
+-- removed in the same change). Column-scoped to exactly the six columns
+-- this one call site's `data` object sets (verified against the handler
+-- source, mapped through `prisma/schema.prisma`'s `@map`s:
+-- attemptState->attempt_state, outcome->outcome, responseAt->response_at,
+-- httpStatus->http_status, errorKind->error_kind,
+-- responseSummary->response_summary) rather than table-level UPDATE --
+-- worker_app must not gain write access to `outbox_id`/`attempt_no`
+-- (the unique-key pair the `create()` call site's own comment relies on
+-- staying immutable) or `started_at`/`request_at`/`batch_size`/
+-- `worker_task_id` (set once at `create()` time, never revised).
+GRANT UPDATE (
+  attempt_state, outcome, response_at, http_status, error_kind, response_summary
+) ON indexnow_outbox_attempt TO worker_app;
 
 -- Worker read surface is explicit and excludes every Admin Auth table.
 GRANT SELECT ON TABLE channel_account, channel_account_credential,

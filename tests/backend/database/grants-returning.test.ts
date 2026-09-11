@@ -778,42 +778,20 @@ const workerBulkMethodExempt = new Set(WORKER_APP_BULK_METHOD_EXEMPTIONS.map((e)
  * construction newly surfaced -- deliberately NOT filed as false positives
  * above (the call sites really are worker_app-reachable and grants.sql
  * really grants nothing matching; masking that as a "false positive" would
- * misrepresent a real risk as verified-safe). Both predate and are
- * unrelated to this lane's own novel-takedown fix, and this lane's own
- * Owner-approved scope is explicit ("仅收 confirmWithdraw/
- * runRightsTransition ... 以及已实证的 takedown grants 与 *Many 守卫；不要扩成
- * 全局 stale Server Action 基础设施改造") -- fixing either would need its own
- * column-level verification and read-only repro against a real gap this
- * lane did not set out to find. Reported via spawn_task instead of being
- * silently left for a future scan to rediscover from scratch; each entry's
- * liveness is still self-checked below (same discipline as the false-
- * positive registries) so this list cannot silently mask a fix that already
- * landed, nor quietly expand to cover an unrelated new gap under the same
- * excuse.
+ * misrepresent a real risk as verified-safe) -- kept as an empty, still-
+ * wired registry rather than deleted outright, so a future genuine gap has
+ * a place to land with the same liveness-checked discipline. Both entries
+ * this registry used to carry (`novel_canonical_tag::deleteMany`,
+ * `indexnow_outbox_attempt::updateMany`) are now closed: Owner-approved
+ * follow-up (2026-09-11, grants+runPublish micro-fix lane) added
+ * `GRANT DELETE ON TABLE novel_canonical_tag TO worker_app` and
+ * `GRANT UPDATE (attempt_state, outcome, response_at, http_status,
+ * error_kind, response_summary) ON indexnow_outbox_attempt TO worker_app`
+ * to `infra/postgres/grants.sql` -- both (table, method) pairs are now
+ * asserted for real by the main loop just below, the same as every other
+ * non-exempt worker_app bulk write.
  */
-const WORKER_APP_BULK_METHOD_KNOWN_GAPS: ReadonlyArray<{ readonly table: string; readonly method: BulkWriteMethod; readonly reason: string }> = [
-  {
-    table: "novel_canonical_tag",
-    method: "deleteMany",
-    reason:
-      "worker/handlers/novel-tag-backfill.ts imports replaceAutoTagSnapshotInTransaction " +
-      "(src/server/tagging/service.ts), whose own tx.novelCanonicalTag.deleteMany({ where: { novelId, " +
-      "source: \"auto\" } }) (service.ts:425) worker_app has never held DELETE for -- only INSERT/UPDATE " +
-      "(grants.sql's worker_app INSERT,UPDATE list) and SELECT. web_app's own two deleteMany call sites on this " +
-      "table (service.ts:302,352, source:\"manual\", inside replaceManualTagSnapshot/exitManualTagMode) are " +
-      "unaffected -- web_app already holds table-level DELETE there. Pre-existing, unrelated to novel takedown.",
-  },
-  {
-    table: "indexnow_outbox_attempt",
-    method: "updateMany",
-    reason:
-      "worker/handlers/indexnow-delivery.ts's own indexNowOutboxAttempt.updateMany(...) (line 210) -- worker_app " +
-      "has only ever held INSERT on this table (grants.sql's worker_app INSERT-only list; the X8 轮 2c RETURNING " +
-      "audit documented in this file's header comment and database-governance.md only added SELECT alongside it, " +
-      "never checked this separate bulk-method statement-privilege layer because that guard did not exist yet). " +
-      "Pre-existing, unrelated to novel takedown.",
-  },
-];
+const WORKER_APP_BULK_METHOD_KNOWN_GAPS: ReadonlyArray<{ readonly table: string; readonly method: BulkWriteMethod; readonly reason: string }> = [];
 const workerBulkKnownGaps = new Set(WORKER_APP_BULK_METHOD_KNOWN_GAPS.map((e) => `${e.table}::${e.method}`));
 
 describe("grants.sql bulk-method invariant (createMany/updateMany/deleteMany, worker_app + web_app): no implicit RETURNING, but PostgreSQL still enforces the base INSERT/UPDATE/DELETE statement privilege", () => {
@@ -877,6 +855,23 @@ describe("grants.sql bulk-method invariant (createMany/updateMany/deleteMany, wo
   it("confirms applyNovelRightsTransition's takedown call sites are still detected by the scan (novel_chapter::updateMany and novel_chapter_content::deleteMany, both via src/server/publish-gate/service.ts, web_app-reachable)", () => {
     expect(webAppBulkWriteMethods.get("novel_chapter")?.has("updateMany"), "expected applyNovelRightsTransition's tx.novelChapter.updateMany(...) to be reachable from src/app/(admin)/ + src/app/api/admin/").toBe(true);
     expect(webAppBulkWriteMethods.get("novel_chapter_content")?.has("deleteMany"), "expected applyNovelRightsTransition's tx.novelChapterContent.deleteMany(...) to be reachable from src/app/(admin)/ + src/app/api/admin/").toBe(true);
+  });
+
+  it("locks in this follow-up's own fix (Owner-approved 2026-09-11, grants+runPublish micro-fix lane): worker_app now holds DELETE on novel_canonical_tag and column-scoped UPDATE on indexnow_outbox_attempt, closing both former WORKER_APP_BULK_METHOD_KNOWN_GAPS entries for real", () => {
+    expect(grantsByRole.get("worker_app")?.get("novel_canonical_tag")?.delete, "worker_app is expected to now have DELETE on novel_canonical_tag").toBe(true);
+    expect(grants).toMatch(/GRANT DELETE ON TABLE novel_canonical_tag TO worker_app;/);
+
+    expect(grantsByRole.get("worker_app")?.get("indexnow_outbox_attempt")?.update, "worker_app is expected to now have UPDATE on indexnow_outbox_attempt").toBe(true);
+    expect(grants).toMatch(
+      /GRANT UPDATE \(\s*attempt_state, outcome, response_at, http_status, error_kind, response_summary\s*\) ON indexnow_outbox_attempt TO worker_app;/,
+    );
+
+    // Both pairs must now be asserted for real by the main bulk-method loop
+    // above, not sitting in the exemption or known-gaps registries.
+    expect(workerBulkMethodExempt.has("novel_canonical_tag::deleteMany")).toBe(false);
+    expect(workerBulkKnownGaps.has("novel_canonical_tag::deleteMany")).toBe(false);
+    expect(workerBulkMethodExempt.has("indexnow_outbox_attempt::updateMany")).toBe(false);
+    expect(workerBulkKnownGaps.has("indexnow_outbox_attempt::updateMany")).toBe(false);
   });
 
   it("every declared web_app bulk-method exemption is live and not masking a real gap", () => {
