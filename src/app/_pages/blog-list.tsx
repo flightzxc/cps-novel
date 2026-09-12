@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
 import { JsonLd } from "@/app/_components/json-ld";
-import { loadBlogList, loadChrome } from "@/app/_lib/public-load";
+import { loadActiveLocales, loadBlogList, loadChrome } from "@/app/_lib/public-load";
 import { toNextMetadata } from "@/app/_lib/seo-metadata";
 import { BlogListScreen } from "@/features/public-ui/blog/BlogListScreen";
 import { Pagination } from "@/features/public-ui/collection/Pagination";
@@ -53,8 +53,9 @@ async function loadBlogListPage(locale: SiteLocale, rawPage: string | string[] |
   const requested = parseBlogPageParam(rawPage);
   if (requested === null) return null;
 
+  const activeLocales = await loadActiveLocales();
   const [{ settings, chrome }, cards] = await Promise.all([
-    loadChrome(locale),
+    loadChrome(locale, undefined, undefined, activeLocales),
     loadBlogList(locale),
   ]);
   const paged = paginateBlogCards(cards, requested);

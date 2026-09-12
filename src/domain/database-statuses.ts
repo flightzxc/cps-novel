@@ -86,7 +86,27 @@ export const SCHEDULE_TRIGGER_KINDS = ["scheduled", "manual"] as const;
 export const MISFIRE_POLICIES = ["bounded_catch_up", "skip", "mark_failed"] as const;
 export const PREVIEW_MATERIALIZATION_POLICIES = ["upstream_returned_preview"] as const;
 export const CAROUSEL_BATCH_STATUSES = ["pending", "processing", "completed", "failed"] as const;
-export const CAROUSEL_SOURCES = ["manual", "automatic"] as const;
+/**
+ * `home_carousel_serving.source` (and, as a subset, `home_carousel_auto_candidate.source`,
+ * which never writes `"manual"`). Schema-contract-drift fix
+ * (`20260912100000_carousel_serving_source_check_fix`): this used to be
+ * `["manual", "automatic"]`, a two-bucket set nothing in this repo ever
+ * wrote -- `src/server/home-carousel/service.ts`'s `computeHomeCarouselInTx`
+ * has always written the finer-grained `"manual" | "new_novel" | "recency"`
+ * (matching CPS `3a76877:src/lib/home-carousel-merge.ts:134,154`'s own
+ * `manual`/`candidate.source` write into the CPS equivalent column, which has
+ * no restricting CHECK at all), so every automatic compute's
+ * `homeCarouselServing.createMany()` failed PostgreSQL's CHECK with 23514.
+ * `tests/backend/database/carousel-check-static.test.ts` (renamed from
+ * `carousel-serving-source-check-static.test.ts` when it grew to cover all
+ * four `home_carousel_*` tables' CHECKs -- carousel batch-status
+ * schema-contract-drift fix) pins this constant, the migration's CHECK
+ * clause, and `service.ts`'s written literals to the same three values so
+ * the two sides cannot drift apart again. No `"revenue"` value (CPS has
+ * one) -- Novel V1 has no revenue-scored candidate branch (`revenueEnabled`
+ * is hard-wired `false`).
+ */
+export const CAROUSEL_SOURCES = ["manual", "new_novel", "recency"] as const;
 export const CANONICAL_TAG_STATUSES = ["active", "inactive"] as const;
 export const NOVEL_TAG_MODES = ["automatic", "manual"] as const;
 export const NOVEL_TAG_SOURCES = ["manual", "auto"] as const;
@@ -321,6 +341,20 @@ export type ArticleSeoVisibility = ValueOf<typeof ARTICLE_SEO_VISIBILITIES>;
 export type RebindBatchStatus = ValueOf<typeof REBIND_BATCH_STATUSES>;
 export type RebindItemStatus = ValueOf<typeof REBIND_ITEM_STATUSES>;
 export type RebindErrorKind = ValueOf<typeof REBIND_ERROR_KINDS>;
+/**
+ * `home_carousel_auto_batch.status`. Gap fix (carousel batch-status
+ * schema-contract-drift, sibling to the `20260912100000` serving.source
+ * fix): every other CHECK-governed enum column in this file has a `ValueOf`
+ * type alongside its value-set constant; `CAROUSEL_BATCH_STATUSES` (above)
+ * did not, so nothing forced `computeHomeCarouselInTx`'s writes to
+ * type-check against it. Used with `satisfies` at each
+ * `home_carousel_auto_batch.status` write site in
+ * `src/server/home-carousel/service.ts` so a value outside this set fails
+ * `tsc`, not just the runtime CHECK / the static migration-consistency test.
+ */
+export type CarouselBatchStatus = ValueOf<typeof CAROUSEL_BATCH_STATUSES>;
+/** `home_carousel_serving.source` (and, as a subset, `home_carousel_auto_candidate.source`). Same gap-fix reasoning as `CarouselBatchStatus` above. */
+export type CarouselSource = ValueOf<typeof CAROUSEL_SOURCES>;
 export type CanonicalTagStatus = ValueOf<typeof CANONICAL_TAG_STATUSES>;
 export type NovelTagMode = ValueOf<typeof NOVEL_TAG_MODES>;
 export type NovelTagSource = ValueOf<typeof NOVEL_TAG_SOURCES>;

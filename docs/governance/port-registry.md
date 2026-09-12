@@ -147,7 +147,7 @@ P1-05A 只登记从 CPS 提取的数据库**模式证据**；没有字节复制�
 | `INDEXNOW_DELIVERY_TASK_TYPE`/`SITEMAP_REFRESH_TASK_TYPE`/`INDEXNOW_SITEMAP_STALE_MS` → `src/lib/indexnow/outbox-contract.ts` | `src/lib/indexnow-outbox-contract.ts` | `1-5` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `COPY` | 原样复制三个任务类型/阈值常量；`SITEMAP_REFRESH_TASK_TYPE`/`INDEXNOW_SITEMAP_STALE_MS` 是 P2-10 共用候选，本任务主导实现（`P2-11.md` §9） | Claude |
 | `INDEXNOW_DEFER_REASON`/`resolveIndexNowReviewMaxWaitMs` 两阶段审核延迟状态机 → 单一通用 defer/release 字段读写 | `src/lib/indexnow-outbox-contract.ts` | `7-38` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `PATTERN_ONLY` | 只借「`deferReason`/`releasedAt`/`releaseReason` 字段承担手动延迟提交」这个形态；**不搬** CPS 绑定 AI 生成审核流程的两阶段编码（`await_review_schedule`/`await_review`）与自动 watchdog 释放——小说仓无对应生成审核环节，`deferReason` 改为自由文本，`releaseDeferredIndexNowOutbox` 只做人工释放 | Claude |
 | `normalizeCanonicalUrl`/`buildIndexNowIdempotencyKey` → `src/lib/indexnow/eligibility.ts` | `src/lib/indexnow-outbox.ts` | `22-45` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | `normalizeCanonicalUrl` 逻辑原样保留（https 强制、host 小写、默认端口剥离、query/fragment 拒绝、双重编码检测）；`buildIndexNowIdempotencyKey` **不搬**——小说仓幂等目标是 `@@unique([url, revision])` 复合键，不再需要单列哈希键（`DECISION-CHECK.md` 核查1a） | Claude |
-| `isIndexNowPageEligible`/`loadEligibleIndexNowPages` → `isNovelIndexNowEligible`/`loadIndexNowCandidateArticle` | `src/lib/indexnow-outbox.ts` | `47-87` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | 保留「locale 白名单 + 谓词族 + 路径可解析」三条件结构；drama 四表联查/`rightsStatus`/`articleType` 分支全删（小说仓无对应多态），改为组合 `visibility.ts` 的 `isIndexNowEligible` + `isPublishableLocale` | Claude |
+| `isIndexNowPageEligible`/`loadEligibleIndexNowPages` → `isNovelIndexNowEligible`/`loadIndexNowCandidateArticle` | `src/lib/indexnow-outbox.ts` | `47-87` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | 保留「locale 白名单 + 谓词族 + 路径可解析」三条件结构；drama 四表联查/`rightsStatus`/`articleType` 分支全删（小说仓无对应多态），改为组合 `visibility.ts` 的 `isIndexNowEligible` + 静态层 `SITE_LOCALES` 成员判定（`isRegisteredSiteLocale`；P4 删除发布白名单层后，IndexNow 资格读的是两层口径中的静态层，见 `locale-canonical.ts` 模块头） | Claude |
 | `enqueueIndexNowFirstPublish` → `src/lib/indexnow/outbox.ts` | `src/lib/indexnow-outbox.ts` | `136-216` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | 保留「查候选→判定资格→`create()`+`catch(P2002)`→按需派发投递」整体流程骨架；输入从 `articleIds: number[]` 收窄为单篇 `articleId: string`（冻结的 dispatcher 契约只传一篇）；冲突目标从 `idempotencyKey` 单列改 `(url, revision)` 复合键；派发目标从 `ensureIndexNowDeliveryTask`/`BatchTask` 改为 `GenericTask`/`GenericTaskItem`（见下方 worker handler 条目） | Claude |
 | `findPublishedWithoutIndexNowDelivery` → `src/lib/indexnow/outbox.ts` | `src/lib/indexnow-outbox.ts` | `327-350` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | 保留差集查询骨架（已发布 Article 减去已有 outbox 记录）；`publishTime` 字段改 cps-novel 的 `status='published'`（无独立 publishTime 列）；候选逐条重新过 `isNovelIndexNowEligible` | Claude |
 | `recoverStaleIndexNowDeliveries` → `src/lib/indexnow/recovery.ts` | `src/lib/indexnow-delivery-service.ts` | `109-169` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | 保留「processing 超时 + 最新 attempt 的 started/completed 分支」崩溃恢复算法；`attemptState` 枚举取值不变（`started/completed/unknown_outcome`，地基已冻结在 `INDEXNOW_ATTEMPT_RECOVERY_STATES`）；`completed` 分支改用新写的 `resolveOutboxDeliveryStatus`（见上）而非内联重复判定 | Claude |
@@ -162,7 +162,7 @@ P1-05A 只登记从 CPS 提取的数据库**模式证据**；没有字节复制�
 | `getStaticSitemapRoot`/`readStaticSitemapFile`/静态响应头 | `src/lib/static-sitemap-cache.ts` | `1-54` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | 原样保留 current 目录读取、路径穿越防御、缓存头和缺失返回 null；仅移动到 `src/lib/seo/` | Codex |
 | `generateStaticSitemaps`/release 校验与原子 symlink 切换 | `src/lib/static-sitemap-generator.ts` | `1-271` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | 保留 release 写入、自检、manifest 和 current.tmp→current 原子切换；类型缩为 mainpage/novelpage，locale 改读冻结白名单，PR1 要求显式注入 family builder | Codex |
 | Sitemap 文件锁、状态机与错误脱敏 | `src/lib/sitemap-refresh-state.ts` | `1-333` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | 保留 wx 排他锁、running/success/failed 状态、失败保留旧版本与敏感值脱敏；移动到 `src/lib/seo/` 并显式透传 family builder | Codex |
-| `renderUrlSetXml`/`renderSitemapIndexXml`/`parseSitemapFileName` | `src/lib/sitemap.ts` | `30-69,96-99,139-155,699-743` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | 提取无 DB 纯核心；类型缩为 mainpage/novelpage，文件名解析只认 `listPublishableLocales()`，不提供 fixture HTTP 白名单 | Codex |
+| `renderUrlSetXml`/`renderSitemapIndexXml`/`parseSitemapFileName` | `src/lib/sitemap.ts` | `30-69,96-99,139-155,699-743` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | 提取无 DB 纯核心；类型缩为 mainpage/novelpage，文件名解析只认静态层 `SITE_LOCALES` 成员（`listPublishableLocales()` 已随 P4 删除发布白名单层一并撤销），不提供 fixture HTTP 白名单 | Codex |
 | `GET /sitemap.xml` 静态只读路由 | `src/app/sitemap.xml/route.ts` | `1-23` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | 保留 Node runtime、force-dynamic、静态命中 200 与缺失 503；仅调整 import 落点，禁止动态查库兜底 | Codex |
 | `GET /sitemap/[fileName]` 静态只读路由 | `src/app/sitemap/[fileName]/route.ts` | `1-35` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | 保留文件名先验校验、非法 404、静态缺失 503；仅调整 import 落点，fixture 验收不经过 HTTP | Codex |
 | `robots` metadata 路由 | `src/app/robots.ts` | `1-17` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | 保留 allow 全站、私有前缀 disallow 与 sitemap 声明；后台路径换为小说仓路由，站点 origin 改为必填且严格校验的 SITE_URL | Codex |
@@ -446,6 +446,398 @@ hooks/number/date/list/relativeTime 格式化器/命名空间管理/错误兜底
 | symbol | source_file | source_lines | baseline_commit | port_kind | changed_what | owner |
 | --- | --- | --- | --- | --- | --- | --- |
 | `intl-messageformat@11.2.3` + `@formatjs/icu-messageformat-parser@3.5.6`（CPS 复数能力依赖链的解析引擎层，非 `next-intl`/`use-intl` 框架层） | CPS `node_modules` 递归 `package.json` resolve 得到的真实版本（非仓库源码路径；`next-intl 4.11.0 → use-intl 4.11.0 → intl-messageformat 11.2.3 → @formatjs/icu-messageformat-parser 3.5.6`） | N/A（依赖版本对齐，非代码行搬运） | `c37602c3933ca97adad0281deb6c75e71e550412` | `ADAPT` | 只对齐引擎版本号作为本仓生产依赖（`intl-messageformat` production dep）+ 门禁专用 dev 依赖（`@formatjs/icu-messageformat-parser`）引入；不引入 `next-intl`/`use-intl` 框架层（路由/Link/redirect/usePathname、React hooks、messages 命名空间管理、`onError` 兜底策略）——理由见上方两段说明；`t()`/`createTranslator`/`getPublicT` 是本仓 `src/lib/locale/messages/index.ts` 既有函数原地改造为调用该引擎（新增 `locale` 参数、`Map<string, IntlMessageFormat>` 编译缓存、`MissingValueError` 重新包装为既有 `MissingMessagesError`），不是从 CPS 抄的 wrapper 代码 | Claude |
+
+### L10N P1 语言归一与存量重算（channel-language.ts，2026-09-10）
+
+依据 `施工提示词_Sonnet_L10N_P1_语言归一与存量重算_2026-09-10.md`。`baseline_commit`
+固定为构建施工提示词本身指定的 `3a76877af27c6247ad94be946b44e9cc5c1cb9ce`——即 tag
+`pulsedrama-v8.5.1-freeze-20260906` 自身的 peeled commit（`chore(release): prepare
+v8.5.1`），**不是**上方 C-17/I18N 两节登记的 `c37602c...`（那是同一只读工作区上
+`3a76877` 之上另外 2 个 docs-only commit 之后的 HEAD，见上方 C-17 小节的说明）。
+两者是同一只读路径 `cps-admin-v851-admin-host` 上的两个不同坐标，本节明确使用
+前者，与上方两节各自独立、互不覆盖。
+
+**范围说明**：`src/lib/locale/channel-language.ts` 是新文件，COPY/ADAPT 自 CPS
+`src/lib/channel-language.ts`——CPS 该文件服务多渠道多上游 app（`beidou`/
+`changdu_moboreels`/`changdu_shortmax`/…），本仓只有一个上游来源 app
+（`moboreader`），所以按 sourceApp 索引的结构（`LANGUAGE_REGISTRY_BY_SOURCE_APP`）
+保留，但简化为单 key；`channel`/`channelAppKey`/`label`
+（`LOCALE_LABEL` 依赖）字段丢弃——没有调用方需要，非"顺手精简"，是"CPS
+多渠道维度在本仓不存在"。moboreader 18 码的**取值**来自海阅自己 X8 库的真实
+证据（`docs/governance/L10N_UPSTREAM_LANGUAGE_EVIDENCE_2026-09-10.md`），CPS
+`CHANGDU_SHORTMAX_LANGUAGE_CODE_TO_LOCALE` 只作交叉核对，不是取值来源，因此
+该常量本身不登记为 COPY 对象（下表只登记算法/别名表/熔断函数的 COPY）。
+
+`scripts/l10n/backfill-source-item-locale.ts` ADAPT 自 CPS
+`scripts/backfill-drama-source-item-locale.ts`：CPS 版本按 `channelApp.channel.
+code`/`channelApp.sourceApp.code` 派生 `channelAppKey`（多渠道场景），本仓单
+source app 场景该步骤整段删除；CPS 的 `--apply` 无审批门禁，本仓按
+`scripts/p2-06-5-production/tagging-bootstrap.ts` 同款方式加了 `--approver`
+（须为 `status=active` 的 `AdminIdentity`）+ `OperationAudit` 审计行（详见脚本
+文件头注释）。`scripts/l10n/probe-unnamed-language-codes.ts` 是新增证据线 X
+工具，无 CPS 对应文件（`PATTERN_ONLY`：借用既有 `getchapterinfo` 适配器与
+凭证/保险丝路径的调用形状，不是搬运 CPS 某个探针脚本——CPS 没有等价物）。
+`worker/handlers/moboreader.ts` 的熔断接线 ADAPT 自 CPS
+`src/lib/changdu-dry-run.ts:429-450`：CPS 在一次 `changdu-dry-run` 调用（对应
+一次上游分页拉取）粒度内评估熔断，本仓按 `persistCatalogPage`（同样对应一次
+`catalog_page` 任务项 = 一次上游分页拉取）粒度调用，语义对齐、粒度同构；CPS
+熔断命中后在同一函数作用域内重写 `parsedItems`，本仓分两段（`pageLanguage
+Resolutions` 预解析 → `suspendedLanguageCodes` 判定 → 逐行落库时读判定结果），
+因为本仓的持久化是逐行 upsert 而非 CPS 那种整批 `parsedItems` 数组重写。
+
+| symbol | source_file | source_lines | baseline_commit | port_kind | changed_what | owner |
+| --- | --- | --- | --- | --- | --- | --- |
+| `ChannelLanguageConfidence`/`ResolvedChannelLanguageConfidence` 类型 → `src/lib/locale/channel-language.ts` | `src/lib/channel-language.ts` | `3-9` | `3a76877af27c6247ad94be946b44e9cc5c1cb9ce` | `COPY` | 原样复制两个类型别名 |
+| `ChannelLanguageWarning` 类型 → 同上（去 `channel`/`channelAppKey` 字段） | `src/lib/channel-language.ts` | `11-23` | `3a76877af27c6247ad94be946b44e9cc5c1cb9ce` | `ADAPT` | 删 `channel`/`channelAppKey` 两个多渠道字段，其余字段名/类型逐字保留 |
+| `ChannelLanguageResolution` 类型 → 同上（去 `channel`/`channelAppKey`/`label`） | `src/lib/channel-language.ts` | `25-35` | `3a76877af27c6247ad94be946b44e9cc5c1cb9ce` | `ADAPT` | 删 `channel`/`channelAppKey`/`label`（`label` 依赖 `LOCALE_LABEL`，本仓无调用方，不搬），其余字段名/类型逐字保留 |
+| `UNKNOWN_SOURCE_LOCALE_FILTER` 常量 → 同上 | `src/lib/channel-language.ts` | `57` | `3a76877af27c6247ad94be946b44e9cc5c1cb9ce` | `COPY` | 原样复制（`"__unknown"`） |
+| `LANGUAGE_NAME_ALIAS_TO_LOCALE` 别名表 → 同上（私有常量，未导出） | `src/lib/channel-language.ts` | `184-266` | `3a76877af27c6247ad94be946b44e9cc5c1cb9ce` | `COPY` | 原样复制全表（含简体中文变体显式 `null`），不是过滤子集——本仓 18 码的全部上游 `languageName` 恰好都已在这张全表里，未新增任何条目 |
+| `normalizeLanguageAlias`/`resolveLanguageNameAlias` 函数 → 同上 | `src/lib/channel-language.ts` | `269-281` | `3a76877af27c6247ad94be946b44e9cc5c1cb9ce` | `COPY` | 原样复制（NFKC 归一 + trim + 折叠空白 + 小写；别名表查不到与显式 `null` 两种情况均返回 `null`，不做区分） |
+| `resolveChannelLanguage` 函数 → 同上（去多渠道 `channel`/`channelAppKey`/`explicitSourceAppCode` 派生逻辑） | `src/lib/channel-language.ts` | `283-361` | `3a76877af27c6247ad94be946b44e9cc5c1cb9ce` | `ADAPT` | code→name 解析优先级、`code_name_conflict` 告警产出逻辑、三态返回（code/name_alias/unknown）逐字保留；`sourceAppCode` 默认值固定为 `"moboreader"` 取代 CPS 从 `channelAppKey` 派生 `changdu_<sourceApp>`/`beidou` 的多分支逻辑（本仓无此维度）；`resolveChannelCode`/`deriveSourceAppCodeFromChannelAppKey`/`normalizeSourceAppCode` 三个多渠道辅助函数不搬 |
+| `evaluateLanguageMappingSuspensions` 函数 → 同上 | `src/lib/channel-language.ts` | `496-520` | `3a76877af27c6247ad94be946b44e9cc5c1cb9ce` | `COPY` | 原样复制，含 `total>=10 && conflicts>=3 && rate>=0.2` 三阈值逐字不变 |
+| 熔断接线粒度（每次上游分页拉取评估一次、命中即本批强制 `locale=null`）→ `persistCatalogPage` | `src/lib/changdu-dry-run.ts` | `380-450` | `3a76877af27c6247ad94be946b44e9cc5c1cb9ce` | `ADAPT` | 语义/粒度对齐（见上方范围说明段落最后一段）；持久化结构从"整批数组重写"改为"逐行 upsert 前读判定结果"，因为本仓落库路径本就是逐行 `tx.novelSourceItem.upsert`，不是 CPS 那种批量构造后统一写入 |
+| `backfillSourceItemLocale` 核心循环（cursor 分页、dry-run 默认、`--re-resolve`、条件 `updateMany`）→ `scripts/l10n/backfill-source-item-locale.ts` | `scripts/backfill-drama-source-item-locale.ts` | `1-173`（全文件） | `3a76877af27c6247ad94be946b44e9cc5c1cb9ce` | `ADAPT` | 删 `channelAppKey` 派生步骤（多渠道概念，本仓不适用）；`--apply` 从"无门禁直接写"改为"需 `--approver`（`AdminIdentity` 存在且 active）+ `OperationAudit` 审计行"，同款方式见 `scripts/p2-06-5-production/tagging-bootstrap.ts` 的 `resolveApprover`/审计写入模式；报告形状从"扁平计数"改为"按 `sourceLanguageCode` 分桶的 before/after locale 直方图"（施工提示词 §1.F 明确要求"每码 before/after 计数"）；无 `NovelSourceItem` 对应的 mapping-version DB 列（核对 `3a76877:prisma/schema.prisma` 的 `DramaSourceItem` 同样没有该列），故不加迁移，`MAPPING_VERSION` 只记在报告/审计快照里 |
+| CanonicalTag bootstrap 的 approver 校验/审计写入形状 → `resolveApprover`/`OperationAudit` 写入 | `scripts/p2-06-5-production/tagging-bootstrap.ts` | `651-657`（`resolveApprover`）、`841-859`（`OperationAudit.create`） | 本仓内部模式复用，非 CPS 搬运 | `PATTERN_ONLY` | 只借"UUID 或 username 双形态查找 + status=active 校验失败即 fail() + OperationAudit 记录 actorType/action/entityType/requestId/reason/before-after snapshot"的形状；不搬 `pg_advisory_xact_lock`（backfill 场景不需要跨进程互斥，`--request-id` 重放判定已足够）与 `--channel-app` 绑定校验（本脚本没有对应概念） |
+
+**L10N P1 补登记（2026-09-11）**：码表证据升级为畅读官方语种编号表（Owner
+2026-09-11 转述，一级来源，18/18 与本仓登记表逐条核对一致，18 码取值不变）；原
+X8 数据库成对样本与 CPS 交叉核对降为佐证。19/20 结论由"证据缺失待补"
+（`MAPPING_EVIDENCE_MISSING`）改为确定性结论 `VENDOR_TABLE_ABSENT`（官方表本身
+没有这两个码，永久不登记，不再等待探针补证据）。详见
+`docs/governance/L10N_UPSTREAM_LANGUAGE_EVIDENCE_2026-09-10.md`"§ 畅读官方语种
+编号表（Owner 2026-09-11 提供）"一节；本条为纯文档更新，不涉及代码/schema 改动。
+
+### L10N P2 创建链语种强制继承 + 发布层 locale 检查删除（content-creation/service.ts + publish-gate/evaluator.ts，2026-09-10）
+
+依据 `施工提示词_Sonnet_L10N_P2_创建链语种强制继承_2026-09-10.md`。`baseline_commit`
+沿用 L10N P1 小节同一坐标 `3a76877af27c6247ad94be946b44e9cc5c1cb9ce`。
+
+**范围说明**：矩阵 #3/#4（创建链语种强制继承）与矩阵 #8（发布门禁语种条件删除）。
+CPS 参照的 `changdu-promote-drama-dry-run.ts`/`changdu-promote-drama.ts` 是一次批量
+"上游来源 → Drama 提级" 的 dry-run/apply 流水线，产出 `blockReasons: string[]` 数组；
+本仓的 `createContentFromSourceItem` 是单条来源条目、单事务、结构化返回值（非
+`blockReasons` 数组）的创建路径，形状本就不同，因此下表大多数条目登记为
+`ADAPT`/`PATTERN_ONLY`（借语义/借顺序），不是逐行 `COPY`——`missing_locale`/
+`unsupported_locale` 两个错误码名称本身是逐字复用（CPS parity 的落点是"码名一致"，
+不是"实现逐字一致"）。模板同语种硬阻断取 CPS **批量**路径的语义
+（`batch-actions-core.ts:167-183`：模板存在性与语种匹配合并成一次判定），不取
+CPS 单篇路径的语义（`article-actions.ts:569-576`：先判"模板不存在"再单独判
+"语种不匹配"两次独立判定）——因为 `selectActiveArticleTemplate` 的查询本身就是
+locale-过滤在内的单次组合查询，无法在不改 `article-templates/service.ts`（P3
+territory，本轮不改）的前提下拆成两次独立判定去复刻单篇路径的两阶段错误码。
+
+| symbol | source_file | source_lines | baseline_commit | port_kind | changed_what | owner |
+| --- | --- | --- | --- | --- | --- | --- |
+| `missing_locale`/`unsupported_locale` 阻断语义（locale 只来自来源事实、无人工覆盖）→ `deriveLocale`（`src/server/content-creation/service.ts`） | `src/lib/changdu-promote-drama-dry-run.ts` | `514-534` | `3a76877af27c6247ad94be946b44e9cc5c1cb9ce` | `ADAPT` | CPS 用 `blockReasons.push("missing_locale", "unsupported_locale")` 累积进批量 dry-run 报告数组；本仓改为 `ContentCreationInputError` 抛出（单条创建路径本就是"guard 即失败"的形状，`src/app/(admin)/catalog-sync/_actions.ts` 与 `./batch.ts` 已有的 `ContentCreationInputError` 捕获链路可直接复用），错误码名称逐字复用 CPS 的两个码名；`normalizeBcp47Locale`/`isSupportedSiteLocale` 两步判定合并为一次 `SITE_LOCALES.includes` 成员检查，因为本仓 `NovelSourceItem.sourceLocale` 落库时已经是 L10N P1 worker 写路径解析好的 BCP-47 值或 `NULL`（`src/lib/locale/channel-language.ts`），不需要在读取时再跑一次 `normalizeBcp47Locale` |
+| locale 只来自来源事实，不接受调用方覆盖 → `Novel.locale`/`Article.locale` 写入点（`runCreateTransaction`） | `src/lib/changdu-promote-drama.ts` | `360-361`、`674-677` | `3a76877af27c6247ad94be946b44e9cc5c1cb9ce` | `PATTERN_ONLY` | 只借"locale 是从 `sample.resolvedSiteLocale`/`plannedDramaFields.locale` 读出来的派生值，`createPlannedDramaFields` 找不到 locale 直接 `throw`，没有任何入参能覆盖它"这条设计原则；不搬 `ChangduPromotionSample`/`createPlannedDramaFields` 的具体实现（分类器接线、`generateDramaId`/`generateSlug` 等与本仓 `createNovelWithBusinessIdRetry`/`resolveUniqueSlug` 完全不同构） |
+| 模板同语种硬阻断（找不到匹配语种模板即硬错，批量语义）→ `template_locale_mismatch`（`runCreateTransaction`/`runDryRun`） | `src/lib/batch-actions-core.ts` | `167-183` | `3a76877af27c6247ad94be946b44e9cc5c1cb9ce` | `PATTERN_ONLY` | 只借"模板语种与内容语种不匹配是一次硬阻断，且不区分'模板不存在'与'模板语种不对'两种子情形"的批量语义；不搬 CPS 的两步实现（先 `Set` 去重模板语种检查同批模板是否单一语种，再逐个 `drama.locale` 比对）——本仓 `selectActiveArticleTemplate` 已经是"给定 locale 取单个模板"的单次查询，语种筛选在查询内部完成，没有"同批多模板语种是否一致"这个中间态需要复刻 |
+| `getTemplateDramaLocaleMismatch` 的"模板不存在"与"语种不匹配"两次独立判定 | `src/actions/article-actions.ts` | `569-576` | `3a76877af27c6247ad94be946b44e9cc5c1cb9ce` | 不搬（仅作对照说明，不登记为 port） | 见上方"范围说明"——本仓创建=单事务无单篇/批量之分，取批量语义，不取这个单篇路径的两阶段错误码 |
+| 发布门禁删除语种检查（Owner 明示例外） → `src/server/publish-gate/evaluator.ts` 删 `checkLocale`/`isRegisteredSiteLocale`/`locale_not_publishable` push/deps 注入位 | 不适用（本条是删除，非搬运） | 不适用 | 不适用 | 不适用（DELETE，非 COPY/ADAPT/PATTERN_ONLY） | **Owner 2026-09-10 明示例外**：`docs/p2/P2_01_PUBLISH_GATE_CONTRACT.md`/`evaluator.ts` 自身 2026-09-08 曾登记的"发布门禁只允许改这一处"的禁区，本轮 Owner 再次明示允许触碰、仅此一处、仅删除语种注册检查；`src/contracts/publish-gate.ts` 的 `locale_not_publishable` 理由码本身不删（该文件本轮不改，P2-01 FROZEN 契约），只是 evaluator 不再产出它；`tests/backend/publish-gate/no-bypass.test.ts` 的既有失败签名（`scripts/s1-exact-target-structural-smoke.ts` 一条 `.$executeRawUnsafe` 命中）改前改后逐字相同，已实测核对 | Claude |
+
+**P2 遗留小项补登记（L10N P5 §1.E，2026-09-11）**：批量创建的**失败时机**是一处刻意保留的语义偏离，不是待收口的 gap——CPS `batch-actions-core.ts:167-183` 在写入前对整批做一次性语种一致性扫描，任何一条不满足即**事前**整批拒绝（零写入）；本仓 `applyContentCreationBatch`（`src/server/content-creation/batch.ts`）逐条走独立事务，一条 `template_locale_mismatch`/`missing_locale`/`unsupported_locale` 只让**该条**在 `runDryRun`/`runCreateTransaction` 内部以 `事后`（每条自己的事务边界内）报错并计入 `failed`，同批其余条目不受影响、各自继续尝试。两者对"模板语种不匹配"这条判定本身的语义一致（找不到匹配语种模板即硬错，不区分"模板不存在"与"语种不匹配"两种子情形），偏离仅在"整批同生共死"（CPS）与"逐条独立成败"（本仓）——本仓从 P0 起就没有 CPS 意义上的"一批 = 一次事前校验通过的写入窗口"这个概念（`batch.ts` 本身就是逐条事务循环，不是单个大事务），裁决为 `PARITY` 可接受，不倒退去为了逐字复刻 CPS 的整批拒绝语义而牺牲本仓已有的"部分成功、逐条可查"体验。
+
+### L10N P3 模板 locale 非空化 + 15 语默认模板资产（2026-09-10）
+
+`施工提示词_Sonnet_L10N_P3_模板locale非空化与15语模板资产_2026-09-10.md` §1，矩阵 #5。CPS
+参照仍是同一个冻结快照 `3a76877af27c6247ad94be946b44e9cc5c1cb9ce`（`git -C
+/Users/chenweifeng/Documents/产品原型及文档/cps项目/cps-admin-v851-admin-host show
+3a76877:<path>`）。`ArticleTemplate.locale` 的 `NOT NULL DEFAULT 'en'` 形状与
+`scripts/l10n/article-template-bootstrap.ts` 的 dry-run/SHA-pin/审批门/幂等 CLI 形状均登记于
+下表；`template-manager.tsx` 的 `TEMPLATE_LOCALE_OPTIONS`（CPS 17 项，相对本仓 `SITE_LOCALES`
+多出 `it`/`tr` 两个真实但未登记为站点语种的 BCP-47 码，不是 `pt`/`zh-TW` 别名折叠）
+**未搬运**——本仓沿用既有唯一真源 `SITE_LOCALES`（15 项），只是删掉了旧实现里那条「全部语种」
+选项，不是从 CPS 搬入一张新表，故不在此登记为 port。
+
+| symbol | source_file | source_lines | baseline_commit | port_kind | changed_what | owner |
+| --- | --- | --- | --- | --- | --- | --- |
+| `ArticleTemplate.locale` 非空默认形状 → `prisma/schema.prisma`（`ArticleTemplate` model） | `prisma/schema.prisma` | `518`（`locale String @default("en")`） | `3a76877af27c6247ad94be946b44e9cc5c1cb9ce` | `ADAPT` | 列类型/长度不变（`VarChar(16)`），只把 CPS 的"非空 + 默认 en，无通用模板语义"这一约束形状对齐过来；本仓额外走一条 `UPDATE ... WHERE locale IS NULL` 防御性回填（X8 今日实测 0 行，生产未核实、迁移仍保留该 UPDATE 作为安全网），CPS 原始迁移无此回填（CPS 该列从建表起就是非空，没有历史 NULL 行要处理） |
+| bootstrap CLI 的 dry-run/SHA-pin/`--apply --approver`/幂等 + 自建 `OperationAudit` 形状 → `scripts/l10n/article-template-bootstrap.ts` | `scripts/p2-06-5-production/tagging-bootstrap.ts` | `1-79`（文件头设计说明）、`156-227`（错误类型/CLI 解析）、`651-657`（`resolveApprover`）、`774-859`（apply 事务与审计写入） | 本仓内部模式复用，非 CPS 搬运 | `PATTERN_ONLY` | 只借"dry-run 默认 + hash 钉死输入 + `--apply` 需 `--approver`（`AdminIdentity` 存在且 active）+ 落库走独立 `OperationAudit`、不经 `mutateAdmin*` 语义层"的整体形状；不搬 `--channel-app` 绑定校验（本脚本没有对应的外部绑定概念）、不搬 `pg_advisory_xact_lock` + `--request-id` 请求级重放去重（tagging-bootstrap 的 196 条映射边需要跨进程互斥防止重复审计；本脚本 15 行数据量小，幂等性直接靠 `(templateKey, version)` 唯一键 upsert 收敛，每次 `--apply` 允许各自记一条 provenance 审计行，不做重放去重）；也不搬 keyword 词表三条过滤规则（本脚本无关键词词典概念） |
+| 每语种独立 `templateKey`（`system-default-v1` / `system-default-<locale>-v1`）→ 15 份 `assets/article-templates/*.json` + `article-template-bootstrap.ts` | `scripts/ops/tkd-dryrun-paginated.sh` | `85-93`（`TEMPLATE_LOCALE` 关联数组：`RUTPL01`→`ru`、`FRTPL01`→`fr`、`PTTPL01`→`pt-BR`、`ESTPL01`→`es`、`FTTPL01`→`zh-Hant`、`TPL001`→`en`） | `3a76877af27c6247ad94be946b44e9cc5c1cb9ce` | `PATTERN_ONLY` | 只借"每个语种一个独立业务标识、不共用一份带通配语义的模板行"这条组织形态；不搬 CPS 该脚本的具体 6 个短码值（本仓 15 语种的 `templateKey` 由 §1.D 命名约定 `system-default[-<locale>]-v1` 独立生成，不复用 `RUTPL01` 这类简写） |
+
+### L10N P4 公开面两层分层、根路径协商、白名单层删除（2026-09-10）
+
+依据 `施工提示词_Sonnet_L10N_P4_公开面两层分层与白名单删除_2026-09-10.md`（§0–§5），
+规划矩阵 #9/#10/#12（#11 JUSTIFIED_DEVIATION 不动）。`baseline_commit` 沿用
+L10N P1/P2 同一坐标 `3a76877af27c6247ad94be946b44e9cc5c1cb9ce`。
+
+#### §1 施工前取证（四张清单，先于代码改动产出）
+
+**清单①：CPS 动态层（`getActiveLocales`/`active-locales`）消费点**
+——`git -C <cps> grep -n "getActiveLocales\|active-locales" 3a76877 -- src`：
+
+| 文件 | 用途 |
+| --- | --- |
+| `src/lib/active-locales.ts` | 定义本身（`unstable_cache(queryActiveLocales, ["active-locales-v1"], {revalidate:300, tags:["active-locales"]})`，`Drama.groupBy({by:["locale"], where:{status:"active", locale:{not:null}}})`，`en` 恒含，按 `locales` 顺序返回） |
+| `src/components/site/site-header.tsx` | **唯一真实消费点**：`await getActiveLocales()`，结果传给 `<LocaleSwitcher availableLocales={activeLocales} />` |
+
+CPS 动态层的消费面极窄——只有 `SiteHeader`→`LocaleSwitcher` 这一条链路读它；sitemap/hreflang/IndexNow/路由/canonical 全部读静态层（见清单②）。海阅动态层的消费点必须同样只对齐这一条链路，不得因为"反正已经有异步函数了"就顺手扩大到 sitemap 等静态层地盘（矩阵 #9 施工要点原话："CPS 用静态集的地方不得换动态集"）。
+
+**清单②：CPS 静态层（`SUPPORTED_SITE_LOCALES`/`isSupportedSiteLocale`/`routing.locales`）消费点**
+——`git -C <cps> grep -n "SUPPORTED_SITE_LOCALES\|isSupportedSiteLocale\|routing.locales" 3a76877 -- src`，
+共 70 余处命中，按海阅有无对应落点分两类：
+
+有海阅对应落点、本轮需要改的（与 §2 范围逐一对应）：
+| CPS 文件/符号 | 语义 | 海阅对应落点 |
+| --- | --- | --- |
+| `src/i18n/routing.ts`（`locales = SUPPORTED_SITE_LOCALES`，`isSupportedLocale`） | 路由层 locale 集合 | `src/proxy.ts` 路径段解析、`src/app/[locale]/_guard.ts` |
+| `src/app/[locale]/(site)/layout.tsx:15,35,46`（`hasLocale(routing.locales,...)`） | 注册即路由 | `src/app/[locale]/_guard.ts` `getRoutableLocale` |
+| `src/lib/static-sitemap-generator.ts:190`（`routeLocales = options.routeLocales ?? locales`） | sitemap 分片默认全量 | `src/lib/seo/static-sitemap-generator.ts:190` |
+| `src/lib/indexnow-outbox.ts:70-82`（`isSupportedSiteLocale`） | IndexNow 资格 | `src/lib/indexnow/eligibility.ts`（已有等价 `isRegisteredSiteLocale`，只是默认门未切换） |
+| `src/lib/drama-hreflang.ts:17-31`（静态 `locales`） | hreflang sibling 查询范围 | `src/lib/seo/novel-hreflang.ts` `loadNovelHreflangSiblings` |
+| `src/lib/supported-site-locales.ts:21`（`BLOG_ARTICLE_LOCALE_OPTIONS = SUPPORTED_SITE_LOCALES`，`article-blog-create-form.tsx:15`） | 博客创建表单语种下拉 | `blog-create-form.tsx`、`content-creation/blog.ts` `requireLocale` |
+
+无海阅对应落点（CPS 特有能力，本轮不搬、不登记为 GAP）：`(admin)/articles/faq-workbench/**`（FAQ 工作台，海阅无此功能）、`(admin)/home-carousel/page.tsx`/`home-carousel-config-write.ts`（轮播 locale，P5 范围，本轮"不做"清单已列）、`(admin)/tags/_components/locale-field-editor.tsx`（对应海阅 `TAG_TRANSLATION_LOCALES`，独立域不动）、`api/admin/blog/drama-search/route.ts`、`lib/blog-seo.ts`、`lib/faq/**`、`lib/seo-utils.ts:132`（海阅 `seo-utils.ts` 现直接读静态层 `SITE_LOCALES`；`listPublishableLocales()` 已随 P4 删除发布白名单层撤销，见清单③）、`lib/site-search/site-search-service.ts`。
+
+**清单③：海阅待删白名单层（`PUBLISHABLE_LOCALES`/`listPublishableLocales`/`isPublishableLocale`/`pickPublishableLocale`/`ARTICLE_TEMPLATE_CRUD_LANDED`）全部消费点**
+——`grep -rn "PUBLISHABLE_LOCALES\|listPublishableLocales\|isPublishableLocale\|pickPublishableLocale\|ARTICLE_TEMPLATE_CRUD_LANDED" src worker scripts tests`：
+
+真实运行时调用点（非注释/非纯文档）：
+
+| 文件:行 | 符号 | 改向 |
+| --- | --- | --- |
+| `src/proxy.ts:155` | `pickPublishableLocale(firstPathSegment)` | 改 `SITE_LOCALES` 成员判定（静态层） |
+| `src/app/layout.tsx:54` | `pickPublishableLocale(header)` | 改读请求 locale（`x-novel-locale`，`SITE_LOCALES` 校验，静态层） |
+| `src/app/[locale]/_guard.ts:66` | `isPublishableLocale(locale)` | 删（保留 `SITE_LOCALES` 成员判定 + 默认语种排除两道，静态层） |
+| `src/app/(admin)/articles/new-blog/_components/blog-create-form.tsx:50` | `listPublishableLocales()` | 改 `SITE_LOCALES`（对齐 CPS `BLOG_ARTICLE_LOCALE_OPTIONS`，静态层） |
+| `src/features/public-ui/layout/LocaleSwitcher.tsx:128` | `listPublishableLocales()` | 改由服务端传入 `activeLocales` prop（动态层） |
+| `src/server/content-creation/blog.ts:111` | `isPublishableLocale(value)` | 改 `SITE_LOCALES` 成员判定（静态层，对齐 CPS `requireLocale` 用 `isSupportedSiteLocale`） |
+| `src/lib/site/request-locale.ts:39-44` | `pickPublishableLocale` 定义（内部调 `isPublishableLocale`） | 改为 `SITE_LOCALES` 成员判定，函数改名去 `Publishable` 措辞 |
+| `src/lib/seo/seo-utils.ts:133` | `listPublishableLocales()` | 改 `SITE_LOCALES`（`buildHreflangAlternates` 的枚举范围，对齐清单②未搬项——`seo-utils.ts` 是 hreflang 的"无过滤盲枚举"分支，不是 `novel-hreflang.ts` 的"过滤 sibling"分支，语义上更贴近 CPS 静态 `locales` 枚举） |
+| `src/lib/seo/novel-hreflang.ts:113` | `listPublishableLocales()` | 改 `SITE_LOCALES`（静态层，可见性谓词 `isVisibleSibling` 不动） |
+| `src/lib/seo/static-sitemap-generator.ts:190` | `listPublishableLocales()` | 改 `SITE_LOCALES`（静态层，对齐 CPS `locales` 默认） |
+| `src/lib/seo/sitemap.ts:426` | `listPublishableLocales().includes(...)` | 改 `SITE_LOCALES.includes(...)`（`parseSitemapFileName` 的文件名合法性判定，静态层） |
+| `src/lib/indexnow/eligibility.ts:180,233` | `isPublishableLocale` 缺省 `localeGate` | 改 `isRegisteredSiteLocale`（已有的 `SITE_LOCALES` 成员判定，对齐 CPS `isSupportedSiteLocale`） |
+| `src/lib/locale/locale-canonical.ts` | `PUBLISHABLE_LOCALES`/`isPublishableLocale`/`listPublishableLocales`/`ARTICLE_TEMPLATE_CRUD_LANDED`/`assertPublishableLocalesFailClosed` 定义本身 | 删除（§2.A） |
+
+9 个测试文件的死 mock（覆盖 `isPublishableLocale`/`listPublishableLocales`，导出消失后 `importOriginal` 展开会 TS 报错）：
+`tests/backend/publish-gate/{admin-wrappers,invalidation-wiring,service,db-retry-wiring,c27-article-type-fork}.test.ts`、
+`tests/backend/seo/{novel-hreflang,sitemap-multi-locale}.test.ts`、
+`tests/ui/locale-switcher-multi-locale.test.tsx`、
+`tests/integration/p2-12-vertical-acceptance.test.ts`——逐一删 mock 键或改指向新接口，见 §改动清单。
+
+**清单④：`PUBLIC_SITE_LOCALE` 消费点分类**
+——`grep -rn "PUBLIC_SITE_LOCALE" src`（76 处非注释代码引用，import 语句与实际使用各算一处）：
+
+| 分类 | 文件 | 结论 |
+| --- | --- | --- |
+| **默认语种常量（保留）** | `src/app/page.tsx`、`src/app/category/[slug]/page.tsx`、`src/app/blog/page.tsx`、`src/app/blog/[slug]/page.tsx`、`src/app/novel/[slugParam]/page.tsx`、`src/app/novel/[slugParam]/not-found.tsx`、`src/app/novel/[slugParam]/chapter/[chapterNumber]/page.tsx`、`src/app/browse/page.tsx` | 这些是**裸路径路由树**（D-8 定案：默认语种在无前缀路径落地），`PUBLIC_SITE_LOCALE` 在这里不是"唯一语种假设"的 bug，是路由结构本身——裸路径树与 `[locale]` 前缀树是两棵并行路由树，各自服务固定的语种范围，不因本轮 guard 放开前缀树而改变 |
+| **默认语种常量（保留，dev-only）** | `src/app/dev-preview/**/*`、`src/features/public-ui/fixtures/mock-chrome.ts` | 开发预览路由，非生产可达路径，`mockChrome` 本身注释明示"语言入口只在确实存在多个可发布语种时才传入"——本轮验证单语种隐藏态的既有测试夹具 |
+| **默认语种常量（保留，根树/裸路径 404·error 边界，404 边界零 props，`headers()` 可用但结构性不读）** | `src/features/public-ui/status/PublicErrorStatus.tsx`、`src/features/public-ui/status/PublicNotFoundStatus.tsx` | 分类理由订正（review fix n4，2026-09-10）：原表述"无请求上下文"不准确——`src/app/not-found.tsx`（根 404 边界）是 Server Component，`headers()` 技术上是可读的（跟 `src/app/[locale]/novel/[slugParam]/not-found.tsx` 的 B-1 修复一样可以读 `x-novel-locale`）；`src/app/error.tsx` 是 `"use client"`，才是真正读不到 `headers()` 的一侧。两者共同的真实理由是**结构性**的，不是技术限制：这两个文件是根/裸路径树自己的 404/error 边界（不在 `[locale]` 前缀树下），裸路径树按 D-8 定案本就只服务默认语种，`PUBLIC_SITE_LOCALE` 在这里与该文件所在路由树的语种范围一致，不是遗漏——跟 B-1 修的 `[locale]` 子树 not-found（该文件确实需要显示请求方语种，因为它住在会路由到任意 `SITE_LOCALES` 成员的前缀树下）是两种不同处境，不能同法处理 |
+| **默认语种常量（保留）** | `src/lib/site/blog-queries.ts:109`（`asSiteLocale(row.locale) ?? PUBLIC_SITE_LOCALE` 兜底）、`src/lib/locale/messages/index.ts:172`（`en` 消息目录短路判定） | 本就是"哪个 locale 缺失就兜底默认语种"的语义，不是遗漏 |
+| **唯一语种假设（改读请求 locale）** | `src/app/layout.tsx:17,51,56` | 根布局 `<html lang dir>` 与顶层 `<title>` 兜底文案——之前恒定 `PUBLIC_SITE_LOCALE`，因为 `pickPublishableLocale` 白名单只放行 `en`；白名单删除后必须真正读 `x-novel-locale` 请求头（§2.E，已在清单③单独登记，已修） |
+| **唯一语种假设（改读请求 locale，review fix B-1 已修，2026-09-10）** | `src/app/[locale]/novel/[slugParam]/not-found.tsx` | 这份文件住在 **`[locale]` 前缀树**（不是裸路径树），Next 16.1.6 以零 props 渲染 `not-found.tsx` 边界（该文件自己的头注释已实测确认，见 `create-component-tree.js`），拿不到路由的 `locale` 参数，此前只能跟裸路径 shell 一样调用 `NovelNotFoundBody({ locale: PUBLIC_SITE_LOCALE })`。P4 首轮之前这条子树整体不可达（旧 guard 恒 404），这个"假装是 en"的缺口无副作用；guard 改为"注册即路由"后，`/ru/novel/...` 这类路径下命中 not-found 边界会真的执行到这份文件，应显示 `ru` 却显示 `en`——是 P4 首轮 guard 改动新暴露的真实唯一语种假设。Opus 复核标为 BLOCKING（B-1），已修：跟 `app/layout.tsx` 同法，读 `headers().get(SITE_LOCALE_REQUEST_HEADER)` → `pickSiteLocale(...)`，try/catch 兜底 `PUBLIC_SITE_LOCALE`；全仓核查确认 `[locale]` 子树下不存在第二个同形文件（`error.tsx`/`not-found.tsx`），无需扩大修法范围 |
+| **唯一语种假设（改读请求 locale）** | `src/proxy.ts:80`（`buildDefaultLocaleRedirectTarget` 的 `/en/*` → 裸路径前缀） | 不是 bug——这个用法是"默认语种是谁"这一个静态问题，`/en/*` 规整不因协商或白名单删除而变化，保留 `PUBLIC_SITE_LOCALE` 引用不动 |
+| **唯一语种假设（改读请求 locale）** | `src/app/[locale]/_guard.ts:65`（`locale === PUBLIC_SITE_LOCALE` 排除默认语种前缀） | 同上，D-8 结构性判定，不是遗漏，保留不动 |
+| **已修复（review fix n3 函数级 2026-09-10 + 调用点 L10N P4.1 `b5de04b` 2026-09-11）** | `src/server/publication/revalidate.ts` `revalidatePublicBlogPaths` | 原表述"博客当前仍是单语种产出面"已失实——`blog-create-form.tsx`/`content-creation/blog.ts`'s `requireLocale` 已开放全部 `SITE_LOCALES`。函数本身已改为按调用方传入的 `locale` 构造路径（`buildBlogPath({ locale: input.locale ?? PUBLIC_SITE_LOCALE, ... })`），非 `en` 路径的失效函数级别早已正确。唯一生产调用点 `publish-gate/service.ts:507` 当时仍在 P4 **禁改区**内、传不了 `locale`——L10N P4.1（`b5de04b`，该行已退出禁改区后收尾）补上了这一行，现在是 `revalidatePublicBlogPaths({ slug: txResult.slug, locale: txResult.locale as SiteLocale })`；`tests/backend/publish-gate/invalidation-wiring.test.ts` 用 `en`/`ru` 两个夹具断言这条调用真的带上了 locale。`locale` 参数本身仍保留可选（`?? PUBLIC_SITE_LOCALE` 兜底）——不再是"唯一调用点还没传"的遗留缺口，而是给"确实没有 locale 可给"的调用方留的文档化行为，`revalidate.test.ts` 的"falls back to en when locale is omitted"用例现在验的是这条兜底本身，不是生产路径的当前状态 |
+
+结论：76 处非注释引用（import 语句与实际使用各算一处）中，
+`src/app/layout.tsx` 一处、`src/app/[locale]/novel/[slugParam]/not-found.tsx`
+一处属于"唯一语种假设"，均已修复（后者是 review fix B-1，本轮新修）；
+`revalidatePublicBlogPaths` 一处函数级别与其唯一调用点均已修复（review fix n3 +
+L10N P4.1 `b5de04b`），实际生效行为已随之改变（非 `en` 博客发布现在正确失效
+`/{locale}/blog/{slug}`，不再落到 `en` 默认路径）；其余全部是裸路径路由树/
+默认值兜底/开发预览等结构性用法，本身正确，不是遗漏。
+
+#### §2 范围改动清单（文件 → CPS 参照）
+
+| 海阅文件 | CPS 参照 | 改动 |
+| --- | --- | --- |
+| `src/lib/locale/locale-canonical.ts` | 不适用（删除） | 删 `PUBLISHABLE_LOCALES`/`isPublishableLocale`/`listPublishableLocales`/`ARTICLE_TEMPLATE_CRUD_LANDED`/`assertPublishableLocalesFailClosed`，`SITE_LOCALES`/`SITE_LOCALE_LABELS`/`SITE_LOCALE_NATIVE_NAMES`/`resolveSiteLocale`/`TAG_TRANSLATION_LOCALES` 三元组不动 |
+| `src/lib/locale/active-locales.ts`（新增） | `3a76877:src/lib/active-locales.ts:12-41` | `ADAPT`：`Drama.groupBy({status:"active"})` 换成 `Article.groupBy({by:["locale"]})` + 本仓公开可见谓词族（`buildPublicArticleWhere` 复用自 `sitemap.ts`），`en` 恒含、按 `SITE_LOCALES` 顺序返回、`unstable_cache` 300s tag `active-locales` |
+| `src/lib/site/chrome.ts` + `src/lib/site/queries.ts`（`loadPublicChrome`） | 不适用（本仓新设计的传递路径） | `SiteChrome` 新增可选字段 `activeLocales`。实码口径订正（review fix n4，2026-09-10）：不是 `loadPublicChrome` 自己并行拉取——`getActiveLocales()` 由 `src/app/_lib/public-load.ts` 新增的 `loadActiveLocales`（`React.cache()` 包一层 `getActiveLocales()`）承担，调用方是每个 `_pages/*.tsx` 页面体，先 `await loadActiveLocales()` 再作为第 4 个参数传给 `loadChrome(locale, current?, categories?, activeLocales?)`，`loadChrome` 再原样转发给 `loadPublicChrome(prisma, locale, current, categories, activeLocales)`——`loadPublicChrome` 自身不发起这次查询，只接收已取好的结果。8 个 `_pages/*.tsx` 页面体已经把 `chrome` 原样传给 `SiteShell`，借这条既有管道，不新增 prop 穿透 |
+| `src/features/public-ui/layout/SiteShell.tsx`/`SiteHeader.tsx`/`LocaleSwitcher.tsx` | `3a76877:src/components/site/site-header.tsx`、`locale-switcher.tsx` | `LocaleSwitcher` 从内部调 `listPublishableLocales()` 改为接收 `activeLocales` prop（海阅 `SiteHeader`/`LocaleSwitcher` 是 `"use client"`，`ChapterScreen.tsx` 直接静态导入 `SiteShell`——`getActiveLocales()` 不能像 CPS 那样放进 `SiteHeader` 内部 await，否则把 `prisma`/`unstable_cache` 拖进客户端包，必须走 prop 传递） |
+| `src/server/publication/revalidate.ts` | 不适用（本仓既有机制） | `revalidatePublicListings()`（发布状态迁移的既有唯一广播点）追加 `revalidateTag("active-locales")`，`safeRevalidateTag` 包一层同 `safeRevalidatePath` 的 try/catch 纪律 |
+| `src/proxy.ts` | `3a76877:src/i18n/routing.ts:6-25`、`src/i18n/root-negotiation.ts`、`src/proxy.ts:287` | 路径段解析改 `SITE_LOCALES` 成员判定；新增根路径协商调用（仅 admin-host 判定放行后、`/en/*` 规整之后、header 转发之前，且只对公开主机生效） |
+| `src/lib/locale/root-negotiation.ts`（新增） | `3a76877:src/i18n/root-negotiation.ts:1-41` | `COPY`：`match`/`parseAcceptLanguage`/bot UA 排除/cookie 优先/307 + Set-Cookie，`isSupportedLocale`→`SITE_LOCALES` 成员判定，`routing.defaultLocale`→`PUBLIC_SITE_LOCALE`，cookie `maxAge/path/sameSite` 逐字同 `3a76877:src/i18n/routing.ts:6-25` |
+| `src/lib/site/request-locale.ts` | 不适用（本仓已有文件的改造） | `pickPublishableLocale` 改名 `pickSiteLocale`，内部改 `SITE_LOCALES` 成员判定；`SITE_LOCALE_REQUEST_HEADER` 不动 |
+| `src/app/[locale]/_guard.ts` | `3a76877:src/app/[locale]/(site)/layout.tsx:43-48` | `getRoutableLocale` 删 `isPublishableLocale` 门，保留 `SITE_LOCALES` 成员判定 + 默认语种排除两道 |
+| `src/app/layout.tsx` | 同上 request-locale 改造 | `lang`/`dir`/`getPublicT` 改读 `pickSiteLocale(header)` 而非固定 `PUBLIC_SITE_LOCALE` |
+| `src/lib/seo/sitemap.ts` | `3a76877:src/lib/static-sitemap-generator.ts:190` | `parseSitemapFileName` 的合法性判定改 `SITE_LOCALES` |
+| `src/lib/seo/static-sitemap-generator.ts` | 同上 | `routeLocales` 默认改 `SITE_LOCALES` |
+| `src/lib/seo/seo-utils.ts` | `3a76877:src/lib/seo-utils.ts:132` | `buildHreflangAlternates` 枚举范围改 `SITE_LOCALES` |
+| `src/lib/seo/novel-hreflang.ts` | `3a76877:src/lib/drama-hreflang.ts:17-31` | `loadNovelHreflangSiblings` 的 `locale: {in: ...}` 改 `SITE_LOCALES`，`isVisibleSibling` 可见性谓词不动 |
+| `src/lib/indexnow/eligibility.ts` | `3a76877:src/lib/indexnow-outbox.ts:70-82` | `isNovelIndexNowEligible`/`isBlogIndexNowEligible` 的缺省 `localeGate` 改 `isRegisteredSiteLocale`（已有符号，本轮只切换默认引用） |
+| `src/app/(admin)/articles/new-blog/_components/blog-create-form.tsx` | `3a76877:src/lib/supported-site-locales.ts:21`（`BLOG_ARTICLE_LOCALE_OPTIONS`） | 语种下拉改 `SITE_LOCALES` |
+| `src/server/content-creation/blog.ts` | 同上 | `requireLocale` 改 `SITE_LOCALES` 成员判定 |
+| `src/lib/slug/text-to-slug.ts` | 不适用（注释修正） | §5：删除失实的"本轮无非 en 调用方"表述，改为 P2 之后来源事实可以是任意 `SITE_LOCALES` 成员，`latin-word-segmentation` 占位规则现实可达 |
+| `package.json` | 不适用 | 新增 `@formatjs/intl-localematcher`，精确版本钉死 |
+
+#### §2.G nginx 对读结论（review fix n4，2026-09-10 补）
+
+施工提示词 §2.G 要求对读 `3a76877:nginx/cps-admin.conf` 与海阅
+`infra/production-like/nginx/full.conf.template` 关于 `/` 与 `Set-Cookie` 的
+缓存行为，差异写进本节；已核对：**无差异，无需改模板**。
+
+海阅 `infra/production-like/nginx/full.conf.template` 全文没有任何
+`proxy_cache`/`proxy_cache_path` 指令（`grep -n "proxy_cache"` 零命中）。
+公开 server 块的根路径落在 `location /`（`full.conf.template:141-144`），
+配置只有 `include .../snippets/proxy-headers.conf; proxy_pass
+http://app_backend;`，不带任何缓存层；同目录 `capacity-locations.conf`
+snippet 里的三条 location（`^~ /novel/`、`^~ /go/`、`= /browse`）都不匹配
+`/` 本身，根路径协商（`negotiateRootLocale`，本轮矩阵 #9/§2.D）落地后的
+`307 + Set-Cookie` 响应因此直接透传到客户端，没有 nginx 层缓存会把这个
+per-request 协商结果错误地缓存/复用给下一个访客的风险。CPS 冻结 tag
+`nginx/cps-admin.conf` 本身在这份对读之前就已经在
+`docs/governance/port-registry.md` 早前条目里记录过"未搬短剧主页面 proxy
+cache"（见上文 "CPS nginx 安全头、gzip、静态缓存..." 一行）——两边独立确认
+都不给根路径挂缓存，结论一致，不存在需要协调的差异。
+
+#### 未搬项说明（明确记录，避免被误判为漏登）
+
+`seo-utils.ts` 的 `buildHreflangAlternates`（"无过滤盲枚举"分支）与
+`novel-hreflang.ts` 的 `loadNovelHreflangSiblings`（"按 Novel 过滤 sibling"
+分支）本轮都从 `listPublishableLocales()` 改 `SITE_LOCALES`，但对应不同的
+CPS 参照文件（前者对应 `lib/seo-utils.ts` 的静态 `SUPPORTED_SITE_LOCALES`
+枚举，后者对应 `lib/drama-hreflang.ts` 的静态 `locales` sibling 查询范围）
+——两者语义不同，登记为两条独立改动，不合并。
+
+### L10N P5 后台运营面 locale 收口 + 轮播按语种（2026-09-11）
+
+依据 `施工提示词_Sonnet_L10N_P5_后台运营面收口与轮播_2026-09-10.md`，矩阵 #13。
+`baseline_commit` 沿用 L10N P1-P4 同一坐标
+`3a76877af27c6247ad94be946b44e9cc5c1cb9ce`（CPS `changdu-sync-panel.tsx`/
+`channel-language.ts` 部分）；轮播部分参照 CPS v7.7 轮播定稿（"locale 白名单
+fail-closed"），该轮定稿不落在 3a76877 这一快照里，逐行 CPS 引用见下表各自
+登记。**未改变**的一点先澄清：P4 交付的 `getActiveLocales()`（`unstable_cache`
+包装的缓存层）本身仍然只有 `SiteChrome.activeLocales → SiteHeader →
+LocaleSwitcher` 这一个消费点——`README.md`/`active-locales.ts` 头注释里那句
+"是动态层唯一消费点"没有被打破，本轮 cron 侧调用的不是它。真正新增的第二个消
+费点是**未缓存核心** `queryActiveLocales`：此前只有测试单独导出调用它
+（绕开 `unstable_cache` 依赖的 Next.js 运行时），`active-locales.ts` 原话是
+"Production code should call `getActiveLocales()` below, **never** this
+function directly"；`scheduler/index.ts`（独立进程，无 Next.js 请求/构建期
+运行时）现在也直接调用它，这处"never"已随本轮改写为区分"应用内代码走缓存
+层"与"非 Next 运行时的独立进程走未缓存核心"两种合法调用方。
+
+| symbol | source_file | source_lines | baseline_commit | port_kind | changed_what | owner |
+| --- | --- | --- | --- | --- | --- | --- |
+| cron 侧按 active locales 逐语种入队（`buildHomeCarouselCronTaskInput`/`buildHomeCarouselScheduleDefinition`，`src/server/home-carousel/service.ts`） | `src/lib/home-carousel-compute.ts`（`runCarouselCronTick`） | `195`（`runCarouselCronTick`）、`246-275`（逐语种循环）、`513`（`listEligibleLocales`） | `3a76877af27c6247ad94be946b44e9cc5c1cb9ce`（`src/lib/home-carousel-compute.ts` 在快照内；L10N P5.1 复核核实：`git -C <CPS 仓> show 3a76877:src/lib/home-carousel-compute.ts` 能取到该文件，此前"非 3a76877 快照内"的登记不准确） | `PATTERN_ONLY` | 只借"cron 按活跃语种集合逐个处理，不是单一硬编码语种"这条语义；不搬 CPS 的具体实现——CPS 用 `node-cron` 直接在应用进程内跑一个 async 回调、循环内联处理每个 locale（无队列），本仓已有独立的 `ScheduleDefinition`/`GenericTask`/Worker 三进程任务队列架构（P1-07 既定），改法是让 `build()` 的 `items[]` 按 active locale 数组展开成多个 `GenericTaskItem`（每语种一条），`worker/handlers/home-carousel.ts` 逐条独立处理——用本仓已有的排队机制表达"多语种"，不是把 CPS 的直接循环搬进来 |
+| cron 幂等键含 locale（`cron:<businessDate>:<locale>`，`computeHomeCarouselInTx`） | 不适用（本仓 `HomeCarouselAutoBatch.uniqueKey` 是本仓自建的幂等机制，CPS 无对应字段） | 不适用 | 不适用 | `PATTERN_ONLY` | 只借"同一 locale 同一天只处理一次，不同 locale 互不影响"这条语义（对应 CPS "每个 locale 各自跑一次 `mergeCarouselServingInTx`"的效果）；具体的 `uniqueKey` 字符串形状是本仓既有 `HomeCarouselAutoBatch` 表设计的自然延伸，不是搬运 |
+| 活跃语种集合来源（`getActiveLocales()`/`queryActiveLocales`，供 cron 与后台页共同使用） | 不适用（复用本仓 L10N P4 已交付的 `active-locales.ts`，非新搬运） | 不适用 | 不适用 | 不适用（复用既有内部接口，非 port） | `scheduler/index.ts` 的 `main()` 调用 `queryActiveLocales(prisma)`（未缓存核心查询），不调用 `unstable_cache` 包装的 `getActiveLocales()`——独立调度器进程没有 Next.js 请求/构建期运行时，`unstable_cache` 依赖该运行时（`active-locales.ts`/`README.md` 原文已明确这是 `queryActiveLocales` 单独导出的理由：给测试与"非 Next 运行时调用方"用）。规划文档原文写的是 `await getActiveLocales()`；本轮按最贴近规划意图但技术可行的方式落地为 `queryActiveLocales(db)` + 关闭捕获快照（同 `getConfig()` 现有模式），已在报告"存疑项"记录 | Claude |
+| worker 语种校验从字面量 `"en"` 改注册表成员判定（`worker/handlers/home-carousel.ts`） | 不适用（本仓既有 handler 自身的既有缺口，非搬运） | 不适用 | 不适用 | 不适用（就地修复，非 port） | 派单未点名这一处，是接线 cron 多语种时发现的直接阻断（否则 worker 会把 cron 新入队的每一条非 `en` item 都判 `home_carousel_payload_invalid`）；改法与本仓已有的 `enqueueHomeCarouselCompute`（手工触发路径）对 `locale` 的校验粒度对齐（`SITE_LOCALES` 成员判定，无更严的闸） | Claude |
+| 同步语种 chip 由 moboreader 码表派生（`CATALOG_SCAN_LANGUAGE_CHIP_OPTIONS`，`catalog-scan-trigger-form.tsx`） | `src/app/(admin)/sync/_components/changdu-sync-panel.tsx` | `765-806`（`sourceLanguageOptions`/`buildLanguageOptions`，按 `getChangduSelectableLanguageOptionsForSourceApp(sourceAppCode)` 派生） | `3a76877af27c6247ad94be946b44e9cc5c1cb9ce` | `PATTERN_ONLY` | 只借"scan chip 是渠道源码表的概念，不是站点语种注册表的概念"这条语义；不搬 CPS 的具体实现——CPS 按 `channelAppKey`/`sourceAppCode` 分支出不同的可选语种子集（`moboreels`/`shortmax`/其余），且对"简体待确认"给一个禁用态占位选项；本仓只有单一上游源（`moboreader`），码表本身已在 L10N P1 落地（`channel-language.ts` 的 `MOBOREADER_LANGUAGE_CODE_TO_LOCALE`，18 码），本轮只是把这张既有表接到 chip 渲染上，不新增任何码表内容；非站点语种（it/fil/ms/tr）不禁用（不同于 CPS 的"简体待确认"禁用态），仍可勾选（`languages[]` 只是任务元数据，upstream 本就返回全部语种，选择只影响本次任务计数），额外标注"仅索引不建内容"文案；反方向：`cs` 无上游码故不在 chip 中，属正确行为（NO_SOURCE_SAMPLE）——moboreader 18 码与 `SITE_LOCALES` 15 语的交集只有 14 个，`cs` 是唯一「站点已注册、上游却没有对应码」的语种，见 `tests/ui/catalog-scan-trigger-form.test.tsx` 的反向验证用例 | Claude |
+| 模板选项按语种批量查询（`listActiveArticleTemplateOptionsForLocales`，`article-templates/service.ts`；`catalog-sync/page.tsx`、`articles/page.tsx` 调用点） | 不适用（P2 复核 C5-a 内部发现项，无对应 CPS 文件） | 不适用 | 不适用 | 不适用（内部效率修复，非 port） | P2 轮已经把"模板选项按语种"这条语义本身做对了（`listActiveArticleTemplateOptions(prisma, locale)`），本轮只是把 `catalog-sync/page.tsx` 循环调用该函数（每页面 distinct locale 一次查询）收拢成一条 `locale: {in}` 查询，`articles/page.tsx` 同款收口；CPS 单篇路径本就是单条 locale 精确查询，没有"批量收拢"这个中间态可比对 | Claude |
+| 批量创建对话框模板下拉按语种过滤/分组（`batch-create-content-dialog.tsx`） | 不适用（P2 复核 C5-b 内部发现项，无对应 CPS 文件） | 不适用 | 不适用 | 不适用（内部一致性修复，非 port） | 复用本仓 `create-content-dialog.tsx`（单篇创建对话框，P2 轮已交付）已有的"按来源条目派生 locale 过滤模板选项"模式，扩展到批量场景的"选中条目可能跨多个 locale"情形；CPS 批量创建路径的语种处理是"整批一次性校验，不匹配即整批拒绝"（已在 L10N P2 小节登记为 `batch-actions-core.ts:167-183` 的 `PATTERN_ONLY`），与本仓这里"挑选阶段就把跨语种的选项都摆出来，写入阶段仍是逐条各自校验"的 UI 形状不是同一件事，不重复登记 |
+| `deriveLocale` 空白值判定改 `!sourceLocale?.trim()`（`content-creation/service.ts`） | `src/lib/changdu-promote-drama-dry-run.ts` | `531` | `3a76877af27c6247ad94be946b44e9cc5c1cb9ce` | `ADAPT` | 只借"`!source.sourceLocale?.trim()`（可选链 + trim 判空）"这一条件写法本身，不借 CPS 该行所在的多原因累积数组写法（`blockReasons.push(...)`，本函数是单错误码 `throw`，形状已在 L10N P2 登记为 `ADAPT`，本轮不改那条登记，只是把这一处判空条件的严谨度提上来） | Claude |
+| 探针 `--apply` 错误分支保留已捕获原始响应（`applyProbeUnnamedLanguageCodes`，`scripts/l10n/probe-unnamed-language-codes.ts`） | 不适用（本仓自建探针脚本自身的缺口，X-2 实跑发现，无对应 CPS 文件） | 不适用 | 不适用 | 不适用（就地修复，非 port） | 见施工提示词 §4.H；`capturedRaw` 原先声明在 `try` 块内部，`catch` 分支够不到，只能硬编码 `languageFields: {}`——X-2 实跑 20/20 次都落进这个分支（`malformed_payload`），意味着这条探针此前从未真正收集到任何诊断证据。改法是把声明提到 `try` 外部，`catch`/成功路径共享同一套提取逻辑 | Claude |
+
+**存疑项（规划原文 vs 落地方式的偏离，记录不擅自发明）**：施工提示词原文
+"cron 调度遍历 `await getActiveLocales()`"字面点名的是 P4 交付的 `unstable_cache`
+包装函数。`scheduler/index.ts` 是独立进程（`node scheduler/index.ts`），没有
+Next.js 请求/构建期运行时——`active-locales.ts`/`README.md` 自己的头注释已经
+为这个理由单独导出了未缓存核心 `queryActiveLocales`（"so tests can call it
+directly... bypassing `unstable_cache` entirely (which depends on Next.js
+request/build-time runtime machinery vitest does not provide)"），且
+`ScheduleDefinition.build`（`@/lib/tasks/scheduler.ts`）是文档化的同步契约，
+`scheduler/index.ts` 自己的头注释也解释了这是"不改动共享调度器框架"的刻意设
+计。本轮按"改动最小、贴合两处既有设计意图"的方向落地：`build()` 保持同步，
+活跃语种集合通过第二个闭包参数 `getActiveLocales: () => readonly string[]`
+（与既有 `getConfig` 完全同款）注入，`scheduler/index.ts` 的 `main()` 每 tick
+用 `queryActiveLocales(prisma)`（调度器自己已打开的 Prisma 连接）刷新一次快
+照——这不是新发明一层兼容壳，是复用 P4 已经为"非 Next 运行时调用方"专门导出
+的那个函数。`enqueueHomeCarouselCron`（ops 手工强制入队的便捷包装）同理，用
+它自己已有的 `db` 句柄调用 `queryActiveLocales`。
+
+### 2026-09-11 · `home_carousel_serving.source` schema-contract-drift 修复
+
+`20260803090000_p1_initial_schema:1247` 装的 `home_carousel_serving_source_check`
+CHECK 只放行 `manual`/`automatic` 两桶，但 `src/server/home-carousel/service.ts`
+的 `computeHomeCarouselInTx`（`154-157` 行区间）从落地起就只写细分值
+`manual`/`new_novel`/`recency`，`automatic` 从未被任何代码路径产出——是本仓
+自己的数据库契约层漂移，不是搬运偏差本身，因此本节只登记"核对 CPS 基线得出
+哪条改法"这一步的证据，实际根因/修复内容详见 `database-governance.md` §4/§12。
+
+| symbol | source_file | source_lines | baseline_commit | port_kind | changed_what | owner |
+| --- | --- | --- | --- | --- | --- | --- |
+| **N-10（schema-contract-drift 修复，核对 CPS 基线）** `home_carousel_serving.source` 的允许值集 — 本仓 `CAROUSEL_SOURCES`（`src/domain/database-statuses.ts`） | `src/lib/home-carousel-merge.ts`（`134`,`154`）；`prisma/schema.prisma`（`808-826`）；`prisma/migrations/20260705090000_v770_home_carousel_pr1b/migration.sql` | `134`,`154`；`808-826`；`CREATE TABLE "home_carousel_serving"` 区块 | `3a76877af27c6247ad94be946b44e9cc5c1cb9ce` | `PG_REIMPLEMENT` | 核对结论：CPS 的 `home_carousel_serving.source` 是 SQLite `TEXT NOT NULL`，**没有任何 CHECK 约束**；`mergeCarouselServingInTx` 直接把 `source: "manual"`（134 行）或 `source: candidate.source`（154 行，取值 `new_drama\|recency\|revenue`）写进该列——CPS 自己的 serving 表本就承载细分来源值，不存在"serving 只分 manual/automatic 两桶、细分值留给候选表"的先例。本仓 `20260803090000_p1_initial_schema` 却给 `home_carousel_serving.source` 装了 PostgreSQL CHECK `IN ('manual','automatic')`，与本仓 `computeHomeCarouselInTx` 从落地起就一直在写的 `manual\|new_novel\|recency` 三值不符（`automatic` 从未被写入过）——按此核对结论选择"放宽 CHECK 对齐 CPS 语义"而非"收窄代码写入去凑 CHECK"：`20260912100000_carousel_serving_source_check_fix` 把 CHECK 改为 `IN ('manual','new_novel','recency')`；不搬 CPS 的 `revenue` 值——Novel V1 无收入评分候选分支（`revenueEnabled` 恒 `false`，见上表 Home carousel 行/N-3）。`home_carousel_auto_candidate.source`（CPS 与本仓均无 CHECK）未受影响 | Claude |
+
+### 2026-09-11 · `home_carousel_auto_batch.status` schema-contract-drift 修复（X8 轮 2a 实证，`fix/carousel-batch-status-check`）
+
+`20260803090000_p1_initial_schema:1246` 装的 `home_carousel_auto_batch_status_check`
+CHECK 只放行 `pending`/`processing`/`completed`/`failed` 四态（自 P1 建库未改），但
+`src/server/home-carousel/service.ts` 的 `computeHomeCarouselInTx`（原 158 行）把
+终态写成字面量 `"success"`——同类漂移的第二例（第一例是上一条 N-10 的
+`home_carousel_serving.source`），同一份数据库契约层漂移，不是搬运偏差本身。
+
+| symbol | source_file | source_lines | baseline_commit | port_kind | changed_what | owner |
+| --- | --- | --- | --- | --- | --- | --- |
+| **N-11（schema-contract-drift 修复，核对 CPS 基线）** `home_carousel_auto_batch.status` 的允许值集 — 本仓 `CAROUSEL_BATCH_STATUSES`（`src/domain/database-statuses.ts`，本轮补 `CarouselBatchStatus`/`CarouselSource` 两个 `ValueOf` 类型，此前有值集常量却没有对应类型，四表里唯独 `home_carousel_serving`/`home_carousel_auto_candidate` 的 `source` 有） | `src/lib/home-carousel-compute.ts`（`228`,`272`,`284`）；`prisma/migrations/20260705090000_v770_home_carousel_pr1b/migration.sql`（`33-43` `CREATE TABLE "home_carousel_auto_batch"`） | `228`,`272`,`284`；`33-43` | `3a76877af27c6247ad94be946b44e9cc5c1cb9ce` | `ADAPT`（与 N-10 决策方向相反，非同款 `PG_REIMPLEMENT`） | 核对结论：CPS 的 `home_carousel_auto_batch.status` 也是 SQLite `TEXT NOT NULL DEFAULT 'pending'`，**没有任何 CHECK 约束**；`homeCarouselAutoBatch.update` 终态直接写 `status: "success"`（272 行，成功路径）/`status: "failed"`（284 行，失败路径，本仓当前无对应持久化失败路径——见 `database-governance.md` 本行 changed_what 说明）。若照搬 N-10 的处理方式（"CPS 无 CHECK 就放宽本仓 CHECK 对齐 CPS 字面量"），这里就该把 CHECK 改成放行 `success`。但本仓 `home_carousel_auto_batch.status` 四态（`pending`/`processing`/`completed`/`failed`）是 P1 数据字典冻结口径（`reference_data_dictionary_location.md`），与 `home_carousel_serving.source`（P1 落地后才发现"CHECK 从未被任何代码路径正确使用过、纯属发明"）不是同一种情形——四态本身在 P1 落地时就是深思熟虑的枚举（`pending→processing→completed\|failed` 状态机形状，`carousel_batch_status_created_idx` 索引也按这四态设计），只是 `computeHomeCarouselInTx` 写终态时手误/沿用了别处 `"success"` 字面量的习惯，从未真正走过 CHECK 校验（此前每次都在同一 UPDATE 里 23514、整个事务回滚）。故**不放宽 CHECK**，选择四态里语义最贴近 CPS `"success"` 的 `"completed"`（终态、成功）——这是本仓自己在"CHECK 已冻结"前提下做的选择，不是照搬 CPS 的字面量，故标 `ADAPT` 而非 `PG_REIMPLEMENT`。CPS 的 `"failed"` 路径未被搬运：本仓 `computeHomeCarouselInTx` 里 `homeCarouselAutoBatch.create` 之后的任何抛错都直接向上抛、不落盘 `failed` 状态的批次行（`catch` 块只处理 `create` 自身的 `P2002` 幂等冲突），维持既有行为不变，不在本轮范围内新增 | Claude |
+
+### 2026-09-11 · X8 轮 2d PR6 M5 遗留缺陷修复（⑥ 幂等路径污染事务 / ⑦ 配置保存权限）
+
+X8 轮 2d 实证暴露 `src/server/home-carousel/service.ts` 的两处 PR6 M5 遗留缺陷：
+`computeHomeCarouselInTx` 用 `create` + `catch(P2002)` 处理
+`home_carousel_auto_batch.unique_key` 幂等冲突，在 worker 共享的 `protectedWrite`
+事务内被 Postgres 判定为已中止（`25P02`），导致同日二次触发 `finalize_failed`；
+`updateHomeCarouselConfig` 用 `tx.siteSetting.upsert`，而 `web_app` 对
+`site_setting` 只有列级 UPDATE（`infra/postgres/grants.sql`），Postgres 的
+`INSERT ... ON CONFLICT` 仍需 INSERT 权限，实测 `permission denied for table
+site_setting`。两条都不是搬运偏差本身（PR6 落地时就已经这样写），登记为
+"落地后发现的 PG/CPS 语义差异"，与 N-10/N-11 同一批性质。
+
+| symbol | source_file | source_lines | baseline_commit | port_kind | changed_what | owner |
+| --- | --- | --- | --- | --- | --- | --- |
+| **N-12（PG/SQLite 语义差异，核对 CPS 基线）** `home_carousel_auto_batch.unique_key` 幂等冲突处理 — 本仓 `computeHomeCarouselInTx` 改用 `createMany({ data: [batchRow], skipDuplicates: true })` | `src/lib/home-carousel-compute.ts`（`219-241`，`runCarouselAutoComputeWithDb` 的 `create` + `catch(isUniqueConstraintError)` 分支） | `219-241` | `3a76877af27c6247ad94be946b44e9cc5c1cb9ce` | `NOT_PORTABLE`（PG/SQLite 差异，非 CPS 语义搬运） | 核对结论：CPS 的 `runCarouselAutoComputeWithDb` 同样是 `create` 包一层 `try/catch`，命中唯一约束冲突（`isUniqueConstraintError`）就返回 `skipped_duplicate`——但 CPS 跑在 SQLite 上，一条语句在打开的事务内失败不会连带毒化同一事务里后续的语句；本仓跑在 PostgreSQL 上则不然：一旦某条语句在打开的事务上抛错（唯一约束冲突同样计入），该连接上同一事务的所有后续语句都会 `25P02 current transaction is aborted`，直到显式 `ROLLBACK`。`computeHomeCarouselInTx` 恒运行在 worker 的 `protectedWrite` 共享事务内（`worker/handlers/home-carousel.ts` → `src/lib/tasks/store.ts` 的 `finalizeTaskItem`），该事务在此函数返回后还会无条件执行 `guardedFinalize` 自己的 `tx.$executeRaw` UPDATE——被 catch 吞掉的 P2002 让外层事务留在中止态，finalize 自己的写入因而在每次同日 cron 重复触发时都失败。**这不是照搬 CPS 就能解决的：CPS 的 `catch` 写法本身在 PG 语境下不安全**，故不参照 CPS 字面实现，改用 `createMany` + `skipDuplicates: true`（编译为 `INSERT ... ON CONFLICT DO NOTHING`），Postgres 在 SQL 层面无异常地消解冲突，事务全程可用；`count === 0` 即判定 `skipped_duplicate`。写法参照仓内先例 `worker/handlers/promo-link-claim.ts` 的 `ensurePromoLinkRow`（`upsert`/`ON CONFLICT DO UPDATE`，同一开放事务内避免异常的理由）。X8 在 `cps-novel-x8-local-postgres-1`（`worker_app` 角色，`BEGIN…ROLLBACK` 只读复现）实测验证：`create` 之后紧跟同 `unique_key` 的第二条 `INSERT` 报 `duplicate key value violates unique constraint`，再下一条语句即报 `current transaction is aborted, commands ignored until end of transaction block`；换成 `INSERT ... ON CONFLICT (unique_key) DO NOTHING` 则第二条返回 `INSERT 0 0`（无异常），再下一条语句正常执行 | Claude |
+| **N-13（PG/SQLite 语义差异，本仓自有选择，非搬运）** `updateHomeCarouselConfig` 写 `site_setting` 单例行 — 本仓改用 `tx.siteSetting.update`，行缺失抛 `SiteSettingNotSeededError`（不新增专属错误码，复用 `src/server/site-settings/service.ts` 既有类） | 不适用（CPS 无 `site_setting` 单例表这一形态；见本文件 100 行 `SiteSetting` 单例表登记行的 `PG_REIMPLEMENT`，本条是其写路径的后续修复，不是新的搬运） | 不适用 | 不适用 | 不适用（就地修复，非 port；本仓自有单例配置表设计，无 CPS 对应符号可核对） | `infra/postgres/grants.sql` 的 "SiteSetting boundary" 注释明示：`web_app` 对 `site_setting` 只有列级 `UPDATE`（含 `carousel_config_json`），`INSERT`/`DELETE` 是 `migration_owner`-only 设计。`upsert` 在 PostgreSQL 上编译为 `INSERT ... ON CONFLICT (id) DO UPDATE`——即便冲突分支总是落到 UPDATE，Postgres 仍要求执行者持有该表的 INSERT 权限才能执行这条语句本身。`updateHomeCarouselConfig` 以 `web_app` 身份运行（仅从 `_actions.ts` 调用），X8 在 `cps-novel-x8-local-postgres-1`（`web_app` 角色，`BEGIN…ROLLBACK` 只读复现）实测：`UPDATE site_setting SET carousel_config_json = carousel_config_json WHERE id = 1` 成功（`UPDATE 1`，列级 UPDATE 已授权）；`INSERT INTO site_setting (id) VALUES (1) ON CONFLICT (id) DO UPDATE ...` 报 `permission denied for table site_setting`。`site_setting` 是 bootstrap 播种的单例行（`id` 固定 1，`site_setting_singleton_check` CHECK 禁止任何其它行存在），本函数不存在需要真正"创建"该行的合法路径，故改 `update` 并在行缺失时 fail-closed 抛错，而非静默 upsert——复用 `SiteSettingNotSeededError`（而非新造一个并行错误类），保持"行缺失"只有一种失败形态，且该类已接入 `src/app/api/admin/_lib/respond.ts` 的后台错误信封 | Claude |
+
+### 2026-09-11 · promo claim 读回完整性守卫修订（Owner 解冻 09-02 契约，`fix/claim-readback-completeness`）
+
+派单原文登记号为 N-13；本文件在 baseline `c9bf7e2`（`feature/l10n-full-cps-parity` HEAD）
+上该编号已被上一条 `updateHomeCarouselConfig` 条目占用（同日更早落地），故顺延登记为
+**N-14**，避免编号冲突覆盖既有条目。背景与证据见
+`docs/operations/MOBOREADER_PRECISE_READBACK_PROBE_2026-09-02.md` 第 13 节。
+
+| symbol | source_file | source_lines | baseline_commit | port_kind | changed_what | owner |
+| --- | --- | --- | --- | --- | --- | --- |
+| **N-14（上游 API 能力差异，本仓自有选择，非搬运）** promo readback 机制 — 本仓 `parseReadbackResponse` 用 `getlistpc` 候选列表 + 四维（`agencyId`/`seriesId`/`language`/`projectType`）精确匹配收敛到唯一目标行；CPS 用 `getvideoinfo` 对 `{agencyId, seriesId, projectType, language}` 直接点查单一目标行，不经过候选列表 | `changdu-getvideoinfo.ts`（`CHANGDU_VIDEOINFO_ENDPOINT`/`CHANGDU_VIDEOINFO_PROJECT_TYPE` 常量；`fetchOnce` 的直接点查请求构造） | `6-10`；`364-391`（请求体见 `385-390`） | `3a76877af27c6247ad94be946b44e9cc5c1cb9ce` | `JUSTIFIED_DEVIATION`（上游 API 差异，非仿写偏差） | CPS 的 `getvideoinfo` 对短剧（`CHANGDU_VIDEOINFO_PROJECT_TYPE = 2`，第 10 行）用 `{agencyId, seriesId, projectType: 2, language}` 一次 POST 点查单一目标行（`fetchOnce` 385-390 行的请求体），不需要候选列表或身份筛选——上游对 `projectType=2` 的 `getvideoinfo` 承载完整 promo record。海阅（`projectType=1`）不具备这条路径：`MOBOREADER_PRECISE_READBACK_PROBE_2026-09-02.md` §5 P-1 已用只读探针证明，同一 `getvideoinfo` 端点对 `projectType=1` 的成功 HTTP 响应没有可检查的 `data` record，`kocCode`/`publicUrl`/`homeLink`/`onlineUrl`/`promoUrl`/`promoCode` 六个 promo 键全部 `KEY_ABSENT`——即该端点不为小说线承载 promo 数据，点查机制在本仓不可用。本仓因此退回 `getlistpc`（`name` 定位 + 四维身份精确匹配）读回路径，并在 2026-09-11 额外处理了 `projectType=2`（单语种短剧）不会遇到的形状：同一 `seriesId` family 下按语言版本展开为多行（详见该报告第 13 节）。这是上游对两个 `projectType` 的 promo 数据承载能力差异，不是本仓选择绕开 CPS 既有机制，故判 `JUSTIFIED_DEVIATION` 而非 `PG_REIMPLEMENT`/`ADAPT` | Claude |
+
+### 2026-09-11 · X8 轮 2f 阻塞①②修复（非 ASCII slug 详情页 404 / canonical·hreflang 自引用缺 locale 前缀）
+
+`l10n-uat-progress.md` 轮 2f 小节记录：13 个非 en 语种里 10 个（含非 ASCII slug 的 ar/es/fr/ja/ko/pl/ru/th/vi/zh-Hant）的已发布文章详情页 `/{locale}/novel/<slug>` 真实 HTTP 100% 404（nginx/DB/业务查询均已排除），且即使 slug 恰好纯 ASCII 因而能访问的 3 语种（de/id/pt-BR），其 `<link rel="canonical">` 与 hreflang 自引用也都指向缺 locale 前缀、访问同样 404 的裸路径——这是本项目历史上第一次有非 en 文章真正发布，才第一次暴露这两处既有缺口（分支 `fix/public-nonascii-slug-and-canonical-prefix`，基线 `feature/l10n-full-cps-parity@60a17f5`）。
+
+阻塞①根因：用固定 `next@16.1.6`（`output: "standalone"`）在独立最小工程实测确认——App Router `force-dynamic`（非 SSG）动态路由段，Next 不会像 SSG 页面那样自动 `decodeURIComponent`；`params.slugParam` 到达页面时仍是 HTTP 原样的百分号编码串（82 字符），而不是解码后的西里尔文明文（57 字符）。`node_modules/next/dist/server/lib/router-utils/decode-path-params.js` 自身头注释印证："We only encode path delimiters for path segments from getStaticPaths... TODO: investigate adding this handling for non-SSG pages so non-ascii names also work there."——`src/app/[locale]/novel/[slugParam]/page.tsx`/`src/app/novel/[slugParam]/page.tsx`（及两者各自的 `chapter/[chapterNumber]` 子路由）均无 `generateStaticParams`，全部走这条非 SSG 路径。
+
+阻塞②根因：`novel-detail.tsx`/`chapter.tsx` 的 `routePath`（同时喂给 `<link rel="canonical">` 与 hreflang 自引用条目）此前用了 locale 无关的 `buildArticleRoutePath`/`buildChapterRoutePath`，而不是带 `/{locale}` 前缀的 `buildArticlePath`/`buildChapterPath`；对 `en`（`localePrefix("en") === ""`）两者字面相同，故此前从未被发现。
+
+| symbol | source_file | source_lines | baseline_commit | port_kind | changed_what | owner |
+| --- | --- | --- | --- | --- | --- | --- |
+| `normalizeRouteSlug`（页面层安全解码 `[slug]`/`[slugParam]` 动态段）→ `decodeSlugParam`（`src/lib/slug/article-path.ts`），调用点：`buildNovelMetadata`/`NovelBody`（`src/app/_pages/novel-detail.tsx`）与 `buildChapterMetadata`/`ChapterBody`（`src/app/_pages/chapter.tsx`），各自紧跟 `await params` 解构之后 | `src/app/[locale]/(site)/drama/[slug]/page.tsx` | `84-90`（函数定义：`try { return decodeURIComponent(slug); } catch { return slug; }`）；`130-131`、`201-202`（`generateMetadata`/`DramaPage` 两个调用点，各自独立调用一次，不共享一次解码结果） | `3a76877af27c6247ad94be946b44e9cc5c1cb9ce` | `ADAPT` | 解码/回落逻辑逐字保留；调用点从 CPS 单文件两处扩展为本仓两个共享 body 文件（novel 详情页 + chapter 详情页）各两处共四处，均遵循同一"紧跟 `await params` 之后立即解码一次"的位置约定；不放进更深层的 `resolvePublicArticleBySlugParam`/`parseArticleSlugParam`——`src/server/articles/service.ts`'s `extractSearchShortId` 已是"先 `decodeURIComponent`、再调用 `parseArticleSlugParam`"的既有调用方，在 `parseArticleSlugParam` 内部再解码一次会对它造成双重解码，与 CPS `parseDramaArticleSlugParam` 同样不在内部解码的既有约定一致。是否需要这一步不是照抄 CPS 就直接搬：先用 `next@16.1.6` 独立最小工程 + 生产同款 `routes-manifest.json`/`next-server.js` 源码实测确认了这条 CPS 既有对策在本仓同一 Next 版本下同样必要，而非凭空假设 | Claude |
+| 页面自身 canonical/hreflang 自引用必须走带 locale 前缀的路径构造器（不是新符号搬运，是已登记符号 `buildArticlePath` 第 105 行端口行的调用点纠偏）→ `novel-detail.tsx`/`chapter.tsx` 的 `routePath` 改回 `buildArticlePath`/`buildChapterPath`，不再用 `buildArticleRoutePath`/`buildChapterRoutePath` | `src/app/[locale]/(site)/drama/[slug]/page.tsx` | `56-69`（`getCanonicalDramaPath`，CPS 里唯一给 canonical/hreflang 自引用用的路径构造函数，固定调用locale 前缀版 `buildDramaArticlePath`）；`141`、`226`（`generateMetadata`/`DramaPage` 两处 `canonicalPath: getCanonicalDramaPath(data)` 调用点，形状一致，从不直接调用路由层裸路径构造器） | `3a76877af27c6247ad94be946b44e9cc5c1cb9ce` | `PATTERN_ONLY` | 只借"页面自身 canonical/hreflang 自引用必须走带 locale 前缀的构造器，从不用路由层裸路径构造器"这条既有设计原则——本仓的 `buildArticleRoutePath`/`buildArticlePath` 一对符号已在本表第 105 行随 `buildDramaArticlePath`/`buildDramaArticleRoutePath` 一起登记过，本次不是新搬运，是 `novel-detail.tsx`/`chapter.tsx` 误用了同一模块里另一个（用于其它场景、locale 无关的）`buildArticleRoutePath`/`buildChapterRoutePath` 之后的纠偏；对 `en` 两个构造器字面相同，此前从未有非 en 已发布文章走到真实 HTTP 详情页请求，该调用点漂移直到 X8 轮 2f 才第一次暴露 | Claude |
+
+### 2026-09-11 · withdraw UI 永久「处理中」兜底 + takedown grants 缺口修复（Owner 批准窄范围 lane，`fix/withdraw-ui-guard-and-takedown-grants`，独立 worktree `withdraw-ui-takedown-grants`，基线 `feature/l10n-full-cps-parity@6fd7bf9`）
+
+两项均登记为「不适用」——不是从 CPS 搬运的符号，一项是本仓自身的 Server Action 调用纪律缺口（CPS 没有等价的 stale-bundle 场景需要登记），一项是 `infra/postgres/grants.sql` 补齐 `database-schema-dictionary.jsonl` 早已声明、但从未真正 `GRANT` 过的 web_app 权限（对齐字典，不涉及搬运）。
+
+| symbol | source_file | source_lines | baseline_commit | port_kind | changed_what | owner |
+| --- | --- | --- | --- | --- | --- | --- |
+| `confirmWithdraw`（`article-list.tsx`）/`runRightsTransition`（`publish-lifecycle-panel.tsx`）的 try/catch/finally 兜底 | 不适用（内部修复，无 CPS 对应） | 不适用 | 不适用 | 不适用（内部 bugfix，非 COPY/ADAPT/PATTERN_ONLY） | Owner 撤回 `de` 文章时 UI 永久「处理中」：两处 `await <ServerAction>(...)` 此前都在 `try/catch` 之外，而 `onConfirm` 均以 `void confirmWithdraw()`/`void runRightsTransition(pending)` 触发——一次 reject（同会话曾观测到 stale bundle 的 "Failed to find Server Action"）会跳过 `await` 之后的每一行，包括 `setWithdrawBusy(false)`/`setBusy(false)`，`ConfirmDialog` 的 `pending` 永久 `true`。补 try/catch/finally：`finally` 恒重置 busy；`catch` 展示刷新提示（含 stale-bundle 专属措辞判断，用 `String(error)` 而非 `error.message`——`tests/ui/admin-secret-boundary.test.tsx` 的既有守卫禁止在 admin UI 源码里出现字面 `error.message`/`envelope.message`，`String(error)` 拿到同样的信号但不触发该文本扫描，且只用于在两条已写好的中文文案间二选一，从不回显原始文本）；对话框刻意不在 catch 里关闭（保留已填的下线原因，刷新后可直接重按）。CPS 没有等价的两组件/两 bug，故不构成搬运 | Claude |
+| `infra/postgres/grants.sql` 补 `web_app` 对 `novel_chapter`/`novel_chapter_content` 的 takedown 写权限 | 不适用（字典对齐，非搬运） | 不适用 | 不适用 | 不适用（grants 补授权，非 COPY/ADAPT/PATTERN_ONLY） | `applyNovelRightsTransition` 的 takedown 分支（`src/server/publish-gate/service.ts:763-786`）`tx.novelChapterContent.deleteMany(...)` 后 `tx.novelChapter.updateMany({data:{status:"withdrawn"}})`；`web_app` 此前只有两表 SELECT，UPDATE/DELETE 全无，takedown 一个有章节的已发布 Novel 会在第一个 chunk 上 `42501 permission denied`。补 `GRANT UPDATE (status, updated_at) ON novel_chapter TO web_app;` + `GRANT DELETE ON TABLE novel_chapter_content TO web_app;`（`novel_chapter.updatedAt` 带 `@updatedAt`，`updateMany` 隐式也写这一列，故列级授权含两列非一列）。`database-schema-dictionary.jsonl` 两表相关字段的 `write_roles` 本就已列 `web_app`（`novel_chapter.status`/`updated_at` 与 `novel_chapter_content` 表级+除 `body` 外全部字段），本行只是把 `grants.sql` 追平字典早已声明的意图，字典本身不改——与 2026-09-11 前序几行「`web_app` 缺失授权收尾」「L10N P5.2」两行同一套结论套路（`grants.sql` 落后于字典，非反过来）。详见 `database-governance.md` 同日新增行 | Claude |
+
+### 2026-09-12 · worker_app grants KNOWN_GAPS 收口 + runPublish stale-action 兜底（Owner 批准窄范围 follow-up lane，`fix/followup-worker-grants-runpublish-guard`，独立 worktree `followup-grants-runpublish`，基线 `feature/l10n-full-cps-parity@c3c4b17`）
+
+两项均登记为「不适用」——都不是从 CPS 搬运的符号：一项是上一行（2026-09-11 withdraw/takedown lane）自己发现、`spawn_task` 登记、Owner 本行批准收口的两个既有 `worker_app` grants 缺口（`novel_canonical_tag::deleteMany`/`indexnow_outbox_attempt::updateMany`，均登记在 `grants-returning.test.ts` 的 `WORKER_APP_BULK_METHOD_KNOWN_GAPS`），一项是 `runPublish` 补上一行已经给 `confirmWithdraw`/`runRightsTransition` 用过的同一 try/catch/finally 兜底形状（本仓自有的 Server Action 调用纪律，CPS 无等价 stale-bundle 场景）。
+
+| symbol | source_file | source_lines | baseline_commit | port_kind | changed_what | owner |
+| --- | --- | --- | --- | --- | --- | --- |
+| `infra/postgres/grants.sql` 补 `worker_app` 对 `novel_canonical_tag` 的 DELETE 与对 `indexnow_outbox_attempt` 六列的列级 UPDATE | 不适用（既有缺口收口，非搬运） | 不适用 | 不适用 | 不适用（grants 补授权，非 COPY/ADAPT/PATTERN_ONLY） | `replaceAutoTagSnapshotInTransaction` 的 `tx.novelCanonicalTag.deleteMany({where:{novelId,source:"auto"}})`（`src/server/tagging/service.ts:425`，经 `worker/handlers/novel-tag-backfill.ts` 到达）——`worker_app` 此前只有该表 INSERT/UPDATE/SELECT，DELETE 全无。`worker/handlers/indexnow-delivery.ts:210` 的 `db.indexNowOutboxAttempt.updateMany({data:{attemptState,outcome,responseAt,httpStatus,errorKind,responseSummary}})`——`worker_app` 此前只有该表 INSERT/SELECT，UPDATE 全无。补 `GRANT DELETE ON TABLE novel_canonical_tag TO worker_app;` + `GRANT UPDATE (attempt_state, outcome, response_at, http_status, error_kind, response_summary) ON indexnow_outbox_attempt TO worker_app;`（列级，精确匹配该唯一调用点 `data` 对象的六列，不给表级 UPDATE——`outbox_id`/`attempt_no`/`started_at`/`request_at`/`batch_size`/`worker_task_id` 均不在此次授权内）。两个缺口均是上一行（2026-09-11）`grants-returning.test.ts` 新增的 `*Many` 守卫扫描时顺带发现、Owner 批准的独立 lane 里登记进 `WORKER_APP_BULK_METHOD_KNOWN_GAPS`（附独立存活性自检）并各自 `spawn_task` 一条任务（`task_0740dcbb`/`task_44b43776`）——本行是那两条任务的收口，登记从该数组移除，守卫主循环对两表转为真实通过。`database-schema-dictionary.jsonl` 核对：`indexnow_outbox_attempt` 表级+全部字段（含本次涉及的六列）的 `write_roles` 本就已列 `worker_app`（`grants.sql` 落后于字典早已声明的意图，未改字典）；`novel_canonical_tag` 表级+全部字段此前 `write_roles` 只有 `migration_owner`（字典本身滞后于 `grants.sql` 既有的 INSERT/UPDATE，是与本行 DELETE 无关的更早既有漂移）——本行给表级+12 条字段级记录追加 `worker_app`（未处理 `web_app` 同一漂移，如实记录不顺手修），未触碰 12 条 constraint 记录（该表既有约定：constraint 记录的 `write_roles` 恒 `["migration_owner"]`，与表的其它 DDL 记录同一惯例） | Claude |
+| `runPublish`（`publish-lifecycle-panel.tsx`）的 try/catch/finally 兜底 | 不适用（内部修复，无 CPS 对应） | 不适用 | 不适用 | 不适用（内部 bugfix，非 COPY/ADAPT/PATTERN_ONLY） | `await publishArticleAction(...)` 此前在 `try/catch` 之外，而"发布"按钮以未 `await` 的 `onClick={runPublish}` 触发——一次 reject（同上一行已观测到的 stale bundle "Failed to find Server Action"）会跳过 `await` 之后的每一行，包括 `setBusy(false)`，按钮永久禁用、零反馈。补 try/catch/finally，形状与同文件 `runRightsTransition`/`article-list.tsx` 的 `confirmWithdraw` 一致：`finally` 恒重置 busy；`catch` 按 `String(error)`（非 `error.message`，同 `admin-secret-boundary.test.tsx` 既有守卫）在 stale-bundle 专属文案「页面版本已过期，请刷新后重试」与通用网络/版本文案间二选一。同一 lane 顺带把 `runRightsTransition` 里 `setBusy(true)`/`crypto.randomUUID()` 从 `try` 外挪进 `try` 内（`crypto.randomUUID()` 本身抛错时此前会跳过整个 `try/finally`，busy 卡死，与本行 `runPublish` 同一 bug 形状早一步）——与 `article-list.tsx` 的 `confirmWithdraw` 对称。CPS 没有等价的组件/bug，故不构成搬运 | Claude |
+
+### 2026-09-12 · `/articles` Server Action 模块级 500 修复：`"use server"` 文件禁止 `export type {…}` 再导出（Owner 批准 PR #7 合并前 Blocker，`fix/articles-actions-types-only-split`，独立 worktree `articles-actions-types-fix`，基线 `feature/l10n-full-cps-parity@1b90916`）
+
+两行均登记为「不适用」——都不是从 CPS 搬运的符号，是本仓自有 Server Action 文件结构上的纯内部 bugfix。根因：`src/app/(admin)/articles/_actions.ts`（`"use server"`）曾用一段裸 `export type { RebindBatchDetail, … };` 列表（C-30A 引入 `RebindCandidate`/`RebindGuardFinding`/`RebindView` 三个，C-30B 的 `feat(c30b)` 提交扩到全部 8 个）把这些原本只从 `@/server/article-rebind` 类型导入的名字再导出，好让 `"use client"` 组件绕开 `tests/ui/admin-secret-boundary.test.tsx` 的 `@/server/**` 导入禁令。Next 的 `"use server"` 导出插桩不认识这种"裸列表再导出"形状是纯类型：它照样把列表里每个名字当 Server Action 登记进 `ensureServerEntryExports([...])`/`registerServerReference(...)`，但这些名字早被普通 TS/SWC 类型擦除步骤删除，模块里从未真正声明过——于是编译产物在模块求值那一刻就 `ReferenceError: RebindBatchDetail is not defined`（X8 web 日志 35 次），把该文件里全部真正的 Server Action 一并炸掉。构建这条守卫时顺带用同一手法在 `src/app/(admin)/novels/_actions.ts`（PR-C3 引入，早于 C-30，与本次触发面无关但同一缺陷形状）里发现了同一个未上报的活 bug（`export type { ApplyPublishTransitionResult, RightsTransitionKind, RightsTransitionResult };`），一并修复并登记，构建前后各拉一次编译产物核对：修复前 `registerServerReference(RightsTransitionResult, …)` 是裸未声明标识符，修复后该数组只剩真实函数引用。两处修法完全一致：把类型再导出移进各自新增的、既非 `"use server"` 也非 `"use client"` 的纯类型模块（`articles/_types/rebind.ts`/`novels/_types/publish-gate.ts`），原 `"use server"` 文件里对应的裸列表整段删除，运行时逻辑一行未动。
+
+| symbol | source_file | source_lines | baseline_commit | port_kind | changed_what | owner |
+| --- | --- | --- | --- | --- | --- | --- |
+| `src/app/(admin)/articles/_actions.ts` 删 `export type { RebindBatchDetail, RebindBatchFacets, RebindBatchSummary, RebindCandidate, RebindGuardFinding, RebindPreviewCategory, RebindPreviewPage, RebindView };`，新增 `src/app/(admin)/articles/_types/rebind.ts` | 不适用（内部修复，无 CPS 对应；C-30A/C-30B 引入，基线已存在） | 不适用 | 不适用 | 不适用（内部 bugfix，非 COPY/ADAPT/PATTERN_ONLY） | 见本节小节说明；两个消费者 `batch-novel-rebind/_components/batch-rebind-client.tsx`（5 个类型）与 `_components/article-rebind-panel.tsx`（3 个类型）改从 `../_types/rebind`/`../../_types/rebind` 导入；`tests/ui/article-rebind-panel.test.tsx`/`tests/ui/batch-rebind-client.test.tsx` 的类型导入同步改点；`_actions.ts` 自身仍需的 8 个类型经内部 `import { …, type X, … } from "@/server/article-rebind"` 原样保留（未再导出，不受影响） | Claude |
+| `src/app/(admin)/novels/_actions.ts` 删 `export type { ApplyPublishTransitionResult, RightsTransitionKind, RightsTransitionResult };`，新增 `src/app/(admin)/novels/_types/publish-gate.ts` | 不适用（内部修复，无 CPS 对应；PR-C3 引入，早于 C-30，基线已存在） | 不适用 | 不适用 | 不适用（内部 bugfix，非 COPY/ADAPT/PATTERN_ONLY） | 与上一行同一缺陷形状、构建本节守卫时顺带发现的第二个实例，非 Owner 本次点名范围，但需要修才能让新增的仓库级守卫（`tests/ui/use-server-exports-guard.test.ts`）真正保持全绿；两个消费者 `_lib/publish-outcome-copy.ts`（`RightsTransitionKind`）与 `_components/publish-lifecycle-panel.tsx`（`ApplyPublishTransitionResult`/`RightsTransitionKind`）改从 `../_types/publish-gate` 导入，`PublishActionResult`/`PublishLifecycleErrorCode`（`_actions.ts` 里的新鲜 `export type X = …;` 别名声明，非再导出列表，本身不触发该 bug）原样留在 `_actions.ts`；`RightsTransitionKind` 因此从 `_actions.ts` 内部 import 里一并删除（不再需要，`RightsTransitionResult`/`ApplyPublishTransitionResult` 两个仍在文件内部当类型注解用，保留） | Claude |
+
+### 2026-09-12 · `/articles` 列表行内「发布」入口补 `unpublished`（Owner 批准小修，`fix/article-list-publish-entry-unpublished`，独立 worktree `article-list-unpublished-fix`，基线 `feature/l10n-full-cps-parity@78a8ef5`）
+
+登记为「小说业务偏离」——不是从 CPS 搬运的符号，是本仓 `ArticleStatus` 比 CPS 多出的 `unpublished` 状态在列表页被漏接的行为纠偏。CPS 参考核验（`articles-client.tsx` line 517/528，commit `3a76877`）：CPS 文章列表「发布」按钮的显示条件字面是 `article.status === "draft"`，「下线」是 `article.status === "published"`；CPS 的 `Article.status` 没有 `unpublished` 这一态（其 `handleSingleStatusChange(article.id, "offline")` 落的是 `"offline"`，列表对 `"offline"` 状态本就没有再显示任何按钮的分支），故 CPS 参考本身对"已下线还能不能从列表再发布"这个问题没有对应答案可抄。本仓 `ArticleStatus`（`src/domain/database-statuses.ts:30`）是 `draft | published | unpublished | takedown` 四态，`unpublished` 由 C-21 的行内「下线」/书目详情页 withdraw 落地，此前 `article-list.tsx` 只在 `status === "draft"` 显示「发布」，导致一篇被下线的文章在列表页没有任何入口能再发布——必须跳转到书目详情页的 `publish-lifecycle-panel.tsx`（其 `showPublish = article.status !== "published" && novelStatus !== "takedown"` 早已把 `unpublished` 当可发布处理）才能重新发布，两个入口行为不一致。Owner 2026-09-12 确认对齐详情页：列表页「发布」条件扩展为 `status === "draft" || status === "unpublished"`，「下线」条件不变（仍只 `status === "published"`）。未新增 `row.novel.status === "takedown"` 判断——`ArticleListRow.novel` 当前不携带 `status` 字段，且 `applyNovelRightsTransition`（`src/server/publish-gate/service.ts:680-` 起）的 takedown 分支对该 Novel 下*全部* Article 无条件级联到 `status: "takedown"`（不筛选来源状态），故一行 `status === "unpublished"` 与其 `novel.status === "takedown"` 在现有转移规则下互斥、不会同时出现，无需在这里另行判断即与详情页语义等价。
+
+| symbol | source_file | source_lines | baseline_commit | port_kind | changed_what | owner |
+| --- | --- | --- | --- | --- | --- | --- |
+| `article-list.tsx` 行内「发布」按钮显示条件 `row.status === "draft"` → `row.status === "draft" \|\| row.status === "unpublished"` | 不适用（小说业务偏离，非搬运；CPS 无 `unpublished` 状态可参照） | 不适用 | 不适用 | 不适用（业务偏离，非 COPY/ADAPT/PATTERN_ONLY） | 见本节小节说明；「下线」按钮条件 `row.status === "published"` 未改；`tests/ui/articles-admin.test.tsx`「行内 发布 / 下线 按钮可见性（C-21）」`describe` 块新增/改写三个用例（已下线行显示发布不显示下线/已撤回行两个都不显示/已下线行点击发布调用 `publishArticleAction`），变异（条件改回只 `draft`）复现红 | Claude |
 
 ## 使用说明
 

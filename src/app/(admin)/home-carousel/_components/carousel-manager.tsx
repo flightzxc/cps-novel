@@ -20,6 +20,7 @@ type ChangeLogRow = { id: string; action: string; actorType: string; actorId: st
 const SOURCE_LABEL: Record<string, string> = { manual: "人工位", new_novel: "新书位", recency: "最近更新" };
 
 export function CarouselManager({
+  locale,
   config,
   slots,
   articles,
@@ -28,6 +29,8 @@ export function CarouselManager({
   serving,
   changeLog,
 }: {
+  /** L10N P5 (矩阵 #13): the locale `page.tsx`'s `?locale=` selector resolved for this render — every read AND write below is scoped to it, replacing 4 hardcoded `"en"` literals (this component's own pre-P5 history). */
+  locale: string;
   config: Config;
   slots: readonly Slot[];
   articles: readonly Article[];
@@ -46,13 +49,13 @@ export function CarouselManager({
     router.refresh();
   }
   async function slotSubmit(data: FormData) {
-    const result = await saveManualCarouselSlotAction({ requestId: crypto.randomUUID(), locale: "en", position: Number(data.get("position")), articleId: String(data.get("articleId")), enabled: true });
+    const result = await saveManualCarouselSlotAction({ requestId: crypto.randomUUID(), locale, position: Number(data.get("position")), articleId: String(data.get("articleId")), enabled: true });
     setMessage(result.ok ? "人工位已保存；运行计算后更新 serving" : result.code);
     router.refresh();
   }
   async function deleteSlot(slot: Slot) {
     if (!window.confirm(`确认删除人工位 #${slot.position}（${slot.title}）？删除后该位置在下次计算时回落到自动候选。`)) return;
-    const result = await deleteManualCarouselSlotAction({ requestId: crypto.randomUUID(), id: slot.id, locale: "en" });
+    const result = await deleteManualCarouselSlotAction({ requestId: crypto.randomUUID(), id: slot.id, locale });
     setMessage(result.ok ? "人工位已删除" : result.code);
     router.refresh();
   }
@@ -69,7 +72,7 @@ export function CarouselManager({
         <label className="text-sm">Timezone<input name="cronTimezone" defaultValue={config.cronTimezone} className="mt-1 w-full rounded border p-2" /></label>
         <label className="flex items-center gap-2 text-sm"><input name="cronEnabled" type="checkbox" defaultChecked={config.cronEnabled} />启用 cron</label>
         <button className={buttonClassName("primary")}>保存配置</button>
-        <button type="button" className={buttonClassName("secondary")} onClick={() => void enqueueCarouselComputeAction({ requestId: crypto.randomUUID(), locale: "en" }).then((result) => { setMessage(result.ok ? `${result.data.status}: ${result.data.taskId}` : result.code); router.refresh(); })}>入队重新计算</button>
+        <button type="button" className={buttonClassName("secondary")} onClick={() => void enqueueCarouselComputeAction({ requestId: crypto.randomUUID(), locale }).then((result) => { setMessage(result.ok ? `${result.data.status}: ${result.data.taskId}` : result.code); router.refresh(); })}>入队重新计算</button>
       </form>
       <form action={slotSubmit} className="flex flex-wrap items-end gap-3 rounded-xl border bg-white p-5">
         <label className="text-sm">位置<select name="position" className="mt-1 block rounded border p-2">{positions.map((n) => <option key={n}>{n}</option>)}</select></label>
@@ -84,7 +87,7 @@ export function CarouselManager({
               <li key={slot.id} className="flex justify-between border-b py-2 text-sm">
                 <span>{slot.position}. {slot.title}</span>
                 <span className="flex gap-2">
-                  <button className={buttonClassName("secondary", "px-2 py-1 text-xs")} onClick={() => void saveManualCarouselSlotAction({ requestId: crypto.randomUUID(), id: slot.id, locale: "en", position: slot.position, articleId: slot.articleId, enabled: !slot.enabled }).then(() => router.refresh())}>{slot.enabled ? "停用" : "启用"}</button>
+                  <button className={buttonClassName("secondary", "px-2 py-1 text-xs")} onClick={() => void saveManualCarouselSlotAction({ requestId: crypto.randomUUID(), id: slot.id, locale, position: slot.position, articleId: slot.articleId, enabled: !slot.enabled }).then(() => router.refresh())}>{slot.enabled ? "停用" : "启用"}</button>
                   <button className={buttonClassName("secondary", "px-2 py-1 text-xs")} onClick={() => void deleteSlot(slot)}>删除</button>
                 </span>
               </li>

@@ -3,6 +3,14 @@
  * selection and `article-generation.ts` prefers TPL001 before the first
  * active template. Novel maps that preference to `system-default-v1` and
  * delegates every validation decision to the existing fail-closed engine.
+ *
+ * L10N P3（2026-09-10，矩阵 #5）：`ArticleTemplate.locale` 收口为 CPS 同型的
+ * `NOT NULL DEFAULT 'en'`，无通用模板语义——`requireLocale` 只接受
+ * `SITE_LOCALES` 成员，`selectActiveArticleTemplate`/
+ * `listActiveArticleTemplateOptions` 不再 OR 一个 `{locale: null}` 通配。
+ * `ensureDefaultArticleTemplate` 本身不变（仍只 bootstrap 一条 en 种子行）；
+ * 其余 14 语的默认模板由 `scripts/l10n/article-template-bootstrap.ts` 从
+ * `assets/article-templates/*.json` 落库，见该脚本文件头注释。
  */
 import { Prisma, type PrismaClient } from "@prisma/client";
 
@@ -68,20 +76,37 @@ function required(value: string, code: string, max: number): string {
 }
 
 /**
- * `locale` 白名单校验。必须是 `SITE_LOCALES` 的成员，或 `null`/空白（表示"全部语种"）。
+ * `locale` 白名单校验。必须是 `SITE_LOCALES` 的成员——不再接受 `null`/空白
+ * 表示"全部语种"。
  *
- * 🔴 修复真实缺陷：旧实现只做 `input.locale?.trim() || null`，任何拼错的字符串
- * （`"eng"`、`"En"`、多打一个空格之外的形态错误……）都会原样落库，产出一个
- * `selectActiveArticleTemplate` 的 `OR: [{locale: X}, {locale: null}]` 永远匹配不到的
+ * L10N P3（`施工提示词_Sonnet_L10N_P3_模板locale非空化与15语模板资产_2026-09-10.md`
+ * §1.B，矩阵 #5）：CPS 没有通用模板这个概念（`3a76877:src/lib/
+ * template-locale-guard.ts:3-6` 的 `normalizeContentLocale` 对空值也只会落到
+ * `"en"` 这一个具体语种，从不是"匹配所有语种"）——旧实现把 `null`/空白当一个
+ * 合法的第三态，是本仓自己发明的、CPS 没有的语义，且 P3 迁移已经把
+ * `ArticleTemplate.locale` 收口成数据库层 `NOT NULL DEFAULT 'en'`
+ * （`prisma/migrations/20260912090000_l10n_article_template_locale_not_null`），
+ * 继续在应用层放行空值只会制造一个数据库拒绝、应用层却以为合法的裂缝。
+ *
+ * 🔴 仍然修复着旧版本就有的真实缺陷：不做 `input.locale?.trim() || fallback`
+ * 这种宽松兜底，任何拼错的字符串（`"eng"`、`"En"`、多打一个空格之外的形态
+ * 错误……）都会原样落库，产出一个 `selectActiveArticleTemplate` 永远匹配不到的
  * 孤儿模板——保存时不报错，用到时才发现模板"不见了"。
+ *
+ * 参数类型是 `unknown` 而不是 `string | null | undefined`：`ArticleTemplateWrite.
+ * locale`（`src/lib/article-templates/contract.ts`）在 L10N P3 已收紧成必填
+ * `string`，类型系统本该保证这里永远拿到字符串——但 `unknown` 让这条运行期校验
+ * 继续对"绕过类型系统传进来的东西"生效（`storage()` 的输入终究来自 server
+ * action 反序列化的调用体，TS 类型标注不是运行时保证），同款防御性收窄见
+ * `src/server/content-creation/blog.ts` 的同名 `requireLocale(value: unknown)`。
  */
-function requireLocale(locale: string | null | undefined): string | null {
+function requireLocale(locale: unknown): string {
   const trimmed = typeof locale === "string" ? locale.trim() : "";
-  if (trimmed === "") return null;
   // 直接查 SITE_LOCALES 数组，不额外派生一份 Set/Map——`tests/ui/locale-canonical.test.ts`
   // 的"没有第二张语种映射表"扫描按名字（含 LOCALE/LANGUAGE）+ 字面量集合声明识别，
   // 就算这份集合是从唯一真源派生的也会被判成第二张表，索性不建。15 项数组 `.includes`
-  // 的开销可以忽略。
+  // 的开销可以忽略。空字符串/`null`/`undefined` 同样不是 `SITE_LOCALES` 的成员，
+  // 自然落进这条 `throw`，不需要单独判空。
   if (!(SITE_LOCALES as readonly string[]).includes(trimmed)) {
     throw new ArticleTemplateInputError("template_locale_invalid");
   }
@@ -238,10 +263,12 @@ export async function selectActiveArticleTemplate(
   db: Pick<PrismaClient, "articleTemplate">,
   input: { readonly locale: string; readonly templateKey?: string; readonly applicableArticleType?: string },
 ) {
-  // 🔴 locale 与 applicableArticleType 各自是一条 OR 子句；不能用两次对象展开
-  // `{...localeWhere, ...typeWhere}` 合并——两者的 key 都叫 `OR`，后一次展开会
-  // 静默吃掉前一次，等价于 locale 过滤完全失效。改用 `AND` 数组显式并列两个独立的 OR。
-  const conditions: Prisma.ArticleTemplateWhereInput[] = [{ OR: [{ locale: input.locale }, { locale: null }] }];
+  // L10N P3：`locale` 精确匹配，不再 OR 一个 `{locale: null}` 通配——数据库层
+  // `locale` 现在是 `NOT NULL`，那条通配从矩阵 #5 裁决之日起就只会匹配到零行，
+  // 留着是死代码；删除后一个 ru 请求不会再意外命中一份从未标注语种的孤儿模板，
+  // en 模板也不会被别的语种借用。`applicableArticleType` 的 `AND` 数组写法不变，
+  // 理由同旧注释：两条独立的 `OR` 子句不能用对象展开合并（key 相同会互相吃掉）。
+  const conditions: Prisma.ArticleTemplateWhereInput[] = [{ locale: input.locale }];
   if (input.applicableArticleType) {
     conditions.push({ OR: [{ applicableArticleType: input.applicableArticleType }, { applicableArticleType: "any" }] });
   }
@@ -285,7 +312,8 @@ export async function listActiveArticleTemplateOptions(
   locale: string,
   applicableArticleType?: string,
 ) {
-  const conditions: Prisma.ArticleTemplateWhereInput[] = [{ OR: [{ locale }, { locale: null }] }];
+  // L10N P3：同 `selectActiveArticleTemplate`，删 `{locale: null}` 通配。
+  const conditions: Prisma.ArticleTemplateWhereInput[] = [{ locale }];
   if (applicableArticleType) {
     conditions.push({ OR: [{ applicableArticleType }, { applicableArticleType: "any" }] });
   }
@@ -294,6 +322,47 @@ export async function listActiveArticleTemplateOptions(
     select: { id: true, templateKey: true, locale: true, version: true },
     orderBy: [{ templateKey: "asc" }, { version: "desc" }],
     distinct: ["templateKey"],
+  });
+}
+
+/**
+ * L10N P5 (P2 复核 C5-a): multi-locale sibling of `listActiveArticleTemplateOptions`
+ * above, for callers that need template options spanning more than one
+ * locale in one page render — `articles/page.tsx`'s template filter and
+ * `catalog-sync/page.tsx`'s per-row create-content picker both used to loop
+ * `listActiveArticleTemplateOptions(prisma, locale)` once per distinct
+ * locale actually present on the page and flatten the results client-side
+ * (N queries for N locales). This is the same query shape collapsed into
+ * one round trip via `locale: { in: locales }`.
+ *
+ * `distinct` here is `["templateKey", "locale"]`, NOT just `["templateKey"]`
+ * like the single-locale function above — with only one `locale` value in
+ * the `where`, distinct-by-templateKey and distinct-by-(templateKey,locale)
+ * are equivalent (every matched row already shares that one locale), but
+ * once `locale` is a set with more than one member, distinct-by-templateKey
+ * alone would silently collapse two DIFFERENT locales' rows into one
+ * option whenever they happen to share a `templateKey` string (globally
+ * possible in principle — `@@unique([templateKey, version])` on
+ * `ArticleTemplate` scopes uniqueness to templateKey+version, not
+ * templateKey+locale), picking whichever sorts first per `orderBy` and
+ * silently dropping the other locale's option out of the result entirely.
+ */
+export async function listActiveArticleTemplateOptionsForLocales(
+  db: PrismaClient,
+  locales: readonly string[],
+  applicableArticleType?: string,
+) {
+  const uniqueLocales = Array.from(new Set(locales));
+  if (uniqueLocales.length === 0) return [];
+  const conditions: Prisma.ArticleTemplateWhereInput[] = [{ locale: { in: uniqueLocales } }];
+  if (applicableArticleType) {
+    conditions.push({ OR: [{ applicableArticleType }, { applicableArticleType: "any" }] });
+  }
+  return db.articleTemplate.findMany({
+    where: { status: "active", deletedAt: null, AND: conditions },
+    select: { id: true, templateKey: true, locale: true, version: true },
+    orderBy: [{ locale: "asc" }, { templateKey: "asc" }, { version: "desc" }],
+    distinct: ["templateKey", "locale"],
   });
 }
 

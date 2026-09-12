@@ -1,5 +1,5 @@
 import type { Prisma, PrismaClient } from "@prisma/client";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { hashAdminSessionToken } from "@/lib/auth/session";
 import type { AdminIdentity, AdminSessionRecord } from "@/lib/auth/types";
@@ -9,6 +9,8 @@ import {
   ArticleTemplateInputError,
   createArticleTemplate,
   ensureDefaultArticleTemplate,
+  listActiveArticleTemplateOptions,
+  listActiveArticleTemplateOptionsForLocales,
   selectActiveArticleTemplate,
 } from "@/server/article-templates";
 import { DEFAULT_ARTICLE_TEMPLATE_KEY } from "@/server/content-creation/default-article-template";
@@ -74,7 +76,17 @@ class FakeArticleTemplateDb {
     if (where.id !== undefined && row.id !== where.id) return false;
     if (where.templateKey !== undefined && row.templateKey !== where.templateKey) return false;
     if (where.status !== undefined && row.status !== where.status) return false;
-    if (where.locale !== undefined && row.locale !== where.locale) return false;
+    if (where.locale !== undefined) {
+      // L10N P5: `listActiveArticleTemplateOptionsForLocales` queries
+      // `{ locale: { in: [...] } }` (a set), not just a bare string equality
+      // — same recursive-`matches` extension shape as `OR`/`AND` below.
+      if (where.locale !== null && typeof where.locale === "object" && "in" in (where.locale as Record<string, unknown>)) {
+        const allowed = (where.locale as { in: readonly (string | null)[] }).in;
+        if (!allowed.includes(row.locale)) return false;
+      } else if (row.locale !== where.locale) {
+        return false;
+      }
+    }
     if (where.applicableArticleType !== undefined && row.applicableArticleType !== where.applicableArticleType) return false;
     if ("deletedAt" in where && where.deletedAt === null && row.deletedAt !== null) return false;
     if (where.OR) {
@@ -275,6 +287,48 @@ describe("createArticleTemplate · 未登记变量必须被引擎拒绝", () => 
     expect(db.rows).toHaveLength(0);
   });
 
+  // L10N P3（矩阵 #5，施工提示词 §1.G）：`requireLocale` 不再接受 null/空白
+  // 表示"全部语种"——CPS 没有通用模板这个概念，且 `ArticleTemplate.locale`
+  // 已收口为数据库层 `NOT NULL`。`it`/`tr` 是真实的 BCP-47 语种码（resolveSiteLocale
+  // 能把上游码解析成它们），但不是这 15 个已登记的 `SITE_LOCALES` 成员——同一条
+  // `requireLocale` 白名单校验必须把它们和格式错误的 "eng" 一样拒绝。
+  it.each(["it", "tr", "", "   "])("locale=%j（合法 BCP-47 但非 SITE_LOCALES 成员，或空白）被拒绝，且不落库", async (locale) => {
+    const db = new FakeArticleTemplateDb();
+    const stores = authFixture();
+    const guarded = await authorization(stores, "admin.article_template.create");
+    await expect(
+      createArticleTemplate(
+        { ...guarded, template: { ...VALID_TEMPLATE, templateKey: "tpl-bad-locale-2", locale } },
+        deps(db, stores),
+      ),
+    ).rejects.toSatisfy((error: unknown) => error instanceof ArticleTemplateInputError && error.code === "template_locale_invalid");
+    expect(db.rows).toHaveLength(0);
+  });
+
+  it("locale 为 null/undefined（旧「全部语种」语义）同样被拒绝——不再是合法输入", async () => {
+    const db = new FakeArticleTemplateDb();
+    const stores = authFixture();
+    const guarded = await authorization(stores, "admin.article_template.create");
+    for (const locale of [null, undefined] as const) {
+      await expect(
+        createArticleTemplate(
+          {
+            ...guarded,
+            // L10N P3: `ArticleTemplateWrite.locale` is now a required `string`
+            // (contract.ts), so a real caller can no longer construct this
+            // object at all — the cast below deliberately bypasses the type
+            // system to keep exercising `requireLocale`'s runtime rejection of
+            // null/undefined (defense against non-TS callers), same rationale
+            // as the `unknown`-typed parameter in service.ts.
+            template: { ...VALID_TEMPLATE, templateKey: "tpl-null-locale", locale: locale as unknown as string },
+          },
+          deps(db, stores),
+        ),
+      ).rejects.toSatisfy((error: unknown) => error instanceof ArticleTemplateInputError && error.code === "template_locale_invalid");
+    }
+    expect(db.rows).toHaveLength(0);
+  });
+
   it("applicableArticleType 越界（不在五值枚举内）被拒绝，且不落库", async () => {
     const db = new FakeArticleTemplateDb();
     const stores = authFixture();
@@ -406,6 +460,86 @@ describe("selectActiveArticleTemplate · 停用模板不可被选中", () => {
   });
 });
 
+// L10N P3（矩阵 #5，施工提示词 §1.G）：`selectActiveArticleTemplate`/
+// `listActiveArticleTemplateOptions` 不再 OR 一个 `{locale: null}` 通配——
+// locale 精确匹配，ru 请求不会命中 en 模板，反之亦然；一份（理论上不该存在，
+// 数据库层现在是 `NOT NULL`，但应用层判断逻辑本身必须独立不依赖那道闸）
+// locale 为 null 的孤儿行也绝不会被任何具体语种命中。这组测试是变异①
+// （"把 `OR {locale:null}` 通配加回 → 红"）的判死对象。
+describe("selectActiveArticleTemplate / listActiveArticleTemplateOptions · locale 精确匹配，无通配", () => {
+  it("ru 模板不对 en 请求命中，en 模板不对 ru 请求命中", async () => {
+    const db = new FakeArticleTemplateDb();
+    const stores = authFixture();
+    const guarded = await authorization(stores, "admin.article_template.create");
+    await createArticleTemplate(
+      { ...guarded, template: { ...VALID_TEMPLATE, templateKey: "tpl-en-only", locale: "en" } },
+      deps(db, stores),
+    );
+    await createArticleTemplate(
+      { ...guarded, template: { ...VALID_TEMPLATE, templateKey: "tpl-ru-only", locale: "ru" } },
+      deps(db, stores),
+    );
+
+    // The en template is selectable under locale "en" but not "ru".
+    expect(
+      (await selectActiveArticleTemplate(db.asPrismaClient(), { locale: "en", templateKey: "tpl-en-only" }))?.templateKey,
+    ).toBe("tpl-en-only");
+    expect(
+      await selectActiveArticleTemplate(db.asPrismaClient(), { locale: "ru", templateKey: "tpl-en-only" }),
+    ).toBeNull();
+
+    // And symmetrically for the ru template.
+    expect(
+      (await selectActiveArticleTemplate(db.asPrismaClient(), { locale: "ru", templateKey: "tpl-ru-only" }))?.templateKey,
+    ).toBe("tpl-ru-only");
+    expect(
+      await selectActiveArticleTemplate(db.asPrismaClient(), { locale: "en", templateKey: "tpl-ru-only" }),
+    ).toBeNull();
+
+    // listActiveArticleTemplateOptions: each locale query surfaces exactly its own template.
+    const enOptions = await listActiveArticleTemplateOptions(db.asPrismaClient(), "en");
+    expect(enOptions.map((option) => option.templateKey)).toContain("tpl-en-only");
+    expect(enOptions.map((option) => option.templateKey)).not.toContain("tpl-ru-only");
+
+    const ruOptions = await listActiveArticleTemplateOptions(db.asPrismaClient(), "ru");
+    expect(ruOptions.map((option) => option.templateKey)).toContain("tpl-ru-only");
+    expect(ruOptions.map((option) => option.templateKey)).not.toContain("tpl-en-only");
+  });
+
+  it("无通配：一份 locale 为 null 的孤儿行不会被任何具体语种命中（变异①判死对象）", async () => {
+    const db = new FakeArticleTemplateDb();
+    // Bypasses `storage()`/`requireLocale` entirely — this row could only
+    // exist pre-P3 (or via direct DB tampering); after this migration the
+    // column itself is `NOT NULL`, but the *application* matching logic
+    // must independently refuse to wildcard-match it, not just rely on the
+    // database rejecting the insert.
+    db.rows.push({
+      id: "template-orphan",
+      templateKey: "tpl-orphan",
+      templateName: "孤儿模板",
+      locale: null,
+      version: 1,
+      schemaVersion: 1,
+      status: "active",
+      applicableArticleType: "novel_article",
+      bodyTemplate: "<p>{novel_title}</p>",
+      contentTemplate: [{ type: "paragraph", content: "{novel_title}" }],
+      seoTemplate: { title: "{novel_title}" },
+      slugTemplate: "",
+      metaKeywordsTemplate: "",
+      deletedAt: null,
+      createdAt: new Date(NOW),
+      updatedAt: new Date(NOW),
+    });
+
+    for (const locale of ["en", "ru"]) {
+      expect(await selectActiveArticleTemplate(db.asPrismaClient(), { locale, templateKey: "tpl-orphan" })).toBeNull();
+      const options = await listActiveArticleTemplateOptions(db.asPrismaClient(), locale);
+      expect(options.map((option) => option.templateKey)).not.toContain("tpl-orphan");
+    }
+  });
+});
+
 describe("ensureDefaultArticleTemplate · 表空时落 system-default-v1，幂等", () => {
   let db: FakeArticleTemplateDb;
 
@@ -429,5 +563,113 @@ describe("ensureDefaultArticleTemplate · 表空时落 system-default-v1，幂�
     const second = await ensureDefaultArticleTemplate(db.asTransactionClient());
     expect(second).toBeNull();
     expect(db.rows).toHaveLength(1);
+  });
+});
+
+// L10N P5 (矩阵 #13, P2 复核 C5-a): `listActiveArticleTemplateOptionsForLocales`
+// collapses N per-locale `listActiveArticleTemplateOptions` queries into one
+// `locale: { in: [...] }` round trip — same locale-exact-match semantics
+// (no wildcard), plus a multi-locale-safe `distinct` (see that function's
+// own doc comment on why it's `["templateKey", "locale"]`, not just
+// `["templateKey"]`).
+describe("listActiveArticleTemplateOptionsForLocales", () => {
+  it("一次查询返回多个语种各自的模板，不互相污染", async () => {
+    const db = new FakeArticleTemplateDb();
+    const stores = authFixture();
+    const guarded = await authorization(stores, "admin.article_template.create");
+    await createArticleTemplate(
+      { ...guarded, template: { ...VALID_TEMPLATE, templateKey: "tpl-en-only", locale: "en" } },
+      deps(db, stores),
+    );
+    await createArticleTemplate(
+      { ...guarded, template: { ...VALID_TEMPLATE, templateKey: "tpl-ru-only", locale: "ru" } },
+      deps(db, stores),
+    );
+    await createArticleTemplate(
+      { ...guarded, template: { ...VALID_TEMPLATE, templateKey: "tpl-ja-only", locale: "ja" } },
+      deps(db, stores),
+    );
+
+    const options = await listActiveArticleTemplateOptionsForLocales(db.asPrismaClient(), ["en", "ru"]);
+    const keys = options.map((option) => option.templateKey);
+    expect(keys).toContain("tpl-en-only");
+    expect(keys).toContain("tpl-ru-only");
+    // ja was never in the requested set — a single `{in: [...]}` query must
+    // not silently widen to "every locale that happens to have a template".
+    expect(keys).not.toContain("tpl-ja-only");
+  });
+
+  it("空数组直接返回 []，不发起零条件查询", async () => {
+    const db = new FakeArticleTemplateDb();
+    expect(await listActiveArticleTemplateOptionsForLocales(db.asPrismaClient(), [])).toEqual([]);
+  });
+
+  it("每份结果都带上自己的 locale（供调用方按语种过滤/分组，不是扁平化后就丢失语种信息）", async () => {
+    const db = new FakeArticleTemplateDb();
+    const stores = authFixture();
+    const guarded = await authorization(stores, "admin.article_template.create");
+    await createArticleTemplate(
+      { ...guarded, template: { ...VALID_TEMPLATE, templateKey: "tpl-en-x", locale: "en" } },
+      deps(db, stores),
+    );
+    await createArticleTemplate(
+      { ...guarded, template: { ...VALID_TEMPLATE, templateKey: "tpl-ru-x", locale: "ru" } },
+      deps(db, stores),
+    );
+
+    const options = await listActiveArticleTemplateOptionsForLocales(db.asPrismaClient(), ["en", "ru"]);
+    const byKey = new Map(options.map((option) => [option.templateKey, option.locale]));
+    expect(byKey.get("tpl-en-x")).toBe("en");
+    expect(byKey.get("tpl-ru-x")).toBe("ru");
+  });
+
+  it("无通配：locale 为 null 的孤儿行不会被任何 in 集合命中", async () => {
+    const db = new FakeArticleTemplateDb();
+    db.rows.push({
+      id: "template-orphan-multi",
+      templateKey: "tpl-orphan-multi",
+      templateName: "孤儿模板",
+      locale: null,
+      version: 1,
+      schemaVersion: 1,
+      status: "active",
+      applicableArticleType: "novel_article",
+      bodyTemplate: "<p>{novel_title}</p>",
+      contentTemplate: [{ type: "paragraph", content: "{novel_title}" }],
+      seoTemplate: { title: "{novel_title}" },
+      slugTemplate: "",
+      metaKeywordsTemplate: "",
+      deletedAt: null,
+      createdAt: new Date(NOW),
+      updatedAt: new Date(NOW),
+    });
+
+    const options = await listActiveArticleTemplateOptionsForLocales(db.asPrismaClient(), ["en", "ru"]);
+    expect(options.map((option) => option.templateKey)).not.toContain("tpl-orphan-multi");
+  });
+
+  // P2 复核 C5-a's whole point: `catalog-sync/page.tsx` used to issue one
+  // `findMany` per distinct `sourceLocale` on the page (`Promise.all(...)`).
+  // This asserts the collapsed call count directly against the service
+  // layer both callers (`catalog-sync/page.tsx`, `articles/page.tsx`) now
+  // share — a page-level render test would only prove "the page still
+  // works", not "it stopped issuing N queries".
+  it("三个语种、任意数量模板，只发一条 findMany（不是逐语种循环）", async () => {
+    const db = new FakeArticleTemplateDb();
+    const stores = authFixture();
+    const guarded = await authorization(stores, "admin.article_template.create");
+    for (const locale of ["en", "ru", "ja"]) {
+      await createArticleTemplate(
+        { ...guarded, template: { ...VALID_TEMPLATE, templateKey: `tpl-${locale}`, locale } },
+        deps(db, stores),
+      );
+    }
+    const client = db.asPrismaClient();
+    const findManySpy = vi.spyOn(client.articleTemplate, "findMany");
+
+    const options = await listActiveArticleTemplateOptionsForLocales(client, ["en", "ru", "ja"]);
+
+    expect(findManySpy).toHaveBeenCalledTimes(1);
+    expect(options.map((option) => option.templateKey).sort()).toEqual(["tpl-en", "tpl-ja", "tpl-ru"]);
   });
 });

@@ -7,63 +7,55 @@
  * locale-prefixed request is reachable; every leaf page under this segment
  * trusts that decision instead of re-deriving it.
  *
- * A locale must clear BOTH gates to be routable here:
+ * L10N P4 (2026-09-10): "registered即路由" — matches CPS's own
+ * `[locale]/(site)/layout.tsx` semantics
+ * (`3a76877:src/app/[locale]/(site)/layout.tsx:43-48`, `hasLocale(routing.
+ * locales, locale)`). A locale need only clear ONE gate to be routable here:
  *
  * 1. **Registered** — a member of `SITE_LOCALES` (`locale-canonical.ts`,
  *    15 entries, aligned to the short-drama site's registry per Owner
- *    decision). This is the mapping/registration gate.
- * 2. **Publishable** — `isPublishableLocale(locale)` (D-7's independent,
- *    fail-closed publish whitelist). Registered ≠ publishable: today
- *    `SITE_LOCALES` has 15 entries and `PUBLISHABLE_LOCALES` is `{en}`
- *    (U6 / Owner D-7). `en` is still excluded from this prefix tree by the
- *    third rule below (D-8 bare default-locale URLs).
+ *    decision).
  *
- * A THIRD, structural rule sits on top of both gates: the default locale
- * (`PUBLIC_SITE_LOCALE`, `en`) is deliberately EXCLUDED from ever resolving
- * here, even once/if it clears `isPublishableLocale`. This project's frozen
- * URL form (D-8: `buildLocaleCanonical`, `src/lib/slug/article-path.ts`)
- * serves the default locale at the bare, unprefixed path. Letting `/en/...`
- * ALSO resolve would create two indexable URLs for the same content — the
- * exact duplicate-content/dead-link surface this unit's hreflang work
- * (`novel-hreflang.ts`) exists to eliminate elsewhere. A request for
- * `/en/...` must 404, not redirect: no such prefixed URL has ever been
- * published or linked from anywhere in this codebase.
+ * The independent D-7 publish whitelist (`PUBLISHABLE_LOCALES`/
+ * `isPublishableLocale`) that used to sit on top of this as a second gate
+ * was deleted this round (矩阵 #9 GAP 收口) — CPS's own routing layer never
+ * had a second, narrower gate here; "is this locale worth showing content
+ * for" is now the dynamic layer's question (`getActiveLocales()`), answered
+ * at the data layer (empty listings, hidden LocaleSwitcher entry, empty
+ * sitemap shard), never at the routing layer (a registered locale is never
+ * a 404 for THIS reason alone).
  *
- * Net effect today: `getRoutableLocale` still returns `null` for every input.
- * `en` is publishable but excluded as the default locale; the other 14
- * registered locales are not on the whitelist. `[locale]/layout.tsx` 404s
- * every request under this segment. That is the correct, intentional state
- * until a second locale is admitted **and** ships its `[locale]/...` leaf
- * pages in the same batch.
+ * A SECOND, structural rule still sits on top of the registration gate: the
+ * default locale (`PUBLIC_SITE_LOCALE`, `en`) is deliberately EXCLUDED from
+ * ever resolving here. This project's frozen URL form (D-8:
+ * `buildLocaleCanonical`, `src/lib/slug/article-path.ts`) serves the default
+ * locale at the bare, unprefixed path. Letting `/en/...` ALSO resolve would
+ * create two indexable URLs for the same content — the exact duplicate-
+ * content/dead-link surface this unit's hreflang work (`novel-hreflang.ts`)
+ * exists to eliminate elsewhere. A request for `/en/...` must 404, not
+ * redirect at this layer — `src/proxy.ts`'s `/en/*` -> bare-path 308 already
+ * intercepts every real `/en/...` request before it ever reaches this guard,
+ * so this branch is a defense-in-depth backstop, not the primary handler.
  *
- * 🔴 P0-S10 correction: adding a locale to `PUBLISHABLE_LOCALES` is
- * necessary but NOT sufficient to make that locale routable. WO-1
- * (`施工工单_WO1-3_多语种公开站地基_2026-09-08.md` §6.2) shipped this
- * subtree's leaf-page *shape* — thin `page.tsx`/`not-found.tsx` shells under
- * `src/app/[locale]/...` that each resolve their `locale` route param and
- * delegate to the shared bodies in `src/app/_pages/*` — but this does not by
- * itself make anything reachable: `getRoutableLocale` still returns `null`
- * for every input (see above), so `[locale]/layout.tsx` 404s every request
- * before any leaf page's own code ever runs. Making `getRoutableLocale`
- * return non-null for a locale before its `PUBLISHABLE_LOCALES` entry is
- * genuinely admitted would not restore access either — the leaf pages exist
- * now, but any hreflang/sitemap entries pointing at `/{locale}/...` before
- * that locale is actually admitted would still be dead links pointing at a
- * page whose data layer has nothing published for that locale. Publishing
- * any second locale therefore MUST land alongside its
- * `PUBLISHABLE_LOCALES` admission — not as a follow-up — or hreflang/sitemap
- * will advertise URLs with no real content behind them yet.
+ * Net effect today: `getRoutableLocale` returns every one of the 14 non-`en`
+ * `SITE_LOCALES` members, `null` only for `en` and for anything not in
+ * `SITE_LOCALES`. WO-1 (`施工工单_WO1-3_多语种公开站地基_2026-09-08.md` §6.2)
+ * already shipped this subtree's leaf-page *shape* — thin `page.tsx`/
+ * `not-found.tsx` shells under `src/app/[locale]/...` that each resolve
+ * their `locale` route param and delegate to the shared bodies in
+ * `src/app/_pages/*` — so every registered locale now actually renders
+ * through those existing shells; nothing else in this subtree needed to
+ * change for that to become true.
  */
 import { notFound } from "next/navigation";
 
-import { isPublishableLocale, SITE_LOCALES, type SiteLocale } from "@/lib/locale/locale-canonical";
+import { SITE_LOCALES, type SiteLocale } from "@/lib/locale/locale-canonical";
 import { PUBLIC_SITE_LOCALE } from "@/lib/site/locale-label";
 
 export function getRoutableLocale(rawLocale: string): SiteLocale | null {
   if (!(SITE_LOCALES as readonly string[]).includes(rawLocale)) return null;
   const locale = rawLocale as SiteLocale;
   if (locale === PUBLIC_SITE_LOCALE) return null;
-  if (!isPublishableLocale(locale)) return null;
   return locale;
 }
 

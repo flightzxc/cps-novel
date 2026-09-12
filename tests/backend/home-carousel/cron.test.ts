@@ -4,6 +4,7 @@ import {
   DEFAULT_HOME_CAROUSEL_CONFIG,
   HOME_CAROUSEL_SCHEDULE_KEY,
   HOME_CAROUSEL_TASK_TYPE,
+  buildHomeCarouselCronTaskInput,
   buildHomeCarouselScheduleDefinition,
   enqueueHomeCarouselCron,
   isHomeCarouselCronDue,
@@ -13,7 +14,7 @@ import {
 import { HANDLERS, createHandlerRegistry } from "@/lib/tasks";
 
 import { SCHEDULES } from "../../../scheduler/index";
-import { FakeHomeCarouselDb } from "./support";
+import { FakeHomeCarouselDb, type FakeArticle } from "./support";
 
 describe("PR6 fix B-1: the home-carousel schedule is actually registered", () => {
   it("scheduler/index.ts's SCHEDULES contains the home-carousel-daily schedule", () => {
@@ -62,7 +63,7 @@ describe("buildHomeCarouselScheduleDefinition", () => {
     expect(definition.dueInstants(new Date("2026-09-05T12:00:00.000Z"))).toEqual([]);
   });
 
-  it("build() produces a ScheduledTaskInput targeting home_carousel.compute.v1 with the configured timezone and cron:<businessDate> item target", () => {
+  it("build() with no getActiveLocales supplied defaults to a single en item (pre-P5 behavior)", () => {
     const definition = buildHomeCarouselScheduleDefinition(() => config({ cronTimezone: "Asia/Shanghai" }));
     const scheduledFor = new Date("2026-09-05T19:00:00.000Z");
     const input = definition.build(scheduledFor);
@@ -70,7 +71,45 @@ describe("buildHomeCarouselScheduleDefinition", () => {
     expect(input.taskType).toBe(HOME_CAROUSEL_TASK_TYPE);
     expect(input.timezone).toBe("Asia/Shanghai");
     expect(input.items).toHaveLength(1);
-    expect(input.items[0]).toMatchObject({ targetType: "home_carousel", targetId: "2026-09-06", payload: { locale: "en", source: "cron" } });
+    expect(input.items[0]).toMatchObject({ targetType: "home_carousel", targetId: "2026-09-06:en", payload: { locale: "en", source: "cron" } });
+  });
+
+  // L10N P5 (矩阵 #13). Mutation ① target: reverting the cron item-building
+  // to hardcode `["en"]` regardless of what `getActiveLocales()` reports —
+  // this is exactly the scenario that would go red.
+  it("build() with active locales [en, ru] enqueues two items, one per locale, each with a locale-scoped target id", () => {
+    const definition = buildHomeCarouselScheduleDefinition(
+      () => config({ cronTimezone: "Asia/Shanghai" }),
+      () => ["en", "ru"],
+    );
+    const input = definition.build(new Date("2026-09-05T19:00:00.000Z"));
+    expect(input.items).toHaveLength(2);
+    expect(input.items).toEqual([
+      { targetType: "home_carousel", targetId: "2026-09-06:en", payload: { locale: "en", source: "cron" } },
+      { targetType: "home_carousel", targetId: "2026-09-06:ru", payload: { locale: "ru", source: "cron" } },
+    ]);
+    expect(input.params).toEqual({ locales: ["en", "ru"] });
+  });
+
+  it("the item set really comes from getActiveLocales(), not a hardcoded default — a [ru]-only active set enqueues exactly one ru item, no en item", () => {
+    const definition = buildHomeCarouselScheduleDefinition(
+      () => config({ cronTimezone: "Asia/Shanghai" }),
+      () => ["ru"],
+    );
+    const input = definition.build(new Date("2026-09-05T19:00:00.000Z"));
+    expect(input.items).toHaveLength(1);
+    expect(input.items[0]).toMatchObject({ targetId: "2026-09-06:ru", payload: { locale: "ru" } });
+    expect(input.items.some((item) => item.payload && (item.payload as { locale?: string }).locale === "en")).toBe(false);
+  });
+
+  it("buildHomeCarouselCronTaskInput itself: empty activeLocales array falls back to [en] rather than enqueuing zero items (enqueueScheduledTask rejects an empty item list)", () => {
+    const input = buildHomeCarouselCronTaskInput(
+      config({ cronTimezone: "Asia/Shanghai" }),
+      new Date("2026-09-05T19:00:00.000Z"),
+      [],
+    );
+    expect(input.items).toHaveLength(1);
+    expect(input.items[0]).toMatchObject({ targetId: "2026-09-06:en", payload: { locale: "en" } });
   });
 });
 
@@ -88,5 +127,46 @@ describe("enqueueHomeCarouselCron (async convenience wrapper, shares the same bu
     const db = new FakeHomeCarouselDb();
     db.carouselConfigJson = { cronEnabled: true };
     await expect(enqueueHomeCarouselCron(db.asPrismaClient(), HANDLERS, new Date("2026-09-05T19:00:00.000Z"))).rejects.toThrow(/not registered/i);
+  });
+
+  function publishedArticle(overrides: Partial<FakeArticle>): FakeArticle {
+    return {
+      id: overrides.id ?? "article-1",
+      novelId: overrides.novelId ?? "novel-1",
+      locale: overrides.locale ?? "en",
+      status: "published",
+      deletedAt: null,
+      publishedAt: new Date("2026-08-01T00:00:00.000Z"),
+      updatedAt: new Date("2026-08-01T00:00:00.000Z"),
+      novel: { title: "T", status: "published", deletedAt: null, coverUrl: "https://example.com/c.jpg" },
+      ...overrides,
+    };
+  }
+
+  // L10N P5 (矩阵 #13, F): resolves the live active-locale set via
+  // queryActiveLocales(db) before building the task input — a real ru
+  // article in the fake db must actually be read (not just the always-en
+  // default assumed without looking).
+  it("resolves the live active-locale set before enqueueing (queryActiveLocales runs ahead of the scheduler write)", async () => {
+    const db = new FakeHomeCarouselDb();
+    db.carouselConfigJson = { cronEnabled: true };
+    db.seedArticle(publishedArticle({ id: "article-en", novelId: "novel-en", locale: "en" }));
+    db.seedArticle(publishedArticle({ id: "article-ru", novelId: "novel-ru", locale: "ru" }));
+    const registry = createHandlerRegistry({
+      [HOME_CAROUSEL_TASK_TYPE]: { family: "generic", handler: async () => ({ status: "success" as const }) },
+    });
+
+    // This fake's `$transaction`/`genericTask` double does not implement
+    // the scheduler's own raw-SQL `schedule_run`/`cron_run` machinery
+    // (`enqueueScheduledTask`, `@/lib/tasks/scheduler.ts`) — that surface
+    // is exercised only against a real database
+    // (`tests/integration/tasks/p1-07-postgres.test.ts`). This test only
+    // needs to prove `queryActiveLocales` actually ran (`db.calls` records
+    // it) ahead of the write attempt, not that the write itself succeeds
+    // against this narrower fake — so the rejection past that point is
+    // swallowed rather than asserted on.
+    await enqueueHomeCarouselCron(db.asPrismaClient(), registry, new Date("2026-09-05T19:00:00.000Z")).catch(() => {});
+
+    expect(db.calls).toContain("article.groupBy");
   });
 });

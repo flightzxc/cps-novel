@@ -130,13 +130,13 @@ async function run() {
       && !book.existingPromo.upstreamCode
       && !book.existingPromo.webUrl
       && Boolean(book.agencyId)
-      && SITE_LOCALES.includes(resolveSiteLocale(book.language, book.languageName ?? undefined) as SiteLocale)
+      && SITE_LOCALES.includes(resolveSiteLocale(book.language, book.languageName ?? undefined).locale as SiteLocale)
     ));
     if (!candidate) blocked("book_b_unclaimed_candidate_missing");
     selectedSeriesId = candidate.seriesId;
     if (selectedSeriesId === BOOK_A_SERIES_ID) blocked("book_a_reuse_forbidden");
 
-    const resolvedLocale = resolveSiteLocale(candidate.language, candidate.languageName ?? undefined);
+    const resolvedLocale = resolveSiteLocale(candidate.language, candidate.languageName ?? undefined).locale;
     if (!SITE_LOCALES.includes(resolvedLocale as SiteLocale)) blocked("book_b_locale_unresolved");
     const locale = resolvedLocale as SiteLocale;
     const source = await prisma.novelSourceItem.upsert({
@@ -183,9 +183,10 @@ async function run() {
       },
     });
     if (!["pending", "linked"].includes(source.status)) blocked("book_b_source_status_invalid");
+    // L10N P2: locale is derived server-side from the `sourceLocale` just
+    // upserted above — no longer a caller-supplied field.
     const content = await createContentFromSourceItem(prisma, {
       novelSourceItemId: source.id,
-      locale,
       mode: "apply",
       actor: { type: "system", source: "one-book-promo-claim-smoke" },
       requestId: randomUUID(),

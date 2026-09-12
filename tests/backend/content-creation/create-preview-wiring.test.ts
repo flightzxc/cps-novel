@@ -19,7 +19,6 @@ describe("createContentFromSourceItem preview wiring", () => {
     const source = fake.seedSourceItem({ title: "Preview after create" });
     const input = {
       novelSourceItemId: source.id,
-      locale: "en" as const,
       mode: "apply" as const,
       actor: { type: "admin" as const, adminId: "admin-1" },
       requestId: "request-1",

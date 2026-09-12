@@ -6,6 +6,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import { buttonClassName } from "@/components/ui/button";
 import { errorEnvelopeCopy } from "@/features/admin-ui/error-copy";
+import { SITE_LOCALE_LABELS, type SiteLocale } from "@/lib/locale/locale-canonical";
 
 import { applyContentCreationAction, dryRunContentCreationAction } from "../_actions";
 import {
@@ -35,9 +36,20 @@ type Stage =
   | { readonly kind: "result"; readonly result: CreateContentResult }
   | { readonly kind: "error"; readonly message: string };
 
+/**
+ * `missing_locale`/`unsupported_locale` are real, reachable outcomes here
+ * (L10N P2, matrix #3) — not defensive placeholders like the other three
+ * codes below. Opening this dialog on a source item whose `sourceLocale` is
+ * `NULL`, or resolves to a locale outside `SITE_LOCALES` (e.g.
+ * `it`/`fil`/`ms`/`tr`), makes the auto-dry-run throw one of these, landing
+ * the dialog straight in `stage: "error"` — the plan preview (and its
+ * "确认创建" button) is never reached at all, so there is nothing further to
+ * disable.
+ */
 const INVALID_INPUT_COPY: Readonly<Record<string, string>> = Object.freeze({
   invalid_novel_source_item_id: "来源条目标识无效，请刷新页面后重试",
-  invalid_locale: "语种参数无效（内部错误），请联系工程排查",
+  missing_locale: "该来源条目尚未识别出语种（sourceLocale 为空），无法创建内容。",
+  unsupported_locale: "该来源条目识别出的语种不是本站已登记的语种，无法创建内容。",
   invalid_actor: "无法确认当前操作者身份，请重新登录后重试",
   invalid_request_id: "请求标识无效（内部错误），请刷新页面后重试",
 });
@@ -73,30 +85,29 @@ function Row({ label, value }: { label: string; value: ReactNode }) {
   );
 }
 
-function localeMismatchNotice(item: SourceItemRow): string | null {
-  if (!item.sourceLocale) {
-    return "该来源条目尚未识别出标准站点语种（语种归一 S7a 未接线），请先人工确认这确实是英文内容，再继续创建。";
-  }
-  if (item.sourceLocale !== "en") {
-    return `该来源条目识别出的语种是「${item.sourceLocale}」，与本次将创建的「en」不一致，请确认这是预期行为。`;
-  }
-  return null;
+/**
+ * `plan.locale` is always identical to `item.sourceLocale` here — by the
+ * time a dry run reaches `stage: "plan"` at all, `loadPlan`
+ * (`src/server/content-creation/service.ts`) has already derived it from
+ * that exact field and thrown `missing_locale`/`unsupported_locale`
+ * otherwise (see `INVALID_INPUT_COPY`'s own doc comment) — so there is no
+ * "mismatch" state left to warn about, only a read-only fact to display:
+ * the code plus its 站点语种标签 (`SITE_LOCALE_LABELS`, the same registry
+ * `template-manager.tsx`'s locale picker already uses for the same
+ * purpose).
+ */
+function derivedLocaleDisplay(locale: SiteLocale): string {
+  return `${locale}（${SITE_LOCALE_LABELS[locale]}）`;
 }
 
 function PlanPreview({ item, plan }: { item: SourceItemRow; plan: ContentCreationPlan }) {
-  const mismatch = localeMismatchNotice(item);
   return (
     <div className="space-y-3">
       <p className={`rounded-lg border px-3 py-2 text-sm ${TONE_STYLE.info}`} role="status">
         尚未写入任何数据。以下字段将写入 Novel / Article（草稿状态），确认后才会真正创建。
       </p>
-      {mismatch && (
-        <p className={`rounded-lg border px-3 py-2 text-sm ${TONE_STYLE.warning}`} data-testid="locale-mismatch-notice">
-          {mismatch}
-        </p>
-      )}
       <dl className="divide-y divide-gray-100 rounded-lg border border-gray-200">
-        <Row label="语种" value={plan.locale} />
+        <Row label="语种" value={<span data-testid="derived-locale-display">{derivedLocaleDisplay(plan.locale)}</span>} />
         <Row label="标题" value={plan.title} />
         <Row label="书目 slug" value={plan.novelSlug} />
         <Row label="文章 slug" value={plan.articleSlug} />
@@ -186,13 +197,33 @@ export function CreateContentDialog({
   contentPublishGranted: boolean;
   contentPublishBlockedReason: string | null;
   onClose: () => void;
-  templateOptions?: readonly { readonly templateKey: string; readonly version: number }[];
+  /**
+   * The full set fetched for the page (`catalog-sync/page.tsx`, across
+   * every distinct `sourceLocale` present on the current page — see that
+   * file's own comment), not pre-filtered to this one item. Filtered down
+   * to `matchingTemplateOptions` below so the picker only ever offers a
+   * template whose own `locale` exactly matches this item's derived
+   * locale — matrix #13's "模板选项按来源条目语种" requirement.
+   *
+   * L10N P3: dropped the `{locale: null}` "all locales" wildcard branch
+   * this filter used to also accept. `ArticleTemplate.locale` is now
+   * database-level `NOT NULL` (`article-templates/service.ts`'s own
+   * `selectActiveArticleTemplate`/`listActiveArticleTemplateOptions` no
+   * longer emit that `OR` at all — see that file's header comment), so no
+   * row can ever have `locale === null` any more; keeping the wildcard
+   * branch here would have been dead code reintroducing the exact
+   * "generic template" semantics P3 removed from the query layer.
+   */
+  templateOptions?: readonly { readonly templateKey: string; readonly locale: string; readonly version: number }[];
 }) {
   const router = useRouter();
   const dialogRef = useRef<HTMLDialogElement>(null);
   const [stage, setStage] = useState<Stage>({ kind: "loading" });
   const [applying, setApplying] = useState(false);
-  const [templateKey, setTemplateKey] = useState(templateOptions[0]?.templateKey ?? "system-default-v1");
+  const matchingTemplateOptions = templateOptions.filter(
+    (template) => template.locale === item.sourceLocale,
+  );
+  const [templateKey, setTemplateKey] = useState(matchingTemplateOptions[0]?.templateKey ?? "system-default-v1");
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -275,8 +306,8 @@ export function CreateContentDialog({
         <h2 className="text-base font-semibold">创建内容 · {item.title}</h2>
         <label className="block text-sm text-gray-700">文章模板
           <select value={templateKey} onChange={(event) => setTemplateKey(event.target.value)} disabled={applying} className="mt-1 w-full rounded border border-gray-300 p-2">
-            {templateOptions.length === 0 && <option value="system-default-v1">system-default-v1（系统默认）</option>}
-            {templateOptions.map((template) => <option key={`${template.templateKey}:${template.version}`} value={template.templateKey}>{template.templateKey} · v{template.version}</option>)}
+            {matchingTemplateOptions.length === 0 && <option value="system-default-v1">system-default-v1（系统默认）</option>}
+            {matchingTemplateOptions.map((template) => <option key={`${template.templateKey}:${template.version}`} value={template.templateKey}>{template.templateKey} · v{template.version}</option>)}
           </select>
         </label>
 

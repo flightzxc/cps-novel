@@ -8,10 +8,19 @@ import {
   ARTICLE_TYPE_OPTIONS,
 } from "@/features/admin-ui/content-view";
 
+// L10N P5 (矩阵 #13): `ArticleTemplate.locale` has been database-level
+// `NOT NULL` since L10N P3 — no row this ever receives can have a null
+// locale any more (same reasoning `catalog-sync-client.tsx`'s own
+// `templateOptions` prop-type comment already gives for its identically
+// shaped option). `article-filters.tsx` still declares its own copy of this
+// shape (rather than importing the service layer's return type) — kept
+// that way, not narrowed to reuse the Prisma-inferred type, so this file's
+// contract with its caller stays explicit and independent of query-layer
+// `select` shape changes.
 export type ArticleTemplateOption = Readonly<{
   id: string;
   templateKey: string;
-  locale: string | null;
+  locale: string;
   version: number;
 }>;
 

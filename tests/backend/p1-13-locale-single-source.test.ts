@@ -20,8 +20,13 @@ function sourceFiles(directory: string): string[] {
 
 describe.skipIf(!localeReadyForFinalIntegration)("P1-13 locale canonical single source — WAITING_FOR_CLAUDE_IN_FINAL_INTEGRATION", () => {
   it("provides the frozen locale API from the one declared implementation source", () => {
+    // L10N P4: isPublishableLocale/listPublishableLocales (the D-7 publish
+    // whitelist) were deleted — resolveSiteLocale is the sole remaining
+    // frozen export here; the two-layer split's dynamic half
+    // (getActiveLocales) intentionally lives in a separate module
+    // (`./active-locales.ts`), not this canonical single-source file.
     const source = readFileSync(canonicalPath, "utf8");
-    for (const symbol of ["resolveSiteLocale", "isPublishableLocale", "listPublishableLocales"]) {
+    for (const symbol of ["resolveSiteLocale"]) {
       expect(source, `${symbol} must be exported by ${canonicalRelativePath}`).toMatch(
         new RegExp(`export\\s+(?:function|const)\\s+${symbol}\\b`),
       );

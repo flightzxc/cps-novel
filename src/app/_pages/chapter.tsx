@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 
 import { JsonLd } from "@/app/_components/json-ld";
 import {
+  loadActiveLocales,
   loadArticleAccess,
   loadChapterView,
   loadChrome,
@@ -13,11 +14,11 @@ import { ChapterScreen } from "@/features/public-ui/chapter/ChapterScreen";
 import { UnavailableScreen } from "@/features/public-ui/status/UnavailableScreen";
 import type { SiteLocale } from "@/lib/locale/locale-canonical";
 import { getPublicT } from "@/lib/locale/messages";
-import { buildChapterPath, buildChapterRoutePath } from "@/lib/seo/chapter-path";
+import { buildChapterPath } from "@/lib/seo/chapter-path";
 import { buildNovelHreflangAlternates, type NovelHreflangSibling } from "@/lib/seo/novel-hreflang";
 import { generateSeoMeta } from "@/lib/seo/seo-meta-generator";
 import { canonicalUrl } from "@/lib/seo/seo-utils";
-import { localePrefix } from "@/lib/slug/article-path";
+import { decodeSlugParam, localePrefix } from "@/lib/slug/article-path";
 
 /**
  * Chapter page shared body (WO-1 §6.1): extracted verbatim out of
@@ -68,7 +69,11 @@ export async function buildChapterMetadata(
   locale: SiteLocale,
   params: Promise<ChapterRouteParams>,
 ): Promise<Metadata> {
-  const { slugParam, chapterNumber: rawNumber } = await params;
+  // Decode once, right after destructuring `params` — see
+  // `decodeSlugParam`'s own doc comment (CPS parity `normalizeRouteSlug`;
+  // Next.js does not decode a `force-dynamic` App Router segment itself).
+  const { slugParam: rawSlugParam, chapterNumber: rawNumber } = await params;
+  const slugParam = decodeSlugParam(rawSlugParam);
   const chapterNumber = parseChapterNumber(rawNumber);
   const t = getPublicT(locale);
   if (chapterNumber === null) return noIndexMetadata(t("meta.chapterNotFound"));
@@ -84,7 +89,11 @@ export async function buildChapterMetadata(
   ]);
   if (!chapter) return noIndexMetadata(t("meta.chapterNotFound"));
 
-  const routePath = buildChapterRoutePath({
+  // Locale-prefixed (`buildChapterPath`), not `buildChapterRoutePath` — same
+  // canonical/hreflang-self-reference defect as `novel-detail.tsx`'s
+  // `buildNovelMetadata` (see that file's comment for the full account).
+  const routePath = buildChapterPath({
+    locale,
     slug: access.slugPart,
     shortId: access.shortId,
     chapterNumber,
@@ -112,13 +121,15 @@ export async function ChapterBody({
   locale: SiteLocale;
   params: Promise<ChapterRouteParams>;
 }) {
-  const { slugParam, chapterNumber: rawNumber } = await params;
+  const { slugParam: rawSlugParam, chapterNumber: rawNumber } = await params;
+  const slugParam = decodeSlugParam(rawSlugParam);
   const chapterNumber = parseChapterNumber(rawNumber);
   if (chapterNumber === null) notFound();
 
+  const activeLocales = await loadActiveLocales();
   const [access, { chrome, settings }] = await Promise.all([
     loadArticleAccess(slugParam, locale),
-    loadChrome(locale),
+    loadChrome(locale, undefined, undefined, activeLocales),
   ]);
 
   if (access.kind === "not_found" || access.kind === "takedown") notFound();
@@ -137,7 +148,9 @@ export async function ChapterBody({
   const chapter = await loadChapterView(access.articleId, chapterNumber);
   if (!chapter) notFound();
 
-  const routePath = buildChapterRoutePath({
+  // See `buildChapterMetadata` above — locale-prefixed path.
+  const routePath = buildChapterPath({
+    locale,
     slug: access.slugPart,
     shortId: access.shortId,
     chapterNumber,

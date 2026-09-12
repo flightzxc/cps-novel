@@ -12,18 +12,30 @@
  * Deliberately **not** ported: CPS's `pinyin-pro` Chinese-to-pinyin
  * transliteration branch (`shouldTransliterateChinese`/`pushChineseTokens`).
  * `SiteLocale` (`src/lib/locale/locale-canonical.ts`) is registered for 15
- * locales as of P0-S10, but `PUBLISHABLE_LOCALES` is `{en}` only (U6 / D-7).
- * The upstream registry that drives `resolveSiteLocale` only has `3 → en`
- * and `7 → ru`. There is no exercised call site in this round that would
- * ever route CJK/Thai/Arabic text through this module for a locale content
- * can actually publish under. Non-Latin scripts are preserved as their own
- * Unicode slug segments instead — the same fallback CPS itself uses for
- * "other" scripts, and exactly what a browser/HTTP stack percent-encodes at
- * the URL layer regardless. That keeps this module at zero new dependencies.
- * If/when a CJK-family (or Thai/Arabic) `SiteLocale` is ever added to
- * `PUBLISHABLE_LOCALES`, that is the natural point to evaluate a
- * transliteration/segmentation library for it — not preemptively here. See
- * `LOCALE_SEGMENTATION_RULES` below for the per-locale placeholder registry.
+ * locales as of P0-S10. `resolveSiteLocale` (L10N P1, 2026-09-10) resolves
+ * 18 upstream codes — see
+ * `docs/governance/L10N_UPSTREAM_LANGUAGE_EVIDENCE_2026-09-10.md` —
+ * including CJK/Thai/Arabic-scripted locales (`zh-Hant`/`ja`/`ko`/`th`/`ar`).
+ *
+ * L10N P4 (2026-09-10): this module's non-`en` branch of
+ * `LOCALE_SEGMENTATION_RULES` is NOW a real, exercised call path, not a
+ * theoretical placeholder — L10N P2's `createContentFromSourceItem` derives
+ * `Article.locale`/`Novel.locale` directly from `sourceItem.sourceLocale`
+ * (any `SITE_LOCALES` member), with no publish-whitelist gate narrowing it
+ * to `en` anymore (the `PUBLISHABLE_LOCALES` whitelist this comment
+ * previously cited was deleted in this same round). A `ru`/`ja`/`zh-Hant`
+ * source item genuinely reaches `textToSlug` today. The
+ * `"latin-word-segmentation"` rule registered for every non-Latin locale
+ * below is still only an **evaluated placeholder, not a verified
+ * per-script segmentation strategy** — see `LOCALE_SEGMENTATION_RULES`'s
+ * own doc comment for what "evaluated" means here (non-Latin runs preserved
+ * verbatim as their own slug segment, never mangled or dropped, and
+ * percent-encoded like any other URL path segment regardless) and why a
+ * real per-script policy (`ja`/`ko`/`zh-Hant`/`ar`/`th` at minimum) is still
+ * owed a dedicated evaluation, now genuinely overdue rather than
+ * hypothetical. Non-Latin scripts are preserved as their own Unicode slug
+ * segments — the same fallback CPS itself uses for "other" scripts — which
+ * keeps this module at zero new dependencies in the meantime.
  */
 import type { SiteLocale } from "@/lib/locale/locale-canonical";
 
@@ -128,30 +140,36 @@ function latinWordSegmentedSlug(text: string): string {
  * an **evaluated placeholder, not a verified per-script segmentation
  * strategy**:
  *
- * 1. `PUBLISHABLE_LOCALES` (`locale-canonical.ts`) is `{en}` only — no
- *    non-`en` content can reach slug generation through any real call site
- *    in this round, so there is nothing to validate a different strategy
- *    against yet.
+ * 1. L10N P4 (2026-09-10): the `PUBLISHABLE_LOCALES` publish whitelist that
+ *    used to gate every non-`en` locale out of any real call site here was
+ *    deleted — content creation (`createContentFromSourceItem`) now derives
+ *    `locale` directly from `sourceItem.sourceLocale` (any `SITE_LOCALES`
+ *    member) with no further narrowing. A `ja`/`zh-Hant`/`th`/`ar` source
+ *    item genuinely reaches this module's non-Latin branch today; this is
+ *    no longer "nothing to validate a different strategy against yet".
  * 2. The Latin-word-segmentation branch already degrades safely for non-Latin
  *    input: it preserves non-Latin Unicode runs as their own slug segment
  *    (see `latinWordSegmentedSlug` above) rather than mangling or dropping
  *    them, and whatever it produces still gets percent-encoded at the
  *    browser/HTTP layer like any other URL path segment. That is a usable,
- *    if generic, fallback — not a broken one.
+ *    if generic, fallback — not a broken one — which is why this round did
+ *    not block on evaluating a real per-script policy before shipping.
  * 3. The locales that most need a real per-script segmentation policy
  *    (`ja`, `ko`, `zh-Hant`, `ar`, `th` at minimum — word-boundary rules for
- *    these scripts differ meaningfully from Latin) should get one evaluated
- *    at the point one of them actually enters `PUBLISHABLE_LOCALES`, because
- *    that is the first moment a real call site exists to verify the choice
- *    against. Guessing a strategy now, with nothing to exercise it, would be
- *    exactly the kind of unverified mapping `locale-canonical.ts` itself
- *    warns against for upstream language codes.
+ *    these scripts differ meaningfully from Latin) still owe one a dedicated
+ *    evaluation — now genuinely overdue (real content is flowing through the
+ *    generic fallback today), not merely hypothetical. Guessing a strategy
+ *    without exercising it against real titles would be exactly the kind of
+ *    unverified mapping `locale-canonical.ts` itself warns against for
+ *    upstream language codes; evaluating one now, with real data available,
+ *    is a legitimate follow-up this round did not attempt.
  *
- * Do not read the 14 new entries below as "Latin segmentation was evaluated
- * and chosen for Thai/Japanese/Arabic/etc." — it was not. It is a
- * placeholder registration that satisfies the exhaustiveness check while
- * those locales remain unpublishable, and it must be revisited (not
- * silently trusted) at each locale's publish-readiness review.
+ * Do not read the 14 non-`en` entries below as "Latin segmentation was
+ * evaluated and chosen for Thai/Japanese/Arabic/etc." — it was not. It is a
+ * placeholder registration that satisfies the exhaustiveness check and
+ * degrades safely, not a reviewed per-script decision — revisit it, don't
+ * silently trust it, the next time slug quality for one of these locales is
+ * actually assessed (SEO review, operator complaint, etc.).
  */
 const LOCALE_SEGMENTATION_RULES: Readonly<Record<SiteLocale, "latin-word-segmentation">> = Object.freeze({
   en: "latin-word-segmentation",

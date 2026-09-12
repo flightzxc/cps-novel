@@ -20,7 +20,6 @@ describe("createContentFromSourceItem — apply, success path", () => {
 
     const result = await createContentFromSourceItem(fake.asPrismaClient(), {
       novelSourceItemId: sourceItem.id,
-      locale: "en",
       mode: "apply",
       actor: ADMIN_ACTOR,
       requestId: "req-1",
@@ -168,7 +167,15 @@ describe("createContentFromSourceItem — apply, success path", () => {
     });
   });
 
-  it("fails closed when an explicit template is not active", async () => {
+  /**
+   * L10N P2 (matrix #4, CPS batch semantics — 海阅创建是单事务，无单篇/批量之分):
+   * `selectActiveArticleTemplate` cannot distinguish "this templateKey does
+   * not exist" from "exists but inactive" from "exists but wrong locale" —
+   * a single combined query — so every shape of "no usable template for the
+   * derived locale" collapses into `template_locale_mismatch`, matching how
+   * CPS's own batch path never separates those either.
+   */
+  it("fails closed when an explicit template is not active — template_locale_mismatch, not a silent pass", async () => {
     const fake = new FakeContentCreationDb();
     fake.seedArticleTemplate({ templateKey: "inactive-v1", status: "inactive" });
     const sourceItem = fake.seedSourceItem({ title: "Blocked Story" });
@@ -179,9 +186,131 @@ describe("createContentFromSourceItem — apply, success path", () => {
       mode: "apply",
       actor: ADMIN_ACTOR,
       requestId: "req-template-inactive",
-    })).resolves.toEqual({ outcome: "template_not_available", templateKey: "inactive-v1" });
+    })).resolves.toEqual({ outcome: "template_locale_mismatch", locale: "en", templateKey: "inactive-v1" });
     expect(fake.novels.size).toBe(0);
     expect(fake.articles.size).toBe(0);
+  });
+
+  it("template_locale_mismatch when no active template exists for the derived locale at all (no explicit templateKey)", async () => {
+    const fake = new FakeContentCreationDb();
+    // A real active template exists, but only for a different locale —
+    // `ensureDefaultArticleTemplate` only bootstraps when the table is
+    // completely empty, so seeding one here proves the auto-select path
+    // itself is locale-scoped, not merely "no template exists yet".
+    fake.seedArticleTemplate({ templateKey: "system-default-v1", locale: "fr", status: "active" });
+    const sourceItem = fake.seedSourceItem({ title: "No Matching Locale Template", sourceLocale: "ru" });
+
+    const result = await createContentFromSourceItem(fake.asPrismaClient(), {
+      novelSourceItemId: sourceItem.id,
+      mode: "apply",
+      actor: ADMIN_ACTOR,
+      requestId: "req-template-locale-mismatch",
+    });
+    expect(result).toEqual({ outcome: "template_locale_mismatch", locale: "ru" });
+    expect(fake.novels.size).toBe(0);
+    expect(fake.articles.size).toBe(0);
+  });
+});
+
+describe("createContentFromSourceItem — locale derivation (L10N P2)", () => {
+  it("ru source: sourceLocale='ru' derives Novel.locale=ru and Article.locale=ru", async () => {
+    const fake = new FakeContentCreationDb();
+    fake.seedArticleTemplate({ templateKey: "system-default-v1", locale: "ru", status: "active" });
+    const sourceItem = fake.seedSourceItem({ title: "Русский заголовок", sourceLocale: "ru" });
+
+    const result = await createContentFromSourceItem(fake.asPrismaClient(), {
+      novelSourceItemId: sourceItem.id,
+      mode: "apply",
+      actor: ADMIN_ACTOR,
+      requestId: "req-ru-1",
+    });
+
+    expect(result.outcome).toBe("created");
+    if (result.outcome !== "created") throw new Error("unreachable");
+    expect(result.locale).toBe("ru");
+    expect(fake.novels.get(result.novelId)?.locale).toBe("ru");
+    expect(fake.articles.get(result.articleId)?.locale).toBe("ru");
+  });
+
+  it("NULL sourceLocale throws ContentCreationInputError('missing_locale') — no writes", async () => {
+    const fake = new FakeContentCreationDb();
+    const sourceItem = fake.seedSourceItem({ title: "Unresolved Source", sourceLocale: null });
+
+    const error = await createContentFromSourceItem(fake.asPrismaClient(), {
+      novelSourceItemId: sourceItem.id,
+      mode: "apply",
+      actor: ADMIN_ACTOR,
+      requestId: "req-missing-locale",
+    }).catch((caught: unknown) => caught);
+
+    expect(error).toBeInstanceOf(ContentCreationInputError);
+    expect((error as ContentCreationInputError).code).toBe("missing_locale");
+    expect(fake.novels.size).toBe(0);
+    expect(fake.articles.size).toBe(0);
+    // Fails closed before any write — the source item itself is untouched.
+    expect(fake.sourceItems.get(sourceItem.id)?.status).toBe("pending");
+  });
+
+  // L10N P5 §1.E: deriveLocale's missing-value check used to be a strict
+  // `=== null`, so a blank (non-null) sourceLocale fell through to the
+  // SITE_LOCALES membership check and was misclassified as
+  // unsupported_locale — see service.ts's deriveLocale doc comment.
+  it("blank/whitespace-only sourceLocale (not null) also throws 'missing_locale', not 'unsupported_locale'", async () => {
+    const fake = new FakeContentCreationDb();
+    const sourceItem = fake.seedSourceItem({ title: "Blank Locale Source", sourceLocale: "  " });
+
+    const error = await createContentFromSourceItem(fake.asPrismaClient(), {
+      novelSourceItemId: sourceItem.id,
+      mode: "apply",
+      actor: ADMIN_ACTOR,
+      requestId: "req-blank-locale",
+    }).catch((caught: unknown) => caught);
+
+    expect(error).toBeInstanceOf(ContentCreationInputError);
+    expect((error as ContentCreationInputError).code).toBe("missing_locale");
+    expect(fake.novels.size).toBe(0);
+    expect(fake.articles.size).toBe(0);
+  });
+
+  it("a resolved locale that is not a registered SITE_LOCALES member (it) throws ContentCreationInputError('unsupported_locale') — no writes", async () => {
+    const fake = new FakeContentCreationDb();
+    const sourceItem = fake.seedSourceItem({ title: "Italian Source, Not A Site Locale", sourceLocale: "it" });
+
+    const error = await createContentFromSourceItem(fake.asPrismaClient(), {
+      novelSourceItemId: sourceItem.id,
+      mode: "apply",
+      actor: ADMIN_ACTOR,
+      requestId: "req-unsupported-locale",
+    }).catch((caught: unknown) => caught);
+
+    expect(error).toBeInstanceOf(ContentCreationInputError);
+    expect((error as ContentCreationInputError).code).toBe("unsupported_locale");
+    expect(fake.novels.size).toBe(0);
+    expect(fake.articles.size).toBe(0);
+  });
+
+  it("missing_locale/unsupported_locale fail closed in dry_run mode too, before loadPlan ever reaches a template check", async () => {
+    const fake = new FakeContentCreationDb();
+    const nullItem = fake.seedSourceItem({ title: "Null Locale Dry Run", sourceLocale: null });
+    const unsupportedItem = fake.seedSourceItem({ title: "Unsupported Locale Dry Run", sourceLocale: "fil" });
+
+    await expect(
+      createContentFromSourceItem(fake.asPrismaClient(), {
+        novelSourceItemId: nullItem.id,
+        mode: "dry_run",
+        actor: ADMIN_ACTOR,
+        requestId: "req-dry-missing",
+      }),
+    ).rejects.toMatchObject({ code: "missing_locale" });
+
+    await expect(
+      createContentFromSourceItem(fake.asPrismaClient(), {
+        novelSourceItemId: unsupportedItem.id,
+        mode: "dry_run",
+        actor: ADMIN_ACTOR,
+        requestId: "req-dry-unsupported",
+      }),
+    ).rejects.toMatchObject({ code: "unsupported_locale" });
   });
 });
 
@@ -217,6 +346,7 @@ describe("createContentFromSourceItem — dry run (default mode)", () => {
       totalChapterCount: true,
       paidFromChapter: true,
       splitRatio: true,
+      sourceLocale: true,
       deletedAt: true,
     });
     expect(fake.lastSourceItemFindFirstArgs?.select).not.toHaveProperty("rawPayload");
@@ -300,15 +430,16 @@ describe("createContentFromSourceItem — idempotent repeat calls", () => {
     expect(previewed.outcome).toBe("already_exists");
   });
 
-  it("already_exists: same locale as the linked Novel replays idempotently", async () => {
+  it("already_exists: derived locale matches the linked Novel's locale, replays idempotently", async () => {
     const fake = new FakeContentCreationDb();
     const novel = fake.seedNovel({ locale: "en" });
     fake.seedArticle({ novelId: novel.id, locale: "en" });
+    // `sourceLocale` defaults to `"en"` in `seedSourceItem` — matches the
+    // linked Novel's own locale, so `loadPlan` derives "en" too.
     const sourceItem = fake.seedSourceItem({ novelId: novel.id, status: "linked" });
 
     const result = await createContentFromSourceItem(fake.asPrismaClient(), {
       novelSourceItemId: sourceItem.id,
-      locale: "en",
       mode: "apply",
       actor: ADMIN_ACTOR,
       requestId: "req-e",
@@ -316,21 +447,20 @@ describe("createContentFromSourceItem — idempotent repeat calls", () => {
     expect(result.outcome).toBe("already_exists");
   });
 
-  it("locale_conflict when the source item is already linked to a Novel in a different locale", async () => {
+  it("locale_conflict when the source item's derived locale no longer matches the Novel it is already linked to", async () => {
     const fake = new FakeContentCreationDb();
-    // `SiteLocale` is frozen to `"en"` only today, so a genuinely different
-    // locale can only be represented through the fake's plain-string field
-    // (real production data cannot reach this state until a second
-    // `SiteLocale` is registered — this test exercises the defensive branch
-    // ahead of that, exactly as the mismatch check itself is written
-    // defensively ahead of it).
+    // The linked Novel is "fr"; the source item's own `sourceLocale`
+    // defaults to `"en"` in `seedSourceItem` (not overridden here) — `en` !==
+    // `fr` derives the conflict. This models data drift (e.g. a mapping-table
+    // correction that changed what this source item resolves to since it was
+    // first linked), the one legitimate way this branch is reachable now that
+    // locale is never caller-supplied.
     const novel = fake.seedNovel({ locale: "fr" });
     fake.seedArticle({ novelId: novel.id, locale: "fr" });
     const sourceItem = fake.seedSourceItem({ novelId: novel.id, status: "linked" });
 
     const result = await createContentFromSourceItem(fake.asPrismaClient(), {
       novelSourceItemId: sourceItem.id,
-      locale: "en",
       mode: "apply",
       actor: ADMIN_ACTOR,
       requestId: "req-e2",
@@ -340,6 +470,7 @@ describe("createContentFromSourceItem — idempotent repeat calls", () => {
       reason: "source_item_already_linked_to_different_locale",
       existingNovelId: novel.id,
       existingLocale: "fr",
+      derivedLocale: "en",
     });
   });
 });

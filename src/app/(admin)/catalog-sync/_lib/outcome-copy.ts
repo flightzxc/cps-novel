@@ -78,13 +78,13 @@ export function describeCreateContentOutcome(result: CreateContentResult): Outco
         title: "该来源条目已过期",
         body: "上游最近一次可信响应未再返回该条目，暂不建议创建内容；待其重新出现后再试。",
       };
-    case "template_not_available":
+    case "template_locale_mismatch":
       return {
         tone: "danger",
-        title: "所选模板不可用",
+        title: "没有匹配语种的可用模板",
         body: result.templateKey
-          ? `模板「${result.templateKey}」不存在、未启用或不适用于当前语种，本次未创建内容。`
-          : "当前语种没有可用模板，本次未创建内容。",
+          ? `模板「${result.templateKey}」不存在、未启用，或语种与本次创建的语种「${result.locale}」不一致，本次未创建内容。`
+          : `语种「${result.locale}」没有可用模板，本次未创建内容。`,
       };
     case "source_item_inconsistent_state":
       return {
@@ -96,7 +96,7 @@ export function describeCreateContentOutcome(result: CreateContentResult): Outco
       return {
         tone: "danger",
         title: "语种冲突",
-        body: `该来源条目已关联到语种为「${result.existingLocale}」的书目（novelId: ${result.existingNovelId}），与本次创建使用的「en」不一致，已拒绝创建。`,
+        body: `该来源条目已关联到语种为「${result.existingLocale}」的书目（novelId: ${result.existingNovelId}），与本次识别出的语种「${result.derivedLocale}」不一致，已拒绝创建。`,
       };
     case "slug_unhealthy":
       return {

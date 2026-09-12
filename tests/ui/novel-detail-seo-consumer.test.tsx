@@ -37,6 +37,7 @@ vi.mock("next/navigation", () => ({
 
 vi.mock("@/app/_lib/public-load", () => ({
   loadChrome: vi.fn(),
+  loadActiveLocales: vi.fn(),
   loadHomeNovels: vi.fn(),
   loadHomeCarousel: vi.fn(),
   loadPublicCategories: vi.fn(),

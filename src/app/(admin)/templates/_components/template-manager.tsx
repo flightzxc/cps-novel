@@ -30,7 +30,8 @@ export type TemplateRow = {
   id: string;
   templateKey: string;
   templateName: string;
-  locale: string | null;
+  /** L10N P3: `ArticleTemplate.locale` is `NOT NULL` now — no more "all locales" `null`. */
+  locale: string;
   version: number;
   schemaVersion: number;
   status: string;
@@ -64,8 +65,7 @@ function seo(row?: TemplateRow) {
   return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
 }
 
-function localeLabel(locale: string | null): string {
-  if (locale === null) return "全部";
+function localeLabel(locale: string): string {
   return SITE_LOCALE_LABELS[locale as SiteLocale] ?? locale;
 }
 
@@ -137,11 +137,15 @@ export function TemplateManager({ rows, canWrite }: { rows: readonly TemplateRow
     }
     setError(null);
     setPending(true);
+    // L10N P3: no more "" → null ("all locales") coercion — the `<select
+    // required>` above always submits a `SITE_LOCALES` member; `service.ts`'s
+    // `requireLocale` still rejects anything that isn't one, this just stops
+    // pre-empting that with a silent-null fallback the server no longer accepts.
     const rawLocale = String(formData.get("locale") ?? "").trim();
     const template: ArticleTemplateWrite = {
       templateKey: String(formData.get("templateKey") ?? ""),
       templateName: String(formData.get("templateName") ?? ""),
-      locale: rawLocale === "" ? null : rawLocale,
+      locale: rawLocale,
       status: String(formData.get("status") ?? "draft") as ArticleTemplateStatus,
       applicableArticleType: String(formData.get("applicableArticleType") ?? "novel_article"),
       titleTemplate,
@@ -222,8 +226,21 @@ export function TemplateManager({ rows, canWrite }: { rows: readonly TemplateRow
             </label>
             <label className="text-sm">
               模板语种
-              <select name="locale" defaultValue={editing?.locale ?? ""} className="mt-1 w-full rounded border p-2">
-                <option value="">全部语种</option>
+              {/*
+               * L10N P3: `locale` 不再有"全部语种"这个第三态——`ArticleTemplate.locale`
+               * 现在是 `NOT NULL`，选项收窄成 `SITE_LOCALES` 15 项（CPS 参照
+               * `3a76877:src/lib/constants.ts:74-92` 的 `TEMPLATE_LOCALE_OPTIONS` 是
+               * 17 项，相对本仓 `SITE_LOCALES` 多出 `it`/`tr` 两个真实但未登记为站点
+               * 语种的 BCP-47 码——不是 `pt`/`zh-TW` 别名折叠，本仓核对过 CPS 源码，
+               * 那 17 项里没有裸 `pt`/裸 `zh-TW`，本仓不登记为独立 locale），
+               * `required` 与 CPS 同款。
+               */}
+              <select
+                name="locale"
+                defaultValue={editing?.locale ?? SITE_LOCALES[0]}
+                required
+                className="mt-1 w-full rounded border p-2"
+              >
                 {SITE_LOCALES.map((locale) => (
                   <option key={locale} value={locale}>
                     {SITE_LOCALE_LABELS[locale]}

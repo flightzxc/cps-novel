@@ -4,13 +4,14 @@
  * Ported from CPS `src/lib/seo-utils.ts` (d77c3b9).
  * Drama `/drama/${slug}` URLs and genre-JSON parsing are replaced with
  * caller-supplied `url` + `genres[]`. Locale set for hreflang enumeration
- * (`buildHreflangAlternates` below) comes from `listPublishableLocales()`,
- * not the full `SITE_LOCALES` registry — see that function's own doc
- * comment for why enumerating the wider registry would advertise dead
- * hreflang links.
+ * (`buildHreflangAlternates` below) is `SITE_LOCALES` (L10N P4) — matching
+ * CPS's own `3a76877:src/lib/seo-utils.ts:132`
+ * (`for (const locale of SUPPORTED_SITE_LOCALES)`), the static registry, not
+ * a narrower "active" set. See that function's own doc comment for why this
+ * is safe for same-relative-path pages specifically.
  */
 
-import { listPublishableLocales } from "@/lib/locale/locale-canonical";
+import { SITE_LOCALES } from "@/lib/locale/locale-canonical";
 
 import { buildCanonical, buildLocaleCanonical, getSiteUrl, toAbsoluteUrl } from "./seo-templates/_shared";
 
@@ -105,32 +106,33 @@ export function canonicalUrl(path: string) {
  * `buildNovelHreflangAlternates`), because blind enumeration there would
  * produce dead links for locales that have no sibling Article at all.
  *
- * Enumerates `listPublishableLocales()`, never the full `SITE_LOCALES`
- * registry. `SITE_LOCALES` only records that a locale is *mapped*
- * (`locale-canonical.ts`'s upstream registry); it says nothing about
- * whether that locale has a live, indexable route today. `SITE_LOCALES` is
- * already 15 entries wide while `listPublishableLocales()` is `{en}`
- * (U6 / D-7) — iterating the wider set here would advertise hreflang
- * alternates for locales this site has never actually served a page for.
- * This is exactly the blind-enumeration failure mode this project's sibling
- * short-drama site had to hotfix after `next-intl`'s default response-header
- * `Link` enumeration walked its full registered-locale set instead of its
- * live one.
+ * L10N P4: enumerates `SITE_LOCALES` (the full 15-entry registry), matching
+ * CPS's own `buildHreflangAlternates` equivalent
+ * (`3a76877:src/lib/seo-utils.ts:132`, `for (const locale of
+ * SUPPORTED_SITE_LOCALES)`) exactly — CPS has no narrower "publishable"
+ * layer to prefer here, and the whitelist that previously narrowed this
+ * project's own version (`PUBLISHABLE_LOCALES`/`listPublishableLocales()`)
+ * was deleted this round. Safe specifically because this function is
+ * reserved for same-relative-path pages (this file's own header/doc comment
+ * above): once the P4 route guard admits every `SITE_LOCALES` member
+ * (`[locale]/_guard.ts`), `/{locale}` and `/{locale}/browse` are real,
+ * non-404 routes for all 15 — an empty listing there is a valid page, not a
+ * dead link, which is exactly the difference from a detail page's sibling
+ * enumeration (`novel-hreflang.ts`, which stays a real DB lookup).
  *
- * `currentLocale` is always included regardless of the whitelist — this is
- * the URL the caller is actually rendering right now (self-referencing
- * hreflang is expected practice, not an extra promise about readiness), and
- * omitting it would be a regression versus today's single-locale behavior.
- * `x-default` prefers the site default locale's entry (`en`, now on the
- * whitelist), falling back to the current page when that locale's URL is
- * not among the built alternates.
+ * `currentLocale` is always included regardless — this is the URL the
+ * caller is actually rendering right now (self-referencing hreflang is
+ * expected practice), and omitting it would be a regression versus today's
+ * behavior. `x-default` prefers the site default locale's entry (`en`),
+ * falling back to the current page when that locale's URL is not among the
+ * built alternates.
  */
 export function buildHreflangAlternates(
   path: string,
   currentLocale: string = "en",
 ): Record<string, string> {
   const result: Record<string, string> = {};
-  for (const locale of listPublishableLocales()) {
+  for (const locale of SITE_LOCALES) {
     result[locale] = buildLocaleCanonical(locale, path);
   }
   result[currentLocale] = buildLocaleCanonical(currentLocale, path);

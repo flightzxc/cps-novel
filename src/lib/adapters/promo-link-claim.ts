@@ -183,9 +183,16 @@ function parseReadbackResponse(value: unknown, request: ClaimPromoRequest): Read
   }
   const totalCount = data.totalCount as number;
   const list = data.list;
-  const complete = Array.isArray(list)
-    && list.length === totalCount
-    && totalCount <= MOBOREADER_PROMO_MAX_CANDIDATES;
+  // 2026-09-11 Owner-approved revision (see MOBOREADER_PRECISE_READBACK_PROBE_2026-09-02.md,
+  // "2026-09-11 修订" section): getlistpc's `totalCount` counts a title
+  // match once, but `list` enumerates every language edition of the same
+  // seriesId family (P-7 gap; 3/3 read-only probe evidence, ar/de/es).
+  // `totalCount` is therefore no longer a hard completeness condition.
+  // Completeness now means "structurally unpaginated": the response was
+  // not truncated by pageSize. `totalCount` (declaredTotalCount) and the
+  // actual row count (returnedCount) are still recorded on every branch
+  // below for audit, regardless of whether they agree.
+  const complete = Array.isArray(list) && list.length < MOBOREADER_PROMO_MAX_CANDIDATES;
   if (!complete) {
     return {
       status: "ambiguous",

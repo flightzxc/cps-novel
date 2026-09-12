@@ -9,19 +9,14 @@ import { afterEach, describe, expect, it, vi } from "vitest";
  * multiple locales, including a hyphenated one (`pt-BR`), and that a
  * locale's candidate query never bleeds into another locale's shard.
  *
- * `listPublishableLocales()` is mocked to a fixed three-locale set for this
- * file only. The real whitelist admits en and is exercised by
- * `static-sitemap.test.ts`, including the zero-public-URL failure guard.
- * This file verifies the simulated multi-locale sharding mechanism and
- * separately retains the explicit empty-routeLocales failure case.
+ * L10N P4: the D-7 publish whitelist (`listPublishableLocales()`) this file
+ * used to mock to a fixed three-locale set is deleted — `parseSitemapFileName`
+ * and `generateStaticSitemaps`' default `routeLocales` now both read the
+ * real, full `SITE_LOCALES` registry (15 entries), no mock needed to exercise
+ * a "wider than en" locale set. This file verifies the multi-locale sharding
+ * mechanism and separately retains the explicit empty-routeLocales failure
+ * case.
  */
-vi.mock("@/lib/locale/locale-canonical", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/lib/locale/locale-canonical")>();
-  return {
-    ...actual,
-    listPublishableLocales: () => ["en", "fr", "pt-BR"],
-  };
-});
 
 const { createSitemapFamilyBuilder, getSitemapFileName, parseSitemapFileName } = await import(
   "@/lib/seo/sitemap"
@@ -60,16 +55,22 @@ afterEach(async () => {
 });
 
 describe("parseSitemapFileName · hyphenated locale codes", () => {
-  it("round-trips a hyphenated locale (pt-BR) once it is on the whitelist", () => {
+  it("round-trips a hyphenated locale (pt-BR) — it is registered in SITE_LOCALES", () => {
     const name = getSitemapFileName("novelpage", "pt-BR", 0);
     expect(name).toBe("site_novelpage_pt-BR.xml");
     expect(parseSitemapFileName(name)).toEqual({ type: "novelpage", locale: "pt-BR", index: 0 });
   });
 
-  it("still rejects a locale that is registered but not on the whitelist", () => {
-    // "ja" is registered in SITE_LOCALES (15-locale P0-S7a registry) but not
-    // in this file's mocked 3-locale whitelist.
-    expect(parseSitemapFileName("site_novelpage_ja.xml")).toBeNull();
+  it("L10N P4: also parses ja — it is registered in SITE_LOCALES, and the narrower D-7 whitelist that used to reject it here is deleted", () => {
+    expect(parseSitemapFileName("site_novelpage_ja.xml")).toEqual({
+      type: "novelpage",
+      locale: "ja",
+      index: 0,
+    });
+  });
+
+  it("still rejects a locale that is not registered in SITE_LOCALES at all", () => {
+    expect(parseSitemapFileName("site_novelpage_xx.xml")).toBeNull();
   });
 });
 
@@ -178,5 +179,43 @@ describe("generateStaticSitemaps · multi-locale release", () => {
       routeLocales: [],
       types: ["mainpage"],
     })).rejects.toThrow("No sitemap child files were generated");
+  });
+
+  it("L10N P4: with no routeLocales override, generates over the default SITE_LOCALES registry (15 locales), and a locale with zero candidates (cs) produces zero shard files without failing the whole release", async () => {
+    process.env.SITE_URL = "https://fixture.example";
+    const root = await temporaryRoot();
+    const buildFamily = vi.fn(async ({ type, locale }: { type: string; locale: string }) => {
+      // "cs" has no visible content — the only-已发布 filter upstream
+      // (isVisibleCandidate) already excluded every candidate before this
+      // builder is even reached, so it legitimately returns zero files, not
+      // one file with zero entries.
+      if (locale === "cs") return [];
+      return [{
+        name: getSitemapFileName(type as "mainpage", locale as never, 0),
+        url: `https://fixture.example/sitemap/site_${type}_${locale}.xml`,
+        lastmod: "2026-08-01T00:00:00.000Z",
+        entries: [{ loc: `https://fixture.example/novel/${locale}-fixture`, lastmod: "2026-08-01T00:00:00.000Z" }],
+      }];
+    });
+
+    const result = await generateStaticSitemaps({
+      buildFamily,
+      rootDir: root,
+      runId: "default-locales-release",
+      types: ["mainpage"],
+      // routeLocales intentionally omitted — exercises the default.
+    });
+
+    const seenLangSet = new Set(buildFamily.mock.calls.map(([spec]: [{ locale: string }]) => spec.locale));
+    expect(seenLangSet.size).toBe(15);
+    expect(seenLangSet.has("cs")).toBe(true);
+    expect(seenLangSet.has("ru")).toBe(true);
+
+    // cs contributed zero shard files (not a file with zero entries), every
+    // other locale contributed exactly one — 14 shards total, generation
+    // still succeeds as a whole (no thrown error reaches this point).
+    expect(result.manifest.sitemapFiles.some((name) => name.includes("_cs."))).toBe(false);
+    expect(result.manifest.sitemapFiles).toHaveLength(14);
+    expect(result.fileCount).toBe(15); // 14 shards + the index itself
   });
 });

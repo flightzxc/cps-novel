@@ -20,14 +20,20 @@ import { localePrefix } from "@/lib/slug/article-path";
  * `createBoundaryConventionElement`, which instantiates the not-found
  * component via `createElement(Component, null)`. This holds for a nested
  * `not-found.tsx` too, so `src/app/[locale]/novel/[slugParam]/not-found.tsx`
- * cannot read its own `locale` route param the way a `page.tsx` can. That
- * shell therefore also calls `NovelNotFoundBody({ locale: PUBLIC_SITE_LOCALE })`
- * — identical to the bare-path shell — same as today (this whole subtree is
- * unreachable: `getRoutableLocale` 404s every locale, see `[locale]/_guard.ts`).
- * Solving this for real needs a locale signal not derived from route
- * params — e.g. the request-locale header WO-2 §8.2 adds for `<html lang>`
- * — which is out of WO-1's scope by the work order's own boundary ("do NOT
- * implement WO-2 or WO-3").
+ * cannot read its own `locale` route param the way a `page.tsx` can.
+ * `src/app/novel/[slugParam]/not-found.tsx` (the bare-path shell — outside
+ * the `[locale]` prefix tree entirely) still pins `PUBLIC_SITE_LOCALE`, on
+ * purpose: a bare path has no request locale to read.
+ *
+ * L10N P4 fix (2026-09-10, review B-1): the `[locale]`-prefixed shell no
+ * longer pins `PUBLIC_SITE_LOCALE` either. It works around the same
+ * zero-props constraint the way `src/app/layout.tsx` already does — neither
+ * file has a `[locale]` route segment of its own, so both read the resolved
+ * locale back out of the `x-novel-locale` request header `src/proxy.ts`
+ * forwards (`SITE_LOCALE_REQUEST_HEADER`), via `pickSiteLocale`, wrapped in
+ * try/catch with `PUBLIC_SITE_LOCALE` as the fallback. See that shell file
+ * for the actual read. `docs/governance/port-registry.md`'s L10N P4 section
+ * (清单④) has the full accounting.
  */
 export const notFoundMetadata: Metadata = {
   robots: { index: false, follow: false },

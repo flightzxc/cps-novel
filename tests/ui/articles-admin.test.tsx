@@ -532,8 +532,12 @@ describe("ArticleList · 列表与批量", () => {
 
   /**
    * C-21 (`分析_文章管理Parity缺口_2026-09-08.md` §六, items #24/#25): CPS
-   * parity is "草稿显示发布，已发布显示下线" — 已下线/已撤回两态两个按钮都不
-   * 出现（既不是可发布的草稿，也不是可下线的已发布）。
+   * parity is "草稿显示发布，已发布显示下线". 2026-09-12 Owner fix extends
+   * that to `unpublished` (see the describe block's own tests below and the
+   * `article-list.tsx` comment above the button) — CPS has no `unpublished`
+   * status to leave without a way back to 发布, but this repo does. Only
+   * `takedown` still shows neither button (既不是可发布的草稿/已下线，也不是
+   * 可下线的已发布)。
    */
   describe("行内 发布 / 下线 按钮可见性（C-21）", () => {
     it("草稿行只显示发布按钮，不显示下线", () => {
@@ -548,12 +552,27 @@ describe("ArticleList · 列表与批量", () => {
       expect(screen.queryByTestId(`article-publish-${PUBLISHED_ROW.id}`)).toBeNull();
     });
 
-    it("已下线 / 已撤回行两个按钮都不显示", () => {
-      render(<ArticleList rows={[UNPUBLISHED_ROW, TAKEDOWN_ROW]} canWrite publicOrigin={PUBLIC_ORIGIN} />);
-      for (const row of [UNPUBLISHED_ROW, TAKEDOWN_ROW]) {
-        expect(screen.queryByTestId(`article-publish-${row.id}`)).toBeNull();
-        expect(screen.queryByTestId(`article-withdraw-${row.id}`)).toBeNull();
-      }
+    /**
+     * 2026-09-12 Owner fix: an `unpublished` row (C-21's withdraw lane) is
+     * re-publishable — same shape as the novel detail page's
+     * `publish-lifecycle-panel.tsx`'s `showPublish = article.status !==
+     * "published" && novelStatus !== "takedown"`, which already treats
+     * `unpublished` as publishable. CPS's own reference
+     * (`articles-client.tsx`, commit 3a76877) only ever gates 发布 on
+     * `status === "draft"` — it has no `unpublished` status to leave stuck —
+     * so this is a deliberate 小说业务偏离 from that reference, logged in
+     * `docs/governance/port-registry.md`.
+     */
+    it("已下线行显示发布按钮，不显示下线", () => {
+      render(<ArticleList rows={[UNPUBLISHED_ROW]} canWrite publicOrigin={PUBLIC_ORIGIN} />);
+      expect(screen.getByTestId(`article-publish-${UNPUBLISHED_ROW.id}`)).toBeTruthy();
+      expect(screen.queryByTestId(`article-withdraw-${UNPUBLISHED_ROW.id}`)).toBeNull();
+    });
+
+    it("已撤回行两个按钮都不显示", () => {
+      render(<ArticleList rows={[TAKEDOWN_ROW]} canWrite publicOrigin={PUBLIC_ORIGIN} />);
+      expect(screen.queryByTestId(`article-publish-${TAKEDOWN_ROW.id}`)).toBeNull();
+      expect(screen.queryByTestId(`article-withdraw-${TAKEDOWN_ROW.id}`)).toBeNull();
     });
 
     it("canWrite=false 时发布/下线按钮均禁用", () => {
@@ -574,6 +593,18 @@ describe("ArticleList · 列表与批量", () => {
       await vi.waitFor(() => expect(listActions.publishArticleAction).toHaveBeenCalledTimes(1));
       expect(listActions.publishArticleAction.mock.calls[0]![0]).toMatchObject({ articleId: DRAFT_ROW.id });
       await vi.waitFor(() => expect(screen.getByText(/首次公开/)).toBeTruthy());
+      await vi.waitFor(() => expect(routerRefresh).toHaveBeenCalledTimes(1));
+    });
+
+    it("已下线行点击发布同样调用 publishArticleAction 并携带该行 articleId（2026-09-12 Owner fix）", async () => {
+      listActions.publishArticleAction.mockResolvedValue({
+        ok: true,
+        data: { outcome: "published", articleId: UNPUBLISHED_ROW.id, novelId: "novel-1", locale: "en", firstPublish: false },
+      });
+      render(<ArticleList rows={[UNPUBLISHED_ROW]} canWrite publicOrigin={PUBLIC_ORIGIN} />);
+      fireEvent.click(screen.getByTestId(`article-publish-${UNPUBLISHED_ROW.id}`));
+      await vi.waitFor(() => expect(listActions.publishArticleAction).toHaveBeenCalledTimes(1));
+      expect(listActions.publishArticleAction.mock.calls[0]![0]).toMatchObject({ articleId: UNPUBLISHED_ROW.id });
       await vi.waitFor(() => expect(routerRefresh).toHaveBeenCalledTimes(1));
     });
 
@@ -741,6 +772,65 @@ describe("ArticleList · 列表与批量", () => {
         ),
       );
       expect(screen.queryByText(/novel_not_currently_published/)).toBeNull();
+    });
+
+    /**
+     * Fix (Owner-approved 窄范围修复 lane, 2026-09-11 —
+     * feedback_delegate_to_sonnet.md 施工工单): before this fix, `await
+     * withdrawArticleAction(...)` in `confirmWithdraw` sat outside any
+     * try/catch while `onConfirm` fires it as `void confirmWithdraw()` — a
+     * *rejected* promise (observed live as a stale Next.js build's "Failed
+     * to find Server Action" after a deploy shipped a new bundle) skipped
+     * every line after the `await`, including `setWithdrawBusy(false)`,
+     * leaving `pending={withdrawBusy}` stuck `true` and the confirm button
+     * permanently reading "处理中…", disabled, with no error surfaced and no
+     * way to retry short of a full page reload. Pins the fix at the
+     * component level (not just "the promise resolved"): the button becomes
+     * clickable again and shows its normal "下线" label, a readable
+     * refresh-prompting message appears, the dialog is deliberately left
+     * open (so the reason the operator typed isn't lost and they can just
+     * press the button again after refreshing), and no premature
+     * `router.refresh()` fires.
+     */
+    it("withdrawArticleAction 因 stale bundle 而 reject（Failed to find Server Action）时，按钮恢复可点击并展示刷新提示，而不是永久卡在「处理中」", async () => {
+      listActions.withdrawArticleAction.mockRejectedValue(
+        new Error('Failed to find Server Action "abc123def456". This request might be from an older or newer deployment.'),
+      );
+      render(<ArticleList rows={[PUBLISHED_ROW]} canWrite publicOrigin={PUBLIC_ORIGIN} />);
+      await act(async () => {
+        fireEvent.click(screen.getByTestId(`article-withdraw-${PUBLISHED_ROW.id}`));
+      });
+      await waitFor(() => expect(dialog()?.open).toBe(true));
+      fireEvent.change(screen.getByLabelText("下线原因"), { target: { value: "运营决定临时下线" } });
+      const confirmButton = () => within(dialog()!).getByRole("button", { name: /^(下线|处理中…)$/ });
+      await act(async () => {
+        fireEvent.click(confirmButton());
+      });
+      await waitFor(() => expect((confirmButton() as HTMLButtonElement).disabled).toBe(false));
+      expect(confirmButton().textContent).toBe("下线");
+      expect(dialog()?.open).toBe(true);
+      await vi.waitFor(() =>
+        expect(screen.getByRole("status").textContent).toContain("撤回请求未完成（页面版本已过期），请刷新页面后重试"),
+      );
+      expect(routerRefresh).not.toHaveBeenCalled();
+    });
+
+    it("withdrawArticleAction 因普通网络错误 reject 时，同样恢复可点击并展示（非 stale-bundle 措辞的）刷新提示", async () => {
+      listActions.withdrawArticleAction.mockRejectedValue(new Error("Network request failed"));
+      render(<ArticleList rows={[PUBLISHED_ROW]} canWrite publicOrigin={PUBLIC_ORIGIN} />);
+      await act(async () => {
+        fireEvent.click(screen.getByTestId(`article-withdraw-${PUBLISHED_ROW.id}`));
+      });
+      await waitFor(() => expect(dialog()?.open).toBe(true));
+      fireEvent.change(screen.getByLabelText("下线原因"), { target: { value: "运营决定临时下线" } });
+      const confirmButton = () => within(dialog()!).getByRole("button", { name: /^(下线|处理中…)$/ });
+      await act(async () => {
+        fireEvent.click(confirmButton());
+      });
+      await waitFor(() => expect((confirmButton() as HTMLButtonElement).disabled).toBe(false));
+      await vi.waitFor(() =>
+        expect(screen.getByRole("status").textContent).toContain("撤回请求未完成（网络或页面版本已过期），请刷新页面后重试"),
+      );
     });
   });
 
@@ -1037,9 +1127,15 @@ const CATEGORY_OPTIONS = [
   { id: "11111111-1111-4111-8111-111111111111", label: "言情" },
   { id: "22222222-2222-4222-8222-222222222222", label: "romance-no-zh" },
 ];
+// L10N P5: `locale: null` was a stale second-template fixture predating
+// L10N P3's `ArticleTemplate.locale` NOT NULL migration — real rows can no
+// longer have a null locale (`article-filters.tsx`'s own
+// `ArticleTemplateOption.locale` is `string`, not `string | null`, since
+// that migration). `"fr"` doubles as exercising a second real locale
+// already present in `LOCALES` above.
 const TEMPLATE_OPTIONS = [
   { id: "33333333-3333-4333-8333-333333333333", templateKey: "tpl-a", locale: "en", version: 2 },
-  { id: "44444444-4444-4444-8444-444444444444", templateKey: "tpl-b", locale: null, version: 1 },
+  { id: "44444444-4444-4444-8444-444444444444", templateKey: "tpl-b", locale: "fr", version: 1 },
 ];
 
 describe("ArticleFilters · C-19 filters", () => {

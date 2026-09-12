@@ -9,16 +9,27 @@
  *
  * ## Scope boundaries (read before extending)
  *
- * - **Locale is caller-supplied, not derived.** Language normalization
- *   (S7a) is not wired yet — `resolveSiteLocale`/`isPublishableLocale`
- *   (`src/lib/locale/locale-canonical.ts`) are not consulted here at all.
- *   The caller is responsible for only invoking this service with a locale
- *   that actually matches `NovelSourceItem.sourceLocale`'s mapped site
- *   locale; this service only checks that the locale is a *registered*
- *   `SiteLocale` (`docs/governance/database-governance.md` §4 `novel` row:
- *   "locale 必须是站点 canonical locale"), not that it is the *correct* one
- *   for this row. **TODO(S7a): derive `locale` from
- *   `NovelSourceItem.sourceLocale` instead of accepting it as an input.**
+ * - **Locale is derived from the source item, never caller-supplied.**
+ *   L10N P2 (`施工提示词_Sonnet_L10N_P2_创建链语种强制继承_2026-09-10.md` §1.A)
+ *   closes the S7a TODO this comment used to carry: `loadPlan` reads
+ *   `NovelSourceItem.sourceLocale` — already a resolved BCP-47 locale or
+ *   `NULL` (L10N P1's worker write path,
+ *   `src/lib/locale/channel-language.ts`'s `resolveChannelLanguage`) — and
+ *   derives `Novel.locale`/`Article.locale` from it directly. This module
+ *   does not re-resolve it from a raw upstream code/name itself; doing so
+ *   would be a second, forbidden mapping implementation (see
+ *   `src/lib/locale/README.md`, "全项目唯一的语种映射实现"). A `NULL`
+ *   `sourceLocale` fails closed with `ContentCreationInputError
+ *   ("missing_locale")`; a resolved value that is not a `SITE_LOCALES`
+ *   member (mapped successfully but not a registered site locale — e.g.
+ *   `it`/`fil`/`ms`/`tr`) fails closed with `ContentCreationInputError
+ *   ("unsupported_locale")`. There is no caller override —
+ *   `CreateContentFromSourceItemInput` has no `locale` field at all. CPS
+ *   parity: an article's locale comes from the source item, never from an
+ *   operator's pick (`3a76877:src/lib/changdu-promote-drama.ts:360-361,
+ *   674-677`, `changdu-promote-drama-dry-run.ts:514-534`, both read-only
+ *   references) — a caller-supplied override here would reopen exactly the
+ *   wrong-locale-content risk this module's TODO used to flag.
  * - **`Article.body`/`title`/`seoMetadata` are rendered by the P2-02
  *   Template Engine (`@/lib/seo/template`), not hand-assembled here.**
  *   P0-S9 wires the engine in against a single code-literal
@@ -126,12 +137,25 @@ function auditActorId(actor: CreateContentActor): string {
 const CONTENT_CREATE_AUDIT_ACTION = "novel.create";
 
 // ---------------------------------------------------------------------------
-// Input validation (throws — malformed caller input, not a business state)
+// Input validation. Most of these throw for malformed caller input (not a
+// business state) — `invalid_novel_source_item_id`/`invalid_actor`/
+// `invalid_request_id` are checked synchronously off the raw input, before
+// any DB read. `missing_locale`/`unsupported_locale` are the two
+// exceptions: they can only be discovered *after* `loadPlan` reads the
+// `NovelSourceItem` row (locale is derived from `sourceItem.sourceLocale`,
+// never caller-supplied — see module header), so they are business-state
+// discoveries surfaced through this same throw-based class rather than a
+// synchronous pre-check. Reusing `ContentCreationInputError` for them is
+// deliberate, not a category error: `src/app/(admin)/catalog-sync/
+// _actions.ts` and `./batch.ts`'s `runSequentialBudgetedBatch` already catch
+// this exact class and classify it as `kind: "invalid_input"` /
+// `inputErrorCode`, so both new codes get that plumbing for free.
 // ---------------------------------------------------------------------------
 
 export type ContentCreationInputErrorCode =
   | "invalid_novel_source_item_id"
-  | "invalid_locale"
+  | "missing_locale"
+  | "unsupported_locale"
   | "invalid_actor"
   | "invalid_request_id";
 
@@ -154,12 +178,45 @@ function requireUuid(value: unknown): string {
   return value.toLowerCase();
 }
 
-function requireLocale(value: SiteLocale | undefined): SiteLocale {
-  const locale = value ?? "en";
-  if (!SITE_LOCALES.includes(locale)) {
-    throw new ContentCreationInputError("invalid_locale", `Locale is not a registered SiteLocale: ${String(locale)}`);
+/**
+ * Derives `Novel.locale`/`Article.locale` from `NovelSourceItem.sourceLocale`
+ * — see module header, "Locale is derived from the source item, never
+ * caller-supplied." `sourceLocale` is already a resolved BCP-47 locale or
+ * `NULL` (L10N P1's worker write path); this function does not re-resolve it
+ * from a raw upstream code/name (that would be a second, forbidden mapping
+ * implementation — `src/lib/locale/README.md`). It only checks registration
+ * against `SITE_LOCALES`, the same membership test
+ * `src/server/publish-gate/evaluator.ts`'s `isRegisteredSiteLocale` and
+ * `src/app/[locale]/_guard.ts` already use elsewhere in this codebase.
+ *
+ * L10N P5 §1.E: the missing-value check was a strict `=== null`, which let
+ * a non-null-but-blank `sourceLocale` (`""`/whitespace-only) fall through
+ * to the `SITE_LOCALES` membership check below and get misclassified as
+ * `unsupported_locale` instead of `missing_locale` — the wrong diagnosis
+ * for "there was never a value to check membership for" (L10N P1's worker
+ * write path never writes a blank string today, but this function must not
+ * depend on that upstream discipline to classify correctly). Changed to
+ * `!sourceLocale?.trim()`, aligned with CPS
+ * `changdu-promote-drama-dry-run.ts:531`'s own
+ * `if (!source.sourceLocale?.trim()) blockReasons.push("missing_locale", ...)`
+ * blank check — same condition shape, not CPS's multi-reason-array push
+ * (this function throws a single error, matching its own existing
+ * single-error-code contract).
+ */
+function deriveLocale(sourceLocale: string | null): SiteLocale {
+  if (!sourceLocale?.trim()) {
+    throw new ContentCreationInputError(
+      "missing_locale",
+      "NovelSourceItem.sourceLocale is NULL/blank — cannot derive a content locale without human/vendor-code correction upstream",
+    );
   }
-  return locale;
+  if (!(SITE_LOCALES as readonly string[]).includes(sourceLocale)) {
+    throw new ContentCreationInputError(
+      "unsupported_locale",
+      `NovelSourceItem.sourceLocale "${sourceLocale}" resolved to a locale that is not a registered SiteLocale`,
+    );
+  }
+  return sourceLocale as SiteLocale;
 }
 
 function requireActor(actor: CreateContentActor): void {
@@ -207,7 +264,20 @@ export type CreateContentResult =
   | { readonly outcome: "source_item_deleted" }
   | { readonly outcome: "source_item_ignored" }
   | { readonly outcome: "source_item_stale" }
-  | { readonly outcome: "template_not_available"; readonly templateKey?: string }
+  /**
+   * CPS parity (matrix #4, `3a76877:src/actions/article-actions.ts:569-576`
+   * + `src/lib/template-locale-guard.ts` + `batch-actions-core.ts:167-183`,
+   * batch semantics — 海阅创建是单事务，无单篇/批量之分): `selectActiveArticleTemplate`
+   * found no active, applicable template for the derived `locale` (an
+   * explicit `templateKey` that exists but is inactive/wrong-locale/
+   * wrong-type collapses into the same "no usable template for this locale"
+   * signal as no `templateKey` at all — CPS's batch path does not
+   * distinguish "template doesn't exist" from "template is the wrong
+   * locale" either, see the read-only reference above). Hard-blocks
+   * creation; `templateKey` is present only when the caller requested one
+   * explicitly.
+   */
+  | { readonly outcome: "template_locale_mismatch"; readonly locale: SiteLocale; readonly templateKey?: string }
   /** Defensive: the source item's `novelId`/`status` combination doesn't match any state this service's state machine expects (e.g. `status === "linked"` but `novelId` is `null`, or `novelId` points at a missing/soft-deleted Novel, or a linked Novel has no Article for its own locale). Not this call's job to repair — surfaced for manual review. */
   | { readonly outcome: "source_item_inconsistent_state" }
   | {
@@ -215,6 +285,16 @@ export type CreateContentResult =
       readonly reason: "source_item_already_linked_to_different_locale";
       readonly existingNovelId: string;
       readonly existingLocale: string;
+      /**
+       * The locale just derived from `sourceItem.sourceLocale` (see module
+       * header) — the value that disagreed with `existingLocale`. L10N P2:
+       * before locale was derived, every caller in this codebase hardcoded
+       * `"en"`, so UI copy could safely assume that was always the attempted
+       * value; now it can legitimately be anything in `SITE_LOCALES`, so
+       * that assumption must not be baked into copy again — see
+       * `catalog-sync/_lib/outcome-copy.ts`'s `locale_conflict` case.
+       */
+      readonly derivedLocale: SiteLocale;
     }
   | { readonly outcome: "slug_unhealthy"; readonly field: "novel" | "article"; readonly baseSlug: string }
   | { readonly outcome: "slug_conflict_exhausted"; readonly field: "novel" | "article"; readonly baseSlug: string }
@@ -240,8 +320,6 @@ export type CreateContentResult =
 
 export type CreateContentFromSourceItemInput = {
   readonly novelSourceItemId: string;
-  /** Defaults to `"en"` — see module header, "Locale is caller-supplied, not derived." */
-  readonly locale?: SiteLocale;
   /** Explicit active template selection; omitted uses the fixed system-default-v1 preference, then the oldest active compatible template. */
   readonly templateKey?: string;
   /** Defaults to `"dry_run"` — same safety-first default `src/lib/tasks/moboreader.ts` uses for its own `mode` parameter. */
@@ -319,6 +397,8 @@ type SourceItemRow = {
   totalChapterCount: number;
   paidFromChapter: number | null;
   splitRatio: Prisma.Decimal | null;
+  /** Already a resolved BCP-47 locale or `NULL` (L10N P1) — see `deriveLocale` above. Never re-resolved here. */
+  sourceLocale: string | null;
   deletedAt: Date | null;
 };
 
@@ -332,6 +412,7 @@ const SOURCE_ITEM_PLAN_SELECT = Object.freeze({
   totalChapterCount: true,
   paidFromChapter: true,
   splitRatio: true,
+  sourceLocale: true,
   deletedAt: true,
 } as const);
 
@@ -376,11 +457,10 @@ function existsCheck(
 async function loadPlan(
   client: ReadClient,
   novelSourceItemId: string,
-  locale: SiteLocale,
 ): Promise<
   | { readonly stage: "blocked"; readonly result: CreateContentResult }
   | { readonly stage: "already_exists"; readonly summary: CreatedContentSummary }
-  | { readonly stage: "ready"; readonly sourceItem: SourceItemRow; readonly novelSlug: string; readonly articleSlug: string }
+  | { readonly stage: "ready"; readonly sourceItem: SourceItemRow; readonly locale: SiteLocale; readonly novelSlug: string; readonly articleSlug: string }
 > {
   // web_app deliberately has no SELECT grant on raw_payload. Keep this query
   // aligned with the explicit column grant instead of letting Prisma request
@@ -391,6 +471,15 @@ async function loadPlan(
   });
   if (!sourceItem) return { stage: "blocked", result: { outcome: "source_item_not_found" } };
   if (sourceItem.deletedAt !== null) return { stage: "blocked", result: { outcome: "source_item_deleted" } };
+
+  // Locale is derived here, before any other branching, so every downstream
+  // decision (already-linked idempotent replay included) uses the same
+  // derived value a fresh creation would — see module header and
+  // `deriveLocale`'s own doc comment. Throws `ContentCreationInputError`
+  // (`missing_locale`/`unsupported_locale`) rather than returning a
+  // `CreateContentResult` outcome — see the "Input validation" section
+  // header above for why.
+  const locale = deriveLocale(sourceItem.sourceLocale);
 
   if (sourceItem.novelId !== null) {
     const existingNovel = (await client.novel.findFirst({ where: { id: sourceItem.novelId } })) as NovelRow | null;
@@ -405,6 +494,7 @@ async function loadPlan(
           reason: "source_item_already_linked_to_different_locale",
           existingNovelId: existingNovel.id,
           existingLocale: existingNovel.locale,
+          derivedLocale: locale,
         },
       };
     }
@@ -450,21 +540,43 @@ async function loadPlan(
     return { stage: "blocked", result: { outcome: articleSlugResult.outcome, field: "article", baseSlug: articleSlugResult.baseSlug } };
   }
 
-  return { stage: "ready", sourceItem, novelSlug: novelSlugResult.slug, articleSlug: articleSlugResult.slug };
+  return { stage: "ready", sourceItem, locale, novelSlug: novelSlugResult.slug, articleSlug: articleSlugResult.slug };
 }
 
 // ---------------------------------------------------------------------------
 // Dry run
 // ---------------------------------------------------------------------------
 
-async function runDryRun(db: PrismaClient, novelSourceItemId: string, locale: SiteLocale): Promise<CreateContentResult> {
-  const plan = await loadPlan(db as unknown as ReadClient, novelSourceItemId, locale);
+async function runDryRun(
+  db: PrismaClient,
+  novelSourceItemId: string,
+  templateKey?: string,
+): Promise<CreateContentResult> {
+  const plan = await loadPlan(db as unknown as ReadClient, novelSourceItemId);
   if (plan.stage === "blocked") return plan.result;
   if (plan.stage === "already_exists") return { outcome: "already_exists", ...plan.summary };
+
+  // Explicit templateKey preview check moved in here (from the old top-level
+  // pre-check in `createContentFromSourceItem`) because it needs the derived
+  // `plan.locale`, which is only known once `loadPlan` has read the source
+  // item — see module header. A dry run with no explicit `templateKey` does
+  // not check template availability at all (unchanged behavior): the
+  // auto-select preference/fallback only gets evaluated inside the real
+  // creation transaction (`runCreateTransaction`).
+  if (templateKey) {
+    const template = await selectActiveArticleTemplate(db, {
+      locale: plan.locale,
+      templateKey,
+      applicableArticleType: "novel_article",
+    });
+    if (!template) return { outcome: "template_locale_mismatch", locale: plan.locale, templateKey };
+    validateStoredArticleTemplate(template);
+  }
+
   return {
     outcome: "dry_run",
     plan: {
-      locale,
+      locale: plan.locale,
       title: plan.sourceItem.title,
       novelSlug: plan.novelSlug,
       articleSlug: plan.articleSlug,
@@ -492,23 +604,24 @@ type WriteClient = ReadClient & {
 
 async function runCreateTransaction(
   tx: WriteClient,
-  input: { novelSourceItemId: string; locale: SiteLocale; templateKey?: string; actorType: "admin" | "system"; actorId: string; requestId: string },
+  input: { novelSourceItemId: string; templateKey?: string; actorType: "admin" | "system"; actorId: string; requestId: string },
 ): Promise<CreateContentResult> {
-  const plan = await loadPlan(tx, input.novelSourceItemId, input.locale);
+  const plan = await loadPlan(tx, input.novelSourceItemId);
   if (plan.stage === "blocked") return plan.result;
   if (plan.stage === "already_exists") return { outcome: "already_exists", ...plan.summary };
 
-  const { sourceItem, novelSlug, articleSlug } = plan;
+  const { sourceItem, locale, novelSlug, articleSlug } = plan;
 
   await ensureDefaultArticleTemplate(tx);
   const template = await selectActiveArticleTemplate(tx as unknown as PrismaClient, {
-    locale: input.locale,
+    locale,
     applicableArticleType: "novel_article",
     ...(input.templateKey ? { templateKey: input.templateKey } : {}),
   });
   if (!template) {
     return {
-      outcome: "template_not_available",
+      outcome: "template_locale_mismatch",
+      locale,
       ...(input.templateKey ? { templateKey: input.templateKey } : {}),
     };
   }
@@ -525,7 +638,7 @@ async function runCreateTransaction(
         titleNormalized: normalizeNovelTitle(sourceItem.title),
         description: sourceItem.description,
         coverUrl: sourceItem.coverUrl,
-        locale: input.locale,
+        locale,
         slug: novelSlug,
         totalChapterCount: sourceItem.totalChapterCount,
         paidFromChapter: sourceItem.paidFromChapter,
@@ -561,7 +674,7 @@ async function runCreateTransaction(
     tx.article.create({
       data: {
         novelId: novel.id,
-        locale: input.locale,
+        locale,
         slug: articleSlug,
         // Spelled out (not `{ publicPageShortId }` shorthand) so this
         // remains textually greppable as the one authorized write site —
@@ -628,7 +741,7 @@ async function runCreateTransaction(
         novelId: novel.id,
         novelBusinessId: novel.businessId,
         articleId: article.id,
-        locale: input.locale,
+        locale,
         novelSlug,
         articleSlug,
         publicPageShortId: article.publicPageShortId,
@@ -642,7 +755,7 @@ async function runCreateTransaction(
     novelId: novel.id,
     novelBusinessId: novel.businessId,
     articleId: article.id,
-    locale: input.locale,
+    locale,
     novelSlug,
     articleSlug,
     publicPageShortId: article.publicPageShortId,
@@ -664,22 +777,12 @@ export async function createContentFromSourceItem(
   input: CreateContentFromSourceItemInput,
 ): Promise<CreateContentResult> {
   const novelSourceItemId = requireUuid(input.novelSourceItemId);
-  const locale = requireLocale(input.locale);
   const mode = input.mode ?? "dry_run";
   requireActor(input.actor);
   const requestId = requireRequestId(input.requestId);
 
   if (mode === "dry_run") {
-    if (input.templateKey) {
-      const template = await selectActiveArticleTemplate(db, {
-        locale,
-        templateKey: input.templateKey,
-        applicableArticleType: "novel_article",
-      });
-      if (!template) return { outcome: "template_not_available", templateKey: input.templateKey };
-      validateStoredArticleTemplate(template);
-    }
-    return runDryRun(db, novelSourceItemId, locale);
+    return runDryRun(db, novelSourceItemId, input.templateKey);
   }
 
   const actorType = auditActorType(input.actor);
@@ -691,7 +794,6 @@ export async function createContentFromSourceItem(
         db.$transaction((tx) =>
           runCreateTransaction(tx as unknown as WriteClient, {
             novelSourceItemId,
-            locale,
             ...(input.templateKey ? { templateKey: input.templateKey } : {}),
             actorType,
             actorId,

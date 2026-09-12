@@ -132,20 +132,17 @@ describe("BlogCreateForm · 字段与提交（C-28）", () => {
     }
   });
 
-  it("语种下拉只列出可发布 locale（Owner 2026-09-08 决定：C-29b commit 3），不是全部 15 个 SITE_LOCALES", async () => {
-    const { SITE_LOCALES, listPublishableLocales } = await import("@/lib/locale/locale-canonical");
+  it("L10N P4: 语种下拉列出全部 15 个 SITE_LOCALES（Owner 2026-09-08 C-29b commit 3 的窄化决定已被 P4 取代——海阅公开面现在对齐 CPS 的 BLOG_ARTICLE_LOCALE_OPTIONS = SUPPORTED_SITE_LOCALES，无发布白名单再收窄）", async () => {
+    const { SITE_LOCALES } = await import("@/lib/locale/locale-canonical");
     const { BlogCreateForm } = await import(
       "@/app/(admin)/articles/new-blog/_components/blog-create-form"
     );
     render(<BlogCreateForm />);
     const select = screen.getByTestId("blog-create-locale") as HTMLSelectElement;
     const optionValues = [...select.options].map((option) => option.value);
-    expect(optionValues).toEqual(listPublishableLocales());
-    // This restriction only says something if it actually narrows the
-    // list — guards against `listPublishableLocales()` silently widening
-    // back to every registered locale and this assertion staying green for
-    // the wrong reason.
-    expect(optionValues.length).toBeLessThan(SITE_LOCALES.length);
+    expect(optionValues).toEqual([...SITE_LOCALES]);
+    expect(optionValues.length).toBe(15);
+    expect(optionValues).toContain("ru");
   });
 
   it("没有状态或发布时间选择器——创建一律落草稿", async () => {

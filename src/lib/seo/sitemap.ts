@@ -1,5 +1,5 @@
 import {
-  listPublishableLocales,
+  SITE_LOCALES,
   type SiteLocale,
 } from "@/lib/locale/locale-canonical";
 import type { Prisma, PrismaClient } from "@prisma/client";
@@ -117,12 +117,29 @@ type ArticleSitemapCandidateWithNovel = ArticleSitemapCandidate & {
   novel: NonNullable<ArticleSitemapCandidate["novel"]>;
 };
 
-function articleSitemapWhere(locale: SiteLocale, env: NodeJS.ProcessEnv): Prisma.ArticleWhereInput {
-  // C-25: `buildPublicArticleWhere` is the "collectability" fragment —
-  // excludes `hidden`, keeps `seo_only` (sitemap is exactly a collectability
-  // boundary, same as IndexNow). This DB-side condition is a pre-filter only;
-  // `isVisibleCandidate` below re-checks it per row, per this file's own
-  // "DB filter is a superset, application layer is authoritative" discipline.
+/**
+ * L10N P4: extracted from this file's own former private `articleSitemapWhere`
+ * so `src/lib/locale/active-locales.ts` can build its `groupBy` `where` from
+ * the exact same collectability fragment instead of hand-rolling a second one
+ * (the construction prompt's explicit ban on "另造... 第二份可见性 where").
+ * `locale` accepts either one `SiteLocale` (sitemap's per-locale query) or an
+ * `{ in: [...] }` filter (active-locales' single cross-locale query) — same
+ * `Prisma.ArticleWhereInput["locale"]` field, two different narrowing shapes.
+ *
+ * C-25: `buildPublicArticleWhere` is the "collectability" fragment —
+ * excludes `hidden`, keeps `seo_only` (sitemap/active-locales are both
+ * exactly a collectability boundary, same as IndexNow). This DB-side
+ * condition is a pre-filter only; `isVisibleCandidate` below re-checks it per
+ * row for sitemap generation, per this file's own "DB filter is a superset,
+ * application layer is authoritative" discipline. `active-locales.ts` does
+ * not have per-row rows to recheck (it only reads a `groupBy` locale
+ * breakdown) — see that module's own header for why the coarser superset is
+ * an accepted, bounded approximation there.
+ */
+export function activePublicArticleWhere(
+  locale: Prisma.ArticleWhereInput["locale"],
+  env: NodeJS.ProcessEnv,
+): Prisma.ArticleWhereInput {
   return buildPublicArticleWhere({
     locale,
     promoLink: {
@@ -134,6 +151,10 @@ function articleSitemapWhere(locale: SiteLocale, env: NodeJS.ProcessEnv): Prisma
       },
     },
   }, env);
+}
+
+function articleSitemapWhere(locale: SiteLocale, env: NodeJS.ProcessEnv): Prisma.ArticleWhereInput {
+  return activePublicArticleWhere(locale, env);
 }
 
 function isVisibleCandidate(
@@ -423,7 +444,7 @@ export function parseSitemapFileName(fileName: string): {
   if (!match) return null;
 
   const locale = match[2];
-  if (!listPublishableLocales().includes(locale as SiteLocale)) return null;
+  if (!(SITE_LOCALES as readonly string[]).includes(locale)) return null;
 
   return {
     type: match[1] as SitemapType,

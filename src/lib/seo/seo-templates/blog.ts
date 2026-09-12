@@ -17,12 +17,16 @@
  * locales that have no sibling Article at all." A blog Article is exactly
  * such a page (keyed by slug, no DB-verified per-locale sibling lookup
  * built this round — see this round's own hreflang ruling: "本轮博客不做
- * 跨语种 hreflang，只输出自指的 canonical 与 x-default"). Harmless today
- * (`listPublishableLocales()` is `{en}` alone, so blind enumeration would
- * coincide with self-only), but inlining self+x-default here keeps this
- * template correct if more locales become publishable before blog hreflang
- * siblings are ever built — it never advertises a cross-locale link this
- * round did not verify.
+ * 跨语种 hreflang，只输出自指的 canonical 与 x-default").
+ *
+ * L10N P4 (2026-09-10): this is no longer a merely-defensive, "harmless
+ * today" guard — `listPublishableLocales()`/the whitelist layer it read is
+ * deleted, and blog creation (`src/server/content-creation/blog.ts`'s
+ * `requireLocale`) now accepts every `SITE_LOCALES` member (15 today), not
+ * `{en}` alone. Calling `buildHreflangAlternates` here would blindly
+ * enumerate all 15 and actually produce dead links for the (typical) blog
+ * post that has no sibling in most of them — inlining self+x-default is now
+ * load-bearing, not prophylactic.
  */
 import { getHomeName } from "../breadcrumb-i18n";
 import {

@@ -2,10 +2,10 @@ import { randomBytes } from "node:crypto";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import type { PrismaClient } from "@prisma/client";
+import type { Prisma, PrismaClient } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
 
-import { MoboreaderAdapterError } from "@/lib/adapters";
+import { MoboreaderAdapterError, type ListBooksResponse, type MoboreaderBook } from "@/lib/adapters";
 import { ID_IN_LIST_CHUNK_SIZE } from "@/lib/db/chunked-id-lookup";
 import {
   enqueueMoboreaderPreviewRefreshTask,
@@ -15,6 +15,7 @@ import {
   resolveMoboreaderPreviewRuntimeConfig,
   validateMoboreaderCatalogScanInput,
 } from "@/lib/tasks";
+import { resolveChannelLanguage } from "@/lib/locale/channel-language";
 import { encryptCredentialSecretForWorker } from "../../../worker/credentials/crypto";
 import {
   createMoboreaderCatalogHandler,
@@ -22,6 +23,7 @@ import {
   createMoboreaderWorkerHandlers,
   determineMoboreaderCatalogStopReason,
   parseMoboreaderCatalogPayload,
+  pickBookSourceLocale,
 } from "../../../worker/handlers/moboreader";
 
 const validInput = {
@@ -516,5 +518,355 @@ describe("MoboReader preview enqueue: chunked id lookup (C-15)", () => {
     expect(findManyCallSizes.length).toBeGreaterThan(1);
     for (const size of findManyCallSizes) expect(size).toBeLessThanOrEqual(ID_IN_LIST_CHUNK_SIZE);
     expect(findManyCallSizes.reduce((a, b) => a + b, 0)).toBe(40_000);
+  });
+});
+
+describe("pickBookSourceLocale · L10N P1 write-site invariant", () => {
+  it("resolved code → the resolved locale string, never a literal \"unknown\"", () => {
+    const resolution = resolveChannelLanguage({ sourceLanguageCode: "3" });
+    expect(pickBookSourceLocale(resolution, new Set())).toBe("en");
+  });
+
+  it("unresolved code (e.g. 19/20, MAPPING_EVIDENCE_MISSING) → null, not the string \"unknown\"", () => {
+    for (const code of ["19", "20", "1"]) {
+      const resolution = resolveChannelLanguage({ sourceLanguageCode: code });
+      const sourceLocale = pickBookSourceLocale(resolution, new Set());
+      expect(sourceLocale).toBeNull();
+      expect(sourceLocale).not.toBe("unknown");
+    }
+  });
+
+  it("a suspended code is force-nulled even though resolveChannelLanguage itself found a mapping", () => {
+    const resolution = resolveChannelLanguage({ sourceLanguageCode: "3" }); // resolves to "en"
+    expect(pickBookSourceLocale(resolution, new Set(["3"]))).toBeNull();
+  });
+
+  it("suspension only affects the matching sourceLanguageCode, not others in the same set", () => {
+    const resolution = resolveChannelLanguage({ sourceLanguageCode: "3" });
+    expect(pickBookSourceLocale(resolution, new Set(["7", "9"]))).toBe("en");
+  });
+});
+
+/**
+ * `persistCatalogPage` wiring (Opus 复核 NON_BLOCKING b①): the two unit-level
+ * describes above prove `pickBookSourceLocale` and
+ * `evaluateLanguageMappingSuspensions` are each individually correct, but
+ * neither proves `persistCatalogPage` (the private function that actually
+ * calls both, once per `catalog_page` task item) wires them together
+ * correctly — a mutation that skips the per-page suspension evaluation
+ * entirely, or applies it to only *some* of a suspended code's rows, would
+ * pass every test above unnoticed. This drives the real, exported
+ * `createMoboreaderCatalogHandler` end to end (mode `apply`) with a page of
+ * 10 books, all `sourceLanguageCode: "3"`, 3 of which carry a conflicting
+ * `languageName` ("俄语" against code 3's own "en" mapping) — `total=10,
+ * conflicts=3, rate=0.3` trips `evaluateLanguageMappingSuspensions`'s
+ * `total>=10 && conflicts>=3 && rate>=0.2` threshold — then calls the
+ * handler's own returned `protectedWrite` against a hand-rolled fake
+ * transaction to assert on what `persistCatalogPage` actually wrote.
+ *
+ * The scenario is deliberately non-terminal (`payload.requestedPageEnd: 2`,
+ * one sibling `catalog_page` item still `pending`) so the fake transaction
+ * only needs to answer the calls `persistCatalogPage` makes on its
+ * non-terminal path (`novelSourceItem.upsert` per book,
+ * `genericTask.findUniqueOrThrow`/`.update`, `genericTaskItem.update`,
+ * `operationAudit.create`) — the terminal path additionally calls
+ * `enqueueMoboreaderPreviewRefreshTask` (its own multi-table binding/
+ * capability/credential lookup chain), which is exercised elsewhere
+ * (C-15 above) and is not this test's concern.
+ */
+describe("persistCatalogPage wiring: per-page suspension evaluation (Opus NON_BLOCKING b①)", () => {
+  const ACCOUNT_ID = "44444444-4444-4444-8444-444444444444";
+  const APP_ID = "55555555-5555-4555-8555-555555555555";
+  const CREDENTIAL_ID = "66666666-6666-4666-8666-666666666666";
+
+  function credentialKeyring(): { env: NodeJS.ProcessEnv; cleanup(): void } {
+    const directory = mkdtempSync(path.join(tmpdir(), "cps-novel-moboreader-suspension-keys-"));
+    const v1 = path.join(directory, "v1");
+    const fingerprint = path.join(directory, "fingerprint");
+    writeFileSync(v1, randomBytes(32).toString("base64"), { mode: 0o600 });
+    writeFileSync(fingerprint, randomBytes(32).toString("base64"), { mode: 0o600 });
+    return {
+      env: {
+        NODE_ENV: "test",
+        CHANNEL_CREDENTIAL_ACTIVE_KEY_VERSION: "1",
+        CHANNEL_CREDENTIAL_ENCRYPTION_KEY_V1_FILE: v1,
+        CHANNEL_CREDENTIAL_FINGERPRINT_KEY_FILE: fingerprint,
+      },
+      cleanup: () => rmSync(directory, { recursive: true, force: true }),
+    };
+  }
+
+  async function withProcessEnvOverlay<T>(overlay: NodeJS.ProcessEnv, run: () => Promise<T>): Promise<T> {
+    const previous = new Map<string, string | undefined>();
+    for (const key of Object.keys(overlay)) previous.set(key, process.env[key]);
+    Object.assign(process.env, overlay);
+    try {
+      return await run();
+    } finally {
+      for (const [key, value] of previous) {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
+    }
+  }
+
+  const suspensionPayload = {
+    pageIndex: 1,
+    pageSize: 10,
+    name: "",
+    orderType: 0,
+    projectType: 1,
+    safetyMaxPages: 2,
+    requestedPageEnd: 2,
+    scheduledPageEnd: 2,
+    expiresAt: new Date(Date.now() + 60_000).toISOString(),
+    source: "manual" as const,
+    actorId: "actor",
+    requestId: "request-id",
+  };
+
+  /** Minimal Prisma double for the handler's own pre-transaction scope/binding load. */
+  function fakeOuterDb(encryptedSecret: Uint8Array): PrismaClient {
+    return {
+      genericTask: {
+        findUnique: async () => ({
+          channelAccountId: ACCOUNT_ID,
+          channelAppId: APP_ID,
+          params: { projectType: suspensionPayload.projectType, pageStart: 1, pageEnd: 2, pageSize: suspensionPayload.pageSize },
+        }),
+      },
+      $queryRaw: async () => [{
+        project_type: suspensionPayload.projectType,
+        credential_id: CREDENTIAL_ID,
+        encrypted_secret: encryptedSecret,
+        key_version: 1,
+      }],
+    } as unknown as PrismaClient;
+  }
+
+  /**
+   * 10 books, all `language: "3"` (code mapping → `en`); `conflictCount` of
+   * them carry `languageName: "俄语"` (nameLocale `ru`, conflicting with the
+   * code mapping) to drive `evaluateLanguageMappingSuspensions`'s conflict
+   * count. `rawEvidence` deliberately mirrors `language`/`languageName` so
+   * `rawLanguageScopeFromPayload` (called by `persistCatalogPage`, throws on
+   * a null scope) can derive a scope.
+   */
+  function suspensionBooks(total: number, conflictCount: number): MoboreaderBook[] {
+    return Array.from({ length: total }, (_, index) => {
+      const languageName = index < conflictCount ? "俄语" : "英语";
+      return {
+        externalBookId: `book-${index + 1}`,
+        agencyId: null,
+        agencyName: null,
+        seriesId: `series-${index + 1}`,
+        materialType: null,
+        title: `Title ${index + 1}`,
+        description: null,
+        coverUrl: null,
+        projectType: 1,
+        language: "3",
+        languageName,
+        allEpis: null,
+        payEpisFrom: null,
+        splitRatio: null,
+        ttoSplitRatio: null,
+        createTime: null,
+        seriesTypeList: [],
+        recommendList: [],
+        labelSnapshotComplete: false, // skips persistLabels' sourceLabel/novelSourceItemLabel tx calls entirely
+        existingPromo: { upstreamCode: null, webUrl: null }, // skips persistExistingCatalogPromo's promoLink tx calls entirely
+        rawEvidence: { language: "3", languageName, __boundary: "approved_raw_evidence" } as const,
+      };
+    });
+  }
+
+  /**
+   * Fake transaction covering exactly the calls `persistCatalogPage` makes
+   * on a non-terminal page (see this describe block's doc comment). `
+   * $queryRaw` is a queue answered in the fixed call order the source issues
+   * them: task-row `FOR UPDATE` lock, then the `beforeStop` `SUM(...)`, then
+   * the `afterStop` pending/processing/failed counts.
+   */
+  function fakeCatalogPageTx() {
+    const queryRawResponses: unknown[] = [
+      [{ id: "task-1" }], // FOR UPDATE lock
+      [{ total: 0n }], // beforeStop: no prior successful pages
+      [{ actual: 0n, pending: 1n, processing_others: 0n, failed: 0n }], // afterStop: sibling page 2 still pending -> non-terminal
+    ];
+    let queryRawCall = 0;
+    const upsertCreateCalls: Array<Record<string, unknown>> = [];
+    let genericTaskItemUpdateArgs: { data: { result: Record<string, unknown> } } | null = null;
+    let genericTaskUpdateArgs: { data: { result: Record<string, unknown> } } | null = null;
+
+    const tx = {
+      $queryRaw: async () => queryRawResponses[queryRawCall++],
+      novelSourceItem: {
+        upsert: async (args: { create: Record<string, unknown> }) => {
+          upsertCreateCalls.push(args.create);
+          return { id: `source-${upsertCreateCalls.length}` };
+        },
+      },
+      genericTask: {
+        findUniqueOrThrow: async () => ({
+          params: {
+            projectType: suspensionPayload.projectType,
+            pageStart: 1,
+            pageEnd: 2,
+            pageSize: suspensionPayload.pageSize,
+          },
+        }),
+        update: async (args: { data: { result: Record<string, unknown> } }) => {
+          genericTaskUpdateArgs = args;
+        },
+      },
+      genericTaskItem: {
+        update: async (args: { data: { result: Record<string, unknown> } }) => {
+          genericTaskItemUpdateArgs = args;
+        },
+      },
+      operationAudit: {
+        create: async () => ({ id: 1n }),
+      },
+    };
+
+    return {
+      tx: tx as unknown as Prisma.TransactionClient,
+      upsertCreateCalls,
+      getGenericTaskItemUpdateArgs: () => genericTaskItemUpdateArgs,
+      getGenericTaskUpdateArgs: () => genericTaskUpdateArgs,
+    };
+  }
+
+  it("a suspended code (total=10, conflicts=3, rate=0.3) forces sourceLocale=null for EVERY row of that code, including the 7 that never individually conflicted", async () => {
+    const keys = credentialKeyring();
+    try {
+      await withProcessEnvOverlay(keys.env, async () => {
+        const encryptedSecret = new Uint8Array(
+          encryptCredentialSecretForWorker("bare-token", ACCOUNT_ID, CREDENTIAL_ID, 1),
+        );
+        const outerDb = fakeOuterDb(encryptedSecret);
+        const books = suspensionBooks(10, 3);
+        const response: ListBooksResponse = {
+          items: books,
+          totalCount: 100,
+          rawEvidence: { totalCount: 100, __boundary: "approved_raw_evidence" } as const,
+        };
+        const adapter = {
+          listBooks: vi.fn(async () => response),
+          fetchBookMaterial: vi.fn(),
+          fetchPreviewChapters: vi.fn(),
+        };
+        const handler = createMoboreaderCatalogHandler(outerDb, {
+          adapter,
+          env: { NODE_ENV: "test", FEATURE_NOVEL_CATALOG_SYNC: "true", NOVEL_CATALOG_SYNC_ALLOW_WRITE: "true" },
+        });
+
+        const outcome = await handler({
+          lease: {
+            family: "generic",
+            taskType: "catalog_scan",
+            mode: "apply",
+            itemId: "item-1",
+            taskId: "task-1",
+            workerId: "worker",
+            executionToken: "token",
+            leaseEpoch: 1n,
+            attemptCount: 1,
+            lockedUntil: new Date(),
+            payload: suspensionPayload,
+          },
+          mode: "apply",
+          signal: new AbortController().signal,
+          heartbeat: async () => true,
+        });
+
+        expect(outcome.status).toBe("success");
+        expect(outcome.protectedWrite).toBeTypeOf("function");
+
+        const { tx, upsertCreateCalls, getGenericTaskItemUpdateArgs, getGenericTaskUpdateArgs } = fakeCatalogPageTx();
+        const writeOutcome = await outcome.protectedWrite!(tx);
+        expect(writeOutcome).toMatchObject({ status: "success" });
+
+        // Every one of the 10 upserted rows — the 3 that individually
+        // conflicted AND the 7 that did not — must have been force-nulled by
+        // the page-level suspension, not just the conflicting ones.
+        expect(upsertCreateCalls).toHaveLength(10);
+        for (const create of upsertCreateCalls) {
+          expect(create.sourceLocale, JSON.stringify(create)).toBeNull();
+        }
+
+        const pageResult = getGenericTaskItemUpdateArgs()?.data.result;
+        expect(pageResult?.unknownLocaleCount).toBe(10);
+        expect(pageResult?.suspendedLanguageCodes).toEqual(["3"]);
+
+        const taskResult = getGenericTaskUpdateArgs()?.data.result;
+        expect(taskResult?.unknownLocaleCount).toBe(10);
+        expect(taskResult?.suspendedLanguageCodes).toEqual(["3"]);
+        expect(taskResult?.terminalState).toBe("processing"); // non-terminal: sibling page 2 still pending
+      });
+    } finally {
+      keys.cleanup();
+    }
+  });
+
+  it("below-threshold conflicts (total=10, conflicts=2, rate=0.2 but conflicts<3) do NOT suspend — rows keep their individually resolved locale", async () => {
+    const keys = credentialKeyring();
+    try {
+      await withProcessEnvOverlay(keys.env, async () => {
+        const encryptedSecret = new Uint8Array(
+          encryptCredentialSecretForWorker("bare-token", ACCOUNT_ID, CREDENTIAL_ID, 1),
+        );
+        const outerDb = fakeOuterDb(encryptedSecret);
+        const books = suspensionBooks(10, 2); // conflicts=2 < 3 -> below threshold
+        const response: ListBooksResponse = {
+          items: books,
+          totalCount: 100,
+          rawEvidence: { totalCount: 100, __boundary: "approved_raw_evidence" } as const,
+        };
+        const adapter = {
+          listBooks: vi.fn(async () => response),
+          fetchBookMaterial: vi.fn(),
+          fetchPreviewChapters: vi.fn(),
+        };
+        const handler = createMoboreaderCatalogHandler(outerDb, {
+          adapter,
+          env: { NODE_ENV: "test", FEATURE_NOVEL_CATALOG_SYNC: "true", NOVEL_CATALOG_SYNC_ALLOW_WRITE: "true" },
+        });
+
+        const outcome = await handler({
+          lease: {
+            family: "generic",
+            taskType: "catalog_scan",
+            mode: "apply",
+            itemId: "item-1",
+            taskId: "task-1",
+            workerId: "worker",
+            executionToken: "token",
+            leaseEpoch: 1n,
+            attemptCount: 1,
+            lockedUntil: new Date(),
+            payload: suspensionPayload,
+          },
+          mode: "apply",
+          signal: new AbortController().signal,
+          heartbeat: async () => true,
+        });
+
+        const { tx, upsertCreateCalls, getGenericTaskItemUpdateArgs } = fakeCatalogPageTx();
+        await outcome.protectedWrite!(tx);
+
+        expect(upsertCreateCalls).toHaveLength(10);
+        // code 3 resolves to "en" unconditionally (code mapping wins over
+        // name), so with no suspension every row keeps "en" — not null.
+        for (const create of upsertCreateCalls) {
+          expect(create.sourceLocale).toBe("en");
+        }
+        expect(getGenericTaskItemUpdateArgs()?.data.result.unknownLocaleCount).toBe(0);
+        expect(getGenericTaskItemUpdateArgs()?.data.result.suspendedLanguageCodes).toEqual([]);
+      });
+    } finally {
+      keys.cleanup();
+    }
   });
 });

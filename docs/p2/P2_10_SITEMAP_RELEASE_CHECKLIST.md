@@ -16,8 +16,15 @@
 ## PR2 开关门禁
 
 - [ ] `FEATURE_SITEMAP_AUTO_REFRESH` 与 `SITEMAP_AUTO_REFRESH_ALLOW_WRITE` 均默认 `false`。
-- [ ] **D-7 关闭前禁止开启任一 Sitemap flag**；当前 `listPublishableLocales()=[]`，提前开启只会生成确定性失败任务。
-- [ ] D-7 关闭且正式 locale 进入白名单后，先以 flags 全关完成正式 locale 直接读盘 dry-run。
+- [ ] **L10N P4 更新（2026-09-10）**：本条原文依据的 D-7"首发 locale 白名单"决策点与
+      `listPublishableLocales()` 已随 P4 删除（`src/lib/locale/locale-canonical.ts`
+      不再有白名单层；`docs/governance/port-registry.md` P4 §2.A）——`listPublishableLocales()=[]`
+      这句技术描述已失实，请勿再照字面核对。现行两层模型下，`static-sitemap-generator.ts`
+      的 `routeLocales` 默认即 `SITE_LOCALES`（15 个已注册语种，非空），分片是否有内容
+      取决于该语种下是否存在真正公开可见的 Article（既有可见性谓词族），不取决于任何白名单。
+      提前开启 flag 的风险因而变成"给尚无发布内容的语种生成空分片"而非"确定性失败任务"——
+      是否已具备开启条件仍需 Owner 按当下真实发布数据重新判断，本条不代为拍板。
+- [ ] 正式 locale 直接读盘 dry-run 先以 flags 全关完成。
 - [ ] dry-run、真实 `SITE_URL` 与静态目录权限均验证后，可先开 enqueue flag，但此时 Worker allowlist 必须仍排除 `sitemap_refresh`，任务只允许保持 pending。
 - [ ] 单独审批 Worker write flag 后，在同一次部署中设置 `SITEMAP_AUTO_REFRESH_ALLOW_WRITE=true` 并把 `sitemap_refresh` 加入 Worker allowlist，避免 write gate 关闭期间任务被消费为 failed。
 - [ ] 任一 flag 关闭时不得发生静态 release 生成或 current symlink 切换。

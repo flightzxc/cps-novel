@@ -24,7 +24,14 @@ export type ArticleTemplateStatus = "draft" | "active" | "inactive";
 export type ArticleTemplateWrite = {
   readonly templateKey: string;
   readonly templateName: string;
-  readonly locale?: string | null;
+  /**
+   * L10N P3：不再 `?: string | null`——`ArticleTemplate.locale` 已收口为数据库层
+   * `NOT NULL DEFAULT 'en'`，应用层写入契约同步收紧成必填 `string`，与 DB 约束、
+   * 后台表单 `required` 三层对齐。`service.ts` 的 `requireLocale` 仍在运行期校验
+   * 它是不是 `SITE_LOCALES` 成员——类型层面的 `string` 只保证"调用方传了点什么"，
+   * 不保证"传的是合法 locale 码"，两层校验目的不同，都留着。
+   */
+  readonly locale: string;
   readonly schemaVersion?: number;
   readonly status: ArticleTemplateStatus;
   /** 缺省时 `storage()` 落 `"novel_article"`。 */

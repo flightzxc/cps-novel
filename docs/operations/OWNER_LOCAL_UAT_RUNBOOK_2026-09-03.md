@@ -374,7 +374,7 @@ scripts/x8-production-like.sh admin-reset x8-owner --deactivate --apply    # 确
 | 14 | 无效码与软删码返回 404 | `/go/{不存在的码}`、`/go/{已软删的码}` | 两者均 HTTP 404（`src/app/go/[code]/route.ts` 对 `deletedAt != null` 和未命中记录均返回 `notFound()`） | 截图或 `curl -I` |
 | 15（Claude/Codex 操作） | 停止 postgres 容器，验证故障可见性 | `/api/health`；再次点击步骤 13 的 CTA | `/api/health` 返回 503（`src/app/api/health/route.ts` 对 `report.ok=false` 返回 503，已核实）。**关于 CTA 302 的说明见下方脚注** | 截图 + `/api/health` 响应体 |
 | 16 | 下架并 takedown | `/novels/{novelId}`（发布生命周期面板，`publish-lifecycle-panel`） | 公开页 `/novel/{slug}` 返回 404 且响应头 `X-Robots-Tag`/meta 带 `noindex`；已物化章节被撤回（不可读） | 截图（公开页 404）+ 截图（后台撤回状态） |
-| 17 | 首页轮播运营 | `/home-carousel` | 配置可保存；人工位写入后首页 Hero 命中；清空 serving 时回退到最近 5 本有封面的已发布书 | 后台与首页截图 |
+| 17 | 首页轮播运营 | `/home-carousel` | 配置可保存；人工位写入后首页 Hero 命中；清空 serving 时回退到最近 5 本有封面的已发布书；**见下方步骤 17 脚注**——L10N P5 起本页按 `?locale=` 选择器分语种，cron 按 active locales 逐语种入队 | 后台与首页截图（含切换到一个非 en 语种后的读取） |
 | 18 | 模板管理与选择 | `/templates`、`/catalog-sync` | 新模板通过 fail-closed 校验后启用；创建内容显式选择该模板，Article.templateId 命中 | 后台截图 + 只读 SQL |
 | 19 | 文章编辑与 SEO | `/articles`、`/novel/{slug}` | 编辑 title/summary/body/SEO，单篇及批量再生成保留 slug/shortId；公开 head/body/FAQ JSON-LD 使用文章值 | 后台与公开页截图 |
 | 20 | 分类公开链 | `/categories`、`/browse?category=...`、`/category/{slug}` | manual 分类与 mapped 派生均可读，空分类 404；首页/footer 与 sitemap generator 按 sortOrder | 后台、browse、category 截图 |
@@ -391,6 +391,28 @@ stale-if-error 配置。据此代码路径，PostgreSQL 真的停止后，`/go/{
 发现的回归，而是与当前实现一致的预期行为，请据实填写而不要为了凑"通过"而
 更改判定标准。`/api/health` 503 这一半的判定已通过代码核实，可直接作为通过
 标准。
+
+**步骤 17 脚注（L10N P5，矩阵 #13，locale 说明）**：首页轮播的 locale 维度分两
+层，两层都要在这一步各验一次：
+
+- **后台读/写**：`/home-carousel` 页头新增语种选择器（选项 = `SITE_LOCALES`，
+  默认 `en`），人工位/最新批候选/serving 预览/变更日志四块视图与「添加人工
+  位」「入队重新计算」「停用/删除人工位」都按所选语种读写——切到一个非 `en`
+  语种（如 `ru`）后，四块视图应各自显示该语种自己的数据（而不是 `en` 的数
+  据原样复用），「已发布文章」下拉也应只列出该语种的文章。
+- **cron 侧**：`buildHomeCarouselCronTaskInput`（`src/server/home-carousel/
+  service.ts`）不再写死单一 `en` 任务项——调度器每次 tick 会先算一遍"活跃
+  语种集"（`getActiveLocales()`/`queryActiveLocales`，定义见
+  `src/lib/locale/active-locales.ts`：`SITE_LOCALES` 中至少有一篇公开可见
+  Article 的子集，`en` 恒含），再为集合里每个语种各入队一个
+  `GenericTaskItem`（`home_carousel.compute.v1`，`payload.locale` 各不相
+  同）；worker 侧逐条独立处理，每条各自的幂等键是
+  `cron:<businessDate>:<locale>`（含 locale，不是只有日期）——同一天两个语
+  种各自成功，互不覆盖、互不误判为重复。本步骤不需要 Owner 手工触发 cron
+  （X8 本地拓扑的调度器/worker 独立进程另见 §2 准备阶段），只需确认"入队重新
+  计算"这个手工触发按钮按当前页面选中的语种入队即可，cron 本身的多语种行为
+  由 Claude/Codex 在准备阶段用自动化测试核对（`tests/backend/home-carousel/
+  cron.test.ts`），不在本步骤的人工验收范围内。
 
 ## 4. 通过判定
 

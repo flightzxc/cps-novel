@@ -66,21 +66,19 @@ import { toErrorEnvelope } from "../../api/admin/_lib/respond";
  * because they live in `src/server/`, the guard's own territory — this
  * service does not, by design; see its module header).
  *
- * Locale is hard-coded to `"en"`, not exposed as a picker. Two independent
- * reasons, both already documented on the service
- * (`src/server/content-creation/service.ts`, "Locale is caller-supplied, not
- * derived"): (1) S7a language normalization is not wired, so nothing here can
- * verify a `NovelSourceItem.sourceLocale` actually maps to whatever an
- * operator might pick — offering a dropdown would invite exactly the
- * wrong-locale-content mistake that module header warns about; (2)
- * `listPublishableLocales()` (`@/lib/locale/locale-canonical`) is currently
- * `["en"]` (U6 / D-7), so there is no second publishable locale this round
- * to justify a picker. `SITE_LOCALES` does register 15 locales, but creation
- * is a prerequisite to publishing, not publishing itself, and expanding past
- * `"en"` is deliberately deferred rather than silently allowed.
+ * Locale is never picked here at all — not hard-coded, not a dropdown.
+ * L10N P2 (2026-09-10, matrix #3/#4) closed the S7a gap this comment used to
+ * describe: `createContentFromSourceItem` now derives `Novel.locale`/
+ * `Article.locale` from the source item's own `sourceLocale` (see
+ * `src/server/content-creation/service.ts`'s module header, "Locale is
+ * derived from the source item, never caller-supplied") and this wrapper has
+ * no `locale` field left to forward. A `NULL`/unresolved `sourceLocale`
+ * surfaces as `ContentCreationInputError("missing_locale")`; a resolved
+ * value outside `SITE_LOCALES` (e.g. `it`/`fil`/`ms`/`tr`) surfaces as
+ * `ContentCreationInputError("unsupported_locale")` — both caught below,
+ * same as every other `ContentCreationInputError` code, and rendered by
+ * `create-content-dialog.tsx`.
  */
-
-const CONTENT_CREATION_LOCALE = "en" as const;
 
 export type ContentCreationActionResult =
   | { readonly ok: true; readonly data: CreateContentResult }
@@ -122,7 +120,6 @@ export async function dryRunContentCreationAction(input: {
     const { context } = await authorizeAction("admin.content_creation.dry_run", input.requestId);
     const data = await createContentFromSourceItem(prisma, {
       novelSourceItemId: input.novelSourceItemId,
-      locale: CONTENT_CREATION_LOCALE,
       mode: "dry_run",
       actor: { type: "admin", adminId: context.identity.id },
       requestId: input.requestId,
@@ -180,7 +177,6 @@ export async function applyContentCreationAction(input: {
     });
     const data = await createContentFromSourceItem(prisma, {
       novelSourceItemId: input.novelSourceItemId,
-      locale: CONTENT_CREATION_LOCALE,
       mode: "apply",
       actor: { type: "admin", adminId: context.identity.id },
       requestId: input.requestId,
@@ -408,8 +404,7 @@ export async function applyCatalogScanTaskAction(
  * carries none of the risk the catalog-scan comment above warns about.
  *
  * `offerType` is hardcoded to {@link UPSTREAM_EXISTING_PROMO_OFFER_TYPE}
- * ("read"), not exposed as a picker — same reasoning
- * `CONTENT_CREATION_LOCALE` uses above: it is the only offer type any
+ * ("read"), not exposed as a picker: it is the only offer type any
  * fixture or production evidence has ever produced
  * (`promo-link-claim-limits.ts`'s own doc comment), so a picker would only
  * invite picking something nothing downstream has ever proven.
@@ -655,7 +650,6 @@ export async function dryRunContentCreationBatchAction(input: {
 
     const data = await dryRunContentCreationBatch(prisma, {
       novelSourceItemIds: selection.uniqueIds,
-      locale: CONTENT_CREATION_LOCALE,
       actor: { type: "admin", adminId: context.identity.id },
       requestId: input.requestId,
       budgetMs: CONTENT_CREATION_BATCH_BUDGET_MS,
@@ -714,7 +708,6 @@ export async function applyContentCreationBatchAction(input: {
 
     const data = await applyContentCreationBatch(prisma, {
       novelSourceItemIds: selection.uniqueIds,
-      locale: CONTENT_CREATION_LOCALE,
       actor: { type: "admin", adminId: context.identity.id },
       requestId: input.requestId,
       budgetMs: CONTENT_CREATION_BATCH_BUDGET_MS,

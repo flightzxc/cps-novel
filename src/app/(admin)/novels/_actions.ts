@@ -16,7 +16,6 @@ import {
   takedownNovel,
   withdrawNovel,
   type ApplyPublishTransitionResult,
-  type RightsTransitionKind,
   type RightsTransitionResult,
 } from "@/server/publish-gate";
 
@@ -27,19 +26,20 @@ import { readPrimaryArticlesForNovels } from "./_lib/read-primary-article";
 import { validateReason } from "./_lib/reason-guard";
 
 /**
- * Re-exported, not re-declared: `tests/ui/admin-secret-boundary.test.tsx`
- * forbids any `"use client"` file from naming an `@/server/**` module, even
- * in a type position (a regex over the literal import source, deliberately
- * blind to `import type` — see that test's own comment on the check). This
- * file is `"use server"`, not client-reachable itself, so it is the correct
- * place to be the *only* module in this route that names
- * `@/server/publish-gate`; every client component and shared `_lib` helper
- * that needs one of these shapes imports it from here instead — the exact
- * discipline `../../catalog-sync/_lib/outcome-copy.ts` already documents for
- * the same reason ("keeps the boundary obviously clean rather than merely
- * safe-in-practice").
+ * `ApplyPublishTransitionResult`/`RightsTransitionKind`/`RightsTransitionResult`
+ * used to be re-exported from here via a bare `export type { … };` list, so
+ * every client component and shared `_lib` helper could name these
+ * `@/server/publish-gate` shapes without a `"use client"` file ever writing
+ * `from "@/server/..."` itself (`tests/ui/admin-secret-boundary.test.tsx`
+ * forbids that, type-only imports included — see that test's own comment).
+ * That re-export-list shape is what breaks a `"use server"` file: see
+ * `./_types/publish-gate.ts`'s header for the mechanism and the build
+ * evidence. Consumers now import those three from `./_types/publish-gate`
+ * instead — a plain, directive-less module, so the boundary discipline
+ * above still holds, just through two chokepoints (this file for the
+ * runtime actions, `./_types/publish-gate.ts` for the re-exported types)
+ * instead of one.
  */
-export type { ApplyPublishTransitionResult, RightsTransitionKind, RightsTransitionResult };
 /** `PublishLifecycleError.code`'s six-member union, derived once here — see `./_lib/publish-outcome-copy.ts` for the exhaustive Chinese copy. */
 export type PublishLifecycleErrorCode = InstanceType<typeof PublishLifecycleError>["code"];
 

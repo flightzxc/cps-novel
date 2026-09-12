@@ -103,7 +103,10 @@ const frozenChecks: Record<string, readonly string[]> = {
   article_template_applicable_article_type_check: ["novel_article", "blog_article", "listicle", "guide", "any"],
   article_status_check: ["draft", "published", "unpublished", "takedown"],
   home_carousel_auto_batch_status_check: ["pending", "processing", "completed", "failed"],
-  home_carousel_serving_source_check: ["manual", "automatic"],
+  // 20260912100000_carousel_serving_source_check_fix: the original
+  // ["manual", "automatic"] set was a schema-contract drift nothing ever
+  // wrote (see database-statuses.ts's CAROUSEL_SOURCES doc comment).
+  home_carousel_serving_source_check: ["manual", "new_novel", "recency"],
 };
 
 describe.skipIf(!enabled).sequential("P1-13 PostgreSQL acceptance gaps", () => {

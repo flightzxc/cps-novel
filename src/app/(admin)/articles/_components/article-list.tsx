@@ -299,20 +299,54 @@ export function ArticleList({
     }
     setWithdrawReasonError(null);
     setWithdrawBusy(true);
-    const result = await withdrawArticleAction({
-      requestId: crypto.randomUUID(),
-      novelId: withdrawTarget.novelId,
-      reason: validation.reason,
-    });
-    setWithdrawBusy(false);
-    setWithdrawTarget(null);
-    setWithdrawReason("");
-    if (!result.ok) {
-      setMessage(`下线失败：${describeArticleActionErrorCode(result.code)}`);
-      return;
+    /**
+     * Fix (Owner-approved 窄范围修复 lane, 2026-09-11): `await
+     * withdrawArticleAction(...)` used to sit outside any try/catch, while
+     * `onConfirm` below fires this function as `void confirmWithdraw()` —
+     * so a *rejected* promise (e.g. a stale Next.js build throwing "Failed
+     * to find Server Action" after a deploy shipped a new bundle, observed
+     * live in an Owner withdraw attempt) skipped every line after the
+     * `await`, including `setWithdrawBusy(false)`. The confirm dialog then
+     * stayed permanently "处理中" — `pending={withdrawBusy}` never clears —
+     * with no error shown and no way to retry short of a full page reload.
+     * `finally` now always resets busy regardless of how the call settles;
+     * `catch` only decides what message to show. The dialog is deliberately
+     * left open on this path (unlike the settled-call branches below, which
+     * always close it) so the operator can just press "下线" again once
+     * they've refreshed, rather than losing the reason they typed.
+     */
+    try {
+      const result = await withdrawArticleAction({
+        requestId: crypto.randomUUID(),
+        novelId: withdrawTarget.novelId,
+        reason: validation.reason,
+      });
+      setWithdrawTarget(null);
+      setWithdrawReason("");
+      if (!result.ok) {
+        setMessage(`下线失败：${describeArticleActionErrorCode(result.code)}`);
+        return;
+      }
+      setMessage(`已下线，受影响文章数：${result.data.affectedArticleIds.length}`);
+      router.refresh();
+    } catch (error) {
+      // `tests/ui/admin-secret-boundary.test.tsx`'s "never reads a
+      // server-authored message off an error" guard bans a literal
+      // `error.message` source occurrence anywhere under this directory
+      // (the admin UI must never echo raw server/runtime text -- error copy
+      // is frontend-owned). `String(error)` picks the same signal (a native
+      // `Error`'s `toString()` is `"Error: " + message`) without reading the
+      // `.message` property by name, and this branch only ever selects
+      // between two already-curated Chinese strings below -- it never
+      // surfaces the raw text itself.
+      setMessage(
+        String(error).includes("Failed to find Server Action")
+          ? "撤回请求未完成（页面版本已过期），请刷新页面后重试"
+          : "撤回请求未完成（网络或页面版本已过期），请刷新页面后重试",
+      );
+    } finally {
+      setWithdrawBusy(false);
     }
-    setMessage(`已下线，受影响文章数：${result.data.affectedArticleIds.length}`);
-    router.refresh();
   }
 
   /**
@@ -549,8 +583,35 @@ export function ArticleList({
                     EXCLUDE (一对一绑定，删除即永久失去公开页), pinned by
                     `tests/ui/articles-admin.test.tsx`'s "列表中不存在删除
                     按钮" assertion.
+
+                    2026-09-12 Owner fix (港registry: 小说业务偏离): CPS's own
+                    reference (`articles-client.tsx` line 517, commit 3a76877)
+                    gates 发布 on exactly `status === "draft"` — CPS has no
+                    `unpublished` status at all (`withdraw`/`offline` there
+                    has no distinct re-publish path from the list). This repo
+                    does have one (`ARTICLE_STATUSES` in
+                    `@/domain/database-statuses`: draft/published/unpublished/
+                    takedown, C-21's own withdraw lane) and an `unpublished`
+                    row was left with no way back to 发布 from this list —
+                    only from the novel detail page's
+                    `publish-lifecycle-panel.tsx`, whose `showPublish =
+                    article.status !== "published" && novelStatus !==
+                    "takedown"` already treats `unpublished` as publishable.
+                    Owner confirmed (2026-09-12) this list should match that:
+                    `unpublished` shows 发布 same as `draft`. No `takedown`
+                    branch is added here — `applyNovelRightsTransition`
+                    (`src/server/publish-gate/service.ts`) cascades a
+                    novel-level takedown to *every* Article regardless of its
+                    current status, so a row can never be
+                    `status === "unpublished"` while its novel is
+                    `"takedown"`; the two conditions are mutually exclusive
+                    by construction, not by a check this component has to
+                    make (row.novel carries no `status` field to check
+                    against here in the first place — a `takedown` Article
+                    itself, cascaded the same way, still correctly renders no
+                    发布 button via the `status` check below).
                   */}
-                  {row.status === "draft" && (
+                  {(row.status === "draft" || row.status === "unpublished") && (
                     <button
                       disabled={!canWrite}
                       className={buttonClassName("secondary", "px-2 py-1 text-xs")}

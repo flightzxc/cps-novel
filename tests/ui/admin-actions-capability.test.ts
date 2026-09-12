@@ -54,7 +54,16 @@ const guards = vi.hoisted(() => ({
   requireFreshAdminServiceMutation: vi.fn(),
 }));
 
-const cache = vi.hoisted(() => ({ revalidatePath: vi.fn() }));
+// L10N P5: `unstable_cache` added so the mock still satisfies
+// `src/lib/locale/active-locales.ts`'s module-top-level `export const
+// getActiveLocales = unstable_cache(...)` call — reached transitively via
+// `@/server/home-carousel`'s carousel actions/service import chain (this
+// file's carousel block), which now imports `queryActiveLocales` from that
+// same module. A plain pass-through is sufficient here: none of this
+// file's tests exercise the *read* side (`getActiveLocales`/carousel admin
+// page), only the write-action capability wiring, so the wrapped
+// function's caching behavior is never observed.
+const cache = vi.hoisted(() => ({ revalidatePath: vi.fn(), unstable_cache: (fn: (...args: never[]) => unknown) => fn }));
 
 vi.mock("next/headers", () => ({
   headers: vi.fn(async () => ({
@@ -104,6 +113,12 @@ function granted() {
 const TEMPLATE_FIXTURE = {
   templateKey: "tpl-1",
   templateName: "模板 1",
+  // L10N P3: `ArticleTemplateWrite.locale` is now a required `string`
+  // (contract.ts) — this fixture is only used to reach
+  // `requireFreshAdminServiceMutation` (which the beforeEach hook rejects
+  // before any DB access), so the exact value doesn't matter, but it must be
+  // present for the object to satisfy the type.
+  locale: "en",
   status: "active" as const,
   titleTemplate: "{novel_title}",
   contentTemplate: [{ type: "paragraph", content: "{novel_title}" }],

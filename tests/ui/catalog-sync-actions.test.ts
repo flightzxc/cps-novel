@@ -192,7 +192,7 @@ describe("dryRunContentCreationAction · 鉴权与参数", () => {
     expect(deps).toMatchObject({ identities: "identities-stub", sessions: "sessions-stub" });
   });
 
-  it("固定 mode: dry_run 与 locale: en，actor 取自会话身份，requestId 原样透传", async () => {
+  it("固定 mode: dry_run，不再传 locale（L10N P2：locale 由服务端从来源条目派生），actor 取自会话身份，requestId 原样透传", async () => {
     guards.requireAdminActionAccess.mockResolvedValue({ context: CONTEXT });
     service.createContentFromSourceItem.mockResolvedValue({ outcome: "dry_run", plan: {} });
 
@@ -203,11 +203,11 @@ describe("dryRunContentCreationAction · 鉴权与参数", () => {
     expect(db).toEqual({ __brand: "prisma-stub" });
     expect(input).toEqual({
       novelSourceItemId: "item-42",
-      locale: "en",
       mode: "dry_run",
       actor: { type: "admin", adminId: "admin-1" },
       requestId: "req-42",
     });
+    expect(input).not.toHaveProperty("locale");
   });
 
   it("成功时原样透传 service 的返回值，套一层 { ok: true, data }", async () => {
@@ -280,7 +280,7 @@ describe("applyContentCreationAction · 鉴权与参数", () => {
     );
   });
 
-  it("固定 mode: apply 与 locale: en，actor 取自 requireFreshAdminServiceMutation 返回的新鲜身份", async () => {
+  it("固定 mode: apply，不再传 locale（L10N P2），actor 取自 requireFreshAdminServiceMutation 返回的新鲜身份", async () => {
     guards.requireAdminActionAccess.mockResolvedValue(granted());
     guards.requireFreshAdminServiceMutation.mockResolvedValue({
       identity: { ...IDENTITY, id: "fresh-admin-2" },
@@ -292,11 +292,11 @@ describe("applyContentCreationAction · 鉴权与参数", () => {
     const [, input] = service.createContentFromSourceItem.mock.calls[0];
     expect(input).toEqual({
       novelSourceItemId: "item-9",
-      locale: "en",
       mode: "apply",
       actor: { type: "admin", adminId: "fresh-admin-2" },
       requestId: "req-9",
     });
+    expect(input).not.toHaveProperty("locale");
   });
 
   it("outcome === created 时才 revalidatePath('/catalog-sync') 与 '/novels'；其它 outcome 不触发", async () => {
@@ -742,7 +742,7 @@ describe("dryRunContentCreationBatchAction · 鉴权与参数", () => {
     expect(guards.requireFreshAdminServiceMutation).not.toHaveBeenCalled();
   });
 
-  it("固定 locale: en 与服务端预算，actor 取自会话身份，id 去重后原样透传", async () => {
+  it("不再传 locale（L10N P2）、固定服务端预算，actor 取自会话身份，id 去重后原样透传", async () => {
     guards.requireAdminActionAccess.mockResolvedValue(granted());
     batchService.dryRunContentCreationBatch.mockResolvedValue(BATCH_DRY_RUN_DATA);
 
@@ -754,11 +754,11 @@ describe("dryRunContentCreationBatchAction · 鉴权与参数", () => {
     const [, input] = batchService.dryRunContentCreationBatch.mock.calls[0];
     expect(input).toEqual({
       novelSourceItemIds: ["item-a", "item-b"],
-      locale: "en",
       actor: { type: "admin", adminId: "admin-1" },
       requestId: "req-b2",
       budgetMs: 25_000,
     });
+    expect(input).not.toHaveProperty("locale");
   });
 
   it("空选择在到达服务层之前就被拒绝成 invalid_input", async () => {
@@ -829,7 +829,7 @@ describe("applyContentCreationBatchAction · 鉴权与参数", () => {
     );
   });
 
-  it("固定 locale: en 与服务端预算，actor 取自 requireFreshAdminServiceMutation 返回的新鲜身份", async () => {
+  it("不再传 locale（L10N P2）、固定服务端预算，actor 取自 requireFreshAdminServiceMutation 返回的新鲜身份", async () => {
     guards.requireAdminActionAccess.mockResolvedValue(granted());
     guards.requireFreshAdminServiceMutation.mockResolvedValue({
       identity: { ...IDENTITY, id: "fresh-admin-7" },
@@ -844,11 +844,11 @@ describe("applyContentCreationBatchAction · 鉴权与参数", () => {
     const [, input] = batchService.applyContentCreationBatch.mock.calls[0];
     expect(input).toEqual({
       novelSourceItemIds: ["item-a", "item-b"],
-      locale: "en",
       actor: { type: "admin", adminId: "fresh-admin-7" },
       requestId: "req-c2",
       budgetMs: 25_000,
     });
+    expect(input).not.toHaveProperty("locale");
   });
 
   it("counts.created > 0 时才 revalidatePath('/catalog-sync') 与 '/novels'；零创建不触发", async () => {

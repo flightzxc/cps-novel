@@ -8,20 +8,15 @@ import {
 
 import { FakePublishGateDb } from "./fake-db";
 
-/**
- * `applyPublishTransition` composes the real `evaluatePublishGate`, which
- * defaults to the real (currently empty-whitelist, fail-closed)
- * `isPublishableLocale`. Mocking the locale module here — rather than adding
- * a test-only override parameter to production code — is what lets these
- * tests exercise the "gate passes" path without weakening
- * `evaluator.ts`'s production default. `vi.mock` calls are hoisted above all
- * imports by vitest, so this applies before `evaluator.ts` (transitively
- * imported by `service.ts` above) resolves it.
- */
-vi.mock("@/lib/locale/locale-canonical", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/lib/locale/locale-canonical")>();
-  return { ...actual, isPublishableLocale: () => true };
-});
+// L10N P4: the `@/lib/locale/locale-canonical` mock that used to live here
+// (overriding `isPublishableLocale: () => true`, so `applyPublishTransition`
+// could exercise `evaluatePublishGate`'s "gate passes" path against the
+// then-real, empty-whitelist `isPublishableLocale`) is dead — `evaluator.ts`
+// dropped its own `checkLocale`/`isRegisteredSiteLocale` locale check
+// entirely in L10N P2 (发布门禁语种条件删除, Owner明示例外), before
+// `isPublishableLocale` itself was deleted here in P4. There is no locale
+// gate left in `evaluatePublishGate` for this mock to have ever needed to
+// satisfy since P2.
 
 const dispatchFirstPublicPublication = vi.fn().mockResolvedValue({ errors: [] });
 vi.mock("@/server/publication/dispatcher", () => ({

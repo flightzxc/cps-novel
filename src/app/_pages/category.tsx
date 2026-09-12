@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 
 import { JsonLd } from "@/app/_components/json-ld";
 import { prisma } from "@/app/_lib/public-deps";
-import { loadChrome } from "@/app/_lib/public-load";
+import { loadActiveLocales, loadChrome } from "@/app/_lib/public-load";
 import { toNextMetadata } from "@/app/_lib/seo-metadata";
 import { CollectionScreen } from "@/features/public-ui/collection/CollectionScreen";
 import { Pagination } from "@/features/public-ui/collection/Pagination";
@@ -36,9 +36,10 @@ function pageNumber(value: string | string[] | undefined): number | null {
 async function load(locale: SiteLocale, slug: string, rawPage: string | string[] | undefined) {
   const page = pageNumber(rawPage);
   if (!page) return null;
+  const activeLocales = await loadActiveLocales();
   const [category, chrome] = await Promise.all([
     getPublicCategoryPage(prisma, locale, slug, page),
-    loadChrome(locale),
+    loadChrome(locale, undefined, undefined, activeLocales),
   ]);
   return category ? { category, ...chrome } : null;
 }

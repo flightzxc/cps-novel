@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 
 import { JsonLd } from "@/app/_components/json-ld";
 import {
+  loadActiveLocales,
   loadArticleAccess,
   loadChrome,
   loadHreflangSiblings,
@@ -17,7 +18,7 @@ import { buildFaqJsonLd } from "@/lib/seo/faq-extract";
 import { buildNovelHreflangAlternates, type NovelHreflangSibling } from "@/lib/seo/novel-hreflang";
 import { generateSeoMeta } from "@/lib/seo/seo-meta-generator";
 import { canonicalUrl } from "@/lib/seo/seo-utils";
-import { buildArticlePath, buildArticleRoutePath, localePrefix } from "@/lib/slug/article-path";
+import { buildArticlePath, decodeSlugParam, localePrefix } from "@/lib/slug/article-path";
 
 /**
  * Novel detail page shared body (WO-1 §6.1): extracted verbatim out of
@@ -64,7 +65,12 @@ export async function buildNovelMetadata(
   locale: SiteLocale,
   params: Promise<NovelRouteParams>,
 ): Promise<Metadata> {
-  const { slugParam } = await params;
+  // Decode once, right after destructuring `params` — CPS parity
+  // (`normalizeRouteSlug`, see `decodeSlugParam`'s own doc comment). Next.js
+  // does not decode a `force-dynamic` App Router segment on its own, so
+  // `slugParam` arrives here still percent-encoded for any non-ASCII slug.
+  const { slugParam: rawSlugParam } = await params;
+  const slugParam = decodeSlugParam(rawSlugParam);
   const access = await loadArticleAccess(slugParam, locale);
   if (access.kind === "not_found") {
     return noIndexMetadata(getPublicT(locale)("meta.notFound"));
@@ -76,7 +82,16 @@ export async function buildNovelMetadata(
   const [{ settings }, novel] = await Promise.all([loadChrome(locale), loadNovelDetail(access.articleId)]);
   if (!novel) return noIndexMetadata(getPublicT(locale)("meta.notFound"));
 
-  const routePath = buildArticleRoutePath({ slug: access.slugPart, shortId: access.shortId });
+  // Locale-prefixed (`buildArticlePath`), not `buildArticleRoutePath` — this
+  // becomes both the `<link rel="canonical">` path (via `canonicalPath`
+  // below) and, through `buildHreflangForArticle`'s `canonical` argument,
+  // the page's own hreflang self-reference entry. The route-only builder
+  // silently dropped the `/${locale}` prefix for every non-`en` locale,
+  // pointing both at a bare `/novel/...` path that 404s on its own route
+  // tree (`en`-only, `src/app/novel/[slugParam]/page.tsx`) — invisible until
+  // this round's first non-`en` published Article (`en`'s own prefix is
+  // always empty, so the two builders were byte-identical for it).
+  const routePath = buildArticlePath({ locale, slug: access.slugPart, shortId: access.shortId });
   const seo = generateSeoMeta({
     entity: "novel",
     locale,
@@ -101,10 +116,12 @@ export async function NovelBody({
   locale: SiteLocale;
   params: Promise<NovelRouteParams>;
 }) {
-  const { slugParam } = await params;
+  const { slugParam: rawSlugParam } = await params;
+  const slugParam = decodeSlugParam(rawSlugParam);
+  const activeLocales = await loadActiveLocales();
   const [access, { chrome, settings }] = await Promise.all([
     loadArticleAccess(slugParam, locale),
-    loadChrome(locale),
+    loadChrome(locale, undefined, undefined, activeLocales),
   ]);
 
   if (access.kind === "not_found" || access.kind === "takedown") notFound();
@@ -123,7 +140,9 @@ export async function NovelBody({
   const novel = await loadNovelDetail(access.articleId);
   if (!novel) notFound();
 
-  const routePath = buildArticleRoutePath({ slug: access.slugPart, shortId: access.shortId });
+  // See `buildNovelMetadata` above — locale-prefixed path, not the
+  // route-only builder.
+  const routePath = buildArticlePath({ locale, slug: access.slugPart, shortId: access.shortId });
   const seo = generateSeoMeta({
     entity: "novel",
     locale,

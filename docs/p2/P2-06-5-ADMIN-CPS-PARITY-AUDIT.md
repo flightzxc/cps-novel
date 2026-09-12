@@ -167,6 +167,9 @@ UNJUSTIFIED_DIVERGENCE=5
 白名单会被后来者当先例扩张，故改为**按符号禁止**——封死 `locale-canonical.ts` 站点发布域的全部
 5 个导出（`SITE_LOCALES` / `SiteLocale` / `resolveSiteLocale` / `isPublishableLocale` /
 `listPublishableLocales`），例外名单归零，且覆盖面比原实现更宽（原来只拦 `SITE_LOCALES` 一个符号）。
+（P4 删除白名单层后现状：站点发布域只剩 3 个导出——`SITE_LOCALES` / `SiteLocale` /
+`resolveSiteLocale`；`isPublishableLocale`/`listPublishableLocales` 已随白名单层整体撤销，
+不再是需要按符号禁止的对象。）
 
 Owner 裁决后新增的长期决策（CanonicalTag 作为公共 taxonomy 的多语策略、SourceLabel 映射与
 CanonicalTagTranslation 严格分层）已记入交接单 §0。

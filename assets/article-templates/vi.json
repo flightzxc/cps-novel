@@ -1,0 +1,43 @@
+{
+  "templateKey": "system-default-vi-v1",
+  "templateName": "系统默认模板 · 越南文",
+  "locale": "vi",
+  "version": 1,
+  "schemaVersion": 1,
+  "status": "active",
+  "applicableArticleType": "novel_article",
+  "bodyTemplate": "<article><h1>{novel_title}</h1>{if cover_url}<p><img src=\"{cover_url}\" alt=\"Ảnh bìa\"></p>{endif}<p>{novel_description}</p>{if total_chapter_count}<p>Tổng số chương: {total_chapter_count}</p>{endif}{if preview_chapter_count}<p>Số chương xem trước miễn phí: {preview_chapter_count}</p>{endif}{if promo_redirect_url}<p><a href=\"{promo_redirect_url}\">Bắt đầu đọc</a></p>{endif}</article>",
+  "contentTemplate": [
+    {
+      "type": "heading",
+      "content": "{novel_title}"
+    },
+    {
+      "type": "image",
+      "content": ""
+    },
+    {
+      "type": "paragraph",
+      "content": "{novel_description}"
+    },
+    {
+      "type": "paragraph",
+      "content": "{if total_chapter_count}Tổng số chương: {total_chapter_count}{endif}"
+    },
+    {
+      "type": "paragraph",
+      "content": "{if preview_chapter_count}Số chương xem trước miễn phí: {preview_chapter_count}{endif}"
+    },
+    {
+      "type": "cta",
+      "content": "Bắt đầu đọc"
+    }
+  ],
+  "seoTemplate": {
+    "title": "{novel_title}",
+    "metaTitle": "{novel_title}",
+    "metaDescription": "{novel_description}"
+  },
+  "slugTemplate": "",
+  "metaKeywordsTemplate": ""
+}

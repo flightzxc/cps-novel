@@ -14,7 +14,7 @@ import {
   summarizeSitemapError,
 } from "@/lib/seo/sitemap-refresh-state";
 import { getSiteUrl, SiteUrlConfigurationError } from "@/lib/seo/site-url";
-import { listPublishableLocales } from "@/lib/locale/locale-canonical";
+import { SITE_LOCALES } from "@/lib/locale/locale-canonical";
 import { readStaticSitemapFile } from "@/lib/seo/static-sitemap-cache";
 import { generateStaticSitemaps } from "@/lib/seo/static-sitemap-generator";
 import type { BuildSitemapFamily } from "@/lib/seo/sitemap";
@@ -118,22 +118,27 @@ describe("static sitemap cache and routes", () => {
 });
 
 describe("static sitemap generation and refresh state", () => {
-  it("generates through the refresh chain once D-7 has admitted en", async () => {
+  it("L10N P4: generates through the refresh chain over the default SITE_LOCALES registry (the D-7 publish whitelist this default used to be is deleted)", async () => {
     process.env.SITE_URL = "https://fixture.example";
     const root = await temporaryRoot();
     const buildFamily = vi.fn(builder());
 
-    expect(listPublishableLocales()).toEqual(["en"]);
+    expect(SITE_LOCALES.length).toBe(15);
     const result = await refreshStaticSitemap({
       buildFamily,
       rootDir: root,
       runId: "d7-en",
       initiatedBy: "test",
-      reason: "en admitted to production locale whitelist",
+      reason: "default SITE_LOCALES registry",
     });
 
     expect(result.status).toBe("success");
     expect(buildFamily).toHaveBeenCalled();
+    // No routeLocales override was passed — generateStaticSitemaps' default
+    // is now SITE_LOCALES (15 entries), not the deleted 1-entry whitelist.
+    const perLangCallSet = new Set(buildFamily.mock.calls.map(([spec]) => spec.locale));
+    expect(perLangCallSet.size).toBe(15);
+    expect(perLangCallSet.has("ru")).toBe(true);
     expect(result.state.current.kind).not.toBe("missing");
     await expect(fs.lstat(path.join(root, "sitemap-generation.lock")))
       .rejects.toMatchObject({ code: "ENOENT" });

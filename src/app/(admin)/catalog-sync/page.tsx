@@ -4,7 +4,7 @@ import { isNovelCatalogSyncEnabled } from "@/lib/flags";
 import { resolveMoboreaderCatalogSafetyMaxPages } from "@/lib/tasks/moboreader";
 import { PROMO_LINK_CLAIM_LIMITS } from "@/lib/tasks/promo-link-claim-limits";
 import { CONTENT_CREATION_BATCH_MAX_SELECTION } from "@/server/content-creation/batch";
-import { listActiveArticleTemplateOptions } from "@/server/article-templates";
+import { listActiveArticleTemplateOptionsForLocales } from "@/server/article-templates";
 import { prisma } from "../../api/admin/_lib/deps";
 
 import { AdminShell } from "../_components/admin-shell";
@@ -24,6 +24,7 @@ type SearchParams = {
   page?: string;
   status?: string;
   search?: string;
+  sourceLocale?: string;
 };
 
 /**
@@ -55,11 +56,44 @@ export default async function CatalogSyncPage({
   const promoClaimBlockedReason = capabilityBlockReason("promo:claim", promoClaim);
 
   const page = granted
-    ? await readSourceItemsPage({ page: params.page, status: params.status, search: params.search })
+    ? await readSourceItemsPage({
+        page: params.page,
+        status: params.status,
+        search: params.search,
+        sourceLocale: params.sourceLocale,
+      })
     : null;
   const channels = granted ? await readActiveChannelScanOptions() : [];
   const claimChannelApps = granted ? await readClaimEligibleChannelAppOptions() : [];
-  const templateOptions = granted ? await listActiveArticleTemplateOptions(prisma, "en") : [];
+  /**
+   * L10N P2 (matrix #13's dialog-scoped part, P2 段): was a single
+   * hardcoded `listActiveArticleTemplateOptions(prisma, "en")` call — every
+   * row's create-content dialog offered the same `en`-only template list
+   * regardless of that row's own derived locale. Content creation no longer
+   * writes a hardcoded `"en"` locale at all (`src/server/content-creation/
+   * service.ts` derives it from `NovelSourceItem.sourceLocale`), so the
+   * template picker must not stay pinned to one locale either.
+   *
+   * L10N P5 (P2 复核 C5-a): the P2 round fixed the *locale* but did it with
+   * N separate `listActiveArticleTemplateOptions(prisma, locale)` queries
+   * (one per distinct `sourceLocale` on the page) flattened client-side —
+   * collapsed here into the single `locale: { in: sourceLocalesOnPage }`
+   * query `listActiveArticleTemplateOptionsForLocales` runs
+   * (`article-templates/service.ts`, own doc comment on why its `distinct`
+   * is `["templateKey", "locale"]` and not just `["templateKey"]`). Same
+   * flat array shape `CatalogSyncClient`/`CreateContentDialog`/
+   * `BatchCreateContentDialog` already accept — no prop-shape change
+   * ripples through those components; `CreateContentDialog` (see its own
+   * doc comment) is what actually narrows this down to the one locale a
+   * given row's dialog needs, this fetch only has to make sure every
+   * locale any row on the page could need is present at all.
+   */
+  const sourceLocalesOnPage = granted
+    ? Array.from(new Set(page?.items.map((item) => item.sourceLocale).filter((locale): locale is string => locale !== null) ?? []))
+    : [];
+  const templateOptions = granted && sourceLocalesOnPage.length > 0
+    ? await listActiveArticleTemplateOptionsForLocales(prisma, sourceLocalesOnPage)
+    : [];
 
   return (
     <AdminShell
@@ -80,7 +114,9 @@ export default async function CatalogSyncPage({
               contentPublishBlockedReason={contentPublishBlockedReason}
               safetyMaxPages={resolveMoboreaderCatalogSafetyMaxPages()}
             />
-            <SourceItemFilters values={{ search: params.search, status: params.status }} />
+            <SourceItemFilters
+              values={{ search: params.search, status: params.status, sourceLocale: params.sourceLocale }}
+            />
             <div className="space-y-2">
               <AdminTimeZoneNote />
               <CatalogSyncClient
@@ -97,7 +133,7 @@ export default async function CatalogSyncPage({
             </div>
             <ContentPagination
               basePath="/catalog-sync"
-              params={{ status: params.status, search: params.search }}
+              params={{ status: params.status, search: params.search, sourceLocale: params.sourceLocale }}
               page={page.page}
               totalPages={page.totalPages}
               total={page.total}

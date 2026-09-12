@@ -2,7 +2,7 @@ import "./setup-cleanup";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import type { RebindCandidate, RebindView } from "@/app/(admin)/articles/_actions";
+import type { RebindCandidate, RebindView } from "@/app/(admin)/articles/_types/rebind";
 
 /**
  * C-30A (施工工单_C30_换小说_移植CPS换租客_2026-09-08.md §4A.7/§4A.8). Same

@@ -241,6 +241,7 @@ describe("上限 200 的前端提示", () => {
       const submit = screen.getByTestId("batch-publish-submit") as HTMLButtonElement;
       expect(submit.disabled).toBe(true);
     },
-    20000,
+    // CI 2 vCPU 实测超 20s，本机 6.5s
+    60000,
   );
 });

@@ -42,16 +42,20 @@ describe("src/proxy.ts — locale request header forwarding", () => {
     }
   });
 
-  it("falls back to en for a locale-shaped prefix that is registered but not (yet) open", () => {
+  it("L10N P4: forwards the path's own registered locale, not a fallback to en (the D-7 publish whitelist this used to fall back through was deleted)", () => {
     vi.stubEnv("SITE_URL", ORIGIN);
     vi.stubEnv("ADMIN_CANONICAL_ORIGIN", `https://${ADMIN_HOST}`);
     vi.stubEnv("NODE_ENV", "production");
 
-    for (const path of ["/ja/browse", "/fr/novel/x-pabc123", "/ru"]) {
+    for (const [path, expected] of [
+      ["/ja/browse", "ja"],
+      ["/fr/novel/x-pabc123", "fr"],
+      ["/ru", "ru"],
+    ] as const) {
       const request = new NextRequest(`${ORIGIN}${path}`, { headers: { host: SITE_HOST } });
       const response = proxy(request);
       expect(response.status, path).toBe(200);
-      expect(forwardedLocale(response), path).toBe("en");
+      expect(forwardedLocale(response), path).toBe(expected);
     }
   });
 
@@ -71,14 +75,16 @@ describe("src/proxy.ts — locale request header forwarding", () => {
     vi.stubEnv("ADMIN_CANONICAL_ORIGIN", `https://${ADMIN_HOST}`);
     vi.stubEnv("NODE_ENV", "production");
 
-    // "ja" is registered (`SITE_LOCALES`) but not (yet) open
-    // (`PUBLISHABLE_LOCALES` is still `{"en"}`) — an inbound request that
-    // already carries this header (a client, a misbehaving proxy hop, or an
-    // attacker probing for locale smuggling) must not have it trusted:
-    // `new Headers(request.headers)` copies the client's value in first,
-    // and only the subsequent `.set(SITE_LOCALE_REQUEST_HEADER, ...)`
-    // (proxy.ts, right below the WO-2 §8.2 comment) makes the proxy's own
-    // derivation win instead.
+    // An inbound request that already carries this header (a client, a
+    // misbehaving proxy hop, or an attacker probing for locale smuggling)
+    // must not have it trusted, regardless of what the header claims:
+    // `new Headers(request.headers)` copies the client's value in first, and
+    // only the subsequent `.set(SITE_LOCALE_REQUEST_HEADER, ...)` (proxy.ts,
+    // right below the WO-2 §8.2 comment) makes the proxy's own derivation —
+    // from the path segment, never the header — win instead. The request
+    // path here is bare `/` (no locale-prefixed first segment and no
+    // Accept-Language header to negotiate against), so the derivation lands
+    // on `en` regardless of the spoofed "ja" header value.
     const request = new NextRequest(`${ORIGIN}/`, {
       headers: { host: SITE_HOST, [SITE_LOCALE_REQUEST_HEADER]: "ja" },
     });

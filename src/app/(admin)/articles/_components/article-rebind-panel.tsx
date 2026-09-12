@@ -10,10 +10,8 @@ import {
   rebindArticleNovelAction,
   rollbackArticleNovelAction,
   searchRebindCandidatesAction,
-  type RebindCandidate,
-  type RebindGuardFinding,
-  type RebindView,
 } from "../_actions";
+import type { RebindCandidate, RebindGuardFinding, RebindView } from "../_types/rebind";
 
 /**
  * C-30A (施工工单_C30_换小说_移植CPS换租客_2026-09-08.md §4A.7). Structure

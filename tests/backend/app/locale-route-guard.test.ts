@@ -3,16 +3,22 @@ import { describe, expect, it, vi } from "vitest";
 import { SITE_LOCALES } from "@/lib/locale/locale-canonical";
 import { getRoutableLocale } from "@/app/[locale]/_guard";
 
+/**
+ * L10N P4 (矩阵 #9): "registered即路由" — the D-7 publish whitelist
+ * (`PUBLISHABLE_LOCALES`/`isPublishableLocale`) that used to reject every
+ * non-`en` `SITE_LOCALES` member here was deleted. `en` alone is still
+ * rejected — that is the SEPARATE, unchanged D-8 structural rule (default
+ * locale stays at the bare path).
+ */
 describe("getRoutableLocale (P0-S7a locale route infra)", () => {
-  it("rejects every locale prefix: en is served bare and other locales have not cleared D-7", () => {
+  it("resolves every registered non-en SITE_LOCALES member under a locale prefix", () => {
     for (const locale of SITE_LOCALES) {
-      expect(getRoutableLocale(locale), `${locale} should not resolve under a locale prefix`).toBeNull();
+      if (locale === "en") continue;
+      expect(getRoutableLocale(locale), `${locale} should resolve under a locale prefix`).toBe(locale);
     }
   });
 
-  it("rejects the default locale (en) despite D-7 admission — it is served bare", () => {
-    // U6 admitted en to the real whitelist. A prefixed `/en/...` request
-    // must still 404: the default-locale structural guard takes precedence.
+  it("rejects the default locale (en) — it is served bare (D-8, unchanged by P4)", () => {
     expect(getRoutableLocale("en")).toBeNull();
   });
 
@@ -24,7 +30,16 @@ describe("getRoutableLocale (P0-S7a locale route infra)", () => {
 });
 
 describe("[locale]/layout.tsx (P0-S7a locale route infra)", () => {
-  it("404s every request today via next/navigation's notFound()", async () => {
+  it("L10N P4: renders children for a registered, non-en locale — no longer 404s (the D-7 whitelist this used to enforce is deleted)", async () => {
+    const { default: LocalePublicLayout } = await import("@/app/[locale]/layout");
+    const result = await LocalePublicLayout({
+      children: "CHILDREN" as never,
+      params: Promise.resolve({ locale: "fr" }),
+    });
+    expect(result).toBe("CHILDREN");
+  });
+
+  it("still 404s via next/navigation's notFound() for en (D-8 default-locale exclusion, unchanged)", async () => {
     vi.resetModules();
     vi.doMock("next/navigation", () => ({
       notFound: () => {
@@ -36,7 +51,27 @@ describe("[locale]/layout.tsx (P0-S7a locale route infra)", () => {
     await expect(
       LocalePublicLayout({
         children: "CHILDREN" as never,
-        params: Promise.resolve({ locale: "fr" }),
+        params: Promise.resolve({ locale: "en" }),
+      }),
+    ).rejects.toThrow("NEXT_NOT_FOUND");
+
+    vi.doUnmock("next/navigation");
+    vi.resetModules();
+  });
+
+  it("still 404s via next/navigation's notFound() for an unregistered locale", async () => {
+    vi.resetModules();
+    vi.doMock("next/navigation", () => ({
+      notFound: () => {
+        throw new Error("NEXT_NOT_FOUND");
+      },
+    }));
+
+    const { default: LocalePublicLayout } = await import("@/app/[locale]/layout");
+    await expect(
+      LocalePublicLayout({
+        children: "CHILDREN" as never,
+        params: Promise.resolve({ locale: "xx" }),
       }),
     ).rejects.toThrow("NEXT_NOT_FOUND");
 

@@ -21,7 +21,7 @@ import type { PrismaClient, Prisma } from "@prisma/client";
 import type { ArticleType } from "@/domain/database-statuses";
 import { isArticleBlogEnabled } from "@/lib/flags";
 import { buildArticlePath, buildBlogPath } from "@/lib/slug/article-path";
-import { SITE_LOCALES, isPublishableLocale, type SiteLocale } from "@/lib/locale/locale-canonical";
+import { SITE_LOCALES, type SiteLocale } from "@/lib/locale/locale-canonical";
 import {
   isHiddenFromPublicView,
   isIndexNowEligible,
@@ -142,15 +142,14 @@ export async function loadIndexNowCandidateArticle(
  * compose additional IndexNow-specific conditions on top ... e.g. locale
  * allowlist").
  *
- * Gates on `isPublishableLocale` (the SEO-publish-surface whitelist), not
- * the broader `SITE_LOCALES` registry — deliberately the same choice
- * Stream D's sitemap generator is documented as making
- * (`P2-07-12-移植审计-2026-08-12/P2-11.md` §9: "本任务的 `isSupportedSiteLocale`
- * 等价物同样会撞上这个问题"). U6 admitted `en` under D-7; other locales
- * remain blocked. Passing this locale check still requires the publication
- * and promo checks below, and enqueue separately enforces both write flags.
- * The optional predicate lets tests isolate these conditions; production
- * callers use the real whitelist.
+ * L10N P4: gates on `isRegisteredSiteLocale` (`SITE_LOCALES` membership),
+ * matching CPS's own `isSupportedSiteLocale` gate on this exact boundary
+ * (`3a76877:src/lib/indexnow-outbox.ts:70-82`). The narrower D-7 publish
+ * whitelist (`PUBLISHABLE_LOCALES`/`isPublishableLocale`) this project used
+ * to gate on here was deleted this round — CPS never had a second, narrower
+ * gate on top of `isSupportedSiteLocale` at this boundary either. The
+ * optional predicate lets tests isolate these conditions; production
+ * callers use the real registry check.
  */
 /**
  * `env` (C-25) is the same override pattern as `isLocalePublishable`: threaded
@@ -177,7 +176,7 @@ export function isNovelIndexNowEligible(
   promoLink: PromoLinkReadinessState,
   options: IndexNowEligibilityOptions = {},
 ): boolean {
-  const localeGate = options.isLocalePublishable ?? isPublishableLocale;
+  const localeGate = options.isLocalePublishable ?? isRegisteredSiteLocale;
   if (!localeGate(article.locale)) return false;
   // C-25: IndexNow is a collectability boundary — `hidden` must never be
   // submitted, `seo_only` still is. This lives here (this module's own
@@ -230,7 +229,7 @@ export function isBlogIndexNowEligible(
   options: IndexNowEligibilityOptions = {},
 ): boolean {
   if (!isArticleBlogEnabled(options.env)) return false;
-  const localeGate = options.isLocalePublishable ?? isPublishableLocale;
+  const localeGate = options.isLocalePublishable ?? isRegisteredSiteLocale;
   if (!localeGate(article.locale)) return false;
   if (isHiddenFromPublicView(article, options.env)) return false;
   return article.status === "published";

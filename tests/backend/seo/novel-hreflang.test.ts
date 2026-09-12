@@ -1,23 +1,18 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { SITE_LOCALES } from "@/lib/locale/locale-canonical";
+
 /**
  * `novel-hreflang.ts`'s per-(novelId, locale) filtered hreflang layer — the
  * "本单最关键项" (P0-S7a's most critical deliverable) regression net.
  *
- * `listPublishableLocales()` is mocked to a fixed two-locale set for this
- * file only, so cross-locale visibility filtering is exercised independently
- * of the real D-7 whitelist, which admits only `en`. The real en query and
- * the simulated empty-whitelist short-circuit are covered separately in
- * `novel-hreflang-whitelist.test.ts`; this file covers the simulated
- * multi-locale path.
+ * L10N P4: the D-7 publish whitelist (`listPublishableLocales()`) this file
+ * used to mock to a fixed two-locale set is deleted — `loadNovelHreflangSiblings`
+ * now always queries `locale: { in: SITE_LOCALES }`, the full, real 15-entry
+ * static registry, no mock needed to exercise a "wider than en" locale set.
+ * `novel-hreflang-whitelist.test.ts` covers that `SITE_LOCALES` boundary
+ * specifically; this file covers the multi-locale visibility-filtering path.
  */
-vi.mock("@/lib/locale/locale-canonical", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/lib/locale/locale-canonical")>();
-  return {
-    ...actual,
-    listPublishableLocales: () => ["en", "fr"],
-  };
-});
 
 const {
   loadNovelHreflangSiblings,
@@ -51,13 +46,13 @@ afterEach(() => {
 });
 
 describe("loadNovelHreflangSiblings", () => {
-  it("queries by novelId, restricted to the publishable locale set", async () => {
+  it("queries by novelId, restricted to the full SITE_LOCALES registry (L10N P4: no narrower whitelist)", async () => {
     const fixtureDb = db([row()]);
     await loadNovelHreflangSiblings(fixtureDb as never, "novel-1");
 
     const query = fixtureDb.article.findMany.mock.calls[0]![0];
     expect(JSON.stringify(query.where)).toContain('"novelId":"novel-1"');
-    expect(JSON.stringify(query.where)).toContain('"locale":{"in":["en","fr"]}');
+    expect(JSON.stringify(query.where)).toContain(`"locale":{"in":${JSON.stringify([...SITE_LOCALES])}}`);
   });
 
   it("returns only rows that pass the authoritative visibility predicate, never status alone", async () => {

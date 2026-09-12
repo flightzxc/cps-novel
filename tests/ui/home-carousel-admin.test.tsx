@@ -9,6 +9,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
  * own branching (which buttons render, whether `window.confirm` gates the
  * delete, the position dropdown bound to `config.slotCount`) goes through
  * the real `CarouselManager`.
+ *
+ * L10N P5 (矩阵 #13): `CarouselManager` now takes a `locale` prop (the
+ * `page.tsx` `?locale=` selector's resolved value) instead of hardcoding
+ * `"en"` at every write-action call site. `renderManager` defaults it to
+ * `"en"` so every pre-existing test below keeps asserting the same
+ * literal it always did; a dedicated block further down renders with
+ * `locale="ru"` to prove the prop is actually threaded through, not just
+ * coincidentally equal to a hardcoded default.
  */
 
 const actions = vi.hoisted(() => ({
@@ -35,6 +43,7 @@ const CHANGE_LOG = [{ id: "1", action: "manual.create", actorType: "admin", acto
 function renderManager(overrides: Partial<Parameters<typeof CarouselManager>[0]> = {}) {
   return render(
     <CarouselManager
+      locale={overrides.locale ?? "en"}
       config={overrides.config ?? CONFIG}
       slots={overrides.slots ?? SLOTS}
       articles={overrides.articles ?? ARTICLES}
@@ -133,6 +142,48 @@ describe("CarouselManager · manual slot CRUD (N-5)", () => {
     const positionSelect = screen.getByLabelText("位置") as HTMLSelectElement;
     const options = [...positionSelect.options].map((option) => option.value);
     expect(options).toEqual(["1", "2", "3"]);
+  });
+});
+
+// L10N P5 (矩阵 #13): `locale` used to be hardcoded `"en"` at 4 call sites
+// in this component (slot add/toggle/delete, enqueue-compute) — the tests
+// above all render with the default `locale="en"` and so cannot by
+// themselves distinguish "correctly threaded from the `locale` prop" from
+// "still a hardcoded literal that happens to equal en". This block renders
+// with `locale="ru"` and asserts every one of those 4 call sites actually
+// received it.
+describe("CarouselManager · locale prop threads through every write action (L10N P5)", () => {
+  it("adding a manual slot sends the page's locale, not a hardcoded en", async () => {
+    renderManager({ locale: "ru" });
+    fireEvent.click(screen.getByText("添加人工位"));
+    await waitFor(() => expect(actions.saveManualCarouselSlotAction).toHaveBeenCalledWith(
+      expect.objectContaining({ locale: "ru" }),
+    ));
+  });
+
+  it("toggling a slot's enabled state sends the page's locale", async () => {
+    renderManager({ locale: "ru" });
+    fireEvent.click(screen.getByText("停用"));
+    await waitFor(() => expect(actions.saveManualCarouselSlotAction).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "slot-1", locale: "ru" }),
+    ));
+  });
+
+  it("deleting a slot sends the page's locale", async () => {
+    vi.stubGlobal("confirm", vi.fn(() => true));
+    renderManager({ locale: "ru" });
+    fireEvent.click(screen.getByText("删除"));
+    await waitFor(() => expect(actions.deleteManualCarouselSlotAction).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "slot-1", locale: "ru" }),
+    ));
+  });
+
+  it("enqueuing an immediate recompute sends the page's locale", async () => {
+    renderManager({ locale: "ru" });
+    fireEvent.click(screen.getByText("入队重新计算"));
+    await waitFor(() => expect(actions.enqueueCarouselComputeAction).toHaveBeenCalledWith(
+      expect.objectContaining({ locale: "ru" }),
+    ));
   });
 });
 

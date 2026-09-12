@@ -128,6 +128,7 @@ function renderPage(
     promoClaimBlockedReason?: string | null;
     contentCreationBatchMaxSize?: number;
     featureEnabled?: boolean;
+    templateOptions?: readonly { readonly id: string; readonly templateKey: string; readonly locale: string; readonly version: number }[];
   } = {},
 ) {
   return render(
@@ -140,6 +141,7 @@ function renderPage(
       promoClaimGranted={options.promoClaimGranted ?? true}
       promoClaimBlockedReason={options.promoClaimBlockedReason ?? null}
       contentCreationBatchMaxSize={options.contentCreationBatchMaxSize ?? 50}
+      templateOptions={options.templateOptions}
     />,
   );
 }
@@ -263,7 +265,7 @@ describe("创建内容对话框 · dry-run 自动触发", () => {
     expect(actions.applyContentCreationAction).not.toHaveBeenCalled();
   });
 
-  it("加载中展示状态文案，计划到达后渲染字段与语种一致时不显示不匹配提示", async () => {
+  it("加载中展示状态文案，计划到达后只读展示已识别语种（L10N P2：不再有不匹配提示这一概念）", async () => {
     actions.dryRunContentCreationAction.mockResolvedValue(okResult({ outcome: "dry_run", plan: PLAN }));
     renderPage();
     await openDialog();
@@ -274,22 +276,110 @@ describe("创建内容对话框 · dry-run 自动触发", () => {
     expect(dlg.getByText(/prov001/)).toBeTruthy();
     expect(dlg.getByText("120")).toBeTruthy();
     expect(dlg.queryByTestId("locale-mismatch-notice")).toBeNull();
+    expect(dlg.getByTestId("derived-locale-display").textContent).toContain("en");
   });
 
-  it("来源条目语种不是 en 时显示不匹配提示", async () => {
-    actions.dryRunContentCreationAction.mockResolvedValue(okResult({ outcome: "dry_run", plan: PLAN }));
+  // L10N P5 §1.E (C7-②): a precise regression assertion for "模板闸整段
+  //删除" — this `ja` scenario is exactly `item.sourceLocale !== "en"`, the
+  // one condition the deleted `localeMismatchNotice` (P0-S13,
+  // `create-content-dialog.tsx`'s pre-e6aa388 history) used to trigger the
+  // warning banner on. The line above this comment already existed before
+  // L10N P2 removed the gate and only proves "no mismatch banner in THIS
+  // fixture" — it would pass just as well if the gate still existed but
+  // simply wasn't reached by this particular test setup. Asserting
+  // `queryByTestId("locale-mismatch-notice")).toBeNull()` specifically in
+  // the one scenario that used to trip it is what actually proves the gate
+  // is gone, not merely untriggered.
+  it("来源条目语种是 ja 时，计划态只读展示 ja（不再是与 en 比较的不匹配提示）", async () => {
+    actions.dryRunContentCreationAction.mockResolvedValue(
+      okResult({ outcome: "dry_run", plan: { ...PLAN, locale: "ja" } }),
+    );
     renderPage({ items: [row({ sourceLocale: "ja" })] });
     await openDialog();
-    expect(within(dialog()).getByTestId("locale-mismatch-notice").textContent).toContain("ja");
+    const dlg = within(dialog());
+    expect(dlg.getByTestId("derived-locale-display").textContent).toContain("ja");
+    expect(dlg.queryByTestId("locale-mismatch-notice")).toBeNull();
   });
 
-  it("来源条目尚未识别出语种时显示另一句提示", async () => {
-    actions.dryRunContentCreationAction.mockResolvedValue(okResult({ outcome: "dry_run", plan: PLAN }));
+  /**
+   * L10N P2: a `NULL`/unresolved `sourceLocale` no longer reaches the plan
+   * stage at all — `createContentFromSourceItem` throws
+   * `ContentCreationInputError("missing_locale")` inside `loadPlan` before
+   * a plan can ever be built, and `dryRunContentCreationAction` converts
+   * that into `{ ok: false, kind: "invalid_input", code: "missing_locale" }`
+   * (same catch this action already has for every other
+   * `ContentCreationInputError` code). The dialog's existing `stage: "error"`
+   * branch renders it — there is no plan preview, and (because `canConfirm`
+   * is only ever true for `stage.kind === "plan"`) no "确认创建" button either.
+   */
+  it("来源条目尚未识别出语种时，dry-run 以 missing_locale 失败，对话框进入错误态且没有确认按钮", async () => {
+    actions.dryRunContentCreationAction.mockResolvedValue({
+      ok: false,
+      kind: "invalid_input",
+      code: "missing_locale",
+    });
     renderPage({ items: [row({ sourceLocale: null })] });
     await openDialog();
-    expect(within(dialog()).getByTestId("locale-mismatch-notice").textContent).toContain(
-      "语种归一 S7a 未接线",
-    );
+    const dlg = within(dialog());
+    expect(dlg.getByRole("alert").textContent).toContain("sourceLocale 为空");
+    expect(dlg.queryByRole("button", { name: "确认创建" })).toBeNull();
+  });
+
+  it("来源条目语种不是站点语种（unsupported_locale）时同样进入错误态且没有确认按钮", async () => {
+    actions.dryRunContentCreationAction.mockResolvedValue({
+      ok: false,
+      kind: "invalid_input",
+      code: "unsupported_locale",
+    });
+    renderPage({ items: [row({ sourceLocale: "it" })] });
+    await openDialog();
+    const dlg = within(dialog());
+    expect(dlg.getByRole("alert").textContent).toContain("不是本站已登记的语种");
+    expect(dlg.queryByRole("button", { name: "确认创建" })).toBeNull();
+  });
+});
+
+/**
+ * L10N P3 regression coverage: `create-content-dialog.tsx`'s template picker
+ * used to also accept a `template.locale === null` "all locales" wildcard
+ * (P2-era — `article-templates/service.ts` still ran a `{locale: null}` OR
+ * clause back then). P3 removed that wildcard from the query layer
+ * (`ArticleTemplate.locale` is `NOT NULL` now), and this dialog's own filter
+ * was updated to match — `matchingTemplateOptions` is exact-locale-only.
+ * These tests pin that at the render layer so a future regression (e.g.
+ * someone re-adding `|| template.locale === null` "to be safe") fails here,
+ * not just in the backend `template_locale_mismatch` suite.
+ */
+describe("创建内容对话框 · 模板选项按来源条目语种精确匹配（L10N P3，不再有 locale===null 通配）", () => {
+  it("只展示与来源条目语种完全一致的模板，语种不同的模板即便存在也不出现在下拉里", async () => {
+    actions.dryRunContentCreationAction.mockResolvedValue(okResult({ outcome: "dry_run", plan: PLAN }));
+    renderPage({
+      items: [row({ sourceLocale: "en" })],
+      templateOptions: [
+        { id: "tpl-en", templateKey: "system-default-v1", locale: "en", version: 1 },
+        { id: "tpl-ru", templateKey: "system-default-ru-v1", locale: "ru", version: 1 },
+      ],
+    });
+
+    await openDialog();
+
+    const select = within(dialog()).getByLabelText("文章模板") as HTMLSelectElement;
+    const optionTexts = Array.from(select.options).map((option) => option.textContent);
+    expect(optionTexts).toEqual(["system-default-v1 · v1"]);
+  });
+
+  it("没有任何模板匹配来源条目语种时，回退到硬编码的 system-default-v1 占位项——不会借用别的语种的模板", async () => {
+    actions.dryRunContentCreationAction.mockResolvedValue(okResult({ outcome: "dry_run", plan: PLAN }));
+    renderPage({
+      items: [row({ sourceLocale: "en" })],
+      templateOptions: [{ id: "tpl-fr", templateKey: "system-default-fr-v1", locale: "fr", version: 1 }],
+    });
+
+    await openDialog();
+
+    const select = within(dialog()).getByLabelText("文章模板") as HTMLSelectElement;
+    const optionTexts = Array.from(select.options).map((option) => option.textContent);
+    expect(optionTexts).toEqual(["system-default-v1（系统默认）"]);
   });
 });
 
@@ -375,6 +465,7 @@ describe("每种结果分类都有独立呈现（不静默吞掉任何一种）"
       reason: "source_item_already_linked_to_different_locale",
       existingNovelId: "novel-7",
       existingLocale: "ja",
+      derivedLocale: "en",
     },
     { outcome: "slug_unhealthy", field: "novel", baseSlug: "" },
     { outcome: "slug_conflict_exhausted", field: "article", baseSlug: "dup-title" },

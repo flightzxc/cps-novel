@@ -331,17 +331,21 @@ describe("P2-06 源码红线：/tags 不得自建第二套语种映射", () => {
    * "CanonicalTag 的译名能录哪些语种"）。禁路径会连正当的单一真源消费一起禁掉，
    * 于是只能挂文件白名单——而白名单会被后来者当成先例往里加。
    *
-   * 改为按**符号**禁：下面五个是 locale-canonical 站点发布域的全部导出面，
+   * 改为按**符号**禁：下面三个是 locale-canonical 站点发布域的全部导出面，
    * 逐一封死；剩下的三个 `TAG_*` 导出正是 CLAUDE.md §3.2.1 要求组件必须复用
    * 而不是自己再抄一份的东西。既不需要任何例外，覆盖面还比原来更宽
    * （原来只拦 `SITE_LOCALES` 一个符号）。
+   *
+   * L10N P4 review fix (n4，2026-09-10)：原来这里是五个，另外两个
+   * `isPublishableLocale`/`listPublishableLocales` 是本轮 §2.A 删掉的白名单层
+   * 导出——`locale-canonical.ts` 已不再导出这两个符号，留着匹配不到任何真实
+   * 引用，是死条目，删掉；两层模型下站点发布域的全部导出面就是这三个。
    *
    * 本守卫的原始意图——"/tags 不得自建第二套语种映射"——由另外两条断言继续
    * 兜底：手写码→名字面映射（下一个 it）与全仓第二映射表检查
    * （tests/ui/locale-canonical.test.ts）。
    */
-  const SITE_LOCALE_DOMAIN_SYMBOLS =
-    /\b(SITE_LOCALES|SiteLocale|resolveSiteLocale|isPublishableLocale|listPublishableLocales)\b/;
+  const SITE_LOCALE_DOMAIN_SYMBOLS = /\b(SITE_LOCALES|SiteLocale|resolveSiteLocale)\b/;
 
   it("/tags 目录下没有文件引用站点发布域的语种符号", async () => {
     const files = await walk(SCAN_ROOT);

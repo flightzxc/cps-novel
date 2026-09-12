@@ -125,10 +125,11 @@ describe("buildIndexNowCanonicalUrl", () => {
 describe("isRegisteredSiteLocale", () => {
   it("accepts every registered SITE_LOCALES member, rejects everything else", () => {
     // P0-S7a expanded `SITE_LOCALES` from `["en"]` to the short-drama site's
-    // 15-locale registry (Owner decision) — `fr` is now registered, so this
-    // must now be `true`. Registered is not the same gate as publishable:
-    // `isNovelIndexNowEligible` still calls `isPublishableLocale` — U6
-    // admitted `en`, so only `en` reaches IndexNow; `fr` remains blocked.
+    // 15-locale registry (Owner decision) — `fr` is registered, so this is
+    // `true`. L10N P4: this IS now the default locale gate
+    // `isNovelIndexNowEligible` reads (the narrower D-7 publish whitelist —
+    // `isPublishableLocale` — was deleted), matching CPS's own
+    // `isSupportedSiteLocale` gate at this exact boundary.
     expect(isRegisteredSiteLocale("en")).toBe(true);
     expect(isRegisteredSiteLocale("fr")).toBe(true);
     expect(isRegisteredSiteLocale("EN")).toBe(false);
@@ -147,14 +148,20 @@ describe("isNovelIndexNowEligible", () => {
     expect(isNovelIndexNowEligible(PUBLISHED_ARTICLE, PUBLISHED_NOVEL, READY_PROMO, { isLocalePublishable: () => true })).toBe(true);
   });
 
-  it("is eligible under the real D-7 whitelist for en", () => {
-    // No override — exercises the real `isPublishableLocale`. U6 admitted `en`.
+  it("is eligible under the real SITE_LOCALES gate for en", () => {
+    // No override — exercises the real `isRegisteredSiteLocale`.
     expect(isNovelIndexNowEligible(PUBLISHED_ARTICLE, PUBLISHED_NOVEL, READY_PROMO)).toBe(true);
   });
 
-  it("is ineligible when the locale has not cleared D-7", () => {
+  it("L10N P4: is also eligible for es — the D-7 publish whitelist that used to block a registered-but-unopened locale here is deleted; isRegisteredSiteLocale is the only gate now", () => {
     expect(
       isNovelIndexNowEligible({ ...PUBLISHED_ARTICLE, locale: "es" }, PUBLISHED_NOVEL, READY_PROMO),
+    ).toBe(true);
+  });
+
+  it("is ineligible for a locale not registered in SITE_LOCALES at all", () => {
+    expect(
+      isNovelIndexNowEligible({ ...PUBLISHED_ARTICLE, locale: "xx" }, PUBLISHED_NOVEL, READY_PROMO),
     ).toBe(false);
   });
 

@@ -10,6 +10,7 @@ import {
   shouldNoIndex,
 } from "@/lib/seo/seo-utils";
 import { getSiteUrl, SiteUrlConfigurationError } from "@/lib/seo/seo-templates/_shared";
+import { SITE_LOCALES } from "@/lib/locale/locale-canonical";
 
 const ORIGIN = "https://example.test";
 
@@ -85,12 +86,13 @@ describe("seo-utils", () => {
     });
   });
 
-  it("builds same-path locale alternates, not cross-Novel siblings", () => {
+  it("L10N P4: builds same-path locale alternates for the full SITE_LOCALES registry (matching CPS's own static SUPPORTED_SITE_LOCALES enumeration), not cross-Novel siblings", () => {
     expect(canonicalUrl("/novel/lantern-pabc")).toBe(`${ORIGIN}/novel/lantern-pabc`);
-    expect(buildHreflangAlternates("/novel/lantern-pabc")).toEqual({
-      "x-default": `${ORIGIN}/novel/lantern-pabc`,
-      en: `${ORIGIN}/novel/lantern-pabc`,
-    });
+    const alternates = buildHreflangAlternates("/novel/lantern-pabc");
+    expect(Object.keys(alternates).sort()).toEqual([...SITE_LOCALES, "x-default"].sort());
+    expect(alternates["x-default"]).toBe(`${ORIGIN}/novel/lantern-pabc`);
+    expect(alternates.en).toBe(`${ORIGIN}/novel/lantern-pabc`);
+    expect(alternates.ru).toBe(`${ORIGIN}/ru/novel/lantern-pabc`);
   });
 
   it("marks page >= 2 as noindex", () => {
