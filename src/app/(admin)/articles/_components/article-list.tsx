@@ -583,8 +583,35 @@ export function ArticleList({
                     EXCLUDE (一对一绑定，删除即永久失去公开页), pinned by
                     `tests/ui/articles-admin.test.tsx`'s "列表中不存在删除
                     按钮" assertion.
+
+                    2026-09-12 Owner fix (港registry: 小说业务偏离): CPS's own
+                    reference (`articles-client.tsx` line 517, commit 3a76877)
+                    gates 发布 on exactly `status === "draft"` — CPS has no
+                    `unpublished` status at all (`withdraw`/`offline` there
+                    has no distinct re-publish path from the list). This repo
+                    does have one (`ARTICLE_STATUSES` in
+                    `@/domain/database-statuses`: draft/published/unpublished/
+                    takedown, C-21's own withdraw lane) and an `unpublished`
+                    row was left with no way back to 发布 from this list —
+                    only from the novel detail page's
+                    `publish-lifecycle-panel.tsx`, whose `showPublish =
+                    article.status !== "published" && novelStatus !==
+                    "takedown"` already treats `unpublished` as publishable.
+                    Owner confirmed (2026-09-12) this list should match that:
+                    `unpublished` shows 发布 same as `draft`. No `takedown`
+                    branch is added here — `applyNovelRightsTransition`
+                    (`src/server/publish-gate/service.ts`) cascades a
+                    novel-level takedown to *every* Article regardless of its
+                    current status, so a row can never be
+                    `status === "unpublished"` while its novel is
+                    `"takedown"`; the two conditions are mutually exclusive
+                    by construction, not by a check this component has to
+                    make (row.novel carries no `status` field to check
+                    against here in the first place — a `takedown` Article
+                    itself, cascaded the same way, still correctly renders no
+                    发布 button via the `status` check below).
                   */}
-                  {row.status === "draft" && (
+                  {(row.status === "draft" || row.status === "unpublished") && (
                     <button
                       disabled={!canWrite}
                       className={buttonClassName("secondary", "px-2 py-1 text-xs")}

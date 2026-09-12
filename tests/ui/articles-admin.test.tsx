@@ -532,8 +532,12 @@ describe("ArticleList · 列表与批量", () => {
 
   /**
    * C-21 (`分析_文章管理Parity缺口_2026-09-08.md` §六, items #24/#25): CPS
-   * parity is "草稿显示发布，已发布显示下线" — 已下线/已撤回两态两个按钮都不
-   * 出现（既不是可发布的草稿，也不是可下线的已发布）。
+   * parity is "草稿显示发布，已发布显示下线". 2026-09-12 Owner fix extends
+   * that to `unpublished` (see the describe block's own tests below and the
+   * `article-list.tsx` comment above the button) — CPS has no `unpublished`
+   * status to leave without a way back to 发布, but this repo does. Only
+   * `takedown` still shows neither button (既不是可发布的草稿/已下线，也不是
+   * 可下线的已发布)。
    */
   describe("行内 发布 / 下线 按钮可见性（C-21）", () => {
     it("草稿行只显示发布按钮，不显示下线", () => {
@@ -548,12 +552,27 @@ describe("ArticleList · 列表与批量", () => {
       expect(screen.queryByTestId(`article-publish-${PUBLISHED_ROW.id}`)).toBeNull();
     });
 
-    it("已下线 / 已撤回行两个按钮都不显示", () => {
-      render(<ArticleList rows={[UNPUBLISHED_ROW, TAKEDOWN_ROW]} canWrite publicOrigin={PUBLIC_ORIGIN} />);
-      for (const row of [UNPUBLISHED_ROW, TAKEDOWN_ROW]) {
-        expect(screen.queryByTestId(`article-publish-${row.id}`)).toBeNull();
-        expect(screen.queryByTestId(`article-withdraw-${row.id}`)).toBeNull();
-      }
+    /**
+     * 2026-09-12 Owner fix: an `unpublished` row (C-21's withdraw lane) is
+     * re-publishable — same shape as the novel detail page's
+     * `publish-lifecycle-panel.tsx`'s `showPublish = article.status !==
+     * "published" && novelStatus !== "takedown"`, which already treats
+     * `unpublished` as publishable. CPS's own reference
+     * (`articles-client.tsx`, commit 3a76877) only ever gates 发布 on
+     * `status === "draft"` — it has no `unpublished` status to leave stuck —
+     * so this is a deliberate 小说业务偏离 from that reference, logged in
+     * `docs/governance/port-registry.md`.
+     */
+    it("已下线行显示发布按钮，不显示下线", () => {
+      render(<ArticleList rows={[UNPUBLISHED_ROW]} canWrite publicOrigin={PUBLIC_ORIGIN} />);
+      expect(screen.getByTestId(`article-publish-${UNPUBLISHED_ROW.id}`)).toBeTruthy();
+      expect(screen.queryByTestId(`article-withdraw-${UNPUBLISHED_ROW.id}`)).toBeNull();
+    });
+
+    it("已撤回行两个按钮都不显示", () => {
+      render(<ArticleList rows={[TAKEDOWN_ROW]} canWrite publicOrigin={PUBLIC_ORIGIN} />);
+      expect(screen.queryByTestId(`article-publish-${TAKEDOWN_ROW.id}`)).toBeNull();
+      expect(screen.queryByTestId(`article-withdraw-${TAKEDOWN_ROW.id}`)).toBeNull();
     });
 
     it("canWrite=false 时发布/下线按钮均禁用", () => {
@@ -574,6 +593,18 @@ describe("ArticleList · 列表与批量", () => {
       await vi.waitFor(() => expect(listActions.publishArticleAction).toHaveBeenCalledTimes(1));
       expect(listActions.publishArticleAction.mock.calls[0]![0]).toMatchObject({ articleId: DRAFT_ROW.id });
       await vi.waitFor(() => expect(screen.getByText(/首次公开/)).toBeTruthy());
+      await vi.waitFor(() => expect(routerRefresh).toHaveBeenCalledTimes(1));
+    });
+
+    it("已下线行点击发布同样调用 publishArticleAction 并携带该行 articleId（2026-09-12 Owner fix）", async () => {
+      listActions.publishArticleAction.mockResolvedValue({
+        ok: true,
+        data: { outcome: "published", articleId: UNPUBLISHED_ROW.id, novelId: "novel-1", locale: "en", firstPublish: false },
+      });
+      render(<ArticleList rows={[UNPUBLISHED_ROW]} canWrite publicOrigin={PUBLIC_ORIGIN} />);
+      fireEvent.click(screen.getByTestId(`article-publish-${UNPUBLISHED_ROW.id}`));
+      await vi.waitFor(() => expect(listActions.publishArticleAction).toHaveBeenCalledTimes(1));
+      expect(listActions.publishArticleAction.mock.calls[0]![0]).toMatchObject({ articleId: UNPUBLISHED_ROW.id });
       await vi.waitFor(() => expect(routerRefresh).toHaveBeenCalledTimes(1));
     });
 
