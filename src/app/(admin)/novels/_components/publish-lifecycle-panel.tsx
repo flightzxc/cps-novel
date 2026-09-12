@@ -15,10 +15,9 @@ import {
   restoreNovelAction,
   takedownNovelAction,
   withdrawNovelAction,
-  type ApplyPublishTransitionResult,
   type PublishActionResult,
-  type RightsTransitionKind,
 } from "../_actions";
+import type { ApplyPublishTransitionResult, RightsTransitionKind } from "../_types/publish-gate";
 import { describeMissingMetadataFields, describePublishGateReason } from "../_lib/publish-gate-copy";
 import { describePublishLifecycleError, describeRightsTransition } from "../_lib/publish-outcome-copy";
 import type { PrimaryArticleRef } from "../_lib/read-primary-article";

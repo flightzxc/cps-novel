@@ -14,12 +14,14 @@ import {
   getRebindBatchPreviewPageAction,
   resumeRebindBatchAction,
   submitRebindBatchAction,
-  type RebindBatchDetail,
-  type RebindBatchFacets,
-  type RebindBatchSummary,
-  type RebindPreviewCategory,
-  type RebindPreviewPage,
 } from "../../_actions";
+import type {
+  RebindBatchDetail,
+  RebindBatchFacets,
+  RebindBatchSummary,
+  RebindPreviewCategory,
+  RebindPreviewPage,
+} from "../../_types/rebind";
 import {
   loadLatestActiveRebindBatchPending,
   removeRebindBatchPending,

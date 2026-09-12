@@ -1,4 +1,5 @@
-import type { PublishLifecycleErrorCode, RightsTransitionKind } from "../_actions";
+import type { PublishLifecycleErrorCode } from "../_actions";
+import type { RightsTransitionKind } from "../_types/publish-gate";
 
 /**
  * Operator-facing copy for `src/server/publish-gate/service.ts`'s outcomes
@@ -15,11 +16,12 @@ import type { PublishLifecycleErrorCode, RightsTransitionKind } from "../_action
  *  - `RightsTransitionKind` — withdraw/takedown/restore's own labels and
  *    confirmation copy, used by the detail-page lifecycle panel.
  *
- * Both types are imported from `../_actions` rather than
- * `@/server/publish-gate` directly, even though this file itself is not a
- * `"use client"` module — see `../_actions.ts`'s own header comment for why
- * that file, not this one, is the single place allowed to name
- * `@/server/publish-gate`.
+ * Neither type is imported from `@/server/publish-gate` directly, even
+ * though this file itself is not a `"use client"` module — `PublishLifecycleErrorCode`
+ * comes from `../_actions` (a fresh alias declared there) and
+ * `RightsTransitionKind` from `../_types/publish-gate` (a directive-less
+ * re-export module — see its header comment for why the type can no
+ * longer be re-exported from `../_actions.ts` itself).
  */
 
 function assertUnreachableCode(value: never): never {

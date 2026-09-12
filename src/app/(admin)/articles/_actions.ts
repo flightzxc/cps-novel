@@ -55,23 +55,15 @@ import {
   type RebindView,
   type SwitchArticleNovelResult,
 } from "@/server/article-rebind";
-// Re-exported (not just imported) so Client Components can pull these types
-// from this Server Action file instead of `@/server/article-rebind`
-// directly — `tests/ui/admin-secret-boundary.test.tsx`'s "keeps Client
-// Components away from Prisma and server services" scan forbids ANY
-// `from "@/server/..."` import in a `"use client"` file, type-only imports
-// included, same boundary `../_components/article-editor.tsx` and every
-// other client component in this directory already respects.
-export type {
-  RebindBatchDetail,
-  RebindBatchFacets,
-  RebindBatchSummary,
-  RebindCandidate,
-  RebindGuardFinding,
-  RebindPreviewCategory,
-  RebindPreviewPage,
-  RebindView,
-};
+// Client Components that need `RebindBatchDetail`/etc. import them from
+// `./_types/rebind` (a plain, directive-less module), not from here. This
+// file used to re-export those types itself via a bare `export type { … };`
+// list — that shape compiles to a runtime reference in a `"use server"`
+// file (the names were type-only imports, erased, so nothing existed for
+// the reference to resolve), which is exactly what threw
+// `ReferenceError: RebindBatchDetail is not defined at module evaluation`
+// for every Server Action in this file. See `./_types/rebind.ts`'s header
+// for the full mechanism and the build evidence.
 
 import { canonicalOrigin, guardDependencies, prisma, readSessionToken } from "../../api/admin/_lib/deps";
 

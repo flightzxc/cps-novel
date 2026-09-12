@@ -7,7 +7,7 @@ import type {
   RebindBatchFacets,
   RebindBatchSummary,
   RebindPreviewPage,
-} from "@/app/(admin)/articles/_actions";
+} from "@/app/(admin)/articles/_types/rebind";
 
 import { installDialogShim } from "./jsdom-dialog";
 
