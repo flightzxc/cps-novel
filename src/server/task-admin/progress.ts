@@ -1,4 +1,5 @@
 import type { PrismaClient } from "@prisma/client";
+import { deriveCatalogBatchPhase, type CatalogBatchPhase } from "@/domain/catalog-batch";
 
 import { requireHighRiskAdminCapability, type AdminAuthContext } from "@/lib/auth";
 
@@ -87,6 +88,7 @@ export type TaskProgressDto = Readonly<{
    * page-based in that case, byte-identical to the pre-C-12 shape.
    */
   pageCounts?: TaskProgressPageCounts;
+  catalogBatch?: Readonly<{ phase: CatalogBatchPhase }>;
 }>;
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -135,6 +137,7 @@ type GenericTaskRow = {
   error: unknown;
   createdAt: Date;
   updatedAt: Date;
+  result?: unknown;
 };
 
 /**
@@ -157,6 +160,11 @@ function toDto(
   const skip = task.skippedCount;
   const processed = bookCounts ? success + failed + skip : pagesProcessed;
   const percent = bookCounts ? bookCounts.percent : pagesPercent;
+  const result = task.result && typeof task.result === "object" && !Array.isArray(task.result)
+    ? task.result as Record<string, unknown> : {};
+  const catalogBatch = task.taskType === "batch.materialize.v1" ? {
+    phase: deriveCatalogBatchPhase({ parentStatus: task.status, enumerationStatus: result.enumerationStatus }),
+  } : undefined;
   return Object.freeze({
     taskType: task.taskType,
     status: mapStatus(task.status),
@@ -170,6 +178,7 @@ function toDto(
     updatedAt: iso(task.updatedAt),
     taskErrors: taskErrorsFrom(task.error),
     items,
+    ...(catalogBatch ? { catalogBatch } : {}),
     ...(currentItem ? { currentItem } : {}),
     ...(bookCounts ? {
       pageCounts: Object.freeze({
@@ -211,7 +220,7 @@ function genericCurrentItemMessage(targetType: string, targetId: string, bookCou
 }
 
 async function loadGenericProgress(db: PrismaClient, taskId: string): Promise<TaskProgressDto | null> {
-  const task = await db.genericTask.findUnique({
+  let task = await db.genericTask.findUnique({
     where: { id: taskId },
     select: {
       taskType: true, status: true, totalCount: true, successCount: true,
@@ -220,6 +229,30 @@ async function loadGenericProgress(db: PrismaClient, taskId: string): Promise<Ta
     },
   });
   if (!task) return null;
+  if (task.taskType === "batch.materialize.v1") {
+    const [sum, states] = await Promise.all([
+      db.genericTask.aggregate({ where: { parentTaskId: taskId, originTaskId: null },
+        _sum: { totalCount: true, successCount: true, failedCount: true, skippedCount: true } }),
+      db.genericTask.groupBy({ by: ["status"], where: { parentTaskId: taskId, originTaskId: null }, _count: { _all: true } }),
+    ]);
+    const result = task.result && typeof task.result === "object" && !Array.isArray(task.result) ? task.result as Record<string, unknown> : {};
+    const active = states.some((s) => s.status === "pending" || s.status === "processing");
+    const disabled = states.some((s) => s.status === "disabled");
+    const failed = states.some((s) => s.status === "failed" || s.status === "completed_with_errors");
+    const blocked = result.blockedReasonCounts && typeof result.blockedReasonCounts === "object"
+      && Object.values(result.blockedReasonCounts as Record<string, unknown>).some((v) => typeof v === "number" && v > 0);
+    task = { ...task,
+      status: task.status === "disabled" ? "disabled"
+        : result.enumerationStatus === "expired" ? "completed_with_errors"
+        : result.enumerationStatus !== "completed" ? task.status
+        : active ? "processing" : disabled ? "disabled"
+        : states.length > 0 && states.every((s) => s.status === "failed") ? "failed"
+        : failed || blocked ? "completed_with_errors" : "completed",
+      totalCount: result.enumerationStatus === "completed" ? sum._sum.totalCount ?? 0 : task.totalCount,
+      successCount: sum._sum.successCount ?? 0, failedCount: sum._sum.failedCount ?? 0,
+      skippedCount: sum._sum.skippedCount ?? 0,
+    };
+  }
   const [failedItems, processingItem, bookCounts] = await Promise.all([
     db.genericTaskItem.findMany({
       where: { taskId, status: "failed" },

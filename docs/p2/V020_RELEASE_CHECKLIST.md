@@ -161,7 +161,7 @@
       内一起改，任务消费原子规则见本节开头）。
 - [ ] `FEATURE_PROMO_LINK_CLAIM=true` / `PROMO_LINK_CLAIM_ALLOW_WRITE=true`（同一次变更内
       一起改）。
-- [ ] `WORKER_TASK_ALLOWLIST=credential.validate.v1,credential.supersede.v1,catalog_scan,home_carousel.compute.v1,moboreader.preview_refresh.v1,promo_link.claim.v1`
+- [ ] `WORKER_TASK_ALLOWLIST=credential.validate.v1,credential.supersede.v1,catalog_scan,home_carousel.compute.v1,moboreader.preview_refresh.v1,promo_link.claim.v1,batch.materialize.v1,content.create.v1`
       与上面两对双闸在**同一次变更**中一起生效；C2b 已验收（见上），
       `moboreader.preview_refresh.v1` 不再需要保持 pending-only。
 - [ ] `home_carousel.compute.v1` 已在 Web action、Scheduler、Worker handler 和 X8 UAT/R allowlist

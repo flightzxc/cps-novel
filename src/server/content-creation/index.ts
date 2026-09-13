@@ -1,6 +1,7 @@
 export {
   ContentCreationInputError,
   createContentFromSourceItem,
+  createContentFromSourceItemInTransaction,
   type ContentCreationInputErrorCode,
   type ContentCreationPlan,
   type CreateContentActor,
@@ -10,6 +11,7 @@ export {
 } from "./service";
 export {
   enqueueContentCreationPreview,
+  resolveContentPreviewAccount,
   type ContentCreationPreviewEnqueueResult,
 } from "./preview-enqueue";
 export {

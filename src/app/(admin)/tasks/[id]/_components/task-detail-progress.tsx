@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 
 import { ImportProgress } from "@/features/admin-ui/import-progress";
@@ -15,7 +16,12 @@ import { ImportProgress } from "@/features/admin-ui/import-progress";
  * poll themselves) catch up to the final counts without a second polling
  * loop.
  */
-export function TaskDetailProgress({ taskId }: { taskId: string }) {
+export function TaskDetailProgress({ taskId, materializing = false }: { taskId: string; materializing?: boolean }) {
   const router = useRouter();
+  useEffect(() => {
+    if (!materializing) return;
+    const timer = window.setInterval(() => router.refresh(), 3000);
+    return () => window.clearInterval(timer);
+  }, [materializing, router]);
   return <ImportProgress taskId={taskId} onTerminal={() => router.refresh()} />;
 }

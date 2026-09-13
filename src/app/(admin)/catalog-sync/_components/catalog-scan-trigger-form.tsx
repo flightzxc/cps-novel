@@ -300,7 +300,7 @@ export function CatalogScanTriggerForm({
               onChange={(event) => onChannelChange(event.target.value)}
               aria-label="渠道"
               aria-invalid={Boolean(fieldErrors.channel)}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+              className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-blue-500 focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
             >
               {channels.map((channel) => (
                 <option key={channel.id} value={channel.id}>
@@ -378,7 +378,7 @@ export function CatalogScanTriggerForm({
               aria-label="渠道账户"
               aria-invalid={Boolean(fieldErrors.channelAccount)}
               disabled={accountOptions.length === 0}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none disabled:bg-gray-50 disabled:text-gray-400"
+              className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-blue-500 focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
             >
               {accountOptions.length === 0 && <option value="">（该渠道下没有启用中的账户）</option>}
               {accountOptions.map((account) => (

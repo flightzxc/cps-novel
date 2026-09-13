@@ -1,4 +1,5 @@
 export * from "./errors";
+export * from "./catalog-batch";
 export * from "./moboreader";
 export * from "./promo-link-claim";
 export * from "./promo-link-claim-limits";

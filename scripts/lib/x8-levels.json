@@ -27,7 +27,7 @@
     }
   },
   "uat": {
-    "workerTaskAllowlist": "credential.validate.v1,credential.supersede.v1,catalog_scan,home_carousel.compute.v1,moboreader.preview_refresh.v1,promo_link.claim.v1",
+    "workerTaskAllowlist": "credential.validate.v1,credential.supersede.v1,catalog_scan,home_carousel.compute.v1,moboreader.preview_refresh.v1,promo_link.claim.v1,batch.materialize.v1,content.create.v1",
     "catalogSyncDefaultGateState": "apply",
     "promoClaimRoles": "super_admin",
     "adminTwoFactorEnforcement": "false",

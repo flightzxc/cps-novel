@@ -145,6 +145,7 @@ describe("P2-04 内容路由登记", () => {
         !action.id.startsWith("admin.article.") &&
         !action.id.startsWith("admin.novel.") &&
         !action.id.startsWith("admin.promo_link_claim.") &&
+        !action.id.startsWith("admin.catalog_batch.") &&
         !action.id.startsWith("admin.article_template.") &&
         !action.id.startsWith("admin.home_carousel.") &&
         !action.id.startsWith("admin.security."),
@@ -166,8 +167,9 @@ describe("P2-04 内容路由登记", () => {
       "admin.novel.takedown",
       "admin.novel.restore",
       "admin.promo_link_claim.enqueue",
-      "admin.content_creation.batch_dry_run",
       "admin.content_creation.batch_apply",
+      "admin.catalog_batch.context",
+      "admin.catalog_batch.summary",
       "admin.article_template.create",
       "admin.article_template.update",
       "admin.article_template.status",
@@ -246,15 +248,11 @@ describe("P2-04 内容路由登记", () => {
       mutation: true,
     });
     // RC-4: two actions, split by static id exactly like
-    // `admin.content_creation.dry_run`/`apply` above — `batch_dry_run` and
+    // `admin.content_creation.dry_run`/`apply` above and `batch_apply`
     // `batch_apply` need different capabilities, so the split (not a
     // client-supplied `mode`) is what keeps the enforced capability out of
     // client-controlled input. See `ADMIN_CONTENT_CREATION_BATCH_ACTIONS`'s
     // own doc comment for the full reasoning.
-    expect(resolveAdminAction("admin.content_creation.batch_dry_run", P2_04_ADMIN_REGISTRY)).toMatchObject({
-      capability: "content:view",
-      mutation: false,
-    });
     expect(resolveAdminAction("admin.content_creation.batch_apply", P2_04_ADMIN_REGISTRY)).toMatchObject({
       capability: "content:publish",
       mutation: true,

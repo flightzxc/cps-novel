@@ -300,12 +300,12 @@ export function CreateContentDialog({
         event.preventDefault();
         if (!applying) onClose();
       }}
-      className="w-full max-w-lg rounded-xl border border-gray-200 p-0 text-gray-900 shadow-xl backdrop:bg-gray-900/40"
+      className="m-auto max-h-[calc(100vh-2rem)] w-full max-w-lg overflow-y-auto rounded-xl border border-gray-200 bg-white p-0 text-gray-900 shadow-xl backdrop:bg-gray-900/40"
     >
       <div className="space-y-4 p-5">
         <h2 className="text-base font-semibold">创建内容 · {item.title}</h2>
         <label className="block text-sm text-gray-700">文章模板
-          <select value={templateKey} onChange={(event) => setTemplateKey(event.target.value)} disabled={applying} className="mt-1 w-full rounded border border-gray-300 p-2">
+          <select value={templateKey} onChange={(event) => setTemplateKey(event.target.value)} disabled={applying} className="mt-1 w-full rounded border border-gray-300 bg-white p-2 text-gray-900 disabled:bg-gray-100 disabled:text-gray-500">
             {matchingTemplateOptions.length === 0 && <option value="system-default-v1">system-default-v1（系统默认）</option>}
             {matchingTemplateOptions.map((template) => <option key={`${template.templateKey}:${template.version}`} value={template.templateKey}>{template.templateKey} · v{template.version}</option>)}
           </select>

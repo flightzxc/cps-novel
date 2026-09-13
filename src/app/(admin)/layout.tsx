@@ -19,7 +19,7 @@ export const metadata = {
  */
 export default function AdminLayout({ children }: { children: ReactNode }) {
   return (
-    <div lang="zh-CN" className="min-h-screen bg-gray-50 text-gray-900">
+    <div lang="zh-CN" className="min-h-screen bg-gray-50 text-gray-900" style={{ colorScheme: "light" }}>
       <AdminDocumentLang />
       {children}
     </div>

@@ -51,6 +51,9 @@ export interface TaskOutcome {
   result?: unknown;
   error?: unknown;
   protectedWrite?: ProtectedWrite;
+  /** Isolation for the fenced finalization transaction. */
+  transactionIsolationLevel?: Prisma.TransactionIsolationLevel;
+  transactionTimeoutMs?: number;
 }
 
 export interface TaskHandlerContext {

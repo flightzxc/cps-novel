@@ -776,6 +776,7 @@ model GenericTask {
   channelAppId       String?   @map("channel_app_id") @db.Uuid
   operationScopeHash String    @map("operation_scope_hash") @db.Char(64)
   originTaskId       String?   @map("origin_task_id") @db.Uuid
+  parentTaskId       String?   @map("parent_task_id") @db.Uuid
   mode               String    @default("apply") @db.VarChar(16)
   status             String    @default("pending") @db.VarChar(32)
   requestToken       String    @unique @map("request_token") @db.VarChar(160)
@@ -796,10 +797,13 @@ model GenericTask {
   channelApp     ChannelApp?       @relation(fields: [channelAppId], references: [id], onDelete: Restrict)
   items          GenericTaskItem[]
   cronRun        CronRun?
+  parentTask     GenericTask?  @relation("GenericTaskChildren", fields: [parentTaskId], references: [id], onDelete: Restrict)
+  childTasks     GenericTask[] @relation("GenericTaskChildren")
 
   @@unique([taskType, originTaskId], map: "generic_task_origin_key")
   @@index([status, taskType, createdAt], map: "generic_task_claim_idx")
   @@index([channelAccountId, channelAppId], map: "generic_task_account_app_idx")
+  @@index([parentTaskId, status, createdAt], map: "generic_task_parent_status_created_idx")
   @@map("generic_task")
 }
 

@@ -122,9 +122,11 @@ describe("P1-06 database operations static contracts", () => {
     // the FK/index/CHECK records above -- their absence is exactly what the
     // live-catalog drift check (assertCatalogConsistency) flagged, running
     // total 1208 + 3 = 1211.
+    // Catalog batch parentage (20260913120000_catalog_batch_parent) adds the
+    // parent_task_id field, its self-FK, and the parent/status/created index.
     // The exact count still guards duplicate keys.
-    expect(records).toHaveLength(1211);
-    expect(new Set(records.map((line) => JSON.parse(line).stable_key)).size).toBe(1211);
+    expect(records).toHaveLength(1214);
+    expect(new Set(records.map((line) => JSON.parse(line).stable_key)).size).toBe(1214);
     const intents = records.map((line) => JSON.parse(line)).filter(
       (record) => record.table_name === "side_effect_intent"
         && ["status", "response_shape", "confirmed_at"].includes(record.field_name),

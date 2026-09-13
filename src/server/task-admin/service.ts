@@ -66,6 +66,14 @@ export type TaskSummaryDto = Readonly<{
   failedCount: number;
   skippedCount: number;
   errorSummary: "redacted" | null;
+  catalogBatch?: Readonly<{
+    phase: "queued" | "disabled" | "materializing" | "executing" | "completed" | "completed_with_errors" | "failed" | "expired";
+    submittedCount: number | null;
+    ineligibleCount: number | null;
+    blockedCount?: number;
+    blockedReasonCounts?: Readonly<Record<string, number>>;
+    childTasks?: readonly Readonly<{ taskId: string; taskType: string; status: string }>[];
+  }>;
   /**
    * C-10 (Phase E rework, 2026-09-07): the task's own stable stop-reason
    * code (e.g. `"upstream_error"`), read from `result.stopReason` — never
@@ -334,6 +342,7 @@ type TaskListRow = {
 type LockedParentRow = {
   id: string;
   status: string;
+  task_type: string;
   channel_account_id: string | null;
   channel_app_id: string | null;
 };
@@ -694,6 +703,24 @@ export type TaskDetailDto = TaskSummaryDto & Readonly<{
 
 function taskSummary(row: TaskListRow, bookCounts?: CatalogBookCountsDto): TaskSummaryDto {
   const stopReason = deriveTaskStopReason(row.status, row.has_error, row.result);
+  const resultObject = jsonPlainObject(row.result);
+  const allowedBlockedReasons = new Set(["channel_binding_or_capability_unavailable", "active_scope_conflict"]);
+  const blockedReasonCounts = resultObject?.blockedReasonCounts && typeof resultObject.blockedReasonCounts === "object" && !Array.isArray(resultObject.blockedReasonCounts)
+    ? Object.fromEntries(Object.entries(resultObject.blockedReasonCounts as Record<string, unknown>)
+      .filter((entry): entry is [string, number] => allowedBlockedReasons.has(entry[0]) && typeof entry[1] === "number" && entry[1] > 0))
+    : {};
+  const catalogBatch = row.task_type === "batch.materialize.v1" ? {
+    phase: (row.status === "disabled" ? "disabled"
+      : resultObject?.enumerationStatus === "expired" ? "expired"
+      : resultObject?.enumerationStatus !== "completed" ? (row.status === "failed" || row.status === "completed_with_errors" ? "failed" : row.status === "processing" ? "materializing" : "queued")
+      : row.status === "processing" ? "executing"
+      : row.status === "completed_with_errors" ? "completed_with_errors"
+      : row.status === "failed" ? "failed" : "completed") as NonNullable<TaskSummaryDto["catalogBatch"]>["phase"],
+    submittedCount: typeof resultObject?.submittedCount === "number" ? resultObject.submittedCount : null,
+    ineligibleCount: typeof resultObject?.ineligibleCount === "number" ? resultObject.ineligibleCount : null,
+    blockedCount: Object.values(blockedReasonCounts).reduce((sum, count) => sum + count, 0),
+    blockedReasonCounts,
+  } : undefined;
   return Object.freeze({
     family: row.family,
     taskId: row.task_id,
@@ -704,6 +731,7 @@ function taskSummary(row: TaskListRow, bookCounts?: CatalogBookCountsDto): TaskS
     failedCount: row.failed_count,
     skippedCount: row.skipped_count,
     errorSummary: row.has_error ? "redacted" : null,
+    ...(catalogBatch ? { catalogBatch } : {}),
     ...(stopReason !== undefined ? { stopReason } : {}),
     ...(bookCounts !== undefined ? { bookCounts } : {}),
   });
@@ -728,10 +756,48 @@ export async function listAdminTasks(
       WHERE (${family}::text IS NULL OR ${family} = 'channel_sync')
         AND (${status}::text IS NULL OR status = ${status})
       UNION ALL
-      SELECT 'generic'::text AS family, id AS task_id, task_type, status,
+      SELECT 'generic'::text AS family, task_id, task_type, status,
         total_count, success_count, failed_count, skipped_count,
-        error IS NOT NULL AS has_error, created_at, result, params
-      FROM generic_task
+        has_error, created_at, result, params
+      FROM (
+        SELECT g.id AS task_id, g.task_type,
+          CASE WHEN g.task_type <> 'batch.materialize.v1' THEN g.status
+            WHEN g.status = 'disabled' THEN 'disabled'
+            WHEN g.result->>'enumerationStatus' = 'expired' THEN 'completed_with_errors'
+            WHEN g.result->>'enumerationStatus' IS DISTINCT FROM 'completed' THEN g.status
+            WHEN COALESCE(c.active_count, 0) > 0 THEN 'processing'
+            WHEN COALESCE(c.disabled_tasks, 0) > 0 THEN 'disabled'
+            WHEN COALESCE(c.total_tasks, 0) > 0 AND c.hard_failed_tasks = c.total_tasks THEN 'failed'
+            WHEN COALESCE(c.failed_tasks, 0) > 0 OR EXISTS (
+              SELECT 1 FROM jsonb_each(COALESCE(g.result->'blockedReasonCounts', '{}'::jsonb)) blocked
+              WHERE jsonb_typeof(blocked.value) = 'number' AND (blocked.value #>> '{}')::numeric > 0
+            ) THEN 'completed_with_errors'
+            ELSE 'completed' END AS status,
+          CASE WHEN g.task_type = 'batch.materialize.v1' AND g.result->>'enumerationStatus' = 'completed'
+            THEN COALESCE(c.total_count, 0) ELSE g.total_count END::int AS total_count,
+          CASE WHEN g.task_type = 'batch.materialize.v1' THEN COALESCE(c.success_count, 0) ELSE g.success_count END::int AS success_count,
+          CASE WHEN g.task_type = 'batch.materialize.v1' THEN COALESCE(c.failed_count, 0) ELSE g.failed_count END::int AS failed_count,
+          CASE WHEN g.task_type = 'batch.materialize.v1' THEN COALESCE(c.skipped_count, 0) ELSE g.skipped_count END::int AS skipped_count,
+          (g.error IS NOT NULL OR COALESCE(c.failed_tasks, 0) > 0
+            OR COALESCE(g.result->>'enumerationStatus' = 'expired', false)
+            OR EXISTS (
+              SELECT 1 FROM jsonb_each(COALESCE(g.result->'blockedReasonCounts', '{}'::jsonb)) blocked
+              WHERE jsonb_typeof(blocked.value) = 'number' AND (blocked.value #>> '{}')::numeric > 0
+            )) AS has_error,
+          g.created_at, g.result, g.params
+        FROM generic_task g
+        LEFT JOIN LATERAL (
+          SELECT SUM(total_count)::int total_count, SUM(success_count)::int success_count,
+            SUM(failed_count)::int failed_count, SUM(skipped_count)::int skipped_count,
+            COUNT(*)::int total_tasks,
+            COUNT(*) FILTER (WHERE status IN ('pending','processing'))::int active_count,
+            COUNT(*) FILTER (WHERE status = 'disabled')::int disabled_tasks,
+            COUNT(*) FILTER (WHERE status IN ('failed','completed_with_errors'))::int failed_tasks
+            ,COUNT(*) FILTER (WHERE status = 'failed')::int hard_failed_tasks
+          FROM generic_task child WHERE child.parent_task_id = g.id AND child.origin_task_id IS NULL
+        ) c ON true
+        WHERE g.parent_task_id IS NULL
+      ) generic_derived
       WHERE (${family}::text IS NULL OR ${family} = 'generic')
         AND (${status}::text IS NULL OR status = ${status})
     ) task_union
@@ -785,6 +851,29 @@ async function deriveOriginStopReason(db: PrismaClient, taskId: string): Promise
   return origin ? deriveItemStopReason(origin.status, origin.result, origin.error) : undefined;
 }
 
+async function deriveCatalogBatchParentRow(db: PrismaClient, row: TaskListRow): Promise<TaskListRow> {
+  if (row.task_type !== "batch.materialize.v1") return row;
+  const children = await db.genericTask.aggregate({ where: { parentTaskId: row.task_id, originTaskId: null },
+    _sum: { totalCount: true, successCount: true, failedCount: true, skippedCount: true } });
+  const states = await db.genericTask.groupBy({ by: ["status"], where: { parentTaskId: row.task_id, originTaskId: null }, _count: { _all: true } });
+  const active = states.some((state) => ["pending", "processing"].includes(state.status));
+  const disabled = states.some((state) => state.status === "disabled");
+  const failed = states.some((state) => ["failed", "completed_with_errors"].includes(state.status));
+  const allFailed = states.length > 0 && states.every((state) => state.status === "failed");
+  const result = jsonPlainObject(row.result);
+  const blocked = Boolean(result?.blockedReasonCounts && typeof result.blockedReasonCounts === "object"
+    && Object.values(result.blockedReasonCounts as Record<string, unknown>).some((value) => typeof value === "number" && value > 0));
+  const status = row.status === "disabled" ? "disabled"
+    : result?.enumerationStatus === "expired" ? "completed_with_errors"
+    : result?.enumerationStatus !== "completed" ? row.status
+    : active ? "processing" : disabled ? "disabled" : allFailed ? "failed" : failed || blocked ? "completed_with_errors" : "completed";
+  return { ...row, status,
+    total_count: result?.enumerationStatus === "completed" ? children._sum.totalCount ?? 0 : row.total_count,
+    success_count: children._sum.successCount ?? 0, failed_count: children._sum.failedCount ?? 0,
+    skipped_count: children._sum.skippedCount ?? 0, has_error: row.has_error || failed || blocked || result?.enumerationStatus === "expired",
+  };
+}
+
 export async function getAdminTaskDetail(
   db: PrismaClient,
   context: AdminAuthContext,
@@ -806,8 +895,9 @@ export async function getAdminTaskDetail(
     FROM ${table}
     WHERE id = ${taskId}::uuid
   `);
-  const row = rows[0];
-  if (!row) throw new TaskAdminError("task_admin_not_found", 404);
+  const rawRow = rows[0];
+  if (!rawRow) throw new TaskAdminError("task_admin_not_found", 404);
+  const row = await deriveCatalogBatchParentRow(db, rawRow);
   const catalogScanConfig = deriveCatalogScanConfig(row.task_type, row.params);
   const catalogScanAudit = deriveCatalogScanAudit(row.task_type, row.result);
   const isCatalogScan = family === "generic" && row.task_type === MOBOREADER_TASK_TYPES.catalogScan;
@@ -819,8 +909,16 @@ export async function getAdminTaskDetail(
   const bookCounts = isCatalogScan
     ? await loadCatalogBookCounts(db, { taskId, taskType: row.task_type, result: row.result, params: row.params })
     : undefined;
+  const childTasks = row.task_type === "batch.materialize.v1" ? await db.genericTask.findMany({
+    where: { parentTaskId: taskId, originTaskId: null }, orderBy: { createdAt: "asc" },
+    select: { id: true, taskType: true, status: true },
+  }) : [];
+  const summary = taskSummary(row, bookCounts);
   return Object.freeze({
-    ...taskSummary(row, bookCounts),
+    ...summary,
+    ...(summary.catalogBatch ? { catalogBatch: { ...summary.catalogBatch,
+      childTasks: childTasks.map((child) => ({ taskId: child.id, taskType: child.taskType, status: child.status })),
+    } } : {}),
     ...(row.mode !== undefined ? { mode: row.mode } : {}),
     ...(row.channel_account_id ? { channelAccountId: row.channel_account_id } : {}),
     createdAt: iso(row.created_at),
@@ -1026,12 +1124,12 @@ async function lockParent(
   let rows: LockedParentRow[];
   if (family === "channel_sync") {
     rows = await tx.$queryRaw(Prisma.sql`
-      SELECT id, status, channel_account_id, channel_app_id
+      SELECT id, status, task_type, channel_account_id, channel_app_id
       FROM channel_sync_task WHERE id = ${taskId}::uuid FOR UPDATE
     `);
   } else {
     rows = await tx.$queryRaw(Prisma.sql`
-      SELECT id, status, channel_account_id, channel_app_id
+      SELECT id, status, task_type, channel_account_id, channel_app_id
       FROM generic_task WHERE id = ${taskId}::uuid FOR UPDATE
     `);
   }
@@ -1261,6 +1359,9 @@ export async function retryFailedTask(
         await lockMutationRequest(tx, input.requestId);
         const parent = await lockParent(tx, family, taskId);
         if (!parent) throw new TaskAdminError("task_admin_not_found", 404);
+        if (family === "generic" && parent.task_type === "batch.materialize.v1") {
+          throw new TaskAdminError("task_admin_state_conflict", 409);
+        }
 
         const prior = await committedAudit(tx, TASK_RETRY_AUDIT_ACTION, input.requestId);
         if (prior) return replayRetry(prior, context.identity.id, family, taskId, reason);

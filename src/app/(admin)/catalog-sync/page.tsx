@@ -2,8 +2,6 @@ import { capabilityBlockReason, findCapabilityState } from "@/features/admin-ui/
 import { AdminTimeZoneNote } from "@/features/admin-ui/time-zone-note";
 import { isNovelCatalogSyncEnabled } from "@/lib/flags";
 import { resolveMoboreaderCatalogSafetyMaxPages } from "@/lib/tasks/moboreader";
-import { PROMO_LINK_CLAIM_LIMITS } from "@/lib/tasks/promo-link-claim-limits";
-import { CONTENT_CREATION_BATCH_MAX_SELECTION } from "@/server/content-creation/batch";
 import { listActiveArticleTemplateOptionsForLocales } from "@/server/article-templates";
 import { prisma } from "../../api/admin/_lib/deps";
 
@@ -15,8 +13,8 @@ import { requireContentPage } from "../novels/_lib/content-page-guard";
 import { CatalogScanTriggerForm } from "./_components/catalog-scan-trigger-form";
 import { CatalogSyncClient } from "./_components/catalog-sync-client";
 import { SourceItemFilters } from "./_components/source-item-filters";
-import { readActiveChannelScanOptions, readClaimEligibleChannelAppOptions } from "./_lib/read-channel-apps";
-import { readSourceItemsPage } from "./_lib/read-source-items";
+import { readActiveChannelScanOptions } from "./_lib/read-channel-apps";
+import { canonicalCatalogFilter, readSourceItemsPage } from "./_lib/read-source-items";
 
 export const dynamic = "force-dynamic";
 
@@ -25,6 +23,7 @@ type SearchParams = {
   status?: string;
   search?: string;
   sourceLocale?: string;
+  pageSize?: string;
 };
 
 /**
@@ -61,10 +60,11 @@ export default async function CatalogSyncPage({
         status: params.status,
         search: params.search,
         sourceLocale: params.sourceLocale,
+        pageSize: params.pageSize,
       })
     : null;
+  const canonicalFilter = canonicalCatalogFilter(params);
   const channels = granted ? await readActiveChannelScanOptions() : [];
-  const claimChannelApps = granted ? await readClaimEligibleChannelAppOptions() : [];
   /**
    * L10N P2 (matrix #13's dialog-scoped part, P2 段): was a single
    * hardcoded `listActiveArticleTemplateOptions(prisma, "en")` call — every
@@ -88,6 +88,8 @@ export default async function CatalogSyncPage({
    * given row's dialog needs, this fetch only has to make sure every
    * locale any row on the page could need is present at all.
    */
+  // Single-row creation still gets a useful immediate picker. Batch dialogs
+  // load their locale/template choices from the full server-side selection.
   const sourceLocalesOnPage = granted
     ? Array.from(new Set(page?.items.map((item) => item.sourceLocale).filter((locale): locale is string => locale !== null) ?? []))
     : [];
@@ -115,25 +117,25 @@ export default async function CatalogSyncPage({
               safetyMaxPages={resolveMoboreaderCatalogSafetyMaxPages()}
             />
             <SourceItemFilters
-              values={{ search: params.search, status: params.status, sourceLocale: params.sourceLocale }}
+              values={{ ...canonicalFilter, pageSize: String(page.pageSize) }}
             />
             <div className="space-y-2">
               <AdminTimeZoneNote />
               <CatalogSyncClient
+                key={JSON.stringify(canonicalFilter)}
                 items={page.items}
                 catalogGate={{ featureEnabled: isNovelCatalogSyncEnabled() }}
                 contentPublish={contentPublish}
-                claimChannelApps={claimChannelApps}
-                promoClaimMaxBatchSize={PROMO_LINK_CLAIM_LIMITS.maxBatchSize}
                 promoClaimGranted={promoClaimBlockedReason === null}
                 promoClaimBlockedReason={promoClaimBlockedReason}
-                contentCreationBatchMaxSize={CONTENT_CREATION_BATCH_MAX_SELECTION}
                 templateOptions={templateOptions}
+                filter={canonicalFilter}
+                total={page.total}
               />
             </div>
             <ContentPagination
               basePath="/catalog-sync"
-              params={{ status: params.status, search: params.search, sourceLocale: params.sourceLocale }}
+              params={{ status: params.status, search: params.search, sourceLocale: params.sourceLocale, pageSize: String(page.pageSize) }}
               page={page.page}
               totalPages={page.totalPages}
               total={page.total}

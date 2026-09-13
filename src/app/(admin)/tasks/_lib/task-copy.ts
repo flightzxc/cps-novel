@@ -86,6 +86,36 @@ export function isTerminalTaskStatus(status: string): boolean {
   return !NON_TERMINAL_TASK_STATUSES.has(status);
 }
 
+const CATALOG_BATCH_PHASE_LABELS: Readonly<Record<string, string>> = Object.freeze({
+  queued: "等待入队",
+  disabled: "已禁用",
+  materializing: "正在统计",
+  executing: "正在执行",
+  completed: "已完成",
+  completed_with_errors: "完成（有异常）",
+  failed: "失败",
+  expired: "已过期",
+});
+
+const CATALOG_BATCH_BLOCKED_REASON_LABELS: Readonly<Record<string, string>> = Object.freeze({
+  channel_account_required: "缺少可用渠道账户",
+  channel_binding_or_capability_unavailable: "渠道绑定或领取能力不可用",
+  active_item_conflict: "条目已有进行中的任务",
+  active_scope_conflict: "当前范围已有进行中的任务",
+});
+
+export function catalogBatchPhaseLabel(phase: string): string {
+  return CATALOG_BATCH_PHASE_LABELS[phase] ?? "处理中";
+}
+
+/** Only allowlisted backend reason keys become operator-facing copy. */
+export function catalogBatchBlockedReasons(counts: Readonly<Record<string, number>> | undefined): readonly string[] {
+  if (!counts) return [];
+  return Object.entries(counts)
+    .filter(([reason, count]) => CATALOG_BATCH_BLOCKED_REASON_LABELS[reason] !== undefined && Number.isFinite(count) && count > 0)
+    .map(([reason, count]) => `${CATALOG_BATCH_BLOCKED_REASON_LABELS[reason]}：${count} 条`);
+}
+
 /**
  * C-9: item-status tabs for the `/tasks/[id]` items table, CPS-parity
  * labels/order (`STATUS_TABS` in the CPS reference `tasks/[id]/page.tsx`).

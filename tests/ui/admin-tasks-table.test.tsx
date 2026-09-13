@@ -140,4 +140,22 @@ describe("TasksTable · 两类任务统一列表", () => {
     expect(screen.getByText("2000 页")).toBeTruthy();
     expect(screen.queryByText(/本$/)).toBeNull();
   });
+
+  it("目录父任务显示中文阶段和未提交原因，不显示后端 reason key", () => {
+    render(<TasksTable tasks={[task({
+      taskType: "batch.materialize.v1",
+      catalogBatch: {
+        phase: "materializing",
+        submittedCount: null,
+        ineligibleCount: null,
+        blockedCount: 3,
+        blockedReasonCounts: { channel_account_required: 2, active_item_conflict: 1 },
+      },
+    })]} />);
+    const cell = screen.getByTestId(`catalog-batch-blocked-${task().taskId}`);
+    expect(screen.getByTestId(`catalog-batch-phase-${task().taskId}`).textContent).toContain("正在统计");
+    expect(cell.textContent).toContain("部分条目未提交（3 条）");
+    expect(cell.textContent).toContain("缺少可用渠道账户：2 条");
+    expect(cell.textContent).not.toContain("channel_account_required");
+  });
 });

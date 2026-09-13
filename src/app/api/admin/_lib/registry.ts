@@ -245,30 +245,13 @@ export const ADMIN_PROMO_LINK_CLAIM_ACTIONS = [
   { id: "admin.promo_link_claim.enqueue", capability: "promo:claim", mutation: true },
 ] as const satisfies AdminRegistry["actions"];
 
-/**
- * RC-4 explicit-selection batch content-creation trigger.
- *
- * `applyContentCreationBatch`/`dryRunContentCreationBatch`
- * (`@/server/content-creation/batch`) had zero `src/app/**` callers before
- * this — composed on top of P1-08B the same way every group above does.
- * CPS v8.3.6 parity target is `runChangduPromoteDramaBatch`
- * (`src/lib/changdu-promote-drama-batch.ts` in the read-only CPS reference);
- * see `src/app/(admin)/catalog-sync/_actions.ts`'s
- * `dryRunContentCreationBatchAction`/`applyContentCreationBatchAction`
- * header for the full reasoning.
- *
- * Two actions, split by static id exactly like {@link
- * ADMIN_CONTENT_CREATION_ACTIONS} (its single-item counterpart): `batch_dry_run`
- * takes `content:view` (zero writes, same bar `/catalog-sync` already
- * requires), `batch_apply` takes `content:publish` (2FA + `super_admin`
- * default, the real write) — the same split as the single-item pair, for
- * the same reason: `dry_run` and `apply` need *different* capabilities, so
- * splitting by static action id (not a client-supplied `mode`) is what
- * keeps the enforced capability out of client-controlled input.
- */
 export const ADMIN_CONTENT_CREATION_BATCH_ACTIONS = [
-  { id: "admin.content_creation.batch_dry_run", capability: "content:view", mutation: false },
   { id: "admin.content_creation.batch_apply", capability: "content:publish", mutation: true },
+] as const satisfies AdminRegistry["actions"];
+
+export const ADMIN_CATALOG_BATCH_ACTIONS = [
+  { id: "admin.catalog_batch.context", capability: "content:view", mutation: false },
+  { id: "admin.catalog_batch.summary", capability: "content:view", mutation: false },
 ] as const satisfies AdminRegistry["actions"];
 
 export const ADMIN_ARTICLE_TEMPLATE_ACTIONS = [
@@ -388,6 +371,7 @@ export const P2_04_ADMIN_REGISTRY: AdminRegistry = Object.freeze({
     ...ADMIN_PUBLISH_LIFECYCLE_ACTIONS,
     ...ADMIN_PROMO_LINK_CLAIM_ACTIONS,
     ...ADMIN_CONTENT_CREATION_BATCH_ACTIONS,
+    ...ADMIN_CATALOG_BATCH_ACTIONS,
     ...ADMIN_ARTICLE_TEMPLATE_ACTIONS,
     ...ADMIN_ARTICLE_ACTIONS,
     ...ADMIN_ARTICLE_REBIND_ACTIONS,

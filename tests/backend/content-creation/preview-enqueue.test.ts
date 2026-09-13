@@ -13,7 +13,7 @@ const { enqueueContentCreationPreview } = await import(
 const SOURCE_ID = "10000000-0000-4000-8000-000000000001";
 const APP_ID = "20000000-0000-4000-8000-000000000001";
 
-function fakeDb(options: { scanAccount?: string | null; fallbackAccounts?: string[] } = {}) {
+function fakeDb(options: { scanAccount?: string | null; scanAccountValid?: boolean; fallbackAccounts?: string[] } = {}) {
   const transaction = vi.fn(async (callback: (tx: object) => unknown) => callback({ tx: true }));
   const findManyCallSizes: number[] = [];
   return {
@@ -35,6 +35,7 @@ function fakeDb(options: { scanAccount?: string | null; fallbackAccounts?: strin
           : { channelAccountId: options.scanAccount }),
     },
     channelAccount: {
+      findFirst: vi.fn(async () => options.scanAccountValid === false ? null : { id: options.scanAccount ?? "scan-account" }),
       findMany: vi.fn(async () => (options.fallbackAccounts ?? []).map((id) => ({ id }))),
     },
     $transaction: transaction,
@@ -97,6 +98,14 @@ describe("content creation -> Moboreader preview enqueue", () => {
       novelSourceItemIds: [SOURCE_ID], requestToken: "batch-token", requestId: "req", actorId: "admin",
     })).resolves.toEqual({ queued: false, reason: "no_channel_account" });
     expect(taskFactory).not.toHaveBeenCalled();
+  });
+
+  it("does not trust a stale latest-scan account and re-resolves the active binding", async () => {
+    const db = fakeDb({ scanAccount: "stale-account", scanAccountValid: false, fallbackAccounts: ["active-account"] });
+    await enqueueContentCreationPreview(db as never, {
+      novelSourceItemIds: [SOURCE_ID], requestToken: "token", requestId: "req", actorId: "admin",
+    });
+    expect(taskFactory).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ channelAccountId: "active-account" }), expect.anything(), expect.anything());
   });
 
   it("preserves disabled and duplicate task-factory outcomes for the UI", async () => {

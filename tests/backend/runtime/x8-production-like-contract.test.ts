@@ -381,10 +381,13 @@ describe("X8 local production-like contracts", () => {
     expect(envHelper).toContain('X8_LEVELS_FILE="$X8_PROJECT_ROOT/scripts/lib/x8-levels.json"');
     expect(validator).toContain('"..", "lib", "x8-levels.json"');
     expect(Object.keys(x8Levels).filter((key) => key !== "_comment").sort()).toEqual(["0", "r", "uat"]);
-    // Each rung only ever adds task types to the one below it.
+    // Every runnable rung retains the Level 0 baseline. Catalog-batch task
+    // types are intentionally UAT-only until their production gate is approved.
     const [level0, levelUat, levelR] = ["0", "uat", "r"].map((key) => x8Levels[key].workerTaskAllowlist.split(","));
     expect(levelUat.slice(0, level0.length)).toEqual(level0);
-    expect(levelR.slice(0, levelUat.length)).toEqual(levelUat);
+    expect(levelR.slice(0, level0.length)).toEqual(level0);
+    expect(levelUat).toEqual(expect.arrayContaining(["batch.materialize.v1", "content.create.v1"]));
+    expect(levelR).not.toEqual(expect.arrayContaining(["batch.materialize.v1", "content.create.v1"]));
     // IndexNow stays hard-gated at every rung until X11 lands.
     for (const level of ["0", "uat", "r"]) {
       for (const flag of [

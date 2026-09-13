@@ -2,6 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { isPromoLinkClaimEnabled, isPromoLinkClaimWriteAllowed } from "../flags";
 import { isUniqueConstraintViolation as isUniqueViolation } from "@/lib/db/db-retry";
+import { findNovelSourceItemsByIds } from "@/lib/db/chunked-id-lookup";
 import {
   PROMO_LINK_CLAIM_LIMITS,
   PROMO_LINK_CLAIM_TARGET_TYPE,
@@ -124,9 +125,6 @@ function validateInput(input: CreatePromoLinkClaimTaskInput): ValidatedInput {
   if (mode !== "dry_run" && mode !== "apply") throw new PromoLinkClaimTaskInputError("mode_invalid");
 
   if (input.items.length === 0) throw new PromoLinkClaimTaskInputError("items_required");
-  if (input.items.length > PROMO_LINK_CLAIM_LIMITS.maxBatchSize) {
-    throw new PromoLinkClaimTaskInputError("batch_size_exceeded");
-  }
   const seen = new Set<string>();
   const items: PromoLinkClaimScopeItem[] = [];
   for (const item of input.items) {
@@ -148,7 +146,7 @@ function digest(value: unknown): string {
   return createHash("sha256").update(JSON.stringify(value)).digest("hex");
 }
 
-function operationScopeHash(items: readonly PromoLinkClaimScopeItem[]): string {
+export function operationScopeHash(items: readonly PromoLinkClaimScopeItem[]): string {
   const normalized = items
     .map((item) => `${item.novelSourceItemId}\n${item.offerType}`)
     .sort();
@@ -199,8 +197,9 @@ export async function createPromoLinkClaimTask(
 
   const skipReasonCounts: Record<string, number> = {};
   const requestedIds = input.items.map((item) => item.novelSourceItemId);
-  const sources = await prisma.novelSourceItem.findMany({
-    where: { id: { in: requestedIds }, channelAppId: input.channelAppId },
+  const sources = await findNovelSourceItemsByIds(prisma, requestedIds, {
+    where: { channelAppId: input.channelAppId },
+    chunkSize: PROMO_LINK_CLAIM_LIMITS.chunkSize,
     select: { id: true, novelId: true, status: true, deletedAt: true },
   });
   const byId = new Map(sources.map((source) => [source.id, source]));
@@ -236,15 +235,16 @@ export async function createPromoLinkClaimTask(
   // selections). `PromoLink.idempotency_key`'s own DB unique constraint is
   // the final backstop the worker handler relies on if this precheck still
   // races a concurrent submission.
-  const alreadyActive = await prisma.genericTaskItem.findMany({
-    where: {
+  const activeElsewhere = new Set<string>();
+  const structuralIds = structurallyEligible.map((item) => item.novelSourceItemId);
+  for (let offset = 0; offset < structuralIds.length; offset += PROMO_LINK_CLAIM_LIMITS.chunkSize) {
+    const alreadyActive = await prisma.genericTaskItem.findMany({ where: {
       targetType: PROMO_LINK_CLAIM_TARGET_TYPE,
-      targetId: { in: structurallyEligible.map((item) => item.novelSourceItemId) },
+      targetId: { in: structuralIds.slice(offset, offset + PROMO_LINK_CLAIM_LIMITS.chunkSize) },
       task: { taskType: PROMO_LINK_CLAIM_TASK_TYPE, status: { in: ["pending", "processing"] } },
-    },
-    select: { targetId: true },
-  });
-  const activeElsewhere = new Set(alreadyActive.map((row) => row.targetId));
+    }, select: { targetId: true } });
+    for (const row of alreadyActive) activeElsewhere.add(row.targetId);
+  }
 
   const eligible = structurallyEligible.filter((item) => {
     if (!activeElsewhere.has(item.novelSourceItemId)) return true;
@@ -294,15 +294,14 @@ export async function createPromoLinkClaimTask(
             allowWriteEnabled: writeAllowed,
             skipReasonCounts,
           },
-          items: {
-            create: eligible.map((item) => ({
-              targetType: PROMO_LINK_CLAIM_TARGET_TYPE,
-              targetId: item.novelSourceItemId,
-              payload: itemPayload(item),
-            })),
-          },
         },
       });
+      for (let offset = 0; offset < eligible.length; offset += PROMO_LINK_CLAIM_LIMITS.chunkSize) {
+        await tx.genericTaskItem.createMany({ data: eligible.slice(offset, offset + PROMO_LINK_CLAIM_LIMITS.chunkSize).map((item) => ({
+          taskId, targetType: PROMO_LINK_CLAIM_TARGET_TYPE,
+          targetId: item.novelSourceItemId, payload: itemPayload(item),
+        })) });
+      }
       await tx.operationAudit.create({
         data: {
           actorType: "admin",

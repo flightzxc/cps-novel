@@ -7,6 +7,16 @@ import { revalidatePath } from "next/cache";
 
 import type { ErrorEnvelope } from "@/contracts";
 import {
+  CatalogSelectionInputError,
+  normalizeCatalogSelection,
+  type CatalogBatchContext,
+  type CatalogBatchEnqueueResult,
+  type CatalogBatchSummary,
+  type CatalogSelection,
+} from "@/domain/catalog-batch";
+import { CatalogBatchInputError, enqueueCatalogBatch } from "@/lib/tasks/catalog-batch";
+import { readCatalogBatchContext, readCatalogBatchSummary } from "@/server/catalog-batch";
+import {
   isNovelCatalogSyncEnabled,
   isNovelCatalogSyncWriteAllowed,
   isPromoLinkClaimEnabled,
@@ -19,13 +29,6 @@ import {
   resolveMoboreaderUpstreamRecommendedPageSize,
   type MoboreaderTaskCreationResult,
 } from "@/lib/tasks/moboreader";
-import {
-  PromoLinkClaimTaskInputError,
-  UPSTREAM_EXISTING_PROMO_OFFER_TYPE,
-  createPromoLinkClaimTask,
-  type PromoLinkClaimTaskCreationResult,
-} from "@/lib/tasks/promo-link-claim";
-import { PROMO_LINK_CLAIM_CAPABILITY_KEY, PROMO_LINK_CLAIM_LIMITS } from "@/lib/tasks/promo-link-claim-limits";
 import { requireAdminActionAccess, requireFreshAdminServiceMutation } from "@/server/auth/guards";
 import {
   ContentCreationInputError,
@@ -33,15 +36,6 @@ import {
   type ContentCreationInputErrorCode,
   type CreateContentResult,
 } from "@/server/content-creation";
-import {
-  CONTENT_CREATION_BATCH_BUDGET_MS,
-  CONTENT_CREATION_BATCH_MAX_SELECTION,
-  ContentCreationBatchInputError,
-  applyContentCreationBatch,
-  dryRunContentCreationBatch,
-  type ContentCreationBatchApplyResult,
-  type ContentCreationBatchDryRunResult,
-} from "@/server/content-creation/batch";
 
 import { canonicalOrigin, guardDependencies, prisma, readSessionToken } from "../../api/admin/_lib/deps";
 import { toErrorEnvelope } from "../../api/admin/_lib/respond";
@@ -379,349 +373,143 @@ export async function applyCatalogScanTaskAction(
   return runCatalogScanTrigger("admin.catalog_scan.apply", "apply", input);
 }
 
-/**
- * RC-1 promo-link claim trigger.
- *
- * `createPromoLinkClaimTask` (`@/lib/tasks/promo-link-claim`) had zero
- * `src/app/**` callers before this — CPS v8.3.6 parity for this repo's
- * promo-link claim chain (`submitChangduPromoClaim`,
- * `src/app/(admin)/sync/actions.ts:724-766` in the read-only CPS reference)
- * is that operators need an explicit-selection launcher on the sync/catalog
- * screen, not a route that only the worker ever reaches. This is that
- * missing entry, composed the same way the two trigger blocks above compose
- * on top of P1-08B.
- *
- * Unlike the catalog-scan pair above, this is **one** action, not two split
- * by `mode`. That split exists there because `dry_run` and `apply` ask for
- * *different* capabilities (`content:view` vs `content:publish`) — splitting
- * by static action id is what keeps the capability out of client-controlled
- * input. Here there is only one capability for the whole claim chain,
- * `promo:claim` (`src/lib/auth/capabilities.ts`), and it is required for
- * *both* modes: the factory writes a `GenericTask` + `OperationAudit` row
- * every time, dry_run included, so a cheap capability-free preview was never
- * on the table the way P0-S13's true content-creation dry run is. With the
- * capability identical either way, branching on `mode` inside one action
- * carries none of the risk the catalog-scan comment above warns about.
- *
- * `offerType` is hardcoded to {@link UPSTREAM_EXISTING_PROMO_OFFER_TYPE}
- * ("read"), not exposed as a picker: it is the only offer type any
- * fixture or production evidence has ever produced
- * (`promo-link-claim-limits.ts`'s own doc comment), so a picker would only
- * invite picking something nothing downstream has ever proven.
- *
- * `novelSourceItemIds` is a plain array, never a filter descriptor — there
- * is no "claim everything matching the current status filter" input shape
- * here at all, mirroring the factory's own `items` contract
- * (`CreatePromoLinkClaimTaskInput`'s doc comment: "never a filter
- * descriptor"). CPS's own `submitChangduPromoClaim` explicitly rejects a
- * `selection` filter object for the exact same reason.
- *
- * Duplicate ids are folded here (not left for the factory's own silent
- * `seen` dedupe) purely so `eligibleCount`/batch-size feedback reflects what
- * the operator actually gets asked about, not a pre-dedupe count they never
- * see. `requestToken` stays server-only, `randomUUID()` per submission, same
- * as `runCatalogScanTrigger` above.
- */
-
-export type PromoLinkClaimTriggerInput = {
-  readonly channelAccountId: string;
-  readonly channelAppId: string;
-  readonly novelSourceItemIds: readonly string[];
-  readonly mode: "dry_run" | "apply";
-  readonly requestId: string;
-};
-
-export type PromoLinkClaimOutcome =
-  | {
-      readonly outcome: "enqueued";
-      readonly taskId: string;
-      readonly mode: "dry_run" | "apply";
-      readonly eligibleCount: number;
-      readonly skipReasonCounts: Readonly<Record<string, number>>;
-    }
-  | {
-      readonly outcome: "enqueued_disabled";
-      readonly taskId: string;
-      readonly mode: "dry_run" | "apply";
-      readonly eligibleCount: number;
-      readonly skipReasonCounts: Readonly<Record<string, number>>;
-      /** Same "both flags, not just the one that blocked this call" shape as `CatalogScanOutcome["created_disabled"]["flags"]` above. */
-      readonly flags: { readonly featureEnabled: boolean; readonly writeAllowed: boolean };
-    }
-  | { readonly outcome: "duplicate"; readonly taskId: string }
-  | { readonly outcome: "active_conflict"; readonly taskId: string }
-  | { readonly outcome: "no_eligible_sources"; readonly skipReasonCounts: Readonly<Record<string, number>> }
-  | {
-      /**
-       * `ChannelCapability` (`(channelAppId, capabilityKey)`) is not
-       * something the factory itself ever reads — that enforcement lives in
-       * the worker handler. Checked here, before the factory is even
-       * called, purely so an operator does not have to submit, wait, and
-       * then discover on `/tasks` that the channel app's claim capability
-       * was never turned on. No task row is written for this outcome.
-       */
-      readonly outcome: "capability_disabled";
-      readonly channelAppId: string;
-    };
-
-export type PromoLinkClaimActionResult =
-  | { readonly ok: true; readonly data: PromoLinkClaimOutcome }
+export type CatalogBatchActionResult<T> =
+  | { readonly ok: true; readonly data: T }
   | { readonly ok: false; readonly kind: "access_denied"; readonly envelope: ErrorEnvelope }
   | { readonly ok: false; readonly kind: "invalid_input"; readonly code: string };
 
-function classifyPromoLinkClaimResult(
-  result: PromoLinkClaimTaskCreationResult,
-  mode: "dry_run" | "apply",
-): PromoLinkClaimOutcome {
-  if (result.status === "duplicate") return { outcome: "duplicate", taskId: result.taskId };
-  if (result.status === "active_conflict") return { outcome: "active_conflict", taskId: result.taskId };
-  if (result.status === "no_eligible_sources") {
-    return { outcome: "no_eligible_sources", skipReasonCounts: result.skipReasonCounts };
-  }
-  if (result.taskStatus === "pending") {
-    return {
-      outcome: "enqueued",
-      taskId: result.taskId,
-      mode,
-      eligibleCount: result.eligibleCount,
-      skipReasonCounts: result.skipReasonCounts,
-    };
-  }
-  return {
-    outcome: "enqueued_disabled",
-    taskId: result.taskId,
-    mode,
-    eligibleCount: result.eligibleCount,
-    skipReasonCounts: result.skipReasonCounts,
-    flags: {
-      featureEnabled: isPromoLinkClaimEnabled(),
-      writeAllowed: isPromoLinkClaimWriteAllowed(),
-    },
-  };
+function catalogBatchInputFailure(error: unknown): { readonly ok: false; readonly kind: "invalid_input"; readonly code: string } | null {
+  return error instanceof CatalogSelectionInputError || error instanceof CatalogBatchInputError
+    ? { ok: false, kind: "invalid_input", code: error.code }
+    : null;
 }
 
-export async function enqueuePromoLinkClaimAction(
-  input: PromoLinkClaimTriggerInput,
-): Promise<PromoLinkClaimActionResult> {
+const CATALOG_BATCH_CONFIG_MAX_ENTRIES = 1_000;
+const CONFIG_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+async function validatePromoAccountConfiguration(db: Pick<typeof prisma, "channelApp">, accounts: Readonly<Record<string, string>>): Promise<boolean> {
+  for (const [channelAppId, accountId] of Object.entries(accounts)) {
+    const binding = await db.channelApp.findFirst({ where: {
+      id: channelAppId, status: "active",
+      channel: { status: "active", channelAccounts: { some: { id: accountId, status: "active", deletedAt: null } } },
+    }, select: { id: true } });
+    if (!binding) return false;
+  }
+  return true;
+}
+
+async function validateTemplateConfiguration(db: Pick<typeof prisma, "articleTemplate">, templates: Readonly<Record<string, string>>): Promise<boolean> {
+  for (const [locale, templateKey] of Object.entries(templates)) {
+    const template = await db.articleTemplate.findFirst({ where: {
+      locale, templateKey, status: "active", deletedAt: null, applicableArticleType: "novel_article",
+    }, select: { id: true } });
+    if (!template) return false;
+  }
+  return true;
+}
+
+export async function readCatalogBatchContextAction(input: {
+  selection: CatalogSelection;
+  requestId: string;
+}): Promise<CatalogBatchActionResult<CatalogBatchContext>> {
   try {
-    const { serviceAuthorization } = await authorizeAction(
-      "admin.promo_link_claim.enqueue",
-      input.requestId,
-    );
-    if (!serviceAuthorization) {
-      // Unreachable given this action's own registration (capability is
-      // always set — see `ADMIN_PROMO_LINK_CLAIM_ACTIONS`), kept as the same
-      // fail-closed backstop the two trigger blocks above use.
-      const { AdminAccessError } = await import("@/lib/auth/errors");
-      throw new AdminAccessError(
-        "admin_service_authorization_required",
-        403,
-        "Action is not bound to a capability",
-      );
-    }
+    await authorizeAction("admin.catalog_batch.context", input.requestId);
+    const data = await readCatalogBatchContext(prisma, normalizeCatalogSelection(input.selection));
+    return { ok: true, data };
+  } catch (error) {
+    return catalogBatchInputFailure(error) ?? { ok: false, kind: "access_denied", envelope: toErrorEnvelope(error) };
+  }
+}
+
+export async function enqueuePromoLinkClaimAction(input: {
+  selection: CatalogSelection;
+  channelAccounts: Readonly<Record<string, string>>;
+  requestId: string;
+}): Promise<CatalogBatchActionResult<CatalogBatchEnqueueResult>> {
+  try {
+    const { serviceAuthorization } = await authorizeAction("admin.promo_link_claim.enqueue", input.requestId);
+    if (!serviceAuthorization) throw new Error("admin_service_authorization_required");
     const guards = guardDependencies();
     const fresh = await requireFreshAdminServiceMutation(serviceAuthorization, "promo:claim", {
-      identities: guards.identities,
-      sessions: guards.sessions,
-      entryId: "admin.promo_link_claim.enqueue",
-      requestId: input.requestId,
+      identities: guards.identities, sessions: guards.sessions,
+      entryId: "admin.promo_link_claim.enqueue", requestId: input.requestId,
     });
-
-    if (!input.channelAppId.trim()) {
-      return { ok: false, kind: "invalid_input", code: "channel_app_required" };
+    const selection = normalizeCatalogSelection(input.selection);
+    if (!input.channelAccounts || typeof input.channelAccounts !== "object" || Array.isArray(input.channelAccounts)) {
+      return { ok: false, kind: "invalid_input", code: "channel_accounts_invalid" };
     }
-    if (!input.channelAccountId.trim()) {
-      return { ok: false, kind: "invalid_input", code: "channel_account_required" };
+    if (Object.keys(input.channelAccounts).length > CATALOG_BATCH_CONFIG_MAX_ENTRIES) {
+      return { ok: false, kind: "invalid_input", code: "channel_accounts_invalid" };
     }
-    const uniqueIds = Array.from(new Set(input.novelSourceItemIds));
-    if (uniqueIds.length === 0) {
-      return { ok: false, kind: "invalid_input", code: "items_required" };
+    for (const [channelAppId, accountId] of Object.entries(input.channelAccounts)) {
+      if (!CONFIG_UUID.test(channelAppId.trim()) || typeof accountId !== "string" || !CONFIG_UUID.test(accountId.trim())) {
+        return { ok: false, kind: "invalid_input", code: "channel_accounts_invalid" };
+      }
     }
-    if (uniqueIds.length > PROMO_LINK_CLAIM_LIMITS.maxBatchSize) {
-      return { ok: false, kind: "invalid_input", code: "batch_size_exceeded" };
-    }
-
-    const capability = await prisma.channelCapability.findUnique({
-      where: {
-        channelAppId_capabilityKey: {
-          channelAppId: input.channelAppId,
-          capabilityKey: PROMO_LINK_CLAIM_CAPABILITY_KEY,
-        },
-      },
-      select: { status: true },
+    const normalizedAccounts = Object.fromEntries(Object.entries(input.channelAccounts).map(([k, v]) => [k.trim(), v.trim()]));
+    const enabled = isPromoLinkClaimEnabled() && isPromoLinkClaimWriteAllowed();
+    const result = await enqueueCatalogBatch(prisma, {
+      operation: "promo_claim", selection, actorId: fresh.identity.id, requestId: input.requestId,
+      channelAccounts: normalizedAccounts,
+    }, new Date(), enabled, async (tx) => {
+      if (!await validatePromoAccountConfiguration(tx, normalizedAccounts)) {
+        throw new CatalogBatchInputError("channel_account_binding_invalid");
+      }
     });
-    if (capability?.status !== "enabled") {
-      return { ok: true, data: { outcome: "capability_disabled", channelAppId: input.channelAppId } };
-    }
-
-    const result = await createPromoLinkClaimTask(prisma, {
-      channelAccountId: input.channelAccountId,
-      channelAppId: input.channelAppId,
-      items: uniqueIds.map((novelSourceItemId) => ({
-        novelSourceItemId,
-        offerType: UPSTREAM_EXISTING_PROMO_OFFER_TYPE,
-      })),
-      requestToken: randomUUID(),
-      actorId: fresh.identity.id,
-      requestId: input.requestId,
-      mode: input.mode,
-    });
-    return { ok: true, data: classifyPromoLinkClaimResult(result, input.mode) };
+    const replaySummary = result.duplicate ? await readCatalogBatchSummary(prisma, result.taskId, fresh.identity.id) : null;
+    return { ok: true, data: { taskId: result.taskId, phase: replaySummary?.phase ?? (result.taskStatus === "disabled" ? "disabled" : "queued") } };
   } catch (error) {
-    if (error instanceof PromoLinkClaimTaskInputError) {
-      return { ok: false, kind: "invalid_input", code: error.code };
-    }
-    return { ok: false, kind: "access_denied", envelope: toErrorEnvelope(error) };
+    return catalogBatchInputFailure(error) ?? { ok: false, kind: "access_denied", envelope: toErrorEnvelope(error) };
   }
 }
 
-/**
- * RC-4 explicit-selection batch content-creation trigger.
- *
- * `applyContentCreationBatch`/`dryRunContentCreationBatch`
- * (`@/server/content-creation/batch`) had zero `src/app/**` callers before
- * this — they exist purely as a thin, serial, budgeted loop over the exact
- * same `createContentFromSourceItem` call `dryRunContentCreationAction`/
- * `applyContentCreationAction` above already make one item at a time. CPS
- * v8.3.6 parity target is `runChangduPromoteDramaBatch`
- * (`src/lib/changdu-promote-drama-batch.ts` in the read-only CPS reference,
- * `git show v8.3.6:src/lib/changdu-promote-drama-batch.ts`): explicit
- * id-list selection only, a per-run cap, strictly sequential per-item calls
- * collected into a results array a summary is derived from — never a
- * BatchTask/queue construction. See `@/server/content-creation/batch`'s
- * module header for the full port-registry-worthy comparison.
- *
- * Two actions, not one split by client-controlled `mode`, for the exact
- * reason `dryRunContentCreationAction`/`applyContentCreationAction` above
- * are already two actions: dry_run needs only `content:view` (already
- * required to reach `/catalog-sync`, zero writes) while apply needs
- * `content:publish` (2FA + `super_admin` default, the real write). Reusing a
- * single action branching on `mode` would make the enforced capability a
- * function of client input — the same reasoning `runCatalogScanTrigger`'s
- * doc comment spells out above.
- *
- * `novelSourceItemIds` is deduped and size-checked *here* first (same
- * `Array.from(new Set(...))` + `items_required`/`batch_size_exceeded` early
- * return `enqueuePromoLinkClaimAction` above already uses) so the operator
- * gets a friendly rejection before ever reaching the service; the service
- * layer (`@/server/content-creation/batch`) validates the exact same two
- * conditions again as a backstop (`ContentCreationBatchInputError`), the
- * same two-layer validation `createPromoLinkClaimTask` already applies on
- * top of this file's own pre-checks.
- */
-
-export type ContentCreationBatchDryRunActionResult =
-  | { readonly ok: true; readonly data: ContentCreationBatchDryRunResult }
-  | { readonly ok: false; readonly kind: "access_denied"; readonly envelope: ErrorEnvelope }
-  | { readonly ok: false; readonly kind: "invalid_input"; readonly code: string };
-
-export type ContentCreationBatchApplyActionResult =
-  | { readonly ok: true; readonly data: ContentCreationBatchApplyResult }
-  | { readonly ok: false; readonly kind: "access_denied"; readonly envelope: ErrorEnvelope }
-  | { readonly ok: false; readonly kind: "invalid_input"; readonly code: string };
-
-function requireBatchSelection(
-  novelSourceItemIds: readonly string[],
-): { readonly ok: true; readonly uniqueIds: readonly string[] } | { readonly ok: false; readonly code: "items_required" | "batch_size_exceeded" } {
-  const uniqueIds = Array.from(new Set(novelSourceItemIds));
-  if (uniqueIds.length === 0) return { ok: false, code: "items_required" };
-  if (uniqueIds.length > CONTENT_CREATION_BATCH_MAX_SELECTION) {
-    return { ok: false, code: "batch_size_exceeded" };
-  }
-  return { ok: true, uniqueIds };
-}
-
-/**
- * Read-only batch preview, gated by `content:view` — same bar as the
- * single-item `dryRunContentCreationAction`. Every id resolves through
- * `createContentFromSourceItem` in `"dry_run"` mode, which performs zero
- * writes by construction (see that service's module header); this action
- * itself performs no writes either.
- */
-export async function dryRunContentCreationBatchAction(input: {
-  novelSourceItemIds: readonly string[];
-  requestId: string;
-  templateKey?: string;
-}): Promise<ContentCreationBatchDryRunActionResult> {
-  try {
-    const { context } = await authorizeAction("admin.content_creation.batch_dry_run", input.requestId);
-    const selection = requireBatchSelection(input.novelSourceItemIds);
-    if (!selection.ok) return { ok: false, kind: "invalid_input", code: selection.code };
-
-    const data = await dryRunContentCreationBatch(prisma, {
-      novelSourceItemIds: selection.uniqueIds,
-      actor: { type: "admin", adminId: context.identity.id },
-      requestId: input.requestId,
-      budgetMs: CONTENT_CREATION_BATCH_BUDGET_MS,
-      templateKey: input.templateKey,
-    });
-    return { ok: true, data };
-  } catch (error) {
-    if (error instanceof ContentCreationBatchInputError) {
-      return { ok: false, kind: "invalid_input", code: error.code };
-    }
-    return { ok: false, kind: "access_denied", envelope: toErrorEnvelope(error) };
-  }
-}
-
-/**
- * The real batch write. Gated by `content:publish` — same bar and same
- * `requireAdminActionAccess` → `requireFreshAdminServiceMutation` two-step
- * as the single-item `applyContentCreationAction` above. Revalidates once
- * (not per item) whenever at least one item actually reached `"created"` —
- * a batch where every item resolved to `skipped_already_linked`/`failed`/
- * `not_processed` changes nothing `/novels` or `/catalog-sync` render, so
- * there is nothing to revalidate for.
- */
 export async function applyContentCreationBatchAction(input: {
-  novelSourceItemIds: readonly string[];
+  selection: CatalogSelection;
+  templateKeysByLocale?: Readonly<Record<string, string>>;
   requestId: string;
-  templateKey?: string;
-}): Promise<ContentCreationBatchApplyActionResult> {
+}): Promise<CatalogBatchActionResult<CatalogBatchEnqueueResult>> {
   try {
-    const { serviceAuthorization } = await authorizeAction(
-      "admin.content_creation.batch_apply",
-      input.requestId,
-    );
-    if (!serviceAuthorization) {
-      // Unreachable given this action's own registration (capability is
-      // always set — see `ADMIN_CONTENT_CREATION_BATCH_ACTIONS`), kept as
-      // the same fail-closed backstop every other real write in this file
-      // uses.
-      const { AdminAccessError } = await import("@/lib/auth/errors");
-      throw new AdminAccessError(
-        "admin_service_authorization_required",
-        403,
-        "Action is not bound to a capability",
-      );
-    }
+    const { serviceAuthorization } = await authorizeAction("admin.content_creation.batch_apply", input.requestId);
+    if (!serviceAuthorization) throw new Error("admin_service_authorization_required");
     const guards = guardDependencies();
-    const context = await requireFreshAdminServiceMutation(serviceAuthorization, "content:publish", {
-      identities: guards.identities,
-      sessions: guards.sessions,
-      entryId: "admin.content_creation.batch_apply",
-      requestId: input.requestId,
+    const fresh = await requireFreshAdminServiceMutation(serviceAuthorization, "content:publish", {
+      identities: guards.identities, sessions: guards.sessions,
+      entryId: "admin.content_creation.batch_apply", requestId: input.requestId,
     });
-
-    const selection = requireBatchSelection(input.novelSourceItemIds);
-    if (!selection.ok) return { ok: false, kind: "invalid_input", code: selection.code };
-
-    const data = await applyContentCreationBatch(prisma, {
-      novelSourceItemIds: selection.uniqueIds,
-      actor: { type: "admin", adminId: context.identity.id },
-      requestId: input.requestId,
-      budgetMs: CONTENT_CREATION_BATCH_BUDGET_MS,
-      templateKey: input.templateKey,
-    });
-    if (data.counts.created > 0) {
-      revalidatePath("/catalog-sync");
-      revalidatePath("/novels");
+    const selection = normalizeCatalogSelection(input.selection);
+    const templates = input.templateKeysByLocale ?? {};
+    if (!templates || typeof templates !== "object" || Array.isArray(templates)
+      || Object.keys(templates).length > CATALOG_BATCH_CONFIG_MAX_ENTRIES
+      || Object.entries(templates).some(([locale, key]) => !locale.trim() || locale.trim().length > 16 || typeof key !== "string" || !key.trim() || key.trim().length > 100)) {
+      return { ok: false, kind: "invalid_input", code: "template_keys_invalid" };
     }
+    const normalizedTemplates = Object.fromEntries(Object.entries(templates).map(([k, v]) => [k.trim(), v.trim()]));
+    const result = await enqueueCatalogBatch(prisma, {
+      operation: "content_create", selection, actorId: fresh.identity.id, requestId: input.requestId,
+      templateKeysByLocale: normalizedTemplates,
+    }, new Date(), true, async (tx) => {
+      if (!await validateTemplateConfiguration(tx, normalizedTemplates)) {
+        throw new CatalogBatchInputError("template_configuration_invalid");
+      }
+    });
+    const replaySummary = result.duplicate ? await readCatalogBatchSummary(prisma, result.taskId, fresh.identity.id) : null;
+    return { ok: true, data: { taskId: result.taskId, phase: replaySummary?.phase ?? (result.taskStatus === "disabled" ? "disabled" : "queued") } };
+  } catch (error) {
+    return catalogBatchInputFailure(error) ?? { ok: false, kind: "access_denied", envelope: toErrorEnvelope(error) };
+  }
+}
+
+export async function readCatalogBatchSummaryAction(input: {
+  taskId: string;
+  requestId: string;
+}): Promise<CatalogBatchActionResult<CatalogBatchSummary>> {
+  try {
+    const { context } = await authorizeAction("admin.catalog_batch.summary", input.requestId);
+    if (!/^[0-9a-f-]{36}$/i.test(input.taskId)) return { ok: false, kind: "invalid_input", code: "task_id_invalid" };
+    const data = await readCatalogBatchSummary(prisma, input.taskId, context.identity.id);
+    if (!data) return { ok: false, kind: "invalid_input", code: "task_not_found" };
     return { ok: true, data };
   } catch (error) {
-    if (error instanceof ContentCreationBatchInputError) {
-      return { ok: false, kind: "invalid_input", code: error.code };
-    }
     return { ok: false, kind: "access_denied", envelope: toErrorEnvelope(error) };
   }
 }

@@ -23,6 +23,8 @@ import { RetryFailedButton } from "../_components/retry-failed-button";
 import {
   isRetryableTaskStatus,
   isTerminalTaskStatus,
+  catalogBatchBlockedReasons,
+  catalogBatchPhaseLabel,
   shouldDropSkippedFilterForTaskType,
   taskFamilyLabel,
 } from "../_lib/task-copy";
@@ -193,12 +195,39 @@ export default async function TaskDetailPage({
               </p>
             )}
           </div>
-          {isRetryableTaskStatus(detail.status) && (
+          {isRetryableTaskStatus(detail.status) && !detail.catalogBatch && (
             <RetryFailedButton family={detail.family} taskId={detail.taskId} failedCount={detail.failedCount} />
           )}
         </div>
 
         {/* 汇总卡片 */}
+        {detail.catalogBatch && (
+          <section className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+            <h2 className="font-medium text-gray-900">批量任务进度</h2>
+            <p className="mt-1 text-sm text-gray-600">
+              阶段：{catalogBatchPhaseLabel(detail.catalogBatch.phase)}；已提交 {detail.catalogBatch.submittedCount?.toLocaleString("zh-CN") ?? "正在统计"} 条；
+              不符合条件 {detail.catalogBatch.ineligibleCount?.toLocaleString("zh-CN") ?? "正在统计"} 条。
+            </p>
+            {(detail.catalogBatch.blockedCount ?? 0) > 0 && (
+              <div className="mt-2 rounded border border-amber-200 bg-amber-50 p-2 text-sm text-amber-900" data-testid="catalog-batch-blocked-explanation">
+                部分条目未提交（{detail.catalogBatch.blockedCount} 条）。
+                {catalogBatchBlockedReasons(detail.catalogBatch.blockedReasonCounts).map((reason) => (
+                  <span key={reason} className="ml-2">{reason}</span>
+                ))}
+              </div>
+            )}
+            {(detail.catalogBatch.childTasks?.length ?? 0) > 0 && (
+              <ul className="mt-3 space-y-2 text-sm" data-testid="catalog-batch-child-tasks">
+                {detail.catalogBatch.childTasks?.map((child) => (
+                  <li key={child.taskId} className="flex items-center justify-between rounded border border-gray-100 px-3 py-2">
+                    <span>{child.taskType} · {taskStatusLabel(child.status)}</span>
+                    <Link href={`/tasks/${child.taskId}?family=generic`} className="text-blue-700 underline">查看子任务</Link>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        )}
         {bookCounts ? (
           <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
             <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
@@ -247,7 +276,7 @@ export default async function TaskDetailPage({
         {!isTerminal && (
           <div className="rounded-xl border border-blue-100 bg-white p-5 shadow-sm">
             <p className="mb-4 text-sm font-medium text-gray-700">实时进度</p>
-            <TaskDetailProgress taskId={detail.taskId} />
+        <TaskDetailProgress taskId={detail.taskId} materializing={detail.catalogBatch?.phase === "materializing" || detail.catalogBatch?.phase === "queued"} />
           </div>
         )}
 

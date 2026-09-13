@@ -257,6 +257,30 @@ describe("/tasks/[id] · 页面区块", () => {
     );
     expect(screen.getByTestId("task-item-status-tab-failed").className).toContain("bg-blue-600");
   });
+
+  it("目录父任务显示子任务链接和中文未提交原因，且不提供重试", async () => {
+    getAdminTaskDetail.mockResolvedValue(detail({
+      taskType: "batch.materialize.v1",
+      status: "completed_with_errors",
+      catalogBatch: {
+        phase: "completed_with_errors",
+        submittedCount: 4,
+        ineligibleCount: 1,
+        blockedCount: 2,
+        blockedReasonCounts: { active_scope_conflict: 2, internal_reason: 9 },
+        childTasks: [{ taskId: "20000000-0000-4000-8000-000000000001", taskType: "promo_link_claim", status: "pending" }],
+      },
+    }));
+    listAdminTaskItems.mockResolvedValue(itemsResult([]));
+
+    render(await renderPage());
+
+    expect(screen.queryByTestId("retry-failed-open")).toBeNull();
+    expect(screen.getByTestId("catalog-batch-blocked-explanation").textContent).toContain("当前范围已有进行中的任务：2 条");
+    expect(screen.getByTestId("catalog-batch-blocked-explanation").textContent).not.toContain("internal_reason");
+    const link = screen.getByText("查看子任务") as HTMLAnchorElement;
+    expect(link.getAttribute("href")).toContain("family=generic");
+  });
 });
 
 describe("/tasks/[id] · catalog_scan 单位与派生审计字段", () => {

@@ -392,6 +392,12 @@ export async function processOneWorkerCycle(options: WorkerRuntimeOptions): Prom
       leaseController.abort(error);
       options.onError?.(sanitizePersistedTaskError(error, "worker_runtime_error"));
     });
+    const stopHeartbeats = async () => {
+      heartbeatEnabled = false;
+      heartbeatController.abort();
+      await heartbeatPromise;
+      await Promise.allSettled(handlerHeartbeats);
+    };
 
     try {
       const handlerPromise = registration.handler({
@@ -415,9 +421,19 @@ export async function processOneWorkerCycle(options: WorkerRuntimeOptions): Prom
         await Promise.allSettled(handlerHeartbeats);
         return true;
       }
-      const outcome = lease.mode === "dry_run"
+      const outcome: TaskOutcome = lease.mode === "dry_run"
         ? { ...drainResult.value, protectedWrite: undefined }
         : drainResult.value;
+      if (outcome.protectedWrite) {
+        // `finalizeTaskItem` locks this same item before running the fenced
+        // protected write. A concurrent heartbeat from this worker would
+        // then wait on its own finalize transaction and can hit the DB role's
+        // lock_timeout during a large materialization. Stop and drain every
+        // heartbeat first. Recovery still cannot take the item while finalize
+        // holds the row lock, and finalize keeps the full token/epoch/owner/
+        // unexpired-at-transaction-start fence in `assertProtectedWriteLease`.
+        await stopHeartbeats();
+      }
       try {
         await finalizeTaskItem(options.prisma, lease, outcome);
       } catch (finalizeError) {
@@ -448,12 +464,9 @@ export async function processOneWorkerCycle(options: WorkerRuntimeOptions): Prom
     } catch (error) {
       if (!(error instanceof LeaseLostError)) throw error;
     } finally {
-      heartbeatEnabled = false;
-      heartbeatController.abort();
       leaseController.abort();
       options.signal.removeEventListener("abort", abortLeaseSignal);
-      await heartbeatPromise;
-      await Promise.allSettled(handlerHeartbeats);
+      await stopHeartbeats();
     }
     return true;
   }

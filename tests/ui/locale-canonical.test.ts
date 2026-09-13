@@ -146,12 +146,6 @@ const LOCALE_DECLARATION_EXEMPTIONS: readonly LocaleDeclarationExemption[] = [
     reason:
       "把既有 MOBOREADER_LANGUAGE_CODE_TO_LOCALE 表（channel-language.ts 唯一真源的一部分）重塑成 chip 展示项（value/label/isSiteLocale），不解析任何码、不新增任何映射内容，只是换一种形状展示已解析结果。",
   },
-  {
-    file: "src/app/(admin)/catalog-sync/_components/batch-create-content-dialog.tsx",
-    identifier: "selectedLocales",
-    reason:
-      "把已解析的 item.sourceLocale 去重成一个集合（Array.from(new Set(...))），不做码→locale 映射、不引入新的解析规则，只是对已解析值的去重收集。",
-  },
 ];
 
 /** 递归收集一批目录下的 .ts / .tsx。 */

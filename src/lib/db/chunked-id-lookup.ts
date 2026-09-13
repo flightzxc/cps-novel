@@ -59,6 +59,7 @@ export async function findNovelSourceItemsByIds<Select extends Prisma.NovelSourc
   options: {
     readonly select: Select;
     readonly where?: Omit<Prisma.NovelSourceItemWhereInput, "id">;
+    readonly chunkSize?: number;
   },
 ): Promise<Array<Prisma.NovelSourceItemGetPayload<{ select: Select }>>> {
   type Row = Prisma.NovelSourceItemGetPayload<{ select: Select }>;
@@ -67,7 +68,7 @@ export async function findNovelSourceItemsByIds<Select extends Prisma.NovelSourc
   if (uniqueIds.length === 0) return [];
 
   const byId = new Map<string, Row>();
-  for (const chunk of chunkIds(uniqueIds)) {
+  for (const chunk of chunkIds(uniqueIds, options.chunkSize)) {
     const rows = (await db.novelSourceItem.findMany({
       where: { ...options.where, id: { in: chunk } },
       select: options.select,

@@ -4,7 +4,7 @@
  * Moboreader task factory; this module only resolves the account and maps the
  * result back to the content-creation UI.
  */
-import type { PrismaClient } from "@prisma/client";
+import type { Prisma, PrismaClient } from "@prisma/client";
 
 import { findNovelSourceItemsByIds } from "@/lib/db/chunked-id-lookup";
 import {
@@ -20,6 +20,33 @@ export type ContentCreationPreviewEnqueueResult =
       readonly reason: "no_channel_account" | "mixed_channel_apps" | "enqueue_failed" | "no_eligible_sources";
       readonly skipReasonCounts?: Record<string, number>;
     };
+
+type PreviewAccountDb = Pick<PrismaClient, "genericTask" | "channelAccount">;
+
+export async function resolveContentPreviewAccount(
+  db: PreviewAccountDb | Prisma.TransactionClient,
+  channelAppId: string,
+  now = new Date(),
+): Promise<string | null> {
+  const latestScan = await db.genericTask.findFirst({
+    where: { taskType: MOBOREADER_TASK_TYPES.catalogScan, channelAppId, status: "completed" },
+    select: { channelAccountId: true }, orderBy: [{ completedAt: "desc" }, { createdAt: "desc" }],
+  });
+  if (latestScan?.channelAccountId) {
+    const valid = await db.channelAccount.findFirst({ where: {
+      id: latestScan.channelAccountId, status: "active", deletedAt: null,
+      channel: { channelApps: { some: { id: channelAppId, status: "active" } } },
+      credentials: { some: { status: "active", OR: [{ expiresAt: null }, { expiresAt: { gt: now } }] } },
+    }, select: { id: true } });
+    if (valid) return valid.id;
+  }
+  const accounts = await db.channelAccount.findMany({ where: {
+    status: "active", deletedAt: null,
+    channel: { channelApps: { some: { id: channelAppId, status: "active" } } },
+    credentials: { some: { status: "active", OR: [{ expiresAt: null }, { expiresAt: { gt: now } }] } },
+  }, select: { id: true }, orderBy: { createdAt: "asc" }, take: 2 });
+  return accounts.length === 1 ? accounts[0]!.id : null;
+}
 
 export async function enqueueContentCreationPreview(
   db: PrismaClient,
@@ -54,33 +81,8 @@ export async function enqueueContentCreationPreview(
   const channelAppId = channelAppIds[0]!;
 
   // Phase C: CatalogScanTask folded into GenericTask (taskType = "catalog_scan").
-  const latestScan = await db.genericTask.findFirst({
-    where: { taskType: MOBOREADER_TASK_TYPES.catalogScan, channelAppId, status: "completed" },
-    select: { channelAccountId: true },
-    orderBy: [{ completedAt: "desc" }, { createdAt: "desc" }],
-  });
-  let channelAccountId = latestScan?.channelAccountId ?? null;
-
-  if (!channelAccountId) {
-    const accounts = await db.channelAccount.findMany({
-      where: {
-        status: "active",
-        deletedAt: null,
-        channel: { channelApps: { some: { id: channelAppId, status: "active" } } },
-        credentials: {
-          some: {
-            status: "active",
-            OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
-          },
-        },
-      },
-      select: { id: true },
-      orderBy: { createdAt: "asc" },
-      take: 2,
-    });
-    if (accounts.length !== 1) return { queued: false, reason: "no_channel_account" };
-    channelAccountId = accounts[0]!.id;
-  }
+  const channelAccountId = await resolveContentPreviewAccount(db, channelAppId, now);
+  if (!channelAccountId) return { queued: false, reason: "no_channel_account" };
 
   try {
     const result = await db.$transaction((tx) =>

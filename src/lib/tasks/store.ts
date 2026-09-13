@@ -647,7 +647,10 @@ export async function finalizeTaskItem(
       },
     });
     await recomputeParentTask(tx, lease.family, lease.taskId);
-      }),
+      }, outcome.transactionIsolationLevel || outcome.transactionTimeoutMs ? {
+        ...(outcome.transactionIsolationLevel ? { isolationLevel: outcome.transactionIsolationLevel } : {}),
+        ...(outcome.transactionTimeoutMs ? { timeout: outcome.transactionTimeoutMs } : {}),
+      } : undefined),
     { op: "tasks.finalizeTaskItem", itemId: lease.itemId, sourceKey: lease.family },
   );
 }

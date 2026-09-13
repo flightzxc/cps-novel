@@ -3,7 +3,7 @@ import Link from "next/link";
 import { taskStatusLabel } from "@/features/admin-ui/content-view";
 import type { CatalogBookCountsDto } from "@/server/task-admin";
 
-import { taskFamilyLabel } from "../_lib/task-copy";
+import { catalogBatchBlockedReasons, catalogBatchPhaseLabel, taskFamilyLabel } from "../_lib/task-copy";
 
 export type TaskSummaryRow = {
   readonly family: string;
@@ -32,6 +32,14 @@ export type TaskSummaryRow = {
    * switches the 总数/成功/失败 columns to "本" units.
    */
   readonly bookCounts?: CatalogBookCountsDto;
+  /** A parent catalog batch's materialization state and compact totals. */
+  readonly catalogBatch?: {
+    readonly phase: string;
+    readonly submittedCount: number | null;
+    readonly ineligibleCount: number | null;
+    readonly blockedCount?: number;
+    readonly blockedReasonCounts?: Readonly<Record<string, number>>;
+  };
 };
 
 /**
@@ -142,6 +150,19 @@ export function TasksTable({
               </td>
               <td className="px-4 py-3" data-testid={`task-status-${task.taskId}`}>
                 {taskStatusLabel(task.status)}
+                {task.catalogBatch && (
+                  <p className="mt-1 text-xs text-gray-500" data-testid={`catalog-batch-phase-${task.taskId}`}>
+                    {catalogBatchPhaseLabel(task.catalogBatch.phase)}
+                    {task.catalogBatch.submittedCount !== null && ` · ${task.catalogBatch.submittedCount} 条`}
+                    {task.catalogBatch.ineligibleCount !== null && ` / 不符合条件 ${task.catalogBatch.ineligibleCount} 条`}
+                    {(task.catalogBatch.blockedCount ?? 0) > 0 && (
+                      <span className="block text-amber-700" data-testid={`catalog-batch-blocked-${task.taskId}`}>
+                        部分条目未提交（{task.catalogBatch.blockedCount} 条）
+                        {catalogBatchBlockedReasons(task.catalogBatch.blockedReasonCounts).map((reason) => ` · ${reason}`)}
+                      </span>
+                    )}
+                  </p>
+                )}
               </td>
               <td className="px-4 py-3 text-right text-gray-600">
                 {countCell(task, task.totalCount, task.bookCounts?.upstreamTotal ?? 0)}

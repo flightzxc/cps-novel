@@ -1,4 +1,5 @@
 import { NOVEL_SOURCE_ITEM_STATUSES, type NovelSourceItemStatus } from "@/domain/database-statuses";
+import { normalizeCatalogSelection, type CatalogFilterSnapshot } from "@/domain/catalog-batch";
 import { UNKNOWN_SOURCE_LOCALE_FILTER } from "@/lib/locale/channel-language";
 import { PROMO_LINK_CLAIM_TARGET_TYPE, PROMO_LINK_CLAIM_TASK_TYPE } from "@/lib/tasks/promo-link-claim-limits";
 
@@ -19,7 +20,8 @@ import { prisma } from "@/app/api/admin/_lib/deps";
  * inside the Server Action (`../_actions.ts`).
  */
 
-const PAGE_SIZE = 20;
+export const CATALOG_PAGE_SIZE_OPTIONS = [50, 100, 200] as const;
+const DEFAULT_PAGE_SIZE = 100;
 
 export type SourceItemRow = {
   readonly id: string;
@@ -78,6 +80,7 @@ export type SourceItemsPage = {
 
 export type SourceItemFilters = {
   readonly page?: string;
+  readonly pageSize?: string;
   readonly status?: string;
   readonly search?: string;
   /**
@@ -92,6 +95,15 @@ export type SourceItemFilters = {
   readonly sourceLocale?: string;
 };
 
+/** The list and an all-filtered batch must describe exactly the same rows. */
+export function canonicalCatalogFilter(filters: SourceItemFilters): CatalogFilterSnapshot {
+  const normalized = normalizeCatalogSelection({
+    scope: "all_filtered",
+    filter: { status: filters.status, search: filters.search, sourceLocale: filters.sourceLocale },
+  });
+  return normalized.scope === "all_filtered" ? normalized.filter : { status: "pending" };
+}
+
 const MAX_SEARCH_LENGTH = 200;
 /** `NovelSourceItem.sourceLocale` is `@db.VarChar(16)` — reject anything longer outright rather than let Prisma's own error surface. */
 const MAX_SOURCE_LOCALE_LENGTH = 16;
@@ -99,6 +111,11 @@ const MAX_SOURCE_LOCALE_LENGTH = 16;
 function normalizePage(value: string | undefined): number {
   const parsed = value ? Number.parseInt(value, 10) : 1;
   return Number.isInteger(parsed) && parsed > 0 ? parsed : 1;
+}
+
+function normalizePageSize(value: string | undefined): number {
+  const parsed = value ? Number.parseInt(value, 10) : DEFAULT_PAGE_SIZE;
+  return (CATALOG_PAGE_SIZE_OPTIONS as readonly number[]).includes(parsed) ? parsed : DEFAULT_PAGE_SIZE;
 }
 
 function normalizeStatus(value: string | undefined): NovelSourceItemStatus | undefined {
@@ -139,9 +156,11 @@ function parseSourceLocaleFilter(
  */
 export async function readSourceItemsPage(filters: SourceItemFilters): Promise<SourceItemsPage> {
   const page = normalizePage(filters.page);
-  const status = normalizeStatus(filters.status) ?? "pending";
-  const search = normalizeSearch(filters.search);
-  const sourceLocaleFilter = parseSourceLocaleFilter(filters.sourceLocale);
+  const pageSize = normalizePageSize(filters.pageSize);
+  const canonical = canonicalCatalogFilter(filters);
+  const status = normalizeStatus(canonical.status) ?? "pending";
+  const search = normalizeSearch(canonical.search);
+  const sourceLocaleFilter = parseSourceLocaleFilter(canonical.sourceLocale);
 
   const where = {
     deletedAt: null,
@@ -157,9 +176,10 @@ export async function readSourceItemsPage(filters: SourceItemFilters): Promise<S
   const [rows, total] = await Promise.all([
     prisma.novelSourceItem.findMany({
       where,
-      orderBy: { lastSeenAt: "desc" },
-      skip: (page - 1) * PAGE_SIZE,
-      take: PAGE_SIZE,
+      // A timestamp alone is not stable when rows share a last-seen value.
+      orderBy: [{ lastSeenAt: "desc" }, { id: "asc" }],
+      skip: (page - 1) * pageSize,
+      take: pageSize,
       select: {
         id: true,
         title: true,
@@ -237,8 +257,8 @@ export async function readSourceItemsPage(filters: SourceItemFilters): Promise<S
       };
     }),
     page,
-    pageSize: PAGE_SIZE,
+    pageSize,
     total,
-    totalPages: Math.max(1, Math.ceil(total / PAGE_SIZE)),
+    totalPages: Math.max(1, Math.ceil(total / pageSize)),
   };
 }

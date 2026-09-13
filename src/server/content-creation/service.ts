@@ -762,6 +762,24 @@ async function runCreateTransaction(
   };
 }
 
+/** Worker-facing fenced variant. The caller owns the surrounding transaction. */
+export async function createContentFromSourceItemInTransaction(
+  tx: Prisma.TransactionClient,
+  input: Omit<CreateContentFromSourceItemInput, "mode" | "deferPreviewEnqueue">,
+): Promise<CreateContentResult> {
+  const novelSourceItemId = requireUuid(input.novelSourceItemId);
+  requireActor(input.actor);
+  const requestId = requireRequestId(input.requestId);
+  // Do not catch rollback signals here. This function runs inside the
+  // worker's fenced finalization transaction; swallowing a CAS loser after
+  // Novel/Article inserts would commit orphan rows.
+  return runCreateTransaction(tx as unknown as WriteClient, {
+    novelSourceItemId,
+    ...(input.templateKey ? { templateKey: input.templateKey } : {}),
+    actorType: auditActorType(input.actor), actorId: auditActorId(input.actor), requestId,
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Public entry point
 // ---------------------------------------------------------------------------

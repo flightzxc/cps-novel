@@ -138,6 +138,12 @@ export class FakePromoLinkClaimTaskDb {
     return results.map((item) => ({ targetId: item.targetId }));
   };
 
+  private genericTaskItemCreateMany = async (args: { data: Array<{ taskId: string; targetType: string; targetId: string; payload: unknown }> }) => {
+    this.calls.push("genericTaskItem.createMany");
+    for (const item of args.data) this.items.push({ id: nextItemId(), ...item });
+    return { count: args.data.length };
+  };
+
   private channelAppFindFirst = async (args: { where: { id: string } }) => {
     this.calls.push("channelApp.findFirst");
     const app = this.channelApps.get(args.where.id);
@@ -162,7 +168,7 @@ export class FakePromoLinkClaimTaskDb {
   private buildClient(): FakeClient {
     const client: FakeClient = {
       genericTask: { findUnique: this.genericTaskFindUnique, findFirst: this.genericTaskFindFirst, create: this.genericTaskCreate },
-      genericTaskItem: { findMany: this.genericTaskItemFindMany },
+      genericTaskItem: { findMany: this.genericTaskItemFindMany, createMany: this.genericTaskItemCreateMany },
       channelApp: { findFirst: this.channelAppFindFirst },
       novelSourceItem: { findMany: this.novelSourceItemFindMany },
       operationAudit: { create: this.operationAuditCreate },
