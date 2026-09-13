@@ -6,6 +6,12 @@
  * （`施工提示词_Sonnet_L10N_P3_模板locale非空化与15语模板资产_2026-09-10.md`
  * §1.E，矩阵 #5）. Default dry-run.
  *
+ * Usage: `tsx scripts/l10n/article-template-bootstrap.ts [--locale <SITE_LOCALE>]
+ * [--apply --approver <AdminIdentity uuid|username>]`. Omitting `--locale`
+ * preserves the all-locale plan/apply behavior. Supplying it scopes database
+ * reads and writes only; all 15 hash-pinned artifacts are still loaded and
+ * structurally validated before orchestration begins.
+ *
  * Shape reuse (`PATTERN_ONLY`, internal — see `docs/governance/
  * port-registry.md`) of `scripts/p2-06-5-production/tagging-bootstrap.ts`:
  * dry-run default + SHA-256-pinned artifacts + `--apply --approver` +
@@ -87,6 +93,7 @@ export type ArticleTemplateBootstrapErrorCode =
   | "asset_template_key_invalid"
   | "asset_shape_invalid"
   | "asset_invariant_violation"
+  | "locale_invalid"
   | "approver_required"
   | "approver_not_found"
   | "approver_inactive";
@@ -358,16 +365,23 @@ export function loadArticleTemplateBootstrapArtifacts(
 // CLI argument parsing
 // ---------------------------------------------------------------------------
 
-export type ArticleTemplateBootstrapCliOptions = Readonly<{ apply: boolean; approver: string | null }>;
+export type ArticleTemplateBootstrapCliOptions = Readonly<{ apply: boolean; approver: string | null; locale?: SiteLocale }>;
 
 export function parseArticleTemplateBootstrapCliOptions(argv: readonly string[]): ArticleTemplateBootstrapCliOptions {
   const apply = argv.includes("--apply");
   const approverIndex = argv.indexOf("--approver");
   const approver = approverIndex >= 0 ? (argv[approverIndex + 1] ?? null) : null;
+  const localeIndex = argv.indexOf("--locale");
+  const localeValue = localeIndex >= 0 ? (argv[localeIndex + 1] ?? "") : null;
+  if (localeValue !== null && !(SITE_LOCALES as readonly string[]).includes(localeValue)) {
+    fail("locale_invalid", `--locale must be one of SITE_LOCALES; got "${localeValue}"`);
+  }
   if (apply && (approver === null || approver.trim().length === 0)) {
     fail("approver_required", "--approver is required for --apply");
   }
-  return Object.freeze({ apply, approver });
+  return Object.freeze(localeValue === null
+    ? { apply, approver }
+    : { apply, approver, locale: localeValue as SiteLocale });
 }
 
 // ---------------------------------------------------------------------------
@@ -512,7 +526,8 @@ export async function runArticleTemplateBootstrapCli(
   options: ArticleTemplateBootstrapCliOptions,
   artifacts: ArticleTemplateBootstrapArtifacts,
 ): Promise<ArticleTemplateBootstrapReport> {
-  const templateKeys = SITE_LOCALES.map((locale) => artifacts.assetsByLocale.get(locale)!.templateKey);
+  const selectedLocales = options.locale ? [options.locale] : SITE_LOCALES;
+  const templateKeys = selectedLocales.map((locale) => artifacts.assetsByLocale.get(locale)!.templateKey);
   const existing = await db.articleTemplate.findMany({ where: { templateKey: { in: templateKeys } }, select: TEMPLATE_SELECT });
   const existingByKey = new Map(existing.map((row) => [row.templateKey, row]));
 
@@ -522,7 +537,7 @@ export async function runArticleTemplateBootstrapCli(
   let plannedSoftDeleted = 0;
   const softDeletedTemplateKeys: string[] = [];
   const warnings: string[] = [];
-  for (const locale of SITE_LOCALES) {
+  for (const locale of selectedLocales) {
     const asset = artifacts.assetsByLocale.get(locale)!;
     const row = existingByKey.get(asset.templateKey);
     const category = categorizeRow(asset, row);
@@ -537,7 +552,7 @@ export async function runArticleTemplateBootstrapCli(
   }
 
   const assetShaByLocale = Object.fromEntries(
-    SITE_LOCALES.map((locale) => [locale, artifacts.manifest.files[assetFilename(locale)]!.sha256]),
+    selectedLocales.map((locale) => [locale, artifacts.manifest.files[assetFilename(locale)]!.sha256]),
   );
 
   if (!options.apply) {
@@ -547,7 +562,7 @@ export async function runArticleTemplateBootstrapCli(
       auditId: null,
       manifestSha256: artifacts.manifestSha256,
       assetShaByLocale,
-      locales: SITE_LOCALES,
+      locales: selectedLocales,
       planned: { create: plannedCreate, update: plannedUpdate, unchanged: plannedUnchanged, softDeleted: plannedSoftDeleted },
       applied: null,
       softDeletedTemplateKeys: Object.freeze(softDeletedTemplateKeys),
@@ -562,7 +577,7 @@ export async function runArticleTemplateBootstrapCli(
     let updated = 0;
     let unchanged = 0;
     let softDeleted = 0;
-    for (const locale of SITE_LOCALES) {
+    for (const locale of selectedLocales) {
       const asset = artifacts.assetsByLocale.get(locale)!;
       const before = existingByKey.get(asset.templateKey);
       const category = categorizeRow(asset, before);
@@ -643,7 +658,7 @@ export async function runArticleTemplateBootstrapCli(
       auditId: audit.id.toString(),
       manifestSha256: artifacts.manifestSha256,
       assetShaByLocale,
-      locales: SITE_LOCALES,
+      locales: selectedLocales,
       planned: { create: plannedCreate, update: plannedUpdate, unchanged: plannedUnchanged, softDeleted: plannedSoftDeleted },
       applied: { created, updated, unchanged, softDeleted },
       softDeletedTemplateKeys: Object.freeze(softDeletedTemplateKeys),

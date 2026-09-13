@@ -607,6 +607,58 @@ describe("updateArticleContent", () => {
 });
 
 describe("regenerateArticle", () => {
+  it("绑定模板语种不匹配时不回退，且文章所有字段与审计均不变", async () => {
+    const db = new FakeArticlesDb();
+    seedNovel(db, "novel-1");
+    seedTemplate(db, { id: "template-de", templateKey: "tpl-de", locale: "de" });
+    seedTemplate(db, { id: "template-en", templateKey: "tpl-en", locale: "en" });
+    const row = seedArticle(db, { id: "article-1", novelId: "novel-1", templateId: "template-de", locale: "en" });
+    const before = structuredClone(row);
+    const stores = authFixture();
+    const guarded = await authorization(stores, "admin.article.regenerate");
+
+    await expect(regenerateArticle(
+      { ...guarded, articleId: row.id, expectedUpdatedAt: row.updatedAt.toISOString() },
+      deps(db, stores),
+    )).resolves.toEqual({ outcome: "template_locale_mismatch" });
+    expect(db.articles[0]).toEqual(before);
+    expect(db.audits).toEqual([]);
+  });
+
+  it("inactive/soft-deleted 外语绑定模板在 single 中仍拒绝且不写", async () => {
+    for (const unavailable of [
+      { status: "inactive", deletedAt: null },
+      { status: "active", deletedAt: new Date("2026-09-01T00:00:00Z") },
+    ]) {
+      const db = new FakeArticlesDb();
+      seedNovel(db, "novel-1");
+      seedTemplate(db, { id: "template-de", templateKey: "tpl-de", locale: "de", ...unavailable });
+      seedTemplate(db, { id: "template-en", templateKey: "tpl-en", locale: "en" });
+      const row = seedArticle(db, { id: "article-1", novelId: "novel-1", templateId: "template-de", locale: "en" });
+      const before = structuredClone(row);
+      const stores = authFixture();
+      const guarded = await authorization(stores, "admin.article.regenerate");
+      await expect(regenerateArticle(
+        { ...guarded, articleId: row.id, expectedUpdatedAt: row.updatedAt.toISOString() }, deps(db, stores),
+      )).resolves.toEqual({ outcome: "template_locale_mismatch" });
+      expect(db.articles[0]).toEqual(before);
+      expect(db.audits).toEqual([]);
+    }
+  });
+
+  it("同语种绑定模板不可用时仍回退到同语种 active 模板", async () => {
+    const db = new FakeArticlesDb();
+    seedNovel(db, "novel-1");
+    seedTemplate(db, { id: "inactive-en", templateKey: "inactive-en", locale: "en", status: "inactive" });
+    seedTemplate(db, { id: "fallback-en", templateKey: "fallback-en", locale: "en" });
+    const row = seedArticle(db, { id: "article-1", novelId: "novel-1", templateId: "inactive-en", locale: "en" });
+    const stores = authFixture();
+    const guarded = await authorization(stores, "admin.article.regenerate");
+    await expect(regenerateArticle(
+      { ...guarded, articleId: row.id, expectedUpdatedAt: row.updatedAt.toISOString() }, deps(db, stores),
+    )).resolves.toMatchObject({ outcome: "regenerated", templateId: "fallback-en" });
+  });
+
   it("再生成保留 slug/publicPageShortId 不变（mutation target: 再生成改 slug → 红）", async () => {
     const db = new FakeArticlesDb();
     seedNovel(db, "novel-1", { title: "Regenerated Title", description: "Regenerated description" });
@@ -688,6 +740,42 @@ describe("regenerateArticle", () => {
 });
 
 describe("regenerateArticlesBatch", () => {
+  it("批量保留模板语种不匹配的逐项失败上下文且不写文章或成功审计", async () => {
+    const db = new FakeArticlesDb();
+    seedNovel(db, "novel-1");
+    seedTemplate(db, { id: "template-de", templateKey: "tpl-de", locale: "de" });
+    seedTemplate(db, { id: "template-en", templateKey: "tpl-en", locale: "en" });
+    const row = seedArticle(db, { id: "article-1", novelId: "novel-1", templateId: "template-de", locale: "en" });
+    const before = structuredClone(row);
+    const stores = authFixture();
+    const guarded = await authorization(stores, "admin.article.regenerate_batch");
+
+    const result = await regenerateArticlesBatch({ ...guarded, articleIds: [row.id] }, deps(db, stores));
+    expect(result.items).toEqual([{ articleId: row.id, status: "failed", result: { outcome: "template_locale_mismatch" } }]);
+    expect(db.articles[0]).toEqual(before);
+    expect(db.audits).toEqual([]);
+  });
+
+  it("inactive/soft-deleted 外语绑定模板在 batch 中仍保留逐项失败且不写", async () => {
+    for (const unavailable of [
+      { status: "inactive", deletedAt: null },
+      { status: "active", deletedAt: new Date("2026-09-01T00:00:00Z") },
+    ]) {
+      const db = new FakeArticlesDb();
+      seedNovel(db, "novel-1");
+      seedTemplate(db, { id: "template-de", templateKey: "tpl-de", locale: "de", ...unavailable });
+      seedTemplate(db, { id: "template-en", templateKey: "tpl-en", locale: "en" });
+      const row = seedArticle(db, { id: "article-1", novelId: "novel-1", templateId: "template-de", locale: "en" });
+      const before = structuredClone(row);
+      const stores = authFixture();
+      const guarded = await authorization(stores, "admin.article.regenerate_batch");
+      const result = await regenerateArticlesBatch({ ...guarded, articleIds: [row.id] }, deps(db, stores));
+      expect(result.items).toEqual([{ articleId: row.id, status: "failed", result: { outcome: "template_locale_mismatch" } }]);
+      expect(db.articles[0]).toEqual(before);
+      expect(db.audits).toEqual([]);
+    }
+  });
+
   it("超过 50 个选择直接拒绝", async () => {
     const db = new FakeArticlesDb();
     const stores = authFixture();

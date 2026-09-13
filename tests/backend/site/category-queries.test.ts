@@ -54,11 +54,13 @@ describe("public category queries · CPS category semantics on CanonicalTag", ()
     await expect(getPublicCategoryPage(db, "en", "fantasy", 1)).resolves.toBeNull();
   });
 
-  it("manual snapshot union mapped derivation excludes auto and never returns SourceLabel fields", async () => {
+  it("manual FULL_SNAPSHOT overrides mapping (including empty); automatic/missing state derives mapping and excludes auto", async () => {
     const query = vi.fn().mockResolvedValue([tagRow]);
     const result = await loadPublicTaxonomyByNovelIds({ $queryRaw: query } as unknown as PrismaClient, [article.novel.id], "en");
     const sql = (query.mock.calls[0][0] as { strings: readonly string[] }).strings.join(" ");
     expect(sql).toContain("nct.source = 'manual'");
+    expect(sql).toContain("nts.mode = 'manual'");
+    expect(sql).toContain("NOT EXISTS");
     expect(sql).toContain("source_label_mapping");
     expect(sql).not.toContain("nct.source = 'auto'");
     expect(JSON.stringify(result.get(article.novel.id))).not.toMatch(/rawToken|externalLabel|sourceLabel/i);

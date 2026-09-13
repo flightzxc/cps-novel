@@ -71,8 +71,8 @@
     "de.json": {
       "locale": "de",
       "templateKey": "system-default-de-v1",
-      "sha256": "864d2e3a1ba3027e377589e116f0de373041af8e631be07c38121524a1c6299c",
-      "bytes": 1406
+      "sha256": "831392197fe6ad09792a0426da75b1f8b3ca150c9747131c813d78bbb3fd91c9",
+      "bytes": 1428
     },
     "pl.json": {
       "locale": "pl",

@@ -36,6 +36,7 @@ type Row = {
   seoTemplate: unknown;
   slugTemplate: string;
   metaKeywordsTemplate: string;
+  updatedAt?: string;
   /** Soft-delete marker (n2 fix lane) — `null` unless a test seeds a pre-soft-deleted row. */
   deletedAt: string | null;
 };
@@ -131,6 +132,20 @@ describe("article-template-bootstrap CLI option parsing", () => {
       approver: "admin-1",
     });
   });
+
+  it("accepts a supported --locale and rejects an unknown locale", () => {
+    expect(parseArticleTemplateBootstrapCliOptions(["--locale", "de"])).toEqual({
+      apply: false,
+      approver: null,
+      locale: "de",
+    });
+    expect(() => parseArticleTemplateBootstrapCliOptions(["--locale", "xx"])).toThrowError(
+      expect.objectContaining({ code: "locale_invalid" }),
+    );
+    expect(() => parseArticleTemplateBootstrapCliOptions(["--locale"])).toThrowError(
+      expect.objectContaining({ code: "locale_invalid" }),
+    );
+  });
 });
 
 describe("article-template-bootstrap real repository assets (真读资产文件)", () => {
@@ -147,6 +162,8 @@ describe("article-template-bootstrap real repository assets (真读资产文件)
       expect(asset!.applicableArticleType).toBe("novel_article");
     }
     expect(artifacts.manifestSha256).toMatch(/^[0-9a-f]{64}$/);
+    expect(artifacts.assetsByLocale.get("de")!.bodyTemplate).toContain(">Mit dem Lesen beginnen</a>");
+    expect(artifacts.assetsByLocale.get("de")!.contentTemplate.at(-1)).toEqual({ type: "cta", content: "Mit dem Lesen beginnen" });
   });
 
   it("en.json's bodyTemplate/contentTemplate/seoTemplate are byte-exact to the current system-default-v1 constants (DEFAULT_ARTICLE_TEMPLATE / SYSTEM_DEFAULT_CONTENT_BLOCKS)", () => {
@@ -176,6 +193,14 @@ describe("article-template-bootstrap real repository assets (真读资产文件)
 });
 
 describe("article-template-bootstrap artifact loading (fixture-sized, mirrors the real 15-file set with one locale corrupted)", () => {
+  it("--locale de cannot bypass validation failure in another locale", () => {
+    const dir = mkdtempSync(join(tmpdir(), "l10n-p3-assets-scoped-invalid-"));
+    mirrorRealAssetsWithOverride(dir, { locale: "ru", dropPlaceholderInBody: true });
+    expect(() => loadArticleTemplateBootstrapArtifacts(dir, ".")).toThrowError(
+      expect.objectContaining({ code: "asset_invariant_violation" }),
+    );
+  });
+
   it("rejects a file whose bytes don't match the manifest's pinned SHA-256", () => {
     // Point the loader at a full 15-locale mirror of the real assets directory,
     // then corrupt exactly one file's manifest-declared SHA, to exercise the
@@ -272,6 +297,15 @@ function mirrorRealAssetsWithOverride(
 }
 
 describe("article-template-bootstrap dry-run", () => {
+  it("--locale de validates all artifacts but scopes planning to the German row", async () => {
+    const db = new FakeArticleTemplateBootstrapDb();
+    const artifacts = loadArticleTemplateBootstrapArtifacts();
+    const report = await runArticleTemplateBootstrapCli(db, { apply: false, approver: null, locale: "de" }, artifacts);
+    expect(report.locales).toEqual(["de"]);
+    expect(report.planned).toEqual({ create: 1, update: 0, unchanged: 0, softDeleted: 0 });
+    expect(report.assetShaByLocale).toEqual({ de: artifacts.manifest.files["de.json"]!.sha256 });
+  });
+
   it("reports 15 planned creates and writes nothing when the table is empty", async () => {
     const db = new FakeArticleTemplateBootstrapDb();
     const artifacts = loadArticleTemplateBootstrapArtifacts();
@@ -325,6 +359,40 @@ describe("article-template-bootstrap dry-run", () => {
 });
 
 describe("article-template-bootstrap apply", () => {
+  it("--locale de updates only German among 15 existing rows and repeat performs no template update", async () => {
+    const db = new FakeArticleTemplateBootstrapDb();
+    const artifacts = loadArticleTemplateBootstrapArtifacts();
+    for (const locale of SITE_LOCALES) {
+      const asset = artifacts.assetsByLocale.get(locale)!;
+      db.rows.push({
+        id: `existing-${locale}`,
+        ...structuredClone(asset),
+        contentTemplate: structuredClone(asset.contentTemplate),
+        seoTemplate: structuredClone(asset.seoTemplate),
+        deletedAt: null,
+        updatedAt: `2026-09-01T00:00:${String(db.rows.length).padStart(2, "0")}.000Z`,
+      });
+    }
+    const de = db.rows.find((row) => row.locale === "de")!;
+    de.bodyTemplate = de.bodyTemplate.replace("Mit dem Lesen beginnen", "Jetzt lesen");
+    de.contentTemplate = (de.contentTemplate as Array<{ type: string; content: string }>).map((block) =>
+      block.type === "cta" ? { ...block, content: "Jetzt lesen" } : block,
+    );
+    const fr = db.rows.find((row) => row.locale === "fr")!;
+    fr.templateName = "operator drift intentionally preserved";
+    const other14Before = structuredClone(db.rows.filter((row) => row.locale !== "de"));
+    const options = { apply: true, approver: "approver-1", locale: "de" as const };
+    const first = await runArticleTemplateBootstrapCli(db, options, artifacts);
+    expect(first.applied).toEqual({ created: 0, updated: 1, unchanged: 0, softDeleted: 0 });
+    expect(db.rows).toHaveLength(SITE_LOCALES.length);
+    expect(db.rows.filter((row) => row.locale !== "de")).toEqual(other14Before);
+    expect(db.rows.find((row) => row.locale === "de")!.bodyTemplate).toBe(artifacts.assetsByLocale.get("de")!.bodyTemplate);
+    const callsAfterFirst = db.calls.length;
+    const second = await runArticleTemplateBootstrapCli(db, options, artifacts);
+    expect(second.applied).toEqual({ created: 0, updated: 0, unchanged: 1, softDeleted: 0 });
+    expect(db.calls.slice(callsAfterFirst)).not.toContain("articleTemplate.upsert");
+  });
+
   it("rejects an approver that does not exist, writing nothing", async () => {
     const db = new FakeArticleTemplateBootstrapDb();
     const artifacts = loadArticleTemplateBootstrapArtifacts();

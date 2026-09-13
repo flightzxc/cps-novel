@@ -23,6 +23,7 @@ import {
   resolveEffectiveTags,
 } from "@/server/tagging";
 import { requireAdminRouteAccess } from "@/server/auth/guards";
+import { loadPublicTaxonomyByNovelIds } from "@/lib/site/public-taxonomy";
 import type { AdminRegistry } from "@/server/auth/registry";
 import { createTaggingWorkerHandlers } from "../../../worker/handlers/novel-tag-backfill";
 import { processOneWorkerCycle } from "../../../worker/runtime";
@@ -43,6 +44,7 @@ const env: NodeJS.ProcessEnv = { ...process.env, FEATURE_P2_06_5_TAGGING: "true"
 const ids = {
   channel: randomUUID(), sourceApp: randomUUID(), channelApp: randomUUID(), admin: randomUUID(),
   novel: randomUUID(), sourceItem: randomUUID(), tagA: randomUUID(), tagB: randomUUID(), tagC: randomUUID(),
+  publicNovel: randomUUID(), publicSourceItem: randomUUID(),
   labelExact: randomUUID(), labelCase: randomUUID(), mappingExact: randomUUID(), mappingSecond: randomUUID(),
 };
 const rawPayload = { language: 2, languageName: " English ", seriesName: "Tagged Novel" };
@@ -223,6 +225,38 @@ describe.skipIf(!enabled).sequential("P2-06.5 isolated PostgreSQL foundation", (
       canonicalTagId: ids.tagA, mappingVersion: "case-distinct", approvedBy: ids.admin,
     } });
     await owner.sourceLabelMapping.delete({ where: { id: caseDistinct.id } });
+  });
+
+  it("serves FULL_SNAPSHOT authority through web_app for manual, empty, automatic, missing-state, and stale-manual cases", async () => {
+    await owner.novel.create({ data: {
+      id: ids.publicNovel, businessId: `public-${ids.publicNovel}`, locale: "zh", title: "Public taxonomy",
+      description: "description", slug: `public-${ids.publicNovel}`, status: "draft",
+    } });
+    await owner.novelSourceItem.create({ data: {
+      id: ids.publicSourceItem, channelAppId: ids.channelApp, novelId: ids.publicNovel,
+      externalBookId: `public-${ids.publicNovel}`, sourceLanguageCode: "2", sourceLanguageName: " English ",
+      sourceLocale: "zh", rawLanguageScope: rawScope, title: "Public taxonomy", description: "description",
+      status: "linked", rawPayload,
+    } });
+    await owner.novelSourceItemLabel.create({ data: {
+      novelSourceItemId: ids.publicSourceItem, sourceLabelId: ids.labelExact, active: true,
+    } });
+    await owner.novelCanonicalTag.create({ data: {
+      novelId: ids.publicNovel, canonicalTagId: ids.tagC, source: "manual", evidence: {}, evidenceSchemaVersion: 1,
+      decidedBy: ids.admin,
+    } });
+
+    const slugs = async () => (await loadPublicTaxonomyByNovelIds(web, [ids.publicNovel], "zh")).get(ids.publicNovel)?.map((tag) => tag.slug) ?? [];
+    expect(await slugs()).toEqual(["beta", "alpha"]); // missing state ignores stale manual
+
+    await owner.novelTagState.create({ data: { novelId: ids.publicNovel, mode: "automatic", revision: 0n } });
+    expect(await slugs()).toEqual(["beta", "alpha"]); // automatic ignores stale manual
+
+    await owner.novelTagState.update({ where: { novelId: ids.publicNovel }, data: { mode: "manual" } });
+    expect(await slugs()).toEqual(["gamma"]); // manual overrides mapped edges
+
+    await owner.novelCanonicalTag.deleteMany({ where: { novelId: ids.publicNovel, source: "manual" } });
+    expect(await slugs()).toEqual([]); // empty FULL_SNAPSHOT remains authoritative
   });
 
   it("resolves mapped+auto union with dedupe, provenance, fallback, and stable order", async () => {

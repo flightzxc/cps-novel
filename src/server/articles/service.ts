@@ -221,6 +221,7 @@ export type ArticleRegenerateResult =
   | { outcome: "article_not_found" }
   | { outcome: "conflict" }
   | { outcome: "template_not_available" }
+  | { outcome: "template_locale_mismatch" }
   | { outcome: "template_render_failed"; code: string }
   /**
    * C-27: regeneration renders Novel template values (title/description/
@@ -267,7 +268,13 @@ async function regenerateCore(
   // comment — rendering below needs Novel template values this Article
   // does not have.
   if (article.novel === null) return { outcome: "article_not_regenerable" };
-  const linked = article.templateId ? await db.articleTemplate.findFirst({ where: { id: article.templateId, status: "active", deletedAt: null } }) : null;
+  // Resolve the bound identity before applying availability filters. A
+  // foreign-locale binding is invalid even when that template is inactive or
+  // soft-deleted; hiding it behind the ordinary same-locale fallback would
+  // regenerate with a different template and conceal the bad binding.
+  const bound = article.templateId ? await db.articleTemplate.findFirst({ where: { id: article.templateId } }) : null;
+  if (bound && bound.locale !== article.locale) return { outcome: "template_locale_mismatch" };
+  const linked = bound?.status === "active" && bound.deletedAt === null ? bound : null;
   const template = linked ?? await selectActiveArticleTemplate(db, { locale: article.locale });
   if (!template) return { outcome: "template_not_available" };
   try {

@@ -383,10 +383,17 @@ describe("ArticleList · 列表与批量", () => {
     await vi.waitFor(() => expect(screen.getByRole("status").textContent).toContain("已被其他操作人修改"));
   });
 
+  it("单行再生成遇到模板语种不匹配时给出明确提示", async () => {
+    listActions.regenerateArticleAction.mockResolvedValue({ ok: true, data: { outcome: "template_locale_mismatch" } });
+    render(<ArticleList rows={[DRAFT_ROW]} canWrite publicOrigin={PUBLIC_ORIGIN} />);
+    fireEvent.click(screen.getByText("再生成"));
+    await vi.waitFor(() => expect(screen.getByRole("status").textContent).toContain("模板语种与文章不一致，未再生成"));
+  });
+
   it("批量再生成调用 regenerateArticlesBatchAction 并携带已选 id", async () => {
     listActions.regenerateArticlesBatchAction.mockResolvedValue({
       ok: true,
-      data: { counts: { regenerated: 1, skipped: 0, failed: 0, not_processed: 0 } },
+      data: { items: [{ articleId: DRAFT_ROW.id, status: "regenerated", result: { outcome: "regenerated" } }], counts: { regenerated: 1, skipped: 0, failed: 0, not_processed: 0 } },
     });
     render(<ArticleList rows={[DRAFT_ROW, PUBLISHED_ROW]} canWrite publicOrigin={PUBLIC_ORIGIN} />);
     fireEvent.click(screen.getByLabelText(`选择 ${DRAFT_ROW.title}`));
@@ -394,6 +401,17 @@ describe("ArticleList · 列表与批量", () => {
     await vi.waitFor(() => expect(listActions.regenerateArticlesBatchAction).toHaveBeenCalledTimes(1));
     expect(listActions.regenerateArticlesBatchAction.mock.calls[0]![0].articleIds).toEqual([DRAFT_ROW.id]);
     await vi.waitFor(() => expect(screen.getByText(/成功 1/)).toBeTruthy());
+  });
+
+  it("批量再生成保留模板语种不匹配的逐项失败上下文", async () => {
+    listActions.regenerateArticlesBatchAction.mockResolvedValue({
+      ok: true,
+      data: { items: [{ articleId: DRAFT_ROW.id, status: "failed", result: { outcome: "template_locale_mismatch" } }], counts: { regenerated: 0, skipped: 0, failed: 1, not_processed: 0 } },
+    });
+    render(<ArticleList rows={[DRAFT_ROW]} canWrite publicOrigin={PUBLIC_ORIGIN} />);
+    fireEvent.click(screen.getByLabelText(`选择 ${DRAFT_ROW.title}`));
+    fireEvent.click(screen.getByText("批量再生成"));
+    await vi.waitFor(() => expect(screen.getByRole("status").textContent).toContain(`模板语种与文章不一致，未再生成：${DRAFT_ROW.id}`));
   });
 
   /**

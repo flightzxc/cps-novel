@@ -171,6 +171,11 @@ describe("默认态：渠道 → 剧场 → 语种 → 账户 依次生效", () 
 // *site* concept. Mutation ③ (chip reverted to the static 15-item
 // `SITE_LOCALES` render) is exactly what the first assertion below catches.
 describe("同步语种 chip 由 moboreader 18 码派生（L10N P5 矩阵 #13）", () => {
+  it("准确说明语种选择只记录任务意向", () => {
+    renderForm();
+    expect(screen.getByText("上游目录接口返回全部语种；此处选择仅记录本次任务的语种意向，不限制抓取、入库或统计。查看指定语种来源，请使用下方列表筛选。")).toBeTruthy();
+  });
+
   it("渲染 18 个语种 chip，不是 SITE_LOCALES 的 15 个", () => {
     renderForm();
     const group = screen.getByRole("group", { name: "同步语种" });

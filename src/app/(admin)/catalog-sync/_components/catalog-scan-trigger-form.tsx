@@ -361,7 +361,7 @@ export function CatalogScanTriggerForm({
               ))}
             </div>
             <p className="mt-1 text-xs text-gray-400">
-              上游目录接口不支持按语种过滤，会返回全部语种；这里的选择只影响本次任务的计数与结果筛选。
+              上游目录接口返回全部语种；此处选择仅记录本次任务的语种意向，不限制抓取、入库或统计。查看指定语种来源，请使用下方列表筛选。
             </p>
             {fieldErrors.languages && (
               <p role="alert" className="mt-1 text-xs text-red-600">

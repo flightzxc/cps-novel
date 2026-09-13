@@ -3,10 +3,11 @@
  *
  * CPS v8.3.6 category pages expose only active taxonomy rows, ordered by the
  * operator-owned sort field. Novel keeps that serving contract, but adapts
- * the membership rule to ADR-P2-06-5: public membership is the union of a
- * manual FULL_SNAPSHOT and live SourceLabelMapping-derived edges. Classifier
- * (`source = 'auto'`) rows are deliberately absent and raw SourceLabel values
- * never cross this module's return boundary.
+ * the membership rule to ADR-P2-06-5: a manual FULL_SNAPSHOT is authoritative
+ * (including an empty snapshot); automatic or missing state derives membership
+ * from live SourceLabelMapping edges. Classifier (`source = 'auto'`) rows are
+ * deliberately absent and raw SourceLabel values never cross this module's
+ * return boundary.
  */
 import { Prisma, type PrismaClient } from "@prisma/client";
 
@@ -74,6 +75,7 @@ export async function loadPublicTaxonomyByNovelIds(
     WITH public_membership AS (
       SELECT nct.novel_id, nct.canonical_tag_id
       FROM novel_canonical_tag nct
+      JOIN novel_tag_state nts ON nts.novel_id = nct.novel_id AND nts.mode = 'manual'
       WHERE nct.novel_id IN (${ids})
         AND nct.source = 'manual'
       UNION
@@ -92,6 +94,10 @@ export async function loadPublicTaxonomyByNovelIds(
        AND slm.raw_token COLLATE "C" = sl.external_label_value::text COLLATE "C"
        AND slm.active IS TRUE
       WHERE nsi.novel_id IN (${ids})
+        AND NOT EXISTS (
+          SELECT 1 FROM novel_tag_state nts
+          WHERE nts.novel_id = nsi.novel_id AND nts.mode = 'manual'
+        )
         AND nsi.status = 'linked'
         AND nsi.deleted_at IS NULL
         AND nsi.raw_language_scope IS NOT NULL

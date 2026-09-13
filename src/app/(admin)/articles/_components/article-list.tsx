@@ -208,9 +208,12 @@ export function ArticleList({
   }
   async function batch() {
     const result = await regenerateArticlesBatchAction({ requestId: crypto.randomUUID(), articleIds: [...selected] });
+    const localeMismatchIds = result.ok
+      ? result.data.items.filter((item) => item.result?.outcome === "template_locale_mismatch").map((item) => item.articleId)
+      : [];
     setMessage(
       result.ok
-        ? `再生成完成：成功 ${result.data.counts.regenerated}，跳过 ${result.data.counts.skipped}，失败 ${result.data.counts.failed}，未处理 ${result.data.counts.not_processed}`
+        ? `再生成完成：成功 ${result.data.counts.regenerated}，跳过 ${result.data.counts.skipped}，失败 ${result.data.counts.failed}，未处理 ${result.data.counts.not_processed}${localeMismatchIds.length > 0 ? `；模板语种与文章不一致，未再生成：${localeMismatchIds.join("、")}` : ""}`
         : result.code,
     );
     if (result.ok) {
@@ -665,6 +668,8 @@ export function ArticleList({
                           result.ok
                             ? result.data.outcome === "conflict"
                               ? "该文章已被其他操作人修改，请刷新后重试。"
+                              : result.data.outcome === "template_locale_mismatch"
+                                ? "模板语种与文章不一致，未再生成"
                               : result.data.outcome
                             : result.code,
                         );

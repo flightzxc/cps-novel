@@ -6,7 +6,7 @@
   "schemaVersion": 1,
   "status": "active",
   "applicableArticleType": "novel_article",
-  "bodyTemplate": "<article><h1>{novel_title}</h1>{if cover_url}<p><img src=\"{cover_url}\" alt=\"Cover\"></p>{endif}<p>{novel_description}</p>{if total_chapter_count}<p>Kapitel insgesamt: {total_chapter_count}</p>{endif}{if preview_chapter_count}<p>Kostenlose Vorschaukapitel verfügbar: {preview_chapter_count}</p>{endif}{if promo_redirect_url}<p><a href=\"{promo_redirect_url}\">Jetzt lesen</a></p>{endif}</article>",
+  "bodyTemplate": "<article><h1>{novel_title}</h1>{if cover_url}<p><img src=\"{cover_url}\" alt=\"Cover\"></p>{endif}<p>{novel_description}</p>{if total_chapter_count}<p>Kapitel insgesamt: {total_chapter_count}</p>{endif}{if preview_chapter_count}<p>Kostenlose Vorschaukapitel verfügbar: {preview_chapter_count}</p>{endif}{if promo_redirect_url}<p><a href=\"{promo_redirect_url}\">Mit dem Lesen beginnen</a></p>{endif}</article>",
   "contentTemplate": [
     {
       "type": "heading",
@@ -30,7 +30,7 @@
     },
     {
       "type": "cta",
-      "content": "Jetzt lesen"
+      "content": "Mit dem Lesen beginnen"
     }
   ],
   "seoTemplate": {

@@ -12,7 +12,7 @@
  *
  * 门禁：`P2_02B_DATABASE_TEST=1`（与同目录 lifecycle 冒烟同一开关）。
  */
-import { PrismaClient } from "@prisma/client";
+import { Prisma, PrismaClient } from "@prisma/client";
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
@@ -21,7 +21,7 @@ import type { AdminIdentity, AdminSessionRecord } from "@/lib/auth/types";
 import { requireAdminActionAccess } from "@/server/auth/guards";
 import { P2_04_ADMIN_REGISTRY } from "@/app/api/admin/_lib/registry";
 import { createArticleTemplate } from "@/server/article-templates";
-import { regenerateArticle } from "@/server/articles";
+import { regenerateArticle, regenerateArticlesBatch } from "@/server/articles";
 import { getPublicNovelDetail, resolvePublicArticleBySlugParam } from "@/lib/site/queries";
 import { TestOnlyInMemoryAuthStores } from "../../backend/auth/test-only-in-memory-stores";
 
@@ -212,5 +212,53 @@ describe.skipIf(!enabled).sequential("P2-02B 模板→生成文章→公开正�
       expect(detail!.readOnUpstreamHref, `${label} readOnUpstreamHref`).toBe(`/go/${redirectCode(label)}`);
       void ids_;
     }
+  });
+
+  it("web_app 使用同语种绑定模板成功；陈旧 expectedUpdatedAt 拒绝且文章/审计不变", async () => {
+    const boundBefore = await owner.article.findUniqueOrThrow({ where: { id: ids.withCover.article } });
+    expect(boundBefore.templateId).not.toBeNull();
+    const auditBeforeSuccess = await owner.operationAudit.count({ where: { action: "article.regenerate", entityId: ids.withCover.article } });
+    await expect(regenerate(ids.withCover.article)).resolves.toMatchObject({
+      outcome: "regenerated",
+      templateId: boundBefore.templateId,
+    });
+    expect(await owner.operationAudit.count({ where: { action: "article.regenerate", entityId: ids.withCover.article } })).toBe(auditBeforeSuccess + 1);
+
+    const current = await owner.article.findUniqueOrThrow({ where: { id: ids.withCover.article } });
+    const auditBeforeConflict = await owner.operationAudit.count({ where: { action: "article.regenerate", entityId: ids.withCover.article } });
+    const g = await authorize(stores, "admin.article.regenerate");
+    const stale = new Date(current.updatedAt.getTime() - 1_000).toISOString();
+    await expect(regenerateArticle(
+      { authorization: g.authorization, requestId: g.requestId, articleId: ids.withCover.article, expectedUpdatedAt: stale },
+      { db: web, identities: stores, sessions: stores, now: NOW },
+    )).resolves.toEqual({ outcome: "conflict" });
+    expect(await owner.article.findUniqueOrThrow({ where: { id: ids.withCover.article } })).toEqual(current);
+    expect(await owner.operationAudit.count({ where: { action: "article.regenerate", entityId: ids.withCover.article } })).toBe(auditBeforeConflict);
+  });
+
+  it("绑定模板语种不匹配时 single/batch 均保留全部文章字段且不写成功审计", async () => {
+    const sourceTemplate = await owner.articleTemplate.findFirstOrThrow({ where: { locale: "en", status: "active", deletedAt: null } });
+    const mismatch = await owner.articleTemplate.create({ data: {
+      templateKey: `render-de-${tag}`, templateName: "德文错配模板", locale: "de", version: 1,
+      schemaVersion: sourceTemplate.schemaVersion, status: "active", applicableArticleType: sourceTemplate.applicableArticleType,
+      bodyTemplate: sourceTemplate.bodyTemplate, contentTemplate: sourceTemplate.contentTemplate as Prisma.InputJsonValue,
+      seoTemplate: sourceTemplate.seoTemplate as Prisma.InputJsonValue, slugTemplate: sourceTemplate.slugTemplate,
+      metaKeywordsTemplate: sourceTemplate.metaKeywordsTemplate,
+    } });
+    await owner.article.update({ where: { id: ids.noCover.article }, data: { templateId: mismatch.id } });
+    const before = await owner.article.findUniqueOrThrow({ where: { id: ids.noCover.article } });
+    const auditBefore = await owner.operationAudit.count({ where: { action: "article.regenerate", entityId: ids.noCover.article } });
+
+    await expect(regenerate(ids.noCover.article)).resolves.toEqual({ outcome: "template_locale_mismatch" });
+    expect(await owner.article.findUniqueOrThrow({ where: { id: ids.noCover.article } })).toEqual(before);
+
+    const g = await authorize(stores, "admin.article.regenerate_batch");
+    const batch = await regenerateArticlesBatch(
+      { authorization: g.authorization, requestId: g.requestId, articleIds: [ids.noCover.article] },
+      { db: web, identities: stores, sessions: stores, now: NOW },
+    );
+    expect(batch.items).toEqual([{ articleId: ids.noCover.article, status: "failed", result: { outcome: "template_locale_mismatch" } }]);
+    expect(await owner.article.findUniqueOrThrow({ where: { id: ids.noCover.article } })).toEqual(before);
+    expect(await owner.operationAudit.count({ where: { action: "article.regenerate", entityId: ids.noCover.article } })).toBe(auditBefore);
   });
 });
