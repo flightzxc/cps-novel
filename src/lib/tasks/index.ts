@@ -1,5 +1,7 @@
 export * from "./errors";
 export * from "./catalog-batch";
+export * from "./article-generate";
+export * from "./legacy-content-create";
 export * from "./moboreader";
 export * from "./promo-link-claim";
 export * from "./promo-link-claim-limits";

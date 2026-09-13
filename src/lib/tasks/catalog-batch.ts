@@ -6,10 +6,13 @@ export const CATALOG_BATCH_TASK_TYPE = "batch.materialize.v1";
 export const CATALOG_BATCH_TARGET_TYPE = "catalog_filter_snapshot";
 export const CONTENT_CREATE_TASK_TYPE = "content.create.v1";
 export const CONTENT_CREATE_TARGET_TYPE = "novel_source_item";
+export const NOVEL_MATERIALIZE_TASK_TYPE = "novel.materialize.v1";
+export const NOVEL_MATERIALIZE_TARGET_TYPE = "novel_source_item";
 export const CATALOG_BATCH_CHUNK_SIZE = 50;
 export const CATALOG_BATCH_TTL_MS = 6 * 60 * 60 * 1_000;
 
-export type CatalogBatchOperation = "content_create" | "promo_claim";
+/** `content_create` is retired: retained only so old payloads remain identifiable. */
+export type CatalogBatchOperation = "novel_materialize" | "content_create" | "promo_claim";
 
 export type CatalogBatchPayload = Readonly<{
   operation: CatalogBatchOperation;
@@ -19,6 +22,7 @@ export type CatalogBatchPayload = Readonly<{
   submittedAt: string;
   expiresAt: string;
   channelAccounts?: Readonly<Record<string, string>>;
+  /** Retired coupled field. New `novel_materialize` payloads must omit it. */
   templateKeysByLocale?: Readonly<Record<string, string>>;
 }>;
 
