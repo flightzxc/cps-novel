@@ -1,14 +1,13 @@
 import { describe, expect, it } from "vitest";
 
-import { TEMPLATE_SEO_SCHEMA_VERSION } from "@/lib/seo/template";
-import { ContentCreationInputError, createContentFromSourceItem } from "@/server/content-creation/service";
+import { ContentCreationInputError, materializeNovelFromSourceItem } from "@/server/content-creation/service";
 
 import { FakeContentCreationDb } from "./fake-db";
 
 const ADMIN_ACTOR = { type: "admin", adminId: "admin-1" } as const;
 
-describe("createContentFromSourceItem — apply, success path", () => {
-  it("creates a draft Novel + same-locale draft Article and writes one audit row", async () => {
+describe("materializeNovelFromSourceItem — apply, success path", () => {
+  it("creates a draft Novel only and writes one audit row", async () => {
     const fake = new FakeContentCreationDb();
     const sourceItem = fake.seedSourceItem({
       title: "The Great Adventure Begins",
@@ -18,7 +17,7 @@ describe("createContentFromSourceItem — apply, success path", () => {
       paidFromChapter: 6,
     });
 
-    const result = await createContentFromSourceItem(fake.asPrismaClient(), {
+    const result = await materializeNovelFromSourceItem(fake.asPrismaClient(), {
       novelSourceItemId: sourceItem.id,
       mode: "apply",
       actor: ADMIN_ACTOR,
@@ -39,40 +38,8 @@ describe("createContentFromSourceItem — apply, success path", () => {
     expect(novel?.paidFromChapter).toBe(6);
     expect(novel?.businessId).toBeTruthy();
 
-    const article = fake.articles.get(result.articleId);
-    expect(article).toBeDefined();
-    expect(article?.novelId).toBe(result.novelId);
-    expect(article?.locale).toBe("en");
-    expect(article?.slug).toBe("the-great-adventure-begins");
-    expect(article?.title).toBe("The Great Adventure Begins");
-    // P0-S9: body is now rendered by the P2-02 Template Engine against
-    // DEFAULT_ARTICLE_TEMPLATE (`@/server/content-creation/default-article-template`),
-    // not left `""` — that was S4's placeholder, explicitly deferred to
-    // "P2-02 or another authorized content production path". Assert on
-    // substance (non-blank + the fields that do have values) rather than an
-    // exact string, so this test does not have to change every time the
-    // built-in template's copy is tweaked.
-    expect(article?.body).not.toBe("");
-    expect(article?.body).toContain("<h1>The Great Adventure Begins</h1>");
-    expect(article?.body).toContain("A sweeping tale of courage.");
-    expect(article?.body).toContain('<img src="https://example.com/cover.jpg" alt="Cover">');
-    expect(article?.body).toContain("Total chapters: 42");
-    // No PromoLink exists at creation time (S5's territory) — the `{if
-    // promo_redirect_url}` block is omitted entirely, not rendered blank.
-    expect(article?.body).not.toContain("Start Reading");
-    expect(article?.publicPageShortId).toHaveLength(8);
-    expect(article?.publicPageShortId).toBe(result.publicPageShortId);
-
-    // The other two rendered slots (metaTitle/metaDescription) land in
-    // seoMetadata — the fake store doesn't persist that column, so assert on
-    // the raw write args instead (see fake-db.ts's `lastArticleCreateArgs`).
-    expect(fake.lastArticleCreateArgs?.seoMetadata).toEqual({
-      metaTitle: "The Great Adventure Begins",
-      metaDescription: "A sweeping tale of courage.",
-    });
-    // P2-02B bumped this to 2 (metaKeywords/slug slots) — assert against the live
-    // constant rather than a hardcoded literal so this test doesn't rot on the next bump.
-    expect(fake.lastArticleCreateArgs?.seoSchemaVersion).toBe(TEMPLATE_SEO_SCHEMA_VERSION);
+    expect(fake.articles.size).toBe(0);
+    expect(fake.lastArticleCreateArgs).toBeNull();
 
     // NovelSourceItem is linked and transitioned.
     const linkedSourceItem = fake.sourceItems.get(sourceItem.id);
@@ -91,134 +58,46 @@ describe("createContentFromSourceItem — apply, success path", () => {
     });
   });
 
-  it("sets templateId but never promoLinkId/status on the created rows", async () => {
+  it("never writes an Article and omits status on Novel.create", async () => {
     const fake = new FakeContentCreationDb();
     const sourceItem = fake.seedSourceItem({ title: "Some Title Here" });
 
-    const result = await createContentFromSourceItem(fake.asPrismaClient(), {
+    const result = await materializeNovelFromSourceItem(fake.asPrismaClient(), {
       novelSourceItemId: sourceItem.id,
       mode: "apply",
       actor: ADMIN_ACTOR,
       requestId: "req-2",
     });
     expect(result.outcome).toBe("created");
-
-    // Asserts on the *keys actually sent* to `.create()`, not merely on the
-    // row this fake happens to construct — PromoLink claiming is S5's
-    // territory (this service must never set it), and `status` is a
-    // schema-default, never a literal key here (see
-    // tests/backend/publish-gate/no-bypass.test.ts, which would fail the
-    // whole suite if a literal `status:` key ever appeared outside
-    // src/server/publish-gate/).
-    expect(fake.lastArticleCreateArgs).not.toHaveProperty("promoLinkId");
-    expect(fake.lastArticleCreateArgs?.templateId).toEqual(expect.any(String));
-    expect(fake.lastArticleCreateArgs).not.toHaveProperty("status");
+    expect(fake.articles.size).toBe(0);
+    expect(fake.lastArticleCreateArgs).toBeNull();
     expect(fake.lastNovelCreateArgs).not.toHaveProperty("status");
   });
 
-  /**
-   * C-26 (`规划_文章管理能力补齐_博客类型可见性换小说_2026-09-08.md` §三/C-26):
-   * "模板渲染路径（创建服务里的文章插入...）：写成 template" — this insert is
-   * one of exactly two authorized `Article.contentMode` write sites (the
-   * other is `src/server/articles/service.ts`'s `updateArticleContent`/
-   * `regenerateCore` — see `tests/backend/articles/
-   * content-mode-sole-write-paths.test.ts`). Asserted on the raw write args,
-   * same as the `templateId`/`status` assertions immediately above, because
-   * this fake's `FakeArticle` storage type does not carry `contentMode`.
-   */
-  it("writes contentMode: \"template\" on the created Article", async () => {
+  it("still materializes when no article template exists for the locale (T01)", async () => {
     const fake = new FakeContentCreationDb();
-    const sourceItem = fake.seedSourceItem({ title: "Content Mode Check" });
-
-    const result = await createContentFromSourceItem(fake.asPrismaClient(), {
-      novelSourceItemId: sourceItem.id,
-      mode: "apply",
-      actor: ADMIN_ACTOR,
-      requestId: "req-content-mode",
-    });
-
-    expect(result.outcome).toBe("created");
-    expect(fake.lastArticleCreateArgs).toMatchObject({ contentMode: "template" });
-  });
-
-  it("uses one explicitly selected active template and persists its id", async () => {
-    const fake = new FakeContentCreationDb();
-    fake.seedArticleTemplate({
-      templateKey: "campaign-v2",
-      bodyTemplate: "<article>Campaign: {novel_title}</article>",
-      seoTemplate: { title: "Campaign {novel_title}" },
-    });
-    const sourceItem = fake.seedSourceItem({ title: "Selected Story" });
-
-    const result = await createContentFromSourceItem(fake.asPrismaClient(), {
-      novelSourceItemId: sourceItem.id,
-      templateKey: "campaign-v2",
-      mode: "apply",
-      actor: ADMIN_ACTOR,
-      requestId: "req-template-selected",
-    });
-
-    expect(result.outcome).toBe("created");
-    const selected = Array.from(fake.articleTemplates.values()).find((row) => row.templateKey === "campaign-v2");
-    expect(fake.lastArticleCreateArgs).toMatchObject({
-      templateId: selected?.id,
-      title: "Campaign Selected Story",
-      body: "<article>Campaign: Selected Story</article>",
-    });
-  });
-
-  /**
-   * L10N P2 (matrix #4, CPS batch semantics — 海阅创建是单事务，无单篇/批量之分):
-   * `selectActiveArticleTemplate` cannot distinguish "this templateKey does
-   * not exist" from "exists but inactive" from "exists but wrong locale" —
-   * a single combined query — so every shape of "no usable template for the
-   * derived locale" collapses into `template_locale_mismatch`, matching how
-   * CPS's own batch path never separates those either.
-   */
-  it("fails closed when an explicit template is not active — template_locale_mismatch, not a silent pass", async () => {
-    const fake = new FakeContentCreationDb();
-    fake.seedArticleTemplate({ templateKey: "inactive-v1", status: "inactive" });
-    const sourceItem = fake.seedSourceItem({ title: "Blocked Story" });
-
-    await expect(createContentFromSourceItem(fake.asPrismaClient(), {
-      novelSourceItemId: sourceItem.id,
-      templateKey: "inactive-v1",
-      mode: "apply",
-      actor: ADMIN_ACTOR,
-      requestId: "req-template-inactive",
-    })).resolves.toEqual({ outcome: "template_locale_mismatch", locale: "en", templateKey: "inactive-v1" });
-    expect(fake.novels.size).toBe(0);
-    expect(fake.articles.size).toBe(0);
-  });
-
-  it("template_locale_mismatch when no active template exists for the derived locale at all (no explicit templateKey)", async () => {
-    const fake = new FakeContentCreationDb();
-    // A real active template exists, but only for a different locale —
-    // `ensureDefaultArticleTemplate` only bootstraps when the table is
-    // completely empty, so seeding one here proves the auto-select path
-    // itself is locale-scoped, not merely "no template exists yet".
     fake.seedArticleTemplate({ templateKey: "system-default-v1", locale: "fr", status: "active" });
     const sourceItem = fake.seedSourceItem({ title: "No Matching Locale Template", sourceLocale: "ru" });
 
-    const result = await createContentFromSourceItem(fake.asPrismaClient(), {
+    const result = await materializeNovelFromSourceItem(fake.asPrismaClient(), {
       novelSourceItemId: sourceItem.id,
       mode: "apply",
       actor: ADMIN_ACTOR,
       requestId: "req-template-locale-mismatch",
     });
-    expect(result).toEqual({ outcome: "template_locale_mismatch", locale: "ru" });
-    expect(fake.novels.size).toBe(0);
+    expect(result.outcome).toBe("created");
+    expect(fake.novels.size).toBe(1);
     expect(fake.articles.size).toBe(0);
   });
 });
 
-describe("createContentFromSourceItem — locale derivation (L10N P2)", () => {
-  it("ru source: sourceLocale='ru' derives Novel.locale=ru and Article.locale=ru", async () => {
+describe("materializeNovelFromSourceItem — locale derivation (L10N P2)", () => {
+  it("ru source: sourceLocale='ru' derives Novel.locale=ru", async () => {
     const fake = new FakeContentCreationDb();
     fake.seedArticleTemplate({ templateKey: "system-default-v1", locale: "ru", status: "active" });
     const sourceItem = fake.seedSourceItem({ title: "Русский заголовок", sourceLocale: "ru" });
 
-    const result = await createContentFromSourceItem(fake.asPrismaClient(), {
+    const result = await materializeNovelFromSourceItem(fake.asPrismaClient(), {
       novelSourceItemId: sourceItem.id,
       mode: "apply",
       actor: ADMIN_ACTOR,
@@ -229,14 +108,14 @@ describe("createContentFromSourceItem — locale derivation (L10N P2)", () => {
     if (result.outcome !== "created") throw new Error("unreachable");
     expect(result.locale).toBe("ru");
     expect(fake.novels.get(result.novelId)?.locale).toBe("ru");
-    expect(fake.articles.get(result.articleId)?.locale).toBe("ru");
+    expect(fake.articles.size).toBe(0);
   });
 
   it("NULL sourceLocale throws ContentCreationInputError('missing_locale') — no writes", async () => {
     const fake = new FakeContentCreationDb();
     const sourceItem = fake.seedSourceItem({ title: "Unresolved Source", sourceLocale: null });
 
-    const error = await createContentFromSourceItem(fake.asPrismaClient(), {
+    const error = await materializeNovelFromSourceItem(fake.asPrismaClient(), {
       novelSourceItemId: sourceItem.id,
       mode: "apply",
       actor: ADMIN_ACTOR,
@@ -259,7 +138,7 @@ describe("createContentFromSourceItem — locale derivation (L10N P2)", () => {
     const fake = new FakeContentCreationDb();
     const sourceItem = fake.seedSourceItem({ title: "Blank Locale Source", sourceLocale: "  " });
 
-    const error = await createContentFromSourceItem(fake.asPrismaClient(), {
+    const error = await materializeNovelFromSourceItem(fake.asPrismaClient(), {
       novelSourceItemId: sourceItem.id,
       mode: "apply",
       actor: ADMIN_ACTOR,
@@ -276,7 +155,7 @@ describe("createContentFromSourceItem — locale derivation (L10N P2)", () => {
     const fake = new FakeContentCreationDb();
     const sourceItem = fake.seedSourceItem({ title: "Italian Source, Not A Site Locale", sourceLocale: "it" });
 
-    const error = await createContentFromSourceItem(fake.asPrismaClient(), {
+    const error = await materializeNovelFromSourceItem(fake.asPrismaClient(), {
       novelSourceItemId: sourceItem.id,
       mode: "apply",
       actor: ADMIN_ACTOR,
@@ -295,7 +174,7 @@ describe("createContentFromSourceItem — locale derivation (L10N P2)", () => {
     const unsupportedItem = fake.seedSourceItem({ title: "Unsupported Locale Dry Run", sourceLocale: "fil" });
 
     await expect(
-      createContentFromSourceItem(fake.asPrismaClient(), {
+      materializeNovelFromSourceItem(fake.asPrismaClient(), {
         novelSourceItemId: nullItem.id,
         mode: "dry_run",
         actor: ADMIN_ACTOR,
@@ -304,7 +183,7 @@ describe("createContentFromSourceItem — locale derivation (L10N P2)", () => {
     ).rejects.toMatchObject({ code: "missing_locale" });
 
     await expect(
-      createContentFromSourceItem(fake.asPrismaClient(), {
+      materializeNovelFromSourceItem(fake.asPrismaClient(), {
         novelSourceItemId: unsupportedItem.id,
         mode: "dry_run",
         actor: ADMIN_ACTOR,
@@ -314,12 +193,12 @@ describe("createContentFromSourceItem — locale derivation (L10N P2)", () => {
   });
 });
 
-describe("createContentFromSourceItem — dry run (default mode)", () => {
+describe("materializeNovelFromSourceItem — dry run (default mode)", () => {
   it("performs zero writes and returns the plan", async () => {
     const fake = new FakeContentCreationDb();
     const sourceItem = fake.seedSourceItem({ title: "Preview Only Story" });
 
-    const result = await createContentFromSourceItem(fake.asPrismaClient(), {
+    const result = await materializeNovelFromSourceItem(fake.asPrismaClient(), {
       novelSourceItemId: sourceItem.id,
       actor: ADMIN_ACTOR,
       requestId: "req-3",
@@ -329,9 +208,8 @@ describe("createContentFromSourceItem — dry run (default mode)", () => {
     expect(result.outcome).toBe("dry_run");
     if (result.outcome !== "dry_run") throw new Error("unreachable");
     expect(result.plan.novelSlug).toBe("preview-only-story");
-    expect(result.plan.articleSlug).toBe("preview-only-story");
     expect(result.plan.locale).toBe("en");
-    expect(result.plan.provisionalPublicPageShortId).toHaveLength(8);
+    expect(result.plan).not.toHaveProperty("articleSlug");
 
     expect(fake.novels.size).toBe(0);
     expect(fake.articles.size).toBe(0);
@@ -358,7 +236,7 @@ describe("createContentFromSourceItem — dry run (default mode)", () => {
   it("dry run with explicit mode: 'dry_run' behaves identically", async () => {
     const fake = new FakeContentCreationDb();
     const sourceItem = fake.seedSourceItem({ title: "Explicit Dry Run" });
-    const result = await createContentFromSourceItem(fake.asPrismaClient(), {
+    const result = await materializeNovelFromSourceItem(fake.asPrismaClient(), {
       novelSourceItemId: sourceItem.id,
       mode: "dry_run",
       actor: ADMIN_ACTOR,
@@ -370,7 +248,7 @@ describe("createContentFromSourceItem — dry run (default mode)", () => {
 
   it("reports source_item_not_found without writing", async () => {
     const fake = new FakeContentCreationDb();
-    const result = await createContentFromSourceItem(fake.asPrismaClient(), {
+    const result = await materializeNovelFromSourceItem(fake.asPrismaClient(), {
       novelSourceItemId: "00000000-0000-4000-8000-000000000000",
       actor: ADMIN_ACTOR,
       requestId: "req-5",
@@ -379,12 +257,12 @@ describe("createContentFromSourceItem — dry run (default mode)", () => {
   });
 });
 
-describe("createContentFromSourceItem — idempotent repeat calls", () => {
+describe("materializeNovelFromSourceItem — idempotent repeat calls", () => {
   it("a second apply call for the same source item returns already_exists and creates no second entity set", async () => {
     const fake = new FakeContentCreationDb();
     const sourceItem = fake.seedSourceItem({ title: "Repeatable Story" });
 
-    const first = await createContentFromSourceItem(fake.asPrismaClient(), {
+    const first = await materializeNovelFromSourceItem(fake.asPrismaClient(), {
       novelSourceItemId: sourceItem.id,
       mode: "apply",
       actor: ADMIN_ACTOR,
@@ -392,7 +270,7 @@ describe("createContentFromSourceItem — idempotent repeat calls", () => {
     });
     expect(first.outcome).toBe("created");
 
-    const second = await createContentFromSourceItem(fake.asPrismaClient(), {
+    const second = await materializeNovelFromSourceItem(fake.asPrismaClient(), {
       novelSourceItemId: sourceItem.id,
       mode: "apply",
       actor: ADMIN_ACTOR,
@@ -402,18 +280,16 @@ describe("createContentFromSourceItem — idempotent repeat calls", () => {
     expect(second.outcome).toBe("already_exists");
     if (first.outcome !== "created" || second.outcome !== "already_exists") throw new Error("unreachable");
     expect(second.novelId).toBe(first.novelId);
-    expect(second.articleId).toBe(first.articleId);
 
-    // Still exactly one Novel, one Article, one audit row.
     expect(fake.novels.size).toBe(1);
-    expect(fake.articles.size).toBe(1);
+    expect(fake.articles.size).toBe(0);
     expect(fake.audits).toHaveLength(1);
   });
 
   it("a dry run after a real creation reports already_exists too", async () => {
     const fake = new FakeContentCreationDb();
     const sourceItem = fake.seedSourceItem({ title: "Dry Run After Real" });
-    const created = await createContentFromSourceItem(fake.asPrismaClient(), {
+    const created = await materializeNovelFromSourceItem(fake.asPrismaClient(), {
       novelSourceItemId: sourceItem.id,
       mode: "apply",
       actor: ADMIN_ACTOR,
@@ -421,7 +297,7 @@ describe("createContentFromSourceItem — idempotent repeat calls", () => {
     });
     expect(created.outcome).toBe("created");
 
-    const previewed = await createContentFromSourceItem(fake.asPrismaClient(), {
+    const previewed = await materializeNovelFromSourceItem(fake.asPrismaClient(), {
       novelSourceItemId: sourceItem.id,
       mode: "dry_run",
       actor: ADMIN_ACTOR,
@@ -433,12 +309,11 @@ describe("createContentFromSourceItem — idempotent repeat calls", () => {
   it("already_exists: derived locale matches the linked Novel's locale, replays idempotently", async () => {
     const fake = new FakeContentCreationDb();
     const novel = fake.seedNovel({ locale: "en" });
-    fake.seedArticle({ novelId: novel.id, locale: "en" });
     // `sourceLocale` defaults to `"en"` in `seedSourceItem` — matches the
     // linked Novel's own locale, so `loadPlan` derives "en" too.
     const sourceItem = fake.seedSourceItem({ novelId: novel.id, status: "linked" });
 
-    const result = await createContentFromSourceItem(fake.asPrismaClient(), {
+    const result = await materializeNovelFromSourceItem(fake.asPrismaClient(), {
       novelSourceItemId: sourceItem.id,
       mode: "apply",
       actor: ADMIN_ACTOR,
@@ -456,10 +331,9 @@ describe("createContentFromSourceItem — idempotent repeat calls", () => {
     // first linked), the one legitimate way this branch is reachable now that
     // locale is never caller-supplied.
     const novel = fake.seedNovel({ locale: "fr" });
-    fake.seedArticle({ novelId: novel.id, locale: "fr" });
     const sourceItem = fake.seedSourceItem({ novelId: novel.id, status: "linked" });
 
-    const result = await createContentFromSourceItem(fake.asPrismaClient(), {
+    const result = await materializeNovelFromSourceItem(fake.asPrismaClient(), {
       novelSourceItemId: sourceItem.id,
       mode: "apply",
       actor: ADMIN_ACTOR,
@@ -475,11 +349,11 @@ describe("createContentFromSourceItem — idempotent repeat calls", () => {
   });
 });
 
-describe("createContentFromSourceItem — source item state guards", () => {
+describe("materializeNovelFromSourceItem — source item state guards", () => {
   it("refuses an ignored source item", async () => {
     const fake = new FakeContentCreationDb();
     const sourceItem = fake.seedSourceItem({ status: "ignored" });
-    const result = await createContentFromSourceItem(fake.asPrismaClient(), {
+    const result = await materializeNovelFromSourceItem(fake.asPrismaClient(), {
       novelSourceItemId: sourceItem.id,
       mode: "apply",
       actor: ADMIN_ACTOR,
@@ -492,7 +366,7 @@ describe("createContentFromSourceItem — source item state guards", () => {
   it("refuses a stale source item", async () => {
     const fake = new FakeContentCreationDb();
     const sourceItem = fake.seedSourceItem({ status: "stale" });
-    const result = await createContentFromSourceItem(fake.asPrismaClient(), {
+    const result = await materializeNovelFromSourceItem(fake.asPrismaClient(), {
       novelSourceItemId: sourceItem.id,
       mode: "apply",
       actor: ADMIN_ACTOR,
@@ -505,7 +379,7 @@ describe("createContentFromSourceItem — source item state guards", () => {
   it("refuses a soft-deleted source item", async () => {
     const fake = new FakeContentCreationDb();
     const sourceItem = fake.seedSourceItem({ deletedAt: new Date() });
-    const result = await createContentFromSourceItem(fake.asPrismaClient(), {
+    const result = await materializeNovelFromSourceItem(fake.asPrismaClient(), {
       novelSourceItemId: sourceItem.id,
       mode: "apply",
       actor: ADMIN_ACTOR,
@@ -515,11 +389,11 @@ describe("createContentFromSourceItem — source item state guards", () => {
   });
 });
 
-describe("createContentFromSourceItem — slug health and conflict", () => {
+describe("materializeNovelFromSourceItem — slug health and conflict", () => {
   it("returns slug_unhealthy without writing when the title normalizes below the minimum length", async () => {
     const fake = new FakeContentCreationDb();
     const sourceItem = fake.seedSourceItem({ title: "Hi" });
-    const result = await createContentFromSourceItem(fake.asPrismaClient(), {
+    const result = await materializeNovelFromSourceItem(fake.asPrismaClient(), {
       novelSourceItemId: sourceItem.id,
       mode: "apply",
       actor: ADMIN_ACTOR,
@@ -535,7 +409,7 @@ describe("createContentFromSourceItem — slug health and conflict", () => {
     fake.seedNovel({ locale: "en", slug: "same-title-story" });
     const sourceItem = fake.seedSourceItem({ title: "Same Title Story" });
 
-    const result = await createContentFromSourceItem(fake.asPrismaClient(), {
+    const result = await materializeNovelFromSourceItem(fake.asPrismaClient(), {
       novelSourceItemId: sourceItem.id,
       mode: "apply",
       actor: ADMIN_ACTOR,
@@ -547,12 +421,13 @@ describe("createContentFromSourceItem — slug health and conflict", () => {
     expect(result.novelSlug).toBe("same-title-story-2");
   });
 
-  it("Novel and Article slugs resolve independently — a taken Novel slug does not force a suffix on the Article slug", async () => {
+  it("a taken Article slug does not block Novel materialization (T02)", async () => {
     const fake = new FakeContentCreationDb();
-    fake.seedNovel({ locale: "en", slug: "independent-story" });
+    const other = fake.seedNovel({ locale: "en", slug: "other-book" });
+    fake.seedArticle({ novelId: other.id, locale: "en", slug: "independent-story" });
     const sourceItem = fake.seedSourceItem({ title: "Independent Story" });
 
-    const result = await createContentFromSourceItem(fake.asPrismaClient(), {
+    const result = await materializeNovelFromSourceItem(fake.asPrismaClient(), {
       novelSourceItemId: sourceItem.id,
       mode: "apply",
       actor: ADMIN_ACTOR,
@@ -560,18 +435,18 @@ describe("createContentFromSourceItem — slug health and conflict", () => {
     });
     expect(result.outcome).toBe("created");
     if (result.outcome !== "created") throw new Error("unreachable");
-    expect(result.novelSlug).toBe("independent-story-2");
-    expect(result.articleSlug).toBe("independent-story");
+    expect(result.novelSlug).toBe("independent-story");
+    expect(fake.articles.size).toBe(1);
   });
 });
 
-describe("createContentFromSourceItem — generator retry wiring", () => {
+describe("materializeNovelFromSourceItem — generator retry wiring", () => {
   it("retries past a businessId collision and still creates exactly one Novel", async () => {
     const fake = new FakeContentCreationDb();
     fake.novelBusinessIdFailuresRemaining = 2;
     const sourceItem = fake.seedSourceItem({ title: "Business Id Retry Story" });
 
-    const result = await createContentFromSourceItem(fake.asPrismaClient(), {
+    const result = await materializeNovelFromSourceItem(fake.asPrismaClient(), {
       novelSourceItemId: sourceItem.id,
       mode: "apply",
       actor: ADMIN_ACTOR,
@@ -583,26 +458,10 @@ describe("createContentFromSourceItem — generator retry wiring", () => {
     expect(fake.novelBusinessIdFailuresRemaining).toBe(0);
   });
 
-  it("retries past a publicPageShortId collision and still creates exactly one Article", async () => {
-    const fake = new FakeContentCreationDb();
-    fake.articleShortIdFailuresRemaining = 3;
-    const sourceItem = fake.seedSourceItem({ title: "Short Id Retry Story" });
-
-    const result = await createContentFromSourceItem(fake.asPrismaClient(), {
-      novelSourceItemId: sourceItem.id,
-      mode: "apply",
-      actor: ADMIN_ACTOR,
-      requestId: "req-m",
-    });
-
-    expect(result.outcome).toBe("created");
-    expect(fake.articles.size).toBe(1);
-    expect(fake.articleShortIdFailuresRemaining).toBe(0);
-  });
 });
 
-describe("createContentFromSourceItem — concurrent creation race", () => {
-  it("the losing transaction rolls back its own Novel/Article and reports concurrent_creation_conflict", async () => {
+describe("materializeNovelFromSourceItem — concurrent creation race", () => {
+  it("the losing transaction rolls back its own Novel and reports concurrent_creation_conflict", async () => {
     const fake = new FakeContentCreationDb();
     const sourceItem = fake.seedSourceItem({ title: "Racing Story Title" });
 
@@ -611,13 +470,12 @@ describe("createContentFromSourceItem — concurrent creation race", () => {
     // Novel gets linked to the same source item.
     fake.onSourceItemRead = () => {
       const winnerNovel = fake.seedNovel({ locale: "en", slug: "racing-story-title-winner" });
-      fake.seedArticle({ novelId: winnerNovel.id, locale: "en", slug: "racing-story-title-winner" });
       const item = fake.sourceItems.get(sourceItem.id)!;
       item.novelId = winnerNovel.id;
       item.status = "linked";
     };
 
-    const result = await createContentFromSourceItem(fake.asPrismaClient(), {
+    const result = await materializeNovelFromSourceItem(fake.asPrismaClient(), {
       novelSourceItemId: sourceItem.id,
       mode: "apply",
       actor: ADMIN_ACTOR,
@@ -625,19 +483,18 @@ describe("createContentFromSourceItem — concurrent creation race", () => {
     });
 
     expect(result).toEqual({ outcome: "concurrent_creation_conflict" });
-    // The loser's own Novel/Article were rolled back — only the winner's remain.
     expect(fake.novels.size).toBe(1);
-    expect(fake.articles.size).toBe(1);
+    expect(fake.articles.size).toBe(0);
     // No audit row from the losing attempt.
     expect(fake.audits).toHaveLength(0);
   });
 });
 
-describe("createContentFromSourceItem — input validation", () => {
+describe("materializeNovelFromSourceItem — input validation", () => {
   it("throws ContentCreationInputError for a malformed novelSourceItemId", async () => {
     const fake = new FakeContentCreationDb();
     await expect(
-      createContentFromSourceItem(fake.asPrismaClient(), {
+      materializeNovelFromSourceItem(fake.asPrismaClient(), {
         novelSourceItemId: "not-a-uuid",
         actor: ADMIN_ACTOR,
         requestId: "req-o",
@@ -649,7 +506,7 @@ describe("createContentFromSourceItem — input validation", () => {
     const fake = new FakeContentCreationDb();
     const sourceItem = fake.seedSourceItem({});
     await expect(
-      createContentFromSourceItem(fake.asPrismaClient(), {
+      materializeNovelFromSourceItem(fake.asPrismaClient(), {
         novelSourceItemId: sourceItem.id,
         actor: ADMIN_ACTOR,
         requestId: "",
@@ -661,7 +518,7 @@ describe("createContentFromSourceItem — input validation", () => {
     const fake = new FakeContentCreationDb();
     const sourceItem = fake.seedSourceItem({});
     await expect(
-      createContentFromSourceItem(fake.asPrismaClient(), {
+      materializeNovelFromSourceItem(fake.asPrismaClient(), {
         novelSourceItemId: sourceItem.id,
         actor: { type: "admin", adminId: "" },
         requestId: "req-p",

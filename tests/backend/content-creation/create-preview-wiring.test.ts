@@ -5,7 +5,7 @@ vi.mock("@/server/content-creation/preview-enqueue", () => ({
   enqueueContentCreationPreview: enqueue,
 }));
 
-const { createContentFromSourceItem } = await import("@/server/content-creation/service");
+const { materializeNovelFromSourceItem } = await import("@/server/content-creation/service");
 const { FakeContentCreationDb } = await import("./fake-db");
 
 beforeEach(() => {
@@ -13,8 +13,8 @@ beforeEach(() => {
   enqueue.mockResolvedValue({ queued: true, status: "duplicate", taskId: "stable-task" });
 });
 
-describe("createContentFromSourceItem preview wiring", () => {
-  it("a committed creation immediately invokes preview enqueue; an idempotent repeat does not", async () => {
+describe("materializeNovelFromSourceItem preview wiring", () => {
+  it("a committed materialize immediately invokes preview enqueue; an idempotent repeat does not", async () => {
     const fake = new FakeContentCreationDb();
     const source = fake.seedSourceItem({ title: "Preview after create" });
     const input = {
@@ -24,7 +24,7 @@ describe("createContentFromSourceItem preview wiring", () => {
       requestId: "request-1",
     };
 
-    const created = await createContentFromSourceItem(fake.asPrismaClient(), input);
+    const created = await materializeNovelFromSourceItem(fake.asPrismaClient(), input);
     expect(created).toMatchObject({
       outcome: "created",
       previewEnqueue: { queued: true, status: "duplicate", taskId: "stable-task" },
@@ -34,11 +34,11 @@ describe("createContentFromSourceItem preview wiring", () => {
       fake.asPrismaClient(),
       expect.objectContaining({
         novelSourceItemIds: [source.id],
-        requestToken: `moboreader.preview_refresh.v1:content_create:${source.id}`,
+        requestToken: `moboreader.preview_refresh.v1:novel_materialize:${source.id}`,
       }),
     );
 
-    const repeated = await createContentFromSourceItem(fake.asPrismaClient(), { ...input, requestId: "request-2" });
+    const repeated = await materializeNovelFromSourceItem(fake.asPrismaClient(), { ...input, requestId: "request-2" });
     expect(repeated.outcome).toBe("already_exists");
     expect(enqueue).toHaveBeenCalledTimes(1);
   });

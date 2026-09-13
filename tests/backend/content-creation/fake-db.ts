@@ -50,6 +50,20 @@ export type FakeArticle = {
   summary: string | null;
   body: string;
   templateId: string | null;
+  promoLinkId: string | null;
+  contentMode?: string;
+  articleType?: string;
+  deletedAt: Date | null;
+};
+
+export type FakePromoLink = {
+  id: string;
+  novelId: string;
+  status: string;
+  webUrl: string | null;
+  appUrl: string | null;
+  fetchedAt: Date | null;
+  publicRedirectCode: string;
   deletedAt: Date | null;
 };
 
@@ -105,6 +119,8 @@ export class FakeContentCreationDb {
   readonly novels = new Map<string, FakeNovel>();
   readonly articles = new Map<string, FakeArticle>();
   readonly articleTemplates = new Map<string, FakeArticleTemplate>();
+  readonly promoLinks = new Map<string, FakePromoLink>();
+  readonly previewChapterCounts = new Map<string, number>();
   readonly audits: FakeAudit[] = [];
   readonly calls: string[] = [];
   lastSourceItemFindFirstArgs: { where: { id: string }; select?: Record<string, boolean> } | null = null;
@@ -113,6 +129,8 @@ export class FakeContentCreationDb {
   novelBusinessIdFailuresRemaining = 0;
   /** How many consecutive `article.create` calls should throw a `public_page_short_id` P2002 before succeeding. */
   articleShortIdFailuresRemaining = 0;
+  /** How many consecutive `article.create` calls should throw `article_novel_locale_key` (T16). */
+  articleNovelLocaleFailuresRemaining = 0;
 
   /** Raw `data` object from the most recent successful `article.create` call — lets a test assert on exactly which keys the service writes (e.g. that `status`/`promoLinkId` are never present at all), not just on the row this fake happens to construct from a subset of them. */
   lastArticleCreateArgs: Record<string, unknown> | null = null;
@@ -181,9 +199,27 @@ export class FakeContentCreationDb {
       summary: article.summary ?? "A sample description.",
       body: article.body ?? "",
       templateId: article.templateId ?? null,
+      promoLinkId: article.promoLinkId ?? null,
+      contentMode: article.contentMode,
+      articleType: article.articleType,
       deletedAt: article.deletedAt ?? null,
     };
     this.articles.set(full.id, full);
+    return full;
+  }
+
+  seedPromoLink(promo: Partial<FakePromoLink> & { novelId: string }): FakePromoLink {
+    const full: FakePromoLink = {
+      id: promo.id ?? nextUuid(),
+      novelId: promo.novelId,
+      status: promo.status ?? "fetched",
+      webUrl: promo.webUrl === undefined ? "https://example.com/read" : promo.webUrl,
+      appUrl: promo.appUrl ?? null,
+      fetchedAt: promo.fetchedAt === undefined ? new Date("2026-09-01T00:00:00.000Z") : promo.fetchedAt,
+      publicRedirectCode: promo.publicRedirectCode ?? "goabc123",
+      deletedAt: promo.deletedAt ?? null,
+    };
+    this.promoLinks.set(full.id, full);
     return full;
   }
 
@@ -256,16 +292,17 @@ export class FakeContentCreationDb {
     const { where } = args;
     if (where.slug !== undefined) {
       for (const article of this.articles.values()) {
-        if (article.deletedAt !== null) continue;
+        if (where.deletedAt === null && article.deletedAt !== null) continue;
         if (article.locale === where.locale && article.slug === where.slug) {
-          return args.select ? { id: article.id } : { ...article };
+          return args.select ? { id: article.id } : { ...article, template: article.templateId ? { templateKey: this.articleTemplates.get(article.templateId)?.templateKey ?? "" } : null };
         }
       }
       return null;
     }
     for (const article of this.articles.values()) {
       if (article.novelId === where.novelId && article.locale === where.locale) {
-        return { ...article };
+        if (where.deletedAt === null && article.deletedAt !== null) continue;
+        return { ...article, template: article.templateId ? { templateKey: this.articleTemplates.get(article.templateId)?.templateKey ?? "" } : null };
       }
     }
     return null;
@@ -309,9 +346,16 @@ export class FakeContentCreationDb {
       this.articleShortIdFailuresRemaining -= 1;
       throw uniqueViolation("article_public_page_short_id_key");
     }
+    if (this.articleNovelLocaleFailuresRemaining > 0) {
+      this.articleNovelLocaleFailuresRemaining -= 1;
+      throw uniqueViolation("article_novel_locale_key");
+    }
     const publicPageShortId = String(args.data.publicPageShortId);
     for (const existing of this.articles.values()) {
       if (existing.publicPageShortId === publicPageShortId) throw uniqueViolation("article_public_page_short_id_key");
+      if (existing.novelId === String(args.data.novelId) && existing.locale === String(args.data.locale)) {
+        throw uniqueViolation("article_novel_locale_key");
+      }
     }
     const article: FakeArticle = {
       id: nextUuid(),
@@ -323,6 +367,9 @@ export class FakeContentCreationDb {
       summary: (args.data.summary as string | null) ?? null,
       body: String(args.data.body ?? ""),
       templateId: (args.data.templateId as string | null) ?? null,
+      promoLinkId: (args.data.promoLinkId as string | null) ?? null,
+      contentMode: args.data.contentMode as string | undefined,
+      articleType: args.data.articleType as string | undefined,
       deletedAt: null,
     };
     this.articles.set(article.id, article);
@@ -454,6 +501,40 @@ export class FakeContentCreationDb {
         create: this.articleTemplateCreate,
         findFirst: this.articleTemplateFindFirst,
       },
+      promoLink: {
+        findMany: async (args: { where: Record<string, unknown> }) => {
+          this.calls.push("promoLink.findMany");
+          return Array.from(this.promoLinks.values())
+            .filter((row) => {
+              if (row.novelId !== args.where.novelId) return false;
+              if (args.where.deletedAt === null && row.deletedAt !== null) return false;
+              if (typeof args.where.status === "string" && row.status !== args.where.status) return false;
+              return true;
+            })
+            .sort((a, b) => {
+              const at = a.fetchedAt?.getTime() ?? 0;
+              const bt = b.fetchedAt?.getTime() ?? 0;
+              return bt - at || a.id.localeCompare(b.id);
+            });
+        },
+        count: async (args: { where: Record<string, unknown> }) => {
+          this.calls.push("promoLink.count");
+          return Array.from(this.promoLinks.values()).filter((row) => {
+            if (row.novelId !== args.where.novelId) return false;
+            if (args.where.deletedAt === null) return row.deletedAt === null;
+            if (args.where.deletedAt && typeof args.where.deletedAt === "object" && "not" in args.where.deletedAt) {
+              return row.deletedAt !== null;
+            }
+            return true;
+          }).length;
+        },
+      },
+      novelChapter: {
+        count: async (args: { where: Record<string, unknown> }) => {
+          this.calls.push("novelChapter.count");
+          return this.previewChapterCounts.get(String(args.where.novelId)) ?? 0;
+        },
+      },
       $transaction: async (callback) => {
         const previousLog = this.undoLog;
         this.undoLog = [];
@@ -502,6 +583,13 @@ type FakeClient = {
     count: (args?: unknown) => Promise<number>;
     create: (args: { data: Record<string, unknown> }) => Promise<unknown>;
     findFirst: (args: { where: Record<string, unknown> }) => Promise<unknown>;
+  };
+  promoLink: {
+    findMany: (args: { where: Record<string, unknown> }) => Promise<unknown>;
+    count: (args: { where: Record<string, unknown> }) => Promise<number>;
+  };
+  novelChapter: {
+    count: (args: { where: Record<string, unknown> }) => Promise<number>;
   };
   $transaction: <T>(callback: (tx: FakeClient) => Promise<T>) => Promise<T>;
 };

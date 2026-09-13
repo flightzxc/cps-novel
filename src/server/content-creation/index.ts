@@ -2,13 +2,28 @@ export {
   ContentCreationInputError,
   createContentFromSourceItem,
   createContentFromSourceItemInTransaction,
+  materializeNovelFromSourceItem,
+  materializeNovelFromSourceItemInTransaction,
   type ContentCreationInputErrorCode,
   type ContentCreationPlan,
   type CreateContentActor,
   type CreateContentFromSourceItemInput,
   type CreateContentResult,
   type CreatedContentSummary,
+  type MaterializeNovelFromSourceItemInput,
+  type MaterializedNovelSummary,
+  type NovelMaterializeResult,
 } from "./service";
+export {
+  generateArticleFromNovel,
+  generateArticleFromNovelInTransaction,
+} from "./generate";
+export type {
+  ArticleGeneratePlan,
+  ArticleGenerateResult,
+  GenerateArticleFromNovelInput,
+  GeneratedArticleSummary,
+} from "./types";
 export {
   enqueueContentCreationPreview,
   resolveContentPreviewAccount,
@@ -26,3 +41,5 @@ export {
   type CreateBlogArticleInput,
   type CreateBlogArticleResult,
 } from "./blog";
+export { resolveReadyPromoLinkForNovel, promoRedirectUrlFor } from "./promo";
+export { listNovelsForArticleGenerate, type NovelGenerateCandidate } from "./eligibility";

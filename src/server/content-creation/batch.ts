@@ -1,4 +1,8 @@
 /**
+ * @deprecated Dead production path. Catalog ingest now enqueues
+ * `novel_materialize` via `enqueueCatalogBatch`. Do not treat this file as
+ * the write path or change its semantics to stand in for the queue.
+ *
  * RC-4 explicit-selection batch wrapper around `createContentFromSourceItem`
  * (`./service.ts`). CPS v8.3.6 parity target:
  * `src/lib/changdu-promote-drama-batch.ts`'s `runChangduPromoteDramaBatch`
@@ -50,9 +54,14 @@ import type { PrismaClient } from "@prisma/client";
 
 import { summarizeDbError } from "@/lib/db/db-retry";
 
+/**
+ * @deprecated Dead in-process loop. Production catalog batch uses
+ * `enqueueCatalogBatch` → `novel.materialize.v1`. Do not treat this file as
+ * the write path to evolve.
+ */
 import {
   ContentCreationInputError,
-  createContentFromSourceItem,
+  materializeNovelFromSourceItem,
   type ContentCreationInputErrorCode,
   type CreateContentActor,
   type CreateContentResult,
@@ -181,9 +190,8 @@ async function runSequentialBudgetedBatch<TPrimaryStatus extends string>(
       // under `Article`/`OperationAudit`'s 160-char bound) purely so each
       // item's own `OperationAudit` row and `withDbRetry` log entries stay
       // individually traceable back to this one batch submission.
-      const result = await createContentFromSourceItem(db, {
+      const result = await materializeNovelFromSourceItem(db, {
         novelSourceItemId,
-        templateKey: input.templateKey,
         mode,
         actor: input.actor,
         requestId: `${input.requestId}:${novelSourceItemId}`,
