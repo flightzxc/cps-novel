@@ -222,8 +222,8 @@ describe("Article.contentMode sole-maintenance-points regression (C-26)", () => 
     expect(findWriteSiteViolations(source).length).toBeGreaterThan(0);
   });
 
-  it("src/server/content-creation/service.ts is the other of exactly the two places allowed to contain the write-site pattern", async () => {
-    const source = await readFile(path.resolve(process.cwd(), "src/server/content-creation/service.ts"), "utf8");
+  it("src/server/content-creation/generate.ts is the other of exactly the two places allowed to contain the write-site pattern", async () => {
+    const source = await readFile(path.resolve(process.cwd(), "src/server/content-creation/generate.ts"), "utf8");
     expect(findWriteSiteViolations(source).length).toBeGreaterThan(0);
   });
 });
