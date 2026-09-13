@@ -15,6 +15,7 @@
 ## 本轮新增：生成硬卡推广
 
 显式「创建文章」走 `article.generate.v1`，输入是当前 Novel 事实，不是 SourceItem 快照。
+「按当前筛选全选」走父任务 `article.generate.batch.v1`：Action 只保存 filter snapshot，Worker 分页枚举并创建每片 ≤200 的 leaf `article.generate.v1`。禁止在 Web 里枚举全库。
 
 推广前置复用 `isPromoReady` + `pickReadyPromoLink`（`fetched` + 非软删，`fetchedAt desc, id asc`）。这是工单收紧策略，相对「有则绑定、无则草稿、发布再拦」的更松变体。不要把它回写成历史冻结事实。
 

@@ -42,4 +42,10 @@ export {
   type CreateBlogArticleResult,
 } from "./blog";
 export { resolveReadyPromoLinkForNovel, promoRedirectUrlFor } from "./promo";
-export { listNovelsForArticleGenerate, type NovelGenerateCandidate } from "./eligibility";
+export {
+  articleGenerateEligibleWhere,
+  listNovelsForArticleGenerate,
+  loadPinnedNovelForArticleGenerate,
+  type NovelGenerateCandidate,
+} from "./eligibility";
+export { resolveReadyPromoLinksForNovels } from "./promo";

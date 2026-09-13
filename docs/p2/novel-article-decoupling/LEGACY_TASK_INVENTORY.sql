@@ -1,9 +1,9 @@
 -- 旧耦合任务盘点（只读）。待现场核验，本轮不执行生产处置。
 -- 在生产只读副本或经批准的分析连接上运行。
 
--- 1) 仍存活的旧叶任务
+-- 1) 仍存活的旧叶任务（只读 generic_task 真实列；lease 在 query 3 的 generic_task_item）
 SELECT id, task_type, status, total_count, success_count, failed_count, skipped_count,
-       locked_until, lease_epoch, created_at, updated_at
+       created_at, updated_at
 FROM generic_task
 WHERE task_type = 'content.create.v1'
   AND status IN ('pending', 'processing', 'disabled')
@@ -34,6 +34,7 @@ WHERE task_type IN (
   'content.create.v1',
   'novel.materialize.v1',
   'article.generate.v1',
+  'article.generate.batch.v1',
   'batch.materialize.v1'
 )
 GROUP BY 1, 2

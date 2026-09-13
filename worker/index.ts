@@ -19,6 +19,7 @@ import { createCatalogBatchWorkerHandlers } from "./handlers/catalog-batch";
 import { createContentCreateWorkerHandlers } from "./handlers/content-create";
 import { createNovelMaterializeWorkerHandlers } from "./handlers/novel-materialize";
 import { createArticleGenerateWorkerHandlers } from "./handlers/article-generate";
+import { createArticleGenerateBatchWorkerHandlers } from "./handlers/article-generate-batch";
 import {
   createWorkerFailureWebhookReporterFromEnv,
   parseShutdownDrainTimeoutEnv,
@@ -78,6 +79,7 @@ export function createWorkerHandlers(prisma: PrismaClient) {
     ...createContentCreateWorkerHandlers(prisma),
     ...createNovelMaterializeWorkerHandlers(prisma),
     ...createArticleGenerateWorkerHandlers(prisma),
+    ...createArticleGenerateBatchWorkerHandlers(prisma),
   });
 }
 

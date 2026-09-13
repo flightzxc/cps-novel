@@ -1,29 +1,101 @@
 /**
  * Isolated-PG probes for Novel/Article decoupling (T04 / T16 / T26 / T27).
- * Off by default. Enable with NOVEL_ARTICLE_DECOUPLE_DATABASE_TEST=1 and the
- * existing P1-06 / catalog-batch role URLs. No new GRANT.
+ *
+ * Off by default. Enable only with:
+ *   NOVEL_ARTICLE_DECOUPLE_DATABASE_TEST=1
+ *   P1_06_OWNER_DATABASE_URL
+ *   P1_06_WEB_DATABASE_URL
+ *   P1_06_WORKER_DATABASE_URL
+ *
+ * This module never constructs PrismaClient or reads DATABASE_URL /
+ * CATALOG_BATCH_* fallbacks at load time. Owner is fixture-only.
+ * Database name must start with `cps_novel_article_decouple_`.
+ * This round does not run against shared X8 / UAT / production volumes.
  */
 import { randomUUID } from "node:crypto";
 
 import { Prisma, PrismaClient } from "@prisma/client";
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 
 import { generateArticleFromNovel } from "@/server/content-creation/generate";
 import { materializeNovelFromSourceItem } from "@/server/content-creation/service";
 
 const enabled = process.env.NOVEL_ARTICLE_DECOUPLE_DATABASE_TEST === "1";
-const ownerUrl = process.env.P1_06_OWNER_DATABASE_URL ?? process.env.CATALOG_BATCH_OWNER_DATABASE_URL ?? process.env.DATABASE_URL;
-const webUrl = process.env.P1_06_WEB_DATABASE_URL ?? process.env.CATALOG_BATCH_OWNER_DATABASE_URL ?? ownerUrl;
-const workerUrl = process.env.P1_06_WORKER_DATABASE_URL ?? process.env.CATALOG_BATCH_WORKER_DATABASE_URL ?? ownerUrl;
 
-const owner = new PrismaClient({ datasourceUrl: ownerUrl });
-const web = new PrismaClient({ datasourceUrl: webUrl });
-const worker = new PrismaClient({ datasourceUrl: workerUrl });
+const FORBIDDEN_DATABASE_NAMES = [
+  "cps_novel_x8",
+  "cps_novel_uat",
+  "cps_novel_prod",
+  "cps_novel_catalog_batch_",
+  "p1_06",
+];
 
+type RoleClients = {
+  owner: PrismaClient;
+  web: PrismaClient;
+  worker: PrismaClient;
+};
+
+function requiredUrl(name: "P1_06_OWNER_DATABASE_URL" | "P1_06_WEB_DATABASE_URL" | "P1_06_WORKER_DATABASE_URL"): string {
+  const value = process.env[name];
+  if (!value) throw new Error(`${name} is required; refusing owner/DATABASE_URL fallback`);
+  return value;
+}
+
+async function assertIsolatedDecoupleDatabase(db: PrismaClient): Promise<void> {
+  const [database] = await db.$queryRaw<Array<{ name: string; version: string }>>`
+    SELECT current_database() AS name, current_setting('server_version') AS version
+  `;
+  if (!database.name.startsWith("cps_novel_article_decouple_")) {
+    throw new Error(`Refusing novel-article-decouple setup against ${database.name}`);
+  }
+  if (FORBIDDEN_DATABASE_NAMES.some((name) => database.name.includes(name.replace(/_$/, "")))) {
+    throw new Error(`Refusing shared/non-disposable database ${database.name}`);
+  }
+  if (!database.version.startsWith("16.")) {
+    throw new Error(`PostgreSQL 16 required, got ${database.version}`);
+  }
+}
+
+async function currentUser(db: PrismaClient): Promise<string> {
+  const [{ current_user: user }] = await db.$queryRawUnsafe<Array<{ current_user: string }>>("SELECT current_user");
+  return user;
+}
+
+function createClientsWhenEnabled(): RoleClients | null {
+  if (!enabled) return null;
+  return {
+    owner: new PrismaClient({ datasourceUrl: requiredUrl("P1_06_OWNER_DATABASE_URL") }),
+    web: new PrismaClient({ datasourceUrl: requiredUrl("P1_06_WEB_DATABASE_URL") }),
+    worker: new PrismaClient({ datasourceUrl: requiredUrl("P1_06_WORKER_DATABASE_URL") }),
+  };
+}
+
+const clients = createClientsWhenEnabled();
+const owner = clients?.owner;
+const web = clients?.web;
+const worker = clients?.worker;
 const ACTOR = { type: "admin" as const, adminId: "decouple-pg-admin" };
 
 describe.skipIf(!enabled)("Novel/Article decoupling isolated PG", () => {
+  beforeAll(async () => {
+    if (!owner || !web || !worker) throw new Error("role clients were not created");
+    await assertIsolatedDecoupleDatabase(owner);
+    const [webUser, workerUser, ownerUser] = await Promise.all([
+      currentUser(web),
+      currentUser(worker),
+      currentUser(owner),
+    ]);
+    expect(webUser).toBe("web_app");
+    expect(workerUser).toBe("worker_app");
+    expect(webUser).not.toBe(ownerUser);
+    expect(workerUser).not.toBe(ownerUser);
+    expect(webUser).not.toBe("migration_owner");
+    expect(workerUser).not.toBe("migration_owner");
+  }, 30_000);
+
   it("T04 concurrent materialize yields one Novel and zero Articles", async () => {
+    if (!owner || !worker) throw new Error("missing clients");
     const sourceId = await seedPendingSource(owner);
     const [first, second] = await Promise.all([
       materializeNovelFromSourceItem(worker, { novelSourceItemId: sourceId, mode: "apply", actor: ACTOR, requestId: `t04-a-${sourceId}` }),
@@ -38,6 +110,7 @@ describe.skipIf(!enabled)("Novel/Article decoupling isolated PG", () => {
   });
 
   it("T16 concurrent generate yields one Article and does not overwrite", async () => {
+    if (!owner || !worker) throw new Error("missing clients");
     const { novelId, promoId } = await seedNovelWithReadyPromo(owner);
     await seedTemplate(owner, "en");
     const [first, second] = await Promise.all([
@@ -53,6 +126,7 @@ describe.skipIf(!enabled)("Novel/Article decoupling isolated PG", () => {
   });
 
   it("T26 worker_app and web_app can INSERT article with implicit RETURNING", async () => {
+    if (!owner || !web || !worker) throw new Error("missing clients");
     const workerSeed = await seedNovelWithReadyPromo(owner, "t26w");
     const webSeed = await seedNovelWithReadyPromo(owner, "t26b");
     await seedTemplate(owner, "en");
@@ -75,6 +149,7 @@ describe.skipIf(!enabled)("Novel/Article decoupling isolated PG", () => {
   });
 
   it("T27 source → 1 Novel 0 Article → fixture promo still 0 Article → generate 1 bound draft", async () => {
+    if (!owner || !worker) throw new Error("missing clients");
     const sourceId = await seedPendingSource(owner, "t27");
     const materialized = await materializeNovelFromSourceItem(worker, {
       novelSourceItemId: sourceId, mode: "apply", actor: ACTOR, requestId: `t27-mat-${sourceId}`,

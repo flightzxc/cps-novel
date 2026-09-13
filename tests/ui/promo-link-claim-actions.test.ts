@@ -28,7 +28,7 @@ vi.mock("@/server/content-creation", () => {
 });
 vi.mock("@/lib/tasks/moboreader", () => ({ MoboreaderTaskInputError: class extends Error {}, createMoboreaderCatalogScanTask: vi.fn(), resolveMoboreaderCatalogSafetyMaxPages: () => 1, resolveMoboreaderUpstreamRecommendedPageSize: () => 1 }));
 
-const { enqueuePromoLinkClaimAction, applyContentCreationBatchAction } = await import("@/app/(admin)/catalog-sync/_actions");
+const { enqueuePromoLinkClaimAction, applyContentCreationBatchAction, applyNovelMaterializeBatchAction } = await import("@/app/(admin)/catalog-sync/_actions");
 const A = "00000000-0000-4000-8000-000000000001";
 const B = "00000000-0000-4000-8000-000000000002";
 const explicit = { scope: "explicit_ids", ids: [B, A] } as const;
@@ -83,13 +83,15 @@ describe("catalog batch mutation actions", () => {
     expect(batch.enqueue).toHaveBeenCalledWith(db, expect.objectContaining({ channelAccounts: { [A]: B } }), expect.any(Date), true, expect.any(Function));
   });
   it.each([explicit, filtered])("content apply enqueues novel_materialize without templates", async (selection) => {
-    await applyContentCreationBatchAction({ selection, requestId: "r7" });
+    await applyNovelMaterializeBatchAction({ selection, requestId: "r7" });
     expect(guards.fresh).toHaveBeenCalledWith(expect.anything(), "content:publish", expect.anything());
     expect(batch.enqueue).toHaveBeenCalledWith(db, expect.objectContaining({ operation: "novel_materialize" }), expect.any(Date), true);
     expect(db.novelSourceItem.findMany).not.toHaveBeenCalled();
   });
-  it("rejects leftover template maps from old pages", async () => {
-    expect(await applyContentCreationBatchAction({ selection: explicit, templateKeysByLocale: { en: "missing" }, requestId: "r8" })).toMatchObject({ ok: false, code: "legacy_template_on_materialize" });
+  it("retires old batch action even without a template map", async () => {
+    expect(await applyContentCreationBatchAction({ selection: explicit, requestId: "r8" })).toMatchObject({ ok: false, code: "retired_protocol" });
+    expect(await applyContentCreationBatchAction({ selection: explicit, templateKeysByLocale: {}, requestId: "r8-empty" })).toMatchObject({ ok: false, code: "retired_protocol" });
+    expect(await applyContentCreationBatchAction({ selection: explicit, templateKeysByLocale: { en: "missing" }, requestId: "r8-map" })).toMatchObject({ ok: false, code: "retired_protocol" });
     expect(batch.enqueue).not.toHaveBeenCalled();
   });
   it("uses stored task state on request-id replay", async () => {

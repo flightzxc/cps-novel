@@ -25,8 +25,12 @@ export default async function ArticleBatchGeneratePage() {
     );
   }
 
-  const novels = await listNovelsForArticleGenerate(prisma, { limit: 200 });
-  const locales = Array.from(new Set(novels.map((row) => row.locale)));
+  const initialPage = await listNovelsForArticleGenerate(prisma, {
+    page: 1,
+    pageSize: 50,
+    eligibleOnly: true,
+  });
+  const locales = Array.from(new Set(initialPage.rows.map((row) => row.locale)));
   const templates = locales.length > 0
     ? await listActiveArticleTemplateOptionsForLocales(prisma, locales, "novel_article")
     : [];
@@ -47,7 +51,7 @@ export default async function ArticleBatchGeneratePage() {
         </div>
       }
     >
-      <ArticleBatchGenerateForm novels={novels} templates={templates} canWrite={canWrite} />
+      <ArticleBatchGenerateForm initialPage={initialPage} templates={templates} canWrite={canWrite} />
     </AdminShell>
   );
 }

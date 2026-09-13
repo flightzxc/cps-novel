@@ -32,6 +32,7 @@ const contentCreation = vi.hoisted(() => {
     BlogArticleInputError,
     generateArticleFromNovel: vi.fn(),
     createBlogArticle: vi.fn(),
+    listNovelsForArticleGenerate: vi.fn(),
   };
 });
 
@@ -47,6 +48,7 @@ const articleGenerate = vi.hoisted(() => {
   return {
     ArticleGenerateInputError,
     enqueueArticleGenerateBatch: vi.fn(),
+    enqueueArticleGenerateParentBatch: vi.fn(),
   };
 });
 
@@ -88,6 +90,7 @@ const {
   dryRunArticleGenerateAction,
   applyArticleGenerateAction,
   enqueueArticleGenerateBatchAction,
+  listArticleGenerateCandidatesAction,
 } = await import("@/app/(admin)/articles/_actions");
 
 const IDENTITY = { id: "admin-1", username: "ops", role: "super_admin", status: "active", sessionVersion: 1, twoFactorEnabled: true };
@@ -101,7 +104,9 @@ beforeEach(() => {
   guards.requireAdminActionAccess.mockReset();
   guards.requireFreshAdminServiceMutation.mockReset();
   contentCreation.generateArticleFromNovel.mockReset();
+  contentCreation.listNovelsForArticleGenerate.mockReset();
   articleGenerate.enqueueArticleGenerateBatch.mockReset();
+  articleGenerate.enqueueArticleGenerateParentBatch.mockReset();
   cache.revalidatePath.mockReset();
   harness.origin = "https://admin.example.com";
   harness.sessionToken = "session-token-abc";
@@ -171,5 +176,49 @@ describe("article generate actions reuse frozen capabilities", () => {
       }),
     );
     expect(result).toEqual({ ok: true, taskId: "task-1" });
+  });
+
+  it("all_filtered enqueues a parent filter snapshot, never a novel id list", async () => {
+    guards.requireAdminActionAccess.mockResolvedValue(granted());
+    guards.requireFreshAdminServiceMutation.mockResolvedValue(CONTEXT);
+    articleGenerate.enqueueArticleGenerateParentBatch.mockResolvedValue({ taskId: "parent-1" });
+
+    const result = await enqueueArticleGenerateBatchAction({
+      selection: { scope: "all_filtered", filter: { search: "old", locale: "en" } },
+      requestId: "req-parent",
+    });
+    expect(articleGenerate.enqueueArticleGenerateParentBatch).toHaveBeenCalledWith(
+      { __brand: "prisma-stub" },
+      expect.objectContaining({
+        filter: { search: "old", locale: "en" },
+        actorId: "admin-1",
+        requestId: "req-parent",
+      }),
+    );
+    expect(articleGenerate.enqueueArticleGenerateBatch).not.toHaveBeenCalled();
+    expect(result).toEqual({ ok: true, taskId: "parent-1" });
+    expect(JSON.stringify(result)).not.toMatch(/novelIds/);
+  });
+
+  it("candidate list uses content:view and returns the current page only", async () => {
+    guards.requireAdminActionAccess.mockResolvedValue({ context: CONTEXT });
+    const page = { rows: [], total: 201, page: 5, pageSize: 50 };
+    contentCreation.listNovelsForArticleGenerate.mockResolvedValue(page);
+
+    const result = await listArticleGenerateCandidatesAction({
+      requestId: "req-list",
+      search: "old",
+      locale: "en",
+      page: 5,
+    });
+    expect(guards.requireAdminActionAccess.mock.calls[0][0]).toMatchObject({
+      actionId: "admin.article.generate_candidates",
+    });
+    expect(contentCreation.listNovelsForArticleGenerate).toHaveBeenCalledWith(
+      { __brand: "prisma-stub" },
+      expect.objectContaining({ search: "old", locale: "en", page: 5, eligibleOnly: true, pageSize: 50 }),
+    );
+    expect(result).toEqual({ ok: true, data: page });
+    expect(guards.requireFreshAdminServiceMutation).not.toHaveBeenCalled();
   });
 });

@@ -25,7 +25,7 @@ export class CatalogSelectionInputError extends Error {
   }
 }
 
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const STATUSES = new Set(["pending", "linked", "ignored", "stale"]);
 
 /** Browser-safe canonicalization used by actions and catalog UI. */
@@ -118,4 +118,6 @@ export type CatalogBatchSummary = Readonly<{
   phase: CatalogBatchPhase;
   submittedCount: number | null;
   ineligibleCount: number | null;
+  alreadyLinkedCount: number | null;
+  blockedCount: number | null;
 }>;

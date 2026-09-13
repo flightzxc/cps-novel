@@ -12,9 +12,17 @@ import {
   type ArticleEditInput,
 } from "@/server/articles";
 import {
+  ArticleGenerateSelectionError,
+  normalizeArticleGenerateSelection,
+  type ArticleGenerateSelection,
+  type NovelGeneratePage,
+} from "@/domain/article-generation";
+import {
   ArticleGenerateInputError,
   enqueueArticleGenerateBatch,
+  enqueueArticleGenerateParentBatch,
 } from "@/lib/tasks/article-generate";
+import { listNovelsForArticleGenerate } from "@/server/content-creation";
 import {
   BlogArticleInputError,
   ContentCreationInputError,
@@ -681,8 +689,34 @@ export async function applyArticleGenerateAction(input: {
   }
 }
 
+export async function listArticleGenerateCandidatesAction(input: {
+  requestId: string;
+  search?: string;
+  locale?: string;
+  page?: number;
+}): Promise<
+  | { ok: true; data: NovelGeneratePage }
+  | { ok: false; kind: "invalid_input" | "access_denied"; code: string }
+> {
+  try {
+    await authorizeRead("admin.article.generate_candidates", input.requestId);
+    const data = await listNovelsForArticleGenerate(prisma, {
+      search: input.search,
+      locale: input.locale,
+      page: input.page,
+      pageSize: 50,
+      eligibleOnly: true,
+    });
+    return { ok: true, data };
+  } catch (error) {
+    if (error instanceof ArticleGenerateSelectionError) return { ok: false, kind: "invalid_input", code: error.code };
+    return { ok: false, kind: "access_denied", code: writeErrorCode(error, "article_generate_list_denied") };
+  }
+}
+
 export async function enqueueArticleGenerateBatchAction(input: {
-  novelIds: readonly string[];
+  novelIds?: readonly string[];
+  selection?: ArticleGenerateSelection;
   requestId: string;
   templateKeysByLocale?: Readonly<Record<string, string>>;
 }): Promise<{ ok: true; taskId: string } | { ok: false; kind: "invalid_input" | "access_denied"; code: string }> {
@@ -695,15 +729,28 @@ export async function enqueueArticleGenerateBatchAction(input: {
       entryId: "admin.article.generate_batch",
       requestId: input.requestId,
     });
-    const result = await enqueueArticleGenerateBatch(prisma, {
-      novelIds: input.novelIds,
-      actorId: context.identity.id,
-      requestId: input.requestId,
-      ...(input.templateKeysByLocale ? { templateKeysByLocale: input.templateKeysByLocale } : {}),
-    });
+    const selection = normalizeArticleGenerateSelection(
+      input.selection ?? { scope: "explicit_ids", novelIds: input.novelIds ?? [] },
+    );
+    const templates = input.templateKeysByLocale;
+    const result = selection.scope === "all_filtered"
+      ? await enqueueArticleGenerateParentBatch(prisma, {
+          filter: selection.filter,
+          actorId: context.identity.id,
+          requestId: input.requestId,
+          ...(templates ? { templateKeysByLocale: templates } : {}),
+        })
+      : await enqueueArticleGenerateBatch(prisma, {
+          novelIds: selection.novelIds,
+          actorId: context.identity.id,
+          requestId: input.requestId,
+          ...(templates ? { templateKeysByLocale: templates } : {}),
+        });
     return { ok: true, taskId: result.taskId };
   } catch (error) {
-    if (error instanceof ArticleGenerateInputError) return { ok: false, kind: "invalid_input", code: error.code };
+    if (error instanceof ArticleGenerateInputError || error instanceof ArticleGenerateSelectionError) {
+      return { ok: false, kind: "invalid_input", code: error.code };
+    }
     return { ok: false, kind: "access_denied", code: writeErrorCode(error, "article_generate_batch_denied") };
   }
 }

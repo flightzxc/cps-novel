@@ -92,7 +92,6 @@ function alreadyExistsSummary(
   novelId: string,
   locale: SiteLocale,
   article: ArticleRow,
-  fallbackTemplateKey: string,
 ): GeneratedArticleSummary {
   return {
     articleId: article.id,
@@ -100,9 +99,40 @@ function alreadyExistsSummary(
     locale,
     articleSlug: article.slug,
     publicPageShortId: article.publicPageShortId,
-    promoLinkId: article.promoLinkId ?? "",
-    templateKey: article.template?.templateKey ?? fallbackTemplateKey,
+    promoLinkId: article.promoLinkId,
+    templateKey: article.template?.templateKey ?? null,
   };
+}
+
+async function lockNovelForUpdate(
+  tx: Prisma.TransactionClient,
+  novelId: string,
+): Promise<NovelRow | null> {
+  const rows = await tx.$queryRaw<NovelRow[]>`
+    SELECT id, title, description, cover_url AS "coverUrl", locale,
+           total_chapter_count AS "totalChapterCount", deleted_at AS "deletedAt"
+    FROM novel
+    WHERE id = ${novelId}::uuid
+    FOR UPDATE
+  `;
+  return rows[0] ?? null;
+}
+
+async function resolveConflictAfterRollback(
+  db: PrismaClient,
+  novelId: string,
+): Promise<ArticleGenerateResult> {
+  const novel = await db.novel.findFirst({
+    where: { id: novelId },
+    select: { locale: true },
+  });
+  const locale = novel ? asSiteLocale(novel.locale) : null;
+  const existing = locale ? await loadExistingArticle(db, novelId, locale) : null;
+  if (existing?.deletedAt) return { outcome: "article_soft_deleted", articleId: existing.id };
+  if (existing && locale) {
+    return { outcome: "already_exists", ...alreadyExistsSummary(novelId, locale, existing) };
+  }
+  return { outcome: "concurrent_generation_conflict" };
 }
 
 async function resolveTemplate(
@@ -140,20 +170,23 @@ async function runGenerate(
     actorId: string;
     requestId: string;
     dryRun: boolean;
+    lockNovel: boolean;
   },
 ): Promise<ArticleGenerateResult> {
-  const novel = await db.novel.findFirst({
-    where: { id: input.novelId },
-    select: {
-      id: true,
-      title: true,
-      description: true,
-      coverUrl: true,
-      locale: true,
-      totalChapterCount: true,
-      deletedAt: true,
-    },
-  }) as NovelRow | null;
+  const novel = input.lockNovel
+    ? await lockNovelForUpdate(db as Prisma.TransactionClient, input.novelId)
+    : await db.novel.findFirst({
+        where: { id: input.novelId },
+        select: {
+          id: true,
+          title: true,
+          description: true,
+          coverUrl: true,
+          locale: true,
+          totalChapterCount: true,
+          deletedAt: true,
+        },
+      }) as NovelRow | null;
   if (!novel) return { outcome: "novel_not_found" };
   if (novel.deletedAt !== null) return { outcome: "novel_deleted" };
   const locale = asSiteLocale(novel.locale);
@@ -166,7 +199,7 @@ async function runGenerate(
   if (existing) {
     return {
       outcome: "already_exists",
-      ...alreadyExistsSummary(novel.id, locale, existing, input.templateKey ?? ""),
+      ...alreadyExistsSummary(novel.id, locale, existing),
     };
   }
 
@@ -272,28 +305,15 @@ export async function generateArticleFromNovelInTransaction(
   const novelId = requireUuid(input.novelId, "invalid_novel_id");
   requireActor(input.actor);
   const requestId = requireRequestId(input.requestId);
-  try {
-    return await runGenerate(tx, {
-      novelId,
-      ...(input.templateKey ? { templateKey: input.templateKey } : {}),
-      actorType: auditActorType(input.actor),
-      actorId: auditActorId(input.actor),
-      requestId,
-      dryRun: false,
-    });
-  } catch (error) {
-    if (isArticleNovelLocaleUniqueViolation(error)) {
-      const localeRow = await tx.novel.findFirst({ where: { id: novelId }, select: { locale: true } });
-      const locale = localeRow ? asSiteLocale(localeRow.locale) : null;
-      const existing = locale ? await loadExistingArticle(tx, novelId, locale) : null;
-      if (existing?.deletedAt) return { outcome: "article_soft_deleted", articleId: existing.id };
-      if (existing && locale) {
-        return { outcome: "already_exists", ...alreadyExistsSummary(novelId, locale, existing, input.templateKey ?? "") };
-      }
-      return { outcome: "concurrent_generation_conflict" };
-    }
-    throw error;
-  }
+  return runGenerate(tx, {
+    novelId,
+    ...(input.templateKey ? { templateKey: input.templateKey } : {}),
+    actorType: auditActorType(input.actor),
+    actorId: auditActorId(input.actor),
+    requestId,
+    dryRun: false,
+    lockNovel: true,
+  });
 }
 
 export async function generateArticleFromNovel(
@@ -316,6 +336,7 @@ export async function generateArticleFromNovel(
         actorId,
         requestId,
         dryRun: true,
+        lockNovel: false,
       });
     }
     return await withDbRetry(
@@ -341,7 +362,7 @@ export async function generateArticleFromNovel(
       };
     }
     if (isArticleNovelLocaleUniqueViolation(error)) {
-      return { outcome: "concurrent_generation_conflict" };
+      return resolveConflictAfterRollback(db, novelId);
     }
     throw error;
   }

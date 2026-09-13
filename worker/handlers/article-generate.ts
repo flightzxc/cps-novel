@@ -15,7 +15,7 @@ type Payload = {
 function parse(value: unknown): Payload {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("article_generate_payload_invalid");
   const p = value as Partial<Payload>;
-  const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
   if (!p.novelId || !uuid.test(p.novelId) || !p.actorId || !p.requestId || !p.expiresAt
     || !Number.isFinite(Date.parse(p.expiresAt))) throw new Error("article_generate_payload_invalid");
   return p as Payload;

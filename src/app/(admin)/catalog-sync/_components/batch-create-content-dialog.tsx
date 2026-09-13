@@ -8,13 +8,18 @@ import type { CatalogBatchContext, CatalogSelection } from "@/domain/catalog-bat
 import { errorEnvelopeCopy } from "@/features/admin-ui/error-copy";
 
 import {
-  applyContentCreationBatchAction,
+  applyNovelMaterializeBatchAction,
   readCatalogBatchContextAction,
   readCatalogBatchSummaryAction,
 } from "../_actions";
 
 type Stage = "loading" | "form" | "submitting" | "counting" | "error";
-type Summary = { submittedCount: number | null; ineligibleCount: number | null };
+type Summary = {
+  submittedCount: number | null;
+  ineligibleCount: number | null;
+  alreadyLinkedCount?: number | null;
+  blockedCount?: number | null;
+};
 
 function formatCount(value: number | null): string {
   return (value ?? 0).toLocaleString("zh-CN");
@@ -104,7 +109,7 @@ export function BatchCreateContentDialog({
     submittedRef.current = true;
     setStage("submitting");
     try {
-      const result = await applyContentCreationBatchAction({
+      const result = await applyNovelMaterializeBatchAction({
         selection: selectionRef.current,
         requestId: requestIdRef.current,
       });
@@ -114,8 +119,8 @@ export function BatchCreateContentDialog({
         setMessage(
           result.kind === "access_denied"
             ? errorEnvelopeCopy(result.envelope)
-            : result.code === "legacy_template_on_materialize"
-              ? "纳入书目不再选择文章模板，请刷新页面后重试"
+            : result.code === "retired_protocol" || result.code === "legacy_template_on_materialize"
+              ? "旧创建内容协议已退役，请刷新页面后重新纳入书目"
               : "提交失败，请重试",
         );
         setStage("error");
@@ -148,7 +153,7 @@ export function BatchCreateContentDialog({
         ))}
         {contentPublishBlockedReason && <p className="rounded border border-amber-200 bg-amber-50 p-2 text-sm text-amber-800">{contentPublishBlockedReason}</p>}
         {taskId && <Link href={`/tasks/${taskId}`} className="text-sm text-blue-700 underline">查看任务</Link>}
-        {stage === "counting" && <p role="status" className="rounded border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">{summary ? <>任务已提交：{formatCount(summary.submittedCount)} 条<br />不符合纳入条件：{formatCount(summary.ineligibleCount)} 条</> : "任务已提交，正在统计…"}</p>}
+        {stage === "counting" && <p role="status" className="rounded border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">{summary ? <>任务已提交：{formatCount(summary.submittedCount)} 条<br />已纳入：{formatCount(summary.alreadyLinkedCount ?? 0)} 条<br />被条件阻断：{formatCount(summary.ineligibleCount)} 条</> : "任务已提交，正在统计…"}</p>}
         {stage === "error" && <p role="alert" className="rounded border border-red-200 bg-red-50 p-2 text-sm text-red-800">{message}</p>}
         <div className="flex justify-end gap-2">
           <button type="button" className={buttonClassName("secondary")} onClick={onClose} disabled={stage === "submitting"}>关闭</button>

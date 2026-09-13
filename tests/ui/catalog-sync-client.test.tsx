@@ -5,6 +5,7 @@ import { installDialogShim } from "./jsdom-dialog";
 
 const actions = vi.hoisted(() => ({
   readCatalogBatchContextAction: vi.fn(), enqueuePromoLinkClaimAction: vi.fn(), readCatalogBatchSummaryAction: vi.fn(),
+  applyNovelMaterializeBatchAction: vi.fn(), dryRunNovelMaterializeAction: vi.fn(), applyNovelMaterializeAction: vi.fn(),
   applyContentCreationBatchAction: vi.fn(), dryRunContentCreationAction: vi.fn(), applyContentCreationAction: vi.fn(),
 }));
 vi.mock("@/app/(admin)/catalog-sync/_actions", () => actions);

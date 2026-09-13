@@ -14,7 +14,8 @@ export type ContentCreationInputErrorCode =
   | "unsupported_locale"
   | "invalid_actor"
   | "invalid_request_id"
-  | "legacy_template_on_materialize";
+  | "legacy_template_on_materialize"
+  | "retired_protocol";
 
 export class ContentCreationInputError extends Error {
   readonly code: ContentCreationInputErrorCode;
@@ -73,8 +74,8 @@ export type GeneratedArticleSummary = {
   readonly locale: SiteLocale;
   readonly articleSlug: string;
   readonly publicPageShortId: string;
-  readonly promoLinkId: string;
-  readonly templateKey: string;
+  readonly promoLinkId: string | null;
+  readonly templateKey: string | null;
 };
 
 export type ArticleGeneratePlan = {

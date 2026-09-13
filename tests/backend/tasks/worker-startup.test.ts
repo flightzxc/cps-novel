@@ -76,6 +76,7 @@ describe("X1 worker startup allowlist", () => {
   it("registers the governed executable handlers and keeps promo-link-binding as a library", () => {
     const registered = Object.keys(createWorkerHandlers({} as PrismaClient)).sort();
     expect(registered).toEqual([
+      "article.generate.batch.v1",
       "article.generate.v1",
       "batch.materialize.v1",
       "catalog_scan",

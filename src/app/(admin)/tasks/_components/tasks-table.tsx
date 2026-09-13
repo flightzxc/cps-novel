@@ -37,6 +37,7 @@ export type TaskSummaryRow = {
     readonly phase: string;
     readonly submittedCount: number | null;
     readonly ineligibleCount: number | null;
+    readonly alreadyLinkedCount?: number | null;
     readonly blockedCount?: number;
     readonly blockedReasonCounts?: Readonly<Record<string, number>>;
   };
@@ -154,7 +155,8 @@ export function TasksTable({
                   <p className="mt-1 text-xs text-gray-500" data-testid={`catalog-batch-phase-${task.taskId}`}>
                     {catalogBatchPhaseLabel(task.catalogBatch.phase)}
                     {task.catalogBatch.submittedCount !== null && ` · ${task.catalogBatch.submittedCount} 条`}
-                    {task.catalogBatch.ineligibleCount !== null && ` / 不符合条件 ${task.catalogBatch.ineligibleCount} 条`}
+                    {task.catalogBatch.alreadyLinkedCount !== null && ` / 已纳入 ${task.catalogBatch.alreadyLinkedCount} 条`}
+                    {task.catalogBatch.ineligibleCount !== null && ` / 被条件阻断 ${task.catalogBatch.ineligibleCount} 条`}
                     {(task.catalogBatch.blockedCount ?? 0) > 0 && (
                       <span className="block text-amber-700" data-testid={`catalog-batch-blocked-${task.taskId}`}>
                         部分条目未提交（{task.catalogBatch.blockedCount} 条）

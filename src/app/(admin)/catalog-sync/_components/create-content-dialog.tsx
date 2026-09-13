@@ -8,7 +8,7 @@ import { buttonClassName } from "@/components/ui/button";
 import { errorEnvelopeCopy } from "@/features/admin-ui/error-copy";
 import { SITE_LOCALE_LABELS, type SiteLocale } from "@/lib/locale/locale-canonical";
 
-import { applyContentCreationAction, dryRunContentCreationAction } from "../_actions";
+import { applyNovelMaterializeAction, dryRunNovelMaterializeAction } from "../_actions";
 import {
   describeCreateContentOutcome,
   type ContentCreationPlan,
@@ -53,6 +53,7 @@ const INVALID_INPUT_COPY: Readonly<Record<string, string>> = Object.freeze({
   invalid_actor: "无法确认当前操作者身份，请重新登录后重试",
   invalid_request_id: "请求标识无效（内部错误），请刷新页面后重试",
   legacy_template_on_materialize: "纳入书目不再选择文章模板，请刷新页面后重试。",
+  retired_protocol: "旧创建内容协议已退役，请刷新页面后重新纳入书目。",
 });
 
 /**
@@ -210,7 +211,7 @@ export function CreateContentDialog({
    * never classify the same response differently.
    */
   async function fetchStage(): Promise<Stage> {
-    const result = await dryRunContentCreationAction({
+    const result = await dryRunNovelMaterializeAction({
       novelSourceItemId: item.id,
       requestId: crypto.randomUUID(),
     });
@@ -243,7 +244,7 @@ export function CreateContentDialog({
 
   async function confirmCreate() {
     setApplying(true);
-    const result = await applyContentCreationAction({
+    const result = await applyNovelMaterializeAction({
       novelSourceItemId: item.id,
       requestId: crypto.randomUUID(),
     });

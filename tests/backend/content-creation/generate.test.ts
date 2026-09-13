@@ -111,6 +111,25 @@ describe("generateArticleFromNovel", () => {
     expect(fake.lastArticleCreateArgs).toMatchObject({ promoLinkId: promo.id });
   });
 
+  it("after unique conflict, re-reads the winner outside the aborted transaction (T16)", async () => {
+    const fake = new FakeContentCreationDb();
+    const { novel } = seedReadyNovel(fake, "Winner Visible");
+    fake.articleNovelLocaleFailuresRemaining = 1;
+    fake.seedWinnerOnNovelLocaleConflict = true;
+
+    const result = await generateArticleFromNovel(fake.asPrismaClient(), {
+      novelId: novel.id,
+      mode: "apply",
+      actor: ADMIN_ACTOR,
+      requestId: "gen-winner-outside-tx",
+    });
+    expect(result.outcome).toBe("already_exists");
+    if (result.outcome !== "already_exists") throw new Error("unreachable");
+    expect(result.articleId).toBe(fake.seededConflictWinnerId);
+    expect(result.templateKey).toBeNull();
+    expect(fake.calls.filter((call) => call === "novel.lockForUpdate").length).toBeGreaterThan(0);
+  });
+
   it("treats article_novel_locale_key P2002 without a visible winner as concurrent_generation_conflict (T16)", async () => {
     const fake = new FakeContentCreationDb();
     seedReadyNovel(fake, "Race Novel");

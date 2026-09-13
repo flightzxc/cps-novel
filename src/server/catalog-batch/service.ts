@@ -85,6 +85,7 @@ export async function readCatalogBatchContext(db: PrismaClient, selection: Norma
     })),
     locales: [...localeCounts].sort(([a], [b]) => a.localeCompare(b)).map(([locale, eligibleCount]) => ({
       locale, eligibleCount,
+      // Novel-only ingest: no template picker. Keep the field empty for old dialogs.
       templates: [],
     })),
   };
@@ -102,10 +103,13 @@ export async function readCatalogBatchSummary(db: PrismaClient, taskId: string, 
   const result = parent.result && typeof parent.result === "object" && !Array.isArray(parent.result) ? parent.result as Record<string, unknown> : {};
   const submittedCount = typeof result.submittedCount === "number" ? result.submittedCount : null;
   const ineligibleCount = typeof result.ineligibleCount === "number" ? result.ineligibleCount : null;
+  const alreadyLinkedCount = typeof result.alreadyLinkedCount === "number" ? result.alreadyLinkedCount : null;
   const enumeration = result.enumerationStatus;
-  const blockedCount = result.blockedReasonCounts && typeof result.blockedReasonCounts === "object"
-    ? Object.values(result.blockedReasonCounts as Record<string, unknown>).reduce<number>((sum, value) => sum + (typeof value === "number" && value > 0 ? value : 0), 0) : 0;
+  const blockedFromReasons = result.blockedReasonCounts && typeof result.blockedReasonCounts === "object"
+    ? Object.values(result.blockedReasonCounts as Record<string, unknown>).reduce<number>((sum, value) => sum + (typeof value === "number" && value > 0 ? value : 0), 0)
+    : 0;
+  const blockedCount = typeof result.blockedCount === "number" ? result.blockedCount : blockedFromReasons;
   const phase = deriveCatalogBatchPhase({ parentStatus: parent.status, enumerationStatus: enumeration,
     childStatuses: parent.childTasks.map((task) => task.status), blockedCount });
-  return { taskId, phase, submittedCount, ineligibleCount };
+  return { taskId, phase, submittedCount, ineligibleCount, alreadyLinkedCount, blockedCount };
 }

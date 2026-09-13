@@ -386,8 +386,8 @@ describe("X8 local production-like contracts", () => {
     const [level0, levelUat, levelR] = ["0", "uat", "r"].map((key) => x8Levels[key].workerTaskAllowlist.split(","));
     expect(levelUat.slice(0, level0.length)).toEqual(level0);
     expect(levelR.slice(0, level0.length)).toEqual(level0);
-    expect(levelUat).toEqual(expect.arrayContaining(["batch.materialize.v1", "content.create.v1", "novel.materialize.v1", "article.generate.v1"]));
-    expect(levelR).not.toEqual(expect.arrayContaining(["batch.materialize.v1", "content.create.v1", "novel.materialize.v1", "article.generate.v1"]));
+    expect(levelUat).toEqual(expect.arrayContaining(["batch.materialize.v1", "content.create.v1", "novel.materialize.v1", "article.generate.v1", "article.generate.batch.v1"]));
+    expect(levelR).not.toEqual(expect.arrayContaining(["batch.materialize.v1", "content.create.v1", "novel.materialize.v1", "article.generate.v1", "article.generate.batch.v1"]));
     // IndexNow stays hard-gated at every rung until X11 lands.
     for (const level of ["0", "uat", "r"]) {
       for (const flag of [

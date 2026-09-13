@@ -950,11 +950,11 @@ describe("ArticleList · 列表与批量", () => {
    * cps-novel's ADAPTed creation entry is `/catalog-sync` (same route the
    * page header's "新建文章"/"批量新建" buttons point at, `../page.tsx`).
    */
-  it("空列表展示「去创建第一篇文章」引导链接，指向目录同步", () => {
+  it("空列表展示「去创建第一篇文章」引导链接，指向创建文章页", () => {
     render(<ArticleList rows={[]} canWrite publicOrigin={PUBLIC_ORIGIN} />);
     expect(screen.getByText("暂无文章")).toBeTruthy();
     const link = screen.getByText("去创建第一篇文章") as HTMLAnchorElement;
-    expect(link.getAttribute("href")).toBe("/catalog-sync");
+    expect(link.getAttribute("href")).toBe("/articles/generate");
   });
 });
 
@@ -1406,20 +1406,18 @@ describe("ArticlesPage 抬头文案与入口按钮（C-22，源码级断言）",
     // scan that a comment could trivially fail).
   });
 
-  it("「新建文章」与「批量新建」两个入口按钮都指向 /catalog-sync", () => {
-    const newArticleIdx = source.indexOf("新建文章");
-    const batchNewIdx = source.indexOf("批量新建");
+  it("「创建文章」与「批量创建文章」两个入口按钮指向独立建稿页", () => {
+    const text = source.replace(/\/\*[\s\S]*?\*\//g, " ");
+    const newArticleIdx = text.indexOf("创建文章");
+    const batchNewIdx = text.indexOf("批量创建文章");
     expect(newArticleIdx).toBeGreaterThan(-1);
     expect(batchNewIdx).toBeGreaterThan(-1);
-    // Each label's nearest preceding `href` must be "/catalog-sync" — walks
-    // backward from the label text to the `href="..."` that renders it,
-    // rather than just counting `/catalog-sync` occurrences (which would
-    // pass even if a label drifted onto some other route by accident).
-    for (const labelIdx of [newArticleIdx, batchNewIdx]) {
-      const before = source.slice(0, labelIdx);
-      const hrefMatch = before.match(/href="([^"]*)"(?!.*href=")/s);
-      expect(hrefMatch?.[1]).toBe("/catalog-sync");
-    }
+    const hrefBefore = (labelIdx: number) => {
+      const before = text.slice(0, labelIdx);
+      return before.match(/href="([^"]*)"(?!.*href=")/s)?.[1];
+    };
+    expect(hrefBefore(newArticleIdx)).toBe("/articles/generate");
+    expect(hrefBefore(batchNewIdx)).toBe("/articles/batch-generate");
   });
 });
 

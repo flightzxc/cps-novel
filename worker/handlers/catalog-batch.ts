@@ -27,7 +27,7 @@ function parsePayload(value: unknown): CatalogBatchPayload {
     || typeof p.submittedAt !== "string" || !Number.isFinite(Date.parse(p.submittedAt))
     || typeof p.expiresAt !== "string" || !Number.isFinite(Date.parse(p.expiresAt))) throw new Error("catalog_batch_payload_invalid");
   if (p.selection.scope === "explicit_ids") {
-    const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
     if (!Array.isArray(p.selection.ids) || p.selection.ids.some((id) => typeof id !== "string" || !uuid.test(id))) throw new Error("catalog_batch_payload_invalid");
   } else if (p.selection.scope !== "all_filtered" || !p.selection.filter || typeof p.selection.filter.status !== "string") {
     throw new Error("catalog_batch_payload_invalid");
@@ -117,6 +117,7 @@ export function createCatalogBatchHandler(db: PrismaClient): TaskHandler {
         let observedCount = 0;
         let submittedCount = 0;
         let ineligibleCount = 0;
+        let alreadyLinkedCount = 0;
         const blockedReasonCounts: Record<string, number> = {};
         await streamSelection(tx, payload.selection, async (rows) => {
           if (payload.selection.scope === "all_filtered") selectedCount += rows.length;
@@ -132,6 +133,10 @@ export function createCatalogBatchHandler(db: PrismaClient): TaskHandler {
           for (const row of rows) {
             if (payload.operation === "promo_claim" && activePromo.has(row.id)) {
               blockedReasonCounts.active_item_conflict = (blockedReasonCounts.active_item_conflict ?? 0) + 1;
+              continue;
+            }
+            if (payload.operation === "novel_materialize" && row.status === "linked" && row.novelId !== null) {
+              alreadyLinkedCount += 1;
               continue;
             }
             const eligible = payload.operation === "novel_materialize"
@@ -212,18 +217,19 @@ export function createCatalogBatchHandler(db: PrismaClient): TaskHandler {
             afterSnapshot: { parentTaskId: lease.taskId, eligibleCount: members.length, expiresAt: payload.expiresAt },
           } });
         }
+        const blockedCount = Object.values(blockedReasonCounts).reduce((sum, count) => sum + count, 0);
         await tx.genericTask.update({ where: { id: lease.taskId }, data: { result: {
-          enumerationStatus: "completed", selectedCount, submittedCount, ineligibleCount,
-          blockedCount: Object.values(blockedReasonCounts).reduce((sum, count) => sum + count, 0),
+          enumerationStatus: "completed", selectedCount, submittedCount, ineligibleCount, alreadyLinkedCount,
+          blockedCount, failedCount: 0,
           childTaskCount, blockedReasonCounts, expiresAt: payload.expiresAt,
         } } });
         await tx.operationAudit.create({ data: {
           actorType: "worker", actorId: lease.workerId, action: "catalog_batch.materialized",
           entityType: "GenericTask", entityId: lease.taskId, requestId: payload.requestId,
           taskType: CATALOG_BATCH_TASK_TYPE, taskId: lease.taskId,
-          afterSnapshot: { selectedCount, submittedCount, ineligibleCount, blockedReasonCounts, expiresAt: payload.expiresAt },
+          afterSnapshot: { selectedCount, submittedCount, ineligibleCount, alreadyLinkedCount, blockedReasonCounts, expiresAt: payload.expiresAt },
         } });
-        return { status: "success", result: { enumerationStatus: "completed", submittedCount, ineligibleCount } };
+        return { status: "success", result: { enumerationStatus: "completed", submittedCount, ineligibleCount, alreadyLinkedCount, blockedCount } };
       },
     };
   };

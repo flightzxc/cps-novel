@@ -131,6 +131,9 @@ export class FakeContentCreationDb {
   articleShortIdFailuresRemaining = 0;
   /** How many consecutive `article.create` calls should throw `article_novel_locale_key` (T16). */
   articleNovelLocaleFailuresRemaining = 0;
+  /** When a locale unique conflict is simulated, insert a winner that survives rollback. */
+  seedWinnerOnNovelLocaleConflict = false;
+  seededConflictWinnerId: string | null = null;
 
   /** Raw `data` object from the most recent successful `article.create` call — lets a test assert on exactly which keys the service writes (e.g. that `status`/`promoLinkId` are never present at all), not just on the row this fake happens to construct from a subset of them. */
   lastArticleCreateArgs: Record<string, unknown> | null = null;
@@ -348,6 +351,16 @@ export class FakeContentCreationDb {
     }
     if (this.articleNovelLocaleFailuresRemaining > 0) {
       this.articleNovelLocaleFailuresRemaining -= 1;
+      if (this.seedWinnerOnNovelLocaleConflict) {
+        const winner = this.seedArticle({
+          novelId: String(args.data.novelId),
+          locale: String(args.data.locale),
+          title: "concurrent-winner",
+          body: "winner body",
+          slug: "concurrent-winner",
+        });
+        this.seededConflictWinnerId = winner.id;
+      }
       throw uniqueViolation("article_novel_locale_key");
     }
     const publicPageShortId = String(args.data.publicPageShortId);
@@ -535,6 +548,22 @@ export class FakeContentCreationDb {
           return this.previewChapterCounts.get(String(args.where.novelId)) ?? 0;
         },
       },
+      $queryRaw: async (_strings: TemplateStringsArray, ...values: unknown[]) => {
+        this.calls.push("novel.lockForUpdate");
+        const novelId = values.find((value): value is string => typeof value === "string");
+        const novel = novelId ? this.novels.get(novelId) : undefined;
+        return novel
+          ? [{
+              id: novel.id,
+              title: novel.title,
+              description: novel.description,
+              coverUrl: novel.coverUrl,
+              locale: novel.locale,
+              totalChapterCount: novel.totalChapterCount,
+              deletedAt: novel.deletedAt,
+            }]
+          : [];
+      },
       $transaction: async (callback) => {
         const previousLog = this.undoLog;
         this.undoLog = [];
@@ -591,5 +620,6 @@ type FakeClient = {
   novelChapter: {
     count: (args: { where: Record<string, unknown> }) => Promise<number>;
   };
+  $queryRaw: (strings: TemplateStringsArray, ...values: unknown[]) => Promise<unknown>;
   $transaction: <T>(callback: (tx: FakeClient) => Promise<T>) => Promise<T>;
 };

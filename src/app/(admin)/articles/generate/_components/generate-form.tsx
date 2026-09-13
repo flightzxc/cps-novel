@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 
 import { buttonClassName } from "@/components/ui/button";
-import type { NovelGenerateCandidate } from "@/server/content-creation";
+import type { NovelGenerateCandidate, PinnedNovelResult } from "@/domain/article-generation";
 
 import {
   applyArticleGenerateAction,
@@ -26,7 +26,10 @@ function failureMessage(result: Extract<ArticleGenerateActionResult, { ok: false
 function describeGenerate(outcome: Extract<ArticleGenerateActionResult, { ok: true }>["data"]): { title: string; body: string } {
   switch (outcome.outcome) {
     case "created":
-      return { title: "文章已创建", body: `草稿文章已绑定推广链接 ${outcome.promoLinkId}。` };
+      return {
+        title: "文章已创建",
+        body: outcome.promoLinkId ? `草稿文章已绑定推广链接 ${outcome.promoLinkId}。` : "草稿文章已创建。",
+      };
     case "already_exists":
       return { title: "该书目已有文章", body: "本次未覆盖已有正文、模板或 slug。" };
     case "dry_run":
@@ -57,30 +60,43 @@ function describeGenerate(outcome: Extract<ArticleGenerateActionResult, { ok: tr
   }
 }
 
+function pinnedError(pinned: PinnedNovelResult): string | null {
+  if (pinned.status === "invalid") return "书目标识无效。不会改选其它书目。";
+  if (pinned.status === "missing") return "指定书目不存在。不会改选其它书目。";
+  if (pinned.status === "deleted") return "指定书目已删除。不会改选其它书目。";
+  return null;
+}
+
 export function ArticleGenerateForm({
-  novels,
+  pinned,
+  pageNovels,
   templates,
   canWrite,
-  initialNovelId,
 }: {
-  novels: readonly NovelGenerateCandidate[];
+  pinned: PinnedNovelResult;
+  pageNovels: readonly NovelGenerateCandidate[];
   templates: readonly TemplateOption[];
   canWrite: boolean;
-  initialNovelId?: string;
 }) {
   const router = useRouter();
-  const [novelId, setNovelId] = useState(initialNovelId && novels.some((row) => row.novelId === initialNovelId) ? initialNovelId : novels[0]?.novelId ?? "");
-  const selected = novels.find((row) => row.novelId === novelId) ?? null;
+  const requested = pinned.status !== "absent";
+  const pinnedNovel = pinned.status === "found" ? pinned.novel : null;
+  const pinFailed = requested && pinnedNovel === null;
+  const [pickedId, setPickedId] = useState(pinnedNovel?.novelId ?? "");
+  const novelId = pinFailed ? "" : (pinnedNovel?.novelId ?? pickedId);
+  const selected = pinnedNovel
+    ?? pageNovels.find((row) => row.novelId === novelId)
+    ?? null;
   const localeTemplates = useMemo(
     () => templates.filter((template) => template.locale === selected?.locale),
     [templates, selected?.locale],
   );
   const [templateKey, setTemplateKey] = useState("");
   const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(pinnedError(pinned));
 
   async function run(mode: "dry_run" | "apply") {
-    if (!novelId) return;
+    if (!novelId || pinFailed) return;
     setBusy(true);
     setMessage(null);
     try {
@@ -111,18 +127,39 @@ export function ArticleGenerateForm({
   return (
     <div className="space-y-4 rounded-xl border border-gray-200 bg-white p-4">
       <p className="text-sm text-gray-600">只有明确执行“创建文章”时才选择 ArticleTemplate。纳入书目不会走到这里。</p>
-      <label className="block text-sm text-gray-700">
-        书目
-        <select value={novelId} onChange={(event) => { setNovelId(event.target.value); setTemplateKey(""); }} className="mt-1 w-full rounded border border-gray-300 p-2">
-          {novels.map((novel) => (
-            <option key={novel.novelId} value={novel.novelId}>
-              {novel.title} · {novel.locale} · {novel.businessId}
-              {novel.hasLiveArticle ? " · 已有文章" : ""}
-              {novel.promoReady ? "" : " · 推广未就绪"}
-            </option>
-          ))}
-        </select>
-      </label>
+      {pinnedNovel && (
+        <p className="rounded border border-emerald-200 bg-emerald-50 p-2 text-sm text-emerald-900">
+          指定书目：{pinnedNovel.title} · {pinnedNovel.locale} · {pinnedNovel.businessId}
+          {pinnedNovel.hasLiveArticle ? " · 已有文章" : " · 尚未创建文章"}
+        </p>
+      )}
+      {pinFailed && (
+        <p role="alert" className="rounded border border-red-200 bg-red-50 p-2 text-sm text-red-800">
+          {pinnedError(pinned)}
+        </p>
+      )}
+      {!requested && (
+        <label className="block text-sm text-gray-700">
+          书目
+          <select
+            value={pickedId}
+            onChange={(event) => {
+              setPickedId(event.target.value);
+              setTemplateKey("");
+            }}
+            className="mt-1 w-full rounded border border-gray-300 p-2"
+          >
+            <option value="">请选择书目</option>
+            {pageNovels.map((novel) => (
+              <option key={novel.novelId} value={novel.novelId}>
+                {novel.title} · {novel.locale} · {novel.businessId}
+                {novel.hasLiveArticle ? " · 已有文章" : ""}
+                {novel.promoReady ? "" : " · 推广未就绪"}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
       {selected && (
         <p className="text-sm text-gray-600">
           推广状态：{selected.promoReady ? "已就绪" : selected.promoOutcome}
@@ -139,10 +176,10 @@ export function ArticleGenerateForm({
           ))}
         </select>
       </label>
-      {message && <p role="status" className="rounded border border-blue-200 bg-blue-50 p-2 text-sm text-blue-900">{message}</p>}
+      {message && !pinFailed && <p role="status" className="rounded border border-blue-200 bg-blue-50 p-2 text-sm text-blue-900">{message}</p>}
       <div className="flex gap-2">
-        <button type="button" disabled={!novelId || busy} className={buttonClassName("secondary")} onClick={() => void run("dry_run")}>预览计划</button>
-        <button type="button" disabled={!novelId || !canWrite || busy} className={buttonClassName("primary")} onClick={() => void run("apply")}>创建文章</button>
+        <button type="button" disabled={!novelId || pinFailed || busy} className={buttonClassName("secondary")} onClick={() => void run("dry_run")}>预览计划</button>
+        <button type="button" disabled={!novelId || pinFailed || !canWrite || busy} className={buttonClassName("primary")} onClick={() => void run("apply")}>创建文章</button>
         <Link href="/articles" className={buttonClassName("secondary")}>返回列表</Link>
       </div>
     </div>

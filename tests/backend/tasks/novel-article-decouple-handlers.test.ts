@@ -83,17 +83,19 @@ describe("catalog-batch parent content_create (T22)", () => {
 
 describe("novel.materialize.v1 payload", () => {
   it("rejects leftover templateKey instead of silently ignoring it", async () => {
-    await expect(
-      createNovelMaterializeHandler({} as PrismaClient)(
-        lease("novel.materialize.v1", {
-          novelSourceItemId: UUID,
-          channelAppId: UUID,
-          actorId: "admin-1",
-          requestId: "req-1",
-          expiresAt: new Date(Date.now() + 60_000).toISOString(),
-          templateKey: "system-default-v1",
-        }),
-      ),
-    ).rejects.toThrow(/novel_materialize_template_forbidden/);
+    const outcome = await createNovelMaterializeHandler({} as PrismaClient)(
+      lease("novel.materialize.v1", {
+        novelSourceItemId: UUID,
+        channelAppId: UUID,
+        actorId: "admin-1",
+        requestId: "req-1",
+        expiresAt: new Date(Date.now() + 60_000).toISOString(),
+        templateKey: "system-default-v1",
+      }),
+    );
+    expect(outcome).toMatchObject({
+      status: "failed",
+      error: { code: "legacy_template_on_materialize" },
+    });
   });
 });

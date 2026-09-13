@@ -281,6 +281,7 @@ export const ADMIN_ARTICLE_ACTIONS = [
   { id: "admin.article.generate_dry_run", capability: "content:view", mutation: false },
   { id: "admin.article.generate_apply", capability: "content:publish", mutation: true },
   { id: "admin.article.generate_batch", capability: "content:publish", mutation: true },
+  { id: "admin.article.generate_candidates", capability: "content:view", mutation: false },
 ] as const satisfies AdminRegistry["actions"];
 
 /**

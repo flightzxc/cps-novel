@@ -181,6 +181,7 @@ describe("P2-04 内容路由登记", () => {
       "admin.article.generate_dry_run",
       "admin.article.generate_apply",
       "admin.article.generate_batch",
+      "admin.article.generate_candidates",
       "admin.article.rebind_novel",
       "admin.article.rebind_rollback",
       "admin.article.rebind_candidates",
@@ -259,6 +260,10 @@ describe("P2-04 内容路由登记", () => {
     expect(resolveAdminAction("admin.content_creation.batch_apply", P2_04_ADMIN_REGISTRY)).toMatchObject({
       capability: "content:publish",
       mutation: true,
+    });
+    expect(resolveAdminAction("admin.article.generate_candidates", P2_04_ADMIN_REGISTRY)).toMatchObject({
+      capability: "content:view",
+      mutation: false,
     });
   });
 });

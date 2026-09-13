@@ -110,8 +110,6 @@ export type ContentCreationBatchInput = {
   readonly novelSourceItemIds: readonly string[];
   readonly actor: CreateContentActor;
   readonly requestId: string;
-  /** One template is fixed for the entire selection; each item's own locale is derived server-side from its `NovelSourceItem.sourceLocale` (`./service.ts` — no caller-supplied `locale` field exists anymore), so a batch spanning multiple derived locales against one fixed `templateKey` naturally surfaces `template_locale_mismatch` per item, the same "one template locale per batch" CPS parity `./service.ts`'s module header documents. */
-  readonly templateKey?: string;
   /** Defaults to {@link CONTENT_CREATION_BATCH_BUDGET_MS}; overridable only for tests. */
   readonly budgetMs?: number;
 };

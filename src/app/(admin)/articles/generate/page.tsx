@@ -2,7 +2,6 @@ import Link from "next/link";
 
 import { findCapabilityState } from "@/features/admin-ui/capability-view";
 import { listActiveArticleTemplateOptionsForLocales } from "@/server/article-templates";
-import { listNovelsForArticleGenerate } from "@/server/content-creation";
 
 import { prisma } from "../../../api/admin/_lib/deps";
 import { AdminShell } from "../../_components/admin-shell";
@@ -10,6 +9,7 @@ import { capabilityViews, sessionView } from "../../_lib/page-guard";
 import { ContentCapabilityDenied } from "../../novels/_components/content-states";
 import { requireContentPage } from "../../novels/_lib/content-page-guard";
 import { ArticleGenerateForm } from "./_components/generate-form";
+import { loadArticleGeneratePage } from "./_lib/load-generate-page";
 
 export const dynamic = "force-dynamic";
 
@@ -30,12 +30,13 @@ export default async function ArticleGeneratePage({
     );
   }
 
-  const novels = await listNovelsForArticleGenerate(prisma, {
-    search: query.search,
-    locale: query.locale,
-    limit: 80,
-  });
-  const locales = Array.from(new Set(novels.map((row) => row.locale)));
+  const model = await loadArticleGeneratePage(prisma, query);
+  const locales = Array.from(
+    new Set([
+      ...(model.pinned.status === "found" ? [model.pinned.novel.locale] : []),
+      ...model.page.rows.map((row) => row.locale),
+    ]),
+  );
   const templates = locales.length > 0
     ? await listActiveArticleTemplateOptionsForLocales(prisma, locales, "novel_article")
     : [];
@@ -57,10 +58,10 @@ export default async function ArticleGeneratePage({
       }
     >
       <ArticleGenerateForm
-        novels={novels}
+        pinned={model.pinned}
+        pageNovels={model.page.rows}
         templates={templates}
         canWrite={canWrite}
-        initialNovelId={query.novelId}
       />
     </AdminShell>
   );

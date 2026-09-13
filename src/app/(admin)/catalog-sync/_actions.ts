@@ -105,15 +105,34 @@ async function authorizeAction(actionId: `admin.${string}`, requestId: string) {
  * (`createContentFromSourceItem`'s own default, spelled out here anyway so a
  * future edit cannot flip it by deleting a line).
  */
+async function rejectRetiredContentCreation(
+  actionId: "admin.content_creation.dry_run" | "admin.content_creation.apply" | "admin.content_creation.batch_apply",
+  requestId: string,
+): Promise<ContentCreationActionResult> {
+  try {
+    await authorizeAction(actionId, requestId);
+    return { ok: false, kind: "invalid_input", code: "retired_protocol" };
+  } catch (error) {
+    return { ok: false, kind: "access_denied", envelope: toErrorEnvelope(error) };
+  }
+}
+
+/** Retired coupled protocol. Old clients must fail closed even without templateKey. */
 export async function dryRunContentCreationAction(input: {
   novelSourceItemId: string;
   requestId: string;
   templateKey?: string;
 }): Promise<ContentCreationActionResult> {
+  void input.novelSourceItemId;
+  void input.templateKey;
+  return rejectRetiredContentCreation("admin.content_creation.dry_run", input.requestId);
+}
+
+export async function dryRunNovelMaterializeAction(input: {
+  novelSourceItemId: string;
+  requestId: string;
+}): Promise<ContentCreationActionResult> {
   try {
-    if (input.templateKey !== undefined) {
-      throw new ContentCreationInputError("legacy_template_on_materialize", "纳入书目不再选择文章模板，请刷新页面后重试");
-    }
     const { context } = await authorizeAction("admin.content_creation.dry_run", input.requestId);
     const data = await materializeNovelFromSourceItem(prisma, {
       novelSourceItemId: input.novelSourceItemId,
@@ -142,10 +161,42 @@ export async function dryRunContentCreationAction(input: {
  * content mutation, which is the right bar for a call that inserts the first
  * `Novel` row a source item will ever have. It no longer creates an Article.
  */
+/** Retired coupled protocol. Old clients must fail closed even without templateKey. */
 export async function applyContentCreationAction(input: {
   novelSourceItemId: string;
   requestId: string;
   templateKey?: string;
+}): Promise<ContentCreationActionResult> {
+  void input.novelSourceItemId;
+  void input.templateKey;
+  try {
+    const { serviceAuthorization } = await authorizeAction("admin.content_creation.apply", input.requestId);
+    if (!serviceAuthorization) {
+      const { AdminAccessError } = await import("@/lib/auth/errors");
+      throw new AdminAccessError(
+        "admin_service_authorization_required",
+        403,
+        "Action is not bound to a capability",
+      );
+    }
+    await requireFreshAdminServiceMutation(serviceAuthorization, "content:publish", {
+      identities: guardDependencies().identities,
+      sessions: guardDependencies().sessions,
+      entryId: "admin.content_creation.apply",
+      requestId: input.requestId,
+    });
+    return { ok: false, kind: "invalid_input", code: "retired_protocol" };
+  } catch (error) {
+    if (error instanceof ContentCreationInputError) {
+      return { ok: false, kind: "invalid_input", code: error.code };
+    }
+    return { ok: false, kind: "access_denied", envelope: toErrorEnvelope(error) };
+  }
+}
+
+export async function applyNovelMaterializeAction(input: {
+  novelSourceItemId: string;
+  requestId: string;
 }): Promise<ContentCreationActionResult> {
   try {
     const { serviceAuthorization } = await authorizeAction(
@@ -153,10 +204,6 @@ export async function applyContentCreationAction(input: {
       input.requestId,
     );
     if (!serviceAuthorization) {
-      // Unreachable given this action's own registration (capability is
-      // always set — see `src/app/api/admin/_lib/registry.ts`), kept as a
-      // fail-closed backstop against a future registration mistake rather
-      // than trusting that mistake cannot happen.
       const { AdminAccessError } = await import("@/lib/auth/errors");
       throw new AdminAccessError(
         "admin_service_authorization_required",
@@ -171,9 +218,6 @@ export async function applyContentCreationAction(input: {
       entryId: "admin.content_creation.apply",
       requestId: input.requestId,
     });
-    if (input.templateKey !== undefined) {
-      throw new ContentCreationInputError("legacy_template_on_materialize", "纳入书目不再选择文章模板，请刷新页面后重试");
-    }
     const data = await materializeNovelFromSourceItem(prisma, {
       novelSourceItemId: input.novelSourceItemId,
       mode: "apply",
@@ -181,8 +225,6 @@ export async function applyContentCreationAction(input: {
       requestId: input.requestId,
     });
     if (data.outcome === "created") {
-      // The source item's own status flipped (`pending` → `linked`) and a
-      // brand-new `Novel` now exists for `/novels` to list.
       revalidatePath("/catalog-sync");
       revalidatePath("/novels");
     }
@@ -457,15 +499,34 @@ export async function enqueuePromoLinkClaimAction(input: {
   }
 }
 
+/** Retired coupled protocol. Empty or missing template map still fails. */
 export async function applyContentCreationBatchAction(input: {
   selection: CatalogSelection;
   templateKeysByLocale?: Readonly<Record<string, string>>;
   requestId: string;
 }): Promise<CatalogBatchActionResult<CatalogBatchEnqueueResult>> {
+  void input.selection;
+  void input.templateKeysByLocale;
   try {
-    if (input.templateKeysByLocale && Object.keys(input.templateKeysByLocale).length > 0) {
-      return { ok: false, kind: "invalid_input", code: "legacy_template_on_materialize" };
-    }
+    const { serviceAuthorization } = await authorizeAction("admin.content_creation.batch_apply", input.requestId);
+    if (!serviceAuthorization) throw new Error("admin_service_authorization_required");
+    await requireFreshAdminServiceMutation(serviceAuthorization, "content:publish", {
+      identities: guardDependencies().identities,
+      sessions: guardDependencies().sessions,
+      entryId: "admin.content_creation.batch_apply",
+      requestId: input.requestId,
+    });
+    return { ok: false, kind: "invalid_input", code: "retired_protocol" };
+  } catch (error) {
+    return catalogBatchInputFailure(error) ?? { ok: false, kind: "access_denied", envelope: toErrorEnvelope(error) };
+  }
+}
+
+export async function applyNovelMaterializeBatchAction(input: {
+  selection: CatalogSelection;
+  requestId: string;
+}): Promise<CatalogBatchActionResult<CatalogBatchEnqueueResult>> {
+  try {
     const { serviceAuthorization } = await authorizeAction("admin.content_creation.batch_apply", input.requestId);
     if (!serviceAuthorization) throw new Error("admin_service_authorization_required");
     const guards = guardDependencies();

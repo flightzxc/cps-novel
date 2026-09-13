@@ -2,9 +2,9 @@
 
 ## 切换 runbook
 
-1. 部署本分支 worker **之前**，确认 allowlist **追加** `novel.materialize.v1`、`article.generate.v1`，并**保留** `content.create.v1`（否则旧叶任务会永远 pending）。
-2. Web 与 Worker 同一次变更切到本分支。不要只升 Web：旧 worker 不认识新 type，新父任务会卡住。
-3. 运营入口：`/catalog-sync` 只做「纳入书目」；「创建文章」在 `/articles/generate` 与 `/articles/batch-generate`。旧页若仍提交 `templateKey` / `templateKeysByLocale`，会被拒绝并要求刷新。
+1. 部署本分支 worker **之前**，确认 allowlist **追加** `novel.materialize.v1`、`article.generate.v1`、`article.generate.batch.v1`，并**保留** `content.create.v1`（否则旧叶任务会永远 pending）。
+2. Web 与 Worker **必须同一次变更**切到本分支。不可只升 Web：旧 Worker 不认识新 type（含 `article.generate.batch.v1`），新父任务会卡住。也不可只升 Worker：旧 Web 仍会打已退役的 ContentCreation Action，或无法提交 `all_filtered` 父任务。
+3. 运营入口：`/catalog-sync` 只做「纳入书目」；「创建文章」在 `/articles/generate` 与 `/articles/batch-generate`。旧页若仍提交 `templateKey` / `templateKeysByLocale`，或仍打旧 `dryRun/applyContentCreation(+Batch)Action`，一律 `retired_protocol`，不会静默转成 Novel-only 入库。
 4. 能力位不变：读 `content:view`，写 `content:publish`。
 5. 生产库存、lease、旧 worker 镜像：先跑 `LEGACY_TASK_INVENTORY.sql`，**待现场核验**。本轮不执行生产处置。
 

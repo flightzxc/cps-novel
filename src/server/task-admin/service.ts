@@ -70,6 +70,7 @@ export type TaskSummaryDto = Readonly<{
     phase: "queued" | "disabled" | "materializing" | "executing" | "completed" | "completed_with_errors" | "failed" | "expired";
     submittedCount: number | null;
     ineligibleCount: number | null;
+    alreadyLinkedCount?: number | null;
     blockedCount?: number;
     blockedReasonCounts?: Readonly<Record<string, number>>;
     childTasks?: readonly Readonly<{ taskId: string; taskType: string; status: string }>[];
@@ -718,6 +719,7 @@ function taskSummary(row: TaskListRow, bookCounts?: CatalogBookCountsDto): TaskS
       : row.status === "failed" ? "failed" : "completed") as NonNullable<TaskSummaryDto["catalogBatch"]>["phase"],
     submittedCount: typeof resultObject?.submittedCount === "number" ? resultObject.submittedCount : null,
     ineligibleCount: typeof resultObject?.ineligibleCount === "number" ? resultObject.ineligibleCount : null,
+    alreadyLinkedCount: typeof resultObject?.alreadyLinkedCount === "number" ? resultObject.alreadyLinkedCount : null,
     blockedCount: Object.values(blockedReasonCounts).reduce((sum, count) => sum + count, 0),
     blockedReasonCounts,
   } : undefined;
