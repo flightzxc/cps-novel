@@ -12,8 +12,15 @@ import {
   type ArticleEditInput,
 } from "@/server/articles";
 import {
+  ArticleGenerateInputError,
+  enqueueArticleGenerateBatch,
+} from "@/lib/tasks/article-generate";
+import {
   BlogArticleInputError,
+  ContentCreationInputError,
   createBlogArticle,
+  generateArticleFromNovel,
+  type ArticleGenerateResult,
   type CreateBlogArticleResult,
 } from "@/server/content-creation";
 import {
@@ -612,5 +619,91 @@ export async function createBlogArticleAction(input: {
   } catch (error) {
     if (error instanceof BlogArticleInputError) return { ok: false as const, code: error.code };
     return { ok: false as const, code: writeErrorCode(error, "article_create_blog_failed") };
+  }
+}
+
+export type ArticleGenerateActionResult =
+  | { readonly ok: true; readonly data: ArticleGenerateResult }
+  | { readonly ok: false; readonly kind: "invalid_input"; readonly code: string }
+  | { readonly ok: false; readonly kind: "access_denied"; readonly code: string };
+
+export async function dryRunArticleGenerateAction(input: {
+  novelId: string;
+  requestId: string;
+  templateKey?: string;
+}): Promise<ArticleGenerateActionResult> {
+  try {
+    const context = await authorizeRead("admin.article.generate_dry_run", input.requestId);
+    const data = await generateArticleFromNovel(prisma, {
+      novelId: input.novelId,
+      mode: "dry_run",
+      actor: { type: "admin", adminId: context.identity.id },
+      requestId: input.requestId,
+      ...(input.templateKey ? { templateKey: input.templateKey } : {}),
+    });
+    return { ok: true, data };
+  } catch (error) {
+    if (error instanceof ContentCreationInputError) return { ok: false, kind: "invalid_input", code: error.code };
+    return { ok: false, kind: "access_denied", code: writeErrorCode(error, "article_generate_denied") };
+  }
+}
+
+export async function applyArticleGenerateAction(input: {
+  novelId: string;
+  requestId: string;
+  templateKey?: string;
+}): Promise<ArticleGenerateActionResult> {
+  try {
+    const auth = await authorization("admin.article.generate_apply", input.requestId);
+    const guards = guardDependencies();
+    const context = await requireFreshAdminServiceMutation(auth, "content:publish", {
+      identities: guards.identities,
+      sessions: guards.sessions,
+      entryId: "admin.article.generate_apply",
+      requestId: input.requestId,
+    });
+    const data = await generateArticleFromNovel(prisma, {
+      novelId: input.novelId,
+      mode: "apply",
+      actor: { type: "admin", adminId: context.identity.id },
+      requestId: input.requestId,
+      ...(input.templateKey ? { templateKey: input.templateKey } : {}),
+    });
+    if (data.outcome === "created") {
+      revalidatePath("/articles");
+      revalidatePath("/novels");
+      revalidatePath(`/novels/${input.novelId}`);
+    }
+    return { ok: true, data };
+  } catch (error) {
+    if (error instanceof ContentCreationInputError) return { ok: false, kind: "invalid_input", code: error.code };
+    return { ok: false, kind: "access_denied", code: writeErrorCode(error, "article_generate_denied") };
+  }
+}
+
+export async function enqueueArticleGenerateBatchAction(input: {
+  novelIds: readonly string[];
+  requestId: string;
+  templateKeysByLocale?: Readonly<Record<string, string>>;
+}): Promise<{ ok: true; taskId: string } | { ok: false; kind: "invalid_input" | "access_denied"; code: string }> {
+  try {
+    const auth = await authorization("admin.article.generate_batch", input.requestId);
+    const guards = guardDependencies();
+    const context = await requireFreshAdminServiceMutation(auth, "content:publish", {
+      identities: guards.identities,
+      sessions: guards.sessions,
+      entryId: "admin.article.generate_batch",
+      requestId: input.requestId,
+    });
+    const result = await enqueueArticleGenerateBatch(prisma, {
+      novelIds: input.novelIds,
+      actorId: context.identity.id,
+      requestId: input.requestId,
+      ...(input.templateKeysByLocale ? { templateKeysByLocale: input.templateKeysByLocale } : {}),
+    });
+    return { ok: true, taskId: result.taskId };
+  } catch (error) {
+    if (error instanceof ArticleGenerateInputError) return { ok: false, kind: "invalid_input", code: error.code };
+    return { ok: false, kind: "access_denied", code: writeErrorCode(error, "article_generate_batch_denied") };
   }
 }

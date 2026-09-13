@@ -2,9 +2,6 @@ import { capabilityBlockReason, findCapabilityState } from "@/features/admin-ui/
 import { AdminTimeZoneNote } from "@/features/admin-ui/time-zone-note";
 import { isNovelCatalogSyncEnabled } from "@/lib/flags";
 import { resolveMoboreaderCatalogSafetyMaxPages } from "@/lib/tasks/moboreader";
-import { listActiveArticleTemplateOptionsForLocales } from "@/server/article-templates";
-import { prisma } from "../../api/admin/_lib/deps";
-
 import { AdminShell } from "../_components/admin-shell";
 import { capabilityViews, sessionView } from "../_lib/page-guard";
 import { ContentCapabilityDenied } from "../novels/_components/content-states";
@@ -29,11 +26,9 @@ type SearchParams = {
 /**
  * `/catalog-sync` — the P0-S13 content-creation trigger entry.
  *
- * `createContentFromSourceItem` (`@/server/content-creation`) has existed
- * since P0-S4 with no caller under `src/app/**` at all — its own module
- * header says so. This page and `./_actions.ts` are that missing entry
- * point: browse `NovelSourceItem` rows, dry-run a creation plan, and (with
- * `content:publish`) apply it.
+ * This page and `./_actions.ts` browse `NovelSourceItem` rows and enqueue
+ * Novel-only materialize (`纳入书目`). They must not select templates or
+ * create Articles.
  *
  * Gated by `content:view`, the same read bar `/novels` uses — this screen is
  * read-heavy (a source-item list) with one write action nested inside a
@@ -65,37 +60,6 @@ export default async function CatalogSyncPage({
     : null;
   const canonicalFilter = canonicalCatalogFilter(params);
   const channels = granted ? await readActiveChannelScanOptions() : [];
-  /**
-   * L10N P2 (matrix #13's dialog-scoped part, P2 段): was a single
-   * hardcoded `listActiveArticleTemplateOptions(prisma, "en")` call — every
-   * row's create-content dialog offered the same `en`-only template list
-   * regardless of that row's own derived locale. Content creation no longer
-   * writes a hardcoded `"en"` locale at all (`src/server/content-creation/
-   * service.ts` derives it from `NovelSourceItem.sourceLocale`), so the
-   * template picker must not stay pinned to one locale either.
-   *
-   * L10N P5 (P2 复核 C5-a): the P2 round fixed the *locale* but did it with
-   * N separate `listActiveArticleTemplateOptions(prisma, locale)` queries
-   * (one per distinct `sourceLocale` on the page) flattened client-side —
-   * collapsed here into the single `locale: { in: sourceLocalesOnPage }`
-   * query `listActiveArticleTemplateOptionsForLocales` runs
-   * (`article-templates/service.ts`, own doc comment on why its `distinct`
-   * is `["templateKey", "locale"]` and not just `["templateKey"]`). Same
-   * flat array shape `CatalogSyncClient`/`CreateContentDialog`/
-   * `BatchCreateContentDialog` already accept — no prop-shape change
-   * ripples through those components; `CreateContentDialog` (see its own
-   * doc comment) is what actually narrows this down to the one locale a
-   * given row's dialog needs, this fetch only has to make sure every
-   * locale any row on the page could need is present at all.
-   */
-  // Single-row creation still gets a useful immediate picker. Batch dialogs
-  // load their locale/template choices from the full server-side selection.
-  const sourceLocalesOnPage = granted
-    ? Array.from(new Set(page?.items.map((item) => item.sourceLocale).filter((locale): locale is string => locale !== null) ?? []))
-    : [];
-  const templateOptions = granted && sourceLocalesOnPage.length > 0
-    ? await listActiveArticleTemplateOptionsForLocales(prisma, sourceLocalesOnPage)
-    : [];
 
   return (
     <AdminShell
@@ -103,8 +67,8 @@ export default async function CatalogSyncPage({
       title="目录同步"
       description={
         page
-          ? `共 ${page.total} 条来源条目，从中创建书目与文章草稿`
-          : "浏览渠道来源条目，并从中创建书目与文章草稿。"
+          ? `共 ${page.total} 条来源条目，从中纳入书目`
+          : "浏览渠道来源条目，并从中纳入书目。"
       }
     >
       <div className="space-y-6">
@@ -128,7 +92,6 @@ export default async function CatalogSyncPage({
                 contentPublish={contentPublish}
                 promoClaimGranted={promoClaimBlockedReason === null}
                 promoClaimBlockedReason={promoClaimBlockedReason}
-                templateOptions={templateOptions}
                 filter={canonicalFilter}
                 total={page.total}
               />

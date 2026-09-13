@@ -367,7 +367,15 @@ export function PublishLifecyclePanel({
         <p className="text-xs text-amber-700">{takedownBlocked}</p>
       )}
       {article === null && (
-        <p className="text-xs text-gray-400">该书目暂无关联文章，无法执行发布。</p>
+        <div className="space-y-2 rounded-lg border border-dashed border-gray-300 bg-gray-50 px-3 py-3">
+          <p className="text-sm text-gray-700">尚未创建文章。没有 Article 是纳入书目后的正常阶段。</p>
+          <a
+            href={`/articles/generate?novelId=${novelId}`}
+            className="inline-block text-sm font-medium text-blue-700 underline-offset-2 hover:underline"
+          >
+            创建文章
+          </a>
+        </div>
       )}
 
       <ConfirmDialog

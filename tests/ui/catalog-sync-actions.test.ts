@@ -44,7 +44,7 @@ const service = vi.hoisted(() => {
     }
   }
   return {
-    createContentFromSourceItem: vi.fn(),
+    materializeNovelFromSourceItem: vi.fn(),
     ContentCreationInputError,
   };
 });
@@ -157,7 +157,7 @@ function granted(overrides: Partial<{ serviceAuthorization: unknown }> = {}) {
 beforeEach(() => {
   guards.requireAdminActionAccess.mockReset();
   guards.requireFreshAdminServiceMutation.mockReset();
-  service.createContentFromSourceItem.mockReset();
+  service.materializeNovelFromSourceItem.mockReset();
   batchService.applyContentCreationBatch.mockReset();
   batchService.dryRunContentCreationBatch.mockReset();
   moboreader.createMoboreaderCatalogScanTask.mockReset();
@@ -174,7 +174,7 @@ afterEach(() => {
 describe("dryRunContentCreationAction · 鉴权与参数", () => {
   it("以 admin.content_creation.dry_run 请求授权，并带上 session/origin/requestId", async () => {
     guards.requireAdminActionAccess.mockResolvedValue({ context: CONTEXT });
-    service.createContentFromSourceItem.mockResolvedValue({ outcome: "dry_run", plan: { locale: "en" } });
+    service.materializeNovelFromSourceItem.mockResolvedValue({ outcome: "dry_run", plan: { locale: "en" } });
 
     await dryRunContentCreationAction({ novelSourceItemId: "item-1", requestId: "req-1" });
 
@@ -192,12 +192,12 @@ describe("dryRunContentCreationAction · 鉴权与参数", () => {
 
   it("固定 mode: dry_run，不再传 locale（L10N P2：locale 由服务端从来源条目派生），actor 取自会话身份，requestId 原样透传", async () => {
     guards.requireAdminActionAccess.mockResolvedValue({ context: CONTEXT });
-    service.createContentFromSourceItem.mockResolvedValue({ outcome: "dry_run", plan: {} });
+    service.materializeNovelFromSourceItem.mockResolvedValue({ outcome: "dry_run", plan: {} });
 
     await dryRunContentCreationAction({ novelSourceItemId: "item-42", requestId: "req-42" });
 
-    expect(service.createContentFromSourceItem).toHaveBeenCalledTimes(1);
-    const [db, input] = service.createContentFromSourceItem.mock.calls[0];
+    expect(service.materializeNovelFromSourceItem).toHaveBeenCalledTimes(1);
+    const [db, input] = service.materializeNovelFromSourceItem.mock.calls[0];
     expect(db).toEqual({ __brand: "prisma-stub" });
     expect(input).toEqual({
       novelSourceItemId: "item-42",
@@ -206,12 +206,24 @@ describe("dryRunContentCreationAction · 鉴权与参数", () => {
       requestId: "req-42",
     });
     expect(input).not.toHaveProperty("locale");
+    expect(input).not.toHaveProperty("templateKey");
+  });
+
+  it("旧页残留 templateKey 直接拒绝，不进入纳入服务", async () => {
+    guards.requireAdminActionAccess.mockResolvedValue({ context: CONTEXT });
+    const result = await dryRunContentCreationAction({
+      novelSourceItemId: "item-1",
+      requestId: "req-1",
+      templateKey: "system-default-v1",
+    });
+    expect(result).toEqual({ ok: false, kind: "invalid_input", code: "legacy_template_on_materialize" });
+    expect(service.materializeNovelFromSourceItem).not.toHaveBeenCalled();
   });
 
   it("成功时原样透传 service 的返回值，套一层 { ok: true, data }", async () => {
     guards.requireAdminActionAccess.mockResolvedValue({ context: CONTEXT });
     const payload = { outcome: "already_exists", novelId: "n1" };
-    service.createContentFromSourceItem.mockResolvedValue(payload);
+    service.materializeNovelFromSourceItem.mockResolvedValue(payload);
 
     const result = await dryRunContentCreationAction({ novelSourceItemId: "item-1", requestId: "req-1" });
     expect(result).toEqual({ ok: true, data: payload });
@@ -233,12 +245,12 @@ describe("dryRunContentCreationAction · 鉴权与参数", () => {
         details: { capability: "content:view" },
       },
     });
-    expect(service.createContentFromSourceItem).not.toHaveBeenCalled();
+    expect(service.materializeNovelFromSourceItem).not.toHaveBeenCalled();
   });
 
   it("service 抛 ContentCreationInputError → { ok:false, kind:'invalid_input', code }，不是当成 access_denied", async () => {
     guards.requireAdminActionAccess.mockResolvedValue({ context: CONTEXT });
-    service.createContentFromSourceItem.mockRejectedValue(
+    service.materializeNovelFromSourceItem.mockRejectedValue(
       new service.ContentCreationInputError("invalid_novel_source_item_id", "bad id"),
     );
 
@@ -248,7 +260,7 @@ describe("dryRunContentCreationAction · 鉴权与参数", () => {
 
   it("非 mutation 的 dry-run 不调用 requireFreshAdminServiceMutation——读操作不要求二次新鲜校验", async () => {
     guards.requireAdminActionAccess.mockResolvedValue({ context: CONTEXT });
-    service.createContentFromSourceItem.mockResolvedValue({ outcome: "dry_run", plan: {} });
+    service.materializeNovelFromSourceItem.mockResolvedValue({ outcome: "dry_run", plan: {} });
 
     await dryRunContentCreationAction({ novelSourceItemId: "item-1", requestId: "req-1" });
     expect(guards.requireFreshAdminServiceMutation).not.toHaveBeenCalled();
@@ -259,7 +271,7 @@ describe("applyContentCreationAction · 鉴权与参数", () => {
   it("以 admin.content_creation.apply 请求授权，拿到 ticket 后调用 requireFreshAdminServiceMutation(content:publish)", async () => {
     guards.requireAdminActionAccess.mockResolvedValue(granted());
     guards.requireFreshAdminServiceMutation.mockResolvedValue(CONTEXT);
-    service.createContentFromSourceItem.mockResolvedValue({ outcome: "created" });
+    service.materializeNovelFromSourceItem.mockResolvedValue({ outcome: "created" });
 
     await applyContentCreationAction({ novelSourceItemId: "item-1", requestId: "req-1" });
 
@@ -283,11 +295,11 @@ describe("applyContentCreationAction · 鉴权与参数", () => {
     guards.requireFreshAdminServiceMutation.mockResolvedValue({
       identity: { ...IDENTITY, id: "fresh-admin-2" },
     });
-    service.createContentFromSourceItem.mockResolvedValue({ outcome: "created" });
+    service.materializeNovelFromSourceItem.mockResolvedValue({ outcome: "created" });
 
     await applyContentCreationAction({ novelSourceItemId: "item-9", requestId: "req-9" });
 
-    const [, input] = service.createContentFromSourceItem.mock.calls[0];
+    const [, input] = service.materializeNovelFromSourceItem.mock.calls[0];
     expect(input).toEqual({
       novelSourceItemId: "item-9",
       mode: "apply",
@@ -300,7 +312,7 @@ describe("applyContentCreationAction · 鉴权与参数", () => {
   it("outcome === created 时才 revalidatePath('/catalog-sync') 与 '/novels'；其它 outcome 不触发", async () => {
     guards.requireAdminActionAccess.mockResolvedValue(granted());
     guards.requireFreshAdminServiceMutation.mockResolvedValue(CONTEXT);
-    service.createContentFromSourceItem.mockResolvedValue({ outcome: "created" });
+    service.materializeNovelFromSourceItem.mockResolvedValue({ outcome: "created" });
 
     await applyContentCreationAction({ novelSourceItemId: "item-1", requestId: "req-1" });
     expect(cache.revalidatePath).toHaveBeenCalledWith("/catalog-sync");
@@ -308,7 +320,7 @@ describe("applyContentCreationAction · 鉴权与参数", () => {
     expect(cache.revalidatePath).toHaveBeenCalledTimes(2);
 
     cache.revalidatePath.mockClear();
-    service.createContentFromSourceItem.mockResolvedValue({ outcome: "already_exists" });
+    service.materializeNovelFromSourceItem.mockResolvedValue({ outcome: "already_exists" });
     await applyContentCreationAction({ novelSourceItemId: "item-1", requestId: "req-2" });
     expect(cache.revalidatePath).not.toHaveBeenCalled();
   });
@@ -323,7 +335,7 @@ describe("applyContentCreationAction · 鉴权与参数", () => {
     expect(result.ok === false && result.kind === "access_denied" && result.envelope.code).toBe(
       "admin_two_factor_required",
     );
-    expect(service.createContentFromSourceItem).not.toHaveBeenCalled();
+    expect(service.materializeNovelFromSourceItem).not.toHaveBeenCalled();
     expect(cache.revalidatePath).not.toHaveBeenCalled();
   });
 
@@ -335,7 +347,7 @@ describe("applyContentCreationAction · 鉴权与参数", () => {
 
     const result = await applyContentCreationAction({ novelSourceItemId: "item-1", requestId: "req-1" });
     expect(result).toMatchObject({ ok: false, kind: "access_denied" });
-    expect(service.createContentFromSourceItem).not.toHaveBeenCalled();
+    expect(service.materializeNovelFromSourceItem).not.toHaveBeenCalled();
   });
 
   it("registration 未来若丢了 capability（serviceAuthorization 为空）也 fail-closed 成 access_denied", async () => {
@@ -344,13 +356,13 @@ describe("applyContentCreationAction · 鉴权与参数", () => {
     const result = await applyContentCreationAction({ novelSourceItemId: "item-1", requestId: "req-1" });
     expect(result).toMatchObject({ ok: false, kind: "access_denied" });
     expect(guards.requireFreshAdminServiceMutation).not.toHaveBeenCalled();
-    expect(service.createContentFromSourceItem).not.toHaveBeenCalled();
+    expect(service.materializeNovelFromSourceItem).not.toHaveBeenCalled();
   });
 
   it("service 抛 ContentCreationInputError → invalid_input，不是 access_denied", async () => {
     guards.requireAdminActionAccess.mockResolvedValue(granted());
     guards.requireFreshAdminServiceMutation.mockResolvedValue(CONTEXT);
-    service.createContentFromSourceItem.mockRejectedValue(
+    service.materializeNovelFromSourceItem.mockRejectedValue(
       new service.ContentCreationInputError("invalid_request_id", "bad request id"),
     );
 

@@ -48,10 +48,11 @@ type Stage =
  */
 const INVALID_INPUT_COPY: Readonly<Record<string, string>> = Object.freeze({
   invalid_novel_source_item_id: "来源条目标识无效，请刷新页面后重试",
-  missing_locale: "该来源条目尚未识别出语种（sourceLocale 为空），无法创建内容。",
-  unsupported_locale: "该来源条目识别出的语种不是本站已登记的语种，无法创建内容。",
+  missing_locale: "该来源条目尚未识别出语种（sourceLocale 为空），无法纳入书目。",
+  unsupported_locale: "该来源条目识别出的语种不是本站已登记的语种，无法纳入书目。",
   invalid_actor: "无法确认当前操作者身份，请重新登录后重试",
   invalid_request_id: "请求标识无效（内部错误），请刷新页面后重试",
+  legacy_template_on_materialize: "纳入书目不再选择文章模板，请刷新页面后重试。",
 });
 
 /**
@@ -104,17 +105,12 @@ function PlanPreview({ item, plan }: { item: SourceItemRow; plan: ContentCreatio
   return (
     <div className="space-y-3">
       <p className={`rounded-lg border px-3 py-2 text-sm ${TONE_STYLE.info}`} role="status">
-        尚未写入任何数据。以下字段将写入 Novel / Article（草稿状态），确认后才会真正创建。
+        尚未写入任何数据。以下字段将写入 Novel（草稿状态）。此步骤不会创建文章，也不选择文章模板。
       </p>
       <dl className="divide-y divide-gray-100 rounded-lg border border-gray-200">
         <Row label="语种" value={<span data-testid="derived-locale-display">{derivedLocaleDisplay(plan.locale)}</span>} />
         <Row label="标题" value={plan.title} />
         <Row label="书目 slug" value={plan.novelSlug} />
-        <Row label="文章 slug" value={plan.articleSlug} />
-        <Row
-          label="预览短码"
-          value={`${plan.provisionalPublicPageShortId}（临时生成，仅供预览，实际创建会重新分配）`}
-        />
         <Row label="总章节数" value={String(item.totalChapterCount)} />
         <Row label="付费起始章节" value={item.paidFromChapter === null ? "未设置" : String(item.paidFromChapter)} />
         <Row label="封面" value={item.coverUrl ?? "（无）"} />
@@ -130,8 +126,6 @@ function CreatedSummary({ summary }: { summary: CreatedContentSummary }) {
       <dl className="divide-y divide-gray-100 rounded-lg border border-gray-200">
         <Row label="书目业务ID" value={summary.novelBusinessId} />
         <Row label="书目 slug" value={summary.novelSlug} />
-        <Row label="文章 slug" value={summary.articleSlug} />
-        <Row label="公开短码" value={summary.publicPageShortId} />
         <Row label="语种" value={summary.locale} />
       </dl>
       <Link
@@ -191,39 +185,16 @@ export function CreateContentDialog({
   contentPublishGranted,
   contentPublishBlockedReason,
   onClose,
-  templateOptions = [],
 }: {
   item: SourceItemRow;
   contentPublishGranted: boolean;
   contentPublishBlockedReason: string | null;
   onClose: () => void;
-  /**
-   * The full set fetched for the page (`catalog-sync/page.tsx`, across
-   * every distinct `sourceLocale` present on the current page — see that
-   * file's own comment), not pre-filtered to this one item. Filtered down
-   * to `matchingTemplateOptions` below so the picker only ever offers a
-   * template whose own `locale` exactly matches this item's derived
-   * locale — matrix #13's "模板选项按来源条目语种" requirement.
-   *
-   * L10N P3: dropped the `{locale: null}` "all locales" wildcard branch
-   * this filter used to also accept. `ArticleTemplate.locale` is now
-   * database-level `NOT NULL` (`article-templates/service.ts`'s own
-   * `selectActiveArticleTemplate`/`listActiveArticleTemplateOptions` no
-   * longer emit that `OR` at all — see that file's header comment), so no
-   * row can ever have `locale === null` any more; keeping the wildcard
-   * branch here would have been dead code reintroducing the exact
-   * "generic template" semantics P3 removed from the query layer.
-   */
-  templateOptions?: readonly { readonly templateKey: string; readonly locale: string; readonly version: number }[];
 }) {
   const router = useRouter();
   const dialogRef = useRef<HTMLDialogElement>(null);
   const [stage, setStage] = useState<Stage>({ kind: "loading" });
   const [applying, setApplying] = useState(false);
-  const matchingTemplateOptions = templateOptions.filter(
-    (template) => template.locale === item.sourceLocale,
-  );
-  const [templateKey, setTemplateKey] = useState(matchingTemplateOptions[0]?.templateKey ?? "system-default-v1");
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -242,7 +213,6 @@ export function CreateContentDialog({
     const result = await dryRunContentCreationAction({
       novelSourceItemId: item.id,
       requestId: crypto.randomUUID(),
-      templateKey,
     });
     if (!result.ok) return { kind: "error", message: failureMessage(result) };
     return result.data.outcome === "dry_run"
@@ -262,7 +232,7 @@ export function CreateContentDialog({
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- item.id is the only input that should re-trigger a dry run
-  }, [item.id, templateKey]);
+  }, [item.id]);
 
   function retryDryRun() {
     // A click handler, not an effect body — setting loading synchronously
@@ -276,7 +246,6 @@ export function CreateContentDialog({
     const result = await applyContentCreationAction({
       novelSourceItemId: item.id,
       requestId: crypto.randomUUID(),
-      templateKey,
     });
     setApplying(false);
     if (!result.ok) {
@@ -303,17 +272,11 @@ export function CreateContentDialog({
       className="m-auto max-h-[calc(100vh-2rem)] w-full max-w-lg overflow-y-auto rounded-xl border border-gray-200 bg-white p-0 text-gray-900 shadow-xl backdrop:bg-gray-900/40"
     >
       <div className="space-y-4 p-5">
-        <h2 className="text-base font-semibold">创建内容 · {item.title}</h2>
-        <label className="block text-sm text-gray-700">文章模板
-          <select value={templateKey} onChange={(event) => setTemplateKey(event.target.value)} disabled={applying} className="mt-1 w-full rounded border border-gray-300 bg-white p-2 text-gray-900 disabled:bg-gray-100 disabled:text-gray-500">
-            {matchingTemplateOptions.length === 0 && <option value="system-default-v1">system-default-v1（系统默认）</option>}
-            {matchingTemplateOptions.map((template) => <option key={`${template.templateKey}:${template.version}`} value={template.templateKey}>{template.templateKey} · v{template.version}</option>)}
-          </select>
-        </label>
+        <h2 className="text-base font-semibold">纳入书目 · {item.title}</h2>
 
         {stage.kind === "loading" && (
           <p role="status" className="text-sm text-gray-500">
-            正在生成创建计划…
+            正在生成纳入计划…
           </p>
         )}
         {stage.kind === "plan" && <PlanPreview item={item} plan={stage.plan} />}
@@ -351,7 +314,7 @@ export function CreateContentDialog({
               onClick={confirmCreate}
               className={buttonClassName("primary")}
             >
-              {applying ? "创建中…" : "确认创建"}
+              {applying ? "纳入中…" : "确认纳入书目"}
             </button>
           )}
         </div>

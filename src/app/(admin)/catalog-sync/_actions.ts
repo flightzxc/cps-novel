@@ -32,9 +32,9 @@ import {
 import { requireAdminActionAccess, requireFreshAdminServiceMutation } from "@/server/auth/guards";
 import {
   ContentCreationInputError,
-  createContentFromSourceItem,
+  materializeNovelFromSourceItem,
   type ContentCreationInputErrorCode,
-  type CreateContentResult,
+  type NovelMaterializeResult,
 } from "@/server/content-creation";
 
 import { canonicalOrigin, guardDependencies, prisma, readSessionToken } from "../../api/admin/_lib/deps";
@@ -75,7 +75,7 @@ import { toErrorEnvelope } from "../../api/admin/_lib/respond";
  */
 
 export type ContentCreationActionResult =
-  | { readonly ok: true; readonly data: CreateContentResult }
+  | { readonly ok: true; readonly data: NovelMaterializeResult }
   | { readonly ok: false; readonly kind: "access_denied"; readonly envelope: ErrorEnvelope }
   | {
       readonly ok: false;
@@ -111,13 +111,15 @@ export async function dryRunContentCreationAction(input: {
   templateKey?: string;
 }): Promise<ContentCreationActionResult> {
   try {
+    if (input.templateKey !== undefined) {
+      throw new ContentCreationInputError("legacy_template_on_materialize", "纳入书目不再选择文章模板，请刷新页面后重试");
+    }
     const { context } = await authorizeAction("admin.content_creation.dry_run", input.requestId);
-    const data = await createContentFromSourceItem(prisma, {
+    const data = await materializeNovelFromSourceItem(prisma, {
       novelSourceItemId: input.novelSourceItemId,
       mode: "dry_run",
       actor: { type: "admin", adminId: context.identity.id },
       requestId: input.requestId,
-      templateKey: input.templateKey,
     });
     return { ok: true, data };
   } catch (error) {
@@ -138,7 +140,7 @@ export async function dryRunContentCreationAction(input: {
  * oversight to "fix" by loosening it to `content:view`. It carries the same
  * `requiresTwoFactor: true` + `super_admin`-default bar as every other real
  * content mutation, which is the right bar for a call that inserts the first
- * `Novel`/`Article` rows a source item will ever have.
+ * `Novel` row a source item will ever have. It no longer creates an Article.
  */
 export async function applyContentCreationAction(input: {
   novelSourceItemId: string;
@@ -169,12 +171,14 @@ export async function applyContentCreationAction(input: {
       entryId: "admin.content_creation.apply",
       requestId: input.requestId,
     });
-    const data = await createContentFromSourceItem(prisma, {
+    if (input.templateKey !== undefined) {
+      throw new ContentCreationInputError("legacy_template_on_materialize", "纳入书目不再选择文章模板，请刷新页面后重试");
+    }
+    const data = await materializeNovelFromSourceItem(prisma, {
       novelSourceItemId: input.novelSourceItemId,
       mode: "apply",
       actor: { type: "admin", adminId: context.identity.id },
       requestId: input.requestId,
-      templateKey: input.templateKey,
     });
     if (data.outcome === "created") {
       // The source item's own status flipped (`pending` → `linked`) and a
@@ -398,16 +402,6 @@ async function validatePromoAccountConfiguration(db: Pick<typeof prisma, "channe
   return true;
 }
 
-async function validateTemplateConfiguration(db: Pick<typeof prisma, "articleTemplate">, templates: Readonly<Record<string, string>>): Promise<boolean> {
-  for (const [locale, templateKey] of Object.entries(templates)) {
-    const template = await db.articleTemplate.findFirst({ where: {
-      locale, templateKey, status: "active", deletedAt: null, applicableArticleType: "novel_article",
-    }, select: { id: true } });
-    if (!template) return false;
-  }
-  return true;
-}
-
 export async function readCatalogBatchContextAction(input: {
   selection: CatalogSelection;
   requestId: string;
@@ -469,6 +463,9 @@ export async function applyContentCreationBatchAction(input: {
   requestId: string;
 }): Promise<CatalogBatchActionResult<CatalogBatchEnqueueResult>> {
   try {
+    if (input.templateKeysByLocale && Object.keys(input.templateKeysByLocale).length > 0) {
+      return { ok: false, kind: "invalid_input", code: "legacy_template_on_materialize" };
+    }
     const { serviceAuthorization } = await authorizeAction("admin.content_creation.batch_apply", input.requestId);
     if (!serviceAuthorization) throw new Error("admin_service_authorization_required");
     const guards = guardDependencies();
@@ -477,21 +474,9 @@ export async function applyContentCreationBatchAction(input: {
       entryId: "admin.content_creation.batch_apply", requestId: input.requestId,
     });
     const selection = normalizeCatalogSelection(input.selection);
-    const templates = input.templateKeysByLocale ?? {};
-    if (!templates || typeof templates !== "object" || Array.isArray(templates)
-      || Object.keys(templates).length > CATALOG_BATCH_CONFIG_MAX_ENTRIES
-      || Object.entries(templates).some(([locale, key]) => !locale.trim() || locale.trim().length > 16 || typeof key !== "string" || !key.trim() || key.trim().length > 100)) {
-      return { ok: false, kind: "invalid_input", code: "template_keys_invalid" };
-    }
-    const normalizedTemplates = Object.fromEntries(Object.entries(templates).map(([k, v]) => [k.trim(), v.trim()]));
     const result = await enqueueCatalogBatch(prisma, {
-      operation: "content_create", selection, actorId: fresh.identity.id, requestId: input.requestId,
-      templateKeysByLocale: normalizedTemplates,
-    }, new Date(), true, async (tx) => {
-      if (!await validateTemplateConfiguration(tx, normalizedTemplates)) {
-        throw new CatalogBatchInputError("template_configuration_invalid");
-      }
-    });
+      operation: "novel_materialize", selection, actorId: fresh.identity.id, requestId: input.requestId,
+    }, new Date(), true);
     const replaySummary = result.duplicate ? await readCatalogBatchSummary(prisma, result.taskId, fresh.identity.id) : null;
     return { ok: true, data: { taskId: result.taskId, phase: replaySummary?.phase ?? (result.taskStatus === "disabled" ? "disabled" : "queued") } };
   } catch (error) {

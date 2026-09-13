@@ -5,7 +5,7 @@ import { normalizeCatalogSelection } from "@/domain/catalog-batch";
 import { P2_04_ADMIN_REGISTRY } from "@/app/api/admin/_lib/registry";
 import {
   CATALOG_BATCH_TASK_TYPE,
-  CONTENT_CREATE_TASK_TYPE,
+  NOVEL_MATERIALIZE_TASK_TYPE,
   buildWorkerAllowlist,
   claimPendingItem,
   createHandlerRegistry,
@@ -18,7 +18,7 @@ import { readCatalogBatchSummary } from "@/server/catalog-batch";
 import { requireAdminRouteAccess } from "@/server/auth/guards";
 import { getAdminTaskDetail, getAdminTaskProgress, listAdminTasks } from "@/server/task-admin";
 import { createCatalogBatchHandler } from "../../../worker/handlers/catalog-batch";
-import { createContentCreateHandler } from "../../../worker/handlers/content-create";
+import { createNovelMaterializeHandler } from "../../../worker/handlers/novel-materialize";
 import { processOneWorkerCycle } from "../../../worker/runtime";
 import {
   assertDisposableCatalogDatabase,
@@ -80,8 +80,7 @@ async function materialize(taskId: string) {
 
 function enqueueContent(selection: ReturnType<typeof normalizeCatalogSelection>, requestId = randomUUID()) {
   return enqueueCatalogBatch(owner, {
-    operation: "content_create", selection, actorId: foundation.actorId, requestId,
-    templateKeysByLocale: {},
+    operation: "novel_materialize", selection, actorId: foundation.actorId, requestId,
   });
 }
 
@@ -161,7 +160,7 @@ describe.skipIf(!enabled).sequential("catalog batch on disposable PostgreSQL 16.
     expect(ids).toHaveLength(scaleCount);
     expect(new Set(ids).size).toBe(scaleCount);
     expect(idsHash(ids)).toBe(idsHash(expectedIds));
-    expect(children.every((row) => row.taskType === CONTENT_CREATE_TASK_TYPE && row.totalCount === row.items.length)).toBe(true);
+    expect(children.every((row) => row.taskType === NOVEL_MATERIALIZE_TASK_TYPE && row.totalCount === row.items.length)).toBe(true);
     const summary = await readCatalogBatchSummary(owner, queued.taskId, foundation.actorId);
     expect(summary).toMatchObject({ phase: "executing", submittedCount: scaleCount, ineligibleCount: 0 });
     await owner.genericTaskItem.updateMany({ where: { task: { parentTaskId: queued.taskId } }, data: { status: "success" } });
@@ -380,7 +379,7 @@ describe.skipIf(!enabled).sequential("catalog batch on disposable PostgreSQL 16.
     expect(await readCatalogBatchSummary(owner, failed.taskId, foundation.actorId)).toMatchObject({ phase: "failed" });
 
     const disabled = await enqueueCatalogBatch(owner, {
-      operation: "content_create", selection: normalizeCatalogSelection({ scope: "explicit_ids", ids: [id!] }),
+      operation: "novel_materialize", selection: normalizeCatalogSelection({ scope: "explicit_ids", ids: [id!] }),
       actorId: foundation.actorId, requestId: randomUUID(),
     }, new Date(), false);
     expect(await readCatalogBatchSummary(owner, disabled.taskId, foundation.actorId)).toMatchObject({ phase: "disabled" });
@@ -393,18 +392,18 @@ describe.skipIf(!enabled).sequential("catalog batch on disposable PostgreSQL 16.
     expect(await readCatalogBatchSummary(owner, expired.taskId, foundation.actorId)).toMatchObject({ phase: "expired" });
   });
 
-  it("content success queues preview atomically; CAS loser and template failure leave no partial business rows", async () => {
+  it("content success queues preview atomically; CAS loser and retired protocol leave no partial business rows", async () => {
     const appId = foundation.channels[0]!.channelAppId;
     const [successId, casId, templateId] = await seedCatalogRows(owner, { channelAppId: appId, count: 3, prefix: "content" });
 
     const successBatch = await enqueueContent(normalizeCatalogSelection({ scope: "explicit_ids", ids: [successId!] }));
     await materialize(successBatch.taskId);
-    const successLease = await claim(CONTENT_CREATE_TASK_TYPE);
+    const successLease = await claim(NOVEL_MATERIALIZE_TASK_TYPE);
     process.env.MOBOREADER_PREVIEW_SOURCE_APP_CODES = `${foundation.channels[0]!.code}-source`;
-    const successOutcome = await createContentCreateHandler(worker)(handlerContext(successLease));
+    const successOutcome = await createNovelMaterializeHandler(worker)(handlerContext(successLease));
     await finalizeTaskItem(worker, successLease, successOutcome);
     expect(await owner.novel.count()).toBe(1);
-    expect(await owner.article.count()).toBe(1);
+    expect(await owner.article.count()).toBe(0);
     const preview = await owner.channelSyncTask.findFirst({ where: { taskType: "moboreader.preview_refresh.v1", items: { some: { novelSourceItemId: successId } } }, include: { items: true } });
     expect(preview?.items.map((item) => item.novelSourceItemId)).toContain(successId);
     const committedCounts = {
@@ -426,8 +425,8 @@ describe.skipIf(!enabled).sequential("catalog batch on disposable PostgreSQL 16.
 
     const casBatch = await enqueueContent(normalizeCatalogSelection({ scope: "explicit_ids", ids: [casId!] }));
     await materialize(casBatch.taskId);
-    const casLease = await claim(CONTENT_CREATE_TASK_TYPE);
-    const casOutcome = await createContentCreateHandler(worker)(handlerContext(casLease));
+    const casLease = await claim(NOVEL_MATERIALIZE_TASK_TYPE);
+    const casOutcome = await createNovelMaterializeHandler(worker)(handlerContext(casLease));
     await owner.$executeRawUnsafe(`CREATE FUNCTION catalog_content_cas_loser() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RETURN NULL; END $$`);
     await owner.$executeRawUnsafe(`CREATE TRIGGER catalog_content_cas_loser_trigger BEFORE UPDATE OF novel_id ON novel_source_item FOR EACH ROW WHEN (OLD.id = '${casId}'::uuid AND OLD.novel_id IS NULL AND NEW.novel_id IS NOT NULL) EXECUTE FUNCTION catalog_content_cas_loser()`);
     const casError = await finalizeTaskItem(worker, casLease, casOutcome).then(() => null, (error: unknown) => error);
@@ -435,21 +434,19 @@ describe.skipIf(!enabled).sequential("catalog batch on disposable PostgreSQL 16.
     await owner.$executeRawUnsafe("DROP TRIGGER catalog_content_cas_loser_trigger ON novel_source_item");
     await owner.$executeRawUnsafe("DROP FUNCTION catalog_content_cas_loser()");
     expect(await owner.novel.count()).toBe(1);
-    expect(await owner.article.count()).toBe(1);
+    expect(await owner.article.count()).toBe(0);
     expect((await owner.novelSourceItem.findUniqueOrThrow({ where: { id: casId } })).novelId).toBeNull();
 
-    const defaultTemplate = await owner.articleTemplate.findFirstOrThrow({ where: { status: "active", locale: "en" } });
-    await owner.articleTemplate.update({ where: { id: defaultTemplate.id }, data: { bodyTemplate: "{if broken}" } });
-    const templateBatch = await enqueueCatalogBatch(owner, {
+    const legacyBatch = await enqueueCatalogBatch(owner, {
       operation: "content_create", selection: normalizeCatalogSelection({ scope: "explicit_ids", ids: [templateId!] }),
-      actorId: foundation.actorId, requestId: randomUUID(), templateKeysByLocale: { en: defaultTemplate.templateKey },
+      actorId: foundation.actorId, requestId: randomUUID(), templateKeysByLocale: { en: "system-default-v1" },
     });
-    await materialize(templateBatch.taskId);
-    const templateLease = await claim(CONTENT_CREATE_TASK_TYPE);
-    await expect(finalizeTaskItem(worker, templateLease, await createContentCreateHandler(worker)(handlerContext(templateLease))))
-      .rejects.toThrow(/ERR_TEMPLATE/);
+    await materialize(legacyBatch.taskId);
+    const legacyParent = await owner.genericTask.findUniqueOrThrow({ where: { id: legacyBatch.taskId } });
+    expect(legacyParent.status).toBe("failed");
+    expect(await owner.genericTask.count({ where: { parentTaskId: legacyBatch.taskId } })).toBe(0);
     expect(await owner.novel.count()).toBe(1);
-    expect(await owner.article.count()).toBe(1);
+    expect(await owner.article.count()).toBe(0);
     expect((await owner.novelSourceItem.findUniqueOrThrow({ where: { id: templateId } })).novelId).toBeNull();
   });
 });

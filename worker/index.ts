@@ -17,6 +17,8 @@ import { createHomeCarouselWorkerHandlers } from "./handlers/home-carousel";
 import { createTaggingWorkerHandlers } from "./handlers/novel-tag-backfill";
 import { createCatalogBatchWorkerHandlers } from "./handlers/catalog-batch";
 import { createContentCreateWorkerHandlers } from "./handlers/content-create";
+import { createNovelMaterializeWorkerHandlers } from "./handlers/novel-materialize";
+import { createArticleGenerateWorkerHandlers } from "./handlers/article-generate";
 import {
   createWorkerFailureWebhookReporterFromEnv,
   parseShutdownDrainTimeoutEnv,
@@ -74,6 +76,8 @@ export function createWorkerHandlers(prisma: PrismaClient) {
     ...createTaggingWorkerHandlers(prisma),
     ...createCatalogBatchWorkerHandlers(prisma),
     ...createContentCreateWorkerHandlers(prisma),
+    ...createNovelMaterializeWorkerHandlers(prisma),
+    ...createArticleGenerateWorkerHandlers(prisma),
   });
 }
 

@@ -278,6 +278,9 @@ export const ADMIN_ARTICLE_ACTIONS = [
    * novel-article creation pipeline.
    */
   { id: "admin.article.create_blog", capability: "content:publish", mutation: true },
+  { id: "admin.article.generate_dry_run", capability: "content:view", mutation: false },
+  { id: "admin.article.generate_apply", capability: "content:publish", mutation: true },
+  { id: "admin.article.generate_batch", capability: "content:publish", mutation: true },
 ] as const satisfies AdminRegistry["actions"];
 
 /**

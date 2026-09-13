@@ -11,7 +11,21 @@ vi.mock("@/lib/tasks/catalog-batch", async (original) => ({ ...(await original<t
 vi.mock("@/server/catalog-batch", () => ({ readCatalogBatchContext: vi.fn(), readCatalogBatchSummary: batch.summary }));
 vi.mock("@/lib/flags", () => ({ isNovelCatalogSyncEnabled: () => true, isNovelCatalogSyncWriteAllowed: () => true, isPromoLinkClaimEnabled: () => flags.feature, isPromoLinkClaimWriteAllowed: () => flags.write }));
 vi.mock("@/app/api/admin/_lib/deps", () => ({ prisma: db, guardDependencies: () => ({ identities: "i", sessions: "s" }), canonicalOrigin: async () => "https://admin.example", readSessionToken: async () => "session" }));
-vi.mock("@/server/content-creation", () => ({ ContentCreationInputError: class extends Error {}, createContentFromSourceItem: vi.fn() }));
+vi.mock("@/server/content-creation", () => {
+  class ContentCreationInputError extends Error {
+    readonly code: string;
+    constructor(code: string, message: string) {
+      super(message);
+      this.name = "ContentCreationInputError";
+      this.code = code;
+    }
+  }
+  return {
+    ContentCreationInputError,
+    materializeNovelFromSourceItem: vi.fn(),
+    createContentFromSourceItem: vi.fn(),
+  };
+});
 vi.mock("@/lib/tasks/moboreader", () => ({ MoboreaderTaskInputError: class extends Error {}, createMoboreaderCatalogScanTask: vi.fn(), resolveMoboreaderCatalogSafetyMaxPages: () => 1, resolveMoboreaderUpstreamRecommendedPageSize: () => 1 }));
 
 const { enqueuePromoLinkClaimAction, applyContentCreationBatchAction } = await import("@/app/(admin)/catalog-sync/_actions");
@@ -68,23 +82,15 @@ describe("catalog batch mutation actions", () => {
     }));
     expect(batch.enqueue).toHaveBeenCalledWith(db, expect.objectContaining({ channelAccounts: { [A]: B } }), expect.any(Date), true, expect.any(Function));
   });
-  it.each([explicit, filtered])("content apply enqueues either selection without enumerating", async (selection) => {
-    await applyContentCreationBatchAction({ selection, templateKeysByLocale: { en: "default" }, requestId: "r7" });
+  it.each([explicit, filtered])("content apply enqueues novel_materialize without templates", async (selection) => {
+    await applyContentCreationBatchAction({ selection, requestId: "r7" });
     expect(guards.fresh).toHaveBeenCalledWith(expect.anything(), "content:publish", expect.anything());
-    expect(batch.enqueue).toHaveBeenCalledWith(db, expect.objectContaining({ operation: "content_create", templateKeysByLocale: { en: "default" } }), expect.any(Date), true, expect.any(Function));
+    expect(batch.enqueue).toHaveBeenCalledWith(db, expect.objectContaining({ operation: "novel_materialize" }), expect.any(Date), true);
     expect(db.novelSourceItem.findMany).not.toHaveBeenCalled();
   });
-  it("rejects a missing locale template", async () => {
-    db.articleTemplate.findFirst.mockResolvedValueOnce(null);
-    expect(await applyContentCreationBatchAction({ selection: explicit, templateKeysByLocale: { en: "missing" }, requestId: "r8" })).toMatchObject({ ok: false, code: "template_configuration_invalid" });
-    expect(db.articleTemplate.findFirst).toHaveBeenCalled();
-  });
-  it("canonicalizes template configuration before both validation and enqueue", async () => {
-    await applyContentCreationBatchAction({ selection: explicit, templateKeysByLocale: { " en ": " default " }, requestId: "trimmed-template" });
-    expect(db.articleTemplate.findFirst).toHaveBeenCalledWith(expect.objectContaining({
-      where: expect.objectContaining({ locale: "en", templateKey: "default" }),
-    }));
-    expect(batch.enqueue).toHaveBeenCalledWith(db, expect.objectContaining({ templateKeysByLocale: { en: "default" } }), expect.any(Date), true, expect.any(Function));
+  it("rejects leftover template maps from old pages", async () => {
+    expect(await applyContentCreationBatchAction({ selection: explicit, templateKeysByLocale: { en: "missing" }, requestId: "r8" })).toMatchObject({ ok: false, code: "legacy_template_on_materialize" });
+    expect(batch.enqueue).not.toHaveBeenCalled();
   });
   it("uses stored task state on request-id replay", async () => {
     batch.enqueue.mockResolvedValueOnce({ taskId: B, taskStatus: "completed", duplicate: true });

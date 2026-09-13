@@ -125,7 +125,9 @@ describe("按钮可见性 · 与 requireSourceStatus 的前置条件一一对应
       />,
     );
     expect(screen.queryByTestId("publish-action-publish")).toBeNull();
-    expect(screen.getByText("该书目暂无关联文章，无法执行发布。")).toBeTruthy();
+    expect(screen.getByText("尚未创建文章。没有 Article 是纳入书目后的正常阶段。")).toBeTruthy();
+    const createLink = screen.getByRole("link", { name: "创建文章" });
+    expect(createLink.getAttribute("href")).toBe("/articles/generate?novelId=n1");
   });
 });
 

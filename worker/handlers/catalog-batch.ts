@@ -3,8 +3,14 @@ import { Prisma, type PrismaClient } from "@prisma/client";
 import type { NormalizedCatalogSelection } from "../../src/domain/catalog-batch";
 import {
   CATALOG_BATCH_CHUNK_SIZE, CATALOG_BATCH_TASK_TYPE,
-  CONTENT_CREATE_TASK_TYPE, CONTENT_CREATE_TARGET_TYPE, type CatalogBatchPayload,
+  CONTENT_CREATE_TARGET_TYPE,
+  NOVEL_MATERIALIZE_TASK_TYPE, NOVEL_MATERIALIZE_TARGET_TYPE,
+  type CatalogBatchPayload,
 } from "../../src/lib/tasks/catalog-batch";
+import {
+  LEGACY_CONTENT_CREATE_RETIRED_CODE,
+  LEGACY_CONTENT_CREATE_RETIRED_MESSAGE,
+} from "../../src/lib/tasks/legacy-content-create";
 import { operationScopeHash, UPSTREAM_EXISTING_PROMO_OFFER_TYPE } from "../../src/lib/tasks/promo-link-claim";
 import { PROMO_LINK_CLAIM_CAPABILITY_KEY, PROMO_LINK_CLAIM_TASK_TYPE } from "../../src/lib/tasks/promo-link-claim-limits";
 import { createHandlerRegistry, type TaskHandler } from "../../src/lib/tasks";
@@ -16,7 +22,7 @@ const ROW_SELECT = { id: true, channelAppId: true, sourceLocale: true, status: t
 function parsePayload(value: unknown): CatalogBatchPayload {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("catalog_batch_payload_invalid");
   const p = value as Partial<CatalogBatchPayload>;
-  if ((p.operation !== "content_create" && p.operation !== "promo_claim") || !p.selection
+  if ((p.operation !== "content_create" && p.operation !== "promo_claim" && p.operation !== "novel_materialize") || !p.selection
     || typeof p.actorId !== "string" || !p.actorId || typeof p.requestId !== "string" || !p.requestId
     || typeof p.submittedAt !== "string" || !Number.isFinite(Date.parse(p.submittedAt))
     || typeof p.expiresAt !== "string" || !Number.isFinite(Date.parse(p.expiresAt))) throw new Error("catalog_batch_payload_invalid");
@@ -83,6 +89,23 @@ export function createCatalogBatchHandler(db: PrismaClient): TaskHandler {
       transactionIsolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead,
       transactionTimeoutMs: 120_000,
       protectedWrite: async (tx) => {
+        if (payload.operation === "content_create") {
+          await tx.genericTask.update({
+            where: { id: lease.taskId },
+            data: {
+              result: {
+                enumerationStatus: "failed",
+                reason: LEGACY_CONTENT_CREATE_RETIRED_CODE,
+                message: LEGACY_CONTENT_CREATE_RETIRED_MESSAGE,
+              },
+            },
+          });
+          return {
+            status: "failed",
+            error: { code: LEGACY_CONTENT_CREATE_RETIRED_CODE, message: LEGACY_CONTENT_CREATE_RETIRED_MESSAGE },
+            result: { enumerationStatus: "failed", reason: LEGACY_CONTENT_CREATE_RETIRED_CODE },
+          };
+        }
         const expiry = Date.parse(payload.expiresAt);
         if (!Number.isFinite(expiry) || Date.now() >= expiry) {
           await tx.genericTask.update({ where: { id: lease.taskId }, data: { result: { enumerationStatus: "expired", submittedCount: 0, ineligibleCount: 0, expiresAt: payload.expiresAt } } });
@@ -111,7 +134,7 @@ export function createCatalogBatchHandler(db: PrismaClient): TaskHandler {
               blockedReasonCounts.active_item_conflict = (blockedReasonCounts.active_item_conflict ?? 0) + 1;
               continue;
             }
-            const eligible = payload.operation === "content_create"
+            const eligible = payload.operation === "novel_materialize"
               ? row.status === "pending" && row.novelId === null
               : row.status === "linked" && row.novelId !== null;
             if (!eligible) { ineligibleCount += 1; continue; }
@@ -142,7 +165,7 @@ export function createCatalogBatchHandler(db: PrismaClient): TaskHandler {
               continue;
             }
           }
-          const taskType = payload.operation === "promo_claim" ? PROMO_LINK_CLAIM_TASK_TYPE : CONTENT_CREATE_TASK_TYPE;
+          const taskType = payload.operation === "promo_claim" ? PROMO_LINK_CLAIM_TASK_TYPE : NOVEL_MATERIALIZE_TASK_TYPE;
           const promoFeatureEnabled = isPromoLinkClaimEnabled();
           const promoWriteAllowed = isPromoLinkClaimWriteAllowed();
           const childStatus = payload.operation === "promo_claim" && (!promoFeatureEnabled || !promoWriteAllowed) ? "disabled" : "pending";
@@ -170,7 +193,7 @@ export function createCatalogBatchHandler(db: PrismaClient): TaskHandler {
           for (let i = 0; i < members.length; i += CATALOG_BATCH_CHUNK_SIZE) {
             await tx.genericTaskItem.createMany({ data: members.slice(i, i + CATALOG_BATCH_CHUNK_SIZE).map((member) => ({
               taskId: childId,
-              targetType: payload.operation === "promo_claim" ? "novel_source_item" : CONTENT_CREATE_TARGET_TYPE,
+              targetType: payload.operation === "promo_claim" ? "novel_source_item" : NOVEL_MATERIALIZE_TARGET_TYPE,
               targetId: member.id,
               payload: payload.operation === "promo_claim" ? {
                 novelSourceItemId: member.id, offerType: UPSTREAM_EXISTING_PROMO_OFFER_TYPE,
@@ -179,8 +202,6 @@ export function createCatalogBatchHandler(db: PrismaClient): TaskHandler {
               } : {
                 novelSourceItemId: member.id, channelAppId, actorId: payload.actorId,
                 requestId: `${payload.requestId}:${member.id}`, expiresAt: payload.expiresAt,
-                ...(member.sourceLocale && payload.templateKeysByLocale?.[member.sourceLocale]
-                  ? { templateKey: payload.templateKeysByLocale[member.sourceLocale] } : {}),
               },
             })) });
           }

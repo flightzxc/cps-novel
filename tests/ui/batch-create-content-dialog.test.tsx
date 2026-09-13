@@ -13,19 +13,19 @@ const { BatchCreateContentDialog } = await import("@/app/(admin)/catalog-sync/_c
 installDialogShim();
 beforeEach(() => Object.values(actions).forEach((action) => action.mockReset()));
 const selection = { scope: "all_filtered" as const, filter: { status: "pending" } };
-const context = { submittedCount: 1001, channelGroups: [], locales: [{ locale: "en", eligibleCount: 3, templates: [{ key: "news", name: "News" }] }, { locale: "ru", eligibleCount: 2, templates: [] }] };
+const context = { submittedCount: 1001, channelGroups: [], locales: [{ locale: "en", eligibleCount: 3, templates: [] }, { locale: "ru", eligibleCount: 2, templates: [] }] };
 function renderDialog() { return render(<BatchCreateContentDialog selection={selection} contentPublishGranted contentPublishBlockedReason={null} onClose={vi.fn()} onSubmitted={vi.fn()} />); }
 
 describe("BatchCreateContentDialog", () => {
-  it("reads templates from the full selection and submits the locale map once", async () => {
+  it("submits novel materialize without a template map", async () => {
     actions.readCatalogBatchContextAction.mockResolvedValue({ ok: true, data: context });
     actions.applyContentCreationBatchAction.mockResolvedValue({ ok: true, data: { taskId: "task-1", phase: "queued" } });
     actions.readCatalogBatchSummaryAction.mockResolvedValue({ ok: true, data: { taskId: "task-1", phase: "completed", submittedCount: 5, ineligibleCount: 1 } });
     renderDialog();
-    await screen.findByText("en（3 条）");
-    fireEvent.change(screen.getAllByDisplayValue("服务默认模板")[0]!, { target: { value: "news" } });
-    fireEvent.click(screen.getByRole("button", { name: "创建内容" }));
-    await waitFor(() => expect(actions.applyContentCreationBatchAction).toHaveBeenCalledWith(expect.objectContaining({ selection, templateKeysByLocale: { en: "news" } })));
+    await screen.findByText("en（3 条待纳入）");
+    fireEvent.click(screen.getByRole("button", { name: "纳入书目" }));
+    await waitFor(() => expect(actions.applyContentCreationBatchAction).toHaveBeenCalledWith(expect.objectContaining({ selection })));
+    expect(actions.applyContentCreationBatchAction.mock.calls[0][0].templateKeysByLocale).toBeUndefined();
     expect(await screen.findByText(/任务已提交：5 条/)).toBeTruthy();
   });
 
@@ -33,25 +33,20 @@ describe("BatchCreateContentDialog", () => {
     actions.readCatalogBatchContextAction.mockResolvedValue({ ok: true, data: context });
     actions.applyContentCreationBatchAction.mockRejectedValueOnce(new Error("offline")).mockResolvedValueOnce({ ok: true, data: { taskId: "task-2", phase: "queued" } });
     actions.readCatalogBatchSummaryAction.mockResolvedValue({ ok: true, data: { taskId: "task-2", phase: "completed", submittedCount: 1, ineligibleCount: 0 } });
-    renderDialog(); await screen.findByText("en（3 条）");
-    fireEvent.click(screen.getByRole("button", { name: "创建内容" }));
+    renderDialog(); await screen.findByText("en（3 条待纳入）");
+    fireEvent.click(screen.getByRole("button", { name: "纳入书目" }));
     await screen.findByRole("alert");
-    expect(screen.getAllByDisplayValue("服务默认模板")[0]!.hasAttribute("disabled")).toBe(true);
-    fireEvent.click(screen.getByRole("button", { name: "创建内容" }));
+    fireEvent.click(screen.getByRole("button", { name: "纳入书目" }));
     await waitFor(() => expect(actions.applyContentCreationBatchAction).toHaveBeenCalledTimes(2));
     expect(actions.applyContentCreationBatchAction.mock.calls[0][0].requestId).toBe(actions.applyContentCreationBatchAction.mock.calls[1][0].requestId);
   });
 
-  it("removes a locale key when switched back to the service default and keeps task link after summary failure", async () => {
+  it("keeps task link after summary failure", async () => {
     actions.readCatalogBatchContextAction.mockResolvedValue({ ok: true, data: context });
     actions.applyContentCreationBatchAction.mockResolvedValue({ ok: true, data: { taskId: "task-3", phase: "queued" } });
     actions.readCatalogBatchSummaryAction.mockRejectedValue(new Error("offline"));
-    renderDialog(); await screen.findByText("en（3 条）");
-    const select = screen.getAllByDisplayValue("服务默认模板")[0]!;
-    fireEvent.change(select, { target: { value: "news" } });
-    fireEvent.change(select, { target: { value: "" } });
-    fireEvent.click(screen.getByRole("button", { name: "创建内容" }));
-    await waitFor(() => expect(actions.applyContentCreationBatchAction).toHaveBeenCalledWith(expect.objectContaining({ templateKeysByLocale: {} })));
+    renderDialog(); await screen.findByText("en（3 条待纳入）");
+    fireEvent.click(screen.getByRole("button", { name: "纳入书目" }));
     expect(await screen.findByRole("link", { name: "查看任务" })).toBeTruthy();
     expect(await screen.findByRole("alert")).toBeTruthy();
   });
@@ -60,7 +55,7 @@ describe("BatchCreateContentDialog", () => {
     actions.readCatalogBatchContextAction.mockResolvedValue({ ok: false, kind: "invalid_input", code: "items_required" });
     renderDialog();
     await screen.findByRole("alert");
-    expect(screen.getByRole("button", { name: "创建内容" }).hasAttribute("disabled")).toBe(true);
+    expect(screen.getByRole("button", { name: "纳入书目" }).hasAttribute("disabled")).toBe(true);
     expect(actions.applyContentCreationBatchAction).not.toHaveBeenCalled();
   });
 });

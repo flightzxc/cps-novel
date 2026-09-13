@@ -74,10 +74,6 @@ export async function readCatalogBatchContext(db: PrismaClient, selection: Norma
       } } } },
     }));
   }
-  const templates = await db.articleTemplate.findMany({
-    where: { locale: { in: [...localeCounts.keys()].filter((x) => x !== UNKNOWN_LOCALE) }, status: "active", deletedAt: null, applicableArticleType: "novel_article" },
-    orderBy: [{ locale: "asc" }, { version: "desc" }], select: { locale: true, templateKey: true, templateName: true },
-  });
   return {
     submittedCount,
     channelGroups: channels.map((row) => ({
@@ -89,7 +85,7 @@ export async function readCatalogBatchContext(db: PrismaClient, selection: Norma
     })),
     locales: [...localeCounts].sort(([a], [b]) => a.localeCompare(b)).map(([locale, eligibleCount]) => ({
       locale, eligibleCount,
-      templates: templates.filter((t) => t.locale === locale).map((t) => ({ key: t.templateKey, name: t.templateName })),
+      templates: [],
     })),
   };
 }

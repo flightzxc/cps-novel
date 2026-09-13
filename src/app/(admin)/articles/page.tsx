@@ -215,29 +215,20 @@ export default async function ArticlesPage({
             </Link>
           )}
           {/*
-            C-22 (item #3/#4, ADAPT): CPS's header carries "生成文章"/"批量
-            生成" entry buttons that open a drama+template picker on this same
-            page. cps-novel has no such picker here — a text-strong-bound
-            Article is created by "从渠道来源条目建书目并顺带建落地页", whose
-            only entry point is `/catalog-sync` (`../catalog-sync/page.tsx`).
-            Both buttons point at that one route (there is no distinct
-            single-vs-batch sub-route to split them across — batch creation
-            is a dialog on the same page, see that page's own `_components/
-            batch-create-content-dialog.tsx`), matching the doc's "均指向目录
-            同步" instruction literally rather than inventing a query-param
-            mode this page does not read.
+            创建文章已从 catalog-sync 拆出：纳入书目不再选模板、不建稿。
+            这里的「创建文章 / 批量创建文章」与列表里的「批量再生成」不是同一件事。
           */}
           <Link
-            href="/catalog-sync"
+            href="/articles/generate"
             className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
           >
-            新建文章
+            创建文章
           </Link>
           <Link
-            href="/catalog-sync"
+            href="/articles/batch-generate"
             className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
           >
-            批量新建
+            批量创建文章
           </Link>
           {/*
             C-30B (施工工单_C30_换小说_移植CPS换租客_2026-09-08.md §4B.4):
