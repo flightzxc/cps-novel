@@ -11,7 +11,7 @@
 1. **A** `ef88f9f` 纠正耦合协议：新任务类型 / DTO，旧 `content_create` 识别后终端失败
 2. **B** `68eaf68` 拆出 `materializeNovelFromSourceItem` 与 `generateArticleFromNovel`
 3. **C** `0965fcb` worker / catalog-sync「纳入书目」/ `/articles/generate*` 运营入口
-4. **D** 写入守卫、T01–T27 矩阵、切换/回退、本文件
+4. **D** `d910923` 写入守卫、T01–T27 矩阵、切换/回退、本文件
 
 ## 本轮策略说明
 
