@@ -281,6 +281,30 @@ describe("/tasks/[id] · 页面区块", () => {
     const link = screen.getByText("查看子任务") as HTMLAnchorElement;
     expect(link.getAttribute("href")).toContain("family=generic");
   });
+
+  it("文章批量父任务显示 article.generate.v1 子任务入口，且不提供整父重试", async () => {
+    getAdminTaskDetail.mockResolvedValue(detail({
+      taskType: "article.generate.batch.v1",
+      status: "processing",
+      catalogBatch: {
+        phase: "executing",
+        submittedCount: 400,
+        ineligibleCount: null,
+        alreadyLinkedCount: null,
+        blockedCount: 0,
+        blockedReasonCounts: {},
+        childTasks: [{ taskId: "20000000-0000-4000-8000-000000000001", taskType: "article.generate.v1", status: "pending" }],
+      },
+    }));
+    listAdminTaskItems.mockResolvedValue(itemsResult([]));
+
+    render(await renderPage());
+
+    expect(screen.queryByTestId("retry-failed-open")).toBeNull();
+    expect(screen.getByText("article.generate.v1 · 待处理")).toBeTruthy();
+    const link = screen.getByText("查看子任务") as HTMLAnchorElement;
+    expect(link.getAttribute("href")).toBe("/tasks/20000000-0000-4000-8000-000000000001?family=generic");
+  });
 });
 
 describe("/tasks/[id] · catalog_scan 单位与派生审计字段", () => {

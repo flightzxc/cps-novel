@@ -1,5 +1,6 @@
 import type { PrismaClient } from "@prisma/client";
 import { deriveCatalogBatchPhase, type CatalogBatchPhase } from "@/domain/catalog-batch";
+import { isParentBatchTaskType } from "@/lib/tasks";
 
 import { requireHighRiskAdminCapability, type AdminAuthContext } from "@/lib/auth";
 
@@ -151,6 +152,7 @@ function toDto(
   items: readonly TaskProgressItemError[],
   currentItem?: TaskProgressCurrentItem,
   bookCounts?: CatalogBookCountsDto,
+  childStatuses?: readonly string[],
 ): TaskProgressDto {
   const pagesProcessed = task.successCount + task.failedCount + task.skippedCount;
   const pagesPercent = task.totalCount > 0 ? Math.round((pagesProcessed / task.totalCount) * 100) : 0;
@@ -162,8 +164,12 @@ function toDto(
   const percent = bookCounts ? bookCounts.percent : pagesPercent;
   const result = task.result && typeof task.result === "object" && !Array.isArray(task.result)
     ? task.result as Record<string, unknown> : {};
-  const catalogBatch = task.taskType === "batch.materialize.v1" ? {
-    phase: deriveCatalogBatchPhase({ parentStatus: task.status, enumerationStatus: result.enumerationStatus }),
+  const catalogBatch = isParentBatchTaskType(task.taskType) ? {
+    phase: deriveCatalogBatchPhase({
+      parentStatus: task.status,
+      enumerationStatus: result.enumerationStatus,
+      childStatuses,
+    }),
   } : undefined;
   return Object.freeze({
     taskType: task.taskType,
@@ -229,7 +235,8 @@ async function loadGenericProgress(db: PrismaClient, taskId: string): Promise<Ta
     },
   });
   if (!task) return null;
-  if (task.taskType === "batch.materialize.v1") {
+  let childStatuses: string[] | undefined;
+  if (isParentBatchTaskType(task.taskType)) {
     const [sum, states] = await Promise.all([
       db.genericTask.aggregate({ where: { parentTaskId: taskId, originTaskId: null },
         _sum: { totalCount: true, successCount: true, failedCount: true, skippedCount: true } }),
@@ -241,6 +248,7 @@ async function loadGenericProgress(db: PrismaClient, taskId: string): Promise<Ta
     const failed = states.some((s) => s.status === "failed" || s.status === "completed_with_errors");
     const blocked = result.blockedReasonCounts && typeof result.blockedReasonCounts === "object"
       && Object.values(result.blockedReasonCounts as Record<string, unknown>).some((v) => typeof v === "number" && v > 0);
+    childStatuses = states.flatMap((state) => Array.from({ length: state._count._all }, () => state.status));
     task = { ...task,
       status: task.status === "disabled" ? "disabled"
         : result.enumerationStatus === "expired" ? "completed_with_errors"
@@ -284,7 +292,7 @@ async function loadGenericProgress(db: PrismaClient, taskId: string): Promise<Ta
       message: genericCurrentItemMessage(processingItem.targetType, processingItem.targetId, bookCounts),
     })
     : undefined;
-  return toDto(task, items, currentItem, bookCounts);
+  return toDto(task, items, currentItem, bookCounts, childStatuses);
 }
 
 async function loadChannelSyncProgress(db: PrismaClient, taskId: string): Promise<TaskProgressDto | null> {

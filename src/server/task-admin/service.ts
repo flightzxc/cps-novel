@@ -8,8 +8,9 @@ import {
 } from "@/lib/auth";
 import { chunkIds } from "@/lib/db/chunked-id-lookup";
 import { isUniqueConstraintViolation, withDbRetry } from "@/lib/db/db-retry";
-import { MOBOREADER_TASK_TYPES, type TaskFamily } from "@/lib/tasks";
+import { CATALOG_BATCH_TASK_TYPE, MOBOREADER_TASK_TYPES, PARENT_BATCH_TASK_TYPES, isParentBatchTaskType, type TaskFamily } from "@/lib/tasks";
 import { TASK_ITEM_STATUSES, TASK_STATUSES } from "@/domain/database-statuses";
+import { deriveCatalogBatchPhase } from "@/domain/catalog-batch";
 import {
   requireFreshAdminServiceMutation,
   type AdminServiceAuthorization,
@@ -710,18 +711,23 @@ function taskSummary(row: TaskListRow, bookCounts?: CatalogBookCountsDto): TaskS
     ? Object.fromEntries(Object.entries(resultObject.blockedReasonCounts as Record<string, unknown>)
       .filter((entry): entry is [string, number] => allowedBlockedReasons.has(entry[0]) && typeof entry[1] === "number" && entry[1] > 0))
     : {};
-  const catalogBatch = row.task_type === "batch.materialize.v1" ? {
-    phase: (row.status === "disabled" ? "disabled"
-      : resultObject?.enumerationStatus === "expired" ? "expired"
-      : resultObject?.enumerationStatus !== "completed" ? (row.status === "failed" || row.status === "completed_with_errors" ? "failed" : row.status === "processing" ? "materializing" : "queued")
-      : row.status === "processing" ? "executing"
-      : row.status === "completed_with_errors" ? "completed_with_errors"
-      : row.status === "failed" ? "failed" : "completed") as NonNullable<TaskSummaryDto["catalogBatch"]>["phase"],
+  const isCatalogMaterialize = row.task_type === CATALOG_BATCH_TASK_TYPE;
+  const catalogBatch = isParentBatchTaskType(row.task_type) ? {
+    phase: deriveCatalogBatchPhase({
+      parentStatus: row.status,
+      enumerationStatus: resultObject?.enumerationStatus,
+    }),
     submittedCount: typeof resultObject?.submittedCount === "number" ? resultObject.submittedCount : null,
-    ineligibleCount: typeof resultObject?.ineligibleCount === "number" ? resultObject.ineligibleCount : null,
-    alreadyLinkedCount: typeof resultObject?.alreadyLinkedCount === "number" ? resultObject.alreadyLinkedCount : null,
-    blockedCount: Object.values(blockedReasonCounts).reduce((sum, count) => sum + count, 0),
-    blockedReasonCounts,
+    ineligibleCount: isCatalogMaterialize && typeof resultObject?.ineligibleCount === "number"
+      ? resultObject.ineligibleCount
+      : null,
+    alreadyLinkedCount: isCatalogMaterialize && typeof resultObject?.alreadyLinkedCount === "number"
+      ? resultObject.alreadyLinkedCount
+      : null,
+    blockedCount: isCatalogMaterialize
+      ? Object.values(blockedReasonCounts).reduce((sum, count) => sum + count, 0)
+      : 0,
+    blockedReasonCounts: isCatalogMaterialize ? blockedReasonCounts : {},
   } : undefined;
   return Object.freeze({
     family: row.family,
@@ -749,6 +755,9 @@ export async function listAdminTasks(
   const family = optionalOneOf(input.family, TASK_FAMILIES);
   const status = optionalOneOf(input.status, TASK_STATUSES);
   const take = limit(input.limit);
+  const parentBatchTypes = Prisma.join(
+    PARENT_BATCH_TASK_TYPES.map((taskType) => Prisma.sql`${taskType}`),
+  );
   const rows = await db.$queryRaw<TaskListRow[]>(Prisma.sql`
     SELECT * FROM (
       SELECT 'channel_sync'::text AS family, id AS task_id, task_type, status,
@@ -763,7 +772,7 @@ export async function listAdminTasks(
         has_error, created_at, result, params
       FROM (
         SELECT g.id AS task_id, g.task_type,
-          CASE WHEN g.task_type <> 'batch.materialize.v1' THEN g.status
+          CASE WHEN g.task_type NOT IN (${parentBatchTypes}) THEN g.status
             WHEN g.status = 'disabled' THEN 'disabled'
             WHEN g.result->>'enumerationStatus' = 'expired' THEN 'completed_with_errors'
             WHEN g.result->>'enumerationStatus' IS DISTINCT FROM 'completed' THEN g.status
@@ -775,11 +784,11 @@ export async function listAdminTasks(
               WHERE jsonb_typeof(blocked.value) = 'number' AND (blocked.value #>> '{}')::numeric > 0
             ) THEN 'completed_with_errors'
             ELSE 'completed' END AS status,
-          CASE WHEN g.task_type = 'batch.materialize.v1' AND g.result->>'enumerationStatus' = 'completed'
+          CASE WHEN g.task_type IN (${parentBatchTypes}) AND g.result->>'enumerationStatus' = 'completed'
             THEN COALESCE(c.total_count, 0) ELSE g.total_count END::int AS total_count,
-          CASE WHEN g.task_type = 'batch.materialize.v1' THEN COALESCE(c.success_count, 0) ELSE g.success_count END::int AS success_count,
-          CASE WHEN g.task_type = 'batch.materialize.v1' THEN COALESCE(c.failed_count, 0) ELSE g.failed_count END::int AS failed_count,
-          CASE WHEN g.task_type = 'batch.materialize.v1' THEN COALESCE(c.skipped_count, 0) ELSE g.skipped_count END::int AS skipped_count,
+          CASE WHEN g.task_type IN (${parentBatchTypes}) THEN COALESCE(c.success_count, 0) ELSE g.success_count END::int AS success_count,
+          CASE WHEN g.task_type IN (${parentBatchTypes}) THEN COALESCE(c.failed_count, 0) ELSE g.failed_count END::int AS failed_count,
+          CASE WHEN g.task_type IN (${parentBatchTypes}) THEN COALESCE(c.skipped_count, 0) ELSE g.skipped_count END::int AS skipped_count,
           (g.error IS NOT NULL OR COALESCE(c.failed_tasks, 0) > 0
             OR COALESCE(g.result->>'enumerationStatus' = 'expired', false)
             OR EXISTS (
@@ -854,7 +863,7 @@ async function deriveOriginStopReason(db: PrismaClient, taskId: string): Promise
 }
 
 async function deriveCatalogBatchParentRow(db: PrismaClient, row: TaskListRow): Promise<TaskListRow> {
-  if (row.task_type !== "batch.materialize.v1") return row;
+  if (!isParentBatchTaskType(row.task_type)) return row;
   const children = await db.genericTask.aggregate({ where: { parentTaskId: row.task_id, originTaskId: null },
     _sum: { totalCount: true, successCount: true, failedCount: true, skippedCount: true } });
   const states = await db.genericTask.groupBy({ by: ["status"], where: { parentTaskId: row.task_id, originTaskId: null }, _count: { _all: true } });
@@ -911,7 +920,7 @@ export async function getAdminTaskDetail(
   const bookCounts = isCatalogScan
     ? await loadCatalogBookCounts(db, { taskId, taskType: row.task_type, result: row.result, params: row.params })
     : undefined;
-  const childTasks = row.task_type === "batch.materialize.v1" ? await db.genericTask.findMany({
+  const childTasks = isParentBatchTaskType(row.task_type) ? await db.genericTask.findMany({
     where: { parentTaskId: taskId, originTaskId: null }, orderBy: { createdAt: "asc" },
     select: { id: true, taskType: true, status: true },
   }) : [];
@@ -1361,7 +1370,7 @@ export async function retryFailedTask(
         await lockMutationRequest(tx, input.requestId);
         const parent = await lockParent(tx, family, taskId);
         if (!parent) throw new TaskAdminError("task_admin_not_found", 404);
-        if (family === "generic" && parent.task_type === "batch.materialize.v1") {
+        if (family === "generic" && isParentBatchTaskType(parent.task_type)) {
           throw new TaskAdminError("task_admin_state_conflict", 409);
         }
 

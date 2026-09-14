@@ -15,8 +15,10 @@ import {
   ArticleGenerateSelectionError,
   normalizeArticleGenerateSelection,
   type ArticleGenerateSelection,
+  type ArticleTemplateOption,
   type NovelGeneratePage,
 } from "@/domain/article-generation";
+import { listActiveArticleTemplateOptionsForLocales } from "@/server/article-templates";
 import {
   ArticleGenerateInputError,
   enqueueArticleGenerateBatch,
@@ -695,7 +697,7 @@ export async function listArticleGenerateCandidatesAction(input: {
   locale?: string;
   page?: number;
 }): Promise<
-  | { ok: true; data: NovelGeneratePage }
+  | { ok: true; data: NovelGeneratePage; templates: readonly ArticleTemplateOption[] }
   | { ok: false; kind: "invalid_input" | "access_denied"; code: string }
 > {
   try {
@@ -707,7 +709,12 @@ export async function listArticleGenerateCandidatesAction(input: {
       pageSize: 50,
       eligibleOnly: true,
     });
-    return { ok: true, data };
+    const locales = Array.from(new Set(data.rows.map((row) => row.locale)));
+    const templates = locales.length > 0
+      ? (await listActiveArticleTemplateOptionsForLocales(prisma, locales, "novel_article"))
+        .map(({ templateKey, locale, version }) => ({ templateKey, locale, version }))
+      : [];
+    return { ok: true, data, templates };
   } catch (error) {
     if (error instanceof ArticleGenerateSelectionError) return { ok: false, kind: "invalid_input", code: error.code };
     return { ok: false, kind: "access_denied", code: writeErrorCode(error, "article_generate_list_denied") };
@@ -719,7 +726,10 @@ export async function enqueueArticleGenerateBatchAction(input: {
   selection?: ArticleGenerateSelection;
   requestId: string;
   templateKeysByLocale?: Readonly<Record<string, string>>;
-}): Promise<{ ok: true; taskId: string } | { ok: false; kind: "invalid_input" | "access_denied"; code: string }> {
+}): Promise<
+  | { ok: true; taskId: string; duplicate: boolean }
+  | { ok: false; kind: "invalid_input" | "access_denied"; code: string }
+> {
   try {
     const auth = await authorization("admin.article.generate_batch", input.requestId);
     const guards = guardDependencies();
@@ -746,7 +756,7 @@ export async function enqueueArticleGenerateBatchAction(input: {
           requestId: input.requestId,
           ...(templates ? { templateKeysByLocale: templates } : {}),
         });
-    return { ok: true, taskId: result.taskId };
+    return { ok: true, taskId: result.taskId, duplicate: result.duplicate };
   } catch (error) {
     if (error instanceof ArticleGenerateInputError || error instanceof ArticleGenerateSelectionError) {
       return { ok: false, kind: "invalid_input", code: error.code };

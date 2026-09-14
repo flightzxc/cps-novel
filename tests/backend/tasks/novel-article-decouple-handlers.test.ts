@@ -7,6 +7,9 @@ import {
   LEGACY_CONTENT_CREATE_RETIRED_MESSAGE,
 } from "@/lib/tasks/legacy-content-create";
 
+import { ARTICLE_GENERATE_BATCH_TASK_TYPE, ARTICLE_GENERATE_LEAF_MAX, ARTICLE_GENERATE_TASK_TYPE } from "@/lib/tasks/article-generate";
+
+import { createArticleGenerateBatchHandler } from "../../../worker/handlers/article-generate-batch";
 import { createCatalogBatchHandler } from "../../../worker/handlers/catalog-batch";
 import { createContentCreateHandler } from "../../../worker/handlers/content-create";
 import { createNovelMaterializeHandler } from "../../../worker/handlers/novel-materialize";
@@ -78,6 +81,61 @@ describe("catalog-batch parent content_create (T22)", () => {
       error: { code: LEGACY_CONTENT_CREATE_RETIRED_CODE },
     });
     expect(updates).toHaveLength(1);
+  });
+});
+
+describe("article.generate.batch.v1 handler (EXT-06)", () => {
+  it("splits 201 eligible novels into leaves of at most 200", async () => {
+    const novels = Array.from({ length: 201 }, (_, index) => ({
+      id: `00000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`,
+    }));
+    const created: Array<{ data: { taskType: string; parentTaskId?: string; items: { create: unknown[] } } }> = [];
+    const updates: Array<{ data: { result?: { submittedCount?: number; childTaskCount?: number } } }> = [];
+    const handler = createArticleGenerateBatchHandler({} as PrismaClient);
+    const prepared = await handler(
+      lease(ARTICLE_GENERATE_BATCH_TASK_TYPE, {
+        filter: { search: "old" },
+        actorId: "admin-1",
+        requestId: "req-parent",
+        submittedAt: new Date().toISOString(),
+        expiresAt: new Date(Date.now() + 60_000).toISOString(),
+      }),
+    );
+    expect(prepared.status).toBe("success");
+    if (prepared.status !== "success" || !("protectedWrite" in prepared) || !prepared.protectedWrite) {
+      throw new Error("expected protectedWrite");
+    }
+    const written = await prepared.protectedWrite({
+      novel: {
+        findMany: async (args: { take: number; where?: { id?: { gt?: string } } }) => {
+          const after = args.where?.id?.gt;
+          const start = after ? novels.findIndex((row) => row.id === after) + 1 : 0;
+          return novels.slice(start, start + args.take);
+        },
+      },
+      genericTask: {
+        create: async (args: { data: { taskType: string; parentTaskId?: string; items: { create: unknown[] } } }) => {
+          created.push(args);
+        },
+        update: async (args: { data: { result?: { submittedCount?: number; childTaskCount?: number } } }) => {
+          updates.push(args);
+        },
+      },
+      operationAudit: { create: async () => ({}) },
+    } as never);
+
+    expect(written).toMatchObject({
+      status: "success",
+      result: { enumerationStatus: "completed", submittedCount: 201, childTaskCount: 2 },
+    });
+    expect(created).toHaveLength(2);
+    expect(created.every((row) => row.data.taskType === ARTICLE_GENERATE_TASK_TYPE)).toBe(true);
+    expect(created.every((row) => row.data.parentTaskId === "task-1")).toBe(true);
+    expect(created[0]!.data.items.create).toHaveLength(ARTICLE_GENERATE_LEAF_MAX);
+    expect(created[1]!.data.items.create).toHaveLength(1);
+    expect(created[0]!.data.items.create.length).toBeLessThanOrEqual(ARTICLE_GENERATE_LEAF_MAX);
+    expect(created[1]!.data.items.create.length).toBeLessThanOrEqual(ARTICLE_GENERATE_LEAF_MAX);
+    expect(updates.at(-1)?.data.result).toMatchObject({ submittedCount: 201, childTaskCount: 2 });
   });
 });
 

@@ -20,15 +20,9 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { generateArticleFromNovel } from "@/server/content-creation/generate";
 import { materializeNovelFromSourceItem } from "@/server/content-creation/service";
 
-const enabled = process.env.NOVEL_ARTICLE_DECOUPLE_DATABASE_TEST === "1";
+import { assertRoleClientsShareIsolatedDatabase } from "../../backend/content-creation/novel-article-decouple-database-guard";
 
-const FORBIDDEN_DATABASE_NAMES = [
-  "cps_novel_x8",
-  "cps_novel_uat",
-  "cps_novel_prod",
-  "cps_novel_catalog_batch_",
-  "p1_06",
-];
+const enabled = process.env.NOVEL_ARTICLE_DECOUPLE_DATABASE_TEST === "1";
 
 type RoleClients = {
   owner: PrismaClient;
@@ -42,19 +36,19 @@ function requiredUrl(name: "P1_06_OWNER_DATABASE_URL" | "P1_06_WEB_DATABASE_URL"
   return value;
 }
 
-async function assertIsolatedDecoupleDatabase(db: PrismaClient): Promise<void> {
+async function currentDatabase(db: PrismaClient): Promise<{ name: string; version: string }> {
   const [database] = await db.$queryRaw<Array<{ name: string; version: string }>>`
     SELECT current_database() AS name, current_setting('server_version') AS version
   `;
-  if (!database.name.startsWith("cps_novel_article_decouple_")) {
-    throw new Error(`Refusing novel-article-decouple setup against ${database.name}`);
-  }
-  if (FORBIDDEN_DATABASE_NAMES.some((name) => database.name.includes(name.replace(/_$/, "")))) {
-    throw new Error(`Refusing shared/non-disposable database ${database.name}`);
-  }
+  return database;
+}
+
+async function assertIsolatedDecoupleDatabase(db: PrismaClient): Promise<string> {
+  const database = await currentDatabase(db);
   if (!database.version.startsWith("16.")) {
     throw new Error(`PostgreSQL 16 required, got ${database.version}`);
   }
+  return database.name;
 }
 
 async function currentUser(db: PrismaClient): Promise<string> {
@@ -80,7 +74,12 @@ const ACTOR = { type: "admin" as const, adminId: "decouple-pg-admin" };
 describe.skipIf(!enabled)("Novel/Article decoupling isolated PG", () => {
   beforeAll(async () => {
     if (!owner || !web || !worker) throw new Error("role clients were not created");
-    await assertIsolatedDecoupleDatabase(owner);
+    const [ownerDatabase, webDatabase, workerDatabase] = await Promise.all([
+      assertIsolatedDecoupleDatabase(owner),
+      assertIsolatedDecoupleDatabase(web),
+      assertIsolatedDecoupleDatabase(worker),
+    ]);
+    assertRoleClientsShareIsolatedDatabase({ ownerDatabase, webDatabase, workerDatabase });
     const [webUser, workerUser, ownerUser] = await Promise.all([
       currentUser(web),
       currentUser(worker),

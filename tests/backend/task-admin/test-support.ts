@@ -99,6 +99,7 @@ export type FakeItem = {
 type FakeParent = {
   id: string;
   status: string;
+  taskType?: string;
   channelAccountId: string | null;
   channelAppId: string | null;
   totalCount: number;
@@ -247,6 +248,7 @@ export class TaskAdminFakeDb {
             return [{
               id: row.id,
               status: row.status,
+              task_type: row.taskType ?? "promo_link.claim",
               channel_account_id: row.channelAccountId,
               channel_app_id: row.channelAppId,
             }];

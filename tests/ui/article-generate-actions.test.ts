@@ -52,6 +52,10 @@ const articleGenerate = vi.hoisted(() => {
   };
 });
 
+const articleTemplates = vi.hoisted(() => ({
+  listActiveArticleTemplateOptionsForLocales: vi.fn(),
+}));
+
 const cache = vi.hoisted(() => ({ revalidatePath: vi.fn() }));
 
 vi.mock("next/headers", () => ({
@@ -63,6 +67,7 @@ vi.mock("next/cache", () => cache);
 vi.mock("@/server/auth/guards", () => guards);
 vi.mock("@/server/content-creation", () => contentCreation);
 vi.mock("@/lib/tasks/article-generate", () => articleGenerate);
+vi.mock("@/server/article-templates", () => articleTemplates);
 vi.mock("@/server/articles", () => ({
   ArticleConflictError: class extends Error {},
   regenerateArticle: vi.fn(),
@@ -107,6 +112,8 @@ beforeEach(() => {
   contentCreation.listNovelsForArticleGenerate.mockReset();
   articleGenerate.enqueueArticleGenerateBatch.mockReset();
   articleGenerate.enqueueArticleGenerateParentBatch.mockReset();
+  articleTemplates.listActiveArticleTemplateOptionsForLocales.mockReset();
+  articleTemplates.listActiveArticleTemplateOptionsForLocales.mockResolvedValue([]);
   cache.revalidatePath.mockReset();
   harness.origin = "https://admin.example.com";
   harness.sessionToken = "session-token-abc";
@@ -158,7 +165,7 @@ describe("article generate actions reuse frozen capabilities", () => {
   it("batch enqueue uses content:publish and keeps novel ids (never source-item ids)", async () => {
     guards.requireAdminActionAccess.mockResolvedValue(granted());
     guards.requireFreshAdminServiceMutation.mockResolvedValue(CONTEXT);
-    articleGenerate.enqueueArticleGenerateBatch.mockResolvedValue({ taskId: "task-1" });
+    articleGenerate.enqueueArticleGenerateBatch.mockResolvedValue({ taskId: "task-1", duplicate: false });
 
     const result = await enqueueArticleGenerateBatchAction({
       novelIds: ["11111111-1111-4111-8111-111111111111"],
@@ -175,13 +182,13 @@ describe("article generate actions reuse frozen capabilities", () => {
         actorId: "admin-1",
       }),
     );
-    expect(result).toEqual({ ok: true, taskId: "task-1" });
+    expect(result).toEqual({ ok: true, taskId: "task-1", duplicate: false });
   });
 
   it("all_filtered enqueues a parent filter snapshot, never a novel id list", async () => {
     guards.requireAdminActionAccess.mockResolvedValue(granted());
     guards.requireFreshAdminServiceMutation.mockResolvedValue(CONTEXT);
-    articleGenerate.enqueueArticleGenerateParentBatch.mockResolvedValue({ taskId: "parent-1" });
+    articleGenerate.enqueueArticleGenerateParentBatch.mockResolvedValue({ taskId: "parent-1", duplicate: false });
 
     const result = await enqueueArticleGenerateBatchAction({
       selection: { scope: "all_filtered", filter: { search: "old", locale: "en" } },
@@ -196,7 +203,7 @@ describe("article generate actions reuse frozen capabilities", () => {
       }),
     );
     expect(articleGenerate.enqueueArticleGenerateBatch).not.toHaveBeenCalled();
-    expect(result).toEqual({ ok: true, taskId: "parent-1" });
+    expect(result).toEqual({ ok: true, taskId: "parent-1", duplicate: false });
     expect(JSON.stringify(result)).not.toMatch(/novelIds/);
   });
 
@@ -218,7 +225,33 @@ describe("article generate actions reuse frozen capabilities", () => {
       { __brand: "prisma-stub" },
       expect.objectContaining({ search: "old", locale: "en", page: 5, eligibleOnly: true, pageSize: 50 }),
     );
-    expect(result).toEqual({ ok: true, data: page });
+    expect(result).toEqual({ ok: true, data: page, templates: [] });
+    expect(articleTemplates.listActiveArticleTemplateOptionsForLocales).not.toHaveBeenCalled();
     expect(guards.requireFreshAdminServiceMutation).not.toHaveBeenCalled();
+  });
+
+  it("candidate list fetches templates only for locales on the current page", async () => {
+    guards.requireAdminActionAccess.mockResolvedValue({ context: CONTEXT });
+    contentCreation.listNovelsForArticleGenerate.mockResolvedValue({
+      rows: [{ novelId: "n1", locale: "ja", title: "J", businessId: "b", hasLiveArticle: false, promoReady: true, promoOutcome: "ready" }],
+      total: 1,
+      page: 2,
+      pageSize: 50,
+    });
+    articleTemplates.listActiveArticleTemplateOptionsForLocales.mockResolvedValue([
+      { id: "tpl-1", templateKey: "ja-body", locale: "ja", version: 3 },
+    ]);
+
+    const result = await listArticleGenerateCandidatesAction({ requestId: "req-ja", page: 2 });
+    expect(articleTemplates.listActiveArticleTemplateOptionsForLocales).toHaveBeenCalledWith(
+      { __brand: "prisma-stub" },
+      ["ja"],
+      "novel_article",
+    );
+    expect(result).toEqual({
+      ok: true,
+      data: expect.objectContaining({ page: 2 }),
+      templates: [{ templateKey: "ja-body", locale: "ja", version: 3 }],
+    });
   });
 });

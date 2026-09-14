@@ -49,6 +49,12 @@ export type NovelGeneratePage = Readonly<{
   pageSize: number;
 }>;
 
+export type ArticleTemplateOption = Readonly<{
+  templateKey: string;
+  locale: string;
+  version: number;
+}>;
+
 export type PinnedNovelResult =
   | Readonly<{ status: "absent" }>
   | Readonly<{ status: "invalid" }>
