@@ -84,6 +84,34 @@ describe("catalog-batch parent content_create (T22)", () => {
   });
 });
 
+describe("catalog-batch locale policy payload", () => {
+  const payload = {
+    operation: "novel_materialize",
+    selection: { scope: "explicit_ids", ids: [UUID] },
+    actorId: "admin-1",
+    requestId: "req-1",
+    submittedAt: new Date().toISOString(),
+    expiresAt: new Date(Date.now() + 60_000).toISOString(),
+  } as const;
+
+  it.each([0, 3, "2", null])("rejects invalid policy version %p", async (enumEligibilityPolicyVersion) => {
+    await expect(createCatalogBatchHandler({} as PrismaClient)(
+      lease(CATALOG_BATCH_TASK_TYPE, { ...payload, enumEligibilityPolicyVersion }),
+    )).rejects.toThrow("catalog_batch_payload_invalid");
+  });
+
+  it("rejects v2 on a non-materialization operation", async () => {
+    await expect(createCatalogBatchHandler({} as PrismaClient)(
+      lease(CATALOG_BATCH_TASK_TYPE, {
+        ...payload,
+        operation: "promo_claim",
+        channelAccounts: {},
+        enumEligibilityPolicyVersion: 2,
+      }),
+    )).rejects.toThrow("catalog_batch_payload_invalid");
+  });
+});
+
 describe("article.generate.batch.v1 handler (EXT-06)", () => {
   it("splits 201 eligible novels into leaves of at most 200", async () => {
     const novels = Array.from({ length: 201 }, (_, index) => ({

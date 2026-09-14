@@ -1,8 +1,9 @@
 import { Prisma } from "@prisma/client";
 
 import { isHealthySlug, textToSlug } from "@/lib/slug/text-to-slug";
-import { SITE_LOCALES, type SiteLocale } from "@/lib/locale/locale-canonical";
+import type { SiteLocale } from "@/lib/locale/locale-canonical";
 import { isUniqueConstraintViolation } from "@/lib/db/db-retry";
+import { evaluateNovelMaterializationLocale } from "@/domain/novel-materialization-locale";
 
 import { ContentCreationInputError, type CreateContentActor } from "./types";
 
@@ -22,19 +23,20 @@ export function requireUuid(value: unknown, code: "invalid_novel_source_item_id"
 }
 
 export function deriveLocale(sourceLocale: string | null): SiteLocale {
-  if (!sourceLocale?.trim()) {
+  const eligibility = evaluateNovelMaterializationLocale(sourceLocale);
+  if (!eligibility.eligible && eligibility.code === "missing_locale") {
     throw new ContentCreationInputError(
       "missing_locale",
       "NovelSourceItem.sourceLocale is NULL/blank — cannot derive a content locale without human/vendor-code correction upstream",
     );
   }
-  if (!(SITE_LOCALES as readonly string[]).includes(sourceLocale)) {
+  if (!eligibility.eligible) {
     throw new ContentCreationInputError(
       "unsupported_locale",
       `NovelSourceItem.sourceLocale "${sourceLocale}" resolved to a locale that is not a registered SiteLocale`,
     );
   }
-  return sourceLocale as SiteLocale;
+  return eligibility.locale;
 }
 
 export function requireActor(actor: CreateContentActor): void {

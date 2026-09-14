@@ -132,8 +132,216 @@ describe.skipIf(!enabled).sequential("catalog batch on disposable PostgreSQL 16.
     const parent = await owner.genericTask.findUniqueOrThrow({ where: { id: first.taskId }, include: { items: true, childTasks: true } });
     expect(parent.items).toHaveLength(1);
     expect(parent.childTasks).toHaveLength(0);
-    expect((parent.params as { selection: unknown }).selection).toEqual(selection);
+    expect(parent.params).toMatchObject({ selection, enumEligibilityPolicyVersion: 2 });
+    expect(parent.items[0]!.payload).toMatchObject({ selection, enumEligibilityPolicyVersion: 2 });
+    expect((parent.params as { inputFingerprint: string }).inputFingerprint).toBe(
+      createHash("sha256").update(JSON.stringify({
+        operation: "novel_materialize",
+        selection,
+        actorId: foundation.actorId,
+        requestId,
+      })).digest("hex"),
+    );
     expect(JSON.stringify((parent.params as { selection: unknown }).selection)).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/i);
+    expect(await owner.operationAudit.findFirstOrThrow({ where: {
+      taskId: first.taskId,
+      action: "catalog_batch.queued",
+    } })).toMatchObject({ afterSnapshot: expect.objectContaining({ enumEligibilityPolicyVersion: 2 }) });
+  });
+
+  it.each([
+    { enumEligibilityPolicyVersion: 1 },
+    { enumEligibilityPolicyVersion: 2 },
+    { enumEligibilityPolicyVersion: 99, unknownMetadata: "must-not-affect-fingerprint" },
+  ])("ignores runtime-only enqueue metadata %# when selecting policy and fingerprinting", async (metadata) => {
+    const selection = normalizeCatalogSelection({ scope: "explicit_ids", ids: [randomUUID()] });
+    const requestId = randomUUID();
+    const businessInput = {
+      operation: "novel_materialize" as const,
+      selection,
+      actorId: foundation.actorId,
+      requestId,
+    };
+    const first = await enqueueCatalogBatch(owner, { ...businessInput, ...metadata } as typeof businessInput);
+    const replay = await enqueueCatalogBatch(owner, businessInput);
+    expect(replay).toMatchObject({ taskId: first.taskId, duplicate: true });
+
+    const parent = await owner.genericTask.findUniqueOrThrow({ where: { id: first.taskId } });
+    expect(parent.params).toMatchObject({ enumEligibilityPolicyVersion: 2 });
+    expect(parent.params).not.toHaveProperty("unknownMetadata");
+    expect((parent.params as { inputFingerprint: string }).inputFingerprint).toBe(
+      createHash("sha256").update(JSON.stringify(businessInput)).digest("hex"),
+    );
+  });
+
+  it("v2 blocks known locale failures before child creation and preserves mutually exclusive counts", async () => {
+    const channelAppId = foundation.channels[0]!.channelAppId;
+    const [eligibleId] = await seedCatalogRows(owner, { channelAppId, count: 1, prefix: "locale-eligible" });
+    const [missingId] = await seedCatalogRows(owner, { channelAppId, count: 1, prefix: "locale-missing", sourceLocale: null });
+    const [unsupportedId] = await seedCatalogRows(owner, { channelAppId, count: 1, prefix: "locale-unsupported", sourceLocale: "it" });
+    const [ineligibleId] = await seedCatalogRows(owner, {
+      channelAppId, count: 1, prefix: "locale-ineligible", status: "ignored", sourceLocale: "it",
+    });
+    const [alreadyLinkedId] = await seedCatalogRows(owner, {
+      channelAppId, count: 1, prefix: "locale-linked", sourceLocale: null,
+    });
+    await linkSources([alreadyLinkedId!]);
+    const missingSelectionId = randomUUID();
+    const queued = await enqueueContent(normalizeCatalogSelection({
+      scope: "explicit_ids",
+      ids: [eligibleId!, missingId!, unsupportedId!, ineligibleId!, alreadyLinkedId!, missingSelectionId],
+    }));
+
+    await materialize(queued.taskId);
+
+    const parent = await owner.genericTask.findUniqueOrThrow({ where: { id: queued.taskId } });
+    const children = await owner.genericTask.findMany({
+      where: { parentTaskId: queued.taskId },
+      include: { items: true },
+    });
+    expect(children).toHaveLength(1);
+    expect(children[0]!.items.map((item) => item.targetId)).toEqual([eligibleId]);
+    expect(parent.result).toMatchObject({
+      enumEligibilityPolicyVersion: 2,
+      selectedCount: 6,
+      submittedCount: 1,
+      ineligibleCount: 2,
+      alreadyLinkedCount: 1,
+      blockedCount: 2,
+      blockedReasonCounts: { missing_locale: 1, unsupported_locale: 1 },
+      childTaskCount: 1,
+    });
+    const result = parent.result as {
+      selectedCount: number;
+      submittedCount: number;
+      ineligibleCount: number;
+      alreadyLinkedCount: number;
+      blockedCount: number;
+    };
+    expect(result.selectedCount).toBe(
+      result.submittedCount + result.ineligibleCount + result.alreadyLinkedCount + result.blockedCount,
+    );
+    expect(await owner.operationAudit.findFirstOrThrow({ where: {
+      taskId: queued.taskId,
+      action: "catalog_batch.materialized",
+    } })).toMatchObject({ afterSnapshot: expect.objectContaining({
+      enumEligibilityPolicyVersion: 2,
+      blockedReasonCounts: { missing_locale: 1, unsupported_locale: 1 },
+    }) });
+    expect(await readCatalogBatchSummary(owner, queued.taskId, foundation.actorId)).toMatchObject({
+      phase: "executing",
+      submittedCount: 1,
+      ineligibleCount: 2,
+      blockedCount: 2,
+    });
+    await owner.genericTaskItem.updateMany({ where: { taskId: children[0]!.id }, data: { status: "success" } });
+    await recomputeParentTask(owner, "generic", children[0]!.id);
+    expect(await readCatalogBatchSummary(owner, queued.taskId, foundation.actorId)).toMatchObject({
+      phase: "completed_with_errors",
+      submittedCount: 1,
+      ineligibleCount: 2,
+      blockedCount: 2,
+    });
+  });
+
+  it("v2 completes an all-blocked batch with no child tasks and an error-bearing summary", async () => {
+    const channelAppId = foundation.channels[0]!.channelAppId;
+    const missingIds = await seedCatalogRows(owner, {
+      channelAppId, count: 2, prefix: "all-blocked-missing", sourceLocale: null,
+    });
+    const unsupportedIds = await seedCatalogRows(owner, {
+      channelAppId, count: 2, prefix: "all-blocked-unsupported", sourceLocale: "fil",
+    });
+    const queued = await enqueueContent(normalizeCatalogSelection({
+      scope: "explicit_ids", ids: [...missingIds, ...unsupportedIds],
+    }));
+
+    await materialize(queued.taskId);
+
+    expect(await owner.genericTask.count({ where: { parentTaskId: queued.taskId } })).toBe(0);
+    expect(await owner.genericTask.findUniqueOrThrow({ where: { id: queued.taskId } })).toMatchObject({
+      status: "completed",
+      result: expect.objectContaining({
+        submittedCount: 0,
+        blockedCount: 4,
+        blockedReasonCounts: { missing_locale: 2, unsupported_locale: 2 },
+        childTaskCount: 0,
+      }),
+    });
+    expect(await readCatalogBatchSummary(owner, queued.taskId, foundation.actorId)).toMatchObject({
+      phase: "completed_with_errors",
+      submittedCount: 0,
+      blockedCount: 4,
+    });
+
+    await owner.novelSourceItem.update({ where: { id: missingIds[0]! }, data: { sourceLocale: "en" } });
+    expect(await owner.genericTask.count({ where: { parentTaskId: queued.taskId } })).toBe(0);
+    const repaired = await enqueueContent(normalizeCatalogSelection({
+      scope: "explicit_ids", ids: [missingIds[0]!],
+    }));
+    await materialize(repaired.taskId);
+    expect(await owner.genericTask.findFirstOrThrow({ where: { parentTaskId: repaired.taskId } })).toMatchObject({
+      totalCount: 1,
+    });
+  });
+
+  it("treats a historical versionless materialization payload as v1 and replays its requestId", async () => {
+    const channelAppId = foundation.channels[0]!.channelAppId;
+    const [sourceId] = await seedCatalogRows(owner, {
+      channelAppId, count: 1, prefix: "historical-v1", sourceLocale: null,
+    });
+    const selection = normalizeCatalogSelection({ scope: "explicit_ids", ids: [sourceId!] });
+    const requestId = randomUUID();
+    const queued = await enqueueContent(selection, requestId);
+    const parent = await owner.genericTask.findUniqueOrThrow({
+      where: { id: queued.taskId }, include: { items: true },
+    });
+    const params = { ...(parent.params as Record<string, unknown>) };
+    const itemPayload = { ...(parent.items[0]!.payload as Record<string, unknown>) };
+    delete params.enumEligibilityPolicyVersion;
+    delete itemPayload.enumEligibilityPolicyVersion;
+    await owner.genericTask.update({ where: { id: queued.taskId }, data: { params: params as Prisma.InputJsonObject } });
+    await owner.genericTaskItem.update({
+      where: { id: parent.items[0]!.id }, data: { payload: itemPayload as Prisma.InputJsonObject },
+    });
+
+    expect(await enqueueContent(selection, requestId)).toMatchObject({ taskId: queued.taskId, duplicate: true });
+    await materialize(queued.taskId);
+
+    const child = await owner.genericTask.findFirstOrThrow({
+      where: { parentTaskId: queued.taskId }, include: { items: true },
+    });
+    expect(child.items.map((item) => item.targetId)).toEqual([sourceId]);
+    expect(await owner.genericTask.findUniqueOrThrow({ where: { id: queued.taskId } })).toMatchObject({
+      result: expect.objectContaining({
+        enumEligibilityPolicyVersion: 1,
+        submittedCount: 1,
+        blockedCount: 0,
+      }),
+    });
+  });
+
+  it("keeps the core locale gate when source facts change after v2 enumeration", async () => {
+    const channelAppId = foundation.channels[0]!.channelAppId;
+    const [sourceId] = await seedCatalogRows(owner, {
+      channelAppId, count: 1, prefix: "locale-race", sourceLocale: "en",
+    });
+    const queued = await enqueueContent(normalizeCatalogSelection({
+      scope: "explicit_ids", ids: [sourceId!],
+    }));
+    await materialize(queued.taskId);
+    await owner.novelSourceItem.update({ where: { id: sourceId! }, data: { sourceLocale: null } });
+
+    const childLease = await claim(NOVEL_MATERIALIZE_TASK_TYPE);
+    const childOutcome = await createNovelMaterializeHandler(worker)(handlerContext(childLease));
+    await expect(finalizeTaskItem(worker, childLease, childOutcome)).rejects.toMatchObject({
+      code: "missing_locale",
+    });
+    expect(await owner.novel.count()).toBe(0);
+    expect(await owner.novelSourceItem.findUniqueOrThrow({ where: { id: sourceId! } })).toMatchObject({
+      status: "pending",
+      novelId: null,
+    });
   });
 
   it(`materializes ${scaleCount.toLocaleString("en-US")} fixed members across channels without omissions at 50-row boundaries`, async () => {
@@ -320,6 +528,9 @@ describe.skipIf(!enabled).sequential("catalog batch on disposable PostgreSQL 16.
       operation: "promo_claim", selection: normalizeCatalogSelection({ scope: "explicit_ids", ids }),
       actorId: foundation.actorId, requestId: randomUUID(), channelAccounts: { [channel.channelAppId]: channel.accountId },
     }, acceptedAt);
+    expect(await owner.genericTask.findUniqueOrThrow({ where: { id: queued.taskId } })).toMatchObject({
+      params: expect.objectContaining({ enumEligibilityPolicyVersion: 1 }),
+    });
     await materialize(queued.taskId);
     const child = await owner.genericTask.findFirstOrThrow({ where: { parentTaskId: queued.taskId }, include: { items: true } });
     expect(child).toMatchObject({ status: "disabled", totalCount: 51 });

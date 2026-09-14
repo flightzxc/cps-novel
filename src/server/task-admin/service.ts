@@ -706,7 +706,12 @@ export type TaskDetailDto = TaskSummaryDto & Readonly<{
 function taskSummary(row: TaskListRow, bookCounts?: CatalogBookCountsDto): TaskSummaryDto {
   const stopReason = deriveTaskStopReason(row.status, row.has_error, row.result);
   const resultObject = jsonPlainObject(row.result);
-  const allowedBlockedReasons = new Set(["channel_binding_or_capability_unavailable", "active_scope_conflict"]);
+  const allowedBlockedReasons = new Set([
+    "channel_binding_or_capability_unavailable",
+    "active_scope_conflict",
+    "missing_locale",
+    "unsupported_locale",
+  ]);
   const blockedReasonCounts = resultObject?.blockedReasonCounts && typeof resultObject.blockedReasonCounts === "object" && !Array.isArray(resultObject.blockedReasonCounts)
     ? Object.fromEntries(Object.entries(resultObject.blockedReasonCounts as Record<string, unknown>)
       .filter((entry): entry is [string, number] => allowedBlockedReasons.has(entry[0]) && typeof entry[1] === "number" && entry[1] > 0))

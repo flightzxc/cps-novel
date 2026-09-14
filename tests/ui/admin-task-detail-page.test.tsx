@@ -278,8 +278,32 @@ describe("/tasks/[id] · 页面区块", () => {
     expect(screen.queryByTestId("retry-failed-open")).toBeNull();
     expect(screen.getByTestId("catalog-batch-blocked-explanation").textContent).toContain("当前范围已有进行中的任务：2 条");
     expect(screen.getByTestId("catalog-batch-blocked-explanation").textContent).not.toContain("internal_reason");
+    expect(screen.getByText(/状态不符合／未找到 1 条/)).toBeTruthy();
     const link = screen.getByText("查看子任务") as HTMLAnchorElement;
     expect(link.getAttribute("href")).toContain("family=generic");
+  });
+
+  it("小说纳入父任务显示两类 locale 阻断中文文案，未知 reason key 仍不泄露", async () => {
+    getAdminTaskDetail.mockResolvedValue(detail({
+      taskType: "batch.materialize.v1",
+      status: "completed_with_errors",
+      catalogBatch: {
+        phase: "completed_with_errors",
+        submittedCount: 1,
+        ineligibleCount: 0,
+        blockedCount: 5,
+        blockedReasonCounts: { missing_locale: 2, unsupported_locale: 3, internal_reason: 9 },
+        childTasks: [],
+      },
+    }));
+    listAdminTaskItems.mockResolvedValue(itemsResult([]));
+
+    render(await renderPage());
+
+    const explanation = screen.getByTestId("catalog-batch-blocked-explanation");
+    expect(explanation.textContent).toContain("来源语言缺失：2 条");
+    expect(explanation.textContent).toContain("来源语言暂不受产品支持：3 条");
+    expect(explanation.textContent).not.toContain("internal_reason");
   });
 
   it("文章批量父任务显示 article.generate.v1 子任务入口，且不提供整父重试", async () => {

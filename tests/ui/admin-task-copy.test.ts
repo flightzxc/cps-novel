@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  catalogBatchBlockedReasons,
   isRetryableTaskStatus,
   itemStatusOptionsFor,
   LIST_LIMIT_NOTE,
@@ -13,6 +14,22 @@ import {
   TASK_ITEM_STATUSES as DOMAIN_TASK_ITEM_STATUSES,
   TASK_STATUSES as DOMAIN_TASK_STATUSES,
 } from "@/domain/database-statuses";
+
+describe("task-copy · batch blocked reason labels", () => {
+  it("labels locale eligibility blocks in Chinese and withholds unknown reason keys", () => {
+    const labels = catalogBatchBlockedReasons({
+      missing_locale: 2,
+      unsupported_locale: 3,
+      internal_reason: 99,
+    });
+
+    expect(labels).toEqual([
+      "来源语言缺失：2 条",
+      "来源语言暂不受产品支持：3 条",
+    ]);
+    expect(labels.join(" ")).not.toContain("internal_reason");
+  });
+});
 
 /**
  * `_lib/task-copy.ts` mirrors private enums from

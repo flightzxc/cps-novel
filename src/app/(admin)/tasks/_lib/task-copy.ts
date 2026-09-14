@@ -102,6 +102,8 @@ const CATALOG_BATCH_BLOCKED_REASON_LABELS: Readonly<Record<string, string>> = Ob
   channel_binding_or_capability_unavailable: "渠道绑定或领取能力不可用",
   active_item_conflict: "条目已有进行中的任务",
   active_scope_conflict: "当前范围已有进行中的任务",
+  missing_locale: "来源语言缺失",
+  unsupported_locale: "来源语言暂不受产品支持",
 });
 
 export function catalogBatchPhaseLabel(phase: string): string {

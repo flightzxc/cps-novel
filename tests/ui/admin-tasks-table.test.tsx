@@ -158,4 +158,25 @@ describe("TasksTable · 两类任务统一列表", () => {
     expect(cell.textContent).toContain("缺少可用渠道账户：2 条");
     expect(cell.textContent).not.toContain("channel_account_required");
   });
+
+  it("小说纳入父任务区分状态不符合和 locale 阻断，且不显示未知 reason key", () => {
+    render(<TasksTable tasks={[task({
+      taskType: "batch.materialize.v1",
+      catalogBatch: {
+        phase: "completed_with_errors",
+        submittedCount: 1,
+        ineligibleCount: 1,
+        alreadyLinkedCount: 0,
+        blockedCount: 5,
+        blockedReasonCounts: { missing_locale: 2, unsupported_locale: 3, internal_reason: 9 },
+      },
+    })]} />);
+
+    const phase = screen.getByTestId(`catalog-batch-phase-${task().taskId}`);
+    const blocked = screen.getByTestId(`catalog-batch-blocked-${task().taskId}`);
+    expect(phase.textContent).toContain("状态不符合／未找到 1 条");
+    expect(blocked.textContent).toContain("来源语言缺失：2 条");
+    expect(blocked.textContent).toContain("来源语言暂不受产品支持：3 条");
+    expect(blocked.textContent).not.toContain("internal_reason");
+  });
 });

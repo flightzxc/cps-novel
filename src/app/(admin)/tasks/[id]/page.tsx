@@ -207,7 +207,7 @@ export default async function TaskDetailPage({
             <p className="mt-1 text-sm text-gray-600">
               阶段：{catalogBatchPhaseLabel(detail.catalogBatch.phase)}；已提交 {detail.catalogBatch.submittedCount?.toLocaleString("zh-CN") ?? "正在统计"} 条；
               已纳入 {detail.catalogBatch.alreadyLinkedCount?.toLocaleString("zh-CN") ?? "—"} 条；
-              被条件阻断 {detail.catalogBatch.ineligibleCount?.toLocaleString("zh-CN") ?? "正在统计"} 条。
+              状态不符合／未找到 {detail.catalogBatch.ineligibleCount?.toLocaleString("zh-CN") ?? "正在统计"} 条。
             </p>
             {(detail.catalogBatch.blockedCount ?? 0) > 0 && (
               <div className="mt-2 rounded border border-amber-200 bg-amber-50 p-2 text-sm text-amber-900" data-testid="catalog-batch-blocked-explanation">

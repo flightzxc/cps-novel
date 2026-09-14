@@ -97,6 +97,46 @@ describe("X9 read DTO allowlists", () => {
     for (const key of FORBIDDEN_KEYS) expect(allKeys(result).has(key)).toBe(false);
   });
 
+  it("allowlists locale eligibility reason counts for materialization batches and withholds unknown keys", async () => {
+    const context = await readContext("/api/admin/tasks");
+    const row = {
+      family: "generic",
+      task_id: TASK_ID,
+      task_type: "batch.materialize.v1",
+      status: "completed_with_errors",
+      total_count: 1,
+      success_count: 1,
+      failed_count: 0,
+      skipped_count: 0,
+      has_error: false,
+      created_at: NOW,
+      result: {
+        enumerationStatus: "completed",
+        submittedCount: 4,
+        ineligibleCount: 1,
+        alreadyLinkedCount: 2,
+        blockedReasonCounts: {
+          missing_locale: 2,
+          unsupported_locale: 3,
+          internal_reason: 99,
+        },
+      },
+    };
+    const db = { $queryRaw: async () => [row] } as unknown as PrismaClient;
+
+    const result = await listAdminTasks(db, context, {}, {} as NodeJS.ProcessEnv);
+
+    expect(result.items[0]?.catalogBatch).toEqual({
+      phase: "completed_with_errors",
+      submittedCount: 4,
+      ineligibleCount: 1,
+      alreadyLinkedCount: 2,
+      blockedCount: 5,
+      blockedReasonCounts: { missing_locale: 2, unsupported_locale: 3 },
+    });
+    expect(allKeys(result)).not.toContain("internal_reason");
+  });
+
   it.each(["channel_sync", "generic"] as const)(
     "returns a uniform lease-only item DTO for %s without item targets or raw worker state",
     async (family) => {

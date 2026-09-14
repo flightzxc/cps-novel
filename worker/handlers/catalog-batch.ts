@@ -1,7 +1,10 @@
 import { createHash, randomUUID } from "node:crypto";
 import { Prisma, type PrismaClient } from "@prisma/client";
 import type { NormalizedCatalogSelection } from "../../src/domain/catalog-batch";
+import { evaluateNovelMaterializationLocale } from "../../src/domain/novel-materialization-locale";
 import {
+  CATALOG_BATCH_ENUM_ELIGIBILITY_POLICY_V1,
+  CATALOG_BATCH_ENUM_ELIGIBILITY_POLICY_V2,
   CATALOG_BATCH_CHUNK_SIZE, CATALOG_BATCH_TASK_TYPE,
   CONTENT_CREATE_TARGET_TYPE,
   NOVEL_MATERIALIZE_TASK_TYPE, NOVEL_MATERIALIZE_TARGET_TYPE,
@@ -36,7 +39,18 @@ function parsePayload(value: unknown): CatalogBatchPayload {
     if (record !== undefined && (!record || typeof record !== "object" || Array.isArray(record)
       || Object.entries(record).some(([key, item]) => !key || typeof item !== "string" || !item))) throw new Error("catalog_batch_payload_invalid");
   }
-  return p as CatalogBatchPayload;
+  const enumEligibilityPolicyVersion = p.enumEligibilityPolicyVersion === undefined
+    ? CATALOG_BATCH_ENUM_ELIGIBILITY_POLICY_V1
+    : p.enumEligibilityPolicyVersion;
+  if (
+    (enumEligibilityPolicyVersion !== CATALOG_BATCH_ENUM_ELIGIBILITY_POLICY_V1
+      && enumEligibilityPolicyVersion !== CATALOG_BATCH_ENUM_ELIGIBILITY_POLICY_V2)
+    || (enumEligibilityPolicyVersion === CATALOG_BATCH_ENUM_ELIGIBILITY_POLICY_V2
+      && p.operation !== "novel_materialize")
+  ) {
+    throw new Error("catalog_batch_payload_invalid");
+  }
+  return { ...p, enumEligibilityPolicyVersion } as CatalogBatchPayload;
 }
 
 function selectionWhere(selection: NormalizedCatalogSelection): Prisma.NovelSourceItemWhereInput {
@@ -84,6 +98,7 @@ export function createCatalogBatchHandler(db: PrismaClient): TaskHandler {
   return async ({ lease }) => {
     if (lease.taskType !== CATALOG_BATCH_TASK_TYPE || lease.itemId === "") throw new Error("catalog_batch_lease_invalid");
     const payload = parsePayload(lease.payload);
+    const enumEligibilityPolicyVersion = payload.enumEligibilityPolicyVersion!;
     return {
       status: "success",
       transactionIsolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead,
@@ -97,19 +112,23 @@ export function createCatalogBatchHandler(db: PrismaClient): TaskHandler {
                 enumerationStatus: "failed",
                 reason: LEGACY_CONTENT_CREATE_RETIRED_CODE,
                 message: LEGACY_CONTENT_CREATE_RETIRED_MESSAGE,
+                enumEligibilityPolicyVersion,
               },
             },
           });
           return {
             status: "failed",
             error: { code: LEGACY_CONTENT_CREATE_RETIRED_CODE, message: LEGACY_CONTENT_CREATE_RETIRED_MESSAGE },
-            result: { enumerationStatus: "failed", reason: LEGACY_CONTENT_CREATE_RETIRED_CODE },
+            result: { enumerationStatus: "failed", reason: LEGACY_CONTENT_CREATE_RETIRED_CODE, enumEligibilityPolicyVersion },
           };
         }
         const expiry = Date.parse(payload.expiresAt);
         if (!Number.isFinite(expiry) || Date.now() >= expiry) {
-          await tx.genericTask.update({ where: { id: lease.taskId }, data: { result: { enumerationStatus: "expired", submittedCount: 0, ineligibleCount: 0, expiresAt: payload.expiresAt } } });
-          return { status: "skipped", result: { enumerationStatus: "expired" } };
+          await tx.genericTask.update({ where: { id: lease.taskId }, data: { result: {
+            enumerationStatus: "expired", submittedCount: 0, ineligibleCount: 0,
+            expiresAt: payload.expiresAt, enumEligibilityPolicyVersion,
+          } } });
+          return { status: "skipped", result: { enumerationStatus: "expired", enumEligibilityPolicyVersion } };
         }
 
         const groups = new Map<string, SnapshotRow[]>();
@@ -143,6 +162,16 @@ export function createCatalogBatchHandler(db: PrismaClient): TaskHandler {
               ? row.status === "pending" && row.novelId === null
               : row.status === "linked" && row.novelId !== null;
             if (!eligible) { ineligibleCount += 1; continue; }
+            if (
+              payload.operation === "novel_materialize"
+              && enumEligibilityPolicyVersion === CATALOG_BATCH_ENUM_ELIGIBILITY_POLICY_V2
+            ) {
+              const localeEligibility = evaluateNovelMaterializationLocale(row.sourceLocale);
+              if (!localeEligibility.eligible) {
+                blockedReasonCounts[localeEligibility.code] = (blockedReasonCounts[localeEligibility.code] ?? 0) + 1;
+                continue;
+              }
+            }
             const accountId = payload.operation === "promo_claim" ? payload.channelAccounts?.[row.channelAppId] : undefined;
             if (payload.operation === "promo_claim" && !accountId) {
               blockedReasonCounts.channel_account_required = (blockedReasonCounts.channel_account_required ?? 0) + 1;
@@ -214,22 +243,33 @@ export function createCatalogBatchHandler(db: PrismaClient): TaskHandler {
             actorType: "worker", actorId: lease.workerId, action: `${taskType}.queued`,
             entityType: "GenericTask", entityId: childId, requestId: payload.requestId,
             taskType, taskId: childId,
-            afterSnapshot: { parentTaskId: lease.taskId, eligibleCount: members.length, expiresAt: payload.expiresAt },
+            afterSnapshot: {
+              parentTaskId: lease.taskId,
+              eligibleCount: members.length,
+              expiresAt: payload.expiresAt,
+              enumEligibilityPolicyVersion,
+            },
           } });
         }
         const blockedCount = Object.values(blockedReasonCounts).reduce((sum, count) => sum + count, 0);
         await tx.genericTask.update({ where: { id: lease.taskId }, data: { result: {
           enumerationStatus: "completed", selectedCount, submittedCount, ineligibleCount, alreadyLinkedCount,
           blockedCount, failedCount: 0,
-          childTaskCount, blockedReasonCounts, expiresAt: payload.expiresAt,
+          childTaskCount, blockedReasonCounts, expiresAt: payload.expiresAt, enumEligibilityPolicyVersion,
         } } });
         await tx.operationAudit.create({ data: {
           actorType: "worker", actorId: lease.workerId, action: "catalog_batch.materialized",
           entityType: "GenericTask", entityId: lease.taskId, requestId: payload.requestId,
           taskType: CATALOG_BATCH_TASK_TYPE, taskId: lease.taskId,
-          afterSnapshot: { selectedCount, submittedCount, ineligibleCount, alreadyLinkedCount, blockedReasonCounts, expiresAt: payload.expiresAt },
+          afterSnapshot: {
+            selectedCount, submittedCount, ineligibleCount, alreadyLinkedCount, blockedReasonCounts,
+            expiresAt: payload.expiresAt, enumEligibilityPolicyVersion,
+          },
         } });
-        return { status: "success", result: { enumerationStatus: "completed", submittedCount, ineligibleCount, alreadyLinkedCount, blockedCount } };
+        return { status: "success", result: {
+          enumerationStatus: "completed", submittedCount, ineligibleCount, alreadyLinkedCount, blockedCount,
+          enumEligibilityPolicyVersion,
+        } };
       },
     };
   };
