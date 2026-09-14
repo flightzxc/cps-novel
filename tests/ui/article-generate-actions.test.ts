@@ -230,6 +230,37 @@ describe("article generate actions reuse frozen capabilities", () => {
     expect(guards.requireFreshAdminServiceMutation).not.toHaveBeenCalled();
   });
 
+  it("candidate list canonicalizes search/locale before querying", async () => {
+    guards.requireAdminActionAccess.mockResolvedValue({ context: CONTEXT });
+    contentCreation.listNovelsForArticleGenerate.mockResolvedValue({
+      rows: [],
+      total: 0,
+      page: 1,
+      pageSize: 50,
+    });
+
+    await listArticleGenerateCandidatesAction({
+      requestId: "req-canonical",
+      search: "Alpha ",
+      locale: " en ",
+      page: 1,
+    });
+    expect(contentCreation.listNovelsForArticleGenerate).toHaveBeenCalledWith(
+      { __brand: "prisma-stub" },
+      expect.objectContaining({ search: "Alpha", locale: "en", eligibleOnly: true, pageSize: 50 }),
+    );
+
+    contentCreation.listNovelsForArticleGenerate.mockClear();
+    await listArticleGenerateCandidatesAction({
+      requestId: "req-blank",
+      search: "   ",
+      locale: "  ",
+    });
+    const blankCall = contentCreation.listNovelsForArticleGenerate.mock.calls[0][1] as Record<string, unknown>;
+    expect(blankCall).not.toHaveProperty("search");
+    expect(blankCall).not.toHaveProperty("locale");
+  });
+
   it("candidate list fetches templates only for locales on the current page", async () => {
     guards.requireAdminActionAccess.mockResolvedValue({ context: CONTEXT });
     contentCreation.listNovelsForArticleGenerate.mockResolvedValue({

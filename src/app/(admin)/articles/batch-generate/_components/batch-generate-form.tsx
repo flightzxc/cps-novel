@@ -4,10 +4,13 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 
 import { buttonClassName } from "@/components/ui/button";
-import type {
-  ArticleGenerateSelection,
-  ArticleTemplateOption,
-  NovelGeneratePage,
+import {
+  ArticleGenerateSelectionError,
+  normalizeArticleGenerateFilter,
+  type ArticleGenerateSelection,
+  type ArticleTemplateOption,
+  type NormalizedArticleGenerateFilter,
+  type NovelGeneratePage,
 } from "@/domain/article-generation";
 
 import {
@@ -24,15 +27,11 @@ type FrozenRequest = Readonly<{
   templateKeysByLocale: Readonly<Record<string, string>>;
 }>;
 
-function filtersEqual(left: DraftFilter, right: DraftFilter): boolean {
+function canonicalFiltersEqual(
+  left: NormalizedArticleGenerateFilter,
+  right: NormalizedArticleGenerateFilter,
+): boolean {
   return left.search === right.search && left.locale === right.locale;
-}
-
-function compactFilter(filter: DraftFilter): { search?: string; locale?: string } {
-  return {
-    ...(filter.search ? { search: filter.search } : {}),
-    ...(filter.locale ? { locale: filter.locale } : {}),
-  };
 }
 
 function compactTemplates(templateKeys: Record<string, string>): Record<string, string> {
@@ -76,14 +75,14 @@ export function ArticleBatchGenerateForm({
   const [frozen, setFrozen] = useState<FrozenRequest | null>(null);
   const [page, setPage] = useState(initialPage);
   const [draftFilter, setDraftFilter] = useState<DraftFilter>({ search: "", locale: "" });
-  const [appliedFilter, setAppliedFilter] = useState<DraftFilter>({ search: "", locale: "" });
+  const [appliedFilter, setAppliedFilter] = useState<NormalizedArticleGenerateFilter>({});
   const [selected, setSelected] = useState<string[]>([]);
   const [templateKeys, setTemplateKeys] = useState<Record<string, string>>({});
   const [templateCache, setTemplateCache] = useState<readonly ArticleTemplateOption[]>(templates);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [taskId, setTaskId] = useState<string | null>(null);
-  const filterDirty = !filtersEqual(draftFilter, appliedFilter);
+  const filterDirty = !canonicalFiltersEqual(normalizeArticleGenerateFilter(draftFilter), appliedFilter);
   const requestLocked = frozen !== null;
   const locales = useMemo(
     () => Array.from(new Set([
@@ -100,14 +99,14 @@ export function ArticleBatchGenerateForm({
     setSelected((current) => (current.includes(id) ? current.filter((item) => item !== id) : [...current, id]));
   }
 
-  async function load(nextPage: number, nextFilter: DraftFilter, reason: "apply" | "page") {
+  async function load(nextPage: number, nextFilter: NormalizedArticleGenerateFilter, reason: "apply" | "page") {
     setBusy(true);
     setMessage(null);
     try {
       const result = await listArticleGenerateCandidatesAction({
         requestId: crypto.randomUUID(),
         page: nextPage,
-        ...compactFilter(nextFilter),
+        ...nextFilter,
       });
       if (!result.ok) {
         setMessage(`无法读取待建稿书目（${result.code}）。已保留当前筛选与页码。`);
@@ -116,14 +115,26 @@ export function ArticleBatchGenerateForm({
       setPage(result.data);
       setTemplateCache((current) => mergeTemplateCache(current, result.templates));
       if (reason === "apply") {
+        const changed = !canonicalFiltersEqual(nextFilter, appliedFilter);
         setAppliedFilter(nextFilter);
-        setSelected([]);
-        setTemplateKeys({});
+        if (changed) {
+          setSelected([]);
+          setTemplateKeys({});
+        }
       }
     } catch {
       setMessage("无法读取待建稿书目。网络失败，已保留当前筛选与页码。");
     } finally {
       setBusy(false);
+    }
+  }
+
+  function applyDraftFilter() {
+    try {
+      void load(1, normalizeArticleGenerateFilter(draftFilter), "apply");
+    } catch (error) {
+      const code = error instanceof ArticleGenerateSelectionError ? error.code : "filter_invalid";
+      setMessage(`筛选无效（${code}）。已保留当前筛选与页码。`);
     }
   }
 
@@ -133,7 +144,7 @@ export function ArticleBatchGenerateForm({
       requestId: roundId,
       scope,
       selection: scope === "all_filtered"
-        ? { scope: "all_filtered", filter: compactFilter(appliedFilter) }
+        ? { scope: "all_filtered", filter: appliedFilter }
         : { scope: "explicit_ids", novelIds: selected },
       templateKeysByLocale: compactTemplates(templateKeys),
     };
@@ -210,7 +221,7 @@ export function ArticleBatchGenerateForm({
         data-testid="apply-filter"
         className={buttonClassName("secondary")}
         disabled={busy || requestLocked}
-        onClick={() => void load(1, draftFilter, "apply")}
+        onClick={applyDraftFilter}
       >
         应用筛选
       </button>
@@ -238,7 +249,12 @@ export function ArticleBatchGenerateForm({
           </select>
         </label>
       ))}
-      <p className="text-sm text-gray-600" data-testid="applied-total">
+      <p
+        className="text-sm text-gray-600"
+        data-testid="applied-total"
+        data-applied-search={appliedFilter.search ?? ""}
+        data-applied-locale={appliedFilter.locale ?? ""}
+      >
         当前筛选共 {page.total.toLocaleString("zh-CN")} 本尚未创建文章的书目。本页 {page.rows.length} 本。
       </p>
       <div className="space-y-2">

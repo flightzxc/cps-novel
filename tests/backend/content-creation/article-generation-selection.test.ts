@@ -2,11 +2,24 @@ import { describe, expect, it } from "vitest";
 
 import {
   ArticleGenerateSelectionError,
+  normalizeArticleGenerateFilter,
   normalizeArticleGenerateSelection,
 } from "@/domain/article-generation";
 
 const ID_A = "11111111-1111-4111-8111-111111111111";
 const ID_B = "22222222-2222-4222-8222-222222222222";
+
+describe("normalizeArticleGenerateFilter", () => {
+  it("trims search/locale and drops blank values", () => {
+    expect(normalizeArticleGenerateFilter({ search: "Alpha ", locale: " en " })).toEqual({
+      search: "Alpha",
+      locale: "en",
+    });
+    expect(normalizeArticleGenerateFilter({ search: "   ", locale: "  " })).toEqual({});
+    expect(normalizeArticleGenerateFilter({ search: " Alpha ", locale: "en" }))
+      .toEqual(normalizeArticleGenerateFilter({ search: "Alpha", locale: "en" }));
+  });
+});
 
 describe("normalizeArticleGenerateSelection", () => {
   it("caps explicit ids at 200 and rejects invalid uuids", () => {

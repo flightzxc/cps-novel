@@ -179,6 +179,59 @@ describe("ArticleBatchGenerateForm (R2-02 / R2-03 / R2-04)", () => {
       .toBe(actions.enqueueArticleGenerateBatchAction.mock.calls[1][0].requestId);
   });
 
+  it("applies a canonical filter so padded search/locale cannot widen enqueue scope", async () => {
+    actions.listArticleGenerateCandidatesAction.mockResolvedValue({
+      ok: true,
+      data: page([novel(ID_EN, "en", "Alpha book")], { total: 1 }),
+      templates: [],
+    });
+    actions.enqueueArticleGenerateBatchAction
+      .mockRejectedValueOnce(new Error("network"))
+      .mockResolvedValueOnce({ ok: true, taskId: "task-alpha", duplicate: false });
+
+    render(<ArticleBatchGenerateForm initialPage={EN_PAGE} templates={[]} canWrite />);
+    fireEvent.change(screen.getByTestId("batch-search"), { target: { value: "Alpha " } });
+    fireEvent.change(screen.getByTestId("batch-locale"), { target: { value: " en " } });
+    fireEvent.click(screen.getByTestId("apply-filter"));
+    await waitFor(() => expect(actions.listArticleGenerateCandidatesAction).toHaveBeenCalled());
+    expect(actions.listArticleGenerateCandidatesAction.mock.calls[0][0]).toMatchObject({
+      search: "Alpha",
+      locale: "en",
+      page: 1,
+    });
+    expect(screen.getByTestId("applied-total").getAttribute("data-applied-search")).toBe("Alpha");
+    expect(screen.getByTestId("applied-total").getAttribute("data-applied-locale")).toBe("en");
+
+    fireEvent.change(screen.getByTestId("batch-search"), { target: { value: " Alpha " } });
+    expect(screen.queryByTestId("filter-dirty")).toBeNull();
+
+    fireEvent.click(screen.getByTestId("submit-filtered"));
+    expect((await screen.findByTestId("batch-message")).textContent).toContain("提交结果未知");
+    fireEvent.click(screen.getByTestId("submit-filtered"));
+    await waitFor(() => expect(actions.enqueueArticleGenerateBatchAction).toHaveBeenCalledTimes(2));
+    const frozen = actions.enqueueArticleGenerateBatchAction.mock.calls[0][0];
+    expect(frozen.selection).toEqual({ scope: "all_filtered", filter: { search: "Alpha", locale: "en" } });
+    expect(actions.enqueueArticleGenerateBatchAction.mock.calls[1][0]).toEqual(frozen);
+  });
+
+  it("treats blank search/locale as unset after apply", async () => {
+    actions.listArticleGenerateCandidatesAction.mockResolvedValue({
+      ok: true,
+      data: EN_PAGE,
+      templates: [],
+    });
+    render(<ArticleBatchGenerateForm initialPage={EN_PAGE} templates={[]} canWrite />);
+    fireEvent.change(screen.getByTestId("batch-search"), { target: { value: "   " } });
+    fireEvent.change(screen.getByTestId("batch-locale"), { target: { value: "  " } });
+    expect(screen.queryByTestId("filter-dirty")).toBeNull();
+    fireEvent.click(screen.getByTestId("apply-filter"));
+    await waitFor(() => expect(actions.listArticleGenerateCandidatesAction).toHaveBeenCalled());
+    expect(actions.listArticleGenerateCandidatesAction.mock.calls[0][0]).not.toHaveProperty("search");
+    expect(actions.listArticleGenerateCandidatesAction.mock.calls[0][0]).not.toHaveProperty("locale");
+    expect(screen.getByTestId("applied-total").getAttribute("data-applied-search")).toBe("");
+    expect(screen.getByTestId("applied-total").getAttribute("data-applied-locale")).toBe("");
+  });
+
   it("fetches and caches ja templates when a later page introduces that locale", async () => {
     actions.listArticleGenerateCandidatesAction.mockResolvedValue({
       ok: true,

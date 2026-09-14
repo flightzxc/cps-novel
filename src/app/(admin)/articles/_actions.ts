@@ -13,6 +13,7 @@ import {
 } from "@/server/articles";
 import {
   ArticleGenerateSelectionError,
+  normalizeArticleGenerateFilter,
   normalizeArticleGenerateSelection,
   type ArticleGenerateSelection,
   type ArticleTemplateOption,
@@ -702,9 +703,12 @@ export async function listArticleGenerateCandidatesAction(input: {
 > {
   try {
     await authorizeRead("admin.article.generate_candidates", input.requestId);
+    const filter = normalizeArticleGenerateFilter({
+      ...(input.search !== undefined ? { search: input.search } : {}),
+      ...(input.locale !== undefined ? { locale: input.locale } : {}),
+    });
     const data = await listNovelsForArticleGenerate(prisma, {
-      search: input.search,
-      locale: input.locale,
+      ...filter,
       page: input.page,
       pageSize: 50,
       eligibleOnly: true,
