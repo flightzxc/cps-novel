@@ -17,6 +17,28 @@ export const ARTICLE_GENERATE_UUID =
  */
 export const ARTICLE_GENERATE_LEAF_MAX = 200;
 
+/**
+ * The `all_filtered` parent protocol task types. They live here, in the
+ * zero-import domain module, for the same reason `ARTICLE_GENERATE_LEAF_MAX`
+ * does: admin Server Components need them to tell an article-generate parent
+ * batch apart from a catalog batch, and must not import
+ * `src/lib/tasks/article-generate.ts` (which reaches Prisma). That module
+ * re-exports these so there is exactly one definition of each string.
+ */
+export const ARTICLE_GENERATE_BATCH_TASK_TYPE = "article.generate.batch.v1";
+export const ARTICLE_GENERATE_BATCH_TASK_TYPE_V2 = "article.generate.batch.v2";
+
+/**
+ * True for EVERY version of the article-generate parent batch protocol.
+ * Call this instead of comparing against one version literal: a
+ * `taskType !== "article.generate.batch.v1"` check silently starts treating
+ * v2 as a catalog batch the moment a new version ships.
+ */
+export function isArticleGenerateBatchTaskType(taskType: string): boolean {
+  return taskType === ARTICLE_GENERATE_BATCH_TASK_TYPE
+    || taskType === ARTICLE_GENERATE_BATCH_TASK_TYPE_V2;
+}
+
 export type NovelGeneratePromoOutcome =
   | "ready"
   | "promo_link_missing"

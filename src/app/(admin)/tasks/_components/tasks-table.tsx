@@ -2,7 +2,7 @@ import Link from "next/link";
 
 import { taskStatusLabel } from "@/features/admin-ui/content-view";
 import type { CatalogBookCountsDto } from "@/server/task-admin";
-import type { ArticleGenerateBlockedReason } from "@/domain/article-generation";
+import { isArticleGenerateBatchTaskType, type ArticleGenerateBlockedReason } from "@/domain/article-generation";
 import type { SafeTaskFailureDto } from "@/server/task-admin/safe-task-error";
 
 import {
@@ -167,9 +167,9 @@ export function TasksTable({
                 {task.catalogBatch && (
                   <p className="mt-1 text-xs text-gray-500" data-testid={`catalog-batch-phase-${task.taskId}`}>
                     {catalogBatchPhaseLabel(task.catalogBatch.phase)}
-                    {task.taskType !== "article.generate.batch.v1" && task.catalogBatch.submittedCount !== null && ` · ${task.catalogBatch.submittedCount} 条`}
-                    {task.taskType !== "article.generate.batch.v1" && task.catalogBatch.alreadyLinkedCount !== null && ` / 已纳入 ${task.catalogBatch.alreadyLinkedCount} 条`}
-                    {task.taskType !== "article.generate.batch.v1" && task.catalogBatch.ineligibleCount !== null && ` / 状态不符合／未找到 ${task.catalogBatch.ineligibleCount} 条`}
+                    {!isArticleGenerateBatchTaskType(task.taskType) && task.catalogBatch.submittedCount !== null && ` · ${task.catalogBatch.submittedCount} 条`}
+                    {!isArticleGenerateBatchTaskType(task.taskType) && task.catalogBatch.alreadyLinkedCount !== null && ` / 已纳入 ${task.catalogBatch.alreadyLinkedCount} 条`}
+                    {!isArticleGenerateBatchTaskType(task.taskType) && task.catalogBatch.ineligibleCount !== null && ` / 状态不符合／未找到 ${task.catalogBatch.ineligibleCount} 条`}
                     {(task.catalogBatch.blockedCount ?? 0) > 0 && (
                       <span className="block text-amber-700" data-testid={`catalog-batch-blocked-${task.taskId}`}>
                         部分条目未提交（{task.catalogBatch.blockedCount} 条）

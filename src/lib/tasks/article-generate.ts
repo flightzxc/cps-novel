@@ -7,11 +7,12 @@ import {
   normalizeArticleGenerateFilter,
   type ArticleGenerateBlockedReason,
   type NormalizedArticleGenerateFilter,
+  ARTICLE_GENERATE_BATCH_TASK_TYPE,
+  ARTICLE_GENERATE_BATCH_TASK_TYPE_V2,
 } from "@/domain/article-generation";
 import { resolveArticleGenerateAdmissions } from "@/server/content-creation/eligibility";
 
 export const ARTICLE_GENERATE_TASK_TYPE = "article.generate.v1";
-export const ARTICLE_GENERATE_BATCH_TASK_TYPE = "article.generate.batch.v1";
 /**
  * Batch-create-operator-ux: the `all_filtered` parent protocol, versioned
  * because its payload's `filter` shape changed (single `locale` → multi
@@ -35,7 +36,6 @@ export const ARTICLE_GENERATE_BATCH_TASK_TYPE = "article.generate.batch.v1";
  * this whole directory tree for that path string and would flag a mere
  * comment mention as a forbidden import).
  */
-export const ARTICLE_GENERATE_BATCH_TASK_TYPE_V2 = "article.generate.batch.v2";
 export const ARTICLE_GENERATE_TARGET_TYPE = "novel";
 export const ARTICLE_GENERATE_BATCH_TARGET_TYPE = "article_generate_filter";
 export const ARTICLE_GENERATE_TTL_MS = 6 * 60 * 60 * 1_000;
@@ -45,7 +45,7 @@ export const ARTICLE_GENERATE_CHUNK_SIZE = 50;
 // for why it lives there and not here) — this used to be an independent
 // `= 200` literal that happened to match the domain guard's own hardcoded
 // `200` by hand rather than by import.
-export { ARTICLE_GENERATE_LEAF_MAX };
+export { ARTICLE_GENERATE_LEAF_MAX, ARTICLE_GENERATE_BATCH_TASK_TYPE, ARTICLE_GENERATE_BATCH_TASK_TYPE_V2 };
 
 /**
  * `worker/handlers/article-generate-batch.ts`'s v1 drain path: a v1 payload

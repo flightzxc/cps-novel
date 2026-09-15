@@ -1,4 +1,6 @@
 import Link from "next/link";
+
+import { isArticleGenerateBatchTaskType } from "@/domain/article-generation";
 import { notFound } from "next/navigation";
 
 import { buttonClassName } from "@/components/ui/button";
@@ -220,7 +222,7 @@ export default async function TaskDetailPage({
             <h2 className="font-medium text-gray-900">批量任务进度</h2>
             <p className="mt-1 text-sm text-gray-600">
               阶段：{catalogBatchPhaseLabel(detail.catalogBatch.phase)}。
-              {detail.taskType !== "article.generate.batch.v1" && <>
+              {!isArticleGenerateBatchTaskType(detail.taskType) && <>
                 已提交 {detail.catalogBatch.submittedCount?.toLocaleString("zh-CN") ?? "正在统计"} 条；
                 已纳入 {detail.catalogBatch.alreadyLinkedCount?.toLocaleString("zh-CN") ?? "—"} 条；
                 状态不符合／未找到 {detail.catalogBatch.ineligibleCount?.toLocaleString("zh-CN") ?? "正在统计"} 条。
