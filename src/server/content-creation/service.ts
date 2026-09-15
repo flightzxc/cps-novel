@@ -166,6 +166,7 @@ async function loadPlan(
     sourceItem.title,
     locale,
     existsCheck((args) => client.novel.findFirst(args) as Promise<{ id: string } | null>, locale),
+    { validateHealth: false },
   );
   if (novelSlugResult.outcome !== "ok") {
     return { stage: "blocked", result: { outcome: novelSlugResult.outcome, field: "novel", baseSlug: novelSlugResult.baseSlug } };

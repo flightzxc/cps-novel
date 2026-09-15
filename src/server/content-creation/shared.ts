@@ -68,13 +68,18 @@ export type SlugResolution =
   | { readonly outcome: "slug_unhealthy"; readonly baseSlug: string }
   | { readonly outcome: "slug_conflict_exhausted"; readonly baseSlug: string };
 
+type SlugResolutionOptions = Readonly<{
+  validateHealth?: boolean;
+}>;
+
 export async function resolveUniqueSlug(
   title: string,
   locale: SiteLocale,
   exists: SlugConflictCheck,
+  options: SlugResolutionOptions = {},
 ): Promise<SlugResolution> {
   const baseSlug = textToSlug(title, locale);
-  if (!isHealthySlug(baseSlug)) {
+  if ((options.validateHealth ?? true) && !isHealthySlug(baseSlug)) {
     return { outcome: "slug_unhealthy", baseSlug };
   }
   if (!(await exists(baseSlug))) {

@@ -390,7 +390,7 @@ describe("materializeNovelFromSourceItem — source item state guards", () => {
 });
 
 describe("materializeNovelFromSourceItem — slug health and conflict", () => {
-  it("returns slug_unhealthy without writing when the title normalizes below the minimum length", async () => {
+  it("creates a Novel for a title that normalizes below the Article minimum length", async () => {
     const fake = new FakeContentCreationDb();
     const sourceItem = fake.seedSourceItem({ title: "Hi" });
     const result = await materializeNovelFromSourceItem(fake.asPrismaClient(), {
@@ -399,9 +399,46 @@ describe("materializeNovelFromSourceItem — slug health and conflict", () => {
       actor: ADMIN_ACTOR,
       requestId: "req-i",
     });
-    expect(result).toEqual({ outcome: "slug_unhealthy", field: "novel", baseSlug: "hi" });
-    expect(fake.novels.size).toBe(0);
+    expect(result.outcome).toBe("created");
+    if (result.outcome !== "created") throw new Error("unreachable");
+    expect(result.novelSlug).toBe("hi");
+    expect(fake.novels.size).toBe(1);
     expect(fake.articles.size).toBe(0);
+  });
+
+  it("materializes the UAT short-title regression sample without creating an Article", async () => {
+    const fake = new FakeContentCreationDb();
+    const sourceItem = fake.seedSourceItem({ title: "HIS(18+)" });
+
+    const result = await materializeNovelFromSourceItem(fake.asPrismaClient(), {
+      novelSourceItemId: sourceItem.id,
+      mode: "apply",
+      actor: ADMIN_ACTOR,
+      requestId: "req-short-title-regression",
+    });
+
+    expect(result.outcome).toBe("created");
+    if (result.outcome !== "created") throw new Error("unreachable");
+    expect(result.novelSlug).toBe("his-18");
+    expect(fake.novels.size).toBe(1);
+    expect(fake.articles.size).toBe(0);
+  });
+
+  it("keeps numeric collision suffixing for a short Novel slug", async () => {
+    const fake = new FakeContentCreationDb();
+    fake.seedNovel({ locale: "en", slug: "his-18" });
+    const sourceItem = fake.seedSourceItem({ title: "HIS(18+)" });
+
+    const result = await materializeNovelFromSourceItem(fake.asPrismaClient(), {
+      novelSourceItemId: sourceItem.id,
+      mode: "apply",
+      actor: ADMIN_ACTOR,
+      requestId: "req-short-title-collision",
+    });
+
+    expect(result.outcome).toBe("created");
+    if (result.outcome !== "created") throw new Error("unreachable");
+    expect(result.novelSlug).toBe("his-18-2");
   });
 
   it("appends a numeric suffix when the base slug is already taken by an active Novel", async () => {

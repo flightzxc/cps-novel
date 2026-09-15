@@ -21,6 +21,21 @@ function seedReadyNovel(fake: FakeContentCreationDb, title = "Ready Novel") {
 }
 
 describe("generateArticleFromNovel", () => {
+  it("keeps the Article slug health check for a short title", async () => {
+    const fake = new FakeContentCreationDb();
+    const { novel } = seedReadyNovel(fake, "Hi");
+
+    const result = await generateArticleFromNovel(fake.asPrismaClient(), {
+      novelId: novel.id,
+      mode: "apply",
+      actor: ADMIN_ACTOR,
+      requestId: "gen-short-title",
+    });
+
+    expect(result).toEqual({ outcome: "slug_unhealthy", field: "article", baseSlug: "hi" });
+    expect(fake.articles.size).toBe(0);
+  });
+
   it("creates a draft Article bound to the ready promo and selected template", async () => {
     const fake = new FakeContentCreationDb();
     const { novel, promo } = seedReadyNovel(fake, "Bound Story");
