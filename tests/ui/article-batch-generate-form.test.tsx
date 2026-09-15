@@ -2,7 +2,15 @@ import "./setup-cleanup";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { NovelGenerateCandidate, NovelGeneratePage } from "@/domain/article-generation";
+import {
+  ARTICLE_GENERATE_LEAF_MAX,
+  articleGenerateBlockedReasonLabel,
+  type ArticleTemplateOption,
+  type NovelGenerateCandidate,
+  type NovelGeneratePage,
+} from "@/domain/article-generation";
+import { formatDateTime } from "@/features/admin-ui/datetime";
+import { SITE_LOCALE_LABELS, type SiteLocale } from "@/lib/locale/locale-canonical";
 
 const actions = vi.hoisted(() => ({
   listArticleGenerateCandidatesAction: vi.fn(),
@@ -19,17 +27,39 @@ const ID_EN = "11111111-1111-4111-8111-111111111111";
 const ID_EN_2 = "11111111-1111-4111-8111-111111111112";
 const ID_JA = "22222222-2222-4222-8222-222222222222";
 
+const DEFAULT_UPDATED_AT = "2026-01-01T00:00:00.000Z";
+
 function novel(id: string, locale: string, title: string): NovelGenerateCandidate {
   return {
     novelId: id,
     title,
     locale,
     businessId: `biz-${id.slice(-4)}`,
+    updatedAt: DEFAULT_UPDATED_AT,
     hasLiveArticle: false,
     promoReady: true,
     promoOutcome: "ready",
     canGenerateArticle: true,
   };
+}
+
+/** Builds the exact row text the component renders — title, Chinese locale
+ * label (falling back to the raw code, same as the component), businessId,
+ * formatted `updatedAt`, and the blocked-reason suffix when present — so
+ * assertions never hand-duplicate `formatDateTime`'s own output format. */
+function rowText(n: NovelGenerateCandidate): string {
+  const label = SITE_LOCALE_LABELS[n.locale as SiteLocale] ?? n.locale;
+  const base = `${n.title} · ${label} · ${n.businessId} · 更新于 ${formatDateTime(n.updatedAt)}`;
+  return n.generateBlockedReason
+    ? `${base} · ${articleGenerateBlockedReasonLabel(n.generateBlockedReason)}`
+    : base;
+}
+
+/** Builds an `ArticleTemplateOption` fixture — `templateName` defaults to a
+ * readable Chinese label derived from the key so option-name assertions stay
+ * legible without every call site inventing its own. */
+function template(templateKey: string, locale: string, version: number, templateName = `${templateKey}模板`): ArticleTemplateOption {
+  return { templateKey, templateName, locale, version };
 }
 
 /** Default `localeCounts`: derived from `rows` unless a test overrides it — most tests don't care
@@ -92,12 +122,12 @@ describe("ArticleBatchGenerateForm (R2-02 / R2-03 / R2-04)", () => {
     actions.listArticleGenerateCandidatesAction.mockResolvedValue({
       ok: true,
       data: EN_PAGE,
-      templates: [{ templateKey: "en-default", locale: "en", version: 1 }],
+      templates: [template("en-default", "en", 1)],
     });
     render(
       <ArticleBatchGenerateForm
         initialPage={EN_PAGE}
-        templates={[{ templateKey: "en-default", locale: "en", version: 1 }]}
+        templates={[template("en-default", "en", 1)]}
         canWrite
       />,
     );
@@ -107,7 +137,7 @@ describe("ArticleBatchGenerateForm (R2-02 / R2-03 / R2-04)", () => {
     fireEvent.change(screen.getByTestId("batch-search"), { target: { value: "" } });
     expect(screen.getByTestId("filter-dirty")).toBeTruthy();
     expect(screen.getByTestId("applied-total").textContent).toContain("10");
-    expect(screen.getByText("Old 1 · en · biz-0001")).toBeTruthy();
+    expect(screen.getByText(rowText(EN_PAGE.rows[0]!))).toBeTruthy();
     expect((screen.getByTestId("submit-filtered") as HTMLButtonElement).disabled).toBe(true);
     expect(actions.enqueueArticleGenerateBatchAction).not.toHaveBeenCalled();
   });
@@ -123,7 +153,7 @@ describe("ArticleBatchGenerateForm (R2-02 / R2-03 / R2-04)", () => {
     fireEvent.click(screen.getByTestId("apply-filter"));
     expect((await screen.findByTestId("batch-message")).textContent).toContain("已保留当前筛选与页码");
     expect(screen.getByTestId("applied-total").textContent).toContain("10");
-    expect(screen.getByText("Old 1 · en · biz-0001")).toBeTruthy();
+    expect(screen.getByText(rowText(EN_PAGE.rows[0]!))).toBeTruthy();
     expect(screen.getByTestId("filter-dirty")).toBeTruthy();
   });
 
@@ -141,26 +171,26 @@ describe("ArticleBatchGenerateForm (R2-02 / R2-03 / R2-04)", () => {
       .mockResolvedValueOnce({
         ok: true,
         data: jaPage,
-        templates: [{ templateKey: "ja-body", locale: "ja", version: 3 }],
+        templates: [template("ja-body", "ja", 3)],
       });
 
     render(
       <ArticleBatchGenerateForm
         initialPage={page1}
-        templates={[{ templateKey: "en-default", locale: "en", version: 1 }]}
+        templates={[template("en-default", "en", 1)]}
         canWrite
       />,
     );
     fireEvent.click(screen.getByTestId(`select-${ID_EN}`));
     expect((screen.getByTestId(`select-${ID_EN}`) as HTMLInputElement).checked).toBe(true);
     fireEvent.click(screen.getByTestId("next-page"));
-    await waitFor(() => expect(screen.getByText("Page two · en · biz-1112")).toBeTruthy());
+    await waitFor(() => expect(screen.getByText(rowText(page2.rows[0]!))).toBeTruthy());
     fireEvent.click(screen.getByTestId("prev-page"));
     await waitFor(() => expect((screen.getByTestId(`select-${ID_EN}`) as HTMLInputElement).checked).toBe(true));
 
     fireEvent.click(localeChip("ja"));
     fireEvent.click(screen.getByTestId("apply-filter"));
-    await waitFor(() => expect(screen.getByText("日本語 · ja · biz-2222")).toBeTruthy());
+    await waitFor(() => expect(screen.getByText(rowText(jaPage.rows[0]!))).toBeTruthy());
     expect((screen.getByTestId(`select-${ID_JA}`) as HTMLInputElement).checked).toBe(false);
     expect((screen.getByTestId("submit-selected") as HTMLButtonElement).disabled).toBe(true);
   });
@@ -174,7 +204,7 @@ describe("ArticleBatchGenerateForm (R2-02 / R2-03 / R2-04)", () => {
     render(
       <ArticleBatchGenerateForm
         initialPage={page([novel(ID_EN, "en", "Only one")], { total: 1 })}
-        templates={[{ templateKey: "en-default", locale: "en", version: 1 }]}
+        templates={[template("en-default", "en", 1)]}
         canWrite
       />,
     );
@@ -365,12 +395,12 @@ describe("ArticleBatchGenerateForm (R2-02 / R2-03 / R2-04)", () => {
     actions.listArticleGenerateCandidatesAction.mockResolvedValue({
       ok: true,
       data: page([novel(ID_JA, "ja", "日本語")], { total: 51, page: 2 }),
-      templates: [{ templateKey: "ja-body", locale: "ja", version: 3 }],
+      templates: [template("ja-body", "ja", 3)],
     });
     render(
       <ArticleBatchGenerateForm
         initialPage={page([novel(ID_EN, "en", "English")], { total: 51 })}
-        templates={[{ templateKey: "en-default", locale: "en", version: 1 }]}
+        templates={[template("en-default", "en", 1)]}
         canWrite
       />,
     );
@@ -378,7 +408,7 @@ describe("ArticleBatchGenerateForm (R2-02 / R2-03 / R2-04)", () => {
     expect(screen.queryByTestId("template-ja")).toBeNull();
     fireEvent.click(screen.getByTestId("next-page"));
     await waitFor(() => expect(screen.getByTestId("template-ja")).toBeTruthy());
-    expect(screen.getByRole("option", { name: "ja-body · v3" })).toBeTruthy();
+    expect(screen.getByRole("option", { name: "ja-body模板（ja-body · v3）" })).toBeTruthy();
     // The "en" row is off the new page and its facet dropped out of
     // `localeCounts`, so its template row no longer renders either — the
     // template row list follows the filtered set, not an ever-growing cache.
@@ -397,15 +427,16 @@ describe("ArticleBatchGenerateForm (R2-02 / R2-03 / R2-04)", () => {
   });
 
   it("toggling 显示不可生成 reloads page 1 with showIneligible=true, without touching the filter or its dirty state", async () => {
+    const blockedOne = {
+      ...novel(ID_EN_2, "en", "Blocked one"),
+      canGenerateArticle: false,
+      promoReady: false,
+      promoOutcome: "promo_link_missing" as const,
+      generateBlockedReason: "promo_link_missing" as const,
+    };
     actions.listArticleGenerateCandidatesAction.mockResolvedValue({
       ok: true,
-      data: page([novel(ID_EN, "en", "Ready one"), {
-        ...novel(ID_EN_2, "en", "Blocked one"),
-        canGenerateArticle: false,
-        promoReady: false,
-        promoOutcome: "promo_link_missing" as const,
-        generateBlockedReason: "promo_link_missing" as const,
-      }], { generatableCount: 1, nonGeneratableCount: 1, total: 2 }),
+      data: page([novel(ID_EN, "en", "Ready one"), blockedOne], { generatableCount: 1, nonGeneratableCount: 1, total: 2 }),
       templates: [],
     });
     render(
@@ -422,7 +453,7 @@ describe("ArticleBatchGenerateForm (R2-02 / R2-03 / R2-04)", () => {
       showIneligible: true,
     });
     expect(screen.queryByTestId("filter-dirty")).toBeNull();
-    await waitFor(() => expect(screen.getByText("Blocked one · en · biz-1112 · 缺少推广链接")).toBeTruthy());
+    await waitFor(() => expect(screen.getByText(rowText(blockedOne))).toBeTruthy());
     expect((screen.getByTestId(`select-${ID_EN_2}`) as HTMLInputElement).disabled).toBe(true);
   });
 
@@ -437,5 +468,106 @@ describe("ArticleBatchGenerateForm (R2-02 / R2-03 / R2-04)", () => {
     await waitFor(() => expect(actions.enqueueArticleGenerateBatchAction).toHaveBeenCalled());
     const call = actions.enqueueArticleGenerateBatchAction.mock.calls[0][0];
     expect(JSON.stringify(call)).not.toMatch(/showIneligible/);
+  });
+
+  it("shows a running 已选 N / 200 indicator and blocks explicit-ids submit above the cap before any action call", () => {
+    const rows = Array.from({ length: ARTICLE_GENERATE_LEAF_MAX + 10 }, (_, index) =>
+      novel(`row-${index + 1}`, "en", `Book ${index + 1}`));
+    render(<ArticleBatchGenerateForm initialPage={page(rows, { total: rows.length })} templates={[]} canWrite />);
+
+    expect(screen.getByTestId("selected-count").textContent)
+      .toContain(`已选 0 / ${ARTICLE_GENERATE_LEAF_MAX}`);
+    expect(screen.queryByTestId("cap-over-message")).toBeNull();
+
+    // 本页全选 pushes the selection past the cap in one click — the page
+    // itself has more rows than the cap allows.
+    fireEvent.click(screen.getByTestId("select-all-page"));
+
+    expect(screen.getByTestId("selected-count").textContent)
+      .toContain(`已选 ${rows.length} / ${ARTICLE_GENERATE_LEAF_MAX}`);
+    expect(screen.getByTestId("cap-over-message")).toBeTruthy();
+    const submitSelected = screen.getByTestId("submit-selected") as HTMLButtonElement;
+    expect(submitSelected.disabled).toBe(true);
+
+    // The disabled attribute already stops the click from reaching `onClick`
+    // in a real browser/jsdom, but this also proves the internal guard in
+    // `submit()` never lets an over-cap explicit-ids request through to the
+    // server action, even if something upstream of `disabled` changes later.
+    fireEvent.click(submitSelected);
+    expect(actions.enqueueArticleGenerateBatchAction).not.toHaveBeenCalled();
+    // The "按当前筛选全部入队" path submits a filter, not ids, so the cap
+    // (an explicit-ids-only constraint) never touches it.
+    expect((screen.getByTestId("submit-filtered") as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it("本页全选 selects only eligible rows on the page and reflects partial selection as indeterminate", () => {
+    const ready1 = novel(ID_EN, "en", "Ready one");
+    const ready2 = novel(ID_EN_2, "en", "Ready two");
+    const blocked = {
+      ...novel(ID_JA, "ja", "Blocked"),
+      canGenerateArticle: false,
+      promoReady: false,
+      promoOutcome: "promo_link_missing" as const,
+      generateBlockedReason: "promo_link_missing" as const,
+    };
+    render(<ArticleBatchGenerateForm initialPage={page([ready1, ready2, blocked])} templates={[]} canWrite />);
+    const selectAll = screen.getByTestId("select-all-page") as HTMLInputElement;
+    expect(selectAll.checked).toBe(false);
+    expect(selectAll.indeterminate).toBe(false);
+
+    fireEvent.click(selectAll);
+    expect((screen.getByTestId(`select-${ID_EN}`) as HTMLInputElement).checked).toBe(true);
+    expect((screen.getByTestId(`select-${ID_EN_2}`) as HTMLInputElement).checked).toBe(true);
+    // The blocked row's own disabled checkbox already forbids this, but
+    // 本页全选 must independently never add an ineligible row either.
+    expect((screen.getByTestId(`select-${ID_JA}`) as HTMLInputElement).checked).toBe(false);
+    expect(selectAll.checked).toBe(true);
+    expect(selectAll.indeterminate).toBe(false);
+
+    fireEvent.click(screen.getByTestId(`select-${ID_EN_2}`));
+    expect(selectAll.checked).toBe(false);
+    expect(selectAll.indeterminate).toBe(true);
+
+    fireEvent.click(selectAll);
+    expect((screen.getByTestId(`select-${ID_EN}`) as HTMLInputElement).checked).toBe(true);
+    expect((screen.getByTestId(`select-${ID_EN_2}`) as HTMLInputElement).checked).toBe(true);
+    expect(selectAll.checked).toBe(true);
+    expect(selectAll.indeterminate).toBe(false);
+  });
+
+  it("shows a 将为 N 本书目创建文章 estimate that follows the explicit selection, falling back to generatableCount when nothing is selected", () => {
+    const ready1 = novel(ID_EN, "en", "Ready one");
+    const ready2 = novel(ID_EN_2, "en", "Ready two");
+    render(
+      <ArticleBatchGenerateForm
+        initialPage={page([ready1, ready2], { generatableCount: 5, nonGeneratableCount: 0, total: 2 })}
+        templates={[]}
+        canWrite
+      />,
+    );
+    expect(screen.getByTestId("generate-estimate").textContent).toContain("将为 5 本书目创建文章");
+
+    fireEvent.click(screen.getByTestId(`select-${ID_EN}`));
+    expect(screen.getByTestId("generate-estimate").textContent).toContain("将为 1 本书目创建文章");
+
+    fireEvent.click(screen.getByTestId(`select-${ID_EN_2}`));
+    expect(screen.getByTestId("generate-estimate").textContent).toContain("将为 2 本书目创建文章");
+
+    fireEvent.click(screen.getByTestId(`select-${ID_EN_2}`));
+    expect(screen.getByTestId("generate-estimate").textContent).toContain("将为 1 本书目创建文章");
+  });
+
+  it("template dropdown option label includes templateName alongside the key and version", () => {
+    render(
+      <ArticleBatchGenerateForm
+        initialPage={page([novel(ID_EN, "en", "Alpha")], { localeCounts: [{ locale: "en", count: 1 }] })}
+        templates={[template("en-default", "en", 2, "英文默认模板")]}
+        canWrite
+      />,
+    );
+    expect(screen.getByTestId("template-en")).toBeTruthy();
+    expect(screen.getByRole("option", { name: "英文默认模板（en-default · v2）" })).toBeTruthy();
+    // The empty-value "服务默认模板" option's semantics are unchanged by this.
+    expect(screen.getByRole("option", { name: "服务默认模板" })).toBeTruthy();
   });
 });

@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { findCapabilityState } from "@/features/admin-ui/capability-view";
+import { AdminTimeZoneNote } from "@/features/admin-ui/time-zone-note";
 import { listActiveArticleTemplateOptionsForLocales } from "@/server/article-templates";
 import { listNovelsForArticleGenerate } from "@/server/content-creation";
 
@@ -53,6 +54,7 @@ export default async function ArticleBatchGeneratePage() {
         </div>
       }
     >
+      <AdminTimeZoneNote />
       <ArticleBatchGenerateForm initialPage={initialPage} templates={templates} canWrite={canWrite} />
     </AdminShell>
   );

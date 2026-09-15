@@ -177,6 +177,10 @@ export function createArticleGenerateBatchHandler(db: PrismaClient): TaskHandler
               title: true,
               locale: true,
               businessId: true,
+              // Not read by `resolveArticleGenerateAdmissions` itself — selected
+              // only because it shares `NovelListRow` (`@/server/content-creation/
+              // eligibility.ts`) with `toCandidate`, which does need it.
+              updatedAt: true,
               deletedAt: true,
               articles: { select: { id: true, locale: true, deletedAt: true } },
             },

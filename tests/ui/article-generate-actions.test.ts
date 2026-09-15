@@ -302,7 +302,7 @@ describe("article generate actions reuse frozen capabilities", () => {
       localeCounts: [{ locale: "en", count: 5 }, { locale: "ja", count: 1 }],
     });
     articleTemplates.listActiveArticleTemplateOptionsForLocales.mockResolvedValue([
-      { id: "tpl-1", templateKey: "ja-body", locale: "ja", version: 3 },
+      { id: "tpl-1", templateKey: "ja-body", templateName: "日文正文模板", locale: "ja", version: 3 },
     ]);
 
     const result = await listArticleGenerateCandidatesAction({ requestId: "req-ja", page: 2 });
@@ -314,7 +314,7 @@ describe("article generate actions reuse frozen capabilities", () => {
     expect(result).toEqual({
       ok: true,
       data: expect.objectContaining({ page: 2 }),
-      templates: [{ templateKey: "ja-body", locale: "ja", version: 3 }],
+      templates: [{ templateKey: "ja-body", templateName: "日文正文模板", locale: "ja", version: 3 }],
     });
   });
 });

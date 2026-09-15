@@ -729,7 +729,7 @@ export async function listArticleGenerateCandidatesAction(input: {
     const locales = data.localeCounts.map((entry) => entry.locale);
     const templates = locales.length > 0
       ? (await listActiveArticleTemplateOptionsForLocales(prisma, locales, "novel_article"))
-        .map(({ templateKey, locale, version }) => ({ templateKey, locale, version }))
+        .map(({ templateKey, templateName, locale, version }) => ({ templateKey, templateName, locale, version }))
       : [];
     return { ok: true, data, templates };
   } catch (error) {

@@ -1,6 +1,22 @@
 export const ARTICLE_GENERATE_UUID =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
+/**
+ * Single source of truth for the explicit-ids submission cap, enforced here
+ * by {@link normalizeArticleGenerateSelection} (`novel_ids_too_many`) and
+ * re-exported from `@/lib/tasks/article-generate.ts` for its own
+ * `ArticleGenerateInputError` guard and the worker's per-leaf-task chunk
+ * ceiling. Defined in this domain module — not there — because this module
+ * has zero imports (no Prisma, no Node builtins) and is safe to import into
+ * a Client Component (`batch-generate-form.tsx`'s pre-submit cap indicator);
+ * `@/lib/tasks/article-generate.ts` pulls in `@prisma/client` and
+ * `@/server/content-creation/eligibility.ts`, which a Client Component must
+ * never import (see `tests/ui/admin-secret-boundary.test.tsx` and this
+ * repo's own precedent for the rule, e.g. `batch-rebind-client.tsx`'s
+ * `REBIND_BATCH_APPLY_CAP` comment).
+ */
+export const ARTICLE_GENERATE_LEAF_MAX = 200;
+
 export type NovelGeneratePromoOutcome =
   | "ready"
   | "promo_link_missing"
@@ -19,6 +35,8 @@ export type NovelGenerateCandidate = {
   readonly title: string;
   readonly locale: string;
   readonly businessId: string;
+  /** ISO 8601 (`Novel.updatedAt.toISOString()`) — same string-not-Date convention as every other admin view type; render via `formatDateTime` (`@/features/admin-ui/datetime`). */
+  readonly updatedAt: string;
   readonly hasLiveArticle: boolean;
   readonly promoReady: boolean;
   readonly promoOutcome: NovelGeneratePromoOutcome;
@@ -119,6 +137,7 @@ export type NovelGeneratePage = Readonly<{
 
 export type ArticleTemplateOption = Readonly<{
   templateKey: string;
+  templateName: string;
   locale: string;
   version: number;
 }>;
@@ -181,7 +200,7 @@ export function normalizeArticleGenerateSelection(
     }
     const novelIds = Array.from(new Set(selection.novelIds.map((id) => id.trim().toLowerCase()))).sort();
     if (novelIds.length === 0) throw new ArticleGenerateSelectionError("novel_ids_required");
-    if (novelIds.length > 200) throw new ArticleGenerateSelectionError("novel_ids_too_many");
+    if (novelIds.length > ARTICLE_GENERATE_LEAF_MAX) throw new ArticleGenerateSelectionError("novel_ids_too_many");
     if (novelIds.some((id) => !ARTICLE_GENERATE_UUID.test(id))) {
       throw new ArticleGenerateSelectionError("novel_id_invalid");
     }

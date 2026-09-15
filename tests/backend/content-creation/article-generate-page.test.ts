@@ -20,6 +20,7 @@ const candidate = (id: string, title = id): NovelGenerateCandidate => ({
   title,
   locale: "en",
   businessId: `biz-${id}`,
+  updatedAt: "2026-01-01T00:00:00.000Z",
   hasLiveArticle: false,
   promoReady: true,
   promoOutcome: "ready",

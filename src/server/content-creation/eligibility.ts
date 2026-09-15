@@ -18,6 +18,7 @@ type NovelListRow = {
   title: string;
   locale: string;
   businessId: string;
+  updatedAt: Date;
   deletedAt: Date | null;
   articles: readonly { id: string; locale: string; deletedAt: Date | null }[];
 };
@@ -152,6 +153,7 @@ function toCandidate(
     title: novel.title,
     locale: novel.locale,
     businessId: novel.businessId,
+    updatedAt: novel.updatedAt.toISOString(),
     hasLiveArticle: novel.articles.some((article) => article.locale === novel.locale && article.deletedAt === null),
     promoReady: outcome === "ready",
     promoOutcome: outcome === "ready" ? "ready" : outcome,
@@ -209,6 +211,7 @@ export async function listNovelsForArticleGenerate(
         title: true,
         locale: true,
         businessId: true,
+        updatedAt: true,
         deletedAt: true,
         articles: { select: { id: true, locale: true, deletedAt: true } },
       },
@@ -264,6 +267,7 @@ export async function loadPinnedNovelForArticleGenerate(
       title: true,
       locale: true,
       businessId: true,
+      updatedAt: true,
       deletedAt: true,
       articles: { select: { id: true, locale: true, deletedAt: true } },
     },

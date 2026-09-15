@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 
 import { buttonClassName } from "@/components/ui/button";
 import {
+  ARTICLE_GENERATE_LEAF_MAX,
   articleGenerateBlockedReasonLabel,
   ArticleGenerateSelectionError,
   normalizeArticleGenerateFilter,
@@ -13,6 +14,7 @@ import {
   type NormalizedArticleGenerateFilter,
   type NovelGeneratePage,
 } from "@/domain/article-generation";
+import { formatDateTime } from "@/features/admin-ui/datetime";
 import { SITE_LOCALE_LABELS, type SiteLocale } from "@/lib/locale/locale-canonical";
 
 import {
@@ -125,12 +127,41 @@ export function ArticleBatchGenerateForm({
     ? appliedFilter.locales
     : page.localeCounts.map((entry) => entry.locale);
   const pageCount = Math.max(1, Math.ceil(page.total / page.pageSize));
+  // 本页全选 population: only rows the per-row checkbox would itself allow —
+  // ineligible rows must never enter `selected` through this control either,
+  // same double-guard discipline as `toggle` below (disabled input +
+  // imperative filter), just applied to a whole page at once.
+  const pageSelectableIds = useMemo(
+    () => page.rows.filter((row) => row.canGenerateArticle).map((row) => row.novelId),
+    [page.rows],
+  );
+  const allPageSelected = pageSelectableIds.length > 0 && pageSelectableIds.every((id) => selected.includes(id));
+  const somePageSelected = pageSelectableIds.some((id) => selected.includes(id));
+  const overCap = selected.length > ARTICLE_GENERATE_LEAF_MAX;
+  // Explicit-ids estimate: what "提交已选" would actually create. Falls back
+  // to `generatableCount` (what "按当前筛选全部入队" would create) once
+  // nothing is explicitly selected — 海阅 makes exactly one Article per
+  // Novel, never a `selected × templates` product like CPS's own estimate.
+  const estimatedArticleCount = selected.length > 0 ? selected.length : page.generatableCount;
 
   function toggle(id: string) {
     if (requestLocked) return;
     const novel = page.rows.find((row) => row.novelId === id);
     if (novel && !novel.canGenerateArticle) return;
     setSelected((current) => (current.includes(id) ? current.filter((item) => item !== id) : [...current, id]));
+  }
+
+  function toggleSelectAllOnPage() {
+    if (requestLocked || pageSelectableIds.length === 0) return;
+    setSelected((current) => {
+      const currentSet = new Set(current);
+      const allSelected = pageSelectableIds.every((id) => currentSet.has(id));
+      for (const id of pageSelectableIds) {
+        if (allSelected) currentSet.delete(id);
+        else currentSet.add(id);
+      }
+      return Array.from(currentSet);
+    });
   }
 
   // Named `flipLocaleChip`, not `toggleLocale` — mirrors
@@ -225,6 +256,15 @@ export function ArticleBatchGenerateForm({
   async function submit(scope: "explicit_ids" | "all_filtered") {
     if (!canWrite || filterDirty) return;
     if (!frozen && scope === "explicit_ids" && selected.length === 0) return;
+    // Double-guard, same discipline as the per-row admission check: the
+    // "已选 N / 200" indicator + inline message already make this visually
+    // clear and disable the submit button before this ever runs, but this
+    // check makes the block unconditional — no `enqueueArticleGenerateBatchAction`
+    // call ever fires for an over-cap explicit-ids submission.
+    if (!frozen && scope === "explicit_ids" && overCap) {
+      setMessage(`已选 ${selected.length} 本，超过单次提交上限 ${ARTICLE_GENERATE_LEAF_MAX} 本，请减少选择后再提交，或改用「按当前筛选全部入队」。`);
+      return;
+    }
     const request = ensureFrozen(scope);
     setBusy(true);
     setMessage(null);
@@ -324,12 +364,15 @@ export function ArticleBatchGenerateForm({
             <option value="">服务默认模板</option>
             {templateCache.filter((template) => template.locale === item).map((template) => (
               <option key={`${template.templateKey}:${template.version}`} value={template.templateKey}>
-                {template.templateKey} · v{template.version}
+                {template.templateName}（{template.templateKey} · v{template.version}）
               </option>
             ))}
           </select>
         </label>
       ))}
+      <p className="text-sm text-gray-600" data-testid="generate-estimate">
+        将为 {estimatedArticleCount.toLocaleString("zh-CN")} 本书目创建文章
+      </p>
       <p
         className="text-sm text-gray-600"
         data-testid="applied-total"
@@ -349,6 +392,29 @@ export function ArticleBatchGenerateForm({
         />
         显示不可生成（{page.nonGeneratableCount.toLocaleString("zh-CN")} 本）
       </label>
+      <div className="flex items-center justify-between">
+        <label className="flex items-center gap-2 text-sm text-gray-700">
+          <input
+            type="checkbox"
+            data-testid="select-all-page"
+            checked={allPageSelected}
+            disabled={busy || requestLocked || pageSelectableIds.length === 0}
+            ref={(el) => {
+              if (el) el.indeterminate = somePageSelected && !allPageSelected;
+            }}
+            onChange={toggleSelectAllOnPage}
+          />
+          本页全选
+        </label>
+        <p className="text-sm text-gray-600" data-testid="selected-count">
+          已选 {selected.length.toLocaleString("zh-CN")} / {ARTICLE_GENERATE_LEAF_MAX}
+        </p>
+      </div>
+      {overCap && (
+        <p data-testid="cap-over-message" className="text-sm text-red-700">
+          已超过单次提交上限（{ARTICLE_GENERATE_LEAF_MAX} 本），请减少选择后再提交「提交已选」，或改用「按当前筛选全部入队」。
+        </p>
+      )}
       <div className="space-y-2">
         {page.rows.map((novel) => (
           <label key={novel.novelId} className="flex items-start gap-2 text-sm text-gray-800">
@@ -360,7 +426,7 @@ export function ArticleBatchGenerateForm({
               onChange={() => toggle(novel.novelId)}
             />
             <span>
-              {novel.title} · {novel.locale} · {novel.businessId}
+              {novel.title} · {SITE_LOCALE_LABELS[novel.locale as SiteLocale] ?? novel.locale} · {novel.businessId} · 更新于 {formatDateTime(novel.updatedAt)}
               {novel.generateBlockedReason ? ` · ${articleGenerateBlockedReasonLabel(novel.generateBlockedReason)}` : ""}
             </span>
           </label>
@@ -394,7 +460,7 @@ export function ArticleBatchGenerateForm({
         <button
           type="button"
           data-testid="submit-selected"
-          disabled={(!selected.length && !frozen) || !canWrite || busy || filterDirty}
+          disabled={(!selected.length && !frozen) || !canWrite || busy || filterDirty || overCap}
           className={buttonClassName("primary")}
           onClick={() => void submit("explicit_ids")}
         >

@@ -127,6 +127,7 @@ function createDb(novels: SeedNovel[], promoCalls: unknown[] = []) {
             title: novel.title,
             locale: novel.locale,
             businessId: novel.businessId,
+            updatedAt: novel.updatedAt,
             deletedAt: novel.deletedAt,
             articles: novel.hasLiveArticle
               ? [{ id: `${novel.id}-article`, locale: novel.locale, deletedAt: null }]
@@ -142,6 +143,7 @@ function createDb(novels: SeedNovel[], promoCalls: unknown[] = []) {
           title: novel.title,
           locale: novel.locale,
           businessId: novel.businessId,
+          updatedAt: novel.updatedAt,
           deletedAt: novel.deletedAt,
           articles: novel.hasLiveArticle
             ? [{ id: `${novel.id}-article`, locale: novel.locale, deletedAt: null }]

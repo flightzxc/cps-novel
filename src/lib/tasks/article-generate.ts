@@ -2,6 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { Prisma, type PrismaClient } from "@prisma/client";
 
 import {
+  ARTICLE_GENERATE_LEAF_MAX,
   ARTICLE_GENERATE_UUID,
   normalizeArticleGenerateFilter,
   type ArticleGenerateBlockedReason,
@@ -39,7 +40,12 @@ export const ARTICLE_GENERATE_TARGET_TYPE = "novel";
 export const ARTICLE_GENERATE_BATCH_TARGET_TYPE = "article_generate_filter";
 export const ARTICLE_GENERATE_TTL_MS = 6 * 60 * 60 * 1_000;
 export const ARTICLE_GENERATE_CHUNK_SIZE = 50;
-export const ARTICLE_GENERATE_LEAF_MAX = 200;
+// Re-exported, not redefined: `@/domain/article-generation` is the single
+// source of truth (see that module's own doc comment on `ARTICLE_GENERATE_LEAF_MAX`
+// for why it lives there and not here) — this used to be an independent
+// `= 200` literal that happened to match the domain guard's own hardcoded
+// `200` by hand rather than by import.
+export { ARTICLE_GENERATE_LEAF_MAX };
 
 /**
  * `worker/handlers/article-generate-batch.ts`'s v1 drain path: a v1 payload
@@ -213,6 +219,10 @@ export async function enqueueArticleGenerateBatch(
           title: true,
           locale: true,
           businessId: true,
+          // Not read by `resolveArticleGenerateAdmissions` itself — selected
+          // only because it shares `NovelListRow` (`@/server/content-creation/
+          // eligibility.ts`) with `toCandidate`, which does need it.
+          updatedAt: true,
           deletedAt: true,
           articles: { select: { id: true, locale: true, deletedAt: true } },
         },
