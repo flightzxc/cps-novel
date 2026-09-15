@@ -117,13 +117,13 @@ export async function resolveArticleGenerateAdmissions(
  */
 function novelWhere(input: {
   readonly search?: string;
-  readonly locale?: string;
+  readonly locales?: readonly string[];
   readonly eligibleOnly?: boolean;
   readonly promoReadiness?: "required" | "excluded";
 }): Prisma.NovelWhereInput {
   return {
     deletedAt: null,
-    ...(input.locale ? { locale: input.locale } : {}),
+    ...(input.locales && input.locales.length > 0 ? { locale: { in: [...input.locales] } } : {}),
     ...(input.search
       ? {
           OR: [
@@ -176,7 +176,7 @@ export async function listNovelsForArticleGenerate(
   db: PrismaClient,
   input: {
     readonly search?: string;
-    readonly locale?: string;
+    readonly locales?: readonly string[];
     readonly page?: number;
     readonly pageSize?: number;
     readonly eligibleOnly?: boolean;
@@ -194,13 +194,13 @@ export async function listNovelsForArticleGenerate(
 ): Promise<NovelGeneratePage> {
   const pageSize = Math.min(Math.max(input.pageSize ?? 50, 1), 80);
   const page = Math.max(input.page ?? 1, 1);
-  const baseFilter = { search: input.search, locale: input.locale };
-  const where = novelWhere({
-    ...baseFilter,
-    eligibleOnly: input.eligibleOnly,
-    ...(input.eligibleOnly && !input.showIneligible ? { promoReadiness: "required" as const } : {}),
-  });
-  const [total, novels, generatableCount, nonGeneratableCount] = await Promise.all([
+  const baseFilter = { search: input.search, locales: input.locales };
+  // Shared by `where` (below, WITH the locale narrowing) and the locale
+  // facet query (below, WITHOUT it) — same view semantics (promo toggle),
+  // different scope.
+  const viewPromoReadiness = input.eligibleOnly && !input.showIneligible ? "required" as const : undefined;
+  const where = novelWhere({ ...baseFilter, eligibleOnly: input.eligibleOnly, promoReadiness: viewPromoReadiness });
+  const [total, novels, generatableCount, nonGeneratableCount, localeCountRows] = await Promise.all([
     db.novel.count({ where }),
     db.novel.findMany({
       where,
@@ -220,12 +220,26 @@ export async function listNovelsForArticleGenerate(
     // batch-generate banner can show "可生成 N 本 / 另有 M 本不可生成"
     // regardless of which set `rows`/`total` above currently represents.
     input.eligibleOnly
-      ? db.novel.count({ where: novelWhere({ ...baseFilter, eligibleOnly: true, promoReadiness: "required" }) })
+      ? db.novel.count({ where: novelWhere({ search: input.search, eligibleOnly: true, promoReadiness: "required" }) })
       : Promise.resolve(0),
     input.eligibleOnly
-      ? db.novel.count({ where: novelWhere({ ...baseFilter, eligibleOnly: true, promoReadiness: "excluded" }) })
+      ? db.novel.count({ where: novelWhere({ search: input.search, eligibleOnly: true, promoReadiness: "excluded" }) })
       : Promise.resolve(0),
+    // Locale facet counts — the population the chip group offers to pick
+    // FROM, so deliberately omits `locales` from its own `where` (a
+    // `groupBy`, never a materialised id list; see `NovelGeneratePage.
+    // localeCounts`'s doc comment in `src/domain/article-generation.ts`).
+    input.eligibleOnly
+      ? db.novel.groupBy({
+          by: ["locale"],
+          where: novelWhere({ search: input.search, eligibleOnly: true, promoReadiness: viewPromoReadiness }),
+          _count: { _all: true },
+        })
+      : Promise.resolve([] as Array<{ locale: string; _count: { _all: number } }>),
   ]);
+  const localeCounts = [...localeCountRows]
+    .map((row) => ({ locale: row.locale, count: row._count._all }))
+    .sort((a, b) => a.locale.localeCompare(b.locale));
   return {
     rows: await decorateNovels(db, novels),
     total,
@@ -233,6 +247,7 @@ export async function listNovelsForArticleGenerate(
     pageSize,
     generatableCount,
     nonGeneratableCount,
+    localeCounts,
   };
 }
 
@@ -272,7 +287,7 @@ export async function loadPinnedNovelForArticleGenerate(
  * blocked.
  */
 export function articleGenerateEligibleWhere(
-  filter: { readonly search?: string; readonly locale?: string },
+  filter: { readonly search?: string; readonly locales?: readonly string[] },
 ): Prisma.NovelWhereInput {
   return novelWhere({ ...filter, eligibleOnly: true, promoReadiness: "required" });
 }

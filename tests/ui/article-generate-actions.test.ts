@@ -191,13 +191,13 @@ describe("article generate actions reuse frozen capabilities", () => {
     articleGenerate.enqueueArticleGenerateParentBatch.mockResolvedValue({ taskId: "parent-1", duplicate: false });
 
     const result = await enqueueArticleGenerateBatchAction({
-      selection: { scope: "all_filtered", filter: { search: "old", locale: "en" } },
+      selection: { scope: "all_filtered", filter: { search: "old", locales: ["en"] } },
       requestId: "req-parent",
     });
     expect(articleGenerate.enqueueArticleGenerateParentBatch).toHaveBeenCalledWith(
       { __brand: "prisma-stub" },
       expect.objectContaining({
-        filter: { search: "old", locale: "en" },
+        filter: { search: "old", locales: ["en"] },
         actorId: "admin-1",
         requestId: "req-parent",
       }),
@@ -209,13 +209,13 @@ describe("article generate actions reuse frozen capabilities", () => {
 
   it("candidate list uses content:view and returns the current page only", async () => {
     guards.requireAdminActionAccess.mockResolvedValue({ context: CONTEXT });
-    const page = { rows: [], total: 201, page: 5, pageSize: 50 };
+    const page = { rows: [], total: 201, page: 5, pageSize: 50, localeCounts: [] };
     contentCreation.listNovelsForArticleGenerate.mockResolvedValue(page);
 
     const result = await listArticleGenerateCandidatesAction({
       requestId: "req-list",
       search: "old",
-      locale: "en",
+      locales: ["en"],
       page: 5,
     });
     expect(guards.requireAdminActionAccess.mock.calls[0][0]).toMatchObject({
@@ -223,7 +223,7 @@ describe("article generate actions reuse frozen capabilities", () => {
     });
     expect(contentCreation.listNovelsForArticleGenerate).toHaveBeenCalledWith(
       { __brand: "prisma-stub" },
-      expect.objectContaining({ search: "old", locale: "en", page: 5, eligibleOnly: true, pageSize: 50 }),
+      expect.objectContaining({ search: "old", locales: ["en"], page: 5, eligibleOnly: true, pageSize: 50 }),
     );
     expect(result).toEqual({ ok: true, data: page, templates: [] });
     expect(articleTemplates.listActiveArticleTemplateOptionsForLocales).not.toHaveBeenCalled();
@@ -239,6 +239,7 @@ describe("article generate actions reuse frozen capabilities", () => {
       pageSize: 50,
       generatableCount: 0,
       nonGeneratableCount: 0,
+      localeCounts: [],
     });
 
     await listArticleGenerateCandidatesAction({ requestId: "req-default" });
@@ -255,44 +256,50 @@ describe("article generate actions reuse frozen capabilities", () => {
     );
   });
 
-  it("candidate list canonicalizes search/locale before querying", async () => {
+  it("candidate list canonicalizes search/locales before querying", async () => {
     guards.requireAdminActionAccess.mockResolvedValue({ context: CONTEXT });
     contentCreation.listNovelsForArticleGenerate.mockResolvedValue({
       rows: [],
       total: 0,
       page: 1,
       pageSize: 50,
+      localeCounts: [],
     });
 
     await listArticleGenerateCandidatesAction({
       requestId: "req-canonical",
       search: "Alpha ",
-      locale: " en ",
+      locales: [" en ", "en", " ja "],
       page: 1,
     });
     expect(contentCreation.listNovelsForArticleGenerate).toHaveBeenCalledWith(
       { __brand: "prisma-stub" },
-      expect.objectContaining({ search: "Alpha", locale: "en", eligibleOnly: true, pageSize: 50 }),
+      expect.objectContaining({ search: "Alpha", locales: ["en", "ja"], eligibleOnly: true, pageSize: 50 }),
     );
 
     contentCreation.listNovelsForArticleGenerate.mockClear();
     await listArticleGenerateCandidatesAction({
       requestId: "req-blank",
       search: "   ",
-      locale: "  ",
+      locales: ["  ", ""],
     });
     const blankCall = contentCreation.listNovelsForArticleGenerate.mock.calls[0][1] as Record<string, unknown>;
     expect(blankCall).not.toHaveProperty("search");
-    expect(blankCall).not.toHaveProperty("locale");
+    expect(blankCall).not.toHaveProperty("locales");
   });
 
-  it("candidate list fetches templates only for locales on the current page", async () => {
+  it("candidate list fetches templates for every locale in the filtered set, not just the current page", async () => {
     guards.requireAdminActionAccess.mockResolvedValue({ context: CONTEXT });
     contentCreation.listNovelsForArticleGenerate.mockResolvedValue({
+      // The current page only shows a "ja" row, but `localeCounts` (the
+      // FULL filtered-set facet, `groupBy`-derived) also carries "en" — a
+      // locale absent from this page but present elsewhere in the filter.
+      // Templates must be fetched for both.
       rows: [{ novelId: "n1", locale: "ja", title: "J", businessId: "b", hasLiveArticle: false, promoReady: true, promoOutcome: "ready" }],
       total: 1,
       page: 2,
       pageSize: 50,
+      localeCounts: [{ locale: "en", count: 5 }, { locale: "ja", count: 1 }],
     });
     articleTemplates.listActiveArticleTemplateOptionsForLocales.mockResolvedValue([
       { id: "tpl-1", templateKey: "ja-body", locale: "ja", version: 3 },
@@ -301,7 +308,7 @@ describe("article generate actions reuse frozen capabilities", () => {
     const result = await listArticleGenerateCandidatesAction({ requestId: "req-ja", page: 2 });
     expect(articleTemplates.listActiveArticleTemplateOptionsForLocales).toHaveBeenCalledWith(
       { __brand: "prisma-stub" },
-      ["ja"],
+      ["en", "ja"],
       "novel_article",
     );
     expect(result).toEqual({

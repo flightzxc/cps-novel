@@ -5,7 +5,11 @@ import type { PrismaClient } from "@prisma/client";
 import { describe, expect, it } from "vitest";
 
 import { P2_04_ADMIN_REGISTRY } from "@/app/api/admin/_lib/registry";
-import { ARTICLE_GENERATE_BATCH_TASK_TYPE, ARTICLE_GENERATE_TASK_TYPE } from "@/lib/tasks/article-generate";
+import {
+  ARTICLE_GENERATE_BATCH_TASK_TYPE,
+  ARTICLE_GENERATE_BATCH_TASK_TYPE_V2,
+  ARTICLE_GENERATE_TASK_TYPE,
+} from "@/lib/tasks/article-generate";
 import { PARENT_BATCH_TASK_TYPES } from "@/lib/tasks/parent-batch";
 import { requireAdminRouteAccess } from "@/server/auth/guards";
 import {
@@ -145,7 +149,27 @@ describe("article.generate.batch.v1 parent read model (R2-01)", () => {
   it("keeps PARENT_BATCH_TASK_TYPES wired into list SQL", async () => {
     const source = await readFile(path.resolve(process.cwd(), "src/server/task-admin/service.ts"), "utf8");
     expect(source).toContain("PARENT_BATCH_TASK_TYPES");
-    expect(PARENT_BATCH_TASK_TYPES).toEqual(["batch.materialize.v1", "article.generate.batch.v1"]);
+    // v1 stays listed (drain-only — an already-enqueued legacy parent still
+    // needs its progress/detail read from children exactly like v2) and v2
+    // (current, `article.generate.batch.v2`) is now also registered.
+    expect(PARENT_BATCH_TASK_TYPES).toEqual([
+      "batch.materialize.v1",
+      "article.generate.batch.v1",
+      "article.generate.batch.v2",
+    ]);
+  });
+
+  it("reads a v2 parent's admission/phase identically to a v1 parent", async () => {
+    const v2Parent = parentRow({ task_type: ARTICLE_GENERATE_BATCH_TASK_TYPE_V2 });
+    const db = fakeParentBatchDb({ parent: v2Parent, children: pendingChildren });
+    const detail = await getAdminTaskDetail(
+      db,
+      await readContext("/api/admin/tasks/detail"),
+      { family: "generic", taskId: PARENT_ID },
+      {} as NodeJS.ProcessEnv,
+    );
+    expect(detail.catalogBatch).toMatchObject({ phase: "executing", submittedCount: 400 });
+    expect(detail.articleAdmission).toMatchObject({ selectedCount: 400, submittedCount: 400 });
   });
 
   it("does not treat finished enumeration + pending children as completed 1/1", async () => {

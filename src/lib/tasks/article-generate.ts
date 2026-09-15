@@ -11,11 +11,51 @@ import { resolveArticleGenerateAdmissions } from "@/server/content-creation/elig
 
 export const ARTICLE_GENERATE_TASK_TYPE = "article.generate.v1";
 export const ARTICLE_GENERATE_BATCH_TASK_TYPE = "article.generate.batch.v1";
+/**
+ * Batch-create-operator-ux: the `all_filtered` parent protocol, versioned
+ * because its payload's `filter` shape changed (single `locale` → multi
+ * `locales`). New enqueues (`enqueueArticleGenerateParentBatch`, below) use
+ * ONLY this v2 type from here on. v1 is kept solely so an already-enqueued
+ * legacy task can still be *read* by a worker that also knows how to drain
+ * it fail-closed (`worker/handlers/article-generate-batch.ts`) — its 6h TTL
+ * (`ARTICLE_GENERATE_TTL_MS`) means the v1 backlog clears itself; nothing
+ * should enqueue v1 again. This distinction matters because a v2 payload
+ * read by a worker that only understands v1's `{search?, locale?}` shape
+ * would silently drop `locales`, apply no locale constraint at all, and
+ * enumerate — then write Articles for — far more novels than the operator
+ * ever saw on screen. Registered everywhere `ARTICLE_GENERATE_BATCH_TASK_TYPE`
+ * is (grep for both constants): worker startup allowlist tests,
+ * `scripts/lib/x8-levels.json`, `docs/p2/V020_RELEASE_CHECKLIST.md`,
+ * `.env.example` / `infra/production-like/.env.uat.example`,
+ * `src/lib/tasks/parent-batch.ts`'s `PARENT_BATCH_TASK_TYPES`, and the
+ * task-admin read model's `isArticleGenerate` check (task detail/list/
+ * progress DTOs — kept out of this comment as a literal path: `tests/
+ * backend/task-admin/read-contracts.test.ts`'s X9 isolation scan greps
+ * this whole directory tree for that path string and would flag a mere
+ * comment mention as a forbidden import).
+ */
+export const ARTICLE_GENERATE_BATCH_TASK_TYPE_V2 = "article.generate.batch.v2";
 export const ARTICLE_GENERATE_TARGET_TYPE = "novel";
 export const ARTICLE_GENERATE_BATCH_TARGET_TYPE = "article_generate_filter";
 export const ARTICLE_GENERATE_TTL_MS = 6 * 60 * 60 * 1_000;
 export const ARTICLE_GENERATE_CHUNK_SIZE = 50;
 export const ARTICLE_GENERATE_LEAF_MAX = 200;
+
+/**
+ * `worker/handlers/article-generate-batch.ts`'s v1 drain path: a v1 payload
+ * whose `filter` carries any key outside the frozen legacy `{search?,
+ * locale?}` shape (most importantly `locales`, the v2 field) must terminate
+ * the task rather than silently ignore the extra key — ignoring it is
+ * exactly the "no locale constraint at all" scope-widening bug this
+ * versioning exists to prevent. Same `status: "failed"` (not thrown)
+ * terminal-on-first-attempt shape as `worker/handlers/novel-materialize.ts`'s
+ * `legacy_template_on_materialize` — never burns through `maxAttempts`
+ * retrying something that can never succeed.
+ */
+export const ARTICLE_GENERATE_BATCH_V1_FILTER_REJECTED_CODE = "article_generate_batch_v1_filter_unsupported";
+export const ARTICLE_GENERATE_BATCH_V1_FILTER_REJECTED_MESSAGE =
+  "article.generate.batch.v1 是只读排空协议，filter 只认旧版 {search?, locale?} 形状；"
+  + "检测到新版字段（如 locales），拒绝执行以避免枚举范围静默失控。请改用新版协议重新提交筛选。";
 
 export type ArticleGenerateBatchPayload = Readonly<{
   novelIds: readonly string[];
@@ -284,7 +324,7 @@ export async function enqueueArticleGenerateParentBatch(
       await tx.genericTask.create({
         data: {
           id: taskId,
-          taskType: ARTICLE_GENERATE_BATCH_TASK_TYPE,
+          taskType: ARTICLE_GENERATE_BATCH_TASK_TYPE_V2,
           operationScopeHash: articleGenerateParentScopeHash(filter),
           mode: "apply",
           status: "pending",
@@ -308,7 +348,7 @@ export async function enqueueArticleGenerateParentBatch(
           entityType: "GenericTask",
           entityId: taskId,
           requestId: input.requestId,
-          taskType: ARTICLE_GENERATE_BATCH_TASK_TYPE,
+          taskType: ARTICLE_GENERATE_BATCH_TASK_TYPE_V2,
           taskId,
           afterSnapshot: { filter, expiresAt: payload.expiresAt },
         },

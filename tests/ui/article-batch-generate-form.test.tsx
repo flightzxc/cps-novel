@@ -32,6 +32,16 @@ function novel(id: string, locale: string, title: string): NovelGenerateCandidat
   };
 }
 
+/** Default `localeCounts`: derived from `rows` unless a test overrides it — most tests don't care
+ * about the locale chip population, but the ones below that click a chip for a locale absent from
+ * the current page pass an explicit override (the chip population is the full filtered set, not
+ * just the current page's rows). */
+function localeCountsFromRows(rows: readonly NovelGenerateCandidate[]) {
+  const counts = new Map<string, number>();
+  for (const row of rows) counts.set(row.locale, (counts.get(row.locale) ?? 0) + 1);
+  return Array.from(counts, ([locale, count]) => ({ locale, count })).sort((a, b) => a.locale.localeCompare(b.locale));
+}
+
 function page(rows: NovelGenerateCandidate[], overrides: Partial<NovelGeneratePage> = {}): NovelGeneratePage {
   const generatableCount = rows.filter((row) => row.canGenerateArticle).length;
   return {
@@ -41,6 +51,7 @@ function page(rows: NovelGenerateCandidate[], overrides: Partial<NovelGeneratePa
     pageSize: 50,
     generatableCount,
     nonGeneratableCount: rows.length - generatableCount,
+    localeCounts: localeCountsFromRows(rows),
     ...overrides,
   };
 }
@@ -51,6 +62,10 @@ const EN_PAGE = page(
   ),
   { total: 10 },
 );
+
+function localeChip(locale: string) {
+  return screen.getByTestId(`batch-locale-chip-${locale}`);
+}
 
 beforeEach(() => {
   actions.listArticleGenerateCandidatesAction.mockReset();
@@ -113,8 +128,12 @@ describe("ArticleBatchGenerateForm (R2-02 / R2-03 / R2-04)", () => {
   });
 
   it("resets explicit selection when a new filter is applied, but keeps it across pagination", async () => {
-    const page1 = page([novel(ID_EN, "en", "Page one")], { total: 60 });
-    const page2 = page([novel(ID_EN_2, "en", "Page two")], { total: 60, page: 2 });
+    // `localeCounts` includes "ja" even though these pages' rows are all
+    // "en" — the chip population comes from the full filtered set, not the
+    // current page, so the operator can pick "ja" before ever seeing a ja row.
+    const localeCounts = [{ locale: "en", count: 60 }, { locale: "ja", count: 1 }];
+    const page1 = page([novel(ID_EN, "en", "Page one")], { total: 60, localeCounts });
+    const page2 = page([novel(ID_EN_2, "en", "Page two")], { total: 60, page: 2, localeCounts });
     const jaPage = page([novel(ID_JA, "ja", "日本語")], { total: 1 });
     actions.listArticleGenerateCandidatesAction
       .mockResolvedValueOnce({ ok: true, data: page2, templates: [] })
@@ -139,7 +158,7 @@ describe("ArticleBatchGenerateForm (R2-02 / R2-03 / R2-04)", () => {
     fireEvent.click(screen.getByTestId("prev-page"));
     await waitFor(() => expect((screen.getByTestId(`select-${ID_EN}`) as HTMLInputElement).checked).toBe(true));
 
-    fireEvent.change(screen.getByTestId("batch-locale"), { target: { value: "ja" } });
+    fireEvent.click(localeChip("ja"));
     fireEvent.click(screen.getByTestId("apply-filter"));
     await waitFor(() => expect(screen.getByText("日本語 · ja · biz-2222")).toBeTruthy());
     expect((screen.getByTestId(`select-${ID_JA}`) as HTMLInputElement).checked).toBe(false);
@@ -225,7 +244,7 @@ describe("ArticleBatchGenerateForm (R2-02 / R2-03 / R2-04)", () => {
       .toBe(actions.enqueueArticleGenerateBatchAction.mock.calls[1][0].requestId);
   });
 
-  it("applies a canonical filter so padded search/locale cannot widen enqueue scope", async () => {
+  it("applies a canonical filter so padded search cannot widen enqueue scope", async () => {
     actions.listArticleGenerateCandidatesAction.mockResolvedValue({
       ok: true,
       data: page([novel(ID_EN, "en", "Alpha book")], { total: 1 }),
@@ -237,16 +256,13 @@ describe("ArticleBatchGenerateForm (R2-02 / R2-03 / R2-04)", () => {
 
     render(<ArticleBatchGenerateForm initialPage={EN_PAGE} templates={[]} canWrite />);
     fireEvent.change(screen.getByTestId("batch-search"), { target: { value: "Alpha " } });
-    fireEvent.change(screen.getByTestId("batch-locale"), { target: { value: " en " } });
     fireEvent.click(screen.getByTestId("apply-filter"));
     await waitFor(() => expect(actions.listArticleGenerateCandidatesAction).toHaveBeenCalled());
     expect(actions.listArticleGenerateCandidatesAction.mock.calls[0][0]).toMatchObject({
       search: "Alpha",
-      locale: "en",
       page: 1,
     });
     expect(screen.getByTestId("applied-total").getAttribute("data-applied-search")).toBe("Alpha");
-    expect(screen.getByTestId("applied-total").getAttribute("data-applied-locale")).toBe("en");
 
     fireEvent.change(screen.getByTestId("batch-search"), { target: { value: " Alpha " } });
     expect(screen.queryByTestId("filter-dirty")).toBeNull();
@@ -256,11 +272,68 @@ describe("ArticleBatchGenerateForm (R2-02 / R2-03 / R2-04)", () => {
     fireEvent.click(screen.getByTestId("submit-filtered"));
     await waitFor(() => expect(actions.enqueueArticleGenerateBatchAction).toHaveBeenCalledTimes(2));
     const frozen = actions.enqueueArticleGenerateBatchAction.mock.calls[0][0];
-    expect(frozen.selection).toEqual({ scope: "all_filtered", filter: { search: "Alpha", locale: "en" } });
+    expect(frozen.selection).toEqual({ scope: "all_filtered", filter: { search: "Alpha" } });
     expect(actions.enqueueArticleGenerateBatchAction.mock.calls[1][0]).toEqual(frozen);
   });
 
-  it("treats blank search/locale as unset after apply", async () => {
+  it("clicking locale chips selects a sorted, deduped locales array regardless of click order", async () => {
+    actions.listArticleGenerateCandidatesAction.mockResolvedValue({
+      ok: true,
+      data: page([novel(ID_EN, "en", "Alpha book")], { total: 1 }),
+      templates: [],
+    });
+    const withJaFacet = page([...EN_PAGE.rows], {
+      total: EN_PAGE.total,
+      localeCounts: [{ locale: "en", count: 10 }, { locale: "ja", count: 3 }],
+    });
+    render(<ArticleBatchGenerateForm initialPage={withJaFacet} templates={[]} canWrite />);
+
+    // Click "ja" before "en" — the applied filter must still come out sorted.
+    fireEvent.click(localeChip("ja"));
+    fireEvent.click(localeChip("en"));
+    expect(localeChip("ja").getAttribute("aria-pressed")).toBe("true");
+    expect(localeChip("en").getAttribute("aria-pressed")).toBe("true");
+    fireEvent.click(screen.getByTestId("apply-filter"));
+    await waitFor(() => expect(actions.listArticleGenerateCandidatesAction).toHaveBeenCalled());
+    expect(actions.listArticleGenerateCandidatesAction.mock.calls[0][0]).toMatchObject({
+      locales: ["en", "ja"],
+    });
+    expect(screen.getByTestId("applied-total").getAttribute("data-applied-locales")).toBe("en,ja");
+
+    // Un-clicking "en" and re-clicking it must not duplicate the entry.
+    fireEvent.click(localeChip("en"));
+    fireEvent.click(localeChip("en"));
+    fireEvent.click(screen.getByTestId("apply-filter"));
+    await waitFor(() => expect(actions.listArticleGenerateCandidatesAction).toHaveBeenCalledTimes(2));
+    expect(actions.listArticleGenerateCandidatesAction.mock.calls[1][0]).toMatchObject({
+      locales: ["en", "ja"],
+    });
+  });
+
+  it("fires the dirty-check guard on a locale chip change alone, and clears it back once un-clicked", async () => {
+    actions.listArticleGenerateCandidatesAction.mockResolvedValue({
+      ok: true,
+      data: EN_PAGE,
+      templates: [],
+    });
+    render(<ArticleBatchGenerateForm initialPage={EN_PAGE} templates={[]} canWrite />);
+    expect(screen.queryByTestId("filter-dirty")).toBeNull();
+
+    fireEvent.click(localeChip("en"));
+    expect(screen.getByTestId("filter-dirty")).toBeTruthy();
+    expect((screen.getByTestId("submit-filtered") as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByTestId("submit-selected") as HTMLButtonElement).disabled).toBe(true);
+
+    fireEvent.click(localeChip("en"));
+    expect(screen.queryByTestId("filter-dirty")).toBeNull();
+
+    fireEvent.click(localeChip("en"));
+    fireEvent.click(screen.getByTestId("apply-filter"));
+    await waitFor(() => expect(actions.listArticleGenerateCandidatesAction).toHaveBeenCalled());
+    expect(screen.queryByTestId("filter-dirty")).toBeNull();
+  });
+
+  it("treats no locale chips selected as unset after apply", async () => {
     actions.listArticleGenerateCandidatesAction.mockResolvedValue({
       ok: true,
       data: EN_PAGE,
@@ -268,17 +341,27 @@ describe("ArticleBatchGenerateForm (R2-02 / R2-03 / R2-04)", () => {
     });
     render(<ArticleBatchGenerateForm initialPage={EN_PAGE} templates={[]} canWrite />);
     fireEvent.change(screen.getByTestId("batch-search"), { target: { value: "   " } });
-    fireEvent.change(screen.getByTestId("batch-locale"), { target: { value: "  " } });
     expect(screen.queryByTestId("filter-dirty")).toBeNull();
     fireEvent.click(screen.getByTestId("apply-filter"));
     await waitFor(() => expect(actions.listArticleGenerateCandidatesAction).toHaveBeenCalled());
     expect(actions.listArticleGenerateCandidatesAction.mock.calls[0][0]).not.toHaveProperty("search");
-    expect(actions.listArticleGenerateCandidatesAction.mock.calls[0][0]).not.toHaveProperty("locale");
+    expect(actions.listArticleGenerateCandidatesAction.mock.calls[0][0]).not.toHaveProperty("locales");
     expect(screen.getByTestId("applied-total").getAttribute("data-applied-search")).toBe("");
-    expect(screen.getByTestId("applied-total").getAttribute("data-applied-locale")).toBe("");
+    expect(screen.getByTestId("applied-total").getAttribute("data-applied-locales")).toBe("");
   });
 
-  it("fetches and caches ja templates when a later page introduces that locale", async () => {
+  it("shows a count on each locale chip and no chip for a locale absent from the filtered set", () => {
+    const withCounts = page([novel(ID_EN, "en", "Alpha")], {
+      total: 1,
+      localeCounts: [{ locale: "en", count: 41 }, { locale: "ja", count: 3 }],
+    });
+    render(<ArticleBatchGenerateForm initialPage={withCounts} templates={[]} canWrite />);
+    expect(localeChip("en").textContent).toContain("41");
+    expect(localeChip("ja").textContent).toContain("3");
+    expect(screen.queryByTestId("batch-locale-chip-th")).toBeNull();
+  });
+
+  it("fetches ja templates when a later page's facet introduces that locale, replacing the previous set", async () => {
     actions.listArticleGenerateCandidatesAction.mockResolvedValue({
       ok: true,
       data: page([novel(ID_JA, "ja", "日本語")], { total: 51, page: 2 }),
@@ -296,7 +379,10 @@ describe("ArticleBatchGenerateForm (R2-02 / R2-03 / R2-04)", () => {
     fireEvent.click(screen.getByTestId("next-page"));
     await waitFor(() => expect(screen.getByTestId("template-ja")).toBeTruthy());
     expect(screen.getByRole("option", { name: "ja-body · v3" })).toBeTruthy();
-    expect(screen.getByRole("option", { name: "en-default · v1" })).toBeTruthy();
+    // The "en" row is off the new page and its facet dropped out of
+    // `localeCounts`, so its template row no longer renders either — the
+    // template row list follows the filtered set, not an ever-growing cache.
+    expect(screen.queryByTestId("template-en")).toBeNull();
   });
 
   it("shows the generatable/non-generatable/page split and a toggle labelled with the blocked count", () => {

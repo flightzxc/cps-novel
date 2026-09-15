@@ -71,7 +71,8 @@ function matchesPromoLinkWhere(link: SeedPromoLink, where: Record<string, unknow
 
 function matchesWhere(novel: SeedNovel, where: Record<string, unknown>): boolean {
   if (where.deletedAt === null && novel.deletedAt !== null) return false;
-  if (typeof where.locale === "string" && novel.locale !== where.locale) return false;
+  const localeIn = (where.locale as { in?: readonly string[] } | undefined)?.in;
+  if (localeIn && !localeIn.includes(novel.locale)) return false;
   if (typeof where.id === "string" && novel.id !== where.id) return false;
   const search = where.OR as Array<Record<string, { contains: string }>> | undefined;
   if (search) {
@@ -101,6 +102,13 @@ function createDb(novels: SeedNovel[], promoCalls: unknown[] = []) {
     novel: {
       count: async ({ where }: { where: Record<string, unknown> }) =>
         novels.filter((novel) => matchesWhere(novel, where)).length,
+      groupBy: async ({ where }: { where: Record<string, unknown> }) => {
+        const counts = new Map<string, number>();
+        for (const novel of novels.filter((row) => matchesWhere(row, where))) {
+          counts.set(novel.locale, (counts.get(novel.locale) ?? 0) + 1);
+        }
+        return Array.from(counts, ([locale, count]) => ({ locale, _count: { _all: count } }));
+      },
       findMany: async ({
         where,
         skip = 0,
@@ -245,6 +253,10 @@ describe("listNovelsForArticleGenerate pagination", () => {
     expect(page.generatableCount).toBe(0);
     expect(page.nonGeneratableCount).toBe(0);
     expect(page.total).toBe(3);
+    // Batch-create-operator-ux: the locale chip facet is gated on
+    // `eligibleOnly` the same way the promo split is — the single-novel
+    // 'generate' page has no chip UI and never asks for it.
+    expect(page.localeCounts).toEqual([]);
   });
 
   it("articleGenerateEligibleWhere (worker enumeration) matches only no-live-article AND promo-ready novels", () => {
@@ -262,6 +274,56 @@ describe("listNovelsForArticleGenerate pagination", () => {
     // `listNovelsForArticleGenerate`'s own `findMany`, which sorts by
     // `updatedAt desc`; this test exercises the raw where-fragment only.
     expect(matched.map((novel) => novel.title)).toEqual(["Older Eligible 2", "Older Eligible 3"]);
+  });
+
+  it("articleGenerateEligibleWhere's locales becomes an OR-matched `in` condition, not a single-value narrowing", () => {
+    const novels = [
+      { ...seedLibrary(1, 1)[0]!, locale: "en" },
+      { ...seedLibrary(1, 1)[0]!, id: uuid(2), locale: "ja" },
+      { ...seedLibrary(1, 1)[0]!, id: uuid(3), locale: "ko" },
+    ];
+    for (const novel of novels) novel.promoLinks = [readyPromoLink()];
+    const where = articleGenerateEligibleWhere({ locales: ["en", "ja"] });
+    const matched = novels.filter((novel) => matchesWhere(novel, where as Record<string, unknown>));
+    expect(matched.map((novel) => novel.locale).sort()).toEqual(["en", "ja"]);
+  });
+
+  it("localeCounts is a groupBy over the full search-scoped set, deliberately ignoring the locales filter itself", async () => {
+    const novels = seedLibrary(4, 4);
+    novels[0]!.locale = "en";
+    novels[1]!.locale = "en";
+    novels[2]!.locale = "ja";
+    novels[3]!.locale = "ko";
+    for (const novel of novels) novel.promoLinks = [readyPromoLink()];
+    const db = createDb(novels);
+    // Even though the operator has already narrowed to "en" via a chip,
+    // `localeCounts` reports every locale in the (search-scoped) candidate
+    // set — it is the population to pick chips FROM, not a readout of the
+    // current selection.
+    const page = await listNovelsForArticleGenerate(db, { page: 1, pageSize: 80, eligibleOnly: true, locales: ["en"] });
+    expect(page.localeCounts).toEqual([
+      { locale: "en", count: 2 },
+      { locale: "ja", count: 1 },
+      { locale: "ko", count: 1 },
+    ]);
+    // ...while `rows`/`total` DO stay narrowed to the selected chip.
+    expect(page.total).toBe(2);
+    expect(page.rows.every((row) => row.locale === "en")).toBe(true);
+  });
+
+  it("localeCounts follows the same promo-readiness view toggle as rows/total (hidden by default, shown with showIneligible)", async () => {
+    const novels = seedLibrary(2, 2);
+    novels[0]!.locale = "en";
+    novels[1]!.locale = "ja";
+    novels[0]!.promoLinks = [readyPromoLink()];
+    // novels[1] has no ready PromoLink — promo-blocked.
+    const db = createDb(novels);
+    const hidden = await listNovelsForArticleGenerate(db, { page: 1, pageSize: 80, eligibleOnly: true });
+    expect(hidden.localeCounts).toEqual([{ locale: "en", count: 1 }]);
+    const shown = await listNovelsForArticleGenerate(db, {
+      page: 1, pageSize: 80, eligibleOnly: true, showIneligible: true,
+    });
+    expect(shown.localeCounts).toEqual([{ locale: "en", count: 1 }, { locale: "ja", count: 1 }]);
   });
 
   it("resolves promo once for the current page ids", async () => {
@@ -326,7 +388,7 @@ describe("loadPinnedNovelForArticleGenerate", () => {
     };
     const db = createDb([pinned, ...seedLibrary(3)]);
     const result = await loadPinnedNovelForArticleGenerate(db, pinned.id);
-    const page = await listNovelsForArticleGenerate(db, { search: "Novel", locale: "en", page: 1, pageSize: 80 });
+    const page = await listNovelsForArticleGenerate(db, { search: "Novel", locales: ["en"], page: 1, pageSize: 80 });
     expect(result).toMatchObject({ status: "found", novel: { novelId: pinned.id, title: "Pinned Title", locale: "ru" } });
     expect(page.total).toBe(3);
     expect(page.rows.some((row) => row.novelId === pinned.id)).toBe(false);

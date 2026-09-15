@@ -696,7 +696,7 @@ export async function applyArticleGenerateAction(input: {
 export async function listArticleGenerateCandidatesAction(input: {
   requestId: string;
   search?: string;
-  locale?: string;
+  locales?: readonly string[];
   page?: number;
   /**
    * View-only list parameter (see `NovelGeneratePage`'s doc comment) —
@@ -712,7 +712,7 @@ export async function listArticleGenerateCandidatesAction(input: {
     await authorizeRead("admin.article.generate_candidates", input.requestId);
     const filter = normalizeArticleGenerateFilter({
       ...(input.search !== undefined ? { search: input.search } : {}),
-      ...(input.locale !== undefined ? { locale: input.locale } : {}),
+      ...(input.locales !== undefined ? { locales: input.locales } : {}),
     });
     const data = await listNovelsForArticleGenerate(prisma, {
       ...filter,
@@ -721,7 +721,12 @@ export async function listArticleGenerateCandidatesAction(input: {
       eligibleOnly: true,
       showIneligible: input.showIneligible === true,
     });
-    const locales = Array.from(new Set(data.rows.map((row) => row.locale)));
+    // Template locales come from `data.localeCounts` (the FULL filtered
+    // set), not `data.rows` (only the current page) — otherwise the
+    // dropdown would grow/shrink confusingly as the operator pages through
+    // results. `localeCounts` is always bounded (≤ the site's locale
+    // count), so fetching templates for all of it every load is cheap.
+    const locales = data.localeCounts.map((entry) => entry.locale);
     const templates = locales.length > 0
       ? (await listActiveArticleTemplateOptionsForLocales(prisma, locales, "novel_article"))
         .map(({ templateKey, locale, version }) => ({ templateKey, locale, version }))

@@ -41,17 +41,38 @@ export function articleGenerateBlockedReasonLabel(reason: ArticleGenerateBlocked
 
 export type ArticleGenerateFilter = Readonly<{
   search?: string;
-  locale?: string;
+  locales?: readonly string[];
 }>;
 
 export type ArticleGenerateSelection =
   | Readonly<{ scope: "explicit_ids"; novelIds: readonly string[] }>
   | Readonly<{ scope: "all_filtered"; filter: ArticleGenerateFilter }>;
 
+/**
+ * Batch-create-operator-ux (locale chips): widened from a single `locale`
+ * to `locales` (OR-matched — `novelWhere`'s `{ locale: { in: [...] } }`).
+ * `locales` is present only when non-empty — blank/empty array means "key
+ * absent", the same convention `search` already used. Sorted + deduped by
+ * `normalizeArticleGenerateFilter` so the `JSON.stringify`-based
+ * `inputFingerprint`/`articleGenerateParentScopeHash`
+ * (`src/lib/tasks/article-generate.ts`) stays stable regardless of chip
+ * click order — unstable ordering here would fingerprint the same logical
+ * filter two different ways and break idempotency replay detection.
+ */
 export type NormalizedArticleGenerateFilter = Readonly<{
   search?: string;
-  locale?: string;
+  locales?: readonly string[];
 }>;
+
+/** Per-entry length cap — matches `Novel.locale @db.VarChar(16)`. */
+const ARTICLE_GENERATE_FILTER_LOCALE_MAX_LENGTH = 16;
+/**
+ * Sensible upper bound on how many locale chips one filter can carry — well
+ * above the ~14 locales any real dataset has today (`SITE_LOCALES` itself
+ * is 15 members), just enough headroom to reject an abusive payload
+ * cheaply before doing any per-entry work.
+ */
+const ARTICLE_GENERATE_FILTER_LOCALES_MAX_COUNT = 50;
 
 export type NormalizedArticleGenerateSelection =
   | Readonly<{ scope: "explicit_ids"; novelIds: readonly string[] }>
@@ -70,7 +91,7 @@ export type NovelGeneratePage = Readonly<{
   page: number;
   pageSize: number;
   /**
-   * Count of novels matching the current search/locale filter that CAN be
+   * Count of novels matching the current search/locales filter that CAN be
    * generated (no live Article and a ready PromoLink) — independent of
    * `total`/`rows`, which follow whichever view (default-hide vs. the
    * "显示不可生成" toggle) the caller asked `listNovelsForArticleGenerate`
@@ -79,11 +100,21 @@ export type NovelGeneratePage = Readonly<{
    */
   generatableCount: number;
   /**
-   * Count of novels matching the current search/locale filter that have no
+   * Count of novels matching the current search/locales filter that have no
    * live Article but are NOT promo-ready — the "不可生成" bucket. Same
    * `eligibleOnly`-only caveat as {@link generatableCount}.
    */
   nonGeneratableCount: number;
+  /**
+   * Per-locale candidate counts for the current `search` + view (promo
+   * toggle), deliberately computed WITHOUT the `locales` filter itself —
+   * this is the population the locale chip group offers the operator to
+   * pick FROM, not a readout of the currently-selected chips. Computed via
+   * `db.novel.groupBy` (never a materialised id list). `[]` under the same
+   * `eligibleOnly`-only caveat as {@link generatableCount} — the
+   * single-novel "单篇创建文章" page has no chip UI and doesn't ask for it.
+   */
+  localeCounts: readonly Readonly<{ locale: string; count: number }>[];
 }>;
 
 export type ArticleTemplateOption = Readonly<{
@@ -109,16 +140,32 @@ export function normalizeArticleGenerateFilter(
   if (raw.search !== undefined && typeof raw.search !== "string") {
     throw new ArticleGenerateSelectionError("filter_search_invalid");
   }
-  if (raw.locale !== undefined && typeof raw.locale !== "string") {
-    throw new ArticleGenerateSelectionError("filter_locale_invalid");
+  if (
+    raw.locales !== undefined
+    && (!Array.isArray(raw.locales) || raw.locales.some((value) => typeof value !== "string"))
+  ) {
+    throw new ArticleGenerateSelectionError("filter_locales_invalid");
   }
   const search = raw.search?.trim() ?? "";
-  const locale = raw.locale?.trim() ?? "";
   if (search.length > 200) throw new ArticleGenerateSelectionError("filter_search_too_long");
-  if (locale.length > 16) throw new ArticleGenerateSelectionError("filter_locale_too_long");
+
+  const rawLocales = raw.locales ?? [];
+  if (rawLocales.length > ARTICLE_GENERATE_FILTER_LOCALES_MAX_COUNT) {
+    throw new ArticleGenerateSelectionError("filter_locales_too_many");
+  }
+  const trimmedLocales = rawLocales.map((value) => value.trim());
+  if (trimmedLocales.some((value) => value.length > ARTICLE_GENERATE_FILTER_LOCALE_MAX_LENGTH)) {
+    throw new ArticleGenerateSelectionError("filter_locale_too_long");
+  }
+  // Dedupe + sort: the fingerprint downstream is a `JSON.stringify` hash,
+  // so a stable, order-independent representation is required for replay
+  // detection to recognise the same logical filter regardless of chip
+  // click order.
+  const locales = Array.from(new Set(trimmedLocales.filter((value) => value.length > 0))).sort();
+
   return Object.freeze({
     ...(search ? { search } : {}),
-    ...(locale ? { locale } : {}),
+    ...(locales.length > 0 ? { locales: Object.freeze(locales) } : {}),
   });
 }
 

@@ -30,7 +30,9 @@ export default async function ArticleBatchGeneratePage() {
     pageSize: 50,
     eligibleOnly: true,
   });
-  const locales = Array.from(new Set(initialPage.rows.map((row) => row.locale)));
+  // Full filtered-set locales (`localeCounts`), not just the current page's
+  // rows — same reasoning as `listArticleGenerateCandidatesAction`.
+  const locales = initialPage.localeCounts.map((entry) => entry.locale);
   const templates = locales.length > 0
     ? await listActiveArticleTemplateOptionsForLocales(prisma, locales, "novel_article")
     : [];

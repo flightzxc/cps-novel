@@ -13,13 +13,14 @@ import {
   type NormalizedArticleGenerateFilter,
   type NovelGeneratePage,
 } from "@/domain/article-generation";
+import { SITE_LOCALE_LABELS, type SiteLocale } from "@/lib/locale/locale-canonical";
 
 import {
   enqueueArticleGenerateBatchAction,
   listArticleGenerateCandidatesAction,
 } from "../../_actions";
 
-type DraftFilter = { readonly search: string; readonly locale: string };
+type DraftFilter = Readonly<{ search: string; locales: ReadonlySet<string> }>;
 
 type FrozenRequest = Readonly<{
   requestId: string;
@@ -32,27 +33,32 @@ function canonicalFiltersEqual(
   left: NormalizedArticleGenerateFilter,
   right: NormalizedArticleGenerateFilter,
 ): boolean {
-  return left.search === right.search && left.locale === right.locale;
+  if (left.search !== right.search) return false;
+  const leftLocales = left.locales ?? [];
+  const rightLocales = right.locales ?? [];
+  // Both sides always pass through `normalizeArticleGenerateFilter` first
+  // (sorted + deduped), so a positional compare is enough here — no need
+  // for a Set-based order-independent comparison.
+  return leftLocales.length === rightLocales.length
+    && leftLocales.every((value, index) => value === rightLocales[index]);
 }
 
 function compactTemplates(templateKeys: Record<string, string>): Record<string, string> {
   return Object.fromEntries(Object.entries(templateKeys).filter(([, value]) => value));
 }
 
-function mergeTemplateCache(
-  current: readonly ArticleTemplateOption[],
-  incoming: readonly ArticleTemplateOption[],
-): ArticleTemplateOption[] {
-  const seen = new Set(current.map((row) => `${row.locale}:${row.templateKey}:${row.version}`));
-  return [
-    ...current,
-    ...incoming.filter((row) => {
-      const key = `${row.locale}:${row.templateKey}:${row.version}`;
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    }),
-  ];
+/**
+ * Chip button styling — copied from `catalog-scan-trigger-form.tsx`'s own
+ * `chipButtonClassName` (same convention; that function isn't exported and
+ * there is no shared chip component, so this copies it rather than
+ * inventing a new visual language for chips).
+ */
+function chipButtonClassName(selected: boolean): string {
+  return `rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors ${
+    selected
+      ? "border-blue-300 bg-blue-50 text-blue-700"
+      : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"
+  }`;
 }
 
 function submitErrorMessage(code: string): string {
@@ -75,7 +81,7 @@ export function ArticleBatchGenerateForm({
   const [roundId, setRoundId] = useState(() => crypto.randomUUID());
   const [frozen, setFrozen] = useState<FrozenRequest | null>(null);
   const [page, setPage] = useState(initialPage);
-  const [draftFilter, setDraftFilter] = useState<DraftFilter>({ search: "", locale: "" });
+  const [draftFilter, setDraftFilter] = useState<DraftFilter>({ search: "", locales: new Set() });
   const [appliedFilter, setAppliedFilter] = useState<NormalizedArticleGenerateFilter>({});
   // View-only list parameter — deliberately its own piece of state, never
   // folded into draftFilter/appliedFilter: it must not enter
@@ -89,16 +95,35 @@ export function ArticleBatchGenerateForm({
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [taskId, setTaskId] = useState<string | null>(null);
-  const filterDirty = !canonicalFiltersEqual(normalizeArticleGenerateFilter(draftFilter), appliedFilter);
-  const requestLocked = frozen !== null;
-  const locales = useMemo(
-    () => Array.from(new Set([
-      ...page.rows.map((row) => row.locale),
-      ...templateCache.map((row) => row.locale),
-      ...(appliedFilter.locale ? [appliedFilter.locale] : []),
-    ])).sort(),
-    [page.rows, templateCache, appliedFilter.locale],
+  const normalizedDraftFilter = useMemo(
+    () => normalizeArticleGenerateFilter({ search: draftFilter.search, locales: [...draftFilter.locales] }),
+    [draftFilter],
   );
+  const filterDirty = !canonicalFiltersEqual(normalizedDraftFilter, appliedFilter);
+  const requestLocked = frozen !== null;
+  // Locale chip options: derived from the current filtered result set
+  // (`page.localeCounts`, a `groupBy` over the FULL matching set — never
+  // just the current page's rows), each carrying a count so the operator
+  // isn't offered an empty bucket. Labels come from the canonical registry
+  // (`SITE_LOCALE_LABELS`); a locale with no registered Chinese label
+  // (shouldn't happen for this dataset, but defends against a future
+  // non-site locale slipping through) falls back to its raw code.
+  const localeChipOptions = useMemo(
+    () => page.localeCounts.map((entry) => ({
+      locale: entry.locale,
+      label: SITE_LOCALE_LABELS[entry.locale as SiteLocale] ?? entry.locale,
+      count: entry.count,
+    })),
+    [page.localeCounts],
+  );
+  // Template dropdown rows: follow the APPLIED locale chips (two-phase —
+  // draft chip clicks alone must not move these before 应用筛选 runs);
+  // when no chip is applied, fall back to every locale present in the
+  // current filtered result set. Deliberately not `page.rows`-derived —
+  // that grew/shrank confusingly as the operator paged through results.
+  const templateLocales = appliedFilter.locales && appliedFilter.locales.length > 0
+    ? appliedFilter.locales
+    : page.localeCounts.map((entry) => entry.locale);
   const pageCount = Math.max(1, Math.ceil(page.total / page.pageSize));
 
   function toggle(id: string) {
@@ -106,6 +131,21 @@ export function ArticleBatchGenerateForm({
     const novel = page.rows.find((row) => row.novelId === id);
     if (novel && !novel.canGenerateArticle) return;
     setSelected((current) => (current.includes(id) ? current.filter((item) => item !== id) : [...current, id]));
+  }
+
+  // Named `flipLocaleChip`, not `toggleLocale` — mirrors
+  // `catalog-scan-trigger-form.tsx`'s own naming reasoning: `tests/ui/
+  // locale-canonical.test.ts`'s pattern-based "no second locale-normalize
+  // implementation" scan flags any `to*Locale*`/`toggle*Locale*`-shaped
+  // name, and this is a plain Set toggle, not a locale mapping.
+  function flipLocaleChip(locale: string) {
+    if (requestLocked) return;
+    setDraftFilter((current) => {
+      const next = new Set(current.locales);
+      if (next.has(locale)) next.delete(locale);
+      else next.add(locale);
+      return { ...current, locales: next };
+    });
   }
 
   async function load(
@@ -132,7 +172,11 @@ export function ArticleBatchGenerateForm({
         .filter((row) => !row.canGenerateArticle)
         .map((row) => row.novelId));
       setSelected((current) => current.filter((novelId) => !blockedOnPage.has(novelId)));
-      setTemplateCache((current) => mergeTemplateCache(current, result.templates));
+      // Full replace, not a cross-load merge: the server already returns
+      // templates for every locale in the current filtered set
+      // (`data.localeCounts`, not just the current page's rows), so there
+      // is nothing left to accumulate.
+      setTemplateCache(result.templates);
       if (reason === "apply") {
         const changed = !canonicalFiltersEqual(nextFilter, appliedFilter);
         setAppliedFilter(nextFilter);
@@ -150,7 +194,7 @@ export function ArticleBatchGenerateForm({
 
   function applyDraftFilter() {
     try {
-      void load(1, normalizeArticleGenerateFilter(draftFilter), showIneligible, "apply");
+      void load(1, normalizedDraftFilter, showIneligible, "apply");
     } catch (error) {
       const code = error instanceof ArticleGenerateSelectionError ? error.code : "filter_invalid";
       setMessage(`筛选无效（${code}）。已保留当前筛选与页码。`);
@@ -222,27 +266,36 @@ export function ArticleBatchGenerateForm({
   return (
     <div className="space-y-4 rounded-xl border border-gray-200 bg-white p-4">
       <p className="text-sm text-gray-600">批量创建文章只针对尚未建稿的书目。已有文章请走「批量再生成」，不会在这里被覆盖。</p>
-      <div className="grid gap-3 sm:grid-cols-2">
-        <label className="block text-sm text-gray-700">
-          搜索
-          <input
-            data-testid="batch-search"
-            value={draftFilter.search}
-            disabled={busy || requestLocked}
-            onChange={(event) => setDraftFilter((current) => ({ ...current, search: event.target.value }))}
-            className="mt-1 w-full rounded border border-gray-300 p-2"
-          />
-        </label>
-        <label className="block text-sm text-gray-700">
-          语种
-          <input
-            data-testid="batch-locale"
-            value={draftFilter.locale}
-            disabled={busy || requestLocked}
-            onChange={(event) => setDraftFilter((current) => ({ ...current, locale: event.target.value }))}
-            className="mt-1 w-full rounded border border-gray-300 p-2"
-          />
-        </label>
+      <label className="block max-w-sm text-sm text-gray-700">
+        搜索
+        <input
+          data-testid="batch-search"
+          value={draftFilter.search}
+          disabled={busy || requestLocked}
+          onChange={(event) => setDraftFilter((current) => ({ ...current, search: event.target.value }))}
+          className="mt-1 w-full rounded border border-gray-300 p-2"
+        />
+      </label>
+      <div>
+        <span className="mb-2 block text-sm text-gray-700">语种</span>
+        <div role="group" aria-label="语种" className="flex flex-wrap gap-2">
+          {localeChipOptions.length === 0 && (
+            <p className="text-xs text-gray-400">当前筛选下没有可选语种。</p>
+          )}
+          {localeChipOptions.map((option) => (
+            <button
+              key={option.locale}
+              type="button"
+              data-testid={`batch-locale-chip-${option.locale}`}
+              aria-pressed={draftFilter.locales.has(option.locale)}
+              disabled={busy || requestLocked}
+              className={chipButtonClassName(draftFilter.locales.has(option.locale))}
+              onClick={() => flipLocaleChip(option.locale)}
+            >
+              {option.label}（{option.count.toLocaleString("zh-CN")}）
+            </button>
+          ))}
+        </div>
       </div>
       <button
         type="button"
@@ -258,7 +311,7 @@ export function ArticleBatchGenerateForm({
           筛选已改动但尚未应用。表格与入队仍使用已应用筛选；请先应用后再提交。
         </p>
       )}
-      {locales.map((item) => (
+      {templateLocales.map((item) => (
         <label className="block text-sm text-gray-700" key={item}>
           {item} 模板
           <select
@@ -281,7 +334,7 @@ export function ArticleBatchGenerateForm({
         className="text-sm text-gray-600"
         data-testid="applied-total"
         data-applied-search={appliedFilter.search ?? ""}
-        data-applied-locale={appliedFilter.locale ?? ""}
+        data-applied-locales={(appliedFilter.locales ?? []).join(",")}
       >
         当前筛选可生成 {page.generatableCount.toLocaleString("zh-CN")} 本 · 另有{" "}
         {page.nonGeneratableCount.toLocaleString("zh-CN")} 本不可生成 · 本页 {page.rows.length} 本

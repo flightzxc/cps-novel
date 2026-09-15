@@ -7,7 +7,12 @@ import {
   LEGACY_CONTENT_CREATE_RETIRED_MESSAGE,
 } from "@/lib/tasks/legacy-content-create";
 
-import { ARTICLE_GENERATE_BATCH_TASK_TYPE, ARTICLE_GENERATE_LEAF_MAX, ARTICLE_GENERATE_TASK_TYPE } from "@/lib/tasks/article-generate";
+import {
+  ARTICLE_GENERATE_BATCH_TASK_TYPE,
+  ARTICLE_GENERATE_BATCH_TASK_TYPE_V2,
+  ARTICLE_GENERATE_LEAF_MAX,
+  ARTICLE_GENERATE_TASK_TYPE,
+} from "@/lib/tasks/article-generate";
 
 import { createArticleGenerateBatchHandler } from "../../../worker/handlers/article-generate-batch";
 import { createCatalogBatchHandler } from "../../../worker/handlers/catalog-batch";
@@ -221,6 +226,103 @@ describe("article.generate.batch.v1 handler (EXT-06)", () => {
       },
     });
     expect(updates.at(-1)?.data.result).toMatchObject({ blockedReasonCounts: { promo_link_missing: 1 } });
+  });
+
+  it("rejects a v1 payload whose filter carries a new-shape key (locales) instead of silently ignoring it", async () => {
+    const outcome = await createArticleGenerateBatchHandler({} as PrismaClient)(lease(
+      ARTICLE_GENERATE_BATCH_TASK_TYPE,
+      {
+        // A v2-shaped filter reaching the v1 task type — e.g. a stale
+        // enqueue path, or a hand-edited row. If this were silently
+        // coerced through the legacy `{search?, locale?}` reader, `locales`
+        // would be dropped and the worker would enumerate with NO locale
+        // constraint at all — the exact scope-widening bug this rejection
+        // exists to prevent.
+        filter: { locales: ["en"] },
+        actorId: "admin-1",
+        requestId: "req-v1-new-shape",
+        submittedAt: new Date().toISOString(),
+        expiresAt: new Date(Date.now() + 60_000).toISOString(),
+      },
+    ));
+    expect(outcome).toMatchObject({
+      status: "failed",
+      error: { code: "article_generate_batch_v1_filter_unsupported" },
+    });
+    // Terminal on the first attempt, not thrown — never burns through
+    // maxAttempts retrying something that can never succeed (same shape as
+    // `legacy_template_on_materialize` below).
+    expect("protectedWrite" in outcome).toBe(false);
+  });
+
+  it("still accepts the frozen legacy {search, locale} shape on v1 (no false-positive rejection)", async () => {
+    const row = { id: UUID, title: "Legacy", locale: "ja", businessId: "legacy", deletedAt: null, articles: [] };
+    const prepared = await createArticleGenerateBatchHandler({} as PrismaClient)(lease(
+      ARTICLE_GENERATE_BATCH_TASK_TYPE,
+      {
+        filter: { search: "old", locale: "ja" },
+        actorId: "admin-1",
+        requestId: "req-v1-legacy-shape",
+        submittedAt: new Date().toISOString(),
+        expiresAt: new Date(Date.now() + 60_000).toISOString(),
+      },
+    ));
+    expect(prepared.status).toBe("success");
+    if (prepared.status !== "success" || !("protectedWrite" in prepared) || !prepared.protectedWrite) {
+      throw new Error("expected protectedWrite");
+    }
+    const written = await prepared.protectedWrite({
+      novel: { findMany: async (args: { where: Record<string, unknown> }) => {
+        const localeIn = (args.where.locale as { in?: string[] } | undefined)?.in;
+        return localeIn?.includes(row.locale) ? [row] : [];
+      } },
+      promoLink: { findMany: async () => [{
+        id: "promo-1", novelId: row.id, status: "fetched", webUrl: "https://example.test/ready",
+        appUrl: null, fetchedAt: new Date(), publicRedirectCode: "ready",
+      }], groupBy: async () => [], count: async () => 0 },
+      genericTask: { create: async () => {}, update: async () => {} },
+      operationAudit: { create: async () => ({}) },
+    } as never);
+    expect(written).toMatchObject({ status: "success", result: { submittedCount: 1 } });
+  });
+
+  it("v2 re-normalizes the persisted filter snapshot: sorts/dedupes locales and rejects blank ones before enumerating", async () => {
+    const enRow = { id: UUID, title: "En", locale: "en", businessId: "en-biz", deletedAt: null, articles: [] };
+    const jaRow = {
+      id: "22222222-2222-4222-8222-222222222222", title: "Ja", locale: "ja", businessId: "ja-biz",
+      deletedAt: null, articles: [],
+    };
+    const receivedWheres: unknown[] = [];
+    const prepared = await createArticleGenerateBatchHandler({} as PrismaClient)(lease(
+      ARTICLE_GENERATE_BATCH_TASK_TYPE_V2,
+      {
+        // Unsorted, padded, duplicated — exactly what a hand-edited or
+        // future-shape row might carry. v2 re-runs the real normalizer
+        // rather than trusting this verbatim.
+        filter: { locales: [" ja ", "en", "en", "  "] },
+        actorId: "admin-1",
+        requestId: "req-v2-renormalize",
+        submittedAt: new Date().toISOString(),
+        expiresAt: new Date(Date.now() + 60_000).toISOString(),
+      },
+    ));
+    expect(prepared.status).toBe("success");
+    if (prepared.status !== "success" || !("protectedWrite" in prepared) || !prepared.protectedWrite) {
+      throw new Error("expected protectedWrite");
+    }
+    await prepared.protectedWrite({
+      novel: {
+        findMany: async (args: { where: Record<string, unknown> }) => {
+          receivedWheres.push(args.where);
+          const localeIn = (args.where.locale as { in?: string[] } | undefined)?.in;
+          return [enRow, jaRow].filter((candidate) => localeIn?.includes(candidate.locale));
+        },
+      },
+      promoLink: { findMany: async () => [], groupBy: async () => [], count: async () => 0 },
+      genericTask: { create: async () => {}, update: async () => {} },
+      operationAudit: { create: async () => ({}) },
+    } as never);
+    expect(receivedWheres[0]).toMatchObject({ locale: { in: ["en", "ja"] } });
   });
 });
 

@@ -134,7 +134,7 @@ describe("article generate factory fingerprint / replay (R2-03)", () => {
   it("rejects the same requestId with a different filter or template as request_replay_mismatch", async () => {
     const db = new FakeArticleGenerateDb();
     await enqueueArticleGenerateParentBatch(db.asPrisma(), {
-      filter: { search: "old", locale: "en" },
+      filter: { search: "old", locales: ["en"] },
       actorId: "admin-1",
       requestId: "req-parent",
       templateKeysByLocale: { en: "en-default" },
@@ -146,7 +146,7 @@ describe("article generate factory fingerprint / replay (R2-03)", () => {
       templateKeysByLocale: { en: "en-default" },
     })).rejects.toMatchObject({ name: "ArticleGenerateInputError", code: "request_replay_mismatch" });
     await expect(enqueueArticleGenerateParentBatch(db.asPrisma(), {
-      filter: { search: "old", locale: "en" },
+      filter: { search: "old", locales: ["en"] },
       actorId: "admin-1",
       requestId: "req-parent",
       templateKeysByLocale: { ja: "ja-body" },
@@ -154,20 +154,46 @@ describe("article generate factory fingerprint / replay (R2-03)", () => {
     expect(db.creates).toBe(1);
   });
 
+  it("treats differently-ordered locales as the same replay (fingerprint is order-independent)", async () => {
+    const db = new FakeArticleGenerateDb();
+    const first = await enqueueArticleGenerateParentBatch(db.asPrisma(), {
+      filter: { locales: ["ja", "en"] },
+      actorId: "admin-1",
+      requestId: "req-same-locales",
+    });
+    const second = await enqueueArticleGenerateParentBatch(db.asPrisma(), {
+      filter: { locales: ["en", "ja"] },
+      actorId: "admin-1",
+      requestId: "req-same-locales",
+    });
+    expect(second).toMatchObject({ taskId: first.taskId, duplicate: true });
+    expect(db.creates).toBe(1);
+  });
+
   it("creates a new task when the requestId changes", async () => {
     const db = new FakeArticleGenerateDb();
     const first = await enqueueArticleGenerateParentBatch(db.asPrisma(), {
-      filter: { locale: "en" },
+      filter: { locales: ["en"] },
       actorId: "admin-1",
       requestId: "req-1",
     });
     const second = await enqueueArticleGenerateParentBatch(db.asPrisma(), {
-      filter: { locale: "en" },
+      filter: { locales: ["en"] },
       actorId: "admin-1",
       requestId: "req-2",
     });
     expect(second.duplicate).toBe(false);
     expect(second.taskId).not.toBe(first.taskId);
     expect(db.creates).toBe(2);
+  });
+
+  it("enqueues new parent batches under the v2 task type", async () => {
+    const db = new FakeArticleGenerateDb();
+    await enqueueArticleGenerateParentBatch(db.asPrisma(), {
+      filter: { locales: ["en"] },
+      actorId: "admin-1",
+      requestId: "req-v2",
+    });
+    expect(db.tasks[0]!.data).toMatchObject({ taskType: "article.generate.batch.v2" });
   });
 });

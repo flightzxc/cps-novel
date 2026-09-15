@@ -19,7 +19,11 @@ export async function loadArticleGeneratePage(
     loadPinnedNovelForArticleGenerate(db, query.novelId),
     listNovelsForArticleGenerate(db, {
       search: query.search,
-      locale: query.locale,
+      // This page's URL contract stays a single `?locale=` (no chip UI
+      // here — see `batch-generate-form.tsx` for that); adapt to
+      // `listNovelsForArticleGenerate`'s widened `locales` param at the
+      // call site rather than changing this page's own query shape.
+      locales: query.locale !== undefined ? [query.locale] : undefined,
       page: 1,
       pageSize: 80,
       eligibleOnly: false,
