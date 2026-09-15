@@ -698,6 +698,12 @@ export async function listArticleGenerateCandidatesAction(input: {
   search?: string;
   locale?: string;
   page?: number;
+  /**
+   * View-only list parameter (see `NovelGeneratePage`'s doc comment) —
+   * never part of the normalized filter, never fingerprinted, never
+   * persisted into an enqueued task payload.
+   */
+  showIneligible?: boolean;
 }): Promise<
   | { ok: true; data: NovelGeneratePage; templates: readonly ArticleTemplateOption[] }
   | { ok: false; kind: "invalid_input" | "access_denied"; code: string }
@@ -713,6 +719,7 @@ export async function listArticleGenerateCandidatesAction(input: {
       page: input.page,
       pageSize: 50,
       eligibleOnly: true,
+      showIneligible: input.showIneligible === true,
     });
     const locales = Array.from(new Set(data.rows.map((row) => row.locale)));
     const templates = locales.length > 0

@@ -230,6 +230,31 @@ describe("article generate actions reuse frozen capabilities", () => {
     expect(guards.requireFreshAdminServiceMutation).not.toHaveBeenCalled();
   });
 
+  it("candidate list forwards showIneligible as a view-only param (false by default, true when requested)", async () => {
+    guards.requireAdminActionAccess.mockResolvedValue({ context: CONTEXT });
+    contentCreation.listNovelsForArticleGenerate.mockResolvedValue({
+      rows: [],
+      total: 0,
+      page: 1,
+      pageSize: 50,
+      generatableCount: 0,
+      nonGeneratableCount: 0,
+    });
+
+    await listArticleGenerateCandidatesAction({ requestId: "req-default" });
+    expect(contentCreation.listNovelsForArticleGenerate).toHaveBeenCalledWith(
+      { __brand: "prisma-stub" },
+      expect.objectContaining({ eligibleOnly: true, showIneligible: false }),
+    );
+
+    contentCreation.listNovelsForArticleGenerate.mockClear();
+    await listArticleGenerateCandidatesAction({ requestId: "req-show-ineligible", showIneligible: true });
+    expect(contentCreation.listNovelsForArticleGenerate).toHaveBeenCalledWith(
+      { __brand: "prisma-stub" },
+      expect.objectContaining({ eligibleOnly: true, showIneligible: true }),
+    );
+  });
+
   it("candidate list canonicalizes search/locale before querying", async () => {
     guards.requireAdminActionAccess.mockResolvedValue({ context: CONTEXT });
     contentCreation.listNovelsForArticleGenerate.mockResolvedValue({

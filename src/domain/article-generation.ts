@@ -69,6 +69,21 @@ export type NovelGeneratePage = Readonly<{
   total: number;
   page: number;
   pageSize: number;
+  /**
+   * Count of novels matching the current search/locale filter that CAN be
+   * generated (no live Article and a ready PromoLink) — independent of
+   * `total`/`rows`, which follow whichever view (default-hide vs. the
+   * "显示不可生成" toggle) the caller asked `listNovelsForArticleGenerate`
+   * for. `0` when the caller didn't ask for `eligibleOnly` filtering at all
+   * (e.g. the single-novel "单篇创建文章" page).
+   */
+  generatableCount: number;
+  /**
+   * Count of novels matching the current search/locale filter that have no
+   * live Article but are NOT promo-ready — the "不可生成" bucket. Same
+   * `eligibleOnly`-only caveat as {@link generatableCount}.
+   */
+  nonGeneratableCount: number;
 }>;
 
 export type ArticleTemplateOption = Readonly<{

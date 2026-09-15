@@ -1,7 +1,30 @@
 import type { PrismaClient } from "@prisma/client";
 import { describe, expect, it } from "vitest";
 
-import { listNovelsForArticleGenerate, loadPinnedNovelForArticleGenerate } from "@/server/content-creation/eligibility";
+import {
+  articleGenerateEligibleWhere,
+  listNovelsForArticleGenerate,
+  loadPinnedNovelForArticleGenerate,
+} from "@/server/content-creation/eligibility";
+
+/**
+ * Independent of the `db.promoLink.*` admission-classification mocks below
+ * (`resolveArticleGenerateAdmissions`'s own data source) — this models the
+ * SAME underlying relation from the SQL-predicate side
+ * (`novelWhere`'s `promoLinks: { some: readyPromoLinkWhere() } }` /
+ * `NOT: { promoLinks: { some } } }`), matching real Prisma/Postgres where a
+ * Novel's `promoLinks` relation is one physical table queried two ways.
+ * Tests that only exercise pagination/article-existence semantics leave
+ * this empty (matching this file's pre-existing default of "no promo data
+ * seeded"); tests that exercise the new promo-readiness predicate populate
+ * it explicitly.
+ */
+type SeedPromoLink = {
+  status: string;
+  webUrl: string | null;
+  appUrl: string | null;
+  deletedAt: Date | null;
+};
 
 type SeedNovel = {
   id: string;
@@ -12,10 +35,38 @@ type SeedNovel = {
   updatedAt: Date;
   hasLiveArticle: boolean;
   hasSoftDeletedArticle?: boolean;
+  promoLinks?: SeedPromoLink[];
 };
 
 function uuid(n: number): string {
   return `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+}
+
+function readyPromoLink(overrides: Partial<SeedPromoLink> = {}): SeedPromoLink {
+  return { status: "fetched", webUrl: "https://promo.example/ready", appUrl: null, deletedAt: null, ...overrides };
+}
+
+function matchesScalarCondition(value: unknown, condition: unknown): boolean {
+  if (condition === null) return value === null;
+  if (typeof condition === "object" && condition !== null && !Array.isArray(condition)) {
+    const cond = condition as { equals?: unknown; not?: unknown };
+    // SQL three-valued logic: a NULL column never satisfies `<> x` — see
+    // `tests/backend/publication/promo-ready-where.test.ts`'s identical
+    // fix/comment for why this can't just be `value !== cond.not`.
+    if ("not" in cond) return value !== null && value !== cond.not;
+    if ("equals" in cond) return value === cond.equals;
+  }
+  return value === condition;
+}
+
+/** Mirrors `readyPromoLinkWhere`'s operators (`equals`/`not`/`OR`) — see `tests/backend/publication/promo-ready-where.test.ts` for the dedicated guard test on that fragment itself. */
+function matchesPromoLinkWhere(link: SeedPromoLink, where: Record<string, unknown>): boolean {
+  return Object.entries(where).every(([key, condition]) => {
+    if (key === "OR") return (condition as Record<string, unknown>[]).some((c) => matchesPromoLinkWhere(link, c));
+    if (key === "AND") return (condition as Record<string, unknown>[]).every((c) => matchesPromoLinkWhere(link, c));
+    if (key === "NOT") return !matchesPromoLinkWhere(link, condition as Record<string, unknown>);
+    return matchesScalarCondition((link as unknown as Record<string, unknown>)[key], condition);
+  });
 }
 
 function matchesWhere(novel: SeedNovel, where: Record<string, unknown>): boolean {
@@ -31,6 +82,17 @@ function matchesWhere(novel: SeedNovel, where: Record<string, unknown>): boolean
   }
   const articles = where.articles as { none?: { deletedAt: null } } | undefined;
   if (articles?.none && novel.hasLiveArticle) return false;
+  const promoLinksSome = (where.promoLinks as { some?: Record<string, unknown> } | undefined)?.some;
+  if (promoLinksSome) {
+    const links = novel.promoLinks ?? [];
+    if (!links.some((link) => matchesPromoLinkWhere(link, promoLinksSome))) return false;
+  }
+  const notPromoLinksSome = (where.NOT as { promoLinks?: { some?: Record<string, unknown> } } | undefined)
+    ?.promoLinks?.some;
+  if (notPromoLinksSome) {
+    const links = novel.promoLinks ?? [];
+    if (links.some((link) => matchesPromoLinkWhere(link, notPromoLinksSome))) return false;
+  }
   return true;
 }
 
@@ -119,16 +181,87 @@ describe("listNovelsForArticleGenerate pagination", () => {
     expect(page.rows[0]?.novelId).toBe(uuid(81));
   });
 
-  it("eligibleOnly keeps older books without a live article when paging past 200", async () => {
+  it("eligibleOnly + showIneligible keeps older books without a live article regardless of promo state, when paging past 200", async () => {
+    // `showIneligible: true` reproduces this function's pre-promo-predicate
+    // behavior exactly (no promo constraint at all) — none of these seeds
+    // have a promoLinks fixture, so without the toggle they would all be
+    // hidden by the new default (see the "hides promo-blocked older books"
+    // test below for that default).
     const novels = seedLibrary(201, 3);
     const db = createDb(novels);
-    const page = await listNovelsForArticleGenerate(db, { page: 1, pageSize: 80, eligibleOnly: true });
+    const page = await listNovelsForArticleGenerate(db, {
+      page: 1,
+      pageSize: 80,
+      eligibleOnly: true,
+      showIneligible: true,
+    });
     expect(page.total).toBe(3);
     expect(page.rows.map((row) => row.title)).toEqual([
       "Older Eligible 3",
       "Older Eligible 2",
       "Older Eligible 1",
     ]);
+  });
+
+  it("eligibleOnly defaults to hiding promo-blocked older books and splits generatable/non-generatable counts", async () => {
+    const novels = seedLibrary(201, 3);
+    // Of the 3 "older eligible" (no live article) novels, only #2 and #3 have a ready PromoLink.
+    novels[1]!.promoLinks = [readyPromoLink()];
+    novels[2]!.promoLinks = [readyPromoLink({ webUrl: null, appUrl: "app://ready" })];
+    const db = createDb(novels);
+    const page = await listNovelsForArticleGenerate(db, { page: 1, pageSize: 80, eligibleOnly: true });
+    expect(page.generatableCount).toBe(2);
+    expect(page.nonGeneratableCount).toBe(1);
+    expect(page.total).toBe(2);
+    expect(page.rows.map((row) => row.title)).toEqual(["Older Eligible 3", "Older Eligible 2"]);
+  });
+
+  it("promoReadiness ignores deleted PromoLinks and whitespace-only-URL rows still land as blocked once resolveArticleGenerateAdmissions runs", async () => {
+    const novels = seedLibrary(2, 2);
+    novels[0]!.promoLinks = [readyPromoLink({ deletedAt: new Date("2026-01-01T00:00:00.000Z") })];
+    novels[1]!.promoLinks = [readyPromoLink()];
+    const db = createDb(novels);
+    const page = await listNovelsForArticleGenerate(db, { page: 1, pageSize: 80, eligibleOnly: true });
+    // Only the second novel's live, ready PromoLink counts — the first's
+    // soft-deleted link is excluded by `readyPromoLinkWhere`'s `deletedAt: null`.
+    expect(page.generatableCount).toBe(1);
+    expect(page.nonGeneratableCount).toBe(1);
+  });
+
+  it("eligibleOnly with no PromoLink data at all hides every row by default (0 generatable, all non-generatable)", async () => {
+    const novels = seedLibrary(5, 5);
+    const db = createDb(novels);
+    const page = await listNovelsForArticleGenerate(db, { page: 1, pageSize: 80, eligibleOnly: true });
+    expect(page.generatableCount).toBe(0);
+    expect(page.nonGeneratableCount).toBe(5);
+    expect(page.total).toBe(0);
+    expect(page.rows).toHaveLength(0);
+  });
+
+  it("eligibleOnly:false never computes the promo split (single-novel 'generate' page is unaffected)", async () => {
+    const novels = seedLibrary(3, 3);
+    const db = createDb(novels);
+    const page = await listNovelsForArticleGenerate(db, { page: 1, pageSize: 80, eligibleOnly: false });
+    expect(page.generatableCount).toBe(0);
+    expect(page.nonGeneratableCount).toBe(0);
+    expect(page.total).toBe(3);
+  });
+
+  it("articleGenerateEligibleWhere (worker enumeration) matches only no-live-article AND promo-ready novels", () => {
+    const novels = seedLibrary(201, 3);
+    novels[1]!.promoLinks = [readyPromoLink()];
+    novels[2]!.promoLinks = [readyPromoLink({ webUrl: null, appUrl: "app://ready" })];
+    const where = articleGenerateEligibleWhere({});
+    const matched = novels.filter((novel) => matchesWhere(novel, where as Record<string, unknown>));
+    // Narrows to exactly the promo-ready subset of the 3 no-live-article
+    // seeds — never widens to include any of the 198 live-article novels,
+    // confirming the "safe to use for worker enumeration" reasoning: a
+    // novel this excludes would only ever have been recorded blocked by
+    // `resolveArticleGenerateAdmissions` anyway.
+    // `.filter()` preserves seed order (index 1, then index 2) — unlike
+    // `listNovelsForArticleGenerate`'s own `findMany`, which sorts by
+    // `updatedAt desc`; this test exercises the raw where-fragment only.
+    expect(matched.map((novel) => novel.title)).toEqual(["Older Eligible 2", "Older Eligible 3"]);
   });
 
   it("resolves promo once for the current page ids", async () => {

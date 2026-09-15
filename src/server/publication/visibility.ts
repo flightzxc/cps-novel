@@ -106,6 +106,12 @@ function isNonBlank(value: string | null | undefined): boolean {
  * that pre-filter is never authoritative on its own — this function's trim
  * check always has the final word before anything is rendered, indexed, or
  * submitted to IndexNow.
+ *
+ * See {@link readyPromoLinkWhere} below (same module, deliberately) for this
+ * predicate's SQL-level counterpart — a Prisma `where` fragment for
+ * listing/counting a Novel's PromoLink rows without loading them into JS.
+ * That fragment is a narrower-but-not-identical SUPERSET (see its own doc
+ * comment for the one accepted gap); this function remains authoritative.
  */
 export function isPromoReady(promoLink: PromoLinkReadinessState): boolean {
   if (!promoLink) return false;
@@ -282,6 +288,56 @@ export function buildPrimaryArticleWhere(
   extra: Prisma.ArticleWhereInput = {},
 ): Prisma.ArticleWhereInput {
   return { AND: [PRIMARY_ARTICLE_RECORD, extra] };
+}
+
+/**
+ * SQL-level counterpart to {@link isPromoReady}, kept in this same module so
+ * neither definition can drift from the other silently (this file's header:
+ * CPS's promo-readiness check was independently reimplemented four times
+ * with a real semantic drift). Returns the WHERE fragment for a single
+ * PromoLink row; a Novel counts as promo-ready iff
+ * `promoLinks: { some: readyPromoLinkWhere() } }` (see
+ * `src/server/content-creation/eligibility.ts`'s `novelWhere`, the only
+ * caller as of this writing).
+ *
+ * Two scoping decisions every caller inherits, both required reading before
+ * reusing this fragment elsewhere:
+ *
+ * 1. Soft-delete: `deletedAt: null` matches the exact "live" scope
+ *    `resolveReadyPromoLinksForNovels`/`resolveReadyPromoLinkForNovel`
+ *    (`src/server/content-creation/promo.ts`) and `pickReadyPromoLink`'s own
+ *    query (`src/server/article-rebind/guards.ts`) already use to derive the
+ *    `promo_link_deleted` outcome — a soft-deleted PromoLink is never ready
+ *    here regardless of its stored status/URLs.
+ *
+ * 2. Blank vs. empty (the "trim gap"): `isPromoReady` treats a
+ *    whitespace-only URL as blank via `.trim().length > 0`. Prisma's typed
+ *    query API has no trim/regex string predicate, and a relation filter
+ *    (`promoLinks: { some }`) cannot embed raw SQL without dropping the
+ *    entire host query to `$queryRaw` — there is no way to express "not
+ *    only whitespace" faithfully here without doing that. Rather than
+ *    inventing a fifth ad hoc check, this reuses the exact convention
+ *    already established for this same field pair by
+ *    `src/lib/seo/sitemap.ts`'s `activePublicArticleWhere` (and this file's
+ *    own `PUBLIC_ARTICLE_RECORD` section comment above): `not: ""` is a
+ *    cheap, index-friendly SUPERSET, not a trim-exact match. A
+ *    whitespace-only `webUrl`/`appUrl` on an otherwise-`fetched`,
+ *    non-deleted row WILL match here even though `isPromoReady` reports it
+ *    as blank — a narrow, deliberately accepted gap, pinned by
+ *    `tests/backend/publication/promo-ready-where.test.ts` so it cannot
+ *    regress into a wider silent drift. `resolveArticleGenerateAdmissions`
+ *    (which calls `isPromoReady` via `pickReadyPromoLink` fresh per row,
+ *    regardless of which SQL bucket a row landed in) remains the sole
+ *    authority for admission/labelling — this predicate is only a
+ *    listing/counting optimisation, per this file's header discipline that
+ *    a DB pre-filter is never authoritative on its own.
+ */
+export function readyPromoLinkWhere(): Prisma.PromoLinkWhereInput {
+  return {
+    deletedAt: null,
+    status: "fetched",
+    OR: [{ webUrl: { not: "" } }, { appUrl: { not: "" } }],
+  };
 }
 
 /**

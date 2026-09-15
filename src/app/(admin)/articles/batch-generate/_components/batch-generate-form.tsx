@@ -77,6 +77,12 @@ export function ArticleBatchGenerateForm({
   const [page, setPage] = useState(initialPage);
   const [draftFilter, setDraftFilter] = useState<DraftFilter>({ search: "", locale: "" });
   const [appliedFilter, setAppliedFilter] = useState<NormalizedArticleGenerateFilter>({});
+  // View-only list parameter — deliberately its own piece of state, never
+  // folded into draftFilter/appliedFilter: it must not enter
+  // canonicalFiltersEqual, the 「筛选已改动但尚未应用」 dirty check,
+  // inputFingerprint, or an enqueued task payload. See
+  // `listArticleGenerateCandidatesAction`'s `showIneligible` doc comment.
+  const [showIneligible, setShowIneligible] = useState(false);
   const [selected, setSelected] = useState<string[]>([]);
   const [templateKeys, setTemplateKeys] = useState<Record<string, string>>({});
   const [templateCache, setTemplateCache] = useState<readonly ArticleTemplateOption[]>(templates);
@@ -102,13 +108,19 @@ export function ArticleBatchGenerateForm({
     setSelected((current) => (current.includes(id) ? current.filter((item) => item !== id) : [...current, id]));
   }
 
-  async function load(nextPage: number, nextFilter: NormalizedArticleGenerateFilter, reason: "apply" | "page") {
+  async function load(
+    nextPage: number,
+    nextFilter: NormalizedArticleGenerateFilter,
+    nextShowIneligible: boolean,
+    reason: "apply" | "page" | "toggle",
+  ) {
     setBusy(true);
     setMessage(null);
     try {
       const result = await listArticleGenerateCandidatesAction({
         requestId: crypto.randomUUID(),
         page: nextPage,
+        showIneligible: nextShowIneligible,
         ...nextFilter,
       });
       if (!result.ok) {
@@ -138,11 +150,18 @@ export function ArticleBatchGenerateForm({
 
   function applyDraftFilter() {
     try {
-      void load(1, normalizeArticleGenerateFilter(draftFilter), "apply");
+      void load(1, normalizeArticleGenerateFilter(draftFilter), showIneligible, "apply");
     } catch (error) {
       const code = error instanceof ArticleGenerateSelectionError ? error.code : "filter_invalid";
       setMessage(`筛选无效（${code}）。已保留当前筛选与页码。`);
     }
+  }
+
+  function toggleShowIneligible() {
+    if (requestLocked) return;
+    const next = !showIneligible;
+    setShowIneligible(next);
+    void load(1, appliedFilter, next, "toggle");
   }
 
   function ensureFrozen(scope: "explicit_ids" | "all_filtered"): FrozenRequest {
@@ -264,8 +283,19 @@ export function ArticleBatchGenerateForm({
         data-applied-search={appliedFilter.search ?? ""}
         data-applied-locale={appliedFilter.locale ?? ""}
       >
-        当前筛选共 {page.total.toLocaleString("zh-CN")} 本尚未创建文章的书目。本页 {page.rows.length} 本。
+        当前筛选可生成 {page.generatableCount.toLocaleString("zh-CN")} 本 · 另有{" "}
+        {page.nonGeneratableCount.toLocaleString("zh-CN")} 本不可生成 · 本页 {page.rows.length} 本
       </p>
+      <label className="flex items-center gap-2 text-sm text-gray-700">
+        <input
+          type="checkbox"
+          data-testid="toggle-show-ineligible"
+          checked={showIneligible}
+          disabled={busy || requestLocked}
+          onChange={toggleShowIneligible}
+        />
+        显示不可生成（{page.nonGeneratableCount.toLocaleString("zh-CN")} 本）
+      </label>
       <div className="space-y-2">
         {page.rows.map((novel) => (
           <label key={novel.novelId} className="flex items-start gap-2 text-sm text-gray-800">
@@ -290,7 +320,7 @@ export function ArticleBatchGenerateForm({
           data-testid="prev-page"
           disabled={busy || requestLocked || page.page <= 1}
           className={buttonClassName("secondary")}
-          onClick={() => void load(page.page - 1, appliedFilter, "page")}
+          onClick={() => void load(page.page - 1, appliedFilter, showIneligible, "page")}
         >
           上一页
         </button>
@@ -300,7 +330,7 @@ export function ArticleBatchGenerateForm({
           data-testid="next-page"
           disabled={busy || requestLocked || page.page >= pageCount}
           className={buttonClassName("secondary")}
-          onClick={() => void load(page.page + 1, appliedFilter, "page")}
+          onClick={() => void load(page.page + 1, appliedFilter, showIneligible, "page")}
         >
           下一页
         </button>

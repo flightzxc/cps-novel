@@ -33,7 +33,16 @@ function novel(id: string, locale: string, title: string): NovelGenerateCandidat
 }
 
 function page(rows: NovelGenerateCandidate[], overrides: Partial<NovelGeneratePage> = {}): NovelGeneratePage {
-  return { rows, total: rows.length, page: 1, pageSize: 50, ...overrides };
+  const generatableCount = rows.filter((row) => row.canGenerateArticle).length;
+  return {
+    rows,
+    total: rows.length,
+    page: 1,
+    pageSize: 50,
+    generatableCount,
+    nonGeneratableCount: rows.length - generatableCount,
+    ...overrides,
+  };
 }
 
 const EN_PAGE = page(
@@ -288,5 +297,59 @@ describe("ArticleBatchGenerateForm (R2-02 / R2-03 / R2-04)", () => {
     await waitFor(() => expect(screen.getByTestId("template-ja")).toBeTruthy());
     expect(screen.getByRole("option", { name: "ja-body · v3" })).toBeTruthy();
     expect(screen.getByRole("option", { name: "en-default · v1" })).toBeTruthy();
+  });
+
+  it("shows the generatable/non-generatable/page split and a toggle labelled with the blocked count", () => {
+    const mixed = page([novel(ID_EN, "en", "Ready one")], { generatableCount: 7, nonGeneratableCount: 3, total: 7 });
+    render(<ArticleBatchGenerateForm initialPage={mixed} templates={[]} canWrite />);
+    const banner = screen.getByTestId("applied-total").textContent ?? "";
+    expect(banner).toContain("可生成 7 本");
+    expect(banner).toContain("另有 3 本不可生成");
+    expect(banner).toContain("本页 1 本");
+    expect(screen.getByTestId("toggle-show-ineligible").parentElement?.textContent).toContain("显示不可生成（3 本）");
+    expect((screen.getByTestId("toggle-show-ineligible") as HTMLInputElement).checked).toBe(false);
+  });
+
+  it("toggling 显示不可生成 reloads page 1 with showIneligible=true, without touching the filter or its dirty state", async () => {
+    actions.listArticleGenerateCandidatesAction.mockResolvedValue({
+      ok: true,
+      data: page([novel(ID_EN, "en", "Ready one"), {
+        ...novel(ID_EN_2, "en", "Blocked one"),
+        canGenerateArticle: false,
+        promoReady: false,
+        promoOutcome: "promo_link_missing" as const,
+        generateBlockedReason: "promo_link_missing" as const,
+      }], { generatableCount: 1, nonGeneratableCount: 1, total: 2 }),
+      templates: [],
+    });
+    render(
+      <ArticleBatchGenerateForm
+        initialPage={page([], { generatableCount: 1, nonGeneratableCount: 1, total: 1 })}
+        templates={[]}
+        canWrite
+      />,
+    );
+    fireEvent.click(screen.getByTestId("toggle-show-ineligible"));
+    await waitFor(() => expect(actions.listArticleGenerateCandidatesAction).toHaveBeenCalled());
+    expect(actions.listArticleGenerateCandidatesAction.mock.calls[0][0]).toMatchObject({
+      page: 1,
+      showIneligible: true,
+    });
+    expect(screen.queryByTestId("filter-dirty")).toBeNull();
+    await waitFor(() => expect(screen.getByText("Blocked one · en · biz-1112 · 缺少推广链接")).toBeTruthy());
+    expect((screen.getByTestId(`select-${ID_EN_2}`) as HTMLInputElement).disabled).toBe(true);
+  });
+
+  it("submitting all_filtered never includes showIneligible in the enqueued selection", async () => {
+    const onlyOne = page([novel(ID_EN, "en", "Only one")], { total: 1 });
+    actions.listArticleGenerateCandidatesAction.mockResolvedValue({ ok: true, data: onlyOne, templates: [] });
+    actions.enqueueArticleGenerateBatchAction.mockResolvedValueOnce({ ok: true, taskId: "task-toggle", duplicate: false });
+    render(<ArticleBatchGenerateForm initialPage={onlyOne} templates={[]} canWrite />);
+    fireEvent.click(screen.getByTestId("toggle-show-ineligible"));
+    await waitFor(() => expect(actions.listArticleGenerateCandidatesAction).toHaveBeenCalled());
+    fireEvent.click(screen.getByTestId("submit-filtered"));
+    await waitFor(() => expect(actions.enqueueArticleGenerateBatchAction).toHaveBeenCalled());
+    const call = actions.enqueueArticleGenerateBatchAction.mock.calls[0][0];
+    expect(JSON.stringify(call)).not.toMatch(/showIneligible/);
   });
 });
