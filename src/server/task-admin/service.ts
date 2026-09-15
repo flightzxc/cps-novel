@@ -9,12 +9,16 @@ import {
 import { chunkIds } from "@/lib/db/chunked-id-lookup";
 import { isUniqueConstraintViolation, withDbRetry } from "@/lib/db/db-retry";
 import { CATALOG_BATCH_TASK_TYPE, MOBOREADER_TASK_TYPES, PARENT_BATCH_TASK_TYPES, isParentBatchTaskType, type TaskFamily } from "@/lib/tasks";
+import { ARTICLE_GENERATE_BATCH_TASK_TYPE, ARTICLE_GENERATE_TASK_TYPE } from "@/lib/tasks/article-generate";
+import type { ArticleGenerateBlockedReason } from "@/domain/article-generation";
 import { TASK_ITEM_STATUSES, TASK_STATUSES } from "@/domain/database-statuses";
 import { deriveCatalogBatchPhase } from "@/domain/catalog-batch";
 import {
   requireFreshAdminServiceMutation,
   type AdminServiceAuthorization,
 } from "@/server/auth/guards";
+
+import { projectSafeTaskFailure, type SafeTaskFailureDto } from "./safe-task-error";
 
 export const TASK_RETRY_ENTRY_ID = "admin.api.task.retry_failed";
 export const MANUAL_REVIEW_RESOLVE_ENTRY_ID = "admin.api.task.manual_review.resolve";
@@ -67,6 +71,13 @@ export type TaskSummaryDto = Readonly<{
   failedCount: number;
   skippedCount: number;
   errorSummary: "redacted" | null;
+  failure?: SafeTaskFailureDto;
+  articleAdmission?: Readonly<{
+    selectedCount: number;
+    submittedCount: number;
+    blockedCount: number;
+    blockedReasonCounts: Readonly<Partial<Record<ArticleGenerateBlockedReason, number>>>;
+  }>;
   catalogBatch?: Readonly<{
     phase: "queued" | "disabled" | "materializing" | "executing" | "completed" | "completed_with_errors" | "failed" | "expired";
     submittedCount: number | null;
@@ -113,6 +124,7 @@ export type TaskItemDto = Readonly<{
   leaseEpoch: string;
   lockedUntil: string | null;
   errorSummary: "redacted" | null;
+  failure?: SafeTaskFailureDto;
   /**
    * C-10: the *origin* failed item's derived stop reason, e.g.
    * `"upstream_error (HTTP 401) @ 第 1 页"` — built from the item's own
@@ -319,6 +331,7 @@ type TaskListRow = {
    * exposed.
    */
   result: Prisma.JsonValue | null;
+  error?: Prisma.JsonValue | null;
   /**
    * C-9 (task-detail route): the three fields below are only ever selected
    * by `getAdminTaskDetail`'s own query — `listAdminTasks`'s query never
@@ -705,6 +718,8 @@ export type TaskDetailDto = TaskSummaryDto & Readonly<{
 
 function taskSummary(row: TaskListRow, bookCounts?: CatalogBookCountsDto): TaskSummaryDto {
   const stopReason = deriveTaskStopReason(row.status, row.has_error, row.result);
+  const hasStoredError = row.error !== undefined ? row.error !== null : row.has_error;
+  const failure = hasStoredError ? projectSafeTaskFailure(row.error) : undefined;
   const resultObject = jsonPlainObject(row.result);
   const allowedBlockedReasons = new Set([
     "channel_binding_or_capability_unavailable",
@@ -717,6 +732,35 @@ function taskSummary(row: TaskListRow, bookCounts?: CatalogBookCountsDto): TaskS
       .filter((entry): entry is [string, number] => allowedBlockedReasons.has(entry[0]) && typeof entry[1] === "number" && entry[1] > 0))
     : {};
   const isCatalogMaterialize = row.task_type === CATALOG_BATCH_TASK_TYPE;
+  const articleBlockedReasons = new Set<ArticleGenerateBlockedReason>([
+    "novel_not_found",
+    "novel_deleted",
+    "already_exists",
+    "article_soft_deleted",
+    "promo_link_missing",
+    "promo_link_not_ready",
+    "promo_link_deleted",
+  ]);
+  const articleBlockedReasonCounts = resultObject?.blockedReasonCounts
+    && typeof resultObject.blockedReasonCounts === "object"
+    && !Array.isArray(resultObject.blockedReasonCounts)
+    ? Object.fromEntries(Object.entries(resultObject.blockedReasonCounts as Record<string, unknown>)
+      .filter((entry): entry is [ArticleGenerateBlockedReason, number] =>
+        articleBlockedReasons.has(entry[0] as ArticleGenerateBlockedReason)
+        && typeof entry[1] === "number" && Number.isSafeInteger(entry[1]) && entry[1] > 0))
+    : {};
+  const isArticleGenerate = row.task_type === ARTICLE_GENERATE_TASK_TYPE
+    || row.task_type === ARTICLE_GENERATE_BATCH_TASK_TYPE;
+  const articleAdmission = isArticleGenerate
+    && typeof resultObject?.selectedCount === "number"
+    && typeof resultObject?.submittedCount === "number"
+    ? {
+        selectedCount: resultObject.selectedCount,
+        submittedCount: resultObject.submittedCount,
+        blockedCount: Object.values(articleBlockedReasonCounts).reduce((sum, count) => sum + count, 0),
+        blockedReasonCounts: articleBlockedReasonCounts,
+      }
+    : undefined;
   const catalogBatch = isParentBatchTaskType(row.task_type) ? {
     phase: deriveCatalogBatchPhase({
       parentStatus: row.status,
@@ -743,7 +787,9 @@ function taskSummary(row: TaskListRow, bookCounts?: CatalogBookCountsDto): TaskS
     successCount: row.success_count,
     failedCount: row.failed_count,
     skippedCount: row.skipped_count,
-    errorSummary: row.has_error ? "redacted" : null,
+    errorSummary: hasStoredError ? "redacted" : null,
+    ...(failure ? { failure } : {}),
+    ...(articleAdmission ? { articleAdmission } : {}),
     ...(catalogBatch ? { catalogBatch } : {}),
     ...(stopReason !== undefined ? { stopReason } : {}),
     ...(bookCounts !== undefined ? { bookCounts } : {}),
@@ -767,14 +813,14 @@ export async function listAdminTasks(
     SELECT * FROM (
       SELECT 'channel_sync'::text AS family, id AS task_id, task_type, status,
         total_count, success_count, failed_count, skipped_count,
-        error IS NOT NULL AS has_error, created_at, result, params
+        error IS NOT NULL AS has_error, created_at, result, params, error
       FROM channel_sync_task
       WHERE (${family}::text IS NULL OR ${family} = 'channel_sync')
         AND (${status}::text IS NULL OR status = ${status})
       UNION ALL
       SELECT 'generic'::text AS family, task_id, task_type, status,
         total_count, success_count, failed_count, skipped_count,
-        has_error, created_at, result, params
+        has_error, created_at, result, params, error
       FROM (
         SELECT g.id AS task_id, g.task_type,
           CASE WHEN g.task_type NOT IN (${parentBatchTypes}) THEN g.status
@@ -800,7 +846,7 @@ export async function listAdminTasks(
               SELECT 1 FROM jsonb_each(COALESCE(g.result->'blockedReasonCounts', '{}'::jsonb)) blocked
               WHERE jsonb_typeof(blocked.value) = 'number' AND (blocked.value #>> '{}')::numeric > 0
             )) AS has_error,
-          g.created_at, g.result, g.params
+          g.created_at, g.result, g.params, g.error
         FROM generic_task g
         LEFT JOIN LATERAL (
           SELECT SUM(total_count)::int total_count, SUM(success_count)::int success_count,
@@ -907,7 +953,7 @@ export async function getAdminTaskDetail(
       status, total_count, success_count, failed_count,
       skipped_count::int AS skipped_count,
       error IS NOT NULL AS has_error, created_at, updated_at,
-      mode, channel_account_id, params, result
+      mode, channel_account_id, params, result, error
     FROM ${table}
     WHERE id = ${taskId}::uuid
   `);
@@ -996,10 +1042,12 @@ export async function listAdminTaskItems(
     total = count;
     items = rows.map((row) => {
       const stopReason = deriveItemStopReason(row.status, row.result, row.error);
+      const failure = row.status === "failed" ? projectSafeTaskFailure(row.error) : undefined;
       return Object.freeze({
         family, itemId: row.id, taskId: row.taskId, status: row.status,
         attemptCount: row.attemptCount, leaseEpoch: row.leaseEpoch.toString(),
         lockedUntil: iso(row.lockedUntil), errorSummary: row.error === null ? null : "redacted",
+        ...(failure ? { failure } : {}),
         ...(stopReason !== undefined ? { stopReason } : {}),
       });
     });
@@ -1021,11 +1069,13 @@ export async function listAdminTaskItems(
     total = count;
     items = rows.map((row) => {
       const stopReason = deriveItemStopReason(row.status, row.result, row.error);
+      const failure = row.status === "failed" ? projectSafeTaskFailure(row.error) : undefined;
       const pageNumber = derivePageNumber(row.targetType, row.targetId);
       return Object.freeze({
         family, itemId: row.id, taskId: row.taskId, status: row.status,
         attemptCount: row.attemptCount, leaseEpoch: row.leaseEpoch.toString(),
         lockedUntil: iso(row.lockedUntil), errorSummary: row.error === null ? null : "redacted",
+        ...(failure ? { failure } : {}),
         ...(stopReason !== undefined ? { stopReason } : {}),
         ...(pageNumber !== undefined ? { pageNumber } : {}),
       });

@@ -2,6 +2,7 @@ import type { Prisma, PrismaClient } from "@prisma/client";
 
 import {
   ARTICLE_GENERATE_UUID,
+  type ArticleGenerateBlockedReason,
   type NovelGenerateCandidate,
   type NovelGeneratePage,
   type PinnedNovelResult,
@@ -16,8 +17,79 @@ type NovelListRow = {
   title: string;
   locale: string;
   businessId: string;
-  articles: readonly { id: string }[];
+  deletedAt: Date | null;
+  articles: readonly { id: string; locale: string; deletedAt: Date | null }[];
 };
+
+export type ArticleGenerateAdmission = Readonly<{
+  novelId: string;
+  canGenerate: boolean;
+  promoOutcome: PromoResolution["outcome"];
+  blockedReason?: ArticleGenerateBlockedReason;
+}>;
+
+type AdmissionDb = Parameters<typeof resolveReadyPromoLinksForNovels>[0];
+
+function articleForNovelLocale(novel: NovelListRow) {
+  return novel.articles.find((article) => article.locale === novel.locale);
+}
+
+/**
+ * Shared Article admission classification. Promo readiness is intentionally
+ * delegated to the existing resolver, which in turn uses pickReadyPromoLink /
+ * isPromoReady. This is the only pre-dispatch classifier used by list, direct
+ * batch enqueue, and all-filtered enumeration.
+ */
+export async function resolveArticleGenerateAdmissions(
+  db: AdmissionDb,
+  requestedNovelIds: readonly string[],
+  novels: readonly NovelListRow[],
+): Promise<ReadonlyMap<string, ArticleGenerateAdmission>> {
+  const rowsById = new Map(novels.map((novel) => [novel.id, novel]));
+  const promoCandidateIds = requestedNovelIds.filter((novelId) => {
+    const novel = rowsById.get(novelId);
+    return Boolean(novel && novel.deletedAt === null);
+  });
+  const promos = await resolveReadyPromoLinksForNovels(db, promoCandidateIds);
+  const admissions = new Map<string, ArticleGenerateAdmission>();
+
+  for (const novelId of requestedNovelIds) {
+    const novel = rowsById.get(novelId);
+    if (!novel) {
+      admissions.set(novelId, {
+        novelId,
+        canGenerate: false,
+        promoOutcome: "promo_link_missing",
+        blockedReason: "novel_not_found",
+      });
+      continue;
+    }
+    if (novel.deletedAt !== null) {
+      admissions.set(novelId, {
+        novelId,
+        canGenerate: false,
+        promoOutcome: "promo_link_missing",
+        blockedReason: "novel_deleted",
+      });
+      continue;
+    }
+    const promoOutcome = promos.get(novelId)?.outcome ?? "promo_link_missing";
+    const existing = articleForNovelLocale(novel);
+    if (existing) {
+      admissions.set(novelId, {
+        novelId,
+        canGenerate: false,
+        promoOutcome,
+        blockedReason: existing.deletedAt === null ? "already_exists" : "article_soft_deleted",
+      });
+      continue;
+    }
+    admissions.set(novelId, promoOutcome === "ready"
+      ? { novelId, canGenerate: true, promoOutcome }
+      : { novelId, canGenerate: false, promoOutcome, blockedReason: promoOutcome });
+  }
+  return admissions;
+}
 
 function novelWhere(input: {
   readonly search?: string;
@@ -41,17 +113,19 @@ function novelWhere(input: {
 
 function toCandidate(
   novel: NovelListRow,
-  promo: PromoResolution | undefined,
+  admission: ArticleGenerateAdmission,
 ): NovelGenerateCandidate {
-  const outcome = promo?.outcome ?? "promo_link_missing";
+  const outcome = admission.promoOutcome;
   return {
     novelId: novel.id,
     title: novel.title,
     locale: novel.locale,
     businessId: novel.businessId,
-    hasLiveArticle: novel.articles.length > 0,
+    hasLiveArticle: novel.articles.some((article) => article.locale === novel.locale && article.deletedAt === null),
     promoReady: outcome === "ready",
     promoOutcome: outcome === "ready" ? "ready" : outcome,
+    canGenerateArticle: admission.canGenerate,
+    ...(admission.blockedReason ? { generateBlockedReason: admission.blockedReason } : {}),
   };
 }
 
@@ -59,11 +133,12 @@ async function decorateNovels(
   db: PrismaClient,
   novels: readonly NovelListRow[],
 ): Promise<NovelGenerateCandidate[]> {
-  const promos = await resolveReadyPromoLinksForNovels(
+  const admissions = await resolveArticleGenerateAdmissions(
     db,
     novels.map((novel) => novel.id),
+    novels,
   );
-  return novels.map((novel) => toCandidate(novel, promos.get(novel.id)));
+  return novels.map((novel) => toCandidate(novel, admissions.get(novel.id)!));
 }
 
 export async function listNovelsForArticleGenerate(
@@ -88,7 +163,8 @@ export async function listNovelsForArticleGenerate(
         title: true,
         locale: true,
         businessId: true,
-        articles: { where: { deletedAt: null }, select: { id: true }, take: 1 },
+        deletedAt: true,
+        articles: { select: { id: true, locale: true, deletedAt: true } },
       },
       orderBy: [{ updatedAt: "desc" }, { id: "asc" }],
       skip: (page - 1) * pageSize,
@@ -117,7 +193,7 @@ export async function loadPinnedNovelForArticleGenerate(
       locale: true,
       businessId: true,
       deletedAt: true,
-      articles: { where: { deletedAt: null }, select: { id: true }, take: 1 },
+      articles: { select: { id: true, locale: true, deletedAt: true } },
     },
   });
   if (!novel) return { status: "missing" };

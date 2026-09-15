@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 
 import { buttonClassName } from "@/components/ui/button";
 import {
+  articleGenerateBlockedReasonLabel,
   ArticleGenerateSelectionError,
   normalizeArticleGenerateFilter,
   type ArticleGenerateSelection,
@@ -96,6 +97,8 @@ export function ArticleBatchGenerateForm({
 
   function toggle(id: string) {
     if (requestLocked) return;
+    const novel = page.rows.find((row) => row.novelId === id);
+    if (novel && !novel.canGenerateArticle) return;
     setSelected((current) => (current.includes(id) ? current.filter((item) => item !== id) : [...current, id]));
   }
 
@@ -113,6 +116,10 @@ export function ArticleBatchGenerateForm({
         return;
       }
       setPage(result.data);
+      const blockedOnPage = new Set(result.data.rows
+        .filter((row) => !row.canGenerateArticle)
+        .map((row) => row.novelId));
+      setSelected((current) => current.filter((novelId) => !blockedOnPage.has(novelId)));
       setTemplateCache((current) => mergeTemplateCache(current, result.templates));
       if (reason === "apply") {
         const changed = !canonicalFiltersEqual(nextFilter, appliedFilter);
@@ -182,7 +189,9 @@ export function ArticleBatchGenerateForm({
           ? "同一请求已存在，已回到原任务，不会新建第二份。"
           : request.scope === "all_filtered"
             ? "已按已应用筛选提交异步批量任务。Worker 会分页枚举尚未建稿的书目，不会在页面里拉全库。"
-            : "批量创建文章任务已提交。这与「批量再生成」不同：这里只给还没有文章的书目建稿。",
+            : result.admission && result.admission.blockedCount > 0
+              ? `任务已提交：已选 ${result.admission.selectedCount} 本，实际提交 ${result.admission.submittedCount} 本，准入阻断 ${result.admission.blockedCount} 本。`
+              : "批量创建文章任务已提交。这与「批量再生成」不同：这里只给还没有文章的书目建稿。",
       );
     } catch {
       setMessage("提交结果未知。请再点一次重放同一请求，不要改筛选或模板。");
@@ -264,12 +273,12 @@ export function ArticleBatchGenerateForm({
               type="checkbox"
               data-testid={`select-${novel.novelId}`}
               checked={selected.includes(novel.novelId)}
-              disabled={requestLocked}
+              disabled={requestLocked || !novel.canGenerateArticle}
               onChange={() => toggle(novel.novelId)}
             />
             <span>
               {novel.title} · {novel.locale} · {novel.businessId}
-              {novel.promoReady ? "" : ` · ${novel.promoOutcome}`}
+              {novel.generateBlockedReason ? ` · ${articleGenerateBlockedReasonLabel(novel.generateBlockedReason)}` : ""}
             </span>
           </label>
         ))}

@@ -64,7 +64,14 @@ function parentRow(overrides: Record<string, unknown> = {}) {
     mode: "apply",
     channel_account_id: null,
     params: {},
-    result: { enumerationStatus: "completed", submittedCount: 400, childTaskCount: 2 },
+    result: {
+      enumerationStatus: "completed",
+      selectedCount: 400,
+      submittedCount: 400,
+      blockedCount: 0,
+      blockedReasonCounts: {},
+      childTaskCount: 2,
+    },
     ...overrides,
   };
 }
@@ -287,6 +294,40 @@ describe("article.generate.batch.v1 parent read model (R2-01)", () => {
     expect(progress.total).toBe(0);
     expect(progress.success).toBe(0);
     expect(progress.catalogBatch).toEqual({ phase: "completed" });
+  });
+
+  it("projects an all-blocked enumeration as blocked, not failed child items", async () => {
+    const db = fakeParentBatchDb({
+      parent: parentRow({
+        result: {
+          enumerationStatus: "completed",
+          selectedCount: 200,
+          submittedCount: 0,
+          blockedCount: 200,
+          blockedReasonCounts: { promo_link_missing: 200 },
+          childTaskCount: 0,
+        },
+      }),
+      children: [],
+    });
+    const detail = await getAdminTaskDetail(
+      db,
+      await readContext("/api/admin/tasks/detail"),
+      { family: "generic", taskId: PARENT_ID },
+      {} as NodeJS.ProcessEnv,
+    );
+    expect(detail).toMatchObject({
+      status: "completed_with_errors",
+      totalCount: 0,
+      failedCount: 0,
+      articleAdmission: {
+        selectedCount: 200,
+        submittedCount: 0,
+        blockedCount: 200,
+        blockedReasonCounts: { promo_link_missing: 200 },
+      },
+    });
+    expect(detail.catalogBatch?.childTasks).toEqual([]);
   });
 
   it("refuses parent-batch retry with 409", async () => {

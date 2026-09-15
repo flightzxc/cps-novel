@@ -23,6 +23,7 @@ import { RetryFailedButton } from "../_components/retry-failed-button";
 import {
   isRetryableTaskStatus,
   isTerminalTaskStatus,
+  articleAdmissionBlockedReasons,
   catalogBatchBlockedReasons,
   catalogBatchPhaseLabel,
   shouldDropSkippedFilterForTaskType,
@@ -195,19 +196,35 @@ export default async function TaskDetailPage({
               </p>
             )}
           </div>
-          {isRetryableTaskStatus(detail.status) && !detail.catalogBatch && (
+          {isRetryableTaskStatus(detail.status) && !detail.catalogBatch && detail.failedCount > 0 && (
             <RetryFailedButton family={detail.family} taskId={detail.taskId} failedCount={detail.failedCount} />
           )}
         </div>
 
         {/* 汇总卡片 */}
+        {detail.articleAdmission && (
+          <section className="rounded-xl border border-amber-200 bg-amber-50 p-4 shadow-sm" data-testid="article-admission-summary">
+            <h2 className="font-medium text-amber-950">Article 生成准入</h2>
+            <p className="mt-1 text-sm text-amber-900">
+              已选 {detail.articleAdmission.selectedCount.toLocaleString("zh-CN")} 条；
+              已提交 {detail.articleAdmission.submittedCount.toLocaleString("zh-CN")} 条；
+              准入阻断 {detail.articleAdmission.blockedCount.toLocaleString("zh-CN")} 条。
+            </p>
+            {articleAdmissionBlockedReasons(detail.articleAdmission.blockedReasonCounts).map((reason) => (
+              <span key={reason} className="mr-3 mt-1 inline-block text-sm text-amber-900">{reason}</span>
+            ))}
+          </section>
+        )}
         {detail.catalogBatch && (
           <section className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
             <h2 className="font-medium text-gray-900">批量任务进度</h2>
             <p className="mt-1 text-sm text-gray-600">
-              阶段：{catalogBatchPhaseLabel(detail.catalogBatch.phase)}；已提交 {detail.catalogBatch.submittedCount?.toLocaleString("zh-CN") ?? "正在统计"} 条；
-              已纳入 {detail.catalogBatch.alreadyLinkedCount?.toLocaleString("zh-CN") ?? "—"} 条；
-              状态不符合／未找到 {detail.catalogBatch.ineligibleCount?.toLocaleString("zh-CN") ?? "正在统计"} 条。
+              阶段：{catalogBatchPhaseLabel(detail.catalogBatch.phase)}。
+              {detail.taskType !== "article.generate.batch.v1" && <>
+                已提交 {detail.catalogBatch.submittedCount?.toLocaleString("zh-CN") ?? "正在统计"} 条；
+                已纳入 {detail.catalogBatch.alreadyLinkedCount?.toLocaleString("zh-CN") ?? "—"} 条；
+                状态不符合／未找到 {detail.catalogBatch.ineligibleCount?.toLocaleString("zh-CN") ?? "正在统计"} 条。
+              </>}
             </p>
             {(detail.catalogBatch.blockedCount ?? 0) > 0 && (
               <div className="mt-2 rounded border border-amber-200 bg-amber-50 p-2 text-sm text-amber-900" data-testid="catalog-batch-blocked-explanation">

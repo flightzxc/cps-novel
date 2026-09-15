@@ -2,8 +2,16 @@ import Link from "next/link";
 
 import { taskStatusLabel } from "@/features/admin-ui/content-view";
 import type { CatalogBookCountsDto } from "@/server/task-admin";
+import type { ArticleGenerateBlockedReason } from "@/domain/article-generation";
+import type { SafeTaskFailureDto } from "@/server/task-admin/safe-task-error";
 
-import { catalogBatchBlockedReasons, catalogBatchPhaseLabel, taskFamilyLabel } from "../_lib/task-copy";
+import {
+  articleAdmissionBlockedReasons,
+  catalogBatchBlockedReasons,
+  catalogBatchPhaseLabel,
+  safeTaskFailureDisplay,
+  taskFamilyLabel,
+} from "../_lib/task-copy";
 
 export type TaskSummaryRow = {
   readonly family: string;
@@ -15,6 +23,13 @@ export type TaskSummaryRow = {
   readonly failedCount: number;
   readonly skippedCount: number;
   readonly errorSummary: "redacted" | null;
+  readonly failure?: SafeTaskFailureDto;
+  readonly articleAdmission?: {
+    readonly selectedCount: number;
+    readonly submittedCount: number;
+    readonly blockedCount: number;
+    readonly blockedReasonCounts: Readonly<Partial<Record<ArticleGenerateBlockedReason, number>>>;
+  };
   /**
    * C-10 (Phase E rework, 2026-09-07): a stable, allowlisted stop-reason
    * code (e.g. `"upstream_error"`), never free text — see
@@ -44,20 +59,18 @@ export type TaskSummaryRow = {
 };
 
 /**
- * `errorSummary` is never a free-text field — it is `"redacted"` or `null`,
- * always (`TaskSummaryDto` in `src/server/task-admin/service.ts`). This is
- * not a placeholder waiting for a real message to arrive later: the service
- * never selects `error` beyond an `IS NOT NULL` check, by design (X9's
- * read-side kept the payload out of the browser entirely). The column says so
- * in the operator's own words instead of leaving `"redacted"` to read like a
- * broken string.
- *
- * C-10: when the service *did* manage to derive a stable stop-reason code
- * for this task (`stopReason`, an allowlisted enum value — never free
- * text), show that instead of the generic "已脱敏" line — it is strictly
- * more useful and still not raw error content.
+ * `failure` is the server's code/context allowlist projection. Free-text
+ * messages never enter this component; unknown failures fall back to the
+ * generic audit/log hint. `stopReason` remains the older stable-enum path.
  */
-function errorSummaryCell(value: "redacted" | null, stopReason: string | undefined) {
+function errorSummaryCell(
+  value: "redacted" | null,
+  stopReason: string | undefined,
+  failure: SafeTaskFailureDto | undefined,
+) {
+  if (failure) {
+    return <span className="text-amber-700">{safeTaskFailureDisplay(failure)}</span>;
+  }
   if (stopReason !== undefined) {
     return (
       <span className="font-mono text-amber-700" title="从任务的停止原因派生，稳定枚举码，非原始错误文本">
@@ -70,7 +83,7 @@ function errorSummaryCell(value: "redacted" | null, stopReason: string | undefin
   }
   return (
     <span className="text-amber-700" title="失败详情已从此列表中脱敏，仅审计日志留有完整记录">
-      已脱敏，详情见审计/日志
+      系统异常，详情见审计/日志
     </span>
   );
 }
@@ -154,15 +167,21 @@ export function TasksTable({
                 {task.catalogBatch && (
                   <p className="mt-1 text-xs text-gray-500" data-testid={`catalog-batch-phase-${task.taskId}`}>
                     {catalogBatchPhaseLabel(task.catalogBatch.phase)}
-                    {task.catalogBatch.submittedCount !== null && ` · ${task.catalogBatch.submittedCount} 条`}
-                    {task.catalogBatch.alreadyLinkedCount !== null && ` / 已纳入 ${task.catalogBatch.alreadyLinkedCount} 条`}
-                    {task.catalogBatch.ineligibleCount !== null && ` / 状态不符合／未找到 ${task.catalogBatch.ineligibleCount} 条`}
+                    {task.taskType !== "article.generate.batch.v1" && task.catalogBatch.submittedCount !== null && ` · ${task.catalogBatch.submittedCount} 条`}
+                    {task.taskType !== "article.generate.batch.v1" && task.catalogBatch.alreadyLinkedCount !== null && ` / 已纳入 ${task.catalogBatch.alreadyLinkedCount} 条`}
+                    {task.taskType !== "article.generate.batch.v1" && task.catalogBatch.ineligibleCount !== null && ` / 状态不符合／未找到 ${task.catalogBatch.ineligibleCount} 条`}
                     {(task.catalogBatch.blockedCount ?? 0) > 0 && (
                       <span className="block text-amber-700" data-testid={`catalog-batch-blocked-${task.taskId}`}>
                         部分条目未提交（{task.catalogBatch.blockedCount} 条）
                         {catalogBatchBlockedReasons(task.catalogBatch.blockedReasonCounts).map((reason) => ` · ${reason}`)}
                       </span>
                     )}
+                  </p>
+                )}
+                {task.articleAdmission && (
+                  <p className="mt-1 text-xs text-gray-500" data-testid={`article-admission-${task.taskId}`}>
+                    已选 {task.articleAdmission.selectedCount} 条 · 已提交 {task.articleAdmission.submittedCount} 条 · 准入阻断 {task.articleAdmission.blockedCount} 条
+                    {articleAdmissionBlockedReasons(task.articleAdmission.blockedReasonCounts).map((reason) => ` · ${reason}`)}
                   </p>
                 )}
               </td>
@@ -178,7 +197,7 @@ export function TasksTable({
               <td className="px-4 py-3 text-right text-gray-500">
                 {countSuffix(task.taskType, task.skippedCount)}
               </td>
-              <td className="px-4 py-3">{errorSummaryCell(task.errorSummary, task.stopReason)}</td>
+              <td className="px-4 py-3">{errorSummaryCell(task.errorSummary, task.stopReason, task.failure)}</td>
               <td className="px-4 py-3 text-right">
                 <Link
                   href={detailHref(task.family, task.taskId)}

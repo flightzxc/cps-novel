@@ -234,6 +234,10 @@ export async function recomputeParentTask(
                 AND terminal_item.result->>'terminalState' = 'partial_failed'
             ) THEN 'completed_with_errors'
           WHEN c.failed > 0 AND c.success = 0 AND c.skipped = 0 THEN 'failed'
+          WHEN t.task_type = 'article.generate.v1' AND EXISTS (
+            SELECT 1 FROM jsonb_each(COALESCE(t.result->'blockedReasonCounts', '{}'::jsonb)) blocked
+            WHERE jsonb_typeof(blocked.value) = 'number' AND (blocked.value #>> '{}')::numeric > 0
+          ) THEN 'completed_with_errors'
           WHEN c.failed > 0 THEN 'completed_with_errors'
           ELSE 'completed' END,
         started_at = COALESCE(t.started_at, transaction_timestamp()),

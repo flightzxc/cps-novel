@@ -28,6 +28,7 @@ function novel(id: string, locale: string, title: string): NovelGenerateCandidat
     hasLiveArticle: false,
     promoReady: true,
     promoOutcome: "ready",
+    canGenerateArticle: true,
   };
 }
 
@@ -48,6 +49,21 @@ beforeEach(() => {
 });
 
 describe("ArticleBatchGenerateForm (R2-02 / R2-03 / R2-04)", () => {
+  it("keeps promo-blocked novels visible but unselectable while all_filtered stays available", () => {
+    const blocked = {
+      ...novel(ID_EN, "en", "Missing promo"),
+      promoReady: false,
+      promoOutcome: "promo_link_missing" as const,
+      canGenerateArticle: false,
+      generateBlockedReason: "promo_link_missing" as const,
+    };
+    render(<ArticleBatchGenerateForm initialPage={page([blocked])} templates={[]} canWrite />);
+    expect(screen.getByText(/Missing promo.*缺少推广链接/)).toBeTruthy();
+    expect((screen.getByTestId(`select-${ID_EN}`) as HTMLInputElement).disabled).toBe(true);
+    expect((screen.getByTestId("submit-selected") as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByTestId("submit-filtered") as HTMLButtonElement).disabled).toBe(false);
+  });
+
   it("keeps the applied 10-book list when search is cleared without applying", async () => {
     actions.listArticleGenerateCandidatesAction.mockResolvedValue({
       ok: true,
@@ -156,6 +172,27 @@ describe("ArticleBatchGenerateForm (R2-02 / R2-03 / R2-04)", () => {
     const secondRound = actions.enqueueArticleGenerateBatchAction.mock.calls[2][0];
     expect(secondRound.requestId).not.toBe(first.requestId);
     expect(secondRound.selection).toEqual({ scope: "explicit_ids", novelIds: [ID_EN] });
+  });
+
+  it("reports explicit admission counts returned by the server", async () => {
+    actions.enqueueArticleGenerateBatchAction.mockResolvedValue({
+      ok: true,
+      taskId: "task-admission",
+      duplicate: false,
+      admission: {
+        selectedCount: 2,
+        submittedCount: 1,
+        blockedCount: 1,
+        blockedReasonCounts: { promo_link_not_ready: 1 },
+      },
+    });
+    const two = page([novel(ID_EN, "en", "One"), novel(ID_EN_2, "en", "Two")]);
+    render(<ArticleBatchGenerateForm initialPage={two} templates={[]} canWrite />);
+    fireEvent.click(screen.getByTestId(`select-${ID_EN}`));
+    fireEvent.click(screen.getByTestId(`select-${ID_EN_2}`));
+    fireEvent.click(screen.getByTestId("submit-selected"));
+    expect((await screen.findByTestId("batch-message")).textContent)
+      .toContain("已选 2 本，实际提交 1 本，准入阻断 1 本");
   });
 
   it("shows request_replay_mismatch without rotating the request", async () => {

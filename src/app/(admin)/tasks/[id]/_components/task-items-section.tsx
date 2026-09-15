@@ -2,9 +2,10 @@ import Link from "next/link";
 
 import { taskStatusLabel } from "@/features/admin-ui/content-view";
 import { formatDateTime } from "@/features/admin-ui/datetime";
+import type { SafeTaskFailureDto } from "@/server/task-admin/safe-task-error";
 
 import { ContentPagination } from "../../../novels/_components/content-pagination";
-import { ITEM_STATUS_TABS } from "../../_lib/task-copy";
+import { ITEM_STATUS_TABS, safeTaskFailureDisplay } from "../../_lib/task-copy";
 
 export type TaskDetailItemRow = {
   readonly itemId: string;
@@ -13,11 +14,19 @@ export type TaskDetailItemRow = {
   readonly leaseEpoch: string;
   readonly lockedUntil: string | null;
   readonly errorSummary: "redacted" | null;
+  readonly failure?: SafeTaskFailureDto;
   readonly stopReason?: string;
   readonly pageNumber?: number;
 };
 
-function errorSummaryCell(value: "redacted" | null, stopReason: string | undefined) {
+function errorSummaryCell(
+  value: "redacted" | null,
+  stopReason: string | undefined,
+  failure: SafeTaskFailureDto | undefined,
+) {
+  if (failure) {
+    return <span className="text-amber-700">{safeTaskFailureDisplay(failure)}</span>;
+  }
   if (stopReason !== undefined) {
     return (
       <span className="font-mono text-amber-700" title="从任务的停止原因派生，稳定枚举码，非原始错误文本">
@@ -28,7 +37,7 @@ function errorSummaryCell(value: "redacted" | null, stopReason: string | undefin
   if (value === null) return <span className="text-gray-400">—</span>;
   return (
     <span className="text-amber-700" title="失败详情已从此列表中脱敏，仅审计日志留有完整记录">
-      已脱敏，详情见审计/日志
+      系统异常，详情见审计/日志
     </span>
   );
 }
@@ -126,7 +135,7 @@ export function TaskItemsSection({
                   <td className="px-3 py-2 text-right">{item.attemptCount}</td>
                   <td className="px-3 py-2 font-mono text-[11px] text-gray-500">{item.leaseEpoch}</td>
                   <td className="px-3 py-2 text-gray-500">{formatDateTime(item.lockedUntil)}</td>
-                  <td className="px-3 py-2">{errorSummaryCell(item.errorSummary, item.stopReason)}</td>
+                  <td className="px-3 py-2">{errorSummaryCell(item.errorSummary, item.stopReason, item.failure)}</td>
                 </tr>
               ))}
             </tbody>

@@ -1,5 +1,10 @@
 import type { TaskFamily } from "@/lib/tasks";
 import {
+  articleGenerateBlockedReasonLabel,
+  type ArticleGenerateBlockedReason,
+} from "@/domain/article-generation";
+import type { SafeTaskFailureDto } from "@/server/task-admin/safe-task-error";
+import {
   TASK_ITEM_STATUSES as DATABASE_TASK_ITEM_STATUSES,
   TASK_STATUSES as DATABASE_TASK_STATUSES,
 } from "@/domain/database-statuses";
@@ -116,6 +121,28 @@ export function catalogBatchBlockedReasons(counts: Readonly<Record<string, numbe
   return Object.entries(counts)
     .filter(([reason, count]) => CATALOG_BATCH_BLOCKED_REASON_LABELS[reason] !== undefined && Number.isFinite(count) && count > 0)
     .map(([reason, count]) => `${CATALOG_BATCH_BLOCKED_REASON_LABELS[reason]}：${count} 条`);
+}
+
+export function articleAdmissionBlockedReasons(
+  counts: Readonly<Partial<Record<ArticleGenerateBlockedReason, number>>> | undefined,
+): readonly string[] {
+  if (!counts) return [];
+  return Object.entries(counts)
+    .filter((entry): entry is [ArticleGenerateBlockedReason, number] =>
+      typeof entry[1] === "number" && Number.isFinite(entry[1]) && entry[1] > 0)
+    .map(([reason, count]) => `${articleGenerateBlockedReasonLabel(reason)}：${count} 条`);
+}
+
+export function safeTaskFailureDisplay(failure: SafeTaskFailureDto): string {
+  const context = failure.context;
+  const parts = context ? [
+    context.httpStatus !== undefined ? `HTTP ${context.httpStatus}` : undefined,
+    context.pageNumber !== undefined ? `第 ${context.pageNumber} 页` : undefined,
+    context.sqlState ? `SQLSTATE ${context.sqlState}` : undefined,
+    context.prismaCode ? `Prisma ${context.prismaCode}` : undefined,
+    context.constraint ? `约束 ${context.constraint}` : undefined,
+  ].filter((value): value is string => value !== undefined) : [];
+  return `${failure.label}（${failure.code}）${parts.length > 0 ? ` · ${parts.join(" · ")}` : ""}`;
 }
 
 /**

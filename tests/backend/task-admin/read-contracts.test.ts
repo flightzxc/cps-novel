@@ -97,6 +97,31 @@ describe("X9 read DTO allowlists", () => {
     for (const key of FORBIDDEN_KEYS) expect(allKeys(result).has(key)).toBe(false);
   });
 
+  it("projects known task and item errors without exposing their raw message or secret detail", async () => {
+    const context = await readContext("/api/admin/tasks");
+    const secret = "Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJhZG1pbiJ9.signature";
+    const row = {
+      family: "generic",
+      task_id: TASK_ID,
+      task_type: "article.generate.v1",
+      status: "failed",
+      total_count: 1,
+      success_count: 0,
+      failed_count: 1,
+      skipped_count: 0,
+      has_error: true,
+      created_at: NOW,
+      params: {},
+      result: {},
+      error: { code: "promo_link_missing", message: secret, detail: { credential: secret } },
+    };
+    const db = { $queryRaw: async () => [row] } as unknown as PrismaClient;
+    const result = await listAdminTasks(db, context, {}, {} as NodeJS.ProcessEnv);
+    expect(result.items[0].failure).toEqual({ code: "promo_link_missing", label: "缺少推广链接" });
+    expect(JSON.stringify(result)).not.toContain(secret);
+    expect(allKeys(result)).not.toContain("credential");
+  });
+
   it("allowlists locale eligibility reason counts for materialization batches and withholds unknown keys", async () => {
     const context = await readContext("/api/admin/tasks");
     const row = {
@@ -349,6 +374,11 @@ describe("C-10 derived stop reason", () => {
     const dbOrigin = { channelSyncTaskItem: delegateOrigin, genericTaskItem: delegateOrigin } as unknown as PrismaClient;
     const originResult = await listAdminTaskItems(dbOrigin, context, { family: "generic", taskId: TASK_ID }, {} as NodeJS.ProcessEnv);
     expect(originResult.items[0].stopReason).toBe("upstream_error (HTTP 401) @ 第 1 页");
+    expect(originResult.items[0].failure).toEqual({
+      code: "upstream_error",
+      label: "上游服务请求失败",
+      context: { httpStatus: 401, pageNumber: 1 },
+    });
     expect(originResult.items[0].errorSummary).toBe("redacted");
     for (const key of FORBIDDEN_KEYS) expect(allKeys(originResult).has(key)).toBe(false);
 
@@ -396,6 +426,11 @@ describe("C-10 derived stop reason", () => {
       dbFinalizeFailed, context, { family: "generic", taskId: TASK_ID }, {} as NodeJS.ProcessEnv,
     );
     expect(finalizeFailedResult.items[0].stopReason).toBe("finalize_failed");
+    expect(finalizeFailedResult.items[0].failure).toEqual({
+      code: "finalize_failed",
+      label: "任务结果落库失败",
+      context: { sqlState: "23514", prismaCode: "P2010", constraint: "novel_source_item_metadata_check" },
+    });
     expect(finalizeFailedResult.items[0].errorSummary).toBe("redacted");
     for (const key of FORBIDDEN_KEYS) expect(allKeys(finalizeFailedResult).has(key)).toBe(false);
   });

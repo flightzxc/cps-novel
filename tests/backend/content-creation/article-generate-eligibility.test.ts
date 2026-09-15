@@ -11,6 +11,7 @@ type SeedNovel = {
   deletedAt: Date | null;
   updatedAt: Date;
   hasLiveArticle: boolean;
+  hasSoftDeletedArticle?: boolean;
 };
 
 function uuid(n: number): string {
@@ -56,7 +57,12 @@ function createDb(novels: SeedNovel[], promoCalls: unknown[] = []) {
             title: novel.title,
             locale: novel.locale,
             businessId: novel.businessId,
-            articles: novel.hasLiveArticle ? [{ id: `${novel.id}-article` }] : [],
+            deletedAt: novel.deletedAt,
+            articles: novel.hasLiveArticle
+              ? [{ id: `${novel.id}-article`, locale: novel.locale, deletedAt: null }]
+              : novel.hasSoftDeletedArticle
+                ? [{ id: `${novel.id}-article`, locale: novel.locale, deletedAt: new Date("2026-01-01T00:00:00.000Z") }]
+                : [],
           })),
       findFirst: async ({ where }: { where: { id?: string } }) => {
         const novel = novels.find((row) => row.id === where.id);
@@ -67,7 +73,11 @@ function createDb(novels: SeedNovel[], promoCalls: unknown[] = []) {
           locale: novel.locale,
           businessId: novel.businessId,
           deletedAt: novel.deletedAt,
-          articles: novel.hasLiveArticle ? [{ id: `${novel.id}-article` }] : [],
+          articles: novel.hasLiveArticle
+            ? [{ id: `${novel.id}-article`, locale: novel.locale, deletedAt: null }]
+            : novel.hasSoftDeletedArticle
+              ? [{ id: `${novel.id}-article`, locale: novel.locale, deletedAt: new Date("2026-01-01T00:00:00.000Z") }]
+              : [],
         };
       },
     },
@@ -123,12 +133,50 @@ describe("listNovelsForArticleGenerate pagination", () => {
 
   it("resolves promo once for the current page ids", async () => {
     const promoCalls: unknown[] = [];
-    const db = createDb(seedLibrary(3), promoCalls);
+    const db = createDb(seedLibrary(3, 3), promoCalls);
     await listNovelsForArticleGenerate(db, { page: 1, pageSize: 80 });
     expect(promoCalls).toHaveLength(1);
     expect(promoCalls[0]).toMatchObject({
       where: { novelId: { in: [uuid(3), uuid(2), uuid(1)] } },
     });
+  });
+
+  it("classifies live/soft-deleted Article and all Promo admission outcomes", async () => {
+    const novels = seedLibrary(6, 6);
+    novels[1]!.hasLiveArticle = true;
+    novels[2]!.hasSoftDeletedArticle = true;
+    const readyId = novels[0]!.id;
+    const notReadyId = novels[4]!.id;
+    const deletedPromoId = novels[5]!.id;
+    const db = createDb(novels) as unknown as {
+      novel: PrismaClient["novel"];
+      promoLink: {
+        findMany: (args: unknown) => Promise<unknown[]>;
+        count: (args: unknown) => Promise<number>;
+        groupBy: (args: { where: { deletedAt: null | { not: null } } }) => Promise<unknown[]>;
+      };
+    };
+    db.promoLink.findMany = async () => [{
+      id: "promo-ready",
+      novelId: readyId,
+      status: "fetched",
+      webUrl: "https://example.test/ready",
+      appUrl: null,
+      fetchedAt: new Date(),
+      publicRedirectCode: "ready-code",
+    }];
+    db.promoLink.groupBy = async ({ where }) => where.deletedAt === null
+      ? [{ novelId: notReadyId, _count: { _all: 1 } }]
+      : [{ novelId: deletedPromoId, _count: { _all: 1 } }];
+
+    const page = await listNovelsForArticleGenerate(db as unknown as PrismaClient, { pageSize: 20 });
+    const byId = new Map(page.rows.map((row) => [row.novelId, row]));
+    expect(byId.get(readyId)).toMatchObject({ canGenerateArticle: true, promoOutcome: "ready" });
+    expect(byId.get(novels[1]!.id)).toMatchObject({ canGenerateArticle: false, generateBlockedReason: "already_exists" });
+    expect(byId.get(novels[2]!.id)).toMatchObject({ canGenerateArticle: false, generateBlockedReason: "article_soft_deleted" });
+    expect(byId.get(novels[3]!.id)).toMatchObject({ canGenerateArticle: false, generateBlockedReason: "promo_link_missing" });
+    expect(byId.get(notReadyId)).toMatchObject({ canGenerateArticle: false, generateBlockedReason: "promo_link_not_ready" });
+    expect(byId.get(deletedPromoId)).toMatchObject({ canGenerateArticle: false, generateBlockedReason: "promo_link_deleted" });
   });
 });
 

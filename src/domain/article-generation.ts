@@ -7,6 +7,13 @@ export type NovelGeneratePromoOutcome =
   | "promo_link_not_ready"
   | "promo_link_deleted";
 
+export type ArticleGenerateBlockedReason =
+  | "novel_not_found"
+  | "novel_deleted"
+  | "already_exists"
+  | "article_soft_deleted"
+  | Exclude<NovelGeneratePromoOutcome, "ready">;
+
 export type NovelGenerateCandidate = {
   readonly novelId: string;
   readonly title: string;
@@ -15,7 +22,22 @@ export type NovelGenerateCandidate = {
   readonly hasLiveArticle: boolean;
   readonly promoReady: boolean;
   readonly promoOutcome: NovelGeneratePromoOutcome;
+  readonly canGenerateArticle: boolean;
+  readonly generateBlockedReason?: ArticleGenerateBlockedReason;
 };
+
+export function articleGenerateBlockedReasonLabel(reason: ArticleGenerateBlockedReason): string {
+  const labels: Readonly<Record<ArticleGenerateBlockedReason, string>> = {
+    novel_not_found: "书目不存在",
+    novel_deleted: "书目已删除",
+    already_exists: "已有 Article",
+    article_soft_deleted: "已有已删除的 Article，需先处理历史记录",
+    promo_link_missing: "缺少推广链接",
+    promo_link_not_ready: "推广链接未就绪",
+    promo_link_deleted: "推广链接已删除/无有效推广链接",
+  };
+  return labels[reason];
+}
 
 export type ArticleGenerateFilter = Readonly<{
   search?: string;

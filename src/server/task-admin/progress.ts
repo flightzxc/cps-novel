@@ -5,6 +5,11 @@ import { isParentBatchTaskType } from "@/lib/tasks";
 import { requireHighRiskAdminCapability, type AdminAuthContext } from "@/lib/auth";
 
 import { loadCatalogBookCounts, TaskAdminError, type CatalogBookCountsDto } from "./service";
+import {
+  projectSafeTaskFailure,
+  safeTaskFailureText,
+  type SafeTaskFailureDto,
+} from "./safe-task-error";
 
 /**
  * C-6 (`施工工单_PhaseC_任务模型迁移与ImportProgress_2026-09-06.md`
@@ -43,6 +48,7 @@ export type TaskProgressItemError = Readonly<{
   id: string;
   status: "failed";
   errorMessage: string;
+  failure?: SafeTaskFailureDto;
   createdAt: string;
 }>;
 
@@ -123,9 +129,8 @@ function mapStatus(raw: string): TaskProgressStatus {
 }
 
 function taskErrorsFrom(error: unknown): readonly string[] {
-  if (!error || typeof error !== "object" || Array.isArray(error)) return [];
-  const message = (error as Record<string, unknown>).message;
-  return typeof message === "string" && message.length > 0 ? [message] : [];
+  if (!error) return [];
+  return [safeTaskFailureText(projectSafeTaskFailure(error))];
 }
 
 type GenericTaskRow = {
@@ -278,12 +283,16 @@ async function loadGenericProgress(db: PrismaClient, taskId: string): Promise<Ta
     // already known — see `loadCatalogBookCounts` (`./service.ts`).
     loadCatalogBookCounts(db, { taskId, taskType: task.taskType, result: task.result, params: task.params }),
   ]);
-  const items = failedItems.map((item) => Object.freeze({
-    id: item.id,
-    status: "failed" as const,
-    errorMessage: taskErrorsFrom(item.error)[0] ?? "任务失败",
-    createdAt: iso(item.createdAt),
-  }));
+  const items = failedItems.map((item) => {
+    const failure = projectSafeTaskFailure(item.error);
+    return Object.freeze({
+      id: item.id,
+      status: "failed" as const,
+      errorMessage: safeTaskFailureText(failure),
+      ...(failure ? { failure } : {}),
+      createdAt: iso(item.createdAt),
+    });
+  });
   const currentItem = processingItem
     ? Object.freeze({
       targetType: processingItem.targetType,
@@ -320,12 +329,16 @@ async function loadChannelSyncProgress(db: PrismaClient, taskId: string): Promis
       },
     }),
   ]);
-  const items = failedItems.map((item) => Object.freeze({
-    id: item.id,
-    status: "failed" as const,
-    errorMessage: taskErrorsFrom(item.error)[0] ?? "任务失败",
-    createdAt: iso(item.createdAt),
-  }));
+  const items = failedItems.map((item) => {
+    const failure = projectSafeTaskFailure(item.error);
+    return Object.freeze({
+      id: item.id,
+      status: "failed" as const,
+      errorMessage: safeTaskFailureText(failure),
+      ...(failure ? { failure } : {}),
+      createdAt: iso(item.createdAt),
+    });
+  });
   const currentItem = processingItem
     ? Object.freeze({
       targetType: "novel_source_item",

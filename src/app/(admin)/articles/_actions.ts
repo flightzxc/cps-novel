@@ -24,6 +24,7 @@ import {
   ArticleGenerateInputError,
   enqueueArticleGenerateBatch,
   enqueueArticleGenerateParentBatch,
+  type ArticleGenerateAdmissionSummary,
 } from "@/lib/tasks/article-generate";
 import { listNovelsForArticleGenerate } from "@/server/content-creation";
 import {
@@ -731,7 +732,7 @@ export async function enqueueArticleGenerateBatchAction(input: {
   requestId: string;
   templateKeysByLocale?: Readonly<Record<string, string>>;
 }): Promise<
-  | { ok: true; taskId: string; duplicate: boolean }
+  | { ok: true; taskId: string; duplicate: boolean; admission?: ArticleGenerateAdmissionSummary }
   | { ok: false; kind: "invalid_input" | "access_denied"; code: string }
 > {
   try {
@@ -760,7 +761,12 @@ export async function enqueueArticleGenerateBatchAction(input: {
           requestId: input.requestId,
           ...(templates ? { templateKeysByLocale: templates } : {}),
         });
-    return { ok: true, taskId: result.taskId, duplicate: result.duplicate };
+    return {
+      ok: true,
+      taskId: result.taskId,
+      duplicate: result.duplicate,
+      ...("admission" in result ? { admission: result.admission } : {}),
+    };
   } catch (error) {
     if (error instanceof ArticleGenerateInputError || error instanceof ArticleGenerateSelectionError) {
       return { ok: false, kind: "invalid_input", code: error.code };

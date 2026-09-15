@@ -4,8 +4,10 @@ import { Prisma, type PrismaClient } from "@prisma/client";
 import {
   ARTICLE_GENERATE_UUID,
   normalizeArticleGenerateFilter,
+  type ArticleGenerateBlockedReason,
   type NormalizedArticleGenerateFilter,
 } from "@/domain/article-generation";
+import { resolveArticleGenerateAdmissions } from "@/server/content-creation/eligibility";
 
 export const ARTICLE_GENERATE_TASK_TYPE = "article.generate.v1";
 export const ARTICLE_GENERATE_BATCH_TASK_TYPE = "article.generate.batch.v1";
@@ -31,6 +33,20 @@ export type ArticleGenerateParentPayload = Readonly<{
   submittedAt: string;
   expiresAt: string;
   templateKeysByLocale?: Readonly<Record<string, string>>;
+}>;
+
+export type ArticleGenerateAdmissionSummary = Readonly<{
+  selectedCount: number;
+  submittedCount: number;
+  blockedCount: number;
+  blockedReasonCounts: Readonly<Partial<Record<ArticleGenerateBlockedReason, number>>>;
+}>;
+
+export type ArticleGenerateEnqueueResult = Readonly<{
+  taskId: string;
+  duplicate: boolean;
+  taskStatus: "pending" | "completed_with_errors";
+  admission: ArticleGenerateAdmissionSummary;
 }>;
 
 export class ArticleGenerateInputError extends Error {
@@ -65,6 +81,45 @@ export function articleGenerateParentScopeHash(filter: NormalizedArticleGenerate
   return createHash("sha256").update(JSON.stringify(filter)).digest("hex");
 }
 
+function admissionSummaryFromResult(
+  value: unknown,
+  fallbackSelectedCount: number,
+): ArticleGenerateAdmissionSummary {
+  const result = value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
+  const selectedCount = typeof result.selectedCount === "number" ? result.selectedCount : fallbackSelectedCount;
+  const submittedCount = typeof result.submittedCount === "number" ? result.submittedCount : selectedCount;
+  const rawReasons = result.blockedReasonCounts && typeof result.blockedReasonCounts === "object"
+    && !Array.isArray(result.blockedReasonCounts)
+    ? result.blockedReasonCounts as Record<string, unknown>
+    : {};
+  const allowedReasons = new Set<ArticleGenerateBlockedReason>([
+    "novel_not_found",
+    "novel_deleted",
+    "already_exists",
+    "article_soft_deleted",
+    "promo_link_missing",
+    "promo_link_not_ready",
+    "promo_link_deleted",
+  ]);
+  const blockedReasonCounts = Object.fromEntries(
+    Object.entries(rawReasons).filter((entry): entry is [ArticleGenerateBlockedReason, number] =>
+      allowedReasons.has(entry[0] as ArticleGenerateBlockedReason)
+      && typeof entry[1] === "number" && Number.isSafeInteger(entry[1]) && entry[1] > 0),
+  );
+  return Object.freeze({
+    selectedCount,
+    submittedCount,
+    blockedCount: Object.values(blockedReasonCounts).reduce((sum, count) => sum + count, 0),
+    blockedReasonCounts: Object.freeze(blockedReasonCounts),
+  });
+}
+
+function taskStatusOf(value: string): "pending" | "completed_with_errors" {
+  return value === "completed_with_errors" ? "completed_with_errors" : "pending";
+}
+
 export async function enqueueArticleGenerateBatch(
   db: PrismaClient,
   input: {
@@ -74,7 +129,7 @@ export async function enqueueArticleGenerateBatch(
     readonly templateKeysByLocale?: Readonly<Record<string, string>>;
   },
   now = new Date(),
-): Promise<{ taskId: string; duplicate: boolean; taskStatus: "pending" }> {
+): Promise<ArticleGenerateEnqueueResult> {
   const novelIds = normalizeArticleGenerateNovelIds(input.novelIds);
   const templates = ordered(input.templateKeysByLocale);
   const canonicalInput = {
@@ -87,14 +142,19 @@ export async function enqueueArticleGenerateBatch(
   const requestToken = `article_generate:${createHash("sha256").update(`${input.actorId}\n${input.requestId}`).digest("hex")}`;
   const existing = await db.genericTask.findUnique({
     where: { requestToken },
-    select: { id: true, params: true, status: true },
+    select: { id: true, params: true, status: true, result: true },
   });
   if (existing) {
     const params = existing.params as Record<string, unknown>;
     if (params.inputFingerprint !== inputFingerprint) {
       throw new ArticleGenerateInputError("request_replay_mismatch");
     }
-    return { taskId: existing.id, duplicate: true, taskStatus: "pending" };
+    return {
+      taskId: existing.id,
+      duplicate: true,
+      taskStatus: taskStatusOf(existing.status),
+      admission: admissionSummaryFromResult(existing.result, novelIds.length),
+    };
   }
 
   const taskId = randomUUID();
@@ -105,31 +165,76 @@ export async function enqueueArticleGenerateBatch(
   };
 
   try {
-    await db.$transaction(async (tx) => {
+    const admission = await db.$transaction(async (tx) => {
+      const novels = await tx.novel.findMany({
+        where: { id: { in: [...novelIds] } },
+        select: {
+          id: true,
+          title: true,
+          locale: true,
+          businessId: true,
+          deletedAt: true,
+          articles: { select: { id: true, locale: true, deletedAt: true } },
+        },
+      });
+      const admissions = await resolveArticleGenerateAdmissions(tx, novelIds, novels);
+      const readyNovelIds: string[] = [];
+      const blockedReasonCounts: Partial<Record<ArticleGenerateBlockedReason, number>> = {};
+      for (const novelId of novelIds) {
+        const item = admissions.get(novelId)!;
+        if (item.canGenerate) {
+          readyNovelIds.push(novelId);
+        } else if (item.blockedReason) {
+          blockedReasonCounts[item.blockedReason] = (blockedReasonCounts[item.blockedReason] ?? 0) + 1;
+        }
+      }
+      const summary: ArticleGenerateAdmissionSummary = Object.freeze({
+        selectedCount: novelIds.length,
+        submittedCount: readyNovelIds.length,
+        blockedCount: novelIds.length - readyNovelIds.length,
+        blockedReasonCounts: Object.freeze(blockedReasonCounts),
+      });
+      const admittedPayload: ArticleGenerateBatchPayload = {
+        ...payload,
+        novelIds: readyNovelIds,
+      };
       await createArticleGenerateLeafTask(tx, {
         taskId,
         parentTaskId: null,
         requestToken,
-        novelIds,
+        novelIds: readyNovelIds,
         actorId: input.actorId,
         requestId: input.requestId,
         inputFingerprint,
-        payload,
+        payload: admittedPayload,
         templates,
+        admission: summary,
+        now,
       });
+      return summary;
     });
-    return { taskId, duplicate: false, taskStatus: "pending" };
+    return {
+      taskId,
+      duplicate: false,
+      taskStatus: admission.submittedCount === 0 ? "completed_with_errors" : "pending",
+      admission,
+    };
   } catch (error) {
     const replay = await db.genericTask.findUnique({
       where: { requestToken },
-      select: { id: true, params: true, status: true },
+      select: { id: true, params: true, status: true, result: true },
     });
     if (replay) {
       const params = replay.params as Record<string, unknown>;
       if (params.inputFingerprint !== inputFingerprint) {
         throw new ArticleGenerateInputError("request_replay_mismatch");
       }
-      return { taskId: replay.id, duplicate: true, taskStatus: "pending" };
+      return {
+        taskId: replay.id,
+        duplicate: true,
+        taskStatus: taskStatusOf(replay.status),
+        admission: admissionSummaryFromResult(replay.result, novelIds.length),
+      };
     }
     throw error;
   }
@@ -238,8 +343,11 @@ export async function createArticleGenerateLeafTask(
     readonly inputFingerprint: string;
     readonly payload: ArticleGenerateBatchPayload;
     readonly templates?: Readonly<Record<string, string>>;
+    readonly admission?: ArticleGenerateAdmissionSummary;
+    readonly now?: Date;
   },
 ): Promise<void> {
+  const terminalWithoutItems = input.novelIds.length === 0 && input.admission !== undefined;
   await tx.genericTask.create({
     data: {
       id: input.taskId,
@@ -247,11 +355,16 @@ export async function createArticleGenerateLeafTask(
       taskType: ARTICLE_GENERATE_TASK_TYPE,
       operationScopeHash: articleGenerateScopeHash(input.novelIds),
       mode: "apply",
-      status: "pending",
+      status: terminalWithoutItems ? "completed_with_errors" : "pending",
       requestToken: input.requestToken,
       totalCount: input.novelIds.length,
       params: { ...(input.payload as unknown as Prisma.InputJsonObject), inputFingerprint: input.inputFingerprint },
-      items: {
+      ...(input.admission ? { result: input.admission as unknown as Prisma.InputJsonObject } : {}),
+      ...(terminalWithoutItems ? {
+        startedAt: input.now ?? new Date(),
+        completedAt: input.now ?? new Date(),
+      } : {}),
+      ...(input.novelIds.length > 0 ? { items: {
         create: input.novelIds.map((novelId) => ({
           targetType: ARTICLE_GENERATE_TARGET_TYPE,
           targetId: novelId,
@@ -263,7 +376,7 @@ export async function createArticleGenerateLeafTask(
             ...(input.templates ? { templateKeysByLocale: input.templates } : {}),
           } as Prisma.InputJsonObject,
         })),
-      },
+      } } : {}),
     },
   });
   await tx.operationAudit.create({
@@ -278,6 +391,12 @@ export async function createArticleGenerateLeafTask(
       taskId: input.taskId,
       afterSnapshot: {
         novelCount: input.novelIds.length,
+        ...(input.admission ? {
+          selectedCount: input.admission.selectedCount,
+          submittedCount: input.admission.submittedCount,
+          blockedCount: input.admission.blockedCount,
+          blockedReasonCounts: input.admission.blockedReasonCounts,
+        } : {}),
         expiresAt: input.payload.expiresAt,
         ...(input.parentTaskId ? { parentTaskId: input.parentTaskId } : {}),
       },

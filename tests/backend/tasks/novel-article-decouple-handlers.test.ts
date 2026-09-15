@@ -116,6 +116,11 @@ describe("article.generate.batch.v1 handler (EXT-06)", () => {
   it("splits 201 eligible novels into leaves of at most 200", async () => {
     const novels = Array.from({ length: 201 }, (_, index) => ({
       id: `00000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`,
+      title: `Novel ${index + 1}`,
+      locale: "en",
+      businessId: `biz-${index + 1}`,
+      deletedAt: null,
+      articles: [],
     }));
     const created: Array<{ data: { taskType: string; parentTaskId?: string; items: { create: unknown[] } } }> = [];
     const updates: Array<{ data: { result?: { submittedCount?: number; childTaskCount?: number } } }> = [];
@@ -141,6 +146,19 @@ describe("article.generate.batch.v1 handler (EXT-06)", () => {
           return novels.slice(start, start + args.take);
         },
       },
+      promoLink: {
+        findMany: async (args: { where: { novelId: { in: string[] } } }) => args.where.novelId.in.map((novelId) => ({
+          id: `promo-${novelId}`,
+          novelId,
+          status: "fetched",
+          webUrl: "https://example.test/promo",
+          appUrl: null,
+          fetchedAt: new Date(),
+          publicRedirectCode: novelId.slice(-8),
+        })),
+        groupBy: async () => [],
+        count: async () => 0,
+      },
       genericTask: {
         create: async (args: { data: { taskType: string; parentTaskId?: string; items: { create: unknown[] } } }) => {
           created.push(args);
@@ -164,6 +182,45 @@ describe("article.generate.batch.v1 handler (EXT-06)", () => {
     expect(created[0]!.data.items.create.length).toBeLessThanOrEqual(ARTICLE_GENERATE_LEAF_MAX);
     expect(created[1]!.data.items.create.length).toBeLessThanOrEqual(ARTICLE_GENERATE_LEAF_MAX);
     expect(updates.at(-1)?.data.result).toMatchObject({ submittedCount: 201, childTaskCount: 2 });
+  });
+
+  it("records all-filtered promo blockers without creating doomed children", async () => {
+    const row = {
+      id: UUID, title: "Blocked", locale: "en", businessId: "blocked", deletedAt: null, articles: [],
+    };
+    const created: unknown[] = [];
+    const updates: Array<{ data: { result?: Record<string, unknown> } }> = [];
+    const prepared = await createArticleGenerateBatchHandler({} as PrismaClient)(lease(
+      ARTICLE_GENERATE_BATCH_TASK_TYPE,
+      {
+        filter: {}, actorId: "admin-1", requestId: "req-blocked-parent",
+        submittedAt: new Date().toISOString(), expiresAt: new Date(Date.now() + 60_000).toISOString(),
+      },
+    ));
+    if (prepared.status !== "success" || !("protectedWrite" in prepared) || !prepared.protectedWrite) {
+      throw new Error("expected protectedWrite");
+    }
+    const written = await prepared.protectedWrite({
+      novel: { findMany: async (args: { where?: { id?: { gt?: string } } }) => args.where?.id?.gt ? [] : [row] },
+      promoLink: { findMany: async () => [], groupBy: async () => [], count: async () => 0 },
+      genericTask: {
+        create: async (args: unknown) => { created.push(args); },
+        update: async (args: { data: { result?: Record<string, unknown> } }) => { updates.push(args); },
+      },
+      operationAudit: { create: async () => ({}) },
+    } as never);
+    expect(created).toHaveLength(0);
+    expect(written).toMatchObject({
+      status: "success",
+      result: {
+        selectedCount: 1,
+        submittedCount: 0,
+        blockedCount: 1,
+        blockedReasonCounts: { promo_link_missing: 1 },
+        childTaskCount: 0,
+      },
+    });
+    expect(updates.at(-1)?.data.result).toMatchObject({ blockedReasonCounts: { promo_link_missing: 1 } });
   });
 });
 

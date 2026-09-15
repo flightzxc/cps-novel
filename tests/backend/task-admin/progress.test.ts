@@ -120,7 +120,7 @@ describe("getAdminTaskProgress (C-6 CPS-parity flat progress read)", () => {
     expect(result.status).toBe("paused");
   });
 
-  it("surfaces the task-level sanitized error message as a single taskErrors entry", async () => {
+  it("projects a known task error to safe Chinese copy without using its message", async () => {
     const context = await readContext();
     const db = fakeGenericDb({
       task: { ...baseGenericTask, status: "failed", error: { code: "upstream_error", message: "MoboReader catalog read failed" } },
@@ -128,10 +128,10 @@ describe("getAdminTaskProgress (C-6 CPS-parity flat progress read)", () => {
 
     const result = await getAdminTaskProgress(db, context, { taskId: GENERIC_TASK_ID });
 
-    expect(result.taskErrors).toEqual(["MoboReader catalog read failed"]);
+    expect(result.taskErrors).toEqual(["上游服务请求失败（upstream_error）"]);
   });
 
-  it("surfaces failed items' sanitized error message as an expandable-list entry", async () => {
+  it("projects failed items through the same safe error allowlist", async () => {
     const context = await readContext();
     const db = fakeGenericDb({
       task: baseGenericTask,
@@ -144,7 +144,38 @@ describe("getAdminTaskProgress (C-6 CPS-parity flat progress read)", () => {
 
     const result = await getAdminTaskProgress(db, context, { taskId: GENERIC_TASK_ID });
 
-    expect(result.items).toEqual([{ id: "item-1", status: "failed", errorMessage: "page 3 failed", createdAt: NOW.toISOString() }]);
+    expect(result.items).toEqual([{
+      id: "item-1",
+      status: "failed",
+      errorMessage: "上游服务请求失败（upstream_error）",
+      failure: { code: "upstream_error", label: "上游服务请求失败" },
+      createdAt: NOW.toISOString(),
+    }]);
+  });
+
+  it("never forwards unknown messages, JWTs, credentials, stacks, or raw payloads", async () => {
+    const context = await readContext();
+    const db = fakeGenericDb({
+      task: {
+        ...baseGenericTask,
+        status: "failed",
+        error: {
+          code: "handler_failed",
+          message: "Authorization: Bearer eyJ.secret.value",
+          stack: "raw stack",
+          detail: { credential: "secret", rawPayload: "body" },
+        },
+      },
+      failedItems: [{
+        id: "item-secret",
+        error: { code: "handler_failed", message: "password=secret", stack: "stack" },
+        createdAt: NOW,
+      }],
+    });
+    const result = await getAdminTaskProgress(db, context, { taskId: GENERIC_TASK_ID });
+    expect(result.taskErrors).toEqual(["系统异常，详情见审计/日志"]);
+    expect(result.items[0]?.errorMessage).toBe("系统异常，详情见审计/日志");
+    expect(JSON.stringify(result)).not.toMatch(/eyJ|password|credential|rawPayload|raw stack/);
   });
 
   it("builds a currentItem message for a catalog_page target", async () => {

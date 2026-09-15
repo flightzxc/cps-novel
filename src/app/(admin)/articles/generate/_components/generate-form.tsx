@@ -5,7 +5,11 @@ import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 
 import { buttonClassName } from "@/components/ui/button";
-import type { NovelGenerateCandidate, PinnedNovelResult } from "@/domain/article-generation";
+import {
+  articleGenerateBlockedReasonLabel,
+  type NovelGenerateCandidate,
+  type PinnedNovelResult,
+} from "@/domain/article-generation";
 
 import {
   applyArticleGenerateAction,
@@ -87,6 +91,7 @@ export function ArticleGenerateForm({
   const selected = pinnedNovel
     ?? pageNovels.find((row) => row.novelId === novelId)
     ?? null;
+  const generationBlocked = selected !== null && !selected.canGenerateArticle;
   const localeTemplates = useMemo(
     () => templates.filter((template) => template.locale === selected?.locale),
     [templates, selected?.locale],
@@ -96,7 +101,7 @@ export function ArticleGenerateForm({
   const [message, setMessage] = useState<string | null>(pinnedError(pinned));
 
   async function run(mode: "dry_run" | "apply") {
-    if (!novelId || pinFailed) return;
+    if (!novelId || pinFailed || generationBlocked) return;
     setBusy(true);
     setMessage(null);
     try {
@@ -151,10 +156,10 @@ export function ArticleGenerateForm({
           >
             <option value="">请选择书目</option>
             {pageNovels.map((novel) => (
-              <option key={novel.novelId} value={novel.novelId}>
+              <option key={novel.novelId} value={novel.novelId} disabled={!novel.canGenerateArticle}>
                 {novel.title} · {novel.locale} · {novel.businessId}
                 {novel.hasLiveArticle ? " · 已有文章" : ""}
-                {novel.promoReady ? "" : " · 推广未就绪"}
+                {novel.generateBlockedReason ? ` · ${articleGenerateBlockedReasonLabel(novel.generateBlockedReason)}` : ""}
               </option>
             ))}
           </select>
@@ -162,7 +167,11 @@ export function ArticleGenerateForm({
       )}
       {selected && (
         <p className="text-sm text-gray-600">
-          推广状态：{selected.promoReady ? "已就绪" : selected.promoOutcome}
+          生成准入：{selected.canGenerateArticle
+            ? "可以生成"
+            : selected.generateBlockedReason
+              ? articleGenerateBlockedReasonLabel(selected.generateBlockedReason)
+              : "当前不可生成"}
         </p>
       )}
       <label className="block text-sm text-gray-700">
@@ -178,8 +187,8 @@ export function ArticleGenerateForm({
       </label>
       {message && !pinFailed && <p role="status" className="rounded border border-blue-200 bg-blue-50 p-2 text-sm text-blue-900">{message}</p>}
       <div className="flex gap-2">
-        <button type="button" disabled={!novelId || pinFailed || busy} className={buttonClassName("secondary")} onClick={() => void run("dry_run")}>预览计划</button>
-        <button type="button" disabled={!novelId || pinFailed || !canWrite || busy} className={buttonClassName("primary")} onClick={() => void run("apply")}>创建文章</button>
+        <button type="button" disabled={!novelId || pinFailed || generationBlocked || busy} className={buttonClassName("secondary")} onClick={() => void run("dry_run")}>预览计划</button>
+        <button type="button" disabled={!novelId || pinFailed || generationBlocked || !canWrite || busy} className={buttonClassName("primary")} onClick={() => void run("apply")}>创建文章</button>
         <Link href="/articles" className={buttonClassName("secondary")}>返回列表</Link>
       </div>
     </div>

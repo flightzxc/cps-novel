@@ -23,6 +23,7 @@ const candidate = (id: string, title = id): NovelGenerateCandidate => ({
   hasLiveArticle: false,
   promoReady: true,
   promoOutcome: "ready",
+  canGenerateArticle: true,
 });
 
 const page = (rows: NovelGenerateCandidate[], total = rows.length): NovelGeneratePage => ({

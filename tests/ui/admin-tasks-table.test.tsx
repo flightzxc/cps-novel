@@ -34,15 +34,15 @@ describe("TasksTable · 两类任务统一列表", () => {
     expect(screen.getByText("7")).toBeTruthy();
   });
 
-  it("errorSummary 为 redacted 时展示脱敏说明，而不是原始字符串", () => {
+  it("unknown redacted errors show the safe generic fallback", () => {
     render(<TasksTable tasks={[task({ errorSummary: "redacted" })]} />);
-    expect(screen.getByText("已脱敏，详情见审计/日志")).toBeTruthy();
+    expect(screen.getByText("系统异常，详情见审计/日志")).toBeTruthy();
     expect(screen.queryByText("redacted")).toBeNull();
   });
 
   it("errorSummary 为 null 时展示占位符而不是脱敏说明", () => {
     render(<TasksTable tasks={[task({ errorSummary: null })]} />);
-    expect(screen.queryByText("已脱敏，详情见审计/日志")).toBeNull();
+    expect(screen.queryByText("系统异常，详情见审计/日志")).toBeNull();
   });
 
   // C-10 (Phase E rework, 2026-09-07): a derived stop reason is a stable
@@ -51,12 +51,36 @@ describe("TasksTable · 两类任务统一列表", () => {
   it("stopReason 存在时展示该稳定码，替代「已脱敏」", () => {
     render(<TasksTable tasks={[task({ errorSummary: "redacted", stopReason: "upstream_error" })]} />);
     expect(screen.getByText("upstream_error")).toBeTruthy();
-    expect(screen.queryByText("已脱敏，详情见审计/日志")).toBeNull();
+    expect(screen.queryByText("系统异常，详情见审计/日志")).toBeNull();
   });
 
-  it("stopReason 缺失时（undefined）维持既有的脱敏说明", () => {
+  it("stopReason 缺失时（undefined）显示安全的未知异常说明", () => {
     render(<TasksTable tasks={[task({ errorSummary: "redacted", stopReason: undefined })]} />);
-    expect(screen.getByText("已脱敏，详情见审计/日志")).toBeTruthy();
+    expect(screen.getByText("系统异常，详情见审计/日志")).toBeTruthy();
+  });
+
+  it("known failures show Chinese copy plus the stable code", () => {
+    render(<TasksTable tasks={[task({
+      failure: { code: "promo_link_missing", label: "缺少推广链接" },
+    })]} />);
+    expect(screen.getByText("缺少推广链接（promo_link_missing）")).toBeTruthy();
+    expect(screen.queryByText("系统异常，详情见审计/日志")).toBeNull();
+  });
+
+  it("shows Article admission counts and localized blocker reasons", () => {
+    render(<TasksTable tasks={[task({
+      taskType: "article.generate.batch.v1",
+      articleAdmission: {
+        selectedCount: 200,
+        submittedCount: 0,
+        blockedCount: 200,
+        blockedReasonCounts: { promo_link_missing: 200 },
+      },
+    })]} />);
+    const admission = screen.getByTestId(`article-admission-${task().taskId}`);
+    expect(admission.textContent).toContain("已选 200 条 · 已提交 0 条 · 准入阻断 200 条");
+    expect(admission.textContent).toContain("缺少推广链接：200 条");
+    expect(admission.textContent).not.toContain("promo_link_missing");
   });
 
   // C-9 (`施工工单_C9_任务详情独立路由对齐CPS_2026-09-07.md`): "查看详情" now
