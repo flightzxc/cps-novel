@@ -17,7 +17,7 @@ import {
 } from "@/domain/catalog-batch";
 import { CatalogBatchInputError, enqueueCatalogBatch } from "@/lib/tasks/catalog-batch";
 import { readCatalogBatchContext, readCatalogBatchSummary } from "@/server/catalog-batch";
-import { resolveClaimCredentialReadiness } from "@/lib/credentials/claim-readiness";
+import { resolveClaimCredentialAdmission } from "@/lib/credentials/claim-readiness";
 import {
   isNovelCatalogSyncEnabled,
   isNovelCatalogSyncWriteAllowed,
@@ -449,15 +449,18 @@ const CONFIG_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}
  * later:
  *
  *  1. The pre-existing binding check (channel/app/account all active).
- *  2. `resolveClaimCredentialReadiness` — the *same* decrypt+validate policy
- *     `worker/handlers/promo-link-claim.ts` uses at actual claim time, not a
- *     weaker stand-in — and refuses with the credential's own typed code
- *     (`credential_missing`/`credential_expired`/`credential_ambiguous`/
- *     `credential_validation_failed`/`credential_invalid`) rather than the
+ *  2. `resolveClaimCredentialAdmission` — a Web-safe, non-secret-column-only
+ *     check (never `encryptedSecret`; see its module header for why this is
+ *     deliberately *not* the same function the worker's deep decrypt/
+ *     validate step uses at actual claim time) — and refuses with the
+ *     credential's own typed code (`credential_missing`/`credential_expired`/
+ *     `credential_ambiguous`/`credential_never_validated`) rather than the
  *     generic `channel_account_binding_invalid`, so an operator (and
  *     `src/server/task-admin/safe-task-error.ts`'s label map) can tell "this
  *     account/app binding is gone" apart from "this credential cannot be
- *     used" — two different remediations.
+ *     used" — two different remediations. `credential_never_validated` alone
+ *     would have caught the 09-14 batch: that credential's `last_validated_at`
+ *     was empty when it was admitted.
  *
  * A credential that *is* usable right now but will expire before a batch
  * this size could plausibly finish is not refused — refusing a legitimate,
@@ -479,10 +482,10 @@ async function validatePromoAccountConfiguration(
       channel: { status: "active", channelAccounts: { some: { id: accountId, status: "active", deletedAt: null } } },
     }, select: { id: true } });
     if (!binding) throw new CatalogBatchInputError("channel_account_binding_invalid");
-    const readiness = await resolveClaimCredentialReadiness(db, accountId, now);
-    if (readiness.status === "not_ready") throw new CatalogBatchInputError(readiness.code);
-    if (readiness.expiringSoon && readiness.expiresAt) {
-      warnings.push({ channelAppId, channelAccountId: accountId, expiresAt: readiness.expiresAt.toISOString() });
+    const admission = await resolveClaimCredentialAdmission(db, accountId, now);
+    if (admission.status === "not_ready") throw new CatalogBatchInputError(admission.code);
+    if (admission.expiringSoon && admission.expiresAt) {
+      warnings.push({ channelAppId, channelAccountId: accountId, expiresAt: admission.expiresAt.toISOString() });
     }
   }
   return warnings;

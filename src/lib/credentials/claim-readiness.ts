@@ -1,49 +1,79 @@
 /**
- * Shared "can this credential actually be used right now" assessment for
- * the promo-link claim chain.
+ * Web-safe "can this credential even be admitted right now" predicate for
+ * the promo-link claim chain, plus the row-selection policy it shares with
+ * the worker's own deep check.
  *
- * Factored out of `worker/handlers/promo-link-claim.ts`'s (formerly private)
- * `resolveClaimCredential` so the *exact* check the worker performs at claim
- * time can also run before a batch is admitted at all
- * (`src/app/(admin)/catalog-sync/_actions.ts`'s `enqueuePromoLinkClaimAction`
- * — see its module comment for the 2026-09-14 incident this exists to
- * prevent: a 79,217-item batch was enqueued against a credential that had
- * never once validated successfully, and burned ~44k items to
- * `credential_validation_failed` in about 18 minutes before anyone noticed).
+ * This module selects only non-secret `ChannelAccountCredential` columns
+ * (`id`, `status`, `expiresAt`, `lastValidatedAt`) and never selects, logs,
+ * or imports anything that reaches `encryptedSecret` — so it is safe to
+ * import from the Web tier
+ * (`src/app/(admin)/catalog-sync/_actions.ts`'s pre-flight
+ * `enqueuePromoLinkClaimAction` gate — see its module comment for the full
+ * 2026-09-14 incident this exists to prevent) as well as from the worker.
+ * `tests/backend/auth/credential-contracts.test.ts` enforces the Web-tier
+ * half of that boundary by scanning every `.ts` file's raw source under
+ * `src/server` and `src/lib/credentials` (this directory) for the literal
+ * names of the symmetric-cipher primitive and the worker's own secret-
+ * decryption helper — this file (and everything else in this directory)
+ * must never spell out either name, call either one, or import a module
+ * that does.
  *
- * This module never reimplements decryption or JWT parsing — both still
- * come from their single existing source
- * (`decryptCredentialSecretForWorker`, `validateCredentialJwtLocally`). It
- * only adds the "pick the one usable row, classify why there isn't one"
- * policy, so that policy has exactly one implementation shared by both the
- * pre-flight gate and the worker's own claim-time resolution — not two
- * copies that could quietly drift apart.
+ * `resolveClaimCredentialAdmission` below is deliberately *not* the same
+ * check the worker performs at actual claim time: it never decrypts or
+ * locally validates the JWT (that needs key access, which the Web tier must
+ * never have), and it additionally refuses a credential that has never once
+ * completed async validation (`lastValidatedAt IS NULL`) — a state the deep
+ * decrypt/validate check has no way to see, because a row that decrypts
+ * fine to a currently-valid JWT is, by the deep check's own definition,
+ * "ready" regardless of whether the separate async validation task
+ * (`worker/handlers/credential.ts`) has ever run against it. That gap is
+ * exactly the 2026-09-14 incident's shape: a 79,217-item batch was admitted
+ * against a credential whose `last_validated_at` was empty, and every one
+ * of its ~44,000 attempted items failed inside decryption. This predicate
+ * would have refused that batch outright, with zero key access.
+ *
+ * The row-selection step both checks share (which single row is even a
+ * candidate, or why there isn't one) lives in
+ * {@link classifyCredentialRowsForClaim} below — a pure function with no DB
+ * or key access of its own — so that one piece of policy has exactly one
+ * implementation. The worker's deep check
+ * (`worker/credentials/claim-readiness.ts`) imports *that* function from
+ * here and layers decrypt-and-validate on top of whatever row it selects;
+ * this module never imports anything from `worker/`, so the two files
+ * cannot be reached through each other in the wrong direction.
  */
 import type { PrismaClient } from "@prisma/client";
-import { decryptCredentialSecretForWorker } from "../../../worker/credentials/crypto";
-import { validateCredentialJwtLocally } from "./jwt";
 import { PROMO_LINK_CLAIM_LIMITS } from "../tasks/promo-link-claim-limits";
 
 export type ClaimCredentialNotReadyCode =
   | "credential_missing"
   | "credential_expired"
   | "credential_ambiguous"
+  | "credential_never_validated"
   | "credential_validation_failed"
   | "credential_invalid";
 
 /**
- * The subset of failure codes this module ever returns that are *systemic*
- * for a given `(channelAccountId)` rather than facts about any one claim
- * attempt: every one of them is derived purely from `accountId` (which
- * credential rows exist, whether the one usable row decrypts/validates),
- * never from anything about the particular novel/source item being claimed.
- * A task's items all share one `channelAccountId`
- * (`src/lib/tasks/promo-link-claim.ts`), so any of these codes is either
- * true for literally every item in the task or none of them — never "a few
- * scattered bad rows". This is what makes them safe to drive a batch-level
- * circuit breaker (`worker/handlers/promo-link-claim-circuit-breaker.ts`):
- * a transient/per-row failure class must never be able to trip it, and
- * these codes structurally cannot be a per-row phenomenon.
+ * The subset of failure codes that are *systemic* for a given
+ * `(channelAccountId)` rather than facts about any one claim attempt: every
+ * one of them is derived purely from `accountId` (which credential rows
+ * exist, whether the one usable row decrypts/validates), never from
+ * anything about the particular novel/source item being claimed. A task's
+ * items all share one `channelAccountId` (`src/lib/tasks/promo-link-claim.ts`),
+ * so any of these codes is either true for literally every item in the task
+ * or none of them — never "a few scattered bad rows". This is what makes
+ * them safe to drive a batch-level circuit breaker
+ * (`worker/handlers/promo-link-claim-circuit-breaker.ts`): a
+ * transient/per-row failure class must never be able to trip it, and these
+ * codes structurally cannot be a per-row phenomenon.
+ *
+ * `credential_never_validated` is deliberately excluded: it is a Web
+ * pre-flight refusal only (see this module's header) and can never be a
+ * code the worker's own deep check produces mid-batch — by the time a task
+ * exists, that refusal already ran and either blocked admission or it
+ * didn't. Including a code here that the breaker's caller
+ * (`worker/credentials/claim-readiness.ts`) can never actually emit would
+ * just be dead weight in the eligibility check.
  */
 export const DETERMINISTIC_CREDENTIAL_FAILURE_CODES: ReadonlySet<string> = new Set<ClaimCredentialNotReadyCode>([
   "credential_missing",
@@ -53,19 +83,17 @@ export const DETERMINISTIC_CREDENTIAL_FAILURE_CODES: ReadonlySet<string> = new S
   "credential_invalid",
 ]);
 
-export type ClaimCredentialReadiness =
-  | {
-      readonly status: "ready";
-      readonly credentialId: string;
-      /** Plaintext JWT. Never log, persist, or return this to a client — same handling rule as every other decrypted secret in this codebase. */
-      readonly secret: string;
-      readonly expiresAt: Date | null;
-      readonly expiringSoon: boolean;
-    }
+export type ClaimCredentialAdmission =
   | {
       readonly status: "not_ready";
       readonly code: ClaimCredentialNotReadyCode;
       readonly message: string;
+    }
+  | {
+      readonly status: "admitted";
+      readonly credentialId: string;
+      readonly expiresAt: Date | null;
+      readonly expiringSoon: boolean;
     };
 
 /**
@@ -75,78 +103,89 @@ export type ClaimCredentialReadiness =
  * and `src/lib/tasks/promo-link-claim.ts`'s own task TTL), so an item near
  * the tail of a large batch can still be legitimately picked up and
  * executed right up to that full window after admission. A credential that
- * would expire *before* the batch's own items do could pass this gate clean
- * and still strand the tail of the run on a fresh `credential_expired`
- * — a second, avoidable incident of the same shape this gate exists to
- * catch. "Near expiry" is therefore defined relative to that same
- * operational window, not an arbitrary clock value: a credential is
- * "expiring soon" when less of it remains than a full batch is allowed to
- * take.
+ * would expire *before* a batch this size could plausibly finish is not
+ * refused outright — refusing a legitimate, currently-valid credential
+ * would be its own foot-gun — but is flagged as a warning so the caller can
+ * record *when* it expires rather than silently proceeding. "Near expiry"
+ * is therefore defined relative to that same operational window, not an
+ * arbitrary clock value: a credential is "expiring soon" when less of it
+ * remains than a full batch is allowed to take.
  */
 export const CREDENTIAL_EXPIRY_WARNING_WINDOW_MS = PROMO_LINK_CLAIM_LIMITS.ttlMs;
 
-type CredentialReadinessDb = Pick<PrismaClient, "channelAccountCredential">;
-
-function notReady(code: ClaimCredentialNotReadyCode, message: string): ClaimCredentialReadiness {
+function notReady(code: ClaimCredentialNotReadyCode, message: string): { status: "not_ready"; code: ClaimCredentialNotReadyCode; message: string } {
   return { status: "not_ready", code, message };
 }
 
+interface CandidateCredentialRow {
+  readonly id: string;
+  readonly expiresAt: Date | null;
+}
+
+export type CredentialRowSelection<T extends CandidateCredentialRow> =
+  | { readonly status: "not_ready"; readonly code: ClaimCredentialNotReadyCode; readonly message: string }
+  | { readonly status: "selected"; readonly row: T };
+
 /**
- * Resolves the single credential a promo-link claim would use for
- * `accountId` right now, and actually attempts to decrypt and locally
- * validate it — never a weaker stand-in like "a row with status=active
- * exists". Identical selection algorithm to (and now the single source
- * for) the worker's claim-time resolution: exactly one non-expired
- * `active` credential must exist for the account, and it must decrypt to a
- * structurally valid, not-yet-expired JWT.
+ * Given every `status: "active"` credential row for one account, decides
+ * which single row a claim would use right now, or classifies why there
+ * isn't one — zero DB access, zero key access, and generic over whatever
+ * extra columns the caller selected (a caller that also selected
+ * `encryptedSecret`/`keyVersion` for its own later use — the worker's deep
+ * check — can pass those very same rows through here unmodified; this
+ * function only ever reads `id`/`expiresAt`). Exported so both
+ * {@link resolveClaimCredentialAdmission} below and the worker's deep
+ * decrypt/validate step share exactly one implementation of this policy —
+ * never two copies that could quietly drift apart.
  */
-export async function resolveClaimCredentialReadiness(
-  db: CredentialReadinessDb,
-  accountId: string,
+export function classifyCredentialRowsForClaim<T extends CandidateCredentialRow>(
+  rows: readonly T[],
   now: Date,
-  env: NodeJS.ProcessEnv = process.env,
-): Promise<ClaimCredentialReadiness> {
-  const credentials = await db.channelAccountCredential.findMany({
-    where: { channelAccountId: accountId, status: "active" },
-    select: { id: true, encryptedSecret: true, keyVersion: true, expiresAt: true },
-  });
+): CredentialRowSelection<T> {
   const nowMs = now.valueOf();
-  const nonExpired = credentials.filter((row) => row.expiresAt === null || row.expiresAt.valueOf() > nowMs);
+  const nonExpired = rows.filter((row) => row.expiresAt === null || row.expiresAt.valueOf() > nowMs);
   if (nonExpired.length === 0) {
     return notReady(
-      credentials.length === 0 ? "credential_missing" : "credential_expired",
+      rows.length === 0 ? "credential_missing" : "credential_expired",
       "No usable active credential for this account",
     );
   }
   if (nonExpired.length > 1) {
     return notReady("credential_ambiguous", "Multiple active credentials exist for this account");
   }
-  const credential = nonExpired[0]!;
-  let secret: string;
-  try {
-    secret = decryptCredentialSecretForWorker(credential.encryptedSecret, accountId, credential.id, credential.keyVersion, env);
-  } catch {
-    // The only failure mode `decryptCredentialSecretForWorker` raises
-    // (`worker/credentials/crypto.ts`): malformed envelope, wrong key
-    // version, or a tampered/undecryptable ciphertext — this is the exact
-    // condition the 2026-09-14 incident hit. Never rethrown: every branch
-    // of this function reports through the same typed `not_ready` shape so
-    // neither caller has to separately handle "the check failed" versus
-    // "the check threw".
-    return notReady("credential_validation_failed", "Stored credential could not be decrypted");
-  }
-  const local = validateCredentialJwtLocally(secret, now);
-  if (local.status !== "active") {
+  return { status: "selected", row: nonExpired[0]! };
+}
+
+type CredentialAdmissionDb = Pick<PrismaClient, "channelAccountCredential">;
+
+/**
+ * Resolves whether a promo-link claim batch may even be admitted against
+ * `accountId` right now, reading only non-secret columns — never
+ * `encryptedSecret`. The account itself (active, not soft-deleted) is
+ * expected to already be validated by the caller before this runs
+ * (`src/app/(admin)/catalog-sync/_actions.ts`'s
+ * `validatePromoAccountConfiguration` checks the `ChannelAccount` binding
+ * first); `ChannelAccountCredential` itself carries no soft-delete column
+ * of its own.
+ */
+export async function resolveClaimCredentialAdmission(
+  db: CredentialAdmissionDb,
+  accountId: string,
+  now: Date,
+): Promise<ClaimCredentialAdmission> {
+  const rows = await db.channelAccountCredential.findMany({
+    where: { channelAccountId: accountId, status: "active" },
+    select: { id: true, expiresAt: true, lastValidatedAt: true },
+  });
+  const selection = classifyCredentialRowsForClaim(rows, now);
+  if (selection.status === "not_ready") return selection;
+  const { row } = selection;
+  if (row.lastValidatedAt === null) {
     return notReady(
-      local.status === "expired" ? "credential_expired" : "credential_invalid",
-      "Credential failed local validation",
+      "credential_never_validated",
+      "Stored credential has never completed validation",
     );
   }
-  return {
-    status: "ready",
-    credentialId: credential.id,
-    secret,
-    expiresAt: local.expiresAt,
-    expiringSoon: local.expiresAt.valueOf() - nowMs < CREDENTIAL_EXPIRY_WARNING_WINDOW_MS,
-  };
+  const expiringSoon = row.expiresAt !== null && row.expiresAt.valueOf() - now.valueOf() < CREDENTIAL_EXPIRY_WARNING_WINDOW_MS;
+  return { status: "admitted", credentialId: row.id, expiresAt: row.expiresAt, expiringSoon };
 }

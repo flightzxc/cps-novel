@@ -59,7 +59,7 @@ import {
   type PromoLinkClaimReadbackPolicy,
 } from "../../src/lib/tasks/promo-link-claim-limits";
 import { createPublicRedirectCode } from "../../src/lib/redirect";
-import { resolveClaimCredentialReadiness } from "../../src/lib/credentials/claim-readiness";
+import { resolveClaimCredentialReadiness } from "../credentials/claim-readiness";
 import { maybeTripPromoLinkClaimCircuitBreaker } from "./promo-link-claim-circuit-breaker";
 import { bindPromoLinkToArticles } from "./promo-link-binding";
 

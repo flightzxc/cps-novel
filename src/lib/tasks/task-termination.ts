@@ -11,8 +11,9 @@ export interface TerminatePendingTaskItemsResult {
  * status, each carrying the same auditable reason.
  *
  * Exists so a task leaving the runnable set (`pending`/`processing`) — an
- * operator cancelling it (`src/server/task-admin/service.ts`'s `cancelTask`)
- * or a circuit breaker tripping it
+ * administrator cancelling it through a future admin-facing mutation (an
+ * Owner-gated capability that does not exist yet; see this task family's
+ * delivery notes) or a circuit breaker tripping it
  * (`worker/handlers/promo-link-claim-circuit-breaker.ts`) — can never again
  * leave its own still-`pending` items stranded forever. This is the exact
  * shape of the 2026-09-14 incident: an operator (or something acting on
