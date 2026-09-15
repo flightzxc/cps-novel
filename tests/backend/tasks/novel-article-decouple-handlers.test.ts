@@ -112,6 +112,79 @@ describe("catalog-batch locale policy payload", () => {
   });
 });
 
+describe("catalog-batch novel_materialize enumeration counts (mixed eligibility)", () => {
+  const PENDING_ID = "11111111-1111-4111-8111-111111111101";
+  const LINKED_ID = "11111111-1111-4111-8111-111111111102";
+  const IGNORED_ID = "11111111-1111-4111-8111-111111111103";
+
+  it("keeps already-linked items out of ineligibleCount and reports the three buckets separately", async () => {
+    const rowsById = new Map([
+      [PENDING_ID, { id: PENDING_ID, channelAppId: "chan-1", sourceLocale: "en", status: "pending", novelId: null }],
+      [LINKED_ID, { id: LINKED_ID, channelAppId: "chan-1", sourceLocale: "en", status: "linked", novelId: "novel-1" }],
+      [IGNORED_ID, { id: IGNORED_ID, channelAppId: "chan-1", sourceLocale: "en", status: "ignored", novelId: null }],
+    ]);
+    const created: unknown[] = [];
+    const createdItems: unknown[] = [];
+    const updates: Array<{ data: { result?: Record<string, unknown> } }> = [];
+
+    const handler = createCatalogBatchHandler({} as PrismaClient);
+    const prepared = await handler(
+      lease(CATALOG_BATCH_TASK_TYPE, {
+        operation: "novel_materialize",
+        selection: { scope: "explicit_ids", ids: [PENDING_ID, LINKED_ID, IGNORED_ID] },
+        actorId: "admin-1",
+        requestId: "req-mixed",
+        submittedAt: new Date().toISOString(),
+        expiresAt: new Date(Date.now() + 60_000).toISOString(),
+      }),
+    );
+    expect(prepared.status).toBe("success");
+    if (prepared.status !== "success" || !("protectedWrite" in prepared) || !prepared.protectedWrite) {
+      throw new Error("expected protectedWrite");
+    }
+    const written = await prepared.protectedWrite({
+      novelSourceItem: {
+        findMany: async (args: { where: { id: { in: string[] } } }) => args.where.id.in
+          .map((id) => rowsById.get(id))
+          .filter((row): row is NonNullable<typeof row> => Boolean(row))
+          .sort((a, b) => a.id.localeCompare(b.id)),
+      },
+      genericTask: {
+        findFirst: async () => null,
+        create: async (args: unknown) => { created.push(args); },
+        update: async (args: { data: { result?: Record<string, unknown> } }) => { updates.push(args); },
+      },
+      genericTaskItem: { createMany: async (args: unknown) => { createdItems.push(args); } },
+      operationAudit: { create: async () => ({}) },
+    } as never);
+
+    // The one already-linked row must not be folded into ineligibleCount:
+    // only IGNORED_ID (genuinely ineligible) counts there, LINKED_ID counts
+    // separately as alreadyLinkedCount, and PENDING_ID is submitted.
+    expect(written).toMatchObject({
+      status: "success",
+      result: {
+        enumerationStatus: "completed",
+        submittedCount: 1,
+        ineligibleCount: 1,
+        alreadyLinkedCount: 1,
+        blockedCount: 0,
+      },
+    });
+    expect(updates.at(-1)?.data.result).toMatchObject({
+      enumerationStatus: "completed",
+      selectedCount: 3,
+      submittedCount: 1,
+      ineligibleCount: 1,
+      alreadyLinkedCount: 1,
+      blockedCount: 0,
+      childTaskCount: 1,
+    });
+    expect(created).toHaveLength(1);
+    expect(createdItems).toHaveLength(1);
+  });
+});
+
 describe("article.generate.batch.v1 handler (EXT-06)", () => {
   it("splits 201 eligible novels into leaves of at most 200", async () => {
     const novels = Array.from({ length: 201 }, (_, index) => ({
