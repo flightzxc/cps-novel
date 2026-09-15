@@ -55,6 +55,35 @@ export const PROMO_LINK_CLAIM_LIMITS = Object.freeze({
     defaultIntervalMs: 2_000,
     maxIntervalMs: 30_000,
   }),
+  /**
+   * Batch-level circuit breaker (2026-09-14 incident: a 79,217-item batch
+   * burned ~44k items to `credential_validation_failed` in ~18 minutes
+   * because nothing ever stopped it). Tripped only by the deterministic/
+   * systemic failure classes in `worker/handlers/promo-link-claim-circuit-
+   * breaker.ts` (currently: the five `resolveClaimCredentialReadiness`
+   * codes) — never by a transient/per-row class, and never by a handful of
+   * genuinely bad individual rows, both by construction: those codes are
+   * account-level facts (the whole task shares one `channelAccountId`), so
+   * they either apply to literally every item in the task or none of them —
+   * they can never be "a few scattered bad rows" the way a per-item data
+   * problem can.
+   *
+   * 3, matching this same file's `readback.defaultAttempts` (one consistent
+   * "n=3" cardinality across this pipeline's safety knobs), is deliberately
+   * more than 1: `resolveClaimCredentialReadiness` reads
+   * `channel_account_credential` live, and `addOrReplaceCredential`
+   * (`src/server/credentials/service.ts`) mutates that same table across
+   * several statements during a credential replace/rotation — an item
+   * finalizing mid-rotation could see a transient `credential_ambiguous`/
+   * `credential_missing` read purely from that race, not from a genuinely
+   * broken credential. Requiring 3 *consecutive* deterministic-class
+   * failures (checked against the most recently finalized sibling items of
+   * the same task, not a per-worker-process in-memory counter — multiple
+   * worker replicas process one task concurrently) absorbs that one-off
+   * race while still halting a systemically broken batch within single
+   * digits of items instead of tens of thousands.
+   */
+  breakerConsecutiveFailureThreshold: 3,
 });
 
 export interface PromoLinkClaimReadbackPolicy {

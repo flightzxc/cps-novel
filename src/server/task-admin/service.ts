@@ -8,7 +8,7 @@ import {
 } from "@/lib/auth";
 import { chunkIds } from "@/lib/db/chunked-id-lookup";
 import { isUniqueConstraintViolation, withDbRetry } from "@/lib/db/db-retry";
-import { CATALOG_BATCH_TASK_TYPE, MOBOREADER_TASK_TYPES, PARENT_BATCH_TASK_TYPES, isParentBatchTaskType, type TaskFamily } from "@/lib/tasks";
+import { CATALOG_BATCH_TASK_TYPE, MOBOREADER_TASK_TYPES, PARENT_BATCH_TASK_TYPES, isParentBatchTaskType, terminatePendingTaskItems, type TaskFamily } from "@/lib/tasks";
 import { ARTICLE_GENERATE_BATCH_TASK_TYPE, ARTICLE_GENERATE_TASK_TYPE } from "@/lib/tasks/article-generate";
 import type { ArticleGenerateBlockedReason } from "@/domain/article-generation";
 import { TASK_ITEM_STATUSES, TASK_STATUSES } from "@/domain/database-statuses";
@@ -1477,6 +1477,170 @@ export async function retryFailedTask(
         });
       }),
       { op: "task-admin.retryFailedTask", itemId: taskId, idempotencyKey: input.requestId },
+    );
+  } catch (error) {
+    if (isUniqueConstraintViolation(error)) {
+      throw new TaskAdminError("task_admin_active_scope_conflict", 409);
+    }
+    throw error;
+  }
+}
+
+export const TASK_CANCEL_ENTRY_ID = "admin.api.task.cancel";
+export const TASK_CANCEL_AUDIT_ACTION = "task.cancel";
+/** Mirrors `RETRYABLE_PARENT_STATUSES` above: cancelling only ever makes sense while a task is still runnable. */
+const CANCELABLE_PARENT_STATUSES = new Set(["pending", "processing"]);
+/**
+ * The reason recorded on every item this cascades — see
+ * `terminatePendingTaskItems`'s (`src/lib/tasks/task-termination.ts`) own
+ * doc comment for why this exists at all: the 2026-09-14 incident's
+ * ~35,316 stranded items were exactly what happens when a task leaves the
+ * runnable set with nothing to ever terminate its own still-`pending`
+ * items. This is the code path that incident's out-of-band `disabled`
+ * flip *should* have gone through.
+ */
+const TASK_CANCEL_ITEM_TERMINATION_REASON_CODE = "parent_task_cancelled";
+
+export type CancelTaskResult = Readonly<{
+  family: TaskFamily;
+  taskId: string;
+  status: "disabled";
+  terminatedPendingItemCount: number;
+  wrote: boolean;
+  auditId: string;
+}>;
+
+function replayCancel(
+  audit: AuditRow,
+  actorId: string,
+  family: TaskFamily,
+  taskId: string,
+  reason: string | null,
+): CancelTaskResult {
+  const after = jsonObject(audit.afterSnapshot);
+  if (
+    audit.actorId !== actorId
+    || audit.entityId !== taskId
+    || audit.taskType !== family
+    || audit.reason !== reason
+    || after?.status !== "disabled"
+    || typeof after.terminatedPendingItemCount !== "number"
+  ) {
+    throw new TaskAdminError("task_admin_idempotency_conflict", 409);
+  }
+  return Object.freeze({
+    family,
+    taskId,
+    status: "disabled" as const,
+    terminatedPendingItemCount: after.terminatedPendingItemCount,
+    wrote: false,
+    auditId: audit.id.toString(),
+  });
+}
+
+/**
+ * Administratively cancels a still-`pending`/`processing` task: flips it to
+ * the existing `disabled` status (no schema change — `disabled` already
+ * means "administratively stopped", the same value every feature-flag-off
+ * batch is born into) and, in the *same* transaction, drives every one of
+ * its own still-`pending` items to `skipped` via `terminatePendingTaskItems`
+ * — never leaving them silently unreachable the way the 2026-09-14
+ * out-of-band `disabled` flip did.
+ *
+ * Deliberately narrower than {@link retryFailedTask} in one respect: a
+ * `family === "generic"` parent-batch task (`isParentBatchTaskType`, e.g.
+ * `batch.materialize.v1`) is rejected the same way retry already rejects it
+ * — its own `items` relation is a single enumeration pseudo-item, and the
+ * real work lives in its child tasks. Cancelling those children individually
+ * (each one is an ordinary `family === "generic"` task with real items) is
+ * the supported path; a cascading "cancel this batch and every child it
+ * spawned" operation is a distinct, larger feature this function does not
+ * attempt.
+ *
+ * No pause/resume pair exists or is added here — `task.paused`/
+ * `task.resumed` have zero references anywhere in this codebase, and the
+ * `generic_task`/`channel_sync_task` status CHECK constraints
+ * (`prisma/migrations/20260803090000_p1_initial_schema/migration.sql`) do
+ * not include a `paused` value; adding one is a schema change and is the
+ * Owner-gated design-note territory this task's brief calls out, not
+ * something to add here. This is intentionally one-way: the Owner's stated
+ * recovery preference is a fresh batch under a new `requestId`, not
+ * resuming a mutated old one — see this task's final report.
+ */
+export async function cancelTask(
+  input: {
+    authorization: AdminServiceAuthorization;
+    requestId: string;
+    family: unknown;
+    taskId: unknown;
+    reason?: unknown;
+  },
+  dependencies: TaskAdminMutationDependencies,
+): Promise<CancelTaskResult> {
+  const context = await requireFreshAdminServiceMutation(input.authorization, "task:manage", {
+    identities: dependencies.identities,
+    sessions: dependencies.sessions,
+    entryId: TASK_CANCEL_ENTRY_ID,
+    requestId: input.requestId,
+    env: dependencies.env,
+    now: dependencies.now,
+  });
+  const family = oneOf(input.family, TASK_FAMILIES);
+  const taskId = uuid(input.taskId);
+  const reason = optionalBoundedText(input.reason, 2_000);
+
+  try {
+    return await withDbRetry(
+      () => dependencies.db.$transaction(async (tx) => {
+        await lockMutationRequest(tx, input.requestId);
+        const parent = await lockParent(tx, family, taskId);
+        if (!parent) throw new TaskAdminError("task_admin_not_found", 404);
+        if (family === "generic" && isParentBatchTaskType(parent.task_type)) {
+          throw new TaskAdminError("task_admin_state_conflict", 409);
+        }
+
+        const prior = await committedAudit(tx, TASK_CANCEL_AUDIT_ACTION, input.requestId);
+        if (prior) return replayCancel(prior, context.identity.id, family, taskId, reason);
+        if (!CANCELABLE_PARENT_STATUSES.has(parent.status)) {
+          throw new TaskAdminError("task_admin_state_conflict", 409);
+        }
+
+        const now = dependencies.now ?? new Date();
+        if (family === "channel_sync") {
+          await tx.channelSyncTask.update({ where: { id: taskId }, data: { status: "disabled", completedAt: now } });
+        } else {
+          await tx.genericTask.update({ where: { id: taskId }, data: { status: "disabled", completedAt: now } });
+        }
+        const { terminatedCount } = await terminatePendingTaskItems(tx, family, taskId, {
+          code: TASK_CANCEL_ITEM_TERMINATION_REASON_CODE,
+          message: "Task was administratively cancelled; this item was never attempted",
+        });
+        const audit = await tx.operationAudit.create({
+          data: {
+            actorType: "admin",
+            actorId: context.identity.id,
+            action: TASK_CANCEL_AUDIT_ACTION,
+            entityType: "Task",
+            entityId: taskId,
+            requestId: input.requestId,
+            taskType: family,
+            taskId,
+            reason,
+            beforeSnapshot: { status: parent.status },
+            afterSnapshot: { status: "disabled", terminatedPendingItemCount: terminatedCount },
+          },
+          select: { id: true },
+        });
+        return Object.freeze({
+          family,
+          taskId,
+          status: "disabled" as const,
+          terminatedPendingItemCount: terminatedCount,
+          wrote: true,
+          auditId: audit.id.toString(),
+        });
+      }),
+      { op: "task-admin.cancelTask", itemId: taskId, idempotencyKey: input.requestId },
     );
   } catch (error) {
     if (isUniqueConstraintViolation(error)) {
