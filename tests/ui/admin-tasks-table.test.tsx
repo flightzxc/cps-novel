@@ -98,10 +98,10 @@ describe("TasksTable · 两类任务统一列表", () => {
     render(<TasksTable tasks={[task({
       taskType,
       catalogBatch: {
+        phase: "materializing",
         submittedCount: 7,
         alreadyLinkedCount: 5,
         ineligibleCount: 3,
-        blockedCount: null,
       },
     })]} />);
     const body = document.body.textContent ?? "";
