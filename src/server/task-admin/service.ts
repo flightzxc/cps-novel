@@ -148,6 +148,8 @@ export type TaskSummaryDto = Readonly<{
    * this field at all.
    */
   bookCounts?: CatalogBookCountsDto;
+  /** Catalog worker phase projected without adding a new database status. */
+  catalogPhase?: "paging" | "finalizing" | "completed" | "failed";
   /**
    * X10 task control (pause/resume/abort): the task's own
    * `result.taskControl` marker (`src/lib/tasks/task-control.ts`), read and
@@ -609,8 +611,10 @@ export type CatalogBookCountsDto = Readonly<{
   upstreamTotal: number;
   /** Σ `result.returnedCount` over this task's successful, non-cascaded catalog pages. */
   fetched: number;
-  /** (failed, non-cascaded pages) × `pageSize` — a cascaded `stoppedBeforeFetch` failure never counts. */
-  failedBooks: number;
+  /** Exact failed source-item count; null when page failures cannot identify individual books. */
+  failedBooks: number | null;
+  /** Actually executed catalog pages that failed; never converted into books. */
+  failedPages?: number;
   /** Pages actually fetched from upstream (success or failure), excluding any `stoppedBeforeFetch` cascade. */
   pagesScanned: number;
   /** `ceil(upstreamTotal / pageSize)` — the real page count, never the safety-fuse pre-created count. */
@@ -650,15 +654,16 @@ async function loadCatalogBookAggregates(
       task_id,
       COALESCE(SUM((result->>'returnedCount')::int) FILTER (WHERE status = 'success'), 0)::bigint AS fetched,
       COUNT(*) FILTER (
-        WHERE status IN ('success', 'failed')
+        WHERE target_type = 'catalog_page' AND status IN ('success', 'failed')
           AND COALESCE(result->>'stoppedBeforeFetch', 'false') <> 'true'
       )::bigint AS pages_scanned,
       COUNT(*) FILTER (
-        WHERE status = 'failed'
+        WHERE target_type IN ('catalog_page', 'catalog_recovery_page') AND status = 'failed'
           AND COALESCE(result->>'stoppedBeforeFetch', 'false') <> 'true'
       )::bigint AS failed_pages
     FROM generic_task_item
-    WHERE task_id = ANY(${taskIds}::uuid[]) AND target_type = 'catalog_page'
+    WHERE task_id = ANY(${taskIds}::uuid[])
+      AND target_type IN ('catalog_page', 'catalog_recovery_page')
     GROUP BY task_id
   `);
   return new Map(rows.map((row) => [row.task_id, {
@@ -676,6 +681,7 @@ function catalogObservedTotalOf(result: unknown): number | undefined {
 function deriveBookCounts(
   observedTotal: number,
   pageSize: number,
+  taskStatus: string,
   aggregate: { fetched: number; pagesScanned: number; failedPages: number } | undefined,
 ): CatalogBookCountsDto {
   const fetched = aggregate?.fetched ?? 0;
@@ -684,10 +690,15 @@ function deriveBookCounts(
   return Object.freeze({
     upstreamTotal: observedTotal,
     fetched,
-    failedBooks: failedPages * pageSize,
+    failedBooks: failedPages === 0 ? 0 : null,
+    failedPages,
     pagesScanned,
     pagesTotalExpected: Math.ceil(observedTotal / pageSize),
-    percent: observedTotal > 0 ? Math.min(100, Math.round((fetched / observedTotal) * 100)) : 0,
+    percent: observedTotal <= 0
+      ? 0
+      : taskStatus === "completed" && fetched >= observedTotal
+        ? 100
+        : Math.min(99.99, Math.floor((fetched / observedTotal) * 10_000) / 100),
   });
 }
 
@@ -696,6 +707,7 @@ export type CatalogBookCountsInput = {
   taskType: string;
   result: unknown;
   params: unknown;
+  status?: string;
 };
 
 function catalogBookCountsPrerequisites(
@@ -720,15 +732,15 @@ export async function loadCatalogBookCountsBatch(
   db: PrismaClient,
   inputs: readonly CatalogBookCountsInput[],
 ): Promise<Map<string, CatalogBookCountsDto>> {
-  const prerequisites = new Map<string, { observedTotal: number; pageSize: number }>();
+  const prerequisites = new Map<string, { observedTotal: number; pageSize: number; status: string }>();
   for (const input of inputs) {
     const prereq = catalogBookCountsPrerequisites(input);
-    if (prereq) prerequisites.set(input.taskId, prereq);
+    if (prereq) prerequisites.set(input.taskId, { ...prereq, status: input.status ?? "processing" });
   }
   const aggregates = await loadCatalogBookAggregates(db, Array.from(prerequisites.keys()));
   const result = new Map<string, CatalogBookCountsDto>();
   for (const [taskId, prereq] of prerequisites) {
-    result.set(taskId, deriveBookCounts(prereq.observedTotal, prereq.pageSize, aggregates.get(taskId)));
+    result.set(taskId, deriveBookCounts(prereq.observedTotal, prereq.pageSize, prereq.status, aggregates.get(taskId)));
   }
   return result;
 }
@@ -849,6 +861,16 @@ function taskSummary(row: TaskListRow, bookCounts?: CatalogBookCountsDto): TaskS
   const taskControl = row.status === "paused" || row.status === "cancelled" || row.status === "disabled"
     ? readTaskControlMarker(row.result)
     : undefined;
+  const finalization = jsonPlainObject(resultObject?.finalization);
+  const catalogPhase = row.task_type !== MOBOREADER_TASK_TYPES.catalogScan
+    ? undefined
+    : row.status === "completed"
+      ? "completed" as const
+      : row.status === "failed" || row.status === "completed_with_errors"
+        ? "failed" as const
+        : finalization?.status === "pending" || finalization?.status === "processing"
+          ? "finalizing" as const
+          : "paging" as const;
   return Object.freeze({
     family: row.family,
     taskId: row.task_id,
@@ -864,6 +886,7 @@ function taskSummary(row: TaskListRow, bookCounts?: CatalogBookCountsDto): TaskS
     ...(catalogBatch ? { catalogBatch } : {}),
     ...(stopReason !== undefined ? { stopReason } : {}),
     ...(bookCounts !== undefined ? { bookCounts } : {}),
+    ...(catalogPhase ? { catalogPhase } : {}),
     ...(taskControl ? { taskControl } : {}),
   });
 }
@@ -964,7 +987,7 @@ export async function listAdminTasks(
     db,
     rows
       .filter((row) => row.family === "generic" && row.task_type === MOBOREADER_TASK_TYPES.catalogScan)
-      .map((row) => ({ taskId: row.task_id, taskType: row.task_type, result: row.result, params: row.params })),
+      .map((row) => ({ taskId: row.task_id, taskType: row.task_type, result: row.result, params: row.params, status: row.status })),
   );
   return Object.freeze({
     items: Object.freeze(rows.map((row) => taskSummary(row, bookCounts.get(row.task_id)))),
@@ -1073,7 +1096,7 @@ export async function getAdminTaskDetail(
   // this function already fetched) — a catalog_scan task with no completed
   // page yet costs no extra query, same as a non-catalog_scan task.
   const bookCounts = isCatalogScan
-    ? await loadCatalogBookCounts(db, { taskId, taskType: row.task_type, result: row.result, params: row.params })
+    ? await loadCatalogBookCounts(db, { taskId, taskType: row.task_type, result: row.result, params: row.params, status: row.status })
     : undefined;
   const childTasks = isParentBatchTaskType(row.task_type) ? await db.genericTask.findMany({
     where: { parentTaskId: taskId, originTaskId: null }, orderBy: { createdAt: "asc" },

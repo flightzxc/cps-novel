@@ -73,7 +73,7 @@ export type TaskProgressDto = Readonly<{
   status: TaskProgressStatus;
   total: number;
   success: number;
-  failed: number;
+  failed: number | null;
   skip: number;
   processed: number;
   percent: number;
@@ -82,6 +82,8 @@ export type TaskProgressDto = Readonly<{
   taskErrors: readonly string[];
   items: readonly TaskProgressItemError[];
   currentItem?: TaskProgressCurrentItem;
+  failedPages?: number;
+  catalogPhase?: "paging" | "finalizing" | "completed" | "failed";
   /**
    * C-12 (`施工工单_C12_目录任务计量口径改为本_2026-09-07.md`): once a
    * `catalog_scan` task's book counts are derivable (`CatalogBookCountsDto`,
@@ -174,8 +176,8 @@ function toDto(
   const total = bookCounts ? bookCounts.upstreamTotal : task.totalCount;
   const success = bookCounts ? bookCounts.fetched : task.successCount;
   const failed = bookCounts ? bookCounts.failedBooks : task.failedCount;
-  const skip = task.skippedCount;
-  const processed = bookCounts ? success + failed + skip : pagesProcessed;
+  const skip = bookCounts ? 0 : task.skippedCount;
+  const processed = bookCounts ? success + (failed ?? 0) : pagesProcessed;
   const percent = bookCounts ? bookCounts.percent : pagesPercent;
   const result = task.result && typeof task.result === "object" && !Array.isArray(task.result)
     ? task.result as Record<string, unknown> : {};
@@ -186,6 +188,18 @@ function toDto(
       childStatuses,
     }),
   } : undefined;
+  const finalization = result.finalization && typeof result.finalization === "object" && !Array.isArray(result.finalization)
+    ? result.finalization as Record<string, unknown>
+    : {};
+  const catalogPhase = task.taskType !== "catalog_scan"
+    ? undefined
+    : task.status === "completed"
+        ? "completed" as const
+        : task.status === "failed" || task.status === "completed_with_errors"
+          ? "failed" as const
+          : finalization.status === "pending" || finalization.status === "processing"
+            ? "finalizing" as const
+            : "paging" as const;
   return Object.freeze({
     taskType: task.taskType,
     status: mapStatus(task.status),
@@ -199,6 +213,8 @@ function toDto(
     updatedAt: iso(task.updatedAt),
     taskErrors: taskErrorsFrom(task.error),
     items,
+    ...(bookCounts ? { failedPages: bookCounts.failedPages } : {}),
+    ...(catalogPhase ? { catalogPhase } : {}),
     ...(catalogBatch ? { catalogBatch } : {}),
     ...(currentItem ? { currentItem } : {}),
     ...(bookCounts ? {
@@ -230,6 +246,8 @@ function toDto(
  * undefined (no page has completed yet).
  */
 function genericCurrentItemMessage(targetType: string, targetId: string, bookCounts?: CatalogBookCountsDto): string {
+  if (targetType === "catalog_finalize") return "正在执行目录收尾";
+  if (targetType === "catalog_recovery_page") return `正在恢复目录第 ${targetId} 页`;
   if (targetType === "catalog_page") {
     if (bookCounts) {
       return `正在抓取目录第 ${targetId} / ${bookCounts.pagesTotalExpected.toLocaleString("zh-CN")} 页`
@@ -303,7 +321,7 @@ async function loadGenericProgress(db: PrismaClient, taskId: string): Promise<Ta
     // C-12: only ever issues its own aggregate query when this taskType is
     // catalog_scan AND result.catalogObservedTotal/params.pageSize are
     // already known — see `loadCatalogBookCounts` (`./service.ts`).
-    loadCatalogBookCounts(db, { taskId, taskType: task.taskType, result: task.result, params: task.params }),
+    loadCatalogBookCounts(db, { taskId, taskType: task.taskType, result: task.result, params: task.params, status: task.status }),
   ]);
   const items = failedItems.map((item) => {
     const failure = projectSafeTaskFailure(item.error);
