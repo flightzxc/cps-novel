@@ -24,6 +24,8 @@ usage() {
     '       scripts/x8-production-like.sh gate catalog-write status' \
     '       scripts/x8-production-like.sh backup-now' \
     '       scripts/x8-production-like.sh restore-smoke' \
+    '       scripts/x8-production-like.sh base-backup-now' \
+    '       scripts/x8-production-like.sh wal-gc [--apply] [--keep N] [--json] [--force]' \
     '       scripts/x8-production-like.sh catalog-one --task-id <uuid> --item-id <uuid> --actor <operator-handle>' \
     '       scripts/x8-production-like.sh preview-one --task-id <uuid> --item-id <uuid> --actor <operator-handle>' \
     '       scripts/x8-production-like.sh promo-fixture --source-item <id> --channel-account <id> --target-url <url> [--apply]' \
@@ -40,9 +42,10 @@ usage() {
     '     fail fast in prepare_x8_environment(). Every subcommand that calls' \
     '     prepare_x8_environment() reads this shell'"'"'s X8_LEVEL -- that is' \
     '     `up`, `down`, `verify`, `accept`, `backup-now`, `restore-smoke`,' \
-    '     `catalog-one`, `preview-one`, `promo-fixture`, `health-sql`,' \
-    '     `admin-secret`, `admin-seed`, and `admin-reset` (2026-09-06 patch:' \
-    '     this line used to say "only `up`", which was already inaccurate).' \
+    '     `base-backup-now`, `wal-gc`, `catalog-one`, `preview-one`,' \
+    '     `promo-fixture`, `health-sql`, `admin-secret`, `admin-seed`, and' \
+    '     `admin-reset` (2026-09-06 patch: this line used to say "only `up`",' \
+    '     which was already inaccurate).' \
     '     `gate catalog-write` and plain `status` do NOT read it at all --' \
     '     both derive their run level from the committed release identity' \
     '     file `up` last wrote (.tmp/x8-production-like/release-identity.json)' \
@@ -78,7 +81,19 @@ usage() {
     '     (disable that automatic run entirely with X8_GC_ON_UP=0);' \
     '     the automatic run never touches dangling layers' \
     '     unless $X8_GC_PRUNE_DANGLING=1 is set explicitly -- a manual `gc`' \
-    '     still does by default.' >&2
+    '     still does by default.' \
+    '' \
+    '     `wal-gc` execs scripts/db/wal-gc-x8.sh inside the running postgres' \
+    '     container (formal entry point; do not hand-run' \
+    '     scripts/db/wal-retention.sh against the running stack -- that path' \
+    '     has no forced archiver-health gate). `base-backup-now` runs' \
+    '     pg_basebackup + verify-physical-base.sh inside the same container,' \
+    '     writing to /var/lib/postgresql/base-backups/<UTC timestamp>. Both' \
+    '     require the compose mounts this work order added to' \
+    '     infra/production-like/docker-compose.yml'"'"'s postgres service' \
+    '     ($X8_BASE_BACKUP_DIR bind + the four scripts/db/*.sh read-only' \
+    '     binds) -- they are not part of the currently running x8 stack' \
+    '     until that stack is next recreated with these compose changes.' >&2
   exit 64
 }
 
@@ -1680,6 +1695,133 @@ backup_now() {
     /bin/bash /opt/cps-novel-x8/backup-timer.sh --once
 }
 
+# WAL-retention rollout work order 2026-09-17, P1-1: wal_gc() and
+# base_backup_now() both exec scripts that only exist inside the postgres
+# container because of the compose mounts commit bbec454 added to
+# infra/production-like/docker-compose.yml's postgres service (the
+# X8_BASE_BACKUP_DIR bind plus four scripts/db/*.sh read-only binds) -- and
+# those mounts only take effect the NEXT time that container is recreated.
+# A postgres container still running from before that compose change has
+# none of them, and `exec bash /app/scripts/db/wal-gc-x8.sh` against it would
+# fail with a raw, uninformative docker "OCI runtime exec failed: no such
+# file or directory" deep inside the compose call, not a message that tells
+# the operator what to actually do. This turns that into a named, actionable
+# refusal up front -- checked from the caller's own worktree, via
+# x8_compose exec (never docker exec directly, so this fails the same way
+# every other check in this file does if the compose project name/files
+# don't resolve), never mutating anything.
+x8_require_wal_retention_mounts() {
+  x8_compose exec -T postgres sh -c \
+    'test -r /app/scripts/db/wal-gc-x8.sh && test -r /app/scripts/db/wal-retention.sh && test -r /app/scripts/db/verify-physical-base.sh && test -r /app/scripts/db/backup-physical-base.sh && mountpoint -q /var/lib/postgresql/base-backups' \
+    || {
+      echo "ERROR: running postgres container predates the WAL-retention mounts (scripts and/or /var/lib/postgresql/base-backups); recreate it from the release worktree (rollout plan Gate 2) before using wal-gc/base-backup-now" >&2
+      return 65
+    }
+}
+
+# Formal entry point for WAL retention GC against the running X8 stack.
+# This never calls scripts/db/wal-retention.sh directly -- it always goes
+# through scripts/db/wal-gc-x8.sh, the wrapper that hard-codes
+# --require-archiver-healthy and the in-container archive/base-backup-dir
+# paths, so no invocation from here can silently run without the archiver
+# health gate. Only --apply/--keep/--json/--force are accepted at this
+# entry point; --keep maps to wal-gc-x8.sh's --keep-base.
+wal_gc() {
+  local -a container_args=()
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --apply) container_args+=(--apply); shift ;;
+      --keep)
+        [[ $# -ge 2 ]] || {
+          echo "ERROR: wal-gc --keep requires a value" >&2
+          return 64
+        }
+        container_args+=(--keep-base "$2")
+        shift 2
+        ;;
+      --json) container_args+=(--json); shift ;;
+      --force) container_args+=(--force); shift ;;
+      *)
+        echo "ERROR: unrecognized wal-gc argument: $1" >&2
+        return 64
+        ;;
+    esac
+  done
+
+  prepare_x8_environment
+  # WAL-retention rollout work order 2026-09-17, P1-2: same pre-flight as
+  # up_x8()/gate_catalog_recreate() -- refuses outright if the compose
+  # project is already running from a different worktree, before this
+  # execs anything into it (so the sender of --force/--apply and the
+  # worktree that actually owns the running stack can never silently
+  # diverge). Then P1-1's mount precondition, now that the stack identity
+  # itself is confirmed.
+  x8_assert_worktree_stack_binding "$P1_12_COMPOSE_PROJECT" "$X8_PROJECT_ROOT" "$(x8_expected_compose_config_files)" || return 65
+  x8_require_wal_retention_mounts || return 65
+  # bash 3.2 `set -u` empty-array guard, same reasoning as elsewhere in this
+  # file: a plain `wal-gc` with no flags at all is an ordinary dry-run, not
+  # a corner case, and container_args is legitimately empty for it.
+  if [[ "${#container_args[@]}" -gt 0 ]]; then
+    x8_compose exec -T -u postgres postgres \
+      bash /app/scripts/db/wal-gc-x8.sh "${container_args[@]}"
+  else
+    x8_compose exec -T -u postgres postgres \
+      bash /app/scripts/db/wal-gc-x8.sh
+  fi
+}
+
+# Formal entry point for an on-demand physical base backup + verification,
+# run inside the postgres container as the postgres OS user against the
+# local unix-socket connection (backup_role, from the compose secret --
+# never a plaintext PGPASSWORD). Writes under
+# /var/lib/postgresql/base-backups/<UTC timestamp>Z and immediately runs
+# verify-physical-base.sh against that same directory; either step failing
+# aborts before the next one runs (heredoc's own `set -euo pipefail`).
+base_backup_now() {
+  prepare_x8_environment
+  # WAL-retention rollout work order 2026-09-17, P1-2: same worktree-binding
+  # pre-flight as wal_gc() above -- see its own comment for why this must
+  # run before anything below execs into the container.
+  x8_assert_worktree_stack_binding "$P1_12_COMPOSE_PROJECT" "$X8_PROJECT_ROOT" "$(x8_expected_compose_config_files)" || return 65
+  x8_require_wal_retention_mounts || return 65
+  x8_compose exec -T -u postgres postgres /bin/bash <<'BASE_BACKUP_NOW'
+set -euo pipefail
+umask 077
+pgpass="$(mktemp /tmp/x8-base-backup-now.pgpass.XXXXXX)"
+trap 'rm -f "$pgpass"' EXIT INT TERM
+password="$(tr -d '\r\n' </run/secrets/backup_role_password)"
+printf '*:*:*:backup_role:%s\n' "$password" >"$pgpass"
+chmod 600 "$pgpass"
+export PGHOST=/var/run/postgresql PGPORT=5432 PGUSER=backup_role PGDATABASE=cps_novel PGPASSFILE="$pgpass"
+stamp="$(date -u '+%Y%m%dT%H%M%SZ')"
+output_dir="/var/lib/postgresql/base-backups/$stamp"
+bash /app/scripts/db/backup-physical-base.sh --output-dir "$output_dir"
+# WAL-retention rollout work order 2026-09-17, P2-4: --work-dir explicitly
+# pinned under the base-backups bind mount (dot-prefixed, so
+# wal-retention.sh's `! -name '.*'` directory enumeration skips it and never
+# mistakes it for a candidate base backup) rather than the default /tmp --
+# unpacking a full base backup into the container's own overlay filesystem
+# would grow the Docker VM's disk instead of the host-backed bind.
+# verify-physical-base.sh's own trap now removes --work-dir unconditionally
+# (success, every fail() exit, and a signal), so this never accumulates.
+bash /app/scripts/db/verify-physical-base.sh --backup-dir "$output_dir" --work-dir "/var/lib/postgresql/base-backups/.verify-$stamp"
+BASE_BACKUP_NOW
+  # WAL-retention rollout work order 2026-09-17, P1-2: the heredoc above
+  # only ever prints the in-container path
+  # (/var/lib/postgresql/base-backups/<stamp>) -- an operator on the host
+  # cannot tell where that landed without knowing $X8_BASE_BACKUP_DIR by
+  # heart. Read the bind's actual host-side source straight off the
+  # container's own mount table (same technique restore_smoke() and the
+  # release-identity checks elsewhere in this file use for other
+  # docker-inspect facts), rather than re-deriving it from env -- this is
+  # the one source of truth that cannot drift from what the container
+  # actually has mounted.
+  local container_id host_dir
+  container_id="$(x8_compose ps -q postgres)"
+  host_dir="$(docker inspect "$container_id" --format '{{range .Mounts}}{{if eq .Destination "/var/lib/postgresql/base-backups"}}{{.Source}}{{end}}{{end}}' 2>/dev/null || true)"
+  echo "X8_BASE_BACKUP_HOST_DIR=${host_dir:-UNKNOWN}"
+}
+
 restore_smoke() {
   prepare_x8_environment
   local latest container_id container_path
@@ -2531,6 +2673,8 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     gate) shift; [[ $# -ge 2 && $# -le 3 ]] || usage; gate_catalog "$@" ;;
     backup-now) [[ $# -eq 1 ]] || usage; backup_now ;;
     restore-smoke) [[ $# -eq 1 ]] || usage; restore_smoke ;;
+    base-backup-now) [[ $# -eq 1 ]] || usage; base_backup_now ;;
+    wal-gc) shift; wal_gc "$@" ;;
     catalog-one) shift; catalog_one "$@" ;;
     preview-one) shift; preview_one "$@" ;;
     promo-fixture) shift; [[ $# -ge 6 ]] || usage; promo_fixture "$@" ;;

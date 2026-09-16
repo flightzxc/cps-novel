@@ -59,6 +59,22 @@ describe("P1-06 database operations static contracts", () => {
     expect(restore).toContain("cps_novel_restore_*");
     expect(restore).toContain("--single-transaction");
     expect(restore).toContain("infra/postgres/grants.sql");
+
+    // wal-gc-x8.sh (WAL retention rehearsal formal entry point): its
+    // argument parser must reject anything outside {--apply, --keep-base,
+    // --json, --force} with usage/exit 64, and it must always force
+    // wal-retention.sh's --require-archiver-healthy -- neither is something
+    // a caller of this wrapper can turn off.
+    const walGcX8 = read("scripts/db/wal-gc-x8.sh");
+    // Scoped to the `target=(...)` wal-retention.sh invocation itself, not
+    // a bare substring search -- the file's own header comment also says
+    // "--require-archiver-healthy" in prose, so a plain `.toContain` would
+    // keep passing even if the flag were deleted from the actual
+    // invocation while that comment survived (see the identical hardening
+    // in wal-gc-x8.test.ts's own static-contracts describe block).
+    expect(walGcX8).toMatch(/target=\([\s\S]*?--require-archiver-healthy[\s\S]*?\)/);
+    expect(walGcX8).toMatch(/usage\(\)\s*\{[\s\S]*?exit 64/);
+    expect(walGcX8).toContain("*) usage ;;");
   });
 
   it("ships syntactically valid shell scripts and does not claim production PITR", () => {
@@ -68,6 +84,10 @@ describe("P1-06 database operations static contracts", () => {
       "scripts/db/backup-physical-base.sh",
       "scripts/db/archive-wal.sh",
       "scripts/db/restore-pitr.sh",
+      "scripts/db/verify-physical-base.sh",
+      "scripts/db/wal-retention.sh",
+      "scripts/db/wal-gc-x8.sh",
+      "scripts/db/wal-retention-rehearsal.sh",
       "scripts/run-p1-06-postgres-verification.sh",
       "scripts/run-x9-postgres-verification.sh",
     ];
