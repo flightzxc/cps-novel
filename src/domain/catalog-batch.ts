@@ -108,9 +108,26 @@ export type CatalogBatchContext = Readonly<{
   }>[];
 }>;
 
+/**
+ * Only ever populated for `operation: "promo_claim"`, and only when at least
+ * one `(channelAppId, channelAccountId)` pair in the submitted scope has a
+ * currently-usable credential that is expiring within the promo-claim
+ * batch's own TTL window (`CREDENTIAL_EXPIRY_WARNING_WINDOW_MS`,
+ * `src/lib/credentials/claim-readiness.ts`) — advisory only, the batch was
+ * already admitted. Absent (never an empty array) when there is nothing to
+ * warn about, matching this codebase's "absent, not empty" convention for
+ * every other optional derived field.
+ */
+export type PromoLinkClaimCredentialWarning = Readonly<{
+  channelAppId: string;
+  channelAccountId: string;
+  expiresAt: string;
+}>;
+
 export type CatalogBatchEnqueueResult = Readonly<{
   taskId: string;
   phase: CatalogBatchPhase;
+  credentialWarnings?: readonly PromoLinkClaimCredentialWarning[];
 }>;
 
 export type CatalogBatchSummary = Readonly<{

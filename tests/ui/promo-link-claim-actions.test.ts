@@ -3,12 +3,19 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const guards = vi.hoisted(() => ({ access: vi.fn(), fresh: vi.fn() }));
 const batch = vi.hoisted(() => ({ enqueue: vi.fn(), summary: vi.fn() }));
 const flags = vi.hoisted(() => ({ feature: true, write: true }));
-const db = vi.hoisted(() => ({ channelApp: { findFirst: vi.fn() }, articleTemplate: { findFirst: vi.fn() }, novelSourceItem: { findMany: vi.fn() } }));
+const credentialReadiness = vi.hoisted(() => ({ resolve: vi.fn() }));
+const db = vi.hoisted(() => ({
+  channelApp: { findFirst: vi.fn() },
+  articleTemplate: { findFirst: vi.fn() },
+  novelSourceItem: { findMany: vi.fn() },
+  operationAudit: { create: vi.fn() },
+}));
 vi.mock("next/headers", () => ({ headers: async () => ({ get: () => "https://admin.example" }) }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("@/server/auth/guards", () => ({ requireAdminActionAccess: guards.access, requireFreshAdminServiceMutation: guards.fresh }));
 vi.mock("@/lib/tasks/catalog-batch", async (original) => ({ ...(await original<typeof import("@/lib/tasks/catalog-batch")>()), enqueueCatalogBatch: batch.enqueue }));
 vi.mock("@/server/catalog-batch", () => ({ readCatalogBatchContext: vi.fn(), readCatalogBatchSummary: batch.summary }));
+vi.mock("@/lib/credentials/claim-readiness", () => ({ resolveClaimCredentialAdmission: credentialReadiness.resolve }));
 vi.mock("@/lib/flags", () => ({ isNovelCatalogSyncEnabled: () => true, isNovelCatalogSyncWriteAllowed: () => true, isPromoLinkClaimEnabled: () => flags.feature, isPromoLinkClaimWriteAllowed: () => flags.write }));
 vi.mock("@/app/api/admin/_lib/deps", () => ({ prisma: db, guardDependencies: () => ({ identities: "i", sessions: "s" }), canonicalOrigin: async () => "https://admin.example", readSessionToken: async () => "session" }));
 vi.mock("@/server/content-creation", () => {
@@ -39,6 +46,9 @@ beforeEach(() => {
   guards.access.mockResolvedValue({ context: { identity: { id: "actor" } }, serviceAuthorization: { ticket: true } });
   guards.fresh.mockResolvedValue({ identity: { id: "actor" } });
   db.channelApp.findFirst.mockResolvedValue({ id: A }); db.articleTemplate.findFirst.mockResolvedValue({ id: A });
+  credentialReadiness.resolve.mockResolvedValue({
+    status: "admitted", credentialId: "credential-1", expiresAt: new Date("2099-01-01T00:00:00.000Z"), expiringSoon: false,
+  });
   batch.enqueue.mockImplementation(async (_db, _input, _now, _enabled, validate) => {
     await validate?.(db);
     return { taskId: B, taskStatus: "pending", duplicate: false };
@@ -74,6 +84,56 @@ describe("catalog batch mutation actions", () => {
     db.channelApp.findFirst.mockResolvedValueOnce(null);
     expect(await enqueuePromoLinkClaimAction({ selection: explicit, channelAccounts: { [A]: B }, requestId: "r6" })).toMatchObject({ ok: false, code: "channel_account_binding_invalid" });
     expect(db.channelApp.findFirst).toHaveBeenCalled();
+    expect(credentialReadiness.resolve).not.toHaveBeenCalled();
+  });
+  it("refuses to enqueue when the credential has never validated", async () => {
+    credentialReadiness.resolve.mockResolvedValueOnce({ status: "not_ready", code: "credential_never_validated", message: "Stored credential has never completed validation" });
+    expect(await enqueuePromoLinkClaimAction({ selection: explicit, channelAccounts: { [A]: B }, requestId: "cred-bad" }))
+      .toMatchObject({ ok: false, kind: "invalid_input", code: "credential_never_validated" });
+    expect(credentialReadiness.resolve).toHaveBeenCalledWith(db, B, expect.any(Date));
+    expect(batch.enqueue).toHaveBeenCalled();
+  });
+  it("refuses to enqueue when the credential is already expired", async () => {
+    credentialReadiness.resolve.mockResolvedValueOnce({ status: "not_ready", code: "credential_expired", message: "No usable active credential for this account" });
+    expect(await enqueuePromoLinkClaimAction({ selection: explicit, channelAccounts: { [A]: B }, requestId: "cred-expired" }))
+      .toMatchObject({ ok: false, kind: "invalid_input", code: "credential_expired" });
+  });
+  it("refuses to enqueue when the credential is missing", async () => {
+    credentialReadiness.resolve.mockResolvedValueOnce({ status: "not_ready", code: "credential_missing", message: "No usable active credential for this account" });
+    expect(await enqueuePromoLinkClaimAction({ selection: explicit, channelAccounts: { [A]: B }, requestId: "cred-missing" }))
+      .toMatchObject({ ok: false, kind: "invalid_input", code: "credential_missing" });
+  });
+  it("allows enqueue on a healthy credential and checks it for every configured account", async () => {
+    const result = await enqueuePromoLinkClaimAction({ selection: explicit, channelAccounts: { [A]: B }, requestId: "cred-healthy" });
+    expect(result).toEqual({ ok: true, data: { taskId: B, phase: "queued" } });
+    expect(credentialReadiness.resolve).toHaveBeenCalledWith(db, B, expect.any(Date));
+  });
+  it("admits the batch but records a warning when the credential is expiring soon", async () => {
+    const expiresAt = new Date("2026-09-16T12:00:00.000Z");
+    credentialReadiness.resolve.mockResolvedValueOnce({ status: "admitted", credentialId: "credential-1", expiresAt, expiringSoon: true });
+    const result = await enqueuePromoLinkClaimAction({ selection: explicit, channelAccounts: { [A]: B }, requestId: "cred-expiring" });
+    expect(result).toEqual({
+      ok: true,
+      data: { taskId: B, phase: "queued", credentialWarnings: [{ channelAppId: A, channelAccountId: B, expiresAt: expiresAt.toISOString() }] },
+    });
+    expect(db.operationAudit.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        action: "promo_link_claim.credential_expiring_soon",
+        entityId: B,
+        afterSnapshot: { warnings: [{ channelAppId: A, channelAccountId: B, expiresAt: expiresAt.toISOString() }] },
+      }),
+    }));
+  });
+  it("never records a credential-expiring warning on a replayed (duplicate) request", async () => {
+    // `mockResolvedValueOnce` short-circuits `batch.enqueue` entirely for this
+    // call — the real `enqueueCatalogBatch` never invokes `validateNewInput`
+    // on a replay either, so `credentialReadiness.resolve` is never reached.
+    batch.enqueue.mockResolvedValueOnce({ taskId: B, taskStatus: "pending", duplicate: true });
+    batch.summary.mockResolvedValueOnce({ taskId: B, phase: "queued", submittedCount: null, ineligibleCount: null });
+    const result = await enqueuePromoLinkClaimAction({ selection: explicit, channelAccounts: { [A]: B }, requestId: "cred-replay" });
+    expect(result).toEqual({ ok: true, data: { taskId: B, phase: "queued" } });
+    expect(credentialReadiness.resolve).not.toHaveBeenCalled();
+    expect(db.operationAudit.create).not.toHaveBeenCalled();
   });
   it("canonicalizes account ids before both validation and enqueue", async () => {
     await enqueuePromoLinkClaimAction({ selection: explicit, channelAccounts: { [` ${A} `]: ` ${B} ` }, requestId: "trimmed-account" });

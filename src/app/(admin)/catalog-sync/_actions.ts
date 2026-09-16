@@ -13,9 +13,11 @@ import {
   type CatalogBatchEnqueueResult,
   type CatalogBatchSummary,
   type CatalogSelection,
+  type PromoLinkClaimCredentialWarning,
 } from "@/domain/catalog-batch";
 import { CatalogBatchInputError, enqueueCatalogBatch } from "@/lib/tasks/catalog-batch";
 import { readCatalogBatchContext, readCatalogBatchSummary } from "@/server/catalog-batch";
+import { resolveClaimCredentialAdmission } from "@/lib/credentials/claim-readiness";
 import {
   isNovelCatalogSyncEnabled,
   isNovelCatalogSyncWriteAllowed,
@@ -433,15 +435,60 @@ function catalogBatchInputFailure(error: unknown): { readonly ok: false; readonl
 const CATALOG_BATCH_CONFIG_MAX_ENTRIES = 1_000;
 const CONFIG_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-async function validatePromoAccountConfiguration(db: Pick<typeof prisma, "channelApp">, accounts: Readonly<Record<string, string>>): Promise<boolean> {
+/**
+ * 2026-09-14 incident (see `worker/handlers/promo-link-claim-circuit-
+ * breaker.ts`'s module header for the full account): a 79,217-item batch was
+ * enqueued and run to ~44k permanently-failed items against a credential
+ * that had *never once* validated successfully. Nothing checked the
+ * credential before the batch existed at all.
+ *
+ * This now does two things per `(channelAppId, channelAccountId)` pair,
+ * inside the same transaction that creates the batch's `GenericTask` row
+ * (`enqueueCatalogBatch`'s `validateNewInput` hook) — so a batch can never
+ * be admitted against a binding this function would have rejected a moment
+ * later:
+ *
+ *  1. The pre-existing binding check (channel/app/account all active).
+ *  2. `resolveClaimCredentialAdmission` — a Web-safe, non-secret-column-only
+ *     check (never `encryptedSecret`; see its module header for why this is
+ *     deliberately *not* the same function the worker's deep decrypt/
+ *     validate step uses at actual claim time) — and refuses with the
+ *     credential's own typed code (`credential_missing`/`credential_expired`/
+ *     `credential_ambiguous`/`credential_never_validated`) rather than the
+ *     generic `channel_account_binding_invalid`, so an operator (and
+ *     `src/server/task-admin/safe-task-error.ts`'s label map) can tell "this
+ *     account/app binding is gone" apart from "this credential cannot be
+ *     used" — two different remediations. `credential_never_validated` alone
+ *     would have caught the 09-14 batch: that credential's `last_validated_at`
+ *     was empty when it was admitted.
+ *
+ * A credential that *is* usable right now but will expire before a batch
+ * this size could plausibly finish is not refused — refusing a legitimate,
+ * currently-valid credential outright would be its own foot-gun — but is
+ * collected into `warnings` so the caller can record *when* it expires
+ * rather than silently proceeding. See `CREDENTIAL_EXPIRY_WARNING_WINDOW_MS`
+ * (`src/lib/credentials/claim-readiness.ts`) for why that window is tied to
+ * the batch's own TTL rather than an arbitrary clock value.
+ */
+async function validatePromoAccountConfiguration(
+  db: Pick<typeof prisma, "channelApp" | "channelAccountCredential">,
+  accounts: Readonly<Record<string, string>>,
+  now: Date,
+): Promise<PromoLinkClaimCredentialWarning[]> {
+  const warnings: PromoLinkClaimCredentialWarning[] = [];
   for (const [channelAppId, accountId] of Object.entries(accounts)) {
     const binding = await db.channelApp.findFirst({ where: {
       id: channelAppId, status: "active",
       channel: { status: "active", channelAccounts: { some: { id: accountId, status: "active", deletedAt: null } } },
     }, select: { id: true } });
-    if (!binding) return false;
+    if (!binding) throw new CatalogBatchInputError("channel_account_binding_invalid");
+    const admission = await resolveClaimCredentialAdmission(db, accountId, now);
+    if (admission.status === "not_ready") throw new CatalogBatchInputError(admission.code);
+    if (admission.expiringSoon && admission.expiresAt) {
+      warnings.push({ channelAppId, channelAccountId: accountId, expiresAt: admission.expiresAt.toISOString() });
+    }
   }
-  return true;
+  return warnings;
 }
 
 export async function readCatalogBatchContextAction(input: {
@@ -484,16 +531,38 @@ export async function enqueuePromoLinkClaimAction(input: {
     }
     const normalizedAccounts = Object.fromEntries(Object.entries(input.channelAccounts).map(([k, v]) => [k.trim(), v.trim()]));
     const enabled = isPromoLinkClaimEnabled() && isPromoLinkClaimWriteAllowed();
+    const now = new Date();
+    // Reset on every attempt (`enqueueCatalogBatch`'s transaction can retry
+    // this callback from scratch on a transient DB error) rather than
+    // accumulated across attempts — the last attempt to actually run is the
+    // only one whose warnings should ever reach the caller.
+    let credentialWarnings: PromoLinkClaimCredentialWarning[] = [];
     const result = await enqueueCatalogBatch(prisma, {
       operation: "promo_claim", selection, actorId: fresh.identity.id, requestId: input.requestId,
       channelAccounts: normalizedAccounts,
-    }, new Date(), enabled, async (tx) => {
-      if (!await validatePromoAccountConfiguration(tx, normalizedAccounts)) {
-        throw new CatalogBatchInputError("channel_account_binding_invalid");
-      }
+    }, now, enabled, async (tx) => {
+      credentialWarnings = await validatePromoAccountConfiguration(tx, normalizedAccounts, now);
     });
+    if (!result.duplicate && credentialWarnings.length > 0) {
+      // Advisory only — the batch was already admitted above. Recorded as
+      // its own audit row (rather than blocking, or silently doing nothing)
+      // so an operator reviewing why a batch later ran into a
+      // freshly-expired credential can see it was flagged as expiring soon
+      // at admission time, with the exact expiry timestamp.
+      await prisma.operationAudit.create({ data: {
+        actorType: "admin", actorId: fresh.identity.id,
+        action: "promo_link_claim.credential_expiring_soon",
+        entityType: "GenericTask", entityId: result.taskId,
+        requestId: input.requestId,
+        afterSnapshot: { warnings: credentialWarnings },
+      } });
+    }
     const replaySummary = result.duplicate ? await readCatalogBatchSummary(prisma, result.taskId, fresh.identity.id) : null;
-    return { ok: true, data: { taskId: result.taskId, phase: replaySummary?.phase ?? (result.taskStatus === "disabled" ? "disabled" : "queued") } };
+    return { ok: true, data: {
+      taskId: result.taskId,
+      phase: replaySummary?.phase ?? (result.taskStatus === "disabled" ? "disabled" : "queued"),
+      ...(!result.duplicate && credentialWarnings.length > 0 ? { credentialWarnings } : {}),
+    } };
   } catch (error) {
     return catalogBatchInputFailure(error) ?? { ok: false, kind: "access_denied", envelope: toErrorEnvelope(error) };
   }
