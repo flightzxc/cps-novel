@@ -114,7 +114,7 @@ export type TaskSummaryDto = Readonly<{
     blockedReasonCounts: Readonly<Partial<Record<ArticleGenerateBlockedReason, number>>>;
   }>;
   catalogBatch?: Readonly<{
-    phase: "queued" | "disabled" | "materializing" | "executing" | "completed" | "completed_with_errors" | "failed" | "expired";
+    phase: "queued" | "disabled" | "paused" | "cancelled" | "materializing" | "executing" | "completed" | "completed_with_errors" | "failed" | "expired";
     submittedCount: number | null;
     ineligibleCount: number | null;
     alreadyLinkedCount?: number | null;
@@ -151,14 +151,19 @@ export type TaskSummaryDto = Readonly<{
   /**
    * X10 task control (pause/resume/abort): the task's own
    * `result.taskControl` marker (`src/lib/tasks/task-control.ts`), read and
-   * validated by `readTaskControlMarker` — never the raw `result` blob.
-   * Present only when `status === "disabled"` *and* the row actually carries
-   * this module's marker; a `disabled` row from any of this codebase's three
-   * pre-existing reasons (a legacy out-of-band flip, a feature-flag-off
-   * task, or a catalog-batch double-gate refusal) carries no marker and
-   * leaves this field absent, exactly like every other optional DTO field
-   * here. This is what lets the UI tell 人工暂停/人工中止/系统保护停止 apart
-   * from each other and from the earlier, unrelated meanings of `disabled`.
+   * validated by `readTaskControlMarker` — never the raw `result` blob, and
+   * never itself the source of truth for *what state* the row is in (that is
+   * the `status` field above — this DTO's `status` is the real, formal
+   * `paused`/`cancelled`/`disabled`/... column value). Present only when
+   * `status` is `"paused"`, `"cancelled"`, or `"disabled"` *and* the row
+   * actually carries this module's marker; a `disabled` row from any of this
+   * codebase's three pre-existing reasons (a legacy out-of-band flip, a
+   * feature-flag-off task, or a catalog-batch double-gate refusal) carries
+   * no marker and leaves this field absent, exactly like every other
+   * optional DTO field here. This is what lets the UI tell
+   * 人工暂停/人工中止/系统保护停止 apart from each other and from the
+   * earlier, unrelated meanings of `disabled` — audit/display detail only
+   * (who/why), layered on top of the formal status.
    */
   taskControl?: TaskControlMarker;
 }>;
@@ -412,9 +417,9 @@ type LockedParentRow = {
    * X10 task control: read only so `pauseTask`/`abortTask` can merge their
    * `taskControl` marker onto whatever `result` already holds
    * (`mergeTaskControlResult`) rather than clobbering a taskType's own
-   * business-result fields, and so `resumeTask` can confirm the row is
-   * actually carrying *our* `paused` marker rather than one of the
-   * pre-existing unmarked `disabled` meanings. Never itself exposed.
+   * business-result fields. Audit metadata only — `resumeTask`/`abortTask`
+   * decide eligibility off `status` (`"paused"`/`"cancelled"` are now real
+   * CHECK-enforced column values), never by reading this field.
    */
   result: Prisma.JsonValue | null;
 };
@@ -836,10 +841,14 @@ function taskSummary(row: TaskListRow, bookCounts?: CatalogBookCountsDto): TaskS
       : 0,
     blockedReasonCounts: isCatalogMaterialize ? blockedReasonCounts : {},
   } : undefined;
-  // X10 task control: only ever derivable off a `disabled` row, and only
-  // when the row actually carries the marker — see `TaskSummaryDto.taskControl`'s
-  // own doc comment for why an unmarked `disabled` row must stay absent here.
-  const taskControl = row.status === "disabled" ? readTaskControlMarker(row.result) : undefined;
+  // X10 task control: only ever derivable off a paused/cancelled/disabled
+  // row, and only when the row actually carries the marker — see
+  // `TaskSummaryDto.taskControl`'s own doc comment for why an unmarked
+  // `disabled` row must stay absent here. `status` itself (not this marker)
+  // is what determines the row is paused/cancelled in the first place.
+  const taskControl = row.status === "paused" || row.status === "cancelled" || row.status === "disabled"
+    ? readTaskControlMarker(row.result)
+    : undefined;
   return Object.freeze({
     family: row.family,
     taskId: row.task_id,
@@ -886,11 +895,22 @@ export async function listAdminTasks(
         has_error, created_at, result, params, error
       FROM (
         SELECT g.id AS task_id, g.task_type,
+          -- X10 task control: paused/cancelled win outright, same as
+          -- disabled below (an admin who paused/aborted this catalog_batch
+          -- parent must never see it silently recomputed from enumeration
+          -- state or child counts) -- see deriveCatalogBatchParentRow's own
+          -- comment (this file, below) and deriveCatalogBatchPhase's
+          -- (@/domain/catalog-batch) for the same guard applied to the
+          -- single-task detail read and the pure phase derivation.
           CASE WHEN g.task_type NOT IN (${parentBatchTypes}) THEN g.status
+            WHEN g.status = 'paused' THEN 'paused'
+            WHEN g.status = 'cancelled' THEN 'cancelled'
             WHEN g.status = 'disabled' THEN 'disabled'
             WHEN g.result->>'enumerationStatus' = 'expired' THEN 'completed_with_errors'
             WHEN g.result->>'enumerationStatus' IS DISTINCT FROM 'completed' THEN g.status
             WHEN COALESCE(c.active_count, 0) > 0 THEN 'processing'
+            WHEN COALESCE(c.cancelled_tasks, 0) > 0 THEN 'cancelled'
+            WHEN COALESCE(c.paused_tasks, 0) > 0 THEN 'paused'
             WHEN COALESCE(c.disabled_tasks, 0) > 0 THEN 'disabled'
             WHEN COALESCE(c.total_tasks, 0) > 0 AND c.hard_failed_tasks = c.total_tasks THEN 'failed'
             WHEN COALESCE(c.failed_tasks, 0) > 0 OR EXISTS (
@@ -917,6 +937,13 @@ export async function listAdminTasks(
             COUNT(*)::int total_tasks,
             COUNT(*) FILTER (WHERE status IN ('pending','processing'))::int active_count,
             COUNT(*) FILTER (WHERE status = 'disabled')::int disabled_tasks,
+            -- X10 task control: a child paused/aborted through the same
+            -- generic TaskControlButtons UI bubbles up the same way a
+            -- disabled child always has (see the CASE below) -- mirrors
+            -- deriveCatalogBatchPhase's own childStatuses handling
+            -- (@/domain/catalog-batch).
+            COUNT(*) FILTER (WHERE status = 'paused')::int paused_tasks,
+            COUNT(*) FILTER (WHERE status = 'cancelled')::int cancelled_tasks,
             COUNT(*) FILTER (WHERE status IN ('failed','completed_with_errors'))::int failed_tasks
             ,COUNT(*) FILTER (WHERE status = 'failed')::int hard_failed_tasks
           FROM generic_task child WHERE child.parent_task_id = g.id AND child.origin_task_id IS NULL
@@ -983,15 +1010,29 @@ async function deriveCatalogBatchParentRow(db: PrismaClient, row: TaskListRow): 
   const states = await db.genericTask.groupBy({ by: ["status"], where: { parentTaskId: row.task_id, originTaskId: null }, _count: { _all: true } });
   const active = states.some((state) => ["pending", "processing"].includes(state.status));
   const disabled = states.some((state) => state.status === "disabled");
+  // X10 task control: same reasoning as `disabled` above -- a child paused
+  // or aborted through the generic TaskControlButtons UI bubbles up the
+  // same way, mirroring deriveCatalogBatchPhase's (@/domain/catalog-batch)
+  // own childStatuses handling and this file's listAdminTasks raw-SQL
+  // sibling above.
+  const cancelledChild = states.some((state) => state.status === "cancelled");
+  const pausedChild = states.some((state) => state.status === "paused");
   const failed = states.some((state) => ["failed", "completed_with_errors"].includes(state.status));
   const allFailed = states.length > 0 && states.every((state) => state.status === "failed");
   const result = jsonPlainObject(row.result);
   const blocked = Boolean(result?.blockedReasonCounts && typeof result.blockedReasonCounts === "object"
     && Object.values(result.blockedReasonCounts as Record<string, unknown>).some((value) => typeof value === "number" && value > 0));
+  // X10 task control: `row.status` (the parent's own status) can itself now
+  // be `paused`/`cancelled` (an admin acted directly on the parent), not
+  // only `disabled` -- checked first, same as `disabled`, so an explicit
+  // pause/abort of the parent is never re-derived from enumeration state or
+  // child counts below.
   const status = row.status === "disabled" ? "disabled"
+    : row.status === "paused" ? "paused"
+    : row.status === "cancelled" ? "cancelled"
     : result?.enumerationStatus === "expired" ? "completed_with_errors"
     : result?.enumerationStatus !== "completed" ? row.status
-    : active ? "processing" : disabled ? "disabled" : allFailed ? "failed" : failed || blocked ? "completed_with_errors" : "completed";
+    : active ? "processing" : cancelledChild ? "cancelled" : pausedChild ? "paused" : disabled ? "disabled" : allFailed ? "failed" : failed || blocked ? "completed_with_errors" : "completed";
   return { ...row, status,
     total_count: result?.enumerationStatus === "completed" ? children._sum.totalCount ?? 0 : row.total_count,
     success_count: children._sum.successCount ?? 0, failed_count: children._sum.failedCount ?? 0,
@@ -1570,9 +1611,17 @@ export async function retryFailedTask(
 //     gap `reference_novel_frozen_task_backlog.md` names as the cause of
 //     95,860 orphaned `pending` rows here (a `disabled` parent whose items
 //     were never driven to any terminal state by anything).
-//  2. Every control action records *who* (an admin identity) or *what* (the
-//     system) acted, and why, via `src/lib/tasks/task-control.ts`'s marker
-//     — CPS has no such concept; its `paused`/`cancelled` are bare statuses.
+//  2. Every control action additionally records *who* (an admin identity)
+//     acted and why, via `src/lib/tasks/task-control.ts`'s marker — CPS has
+//     no such concept.
+//
+// X10 formal statuses (`20260916090000_x10_task_control_paused_cancelled`,
+// Owner-approved): pause writes `status = 'paused'`, abort writes `status =
+// 'cancelled'` — real CHECK-enforced column values, same as CPS's own bare
+// `paused`/`cancelled` statuses, not the interim `disabled` + JSON-marker
+// workaround this feature originally shipped with. Every eligibility check
+// below reads `status` directly; the marker is carried along purely as
+// audit metadata for the detail page's "who/why" line.
 //
 // `retryFailedTask` above already establishes this file's idempotency-replay
 // shape (a mutation request id that resolves to a prior committed
@@ -1585,7 +1634,7 @@ export async function retryFailedTask(
 export type TaskControlResult = Readonly<{
   family: TaskFamily;
   taskId: string;
-  status: "disabled" | "pending";
+  status: "paused" | "pending";
   wrote: boolean;
   auditId: string;
 }>;
@@ -1593,7 +1642,7 @@ export type TaskControlResult = Readonly<{
 export type AbortTaskResult = Readonly<{
   family: TaskFamily;
   taskId: string;
-  status: "disabled";
+  status: "cancelled";
   terminatedPendingItemCount: number;
   wrote: boolean;
   auditId: string;
@@ -1629,7 +1678,7 @@ function replayTaskControl(
   family: TaskFamily,
   taskId: string,
   reason: string | null,
-  expectedStatus: "disabled" | "pending",
+  expectedStatus: "paused" | "pending",
 ): TaskControlResult {
   const after = jsonObject(audit.afterSnapshot);
   if (
@@ -1657,7 +1706,7 @@ function replayAbort(
     || audit.entityId !== taskId
     || audit.taskType !== family
     || audit.reason !== reason
-    || after?.status !== "disabled"
+    || after?.status !== "cancelled"
     || typeof after.terminatedPendingItemCount !== "number"
   ) {
     throw new TaskAdminError("task_admin_idempotency_conflict", 409);
@@ -1665,7 +1714,7 @@ function replayAbort(
   return Object.freeze({
     family,
     taskId,
-    status: "disabled",
+    status: "cancelled",
     terminatedPendingItemCount: after.terminatedPendingItemCount,
     wrote: false,
     auditId: audit.id.toString(),
@@ -1711,7 +1760,7 @@ export async function pauseTask(
         if (!parent) throw new TaskAdminError("task_admin_not_found", 404);
 
         const prior = await committedAudit(tx, TASK_PAUSE_AUDIT_ACTION, input.requestId);
-        if (prior) return replayTaskControl(prior, context.identity.id, family, taskId, reason, "disabled");
+        if (prior) return replayTaskControl(prior, context.identity.id, family, taskId, reason, "paused");
 
         if (!["pending", "processing"].includes(parent.status)) {
           throw new TaskAdminError("task_admin_state_conflict", 409);
@@ -1724,7 +1773,10 @@ export async function pauseTask(
           actorId: context.identity.id,
           reason,
         };
-        const updateData = { status: "disabled" as const, result: mergeTaskControlResult(parent.result, marker) };
+        // X10 formal statuses: `status = 'paused'` is a real CHECK-enforced
+        // value now — the marker above is merged into `result` purely as
+        // audit metadata (who/why), never read back to decide state.
+        const updateData = { status: "paused" as const, result: mergeTaskControlResult(parent.result, marker) };
         const updated = family === "channel_sync"
           ? await tx.channelSyncTask.updateMany({ where: { id: taskId, status: { in: ["pending", "processing"] } }, data: updateData })
           : await tx.genericTask.updateMany({ where: { id: taskId, status: { in: ["pending", "processing"] } }, data: updateData });
@@ -1742,11 +1794,11 @@ export async function pauseTask(
             taskId,
             reason,
             beforeSnapshot: { status: parent.status },
-            afterSnapshot: { status: "disabled" },
+            afterSnapshot: { status: "paused" },
           },
           select: { id: true },
         });
-        return Object.freeze({ family, taskId, status: "disabled" as const, wrote: true, auditId: audit.id.toString() });
+        return Object.freeze({ family, taskId, status: "paused" as const, wrote: true, auditId: audit.id.toString() });
       }),
     { op: "task-admin.pauseTask", itemId: taskId, idempotencyKey: input.requestId },
   );
@@ -1756,10 +1808,11 @@ export async function pauseTask(
  * Resume — re-validates {@link checkResumePrecondition} first (inside the
  * same locked transaction, so a resume can never race a concurrent
  * pause/abort of the same task), then continues the same task's remaining
- * `pending` items. Only ever accepts a row this codebase's own pause put
- * into `disabled` (`readTaskControlMarker(...).kind === "paused"`) — never a
- * legacy out-of-band `disabled` row, a feature-flag-off `disabled` row, nor
- * an aborted/system-held one.
+ * `pending` items. Only ever accepts `status === "paused"` — checked
+ * directly on the real column, never by reading the `taskControl` marker —
+ * so a `disabled` row (a legacy out-of-band row, a feature-flag-off row, a
+ * catalog-batch double-gate refusal, or the worker's own system hold) and a
+ * `cancelled` (aborted) row are both refused, never resumed.
  *
  * Retry-failed is a deliberately separate concern (`retryFailedTask` above,
  * which only ever accepts `failed`/`completed_with_errors`) and is never
@@ -1796,8 +1849,14 @@ export async function resumeTask(
         const prior = await committedAudit(tx, TASK_RESUME_AUDIT_ACTION, input.requestId);
         if (prior) return replayTaskControl(prior, context.identity.id, family, taskId, null, "pending");
 
-        const marker = readTaskControlMarker(parent.result);
-        if (parent.status !== "disabled" || marker?.kind !== "paused") {
+        // X10 formal statuses: eligibility is decided off `status` alone —
+        // `"paused"` is a real CHECK-enforced column value now, so there is
+        // no longer any need (and, per this feature's own "never determine
+        // state from JSON" rule, no longer any license) to also inspect the
+        // `taskControl` marker here. A `disabled` row (system hold, a
+        // legacy/flag-off/double-gate reason) is never resumable through
+        // this path — only `paused` is.
+        if (parent.status !== "paused") {
           throw new TaskAdminError("task_admin_state_conflict", 409);
         }
 
@@ -1805,8 +1864,8 @@ export async function resumeTask(
 
         const updateData = { status: "pending" as const };
         const updated = family === "channel_sync"
-          ? await tx.channelSyncTask.updateMany({ where: { id: taskId, status: "disabled" }, data: updateData })
-          : await tx.genericTask.updateMany({ where: { id: taskId, status: "disabled" }, data: updateData });
+          ? await tx.channelSyncTask.updateMany({ where: { id: taskId, status: "paused" }, data: updateData })
+          : await tx.genericTask.updateMany({ where: { id: taskId, status: "paused" }, data: updateData });
         if (updated.count !== 1) throw new TaskAdminError("task_admin_concurrent_write", 409);
 
         const audit = await tx.operationAudit.create({
@@ -1820,7 +1879,7 @@ export async function resumeTask(
             taskType: family,
             taskId,
             reason: null,
-            beforeSnapshot: { status: "disabled" },
+            beforeSnapshot: { status: "paused" },
             afterSnapshot: { status: "pending" },
           },
           select: { id: true },
@@ -1838,9 +1897,10 @@ export async function resumeTask(
  * behind); whichever item is currently `processing` finishes normally;
  * history is never deleted or rewritten — every already-`success`/`failed`/
  * `skipped` item keeps its own outcome untouched, and this action never
- * revisits a task it has already aborted (the `disabled` + `aborted` marker
- * pins that state, and a second abort attempt on the same task is refused
- * by the eligibility check below, not silently accepted as a no-op).
+ * revisits a task it has already aborted (writing `status = "cancelled"` — a
+ * real CHECK-enforced value, not a marker — pins that state, and a second
+ * abort attempt on the same task is refused by the eligibility check below,
+ * not silently accepted as a no-op).
  */
 export async function abortTask(
   input: {
@@ -1875,9 +1935,13 @@ export async function abortTask(
         const prior = await committedAudit(tx, TASK_ABORT_AUDIT_ACTION, input.requestId);
         if (prior) return replayAbort(prior, context.identity.id, family, taskId, reason);
 
-        const priorMarker = readTaskControlMarker(parent.result);
-        const eligible = ["pending", "processing"].includes(parent.status)
-          || (parent.status === "disabled" && priorMarker?.kind === "paused");
+        // X10 formal statuses: eligibility is decided off `status` alone —
+        // `"paused"` is a real CHECK-enforced column value now, so aborting a
+        // paused task no longer needs to also inspect the `taskControl`
+        // marker (a `disabled` row — system hold, legacy/flag-off/
+        // double-gate — is never eligible here; only pending/processing/
+        // paused are).
+        const eligible = ["pending", "processing", "paused"].includes(parent.status);
         if (!eligible) throw new TaskAdminError("task_admin_state_conflict", 409);
 
         const { terminatedCount } = await terminatePendingTaskItems(tx, family, taskId, {
@@ -1892,7 +1956,10 @@ export async function abortTask(
           reason,
           terminatedPendingItemCount: terminatedCount,
         };
-        const updateData = { status: "disabled" as const, result: mergeTaskControlResult(parent.result, marker) };
+        // X10 formal statuses: `status = 'cancelled'` is a real CHECK-enforced
+        // value now — the marker above is merged into `result` purely as
+        // audit metadata (who/why), never read back to decide state.
+        const updateData = { status: "cancelled" as const, result: mergeTaskControlResult(parent.result, marker) };
         const updated = family === "channel_sync"
           ? await tx.channelSyncTask.updateMany({ where: { id: taskId, status: parent.status }, data: updateData })
           : await tx.genericTask.updateMany({ where: { id: taskId, status: parent.status }, data: updateData });
@@ -1910,14 +1977,14 @@ export async function abortTask(
             taskId,
             reason,
             beforeSnapshot: { status: parent.status },
-            afterSnapshot: { status: "disabled", terminatedPendingItemCount: terminatedCount },
+            afterSnapshot: { status: "cancelled", terminatedPendingItemCount: terminatedCount },
           },
           select: { id: true },
         });
         return Object.freeze({
           family,
           taskId,
-          status: "disabled" as const,
+          status: "cancelled" as const,
           terminatedPendingItemCount: terminatedCount,
           wrote: true,
           auditId: audit.id.toString(),

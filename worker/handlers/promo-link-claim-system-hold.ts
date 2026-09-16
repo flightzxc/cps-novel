@@ -87,14 +87,15 @@ export interface SystemHoldOutcome {
  * already held and reports `halted: false` as a no-op.
  *
  * Drives the parent out of the runnable set by setting `status = 'disabled'`
- * — `generic_task_status_check` (the real Postgres CHECK constraint from
- * `prisma/migrations/20260803090000_p1_initial_schema`) has no room for a
- * dedicated `'system_hold'` literal; see `src/lib/tasks/task-control.ts`'s
- * module header for why `'disabled'` plus a `result.taskControl` marker is
- * the correct, non-migration-requiring way to make this distinguishable
- * from every other reason a task can be `disabled`. `recomputeParentTask`
- * (`src/lib/tasks/store.ts`) has a matching guard that never recomputes a
- * `disabled` parent's status back out from item counts, so this halt is
+ * — deliberately unchanged by X10's formal `paused`/`cancelled` statuses
+ * (`20260916090000_x10_task_control_paused_cancelled`, scoped to the two
+ * *manual* operations only). `generic_task_status_check` has no dedicated
+ * `'system_hold'` literal; see `src/lib/tasks/task-control.ts`'s module
+ * header for why `'disabled'` plus a `result.taskControl` marker is still
+ * the mechanism here, making this distinguishable from every other reason a
+ * task can be `disabled`. `recomputeParentTask` (`src/lib/tasks/store.ts`)
+ * guards `'disabled'` (alongside `'paused'`/`'cancelled'`) as the first CASE
+ * branch — never recomputing it back out from item counts — so this halt is
  * durable even though this same finalize transaction goes on to also
  * finalize the triggering item and call `recomputeParentTask` afterward.
  */

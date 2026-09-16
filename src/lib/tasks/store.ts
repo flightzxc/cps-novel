@@ -221,15 +221,22 @@ export async function recomputeParentTask(
         total_count = c.total, success_count = c.success,
         failed_count = c.failed, skipped_count = c.skipped,
         status = CASE
-          -- Task control (pause/abort/system-hold, src/lib/tasks/task-control.ts):
-          -- a disabled parent is administratively out of the runnable set for
-          -- one of several reasons (a manual pause/abort, a worker system hold,
-          -- or one of the pre-existing out-of-band/flag-off reasons) and must
+          -- Task control (pause/abort/system-hold, src/lib/tasks/task-control.ts;
+          -- X10 formal statuses, 20260916090000_x10_task_control_paused_cancelled):
+          -- a paused/cancelled/disabled parent is administratively out of the
+          -- runnable set -- manual pause (status = 'paused'), manual abort
+          -- (status = 'cancelled'), a worker system hold, or one of the
+          -- pre-existing out-of-band/flag-off disabled reasons -- and must
           -- never be silently resurrected just because its in-flight item
           -- finished and other items are still pending (pause's whole point
-          -- is to leave those pending untouched). Checked first and wins
-          -- outright -- never recomputed from item counts.
-          WHEN t.status = 'disabled' THEN t.status
+          -- is to leave those pending untouched). disabled is guarded here
+          -- for more than defense: the worker's own system hold
+          -- (worker/handlers/promo-link-claim-system-hold.ts) still writes
+          -- it live, from inside the very same finalize transaction that
+          -- goes on to call this function for the triggering item -- an
+          -- unguarded disabled would be un-held on the spot. Checked first
+          -- and wins outright -- never recomputed from item counts.
+          WHEN t.status IN ('paused', 'cancelled', 'disabled') THEN t.status
           WHEN c.pending + c.processing > 0 THEN 'processing'
           WHEN c.failed > 0 AND c.success = 0 AND c.skipped = 0 THEN 'failed'
           WHEN c.failed > 0 THEN 'completed_with_errors'
@@ -259,9 +266,9 @@ export async function recomputeParentTask(
         status = CASE
           -- Task control (pause/abort/system-hold, src/lib/tasks/task-control.ts):
           -- same reasoning as channel_sync_task's own recompute above -- a
-          -- disabled parent must never be recomputed back into
-          -- processing/completed*/failed from item counts alone.
-          WHEN t.status = 'disabled' THEN t.status
+          -- paused/cancelled/disabled parent must never be recomputed back
+          -- into processing/completed*/failed from item counts alone.
+          WHEN t.status IN ('paused', 'cancelled', 'disabled') THEN t.status
           WHEN c.pending + c.processing > 0 THEN 'processing'
           -- Phase C: CatalogScan's own former recomputeParentTask branch
           -- treated an early, non-error stop (e.g. safety_limit) as

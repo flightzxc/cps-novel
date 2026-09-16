@@ -42,7 +42,7 @@ import {
  * implementation.
  */
 
-export type TaskProgressStatus = "pending" | "processing" | "completed" | "partial_failed" | "failed" | "paused";
+export type TaskProgressStatus = "pending" | "processing" | "completed" | "partial_failed" | "failed" | "paused" | "cancelled";
 
 export type TaskProgressItemError = Readonly<{
   id: string;
@@ -114,13 +114,23 @@ function iso(value: Date): string {
 /**
  * `completed_with_errors` -> `partial_failed` is the one mapping the work
  * order names explicitly (same bridge CPS's own `changdu-source-sync`
- * bridge handler already performs the other direction). `disabled` (task
- * retained, execution administratively prohibited -- see
- * `src/domain/database-statuses.ts`'s `TASK_STATUS_SEMANTICS`) maps to
- * CPS's `paused`: both mean "this task exists and is not going to progress
- * on its own", which is a closer semantic fit than `failed` (an attempted
- * and unsuccessful outcome) -- and the ported component already has a
- * dedicated `paused` badge/color, unused otherwise in this app.
+ * bridge handler already performs the other direction).
+ *
+ * `paused`/`cancelled` (X10 task control, formal statuses as of
+ * `20260916090000_x10_task_control_paused_cancelled`) are real column values
+ * now and pass through unchanged via the fallback below — the ported
+ * `ImportProgress` component (`src/features/admin-ui/import-progress.tsx`)
+ * already has dedicated badges/colors for both.
+ *
+ * `disabled` (task retained, execution administratively prohibited -- see
+ * `src/domain/database-statuses.ts`'s `TASK_STATUS_SEMANTICS`) still maps to
+ * CPS's `paused`: it covers the worker's own system hold plus every
+ * pre-existing legacy/flag-off/double-gate reason a row can be `disabled` --
+ * none of which are the same thing as this feature's own literal `paused`
+ * status, but all mean "this task exists and is not going to progress on its
+ * own", a closer semantic fit than `failed` (an attempted and unsuccessful
+ * outcome). Manual pause/abort no longer go through this bridge at all as of
+ * X10 -- they write `paused`/`cancelled` directly.
  */
 function mapStatus(raw: string): TaskProgressStatus {
   if (raw === "completed_with_errors") return "partial_failed";
@@ -250,15 +260,27 @@ async function loadGenericProgress(db: PrismaClient, taskId: string): Promise<Ta
     const result = task.result && typeof task.result === "object" && !Array.isArray(task.result) ? task.result as Record<string, unknown> : {};
     const active = states.some((s) => s.status === "pending" || s.status === "processing");
     const disabled = states.some((s) => s.status === "disabled");
+    // X10 task control: same reasoning as `disabled` above -- a child paused
+    // or aborted through the generic TaskControlButtons UI bubbles up the
+    // same way (mirrors `deriveCatalogBatchPhase`'s own childStatuses
+    // handling, @/domain/catalog-batch, and this app's other independent
+    // catalog-batch status recompute in service.ts).
+    const cancelledChild = states.some((s) => s.status === "cancelled");
+    const pausedChild = states.some((s) => s.status === "paused");
     const failed = states.some((s) => s.status === "failed" || s.status === "completed_with_errors");
     const blocked = result.blockedReasonCounts && typeof result.blockedReasonCounts === "object"
       && Object.values(result.blockedReasonCounts as Record<string, unknown>).some((v) => typeof v === "number" && v > 0);
     childStatuses = states.flatMap((state) => Array.from({ length: state._count._all }, () => state.status));
     task = { ...task,
+      // X10 task control: the parent's own status can itself now be
+      // `paused`/`cancelled` (an admin acted directly on the parent), not
+      // only `disabled` -- checked first, same as `disabled`.
       status: task.status === "disabled" ? "disabled"
+        : task.status === "paused" ? "paused"
+        : task.status === "cancelled" ? "cancelled"
         : result.enumerationStatus === "expired" ? "completed_with_errors"
         : result.enumerationStatus !== "completed" ? task.status
-        : active ? "processing" : disabled ? "disabled"
+        : active ? "processing" : cancelledChild ? "cancelled" : pausedChild ? "paused" : disabled ? "disabled"
         : states.length > 0 && states.every((s) => s.status === "failed") ? "failed"
         : failed || blocked ? "completed_with_errors" : "completed",
       totalCount: result.enumerationStatus === "completed" ? sum._sum.totalCount ?? 0 : task.totalCount,

@@ -240,7 +240,6 @@ export default async function TaskDetailPage({
               family={detail.family}
               taskId={detail.taskId}
               status={detail.status}
-              taskControl={detail.taskControl}
             />
             {isRetryableTaskStatus(detail.status) && !detail.catalogBatch && detail.failedCount > 0 && (
               <RetryFailedButton family={detail.family} taskId={detail.taskId} failedCount={detail.failedCount} />

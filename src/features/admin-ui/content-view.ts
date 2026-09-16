@@ -232,6 +232,10 @@ const TASK_STATUS_LABELS: Readonly<Record<string, string>> = Object.freeze({
   completed_with_errors: "部分失败",
   failed: "失败",
   disabled: "已停用",
+  // X10 task control (pause/resume/abort, formal statuses): additive next to
+  // "disabled" above.
+  paused: "已暂停",
+  cancelled: "已中止",
   success: "成功",
   skipped: "已跳过",
 });

@@ -12,7 +12,19 @@ export const LABEL_KINDS = ["series_type", "recommend", "language", "agency"] as
 export const TASK_MODES = ["dry_run", "apply"] as const;
 export const PROMO_LINK_STATUSES = ["pending", "fetched", "failed", "registered_disabled"] as const;
 export const PROMO_LINK_ORIGINS = ["upstream_existing", "claimed"] as const;
-export const TASK_STATUSES = ["pending", "processing", "completed", "completed_with_errors", "failed", "disabled"] as const;
+/**
+ * X10 task control (pause/resume/abort, `20260916090000_x10_task_control_paused_cancelled`):
+ * `paused`/`cancelled` are real CHECK-enforced values, not a `disabled` +
+ * JSON-marker workaround — `pauseTask`/`abortTask`
+ * (`src/server/task-admin/service.ts`) write them directly, and every reader
+ * (`recomputeParentTask`'s guard, the admin UI) determines state off this
+ * column alone. `disabled` stays in the set unchanged: the worker's own
+ * first-occurrence system hold (`worker/handlers/promo-link-claim-system-hold.ts`)
+ * deliberately keeps writing it, and the 271 pre-existing legacy rows plus
+ * the feature-flag-off/catalog-batch-double-gate `disabled` meanings are
+ * untouched by this migration.
+ */
+export const TASK_STATUSES = ["pending", "processing", "completed", "completed_with_errors", "failed", "disabled", "paused", "cancelled"] as const;
 // Phase C: CATALOG_ITEM_STATUSES (pending|processing|success|failed, no
 // skipped) removed -- it described CatalogScanTaskItem's own lifecycle,
 // which is dropped. GenericTaskItem (including taskType='catalog_scan' rows)
@@ -124,7 +136,9 @@ const TASK_STATUS_SEMANTICS = {
   completed: "All required items reached successful terminal outcomes.",
   completed_with_errors: "Task reached terminal state with both accepted and failed or skipped outcomes.",
   failed: "Task reached a terminal failure and will not continue automatically under this run.",
-  disabled: "Task is retained but execution is administratively prohibited.",
+  disabled: "Task is retained but execution is administratively prohibited (legacy out-of-band flips, feature-flag-off-at-creation, catalog-batch double-gate refusals, and the worker's own first-occurrence system hold — never written by manual pause/abort as of X10).",
+  paused: "Task was manually paused: leasing of new items stopped, every still-pending item is left exactly pending, and any in-flight item finishes normally. Resumable.",
+  cancelled: "Task was manually aborted: irreversible, every still-pending item was terminated (skipped), and any in-flight item finished normally. History (already success/failed/skipped items) is never rewritten.",
 } as const;
 
 const TASK_ITEM_STATUS_SEMANTICS = {

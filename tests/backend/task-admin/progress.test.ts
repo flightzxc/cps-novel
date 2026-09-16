@@ -120,6 +120,24 @@ describe("getAdminTaskProgress (C-6 CPS-parity flat progress read)", () => {
     expect(result.status).toBe("paused");
   });
 
+  it("passes the literal 'paused' status straight through (X10 formal status, not the disabled bridge)", async () => {
+    const context = await readContext();
+    const db = fakeGenericDb({ task: { ...baseGenericTask, status: "paused" } });
+
+    const result = await getAdminTaskProgress(db, context, { taskId: GENERIC_TASK_ID });
+
+    expect(result.status).toBe("paused");
+  });
+
+  it("passes the literal 'cancelled' status straight through (X10 formal status)", async () => {
+    const context = await readContext();
+    const db = fakeGenericDb({ task: { ...baseGenericTask, status: "cancelled" } });
+
+    const result = await getAdminTaskProgress(db, context, { taskId: GENERIC_TASK_ID });
+
+    expect(result.status).toBe("cancelled");
+  });
+
   it("projects a known task error to safe Chinese copy without using its message", async () => {
     const context = await readContext();
     const db = fakeGenericDb({

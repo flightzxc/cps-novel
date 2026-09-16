@@ -64,7 +64,19 @@ export function normalizeCatalogSelection(selection: CatalogSelection): Normaliz
   });
 }
 
-export type CatalogBatchPhase = "queued" | "disabled" | "materializing" | "executing" | "completed" | "completed_with_errors" | "failed" | "expired";
+/**
+ * X10 task control (pause/resume/abort): `paused`/`cancelled` are additive
+ * next to `disabled` — a catalog_batch parent (or one of its children) is
+ * just as reachable through the generic `TaskControlButtons` UI as any other
+ * task, and `pauseTask`/`abortTask` (`src/server/task-admin/service.ts`) now
+ * write these two formal statuses instead of `disabled` for that. Guarded
+ * the same way `disabled` always was: checked before the
+ * `enumerationStatus`-driven aggregation below, so an explicitly paused/
+ * aborted batch is never silently re-derived back into `materializing`/
+ * `executing`/`completed*` from its enumeration state or its children's
+ * counts.
+ */
+export type CatalogBatchPhase = "queued" | "disabled" | "paused" | "cancelled" | "materializing" | "executing" | "completed" | "completed_with_errors" | "failed" | "expired";
 
 export function deriveCatalogBatchPhase(input: {
   parentStatus: string;
@@ -73,6 +85,8 @@ export function deriveCatalogBatchPhase(input: {
   blockedCount?: number;
 }): CatalogBatchPhase {
   if (input.parentStatus === "disabled") return "disabled";
+  if (input.parentStatus === "paused") return "paused";
+  if (input.parentStatus === "cancelled") return "cancelled";
   if (input.enumerationStatus === "expired") return "expired";
   if (input.enumerationStatus !== "completed") {
     if (input.parentStatus === "failed" || input.parentStatus === "completed_with_errors") return "failed";
@@ -80,6 +94,8 @@ export function deriveCatalogBatchPhase(input: {
   }
   const children = input.childStatuses ?? [];
   if (children.some((status) => status === "pending" || status === "processing")) return "executing";
+  if (children.some((status) => status === "cancelled")) return "cancelled";
+  if (children.some((status) => status === "paused")) return "paused";
   if (children.some((status) => status === "disabled")) return "disabled";
   if (input.parentStatus === "processing") return "executing";
   if (input.parentStatus === "failed") return "failed";

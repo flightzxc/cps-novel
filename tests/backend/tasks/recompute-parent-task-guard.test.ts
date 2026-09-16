@@ -38,18 +38,20 @@ function fakeTx() {
   return { tx, executeRawCalls, queryRawCalls };
 }
 
-describe("recomputeParentTask — disabled-parent guard", () => {
-  it("generic_task: never recomputes status away from 'disabled' from item counts", async () => {
+const GUARD = "WHEN t.status IN ('paused', 'cancelled', 'disabled') THEN t.status";
+
+describe("recomputeParentTask — paused/cancelled/disabled-parent guard", () => {
+  it("generic_task: never recomputes status away from 'paused'/'cancelled'/'disabled' from item counts", async () => {
     const { tx, executeRawCalls } = fakeTx();
     await recomputeParentTask(tx, "generic", "task-1");
     expect(executeRawCalls).toHaveLength(1);
-    expect(executeRawCalls[0]!.sql).toContain("WHEN t.status = 'disabled' THEN t.status");
-    // The guard must be the FIRST branch of the CASE — a disabled parent
-    // must win outright, never be shadowed by a later, more specific branch
-    // (e.g. the article.generate.v1 blockedReasonCounts check) that could
-    // otherwise fire first for some taskTypes.
+    expect(executeRawCalls[0]!.sql).toContain(GUARD);
+    // The guard must be the FIRST branch of the CASE — a paused/cancelled/
+    // disabled parent must win outright, never be shadowed by a later, more
+    // specific branch (e.g. the article.generate.v1 blockedReasonCounts
+    // check) that could otherwise fire first for some taskTypes.
     const caseIndex = executeRawCalls[0]!.sql.indexOf("CASE");
-    const guardIndex = executeRawCalls[0]!.sql.indexOf("WHEN t.status = 'disabled'");
+    const guardIndex = executeRawCalls[0]!.sql.indexOf(GUARD);
     const nextWhenIndex = executeRawCalls[0]!.sql.indexOf("WHEN", guardIndex + 1);
     expect(guardIndex).toBeGreaterThan(caseIndex);
     expect(guardIndex).toBeLessThan(nextWhenIndex);
@@ -60,9 +62,9 @@ describe("recomputeParentTask — disabled-parent guard", () => {
     await recomputeParentTask(tx, "channel_sync", "task-1");
     expect(executeRawCalls).toHaveLength(1);
     const sql = executeRawCalls[0]!.sql;
-    expect(sql).toContain("WHEN t.status = 'disabled' THEN t.status");
+    expect(sql).toContain(GUARD);
     const caseIndex = sql.indexOf("CASE");
-    const guardIndex = sql.indexOf("WHEN t.status = 'disabled'");
+    const guardIndex = sql.indexOf(GUARD);
     const nextWhenIndex = sql.indexOf("WHEN", guardIndex + 1);
     expect(guardIndex).toBeGreaterThan(caseIndex);
     expect(guardIndex).toBeLessThan(nextWhenIndex);

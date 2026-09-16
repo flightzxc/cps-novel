@@ -61,8 +61,8 @@ describe("X10 task control — pause", () => {
         { db: fake.asPrismaClient(), identities: stores, sessions: stores, now: NOW },
       );
 
-      expect(result).toMatchObject({ family, taskId: TASK_ID, status: "disabled", wrote: true });
-      expect(fake.parents.get(family)).toMatchObject({ status: "disabled" });
+      expect(result).toMatchObject({ family, taskId: TASK_ID, status: "paused", wrote: true });
+      expect(fake.parents.get(family)).toMatchObject({ status: "paused" });
       expect(fake.itemUpdateCalls.size).toBe(0);
       expect(fake.items.get(family)).toEqual(itemsBefore); // pending items left exactly as pending — none touched at all
       expect(fake.audits[0]).toMatchObject({
@@ -98,7 +98,7 @@ describe("X10 task control — pause", () => {
     const first = await pauseTask(input, dependencies);
     const replay = await pauseTask(input, dependencies);
     expect(first.wrote).toBe(true);
-    expect(replay).toMatchObject({ wrote: false, auditId: first.auditId, status: "disabled" });
+    expect(replay).toMatchObject({ wrote: false, auditId: first.auditId, status: "paused" });
     expect(fake.parentUpdateCalls.get("generic")).toBe(1);
   });
 });
@@ -110,7 +110,7 @@ describe("X10 task control — resume", () => {
     const ticket = await issueTaskAuthorization(stores, { token: admin.token, pathname: "/api/admin/tasks/resume" });
     const fake = new TaskAdminFakeDb();
     const parent = fake.parents.get("generic")!;
-    parent.status = "disabled";
+    parent.status = "paused";
     parent.taskType = "catalog_scan";
     parent.result = mergeTaskControlResult(parent.result, pausedMarker(admin.identity.id));
 
@@ -123,13 +123,32 @@ describe("X10 task control — resume", () => {
     expect(fake.audits[0]).toMatchObject({ action: TASK_RESUME_AUDIT_ACTION, actorId: admin.identity.id });
   });
 
+  it("resumes off the formal 'paused' status alone, even with no taskControl marker at all (state determination never reads the JSON marker)", async () => {
+    const stores = newStores();
+    const admin = seedTaskAdmin(stores);
+    const ticket = await issueTaskAuthorization(stores, { token: admin.token, pathname: "/api/admin/tasks/resume" });
+    const fake = new TaskAdminFakeDb();
+    const parent = fake.parents.get("generic")!;
+    parent.status = "paused";
+    parent.taskType = "catalog_scan";
+    // Deliberately no marker merged in at all — proves eligibility is
+    // decided off `status` alone, never by reading `result.taskControl`.
+
+    const result = await resumeTask(
+      { ...ticket, family: "generic", taskId: TASK_ID },
+      { db: fake.asPrismaClient(), identities: stores, sessions: stores, now: NOW },
+    );
+    expect(result).toMatchObject({ status: "pending", wrote: true });
+    expect(fake.parents.get("generic")!.status).toBe("pending");
+  });
+
   it("re-validates the promo_link.claim.v1 credential precondition and resumes once it is admissible", async () => {
     const stores = newStores();
     const admin = seedTaskAdmin(stores);
     const ticket = await issueTaskAuthorization(stores, { token: admin.token, pathname: "/api/admin/tasks/resume" });
     const fake = new TaskAdminFakeDb(); // default credentials array already has one admissible row
     const parent = fake.parents.get("generic")!;
-    parent.status = "disabled";
+    parent.status = "paused";
     parent.taskType = PROMO_LINK_CLAIM_TASK_TYPE;
     parent.result = mergeTaskControlResult(parent.result, pausedMarker(admin.identity.id));
 
@@ -148,7 +167,7 @@ describe("X10 task control — resume", () => {
     const fake = new TaskAdminFakeDb();
     fake.credentials.length = 0; // no usable credential
     const parent = fake.parents.get("generic")!;
-    parent.status = "disabled";
+    parent.status = "paused";
     parent.taskType = PROMO_LINK_CLAIM_TASK_TYPE;
     parent.result = mergeTaskControlResult(parent.result, pausedMarker(admin.identity.id));
 
@@ -156,17 +175,31 @@ describe("X10 task control — resume", () => {
       { ...ticket, family: "generic", taskId: TASK_ID },
       { db: fake.asPrismaClient(), identities: stores, sessions: stores, now: NOW },
     )).rejects.toMatchObject({ code: "task_admin_precondition_failed", status: 409 });
-    expect(fake.parents.get("generic")!.status).toBe("disabled"); // never flipped
+    expect(fake.parents.get("generic")!.status).toBe("paused"); // never flipped
     expect(fake.parentUpdateCalls.size).toBe(0);
     expect(fake.audits).toHaveLength(0);
   });
 
-  it("refuses to resume a disabled row that does not carry our own 'paused' marker (legacy/other disabled reasons)", async () => {
+  it("refuses to resume a 'disabled' row (system hold / legacy / flag-off / double-gate) — only 'paused' is resumable", async () => {
     const stores = newStores();
     const admin = seedTaskAdmin(stores);
     const ticket = await issueTaskAuthorization(stores, { token: admin.token, pathname: "/api/admin/tasks/resume" });
     const fake = new TaskAdminFakeDb();
-    fake.parents.get("generic")!.status = "disabled"; // no taskControl marker at all — e.g. one of the 271 legacy rows
+    fake.parents.get("generic")!.status = "disabled"; // e.g. one of the 271 legacy rows, or a live system hold
+    await expect(resumeTask(
+      { ...ticket, family: "generic", taskId: TASK_ID },
+      { db: fake.asPrismaClient(), identities: stores, sessions: stores, now: NOW },
+    )).rejects.toMatchObject({ code: "task_admin_state_conflict", status: 409 });
+  });
+
+  it("refuses to resume a 'cancelled' (aborted) task", async () => {
+    const stores = newStores();
+    const admin = seedTaskAdmin(stores);
+    const ticket = await issueTaskAuthorization(stores, { token: admin.token, pathname: "/api/admin/tasks/resume" });
+    const fake = new TaskAdminFakeDb();
+    const parent = fake.parents.get("generic")!;
+    parent.status = "cancelled";
+    parent.result = mergeTaskControlResult(parent.result, { kind: "aborted", source: "manual", at: NOW.toISOString(), actorId: admin.identity.id, reason: null });
     await expect(resumeTask(
       { ...ticket, family: "generic", taskId: TASK_ID },
       { db: fake.asPrismaClient(), identities: stores, sessions: stores, now: NOW },
@@ -192,8 +225,8 @@ describe("X10 task control — abort", () => {
         { db: fake.asPrismaClient(), identities: stores, sessions: stores, now: NOW },
       );
 
-      expect(result).toMatchObject({ family, taskId: TASK_ID, status: "disabled", terminatedPendingItemCount: 1, wrote: true });
-      expect(fake.parents.get(family)!.status).toBe("disabled");
+      expect(result).toMatchObject({ family, taskId: TASK_ID, status: "cancelled", terminatedPendingItemCount: 1, wrote: true });
+      expect(fake.parents.get(family)!.status).toBe("cancelled");
 
       const after = fake.items.get(family)!;
       expect(after.find((row) => row.id === "60000000-0000-4000-8000-000000000099")).toMatchObject({
@@ -223,7 +256,7 @@ describe("X10 task control — abort", () => {
 
     const firstTicket = await issueTaskAuthorization(stores, { token: admin.token, pathname: "/api/admin/tasks/abort" });
     await abortTask({ ...firstTicket, family: "generic", taskId: TASK_ID }, dependencies());
-    expect(fake.parents.get("generic")!.status).toBe("disabled");
+    expect(fake.parents.get("generic")!.status).toBe("cancelled");
 
     const secondTicket = await issueTaskAuthorization(stores, { token: admin.token, pathname: "/api/admin/tasks/abort" });
     await expect(abortTask({ ...secondTicket, family: "generic", taskId: TASK_ID }, dependencies()))
@@ -246,20 +279,32 @@ describe("X10 task control — abort", () => {
     expect(fake.audits).toHaveLength(1);
   });
 
-  it("can abort a manually-paused task (disabled + paused marker), not only an active one", async () => {
+  it("can abort a manually-paused task (status='paused'), not only an active one", async () => {
     const stores = newStores();
     const admin = seedTaskAdmin(stores);
     const ticket = await issueTaskAuthorization(stores, { token: admin.token, pathname: "/api/admin/tasks/abort" });
     const fake = new TaskAdminFakeDb();
     const parent = fake.parents.get("generic")!;
-    parent.status = "disabled";
+    parent.status = "paused";
     parent.result = mergeTaskControlResult(parent.result, pausedMarker(admin.identity.id));
 
     const result = await abortTask(
       { ...ticket, family: "generic", taskId: TASK_ID },
       { db: fake.asPrismaClient(), identities: stores, sessions: stores, now: NOW },
     );
-    expect(result).toMatchObject({ status: "disabled", wrote: true });
+    expect(result).toMatchObject({ status: "cancelled", wrote: true });
+  });
+
+  it("refuses to abort a 'disabled' task (system hold / legacy / flag-off / double-gate) — only pending/processing/paused are eligible", async () => {
+    const stores = newStores();
+    const admin = seedTaskAdmin(stores);
+    const ticket = await issueTaskAuthorization(stores, { token: admin.token, pathname: "/api/admin/tasks/abort" });
+    const fake = new TaskAdminFakeDb();
+    fake.parents.get("generic")!.status = "disabled"; // e.g. a live worker system hold
+    await expect(abortTask(
+      { ...ticket, family: "generic", taskId: TASK_ID },
+      { db: fake.asPrismaClient(), identities: stores, sessions: stores, now: NOW },
+    )).rejects.toMatchObject({ code: "task_admin_state_conflict", status: 409 });
   });
 
   it("refuses to abort a task in a genuinely terminal state (nothing left to stop)", async () => {

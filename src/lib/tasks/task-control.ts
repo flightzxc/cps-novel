@@ -1,31 +1,41 @@
 /**
  * Administrative task-control marker for `GenericTask`/`ChannelSyncTask`.
  *
- * `generic_task_status_check`/`channel_sync_task_status_check` (both from
- * `prisma/migrations/20260803090000_p1_initial_schema/migration.sql`) are
- * real Postgres CHECK constraints — `status` may only ever be one of
- * `'pending' | 'processing' | 'completed' | 'completed_with_errors' |
- * 'failed' | 'disabled'` (pinned again by
- * `tests/integration/tasks/p1-13-postgres-acceptance.test.ts`). There is no
- * room in that closed set for a literal `'paused'`/`'aborted'`/
- * `'system_hold'` value without a schema migration, which this work is
- * explicitly forbidden from adding.
+ * X10 formal statuses (`20260916090000_x10_task_control_paused_cancelled`,
+ * Owner-approved): `generic_task_status_check`/`channel_sync_task_status_check`
+ * now allow `'paused'`/`'cancelled'` as real values alongside the original
+ * six (pinned by `tests/integration/tasks/p1-13-postgres-acceptance.test.ts`).
+ * Manual pause writes `status = 'paused'`; manual abort writes `status =
+ * 'cancelled'`. **State is always read off that column, never off this
+ * module's marker** — the admin service's `resumeTask`/`abortTask`
+ * eligibility checks, the tasks-list/detail UI, and
+ * `recomputeParentTask`'s guard (`src/lib/tasks/store.ts`) all key on
+ * `status` directly.
  *
- * `'disabled'` — "Task is retained but execution is administratively
- * prohibited" (`src/domain/database-statuses.ts`) — is already the row's
- * only "administratively pulled out of the runnable set" bucket, and is
- * already reused for three distinct existing meanings before this module
- * ever existed: (1) the 271 legacy rows an operator flipped out-of-band with
- * no product support; (2) a `promo_link.claim.v1` task created directly
- * `disabled` because its write feature flag was off at creation time
- * (`src/lib/tasks/promo-link-claim.ts`); (3) a `catalog_batch`-family child
- * task disabled by the double credential/capability gate. None of the three
- * ever carries this module's marker, so "marker present" is a safe,
- * additive fourth meaning that never collides with the first three — an
- * absent marker on a `disabled` row is exactly one of those three earlier
- * cases and must never be treated as ours (see `reference_novel_..._sop.md`/
- * this task family's own delivery notes for the explicit instruction to
- * never retrofit the 271 legacy rows).
+ * This module's marker is retained purely as **audit metadata** — who
+ * (`actorId`) did what and why (`reason`), and when (`at`) — for display on
+ * the task-detail page. It must never again be the thing that decides *what
+ * state* a row is in for pause/abort; see `readTaskControlMarker`'s own doc
+ * comment on why it is still useful to read (system hold's own
+ * disambiguation, described next), not for deciding pause/abort eligibility.
+ *
+ * One case still relies on the pre-migration `'disabled'` + marker shape,
+ * unchanged and deliberately out of this migration's scope: the worker's own
+ * first-occurrence system hold (`worker/handlers/promo-link-claim-system-hold.ts`)
+ * still writes `status = 'disabled'` with `kind: 'system_hold'`, because
+ * `'disabled'` is *also* reused for three older, unrelated meanings that
+ * predate this module: (1) the 271 legacy rows an operator flipped
+ * out-of-band with no product support; (2) a `promo_link.claim.v1` task
+ * created directly `disabled` because its write feature flag was off at
+ * creation time (`src/lib/tasks/promo-link-claim.ts`); (3) a
+ * `catalog_batch`-family child task disabled by the double
+ * credential/capability gate. None of those three ever carries this
+ * module's marker, so "marker present with `kind: 'system_hold'`" stays a
+ * safe, additive fourth meaning on `disabled` rows that never collides with
+ * the first three — an absent marker on a `disabled` row is exactly one of
+ * those three earlier cases and must never be treated as ours (see
+ * `reference_novel_..._sop.md`/this task family's own delivery notes for the
+ * explicit instruction to never retrofit the 271 legacy rows).
  *
  * This module is deliberately pure (no DB, no Prisma import beyond the
  * `Json` value types) so it can be imported from the worker (system hold),
@@ -124,7 +134,19 @@ export function mergeTaskControlResult(
   return { ...base, [RESULT_KEY]: { ...marker } } as unknown as Prisma.InputJsonObject;
 }
 
-/** True exactly when the row's own marker says an operator paused it (resumable). */
+/**
+ * True exactly when the row's own marker says `kind: "paused"`. Audit/display
+ * only — as of X10's formal statuses, nothing in this codebase uses this to
+ * decide whether a row is actually resumable; that question is `status ===
+ * "paused"` (a real CHECK-enforced column value), checked directly by the
+ * admin service's `resumeTask`/`abortTask` and never by reading this marker.
+ * Kept for the one case where the marker is still the
+ * only way to disambiguate a `disabled` row's meaning — this reads the same
+ * way for a `disabled` row the worker's system hold marked `kind:
+ * "system_hold"`, so callers wanting "specifically an operator's pause" over
+ * "any disabled reason" still have this available — never as a substitute
+ * for the `status` column.
+ */
 export function isPausedByTaskControl(result: unknown): boolean {
   return readTaskControlMarker(result)?.kind === "paused";
 }

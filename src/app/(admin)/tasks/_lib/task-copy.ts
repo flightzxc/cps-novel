@@ -94,6 +94,10 @@ export function isTerminalTaskStatus(status: string): boolean {
 const CATALOG_BATCH_PHASE_LABELS: Readonly<Record<string, string>> = Object.freeze({
   queued: "等待入队",
   disabled: "已禁用",
+  // X10 task control: additive next to "disabled" above — see
+  // `deriveCatalogBatchPhase`'s own doc comment (`@/domain/catalog-batch`).
+  paused: "已暂停",
+  cancelled: "已中止",
   materializing: "正在统计",
   executing: "正在执行",
   completed: "已完成",
@@ -201,12 +205,15 @@ export const LIST_LIMIT_NOTE =
  * (`TASK_FAMILIES`/`RETRYABLE_PARENT_STATUSES` above) rather than reaching
  * into server internals, and this is the same discipline.
  *
- * Only ever meaningful when the task's own `status === "disabled"` *and*
- * this field is present — `src/server/task-admin/service.ts`'s `taskSummary`
- * only ever populates it in that case, leaving a `disabled` row from any of
- * this codebase's three pre-existing, unrelated reasons (a legacy
- * out-of-band flip, a feature-flag-off task, or a catalog-batch double-gate
- * refusal) with this field absent.
+ * Only ever meaningful when the task's own `status` is `"paused"`,
+ * `"cancelled"`, or `"disabled"` *and* this field is present —
+ * `src/server/task-admin/service.ts`'s `taskSummary` only ever populates it
+ * in that case, leaving a `disabled` row from any of this codebase's three
+ * pre-existing, unrelated reasons (a legacy out-of-band flip, a
+ * feature-flag-off task, or a catalog-batch double-gate refusal) with this
+ * field absent. `kind` is audit/display metadata only (who/why) — it is
+ * never what decides whether a row is paused/cancelled; that is the `status`
+ * column itself, read directly by `TaskControlButtons`.
  */
 export type TaskControlKind = "paused" | "aborted" | "system_hold";
 export type TaskControlSummary = Readonly<{

@@ -85,10 +85,13 @@ const frozenChecks: Record<string, readonly string[]> = {
   // Phase C: catalog_scan_task(_item) dropped -- CatalogScan is now
   // GenericTask(taskType='catalog_scan'), covered by the generic_task_*
   // entries below.
-  channel_sync_task_status_check: ["pending", "processing", "completed", "completed_with_errors", "failed", "disabled"],
+  // X10 task control (`20260916090000_x10_task_control_paused_cancelled`):
+  // "paused"/"cancelled" added alongside the original six -- see
+  // src/lib/tasks/task-control.ts's module doc comment.
+  channel_sync_task_status_check: ["pending", "processing", "completed", "completed_with_errors", "failed", "disabled", "paused", "cancelled"],
   channel_sync_task_mode_check: ["dry_run", "apply"],
   channel_sync_task_item_status_check: ["pending", "processing", "success", "skipped", "failed"],
-  generic_task_status_check: ["pending", "processing", "completed", "completed_with_errors", "failed", "disabled"],
+  generic_task_status_check: ["pending", "processing", "completed", "completed_with_errors", "failed", "disabled", "paused", "cancelled"],
   generic_task_mode_check: ["dry_run", "apply"],
   generic_task_item_status_check: ["pending", "processing", "success", "skipped", "failed"],
   side_effect_intent_status_check: ["prepared", "confirmed", "failed", "claim_retry_blocked", "manual_review_required"],

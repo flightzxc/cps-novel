@@ -7,9 +7,20 @@ describe("catalog batch aggregate phase", () => {
     [{ parentStatus: "processing" }, "materializing"],
     [{ parentStatus: "failed" }, "failed"],
     [{ parentStatus: "disabled" }, "disabled"],
+    // X10 task control: paused/cancelled win outright, same as disabled,
+    // regardless of enumerationStatus/childStatuses — an admin who paused or
+    // aborted a catalog_batch parent must never see it silently recomputed
+    // back into materializing/executing/completed*.
+    [{ parentStatus: "paused" }, "paused"],
+    [{ parentStatus: "paused", enumerationStatus: "completed", childStatuses: ["completed"] }, "paused"],
+    [{ parentStatus: "cancelled" }, "cancelled"],
+    [{ parentStatus: "cancelled", enumerationStatus: "completed", childStatuses: ["completed"] }, "cancelled"],
     [{ parentStatus: "completed", enumerationStatus: "expired" }, "expired"],
     [{ parentStatus: "completed", enumerationStatus: "completed", childStatuses: ["processing", "disabled"] }, "executing"],
     [{ parentStatus: "completed", enumerationStatus: "completed", childStatuses: ["disabled"] }, "disabled"],
+    [{ parentStatus: "completed", enumerationStatus: "completed", childStatuses: ["paused"] }, "paused"],
+    [{ parentStatus: "completed", enumerationStatus: "completed", childStatuses: ["cancelled"] }, "cancelled"],
+    [{ parentStatus: "completed", enumerationStatus: "completed", childStatuses: ["cancelled", "paused", "disabled"] }, "cancelled"],
     [{ parentStatus: "completed", enumerationStatus: "completed", childStatuses: ["failed", "failed"] }, "failed"],
     [{ parentStatus: "completed", enumerationStatus: "completed", childStatuses: ["completed", "failed"] }, "completed_with_errors"],
     [{ parentStatus: "completed", enumerationStatus: "completed", childStatuses: ["completed"] }, "completed"],

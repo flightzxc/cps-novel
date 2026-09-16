@@ -61,20 +61,28 @@ describe("task-copy · retryable status gate", () => {
   });
 
   it("refuses every other parent status", () => {
-    for (const status of ["pending", "processing", "completed", "disabled"]) {
+    for (const status of ["pending", "processing", "completed", "disabled", "paused", "cancelled"]) {
       expect(isRetryableTaskStatus(status)).toBe(false);
     }
   });
 });
 
 describe("task-copy · TASK_STATUSES/TASK_ITEM_STATUSES single source of truth (C-5)", () => {
-  it("matches the frozen 6-value task-status set the generic_task/channel_sync_task CHECK constraints enforce", () => {
+  it("matches the frozen 8-value task-status set the generic_task/channel_sync_task CHECK constraints enforce", () => {
     // Matches database-governance.md §4's Task line and the
     // generic_task_status_check/channel_sync_task_status_check CHECK clauses
     // verified live in tests/integration/tasks/p1-13-postgres-acceptance.test.ts's
     // frozenChecks. A drift here (e.g. someone dropping "disabled" from one
     // copy but not the CHECK) would previously have gone unnoticed at the
     // unit-test layer -- there was no test asserting this exact set.
+    //
+    // X10 task control (`20260916090000_x10_task_control_paused_cancelled`):
+    // grew from 6 to 8 values -- "paused"/"cancelled" are now real,
+    // CHECK-enforced statuses pauseTask/abortTask write directly, replacing
+    // the interim "disabled" + JSON-marker workaround for those two manual
+    // operations. "disabled" itself is unchanged and still there (the
+    // worker's own system hold, plus the three older unrelated meanings,
+    // keep using it).
     expect(TASK_STATUSES).toEqual([
       "pending",
       "processing",
@@ -82,6 +90,8 @@ describe("task-copy · TASK_STATUSES/TASK_ITEM_STATUSES single source of truth (
       "completed_with_errors",
       "failed",
       "disabled",
+      "paused",
+      "cancelled",
     ]);
   });
 

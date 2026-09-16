@@ -9,8 +9,6 @@ import type { TaskFamily } from "@/lib/tasks";
 import { adminFetch } from "@/features/admin-ui/admin-fetch";
 import { errorEnvelopeCopy } from "@/features/admin-ui/error-copy";
 
-import type { TaskControlSummary } from "../_lib/task-copy";
-
 type ControlAction = "pause" | "resume" | "abort";
 
 type ControlResult = {
@@ -62,12 +60,10 @@ export function TaskControlButtons({
   family,
   taskId,
   status,
-  taskControl,
 }: {
   family: TaskFamily;
   taskId: string;
   status: string;
-  taskControl?: TaskControlSummary;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState<ControlAction | null>(null);
@@ -75,11 +71,18 @@ export function TaskControlButtons({
   const [busy, setBusy] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
+  // X10 formal statuses: eligibility reads the real `status` column directly
+  // — "paused" is a real CHECK-enforced value now, not a `disabled` row that
+  // happens to carry a `taskControl.kind === "paused"` marker. The
+  // `taskControl` marker itself (`TaskControlSummary`, `../_lib/task-copy`)
+  // is display-only audit metadata rendered elsewhere on the detail page
+  // (the status badge and the "who/why" line) — this component has no need
+  // for it and does not take it as a prop.
   const isActive = status === "pending" || status === "processing";
-  const isPausedByUs = status === "disabled" && taskControl?.kind === "paused";
+  const isPaused = status === "paused";
   const canPause = isActive;
-  const canResume = isPausedByUs;
-  const canAbort = isActive || isPausedByUs;
+  const canResume = isPaused;
+  const canAbort = isActive || isPaused;
 
   if (!canPause && !canResume && !canAbort) return null;
 
