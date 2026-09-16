@@ -32,7 +32,7 @@
 
 | Step | 断言 | 轮 A（旧脚本）实际值 | 轮 A 结果 | 轮 B（修复脚本）实际值 | 轮 B 结果 |
 |---|---|---|---|---|---|
-| STEP0 | 5 个合法 WAL 文件名返回 0 且落地，3 个非法文件名返回 65 | `.backup`/`.history` 两个合法用例返回 65（LEGAL_BAD） | **FAIL** | 5 legal 全 0、3 illegal 全 65 | **PASS** |
+| STEP0 | 5 个合法 WAL 文件名返回 0 且落地，4 个非法文件名返回 65（轮 A/B 首次演练时为 3；v2 修复轮 P2-17 补充 `../x` 路径逃逸用例后为 4，本表按当前脚本订正） | `.backup`/`.history` 两个合法用例返回 65（LEGAL_BAD） | **FAIL** | 5 legal 全 0、3 illegal 全 65（当轮跑的是 3 用例版本，`../x` 是 v2 修复轮才补的） | **PASS** |
 | STEP1 | rig 用 `pg_isready` 可达 | 可达 | PASS | 可达 | PASS |
 | STEP2 | B1 备份后 10s，`pg_stat_archiver.failed_count=0` | `failed_count=6`，`last_failed_wal=000000010000000000000006.00000028.backup` | **FAIL** | `failed_count=0` | PASS |
 | STEP2_WAIT_ARCHIVE | 120s 内 `last_archived_wal` 追到 RP_M3 对应 segment | 超时，卡在 `000000010000000000000006` 不再前进 | **FAIL** | 追到 `000000010000000000000011` | PASS |
@@ -157,14 +157,15 @@ tl_history_present=yes tl_failed=0
 - `--force`（绕过 `delete_surge_guard`）：演练从未传这个参数。复核者手工验证过，非演练证据。
 - `plan_failed`（P1-1，`pg_archivecleanup -n` 非零退出）：演练本身未构造这个场景。**本轮新增单测覆盖**：`tests/backend/database/wal-retention-apply-order.test.ts`（PATH shim 的 `-n` 返回非零，断言 `REFUSED reason=plan_failed` 且退出 65、目录/RETIRED 均未被触碰）。
 - `anchor_not_in_archive`（P0-1，本轮修复的核心项）：**本轮新增双重覆盖**——单测（同一测试文件，锚点文件不落地）与演练新增的 Step4N（临时把真实 `$ANCHOR` 移出 `/rig/archive` 再 dry-run，断言 `REFUSED reason=anchor_not_in_archive` 且退出 65，之后移回）。
-- `would_empty_archive`（P0-1）：本轮新增的单测三个场景都不构造"计划执行后归档清空"的情形，演练也没有专门构造；**完全未验证**，只有静态代码走查。
-- `archiver_failing` / `archiver_unreadable`（P0-1，`--require-archiver-healthy`）：演练 Step4 的 dry-run 与 apply 都加了该开关并断言"健康路径不会被误拒"（rig 内 `pg_stat_archiver.failed_count=0`，走本地 socket）；但没有构造 `failed_count` 真实上升、或 `psql` 不可达/查询失败的负例——**两个拒绝分支本身会不会真的拒绝，仍未验证**，只验证了它不会误伤正常路径。
-- `unexpected_directory`（P1-2）：无单测、演练也没有在 `base-backup-dir` 下放一个不认识的目录去触发它；完全未验证。
-- `reconcile_mismatch`（P2-12，退出 62）：无单测、演练没有构造"`pg_archivecleanup -d` 之后文件仍在"的场景；完全未验证。
+- `would_empty_archive`（P0-1）：**正常路径不可达，保留作兜底，不计入独立覆盖**——Opus 二轮复核已论证：只要 `anchor_not_in_archive` 先于它把关（锚点段必须真实在档），锚点自身在 `pg_archivecleanup -n` 的输出里永远不会被列入删除计划（它是 OLDESTKEPTWALFILE 本身，pg_archivecleanup 按契约保留它和更新的），所以"计划执行后归档清零"这个条件在锚点存在的前提下不可能成立；该分支是防御性兜底（防的是 `anchor_not_in_archive` 之外别的假设被打破），不是一条独立可达的代码路径，因此不再要求单独构造用例覆盖它。演练与单测均未构造，这是预期内、不是缺口。
+- `archiver_failing` / `archiver_unreadable`（P1-C，`--require-archiver-healthy`）：**本轮（v3）改为时点谓词**（不再是 `failed_count` 基线/增量比较，见下方"二轮复核结论"），且**新增单测覆盖了两个拒绝分支本身**——`tests/backend/database/wal-retention-guards.test.ts`：psql 非零退出 / 返回非数字 `failed_count` → `archiver_unreadable`；`last_failed_time > last_archived_time`（psql 返回 `t`）→ `archiver_failing`；返回 `f` → 不拒绝。演练 Step4 的 dry-run/apply 仍然只覆盖健康路径（rig 内 `pg_stat_archiver.failed_count=0`，走本地 socket，断言"不会被误拒"）——**这一条脚注：演练本身仅覆盖健康路径；两个拒绝分支的失败路径由本轮新增单测覆盖，不是演练证据**。
+- `verified_malformed`（P1-D，本轮新增的拒绝分支）：**本轮新增单测覆盖**——`wal-retention-guards.test.ts`：VERIFIED 缺失 `start_wal` → `REFUSED reason=verified_malformed name=<dir>`，退出 65，且该目录本身与其邻居均未被触碰（未打 RETIRED、未被删除）。演练本身未构造这个场景（rig 里的 VERIFIED 全部由 `verify-physical-base.sh` 正常写出，从不缺字段）；**完全未在演练里验证**，只有单测。
+- `unexpected_directory`（P1-2）：无单测、演练也没有在 `base-backup-dir` 下放一个不认识的目录去触发它；完全未验证。P2-1（本轮）把这条判定行从 stderr 改到了 stdout，但输出流改动本身也没有专门测试点名它——只在 `wal-retention-guards.test.ts` 的"全部 REFUSED 行都在 stdout"回归里被间接覆盖到同一条通用规则,不是对 `unexpected_directory` 这个具体分支的专门断言。
+- `reconcile_mismatch`（P2-12/P2-4，退出 62）：无单测、演练没有构造"`pg_archivecleanup -d` 之后文件仍在"的场景；**完全未验证**，本轮（P2-4）额外在这条警告后加了一行 `WAL_RETENTION_HINT=retired_markers_kept dirs=<列表> action="..."`，同样未经任何自动化测试或演练验证——这是刻意的 fail-closed 设计（详见"改动清单"P2-4），不会自愈，需要人工确认后手动删除 RETIRED 标记；但"这条 HINT 真的会在 mismatch 时打印出来"这件事本身仍然只是静态代码走查，没有构造过真实的 reconcile_mismatch 场景去验证。
 - `compressed_files_without_archive_ext` 告警（P2-13）：无单测、演练全程没有产生任何压缩 WAL；完全未验证。
 - 容量档位转档（`OK`/`WARN`/`DEGRADED`/`OVER` 四档，P2-7）：演练全程归档目录很小，只报告过 `OK` 档（`WAL_RETENTION_CAPACITY=OK bytes=285213689 max=1073741824`），从未构造真实数据让它转到 `WARN`/`DEGRADED`/`OVER`。复核者曾对旧的三档版本手工验证过，非演练证据；四档新增的 `DEGRADED` 门槛本身未经任何验证。
 - 压缩归档（`--archive-ext .gz` 路径）：脚本支持该参数，但本轮全程没有产生任何压缩 WAL，未实测。复核者手工验证过（旧版三档同一轮），非演练证据。
-- 多时间线（`timeline_unsupported` 拒绝分支）：本轮只做了静态代码走查，未在演练里构造出一个真实的多 WAL-Ranges/非 1 号时间线场景去触发它（6A/6B 用的都是单一时间线 1 号）。完全未验证。
+- 多时间线（`timeline_unsupported` 拒绝分支，两个独立触发条件）：该分支实际由两个条件之一触发——(a) `wal_ranges_count != 1`（含 0 和 ≥2 两种形状）、(b) `anchor_timeline != "1"`。**(a) 的 0 这一形状本轮（v3）新增单测覆盖**：`wal-retention-guards.test.ts` 用一份真实 `"WAL-Ranges": []` 的 `backup_manifest` 断言 `REFUSED reason=timeline_unsupported`（这也是 P1-B 修复本身要证明的：`grep -oE '"Timeline"'` 在 0 个 Timeline 键时退出 1，`set -euo pipefail` 下若无 `|| true` 会在这条断言执行前就整体杀死脚本）。**(a) 的 ≥2 形状与 (b) 仍完全未验证**——本轮只做了静态代码走查，未在演练或单测里构造出一个真实的多 WAL-Ranges（≥2 个 Timeline 键）或非 1 号时间线场景（6A/6B 用的都是单一时间线 1 号）。
 - apply 中途 kill（进程被杀在"已标记 RETIRED、还没删 WAL"或"已删 WAL、还没删目录"之间）：无单测、演练没有模拟；完全未验证。P1-3 的单测只验证了正常完整跑完时 RETIRED 先于目录删除这个**时序**，不等于验证了"中途真的被杀掉"后重跑是安全的。
 - 告警脚本接线（`pg_stat_archiver.failed_count`/`last_failed_time` 超阈值告警）：未覆盖。
 - `infra/production-like/backup-timer.sh` 与 `verify-physical-base.sh`/`wal-retention.sh` 的定时任务接线：未覆盖，两者目前都是独立可执行脚本，尚未接入任何 cron/timer——这也是为什么 `--require-archiver-healthy` 默认关：接线时的 timer/操作员必须显式打开它。
@@ -230,6 +231,51 @@ tl_history_present=yes tl_failed=0
   ```
 - Start-LSN→段名公式核对（P2-10）：拿本轮真实 B2 备份的 `backup_manifest`（`Start-LSN=0/B000028`）与 `backup_label`（`file 00000001000000000000000B`）分别用 Python 与 bash `$((16#...))` 独立算了一遍公式，两者都得到 `00000001000000000000000B`，与 `backup_label` 完全一致。
 - 容器计数：v2 运行前 `docker ps -a --format '{{.Names}}' | grep -c cps-novel-x8` = **6**；运行后 = **6**；运行前后均确认无 `wal-retention-rig-*` 残留（`docker ps -a`/`docker volume ls` 均为空）。
+
+---
+
+## v3 修复轮（本次，Opus 二轮复核收口：4 个 P1 + 若干 P2）
+
+- Commit（本轮 v3，代码 + 测试 + 本节文档）：与本节同一次提交，见 `git log`。
+
+Opus 二轮复核抓到的核心问题是同一族：`set -e` 会在 P1-A/P1-B 的赋值处直接杀死脚本，导致对应的 `REFUSED` 行永远打不出来（不是判断错了，是根本没跑到判断）；P1-C 的 `failed_count` 基线一旦上升就再也回不来，会永久拒绝；P1-D 的 `VERIFIED` 缺字段会被空字符串排序规则悄悄当成"最老备份"静默退休、`rm -rf`。
+
+### 改动清单（file:line，均以本次提交后的文件为准）
+
+- **P1-A** `scripts/db/wal-retention.sh:255`（原 v2 轮的 `:215`）：`archiver_row="$(psql ... 2>/dev/null || true)"` —— psql 连接/查询失败时命令替换整体非零退出，`set -euo pipefail` 下若不加 `|| true` 会在这条赋值本身杀死脚本，`archiver_unreadable` 的判断分支永远执行不到。
+- **P1-B** `scripts/db/wal-retention.sh:214`（原 v2 轮的 `:194`）：`wal_ranges_count="$(... | grep -oE '"Timeline"' | wc -l | tr -d ' ' || true)"` —— `|| true` 加在整条 pipe 末尾（不是"grep 后面插入"：那样会写成 `grep ... || true | wc -l | ...`，等价于 `grep ... || (true | wc -l | ...)`，grep 一成功就整条 pipe 提前短路，wc/tr 的计数逻辑反而被跳过；采用与文件里既有 `:202`/`:310`/`:373` 完全同款的"整条 pipe 末尾 `|| true`"写法）。0 个 `"Timeline"` 键时 `grep -oE` 退出 1，`pipefail` 下即使 `wc`/`tr` 都成功，整条 pipeline 的聚合退出码仍是那个 1，不加 `|| true` 会在这条赋值杀死脚本，`timeline_unsupported` 打不出来。
+- **P1-C** `scripts/db/wal-retention.sh:228-279`（原 v2 轮 `archiver_failing` 整段 `:208-230` 的重写；state 持久化改动见下）：废弃 `failed_count` 基线/state 比较（一旦 `failed_count` 因为一次瞬时失败升高，state 里的 `last_failed_count` 也会在下一次成功 apply 后被更新为那个更高的值——但只要 Postgres 自己再也不把 `failed_count` 计数器清零，此后只要有第二次失败让 `failed_count` 继续哪怕只涨 1，就会一直拒绝，永远无法在不重启 Postgres 的情况下自愈），改为对 `pg_stat_archiver` 的**时点谓词**：两条独立 `psql --no-psqlrc -tAc` 查询——第一条 `SELECT coalesce(failed_count,0), coalesce(last_failed_time::text,''), coalesce(last_archived_time::text,'') FROM pg_stat_archiver` 取三列判断是否可读（`failed_count` 非数字 → `archiver_unreadable`）；第二条 `SELECT (last_failed_time IS NOT NULL AND (last_archived_time IS NULL OR last_failed_time > last_archived_time)) FROM pg_stat_archiver` 让 Postgres 自己做时间戳比较返回单个 t/f，脚本只认字面 `t`/`f`，其余一律 `archiver_unreadable`。`t` → `REFUSED reason=archiver_failing`，并把三列原值（`failed_count=`/`last_failed_time=`/`last_archived_time=`）打在同一行。`psql` 调用前 `export PGCONNECT_TIMEOUT=10`（`:250`，即 P2-5）。state 文件（`:461-472`）不再写 `last_failed_count`；旧 state 文件里若还留着这个键，`read_kv` 已经不再读它，静默忽略。
+- **P1-D** `scripts/db/wal-retention.sh:98-129`（枚举循环，取代原 P1-2 范围 `:96-116` 里"只做目录名正则"的部分）：每份候选 `VERIFIED`（`-f "$d/VERIFIED" && ! -f "$d/RETIRED"`）新增三项格式校验——`start_wal` 匹配 `^[0-9A-F]{24}$`、`start_timeline` 匹配 `^[0-9]+$`、`verified_epoch` 匹配 `^[0-9]+$`（`:106-117`），任一不满足 → `REFUSED reason=verified_malformed name=<dir>` 退出 65，不删除/不标记任何东西。修的是真实数据丢失通路：`start_wal` 缺失时 `read_kv` 返回空串，空串在后续 `sort -t'|' -k1,1 -k2,2`（`:128`）里排在所有真实 WAL 名之前，即被当成"最老的备份"，在 apply 时会被静默标记 RETIRED 并 `rm -rf`——即便它可能是唯一一份还没坏的备份。
+- **P2-1**（全文件，统一到 stdout）：以下几处从 `>&2` 挪到 stdout——`:102`（`unexpected_directory`）、`:153`（`anchor_verified_missing`）、`:159`（`anchor_verified_malformed`）、`:169`（`anchor_not_in_archive`）、`:180`（`stale_base_backup`，`verified_epoch` 格式错分支——注意同一个 `reason=stale_base_backup` 在另一条"超龄"分支 `:186` 原本就在 stdout，改前两个分支输出流不一致）、`:198`（`timeline_unsupported`，`backup_manifest` 缺失分支——同理，`:217` 的 `wal_ranges_count` 分支原本就在 stdout）。新增的 `:115`（`verified_malformed`）、`:247`/`:258`/`:275`（`archiver_unreadable` 三处）、`:268`（`archiver_failing`）从一开始就写在 stdout。`tests/backend/database/wal-retention-apply-order.test.ts` 里 `anchor_not_in_archive` 的断言（`:246-250`）从 `result.stderr + result.stdout` 改为只看 `result.stdout`，并新增 `expect(result.stderr).not.toContain(...)`。
+- **P2-4** `scripts/db/wal-retention.sh:439-452`（`WAL_RETENTION_HINT` 本身在 `:450`）：`reconcile_mismatch`（退出 62）分支新增一行 `WAL_RETENTION_HINT=retired_markers_kept dirs=<retire_set 逗号列表> action="确认这些目录的 WAL 是否仍完整；若要恢复为有效集合成员，人工删除其 RETIRED 标记"`。刻意不做成自愈：退出 62 之后，步骤 3（删除 RETIRED 目录）与步骤 4（持久化 state）都不会再执行，RETIRED 标记原样留着，需要人工判断。
+- **P2-5**：见上方 P1-C 的 `PGCONNECT_TIMEOUT=10`（`:250`）。
+- **P2-6**：`scripts/db/wal-retention.sh:11` `keep_base="2"`，核对无误，行号未变（本轮没有在这条之前插入任何行）。
+- **P2-7**：本文件 STEP0 矩阵行（第 35 行）非法用例数由 3 订正为 4，并加注"轮 A/B 首次演练时为 3"；`--require-archiver-healthy` "不会误伤正常路径"断言已在上方"未覆盖项"对应条目补充脚注"演练本身仅覆盖健康路径；两个拒绝分支的失败路径由本轮新增单测覆盖"。
+
+### 额外发现并修复的一个真实 bug（不在原始 P1/P2 清单里）
+
+编写本轮"`--require-archiver-healthy` 返回 `f`（健康）→ 不拒绝 → 正常 `DRY_RUN`"这个单测时，第一次真实跑出了脚本本身的崩溃，而不是预期的 `WAL_RETENTION=DRY_RUN`：
+
+```
+.../scripts/db/wal-retention.sh: line 315: planned_files[@]: unbound variable
+```
+
+根因：`scripts/db/wal-retention.sh` 原来有两处 `for f in "${planned_files[@]}"; do ...`（would_empty_archive 段与 apply 后 reconcile 段）没有守卫。在 `set -u` 下，bash < 4.4（含 macOS 系统 `bash` 3.2.57——本轮红线里明确的本机 shell）对**空数组**的 `"${arr[@]}"` 展开会报 "unbound variable"，即便这个数组是用完全正常的 `arr=()` 声明的（bash 4.4 才修了这个不一致）。`planned_files` 为空（"没有任何可回收的 WAL 段"）是完全正常、常见的结果——例如每次健康 dry-run 紧跟在上一次 apply 之后，通常就没有新东西可删——但 v1/v2 两轮演练与既有单测凑巧全部落在"有东西可删"的场景，这条路径此前从未被真正走过一次。修法：两处都补了 `if [[ "${#planned_files[@]}" -gt 0 ]]; then ... fi` 守卫（`scripts/db/wal-retention.sh:319-324`、`:434-438`），不影响非空场景的原有逻辑。
+
+### 二轮复核结论
+
+- **P1-A**：`scripts/db/wal-retention.sh:255`，psql 结果赋值补 `|| true`，防 `set -e`+`pipefail` 在 psql 失败时于赋值处直接杀死脚本 → 测试：`wal-retention-guards.test.ts` › "psql exiting non-zero prints REFUSED reason=archiver_unreadable on stdout, exit 65"。
+- **P1-B**：`scripts/db/wal-retention.sh:214`，`grep -oE '"Timeline"' | wc -l | tr -d ' '` 整条 pipe 末尾补 `|| true`，防 0 个 `"Timeline"` 键时 grep 非零退出在 `pipefail` 下杀死脚本 → 测试：`wal-retention-guards.test.ts` › "anchor backup_manifest with an empty WAL-Ranges array prints REFUSED reason=timeline_unsupported, exit 65"。
+- **P1-C**：`scripts/db/wal-retention.sh:228-279`，`archiver_failing` 从 `failed_count` 基线/state 比较整段重写为时点谓词（`last_failed_time`/`last_archived_time` 的先后由 Postgres 自己判，脚本只认返回的 t/f 字面值） → 测试：`wal-retention-guards.test.ts` › "refuses with archiver_failing when Postgres reports the last failure is newer than the last success" 与 "does not refuse (falls through to a normal DRY_RUN) when Postgres reports the archiver is healthy"。
+- **P1-D**：`scripts/db/wal-retention.sh:98-129`，枚举循环内对每份 `VERIFIED` 的 `start_wal`/`start_timeline`/`verified_epoch` 三项格式做前置校验，任一不满足即拒且不碰任何文件 → 测试：`wal-retention-guards.test.ts` › "a VERIFIED file missing start_wal prints REFUSED reason=verified_malformed, exit 65, and touches nothing"。
+- **`would_empty_archive`**：正常路径不可达，保留作兜底，不计入独立覆盖——Opus 已论证：`anchor_not_in_archive` 先把关（锚点段必须真实在档），而锚点段本身正是 `pg_archivecleanup` 的 `OLDESTKEPTWALFILE` 参数，按其契约永远不会出现在自己的删除计划（`-n` 输出）里；因此"锚点存在"这个前提一旦成立，"计划执行后归档清零"这个条件就不可能同时成立，该分支是防御性兜底而非独立可达路径，不再要求单独构造用例覆盖。
+
+### 验证结果（v3）
+
+- 单测：`npx vitest run --project node tests/backend/database/` → **18 files passed, 130 tests passed**（含新文件 `wal-retention-guards.test.ts` 7 个用例，以及 `wal-retention-apply-order.test.ts` 3 个用例——其中 `anchor_not_in_archive` 一条的断言本轮改为只看 stdout）。
+- `bash -n`：`scripts/db/wal-retention.sh`、`scripts/db/verify-physical-base.sh`、`scripts/db/wal-retention-rehearsal.sh` 均通过。
+- 演练轮 B v3：`WAL_RETENTION_REHEARSAL=PASS`，退出 0，**30/30 断言 PASS**（与 v2 同一组 30 条断言；本轮未新增 STEP，`STEP4_DRYRUN_ARCHIVER_HEALTHY`/`STEP4_APPLY_ARCHIVER_HEALTHY` 这两条现在实际跑的是 P1-C 的时点谓词而不是旧的 `failed_count` 基线逻辑），证据存于 `.tmp/wal-retention-rehearsal/evidence-roundB-v3/`（未提交，仅本机留存），运行区间 2026-09-16 15:06:35–15:08:00 UTC。
+- 容器计数：v3 运行前 `docker ps -a --format '{{.Names}}' | grep -c cps-novel-x8` = **6**；运行后 = **6**；运行前后均确认无 `wal-retention-rig-*` 残留（`docker ps -a`/`docker volume ls` 均为空）。
 
 ---
 

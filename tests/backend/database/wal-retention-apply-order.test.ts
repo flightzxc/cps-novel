@@ -243,7 +243,11 @@ describe("wal-retention.sh apply ordering and refusal paths", () => {
     );
 
     expect(result.status).toBe(65);
-    expect(result.stderr + result.stdout).toContain("WAL_RETENTION=REFUSED reason=anchor_not_in_archive");
+    // P2-1 (wal-retention.sh v3 fix round): every machine-readable
+    // WAL_RETENTION= judgment line is now unified onto stdout, never
+    // stderr -- this refusal used to print on stderr.
+    expect(result.stdout).toContain("WAL_RETENTION=REFUSED reason=anchor_not_in_archive");
+    expect(result.stderr).not.toContain("WAL_RETENTION=REFUSED");
 
     // The refusal happens before the plan is even computed -- the shim's
     // -n/-d were never invoked, so the log file it would have written to
