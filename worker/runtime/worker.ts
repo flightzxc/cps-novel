@@ -250,8 +250,21 @@ async function handleFinalizeFailure(
   options: WorkerRuntimeOptions,
   lease: TaskLease,
   finalizeError: unknown,
+  maxAttempts: number,
 ): Promise<void> {
-  const failedOutcome = buildFinalizeFailedOutcome(finalizeError);
+  const retryCatalogFinalize = lease.taskType === "catalog_scan" && lease.attemptCount < maxAttempts;
+  const failedOutcome: TaskOutcome = retryCatalogFinalize
+    ? {
+        status: "retry",
+        result: { retryReason: "finalize_failed" },
+        error: buildFinalizeFailedOutcome(finalizeError).error,
+      }
+    : {
+        ...buildFinalizeFailedOutcome(finalizeError),
+        ...(lease.taskType === "catalog_scan" && lease.targetType === "catalog_page"
+          ? { result: { stopReason: "upstream_error", terminalState: "partial_failed" } }
+          : {}),
+      };
   // D-7b: engineering-side-only traceability line, deliberately separate
   // from `failedOutcome.error.detail` (which stays the C-10
   // operator-visible allowlist, untouched by this addition). This is the
@@ -268,7 +281,7 @@ async function handleFinalizeFailure(
   }));
   try {
     await finalizeTaskItem(options.prisma, lease, failedOutcome);
-    await emitWorkerTaskFailure({
+    if (!retryCatalogFinalize) await emitWorkerTaskFailure({
       family: lease.family,
       taskType: lease.taskType,
       taskId: lease.taskId,
@@ -421,9 +434,17 @@ export async function processOneWorkerCycle(options: WorkerRuntimeOptions): Prom
         await Promise.allSettled(handlerHeartbeats);
         return true;
       }
-      const outcome: TaskOutcome = lease.mode === "dry_run"
+      let outcome: TaskOutcome = lease.mode === "dry_run"
         ? { ...drainResult.value, protectedWrite: undefined }
         : drainResult.value;
+      const maxAttempts = registration.maxAttempts ?? 3;
+      if (outcome.status === "retry" && lease.attemptCount >= maxAttempts) {
+        outcome = {
+          status: "failed",
+          result: outcome.result,
+          error: sanitizePersistedTaskError(outcome.error, "retry_exhausted"),
+        };
+      }
       if (outcome.protectedWrite) {
         // `finalizeTaskItem` locks this same item before running the fenced
         // protected write. A concurrent heartbeat from this worker would
@@ -445,7 +466,7 @@ export async function processOneWorkerCycle(options: WorkerRuntimeOptions): Prom
         // `paid_from_chapter` CHECK violation) that must fail this one item,
         // never the worker process.
         if (finalizeError instanceof LeaseLostError) throw finalizeError;
-        await handleFinalizeFailure(options, lease, finalizeError);
+        await handleFinalizeFailure(options, lease, finalizeError, maxAttempts);
         return true;
       }
       if (outcome.status === "failed") {

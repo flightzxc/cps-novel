@@ -25,6 +25,8 @@ export type TerminalItemStatus = "success" | "skipped" | "failed";
 export interface TaskLease {
   family: TaskFamily;
   taskType: string;
+  /** Physical work-unit kind (for example catalog_page/catalog_finalize). */
+  targetType?: string;
   mode: TaskMode;
   itemId: string;
   taskId: string;
@@ -47,7 +49,7 @@ export type ProtectedWrite = (
 ) => Promise<void | ProtectedWriteResult>;
 
 export interface TaskOutcome {
-  status: TerminalItemStatus;
+  status: TerminalItemStatus | "retry";
   result?: unknown;
   error?: unknown;
   protectedWrite?: ProtectedWrite;
