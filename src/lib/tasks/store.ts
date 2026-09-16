@@ -76,11 +76,30 @@ async function selectPending(
                  i.created_at AS cursor_at
           FROM channel_sync_task_item i
           WHERE i.status = 'pending' ${cursorClause} ${targetClause}
+            -- Parent-eligibility pushdown: a disabled/completed/failed parent
+            -- can never yield a claimable item, so this must be evaluated
+            -- *before* the LIMIT, not after via the outer eligible column.
+            -- Otherwise a large block of old, ineligible-parent items sorts
+            -- ahead of runnable work and every claim attempt pages through
+            -- (and row-locks) all of them before finding anything real.
+            -- t.id is the primary key of channel_sync_task, so this is an
+            -- O(1) index lookup per candidate row, not a table scan.
+            AND EXISTS (
+              SELECT 1 FROM channel_sync_task t
+              WHERE t.id = i.task_id
+                AND t.status IN ('pending', 'processing')
+                AND t.task_type = ANY(${taskTypes}::text[])
+            )
           ORDER BY i.created_at, i.id
           LIMIT 128
           FOR UPDATE OF i SKIP LOCKED
         )
         SELECT c.*, t.task_type,
+               -- Kept as a cheap assertion, not the primary filter anymore:
+               -- if the EXISTS pushdown above ever diverges from this
+               -- predicate, this still stops an ineligible row from being
+               -- returned instead of silently masking the bug (see the
+               -- comment above the EXISTS clause in this CTE).
                (t.status IN ('pending', 'processing') AND t.task_type = ANY(${taskTypes}::text[])) AS eligible
         FROM candidates c JOIN channel_sync_task t ON t.id = c.task_id
         ORDER BY c.cursor_at, c.id
@@ -92,6 +111,15 @@ async function selectPending(
                  i.created_at AS cursor_at
           FROM generic_task_item i
           WHERE i.status = 'pending' ${cursorClause} ${targetClause}
+            -- Parent-eligibility pushdown -- see the channel_sync branch
+            -- above for why this must live in the inner WHERE, ahead of the
+            -- LIMIT, rather than in the outer eligible column.
+            AND EXISTS (
+              SELECT 1 FROM generic_task t
+              WHERE t.id = i.task_id
+                AND t.status IN ('pending', 'processing')
+                AND t.task_type = ANY(${taskTypes}::text[])
+            )
             AND (
               -- Phase C: catalog-scan pages must still be claimed strictly in
               -- order (the CatalogScan family used to enforce this itself);
@@ -112,6 +140,7 @@ async function selectPending(
           FOR UPDATE OF i SKIP LOCKED
         )
         SELECT c.*, t.task_type,
+               -- Kept as a cheap assertion -- see the channel_sync branch above.
                (t.status IN ('pending', 'processing') AND t.task_type = ANY(${taskTypes}::text[])) AS eligible
         FROM candidates c JOIN generic_task t ON t.id = c.task_id
         ORDER BY c.cursor_at, c.id
