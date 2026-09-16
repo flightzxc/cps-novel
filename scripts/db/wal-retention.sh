@@ -2,19 +2,20 @@
 set -euo pipefail
 
 usage() {
-  echo "usage: wal-retention.sh --archive-dir /absolute/dir --base-backup-dir /absolute/dir --keep-base N [--max-bytes B] [--apply] [--force] [--json] [--max-backup-age-seconds S] [--archive-ext EXT]" >&2
+  echo "usage: wal-retention.sh --archive-dir /absolute/dir --base-backup-dir /absolute/dir [--keep-base N] [--max-bytes B] [--apply] [--force] [--json] [--max-backup-age-seconds S] [--archive-ext EXT] [--require-archiver-healthy]" >&2
   exit 64
 }
 
 archive_dir=""
 base_backup_dir=""
-keep_base=""
+keep_base="2"
 max_bytes=""
 apply=0
 force=0
 json=0
 max_backup_age_seconds=93600
 archive_ext=""
+require_archiver_healthy=0
 
 while (($#)); do
   case "$1" in
@@ -27,6 +28,7 @@ while (($#)); do
     --json) json=1; shift ;;
     --max-backup-age-seconds) (($# >= 2)) || usage; max_backup_age_seconds="$2"; shift 2 ;;
     --archive-ext) (($# >= 2)) || usage; archive_ext="$2"; shift 2 ;;
+    --require-archiver-healthy) require_archiver_healthy=1; shift ;;
     *) usage ;;
   esac
 done
@@ -50,10 +52,12 @@ require_command stat
 require_command date
 
 # GNU stat (the rehearsal's Debian rig, and production) vs. BSD stat (a
-# developer's own macOS host running this by hand) take the file-size flag
+# developer's own macOS host running this by hand) take the file flags
 # differently; probe once instead of guessing from uname.
 stat_size_flag="-c%s"
 stat -c%s "$0" >/dev/null 2>&1 || stat_size_flag="-f%z"
+stat_mtime_flag="-c%Y"
+stat -c%Y "$0" >/dev/null 2>&1 || stat_mtime_flag="-f%m"
 
 read_kv() {
   # First "key=value" line in a flat marker/state file; empty if absent.
@@ -62,23 +66,56 @@ read_kv() {
 
 # ---- mutual exclusion: one retention run at a time per base-backup-dir ----
 lock_dir="$base_backup_dir/.wal-retention.lock"
+plan_tmp=""
+plan_err=""
+trap 'rm -f "$plan_tmp" "$plan_err"; rmdir "$lock_dir" 2>/dev/null || true' EXIT INT TERM
 if ! mkdir "$lock_dir" 2>/dev/null; then
-  echo "WAL_RETENTION=LOCKED"
+  lock_mtime="$(stat "$stat_mtime_flag" "$lock_dir" 2>/dev/null || true)"
+  now_epoch_lock="$(date -u '+%s')"
+  hint="if you have confirmed no wal-retention.sh process is running against this base-backup-dir, you may manually: rmdir $lock_dir"
+  if [[ "$lock_mtime" =~ ^[0-9]+$ ]]; then
+    lock_age_seconds=$((now_epoch_lock - lock_mtime))
+    echo "WAL_RETENTION=LOCKED lock_age_seconds=$lock_age_seconds hint=\"$hint\""
+  else
+    echo "WAL_RETENTION=LOCKED hint=\"$hint\""
+  fi
+  # The EXIT trap's rmdir must not fire here -- this process never created
+  # the lock, so it must never remove it. Clear the trap before exiting.
+  trap - EXIT INT TERM
   exit 75
 fi
-trap 'rmdir "$lock_dir" 2>/dev/null || true' EXIT INT TERM
+state_file="$base_backup_dir/.wal-retention.state"
 
 # ---- enumerate the valid set: has VERIFIED, has no RETIRED ----------------
-# Directory names are expected to sort lexically in creation order (a
-# timestamp stamp in production; the rehearsal's B1/B2/B3 satisfy the same
-# property). Only members of this set count toward --keep-base.
-valid_dirs=()
+# Every non-dot directory directly under base-backup-dir must look like one
+# WE created (a bounded, conservative name charset) -- an unrecognized
+# directory might be a hand-placed backup from someone else, so this refuses
+# outright rather than silently skip it.
+# Ordering is by each candidate's own VERIFIED start_wal (ascending), not by
+# directory name -- within a single timeline, WAL segment names already sort
+# in time order, and start_wal is the fact that actually matters; directory
+# name is only a tie-breaker.
+valid_pairs=()
 while IFS= read -r d; do
   name="$(basename "$d")"
+  if [[ ! "$name" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$ ]]; then
+    echo "WAL_RETENTION=REFUSED reason=unexpected_directory name=$name" >&2
+    exit 65
+  fi
   if [[ -f "$d/VERIFIED" && ! -f "$d/RETIRED" ]]; then
-    valid_dirs+=("$name")
+    sw="$(read_kv "$d/VERIFIED" start_wal)"
+    valid_pairs+=("${sw}|${name}")
   fi
 done < <(find "$base_backup_dir" -mindepth 1 -maxdepth 1 -type d ! -name '.*' 2>/dev/null | sort)
+
+valid_dirs=()
+if [[ "${#valid_pairs[@]}" -gt 0 ]]; then
+  while IFS='|' read -r sw name; do
+    [[ -n "$name" ]] || continue
+    valid_dirs+=("$name")
+    echo "WAL_RETENTION_BASE_START_WAL=$name start_wal=${sw:-UNKNOWN}"
+  done < <(printf '%s\n' "${valid_pairs[@]}" | sort -t'|' -k1,1 -k2,2)
+fi
 
 if [[ "${#valid_dirs[@]}" -lt "$keep_base" ]]; then
   # Cold start / not enough verified history yet is a normal, expected
@@ -112,23 +149,28 @@ anchor_timeline="$(read_kv "$anchor_verified" start_timeline)"
   exit 65
 }
 
+# ---- refusal: anchor_not_in_archive ----------------------------------------
+# Offline and mandatory: if the archive doesn't actually hold the segment
+# every kept backup depends on, nothing below can be trusted -- refuse
+# before computing or touching anything else.
+anchor_archive_path="$archive_dir/$anchor$archive_ext"
+[[ -f "$anchor_archive_path" ]] || {
+  echo "WAL_RETENTION=REFUSED reason=anchor_not_in_archive" >&2
+  exit 65
+}
+
 latest_dir="${valid_dirs[$((total - 1))]}"
 latest_verified="$base_backup_dir/$latest_dir/VERIFIED"
-latest_verified_at="$(read_kv "$latest_verified" verified_at)"
+latest_verified_epoch="$(read_kv "$latest_verified" verified_epoch)"
 
 # ---- refusal: stale_base_backup (only gates --apply) -----------------------
 if [[ "$apply" == "1" ]]; then
-  [[ -n "$latest_verified_at" ]] || {
+  [[ "$latest_verified_epoch" =~ ^[0-9]+$ ]] || {
     echo "WAL_RETENTION=REFUSED reason=stale_base_backup" >&2
     exit 65
   }
   now_epoch="$(date -u '+%s')"
-  latest_epoch="$(date -u -d "$latest_verified_at" '+%s' 2>/dev/null || true)"
-  if [[ -z "$latest_epoch" ]]; then
-    echo "WAL_RETENTION=REFUSED reason=stale_base_backup" >&2
-    exit 65
-  fi
-  age_seconds=$((now_epoch - latest_epoch))
+  age_seconds=$((now_epoch - latest_verified_epoch))
   if [[ "$age_seconds" -gt "$max_backup_age_seconds" ]]; then
     echo "WAL_RETENTION=REFUSED reason=stale_base_backup"
     exit 65
@@ -145,8 +187,8 @@ anchor_manifest="$base_backup_dir/$anchor_dir/backup_manifest"
   echo "WAL_RETENTION=REFUSED reason=timeline_unsupported" >&2
   exit 65
 }
-manifest_flat="$(tr -d '\n' <"$anchor_manifest")"
-wal_ranges_section="$(printf '%s' "$manifest_flat" | grep -oE '"WAL-Ranges"[[:space:]]*:[[:space:]]*\[[^]]*\]' || true)"
+manifest_tail="$(sed -n '/WAL-Ranges/,$p' "$anchor_manifest" | tr -d '\n')"
+wal_ranges_section="$(printf '%s' "$manifest_tail" | grep -oE '"WAL-Ranges"[[:space:]]*:[[:space:]]*\[[^]]*\]' || true)"
 wal_ranges_count=0
 if [[ -n "$wal_ranges_section" ]]; then
   wal_ranges_count="$(printf '%s' "$wal_ranges_section" | grep -oE '"Timeline"' | wc -l | tr -d ' ')"
@@ -163,19 +205,71 @@ if ! { touch "$write_probe" 2>/dev/null && rm -f "$write_probe" 2>/dev/null; }; 
   exit 65
 fi
 
+# ---- refusal: archiver_failing (opt-in via --require-archiver-healthy) ----
+# Off by default; a timer/operator wiring this script into automation MUST
+# turn it on (see docs). When on, an unreadable pg_stat_archiver is treated
+# exactly like a rising failed_count -- fail closed either way.
+archiver_failed_count=""
+if [[ "$require_archiver_healthy" == "1" ]]; then
+  if command -v psql >/dev/null 2>&1; then
+    archiver_failed_count="$(psql --no-psqlrc -tAc "SELECT failed_count FROM pg_stat_archiver" 2>/dev/null | tr -d '[:space:]')"
+  fi
+  if [[ ! "$archiver_failed_count" =~ ^[0-9]+$ ]]; then
+    echo "WAL_RETENTION=REFUSED reason=archiver_unreadable"
+    exit 65
+  fi
+  last_failed_count=0
+  if [[ -f "$state_file" ]]; then
+    v="$(read_kv "$state_file" last_failed_count)"
+    [[ "$v" =~ ^[0-9]+$ ]] && last_failed_count="$v"
+  fi
+  if [[ "$archiver_failed_count" -gt "$last_failed_count" ]]; then
+    echo "WAL_RETENTION=REFUSED reason=archiver_failing"
+    exit 65
+  fi
+fi
+
 # ---- compute the plan: which archived WAL files are now reclaimable -------
 archivecleanup_args=("$archive_dir" "$anchor")
 if [[ -n "$archive_ext" ]]; then
   archivecleanup_args=(-x "$archive_ext" "$archive_dir" "$anchor")
 fi
+plan_tmp="$(mktemp "${TMPDIR:-/tmp}/wal-retention-plan.XXXXXX")"
+plan_err="$(mktemp "${TMPDIR:-/tmp}/wal-retention-plan-err.XXXXXX")"
+plan_rc=0
+pg_archivecleanup -n "${archivecleanup_args[@]}" >"$plan_tmp" 2>"$plan_err" || plan_rc=$?
+if [[ "$plan_rc" -ne 0 ]]; then
+  echo "WAL_RETENTION=REFUSED reason=plan_failed"
+  cat "$plan_err" >&2
+  exit 65
+fi
 planned_files=()
 while IFS= read -r f; do
   [[ -n "$f" ]] && planned_files+=("$f")
-done < <(pg_archivecleanup -n "${archivecleanup_args[@]}")
+done <"$plan_tmp"
 planned_delete_count="${#planned_files[@]}"
 
+# ---- refusal: would_empty_archive ------------------------------------------
+# If applying the plan above would leave zero surviving 24-hex segment files
+# in the archive (i.e. nothing at or after the anchor), that means the plan
+# disagrees with what anchor_not_in_archive just confirmed -- refuse rather
+# than delete everything and print APPLIED anyway.
+# End-anchored, at most one simple extension -- this deliberately excludes
+# pg_basebackup's two-extension "<24hex>.<8hex>.backup" history files (which
+# pg_archivecleanup never touches either) so both counts below only ever
+# reflect real/restorable WAL segments.
+current_segment_count="$(find "$archive_dir" -maxdepth 1 -type f -exec basename {} \; 2>/dev/null | grep -cE '^[0-9A-F]{24}(\.[A-Za-z0-9]+)?$' || true)"
+planned_segment_count=0
+for f in "${planned_files[@]}"; do
+  bn="$(basename "$f")"
+  [[ "$bn" =~ ^[0-9A-F]{24}(\.[A-Za-z0-9]+)?$ ]] && planned_segment_count=$((planned_segment_count + 1))
+done
+if [[ "$current_segment_count" -gt 0 && $((current_segment_count - planned_segment_count)) -le 0 ]]; then
+  echo "WAL_RETENTION=REFUSED reason=would_empty_archive"
+  exit 65
+fi
+
 # ---- refusal: delete_surge_guard (apply-only; --force bypasses) -----------
-state_file="$base_backup_dir/.wal-retention.state"
 last_deleted_count=0
 if [[ -f "$state_file" ]]; then
   v="$(read_kv "$state_file" last_deleted_count)"
@@ -214,12 +308,24 @@ if [[ -n "$max_bytes" ]]; then
   done < <(find "$archive_dir" -maxdepth 1 -type f -exec stat "$stat_size_flag" {} \; 2>/dev/null)
   if [[ "$capacity_bytes" -ge "$max_bytes" ]]; then
     capacity_status=OVER
+  elif [[ $((capacity_bytes * 100)) -ge $((max_bytes * 85)) ]]; then
+    capacity_status=DEGRADED
   elif [[ $((capacity_bytes * 100)) -ge $((max_bytes * 70)) ]]; then
     capacity_status=WARN
   else
     capacity_status=OK
   fi
   echo "WAL_RETENTION_CAPACITY=$capacity_status bytes=$capacity_bytes max=$max_bytes"
+fi
+
+# ---- warn-only: compressed archive files present without --archive-ext ----
+# (or the reverse: --archive-ext given but nothing compressed is there).
+# Never a refusal -- purely a hint that the two may be out of sync.
+compressed_count="$(find "$archive_dir" -maxdepth 1 -type f -exec basename {} \; 2>/dev/null | grep -cE '^[0-9A-F]{24}\.(gz|lz4|zst)$' || true)"
+if [[ -z "$archive_ext" && "$compressed_count" -gt 0 ]]; then
+  echo "WAL_RETENTION_WARN=compressed_files_without_archive_ext"
+elif [[ -n "$archive_ext" && "$compressed_count" -eq 0 ]]; then
+  echo "WAL_RETENTION_WARN=compressed_files_without_archive_ext"
 fi
 
 emit_json_summary() {
@@ -257,6 +363,21 @@ if [[ "${#retire_set[@]}" -gt 0 ]]; then
 fi
 # 2) remove the WAL segments now provably unreachable from any kept backup.
 pg_archivecleanup -d "${archivecleanup_args[@]}"
+
+# 2b) reconcile: every path the plan named must actually be gone now. A
+#     mismatch means pg_archivecleanup's -d run diverged from its own -n
+#     plan (or something else touched the archive mid-run) -- warn loudly
+#     and stop before touching the RETIRED directories or persisting state,
+#     rather than claim a clean APPLIED that isn't true.
+deleted_actual=0
+for f in "${planned_files[@]}"; do
+  [[ -e "$f" ]] || deleted_actual=$((deleted_actual + 1))
+done
+if [[ "$deleted_actual" -ne "$planned_delete_count" ]]; then
+  echo "WAL_RETENTION_WARN=reconcile_mismatch deleted=$deleted_actual planned=$planned_delete_count"
+  exit 62
+fi
+
 # 3) only now remove the directories THIS run marked RETIRED in step 1 --
 #    never a glob, never anything not explicitly listed above.
 if [[ "${#retire_set[@]}" -gt 0 ]]; then
@@ -264,13 +385,17 @@ if [[ "${#retire_set[@]}" -gt 0 ]]; then
     rm -rf "$base_backup_dir/$d"
   done
 fi
-# 4) persist state for the next run's delete_surge_guard.
+# 4) persist state for the next run's delete_surge_guard (and, when
+#    --require-archiver-healthy is on, its archiver_failing baseline).
 run_at="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
 tmp_state="$base_backup_dir/.wal-retention.state.$$"
 {
   printf 'last_deleted_count=%s\n' "$planned_delete_count"
   printf 'last_run_at=%s\n' "$run_at"
   printf 'anchor=%s\n' "$anchor"
+  if [[ "$require_archiver_healthy" == "1" ]]; then
+    printf 'last_failed_count=%s\n' "$archiver_failed_count"
+  fi
 } >"$tmp_state"
 mv "$tmp_state" "$state_file"
 
