@@ -10,19 +10,23 @@ import { ID_IN_LIST_CHUNK_SIZE } from "@/lib/db/chunked-id-lookup";
 import {
   enqueueMoboreaderPreviewRefreshTask,
   MOBOREADER_CATALOG_LIMITS,
+  MOBOREADER_PREVIEW_STAGE_BATCH_SIZE,
   MOBOREADER_PREVIEW_ENV,
   MOBOREADER_PREVIEW_RUNTIME_DEFAULTS,
   resolveMoboreaderPreviewRuntimeConfig,
+  stageMoboreaderPreviewRefreshTask,
   validateMoboreaderCatalogScanInput,
 } from "@/lib/tasks";
 import { resolveChannelLanguage } from "@/lib/locale/channel-language";
 import { encryptCredentialSecretForWorker } from "../../../worker/credentials/crypto";
 import {
+  catalogRecoveryFingerprint,
   createMoboreaderCatalogHandler,
   createMoboreaderPreviewHandler,
   createMoboreaderWorkerHandlers,
   determineMoboreaderCatalogStopReason,
   parseMoboreaderCatalogPayload,
+  parseMoboreaderCatalogRecoveryPayload,
   pickBookSourceLocale,
 } from "../../../worker/handlers/moboreader";
 
@@ -132,6 +136,27 @@ describe("MoboReader catalog safety and parity", () => {
     expect(() => parseMoboreaderCatalogPayload({ ...payload, pageSize: 101 })).toThrow("catalog_payload_invalid");
   });
 
+  it("pins recovery identity sets with an order-independent SHA-256 fingerprint", () => {
+    const identities = [
+      { externalBookId: "book:2", sourceLanguageCode: "en" },
+      { externalBookId: "book-1", sourceLanguageCode: "ja" },
+    ];
+    const fingerprint = catalogRecoveryFingerprint(identities);
+    expect(catalogRecoveryFingerprint([...identities].reverse())).toBe(fingerprint);
+    expect(parseMoboreaderCatalogRecoveryPayload({
+      ...payload,
+      kind: "catalog_recovery_page",
+      missingIdentities: identities,
+      gapFingerprint: fingerprint,
+    })).toMatchObject({ missingIdentities: [identities[1], identities[0]], gapFingerprint: fingerprint });
+    expect(() => parseMoboreaderCatalogRecoveryPayload({
+      ...payload,
+      kind: "catalog_recovery_page",
+      missingIdentities: identities,
+      gapFingerprint: "0".repeat(64),
+    })).toThrow("catalog_recovery_fingerprint_mismatch");
+  });
+
   it.each([
     [{ returnedCount: 0, pageSize: 10, fetchedRaw: 0, batchExpectedCount: 100, pageIndex: 1, requestedPageEnd: 10, scheduledPageEnd: 10 }, "empty_page"],
     [{ returnedCount: 10, pageSize: 10, fetchedRaw: 100, batchExpectedCount: 100, pageIndex: 10, requestedPageEnd: 20, scheduledPageEnd: 20 }, "expected_total_reached"],
@@ -188,6 +213,45 @@ describe("MoboReader catalog safety and parity", () => {
     expect(adapter.listBooks).not.toHaveBeenCalled();
   });
 
+  it("does not request a page beyond the persisted terminalPage", async () => {
+    const terminalPayload = {
+      ...payload,
+      pageIndex: 5,
+      requestedPageEnd: 10,
+      scheduledPageEnd: 10,
+    };
+    const db = {
+      genericTask: {
+        findUnique: vi.fn(async () => ({
+          channelAccountId: "account",
+          channelAppId: "app",
+          params: { projectType: 1, pageStart: 1, pageEnd: 10, pageSize: 20 },
+          result: { terminalPage: 4 },
+        })),
+      },
+    } as unknown as PrismaClient;
+    const adapter = { listBooks: vi.fn(), fetchBookMaterial: vi.fn(), fetchPreviewChapters: vi.fn() };
+    const outcome = await createMoboreaderCatalogHandler(db, {
+      adapter,
+      env: { NODE_ENV: "test", FEATURE_NOVEL_CATALOG_SYNC: "true", NOVEL_CATALOG_SYNC_ALLOW_WRITE: "true" },
+    })({
+      lease: {
+        family: "generic", taskType: "catalog_scan", targetType: "catalog_page", mode: "apply",
+        itemId: "item", taskId: "task", workerId: "worker", executionToken: "token",
+        leaseEpoch: 1n, attemptCount: 1, lockedUntil: new Date(), payload: terminalPayload,
+      },
+      mode: "apply",
+      signal: new AbortController().signal,
+      heartbeat: async () => true,
+    });
+
+    expect(outcome).toMatchObject({
+      status: "success",
+      result: { stoppedBeforeFetch: true, terminalPage: 4, returnedCount: 0 },
+    });
+    expect(adapter.listBooks).not.toHaveBeenCalled();
+  });
+
   it("keeps the Preview feature gate ahead of database and upstream access", async () => {
     const adapter = { listBooks: vi.fn(), fetchBookMaterial: vi.fn(), fetchPreviewChapters: vi.fn() };
     const outcome = await createMoboreaderPreviewHandler({} as never, { adapter, env: { NODE_ENV: "test" } })({
@@ -199,6 +263,95 @@ describe("MoboReader catalog safety and parity", () => {
     expect(outcome).toMatchObject({ status: "failed", error: { code: "feature_disabled" } });
     expect(adapter.fetchBookMaterial).not.toHaveBeenCalled();
     expect(adapter.fetchPreviewChapters).not.toHaveBeenCalled();
+  });
+});
+
+describe("catalog finalizer preview staging", () => {
+  it("stages 100,000 sources in bounded short phases and a fixed-token rerun is a no-op", async () => {
+    const sourceIds = Array.from({ length: 100_000 }, (_, index) =>
+      `00000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`,
+    );
+    const lookupSizes: number[] = [];
+    const writeBatchSizes: number[] = [];
+    let stagedCount = 0;
+    const taskCreate = vi.fn(async () => ({}));
+    const taskUpdate = vi.fn(async () => ({}));
+    const tx = {
+      channelSyncTask: { create: taskCreate, update: taskUpdate },
+      channelSyncTaskItem: {
+        createMany: vi.fn(async (args: { data: unknown[] }) => {
+          writeBatchSizes.push(args.data.length);
+          stagedCount += args.data.length;
+          return { count: args.data.length };
+        }),
+        count: vi.fn(async () => stagedCount),
+      },
+      operationAudit: { create: vi.fn(async () => ({})) },
+    };
+    const db = {
+      channelSyncTask: {
+        findUnique: vi.fn(async () => null),
+        findFirst: vi.fn(async () => null),
+      },
+      channelApp: { findFirst: vi.fn(async () => ({ id: "app", sourceApp: { code: "changdu" } })) },
+      channelAccount: { findFirst: vi.fn(async () => ({ id: "account", credentials: [{ id: "credential" }] })) },
+      novelSourceItem: {
+        findMany: vi.fn(async (args: { where: { id: { in: string[] } } }) => {
+          const ids = args.where.id.in;
+          lookupSizes.push(ids.length);
+          return ids.map((id) => ({
+            id,
+            novelId: id,
+            deletedAt: null,
+            novel: { previewPolicy: null },
+          }));
+        }),
+      },
+    } as unknown as PrismaClient;
+    const writePhase = async <T>(write: (client: Prisma.TransactionClient) => Promise<T>) =>
+      write(tx as unknown as Prisma.TransactionClient);
+    const input = {
+      trigger: "auto" as const,
+      catalogScanTaskId: "10000000-0000-4000-8000-000000000001",
+      channelAccountId: "10000000-0000-4000-8000-000000000002",
+      channelAppId: "10000000-0000-4000-8000-000000000003",
+      novelSourceItemIds: sourceIds,
+      requestToken: "moboreader.preview_refresh.v1:10000000-0000-4000-8000-000000000001",
+      actorId: "actor",
+      requestId: "request",
+      mode: "apply" as const,
+    };
+
+    const result = await stageMoboreaderPreviewRefreshTask(db, input, writePhase, {
+      NODE_ENV: "test",
+      FEATURE_NOVEL_CATALOG_SYNC: "true",
+      NOVEL_CATALOG_SYNC_ALLOW_WRITE: "true",
+      MOBOREADER_PREVIEW_SOURCE_APP_CODES: "changdu",
+    });
+
+    expect(result).toMatchObject({ status: "enqueued", eligibleCount: 100_000, taskStatus: "pending" });
+    expect(Math.max(...lookupSizes)).toBeLessThanOrEqual(ID_IN_LIST_CHUNK_SIZE);
+    expect(Math.max(...writeBatchSizes)).toBeLessThanOrEqual(MOBOREADER_PREVIEW_STAGE_BATCH_SIZE);
+    expect(writeBatchSizes).toHaveLength(100);
+    expect(stagedCount).toBe(100_000);
+    expect(taskCreate).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ status: "disabled", totalCount: 0 }),
+    }));
+    expect(taskUpdate).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ status: "pending", totalCount: 100_000 }),
+    }));
+
+    const duplicateDb = {
+      channelSyncTask: {
+        findUnique: vi.fn(async () => ({ id: "ready-task", status: "pending", result: { buildStatus: "ready" } })),
+      },
+    } as unknown as PrismaClient;
+    await expect(stageMoboreaderPreviewRefreshTask(
+      duplicateDb,
+      input,
+      async () => { throw new Error("duplicate rerun must not write"); },
+      { NODE_ENV: "test" },
+    )).resolves.toEqual({ status: "duplicate", taskId: "ready-task" });
   });
 });
 
