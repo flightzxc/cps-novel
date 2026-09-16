@@ -4,6 +4,7 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   rmSync,
   writeFileSync,
@@ -308,6 +309,99 @@ describe("wal-retention.sh: malformed VERIFIED must refuse, not silently retire 
 // land on stderr (P2-1). Spot-checked here against one representative
 // REFUSED from each of the four scenarios above rather than re-asserted
 // per-test.
+// wal-gc-x8.sh rehearsal work order: --force is documented (wal-retention.sh's
+// own header, and this file's own --force test above) to bypass exactly one
+// guard, delete_surge_guard. These three cases prove --force does NOT also
+// bypass three of the OTHER fail-closed refusals -- the ones that already
+// existed before --force was introduced, and which sit earlier in the
+// script than delete_surge_guard, so a caller cannot expect --force to
+// reach past them.
+const PG_ARCHIVECLEANUP_FAIL_SHIM = `#!/usr/bin/env bash
+set -u
+mode="\${1:-}"
+case "$mode" in
+  -n) echo "shim: simulated pg_archivecleanup -n failure" >&2; exit 1 ;;
+  -d) echo "shim: simulated pg_archivecleanup -d failure" >&2; exit 1 ;;
+  *) echo "shim: unsupported mode $mode" >&2; exit 1 ;;
+esac
+`;
+
+function setupTripleMissingAnchorArchiveFile(): { baseDir: string; archiveDir: string } {
+  const baseDir = mkTestDir("wal-retention-base-");
+  // Archive dir stays empty -- the anchor's own WAL segment is never
+  // written into it, which is exactly what anchor_not_in_archive checks for.
+  const archiveDir = mkTestDir("wal-retention-archive-");
+  const nowEpoch = String(Math.floor(Date.now() / 1000));
+  for (const [name, wal] of [
+    ["B1", B1_WAL],
+    ["B2", ANCHOR_WAL],
+    ["B3", B3_WAL],
+  ] as const) {
+    writeVerified(baseDir, name, { start_wal: wal, start_timeline: "1", verified_epoch: nowEpoch });
+    writeManifest(baseDir, name, SINGLE_RANGE);
+  }
+  return { baseDir, archiveDir };
+}
+
+describe("wal-retention.sh --force: bypasses delete_surge_guard only, not the other refusals", () => {
+  it("--force does not bypass anchor_not_in_archive", () => {
+    const { baseDir, archiveDir } = setupTripleMissingAnchorArchiveFile();
+    const binDir = makeBin();
+
+    const result = run(
+      ["--archive-dir", archiveDir, "--base-backup-dir", baseDir, "--keep-base", "2", "--apply", "--force"],
+      {},
+      binDir,
+    );
+
+    expect(result.status).toBe(65);
+    expect(result.stdout).toContain("WAL_RETENTION=REFUSED reason=anchor_not_in_archive");
+    expect(existsSync(path.join(baseDir, "B1", "RETIRED"))).toBe(false);
+    expect(existsSync(path.join(baseDir, "B1"))).toBe(true);
+    expect(existsSync(path.join(baseDir, ".wal-retention.state"))).toBe(false);
+  });
+
+  it("--force does not bypass verified_malformed", () => {
+    const baseDir = mkTestDir("wal-retention-base-");
+    const archiveDir = mkTestDir("wal-retention-archive-");
+    const nowEpoch = String(Math.floor(Date.now() / 1000));
+    const b1Dir = writeVerified(baseDir, "B1", { start_timeline: "1", verified_epoch: nowEpoch });
+    writeManifest(baseDir, "B1", SINGLE_RANGE);
+    const binDir = makeBin();
+
+    const result = run(
+      ["--archive-dir", archiveDir, "--base-backup-dir", baseDir, "--keep-base", "2", "--apply", "--force"],
+      {},
+      binDir,
+    );
+
+    expect(result.status).toBe(65);
+    expect(result.stdout).toContain("WAL_RETENTION=REFUSED reason=verified_malformed name=B1");
+    expect(existsSync(b1Dir)).toBe(true);
+    expect(existsSync(path.join(b1Dir, "RETIRED"))).toBe(false);
+    expect(existsSync(path.join(baseDir, ".wal-retention.state"))).toBe(false);
+  });
+
+  it("--force does not bypass plan_failed", () => {
+    const { baseDir, archiveDir } = setupHealthyTriple();
+    const archiveFilesBefore = readdirSync(archiveDir).sort();
+    const binDir = makeBin({ pg_archivecleanup: PG_ARCHIVECLEANUP_FAIL_SHIM });
+
+    const result = run(
+      ["--archive-dir", archiveDir, "--base-backup-dir", baseDir, "--keep-base", "2", "--apply", "--force"],
+      {},
+      binDir,
+    );
+
+    expect(result.status).toBe(65);
+    expect(result.stdout).toContain("WAL_RETENTION=REFUSED reason=plan_failed");
+    expect(existsSync(path.join(baseDir, "B1", "RETIRED"))).toBe(false);
+    expect(existsSync(path.join(baseDir, "B1"))).toBe(true);
+    expect(existsSync(path.join(baseDir, ".wal-retention.state"))).toBe(false);
+    expect(readdirSync(archiveDir).sort()).toEqual(archiveFilesBefore);
+  });
+});
+
 describe("wal-retention.sh: all WAL_RETENTION judgment lines are on stdout, never stderr", () => {
   it("stderr never contains a WAL_RETENTION= line across the four refusal scenarios above", () => {
     const scenarios: Array<{ args: string[]; env: NodeJS.ProcessEnv; binDir: string }> = [];
