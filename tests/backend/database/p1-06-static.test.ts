@@ -70,6 +70,7 @@ describe("P1-06 database operations static contracts", () => {
       "scripts/db/restore-pitr.sh",
       "scripts/db/verify-physical-base.sh",
       "scripts/db/wal-retention.sh",
+      "scripts/db/wal-retention-rehearsal.sh",
       "scripts/run-p1-06-postgres-verification.sh",
       "scripts/run-x9-postgres-verification.sh",
     ];

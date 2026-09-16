@@ -1,9 +1,26 @@
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
+
+// Every mkdtempSync call in this file is routed through this helper so the
+// per-test temp directory is always removed afterward, instead of leaking
+// one archive-wal-{legal,illegal,conflict,idempotent}-* directory per test
+// run into the OS tmp dir.
+const createdDirs: string[] = [];
+function mkTestDir(prefix: string): string {
+  const dir = mkdtempSync(path.join(tmpdir(), prefix));
+  createdDirs.push(dir);
+  return dir;
+}
+
+afterEach(() => {
+  for (const dir of createdDirs.splice(0, createdDirs.length)) {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
 
 // This is a rehearsal-driven regression test: the WAL retention rehearsal
 // (2026-09-16) found the original archive_command whitelist rejected two
@@ -38,7 +55,7 @@ describe("archive-wal.sh filename whitelist", () => {
   ];
 
   it.each(legalNames)("accepts %s and archives the file", (walFilename) => {
-    const work = mkdtempSync(path.join(tmpdir(), "archive-wal-legal-"));
+    const work = mkTestDir("archive-wal-legal-");
     const archiveDir = path.join(work, "archive");
     mkdirSync(archiveDir, { recursive: true });
     const sourcePath = makeSource(work, "src", `payload for ${walFilename}`);
@@ -59,7 +76,7 @@ describe("archive-wal.sh filename whitelist", () => {
   ];
 
   it.each(illegalNames)("rejects %s with exit 65", (walFilename) => {
-    const work = mkdtempSync(path.join(tmpdir(), "archive-wal-illegal-"));
+    const work = mkTestDir("archive-wal-illegal-");
     const archiveDir = path.join(work, "archive");
     mkdirSync(archiveDir, { recursive: true });
     const sourcePath = makeSource(work, "src", "payload");
@@ -70,7 +87,7 @@ describe("archive-wal.sh filename whitelist", () => {
   });
 
   it("refuses to overwrite a same-named file with different content (exit 73)", () => {
-    const work = mkdtempSync(path.join(tmpdir(), "archive-wal-conflict-"));
+    const work = mkTestDir("archive-wal-conflict-");
     const archiveDir = path.join(work, "archive");
     mkdirSync(archiveDir, { recursive: true });
     const walFilename = "00000001000000430000006B";
@@ -85,7 +102,7 @@ describe("archive-wal.sh filename whitelist", () => {
   });
 
   it("is idempotent for a same-named file with identical content (exit 0)", () => {
-    const work = mkdtempSync(path.join(tmpdir(), "archive-wal-idempotent-"));
+    const work = mkTestDir("archive-wal-idempotent-");
     const archiveDir = path.join(work, "archive");
     mkdirSync(archiveDir, { recursive: true });
     const walFilename = "00000001000000430000006B";

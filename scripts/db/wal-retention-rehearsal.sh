@@ -118,6 +118,12 @@ cleanup() {
   log "cleanup: removed container=$RIG_CONTAINER volume=$RIG_VOLUME"
 }
 trap cleanup EXIT
+on_interrupt() {
+  echo "WAL_RETENTION_REHEARSAL=ABORTED"
+  log "REHEARSAL_ABORTED via signal"
+  exit 130
+}
+trap on_interrupt INT TERM
 
 log "REHEARSAL_STARTED archive_script=$ARCHIVE_SCRIPT keep_rig=$KEEP_RIG"
 
@@ -125,7 +131,7 @@ log "REHEARSAL_STARTED archive_script=$ARCHIVE_SCRIPT keep_rig=$KEEP_RIG"
 # preparation: fresh named volume + directory skeleton, owned by postgres
 # ---------------------------------------------------------------------------
 docker volume create "$RIG_VOLUME" >/dev/null
-docker run --rm --pull never -v "$RIG_VOLUME":/rig "$IMG" \
+docker run --rm --pull never --network none -v "$RIG_VOLUME":/rig "$IMG" \
   install -d -o postgres -g postgres -m 0700 /rig /rig/archive /rig/archive-tl /rig/base /rig/work >/dev/null
 log "STEP_PREP volume+dirs ready"
 
@@ -144,6 +150,7 @@ step0() {
     "foo"
     "0000000100000043"
     "00000001000000430000006B.GZ"
+    "../x"
   )
   local out
   out="$(docker run --rm -i --pull never --network none \
@@ -177,6 +184,18 @@ for name in "$@"; do
       echo "ILLEGAL_BAD name=$name rc=$rc"
       ok=0
     fi
+    if [[ "$name" == "../x" ]]; then
+      # Path-escape attempt: confirm the rejection is not only by exit
+      # code, but that no file was actually written anywhere it could
+      # have landed -- both the literal escape target and, defensively,
+      # inside the archive dir itself.
+      if [[ -e /rig/work/step0/x || -e "/rig/work/step0/out/../x" || -e /rig/work/step0/out/x ]]; then
+        echo "ILLEGAL_BAD name=$name reason=escaped_file_created"
+        ok=0
+      else
+        echo "ILLEGAL_OK name=$name no_escape_file_created"
+      fi
+    fi
   fi
 done
 echo "STEP0_OVERALL=$([[ "$ok" == 1 ]] && echo PASS || echo FAIL)"
@@ -185,7 +204,7 @@ INNER
   echo "$out" >"$EVIDENCE_DIR/step0.log"
   local overall
   overall="$(printf '%s\n' "$out" | grep -oE 'STEP0_OVERALL=(PASS|FAIL)' | cut -d= -f2)"
-  assert_step "STEP0" "whitelist accepts 5 legal / rejects 3 illegal filename shapes" "PASS" "${overall:-MISSING}"
+  assert_step "STEP0" "whitelist accepts 5 legal / rejects 4 illegal filename shapes (incl. ../x path escape, no file written)" "PASS" "${overall:-MISSING}"
 }
 step0
 
@@ -258,6 +277,7 @@ step2() {
   dexec bash -c "$backup_env; bash /app/scripts/db-src/backup-physical-base.sh --output-dir /rig/base/B1" \
     >"$EVIDENCE_DIR/step2-b1-backup.log" 2>&1
   local b1_rc=$?
+  assert_step "STEP2_B1_RC" "backup-physical-base.sh exit code for B1" "0" "$b1_rc"
 
   sleep 10
   local archiver_row
@@ -272,6 +292,8 @@ step2() {
   dexec psql -d rig -c "SELECT pg_switch_wal();" >/dev/null
   dexec bash -c "$backup_env; bash /app/scripts/db-src/backup-physical-base.sh --output-dir /rig/base/B2" \
     >"$EVIDENCE_DIR/step2-b2-backup.log" 2>&1
+  local b2_rc=$?
+  assert_step "STEP2_B2_RC" "backup-physical-base.sh exit code for B2" "0" "$b2_rc"
 
   dexec psql -d rig -c "INSERT INTO marker(label) VALUES ('M2');" >/dev/null
   RP_M2_LSN="$(dexec psql -d rig -t -A -c "SELECT pg_create_restore_point('RP_M2');")"
@@ -280,6 +302,8 @@ step2() {
   dexec psql -d rig -c "SELECT pg_switch_wal();" >/dev/null
   dexec bash -c "$backup_env; bash /app/scripts/db-src/backup-physical-base.sh --output-dir /rig/base/B3" \
     >"$EVIDENCE_DIR/step2-b3-backup.log" 2>&1
+  local b3_rc=$?
+  assert_step "STEP2_B3_RC" "backup-physical-base.sh exit code for B3" "0" "$b3_rc"
 
   dexec psql -d rig -c "INSERT INTO marker(label) VALUES ('M3');" >/dev/null
   RP_M3_LSN="$(dexec psql -d rig -t -A -c "SELECT pg_create_restore_point('RP_M3');")"
@@ -347,6 +371,42 @@ INNER
 step3
 
 # ---------------------------------------------------------------------------
+# STEP 4N: anchor_not_in_archive fail-closed guard (covers P0-1). Must run
+# BEFORE step4's own apply -- it temporarily removes the anchor segment from
+# the real /rig/archive (not archive-mutant) and puts it back immediately
+# after the dry-run, so step4 below still sees a complete archive.
+# ---------------------------------------------------------------------------
+step4n() {
+  if [[ "$BLOCKED" == "1" ]]; then
+    result "STEP4N" SKIP "rig never came up"
+    return
+  fi
+  if [[ ! "$ANCHOR_B2" =~ ^[0-9A-F]{24}$ ]]; then
+    result "STEP4N" SKIP "ANCHOR_B2 unknown (step3 did not resolve it); cannot exercise anchor_not_in_archive"
+    return
+  fi
+  dexec bash -c "mkdir -p /rig/work/aside"
+  local moved=0
+  if dexec test -f "/rig/archive/$ANCHOR_B2"; then
+    dexec mv "/rig/archive/$ANCHOR_B2" "/rig/work/aside/$ANCHOR_B2"
+    moved=1
+  fi
+  local out rc
+  out="$(dexec bash -c "bash /app/scripts/db-src/wal-retention.sh --archive-dir /rig/archive --base-backup-dir /rig/base --keep-base 2 --json" 2>&1)"
+  rc=$?
+  echo "$out" >"$EVIDENCE_DIR/step4n-dry-run.log"
+  if [[ "$moved" == "1" ]]; then
+    dexec mv "/rig/work/aside/$ANCHOR_B2" "/rig/archive/$ANCHOR_B2"
+  fi
+  local refused_ok=0
+  printf '%s' "$out" | grep -qE '^WAL_RETENTION=REFUSED reason=anchor_not_in_archive$' && refused_ok=1
+  local rc_ok=0
+  [[ "$rc" -eq 65 ]] && rc_ok=1
+  result "STEP4N" "$([[ "$refused_ok" == 1 && "$rc_ok" == 1 ]] && echo PASS || echo FAIL)" "dry-run with ANCHOR($ANCHOR_B2) moved out of /rig/archive must print REFUSED reason=anchor_not_in_archive and exit 65, then ANCHOR is moved back before step4 (moved_back=$moved refused_ok=$refused_ok rc_ok=$rc_ok rc=$rc)"
+}
+step4n
+
+# ---------------------------------------------------------------------------
 # STEP 4: retention dry-run -> apply -> idempotent re-run
 # ---------------------------------------------------------------------------
 step4() {
@@ -357,7 +417,7 @@ step4() {
   dexec cp -a /rig/archive /rig/archive-mutant
 
   local dry
-  dry="$(dexec bash -c "bash /app/scripts/db-src/wal-retention.sh --archive-dir /rig/archive --base-backup-dir /rig/base --keep-base 2 --max-bytes 1073741824 --json" 2>&1)"
+  dry="$(dexec bash -c "export PGHOST=/var/run/postgresql PGDATABASE=rig; bash /app/scripts/db-src/wal-retention.sh --archive-dir /rig/archive --base-backup-dir /rig/base --keep-base 2 --max-bytes 1073741824 --json --require-archiver-healthy" 2>&1)"
   echo "$dry" >"$EVIDENCE_DIR/step4-dry-run.log"
   local planned
   planned="$(printf '%s' "$dry" | grep -oE 'WAL_RETENTION=DRY_RUN planned_delete=[0-9]+' | grep -oE '[0-9]+$')"
@@ -367,10 +427,16 @@ step4() {
   printf '%s' "$dry" | grep -qE "anchor.:.$ANCHOR_B2" && anchor_ok=1
   result "STEP4_DRYRUN_SET" "$([[ "$retire_ok" == 1 && "$keep_ok" == 1 ]] && echo PASS || echo FAIL)" "retire=B1($retire_ok) keep=B2,B3($keep_ok) planned_delete=${planned:-MISSING}"
   assert_step "STEP4_DRYRUN_ANCHOR" "dry-run anchor equals B2's VERIFIED start_wal" "1" "$anchor_ok"
+  local dry_refused=0
+  printf '%s' "$dry" | grep -q '^WAL_RETENTION=REFUSED' && dry_refused=1
+  assert_step "STEP4_DRYRUN_ARCHIVER_HEALTHY" "dry-run with --require-archiver-healthy is not refused" "0" "$dry_refused"
 
   local apply
-  apply="$(dexec bash -c "bash /app/scripts/db-src/wal-retention.sh --archive-dir /rig/archive --base-backup-dir /rig/base --keep-base 2 --apply --json" 2>&1)"
+  apply="$(dexec bash -c "export PGHOST=/var/run/postgresql PGDATABASE=rig; bash /app/scripts/db-src/wal-retention.sh --archive-dir /rig/archive --base-backup-dir /rig/base --keep-base 2 --apply --json --require-archiver-healthy" 2>&1)"
   echo "$apply" >"$EVIDENCE_DIR/step4-apply.log"
+  local apply_refused=0
+  printf '%s' "$apply" | grep -q '^WAL_RETENTION=REFUSED' && apply_refused=1
+  assert_step "STEP4_APPLY_ARCHIVER_HEALTHY" "apply with --require-archiver-healthy is not refused" "0" "$apply_refused"
   local deleted
   deleted="$(printf '%s' "$apply" | grep -oE 'WAL_RETENTION=APPLIED deleted=[0-9]+' | grep -oE '[0-9]+$')"
   local base_left
@@ -385,9 +451,19 @@ step4() {
   # continuity: min 24-hex archive filename after apply must equal ANCHOR,
   # and the count of 24-hex names must match the closed-form segment count
   # between ANCHOR and the highest remaining segment (single timeline).
-  local min_seg
+  local min_seg max_seg
   min_seg="$(dexec bash -c "ls /rig/archive | grep -E '^[0-9A-F]{24}\$' | sort | head -1")"
+  max_seg="$(dexec bash -c "ls /rig/archive | grep -E '^[0-9A-F]{24}\$' | sort | tail -1")"
   assert_step "STEP4_CONTINUITY_MIN" "smallest surviving 24-hex archive filename equals ANCHOR" "$ANCHOR_B2" "$min_seg"
+
+  local expected_count="" actual_count
+  if [[ "$ANCHOR_B2" =~ ^[0-9A-F]{24}$ && "$max_seg" =~ ^[0-9A-F]{24}$ ]]; then
+    local lo_log="${ANCHOR_B2:8:8}" lo_seg="${ANCHOR_B2:16:8}"
+    local hi_log="${max_seg:8:8}" hi_seg="${max_seg:16:8}"
+    expected_count=$(( ( $((16#$hi_log)) - $((16#$lo_log)) ) * 256 + ( $((16#$hi_seg)) - $((16#$lo_seg)) ) + 1 ))
+  fi
+  actual_count="$(dexec bash -c "ls /rig/archive | grep -cE '^[0-9A-F]{24}\$' || true")"
+  assert_step "STEP4_CONTINUITY_COUNT" "surviving 24-hex archive file count matches closed-form segment count from ANCHOR($ANCHOR_B2) to max($max_seg)" "${expected_count:-MISSING}" "$actual_count"
 
   local backup_leftover
   backup_leftover="$(dexec bash -c "ls /rig/archive | grep -c '\\.backup\$' || true")"
