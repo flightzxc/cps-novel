@@ -93,6 +93,12 @@ export const ADMIN_TASK_ROUTES = [
   // registered for a fixed capability.
   { id: "admin.api.task.progress", path: "/api/admin/tasks/progress", methods: ["GET"], capability: "task:manage" },
   { id: "admin.api.task.retry_failed", path: "/api/admin/tasks/retry-failed", methods: ["POST"], capability: "task:manage" },
+  // X10 task control (pause/resume/abort) — same fixed-path-with-body-taskId
+  // shape as `/retry-failed` above, for the same `resolveAdminRoute`
+  // exact-string-match reason.
+  { id: "admin.api.task.pause", path: "/api/admin/tasks/pause", methods: ["POST"], capability: "task:manage" },
+  { id: "admin.api.task.resume", path: "/api/admin/tasks/resume", methods: ["POST"], capability: "task:manage" },
+  { id: "admin.api.task.abort", path: "/api/admin/tasks/abort", methods: ["POST"], capability: "task:manage" },
   { id: "admin.api.task.manual_reviews", path: "/api/admin/tasks/manual-reviews", methods: ["GET"], capability: "task:manage" },
   { id: "admin.api.task.manual_review.resolve", path: "/api/admin/tasks/manual-reviews/resolve", methods: ["POST"], capability: "task:manage" },
   { id: "admin.api.promo_link.list", path: "/api/admin/promo-links", methods: ["GET"], capability: "task:manage" },

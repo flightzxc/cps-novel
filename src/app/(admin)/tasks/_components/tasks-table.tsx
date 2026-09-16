@@ -10,7 +10,9 @@ import {
   catalogBatchBlockedReasons,
   catalogBatchPhaseLabel,
   safeTaskFailureDisplay,
+  taskControlSummaryLine,
   taskFamilyLabel,
+  type TaskControlSummary,
 } from "../_lib/task-copy";
 
 export type TaskSummaryRow = {
@@ -47,6 +49,14 @@ export type TaskSummaryRow = {
    * switches the 总数/成功/失败 columns to "本" units.
    */
   readonly bookCounts?: CatalogBookCountsDto;
+  /**
+   * X10 task control (pause/resume/abort): present only for a `disabled`
+   * row this codebase's own pause/abort/system-hold actually marked — see
+   * `TaskControlSummary`'s own doc comment in `../_lib/task-copy` for why an
+   * unmarked `disabled` row (one of three pre-existing, unrelated meanings)
+   * never gets this field.
+   */
+  readonly taskControl?: TaskControlSummary;
   /** A parent catalog batch's materialization state and compact totals. */
   readonly catalogBatch?: {
     readonly phase: string;
@@ -163,7 +173,20 @@ export function TasksTable({
                 <span className="ml-2 font-mono text-[11px] text-gray-400">{task.taskId}</span>
               </td>
               <td className="px-4 py-3" data-testid={`task-status-${task.taskId}`}>
-                {taskStatusLabel(task.status)}
+                {task.taskControl ? (
+                  <span
+                    className={
+                      task.taskControl.kind === "system_hold"
+                        ? "font-medium text-red-700"
+                        : "font-medium text-amber-700"
+                    }
+                    data-testid={`task-control-badge-${task.taskId}`}
+                  >
+                    {taskControlSummaryLine(task.taskControl)}
+                  </span>
+                ) : (
+                  taskStatusLabel(task.status)
+                )}
                 {task.catalogBatch && (
                   <p className="mt-1 text-xs text-gray-500" data-testid={`catalog-batch-phase-${task.taskId}`}>
                     {catalogBatchPhaseLabel(task.catalogBatch.phase)}

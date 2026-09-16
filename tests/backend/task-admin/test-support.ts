@@ -50,7 +50,12 @@ export async function issueTaskAuthorization(
   stores: TestOnlyInMemoryAuthStores,
   input: {
     token: string;
-    pathname: "/api/admin/tasks/retry-failed" | "/api/admin/tasks/manual-reviews/resolve";
+    pathname:
+      | "/api/admin/tasks/retry-failed"
+      | "/api/admin/tasks/manual-reviews/resolve"
+      | "/api/admin/tasks/pause"
+      | "/api/admin/tasks/resume"
+      | "/api/admin/tasks/abort";
     requestId?: string;
     env?: NodeJS.ProcessEnv;
   },
@@ -111,6 +116,14 @@ type FakeParent = {
   error: unknown;
 };
 
+export type FakeCredential = {
+  id: string;
+  channelAccountId: string;
+  status: string;
+  expiresAt: Date | null;
+  lastValidatedAt: Date | null;
+};
+
 type FakeIntent = {
   id: string;
   status: string;
@@ -163,6 +176,22 @@ export class TaskAdminFakeDb {
   readonly itemUpdateCalls = new Map<TaskFamily, number>();
   readonly parentUpdateCalls = new Map<TaskFamily, number>();
   promoMutationCalls = 0;
+  /**
+   * X10 task control: backs `resolveClaimCredentialAdmission`'s
+   * `channelAccountCredential.findMany` for `resumeTask`'s precondition
+   * recheck. Seeded with one admissible row for the default
+   * `channelAccountId` every fake parent above already carries, so a test
+   * that never touches this array (every pre-existing test in this file)
+   * is unaffected; a test exercising the precondition gate mutates or
+   * empties this array instead.
+   */
+  readonly credentials: FakeCredential[] = [{
+    id: "70000000-0000-4000-8000-000000000001",
+    channelAccountId: "40000000-0000-4000-8000-000000000001",
+    status: "active",
+    expiresAt: null,
+    lastValidatedAt: NOW,
+  }];
 
   private manualReads = 0;
   private releaseManualReads: (() => void) | null = null;
@@ -229,6 +258,29 @@ export class TaskAdminFakeDb {
         this.parentUpdateCalls.set(family, (this.parentUpdateCalls.get(family) ?? 0) + 1);
         return row;
       },
+      /**
+       * X10 task control: `pauseTask`/`resumeTask`/`abortTask` write through
+       * a conditional `updateMany` (matching CPS's own TOCTOU-safe pause
+       * route shape) rather than `update`, even though `lockParent`'s own
+       * `FOR UPDATE` already makes the plain `update` above race-free —
+       * belt-and-suspenders, kept on purpose. `where.status` is either a
+       * bare string or a Prisma `{ in: [...] }` filter; this fake supports
+       * both.
+       */
+      updateMany: async (args: {
+        where: { id: string; status: string | { in: readonly string[] } };
+        data: Record<string, unknown>;
+      }) => {
+        const row = this.parents.get(family);
+        if (!row || row.id !== args.where.id) return { count: 0 };
+        const statusMatches = typeof args.where.status === "string"
+          ? row.status === args.where.status
+          : args.where.status.in.includes(row.status);
+        if (!statusMatches) return { count: 0 };
+        Object.assign(row, args.data);
+        this.parentUpdateCalls.set(family, (this.parentUpdateCalls.get(family) ?? 0) + 1);
+        return { count: 1 };
+      },
     };
   }
 
@@ -251,6 +303,7 @@ export class TaskAdminFakeDb {
               task_type: row.taskType ?? "promo_link.claim",
               channel_account_id: row.channelAccountId,
               channel_app_id: row.channelAppId,
+              result: row.result,
             }];
           }
         }
@@ -263,6 +316,17 @@ export class TaskAdminFakeDb {
       genericTaskItem: genericItems,
       channelSyncTask: this.parentDelegate("channel_sync"),
       genericTask: this.parentDelegate("generic"),
+      /**
+       * X10 task control: backs `resolveClaimCredentialAdmission`
+       * (`resumeTask`'s precondition recheck). Only `findMany` is exercised
+       * — that function never writes.
+       */
+      channelAccountCredential: {
+        findMany: async (args: { where: { channelAccountId: string; status: string } }) =>
+          this.credentials
+            .filter((row) => row.channelAccountId === args.where.channelAccountId && row.status === args.where.status)
+            .map((row) => ({ id: row.id, expiresAt: row.expiresAt, lastValidatedAt: row.lastValidatedAt })),
+      },
       sideEffectIntent: {
         findFirst: async () => this.unresolvedStatus ? { id: "blocked-intent" } : null,
         findUnique: async (args: { where: { id: string } }) => {

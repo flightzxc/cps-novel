@@ -64,7 +64,7 @@ const SAFE_ERROR_LABELS: Readonly<Record<string, string>> = Object.freeze({
   claim_readback_locator_stale: "推广链接回读定位信息已过期",
   claim_readback_target_not_located: "推广链接回读未定位到目标",
   lease_lost_before_claim: "领取推广链接前任务租约已丢失",
-  circuit_breaker_tripped: "批次因连续同类系统性失败被熔断中止",
+  task_system_hold: "任务因批次级系统性故障被系统自动停止",
   finalize_failed: "任务结果落库失败",
   legacy_template_on_materialize: "书目落库任务不支持 ArticleTemplate",
   legacy_content_create_retired: "旧版内容创建协议已停用",

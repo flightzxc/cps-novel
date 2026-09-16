@@ -12,5 +12,6 @@ export * from "./sitemap-refresh";
 export * from "./side-effect-intent";
 export * from "./state";
 export * from "./store";
+export * from "./task-control";
 export * from "./task-termination";
 export * from "./types";

@@ -52,6 +52,15 @@ export type AdminErrorCode =
   | "task_admin_unresolved_intent"
   | "task_admin_concurrent_write"
   | "task_admin_active_scope_conflict"
+  /**
+   * X10 task control: `resumeTask` re-validated the taskType's own
+   * precondition (e.g. `promo_link.claim.v1`'s credential admission check)
+   * and it still refuses. Distinct from `task_admin_state_conflict` — the
+   * task's own status/marker were exactly right for a resume attempt, but
+   * an external fact is not, so the remediation is different ("go fix the
+   * credential", not "refresh the page").
+   */
+  | "task_admin_precondition_failed"
   | "task_admin_internal_error";
 
 /**

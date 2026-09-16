@@ -193,3 +193,45 @@ export const TASK_LIST_MAX_LIMIT = 100;
 export const LIST_LIMIT_NOTE =
   "本列表没有翻页——接口只支持一次性返回最近的若干条（最多 100 条），不存在第 2 页。" +
   "如果没有看到目标任务，请用左侧的 family / 状态筛选缩小范围，而不是加大条数等待。";
+
+/**
+ * X10 task control (pause/resume/abort). A local copy of the shape, not an
+ * import of `TaskControlMarker` (`src/lib/tasks/task-control.ts`) — this
+ * file already keeps its own local copies of a few server-side enums
+ * (`TASK_FAMILIES`/`RETRYABLE_PARENT_STATUSES` above) rather than reaching
+ * into server internals, and this is the same discipline.
+ *
+ * Only ever meaningful when the task's own `status === "disabled"` *and*
+ * this field is present — `src/server/task-admin/service.ts`'s `taskSummary`
+ * only ever populates it in that case, leaving a `disabled` row from any of
+ * this codebase's three pre-existing, unrelated reasons (a legacy
+ * out-of-band flip, a feature-flag-off task, or a catalog-batch double-gate
+ * refusal) with this field absent.
+ */
+export type TaskControlKind = "paused" | "aborted" | "system_hold";
+export type TaskControlSummary = Readonly<{
+  kind: TaskControlKind;
+  source: "manual" | "system";
+  at: string;
+  actorId?: string | null;
+  reason?: string | null;
+  reasonCode?: string;
+  terminatedPendingItemCount?: number;
+}>;
+
+const TASK_CONTROL_KIND_LABELS: Readonly<Record<TaskControlKind, string>> = Object.freeze({
+  paused: "人工暂停",
+  aborted: "人工中止",
+  system_hold: "系统保护停止",
+});
+
+/** Unknown kinds pass through verbatim, same discipline as `taskStatusLabel`. */
+export function taskControlKindLabel(kind: string): string {
+  return TASK_CONTROL_KIND_LABELS[kind as TaskControlKind] ?? kind;
+}
+
+/** Compact one-line summary for the tasks-list table's status cell. */
+export function taskControlSummaryLine(control: TaskControlSummary): string {
+  const label = taskControlKindLabel(control.kind);
+  return control.kind === "system_hold" && control.reasonCode ? `${label}（${control.reasonCode}）` : label;
+}

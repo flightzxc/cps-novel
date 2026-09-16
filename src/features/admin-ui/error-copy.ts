@@ -68,6 +68,7 @@ const COPY: Readonly<Record<AdminErrorCode, string>> = Object.freeze({
   task_admin_unresolved_intent: "该任务有未裁决的人工审查项，先去处理",
   task_admin_concurrent_write: "任务已被其他操作同时修改，请刷新后重试",
   task_admin_active_scope_conflict: "同一渠道/应用范围内已有进行中的任务，请等待其完成后再重试",
+  task_admin_precondition_failed: "恢复前置条件未满足（例如渠道凭据仍不可用），请先处理后再重试",
   task_admin_internal_error: "系统内部错误，请联系工程排查并附上操作时间",
   invalid_tag_request: "标签请求格式无效",
   invalid_canonical_tag: "Canonical Tag 数据无效",

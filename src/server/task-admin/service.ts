@@ -8,12 +8,24 @@ import {
 } from "@/lib/auth";
 import { chunkIds } from "@/lib/db/chunked-id-lookup";
 import { isUniqueConstraintViolation, withDbRetry } from "@/lib/db/db-retry";
-import { CATALOG_BATCH_TASK_TYPE, MOBOREADER_TASK_TYPES, PARENT_BATCH_TASK_TYPES, isParentBatchTaskType, type TaskFamily } from "@/lib/tasks";
+import {
+  CATALOG_BATCH_TASK_TYPE,
+  MOBOREADER_TASK_TYPES,
+  PARENT_BATCH_TASK_TYPES,
+  PROMO_LINK_CLAIM_TASK_TYPE,
+  isParentBatchTaskType,
+  mergeTaskControlResult,
+  readTaskControlMarker,
+  terminatePendingTaskItems,
+  type TaskControlMarker,
+  type TaskFamily,
+} from "@/lib/tasks";
 import {
   ARTICLE_GENERATE_BATCH_TASK_TYPE,
   ARTICLE_GENERATE_BATCH_TASK_TYPE_V2,
   ARTICLE_GENERATE_TASK_TYPE,
 } from "@/lib/tasks/article-generate";
+import { resolveClaimCredentialAdmission } from "@/lib/credentials/claim-readiness";
 import type { ArticleGenerateBlockedReason } from "@/domain/article-generation";
 import { TASK_ITEM_STATUSES, TASK_STATUSES } from "@/domain/database-statuses";
 import { deriveCatalogBatchPhase } from "@/domain/catalog-batch";
@@ -28,6 +40,14 @@ export const TASK_RETRY_ENTRY_ID = "admin.api.task.retry_failed";
 export const MANUAL_REVIEW_RESOLVE_ENTRY_ID = "admin.api.task.manual_review.resolve";
 export const TASK_RETRY_AUDIT_ACTION = "task.retry_failed";
 export const MANUAL_REVIEW_AUDIT_ACTION = "side_effect_intent.manual_resolve";
+export const TASK_PAUSE_ENTRY_ID = "admin.api.task.pause";
+export const TASK_RESUME_ENTRY_ID = "admin.api.task.resume";
+export const TASK_ABORT_ENTRY_ID = "admin.api.task.abort";
+export const TASK_PAUSE_AUDIT_ACTION = "task.pause";
+export const TASK_RESUME_AUDIT_ACTION = "task.resume";
+export const TASK_ABORT_AUDIT_ACTION = "task.abort";
+/** `terminatePendingTaskItems`'s reason code for items cascaded by a manual abort — distinct from `task_system_hold` (the worker's own halt) so the two are never confused when reading an item's own `error.code`. */
+export const TASK_ABORT_TERMINATION_REASON = "task_manually_aborted";
 
 // Phase C: catalog_scan folded into GenericTask (taskType = "catalog_scan");
 // it is no longer a physical family.
@@ -54,7 +74,18 @@ export type TaskAdminErrorCode =
   | "task_admin_idempotency_conflict"
   | "task_admin_unresolved_intent"
   | "task_admin_concurrent_write"
-  | "task_admin_active_scope_conflict";
+  | "task_admin_active_scope_conflict"
+  /**
+   * X10 task control (pause/resume/abort): `resumeTask` re-validated a
+   * taskType's own precondition (currently only `promo_link.claim.v1`'s
+   * credential admission check) and it still refuses right now. Distinct
+   * from `task_admin_state_conflict` — the task's own status/marker were
+   * exactly right for a resume attempt; it is some *external* fact (the
+   * credential) that is not, and the operator's remediation is different
+   * ("go fix the credential", not "refresh, this button should not have
+   * been enabled").
+   */
+  | "task_admin_precondition_failed";
 
 export class TaskAdminError extends Error {
   constructor(readonly code: TaskAdminErrorCode, readonly status: TaskAdminErrorStatus) {
@@ -117,6 +148,19 @@ export type TaskSummaryDto = Readonly<{
    * this field at all.
    */
   bookCounts?: CatalogBookCountsDto;
+  /**
+   * X10 task control (pause/resume/abort): the task's own
+   * `result.taskControl` marker (`src/lib/tasks/task-control.ts`), read and
+   * validated by `readTaskControlMarker` — never the raw `result` blob.
+   * Present only when `status === "disabled"` *and* the row actually carries
+   * this module's marker; a `disabled` row from any of this codebase's three
+   * pre-existing reasons (a legacy out-of-band flip, a feature-flag-off
+   * task, or a catalog-batch double-gate refusal) carries no marker and
+   * leaves this field absent, exactly like every other optional DTO field
+   * here. This is what lets the UI tell 人工暂停/人工中止/系统保护停止 apart
+   * from each other and from the earlier, unrelated meanings of `disabled`.
+   */
+  taskControl?: TaskControlMarker;
 }>;
 
 export type TaskItemDto = Readonly<{
@@ -364,6 +408,15 @@ type LockedParentRow = {
   task_type: string;
   channel_account_id: string | null;
   channel_app_id: string | null;
+  /**
+   * X10 task control: read only so `pauseTask`/`abortTask` can merge their
+   * `taskControl` marker onto whatever `result` already holds
+   * (`mergeTaskControlResult`) rather than clobbering a taskType's own
+   * business-result fields, and so `resumeTask` can confirm the row is
+   * actually carrying *our* `paused` marker rather than one of the
+   * pre-existing unmarked `disabled` meanings. Never itself exposed.
+   */
+  result: Prisma.JsonValue | null;
 };
 
 type AuditRow = {
@@ -783,6 +836,10 @@ function taskSummary(row: TaskListRow, bookCounts?: CatalogBookCountsDto): TaskS
       : 0,
     blockedReasonCounts: isCatalogMaterialize ? blockedReasonCounts : {},
   } : undefined;
+  // X10 task control: only ever derivable off a `disabled` row, and only
+  // when the row actually carries the marker — see `TaskSummaryDto.taskControl`'s
+  // own doc comment for why an unmarked `disabled` row must stay absent here.
+  const taskControl = row.status === "disabled" ? readTaskControlMarker(row.result) : undefined;
   return Object.freeze({
     family: row.family,
     taskId: row.task_id,
@@ -798,6 +855,7 @@ function taskSummary(row: TaskListRow, bookCounts?: CatalogBookCountsDto): TaskS
     ...(catalogBatch ? { catalogBatch } : {}),
     ...(stopReason !== undefined ? { stopReason } : {}),
     ...(bookCounts !== undefined ? { bookCounts } : {}),
+    ...(taskControl ? { taskControl } : {}),
   });
 }
 
@@ -1195,12 +1253,12 @@ async function lockParent(
   let rows: LockedParentRow[];
   if (family === "channel_sync") {
     rows = await tx.$queryRaw(Prisma.sql`
-      SELECT id, status, task_type, channel_account_id, channel_app_id
+      SELECT id, status, task_type, channel_account_id, channel_app_id, result
       FROM channel_sync_task WHERE id = ${taskId}::uuid FOR UPDATE
     `);
   } else {
     rows = await tx.$queryRaw(Prisma.sql`
-      SELECT id, status, task_type, channel_account_id, channel_app_id
+      SELECT id, status, task_type, channel_account_id, channel_app_id, result
       FROM generic_task WHERE id = ${taskId}::uuid FOR UPDATE
     `);
   }
@@ -1489,6 +1547,384 @@ export async function retryFailedTask(
     }
     throw error;
   }
+}
+
+// ---------------------------------------------------------------------
+// X10 task control: pause / resume / abort
+//
+// Ported from CPS's `/api/tasks/[id]/{pause,resume,cancel}` (v8.5.1) — same
+// three operations, same core semantics (pause stops leasing but leaves
+// pending items alone and lets the in-flight one finish; resume continues
+// the same task; abort/cancel is irreversible) — adapted to this repo's
+// lock-then-write-inside-one-transaction admin-mutation shape (`lockParent`
+// already holds `FOR UPDATE` for the whole mutation, which is a strictly
+// stronger safety property than CPS's own unconditional-write hazard, but
+// the conditional `updateMany` + affected-row check below is kept anyway,
+// matching CPS's own belt-and-suspenders comment on its pause route) rather
+// than CPS's own findFirst-then-updateMany-with-no-transaction shape, and
+// with two capabilities CPS's version does not have:
+//
+//  1. Abort actually terminates every still-`pending` item
+//     (`terminatePendingTaskItems`) instead of only flipping the parent's
+//     own status. CPS's `cancel` route never does this — it is exactly the
+//     gap `reference_novel_frozen_task_backlog.md` names as the cause of
+//     95,860 orphaned `pending` rows here (a `disabled` parent whose items
+//     were never driven to any terminal state by anything).
+//  2. Every control action records *who* (an admin identity) or *what* (the
+//     system) acted, and why, via `src/lib/tasks/task-control.ts`'s marker
+//     — CPS has no such concept; its `paused`/`cancelled` are bare statuses.
+//
+// `retryFailedTask` above already establishes this file's idempotency-replay
+// shape (a mutation request id that resolves to a prior committed
+// `OperationAudit` row replays that row's result instead of re-executing);
+// these three functions follow it exactly for the same reason: a client
+// retry after a dropped response must never risk applying the same control
+// action twice.
+// ---------------------------------------------------------------------
+
+export type TaskControlResult = Readonly<{
+  family: TaskFamily;
+  taskId: string;
+  status: "disabled" | "pending";
+  wrote: boolean;
+  auditId: string;
+}>;
+
+export type AbortTaskResult = Readonly<{
+  family: TaskFamily;
+  taskId: string;
+  status: "disabled";
+  terminatedPendingItemCount: number;
+  wrote: boolean;
+  auditId: string;
+}>;
+
+/**
+ * `resumeTask`'s only known precondition today: a `promo_link.claim.v1`
+ * task's credential must still be admissible, re-checked the same way the
+ * original enqueue gate did (`resolveClaimCredentialAdmission`,
+ * Web-safe/non-secret). Every other taskType has no known precondition and
+ * resumes unconditionally — this is intentionally a single `if`, not a
+ * registry, because there is exactly one precondition in this codebase
+ * today; a second taskType growing one is a deliberate, reviewable addition
+ * here, not a silent gap.
+ */
+async function checkResumePrecondition(
+  tx: Prisma.TransactionClient,
+  taskType: string,
+  channelAccountId: string | null,
+  now: Date,
+): Promise<void> {
+  if (taskType !== PROMO_LINK_CLAIM_TASK_TYPE) return;
+  if (!channelAccountId) return;
+  const admission = await resolveClaimCredentialAdmission(tx, channelAccountId, now);
+  if (admission.status === "not_ready") {
+    throw new TaskAdminError("task_admin_precondition_failed", 409);
+  }
+}
+
+function replayTaskControl(
+  audit: AuditRow,
+  actorId: string,
+  family: TaskFamily,
+  taskId: string,
+  reason: string | null,
+  expectedStatus: "disabled" | "pending",
+): TaskControlResult {
+  const after = jsonObject(audit.afterSnapshot);
+  if (
+    audit.actorId !== actorId
+    || audit.entityId !== taskId
+    || audit.taskType !== family
+    || audit.reason !== reason
+    || after?.status !== expectedStatus
+  ) {
+    throw new TaskAdminError("task_admin_idempotency_conflict", 409);
+  }
+  return Object.freeze({ family, taskId, status: expectedStatus, wrote: false, auditId: audit.id.toString() });
+}
+
+function replayAbort(
+  audit: AuditRow,
+  actorId: string,
+  family: TaskFamily,
+  taskId: string,
+  reason: string | null,
+): AbortTaskResult {
+  const after = jsonObject(audit.afterSnapshot);
+  if (
+    audit.actorId !== actorId
+    || audit.entityId !== taskId
+    || audit.taskType !== family
+    || audit.reason !== reason
+    || after?.status !== "disabled"
+    || typeof after.terminatedPendingItemCount !== "number"
+  ) {
+    throw new TaskAdminError("task_admin_idempotency_conflict", 409);
+  }
+  return Object.freeze({
+    family,
+    taskId,
+    status: "disabled",
+    terminatedPendingItemCount: after.terminatedPendingItemCount,
+    wrote: false,
+    auditId: audit.id.toString(),
+  });
+}
+
+/**
+ * Pause — stop leasing new items; every still-`pending` item is left exactly
+ * as `pending`; whichever item is currently `processing` finishes normally
+ * (its own `finalizeTaskItem` never consults the parent's status at all, and
+ * `recomputeParentTask`'s own `status = 'disabled'` guard,
+ * `src/lib/tasks/store.ts`, keeps this pause from being silently reverted
+ * the moment that item's finalize runs).
+ */
+export async function pauseTask(
+  input: {
+    authorization: AdminServiceAuthorization;
+    requestId: string;
+    family: unknown;
+    taskId: unknown;
+    reason?: unknown;
+  },
+  dependencies: TaskAdminMutationDependencies,
+): Promise<TaskControlResult> {
+  const context = await requireFreshAdminServiceMutation(input.authorization, "task:manage", {
+    identities: dependencies.identities,
+    sessions: dependencies.sessions,
+    entryId: TASK_PAUSE_ENTRY_ID,
+    requestId: input.requestId,
+    env: dependencies.env,
+    now: dependencies.now,
+  });
+  const family = oneOf(input.family, TASK_FAMILIES);
+  const taskId = uuid(input.taskId);
+  const reason = optionalBoundedText(input.reason, 2_000);
+  const now = dependencies.now ?? new Date();
+
+  return withDbRetry(
+    () =>
+      dependencies.db.$transaction(async (tx) => {
+        await lockMutationRequest(tx, input.requestId);
+        const parent = await lockParent(tx, family, taskId);
+        if (!parent) throw new TaskAdminError("task_admin_not_found", 404);
+
+        const prior = await committedAudit(tx, TASK_PAUSE_AUDIT_ACTION, input.requestId);
+        if (prior) return replayTaskControl(prior, context.identity.id, family, taskId, reason, "disabled");
+
+        if (!["pending", "processing"].includes(parent.status)) {
+          throw new TaskAdminError("task_admin_state_conflict", 409);
+        }
+
+        const marker: TaskControlMarker = {
+          kind: "paused",
+          source: "manual",
+          at: now.toISOString(),
+          actorId: context.identity.id,
+          reason,
+        };
+        const updateData = { status: "disabled" as const, result: mergeTaskControlResult(parent.result, marker) };
+        const updated = family === "channel_sync"
+          ? await tx.channelSyncTask.updateMany({ where: { id: taskId, status: { in: ["pending", "processing"] } }, data: updateData })
+          : await tx.genericTask.updateMany({ where: { id: taskId, status: { in: ["pending", "processing"] } }, data: updateData });
+        if (updated.count !== 1) throw new TaskAdminError("task_admin_concurrent_write", 409);
+
+        const audit = await tx.operationAudit.create({
+          data: {
+            actorType: "admin",
+            actorId: context.identity.id,
+            action: TASK_PAUSE_AUDIT_ACTION,
+            entityType: "Task",
+            entityId: taskId,
+            requestId: input.requestId,
+            taskType: family,
+            taskId,
+            reason,
+            beforeSnapshot: { status: parent.status },
+            afterSnapshot: { status: "disabled" },
+          },
+          select: { id: true },
+        });
+        return Object.freeze({ family, taskId, status: "disabled" as const, wrote: true, auditId: audit.id.toString() });
+      }),
+    { op: "task-admin.pauseTask", itemId: taskId, idempotencyKey: input.requestId },
+  );
+}
+
+/**
+ * Resume — re-validates {@link checkResumePrecondition} first (inside the
+ * same locked transaction, so a resume can never race a concurrent
+ * pause/abort of the same task), then continues the same task's remaining
+ * `pending` items. Only ever accepts a row this codebase's own pause put
+ * into `disabled` (`readTaskControlMarker(...).kind === "paused"`) — never a
+ * legacy out-of-band `disabled` row, a feature-flag-off `disabled` row, nor
+ * an aborted/system-held one.
+ *
+ * Retry-failed is a deliberately separate concern (`retryFailedTask` above,
+ * which only ever accepts `failed`/`completed_with_errors`) and is never
+ * folded into resume.
+ */
+export async function resumeTask(
+  input: {
+    authorization: AdminServiceAuthorization;
+    requestId: string;
+    family: unknown;
+    taskId: unknown;
+  },
+  dependencies: TaskAdminMutationDependencies,
+): Promise<TaskControlResult> {
+  const context = await requireFreshAdminServiceMutation(input.authorization, "task:manage", {
+    identities: dependencies.identities,
+    sessions: dependencies.sessions,
+    entryId: TASK_RESUME_ENTRY_ID,
+    requestId: input.requestId,
+    env: dependencies.env,
+    now: dependencies.now,
+  });
+  const family = oneOf(input.family, TASK_FAMILIES);
+  const taskId = uuid(input.taskId);
+  const now = dependencies.now ?? new Date();
+
+  return withDbRetry(
+    () =>
+      dependencies.db.$transaction(async (tx) => {
+        await lockMutationRequest(tx, input.requestId);
+        const parent = await lockParent(tx, family, taskId);
+        if (!parent) throw new TaskAdminError("task_admin_not_found", 404);
+
+        const prior = await committedAudit(tx, TASK_RESUME_AUDIT_ACTION, input.requestId);
+        if (prior) return replayTaskControl(prior, context.identity.id, family, taskId, null, "pending");
+
+        const marker = readTaskControlMarker(parent.result);
+        if (parent.status !== "disabled" || marker?.kind !== "paused") {
+          throw new TaskAdminError("task_admin_state_conflict", 409);
+        }
+
+        await checkResumePrecondition(tx, parent.task_type, parent.channel_account_id, now);
+
+        const updateData = { status: "pending" as const };
+        const updated = family === "channel_sync"
+          ? await tx.channelSyncTask.updateMany({ where: { id: taskId, status: "disabled" }, data: updateData })
+          : await tx.genericTask.updateMany({ where: { id: taskId, status: "disabled" }, data: updateData });
+        if (updated.count !== 1) throw new TaskAdminError("task_admin_concurrent_write", 409);
+
+        const audit = await tx.operationAudit.create({
+          data: {
+            actorType: "admin",
+            actorId: context.identity.id,
+            action: TASK_RESUME_AUDIT_ACTION,
+            entityType: "Task",
+            entityId: taskId,
+            requestId: input.requestId,
+            taskType: family,
+            taskId,
+            reason: null,
+            beforeSnapshot: { status: "disabled" },
+            afterSnapshot: { status: "pending" },
+          },
+          select: { id: true },
+        });
+        return Object.freeze({ family, taskId, status: "pending" as const, wrote: true, auditId: audit.id.toString() });
+      }),
+    { op: "task-admin.resumeTask", itemId: taskId, idempotencyKey: input.requestId },
+  );
+}
+
+/**
+ * Abort — irreversible. Stops leasing (every still-`pending` item is
+ * terminated via `terminatePendingTaskItems` in the same transaction, so
+ * nothing is ever left orphaned the way CPS's own `cancel` route leaves
+ * behind); whichever item is currently `processing` finishes normally;
+ * history is never deleted or rewritten — every already-`success`/`failed`/
+ * `skipped` item keeps its own outcome untouched, and this action never
+ * revisits a task it has already aborted (the `disabled` + `aborted` marker
+ * pins that state, and a second abort attempt on the same task is refused
+ * by the eligibility check below, not silently accepted as a no-op).
+ */
+export async function abortTask(
+  input: {
+    authorization: AdminServiceAuthorization;
+    requestId: string;
+    family: unknown;
+    taskId: unknown;
+    reason?: unknown;
+  },
+  dependencies: TaskAdminMutationDependencies,
+): Promise<AbortTaskResult> {
+  const context = await requireFreshAdminServiceMutation(input.authorization, "task:manage", {
+    identities: dependencies.identities,
+    sessions: dependencies.sessions,
+    entryId: TASK_ABORT_ENTRY_ID,
+    requestId: input.requestId,
+    env: dependencies.env,
+    now: dependencies.now,
+  });
+  const family = oneOf(input.family, TASK_FAMILIES);
+  const taskId = uuid(input.taskId);
+  const reason = optionalBoundedText(input.reason, 2_000);
+  const now = dependencies.now ?? new Date();
+
+  return withDbRetry(
+    () =>
+      dependencies.db.$transaction(async (tx) => {
+        await lockMutationRequest(tx, input.requestId);
+        const parent = await lockParent(tx, family, taskId);
+        if (!parent) throw new TaskAdminError("task_admin_not_found", 404);
+
+        const prior = await committedAudit(tx, TASK_ABORT_AUDIT_ACTION, input.requestId);
+        if (prior) return replayAbort(prior, context.identity.id, family, taskId, reason);
+
+        const priorMarker = readTaskControlMarker(parent.result);
+        const eligible = ["pending", "processing"].includes(parent.status)
+          || (parent.status === "disabled" && priorMarker?.kind === "paused");
+        if (!eligible) throw new TaskAdminError("task_admin_state_conflict", 409);
+
+        const { terminatedCount } = await terminatePendingTaskItems(tx, family, taskId, {
+          code: TASK_ABORT_TERMINATION_REASON,
+          message: "Task was manually aborted before this item was ever attempted",
+        });
+        const marker: TaskControlMarker = {
+          kind: "aborted",
+          source: "manual",
+          at: now.toISOString(),
+          actorId: context.identity.id,
+          reason,
+          terminatedPendingItemCount: terminatedCount,
+        };
+        const updateData = { status: "disabled" as const, result: mergeTaskControlResult(parent.result, marker) };
+        const updated = family === "channel_sync"
+          ? await tx.channelSyncTask.updateMany({ where: { id: taskId, status: parent.status }, data: updateData })
+          : await tx.genericTask.updateMany({ where: { id: taskId, status: parent.status }, data: updateData });
+        if (updated.count !== 1) throw new TaskAdminError("task_admin_concurrent_write", 409);
+
+        const audit = await tx.operationAudit.create({
+          data: {
+            actorType: "admin",
+            actorId: context.identity.id,
+            action: TASK_ABORT_AUDIT_ACTION,
+            entityType: "Task",
+            entityId: taskId,
+            requestId: input.requestId,
+            taskType: family,
+            taskId,
+            reason,
+            beforeSnapshot: { status: parent.status },
+            afterSnapshot: { status: "disabled", terminatedPendingItemCount: terminatedCount },
+          },
+          select: { id: true },
+        });
+        return Object.freeze({
+          family,
+          taskId,
+          status: "disabled" as const,
+          terminatedPendingItemCount: terminatedCount,
+          wrote: true,
+          auditId: audit.id.toString(),
+        });
+      }),
+    { op: "task-admin.abortTask", itemId: taskId, idempotencyKey: input.requestId },
+  );
 }
 
 function manualReplay(

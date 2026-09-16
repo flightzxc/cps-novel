@@ -60,7 +60,7 @@ import {
 } from "../../src/lib/tasks/promo-link-claim-limits";
 import { createPublicRedirectCode } from "../../src/lib/redirect";
 import { resolveClaimCredentialReadiness } from "../credentials/claim-readiness";
-import { maybeTripPromoLinkClaimCircuitBreaker } from "./promo-link-claim-circuit-breaker";
+import { maybeHaltTaskOnGlobalFailure } from "./promo-link-claim-system-hold";
 import { bindPromoLinkToArticles } from "./promo-link-binding";
 
 // ---------------------------------------------------------------------
@@ -593,11 +593,12 @@ async function claimViaAdapter(
     // caught this before the batch was ever enqueued, but this is the
     // backstop for a credential that goes bad *after* admission (superseded/
     // revoked mid-batch, or a scope reused an already-broken one) — see
-    // `promo-link-claim-circuit-breaker.ts`'s module header.
+    // `promo-link-claim-system-hold.ts`'s module header. Halts the whole
+    // task immediately, on this first occurrence — no counting.
     return {
       status: "failed",
       error: credential.error,
-      protectedWrite: (tx) => maybeTripPromoLinkClaimCircuitBreaker(tx, {
+      protectedWrite: (tx) => maybeHaltTaskOnGlobalFailure(tx, {
         taskId: lease.taskId,
         itemId: lease.itemId,
         failureCode: credential.error.code,

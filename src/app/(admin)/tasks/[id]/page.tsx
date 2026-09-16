@@ -22,6 +22,7 @@ import { ContentCapabilityDenied } from "../../novels/_components/content-states
 import { requireContentPage } from "../../novels/_lib/content-page-guard";
 import { sessionView } from "../../_lib/page-guard";
 import { RetryFailedButton } from "../_components/retry-failed-button";
+import { TaskControlButtons } from "../_components/task-control-buttons";
 import {
   isRetryableTaskStatus,
   isTerminalTaskStatus,
@@ -29,6 +30,7 @@ import {
   catalogBatchBlockedReasons,
   catalogBatchPhaseLabel,
   shouldDropSkippedFilterForTaskType,
+  taskControlKindLabel,
   taskFamilyLabel,
 } from "../_lib/task-copy";
 import { TaskConfigSummary } from "./_components/task-config-summary";
@@ -176,10 +178,18 @@ export default async function TaskDetailPage({
                 {taskFamilyLabel(detail.family)} · {detail.taskType}
               </h1>
               <span
-                className="inline-flex items-center rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-800"
+                className={
+                  detail.taskControl
+                    ? `inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${
+                        detail.taskControl.kind === "system_hold"
+                          ? "bg-red-100 text-red-800"
+                          : "bg-amber-100 text-amber-800"
+                      }`
+                    : "inline-flex items-center rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-800"
+                }
                 data-testid="task-detail-status-badge"
               >
-                {taskStatusLabel(detail.status)}
+                {detail.taskControl ? taskControlKindLabel(detail.taskControl.kind) : taskStatusLabel(detail.status)}
               </span>
             </div>
             <p className="mt-1 font-mono text-xs text-gray-500">{detail.taskId}</p>
@@ -197,10 +207,45 @@ export default async function TaskDetailPage({
                   : `#${detail.channelAccountId}（账号已不存在或已被删除）`}
               </p>
             )}
+            {/*
+              X10 task control: distinguishes 人工暂停/人工中止 (who/when,
+              from an admin identity id + timestamp) from 系统保护停止 (the
+              failure-class reason code) — never rendered for a `disabled`
+              row from any of this codebase's three pre-existing, unrelated
+              reasons (legacy out-of-band, feature-flag-off-at-creation,
+              catalog-batch double-gate), since `detail.taskControl` is
+              absent for all three.
+            */}
+            {detail.taskControl && (
+              <p className="mt-1 text-xs text-gray-600" data-testid="task-control-detail">
+                {detail.taskControl.source === "manual" ? (
+                  <>
+                    操作人：{detail.taskControl.actorId ?? "未知"} · 时间：{formatDateTime(detail.taskControl.at)}
+                    {detail.taskControl.reason && <>· 原因：{detail.taskControl.reason}</>}
+                  </>
+                ) : (
+                  <>
+                    系统于 {formatDateTime(detail.taskControl.at)} 自动停止
+                    {detail.taskControl.reasonCode && <>，原因：{detail.taskControl.reasonCode}（批次级系统性故障，非个别子项问题）</>}
+                  </>
+                )}
+                {typeof detail.taskControl.terminatedPendingItemCount === "number" && (
+                  <>（已将 {detail.taskControl.terminatedPendingItemCount} 个待处理子项标记为跳过）</>
+                )}
+              </p>
+            )}
           </div>
-          {isRetryableTaskStatus(detail.status) && !detail.catalogBatch && detail.failedCount > 0 && (
-            <RetryFailedButton family={detail.family} taskId={detail.taskId} failedCount={detail.failedCount} />
-          )}
+          <div className="flex flex-col items-end gap-2">
+            <TaskControlButtons
+              family={detail.family}
+              taskId={detail.taskId}
+              status={detail.status}
+              taskControl={detail.taskControl}
+            />
+            {isRetryableTaskStatus(detail.status) && !detail.catalogBatch && detail.failedCount > 0 && (
+              <RetryFailedButton family={detail.family} taskId={detail.taskId} failedCount={detail.failedCount} />
+            )}
+          </div>
         </div>
 
         {/* 汇总卡片 */}

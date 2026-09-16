@@ -62,16 +62,18 @@ export type ClaimCredentialNotReadyCode =
  * items all share one `channelAccountId` (`src/lib/tasks/promo-link-claim.ts`),
  * so any of these codes is either true for literally every item in the task
  * or none of them — never "a few scattered bad rows". This is what makes
- * them safe to drive a batch-level circuit breaker
- * (`worker/handlers/promo-link-claim-circuit-breaker.ts`): a
- * transient/per-row failure class must never be able to trip it, and these
- * codes structurally cannot be a per-row phenomenon.
+ * them safe to drive an immediate, first-occurrence system hold
+ * (`worker/handlers/promo-link-claim-system-hold.ts`, which replaced an
+ * earlier 3-consecutive-failure circuit breaker once the Owner rejected any
+ * count/threshold for a failure class that is global by construction): a
+ * transient/per-row failure class must never be able to trigger it, and
+ * these codes structurally cannot be a per-row phenomenon.
  *
  * `credential_never_validated` is deliberately excluded: it is a Web
  * pre-flight refusal only (see this module's header) and can never be a
  * code the worker's own deep check produces mid-batch — by the time a task
  * exists, that refusal already ran and either blocked admission or it
- * didn't. Including a code here that the breaker's caller
+ * didn't. Including a code here that the system hold's caller
  * (`worker/credentials/claim-readiness.ts`) can never actually emit would
  * just be dead weight in the eligibility check.
  */
