@@ -36,7 +36,7 @@ interface CurrentItem {
   message: string;
 }
 
-interface ProgressData {
+export interface ProgressData {
   taskType?: string;
   status:
     | "pending"
@@ -48,7 +48,17 @@ interface ProgressData {
     | "cancelled";
   total: number;
   success: number;
-  failed: number;
+  failed: number | null;
+  failedPages?: number;
+  catalogPhase?: "paging" | "finalizing" | "completed" | "failed";
+  pageCounts?: {
+    total: number;
+    success: number;
+    failed: number;
+    percent: number;
+    pagesScanned: number;
+    pagesTotalExpected: number;
+  };
   skip: number;
   processed?: number;
   percent?: number;
@@ -198,7 +208,7 @@ export function ImportProgress({ taskId, onTerminal }: ImportProgressProps) {
     taskErrors = [],
     currentItem,
   } = progress;
-  const processed = progress.processed ?? success + failed + skip;
+  const processed = progress.processed ?? success + (failed ?? 0) + skip;
   const percent = progress.percent ?? (total > 0 ? Math.round((processed / total) * 100) : 0);
   const statusCfg = STATUS_CONFIG[status] ?? STATUS_CONFIG.pending;
   const itemErrors = items.flatMap((item, index) =>
@@ -280,19 +290,24 @@ export function ImportProgress({ taskId, onTerminal }: ImportProgressProps) {
         </div>
       )}
 
-      {/* Stats grid */}
+      {/* Stats grid. Catalog book counts and page failures come from this
+          same polling payload, so the detail page never mixes them with a
+          stale server-rendered snapshot while the task is active. */}
       <div className="grid grid-cols-4 gap-3">
         <div className="rounded-xl border border-gray-200 bg-white p-3 text-center">
           <div className="text-2xl font-bold text-gray-800">{total}</div>
-          <div className="mt-0.5 text-xs text-gray-500">总计</div>
+          <div className="mt-0.5 text-xs text-gray-500">总计{progress.pageCounts ? "（本）" : ""}</div>
         </div>
         <div className="rounded-xl border border-green-200 bg-green-50 p-3 text-center">
           <div className="text-2xl font-bold text-green-700">{success}</div>
-          <div className="mt-0.5 text-xs text-green-600">成功</div>
+          <div className="mt-0.5 text-xs text-green-600">成功{progress.pageCounts ? "（本）" : ""}</div>
         </div>
         <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-center">
-          <div className="text-2xl font-bold text-red-700">{failed}</div>
-          <div className="mt-0.5 text-xs text-red-600">失败</div>
+          <div className="text-2xl font-bold text-red-700">{failed === null ? "未知" : failed}</div>
+          <div className="mt-0.5 text-xs text-red-600">失败{progress.pageCounts ? "（本）" : ""}</div>
+          {typeof progress.failedPages === "number" && progress.failedPages > 0 && (
+            <div className="mt-1 text-xs text-red-600">{progress.failedPages.toLocaleString("zh-CN")} 页失败</div>
+          )}
         </div>
         <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-center">
           <div className="text-2xl font-bold text-amber-700">{skip}</div>

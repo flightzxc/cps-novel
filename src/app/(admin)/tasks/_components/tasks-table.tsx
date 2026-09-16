@@ -1,4 +1,5 @@
 import Link from "next/link";
+import type { ReactNode } from "react";
 
 import { taskStatusLabel } from "@/features/admin-ui/content-view";
 import type { CatalogBookCountsDto } from "@/server/task-admin";
@@ -130,6 +131,22 @@ function countCell(task: TaskSummaryRow, pageValue: number, bookValue: number): 
   return `${pageValue} 页`;
 }
 
+function failedCountCell(task: TaskSummaryRow): ReactNode {
+  if (task.taskType !== "catalog_scan" || !task.bookCounts) {
+    return countSuffix(task.taskType, task.failedCount);
+  }
+  return (
+    <>
+      <span>{task.bookCounts.failedBooks === null ? "未知" : `${task.bookCounts.failedBooks} 本`}</span>
+      {typeof task.bookCounts.failedPages === "number" && task.bookCounts.failedPages > 0 && (
+        <span className="block text-xs text-red-500">
+          {task.bookCounts.failedPages.toLocaleString("zh-CN")} 页失败
+        </span>
+      )}
+    </>
+  );
+}
+
 export function TasksTable({
   tasks,
 }: {
@@ -215,7 +232,7 @@ export function TasksTable({
                 {countCell(task, task.successCount, task.bookCounts?.fetched ?? 0)}
               </td>
               <td className="px-4 py-3 text-right text-red-700">
-                {countCell(task, task.failedCount, task.bookCounts?.failedBooks ?? 0)}
+                {failedCountCell(task)}
               </td>
               <td className="px-4 py-3 text-right text-gray-500">
                 {countSuffix(task.taskType, task.skippedCount)}

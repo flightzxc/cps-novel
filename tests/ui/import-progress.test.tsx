@@ -229,4 +229,65 @@ describe("ImportProgress 轮询与终态 (C-6)", () => {
 
     expect(screen.getByText("正在抓取目录第 375 / 4,859 页（已获取 7,100 / 97,238 本）")).toBeTruthy();
   });
+
+  it("失败书数未知时显示“未知”和真实失败页数，不回退成 0", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () =>
+          progressPayload({
+            total: 97320,
+            success: 97300,
+            failed: null,
+            failedPages: 123,
+            processed: 97300,
+            percent: 99.97,
+            pageCounts: {
+              total: 2000,
+              success: 973,
+              failed: 123,
+              percent: 55,
+              pagesScanned: 1096,
+              pagesTotalExpected: 974,
+            },
+          }),
+      }),
+    );
+
+    render(<ImportProgress taskId="task-unknown-failures" />);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    expect(screen.getByText("未知")).toBeTruthy();
+    expect(screen.getByText("123 页失败")).toBeTruthy();
+    expect(screen.getByText("99.97%")).toBeTruthy();
+  });
+
+  it("finalizer 当前项直接显示后端提供的目录收尾文案", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () =>
+          progressPayload({
+            catalogPhase: "finalizing",
+            currentItem: {
+              targetType: "catalog_finalize",
+              targetId: "v1",
+              status: "processing",
+              message: "正在执行目录收尾",
+            },
+          }),
+      }),
+    );
+
+    render(<ImportProgress taskId="task-finalizing" />);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    expect(screen.getByText("正在执行目录收尾")).toBeTruthy();
+  });
 });
