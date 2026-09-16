@@ -9,7 +9,11 @@ import {
 import { chunkIds } from "@/lib/db/chunked-id-lookup";
 import { isUniqueConstraintViolation, withDbRetry } from "@/lib/db/db-retry";
 import { CATALOG_BATCH_TASK_TYPE, MOBOREADER_TASK_TYPES, PARENT_BATCH_TASK_TYPES, isParentBatchTaskType, type TaskFamily } from "@/lib/tasks";
-import { ARTICLE_GENERATE_BATCH_TASK_TYPE, ARTICLE_GENERATE_TASK_TYPE } from "@/lib/tasks/article-generate";
+import {
+  ARTICLE_GENERATE_BATCH_TASK_TYPE,
+  ARTICLE_GENERATE_BATCH_TASK_TYPE_V2,
+  ARTICLE_GENERATE_TASK_TYPE,
+} from "@/lib/tasks/article-generate";
 import type { ArticleGenerateBlockedReason } from "@/domain/article-generation";
 import { TASK_ITEM_STATUSES, TASK_STATUSES } from "@/domain/database-statuses";
 import { deriveCatalogBatchPhase } from "@/domain/catalog-batch";
@@ -750,7 +754,8 @@ function taskSummary(row: TaskListRow, bookCounts?: CatalogBookCountsDto): TaskS
         && typeof entry[1] === "number" && Number.isSafeInteger(entry[1]) && entry[1] > 0))
     : {};
   const isArticleGenerate = row.task_type === ARTICLE_GENERATE_TASK_TYPE
-    || row.task_type === ARTICLE_GENERATE_BATCH_TASK_TYPE;
+    || row.task_type === ARTICLE_GENERATE_BATCH_TASK_TYPE
+    || row.task_type === ARTICLE_GENERATE_BATCH_TASK_TYPE_V2;
   const articleAdmission = isArticleGenerate
     && typeof resultObject?.selectedCount === "number"
     && typeof resultObject?.submittedCount === "number"

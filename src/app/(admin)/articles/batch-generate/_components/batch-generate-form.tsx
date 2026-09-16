@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 
 import { buttonClassName } from "@/components/ui/button";
 import {
+  ARTICLE_GENERATE_LEAF_MAX,
   articleGenerateBlockedReasonLabel,
   ArticleGenerateSelectionError,
   normalizeArticleGenerateFilter,
@@ -13,13 +14,15 @@ import {
   type NormalizedArticleGenerateFilter,
   type NovelGeneratePage,
 } from "@/domain/article-generation";
+import { formatDateTime } from "@/features/admin-ui/datetime";
+import { SITE_LOCALE_LABELS, type SiteLocale } from "@/lib/locale/locale-canonical";
 
 import {
   enqueueArticleGenerateBatchAction,
   listArticleGenerateCandidatesAction,
 } from "../../_actions";
 
-type DraftFilter = { readonly search: string; readonly locale: string };
+type DraftFilter = Readonly<{ search: string; locales: ReadonlySet<string> }>;
 
 type FrozenRequest = Readonly<{
   requestId: string;
@@ -32,27 +35,32 @@ function canonicalFiltersEqual(
   left: NormalizedArticleGenerateFilter,
   right: NormalizedArticleGenerateFilter,
 ): boolean {
-  return left.search === right.search && left.locale === right.locale;
+  if (left.search !== right.search) return false;
+  const leftLocales = left.locales ?? [];
+  const rightLocales = right.locales ?? [];
+  // Both sides always pass through `normalizeArticleGenerateFilter` first
+  // (sorted + deduped), so a positional compare is enough here — no need
+  // for a Set-based order-independent comparison.
+  return leftLocales.length === rightLocales.length
+    && leftLocales.every((value, index) => value === rightLocales[index]);
 }
 
 function compactTemplates(templateKeys: Record<string, string>): Record<string, string> {
   return Object.fromEntries(Object.entries(templateKeys).filter(([, value]) => value));
 }
 
-function mergeTemplateCache(
-  current: readonly ArticleTemplateOption[],
-  incoming: readonly ArticleTemplateOption[],
-): ArticleTemplateOption[] {
-  const seen = new Set(current.map((row) => `${row.locale}:${row.templateKey}:${row.version}`));
-  return [
-    ...current,
-    ...incoming.filter((row) => {
-      const key = `${row.locale}:${row.templateKey}:${row.version}`;
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    }),
-  ];
+/**
+ * Chip button styling — copied from `catalog-scan-trigger-form.tsx`'s own
+ * `chipButtonClassName` (same convention; that function isn't exported and
+ * there is no shared chip component, so this copies it rather than
+ * inventing a new visual language for chips).
+ */
+function chipButtonClassName(selected: boolean): string {
+  return `rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors ${
+    selected
+      ? "border-blue-300 bg-blue-50 text-blue-700"
+      : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"
+  }`;
 }
 
 function submitErrorMessage(code: string): string {
@@ -75,25 +83,66 @@ export function ArticleBatchGenerateForm({
   const [roundId, setRoundId] = useState(() => crypto.randomUUID());
   const [frozen, setFrozen] = useState<FrozenRequest | null>(null);
   const [page, setPage] = useState(initialPage);
-  const [draftFilter, setDraftFilter] = useState<DraftFilter>({ search: "", locale: "" });
+  const [draftFilter, setDraftFilter] = useState<DraftFilter>({ search: "", locales: new Set() });
   const [appliedFilter, setAppliedFilter] = useState<NormalizedArticleGenerateFilter>({});
+  // View-only list parameter — deliberately its own piece of state, never
+  // folded into draftFilter/appliedFilter: it must not enter
+  // canonicalFiltersEqual, the 「筛选已改动但尚未应用」 dirty check,
+  // inputFingerprint, or an enqueued task payload. See
+  // `listArticleGenerateCandidatesAction`'s `showIneligible` doc comment.
+  const [showIneligible, setShowIneligible] = useState(false);
   const [selected, setSelected] = useState<string[]>([]);
   const [templateKeys, setTemplateKeys] = useState<Record<string, string>>({});
   const [templateCache, setTemplateCache] = useState<readonly ArticleTemplateOption[]>(templates);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [taskId, setTaskId] = useState<string | null>(null);
-  const filterDirty = !canonicalFiltersEqual(normalizeArticleGenerateFilter(draftFilter), appliedFilter);
-  const requestLocked = frozen !== null;
-  const locales = useMemo(
-    () => Array.from(new Set([
-      ...page.rows.map((row) => row.locale),
-      ...templateCache.map((row) => row.locale),
-      ...(appliedFilter.locale ? [appliedFilter.locale] : []),
-    ])).sort(),
-    [page.rows, templateCache, appliedFilter.locale],
+  const normalizedDraftFilter = useMemo(
+    () => normalizeArticleGenerateFilter({ search: draftFilter.search, locales: [...draftFilter.locales] }),
+    [draftFilter],
   );
+  const filterDirty = !canonicalFiltersEqual(normalizedDraftFilter, appliedFilter);
+  const requestLocked = frozen !== null;
+  // Locale chip options: derived from the current filtered result set
+  // (`page.localeCounts`, a `groupBy` over the FULL matching set — never
+  // just the current page's rows), each carrying a count so the operator
+  // isn't offered an empty bucket. Labels come from the canonical registry
+  // (`SITE_LOCALE_LABELS`); a locale with no registered Chinese label
+  // (shouldn't happen for this dataset, but defends against a future
+  // non-site locale slipping through) falls back to its raw code.
+  const localeChipOptions = useMemo(
+    () => page.localeCounts.map((entry) => ({
+      locale: entry.locale,
+      label: SITE_LOCALE_LABELS[entry.locale as SiteLocale] ?? entry.locale,
+      count: entry.count,
+    })),
+    [page.localeCounts],
+  );
+  // Template dropdown rows: follow the APPLIED locale chips (two-phase —
+  // draft chip clicks alone must not move these before 应用筛选 runs);
+  // when no chip is applied, fall back to every locale present in the
+  // current filtered result set. Deliberately not `page.rows`-derived —
+  // that grew/shrank confusingly as the operator paged through results.
+  const templateLocales = appliedFilter.locales && appliedFilter.locales.length > 0
+    ? appliedFilter.locales
+    : page.localeCounts.map((entry) => entry.locale);
   const pageCount = Math.max(1, Math.ceil(page.total / page.pageSize));
+  // 本页全选 population: only rows the per-row checkbox would itself allow —
+  // ineligible rows must never enter `selected` through this control either,
+  // same double-guard discipline as `toggle` below (disabled input +
+  // imperative filter), just applied to a whole page at once.
+  const pageSelectableIds = useMemo(
+    () => page.rows.filter((row) => row.canGenerateArticle).map((row) => row.novelId),
+    [page.rows],
+  );
+  const allPageSelected = pageSelectableIds.length > 0 && pageSelectableIds.every((id) => selected.includes(id));
+  const somePageSelected = pageSelectableIds.some((id) => selected.includes(id));
+  const overCap = selected.length > ARTICLE_GENERATE_LEAF_MAX;
+  // Explicit-ids estimate: what "提交已选" would actually create. Falls back
+  // to `generatableCount` (what "按当前筛选全部入队" would create) once
+  // nothing is explicitly selected — 海阅 makes exactly one Article per
+  // Novel, never a `selected × templates` product like CPS's own estimate.
+  const estimatedArticleCount = selected.length > 0 ? selected.length : page.generatableCount;
 
   function toggle(id: string) {
     if (requestLocked) return;
@@ -102,13 +151,47 @@ export function ArticleBatchGenerateForm({
     setSelected((current) => (current.includes(id) ? current.filter((item) => item !== id) : [...current, id]));
   }
 
-  async function load(nextPage: number, nextFilter: NormalizedArticleGenerateFilter, reason: "apply" | "page") {
+  function toggleSelectAllOnPage() {
+    if (requestLocked || pageSelectableIds.length === 0) return;
+    setSelected((current) => {
+      const currentSet = new Set(current);
+      const allSelected = pageSelectableIds.every((id) => currentSet.has(id));
+      for (const id of pageSelectableIds) {
+        if (allSelected) currentSet.delete(id);
+        else currentSet.add(id);
+      }
+      return Array.from(currentSet);
+    });
+  }
+
+  // Named `flipLocaleChip`, not `toggleLocale` — mirrors
+  // `catalog-scan-trigger-form.tsx`'s own naming reasoning: `tests/ui/
+  // locale-canonical.test.ts`'s pattern-based "no second locale-normalize
+  // implementation" scan flags any `to*Locale*`/`toggle*Locale*`-shaped
+  // name, and this is a plain Set toggle, not a locale mapping.
+  function flipLocaleChip(locale: string) {
+    if (requestLocked) return;
+    setDraftFilter((current) => {
+      const next = new Set(current.locales);
+      if (next.has(locale)) next.delete(locale);
+      else next.add(locale);
+      return { ...current, locales: next };
+    });
+  }
+
+  async function load(
+    nextPage: number,
+    nextFilter: NormalizedArticleGenerateFilter,
+    nextShowIneligible: boolean,
+    reason: "apply" | "page" | "toggle",
+  ) {
     setBusy(true);
     setMessage(null);
     try {
       const result = await listArticleGenerateCandidatesAction({
         requestId: crypto.randomUUID(),
         page: nextPage,
+        showIneligible: nextShowIneligible,
         ...nextFilter,
       });
       if (!result.ok) {
@@ -120,7 +203,11 @@ export function ArticleBatchGenerateForm({
         .filter((row) => !row.canGenerateArticle)
         .map((row) => row.novelId));
       setSelected((current) => current.filter((novelId) => !blockedOnPage.has(novelId)));
-      setTemplateCache((current) => mergeTemplateCache(current, result.templates));
+      // Full replace, not a cross-load merge: the server already returns
+      // templates for every locale in the current filtered set
+      // (`data.localeCounts`, not just the current page's rows), so there
+      // is nothing left to accumulate.
+      setTemplateCache(result.templates);
       if (reason === "apply") {
         const changed = !canonicalFiltersEqual(nextFilter, appliedFilter);
         setAppliedFilter(nextFilter);
@@ -138,11 +225,18 @@ export function ArticleBatchGenerateForm({
 
   function applyDraftFilter() {
     try {
-      void load(1, normalizeArticleGenerateFilter(draftFilter), "apply");
+      void load(1, normalizedDraftFilter, showIneligible, "apply");
     } catch (error) {
       const code = error instanceof ArticleGenerateSelectionError ? error.code : "filter_invalid";
       setMessage(`筛选无效（${code}）。已保留当前筛选与页码。`);
     }
+  }
+
+  function toggleShowIneligible() {
+    if (requestLocked) return;
+    const next = !showIneligible;
+    setShowIneligible(next);
+    void load(1, appliedFilter, next, "toggle");
   }
 
   function ensureFrozen(scope: "explicit_ids" | "all_filtered"): FrozenRequest {
@@ -162,6 +256,15 @@ export function ArticleBatchGenerateForm({
   async function submit(scope: "explicit_ids" | "all_filtered") {
     if (!canWrite || filterDirty) return;
     if (!frozen && scope === "explicit_ids" && selected.length === 0) return;
+    // Double-guard, same discipline as the per-row admission check: the
+    // "已选 N / 200" indicator + inline message already make this visually
+    // clear and disable the submit button before this ever runs, but this
+    // check makes the block unconditional — no `enqueueArticleGenerateBatchAction`
+    // call ever fires for an over-cap explicit-ids submission.
+    if (!frozen && scope === "explicit_ids" && overCap) {
+      setMessage(`已选 ${selected.length} 本，超过单次提交上限 ${ARTICLE_GENERATE_LEAF_MAX} 本，请减少选择后再提交，或改用「按当前筛选全部入队」。`);
+      return;
+    }
     const request = ensureFrozen(scope);
     setBusy(true);
     setMessage(null);
@@ -203,27 +306,36 @@ export function ArticleBatchGenerateForm({
   return (
     <div className="space-y-4 rounded-xl border border-gray-200 bg-white p-4">
       <p className="text-sm text-gray-600">批量创建文章只针对尚未建稿的书目。已有文章请走「批量再生成」，不会在这里被覆盖。</p>
-      <div className="grid gap-3 sm:grid-cols-2">
-        <label className="block text-sm text-gray-700">
-          搜索
-          <input
-            data-testid="batch-search"
-            value={draftFilter.search}
-            disabled={busy || requestLocked}
-            onChange={(event) => setDraftFilter((current) => ({ ...current, search: event.target.value }))}
-            className="mt-1 w-full rounded border border-gray-300 p-2"
-          />
-        </label>
-        <label className="block text-sm text-gray-700">
-          语种
-          <input
-            data-testid="batch-locale"
-            value={draftFilter.locale}
-            disabled={busy || requestLocked}
-            onChange={(event) => setDraftFilter((current) => ({ ...current, locale: event.target.value }))}
-            className="mt-1 w-full rounded border border-gray-300 p-2"
-          />
-        </label>
+      <label className="block max-w-sm text-sm text-gray-700">
+        搜索
+        <input
+          data-testid="batch-search"
+          value={draftFilter.search}
+          disabled={busy || requestLocked}
+          onChange={(event) => setDraftFilter((current) => ({ ...current, search: event.target.value }))}
+          className="mt-1 w-full rounded border border-gray-300 p-2"
+        />
+      </label>
+      <div>
+        <span className="mb-2 block text-sm text-gray-700">语种</span>
+        <div role="group" aria-label="语种" className="flex flex-wrap gap-2">
+          {localeChipOptions.length === 0 && (
+            <p className="text-xs text-gray-400">当前筛选下没有可选语种。</p>
+          )}
+          {localeChipOptions.map((option) => (
+            <button
+              key={option.locale}
+              type="button"
+              data-testid={`batch-locale-chip-${option.locale}`}
+              aria-pressed={draftFilter.locales.has(option.locale)}
+              disabled={busy || requestLocked}
+              className={chipButtonClassName(draftFilter.locales.has(option.locale))}
+              onClick={() => flipLocaleChip(option.locale)}
+            >
+              {option.label}（{option.count.toLocaleString("zh-CN")}）
+            </button>
+          ))}
+        </div>
       </div>
       <button
         type="button"
@@ -239,7 +351,7 @@ export function ArticleBatchGenerateForm({
           筛选已改动但尚未应用。表格与入队仍使用已应用筛选；请先应用后再提交。
         </p>
       )}
-      {locales.map((item) => (
+      {templateLocales.map((item) => (
         <label className="block text-sm text-gray-700" key={item}>
           {item} 模板
           <select
@@ -252,20 +364,57 @@ export function ArticleBatchGenerateForm({
             <option value="">服务默认模板</option>
             {templateCache.filter((template) => template.locale === item).map((template) => (
               <option key={`${template.templateKey}:${template.version}`} value={template.templateKey}>
-                {template.templateKey} · v{template.version}
+                {template.templateName}（{template.templateKey} · v{template.version}）
               </option>
             ))}
           </select>
         </label>
       ))}
+      <p className="text-sm text-gray-600" data-testid="generate-estimate">
+        将为 {estimatedArticleCount.toLocaleString("zh-CN")} 本书目创建文章
+      </p>
       <p
         className="text-sm text-gray-600"
         data-testid="applied-total"
         data-applied-search={appliedFilter.search ?? ""}
-        data-applied-locale={appliedFilter.locale ?? ""}
+        data-applied-locales={(appliedFilter.locales ?? []).join(",")}
       >
-        当前筛选共 {page.total.toLocaleString("zh-CN")} 本尚未创建文章的书目。本页 {page.rows.length} 本。
+        当前筛选可生成 {page.generatableCount.toLocaleString("zh-CN")} 本 · 另有{" "}
+        {page.nonGeneratableCount.toLocaleString("zh-CN")} 本不可生成 · 本页 {page.rows.length} 本
       </p>
+      <label className="flex items-center gap-2 text-sm text-gray-700">
+        <input
+          type="checkbox"
+          data-testid="toggle-show-ineligible"
+          checked={showIneligible}
+          disabled={busy || requestLocked}
+          onChange={toggleShowIneligible}
+        />
+        显示不可生成（{page.nonGeneratableCount.toLocaleString("zh-CN")} 本）
+      </label>
+      <div className="flex items-center justify-between">
+        <label className="flex items-center gap-2 text-sm text-gray-700">
+          <input
+            type="checkbox"
+            data-testid="select-all-page"
+            checked={allPageSelected}
+            disabled={busy || requestLocked || pageSelectableIds.length === 0}
+            ref={(el) => {
+              if (el) el.indeterminate = somePageSelected && !allPageSelected;
+            }}
+            onChange={toggleSelectAllOnPage}
+          />
+          本页全选
+        </label>
+        <p className="text-sm text-gray-600" data-testid="selected-count">
+          已选 {selected.length.toLocaleString("zh-CN")} / {ARTICLE_GENERATE_LEAF_MAX}
+        </p>
+      </div>
+      {overCap && (
+        <p data-testid="cap-over-message" className="text-sm text-red-700">
+          已超过单次提交上限（{ARTICLE_GENERATE_LEAF_MAX} 本），请减少选择后再提交「提交已选」，或改用「按当前筛选全部入队」。
+        </p>
+      )}
       <div className="space-y-2">
         {page.rows.map((novel) => (
           <label key={novel.novelId} className="flex items-start gap-2 text-sm text-gray-800">
@@ -277,7 +426,7 @@ export function ArticleBatchGenerateForm({
               onChange={() => toggle(novel.novelId)}
             />
             <span>
-              {novel.title} · {novel.locale} · {novel.businessId}
+              {novel.title} · {SITE_LOCALE_LABELS[novel.locale as SiteLocale] ?? novel.locale} · {novel.businessId} · 更新于 {formatDateTime(novel.updatedAt)}
               {novel.generateBlockedReason ? ` · ${articleGenerateBlockedReasonLabel(novel.generateBlockedReason)}` : ""}
             </span>
           </label>
@@ -290,7 +439,7 @@ export function ArticleBatchGenerateForm({
           data-testid="prev-page"
           disabled={busy || requestLocked || page.page <= 1}
           className={buttonClassName("secondary")}
-          onClick={() => void load(page.page - 1, appliedFilter, "page")}
+          onClick={() => void load(page.page - 1, appliedFilter, showIneligible, "page")}
         >
           上一页
         </button>
@@ -300,7 +449,7 @@ export function ArticleBatchGenerateForm({
           data-testid="next-page"
           disabled={busy || requestLocked || page.page >= pageCount}
           className={buttonClassName("secondary")}
-          onClick={() => void load(page.page + 1, appliedFilter, "page")}
+          onClick={() => void load(page.page + 1, appliedFilter, showIneligible, "page")}
         >
           下一页
         </button>
@@ -311,7 +460,7 @@ export function ArticleBatchGenerateForm({
         <button
           type="button"
           data-testid="submit-selected"
-          disabled={(!selected.length && !frozen) || !canWrite || busy || filterDirty}
+          disabled={(!selected.length && !frozen) || !canWrite || busy || filterDirty || overCap}
           className={buttonClassName("primary")}
           onClick={() => void submit("explicit_ids")}
         >

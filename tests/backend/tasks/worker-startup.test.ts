@@ -77,6 +77,7 @@ describe("X1 worker startup allowlist", () => {
     const registered = Object.keys(createWorkerHandlers({} as PrismaClient)).sort();
     expect(registered).toEqual([
       "article.generate.batch.v1",
+      "article.generate.batch.v2",
       "article.generate.v1",
       "batch.materialize.v1",
       "catalog_scan",

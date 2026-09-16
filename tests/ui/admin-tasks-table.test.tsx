@@ -83,6 +83,33 @@ describe("TasksTable · 两类任务统一列表", () => {
     expect(admission.textContent).not.toContain("promo_link_missing");
   });
 
+  // Regression: the catalog-batch count strings used to be gated on
+  // `taskType !== "article.generate.batch.v1"` — a negative check against ONE
+  // version literal. The moment `article.generate.batch.v2` shipped, that
+  // condition became true for v2 and the table started rendering catalog
+  // semantics (「已纳入」/「状态不符合／未找到」) on an article-generate parent,
+  // which has no such buckets. Both versions must be excluded, so this asserts
+  // v2 explicitly; `isArticleGenerateBatchTaskType` is the version-agnostic
+  // predicate that replaced the literal comparison.
+  it.each([
+    ["article.generate.batch.v1"],
+    ["article.generate.batch.v2"],
+  ])("%s 不渲染 catalog 批次的计数语义", (taskType) => {
+    render(<TasksTable tasks={[task({
+      taskType,
+      catalogBatch: {
+        submittedCount: 7,
+        alreadyLinkedCount: 5,
+        ineligibleCount: 3,
+        blockedCount: null,
+      },
+    })]} />);
+    const body = document.body.textContent ?? "";
+    expect(body).not.toContain("已纳入 5 条");
+    expect(body).not.toContain("状态不符合／未找到 3 条");
+    expect(body).not.toContain("· 7 条");
+  });
+
   // C-9 (`施工工单_C9_任务详情独立路由对齐CPS_2026-09-07.md`): "查看详情" now
   // navigates to the independent `/tasks/<taskId>` route instead of the old
   // same-page panel's `/tasks?taskId=…&taskFamily=…`.

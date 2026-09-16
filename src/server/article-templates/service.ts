@@ -360,7 +360,7 @@ export async function listActiveArticleTemplateOptionsForLocales(
   }
   return db.articleTemplate.findMany({
     where: { status: "active", deletedAt: null, AND: conditions },
-    select: { id: true, templateKey: true, locale: true, version: true },
+    select: { id: true, templateKey: true, templateName: true, locale: true, version: true },
     orderBy: [{ locale: "asc" }, { templateKey: "asc" }, { version: "desc" }],
     distinct: ["templateKey", "locale"],
   });

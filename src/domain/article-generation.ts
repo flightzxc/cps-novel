@@ -1,6 +1,44 @@
 export const ARTICLE_GENERATE_UUID =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
+/**
+ * Single source of truth for the explicit-ids submission cap, enforced here
+ * by {@link normalizeArticleGenerateSelection} (`novel_ids_too_many`) and
+ * re-exported from `@/lib/tasks/article-generate.ts` for its own
+ * `ArticleGenerateInputError` guard and the worker's per-leaf-task chunk
+ * ceiling. Defined in this domain module — not there — because this module
+ * has zero imports (no Prisma, no Node builtins) and is safe to import into
+ * a Client Component (`batch-generate-form.tsx`'s pre-submit cap indicator);
+ * `@/lib/tasks/article-generate.ts` pulls in `@prisma/client` and
+ * `@/server/content-creation/eligibility.ts`, which a Client Component must
+ * never import (see `tests/ui/admin-secret-boundary.test.tsx` and this
+ * repo's own precedent for the rule, e.g. `batch-rebind-client.tsx`'s
+ * `REBIND_BATCH_APPLY_CAP` comment).
+ */
+export const ARTICLE_GENERATE_LEAF_MAX = 200;
+
+/**
+ * The `all_filtered` parent protocol task types. They live here, in the
+ * zero-import domain module, for the same reason `ARTICLE_GENERATE_LEAF_MAX`
+ * does: admin Server Components need them to tell an article-generate parent
+ * batch apart from a catalog batch, and must not import
+ * `src/lib/tasks/article-generate.ts` (which reaches Prisma). That module
+ * re-exports these so there is exactly one definition of each string.
+ */
+export const ARTICLE_GENERATE_BATCH_TASK_TYPE = "article.generate.batch.v1";
+export const ARTICLE_GENERATE_BATCH_TASK_TYPE_V2 = "article.generate.batch.v2";
+
+/**
+ * True for EVERY version of the article-generate parent batch protocol.
+ * Call this instead of comparing against one version literal: a
+ * `taskType !== "article.generate.batch.v1"` check silently starts treating
+ * v2 as a catalog batch the moment a new version ships.
+ */
+export function isArticleGenerateBatchTaskType(taskType: string): boolean {
+  return taskType === ARTICLE_GENERATE_BATCH_TASK_TYPE
+    || taskType === ARTICLE_GENERATE_BATCH_TASK_TYPE_V2;
+}
+
 export type NovelGeneratePromoOutcome =
   | "ready"
   | "promo_link_missing"
@@ -19,6 +57,8 @@ export type NovelGenerateCandidate = {
   readonly title: string;
   readonly locale: string;
   readonly businessId: string;
+  /** ISO 8601 (`Novel.updatedAt.toISOString()`) — same string-not-Date convention as every other admin view type; render via `formatDateTime` (`@/features/admin-ui/datetime`). */
+  readonly updatedAt: string;
   readonly hasLiveArticle: boolean;
   readonly promoReady: boolean;
   readonly promoOutcome: NovelGeneratePromoOutcome;
@@ -41,17 +81,38 @@ export function articleGenerateBlockedReasonLabel(reason: ArticleGenerateBlocked
 
 export type ArticleGenerateFilter = Readonly<{
   search?: string;
-  locale?: string;
+  locales?: readonly string[];
 }>;
 
 export type ArticleGenerateSelection =
   | Readonly<{ scope: "explicit_ids"; novelIds: readonly string[] }>
   | Readonly<{ scope: "all_filtered"; filter: ArticleGenerateFilter }>;
 
+/**
+ * Batch-create-operator-ux (locale chips): widened from a single `locale`
+ * to `locales` (OR-matched — `novelWhere`'s `{ locale: { in: [...] } }`).
+ * `locales` is present only when non-empty — blank/empty array means "key
+ * absent", the same convention `search` already used. Sorted + deduped by
+ * `normalizeArticleGenerateFilter` so the `JSON.stringify`-based
+ * `inputFingerprint`/`articleGenerateParentScopeHash`
+ * (`src/lib/tasks/article-generate.ts`) stays stable regardless of chip
+ * click order — unstable ordering here would fingerprint the same logical
+ * filter two different ways and break idempotency replay detection.
+ */
 export type NormalizedArticleGenerateFilter = Readonly<{
   search?: string;
-  locale?: string;
+  locales?: readonly string[];
 }>;
+
+/** Per-entry length cap — matches `Novel.locale @db.VarChar(16)`. */
+const ARTICLE_GENERATE_FILTER_LOCALE_MAX_LENGTH = 16;
+/**
+ * Sensible upper bound on how many locale chips one filter can carry — well
+ * above the ~14 locales any real dataset has today (`SITE_LOCALES` itself
+ * is 15 members), just enough headroom to reject an abusive payload
+ * cheaply before doing any per-entry work.
+ */
+const ARTICLE_GENERATE_FILTER_LOCALES_MAX_COUNT = 50;
 
 export type NormalizedArticleGenerateSelection =
   | Readonly<{ scope: "explicit_ids"; novelIds: readonly string[] }>
@@ -69,10 +130,36 @@ export type NovelGeneratePage = Readonly<{
   total: number;
   page: number;
   pageSize: number;
+  /**
+   * Count of novels matching the current search/locales filter that CAN be
+   * generated (no live Article and a ready PromoLink) — independent of
+   * `total`/`rows`, which follow whichever view (default-hide vs. the
+   * "显示不可生成" toggle) the caller asked `listNovelsForArticleGenerate`
+   * for. `0` when the caller didn't ask for `eligibleOnly` filtering at all
+   * (e.g. the single-novel "单篇创建文章" page).
+   */
+  generatableCount: number;
+  /**
+   * Count of novels matching the current search/locales filter that have no
+   * live Article but are NOT promo-ready — the "不可生成" bucket. Same
+   * `eligibleOnly`-only caveat as {@link generatableCount}.
+   */
+  nonGeneratableCount: number;
+  /**
+   * Per-locale candidate counts for the current `search` + view (promo
+   * toggle), deliberately computed WITHOUT the `locales` filter itself —
+   * this is the population the locale chip group offers the operator to
+   * pick FROM, not a readout of the currently-selected chips. Computed via
+   * `db.novel.groupBy` (never a materialised id list). `[]` under the same
+   * `eligibleOnly`-only caveat as {@link generatableCount} — the
+   * single-novel "单篇创建文章" page has no chip UI and doesn't ask for it.
+   */
+  localeCounts: readonly Readonly<{ locale: string; count: number }>[];
 }>;
 
 export type ArticleTemplateOption = Readonly<{
   templateKey: string;
+  templateName: string;
   locale: string;
   version: number;
 }>;
@@ -94,16 +181,32 @@ export function normalizeArticleGenerateFilter(
   if (raw.search !== undefined && typeof raw.search !== "string") {
     throw new ArticleGenerateSelectionError("filter_search_invalid");
   }
-  if (raw.locale !== undefined && typeof raw.locale !== "string") {
-    throw new ArticleGenerateSelectionError("filter_locale_invalid");
+  if (
+    raw.locales !== undefined
+    && (!Array.isArray(raw.locales) || raw.locales.some((value) => typeof value !== "string"))
+  ) {
+    throw new ArticleGenerateSelectionError("filter_locales_invalid");
   }
   const search = raw.search?.trim() ?? "";
-  const locale = raw.locale?.trim() ?? "";
   if (search.length > 200) throw new ArticleGenerateSelectionError("filter_search_too_long");
-  if (locale.length > 16) throw new ArticleGenerateSelectionError("filter_locale_too_long");
+
+  const rawLocales = raw.locales ?? [];
+  if (rawLocales.length > ARTICLE_GENERATE_FILTER_LOCALES_MAX_COUNT) {
+    throw new ArticleGenerateSelectionError("filter_locales_too_many");
+  }
+  const trimmedLocales = rawLocales.map((value) => value.trim());
+  if (trimmedLocales.some((value) => value.length > ARTICLE_GENERATE_FILTER_LOCALE_MAX_LENGTH)) {
+    throw new ArticleGenerateSelectionError("filter_locale_too_long");
+  }
+  // Dedupe + sort: the fingerprint downstream is a `JSON.stringify` hash,
+  // so a stable, order-independent representation is required for replay
+  // detection to recognise the same logical filter regardless of chip
+  // click order.
+  const locales = Array.from(new Set(trimmedLocales.filter((value) => value.length > 0))).sort();
+
   return Object.freeze({
     ...(search ? { search } : {}),
-    ...(locale ? { locale } : {}),
+    ...(locales.length > 0 ? { locales: Object.freeze(locales) } : {}),
   });
 }
 
@@ -119,7 +222,7 @@ export function normalizeArticleGenerateSelection(
     }
     const novelIds = Array.from(new Set(selection.novelIds.map((id) => id.trim().toLowerCase()))).sort();
     if (novelIds.length === 0) throw new ArticleGenerateSelectionError("novel_ids_required");
-    if (novelIds.length > 200) throw new ArticleGenerateSelectionError("novel_ids_too_many");
+    if (novelIds.length > ARTICLE_GENERATE_LEAF_MAX) throw new ArticleGenerateSelectionError("novel_ids_too_many");
     if (novelIds.some((id) => !ARTICLE_GENERATE_UUID.test(id))) {
       throw new ArticleGenerateSelectionError("novel_id_invalid");
     }

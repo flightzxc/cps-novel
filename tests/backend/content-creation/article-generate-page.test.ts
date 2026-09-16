@@ -20,6 +20,7 @@ const candidate = (id: string, title = id): NovelGenerateCandidate => ({
   title,
   locale: "en",
   businessId: `biz-${id}`,
+  updatedAt: "2026-01-01T00:00:00.000Z",
   hasLiveArticle: false,
   promoReady: true,
   promoOutcome: "ready",
@@ -31,6 +32,12 @@ const page = (rows: NovelGenerateCandidate[], total = rows.length): NovelGenerat
   total,
   page: 1,
   pageSize: 80,
+  // This page always calls with `eligibleOnly: false` (see the assertion
+  // below) — production code returns 0/0/[] in that case (no promo split,
+  // no locale facet computed), so these fixtures match that unaffected shape.
+  generatableCount: 0,
+  nonGeneratableCount: 0,
+  localeCounts: [],
 });
 
 describe("loadArticleGeneratePage", () => {
