@@ -6,10 +6,15 @@ services:
       P1_06_WAL_ARCHIVE_DIR: /var/lib/postgresql/wal-archive
     volumes:
       - wal_archive:/var/lib/postgresql/wal-archive
+      - ${X8_BASE_BACKUP_DIR:?X8_BASE_BACKUP_DIR is required}:/var/lib/postgresql/base-backups
       - ./infra/postgres/pitr/postgresql.conf.example:/etc/postgresql/postgresql.conf:ro
       - ./infra/production-like/postgres-entrypoint.sh:/opt/cps-novel-x8/postgres-entrypoint.sh:ro
       - ./infra/production-like/launch-day-health-checks.sql:/opt/cps-novel-x8/launch-day-health-checks.sql:ro
       - ./scripts/db/archive-wal.sh:/app/scripts/db/archive-wal.sh:ro
+      - ./scripts/db/wal-retention.sh:/app/scripts/db/wal-retention.sh:ro
+      - ./scripts/db/wal-gc-x8.sh:/app/scripts/db/wal-gc-x8.sh:ro
+      - ./scripts/db/backup-physical-base.sh:/app/scripts/db/backup-physical-base.sh:ro
+      - ./scripts/db/verify-physical-base.sh:/app/scripts/db/verify-physical-base.sh:ro
 
   web:
     ports: !reset []

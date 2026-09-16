@@ -9,6 +9,11 @@ X8_SECRET_DIR="$X8_RUNTIME_DIR/secrets"
 X8_TLS_DIR="$X8_RUNTIME_DIR/tls"
 X8_NGINX_RUNTIME_DIR="$X8_RUNTIME_DIR/nginx"
 X8_BACKUP_DIR="$X8_RUNTIME_DIR/backups"
+# `base-backup-now`/`wal-gc`'s compose mount for the postgres container's
+# /var/lib/postgresql/base-backups -- same host-bind-dir treatment as
+# X8_BACKUP_DIR above (mkdir/chmod 700 in prepare_x8_environment(), passed
+# to compose only via this exported env var, never a CLI flag).
+X8_BASE_BACKUP_DIR="$X8_RUNTIME_DIR/base-backups"
 X8_EVIDENCE_DIR="$X8_RUNTIME_DIR/evidence"
 X8_GATE_STATE_FILE="$X8_RUNTIME_DIR/catalog-gate.state"
 X8_BACKUP_PGPASS_FILE="$X8_SECRET_DIR/backup.pgpass"
@@ -548,7 +553,7 @@ x8_export_static_topology() {
   export X8_MIN_FREE_KIB_BUILD="${X8_MIN_FREE_KIB_BUILD:-8388608}"
   export X8_WARN_FREE_KIB_BUILD="${X8_WARN_FREE_KIB_BUILD:-15728640}"
   export X8_MIN_FREE_KIB_DB="${X8_MIN_FREE_KIB_DB:-2097152}"
-  export X8_RUNTIME_DIR X8_SECRET_DIR X8_TLS_DIR X8_NGINX_RUNTIME_DIR X8_BACKUP_DIR X8_EVIDENCE_DIR
+  export X8_RUNTIME_DIR X8_SECRET_DIR X8_TLS_DIR X8_NGINX_RUNTIME_DIR X8_BACKUP_DIR X8_BASE_BACKUP_DIR X8_EVIDENCE_DIR
   export X8_GATE_STATE_FILE X8_BACKUP_PGPASS_FILE X8_IDENTITY_FILE X8_IDENTITY_CANDIDATE_FILE X8_IDENTITY_FAILURE_MARKER X8_IDENTITY_PREVIOUS_FILE
 }
 
@@ -592,9 +597,9 @@ prepare_x8_environment() {
   }
   export X8_LEVEL
 
-  mkdir -p "$X8_SECRET_DIR" "$X8_TLS_DIR" "$X8_NGINX_RUNTIME_DIR" "$X8_BACKUP_DIR" "$X8_EVIDENCE_DIR"
+  mkdir -p "$X8_SECRET_DIR" "$X8_TLS_DIR" "$X8_NGINX_RUNTIME_DIR" "$X8_BACKUP_DIR" "$X8_BASE_BACKUP_DIR" "$X8_EVIDENCE_DIR"
   chmod 700 "$X8_RUNTIME_DIR" "$X8_SECRET_DIR" "$X8_TLS_DIR" "$X8_NGINX_RUNTIME_DIR" \
-    "$X8_BACKUP_DIR" "$X8_EVIDENCE_DIR"
+    "$X8_BACKUP_DIR" "$X8_BASE_BACKUP_DIR" "$X8_EVIDENCE_DIR"
 
   if [[ ! -f "$X8_GATE_STATE_FILE" ]]; then
     local catalog_default
