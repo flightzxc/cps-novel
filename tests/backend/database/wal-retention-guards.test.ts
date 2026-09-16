@@ -436,3 +436,52 @@ describe("wal-retention.sh: all WAL_RETENTION judgment lines are on stdout, neve
     }
   });
 });
+
+// WAL-retention rollout work order 2026-09-17, P2-5: a legally-named
+// directory directly under base-backup-dir with neither VERIFIED nor
+// RETIRED (an in-flight backup-physical-base.sh run, or one that failed
+// before verify-physical-base.sh ever wrote VERIFIED) must not be silently
+// invisible -- it enters neither the valid set nor the retire set, and
+// previously produced no output naming it at all.
+describe("wal-retention.sh: a directory with neither VERIFIED nor RETIRED is warned, not silently skipped (P2-5)", () => {
+  it("prints WAL_RETENTION_WARN=unverified_backup_dir for a legally-named orphan directory, without refusing or gating on it", () => {
+    const { baseDir, archiveDir } = setupHealthyTriple();
+    // A fourth, legally-named directory with no VERIFIED and no RETIRED
+    // marker at all -- exactly the shape of an in-flight or abandoned
+    // backup-physical-base.sh run.
+    mkdirSync(path.join(baseDir, "ORPHAN"));
+    const binDir = makeBin();
+
+    const result = run(
+      ["--archive-dir", archiveDir, "--base-backup-dir", baseDir, "--keep-base", "2"],
+      {},
+      binDir,
+    );
+
+    // Warn-only: this must not turn into a refusal, and the otherwise
+    // healthy dry-run underneath it must still proceed normally.
+    expect(result.status).toBe(0);
+    expect(result.stdout).not.toContain("WAL_RETENTION=REFUSED");
+    expect(result.stdout).toContain("WAL_RETENTION_WARN=unverified_backup_dir name=ORPHAN");
+    expect(result.stdout).toContain("WAL_RETENTION=DRY_RUN");
+  });
+
+  it("does not warn about a directory that already has RETIRED (a backup mid-retirement, not an orphan)", () => {
+    const { baseDir, archiveDir } = setupHealthyTriple();
+    // RETIRED-only (no VERIFIED) is not the shape P2-5 targets either --
+    // that is a backup already marked for removal, not one that never got
+    // verified.
+    mkdirSync(path.join(baseDir, "OLDRETIRED"));
+    writeFileSync(path.join(baseDir, "OLDRETIRED", "RETIRED"), "");
+    const binDir = makeBin();
+
+    const result = run(
+      ["--archive-dir", archiveDir, "--base-backup-dir", baseDir, "--keep-base", "2"],
+      {},
+      binDir,
+    );
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).not.toContain("WAL_RETENTION_WARN=unverified_backup_dir name=OLDRETIRED");
+  });
+});

@@ -53,10 +53,8 @@ for required in base.tar.gz backup_manifest pg_wal.tar.gz; do
   }
 done
 
-cleanup_work_dir=0
 if [[ -z "$work_dir" ]]; then
   work_dir="$(mktemp -d "${TMPDIR:-/tmp}/verify-physical-base.XXXXXX")"
-  cleanup_work_dir=1
 else
   [[ "$work_dir" = /* ]] || usage
   [[ ! -e "$work_dir" ]] || {
@@ -67,7 +65,22 @@ else
   }
   mkdir -p "$work_dir"
 fi
-trap '[[ "$cleanup_work_dir" == "1" ]] && rm -rf "$work_dir"' EXIT INT TERM
+# WAL-retention rollout work order 2026-09-17, P2-4: work_dir is scratch
+# space for unpacking a base backup to verify it (potentially the same
+# size as the backup itself) -- it is never where the proof of a successful
+# verification lives (that is the VERIFIED marker written into backup_dir
+# below). Previously this only cleaned up a self-generated mktemp
+# directory; an explicit --work-dir was left behind on every exit path.
+# That mattered once a caller started passing --work-dir a persistent,
+# shared location (base_backup_now()'s .verify-<stamp>, deliberately placed
+# inside the /var/lib/postgresql/base-backups bind so unpacking never
+# spills onto the container's own overlay/VM disk) rather than a private
+# /rig-style directory the caller tears down as a whole afterward -- an
+# unconditional survivor there would accumulate one full unpacked backup
+# per base-backup-now run, forever. Cleanup is therefore unconditional and
+# covers every exit path (normal PASS, every `fail()` exit, and a signal),
+# regardless of who created work_dir.
+trap 'rm -rf "$work_dir"' EXIT INT TERM
 
 fail() {
   echo "$1" >&2
@@ -142,7 +155,7 @@ verified_at="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
 # developer's own BSD/macOS `date`.
 verified_epoch="$(date -u '+%s')"
 temp_marker="$backup_dir/.VERIFIED.$$"
-trap 'rm -f "$temp_marker"; [[ "$cleanup_work_dir" == "1" ]] && rm -rf "$work_dir"' EXIT INT TERM
+trap 'rm -f "$temp_marker"; rm -rf "$work_dir"' EXIT INT TERM
 {
   printf 'verified_at=%s\n' "$verified_at"
   printf 'verified_epoch=%s\n' "$verified_epoch"
@@ -151,6 +164,6 @@ trap 'rm -f "$temp_marker"; [[ "$cleanup_work_dir" == "1" ]] && rm -rf "$work_di
   printf 'start_timeline=%s\n' "$start_timeline"
 } >"$temp_marker"
 mv "$temp_marker" "$backup_dir/VERIFIED"
-trap '[[ "$cleanup_work_dir" == "1" ]] && rm -rf "$work_dir"' EXIT INT TERM
+trap 'rm -rf "$work_dir"' EXIT INT TERM
 
 echo "PHYSICAL_BASE_VERIFY=PASS"

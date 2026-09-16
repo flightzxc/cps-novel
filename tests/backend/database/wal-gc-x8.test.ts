@@ -201,12 +201,23 @@ describe("wal-gc-x8.sh: --apply refuses when the archiver cannot be read, --forc
   it("psql exiting non-zero (archiver unreadable) refuses, deletes nothing, no state file", () => {
     const { baseDir, archiveDir } = setupTripleWithDeletableSegments();
     const filesBefore = readdirSync(archiveDir).sort();
-    const binDir = makeBin({ psql: PSQL_SHIM });
+    // WAL-retention rollout work order 2026-09-17, P2-2/P2-3: this one case
+    // (of the four in this describe block) uses the REAL pg_archivecleanup
+    // shim, not the NOOP one every other case here uses. With the NOOP shim,
+    // "archive file count unchanged" is trivially true regardless of
+    // whether the refusal actually ran before reaching wal-retention.sh's
+    // delete step -- -d is a no-op either way, so a regression that let
+    // execution fall through past archiver_unreadable would still pass this
+    // assertion. The REAL shim actually deletes matching files in -d mode,
+    // so this is the one case in the block that can genuinely catch that
+    // regression rather than only checking a marker file.
+    const binDir = makeBin({ psql: PSQL_SHIM, pg_archivecleanup: PG_ARCHIVECLEANUP_REAL_SHIM });
 
     const result = run(["--apply", "--keep-base", "2"], { PSQL_SHIM_EXIT: "2" }, binDir, archiveDir, baseDir);
 
     expect(result.status).not.toBe(0);
     expect(result.stdout).toContain("WAL_RETENTION=REFUSED reason=archiver_unreadable");
+    expect(existsSync(path.join(baseDir, "B1"))).toBe(true);
     expect(existsSync(path.join(baseDir, "B1", "RETIRED"))).toBe(false);
     expect(readdirSync(archiveDir).sort()).toEqual(filesBefore);
     expect(existsSync(path.join(baseDir, ".wal-retention.state"))).toBe(false);
@@ -227,6 +238,7 @@ describe("wal-gc-x8.sh: --apply refuses when the archiver cannot be read, --forc
 
     expect(result.status).not.toBe(0);
     expect(result.stdout).toContain("WAL_RETENTION=REFUSED reason=archiver_failing");
+    expect(existsSync(path.join(baseDir, "B1"))).toBe(true);
     expect(existsSync(path.join(baseDir, "B1", "RETIRED"))).toBe(false);
     expect(readdirSync(archiveDir).sort()).toEqual(filesBefore);
     expect(existsSync(path.join(baseDir, ".wal-retention.state"))).toBe(false);
@@ -247,6 +259,7 @@ describe("wal-gc-x8.sh: --apply refuses when the archiver cannot be read, --forc
 
     expect(result.status).not.toBe(0);
     expect(result.stdout).toContain("WAL_RETENTION=REFUSED reason=archiver_unreadable");
+    expect(existsSync(path.join(baseDir, "B1"))).toBe(true);
     expect(existsSync(path.join(baseDir, "B1", "RETIRED"))).toBe(false);
     expect(readdirSync(archiveDir).sort()).toEqual(filesBefore);
     expect(existsSync(path.join(baseDir, ".wal-retention.state"))).toBe(false);
@@ -267,6 +280,7 @@ describe("wal-gc-x8.sh: --apply refuses when the archiver cannot be read, --forc
 
     expect(result.status).not.toBe(0);
     expect(result.stdout).toContain("WAL_RETENTION=REFUSED reason=archiver_failing");
+    expect(existsSync(path.join(baseDir, "B1"))).toBe(true);
     expect(existsSync(path.join(baseDir, "B1", "RETIRED"))).toBe(false);
     expect(readdirSync(archiveDir).sort()).toEqual(filesBefore);
     expect(existsSync(path.join(baseDir, ".wal-retention.state"))).toBe(false);
@@ -286,6 +300,43 @@ describe("wal-gc-x8.sh: a healthy archiver falls through to a normal dry-run", (
     expect(result.stdout).toMatch(/WAL_RETENTION=DRY_RUN planned_delete=[1-9]\d*/);
     expect(readdirSync(archiveDir).sort()).toEqual(filesBefore);
     expect(existsSync(path.join(baseDir, ".wal-retention.state"))).toBe(false);
+  });
+});
+
+// WAL-retention rollout work order 2026-09-17, P2-9: --force silently
+// disarms wal-retention.sh's delete_surge_guard for the whole run (see the
+// wrapper's own header comment) -- printed on stdout, ahead of
+// wal-retention.sh's own output, so it lands in the same evidence/log
+// stream as whatever that run goes on to do, whether or not the guard
+// would actually have fired this time.
+describe("wal-gc-x8.sh: --force prints a disabled-guard notice before wal-retention.sh runs (P2-9)", () => {
+  it("prints WAL_GC_X8_NOTICE=delete_surge_guard_disabled_for_this_run before WAL_RETENTION=APPLIED when --force is passed", () => {
+    const { baseDir, archiveDir } = setupTripleWithDeletableSegments();
+    const binDir = makeBin({ psql: PSQL_SHIM, pg_archivecleanup: PG_ARCHIVECLEANUP_REAL_SHIM });
+
+    const result = run(
+      ["--apply", "--keep-base", "2", "--force"],
+      { PSQL_SHIM_FLAG: "f" },
+      binDir,
+      archiveDir,
+      baseDir,
+    );
+
+    expect(result.status).toBe(0);
+    const noticeIndex = result.stdout.indexOf("WAL_GC_X8_NOTICE=delete_surge_guard_disabled_for_this_run");
+    const appliedIndex = result.stdout.indexOf("WAL_RETENTION=APPLIED");
+    expect(noticeIndex).toBeGreaterThanOrEqual(0);
+    expect(appliedIndex).toBeGreaterThan(noticeIndex);
+  });
+
+  it("does not print the notice when --force is omitted", () => {
+    const { baseDir, archiveDir } = setupTripleWithDeletableSegments();
+    const binDir = makeBin({ psql: PSQL_SHIM, pg_archivecleanup: PG_ARCHIVECLEANUP_REAL_SHIM });
+
+    const result = run(["--apply", "--keep-base", "2"], { PSQL_SHIM_FLAG: "f" }, binDir, archiveDir, baseDir);
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).not.toContain("WAL_GC_X8_NOTICE=");
   });
 });
 
@@ -314,12 +365,43 @@ describe("wal-gc-x8.sh: only {--apply, --keep-base, --json, --force} are accepte
     expect(result.status).toBe(64);
     expect(existsSync(markerFile)).toBe(false);
   });
+
+  // WAL-retention rollout work order 2026-09-17, P2-3: positive control for
+  // the it.each block above. Every one of those cases only proves the
+  // marker file is ABSENT -- on its own that is also exactly what a broken
+  // wrapper that (say) always hit `usage` regardless of its arguments, or
+  // never resolved wal-retention.sh at all, would produce. This proves the
+  // opposite side: a legal argument set (one of each recognized flag) DOES
+  // reach and invoke the stub, so "marker absent" in the rejection cases
+  // above is actually load-bearing evidence of correct rejection, not an
+  // artifact of the harness never being able to produce a marker at all.
+  it("a legal argument set reaches and invokes wal-retention.sh (marker is created)", () => {
+    const { wrapperCopy, markerFile } = mkWrapperCopyWithMarkerStub();
+
+    const result = spawnSync(
+      "bash",
+      [wrapperCopy, "--apply", "--keep-base", "2", "--json", "--force"],
+      { encoding: "utf8" },
+    );
+
+    expect(result.status).toBe(0);
+    expect(existsSync(markerFile)).toBe(true);
+  });
 });
 
 describe("wal-gc-x8.sh / x8-production-like.sh: static contracts", () => {
   it("wal-gc-x8.sh unconditionally forces --require-archiver-healthy", () => {
     const content = readFileSync(scriptPath, "utf8");
-    expect(content).toContain("--require-archiver-healthy");
+    // Scoped to the fixed wal-retention.sh invocation itself (the
+    // `target=(...)` array), not a bare substring search -- the file's own
+    // header comment ALSO says "--require-archiver-healthy" in prose (to
+    // explain the guarantee this test exists to enforce), so a plain
+    // `.toContain` would keep passing even if the flag were deleted from
+    // the actual invocation while that comment survived. This must find
+    // the literal flag between `target=(` and that array's own closing
+    // `)`, which is where wal-retention.sh is actually invoked.
+    const targetMatch = content.match(/target=\([\s\S]*?--require-archiver-healthy[\s\S]*?\)/);
+    expect(targetMatch).toBeTruthy();
     // It must be a fixed literal in the fixed wal-retention.sh invocation,
     // not a case arm in the argument parser below (which would mean a
     // caller could toggle it).

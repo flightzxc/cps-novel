@@ -168,7 +168,7 @@ tl_history_present=yes tl_failed=0
 - 多时间线（`timeline_unsupported` 拒绝分支，两个独立触发条件）：该分支实际由两个条件之一触发——(a) `wal_ranges_count != 1`（含 0 和 ≥2 两种形状）、(b) `anchor_timeline != "1"`。**(a) 的 0 这一形状本轮（v3）新增单测覆盖**：`wal-retention-guards.test.ts` 用一份真实 `"WAL-Ranges": []` 的 `backup_manifest` 断言 `REFUSED reason=timeline_unsupported`（这也是 P1-B 修复本身要证明的：`grep -oE '"Timeline"'` 在 0 个 Timeline 键时退出 1，`set -euo pipefail` 下若无 `|| true` 会在这条断言执行前就整体杀死脚本）。**(a) 的 ≥2 形状与 (b) 仍完全未验证**——本轮只做了静态代码走查，未在演练或单测里构造出一个真实的多 WAL-Ranges（≥2 个 Timeline 键）或非 1 号时间线场景（6A/6B 用的都是单一时间线 1 号）。
 - apply 中途 kill（进程被杀在"已标记 RETIRED、还没删 WAL"或"已删 WAL、还没删目录"之间）：无单测、演练没有模拟；完全未验证。P1-3 的单测只验证了正常完整跑完时 RETIRED 先于目录删除这个**时序**，不等于验证了"中途真的被杀掉"后重跑是安全的。
 - 告警脚本接线（`pg_stat_archiver.failed_count`/`last_failed_time` 超阈值告警）：未覆盖。
-- `infra/production-like/backup-timer.sh` 与 `verify-physical-base.sh`/`wal-retention.sh` 的定时任务接线：未覆盖，两者目前都是独立可执行脚本，尚未接入任何 cron/timer——这也是为什么 `--require-archiver-healthy` 默认关：接线时的 timer/操作员必须显式打开它。
+- `infra/production-like/backup-timer.sh` 与 `verify-physical-base.sh`/`wal-retention.sh` 的定时任务接线：未覆盖，两者目前都是独立可执行脚本，尚未接入任何 cron/timer。**订正（Opus 三轮复核，P2-8）**：`--require-archiver-healthy` 默认关，指的是 `wal-retention.sh` 这个底层脚本自己的默认值——这是刻意的，供离线单测/rehearsal 这类不需要真实 `pg_stat_archiver` 的场景直接调用。它不代表"正式入口也默认关"：`scripts/db/wal-gc-x8.sh`（唯一受支持的正式 X8 入口，见下方"正式入口与 compose 挂载"一节）把它硬编码为固定开启，任何调用这个入口的路径都不能关掉它。
 - `pg_hba.conf` 的生产化改造：本次沿用镜像默认（`local replication all trust`），未做生产级认证方案设计或验证。
 
 ## 资源清单（证明未触碰 cps-novel-x8-*）
@@ -276,6 +276,50 @@ Opus 二轮复核抓到的核心问题是同一族：`set -e` 会在 P1-A/P1-B �
 - `bash -n`：`scripts/db/wal-retention.sh`、`scripts/db/verify-physical-base.sh`、`scripts/db/wal-retention-rehearsal.sh` 均通过。
 - 演练轮 B v3：`WAL_RETENTION_REHEARSAL=PASS`，退出 0，**30/30 断言 PASS**（与 v2 同一组 30 条断言；本轮未新增 STEP，`STEP4_DRYRUN_ARCHIVER_HEALTHY`/`STEP4_APPLY_ARCHIVER_HEALTHY` 这两条现在实际跑的是 P1-C 的时点谓词而不是旧的 `failed_count` 基线逻辑），证据存于 `.tmp/wal-retention-rehearsal/evidence-roundB-v3/`（未提交，仅本机留存），运行区间 2026-09-16 15:06:35–15:08:00 UTC。
 - 容器计数：v3 运行前 `docker ps -a --format '{{.Names}}' | grep -c cps-novel-x8` = **6**；运行后 = **6**；运行前后均确认无 `wal-retention-rig-*` 残留（`docker ps -a`/`docker volume ls` 均为空）。
+
+## v4 修复轮（本次，Opus 三轮复核收口）
+
+- Commit（本轮 v4，代码 + 测试 + 本节文档）：与本节同一次提交，见 `git log`。
+
+本轮修的不是 `wal-retention.sh` 本身的判断逻辑（v2/v3 两轮已收口），而是 `scripts/x8-production-like.sh` 的 `wal-gc`/`base-backup-now` 两个正式 X8 入口——Opus 三轮复核指出它们写作时缺了与 `up`/`gate` 家族同款的两项前置检查，以及 `wal-gc-x8.sh` 包装器本身两处可加固的地方。
+
+### 正式入口与 compose 挂载
+
+`scripts/x8-production-like.sh` 对外只暴露两个子命令触达 WAL 保留/基准备份机制——绝不支持在活栈容器内手敲裸 `wal-retention.sh`（那条路径没有强制的 archiver 健康闸）：
+
+- `wal-gc [--apply] [--keep N] [--json] [--force]`：`x8_compose exec` 到 postgres 容器内的 `postgres` 系统用户，执行 `bash /app/scripts/db/wal-gc-x8.sh`。
+- `base-backup-now`：同样 `exec` 到 postgres 容器，以 `backup_role`（走 compose secret，从不明文 `PGPASSWORD`）跑 `pg_basebackup` + `verify-physical-base.sh`，写入 `/var/lib/postgresql/base-backups/<UTC 时间戳>`。
+
+两者都依赖 `infra/production-like/docker-compose.yml` postgres 服务的五处新挂载（commit `bbec454`）：
+
+1. `${X8_BASE_BACKUP_DIR:?...}:/var/lib/postgresql/base-backups`（宿主 bind，`X8_BASE_BACKUP_DIR` 派生自 `scripts/lib/x8-production-like-env.sh:16` 的 `"$X8_RUNTIME_DIR/base-backups"`）
+2. `./scripts/db/wal-retention.sh:/app/scripts/db/wal-retention.sh:ro`
+3. `./scripts/db/wal-gc-x8.sh:/app/scripts/db/wal-gc-x8.sh:ro`
+4. `./scripts/db/backup-physical-base.sh:/app/scripts/db/backup-physical-base.sh:ro`
+5. `./scripts/db/verify-physical-base.sh:/app/scripts/db/verify-physical-base.sh:ro`
+
+`infra/production-like/postgres-entrypoint.sh:6` 新增一行 `install -d -o postgres -g postgres -m 0700 /var/lib/postgresql/base-backups`（与既有的 `wal-archive` 那行同款）。这些都是 compose 文件/entrypoint 改动，只有当前活跑的 postgres 容器**被下一次 recreate**才会真正获得这些挂载——写作时本机活栈（`cps-novel-x8-local-postgres-1`）就是先于这次提交起来的，还没有它们。
+
+**P2-6：这是入口级控制，不是容器级控制。** compose 必然把裸 `wal-retention.sh` 本身也 `:ro` 挂进了 postgres 容器（供 `wal-gc-x8.sh` 自己 exec），这意味着任何能 `docker exec` 进容器的人仍然可以直接手敲 `bash /app/scripts/db/wal-retention.sh --apply`（不带 `--require-archiver-healthy`）,绕开 `wal-gc-x8.sh` 强加的那道闸——容器内没有第二层机制阻止这件事。这是运维纪律问题，不是可以用代码堵死的口子：对活栈的一切 WAL 保留/基准备份操作**只允许**经 `scripts/x8-production-like.sh wal-gc` / `base-backup-now` 两个入口，禁止在容器内手敲 `wal-retention.sh`。
+
+### 改动清单（file:line）
+
+- **P1-1**（运行时挂载预检）`scripts/x8-production-like.sh`：新增 `x8_require_wal_retention_mounts()`（`wal_gc()` 定义之前），用 `x8_compose exec -T postgres sh -c 'test -r ... && mountpoint -q /var/lib/postgresql/base-backups'` 探测四个脚本 bind + base-backups 挂载点是否都已就位；`wal_gc()`/`base_backup_now()` 各自在 `prepare_x8_environment` 之后、真正 `exec` 之前调用它，失败即 `ERROR: running postgres container predates the WAL-retention mounts ...` 并 `return 65`。堵的是"脚本挂了、目录没挂"这种更危险的中间态——`backup-physical-base.sh` 的 `mkdir -p` 若落在没挂 `base-backups` 的容器里，会把整份基准备份写进容器自己的 overlay 层（Docker VM 盘），且在下次 recreate 时连带那次备份一起消失。
+- **P1-2**（worktree 绑定 + 宿主落点可见）`scripts/x8-production-like.sh`：`wal_gc()`/`base_backup_now()` 各自在 `prepare_x8_environment` 之后调用 `x8_assert_worktree_stack_binding "$P1_12_COMPOSE_PROJECT" "$X8_PROJECT_ROOT" "$(x8_expected_compose_config_files)" || return 65`——与 `up_x8()`/`gate_catalog_recreate()`/`gate_catalog_status()` 完全同款的前置检查，写作时这两个新子命令是唯一没有它的（会静默对另一个 worktree `up` 起来的栈生效，宿主产物落进那个 worktree 的 `base-backups` 绑定目录而不是调用者自己的）。`base_backup_now()` 成功后新增一行 `X8_BASE_BACKUP_HOST_DIR=<宿主真实落点>`（`docker inspect <postgres 容器> --format '{{range .Mounts}}{{if eq .Destination "/var/lib/postgresql/base-backups"}}{{.Source}}{{end}}{{end}}'`，与 `restore_smoke()` 等处读容器实际状态同一手法），让操作员不用死记 `$X8_BASE_BACKUP_DIR` 也能知道这次备份落在宿主的哪个目录。
+- **P2-1**（静态断言防注释欺骗）`tests/backend/database/wal-gc-x8.test.ts`、`tests/backend/database/p1-06-static.test.ts`：两处 `expect(content).toContain("--require-archiver-healthy")` 改为 `expect(content).toMatch(/target=\([\s\S]*?--require-archiver-healthy[\s\S]*?\)/)`——`wal-gc-x8.sh` 自己的头部注释里也有一句英文散文提到这个 flag 名字，纯 `toContain` 哪怕真的把 `target=()` 数组里那一行删掉、只留注释，测试依然会通过；改后的正则钉死在 `target=(` 到其自身闭合 `)` 之间。变异验证：手动删掉 `target=()` 里的 `--require-archiver-healthy` 那一行（注释原样保留），两个静态测试均从 PASS 转 FAIL（`wal-gc-x8.test.ts` 的静态契约用例报 `expected null to be truthy`，且级联导致四个运行时拒绝用例本身也转 FAIL——因为少了这个 flag，`archiver_unreadable`/`archiver_failing` 两条拒绝路径本身就不会再触发），随后 `mv` 恢复原文件，`git diff --quiet -- scripts/db/wal-gc-x8.sh` 相对本轮改动后的版本为空。
+- **P2-2/P2-3**（测试承重）`tests/backend/database/wal-gc-x8.test.ts`：四个"archiver 拒绝"用例新增 `expect(existsSync(path.join(baseDir, "B1"))).toBe(true)`（只查 `RETIRED` 标记不够——真实 bug 可能整个目录被删而不留下一个假的"未打标记"状态）；其中一个用例（psql 非零退出那条）把默认的 `PG_ARCHIVECLEANUP_NOOP_SHIM` 换成会真删文件的 `PG_ARCHIVECLEANUP_REAL_SHIM`，让"归档文件数不变"这条断言从"无论如何都为真"变成真正能在回归时失败。`mkWrapperCopyWithMarkerStub` 新增一条正向对照用例："合法参数集（`--apply --keep-base 2 --json --force`）下 marker 必须被创建"——此前四条 `it.each` 拒绝用例只证明了 marker 不存在，单独看这也可能是"包装器压根没接到 wal-retention.sh"这种坏掉的形状，正向对照补上另一半。
+- **P2-4**（校验解包目录不落 VM 盘）`scripts/x8-production-like.sh` 的 `base_backup_now()`：调用 `verify-physical-base.sh` 时新增 `--work-dir "/var/lib/postgresql/base-backups/.verify-$stamp"`（点号前缀，`wal-retention.sh` 枚举有效集合的 `find ... ! -name '.*'` 会原样跳过，不会被误当成候选备份目录）。`scripts/db/verify-physical-base.sh`：原先只有脚本自己 `mktemp -d` 生成的 work_dir 才会被 EXIT/INT/TERM 陷阱 `rm -rf`，调用方显式传入的 `--work-dir` 此前完全不会被清理——这在 `.tmp/`/`/rig` 这类一次性演练目录下无所谓（整体会被随后一并拆除），但换成 `base_backup_now()` 这种指向持久 bind 挂载、每次调用都会用到的场景后，会导致每跑一次就在 `base-backups` 里留下一份解包出来的完整基准备份副本，永久攒着。修复：去掉 `cleanup_work_dir` 这个条件位，两处 trap 一律 `rm -rf "$work_dir"`——无论调用方自己传的还是脚本自造的，成功/`fail()` 的每条退出路径/信号都会清理。
+- **P2-5**（孤儿备份目录可见）`scripts/db/wal-retention.sh` 枚举循环：新增 `elif [[ ! -f "$d/VERIFIED" && ! -f "$d/RETIRED" ]]` 分支，打印 `WAL_RETENTION_WARN=unverified_backup_dir name=<dir>`（stdout，只警告，不计入有效集合也不触发拒绝）——覆盖的是"合法命名的目录，两个标记都没有"（典型形状：`backup-physical-base.sh` 还没跑完、或跑完了但从没到 `verify-physical-base.sh` 那一步）此前完全不会出现在任何输出里的问题。`tests/backend/database/wal-retention-guards.test.ts` 新增两条：一条证明这个警告真的打印且不影响下面正常的 `DRY_RUN`,一条证明"只有 `RETIRED`、没有 `VERIFIED`"（正常退休流程的中间态，不是孤儿）不会被误警告。
+- **P2-6**：见上方"正式入口与 compose 挂载"一节末段——入口级而非容器级控制，运维纪律条款，本轮未改代码。
+- **P2-7**（包装器头注释）`scripts/db/wal-gc-x8.sh`：头部新增一段，点名 `X8_WAL_ARCHIVE_DIR`/`X8_BASE_BACKUP_DIR_IN_CONTAINER`/`X8_WAL_ARCHIVE_MAX_BYTES` 三个 env 覆盖仅供 `tests/backend/database/wal-gc-x8.test.ts` 无 Docker 单测用，正式入口经 `x8_compose exec` 从不传 `-e`，这三个变量在真实调用里不可达，始终吃 `:-` 右侧的硬编码默认值。
+- **P2-9**（`--force` 通知）`scripts/db/wal-gc-x8.sh`：解析到 `--force` 时置 `force_requested=1`，在 `exec` 进 `wal-retention.sh` 之前（早于它自己任何 `WAL_RETENTION*=` 输出行）打印 `WAL_GC_X8_NOTICE=delete_surge_guard_disabled_for_this_run` 到 stdout——无论这次运行 `delete_surge_guard` 实际上会不会触发，都先把"这次调用整体解除了这道闸"这件事落进同一条日志/证据流。`tests/backend/database/wal-gc-x8.test.ts` 新增两条：`--force` 时通知先于 `WAL_RETENTION=APPLIED` 出现；不带 `--force` 时完全不打印这行。
+
+### 验证结果（v4）
+
+- 单测：`npx vitest run --project node tests/backend/database/` → **19 files passed, 149 tests passed**（较 v3 的 18 files/130 tests 新增：`wal-retention-guards.test.ts` +2、`wal-gc-x8.test.ts` +5 净增,其中 1 条替换为正向对照）。
+- `bash -n`：`scripts/x8-production-like.sh`、`scripts/db/wal-gc-x8.sh`、`scripts/db/wal-retention.sh`、`scripts/db/verify-physical-base.sh` 均通过。
+- 变异验证（P2-1）：见上方 P2-1 条目，静态断言从"注释也能骗过"改为"钉死在 `target=(...)` 数组内"，删除真实 flag（保留注释）后两个静态测试均转 FAIL，恢复后 `git diff --quiet` 为 0（相对本轮提交前的工作区状态；未跟踪的 `docs/audits/` 不计入)。
+- 本轮**未**重新跑 `wal-retention-rehearsal.sh` 一次性 Docker rig（这轮改的是 `scripts/x8-production-like.sh` 这个更上层的正式入口 + 包装器本身,rig 演练脚本走的是另一条路径，直接调用 `verify-physical-base.sh`/`wal-retention.sh`，不经过 `wal-gc-x8.sh`/`x8-production-like.sh` 这两层；`mountpoint`/worktree 绑定这两项新前置检查也只在真实 compose 栈里才有意义）——这是本轮如实登记的缺口，不是演练证据，留给"WAL 保留策略 X8 上线路线图（2026-09-17）"（`docs/audits/WAL_RETENTION_X8_ROLLOUT_PLAN_2026-09-17.md`）里 Gate 2 之后的真实 recreate 去补。
 
 ---
 

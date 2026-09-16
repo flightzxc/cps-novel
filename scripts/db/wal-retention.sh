@@ -116,6 +116,17 @@ while IFS= read -r d; do
       exit 65
     fi
     valid_pairs+=("${sw}|${name}")
+  elif [[ ! -f "$d/VERIFIED" && ! -f "$d/RETIRED" ]]; then
+    # WAL-retention rollout work order 2026-09-17, P2-5: a legally-named
+    # directory with neither marker is not a refusal (an in-flight
+    # backup-physical-base.sh run, or one that failed before
+    # verify-physical-base.sh ever wrote VERIFIED, are both ordinary and
+    # must not block retention) -- but it is also invisible to every count
+    # and log line above without this, silently never entering the valid
+    # set or the retire set either. Warn-only, stdout, never counted toward
+    # anything -- purely so an operator scanning output notices a backup
+    # attempt that never finished.
+    echo "WAL_RETENTION_WARN=unverified_backup_dir name=$name"
   fi
 done < <(find "$base_backup_dir" -mindepth 1 -maxdepth 1 -type d ! -name '.*' 2>/dev/null | sort)
 

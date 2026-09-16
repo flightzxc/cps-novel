@@ -1695,6 +1695,30 @@ backup_now() {
     /bin/bash /opt/cps-novel-x8/backup-timer.sh --once
 }
 
+# WAL-retention rollout work order 2026-09-17, P1-1: wal_gc() and
+# base_backup_now() both exec scripts that only exist inside the postgres
+# container because of the compose mounts commit bbec454 added to
+# infra/production-like/docker-compose.yml's postgres service (the
+# X8_BASE_BACKUP_DIR bind plus four scripts/db/*.sh read-only binds) -- and
+# those mounts only take effect the NEXT time that container is recreated.
+# A postgres container still running from before that compose change has
+# none of them, and `exec bash /app/scripts/db/wal-gc-x8.sh` against it would
+# fail with a raw, uninformative docker "OCI runtime exec failed: no such
+# file or directory" deep inside the compose call, not a message that tells
+# the operator what to actually do. This turns that into a named, actionable
+# refusal up front -- checked from the caller's own worktree, via
+# x8_compose exec (never docker exec directly, so this fails the same way
+# every other check in this file does if the compose project name/files
+# don't resolve), never mutating anything.
+x8_require_wal_retention_mounts() {
+  x8_compose exec -T postgres sh -c \
+    'test -r /app/scripts/db/wal-gc-x8.sh && test -r /app/scripts/db/wal-retention.sh && test -r /app/scripts/db/verify-physical-base.sh && test -r /app/scripts/db/backup-physical-base.sh && mountpoint -q /var/lib/postgresql/base-backups' \
+    || {
+      echo "ERROR: running postgres container predates the WAL-retention mounts (scripts and/or /var/lib/postgresql/base-backups); recreate it from the release worktree (rollout plan Gate 2) before using wal-gc/base-backup-now" >&2
+      return 65
+    }
+}
+
 # Formal entry point for WAL retention GC against the running X8 stack.
 # This never calls scripts/db/wal-retention.sh directly -- it always goes
 # through scripts/db/wal-gc-x8.sh, the wrapper that hard-codes
@@ -1725,6 +1749,15 @@ wal_gc() {
   done
 
   prepare_x8_environment
+  # WAL-retention rollout work order 2026-09-17, P1-2: same pre-flight as
+  # up_x8()/gate_catalog_recreate() -- refuses outright if the compose
+  # project is already running from a different worktree, before this
+  # execs anything into it (so the sender of --force/--apply and the
+  # worktree that actually owns the running stack can never silently
+  # diverge). Then P1-1's mount precondition, now that the stack identity
+  # itself is confirmed.
+  x8_assert_worktree_stack_binding "$P1_12_COMPOSE_PROJECT" "$X8_PROJECT_ROOT" "$(x8_expected_compose_config_files)" || return 65
+  x8_require_wal_retention_mounts || return 65
   # bash 3.2 `set -u` empty-array guard, same reasoning as elsewhere in this
   # file: a plain `wal-gc` with no flags at all is an ordinary dry-run, not
   # a corner case, and container_args is legitimately empty for it.
@@ -1746,6 +1779,11 @@ wal_gc() {
 # aborts before the next one runs (heredoc's own `set -euo pipefail`).
 base_backup_now() {
   prepare_x8_environment
+  # WAL-retention rollout work order 2026-09-17, P1-2: same worktree-binding
+  # pre-flight as wal_gc() above -- see its own comment for why this must
+  # run before anything below execs into the container.
+  x8_assert_worktree_stack_binding "$P1_12_COMPOSE_PROJECT" "$X8_PROJECT_ROOT" "$(x8_expected_compose_config_files)" || return 65
+  x8_require_wal_retention_mounts || return 65
   x8_compose exec -T -u postgres postgres /bin/bash <<'BASE_BACKUP_NOW'
 set -euo pipefail
 umask 077
@@ -1758,8 +1796,30 @@ export PGHOST=/var/run/postgresql PGPORT=5432 PGUSER=backup_role PGDATABASE=cps_
 stamp="$(date -u '+%Y%m%dT%H%M%SZ')"
 output_dir="/var/lib/postgresql/base-backups/$stamp"
 bash /app/scripts/db/backup-physical-base.sh --output-dir "$output_dir"
-bash /app/scripts/db/verify-physical-base.sh --backup-dir "$output_dir"
+# WAL-retention rollout work order 2026-09-17, P2-4: --work-dir explicitly
+# pinned under the base-backups bind mount (dot-prefixed, so
+# wal-retention.sh's `! -name '.*'` directory enumeration skips it and never
+# mistakes it for a candidate base backup) rather than the default /tmp --
+# unpacking a full base backup into the container's own overlay filesystem
+# would grow the Docker VM's disk instead of the host-backed bind.
+# verify-physical-base.sh's own trap now removes --work-dir unconditionally
+# (success, every fail() exit, and a signal), so this never accumulates.
+bash /app/scripts/db/verify-physical-base.sh --backup-dir "$output_dir" --work-dir "/var/lib/postgresql/base-backups/.verify-$stamp"
 BASE_BACKUP_NOW
+  # WAL-retention rollout work order 2026-09-17, P1-2: the heredoc above
+  # only ever prints the in-container path
+  # (/var/lib/postgresql/base-backups/<stamp>) -- an operator on the host
+  # cannot tell where that landed without knowing $X8_BASE_BACKUP_DIR by
+  # heart. Read the bind's actual host-side source straight off the
+  # container's own mount table (same technique restore_smoke() and the
+  # release-identity checks elsewhere in this file use for other
+  # docker-inspect facts), rather than re-deriving it from env -- this is
+  # the one source of truth that cannot drift from what the container
+  # actually has mounted.
+  local container_id host_dir
+  container_id="$(x8_compose ps -q postgres)"
+  host_dir="$(docker inspect "$container_id" --format '{{range .Mounts}}{{if eq .Destination "/var/lib/postgresql/base-backups"}}{{.Source}}{{end}}{{end}}' 2>/dev/null || true)"
+  echo "X8_BASE_BACKUP_HOST_DIR=${host_dir:-UNKNOWN}"
 }
 
 restore_smoke() {

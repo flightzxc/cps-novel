@@ -66,7 +66,13 @@ describe("P1-06 database operations static contracts", () => {
     // wal-retention.sh's --require-archiver-healthy -- neither is something
     // a caller of this wrapper can turn off.
     const walGcX8 = read("scripts/db/wal-gc-x8.sh");
-    expect(walGcX8).toContain("--require-archiver-healthy");
+    // Scoped to the `target=(...)` wal-retention.sh invocation itself, not
+    // a bare substring search -- the file's own header comment also says
+    // "--require-archiver-healthy" in prose, so a plain `.toContain` would
+    // keep passing even if the flag were deleted from the actual
+    // invocation while that comment survived (see the identical hardening
+    // in wal-gc-x8.test.ts's own static-contracts describe block).
+    expect(walGcX8).toMatch(/target=\([\s\S]*?--require-archiver-healthy[\s\S]*?\)/);
     expect(walGcX8).toMatch(/usage\(\)\s*\{[\s\S]*?exit 64/);
     expect(walGcX8).toContain("*) usage ;;");
   });
