@@ -37,6 +37,14 @@ services:
       P1_12_SCHEDULER_APP_PASSWORD_FILE: /run/secrets/scheduler_app_password
       P1_12_ANALYST_RO_PASSWORD_FILE: /run/secrets/analyst_ro_password
       P1_12_BACKUP_ROLE_PASSWORD_FILE: /run/secrets/backup_role_password
+      # Gate 5 review fix (P1-3, WAL retention rollout): read ONLY by
+      # infra/postgres/init-roles.sh during initdb on a brand-new PGDATA
+      # (initdb.d scripts run once, the first time a cluster is bootstrapped
+      # from empty) to scope the pg_hba.conf replication rule it appends for
+      # backup_role to a real subnet instead of always falling back to the
+      # hard-coded default inside that rule-building logic. Same default as
+      # the X8 overlay's postgres service (infra/production-like/docker-compose.yml).
+      X8_RUNTIME_SUBNET: ${X8_RUNTIME_SUBNET:-172.18.0.0/16}
     secrets:
       - postgres_admin_password
       - migration_owner_password
@@ -48,6 +56,11 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./infra/postgres/init-roles.sh:/docker-entrypoint-initdb.d/10-p1-12-roles.sh:ro
+      # Gate 5 review fix (P1-3): sibling file init-roles.sh sources (via its
+      # own SCRIPT_DIR="$(dirname "${BASH_SOURCE[0]}")" resolution) for the
+      # pg_hba.conf replication-rule append logic. Must land in the exact
+      # same container directory as the mount above.
+      - ./infra/postgres/hba-replication-rule.sh:/docker-entrypoint-initdb.d/hba-replication-rule.sh:ro
       - ./infra/postgres/roles.sql:/opt/cps-novel-postgres/roles.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d cps_novel"]

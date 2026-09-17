@@ -543,6 +543,19 @@ x8_export_static_topology() {
   export X8_NGINX_IMAGE="${X8_NGINX_IMAGE:-nginx:1.28.0-alpine}"
   export X8_BACKUP_INTERVAL_SECONDS="${X8_BACKUP_INTERVAL_SECONDS:-86400}"
   export X8_BACKUP_RUN_ON_START="${X8_BACKUP_RUN_ON_START:-true}"
+  # Gate 5-Dev: backup-timer.sh's four-step daily loop (see that script's own
+  # header comment for the full step list). X8_BACKUP_PHYSICAL_ENABLED gates
+  # whether the physical base-backup/verify steps run at all;
+  # X8_BASE_BACKUP_MIN_INTERVAL_SECONDS (72000s = 20h) is how recent the
+  # newest VERIFIED physical backup must be before another one is skipped.
+  export X8_BACKUP_PHYSICAL_ENABLED="${X8_BACKUP_PHYSICAL_ENABLED:-true}"
+  export X8_BASE_BACKUP_MIN_INTERVAL_SECONDS="${X8_BASE_BACKUP_MIN_INTERVAL_SECONDS:-72000}"
+  # Gate 5 review fix (P1-3): the docker network subnet infra/postgres/init-roles.sh
+  # scopes its pg_hba.conf replication rule for backup_role to (initdb-time
+  # only; see that file and infra/production-like/docker-compose.yml's
+  # postgres service for the full explanation). Same default the compose
+  # files themselves fall back to when this is unset.
+  export X8_RUNTIME_SUBNET="${X8_RUNTIME_SUBNET:-172.18.0.0/16}"
   # D-9a (施工工单_D9_up数据库准备原子化与镜像保留_2026-09-09.md 三.3.2①): Owner
   # parameters, defaulted to the work order's own suggested values (第七节).
   # X8_MIN_FREE_KIB_BUILD/X8_WARN_FREE_KIB_BUILD gate build_app_image() (闸A,

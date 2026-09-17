@@ -437,6 +437,53 @@ describe("wal-retention.sh: all WAL_RETENTION judgment lines are on stdout, neve
   });
 });
 
+// Gate 5-Dev: archive_not_writable must only gate --apply. Production wires
+// wal_archive into the backup-timer container read-only (`:ro`) so its daily
+// dry-run loop (wal-gc-x8.sh, never --apply) can run without a writable
+// archive; only a real --apply invocation still needs to prove it can write.
+describe("wal-retention.sh: archive_not_writable only gates --apply (Gate 5-Dev)", () => {
+  it("a read-only archive-dir still produces a normal DRY_RUN without --apply", () => {
+    const { baseDir, archiveDir } = setupHealthyTriple();
+    const binDir = makeBin();
+    chmodSync(archiveDir, 0o555);
+
+    try {
+      const result = run(
+        ["--archive-dir", archiveDir, "--base-backup-dir", baseDir, "--keep-base", "2"],
+        {},
+        binDir,
+      );
+
+      expect(result.status).toBe(0);
+      expect(result.stdout).not.toContain("WAL_RETENTION=REFUSED");
+      expect(result.stdout).toContain("WAL_RETENTION=DRY_RUN");
+    } finally {
+      chmodSync(archiveDir, 0o755);
+    }
+  });
+
+  it("a read-only archive-dir refuses with archive_not_writable when --apply is passed, and touches no RETIRED/state", () => {
+    const { baseDir, archiveDir } = setupHealthyTriple();
+    const binDir = makeBin();
+    chmodSync(archiveDir, 0o555);
+
+    try {
+      const result = run(
+        ["--archive-dir", archiveDir, "--base-backup-dir", baseDir, "--keep-base", "2", "--apply"],
+        {},
+        binDir,
+      );
+
+      expect(result.status).toBe(65);
+      expect(result.stdout).toContain("WAL_RETENTION=REFUSED reason=archive_not_writable");
+      expect(existsSync(path.join(baseDir, "B1", "RETIRED"))).toBe(false);
+      expect(existsSync(path.join(baseDir, ".wal-retention.state"))).toBe(false);
+    } finally {
+      chmodSync(archiveDir, 0o755);
+    }
+  });
+});
+
 // WAL-retention rollout work order 2026-09-17, P2-5: a legally-named
 // directory directly under base-backup-dir with neither VERIFIED nor
 // RETIRED (an in-flight backup-physical-base.sh run, or one that failed

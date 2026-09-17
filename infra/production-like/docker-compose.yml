@@ -4,6 +4,15 @@ services:
     command: ["postgres", "-c", "config_file=/etc/postgresql/postgresql.conf", "-c", "listen_addresses=*"]
     environment:
       P1_06_WAL_ARCHIVE_DIR: /var/lib/postgresql/wal-archive
+      # Gate 5 review fix (P1-3): read ONLY by infra/postgres/init-roles.sh,
+      # ONLY during initdb on a brand-new PGDATA (initdb.d scripts run once,
+      # the first time a cluster is bootstrapped from empty) -- it has no
+      # effect on an already-initialized, already-running postgres
+      # container. This compose service was NOT recreated when this env var
+      # was added (5-Ops only recreated backup-timer); it takes effect the
+      # next time postgres itself is recreated from empty (Gate 2-style),
+      # not before.
+      X8_RUNTIME_SUBNET: ${X8_RUNTIME_SUBNET:-172.18.0.0/16}
     volumes:
       - wal_archive:/var/lib/postgresql/wal-archive
       - ${X8_BASE_BACKUP_DIR:?X8_BASE_BACKUP_DIR is required}:/var/lib/postgresql/base-backups
@@ -66,11 +75,19 @@ services:
       X8_BACKUP_RUN_ON_START: ${X8_BACKUP_RUN_ON_START:-true}
       X8_BACKUP_OUTPUT_DIR: /backups
       X8_BACKUP_PGPASS_SOURCE: /run/x8-secrets/backup.pgpass
+      X8_BACKUP_PHYSICAL_ENABLED: ${X8_BACKUP_PHYSICAL_ENABLED:-true}
+      X8_BASE_BACKUP_MIN_INTERVAL_SECONDS: ${X8_BASE_BACKUP_MIN_INTERVAL_SECONDS:-72000}
     volumes:
       - ./scripts/db/backup-logical.sh:/opt/cps-novel-x8/backup-logical.sh:ro
       - ./infra/production-like/backup-timer.sh:/opt/cps-novel-x8/backup-timer.sh:ro
+      - ./scripts/db/wal-gc-x8.sh:/app/scripts/db/wal-gc-x8.sh:ro
+      - ./scripts/db/wal-retention.sh:/app/scripts/db/wal-retention.sh:ro
+      - ./scripts/db/verify-physical-base.sh:/app/scripts/db/verify-physical-base.sh:ro
+      - ./scripts/db/backup-physical-base.sh:/app/scripts/db/backup-physical-base.sh:ro
       - ${X8_BACKUP_DIR:?X8_BACKUP_DIR is required}:/backups
       - ${X8_BACKUP_PGPASS_FILE:?X8_BACKUP_PGPASS_FILE is required}:/run/x8-secrets/backup.pgpass:ro
+      - ${X8_BASE_BACKUP_DIR:?X8_BASE_BACKUP_DIR is required}:/var/lib/postgresql/base-backups
+      - wal_archive:/var/lib/postgresql/wal-archive:ro
     healthcheck:
       test: ["CMD-SHELL", "test -f /tmp/x8-backup-last-success"]
       interval: 30s

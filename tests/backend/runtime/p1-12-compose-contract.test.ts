@@ -47,10 +47,33 @@ describe("P1-12 Compose and image contracts", () => {
     const postgres = serviceBlock("postgres");
     expect(postgres).toContain("image: postgres:16.14");
     expect(postgres).toContain("postgres_data:/var/lib/postgresql/data");
+    // Gate 5 review fix (F-1): initdb.d mount regression guard -- without
+    // this line, infra/postgres/hba-replication-rule.sh never lands inside
+    // the container, so init-roles.sh's own SCRIPT_DIR-relative source of
+    // it fails silently on any brand-new PGDATA and backup_role never gets
+    // a pg_hba.conf replication rule.
+    expect(postgres).toContain(
+      "./infra/postgres/hba-replication-rule.sh:/docker-entrypoint-initdb.d/hba-replication-rule.sh:ro",
+    );
     expect(postgres).toContain("pg_isready -U postgres -d cps_novel");
     expect(postgres).not.toMatch(/\n    ports:/);
     expect(serviceBlock("web")).toContain('"127.0.0.1:${P1_12_WEB_PORT:-3000}:3000"');
     expect(compose).not.toMatch(/network_mode:\s*host/);
+  });
+
+  // Gate 5 review fix (P1-3, WAL retention rollout): X8_RUNTIME_SUBNET scopes
+  // the pg_hba.conf replication rule infra/postgres/init-roles.sh appends
+  // for backup_role during initdb -- read only at that moment, on a
+  // brand-new PGDATA. See infra/postgres/hba-replication-rule.sh (the
+  // function that actually builds the rule) and
+  // tests/backend/database/init-roles-hba.test.ts for the append logic
+  // itself.
+  it("passes X8_RUNTIME_SUBNET through to the postgres service for init-roles.sh's pg_hba.conf rule", () => {
+    const postgres = serviceBlock("postgres");
+    expect(postgres).toContain("X8_RUNTIME_SUBNET: ${X8_RUNTIME_SUBNET:-172.18.0.0/16}");
+    expect(read("infra/postgres/hba-replication-rule.sh")).toContain(
+      'hba_rule="host replication backup_role ${X8_RUNTIME_SUBNET:-172.18.0.0/16} scram-sha-256"',
+    );
   });
 
   it("contains no SQLite runtime, volume, probe, backup, pragma, or migrate-on-start behavior", () => {
@@ -431,6 +454,7 @@ describe("P1-12 Compose and image contracts", () => {
   it("ships syntactically valid runtime shell scripts", () => {
     for (const path of [
       "infra/postgres/init-roles.sh",
+      "infra/postgres/hba-replication-rule.sh",
       "scripts/lib/p1-12-local-env.sh",
       "scripts/p1-12-compose-up.sh",
       "scripts/run-scheduler-loop.sh",

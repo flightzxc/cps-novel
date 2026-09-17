@@ -93,7 +93,18 @@ usage() {
     '     infra/production-like/docker-compose.yml'"'"'s postgres service' \
     '     ($X8_BASE_BACKUP_DIR bind + the four scripts/db/*.sh read-only' \
     '     binds) -- they are not part of the currently running x8 stack' \
-    '     until that stack is next recreated with these compose changes.' >&2
+    '     until that stack is next recreated with these compose changes.' \
+    '' \
+    '     Gate 5 review fix: `backup-now` runs' \
+    '     infra/production-like/backup-timer.sh --once --logical-only --' \
+    '     ONLY the logical (pg_dump-style) backup step, nothing else. The' \
+    '     physical base backup, its verification, and the WAL-retention' \
+    '     dry-run cleanup plan are the other three steps of that same' \
+    '     script'"'"'s four-step run_backup() loop, but that full loop only' \
+    '     ever runs unattended, from the backup-timer container'"'"'s own' \
+    '     forever loop (interval $X8_BACKUP_INTERVAL_SECONDS, default 24h) --' \
+    '     never from this on-demand `backup-now` command. Use' \
+    '     `base-backup-now` for an on-demand physical base backup instead.' >&2
   exit 64
 }
 
@@ -1689,10 +1700,21 @@ verify_x8() {
   echo "X8_TOPOLOGY_VERIFY=PASS"
 }
 
+# Gate 5 review fix (P1-2): `backup-now` has always been documented and
+# understood as an on-demand LOGICAL backup, but before this fix it invoked
+# the full four-step run_backup() (logical -> physical base backup -> its
+# verification -> a wal-gc dry-run plan) via plain `--once`. A operator
+# meaning to take a quick logical dump before some other change could
+# unexpectedly also trigger a physical base backup (a much heavier,
+# longer-running operation with its own dedicated `base-backup-now` entry
+# point) or a wal-gc dry-run plan. `--logical-only` (see
+# infra/production-like/backup-timer.sh) makes `backup-now` do exactly what
+# its name says and nothing else; the four-step loop still runs on its own,
+# unattended, from the backup-timer container's normal forever loop.
 backup_now() {
   prepare_x8_environment
   x8_compose run --rm --no-deps backup-timer \
-    /bin/bash /opt/cps-novel-x8/backup-timer.sh --once
+    /bin/bash /opt/cps-novel-x8/backup-timer.sh --once --logical-only
 }
 
 # WAL-retention rollout work order 2026-09-17, P1-1: wal_gc() and

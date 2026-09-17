@@ -229,11 +229,19 @@ if [[ "$anchor_timeline" != "1" || "$wal_ranges_count" != "1" ]]; then
   exit 65
 fi
 
-# ---- refusal: archive_not_writable -----------------------------------------
-write_probe="$archive_dir/.wal-retention.writetest.$$"
-if ! { touch "$write_probe" 2>/dev/null && rm -f "$write_probe" 2>/dev/null; }; then
-  echo "WAL_RETENTION=REFUSED reason=archive_not_writable"
-  exit 65
+# ---- refusal: archive_not_writable (apply-only) ----------------------------
+# A dry-run never writes anything into archive_dir -- it only needs to READ
+# it (pg_archivecleanup -n, the capacity `find`/`stat` scan below). Gate 5's
+# production wiring mounts wal_archive read-only into the backup-timer
+# container specifically so its daily `wal-gc-x8.sh --json` dry-run loop can
+# run without a writable archive; only an --apply run ever needs to actually
+# delete from it, so only --apply is refused here.
+if [[ "$apply" == "1" ]]; then
+  write_probe="$archive_dir/.wal-retention.writetest.$$"
+  if ! { touch "$write_probe" 2>/dev/null && rm -f "$write_probe" 2>/dev/null; }; then
+    echo "WAL_RETENTION=REFUSED reason=archive_not_writable"
+    exit 65
+  fi
 fi
 
 # ---- refusal: archiver_failing (opt-in via --require-archiver-healthy) ----
