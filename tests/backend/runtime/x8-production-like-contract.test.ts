@@ -164,12 +164,21 @@ describe("X8 local production-like contracts", () => {
     // directly, so tests/backend/database/backup-timer-static.test.ts can
     // shim it -- but the default value of that variable (and therefore the
     // real, unset-by-compose production behaviour) is still this exact
-    // in-container path.
+    // in-container path. Gate 5 review fix (env-override gate): the plain
+    // `: "${VAR:=default}"` form was replaced by the x8_timer_apply_override
+    // helper (gates every X8_TIMER_* override behind X8_TIMER_TEST_MODE=1),
+    // so the default is now spelled as its second argument instead.
     const backupTimerSource = read("infra/production-like/backup-timer.sh");
     expect(backupTimerSource).toContain(
-      "X8_TIMER_LOGICAL_BACKUP_SCRIPT:=/opt/cps-novel-x8/backup-logical.sh",
+      "x8_timer_apply_override X8_TIMER_LOGICAL_BACKUP_SCRIPT /opt/cps-novel-x8/backup-logical.sh",
     );
     expect(backupTimerSource).toContain('"$X8_TIMER_LOGICAL_BACKUP_SCRIPT" --output');
+    // Gate 5 review fix (P1-2): backup_now() in scripts/x8-production-like.sh
+    // must invoke backup-timer.sh with --logical-only so an on-demand
+    // `backup-now` only ever takes a logical backup, never the physical
+    // base-backup/verify/wal-gc-dry-run steps.
+    const backupNowEntry = launcher.slice(launcher.indexOf("backup_now()"), launcher.indexOf("x8_require_wal_retention_mounts()"));
+    expect(backupNowEntry).toContain("backup-timer.sh --once --logical-only");
     // D-9a (施工工单_D9_up数据库准备原子化与镜像保留_2026-09-09.md 三.3.2③) added
     // several EARLIER mentions of the literal string "infra/postgres/grants.sql"
     // before the real invocation below -- inside a doc-comment right above it
@@ -467,6 +476,21 @@ describe("X8 local production-like contracts", () => {
     expect(healthSql).toContain("BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY;");
     expect(healthSql.match(/X8_HEALTH_SQL_GROUP_/g)).toHaveLength(5);
     expect(healthSql.trimEnd().endsWith("COMMIT;")).toBe(true);
+  });
+
+  // Gate 5 review fix (P2): the backup-timer service must have read-only
+  // access to the WAL archive volume and all four WAL-retention scripts
+  // (backup-timer.sh's run_backup() steps 2-4 exec these) -- this has been
+  // true since Gate 5-Dev, this test just pins it down explicitly.
+  it("wires the backup-timer service with the read-only wal-archive mount and all four WAL-retention scripts", () => {
+    const btIdx = overlay.indexOf("\n  backup-timer:\n");
+    expect(btIdx).toBeGreaterThan(-1);
+    const nextServiceIdx = overlay.indexOf("\nnetworks:", btIdx);
+    const backupTimerBlock = overlay.slice(btIdx, nextServiceIdx === -1 ? undefined : nextServiceIdx);
+    expect(backupTimerBlock).toContain("wal_archive:/var/lib/postgresql/wal-archive:ro");
+    for (const script of ["wal-gc-x8.sh", "wal-retention.sh", "verify-physical-base.sh", "backup-physical-base.sh"]) {
+      expect(backupTimerBlock).toContain(`/app/scripts/db/${script}:ro`);
+    }
   });
 
   it("M2 warns on UAT/R catalog gate drift without overwriting operator state", () => {

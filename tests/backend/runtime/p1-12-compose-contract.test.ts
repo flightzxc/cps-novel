@@ -53,6 +53,21 @@ describe("P1-12 Compose and image contracts", () => {
     expect(compose).not.toMatch(/network_mode:\s*host/);
   });
 
+  // Gate 5 review fix (P1-3, WAL retention rollout): X8_RUNTIME_SUBNET scopes
+  // the pg_hba.conf replication rule infra/postgres/init-roles.sh appends
+  // for backup_role during initdb -- read only at that moment, on a
+  // brand-new PGDATA. See infra/postgres/hba-replication-rule.sh (the
+  // function that actually builds the rule) and
+  // tests/backend/database/init-roles-hba.test.ts for the append logic
+  // itself.
+  it("passes X8_RUNTIME_SUBNET through to the postgres service for init-roles.sh's pg_hba.conf rule", () => {
+    const postgres = serviceBlock("postgres");
+    expect(postgres).toContain("X8_RUNTIME_SUBNET: ${X8_RUNTIME_SUBNET:-172.18.0.0/16}");
+    expect(read("infra/postgres/hba-replication-rule.sh")).toContain(
+      'hba_rule="host replication backup_role ${X8_RUNTIME_SUBNET:-172.18.0.0/16} scram-sha-256"',
+    );
+  });
+
   it("contains no SQLite runtime, volume, probe, backup, pragma, or migrate-on-start behavior", () => {
     expect(`${compose}\n${dockerfile}`).not.toMatch(/sqlite|pragma|cps\.db|\/app\/data/i);
     expect(serviceBlock("web")).not.toMatch(/migrate/i);
@@ -431,6 +446,7 @@ describe("P1-12 Compose and image contracts", () => {
   it("ships syntactically valid runtime shell scripts", () => {
     for (const path of [
       "infra/postgres/init-roles.sh",
+      "infra/postgres/hba-replication-rule.sh",
       "scripts/lib/p1-12-local-env.sh",
       "scripts/p1-12-compose-up.sh",
       "scripts/run-scheduler-loop.sh",

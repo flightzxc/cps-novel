@@ -1,5 +1,5 @@
-import { spawnSync } from "node:child_process";
-import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { execFileSync, spawnSync } from "node:child_process";
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -42,16 +42,21 @@ function writeShim(filePath: string, content: string): void {
   chmodSync(filePath, 0o755);
 }
 
-// Fake `docker` for `docker exec <container> du -sb <path>`. Selects a byte
-// count by the requested path when the path-specific env var is set (so the
-// aggregate "everything healthy" test can give the archive-capacity and
-// pg_wal-bloat judgements different, independently-controlled numbers in
-// the same process); otherwise falls back to a single generic value.
-// DOCKER_SHIM_EXIT simulates the exec itself failing (fail-closed path).
-const DOCKER_DU_SHIM = `#!/usr/bin/env bash
+// Fake `docker` supporting the two subcommands check-wal-archive.sh issues:
+// `docker exec <container> du -sb <path>` (judgements 1/4) and
+// `docker inspect <container> --format ...` (judgement 3's mount
+// resolution, Gate 5 review fix P1-5). `exec du` selects a byte count by the
+// requested path when the path-specific env var is set (so the aggregate
+// "everything healthy" test can give the archive-capacity and pg_wal-bloat
+// judgements different, independently-controlled numbers in the same
+// process); otherwise falls back to a single generic value.
+// DOCKER_SHIM_EXIT simulates the exec itself failing (fail-closed path);
+// DOCKER_SHIM_INSPECT_MOUNT_SOURCE controls what `inspect --format` prints
+// (empty/unset = no matching mount, same as a real container missing it).
+const DOCKER_SHIM = `#!/usr/bin/env bash
 set -u
 if [[ "\${DOCKER_SHIM_EXIT:-0}" != "0" ]]; then
-  echo "shim: simulated docker exec failure" >&2
+  echo "shim: simulated docker failure" >&2
   exit "\${DOCKER_SHIM_EXIT}"
 fi
 if [[ "\${1:-}" == "exec" && "\${3:-}" == "du" ]]; then
@@ -64,6 +69,10 @@ if [[ "\${1:-}" == "exec" && "\${3:-}" == "du" ]]; then
     bytes="\${DOCKER_SHIM_DU_BYTES:-0}"
   fi
   printf '%s\\t%s\\n' "\$bytes" "\$path_arg"
+  exit 0
+fi
+if [[ "\${1:-}" == "inspect" ]]; then
+  printf '%s' "\${DOCKER_SHIM_INSPECT_MOUNT_SOURCE:-}"
   exit 0
 fi
 echo "shim: unsupported docker invocation: \$*" >&2
@@ -144,9 +153,15 @@ printf 'FIRE_TOTAL=%s\\n' "$(alert_fire_total)"
   };
 }
 
+describe("check-wal-archive.sh: static contracts", () => {
+  it("is syntactically valid bash", () => {
+    execFileSync("bash", ["-n", scriptPath]);
+  });
+});
+
 describe("check-wal-archive.sh: judgement 1 -- WAL archive directory capacity", () => {
   it("healthy (bytes well under max) does not fire", () => {
-    const binDir = makeBin({ docker: DOCKER_DU_SHIM });
+    const binDir = makeBin({ docker: DOCKER_SHIM });
     const { fireTotal, output } = runCheck(
       "check_wal_archive_capacity",
       { ALERT_WAL_ARCHIVE_MAX_BYTES: "1000000000", DOCKER_SHIM_DU_BYTES: "1000" },
@@ -157,7 +172,7 @@ describe("check-wal-archive.sh: judgement 1 -- WAL archive directory capacity", 
   });
 
   it("bytes >= max fires wal_archive_capacity_over", () => {
-    const binDir = makeBin({ docker: DOCKER_DU_SHIM });
+    const binDir = makeBin({ docker: DOCKER_SHIM });
     const { fireTotal, output } = runCheck(
       "check_wal_archive_capacity",
       { ALERT_WAL_ARCHIVE_MAX_BYTES: "1000", DOCKER_SHIM_DU_BYTES: "1000000" },
@@ -168,7 +183,7 @@ describe("check-wal-archive.sh: judgement 1 -- WAL archive directory capacity", 
   });
 
   it("a failed docker exec fails closed with wal_archive_capacity_unreadable", () => {
-    const binDir = makeBin({ docker: DOCKER_DU_SHIM });
+    const binDir = makeBin({ docker: DOCKER_SHIM });
     const { fireTotal, output } = runCheck(
       "check_wal_archive_capacity",
       { DOCKER_SHIM_EXIT: "1" },
@@ -176,6 +191,44 @@ describe("check-wal-archive.sh: judgement 1 -- WAL archive directory capacity", 
     );
     expect(fireTotal).toBe(1);
     expect(output).toContain("ALERT key=wal_archive_capacity_unreadable");
+  });
+
+  // Gate 5 review fix (P2): non-numeric `du` output (not just a failed exec)
+  // must also fail closed -- the awk/regex parse path, not the exit-code
+  // path.
+  it("non-numeric du output fails closed with wal_archive_capacity_unreadable", () => {
+    const binDir = makeBin({ docker: DOCKER_SHIM });
+    const { fireTotal, output } = runCheck(
+      "check_wal_archive_capacity",
+      { DOCKER_SHIM_DU_BYTES: "not-a-number" },
+      binDir,
+    );
+    expect(fireTotal).toBe(1);
+    expect(output).toContain("ALERT key=wal_archive_capacity_unreadable");
+  });
+
+  // Gate 5 review fix (P2): these three severity tiers are mutually
+  // exclusive judgements of the same byte count -- whichever tier fires,
+  // the other two (plus _unreadable) must be recovered, so a previously-open
+  // alert for a tier this run has moved away from does not stay stuck open
+  // forever. In DRY_RUN mode (this harness always sets it) alert_recover
+  // never deletes the debounce file, it only logs what it WOULD clear --
+  // exactly the signal this test asserts on.
+  it("firing wal_archive_capacity_over logs a would-clear for the degraded/warn/unreadable debounce keys", () => {
+    const stateDir = mkTestDir("check-wal-archive-state-tiers-");
+    for (const key of ["wal_archive_capacity_degraded", "wal_archive_capacity_warn", "wal_archive_capacity_unreadable"]) {
+      writeFileSync(path.join(stateDir, `${key}.last_sent`), "1\n");
+    }
+    const binDir = makeBin({ docker: DOCKER_SHIM });
+    const { output } = runCheck(
+      "check_wal_archive_capacity",
+      { ALERT_WAL_ARCHIVE_MAX_BYTES: "1000", DOCKER_SHIM_DU_BYTES: "1000000", ALERT_STATE_DIR: stateDir },
+      binDir,
+    );
+    expect(output).toContain("ALERT key=wal_archive_capacity_over");
+    expect(output).toContain("[DRY_RUN] would clear debounce state for key=wal_archive_capacity_degraded");
+    expect(output).toContain("[DRY_RUN] would clear debounce state for key=wal_archive_capacity_warn");
+    expect(output).toContain("[DRY_RUN] would clear debounce state for key=wal_archive_capacity_unreadable");
   });
 });
 
@@ -220,6 +273,52 @@ describe("check-wal-archive.sh: judgement 2 -- pg_stat_archiver health", () => {
   });
 });
 
+// Gate 5 review fix (P1-1): check-wal-archive.sh's judgement 2 predicate
+// must be byte-identical to scripts/db/wal-retention.sh's own
+// --require-archiver-healthy second query -- the header comment on both
+// files says "copied verbatim, not reinvented", so this proves it rather
+// than trusting the comment.
+describe("check-wal-archive.sh: judgement 2 predicate matches wal-retention.sh byte-for-byte (P1-1)", () => {
+  const PREDICATE_RE =
+    /SELECT \(last_failed_time IS NOT NULL AND \(last_archived_time IS NULL OR last_failed_time > last_archived_time\)\) FROM pg_stat_archiver/;
+
+  it("the SQL predicate text is byte-identical in both scripts", () => {
+    const checkSource = readFileSync(scriptPath, "utf8");
+    const walRetentionSource = readFileSync(
+      path.resolve(root, "scripts/db/wal-retention.sh"),
+      "utf8",
+    );
+    const checkMatch = checkSource.match(PREDICATE_RE);
+    const walRetentionMatch = walRetentionSource.match(PREDICATE_RE);
+    expect(checkMatch?.[0]).toBeTruthy();
+    expect(walRetentionMatch?.[0]).toBeTruthy();
+    expect(checkMatch?.[0]).toBe(walRetentionMatch?.[0]);
+  });
+
+  // Behavioural companion to the static byte-match above: a psql shim that
+  // echoes back the exact SQL text it was invoked with, so this asserts on
+  // what check_wal_archiver_health() actually SENDS at runtime, not just
+  // what the source file happens to contain -- and specifically on the `>`
+  // direction (last_failed_time newer than last_archived_time), the part a
+  // sign-flip typo would silently invert.
+  it("check_wal_archiver_health() issues a query containing last_failed_time > last_archived_time", () => {
+    const binDir = makeBin({});
+    const sqlLog = path.join(mkTestDir("check-wal-archive-sql-log-"), "psql-calls.log");
+    writeShim(
+      path.join(binDir, "psql"),
+      `#!/usr/bin/env bash\nset -u\nprintf '%s\\n' "$*" >> "${sqlLog}"\nprintf '%s\\n' "\${PSQL_SHIM_FLAG:-f}"\nexit 0\n`,
+    );
+    const { fireTotal } = runCheck(
+      "check_wal_archiver_health",
+      { ALERT_DATABASE_URL: "postgresql://test:test@127.0.0.1:1/test", PSQL_SHIM_FLAG: "f" },
+      binDir,
+    );
+    expect(fireTotal).toBe(0);
+    const sqlCalls = readFileSync(sqlLog, "utf8");
+    expect(sqlCalls).toContain("last_failed_time > last_archived_time");
+  });
+});
+
 describe("check-wal-archive.sh: judgement 3 -- physical base backup freshness", () => {
   it("a fresh VERIFIED marker (10min old, default 93600s threshold) does not fire", () => {
     const baseBackupDir = mkTestDir("check-wal-archive-basebackup-");
@@ -251,9 +350,78 @@ describe("check-wal-archive.sh: judgement 3 -- physical base backup freshness", 
   });
 });
 
+// Gate 5 review fix (P1-5): when ALERT_BASE_BACKUP_DIR is left unset, the
+// directory is resolved from ALERT_POSTGRES_CONTAINER_NAME's own
+// `docker inspect` mount table instead of a hard-coded worktree-relative
+// fallback (removed entirely).
+describe("check-wal-archive.sh: judgement 3 -- ALERT_BASE_BACKUP_DIR resolution from container mounts (P1-5)", () => {
+  it("unset ALERT_BASE_BACKUP_DIR resolves the host path via docker inspect mounts", () => {
+    const baseBackupDir = mkTestDir("check-wal-archive-basebackup-resolved-");
+    writeVerifiedBackup(baseBackupDir, "20260917T035414Z", 600);
+    const binDir = makeBin({ docker: DOCKER_SHIM });
+    const { fireTotal, output } = runCheck(
+      "check_physical_base_backup_freshness",
+      { DOCKER_SHIM_INSPECT_MOUNT_SOURCE: baseBackupDir },
+      binDir,
+    );
+    expect(fireTotal).toBe(0);
+    expect(output).not.toContain("ALERT key=base_backup");
+  });
+
+  it("a /host_mnt/-prefixed mount source (Docker Desktop for macOS) is retried with the prefix stripped", () => {
+    const baseBackupDir = mkTestDir("check-wal-archive-basebackup-hostmnt-");
+    writeVerifiedBackup(baseBackupDir, "20260917T035414Z", 600);
+    const binDir = makeBin({ docker: DOCKER_SHIM });
+    const { fireTotal, output } = runCheck(
+      "check_physical_base_backup_freshness",
+      { DOCKER_SHIM_INSPECT_MOUNT_SOURCE: `/host_mnt${baseBackupDir}` },
+      binDir,
+    );
+    expect(fireTotal).toBe(0);
+    expect(output).not.toContain("ALERT key=base_backup");
+  });
+
+  it("an empty docker inspect result (no matching mount) fires base_backup_dir_unresolved, not base_backup_missing", () => {
+    const binDir = makeBin({ docker: DOCKER_SHIM });
+    const { fireTotal, output } = runCheck(
+      "check_physical_base_backup_freshness",
+      { DOCKER_SHIM_INSPECT_MOUNT_SOURCE: "" },
+      binDir,
+    );
+    expect(fireTotal).toBe(1);
+    expect(output).toContain("ALERT key=base_backup_dir_unresolved");
+    expect(output).not.toContain("ALERT key=base_backup_missing");
+  });
+
+  it("a failed docker inspect (nonzero exit) also fires base_backup_dir_unresolved", () => {
+    const binDir = makeBin({ docker: DOCKER_SHIM });
+    const { fireTotal, output } = runCheck(
+      "check_physical_base_backup_freshness",
+      { DOCKER_SHIM_EXIT: "1" },
+      binDir,
+    );
+    expect(fireTotal).toBe(1);
+    expect(output).toContain("ALERT key=base_backup_dir_unresolved");
+  });
+
+  it("an explicit ALERT_BASE_BACKUP_DIR bypasses docker inspect entirely (no docker on PATH needed)", () => {
+    const baseBackupDir = mkTestDir("check-wal-archive-basebackup-explicit-");
+    writeVerifiedBackup(baseBackupDir, "20260917T035414Z", 600);
+    // Deliberately no docker shim on PATH at all: if the check tried to call
+    // docker despite ALERT_BASE_BACKUP_DIR already being set, this would
+    // fail with "command not found", proving the explicit setting really
+    // does skip resolution altogether.
+    const { fireTotal, output } = runCheck("check_physical_base_backup_freshness", {
+      ALERT_BASE_BACKUP_DIR: baseBackupDir,
+    });
+    expect(fireTotal).toBe(0);
+    expect(output).not.toContain("ALERT key=");
+  });
+});
+
 describe("check-wal-archive.sh: judgement 4 -- pg_wal directory size", () => {
   it("healthy (bytes well under max) does not fire", () => {
-    const binDir = makeBin({ docker: DOCKER_DU_SHIM });
+    const binDir = makeBin({ docker: DOCKER_SHIM });
     const { fireTotal, output } = runCheck(
       "check_pg_wal_bloat",
       { ALERT_PG_WAL_MAX_BYTES: "1000000000", DOCKER_SHIM_DU_BYTES: "1000" },
@@ -264,7 +432,7 @@ describe("check-wal-archive.sh: judgement 4 -- pg_wal directory size", () => {
   });
 
   it("bytes > max fires pg_wal_bloat", () => {
-    const binDir = makeBin({ docker: DOCKER_DU_SHIM });
+    const binDir = makeBin({ docker: DOCKER_SHIM });
     const { fireTotal, output } = runCheck(
       "check_pg_wal_bloat",
       { ALERT_PG_WAL_MAX_BYTES: "1000", DOCKER_SHIM_DU_BYTES: "1000000" },
@@ -275,8 +443,21 @@ describe("check-wal-archive.sh: judgement 4 -- pg_wal directory size", () => {
   });
 
   it("a failed docker exec fails closed with pg_wal_unreadable", () => {
-    const binDir = makeBin({ docker: DOCKER_DU_SHIM });
+    const binDir = makeBin({ docker: DOCKER_SHIM });
     const { fireTotal, output } = runCheck("check_pg_wal_bloat", { DOCKER_SHIM_EXIT: "1" }, binDir);
+    expect(fireTotal).toBe(1);
+    expect(output).toContain("ALERT key=pg_wal_unreadable");
+  });
+
+  // Gate 5 review fix (P2): non-numeric `du` output (not just a failed exec)
+  // must also fail closed.
+  it("non-numeric du output fails closed with pg_wal_unreadable", () => {
+    const binDir = makeBin({ docker: DOCKER_SHIM });
+    const { fireTotal, output } = runCheck(
+      "check_pg_wal_bloat",
+      { DOCKER_SHIM_DU_BYTES: "not-a-number" },
+      binDir,
+    );
     expect(fireTotal).toBe(1);
     expect(output).toContain("ALERT key=pg_wal_unreadable");
   });
@@ -284,7 +465,7 @@ describe("check-wal-archive.sh: judgement 4 -- pg_wal directory size", () => {
 
 describe("check-wal-archive.sh: run_wal_archive_checks() aggregate", () => {
   it("a fully healthy environment fires zero alerts across all four judgements", () => {
-    const binDir = makeBin({ docker: DOCKER_DU_SHIM, psql: PSQL_SHIM });
+    const binDir = makeBin({ docker: DOCKER_SHIM, psql: PSQL_SHIM });
     const baseBackupDir = mkTestDir("check-wal-archive-basebackup-healthy-");
     writeVerifiedBackup(baseBackupDir, "20260917T035414Z", 600);
 
