@@ -110,6 +110,18 @@ worker 镜像 `cps-novel:0.1.0-da59d13` 含 worker 领取查询热修（commit `
 13. **正式入口的"强制 archiver health"是入口级控制，不是容器级控制**（Opus 三轮 P2-6）：compose 必然把裸 `wal-retention.sh` 也挂进 postgres 容器，`docker exec` 直接跑它仍可不带 `--require-archiver-healthy`。运维纪律：Gate 3 之后对活栈**只允许**经 `scripts/x8-production-like.sh wal-gc` / `base-backup-now` 操作，禁止在容器内手敲 `wal-retention.sh --apply`。
 14. **运行时挂载预检**（Opus 三轮 P1-1）：当前活栈的 postgres 容器没有 `/var/lib/postgresql/base-backups` 挂载和四个新脚本 bind；若在 Gate 2 之前误跑新子命令，修复轮加入的预检（`test -r` 四个脚本 + `mountpoint -q /var/lib/postgresql/base-backups`）会以 65 拒绝并提示先 recreate。更危险的形状是"脚本挂了、目录没挂"——`backup-physical-base.sh` 的 `mkdir -p` 会把整份基准备份写进容器 overlay 层（即 Docker VM 盘），并在下次 recreate 时消失；预检就是为堵这条路。
 15. **`-u postgres` 读 `/run/secrets/backup_role_password` 依赖 Docker Desktop for macOS 的 uid 重映射**（Opus 三轮实证：宿主 0600/501:20 的文件在容器内显示为 999:999 可读）。**在原生 Linux Docker（未来海阅生产 VPS）上没有这层重映射**，0600/501 的文件对 uid 999 不可读，`base-backup-now` 会在读密码那一步 fail-closed 退出。生产部署前必须把 secrets 文件属主/权限按 Linux 语义处理（属 postgres uid 或 0640 + 组），这条写进方案 v2 §2.4 的生产前提。
+   **同源但方向相反的一条（Gate 5 review fix，与上面这条一起在生产前处理）**：
+   `backup-timer` 容器默认以 root 身份运行，`backup-timer.sh` 的第 2/3 步（物理基准
+   备份 + 校验）以 root 写 `base-backups` 目录本身、`.verify-<stamp>` 临时校验目录，
+   以及各种产物文件——上面这条是"谁能**读**密码"，这条是"谁能**删/写**备份文件"。
+   Docker Desktop for macOS 的同一层 uid 重映射同样让后续以非 root uid 清理这些
+   root 属主文件变得"看起来能行"；**原生 Linux Docker 上没有这层重映射**，一个以非
+   root uid（例如把 backup-timer 镜像切到 `postgres` 用户运行后的 uid 999）尝试删除
+   /覆写 root 属主的 `base-backups` 内容会被内核直接拒绝。生产部署前需要在
+   compose 层给 `backup-timer` 服务显式对齐 `user:`（与写入这些目录的实际身份一致），
+   或者补一条显式 `chown` 步骤——这条同样写进方案 v2 §2.4 的生产前提，Gate 5 一节
+   （下方 5-Dev 交付清单之后）也重复标注了一遍，避免只改了"谁能读密码"却漏了
+   "谁能删备份"这半边。
 
 ---
 
@@ -397,9 +409,16 @@ rm -rf "$WD"
 2. `infra/production-like/backup-timer.sh`：`run_backup()` 从一步（逻辑备份）扩成
    四步——逻辑备份（默认路径不变）→ 物理基准备份 → 完整校验 → `wal-gc-x8.sh --json`
    **dry-run**（这个循环里永远不出现 apply 相关的标志，人工授权的单独 apply 动作见
-   第 5 节）。每一步各自 `set +e`/`set -e` 隔离，一步失败不影响之前已成功的步骤，
-   但整轮仍会通过这个文件本身的 `set -e` 向外传播非零退出（沿用四步扩容前"失败即
-   退出、靠 compose `restart: unless-stopped` 重试"的既有语义，没有改）。新增两个
+   第 5 节）。每一步各自 `set +e`/`set -e` 隔离，一步失败不影响之前已成功的步骤。
+   ~~但整轮仍会通过这个文件本身的 `set -e` 向外传播非零退出（沿用四步扩容前"失败即
+   退出、靠 compose `restart: unless-stopped` 重试"的既有语义，没有改）。~~ **Gate 5
+   review fix（P1-6）修正**：这句只对 `--once`（`backup-now`/验收用）仍然成立。
+   run-on-start 与永久循环这两个调用点改走 `run_backup_resilient()`——第 1 步失败才
+   继续退出重试，第 2-4 步单独失败改为打印 `BACKUP_TIMER_RUN=DEGRADED` 并继续下一
+   周期，不再无差别崩溃重启（详见下方"FAIL 停止条件与回退"）。同批修复另加
+   `--logical-only`（`backup-now` 现在只跑第 1 步，不再意外触发物理备份/校验/
+   dry-run 三步）、`X8_TIMER_*` 覆盖的 `X8_TIMER_TEST_MODE` 门控、`wal-gc-dry-run-*.txt`
+   按 30 份保留、`VERIFIED` 缺失/畸形时的 `verified_malformed` 告警。新增两个
    开关：`X8_BACKUP_PHYSICAL_ENABLED`（默认 `true`）、`X8_BASE_BACKUP_MIN_INTERVAL_SECONDS`
    （默认 `72000` 秒 = 20 小时）。
 3. `infra/production-like/docker-compose.yml`：`backup-timer` 服务新增四个脚本的
@@ -501,6 +520,14 @@ docker exec cps-novel-x8-local-postgres-1 psql -U postgres -d cps_novel -tAc \
 触发场景 + 一个健康场景 + 三个 fail-closed（`_unreadable`）场景，外加一个"全部健康
 时 `run_wal_archive_checks()` 零告警"的聚合用例。
 
+**Linux 可移植前提（与风险 15 同源，生产部署前必须处理）**：`backup-timer` 容器目前
+以 root 身份运行，第 2/3 步以 root 写 `base-backups`/`.verify-<stamp>` 锁目录与产物
+文件；Docker Desktop for macOS 的 uid 重映射让"之后能不能删/覆写这些文件"这件事在本
+地看不出问题，但原生 Linux（未来海阅生产 VPS）没有这层重映射——一个非 root uid（例如
+把镜像切到 `postgres` 用户后的 uid 999）尝试清理 root 属主的备份文件会被拒绝。生产部
+署前需要给 `backup-timer` 服务的 `user:` 对齐实际写入身份，或者补一条显式 `chown`
+步骤；详见风险 15。
+
 **这一条必须在首次启用清理（第一次真实 `--apply`）之前就接好**——理由见风险 6：锚定式保留有一个静默失效方向（没人按时做基准备份，锚点再也不前进），没有新鲜度告警，这个方向没有任何东西能捞回来。**5-Dev 已满足这个前置条件**（代码已实现且有测试覆盖）；仍待 5-Ops 在活栈上实际接线验证。
 
 **PASS 条件**
@@ -509,7 +536,20 @@ docker exec cps-novel-x8-local-postgres-1 psql -U postgres -d cps_novel -tAc \
 - `check-wal-archive.sh` 四项判据均有对应 `drill.sh` 场景且断言 `alert_fire` 被调用；接入 `run-all.sh` 后 `alert_fire_total` 在正常场景下为 0。**5-Dev 已用单测+drill.sh 验证过这一条**；5-Ops 需要在真实活栈上再跑一遍 `drill.sh` 确认结论不变。
 
 **FAIL 停止条件与回退**
-- 四步循环任一步失败：`backup-timer` 容器的 `test -f /tmp/x8-backup-last-success` 健康检查会失败，触发既有 `check-backup-freshness.sh`——这本身就是设计好的失败可见性，不需要额外回退动作，但要排查后再继续。
+- **四步循环失败的真实语义（Gate 5 review fix P1-6，修正上一版这里的错误表述）**：第 1 步
+  （逻辑备份）失败——`run_backup()` 返回非零，这个文件自己的 `set -e` 向外传播，整个
+  进程退出，compose `restart: unless-stopped` + `X8_BACKUP_RUN_ON_START=true` 立即重
+  试；这条路径上 `test -f /tmp/x8-backup-last-success` 健康检查确实会失败（标记这次没
+  被 touch），触发既有 `check-backup-freshness.sh`。**但第 2/3/4 步（物理基准备份/
+  校验/wal-gc dry-run）单独失败不再走这条路**——`run_backup_resilient()`（run-on-start
+  与永久循环的调用点，`--once` 不经过它）会打印
+  `BACKUP_TIMER_RUN=DEGRADED failed_steps=<2,3,4 的子集>` 并让循环继续睡到下一个周期，
+  不退出、不重做逻辑备份、健康检查`test -f /tmp/x8-backup-last-success`**不会**失败
+  （第 1 步这次本来就成功了，标记照样被 touch）。这条方向的可见性来自
+  `check-wal-archive.sh` 的四判据（尤其判据③物理基准备份新鲜度），不是靠
+  `check-backup-freshness.sh` 或容器重启循环——一个卡死的物理备份/校验/dry-run 步骤，
+  重启容器也无助于修好它，只会让逻辑备份跑得比 `X8_BACKUP_INTERVAL_SECONDS` 意图的
+  频率高得多。
 - `pg_hba` 新规则解析出 error：`pg_reload_conf()` 不会应用一个语法错误的配置（PostgreSQL 会保留旧配置生效、只在日志里报错），核对 `pg_hba_file_rules.error` 列定位具体哪一行错了，修正后重新 `pg_reload_conf()`，不需要 recreate。
 
 ---

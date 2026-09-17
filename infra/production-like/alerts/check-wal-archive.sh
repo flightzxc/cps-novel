@@ -45,9 +45,22 @@ source "${SCRIPT_DIR}/alert-lib.sh"
 # infra/production-like/docker-compose.yml binds as X8_BASE_BACKUP_DIR into
 # both the postgres and backup-timer containers). Reading it directly off
 # the host means this judgement needs no docker dependency at all, unlike
-# judgements 1/2/4 above. Only computed (cd + pwd, for a fully resolved
-# absolute path) when the caller has not already set an override.
-: "${ALERT_BASE_BACKUP_DIR:=$(cd "${SCRIPT_DIR}/../../.." && pwd)/.tmp/x8-production-like/base-backups}"
+# judgements 1/2/4 above.
+#
+# Gate 5 review fix (P1-5): NO hard-coded worktree-relative fallback here
+# anymore -- the old default (`<repo root>/.tmp/x8-production-like/base-backups`)
+# silently resolved to whatever worktree happened to run this check, which
+# is correct only by coincidence (it is the same trap
+# x8_assert_worktree_stack_binding() exists to catch for the operator
+# commands: the container this checks against and the worktree running the
+# check can drift). When ALERT_BASE_BACKUP_DIR is left unset,
+# alert_resolve_base_backup_dir_from_mounts() below resolves it from the
+# ACTUAL running container's own mount table instead (the one source of
+# truth that cannot drift from what the container has mounted) -- and if
+# that resolution itself fails, judgement 3 fails closed with
+# base_backup_dir_unresolved rather than silently falling back to a path
+# that may not even belong to this container.
+: "${ALERT_BASE_BACKUP_DIR:=}"
 : "${ALERT_BASE_BACKUP_MAX_AGE_SECONDS:=93600}"
 : "${ALERT_PSQL_TIMEOUT_SECONDS:=15}"
 
@@ -74,20 +87,37 @@ check_wal_archive_capacity() {
     return 1
   fi
 
+  # Gate 5 review fix (P2): these three tiers are mutually exclusive
+  # judgements of the same byte count -- whichever one fires this run,
+  # recover the OTHER two tier keys (plus _unreadable, since a `du` that
+  # just succeeded proves this run is not the "can't tell" case), so a
+  # previously-open alert for a tier this run has moved away from is not
+  # left stuck open forever (it would otherwise only ever clear via the
+  # single fully-healthy branch at the bottom, which a persistently
+  # over-threshold archive may never reach again).
   if (( bytes >= ALERT_WAL_ARCHIVE_MAX_BYTES )); then
     alert_fire "wal_archive_capacity_over" "critical" \
       "cps-novel WAL archive at/over capacity" \
       "bytes=${bytes} max=${ALERT_WAL_ARCHIVE_MAX_BYTES} (>=100%) container=${ALERT_POSTGRES_CONTAINER_NAME}."
+    alert_recover "wal_archive_capacity_degraded"
+    alert_recover "wal_archive_capacity_warn"
+    alert_recover "wal_archive_capacity_unreadable"
     return 1
   elif (( bytes * 100 >= ALERT_WAL_ARCHIVE_MAX_BYTES * 85 )); then
     alert_fire "wal_archive_capacity_degraded" "critical" \
       "cps-novel WAL archive capacity degraded" \
       "bytes=${bytes} max=${ALERT_WAL_ARCHIVE_MAX_BYTES} (>=85%) container=${ALERT_POSTGRES_CONTAINER_NAME}."
+    alert_recover "wal_archive_capacity_over"
+    alert_recover "wal_archive_capacity_warn"
+    alert_recover "wal_archive_capacity_unreadable"
     return 1
   elif (( bytes * 100 >= ALERT_WAL_ARCHIVE_MAX_BYTES * 70 )); then
     alert_fire "wal_archive_capacity_warn" "warning" \
       "cps-novel WAL archive capacity warning" \
       "bytes=${bytes} max=${ALERT_WAL_ARCHIVE_MAX_BYTES} (>=70%) container=${ALERT_POSTGRES_CONTAINER_NAME}."
+    alert_recover "wal_archive_capacity_over"
+    alert_recover "wal_archive_capacity_degraded"
+    alert_recover "wal_archive_capacity_unreadable"
     return 1
   fi
 
@@ -147,6 +177,45 @@ check_wal_archiver_health() {
   esac
 }
 
+# Gate 5 review fix (P1-5): resolves the host path bound as
+# /var/lib/postgresql/base-backups inside ALERT_POSTGRES_CONTAINER_NAME,
+# straight off that container's own mount table -- the one source of truth
+# that cannot drift from what the container actually has mounted (same
+# technique scripts/x8-production-like.sh's base_backup_now() already uses
+# to print X8_BASE_BACKUP_HOST_DIR). Only called when the caller has not
+# already set ALERT_BASE_BACKUP_DIR explicitly. Docker Desktop for macOS is
+# known to report some mount sources with a /host_mnt/ prefix that is only
+# meaningful inside the Docker Desktop VM, not on the host filesystem the
+# rest of this script (and every other file reader in it) runs against, so
+# a /host_mnt/-prefixed result that does not itself exist is retried with
+# that prefix stripped. Returns non-zero (nothing printed) if `docker
+# inspect` fails, yields no matching mount, or neither candidate path is an
+# existing directory -- the caller fires base_backup_dir_unresolved for
+# that, it is not this function's job to alert.
+alert_resolve_base_backup_dir_from_mounts() {
+  local raw rc candidate
+  set +e
+  raw="$(docker inspect "${ALERT_POSTGRES_CONTAINER_NAME}" --format \
+    '{{range .Mounts}}{{if eq .Destination "/var/lib/postgresql/base-backups"}}{{.Source}}{{end}}{{end}}' \
+    2>/dev/null)"
+  rc=$?
+  set -e
+  [[ ${rc} -eq 0 && -n "${raw}" ]] || return 1
+
+  if [[ -d "${raw}" ]]; then
+    printf '%s' "${raw}"
+    return 0
+  fi
+  if [[ "${raw}" == /host_mnt/* ]]; then
+    candidate="${raw#/host_mnt}"
+    if [[ -d "${candidate}" ]]; then
+      printf '%s' "${candidate}"
+      return 0
+    fi
+  fi
+  return 1
+}
+
 # ---- judgement 3: physical base backup freshness ----------------------------
 # Newest VERIFIED marker's verified_epoch among correctly-named
 # (YYYYMMDDTHHMMSSZ) subdirectories of ALERT_BASE_BACKUP_DIR -- same
@@ -156,10 +225,19 @@ check_wal_archiver_health() {
 # treatment wal-retention.sh gives it.
 check_physical_base_backup_freshness() {
   local dir="${ALERT_BASE_BACKUP_DIR}"
+  if [[ -z "${dir}" ]]; then
+    dir="$(alert_resolve_base_backup_dir_from_mounts)" || {
+      alert_fire "base_backup_dir_unresolved" "critical" \
+        "cps-novel base-backups directory could not be resolved" \
+        "ALERT_BASE_BACKUP_DIR is not set and docker inspect ${ALERT_POSTGRES_CONTAINER_NAME} did not yield a usable host path for the /var/lib/postgresql/base-backups mount."
+      return 1
+    }
+  fi
   if [[ ! -d "${dir}" ]]; then
     alert_fire "base_backup_missing" "critical" \
       "cps-novel physical base backup directory missing" \
       "ALERT_BASE_BACKUP_DIR=${dir} does not exist."
+    alert_recover "base_backup_dir_unresolved"
     return 1
   fi
 
@@ -182,6 +260,7 @@ check_physical_base_backup_freshness() {
     alert_fire "base_backup_missing" "critical" \
       "cps-novel has no VERIFIED physical base backup" \
       "no directory under ALERT_BASE_BACKUP_DIR=${dir} has a valid VERIFIED marker."
+    alert_recover "base_backup_dir_unresolved"
     return 1
   fi
 
@@ -192,11 +271,13 @@ check_physical_base_backup_freshness() {
     alert_fire "base_backup_stale" "critical" \
       "cps-novel physical base backup is stale" \
       "newest VERIFIED=${newest_name} verified_epoch=${newest_epoch} age_seconds=${age} threshold_seconds=${ALERT_BASE_BACKUP_MAX_AGE_SECONDS}."
+    alert_recover "base_backup_dir_unresolved"
     return 1
   fi
 
   alert_recover "base_backup_missing"
   alert_recover "base_backup_stale"
+  alert_recover "base_backup_dir_unresolved"
   alert_log "check-wal-archive: physical base backup fresh (newest=${newest_name} age=${age}s)"
   return 0
 }

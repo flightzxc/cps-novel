@@ -4,6 +4,15 @@ services:
     command: ["postgres", "-c", "config_file=/etc/postgresql/postgresql.conf", "-c", "listen_addresses=*"]
     environment:
       P1_06_WAL_ARCHIVE_DIR: /var/lib/postgresql/wal-archive
+      # Gate 5 review fix (P1-3): read ONLY by infra/postgres/init-roles.sh,
+      # ONLY during initdb on a brand-new PGDATA (initdb.d scripts run once,
+      # the first time a cluster is bootstrapped from empty) -- it has no
+      # effect on an already-initialized, already-running postgres
+      # container. This compose service was NOT recreated when this env var
+      # was added (5-Ops only recreated backup-timer); it takes effect the
+      # next time postgres itself is recreated from empty (Gate 2-style),
+      # not before.
+      X8_RUNTIME_SUBNET: ${X8_RUNTIME_SUBNET:-172.18.0.0/16}
     volumes:
       - wal_archive:/var/lib/postgresql/wal-archive
       - ${X8_BASE_BACKUP_DIR:?X8_BASE_BACKUP_DIR is required}:/var/lib/postgresql/base-backups

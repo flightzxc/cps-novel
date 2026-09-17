@@ -105,6 +105,22 @@ docs/operations/ALERTS_RUNBOOK_2026-09-03.md              本文件
 `WAL_RETENTION_X8_ROLLOUT_PLAN_2026-09-17.md` §4 Gate 5 与
 `docs/operations/WAL_RETENTION_REHEARSAL_2026-09-16.md` "Gate 5-Dev" 小节。
 
+**Gate 5 review fix 补充**（`WAL_RETENTION_X8_ROLLOUT_PLAN_2026-09-17.md` §4 Gate 5
+"FAIL 停止条件与回退"有完整版本，这里只摘要给告警读者）：`backup-timer.sh` 四步循环
+里，第 1 步（逻辑备份）失败仍然是"整个容器进程退出，靠 compose `restart:
+unless-stopped` 重试"，`test -f /tmp/x8-backup-last-success` 健康检查会失败——这条
+没变。**第 2/3/4 步（物理基准备份/校验/wal-gc dry-run）单独失败不再触发容器重启**，
+改为打印 `BACKUP_TIMER_RUN=DEGRADED failed_steps=<子集>` 并让循环继续睡到下一个周
+期；这条方向的可见性完全靠 `check-wal-archive.sh` 的四判据（尤其判据③），**不是**
+靠 `check-backup-freshness.sh` 或健康检查——第 1 步这次本来就成功了，`x8-backup-
+last-success` 照样被 touch，健康检查不会报警。另外两点：`x8-base-backup-last-
+success`（区别于上面那个 `x8-backup-last-success`）纯属**信息性标记**，本仓库当前
+没有任何告警/健康检查/脚本读它——它存在只是给未来想核对"物理备份路径最近一次到达
+健康终态"的人一个容器内证据，判据③读的是宿主机上的 `VERIFIED` 标记本身，不依赖这
+个容器内标记。`base_backup_dir_unresolved`（判据③新告警键，见上表 `ALERT_BASE_
+BACKUP_DIR` 一行）与既有的 `base_backup_missing`/`base_backup_stale` 是同一判据函
+数里三条互斥的失败路径，误报处理方式相同（见第 6 节）。
+
 所有脚本 `set -euo pipefail`；`run-all.sh`/`drill.sh` 顶部写的是 `set -uo pipefail`，
 **但复核实测 errexit 实际仍是开的**——`source alert-lib.sh` 会把 `-e` 重新打开，
 且每个 `check-*.sh` 退出自己的 `set +e; ...; set -e` 探测块时也会把 `-e` 还原。
@@ -146,12 +162,21 @@ Gate 5-Dev 判据④（`check-wal-archive.sh`）新增：
 | `ALERT_POSTGRES_CONTAINER_NAME` | postgres 容器名，用于 `docker exec ... du -sb` 两个子判据 | `${ALERT_COMPOSE_PROJECT}-postgres-1` |
 | `ALERT_WAL_ARCHIVE_MAX_BYTES` | WAL 归档目录容量上限（OVER=100%/DEGRADED=85%/WARN=70%，与 `wal-retention.sh --max-bytes` 同一套阈值） | `21474836480`（20 GiB） |
 | `ALERT_PG_WAL_MAX_BYTES` | `pg_wal` 目录体积上限 | `2147483648`（2 GiB） |
-| `ALERT_BASE_BACKUP_DIR` | 宿主机上物理基准备份目录（`X8_BASE_BACKUP_DIR` 绑定的同一份宿主路径），直接读 `VERIFIED` 标记，不依赖 docker | 未设置时解析为 `<repo root>/.tmp/x8-production-like/base-backups` |
+| `ALERT_BASE_BACKUP_DIR` | 宿主机上物理基准备份目录（`X8_BASE_BACKUP_DIR` 绑定的同一份宿主路径），直接读 `VERIFIED` 标记，不依赖 docker | **Gate 5 review fix（P1-5）**：未设置时不再有硬编码的 worktree 相对路径兜底——改为从 `ALERT_POSTGRES_CONTAINER_NAME` 的 `docker inspect` 挂载表实时解析（`/host_mnt/` 前缀会自动重试去掉后的路径，兼容 Docker Desktop for macOS）；解析失败/为空/两种候选路径都不是已存在目录 → 判据③ fail-closed 触发新告警键 `base_backup_dir_unresolved`（critical），不再静默回退到某个可能压根不属于这个容器的路径 |
 | `ALERT_BASE_BACKUP_MAX_AGE_SECONDS` | 最新一份 `VERIFIED` 的 `verified_epoch` 陈旧阈值 | `93600`（26h，与判据③同一阈值） |
 
 `ALERT_DATABASE_URL`/`ALERT_PSQL_TIMEOUT_SECONDS` 复用判据②已有的两个变量（同一份
 `pg_stat_archiver` 查询谓词，与 `wal-retention.sh --require-archiver-healthy` 逐字
-相同）；未在此重复登记默认值。
+相同，`tests/backend/alerts/check-wal-archive.test.ts` 现有一个静态测试逐字节比对
+两份脚本里的这段 SQL，防止未来某一边改了另一边没跟着改）；未在此重复登记默认值。
+
+**判据①/④"容量"口径与 `wal-retention.sh` 的差异只在字节级，不是概念差异**：
+`check-wal-archive.sh` 走 `docker exec ... du -sb <path>`（对整个目录递归求和的
+"表观大小"，`du` 自己的定义），而 `scripts/db/wal-retention.sh --max-bytes` 是对
+归档目录下每个文件单独 `stat` 再求和。两者在稀疏文件/文件系统块对齐场景下可能有
+几 KB 量级的出入，但都是同一件事（"这个目录/这些文件一共占多少字节"）的两种合理
+取法，不代表阈值判断在概念上不一致——差异只体现在阈值边界附近的极少数字节，不影响
+70%/85%/100% 这三档判断的实际意义。
 
 去抖/状态：
 

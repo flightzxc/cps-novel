@@ -2,6 +2,10 @@
 set -euo pipefail
 set +x
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=infra/postgres/hba-replication-rule.sh
+source "${SCRIPT_DIR}/hba-replication-rule.sh"
+
 read_secret() {
   local variable_name="$1"
   local path="${!variable_name:-}"
@@ -50,10 +54,14 @@ SQL
 # postgres-entrypoint.sh addition, per the rollout plan's §5.2) and call
 # `SELECT pg_reload_conf();`, which is the PostgreSQL-native, no-restart way
 # to pick up a pg_hba.conf edit.
+#
+# Gate 5 review fix (P1-3): the actual append logic now lives in
+# hba-replication-rule.sh (sourced above) so it can be unit-tested in
+# isolation (tests/backend/database/init-roles-hba.test.ts) without a live
+# psql/PGDATA -- it also now guarantees the file ends with a newline before
+# appending, so a pg_hba.conf whose last line lacked a trailing newline can
+# no longer get the new rule glued onto the end of that line.
 hba_file="${PGDATA:-/var/lib/postgresql/data}/pg_hba.conf"
-hba_rule="host replication backup_role ${X8_RUNTIME_SUBNET:-172.18.0.0/16} scram-sha-256"
-if [[ -f "$hba_file" ]]; then
-  grep -qxF "$hba_rule" "$hba_file" || echo "$hba_rule" >>"$hba_file"
-fi
+x8_append_hba_replication_rule "$hba_file"
 
 echo "P1_12_POSTGRES_ROLES_INITIALIZED=PASS"
