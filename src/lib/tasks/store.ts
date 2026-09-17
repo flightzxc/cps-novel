@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { Prisma, type PrismaClient } from "@prisma/client";
+
 import { withDbRetry } from "@/lib/db/db-retry";
 import type {
   RecoveryResult,
@@ -10,6 +11,7 @@ import type {
   TaskOutcome,
 } from "./types";
 import { TASK_FAMILIES } from "./types";
+import { accountHoldExistsSql } from "./account-hold";
 import { sanitizePersistedTaskError } from "./errors";
 import {
   catalogFinalizeGeneration,
@@ -95,6 +97,20 @@ async function selectPending(
               WHERE t.id = i.task_id
                 AND t.status IN ('pending', 'processing')
                 AND t.task_type = ANY(${taskTypes}::text[])
+                -- Account-level deterministic-failure brake (Owner 2026-09-18
+                -- 决策 2; see src/lib/tasks/account-hold.ts for the whole
+                -- rationale). Sits inside this same parent EXISTS for the
+                -- reason stated just above -- pushed down ahead of the LIMIT,
+                -- so a held account's items are never candidates rather than
+                -- being fetched, locked and then discarded.
+                --
+                -- Structurally this is what makes "held" mean *held* and not
+                -- "burned more slowly": a filtered-out item is not written to
+                -- at all -- no lease, no attempt_count increment, no error, no
+                -- requeue -- so there is no claim/requeue cycle to spin on and
+                -- nothing to undo when the hold is released. The worker simply
+                -- finds no work and falls through to its ordinary poll sleep.
+                AND NOT ${accountHoldExistsSql(Prisma.sql`t.channel_account_id`)}
             )
           ORDER BY i.created_at, i.id
           LIMIT 128

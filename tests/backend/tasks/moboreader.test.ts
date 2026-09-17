@@ -787,6 +787,11 @@ describe("MoboReader preview enqueue: chunked id lookup (C-15)", () => {
       },
       novelSourceItem: { findMany },
       operationAudit: { create: async () => undefined },
+      // Owner 2026-09-18 决策 2: the enqueue path now consults the account
+      // brake before deciding `pending` vs `disabled`. No hold here — this
+      // test is about chunking, and an un-held account is the shape that
+      // exercises the normal `pending` branch.
+      channelAccountHold: { findFirst: async () => null },
     };
     return { db, findManyCallSizes };
   }

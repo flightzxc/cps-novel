@@ -1,10 +1,13 @@
-# 试读章节补采（Preview Backfill）恢复手册 — 2026-09-18
+# 试读章节补采（Preview Backfill）与账号级刹车 — 操作手册 2026-09-18
 
-## 这个手册解决什么
-
-后台批量发布小说文章时，门禁整批拒绝，提示 **「未通过发布门禁：没有可信试读章节」**。
-该提示对应 `PublishGateReason = preview_chapter_missing`：这本书在库里**没有一章已落地、正文非空的试读章节**，
-页面即使发出去，读者点进来也没有可读内容。门禁本身是对的，需要修的是上游的试读采集链路。
+> **2026-09-18 Owner 两项决策已生效，先读这段。**
+>
+> **决策 1｜发布与 Preview 解耦。** 试读是文章页面的增强能力，不再是发布的硬前置条件。
+> `preview_chapter_missing` / `preview_body_missing` 已降级为 **warning**：文章照常发布，
+> 前台在没有试读时**整块隐藏试读模块**（不显示「暂无试读」这类空壳）。
+> 所以本手册描述的补采**不再是发布的前置步骤**，而是「文章先上线、试读后台异步补齐」。
+>
+> **决策 2｜Preview 账号级确定性故障刹车。** 见本手册第二部分。
 
 ## 链路是怎么断的（2026-09-14 事故）
 
@@ -13,7 +16,7 @@
 2. 那一小时里 Worker 解不开渠道账号的凭据，每张任务都在 `loadMoboreaderPreviewScope` 抛
    `credential_validation_failed`。该任务类型注册的是 `maxAttempts: 1`，一次失败即终态 `failed`。
 3. 推广领取链路当天被同一个凭据烧掉后补了两道防线（任务级 system hold + 入口凭据预检），
-   **试读链路两样都没有**，而且它比推广链路更脆：
+   **试读链路当时两样都没有**（决策 2 补上的就是这一半），而且它比推广链路更脆：
 
    - `enqueueContentCreationPreview` 的三个调用点全部挂在 `outcome === "created"` 上，
      书一旦已存在，任何入口都不会再排第二张试读任务；
@@ -21,6 +24,7 @@
    - `scheduler/index.ts` 只调度轮播，没有任何周期任务回头补这些书。
 
 结论：**一本书的试读任务一旦失败，系统里没有任何回路能把它捞回来**——这才是真正的断点。
+（第一部分的补采工具补的是这条回路；第二部分的账号级刹车补的是"不要再一次性烧掉几万张"。）
 
 ## 恢复工具
 
@@ -85,10 +89,74 @@ npx tsx scripts/preview-backfill-recovery.ts \
   `enqueueContentCreationPreview → Worker → materializeChangduPreview` 链路，
   沿途的 feature flag、写入闸门、审计全部照旧生效。
 
-## 仍然敞口的一条（需要 Owner 决策，不在本工具范围内）
+---
 
-试读链路至今没有推广领取链路那样的「账号级确定性失败即刹车」保护。
-凭据再坏一次，几万张新排的试读任务仍然会在几分钟内全部烧成终态，
-只不过现在有了这个工具可以再捞回来。要不要给试读链路也加一道 hold，
-以及加在任务级还是账号级（自动链路是一本书一张任务，任务级 hold 对它无效），
-是一个需要拍板的设计决定。
+## 第二部分：账号级确定性故障刹车（决策 2，已实现）
+
+### 它拦的是什么
+
+2026-09-14 那种事故：一个渠道账号的凭据解不开，79,183 张试读任务在 70 分钟内
+全部烧成终态 `failed`（`maxAttempts: 1`，一张一本书）。
+
+要的是**故障隔离**，不是把重试次数从 1 改成 3——凭据坏了时重试三次只会把
+7.9 万次失败变成 23.7 万次。
+
+### 触发条件
+
+只有**账号级确定性**失败会拉闸，取值域就是推广链路已有的
+`DETERMINISTIC_CREDENTIAL_FAILURE_CODES`（`src/lib/credentials/claim-readiness.ts`）：
+`credential_missing` / `credential_expired` / `credential_ambiguous` /
+`credential_validation_failed` / `credential_invalid`。
+这些码全部只由 `channelAccountId` 决定，对该账号的每一张任务同真同假。
+
+**不会**拉闸的（保持各自原有的每条重试/失败处理）：上游超时、连接重置、5xx、限流
+（统一收敛到 `upstream_material_read_failed` / `upstream_preview_read_failed`）、
+单书不存在、单书下架、章节缺失、单书 parsing 错误、能力/绑定配置问题。
+
+### 粒度与状态
+
+粒度是**渠道账号**，不是渠道、不是任务。别的账号完全不受影响。
+状态就一行 `channel_account_hold`：`released_at IS NULL` 即生效，
+`channel_account_hold_active_uidx` 保证每个账号至多一条。
+
+三层生效：
+
+1. **领取期**——`selectPending` 的下推谓词。被 hold 账号的条目直接不进候选集。
+   条目**原样留在 pending**：不加租约、不加 attempt、不写 error、不 requeue，
+   因此不存在「领取→发现 hold→退回→再领取」的空转。worker 只是领不到活，照常睡轮询间隔。
+2. **入队期**——被 hold 的账号，新排的试读任务直接建成 `disabled` 并带
+   `taskControl.kind=system_hold` 标记（工作被**保留**，不是被丢弃）。
+   这一层保证 hold 期间可运行池不再增长。
+3. **失败期**——试读 handler 遇到上述凭据类失败时，在该条目自己的
+   `protectedWrite` 事务里幂等写下 hold 行（`INSERT ... ON CONFLICT DO NOTHING`）。
+
+### 查看
+
+```
+npx tsx scripts/preview-account-hold.ts --list
+```
+
+列出每条 active hold、触发码、生效时间，以及它当前挡下了多少张任务。
+
+### 解除
+
+**先修凭据**，再解除。解除命令自带凭据预检，解不开就拒绝放行（退出码 65）：
+
+```
+npx tsx scripts/preview-account-hold.ts --release \
+  --channel-account-id <uuid> --released-by <operator-id> \
+  --reason "rotated credential 2026-09-18" \
+  --confirm RELEASE_PREVIEW_ACCOUNT_HOLD
+```
+
+解除会：清掉 hold 行（`released_at` / `released_by` 必须成对，由 CHECK 约束保证）→
+分块（每批 500）把本刹车挂起的任务放回 `pending` → 写一条
+`preview.account_hold_released` 审计。
+
+因功能开关关闭而 `disabled` 的任务**不带**这个标记，不会被顺手放行。
+
+### 历史事故数据怎么办
+
+刹车只负责「下一次凭据故障不再烧掉几万张任务」。
+2026-09-14 已经烧成终态的那 79,183 张不在它的职责范围内，
+用第一部分的补采工具恢复即可——不要为了新机制去批量改写历史任务状态机。

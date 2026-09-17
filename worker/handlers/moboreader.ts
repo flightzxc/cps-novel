@@ -48,6 +48,7 @@ import {
 } from "../../src/lib/locale/channel-language";
 import { createPublicRedirectCode } from "../../src/lib/redirect";
 import { decryptCredentialSecretForWorker } from "../credentials/crypto";
+import { holdChannelAccountForPreview, isAccountLevelPreviewFailure } from "./preview-account-hold";
 import { bindPromoLinkToArticles } from "./promo-link-binding";
 
 export interface MoboreaderCatalogPayload {
@@ -1281,8 +1282,17 @@ async function loadMoboreaderPreviewScope(db: PrismaClient, taskId: string, item
       },
     },
   });
-  if (!account || account.credentials.length !== 1) {
-    throw new Error(account ? "credential_ambiguous" : "preview_account_unavailable");
+  if (!account) throw new Error("preview_account_unavailable");
+  if (account.credentials.length !== 1) {
+    // Split out from the single `credential_ambiguous` this used to throw for
+    // both cases: zero usable credentials and two are different facts, both
+    // already registered in `ClaimCredentialNotReadyCode`
+    // (`src/lib/credentials/claim-readiness.ts`), and both are equally
+    // account-level — so the *hold behaviour* below is identical either way.
+    // What changes is only that the recorded `reason_code` now says which one
+    // actually happened, instead of telling an operator to go looking for a
+    // second credential that is not there.
+    throw new Error(account.credentials.length === 0 ? "credential_missing" : "credential_ambiguous");
   }
   const requests = buildMoboreaderPreviewRequestsFromCatalogRow(source.rawPayload);
   if (
@@ -1590,7 +1600,44 @@ export function createMoboreaderPreviewHandler(
       return { status: "failed", error: { code: "write_disabled", message: "Preview refresh write gate is disabled" } };
     }
     const payload = parseMoboreaderPreviewPayload(lease.payload);
-    const scope = await loadMoboreaderPreviewScope(db, lease.taskId, lease.itemId, env);
+    // Account-level deterministic-failure brake (Owner 2026-09-18 决策 2) —
+    // layer 3 of three, see `src/lib/tasks/account-hold.ts`'s module header.
+    //
+    // This try/catch exists *only* to classify. Before it, every throw out of
+    // `loadMoboreaderPreviewScope` — a bad credential exactly as much as a bad
+    // book — surfaced identically as the runtime's generic `handler_failed`,
+    // which is why the 2026-09-14 burn could not even be distinguished from
+    // ordinary per-book noise without reading 79,183 error messages. Only the
+    // codes `isAccountLevelPreviewFailure` recognises (the credential
+    // taxonomy, which is derived from `channelAccountId` alone) brake the
+    // account; every other code is re-thrown completely unchanged, so
+    // per-book and transient failures keep the exact handling they have today.
+    let scope: Awaited<ReturnType<typeof loadMoboreaderPreviewScope>>;
+    try {
+      scope = await loadMoboreaderPreviewScope(db, lease.taskId, lease.itemId, env);
+    } catch (error) {
+      const code = error instanceof Error ? error.message : "";
+      if (!isAccountLevelPreviewFailure(code)) throw error;
+      // Read the account off the task rather than off `scope` — the loader
+      // threw before it could return one.
+      const task = await db.channelSyncTask.findUnique({
+        where: { id: lease.taskId },
+        select: { channelAccountId: true },
+      });
+      if (!task) throw error;
+      return {
+        status: "failed",
+        error: { code, message: "MoboReader preview credential is unusable for this channel account" },
+        protectedWrite: async (tx) => {
+          await holdChannelAccountForPreview(tx, {
+            channelAccountId: task.channelAccountId,
+            reasonCode: code,
+            taskId: lease.taskId,
+            itemId: lease.itemId,
+          });
+        },
+      };
+    }
     try {
       await adapter.fetchBookMaterial(scope.requests.material, scope.token, signal);
     } catch {

@@ -118,6 +118,26 @@ export async function preflightPreviewCredential(
 ): Promise<CredentialPreflight> {
   const channelAccountId = await resolveContentPreviewAccount(db, channelAppId, now);
   if (!channelAccountId) return { status: "unusable", code: "no_channel_account", channelAccountId: null };
+  return preflightChannelAccountCredential(db, channelAccountId, now, env);
+}
+
+/**
+ * The account-keyed half of the pre-flight, split out so
+ * `scripts/preview-account-hold.ts --release` can gate a hold release on the
+ * *same* check — releasing a brake without re-proving the credential would
+ * hand the worker straight back the 79k-burn it was braked for.
+ *
+ * Resolves the same single active credential row `loadMoboreaderPreviewScope`
+ * will select at run time and proves it decrypts. It cannot prove upstream
+ * still accepts the token — only that the 2026-09-14 failure mode is absent
+ * right now.
+ */
+export async function preflightChannelAccountCredential(
+  db: PrismaClient,
+  channelAccountId: string,
+  now = new Date(),
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<CredentialPreflight> {
   const account = await db.channelAccount.findFirst({
     where: { id: channelAccountId, status: "active", deletedAt: null },
     select: {

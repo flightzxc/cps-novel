@@ -6,6 +6,8 @@ import {
 } from "../flags";
 import { isUniqueConstraintViolation as isUniqueViolation } from "@/lib/db/db-retry";
 import { findNovelSourceItemsByIds } from "@/lib/db/chunked-id-lookup";
+import { findActiveAccountHold } from "./account-hold";
+import { mergeTaskControlResult, type TaskControlMarker } from "./task-control";
 
 export const MOBOREADER_TASK_TYPES = Object.freeze({
   catalogScan: "catalog_scan",
@@ -183,7 +185,23 @@ export interface EnqueueMoboreaderPreviewRefreshTaskInput extends CreateMoboread
 }
 
 export type MoboreaderPreviewTaskCreationResult =
-  | { status: "enqueued"; taskId: string; taskStatus: "pending" | "disabled"; eligibleCount: number; skipReasonCounts: Record<string, number> }
+  | {
+      status: "enqueued";
+      taskId: string;
+      taskStatus: "pending" | "disabled";
+      eligibleCount: number;
+      skipReasonCounts: Record<string, number>;
+      /**
+       * Present exactly when this task was created `disabled` because the
+       * channel account is under an active hold (Owner 2026-09-18 决策 2,
+       * `./account-hold.ts`). Distinguishes "parked by the brake, re-enable
+       * it with `scripts/preview-account-hold.ts --release`" from the older,
+       * unrelated reason a preview task can be born `disabled` (the catalog
+       * feature/write flags being off), which carries no `taskControl` marker
+       * and is not something a release re-enables.
+       */
+      accountHeld?: { holdId: string; reasonCode: string };
+    }
   | { status: "duplicate"; taskId: string }
   | { status: "active_conflict"; taskId: string }
   | { status: "no_eligible_sources"; skipReasonCounts: Record<string, number> };
@@ -1075,9 +1093,30 @@ async function enqueueMoboreaderPreviewRefreshTaskInDb(
   if (active) return { status: "active_conflict", taskId: active.id };
   const enabled = isNovelCatalogSyncEnabled(env);
   const writeAllowed = isNovelCatalogSyncWriteAllowed(env);
-  // Phase D D-1, 做法1 (see the twin comment on the catalog-scan enqueue
-  // above): no more dry_run exemption from the write gate.
-  const taskStatus = enabled && writeAllowed ? "pending" : "disabled";
+  // Account-level deterministic-failure brake (Owner 2026-09-18 决策 2) —
+  // layer 2 of three, see `./account-hold.ts`'s module header. The claim-time
+  // pushdown alone would already stop a held account's work from running;
+  // this exists so the *pending pool itself* stops growing under a hold.
+  // During the 2026-09-14 incident the backlog was produced progressively by
+  // a running catalog materialization, so "held but still accumulating" would
+  // have meant every claim attempt paging through an ever-larger block of
+  // unrunnable items.
+  //
+  // Parked as `disabled` + a `taskControl` marker rather than dropped: the
+  // work is real and must stay recoverable, visible in the task admin, and
+  // re-enablable in one operator command
+  // (`scripts/preview-account-hold.ts --release`). Dropping it would leave no
+  // record that anything was ever supposed to happen for these books.
+  const activeHold = await findActiveAccountHold(db, input.channelAccountId);
+  const taskStatus = enabled && writeAllowed && !activeHold ? "pending" : "disabled";
+  const holdMarker: TaskControlMarker | null = activeHold
+    ? {
+        kind: "system_hold",
+        source: "system",
+        at: now.toISOString(),
+        reasonCode: activeHold.reasonCode,
+      }
+    : null;
   await db.channelSyncTask.create({
     data: {
       id: taskId,
@@ -1098,7 +1137,9 @@ async function enqueueMoboreaderPreviewRefreshTaskInDb(
         skipReasonCounts,
         evidence: { ...MOBOREADER_PREVIEW_EVIDENCE },
       },
-      result: { eligibleCount: eligibleIds.length, skipReasonCounts },
+      result: holdMarker
+        ? mergeTaskControlResult({ eligibleCount: eligibleIds.length, skipReasonCounts }, holdMarker)
+        : { eligibleCount: eligibleIds.length, skipReasonCounts },
       items: {
         createMany: {
           data: eligibleIds.map((novelSourceItemId) => ({
@@ -1119,7 +1160,11 @@ async function enqueueMoboreaderPreviewRefreshTaskInDb(
     data: {
       actorType: input.trigger === "auto" ? "worker" : "admin",
       actorId: input.actorId,
-      action: taskStatus === "pending" ? "moboreader.preview_refresh.queued" : "moboreader.preview_refresh.queued_disabled",
+      action: taskStatus === "pending"
+        ? "moboreader.preview_refresh.queued"
+        : activeHold
+          ? "moboreader.preview_refresh.queued_account_held"
+          : "moboreader.preview_refresh.queued_disabled",
       entityType: "ChannelSyncTask",
       entityId: taskId,
       requestId: input.requestId,
@@ -1130,10 +1175,20 @@ async function enqueueMoboreaderPreviewRefreshTaskInDb(
         status: taskStatus,
         eligibleCount: eligibleIds.length,
         skipReasonCounts,
+        ...(activeHold
+          ? { accountHoldId: activeHold.id, accountHoldReasonCode: activeHold.reasonCode }
+          : {}),
       },
     },
   });
-  return { status: "enqueued", taskId, taskStatus, eligibleCount: eligibleIds.length, skipReasonCounts };
+  return {
+    status: "enqueued",
+    taskId,
+    taskStatus,
+    eligibleCount: eligibleIds.length,
+    skipReasonCounts,
+    ...(activeHold ? { accountHeld: { holdId: activeHold.id, reasonCode: activeHold.reasonCode } } : {}),
+  };
 }
 
 export async function enqueueMoboreaderPreviewRefreshTask(

@@ -24,8 +24,9 @@ describe("P1-05B static database contracts", () => {
     // models; Phase C step C-4 dropped CatalogScanTask/CatalogScanTaskItem,
     // bringing it back down to 49. C-30A (施工工单_C30_换小说_移植CPS换租客_
     // 2026-09-08.md §4A.1) adds three more (ArticleNovelRebindPreview/
-    // Batch/BatchItem), bringing it to 52.
-    expect(JSON.parse(output)).toMatchObject({ status: "ok", models: 52 });
+    // Batch/BatchItem), bringing it to 52. Owner 2026-09-18 决策 2 adds
+    // ChannelAccountHold (20260918090000_preview_account_hold), bringing it to 53.
+    expect(JSON.parse(output)).toMatchObject({ status: "ok", models: 53 });
   });
 
   it("keeps stable keys globally unique and records physical ownership", () => {
