@@ -159,9 +159,17 @@ describe("X8 local production-like contracts", () => {
     expect(overlay).toContain("PGUSER: backup_role");
     expect(overlay).toContain("backup.pgpass:ro");
     expect(overlay).not.toMatch(/PGPASSWORD:/);
-    expect(read("infra/production-like/backup-timer.sh")).toContain(
-      "/opt/cps-novel-x8/backup-logical.sh --output",
+    // Gate 5-Dev: run_backup()'s step 1 invokes backup-logical.sh via
+    // X8_TIMER_LOGICAL_BACKUP_SCRIPT rather than the hard-coded path
+    // directly, so tests/backend/database/backup-timer-static.test.ts can
+    // shim it -- but the default value of that variable (and therefore the
+    // real, unset-by-compose production behaviour) is still this exact
+    // in-container path.
+    const backupTimerSource = read("infra/production-like/backup-timer.sh");
+    expect(backupTimerSource).toContain(
+      "X8_TIMER_LOGICAL_BACKUP_SCRIPT:=/opt/cps-novel-x8/backup-logical.sh",
     );
+    expect(backupTimerSource).toContain('"$X8_TIMER_LOGICAL_BACKUP_SCRIPT" --output');
     // D-9a (施工工单_D9_up数据库准备原子化与镜像保留_2026-09-09.md 三.3.2③) added
     // several EARLIER mentions of the literal string "infra/postgres/grants.sql"
     // before the real invocation below -- inside a doc-comment right above it

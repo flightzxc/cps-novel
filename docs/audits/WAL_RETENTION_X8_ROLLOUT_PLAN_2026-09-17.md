@@ -380,25 +380,62 @@ rm -rf "$WD"
 
 ### Gate 5 — 每日 timer + 告警
 
+**状态**：**5-Dev（代码实现）已完成**，分支 `feature/wal-retention-gate5`（基线
+`36234d639d9722e0fd69b1301f7b7ead375c3cf8`），四个 commit，**未 push**，等 Opus 复核后
+再由 Owner 决定 push/合并时机。**5-Ops（在活栈上落地执行）仍待人工**——本节下方 5.2
+的手工步骤、以及"接线到真实运行的 `cps-novel-x8-local-*` 容器"这一整段都还没有做；
+具体执行步骤序列、验收命令另行以 Codex 提示词下发，不在本单范围内跑。
+
 **前置条件**
 - Gate 4 PASS（B1/B2 均 `VERIFIED`，恢复链正向/负向均按预期）。
 
-**5.1 扩 `backup-timer.sh` 的循环**
+**5-Dev 交付清单**（四个 commit，均在上面的分支）：
 
-`infra/production-like/backup-timer.sh` 当前的 `run_backup()` 只做一步（逻辑备份）。扩成四步：逻辑备份（不变）→ 物理基准备份 → 完整校验 → 清理 **dry-run**（`--apply` 永远不进这个循环，只有人工授权的单独动作才能 apply，见第 5 节）。
+1. `scripts/db/wal-retention.sh`：`archive_not_writable` 改为**只在 `--apply` 时检查**
+   ——dry-run 从不写归档，之前"任何调用都要求 archive-dir 可写"和"生产给
+   `backup-timer` 的归档挂载改成只读 `:ro`"是矛盾的，这条 fix 就是为了解开这个矛盾。
+2. `infra/production-like/backup-timer.sh`：`run_backup()` 从一步（逻辑备份）扩成
+   四步——逻辑备份（默认路径不变）→ 物理基准备份 → 完整校验 → `wal-gc-x8.sh --json`
+   **dry-run**（这个循环里永远不出现 apply 相关的标志，人工授权的单独 apply 动作见
+   第 5 节）。每一步各自 `set +e`/`set -e` 隔离，一步失败不影响之前已成功的步骤，
+   但整轮仍会通过这个文件本身的 `set -e` 向外传播非零退出（沿用四步扩容前"失败即
+   退出、靠 compose `restart: unless-stopped` 重试"的既有语义，没有改）。新增两个
+   开关：`X8_BACKUP_PHYSICAL_ENABLED`（默认 `true`）、`X8_BASE_BACKUP_MIN_INTERVAL_SECONDS`
+   （默认 `72000` 秒 = 20 小时）。
+3. `infra/production-like/docker-compose.yml`：`backup-timer` 服务新增四个脚本的
+   只读挂载（与 `postgres` 服务已有的挂载同款）、`base-backups`（读写）与
+   `wal_archive`（**只读 `:ro`**）两个卷，以及上面两个开关的 env 透传。
+4. `infra/postgres/init-roles.sh`：仅对**全新** `PGDATA`（initdb 阶段脚本，只在
+   集群首次初始化时跑一次）幂等追加
+   `host replication backup_role <subnet> scram-sha-256`；**不会、也不能触碰任何
+   已经初始化过的活库**——那正是下面 5.2 描述的、仍待人工执行的部分。
+5. `infra/production-like/alerts/check-wal-archive.sh`：四判据（归档容量/
+   `pg_stat_archiver` 健康/基准备份新鲜度/`pg_wal` 体积），接入 `run-all.sh`
+   （四条判据）与 `drill.sh`（四个新 keyword-flip 场景）。详见下方 5.3。
 
-```bash
-# run_backup() 扩成四步的示意（改 infra/production-like/backup-timer.sh，不在本 Gate 直接改代码，
-# 这里只给出验收要看的行为契约）：
-#   1. /bin/bash /opt/cps-novel-x8/backup-logical.sh --output ...        （现状不变）
-#   2. 物理基准备份等价物（容器内本地 socket，同 base-backup-now 的连接方式）
-#   3. verify-physical-base.sh
-#   4. wal-gc-x8.sh（不带 --apply，只打印计划）
-```
+**关键语义**（供复核/验收核对，四条都不是"自解释"的行为，容易被误判成 bug）：
 
-**5.2 跨容器 `pg_hba` 授权 —— 仅当步骤 5.1 需要 `backup-timer` 容器本身发起跨容器复制连接时才需要**
+- **`SKIPPED_RECENT`**：最新一份 `VERIFIED` 的 `verified_epoch` 距今 <
+  `X8_BASE_BACKUP_MIN_INTERVAL_SECONDS`（默认 72000s）→ 跳过本次物理备份。**这是
+  健康态，不是失败**——`x8-base-backup-last-success` 标记照样被 touch，因为"已经有
+  一份足够新的 VERIFIED 备份"这件事本身就是这个标记想证明的事情。
+- **`DISABLED`**：`X8_BACKUP_PHYSICAL_ENABLED=false` → 物理备份/校验两步都不跑。
+  **`x8-base-backup-last-success` 不会被 touch**——这是操作员主动关闭，标记不应该
+  假装"健康"，否则告警链会被这个标记永久性地捂住。
+- **`archive_not_writable` 只门 `--apply`**：dry-run 从不写归档，所以
+  `wal_archive:/var/lib/postgresql/wal-archive:ro` 这个只读挂载不会挡住每日的
+  `wal-gc-x8.sh --json` dry-run 循环；只有人工授权的真实 `--apply`（见第 5 节，
+  且从不在 `backup-timer.sh` 里）才需要归档可写。
+- **验收默认不产 B3**：Owner 已拍板，Gate 5 验收要验的是"最近已有一份足够新的
+  `VERIFIED`（不管是不是本单常说的 B2）→ timer 正确判定 `SKIPPED_RECENT`"，不是
+  每次验收都真去跑一次物理基准备份。`SKIPPED_RECENT` 因此是一等公民，有专门的
+  行为测试覆盖（`tests/backend/database/backup-timer-static.test.ts`：四个场景之一
+  就是"10 分钟前的 VERIFIED → SKIPPED_RECENT，physical/verify 两个 shim 都不被调用，
+  两个成功标记都被 touch"）。
 
-`base-backup-now`/`wal-gc` 这两个已实现的操作员命令走的是"容器内 `docker exec` + 本地 socket"，**从不需要改 `pg_hba`**（本地 socket 命中的是 `local ... trust` 这一行，已用 `docker exec ... grep -v '^\s*#\|^\s*$' pg_hba.conf` 核对过当前活栈就是这样配的）。只有当 5.1 的循环选择让 `backup-timer` 容器**自己**发起 `pg_basebackup --wal-method=stream`（PGHOST=postgres，走 docker 网络 TCP，而不是 `docker exec` 进 postgres 容器）时，才会命中 `host all all all scram-sha-256` 这条泛匹配规则之外、专属 replication 类连接的空白——当前 `pg_hba.conf` 只有 `host replication all 127.0.0.1/32 trust` 与 `::1/128`（回环），docker 网络内的跨容器连接两者都不匹配。
+**5.2 跨容器 `pg_hba` 授权 —— 仅当 5-Dev 交付第 2 条的循环需要 `backup-timer` 容器本身发起跨容器复制连接时才需要，仍待 5-Ops 在活栈手工执行**
+
+`base-backup-now`/`wal-gc` 这两个已实现的操作员命令走的是"容器内 `docker exec` + 本地 socket"，**从不需要改 `pg_hba`**（本地 socket 命中的是 `local ... trust` 这一行，已用 `docker exec ... grep -v '^\s*#\|^\s*$' pg_hba.conf` 核对过当前活栈就是这样配的）。只有当 5-Dev 交付清单第 2 条的循环选择让 `backup-timer` 容器**自己**发起 `pg_basebackup --wal-method=stream`（PGHOST=postgres，走 docker 网络 TCP，而不是 `docker exec` 进 postgres 容器）时，才会命中 `host all all all scram-sha-256` 这条泛匹配规则之外、专属 replication 类连接的空白——当前 `pg_hba.conf` 只有 `host replication all 127.0.0.1/32 trust` 与 `::1/128`（回环），docker 网络内的跨容器连接两者都不匹配。
 
 **PostgreSQL 协议层面的事实**（与本项目的部署机制无关）：`hba_file` 显示为 `/var/lib/postgresql/data/pg_hba.conf`，**在 `postgres_data` 这个数据卷内，不是 bind mount**。按 PostgreSQL 官方文档，`pg_hba.conf` 的改动**只需要 `SELECT pg_reload_conf()`（或 `SIGHUP`）即可生效，不需要重启进程，更不需要容器 recreate**——这是 PostgreSQL 协议本身的行为，不依赖本项目怎么部署它。方案 v2 文档 §2.6 里"这是 postgres 的配置变更，需要容器重建才能生效"这句话，写的是**另一件事**：如果要让这条 `pg_hba` 追加规则在**未来每一次容器重启**后都持续存在（即让它成为 `postgres-entrypoint.sh` 或某个初始化脚本的一部分、写进版本控制），那才需要改一个被 bind mount 的脚本文件并让它在下次容器启动时执行——但那是"让改动持久化/可重现"的工程需求，不是"这条 `pg_hba` 规则本身要生效"的必要条件。两件事不要混为一谈。
 
@@ -430,29 +467,46 @@ docker exec cps-novel-x8-local-postgres-1 psql -U postgres -d cps_novel -tAc \
 #    需要 recreate，不是"pg_hba 本身要生效"需要 recreate。
 ```
 
-**5.3 告警新判据**
+**5.3 告警新判据 —— 已实现（5-Dev 交付第 5 条）**
 
-新增 `infra/production-like/alerts/check-wal-archive.sh`（沿用 `check-backup-freshness.sh` 同款结构：`source alert-lib.sh`，`fail_closed_run`/`alert_fire`/`alert_recover`，standalone-execution guard），覆盖四件事：
+`infra/production-like/alerts/check-wal-archive.sh` 已交付，沿用
+`check-backup-freshness.sh` 同款结构（`source alert-lib.sh`，
+`fail_closed_run`/`alert_fire`/`alert_recover`，standalone-execution guard），
+覆盖四件事：
 
-1. 容量四档（`OK`/`WARN`/`DEGRADED`/`OVER`，与 `wal-retention.sh --max-bytes` 同一套阈值，20 GiB/70%/85%/100%）。
-2. `pg_stat_archiver` 健康（`last_failed_time > last_archived_time` → 告警，与 `wal-retention.sh --require-archiver-healthy` 同一谓词，不是另发明一套）。
-3. 基准备份新鲜度（复用 §3 现有 26 小时判据，把"最新一份 `VERIFIED` 的 `verified_epoch`"这个新维度纳入同一条检查——**不新增判据入口**，只扩展 `check-backup-freshness.sh` 或新增一个同构检查函数，两者选一，但必须并入 `run-all.sh` 的同一次运行）。
-4. `pg_wal` 占用 > `2 × max_wal_size`（当前 `max_wal_size=1GB`，即阈值 2GB；取证时 `pg_wal` 实际占用 992MB，属正常）。
+1. 归档目录容量（`OK`/`WARN`/`DEGRADED`/`OVER`，与 `wal-retention.sh --max-bytes`
+   同一套阈值，默认 20 GiB/70%/85%/100%）——`wal_archive_capacity_warn|degraded|over`，
+   读不到（`docker exec du` 失败或输出不可解析）→ `wal_archive_capacity_unreadable`。
+2. `pg_stat_archiver` 健康——`last_failed_time IS NOT NULL AND (last_archived_time
+   IS NULL OR last_failed_time > last_archived_time)`，与 `wal-retention.sh
+   --require-archiver-healthy` 同一条 SQL 谓词、逐字复制，不是另发明一套
+   （`wal_archiver_failing`；`ALERT_DATABASE_URL` 未配置或 psql 探测失败 →
+   `wal_archiver_unreadable`）。
+3. 物理基准备份新鲜度——**独立于**现有 26 小时逻辑备份标记判据（判据③读的是容器内
+   `/tmp/x8-backup-last-success`；这一条读的是宿主机上 `ALERT_BASE_BACKUP_DIR`
+   （默认解析为 `<repo root>/.tmp/x8-production-like/base-backups`）下最新一份
+   `VERIFIED` 的 `verified_epoch`，不依赖 docker）——`base_backup_stale`（默认阈值
+   同为 93600s=26h）/`base_backup_missing`。
+4. `pg_wal` 目录体积 > `ALERT_PG_WAL_MAX_BYTES`（默认 2 GiB）——`pg_wal_bloat`，读不到
+   → `pg_wal_unreadable`。
 
-```bash
-docker exec cps-novel-x8-local-postgres-1 psql -U postgres -d cps_novel -tAc "SHOW max_wal_size;"
-docker exec cps-novel-x8-local-postgres-1 psql -U postgres -d cps_novel -tAc \
-  "SELECT pg_size_pretty(sum(size)) FROM pg_ls_waldir();"
-```
+已接入 `infra/production-like/alerts/run-all.sh`（四条判据串行、`||` 守卫、互不影响）
+与 `drill.sh`（四个新 keyword-flip 场景 F/G/H/I）。**注意一处与原计划的偏差**：判据①
+和④都要靠 `docker exec <容器> du -sb <路径>` 拿到一个可控的字节数才能真正触发阈值，
+但本单的红线禁止对活栈 `cps-novel-x8-local-*` 做任何 `docker exec`（只允许只读
+`docker inspect`）——`drill.sh` 的这两个场景因此改用一个完全本地、一次性生成并用完
+即删的假 `docker` 可执行文件（塞进临时 `PATH`），从不连接真实 docker daemon 或
+真实容器，行为上比依赖某个真实容器当天的实际磁盘占用更确定。单测
+（`tests/backend/alerts/check-wal-archive.test.ts`）用同样手法覆盖了四判据各一个
+触发场景 + 一个健康场景 + 三个 fail-closed（`_unreadable`）场景，外加一个"全部健康
+时 `run_wal_archive_checks()` 零告警"的聚合用例。
 
-接入 `infra/production-like/alerts/run-all.sh`（新增 `source`/调用，与三条既有 check 同一个 `|| failures=$(( failures + 1 ))` 模式），并补一个 `drill.sh` 场景（keyword-flip 方法：指向一个不存在的容器名/一个人为设成极小的 `--max-bytes`，断言 `alert_fire` 真的被调用），不要只加进 `run-all.sh` 而漏了 `drill.sh`——`run-all.sh` 三条既有判据都各自在 `drill.sh` 里有对应场景，新判据不接等于"没人测过它真的会响"。
-
-**这一条必须在首次启用清理（第一次真实 `--apply`）之前就接好**——理由见风险 6：锚定式保留有一个静默失效方向（没人按时做基准备份，锚点再也不前进），没有新鲜度告警，这个方向没有任何东西能捞回来。
+**这一条必须在首次启用清理（第一次真实 `--apply`）之前就接好**——理由见风险 6：锚定式保留有一个静默失效方向（没人按时做基准备份，锚点再也不前进），没有新鲜度告警，这个方向没有任何东西能捞回来。**5-Dev 已满足这个前置条件**（代码已实现且有测试覆盖）；仍待 5-Ops 在活栈上实际接线验证。
 
 **PASS 条件**
-- `backup-timer.sh` 扩成四步后连续跑满至少一个 `X8_BACKUP_INTERVAL_SECONDS` 周期（默认 86400s），四步均成功，`VERIFIED` 新增。
+- `backup-timer.sh` 扩成四步后连续跑满至少一个 `X8_BACKUP_INTERVAL_SECONDS` 周期（默认 86400s），四步均成功；根据 `X8_BASE_BACKUP_MIN_INTERVAL_SECONDS` 的判定，`VERIFIED` 新增或正确 `SKIPPED_RECENT`（验收默认走 `SKIPPED_RECENT` 路径，见上）。
 - 若选择了 5.2 的跨容器路径：`pg_hba_file_rules` 显示新规则、无 error；`backup_role` 可复制连接、`web_app`/`worker_app` 不可（用一次性 `psql "host=postgres user=web_app replication=database" ...` 之类的探测确认被拒绝）。
-- `check-wal-archive.sh` 四项判据均有对应 `drill.sh` 场景且断言 `alert_fire` 被调用；接入 `run-all.sh` 后 `alert_fire_total` 在正常场景下为 0。
+- `check-wal-archive.sh` 四项判据均有对应 `drill.sh` 场景且断言 `alert_fire` 被调用；接入 `run-all.sh` 后 `alert_fire_total` 在正常场景下为 0。**5-Dev 已用单测+drill.sh 验证过这一条**；5-Ops 需要在真实活栈上再跑一遍 `drill.sh` 确认结论不变。
 
 **FAIL 停止条件与回退**
 - 四步循环任一步失败：`backup-timer` 容器的 `test -f /tmp/x8-backup-last-success` 健康检查会失败，触发既有 `check-backup-freshness.sh`——这本身就是设计好的失败可见性，不需要额外回退动作，但要排查后再继续。

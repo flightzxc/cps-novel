@@ -90,6 +90,9 @@ describe("P1-06 database operations static contracts", () => {
       "scripts/db/wal-retention-rehearsal.sh",
       "scripts/run-p1-06-postgres-verification.sh",
       "scripts/run-x9-postgres-verification.sh",
+      // Gate 5-Dev (WAL retention daily timer + its fourth alert judgement).
+      "infra/production-like/backup-timer.sh",
+      "infra/production-like/alerts/check-wal-archive.sh",
     ];
     for (const script of scripts) {
       execFileSync("bash", ["-n", resolve(root, script)]);

@@ -324,3 +324,105 @@ Opus 二轮复核抓到的核心问题是同一族：`set -e` 会在 P1-A/P1-B �
 ---
 
 REHEARSAL_RESULT=PASS
+
+## Gate 5-Dev 补充（2026-09-17）
+
+代码实现轮，分支 `feature/wal-retention-gate5`（从 `integration/2026-09-16-night`
+`36234d639d9722e0fd69b1301f7b7ead375c3cf8` 切出，独立 worktree），四个 commit，
+**未 push**。范围是 `docs/audits/WAL_RETENTION_X8_ROLLOUT_PLAN_2026-09-17.md` §4
+Gate 5 的"5-Dev"部分（代码 + 测试）；该文档本节已同步改写，含"5-Ops 待办"清单，
+本节只记录本轮实现细节与验证证据，不重复那边已有的语义说明。
+
+### 改动清单（file:line 摘要）
+
+- `scripts/db/wal-retention.sh:232-243`：`archive_not_writable` 由无条件检查改为
+  只在 `apply=1` 时检查——dry-run 只读归档（`pg_archivecleanup -n`、容量 `find`/
+  `stat` 扫描），不再要求归档可写；这是让 Gate 5 的每日 `wal-gc-x8.sh --json` 循环
+  能对着 `wal_archive:...:ro` 只读挂载跑的前提。`tests/backend/database/wal-retention-guards.test.ts`
+  新增 2 例：`chmod 555` 的归档目录，不带 `--apply` 仍是 `DRY_RUN`；带 `--apply`
+  仍 `REFUSED reason=archive_not_writable` 且不留 `RETIRED`/状态文件。
+- `infra/production-like/backup-timer.sh`：`run_backup()` 从一步扩成四步（逻辑
+  备份 → 物理基准备份 → 校验 → `wal-gc-x8.sh --json` dry-run），每步独立
+  `set +e`/`set -e` 探测块；新增 `X8_BACKUP_PHYSICAL_ENABLED`（默认 `true`）、
+  `X8_BASE_BACKUP_MIN_INTERVAL_SECONDS`（默认 `72000`）两个业务开关，以及仅供
+  测试用的四个路径覆盖（`X8_TIMER_SCRIPT_DIR`/`X8_TIMER_BASE_BACKUP_DIR`/
+  `X8_TIMER_STATE_DIR`/`X8_TIMER_LOGICAL_BACKUP_SCRIPT`，默认值与原硬编码路径
+  完全一致，正式 compose 从不传）。两个独立成功标记：`x8-backup-last-success`
+  语义不变（只认步骤 1），新增 `x8-base-backup-last-success`（`CREATED`+校验通过
+  或 `SKIPPED_RECENT` 时 touch，`DISABLED`/失败不 touch）。全文 `grep -c -- '--apply'`
+  = 0。
+- `infra/production-like/docker-compose.yml`：`backup-timer` 服务新增
+  `wal-gc-x8.sh`/`wal-retention.sh`/`verify-physical-base.sh`/
+  `backup-physical-base.sh` 四个只读挂载（与 `postgres` 服务同款）、
+  `${X8_BASE_BACKUP_DIR}:/var/lib/postgresql/base-backups`（读写）、
+  `wal_archive:/var/lib/postgresql/wal-archive:ro`（**只读**，与上面 wal-retention.sh
+  的 fix 配套），以及两个新开关的 env 透传（默认值同上）。`scripts/lib/x8-production-like-env.sh`
+  同步导出这两个变量。
+- `infra/postgres/init-roles.sh`：initdb 阶段幂等追加
+  `host replication backup_role ${X8_RUNTIME_SUBNET:-172.18.0.0/16} scram-sha-256`
+  到 `pg_hba.conf`，仅对全新集群生效；已初始化的活库需要 Gate 5-Ops 手工追加同一行
+  + `pg_reload_conf()`（步骤在 `WAL_RETENTION_X8_ROLLOUT_PLAN_2026-09-17.md` §4
+  Gate 5 §5.2）。
+- `infra/production-like/alerts/check-wal-archive.sh`（新文件）：四判据——归档容量
+  （70/85/100% 阈值同 `wal-retention.sh --max-bytes`）、`pg_stat_archiver` 健康
+  （与 `wal-retention.sh --require-archiver-healthy` 同一条 SQL 谓词）、物理基准
+  备份新鲜度（独立于既有 26h 逻辑备份标记判据，直接读宿主 `ALERT_BASE_BACKUP_DIR`
+  下的 `VERIFIED`，不依赖 docker）、`pg_wal` 体积。接入
+  `infra/production-like/alerts/run-all.sh`（四条判据）与 `drill.sh`（新场景
+  F/G/H/I）。`docs/operations/ALERTS_RUNBOOK_2026-09-03.md` §2/§3 同步补文件清单
+  与五个新 env 变量。
+- 两处红线相关的偏差记录（均已在对应位置写明理由）：
+  1. `drill.sh` 场景 F/I 原计划直接对活栈 `docker exec du -sb`，但本单红线禁止
+     对 `cps-novel-x8-local-*` 做任何 `docker exec`（只允许只读 `docker inspect`）
+     ——改用一次性生成、用完即删的本地假 `docker` PATH shim，从不连接真实 docker
+     daemon 或真实容器。
+  2. `run_backup()`/`--once` 分支对非零返回**不做**额外 `|| true` 吞掉——沿用
+     四步扩容前"整轮失败即整个进程退出，靠 compose `restart: unless-stopped` +
+     `X8_BACKUP_RUN_ON_START=true` 重试"的既有语义,没有引入新的静默容错。
+- `tests/backend/runtime/x8-production-like-contract.test.ts:162-168`：既有断言
+  "`backup-timer.sh` 包含字面量 `/opt/cps-novel-x8/backup-logical.sh --output`"
+  因上面 `X8_TIMER_LOGICAL_BACKUP_SCRIPT` 改动而失真（该路径现在经变量间接引用），
+  改为分别断言默认值行与调用行，语义不变（生产默认行为完全一致）。
+
+### 新增/改动测试
+
+- `tests/backend/database/backup-timer-static.test.ts`（新文件）：静态契约
+  （`bash -n`、四个 `BACKUP_TIMER_STEP=` token 顺序、全文零 `--apply`、
+  `X8_BASE_BACKUP_MIN_INTERVAL_SECONDS:=72000`、`SKIPPED_RECENT`/`DISABLED`/
+  `SKIPPED` 三个 token）+ 四个行为用例（PATH shim 假冒四个下游脚本）：
+  10 分钟前的 `VERIFIED` → `SKIPPED_RECENT`，physical/verify 两个 shim 都不被
+  调用，wal-gc shim 被调用且参数不含 `--apply`，两个成功标记都被 touch；25 小时前
+  的 `VERIFIED` → `CREATED_NOT_PITR_VALIDATED`，physical/verify 都被调用；
+  `X8_BACKUP_PHYSICAL_ENABLED=false` → `DISABLED`，第二个标记不被 touch；wal-gc
+  shim 输出 `WAL_RETENTION=REFUSED reason=x` → 整轮退出非零，但第一个（逻辑备份）
+  标记仍被 touch。7/7 PASS。
+- `tests/backend/alerts/check-wal-archive.test.ts`（新文件，新目录）：四判据各
+  一个健康场景 + 一个触发场景，三个 docker/psql `_unreadable` fail-closed 场景，
+  一个"全部健康时 `run_wal_archive_checks()` 零告警"聚合场景。14/14 PASS。
+- `tests/backend/database/p1-06-static.test.ts`：`bash -n` 清单新增
+  `infra/production-like/backup-timer.sh`、`infra/production-like/alerts/check-wal-archive.sh`。
+
+### 验证结果
+
+- `npx vitest run --project node tests/backend/`：**254 files passed, 23 skipped
+  （常驻 PG 集成测试，无本地活库时按设计跳过）；2758 tests passed, 219 skipped**。
+  零新增失败（含首次运行时发现并修复的 1 处既有测试因本轮改动而需要更新断言的
+  情况，见上"改动清单"最后一条）。
+- `bash -n`：本轮改动的全部脚本（`wal-retention.sh`、`backup-timer.sh`、
+  `check-wal-archive.sh`、`run-all.sh`、`drill.sh`、`init-roles.sh`、
+  `x8-production-like-env.sh`）均通过。
+- 变异验证（三次，均 FAIL 后原样恢复，`diff` 确认逐字节相同）：
+  1. `backup-timer.sh` 的 `wal-gc-x8.sh --json` 调用加 `--apply` →
+     `backup-timer-static.test.ts` 的静态 token 测试与行为测试各 FAIL 一条
+     （`expected 'walgc --json --apply' not to contain '--apply'`）。
+  2. `wal-retention.sh` 的 `archive_not_writable` 挪回无条件检查（脱离
+     `if [[ "$apply" == "1" ]]` 门）→ `wal-retention-guards.test.ts` 新增的
+     只读归档 dry-run 用例 FAIL（`expected 65 to be +0`）。
+  3. `backup-timer.sh` 的 `SKIPPED_RECENT` 判断条件改成 `if false; then`
+     （永远判定为 `CREATED`）→ `backup-timer-static.test.ts` 的 `SKIPPED_RECENT`
+     行为用例 FAIL（physical/verify shim 被意外调用）。
+- `docker ps -a --format '{{.Names}}' | grep -c cps-novel-x8`：任务开始/结束前后
+  均为 `6`，本轮未触碰任何真实容器（`check-wal-archive.sh` 的 `docker exec` 调用
+  只在单测/drill 的 PATH shim 里出现，从未指向真实容器名）。
+
+GATE5_DEV_RESULT=CODE_COMPLETE_PENDING_OPUS_REVIEW_AND_5_OPS

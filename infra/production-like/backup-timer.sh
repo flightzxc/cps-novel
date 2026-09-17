@@ -19,14 +19,15 @@ set +x
 # jitter so a normal daily cadence produces exactly one physical backup per
 # calendar day, not one per timer tick.
 : "${X8_BASE_BACKUP_MIN_INTERVAL_SECONDS:=72000}"
-# The following three are overridable ONLY so tests can point run_backup()'s
-# steps 2-4 at throwaway directories without Docker (see
+# The following four are overridable ONLY so tests can point run_backup()'s
+# steps at throwaway scripts/directories without Docker (see
 # tests/backend/database/backup-timer-static.test.ts). The real compose
 # wiring never sets any of them, so production/rehearsal always gets the
 # hard-coded in-container defaults on the right of each `:-`/`:=`.
 : "${X8_TIMER_SCRIPT_DIR:=/app/scripts/db}"
 : "${X8_TIMER_BASE_BACKUP_DIR:=/var/lib/postgresql/base-backups}"
 : "${X8_TIMER_STATE_DIR:=/tmp}"
+: "${X8_TIMER_LOGICAL_BACKUP_SCRIPT:=/opt/cps-novel-x8/backup-logical.sh}"
 
 [[ "$X8_BACKUP_OUTPUT_DIR" = /* ]] || {
   echo "ERROR: X8_BACKUP_OUTPUT_DIR must be absolute" >&2
@@ -89,12 +90,12 @@ run_backup() {
   local stamp rc_total=0
   stamp="$(date -u '+%Y%m%dT%H%M%SZ')"
 
-  # ---- step 1: logical backup (unchanged) ----------------------------------
+  # ---- step 1: logical backup (default path unchanged; overridable only for tests via X8_TIMER_LOGICAL_BACKUP_SCRIPT) ----
   echo "BACKUP_TIMER_STEP=1_LOGICAL_BACKUP"
   local logical_output rc1
   logical_output="$X8_BACKUP_OUTPUT_DIR/cps-novel-x8-${stamp}.dump"
   set +e
-  /bin/bash /opt/cps-novel-x8/backup-logical.sh --output "$logical_output"
+  /bin/bash "$X8_TIMER_LOGICAL_BACKUP_SCRIPT" --output "$logical_output"
   rc1=$?
   set -e
   if [[ "$rc1" -eq 0 ]]; then
