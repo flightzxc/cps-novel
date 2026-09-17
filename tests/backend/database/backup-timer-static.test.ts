@@ -303,6 +303,36 @@ describe("backup-timer.sh --once: physical base-backup skip/create decision (Gat
   });
 });
 
+// Gate 5 review fix (F-3): BACKUP_TIMER_LOGICAL_ONLY must never drift in
+// from the environment -- only --logical-only on the command line may set
+// it. Before this fix, run_backup() read `${BACKUP_TIMER_LOGICAL_ONLY:-false}`
+// with no unconditional reset first, so a stray BACKUP_TIMER_LOGICAL_ONLY=true
+// already present in the process environment (an operator's shell, a leaked
+// env file, compose env-file inheritance) would silently short-circuit
+// every --once/run-on-start/loop invocation into logical-only mode with no
+// flag on the command line to explain why.
+describe("backup-timer.sh --once: BACKUP_TIMER_LOGICAL_ONLY must not drift in from the environment (Gate 5 review fix F-3)", () => {
+  it("BACKUP_TIMER_LOGICAL_ONLY=true in the environment, without --logical-only on the command line, is ignored -- all four steps still run", () => {
+    const shims = makeShims();
+    const baseBackupDir = mkTestDir("backup-timer-basebackups-f3-");
+    const stateDir = mkTestDir("backup-timer-state-f3-");
+    const outputDir = mkTestDir("backup-timer-output-f3-");
+
+    const result = runOnce(
+      shims,
+      { BACKUP_TIMER_LOGICAL_ONLY: "true" },
+      { baseBackupDir, stateDir, outputDir },
+    );
+
+    expect(result.status).toBe(0);
+    const callLog = readFileSync(shims.callLog, "utf8");
+    expect(callLog).toContain("physical ");
+    expect(callLog).toContain("verify ");
+    expect(callLog).toContain("walgc ");
+    expect(result.stdout).not.toContain("BACKUP_TIMER_MODE=logical_only");
+  });
+});
+
 describe("backup-timer.sh --once --logical-only (Gate 5 review fix P1-2)", () => {
   it("runs only the logical-backup step, prints BACKUP_TIMER_MODE=logical_only, and touches only the logical marker", () => {
     const shims = makeShims();
@@ -462,5 +492,76 @@ describe("backup-timer.sh forever loop: DEGRADED on steps 2-4 failure (Gate 5 re
     expect(result.status).not.toBe(0);
     expect(result.stdout).not.toContain("BACKUP_TIMER_RUN=DEGRADED");
     expect(result.stdout).not.toContain("BACKUP_TIMER_TEST_MAX_CYCLES_REACHED");
+  });
+});
+
+// Gate 5 review fix (F-2): the two run_backup() success markers
+// (x8-backup-last-success, x8-base-backup-last-success) are now each
+// isolated `touch` probes -- a marker write failure (e.g. a full or
+// read-only X8_TIMER_STATE_DIR) prints BACKUP_TIMER_WARN=marker_not_written
+// and counts as its own failed step, instead of either being silently
+// swallowed (pre-fix: an unguarded `touch` under this file's own `set -e`
+// would have crashed the whole run with no diagnostic) or masquerading as a
+// step-1 logical-backup failure.
+describe("backup-timer.sh: marker-write isolation (Gate 5 review fix F-2)", () => {
+  it("--once: a read-only X8_TIMER_STATE_DIR prints BACKUP_TIMER_WARN=marker_not_written and exits non-zero", () => {
+    const shims = makeShims();
+    const baseBackupDir = mkTestDir("backup-timer-basebackups-f2-once-");
+    const stateDir = mkTestDir("backup-timer-state-f2-once-");
+    const outputDir = mkTestDir("backup-timer-output-f2-once-");
+    chmodSync(stateDir, 0o555);
+
+    let result: ReturnType<typeof runOnce>;
+    try {
+      result = runOnce(
+        shims,
+        { X8_BACKUP_PHYSICAL_ENABLED: "false" },
+        { baseBackupDir, stateDir, outputDir },
+      );
+    } finally {
+      chmodSync(stateDir, 0o755);
+    }
+
+    expect(result.stdout).toContain("BACKUP_TIMER_WARN=marker_not_written");
+    expect(result.stdout).toContain(`marker=${path.join(stateDir, "x8-backup-last-success")}`);
+    expect(result.status).not.toBe(0);
+  });
+
+  it("forever loop: a read-only X8_TIMER_STATE_DIR still prints BACKUP_TIMER_RUN=DEGRADED and exits 0 (does not crash-restart)", () => {
+    const shims = makeShims();
+    const baseBackupDir = mkTestDir("backup-timer-basebackups-f2-loop-");
+    const stateDir = mkTestDir("backup-timer-state-f2-loop-");
+    const outputDir = mkTestDir("backup-timer-output-f2-loop-");
+    const pgpassSource = path.join(mkTestDir("backup-timer-pgpass-f2-loop-"), "backup.pgpass");
+    writeFileSync(pgpassSource, "*:*:*:backup_role:drill\n");
+    chmodSync(stateDir, 0o555);
+
+    let result: ReturnType<typeof spawnSync>;
+    try {
+      result = spawnSync("bash", [scriptPath], {
+        env: {
+          ...process.env,
+          X8_BACKUP_OUTPUT_DIR: outputDir,
+          X8_BACKUP_PGPASS_SOURCE: pgpassSource,
+          X8_TIMER_SCRIPT_DIR: shims.scriptDir,
+          X8_TIMER_BASE_BACKUP_DIR: baseBackupDir,
+          X8_TIMER_STATE_DIR: stateDir,
+          X8_TIMER_LOGICAL_BACKUP_SCRIPT: shims.logicalScript,
+          X8_TIMER_TEST_MODE: "1",
+          X8_TIMER_MAX_CYCLES: "1",
+          X8_BACKUP_RUN_ON_START: "false",
+          X8_BACKUP_INTERVAL_SECONDS: "1",
+          X8_BACKUP_PHYSICAL_ENABLED: "false",
+        },
+        encoding: "utf8",
+        timeout: 30000,
+      });
+    } finally {
+      chmodSync(stateDir, 0o755);
+    }
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("BACKUP_TIMER_WARN=marker_not_written");
+    expect(result.stdout).toContain("BACKUP_TIMER_RUN=DEGRADED");
   });
 });

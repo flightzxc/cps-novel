@@ -47,6 +47,14 @@ describe("P1-12 Compose and image contracts", () => {
     const postgres = serviceBlock("postgres");
     expect(postgres).toContain("image: postgres:16.14");
     expect(postgres).toContain("postgres_data:/var/lib/postgresql/data");
+    // Gate 5 review fix (F-1): initdb.d mount regression guard -- without
+    // this line, infra/postgres/hba-replication-rule.sh never lands inside
+    // the container, so init-roles.sh's own SCRIPT_DIR-relative source of
+    // it fails silently on any brand-new PGDATA and backup_role never gets
+    // a pg_hba.conf replication rule.
+    expect(postgres).toContain(
+      "./infra/postgres/hba-replication-rule.sh:/docker-entrypoint-initdb.d/hba-replication-rule.sh:ro",
+    );
     expect(postgres).toContain("pg_isready -U postgres -d cps_novel");
     expect(postgres).not.toMatch(/\n    ports:/);
     expect(serviceBlock("web")).toContain('"127.0.0.1:${P1_12_WEB_PORT:-3000}:3000"');

@@ -131,7 +131,24 @@ run_backup() {
   rc1=$?
   set -e
   if [[ "$rc1" -eq 0 ]]; then
-    touch "$X8_TIMER_STATE_DIR/x8-backup-last-success"
+    # Gate 5 review fix (F-2): the marker write is its own isolated
+    # probe -- a full/read-only X8_TIMER_STATE_DIR must never look like a
+    # logical-backup FAILURE (BACKUP_TIMER_STEP1_FAILED, which crashes
+    # run_backup_resilient's callers) when the dump itself already
+    # succeeded. It still has to be visible and it still has to make the
+    # overall run non-zero (nothing downstream should believe a marker
+    # exists when it does not), so it counts as its own failed step ("1")
+    # instead.
+    local logical_marker="$X8_TIMER_STATE_DIR/x8-backup-last-success" rc1_marker
+    set +e
+    touch "$logical_marker"
+    rc1_marker=$?
+    set -e
+    if [[ "$rc1_marker" -ne 0 ]]; then
+      echo "BACKUP_TIMER_WARN=marker_not_written marker=${logical_marker} step=1"
+      rc_total=1
+      BACKUP_TIMER_FAILED_STEPS="${BACKUP_TIMER_FAILED_STEPS}1,"
+    fi
   else
     echo "LOGICAL_BACKUP=FAILED rc=$rc1"
     rc_total=1
@@ -230,7 +247,20 @@ run_backup() {
 
   if [[ "$physical_decision" == "SKIPPED_RECENT" ]] \
     || { [[ "$physical_decision" == "CREATED" ]] && [[ "$rc3" -eq 0 ]]; }; then
-    touch "$X8_TIMER_STATE_DIR/x8-base-backup-last-success"
+    # Gate 5 review fix (F-2): same isolated-probe treatment as the logical
+    # marker above -- a write failure here must not be silently swallowed,
+    # but it also must not be conflated with step 3 (verification) actually
+    # failing, since verification already passed by the time this runs.
+    local base_marker="$X8_TIMER_STATE_DIR/x8-base-backup-last-success" rc3_marker
+    set +e
+    touch "$base_marker"
+    rc3_marker=$?
+    set -e
+    if [[ "$rc3_marker" -ne 0 ]]; then
+      echo "BACKUP_TIMER_WARN=marker_not_written marker=${base_marker} step=3"
+      rc_total=1
+      BACKUP_TIMER_FAILED_STEPS="${BACKUP_TIMER_FAILED_STEPS}3,"
+    fi
   fi
 
   # ---- step 4: WAL retention cleanup plan (read-only; never mutates the archive) ----
@@ -318,7 +348,9 @@ run_backup_resilient() {
   # defeating this whole wrapper. A command in `if`/`else` "tested" position
   # is exempt from errexit regardless of what it does to `-e` internally,
   # which is what this rewrite relies on (verified against this file's own
-  # bash 3.2.57 target).
+  # bash 3.2.57 target). `if run_backup` 的 errexit 豁免覆盖 run_backup 整个
+  # 动态作用域，函数内部的 `set -e` 不会重新武装；步骤时序全靠显式 rc 判断，
+  # 不靠 errexit。
   if run_backup; then
     rc=0
   else
@@ -334,6 +366,16 @@ run_backup_resilient() {
 }
 
 # ---- argument parsing -------------------------------------------------------
+# Gate 5 review fix (F-3): BACKUP_TIMER_LOGICAL_ONLY must never drift in from
+# the environment -- run_backup() reads it via `${BACKUP_TIMER_LOGICAL_ONLY:-false}`,
+# but that fallback only applies when the variable is UNSET; a stray
+# BACKUP_TIMER_LOGICAL_ONLY=true already exported into this process (e.g. an
+# operator's shell, a leaked env file) would silently short-circuit every
+# --once/run-on-start/loop invocation into logical-only mode with no flag on
+# the command line to explain why. Unconditionally reset it to false here,
+# before argument parsing runs -- the only thing that can set it back to true
+# is --logical-only actually being present in $@ below.
+BACKUP_TIMER_LOGICAL_ONLY=false
 run_once=false
 logical_only=false
 while [[ $# -gt 0 ]]; do
