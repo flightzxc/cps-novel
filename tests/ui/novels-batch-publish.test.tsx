@@ -113,7 +113,7 @@ describe("提交与逐条结果呈现", () => {
       ok: true,
       data: {
         items: [
-          { kind: "resolved", novelId: NOVEL_ID, articleId: "a1", result: { outcome: "published", articleId: "a1", novelId: NOVEL_ID, locale: "en", firstPublish: true } },
+          { kind: "resolved", novelId: NOVEL_ID, articleId: "a1", result: { outcome: "published", articleId: "a1", novelId: NOVEL_ID, locale: "en", firstPublish: true, warnings: [] } },
           {
             kind: "resolved",
             novelId: NOVEL_ID_B,
@@ -155,7 +155,7 @@ describe("提交与逐条结果呈现", () => {
       data: {
         items: [
           { kind: "resolved", novelId: NOVEL_ID, articleId: "a1", result: { outcome: "conflict" } },
-          { kind: "resolved", novelId: NOVEL_ID_B, articleId: "a2", result: { outcome: "published", articleId: "a2", novelId: NOVEL_ID_B, locale: "en", firstPublish: false } },
+          { kind: "resolved", novelId: NOVEL_ID_B, articleId: "a2", result: { outcome: "published", articleId: "a2", novelId: NOVEL_ID_B, locale: "en", firstPublish: false, warnings: [] } },
         ],
         summary: { published: 1, rejected: 0, conflict: 1, notFound: 0, noArticle: 0 },
       },
@@ -164,7 +164,7 @@ describe("提交与逐条结果呈现", () => {
       ok: true,
       data: {
         items: [
-          { kind: "resolved", novelId: NOVEL_ID, articleId: "a1", result: { outcome: "published", articleId: "a1", novelId: NOVEL_ID, locale: "en", firstPublish: true } },
+          { kind: "resolved", novelId: NOVEL_ID, articleId: "a1", result: { outcome: "published", articleId: "a1", novelId: NOVEL_ID, locale: "en", firstPublish: true, warnings: [] } },
         ],
         summary: { published: 1, rejected: 0, conflict: 0, notFound: 0, noArticle: 0 },
       },

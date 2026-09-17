@@ -14,7 +14,7 @@ import {
   type PublishNovelsBatchOutcome,
 } from "../_actions";
 import { MAX_BATCH_PUBLISH_SELECTION } from "../_lib/batch-publish-constants";
-import { describePublishGateReason } from "../_lib/publish-gate-copy";
+import { describePublishGateReason, summarizePublishGateWarnings } from "../_lib/publish-gate-copy";
 import { describePublishLifecycleError } from "../_lib/publish-outcome-copy";
 import { NovelsTable } from "./novels-table";
 
@@ -172,8 +172,13 @@ function describeBatchItemOutcome(item: PublishNovelsBatchItem): string {
   if (item.kind === "no_article") return "无关联文章，未提交发布";
   const { result } = item;
   switch (result.outcome) {
-    case "published":
-      return result.firstPublish ? "已发布（首次公开）" : "已发布";
+    case "published": {
+      // 同 `../../articles/_components/article-list.tsx`：解耦后「已发布」不再
+      // 等于「页面形态完整」，未阻断项必须跟在结果里一起回给操作者。
+      const published = result.firstPublish ? "已发布（首次公开）" : "已发布";
+      const warning = summarizePublishGateWarnings(result.warnings);
+      return warning ? `${published}（${warning}）` : published;
+    }
     case "not_found":
       return "对应文章不存在";
     case "conflict":

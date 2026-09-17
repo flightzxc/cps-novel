@@ -77,11 +77,24 @@ describe("小说详情页 · 可试读章节区块", () => {
     expect(screen.getByText("Preview chapters")).toBeTruthy();
   });
 
-  it("没有可试读章节时给出空状态，不留空列表", () => {
-    render(<NovelDetailScreen locale="en" novel={MOCK_NOVEL_DETAIL_SPARSE} />);
+  /**
+   * Owner 决策 2026-09-18（发布与 Preview 解耦）：没有试读的文章可以正常发布，
+   * 于是「零章节」成为一个正常且长期存在的页面形态，不再是一个要向读者交代的
+   * 异常。此前这里渲染「可试读章节」标题 + 一张 `novel.noPreviewChapters` 空
+   * 状态卡片——那是把后台的采集缺口当产品文案讲出去。现在整块消失，与同页
+   * 标签区/推荐区取齐。
+   *
+   * 三条一起断言：列表没有、空壳提示没有、连区块本身都不在——只断言第一条的话，
+   * 把空状态卡片换成另一句「暂无试读」仍然能过。
+   */
+  it("没有可试读章节时整块不渲染——不留空列表，也不显示「暂无试读」这类空壳提示", () => {
+    const { container } = render(<NovelDetailScreen locale="en" novel={MOCK_NOVEL_DETAIL_SPARSE} />);
 
-    expect(screen.getByTestId("preview-chapters-empty")).toBeTruthy();
     expect(screen.queryByTestId("preview-chapter-list")).toBeNull();
+    expect(screen.queryByTestId("preview-chapters-empty")).toBeNull();
+    expect(screen.queryByTestId("preview-chapters")).toBeNull();
+    // 页面其余部分照常渲染：没有试读 ≠ 页面坏了。
+    expect(container.textContent).toContain(MOCK_NOVEL_DETAIL_SPARSE.title);
   });
 });
 

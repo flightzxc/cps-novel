@@ -41,9 +41,19 @@ describe("describePublishGateReason · 穷尽契约登记的每一个 reason", (
     expect(describePublishGateReason("promo_link_missing").guidance).toContain("目录同步");
   });
 
-  it("preview_chapter_missing 的指引同样指向目录同步（试读章节的落地来源）", () => {
-    expect(describePublishGateReason("preview_chapter_missing").guidance).toContain("目录同步");
-  });
+  /**
+   * Owner 决策 2026-09-18（发布与 Preview 解耦）之后，这两条已不是阻断项，
+   * 文案也必须跟着改口径：再写「…后再发布」就是用文案把一条不存在的限制
+   * 重新教给操作者。断言"说了不阻断"+"没说要等"，两面都钉住。
+   */
+  it.each(["preview_chapter_missing", "preview_body_missing"] as const)(
+    "%s 的指引明说不影响发布，且不再要求先等试读落地",
+    (reason) => {
+      const guidance = describePublishGateReason(reason).guidance;
+      expect(guidance).toContain("不影响发布");
+      expect(guidance).not.toContain("再发布");
+    },
+  );
 
   it("rights_blocked 的指引明确要求先「恢复」再重新发布", () => {
     expect(describePublishGateReason("rights_blocked").guidance).toContain("恢复");

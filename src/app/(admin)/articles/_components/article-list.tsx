@@ -13,7 +13,7 @@ import { formatDateTime } from "@/features/admin-ui/content-view";
 import { buildArticlePath, buildBlogPath } from "@/lib/slug/article-path";
 
 import { MAX_BATCH_PUBLISH_SELECTION } from "../../novels/_lib/batch-publish-constants";
-import { describePublishGateReason } from "../../novels/_lib/publish-gate-copy";
+import { describePublishGateReason, summarizePublishGateWarnings } from "../../novels/_lib/publish-gate-copy";
 import { describePublishLifecycleError, isPublishLifecycleErrorCode } from "../../novels/_lib/publish-outcome-copy";
 import { validateReason } from "../../novels/_lib/reason-guard";
 import {
@@ -237,7 +237,11 @@ export function ArticleList({
     }
     const { data } = result;
     if (data.outcome === "published") {
-      setMessage(data.firstPublish ? "已发布（首次公开）" : "已发布");
+      // 2026-09-18 解耦：发布成功仍可能带未阻断项（今天就是缺试读）。不说出来
+      // 的话，操作者会以为这本书的页面已经是完整形态。
+      const warning = summarizePublishGateWarnings(data.warnings);
+      const published = data.firstPublish ? "已发布（首次公开）" : "已发布";
+      setMessage(warning ? `${published}；${warning}，不影响本次发布` : published);
       router.refresh();
       return;
     }

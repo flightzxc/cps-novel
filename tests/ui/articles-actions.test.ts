@@ -111,7 +111,7 @@ afterEach(() => {
 describe("publishArticleAction · 鉴权与透传", () => {
   it("以 admin.article.publish 请求授权，把 articleId/requestId 转发给 publishArticleAsAdmin", async () => {
     guards.requireAdminActionAccess.mockResolvedValue(granted());
-    publishGate.publishArticleAsAdmin.mockResolvedValue({ outcome: "published", articleId: "a1", novelId: "n1", locale: "en", firstPublish: true });
+    publishGate.publishArticleAsAdmin.mockResolvedValue({ outcome: "published", articleId: "a1", novelId: "n1", locale: "en", firstPublish: true, warnings: [] });
 
     const result = await publishArticleAction({ requestId: "req-1", articleId: "a1" });
 
@@ -128,7 +128,7 @@ describe("publishArticleAction · 鉴权与透传", () => {
     const [call] = publishGate.publishArticleAsAdmin.mock.calls[0];
     expect(call).toMatchObject({ authorization: { ticket: true }, requestId: "req-1", articleId: "a1" });
 
-    expect(result).toEqual({ ok: true, data: { outcome: "published", articleId: "a1", novelId: "n1", locale: "en", firstPublish: true } });
+    expect(result).toEqual({ ok: true, data: { outcome: "published", articleId: "a1", novelId: "n1", locale: "en", firstPublish: true, warnings: [] } });
     expect(cache.revalidatePath).toHaveBeenCalledWith("/articles");
   });
 
@@ -206,7 +206,7 @@ describe("withdrawArticleAction · 鉴权与透传", () => {
 describe("publishArticlesBatchAction · 鉴权与透传", () => {
   it("以 admin.article.publish_batch 请求授权，把 articleIds 原样转发", async () => {
     guards.requireAdminActionAccess.mockResolvedValue(granted());
-    const payload = { results: [{ articleId: "a1", result: { outcome: "published", articleId: "a1", novelId: "n1", locale: "en", firstPublish: false } }] };
+    const payload = { results: [{ articleId: "a1", result: { outcome: "published", articleId: "a1", novelId: "n1", locale: "en", firstPublish: false, warnings: [] } }] };
     publishGate.publishArticlesBatchAsAdmin.mockResolvedValue(payload);
 
     const result = await publishArticlesBatchAction({ requestId: "req-3", articleIds: ["a1"] });

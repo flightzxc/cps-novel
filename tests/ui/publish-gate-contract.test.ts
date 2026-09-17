@@ -7,6 +7,9 @@ import { ARTICLE_STATUSES } from "@/domain/database-statuses";
 import * as publishGate from "@/contracts/publish-gate";
 import {
   createPublishGateResult,
+  createPublishGateWarnings,
+  isPublishGateWarningReason,
+  PUBLISH_GATE_WARNING_REASONS,
   DEFAULT_PUBLISH_INTENT,
   narrowPublishGateReason,
   narrowPublishIntent,
@@ -270,9 +273,15 @@ describe("🔴 模块导出面精确锁定", () => {
       "DEFAULT_PUBLISH_INTENT",
       "PAID_FROM_CHAPTER_POLICY",
       "PUBLISH_GATE_REASONS",
+      // Owner 决策 2026-09-18（发布与 Preview 解耦）新增的三项，成套出现：
+      // warning 清单本身 + 判定谓词 + 与 createPublishGateResult 对称的归一
+      // helper。除此之外导出面不得再长出任何东西。
+      "PUBLISH_GATE_WARNING_REASONS",
       "PUBLISH_INTENTS",
       "PUBLISH_REQUIRED_METADATA_FIELDS",
       "createPublishGateResult",
+      "createPublishGateWarnings",
+      "isPublishGateWarningReason",
       "narrowPublishGateReason",
       "narrowPublishIntent",
     ]);
@@ -381,6 +390,66 @@ describe("🔴 试读物化规则移出通用 Gate 模块（cap 落在 P2-05 的
   it("剥注释后的契约源码（valueVisible）没有 allEpis——即使物化细节已移出，通用层依然不得编码总数补章逻辑", async () => {
     const stripped = stripToValueVisible(await readContractSource(CONTRACT_PATH));
     expect(stripped).not.toContain("allEpis");
+  });
+});
+
+/**
+ * Owner 决策 2026-09-18（发布与 Preview 解耦）。这一组钉的是「warning 永远不能
+ * 升级成 blocker」这条单向性——它是整个解耦决策在 DTO 层的兜底：即便某个调用方
+ * 把 preview 码当阻断理由传进 createPublishGateResult，也不许把 publishable
+ * 打成 false。
+ */
+describe("warning-only 理由（2026-09-18 解耦）", () => {
+  it("warning 清单是 PUBLISH_GATE_REASONS 的真子集，且恰好是 preview 两项", () => {
+    expect([...PUBLISH_GATE_WARNING_REASONS]).toEqual([
+      "preview_chapter_missing",
+      "preview_body_missing",
+    ]);
+    for (const warning of PUBLISH_GATE_WARNING_REASONS) {
+      expect(PUBLISH_GATE_REASONS).toContain(warning);
+    }
+    expect(PUBLISH_GATE_WARNING_REASONS.length).toBeLessThan(PUBLISH_GATE_REASONS.length);
+  });
+
+  it("isPublishGateWarningReason 只对这两项为真，对其余每一个登记理由都为假", () => {
+    for (const reason of PUBLISH_GATE_REASONS) {
+      expect(isPublishGateWarningReason(reason)).toBe(
+        (PUBLISH_GATE_WARNING_REASONS as readonly string[]).includes(reason),
+      );
+    }
+  });
+
+  it("🔴 createPublishGateResult 把 warning 码从阻断集合里剔除——传进来也不阻断", () => {
+    const onlyWarnings = createPublishGateResult([...PUBLISH_GATE_WARNING_REASONS]);
+    expect(onlyWarnings.reasons).toEqual([]);
+    expect(onlyWarnings.publishable).toBe(true);
+
+    const mixed = createPublishGateResult(["preview_chapter_missing", "promo_link_missing"]);
+    expect(mixed.reasons).toEqual(["promo_link_missing"]);
+    expect(mixed.publishable).toBe(false);
+  });
+
+  it("createPublishGateWarnings 去重、按注册表顺序输出", () => {
+    expect(
+      createPublishGateWarnings([
+        "preview_body_missing",
+        "preview_chapter_missing",
+        "preview_body_missing",
+      ]),
+    ).toEqual(["preview_chapter_missing", "preview_body_missing"]);
+    expect(createPublishGateWarnings([])).toEqual([]);
+  });
+
+  it("🔴 createPublishGateWarnings 丢弃未登记值与非 warning 的阻断码——warning 侧不许凭空长出一条理由", () => {
+    expect(createPublishGateWarnings(["totally_bogus", 42, null])).toEqual([]);
+    // 阻断码传进 warnings 也不会被"降级"成一条提示：那等于把一条真门禁悄悄关掉。
+    expect(createPublishGateWarnings(["promo_link_missing", "rights_blocked"])).toEqual([]);
+  });
+
+  it("🔴 非数组输入返回空数组，不抛异常（与 createPublishGateResult 的 fail-closed 方向相反，理由见实现注释）", () => {
+    for (const bogus of [null, undefined, "preview_chapter_missing", 42, { length: 1 }] as unknown[]) {
+      expect(createPublishGateWarnings(bogus as readonly unknown[])).toEqual([]);
+    }
   });
 });
 

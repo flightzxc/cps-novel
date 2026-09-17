@@ -114,7 +114,7 @@ afterEach(() => {
 describe("publishArticleAction · 鉴权与接线", () => {
   it("以 admin.article.publish 请求授权，并带上 session/origin/requestId", async () => {
     guards.requireAdminActionAccess.mockResolvedValue(granted());
-    publishGate.publishArticleAsAdmin.mockResolvedValue({ outcome: "published", articleId: "a1", novelId: "n1", locale: "en", firstPublish: true });
+    publishGate.publishArticleAsAdmin.mockResolvedValue({ outcome: "published", articleId: "a1", novelId: "n1", locale: "en", firstPublish: true, warnings: [] });
 
     await publishArticleAction({ novelId: "n1", articleId: "a1", requestId: "req-1" });
 
@@ -131,7 +131,7 @@ describe("publishArticleAction · 鉴权与接线", () => {
 
   it("把 guard 发的 ticket 原样交给 publishArticleAsAdmin，db 来自 serviceDependencies", async () => {
     guards.requireAdminActionAccess.mockResolvedValue(granted());
-    publishGate.publishArticleAsAdmin.mockResolvedValue({ outcome: "published", articleId: "a1", novelId: "n1", locale: "en", firstPublish: true });
+    publishGate.publishArticleAsAdmin.mockResolvedValue({ outcome: "published", articleId: "a1", novelId: "n1", locale: "en", firstPublish: true, warnings: [] });
 
     await publishArticleAction({ novelId: "n1", articleId: "a1", requestId: "req-1" });
 
@@ -276,7 +276,7 @@ describe("publishNovelsBatchAction · 选择解析与批量结果分组", () => 
     );
     publishGate.publishArticlesBatchAsAdmin.mockResolvedValue({
       results: [
-        { articleId: "a1", result: { outcome: "published", articleId: "a1", novelId: "n1", locale: "en", firstPublish: true } },
+        { articleId: "a1", result: { outcome: "published", articleId: "a1", novelId: "n1", locale: "en", firstPublish: true, warnings: [] } },
         { articleId: "a2", result: { outcome: "conflict" } },
       ],
     });
@@ -294,7 +294,7 @@ describe("publishNovelsBatchAction · 选择解析与批量结果分组", () => 
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error("unreachable");
     expect(result.data.items).toEqual([
-      { kind: "resolved", novelId: "n1", articleId: "a1", result: { outcome: "published", articleId: "a1", novelId: "n1", locale: "en", firstPublish: true } },
+      { kind: "resolved", novelId: "n1", articleId: "a1", result: { outcome: "published", articleId: "a1", novelId: "n1", locale: "en", firstPublish: true, warnings: [] } },
       { kind: "resolved", novelId: "n2", articleId: "a2", result: { outcome: "conflict" } },
       { kind: "no_article", novelId: "n3" },
     ]);

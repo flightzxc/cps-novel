@@ -142,6 +142,7 @@ import {
 import { requireFreshAdminServiceMutation, type AdminServiceAuthorization } from "@/server/auth/guards";
 
 import { evaluatePublishGate, type PublishGateEvaluation } from "./evaluator";
+import type { PublishGateWarningReason } from "@/contracts/publish-gate";
 import { loadPublishGateFacts } from "./facts";
 import { resolveArticlePublishTimeForWrite } from "./resolve-publish-time";
 
@@ -229,6 +230,15 @@ export type ApplyPublishTransitionResult =
       readonly locale: string;
       /** True only the first time this Article ever reached `published`. */
       readonly firstPublish: boolean;
+      /**
+       * Owner decision 2026-09-18 (publish/preview decoupling): non-blocking
+       * gate findings the Article was published *despite* — today exactly the
+       * preview pair. Carried on the success branch on purpose: "published,
+       * but this book still has no readable 试读章节" is the one moment an
+       * operator can act on it, and dropping it here would make the decoupling
+       * silent instead of explicit. Empty for a fully clean publish.
+       */
+      readonly warnings: readonly PublishGateWarningReason[];
     }
   | { readonly outcome: "rejected"; readonly gate: PublishGateEvaluation }
   | { readonly outcome: "not_found" }
@@ -268,6 +278,8 @@ type TxPublishOutcome =
       /** C-27: `null` for a non-`novel_article` (blog/listicle/guide) — see this module's "Why Novel and Article publish together" section below. */
       readonly novelId: string | null;
       readonly locale: string;
+      /** See the public `ApplyPublishTransitionResult`'s own `warnings` doc. */
+      readonly warnings: readonly PublishGateWarningReason[];
       /**
        * Carried through purely to build the invalidated path after commit
        * (`@/server/publication/revalidate`) — not part of the public
@@ -372,6 +384,11 @@ export async function applyPublishTransition(
           firstPublish: false,
           wrote: false,
           articleType: article.articleType,
+          // Re-evaluated from live facts on this replay rather than read back
+          // out of the original audit row: a replay that lands after the
+          // backfill has since materialized the preview should not keep
+          // reporting a warning that is no longer true.
+          warnings: gate.warnings,
         };
       }
 
@@ -428,9 +445,14 @@ export async function applyPublishTransition(
           beforeSnapshot: facts.novel
             ? { articleStatus: facts.article.status, novelStatus: facts.novel.status }
             : { articleStatus: facts.article.status },
+          // `publishWarnings` records what was knowingly published *despite*
+          // (Owner 2026-09-18 decoupling). Without it the audit row would
+          // read identically for "published with a full 试读" and "published
+          // with none", and the decision to ship the second one would leave
+          // no trace at all.
           afterSnapshot: facts.novel
-            ? { articleStatus: "published", novelStatus: "published" }
-            : { articleStatus: "published" },
+            ? { articleStatus: "published", novelStatus: "published", publishWarnings: [...gate.warnings] }
+            : { articleStatus: "published", publishWarnings: [...gate.warnings] },
         },
       });
 
@@ -444,6 +466,7 @@ export async function applyPublishTransition(
         firstPublish,
         wrote: true,
         articleType: article.articleType,
+        warnings: gate.warnings,
       };
         }),
       { op: "publish-gate.applyPublishTransition", itemId: input.articleId, idempotencyKey: input.requestId },
@@ -515,6 +538,7 @@ export async function applyPublishTransition(
       novelId: txResult.novelId,
       locale: txResult.locale,
       firstPublish: txResult.firstPublish,
+      warnings: txResult.warnings,
     };
   }
   return txResult;

@@ -604,7 +604,7 @@ describe("ArticleList · 列表与批量", () => {
     it("发布成功（首次公开）：调用 publishArticleAction 并携带 articleId，刷新列表", async () => {
       listActions.publishArticleAction.mockResolvedValue({
         ok: true,
-        data: { outcome: "published", articleId: DRAFT_ROW.id, novelId: "novel-1", locale: "en", firstPublish: true },
+        data: { outcome: "published", articleId: DRAFT_ROW.id, novelId: "novel-1", locale: "en", firstPublish: true, warnings: [] },
       });
       render(<ArticleList rows={[DRAFT_ROW]} canWrite publicOrigin={PUBLIC_ORIGIN} />);
       fireEvent.click(screen.getByTestId(`article-publish-${DRAFT_ROW.id}`));
@@ -617,7 +617,7 @@ describe("ArticleList · 列表与批量", () => {
     it("已下线行点击发布同样调用 publishArticleAction 并携带该行 articleId（2026-09-12 Owner fix）", async () => {
       listActions.publishArticleAction.mockResolvedValue({
         ok: true,
-        data: { outcome: "published", articleId: UNPUBLISHED_ROW.id, novelId: "novel-1", locale: "en", firstPublish: false },
+        data: { outcome: "published", articleId: UNPUBLISHED_ROW.id, novelId: "novel-1", locale: "en", firstPublish: false, warnings: [] },
       });
       render(<ArticleList rows={[UNPUBLISHED_ROW]} canWrite publicOrigin={PUBLIC_ORIGIN} />);
       fireEvent.click(screen.getByTestId(`article-publish-${UNPUBLISHED_ROW.id}`));
@@ -858,7 +858,7 @@ describe("ArticleList · 列表与批量", () => {
         ok: true,
         data: {
           results: [
-            { articleId: DRAFT_ROW.id, result: { outcome: "published", articleId: DRAFT_ROW.id, novelId: "novel-1", locale: "en", firstPublish: false } },
+            { articleId: DRAFT_ROW.id, result: { outcome: "published", articleId: DRAFT_ROW.id, novelId: "novel-1", locale: "en", firstPublish: false, warnings: [] } },
           ],
         },
       });

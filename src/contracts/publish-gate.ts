@@ -32,7 +32,20 @@ export function narrowPublishIntent(value: unknown): PublishIntent | null {
 }
 
 /**
- * 发布失败稳定理由码。全部为阻断级：任一存在即拒绝本次 now/scheduled，内容保持 draft。
+ * 发布判定稳定理由码注册表。
+ *
+ * 🔴 Owner 决策 2026-09-18（发布与 Preview 解耦）取代了本注册表更早的
+ * 「全部为阻断级」口径：`preview_chapter_missing` / `preview_body_missing`
+ * 两项**不再阻断发布**。产品口径是「试读是文章页面的增强能力，不是文章发布的
+ * 硬前置条件」——没有试读的文章照样可以发布，试读后续异步补齐
+ *（`src/server/preview-recovery/backfill.ts`）。两者仍然是登记在册的理由码，
+ * 仍然由 evaluator 逐项判定并产出，只是改由 {@link PUBLISH_GATE_WARNING_REASONS}
+ * 承载：它们进 `PublishGateEvaluation.warnings`（诊断/后台状态/补采候选依据），
+ * 永远不进 `PublishGateResult.reasons`、永远不影响 `publishable`。
+ * **事实采集逻辑不得删除**——补采链路要靠它知道哪些书缺试读。
+ *
+ * 除这两项外的全部理由码维持原口径：阻断级，任一存在即拒绝本次 now/scheduled，
+ * 内容保持 draft。
  * promo_link_missing / promo_link_not_ready 两项合起来承接 Owner supersession 决策 7
  *（PromoLink 缺失或当前业务不可发布即禁止发布）；必要的 URL 可用性校验归入
  * promo_link_not_ready。public_redirect_code 本身
@@ -43,8 +56,8 @@ export function narrowPublishIntent(value: unknown): PublishIntent | null {
 export const PUBLISH_GATE_REASONS = Object.freeze([
   "locale_not_publishable", // Article.locale 不在 SITE_LOCALES 15 项登记表内（Owner 2026-09-08 起不再是 D-7 {en} 白名单；见 evaluator.ts，实践中不可达，仅防御性保留）
   "required_metadata_missing", // Article 发布产物的 title/slug/body 缺失；可携带 RequiredMetadataMissingDetail
-  "preview_chapter_missing", // 无可信已物化、可公开的试读章节（章节真源边界）
-  "preview_body_missing", // 已物化试读章节存在，但正文为空
+  "preview_chapter_missing", // 🟡 warning-only（Owner 2026-09-18）：无可信已物化、可公开的试读章节（章节真源边界）
+  "preview_body_missing", // 🟡 warning-only（Owner 2026-09-18）：已物化试读章节存在，但正文为空
   "promo_link_missing", // PromoLink 记录不存在
   "promo_link_not_ready", // PromoLink 存在但未达 fetched/业务可用态，含必要的 URL 可用性校验
   "page_identity_conflict", // slug/(novelId,locale)/短码等页面身份冲突
@@ -54,6 +67,29 @@ export const PUBLISH_GATE_REASONS = Object.freeze([
 export type PublishGateReason = (typeof PUBLISH_GATE_REASONS)[number];
 
 const PUBLISH_GATE_REASON_SET: ReadonlySet<string> = new Set(PUBLISH_GATE_REASONS);
+
+/**
+ * 只作诊断、永不阻断的理由码子集（Owner 决策 2026-09-18，见
+ * {@link PUBLISH_GATE_REASONS} 的说明）。必须是 `PUBLISH_GATE_REASONS` 的子集：
+ * 下面的 `satisfies` 让「往这里塞一个没登记的码」变成编译失败，而不是一个
+ * 运行时永远匹配不上的死值。
+ *
+ * 这个清单是「哪些理由不阻断发布」的**唯一真源**：evaluator 不再各自
+ * 判断某个理由该进 reasons 还是 warnings，`createPublishGateResult`
+ * 也按同一份清单把 warning 码从阻断集合里剔除——两侧同源，不可能互相跑偏。
+ */
+export const PUBLISH_GATE_WARNING_REASONS = Object.freeze([
+  "preview_chapter_missing",
+  "preview_body_missing",
+] as const) satisfies readonly PublishGateReason[];
+export type PublishGateWarningReason = (typeof PUBLISH_GATE_WARNING_REASONS)[number];
+
+const PUBLISH_GATE_WARNING_REASON_SET: ReadonlySet<string> = new Set(PUBLISH_GATE_WARNING_REASONS);
+
+/** 该理由码是否为 warning-only（不阻断发布）。 */
+export function isPublishGateWarningReason(reason: PublishGateReason): reason is PublishGateWarningReason {
+  return PUBLISH_GATE_WARNING_REASON_SET.has(reason);
+}
 
 /** 未登记值收敛为 null，调用方按无效请求处理。 */
 export function narrowPublishGateReason(value: unknown): PublishGateReason | null {
@@ -83,7 +119,9 @@ export type RequiredMetadataMissingDetail = {
 };
 
 /**
- * 门禁结果 DTO。形状恒为 publishable/reasons 两个字段，无自由文本字段：不承载
+ * 门禁结果 DTO。形状恒为 publishable/reasons 两个字段（Owner 2026-09-18 的
+ * 解耦决策**没有**改这个形状：warnings 挂在 P2-07 evaluator 自己的
+ * `PublishGateEvaluation` 上，不进这个冻结 DTO），无自由文本字段：不承载
  * 任何异常说明文字或凭证类敏感值——分成比例与来源标签字段永不参与本门禁，见
  * P2_01 文档 §口径。它是 createPublishGateResult 的返回形状，不是一张持久化的
  * 判定记录表。
@@ -96,8 +134,11 @@ export type PublishGateResult = {
 /**
  * 聚合/归一发布门禁候选理由为一份 DTO——不是准入状态机，也不是 evaluator。
  * 它不逐项执行 locale/metadata/preview/promo/身份/权利检查，只把已经产出的候选
- * 理由去重、按注册表顺序排序、把未登记值与非法输入 fail-closed 收敛为
- * blocking_sync_exception，属于 DTO 层的输入卫生（hygiene），不是门禁评估本身。
+ * 理由去重、按注册表顺序排序、剔除 {@link PUBLISH_GATE_WARNING_REASONS} 里的
+ * warning-only 码（Owner 2026-09-18 解耦决策；即使调用方误把它们当阻断理由传
+ * 进来，这里也不会让它们把 `publishable` 打成 false）、把未登记值与非法输入
+ * fail-closed 收敛为 blocking_sync_exception，属于 DTO 层的输入卫生（hygiene），
+ * 不是门禁评估本身。
  * 真正逐项执行发布检查、决定传入哪些理由的是 P2-07 的 evaluator；空 reasons
  * 数组只代表"这次调用没有收到失败理由"，不证明所有检查项都已被执行过。
  */
@@ -115,7 +156,9 @@ export function createPublishGateResult(candidateReasons: readonly unknown[]): P
     (candidate) => narrowPublishGateReason(candidate) ?? "blocking_sync_exception",
   );
   const present = new Set<PublishGateReason>(narrowed);
-  const ordered = PUBLISH_GATE_REASONS.filter((reason) => present.has(reason));
+  const ordered = PUBLISH_GATE_REASONS.filter(
+    (reason) => present.has(reason) && !isPublishGateWarningReason(reason),
+  );
   const reasons: readonly PublishGateReason[] = Object.freeze(ordered);
 
   const result: { publishable: boolean; reasons: readonly PublishGateReason[] } = {
@@ -137,3 +180,22 @@ export const PAID_FROM_CHAPTER_POLICY = Object.freeze({
   autoSeoRecomputeOnChange: false,
   autoIndexNowOnChange: false,
 } as const);
+
+/**
+ * warnings 侧的归一 helper，与 {@link createPublishGateResult} 对称：去重、按
+ * 注册表顺序排序、丢弃任何不在 {@link PUBLISH_GATE_WARNING_REASONS} 里的值。
+ *
+ * 这里的丢弃方向与 `createPublishGateResult` 的 fail-closed **刻意相反**，因为
+ * 两者的"安全方向"本来就相反：阻断集合里混进未知值必须收敛成拒绝（宁可不发），
+ * 而 warning 集合里混进未知值不能凭空变出一条阻断理由——warning 永远不许升级
+ * 成 blocker，否则解耦决策就被一个输入卫生分支偷偷推翻了。
+ */
+export function createPublishGateWarnings(
+  candidateWarnings: readonly unknown[],
+): readonly PublishGateWarningReason[] {
+  if (!Array.isArray(candidateWarnings)) return Object.freeze([] as const);
+  const present = new Set<string>(
+    candidateWarnings.filter((candidate): candidate is string => typeof candidate === "string"),
+  );
+  return Object.freeze(PUBLISH_GATE_WARNING_REASONS.filter((reason) => present.has(reason)));
+}

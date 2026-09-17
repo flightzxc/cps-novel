@@ -167,7 +167,7 @@ describe("发布 · 直接点击，不经过二次确认", () => {
   it("点击后调用 publishArticleAction，成功时渲染发布结果并刷新页面", async () => {
     actions.publishArticleAction.mockResolvedValue({
       ok: true,
-      data: { outcome: "published", articleId: "a1", novelId: "n1", locale: "en", firstPublish: true },
+      data: { outcome: "published", articleId: "a1", novelId: "n1", locale: "en", firstPublish: true, warnings: [] },
     });
     render(
       <PublishLifecyclePanel
@@ -195,7 +195,10 @@ describe("发布 · 直接点击，不经过二次确认", () => {
         outcome: "rejected",
         gate: {
           publishable: false,
-          reasons: ["promo_link_missing", "preview_chapter_missing"],
+          // 解耦后 preview 项不会再出现在 reasons 里；这里保留一条真实的阻断项
+          // （promo）+ 一条 warning，正好覆盖面板要同时渲染两段的形态。
+          reasons: ["promo_link_missing"],
+          warnings: ["preview_chapter_missing"],
           requiredMetadataMissing: null,
         },
       },
@@ -213,8 +216,11 @@ describe("发布 · 直接点击，不经过二次确认", () => {
       fireEvent.click(screen.getByTestId("publish-action-publish"));
     });
     expect(await screen.findByTestId("publish-gate-reason-promo_link_missing")).toBeTruthy();
-    expect(screen.getByTestId("publish-gate-reason-preview_chapter_missing")).toBeTruthy();
-    expect(screen.getByText(/未通过发布门禁，共 2 项/)).toBeTruthy();
+    // preview 项渲染在 warning 区，不在 reason 区——渲染位置本身就是"它不阻断"
+    // 这件事在 UI 上的表达。
+    expect(screen.queryByTestId("publish-gate-reason-preview_chapter_missing")).toBeNull();
+    expect(screen.getByTestId("publish-gate-warning-preview_chapter_missing")).toBeTruthy();
+    expect(screen.getByText(/未通过发布门禁，共 1 项/)).toBeTruthy();
   });
 
   it("conflict 时给出安全重试提示与重试按钮，点击后再次调用 publishArticleAction", async () => {
