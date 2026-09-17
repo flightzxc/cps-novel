@@ -36,25 +36,21 @@ function dialog(): HTMLDialogElement | null {
   return document.querySelector("dialog");
 }
 
-async function openAndFillReason(text = "上游临时抖动已恢复") {
+async function openDialog() {
   fireEvent.click(screen.getByTestId("retry-failed-open"));
   await waitFor(() => expect(dialog()?.open).toBe(true));
-  fireEvent.change(screen.getByTestId("retry-failed-reason-input"), { target: { value: text } });
 }
 
 describe("RetryFailedButton · 重试失败项", () => {
-  it("原因为空时点击确认不发请求，就地展示校验提示", async () => {
-    render(<RetryFailedButton family="channel_sync" taskId={TASK_ID} />);
-    fireEvent.click(screen.getByTestId("retry-failed-open"));
-    await waitFor(() => expect(dialog()?.open).toBe(true));
-    await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "确认重试" }));
-    });
-    expect(fetchMock).not.toHaveBeenCalled();
-    expect(screen.getByTestId("retry-failed-reason-error")).toBeTruthy();
+  it("对话框内没有任何输入控件，正文文案含失败子项数", async () => {
+    render(<RetryFailedButton family="channel_sync" taskId={TASK_ID} failedCount={3} />);
+    await openDialog();
+    expect(dialog()?.querySelectorAll("input").length).toBe(0);
+    expect(screen.queryByRole("textbox")).toBeNull();
+    expect(dialog()?.textContent).toContain("确认重试 3 个失败项");
   });
 
-  it("提交命中 retry-failed 路由，请求体带 family/taskId/reason（trim 后），并携带 x-request-id", async () => {
+  it("提交命中 retry-failed 路由，请求体恰好为 family/taskId（不含 reason），并携带 x-request-id", async () => {
     fetchMock.mockResolvedValue(
       okResponse({
         family: "channel_sync",
@@ -69,8 +65,8 @@ describe("RetryFailedButton · 重试失败项", () => {
         auditId: "1",
       }),
     );
-    render(<RetryFailedButton family="channel_sync" taskId={TASK_ID} />);
-    await openAndFillReason("  上游临时抖动已恢复  ");
+    render(<RetryFailedButton family="channel_sync" taskId={TASK_ID} failedCount={3} />);
+    await openDialog();
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: "确认重试" }));
     });
@@ -84,7 +80,6 @@ describe("RetryFailedButton · 重试失败项", () => {
     expect(JSON.parse(String(request.body))).toEqual({
       family: "channel_sync",
       taskId: TASK_ID,
-      reason: "上游临时抖动已恢复",
     });
   });
 
@@ -103,8 +98,8 @@ describe("RetryFailedButton · 重试失败项", () => {
         auditId: "2",
       }),
     );
-    render(<RetryFailedButton family="generic" taskId={TASK_ID} />);
-    await openAndFillReason();
+    render(<RetryFailedButton family="generic" taskId={TASK_ID} failedCount={5} />);
+    await openDialog();
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: "确认重试" }));
     });
@@ -121,10 +116,10 @@ describe("RetryFailedButton · 重试失败项", () => {
       ["task_admin_active_scope_conflict", "同一渠道/应用范围内已有进行中的任务"],
     ];
     const seenTexts = new Set<string>();
-    render(<RetryFailedButton family="channel_sync" taskId={TASK_ID} />);
+    render(<RetryFailedButton family="channel_sync" taskId={TASK_ID} failedCount={4} />);
     for (const [code, expectedSubstring] of cases) {
       fetchMock.mockResolvedValueOnce(envelopeResponse({ ok: false, status: 409, code }));
-      await openAndFillReason();
+      await openDialog();
       await act(async () => {
         fireEvent.click(screen.getByRole("button", { name: "确认重试" }));
       });

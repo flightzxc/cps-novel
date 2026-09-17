@@ -1,318 +1,163 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 
 import { buttonClassName } from "@/components/ui/button";
-import { EmptyRow, TBody, TD, TH, THead, Table } from "@/components/ui/table";
+import type { CatalogBatchContext, CatalogSelection } from "@/domain/catalog-batch";
 import { errorEnvelopeCopy } from "@/features/admin-ui/error-copy";
 
-import { applyContentCreationBatchAction, dryRunContentCreationBatchAction } from "../_actions";
 import {
-  batchActionInvalidInputMessage,
-  batchItemStatusLabel,
-  batchItemStatusTone,
-  batchNotProcessedHint,
-  batchSummaryLine,
-  describeBatchItem,
-  type ContentCreationBatchApplyData,
-  type ContentCreationBatchApplyItem,
-  type ContentCreationBatchDryRunData,
-  type ContentCreationBatchDryRunItem,
-  type OutcomeTone,
-} from "../_lib/batch-create-copy";
-import type { SourceItemRow } from "../_lib/read-source-items";
+  applyNovelMaterializeBatchAction,
+  readCatalogBatchContextAction,
+  readCatalogBatchSummaryAction,
+} from "../_actions";
 
-/**
- * RC-4 "批量创建内容" — dry-run preview → confirm apply, explicit selection
- * only (the same `selectedIds` state `CatalogSyncClient`'s toolbar already
- * maintains for "领取推广链接"; there is no second selection mechanism and
- * no "创建全部匹配当前筛选" shortcut here either).
- *
- * Two-step like `CreateContentDialog` (auto dry-run on mount, write only on
- * an explicit "确认创建" click) rather than `PromoLinkClaimDialog`'s
- * manual mode picker — batch content creation shares the single-item flow's
- * capability model (`content:view` unlocks the preview, `content:publish`
- * unlocks the write), not promo-claim's single-capability-for-both-modes
- * model. See `../_actions.ts`'s `dryRunContentCreationBatchAction`/
- * `applyContentCreationBatchAction` header for the full reasoning.
- *
- * Cross-`channelApp` selections are allowed, unlike the promo-claim dialog —
- * creation never scopes to a channel account, so there is nothing here that
- * would silently fall outside a single channel app's boundary the way a
- * claim task would.
- */
+type Stage = "loading" | "form" | "submitting" | "counting" | "error";
+type Summary = {
+  submittedCount: number | null;
+  ineligibleCount: number | null;
+  alreadyLinkedCount?: number | null;
+  blockedCount?: number | null;
+};
 
-type Stage =
-  | { readonly kind: "loading" }
-  | { readonly kind: "preview"; readonly data: ContentCreationBatchDryRunData }
-  | { readonly kind: "applying" }
-  | { readonly kind: "result"; readonly data: ContentCreationBatchApplyData }
-  | { readonly kind: "invalid_input"; readonly message: string }
-  | { readonly kind: "access_denied"; readonly message: string };
-
-const TONE_STYLE: Readonly<Record<OutcomeTone, string>> = Object.freeze({
-  success: "border-emerald-200 bg-emerald-50 text-emerald-900",
-  info: "border-blue-200 bg-blue-50 text-blue-900",
-  warning: "border-amber-200 bg-amber-50 text-amber-900",
-  danger: "border-red-200 bg-red-50 text-red-900",
-});
-
-const STATUS_BADGE_STYLE: Readonly<Record<OutcomeTone, string>> = Object.freeze({
-  success: "bg-emerald-100 text-emerald-800",
-  info: "bg-blue-100 text-blue-800",
-  warning: "bg-amber-100 text-amber-800",
-  danger: "bg-red-100 text-red-800",
-});
-
-function ItemRow({
-  item,
-  title,
-}: {
-  item: ContentCreationBatchDryRunItem | ContentCreationBatchApplyItem;
-  title: string;
-}) {
-  const copy = describeBatchItem(item);
-  const tone = batchItemStatusTone(item.status);
-  return (
-    <tr data-testid={`batch-create-item-${item.novelSourceItemId}`}>
-      <TD>
-        <p className="font-medium text-gray-900">{title}</p>
-        <p className="text-xs text-gray-400">{item.novelSourceItemId}</p>
-      </TD>
-      <TD>
-        <span
-          className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_BADGE_STYLE[tone]}`}
-          data-testid={`batch-create-item-status-${item.novelSourceItemId}`}
-        >
-          {batchItemStatusLabel(item.status)}
-        </span>
-      </TD>
-      <TD className="text-xs text-gray-600">{copy.body}</TD>
-    </tr>
-  );
-}
-
-function ItemsTable({
-  items,
-  itemsById,
-}: {
-  items: readonly (ContentCreationBatchDryRunItem | ContentCreationBatchApplyItem)[];
-  itemsById: ReadonlyMap<string, SourceItemRow>;
-}) {
-  return (
-    <Table>
-      <THead>
-        <tr>
-          <TH>来源条目</TH>
-          <TH>状态</TH>
-          <TH>说明</TH>
-        </tr>
-      </THead>
-      <TBody>
-        {items.map((item) => (
-          <ItemRow
-            key={item.novelSourceItemId}
-            item={item}
-            title={itemsById.get(item.novelSourceItemId)?.title ?? item.novelSourceItemId}
-          />
-        ))}
-        {items.length === 0 && <EmptyRow colSpan={3}>没有可展示的条目</EmptyRow>}
-      </TBody>
-    </Table>
-  );
+function formatCount(value: number | null): string {
+  return (value ?? 0).toLocaleString("zh-CN");
 }
 
 export function BatchCreateContentDialog({
-  selectedItems,
-  maxBatchSize,
+  selection,
   contentPublishGranted,
   contentPublishBlockedReason,
   onClose,
   onSubmitted,
 }: {
-  selectedItems: readonly SourceItemRow[];
-  maxBatchSize: number;
+  selection: CatalogSelection;
   contentPublishGranted: boolean;
   contentPublishBlockedReason: string | null;
   onClose: () => void;
-  /** Called once an apply submission returns (any outcome) so the parent can clear the row selection — same contract as `PromoLinkClaimDialog`'s `onSubmitted`. */
   onSubmitted: () => void;
 }) {
-  const router = useRouter();
   const dialogRef = useRef<HTMLDialogElement>(null);
-  const [stage, setStage] = useState<Stage>({ kind: "loading" });
+  const mountedRef = useRef(true);
+  const timerRef = useRef<number | null>(null);
+  const selectionRef = useRef(selection);
+  const requestIdRef = useRef(crypto.randomUUID());
+  const submittedRef = useRef(false);
 
-  const itemsById = new Map(selectedItems.map((item) => [item.id, item] as const));
-  const overLimit = selectedItems.length > maxBatchSize;
-  const empty = selectedItems.length === 0;
+  const [context, setContext] = useState<CatalogBatchContext | null>(null);
+  const [stage, setStage] = useState<Stage>("loading");
+  const [message, setMessage] = useState("");
+  const [taskId, setTaskId] = useState<string | null>(null);
+  const [summary, setSummary] = useState<Summary | null>(null);
 
   useEffect(() => {
-    const dialog = dialogRef.current;
-    if (dialog && !dialog.open) dialog.showModal();
+    mountedRef.current = true;
+    dialogRef.current?.showModal();
+    void readCatalogBatchContextAction({ selection: selectionRef.current, requestId: crypto.randomUUID() })
+      .then((result) => {
+        if (!mountedRef.current) return;
+        if (!result.ok) {
+          setMessage(result.kind === "access_denied" ? errorEnvelopeCopy(result.envelope) : "无法读取所选条目，请重试");
+          setStage("error");
+          return;
+        }
+        setContext(result.data);
+        setStage("form");
+      })
+      .catch(() => {
+        if (!mountedRef.current) return;
+        setMessage("无法读取所选条目，请重试");
+        setStage("error");
+      });
+    return () => {
+      mountedRef.current = false;
+      if (timerRef.current !== null) window.clearTimeout(timerRef.current);
+    };
   }, []);
 
-  // Auto-preview on mount, same UX rule `CreateContentDialog` uses ("dry run
-  // kicks off as soon as the dialog opens") — skipped when the selection is
-  // already known-invalid client-side (over the cap, or empty), so an
-  // obviously-rejected request is never actually sent.
-  useEffect(() => {
-    if (overLimit || empty) return;
-    let cancelled = false;
-    dryRunContentCreationBatchAction({
-      novelSourceItemIds: selectedItems.map((item) => item.id),
-      requestId: crypto.randomUUID(),
-    }).then((result) => {
-      if (cancelled) return;
+  async function poll(id: string): Promise<void> {
+    try {
+      const result = await readCatalogBatchSummaryAction({ taskId: id, requestId: crypto.randomUUID() });
+      if (!mountedRef.current) return;
       if (!result.ok) {
-        setStage(
-          result.kind === "invalid_input"
-            ? { kind: "invalid_input", message: batchActionInvalidInputMessage(result.code) }
-            : { kind: "access_denied", message: errorEnvelopeCopy(result.envelope) },
-        );
+        setMessage("无法读取任务统计，请在任务中心查看");
+        setStage("error");
         return;
       }
-      setStage({ kind: "preview", data: result.data });
-    });
-    return () => {
-      cancelled = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- the selection is fixed for this dialog instance's whole lifetime, see PromoLinkClaimDialog's own note on the same pattern
-  }, []);
-
-  async function confirmApply() {
-    setStage({ kind: "applying" });
-    const result = await applyContentCreationBatchAction({
-      novelSourceItemIds: selectedItems.map((item) => item.id),
-      requestId: crypto.randomUUID(),
-    });
-    if (!result.ok) {
-      setStage(
-        result.kind === "invalid_input"
-          ? { kind: "invalid_input", message: batchActionInvalidInputMessage(result.code) }
-          : { kind: "access_denied", message: errorEnvelopeCopy(result.envelope) },
-      );
-      return;
+      if (result.data.submittedCount !== null && result.data.ineligibleCount !== null) {
+        setSummary(result.data);
+        return;
+      }
+      if (["disabled", "failed", "expired"].includes(result.data.phase)) {
+        setMessage("任务已提交，请在任务中心查看状态");
+        setStage("error");
+        return;
+      }
+      timerRef.current = window.setTimeout(() => {
+        if (mountedRef.current) void poll(id);
+      }, 900);
+    } catch {
+      if (!mountedRef.current) return;
+      setMessage("无法读取任务统计，请在任务中心查看");
+      setStage("error");
     }
-    setStage({ kind: "result", data: result.data });
-    onSubmitted();
-    // Only meaningful if at least one item actually reached "created" — a
-    // batch where nothing wrote anything (all skipped/failed/not_processed)
-    // leaves every other page's render exactly as it was.
-    if (result.data.counts.created > 0) router.refresh();
   }
 
-  const isApplying = stage.kind === "applying";
-  const creatableCount = stage.kind === "preview" ? stage.data.counts.creatable : 0;
-  const canConfirm = stage.kind === "preview" && creatableCount > 0;
+  async function submit(): Promise<void> {
+    if (!context || !contentPublishGranted || taskId || submittedRef.current) return;
+    submittedRef.current = true;
+    setStage("submitting");
+    try {
+      const result = await applyNovelMaterializeBatchAction({
+        selection: selectionRef.current,
+        requestId: requestIdRef.current,
+      });
+      if (!mountedRef.current) return;
+      if (!result.ok) {
+        submittedRef.current = false;
+        setMessage(
+          result.kind === "access_denied"
+            ? errorEnvelopeCopy(result.envelope)
+            : result.code === "retired_protocol" || result.code === "legacy_template_on_materialize"
+              ? "旧创建内容协议已退役，请刷新页面后重新纳入书目"
+              : "提交失败，请重试",
+        );
+        setStage("error");
+        return;
+      }
+      setTaskId(result.data.taskId);
+      onSubmitted();
+      setStage("counting");
+      void poll(result.data.taskId);
+    } catch {
+      if (!mountedRef.current) return;
+      submittedRef.current = false;
+      setMessage("提交失败，请重试");
+      setStage("error");
+    }
+  }
+
+  const canSubmit = Boolean(context) && contentPublishGranted && !taskId && !submittedRef.current && (stage === "form" || stage === "error");
 
   return (
-    <dialog
-      ref={dialogRef}
-      onCancel={(event) => {
-        event.preventDefault();
-        if (!isApplying) onClose();
-      }}
-      className="w-full max-w-3xl rounded-xl border border-gray-200 p-0 text-gray-900 shadow-xl backdrop:bg-gray-900/40"
-    >
+    <dialog ref={dialogRef} onCancel={(event) => { event.preventDefault(); if (stage !== "submitting") onClose(); }} className="m-auto max-h-[calc(100vh-2rem)] w-full max-w-xl overflow-y-auto rounded-xl border border-gray-200 bg-white p-0 text-gray-900 shadow-xl backdrop:bg-gray-900/40">
       <div className="space-y-4 p-5">
-        <h2 className="text-base font-semibold">批量创建内容</h2>
-
-        <p className="text-sm text-gray-600" data-testid="batch-create-selection-count">
-          已选择 <span className="font-medium text-gray-900">{selectedItems.length}</span> 条来源条目
-          （单次上限 {maxBatchSize} 条）
-        </p>
-
-        {empty && (
-          <p role="alert" className={`rounded-lg border px-3 py-2 text-sm ${TONE_STYLE.danger}`}>
-            未勾选任何来源条目，请先在列表中勾选后再打开本对话框。
+        <h2 className="text-base font-semibold">批量纳入书目</h2>
+        <p className="text-sm text-gray-600">此步骤只把渠道小说纳入书目，不会创建文章，也不选择文章模板。</p>
+        {stage === "loading" && <p className="text-sm text-gray-600">正在读取所选条目…</p>}
+        {context?.locales.map((locale) => (
+          <p className="text-sm text-gray-700" key={locale.locale}>
+            {locale.locale}（{locale.eligibleCount} 条待纳入）
           </p>
-        )}
-
-        {overLimit && (
-          <p role="alert" className={`rounded-lg border px-3 py-2 text-sm ${TONE_STYLE.danger}`} data-testid="batch-create-over-limit">
-            所选数量超过单次上限 {maxBatchSize} 条，请取消部分勾选后再提交。
-          </p>
-        )}
-
-        {stage.kind === "loading" && !overLimit && !empty && (
-          <p role="status" className="text-sm text-gray-500">
-            正在生成批量创建预览…
-          </p>
-        )}
-
-        {stage.kind === "preview" && (
-          <div className="space-y-3">
-            <p className={`rounded-lg border px-3 py-2 text-sm ${TONE_STYLE.info}`} role="status" data-testid="batch-create-preview-summary">
-              尚未写入任何数据。{batchSummaryLine(stage.data.counts, "可创建")}
-            </p>
-            <ItemsTable items={stage.data.items} itemsById={itemsById} />
-            {!contentPublishGranted && contentPublishBlockedReason && (
-              <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
-                {contentPublishBlockedReason}
-              </p>
-            )}
-          </div>
-        )}
-
-        {stage.kind === "applying" && (
-          <p role="status" className="text-sm text-gray-500">
-            正在批量创建…
-          </p>
-        )}
-
-        {stage.kind === "result" && (
-          <div className="space-y-3">
-            <p
-              role="status"
-              className={`rounded-lg border px-3 py-2 text-sm ${TONE_STYLE.success}`}
-              data-testid="batch-create-result-summary"
-            >
-              {batchSummaryLine(stage.data.counts, "已创建")}
-            </p>
-            {batchNotProcessedHint(stage.data.counts.not_processed) && (
-              <p
-                role="alert"
-                className={`rounded-lg border px-3 py-2 text-sm ${TONE_STYLE.warning}`}
-                data-testid="batch-create-not-processed-hint"
-              >
-                {batchNotProcessedHint(stage.data.counts.not_processed)}
-              </p>
-            )}
-            <ItemsTable items={stage.data.items} itemsById={itemsById} />
-          </div>
-        )}
-
-        {stage.kind === "invalid_input" && (
-          <p role="alert" className={`rounded-lg border px-3 py-2 text-sm ${TONE_STYLE.danger}`}>
-            {stage.message}
-          </p>
-        )}
-        {stage.kind === "access_denied" && (
-          <p role="alert" className={`rounded-lg border px-3 py-2 text-sm ${TONE_STYLE.danger}`}>
-            {stage.message}
-          </p>
-        )}
-
+        ))}
+        {contentPublishBlockedReason && <p className="rounded border border-amber-200 bg-amber-50 p-2 text-sm text-amber-800">{contentPublishBlockedReason}</p>}
+        {taskId && <Link href={`/tasks/${taskId}`} className="text-sm text-blue-700 underline">查看任务</Link>}
+        {stage === "counting" && <p role="status" className="rounded border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">{summary ? <>任务已提交：{formatCount(summary.submittedCount)} 条<br />已纳入：{formatCount(summary.alreadyLinkedCount ?? 0)} 条<br />被条件阻断：{formatCount(summary.ineligibleCount)} 条</> : "任务已提交，正在统计…"}</p>}
+        {stage === "error" && <p role="alert" className="rounded border border-red-200 bg-red-50 p-2 text-sm text-red-800">{message}</p>}
         <div className="flex justify-end gap-2">
-          <button
-            type="button"
-            disabled={isApplying}
-            onClick={onClose}
-            className={buttonClassName("secondary")}
-          >
-            {stage.kind === "result" ? "关闭" : "取消"}
-          </button>
-          {stage.kind === "preview" && (
-            <button
-              type="button"
-              disabled={!canConfirm || !contentPublishGranted}
-              onClick={confirmApply}
-              className={buttonClassName("primary")}
-            >
-              确认创建（批量，共 {creatableCount} 条可创建）
-            </button>
-          )}
+          <button type="button" className={buttonClassName("secondary")} onClick={onClose} disabled={stage === "submitting"}>关闭</button>
+          {!taskId && <button type="button" className={buttonClassName("primary")} disabled={!canSubmit} onClick={() => void submit()}>{stage === "submitting" ? "正在提交…" : "纳入书目"}</button>}
         </div>
       </div>
     </dialog>

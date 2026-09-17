@@ -59,6 +59,22 @@ describe("P1-06 database operations static contracts", () => {
     expect(restore).toContain("cps_novel_restore_*");
     expect(restore).toContain("--single-transaction");
     expect(restore).toContain("infra/postgres/grants.sql");
+
+    // wal-gc-x8.sh (WAL retention rehearsal formal entry point): its
+    // argument parser must reject anything outside {--apply, --keep-base,
+    // --json, --force} with usage/exit 64, and it must always force
+    // wal-retention.sh's --require-archiver-healthy -- neither is something
+    // a caller of this wrapper can turn off.
+    const walGcX8 = read("scripts/db/wal-gc-x8.sh");
+    // Scoped to the `target=(...)` wal-retention.sh invocation itself, not
+    // a bare substring search -- the file's own header comment also says
+    // "--require-archiver-healthy" in prose, so a plain `.toContain` would
+    // keep passing even if the flag were deleted from the actual
+    // invocation while that comment survived (see the identical hardening
+    // in wal-gc-x8.test.ts's own static-contracts describe block).
+    expect(walGcX8).toMatch(/target=\([\s\S]*?--require-archiver-healthy[\s\S]*?\)/);
+    expect(walGcX8).toMatch(/usage\(\)\s*\{[\s\S]*?exit 64/);
+    expect(walGcX8).toContain("*) usage ;;");
   });
 
   it("ships syntactically valid shell scripts and does not claim production PITR", () => {
@@ -68,6 +84,10 @@ describe("P1-06 database operations static contracts", () => {
       "scripts/db/backup-physical-base.sh",
       "scripts/db/archive-wal.sh",
       "scripts/db/restore-pitr.sh",
+      "scripts/db/verify-physical-base.sh",
+      "scripts/db/wal-retention.sh",
+      "scripts/db/wal-gc-x8.sh",
+      "scripts/db/wal-retention-rehearsal.sh",
       "scripts/run-p1-06-postgres-verification.sh",
       "scripts/run-x9-postgres-verification.sh",
     ];
@@ -83,10 +103,50 @@ describe("P1-06 database operations static contracts", () => {
   it("extends the dictionary for the six approved Auth tables without duplicate keys", () => {
     const records = read("docs/governance/database-schema-dictionary.jsonl").trim().split("\n");
     // v0.2.0 foundation (Stream F, migration 20260818120000_v020_foundation_shared) added 32
-    // records for IndexNowOutbox/-Attempt's new fields and the SiteSetting table, so
-    // 920 -> 952. This assertion's purpose — no duplicate stable_key — is unaffected by the count.
-    expect(records).toHaveLength(952);
-    expect(new Set(records.map((line) => JSON.parse(line).stable_key)).size).toBe(952);
+    // records for IndexNowOutbox/-Attempt's new fields and the SiteSetting table; launch parity
+    // adds the governed carousel_config_json field. The ArticleTemplate CPS-parity migration
+    // (20260906090000_p2_02b_article_template_cps_parity) adds six: the five new columns
+    // (template_name, applicable_article_type, content_template, slug_template,
+    // meta_keywords_template) plus the applicable_article_type CHECK. The status column and
+    // article_template_status_check records were rewritten in place, not added, because that
+    // CHECK changed value sets ('retired' -> 'inactive') rather than gaining a new object.
+    // Phase C step C-1 (施工工单_PhaseC_任务模型迁移与ImportProgress_2026-09-06.md)
+    // adds two more: the generic_task partial indexes equivalent to
+    // catalog_scan_task's catalog_scan_status_created_idx/catalog_scan_scope_idx.
+    // Phase E — C-24 (article axes foundation, 20260909090000_c24_article_axes)
+    // adds eight more: three new field records (article_type, content_mode,
+    // seo_visibility), their three CHECK constraint records, and two index
+    // records (article_seo_visibility_idx, article_type_locale_status_published_idx).
+    // Phase E — C-27 (blog article foundation, 20260910090000_c27_blog_article_foundation)
+    // adds one more: the article_novel_id_by_type_check CHECK constraint record.
+    // novel_id and article_published_promo_link_check were rewritten in place
+    // (nullable flag / forked predicate), not added, same "same-field semantic
+    // evolution, not replacement" treatment C-24's header cites for
+    // article_template_status_check's earlier in-place rewrite.
+    // Phase E — C-30A (施工工单_C30_换小说_移植CPS换租客_2026-09-08.md §4A.1,
+    // 20260911090000_c30_novel_rebind_foundation) adds 78 more: one field
+    // record (novel.title_normalized), three table records, 59 more field
+    // records across the three new tables (ArticleNovelRebindPreview/Batch/
+    // BatchItem — 60 field records total for this migration), and 15
+    // constraint records (indexes/uniques/FKs/CHECKs) for those same
+    // objects — 1130 + 78 = 1208. `article_novel_rebind_batch.preview_id`
+    // carries no FK (CPS parity with `ArticleDramaSwitchBatch.previewId`,
+    // itself FK-less, since the referenced preview row is bounded-lifetime
+    // and may legitimately be gone before the batch row's own retention
+    // ends) — a review fix removed the FK constraint record this migration
+    // originally, incorrectly, shipped with, dropping the constraint count
+    // from 16 to 15 and the running total from 1209 to 1208.
+    // PR #7 CI dictionary drift fix (fix/dictionary-drift-rebind-tables) adds
+    // 3 more: the article_novel_rebind_preview/_batch/_batch_item primary-key
+    // constraint records the C-30A migration should have shipped alongside
+    // the FK/index/CHECK records above -- their absence is exactly what the
+    // live-catalog drift check (assertCatalogConsistency) flagged, running
+    // total 1208 + 3 = 1211.
+    // Catalog batch parentage (20260913120000_catalog_batch_parent) adds the
+    // parent_task_id field, its self-FK, and the parent/status/created index.
+    // The exact count still guards duplicate keys.
+    expect(records).toHaveLength(1214);
+    expect(new Set(records.map((line) => JSON.parse(line).stable_key)).size).toBe(1214);
     const intents = records.map((line) => JSON.parse(line)).filter(
       (record) => record.table_name === "side_effect_intent"
         && ["status", "response_shape", "confirmed_at"].includes(record.field_name),

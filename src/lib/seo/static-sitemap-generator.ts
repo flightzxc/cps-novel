@@ -2,7 +2,7 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import process from "node:process";
 
-import { listPublishableLocales } from "@/lib/locale/locale-canonical";
+import { SITE_LOCALES } from "@/lib/locale/locale-canonical";
 import { getStaticSitemapRoot } from "@/lib/seo/static-sitemap-cache";
 import {
   renderSitemapIndexXml,
@@ -187,7 +187,7 @@ export async function generateStaticSitemaps(
   const sitemapDir = path.join(releaseDir, "sitemap");
   const indexFiles: SitemapFile[] = [];
   const types = options.types ?? SITEMAP_TYPES;
-  const routeLocales = options.routeLocales ?? listPublishableLocales();
+  const routeLocales = options.routeLocales ?? SITE_LOCALES;
   let urlCount = 0;
 
   await fs.mkdir(sitemapDir, { recursive: true });

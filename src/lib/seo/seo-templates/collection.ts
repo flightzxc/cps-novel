@@ -29,8 +29,9 @@ export function buildCollectionSeoMeta(
 ) {
   const title = data.title.trim();
   const description = truncateDescription(data.description);
-  const pagePath =
-    pageNumber > 1 ? `${data.canonicalPath}?page=${pageNumber}` : data.canonicalPath;
+  const pagePath = pageNumber > 1
+    ? `${data.canonicalPath}${data.canonicalPath.includes("?") ? "&" : "?"}page=${pageNumber}`
+    : data.canonicalPath;
   const canonical = buildCanonical(pagePath);
   const ogImage = resolveOgImage(null, data.defaultOgImage);
   const ogLocale = openGraphLocaleTag(locale);

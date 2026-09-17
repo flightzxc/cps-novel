@@ -17,7 +17,14 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
 
-import { claimPendingItem, finalizeTaskItem, heartbeatTaskItem, LeaseLostError, recoverExpiredItem } from "@/lib/tasks/store";
+import {
+  claimPendingItem,
+  finalizeTaskItem,
+  heartbeatTaskItem,
+  LeaseLostError,
+  recomputeParentTask,
+  recoverExpiredItem,
+} from "@/lib/tasks/store";
 import type { TaskClaimTarget, TaskLease } from "@/lib/tasks/types";
 
 function prismaError(code: string): Prisma.PrismaClientKnownRequestError {
@@ -36,6 +43,28 @@ function fakePrisma(tx: Record<string, unknown>, failures: number) {
   } as unknown as PrismaClient;
   return { client, attempts };
 }
+
+describe("recomputeParentTask Article admission status", () => {
+  it("keeps the blocked-result terminal clause in the generic family only", async () => {
+    const genericExecute = vi.fn().mockResolvedValue(1);
+    await recomputeParentTask({
+      $queryRaw: vi.fn().mockResolvedValue([]),
+      $executeRaw: genericExecute,
+    } as unknown as Prisma.TransactionClient, "generic", "00000000-0000-4000-8000-000000000001");
+    const genericSql = (genericExecute.mock.calls[0]![0] as Prisma.Sql).strings.join("?");
+    expect(genericSql).toContain("t.task_type = 'article.generate.v1'");
+    expect(genericSql).toContain("t.result->'blockedReasonCounts'");
+
+    const channelExecute = vi.fn().mockResolvedValue(1);
+    await recomputeParentTask({
+      $queryRaw: vi.fn().mockResolvedValue([]),
+      $executeRaw: channelExecute,
+    } as unknown as Prisma.TransactionClient, "channel_sync", "00000000-0000-4000-8000-000000000001");
+    const channelSql = (channelExecute.mock.calls[0]![0] as Prisma.Sql).strings.join("?");
+    expect(channelSql).not.toContain("article.generate.v1");
+    expect(channelSql).not.toContain("blockedReasonCounts");
+  });
+});
 
 describe("db-retry wiring: claimPendingItem", () => {
   it.each([
@@ -163,6 +192,116 @@ describe("db-retry wiring: finalizeTaskItem", () => {
     expect(attempts.count).toBe(2);
     expect(operationAuditCreate).toHaveBeenCalledTimes(1);
   }, 10_000);
+
+  it("uses a protected-write override as the final terminal outcome", async () => {
+    const queryRaw = vi.fn()
+      .mockResolvedValueOnce([{ id: lease.itemId }]) // assertProtectedWriteLease
+      .mockResolvedValueOnce([]); // recomputeParentTask's SELECT ... FOR UPDATE
+    const executeRaw = vi.fn().mockResolvedValue(1);
+    const operationAuditCreate = vi.fn().mockResolvedValue({});
+    const protectedWrite = vi.fn(async () => ({
+      status: "failed" as const,
+      result: { source: "override" },
+      error: { code: "override_failure", message: "Override failure" },
+    }));
+    const tx = { $executeRaw: executeRaw, $queryRaw: queryRaw, operationAudit: { create: operationAuditCreate } };
+    const { client } = fakePrisma(tx, 0);
+
+    await finalizeTaskItem(client, lease, {
+      status: "success",
+      result: { source: "provisional" },
+      protectedWrite,
+    });
+
+    expect(protectedWrite).toHaveBeenCalledWith(tx);
+    const finalizeStatement = executeRaw.mock.calls[0][0] as Prisma.Sql;
+    expect(finalizeStatement.values).toEqual(expect.arrayContaining([
+      "failed",
+      JSON.stringify({ source: "override" }),
+      JSON.stringify({ code: "override_failure", message: "Override failure" }),
+    ]));
+    expect(finalizeStatement.values).not.toContain(JSON.stringify({ source: "provisional" }));
+    expect(operationAuditCreate).toHaveBeenCalledWith({
+      data: expect.objectContaining({ action: "task_item.failed", reason: "worker_terminal_failure" }),
+    });
+  });
+
+  it("keeps the original outcome when a protected write returns no override", async () => {
+    const queryRaw = vi.fn()
+      .mockResolvedValueOnce([{ id: lease.itemId }]) // assertProtectedWriteLease
+      .mockResolvedValueOnce([]); // recomputeParentTask's SELECT ... FOR UPDATE
+    const executeRaw = vi.fn().mockResolvedValue(1);
+    const operationAuditCreate = vi.fn().mockResolvedValue({});
+    const protectedWrite = vi.fn(async () => undefined);
+    const tx = { $executeRaw: executeRaw, $queryRaw: queryRaw, operationAudit: { create: operationAuditCreate } };
+    const { client } = fakePrisma(tx, 0);
+
+    await finalizeTaskItem(client, lease, {
+      status: "success",
+      result: { source: "original" },
+      protectedWrite,
+    });
+
+    const finalizeStatement = executeRaw.mock.calls[0][0] as Prisma.Sql;
+    expect(finalizeStatement.values).toEqual(expect.arrayContaining([
+      "success",
+      JSON.stringify({ source: "original" }),
+    ]));
+    expect(operationAuditCreate).toHaveBeenCalledWith({
+      data: expect.objectContaining({ action: "task_item.success", reason: null }),
+    });
+  });
+
+  it("never creates a catalog_finalize item for a dry-run terminal page", async () => {
+    const dryRunLease: TaskLease = {
+      ...lease,
+      taskType: "catalog_scan",
+      targetType: "catalog_page",
+      mode: "dry_run",
+      payload: { actorId: "actor", requestId: "request" },
+    };
+    const executeRaw = vi.fn().mockResolvedValue(1);
+    const queryRaw = vi.fn().mockResolvedValue([]);
+    const upsert = vi.fn();
+    const tx = {
+      $executeRaw: executeRaw,
+      $queryRaw: queryRaw,
+      genericTaskItem: { upsert },
+      operationAudit: { create: vi.fn().mockResolvedValue({}) },
+    };
+    const { client } = fakePrisma(tx, 0);
+
+    await finalizeTaskItem(client, dryRunLease, {
+      status: "success",
+      result: { stopReason: "expected_total_reached", returnedCount: 1 },
+    });
+
+    expect(upsert).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["execution token", { ...lease, executionToken: "stale-token" }, "stale-token"],
+    ["lease epoch", { ...lease, leaseEpoch: 0n }, 0n],
+  ] as const)("rejects a stale %s before the protected write runs", async (_field, staleLease, staleValue) => {
+    const queryRaw = vi.fn().mockResolvedValueOnce([]);
+    const executeRaw = vi.fn();
+    const operationAuditCreate = vi.fn();
+    const protectedWrite = vi.fn(async () => ({ status: "success" as const }));
+    const tx = { $executeRaw: executeRaw, $queryRaw: queryRaw, operationAudit: { create: operationAuditCreate } };
+    const { client, attempts } = fakePrisma(tx, 0);
+
+    await expect(finalizeTaskItem(client, staleLease, {
+      status: "success",
+      protectedWrite,
+    })).rejects.toBeInstanceOf(LeaseLostError);
+
+    const leaseAssertion = queryRaw.mock.calls[0][0] as Prisma.Sql;
+    expect(leaseAssertion.values).toContain(staleValue);
+    expect(attempts.count).toBe(1);
+    expect(protectedWrite).not.toHaveBeenCalled();
+    expect(executeRaw).not.toHaveBeenCalled();
+    expect(operationAuditCreate).not.toHaveBeenCalled();
+  });
 
   it("does not retry a lease-fencing mismatch (LeaseLostError) — rethrown on the first attempt", async () => {
     // `guardedFinalize`'s conditional UPDATE reports 0 rows affected — the

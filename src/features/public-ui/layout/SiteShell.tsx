@@ -11,9 +11,16 @@ export interface SiteChrome {
   /** 站点品牌名（`SiteSetting.siteName`）。缺失或空白时页头/页脚回落到占位符。 */
   siteName?: string;
   navItems?: NavItem[];
-  localeNav?: NavItem[];
   footerLinks?: NavItem[];
   footerNote?: string;
+  /**
+   * L10N P4：动态层 `getActiveLocales()` 的结果（`src/lib/site/chrome.ts`
+   * `loadPublicChrome` 拉取后塞入），传给 `SiteHeader`→`LocaleSwitcher` 决定
+   * 语言切换器渲染哪些条目。可选——`mockChrome`（dev-preview 夹具）刻意不传，
+   * 用来验证"只有一个可选语种时切换器不渲染"这条既有分支；缺省时
+   * `SiteHeader` 按空数组处理（同样隐藏切换器）。
+   */
+  activeLocales?: readonly SiteLocale[];
 }
 
 /**
@@ -60,8 +67,8 @@ export function SiteShell({
           brandHref={chrome.brandHref}
           brandName={chrome.siteName}
           navItems={chrome.navItems}
-          localeNav={chrome.localeNav}
           overlay={headerOverlay}
+          activeLocales={chrome.activeLocales}
         />
 
         <main id="main" className="flex-1">

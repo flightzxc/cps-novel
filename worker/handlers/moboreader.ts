@@ -5,6 +5,7 @@ import {
   createMoboreaderReadAdapter,
   moboreaderUpstreamRateGate,
   resolveMoboreaderUpstreamRateLimitConfig,
+  MoboreaderAdapterError,
   MoboreaderRateLimitedError,
   type ListBooksResponse,
   type MoboreaderBook,
@@ -16,19 +17,35 @@ import {
   isNovelCatalogSyncWriteAllowed,
 } from "../../src/lib/flags";
 import {
-  enqueueMoboreaderPreviewRefreshTask,
+  clampTotalChapterCount,
+  catalogFinalizeGeneration,
+  catalogPreviewRequestToken,
+  failMoboreaderCatalogFinalize,
+  MOBOREADER_CATALOG_MAX_ATTEMPTS,
+  MOBOREADER_CATALOG_FINALIZE_TARGET_ID,
   MOBOREADER_CATALOG_LIMITS,
+  MOBOREADER_CATALOG_TARGET_TYPES,
   MOBOREADER_PREVIEW_ENV,
+  normalizePaidFromChapter,
+  paidFromChapterForUpdate,
   resolveMoboreaderPreviewRuntimeConfig,
+  stageMoboreaderPreviewRefreshTask,
+  totalChapterCountForUpdate,
   MOBOREADER_TASK_TYPES,
 } from "../../src/lib/tasks/moboreader";
 import { materializeChangduPreview } from "../../src/lib/preview";
-import { createHandlerRegistry, type TaskHandler } from "../../src/lib/tasks";
+import { rawLanguageScopeFromPayload } from "../../src/lib/tagging/raw-language-scope";
+import { createHandlerRegistry, withTaskLeaseTransaction, type ProtectedWriteResult, type TaskHandler, type TaskLease } from "../../src/lib/tasks";
 import {
   buildPromoLinkIdempotencyKey,
   UPSTREAM_EXISTING_PROMO_OFFER_TYPE,
 } from "../../src/lib/tasks/promo-link-claim";
-import { resolveSiteLocale } from "../../src/lib/locale/locale-canonical";
+import {
+  evaluateLanguageMappingSuspensions,
+  resolveChannelLanguage,
+  MOBOREADER_SOURCE_APP_CODE,
+  type ChannelLanguageResolution,
+} from "../../src/lib/locale/channel-language";
 import { createPublicRedirectCode } from "../../src/lib/redirect";
 import { decryptCredentialSecretForWorker } from "../credentials/crypto";
 import { bindPromoLinkToArticles } from "./promo-link-binding";
@@ -46,6 +63,35 @@ export interface MoboreaderCatalogPayload {
   source: "manual";
   actorId: string;
   requestId: string;
+}
+
+export interface CatalogRecoveryIdentity {
+  externalBookId: string;
+  sourceLanguageCode: string;
+}
+
+export interface MoboreaderCatalogRecoveryPayload extends MoboreaderCatalogPayload {
+  kind: "catalog_recovery_page";
+  missingIdentities: CatalogRecoveryIdentity[];
+  gapFingerprint: string;
+}
+
+function normalizedRecoveryIdentities(
+  identities: readonly CatalogRecoveryIdentity[],
+): CatalogRecoveryIdentity[] {
+  const unique = new Map<string, CatalogRecoveryIdentity>();
+  for (const identity of identities) {
+    if (!identity.externalBookId || !identity.sourceLanguageCode) throw new Error("catalog_recovery_identity_invalid");
+    const key = JSON.stringify([identity.externalBookId, identity.sourceLanguageCode]);
+    unique.set(key, { externalBookId: identity.externalBookId, sourceLanguageCode: identity.sourceLanguageCode });
+  }
+  return Array.from(unique.entries()).sort(([left], [right]) => left.localeCompare(right)).map(([, identity]) => identity);
+}
+
+export function catalogRecoveryFingerprint(identities: readonly CatalogRecoveryIdentity[]): string {
+  return createHash("sha256")
+    .update(JSON.stringify(normalizedRecoveryIdentities(identities)), "utf8")
+    .digest("hex");
 }
 
 export type MoboreaderCatalogStopReason =
@@ -100,6 +146,25 @@ export function parseMoboreaderCatalogPayload(value: unknown): MoboreaderCatalog
   return item as MoboreaderCatalogPayload;
 }
 
+export function parseMoboreaderCatalogRecoveryPayload(value: unknown): MoboreaderCatalogRecoveryPayload {
+  const base = parseMoboreaderCatalogPayload(value);
+  const item = value as Partial<MoboreaderCatalogRecoveryPayload>;
+  if (item.kind !== MOBOREADER_CATALOG_TARGET_TYPES.recoveryPage || !Array.isArray(item.missingIdentities)) {
+    throw new Error("catalog_recovery_payload_invalid");
+  }
+  if (typeof item.gapFingerprint !== "string" || !/^[a-f0-9]{64}$/.test(item.gapFingerprint)) {
+    throw new Error("catalog_recovery_fingerprint_invalid");
+  }
+  const missingIdentities = normalizedRecoveryIdentities(item.missingIdentities);
+  if (missingIdentities.length < 1 || missingIdentities.length > base.pageSize) {
+    throw new Error("catalog_recovery_identity_count_invalid");
+  }
+  if (catalogRecoveryFingerprint(missingIdentities) !== item.gapFingerprint) {
+    throw new Error("catalog_recovery_fingerprint_mismatch");
+  }
+  return { ...base, kind: item.kind, missingIdentities, gapFingerprint: item.gapFingerprint };
+}
+
 interface BindingRow {
   project_type: number;
   credential_id: string;
@@ -114,6 +179,39 @@ interface CatalogTaskScope {
   pageStart: number;
   pageEnd: number;
   pageSize: number;
+  terminalPage: number | null;
+}
+
+/**
+ * Phase C: `CatalogScanTask`'s former physical task-level columns
+ * (`projectType`/`pageStart`/`pageEnd`/`pageSize`) are no longer columns —
+ * `GenericTask` has no such fields — they live in `GenericTask.params`
+ * (written once, at creation, by `createMoboreaderCatalogScanTask` in
+ * `src/lib/tasks/moboreader.ts`, the sole writer). This is the sole reader.
+ */
+export function parseCatalogScanTaskParams(value: unknown): {
+  projectType: number;
+  pageStart: number;
+  pageEnd: number;
+  pageSize: number;
+} {
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("catalog_task_missing");
+  const params = value as Record<string, unknown>;
+  const { projectType, pageStart, pageEnd, pageSize } = params;
+  if (
+    !Number.isSafeInteger(projectType)
+    || !Number.isSafeInteger(pageStart)
+    || !Number.isSafeInteger(pageEnd)
+    || !Number.isSafeInteger(pageSize)
+  ) {
+    throw new Error("catalog_task_missing");
+  }
+  return {
+    projectType: projectType as number,
+    pageStart: pageStart as number,
+    pageEnd: pageEnd as number,
+    pageSize: pageSize as number,
+  };
 }
 
 async function loadAndValidateTaskScope(
@@ -121,32 +219,36 @@ async function loadAndValidateTaskScope(
   taskId: string,
   payload: MoboreaderCatalogPayload,
 ): Promise<CatalogTaskScope> {
-  const task = await db.catalogScanTask.findUnique({
+  const task = await db.genericTask.findUnique({
     where: { id: taskId },
-    select: {
-      channelAccountId: true,
-      channelAppId: true,
-      projectType: true,
-      pageStart: true,
-      pageEnd: true,
-      pageSize: true,
-    },
+    select: { channelAccountId: true, channelAppId: true, params: true, result: true },
   });
-  if (!task) throw new Error("catalog_task_missing");
-  const pageCount = task.pageEnd - task.pageStart + 1;
+  if (!task || !task.channelAccountId || !task.channelAppId) throw new Error("catalog_task_missing");
+  const { projectType, pageStart, pageEnd, pageSize } = parseCatalogScanTaskParams(task.params);
+  const pageCount = pageEnd - pageStart + 1;
   if (
     pageCount < 1
-    || task.pageSize !== payload.pageSize
-    || task.projectType !== payload.projectType
-    || task.pageEnd !== payload.requestedPageEnd
-    || payload.scheduledPageEnd > task.pageEnd
-    || payload.scheduledPageEnd - task.pageStart + 1 > payload.safetyMaxPages
-    || payload.pageIndex < task.pageStart
+    || pageSize !== payload.pageSize
+    || projectType !== payload.projectType
+    || pageEnd !== payload.requestedPageEnd
+    || payload.scheduledPageEnd > pageEnd
+    || payload.scheduledPageEnd - pageStart + 1 > payload.safetyMaxPages
+    || payload.pageIndex < pageStart
     || payload.pageIndex > payload.scheduledPageEnd
   ) {
     throw new Error("catalog_task_bounds_mismatch");
   }
-  return task;
+  return {
+    channelAccountId: task.channelAccountId,
+    channelAppId: task.channelAppId,
+    projectType,
+    pageStart,
+    pageEnd,
+    pageSize,
+    terminalPage: Number.isSafeInteger(plainJson(task.result).terminalPage)
+      ? plainJson(task.result).terminalPage as number
+      : null,
+  };
 }
 
 async function loadBinding(db: PrismaClient, payload: MoboreaderCatalogPayload, accountId: string, appId: string) {
@@ -312,11 +414,11 @@ function sumIncompleteLabelSnapshots(results: Array<{ result: Prisma.JsonValue |
 }
 
 async function loadTaskLabelSummary(
-  tx: Prisma.TransactionClient,
+  tx: Prisma.TransactionClient | PrismaClient,
   taskId: string,
 ): Promise<TaskLabelSummary> {
-  const results = await tx.catalogScanTaskItem.findMany({
-    where: { taskId },
+  const results = await tx.genericTaskItem.findMany({
+    where: { taskId, targetType: { in: [MOBOREADER_CATALOG_TARGET_TYPES.page, MOBOREADER_CATALOG_TARGET_TYPES.recoveryPage] } },
     select: { result: true },
   });
   const droppedLabels = mergeDroppedLabels(results.map(({ result }) => {
@@ -448,10 +550,28 @@ async function persistExistingCatalogPromo(
   };
 }
 
+/**
+ * L10N P1 write-site rule: `NovelSourceItem.sourceLocale` is either an
+ * already-resolved locale string or `null` — **never** the literal string
+ * `"unknown"` (the pre-P1 behavior this rule replaces). A code suspended by
+ * this page's `evaluateLanguageMappingSuspensions` circuit-breaker is forced
+ * to `null` regardless of what `resolveChannelLanguage` returned for it.
+ * Pure/exported so this exact write-site expression has its own regression
+ * test (`tests/backend/tasks/moboreader.test.ts`) independent of the full
+ * `persistCatalogPage` transaction plumbing.
+ */
+export function pickBookSourceLocale(
+  resolution: ChannelLanguageResolution,
+  suspendedLanguageCodes: ReadonlySet<string>,
+): string | null {
+  return suspendedLanguageCodes.has(resolution.sourceLanguageCode) ? null : (resolution.locale ?? null);
+}
+
 async function persistCatalogPage(
   tx: Prisma.TransactionClient,
   input: {
     response: ListBooksResponse;
+    baseResult: Prisma.InputJsonObject;
     payload: MoboreaderCatalogPayload;
     taskId: string;
     itemId: string;
@@ -459,13 +579,19 @@ async function persistCatalogPage(
     channelAccountId: string;
     env: NodeJS.ProcessEnv;
     now: Date;
+    recoveryOnly?: boolean;
   },
-) {
-  await tx.$queryRaw(Prisma.sql`SELECT id FROM catalog_scan_task WHERE id = ${input.taskId}::uuid FOR UPDATE`);
-  await tx.catalogScanTaskItem.update({
-    where: { id: input.itemId },
-    data: { returnedCount: input.response.items.length },
-  });
+): Promise<ProtectedWriteResult> {
+  await tx.$queryRaw(Prisma.sql`SELECT id FROM generic_task WHERE id = ${input.taskId}::uuid FOR UPDATE`);
+  // Phase C: the pre-Phase-C code wrote `returnedCount` here as a separate
+  // early physical-column update, before this same item's own `result` JSON
+  // (below) carried the identical value. That column no longer exists on
+  // `GenericTaskItem` (Phase C folds it into `result.returnedCount`), and
+  // the early write was provably redundant even before this migration: this
+  // item's own status stays 'processing' until `guardedFinalize` runs after
+  // this whole `protectedWrite` returns, so neither `beforeStop` nor
+  // `afterStop` below (both scoped to sibling item aggregates) ever see it
+  // in between. Folded into the one `result` write later in this function.
   const now = input.now;
   const sourceItemIds: string[] = [];
   const droppedLabels: DroppedLabelsSummary[] = [];
@@ -477,51 +603,105 @@ async function persistCatalogPage(
     articlesConflicted: 0,
   };
   let pageIncompleteLabelSnapshots = 0;
-  for (const book of input.response.items) {
-    const sourceLocale = resolveSiteLocale(book.language, book.languageName ?? undefined);
-    const source = await tx.novelSourceItem.upsert({
-      where: {
-        channelAppId_externalBookId_sourceLanguageCode: {
-          channelAppId: input.channelAppId,
-          externalBookId: book.externalBookId,
-          sourceLanguageCode: book.language,
+  // L10N P1: resolve every book's language up front (pass 1) so
+  // `evaluateLanguageMappingSuspensions` (CPS `changdu-dry-run.ts:429-450`
+  // shape, ported to `src/lib/locale/channel-language.ts`) can see the whole
+  // page's code/name-conflict signal before any row is persisted — a code
+  // whose resolutions disagree with their own paired `languageName` often
+  // enough *in this page* gets its `sourceLocale` force-nulled for every
+  // book on this page, not just the individual books that triggered the
+  // conflict. Suspension is evaluated per `catalog_page` task item (one
+  // upstream page fetch), the same granularity CPS's `resolveChannelLanguage`
+  // call site uses.
+  const pageLanguageResolutions: readonly ChannelLanguageResolution[] = input.response.items.map((book) =>
+    resolveChannelLanguage({
+      sourceAppCode: MOBOREADER_SOURCE_APP_CODE,
+      sourceLanguageCode: book.language,
+      sourceLanguageName: book.languageName,
+    }),
+  );
+  const suspendedLanguageCodes = evaluateLanguageMappingSuspensions(
+    pageLanguageResolutions.map((resolution) => ({
+      sourceLanguageCode: resolution.sourceLanguageCode,
+      warning: resolution.warning,
+    })),
+  );
+  let pageUnknownLocaleCount = 0;
+  for (const [bookIndex, book] of input.response.items.entries()) {
+    const languageResolution = pageLanguageResolutions[bookIndex];
+    const sourceLocale = pickBookSourceLocale(languageResolution, suspendedLanguageCodes);
+    const rawLanguageScope = rawLanguageScopeFromPayload(book.rawEvidence);
+    if (rawLanguageScope === null) throw new Error("MoboReader raw language scope is not reliably derivable");
+    const createData = {
+      channelAppId: input.channelAppId,
+      externalBookId: book.externalBookId,
+      sourceLanguageCode: book.language,
+      sourceLanguageName: book.languageName,
+      sourceLocale,
+      rawLanguageScope,
+      title: book.title,
+      description: book.description ?? "",
+      coverUrl: book.coverUrl,
+      totalChapterCount: book.allEpis === null ? 0 : clampTotalChapterCount(book.allEpis),
+      paidFromChapter: normalizePaidFromChapter(book.payEpisFrom),
+      splitRatio: decimal(book.splitRatio),
+      ttoSplitRatio: decimal(book.ttoSplitRatio),
+      externalAgencyId: book.agencyId,
+      sourceCreatedAtRaw: book.createTime,
+      lastSeenAt: now,
+      rawPayload: book.rawEvidence as Prisma.InputJsonObject,
+    } satisfies Prisma.NovelSourceItemCreateManyInput;
+    let source: { id: string; novelId: string | null; status: string };
+    if (input.recoveryOnly) {
+      const inserted = await tx.novelSourceItem.createMany({ data: [createData], skipDuplicates: true });
+      if (inserted.count === 0) continue;
+      source = await tx.novelSourceItem.findUniqueOrThrow({
+        where: {
+          channelAppId_externalBookId_sourceLanguageCode: {
+            channelAppId: input.channelAppId,
+            externalBookId: book.externalBookId,
+            sourceLanguageCode: book.language,
+          },
         },
-      },
-      create: {
-        channelAppId: input.channelAppId,
-        externalBookId: book.externalBookId,
-        sourceLanguageCode: book.language,
-        sourceLanguageName: book.languageName,
-        sourceLocale,
-        title: book.title,
-        description: book.description ?? "",
-        coverUrl: book.coverUrl,
-        totalChapterCount: book.allEpis ?? 0,
-        paidFromChapter: book.payEpisFrom,
-        splitRatio: decimal(book.splitRatio),
-        ttoSplitRatio: decimal(book.ttoSplitRatio),
-        externalAgencyId: book.agencyId,
-        sourceCreatedAtRaw: book.createTime,
-        lastSeenAt: now,
-        rawPayload: book.rawEvidence as Prisma.InputJsonObject,
-      },
-      update: {
-        sourceLanguageName: book.languageName ?? undefined,
-        sourceLocale,
-        title: book.title,
-        description: book.description ?? undefined,
-        coverUrl: book.coverUrl ?? undefined,
-        totalChapterCount: book.allEpis ?? undefined,
-        paidFromChapter: book.payEpisFrom ?? undefined,
-        splitRatio: book.splitRatio === null ? undefined : decimal(book.splitRatio),
-        ttoSplitRatio: book.ttoSplitRatio === null ? undefined : decimal(book.ttoSplitRatio),
-        externalAgencyId: book.agencyId ?? undefined,
-        sourceCreatedAtRaw: book.createTime ?? undefined,
-        lastSeenAt: now,
-        deletedAt: null,
-        rawPayload: book.rawEvidence as Prisma.InputJsonObject,
-      },
-    });
+        select: { id: true, novelId: true, status: true },
+      });
+    } else {
+      source = await tx.novelSourceItem.upsert({
+        where: {
+          channelAppId_externalBookId_sourceLanguageCode: {
+            channelAppId: input.channelAppId,
+            externalBookId: book.externalBookId,
+            sourceLanguageCode: book.language,
+          },
+        },
+        create: createData,
+        update: {
+          sourceLanguageName: book.languageName ?? undefined,
+          sourceLocale,
+          rawLanguageScope,
+          title: book.title,
+          description: book.description ?? undefined,
+          coverUrl: book.coverUrl ?? undefined,
+          totalChapterCount: totalChapterCountForUpdate(book.allEpis),
+        // An upstream 0 (or negative) must explicitly overwrite a previous
+        // positive value with NULL ("free now"); see
+        // `paidFromChapterForUpdate` for why this cannot be
+        // `book.payEpisFrom ?? undefined` (that would pass 0 straight
+        // through to the `paid_from_chapter > 0` DB CHECK — the crash this
+        // fix removes).
+          paidFromChapter: paidFromChapterForUpdate(book.payEpisFrom),
+          splitRatio: book.splitRatio === null ? undefined : decimal(book.splitRatio),
+          ttoSplitRatio: book.ttoSplitRatio === null ? undefined : decimal(book.ttoSplitRatio),
+          externalAgencyId: book.agencyId ?? undefined,
+          sourceCreatedAtRaw: book.createTime ?? undefined,
+          lastSeenAt: now,
+          deletedAt: null,
+          rawPayload: book.rawEvidence as Prisma.InputJsonObject,
+        },
+        select: { id: true, novelId: true, status: true },
+      });
+    }
+    if (sourceLocale === null) pageUnknownLocaleCount += 1;
     sourceItemIds.push(source.id);
     const promoResult = await persistExistingCatalogPromo(tx, {
       source,
@@ -543,24 +723,27 @@ async function persistCatalogPage(
   }
   const pageDroppedLabels = mergeDroppedLabels(droppedLabels);
 
-  const [beforeStop] = await tx.$queryRaw<Array<{ total: bigint; max_page: number }>>(Prisma.sql`
-    SELECT COALESCE(SUM(returned_count), 0)::bigint AS total,
-           COALESCE(MAX(page_index) FILTER (
-             WHERE status = 'success' AND COALESCE((result->>'stoppedBeforeFetch')::boolean, false) = false
-           ), ${input.payload.pageIndex})::int AS max_page
-    FROM catalog_scan_task_item
-    WHERE task_id = ${input.taskId}::uuid AND status = 'success'
+  const [beforeStop] = await tx.$queryRaw<Array<{ total: bigint }>>(Prisma.sql`
+    SELECT COALESCE(SUM((result->>'returnedCount')::int), 0)::bigint AS total
+    FROM generic_task_item
+    WHERE task_id = ${input.taskId}::uuid AND target_type = 'catalog_page' AND status = 'success'
   `);
-  const fetchedRaw = Number(beforeStop.total);
-  const task = await tx.catalogScanTask.findUniqueOrThrow({
+  // The current page remains `processing` until guardedFinalize. Treat its
+  // response as provisionally complete for this transaction's aggregate
+  // calculations without moving the terminal status write out of the
+  // fenced finalizer.
+  const appliedCount = input.recoveryOnly ? sourceItemIds.length : input.response.items.length;
+  const fetchedRaw = Number(beforeStop.total) + appliedCount;
+  const task = await tx.genericTask.findUniqueOrThrow({
     where: { id: input.taskId },
-    select: { pageStart: true, pageEnd: true, pageSize: true },
+    select: { params: true },
   });
-  const requestedCapacity = (task.pageEnd - task.pageStart + 1) * task.pageSize;
-  const upstreamRemaining = Math.max(0, input.response.totalCount - (task.pageStart - 1) * task.pageSize);
+  const { pageStart, pageEnd, pageSize } = parseCatalogScanTaskParams(task.params);
+  const requestedCapacity = (pageEnd - pageStart + 1) * pageSize;
+  const upstreamRemaining = Math.max(0, input.response.totalCount - (pageStart - 1) * pageSize);
   const batchExpectedCount = Math.min(requestedCapacity, upstreamRemaining);
   const stopReason = determineMoboreaderCatalogStopReason({
-    returnedCount: input.response.items.length,
+    returnedCount: appliedCount,
     pageSize: input.payload.pageSize,
     fetchedRaw,
     batchExpectedCount,
@@ -569,107 +752,115 @@ async function persistCatalogPage(
     scheduledPageEnd: input.payload.scheduledPageEnd,
   });
 
-  await tx.catalogScanTaskItem.update({
+  const enrichedResult = {
+    ...input.baseResult,
+    returnedCount: appliedCount,
+    stopReason,
+    sourceItemIds,
+    droppedLabels: droppedLabelsJson(pageDroppedLabels),
+    incompleteLabelSnapshots: pageIncompleteLabelSnapshots,
+    promoCapture: catalogPromoSummaryJson(promoSummary),
+    // L10N P1 (施工提示词_Sonnet_L10N_P1_语言归一与存量重算_2026-09-10.md §1.D):
+    // additive-only fields, same convention as `droppedLabels`/
+    // `incompleteLabelSnapshots` above — this page's own count/codes, rolled
+    // up into the task-level `result` at `terminal` below.
+    unknownLocaleCount: pageUnknownLocaleCount,
+    suspendedLanguageCodes: Array.from(suspendedLanguageCodes),
+  } satisfies Prisma.InputJsonObject;
+
+  // This provisional write makes the current page visible to the task-level
+  // aggregation below. persistCatalogPage returns the exact same value as a
+  // ProtectedWriteResult so guardedFinalize remains the sole terminal write
+  // and cannot replace it with the handler's pre-persistence result.
+  await tx.genericTaskItem.update({
     where: { id: input.itemId },
-    data: {
-      result: {
-        source: "manual",
-        pageIndex: input.payload.pageIndex,
-        returnedCount: input.response.items.length,
-        observedTotal: input.response.totalCount,
-        sourceItemIds,
-        stopReason,
-        droppedLabels: droppedLabelsJson(pageDroppedLabels),
-        incompleteLabelSnapshots: pageIncompleteLabelSnapshots,
-        promoCapture: catalogPromoSummaryJson(promoSummary),
-      },
-    },
+    data: { result: enrichedResult },
   });
   if (stopReason) {
-    await tx.catalogScanTaskItem.updateMany({
-      where: { taskId: input.taskId, status: "pending", pageIndex: { gt: input.payload.pageIndex } },
-      data: {
-        status: "success",
-        returnedCount: 0,
-        result: { stoppedBeforeFetch: true, stopReason },
-        finishedAt: now,
-      },
-    });
+    // `target_id` is a page index encoded as text (`GenericTaskItem.targetId`
+    // is `VARCHAR`) — comparing it numerically against `input.payload.pageIndex`
+    // needs an explicit cast Prisma's typed `updateMany` filter cannot express
+    // (page indices exceed one digit, so a plain string `gt` would sort
+    // lexically and misorder "10" before "9"). Raw SQL, same predicate shape
+    // the pre-Phase-C `pageIndex: { gt: ... }` filter expressed.
+    await tx.$executeRaw(Prisma.sql`
+      UPDATE generic_task_item SET
+        status = 'success',
+        result = jsonb_build_object('stoppedBeforeFetch', true, 'stopReason', ${stopReason}, 'returnedCount', 0),
+        finished_at = ${now}, updated_at = transaction_timestamp()
+      WHERE task_id = ${input.taskId}::uuid AND target_type = 'catalog_page' AND status = 'pending'
+        AND (target_id)::int > ${input.payload.pageIndex}
+    `);
   }
 
-  const [afterStop] = await tx.$queryRaw<Array<{ actual: bigint; pending: bigint; processing: bigint; failed: bigint }>>(Prisma.sql`
-    SELECT COALESCE(SUM(returned_count), 0)::bigint AS actual,
-           COUNT(*) FILTER (WHERE status = 'pending')::bigint AS pending,
-           COUNT(*) FILTER (WHERE status = 'processing')::bigint AS processing,
+  const [afterStop] = await tx.$queryRaw<Array<{ actual: bigint; failed: bigint }>>(Prisma.sql`
+    SELECT COALESCE(SUM((result->>'returnedCount')::int), 0)::bigint AS actual,
            COUNT(*) FILTER (WHERE status = 'failed')::bigint AS failed
-    FROM catalog_scan_task_item WHERE task_id = ${input.taskId}::uuid
+    FROM generic_task_item WHERE task_id = ${input.taskId}::uuid AND target_type = 'catalog_page'
   `);
   const batchActualCount = Number(afterStop.actual);
-  const terminal = Number(afterStop.pending) === 0 && Number(afterStop.processing) === 0;
-  const partialFailed = terminal && (
-    stopReason === "safety_limit"
-    || Number(afterStop.failed) > 0
-    || batchActualCount < batchExpectedCount
-  );
-  let previewEnqueue: Prisma.InputJsonObject | null = null;
-  let touchedSourceItemIds = sourceItemIds;
-  // Same non-terminal/terminal convention as completeness.fetchedUniqueSourceItems above:
-  // non-terminal pages carry this page's own value, and only the terminal page pays for
-  // the one full-task scan that recomputes the durable, idempotent task-level summary.
-  let taskDroppedLabels = pageDroppedLabels;
-  let taskIncompleteLabelSnapshots = pageIncompleteLabelSnapshots;
-  if (terminal) {
-    const itemResults = await tx.catalogScanTaskItem.findMany({
-      where: { taskId: input.taskId },
-      select: { result: true },
+  let finalizeGeneration = 1;
+  if (stopReason) {
+    const finalizeItem = await tx.genericTaskItem.upsert({
+      where: {
+        taskId_targetType_targetId: {
+          taskId: input.taskId,
+          targetType: MOBOREADER_CATALOG_TARGET_TYPES.finalize,
+          targetId: MOBOREADER_CATALOG_FINALIZE_TARGET_ID,
+        },
+      },
+      create: {
+        taskId: input.taskId,
+        targetType: MOBOREADER_CATALOG_TARGET_TYPES.finalize,
+        targetId: MOBOREADER_CATALOG_FINALIZE_TARGET_ID,
+        payload: {
+          kind: MOBOREADER_CATALOG_TARGET_TYPES.finalize,
+          actorId: input.payload.actorId,
+          requestId: input.payload.requestId,
+          generation: 1,
+        },
+      },
+      update: {},
+      select: { payload: true },
     });
-    touchedSourceItemIds = Array.from(new Set(itemResults.flatMap(({ result }) => {
-      if (!result || typeof result !== "object" || Array.isArray(result)) return [];
-      const ids = (result as Record<string, unknown>).sourceItemIds;
-      return Array.isArray(ids) ? ids.filter((id): id is string => typeof id === "string") : [];
-    })));
-    const labelSummary = await loadTaskLabelSummary(tx, input.taskId);
-    taskDroppedLabels = labelSummary.droppedLabels;
-    taskIncompleteLabelSnapshots = labelSummary.incompleteLabelSnapshots;
-    if (touchedSourceItemIds.length > 0) {
-      const preview = await enqueueMoboreaderPreviewRefreshTask(tx, {
-        trigger: "auto",
-        catalogScanTaskId: input.taskId,
-        channelAccountId: (await tx.catalogScanTask.findUniqueOrThrow({ where: { id: input.taskId } })).channelAccountId,
-        channelAppId: input.channelAppId,
-        novelSourceItemIds: touchedSourceItemIds,
-        requestToken: `moboreader.preview_refresh.v1:${input.taskId}`,
-        actorId: input.payload.actorId,
-        requestId: input.payload.requestId,
-        mode: "apply",
-      }, input.env, now);
-      previewEnqueue = preview as unknown as Prisma.InputJsonObject;
-    }
+    finalizeGeneration = catalogFinalizeGeneration(plainJson(finalizeItem.payload).generation);
   }
-  await tx.catalogScanTask.update({
+  await tx.genericTask.update({
     where: { id: input.taskId },
     data: {
-      catalogObservedTotal: input.response.totalCount,
-      batchExpectedCount,
-      batchActualCount,
       result: {
+        // Phase C: `catalogObservedTotal`/`batchExpectedCount`/
+        // `batchActualCount` were physical `CatalogScanTask` columns
+        // mutated on every page; folded into this same `result` write
+        // (which already fully replaces the field on every call, so there
+        // is no partial-merge hazard from moving them here).
+        catalogObservedTotal: input.response.totalCount,
+        batchExpectedCount,
+        batchActualCount,
         checkpoint: {
-          lastCompletedPage: beforeStop.max_page,
-          returnedCount: input.response.items.length,
+          lastCompletedPage: input.payload.pageIndex,
+          returnedCount: appliedCount,
           observedTotal: input.response.totalCount,
           completedAt: now.toISOString(),
         },
         stopReason,
-        terminalState: terminal ? (partialFailed ? "partial_failed" : "completed") : "processing",
+        terminalPage: stopReason ? input.payload.pageIndex : null,
+        finalization: stopReason ? {
+          status: "pending", targetId: MOBOREADER_CATALOG_FINALIZE_TARGET_ID, generation: finalizeGeneration,
+        } : null,
+        terminalState: "processing",
         completeness: {
           expected: batchExpectedCount,
           actual: batchActualCount,
-          fetchedUniqueSourceItems: touchedSourceItemIds.length,
-          duplicateObservations: Math.max(0, batchActualCount - touchedSourceItemIds.length),
+          fetchedUniqueSourceItems: sourceItemIds.length,
+          duplicateObservations: Math.max(0, batchActualCount - sourceItemIds.length),
         },
-        previewEnqueue,
-        droppedLabels: droppedLabelsJson(taskDroppedLabels),
-        incompleteLabelSnapshots: taskIncompleteLabelSnapshots,
+        // L10N P1: additive-only task-level fields, see `enrichedResult` above.
+        unknownLocaleCount: pageUnknownLocaleCount,
+        suspendedLanguageCodes: Array.from(suspendedLanguageCodes),
+        previewEnqueue: null,
+        droppedLabels: droppedLabelsJson(pageDroppedLabels),
+        incompleteLabelSnapshots: pageIncompleteLabelSnapshots,
       },
     },
   });
@@ -678,14 +869,14 @@ async function persistCatalogPage(
       actorType: "admin",
       actorId: input.payload.actorId,
       action: `moboreader.catalog_page.applied.${input.payload.pageIndex}`,
-      entityType: "CatalogScanTaskItem",
+      entityType: "GenericTaskItem",
       entityId: input.itemId,
       requestId: input.payload.requestId,
       taskType: MOBOREADER_TASK_TYPES.catalogScan,
       taskId: input.taskId,
       afterSnapshot: {
         pageIndex: input.payload.pageIndex,
-        returnedCount: input.response.items.length,
+        returnedCount: appliedCount,
         observedTotal: input.response.totalCount,
         stopReason,
         droppedLabels: droppedLabelsJson(pageDroppedLabels),
@@ -694,6 +885,7 @@ async function persistCatalogPage(
       },
     },
   });
+  return { status: "success", result: enrichedResult };
 }
 
 async function persistCatalogUpstreamFailure(
@@ -703,70 +895,266 @@ async function persistCatalogUpstreamFailure(
     itemId: string;
     payload: MoboreaderCatalogPayload;
     channelAppId: string;
+    channelAccountId: string;
     env: NodeJS.ProcessEnv;
     now: Date;
   },
 ) {
-  await tx.$queryRaw(Prisma.sql`SELECT id FROM catalog_scan_task WHERE id = ${input.taskId}::uuid FOR UPDATE`);
+  await tx.$queryRaw(Prisma.sql`SELECT id FROM generic_task WHERE id = ${input.taskId}::uuid FOR UPDATE`);
   const now = input.now;
-  await tx.catalogScanTaskItem.updateMany({
-    where: { taskId: input.taskId, status: "pending", pageIndex: { gt: input.payload.pageIndex } },
-    data: {
-      status: "failed",
-      error: { code: "upstream_error", message: "Catalog scan stopped after an upstream error" },
-      result: { stoppedBeforeFetch: true, stopReason: "upstream_error" },
-      finishedAt: now,
-    },
-  });
-  const [totals] = await tx.$queryRaw<Array<{ actual: bigint; expected: number | null }>>(Prisma.sql`
-    SELECT COALESCE(SUM(i.returned_count), 0)::bigint AS actual, t.batch_expected_count AS expected
-    FROM catalog_scan_task t
-    LEFT JOIN catalog_scan_task_item i ON i.task_id = t.id
+  // Same numeric-`target_id` cast reasoning as the stop-cascade in
+  // `persistCatalogPage` above — raw SQL, not Prisma's typed `updateMany`.
+  await tx.$executeRaw(Prisma.sql`
+    UPDATE generic_task_item SET
+      status = 'failed',
+      error = ${JSON.stringify({ code: "upstream_error", message: "Catalog scan stopped after an upstream error" })}::jsonb,
+      result = ${JSON.stringify({ stoppedBeforeFetch: true, stopReason: "upstream_error" })}::jsonb,
+      finished_at = ${now}, updated_at = transaction_timestamp()
+    WHERE task_id = ${input.taskId}::uuid AND target_type = 'catalog_page' AND status = 'pending'
+      AND (target_id)::int > ${input.payload.pageIndex}
+  `);
+  const [totals] = await tx.$queryRaw<Array<{
+    actual: bigint;
+    expected: number | null;
+    observed_total: number | null;
+    prior_result: Prisma.JsonValue | null;
+  }>>(Prisma.sql`
+    SELECT COALESCE(SUM((i.result->>'returnedCount')::int), 0)::bigint AS actual,
+           (t.result->>'batchExpectedCount')::int AS expected,
+           (t.result->>'catalogObservedTotal')::int AS observed_total,
+           t.result AS prior_result
+    FROM generic_task t
+    LEFT JOIN generic_task_item i ON i.task_id = t.id AND i.target_type = 'catalog_page'
     WHERE t.id = ${input.taskId}::uuid
-    GROUP BY t.batch_expected_count
+    GROUP BY t.id
   `);
   const actual = Number(totals.actual);
   const expected = totals.expected ?? actual;
-  const itemResults = await tx.catalogScanTaskItem.findMany({
-    where: { taskId: input.taskId },
-    select: { result: true },
+  // Phase C: `catalogObservedTotal`/`batchExpectedCount` used to be separate
+  // physical `CatalogScanTask` columns this failure path never touched, so a
+  // failed page after an earlier successful one kept whatever those columns
+  // already held. Now that both live inside the same `result` JSON blob this
+  // function replaces wholesale, they must be explicitly carried forward
+  // from the prior `result` (read above) instead of silently dropping to
+  // `undefined`.
+  const priorObservedTotal = totals.observed_total;
+  const priorBatchExpectedCount = totals.expected;
+  const priorTaskResult = totals.prior_result && typeof totals.prior_result === "object" && !Array.isArray(totals.prior_result)
+    ? totals.prior_result
+    : {};
+  const finalizeItem = await tx.genericTaskItem.upsert({
+    where: {
+      taskId_targetType_targetId: {
+        taskId: input.taskId,
+        targetType: MOBOREADER_CATALOG_TARGET_TYPES.finalize,
+        targetId: MOBOREADER_CATALOG_FINALIZE_TARGET_ID,
+      },
+    },
+    create: {
+      taskId: input.taskId,
+      targetType: MOBOREADER_CATALOG_TARGET_TYPES.finalize,
+      targetId: MOBOREADER_CATALOG_FINALIZE_TARGET_ID,
+      payload: {
+        kind: MOBOREADER_CATALOG_TARGET_TYPES.finalize,
+        actorId: input.payload.actorId,
+        requestId: input.payload.requestId,
+        generation: 1,
+      },
+    },
+    update: {},
+    select: { payload: true },
   });
-  const touchedSourceItemIds = Array.from(new Set(itemResults.flatMap(({ result }) => {
-    if (!result || typeof result !== "object" || Array.isArray(result)) return [];
-    const ids = (result as Record<string, unknown>).sourceItemIds;
-    return Array.isArray(ids) ? ids.filter((id): id is string => typeof id === "string") : [];
-  })));
-  const taskLabelSummary = await loadTaskLabelSummary(tx, input.taskId);
-  let previewEnqueue: Prisma.InputJsonObject | null = null;
-  if (touchedSourceItemIds.length > 0) {
-    const task = await tx.catalogScanTask.findUniqueOrThrow({ where: { id: input.taskId } });
-    const preview = await enqueueMoboreaderPreviewRefreshTask(tx, {
-      trigger: "auto",
-      catalogScanTaskId: input.taskId,
-      channelAccountId: task.channelAccountId,
-      channelAppId: input.channelAppId,
-      novelSourceItemIds: touchedSourceItemIds,
-      requestToken: `moboreader.preview_refresh.v1:${input.taskId}`,
-      actorId: input.payload.actorId,
-      requestId: input.payload.requestId,
-      mode: "apply",
-    }, input.env, now);
-    previewEnqueue = preview as unknown as Prisma.InputJsonObject;
-  }
-  await tx.catalogScanTask.update({
+  const finalizeGeneration = catalogFinalizeGeneration(plainJson(finalizeItem.payload).generation);
+  await tx.genericTask.update({
     where: { id: input.taskId },
     data: {
-      batchActualCount: actual,
       result: {
+        ...priorTaskResult,
+        // Phase C: `catalogObservedTotal`/`batchExpectedCount`/
+        // `batchActualCount` folded into `result` (no physical columns on
+        // `GenericTask`) — see `persistCatalogPage` above. The first two are
+        // carried forward from the prior `result` rather than dropped.
+        catalogObservedTotal: priorObservedTotal,
+        batchExpectedCount: priorBatchExpectedCount,
+        batchActualCount: actual,
         stopReason: "upstream_error",
-        terminalState: "partial_failed",
-        completeness: { expected, actual },
-        previewEnqueue,
-        droppedLabels: droppedLabelsJson(taskLabelSummary.droppedLabels),
-        incompleteLabelSnapshots: taskLabelSummary.incompleteLabelSnapshots,
+        terminalPage: input.payload.pageIndex,
+        finalization: {
+          status: "pending", targetId: MOBOREADER_CATALOG_FINALIZE_TARGET_ID, generation: finalizeGeneration,
+        },
+        terminalState: "processing",
+        completeness: {
+          expected,
+          actual,
+          fetchedUniqueSourceItems: actual,
+          duplicateObservations: 0,
+        },
+        previewEnqueue: null,
       },
     },
   });
+}
+
+interface CatalogFinalizePayload {
+  kind: "catalog_finalize";
+  actorId: string;
+  requestId: string;
+  generation?: number;
+}
+
+function parseCatalogFinalizePayload(value: unknown): CatalogFinalizePayload {
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("catalog_finalize_payload_invalid");
+  const payload = value as Partial<CatalogFinalizePayload>;
+  if (payload.kind !== MOBOREADER_CATALOG_TARGET_TYPES.finalize) throw new Error("catalog_finalize_kind_invalid");
+  if (typeof payload.actorId !== "string" || !payload.actorId) throw new Error("catalog_finalize_actor_required");
+  if (typeof payload.requestId !== "string" || !payload.requestId) throw new Error("catalog_finalize_request_required");
+  return { ...payload, generation: catalogFinalizeGeneration(payload.generation) } as CatalogFinalizePayload;
+}
+
+function plainJson(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
+}
+
+async function runCatalogFinalize(
+  db: PrismaClient,
+  lease: TaskLease,
+  env: NodeJS.ProcessEnv,
+  now: Date,
+): Promise<ProtectedWriteResult> {
+  const payload = parseCatalogFinalizePayload(lease.payload);
+  const task = await db.genericTask.findUniqueOrThrow({
+    where: { id: lease.taskId },
+    select: { channelAccountId: true, channelAppId: true, result: true },
+  });
+  if (!task.channelAccountId || !task.channelAppId) throw new Error("catalog_finalize_scope_missing");
+  const priorResult = plainJson(task.result);
+  const priorFinalization = plainJson(priorResult.finalization);
+  const generation = catalogFinalizeGeneration(payload.generation);
+  if (priorFinalization.status === "completed" && catalogFinalizeGeneration(priorFinalization.generation) === generation) {
+    return { status: "success", result: { finalization: "already_completed" } };
+  }
+  await withTaskLeaseTransaction(db, lease, async (tx) => {
+    const current = await tx.genericTask.findUniqueOrThrow({ where: { id: lease.taskId }, select: { result: true } });
+    await tx.genericTask.update({
+      where: { id: lease.taskId },
+      data: {
+        result: {
+          ...plainJson(current.result),
+          finalization: {
+            status: "processing",
+            targetId: MOBOREADER_CATALOG_FINALIZE_TARGET_ID,
+            generation,
+            attempt: lease.attemptCount,
+            startedAt: now.toISOString(),
+          },
+        },
+      },
+    });
+  });
+
+  const itemResults = await db.genericTaskItem.findMany({
+    where: {
+      taskId: lease.taskId,
+      targetType: { in: [MOBOREADER_CATALOG_TARGET_TYPES.page, MOBOREADER_CATALOG_TARGET_TYPES.recoveryPage] },
+      status: "success",
+    },
+    select: { result: true },
+  });
+  const touchedSourceItemIds = Array.from(new Set(itemResults.flatMap(({ result }) => {
+    const ids = plainJson(result).sourceItemIds;
+    return Array.isArray(ids) ? ids.filter((id): id is string => typeof id === "string") : [];
+  })));
+  const batchActualCount = itemResults.reduce((sum, { result }) => {
+    const value = plainJson(result).returnedCount;
+    return sum + (typeof value === "number" && Number.isFinite(value) ? value : 0);
+  }, 0);
+  const suspendedCodes = new Set<string>();
+  const unknownLocaleCount = itemResults.reduce((sum, { result }) => {
+    const object = plainJson(result);
+    if (Array.isArray(object.suspendedLanguageCodes)) {
+      for (const code of object.suspendedLanguageCodes) if (typeof code === "string") suspendedCodes.add(code);
+    }
+    return sum + (typeof object.unknownLocaleCount === "number" && Number.isFinite(object.unknownLocaleCount)
+      ? object.unknownLocaleCount
+      : 0);
+  }, 0);
+  const labelSummary = await loadTaskLabelSummary(db, lease.taskId);
+  const failedPages = await db.genericTaskItem.count({
+    where: {
+      taskId: lease.taskId,
+      targetType: { in: [MOBOREADER_CATALOG_TARGET_TYPES.page, MOBOREADER_CATALOG_TARGET_TYPES.recoveryPage] },
+      status: "failed",
+    },
+  });
+
+  let previewEnqueue: Prisma.InputJsonObject | null = null;
+  if (touchedSourceItemIds.length > 0) {
+    const preview = await stageMoboreaderPreviewRefreshTask(db, {
+      trigger: "auto",
+      catalogScanTaskId: lease.taskId,
+      channelAccountId: task.channelAccountId,
+      channelAppId: task.channelAppId,
+      novelSourceItemIds: touchedSourceItemIds,
+      requestToken: catalogPreviewRequestToken(lease.taskId, generation),
+      actorId: payload.actorId,
+      requestId: payload.requestId,
+      mode: "apply",
+    }, (write) => withTaskLeaseTransaction(db, lease, write), env, now);
+    previewEnqueue = preview as unknown as Prisma.InputJsonObject;
+  }
+
+  const expected = typeof priorResult.batchExpectedCount === "number"
+    ? priorResult.batchExpectedCount
+    : (typeof priorResult.catalogObservedTotal === "number" ? priorResult.catalogObservedTotal : batchActualCount);
+  const partialFailed = failedPages > 0
+    || priorResult.stopReason === "safety_limit"
+    || priorResult.stopReason === "upstream_error"
+    || batchActualCount < expected;
+
+  await withTaskLeaseTransaction(db, lease, async (tx) => {
+    const current = await tx.genericTask.findUniqueOrThrow({ where: { id: lease.taskId }, select: { result: true } });
+    await tx.genericTask.update({
+      where: { id: lease.taskId },
+      data: {
+        result: {
+          ...plainJson(current.result),
+          batchActualCount,
+          terminalState: partialFailed ? "partial_failed" : "completed",
+          finalization: { status: "completed", generation, completedAt: now.toISOString() },
+          completeness: {
+            expected,
+            actual: batchActualCount,
+            fetchedUniqueSourceItems: touchedSourceItemIds.length,
+            duplicateObservations: Math.max(0, batchActualCount - touchedSourceItemIds.length),
+          },
+          unknownLocaleCount,
+          suspendedLanguageCodes: Array.from(suspendedCodes),
+          previewEnqueue,
+          droppedLabels: droppedLabelsJson(labelSummary.droppedLabels),
+          incompleteLabelSnapshots: labelSummary.incompleteLabelSnapshots,
+        },
+      },
+    });
+    await tx.operationAudit.create({
+      data: {
+        actorType: "worker", actorId: payload.actorId,
+        action: "moboreader.catalog_finalize.completed", entityType: "GenericTask",
+        entityId: lease.taskId, requestId: payload.requestId,
+        taskType: MOBOREADER_TASK_TYPES.catalogScan, taskId: lease.taskId,
+        afterSnapshot: {
+          batchActualCount, fetchedUniqueSourceItems: touchedSourceItemIds.length,
+          failedPages, previewEnqueue,
+        },
+      },
+    });
+  });
+
+  return {
+    status: "success",
+    result: { batchActualCount, fetchedUniqueSourceItems: touchedSourceItemIds.length, failedPages, previewEnqueue },
+  };
 }
 
 export interface MoboreaderHandlerDependencies {
@@ -929,7 +1317,45 @@ export function createMoboreaderCatalogHandler(
   });
   const now = dependencies.now ?? (() => new Date());
   return async ({ lease, mode, signal }) => {
-    const payload = parseMoboreaderCatalogPayload(lease.payload);
+    if (lease.targetType === MOBOREADER_CATALOG_TARGET_TYPES.finalize) {
+      if (mode !== "apply") {
+        return { status: "failed", error: { code: "catalog_finalize_mode_invalid", message: "Catalog finalization requires apply mode" } };
+      }
+      if (!isNovelCatalogSyncEnabled(env)) {
+        return { status: "failed", error: { code: "feature_disabled", message: "Catalog sync feature is disabled" } };
+      }
+      if (!isNovelCatalogSyncWriteAllowed(env)) {
+        return { status: "failed", error: { code: "write_disabled", message: "Catalog sync write gate is disabled" } };
+      }
+      try {
+        return await runCatalogFinalize(db, lease, env, now());
+      } catch {
+        if (lease.attemptCount >= MOBOREADER_CATALOG_MAX_ATTEMPTS) {
+          try {
+            const payload = parseCatalogFinalizePayload(lease.payload);
+            await withTaskLeaseTransaction(db, lease, (tx) => failMoboreaderCatalogFinalize(tx, {
+              catalogTaskId: lease.taskId,
+              generation: catalogFinalizeGeneration(payload.generation),
+              actorId: payload.actorId,
+              requestId: payload.requestId,
+              reason: "retry_exhausted",
+              now: now(),
+            }));
+          } catch {
+            // The final item outcome still records the exhausted failure; a
+            // preserved disabled/building shell remains non-claimable evidence.
+          }
+        }
+        return {
+          status: "retry",
+          error: { code: "catalog_finalize_failed", message: "Catalog task finalization failed and will be retried" },
+        };
+      }
+    }
+    const recoveryPayload = lease.targetType === MOBOREADER_CATALOG_TARGET_TYPES.recoveryPage
+      ? parseMoboreaderCatalogRecoveryPayload(lease.payload)
+      : null;
+    const payload = recoveryPayload ?? parseMoboreaderCatalogPayload(lease.payload);
     if (!isNovelCatalogSyncEnabled(env)) {
       return { status: "failed", error: { code: "feature_disabled", message: "Catalog sync feature is disabled" } };
     }
@@ -940,6 +1366,17 @@ export function createMoboreaderCatalogHandler(
       return { status: "failed", error: { code: "task_expired", message: "Catalog scan task expired" } };
     }
     const scope = await loadAndValidateTaskScope(db, lease.taskId, payload);
+    if (scope.terminalPage !== null && payload.pageIndex > scope.terminalPage) {
+      return {
+        status: "success",
+        result: {
+          stoppedBeforeFetch: true,
+          stopReason: "expected_total_reached",
+          returnedCount: 0,
+          terminalPage: scope.terminalPage,
+        },
+      };
+    }
     const binding = await loadBinding(db, payload, scope.channelAccountId, scope.channelAppId);
     const token = decryptCredentialSecretForWorker(
       binding.encrypted_secret,
@@ -961,10 +1398,23 @@ export function createMoboreaderCatalogHandler(
       // message for operators, but the outcome shape (`status: "failed"`,
       // `result.stopReason: "upstream_error"`, same `protectedWrite`) is
       // byte-identical to the pre-existing generic-error path below — this
-      // task's item is a page, so `catalog_scan_task_item` already lets an
+      // task's item is a page, so `generic_task_item` already lets an
       // operator resume from `payload.pageIndex` with a fresh scan task; no
       // new recovery mechanism.
       const rateLimited = error instanceof MoboreaderRateLimitedError;
+      // C-10 (Phase E rework, 2026-09-07): before this, a `MoboreaderAdapterError`
+      // (e.g. an upstream HTTP 401) fell into the generic
+      // `{ code: "upstream_error", message: "MoboReader catalog read failed" }`
+      // branch below, discarding the adapter's own code/HTTP status/retryable
+      // flag — the exact information an operator needs to tell "bad
+      // credential" (401) apart from "transient upstream failure" (5xx)
+      // without reproducing the call in a container. `detail` carries only
+      // the enumerated adapter code, HTTP status, retryable flag, and page
+      // index — never the upstream response body, a token, or a URL — and is
+      // itself narrowed again by `sanitizePersistedTaskError`'s allowlist
+      // projection (`src/lib/tasks/errors.ts`) before persistence. The
+      // outer contract `code` stays `"upstream_error"`, unchanged.
+      const adapterError = error instanceof MoboreaderAdapterError ? error : null;
       return {
         status: "failed",
         result: { stopReason: "upstream_error", terminalState: "partial_failed" },
@@ -975,14 +1425,36 @@ export function createMoboreaderCatalogHandler(
                 + `(HTTP ${error.status}, ${error.reason}, retried ${error.attempts} time(s), `
                 + `elapsed ${error.elapsedMs}ms). Resume a new scan from page ${payload.pageIndex}.`,
             }
-          : { code: "upstream_error", message: "MoboReader catalog read failed" },
-        protectedWrite: async (tx) => persistCatalogUpstreamFailure(tx, {
-          taskId: lease.taskId,
-          itemId: lease.itemId,
-          payload,
-          channelAppId: scope.channelAppId,
-          env,
-          now: now(),
+          : adapterError
+            ? {
+                code: "upstream_error",
+                message: `MoboReader catalog read failed: ${adapterError.code}`
+                  + `${adapterError.status != null ? ` (HTTP ${adapterError.status})` : ""}`
+                  + ` at page ${payload.pageIndex}`,
+                detail: {
+                  adapterCode: adapterError.code,
+                  httpStatus: adapterError.status ?? null,
+                  retryable: adapterError.retryable,
+                  pageIndex: payload.pageIndex,
+                },
+              }
+            : { code: "upstream_error", message: "MoboReader catalog read failed" },
+        // Phase D D-1, 做法2: dry_run runs the real upstream call and the
+        // real judgement above (`result.stopReason` etc. are unconditional),
+        // but must never attach a `protectedWrite` — `persistCatalogUpstreamFailure`
+        // upserts real task-item/task rows and can enqueue a real (mode:
+        // "apply") preview-refresh task. See the twin comment on the success
+        // path below.
+        ...(mode === "dry_run" ? {} : {
+          protectedWrite: async (tx) => persistCatalogUpstreamFailure(tx, {
+            taskId: lease.taskId,
+            itemId: lease.itemId,
+            payload,
+            channelAppId: scope.channelAppId,
+            channelAccountId: scope.channelAccountId,
+            env,
+            now: now(),
+          }),
         }),
       };
     }
@@ -991,15 +1463,59 @@ export function createMoboreaderCatalogHandler(
         status: "failed",
         result: { stopReason: "upstream_error", terminalState: "partial_failed" },
         error: { code: "upstream_page_limit_exceeded", message: "Upstream page exceeded the requested page size" },
-        protectedWrite: async (tx) => persistCatalogUpstreamFailure(tx, {
-          taskId: lease.taskId,
-          itemId: lease.itemId,
-          payload,
-          channelAppId: scope.channelAppId,
-          env,
-          now: now(),
+        ...(mode === "dry_run" ? {} : {
+          protectedWrite: async (tx) => persistCatalogUpstreamFailure(tx, {
+            taskId: lease.taskId,
+            itemId: lease.itemId,
+            payload,
+            channelAppId: scope.channelAppId,
+            channelAccountId: scope.channelAccountId,
+            env,
+            now: now(),
+          }),
         }),
       };
+    }
+    if (recoveryPayload) {
+      const existing = await db.novelSourceItem.findMany({
+        where: {
+          channelAppId: scope.channelAppId,
+          OR: recoveryPayload.missingIdentities.map((identity) => ({
+            externalBookId: identity.externalBookId,
+            sourceLanguageCode: identity.sourceLanguageCode,
+          })),
+        },
+        select: { externalBookId: true, sourceLanguageCode: true },
+      });
+      const existingKeys = new Set(existing.map((identity) => JSON.stringify([
+        identity.externalBookId,
+        identity.sourceLanguageCode,
+      ])));
+      const stillMissing = recoveryPayload.missingIdentities.filter((identity) => !existingKeys.has(JSON.stringify([
+        identity.externalBookId,
+        identity.sourceLanguageCode,
+      ])));
+      if (catalogRecoveryFingerprint(stillMissing) !== recoveryPayload.gapFingerprint) {
+        return {
+          status: "failed",
+          error: { code: "catalog_recovery_gap_drift", message: "Catalog recovery gap changed after approval" },
+        };
+      }
+      const missingKeys = new Set(stillMissing.map((identity) => JSON.stringify([
+        identity.externalBookId,
+        identity.sourceLanguageCode,
+      ])));
+      const recoveryItems = response.items.filter((book) => missingKeys.has(JSON.stringify([
+        book.externalBookId,
+        book.language,
+      ])));
+      if (recoveryItems.length !== stillMissing.length) {
+        return {
+          status: "failed",
+          error: { code: "catalog_recovery_upstream_drift", message: "Approved catalog recovery identities are no longer present upstream" },
+        };
+      }
+      response = { ...response, items: recoveryItems };
     }
     const observedFetchedPosition = (payload.pageIndex - 1) * payload.pageSize + response.items.length;
     const stopReason = determineMoboreaderCatalogStopReason({
@@ -1020,13 +1536,28 @@ export function createMoboreaderCatalogHandler(
       plannedSourceIds: response.items.map((item) => `${item.externalBookId}:${item.language}`),
       checkpoint: { pageIndex: payload.pageIndex },
       stopReason,
-      terminalState: stopReason === "safety_limit" ? "partial_failed" : undefined,
-    };
+      ...(stopReason === "safety_limit" ? { terminalState: "partial_failed" } : {}),
+    } satisfies Prisma.InputJsonObject;
+    // Phase D (施工工单_PhaseD_安全与运行态收口_2026-09-06.md D-1, 做法2): the
+    // real upstream fetch and the real stop-reason judgement above both ran
+    // unconditionally — `result` (already carrying `mode`) reflects exactly
+    // what an apply run would have decided. Only the write is conditional:
+    // dry_run must terminate the item without ever calling
+    // `persistCatalogPage` (source-item upsert, label writes, PromoLink
+    // upsert + article binding, and an auto preview-refresh enqueue). Status
+    // stays "success" rather than "skipped" — `guardedFinalize`
+    // (`src/lib/tasks/store.ts`) enforces the pre-existing Phase C parity
+    // invariant that a catalog-page item is success/failed only, never
+    // skipped; this is a page-shaped record either way, dry_run or not.
+    if (mode === "dry_run") {
+      return { status: "success", result };
+    }
     return {
       status: "success",
       result,
       protectedWrite: async (tx) => persistCatalogPage(tx, {
         response,
+        baseResult: result,
         payload,
         taskId: lease.taskId,
         itemId: lease.itemId,
@@ -1034,6 +1565,7 @@ export function createMoboreaderCatalogHandler(
         channelAccountId: scope.channelAccountId,
         env,
         now: now(),
+        recoveryOnly: recoveryPayload !== null,
       }),
     };
   };
@@ -1086,6 +1618,24 @@ export function createMoboreaderPreviewHandler(
         },
       };
     }
+    // Phase D (施工工单_PhaseD_安全与运行态收口_2026-09-06.md D-1, 做法2): both
+    // upstream reads and the empty-preview judgement above already ran for
+    // real. dry_run must stop here, without ever calling
+    // `materializeChangduPreview` (writes NovelChapter/NovelChapterContent) —
+    // same "skipped, no protectedWrite" shape as
+    // `worker/handlers/promo-link-claim.ts`'s own dry_run branch. Unlike the
+    // catalog-scan item above, this family (`channel_sync`) has no
+    // "no skipped" restriction in `guardedFinalize`.
+    if (mode === "dry_run") {
+      return {
+        status: "skipped",
+        result: {
+          decision: "would_materialize",
+          materialTypeSource: scope.requests.materialTypeSource,
+          upstreamCount: preview.chapterList.length,
+        },
+      };
+    }
     return {
       status: "success",
       result: {
@@ -1114,8 +1664,10 @@ export function createMoboreaderWorkerHandlers(
 ) {
   return createHandlerRegistry({
     [MOBOREADER_TASK_TYPES.catalogScan]: {
-      family: "catalog_scan",
-      maxAttempts: 3,
+      // Phase C: CatalogScan is now a GenericTask taskType, not its own
+      // family — TASK_FAMILIES has shrunk to ["channel_sync", "generic"].
+      family: "generic",
+      maxAttempts: MOBOREADER_CATALOG_MAX_ATTEMPTS,
       handler: createMoboreaderCatalogHandler(db, dependencies),
     },
     [MOBOREADER_TASK_TYPES.previewRefresh]: {

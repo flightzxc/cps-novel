@@ -124,6 +124,10 @@ export function NovelDetailScreen({
             </div>
           </section>
 
+          {novel.contentBody ? (
+            <section aria-label="Article content" className="prose prose-neutral mt-10 max-w-[68ch]" dangerouslySetInnerHTML={{ __html: novel.contentBody }} />
+          ) : null}
+
           {/* --- 可试读章节区块（嵌入本页） --- */}
           <PreviewChapterList locale={locale} chapters={novel.previewChapters} />
         </article>

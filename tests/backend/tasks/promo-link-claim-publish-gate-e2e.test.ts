@@ -35,12 +35,6 @@ const APPLY_ENV: NodeJS.ProcessEnv = {
   PROMO_LINK_CLAIM_ALLOW_WRITE: "true",
 };
 
-// U6 admitted en under D-7. These tests use the explicit locale predicate
-// to isolate promo state transitions from whitelist policy. The evaluator
-// and content-creation suites separately exercise the real whitelist;
-// production publishing must not inject this override.
-const GATE_DEPS_SKIP_LAUNCH_WHITELIST = { isPublishableLocale: () => true };
-
 function baseLease(overrides: Partial<{ mode: "dry_run" | "apply" }> = {}) {
   return {
     family: "generic" as const,
@@ -77,8 +71,8 @@ function makePayload() {
  */
 function buildFacts(article: FakeArticle, promoLink: FakePromoLink | null): PublishGateFacts {
   return {
-    novel: { status: "draft", locale: "en" },
-    article: { status: "draft", title: "A Publishable Title", slug: "a-publishable-title", body: "Real chapter body content." },
+    novel: { status: "draft" },
+    article: { status: "draft", locale: "en", title: "A Publishable Title", slug: "a-publishable-title", body: "Real chapter body content." },
     promoLink: promoLink ? { status: promoLink.status, webUrl: promoLink.webUrl, appUrl: promoLink.appUrl } : null,
     preview: { hasPreviewChapter: true, hasPreviewBody: true },
     pageIdentity: { conflicting: false },
@@ -135,7 +129,7 @@ describe("P0-S11 end-to-end: promo-link-claim binding → real evaluatePublishGa
     db.seedArticle({ id: "article-en", novelId: "novel-1", locale: "en", promoLinkId: null, deletedAt: null });
 
     // BEFORE: no PromoLink exists yet — the real defect this task closes.
-    const before = evaluatePublishGate(buildFacts(db.articles.get("article-en")!, null), GATE_DEPS_SKIP_LAUNCH_WHITELIST);
+    const before = evaluatePublishGate(buildFacts(db.articles.get("article-en")!, null));
     expect(before.reasons).toContain("promo_link_missing");
     expect(before.publishable).toBe(false);
 
@@ -160,7 +154,7 @@ describe("P0-S11 end-to-end: promo-link-claim binding → real evaluatePublishGa
     const promoLinkRow = db.promoLinkByIdempotencyKey(idempotencyKey)!;
     expect(boundArticle.promoLinkId).toBe(promoLinkRow.id);
 
-    const after = evaluatePublishGate(buildFacts(boundArticle, promoLinkRow), GATE_DEPS_SKIP_LAUNCH_WHITELIST);
+    const after = evaluatePublishGate(buildFacts(boundArticle, promoLinkRow));
     expect(after.reasons).not.toContain("promo_link_missing");
     expect(after.reasons).not.toContain("promo_link_not_ready");
     // Every other condition was satisfied by construction — the Article is
@@ -197,7 +191,7 @@ describe("P0-S11 end-to-end: promo-link-claim binding → real evaluatePublishGa
     const article = db.articles.get("article-en")!;
     expect(article.promoLinkId).toBeNull();
 
-    const after = evaluatePublishGate(buildFacts(article, null), GATE_DEPS_SKIP_LAUNCH_WHITELIST);
+    const after = evaluatePublishGate(buildFacts(article, null));
     expect(after.reasons).toContain("promo_link_missing");
     expect(after.publishable).toBe(false);
   });

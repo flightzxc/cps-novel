@@ -181,8 +181,10 @@ function completeSnapshot(status = "registered_disabled"): FoundationSnapshot {
 
 describe("MoboReader foundation profile", () => {
   it("freezes the requested parent identity and four disabled-on-create capability keys", () => {
-    expect(MOBOREADER_FOUNDATION.channel).toMatchObject({ code: "moboreader", name: "MoboReader" });
-    expect(MOBOREADER_FOUNDATION.sourceApp).toMatchObject({ code: "changdu", name: "Changdu" });
+    // Phase B entity fix: Channel is the changdu channel, SourceApp is the
+    // moboreader theater — see 施工工单_PhaseB_实体订正与运营表单Parity_2026-09-06.md §二.
+    expect(MOBOREADER_FOUNDATION.channel).toMatchObject({ code: "changdu", name: "Changdu" });
+    expect(MOBOREADER_FOUNDATION.sourceApp).toMatchObject({ code: "moboreader", name: "MoboReader" });
     expect(MOBOREADER_FOUNDATION.channelApp).toMatchObject({ externalAppId: "moboreader", projectType: 1 });
     expect(MOBOREADER_FOUNDATION.capabilities.map((row) => row.capabilityKey)).toEqual([
       "getlistpc",

@@ -1,5 +1,5 @@
 import type { PrismaClient } from "@prisma/client";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { createSitemapFamilyBuilder } from "@/lib/seo/sitemap";
 import { resolvePublicArticleBySlugParam } from "@/lib/site/queries";
@@ -8,14 +8,13 @@ import { invalidateSiteSettingCache } from "@/server/site-settings/service";
 
 import { FakePublishGateDb } from "../backend/publish-gate/fake-db";
 
-vi.mock("@/lib/locale/locale-canonical", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/lib/locale/locale-canonical")>();
-  return {
-    ...actual,
-    isPublishableLocale: (locale: unknown) => locale === "en",
-    listPublishableLocales: () => ["en"],
-  };
-});
+// L10N P4: the `@/lib/locale/locale-canonical` mock that used to live here
+// (overriding `isPublishableLocale`/`listPublishableLocales` to a fixed
+// `{en}` set) is dead — both symbols are deleted, and every consumer this
+// test exercises (`createSitemapFamilyBuilder`, `resolvePublicArticleBySlugParam`,
+// `applyPublishTransition`) now reads `SITE_LOCALES` (the real, static,
+// always-15-entry registry) instead, which already includes "en" — no mock
+// needed to make this test's `en`-locale fixtures resolve correctly.
 
 const ARTICLE_ID = "article-p2-12";
 const NOVEL_ID = "novel-p2-12";

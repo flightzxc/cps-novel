@@ -203,8 +203,8 @@ describe("Article.publicPageShortId sole-generation-entry-point regression", () 
     expect(findWriteSiteViolations('db.novel.update({ where: { id }, data: { businessId: x } });')).toEqual([]);
   });
 
-  it("src/server/content-creation/service.ts is exactly the one place allowed to contain the write-site pattern", async () => {
-    const source = await readFile(path.resolve(process.cwd(), "src/server/content-creation/service.ts"), "utf8");
+  it("src/server/content-creation/generate.ts is the novel-article write site for publicPageShortId", async () => {
+    const source = await readFile(path.resolve(process.cwd(), "src/server/content-creation/generate.ts"), "utf8");
     expect(findWriteSiteViolations(source).length).toBeGreaterThan(0);
   });
 

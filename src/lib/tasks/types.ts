@@ -1,6 +1,15 @@
 import type { Prisma } from "@prisma/client";
 
-export const TASK_FAMILIES = ["catalog_scan", "channel_sync", "generic"] as const;
+/**
+ * Phase C (`施工工单_PhaseC_任务模型迁移与ImportProgress_2026-09-06.md`):
+ * `TASK_ARCHITECTURE_DECISION = MIGRATE_TO_CPS_TASK_MODEL` folded
+ * `CatalogScanTask`/`CatalogScanTaskItem` into `GenericTask`/`GenericTaskItem`
+ * (`taskType = "catalog_scan"`, item `targetType = "catalog_page"`).
+ * `"catalog_scan"` is no longer a physical family — it is one `taskType`
+ * value among many under the `"generic"` family, exactly like every other
+ * GenericTask taskType.
+ */
+export const TASK_FAMILIES = ["channel_sync", "generic"] as const;
 
 export type TaskFamily = (typeof TASK_FAMILIES)[number];
 
@@ -16,6 +25,8 @@ export type TerminalItemStatus = "success" | "skipped" | "failed";
 export interface TaskLease {
   family: TaskFamily;
   taskType: string;
+  /** Physical work-unit kind (for example catalog_page/catalog_finalize). */
+  targetType?: string;
   mode: TaskMode;
   itemId: string;
   taskId: string;
@@ -27,13 +38,24 @@ export interface TaskLease {
   payload: unknown;
 }
 
-export type ProtectedWrite = (transaction: Prisma.TransactionClient) => Promise<void>;
-
-export interface TaskOutcome {
+export interface ProtectedWriteResult {
   status: TerminalItemStatus;
   result?: unknown;
   error?: unknown;
+}
+
+export type ProtectedWrite = (
+  transaction: Prisma.TransactionClient,
+) => Promise<void | ProtectedWriteResult>;
+
+export interface TaskOutcome {
+  status: TerminalItemStatus | "retry";
+  result?: unknown;
+  error?: unknown;
   protectedWrite?: ProtectedWrite;
+  /** Isolation for the fenced finalization transaction. */
+  transactionIsolationLevel?: Prisma.TransactionIsolationLevel;
+  transactionTimeoutMs?: number;
 }
 
 export interface TaskHandlerContext {

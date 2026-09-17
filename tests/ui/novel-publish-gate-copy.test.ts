@@ -2,7 +2,11 @@ import { describe, expect, it } from "vitest";
 
 import { PUBLISH_GATE_REASONS } from "@/contracts/publish-gate";
 import { describeMissingMetadataFields, describePublishGateReason } from "@/app/(admin)/novels/_lib/publish-gate-copy";
-import { describePublishLifecycleError, describeRightsTransition } from "@/app/(admin)/novels/_lib/publish-outcome-copy";
+import {
+  describePublishLifecycleError,
+  describeRightsTransition,
+  isPublishLifecycleErrorCode,
+} from "@/app/(admin)/novels/_lib/publish-outcome-copy";
 
 /**
  * PR-C3 task item 2: the Hard Gate's rejection reasons must be exhaustively
@@ -102,6 +106,27 @@ describe("describePublishLifecycleError · 穷尽 PublishLifecycleError 的六�
 
   it("batch_too_large 的文案点名批量发布上限（200 部）", () => {
     expect(describePublishLifecycleError("batch_too_large")).toContain("200");
+  });
+});
+
+/**
+ * Fix 1 (Opus review of C-21/22/23): `isPublishLifecycleErrorCode` is the
+ * runtime guard `../../articles/_components/article-list.tsx` needs before
+ * it can safely hand a bare `string` code (from `../../articles/_actions.ts`'s
+ * flat `{ ok: false, code: string }` result) to `describePublishLifecycleError`
+ * above, which throws on anything outside the six-member union.
+ */
+describe("isPublishLifecycleErrorCode", () => {
+  it("对全部六个已登记 code 返回 true", () => {
+    for (const code of LIFECYCLE_ERROR_CODES) {
+      expect(isPublishLifecycleErrorCode(code)).toBe(true);
+    }
+  });
+
+  it("对不属于该 union 的 code（如 article_conflict、*_failed fallback）返回 false，而不是抛出", () => {
+    for (const code of ["article_conflict", "article_publish_failed", "article_withdraw_failed", ""]) {
+      expect(isPublishLifecycleErrorCode(code)).toBe(false);
+    }
   });
 });
 

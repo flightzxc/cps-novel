@@ -173,9 +173,6 @@ describe("wall-clock budget — see batch.ts module header, this is the CPS v7.9
 
   it("budget exhausted mid-batch: already-committed items are not rolled back, the rest come back not_processed untouched", async () => {
     const fake = new FakeContentCreationDb();
-    // Titles long enough to clear `MIN_HEALTHY_SLUG_LENGTH` (5) — a
-    // one-letter title would fail at the `slug_unhealthy` guard before ever
-    // reaching the budget logic this test actually exercises.
     const a = fake.seedSourceItem({ title: "Budget Item A" });
     const b = fake.seedSourceItem({ title: "Budget Item B" });
     const c = fake.seedSourceItem({ title: "Budget Item C" });

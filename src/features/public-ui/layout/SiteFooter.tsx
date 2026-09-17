@@ -35,6 +35,8 @@ export function SiteFooter({
                 <li key={link.href + link.label}>
                   <a
                     href={link.href}
+                    target={link.external ? "_blank" : undefined}
+                    rel={link.external ? `noopener${link.nofollow ? " nofollow" : ""}` : undefined}
                     className="text-sm text-novel-fg-muted transition-colors hover:text-novel-fg"
                   >
                     {link.label}

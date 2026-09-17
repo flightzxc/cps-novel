@@ -131,13 +131,19 @@ describe("MoboReader promo claim adapter — frozen Book A contract", () => {
     });
   });
 
-  it("fails closed when the response is truncated and never scans another page", async () => {
+  it("fails closed when the returned page is not shorter than pageSize and never scans another page", async () => {
+    // 2026-09-11 Owner-approved revision: totalCount is no longer part of the
+    // completeness test (see MOBOREADER_PRECISE_READBACK_PROBE_2026-09-02.md
+    // §13). A list shorter than pageSize is now the only signal of
+    // completeness, so this fixture pins the boundary that still must fail
+    // closed: exactly pageSize (100) rows returned, regardless of the
+    // declared totalCount.
     const fetchImpl = vi.fn(async () => jsonResponse({
       status: true,
       code: 200,
       data: {
-        totalCount: 4,
-        list: Array.from({ length: 3 }, (_, index) => ({
+        totalCount: 1,
+        list: Array.from({ length: MOBOREADER_PROMO_MAX_CANDIDATES }, (_, index) => ({
           agencyId: 3366,
           seriesId: `other-${index}`,
           language: 3,
@@ -151,8 +157,8 @@ describe("MoboReader promo claim adapter — frozen Book A contract", () => {
     await expect(adapter.readPromoAfterClaim!(request, "jwt-token")).resolves.toEqual({
       status: "ambiguous",
       reason: "candidate_set_incomplete",
-      totalCount: 4,
-      returnedCount: 3,
+      totalCount: 1,
+      returnedCount: 100,
     });
     expect(fetchImpl).toHaveBeenCalledTimes(1);
     const [, init] = (fetchImpl as unknown as ReturnType<typeof vi.fn>).mock.calls[0];
@@ -372,5 +378,114 @@ describe("MoboReader promo claim adapter — frozen Book A contract", () => {
       ambiguous: false,
     } satisfies Partial<PromoLinkClaimAdapterError>);
     expect(fetchImpl).not.toHaveBeenCalled();
+  });
+});
+
+describe("MoboReader promo claim adapter — 2026-09-11 Owner-approved readback completeness revision", () => {
+  // Real upstream shape from the X8 轮 2b read-only probe (ar:1/11, de:1/14,
+  // es:1/12 — MOBOREADER_PRECISE_READBACK_PROBE_2026-09-02.md §13): getlistpc's
+  // totalCount counts a title match once, but list enumerates every language
+  // edition of the same seriesId family. Fixtures below reproduce that shape
+  // with the target's own identity dimensions (agencyId=3366, seriesId
+  // "124235322", language 3, projectType 1) so the four-dimensional matcher
+  // — not totalCount — is what decides the outcome.
+  function familyRow(overrides: Partial<Record<string, unknown>> = {}) {
+    return {
+      agencyId: 3366,
+      seriesId: "124235322",
+      language: 3,
+      projectType: 1,
+      kocCode: "AR1DE2ES3",
+      publicUrl: "https://eng.moboreader.com/1M4mpB/AR1DE2ES3",
+      homeLink: "https://eng.moboreader.com/book/AR1DE2ES3",
+      ...overrides,
+    };
+  }
+
+  function familySiblings(count: number) {
+    return Array.from({ length: count }, (_, index) => ({
+      agencyId: 3366,
+      seriesId: `family-series-${index}`,
+      language: index + 10,
+      projectType: 1,
+      kocCode: null,
+    }));
+  }
+
+  it("still finds a single row when totalCount undercounts a 1/1 non-family book (EN fixture)", async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse({
+      status: true,
+      code: 200,
+      data: { totalCount: 1, list: [familyRow()] },
+    })) as unknown as typeof fetch;
+    const adapter = createPromoLinkClaimAdapter({ fetchImpl });
+
+    await expect(adapter.readPromoAfterClaim!(request, "jwt-token")).resolves.toEqual({
+      status: "found",
+      promo: {
+        upstreamCode: "AR1DE2ES3",
+        webUrl: "https://eng.moboreader.com/1M4mpB/AR1DE2ES3",
+        appUrl: "https://eng.moboreader.com/book/AR1DE2ES3",
+      },
+    });
+  });
+
+  it("finds the sole four-dimensional match in a 12-row language-family candidate set (ar/de/es probe shape), correctly excluding a same-seriesId decoy in a different language", async () => {
+    // The decoy shares agencyId+seriesId+projectType with the target row but
+    // not language — it pins that `language` is load-bearing in the
+    // four-dimensional match, not just agencyId+seriesId+projectType.
+    const languageDecoy = familyRow({ language: 99, kocCode: "DECOY_MUST_NOT_MATCH" });
+    const list = [familyRow(), languageDecoy, ...familySiblings(10)];
+    const fetchImpl = vi.fn(async () => jsonResponse({
+      status: true,
+      code: 200,
+      data: { totalCount: 1, list },
+    })) as unknown as typeof fetch;
+    const adapter = createPromoLinkClaimAdapter({ fetchImpl });
+
+    await expect(adapter.readPromoAfterClaim!(request, "jwt-token")).resolves.toEqual({
+      status: "found",
+      promo: {
+        upstreamCode: "AR1DE2ES3",
+        webUrl: "https://eng.moboreader.com/1M4mpB/AR1DE2ES3",
+        appUrl: "https://eng.moboreader.com/book/AR1DE2ES3",
+      },
+    });
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it("reports target_missing when a complete 12-row family candidate set has zero four-dimensional matches", async () => {
+    // No row shares the target's seriesId — the whole family is siblings.
+    const list = familySiblings(12);
+    const fetchImpl = vi.fn(async () => jsonResponse({
+      status: true,
+      code: 200,
+      data: { totalCount: 1, list },
+    })) as unknown as typeof fetch;
+    const adapter = createPromoLinkClaimAdapter({ fetchImpl });
+
+    await expect(adapter.readPromoAfterClaim!(request, "jwt-token")).resolves.toEqual({
+      status: "target_missing",
+      reason: "identity_no_match",
+      totalCount: 1,
+      returnedCount: 12,
+    });
+  });
+
+  it("reports identity_not_unique when two rows in a complete 12-row family share the target identity", async () => {
+    const list = [familyRow(), familyRow({ kocCode: "DUPLICATE" }), ...familySiblings(10)];
+    const fetchImpl = vi.fn(async () => jsonResponse({
+      status: true,
+      code: 200,
+      data: { totalCount: 1, list },
+    })) as unknown as typeof fetch;
+    const adapter = createPromoLinkClaimAdapter({ fetchImpl });
+
+    await expect(adapter.readPromoAfterClaim!(request, "jwt-token")).resolves.toEqual({
+      status: "ambiguous",
+      reason: "identity_not_unique",
+      totalCount: 1,
+      returnedCount: 12,
+    });
   });
 });

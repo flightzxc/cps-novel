@@ -41,13 +41,13 @@ afterEach(() => {
 describe("P2-12 promo whitespace regression", () => {
   it("rejects promoUrl='   ' at publish, public access, sitemap, and IndexNow boundaries", async () => {
     const facts: PublishGateFacts = {
-      novel: { status: "ready", locale: "en" },
-      article: { status: "draft", title: "Blank promo", slug: "blank-promo", body: "body" },
+      novel: { status: "ready" },
+      article: { status: "draft", locale: "en", title: "Blank promo", slug: "blank-promo", body: "body" },
       promoLink: WHITESPACE_PROMO,
       preview: { hasPreviewChapter: true, hasPreviewBody: true },
       pageIdentity: { conflicting: false },
     };
-    const publishGate = evaluatePublishGate(facts, { isPublishableLocale: () => true });
+    const publishGate = evaluatePublishGate(facts);
     expect(publishGate).toMatchObject({ publishable: false, reasons: ["promo_link_not_ready"] });
 
     const publicDb = {

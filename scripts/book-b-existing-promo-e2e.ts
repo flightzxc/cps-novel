@@ -106,7 +106,7 @@ async function run(): Promise<Record<string, unknown>> {
     FEATURE_NOVEL_CATALOG_SYNC: "true",
     NOVEL_CATALOG_SYNC_ALLOW_WRITE: "true",
     WORKER_TASK_ALLOWLIST: MOBOREADER_TASK_TYPES.previewRefresh,
-    MOBOREADER_PREVIEW_SOURCE_APP_CODES: "changdu",
+    MOBOREADER_PREVIEW_SOURCE_APP_CODES: "moboreader",
     MOBOREADER_PREVIEW_SOURCE_ITEM_ALLOWLIST: BOOK_B.sourceItemId,
   };
   const web = new PrismaClient({ datasourceUrl: requiredEnv("BOOK_B_E2E_WEB_DATABASE_URL") });

@@ -23,6 +23,16 @@ export type FakeArticle = {
   deletedAt: Date | null;
   novelStatus: string;
   promoLink: FakePromoLink;
+  /**
+   * C-29b: defaults to `"novel_article"` when omitted (every pre-C-29b
+   * fixture in this file). Set to `"blog_article"` (or another blog-family
+   * value) to seed a blog-shaped row — `article.findFirst` below shapes its
+   * returned row by this field, same discriminated-branch shape production
+   * `loadIndexNowCandidateArticle` (`src/lib/indexnow/eligibility.ts`) uses:
+   * a blog row's returned object carries no `novel`/`promoLink`/`novelId`
+   * fields at all, not always-null placeholders.
+   */
+  articleType?: string;
 };
 
 export type FakeOutboxRow = {
@@ -173,24 +183,47 @@ export class FakeIndexNowDb {
   }
 
   private article = {
+    // C-29b: shapes its return by `articleType`, same discriminated-branch
+    // pattern production `loadIndexNowCandidateArticle` uses — a
+    // `"novel_article"` row (the default) keeps the exact pre-C-29b shape;
+    // any other value (the blog family) returns the leaner shape with no
+    // `novel`/`promoLink`/`novelId` fields at all.
     findFirst: async (args: { where: { id: string; deletedAt: null }; select: unknown }) => {
       const article = this.articles.get(args.where.id);
       if (!article || article.deletedAt !== null) return null;
+      const articleType = article.articleType ?? "novel_article";
+      if (articleType === "novel_article") {
+        return {
+          id: article.id,
+          novelId: article.novelId,
+          locale: article.locale,
+          slug: article.slug,
+          publicPageShortId: article.publicPageShortId,
+          status: article.status,
+          updatedAt: article.updatedAt,
+          articleType,
+          novel: { status: article.novelStatus },
+          promoLink: article.promoLink,
+        };
+      }
       return {
         id: article.id,
-        novelId: article.novelId,
         locale: article.locale,
         slug: article.slug,
-        publicPageShortId: article.publicPageShortId,
         status: article.status,
         updatedAt: article.updatedAt,
-        novel: { status: article.novelStatus },
-        promoLink: article.promoLink,
+        articleType,
       };
     },
-    findMany: async (args: { where: { status: string; deletedAt: null }; orderBy?: unknown; take?: number; select: unknown }) => {
+    findMany: async (args: {
+      where: { status: string; deletedAt: null; articleType?: string };
+      orderBy?: unknown;
+      take?: number;
+      select: unknown;
+    }) => {
       const rows = [...this.articles.values()]
         .filter((a) => a.deletedAt === null && a.status === args.where.status)
+        .filter((a) => args.where.articleType === undefined || (a.articleType ?? "novel_article") === args.where.articleType)
         .sort((a, b) => (a.id < b.id ? -1 : 1));
       const limited = args.take ? rows.slice(0, args.take) : rows;
       return limited.map((a) => ({ id: a.id }));

@@ -57,6 +57,7 @@ export function SiteSettingsClient({
 
   const [current, setCurrent] = useState<SiteSettingView | null>(setting);
   const [notice, setNotice] = useState<Notice | null>(null);
+  const [siteBusy, setSiteBusy] = useState(false);
   const [ogBusy, setOgBusy] = useState(false);
   const [indexNowBusy, setIndexNowBusy] = useState(false);
   const [ogImage, setOgImage] = useState(setting?.defaultOgImage ?? "");
@@ -66,6 +67,16 @@ export function SiteSettingsClient({
   const [indexNowKey, setIndexNowKey] = useState(setting?.indexNowKey ?? "");
   const [indexNowKeyLocation, setIndexNowKeyLocation] = useState(setting?.indexNowKeyLocation ?? "");
   const [indexNowReason, setIndexNowReason] = useState("");
+  const [siteName, setSiteName] = useState(setting?.siteName ?? "");
+  const [siteDescription, setSiteDescription] = useState(setting?.siteDescription ?? "");
+  const [homeMetaTitle, setHomeMetaTitle] = useState(setting?.homeMetaTitle ?? "");
+  const [homeMetaDescription, setHomeMetaDescription] = useState(setting?.homeMetaDescription ?? "");
+  const [gscVerification, setGscVerification] = useState(setting?.googleSearchConsoleVerification ?? "");
+  const [footerCopyrightText, setFooterCopyrightText] = useState(setting?.footerCopyrightText ?? "");
+  const [footerDisclaimerText, setFooterDisclaimerText] = useState(setting?.footerDisclaimerText ?? "");
+  const [friendLinksJson, setFriendLinksJson] = useState(JSON.stringify(setting?.friendLinks ?? [], null, 2));
+  const [ga4MeasurementId, setGa4MeasurementId] = useState(setting?.ga4MeasurementId ?? "");
+  const [siteReason, setSiteReason] = useState("");
 
   // `settingsManage !== "granted"` and `setting === null` travel together —
   // the page never reads the row unless the capability is granted (see
@@ -86,7 +97,7 @@ export function SiteSettingsClient({
     );
   }
 
-  function applyServerSetting(next: SiteSettingView, section: "og" | "indexNow" | "all") {
+  function applyServerSetting(next: SiteSettingView, section: "site" | "og" | "indexNow" | "all") {
     setCurrent(next);
     // Success only resets the section that was submitted, so an uncommitted
     // draft in the other section survives. A 409 refetch uses `"all"` because
@@ -100,6 +111,17 @@ export function SiteSettingsClient({
       setIndexNowKey(next.indexNowKey);
       setIndexNowKeyLocation(next.indexNowKeyLocation);
     }
+    if (section === "site" || section === "all") {
+      setSiteName(next.siteName);
+      setSiteDescription(next.siteDescription);
+      setHomeMetaTitle(next.homeMetaTitle);
+      setHomeMetaDescription(next.homeMetaDescription);
+      setGscVerification(next.googleSearchConsoleVerification);
+      setFooterCopyrightText(next.footerCopyrightText);
+      setFooterDisclaimerText(next.footerDisclaimerText);
+      setFriendLinksJson(JSON.stringify(next.friendLinks, null, 2));
+      setGa4MeasurementId(next.ga4MeasurementId ?? "");
+    }
   }
 
   /** Re-reads the row after a 409 so the operator's next attempt starts from a fresh `expectedUpdatedAt`, not the stale one that just lost the race. */
@@ -109,12 +131,12 @@ export function SiteSettingsClient({
   }
 
   async function submitPatch(
-    fields: Record<string, string>,
+    fields: Record<string, unknown>,
     reasonValue: string,
     expectedUpdatedAt: string,
     setBusy: (value: boolean) => void,
     clearReason: () => void,
-    section: "og" | "indexNow",
+    section: "site" | "og" | "indexNow",
   ) {
     setBusy(true);
     setNotice(null);
@@ -161,6 +183,32 @@ export function SiteSettingsClient({
     current.indexNowHost.length > 0
     && current.indexNowKey.length > 0
     && current.indexNowKeyLocation.length > 0;
+  const normalizedFriendLinksJson = friendLinksJson.trim();
+  const siteFields: Record<string, unknown> = {
+    siteName: siteName.trim(),
+    siteDescription: siteDescription.trim(),
+    homeMetaTitle: homeMetaTitle.trim(),
+    homeMetaDescription: homeMetaDescription.trim(),
+    googleSearchConsoleVerification: gscVerification.trim(),
+    footerCopyrightText: footerCopyrightText.trim(),
+    footerDisclaimerText: footerDisclaimerText.trim(),
+    ga4MeasurementId: ga4MeasurementId.trim(),
+  };
+  let parsedFriendLinks: unknown = null;
+  let friendLinksValid = true;
+  try { parsedFriendLinks = JSON.parse(normalizedFriendLinksJson || "[]"); } catch { friendLinksValid = false; }
+  siteFields.friendLinks = parsedFriendLinks;
+  const siteDirty = friendLinksValid && (
+    siteFields.siteName !== current.siteName
+    || siteFields.siteDescription !== current.siteDescription
+    || siteFields.homeMetaTitle !== current.homeMetaTitle
+    || siteFields.homeMetaDescription !== current.homeMetaDescription
+    || siteFields.googleSearchConsoleVerification !== current.googleSearchConsoleVerification
+    || siteFields.footerCopyrightText !== current.footerCopyrightText
+    || siteFields.footerDisclaimerText !== current.footerDisclaimerText
+    || siteFields.ga4MeasurementId !== (current.ga4MeasurementId ?? "")
+    || JSON.stringify(parsedFriendLinks) !== JSON.stringify(current.friendLinks)
+  );
 
   async function handleOgSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -172,6 +220,19 @@ export function SiteSettingsClient({
       setOgBusy,
       () => setOgReason(""),
       "og",
+    );
+  }
+
+  async function handleSiteSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!current || !siteDirty || !siteReason.trim() || !friendLinksValid) return;
+    await submitPatch(
+      siteFields,
+      siteReason,
+      current.updatedAt,
+      setSiteBusy,
+      () => setSiteReason(""),
+      "site",
     );
   }
 
@@ -213,6 +274,26 @@ export function SiteSettingsClient({
           {notice.text}
         </p>
       )}
+
+      <section className="space-y-4 rounded-xl border border-gray-200 bg-white p-6">
+        <div>
+          <h2 className="text-base font-semibold text-gray-900">站点、SEO 与页脚</h2>
+          <p className="mt-1 text-sm text-gray-500">CPS v8.3.6 的公开消费字段；保存后首页 head 与页脚读取同一 SiteSetting。</p>
+        </div>
+        <form onSubmit={handleSiteSubmit} className="grid gap-3" aria-label="保存站点 SEO 设置">
+          <label className="block"><span className="mb-1 block text-xs text-gray-500">站点名称</span><input value={siteName} onChange={(event) => setSiteName(event.target.value)} required className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" /></label>
+          <label className="block"><span className="mb-1 block text-xs text-gray-500">站点描述</span><textarea value={siteDescription} onChange={(event) => setSiteDescription(event.target.value)} rows={2} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" /></label>
+          <label className="block"><span className="mb-1 block text-xs text-gray-500">首页 Meta Title</span><input value={homeMetaTitle} onChange={(event) => setHomeMetaTitle(event.target.value)} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" /></label>
+          <label className="block"><span className="mb-1 block text-xs text-gray-500">首页 Meta Description</span><textarea value={homeMetaDescription} onChange={(event) => setHomeMetaDescription(event.target.value)} rows={2} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" /></label>
+          <label className="block"><span className="mb-1 block text-xs text-gray-500">Google Search Console 验证码</span><input value={gscVerification} onChange={(event) => setGscVerification(event.target.value)} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" /></label>
+          <label className="block"><span className="mb-1 block text-xs text-gray-500">GA4 Measurement ID</span><input value={ga4MeasurementId} onChange={(event) => setGa4MeasurementId(event.target.value.toUpperCase())} placeholder="G-XXXXXXXXXX" className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm font-mono" /></label>
+          <label className="block"><span className="mb-1 block text-xs text-gray-500">页脚版权</span><textarea value={footerCopyrightText} onChange={(event) => setFooterCopyrightText(event.target.value)} rows={2} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" /></label>
+          <label className="block"><span className="mb-1 block text-xs text-gray-500">页脚免责声明</span><textarea value={footerDisclaimerText} onChange={(event) => setFooterDisclaimerText(event.target.value)} rows={2} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" /></label>
+          <label className="block"><span className="mb-1 block text-xs text-gray-500">友链 JSON</span><textarea value={friendLinksJson} onChange={(event) => setFriendLinksJson(event.target.value)} rows={5} aria-invalid={!friendLinksValid} className="w-full rounded-lg border border-gray-300 px-3 py-2 font-mono text-xs" />{!friendLinksValid ? <span className="mt-1 block text-xs text-red-700">JSON 格式无效</span> : null}</label>
+          <label className="block"><span className="mb-1 block text-xs text-gray-500">修改原因（必填，写入审计）</span><input value={siteReason} onChange={(event) => setSiteReason(event.target.value)} required className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" /></label>
+          <button type="submit" disabled={siteBusy || !siteDirty || !siteReason.trim() || !friendLinksValid} className={buttonClassName("primary")}>保存站点 SEO 设置</button>
+        </form>
+      </section>
 
       <section className="space-y-4 rounded-xl border border-gray-200 bg-white p-6">
         <div>

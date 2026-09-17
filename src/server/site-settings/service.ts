@@ -16,6 +16,7 @@ import type { Prisma, PrismaClient } from "@prisma/client";
 import type { AdminIdentityStore, SessionStore } from "@/lib/auth/ports";
 import { withDbRetry } from "@/lib/db/db-retry";
 import { getSiteUrl } from "@/lib/seo/site-url";
+import { normalizeGa4MeasurementId } from "@/lib/seo/ga4-measurement-id";
 import {
   requireFreshAdminServiceMutation,
   type AdminServiceAuthorization,
@@ -191,14 +192,39 @@ const SITE_SETTING_AUDIT_ACTION = "site_setting.update";
 const SITE_SETTING_ENTITY_ID = "1";
 const SITE_SETTING_ENTRY_ID = "admin.api.site_settings";
 const WRITABLE_FIELDS = [
+  "siteName",
+  "siteDescription",
+  "homeMetaTitle",
+  "homeMetaDescription",
   "defaultOgImage",
+  "googleSearchConsoleVerification",
+  "footerCopyrightText",
+  "footerDisclaimerText",
+  "friendLinks",
   "indexNowHost",
   "indexNowKey",
   "indexNowKeyLocation",
+  "ga4MeasurementId",
 ] as const;
 
 type WritableField = (typeof WRITABLE_FIELDS)[number];
-type WritableValues = Readonly<Record<WritableField, string>>;
+export type SiteSettingFriendLink = Readonly<{ name: string; url: string; nofollow: boolean }>;
+type WritableValues = {
+  siteName: string;
+  siteDescription: string;
+  homeMetaTitle: string;
+  homeMetaDescription: string;
+  defaultOgImage: string;
+  googleSearchConsoleVerification: string;
+  footerCopyrightText: string;
+  footerDisclaimerText: string;
+  friendLinks: SiteSettingFriendLink[];
+  indexNowHost: string;
+  indexNowKey: string;
+  indexNowKeyLocation: string;
+  ga4MeasurementId: string | null;
+};
+type WritablePatch = Partial<WritableValues>;
 
 export type AdminSiteSettingView = Readonly<WritableValues & {
   updatedAt: string;
@@ -214,10 +240,19 @@ export type UpdateSiteSettingInput = Readonly<{
   requestId: string;
   expectedUpdatedAt: unknown;
   reason: unknown;
+  siteName?: unknown;
+  siteDescription?: unknown;
+  homeMetaTitle?: unknown;
+  homeMetaDescription?: unknown;
   defaultOgImage?: unknown;
+  googleSearchConsoleVerification?: unknown;
+  footerCopyrightText?: unknown;
+  footerDisclaimerText?: unknown;
+  friendLinks?: unknown;
   indexNowHost?: unknown;
   indexNowKey?: unknown;
   indexNowKeyLocation?: unknown;
+  ga4MeasurementId?: unknown;
 }>;
 
 export type SiteSettingWriteDependencies = Readonly<{
@@ -259,11 +294,21 @@ export class SiteSettingMutationConflictError extends Error {
 class SiteSettingConcurrentUpdateSignal extends Error {}
 
 function adminView(snapshot: SiteSettingSnapshot): AdminSiteSettingView {
+  const friendLinks = normalizeFriendLinks(snapshot.friendLinks);
   return Object.freeze({
+    siteName: snapshot.siteName,
+    siteDescription: snapshot.siteDescription,
+    homeMetaTitle: snapshot.homeMetaTitle,
+    homeMetaDescription: snapshot.homeMetaDescription,
     defaultOgImage: snapshot.defaultOgImage,
+    googleSearchConsoleVerification: snapshot.googleSearchConsoleVerification,
+    footerCopyrightText: snapshot.footerCopyrightText,
+    footerDisclaimerText: snapshot.footerDisclaimerText,
+    friendLinks,
     indexNowHost: snapshot.indexNowHost,
     indexNowKey: snapshot.indexNowKey,
     indexNowKeyLocation: snapshot.indexNowKeyLocation,
+    ga4MeasurementId: snapshot.ga4MeasurementId,
     updatedAt: snapshot.updatedAt.toISOString(),
   });
 }
@@ -295,20 +340,58 @@ function expectedTimestamp(value: unknown): Date {
   return parsed;
 }
 
-function normalizedPatch(input: UpdateSiteSettingInput): Partial<Record<WritableField, string>> {
-  const patch: Partial<Record<WritableField, string>> = {};
-  for (const field of WRITABLE_FIELDS) {
+function textValue(value: unknown, field: string, maxLength: number): string {
+  if (typeof value !== "string") throw new SiteSettingValidationError(`${field} must be a string`);
+  const normalized = value.trim();
+  if (normalized.length > maxLength) throw new SiteSettingValidationError(`${field} is too long`);
+  return normalized;
+}
+
+function normalizeFriendLinks(value: unknown): SiteSettingFriendLink[] {
+  let parsed = value;
+  if (typeof value === "string") {
+    try { parsed = JSON.parse(value); } catch { throw new SiteSettingValidationError("friendLinks must be valid JSON"); }
+  }
+  if (!Array.isArray(parsed) || parsed.length > 50) {
+    throw new SiteSettingValidationError("friendLinks must be an array of at most 50 links");
+  }
+  return parsed.map((entry, index) => {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+      throw new SiteSettingValidationError(`friendLinks[${index}] is invalid`);
+    }
+    const row = entry as Record<string, unknown>;
+    const name = textValue(row.name, `friendLinks[${index}].name`, 160);
+    const url = textValue(row.url, `friendLinks[${index}].url`, 2048);
+    if (!name) throw new SiteSettingValidationError(`friendLinks[${index}].name is required`);
+    let parsedUrl: URL;
+    try { parsedUrl = new URL(url); } catch { throw new SiteSettingValidationError(`friendLinks[${index}].url is invalid`); }
+    if (parsedUrl.protocol !== "https:") throw new SiteSettingValidationError(`friendLinks[${index}].url must use https`);
+    if (typeof row.nofollow !== "boolean") throw new SiteSettingValidationError(`friendLinks[${index}].nofollow must be boolean`);
+    return Object.freeze({ name, url: parsedUrl.href, nofollow: row.nofollow });
+  });
+}
+
+function normalizedPatch(input: UpdateSiteSettingInput): WritablePatch {
+  const patch: WritablePatch = {};
+  const textFields: ReadonlyArray<readonly [Exclude<WritableField, "friendLinks" | "ga4MeasurementId">, number]> = [
+    ["siteName", 160], ["siteDescription", 5000], ["homeMetaTitle", 500],
+    ["homeMetaDescription", 2000], ["defaultOgImage", 4096],
+    ["googleSearchConsoleVerification", 255], ["footerCopyrightText", 5000],
+    ["footerDisclaimerText", 5000], ["indexNowHost", 255], ["indexNowKey", 255],
+    ["indexNowKeyLocation", 255],
+  ];
+  for (const [field, maxLength] of textFields) {
     if (!Object.prototype.hasOwnProperty.call(input, field)) continue;
-    const value = input[field];
-    if (typeof value !== "string") {
-      throw new SiteSettingValidationError(`${field} must be a string`);
-    }
-    const normalized = value.trim();
-    const maxLength = field === "defaultOgImage" ? 4096 : 255;
-    if (normalized.length > maxLength) {
-      throw new SiteSettingValidationError(`${field} is too long`);
-    }
-    patch[field] = normalized;
+    (patch as Record<string, unknown>)[field] = textValue(input[field], field, maxLength);
+  }
+  if (Object.prototype.hasOwnProperty.call(input, "friendLinks")) {
+    patch.friendLinks = normalizeFriendLinks(input.friendLinks);
+  }
+  if (Object.prototype.hasOwnProperty.call(input, "ga4MeasurementId")) {
+    const raw = textValue(input.ga4MeasurementId, "ga4MeasurementId", 64);
+    const normalized = normalizeGa4MeasurementId(raw);
+    if (raw && !normalized) throw new SiteSettingValidationError("ga4MeasurementId is invalid");
+    patch.ga4MeasurementId = normalized;
   }
   if (Object.keys(patch).length === 0) {
     throw new SiteSettingValidationError("At least one SiteSetting field is required");
@@ -318,16 +401,26 @@ function normalizedPatch(input: UpdateSiteSettingInput): Partial<Record<Writable
 
 function validateMergedValues(
   before: SiteSettingSnapshot,
-  patch: Partial<Record<WritableField, string>>,
+  patch: WritablePatch,
   env: NodeJS.ProcessEnv,
-): { values: WritableValues; patch: Partial<Record<WritableField, string>> } {
-  const values: Record<WritableField, string> = {
+): { values: WritableValues; patch: WritablePatch } {
+  const values: WritableValues = {
+    siteName: patch.siteName ?? before.siteName.trim(),
+    siteDescription: patch.siteDescription ?? before.siteDescription.trim(),
+    homeMetaTitle: patch.homeMetaTitle ?? before.homeMetaTitle.trim(),
+    homeMetaDescription: patch.homeMetaDescription ?? before.homeMetaDescription.trim(),
     defaultOgImage: patch.defaultOgImage ?? before.defaultOgImage.trim(),
+    googleSearchConsoleVerification: patch.googleSearchConsoleVerification ?? before.googleSearchConsoleVerification.trim(),
+    footerCopyrightText: patch.footerCopyrightText ?? before.footerCopyrightText.trim(),
+    footerDisclaimerText: patch.footerDisclaimerText ?? before.footerDisclaimerText.trim(),
+    friendLinks: patch.friendLinks ?? normalizeFriendLinks(before.friendLinks),
     indexNowHost: patch.indexNowHost ?? before.indexNowHost.trim(),
     indexNowKey: patch.indexNowKey ?? before.indexNowKey.trim(),
     indexNowKeyLocation: patch.indexNowKeyLocation ?? before.indexNowKeyLocation.trim(),
+    ga4MeasurementId: patch.ga4MeasurementId !== undefined ? patch.ga4MeasurementId : before.ga4MeasurementId,
   };
 
+  if (!values.siteName) throw new SiteSettingValidationError("siteName must remain non-empty");
   if (!values.defaultOgImage) {
     throw new SiteSettingValidationError("defaultOgImage must remain non-empty");
   }
@@ -358,8 +451,8 @@ function validateMergedValues(
         "indexNowKeyLocation must point to this deployment's /indexnow-key.txt route",
       );
     }
-    values.indexNowHost = siteUrl.host;
-    values.indexNowKeyLocation = expectedLocation;
+    (values as { indexNowHost: string }).indexNowHost = siteUrl.host;
+    (values as { indexNowKeyLocation: string }).indexNowKeyLocation = expectedLocation;
     if (patch.indexNowHost !== undefined) patch.indexNowHost = values.indexNowHost;
     if (patch.indexNowKeyLocation !== undefined) {
       patch.indexNowKeyLocation = values.indexNowKeyLocation;
@@ -373,7 +466,7 @@ function requestFingerprint(input: {
   actorId: string;
   expectedUpdatedAt: Date;
   reason: string;
-  patch: Partial<Record<WritableField, string>>;
+  patch: WritablePatch;
 }): string {
   return createHash("sha256")
     .update(JSON.stringify({
@@ -389,10 +482,19 @@ function requestFingerprint(input: {
 
 function auditSnapshot(values: WritableValues, updatedAt: Date): Prisma.JsonObject {
   return {
+    siteName: values.siteName,
+    siteDescription: values.siteDescription,
+    homeMetaTitle: values.homeMetaTitle,
+    homeMetaDescription: values.homeMetaDescription,
     defaultOgImage: values.defaultOgImage,
+    googleSearchConsoleVerification: values.googleSearchConsoleVerification,
+    footerCopyrightText: values.footerCopyrightText,
+    footerDisclaimerText: values.footerDisclaimerText,
+    friendLinks: values.friendLinks as unknown as Prisma.JsonArray,
     indexNowHost: values.indexNowHost,
     indexNowKeyConfigured: values.indexNowKey.length > 0,
     indexNowKeyLocation: values.indexNowKeyLocation,
+    ga4MeasurementId: values.ga4MeasurementId,
     updatedAt: updatedAt.toISOString(),
   };
 }
@@ -523,20 +625,38 @@ export async function updateAdminSiteSetting(
             reason,
             beforeSnapshot: auditSnapshot(
               {
+                siteName: before.siteName,
+                siteDescription: before.siteDescription,
+                homeMetaTitle: before.homeMetaTitle,
+                homeMetaDescription: before.homeMetaDescription,
                 defaultOgImage: before.defaultOgImage,
+                googleSearchConsoleVerification: before.googleSearchConsoleVerification,
+                footerCopyrightText: before.footerCopyrightText,
+                footerDisclaimerText: before.footerDisclaimerText,
+                friendLinks: normalizeFriendLinks(before.friendLinks),
                 indexNowHost: before.indexNowHost,
                 indexNowKey: before.indexNowKey,
                 indexNowKeyLocation: before.indexNowKeyLocation,
+                ga4MeasurementId: before.ga4MeasurementId,
               },
               before.updatedAt,
             ),
             afterSnapshot: {
               ...auditSnapshot(
                 {
+                  siteName: after.siteName,
+                  siteDescription: after.siteDescription,
+                  homeMetaTitle: after.homeMetaTitle,
+                  homeMetaDescription: after.homeMetaDescription,
                   defaultOgImage: after.defaultOgImage,
+                  googleSearchConsoleVerification: after.googleSearchConsoleVerification,
+                  footerCopyrightText: after.footerCopyrightText,
+                  footerDisclaimerText: after.footerDisclaimerText,
+                  friendLinks: normalizeFriendLinks(after.friendLinks),
                   indexNowHost: after.indexNowHost,
                   indexNowKey: after.indexNowKey,
                   indexNowKeyLocation: after.indexNowKeyLocation,
+                  ga4MeasurementId: after.ga4MeasurementId,
                 },
                 after.updatedAt,
               ),

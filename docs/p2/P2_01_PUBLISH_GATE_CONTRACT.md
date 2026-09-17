@@ -95,7 +95,7 @@ P2-01 Owner 决策，**不包含**本节记录的八条决策或任何 supersess
 | 定时发布 | `scheduled` → `status=pending` + node-cron 每分钟翻转，翻转时**不复查**门禁（`src/instrumentation.ts:18-72`，已知缺口） | 冻结：进入 `published` 的每次转换（含到点翻转）都必须过同一个 gate | `CPS_PARITY_ADAPTED`（Owner 决策 6，不复制 CPS 缺口） |
 | PromoLink 存在性/可用态门禁 | 发布前检查 `Drama.promoUrl` 非空，来源无关（`src/actions/drama-publish-actions.ts:110-114`、`src/actions/article-actions.ts:563-567`、`src/lib/batch-actions-core.ts:188-197`） | `promo_link_missing` / `promo_link_not_ready` 两项 Hard Gate；后者覆盖必要的 URL 可用性校验（§0 决策 7） | `CPS_PARITY` |
 | `public_redirect_code`（公开跳转短码本身） | CPS `promoCode` 概念相近，但字段级不变量不同：CPS 没有"全局唯一、永不复用、创建后不可变"的显式约束（换绑流查 `promoCode` 处：`src/lib/article-drama-switch-service.ts:257-262`） | 小说侧原创约束：`prisma/schema.prisma:481` 定义 `publicRedirectCode` 为 `@unique` 且非可空（NOT NULL + UNIQUE）；唯一生成入口 `src/lib/redirect/public-redirect-code.ts`（`CLAUDE.md` §3.2.1、§5 修正 6：全局唯一、永不复用、不可变、唯一索引不排除软删）。仍是发布硬前置，但业务层因 DB 约束永远到达不了"码未分配"这个失败态，故不在 `PUBLISH_GATE_REASONS` 登记对应理由码 | `ORIGINAL_REQUIRED`（理由：该字段的具体不变量为小说侧原创，非 CPS 直接搬迁） |
-| Locale gate | blog 族白名单 `normalizeBlogArticleFamilyLocale`（`src/lib/supported-site-locales.ts:46-65`）+ 模板/剧集语种一致校验（`src/lib/template-locale-guard.ts:13-28`） | `locale_not_publishable` 对应 `isPublishableLocale(novel.locale)` 为 `false`；唯一真源是 `src/lib/locale/locale-canonical.ts:143-145`（`CLAUDE.md` §3.2.1 登记的唯一真源文件），fail-closed，实现是小说侧唯一真源，非 CPS 白名单的直接搬迁 | `CPS_PARITY`（概念对齐：都是发布前语种白名单硬门禁） |
+| Locale gate | blog 族白名单 `normalizeBlogArticleFamilyLocale`（`src/lib/supported-site-locales.ts:46-65`）+ 模板/剧集语种一致校验（`src/lib/template-locale-guard.ts:13-28`） | `locale_not_publishable` 对应 `Article.locale` 不在 `SITE_LOCALES`（15 项登记表）内（Owner 2026-09-08 移除可发布语种门禁，门禁改读文章自身 locale，见 `src/server/publish-gate/evaluator.ts` 头注释）；`PUBLISHABLE_LOCALES` 仍存在，但只服务前台/SEO/IndexNow 就绪度，与发布门禁无关| `CPS_PARITY`（概念对齐：都是发布前语种白名单硬门禁） |
 | 页面身份冲突 | `(locale, slug)` `@@unique`（`prisma/schema.prisma:577`）+ slug 预检 + `publicPageShortId` fail-closed 守卫（`src/lib/article-public-page-id.ts:94-128`）+ 换绑流 `duplicate_page` 硬拒（`src/lib/article-drama-switch-service.ts:333-350,404-422`） | `page_identity_conflict` | `CPS_PARITY` |
 | 权利态 | `Drama.rightsStatus` 枚举 `unknown/cleared/restricted/takedown`（`src/lib/constants.ts:32-37`；`takedownDrama` → 前台 410） | `rights_blocked`，对应小说侧 `takedown`/`withdrawn` 语义 | `CPS_PARITY` |
 | 发布检查结果（multi-reason DTO） | 无稳定机器码、直接抛中文串、first-failure-only、V2 catch 会外泄内部 exception message（`src/actions/article-actions.ts:1129-1136,1419-1426`，已知缺口） | 稳定 `snake_case` reason 码、`createPublishGateResult` 一次可携带多个理由、结果无自由文本字段（沿用 `src/contracts/errors.ts` 的纪律）；这是 DTO 归一 helper，不是 evaluator（见 §6） | `CPS_PARITY_ADAPTED`（不复制 CPS 的信息外泄缺口） |
@@ -114,7 +114,7 @@ P2-01 Owner 决策，**不包含**本节记录的八条决策或任何 supersess
 
 | 理由码 | 冻结条件 | 依据 |
 | --- | --- | --- |
-| `locale_not_publishable` | `isPublishableLocale(novel.locale)` 为 `false` | `src/lib/locale/locale-canonical.ts`；D-7 fail-closed |
+| `locale_not_publishable` | `Article.locale` 不是 `SITE_LOCALES` 成员；写入侧 `content-creation/service.ts:154` 已拦截，实践中不可达，防御性保留 | `src/lib/locale/locale-canonical.ts`；D-7 fail-closed |
 | `required_metadata_missing` | 最终待发布 `Article` 的 `title` / `slug` / `body` 缺失；可携带 `RequiredMetadataMissingDetail.missingFields`（P2-07 填充）。其中 `body` 是 Template Engine 或其他已授权内容生产路径生成的最终 `Article.body` 发布产物，不是 `Novel` metadata；P2-01 只冻结非空要求，不实现 P2-02 | 对应 `article` 表 `published` 行 CHECK 约束语义；字段域见 `PUBLISH_REQUIRED_METADATA_FIELDS` |
 | `preview_chapter_missing` | 无可信已物化、可公开的试读章节 | §4；章节真源边界 |
 | `preview_body_missing` | 已物化试读章节存在，但正文为空 | §4 |

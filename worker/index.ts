@@ -13,6 +13,13 @@ import { createIndexNowWorkerHandlers } from "./handlers/indexnow-delivery";
 import { createMoboreaderWorkerHandlers } from "./handlers/moboreader";
 import { createPromoLinkClaimWorkerHandlers } from "./handlers/promo-link-claim";
 import { createSitemapRefreshWorkerHandlers } from "./handlers/sitemap-refresh";
+import { createHomeCarouselWorkerHandlers } from "./handlers/home-carousel";
+import { createTaggingWorkerHandlers } from "./handlers/novel-tag-backfill";
+import { createCatalogBatchWorkerHandlers } from "./handlers/catalog-batch";
+import { createContentCreateWorkerHandlers } from "./handlers/content-create";
+import { createNovelMaterializeWorkerHandlers } from "./handlers/novel-materialize";
+import { createArticleGenerateWorkerHandlers } from "./handlers/article-generate";
+import { createArticleGenerateBatchWorkerHandlers } from "./handlers/article-generate-batch";
 import {
   createWorkerFailureWebhookReporterFromEnv,
   parseShutdownDrainTimeoutEnv,
@@ -66,6 +73,13 @@ export function createWorkerHandlers(prisma: PrismaClient) {
     ...createPromoLinkClaimWorkerHandlers(prisma),
     ...createIndexNowWorkerHandlers(prisma),
     ...createSitemapRefreshWorkerHandlers(prisma),
+    ...createHomeCarouselWorkerHandlers(prisma),
+    ...createTaggingWorkerHandlers(prisma),
+    ...createCatalogBatchWorkerHandlers(prisma),
+    ...createContentCreateWorkerHandlers(prisma),
+    ...createNovelMaterializeWorkerHandlers(prisma),
+    ...createArticleGenerateWorkerHandlers(prisma),
+    ...createArticleGenerateBatchWorkerHandlers(prisma),
   });
 }
 

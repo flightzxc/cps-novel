@@ -9,7 +9,7 @@
  */
 import { describe, expect, it } from "vitest";
 
-import { buildNovelTemplateValues, renderArticleDraft } from "@/lib/seo/template";
+import { TEMPLATE_SEO_SCHEMA_VERSION, buildNovelTemplateValues, renderArticleDraft } from "@/lib/seo/template";
 import { DEFAULT_ARTICLE_TEMPLATE, DEFAULT_ARTICLE_TEMPLATE_KEY } from "@/server/content-creation/default-article-template";
 
 const FULL_INPUT = {
@@ -48,7 +48,9 @@ describe("DEFAULT_ARTICLE_TEMPLATE", () => {
       metaTitle: "The Great Adventure Begins",
       metaDescription: "A sweeping tale of courage.",
     });
-    expect(rendered.seoSchemaVersion).toBe(1);
+    // P2-02B bumped this to 2 (metaKeywords/slug slots) — assert against the live
+    // constant rather than a hardcoded literal so this test doesn't rot on the next bump.
+    expect(rendered.seoSchemaVersion).toBe(TEMPLATE_SEO_SCHEMA_VERSION);
   });
 
   it("renders successfully with every optional field absent — required fields alone are enough", () => {

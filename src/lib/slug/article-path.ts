@@ -14,10 +14,20 @@
  * Route segment is `/novel/` (matching `src/app/dev-preview/novel/`), not
  * CPS's `/drama/`.
  *
- * 🔴 Sole URL-construction entry point for public Article pages — sitemap,
- * IndexNow, CTA links, admin preview links, and structured data must all
- * call these functions rather than concatenating paths inline (see
- * `src/lib/slug/README.md`).
+ * C-29 (`规划_文章管理能力补齐_博客类型可见性换小说_2026-09-08.md` §三/C-29)
+ * adds a second, parallel path family below: `buildBlogPath`/
+ * `buildBlogRoutePath`, route segment `/blog/`. Deliberately no short id
+ * suffix on the blog family — "注意博客路径不带短码" per the plan, matching
+ * CPS's own blog routing (the short id there is a `novel_article`-only
+ * concept; a blog Article's route primary key is its slug alone, and this
+ * codebase's `Article.slug` is already unique per `(locale)` among
+ * non-deleted rows regardless of type — see
+ * `docs/governance/database-governance.md` §5 item 5).
+ *
+ * 🔴 Sole URL-construction entry point for public Article pages (both
+ * families) — sitemap, IndexNow, CTA links, admin preview links, and
+ * structured data must all call these functions rather than concatenating
+ * paths inline (see `src/lib/slug/README.md`).
  */
 import type { SiteLocale } from "@/lib/locale/locale-canonical";
 
@@ -32,7 +42,18 @@ export type ArticleRoutePathInput = {
   readonly shortId: string;
 };
 
-function localePrefix(locale: SiteLocale): string {
+/**
+ * As-needed locale URL prefix: empty for the default locale (`en`), `/{locale}`
+ * for every other registered locale.
+ *
+ * 🔴 Sole prefix-building implementation (D-8). WO-2
+ * (`施工工单_WO1-3_多语种公开站地基_2026-09-08.md` §8.1) exports it for reuse
+ * by every other in-site link that must react to the currently-served
+ * locale — `chromeFromSiteSetting`'s nav/brand hrefs, the category taxonomy
+ * projection, the `_pages/*` basePath/homeHref props, and the locale
+ * switcher — rather than writing a second copy of this rule.
+ */
+export function localePrefix(locale: SiteLocale): string {
   return locale === "en" ? "" : `/${locale}`;
 }
 
@@ -75,4 +96,74 @@ export function parseArticleSlugParam(param: string): ParsedArticleSlugParam | n
     slugPart: param.slice(0, match.index),
     shortId: match[1]!,
   };
+}
+
+/**
+ * Safe decode for a raw `[slugParam]`/`[slug]` dynamic-route segment, called
+ * once at each page-body entry point right after destructuring `params` —
+ * CPS parity: `normalizeRouteSlug`,
+ * `git show 3a76877:src/app/[locale]/(site)/drama/[slug]/page.tsx:84-89`
+ * (`try { return decodeURIComponent(slug); } catch { return slug; }`,
+ * called independently from both `generateMetadata` and the page body).
+ * `parseArticleSlugParam`/CPS's `parseDramaArticleSlugParam` both
+ * deliberately do NOT decode internally — `src/server/articles/service.ts`'s
+ * `extractSearchShortId` already decodes an admin-pasted URL *before*
+ * calling `parseArticleSlugParam`, so decoding a second time inside it would
+ * double-decode that caller. This is the sibling boundary for the public
+ * route's own raw `params.slugParam`.
+ *
+ * Not a parity gap versus CPS's own `normalizeRouteSlug`, and not a blanket
+ * "Next never decodes a dynamic route segment" claim either — confirmed
+ * empirically against the pinned `next@16.1.6` (`output: "standalone"`)
+ * build, not merely inferred from the framework's `getStaticPaths`-era
+ * decode path
+ * (`node_modules/next/dist/server/lib/router-utils/decode-path-params.js`'s
+ * own header comment: "We only encode path delimiters for path segments
+ * from getStaticPaths... TODO: investigate adding this handling for
+ * non-SSG pages so non-ascii names also work there"). For a `force-dynamic`
+ * (non-SSG) App Router page, an ASCII percent-escape in the segment DOES get
+ * normalized/decoded by Next itself before `params` is handed to the page;
+ * only a non-ASCII percent-escape survives undecoded. This function is
+ * therefore an idempotent no-op on an already-decoded, pure-ASCII slug and
+ * decodes exactly once on a non-ASCII one — safe to call unconditionally at
+ * every public Article/chapter page entry point regardless of which case
+ * the raw segment turns out to be.
+ */
+export function decodeSlugParam(raw: string): string {
+  try {
+    return decodeURIComponent(raw);
+  } catch {
+    return raw;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// C-29 blog family. No short id, no `-p{shortId}` suffix to split off — the
+// `[slug]` dynamic segment IS the Article's `slug` column directly, so there
+// is no `parseArticleSlugParam`-equivalent to call. That does NOT exempt
+// this family from `decodeSlugParam`, though: per that function's own doc
+// comment, Next.js does not decode a non-ASCII-percent-escaped
+// `force-dynamic` route segment on its own, and this holds regardless of
+// whether the segment still needs splitting afterward — `blog-detail.tsx`
+// calls `decodeSlugParam` on the raw `[slug]` right after destructuring
+// `params`, same as the novel/chapter families.
+// ---------------------------------------------------------------------------
+
+export type BlogRoutePathInput = {
+  readonly slug: string;
+};
+
+export type BlogPathInput = {
+  readonly locale: SiteLocale;
+  readonly slug: string;
+};
+
+/** Locale-independent path segment, e.g. `/blog/my-post-title`. */
+export function buildBlogRoutePath(input: BlogRoutePathInput): string {
+  return `/blog/${encodeURIComponent(input.slug)}`;
+}
+
+/** Full site-relative path including the locale prefix (empty for `en`). */
+export function buildBlogPath(input: BlogPathInput): string {
+  return `${localePrefix(input.locale)}${buildBlogRoutePath(input)}`;
 }

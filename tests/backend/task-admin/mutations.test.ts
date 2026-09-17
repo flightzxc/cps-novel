@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import {
   MANUAL_REVIEW_AUDIT_ACTION,
+  CATALOG_FINALIZE_RETRY_AUDIT_ACTION,
+  retryCatalogFinalizeTask,
   retryFailedTask,
   resolveManualReview,
   TASK_RETRY_AUDIT_ACTION,
@@ -21,7 +23,7 @@ import {
 const REASON = "operator checked the failed task evidence";
 
 describe("X9 failed-item retry", () => {
-  it.each(["catalog_scan", "channel_sync", "generic"] as const)(
+  it.each(["channel_sync", "generic"] as const)(
     "requeues every failed %s item, preserves fencing counters, recounts parent, and audits in the transaction",
     async (family) => {
       const stores = newStores();
@@ -35,7 +37,7 @@ describe("X9 failed-item retry", () => {
         .map((row) => ({ id: row.id, attemptCount: row.attemptCount, leaseEpoch: row.leaseEpoch }));
 
       const result = await retryFailedTask(
-        { ...ticket, family, taskId: TASK_ID, reason: REASON },
+        { ...ticket, family, taskId: TASK_ID },
         { db: fake.asPrismaClient(), identities: stores, sessions: stores, now: NOW },
       );
 
@@ -78,7 +80,7 @@ describe("X9 failed-item retry", () => {
         actorId: admin.identity.id,
         entityId: TASK_ID,
         taskType: family,
-        reason: REASON,
+        reason: null,
       });
     },
   );
@@ -96,7 +98,7 @@ describe("X9 failed-item retry", () => {
       fake.unresolvedStatus = unresolvedStatus;
 
       await expect(retryFailedTask(
-        { ...ticket, family: "channel_sync", taskId: TASK_ID, reason: REASON },
+        { ...ticket, family: "channel_sync", taskId: TASK_ID },
         { db: fake.asPrismaClient(), identities: stores, sessions: stores, now: NOW },
       )).rejects.toMatchObject({ code: "task_admin_unresolved_intent", status: 409 });
       expect(fake.itemUpdateCalls.size).toBe(0);
@@ -116,13 +118,13 @@ describe("X9 failed-item retry", () => {
     fake.genericUnlinkedBlocked = true;
 
     await expect(retryFailedTask(
-      { ...ticket, family: "generic", taskId: TASK_ID, reason: REASON },
+      { ...ticket, family: "generic", taskId: TASK_ID },
       { db: fake.asPrismaClient(), identities: stores, sessions: stores, now: NOW },
     )).rejects.toMatchObject({ code: "task_admin_unresolved_intent", status: 409 });
     expect(fake.itemUpdateCalls.size).toBe(0);
   });
 
-  it("safely replays the same committed request id and rejects a changed replay binding", async () => {
+  it("safely replays the same committed request id when no reason was supplied", async () => {
     const stores = newStores();
     const admin = seedTaskAdmin(stores);
     const ticket = await issueTaskAuthorization(stores, {
@@ -131,14 +133,31 @@ describe("X9 failed-item retry", () => {
     });
     const fake = new TaskAdminFakeDb();
     const dependencies = { db: fake.asPrismaClient(), identities: stores, sessions: stores, now: NOW };
-    const input = { ...ticket, family: "catalog_scan" as const, taskId: TASK_ID, reason: REASON };
+    const input = { ...ticket, family: "generic" as const, taskId: TASK_ID };
 
     const first = await retryFailedTask(input, dependencies);
     const replay = await retryFailedTask(input, dependencies);
     expect(first.wrote).toBe(true);
     expect(replay).toMatchObject({ wrote: false, auditId: first.auditId, retriedItemCount: 2 });
-    expect(fake.itemUpdateCalls.get("catalog_scan")).toBe(1);
+    expect(fake.itemUpdateCalls.get("generic")).toBe(1);
     expect(fake.audits).toHaveLength(1);
+    expect(fake.audits[0]).toMatchObject({ reason: null });
+  });
+
+  it("still accepts an explicit reason on first write and rejects a replay whose reason binding changed", async () => {
+    const stores = newStores();
+    const admin = seedTaskAdmin(stores);
+    const ticket = await issueTaskAuthorization(stores, {
+      token: admin.token,
+      pathname: "/api/admin/tasks/retry-failed",
+    });
+    const fake = new TaskAdminFakeDb();
+    const dependencies = { db: fake.asPrismaClient(), identities: stores, sessions: stores, now: NOW };
+    const input = { ...ticket, family: "generic" as const, taskId: TASK_ID, reason: REASON };
+
+    const first = await retryFailedTask(input, dependencies);
+    expect(first.wrote).toBe(true);
+    expect(fake.audits[0]).toMatchObject({ reason: REASON });
 
     await expect(retryFailedTask({ ...input, reason: "different binding" }, dependencies))
       .rejects.toMatchObject({ code: "task_admin_idempotency_conflict", status: 409 });
@@ -154,10 +173,106 @@ describe("X9 failed-item retry", () => {
     const fake = new TaskAdminFakeDb();
     fake.parents.get("channel_sync")!.status = "processing";
     await expect(retryFailedTask(
-      { ...ticket, family: "channel_sync", taskId: TASK_ID, reason: REASON },
+      { ...ticket, family: "channel_sync", taskId: TASK_ID },
       { db: fake.asPrismaClient(), identities: stores, sessions: stores, now: NOW },
     )).rejects.toBeInstanceOf(TaskAdminError);
     expect(fake.itemUpdateCalls.size).toBe(0);
+  });
+
+  it("catalog retry preserves EOF evidence and rearms finalize as a new generation", async () => {
+    const stores = newStores();
+    const admin = seedTaskAdmin(stores);
+    const ticket = await issueTaskAuthorization(stores, {
+      token: admin.token,
+      pathname: "/api/admin/tasks/retry-failed",
+    });
+    const fake = new TaskAdminFakeDb();
+    const parent = fake.parents.get("generic")!;
+    parent.taskType = "catalog_scan";
+    parent.result = {
+      terminalPage: 974,
+      catalogObservedTotal: 97_320,
+      checkpoint: { lastCompletedPage: 973 },
+      finalization: { status: "completed", generation: 1 },
+      terminalState: "partial_failed",
+      previewEnqueue: { status: "enqueued" },
+    };
+    const [failedPage, successPage, finalize] = fake.items.get("generic")!;
+    Object.assign(failedPage, { targetType: "catalog_page", targetId: "974", status: "failed" });
+    Object.assign(successPage, { targetType: "catalog_page", targetId: "973", status: "success" });
+    Object.assign(finalize, {
+      targetType: "catalog_finalize", targetId: "v1", status: "success", attemptCount: 1,
+      payload: { kind: "catalog_finalize", actorId: "worker", requestId: "old", generation: 1 },
+    });
+    fake.items.set("generic", [failedPage, successPage, finalize]);
+
+    const result = await retryFailedTask(
+      { ...ticket, family: "generic", taskId: TASK_ID },
+      { db: fake.asPrismaClient(), identities: stores, sessions: stores, now: NOW },
+    );
+
+    expect(result).toMatchObject({ retriedItemCount: 1, status: "pending" });
+    expect(failedPage.status).toBe("pending");
+    expect(finalize).toMatchObject({ status: "pending", attemptCount: 0, payload: { generation: 2 } });
+    expect(parent.result).toMatchObject({
+      terminalPage: 974,
+      catalogObservedTotal: 97_320,
+      checkpoint: { lastCompletedPage: 973 },
+      finalization: { status: "pending", generation: 2 },
+      terminalState: "processing",
+      previewEnqueue: null,
+    });
+  });
+});
+
+describe("catalog finalize formal recovery", () => {
+  it("starts a new audited generation, resets only finalize attempts, and replays idempotently", async () => {
+    const stores = newStores();
+    const admin = seedTaskAdmin(stores);
+    const ticket = await issueTaskAuthorization(stores, {
+      token: admin.token,
+      pathname: "/api/admin/tasks/retry-catalog-finalize",
+    });
+    const fake = new TaskAdminFakeDb();
+    const parent = fake.parents.get("generic")!;
+    parent.taskType = "catalog_scan";
+    parent.failedCount = 0;
+    parent.result = {
+      terminalPage: 974,
+      catalogObservedTotal: 97_320,
+      finalization: { status: "failed", generation: 1 },
+      terminalState: "partial_failed",
+    };
+    const finalize = fake.items.get("generic")![0];
+    Object.assign(finalize, {
+      targetType: "catalog_finalize",
+      targetId: "v1",
+      status: "failed",
+      attemptCount: 3,
+      leaseEpoch: 9n,
+      payload: { kind: "catalog_finalize", actorId: "worker", requestId: "original", generation: 1 },
+    });
+    fake.items.set("generic", [finalize]);
+    const dependencies = { db: fake.asPrismaClient(), identities: stores, sessions: stores, now: NOW };
+
+    const first = await retryCatalogFinalizeTask({ ...ticket, taskId: TASK_ID }, dependencies);
+    const replay = await retryCatalogFinalizeTask({ ...ticket, taskId: TASK_ID }, dependencies);
+
+    expect(first).toMatchObject({ status: "pending", generation: 2, wrote: true });
+    expect(replay).toMatchObject({ status: "pending", generation: 2, wrote: false, auditId: first.auditId });
+    expect(finalize).toMatchObject({ status: "pending", attemptCount: 0, leaseEpoch: 9n, payload: { generation: 2 } });
+    expect(parent).toMatchObject({
+      status: "pending",
+      failedCount: 0,
+      result: {
+        terminalPage: 974,
+        catalogObservedTotal: 97_320,
+        finalization: { status: "pending", generation: 2 },
+        terminalState: "processing",
+      },
+    });
+    expect(fake.audits).toHaveLength(1);
+    expect(fake.audits[0]).toMatchObject({ action: CATALOG_FINALIZE_RETRY_AUDIT_ACTION });
   });
 });
 

@@ -45,10 +45,10 @@ import {
 import { isPromoLinkClaimEnabled, isPromoLinkClaimWriteAllowed } from "../../src/lib/flags";
 import {
   buildPromoLinkIdempotencyKey,
+  confirmSideEffectIntentByReadbackInTransaction,
   createHandlerRegistry,
   prepareSideEffectIntent,
   transitionSideEffectIntent,
-  transitionSideEffectIntentInTransaction,
   type TaskHandler,
 } from "../../src/lib/tasks";
 export { buildPromoLinkIdempotencyKey } from "../../src/lib/tasks/promo-link-claim";
@@ -59,8 +59,8 @@ import {
   type PromoLinkClaimReadbackPolicy,
 } from "../../src/lib/tasks/promo-link-claim-limits";
 import { createPublicRedirectCode } from "../../src/lib/redirect";
-import { validateCredentialJwtLocally } from "../../src/lib/credentials/jwt";
-import { decryptCredentialSecretForWorker } from "../credentials/crypto";
+import { resolveClaimCredentialReadiness } from "../credentials/claim-readiness";
+import { maybeHaltTaskOnGlobalFailure } from "./promo-link-claim-system-hold";
 import { bindPromoLinkToArticles } from "./promo-link-binding";
 
 // ---------------------------------------------------------------------
@@ -472,14 +472,9 @@ async function writePromoLinkClaimed(
     },
   });
   if (options.intentEffectKey) {
-    await transitionSideEffectIntentInTransaction(tx, {
+    await confirmSideEffectIntentByReadbackInTransaction(tx, {
       effectKey: options.intentEffectKey,
-      status: "confirmed",
-      responseShape: {
-        source: "readback",
-        hasWebUrl: Boolean(result.webUrl),
-        hasAppUrl: Boolean(result.appUrl),
-      },
+      evidence: { hasWebUrl: Boolean(result.webUrl), hasAppUrl: Boolean(result.appUrl) },
     });
   }
   return row.id;
@@ -560,28 +555,22 @@ function readbackFailureEvidence(
   return evidence;
 }
 
+/**
+ * Thin adapter onto the shared `resolveClaimCredentialReadiness`
+ * (`src/lib/credentials/claim-readiness.ts`) — the actual decrypt/validate
+ * policy lives there now, shared with the pre-flight admission gate in
+ * `src/app/(admin)/catalog-sync/_actions.ts`. This wrapper only translates
+ * that shared result into this file's existing `{ secret } | FailedOutcome`
+ * call shape so `claimViaAdapter` below needed no changes.
+ */
 async function resolveClaimCredential(
   db: PrismaClient,
   accountId: string,
   now: Date,
 ): Promise<{ secret: string } | FailedOutcome> {
-  const credentials = await db.channelAccountCredential.findMany({
-    where: { channelAccountId: accountId, status: "active" },
-    select: { id: true, encryptedSecret: true, keyVersion: true, expiresAt: true },
-  });
-  const nowMs = now.valueOf();
-  const nonExpired = credentials.filter((row) => row.expiresAt === null || row.expiresAt.valueOf() > nowMs);
-  if (nonExpired.length === 0) {
-    return failed(credentials.length === 0 ? "credential_missing" : "credential_expired", "No usable active credential for this account");
-  }
-  if (nonExpired.length > 1) return failed("credential_ambiguous", "Multiple active credentials exist for this account");
-  const credential = nonExpired[0];
-  const secret = decryptCredentialSecretForWorker(credential.encryptedSecret, accountId, credential.id, credential.keyVersion);
-  const local = validateCredentialJwtLocally(secret, now);
-  if (local.status !== "active") {
-    return failed(local.status === "expired" ? "credential_expired" : "credential_invalid", "Credential failed local validation");
-  }
-  return { secret };
+  const readiness = await resolveClaimCredentialReadiness(db, accountId, now);
+  if (readiness.status === "not_ready") return failed(readiness.code, readiness.message);
+  return { secret: readiness.secret };
 }
 
 async function claimViaAdapter(
@@ -598,7 +587,23 @@ async function claimViaAdapter(
 ): Promise<{ status: "success" | "failed"; result?: unknown; error?: unknown; protectedWrite: (tx: Prisma.TransactionClient) => Promise<void> }> {
   const credential = await resolveClaimCredential(db, scope.account.id, now);
   if ("status" in credential) {
-    return { status: "failed", error: credential.error, protectedWrite: async () => undefined };
+    // The 2026-09-14 incident's exact failure shape: an account-level
+    // credential problem that is true for literally every item in this
+    // task. The pre-flight gate (`enqueuePromoLinkClaimAction`) should have
+    // caught this before the batch was ever enqueued, but this is the
+    // backstop for a credential that goes bad *after* admission (superseded/
+    // revoked mid-batch, or a scope reused an already-broken one) — see
+    // `promo-link-claim-system-hold.ts`'s module header. Halts the whole
+    // task immediately, on this first occurrence — no counting.
+    return {
+      status: "failed",
+      error: credential.error,
+      protectedWrite: (tx) => maybeHaltTaskOnGlobalFailure(tx, {
+        taskId: lease.taskId,
+        itemId: lease.itemId,
+        failureCode: credential.error.code,
+      }).then(() => undefined),
+    };
   }
 
   if (!scope.source.title.trim()) {

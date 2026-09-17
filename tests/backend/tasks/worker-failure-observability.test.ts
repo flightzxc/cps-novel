@@ -122,7 +122,7 @@ describe("X10 worker failure emission boundaries", () => {
     const stderr = vi.spyOn(console, "error").mockImplementation(() => undefined);
     const handlers = createHandlerRegistry({
       catalog_scan: {
-        family: "catalog_scan",
+        family: "generic",
         handler: async () => ({
           status: "failed",
           error: {
@@ -152,7 +152,7 @@ describe("X10 worker failure emission boundaries", () => {
 
     expect(onTaskFailure).toHaveBeenCalledTimes(1);
     expect(onTaskFailure).toHaveBeenCalledWith({
-      family: "catalog_scan",
+      family: "generic",
       taskType: "catalog_scan",
       taskId: "00000000-0000-4000-8000-000000000002",
       itemId: "00000000-0000-4000-8000-000000000001",

@@ -1,0 +1,53 @@
+-- Fixes a schema-contract drift on `home_carousel_serving.source` that made
+-- every automatic (non-manual) carousel finalize fail in production.
+--
+-- Root cause: `20260803090000_p1_initial_schema` (line 1247) installed
+-- `home_carousel_serving_source_check`, restricting `source` to only the two
+-- values manual and automatic, but `src/server/home-carousel/service.ts`'s
+-- `computeHomeCarouselInTx` has always written the finer-grained values
+-- `"manual" | "new_novel" | "recency"` into this same column (merge branch,
+-- mirroring `home_carousel_auto_candidate.source`'s own values one line
+-- above it) -- "automatic" is never actually produced by any code path. Every
+-- compute whose merged result includes at least one auto (new_novel/recency)
+-- row therefore fails its `homeCarouselServing.createMany()` with PostgreSQL
+-- 23514, surfaced to the app as an unmapped `ConnectorError`
+-- (sqlState/prismaCode/constraint all `null` in the Worker's own error
+-- capture -- `computeHomeCarouselInTx` builds one multi-row INSERT, so a
+-- single invalid row fails the entire batch, including any manual rows in
+-- the same call). `docs/governance/database-governance.md` §12's
+-- 2026-09-11 L10N P5.2 changelog row already flagged this exact
+-- `ConnectorError` as a pre-existing Worker-side defect, unrelated to that
+-- row's own `scheduler_app` grants fix; this migration is that fix.
+--
+-- CPS parity check (`3a76877:src/lib/home-carousel-merge.ts:134,154` +
+-- `3a76877:src/lib/home-carousel-compute.ts:389,408,480`): CPS's own
+-- `mergeCarouselServingInTx` writes `source: "manual"` for manual slots and
+-- `source: candidate.source` (`"new_drama" | "recency" | "revenue"`) for
+-- auto-filled slots directly into `home_carousel_serving.source` -- CPS's
+-- `home_carousel_serving` table (`3a76877:prisma/migrations/
+-- 20260705090000_v770_home_carousel_pr1b/migration.sql`) has no CHECK
+-- constraint on that column at all (SQLite, `"source" TEXT NOT NULL`,
+-- unconstrained). So CPS's own serving table already carries the same
+-- fine-grained values this repo's application code writes; there is no CPS
+-- precedent for a `manual`/`automatic` two-bucket restriction on this
+-- column. The fix therefore widens this repo's CHECK to match what the
+-- (already-correct, CPS-aligned) application and admin-UI code has written
+-- and displayed all along (`SOURCE_LABEL` in
+-- `src/app/(admin)/home-carousel/_components/carousel-manager.tsx` has
+-- never had an "automatic" entry), rather than narrowing the application
+-- code down to the two buckets the stale CHECK invented. Novel V1 has no
+-- revenue-scored candidate branch (`revenueEnabled` is hard-wired `false`,
+-- see `service.ts`'s `HomeCarouselConfig` doc comment), so CPS's `revenue`
+-- value is intentionally not included here -- `CAROUSEL_SOURCES`
+-- (`src/domain/database-statuses.ts`) is the two arrays' single source of
+-- truth and this migration's allowed-value list must equal it exactly
+-- (enforced by `tests/backend/database/carousel-serving-source-check-static.test.ts`).
+--
+-- Read-only repro against a disposable X8 uat database confirmed the bug
+-- before this fix (`worker_app` role, single `BEGIN; ...; ROLLBACK;`
+-- transaction, zero persisted rows): `source='automatic'` succeeded,
+-- `source='recency'` raised `ERROR: new row for relation
+-- "home_carousel_serving" violates check constraint
+-- "home_carousel_serving_source_check"` (23514).
+ALTER TABLE "home_carousel_serving" DROP CONSTRAINT "home_carousel_serving_source_check";
+ALTER TABLE "home_carousel_serving" ADD CONSTRAINT "home_carousel_serving_source_check" CHECK ("source" IN ('manual', 'new_novel', 'recency'));

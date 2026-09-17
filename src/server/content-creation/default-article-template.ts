@@ -54,14 +54,21 @@
  * anything else, and no other registered field placed inside any attribute.
  */
 import type { ArticleTemplateSource } from "@/lib/seo/template";
+import { DEFAULT_ARTICLE_TEMPLATE_KEY } from "@/lib/article-templates/default-template-key";
 
 /**
  * Not an `ArticleTemplate.templateKey` — no such row exists. Carried only as
  * `RenderArticleContext.templateKey` so a `TemplateRenderError` thrown while
  * rendering this constant is distinguishable in logs/tests from a future
  * DB-sourced template's failures.
+ *
+ * The literal itself now lives in `@/lib/article-templates/default-template-key`
+ * (the template admin form, a `"use client"` component, needs this string to
+ * detect "the operator is editing the built-in seed row" and cannot import
+ * anything under `@/server/` — see that file's header comment). Re-exported
+ * here unchanged for every existing caller.
  */
-export const DEFAULT_ARTICLE_TEMPLATE_KEY = "system-default-v1";
+export { DEFAULT_ARTICLE_TEMPLATE_KEY };
 
 export const DEFAULT_ARTICLE_TEMPLATE: ArticleTemplateSource = Object.freeze({
   title: "{novel_title}",

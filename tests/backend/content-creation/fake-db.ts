@@ -21,6 +21,8 @@ export type FakeSourceItem = {
   totalChapterCount: number;
   paidFromChapter: number | null;
   splitRatio: Prisma.Decimal | null;
+  /** L10N P2: `Novel.locale`/`Article.locale` are now derived from this field — see `service.ts`'s `deriveLocale`. Defaults to `"en"` in `seedSourceItem` below so every pre-P2 test (none of which set this) keeps deriving the same `"en"` locale it used to pass in explicitly. */
+  sourceLocale: string | null;
   deletedAt: Date | null;
 };
 
@@ -47,7 +49,40 @@ export type FakeArticle = {
   title: string;
   summary: string | null;
   body: string;
+  templateId: string | null;
+  promoLinkId: string | null;
+  contentMode?: string;
+  articleType?: string;
   deletedAt: Date | null;
+};
+
+export type FakePromoLink = {
+  id: string;
+  novelId: string;
+  status: string;
+  webUrl: string | null;
+  appUrl: string | null;
+  fetchedAt: Date | null;
+  publicRedirectCode: string;
+  deletedAt: Date | null;
+};
+
+export type FakeArticleTemplate = {
+  id: string;
+  templateKey: string;
+  // L10N P3: `ArticleTemplate.locale` is database-level `NOT NULL` now
+  // (`prisma/schema.prisma`'s `ArticleTemplate.locale String @default("en")`)
+  // — no seeded row can legitimately be a null-locale "all locales"
+  // template any more, so this fake no longer types the column as nullable.
+  locale: string;
+  version: number;
+  schemaVersion: number;
+  status: string;
+  bodyTemplate: string;
+  seoTemplate: unknown;
+  deletedAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
 };
 
 export type FakeAudit = {
@@ -83,6 +118,9 @@ export class FakeContentCreationDb {
   readonly sourceItems = new Map<string, FakeSourceItem>();
   readonly novels = new Map<string, FakeNovel>();
   readonly articles = new Map<string, FakeArticle>();
+  readonly articleTemplates = new Map<string, FakeArticleTemplate>();
+  readonly promoLinks = new Map<string, FakePromoLink>();
+  readonly previewChapterCounts = new Map<string, number>();
   readonly audits: FakeAudit[] = [];
   readonly calls: string[] = [];
   lastSourceItemFindFirstArgs: { where: { id: string }; select?: Record<string, boolean> } | null = null;
@@ -91,6 +129,11 @@ export class FakeContentCreationDb {
   novelBusinessIdFailuresRemaining = 0;
   /** How many consecutive `article.create` calls should throw a `public_page_short_id` P2002 before succeeding. */
   articleShortIdFailuresRemaining = 0;
+  /** How many consecutive `article.create` calls should throw `article_novel_locale_key` (T16). */
+  articleNovelLocaleFailuresRemaining = 0;
+  /** When a locale unique conflict is simulated, insert a winner that survives rollback. */
+  seedWinnerOnNovelLocaleConflict = false;
+  seededConflictWinnerId: string | null = null;
 
   /** Raw `data` object from the most recent successful `article.create` call — lets a test assert on exactly which keys the service writes (e.g. that `status`/`promoLinkId` are never present at all), not just on the row this fake happens to construct from a subset of them. */
   lastArticleCreateArgs: Record<string, unknown> | null = null;
@@ -121,6 +164,9 @@ export class FakeContentCreationDb {
       totalChapterCount: item.totalChapterCount ?? 12,
       paidFromChapter: item.paidFromChapter ?? null,
       splitRatio: item.splitRatio ?? null,
+      // `undefined` (not passed) defaults to "en"; explicitly passing `null`
+      // seeds a genuinely unresolved source item (`missing_locale` tests).
+      sourceLocale: item.sourceLocale === undefined ? "en" : item.sourceLocale,
       deletedAt: item.deletedAt ?? null,
     };
     this.sourceItems.set(full.id, full);
@@ -155,9 +201,47 @@ export class FakeContentCreationDb {
       title: article.title ?? "A Sample Title",
       summary: article.summary ?? "A sample description.",
       body: article.body ?? "",
+      templateId: article.templateId ?? null,
+      promoLinkId: article.promoLinkId ?? null,
+      contentMode: article.contentMode,
+      articleType: article.articleType,
       deletedAt: article.deletedAt ?? null,
     };
     this.articles.set(full.id, full);
+    return full;
+  }
+
+  seedPromoLink(promo: Partial<FakePromoLink> & { novelId: string }): FakePromoLink {
+    const full: FakePromoLink = {
+      id: promo.id ?? nextUuid(),
+      novelId: promo.novelId,
+      status: promo.status ?? "fetched",
+      webUrl: promo.webUrl === undefined ? "https://example.com/read" : promo.webUrl,
+      appUrl: promo.appUrl ?? null,
+      fetchedAt: promo.fetchedAt === undefined ? new Date("2026-09-01T00:00:00.000Z") : promo.fetchedAt,
+      publicRedirectCode: promo.publicRedirectCode ?? "goabc123",
+      deletedAt: promo.deletedAt ?? null,
+    };
+    this.promoLinks.set(full.id, full);
+    return full;
+  }
+
+  seedArticleTemplate(template: Partial<FakeArticleTemplate> = {}): FakeArticleTemplate {
+    const now = new Date();
+    const full: FakeArticleTemplate = {
+      id: template.id ?? nextUuid(),
+      templateKey: template.templateKey ?? "system-default-v1",
+      locale: template.locale === undefined ? "en" : template.locale,
+      version: template.version ?? 1,
+      schemaVersion: template.schemaVersion ?? 1,
+      status: template.status ?? "active",
+      bodyTemplate: template.bodyTemplate ?? "<h1>{novel_title}</h1><p>{novel_description}</p>",
+      seoTemplate: template.seoTemplate ?? { title: "{novel_title}", metaDescription: "{novel_description}" },
+      deletedAt: template.deletedAt ?? null,
+      createdAt: template.createdAt ?? now,
+      updatedAt: template.updatedAt ?? now,
+    };
+    this.articleTemplates.set(full.id, full);
     return full;
   }
 
@@ -211,16 +295,17 @@ export class FakeContentCreationDb {
     const { where } = args;
     if (where.slug !== undefined) {
       for (const article of this.articles.values()) {
-        if (article.deletedAt !== null) continue;
+        if (where.deletedAt === null && article.deletedAt !== null) continue;
         if (article.locale === where.locale && article.slug === where.slug) {
-          return args.select ? { id: article.id } : { ...article };
+          return args.select ? { id: article.id } : { ...article, template: article.templateId ? { templateKey: this.articleTemplates.get(article.templateId)?.templateKey ?? "" } : null };
         }
       }
       return null;
     }
     for (const article of this.articles.values()) {
       if (article.novelId === where.novelId && article.locale === where.locale) {
-        return { ...article };
+        if (where.deletedAt === null && article.deletedAt !== null) continue;
+        return { ...article, template: article.templateId ? { templateKey: this.articleTemplates.get(article.templateId)?.templateKey ?? "" } : null };
       }
     }
     return null;
@@ -264,9 +349,26 @@ export class FakeContentCreationDb {
       this.articleShortIdFailuresRemaining -= 1;
       throw uniqueViolation("article_public_page_short_id_key");
     }
+    if (this.articleNovelLocaleFailuresRemaining > 0) {
+      this.articleNovelLocaleFailuresRemaining -= 1;
+      if (this.seedWinnerOnNovelLocaleConflict) {
+        const winner = this.seedArticle({
+          novelId: String(args.data.novelId),
+          locale: String(args.data.locale),
+          title: "concurrent-winner",
+          body: "winner body",
+          slug: "concurrent-winner",
+        });
+        this.seededConflictWinnerId = winner.id;
+      }
+      throw uniqueViolation("article_novel_locale_key");
+    }
     const publicPageShortId = String(args.data.publicPageShortId);
     for (const existing of this.articles.values()) {
       if (existing.publicPageShortId === publicPageShortId) throw uniqueViolation("article_public_page_short_id_key");
+      if (existing.novelId === String(args.data.novelId) && existing.locale === String(args.data.locale)) {
+        throw uniqueViolation("article_novel_locale_key");
+      }
     }
     const article: FakeArticle = {
       id: nextUuid(),
@@ -277,6 +379,10 @@ export class FakeContentCreationDb {
       title: String(args.data.title),
       summary: (args.data.summary as string | null) ?? null,
       body: String(args.data.body ?? ""),
+      templateId: (args.data.templateId as string | null) ?? null,
+      promoLinkId: (args.data.promoLinkId as string | null) ?? null,
+      contentMode: args.data.contentMode as string | undefined,
+      articleType: args.data.articleType as string | undefined,
       deletedAt: null,
     };
     this.articles.set(article.id, article);
@@ -284,6 +390,77 @@ export class FakeContentCreationDb {
       this.articles.delete(article.id);
     });
     return { ...article };
+  };
+
+  private articleTemplateCount = async () => {
+    this.calls.push("articleTemplate.count");
+    return Array.from(this.articleTemplates.values()).filter((row) => row.deletedAt === null).length;
+  };
+
+  private articleTemplateCreate = async (args: { data: Record<string, unknown> }) => {
+    this.calls.push("articleTemplate.create");
+    const row = this.seedArticleTemplate(args.data as Partial<FakeArticleTemplate>);
+    this.logUndo(() => this.articleTemplates.delete(row.id));
+    return { ...row };
+  };
+
+  private articleTemplateFindFirst = async (args: { where: Record<string, unknown> }) => {
+    this.calls.push("articleTemplate.findFirst");
+    const where = args.where;
+    /**
+     * L10N P3 fix: `selectActiveArticleTemplate`/`listActiveArticleTemplateOptions`
+     * (`src/server/article-templates/service.ts`) no longer emit a `locale`
+     * `OR` clause at all — since `ArticleTemplate.locale` is `NOT NULL`,
+     * P3 replaced the old `{ OR: [{locale: X}, {locale: null}] }` wildcard
+     * with a plain equality condition, `{ locale: input.locale }`, pushed as
+     * one element of the top-level `AND` array (`{ ..., AND: [{ locale: X },
+     * ...] }` — see that function's own "L10N P3：`locale` 精确匹配" comment).
+     *
+     * This fake used to look ONLY for `locale` nested inside an `OR` group
+     * (either a top-level `where.OR` or an `AND[].OR`). Since P3 stopped
+     * emitting that shape, `orClauseGroups` was always empty here, so the
+     * locale filter silently degraded to "match any locale" — the exact bug
+     * this fix closes (a `ru` request was matching a seeded `en`/`fr`
+     * template). Collecting plain `{ locale: X }` equality conditions from
+     * both the top level and `AND[]` — in addition to the OR-group form,
+     * still checked below — makes this fake enforce the same locale scoping
+     * production's exact-match query now does.
+     */
+    const localeEqualityValues: string[] = [];
+    if (typeof where.locale === "string") localeEqualityValues.push(where.locale);
+    if (Array.isArray(where.AND)) {
+      for (const clause of where.AND as Array<Record<string, unknown>>) {
+        if (typeof clause.locale === "string") localeEqualityValues.push(clause.locale);
+      }
+    }
+
+    // Back-compat only: production has not emitted an `OR`-wrapped locale
+    // clause since P3 (see comment above), but this fake keeps recognizing
+    // the shape so it doesn't silently stop enforcing locale if a caller
+    // ever reintroduces an `OR` form (e.g. a future "also match a fallback
+    // locale" query) without this fake being updated in lockstep.
+    const orClauseGroups: Array<Array<{ locale?: string | null }>> = [];
+    if (Array.isArray(where.OR)) orClauseGroups.push(where.OR as Array<{ locale?: string | null }>);
+    if (Array.isArray(where.AND)) {
+      for (const clause of where.AND as Array<Record<string, unknown>>) {
+        if (Array.isArray(clause.OR)) orClauseGroups.push(clause.OR as Array<{ locale?: string | null }>);
+      }
+    }
+    const localeOrGroup = orClauseGroups.find((group) => group.some((entry) => "locale" in entry));
+    const localeOr = localeOrGroup?.map((entry) => entry.locale ?? null);
+
+    const hasLocaleFilter = localeEqualityValues.length > 0 || localeOr !== undefined;
+    const matchesLocale = (rowLocale: string | null) =>
+      localeEqualityValues.includes(rowLocale as string) || (localeOr?.includes(rowLocale) ?? false);
+
+    const rows = Array.from(this.articleTemplates.values()).filter((row) =>
+      row.deletedAt === null &&
+      (where.templateKey === undefined || row.templateKey === where.templateKey) &&
+      (where.status === undefined || row.status === where.status) &&
+      (!hasLocaleFilter || matchesLocale(row.locale)),
+    );
+    rows.sort((left, right) => left.createdAt.getTime() - right.createdAt.getTime() || right.version - left.version);
+    return rows.length > 0 ? { ...rows[0] } : null;
   };
 
   private sourceItemUpdateMany = async (args: {
@@ -332,6 +509,61 @@ export class FakeContentCreationDb {
       operationAudit: {
         create: this.operationAuditCreate,
       },
+      articleTemplate: {
+        count: this.articleTemplateCount,
+        create: this.articleTemplateCreate,
+        findFirst: this.articleTemplateFindFirst,
+      },
+      promoLink: {
+        findMany: async (args: { where: Record<string, unknown> }) => {
+          this.calls.push("promoLink.findMany");
+          return Array.from(this.promoLinks.values())
+            .filter((row) => {
+              if (row.novelId !== args.where.novelId) return false;
+              if (args.where.deletedAt === null && row.deletedAt !== null) return false;
+              if (typeof args.where.status === "string" && row.status !== args.where.status) return false;
+              return true;
+            })
+            .sort((a, b) => {
+              const at = a.fetchedAt?.getTime() ?? 0;
+              const bt = b.fetchedAt?.getTime() ?? 0;
+              return bt - at || a.id.localeCompare(b.id);
+            });
+        },
+        count: async (args: { where: Record<string, unknown> }) => {
+          this.calls.push("promoLink.count");
+          return Array.from(this.promoLinks.values()).filter((row) => {
+            if (row.novelId !== args.where.novelId) return false;
+            if (args.where.deletedAt === null) return row.deletedAt === null;
+            if (args.where.deletedAt && typeof args.where.deletedAt === "object" && "not" in args.where.deletedAt) {
+              return row.deletedAt !== null;
+            }
+            return true;
+          }).length;
+        },
+      },
+      novelChapter: {
+        count: async (args: { where: Record<string, unknown> }) => {
+          this.calls.push("novelChapter.count");
+          return this.previewChapterCounts.get(String(args.where.novelId)) ?? 0;
+        },
+      },
+      $queryRaw: async (_strings: TemplateStringsArray, ...values: unknown[]) => {
+        this.calls.push("novel.lockForUpdate");
+        const novelId = values.find((value): value is string => typeof value === "string");
+        const novel = novelId ? this.novels.get(novelId) : undefined;
+        return novel
+          ? [{
+              id: novel.id,
+              title: novel.title,
+              description: novel.description,
+              coverUrl: novel.coverUrl,
+              locale: novel.locale,
+              totalChapterCount: novel.totalChapterCount,
+              deletedAt: novel.deletedAt,
+            }]
+          : [];
+      },
       $transaction: async (callback) => {
         const previousLog = this.undoLog;
         this.undoLog = [];
@@ -376,5 +608,18 @@ type FakeClient = {
   operationAudit: {
     create: (args: { data: FakeAudit }) => Promise<unknown>;
   };
+  articleTemplate: {
+    count: (args?: unknown) => Promise<number>;
+    create: (args: { data: Record<string, unknown> }) => Promise<unknown>;
+    findFirst: (args: { where: Record<string, unknown> }) => Promise<unknown>;
+  };
+  promoLink: {
+    findMany: (args: { where: Record<string, unknown> }) => Promise<unknown>;
+    count: (args: { where: Record<string, unknown> }) => Promise<number>;
+  };
+  novelChapter: {
+    count: (args: { where: Record<string, unknown> }) => Promise<number>;
+  };
+  $queryRaw: (strings: TemplateStringsArray, ...values: unknown[]) => Promise<unknown>;
   $transaction: <T>(callback: (tx: FakeClient) => Promise<T>) => Promise<T>;
 };

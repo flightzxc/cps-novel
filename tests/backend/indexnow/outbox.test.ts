@@ -7,8 +7,12 @@ import { FakeIndexNowDb, installTestSiteUrl, testEnv } from "./fake-db";
 installTestSiteUrl();
 
 const ENABLED_ENV = testEnv({ FEATURE_INDEXNOW_OUTBOX: "true", INDEXNOW_OUTBOX_ALLOW_WRITE: "true" });
-// `isPublishableLocale` (the real default) is `{en}` after U6 / D-7.
-// Tests that need to look past the locale gate inject `LOCALE_OK`.
+// L10N P4: the real default locale gate is now `isRegisteredSiteLocale`
+// (SITE_LOCALES membership — the narrower D-7 publish whitelist
+// `isPublishableLocale` was deleted). `LOCALE_OK` still lets tests that only
+// care about the two feature flags look past the locale gate unconditionally
+// (useful for an unregistered-locale fixture, not needed for any real
+// SITE_LOCALES member anymore).
 const LOCALE_OK = { isLocalePublishable: () => true };
 
 function seedEligibleArticle(fake: FakeIndexNowDb, id: string, updatedAt: Date, locale = "en") {
@@ -68,7 +72,7 @@ describe("enqueueIndexNowFirstPublish — double-gate boundary", () => {
     expect(fake.outbox.size).toBe(1);
   });
 
-  it("enqueues en under the real D-7 whitelist without a locale override", async () => {
+  it("enqueues en under the real SITE_LOCALES gate without a locale override", async () => {
     const fake = new FakeIndexNowDb();
     seedEligibleArticle(fake, "article-1", new Date("2026-01-01T00:00:00.000Z"), "en");
     const result = await enqueueIndexNowFirstPublish(fake.asPrismaClient(), { articleId: "article-1", source: "test" }, ENABLED_ENV);
@@ -76,9 +80,17 @@ describe("enqueueIndexNowFirstPublish — double-gate boundary", () => {
     expect(fake.outbox.size).toBe(1);
   });
 
-  it("is ineligible under the real whitelist for a locale D-7 has not admitted", async () => {
+  it("L10N P4: also enqueues es under the real gate — the D-7 publish whitelist that used to block a registered-but-unopened locale here is deleted", async () => {
     const fake = new FakeIndexNowDb();
     seedEligibleArticle(fake, "article-1", new Date("2026-01-01T00:00:00.000Z"), "es");
+    const result = await enqueueIndexNowFirstPublish(fake.asPrismaClient(), { articleId: "article-1", source: "test" }, ENABLED_ENV);
+    expect(result.outcome).toBe("enqueued");
+    expect(fake.outbox.size).toBe(1);
+  });
+
+  it("is ineligible under the real gate for a locale not registered in SITE_LOCALES at all", async () => {
+    const fake = new FakeIndexNowDb();
+    seedEligibleArticle(fake, "article-1", new Date("2026-01-01T00:00:00.000Z"), "xx-not-a-real-locale");
     const result = await enqueueIndexNowFirstPublish(fake.asPrismaClient(), { articleId: "article-1", source: "test" }, ENABLED_ENV);
     expect(result).toEqual({ outcome: "ineligible" });
     expect(fake.outbox.size).toBe(0);

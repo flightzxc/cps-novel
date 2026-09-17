@@ -14,6 +14,7 @@
 | --- | --- | --- | --- | --- |
 | v0.1.0 | P1-04～P1-14 | P1 工程底座、Schema/运维、Worker/Scheduler、Auth/Credential、后台与公共 UI、阅读器、四容器/Health、最终测试和只读审计 | `main@fb8cddbdf7c8ff6b566169eade4a89258e7db668` | **P1_LOCAL_COMPLETE；UNRELEASED；UNDEPLOYED** |
 | v0.1.0 | P1-15 | P1 收口报告、风险债务登记与 P2 交接输入包 | `feature/v0.1.0-p1-15-closeout` | **WAITING_FOR_GPT_NOTION_AND_OWNER_GATE** |
+| v0.1.0 | M0–M12 launch parity | 后台核心能力、首页轮播、模板/文章/分类、安全设置与公开 SEO consumer 一次性交付 | `feature/launch-parity-operating-surfaces`（本地） | **LOCAL_IMPLEMENTED；OWNER_PUSH_GATE；UNRELEASED；UNDEPLOYED** |
 
 ## 远端同步状态
 

@@ -1,0 +1,43 @@
+{
+  "templateKey": "system-default-ko-v1",
+  "templateName": "系统默认模板 · 韩文",
+  "locale": "ko",
+  "version": 1,
+  "schemaVersion": 1,
+  "status": "active",
+  "applicableArticleType": "novel_article",
+  "bodyTemplate": "<article><h1>{novel_title}</h1>{if cover_url}<p><img src=\"{cover_url}\" alt=\"표지\"></p>{endif}<p>{novel_description}</p>{if total_chapter_count}<p>총 회차: {total_chapter_count}</p>{endif}{if preview_chapter_count}<p>무료 미리보기 회차: {preview_chapter_count}</p>{endif}{if promo_redirect_url}<p><a href=\"{promo_redirect_url}\">읽기 시작</a></p>{endif}</article>",
+  "contentTemplate": [
+    {
+      "type": "heading",
+      "content": "{novel_title}"
+    },
+    {
+      "type": "image",
+      "content": ""
+    },
+    {
+      "type": "paragraph",
+      "content": "{novel_description}"
+    },
+    {
+      "type": "paragraph",
+      "content": "{if total_chapter_count}총 회차: {total_chapter_count}{endif}"
+    },
+    {
+      "type": "paragraph",
+      "content": "{if preview_chapter_count}무료 미리보기 회차: {preview_chapter_count}{endif}"
+    },
+    {
+      "type": "cta",
+      "content": "읽기 시작"
+    }
+  ],
+  "seoTemplate": {
+    "title": "{novel_title}",
+    "metaTitle": "{novel_title}",
+    "metaDescription": "{novel_description}"
+  },
+  "slugTemplate": "",
+  "metaKeywordsTemplate": ""
+}

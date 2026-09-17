@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 import {
   ADMIN_CONTENT_ROUTES,
   ADMIN_TASK_ROUTES,
+  ADMIN_TAGGING_ROUTES,
   CONTENT_ROUTE_CAPABILITIES,
   P2_04_ADMIN_REGISTRY,
 } from "@/app/api/admin/_lib/registry";
@@ -55,7 +56,8 @@ async function contentRouteFiles(directories = CONTENT_ROUTE_DIRS): Promise<Rout
   return nested.flat();
 }
 
-const FILES = await contentRouteFiles();
+const TAGGING_PATHS = new Set<string>(ADMIN_TAGGING_ROUTES.map((route) => route.path));
+const FILES = (await contentRouteFiles()).filter((entry) => !TAGGING_PATHS.has(entry.route));
 
 /**
  * P2-04 路由登记与 orphan 检查。
@@ -86,11 +88,13 @@ describe("P2-04 内容路由登记", () => {
     for (const route of ADMIN_CONTENT_ROUTES) expect(paths).toContain(route.path);
     for (const route of ADMIN_SITE_SETTING_ROUTES) expect(paths).toContain(route.path);
     for (const route of ADMIN_TASK_ROUTES) expect(paths).toContain(route.path);
+    for (const route of ADMIN_TAGGING_ROUTES) expect(paths).toContain(route.path);
     expect(paths.length).toBe(
       P1_08B_ADMIN_REGISTRY.routes.length
       + ADMIN_CONTENT_ROUTES.length
       + ADMIN_SITE_SETTING_ROUTES.length
-      + ADMIN_TASK_ROUTES.length,
+      + ADMIN_TASK_ROUTES.length
+      + ADMIN_TAGGING_ROUTES.length,
     );
   });
 
@@ -140,7 +144,11 @@ describe("P2-04 内容路由登记", () => {
         !action.id.startsWith("admin.catalog_scan.") &&
         !action.id.startsWith("admin.article.") &&
         !action.id.startsWith("admin.novel.") &&
-        !action.id.startsWith("admin.promo_link_claim."),
+        !action.id.startsWith("admin.promo_link_claim.") &&
+        !action.id.startsWith("admin.catalog_batch.") &&
+        !action.id.startsWith("admin.article_template.") &&
+        !action.id.startsWith("admin.home_carousel.") &&
+        !action.id.startsWith("admin.security."),
     );
     expect(p204Actions).toEqual(P1_08B_ADMIN_REGISTRY.actions);
     for (const action of p204Actions) {
@@ -159,8 +167,38 @@ describe("P2-04 内容路由登记", () => {
       "admin.novel.takedown",
       "admin.novel.restore",
       "admin.promo_link_claim.enqueue",
-      "admin.content_creation.batch_dry_run",
       "admin.content_creation.batch_apply",
+      "admin.catalog_batch.context",
+      "admin.catalog_batch.summary",
+      "admin.article_template.create",
+      "admin.article_template.update",
+      "admin.article_template.status",
+      "admin.article_template.delete",
+      "admin.article.update",
+      "admin.article.regenerate",
+      "admin.article.regenerate_batch",
+      "admin.article.create_blog",
+      "admin.article.generate_dry_run",
+      "admin.article.generate_apply",
+      "admin.article.generate_batch",
+      "admin.article.generate_candidates",
+      "admin.article.rebind_novel",
+      "admin.article.rebind_rollback",
+      "admin.article.rebind_candidates",
+      "admin.article.rebind_facets",
+      "admin.article.rebind_preview",
+      "admin.article.rebind_preview_page",
+      "admin.article.rebind_batch_apply",
+      "admin.article.rebind_batch_resume",
+      "admin.article.rebind_batch_detail",
+      "admin.article.rebind_batch_by_token",
+      "admin.home_carousel.config",
+      "admin.home_carousel.manual_upsert",
+      "admin.home_carousel.manual_delete",
+      "admin.home_carousel.compute",
+      "admin.security.two_factor.start",
+      "admin.security.two_factor.confirm",
+      "admin.security.recovery_codes.regenerate",
     ]);
     expect(resolveAdminAction("admin.content_creation.dry_run", P2_04_ADMIN_REGISTRY)).toMatchObject({
       capability: "content:view",
@@ -214,18 +252,18 @@ describe("P2-04 内容路由登记", () => {
       mutation: true,
     });
     // RC-4: two actions, split by static id exactly like
-    // `admin.content_creation.dry_run`/`apply` above — `batch_dry_run` and
+    // `admin.content_creation.dry_run`/`apply` above and `batch_apply`
     // `batch_apply` need different capabilities, so the split (not a
     // client-supplied `mode`) is what keeps the enforced capability out of
     // client-controlled input. See `ADMIN_CONTENT_CREATION_BATCH_ACTIONS`'s
     // own doc comment for the full reasoning.
-    expect(resolveAdminAction("admin.content_creation.batch_dry_run", P2_04_ADMIN_REGISTRY)).toMatchObject({
-      capability: "content:view",
-      mutation: false,
-    });
     expect(resolveAdminAction("admin.content_creation.batch_apply", P2_04_ADMIN_REGISTRY)).toMatchObject({
       capability: "content:publish",
       mutation: true,
+    });
+    expect(resolveAdminAction("admin.article.generate_candidates", P2_04_ADMIN_REGISTRY)).toMatchObject({
+      capability: "content:view",
+      mutation: false,
     });
   });
 });

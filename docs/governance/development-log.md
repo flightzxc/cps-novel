@@ -4,6 +4,545 @@
 
 ---
 
+## 2026-09-07 · Tagging V3 FK 具名对齐（零 schema migration，仅 Prisma `map:`）
+
+- 根因：`20260816160000_p2_06_5_tagging_v3` 手写迁移给 6 条 FK 取了短名，`schema.prisma` 对应 `@relation` 未写 `map:`，致 `prisma migrate diff --exit-code` 恒 exit 2，`scripts/p1-13-postgres-verification.sh` 等脚本从未跑到 grants/测试。
+- 修复：只给 `CanonicalTagTranslation`/`CanonicalTagKeyword`/`SourceLabelMapping`/`NovelTagState`/`NovelCanonicalTag`（两处）共 6 个 `@relation` 补 `map:` 指回已落地物理名（先例 `database-governance.md` §5 第 12 条，登记为第 19 条）；不改 Migration、不新增 migration、不改 JSONL。
+- 验证（生产路径）：一次性 PostgreSQL 16.14 容器 `migrate deploy` 后两方向 `migrate diff --exit-code` 均 `No difference detected.` / `EXIT_CODE=0`，字典 drift checker PASS（`{"status":"ok","models":49,…}`，`DRIFT_EXIT=0`），活库 6 条 FK 名仍为短名。`scripts/p1-13-postgres-verification.sh` **未作任何修改、原样运行**：diff 门禁通过（此前恒 exit 2 的阻塞解除），随后于 `npm run test:integration` 命中既有基线失败 `KTF-001`（`tests/integration/tasks/p1-07-postgres.test.ts` >「commits side-effect intent independently and blocks unknown retry」，测试文件、用例名、失败断言完全命中；该步 1 failed / 114 passed / 41 skipped），脚本 `set -e` 于此中止：`P1_13_POSTGRES_ERROR line=141 status=1`、`P1_13_POSTGRES_CLEANUP=PASS`（容器/卷/网络自清理）。`git stash` A/B（同一测试文件、各起一次性库）修复前后均 `1 failed | 25 passed (26)`、失败断言逐字相同，证明该失败与本改动无关。
+- 补充证据（**非生产路径补充证据，不替代原样脚本**）：把 p1-13 脚本各 `npm run …`/`npm test` 行追加 `|| printf 'STEP_FAILED=…'`（其余不动）后跑完全部步骤，结果为 `BUILD=PASS`、`TYPECHECK=PASS`、`LINT=PASS`；`npm run test:backend` 唯一失败为既有基线 `tests/backend/publish-gate/no-bypass.test.ts`（`1 failed | 172 passed (173)` 文件、`1 failed | 1719 passed (1720)` 用例）；完整 `npm test` = `2 failed | 3669 passed | 41 skipped (3712)`，失败集恰为 `KTF-001` 与 `publish-gate/no-bypass` 这两条既有基线失败，无任何新增失败。注：该跑法下 `|| printf` 不阻断其后的 `*=PASS` printf，故 `STEP_FAILED=` 与 `INTEGRATION_TESTS=PASS`/`BACKEND_TESTS=PASS` 会同时出现，判读以 `STEP_FAILED=` 为准。
+- 明确没做的：未改 Migration、未新增 migration、未改 `database-schema-dictionary.jsonl`、未补 §3.2 Tagging V3 七表词典行；`KTF-001` 与 `tests/backend/publish-gate/no-bypass.test.ts` 两条既有基线失败均未修改、未绕过、未从登记中移除，本轮只按编号/登记引用。
+
+---
+
+## 2026-09-06 · PR6 fix lane F — P2-06.5 标签管理 feature flag 接线缺口修复
+
+- 背景：运行中的 X8 uat（`cps-novel-x8-local`）web 日志出现
+  `TaggingAdminError: tagging_disabled (403)`，来自
+  `src/server/tagging/admin-service.ts:184-186` 的 `requireTaggingRead ->
+  isTaggingEnabled(env)`；`/categories` 与 `/tags` 的 Canonical/Mappings
+  页对该错误没有专门处理，最终落到 Next 通用错误边界 "Something went
+  wrong"。同一轮排查发现 `grep -i TAGGING docker-compose.yml .env.example
+  scripts/lib/x8-levels.json` 零命中、`docker inspect web` 的环境变量里
+  也没有任何 tagging 变量——`src/lib/flags/feature-flags.ts` 里已经定义好的
+  `FEATURE_P2_06_5_TAGGING`（主读闸）、`FEATURE_P2_06_5_TAG_ADMIN_WRITE`
+  （后台写闸）、`FEATURE_NOVEL_TAG_AUTO`（auto 分类闸）、
+  `AUTO_WRITE_AUTHORIZED`（ADR 门，精确 `YES` 才放行）四个变量，从未被任何
+  运行配置接入，`worker/handlers/novel-tag-backfill.ts` 同样拿不到。
+- 修复（透传 + 分级）：
+  - `docker-compose.yml`：`web`、`worker` 两个服务各加四行
+    `FEATURE_P2_06_5_TAGGING: ${FEATURE_P2_06_5_TAGGING:-false}` /
+    `FEATURE_P2_06_5_TAG_ADMIN_WRITE: ${...:-false}` /
+    `FEATURE_NOVEL_TAG_AUTO: ${...:-false}` /
+    `AUTO_WRITE_AUTHORIZED: ${AUTO_WRITE_AUTHORIZED:-NO}`；`scheduler` 不
+    消费这组 flag，未接。
+  - `scripts/lib/x8-levels.json`：三级 `flags` 各加四项——Level 0 为
+    `false/false/false/NO`；Level UAT、Level R 均为
+    `true/true/false/NO`（生产读 + 后台手工写开放，auto 分类关闭，
+    Owner 授权门恒 `NO`）。`scripts/lib/x8-production-like-env.sh` 的
+    `x8_level_config()` 本就通用遍历 `entry.flags` 导出，无需改代码，只补了
+    说明注释。
+  - `scripts/acceptance/x8-validate-compose.mjs`：
+    `FEATURE_P2_06_5_TAGGING`/`FEATURE_P2_06_5_TAG_ADMIN_WRITE` 纳入既有的
+    "按 level 表取期望值"断言循环（web、worker 各一处）；`FEATURE_NOVEL_TAG_AUTO`
+    /`AUTO_WRITE_AUTHORIZED` 走独立的硬编码断言（ADR guard）——期望值
+    `"false"`/`"NO"` 不从 `scripts/lib/x8-levels.json` 读取，任何 level（含
+    表本身与渲染出的 compose config）出现 `true`/`YES` 都直接 FAIL，防止表
+    被误改后"自己跟自己一致"就蒙混过关。
+  - `.env.example` 补四行默认值 + ADR 注释；`docs/p2/V020_RELEASE_CHECKLIST.md`
+    §2 与 Level 0/UAT/R 三节补齐对应勾选项；
+    `docs/governance/feature-flag-registry.md` 补一段"此前从未接入运行
+    配置"的接线说明（四个 flag 本身的语义行此前已存在，未新增）。
+- 修复（页面禁用态，`src/app/(admin)/categories/**`、
+  `src/app/(admin)/tags/**`、`src/app/(admin)/novels/_components/
+  novel-tags-panel.tsx`/`novel-tags-editor.tsx`）：
+  - 新增 `src/app/(admin)/tags/_lib/tagging-flag-checklist.ts`
+    （`readTaggingFlagState`/`taggingFlagChecklist`，纯函数）与
+    `src/app/(admin)/tags/_components/tagging-disabled-panel.tsx`
+    （`TaggingDisabledPanel`/`TaggingWriteDisabledNotice`，与
+    `catalog-sync` 的 `FlagChecklist` 同一视觉语言：逐项列出 flag 当前值
+    与说明，`已开启`/`未开启` 徽标）。
+  - `/categories`、`/tags/canonical`、`/tags/mappings` 三个页面在调用
+    `listAdminCanonicalTags`/`listAdminSourceLabelMappings` 之前先用
+    `readTaggingFlagState()` 预判：读闸关闭时渲染 `TaggingDisabledPanel`，
+    完全不再调用标签服务（不会再抛 `TaggingAdminError`）；读闸开、写闸关
+    时正常展示只读数据，并在 `CanonicalTagsClient`/`MappingsClient` 上方
+    渲染 `TaggingWriteDisabledNotice`，同时把 `writeFlagEnabled` 传给这两
+    个客户端组件，与既有的 `tag:manage` RBAC 检查一起折叠进 `canManage`，
+    编辑按钮预先禁用而不是等提交时才收到 `tag_write_not_authorized`。
+  - `novel-tags-panel.tsx` 同样在调用 `getAdminNovelTags`/
+    `listAllActiveCanonicalTags` 之前预判读闸，渲染
+    `TaggingDisabledPanel`；写闸状态同样传给 `NovelTagsEditor`。
+  - `/tags` 的"来源标签字典" tab（`src/app/(admin)/tags/page.tsx`）走
+    `listAdminSourceLabels`（`@/server/admin-content`），不经过 tagging
+    flag，未改动。
+  - `CanonicalTagsClient`/`MappingsClient`/`NovelTagsEditor` 的
+    `writeFlagEnabled` 均为可选参数、默认 `true`——三个既有的组件级测试
+    文件（`tests/ui/admin-canonical-tags.test.tsx`、
+    `tests/ui/admin-tag-mappings.test.tsx`、
+    `tests/ui/admin-novel-tags.test.tsx`）未改动，行为不变。
+- 新增测试：
+  - `tests/ui/categories-disabled-state.test.tsx`：真实渲染
+    `CategoriesPage`（`await CategoriesPage(...)` 后 `render`，与
+    `tests/ui/admin-two-factor-setup-page.test.tsx` 同一手法），覆盖读闸关
+    （禁用面板、`listAdminCanonicalTags` 零调用）、读开写关（只读 + 写通知
+    + 编辑器禁用）、两闸皆开（正常 + 编辑器可用）三种状态。
+  - `tests/backend/flags/tagging-flags-passthrough.test.ts`：直接解析
+    `docker-compose.yml` 文本，断言 `web`/`worker` 四变量透传且默认值精确
+    （`false/false/false/NO`）、`scheduler` 零透传；断言
+    `scripts/lib/x8-levels.json` 三级的 ADR 冻结值与 UAT/R 开闸值；一个
+    Docker-gated 的 belt-and-suspenders 用例用干净环境渲染裸
+    `docker-compose.yml`（不经 X8_LEVEL 脚本，因为该脚本总会为
+    `flags` 里的每个 key 导出一个值，会掩盖 compose 层默认值被删的变异）。
+  - `tests/backend/runtime/x8-production-like-contract.test.ts` 追加两个
+    Docker-gated 用例：三级（0/uat/r）渲染并核对四变量与
+    `scripts/lib/x8-levels.json` 完全一致；ADR guard 变异测试——在内存中把
+    渲染出的 JSON 的 `FEATURE_NOVEL_TAG_AUTO`/`AUTO_WRITE_AUTHORIZED` 改成
+    `true`/`YES` 后喂给 validator，断言其非零退出且报错信息含
+    `"ADR guard"`（从不写回 `scripts/lib/x8-levels.json` 本身）。
+- 变异验证（手工，均已复原）：① `docker-compose.yml` 里删掉
+  `AUTO_WRITE_AUTHORIZED` 的 `:-NO` 默认值，用干净环境渲染裸
+  compose——`AUTO_WRITE_AUTHORIZED` 变成空字符串，`tagging-flags-
+  passthrough.test.ts` 的透传断言转红；② 临时把
+  `scripts/lib/x8-levels.json` 的 `uat.flags.FEATURE_NOVEL_TAG_AUTO` 改成
+  `"true"`，走完整 X8 渲染管线（`x8-production-like-env.sh` +
+  `x8-validate-compose.mjs`），validator 报
+  `"x8-levels.json flags.FEATURE_NOVEL_TAG_AUTO must be \"false\" ...
+  (ADR guard)"` 后非零退出；改动前先复制原文件备份，验证完立即用备份覆盖
+  还原，`git diff` 核对与预期改动完全一致。
+- 门禁：`npm run typecheck`、`npm run lint`（0 error）、
+  `npm run test:ui`（114 files / 1805 tests 全绿，含新增三例与既有
+  `admin-canonical-tags`/`admin-tag-mappings`/`admin-novel-tags` 三个未改
+  文件）、`npm run test:backend`（164/165 files 通过，唯一失败是既有的
+  `publish-gate/no-bypass`——与本 lane 无关的已知基线失败）、
+  `npm run build` 全绿（`/categories`、`/tags/canonical`、`/tags/mappings`
+  均出现在路由清单）。X8 render-only 三级（`docker compose config`
+  静态渲染，未起容器）确认四变量：Level 0 → `false/false/false/NO`；
+  Level UAT/R → `true/true/false/NO`（web/worker 一致，scheduler 均
+  undefined）。
+- 范围边界：未改 `src/server/tagging/**` 门逻辑本体、未改
+  scheduler/carousel/articles/templates；未 push/未 merge/未改 PR/未动
+  docker 状态，交由 Fable 整合与重起。
+
+---
+
+## 2026-09-05 · PR6 fix lane E — carousel PostgreSQL 权限缺口修复 + X8 实证
+
+- 背景：运行中的 X8 uat（`cps-novel-x8-local`）暴露 `scheduler` 容器持续
+  `Restarting`，日志为 `scheduler/index.ts:59 main -> getHomeCarouselConfig
+  (src/server/home-carousel/service.ts:65) -> prisma.siteSetting.findUnique`
+  抛出 `42501 permission denied for table site_setting`；`infra/postgres/
+  grants.sql:140-145` 明确规定 Scheduler 不得访问 `site_setting`（含 S2
+  IndexNow key），但该表恰恰也是首页轮播 `carouselConfigJson` 的存放位置，
+  `scheduler` 判定 cron 是否到点必须读它——两条边界在这一列上直接冲突。
+  同一轮 `information_schema.role_table_grants` 复核另外发现 `worker_app`
+  对 `home_carousel_manual_slot/auto_batch/auto_candidate/serving` 只有
+  INSERT/UPDATE、无 SELECT，`home_carousel_change_log` 只有 INSERT；
+  `computeHomeCarouselInTx`（`src/server/home-carousel/service.ts:77-122`）
+  在同一事务里对前四张表分别 `findMany`/`update`/`deleteMany`，均需要
+  SELECT，`deleteMany` 收缩 `home_carousel_serving` 还需要 DELETE（这几处
+  查询之前从未被真实执行过，缺口一直潜伏到这次 X8 实跑才现形）。
+- 修复（`infra/postgres/grants.sql`）：
+  - `GRANT SELECT (id, carousel_config_json) ON site_setting TO
+    scheduler_app;`——列级授权，不给整表 SELECT；`id` 是因为 Prisma 生成的
+    `WHERE id = 1` 也需要该列的读权限。`indexnow_key` 等其余列、以及
+    `analyst_ro` 依旧零可见性。
+  - `worker_app` 补 `GRANT SELECT ON TABLE home_carousel_manual_slot,
+    home_carousel_auto_batch, home_carousel_auto_candidate,
+    home_carousel_serving TO worker_app;`。
+  - `worker_app` 补 `GRANT DELETE ON TABLE home_carousel_serving TO
+    worker_app;`——merge 用 `deleteMany` 整体清空该 locale 的 serving 快照
+    后 `createMany` 重建，不是"就地 UPDATE 固定行集"的语义，其余三张表没有
+    delete 调用，不给 DELETE。
+  - `home_carousel_change_log` 保持 INSERT-only 不变（worker 从不读回它）。
+  - `src/server/home-carousel/service.ts` 里 `getHomeCarouselConfig`
+    （scheduler 路径）与 `computeHomeCarouselInTx`（worker 路径）对
+    `siteSetting` 的两处读取本就是 `select:{carouselConfigJson:true}`
+    列级 select；`worker/handlers/home-carousel.ts` 只转调
+    `computeHomeCarouselInTx`。代码侧均无需改动。
+- 新增 `tests/backend/database/carousel-grants.test.ts`（6 用例）锁定上述
+  授权矩阵：scheduler_app 只有列级 SELECT 且对五张 `home_carousel_*` 零
+  访问；worker_app 四表 SELECT + `home_carousel_serving` 专属 DELETE；
+  `home_carousel_change_log` 维持 INSERT-only；web_app/analyst_ro 原有的
+  五表 SELECT 不受影响。手工做过一次变异验证：临时删掉
+  `GRANT SELECT (id, carousel_config_json) ON site_setting TO
+  scheduler_app;` 这一行，对应用例立即转红，然后已还原。
+- 交界修补（不在原始任务允许改动的文件清单内，但发现后判断为必要的连带
+  最小改动，否则契约测试与新授权直接矛盾、数据字典与真实授权漂移）：
+  - `tests/backend/database/x6-site-setting-grants.test.ts` 原先用一条
+    正则断言"scheduler_app 对 `site_setting` 零访问"
+    （`not.toMatch(/GRANT[^;]+site_setting[^;]+(?:analyst_ro|scheduler_app)/s)`），
+    这与本 lane 新增的列级授权字面冲突。已收窄为两条：analyst_ro 依旧
+    零访问原样保留；scheduler_app 改为"零整表 SELECT、零
+    INSERT/UPDATE/DELETE，只允许既定列级 SELECT"。"字典与授权同步"用例
+    同步放宽——`id`/`carousel_config_json` 两个字段允许 `read_roles`
+    含 `scheduler_app`，其余 17 个 `site_setting` 字段仍必须恰好是
+    `["web_app","worker_app"]`。
+  - `docs/governance/database-schema-dictionary.jsonl` 里
+    `site_setting.id`/`site_setting.carousel_config_json` 两条字段记录的
+    `read_roles` 同步补 `scheduler_app`，`notes`/`evidence` 附带一句
+    PR6 lane E 的授权来源说明；未触碰同表其余记录。
+- 门禁：`npm run typecheck` 通过；`npm run lint` 0 error（3 条既有无关
+  warning）；`npm run test:backend` 163/164 文件、1529/1530 用例通过，
+  唯一失败是既有基线失败 `tests/backend/publish-gate/no-bypass.test.ts`
+  （改动前后完全同构，非本 lane 引入）；`npm run test:ui` 113/113 文件、
+  1800/1800 用例全绿。
+- X8 实证（`cps-novel-x8-local`，`X8_LEVEL=uat`）：
+  1. 修复前复现：`docker ps` 显示 `cps-novel-x8-local-scheduler-1` 处于
+     `Restarting (1)` 循环；`docker logs` 与上方背景描述的堆栈完全一致；
+     直接查 `information_schema.role_table_grants`/`role_column_grants`
+     确认 `scheduler_app` 对 `site_setting` 与全部 `home_carousel_*` 均
+     0 行授权，`worker_app` 对四张 `home_carousel_*` 只有
+     INSERT/UPDATE（9 行，无 SELECT/DELETE）。
+  2. 以 postgres 超级用户对 X8 postgres 容器重跑修复后的
+     `infra/postgres/grants.sql`（该文件自带 REVOKE 重置，幂等，允许
+     重复执行）：63 条语句全部 `GRANT`/`REVOKE`/`DO`/`ALTER DEFAULT
+     PRIVILEGES` 成功，零报错。
+  3. `docker compose -p cps-novel-x8-local restart scheduler`：容器从
+     `Restarting` 转为持续 `Up ... (healthy)`，`RestartCount` 维持 0；
+     观察窗跨越至少两次 60s cron tick（`scripts/run-scheduler-loop.sh`
+     的 `SCHEDULER_INTERVAL_SECONDS=60`），`docker logs` 自重启时间点起
+     再未出现任何 42501 或其他错误。
+  4. 只读复核 `role_table_grants`/`role_column_grants`：`scheduler_app`
+     对 `site_setting` 恰好两行列级 SELECT（`id`、`carousel_config_json`），
+     零整表授权，对全部 `home_carousel_*` 仍 0 行；`worker_app` 对四张
+     `home_carousel_*` 各自新增 SELECT，`home_carousel_serving` 额外新增
+     DELETE，`home_carousel_change_log` 仍只有 INSERT——与
+     `carousel-grants.test.ts` 断言的矩阵逐项一致。
+  5. `curl https://novel.test/api/health`（`--resolve` 到本机）返回
+     `HTTP_STATUS=200`，body `{"ok":true,"status":"healthy",...}`；其余
+     五个容器（`web`/`worker`/`nginx`/`postgres`/`backup-timer`）全程保持
+     `healthy`，未被本次操作触碰。
+  - 全程未 down、未重建镜像、未跑任何有副作用的轮播 compute/manual 写入，
+    只做 grants 重跑 + restart scheduler + 只读 SQL/HTTP 校验。
+- 未 push、未改 PR、未 merge、未部署；未碰 prisma schema/migration；
+  未碰 `src/app/api/admin/_lib/registry.ts`。
+
+---
+
+## 2026-09-05 · PR6 四条 fix lane 线性整合 + 交界修补
+
+- 把 PR #6（`feature/launch-parity-operating-surfaces`，基线 `a05e41b`）的四条并行修复
+  lane 按 A → B → D → C 线性 cherry-pick 进 PR 分支本体，共 15 个 commit（A 4 /
+  B 4 / D 4 / C 3），全部保留原 trailer；未 rebase/reset/force，只在 `a05e41b` 之上追加。
+  - Lane A `fix/pr6-lane-a-carousel@16fab14`（`a05e41b..`，4 commit）
+  - Lane B `fix/pr6-lane-b-templates-articles@b866384`（`a05e41b..`，4 commit）
+  - Lane D `fix/pr6-lane-d-articles-leftovers@f701308`（基线是 lane B HEAD，与 B 合成
+    一段 8 commit 的 `a05e41b..f701308` 一次性 cherry-pick，保持原顺序）
+  - Lane C `fix/pr6-lane-c-tagging-bootstrap@129f821`（`a05e41b..`，3 commit）
+- 冲突只出现在本文件（三次，各 lane 都在顶部追加条目）：全部保留，按 A/B/D/C 顺序堆叠，
+  没有删改任何一条 lane 条目或下方历史条目。`docs/governance/port-registry.md` 的两处
+  追加自动合并成功（lane A 的 N-3/N-4 行与 lane B 的 N-7/N-8 段落各自独立）；
+  lane C 的 `docs/adr/ADR-P2-06-5-TAGGING-V3.md`/`docs/governance/database-governance.md`/
+  `docs/operations/OWNER_LOCAL_UAT_RUNBOOK_2026-09-03.md`/`scripts/README.md` 无冲突。
+  **无代码冲突**——四条 lane 的文件边界事前切开，事后证明确实不重叠。
+- 交界修补 1（B-1 × tagging 治理测试）：`tests/backend/tagging/p2-06-5-governance.test.ts`
+  原本断言 `scheduler/index.ts` 含源码字面量
+  `"SCHEDULES: readonly ScheduleDefinition[] = Object.freeze([])"`——那不是 P2-06.5 的
+  治理不变量，只是"scheduler 出厂时恰好为空"的偶然快照，而 B-1 必须改掉这个字面量。
+  改为断言 **`scheduler/index.ts` 的 import 语句不得含 tagging/auto_classify/canonical-tag/
+  novel-tag**（逐条 import 断言 + 全文再扫一遍兜住动态 import 与裸字符串任务类型），
+  该 `it` 块其余断言（纯 Tagging 核心无框架依赖、CLI 不读 `DATABASE_URL`）原样保留。
+  真正的治理语义（自动分类保持 explicit-only、`AUTO_WRITE_AUTHORIZED=NO`）比原断言更贴。
+- 交界修补 2（N-5 人工位删除的 action id）：lane A 因 `src/app/api/admin/_lib/registry.ts`
+  在其文件边界外，让 `deleteHomeCarouselManualSlot` 复用了
+  `admin.home_carousel.manual_upsert` 的 action id。整合后补上独立登记
+  `admin.home_carousel.manual_delete`（capability 同为 `settings:manage`，`mutation: true`），
+  服务体与 `_actions.ts` 动作体改用该 id。复用 id 会让一次破坏性的人工位删除在
+  `operation_audit`/限流的 entry id 上与 upsert 无法区分——这是登记独立 id 的实际理由，
+  不是形式对齐。同步更新 `tests/ui/admin-content-registry.test.ts` 的 action 穷举、
+  `tests/ui/admin-actions-capability.test.ts`（13 → 14 条，carousel 3 → 4）与
+  `tests/backend/home-carousel/actions-capability.test.ts`（delete 用例改用新 id）。
+  `tests/backend/auth/admin-registry-parity.test.ts` 无需改动——它穷举的是
+  `P1_08B_ADMIN_REGISTRY.actions`（凭证面），不含 P2-04 的轮播动作。
+- 交界修补 3（`article_conflict` 穷举）：查证后**无需补**
+  `tests/backend/contracts/admin-contracts.test.ts`——该文件没有 `AdminErrorCode` 穷举清单；
+  `tests/ui/admin-error-envelope.test.ts`/`admin-secret-boundary.test.tsx` 里的 code 数组
+  都是子集抽样而非穷举。`article_conflict` 的穷举性由 `error-copy.ts` 的
+  `Readonly<Record<AdminErrorCode, string>>` 在编译期保证，lane D 已补齐并有
+  `tests/ui/admin-error-copy.test.ts` 锁定。
+- 文档同步：`docs/p2/LAUNCH_PARITY_OPERATING_SURFACES_2026-09-05.md` 的"新 actions"行由
+  "carousel 3（复用 manual_upsert）"改为"carousel 4"；`docs/governance/port-registry.md`
+  N-7 行里"`article_conflict` 尚未登记"的过时说明改为已登记（lane D 已做，lane B 写下该行时
+  确为事实）。上方 lane A 条目里"`p2-06-5-governance.test.ts` 两处失败之一"的记述由本条
+  交界修补 1 消解，按本文件惯例不回改历史条目，在此登记。
+- 未 push、未改 PR、未 merge、未部署；未碰 prisma/migration。
+
+---
+
+## 2026-09-05 · PR6 fix lane A — M5 轮播 scheduler 死代码修复 + B-2 咬合测试 + N-3/4/5/6 + 文档失实修正
+
+- 背景：PR #6（`feature/launch-parity-operating-surfaces@a05e41b`）验收 CHANGES_REQUIRED，
+  B-1 发现下方 2026-09-05 条目"`home_carousel.compute.v1` 进入 Scheduler、Worker 与 X8
+  allowlist"一句在写下时并不成立——`scheduler/index.ts` 的 `SCHEDULES` 恒为空数组、
+  `enqueueHomeCarouselCron` 全仓零调用者，Worker/X8 allowlist 三处确已登记但 Scheduler
+  从未真正注册；`V020_RELEASE_CHECKLIST.md:140` 与
+  `docs/p2/LAUNCH_PARITY_OPERATING_SURFACES_2026-09-05.md` 同样写了这句未兑现的话。
+  本条目记录把它补齐、而不是删改下方历史条目的过程。
+- 独立 worktree `cps-novel-pr6-lane-a`（`fix/pr6-lane-a-carousel`，基线同 `a05e41b`）；
+  文件边界限定在 `home-carousel` 相关路径，未碰 `registry.ts`、articles/templates/
+  tagging/settings/security 任一文件，未碰 Codex 的 `cps-novel-launch-parity` worktree。
+- B-1：`scheduler/index.ts` 新增首条 `ScheduleDefinition`（`buildHomeCarouselScheduleDefinition`，
+  新增于 `src/server/home-carousel/service.ts`）；`dueInstants`/`build` 按框架契约保持同步、
+  不带 db 句柄，改为读取 `main()` 每 tick 刷新一次的闭包配置快照。新增一枚极简 5 段 crontab
+  匹配器（`isHomeCarouselCronDue`，分钟精度，匹配 scheduler 进程本身的 tick 节奏）。
+  `cronEnabled=false` 时 `dueInstants` 直接返回空数组——不建 ScheduleRun/CronRun/GenericTask，
+  不是"建了再撤销"。默认时区由未登记偏离的 `Asia/Tokyo` 改回规格值 `Asia/Shanghai`。
+  `enqueueHomeCarouselCron`（原零调用者）保留为异步便捷入口，与 `ScheduleDefinition.build`
+  共享同一个纯函数 `buildHomeCarouselCronTaskInput`，不会出现两条实现分叉。scheduler 进程
+  仍只登记任务类型元数据（`family:"generic"`），从不执行 handler——真正执行体仍在 Worker
+  自己的 registry（`createWorkerHandlers`）里，这条边界由既有
+  `tests/backend/auth/p1-08b-production-contracts.test.ts`/`tests/backend/tasks/
+  scheduler-boundary.test.ts` 的源码扫描继续守着（改动过程中两次踩中这两个断言的禁用词，
+  已改措辞规避，未改断言本身）。
+- B-1 #3：`normalizeHomeCarouselConfig` 原先读了 `slotCount`/`newSlotCount`/
+  `newNovelWindowDays` 又丢弃、compute 侧全用字面量 5/1/14。现按 CPS
+  `home-carousel-config.ts` 的校验口径接住三个字段（slotCount 整数 ≥1；newSlotCount 整数
+  0-2；newNovelWindowDays 整数 ≥0，越界或非法回落默认值，不是 throw），`computeHomeCarouselInTx`
+  与 `upsertHomeCarouselManualSlot` 的 position 上限全部真读这三个值。
+- N-5：新增 `deleteHomeCarouselManualSlot`（写 `deletedAt`，change log 记
+  `manual_slot.delete`）；管理页加删除按钮（`window.confirm` 二次确认）。复用既有
+  `admin.home_carousel.manual_upsert` action id/`settings:manage` 能力位，未新增第 4 个
+  action id——`src/app/api/admin/_lib/registry.ts` 不在本 lane 文件边界内。
+- N-6：`/home-carousel` 管理页新增三块视图（最新批候选按 rank、serving 预览按 position 并
+  标注 manual/new_novel/recency 来源、change log 最近 50 条只读）；新增
+  `listLatestHomeCarouselCandidates`/`listHomeCarouselServing`/`listHomeCarouselChangeLog`
+  三个只读服务函数。
+- N-3/N-4：`docs/governance/port-registry.md` 补登记两条显式偏离——收入评分 W/τ/α 三参数
+  随 `revenueEnabled` 恒 false 一并从类型里删除（非"读了不用"）；配置可写字段从 CPS 的 5
+  个（4 个是收入相关，Novel 无意义）改为 Novel 自己的 3 个（cronSchedule/cronTimezone/
+  cronEnabled）。
+- 测试：`tests/backend/home-carousel/{compute,merge,queries,cron,actions-capability}.test.ts`
+  新增（fake-db in-memory 双，同 `tests/backend/tasks/promo-link-claim-factory-fake-db.ts`
+  设计）；`source-boundaries.test.ts`/`x8-production-like-contract.test.ts` 追加断言；
+  `tests/ui/home-carousel-admin.test.tsx` 新增。五项变异自检见 PR 报告，逐项复原。
+- 门禁：`typecheck`/`lint`/`test:ui`（108 files/1751 tests）/`build` 全绿；`test:backend`
+  仅 `publish-gate/no-bypass.test.ts`（`scripts/s1-exact-target-structural-smoke.ts` 的
+  `$executeRawUnsafe` 历史误报，未改该文件，与 main 同签名）与
+  `tests/backend/tagging/p2-06-5-governance.test.ts`（断言 `scheduler/index.ts` 源码字面量
+  `"SCHEDULES: readonly ScheduleDefinition[] = Object.freeze([])"`——B-1 要求的改动必然改掉
+  这个字面量；该测试文件属 tagging 边界，不在本 lane 可改范围，留给该测试的 owner 更新断言
+  为"不得引入 tagging 依赖"而非"SCHEDULES 恒空"）两处失败；X8 三级 render-only 验证全 PASS
+  （容器为会话开始前已运行的既有 X8 环境，本 lane 未 up/down 任何容器）。
+- 未 push、未 merge、未部署、未碰 prisma/migration（`carouselConfigJson` 列已在）。
+
+---
+
+## 2026-09-05 · PR6 fix lane B：M6/M7 咬合测试缺口 + N-7/N-8/N-9/N-13
+
+分支 `fix/pr6-lane-b-templates-articles`（`worktree cps-novel-pr6-lane-b`），基线
+`feature/launch-parity-operating-surfaces@a05e41b`。修复 Codex PR #6 验收
+`CHANGES_REQUIRED_2026-09-05.md` 里 B-2 项点名的 M6（模板）/M7（文章）咬合测试缺口与
+13 个新 action 的动作层 capability 测试，以及同批 N-7/N-8/N-9/N-13。
+
+- **B-2 咬合测试**：新增 `tests/backend/article-templates/service.test.ts`（未登记变量
+  被 `renderArticleDraft` 拒绝、停用模板不可被 `selectActiveArticleTemplate` 选中、
+  `ensureDefaultArticleTemplate` 表空落 `system-default-v1` 且幂等）、
+  `tests/ui/templates-admin.test.tsx`（列表/新建/编辑/启停/删除/错误回显）、
+  `tests/backend/articles/service.test.ts`（编辑写 body/seoMetadata 且审计、再生成保
+  slug/shortId、批量 ≤50/25s 四态）、`tests/ui/articles-admin.test.tsx`（列表/选择/单条
+  与批量再生成/编辑预览）、`tests/ui/novel-detail-seo-consumer.test.tsx`（`generateMetadata`
+  与页面正文优先 `Article.seoMetadata`/`body`、FAQ JSON-LD、未发布文章不进消费）、
+  `tests/ui/admin-actions-capability.test.ts`（13 个新 action：template 4/article
+  3/carousel 3/security 3，各一条"动作体实际传给 `requireFreshAdminServiceMutation`
+  或 `requireAdminActionAccess` 的 capability/actionId 必须等于 registry 声明"，抽 7
+  个做变异证明——`article-templates/service.ts`、`articles/service.ts` 的
+  `authorize()` 硬编码 capability 改 `content:view` 后对应测试全部转红，人工验证后已
+  复原）。所有新测试逐条手工验证：改坏对应实现后目标用例必须变红，复原后
+  `git status --porcelain` 干净。已知不足：list 筛选（locale/status/novel/template）
+  施工规格提及但 `ArticleList`/`articles/page.tsx` 从未实现，未新增；创建时写
+  `Article.templateId` 的测试属于 `src/server/content-creation/**`（本 lane 文件边界
+  外），未新增，留给该模块所有者。
+- **N-7 乐观锁**：`src/server/articles/service.ts` 新增 `ArticleConflictError`
+  （`article_conflict`/409，同 `SiteSettingMutationConflictError` 的错误码模式）与
+  `expectedArticleTimestamp`（settings 同款往返校验）；`updateArticleContent` 与
+  `regenerateArticle`（经 `regenerateCore` 新增可选 `expectedUpdatedAt` 参数）均走
+  `[expected, expected+1ms)` 窗口 `updateMany` CAS；批量再生成不接 CAS（理由见
+  `service.ts` 该函数上方注释）。`article_conflict` 尚未登记进
+  `src/contracts/errors.ts`/`src/features/admin-ui/error-copy.ts`（两者不在本 lane
+  文件边界内）。UI：`articles/_actions.ts` 区分 conflict 与其他失败码；
+  `[articleId]/page.tsx` 用 `updatedAt` 做 `<ArticleEditor key>` 使 `router.refresh()`
+  后重新挂载而不是徒劳的 `useState` 同步；`article-list.tsx` 单条再生成把
+  `row.updatedAt` 作为 `expectedUpdatedAt` 传入。
+- **N-8 正文白名单**：新增零依赖 `src/server/articles/sanitize-body.ts`
+  （`sanitizeArticleBody`：保留 `p/br/h2/h3/ul/ol/li/strong/em/a[href https-only]/
+  img[src https-only,alt]/blockquote`，剥除 `script`/`style`/`on*`/`javascript:`/非
+  https 链接），只接入 `updateArticleContent`（管理员手工编辑路径）；`regenerateCore`
+  （模板引擎生成/再生成路径）不受影响。登记为"与 CPS 同源风险的接受/收口"（CPS 原本
+  也不做正文白名单），见 `port-registry.md` 2026-09-05 · PR6 fix lane B 小节。
+- **N-9 公开侧查询数**：新增 `tests/backend/site/public-query-budget.test.ts`
+  （计数式 fake Prisma db，测出首页当前调用形态每次渲染 `getSiteSetting` +
+  `listPublicCategories` 形态合计 7 次新增查询——`loadChrome`/独立
+  `loadPublicCategories` 各查一次，`listHomeNovels` 又查一次同形态数据）。
+  `src/lib/site/queries.ts` 的 `loadPublicChrome` 加了可选第三参数 `categories`（预先
+  算好时跳过内部再查一次），并有对应能力测试；**未接入 `src/app/page.tsx`**——
+  尝试过直接在 `page.tsx` 里绕开 `@/app/_lib/public-load` 调用 `getSiteSetting`/
+  `loadPublicChrome`，会打穿 `tests/ui/public-routes.test.tsx`（本 lane 文件边界外，
+  只 mock `public-load.ts`，未 mock 真实 Prisma）——已验证会炸、已还原。真正接线需要
+  同时改 `src/app/_lib/public-load.ts`（`loadChrome` 签名或加一个变体），也不在本
+  lane 文件边界内。两处都在报告里列为需要整合者处理的跨边界项。
+- **N-13**：M1/M3/M9/M11 的 enforcement=false 覆盖仍是靠 M0
+  （`admin-capability-projection-enforcement.test.ts`）投影测试组合达成，本 lane 未
+  新增专属覆盖，也未声称"已补"。
+- 未 push、未合并；只在本 worktree 内提交。
+
+---
+
+## 2026-09-05 · PR6 fix lane D：收口 lane B 的 5 个跨边界项
+
+分支 `fix/pr6-lane-d-articles-leftovers`（`worktree cps-novel-pr6-lane-d`），基线
+`fix/pr6-lane-b-templates-articles@b866384`。Lane B 报告点名的 5 个跨边界项，本 lane
+在放开的文件边界内逐条收口。
+
+- **`article_conflict` 错误码登记**：`src/contracts/errors.ts` 的 `AdminErrorCode`
+  联合类型新增 `article_conflict`；`src/features/admin-ui/error-copy.ts` 的 `COPY`
+  表（`Readonly<Record<AdminErrorCode, string>>`，漏登记即编译期报错）补上中文文案
+  "文章已被其他操作人修改，请刷新后重试"。文章无 HTTP 路由——全部走
+  `articles/_actions.ts` 的 Server Action——所以没有 `respond.ts` 的
+  `toErrorEnvelope` 分支要同步补。新增 `tests/ui/admin-error-copy.test.ts` 锁定
+  `ArticleConflictError.code`/`.status` 与文案。`service.ts`/`_actions.ts` 里"两个
+  文件在 lane 边界外未登记"的过时注释已更新为已完成状态。
+- **M7 文章列表筛选**：`src/server/articles/service.ts` 新增 `listArticles`
+  （`locale`/`status`/`novelId`/`templateId` 四维过滤，语义对齐 CPS
+  `git show v8.3.6:src/actions/article-actions.ts` 的 `getArticles`），复用
+  `@/server/admin-content` 已登记的 `AdminContentQueryError`/
+  `invalid_status`/`invalid_locale`/`invalid_identifier`，未登记参数静默忽略；分页
+  `page`/`pageSize`（≤100，`ARTICLE_LIST_MAX_PAGE_SIZE`）+ 真实 `COUNT(*)` 出
+  `total`/`totalPages`（不伪造翻页，同 `@/server/admin-content`
+  `normalizeAdminNovelListInput` 的约定）。`articles/page.tsx` 接入
+  `searchParams` 驱动的筛选表单（新增 `_components/article-filters.tsx`）与分页
+  （复用 `../novels/_components/content-pagination.tsx`）；非法筛选值走新增
+  `_lib/query-errors.ts` 的 `articleQueryErrorEnvelope`（内联 400 面板，`invalid_
+  identifier` 在这里永远是"改筛选值"而不是 novels 详情页那种"这本书不存在"的 404，
+  故未直接复用 `novels/_lib/content-errors.ts` 的同名函数）；新增
+  `articles/error.tsx` 段级错误边界兜底非筛选异常。测试：
+  `tests/backend/articles/service.test.ts` 新增 `describe("listArticles ...")`
+  （单维/组合筛选、软删除永不出现、未登记参数忽略、四个非法值分别拒绝、分页与
+  `totalPages`），`tests/ui/articles-admin.test.tsx` 新增
+  `ArticleFilters` 咬合测试（字段名对齐 query-string key、当前值回填
+  `defaultValue`、状态四态选项、纯 GET 无 `page` 字段）。
+- **`Article.templateId` 写入测试**：读源码确认
+  `src/server/content-creation/service.ts:577` 的 `runCreateTransaction` 本就在
+  `tx.article.create` 写 `templateId: template.id`（语义未改，本 lane 只补测试）。
+  新增 `tests/backend/content-creation/template-selection.test.ts`：无已注册模板
+  时写入自动创建的 `system-default-v1` 模板 id；显式 `input.templateKey` 时写入该
+  模板 id 而非默认模板 id。两个断言都直接查
+  `fake.lastArticleCreateArgs.templateId`，不只查落库后的行。
+- **N-9 首页 categories 只查一次**：`src/app/_lib/public-load.ts` 的 `loadChrome`
+  加了可选第二参数 `categories`，转发进 `loadPublicChrome`（lane B 已给
+  `queries.ts` 加好的第三参数）；未新增导出名——`tests/ui/public-routes.test.tsx`
+  的 `vi.mock("@/app/_lib/public-load", () => ({ loadChrome: vi.fn(), ... }))`
+  是固定 mock 工厂，新增导出在该文件里会是 `undefined`，验证过会炸，改成给既有
+  `loadChrome` 加参数就没有这问题。`src/app/page.tsx` 的
+  `generateMetadata`/`HomePage` 都改成先 `loadPublicCategories(locale)` 一次，再把
+  结果传给 `loadChrome("home", categories)`。
+  `tests/backend/site/public-query-budget.test.ts` 首页用例上限从 ≤7 降到 ≤5（
+  `article.findMany` 3→2，`$queryRaw` taxonomy 3→2，`siteSetting.findUnique` 仍
+  1），并把用例本身改写成模拟接线后的调用顺序。
+- **重复 `article.findMany`（记录不改）**：`listPublicCategories` 与
+  `listPublicArticles`（经 `listHomeNovels`）各自独立跑同一条
+  `article.findMany`（同 `buildPublicArticleWhere`/`ARTICLE_CARD_SELECT`/
+  `take`），N-9 接线后首页仍剩这两次同形态查询。已在
+  `public-query-budget.test.ts` 文件头与新用例注释里记录来源与"需要每个调用方
+  兼容性审计后才能收口"的后续项，本 lane 未改代码。
+- 变异自检（改坏→红，复原→`git diff` 干净）：① `listArticles` 去掉 `status`
+  过滤条件 → `service.test.ts` 2 个用例转红；② `runCreateTransaction` 删掉
+  `templateId: template.id,` → `template-selection.test.ts` 2 个用例转红；③
+  `public-query-budget.test.ts` 首页用例改回"分别查两次 categories"的旧调用形态
+  （模拟 `page.tsx` 回退）→ 该用例在新 ≤5 阈值下转红（7 > 5）。
+- 门禁：`typecheck`/`lint`（0 error，3 条与本 lane 无关的既有 warning）/
+  `test:ui`（112 files / 1788 tests all green）/`test:backend`（157 files /
+  1471 tests，唯一失败 `publish-gate/no-bypass.test.ts` 指向
+  `scripts/s1-exact-target-structural-smoke.ts`，与本 lane 改动无关，任务书列为
+  唯一允许失败）/`build`（Next 16 Turbopack 编译通过，`/articles` 路由正常生成）。
+- 未 push、未合并；只在本 worktree 内提交。
+
+---
+
+## 2026-09-05 · PR6 fix lane C — CanonicalTag bootstrap CLI（B-3）+ 治理记录（N-11/N-12）
+
+- 背景：PR #6（`feature/launch-parity-operating-surfaces`）验收 CHANGES_REQUIRED，
+  B-3 指出 additive migration 无 seed、`mutateAdminCanonicalTag` 只有 update 没有
+  create、`canonicalTag.create` 只出现在一处测试 fixture——`canonical_tag` 在
+  UAT 环境恒为空，公开分类链（`/category/[slug]`）不可执行。从 `main a05e41b`
+  独立 worktree（`fix/pr6-lane-c-tagging-bootstrap`）施工，与并行修复 B-1/B-2 的
+  lane A/B 互不接触。
+- 新增 `scripts/p2-06-5-production/tagging-bootstrap.ts`：ADR-P2-06-5-TAGGING-V3 §12
+  "explicit bootstrap CLI" 的实现。默认 dry-run，读取并 SHA-256 校验两份权威文件
+  （CanonicalTag v1 Final JSON、B2 Owner Final mapping CSV），打印 123 tag /
+  123 translation / 314 alias / 360 keyword / 194 组 196 条 mapping edge 的计划
+  写入量与数据库当前计数，零写入。`--apply --approver <adminIdentity>
+  --channel-app changdu-app=<UUID>` 事务内幂等 upsert 并写 `OperationAudit`；
+  同 `--request-id` 重放零写入。不经过 `mutateAdmin*` 语义层（ADR：bootstrap 是
+  authority 平面），不写 `novel_canonical_tag`。
+- 施工中发现并修复一个真实 alias 冲突检测 bug：初版把"某 tag 的 alias 与自己的
+  slug/stableId 相同"（真实数据里 `ct-v1-adventure` 的 slug 与 alias 都是
+  "adventure"，是有意为之的关键词种子设计）误判为冲突并拒绝写入；在 X8 uat 实跑
+  dry-run 时被真实 123 条数据当场抓到（fixture 测试因数据太小没覆盖到）。修复为
+  只检测跨 tag 的身份碰撞（与 `mutateAdminCanonicalTag` 的 `replace_aliases` 校验
+  语义对齐——只查*其它* tag 的身份集合，不查自己），补充回归测试。
+- 新增 `tests/backend/tagging/bootstrap.test.ts`（22 用例，fake db + 小 fixture）：
+  CLI 参数解析、`parseCsv`、`buildCanonicalPlan`（去重/冲突/脚本过滤/overlay
+  disable/alias 碰撞）、`buildMappingPlan`（分组/fanout）、SHA-256 不符拒绝
+  （临时目录 fixture，非真实 123 条文件）、dry-run 零写入、approver 不存在/非
+  active 拒绝、channel-app 绑定缺失/不存在拒绝、apply 幂等（同 request-id 二次
+  调用为纯 replay，`novel_canonical_tag` 全程未被触碰）。
+- X8 uat（`cps-novel-x8-local`，基线 `a05e41b`）实跑：dry-run→apply 全部通过，
+  `canonical_tag`/`canonical_tag_translation`/`canonical_tag_keyword`/
+  `source_label_mapping` 落地 123/123/360/196，`novel_canonical_tag` 保持 0；
+  二次 apply（同 request-id）为 `outcome=replayed`。因 lane C 未合并，X8 镜像里
+  没有 `docs/`（生产镜像本就不打包）与新脚本文件，实跑时对 `docker compose run`
+  额外挂载三个只读 volume（脚本本身 + 两份权威文件），不修改 X8 worktree；见
+  runbook §2.6 记录的验证过命令与合并后的等效形态。
+- 治理记录（N-11/N-12）：`database-governance.md` §12 补两行——carousel 列
+  migration `20260905090000_site_setting_carousel_config` 此前遗漏未记；
+  `20260816160000_p2_06_5_tagging_v3` 与 `20260818120000_v020_foundation_shared`
+  的目录名字面序与 X8 卷上 `_prisma_migrations` 实际 apply 顺序不一致（`migrate
+  deploy` 只按"是否已记录"决定要不要应用，安全；`migrate dev` 的 shadow-DB 重放
+  假定目录序即应用序，会报漂移）——已用 `SELECT started_at FROM
+  _prisma_migrations` 实测核实该顺序倒挂确实存在，不是臆测；两个 migration 目录
+  均不改名。ADR §12 追加 2026-09-05 实现记录；`scripts/README.md`、
+  `docs/operations/OWNER_LOCAL_UAT_RUNBOOK_2026-09-03.md` §2.6 补命令形态。
+- 门禁：`npm run typecheck`/`npm run lint` 全绿；`npm run test:backend`
+  1445/1446（唯一失败 `publish-gate/no-bypass`，与 main 同签名、非本次改动引入）；
+  `npm run test:ui` 1740/1740 全绿。未 push、未改 PR、未碰主检出或 Codex 的
+  lane A/B worktree。
+
+---
+
+## 2026-09-05 · CPS 海阅首发后台与 SEO 运营面补全
+
+- 从 clean `main@f99c25e` 的独立 worktree 实施 M0–M12；主检出保持只读。
+- 完成 enforcement-aware 能力投影、目录写闸三态、创建后 preview 入队、轮播、模板、文章、
+  CanonicalTag 分类公开链、13 字段站点设置与安全页恢复码事务轮换。
+- Tagging V3 仅从 `1237b17` 相对 `c5bf508` 的 18 个已提交历史重放；manual/mapped 公开读取，
+  `AUTO_WRITE_AUTHORIZED=NO`，无 taxonomy auto write。
+- 新 mutation 入口全部进入 Admin registry；`home_carousel.compute.v1` 进入 Scheduler、Worker 与
+  X8 allowlist；`SiteSetting.carouselConfigJson` migration、数据库字典和列级授权同步。
+- X8 原始截图、只读 SQL、门禁输出与 mutation 证据只保存在忽略目录
+  `.tmp/x8-production-like/evidence/`，不进入 Git。远端 push、PR、部署与 tag 均未执行。
+
+详见 `docs/p2/LAUNCH_PARITY_OPERATING_SURFACES_2026-09-05.md`。
+## 2026-09-07 · SideEffectIntent 通用状态机收口（KTF-001 处置）
+
+- 背景：`31d4723`（2026-09-01 claim lifecycle 加固）为 readback-only recovery 在通用
+  `isAllowedSideEffectTransition` 上打开了 `claim_retry_blocked -> confirmed`，同时只改了单测
+  `side-effect-state.test.ts`，没改 P1-07 集成测试 `commits side-effect intent independently and
+  blocks unknown retry`，该用例自此在一次性 PostgreSQL 上稳定失败并被登记为 KTF-001。通用
+  `transitionSideEffectIntent()` 因而允许任意调用方在没有任何证据的情况下把“结果未知”的副作用
+  标成 confirmed。
+- 处置：通用图恢复 P1-07 原始形状（`claim_retry_blocked` 只能到 `manual_review_required`）；新增
+  `confirmSideEffectIntentByReadbackInTransaction(tx, { effectKey, evidence })` 作为 readback 确认
+  的唯一边界（只接受 `prepared`/`claim_retry_blocked`，强制 `hasWebUrl/hasAppUrl` 布尔证据，
+  `responseShape` 合并既有 ambiguity 证据并记 `source=readback`/`confirmedFrom`，状态限定 CAS）；
+  `worker/handlers/promo-link-claim.ts` 的 `writePromoLinkClaimed` 改走该边界。X9
+  `resolveManualReview` 与 `manual_review_required` 终态语义不变。
+- 测试：`side-effect-state.test.ts` 重写为三边界矩阵 + 专用边界 fake-tx 用例；claim handler 新增
+  `claim_retry_blocked` 崩溃窗口的 readback 恢复与 readback 失败转人工两用例；新增
+  `side-effect-readback-boundary.test.ts` 源码钉子（唯一调用点 = claim handler；task-admin 不引用）；
+  P1-07 集成测试原用例不改并新增专用边界用例。
+- 明确没做：不改 `SideEffectIntentTransition` 类型、不改 `prepared -> confirmed` 通用边、不改 X9、
+  不改 `docs/operations/MOBOREADER_PROMO_CLAIM_CONTRACT_2026-08-31.md`（历史记录）。
+
 ## 2026-09-04 · RC-11 本地管理员认证恢复 + 2FA 首次绑定 QR
 
 - 事故背景：X8 复用旧 PostgreSQL volume，遗留管理员 `x8-owner` 已在 2026-08-26 完成

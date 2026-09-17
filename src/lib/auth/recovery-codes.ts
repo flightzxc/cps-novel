@@ -1,4 +1,8 @@
-import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
+import { randomBytes, randomUUID, scryptSync, timingSafeEqual } from "node:crypto";
+import type { AdminIdentityStore, AuthUnitOfWork, TwoFactorStore } from "./ports";
+import { AdminAccessError } from "./errors";
+import { decryptTotpSecret } from "./totp-crypto";
+import { verifyTotpCode } from "./totp";
 
 export const DEFAULT_RECOVERY_CODE_COUNT = 10;
 const RECOVERY_CODE_RE = /^[A-F0-9]{4}-[A-F0-9]{4}-[A-F0-9]{4}$/;
@@ -68,4 +72,48 @@ export function verifyRecoveryCode(code: string, storedHash: string): boolean {
 export function maskRecoveryCode(code: string): string {
   const normalized = normalizeRecoveryCode(code);
   return normalized.length >= 4 ? `${normalized.slice(0, 4)}-****-${normalized.slice(-4)}` : "****";
+}
+
+/**
+ * CPS v8.3.6 recovery-code rotation semantics. The current TOTP is verified
+ * before any write; the store transaction replaces every prior code and
+ * increments sessionVersion atomically. Plain codes exist only in this return
+ * value so the security panel can display them once.
+ */
+export async function regenerateRecoveryCodes(input: {
+  identityId: string;
+  code: string;
+  identities: AdminIdentityStore;
+  twoFactor: TwoFactorStore;
+  transactions: AuthUnitOfWork;
+  encryptionKey?: string;
+  now?: Date;
+  recoveryHashCost?: number;
+}): Promise<{ recoveryCodes: string[]; nextSessionVersion: number }> {
+  const now = input.now ?? new Date();
+  const [identity, state] = await Promise.all([
+    input.identities.findById(input.identityId),
+    input.twoFactor.findByIdentityId(input.identityId),
+  ]);
+  if (!identity || identity.status !== "active") throw new Error("Admin identity not found");
+  if (!state?.enabled || !state.encryptedSecret) {
+    throw new AdminAccessError("two_factor_failed", 403, "Two-factor authentication is not enabled");
+  }
+  const secret = decryptTotpSecret(state.encryptedSecret, input.encryptionKey);
+  if (!verifyTotpCode(secret, input.code, { timestamp: now.getTime() })) {
+    throw new AdminAccessError("two_factor_failed", 403, "Invalid two-factor code");
+  }
+  const recoveryCodes = generateRecoveryCodes();
+  const transaction = await input.transactions.regenerateRecoveryCodes({
+    identityId: identity.id,
+    expectedSessionVersion: identity.sessionVersion,
+    expectedEncryptedSecret: state.encryptedSecret,
+    rotatedAt: now,
+    recoveryCodes: recoveryCodes.map((recoveryCode) => ({
+      id: randomUUID(),
+      codeHash: hashRecoveryCode(recoveryCode, { cost: input.recoveryHashCost }),
+    })),
+  });
+  if (transaction.status !== "committed") throw new Error("Two-factor state changed concurrently");
+  return { recoveryCodes, nextSessionVersion: transaction.nextSessionVersion };
 }

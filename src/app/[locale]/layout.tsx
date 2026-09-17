@@ -7,8 +7,9 @@ import { getRoutableLocale } from "./_guard";
  * Locale-prefixed public route tree — "as-needed" scheme (D-8): the default
  * locale (`en`) lives at the bare path (`src/app/page.tsx`,
  * `src/app/browse/page.tsx`, `src/app/novel/...`), every other registered
- * `SITE_LOCALES` member lives here, under `/{locale}/...`, once it clears
- * the D-7 publish whitelist. Next.js resolves static segments (`browse`,
+ * `SITE_LOCALES` member lives here, under `/{locale}/...` (L10N P4:
+ * "registered即路由" — the D-7 publish whitelist that used to gate this
+ * further was deleted). Next.js resolves static segments (`browse`,
  * `novel`) ahead of this dynamic `[locale]` segment at the same directory
  * level, so the two trees coexist without any route conflict or rewrite —
  * this is the standard App Router "as-needed" locale-prefix pattern,

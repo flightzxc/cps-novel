@@ -6,8 +6,9 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import { buttonClassName } from "@/components/ui/button";
 import { errorEnvelopeCopy } from "@/features/admin-ui/error-copy";
+import { SITE_LOCALE_LABELS, type SiteLocale } from "@/lib/locale/locale-canonical";
 
-import { applyContentCreationAction, dryRunContentCreationAction } from "../_actions";
+import { applyNovelMaterializeAction, dryRunNovelMaterializeAction } from "../_actions";
 import {
   describeCreateContentOutcome,
   type ContentCreationPlan,
@@ -35,11 +36,24 @@ type Stage =
   | { readonly kind: "result"; readonly result: CreateContentResult }
   | { readonly kind: "error"; readonly message: string };
 
+/**
+ * `missing_locale`/`unsupported_locale` are real, reachable outcomes here
+ * (L10N P2, matrix #3) — not defensive placeholders like the other three
+ * codes below. Opening this dialog on a source item whose `sourceLocale` is
+ * `NULL`, or resolves to a locale outside `SITE_LOCALES` (e.g.
+ * `it`/`fil`/`ms`/`tr`), makes the auto-dry-run throw one of these, landing
+ * the dialog straight in `stage: "error"` — the plan preview (and its
+ * "确认创建" button) is never reached at all, so there is nothing further to
+ * disable.
+ */
 const INVALID_INPUT_COPY: Readonly<Record<string, string>> = Object.freeze({
   invalid_novel_source_item_id: "来源条目标识无效，请刷新页面后重试",
-  invalid_locale: "语种参数无效（内部错误），请联系工程排查",
+  missing_locale: "该来源条目尚未识别出语种（sourceLocale 为空），无法纳入书目。",
+  unsupported_locale: "该来源条目识别出的语种不是本站已登记的语种，无法纳入书目。",
   invalid_actor: "无法确认当前操作者身份，请重新登录后重试",
   invalid_request_id: "请求标识无效（内部错误），请刷新页面后重试",
+  legacy_template_on_materialize: "纳入书目不再选择文章模板，请刷新页面后重试。",
+  retired_protocol: "旧创建内容协议已退役，请刷新页面后重新纳入书目。",
 });
 
 /**
@@ -73,37 +87,31 @@ function Row({ label, value }: { label: string; value: ReactNode }) {
   );
 }
 
-function localeMismatchNotice(item: SourceItemRow): string | null {
-  if (!item.sourceLocale) {
-    return "该来源条目尚未识别出标准站点语种（语种归一 S7a 未接线），请先人工确认这确实是英文内容，再继续创建。";
-  }
-  if (item.sourceLocale !== "en") {
-    return `该来源条目识别出的语种是「${item.sourceLocale}」，与本次将创建的「en」不一致，请确认这是预期行为。`;
-  }
-  return null;
+/**
+ * `plan.locale` is always identical to `item.sourceLocale` here — by the
+ * time a dry run reaches `stage: "plan"` at all, `loadPlan`
+ * (`src/server/content-creation/service.ts`) has already derived it from
+ * that exact field and thrown `missing_locale`/`unsupported_locale`
+ * otherwise (see `INVALID_INPUT_COPY`'s own doc comment) — so there is no
+ * "mismatch" state left to warn about, only a read-only fact to display:
+ * the code plus its 站点语种标签 (`SITE_LOCALE_LABELS`, the same registry
+ * `template-manager.tsx`'s locale picker already uses for the same
+ * purpose).
+ */
+function derivedLocaleDisplay(locale: SiteLocale): string {
+  return `${locale}（${SITE_LOCALE_LABELS[locale]}）`;
 }
 
 function PlanPreview({ item, plan }: { item: SourceItemRow; plan: ContentCreationPlan }) {
-  const mismatch = localeMismatchNotice(item);
   return (
     <div className="space-y-3">
       <p className={`rounded-lg border px-3 py-2 text-sm ${TONE_STYLE.info}`} role="status">
-        尚未写入任何数据。以下字段将写入 Novel / Article（草稿状态），确认后才会真正创建。
+        尚未写入任何数据。以下字段将写入 Novel（草稿状态）。此步骤不会创建文章，也不选择文章模板。
       </p>
-      {mismatch && (
-        <p className={`rounded-lg border px-3 py-2 text-sm ${TONE_STYLE.warning}`} data-testid="locale-mismatch-notice">
-          {mismatch}
-        </p>
-      )}
       <dl className="divide-y divide-gray-100 rounded-lg border border-gray-200">
-        <Row label="语种" value={plan.locale} />
+        <Row label="语种" value={<span data-testid="derived-locale-display">{derivedLocaleDisplay(plan.locale)}</span>} />
         <Row label="标题" value={plan.title} />
         <Row label="书目 slug" value={plan.novelSlug} />
-        <Row label="文章 slug" value={plan.articleSlug} />
-        <Row
-          label="预览短码"
-          value={`${plan.provisionalPublicPageShortId}（临时生成，仅供预览，实际创建会重新分配）`}
-        />
         <Row label="总章节数" value={String(item.totalChapterCount)} />
         <Row label="付费起始章节" value={item.paidFromChapter === null ? "未设置" : String(item.paidFromChapter)} />
         <Row label="封面" value={item.coverUrl ?? "（无）"} />
@@ -119,8 +127,6 @@ function CreatedSummary({ summary }: { summary: CreatedContentSummary }) {
       <dl className="divide-y divide-gray-100 rounded-lg border border-gray-200">
         <Row label="书目业务ID" value={summary.novelBusinessId} />
         <Row label="书目 slug" value={summary.novelSlug} />
-        <Row label="文章 slug" value={summary.articleSlug} />
-        <Row label="公开短码" value={summary.publicPageShortId} />
         <Row label="语种" value={summary.locale} />
       </dl>
       <Link
@@ -131,6 +137,28 @@ function CreatedSummary({ summary }: { summary: CreatedContentSummary }) {
       </Link>
     </>
   );
+}
+
+function PreviewEnqueueNotice({ result }: { result: Extract<CreateContentResult, { outcome: "created" }> }) {
+  const preview = result.previewEnqueue;
+  if (!preview) return null;
+  let message: string;
+  if (!preview.queued) {
+    message = preview.reason === "no_channel_account"
+      ? "预览未入队：没有可唯一确定的有效渠道账户；内容已创建，可稍后人工补发。"
+      : preview.reason === "mixed_channel_apps"
+        ? "预览未入队：所选来源跨越多个渠道应用；内容已创建，可分渠道补发。"
+        : preview.reason === "no_eligible_sources"
+          ? "预览未入队：当前没有符合条件的来源条目。"
+        : "预览未入队：提交后的入队步骤失败；内容已创建，可稍后人工补发。";
+  } else if (preview.status === "enqueued" && preview.taskStatus === "disabled") {
+    message = "预览任务已创建，但目录写闸关闭，任务状态为 disabled。";
+  } else if (preview.status === "duplicate" || preview.status === "active_conflict") {
+    message = "预览任务未重复创建：已存在相同或进行中的任务。";
+  } else {
+    message = "预览刷新任务已入队。";
+  }
+  return <p data-testid="preview-enqueue-result" className={`rounded-lg border px-3 py-2 text-sm ${TONE_STYLE.info}`}>{message}</p>;
 }
 
 function ResultPanel({ result }: { result: CreateContentResult }) {
@@ -148,6 +176,7 @@ function ResultPanel({ result }: { result: CreateContentResult }) {
       {(result.outcome === "created" || result.outcome === "already_exists") && (
         <CreatedSummary summary={result} />
       )}
+      {result.outcome === "created" && <PreviewEnqueueNotice result={result} />}
     </div>
   );
 }
@@ -182,7 +211,7 @@ export function CreateContentDialog({
    * never classify the same response differently.
    */
   async function fetchStage(): Promise<Stage> {
-    const result = await dryRunContentCreationAction({
+    const result = await dryRunNovelMaterializeAction({
       novelSourceItemId: item.id,
       requestId: crypto.randomUUID(),
     });
@@ -215,7 +244,7 @@ export function CreateContentDialog({
 
   async function confirmCreate() {
     setApplying(true);
-    const result = await applyContentCreationAction({
+    const result = await applyNovelMaterializeAction({
       novelSourceItemId: item.id,
       requestId: crypto.randomUUID(),
     });
@@ -241,14 +270,14 @@ export function CreateContentDialog({
         event.preventDefault();
         if (!applying) onClose();
       }}
-      className="w-full max-w-lg rounded-xl border border-gray-200 p-0 text-gray-900 shadow-xl backdrop:bg-gray-900/40"
+      className="m-auto max-h-[calc(100vh-2rem)] w-full max-w-lg overflow-y-auto rounded-xl border border-gray-200 bg-white p-0 text-gray-900 shadow-xl backdrop:bg-gray-900/40"
     >
       <div className="space-y-4 p-5">
-        <h2 className="text-base font-semibold">创建内容 · {item.title}</h2>
+        <h2 className="text-base font-semibold">纳入书目 · {item.title}</h2>
 
         {stage.kind === "loading" && (
           <p role="status" className="text-sm text-gray-500">
-            正在生成创建计划…
+            正在生成纳入计划…
           </p>
         )}
         {stage.kind === "plan" && <PlanPreview item={item} plan={stage.plan} />}
@@ -286,7 +315,7 @@ export function CreateContentDialog({
               onClick={confirmCreate}
               className={buttonClassName("primary")}
             >
-              {applying ? "创建中…" : "确认创建"}
+              {applying ? "纳入中…" : "确认纳入书目"}
             </button>
           )}
         </div>

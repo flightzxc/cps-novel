@@ -1154,6 +1154,112 @@ describe("P0-S5 promo-link claim handler — frozen novel claim contract", () =>
     });
   });
 
+  it("recovers a claim_retry_blocked intent (crash window before manual review) by readback only and confirms it atomically with PromoLink", async () => {
+    const db = seedFoundation(new FakePromoLinkClaimHandlerDb(), {
+      rawPayload: { agencyId: "agency-1", seriesId: "series-1", language: "en" },
+      capabilityStatus: "enabled",
+    });
+    seedActiveCredential(db);
+    const idempotencyKey = buildPromoLinkIdempotencyKey({ channelAppId: "app-1", novelSourceItemId: "source-1", channelAccountId: "account-1", offerType: "read" });
+    const effectKey = "d".repeat(64);
+    db.intents.set(effectKey, {
+      id: "intent-blocked-recoverable",
+      effectKey,
+      operationType: "promo_link.claim_promo",
+      idempotencyKey: effectKey,
+      targetType: "promo_link",
+      targetId: idempotencyKey,
+      channelAccountId: "account-1",
+      channelAppId: "app-1",
+      status: "claim_retry_blocked",
+      requestSummary: {},
+      responseShape: { failureCategory: "upstream_timeout", readbackConfirmed: false, readbackStatus: "missing" },
+      createdAt: new Date(Date.now() - 60_000),
+    });
+    const recoveredPromo: ClaimPromoResult = {
+      upstreamCode: "RECOVERED-BLOCKED-CODE",
+      webUrl: "https://eng.moboreader.com/recovered-blocked",
+      appUrl: "https://eng.moboreader.com/book/recovered-blocked",
+    };
+    const adapter: PromoLinkClaimAdapter = {
+      claimPromo: vi.fn(),
+      readPromoAfterClaim: vi.fn().mockResolvedValue({ status: "found", promo: recoveredPromo }),
+    };
+    const handler = createPromoLinkClaimHandler(db.asPrismaClient(), { env: APPLY_ENV, adapter });
+    const outcome = await handler({
+      lease: { ...baseLease({ attemptCount: 2 }), payload: makePayload() },
+      mode: "apply",
+      signal: new AbortController().signal,
+      heartbeat: async () => true,
+    });
+
+    expect(outcome).toMatchObject({ status: "success", result: { decision: "readback_recovered" } });
+    expect(adapter.claimPromo).not.toHaveBeenCalled();
+    expect(db.intents.get(effectKey)).toMatchObject({ status: "claim_retry_blocked" });
+    expect(db.promoLinks.size).toBe(0);
+
+    await db.runProtectedWriteTransaction(
+      (outcome as { protectedWrite: (tx: unknown) => Promise<void> }).protectedWrite as never,
+    );
+    expect(db.intents.get(effectKey)).toMatchObject({
+      status: "confirmed",
+      responseShape: {
+        failureCategory: "upstream_timeout",
+        source: "readback",
+        confirmedFrom: "claim_retry_blocked",
+        hasWebUrl: true,
+        hasAppUrl: true,
+      },
+    });
+    expect(db.promoLinkByIdempotencyKey(idempotencyKey)).toMatchObject({
+      status: "fetched",
+      origin: "claimed",
+      upstreamCode: "RECOVERED-BLOCKED-CODE",
+    });
+    expect(db.audits.some((audit) => audit.action === "promo_link_claim.readback_recovered")).toBe(true);
+  });
+
+  it("routes a claim_retry_blocked intent whose readback cannot locate the promo to manual review without another getcode", async () => {
+    const db = seedFoundation(new FakePromoLinkClaimHandlerDb(), {
+      rawPayload: { agencyId: "agency-1", seriesId: "series-1", language: "en" },
+      capabilityStatus: "enabled",
+    });
+    seedActiveCredential(db);
+    const idempotencyKey = buildPromoLinkIdempotencyKey({ channelAppId: "app-1", novelSourceItemId: "source-1", channelAccountId: "account-1", offerType: "read" });
+    const effectKey = "d".repeat(64);
+    db.intents.set(effectKey, {
+      id: "intent-blocked-unrecoverable",
+      effectKey,
+      operationType: "promo_link.claim_promo",
+      idempotencyKey: effectKey,
+      targetType: "promo_link",
+      targetId: idempotencyKey,
+      channelAccountId: "account-1",
+      channelAppId: "app-1",
+      status: "claim_retry_blocked",
+      requestSummary: {},
+      responseShape: { failureCategory: "upstream_timeout", readbackConfirmed: false, readbackStatus: "missing" },
+      createdAt: new Date(Date.now() - 60_000),
+    });
+    const adapter: PromoLinkClaimAdapter = {
+      claimPromo: vi.fn(),
+      readPromoAfterClaim: vi.fn().mockResolvedValue({ status: "missing" }),
+    };
+    const sleep = vi.fn(async () => undefined);
+    const handler = createPromoLinkClaimHandler(db.asPrismaClient(), { env: RETRY_ENV, adapter, sleep });
+    const outcome = await handler({
+      lease: { ...baseLease({ attemptCount: 2 }), payload: makePayload() },
+      mode: "apply",
+      signal: new AbortController().signal,
+      heartbeat: async () => true,
+    });
+
+    expect(outcome).toMatchObject({ status: "success", result: { decision: "manual_review_required" } });
+    expect(adapter.claimPromo).not.toHaveBeenCalled();
+    expect(db.intents.get(effectKey)).toMatchObject({ status: "manual_review_required" });
+    expect(db.intents.get(effectKey)?.responseShape).toMatchObject({ readbackConfirmed: false });
+  });
+
   it("rolls back the PromoLink write when intent confirmation cannot commit", async () => {
     const db = seedFoundation(new FakePromoLinkClaimHandlerDb(), {
       rawPayload: { agencyId: "agency-1", seriesId: "series-1", language: "en" },

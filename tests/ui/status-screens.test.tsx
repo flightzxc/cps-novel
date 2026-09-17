@@ -26,7 +26,11 @@ describe("撤回状态", () => {
     render(<UnavailableScreen locale="en" reason="takedown" />);
 
     expect(screen.getByRole("heading", { name: "This book has been withdrawn" })).toBeTruthy();
-    expect(screen.getByText(/withdrawal is permanent/)).toBeTruthy();
+    // Owner 拍板 2026-09-10 (承诺句英文口径): "This withdrawal is permanent."
+    // was removed from `unavailable.takedownBody` — assert the remaining
+    // sentence is still shown, and that the deleted permanence claim is gone.
+    expect(screen.getByText(/no longer offers this book/)).toBeTruthy();
+    expect(screen.queryByText(/permanent/i)).toBeNull();
   });
 
   it("标出状态原因", () => {

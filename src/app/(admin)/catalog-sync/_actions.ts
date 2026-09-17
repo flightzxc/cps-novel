@@ -7,6 +7,18 @@ import { revalidatePath } from "next/cache";
 
 import type { ErrorEnvelope } from "@/contracts";
 import {
+  CatalogSelectionInputError,
+  normalizeCatalogSelection,
+  type CatalogBatchContext,
+  type CatalogBatchEnqueueResult,
+  type CatalogBatchSummary,
+  type CatalogSelection,
+  type PromoLinkClaimCredentialWarning,
+} from "@/domain/catalog-batch";
+import { CatalogBatchInputError, enqueueCatalogBatch } from "@/lib/tasks/catalog-batch";
+import { readCatalogBatchContext, readCatalogBatchSummary } from "@/server/catalog-batch";
+import { resolveClaimCredentialAdmission } from "@/lib/credentials/claim-readiness";
+import {
   isNovelCatalogSyncEnabled,
   isNovelCatalogSyncWriteAllowed,
   isPromoLinkClaimEnabled,
@@ -15,31 +27,17 @@ import {
 import {
   MoboreaderTaskInputError,
   createMoboreaderCatalogScanTask,
+  resolveMoboreaderCatalogSafetyMaxPages,
+  resolveMoboreaderUpstreamRecommendedPageSize,
   type MoboreaderTaskCreationResult,
 } from "@/lib/tasks/moboreader";
-import {
-  PromoLinkClaimTaskInputError,
-  UPSTREAM_EXISTING_PROMO_OFFER_TYPE,
-  createPromoLinkClaimTask,
-  type PromoLinkClaimTaskCreationResult,
-} from "@/lib/tasks/promo-link-claim";
-import { PROMO_LINK_CLAIM_CAPABILITY_KEY, PROMO_LINK_CLAIM_LIMITS } from "@/lib/tasks/promo-link-claim-limits";
 import { requireAdminActionAccess, requireFreshAdminServiceMutation } from "@/server/auth/guards";
 import {
   ContentCreationInputError,
-  createContentFromSourceItem,
+  materializeNovelFromSourceItem,
   type ContentCreationInputErrorCode,
-  type CreateContentResult,
+  type NovelMaterializeResult,
 } from "@/server/content-creation";
-import {
-  CONTENT_CREATION_BATCH_BUDGET_MS,
-  CONTENT_CREATION_BATCH_MAX_SELECTION,
-  ContentCreationBatchInputError,
-  applyContentCreationBatch,
-  dryRunContentCreationBatch,
-  type ContentCreationBatchApplyResult,
-  type ContentCreationBatchDryRunResult,
-} from "@/server/content-creation/batch";
 
 import { canonicalOrigin, guardDependencies, prisma, readSessionToken } from "../../api/admin/_lib/deps";
 import { toErrorEnvelope } from "../../api/admin/_lib/respond";
@@ -64,24 +62,22 @@ import { toErrorEnvelope } from "../../api/admin/_lib/respond";
  * because they live in `src/server/`, the guard's own territory — this
  * service does not, by design; see its module header).
  *
- * Locale is hard-coded to `"en"`, not exposed as a picker. Two independent
- * reasons, both already documented on the service
- * (`src/server/content-creation/service.ts`, "Locale is caller-supplied, not
- * derived"): (1) S7a language normalization is not wired, so nothing here can
- * verify a `NovelSourceItem.sourceLocale` actually maps to whatever an
- * operator might pick — offering a dropdown would invite exactly the
- * wrong-locale-content mistake that module header warns about; (2)
- * `listPublishableLocales()` (`@/lib/locale/locale-canonical`) is currently
- * `["en"]` (U6 / D-7), so there is no second publishable locale this round
- * to justify a picker. `SITE_LOCALES` does register 15 locales, but creation
- * is a prerequisite to publishing, not publishing itself, and expanding past
- * `"en"` is deliberately deferred rather than silently allowed.
+ * Locale is never picked here at all — not hard-coded, not a dropdown.
+ * L10N P2 (2026-09-10, matrix #3/#4) closed the S7a gap this comment used to
+ * describe: `createContentFromSourceItem` now derives `Novel.locale`/
+ * `Article.locale` from the source item's own `sourceLocale` (see
+ * `src/server/content-creation/service.ts`'s module header, "Locale is
+ * derived from the source item, never caller-supplied") and this wrapper has
+ * no `locale` field left to forward. A `NULL`/unresolved `sourceLocale`
+ * surfaces as `ContentCreationInputError("missing_locale")`; a resolved
+ * value outside `SITE_LOCALES` (e.g. `it`/`fil`/`ms`/`tr`) surfaces as
+ * `ContentCreationInputError("unsupported_locale")` — both caught below,
+ * same as every other `ContentCreationInputError` code, and rendered by
+ * `create-content-dialog.tsx`.
  */
 
-const CONTENT_CREATION_LOCALE = "en" as const;
-
 export type ContentCreationActionResult =
-  | { readonly ok: true; readonly data: CreateContentResult }
+  | { readonly ok: true; readonly data: NovelMaterializeResult }
   | { readonly ok: false; readonly kind: "access_denied"; readonly envelope: ErrorEnvelope }
   | {
       readonly ok: false;
@@ -111,15 +107,37 @@ async function authorizeAction(actionId: `admin.${string}`, requestId: string) {
  * (`createContentFromSourceItem`'s own default, spelled out here anyway so a
  * future edit cannot flip it by deleting a line).
  */
+async function rejectRetiredContentCreation(
+  actionId: "admin.content_creation.dry_run" | "admin.content_creation.apply" | "admin.content_creation.batch_apply",
+  requestId: string,
+): Promise<ContentCreationActionResult> {
+  try {
+    await authorizeAction(actionId, requestId);
+    return { ok: false, kind: "invalid_input", code: "retired_protocol" };
+  } catch (error) {
+    return { ok: false, kind: "access_denied", envelope: toErrorEnvelope(error) };
+  }
+}
+
+/** Retired coupled protocol. Old clients must fail closed even without templateKey. */
 export async function dryRunContentCreationAction(input: {
+  novelSourceItemId: string;
+  requestId: string;
+  templateKey?: string;
+}): Promise<ContentCreationActionResult> {
+  void input.novelSourceItemId;
+  void input.templateKey;
+  return rejectRetiredContentCreation("admin.content_creation.dry_run", input.requestId);
+}
+
+export async function dryRunNovelMaterializeAction(input: {
   novelSourceItemId: string;
   requestId: string;
 }): Promise<ContentCreationActionResult> {
   try {
     const { context } = await authorizeAction("admin.content_creation.dry_run", input.requestId);
-    const data = await createContentFromSourceItem(prisma, {
+    const data = await materializeNovelFromSourceItem(prisma, {
       novelSourceItemId: input.novelSourceItemId,
-      locale: CONTENT_CREATION_LOCALE,
       mode: "dry_run",
       actor: { type: "admin", adminId: context.identity.id },
       requestId: input.requestId,
@@ -143,9 +161,42 @@ export async function dryRunContentCreationAction(input: {
  * oversight to "fix" by loosening it to `content:view`. It carries the same
  * `requiresTwoFactor: true` + `super_admin`-default bar as every other real
  * content mutation, which is the right bar for a call that inserts the first
- * `Novel`/`Article` rows a source item will ever have.
+ * `Novel` row a source item will ever have. It no longer creates an Article.
  */
+/** Retired coupled protocol. Old clients must fail closed even without templateKey. */
 export async function applyContentCreationAction(input: {
+  novelSourceItemId: string;
+  requestId: string;
+  templateKey?: string;
+}): Promise<ContentCreationActionResult> {
+  void input.novelSourceItemId;
+  void input.templateKey;
+  try {
+    const { serviceAuthorization } = await authorizeAction("admin.content_creation.apply", input.requestId);
+    if (!serviceAuthorization) {
+      const { AdminAccessError } = await import("@/lib/auth/errors");
+      throw new AdminAccessError(
+        "admin_service_authorization_required",
+        403,
+        "Action is not bound to a capability",
+      );
+    }
+    await requireFreshAdminServiceMutation(serviceAuthorization, "content:publish", {
+      identities: guardDependencies().identities,
+      sessions: guardDependencies().sessions,
+      entryId: "admin.content_creation.apply",
+      requestId: input.requestId,
+    });
+    return { ok: false, kind: "invalid_input", code: "retired_protocol" };
+  } catch (error) {
+    if (error instanceof ContentCreationInputError) {
+      return { ok: false, kind: "invalid_input", code: error.code };
+    }
+    return { ok: false, kind: "access_denied", envelope: toErrorEnvelope(error) };
+  }
+}
+
+export async function applyNovelMaterializeAction(input: {
   novelSourceItemId: string;
   requestId: string;
 }): Promise<ContentCreationActionResult> {
@@ -155,10 +206,6 @@ export async function applyContentCreationAction(input: {
       input.requestId,
     );
     if (!serviceAuthorization) {
-      // Unreachable given this action's own registration (capability is
-      // always set — see `src/app/api/admin/_lib/registry.ts`), kept as a
-      // fail-closed backstop against a future registration mistake rather
-      // than trusting that mistake cannot happen.
       const { AdminAccessError } = await import("@/lib/auth/errors");
       throw new AdminAccessError(
         "admin_service_authorization_required",
@@ -173,16 +220,13 @@ export async function applyContentCreationAction(input: {
       entryId: "admin.content_creation.apply",
       requestId: input.requestId,
     });
-    const data = await createContentFromSourceItem(prisma, {
+    const data = await materializeNovelFromSourceItem(prisma, {
       novelSourceItemId: input.novelSourceItemId,
-      locale: CONTENT_CREATION_LOCALE,
       mode: "apply",
       actor: { type: "admin", adminId: context.identity.id },
       requestId: input.requestId,
     });
     if (data.outcome === "created") {
-      // The source item's own status flipped (`pending` → `linked`) and a
-      // brand-new `Novel` now exists for `/novels` to list.
       revalidatePath("/catalog-sync");
       revalidatePath("/novels");
     }
@@ -218,14 +262,29 @@ export async function applyContentCreationAction(input: {
  * (`active_conflict`), not requestToken replay — a double submit from this
  * form produces two distinct tokens but still only one live task, because the
  * second call observes the first one still `pending`/`processing`.
+ *
+ * Phase B (`施工工单_PhaseB_实体订正与运营表单Parity_2026-09-06.md` §三):
+ * `pageStart`/`pageEnd`/`pageSize` are no longer part of this action's own
+ * input — CPS's `changdu-sync-panel.tsx` never exposes page mechanics to an
+ * operator either, it just scans to its own safety ceiling every time. This
+ * action now resolves the same three values the old form used to collect —
+ * page 1 through the factory's own configured safety ceiling
+ * (`resolveMoboreaderCatalogSafetyMaxPages`), at the factory's own
+ * env-resolved recommended page size (`resolveMoboreaderUpstreamRecommendedPageSize`
+ * — C-13, `施工工单_C13_每页100本与节流余量_2026-09-07.md`: reads the
+ * `MOBOREADER_UPSTREAM_RECOMMENDED_PAGE_SIZE` env var instead of the bare
+ * CPS-parity constant, so an operator can opt a task into the probed-safe
+ * larger page size without a code change; still defaults to 20 when unset)
+ * — as fixed server-side values instead. `languages` replaces them as the
+ * one thing the operator does choose: recorded on the task for `/tasks`
+ * detail and result filtering (Phase C), never sent upstream as a filter
+ * (see the doc on `CreateMoboreaderCatalogScanTaskInput.languages`).
  */
 
 export type CatalogScanTriggerInput = {
   readonly channelAccountId: string;
   readonly channelAppId: string;
-  readonly pageStart: number;
-  readonly pageEnd: number;
-  readonly pageSize: number;
+  readonly languages: readonly string[];
   readonly requestId: string;
 };
 
@@ -315,9 +374,10 @@ async function runCatalogScanTrigger(
     const result = await createMoboreaderCatalogScanTask(prisma, {
       channelAccountId: input.channelAccountId,
       channelAppId: input.channelAppId,
-      pageStart: input.pageStart,
-      pageEnd: input.pageEnd,
-      pageSize: input.pageSize,
+      pageStart: 1,
+      pageEnd: resolveMoboreaderCatalogSafetyMaxPages(),
+      pageSize: resolveMoboreaderUpstreamRecommendedPageSize(),
+      languages: input.languages,
       requestToken: randomUUID(),
       actorId,
       requestId: input.requestId,
@@ -361,348 +421,210 @@ export async function applyCatalogScanTaskAction(
   return runCatalogScanTrigger("admin.catalog_scan.apply", "apply", input);
 }
 
-/**
- * RC-1 promo-link claim trigger.
- *
- * `createPromoLinkClaimTask` (`@/lib/tasks/promo-link-claim`) had zero
- * `src/app/**` callers before this — CPS v8.3.6 parity for this repo's
- * promo-link claim chain (`submitChangduPromoClaim`,
- * `src/app/(admin)/sync/actions.ts:724-766` in the read-only CPS reference)
- * is that operators need an explicit-selection launcher on the sync/catalog
- * screen, not a route that only the worker ever reaches. This is that
- * missing entry, composed the same way the two trigger blocks above compose
- * on top of P1-08B.
- *
- * Unlike the catalog-scan pair above, this is **one** action, not two split
- * by `mode`. That split exists there because `dry_run` and `apply` ask for
- * *different* capabilities (`content:view` vs `content:publish`) — splitting
- * by static action id is what keeps the capability out of client-controlled
- * input. Here there is only one capability for the whole claim chain,
- * `promo:claim` (`src/lib/auth/capabilities.ts`), and it is required for
- * *both* modes: the factory writes a `GenericTask` + `OperationAudit` row
- * every time, dry_run included, so a cheap capability-free preview was never
- * on the table the way P0-S13's true content-creation dry run is. With the
- * capability identical either way, branching on `mode` inside one action
- * carries none of the risk the catalog-scan comment above warns about.
- *
- * `offerType` is hardcoded to {@link UPSTREAM_EXISTING_PROMO_OFFER_TYPE}
- * ("read"), not exposed as a picker — same reasoning
- * `CONTENT_CREATION_LOCALE` uses above: it is the only offer type any
- * fixture or production evidence has ever produced
- * (`promo-link-claim-limits.ts`'s own doc comment), so a picker would only
- * invite picking something nothing downstream has ever proven.
- *
- * `novelSourceItemIds` is a plain array, never a filter descriptor — there
- * is no "claim everything matching the current status filter" input shape
- * here at all, mirroring the factory's own `items` contract
- * (`CreatePromoLinkClaimTaskInput`'s doc comment: "never a filter
- * descriptor"). CPS's own `submitChangduPromoClaim` explicitly rejects a
- * `selection` filter object for the exact same reason.
- *
- * Duplicate ids are folded here (not left for the factory's own silent
- * `seen` dedupe) purely so `eligibleCount`/batch-size feedback reflects what
- * the operator actually gets asked about, not a pre-dedupe count they never
- * see. `requestToken` stays server-only, `randomUUID()` per submission, same
- * as `runCatalogScanTrigger` above.
- */
-
-export type PromoLinkClaimTriggerInput = {
-  readonly channelAccountId: string;
-  readonly channelAppId: string;
-  readonly novelSourceItemIds: readonly string[];
-  readonly mode: "dry_run" | "apply";
-  readonly requestId: string;
-};
-
-export type PromoLinkClaimOutcome =
-  | {
-      readonly outcome: "enqueued";
-      readonly taskId: string;
-      readonly mode: "dry_run" | "apply";
-      readonly eligibleCount: number;
-      readonly skipReasonCounts: Readonly<Record<string, number>>;
-    }
-  | {
-      readonly outcome: "enqueued_disabled";
-      readonly taskId: string;
-      readonly mode: "dry_run" | "apply";
-      readonly eligibleCount: number;
-      readonly skipReasonCounts: Readonly<Record<string, number>>;
-      /** Same "both flags, not just the one that blocked this call" shape as `CatalogScanOutcome["created_disabled"]["flags"]` above. */
-      readonly flags: { readonly featureEnabled: boolean; readonly writeAllowed: boolean };
-    }
-  | { readonly outcome: "duplicate"; readonly taskId: string }
-  | { readonly outcome: "active_conflict"; readonly taskId: string }
-  | { readonly outcome: "no_eligible_sources"; readonly skipReasonCounts: Readonly<Record<string, number>> }
-  | {
-      /**
-       * `ChannelCapability` (`(channelAppId, capabilityKey)`) is not
-       * something the factory itself ever reads — that enforcement lives in
-       * the worker handler. Checked here, before the factory is even
-       * called, purely so an operator does not have to submit, wait, and
-       * then discover on `/tasks` that the channel app's claim capability
-       * was never turned on. No task row is written for this outcome.
-       */
-      readonly outcome: "capability_disabled";
-      readonly channelAppId: string;
-    };
-
-export type PromoLinkClaimActionResult =
-  | { readonly ok: true; readonly data: PromoLinkClaimOutcome }
+export type CatalogBatchActionResult<T> =
+  | { readonly ok: true; readonly data: T }
   | { readonly ok: false; readonly kind: "access_denied"; readonly envelope: ErrorEnvelope }
   | { readonly ok: false; readonly kind: "invalid_input"; readonly code: string };
 
-function classifyPromoLinkClaimResult(
-  result: PromoLinkClaimTaskCreationResult,
-  mode: "dry_run" | "apply",
-): PromoLinkClaimOutcome {
-  if (result.status === "duplicate") return { outcome: "duplicate", taskId: result.taskId };
-  if (result.status === "active_conflict") return { outcome: "active_conflict", taskId: result.taskId };
-  if (result.status === "no_eligible_sources") {
-    return { outcome: "no_eligible_sources", skipReasonCounts: result.skipReasonCounts };
-  }
-  if (result.taskStatus === "pending") {
-    return {
-      outcome: "enqueued",
-      taskId: result.taskId,
-      mode,
-      eligibleCount: result.eligibleCount,
-      skipReasonCounts: result.skipReasonCounts,
-    };
-  }
-  return {
-    outcome: "enqueued_disabled",
-    taskId: result.taskId,
-    mode,
-    eligibleCount: result.eligibleCount,
-    skipReasonCounts: result.skipReasonCounts,
-    flags: {
-      featureEnabled: isPromoLinkClaimEnabled(),
-      writeAllowed: isPromoLinkClaimWriteAllowed(),
-    },
-  };
+function catalogBatchInputFailure(error: unknown): { readonly ok: false; readonly kind: "invalid_input"; readonly code: string } | null {
+  return error instanceof CatalogSelectionInputError || error instanceof CatalogBatchInputError
+    ? { ok: false, kind: "invalid_input", code: error.code }
+    : null;
 }
 
-export async function enqueuePromoLinkClaimAction(
-  input: PromoLinkClaimTriggerInput,
-): Promise<PromoLinkClaimActionResult> {
-  try {
-    const { serviceAuthorization } = await authorizeAction(
-      "admin.promo_link_claim.enqueue",
-      input.requestId,
-    );
-    if (!serviceAuthorization) {
-      // Unreachable given this action's own registration (capability is
-      // always set — see `ADMIN_PROMO_LINK_CLAIM_ACTIONS`), kept as the same
-      // fail-closed backstop the two trigger blocks above use.
-      const { AdminAccessError } = await import("@/lib/auth/errors");
-      throw new AdminAccessError(
-        "admin_service_authorization_required",
-        403,
-        "Action is not bound to a capability",
-      );
-    }
-    const guards = guardDependencies();
-    const fresh = await requireFreshAdminServiceMutation(serviceAuthorization, "promo:claim", {
-      identities: guards.identities,
-      sessions: guards.sessions,
-      entryId: "admin.promo_link_claim.enqueue",
-      requestId: input.requestId,
-    });
-
-    if (!input.channelAppId.trim()) {
-      return { ok: false, kind: "invalid_input", code: "channel_app_required" };
-    }
-    if (!input.channelAccountId.trim()) {
-      return { ok: false, kind: "invalid_input", code: "channel_account_required" };
-    }
-    const uniqueIds = Array.from(new Set(input.novelSourceItemIds));
-    if (uniqueIds.length === 0) {
-      return { ok: false, kind: "invalid_input", code: "items_required" };
-    }
-    if (uniqueIds.length > PROMO_LINK_CLAIM_LIMITS.maxBatchSize) {
-      return { ok: false, kind: "invalid_input", code: "batch_size_exceeded" };
-    }
-
-    const capability = await prisma.channelCapability.findUnique({
-      where: {
-        channelAppId_capabilityKey: {
-          channelAppId: input.channelAppId,
-          capabilityKey: PROMO_LINK_CLAIM_CAPABILITY_KEY,
-        },
-      },
-      select: { status: true },
-    });
-    if (capability?.status !== "enabled") {
-      return { ok: true, data: { outcome: "capability_disabled", channelAppId: input.channelAppId } };
-    }
-
-    const result = await createPromoLinkClaimTask(prisma, {
-      channelAccountId: input.channelAccountId,
-      channelAppId: input.channelAppId,
-      items: uniqueIds.map((novelSourceItemId) => ({
-        novelSourceItemId,
-        offerType: UPSTREAM_EXISTING_PROMO_OFFER_TYPE,
-      })),
-      requestToken: randomUUID(),
-      actorId: fresh.identity.id,
-      requestId: input.requestId,
-      mode: input.mode,
-    });
-    return { ok: true, data: classifyPromoLinkClaimResult(result, input.mode) };
-  } catch (error) {
-    if (error instanceof PromoLinkClaimTaskInputError) {
-      return { ok: false, kind: "invalid_input", code: error.code };
-    }
-    return { ok: false, kind: "access_denied", envelope: toErrorEnvelope(error) };
-  }
-}
+const CATALOG_BATCH_CONFIG_MAX_ENTRIES = 1_000;
+const CONFIG_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 /**
- * RC-4 explicit-selection batch content-creation trigger.
+ * 2026-09-14 incident (see `worker/handlers/promo-link-claim-circuit-
+ * breaker.ts`'s module header for the full account): a 79,217-item batch was
+ * enqueued and run to ~44k permanently-failed items against a credential
+ * that had *never once* validated successfully. Nothing checked the
+ * credential before the batch existed at all.
  *
- * `applyContentCreationBatch`/`dryRunContentCreationBatch`
- * (`@/server/content-creation/batch`) had zero `src/app/**` callers before
- * this — they exist purely as a thin, serial, budgeted loop over the exact
- * same `createContentFromSourceItem` call `dryRunContentCreationAction`/
- * `applyContentCreationAction` above already make one item at a time. CPS
- * v8.3.6 parity target is `runChangduPromoteDramaBatch`
- * (`src/lib/changdu-promote-drama-batch.ts` in the read-only CPS reference,
- * `git show v8.3.6:src/lib/changdu-promote-drama-batch.ts`): explicit
- * id-list selection only, a per-run cap, strictly sequential per-item calls
- * collected into a results array a summary is derived from — never a
- * BatchTask/queue construction. See `@/server/content-creation/batch`'s
- * module header for the full port-registry-worthy comparison.
+ * This now does two things per `(channelAppId, channelAccountId)` pair,
+ * inside the same transaction that creates the batch's `GenericTask` row
+ * (`enqueueCatalogBatch`'s `validateNewInput` hook) — so a batch can never
+ * be admitted against a binding this function would have rejected a moment
+ * later:
  *
- * Two actions, not one split by client-controlled `mode`, for the exact
- * reason `dryRunContentCreationAction`/`applyContentCreationAction` above
- * are already two actions: dry_run needs only `content:view` (already
- * required to reach `/catalog-sync`, zero writes) while apply needs
- * `content:publish` (2FA + `super_admin` default, the real write). Reusing a
- * single action branching on `mode` would make the enforced capability a
- * function of client input — the same reasoning `runCatalogScanTrigger`'s
- * doc comment spells out above.
+ *  1. The pre-existing binding check (channel/app/account all active).
+ *  2. `resolveClaimCredentialAdmission` — a Web-safe, non-secret-column-only
+ *     check (never `encryptedSecret`; see its module header for why this is
+ *     deliberately *not* the same function the worker's deep decrypt/
+ *     validate step uses at actual claim time) — and refuses with the
+ *     credential's own typed code (`credential_missing`/`credential_expired`/
+ *     `credential_ambiguous`/`credential_never_validated`) rather than the
+ *     generic `channel_account_binding_invalid`, so an operator (and
+ *     `src/server/task-admin/safe-task-error.ts`'s label map) can tell "this
+ *     account/app binding is gone" apart from "this credential cannot be
+ *     used" — two different remediations. `credential_never_validated` alone
+ *     would have caught the 09-14 batch: that credential's `last_validated_at`
+ *     was empty when it was admitted.
  *
- * `novelSourceItemIds` is deduped and size-checked *here* first (same
- * `Array.from(new Set(...))` + `items_required`/`batch_size_exceeded` early
- * return `enqueuePromoLinkClaimAction` above already uses) so the operator
- * gets a friendly rejection before ever reaching the service; the service
- * layer (`@/server/content-creation/batch`) validates the exact same two
- * conditions again as a backstop (`ContentCreationBatchInputError`), the
- * same two-layer validation `createPromoLinkClaimTask` already applies on
- * top of this file's own pre-checks.
+ * A credential that *is* usable right now but will expire before a batch
+ * this size could plausibly finish is not refused — refusing a legitimate,
+ * currently-valid credential outright would be its own foot-gun — but is
+ * collected into `warnings` so the caller can record *when* it expires
+ * rather than silently proceeding. See `CREDENTIAL_EXPIRY_WARNING_WINDOW_MS`
+ * (`src/lib/credentials/claim-readiness.ts`) for why that window is tied to
+ * the batch's own TTL rather than an arbitrary clock value.
  */
-
-export type ContentCreationBatchDryRunActionResult =
-  | { readonly ok: true; readonly data: ContentCreationBatchDryRunResult }
-  | { readonly ok: false; readonly kind: "access_denied"; readonly envelope: ErrorEnvelope }
-  | { readonly ok: false; readonly kind: "invalid_input"; readonly code: string };
-
-export type ContentCreationBatchApplyActionResult =
-  | { readonly ok: true; readonly data: ContentCreationBatchApplyResult }
-  | { readonly ok: false; readonly kind: "access_denied"; readonly envelope: ErrorEnvelope }
-  | { readonly ok: false; readonly kind: "invalid_input"; readonly code: string };
-
-function requireBatchSelection(
-  novelSourceItemIds: readonly string[],
-): { readonly ok: true; readonly uniqueIds: readonly string[] } | { readonly ok: false; readonly code: "items_required" | "batch_size_exceeded" } {
-  const uniqueIds = Array.from(new Set(novelSourceItemIds));
-  if (uniqueIds.length === 0) return { ok: false, code: "items_required" };
-  if (uniqueIds.length > CONTENT_CREATION_BATCH_MAX_SELECTION) {
-    return { ok: false, code: "batch_size_exceeded" };
+async function validatePromoAccountConfiguration(
+  db: Pick<typeof prisma, "channelApp" | "channelAccountCredential">,
+  accounts: Readonly<Record<string, string>>,
+  now: Date,
+): Promise<PromoLinkClaimCredentialWarning[]> {
+  const warnings: PromoLinkClaimCredentialWarning[] = [];
+  for (const [channelAppId, accountId] of Object.entries(accounts)) {
+    const binding = await db.channelApp.findFirst({ where: {
+      id: channelAppId, status: "active",
+      channel: { status: "active", channelAccounts: { some: { id: accountId, status: "active", deletedAt: null } } },
+    }, select: { id: true } });
+    if (!binding) throw new CatalogBatchInputError("channel_account_binding_invalid");
+    const admission = await resolveClaimCredentialAdmission(db, accountId, now);
+    if (admission.status === "not_ready") throw new CatalogBatchInputError(admission.code);
+    if (admission.expiringSoon && admission.expiresAt) {
+      warnings.push({ channelAppId, channelAccountId: accountId, expiresAt: admission.expiresAt.toISOString() });
+    }
   }
-  return { ok: true, uniqueIds };
+  return warnings;
 }
 
-/**
- * Read-only batch preview, gated by `content:view` — same bar as the
- * single-item `dryRunContentCreationAction`. Every id resolves through
- * `createContentFromSourceItem` in `"dry_run"` mode, which performs zero
- * writes by construction (see that service's module header); this action
- * itself performs no writes either.
- */
-export async function dryRunContentCreationBatchAction(input: {
-  novelSourceItemIds: readonly string[];
+export async function readCatalogBatchContextAction(input: {
+  selection: CatalogSelection;
   requestId: string;
-}): Promise<ContentCreationBatchDryRunActionResult> {
+}): Promise<CatalogBatchActionResult<CatalogBatchContext>> {
   try {
-    const { context } = await authorizeAction("admin.content_creation.batch_dry_run", input.requestId);
-    const selection = requireBatchSelection(input.novelSourceItemIds);
-    if (!selection.ok) return { ok: false, kind: "invalid_input", code: selection.code };
-
-    const data = await dryRunContentCreationBatch(prisma, {
-      novelSourceItemIds: selection.uniqueIds,
-      locale: CONTENT_CREATION_LOCALE,
-      actor: { type: "admin", adminId: context.identity.id },
-      requestId: input.requestId,
-      budgetMs: CONTENT_CREATION_BATCH_BUDGET_MS,
-    });
+    await authorizeAction("admin.catalog_batch.context", input.requestId);
+    const data = await readCatalogBatchContext(prisma, normalizeCatalogSelection(input.selection));
     return { ok: true, data };
   } catch (error) {
-    if (error instanceof ContentCreationBatchInputError) {
-      return { ok: false, kind: "invalid_input", code: error.code };
-    }
-    return { ok: false, kind: "access_denied", envelope: toErrorEnvelope(error) };
+    return catalogBatchInputFailure(error) ?? { ok: false, kind: "access_denied", envelope: toErrorEnvelope(error) };
   }
 }
 
-/**
- * The real batch write. Gated by `content:publish` — same bar and same
- * `requireAdminActionAccess` → `requireFreshAdminServiceMutation` two-step
- * as the single-item `applyContentCreationAction` above. Revalidates once
- * (not per item) whenever at least one item actually reached `"created"` —
- * a batch where every item resolved to `skipped_already_linked`/`failed`/
- * `not_processed` changes nothing `/novels` or `/catalog-sync` render, so
- * there is nothing to revalidate for.
- */
-export async function applyContentCreationBatchAction(input: {
-  novelSourceItemIds: readonly string[];
+export async function enqueuePromoLinkClaimAction(input: {
+  selection: CatalogSelection;
+  channelAccounts: Readonly<Record<string, string>>;
   requestId: string;
-}): Promise<ContentCreationBatchApplyActionResult> {
+}): Promise<CatalogBatchActionResult<CatalogBatchEnqueueResult>> {
   try {
-    const { serviceAuthorization } = await authorizeAction(
-      "admin.content_creation.batch_apply",
-      input.requestId,
-    );
-    if (!serviceAuthorization) {
-      // Unreachable given this action's own registration (capability is
-      // always set — see `ADMIN_CONTENT_CREATION_BATCH_ACTIONS`), kept as
-      // the same fail-closed backstop every other real write in this file
-      // uses.
-      const { AdminAccessError } = await import("@/lib/auth/errors");
-      throw new AdminAccessError(
-        "admin_service_authorization_required",
-        403,
-        "Action is not bound to a capability",
-      );
-    }
+    const { serviceAuthorization } = await authorizeAction("admin.promo_link_claim.enqueue", input.requestId);
+    if (!serviceAuthorization) throw new Error("admin_service_authorization_required");
     const guards = guardDependencies();
-    const context = await requireFreshAdminServiceMutation(serviceAuthorization, "content:publish", {
-      identities: guards.identities,
-      sessions: guards.sessions,
+    const fresh = await requireFreshAdminServiceMutation(serviceAuthorization, "promo:claim", {
+      identities: guards.identities, sessions: guards.sessions,
+      entryId: "admin.promo_link_claim.enqueue", requestId: input.requestId,
+    });
+    const selection = normalizeCatalogSelection(input.selection);
+    if (!input.channelAccounts || typeof input.channelAccounts !== "object" || Array.isArray(input.channelAccounts)) {
+      return { ok: false, kind: "invalid_input", code: "channel_accounts_invalid" };
+    }
+    if (Object.keys(input.channelAccounts).length > CATALOG_BATCH_CONFIG_MAX_ENTRIES) {
+      return { ok: false, kind: "invalid_input", code: "channel_accounts_invalid" };
+    }
+    for (const [channelAppId, accountId] of Object.entries(input.channelAccounts)) {
+      if (!CONFIG_UUID.test(channelAppId.trim()) || typeof accountId !== "string" || !CONFIG_UUID.test(accountId.trim())) {
+        return { ok: false, kind: "invalid_input", code: "channel_accounts_invalid" };
+      }
+    }
+    const normalizedAccounts = Object.fromEntries(Object.entries(input.channelAccounts).map(([k, v]) => [k.trim(), v.trim()]));
+    const enabled = isPromoLinkClaimEnabled() && isPromoLinkClaimWriteAllowed();
+    const now = new Date();
+    // Reset on every attempt (`enqueueCatalogBatch`'s transaction can retry
+    // this callback from scratch on a transient DB error) rather than
+    // accumulated across attempts — the last attempt to actually run is the
+    // only one whose warnings should ever reach the caller.
+    let credentialWarnings: PromoLinkClaimCredentialWarning[] = [];
+    const result = await enqueueCatalogBatch(prisma, {
+      operation: "promo_claim", selection, actorId: fresh.identity.id, requestId: input.requestId,
+      channelAccounts: normalizedAccounts,
+    }, now, enabled, async (tx) => {
+      credentialWarnings = await validatePromoAccountConfiguration(tx, normalizedAccounts, now);
+    });
+    if (!result.duplicate && credentialWarnings.length > 0) {
+      // Advisory only — the batch was already admitted above. Recorded as
+      // its own audit row (rather than blocking, or silently doing nothing)
+      // so an operator reviewing why a batch later ran into a
+      // freshly-expired credential can see it was flagged as expiring soon
+      // at admission time, with the exact expiry timestamp.
+      await prisma.operationAudit.create({ data: {
+        actorType: "admin", actorId: fresh.identity.id,
+        action: "promo_link_claim.credential_expiring_soon",
+        entityType: "GenericTask", entityId: result.taskId,
+        requestId: input.requestId,
+        afterSnapshot: { warnings: credentialWarnings },
+      } });
+    }
+    const replaySummary = result.duplicate ? await readCatalogBatchSummary(prisma, result.taskId, fresh.identity.id) : null;
+    return { ok: true, data: {
+      taskId: result.taskId,
+      phase: replaySummary?.phase ?? (result.taskStatus === "disabled" ? "disabled" : "queued"),
+      ...(!result.duplicate && credentialWarnings.length > 0 ? { credentialWarnings } : {}),
+    } };
+  } catch (error) {
+    return catalogBatchInputFailure(error) ?? { ok: false, kind: "access_denied", envelope: toErrorEnvelope(error) };
+  }
+}
+
+/** Retired coupled protocol. Empty or missing template map still fails. */
+export async function applyContentCreationBatchAction(input: {
+  selection: CatalogSelection;
+  templateKeysByLocale?: Readonly<Record<string, string>>;
+  requestId: string;
+}): Promise<CatalogBatchActionResult<CatalogBatchEnqueueResult>> {
+  void input.selection;
+  void input.templateKeysByLocale;
+  try {
+    const { serviceAuthorization } = await authorizeAction("admin.content_creation.batch_apply", input.requestId);
+    if (!serviceAuthorization) throw new Error("admin_service_authorization_required");
+    await requireFreshAdminServiceMutation(serviceAuthorization, "content:publish", {
+      identities: guardDependencies().identities,
+      sessions: guardDependencies().sessions,
       entryId: "admin.content_creation.batch_apply",
       requestId: input.requestId,
     });
+    return { ok: false, kind: "invalid_input", code: "retired_protocol" };
+  } catch (error) {
+    return catalogBatchInputFailure(error) ?? { ok: false, kind: "access_denied", envelope: toErrorEnvelope(error) };
+  }
+}
 
-    const selection = requireBatchSelection(input.novelSourceItemIds);
-    if (!selection.ok) return { ok: false, kind: "invalid_input", code: selection.code };
-
-    const data = await applyContentCreationBatch(prisma, {
-      novelSourceItemIds: selection.uniqueIds,
-      locale: CONTENT_CREATION_LOCALE,
-      actor: { type: "admin", adminId: context.identity.id },
-      requestId: input.requestId,
-      budgetMs: CONTENT_CREATION_BATCH_BUDGET_MS,
+export async function applyNovelMaterializeBatchAction(input: {
+  selection: CatalogSelection;
+  requestId: string;
+}): Promise<CatalogBatchActionResult<CatalogBatchEnqueueResult>> {
+  try {
+    const { serviceAuthorization } = await authorizeAction("admin.content_creation.batch_apply", input.requestId);
+    if (!serviceAuthorization) throw new Error("admin_service_authorization_required");
+    const guards = guardDependencies();
+    const fresh = await requireFreshAdminServiceMutation(serviceAuthorization, "content:publish", {
+      identities: guards.identities, sessions: guards.sessions,
+      entryId: "admin.content_creation.batch_apply", requestId: input.requestId,
     });
-    if (data.counts.created > 0) {
-      revalidatePath("/catalog-sync");
-      revalidatePath("/novels");
-    }
+    const selection = normalizeCatalogSelection(input.selection);
+    const result = await enqueueCatalogBatch(prisma, {
+      operation: "novel_materialize", selection, actorId: fresh.identity.id, requestId: input.requestId,
+    }, new Date(), true);
+    const replaySummary = result.duplicate ? await readCatalogBatchSummary(prisma, result.taskId, fresh.identity.id) : null;
+    return { ok: true, data: { taskId: result.taskId, phase: replaySummary?.phase ?? (result.taskStatus === "disabled" ? "disabled" : "queued") } };
+  } catch (error) {
+    return catalogBatchInputFailure(error) ?? { ok: false, kind: "access_denied", envelope: toErrorEnvelope(error) };
+  }
+}
+
+export async function readCatalogBatchSummaryAction(input: {
+  taskId: string;
+  requestId: string;
+}): Promise<CatalogBatchActionResult<CatalogBatchSummary>> {
+  try {
+    const { context } = await authorizeAction("admin.catalog_batch.summary", input.requestId);
+    if (!/^[0-9a-f-]{36}$/i.test(input.taskId)) return { ok: false, kind: "invalid_input", code: "task_id_invalid" };
+    const data = await readCatalogBatchSummary(prisma, input.taskId, context.identity.id);
+    if (!data) return { ok: false, kind: "invalid_input", code: "task_not_found" };
     return { ok: true, data };
   } catch (error) {
-    if (error instanceof ContentCreationBatchInputError) {
-      return { ok: false, kind: "invalid_input", code: error.code };
-    }
     return { ok: false, kind: "access_denied", envelope: toErrorEnvelope(error) };
   }
 }

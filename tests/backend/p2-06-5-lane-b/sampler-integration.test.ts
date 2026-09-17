@@ -227,7 +227,8 @@ describe("P2-06.5 Lane B sampler integration", () => {
     ]);
     expect(await verifyRawRunManifest(store.paths.runDir)).toMatchObject({ ok: true, failures: [] });
     expect((await readFile(store.paths.finalSelection, "utf8")).trim().split("\n")).toHaveLength(10_000);
-  }, 30_000);
+    // CI 2 vCPU 实测超 30s，本机 11.9s/9.1s
+  }, 90_000);
 
   it("turns valid-JSON schema failures into retryable page failures and freezes the first page universe", async () => {
     const credentialFile = await fixtureCredential();
@@ -274,5 +275,6 @@ describe("P2-06.5 Lane B sampler integration", () => {
       expect.objectContaining({ pageIndex: 1, errorCode: "upstream_schema_invalid", retryable: true }),
       expect.objectContaining({ catalogTotalChangedFrom: 95_479, catalogTotalChangedTo: 100 }),
     ]));
-  }, 30_000);
+    // CI 2 vCPU 实测超 30s，本机 11.9s/9.1s
+  }, 90_000);
 });

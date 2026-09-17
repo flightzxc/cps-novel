@@ -31,7 +31,6 @@ import {
   type PublishRequiredMetadataField,
   type RequiredMetadataMissingDetail,
 } from "@/contracts/publish-gate";
-import { isPublishableLocale as isPublishableLocaleDefault } from "@/lib/locale/locale-canonical";
 import {
   isPromoReady,
   isRightsBlocked,
@@ -39,25 +38,35 @@ import {
 } from "@/server/publication/visibility";
 
 /**
- * `locale_not_publishable` reads `novel.locale`, not `article.locale` — this
- * is not a shortcut, it is what `docs/p2/P2_01_PUBLISH_GATE_CONTRACT.md` §3
- * pins verbatim ("对应 `isPublishableLocale(novel.locale)` 为 `false`").
- * `Novel.locale` is the work's own canonical source language
- * (`docs/governance/database-governance.md` §4: "locale 必须是站点 canonical
- * locale"); `Article.locale` identifies which localized SEO page a given
- * Article row *is* (it is what makes `(novelId, locale)` and
- * `(locale, slug)` unique). Today the two always match (`SITE_LOCALES` has
- * exactly one member), so this distinction is currently unobservable — do
- * not "simplify" it to `article.locale` without an Owner sign-off, since the
- * contract text is what is frozen, not today's single-locale coincidence.
+ * Locale history (kept so a future reader does not "fix" this back in as a
+ * well-intentioned readd): a 2026-09-08 Owner decision first replaced the
+ * old `PUBLISHABLE_LOCALES`/`isPublishableLocale` D-7 whitelist check here
+ * with a `checkLocale` defaulting to `isRegisteredSiteLocale` (registration
+ * against the full `SITE_LOCALES` registry, `locale_not_publishable` on
+ * failure). L10N P2 (2026-09-10, `施工提示词_Sonnet_L10N_P2_创建链语种强制
+ * 继承_2026-09-10.md` §1.E, matrix #8 — an explicit, one-time Owner
+ * exception to this codebase's "evaluator.ts is otherwise untouchable"
+ * rule) removed that check entirely: `src/server/content-creation/
+ * service.ts` now derives and hard-blocks an unregistered locale
+ * (`missing_locale`/`unsupported_locale`) at Article-*creation* time, before
+ * a row can even exist with a bad locale, so a second, redundant check here
+ * at *publish* time — on data that can no longer occur — is pure CPS parity
+ * ("an article's locale is the article's own field ... there is no
+ * publishable-locale gate and no article/drama locale consistency
+ * assertion"). `locale_not_publishable` remains a registered
+ * `PublishGateReason` in the frozen `src/contracts/publish-gate.ts` (not
+ * modified by this change) purely as defensive DTO-layer hygiene — this
+ * evaluator itself now never produces it, and `tests/backend/publish-gate/
+ * evaluator.test.ts` asserts the returned `reasons` set never contains any
+ * locale-shaped code.
  */
 export type PublishGateNovelFacts = {
   readonly status: string;
-  readonly locale: string;
 };
 
 export type PublishGateArticleFacts = {
   readonly status: string;
+  readonly locale: string;
   readonly title: string;
   readonly slug: string;
   readonly body: string;
@@ -81,17 +90,27 @@ export type PublishGatePageIdentityFacts = {
 };
 
 export type PublishGateFacts = {
-  readonly novel: PublishGateNovelFacts;
+  /**
+   * C-27: `null` for a non-`novel_article` (blog/listicle/guide) — see this
+   * file's header. `null` here is exactly equivalent to "this Article's
+   * `article_type` is not `novel_article`" (the CHECK enforces the two never
+   * disagree), so the evaluator below forks on this field rather than
+   * threading `articleType` through as a second fact.
+   */
+  readonly novel: PublishGateNovelFacts | null;
   readonly article: PublishGateArticleFacts;
   readonly promoLink: PromoLinkReadinessState;
   readonly preview: PublishGatePreviewFacts;
   readonly pageIdentity: PublishGatePageIdentityFacts;
 };
 
-export type PublishGateEvaluatorDeps = {
-  /** Injectable for tests only — production callers must not override this. */
-  readonly isPublishableLocale?: (locale: unknown) => boolean;
-};
+// No locale check remains here to inject — see this file's header, "Locale
+// history". `Record<string, never>` (not `{}`, which `@typescript-eslint/
+// no-empty-object-type` correctly rejects as "allows any non-nullish
+// value") is kept as a genuinely-empty extension point rather than deleted
+// outright, so `evaluatePublishGate(facts, deps)`'s own signature does not
+// have to change again for some future, unrelated test-only override.
+export type PublishGateEvaluatorDeps = Record<string, never>;
 
 export type PublishGateEvaluation = PublishGateResult & {
   readonly requiredMetadataMissing: RequiredMetadataMissingDetail | null;
@@ -117,41 +136,73 @@ function requiredMetadataMissingFields(article: PublishGateArticleFacts): Publis
  * doc comment). Never throws on bad input: an impossible/malformed facts
  * object simply produces whichever reasons its fields legitimately fail,
  * same fail-closed posture as the rest of this codebase's gates.
+ *
+ * C-27 fork: `facts.novel` is `null` for a non-`novel_article` (blog/
+ * listicle/guide — see this file's header). For that branch, three
+ * conditions apply — `required_metadata_missing`, `page_identity_conflict`,
+ * and `rights_blocked` (read off `facts.article.status` only — see below) —
+ * all Article-level concepts a Novel-less row still has. The other four reasons
+ * (`preview_chapter_missing`/`preview_body_missing`/`promo_link_missing`/
+ * `promo_link_not_ready`) are entirely Novel-side concepts (试读章节 belongs
+ * to the Novel; PromoLink readiness is keyed off the Novel too) that a
+ * Novel-less Article cannot fail or pass — they are skipped, not
+ * evaluated-and-cleared, for that branch. A `novel_article` (`facts.novel`
+ * present) keeps exactly today's seven-reason behavior, byte-for-byte — this
+ * fork only ever *narrows* what gets checked, never changes a
+ * `novel_article`'s own evaluation.
+ *
+ * `rights_blocked` specifically: `visibility.ts`'s `isRightsBlocked` is
+ * `novel.status === "takedown" || article.status === "takedown"` — an OR of
+ * a Novel-side half and an Article-side half. A Novel-less Article has no
+ * Novel-side half to read, but it still has its own `status` column and can
+ * still be set to `takedown` (an Owner/ops rights-removal action on a blog
+ * post is exactly as real as on a novel_article) — a takedown blog must not
+ * publish. So this branch keeps the Article-side half of that OR
+ * (`facts.article.status === "takedown"`) rather than skipping
+ * `rights_blocked` entirely; only the Novel-side half is inapplicable here.
  */
 export function evaluatePublishGate(
   facts: PublishGateFacts,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- kept as an extension point, see `PublishGateEvaluatorDeps`'s own doc comment
   deps: PublishGateEvaluatorDeps = {},
 ): PublishGateEvaluation {
-  const checkLocale = deps.isPublishableLocale ?? isPublishableLocaleDefault;
   const reasons: PublishGateReason[] = [];
-
-  if (!checkLocale(facts.novel.locale)) {
-    reasons.push("locale_not_publishable");
-  }
+  const novel = facts.novel;
 
   const missingFields = requiredMetadataMissingFields(facts.article);
   if (missingFields.length > 0) {
     reasons.push("required_metadata_missing");
   }
 
-  if (!facts.preview.hasPreviewChapter) {
-    reasons.push("preview_chapter_missing");
-  } else if (!facts.preview.hasPreviewBody) {
-    reasons.push("preview_body_missing");
-  }
+  if (novel) {
+    // Novel-side conditions — see this function's header on why these do
+    // not apply to a Novel-less (non-novel_article) Article at all.
+    if (!facts.preview.hasPreviewChapter) {
+      reasons.push("preview_chapter_missing");
+    } else if (!facts.preview.hasPreviewBody) {
+      reasons.push("preview_body_missing");
+    }
 
-  if (!facts.promoLink) {
-    reasons.push("promo_link_missing");
-  } else if (!isPromoReady(facts.promoLink)) {
-    reasons.push("promo_link_not_ready");
+    if (!facts.promoLink) {
+      reasons.push("promo_link_missing");
+    } else if (!isPromoReady(facts.promoLink)) {
+      reasons.push("promo_link_not_ready");
+    }
+
+    if (isRightsBlocked(novel, { status: facts.article.status })) {
+      reasons.push("rights_blocked");
+    }
+  } else if (facts.article.status === "takedown") {
+    // Novel-less (non-novel_article) branch: only the Article-side half of
+    // `isRightsBlocked`'s OR applies (there is no Novel to read the other
+    // half from) — see this function's header. Inlined rather than calling
+    // `isRightsBlocked` itself, which requires a `NovelPublicationState`
+    // this branch does not have.
+    reasons.push("rights_blocked");
   }
 
   if (facts.pageIdentity.conflicting) {
     reasons.push("page_identity_conflict");
-  }
-
-  if (isRightsBlocked(facts.novel, { status: facts.article.status })) {
-    reasons.push("rights_blocked");
   }
 
   const result = createPublishGateResult(reasons);

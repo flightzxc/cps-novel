@@ -1,6 +1,6 @@
 import { retryFailedTask } from "@/server/task-admin";
 
-import { guardMutation, serviceDependencies, text } from "../../_lib/route";
+import { guardMutation, serviceDependencies } from "../../_lib/route";
 import { handleTaskAdmin } from "../../_lib/task-admin-route";
 
 export async function POST(request: Request) {
@@ -11,7 +11,7 @@ export async function POST(request: Request) {
       requestId,
       family: body.family,
       taskId: body.taskId,
-      reason: text(body, "reason"),
+      reason: body.reason,
     }, serviceDependencies());
   });
 }

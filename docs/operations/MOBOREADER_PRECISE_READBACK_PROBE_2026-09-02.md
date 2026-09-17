@@ -265,3 +265,86 @@ P-10 同时证明生产必须逐次检查完整性；若生产标题定位产生
 `worker/handlers/promo-link-claim.ts`；定向测试覆盖完整多行候选中唯一四维命中、0 命中、
 多命中、四个字段逐项缺失（含 `language`）、截断/非数组响应、标题单次刷新、刷新后仍为
 0，以及不回退到第 2 页。
+
+## 13. 2026-09-11 修订（Owner 解冻）
+
+本节修订第 11 节第 2 条的完整性判据（`complete <=> list.length === totalCount && totalCount
+<= MAX_CANDIDATES`）。第 11 节其余各条（1/3/4/5/6）与第 12 节标题改名恢复路径**一字不
+动**，仍是现行合同。
+
+### 13.1 P-7 缺口如何被填上
+
+第 9 节 P-7（本地多语种候选）当时登记为 `CONTRACT_EVIDENCE_GAP`：探针执行时本地没有
+可构造的多语种候选样本，未对非英语标题发过一次 `getlistpc`。这个缺口在两步之后被真实
+填上，而非靠推断关闭：
+
+1. **X8 轮 2b（2026-09-11，build `f696519`，真实 apply claim）**：对 ar/de/es 三个
+   非英语 `NovelSourceItem`（`novel_source_item.id` 分别为
+   `3f479661-7681-4a40-9e40-008b69f3c2aa`、`3d722327-949d-447a-b7a3-28c93659496d`、
+   `50a2e21b-3ada-4127-a39b-b0de8a221d18`）各执行 1 次真实 `createPromoLinkClaimTask`，
+   三语种 100% 同形失败于 readback 阶段：`claim_readback_ambiguous /
+   candidate_set_incomplete`（`totalCount=1` 但 `list.length` 分别为 `11/14/12`）。
+   `promo_link` 表三语种均 0 行——claim 从未推进到 `getcode`，本轮只是**发现**了 P-7 的
+   真实形状，没有以任何方式绕过第 11 节的双闸或 mutation 冻结。
+2. **只读探针（同日，对象 HEAD `c9bf7e2`）**：对轮 2b 同三本各追加 1 次只读
+   `getlistpc`（`createPromoLinkClaimAdapter().readPromoAfterClaim`，`worker_app` 角色，
+   全程未调 `.claimPromo()`/`getcode`，零 DB 写），坐标与生产
+   `readPromoAfterClaim`（`promo-link-claim.ts:40-44/353-357`）完全一致；另各加 1 次
+   `name=seriesId` 变体。
+
+   | locale | totalCount | list.length | 四维命中行数 | 命中行标题=目标 |
+   |---|---:|---:|---:|---|
+   | ar | 1 | 11 | 1 | 是 |
+   | de | 1 | 14 | 1 | 是 |
+   | es | 1 | 12 | 1 | 是 |
+
+   三本 `distinctReturnedAgencyIds=1`（全簇同一 agency）、
+   `distinctReturnedSeriesIds=returnedCount`（每行不同 `seriesId`=不同语种版本）；
+   `agencyId+seriesId+language+projectType` 四维联合在全部 6 次请求（含 `name=seriesId`
+   变体）都恰好选中 1 行，且该行标题前 20 字符与本地目标一致。`name=seriesId` 变体与
+   `name=title` 返回**完全相同**的行集合——判 `NOT_SUPPORTED`：`getlistpc.name` 不支持按
+   id 精确检索，不能作为按 id 定位的替代坐标。
+
+   结论：`getlistpc` 的 `totalCount` 按**书**计一次（该 agency 下同一部作品只算 1），但
+   `list` 按**书 × 语种版本**展开（该 `seriesId` family 下每个已上线语言各一行）——三本
+   returnedCount(11/14/12) 均对应该 agency 名下已发行的语言版本数，不是异常膨胀，也不是
+   分页截断的证据；三次请求 `returnedCount` 均 `< 100 = pageSize`，未被截断。第 11 节旧
+   判据要求 `list.length === totalCount`，把这个正常形状误判为
+   `candidate_set_incomplete`，导致三语种 claim 100% 假性失败。
+
+### 13.2 守卫改法
+
+`src/lib/adapters/promo-link-claim.ts` 第 186–196 行（`parseReadbackResponse` 内部）：
+
+- 改前：`complete <=> Array.isArray(list) && list.length === totalCount && totalCount <=
+  MOBOREADER_PROMO_MAX_CANDIDATES`。
+- 改后：`complete <=> Array.isArray(list) && list.length < MOBOREADER_PROMO_MAX_CANDIDATES`
+  （严格小于 pageSize=100，即"结构性未截断"）。`list.length >= pageSize` 仍判
+  `ambiguous/candidate_set_incomplete`（无法排除截断，禁止翻页拼接，与第 11 节第 2 条后半
+  一致）。
+- `totalCount` 不再是完整性的硬条件，但在每条分支上仍被记录（`totalCount`/
+  `returnedCount` 字段，即本节的 `declaredTotalCount`/`returnedCount` 概念）供审计——这两
+  个字段本就是 `ReadPromoAfterClaimResult` 既有结构的一部分，未新增/未改名，只是
+  `totalCount` 从"門檻"降级为"仅记录"。
+- 第 11 节第 3/4 条（完整候选集内的四维身份字段完整性校验与恰好 1 条匹配）与
+  `target_missing`/`identity_not_unique` 语义**一字不动**：候选集合"完整"后仍必须四维
+  精确匹配收敛到唯一 1 行才 `found`；0 命中仍 `target_missing/identity_no_match`；
+  ≥2 命中仍 `ambiguous/identity_not_unique`。翻页拼接、放宽四维校验、跳过身份字段完整性
+  检查均不在本次修订范围内，且被红线明确禁止。
+
+### 13.3 与 CPS `getvideoinfo` 点查机制的差异（合理偏离）
+
+CPS（`changdu-getvideoinfo.ts`，参照基线 `3a76877`）对短剧（`projectType=2`）用
+`getvideoinfo` 做直接点查：`fetchOnce`（364–391 行）以
+`{agencyId, seriesId, projectType: CHANGDU_VIDEOINFO_PROJECT_TYPE(=2), language}`
+（386–389 行）一次 POST 命中单一目标行，不经过候选列表、不需要四维筛选——上游对
+`projectType=2` 的 `getvideoinfo` 承载完整 promo record。
+
+海阅（`projectType=1`）不具备这条路径：第 5 节 P-1 探针已证明，同一 `getvideoinfo`
+端点对 `projectType=1` 的成功 HTTP 响应没有可检查的 `data` record，六个 promo 相关键
+（`kocCode`/`publicUrl`/`homeLink`/`onlineUrl`/`promoUrl`/`promoCode`）全部
+`KEY_ABSENT`（§5 P-1）——即该上游端点不为 `projectType=1` 承载 promo 数据，点查机制在
+小说线不可用。海阅只能退回 `getlistpc` 候选列表 + 四维精确匹配的读回路径，且必须处理
+候选集合"书 × 语种版本"展开这一 `projectType=2`（单语种短剧）不会遇到的形状。这是上游
+API 本身对两个 `projectType` 的能力差异，不是本仓选择绕开 CPS 既有机制；已在
+`docs/governance/port-registry.md` 登记 N-14，判 `JUSTIFIED_DEVIATION`。

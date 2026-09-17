@@ -5,7 +5,13 @@ export const MAX_WORKER_FAILURE_WEBHOOK_TIMEOUT_MS = 60_000;
 export const DEFAULT_WORKER_FAILURE_WEBHOOK_COOLDOWN_SECONDS = 1_800;
 export const MAX_WORKER_FAILURE_WEBHOOK_COOLDOWN_SECONDS = 7 * 24 * 60 * 60;
 
-export type WorkerTaskFailureSource = "handler" | "lease_recovery";
+/**
+ * D-7 (`施工工单_PhaseE返工2_坏页不崩worker与免费书归一_2026-09-07.md`) adds
+ * `"finalize"`: a `finalizeTaskItem` write transaction itself failing (as
+ * opposed to `"handler"`, the task handler's own reported outcome, or
+ * `"lease_recovery"`, an expired-lease sweep).
+ */
+export type WorkerTaskFailureSource = "handler" | "lease_recovery" | "finalize";
 
 export interface WorkerTaskFailureEvent {
   family: TaskFamily;

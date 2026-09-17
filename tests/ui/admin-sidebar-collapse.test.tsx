@@ -131,6 +131,7 @@ describe("侧栏 · active 与分组展开", () => {
   it("本期未建的入口不是链接，点不动但仍占位——运营看得到功能存在", () => {
     renderSidebar("/dashboard");
     // 真页面：/novels（P2-04 内容管理）、/catalog-sync（P0-S13 内容创建入口）、
+    // M5/M6/M7/M8 also make carousel/templates/articles/categories real;
     // /tags（P2-06 标签字典）与 /channel-accounts；/settings 因为有子项而可展开。
     // /tasks 与 /promo-links（PR-C5）也是真页面了，但这份 fixture 没有授予
     // `task:manage`，所以两者仍然不出现在链接列表里——只是原因从"未建"变成了
@@ -138,6 +139,10 @@ describe("侧栏 · active 与分组展开", () => {
     expect(screen.getAllByRole("link").map((link) => link.textContent)).toEqual([
       "书目管理",
       "目录同步",
+      "首页轮播",
+      "模板管理",
+      "文章管理",
+      "分类管理",
       "标签管理",
       "站点设置",
       "渠道账户",

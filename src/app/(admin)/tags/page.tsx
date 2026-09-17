@@ -13,6 +13,7 @@ import { ContentCapabilityDenied } from "../novels/_components/content-states";
 import { ContentPagination } from "../novels/_components/content-pagination";
 import { requireContentPage } from "../novels/_lib/content-page-guard";
 import { TagFilters, type TagActivityFilter } from "./_components/tag-filters";
+import { TagNavTabs } from "./_components/tag-nav-tabs";
 import { TagsTable } from "./_components/tags-table";
 
 export const dynamic = "force-dynamic";
@@ -73,6 +74,7 @@ export default async function TagsPage({
       }
     >
       <div className="space-y-6">
+        <TagNavTabs current="labels" />
         {granted && page ? (
           <>
             <TagFilters

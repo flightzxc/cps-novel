@@ -44,12 +44,27 @@ export function NovelsBatchPublish({
 
   const blocked = capabilityBlockReason("content:publish", canPublish);
   const overCap = selected.size > MAX_BATCH_PUBLISH_SELECTION;
+  const allSelected = novels.length > 0 && novels.every((n) => selected.has(n.novelId));
+  const someSelected = novels.some((n) => selected.has(n.novelId));
 
   function toggle(novelId: string) {
     setSelected((previous) => {
       const next = new Set(previous);
       if (next.has(novelId)) next.delete(novelId);
       else next.add(novelId);
+      return next;
+    });
+  }
+
+  function toggleAll() {
+    setSelected((previous) => {
+      const next = new Set(previous);
+      const allCurrentlySelected = novels.length > 0 && novels.every((n) => next.has(n.novelId));
+      if (allCurrentlySelected) {
+        novels.forEach((n) => next.delete(n.novelId));
+      } else {
+        novels.forEach((n) => next.add(n.novelId));
+      }
       return next;
     });
   }
@@ -136,7 +151,14 @@ export function NovelsBatchPublish({
 
       <NovelsTable
         novels={novels}
-        selection={{ selected, onToggle: toggle, disabled: () => busy }}
+        selection={{
+          selected,
+          onToggle: toggle,
+          disabled: () => busy,
+          allSelected,
+          someSelected,
+          onToggleAll: toggleAll,
+        }}
       />
     </div>
   );

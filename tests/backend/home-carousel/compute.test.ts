@@ -1,0 +1,219 @@
+import { describe, expect, it } from "vitest";
+
+import { computeHomeCarouselInTx } from "@/server/home-carousel";
+
+import { FakeHomeCarouselDb, type FakeArticle } from "./support";
+
+const NOW = new Date("2026-09-05T19:00:00.000Z");
+const DAY = 86_400_000;
+
+function article(overrides: Partial<FakeArticle> & { id: string; novelId: string }): FakeArticle {
+  return {
+    locale: "en",
+    status: "published",
+    deletedAt: null,
+    publishedAt: new Date(NOW.getTime() - 90 * DAY),
+    updatedAt: new Date(NOW.getTime() - 90 * DAY),
+    novel: { title: `Novel ${overrides.novelId}`, status: "published", deletedAt: null, coverUrl: "https://cdn.example.com/cover.jpg" },
+    ...overrides,
+  };
+}
+
+function seedSixOldArticles(db: FakeHomeCarouselDb) {
+  for (let i = 0; i < 6; i += 1) {
+    db.seedArticle(article({
+      id: `article-${i}`,
+      novelId: `novel-${i}`,
+      updatedAt: new Date(NOW.getTime() - i * DAY - 90 * DAY),
+      publishedAt: new Date(NOW.getTime() - i * DAY - 90 * DAY),
+    }));
+  }
+}
+
+describe("computeHomeCarouselInTx honors carouselConfigJson (PR6 fix B-1 #3)", () => {
+  it("slotCount caps how many candidates/serving rows are produced", async () => {
+    const dbDefault = new FakeHomeCarouselDb();
+    seedSixOldArticles(dbDefault);
+    const resultDefault = await computeHomeCarouselInTx(dbDefault.asTransactionClient(), { locale: "en", source: "manual", now: NOW });
+    expect(resultDefault.count).toBe(5); // DEFAULT_HOME_CAROUSEL_CONFIG.slotCount
+
+    const dbSmall = new FakeHomeCarouselDb();
+    dbSmall.carouselConfigJson = { slotCount: 2 };
+    seedSixOldArticles(dbSmall);
+    const resultSmall = await computeHomeCarouselInTx(dbSmall.asTransactionClient(), { locale: "en", source: "manual", now: NOW });
+    expect(resultSmall.count).toBe(2);
+    expect(dbSmall.serving).toHaveLength(2);
+  });
+
+  it("newNovelWindowDays gates which candidates count as new_novel", async () => {
+    const dbInWindow = new FakeHomeCarouselDb();
+    dbInWindow.carouselConfigJson = { newNovelWindowDays: 14 };
+    dbInWindow.seedArticle(article({ id: "fresh", novelId: "novel-fresh", publishedAt: new Date(NOW.getTime() - 1 * DAY), updatedAt: new Date(NOW.getTime() - 1 * DAY) }));
+    seedSixOldArticles(dbInWindow);
+    await computeHomeCarouselInTx(dbInWindow.asTransactionClient(), { locale: "en", source: "manual", now: NOW });
+    const freshCandidateInWindow = dbInWindow.candidates.find((row) => row.novelId === "novel-fresh");
+    expect(freshCandidateInWindow?.source).toBe("new_novel");
+
+    const dbOutsideWindow = new FakeHomeCarouselDb();
+    dbOutsideWindow.carouselConfigJson = { newNovelWindowDays: 0 };
+    dbOutsideWindow.seedArticle(article({ id: "fresh", novelId: "novel-fresh", publishedAt: new Date(NOW.getTime() - 1 * DAY), updatedAt: new Date(NOW.getTime() - 1 * DAY) }));
+    seedSixOldArticles(dbOutsideWindow);
+    await computeHomeCarouselInTx(dbOutsideWindow.asTransactionClient(), { locale: "en", source: "manual", now: NOW });
+    const freshCandidateOutsideWindow = dbOutsideWindow.candidates.find((row) => row.novelId === "novel-fresh");
+    expect(freshCandidateOutsideWindow?.source).toBe("recency");
+  });
+
+  it("newSlotCount=0 folds an in-window article into recency instead of reserving a new_novel slot", async () => {
+    const db = new FakeHomeCarouselDb();
+    db.carouselConfigJson = { newSlotCount: 0 };
+    db.seedArticle(article({ id: "fresh", novelId: "novel-fresh", publishedAt: new Date(NOW.getTime() - 1 * DAY), updatedAt: new Date(NOW.getTime() - 1 * DAY) }));
+    seedSixOldArticles(db);
+    await computeHomeCarouselInTx(db.asTransactionClient(), { locale: "en", source: "manual", now: NOW });
+    expect(db.candidates.some((row) => row.source === "new_novel")).toBe(false);
+  });
+
+  // X8 轮 2d ⑥ fix: was "a same-day repeat hits P2002 and returns
+  // skipped_duplicate" (plain `create` + caught P2002 — safe on this fake,
+  // which has no real transaction-abort semantics, but not on production
+  // PostgreSQL: a caught unique-violation there leaves the whole open
+  // transaction `25P02 aborted`, and `computeHomeCarouselInTx` always runs
+  // inside the worker's shared `protectedWrite` transaction, whose own
+  // `finalizeTaskItem` write comes right after — see this function's own
+  // header comment). Retitled + extended to pin the fixed mechanism itself.
+  it("cron:<businessDate> is idempotent: a same-day repeat resolves via createMany+skipDuplicates (never a caught P2002) and returns skipped_duplicate without raising", async () => {
+    const db = new FakeHomeCarouselDb();
+    seedSixOldArticles(db);
+    const first = await computeHomeCarouselInTx(db.asTransactionClient(), { locale: "en", source: "cron", now: NOW });
+    expect(first.status).toBe("success");
+    db.calls.length = 0; // isolate the second call's own call trace below
+    const second = await computeHomeCarouselInTx(db.asTransactionClient(), { locale: "en", source: "cron", now: NOW });
+    expect(second).toEqual({ status: "skipped_duplicate" });
+    expect(db.batches.size).toBe(1);
+    // Mutation pin: reverting `computeHomeCarouselInTx` to `create` + `catch
+    // (P2002)` flips this call trace back to `homeCarouselAutoBatch.create`
+    // — failing this assertion (in addition to
+    // `tests/backend/database/carousel-check-static.test.ts`'s literal-marker
+    // guard, which would also throw outright since it greps for the
+    // `.createMany(` marker specifically).
+    expect(db.calls).toContain("homeCarouselAutoBatch.createMany");
+    expect(db.calls).not.toContain("homeCarouselAutoBatch.create");
+    // Proves the `skipped_duplicate` early return never threw inside the
+    // transaction: the same handle is still fully usable for a further
+    // write immediately after — the exact shape `finalizeTaskItem`'s own
+    // `guardedFinalize` write relies on in production. This fake has no
+    // real PostgreSQL transaction-abort semantics to reproduce (a thrown/
+    // caught exception here would instead reject the `await` above and
+    // fail this test before ever reaching this line), so this assertion
+    // documents the intended no-throw contract rather than reproducing
+    // `25P02` itself — that reproduction is X8's own real-database probe.
+    const tx = db.asTransactionClient();
+    await expect(
+      tx.homeCarouselChangeLog.create({ data: { locale: "en", action: "probe.no_throw", actorType: "system", actorId: null, afterState: {} } }),
+    ).resolves.toBeDefined();
+  });
+
+  // L10N P5 (矩阵 #13, F). Mutation ② target: dropping `locale` from the
+  // cron idempotency key (`cron:<businessDate>` instead of
+  // `cron:<businessDate>:<locale>`) — that would make this test fail with
+  // `second.status !== "success"` (the ru compute would collide with en's
+  // already-created HomeCarouselAutoBatch row and get wrongly classified
+  // as a same-day repeat).
+  it("cron:<businessDate>:<locale> is per-locale: en and ru computes on the same business date do NOT collide with each other", async () => {
+    const db = new FakeHomeCarouselDb();
+    db.seedArticle(article({ id: "article-en", novelId: "novel-en", locale: "en" }));
+    db.seedArticle(article({ id: "article-ru", novelId: "novel-ru", locale: "ru" }));
+
+    const en = await computeHomeCarouselInTx(db.asTransactionClient(), { locale: "en", source: "cron", now: NOW });
+    expect(en.status).toBe("success");
+    const ru = await computeHomeCarouselInTx(db.asTransactionClient(), { locale: "ru", source: "cron", now: NOW });
+    expect(ru.status).toBe("success");
+
+    expect(db.batches.size).toBe(2);
+    const uniqueKeys = [...db.batches.values()].map((batch) => batch.uniqueKey).sort();
+    expect(uniqueKeys).toEqual(["cron:2026-09-06:en", "cron:2026-09-06:ru"]);
+
+    // Each locale's own repeat still correctly dedupes against itself.
+    const enRepeat = await computeHomeCarouselInTx(db.asTransactionClient(), { locale: "en", source: "cron", now: NOW });
+    expect(enRepeat).toEqual({ status: "skipped_duplicate" });
+    const ruRepeat = await computeHomeCarouselInTx(db.asTransactionClient(), { locale: "ru", source: "cron", now: NOW });
+    expect(ruRepeat).toEqual({ status: "skipped_duplicate" });
+    expect(db.batches.size).toBe(2);
+  });
+
+  it("revenueEnabled cannot be turned on through stored config (compute never sees a revenue branch)", async () => {
+    const db = new FakeHomeCarouselDb();
+    db.carouselConfigJson = { revenueEnabled: true };
+    seedSixOldArticles(db);
+    const result = await computeHomeCarouselInTx(db.asTransactionClient(), { locale: "en", source: "manual", now: NOW });
+    expect(result.status).toBe("success");
+    expect(dbBatchParams(db)).toMatchObject({ revenueEnabled: false });
+  });
+});
+
+// Carousel batch-status schema-contract-drift fix, sibling to the
+// `20260912100000_carousel_serving_source_check_fix` (`home_carousel_serving.source`)
+// fix: `computeHomeCarouselInTx` used to write the terminal
+// `home_carousel_auto_batch.status` value as the literal `"success"`, which
+// `home_carousel_auto_batch_status_check` (`pending`/`processing`/
+// `completed`/`failed`, `20260803090000_p1_initial_schema`, unchanged since)
+// has never allowed — every compute's own final UPDATE was itself a 23514,
+// rolling back the whole transaction (including the `homeCarouselServing`/
+// `homeCarouselAutoCandidate` rows the same call had just written). Every
+// other assertion in this file only checks `result.status` — the function's
+// own `{ status: "success" as const, ... }` *return value*, a separate,
+// unrelated API contract that was never the bug and is untouched by this
+// fix — so this is the one test in the suite that actually reads the
+// persisted `home_carousel_auto_batch` row back out of the fake and checks
+// its `status` column landed on a CHECK-valid value.
+describe("computeHomeCarouselInTx home_carousel_auto_batch.status schema-contract-drift fix", () => {
+  it("persists the terminal batch row with status 'completed' (a CAROUSEL_BATCH_STATUSES member), not the stale CHECK-violating 'success' literal", async () => {
+    const db = new FakeHomeCarouselDb();
+    seedSixOldArticles(db);
+    const result = await computeHomeCarouselInTx(db.asTransactionClient(), { locale: "en", source: "manual", now: NOW });
+    expect(result.status).toBe("success"); // computeHomeCarouselInTx's own return-value contract — unchanged, unrelated to the DB column below.
+    const [batch] = [...db.batches.values()];
+    expect(batch.status).toBe("completed");
+    expect(batch.finishedAt).toEqual(NOW);
+  });
+});
+
+// C-25 review fix: the candidate query now applies `buildPublicListArticleWhere`
+// (same "list surface" fragment as `src/lib/site/home-carousel-service.ts`'s
+// `fallbackRows`) so a `hidden`/`seo_only` Article can never be written into
+// `home_carousel_serving` — see `src/server/home-carousel/service.ts`'s
+// `computeHomeCarouselInTx`.
+describe("computeHomeCarouselInTx honors Article.seoVisibility (C-25 review fix)", () => {
+  // Same `as unknown as NodeJS.ProcessEnv` convention as this repo's other
+  // C-25 flag tests (tests/backend/publication/visibility.test.ts,
+  // tests/backend/publication/access.test.ts).
+  const FLAG_ON = { FEATURE_ARTICLE_SEO_VISIBILITY: "true" } as unknown as NodeJS.ProcessEnv;
+
+  function seedVisibilityFixture(db: FakeHomeCarouselDb) {
+    db.seedArticle(article({ id: "article-public", novelId: "novel-public", seoVisibility: "public" }));
+    db.seedArticle(article({ id: "article-hidden", novelId: "novel-hidden", seoVisibility: "hidden" }));
+    db.seedArticle(article({ id: "article-seo-only", novelId: "novel-seo-only", seoVisibility: "seo_only" }));
+  }
+
+  it("flag on: excludes hidden and seo_only candidates from the batch and from serving", async () => {
+    const db = new FakeHomeCarouselDb();
+    seedVisibilityFixture(db);
+    const result = await computeHomeCarouselInTx(db.asTransactionClient(), { locale: "en", source: "manual", now: NOW, env: FLAG_ON });
+    expect(result.status).toBe("success");
+    expect(db.candidates.map((row) => row.novelId)).toEqual(["novel-public"]);
+    expect(db.serving.map((row) => row.novelId)).toEqual(["novel-public"]);
+  });
+
+  it("flag off (default): hidden/seo_only Articles are read as public, matching pre-C-25 behavior", async () => {
+    const db = new FakeHomeCarouselDb();
+    seedVisibilityFixture(db);
+    const result = await computeHomeCarouselInTx(db.asTransactionClient(), { locale: "en", source: "manual", now: NOW });
+    expect(result.status).toBe("success");
+    expect(db.candidates.map((row) => row.novelId).sort()).toEqual(["novel-hidden", "novel-public", "novel-seo-only"]);
+    expect(db.serving.map((row) => row.novelId).sort()).toEqual(["novel-hidden", "novel-public", "novel-seo-only"]);
+  });
+});
+
+function dbBatchParams(db: FakeHomeCarouselDb) {
+  const [batch] = [...db.batches.values()];
+  return batch.params as Record<string, unknown>;
+}

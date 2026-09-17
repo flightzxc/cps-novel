@@ -5,35 +5,77 @@ import {
   isNovelCatalogSyncWriteAllowed,
 } from "../flags";
 import { isUniqueConstraintViolation as isUniqueViolation } from "@/lib/db/db-retry";
+import { findNovelSourceItemsByIds } from "@/lib/db/chunked-id-lookup";
 
 export const MOBOREADER_TASK_TYPES = Object.freeze({
   catalogScan: "catalog_scan",
   previewRefresh: "moboreader.preview_refresh.v1",
 });
 
+export const MOBOREADER_CATALOG_TARGET_TYPES = Object.freeze({
+  page: "catalog_page",
+  recoveryPage: "catalog_recovery_page",
+  finalize: "catalog_finalize",
+});
+
+export const MOBOREADER_CATALOG_FINALIZE_TARGET_ID = "v1";
+export const MOBOREADER_PREVIEW_STAGE_BATCH_SIZE = 1_000;
+export const MOBOREADER_CATALOG_MAX_ATTEMPTS = 3;
+
+export const MOBOREADER_PREVIEW_EVIDENCE = Object.freeze({
+  dataId: "confirmed_getlistpc_series_id",
+  materialType: "confirmed_runtime_selection_policy",
+  materialTypeGlobalConstant: "not_asserted",
+  materialType1001: "rejected",
+  productionPreviewCall: "enabled",
+});
+
+export function catalogFinalizeGeneration(value: unknown): number {
+  return typeof value === "number" && Number.isSafeInteger(value) && value > 0 ? value : 1;
+}
+
+export function catalogPreviewRequestToken(taskId: string, generation: number): string {
+  const normalized = catalogFinalizeGeneration(generation);
+  return normalized === 1
+    ? `moboreader.preview_refresh.v1:${taskId}`
+    : `moboreader.preview_refresh.v1:${taskId}:g${normalized}`;
+}
+
 export const MOBOREADER_CATALOG_LIMITS = Object.freeze({
   defaultSafetyMaxPages: 2_000,
   /**
-   * Hard ceiling on a catalog-scan task's page size, clamped to CPS's own
-   * value by the RC-3 fixup (`docs/governance/port-registry.md`).
+   * Hard ceiling on a catalog-scan task's page size.
    *
-   * CPS v8.3.6 caps this at 20 —
+   * C-13 (`施工工单_C13_每页100本与节流余量_2026-09-07.md`, Owner-approved
+   * business exception): raised from the CPS-parity 20 to 100 after probing
+   * this repo's own upstream host directly — a 20-row and a 100-row
+   * `getlistpc` request each consumed exactly one unit of the observed
+   * `x-ratelimit-limit: 60`/minute Kong quota (`x-ratelimit-remaining`
+   * dropped by 1 either way, not by row count), and content came back
+   * identical/same-order across both page sizes. That upstream therefore
+   * limits by *request count*, not row count, so a bigger page is not a
+   * bigger ask of the rate limiter — it is fewer asks for the same catalog
+   * (~4,859 requests at 20/page vs. ~973 at 100/page). 100 is the number
+   * actually probed; page sizes above 100 were deliberately not explored
+   * and must not be assumed safe.
+   *
+   * CPS v8.3.6 itself still caps this at 20 —
    * `worker/handlers/changdu-source-sync.ts:814`,
-   * `Math.min(positiveInteger(params.pageSize, 20), 20)` — the page shape
-   * the 2026-08-26 429 incident was probed against. That upstream limits
-   * by *request count* (~60/window), so a 20-row page is the shape the
-   * measured ~55 requests/minute pacing budget was sized for. This repo
-   * previously allowed 100, a value never probed against that host and
-   * not a CPS-parity number.
+   * `Math.min(positiveInteger(params.pageSize, 20), 20)`, sized for 短剧's
+   * much smaller catalog. This repo's business — a ~97k-book novel
+   * catalog vs. CPS's 短剧 scale — is the named exception for diverging
+   * from that CPS default; see `MOBOREADER_UPSTREAM_RECOMMENDED_PAGE_SIZE`
+   * below for how the *default* stays conservative while this ceiling
+   * gives operators (via env) room to opt into the probed 100.
    *
    * One deliberate divergence from CPS: CPS silently *clamps* an
-   * over-large request down to 20, whereas
+   * over-large request down to its ceiling, whereas
    * `validateMoboreaderCatalogScanInput` below *rejects* it with
    * `page_size_exceeded`. Rejecting is the stricter of the two and matches
    * this repo's existing fail-fast validation style; nothing here depends
    * on the silent-clamp behavior.
    */
-  maxPageSize: 20,
+  maxPageSize: 100,
   ttlMs: 6 * 60 * 60 * 1_000,
 });
 
@@ -43,11 +85,21 @@ export const MOBOREADER_CATALOG_LIMITS = Object.freeze({
  * `worker/handlers/changdu-source-sync.ts:814`'s
  * `positiveInteger(params.pageSize, 20)` fallback.
  *
- * Distinct from `MOBOREADER_CATALOG_LIMITS.maxPageSize` above only in
- * role: that is the ceiling `validateMoboreaderCatalogScanInput` enforces,
- * this is what a caller expressing no preference should send. Both are 20
- * today; this one is env-overridable so a scan can be tuned smaller
- * without moving the ceiling.
+ * Distinct from `MOBOREADER_CATALOG_LIMITS.maxPageSize` above in both value
+ * and role, since C-13 (`施工工单_C13_每页100本与节流余量_2026-09-07.md`):
+ * that is the hard ceiling `validateMoboreaderCatalogScanInput` enforces
+ * (100, the probed value), this is the conservative CPS-parity value a
+ * caller expressing no preference gets (still 20) — raising the ceiling
+ * does not by itself change what an unconfigured environment actually
+ * requests upstream. An operator opts into the larger, probed page size
+ * deliberately via the `MOBOREADER_UPSTREAM_RECOMMENDED_PAGE_SIZE` env var
+ * (see `resolveMoboreaderUpstreamRecommendedPageSize` below), not by this
+ * constant changing out from under them.
+ *
+ * Production task creation must call `resolveMoboreaderUpstreamRecommendedPageSize`
+ * rather than reading this bare constant — see
+ * `src/app/(admin)/catalog-sync/_actions.ts`, the sole task-creation call
+ * site, wired to the resolver as of C-13.
  *
  * The two upstream-pacing mechanisms that depend on neither value — the
  * inter-request throttle door and the bounded 429/503 retry/budget — are
@@ -56,13 +108,28 @@ export const MOBOREADER_CATALOG_LIMITS = Object.freeze({
 export const MOBOREADER_UPSTREAM_RECOMMENDED_PAGE_SIZE = 20;
 export const MOBOREADER_UPSTREAM_RECOMMENDED_PAGE_SIZE_ENV = "MOBOREADER_UPSTREAM_RECOMMENDED_PAGE_SIZE";
 
+/**
+ * Resolves the env override (or the CPS-parity default above) and, as of
+ * C-13, fails fast rather than handing the caller a value the factory's
+ * own `validateMoboreaderCatalogScanInput` would refuse a moment later: a
+ * mis-set `MOBOREADER_UPSTREAM_RECOMMENDED_PAGE_SIZE` above
+ * `MOBOREADER_CATALOG_LIMITS.maxPageSize` would otherwise create a
+ * `GenericTask` (and its audit row) that the handler then rejects item by
+ * item at claim time — a confusing, half-alive failure mode. Rejecting
+ * here instead means a bad env value never gets far enough to enqueue
+ * anything.
+ */
 export function resolveMoboreaderUpstreamRecommendedPageSize(
   env: NodeJS.ProcessEnv = process.env,
 ): number {
   const raw = env[MOBOREADER_UPSTREAM_RECOMMENDED_PAGE_SIZE_ENV];
   if (raw === undefined || raw.trim() === "") return MOBOREADER_UPSTREAM_RECOMMENDED_PAGE_SIZE;
   const parsed = Number(raw);
-  return positiveInteger(parsed, "upstream_recommended_page_size_invalid");
+  const value = positiveInteger(parsed, "upstream_recommended_page_size_invalid");
+  if (value > MOBOREADER_CATALOG_LIMITS.maxPageSize) {
+    throw new MoboreaderTaskInputError("upstream_recommended_page_size_exceeds_ceiling");
+  }
+  return value;
 }
 
 export const MOBOREADER_CATALOG_SAFETY_MAX_PAGES_ENV = "MOBOREADER_CATALOG_SAFETY_MAX_PAGES";
@@ -81,6 +148,18 @@ export interface CreateMoboreaderCatalogScanTaskInput {
   mode?: "dry_run" | "apply";
   name?: string;
   orderType?: number;
+  /**
+   * Phase B (`施工工单_PhaseB_实体订正与运营表单Parity_2026-09-06.md` §三):
+   * CPS parity for the "同步语种" chip row on `changdu-sync-panel.tsx`.
+   * Same semantics there as here — the upstream `getlistpc` list call has no
+   * per-language filter, so this is never sent upstream and never narrows
+   * what a page fetches; it is a plain record of which languages the
+   * operator meant this run to be *about*, stored on the task for `/tasks`
+   * detail and result filtering (Phase C). Optional and unvalidated in
+   * shape beyond "non-empty trimmed strings" so existing non-UI callers
+   * (scripts, tests) that never pass it keep working unchanged.
+   */
+  languages?: readonly string[];
 }
 
 export type MoboreaderTaskCreationResult =
@@ -98,7 +177,7 @@ export interface CreateMoboreaderPreviewRefreshTaskInput {
   mode?: "dry_run" | "apply";
 }
 
-interface EnqueueMoboreaderPreviewRefreshTaskInput extends CreateMoboreaderPreviewRefreshTaskInput {
+export interface EnqueueMoboreaderPreviewRefreshTaskInput extends CreateMoboreaderPreviewRefreshTaskInput {
   trigger: "manual" | "auto";
   catalogScanTaskId?: string;
 }
@@ -178,6 +257,29 @@ export interface ValidatedCatalogScanInput {
   mode: "dry_run" | "apply";
   name: string;
   orderType: number;
+  languages: readonly string[];
+}
+
+/**
+ * Trims/dedupes; throws `languages_invalid` on anything not a non-empty
+ * string (see {@link CreateMoboreaderCatalogScanTaskInput.languages}).
+ *
+ * Deliberately not named with a `normalize*Language*` shape — this is a
+ * plain array sanitizer, not a locale-canonicalization function, and
+ * `tests/ui/locale-canonical.test.ts`'s "no second locale-normalize
+ * implementation" scan flags names matching that shape by pattern alone.
+ */
+function sanitizeLanguageList(value: readonly string[] | undefined): readonly string[] {
+  if (value === undefined) return [];
+  if (!Array.isArray(value)) throw new MoboreaderTaskInputError("languages_invalid");
+  const seen = new Set<string>();
+  for (const entry of value) {
+    if (typeof entry !== "string") throw new MoboreaderTaskInputError("languages_invalid");
+    const trimmed = entry.trim();
+    if (!trimmed || trimmed.length > 32) throw new MoboreaderTaskInputError("languages_invalid");
+    seen.add(trimmed);
+  }
+  return Array.from(seen);
 }
 
 export function validateMoboreaderCatalogScanInput(
@@ -198,6 +300,7 @@ export function validateMoboreaderCatalogScanInput(
   if (input.orderType !== undefined && !Number.isSafeInteger(input.orderType)) {
     throw new MoboreaderTaskInputError("order_type_invalid");
   }
+  const languages = sanitizeLanguageList(input.languages);
   return {
     channelAccountId: required(input.channelAccountId, "channel_account_required"),
     channelAppId: required(input.channelAppId, "channel_app_required"),
@@ -211,6 +314,7 @@ export function validateMoboreaderCatalogScanInput(
     mode,
     name: input.name ?? "",
     orderType: input.orderType ?? 0,
+    languages,
   };
 }
 
@@ -223,8 +327,82 @@ export function resolveMoboreaderCatalogSafetyMaxPages(
   return positiveInteger(parsed, "safety_max_pages_invalid");
 }
 
+/**
+ * Normalizes an upstream `payEpisFrom` to the `paid_from_chapter` column's
+ * semantics: the DB CHECK on both `novel` and `novel_source_item` is
+ * `paid_from_chapter IS NULL OR paid_from_chapter > 0` — `NULL` means
+ * "free / no paywall". MoboReader returns `0` (sometimes negative) for a
+ * book with no paywall, which must fold to `null` rather than being
+ * written literally. This mirrors CPS's own lower-bound clamp for the
+ * same upstream field — `clampFreeEpisodeCount(payEpisFrom - 1, allEpis)`,
+ * `Math.max(0, value)` in
+ * cps-admin `src/lib/adapters/changdu.ts:124-126,368-371` — adapted to
+ * this schema's "store the cut chapter directly" shape instead of CPS's
+ * "store a free-episode count" shape.
+ *
+ * `null` stays `null` (upstream did not report a value at all, which is
+ * distinct from "reported free"); callers that need "leave the existing
+ * column unchanged on an update" must express that themselves (`null` ->
+ * `undefined`) rather than relying on this function, since this function's
+ * `null -> null` is a value, not an omission.
+ */
+export function normalizePaidFromChapter(value: number | null): number | null {
+  if (value === null) return null;
+  return value > 0 ? value : null;
+}
+
+/**
+ * Clamps an upstream `allEpis` to the `total_chapter_count` column's `>=
+ * 0` DB CHECK (same two tables as `normalizePaidFromChapter` above).
+ * Operates on a definite number; callers decide how to handle a `null`
+ * `allEpis` (default to `0` on create, `undefined`/leave-unchanged on
+ * update) since that policy differs by call site.
+ */
+export function clampTotalChapterCount(value: number): number {
+  return Math.max(0, value);
+}
+
+/**
+ * `paidFromChapter` value for an UPDATE `data` object (two call sites:
+ * `persistCatalogPage`'s `novelSourceItem.upsert.update` in
+ * `worker/handlers/moboreader.ts`, and `materializeChangduPreview`'s
+ * `novelSourceItem.update` in `src/lib/preview/changdu-materialization.ts`).
+ * An absent upstream value (`null`/`undefined`) means "leave the existing
+ * column unchanged", expressed to Prisma as `undefined`. A *reported*
+ * value — including `0` or negative — is normalized and written
+ * explicitly, so an upstream `0` can overwrite a previously-stored
+ * positive value with `NULL` instead of being silently swallowed by a
+ * bare `?? undefined` (which only substitutes on nullish, so `0` would
+ * pass straight through to the `paid_from_chapter > 0` DB CHECK).
+ */
+export function paidFromChapterForUpdate(value: number | null | undefined): number | null | undefined {
+  return value == null ? undefined : normalizePaidFromChapter(value);
+}
+
+/** `totalChapterCount` counterpart to `paidFromChapterForUpdate` above. */
+export function totalChapterCountForUpdate(value: number | null | undefined): number | undefined {
+  return value == null ? undefined : clampTotalChapterCount(value);
+}
+
 function digest(value: unknown): string {
   return createHash("sha256").update(JSON.stringify(value)).digest("hex");
+}
+
+/**
+ * Phase C (`施工工单_PhaseC_任务模型迁移与ImportProgress_2026-09-06.md` C-1/C-2):
+ * `CatalogScanTask` is folded into `GenericTask` (`taskType =
+ * MOBOREADER_TASK_TYPES.catalogScan`). `project_type` is not a physical
+ * column on `GenericTask`, so the single-active-scan-per-scope exclusivity
+ * `catalog_scan_active_scope_uidx` used to provide is now expressed by
+ * folding `projectType` into `operationScopeHash` and relying on the
+ * existing `generic_task_active_scope_uidx` UNIQUE(task_type,
+ * channel_account_id, channel_app_id, operation_scope_hash) WHERE status IN
+ * ('pending','processing') — the same mechanism every other GenericTask
+ * taskType already uses for its own active-scope exclusivity, not a new
+ * mechanism invented for catalog scan.
+ */
+function catalogScanOperationScopeHash(projectType: number): string {
+  return digest({ projectType });
 }
 
 export async function createMoboreaderCatalogScanTask(
@@ -233,7 +411,7 @@ export async function createMoboreaderCatalogScanTask(
   env: NodeJS.ProcessEnv = process.env,
 ): Promise<MoboreaderTaskCreationResult> {
   const input = validateMoboreaderCatalogScanInput(rawInput, env);
-  const duplicate = await prisma.catalogScanTask.findUnique({ where: { requestToken: input.requestToken } });
+  const duplicate = await prisma.genericTask.findUnique({ where: { requestToken: input.requestToken } });
   if (duplicate) return { status: "duplicate", taskId: duplicate.id };
 
   const binding = await prisma.channelApp.findFirst({
@@ -245,11 +423,13 @@ export async function createMoboreaderCatalogScanTask(
     select: { id: true, projectType: true },
   });
   if (!binding) throw new MoboreaderTaskInputError("active_channel_binding_required");
-  const existing = await prisma.catalogScanTask.findFirst({
+  const operationScopeHash = catalogScanOperationScopeHash(binding.projectType);
+  const existing = await prisma.genericTask.findFirst({
     where: {
+      taskType: MOBOREADER_TASK_TYPES.catalogScan,
       channelAccountId: input.channelAccountId,
       channelAppId: input.channelAppId,
-      projectType: binding.projectType,
+      operationScopeHash,
       status: { in: ["pending", "processing"] },
     },
     orderBy: { createdAt: "asc" },
@@ -258,7 +438,21 @@ export async function createMoboreaderCatalogScanTask(
 
   const enabled = isNovelCatalogSyncEnabled(env);
   const writeAllowed = isNovelCatalogSyncWriteAllowed(env);
-  const taskStatus = enabled && (input.mode === "dry_run" || writeAllowed) ? "pending" : "disabled";
+  // Phase D (施工工单_PhaseD_安全与运行态收口_2026-09-06.md D-1, 做法1): this
+  // used to read `enabled && (input.mode === "dry_run" || writeAllowed)`,
+  // letting a dry_run task bypass the write gate and get enqueued as
+  // "pending" (and therefore actually claimed and processed by the worker)
+  // even while an operator had turned the whole feature's write gate off.
+  // Combined with the handler/finalizer previously attaching a real
+  // `protectedWrite` regardless of mode (fixed below in
+  // worker/handlers/moboreader.ts and src/lib/tasks/store.ts), that bypass
+  // was the actual "dry_run silently writes real rows while ALLOW_WRITE is
+  // false" hole this doc names. Now that dry_run never attaches a
+  // `protectedWrite` (and `finalizeTaskItem` fail-closed rejects one if a
+  // handler ever regresses), dry_run no longer needs — or gets — a special
+  // exemption from this gate: the one flag now uniformly decides whether
+  // this feature's tasks (of either mode) are even claimed and run at all.
+  const taskStatus = enabled && writeAllowed ? "pending" : "disabled";
   const expiresAt = new Date(Date.now() + MOBOREADER_CATALOG_LIMITS.ttlMs);
   const taskId = randomUUID();
   const scheduledPageEnd = Math.min(input.pageEnd, input.pageStart + input.safetyMaxPages - 1);
@@ -267,28 +461,37 @@ export async function createMoboreaderCatalogScanTask(
     source: "manual",
     actorId: input.actorId,
     requestId: input.requestId,
+    // CatalogScan's former physical task-level columns (Phase C: no longer
+    // columns on GenericTask, carried here instead — see
+    // `parseCatalogScanTaskParams` in `worker/handlers/moboreader.ts`, the
+    // sole reader).
+    projectType: binding.projectType,
+    pageStart: input.pageStart,
+    pageEnd: input.pageEnd,
+    pageSize: input.pageSize,
     safetyMaxPages: input.safetyMaxPages,
     requestedPageEnd: input.pageEnd,
     scheduledPageEnd,
     expiresAt: expiresAt.toISOString(),
     featureFlagEnabled: enabled,
     allowWriteEnabled: writeAllowed,
+    // Phase B: recorded, never sent upstream — see `languages` doc on
+    // `CreateMoboreaderCatalogScanTaskInput` above.
+    languages: [...input.languages],
     registeredDetailStatus: MOBOREADER_PREVIEW_RUNTIME_STATUS,
   } satisfies Prisma.InputJsonObject;
   try {
     return await prisma.$transaction(async (tx) => {
-      await tx.catalogScanTask.create({
+      await tx.genericTask.create({
         data: {
           id: taskId,
+          taskType: MOBOREADER_TASK_TYPES.catalogScan,
           channelAccountId: input.channelAccountId,
           channelAppId: input.channelAppId,
-          projectType: binding.projectType,
+          operationScopeHash,
           mode: input.mode,
           status: taskStatus,
           requestToken: input.requestToken,
-          pageStart: input.pageStart,
-          pageEnd: input.pageEnd,
-          pageSize: input.pageSize,
           totalCount: pages.length,
           params: safeParams,
           items: {
@@ -307,7 +510,15 @@ export async function createMoboreaderCatalogScanTask(
                 actorId: input.actorId,
                 requestId: input.requestId,
               };
-              return { pageIndex, requestFingerprint: digest(payload), payload };
+              return {
+                targetType: "catalog_page",
+                targetId: String(pageIndex),
+                // `requestFingerprint` was a physical CatalogScanTaskItem
+                // column (a digest of this same payload, never compared
+                // against anything downstream — see the Phase C worktree
+                // audit). Folded into payload verbatim, no semantic loss.
+                payload: { ...payload, requestFingerprint: digest(payload) },
+              };
             }),
           },
         },
@@ -317,7 +528,7 @@ export async function createMoboreaderCatalogScanTask(
           actorType: "admin",
           actorId: input.actorId,
           action: "moboreader.catalog_scan.queued",
-          entityType: "CatalogScanTask",
+          entityType: "GenericTask",
           entityId: taskId,
           requestId: input.requestId,
           taskType: MOBOREADER_TASK_TYPES.catalogScan,
@@ -339,13 +550,14 @@ export async function createMoboreaderCatalogScanTask(
     });
   } catch (error) {
     if (!isUniqueViolation(error)) throw error;
-    const exact = await prisma.catalogScanTask.findUnique({ where: { requestToken: input.requestToken } });
+    const exact = await prisma.genericTask.findUnique({ where: { requestToken: input.requestToken } });
     if (exact) return { status: "duplicate", taskId: exact.id };
-    const active = await prisma.catalogScanTask.findFirst({
+    const active = await prisma.genericTask.findFirst({
       where: {
+        taskType: MOBOREADER_TASK_TYPES.catalogScan,
         channelAccountId: input.channelAccountId,
         channelAppId: input.channelAppId,
-        projectType: binding.projectType,
+        operationScopeHash,
         status: { in: ["pending", "processing"] },
       },
       orderBy: { createdAt: "asc" },
@@ -356,6 +568,102 @@ export async function createMoboreaderCatalogScanTask(
 }
 
 type TaskDb = PrismaClient | Prisma.TransactionClient;
+
+export async function failMoboreaderCatalogFinalize(
+  tx: Prisma.TransactionClient,
+  input: {
+    catalogTaskId: string;
+    generation: number;
+    actorId: string;
+    requestId?: string;
+    reason: "retry_exhausted" | "lease_expired";
+    now?: Date;
+  },
+): Promise<void> {
+  const now = input.now ?? new Date();
+  const parent = await tx.genericTask.findUniqueOrThrow({
+    where: { id: input.catalogTaskId },
+    select: { result: true },
+  });
+  const result = parent.result && typeof parent.result === "object" && !Array.isArray(parent.result)
+    ? parent.result as Record<string, unknown>
+    : {};
+  await tx.genericTask.update({
+    where: { id: input.catalogTaskId },
+    data: {
+      result: {
+        ...result,
+        finalization: {
+          status: "failed",
+          generation: catalogFinalizeGeneration(input.generation),
+          failedAt: now.toISOString(),
+          reason: input.reason,
+        },
+        terminalState: "partial_failed",
+      },
+    },
+  });
+
+  const requestToken = catalogPreviewRequestToken(input.catalogTaskId, input.generation);
+  const preview = await tx.channelSyncTask.findUnique({
+    where: { requestToken },
+    select: { id: true, status: true, result: true },
+  });
+  const previewResult = preview?.result && typeof preview.result === "object" && !Array.isArray(preview.result)
+    ? preview.result as Record<string, unknown>
+    : {};
+  let failedPreviewItems = 0;
+  if (preview && preview.status === "disabled" && previewResult.buildStatus === "building") {
+    const failed = await tx.channelSyncTaskItem.updateMany({
+      where: { taskId: preview.id, status: "pending" },
+      data: {
+        status: "failed",
+        error: { code: "preview_build_abandoned", message: "Catalog finalizer exhausted before preview activation" },
+        finishedAt: now,
+      },
+    });
+    failedPreviewItems = failed.count;
+    const actualFailedCount = await tx.channelSyncTaskItem.count({ where: { taskId: preview.id, status: "failed" } });
+    await tx.channelSyncTask.update({
+      where: { id: preview.id },
+      data: {
+        status: "failed",
+        failedCount: actualFailedCount,
+        completedAt: now,
+        error: { code: "preview_build_abandoned", message: "Preview staging did not complete" },
+        result: { ...previewResult, buildStatus: "failed", failedAt: now.toISOString() },
+      },
+    });
+    await tx.operationAudit.create({
+      data: {
+        actorType: "worker", actorId: input.actorId,
+        action: "moboreader.preview_refresh.build_failed", entityType: "ChannelSyncTask",
+        entityId: preview.id, requestId: input.requestId,
+        taskType: MOBOREADER_TASK_TYPES.previewRefresh, taskId: preview.id,
+        afterSnapshot: {
+          catalogScanTaskId: input.catalogTaskId,
+          generation: catalogFinalizeGeneration(input.generation),
+          buildStatus: "failed",
+          failedPreviewItems,
+          reason: input.reason,
+        },
+      },
+    });
+  }
+  await tx.operationAudit.create({
+    data: {
+      actorType: "worker", actorId: input.actorId,
+      action: "moboreader.catalog_finalize.failed", entityType: "GenericTask",
+      entityId: input.catalogTaskId, requestId: input.requestId,
+      taskType: MOBOREADER_TASK_TYPES.catalogScan, taskId: input.catalogTaskId,
+      afterSnapshot: {
+        generation: catalogFinalizeGeneration(input.generation),
+        reason: input.reason,
+        failedPreviewItems,
+      },
+    },
+  });
+}
 
 function csvSet(value: string | undefined): Set<string> {
   return new Set((value ?? "").split(",").map((item) => item.trim()).filter(Boolean));
@@ -382,6 +690,292 @@ function validatedPreviewInput(input: EnqueueMoboreaderPreviewRefreshTaskInput) 
     requestId: required(input.requestId, "request_id_required"),
     novelSourceItemIds: ids,
     mode,
+  };
+}
+
+type PreviewPlan = Readonly<{
+  input: ReturnType<typeof validatedPreviewInput>;
+  runtime: MoboreaderPreviewRuntimeConfig;
+  eligibleIds: readonly string[];
+  skipReasonCounts: Record<string, number>;
+  operationScopeHash: string;
+  taskStatus: "pending" | "disabled";
+}>;
+
+async function buildPreviewPlan(
+  db: TaskDb,
+  rawInput: EnqueueMoboreaderPreviewRefreshTaskInput,
+  env: NodeJS.ProcessEnv,
+  now: Date,
+): Promise<PreviewPlan | { status: "no_eligible_sources"; skipReasonCounts: Record<string, number> }> {
+  const input = validatedPreviewInput(rawInput);
+  const skipReasonCounts: Record<string, number> = {};
+  const binding = await db.channelApp.findFirst({
+    where: { id: input.channelAppId, status: "active", channel: { status: "active" }, sourceApp: { status: "active" } },
+    select: { id: true, sourceApp: { select: { code: true } } },
+  });
+  if (!binding) {
+    increment(skipReasonCounts, "inactive_channel_binding", input.novelSourceItemIds.length);
+    return { status: "no_eligible_sources", skipReasonCounts };
+  }
+  const sourceAppAllowlist = csvSet(env[MOBOREADER_PREVIEW_ENV.sourceAppCodes]);
+  if (!sourceAppAllowlist.has(binding.sourceApp.code)) {
+    increment(skipReasonCounts, "source_app_not_allowlisted", input.novelSourceItemIds.length);
+    return { status: "no_eligible_sources", skipReasonCounts };
+  }
+  const account = await db.channelAccount.findFirst({
+    where: {
+      id: input.channelAccountId,
+      channel: { channelApps: { some: { id: input.channelAppId } } },
+      status: "active",
+      deletedAt: null,
+    },
+    select: {
+      id: true,
+      credentials: {
+        where: { status: "active", OR: [{ expiresAt: null }, { expiresAt: { gt: now } }] },
+        select: { id: true },
+        take: 2,
+      },
+    },
+  });
+  if (!account || account.credentials.length !== 1) {
+    increment(skipReasonCounts, account ? "credential_ambiguous" : "account_unavailable", input.novelSourceItemIds.length);
+    return { status: "no_eligible_sources", skipReasonCounts };
+  }
+
+  const runtime = resolveMoboreaderPreviewRuntimeConfig(env);
+  const optionalAllowlist = csvSet(env[MOBOREADER_PREVIEW_ENV.sourceItemAllowlist]);
+  const sources = await findNovelSourceItemsByIds(db, input.novelSourceItemIds, {
+    where: { channelAppId: input.channelAppId },
+    select: {
+      id: true,
+      novelId: true,
+      deletedAt: true,
+      novel: { select: { previewPolicy: { select: { lastRefreshedAt: true } } } },
+    },
+  });
+  const byId = new Map(sources.map((source) => [source.id, source]));
+  const eligibleIds: string[] = [];
+  for (const sourceId of input.novelSourceItemIds) {
+    const source = byId.get(sourceId);
+    if (!source || source.deletedAt || !source.novelId) {
+      increment(skipReasonCounts, "source_unlinked_or_deleted");
+      continue;
+    }
+    if (optionalAllowlist.size > 0 && !optionalAllowlist.has(sourceId)) {
+      increment(skipReasonCounts, "source_item_not_allowlisted");
+      continue;
+    }
+    const refreshedAt = source.novel?.previewPolicy?.lastRefreshedAt;
+    if (refreshedAt && now.valueOf() - refreshedAt.valueOf() < runtime.freshnessMs) {
+      increment(skipReasonCounts, "fresh_preview");
+      continue;
+    }
+    eligibleIds.push(sourceId);
+  }
+  if (eligibleIds.length === 0) return { status: "no_eligible_sources", skipReasonCounts };
+  const enabled = isNovelCatalogSyncEnabled(env);
+  const writeAllowed = isNovelCatalogSyncWriteAllowed(env);
+  return {
+    input,
+    runtime,
+    eligibleIds,
+    skipReasonCounts,
+    operationScopeHash: digest([...eligibleIds].sort()),
+    taskStatus: enabled && writeAllowed ? "pending" : "disabled",
+  };
+}
+
+export interface PreviewStageWriter {
+  <T>(write: (tx: Prisma.TransactionClient) => Promise<T>): Promise<T>;
+}
+
+/**
+ * Auto-preview builder used by catalog finalization. It deliberately never
+ * holds one interactive transaction across eligibility reads and all item
+ * inserts. A disabled/building shell plus unique item keys makes every batch
+ * resumable and idempotent; the task only becomes claimable after activation.
+ */
+export async function stageMoboreaderPreviewRefreshTask(
+  prisma: PrismaClient,
+  rawInput: EnqueueMoboreaderPreviewRefreshTaskInput,
+  writePhase: PreviewStageWriter,
+  env: NodeJS.ProcessEnv = process.env,
+  now = new Date(),
+): Promise<MoboreaderPreviewTaskCreationResult> {
+  const validated = validatedPreviewInput(rawInput);
+  const existing = await prisma.channelSyncTask.findUnique({
+    where: { requestToken: validated.requestToken },
+    select: { id: true, status: true, result: true },
+  });
+  const existingResult = existing?.result && typeof existing.result === "object" && !Array.isArray(existing.result)
+    ? existing.result as Record<string, unknown>
+    : null;
+  if (existing && existingResult?.buildStatus === "superseded" && typeof existingResult.activeTaskId === "string") {
+    return { status: "active_conflict", taskId: existingResult.activeTaskId };
+  }
+  if (existing && existingResult?.buildStatus !== "building") {
+    return { status: "duplicate", taskId: existing.id };
+  }
+
+  const planned = await buildPreviewPlan(prisma, rawInput, env, now);
+  if ("status" in planned) return planned;
+  const active = await prisma.channelSyncTask.findFirst({
+    where: {
+      taskType: MOBOREADER_TASK_TYPES.previewRefresh,
+      channelAccountId: planned.input.channelAccountId,
+      channelAppId: planned.input.channelAppId,
+      operationScopeHash: planned.operationScopeHash,
+      status: { in: ["pending", "processing"] },
+    },
+    orderBy: { createdAt: "asc" },
+  });
+  if (active) return { status: "active_conflict", taskId: active.id };
+
+  const taskId = existing?.id ?? randomUUID();
+  if (!existing) {
+    await writePhase(async (tx) => {
+      await tx.channelSyncTask.create({
+        data: {
+          id: taskId,
+          taskType: MOBOREADER_TASK_TYPES.previewRefresh,
+          channelAccountId: planned.input.channelAccountId,
+          channelAppId: planned.input.channelAppId,
+          operationScopeHash: planned.operationScopeHash,
+          requestToken: planned.input.requestToken,
+          mode: planned.input.mode,
+          status: "disabled",
+          totalCount: 0,
+          params: {
+            trigger: planned.input.trigger,
+            catalogScanTaskId: planned.input.catalogScanTaskId ?? null,
+            runtime: { ...planned.runtime },
+            featureFlagEnabled: isNovelCatalogSyncEnabled(env),
+            allowWriteEnabled: isNovelCatalogSyncWriteAllowed(env),
+            skipReasonCounts: planned.skipReasonCounts,
+            evidence: { ...MOBOREADER_PREVIEW_EVIDENCE },
+          },
+          result: { buildStatus: "building", eligibleCount: planned.eligibleIds.length, skipReasonCounts: planned.skipReasonCounts },
+        },
+      });
+      await tx.operationAudit.create({
+        data: {
+          actorType: "worker", actorId: planned.input.actorId,
+          action: "moboreader.preview_refresh.build_started", entityType: "ChannelSyncTask",
+          entityId: taskId, requestId: planned.input.requestId,
+          taskType: MOBOREADER_TASK_TYPES.previewRefresh, taskId,
+          afterSnapshot: { catalogScanTaskId: planned.input.catalogScanTaskId ?? null, eligibleCount: planned.eligibleIds.length },
+        },
+      });
+    });
+  }
+
+  for (let offset = 0; offset < planned.eligibleIds.length; offset += MOBOREADER_PREVIEW_STAGE_BATCH_SIZE) {
+    const ids = planned.eligibleIds.slice(offset, offset + MOBOREADER_PREVIEW_STAGE_BATCH_SIZE);
+    await writePhase(async (tx) => {
+      const inserted = await tx.channelSyncTaskItem.createMany({
+        data: ids.map((novelSourceItemId) => ({
+          taskId,
+          novelSourceItemId,
+          payload: {
+            trigger: planned.input.trigger,
+            runtime: { ...planned.runtime },
+            actorId: planned.input.actorId,
+            requestId: planned.input.requestId,
+            contractStatus: MOBOREADER_PREVIEW_RUNTIME_STATUS,
+          },
+        })),
+        skipDuplicates: true,
+      });
+      await tx.operationAudit.create({
+        data: {
+          actorType: "worker", actorId: planned.input.actorId,
+          action: "moboreader.preview_refresh.items_staged", entityType: "ChannelSyncTask",
+          entityId: taskId, requestId: planned.input.requestId,
+          taskType: MOBOREADER_TASK_TYPES.previewRefresh, taskId,
+          afterSnapshot: { offset, attemptedCount: ids.length, insertedCount: inserted.count },
+        },
+      });
+    });
+  }
+
+  try {
+    await writePhase(async (tx) => {
+      const totalCount = await tx.channelSyncTaskItem.count({ where: { taskId } });
+      await tx.channelSyncTask.update({
+        where: { id: taskId },
+        data: {
+          status: planned.taskStatus,
+          totalCount,
+          result: { buildStatus: "ready", eligibleCount: totalCount, skipReasonCounts: planned.skipReasonCounts },
+        },
+      });
+      await tx.operationAudit.create({
+        data: {
+          actorType: "worker", actorId: planned.input.actorId,
+          action: planned.taskStatus === "pending" ? "moboreader.preview_refresh.queued" : "moboreader.preview_refresh.queued_disabled",
+          entityType: "ChannelSyncTask", entityId: taskId, requestId: planned.input.requestId,
+          taskType: MOBOREADER_TASK_TYPES.previewRefresh, taskId,
+          afterSnapshot: { trigger: planned.input.trigger, status: planned.taskStatus, eligibleCount: totalCount, skipReasonCounts: planned.skipReasonCounts },
+        },
+      });
+    });
+  } catch (error) {
+    if (!isUniqueViolation(error) || planned.taskStatus !== "pending") throw error;
+    const winner = await prisma.channelSyncTask.findFirst({
+      where: {
+        id: { not: taskId },
+        taskType: MOBOREADER_TASK_TYPES.previewRefresh,
+        channelAccountId: planned.input.channelAccountId,
+        channelAppId: planned.input.channelAppId,
+        operationScopeHash: planned.operationScopeHash,
+        status: { in: ["pending", "processing"] },
+      },
+      orderBy: { createdAt: "asc" },
+      select: { id: true },
+    });
+    if (!winner) throw error;
+    await writePhase(async (tx) => {
+      const skipped = await tx.channelSyncTaskItem.updateMany({
+        where: { taskId, status: "pending" },
+        data: {
+          status: "skipped",
+          result: { skipReason: "active_scope_conflict", activeTaskId: winner.id },
+          error: Prisma.DbNull,
+          finishedAt: now,
+        },
+      });
+      await tx.channelSyncTask.update({
+        where: { id: taskId, status: "disabled" },
+        data: {
+          status: "cancelled",
+          skippedCount: skipped.count,
+          completedAt: now,
+          result: {
+            buildStatus: "superseded",
+            activeTaskId: winner.id,
+            eligibleCount: planned.eligibleIds.length,
+            skipReasonCounts: planned.skipReasonCounts,
+          },
+        },
+      });
+      await tx.operationAudit.create({
+        data: {
+          actorType: "worker", actorId: planned.input.actorId,
+          action: "moboreader.preview_refresh.build_superseded", entityType: "ChannelSyncTask",
+          entityId: taskId, requestId: planned.input.requestId,
+          taskType: MOBOREADER_TASK_TYPES.previewRefresh, taskId,
+          afterSnapshot: { activeTaskId: winner.id, skippedCount: skipped.count },
+        },
+      });
+    });
+    return { status: "active_conflict", taskId: winner.id };
+  }
+
+  return {
+    status: "enqueued", taskId, taskStatus: planned.taskStatus,
+    eligibleCount: planned.eligibleIds.length, skipReasonCounts: planned.skipReasonCounts,
   };
 }
 
@@ -432,8 +1026,12 @@ async function enqueueMoboreaderPreviewRefreshTaskInDb(
 
   const runtime = resolveMoboreaderPreviewRuntimeConfig(env);
   const optionalAllowlist = csvSet(env[MOBOREADER_PREVIEW_ENV.sourceItemAllowlist]);
-  const sources = await db.novelSourceItem.findMany({
-    where: { id: { in: input.novelSourceItemIds }, channelAppId: input.channelAppId },
+  // C-15: a "whole task scan" trigger can hand this up to ~96,660 ids in one
+  // call (施工工单_C15) -- well past Postgres's 32,767 bind-variable cap for
+  // a plain `id: { in: ... } }` findMany. Chunked via
+  // `findNovelSourceItemsByIds` instead of a single unbounded findMany.
+  const sources = await findNovelSourceItemsByIds(db, input.novelSourceItemIds, {
+    where: { channelAppId: input.channelAppId },
     select: {
       id: true,
       novelId: true,
@@ -477,7 +1075,9 @@ async function enqueueMoboreaderPreviewRefreshTaskInDb(
   if (active) return { status: "active_conflict", taskId: active.id };
   const enabled = isNovelCatalogSyncEnabled(env);
   const writeAllowed = isNovelCatalogSyncWriteAllowed(env);
-  const taskStatus = enabled && (input.mode === "dry_run" || writeAllowed) ? "pending" : "disabled";
+  // Phase D D-1, 做法1 (see the twin comment on the catalog-scan enqueue
+  // above): no more dry_run exemption from the write gate.
+  const taskStatus = enabled && writeAllowed ? "pending" : "disabled";
   await db.channelSyncTask.create({
     data: {
       id: taskId,
@@ -496,13 +1096,7 @@ async function enqueueMoboreaderPreviewRefreshTaskInDb(
         featureFlagEnabled: enabled,
         allowWriteEnabled: writeAllowed,
         skipReasonCounts,
-        evidence: {
-          dataId: "confirmed_getlistpc_series_id",
-          materialType: "confirmed_runtime_selection_policy",
-          materialTypeGlobalConstant: "not_asserted",
-          materialType1001: "rejected",
-          productionPreviewCall: "enabled",
-        },
+        evidence: { ...MOBOREADER_PREVIEW_EVIDENCE },
       },
       result: { eligibleCount: eligibleIds.length, skipReasonCounts },
       items: {

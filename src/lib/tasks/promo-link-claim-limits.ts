@@ -6,15 +6,13 @@
  * evidence state, and this task's task-instruction explicitly forbids
  * reusing the short-drama-derived MoboReader numbers here.
  *
- * `ttlMs` and `maxBatchSize` remain PENDING OWNER CALIBRATION; the comment
+ * `ttlMs` remains PENDING OWNER CALIBRATION; the comment
  * on each says why. `readback.*` is a local safety-hygiene policy independent
  * of the unproven `claimPromo` idempotency contract. Its deployment defaults
  * were Owner-frozen on 2026-09-02 to match CPS v8.3.6: three read-only
  * attempts at a 2000ms interval, while preserving the existing clamps.
- * `maxBatchSize` has no precedent to cite — it is a deliberately
- *     conservative placeholder pending real Owner input once operators have
- *     opinions about explicit-selection batch size for a side-effecting-
- *     adjacent capability.
+ * Selection size is intentionally not capped here. Fifty is only an internal
+ * database chunk size and is never an operator-facing limit.
  */
 
 /** Capability-registry key. Matches the architecture doc's own capability name verbatim (`novel-v1-adapter-and-workflow-v0.2.1.md` §2.2/§2.3 `claimPromo` row) — not a project-invented rename. */
@@ -38,17 +36,8 @@ export const PROMO_LINK_CLAIM_LIMITS = Object.freeze({
    * invented. PENDING OWNER CALIBRATION.
    */
   ttlMs: 6 * 60 * 60 * 1_000,
-  /**
-   * Explicit-selection batch cap ("拒绝按筛选全量、只接受显式区间" — doc §4,
-   * item 15: callers must pass an explicit id list, never a filter
-   * descriptor; this cap only bounds that list's length). No CPS citation
-   * for this exact number — deliberately conservative because most items
-   * routed through this chain will, in practice, resolve via the
-   * always-enabled "already-existing promo" pre-read (§3.9) rather than the
-   * disabled `claimPromo` path, so a small cap costs little throughput
-   * today. PENDING OWNER CALIBRATION, not inherited from any source.
-   */
-  maxBatchSize: 50,
+  /** Internal database read/write chunk; never an operator selection cap. */
+  chunkSize: 50,
   /**
    * Bounded readback retry for pre-read, post-claim confirmation, and
    * readback-only recovery. The 3-attempt/2000ms deployment defaults are

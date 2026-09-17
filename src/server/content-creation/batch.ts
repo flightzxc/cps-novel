@@ -1,4 +1,8 @@
 /**
+ * @deprecated Dead production path. Catalog ingest now enqueues
+ * `novel_materialize` via `enqueueCatalogBatch`. Do not treat this file as
+ * the write path or change its semantics to stand in for the queue.
+ *
  * RC-4 explicit-selection batch wrapper around `createContentFromSourceItem`
  * (`./service.ts`). CPS v8.3.6 parity target:
  * `src/lib/changdu-promote-drama-batch.ts`'s `runChangduPromoteDramaBatch`
@@ -48,16 +52,21 @@
  */
 import type { PrismaClient } from "@prisma/client";
 
-import type { SiteLocale } from "@/lib/locale/locale-canonical";
 import { summarizeDbError } from "@/lib/db/db-retry";
 
+/**
+ * @deprecated Dead in-process loop. Production catalog batch uses
+ * `enqueueCatalogBatch` → `novel.materialize.v1`. Do not treat this file as
+ * the write path to evolve.
+ */
 import {
   ContentCreationInputError,
-  createContentFromSourceItem,
+  materializeNovelFromSourceItem,
   type ContentCreationInputErrorCode,
   type CreateContentActor,
   type CreateContentResult,
 } from "./service";
+import { enqueueContentCreationPreview, type ContentCreationPreviewEnqueueResult } from "./preview-enqueue";
 
 // ---------------------------------------------------------------------------
 // Batch-level input validation (throws — malformed caller input, mirrors
@@ -101,8 +110,6 @@ export type ContentCreationBatchInput = {
   readonly novelSourceItemIds: readonly string[];
   readonly actor: CreateContentActor;
   readonly requestId: string;
-  /** Forwarded to `createContentFromSourceItem` unchanged — defaults to `"en"` there. */
-  readonly locale?: SiteLocale;
   /** Defaults to {@link CONTENT_CREATION_BATCH_BUDGET_MS}; overridable only for tests. */
   readonly budgetMs?: number;
 };
@@ -181,12 +188,12 @@ async function runSequentialBudgetedBatch<TPrimaryStatus extends string>(
       // under `Article`/`OperationAudit`'s 160-char bound) purely so each
       // item's own `OperationAudit` row and `withDbRetry` log entries stay
       // individually traceable back to this one batch submission.
-      const result = await createContentFromSourceItem(db, {
+      const result = await materializeNovelFromSourceItem(db, {
         novelSourceItemId,
-        locale: input.locale,
         mode,
         actor: input.actor,
         requestId: `${input.requestId}:${novelSourceItemId}`,
+        deferPreviewEnqueue: mode === "apply",
       });
       items.push({ novelSourceItemId, status: classify(result), result });
     } catch (error) {
@@ -234,6 +241,7 @@ export type ContentCreationBatchApplyCounts = Readonly<Record<ContentCreationBat
 export type ContentCreationBatchApplyResult = {
   readonly items: readonly ContentCreationBatchApplyItemOutcome[];
   readonly counts: ContentCreationBatchApplyCounts;
+  readonly previewEnqueue?: ContentCreationPreviewEnqueueResult;
 };
 
 const APPLY_STATUSES = ["created", "skipped_already_linked", "failed", "not_processed"] as const;
@@ -260,7 +268,18 @@ export async function applyContentCreationBatch(
   input: ContentCreationBatchInput,
 ): Promise<ContentCreationBatchApplyResult> {
   const items = await runSequentialBudgetedBatch(db, "apply", input, classifyApplyOutcome);
-  return { items, counts: countBy(items, APPLY_STATUSES) };
+  const createdIds = items
+    .filter((item) => item.status === "created")
+    .map((item) => item.novelSourceItemId);
+  const previewEnqueue = createdIds.length > 0
+    ? await enqueueContentCreationPreview(db, {
+        novelSourceItemIds: createdIds,
+        requestToken: `moboreader.preview_refresh.v1:content_create_batch:${input.requestId}`,
+        requestId: input.requestId,
+        actorId: input.actor.type === "admin" ? input.actor.adminId : input.actor.source,
+      })
+    : undefined;
+  return { items, counts: countBy(items, APPLY_STATUSES), ...(previewEnqueue ? { previewEnqueue } : {}) };
 }
 
 // ---------------------------------------------------------------------------

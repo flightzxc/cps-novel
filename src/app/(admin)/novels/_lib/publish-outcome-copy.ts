@@ -1,4 +1,5 @@
-import type { PublishLifecycleErrorCode, RightsTransitionKind } from "../_actions";
+import type { PublishLifecycleErrorCode } from "../_actions";
+import type { RightsTransitionKind } from "../_types/publish-gate";
 
 /**
  * Operator-facing copy for `src/server/publish-gate/service.ts`'s outcomes
@@ -15,11 +16,12 @@ import type { PublishLifecycleErrorCode, RightsTransitionKind } from "../_action
  *  - `RightsTransitionKind` — withdraw/takedown/restore's own labels and
  *    confirmation copy, used by the detail-page lifecycle panel.
  *
- * Both types are imported from `../_actions` rather than
- * `@/server/publish-gate` directly, even though this file itself is not a
- * `"use client"` module — see `../_actions.ts`'s own header comment for why
- * that file, not this one, is the single place allowed to name
- * `@/server/publish-gate`.
+ * Neither type is imported from `@/server/publish-gate` directly, even
+ * though this file itself is not a `"use client"` module — `PublishLifecycleErrorCode`
+ * comes from `../_actions` (a fresh alias declared there) and
+ * `RightsTransitionKind` from `../_types/publish-gate` (a directive-less
+ * re-export module — see its header comment for why the type can no
+ * longer be re-exported from `../_actions.ts` itself).
  */
 
 function assertUnreachableCode(value: never): never {
@@ -43,6 +45,34 @@ export function describePublishLifecycleError(code: PublishLifecycleErrorCode): 
     default:
       return assertUnreachableCode(code);
   }
+}
+
+/**
+ * Fix 1 (Opus review of C-21/22/23): `../../articles/_actions.ts` returns a
+ * flat `{ ok: false, code: string }` — not this route's own
+ * `PublishActionResult`'s `{ kind: "lifecycle_error", code: ... }`
+ * discriminated shape — so `../../articles/_components/article-list.tsx`
+ * cannot tell "this code is a `PublishLifecycleErrorCode`" from the type
+ * checker alone; it has to ask at runtime before it can safely hand `code`
+ * to `describePublishLifecycleError` above (which throws on anything else).
+ *
+ * Built from a `Record<PublishLifecycleErrorCode, true>` rather than a
+ * hand-written array specifically so it stays exhaustive the same way the
+ * `switch` above does: adding a seventh member to the union without adding
+ * it to `KNOWN_CODES` is a compile error ("Property ... is missing"), not a
+ * silently-incomplete runtime guard.
+ */
+const KNOWN_CODES: Readonly<Record<PublishLifecycleErrorCode, true>> = Object.freeze({
+  article_not_found: true,
+  novel_not_found: true,
+  novel_not_currently_published: true,
+  novel_already_takedown: true,
+  novel_not_currently_takedown: true,
+  batch_too_large: true,
+});
+
+export function isPublishLifecycleErrorCode(code: string): code is PublishLifecycleErrorCode {
+  return Object.prototype.hasOwnProperty.call(KNOWN_CODES, code);
 }
 
 export type RightsTransitionCopy = {

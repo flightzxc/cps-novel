@@ -28,14 +28,11 @@ source "${SCRIPT_DIR}/alert-lib.sh"
 : "${ALERT_PSQL_TIMEOUT_SECONDS:=15}"
 
 # Verbatim from docs/operations/LAUNCH_DAY_HEALTH_CHECKS.md §2.
+# Phase C: catalog_scan_task(_item) dropped -- CatalogScan is now
+# GenericTask(taskType='catalog_scan'); two family branches, not three.
 read -r -d '' EXPIRED_LOCKS_SQL <<'SQL' || true
 WITH expired AS (
-  SELECT 'catalog_scan'::text AS family, 'catalog_scan'::text AS task_type,
-         i.locked_until
-  FROM catalog_scan_task_item i
-  WHERE i.status = 'processing' AND i.locked_until < transaction_timestamp()
-  UNION ALL
-  SELECT 'channel_sync', t.task_type, i.locked_until
+  SELECT 'channel_sync'::text AS family, t.task_type, i.locked_until
   FROM channel_sync_task_item i
   JOIN channel_sync_task t ON t.id = i.task_id
   WHERE i.status = 'processing' AND i.locked_until < transaction_timestamp()

@@ -840,9 +840,12 @@ describe("模板记录归一（narrowArticleTemplateSource）", () => {
   });
 
   it("🔴 未知 schemaVersion 一律 fail-closed 返回 null，不做 best-effort 解析", () => {
-    expect(narrowArticleTemplateSource({ ...base, schemaVersion: 2 })).toBeNull();
+    // P2-02B：1 与 2 都是本引擎认识的版本（见下方"schemaVersion 1/2 双版本兼容"），
+    // 这里只测真正落在 SUPPORTED_TEMPLATE_SCHEMA_VERSIONS 之外的输入。
+    expect(narrowArticleTemplateSource({ ...base, schemaVersion: 3 })).toBeNull();
     expect(narrowArticleTemplateSource({ ...base, schemaVersion: 0 })).toBeNull();
     expect(narrowArticleTemplateSource({ ...base, schemaVersion: "1" })).toBeNull();
+    expect(narrowArticleTemplateSource({ ...base, schemaVersion: "2" })).toBeNull();
     expect(narrowArticleTemplateSource({ ...base, schemaVersion: undefined })).toBeNull();
   });
 
@@ -870,10 +873,89 @@ describe("模板记录归一（narrowArticleTemplateSource）", () => {
   });
 });
 
-describe("四槽位装配与输出合同", () => {
-  it("四个槽位名精确等于冻结集合，且与 P2-01 的 title / body 同名", () => {
-    expect([...ARTICLE_TEMPLATE_SLOTS]).toEqual(["title", "body", "metaTitle", "metaDescription"]);
+describe("schemaVersion 1/2 双版本兼容（P2-02B：metaKeywords/slug 扩槽）", () => {
+  const base = {
+    bodyTemplate: "<p>{novel_description}</p>",
+    seoTemplate: { title: "{novel_title}", metaTitle: "M", metaDescription: "D" },
+  };
+
+  it("schemaVersion 1 仍被接受——现网既有 v1 行（如内置 system-default-v1）不是非法，只是缺这两个可选槽位", () => {
+    const source = narrowArticleTemplateSource({ ...base, schemaVersion: 1 });
+    expect(source).not.toBeNull();
+    expect(Object.keys(source ?? {}).sort()).toEqual(["body", "metaDescription", "metaTitle", "title"]);
+  });
+
+  it("schemaVersion 1 即使物理列带有非空 slugTemplate/metaKeywordsTemplate 也完全忽略——v1 模板没有机会配置这两个槽位", () => {
+    const source = narrowArticleTemplateSource({
+      ...base,
+      schemaVersion: 1,
+      slugTemplate: "should-be-ignored",
+      metaKeywordsTemplate: "should,be,ignored",
+    });
+    expect(source).not.toBeNull();
+    expect("slug" in (source ?? {})).toBe(false);
+    expect("metaKeywords" in (source ?? {})).toBe(false);
+  });
+
+  it("schemaVersion 2 且提供非空 slugTemplate/metaKeywordsTemplate 时纳入产物", () => {
+    const source = narrowArticleTemplateSource({
+      ...base,
+      schemaVersion: 2,
+      slugTemplate: "{novel_title}-review",
+      metaKeywordsTemplate: "{novel_title}, novel, review",
+    });
+    expect(source).toEqual({
+      title: "{novel_title}",
+      body: "<p>{novel_description}</p>",
+      metaTitle: "M",
+      metaDescription: "D",
+      metaKeywords: "{novel_title}, novel, review",
+      slug: "{novel_title}-review",
+    });
+  });
+
+  it("schemaVersion 2 但 slugTemplate/metaKeywordsTemplate 是空串（列默认值）时视为未提供，不是空槽位", () => {
+    const source = narrowArticleTemplateSource({
+      ...base,
+      schemaVersion: 2,
+      slugTemplate: "",
+      metaKeywordsTemplate: "",
+    });
+    expect(source).not.toBeNull();
+    expect("slug" in (source ?? {})).toBe(false);
+    expect("metaKeywords" in (source ?? {})).toBe(false);
+  });
+
+  it("schemaVersion 2 下 slugTemplate/metaKeywordsTemplate 若存在但不是字符串则整体拒绝", () => {
+    expect(narrowArticleTemplateSource({ ...base, schemaVersion: 2, slugTemplate: 42 })).toBeNull();
+    expect(narrowArticleTemplateSource({ ...base, schemaVersion: 2, metaKeywordsTemplate: 42 })).toBeNull();
+  });
+});
+
+describe("六槽位装配与输出合同（P2-02B：新增 metaKeywords / slug）", () => {
+  it("六个槽位名精确等于冻结集合，且与 P2-01 的 title / body 同名", () => {
+    expect([...ARTICLE_TEMPLATE_SLOTS]).toEqual(["title", "body", "metaTitle", "metaDescription", "metaKeywords", "slug"]);
     expect(Object.isFrozen(ARTICLE_TEMPLATE_SLOTS)).toBe(true);
+  });
+
+  it("提供 slug 槽位时渲染出 slugCandidate（不叫 slug，避免被当成终值直接落库），按 text 上下文渲染不做 HTML 转义", () => {
+    // body（VALID_SOURCE 里是 "<p>{novel_description}</p>"）与 slug/metaKeywords 都引用
+    // 同一个字段，取同一个含 "&" 的取值——直接对照 html 上下文（转义）与 text 上下文（不转义）。
+    const source: ArticleTemplateSource = {
+      ...VALID_SOURCE,
+      metaKeywords: "{novel_description}",
+      slug: "{novel_description}",
+    };
+    const draft = renderArticleDraft(source, values({ description: "A & B" }));
+    expect(draft.slugCandidate).toBe("A & B");
+    expect(draft.seoMetadata.metaKeywords).toBe("A & B");
+    expect(draft.body).toBe("<p>A &amp; B</p>");
+  });
+
+  it("不提供 slug / metaKeywords 时，产物里就没有那两个键", () => {
+    const draft = renderArticleDraft(VALID_SOURCE, values());
+    expect("slugCandidate" in draft).toBe(false);
+    expect("metaKeywords" in draft.seoMetadata).toBe(false);
   });
 
   it("正常输入产出非空 body 与完整产物形状", () => {

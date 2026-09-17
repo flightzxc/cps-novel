@@ -97,10 +97,16 @@ export function isAllowedSideEffectTransition(
     return next === "confirmed" || next === "failed" || next === "claim_retry_blocked";
   }
   if (current === "claim_retry_blocked") {
-    return next === "confirmed" || next === "manual_review_required";
+    // The outcome is unknown. The generic worker graph may only hand the
+    // intent to manual review. Reaching `confirmed` from here requires
+    // independent readback evidence and goes through
+    // `confirmSideEffectIntentByReadbackInTransaction`; `failed` is only
+    // reachable through the X9 adjudicator after manual review.
+    return next === "manual_review_required";
   }
-  // `manual_review_required` is terminal for the generic worker graph.
-  // Only the dedicated adjudication boundary may leave that state.
+  // `manual_review_required`, `confirmed` and `failed` are terminal for the
+  // generic worker graph. Only the dedicated X9 adjudication boundary may
+  // leave `manual_review_required`.
   return false;
 }
 
@@ -140,6 +146,75 @@ export async function transitionSideEffectIntent(
   },
 ): Promise<SideEffectIntent> {
   return prisma.$transaction((tx) => transitionSideEffectIntentInTransaction(tx, input));
+}
+
+/** Statuses from which an independent readback may confirm the intent. */
+export const READBACK_CONFIRMABLE_STATUSES = ["prepared", "claim_retry_blocked"] as const;
+
+export function isReadbackConfirmableStatus(current: string): boolean {
+  return (READBACK_CONFIRMABLE_STATUSES as readonly string[]).includes(current);
+}
+
+export interface SideEffectReadbackEvidence {
+  hasWebUrl: boolean;
+  hasAppUrl: boolean;
+}
+
+function readbackEvidenceIsValid(value: unknown): value is SideEffectReadbackEvidence {
+  return Boolean(value)
+    && typeof value === "object"
+    && typeof (value as SideEffectReadbackEvidence).hasWebUrl === "boolean"
+    && typeof (value as SideEffectReadbackEvidence).hasAppUrl === "boolean";
+}
+
+function jsonObjectOrEmpty(value: Prisma.JsonValue | null): Prisma.JsonObject {
+  return value && typeof value === "object" && !Array.isArray(value) ? (value as Prisma.JsonObject) : {};
+}
+
+/**
+ * Readback-recovery confirmation boundary.
+ *
+ * This is the ONLY way an intent whose outcome is still unknown to the
+ * worker (`prepared`, or `claim_retry_blocked` in the crash window before
+ * it reaches manual review) may become `confirmed` without the X9
+ * adjudicator: the caller has re-read the upstream object through the
+ * read-only readback path, located it, and is writing the local business
+ * rows (PromoLink, Article binding) in the *same* fenced transaction `tx`.
+ * The generic worker graph (`isAllowedSideEffectTransition`) deliberately
+ * has no `claim_retry_blocked -> confirmed` edge; do not add one there.
+ *
+ * Evidence is mandatory and is merged over the intent's existing
+ * `responseShape` so the ambiguity trail (failureCategory / readbackStatus
+ * recorded when the intent was blocked) is preserved next to the
+ * confirmation.
+ */
+export async function confirmSideEffectIntentByReadbackInTransaction(
+  tx: Prisma.TransactionClient,
+  input: { effectKey: string; evidence: SideEffectReadbackEvidence },
+): Promise<SideEffectIntent> {
+  if (!readbackEvidenceIsValid(input.evidence)) {
+    throw new Error("Readback evidence is required to confirm a side-effect intent");
+  }
+  const current = await tx.sideEffectIntent.findUnique({ where: { effectKey: input.effectKey } });
+  if (!current) throw new Error(`Side-effect intent not found: ${input.effectKey}`);
+  if (!isReadbackConfirmableStatus(current.status)) {
+    throw new Error(`Illegal side-effect readback confirmation: ${current.status} -> confirmed`);
+  }
+  const responseShape: Prisma.InputJsonObject = {
+    ...(jsonObjectOrEmpty(current.responseShape) as Prisma.InputJsonObject),
+    source: "readback",
+    confirmedFrom: current.status,
+    hasWebUrl: input.evidence.hasWebUrl,
+    hasAppUrl: input.evidence.hasAppUrl,
+  };
+  const changed = await tx.sideEffectIntent.updateMany({
+    where: { id: current.id, status: current.status },
+    data: { status: "confirmed", responseShape, confirmedAt: new Date() },
+  });
+  if (changed.count !== 1) {
+    throw new Error(`Concurrent side-effect transition rejected: ${current.status} -> confirmed`);
+  }
+  return tx.sideEffectIntent.findUniqueOrThrow({ where: { id: current.id } });
 }
 
 export function markSideEffectUnknown(

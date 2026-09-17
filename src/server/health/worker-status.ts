@@ -13,8 +13,10 @@ import { HEALTH_DATABASE_TIMEOUT_MS, type HealthDatabaseClient } from "./service
  * 过期处理锁（`status = 'processing' AND locked_until < transaction_timestamp()`）
  * 是"租约到期但没有 Worker 在正常回收"的信号；`heartbeat_at` 字段与三张
  * `*_task_item` 表名取自 `src/lib/tasks/store.ts`（`heartbeatTaskItem`/
- * `assignLease` 等写路径）与 `prisma/schema.prisma` 的 `CatalogScanTaskItem` /
+ * `assignLease` 等写路径）与 `prisma/schema.prisma` 的
  * `ChannelSyncTaskItem` / `GenericTaskItem` 模型（`@map("heartbeat_at")`）。
+ * Phase C：`CatalogScanTaskItem` 已并入 `GenericTaskItem`
+ * （`taskType='catalog_scan'`），三表 UNION 收为两表。
  *
  * 判定：
  *   - 查询失败或超过 `HEALTH_DATABASE_TIMEOUT_MS`（与 `getHealthReport` 共用同
@@ -59,12 +61,7 @@ interface HeartbeatRow {
 // locks」——只读证据查询，不带任何调用方参数，用 Prisma.sql 标签而非字符串拼接。
 const EXPIRED_LOCKS_QUERY = Prisma.sql`
   WITH expired AS (
-    SELECT 'catalog_scan'::text AS family, 'catalog_scan'::text AS task_type,
-           i.locked_until
-    FROM catalog_scan_task_item i
-    WHERE i.status = 'processing' AND i.locked_until < transaction_timestamp()
-    UNION ALL
-    SELECT 'channel_sync', t.task_type, i.locked_until
+    SELECT 'channel_sync'::text AS family, t.task_type, i.locked_until
     FROM channel_sync_task_item i
     JOIN channel_sync_task t ON t.id = i.task_id
     WHERE i.status = 'processing' AND i.locked_until < transaction_timestamp()
@@ -83,12 +80,10 @@ const EXPIRED_LOCKS_QUERY = Prisma.sql`
 `;
 
 // 心跳年龄不在运维文档里，字段/表名取自 src/lib/tasks/store.ts 与
-// prisma/schema.prisma（见上方头注释）。三表 UNION 取全局最新一次心跳。
+// prisma/schema.prisma（见上方头注释）。Phase C 起两表 UNION 取全局最新一次心跳。
 const LAST_HEARTBEAT_QUERY = Prisma.sql`
   SELECT max(heartbeat_at) AS last_heartbeat_at
   FROM (
-    SELECT heartbeat_at FROM catalog_scan_task_item WHERE heartbeat_at IS NOT NULL
-    UNION ALL
     SELECT heartbeat_at FROM channel_sync_task_item WHERE heartbeat_at IS NOT NULL
     UNION ALL
     SELECT heartbeat_at FROM generic_task_item WHERE heartbeat_at IS NOT NULL

@@ -6,7 +6,13 @@ source_path="$1"
 wal_filename="$2"
 : "${P1_06_WAL_ARCHIVE_DIR:?P1_06_WAL_ARCHIVE_DIR is required}"
 [[ "$P1_06_WAL_ARCHIVE_DIR" = /* ]] || { echo "WAL archive directory must be absolute" >&2; exit 65; }
-[[ "$wal_filename" =~ ^[0-9A-F]{24}(\.[a-z0-9]+)?$ ]] || {
+# Allow two more file shapes the server itself feeds to archive_command,
+# besides plain WAL segments: pg_basebackup's "<seg>.<8hex>.backup" history
+# file (else the archiver wedges behind every base backup), and a timeline
+# history file "<8hex>.history" (emitted on recovery-target promotion).
+[[ "$wal_filename" =~ ^[0-9A-F]{24}(\.[a-z0-9]+)?$ \
+  || "$wal_filename" =~ ^[0-9A-F]{24}\.[0-9A-F]{8}\.backup$ \
+  || "$wal_filename" =~ ^[0-9A-F]{8}\.history$ ]] || {
   echo "Invalid WAL archive filename" >&2
   exit 65
 }

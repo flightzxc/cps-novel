@@ -312,31 +312,35 @@ describe.skipIf(!enabled).sequential("P1-05B PostgreSQL constraints", () => {
   });
 
   it("enforces CatalogScan active scope per account and app", async () => {
+    // Phase C: CatalogScanTask folded into GenericTask (taskType =
+    // "catalog_scan"). project_type is no longer a physical column -- the
+    // exclusivity this test checks is now generic_task_active_scope_uidx
+    // UNIQUE(task_type, channel_account_id, channel_app_id,
+    // operation_scope_hash) WHERE status IN ('pending','processing'), with
+    // operation_scope_hash standing in for "same projectType".
+    const scopeHash = "2".repeat(64);
     await execute(`
-      INSERT INTO catalog_scan_task (
-        id, channel_account_id, channel_app_id, project_type, request_token,
-        page_start, page_end, page_size, updated_at
+      INSERT INTO generic_task (
+        id, task_type, channel_account_id, channel_app_id, operation_scope_hash, request_token, updated_at
       ) VALUES (
-        'a0000000-0000-4000-8000-000000000001', '${ids.accountA}', '${ids.appA}', 2,
-        'scan-a', 1, 2, 20, now()
+        'a0000000-0000-4000-8000-000000000001', 'catalog_scan', '${ids.accountA}', '${ids.appA}',
+        '${scopeHash}', 'scan-a', now()
       )
     `);
     await expectDatabaseFailure(`
-      INSERT INTO catalog_scan_task (
-        id, channel_account_id, channel_app_id, project_type, request_token,
-        page_start, page_end, page_size, status, updated_at
+      INSERT INTO generic_task (
+        id, task_type, channel_account_id, channel_app_id, operation_scope_hash, request_token, status, updated_at
       ) VALUES (
-        'a0000000-0000-4000-8000-000000000002', '${ids.accountA}', '${ids.appA}', 2,
-        'scan-conflict', 1, 2, 20, 'processing', now()
+        'a0000000-0000-4000-8000-000000000002', 'catalog_scan', '${ids.accountA}', '${ids.appA}',
+        '${scopeHash}', 'scan-conflict', 'processing', now()
       )
-    `, "catalog_scan_active_scope_uidx");
+    `, "generic_task_active_scope_uidx");
     await execute(`
-      INSERT INTO catalog_scan_task (
-        id, channel_account_id, channel_app_id, project_type, request_token,
-        page_start, page_end, page_size, updated_at
+      INSERT INTO generic_task (
+        id, task_type, channel_account_id, channel_app_id, operation_scope_hash, request_token, updated_at
       ) VALUES
-        ('a0000000-0000-4000-8000-000000000003', '${ids.accountB}', '${ids.appA}', 2, 'scan-account-b', 1, 2, 20, now()),
-        ('a0000000-0000-4000-8000-000000000004', '${ids.accountA}', '${ids.appB}', 2, 'scan-app-b', 1, 2, 20, now())
+        ('a0000000-0000-4000-8000-000000000003', 'catalog_scan', '${ids.accountB}', '${ids.appA}', '${scopeHash}', 'scan-account-b', now()),
+        ('a0000000-0000-4000-8000-000000000004', 'catalog_scan', '${ids.accountA}', '${ids.appB}', '${scopeHash}', 'scan-app-b', now())
     `);
   });
 
@@ -379,14 +383,9 @@ describe.skipIf(!enabled).sequential("P1-05B PostgreSQL constraints", () => {
   });
 
   it("uses separate pending-claim and expired-lease indexes for every Item table", async () => {
+    // Phase C: catalog_scan_task(_item) dropped -- only channel_sync_task_item
+    // and generic_task_item remain.
     await executeBatch(`
-      INSERT INTO catalog_scan_task (
-        id, channel_account_id, channel_app_id, project_type, request_token,
-        page_start, page_end, page_size, status, updated_at
-      ) VALUES (
-        'a0000000-0000-4000-8000-000000000010', '${ids.accountA}', '${ids.appA}', 9,
-        'scan-explain', 1, 6000, 20, 'completed', now()
-      );
       INSERT INTO channel_sync_task (
         id, task_type, channel_account_id, channel_app_id, operation_scope_hash,
         request_token, status, updated_at
@@ -407,21 +406,6 @@ describe.skipIf(!enabled).sequential("P1-05B PostgreSQL constraints", () => {
       SELECT
         ('81000000-0000-4000-8000-' || lpad(gs::text, 12, '0'))::uuid,
         '${ids.appA}', 'explain-' || gs, 'en', 'Explain ' || gs, '', 'pending', '{}', now()
-      FROM generate_series(1, 6000) gs;
-      INSERT INTO catalog_scan_task_item (
-        id, task_id, page_index, request_fingerprint, status, attempt_count,
-        execution_token, lease_epoch, locked_by, locked_until, updated_at
-      )
-      SELECT
-        ('82000000-0000-4000-8000-' || lpad(gs::text, 12, '0'))::uuid,
-        'a0000000-0000-4000-8000-000000000010', gs, repeat(md5(gs::text), 2),
-        CASE WHEN gs <= 20 THEN 'pending' WHEN gs <= 40 THEN 'processing' ELSE 'success' END,
-        CASE WHEN gs BETWEEN 21 AND 40 THEN 1 ELSE 0 END,
-        CASE WHEN gs BETWEEN 21 AND 40 THEN ('83000000-0000-4000-8000-' || lpad(gs::text, 12, '0'))::uuid ELSE NULL END,
-        CASE WHEN gs BETWEEN 21 AND 40 THEN 1 ELSE 0 END,
-        CASE WHEN gs BETWEEN 21 AND 40 THEN 'worker-a' ELSE NULL END,
-        CASE WHEN gs BETWEEN 21 AND 40 THEN now() - interval '1 hour' ELSE NULL END,
-        now()
       FROM generate_series(1, 6000) gs;
       INSERT INTO channel_sync_task_item (
         id, task_id, novel_source_item_id, status, attempt_count, execution_token,
@@ -454,12 +438,11 @@ describe.skipIf(!enabled).sequential("P1-05B PostgreSQL constraints", () => {
         CASE WHEN gs BETWEEN 21 AND 40 THEN now() - interval '1 hour' ELSE NULL END,
         now()
       FROM generate_series(1, 6000) gs;
-      ANALYZE catalog_scan_task_item;
       ANALYZE channel_sync_task_item;
       ANALYZE generic_task_item;
     `);
 
-    const tables = ["catalog_scan_task_item", "channel_sync_task_item", "generic_task_item"];
+    const tables = ["channel_sync_task_item", "generic_task_item"];
     const plans: Record<string, { pending: string[]; recovery: string[] }> = {};
     for (const table of tables) {
       plans[table] = {

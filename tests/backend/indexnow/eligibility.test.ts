@@ -125,10 +125,11 @@ describe("buildIndexNowCanonicalUrl", () => {
 describe("isRegisteredSiteLocale", () => {
   it("accepts every registered SITE_LOCALES member, rejects everything else", () => {
     // P0-S7a expanded `SITE_LOCALES` from `["en"]` to the short-drama site's
-    // 15-locale registry (Owner decision) — `fr` is now registered, so this
-    // must now be `true`. Registered is not the same gate as publishable:
-    // `isNovelIndexNowEligible` still calls `isPublishableLocale` — U6
-    // admitted `en`, so only `en` reaches IndexNow; `fr` remains blocked.
+    // 15-locale registry (Owner decision) — `fr` is registered, so this is
+    // `true`. L10N P4: this IS now the default locale gate
+    // `isNovelIndexNowEligible` reads (the narrower D-7 publish whitelist —
+    // `isPublishableLocale` — was deleted), matching CPS's own
+    // `isSupportedSiteLocale` gate at this exact boundary.
     expect(isRegisteredSiteLocale("en")).toBe(true);
     expect(isRegisteredSiteLocale("fr")).toBe(true);
     expect(isRegisteredSiteLocale("EN")).toBe(false);
@@ -147,14 +148,20 @@ describe("isNovelIndexNowEligible", () => {
     expect(isNovelIndexNowEligible(PUBLISHED_ARTICLE, PUBLISHED_NOVEL, READY_PROMO, { isLocalePublishable: () => true })).toBe(true);
   });
 
-  it("is eligible under the real D-7 whitelist for en", () => {
-    // No override — exercises the real `isPublishableLocale`. U6 admitted `en`.
+  it("is eligible under the real SITE_LOCALES gate for en", () => {
+    // No override — exercises the real `isRegisteredSiteLocale`.
     expect(isNovelIndexNowEligible(PUBLISHED_ARTICLE, PUBLISHED_NOVEL, READY_PROMO)).toBe(true);
   });
 
-  it("is ineligible when the locale has not cleared D-7", () => {
+  it("L10N P4: is also eligible for es — the D-7 publish whitelist that used to block a registered-but-unopened locale here is deleted; isRegisteredSiteLocale is the only gate now", () => {
     expect(
       isNovelIndexNowEligible({ ...PUBLISHED_ARTICLE, locale: "es" }, PUBLISHED_NOVEL, READY_PROMO),
+    ).toBe(true);
+  });
+
+  it("is ineligible for a locale not registered in SITE_LOCALES at all", () => {
+    expect(
+      isNovelIndexNowEligible({ ...PUBLISHED_ARTICLE, locale: "xx" }, PUBLISHED_NOVEL, READY_PROMO),
     ).toBe(false);
   });
 
@@ -175,5 +182,63 @@ describe("isNovelIndexNowEligible", () => {
     expect(
       isNovelIndexNowEligible(PUBLISHED_ARTICLE, { status: "takedown" }, READY_PROMO, { isLocalePublishable: () => true }),
     ).toBe(false);
+  });
+
+  /**
+   * C-25 (`规划_文章管理能力补齐_博客类型可见性换小说_2026-09-08.md` §三/C-25):
+   * "IndexNow：投递资格判定追加「排除 hidden」。放在该模块自己那层…不要下沉到通用
+   * 谓词族" — pins that `hidden` is excluded, `seo_only` stays eligible (same
+   * collectability contract as sitemap), and that the flag being off
+   * reproduces pre-C-25 behavior exactly.
+   */
+  describe("C-25: seoVisibility", () => {
+    // Same `as unknown as NodeJS.ProcessEnv` convention as this repo's other
+    // env-override tests: Next.js's global augmentation makes
+    // `NodeJS.ProcessEnv` require `NODE_ENV`, which a plain single-key test
+    // literal never carries.
+    const FLAG_ON = { FEATURE_ARTICLE_SEO_VISIBILITY: "true" } as unknown as NodeJS.ProcessEnv;
+    const FLAG_OFF = {} as unknown as NodeJS.ProcessEnv;
+
+    it("is ineligible when seoVisibility is hidden and the flag is on", () => {
+      expect(
+        isNovelIndexNowEligible(
+          { ...PUBLISHED_ARTICLE, seoVisibility: "hidden" },
+          PUBLISHED_NOVEL,
+          READY_PROMO,
+          { isLocalePublishable: () => true, env: FLAG_ON },
+        ),
+      ).toBe(false);
+    });
+
+    it("stays eligible when seoVisibility is seo_only (collectability keeps seo_only, same as sitemap)", () => {
+      expect(
+        isNovelIndexNowEligible(
+          { ...PUBLISHED_ARTICLE, seoVisibility: "seo_only" },
+          PUBLISHED_NOVEL,
+          READY_PROMO,
+          { isLocalePublishable: () => true, env: FLAG_ON },
+        ),
+      ).toBe(true);
+    });
+
+    it("hidden has no effect while the flag is off (pre-C-25 behavior)", () => {
+      expect(
+        isNovelIndexNowEligible(
+          { ...PUBLISHED_ARTICLE, seoVisibility: "hidden" },
+          PUBLISHED_NOVEL,
+          READY_PROMO,
+          { isLocalePublishable: () => true, env: FLAG_OFF },
+        ),
+      ).toBe(true);
+    });
+
+    it("a row with no seoVisibility field at all (pre-C-25 caller shape) stays eligible", () => {
+      expect(
+        isNovelIndexNowEligible(PUBLISHED_ARTICLE, PUBLISHED_NOVEL, READY_PROMO, {
+          isLocalePublishable: () => true,
+          env: FLAG_ON,
+        }),
+      ).toBe(true);
+    });
   });
 });

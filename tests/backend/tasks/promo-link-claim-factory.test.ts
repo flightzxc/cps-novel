@@ -124,13 +124,16 @@ describe("P0-S5 promo-link claim task factory — explicit selection only", () =
     );
   });
 
-  it("rejects a batch larger than the configured cap", async () => {
+  it("treats 50 as an internal chunk and accepts a 51-item selection", async () => {
     const db = seedFoundation(new FakePromoLinkClaimTaskDb());
-    const items = Array.from({ length: PROMO_LINK_CLAIM_LIMITS.maxBatchSize + 1 }, (_, index) => ({
+    const items = Array.from({ length: PROMO_LINK_CLAIM_LIMITS.chunkSize + 1 }, (_, index) => ({
       novelSourceItemId: `00000000-0000-4000-8000-${String(index).padStart(12, "0")}`,
       offerType: "read",
     }));
-    await expect(createPromoLinkClaimTask(db.asPrismaClient(), baseInput({ items }), APPLY_ENABLED_ENV)).rejects.toThrow("batch_size_exceeded");
+    for (const item of items) db.seedSourceItem({ id: item.novelSourceItemId, channelAppId: "app-1", novelId: "novel-1", status: "linked", deletedAt: null });
+    const result = await createPromoLinkClaimTask(db.asPrismaClient(), baseInput({ items }), APPLY_ENABLED_ENV);
+    expect(result).toMatchObject({ status: "enqueued", eligibleCount: 51 });
+    expect(db.items).toHaveLength(51);
   });
 
   it("skips ineligible items (unlinked/deleted) individually rather than failing the whole batch", async () => {

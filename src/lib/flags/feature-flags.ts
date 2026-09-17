@@ -1,5 +1,9 @@
 export const NOVEL_CATALOG_SYNC_FEATURE_FLAG = "FEATURE_NOVEL_CATALOG_SYNC";
 export const NOVEL_CATALOG_SYNC_ALLOW_WRITE_FLAG = "NOVEL_CATALOG_SYNC_ALLOW_WRITE";
+export const TAGGING_MASTER_FEATURE_FLAG = "FEATURE_P2_06_5_TAGGING";
+export const TAGGING_ADMIN_WRITE_FEATURE_FLAG = "FEATURE_P2_06_5_TAG_ADMIN_WRITE";
+export const TAGGING_AUTO_FEATURE_FLAG = "FEATURE_NOVEL_TAG_AUTO";
+export const TAGGING_AUTO_WRITE_AUTHORIZATION = "AUTO_WRITE_AUTHORIZED";
 export const SITEMAP_AUTO_REFRESH_FEATURE_FLAG = "FEATURE_SITEMAP_AUTO_REFRESH";
 export const SITEMAP_AUTO_REFRESH_ALLOW_WRITE_FLAG = "SITEMAP_AUTO_REFRESH_ALLOW_WRITE";
 
@@ -9,6 +13,19 @@ export function isNovelCatalogSyncEnabled(env: NodeJS.ProcessEnv = process.env):
 
 export function isNovelCatalogSyncWriteAllowed(env: NodeJS.ProcessEnv = process.env): boolean {
   return env[NOVEL_CATALOG_SYNC_ALLOW_WRITE_FLAG] === "true";
+}
+
+export function isTaggingEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+  return env[TAGGING_MASTER_FEATURE_FLAG] === "true";
+}
+export function isTagAdminWriteEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+  return env[TAGGING_ADMIN_WRITE_FEATURE_FLAG] === "true";
+}
+export function isAutoTaggingEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+  return env[TAGGING_AUTO_FEATURE_FLAG] === "true";
+}
+export function isAutoTagWriteAuthorized(env: NodeJS.ProcessEnv = process.env): boolean {
+  return env[TAGGING_AUTO_WRITE_AUTHORIZATION] === "YES";
 }
 
 // -----------------------------------------------------------------------
@@ -119,4 +136,161 @@ export function isPublicTrackingWriteDisabled(env: NodeJS.ProcessEnv = process.e
   return PUBLIC_TRACKING_WRITE_DISABLED_TRUTHY.test(
     env[PUBLIC_TRACKING_WRITE_DISABLED_FLAG]?.trim() ?? "",
   );
+}
+
+// -----------------------------------------------------------------------
+// C-25 (`规划_文章管理能力补齐_博客类型可见性换小说_2026-09-08.md` §三/C-25).
+// `Article.seoVisibility` (C-24 axes foundation) only affects public-site
+// *reads* (list exclusion, sitemap/IndexNow collectability, detail 404 for
+// `hidden`) -- there is no protected business write this flag needs to gate,
+// the admin filter/column/editor controls read and write the column
+// regardless of this flag's value. Per this round's "一 flag 一函数、双闸"
+// discipline, a double-gate is for *protected writes*; a read-only capability
+// like this one is deliberately single-gated (documented here and in
+// `docs/governance/feature-flag-registry.md` so it is not mistaken for a
+// missed second gate).
+//
+// Default `false` reproduces this project's pre-C-25 public-site behavior
+// exactly: `src/server/publication/visibility.ts`'s `buildPublicArticleWhere`/
+// `buildPublicListArticleWhere`/`isHiddenFromPublicView`, `src/server/
+// publication/access.ts`'s `checkNovelArticlePublicAccess`, `src/lib/seo/
+// sitemap.ts`'s `isVisibleCandidate`, and `src/lib/indexnow/eligibility.ts`'s
+// `isNovelIndexNowEligible` all treat every Article as if `seoVisibility`
+// were `"public"` while this is off -- letting operators pre-stage
+// `seo_only`/`hidden` values in the admin editor before the public-facing
+// behavior is switched on ("后台先行、公开后开", the same rollout convention
+// this repo's IndexNow enqueue/delivery pair already uses).
+//
+// Consumed by BOTH the web and worker processes, not web-only: every
+// function above defaults its own `env` param to `process.env`, and the
+// sitemap-refresh/indexnow-delivery worker handlers
+// (`worker/handlers/sitemap-refresh.ts`'s `createSitemapFamilyBuilder`,
+// `worker/handlers/indexnow-delivery.ts`'s `isNovelIndexNowEligible` call)
+// never pass an override -- so each reads the WORKER process's own copy of
+// this var. `docker-compose.yml` must register it in both the web and
+// worker service blocks (a P0 gap this round's review caught: the worker
+// block was missing it, silently pinning the worker's read to "false"
+// regardless of web's value). Only the scheduler is exempt -- it only
+// enqueues tasks and has no public-site read path to gate.
+// -----------------------------------------------------------------------
+export const ARTICLE_SEO_VISIBILITY_FEATURE_FLAG = "FEATURE_ARTICLE_SEO_VISIBILITY";
+
+/** Gates whether public-site reads (list/sitemap/IndexNow/detail) honor `Article.seoVisibility` at all. Exact `=== "true"` parsing, default off. */
+export function isArticleSeoVisibilityEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+  return env[ARTICLE_SEO_VISIBILITY_FEATURE_FLAG] === "true";
+}
+
+// -----------------------------------------------------------------------
+// C-28 (`规划_文章管理能力补齐_博客类型可见性换小说_2026-09-08.md` §三/C-28).
+// "新建博客" is a protected business write (the first write path in this
+// codebase that can create an Article with `novelId: null`) — per this
+// file's own "一 flag 一函数、双闸" discipline that means a *pair*, unlike
+// `FEATURE_ARTICLE_SEO_VISIBILITY` above (a read-only gate, deliberately
+// single). `FEATURE_ARTICLE_BLOG` off means the whole capability is
+// invisible: the "新建博客" header button does not render
+// (`src/app/(admin)/articles/page.tsx`), `/articles/new-blog` 404s
+// (`src/app/(admin)/articles/new-blog/page.tsx`, same `notFound()` +
+// `force-dynamic` kill-switch shape as `src/app/dev-preview/layout.tsx`),
+// and the creation service itself
+// (`src/server/content-creation/blog.ts`'s `createBlogArticle`) fail-closes
+// even if called directly. `ARTICLE_BLOG_ALLOW_WRITE` is the second key:
+// even with the feature flag on, the creation service performs zero writes
+// unless this is also true — "功能开了也不写库".
+//
+// `ARTICLE_BLOG_ALLOW_WRITE` stays web-only, unchanged since C-28:
+// `createBlogArticle`'s only caller is the admin Server Action
+// (`src/app/(admin)/articles/_actions.ts`'s `createBlogArticleAction`), an
+// interactive write triggered from the new-blog form — no worker or
+// scheduler task chain ever creates a blog Article, and `isArticleBlogWriteAllowed`
+// has no caller under `worker/`/`scheduler/`. Registered in
+// `docker-compose.yml`'s `web` service only.
+//
+// `FEATURE_ARTICLE_BLOG` (the read gate above `isArticleBlogEnabled`) is
+// DIFFERENT as of C-29 (`规划_文章管理能力补齐_博客类型可见性换小说_2026-09-08.md`
+// §三/C-29) — it is now ALSO consumed by the worker process, the same shape
+// `FEATURE_ARTICLE_SEO_VISIBILITY` above already has: `src/lib/seo/sitemap.ts`'s
+// `createSitemapFamilyBuilder` calls `isArticleBlogEnabled(env)` to decide
+// whether to emit the `blogpage` sitemap family at all (`env` defaults to
+// `process.env`, so `worker/handlers/sitemap-refresh.ts`'s call site reads
+// the WORKER process's own copy), and `docker-compose.yml`'s `worker`
+// service block must therefore carry `FEATURE_ARTICLE_BLOG` too (registered
+// this round). `src/lib/indexnow/eligibility.ts`'s `isBlogIndexNowEligible`
+// also checks this flag but is NOT yet called from any file under `worker/`
+// — the natural call site (`worker/handlers/indexnow-delivery.ts`'s
+// drift-recheck) has nothing to recheck yet, since no blog `IndexNowOutbox`
+// row can be enqueued this round (`publish-gate/service.ts`'s
+// `dispatchFirstPublicPublication` call still skips `novelId === null`
+// Articles — see that file's own inline comment and `eligibility.ts`'s
+// `isBlogIndexNowEligible` doc comment for the full explanation). So: the
+// worker's `docker-compose.yml`/`scripts/lib/x8-levels.json`/
+// `scripts/acceptance/x8-validate-compose.mjs` registration for
+// `FEATURE_ARTICLE_BLOG` reflects the sitemap consumer only, not an
+// IndexNow one yet. `ARTICLE_BLOG_ALLOW_WRITE` is unaffected by any of this
+// — it is a write gate, and neither new C-29 consumer performs a write.
+// See `docs/governance/feature-flag-registry.md` and
+// `tests/backend/flags/article-blog-flags-passthrough.test.ts`.
+// -----------------------------------------------------------------------
+export const ARTICLE_BLOG_FEATURE_FLAG = "FEATURE_ARTICLE_BLOG";
+export const ARTICLE_BLOG_ALLOW_WRITE_FLAG = "ARTICLE_BLOG_ALLOW_WRITE";
+
+/** Gates whether the "新建博客" entry (header button, `/articles/new-blog` page, creation service) exists at all. Exact `=== "true"` parsing, default off. */
+export function isArticleBlogEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+  return env[ARTICLE_BLOG_FEATURE_FLAG] === "true";
+}
+
+/** Second key: even with the feature on, `createBlogArticle` performs zero writes unless this is also true. */
+export function isArticleBlogWriteAllowed(env: NodeJS.ProcessEnv = process.env): boolean {
+  return env[ARTICLE_BLOG_ALLOW_WRITE_FLAG] === "true";
+}
+
+// -----------------------------------------------------------------------
+// C-30A/C-30B (施工工单_C30_换小说_移植CPS换租客_2026-09-08.md §4A.5/附录 E).
+// "换小说" (rebind) is a protected business write — a two-field
+// (`Article.novelId` + `Article.promoLinkId`) atomic rewrite — so per this
+// file's "一 flag 一函数、双闸" discipline it gets a pair, same shape as
+// `FEATURE_ARTICLE_BLOG`/`ARTICLE_BLOG_ALLOW_WRITE` above. `FEATURE_ARTICLE_
+// NOVEL_REBIND` off means the whole capability is invisible: the editor-page
+// rebind panel (C-30A) does not render, the batch-rebind page (C-30B) 404s,
+// and the service layer fail-closes even on a direct call.
+// `ARTICLE_NOVEL_REBIND_ALLOW_WRITE` is the second key: even with the
+// feature on, the rebind itself (single-article write, and — C-30B — batch
+// apply/resume) performs zero writes unless this is also true.
+//
+// 🔴 One deliberate, explicit exception (施工工单 §4A.5's own words: "执行方
+// 不得静默改成双闸或改成无闸"): a batch-rebind PREVIEW's write (the
+// `article_novel_rebind_preview` row itself, C-30B) needs only the total
+// gate `FEATURE_ARTICLE_NOVEL_REBIND` — NOT `ARTICLE_NOVEL_REBIND_ALLOW_
+// WRITE`. Reasoning, same shape as `FEATURE_ARTICLE_SEO_VISIBILITY`'s own
+// single-gate note above: a preview snapshot is operator-triggered, bounded-
+// lifetime (30-minute expiry + bounded cleanup sweep), and has zero business
+// side effect of its own — it never touches `Article.novelId`/`promoLinkId`,
+// never calls the single-article rebind service, and cannot be replayed into
+// one (applying a batch is a *separate* write, gated by both flags as
+// normal). Letting an operator generate and inspect a preview before the
+// write gate is opened has real operational value for the channel-outage
+// scenario this whole capability exists for ("先看清楚再开写") — same
+// rollout convention this repo's IndexNow outbox/delivery pair and
+// `FEATURE_ARTICLE_BLOG`'s sitemap consumption already use ("后台先行、公开
+// 后开" / "enqueue 先行、worker 后开"). This exception is registered here,
+// in `docs/governance/feature-flag-registry.md`, and pinned by a dedicated
+// positive/negative test pair — it must never be silently turned into a
+// double-gate or a no-gate.
+//
+// C-30A registers both flags and both read functions now (schema + single-
+// article service order); the preview single-gate exception's *consumer*
+// (the actual preview-write code path) does not exist until C-30B — this
+// comment documents the contract in advance so the exception is not
+// introduced ad hoc when that code lands.
+// -----------------------------------------------------------------------
+export const ARTICLE_NOVEL_REBIND_FEATURE_FLAG = "FEATURE_ARTICLE_NOVEL_REBIND";
+export const ARTICLE_NOVEL_REBIND_ALLOW_WRITE_FLAG = "ARTICLE_NOVEL_REBIND_ALLOW_WRITE";
+
+/** Gates whether the rebind capability exists at all (editor-page panel renders, batch page resolves, service layer accepts calls). Exact `=== "true"` parsing, default off. */
+export function isArticleNovelRebindEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+  return env[ARTICLE_NOVEL_REBIND_FEATURE_FLAG] === "true";
+}
+
+/** Second key: even with the feature on, the rebind write itself (single-article, and C-30B's batch apply/resume) performs zero writes unless this is also true. Does NOT gate a batch preview's own write — see this file's C-30A/C-30B header comment for that deliberate single-gate exception. */
+export function isArticleNovelRebindWriteAllowed(env: NodeJS.ProcessEnv = process.env): boolean {
+  return env[ARTICLE_NOVEL_REBIND_ALLOW_WRITE_FLAG] === "true";
 }

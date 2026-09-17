@@ -50,7 +50,13 @@ export async function issueTaskAuthorization(
   stores: TestOnlyInMemoryAuthStores,
   input: {
     token: string;
-    pathname: "/api/admin/tasks/retry-failed" | "/api/admin/tasks/manual-reviews/resolve";
+    pathname:
+      | "/api/admin/tasks/retry-failed"
+      | "/api/admin/tasks/retry-catalog-finalize"
+      | "/api/admin/tasks/manual-reviews/resolve"
+      | "/api/admin/tasks/pause"
+      | "/api/admin/tasks/resume"
+      | "/api/admin/tasks/abort";
     requestId?: string;
     env?: NodeJS.ProcessEnv;
   },
@@ -94,11 +100,13 @@ export type FakeItem = {
   novelSourceItemId?: string;
   targetType?: string;
   targetId?: string;
+  payload?: Prisma.JsonValue;
 };
 
 type FakeParent = {
   id: string;
   status: string;
+  taskType?: string;
   channelAccountId: string | null;
   channelAppId: string | null;
   totalCount: number;
@@ -108,6 +116,14 @@ type FakeParent = {
   completedAt: Date | null;
   result: unknown;
   error: unknown;
+};
+
+export type FakeCredential = {
+  id: string;
+  channelAccountId: string;
+  status: string;
+  expiresAt: Date | null;
+  lastValidatedAt: Date | null;
 };
 
 type FakeIntent = {
@@ -162,6 +178,22 @@ export class TaskAdminFakeDb {
   readonly itemUpdateCalls = new Map<TaskFamily, number>();
   readonly parentUpdateCalls = new Map<TaskFamily, number>();
   promoMutationCalls = 0;
+  /**
+   * X10 task control: backs `resolveClaimCredentialAdmission`'s
+   * `channelAccountCredential.findMany` for `resumeTask`'s precondition
+   * recheck. Seeded with one admissible row for the default
+   * `channelAccountId` every fake parent above already carries, so a test
+   * that never touches this array (every pre-existing test in this file)
+   * is unaffected; a test exercising the precondition gate mutates or
+   * empties this array instead.
+   */
+  readonly credentials: FakeCredential[] = [{
+    id: "70000000-0000-4000-8000-000000000001",
+    channelAccountId: "40000000-0000-4000-8000-000000000001",
+    status: "active",
+    expiresAt: null,
+    lastValidatedAt: NOW,
+  }];
 
   private manualReads = 0;
   private releaseManualReads: (() => void) | null = null;
@@ -170,7 +202,7 @@ export class TaskAdminFakeDb {
   });
 
   constructor() {
-    for (const family of ["catalog_scan", "channel_sync", "generic"] as const) {
+    for (const family of ["channel_sync", "generic"] as const) {
       this.parents.set(family, {
         id: TASK_ID,
         status: "completed_with_errors",
@@ -199,23 +231,61 @@ export class TaskAdminFakeDb {
   }
 
   private familyDelegate(family: TaskFamily) {
+    const matchesWhere = (row: FakeItem, where: {
+      taskId?: string;
+      status?: string;
+      targetType?: string | { in: readonly string[] };
+    }) => {
+      if (where.taskId && row.taskId !== where.taskId) return false;
+      if (where.status && row.status !== where.status) return false;
+      if (typeof where.targetType === "string" && row.targetType !== where.targetType) return false;
+      if (where.targetType && typeof where.targetType !== "string" && !where.targetType.in.includes(row.targetType ?? "")) return false;
+      return true;
+    };
     return {
-      findMany: async (args: { where: { taskId: string; status?: string } }) =>
-        (this.items.get(family) ?? []).filter((row) =>
-          row.taskId === args.where.taskId && (!args.where.status || row.status === args.where.status)),
-      updateMany: async (args: { where: { taskId: string; status: string }; data: Record<string, unknown> }) => {
+      findMany: async (args: { where: { taskId: string; status?: string; targetType?: string | { in: readonly string[] } } }) =>
+        (this.items.get(family) ?? []).filter((row) => matchesWhere(row, args.where)),
+      findUnique: async (args: { where: { taskId_targetType_targetId: { taskId: string; targetType: string; targetId: string } } }) => {
+        const key = args.where.taskId_targetType_targetId;
+        return (this.items.get(family) ?? []).find((row) => row.taskId === key.taskId
+          && row.targetType === key.targetType && row.targetId === key.targetId) ?? null;
+      },
+      upsert: async (args: {
+        where: { taskId_targetType_targetId: { taskId: string; targetType: string; targetId: string } };
+        create: Record<string, unknown>;
+        update: Record<string, unknown>;
+      }) => {
+        const key = args.where.taskId_targetType_targetId;
+        let row = (this.items.get(family) ?? []).find((candidate) => candidate.taskId === key.taskId
+          && candidate.targetType === key.targetType && candidate.targetId === key.targetId);
+        if (row) Object.assign(row, args.update);
+        else {
+          row = {
+            id: randomUUID(), taskId: key.taskId, status: "pending", attemptCount: 0, leaseEpoch: 0n,
+            executionToken: null, lockedBy: null, lockedUntil: null, heartbeatAt: null,
+            result: null, error: null, finishedAt: null,
+            targetType: key.targetType, targetId: key.targetId,
+            ...args.create,
+          } as FakeItem;
+          this.items.get(family)!.push(row);
+        }
+        return row;
+      },
+      updateMany: async (args: {
+        where: { taskId: string; status: string; targetType?: string | { in: readonly string[] } };
+        data: Record<string, unknown>;
+      }) => {
         let count = 0;
         for (const row of this.items.get(family) ?? []) {
-          if (row.taskId !== args.where.taskId || row.status !== args.where.status) continue;
+          if (!matchesWhere(row, args.where)) continue;
           Object.assign(row, args.data);
           count += 1;
         }
         this.itemUpdateCalls.set(family, (this.itemUpdateCalls.get(family) ?? 0) + 1);
         return { count };
       },
-      count: async (args: { where: { taskId: string; status?: string } }) =>
-        (this.items.get(family) ?? []).filter((row) =>
-          row.taskId === args.where.taskId && (!args.where.status || row.status === args.where.status)).length,
+      count: async (args: { where: { taskId: string; status?: string; targetType?: string | { in: readonly string[] } } }) =>
+        (this.items.get(family) ?? []).filter((row) => matchesWhere(row, args.where)).length,
     };
   }
 
@@ -228,11 +298,33 @@ export class TaskAdminFakeDb {
         this.parentUpdateCalls.set(family, (this.parentUpdateCalls.get(family) ?? 0) + 1);
         return row;
       },
+      /**
+       * X10 task control: `pauseTask`/`resumeTask`/`abortTask` write through
+       * a conditional `updateMany` (matching CPS's own TOCTOU-safe pause
+       * route shape) rather than `update`, even though `lockParent`'s own
+       * `FOR UPDATE` already makes the plain `update` above race-free —
+       * belt-and-suspenders, kept on purpose. `where.status` is either a
+       * bare string or a Prisma `{ in: [...] }` filter; this fake supports
+       * both.
+       */
+      updateMany: async (args: {
+        where: { id: string; status: string | { in: readonly string[] } };
+        data: Record<string, unknown>;
+      }) => {
+        const row = this.parents.get(family);
+        if (!row || row.id !== args.where.id) return { count: 0 };
+        const statusMatches = typeof args.where.status === "string"
+          ? row.status === args.where.status
+          : args.where.status.in.includes(row.status);
+        if (!statusMatches) return { count: 0 };
+        Object.assign(row, args.data);
+        this.parentUpdateCalls.set(family, (this.parentUpdateCalls.get(family) ?? 0) + 1);
+        return { count: 1 };
+      },
     };
   }
 
   asPrismaClient(): PrismaClient {
-    const catalogItems = this.familyDelegate("catalog_scan");
     const channelItems = this.familyDelegate("channel_sync");
     const genericItems = this.familyDelegate("generic");
     const client = {
@@ -240,18 +332,18 @@ export class TaskAdminFakeDb {
       $queryRaw: async (query: { strings: readonly string[]; values: readonly unknown[] }) => {
         const sql = query.strings.join("?");
         if (sql.includes("pg_advisory_xact_lock")) return [];
-        for (const family of ["catalog_scan", "channel_sync", "generic"] as const) {
-          const table = family === "catalog_scan"
-            ? "catalog_scan_task"
-            : family === "channel_sync" ? "channel_sync_task" : "generic_task";
+        for (const family of ["channel_sync", "generic"] as const) {
+          const table = family === "channel_sync" ? "channel_sync_task" : "generic_task";
           if (sql.includes(`FROM ${table} WHERE id`)) {
             const row = this.parents.get(family);
             if (!row || row.id !== query.values[0]) return [];
             return [{
               id: row.id,
               status: row.status,
+              task_type: row.taskType ?? "promo_link.claim",
               channel_account_id: row.channelAccountId,
               channel_app_id: row.channelAppId,
+              result: row.result,
             }];
           }
         }
@@ -260,12 +352,21 @@ export class TaskAdminFakeDb {
         }
         throw new Error(`unexpected query: ${sql}`);
       },
-      catalogScanTaskItem: catalogItems,
       channelSyncTaskItem: channelItems,
       genericTaskItem: genericItems,
-      catalogScanTask: this.parentDelegate("catalog_scan"),
       channelSyncTask: this.parentDelegate("channel_sync"),
       genericTask: this.parentDelegate("generic"),
+      /**
+       * X10 task control: backs `resolveClaimCredentialAdmission`
+       * (`resumeTask`'s precondition recheck). Only `findMany` is exercised
+       * — that function never writes.
+       */
+      channelAccountCredential: {
+        findMany: async (args: { where: { channelAccountId: string; status: string } }) =>
+          this.credentials
+            .filter((row) => row.channelAccountId === args.where.channelAccountId && row.status === args.where.status)
+            .map((row) => ({ id: row.id, expiresAt: row.expiresAt, lastValidatedAt: row.lastValidatedAt })),
+      },
       sideEffectIntent: {
         findFirst: async () => this.unresolvedStatus ? { id: "blocked-intent" } : null,
         findUnique: async (args: { where: { id: string } }) => {

@@ -4,7 +4,9 @@ import { useEffect, useId, useRef, useState } from "react";
 import { BrandLockup } from "@/components/BrandMark";
 import { Container } from "@/components/Container";
 import type { NavItem } from "@/features/public-ui/types";
+import type { SiteLocale } from "@/lib/locale/locale-canonical";
 import { useT } from "@/lib/locale/messages/MessagesProvider";
+import { LocaleSwitcher } from "./LocaleSwitcher";
 
 /** 页头高度（h-16）。overlay 模式下滚过这个距离就落回实底。 */
 const HEADER_HEIGHT_PX = 64;
@@ -21,20 +23,24 @@ export function SiteHeader({
   brandHref = "/",
   brandName,
   navItems = [],
-  localeNav,
   overlay = false,
+  activeLocales = [],
 }: {
   brandHref?: string;
   /** 站点品牌名。缺失或空白时 `BrandLockup` 回落到占位符。 */
   brandName?: string;
   navItems?: NavItem[];
-  /** 语言入口。只有在确实存在多个可发布语种时才由调用方传入。 */
-  localeNav?: NavItem[];
   /**
    * 浮在主视觉 Hero 之上：无底色、无毛玻璃、无分隔线，仅靠 Hero 的纵向压黑保证可读。
    * 滚出 Hero 后自动恢复底色与分隔线。不传时行为与普通页头完全一致。
    */
   overlay?: boolean;
+  /**
+   * L10N P4：动态层 `getActiveLocales()` 结果，透传给 `LocaleSwitcher`。
+   * 缺省按空数组处理——`LocaleSwitcher` 在 `activeLocales.length <= 1` 时
+   * 不渲染任何 DOM，空数组与"只有 en 一个"效果相同（都隐藏切换器）。
+   */
+  activeLocales?: readonly SiteLocale[];
 }) {
   const t = useT();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -76,9 +82,6 @@ export function SiteHeader({
   // 展开移动端菜单时必须落回实底，否则菜单会压在主视觉图上读不清
   const transparent = overlay && !pinned && !menuOpen;
 
-  const allItems =
-    localeNav && localeNav.length > 0 ? [...navItems, ...localeNav] : navItems;
-
   // Esc 关闭并把焦点交还给触发按钮，否则键盘用户会掉进页面顶部
   useEffect(() => {
     if (!menuOpen) {
@@ -110,16 +113,26 @@ export function SiteHeader({
         <Container className="flex h-16 items-center justify-between gap-4">
           <BrandLockup size={32} href={brandHref} name={brandName} />
 
-          {/* 桌面导航 */}
-          <nav aria-label={t("nav.mainNav")} className="hidden md:block">
-            <ul className="flex list-none items-center gap-7 p-0">
-              {allItems.map((item) => (
-                <li key={item.href + item.label}>
-                  <NavLink item={item} />
-                </li>
-              ))}
-            </ul>
-          </nav>
+          <div className="flex items-center gap-3">
+            {/* 桌面导航 */}
+            <nav aria-label={t("nav.mainNav")} className="hidden md:block">
+              <ul className="flex list-none items-center gap-7 p-0">
+                {navItems.map((item) => (
+                  <li key={item.href + item.label}>
+                    <NavLink item={item} />
+                  </li>
+                ))}
+              </ul>
+            </nav>
+
+            {/* 语言入口。只有在确实存在多个活跃语种时才渲染任何 DOM
+                （`LocaleSwitcher` 组件自身在 `activeLocales.length <= 1`
+                时返回 null，L10N P4：活跃集由动态层 `getActiveLocales()`
+                决定，不再是静态白名单）。这是本站唯一的语种切换入口——
+                没有第二个通过 `navItems` 注入的旁路（WO-2 review：移除了
+                此前从未被任何调用方填充过的 `SiteChrome.localeNav` 槽位）。 */}
+            <LocaleSwitcher activeLocales={activeLocales} />
+          </div>
 
           {/* 移动端开关 */}
           <button
@@ -165,7 +178,7 @@ export function SiteHeader({
           >
             <Container as="nav" className="py-2">
               <ul className="flex list-none flex-col p-0">
-                {allItems.map((item) => (
+                {navItems.map((item) => (
                   <li
                     key={item.href + item.label}
                     className="border-b border-novel-border last:border-b-0"

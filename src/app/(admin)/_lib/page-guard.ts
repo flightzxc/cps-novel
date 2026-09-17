@@ -116,23 +116,36 @@ export async function requireAdminPage(pathname: string): Promise<AdminAuthConte
   return context;
 }
 
-export function capabilityViews(context: AdminAuthContext): readonly AdminCapabilityView[] {
+/**
+ * CPS v8.3.6 parity: the admin navigation projects capability grants only;
+ * Novel's local-UAT 2FA switch may satisfy the step-up requirement, but it
+ * must never change the underlying capability grant or the production gate.
+ */
+export function capabilityViews(
+  context: AdminAuthContext,
+  env: NodeJS.ProcessEnv = process.env,
+): readonly AdminCapabilityView[] {
+  const twoFactorSatisfied = !isTwoFactorEnforced(env) || context.twoFactorCompleted;
   return ALL_CAPABILITIES.map((capability) =>
     projectAdminCapability({
       capability,
-      granted: hasAdminCapability(context, capability),
+      granted: hasAdminCapability(context, capability, env),
       requiresTwoFactor: ADMIN_CAPABILITY_CONFIG[capability].requiresTwoFactor,
-      twoFactorCompleted: context.twoFactorCompleted,
+      twoFactorCompleted: twoFactorSatisfied,
     }),
   );
 }
 
-export function sessionView(context: AdminAuthContext): AdminSessionView {
+export function sessionView(
+  context: AdminAuthContext,
+  env: NodeJS.ProcessEnv = process.env,
+): AdminSessionView {
+  const twoFactorSatisfied = !isTwoFactorEnforced(env) || context.twoFactorCompleted;
   return projectAdminSession({
     identity: context.identity,
     session: context.session,
-    twoFactorCompleted: context.twoFactorCompleted,
+    twoFactorCompleted: twoFactorSatisfied,
     idleTimeoutMs: ADMIN_IDLE_TIMEOUT_MS,
-    capabilities: capabilityViews(context),
+    capabilities: capabilityViews(context, env),
   });
 }

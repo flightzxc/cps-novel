@@ -30,6 +30,7 @@ export function BookCard({ locale, novel }: { locale: SiteLocale; novel: NovelCa
         <h3 className="mt-3 font-novel-serif text-base leading-snug font-medium text-novel-fg">
           {novel.title}
         </h3>
+        {novel.summary ? <p className="mt-2 line-clamp-3 text-sm leading-5 text-novel-fg-muted">{novel.summary}</p> : null}
       </a>
 
       {novel.locale ? (

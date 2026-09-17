@@ -1,9 +1,7 @@
 import { capabilityBlockReason, findCapabilityState } from "@/features/admin-ui/capability-view";
 import { AdminTimeZoneNote } from "@/features/admin-ui/time-zone-note";
-import { MOBOREADER_CATALOG_LIMITS, resolveMoboreaderCatalogSafetyMaxPages } from "@/lib/tasks/moboreader";
-import { PROMO_LINK_CLAIM_LIMITS } from "@/lib/tasks/promo-link-claim-limits";
-import { CONTENT_CREATION_BATCH_MAX_SELECTION } from "@/server/content-creation/batch";
-
+import { isNovelCatalogSyncEnabled } from "@/lib/flags";
+import { resolveMoboreaderCatalogSafetyMaxPages } from "@/lib/tasks/moboreader";
 import { AdminShell } from "../_components/admin-shell";
 import { capabilityViews, sessionView } from "../_lib/page-guard";
 import { ContentCapabilityDenied } from "../novels/_components/content-states";
@@ -12,8 +10,8 @@ import { requireContentPage } from "../novels/_lib/content-page-guard";
 import { CatalogScanTriggerForm } from "./_components/catalog-scan-trigger-form";
 import { CatalogSyncClient } from "./_components/catalog-sync-client";
 import { SourceItemFilters } from "./_components/source-item-filters";
-import { readActiveChannelAppOptions, readClaimEligibleChannelAppOptions } from "./_lib/read-channel-apps";
-import { readSourceItemsPage } from "./_lib/read-source-items";
+import { readActiveChannelScanOptions } from "./_lib/read-channel-apps";
+import { canonicalCatalogFilter, readSourceItemsPage } from "./_lib/read-source-items";
 
 export const dynamic = "force-dynamic";
 
@@ -21,16 +19,16 @@ type SearchParams = {
   page?: string;
   status?: string;
   search?: string;
+  sourceLocale?: string;
+  pageSize?: string;
 };
 
 /**
  * `/catalog-sync` — the P0-S13 content-creation trigger entry.
  *
- * `createContentFromSourceItem` (`@/server/content-creation`) has existed
- * since P0-S4 with no caller under `src/app/**` at all — its own module
- * header says so. This page and `./_actions.ts` are that missing entry
- * point: browse `NovelSourceItem` rows, dry-run a creation plan, and (with
- * `content:publish`) apply it.
+ * This page and `./_actions.ts` browse `NovelSourceItem` rows and enqueue
+ * Novel-only materialize (`纳入书目`). They must not select templates or
+ * create Articles.
  *
  * Gated by `content:view`, the same read bar `/novels` uses — this screen is
  * read-heavy (a source-item list) with one write action nested inside a
@@ -52,10 +50,16 @@ export default async function CatalogSyncPage({
   const promoClaimBlockedReason = capabilityBlockReason("promo:claim", promoClaim);
 
   const page = granted
-    ? await readSourceItemsPage({ page: params.page, status: params.status, search: params.search })
+    ? await readSourceItemsPage({
+        page: params.page,
+        status: params.status,
+        search: params.search,
+        sourceLocale: params.sourceLocale,
+        pageSize: params.pageSize,
+      })
     : null;
-  const channelApps = granted ? await readActiveChannelAppOptions() : [];
-  const claimChannelApps = granted ? await readClaimEligibleChannelAppOptions() : [];
+  const canonicalFilter = canonicalCatalogFilter(params);
+  const channels = granted ? await readActiveChannelScanOptions() : [];
 
   return (
     <AdminShell
@@ -63,36 +67,38 @@ export default async function CatalogSyncPage({
       title="目录同步"
       description={
         page
-          ? `共 ${page.total} 条来源条目，从中创建书目与文章草稿`
-          : "浏览渠道来源条目，并从中创建书目与文章草稿。"
+          ? `共 ${page.total} 条来源条目，从中纳入书目`
+          : "浏览渠道来源条目，并从中纳入书目。"
       }
     >
       <div className="space-y-6">
         {granted && page ? (
           <>
             <CatalogScanTriggerForm
-              channelApps={channelApps}
+              channels={channels}
               contentPublishGranted={contentPublishBlockedReason === null}
               contentPublishBlockedReason={contentPublishBlockedReason}
-              maxPageSize={MOBOREADER_CATALOG_LIMITS.maxPageSize}
               safetyMaxPages={resolveMoboreaderCatalogSafetyMaxPages()}
             />
-            <SourceItemFilters values={{ search: params.search, status: params.status }} />
+            <SourceItemFilters
+              values={{ ...canonicalFilter, pageSize: String(page.pageSize) }}
+            />
             <div className="space-y-2">
               <AdminTimeZoneNote />
               <CatalogSyncClient
+                key={JSON.stringify(canonicalFilter)}
                 items={page.items}
+                catalogGate={{ featureEnabled: isNovelCatalogSyncEnabled() }}
                 contentPublish={contentPublish}
-                claimChannelApps={claimChannelApps}
-                promoClaimMaxBatchSize={PROMO_LINK_CLAIM_LIMITS.maxBatchSize}
                 promoClaimGranted={promoClaimBlockedReason === null}
                 promoClaimBlockedReason={promoClaimBlockedReason}
-                contentCreationBatchMaxSize={CONTENT_CREATION_BATCH_MAX_SELECTION}
+                filter={canonicalFilter}
+                total={page.total}
               />
             </div>
             <ContentPagination
               basePath="/catalog-sync"
-              params={{ status: params.status, search: params.search }}
+              params={{ status: params.status, search: params.search, sourceLocale: params.sourceLocale, pageSize: String(page.pageSize) }}
               page={page.page}
               totalPages={page.totalPages}
               total={page.total}

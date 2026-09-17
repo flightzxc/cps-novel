@@ -1,0 +1,61 @@
+{
+  "schema_version": 1,
+  "artifact_name": "P2-06.5 Lane C classifier config — Owner Final",
+  "status": "FROZEN",
+  "frozen_at": "2026-08-17",
+  "lane_status": "FINAL",
+  "text_parameters": {
+    "status": "FROZEN",
+    "title_weight": 30,
+    "description_weight": 30,
+    "chapter_weight": 0,
+    "threshold": 30,
+    "max_text_tags": 3
+  },
+  "keyword_eligibility_overlay": {
+    "version": "keyword-eligibility-v2",
+    "sha256": "e796ba1ed79b344f790a70853d2e9773d6265e307615b2a60da28b90a6164854",
+    "path": "docs/p2/p2-06-5-lane-c/lexicon-overrides/2026-08-17/keyword-eligibility-v2.json",
+    "supersedes": "keyword-eligibility-v1"
+  },
+  "owner_final_decisions": {
+    "grade_b_locale_rules": "REMOVED",
+    "grade_b_removal_evidence": "suppression safety review judged 8/20 removed edges as genuine (40% false removal)",
+    "werewolf_luna_canonical_tag": "RETAINED",
+    "werewolf_luna_bare_description_keyword": "DISABLED",
+    "werewolf_luna_title_behaviour": "UNCHANGED (no title precision evidence this round)",
+    "future_werewolf_luna_description": "explicit phrase seed validated by independent evidence only; ambiguous cases go to Offline LLM enrichment",
+    "observation_only_no_rule": [
+      "ct-v1-princess",
+      "ct-v1-crown-prince",
+      "ct-v1-student"
+    ]
+  },
+  "authoritative_run": {
+    "run_id": "2026-08-17-owner-final-c1-final",
+    "sample_count": 10000,
+    "reproducible_from_head": true,
+    "artifact_hashes_matched": "11/11"
+  },
+  "lineage": {
+    "canonical_sha256": "8bc8cdae8be2176bde170173e98bad2b9fa0e1770818174a57320816eefdccad",
+    "raw_manifest_sha256": "4d7d6931687a2391ded9699ce90d54ceb3242ec232515d537eb7721274f61148",
+    "b2_manifest_sha256": "4f370023d933dfa3d011ee310880d5e5ad050d92435f21ecc805abae65c881bf",
+    "waiver_sha256": "52ce6e6ff5862353481023b9914fb06cd06e9ef5639913bb5044f4a01730d8d1",
+    "c1_input_sha256": "046fe9234b317eba145c3fbb35edd2e72af49e41309dcd5d5f45f7bc43d1776d",
+    "scorer_sample_sha256": "f14fa303128aa8713cdbd1c3f60e3ed161f055ced47f65bde354462860d8d330",
+    "lexicon_override_sha256": "e796ba1ed79b344f790a70853d2e9773d6265e307615b2a60da28b90a6164854",
+    "lexicon_override_version": "keyword-eligibility-v2"
+  },
+  "deferred": {
+    "chapter_evidence_status": "DEFER",
+    "c2_sample_request": "NONE",
+    "offline_llm_seams": [
+      "NO_SOURCE_MAPPING",
+      "TEXT_ZERO_HIT",
+      "LOW_TEXT_CONFIDENCE",
+      "UNSUPPORTED_LANGUAGE"
+    ]
+  },
+  "auto_write_authorized": "NO"
+}

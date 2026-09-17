@@ -1,4 +1,8 @@
 export * from "./errors";
+export * from "./catalog-batch";
+export * from "./article-generate";
+export * from "./parent-batch";
+export * from "./legacy-content-create";
 export * from "./moboreader";
 export * from "./promo-link-claim";
 export * from "./promo-link-claim-limits";
@@ -8,4 +12,6 @@ export * from "./sitemap-refresh";
 export * from "./side-effect-intent";
 export * from "./state";
 export * from "./store";
+export * from "./task-control";
+export * from "./task-termination";
 export * from "./types";
