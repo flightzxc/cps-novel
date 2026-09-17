@@ -89,10 +89,21 @@ infra/production-like/alerts/alert-lib.sh              共享推送/去抖/fail-
 infra/production-like/alerts/check-health.sh            告警①
 infra/production-like/alerts/check-worker-locks.sh       告警②（两个子检查）
 infra/production-like/alerts/check-backup-freshness.sh   告警③
-infra/production-like/alerts/run-all.sh                  串行跑①②③，互不影响
+infra/production-like/alerts/check-wal-archive.sh         告警④（Gate 5-Dev 新增，四个子判据，见 §3）
+infra/production-like/alerts/run-all.sh                  串行跑①②③④，互不影响
 infra/production-like/alerts/drill.sh                     演练脚本（keyword-flip 法）
 docs/operations/ALERTS_RUNBOOK_2026-09-03.md              本文件
 ```
+
+**Gate 5-Dev 补充（WAL 保留每日 timer 上线）**：`check-wal-archive.sh` 是
+`WAL_RETENTION_X8_ROLLOUT_PLAN_2026-09-17.md` §4 Gate 5 要求的第④条判据，已接入
+`run-all.sh`（四条判据串行、互不影响）与 `drill.sh`（四个新场景 F/G/H/I）。这一条
+**与 RC-7 三条判据同一批交付文件，但是后续独立提交**——上面"没有改动任何既有文件"
+一句仅描述 RC-7 首次交付时的状态；Gate 5-Dev 本身另外改了
+`infra/production-like/backup-timer.sh`、`infra/production-like/docker-compose.yml`
+（四步循环 + 新增挂载/env）与 `infra/postgres/init-roles.sh`（pg_hba 追加），详见
+`WAL_RETENTION_X8_ROLLOUT_PLAN_2026-09-17.md` §4 Gate 5 与
+`docs/operations/WAL_RETENTION_REHEARSAL_2026-09-16.md` "Gate 5-Dev" 小节。
 
 所有脚本 `set -euo pipefail`；`run-all.sh`/`drill.sh` 顶部写的是 `set -uo pipefail`，
 **但复核实测 errexit 实际仍是开的**——`source alert-lib.sh` 会把 `-e` 重新打开，
@@ -127,6 +138,20 @@ docs/operations/ALERTS_RUNBOOK_2026-09-03.md              本文件
 | `ALERT_BACKUP_CONTAINER_NAME` | backup-timer 容器名 | `${ALERT_COMPOSE_PROJECT}-backup-timer-1` |
 | `ALERT_BACKUP_MARKER_HOST_PATH` | 可选：若未来把标记 bind-mount 到宿主机，设此变量直接读宿主路径，跳过 `docker exec` | 未设置（默认走容器内路径） |
 | `ALERT_BACKUP_MAX_AGE_SECONDS` | 备份陈旧阈值 | `93600`（26h，见上表来源） |
+
+Gate 5-Dev 判据④（`check-wal-archive.sh`）新增：
+
+| 变量 | 用途 | 默认值 |
+| --- | --- | --- |
+| `ALERT_POSTGRES_CONTAINER_NAME` | postgres 容器名，用于 `docker exec ... du -sb` 两个子判据 | `${ALERT_COMPOSE_PROJECT}-postgres-1` |
+| `ALERT_WAL_ARCHIVE_MAX_BYTES` | WAL 归档目录容量上限（OVER=100%/DEGRADED=85%/WARN=70%，与 `wal-retention.sh --max-bytes` 同一套阈值） | `21474836480`（20 GiB） |
+| `ALERT_PG_WAL_MAX_BYTES` | `pg_wal` 目录体积上限 | `2147483648`（2 GiB） |
+| `ALERT_BASE_BACKUP_DIR` | 宿主机上物理基准备份目录（`X8_BASE_BACKUP_DIR` 绑定的同一份宿主路径），直接读 `VERIFIED` 标记，不依赖 docker | 未设置时解析为 `<repo root>/.tmp/x8-production-like/base-backups` |
+| `ALERT_BASE_BACKUP_MAX_AGE_SECONDS` | 最新一份 `VERIFIED` 的 `verified_epoch` 陈旧阈值 | `93600`（26h，与判据③同一阈值） |
+
+`ALERT_DATABASE_URL`/`ALERT_PSQL_TIMEOUT_SECONDS` 复用判据②已有的两个变量（同一份
+`pg_stat_archiver` 查询谓词，与 `wal-retention.sh --require-archiver-healthy` 逐字
+相同）；未在此重复登记默认值。
 
 去抖/状态：
 
