@@ -18,6 +18,10 @@ import {
 } from "../../src/lib/flags";
 import {
   clampTotalChapterCount,
+  catalogFinalizeGeneration,
+  catalogPreviewRequestToken,
+  failMoboreaderCatalogFinalize,
+  MOBOREADER_CATALOG_MAX_ATTEMPTS,
   MOBOREADER_CATALOG_FINALIZE_TARGET_ID,
   MOBOREADER_CATALOG_LIMITS,
   MOBOREADER_CATALOG_TARGET_TYPES,
@@ -795,8 +799,9 @@ async function persistCatalogPage(
     FROM generic_task_item WHERE task_id = ${input.taskId}::uuid AND target_type = 'catalog_page'
   `);
   const batchActualCount = Number(afterStop.actual);
+  let finalizeGeneration = 1;
   if (stopReason) {
-    await tx.genericTaskItem.upsert({
+    const finalizeItem = await tx.genericTaskItem.upsert({
       where: {
         taskId_targetType_targetId: {
           taskId: input.taskId,
@@ -812,10 +817,13 @@ async function persistCatalogPage(
           kind: MOBOREADER_CATALOG_TARGET_TYPES.finalize,
           actorId: input.payload.actorId,
           requestId: input.payload.requestId,
+          generation: 1,
         },
       },
       update: {},
+      select: { payload: true },
     });
+    finalizeGeneration = catalogFinalizeGeneration(plainJson(finalizeItem.payload).generation);
   }
   await tx.genericTask.update({
     where: { id: input.taskId },
@@ -837,7 +845,9 @@ async function persistCatalogPage(
         },
         stopReason,
         terminalPage: stopReason ? input.payload.pageIndex : null,
-        finalization: stopReason ? { status: "pending", targetId: MOBOREADER_CATALOG_FINALIZE_TARGET_ID } : null,
+        finalization: stopReason ? {
+          status: "pending", targetId: MOBOREADER_CATALOG_FINALIZE_TARGET_ID, generation: finalizeGeneration,
+        } : null,
         terminalState: "processing",
         completeness: {
           expected: batchExpectedCount,
@@ -932,7 +942,7 @@ async function persistCatalogUpstreamFailure(
   const priorTaskResult = totals.prior_result && typeof totals.prior_result === "object" && !Array.isArray(totals.prior_result)
     ? totals.prior_result
     : {};
-  await tx.genericTaskItem.upsert({
+  const finalizeItem = await tx.genericTaskItem.upsert({
     where: {
       taskId_targetType_targetId: {
         taskId: input.taskId,
@@ -948,10 +958,13 @@ async function persistCatalogUpstreamFailure(
         kind: MOBOREADER_CATALOG_TARGET_TYPES.finalize,
         actorId: input.payload.actorId,
         requestId: input.payload.requestId,
+        generation: 1,
       },
     },
     update: {},
+    select: { payload: true },
   });
+  const finalizeGeneration = catalogFinalizeGeneration(plainJson(finalizeItem.payload).generation);
   await tx.genericTask.update({
     where: { id: input.taskId },
     data: {
@@ -966,7 +979,9 @@ async function persistCatalogUpstreamFailure(
         batchActualCount: actual,
         stopReason: "upstream_error",
         terminalPage: input.payload.pageIndex,
-        finalization: { status: "pending", targetId: MOBOREADER_CATALOG_FINALIZE_TARGET_ID },
+        finalization: {
+          status: "pending", targetId: MOBOREADER_CATALOG_FINALIZE_TARGET_ID, generation: finalizeGeneration,
+        },
         terminalState: "processing",
         completeness: {
           expected,
@@ -984,6 +999,7 @@ interface CatalogFinalizePayload {
   kind: "catalog_finalize";
   actorId: string;
   requestId: string;
+  generation?: number;
 }
 
 function parseCatalogFinalizePayload(value: unknown): CatalogFinalizePayload {
@@ -992,7 +1008,7 @@ function parseCatalogFinalizePayload(value: unknown): CatalogFinalizePayload {
   if (payload.kind !== MOBOREADER_CATALOG_TARGET_TYPES.finalize) throw new Error("catalog_finalize_kind_invalid");
   if (typeof payload.actorId !== "string" || !payload.actorId) throw new Error("catalog_finalize_actor_required");
   if (typeof payload.requestId !== "string" || !payload.requestId) throw new Error("catalog_finalize_request_required");
-  return payload as CatalogFinalizePayload;
+  return { ...payload, generation: catalogFinalizeGeneration(payload.generation) } as CatalogFinalizePayload;
 }
 
 function plainJson(value: unknown): Record<string, unknown> {
@@ -1015,7 +1031,8 @@ async function runCatalogFinalize(
   if (!task.channelAccountId || !task.channelAppId) throw new Error("catalog_finalize_scope_missing");
   const priorResult = plainJson(task.result);
   const priorFinalization = plainJson(priorResult.finalization);
-  if (priorFinalization.status === "completed") {
+  const generation = catalogFinalizeGeneration(payload.generation);
+  if (priorFinalization.status === "completed" && catalogFinalizeGeneration(priorFinalization.generation) === generation) {
     return { status: "success", result: { finalization: "already_completed" } };
   }
   await withTaskLeaseTransaction(db, lease, async (tx) => {
@@ -1028,6 +1045,7 @@ async function runCatalogFinalize(
           finalization: {
             status: "processing",
             targetId: MOBOREADER_CATALOG_FINALIZE_TARGET_ID,
+            generation,
             attempt: lease.attemptCount,
             startedAt: now.toISOString(),
           },
@@ -1079,7 +1097,7 @@ async function runCatalogFinalize(
       channelAccountId: task.channelAccountId,
       channelAppId: task.channelAppId,
       novelSourceItemIds: touchedSourceItemIds,
-      requestToken: `moboreader.preview_refresh.v1:${lease.taskId}`,
+      requestToken: catalogPreviewRequestToken(lease.taskId, generation),
       actorId: payload.actorId,
       requestId: payload.requestId,
       mode: "apply",
@@ -1104,7 +1122,7 @@ async function runCatalogFinalize(
           ...plainJson(current.result),
           batchActualCount,
           terminalState: partialFailed ? "partial_failed" : "completed",
-          finalization: { status: "completed", completedAt: now.toISOString() },
+          finalization: { status: "completed", generation, completedAt: now.toISOString() },
           completeness: {
             expected,
             actual: batchActualCount,
@@ -1137,50 +1155,6 @@ async function runCatalogFinalize(
     status: "success",
     result: { batchActualCount, fetchedUniqueSourceItems: touchedSourceItemIds.length, failedPages, previewEnqueue },
   };
-}
-
-async function terminateIncompletePreviewBuild(
-  db: PrismaClient,
-  lease: TaskLease,
-  payload: CatalogFinalizePayload,
-  now: Date,
-): Promise<void> {
-  await withTaskLeaseTransaction(db, lease, async (tx) => {
-    const requestToken = `moboreader.preview_refresh.v1:${lease.taskId}`;
-    const task = await tx.channelSyncTask.findUnique({
-      where: { requestToken },
-      select: { id: true, status: true, result: true },
-    });
-    const result = plainJson(task?.result);
-    if (!task || task.status !== "disabled" || result.buildStatus !== "building") return;
-    await tx.channelSyncTaskItem.updateMany({
-      where: { taskId: task.id, status: "pending" },
-      data: {
-        status: "failed",
-        error: { code: "preview_build_abandoned", message: "Catalog finalizer exhausted retries while staging preview" },
-        finishedAt: now,
-      },
-    });
-    await tx.channelSyncTask.update({
-      where: { id: task.id },
-      data: {
-        status: "failed",
-        failedCount: await tx.channelSyncTaskItem.count({ where: { taskId: task.id } }),
-        completedAt: now,
-        error: { code: "preview_build_abandoned", message: "Preview staging did not complete" },
-        result: { ...result, buildStatus: "failed", failedAt: now.toISOString() },
-      },
-    });
-    await tx.operationAudit.create({
-      data: {
-        actorType: "worker", actorId: payload.actorId,
-        action: "moboreader.preview_refresh.build_failed", entityType: "ChannelSyncTask",
-        entityId: task.id, requestId: payload.requestId,
-        taskType: MOBOREADER_TASK_TYPES.previewRefresh, taskId: task.id,
-        afterSnapshot: { catalogScanTaskId: lease.taskId, buildStatus: "failed" },
-      },
-    });
-  });
 }
 
 export interface MoboreaderHandlerDependencies {
@@ -1347,12 +1321,26 @@ export function createMoboreaderCatalogHandler(
       if (mode !== "apply") {
         return { status: "failed", error: { code: "catalog_finalize_mode_invalid", message: "Catalog finalization requires apply mode" } };
       }
+      if (!isNovelCatalogSyncEnabled(env)) {
+        return { status: "failed", error: { code: "feature_disabled", message: "Catalog sync feature is disabled" } };
+      }
+      if (!isNovelCatalogSyncWriteAllowed(env)) {
+        return { status: "failed", error: { code: "write_disabled", message: "Catalog sync write gate is disabled" } };
+      }
       try {
         return await runCatalogFinalize(db, lease, env, now());
       } catch {
-        if (lease.attemptCount >= 3) {
+        if (lease.attemptCount >= MOBOREADER_CATALOG_MAX_ATTEMPTS) {
           try {
-            await terminateIncompletePreviewBuild(db, lease, parseCatalogFinalizePayload(lease.payload), now());
+            const payload = parseCatalogFinalizePayload(lease.payload);
+            await withTaskLeaseTransaction(db, lease, (tx) => failMoboreaderCatalogFinalize(tx, {
+              catalogTaskId: lease.taskId,
+              generation: catalogFinalizeGeneration(payload.generation),
+              actorId: payload.actorId,
+              requestId: payload.requestId,
+              reason: "retry_exhausted",
+              now: now(),
+            }));
           } catch {
             // The final item outcome still records the exhausted failure; a
             // preserved disabled/building shell remains non-claimable evidence.
@@ -1679,7 +1667,7 @@ export function createMoboreaderWorkerHandlers(
       // Phase C: CatalogScan is now a GenericTask taskType, not its own
       // family — TASK_FAMILIES has shrunk to ["channel_sync", "generic"].
       family: "generic",
-      maxAttempts: 3,
+      maxAttempts: MOBOREADER_CATALOG_MAX_ATTEMPTS,
       handler: createMoboreaderCatalogHandler(db, dependencies),
     },
     [MOBOREADER_TASK_TYPES.previewRefresh]: {

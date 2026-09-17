@@ -52,6 +52,7 @@ export async function issueTaskAuthorization(
     token: string;
     pathname:
       | "/api/admin/tasks/retry-failed"
+      | "/api/admin/tasks/retry-catalog-finalize"
       | "/api/admin/tasks/manual-reviews/resolve"
       | "/api/admin/tasks/pause"
       | "/api/admin/tasks/resume"
@@ -99,6 +100,7 @@ export type FakeItem = {
   novelSourceItemId?: string;
   targetType?: string;
   targetId?: string;
+  payload?: Prisma.JsonValue;
 };
 
 type FakeParent = {
@@ -229,23 +231,61 @@ export class TaskAdminFakeDb {
   }
 
   private familyDelegate(family: TaskFamily) {
+    const matchesWhere = (row: FakeItem, where: {
+      taskId?: string;
+      status?: string;
+      targetType?: string | { in: readonly string[] };
+    }) => {
+      if (where.taskId && row.taskId !== where.taskId) return false;
+      if (where.status && row.status !== where.status) return false;
+      if (typeof where.targetType === "string" && row.targetType !== where.targetType) return false;
+      if (where.targetType && typeof where.targetType !== "string" && !where.targetType.in.includes(row.targetType ?? "")) return false;
+      return true;
+    };
     return {
-      findMany: async (args: { where: { taskId: string; status?: string } }) =>
-        (this.items.get(family) ?? []).filter((row) =>
-          row.taskId === args.where.taskId && (!args.where.status || row.status === args.where.status)),
-      updateMany: async (args: { where: { taskId: string; status: string }; data: Record<string, unknown> }) => {
+      findMany: async (args: { where: { taskId: string; status?: string; targetType?: string | { in: readonly string[] } } }) =>
+        (this.items.get(family) ?? []).filter((row) => matchesWhere(row, args.where)),
+      findUnique: async (args: { where: { taskId_targetType_targetId: { taskId: string; targetType: string; targetId: string } } }) => {
+        const key = args.where.taskId_targetType_targetId;
+        return (this.items.get(family) ?? []).find((row) => row.taskId === key.taskId
+          && row.targetType === key.targetType && row.targetId === key.targetId) ?? null;
+      },
+      upsert: async (args: {
+        where: { taskId_targetType_targetId: { taskId: string; targetType: string; targetId: string } };
+        create: Record<string, unknown>;
+        update: Record<string, unknown>;
+      }) => {
+        const key = args.where.taskId_targetType_targetId;
+        let row = (this.items.get(family) ?? []).find((candidate) => candidate.taskId === key.taskId
+          && candidate.targetType === key.targetType && candidate.targetId === key.targetId);
+        if (row) Object.assign(row, args.update);
+        else {
+          row = {
+            id: randomUUID(), taskId: key.taskId, status: "pending", attemptCount: 0, leaseEpoch: 0n,
+            executionToken: null, lockedBy: null, lockedUntil: null, heartbeatAt: null,
+            result: null, error: null, finishedAt: null,
+            targetType: key.targetType, targetId: key.targetId,
+            ...args.create,
+          } as FakeItem;
+          this.items.get(family)!.push(row);
+        }
+        return row;
+      },
+      updateMany: async (args: {
+        where: { taskId: string; status: string; targetType?: string | { in: readonly string[] } };
+        data: Record<string, unknown>;
+      }) => {
         let count = 0;
         for (const row of this.items.get(family) ?? []) {
-          if (row.taskId !== args.where.taskId || row.status !== args.where.status) continue;
+          if (!matchesWhere(row, args.where)) continue;
           Object.assign(row, args.data);
           count += 1;
         }
         this.itemUpdateCalls.set(family, (this.itemUpdateCalls.get(family) ?? 0) + 1);
         return { count };
       },
-      count: async (args: { where: { taskId: string; status?: string } }) =>
-        (this.items.get(family) ?? []).filter((row) =>
-          row.taskId === args.where.taskId && (!args.where.status || row.status === args.where.status)).length,
+      count: async (args: { where: { taskId: string; status?: string; targetType?: string | { in: readonly string[] } } }) =>
+        (this.items.get(family) ?? []).filter((row) => matchesWhere(row, args.where)).length,
     };
   }
 

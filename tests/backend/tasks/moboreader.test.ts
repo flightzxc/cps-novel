@@ -2,13 +2,16 @@ import { randomBytes } from "node:crypto";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import type { Prisma, PrismaClient } from "@prisma/client";
+import { Prisma, type PrismaClient } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
 
 import { MoboreaderAdapterError, type ListBooksResponse, type MoboreaderBook } from "@/lib/adapters";
 import { ID_IN_LIST_CHUNK_SIZE } from "@/lib/db/chunked-id-lookup";
 import {
   enqueueMoboreaderPreviewRefreshTask,
+  catalogPreviewRequestToken,
+  failMoboreaderCatalogFinalize,
+  MOBOREADER_CATALOG_MAX_ATTEMPTS,
   MOBOREADER_CATALOG_LIMITS,
   MOBOREADER_PREVIEW_STAGE_BATCH_SIZE,
   MOBOREADER_PREVIEW_ENV,
@@ -169,8 +172,41 @@ describe("MoboReader catalog safety and parity", () => {
 
   it("registers catalog and preview in the reused worker", () => {
     const handlers = createMoboreaderWorkerHandlers({} as never);
-    expect(handlers.catalog_scan).toMatchObject({ family: "generic", maxAttempts: 3 });
+    expect(handlers.catalog_scan).toMatchObject({ family: "generic", maxAttempts: MOBOREADER_CATALOG_MAX_ATTEMPTS });
     expect(handlers["moboreader.preview_refresh.v1"]).toMatchObject({ family: "channel_sync", maxAttempts: 1 });
+  });
+
+  it.each([
+    [{ NODE_ENV: "test" }, "feature_disabled"],
+    [{ NODE_ENV: "test", FEATURE_NOVEL_CATALOG_SYNC: "true", NOVEL_CATALOG_SYNC_ALLOW_WRITE: "false" }, "write_disabled"],
+  ] satisfies Array<[NodeJS.ProcessEnv, string]>) (
+    "keeps catalog finalize behind both production write gates (%s)",
+    async (env, code) => {
+      const db = { genericTask: { findUniqueOrThrow: vi.fn() } } as unknown as PrismaClient;
+      const outcome = await createMoboreaderCatalogHandler(db, {
+        adapter: { listBooks: vi.fn(), fetchBookMaterial: vi.fn(), fetchPreviewChapters: vi.fn() },
+        env,
+      })({
+        lease: {
+          family: "generic", taskType: "catalog_scan", targetType: "catalog_finalize", mode: "apply",
+          itemId: "item", taskId: "task", workerId: "worker", executionToken: "token",
+          leaseEpoch: 1n, attemptCount: 1, lockedUntil: new Date(),
+          payload: { kind: "catalog_finalize", actorId: "actor", requestId: "request", generation: 1 },
+        },
+        mode: "apply",
+        signal: new AbortController().signal,
+        heartbeat: async () => true,
+      });
+      expect(outcome).toMatchObject({ status: "failed", error: { code } });
+      expect(db.genericTask.findUniqueOrThrow).not.toHaveBeenCalled();
+    },
+  );
+
+  it("uses a stable Preview token within a generation and a new token for a new generation", () => {
+    const taskId = "10000000-0000-4000-8000-000000000001";
+    expect(catalogPreviewRequestToken(taskId, 1)).toBe(`moboreader.preview_refresh.v1:${taskId}`);
+    expect(catalogPreviewRequestToken(taskId, 2)).toBe(`moboreader.preview_refresh.v1:${taskId}:g2`);
+    expect(catalogPreviewRequestToken(taskId, 2)).toBe(catalogPreviewRequestToken(taskId, 2));
   });
 
   it("freezes Preview parity defaults and supports env overrides", () => {
@@ -267,6 +303,42 @@ describe("MoboReader catalog safety and parity", () => {
 });
 
 describe("catalog finalizer preview staging", () => {
+  it("terminalizes only the pending Preview residue with an exact failed count", async () => {
+    const previewUpdate = vi.fn(async () => ({}));
+    const parentUpdate = vi.fn(async () => ({}));
+    const tx = {
+      genericTask: {
+        findUniqueOrThrow: vi.fn(async () => ({ result: { terminalPage: 974 } })),
+        update: parentUpdate,
+      },
+      channelSyncTask: {
+        findUnique: vi.fn(async () => ({ id: "preview", status: "disabled", result: { buildStatus: "building" } })),
+        update: previewUpdate,
+      },
+      channelSyncTaskItem: {
+        updateMany: vi.fn(async () => ({ count: 2 })),
+        count: vi.fn(async () => 2),
+      },
+      operationAudit: { create: vi.fn(async () => ({})) },
+    } as unknown as Prisma.TransactionClient;
+
+    await failMoboreaderCatalogFinalize(tx, {
+      catalogTaskId: "10000000-0000-4000-8000-000000000001",
+      generation: 2,
+      actorId: "worker",
+      requestId: "request",
+      reason: "lease_expired",
+      now: new Date("2026-09-17T00:00:00Z"),
+    });
+
+    expect(parentUpdate).toHaveBeenCalledWith(expect.objectContaining({
+      data: { result: expect.objectContaining({ finalization: expect.objectContaining({ status: "failed", generation: 2 }) }) },
+    }));
+    expect(previewUpdate).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ status: "failed", failedCount: 2, result: expect.objectContaining({ buildStatus: "failed" }) }),
+    }));
+  });
+
   it("stages 100,000 sources in bounded short phases and a fixed-token rerun is a no-op", async () => {
     const sourceIds = Array.from({ length: 100_000 }, (_, index) =>
       `00000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`,
@@ -335,7 +407,13 @@ describe("catalog finalizer preview staging", () => {
     expect(writeBatchSizes).toHaveLength(100);
     expect(stagedCount).toBe(100_000);
     expect(taskCreate).toHaveBeenCalledWith(expect.objectContaining({
-      data: expect.objectContaining({ status: "disabled", totalCount: 0 }),
+      data: expect.objectContaining({
+        status: "disabled",
+        totalCount: 0,
+        params: expect.objectContaining({
+          evidence: expect.objectContaining({ dataId: "confirmed_getlistpc_series_id" }),
+        }),
+      }),
     }));
     expect(taskUpdate).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({ status: "pending", totalCount: 100_000 }),
@@ -352,6 +430,79 @@ describe("catalog finalizer preview staging", () => {
       async () => { throw new Error("duplicate rerun must not write"); },
       { NODE_ENV: "test" },
     )).resolves.toEqual({ status: "duplicate", taskId: "ready-task" });
+  });
+
+  it("turns an activation unique-race loser into a replayable superseded shell", async () => {
+    const taskUpdate = vi.fn()
+      .mockRejectedValueOnce(new Prisma.PrismaClientKnownRequestError("active scope race", {
+        code: "P2002", clientVersion: "6.19.2",
+      }))
+      .mockResolvedValueOnce({});
+    const itemUpdateMany = vi.fn(async () => ({ count: 1 }));
+    const tx = {
+      channelSyncTask: { create: vi.fn(async () => ({})), update: taskUpdate },
+      channelSyncTaskItem: {
+        createMany: vi.fn(async () => ({ count: 1 })),
+        count: vi.fn(async () => 1),
+        updateMany: itemUpdateMany,
+      },
+      operationAudit: { create: vi.fn(async () => ({})) },
+    };
+    const findFirst = vi.fn()
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ id: "20000000-0000-4000-8000-000000000001" });
+    const db = {
+      channelSyncTask: { findUnique: vi.fn(async () => null), findFirst },
+      channelApp: { findFirst: vi.fn(async () => ({ id: "app", sourceApp: { code: "changdu" } })) },
+      channelAccount: { findFirst: vi.fn(async () => ({ id: "account", credentials: [{ id: "credential" }] })) },
+      novelSourceItem: { findMany: vi.fn(async () => [{
+        id: "10000000-0000-4000-8000-000000000004", novelId: "novel", deletedAt: null,
+        novel: { previewPolicy: null },
+      }]) },
+    } as unknown as PrismaClient;
+
+    const result = await stageMoboreaderPreviewRefreshTask(db, {
+      trigger: "auto",
+      catalogScanTaskId: "10000000-0000-4000-8000-000000000001",
+      channelAccountId: "10000000-0000-4000-8000-000000000002",
+      channelAppId: "10000000-0000-4000-8000-000000000003",
+      novelSourceItemIds: ["10000000-0000-4000-8000-000000000004"],
+      requestToken: "race-request",
+      actorId: "actor",
+      requestId: "request",
+      mode: "apply",
+    }, async (write) => write(tx as unknown as Prisma.TransactionClient), {
+      NODE_ENV: "test",
+      FEATURE_NOVEL_CATALOG_SYNC: "true",
+      NOVEL_CATALOG_SYNC_ALLOW_WRITE: "true",
+      MOBOREADER_PREVIEW_SOURCE_APP_CODES: "changdu",
+    });
+
+    expect(result).toEqual({ status: "active_conflict", taskId: "20000000-0000-4000-8000-000000000001" });
+    expect(itemUpdateMany).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ status: "skipped" }),
+    }));
+    expect(taskUpdate).toHaveBeenLastCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ status: "cancelled", result: expect.objectContaining({ buildStatus: "superseded" }) }),
+    }));
+
+    const replayDb = {
+      channelSyncTask: { findUnique: vi.fn(async () => ({
+        id: "loser", status: "cancelled",
+        result: { buildStatus: "superseded", activeTaskId: "20000000-0000-4000-8000-000000000001" },
+      })) },
+    } as unknown as PrismaClient;
+    await expect(stageMoboreaderPreviewRefreshTask(
+      replayDb,
+      {
+        trigger: "auto", catalogScanTaskId: "10000000-0000-4000-8000-000000000001",
+        channelAccountId: "10000000-0000-4000-8000-000000000002",
+        channelAppId: "10000000-0000-4000-8000-000000000003",
+        novelSourceItemIds: ["10000000-0000-4000-8000-000000000004"],
+        requestToken: "race-request", actorId: "actor", requestId: "request", mode: "apply",
+      },
+      async () => { throw new Error("superseded replay must not write"); },
+    )).resolves.toEqual({ status: "active_conflict", taskId: "20000000-0000-4000-8000-000000000001" });
   });
 });
 

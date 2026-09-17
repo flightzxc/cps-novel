@@ -20,8 +20,14 @@ import path from "node:path";
 
 import { Prisma, PrismaClient } from "@prisma/client";
 
-import { createMoboreaderReadAdapter } from "../src/lib/adapters";
 import {
+  createMoboreaderReadAdapter,
+  moboreaderUpstreamRateGate,
+  resolveMoboreaderUpstreamRateLimitConfig,
+  type MoboreaderReadAdapter,
+} from "../src/lib/adapters";
+import {
+  catalogFinalizeGeneration,
   MOBOREADER_CATALOG_FINALIZE_TARGET_ID,
   MOBOREADER_CATALOG_TARGET_TYPES,
   MOBOREADER_TASK_TYPES,
@@ -141,9 +147,20 @@ export async function runCatalogRecovery(
   db: PrismaClient,
   args: RecoveryArgs,
   env: NodeJS.ProcessEnv = process.env,
+  dependencies: { adapter?: MoboreaderReadAdapter } = {},
 ) {
   const context = await loadRecoveryContext(db, args);
-  const adapter = createMoboreaderReadAdapter();
+  const rateLimit = resolveMoboreaderUpstreamRateLimitConfig(env);
+  const adapter = dependencies.adapter ?? createMoboreaderReadAdapter({
+    rateGate: moboreaderUpstreamRateGate,
+    upstreamRateLimitPolicy: {
+      maxAttempts: rateLimit.maxRateLimitRetries,
+      backoffBaseMs: rateLimit.backoffBaseMs,
+      backoffCapMs: rateLimit.backoffCapMs,
+      retryAfterCapMs: rateLimit.retryAfterCapMs,
+      totalBudgetMs: rateLimit.totalBudgetMs,
+    },
+  });
   const token = decryptCredentialSecretForWorker(
     context.credential.encryptedSecret,
     context.task.channelAccountId!,
@@ -216,8 +233,8 @@ export async function runCatalogRecovery(
     if (processing !== 0) throw new Error("catalog_task_has_processing_items");
     await tx.$executeRaw(Prisma.sql`
       UPDATE generic_task_item SET
-        status = 'skipped',
-        result = jsonb_build_object('stoppedBeforeFetch', true, 'stopReason', 'controlled_recovery'),
+        status = 'success',
+        result = jsonb_build_object('stoppedBeforeFetch', true, 'stopReason', 'controlled_recovery', 'returnedCount', 0),
         error = NULL, finished_at = transaction_timestamp(), updated_at = transaction_timestamp()
       WHERE task_id = ${args.taskId}::uuid AND target_type = 'catalog_page' AND status = 'pending'
         AND (target_id)::int > ${args.terminalPage}
@@ -242,9 +259,41 @@ export async function runCatalogRecovery(
             gapFingerprint: computedFingerprint,
           },
         },
-        update: {},
+        update: {
+          status: "pending", attemptCount: 0, executionToken: null, lockedBy: null,
+          lockedUntil: null, heartbeatAt: null, result: Prisma.DbNull,
+          error: Prisma.DbNull, finishedAt: null,
+          payload: {
+            ...context.payload,
+            kind: MOBOREADER_CATALOG_TARGET_TYPES.recoveryPage,
+            expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+            requestId: args.requestId,
+            missingIdentities,
+            gapFingerprint: computedFingerprint,
+          },
+        },
       });
     }
+    const existingFinalize = await tx.genericTaskItem.findUnique({
+      where: { taskId_targetType_targetId: {
+        taskId: args.taskId,
+        targetType: MOBOREADER_CATALOG_TARGET_TYPES.finalize,
+        targetId: MOBOREADER_CATALOG_FINALIZE_TARGET_ID,
+      } },
+      select: { payload: true },
+    });
+    const existingFinalizePayload = jsonObject(existingFinalize?.payload);
+    const priorFinalization = jsonObject(context.result.finalization);
+    const generation = Math.max(
+      catalogFinalizeGeneration(existingFinalizePayload.generation),
+      catalogFinalizeGeneration(priorFinalization.generation),
+    ) + 1;
+    const finalizePayload = {
+      kind: MOBOREADER_CATALOG_TARGET_TYPES.finalize,
+      actorId: context.payload.actorId,
+      requestId: args.requestId,
+      generation,
+    };
     await tx.genericTaskItem.upsert({
       where: { taskId_targetType_targetId: {
         taskId: args.taskId,
@@ -255,13 +304,13 @@ export async function runCatalogRecovery(
         taskId: args.taskId,
         targetType: MOBOREADER_CATALOG_TARGET_TYPES.finalize,
         targetId: MOBOREADER_CATALOG_FINALIZE_TARGET_ID,
-        payload: {
-          kind: MOBOREADER_CATALOG_TARGET_TYPES.finalize,
-          actorId: context.payload.actorId,
-          requestId: args.requestId,
-        },
+        payload: finalizePayload,
       },
-      update: {},
+      update: {
+        status: "pending", attemptCount: 0, executionToken: null, lockedBy: null,
+        lockedUntil: null, heartbeatAt: null, result: Prisma.DbNull,
+        error: Prisma.DbNull, finishedAt: null, payload: finalizePayload,
+      },
     });
     await tx.genericTask.update({
       where: { id: args.taskId },
@@ -271,13 +320,14 @@ export async function runCatalogRecovery(
         result: {
           ...context.result,
           terminalPage: args.terminalPage,
-          finalization: { status: "pending", targetId: MOBOREADER_CATALOG_FINALIZE_TARGET_ID },
+          finalization: { status: "pending", targetId: MOBOREADER_CATALOG_FINALIZE_TARGET_ID, generation },
           terminalState: "processing",
           recovery: {
             requestId: args.requestId,
             terminalPage: args.terminalPage,
             gapFingerprint: computedFingerprint,
             missingCount: missingIdentities.length,
+            generation,
           },
         },
       },
@@ -296,6 +346,7 @@ export async function runCatalogRecovery(
           terminalPage: args.terminalPage,
           gapFingerprint: computedFingerprint,
           missingCount: missingIdentities.length,
+          generation,
           historicalFailedPages: failedPages,
           pendingPagesTerminated: pendingAfterTerminal,
         },

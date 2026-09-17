@@ -9,8 +9,9 @@ set +x
 # teardown on exit). Runs the D-1 dry-run zero-write tests
 # (tests/integration/tasks/p2-05-postgres.test.ts), the new dry_run
 # protectedWrite fail-closed backstop test
-# (tests/integration/tasks/p1-07-postgres.test.ts), and the p1-13 acceptance
-# regression the work order names explicitly -- never touches
+# (tests/integration/tasks/p1-07-postgres.test.ts), the catalog-finalize
+# crash/fencing/recovery state machine, and the p1-13 acceptance regression
+# the work order names explicitly -- never touches
 # cps-novel-x8-local or any other already-running stack.
 
 project_root="$(cd "$(dirname "$0")/.." && pwd)"
@@ -136,6 +137,10 @@ export P1_07_DATABASE_TEST=1
 export P2_05_DATABASE_TEST=1
 export P2_05_OWNER_DATABASE_URL="$owner_url"
 export P2_05_WORKER_DATABASE_URL="$worker_url"
+export CATALOG_FINALIZE_DATABASE_TEST=1
+export CATALOG_FINALIZE_OWNER_DATABASE_URL="$owner_url"
+export CATALOG_FINALIZE_WEB_DATABASE_URL="$web_url"
+export CATALOG_FINALIZE_WORKER_DATABASE_URL="$worker_url"
 export P1_13_DATABASE_TEST=1
 export CHANNEL_CREDENTIAL_ACTIVE_KEY_VERSION=2
 export CHANNEL_CREDENTIAL_ENCRYPTION_KEY_V1_FILE="$secret_dir/credential-v1.key"
@@ -149,5 +154,6 @@ printf 'TEST_DB_ISOLATION=UNIQUE_DATABASE_PER_RUN name=%s port=%s\n' "$database_
 npx vitest run --project node --no-file-parallelism \
   tests/integration/tasks/p1-07-postgres.test.ts \
   tests/integration/tasks/p2-05-postgres.test.ts \
+  tests/integration/tasks/catalog-finalize-postgres.test.ts \
   tests/integration/tasks/p1-13-postgres-acceptance.test.ts
 printf 'PHASE_D_PG_GATED_TESTS=PASS\n'

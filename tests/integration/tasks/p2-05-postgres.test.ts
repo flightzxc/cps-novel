@@ -16,6 +16,9 @@ import {
   claimPendingItem,
   createMoboreaderCatalogScanTask,
   createMoboreaderPreviewRefreshTask,
+  MOBOREADER_PREVIEW_EVIDENCE,
+  stageMoboreaderPreviewRefreshTask,
+  type PreviewStageWriter,
 } from "@/lib/tasks";
 import { encryptCredentialSecretForWorker } from "../../../worker/credentials/crypto";
 import {
@@ -197,7 +200,7 @@ async function enqueueRange(input: {
   }, input.env ?? gates);
 }
 
-async function consume(
+async function consumeOneCycle(
   readAdapter = adapter(),
   env: NodeJS.ProcessEnv = gates,
   now?: () => Date,
@@ -211,6 +214,28 @@ async function consume(
     signal: new AbortController().signal,
     leaseMs: 30_000,
   });
+}
+
+async function consume(
+  readAdapter = adapter(),
+  env: NodeJS.ProcessEnv = gates,
+  now?: () => Date,
+) {
+  const consumed = await consumeOneCycle(readAdapter, env, now);
+  if (!consumed) return false;
+  const readyFinalize = await owner.genericTaskItem.findFirst({
+    where: {
+      targetType: "catalog_finalize",
+      status: "pending",
+      task: {
+        status: { in: ["pending", "processing"] },
+        items: { none: { targetType: { in: ["catalog_page", "catalog_recovery_page"] }, status: { in: ["pending", "processing"] } } },
+      },
+    },
+    select: { id: true },
+  });
+  if (readyFinalize) await consumeOneCycle(readAdapter, env, now);
+  return true;
 }
 
 async function consumePreview(readAdapter = adapter(), env: NodeJS.ProcessEnv = gates) {
@@ -336,6 +361,9 @@ describe.skipIf(!enabled).sequential("P2-05 PostgreSQL 16.14 write paths", () =>
     // the terminal page; skipping it (dry_run's whole point) means no such
     // task exists either.
     expect(await owner.channelSyncTask.count()).toBe(0);
+    expect(await owner.genericTaskItem.count({
+      where: { taskId: created.taskId, targetType: "catalog_finalize" },
+    })).toBe(0);
 
     // Task/item bookkeeping and audit trail are unaffected -- only the
     // business write is suppressed.
@@ -529,6 +557,151 @@ describe.skipIf(!enabled).sequential("P2-05 PostgreSQL 16.14 write paths", () =>
     expect(await owner.sourceLabel.count()).toBe(4);
   });
 
+  it("commits the terminal page before a separately claimed finalize phase", async () => {
+    await seedLinkedSource("book-1", "terminal-finalize-book");
+    const created = await enqueue("apply");
+    expect(await consumeOneCycle()).toBe(true);
+    expect(await owner.genericTask.findUniqueOrThrow({ where: { id: created.taskId } })).toMatchObject({
+      status: "processing",
+      result: {
+        terminalState: "processing",
+        finalization: { status: "pending", generation: 1 },
+        previewEnqueue: null,
+      },
+    });
+    expect(await owner.genericTaskItem.findUniqueOrThrow({
+      where: { taskId_targetType_targetId: { taskId: created.taskId, targetType: "catalog_finalize", targetId: "v1" } },
+    })).toMatchObject({ status: "pending", attemptCount: 0 });
+    expect(await owner.channelSyncTask.count()).toBe(0);
+
+    expect(await consumeOneCycle()).toBe(true);
+    expect(await owner.genericTask.findUniqueOrThrow({ where: { id: created.taskId } })).toMatchObject({
+      status: "completed",
+      result: { terminalState: "completed", finalization: { status: "completed", generation: 1 } },
+    });
+    expect(await owner.channelSyncTask.count({
+      where: { requestToken: `moboreader.preview_refresh.v1:${created.taskId}` },
+    })).toBe(1);
+  });
+
+  it.each([
+    ["feature", { ...gates, FEATURE_NOVEL_CATALOG_SYNC: "false" }],
+    ["write", { ...gates, NOVEL_CATALOG_SYNC_ALLOW_WRITE: "false" }],
+  ] as const)("blocks finalize before Preview staging when the %s gate closes", async (_gate, closedEnv) => {
+    const created = await enqueue("apply");
+    expect(await consumeOneCycle()).toBe(true);
+    expect(await consumeOneCycle(adapter(), closedEnv)).toBe(true);
+    expect(await owner.channelSyncTask.count()).toBe(0);
+    expect(await owner.genericTaskItem.findUniqueOrThrow({
+      where: { taskId_targetType_targetId: { taskId: created.taskId, targetType: "catalog_finalize", targetId: "v1" } },
+    })).toMatchObject({ status: "failed", attemptCount: 1 });
+  });
+
+  it("resumes a committed staging batch after a crash without duplicate items and preserves the evidence contract", async () => {
+    const linked = await seedLinkedSource("staging-crash", "staging-crash-business");
+    const requestToken = `staging-crash:${randomUUID()}`;
+    const input = {
+      trigger: "auto" as const,
+      catalogScanTaskId: randomUUID(),
+      channelAccountId: ids.account,
+      channelAppId: ids.channelApp,
+      novelSourceItemIds: [linked.source.id],
+      requestToken,
+      actorId: "p2-05-worker",
+      requestId: randomUUID(),
+      mode: "apply" as const,
+    };
+    let phase = 0;
+    await expect(stageMoboreaderPreviewRefreshTask(worker, input, async (write) => {
+      phase += 1;
+      const result = await worker.$transaction(write);
+      if (phase === 2) throw new Error("simulated_crash_after_staging_commit");
+      return result;
+    }, gates)).rejects.toThrow("simulated_crash_after_staging_commit");
+
+    const shell = await owner.channelSyncTask.findUniqueOrThrow({ where: { requestToken } });
+    expect(shell).toMatchObject({
+      status: "disabled",
+      params: { evidence: MOBOREADER_PREVIEW_EVIDENCE },
+      result: { buildStatus: "building" },
+    });
+    expect(await owner.channelSyncTaskItem.count({ where: { taskId: shell.id } })).toBe(1);
+
+    const resumed = await stageMoboreaderPreviewRefreshTask(
+      worker,
+      input,
+      (write) => worker.$transaction(write),
+      gates,
+    );
+    expect(resumed).toMatchObject({ status: "enqueued", taskId: shell.id, eligibleCount: 1 });
+    expect(await owner.channelSyncTask.count({ where: { requestToken } })).toBe(1);
+    expect(await owner.channelSyncTaskItem.count({ where: { taskId: shell.id } })).toBe(1);
+    const stageAudits = await owner.operationAudit.findMany({
+      where: { action: "moboreader.preview_refresh.items_staged", entityId: shell.id },
+      orderBy: { id: "asc" },
+      select: { afterSnapshot: true },
+    });
+    expect(stageAudits.at(-1)?.afterSnapshot).toMatchObject({ insertedCount: 0 });
+  });
+
+  it("resolves a real active-scope activation race, terminalizes the loser, and replays the same winner", async () => {
+    const linked = await seedLinkedSource("activation-race", "activation-race-business");
+    let shellCommits = 0;
+    let releaseShells!: () => void;
+    const bothShellsCommitted = new Promise<void>((resolve) => { releaseShells = resolve; });
+    const writer = (): PreviewStageWriter => {
+      let phase = 0;
+      return async (write) => {
+        phase += 1;
+        const result = await worker.$transaction(write);
+        if (phase === 1) {
+          shellCommits += 1;
+          if (shellCommits === 2) releaseShells();
+          await bothShellsCommitted;
+        }
+        return result;
+      };
+    };
+    const common = {
+      trigger: "auto" as const,
+      catalogScanTaskId: randomUUID(),
+      channelAccountId: ids.account,
+      channelAppId: ids.channelApp,
+      novelSourceItemIds: [linked.source.id],
+      actorId: "p2-05-worker",
+      mode: "apply" as const,
+    };
+    const firstInput = { ...common, requestToken: `race-a:${randomUUID()}`, requestId: randomUUID() };
+    const secondInput = { ...common, requestToken: `race-b:${randomUUID()}`, requestId: randomUUID() };
+    const [first, second] = await Promise.all([
+      stageMoboreaderPreviewRefreshTask(worker, firstInput, writer(), gates),
+      stageMoboreaderPreviewRefreshTask(worker, secondInput, writer(), gates),
+    ]);
+    const winner = [first, second].find((result) => result.status === "enqueued");
+    const loser = [first, second].find((result) => result.status === "active_conflict");
+    expect(winner?.status).toBe("enqueued");
+    expect(loser).toMatchObject({ status: "active_conflict", taskId: winner?.taskId });
+
+    const tasks = await owner.channelSyncTask.findMany({
+      where: { requestToken: { in: [firstInput.requestToken, secondInput.requestToken] } },
+      include: { items: true },
+    });
+    expect(tasks).toHaveLength(2);
+    expect(tasks.find((task) => task.id === winner?.taskId)).toMatchObject({ status: "pending" });
+    const superseded = tasks.find((task) => task.id !== winner?.taskId);
+    expect(superseded).toMatchObject({
+      status: "cancelled",
+      skippedCount: 1,
+      result: { buildStatus: "superseded", activeTaskId: winner?.taskId },
+      items: [{ status: "skipped", result: { skipReason: "active_scope_conflict", activeTaskId: winner?.taskId } }],
+    });
+    const loserInput = superseded?.requestToken === firstInput.requestToken ? firstInput : secondInput;
+    expect(await stageMoboreaderPreviewRefreshTask(worker, loserInput, writer(), gates)).toMatchObject({
+      status: "active_conflict",
+      taskId: winner?.taskId,
+    });
+  });
+
   it("writes sourceLocale and captures a linked source promo before rawPayload redaction", async () => {
     const linked = await seedLinkedSource("promo-book", "promo-book-business", "3", "英语");
     await owner.article.create({
@@ -596,7 +769,9 @@ describe.skipIf(!enabled).sequential("P2-05 PostgreSQL 16.14 write paths", () =>
     expect(promoLink.publicRedirectCode).toMatch(/^[a-z0-9]{10}$/);
     expect((await owner.article.findUniqueOrThrow({ where: { novelId_locale: { novelId: linked.novel.id, locale: "en-US" } } })).promoLinkId)
       .toBe(promoLink.id);
-    const item = await owner.genericTaskItem.findFirstOrThrow({ where: { taskId: created.taskId } });
+    const item = await owner.genericTaskItem.findFirstOrThrow({
+      where: { taskId: created.taskId, targetType: "catalog_page" },
+    });
     expect(item.result).toMatchObject({
       mode: "apply",
       plannedSourceIds: ["promo-book:3"],
@@ -655,7 +830,9 @@ describe.skipIf(!enabled).sequential("P2-05 PostgreSQL 16.14 write paths", () =>
     expect(await owner.promoLink.count()).toBe(0);
     const source = await owner.novelSourceItem.findFirstOrThrow({ where: { externalBookId: "unlinked-promo" } });
     expect(JSON.stringify(source.rawPayload)).not.toContain(secretCode);
-    const item = await owner.genericTaskItem.findFirstOrThrow({ where: { taskId: created.taskId } });
+    const item = await owner.genericTaskItem.findFirstOrThrow({
+      where: { taskId: created.taskId, targetType: "catalog_page" },
+    });
     expect(item.result).toMatchObject({ promoCapture: { fetched: 0, deferredUntilLinked: 1 } });
   });
 
@@ -911,7 +1088,7 @@ describe.skipIf(!enabled).sequential("P2-05 PostgreSQL 16.14 write paths", () =>
       orderBy: { sourceLabelId: "asc" },
     })).toEqual(relationsBeforeIncomplete);
     const incompleteItem = await owner.genericTaskItem.findFirstOrThrow({
-      where: { taskId: incompleteEnqueue.taskId },
+      where: { taskId: incompleteEnqueue.taskId, targetType: "catalog_page" },
     });
     expect(incompleteItem.result).toMatchObject({
       incompleteLabelSnapshots: 1,
@@ -961,7 +1138,9 @@ describe.skipIf(!enabled).sequential("P2-05 PostgreSQL 16.14 write paths", () =>
       count: 1,
       groups: [{ kind: "series_type", length: 302, sha256: digest, count: 1 }],
     };
-    const item = await owner.genericTaskItem.findFirstOrThrow({ where: { taskId: created.taskId } });
+    const item = await owner.genericTaskItem.findFirstOrThrow({
+      where: { taskId: created.taskId, targetType: "catalog_page" },
+    });
     const task = await owner.genericTask.findUniqueOrThrow({ where: { id: created.taskId } });
     const audit = await owner.operationAudit.findFirstOrThrow({
       where: { taskId: created.taskId, action: "moboreader.catalog_page.applied.1" },

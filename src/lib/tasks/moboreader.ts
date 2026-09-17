@@ -20,6 +20,26 @@ export const MOBOREADER_CATALOG_TARGET_TYPES = Object.freeze({
 
 export const MOBOREADER_CATALOG_FINALIZE_TARGET_ID = "v1";
 export const MOBOREADER_PREVIEW_STAGE_BATCH_SIZE = 1_000;
+export const MOBOREADER_CATALOG_MAX_ATTEMPTS = 3;
+
+export const MOBOREADER_PREVIEW_EVIDENCE = Object.freeze({
+  dataId: "confirmed_getlistpc_series_id",
+  materialType: "confirmed_runtime_selection_policy",
+  materialTypeGlobalConstant: "not_asserted",
+  materialType1001: "rejected",
+  productionPreviewCall: "enabled",
+});
+
+export function catalogFinalizeGeneration(value: unknown): number {
+  return typeof value === "number" && Number.isSafeInteger(value) && value > 0 ? value : 1;
+}
+
+export function catalogPreviewRequestToken(taskId: string, generation: number): string {
+  const normalized = catalogFinalizeGeneration(generation);
+  return normalized === 1
+    ? `moboreader.preview_refresh.v1:${taskId}`
+    : `moboreader.preview_refresh.v1:${taskId}:g${normalized}`;
+}
 
 export const MOBOREADER_CATALOG_LIMITS = Object.freeze({
   defaultSafetyMaxPages: 2_000,
@@ -549,6 +569,102 @@ export async function createMoboreaderCatalogScanTask(
 
 type TaskDb = PrismaClient | Prisma.TransactionClient;
 
+export async function failMoboreaderCatalogFinalize(
+  tx: Prisma.TransactionClient,
+  input: {
+    catalogTaskId: string;
+    generation: number;
+    actorId: string;
+    requestId?: string;
+    reason: "retry_exhausted" | "lease_expired";
+    now?: Date;
+  },
+): Promise<void> {
+  const now = input.now ?? new Date();
+  const parent = await tx.genericTask.findUniqueOrThrow({
+    where: { id: input.catalogTaskId },
+    select: { result: true },
+  });
+  const result = parent.result && typeof parent.result === "object" && !Array.isArray(parent.result)
+    ? parent.result as Record<string, unknown>
+    : {};
+  await tx.genericTask.update({
+    where: { id: input.catalogTaskId },
+    data: {
+      result: {
+        ...result,
+        finalization: {
+          status: "failed",
+          generation: catalogFinalizeGeneration(input.generation),
+          failedAt: now.toISOString(),
+          reason: input.reason,
+        },
+        terminalState: "partial_failed",
+      },
+    },
+  });
+
+  const requestToken = catalogPreviewRequestToken(input.catalogTaskId, input.generation);
+  const preview = await tx.channelSyncTask.findUnique({
+    where: { requestToken },
+    select: { id: true, status: true, result: true },
+  });
+  const previewResult = preview?.result && typeof preview.result === "object" && !Array.isArray(preview.result)
+    ? preview.result as Record<string, unknown>
+    : {};
+  let failedPreviewItems = 0;
+  if (preview && preview.status === "disabled" && previewResult.buildStatus === "building") {
+    const failed = await tx.channelSyncTaskItem.updateMany({
+      where: { taskId: preview.id, status: "pending" },
+      data: {
+        status: "failed",
+        error: { code: "preview_build_abandoned", message: "Catalog finalizer exhausted before preview activation" },
+        finishedAt: now,
+      },
+    });
+    failedPreviewItems = failed.count;
+    const actualFailedCount = await tx.channelSyncTaskItem.count({ where: { taskId: preview.id, status: "failed" } });
+    await tx.channelSyncTask.update({
+      where: { id: preview.id },
+      data: {
+        status: "failed",
+        failedCount: actualFailedCount,
+        completedAt: now,
+        error: { code: "preview_build_abandoned", message: "Preview staging did not complete" },
+        result: { ...previewResult, buildStatus: "failed", failedAt: now.toISOString() },
+      },
+    });
+    await tx.operationAudit.create({
+      data: {
+        actorType: "worker", actorId: input.actorId,
+        action: "moboreader.preview_refresh.build_failed", entityType: "ChannelSyncTask",
+        entityId: preview.id, requestId: input.requestId,
+        taskType: MOBOREADER_TASK_TYPES.previewRefresh, taskId: preview.id,
+        afterSnapshot: {
+          catalogScanTaskId: input.catalogTaskId,
+          generation: catalogFinalizeGeneration(input.generation),
+          buildStatus: "failed",
+          failedPreviewItems,
+          reason: input.reason,
+        },
+      },
+    });
+  }
+  await tx.operationAudit.create({
+    data: {
+      actorType: "worker", actorId: input.actorId,
+      action: "moboreader.catalog_finalize.failed", entityType: "GenericTask",
+      entityId: input.catalogTaskId, requestId: input.requestId,
+      taskType: MOBOREADER_TASK_TYPES.catalogScan, taskId: input.catalogTaskId,
+      afterSnapshot: {
+        generation: catalogFinalizeGeneration(input.generation),
+        reason: input.reason,
+        failedPreviewItems,
+      },
+    },
+  });
+}
+
 function csvSet(value: string | undefined): Set<string> {
   return new Set((value ?? "").split(",").map((item) => item.trim()).filter(Boolean));
 }
@@ -696,6 +812,9 @@ export async function stageMoboreaderPreviewRefreshTask(
   const existingResult = existing?.result && typeof existing.result === "object" && !Array.isArray(existing.result)
     ? existing.result as Record<string, unknown>
     : null;
+  if (existing && existingResult?.buildStatus === "superseded" && typeof existingResult.activeTaskId === "string") {
+    return { status: "active_conflict", taskId: existingResult.activeTaskId };
+  }
   if (existing && existingResult?.buildStatus !== "building") {
     return { status: "duplicate", taskId: existing.id };
   }
@@ -735,6 +854,7 @@ export async function stageMoboreaderPreviewRefreshTask(
             featureFlagEnabled: isNovelCatalogSyncEnabled(env),
             allowWriteEnabled: isNovelCatalogSyncWriteAllowed(env),
             skipReasonCounts: planned.skipReasonCounts,
+            evidence: { ...MOBOREADER_PREVIEW_EVIDENCE },
           },
           result: { buildStatus: "building", eligibleCount: planned.eligibleIds.length, skipReasonCounts: planned.skipReasonCounts },
         },
@@ -780,26 +900,78 @@ export async function stageMoboreaderPreviewRefreshTask(
     });
   }
 
-  await writePhase(async (tx) => {
-    const totalCount = await tx.channelSyncTaskItem.count({ where: { taskId } });
-    await tx.channelSyncTask.update({
-      where: { id: taskId },
-      data: {
-        status: planned.taskStatus,
-        totalCount,
-        result: { buildStatus: "ready", eligibleCount: totalCount, skipReasonCounts: planned.skipReasonCounts },
-      },
+  try {
+    await writePhase(async (tx) => {
+      const totalCount = await tx.channelSyncTaskItem.count({ where: { taskId } });
+      await tx.channelSyncTask.update({
+        where: { id: taskId },
+        data: {
+          status: planned.taskStatus,
+          totalCount,
+          result: { buildStatus: "ready", eligibleCount: totalCount, skipReasonCounts: planned.skipReasonCounts },
+        },
+      });
+      await tx.operationAudit.create({
+        data: {
+          actorType: "worker", actorId: planned.input.actorId,
+          action: planned.taskStatus === "pending" ? "moboreader.preview_refresh.queued" : "moboreader.preview_refresh.queued_disabled",
+          entityType: "ChannelSyncTask", entityId: taskId, requestId: planned.input.requestId,
+          taskType: MOBOREADER_TASK_TYPES.previewRefresh, taskId,
+          afterSnapshot: { trigger: planned.input.trigger, status: planned.taskStatus, eligibleCount: totalCount, skipReasonCounts: planned.skipReasonCounts },
+        },
+      });
     });
-    await tx.operationAudit.create({
-      data: {
-        actorType: "worker", actorId: planned.input.actorId,
-        action: planned.taskStatus === "pending" ? "moboreader.preview_refresh.queued" : "moboreader.preview_refresh.queued_disabled",
-        entityType: "ChannelSyncTask", entityId: taskId, requestId: planned.input.requestId,
-        taskType: MOBOREADER_TASK_TYPES.previewRefresh, taskId,
-        afterSnapshot: { trigger: planned.input.trigger, status: planned.taskStatus, eligibleCount: totalCount, skipReasonCounts: planned.skipReasonCounts },
+  } catch (error) {
+    if (!isUniqueViolation(error) || planned.taskStatus !== "pending") throw error;
+    const winner = await prisma.channelSyncTask.findFirst({
+      where: {
+        id: { not: taskId },
+        taskType: MOBOREADER_TASK_TYPES.previewRefresh,
+        channelAccountId: planned.input.channelAccountId,
+        channelAppId: planned.input.channelAppId,
+        operationScopeHash: planned.operationScopeHash,
+        status: { in: ["pending", "processing"] },
       },
+      orderBy: { createdAt: "asc" },
+      select: { id: true },
     });
-  });
+    if (!winner) throw error;
+    await writePhase(async (tx) => {
+      const skipped = await tx.channelSyncTaskItem.updateMany({
+        where: { taskId, status: "pending" },
+        data: {
+          status: "skipped",
+          result: { skipReason: "active_scope_conflict", activeTaskId: winner.id },
+          error: Prisma.DbNull,
+          finishedAt: now,
+        },
+      });
+      await tx.channelSyncTask.update({
+        where: { id: taskId, status: "disabled" },
+        data: {
+          status: "cancelled",
+          skippedCount: skipped.count,
+          completedAt: now,
+          result: {
+            buildStatus: "superseded",
+            activeTaskId: winner.id,
+            eligibleCount: planned.eligibleIds.length,
+            skipReasonCounts: planned.skipReasonCounts,
+          },
+        },
+      });
+      await tx.operationAudit.create({
+        data: {
+          actorType: "worker", actorId: planned.input.actorId,
+          action: "moboreader.preview_refresh.build_superseded", entityType: "ChannelSyncTask",
+          entityId: taskId, requestId: planned.input.requestId,
+          taskType: MOBOREADER_TASK_TYPES.previewRefresh, taskId,
+          afterSnapshot: { activeTaskId: winner.id, skippedCount: skipped.count },
+        },
+      });
+    });
+    return { status: "active_conflict", taskId: winner.id };
+  }
 
   return {
     status: "enqueued", taskId, taskStatus: planned.taskStatus,
@@ -924,13 +1096,7 @@ async function enqueueMoboreaderPreviewRefreshTaskInDb(
         featureFlagEnabled: enabled,
         allowWriteEnabled: writeAllowed,
         skipReasonCounts,
-        evidence: {
-          dataId: "confirmed_getlistpc_series_id",
-          materialType: "confirmed_runtime_selection_policy",
-          materialTypeGlobalConstant: "not_asserted",
-          materialType1001: "rejected",
-          productionPreviewCall: "enabled",
-        },
+        evidence: { ...MOBOREADER_PREVIEW_EVIDENCE },
       },
       result: { eligibleCount: eligibleIds.length, skipReasonCounts },
       items: {

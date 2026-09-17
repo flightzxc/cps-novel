@@ -11,6 +11,10 @@ import type {
 } from "./types";
 import { TASK_FAMILIES } from "./types";
 import { sanitizePersistedTaskError } from "./errors";
+import {
+  catalogFinalizeGeneration,
+  failMoboreaderCatalogFinalize,
+} from "./moboreader";
 
 type Db = PrismaClient | Prisma.TransactionClient;
 
@@ -22,6 +26,7 @@ interface CandidateRow {
   payload: unknown;
   attempt_count: number;
   lease_epoch: bigint;
+  mode?: TaskMode;
   cursor_at?: Date;
   eligible?: boolean;
 }
@@ -403,7 +408,7 @@ async function selectExpired(
           LIMIT 128
           FOR UPDATE OF i SKIP LOCKED
         )
-        SELECT c.*, t.task_type, (t.task_type = ANY(${taskTypes}::text[])) AS eligible
+        SELECT c.*, t.task_type, t.mode, (t.task_type = ANY(${taskTypes}::text[])) AS eligible
         FROM candidates c JOIN channel_sync_task t ON t.id = c.task_id
         ORDER BY c.cursor_at, c.id
       `);
@@ -419,7 +424,7 @@ async function selectExpired(
           LIMIT 128
           FOR UPDATE OF i SKIP LOCKED
         )
-        SELECT c.*, t.task_type, (t.task_type = ANY(${taskTypes}::text[])) AS eligible
+        SELECT c.*, t.task_type, t.mode, (t.task_type = ANY(${taskTypes}::text[])) AS eligible
         FROM candidates c JOIN generic_task t ON t.id = c.task_id
         ORDER BY c.cursor_at, c.id
       `);
@@ -496,18 +501,30 @@ export async function recoverExpiredItem(
       const payload = row.payload && typeof row.payload === "object" && !Array.isArray(row.payload)
         ? row.payload as Record<string, unknown>
         : {};
-      if (typeof payload.actorId === "string" && payload.actorId && typeof payload.requestId === "string" && payload.requestId) {
+      if (row.mode === "apply" && typeof payload.actorId === "string" && payload.actorId && typeof payload.requestId === "string" && payload.requestId) {
         await tx.genericTaskItem.upsert({
           where: { taskId_targetType_targetId: {
             taskId: row.task_id, targetType: "catalog_finalize", targetId: "v1",
           } },
           create: {
             taskId: row.task_id, targetType: "catalog_finalize", targetId: "v1",
-            payload: { kind: "catalog_finalize", actorId: payload.actorId, requestId: payload.requestId },
+            payload: { kind: "catalog_finalize", actorId: payload.actorId, requestId: payload.requestId, generation: 1 },
           },
           update: {},
         });
       }
+    }
+    if (terminal && row.task_type === "catalog_scan" && row.target_type === "catalog_finalize") {
+      const payload = row.payload && typeof row.payload === "object" && !Array.isArray(row.payload)
+        ? row.payload as Record<string, unknown>
+        : {};
+      await failMoboreaderCatalogFinalize(tx, {
+        catalogTaskId: row.task_id,
+        generation: catalogFinalizeGeneration(payload.generation),
+        actorId: typeof payload.actorId === "string" && payload.actorId ? payload.actorId : (input.workerId ?? "lease-recovery"),
+        requestId: typeof payload.requestId === "string" ? payload.requestId : undefined,
+        reason: "lease_expired",
+      });
     }
     if (terminal) {
       await tx.operationAudit.create({
@@ -803,7 +820,7 @@ export async function finalizeTaskItem(
           ? lease.payload as Record<string, unknown>
           : {};
         if (typeof payload.actorId === "string" && payload.actorId && typeof payload.requestId === "string" && payload.requestId) {
-          await tx.genericTaskItem.upsert({
+          if (lease.mode === "apply") await tx.genericTaskItem.upsert({
             where: { taskId_targetType_targetId: {
               taskId: lease.taskId,
               targetType: "catalog_finalize",
@@ -813,7 +830,7 @@ export async function finalizeTaskItem(
               taskId: lease.taskId,
               targetType: "catalog_finalize",
               targetId: "v1",
-              payload: { kind: "catalog_finalize", actorId: payload.actorId, requestId: payload.requestId },
+              payload: { kind: "catalog_finalize", actorId: payload.actorId, requestId: payload.requestId, generation: 1 },
             },
             update: {},
           });

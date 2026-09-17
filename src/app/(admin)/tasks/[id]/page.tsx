@@ -22,6 +22,7 @@ import { ContentCapabilityDenied } from "../../novels/_components/content-states
 import { requireContentPage } from "../../novels/_lib/content-page-guard";
 import { sessionView } from "../../_lib/page-guard";
 import { RetryFailedButton } from "../_components/retry-failed-button";
+import { RetryCatalogFinalizeButton } from "../_components/retry-catalog-finalize-button";
 import { TaskControlButtons } from "../_components/task-control-buttons";
 import {
   isRetryableTaskStatus,
@@ -243,6 +244,9 @@ export default async function TaskDetailPage({
             />
             {isRetryableTaskStatus(detail.status) && !detail.catalogBatch && detail.failedCount > 0 && (
               <RetryFailedButton family={detail.family} taskId={detail.taskId} failedCount={detail.failedCount} />
+            )}
+            {detail.catalogFinalize?.retryable && (
+              <RetryCatalogFinalizeButton taskId={detail.taskId} />
             )}
           </div>
         </div>

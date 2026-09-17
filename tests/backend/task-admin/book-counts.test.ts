@@ -288,6 +288,7 @@ describe("C-12 getAdminTaskDetail: bookCounts projection", () => {
     const aggregateRow = { task_id: TASK_ID, fetched: 80n, pages_scanned: 5n, failed_pages: 1n };
     let call = 0;
     const db = {
+      genericTaskItem: { findUnique: async () => null },
       $queryRaw: async () => {
         call += 1;
         if (call === 1) return [row];
@@ -322,6 +323,7 @@ describe("C-12 getAdminTaskDetail: bookCounts projection", () => {
     };
     let call = 0;
     const db = {
+      genericTaskItem: { findUnique: async () => null },
       $queryRaw: async () => {
         call += 1;
         return call === 1 ? [row] : [];

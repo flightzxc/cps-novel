@@ -229,6 +229,22 @@ describe("/tasks/[id] · 页面区块", () => {
     expect(screen.getByTestId("retry-failed-open")).toBeTruthy();
   });
 
+  it("finalize 单独失败时渲染正式重新收尾入口，不伪造失败页数", async () => {
+    getAdminTaskDetail.mockResolvedValue(detail({
+      taskType: "catalog_scan",
+      status: "completed_with_errors",
+      failedCount: 0,
+      catalogFinalize: { status: "failed", attemptCount: 3, generation: 1, retryable: true },
+    }));
+    listAdminTaskItems.mockResolvedValue(itemsResult([]));
+
+    const element = await renderPage();
+    render(element);
+
+    expect(screen.getByTestId("retry-catalog-finalize-open")).toBeTruthy();
+    expect(screen.queryByTestId("retry-failed-open")).toBeNull();
+  });
+
   it("账号标签来自 channelAccountId → business_id", async () => {
     getAdminTaskDetail.mockResolvedValue(detail({ channelAccountId: "40000000-0000-4000-8000-000000000001" }));
     listAdminTaskItems.mockResolvedValue(itemsResult([]));

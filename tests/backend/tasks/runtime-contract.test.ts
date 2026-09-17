@@ -23,8 +23,8 @@ describe("P1-07 SQL and shutdown contracts", () => {
   });
 
   it("propagates task mode on every lease and suppresses only dry-run protected writes", () => {
-    // Phase C: two families (channel_sync, generic).
-    expect(source.match(/t\.mode/g)).toHaveLength(2);
+    // Two families (channel_sync, generic), pending + expired each = 4.
+    expect(source.match(/t\.mode/g)).toHaveLength(4);
     expect(source).toContain("mode: row.mode");
     expect(workerSource).toContain("mode: lease.mode");
     expect(workerSource).toContain('lease.mode === "dry_run"');

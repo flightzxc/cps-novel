@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import {
   MANUAL_REVIEW_AUDIT_ACTION,
+  CATALOG_FINALIZE_RETRY_AUDIT_ACTION,
+  retryCatalogFinalizeTask,
   retryFailedTask,
   resolveManualReview,
   TASK_RETRY_AUDIT_ACTION,
@@ -175,6 +177,102 @@ describe("X9 failed-item retry", () => {
       { db: fake.asPrismaClient(), identities: stores, sessions: stores, now: NOW },
     )).rejects.toBeInstanceOf(TaskAdminError);
     expect(fake.itemUpdateCalls.size).toBe(0);
+  });
+
+  it("catalog retry preserves EOF evidence and rearms finalize as a new generation", async () => {
+    const stores = newStores();
+    const admin = seedTaskAdmin(stores);
+    const ticket = await issueTaskAuthorization(stores, {
+      token: admin.token,
+      pathname: "/api/admin/tasks/retry-failed",
+    });
+    const fake = new TaskAdminFakeDb();
+    const parent = fake.parents.get("generic")!;
+    parent.taskType = "catalog_scan";
+    parent.result = {
+      terminalPage: 974,
+      catalogObservedTotal: 97_320,
+      checkpoint: { lastCompletedPage: 973 },
+      finalization: { status: "completed", generation: 1 },
+      terminalState: "partial_failed",
+      previewEnqueue: { status: "enqueued" },
+    };
+    const [failedPage, successPage, finalize] = fake.items.get("generic")!;
+    Object.assign(failedPage, { targetType: "catalog_page", targetId: "974", status: "failed" });
+    Object.assign(successPage, { targetType: "catalog_page", targetId: "973", status: "success" });
+    Object.assign(finalize, {
+      targetType: "catalog_finalize", targetId: "v1", status: "success", attemptCount: 1,
+      payload: { kind: "catalog_finalize", actorId: "worker", requestId: "old", generation: 1 },
+    });
+    fake.items.set("generic", [failedPage, successPage, finalize]);
+
+    const result = await retryFailedTask(
+      { ...ticket, family: "generic", taskId: TASK_ID },
+      { db: fake.asPrismaClient(), identities: stores, sessions: stores, now: NOW },
+    );
+
+    expect(result).toMatchObject({ retriedItemCount: 1, status: "pending" });
+    expect(failedPage.status).toBe("pending");
+    expect(finalize).toMatchObject({ status: "pending", attemptCount: 0, payload: { generation: 2 } });
+    expect(parent.result).toMatchObject({
+      terminalPage: 974,
+      catalogObservedTotal: 97_320,
+      checkpoint: { lastCompletedPage: 973 },
+      finalization: { status: "pending", generation: 2 },
+      terminalState: "processing",
+      previewEnqueue: null,
+    });
+  });
+});
+
+describe("catalog finalize formal recovery", () => {
+  it("starts a new audited generation, resets only finalize attempts, and replays idempotently", async () => {
+    const stores = newStores();
+    const admin = seedTaskAdmin(stores);
+    const ticket = await issueTaskAuthorization(stores, {
+      token: admin.token,
+      pathname: "/api/admin/tasks/retry-catalog-finalize",
+    });
+    const fake = new TaskAdminFakeDb();
+    const parent = fake.parents.get("generic")!;
+    parent.taskType = "catalog_scan";
+    parent.failedCount = 0;
+    parent.result = {
+      terminalPage: 974,
+      catalogObservedTotal: 97_320,
+      finalization: { status: "failed", generation: 1 },
+      terminalState: "partial_failed",
+    };
+    const finalize = fake.items.get("generic")![0];
+    Object.assign(finalize, {
+      targetType: "catalog_finalize",
+      targetId: "v1",
+      status: "failed",
+      attemptCount: 3,
+      leaseEpoch: 9n,
+      payload: { kind: "catalog_finalize", actorId: "worker", requestId: "original", generation: 1 },
+    });
+    fake.items.set("generic", [finalize]);
+    const dependencies = { db: fake.asPrismaClient(), identities: stores, sessions: stores, now: NOW };
+
+    const first = await retryCatalogFinalizeTask({ ...ticket, taskId: TASK_ID }, dependencies);
+    const replay = await retryCatalogFinalizeTask({ ...ticket, taskId: TASK_ID }, dependencies);
+
+    expect(first).toMatchObject({ status: "pending", generation: 2, wrote: true });
+    expect(replay).toMatchObject({ status: "pending", generation: 2, wrote: false, auditId: first.auditId });
+    expect(finalize).toMatchObject({ status: "pending", attemptCount: 0, leaseEpoch: 9n, payload: { generation: 2 } });
+    expect(parent).toMatchObject({
+      status: "pending",
+      failedCount: 0,
+      result: {
+        terminalPage: 974,
+        catalogObservedTotal: 97_320,
+        finalization: { status: "pending", generation: 2 },
+        terminalState: "processing",
+      },
+    });
+    expect(fake.audits).toHaveLength(1);
+    expect(fake.audits[0]).toMatchObject({ action: CATALOG_FINALIZE_RETRY_AUDIT_ACTION });
   });
 });
 

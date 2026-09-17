@@ -59,7 +59,11 @@ Apply 会在一个短事务中：
 4. upsert 唯一的 `catalog_finalize`；
 5. 将父任务恢复为可领取的 `pending`，并写入审计记录。
 
-Worker 领取恢复页后会再次请求第 974 页、再次校验缺口指纹，只用 `createMany(skipDuplicates)` 插入仍缺失的 identities，不更新已有正常记录。随后 finalizer 汇总原 1～973 页与恢复页结果，并以固定 token `moboreader.preview_refresh.v1:<catalogTaskId>` 分批构建覆盖原批次的 Preview 任务。
+普通页恢复与人工“重新执行目录收尾”都会开启一个单调递增的 finalize generation。同一 generation
+内的 worker crash/retry 继续复用同一个 Preview request token；只有人工重新收尾或页面结果发生变化时
+才进入新 generation，避免旧的已完成 Preview 被错误当作本轮结果。
+
+Worker 领取恢复页后会再次请求第 974 页、再次校验缺口指纹，只用 `createMany(skipDuplicates)` 插入仍缺失的 identities，不更新已有正常记录。随后 finalizer 汇总原 1～973 页与恢复页结果，并以 generation 稳定 token（首代为 `moboreader.preview_refresh.v1:<catalogTaskId>`，后续为 `...:<catalogTaskId>:g<N>`）分批构建覆盖原批次的 Preview 任务。
 
 ## 3. 完成核验
 
@@ -72,3 +76,10 @@ Worker 领取恢复页后会再次请求第 974 页、再次校验缺口指纹�
 - 失败书数未知时 API/UI 显示 `null/未知`，同时显示实际失败页数。
 
 如任何状态、总数或指纹漂移，停止执行并重新 dry-run；不得绕过校验，也不得手工修改任务表。
+
+## 4. Finalize 重试耗尽
+
+finalize item 达到重试上限后，任务详情会显示“重新执行目录收尾”。该动作保留页面结果、EOF 围栏和
+历史失败证据，只重置 finalize 的新一轮尝试预算并开启新 generation。若失败发生在 Preview staging
+中途，系统会把 `disabled/building` shell 及其 pending items 正式终结为 failed；不得手工删除或改写
+该残骸。按钮不可用或状态与页面不一致时停止操作，先核对任务与 item 状态。

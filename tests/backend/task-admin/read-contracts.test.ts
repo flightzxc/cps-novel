@@ -519,6 +519,7 @@ describe("C-9 task-detail route derivations", () => {
         queryCall += 1;
         return queryCall === 1 ? [row] : [];
       },
+      genericTaskItem: { findUnique: async () => ({ status: "failed", attemptCount: 3, payload: { generation: 4 } }) },
     } as unknown as PrismaClient;
 
     const detail = await getAdminTaskDetail(db, context, { family: "generic", taskId: TASK_ID }, {} as NodeJS.ProcessEnv);
@@ -543,6 +544,7 @@ describe("C-9 task-detail route derivations", () => {
       actualFetchedCount: 88,
       lastCompletedPage: 4,
     });
+    expect(detail.catalogFinalize).toEqual({ status: "failed", attemptCount: 3, generation: 4, retryable: true });
     for (const key of FORBIDDEN_KEYS) expect(allKeys(detail).has(key)).toBe(false);
     expect(allKeys(detail)).not.toContain("secret");
     expect(allKeys(detail)).not.toContain("projectType");
@@ -623,6 +625,7 @@ describe("C-9 task-detail route derivations", () => {
         queryCall += 1;
         return queryCall === 1 ? [row] : [originItemRow];
       },
+      genericTaskItem: { findUnique: async () => null },
     } as unknown as PrismaClient;
 
     const detail = await getAdminTaskDetail(db, context, { family: "generic", taskId: TASK_ID }, {} as NodeJS.ProcessEnv);
@@ -667,6 +670,7 @@ describe("C-9 task-detail route derivations", () => {
         queryCall += 1;
         return queryCall === 1 ? [row] : [cascadedItemRow];
       },
+      genericTaskItem: { findUnique: async () => null },
     } as unknown as PrismaClient;
 
     const detail = await getAdminTaskDetail(db, context, { family: "generic", taskId: TASK_ID }, {} as NodeJS.ProcessEnv);
