@@ -241,6 +241,11 @@ describe("P2-12 vertical acceptance", () => {
       novelId: NOVEL_ID,
       locale: "en",
       firstPublish: true,
+      // Owner decision 2026-09-18 (publish/preview decoupling, c6d8db6): the
+      // seeded fixture below has a materialized preview chapter with a body,
+      // so there is nothing to warn about. See the analogous fully-clean
+      // fixture in tests/backend/publish-gate/service.test.ts.
+      warnings: [],
     });
 
     await expect(resolvePublicArticleBySlugParam(client, `${SLUG}-p${SHORT_ID}`, "en"))
