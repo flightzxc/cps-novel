@@ -595,6 +595,132 @@ x8_export_catalog_gate_env() {
   esac
 }
 
+# X8_BACKUP_PGPASS_RECONCILE_2026-09-18: pg_basebackup's physical-replication
+# connection authenticates through libpq's pgpass matching, where the
+# "database" field of the connection it opens is the LITERAL string
+# "replication" -- never the real database name. The single-line pgpass
+# file this function replaces only ever carried
+# `postgres:5432:cps_novel:backup_role:<pw>` (matching the LOGICAL backup's
+# `pg_dump -d cps_novel` connection), so pg_basebackup's physical-replication
+# connection never found a matching pgpass row and libpq failed with
+# "fe_sendauth: no password supplied" before a password was ever sent. The
+# server side (backup_role's REPLICATION attribute, pg_hba.conf's
+# `host replication backup_role 172.18.0.0/16 scram-sha-256` line) was never
+# the problem.
+#
+# x8_reconcile_backup_pgpass() makes backup.pgpass carry BOTH rows the two
+# backup connections need, reconciled idempotently on every
+# prepare_x8_environment() call (not just "create if missing" -- a password
+# rotation, or a file left behind by the old single-line code, must also
+# converge):
+#   postgres:5432:cps_novel:backup_role:<pw>     (logical, pg_dump)
+#   postgres:5432:replication:backup_role:<pw>   (physical, pg_basebackup)
+#
+# Deliberately narrow: only lines that exactly match one of those two
+# `postgres:5432:{cps_novel,replication}:backup_role:` prefixes are ever
+# touched -- never a wildcard `postgres:5432:*:backup_role:`, which would
+# also swallow any future unrelated `postgres:5432:<otherdb>:backup_role:`
+# row. Any other line already present (an operator note, an unrelated
+# host/role pgpass row) is preserved byte-for-byte in its original
+# position -- this file is bind-mounted into the backup-timer container
+# (infra/production-like/docker-compose.yml) and a reconcile pass has no
+# business rewriting content it doesn't own.
+#
+# Idempotent and atomic: the target content is computed in memory first; if
+# it already matches the file byte-for-byte, nothing is written (prints
+# UNCHANGED, inode untouched -- a config problem like an unwritable secrets
+# directory then only ever surfaces when a write is actually needed, never
+# on a no-op rerun). Otherwise it writes via mktemp+chmod+mv inside the same
+# directory (atomic rename, so the final path never shows a partial file),
+# under a RETURN trap that removes the temp file on every exit path. The
+# function also defensively turns off `xtrace` for its own body and restores
+# the caller's setting on return, in case a caller has `set -x` on -- the
+# password must never reach a trace line.
+#
+# Both status lines (UNCHANGED / RECONCILED) go to STDERR, never stdout --
+# prepare_x8_environment() is on the call path of commands whose stdout IS a
+# machine-parsed payload (e.g. `docker compose ... config --format json`
+# piped straight into scripts/acceptance/x8-validate-compose.mjs's
+# JSON.parse(stdin)); a stray stdout line here would silently corrupt that
+# payload for every caller, not just the ones that care about pgpass.
+x8_reconcile_backup_pgpass() {
+  local x8_pgpass_trace_restore=""
+  case "$-" in
+    *x*)
+      x8_pgpass_trace_restore=1
+      set +x
+      ;;
+  esac
+
+  local tmp=""
+  trap '[[ -n "$tmp" ]] && rm -f "$tmp"; [[ -n "$x8_pgpass_trace_restore" ]] && set -x; trap - RETURN' RETURN
+
+  local backup_password
+  backup_password="$(read_secret_value "$P1_12_BACKUP_ROLE_PASSWORD_FILE")" || {
+    echo "ERROR: unable to read backup_role password from $P1_12_BACKUP_ROLE_PASSWORD_FILE" >&2
+    return 65
+  }
+  [[ -n "$backup_password" ]] || {
+    echo "ERROR: backup_role password file $P1_12_BACKUP_ROLE_PASSWORD_FILE is empty" >&2
+    return 65
+  }
+
+  # Slurp the existing file byte-for-byte (including any trailing newlines)
+  # for the later UNCHANGED comparison, and separately walk it line-by-line
+  # to build the kept (non-backup_role) content. `read -r -d ''` is the
+  # idiom that reads to EOF without stripping trailing newlines the way
+  # `$(cat file)` would; its own nonzero exit (no NUL delimiter found) is
+  # expected and harmless here.
+  local existing_content="" line kept=""
+  if [[ -f "$X8_BACKUP_PGPASS_FILE" ]]; then
+    IFS= read -r -d '' existing_content <"$X8_BACKUP_PGPASS_FILE" || true
+    while IFS= read -r line || [[ -n "$line" ]]; do
+      case "$line" in
+        postgres:5432:cps_novel:backup_role:* | postgres:5432:replication:backup_role:*)
+          continue
+          ;;
+      esac
+      kept="${kept}${line}"$'\n'
+    done <"$X8_BACKUP_PGPASS_FILE"
+  fi
+
+  local new_content
+  new_content="${kept}postgres:5432:cps_novel:backup_role:${backup_password}"$'\n'"postgres:5432:replication:backup_role:${backup_password}"$'\n'
+
+  if [[ -f "$X8_BACKUP_PGPASS_FILE" && "$existing_content" == "$new_content" ]]; then
+    echo "X8_BACKUP_PGPASS=UNCHANGED" >&2
+    return 0
+  fi
+
+  local previous_umask
+  previous_umask="$(umask)"
+  umask 077
+  tmp="$(mktemp "${X8_BACKUP_PGPASS_FILE}.XXXXXX" 2>/dev/null)" || {
+    umask "$previous_umask"
+    tmp=""
+    echo "ERROR: unable to create a temporary file next to $X8_BACKUP_PGPASS_FILE (is $X8_SECRET_DIR writable?)" >&2
+    return 65
+  }
+  umask "$previous_umask"
+
+  printf '%s' "$new_content" >"$tmp" || {
+    echo "ERROR: unable to write temporary pgpass content to $tmp" >&2
+    return 65
+  }
+  chmod 600 "$tmp" || {
+    echo "ERROR: unable to chmod temporary pgpass file $tmp" >&2
+    return 65
+  }
+  mv -f "$tmp" "$X8_BACKUP_PGPASS_FILE" || {
+    echo "ERROR: unable to move temporary pgpass file into place at $X8_BACKUP_PGPASS_FILE" >&2
+    return 65
+  }
+
+  local line_count
+  line_count="$(printf '%s' "$new_content" | wc -l | tr -d ' ')"
+  echo "X8_BACKUP_PGPASS=RECONCILED lines=${line_count} backup_role_rules=2" >&2
+}
+
 prepare_x8_environment() {
   # RC-2b: X8_LEVEL selects which docs/p2/V020_RELEASE_CHECKLIST.md flag
   # ladder rung this local topology boots at. Fail fast, before any
@@ -656,14 +782,10 @@ prepare_x8_environment() {
 
   prepare_p1_12_local_environment
 
-  if [[ ! -f "$X8_BACKUP_PGPASS_FILE" ]]; then
-    local backup_password temporary
-    backup_password="$(read_secret_value "$P1_12_BACKUP_ROLE_PASSWORD_FILE")"
-    temporary="${X8_BACKUP_PGPASS_FILE}.tmp.$$"
-    printf 'postgres:5432:cps_novel:backup_role:%s\n' "$backup_password" >"$temporary"
-    chmod 600 "$temporary"
-    mv "$temporary" "$X8_BACKUP_PGPASS_FILE"
-  fi
+  # X8_BACKUP_PGPASS_RECONCILE_2026-09-18: reconcile on every prepare, not
+  # just on first creation -- see x8_reconcile_backup_pgpass()'s own header
+  # comment for why a "file already exists" check is not enough.
+  x8_reconcile_backup_pgpass || return 65
 }
 
 # 2026-09-06 patch work order, P1-6 ("闸门需要的环境应当直接由身份文件构造", not
