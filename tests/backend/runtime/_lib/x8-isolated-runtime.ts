@@ -62,7 +62,7 @@ export function makeIsolatedRuntimeDir(prefix = "x8-test-runtime-"): string {
  * own fresh, unshared one.
  */
 export function x8Env(
-  extra: NodeJS.ProcessEnv = {},
+  extra: Record<string, string | undefined> = {},
   runtimeDir: string = makeIsolatedRuntimeDir(),
 ): NodeJS.ProcessEnv {
   return { ...process.env, X8_RUNTIME_DIR: runtimeDir, ...extra };
