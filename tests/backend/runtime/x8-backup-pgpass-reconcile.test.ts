@@ -203,16 +203,20 @@ describe("x8_reconcile_backup_pgpass: file mode, no wildcard, no secret leak", (
 });
 
 describe("x8_reconcile_backup_pgpass: unrelated records and atomicity", () => {
-  it("preserves an unrelated pgpass record byte-for-byte, in its original position", () => {
+  // P1-2 (Opus review 2026-09-18): the two canonical rows now sort FIRST,
+  // ahead of every preserved line -- a structural second line of defense
+  // under libpq's first-match-wins pgpass semantics, on top of the
+  // shadowing-rule removal covered separately below.
+  it("preserves an unrelated pgpass record byte-for-byte, after the two canonical rows", () => {
     writeFileSync(pgpassPath(), "otherhost:5432:otherdb:otheruser:otherpw\n");
     chmodSync(pgpassPath(), 0o600);
     const result = runReconcile("x8_reconcile_backup_pgpass");
     expect(result.status, result.stderr).toBe(0);
     const lines = readFileSync(pgpassPath(), "utf8").split("\n").filter(Boolean);
     expect(lines).toEqual([
-      "otherhost:5432:otherdb:otheruser:otherpw",
       `postgres:5432:cps_novel:backup_role:${TEST_PASSWORD}`,
       `postgres:5432:replication:backup_role:${TEST_PASSWORD}`,
+      "otherhost:5432:otherdb:otheruser:otherpw",
     ]);
   });
 
@@ -240,5 +244,99 @@ describe("x8_reconcile_backup_pgpass: unrelated records and atomicity", () => {
     // no `backup.pgpass.XXXXXX`-shaped mktemp leftover.
     const entries = readdirSync(secretDir).sort();
     expect(entries).toEqual(["backup.pgpass", "backup_role.password"]);
+  });
+});
+
+describe("x8_reconcile_backup_pgpass: P1-2 shadowing-wildcard rule removal", () => {
+  // Opus review 2026-09-18, P1-2: a pre-existing broader rule (host and/or
+  // port and/or db field written as a literal `*`, or an already-narrower
+  // field combination such as `postgres:*:replication:backup_role:`) can
+  // shadow one of the two canonical rows under libpq's first-match-wins
+  // pgpass matching -- it must be removed on every reconcile pass, not
+  // just the two byte-for-byte canonical prefixes. A line outside that
+  // exact 4-field shape (different case, e.g.) cannot shadow anything
+  // under libpq's exact-text matching and must be left alone.
+  it("removes every shadowing-shape row, keeps an unrelated row and an approximate near-miss row, warns with the exact count, and puts the canonical rows first", () => {
+    writeFileSync(
+      pgpassPath(),
+      [
+        `postgres:5432:*:backup_role:OLD`,
+        `*:*:*:backup_role:OLD2`,
+        `postgres:*:replication:backup_role:OLD3`,
+        "unrelated:5432:otherdb:otheruser:otherpw",
+        "POSTGRES:5432:cps_novel:backup_role:x",
+        "",
+      ].join("\n"),
+    );
+    chmodSync(pgpassPath(), 0o600);
+
+    const result = runReconcile("x8_reconcile_backup_pgpass");
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stderr).toContain("X8_BACKUP_PGPASS_WARN=removed_shadowing_rules count=3");
+
+    const lines = readFileSync(pgpassPath(), "utf8").split("\n").filter(Boolean);
+    // Canonical rows at line 1 and 2, in that order.
+    expect(lines[0]).toBe(`postgres:5432:cps_novel:backup_role:${TEST_PASSWORD}`);
+    expect(lines[1]).toBe(`postgres:5432:replication:backup_role:${TEST_PASSWORD}`);
+    // The unrelated row and the case-mismatched near-miss row both survive
+    // -- neither can shadow the canonical rows under libpq's exact-text
+    // matching, so this function has no basis to remove either.
+    expect(lines).toContain("unrelated:5432:otherdb:otheruser:otherpw");
+    expect(lines).toContain("POSTGRES:5432:cps_novel:backup_role:x");
+    // None of the three wildcard-shaped stale rows survive.
+    expect(lines).not.toContain("postgres:5432:*:backup_role:OLD");
+    expect(lines).not.toContain("*:*:*:backup_role:OLD2");
+    expect(lines).not.toContain("postgres:*:replication:backup_role:OLD3");
+    expect(lines).toHaveLength(4);
+  });
+
+  // A no-op rerun of scenarios B/D/E never removes anything but the two
+  // exact canonical prefixes -- that is routine upgrade/rotation churn, not
+  // a stray shadowing rule, and must never trigger the WARN line.
+  it("does not warn when only the two exact canonical prefixes are rewritten", () => {
+    writeFileSync(pgpassPath(), `postgres:5432:cps_novel:backup_role:${TEST_PASSWORD}\n`);
+    chmodSync(pgpassPath(), 0o600);
+    const result = runReconcile("x8_reconcile_backup_pgpass");
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stderr).not.toContain("X8_BACKUP_PGPASS_WARN");
+  });
+});
+
+describe("x8_reconcile_backup_pgpass: P2-1 unreadable existing file is refused, not overwritten", () => {
+  it("returns 65 and leaves the file's bytes untouched when the file exists but this process cannot read it", () => {
+    writeFileSync(pgpassPath(), "otherhost:5432:otherdb:otheruser:otherpw\n");
+    chmodSync(pgpassPath(), 0o000);
+    try {
+      const result = runReconcile("x8_reconcile_backup_pgpass");
+      expect(result.status).toBe(65);
+      expect(result.stderr).toContain("not readable");
+    } finally {
+      chmodSync(pgpassPath(), 0o600);
+    }
+    // Bytes are exactly what was written before the refused call -- nothing
+    // was overwritten, nothing was appended.
+    expect(readFileSync(pgpassPath(), "utf8")).toBe("otherhost:5432:otherdb:otheruser:otherpw\n");
+  });
+});
+
+describe("x8_reconcile_backup_pgpass: P2-4 no-trailing-newline fallback", () => {
+  // The `while IFS= read -r line || [[ -n "$line" ]]; do ... done <file`
+  // idiom's `|| [[ -n "$line" ]]` clause is what keeps a file's last line
+  // alive when the file has no trailing newline (`read` still populates
+  // `$line` and returns non-zero on EOF with no delimiter). Without that
+  // clause the loop body would simply never run for that final line, and
+  // an unrelated last line with no trailing newline would silently vanish
+  // from the reconciled file instead of being preserved.
+  it("preserves an unrelated line that has no trailing newline", () => {
+    writeFileSync(pgpassPath(), "otherhost:5432:otherdb:otheruser:otherpw"); // no trailing \n
+    chmodSync(pgpassPath(), 0o600);
+    const result = runReconcile("x8_reconcile_backup_pgpass");
+    expect(result.status, result.stderr).toBe(0);
+    const lines = readFileSync(pgpassPath(), "utf8").split("\n").filter(Boolean);
+    expect(lines).toEqual([
+      `postgres:5432:cps_novel:backup_role:${TEST_PASSWORD}`,
+      `postgres:5432:replication:backup_role:${TEST_PASSWORD}`,
+      "otherhost:5432:otherdb:otheruser:otherpw",
+    ]);
   });
 });
