@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { PUBLISH_GATE_REASONS, type PublishGateReason } from "@/contracts/publish-gate";
+import {
+  PUBLISH_GATE_REASONS,
+  PUBLISH_GATE_WARNING_REASONS,
+  type PublishGateReason,
+} from "@/contracts/publish-gate";
 import { evaluatePublishGate, type PublishGateFacts } from "@/server/publish-gate/evaluator";
 
 /**
@@ -28,7 +32,7 @@ function facts(overrides: Partial<PublishGateFacts> = {}): PublishGateFacts {
 describe("evaluatePublishGate", () => {
   it("is publishable when every condition passes", () => {
     const result = evaluatePublishGate(facts());
-    expect(result).toEqual({ publishable: true, reasons: [], requiredMetadataMissing: null });
+    expect(result).toEqual({ publishable: true, reasons: [], warnings: [], requiredMetadataMissing: null });
   });
 
   /**
@@ -93,20 +97,62 @@ describe("evaluatePublishGate", () => {
     });
   });
 
-  describe("preview chapter checks", () => {
-    it("flags preview_chapter_missing when no preview chapter exists", () => {
+  /**
+   * Owner decision 2026-09-18 — publish/preview decoupling. 试读 is an
+   * enhancement of the article page, not a precondition for publishing it;
+   * a book with no 试读 publishes now and gets its chapters backfilled
+   * asynchronously (`src/server/preview-recovery/backfill.ts`).
+   *
+   * These tests deliberately assert *both* halves of that decision on every
+   * case: the fact is still computed and still reported (`warnings`), and it
+   * no longer blocks (`reasons` clean, `publishable` true). Asserting only
+   * the second half would let someone "fix" a future failure by deleting the
+   * preview check outright, which would silently blind the backfill path to
+   * the books it exists to find.
+   */
+  describe("preview chapter checks — warning-only since 2026-09-18", () => {
+    it("Case 1: no preview chapter at all → warning, still publishable", () => {
       const result = evaluatePublishGate(facts({ preview: { hasPreviewChapter: false, hasPreviewBody: false } }));
-      expect(result.reasons).toEqual(["preview_chapter_missing"]);
+      expect(result.warnings).toEqual(["preview_chapter_missing"]);
+      expect(result.reasons).toEqual([]);
+      expect(result.publishable).toBe(true);
     });
 
-    it("flags preview_body_missing (not preview_chapter_missing) when a chapter exists but has no body", () => {
+    it("Case 2: a chapter exists but its body is empty → preview_body_missing warning, still publishable", () => {
       const result = evaluatePublishGate(facts({ preview: { hasPreviewChapter: true, hasPreviewBody: false } }));
-      expect(result.reasons).toEqual(["preview_body_missing"]);
+      expect(result.warnings).toEqual(["preview_body_missing"]);
+      expect(result.reasons).toEqual([]);
+      expect(result.publishable).toBe(true);
     });
 
-    it("never emits both preview reasons for the same evaluation", () => {
+    it("never emits both preview codes for the same evaluation", () => {
       const missingChapter = evaluatePublishGate(facts({ preview: { hasPreviewChapter: false, hasPreviewBody: true } }));
-      expect(missingChapter.reasons).toEqual(["preview_chapter_missing"]);
+      expect(missingChapter.warnings).toEqual(["preview_chapter_missing"]);
+    });
+
+    it("emits no warning at all when the preview is complete", () => {
+      expect(evaluatePublishGate(facts()).warnings).toEqual([]);
+    });
+
+    it("no preview code can ever reach `reasons`, for any combination of the two preview facts", () => {
+      for (const hasPreviewChapter of [true, false]) {
+        for (const hasPreviewBody of [true, false]) {
+          const result = evaluatePublishGate(facts({ preview: { hasPreviewChapter, hasPreviewBody } }));
+          for (const warning of PUBLISH_GATE_WARNING_REASONS) {
+            expect(result.reasons).not.toContain(warning);
+          }
+          expect(result.publishable).toBe(true);
+        }
+      }
+    });
+
+    it("a missing preview does not mask a real blocker — promo is still evaluated alongside it", () => {
+      const result = evaluatePublishGate(
+        facts({ preview: { hasPreviewChapter: false, hasPreviewBody: false }, promoLink: null }),
+      );
+      expect(result.reasons).toEqual(["promo_link_missing"]);
+      expect(result.warnings).toEqual(["preview_chapter_missing"]);
+      expect(result.publishable).toBe(false);
     });
   });
 
@@ -149,7 +195,7 @@ describe("evaluatePublishGate", () => {
     });
   });
 
-  it("accumulates multiple simultaneous reasons in PUBLISH_GATE_REASONS registry order", () => {
+  it("accumulates multiple simultaneous blockers in PUBLISH_GATE_REASONS registry order, with the preview finding kept out on the warnings side", () => {
     const result = evaluatePublishGate(
       facts({
         promoLink: null,
@@ -158,10 +204,11 @@ describe("evaluatePublishGate", () => {
       }),
     );
     const order = PUBLISH_GATE_REASONS;
-    const expected = ["required_metadata_missing", "preview_chapter_missing", "promo_link_missing"];
+    const expected = ["required_metadata_missing", "promo_link_missing"];
     expect(result.reasons).toEqual(expected);
     // Sanity: the expected reasons really do appear in registry order.
     expect([...expected].sort((a, b) => order.indexOf(a as never) - order.indexOf(b as never))).toEqual(expected);
+    expect(result.warnings).toEqual(["preview_chapter_missing"]);
     expect(result.publishable).toBe(false);
   });
 
@@ -210,7 +257,12 @@ describe("evaluatePublishGate", () => {
 
     it("is publishable with no Novel, no PromoLink, no preview chapters, and a non-takedown status — every skipped/inapplicable condition stays silent", () => {
       const result = evaluatePublishGate(blogFacts());
-      expect(result).toEqual({ publishable: true, reasons: [], requiredMetadataMissing: null });
+      // `warnings` is empty, not "preview_chapter_missing": the preview pair
+      // is a Novel-side concept this fork skips entirely (it is not
+      // evaluated-and-warned any more than it used to be
+      // evaluated-and-cleared), so a blog Article never carries a 试读 warning
+      // it could not act on.
+      expect(result).toEqual({ publishable: true, reasons: [], warnings: [], requiredMetadataMissing: null });
     });
 
     it("never emits a locale-shaped reason for a Novel-less Article, regardless of facts.article.locale", () => {

@@ -19,6 +19,7 @@ export {
   publishArticleAsAdmin,
   publishArticlesBatch,
   publishArticlesBatchAsAdmin,
+  publishBatchItemRequestId,
   publishDueScheduledArticles,
   restoreNovel,
   takedownNovel,

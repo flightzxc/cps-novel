@@ -92,6 +92,10 @@ describe("applyPublishTransition", () => {
       novelId: "novel-1",
       locale: "en",
       firstPublish: true,
+      // A fully-materialized preview: nothing to warn about (the seeded
+      // fixture has a chapter with a body). The warning-carrying counterpart
+      // is asserted in the decoupling suite.
+      warnings: [],
     });
     expect(db.articles.get("article-1")?.status).toBe("published");
     expect(db.articles.get("article-1")?.publishedAt).toEqual(now);
@@ -192,26 +196,53 @@ describe("applyPublishTransition", () => {
         actor: { type: "admin", adminId: "admin-1" },
       });
 
-      // `loadPublishGateFacts` issues the preview-chapter query *after* the
-      // primary Article read (in the `Promise.all` — see `facts.ts`), so it
-      // observes the hook's already-committed chapter withdrawal: the gate
-      // sees `preview_chapter_missing` and rejects on that basis, never
-      // reaching the write. This is READ COMMITTED behaving exactly as it
-      // should — each statement in the transaction sees the latest
-      // committed data as of that statement, not a single frozen snapshot —
-      // and it is a *second*, independent layer of protection on top of the
-      // write-side `conflict` check below: whichever part of
-      // `loadPublishGateFacts` happens to observe the interleaved commit is
-      // what catches it. `firstPublish` is never fired by mistake.
-      expect(result).toEqual({
-        outcome: "rejected",
-        gate: { publishable: false, reasons: ["preview_chapter_missing"], requiredMetadataMissing: null },
-      });
+      // Before the 2026-09-18 publish/preview decoupling this interleaving
+      // was caught on the *read* side: `loadPublishGateFacts` issues the
+      // preview-chapter query after the primary Article read (in the
+      // `Promise.all` — see `facts.ts`), so it observed the hook's
+      // already-committed chapter withdrawal and the gate rejected with
+      // `preview_chapter_missing`. That code is a warning now, so the read
+      // side no longer refuses — and the write-side conditional `updateMany`
+      // is what catches it instead: its precondition pins Article.status to
+      // the `draft` this transaction read, the row is `takedown` by then, so
+      // `count` is 0 and `PublishConflictSignal` rolls the whole thing back.
+      //
+      // That is the *primary* TOCTOU defense this test was always written to
+      // guard (the preview read was only ever an incidental second layer, as
+      // the original comment here said), and it is untouched by the
+      // decoupling. What changed is only which layer fires, i.e. the reported
+      // outcome: `conflict` ("refused, nothing written, safe to retry")
+      // instead of `rejected`.
+      expect(result).toEqual({ outcome: "conflict" });
       // The interleaved takedown must survive untouched — not silently
       // republished over content whose body no longer exists.
       expect(db.novels.get("novel-1")?.status).toBe("takedown");
       expect(db.articles.get("article-1")?.status).toBe("takedown");
       expect(db.chapters.get("chapter-1")?.body).toBeNull();
+      expect(db.audits).toHaveLength(0);
+      expect(dispatchFirstPublicPublication).not.toHaveBeenCalled();
+
+      // And the rights protection is genuinely intact, not merely deferred:
+      // the retry the `conflict` invites now reads the takedown for real and
+      // is refused on its own merits. Without this second call the test would
+      // pass even if `rights_blocked` had been broken along with the preview
+      // pair.
+      db.onFactsLoaded = null;
+      const retry = await applyPublishTransition(db.asPrismaClient(), {
+        articleId: "article-1",
+        requestId: "req-2",
+        actor: { type: "admin", adminId: "admin-1" },
+      });
+      expect(retry).toEqual({
+        outcome: "rejected",
+        gate: {
+          publishable: false,
+          reasons: ["rights_blocked"],
+          warnings: ["preview_chapter_missing"],
+          requiredMetadataMissing: null,
+        },
+      });
+      expect(db.articles.get("article-1")?.status).toBe("takedown");
       expect(db.audits).toHaveLength(0);
       expect(dispatchFirstPublicPublication).not.toHaveBeenCalled();
     });

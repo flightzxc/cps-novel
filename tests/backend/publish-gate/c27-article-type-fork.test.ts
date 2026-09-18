@@ -100,6 +100,10 @@ describe("C-27: applyPublishTransition forks by article type end-to-end", () => 
       novelId: null,
       locale: "en",
       firstPublish: true,
+      // Empty, not `["preview_chapter_missing"]`: the preview pair is a
+      // Novel-side concept this fork skips entirely, so the 2026-09-18
+      // decoupling gives a blog Article no warning it could not act on.
+      warnings: [],
     });
     expect(db.articles.get("blog-1")?.status).toBe("published");
     expect(db.articles.get("blog-1")?.publishedAt).toEqual(now);

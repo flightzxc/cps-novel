@@ -13,12 +13,14 @@ import { formatDateTime } from "@/features/admin-ui/content-view";
 import { buildArticlePath, buildBlogPath } from "@/lib/slug/article-path";
 
 import { MAX_BATCH_PUBLISH_SELECTION } from "../../novels/_lib/batch-publish-constants";
-import { describePublishGateReason } from "../../novels/_lib/publish-gate-copy";
+import { describePublishGateReason, summarizePublishGateWarnings } from "../../novels/_lib/publish-gate-copy";
 import { describePublishLifecycleError, isPublishLifecycleErrorCode } from "../../novels/_lib/publish-outcome-copy";
 import { validateReason } from "../../novels/_lib/reason-guard";
 import {
   publishArticleAction,
   publishArticlesBatchAction,
+  publishArticlesByFilterChunkAction,
+  type ArticlePublishFilterInput,
   regenerateArticleAction,
   regenerateArticlesBatchAction,
   withdrawArticleAction,
@@ -162,17 +164,129 @@ function ArticleUrlCell({ row, publicOrigin }: { row: ArticleListRow; publicOrig
   );
 }
 
+/**
+ * Live progress, then the final tally, for a cross-page publish.
+ *
+ * While running it only ever states what has already been decided
+ * ("已处理 200 / 811"). It never pre-counts the rows it has not reached, and
+ * on an abort it says so instead of rendering a number that looks like a
+ * finished run — same rule the single-batch path follows.
+ */
+function CrossPagePublishPanel({ progress }: { progress: CrossPageProgress }) {
+  const remaining = Math.max(progress.target - progress.processed, 0);
+  if (!progress.done) {
+    return (
+      <div
+        className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-900"
+        data-testid="articles-cross-page-progress"
+      >
+        <p className="font-medium">正在批量发布…</p>
+        <p className="mt-1 text-xs">
+          已处理 {progress.processed} / {progress.target} · 成功 {progress.published} · 拒绝 {progress.rejected}
+          {progress.conflict > 0 ? ` · 冲突 ${progress.conflict}` : ""}
+          {progress.notFound > 0 ? ` · 不存在 ${progress.notFound}` : ""}
+        </p>
+      </div>
+    );
+  }
+  if (progress.aborted) {
+    return (
+      <div
+        className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900"
+        data-testid="articles-cross-page-aborted"
+      >
+        <p className="font-medium">批量发布已中断</p>
+        <p className="mt-1 text-xs">
+          成功 {progress.published} · 拒绝 {progress.rejected} · 冲突 {progress.conflict} · 不存在{" "}
+          {progress.notFound} · 发生异常 1（{progress.aborted.errorKind}） · 尚未处理 {remaining}
+        </p>
+        <p className="mt-1 text-xs">
+          已经成功发布的内容不会回滚。请刷新页面确认实际状态后，可继续处理剩余内容。
+        </p>
+      </div>
+    );
+  }
+  return (
+    <div
+      className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900"
+      data-testid="articles-cross-page-done"
+    >
+      <p className="font-medium">批量发布完成</p>
+      <p className="mt-1 text-xs">
+        目标 {progress.target} · 成功 {progress.published} · 拒绝 {progress.rejected} · 冲突{" "}
+        {progress.conflict} · 不存在 {progress.notFound}
+        {remaining > 0 ? ` · 未处理 ${remaining}` : ""}
+      </p>
+    </div>
+  );
+}
+
+/**
+ * Running tally of a cross-page publish. Every field is a fact that already
+ * happened — there is no projected total in here, because a run that is still
+ * going has not decided anything about the rows it has not reached.
+ */
+type CrossPageProgress = {
+  readonly target: number;
+  readonly processed: number;
+  readonly published: number;
+  readonly rejected: number;
+  readonly conflict: number;
+  readonly notFound: number;
+  readonly done: boolean;
+  readonly aborted: { readonly articleId: string; readonly errorKind: string } | null;
+};
+
+const EMPTY_PROGRESS = (target: number): CrossPageProgress => ({
+  target,
+  processed: 0,
+  published: 0,
+  rejected: 0,
+  conflict: 0,
+  notFound: 0,
+  done: false,
+  aborted: null,
+});
+
 export function ArticleList({
   rows,
   canWrite,
   publicOrigin,
+  total,
+  filters,
+  filterSignature,
 }: {
   rows: readonly ArticleListRow[];
   canWrite: boolean;
   publicOrigin: string | null;
+  /**
+   * Total rows matching the current filter, straight from the same
+   * `listArticles` call that produced `rows`. Optional so an existing caller
+   * (and every test that predates this) keeps working — without it the
+   * cross-page affordance simply never appears, which is the correct
+   * degradation for a caller that cannot say how many rows there are.
+   */
+  total?: number;
+  /** Echo of the filters `listArticles` was called with, forwarded verbatim to the chunk action. */
+  filters?: ArticlePublishFilterInput;
+  /**
+   * Stable serialization of `filters`. Any change to it drops an in-flight
+   * "all matching" selection — see the effect below on why this is a
+   * correctness requirement, not a nicety.
+   */
+  filterSignature?: string;
 }) {
   const router = useRouter();
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
+  /**
+   * Gmail-style two-step selection. `explicit` is the page-local checkbox set
+   * (`selected`); `all_matching` means "every row the current filter matches",
+   * carried as the *filter*, never as a materialized id list — the ids are
+   * resolved server-side, one batch at a time, at publish time.
+   */
+  const [allMatching, setAllMatching] = useState(false);
+  const [crossPageProgress, setCrossPageProgress] = useState<CrossPageProgress | null>(null);
+  const [batchBusy, setBatchBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [withdrawTarget, setWithdrawTarget] = useState<{ articleId: string; novelId: string; title: string } | null>(null);
   const [withdrawReason, setWithdrawReason] = useState("");
@@ -194,7 +308,45 @@ export function ArticleList({
    * any row anywhere is.
    */
   const someSelected = rows.some((r) => selected.has(r.id)) && !allSelected;
+  /**
+   * 🔴 Dropping the cross-page selection when the filter changes is a
+   * correctness requirement, not tidiness. `all_matching` stores the *filter*,
+   * and the publish action re-resolves ids from whatever filter it is handed —
+   * so a stale `all_matching` surviving a filter change would mean the screen
+   * shows one result set while the button publishes a different one. Keyed on
+   * the page's own serialization of the filters it queried with, so it fires
+   * for every axis (search / status / locale / novel / template / category /
+   * type / content mode / SEO visibility) without this component having to
+   * enumerate them.
+   */
+  const [seenFilterSignature, setSeenFilterSignature] = useState(filterSignature);
+  if (seenFilterSignature !== filterSignature) {
+    // React's documented "adjusting state when a prop changes" — a setState
+    // during render of this same component, which React re-runs immediately
+    // without committing the stale tree. Deliberately not a `useEffect`:
+    // an effect would let one paint happen with the new rows still carrying
+    // the old `all_matching`, i.e. the exact "screen shows A, button publishes
+    // B" window this reset exists to close (and `react-hooks/set-state-in-effect`
+    // rejects that shape outright).
+    setSeenFilterSignature(filterSignature);
+    setAllMatching(false);
+    setCrossPageProgress(null);
+    // The explicit page selection goes too. It was scoped to a result set that
+    // no longer exists — carrying those ids into a different filter's view
+    // would leave the operator acting on rows they can no longer see, which is
+    // the same "screen says A, button does B" problem in a smaller costume.
+    setSelected(new Set());
+  }
+  const matchingTotal = total ?? rows.length;
+  /** The cross-page affordance only means anything when the filter reaches past this page. */
+  const canOfferAllMatching = allSelected && matchingTotal > rows.length && filters !== undefined;
+  const selectionCount = allMatching ? matchingTotal : selected.size;
+  function clearSelection() {
+    setAllMatching(false);
+    setSelected(new Set());
+  }
   function toggleAll() {
+    setAllMatching(false);
     setSelected((current) => {
       const next = new Set(current);
       const allVisible = rows.length > 0 && rows.every((r) => next.has(r.id));
@@ -237,7 +389,11 @@ export function ArticleList({
     }
     const { data } = result;
     if (data.outcome === "published") {
-      setMessage(data.firstPublish ? "已发布（首次公开）" : "已发布");
+      // 2026-09-18 解耦：发布成功仍可能带未阻断项（今天就是缺试读）。不说出来
+      // 的话，操作者会以为这本书的页面已经是完整形态。
+      const warning = summarizePublishGateWarnings(data.warnings);
+      const published = data.firstPublish ? "已发布（首次公开）" : "已发布";
+      setMessage(warning ? `${published}；${warning}，不影响本次发布` : published);
       router.refresh();
       return;
     }
@@ -359,10 +515,80 @@ export function ArticleList({
    * `publishNovelsBatchAction`, since this list's checkboxes already are
    * article ids.
    */
+  /**
+   * Cross-page publish: walk the filter server-side, one ≤200 batch at a time.
+   *
+   * The 200 cap is respected, not widened — "publish all 811" is five ordinary
+   * batches, each with its own `requestId` and therefore its own per-article
+   * operation ids (the `a059537` fix). Nothing here touches `updateMany`; every
+   * article still goes through `applyPublishTransition`'s gate, audit and
+   * replay check.
+   *
+   * The loop lives here rather than in one long server call so the operator
+   * sees movement instead of a spinner, and so an abort stops immediately
+   * (§九) instead of after another 600 rows.
+   */
+  async function batchPublishAllMatching() {
+    if (!filters) return;
+    setBatchBusy(true);
+    setMessage(null);
+    let progress = EMPTY_PROGRESS(matchingTotal);
+    setCrossPageProgress(progress);
+    let cursor: string | undefined;
+    try {
+      for (;;) {
+        const response = await publishArticlesByFilterChunkAction({
+          requestId: crypto.randomUUID(),
+          filters,
+          ...(cursor === undefined ? {} : { afterId: cursor }),
+        });
+        if (!response.ok) {
+          // The chunk never entered its publish loop (authorization, input,
+          // cap) — nothing in THIS chunk was written. Earlier chunks stand.
+          setMessage(`批量发布已中断：${describeArticleActionErrorCode(response.code)}。此前已成功发布的内容不会回滚，请刷新页面确认实际状态。`);
+          progress = { ...progress, done: true };
+          setCrossPageProgress(progress);
+          return;
+        }
+        for (const { result: outcome } of response.data.results) {
+          if (outcome.outcome === "published") progress = { ...progress, published: progress.published + 1 };
+          else if (outcome.outcome === "rejected") progress = { ...progress, rejected: progress.rejected + 1 };
+          else if (outcome.outcome === "conflict") progress = { ...progress, conflict: progress.conflict + 1 };
+          else if (outcome.outcome === "not_found") progress = { ...progress, notFound: progress.notFound + 1 };
+        }
+        progress = { ...progress, processed: progress.processed + response.data.results.length };
+        setCrossPageProgress(progress);
+
+        if (response.data.aborted) {
+          // §九: stop, do not keep firing chunks into an unexplained failure,
+          // and do not retry it automatically.
+          progress = { ...progress, done: true, aborted: response.data.aborted };
+          setCrossPageProgress(progress);
+          return;
+        }
+        if (response.data.nextCursor === null) {
+          progress = { ...progress, done: true };
+          setCrossPageProgress(progress);
+          return;
+        }
+        cursor = response.data.nextCursor;
+      }
+    } finally {
+      setBatchBusy(false);
+      clearSelection();
+      router.refresh();
+    }
+  }
+
   async function batchPublish() {
+    const selectedCount = selected.size;
     const result = await publishArticlesBatchAction({ requestId: crypto.randomUUID(), articleIds: [...selected] });
     if (!result.ok) {
-      setMessage(`批量发布失败：${describeArticleActionErrorCode(result.code)}`);
+      // 这一支意味着**整次调用**在进入逐篇循环之前就失败了（授权、选择校验、
+      // 批量上限），因此没有任何文章被改动 —— 说得出这句话才有价值，
+      // 光甩一个 `article_batch_publish_failed` 裸码对操作者毫无信息量。
+      // 逐篇循环中途出错不会走到这里，它带着已完成的部分从下面的 aborted 分支返回。
+      setMessage(`批量发布未执行：${describeArticleActionErrorCode(result.code)}。本次没有文章被改动，可修正后重试。`);
       return;
     }
     let published = 0;
@@ -374,6 +600,24 @@ export function ArticleList({
       else if (outcome.outcome === "rejected") rejected += 1;
       else if (outcome.outcome === "conflict") conflict += 1;
       else if (outcome.outcome === "not_found") notFound += 1;
+    }
+    const processed = result.data.results.length;
+    if (result.data.aborted) {
+      // 已处理的部分是真的（逐篇独立事务，已提交的不会回滚）；未处理的部分
+      // 同样是真的（它们压根没被尝试）。两边都据实说，不合成一个看起来完整的统计。
+      //
+      // 用服务端给出的确切清单，而不是 `已选 - 已处理` 这种减法：出错的那一篇
+      // 既不在 `results` 里、也不在"其余未处理"里（它被尝试过、事务回滚了），
+      // 减法会把它算进"其余"，让「第 N 篇出错，其余 M 篇未处理」这句话自相矛盾。
+      const notProcessed = result.data.aborted.notProcessedArticleIds.length;
+      setMessage(
+        `批量发布中断：已处理 ${processed}/${selectedCount} 篇（成功 ${published}，拒绝 ${rejected}，冲突 ${conflict}，不存在 ${notFound}）；`
+        + `第 ${processed + 1} 篇出错（${result.data.aborted.errorKind}）后停止，其余 ${notProcessed} 篇未处理、保持原状。`
+        + `已发布的不会回滚，请刷新页面确认实际状态后再决定是否重试。`,
+      );
+      setSelected(new Set());
+      router.refresh();
+      return;
     }
     setMessage(`批量发布完成：成功 ${published}，拒绝 ${rejected}，冲突 ${conflict}，不存在 ${notFound}`);
     setSelected(new Set());
@@ -408,6 +652,45 @@ export function ArticleList({
 
   return (
     <div className="space-y-4">
+      {/* Gmail-style second step. Only offered once the whole page is picked
+          and the filter demonstrably reaches past it — otherwise "全部 N 条"
+          and "当前页" name the same rows and the extra affordance is noise. */}
+      {canOfferAllMatching && !allMatching && (
+        <p
+          className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-900"
+          data-testid="articles-select-all-matching-offer"
+        >
+          已选择当前页 {rows.length} 条。
+          <button
+            type="button"
+            className="ml-1 font-medium underline underline-offset-2"
+            onClick={() => setAllMatching(true)}
+            data-testid="articles-select-all-matching"
+          >
+            选择符合当前筛选条件的全部 {matchingTotal} 条
+          </button>
+        </p>
+      )}
+      {allMatching && (
+        <p
+          className="flex flex-wrap items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-900"
+          data-testid="articles-all-matching-banner"
+        >
+          <span>已选择符合当前筛选条件的全部 {matchingTotal} 条</span>
+          <button
+            type="button"
+            className="font-medium underline underline-offset-2"
+            onClick={clearSelection}
+            disabled={batchBusy}
+            data-testid="articles-clear-all-matching"
+          >
+            取消全选
+          </button>
+        </p>
+      )}
+      {crossPageProgress && (
+        <CrossPagePublishPanel progress={crossPageProgress} />
+      )}
       <div className="flex flex-wrap items-center justify-between gap-3">
         {/*
           Fix 5 (Opus review of C-21/22/23): this single count used to render
@@ -419,21 +702,33 @@ export function ArticleList({
           they are about to click. Each cap now sits next to its own button
           instead.
         */}
-        <p className="text-sm text-gray-600">已选择 {selected.size}</p>
+        <p className="text-sm text-gray-600" data-testid="articles-selection-count">
+          {allMatching ? `已选择符合当前筛选条件的全部 ${matchingTotal} 条` : `已选择 ${selected.size}`}
+        </p>
         <div className="flex flex-wrap items-center gap-4">
           <div className="flex items-center gap-2">
             <button
-              disabled={!canWrite || selected.size === 0 || overPublishCap}
+              disabled={!canWrite || batchBusy || selectionCount === 0 || (!allMatching && overPublishCap)}
               className={buttonClassName("primary")}
-              onClick={() => void batchPublish()}
+              onClick={() => void (allMatching ? batchPublishAllMatching() : batchPublish())}
               data-testid="articles-batch-publish"
             >
-              批量发布
+              {batchBusy ? "正在批量发布…" : "批量发布"}
             </button>
-            <span className="text-xs text-gray-500">/ {MAX_BATCH_PUBLISH_SELECTION}</span>
-            {overPublishCap && (
+            {/* The per-call cap still applies to a hand-picked selection. In
+                cross-page mode it is not a ceiling on the operator's choice —
+                the run is split into batches of this size server-side — so
+                showing "/200" there would read as a limit that is not being
+                enforced on what they picked. */}
+            {!allMatching && <span className="text-xs text-gray-500">/ {MAX_BATCH_PUBLISH_SELECTION}</span>}
+            {!allMatching && overPublishCap && (
               <span className="text-xs text-red-600">
                 超过批量发布上限（{MAX_BATCH_PUBLISH_SELECTION} 篇），请减少选择后再提交
+              </span>
+            )}
+            {allMatching && (
+              <span className="text-xs text-gray-500">
+                将按每批 {MAX_BATCH_PUBLISH_SELECTION} 条分批执行
               </span>
             )}
           </div>

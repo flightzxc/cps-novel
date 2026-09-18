@@ -5,11 +5,14 @@ import { revalidatePath } from "next/cache";
 
 import { requireAdminActionAccess, requireFreshAdminServiceMutation } from "@/server/auth/guards";
 import {
+  ARTICLE_ID_RESOLVE_MAX_LIMIT,
   ArticleConflictError,
+  listArticleIdsForFilter,
   regenerateArticle,
   regenerateArticlesBatch,
   updateArticleContent,
   type ArticleEditInput,
+  type ArticleListInput,
 } from "@/server/articles";
 import {
   ArticleGenerateSelectionError,
@@ -85,6 +88,7 @@ import {
 // for the full mechanism and the build evidence.
 
 import { canonicalOrigin, guardDependencies, prisma, readSessionToken } from "../../api/admin/_lib/deps";
+import { MAX_BATCH_PUBLISH_SELECTION } from "../novels/_lib/batch-publish-constants";
 
 /**
  * C-21 (`分析_文章管理Parity缺口_2026-09-08.md` §六): thin Server Action
@@ -568,6 +572,84 @@ export async function publishArticlesBatchAction(input: { requestId: string; art
     revalidatePath("/articles");
     return { ok: true as const, data };
   } catch (error) { return { ok: false as const, code: writeErrorCode(error, "article_batch_publish_failed") }; }
+}
+
+/**
+ * Filters a cross-page "select all matching" publish is scoped to. Exactly
+ * the axes `/articles` itself filters on — the client echoes back what is in
+ * the URL and this action feeds it to the *same* normalizer and the *same*
+ * WHERE builder `listArticles` uses, so "what I am looking at" and "what I am
+ * about to publish" cannot diverge.
+ */
+export type ArticlePublishFilterInput = Pick<
+  ArticleListInput,
+  "locale" | "status" | "novelId" | "templateId" | "search" | "canonicalTagId"
+  | "seoVisibility" | "articleType" | "contentMode"
+>;
+
+export type PublishArticlesByFilterChunkResult = PublishArticlesBatchResult & {
+  /** Ids this chunk actually resolved and submitted, in the order they were published. */
+  readonly resolvedCount: number;
+  /**
+   * Keyset cursor for the next chunk, or `null` when this was the last one.
+   * `null` with `aborted` set means "no more *after this chunk*", not "the
+   * run finished cleanly" — the caller must stop on `aborted` regardless.
+   */
+  readonly nextCursor: string | null;
+};
+
+/**
+ * One chunk of a cross-page batch publish (2026-09-18).
+ *
+ * The client never holds or sends the id list: it sends the filter and a
+ * cursor, and this action resolves at most `MAX_BATCH_PUBLISH_SELECTION` ids
+ * server-side before handing them to the ordinary
+ * `publishArticlesBatchAsAdmin`. So "publish all 811" is N legitimate batches
+ * of ≤200, each with its own `requestId` and its own per-article operation
+ * ids — the 200 cap is respected, not widened, and nothing bypasses
+ * `applyPublishTransition`'s per-article gate, audit and replay handling.
+ *
+ * Deliberately NOT an `updateMany`: that is the CPS
+ * `changeArticlesStatusByFilter` defect this codebase exists to not
+ * reproduce, and it would skip the promo/rights/metadata/page-identity gate,
+ * the preview warning, the per-item audit row and the replay check in one go.
+ *
+ * Progress is the caller's loop, not a task record: each call returns this
+ * chunk's real outcomes plus the next cursor, so the UI can count as it goes
+ * without this round having to build a task centre.
+ */
+export async function publishArticlesByFilterChunkAction(input: {
+  requestId: string;
+  filters: ArticlePublishFilterInput;
+  afterId?: string;
+}) {
+  try {
+    const auth = await authorization("admin.article.publish_batch", input.requestId);
+    const { articleIds, nextCursor } = await listArticleIdsForFilter(prisma, {
+      ...input.filters,
+      ...(input.afterId === undefined ? {} : { afterId: input.afterId }),
+      // One chunk resolves exactly one batch's worth. The two caps are the
+      // same number on purpose; pinning to the smaller of the pair keeps them
+      // from drifting apart into a resolve that cannot be published.
+      limit: Math.min(MAX_BATCH_PUBLISH_SELECTION, ARTICLE_ID_RESOLVE_MAX_LIMIT),
+    });
+    if (articleIds.length === 0) {
+      return { ok: true as const, data: { results: [], resolvedCount: 0, nextCursor: null } };
+    }
+    const batch: PublishArticlesBatchResult = await publishArticlesBatchAsAdmin(
+      { authorization: auth, requestId: input.requestId, articleIds },
+      deps(),
+    );
+    revalidatePath("/articles");
+    const data: PublishArticlesByFilterChunkResult = {
+      ...batch,
+      resolvedCount: articleIds.length,
+      nextCursor,
+    };
+    return { ok: true as const, data };
+  } catch (error) {
+    return { ok: false as const, code: writeErrorCode(error, "article_batch_publish_failed") };
+  }
 }
 
 /**

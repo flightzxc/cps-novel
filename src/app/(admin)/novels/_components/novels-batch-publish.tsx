@@ -14,7 +14,7 @@ import {
   type PublishNovelsBatchOutcome,
 } from "../_actions";
 import { MAX_BATCH_PUBLISH_SELECTION } from "../_lib/batch-publish-constants";
-import { describePublishGateReason } from "../_lib/publish-gate-copy";
+import { describePublishGateReason, summarizePublishGateWarnings } from "../_lib/publish-gate-copy";
 import { describePublishLifecycleError } from "../_lib/publish-outcome-copy";
 import { NovelsTable } from "./novels-table";
 
@@ -93,7 +93,7 @@ export function NovelsBatchPublish({
   function retryConflicts() {
     if (!result) return;
     const retryIds = result.items
-      .filter((item) => item.kind !== "no_article" && item.result.outcome === "conflict")
+      .filter((item) => item.kind === "resolved" && item.result.outcome === "conflict")
       .map((item) => item.novelId);
     void runBatch(retryIds);
   }
@@ -170,10 +170,18 @@ function assertUnreachableOutcome(value: never): never {
 
 function describeBatchItemOutcome(item: PublishNovelsBatchItem): string {
   if (item.kind === "no_article") return "无关联文章，未提交发布";
+  // 2026-09-18：批次中断后未被处理到的项。它的状态没有被改动过，不能按
+  // 「文章不存在」之类的确定结论呈现。
+  if (item.kind === "not_processed") return "本次未处理（批量发布提前中断）";
   const { result } = item;
   switch (result.outcome) {
-    case "published":
-      return result.firstPublish ? "已发布（首次公开）" : "已发布";
+    case "published": {
+      // 同 `../../articles/_components/article-list.tsx`：解耦后「已发布」不再
+      // 等于「页面形态完整」，未阻断项必须跟在结果里一起回给操作者。
+      const published = result.firstPublish ? "已发布（首次公开）" : "已发布";
+      const warning = summarizePublishGateWarnings(result.warnings);
+      return warning ? `${published}（${warning}）` : published;
+    }
     case "not_found":
       return "对应文章不存在";
     case "conflict":
@@ -197,10 +205,23 @@ function BatchResultPanel({
   const { summary } = result;
   return (
     <div className="space-y-2 rounded-xl border border-gray-200 bg-white p-4 shadow-sm" data-testid="batch-publish-result">
+      {/* 中断提示放在统计之前：统计只覆盖真正跑完的部分，先说清楚这一点，
+          再给数字，避免把一次半途而废的运行读成完整结果。 */}
+      {result.aborted && (
+        <p
+          className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900"
+          data-testid="batch-publish-aborted"
+        >
+          批量发布中途出错后中断（{result.aborted.errorKind}）。下面的统计只覆盖已处理的部分，
+          <span className="font-medium">此前已发布的文章不会回滚</span>，
+          未处理 {summary.notProcessed} 项保持原状。请刷新页面确认实际状态后再重试。
+        </p>
+      )}
       <p className="text-sm font-medium text-gray-900">
-        批量发布结果：成功 {summary.published} · 拒绝 {summary.rejected} · 冲突 {summary.conflict} · 文章不存在{" "}
-        {summary.notFound}
+        {result.aborted ? "批量发布（已处理部分）：" : "批量发布结果："}成功 {summary.published} · 拒绝{" "}
+        {summary.rejected} · 冲突 {summary.conflict} · 文章不存在 {summary.notFound}
         {summary.noArticle > 0 ? ` · 无关联文章 ${summary.noArticle}` : ""}
+        {summary.notProcessed > 0 ? ` · 未处理 ${summary.notProcessed}` : ""}
       </p>
       {summary.conflict > 0 && (
         <button

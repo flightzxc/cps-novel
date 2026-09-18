@@ -30,6 +30,7 @@ const listActions = vi.hoisted(() => ({
   publishArticleAction: vi.fn(),
   withdrawArticleAction: vi.fn(),
   publishArticlesBatchAction: vi.fn(),
+  publishArticlesByFilterChunkAction: vi.fn(),
 }));
 
 const editorActions = vi.hoisted(() => ({
@@ -95,6 +96,7 @@ beforeEach(() => {
   listActions.publishArticleAction.mockReset();
   listActions.withdrawArticleAction.mockReset();
   listActions.publishArticlesBatchAction.mockReset();
+  listActions.publishArticlesByFilterChunkAction.mockReset();
   editorActions.updateArticleAction.mockReset();
   routerRefresh.mockReset();
 });
@@ -604,7 +606,7 @@ describe("ArticleList · 列表与批量", () => {
     it("发布成功（首次公开）：调用 publishArticleAction 并携带 articleId，刷新列表", async () => {
       listActions.publishArticleAction.mockResolvedValue({
         ok: true,
-        data: { outcome: "published", articleId: DRAFT_ROW.id, novelId: "novel-1", locale: "en", firstPublish: true },
+        data: { outcome: "published", articleId: DRAFT_ROW.id, novelId: "novel-1", locale: "en", firstPublish: true, warnings: [] },
       });
       render(<ArticleList rows={[DRAFT_ROW]} canWrite publicOrigin={PUBLIC_ORIGIN} />);
       fireEvent.click(screen.getByTestId(`article-publish-${DRAFT_ROW.id}`));
@@ -617,7 +619,7 @@ describe("ArticleList · 列表与批量", () => {
     it("已下线行点击发布同样调用 publishArticleAction 并携带该行 articleId（2026-09-12 Owner fix）", async () => {
       listActions.publishArticleAction.mockResolvedValue({
         ok: true,
-        data: { outcome: "published", articleId: UNPUBLISHED_ROW.id, novelId: "novel-1", locale: "en", firstPublish: false },
+        data: { outcome: "published", articleId: UNPUBLISHED_ROW.id, novelId: "novel-1", locale: "en", firstPublish: false, warnings: [] },
       });
       render(<ArticleList rows={[UNPUBLISHED_ROW]} canWrite publicOrigin={PUBLIC_ORIGIN} />);
       fireEvent.click(screen.getByTestId(`article-publish-${UNPUBLISHED_ROW.id}`));
@@ -858,7 +860,7 @@ describe("ArticleList · 列表与批量", () => {
         ok: true,
         data: {
           results: [
-            { articleId: DRAFT_ROW.id, result: { outcome: "published", articleId: DRAFT_ROW.id, novelId: "novel-1", locale: "en", firstPublish: false } },
+            { articleId: DRAFT_ROW.id, result: { outcome: "published", articleId: DRAFT_ROW.id, novelId: "novel-1", locale: "en", firstPublish: false, warnings: [] } },
           ],
         },
       });
@@ -870,6 +872,236 @@ describe("ArticleList · 列表与批量", () => {
       await vi.waitFor(() => expect(screen.getByText(/成功 1/)).toBeTruthy());
       expect(screen.getByText("已选择 0")).toBeTruthy();
       expect(routerRefresh).toHaveBeenCalled();
+    });
+
+    /**
+     * Case 6a (2026-09-18 batch audit-collision fix)，文章页入口的呈现侧。
+     *
+     * 中断后必须同时说清三件事：已处理的部分是真的、已发布的不回滚、其余未处理。
+     * 绝不能把一个跑了一半的批次渲染成一份完整统计。
+     */
+    it("批量发布中途中断 → 明说已处理/未处理并提示刷新，不伪装成完整统计", async () => {
+      listActions.publishArticlesBatchAction.mockResolvedValue({
+        ok: true,
+        data: {
+          results: [
+            { articleId: DRAFT_ROW.id, result: { outcome: "published", articleId: DRAFT_ROW.id, novelId: "novel-1", locale: "en", firstPublish: true, warnings: [] } },
+          ],
+          aborted: {
+            articleId: PUBLISHED_ROW.id,
+            errorKind: "PrismaClientKnownRequestError:P2002:request_id,action",
+            notProcessedArticleIds: [],
+          },
+        },
+      });
+      render(<ArticleList rows={[DRAFT_ROW, PUBLISHED_ROW]} canWrite publicOrigin={PUBLIC_ORIGIN} />);
+      fireEvent.click(screen.getByLabelText(`选择 ${DRAFT_ROW.title}`));
+      fireEvent.click(screen.getByLabelText(`选择 ${PUBLISHED_ROW.title}`));
+      fireEvent.click(screen.getByTestId("articles-batch-publish"));
+
+      await vi.waitFor(() => expect(screen.getByRole("status").textContent).toContain("批量发布中断"));
+      const text = screen.getByRole("status").textContent ?? "";
+      expect(text).toContain("已处理 1/2 篇");
+      expect(text).toContain("成功 1");
+      // 出错的那一篇既不在"已处理"里、也不在"其余未处理"里 —— 它被尝试过、
+      // 事务回滚了。所以这里是 0，不是 1。用 `已选 - 已处理` 做减法会算成 1，
+      // 让同一句话里的「第 2 篇出错」和「其余 1 篇未处理」互相矛盾。
+      expect(text).toContain("其余 0 篇未处理");
+      expect(text).toContain("已发布的不会回滚");
+      expect(text).toContain("刷新");
+      // 异常类别必须出现在文案里，否则操作者拿不到任何可上报的线索。
+      expect(text).toContain("PrismaClientKnownRequestError:P2002:request_id,action");
+      // 不得出现"完成"这种把中断读成收工的措辞。
+      expect(text).not.toContain("批量发布完成");
+      expect(routerRefresh).toHaveBeenCalled();
+    });
+
+    /**
+     * 整次调用在进入逐篇循环前就失败（授权/校验/上限）——此时确实一篇都没动，
+     * 说出来比甩一个裸码有用。这一支不会带 aborted。
+     */
+    it("整次调用未执行时明确告知没有文章被改动，不再只显示裸码", async () => {
+      listActions.publishArticlesBatchAction.mockResolvedValue({ ok: false, code: "article_batch_publish_failed" });
+      render(<ArticleList rows={[DRAFT_ROW]} canWrite publicOrigin={PUBLIC_ORIGIN} />);
+      fireEvent.click(screen.getByLabelText(`选择 ${DRAFT_ROW.title}`));
+      fireEvent.click(screen.getByTestId("articles-batch-publish"));
+      await vi.waitFor(() => expect(screen.getByRole("status").textContent).toContain("批量发布未执行"));
+      expect(screen.getByRole("status").textContent).toContain("本次没有文章被改动");
+    });
+
+    /**
+     * 跨页全选（2026-09-18）。Gmail 式两段选择：先选当前页，再选"符合当前筛选
+     * 条件的全部 N 条"。全部只以**筛选条件**存在于前端，ID 由服务端逐批解析。
+     */
+    describe("跨页全选", () => {
+      const FILTERS = { status: "draft" } as const;
+
+      function renderList(props: Partial<Parameters<typeof ArticleList>[0]> = {}) {
+        return render(
+          <ArticleList
+            rows={[DRAFT_ROW, PUBLISHED_ROW]}
+            canWrite
+            publicOrigin={PUBLIC_ORIGIN}
+            total={811}
+            filters={FILTERS}
+            filterSignature={JSON.stringify(FILTERS)}
+            {...props}
+          />,
+        );
+      }
+
+      function chunk(published: number, extra: Record<string, unknown> = {}) {
+        return {
+          ok: true,
+          data: {
+            results: Array.from({ length: published }, (_, index) => ({
+              articleId: `a${index}`,
+              result: { outcome: "published", articleId: `a${index}`, novelId: "n", locale: "en", firstPublish: true, warnings: [] },
+            })),
+            resolvedCount: published,
+            nextCursor: null,
+            ...extra,
+          },
+        };
+      }
+
+      it("Case 1：只勾当前页时不进入跨页模式，发布走原来的显式 id 路径", async () => {
+        listActions.publishArticlesBatchAction.mockResolvedValue({ ok: true, data: { results: [] } });
+        renderList();
+        fireEvent.click(screen.getByLabelText(`选择 ${DRAFT_ROW.title}`));
+        // 只选了一行 → 连"选择全部"的入口都不该出现
+        expect(screen.queryByTestId("articles-select-all-matching")).toBeNull();
+        fireEvent.click(screen.getByTestId("articles-batch-publish"));
+        await vi.waitFor(() => expect(listActions.publishArticlesBatchAction).toHaveBeenCalledTimes(1));
+        expect(listActions.publishArticlesBatchAction.mock.calls[0]![0].articleIds).toEqual([DRAFT_ROW.id]);
+        expect(listActions.publishArticlesByFilterChunkAction).not.toHaveBeenCalled();
+      });
+
+      it("Case 2：当前页全选且总数大于本页 → 出现「选择全部 811 条」，点击后进入跨页模式", () => {
+        renderList();
+        expect(screen.queryByTestId("articles-select-all-matching")).toBeNull();
+        fireEvent.click(screen.getByLabelText("选择当前页"));
+        expect(screen.getByTestId("articles-select-all-matching").textContent).toContain("全部 811 条");
+        fireEvent.click(screen.getByTestId("articles-select-all-matching"));
+        expect(screen.getByTestId("articles-all-matching-banner").textContent).toContain("全部 811 条");
+        expect(screen.getByTestId("articles-selection-count").textContent).toContain("全部 811 条");
+      });
+
+      it("总数不超过当前页时不提供跨页入口（此时「全部」与「本页」是同一批）", () => {
+        renderList({ total: 2 });
+        fireEvent.click(screen.getByLabelText("选择当前页"));
+        expect(screen.queryByTestId("articles-select-all-matching")).toBeNull();
+      });
+
+      it("Case 4：跨页发布把筛选交给服务端逐批解析，按 cursor 连续执行多个 batch，每批各自的 requestId", async () => {
+        listActions.publishArticlesByFilterChunkAction
+          .mockResolvedValueOnce(chunk(200, { nextCursor: "cursor-200" }))
+          .mockResolvedValueOnce(chunk(200, { nextCursor: "cursor-400" }))
+          .mockResolvedValueOnce(chunk(1, { nextCursor: null }));
+        renderList({ total: 401 });
+        fireEvent.click(screen.getByLabelText("选择当前页"));
+        fireEvent.click(screen.getByTestId("articles-select-all-matching"));
+        fireEvent.click(screen.getByTestId("articles-batch-publish"));
+
+        await vi.waitFor(() => expect(screen.queryByTestId("articles-cross-page-done")).toBeTruthy());
+        expect(listActions.publishArticlesByFilterChunkAction).toHaveBeenCalledTimes(3);
+        const calls = listActions.publishArticlesByFilterChunkAction.mock.calls.map((call) => call[0]);
+        // 筛选条件原样下传，前端从不发送 id 列表
+        for (const call of calls) {
+          expect(call.filters).toEqual(FILTERS);
+          expect(call).not.toHaveProperty("articleIds");
+        }
+        // cursor 串起来；首批不带 afterId
+        expect(calls[0]!.afterId).toBeUndefined();
+        expect(calls[1]!.afterId).toBe("cursor-200");
+        expect(calls[2]!.afterId).toBe("cursor-400");
+        // 每批一个独立 requestId（a059537 的逐篇编号依赖它）
+        const requestIds = calls.map((call) => call.requestId);
+        expect(new Set(requestIds).size).toBe(3);
+        expect(screen.getByTestId("articles-cross-page-done").textContent).toContain("成功 401");
+      });
+
+      it("执行期间按钮禁用并显示进度，不允许重复提交", async () => {
+        let release: (value: unknown) => void = () => {};
+        const gate = new Promise((resolve) => { release = resolve; });
+        listActions.publishArticlesByFilterChunkAction
+          .mockImplementationOnce(async () => { await gate; return chunk(200, { nextCursor: null }); });
+        renderList();
+        fireEvent.click(screen.getByLabelText("选择当前页"));
+        fireEvent.click(screen.getByTestId("articles-select-all-matching"));
+        fireEvent.click(screen.getByTestId("articles-batch-publish"));
+
+        await vi.waitFor(() => expect(screen.getByTestId("articles-cross-page-progress")).toBeTruthy());
+        const button = screen.getByTestId("articles-batch-publish") as HTMLButtonElement;
+        expect(button.disabled).toBe(true);
+        expect(button.textContent).toContain("正在批量发布");
+        fireEvent.click(button);
+        expect(listActions.publishArticlesByFilterChunkAction).toHaveBeenCalledTimes(1);
+        release(undefined);
+        await vi.waitFor(() => expect(screen.queryByTestId("articles-cross-page-done")).toBeTruthy());
+      });
+
+      it("Case 6：某一批 aborted → 停止后续批次，如实呈现已成功/未处理，不说「全部失败」", async () => {
+        listActions.publishArticlesByFilterChunkAction
+          .mockResolvedValueOnce(chunk(200, { nextCursor: "cursor-200" }))
+          .mockResolvedValueOnce({
+            ok: true,
+            data: {
+              results: [
+                { articleId: "x1", result: { outcome: "published", articleId: "x1", novelId: "n", locale: "en", firstPublish: true, warnings: [] } },
+              ],
+              resolvedCount: 200,
+              nextCursor: "cursor-400",
+              aborted: { articleId: "x2", errorKind: "PrismaClientKnownRequestError:P2002:request_id,action" },
+            },
+          });
+        renderList({ total: 811 });
+        fireEvent.click(screen.getByLabelText("选择当前页"));
+        fireEvent.click(screen.getByTestId("articles-select-all-matching"));
+        fireEvent.click(screen.getByTestId("articles-batch-publish"));
+
+        await vi.waitFor(() => expect(screen.queryByTestId("articles-cross-page-aborted")).toBeTruthy());
+        // 第三批不得再发
+        expect(listActions.publishArticlesByFilterChunkAction).toHaveBeenCalledTimes(2);
+        const text = screen.getByTestId("articles-cross-page-aborted").textContent ?? "";
+        expect(text).toContain("批量发布已中断");
+        expect(text).toContain("成功 201");
+        expect(text).toContain("发生异常 1");
+        expect(text).toContain("尚未处理 610");
+        expect(text).toContain("不会回滚");
+        expect(text).not.toContain("全部发布失败");
+      });
+
+      it("Case 7：筛选条件变化必须清空跨页全选，不能拿旧条件去发布", () => {
+        const { rerender } = renderList();
+        fireEvent.click(screen.getByLabelText("选择当前页"));
+        fireEvent.click(screen.getByTestId("articles-select-all-matching"));
+        expect(screen.getByTestId("articles-all-matching-banner")).toBeTruthy();
+
+        const nextFilters = { status: "published" } as const;
+        rerender(
+          <ArticleList
+            rows={[DRAFT_ROW, PUBLISHED_ROW]}
+            canWrite
+            publicOrigin={PUBLIC_ORIGIN}
+            total={53}
+            filters={nextFilters}
+            filterSignature={JSON.stringify(nextFilters)}
+          />,
+        );
+        expect(screen.queryByTestId("articles-all-matching-banner")).toBeNull();
+        expect(screen.getByTestId("articles-selection-count").textContent).toContain("已选择 0");
+      });
+
+      it("取消全选回到 0 条", () => {
+        renderList();
+        fireEvent.click(screen.getByLabelText("选择当前页"));
+        fireEvent.click(screen.getByTestId("articles-select-all-matching"));
+        fireEvent.click(screen.getByTestId("articles-clear-all-matching"));
+        expect(screen.queryByTestId("articles-all-matching-banner")).toBeNull();
+        expect(screen.getByTestId("articles-selection-count").textContent).toContain("已选择 0");
+        expect((screen.getByTestId("articles-batch-publish") as HTMLButtonElement).disabled).toBe(true);
+      });
     });
 
     it("canWrite=false 时批量发布按钮禁用", () => {

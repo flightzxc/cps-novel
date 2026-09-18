@@ -77,6 +77,7 @@ describe("C-12 listAdminTasks: bookCounts projection", () => {
       upstreamTotal: 1000,
       fetched: 190,
       failedBooks: 0,
+      failedPages: 0,
       pagesScanned: 10,
       pagesTotalExpected: 50,
       percent: 19,
@@ -84,10 +85,11 @@ describe("C-12 listAdminTasks: bookCounts projection", () => {
     // Page-denominated fields untouched — Phase C's frozen task shape.
     expect(result.items[0].totalCount).toBe(2000);
     expect(result.items[0].successCount).toBe(10);
+    expect(result.items[0].catalogPhase).toBe("paging");
     expect(call).toBe(2);
   });
 
-  it("terminal task: failedBooks = non-cascaded failed pages × pageSize, using the aggregate's already-excluded failed_pages count", async () => {
+  it("terminal task: keeps failedBooks unknown while reporting the exact failed-page count", async () => {
     const context = await readContext("/api/admin/tasks");
     const row = {
       family: "generic", task_id: TASK_ID, task_type: "catalog_scan", status: "completed_with_errors",
@@ -113,14 +115,16 @@ describe("C-12 listAdminTasks: bookCounts projection", () => {
     expect(result.items[0].bookCounts).toEqual({
       upstreamTotal: 89,
       fetched: 80,
-      failedBooks: 20, // 1 non-cascaded failed page × pageSize 20 — not 1995 cascaded pages.
+      failedBooks: null,
+      failedPages: 1,
       pagesScanned: 5, // 4 success + 1 failed, not 1995 cascaded pages ever counted "scanned".
       pagesTotalExpected: 5, // ceil(89 / 20), not the 2000-page safety fuse.
-      percent: 90, // round(80 / 89 * 100)
+      percent: 89.88,
     });
+    expect(result.items[0].catalogPhase).toBe("failed");
   });
 
-  it("percent is capped at 100 even if the aggregate ever over-reports fetched relative to upstreamTotal", async () => {
+  it("an in-progress task never displays 100 even if the aggregate over-reports fetched", async () => {
     const context = await readContext("/api/admin/tasks");
     const row = {
       family: "generic", task_id: TASK_ID, task_type: "catalog_scan", status: "processing",
@@ -139,7 +143,30 @@ describe("C-12 listAdminTasks: bookCounts projection", () => {
     } as unknown as PrismaClient;
 
     const result = await listAdminTasks(db, context, {}, {} as NodeJS.ProcessEnv);
-    expect(result.items[0].bookCounts?.percent).toBe(100);
+    expect(result.items[0].bookCounts?.percent).toBe(99.99);
+  });
+
+  it("floors 97300 / 97320 to 99.97% while processing", async () => {
+    const context = await readContext("/api/admin/tasks");
+    const row = {
+      family: "generic", task_id: TASK_ID, task_type: "catalog_scan", status: "processing",
+      total_count: 2000, success_count: 973, failed_count: 0, skipped_count: 0,
+      has_error: false, created_at: NOW,
+      result: { catalogObservedTotal: 97320 }, params: { pageSize: 100 },
+    };
+    let call = 0;
+    const db = {
+      $queryRaw: async () => {
+        call += 1;
+        return call === 1
+          ? [row]
+          : [{ task_id: TASK_ID, fetched: 97300n, pages_scanned: 973n, failed_pages: 0n }];
+      },
+    } as unknown as PrismaClient;
+
+    const result = await listAdminTasks(db, context, {}, {} as NodeJS.ProcessEnv);
+
+    expect(result.items[0].bookCounts?.percent).toBe(99.97);
   });
 
   it("missing result.catalogObservedTotal: bookCounts is entirely absent (not a partially-filled object), and no aggregate query is issued", async () => {
@@ -261,6 +288,7 @@ describe("C-12 getAdminTaskDetail: bookCounts projection", () => {
     const aggregateRow = { task_id: TASK_ID, fetched: 80n, pages_scanned: 5n, failed_pages: 1n };
     let call = 0;
     const db = {
+      genericTaskItem: { findUnique: async () => null },
       $queryRaw: async () => {
         call += 1;
         if (call === 1) return [row];
@@ -274,10 +302,11 @@ describe("C-12 getAdminTaskDetail: bookCounts projection", () => {
     expect(detail.bookCounts).toEqual({
       upstreamTotal: 89,
       fetched: 80,
-      failedBooks: 20,
+      failedBooks: null,
+      failedPages: 1,
       pagesScanned: 5,
       pagesTotalExpected: 5,
-      percent: 90,
+      percent: 89.88,
     });
     expect(call).toBe(3);
   });
@@ -294,6 +323,7 @@ describe("C-12 getAdminTaskDetail: bookCounts projection", () => {
     };
     let call = 0;
     const db = {
+      genericTaskItem: { findUnique: async () => null },
       $queryRaw: async () => {
         call += 1;
         return call === 1 ? [row] : [];

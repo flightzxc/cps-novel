@@ -215,6 +215,8 @@ describe("/tasks/[id] · 页面区块", () => {
     render(element);
 
     expect(screen.getByTestId("import-progress-task-id").textContent).toContain(TASK_ID);
+    expect(screen.queryByTestId("task-detail-static-summary")).toBeNull();
+    expect(screen.queryByTestId("task-detail-static-progress")).toBeNull();
   });
 
   it("失败/部分失败状态下渲染「重试失败项」按钮", async () => {
@@ -225,6 +227,22 @@ describe("/tasks/[id] · 页面区块", () => {
     render(element);
 
     expect(screen.getByTestId("retry-failed-open")).toBeTruthy();
+  });
+
+  it("finalize 单独失败时渲染正式重新收尾入口，不伪造失败页数", async () => {
+    getAdminTaskDetail.mockResolvedValue(detail({
+      taskType: "catalog_scan",
+      status: "completed_with_errors",
+      failedCount: 0,
+      catalogFinalize: { status: "failed", attemptCount: 3, generation: 1, retryable: true },
+    }));
+    listAdminTaskItems.mockResolvedValue(itemsResult([]));
+
+    const element = await renderPage();
+    render(element);
+
+    expect(screen.getByTestId("retry-catalog-finalize-open")).toBeTruthy();
+    expect(screen.queryByTestId("retry-failed-open")).toBeNull();
   });
 
   it("账号标签来自 channelAccountId → business_id", async () => {
@@ -422,6 +440,7 @@ describe("/tasks/[id] · C-12 bookCounts 单位切换", () => {
     upstreamTotal: 89,
     fetched: 80,
     failedBooks: 20,
+    failedPages: 1,
     pagesScanned: 5,
     pagesTotalExpected: 5,
     percent: 90,
@@ -475,7 +494,33 @@ describe("/tasks/[id] · C-12 bookCounts 单位切换", () => {
     const element = await renderPage();
     render(element);
 
-    expect(screen.getByText("100 / 89 本")).toBeTruthy(); // (fetched 80 + failedBooks 20) / upstreamTotal 89
+    expect(screen.getByText("80 / 89 本")).toBeTruthy();
+  });
+
+  it("终态失败书数未知时显示“未知”与失败页数，进度仍按真实成功书数计算", async () => {
+    getAdminTaskDetail.mockResolvedValue(
+      detail({
+        taskType: "catalog_scan",
+        status: "completed_with_errors",
+        bookCounts: {
+          upstreamTotal: 97320,
+          fetched: 97300,
+          failedBooks: null,
+          failedPages: 123,
+          pagesScanned: 1096,
+          pagesTotalExpected: 974,
+          percent: 99.97,
+        },
+      }),
+    );
+    listAdminTaskItems.mockResolvedValue(itemsResult([]));
+
+    render(await renderPage());
+
+    expect(screen.getByText("未知")).toBeTruthy();
+    expect(screen.getByText("123 页失败")).toBeTruthy();
+    expect(screen.getByText("97,300 / 97,320 本")).toBeTruthy();
+    expect(screen.queryByText("0 本")).toBeNull();
   });
 
   it("bookCounts 缺失时（尚未拿到首页），汇总卡片与进度条维持既有页口径展示", async () => {

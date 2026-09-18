@@ -312,7 +312,7 @@ describe("getAdminTaskProgress (C-12 book-counts projection)", () => {
     expect(result.failed).toBe(0);
     expect(result.skip).toBe(0);
     expect(result.processed).toBe(80);
-    expect(result.percent).toBe(90); // round(80 / 89 * 100)
+    expect(result.percent).toBe(89.88);
     expect(result.pageCounts).toEqual({
       total: 2000,
       success: 4,
@@ -341,7 +341,7 @@ describe("getAdminTaskProgress (C-12 book-counts projection)", () => {
     });
   });
 
-  it("failedBooks excludes cascaded pages via the aggregate's failed_pages, multiplied by pageSize", async () => {
+  it("does not invent failed books from failed-page counts", async () => {
     const context = await readContext();
     const db = fakeGenericDb({
       task: {
@@ -355,7 +355,8 @@ describe("getAdminTaskProgress (C-12 book-counts projection)", () => {
 
     const result = await getAdminTaskProgress(db, context, { taskId: GENERIC_TASK_ID });
 
-    expect(result.failed).toBe(20); // 1 non-cascaded failed page × pageSize 20, not 1997.
+    expect(result.failed).toBeNull();
+    expect(result.failedPages).toBe(1);
     expect(result.pageCounts?.failed).toBe(1997); // page-based figure preserved verbatim in pageCounts.
   });
 

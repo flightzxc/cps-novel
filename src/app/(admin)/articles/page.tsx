@@ -106,24 +106,38 @@ export default async function ArticlesPage({
   const publicOrigin = resolvePublicOrigin();
 
   let rows: readonly ArticleListItem[] = [];
+  /**
+   * The filter axes — page number excluded — that both the list query and the
+   * cross-page "select all matching" publish are scoped to. Built once and
+   * handed to both so the two can never be answering different questions;
+   * `page` is deliberately out, because "all matching" spans pages.
+   */
+  const listFilters = {
+    locale: params.locale || undefined,
+    status: params.status || undefined,
+    novelId: params.novelId || undefined,
+    templateId: params.templateId || undefined,
+    search: params.search || undefined,
+    canonicalTagId: params.canonicalTagId || undefined,
+    seoVisibility: params.seoVisibility || undefined,
+    articleType: params.articleType || undefined,
+    contentMode: params.contentMode || undefined,
+  };
+  /**
+   * Stable serialization of the filters this page actually queried with. The
+   * client drops any in-flight cross-page selection whenever it changes —
+   * `JSON.stringify` over a fixed key order is enough, and being derived from
+   * `listFilters` itself means a future filter axis is covered the moment it
+   * is added there rather than needing a second list kept in sync.
+   */
+  const filterSignature = JSON.stringify(listFilters);
   let page = 1;
   let totalPages = 0;
   let total = 0;
   let listError: ErrorEnvelope | null = null;
   if (granted) {
     try {
-      const result = await listArticles(prisma, {
-        page: params.page ? Number(params.page) : undefined,
-        locale: params.locale || undefined,
-        status: params.status || undefined,
-        novelId: params.novelId || undefined,
-        templateId: params.templateId || undefined,
-        search: params.search || undefined,
-        canonicalTagId: params.canonicalTagId || undefined,
-        seoVisibility: params.seoVisibility || undefined,
-        articleType: params.articleType || undefined,
-        contentMode: params.contentMode || undefined,
-      });
+      const result = await listArticles(prisma, { ...listFilters, page: params.page ? Number(params.page) : undefined });
       rows = result.items;
       page = result.page;
       totalPages = result.totalPages;
@@ -263,7 +277,14 @@ export default async function ArticlesPage({
             <>
               {/* C-20: 创建时间 column needs one page-level UTC+8 declaration, same placement as `../novels/page.tsx`'s own `AdminTimeZoneNote`. */}
               <AdminTimeZoneNote />
-              <ArticleList canWrite={canWrite} publicOrigin={publicOrigin} rows={rows} />
+              <ArticleList
+                canWrite={canWrite}
+                publicOrigin={publicOrigin}
+                rows={rows}
+                total={total}
+                filters={listFilters}
+                filterSignature={filterSignature}
+              />
               <ContentPagination
                 basePath="/articles"
                 params={params}

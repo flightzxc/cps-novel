@@ -252,6 +252,33 @@ describe("db-retry wiring: finalizeTaskItem", () => {
     });
   });
 
+  it("never creates a catalog_finalize item for a dry-run terminal page", async () => {
+    const dryRunLease: TaskLease = {
+      ...lease,
+      taskType: "catalog_scan",
+      targetType: "catalog_page",
+      mode: "dry_run",
+      payload: { actorId: "actor", requestId: "request" },
+    };
+    const executeRaw = vi.fn().mockResolvedValue(1);
+    const queryRaw = vi.fn().mockResolvedValue([]);
+    const upsert = vi.fn();
+    const tx = {
+      $executeRaw: executeRaw,
+      $queryRaw: queryRaw,
+      genericTaskItem: { upsert },
+      operationAudit: { create: vi.fn().mockResolvedValue({}) },
+    };
+    const { client } = fakePrisma(tx, 0);
+
+    await finalizeTaskItem(client, dryRunLease, {
+      status: "success",
+      result: { stopReason: "expected_total_reached", returnedCount: 1 },
+    });
+
+    expect(upsert).not.toHaveBeenCalled();
+  });
+
   it.each([
     ["execution token", { ...lease, executionToken: "stale-token" }, "stale-token"],
     ["lease epoch", { ...lease, leaseEpoch: 0n }, 0n],

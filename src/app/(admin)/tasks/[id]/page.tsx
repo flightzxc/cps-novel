@@ -22,6 +22,7 @@ import { ContentCapabilityDenied } from "../../novels/_components/content-states
 import { requireContentPage } from "../../novels/_lib/content-page-guard";
 import { sessionView } from "../../_lib/page-guard";
 import { RetryFailedButton } from "../_components/retry-failed-button";
+import { RetryCatalogFinalizeButton } from "../_components/retry-catalog-finalize-button";
 import { TaskControlButtons } from "../_components/task-control-buttons";
 import {
   isRetryableTaskStatus,
@@ -244,6 +245,9 @@ export default async function TaskDetailPage({
             {isRetryableTaskStatus(detail.status) && !detail.catalogBatch && detail.failedCount > 0 && (
               <RetryFailedButton family={detail.family} taskId={detail.taskId} failedCount={detail.failedCount} />
             )}
+            {detail.catalogFinalize?.retryable && (
+              <RetryCatalogFinalizeButton taskId={detail.taskId} />
+            )}
           </div>
         </div>
 
@@ -292,8 +296,8 @@ export default async function TaskDetailPage({
             )}
           </section>
         )}
-        {bookCounts ? (
-          <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        {isTerminal && (bookCounts ? (
+          <div className="grid grid-cols-2 gap-4 lg:grid-cols-4" data-testid="task-detail-static-summary">
             <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
               <p className="text-xs text-gray-400">总计（本）</p>
               <p className="mt-1 text-2xl font-bold text-gray-900">{bookCounts.upstreamTotal.toLocaleString("zh-CN")}</p>
@@ -304,7 +308,12 @@ export default async function TaskDetailPage({
             </div>
             <div className="rounded-xl border border-red-100 bg-red-50/50 p-4 shadow-sm">
               <p className="text-xs text-red-600">失败（本）</p>
-              <p className="mt-1 text-2xl font-bold text-red-700">{bookCounts.failedBooks.toLocaleString("zh-CN")}</p>
+              <p className="mt-1 text-2xl font-bold text-red-700">
+                {bookCounts.failedBooks === null ? "未知" : bookCounts.failedBooks.toLocaleString("zh-CN")}
+              </p>
+              {typeof bookCounts.failedPages === "number" && bookCounts.failedPages > 0 && (
+                <p className="mt-1 text-xs text-red-600">{bookCounts.failedPages.toLocaleString("zh-CN")} 页失败</p>
+              )}
             </div>
             <div className="rounded-xl border border-blue-100 bg-blue-50/50 p-4 shadow-sm">
               <p className="text-xs text-blue-600">完成度</p>
@@ -312,7 +321,7 @@ export default async function TaskDetailPage({
             </div>
           </div>
         ) : (
-          <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
+          <div className="grid grid-cols-2 gap-4 lg:grid-cols-5" data-testid="task-detail-static-summary">
             <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
               <p className="text-xs text-gray-400">总计{countUnit ? `（${countUnit}）` : ""}</p>
               <p className="mt-1 text-2xl font-bold text-gray-900">{detail.totalCount}</p>
@@ -334,7 +343,7 @@ export default async function TaskDetailPage({
               <p className="mt-1 text-2xl font-bold text-blue-700">{percent}%</p>
             </div>
           </div>
-        )}
+        ))}
 
         {/* 非终态时的实时进度轮询（Phase C 移植的 ImportProgress） */}
         {!isTerminal && (
@@ -345,12 +354,12 @@ export default async function TaskDetailPage({
         )}
 
         {/* 总进度条（终态时展示最终结果） */}
-        <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+        {isTerminal && <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm" data-testid="task-detail-static-progress">
           <div className="mb-2 flex items-center justify-between">
             <p className="text-sm font-medium text-gray-700">任务进度</p>
             <p className="text-xs text-gray-400">
               {bookCounts
-                ? `${(bookCounts.fetched + bookCounts.failedBooks).toLocaleString("zh-CN")} / ${bookCounts.upstreamTotal.toLocaleString("zh-CN")} 本`
+                ? `${bookCounts.fetched.toLocaleString("zh-CN")} / ${bookCounts.upstreamTotal.toLocaleString("zh-CN")} 本`
                 : `${processed} / ${detail.totalCount}`}
             </p>
           </div>
@@ -364,7 +373,7 @@ export default async function TaskDetailPage({
                       style={{ width: `${(bookCounts.fetched / bookCounts.upstreamTotal) * 100}%` }}
                     />
                   )}
-                  {bookCounts.upstreamTotal > 0 && bookCounts.failedBooks > 0 && (
+                  {bookCounts.upstreamTotal > 0 && bookCounts.failedBooks !== null && bookCounts.failedBooks > 0 && (
                     <div
                       className="h-full bg-red-400 transition-all"
                       style={{ width: `${(bookCounts.failedBooks / bookCounts.upstreamTotal) * 100}%` }}
@@ -395,7 +404,7 @@ export default async function TaskDetailPage({
               )}
             </div>
           </div>
-        </div>
+        </div>}
 
         {/* 任务配置摘要 + 目录扫描审计 */}
         <TaskConfigSummary

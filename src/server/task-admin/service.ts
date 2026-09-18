@@ -10,6 +10,9 @@ import { chunkIds } from "@/lib/db/chunked-id-lookup";
 import { isUniqueConstraintViolation, withDbRetry } from "@/lib/db/db-retry";
 import {
   CATALOG_BATCH_TASK_TYPE,
+  catalogFinalizeGeneration,
+  MOBOREADER_CATALOG_FINALIZE_TARGET_ID,
+  MOBOREADER_CATALOG_TARGET_TYPES,
   MOBOREADER_TASK_TYPES,
   PARENT_BATCH_TASK_TYPES,
   PROMO_LINK_CLAIM_TASK_TYPE,
@@ -37,8 +40,10 @@ import {
 import { projectSafeTaskFailure, type SafeTaskFailureDto } from "./safe-task-error";
 
 export const TASK_RETRY_ENTRY_ID = "admin.api.task.retry_failed";
+export const CATALOG_FINALIZE_RETRY_ENTRY_ID = "admin.api.task.retry_catalog_finalize";
 export const MANUAL_REVIEW_RESOLVE_ENTRY_ID = "admin.api.task.manual_review.resolve";
 export const TASK_RETRY_AUDIT_ACTION = "task.retry_failed";
+export const CATALOG_FINALIZE_RETRY_AUDIT_ACTION = "moboreader.catalog_finalize.retry_requested";
 export const MANUAL_REVIEW_AUDIT_ACTION = "side_effect_intent.manual_resolve";
 export const TASK_PAUSE_ENTRY_ID = "admin.api.task.pause";
 export const TASK_RESUME_ENTRY_ID = "admin.api.task.resume";
@@ -148,6 +153,8 @@ export type TaskSummaryDto = Readonly<{
    * this field at all.
    */
   bookCounts?: CatalogBookCountsDto;
+  /** Catalog worker phase projected without adding a new database status. */
+  catalogPhase?: "paging" | "finalizing" | "completed" | "failed";
   /**
    * X10 task control (pause/resume/abort): the task's own
    * `result.taskControl` marker (`src/lib/tasks/task-control.ts`), read and
@@ -343,6 +350,15 @@ export type RetryFailedTaskResult = Readonly<{
   successCount: number;
   failedCount: number;
   skippedCount: number;
+  wrote: boolean;
+  auditId: string;
+}>;
+
+export type RetryCatalogFinalizeResult = Readonly<{
+  family: "generic";
+  taskId: string;
+  status: "pending";
+  generation: number;
   wrote: boolean;
   auditId: string;
 }>;
@@ -609,8 +625,10 @@ export type CatalogBookCountsDto = Readonly<{
   upstreamTotal: number;
   /** Σ `result.returnedCount` over this task's successful, non-cascaded catalog pages. */
   fetched: number;
-  /** (failed, non-cascaded pages) × `pageSize` — a cascaded `stoppedBeforeFetch` failure never counts. */
-  failedBooks: number;
+  /** Exact failed source-item count; null when page failures cannot identify individual books. */
+  failedBooks: number | null;
+  /** Actually executed catalog pages that failed; never converted into books. */
+  failedPages?: number;
   /** Pages actually fetched from upstream (success or failure), excluding any `stoppedBeforeFetch` cascade. */
   pagesScanned: number;
   /** `ceil(upstreamTotal / pageSize)` — the real page count, never the safety-fuse pre-created count. */
@@ -650,15 +668,16 @@ async function loadCatalogBookAggregates(
       task_id,
       COALESCE(SUM((result->>'returnedCount')::int) FILTER (WHERE status = 'success'), 0)::bigint AS fetched,
       COUNT(*) FILTER (
-        WHERE status IN ('success', 'failed')
+        WHERE target_type = 'catalog_page' AND status IN ('success', 'failed')
           AND COALESCE(result->>'stoppedBeforeFetch', 'false') <> 'true'
       )::bigint AS pages_scanned,
       COUNT(*) FILTER (
-        WHERE status = 'failed'
+        WHERE target_type IN ('catalog_page', 'catalog_recovery_page') AND status = 'failed'
           AND COALESCE(result->>'stoppedBeforeFetch', 'false') <> 'true'
       )::bigint AS failed_pages
     FROM generic_task_item
-    WHERE task_id = ANY(${taskIds}::uuid[]) AND target_type = 'catalog_page'
+    WHERE task_id = ANY(${taskIds}::uuid[])
+      AND target_type IN ('catalog_page', 'catalog_recovery_page')
     GROUP BY task_id
   `);
   return new Map(rows.map((row) => [row.task_id, {
@@ -676,6 +695,7 @@ function catalogObservedTotalOf(result: unknown): number | undefined {
 function deriveBookCounts(
   observedTotal: number,
   pageSize: number,
+  taskStatus: string,
   aggregate: { fetched: number; pagesScanned: number; failedPages: number } | undefined,
 ): CatalogBookCountsDto {
   const fetched = aggregate?.fetched ?? 0;
@@ -684,10 +704,15 @@ function deriveBookCounts(
   return Object.freeze({
     upstreamTotal: observedTotal,
     fetched,
-    failedBooks: failedPages * pageSize,
+    failedBooks: failedPages === 0 ? 0 : null,
+    failedPages,
     pagesScanned,
     pagesTotalExpected: Math.ceil(observedTotal / pageSize),
-    percent: observedTotal > 0 ? Math.min(100, Math.round((fetched / observedTotal) * 100)) : 0,
+    percent: observedTotal <= 0
+      ? 0
+      : taskStatus === "completed" && fetched >= observedTotal
+        ? 100
+        : Math.min(99.99, Math.floor((fetched / observedTotal) * 10_000) / 100),
   });
 }
 
@@ -696,6 +721,7 @@ export type CatalogBookCountsInput = {
   taskType: string;
   result: unknown;
   params: unknown;
+  status?: string;
 };
 
 function catalogBookCountsPrerequisites(
@@ -720,15 +746,15 @@ export async function loadCatalogBookCountsBatch(
   db: PrismaClient,
   inputs: readonly CatalogBookCountsInput[],
 ): Promise<Map<string, CatalogBookCountsDto>> {
-  const prerequisites = new Map<string, { observedTotal: number; pageSize: number }>();
+  const prerequisites = new Map<string, { observedTotal: number; pageSize: number; status: string }>();
   for (const input of inputs) {
     const prereq = catalogBookCountsPrerequisites(input);
-    if (prereq) prerequisites.set(input.taskId, prereq);
+    if (prereq) prerequisites.set(input.taskId, { ...prereq, status: input.status ?? "processing" });
   }
   const aggregates = await loadCatalogBookAggregates(db, Array.from(prerequisites.keys()));
   const result = new Map<string, CatalogBookCountsDto>();
   for (const [taskId, prereq] of prerequisites) {
-    result.set(taskId, deriveBookCounts(prereq.observedTotal, prereq.pageSize, aggregates.get(taskId)));
+    result.set(taskId, deriveBookCounts(prereq.observedTotal, prereq.pageSize, prereq.status, aggregates.get(taskId)));
   }
   return result;
 }
@@ -776,6 +802,12 @@ export type TaskDetailDto = TaskSummaryDto & Readonly<{
    * other field here.
    */
   originStopReason?: string;
+  catalogFinalize?: Readonly<{
+    status: string;
+    attemptCount: number;
+    generation: number;
+    retryable: boolean;
+  }>;
 }>;
 
 function taskSummary(row: TaskListRow, bookCounts?: CatalogBookCountsDto): TaskSummaryDto {
@@ -849,6 +881,16 @@ function taskSummary(row: TaskListRow, bookCounts?: CatalogBookCountsDto): TaskS
   const taskControl = row.status === "paused" || row.status === "cancelled" || row.status === "disabled"
     ? readTaskControlMarker(row.result)
     : undefined;
+  const finalization = jsonPlainObject(resultObject?.finalization);
+  const catalogPhase = row.task_type !== MOBOREADER_TASK_TYPES.catalogScan
+    ? undefined
+    : row.status === "completed"
+      ? "completed" as const
+      : row.status === "failed" || row.status === "completed_with_errors"
+        ? "failed" as const
+        : finalization?.status === "pending" || finalization?.status === "processing"
+          ? "finalizing" as const
+          : "paging" as const;
   return Object.freeze({
     family: row.family,
     taskId: row.task_id,
@@ -864,6 +906,7 @@ function taskSummary(row: TaskListRow, bookCounts?: CatalogBookCountsDto): TaskS
     ...(catalogBatch ? { catalogBatch } : {}),
     ...(stopReason !== undefined ? { stopReason } : {}),
     ...(bookCounts !== undefined ? { bookCounts } : {}),
+    ...(catalogPhase ? { catalogPhase } : {}),
     ...(taskControl ? { taskControl } : {}),
   });
 }
@@ -964,7 +1007,7 @@ export async function listAdminTasks(
     db,
     rows
       .filter((row) => row.family === "generic" && row.task_type === MOBOREADER_TASK_TYPES.catalogScan)
-      .map((row) => ({ taskId: row.task_id, taskType: row.task_type, result: row.result, params: row.params })),
+      .map((row) => ({ taskId: row.task_id, taskType: row.task_type, result: row.result, params: row.params, status: row.status })),
   );
   return Object.freeze({
     items: Object.freeze(rows.map((row) => taskSummary(row, bookCounts.get(row.task_id)))),
@@ -1068,12 +1111,26 @@ export async function getAdminTaskDetail(
   const catalogScanAudit = deriveCatalogScanAudit(row.task_type, row.result);
   const isCatalogScan = family === "generic" && row.task_type === MOBOREADER_TASK_TYPES.catalogScan;
   const originStopReason = isCatalogScan ? await deriveOriginStopReason(db, taskId) : undefined;
+  const catalogFinalizeItem = isCatalogScan ? await db.genericTaskItem.findUnique({
+    where: { taskId_targetType_targetId: {
+      taskId,
+      targetType: MOBOREADER_CATALOG_TARGET_TYPES.finalize,
+      targetId: MOBOREADER_CATALOG_FINALIZE_TARGET_ID,
+    } },
+    select: { status: true, attemptCount: true, payload: true },
+  }) : null;
+  const catalogFinalize = catalogFinalizeItem ? {
+    status: catalogFinalizeItem.status,
+    attemptCount: catalogFinalizeItem.attemptCount,
+    generation: catalogFinalizeGeneration(finalizePayload(catalogFinalizeItem.payload).generation),
+    retryable: catalogFinalizeItem.status === "failed" && RETRYABLE_PARENT_STATUSES.has(row.status),
+  } : undefined;
   // C-12: only issues its aggregate SQL query when catalogObservedTotal/
   // pageSize are already known (both read from `row.result`/`row.params`
   // this function already fetched) — a catalog_scan task with no completed
   // page yet costs no extra query, same as a non-catalog_scan task.
   const bookCounts = isCatalogScan
-    ? await loadCatalogBookCounts(db, { taskId, taskType: row.task_type, result: row.result, params: row.params })
+    ? await loadCatalogBookCounts(db, { taskId, taskType: row.task_type, result: row.result, params: row.params, status: row.status })
     : undefined;
   const childTasks = isParentBatchTaskType(row.task_type) ? await db.genericTask.findMany({
     where: { parentTaskId: taskId, originTaskId: null }, orderBy: { createdAt: "asc" },
@@ -1092,6 +1149,7 @@ export async function getAdminTaskDetail(
     ...(catalogScanConfig ? { catalogScanConfig } : {}),
     ...(catalogScanAudit ? { catalogScanAudit } : {}),
     ...(originStopReason !== undefined ? { originStopReason } : {}),
+    ...(catalogFinalize ? { catalogFinalize } : {}),
   });
 }
 
@@ -1362,6 +1420,31 @@ function replayRetry(
   });
 }
 
+function replayCatalogFinalizeRetry(
+  audit: AuditRow,
+  actorId: string,
+  taskId: string,
+  reason: string | null,
+): RetryCatalogFinalizeResult {
+  const after = jsonObject(audit.afterSnapshot);
+  if (
+    audit.actorId !== actorId
+    || audit.entityId !== taskId
+    || audit.taskType !== MOBOREADER_TASK_TYPES.catalogScan
+    || audit.reason !== reason
+    || after?.status !== "pending"
+    || typeof after.generation !== "number"
+  ) throw new TaskAdminError("task_admin_idempotency_conflict", 409);
+  return Object.freeze({
+    family: "generic",
+    taskId,
+    status: "pending",
+    generation: after.generation,
+    wrote: false,
+    auditId: audit.id.toString(),
+  });
+}
+
 type FailedBinding = { id: string; targetId?: string };
 
 async function failedBindings(
@@ -1448,6 +1531,102 @@ async function retryItems(
   return (await tx.genericTaskItem.updateMany({
     where: { taskId, status: "failed" }, data,
   })).count;
+}
+
+function finalizePayload(value: Prisma.JsonValue | null): Record<string, Prisma.JsonValue> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, Prisma.JsonValue>
+    : {};
+}
+
+async function rearmCatalogFinalize(
+  tx: Prisma.TransactionClient,
+  input: {
+    taskId: string;
+    parentResult: Prisma.JsonValue | null;
+    actorId: string;
+    requestId: string;
+    resetFailedPages: boolean;
+  },
+): Promise<{ generation: number; retriedItemCount: number; counts: ItemCounts }> {
+  const existing = await tx.genericTaskItem.findUnique({
+    where: { taskId_targetType_targetId: {
+      taskId: input.taskId,
+      targetType: MOBOREADER_CATALOG_TARGET_TYPES.finalize,
+      targetId: MOBOREADER_CATALOG_FINALIZE_TARGET_ID,
+    } },
+    select: { payload: true },
+  });
+  const existingPayload = finalizePayload(existing?.payload ?? null);
+  const result = finalizePayload(input.parentResult);
+  const finalization = finalizePayload(result.finalization ?? null);
+  const generation = Math.max(
+    catalogFinalizeGeneration(existingPayload.generation),
+    catalogFinalizeGeneration(finalization.generation),
+  ) + 1;
+  const payload = {
+    kind: MOBOREADER_CATALOG_TARGET_TYPES.finalize,
+    actorId: typeof existingPayload.actorId === "string" ? existingPayload.actorId : input.actorId,
+    requestId: input.requestId,
+    generation,
+  } satisfies Prisma.InputJsonObject;
+
+  const retriedItemCount = input.resetFailedPages
+    ? (await tx.genericTaskItem.updateMany({
+        where: {
+          taskId: input.taskId,
+          targetType: { in: [MOBOREADER_CATALOG_TARGET_TYPES.page, MOBOREADER_CATALOG_TARGET_TYPES.recoveryPage] },
+          status: "failed",
+        },
+        data: {
+          status: "pending", executionToken: null, lockedBy: null, lockedUntil: null,
+          heartbeatAt: null, result: Prisma.DbNull, error: Prisma.DbNull, finishedAt: null,
+        },
+      })).count
+    : 0;
+
+  await tx.genericTaskItem.upsert({
+    where: { taskId_targetType_targetId: {
+      taskId: input.taskId,
+      targetType: MOBOREADER_CATALOG_TARGET_TYPES.finalize,
+      targetId: MOBOREADER_CATALOG_FINALIZE_TARGET_ID,
+    } },
+    create: {
+      taskId: input.taskId,
+      targetType: MOBOREADER_CATALOG_TARGET_TYPES.finalize,
+      targetId: MOBOREADER_CATALOG_FINALIZE_TARGET_ID,
+      payload,
+    },
+    update: {
+      status: "pending", attemptCount: 0, executionToken: null, lockedBy: null,
+      lockedUntil: null, heartbeatAt: null, result: Prisma.DbNull,
+      error: Prisma.DbNull, finishedAt: null, payload,
+    },
+  });
+  const [totalCount, successCount, failedCount, skippedCount] = await Promise.all([
+    tx.genericTaskItem.count({ where: { taskId: input.taskId, targetType: MOBOREADER_CATALOG_TARGET_TYPES.page } }),
+    tx.genericTaskItem.count({ where: { taskId: input.taskId, targetType: MOBOREADER_CATALOG_TARGET_TYPES.page, status: "success" } }),
+    tx.genericTaskItem.count({ where: { taskId: input.taskId, targetType: MOBOREADER_CATALOG_TARGET_TYPES.page, status: "failed" } }),
+    tx.genericTaskItem.count({ where: { taskId: input.taskId, targetType: MOBOREADER_CATALOG_TARGET_TYPES.page, status: "skipped" } }),
+  ]);
+  const counts = { totalCount, successCount, failedCount, skippedCount };
+  await tx.genericTask.update({
+    where: { id: input.taskId },
+    data: {
+      status: "pending", completedAt: null, error: Prisma.DbNull, ...counts,
+      result: {
+        ...result,
+        finalization: {
+          status: "pending",
+          targetId: MOBOREADER_CATALOG_FINALIZE_TARGET_ID,
+          generation,
+        },
+        terminalState: "processing",
+        previewEnqueue: null,
+      },
+    },
+  });
+  return { generation, retriedItemCount, counts };
 }
 
 type ItemCounts = {
@@ -1539,17 +1718,36 @@ export async function retryFailedTask(
           throw new TaskAdminError("task_admin_state_conflict", 409);
         }
 
-        const bindings = await failedBindings(tx, family, taskId);
+        const isCatalogScan = family === "generic" && parent.task_type === MOBOREADER_TASK_TYPES.catalogScan;
+        const bindings = isCatalogScan
+          ? await tx.genericTaskItem.findMany({
+              where: {
+                taskId,
+                status: "failed",
+                targetType: { in: [MOBOREADER_CATALOG_TARGET_TYPES.page, MOBOREADER_CATALOG_TARGET_TYPES.recoveryPage] },
+              },
+              select: { id: true, targetId: true },
+            })
+          : await failedBindings(tx, family, taskId);
         if (bindings.length === 0) throw new TaskAdminError("task_admin_state_conflict", 409);
         if (await hasUnresolvedIntent(tx, family, parent, bindings)) {
           throw new TaskAdminError("task_admin_unresolved_intent", 409);
         }
 
-        const retriedItemCount = await retryItems(tx, family, taskId);
+        const catalogRetry = isCatalogScan
+          ? await rearmCatalogFinalize(tx, {
+              taskId,
+              parentResult: parent.result,
+              actorId: context.identity.id,
+              requestId: input.requestId,
+              resetFailedPages: true,
+            })
+          : null;
+        const retriedItemCount = catalogRetry?.retriedItemCount ?? await retryItems(tx, family, taskId);
         if (retriedItemCount !== bindings.length) {
           throw new TaskAdminError("task_admin_concurrent_write", 409);
         }
-        const counts = await recountAndResetParent(tx, family, taskId);
+        const counts = catalogRetry?.counts ?? await recountAndResetParent(tx, family, taskId);
         const audit = await tx.operationAudit.create({
           data: {
             actorType: "admin",
@@ -1565,6 +1763,7 @@ export async function retryFailedTask(
             afterSnapshot: {
               status: "pending",
               retriedItemCount,
+              ...(catalogRetry ? { finalizeGeneration: catalogRetry.generation } : {}),
               ...counts,
             },
           },
@@ -1588,6 +1787,84 @@ export async function retryFailedTask(
     }
     throw error;
   }
+}
+
+export async function retryCatalogFinalizeTask(
+  input: {
+    authorization: AdminServiceAuthorization;
+    requestId: string;
+    taskId: unknown;
+    reason?: unknown;
+  },
+  dependencies: TaskAdminMutationDependencies,
+): Promise<RetryCatalogFinalizeResult> {
+  const context = await requireFreshAdminServiceMutation(input.authorization, "task:manage", {
+    identities: dependencies.identities,
+    sessions: dependencies.sessions,
+    entryId: CATALOG_FINALIZE_RETRY_ENTRY_ID,
+    requestId: input.requestId,
+    env: dependencies.env,
+    now: dependencies.now,
+  });
+  const taskId = uuid(input.taskId);
+  const reason = optionalBoundedText(input.reason, 2_000);
+  return withDbRetry(
+    () => dependencies.db.$transaction(async (tx) => {
+      await lockMutationRequest(tx, input.requestId);
+      const parent = await lockParent(tx, "generic", taskId);
+      if (!parent) throw new TaskAdminError("task_admin_not_found", 404);
+      const prior = await committedAudit(tx, CATALOG_FINALIZE_RETRY_AUDIT_ACTION, input.requestId);
+      if (prior) return replayCatalogFinalizeRetry(prior, context.identity.id, taskId, reason);
+      if (parent.task_type !== MOBOREADER_TASK_TYPES.catalogScan || !RETRYABLE_PARENT_STATUSES.has(parent.status)) {
+        throw new TaskAdminError("task_admin_state_conflict", 409);
+      }
+      const processingCount = await tx.genericTaskItem.count({ where: { taskId, status: "processing" } });
+      if (processingCount !== 0) throw new TaskAdminError("task_admin_concurrent_write", 409);
+      const finalizeItem = await tx.genericTaskItem.findUnique({
+        where: { taskId_targetType_targetId: {
+          taskId,
+          targetType: MOBOREADER_CATALOG_TARGET_TYPES.finalize,
+          targetId: MOBOREADER_CATALOG_FINALIZE_TARGET_ID,
+        } },
+        select: { status: true, attemptCount: true },
+      });
+      if (!finalizeItem || finalizeItem.status !== "failed") {
+        throw new TaskAdminError("task_admin_state_conflict", 409);
+      }
+      const rearmed = await rearmCatalogFinalize(tx, {
+        taskId,
+        parentResult: parent.result,
+        actorId: context.identity.id,
+        requestId: input.requestId,
+        resetFailedPages: false,
+      });
+      const audit = await tx.operationAudit.create({
+        data: {
+          actorType: "admin",
+          actorId: context.identity.id,
+          action: CATALOG_FINALIZE_RETRY_AUDIT_ACTION,
+          entityType: "GenericTask",
+          entityId: taskId,
+          requestId: input.requestId,
+          taskType: MOBOREADER_TASK_TYPES.catalogScan,
+          taskId,
+          reason,
+          beforeSnapshot: { status: parent.status, attemptCount: finalizeItem.attemptCount },
+          afterSnapshot: { status: "pending", generation: rearmed.generation },
+        },
+        select: { id: true },
+      });
+      return Object.freeze({
+        family: "generic" as const,
+        taskId,
+        status: "pending" as const,
+        generation: rearmed.generation,
+        wrote: true,
+        auditId: audit.id.toString(),
+      });
+    }),
+    { op: "task-admin.retryCatalogFinalizeTask", itemId: taskId, idempotencyKey: input.requestId },
+  );
 }
 
 // ---------------------------------------------------------------------

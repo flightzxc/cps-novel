@@ -123,8 +123,10 @@ function assertStaticConsistency(schemaTables, records) {
   // models (ArticleNovelRebindPreview/Batch/BatchItem) push the count from
   // 49 to 52 -- updated alongside the migration that adds them, same as the
   // 51->49 update Phase C's C-4 DROP made when it removed two models.
-  if (schemaTables.size !== 52) {
-    problems.push(`expected 52 Prisma models, found ${schemaTables.size}`);
+  // Owner 2026-09-18 决策 2: ChannelAccountHold
+  // (20260918090000_preview_account_hold) pushes 52 -> 53.
+  if (schemaTables.size !== 53) {
+    problems.push(`expected 53 Prisma models, found ${schemaTables.size}`);
   }
   if (problems.length) fail(problems);
   return { recordCount: records.length, activeCount: active.length };
@@ -205,8 +207,9 @@ async function assertCatalogConsistency(records) {
     // C-30A (施工工单_C30_换小说_移植CPS换租客_2026-09-08.md §4A.1): three new
     // rebind tables (article_novel_rebind_preview/_batch/_batch_item) push the
     // live-catalog baseline from 49 to 52, mirroring the 52-model constant
-    // assertStaticConsistency already carries above.
-    if (actualTables.size !== 52) problems.push(`expected 52 database tables, found ${actualTables.size}`);
+    // assertStaticConsistency already carries above. Owner 2026-09-18 决策 2:
+    // channel_account_hold pushes it to 53.
+    if (actualTables.size !== 53) problems.push(`expected 53 database tables, found ${actualTables.size}`);
     if (problems.length) fail(problems);
     return {
       tableCount: actualTables.size,

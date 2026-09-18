@@ -65,13 +65,15 @@ function checkViolationError(constraint: string) {
 function buildFinalizeFailureCyclePrisma(
   firstFinalizeError: unknown,
   secondFinalizeBehavior: { succeeds: true } | { succeeds: false; error: unknown },
+  options: { taskType?: string; attemptCount?: number; targetType?: string } = {},
 ) {
   const candidate = {
     id: ITEM_ID,
     task_id: TASK_ID,
-    task_type: "runtime.failure",
-    payload: null,
-    attempt_count: 2,
+    task_type: options.taskType ?? "runtime.failure",
+    target_type: options.targetType ?? "work_item",
+    payload: options.taskType === "catalog_scan" ? { actorId: "actor", requestId: "request" } : null,
+    attempt_count: options.attemptCount ?? 2,
     lease_epoch: 2n,
     cursor_at: new Date("2026-09-07T12:14:00Z"),
     eligible: true,
@@ -119,7 +121,43 @@ function handlers() {
   });
 }
 
+function catalogHandlers() {
+  return createHandlerRegistry({
+    catalog_scan: {
+      family: "generic",
+      maxAttempts: 3,
+      handler: async () => ({ status: "success" as const, result: { returnedCount: 1 } }),
+    },
+  });
+}
+
 describe("D-7: a finalizeTaskItem failure fails the item, never the worker process", () => {
+  it("requeues the same catalog page after its first commit failure and emits no terminal alert", async () => {
+    const db = buildFinalizeFailureCyclePrisma(
+      checkViolationError("novel_source_item_metadata_check"),
+      { succeeds: true },
+      { taskType: "catalog_scan", attemptCount: 1, targetType: "catalog_page" },
+    );
+    const onTaskFailure = vi.fn();
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+    await expect(processOneWorkerCycle({
+      prisma: db.prisma,
+      workerId: "worker-finalize-failure",
+      handlers: catalogHandlers(),
+      allowlist: buildWorkerAllowlist("catalog_scan", catalogHandlers()),
+      signal: new AbortController().signal,
+      onTaskFailure,
+    })).resolves.toBe(true);
+
+    const retryStatement = db.executeRaw.mock.calls[2][0] as Prisma.Sql;
+    expect(retryStatement.strings.join("?")).toContain("status = 'pending'");
+    expect(onTaskFailure).not.toHaveBeenCalled();
+    expect(db.operationAuditCreate).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ action: "task_item.retry_scheduled" }),
+    }));
+  });
+
   it("(a)(b)(c): retries with a redacted finalize_failed outcome, persists sqlState/constraint but never row data, emits source: finalize, and the cycle resolves", async () => {
     const firstError = checkViolationError("novel_source_item_metadata_check");
     const db = buildFinalizeFailureCyclePrisma(firstError, { succeeds: true });

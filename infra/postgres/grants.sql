@@ -88,6 +88,13 @@ GRANT SELECT ON TABLE
   novel_tag_state,
   novel_canonical_tag,
   tag_classification_run,
+  -- Preview account hold (Owner 2026-09-18 决策 2). Web needs SELECT for a
+  -- real reason, not for display: `applyContentCreationBatch` /
+  -- `materializeNovelFromSourceItem` run in the Web tier and both reach
+  -- `enqueueMoboreaderPreviewRefreshTask`, which now refuses to enqueue a
+  -- held account's preview work as runnable. Without this grant that enqueue
+  -- fails outright with `permission denied for table channel_account_hold`.
+  channel_account_hold,
   _prisma_migrations
 TO web_app, analyst_ro;
 
@@ -381,6 +388,15 @@ GRANT UPDATE (
 GRANT SELECT ON TABLE channel_account, channel_account_credential,
   channel_credential_active_fingerprint, credential_change_log,
   generic_task, generic_task_item, side_effect_intent, operation_audit TO worker_app;
+-- Preview account hold (Owner 2026-09-18 决策 2): the worker reads it on every
+-- `channel_sync` claim (the pushdown in `selectPending`, src/lib/tasks/store.ts),
+-- writes it on the first deterministic credential failure
+-- (worker/handlers/preview-account-hold.ts), and updates it on release
+-- (scripts/preview-account-hold.ts, run from the worker tier because that is
+-- where the keyring for the release pre-flight lives). SELECT is listed
+-- explicitly alongside INSERT/UPDATE for the same RETURNING reason documented
+-- further down this file.
+GRANT SELECT, INSERT, UPDATE ON TABLE channel_account_hold TO worker_app;
 GRANT SELECT ON TABLE channel, source_app, channel_app, channel_capability,
   novel, novel_source_item, novel_chapter, novel_chapter_source_item,
   novel_chapter_content, novel_preview_policy, source_label,

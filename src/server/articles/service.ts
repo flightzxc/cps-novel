@@ -441,6 +441,14 @@ export type ArticleListInput = {
 export const ARTICLE_LIST_DEFAULT_PAGE_SIZE = 20;
 export const ARTICLE_LIST_MAX_PAGE_SIZE = 100;
 
+/**
+ * Ceiling on one `listArticleIdsForFilter` call. Deliberately the publish
+ * batch cap (200): the only caller resolves exactly one batch's worth at a
+ * time, and a larger window would let a caller materialize an unbounded id
+ * list in memory — the thing the keyset design exists to avoid.
+ */
+export const ARTICLE_ID_RESOLVE_MAX_LIMIT = 200;
+
 const ARTICLE_UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function requireArticleUuid(value: unknown): string {
@@ -714,17 +722,16 @@ function articleCanonicalTagNames(tags: readonly ArticleListSelectCanonicalTag[]
 }
 
 /**
- * Article list for `/articles` (M7). A plain read, not a service mutation —
- * same shape as `@/server/admin-content`'s `listAdminNovels` — so it takes no
- * `AdminServiceAuthorization`; the page (`requireContentPage("/articles",
- * "content:view")`) is what gates access, exactly as it already did before
- * this function existed.
+ * The one WHERE every filtered Article view is built from.
+ *
+ * Extracted 2026-09-18 so "select all matching" cannot drift from what the
+ * operator is looking at. `listArticles` renders a page from this;
+ * `listArticleIdsForFilter` resolves the ids a cross-page batch will act on
+ * from the *same* function against the *same* normalized input. A second,
+ * hand-written "approximately the same" WHERE is exactly how a list that says
+ * 811 ends up publishing 823.
  */
-export async function listArticles(
-  db: Pick<PrismaClient, "article">,
-  input: ArticleListInput = {},
-): Promise<AdminContentPage<ArticleListItem>> {
-  const normalized = normalizeArticleListInput(input);
+function buildArticleListWhere(normalized: NormalizedArticleList): Prisma.ArticleWhereInput {
   const searchOr = normalized.search ? buildArticleSearchOr(normalized.search) : undefined;
   const where: Prisma.ArticleWhereInput = {
     deletedAt: null,
@@ -752,7 +759,22 @@ export async function listArticles(
       ? { novel: { canonicalTags: { some: { canonicalTagId: normalized.canonicalTagId } } } }
       : {}),
   };
-  const [total, rows] = await Promise.all([
+  return where;
+}
+
+/**
+ * Article list for `/articles` (M7). A plain read, not a service mutation —
+ * same shape as `@/server/admin-content`'s `listAdminNovels` — so it takes no
+ * `AdminServiceAuthorization`; the page (`requireContentPage("/articles",
+ * "content:view")`) is what gates access, exactly as it already did before
+ * this function existed.
+ */
+export async function listArticles(
+  db: Pick<PrismaClient, "article">,
+  input: ArticleListInput = {},
+): Promise<AdminContentPage<ArticleListItem>> {
+  const normalized = normalizeArticleListInput(input);
+  const where = buildArticleListWhere(normalized);  const [total, rows] = await Promise.all([
     db.article.count({ where }),
     db.article.findMany({
       where,
@@ -789,6 +811,60 @@ export async function listArticles(
     pageSize: normalized.pageSize,
     total,
     totalPages: Math.ceil(total / normalized.pageSize),
+  };
+}
+
+/**
+ * Resolves one page-sized *slice of ids* for a filter, for the cross-page
+ * "select all matching" batch publish (2026-09-18).
+ *
+ * Two deliberate departures from `listArticles`, both load-bearing:
+ *
+ *   1. **Ordered by `id`, not `updatedAt`.** The list is ordered by
+ *      `updatedAt desc` — and publishing *writes* `updatedAt`. Walking a
+ *      mutation with a cursor over the very column the mutation changes
+ *      reshuffles the sequence mid-run, silently skipping and repeating rows.
+ *      `id` is immutable, unique and total, so it is a stable spine to walk
+ *      even while the rows it names are being rewritten.
+ *   2. **Keyset cursor (`id > afterId`), not `skip`/`take`.** Offsets are
+ *      equally unsafe here for a second reason: a filter can stop matching a
+ *      row the batch just published (`status=draft` is the obvious one), which
+ *      shifts every later row back under an offset. Behind a keyset cursor,
+ *      already-processed rows are behind the cursor and simply never
+ *      re-enter the window.
+ *
+ * `limit` is a hard cap the caller supplies (the publish batch size); one
+ * extra row is fetched purely to decide whether a next cursor exists, and is
+ * never returned.
+ */
+export async function listArticleIdsForFilter(
+  db: Pick<PrismaClient, "article">,
+  input: ArticleListInput & { readonly afterId?: string; readonly limit: number },
+): Promise<{ articleIds: readonly string[]; nextCursor: string | null }> {
+  if (!Number.isInteger(input.limit) || input.limit < 1 || input.limit > ARTICLE_ID_RESOLVE_MAX_LIMIT) {
+    throw new AdminContentQueryError(
+      "invalid_page_size",
+      `Resolve limit must be between 1 and ${ARTICLE_ID_RESOLVE_MAX_LIMIT}`,
+    );
+  }
+  const afterId = input.afterId !== undefined ? requireArticleUuid(input.afterId) : undefined;
+  // `page`/`pageSize` are irrelevant to a keyset walk; pin them to the
+  // defaults so a caller's page number can never narrow the id set.
+  const normalized = normalizeArticleListInput({ ...input, page: 1, pageSize: ARTICLE_LIST_DEFAULT_PAGE_SIZE });
+  const rows = await db.article.findMany({
+    where: {
+      ...buildArticleListWhere(normalized),
+      ...(afterId ? { id: { gt: afterId } } : {}),
+    },
+    orderBy: { id: "asc" },
+    take: input.limit + 1,
+    select: { id: true },
+  });
+  const hasMore = rows.length > input.limit;
+  const articleIds = (hasMore ? rows.slice(0, input.limit) : rows).map((row) => row.id);
+  return {
+    articleIds,
+    nextCursor: hasMore ? articleIds[articleIds.length - 1]! : null,
   };
 }
 

@@ -155,8 +155,13 @@ describe("P1-06 database operations static contracts", () => {
     // Catalog batch parentage (20260913120000_catalog_batch_parent) adds the
     // parent_task_id field, its self-FK, and the parent/status/created index.
     // The exact count still guards duplicate keys.
-    expect(records).toHaveLength(1214);
-    expect(new Set(records.map((line) => JSON.parse(line).stable_key)).size).toBe(1214);
+    // Owner 2026-09-18 决策 2 (20260918090000_preview_account_hold): the
+    // channel_account_hold table adds 1 table + 13 field records (including
+    // `scope`) + 6 physical objects (pkey, FK, the partial-unique active
+    // index, the history index, the release-shape CHECK, the scope CHECK)
+    // -- 1214 + 20 = 1234.
+    expect(records).toHaveLength(1234);
+    expect(new Set(records.map((line) => JSON.parse(line).stable_key)).size).toBe(1234);
     const intents = records.map((line) => JSON.parse(line)).filter(
       (record) => record.table_name === "side_effect_intent"
         && ["status", "response_shape", "confirmed_at"].includes(record.field_name),

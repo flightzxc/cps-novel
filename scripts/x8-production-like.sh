@@ -2448,9 +2448,59 @@ gate_catalog() {
 # default gate-state file as a side effect of looking. Reuses
 # prepare_x8_gate_environment() (identity-only, already-established runtime
 # required, zero provisioning) rather than a second bespoke read path.
+# 2026-09-18 governance round: `status` used to be `prepare_x8_gate_environment`
+# plus `compose ps`, i.e. it read the committed release identity and then never
+# checked it against anything. That made the identity file authoritative by
+# assumption -- which it is not. `up` promotes it only after build, database
+# prep, recreate and every health probe pass (see up_x8), so for the SUPPORTED
+# deploy path the file is right by construction; but an out-of-band
+# `docker compose up -d --no-deps web worker scheduler` (an entirely reasonable
+# thing to do while iterating, and what the 2026-09-18 deploys actually did)
+# swaps the image underneath without touching it. The file then names the
+# previous release and nothing says so.
+#
+# The comparison basis is the running container's own
+# `org.opencontainers.image.revision` label, baked by the Dockerfile from the
+# GIT_COMMIT build arg: it travels with the image rather than with any file an
+# operator could forget to update. Same "state file vs. container reality"
+# stance warn_x8_gate_drift already takes for the catalog gate.
+#
+# Absent containers are reported but are NOT drift: a stopped stack does not
+# contradict the identity, it just has nothing to compare against.
+x8_report_identity_drift() {
+  local drifted=0 service container actual
+  for service in web worker scheduler; do
+    container="$(x8_gate_compose ps -q "$service" 2>/dev/null || true)"
+    if [[ -z "$container" ]]; then
+      echo "X8_IDENTITY_RUNTIME_ABSENT=$service"
+      continue
+    fi
+    actual="$(docker inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$container" 2>/dev/null || true)"
+    if [[ -z "$actual" ]]; then
+      echo "X8_IDENTITY_DRIFT=$service reason=revision_label_missing identity=$X8_IDENTITY_GIT_COMMIT"
+      drifted=1
+      continue
+    fi
+    if [[ "$actual" != "$X8_IDENTITY_GIT_COMMIT" ]]; then
+      echo "X8_IDENTITY_DRIFT=$service identity=$X8_IDENTITY_GIT_COMMIT running=$actual"
+      drifted=1
+    fi
+  done
+  if [[ "$drifted" -ne 0 ]]; then
+    echo "X8_IDENTITY_STATUS=DRIFT" >&2
+    echo "The committed release identity ($X8_IDENTITY_FILE) does not describe what is running." >&2
+    echo "Do not trust it. Re-deploy through the supported path to make them agree:" >&2
+    echo "  X8_LEVEL=$X8_IDENTITY_LEVEL scripts/x8-production-like.sh up" >&2
+    return 65
+  fi
+  echo "X8_IDENTITY_STATUS=OK commit=$X8_IDENTITY_GIT_COMMIT image=$X8_IDENTITY_IMAGE_REF"
+  return 0
+}
+
 status_x8() {
   prepare_x8_gate_environment || return 65
   x8_gate_compose ps
+  x8_report_identity_drift
 }
 
 down_x8() {

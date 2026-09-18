@@ -6,7 +6,7 @@ import { useState } from "react";
 import { buttonClassName } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import type { AdminCapabilityState } from "@/contracts";
-import type { PublishGateReason } from "@/contracts/publish-gate";
+import type { PublishGateReason, PublishGateWarningReason } from "@/contracts/publish-gate";
 import { capabilityBlockReason } from "@/features/admin-ui/capability-view";
 import { errorEnvelopeCopy } from "@/features/admin-ui/error-copy";
 
@@ -57,11 +57,37 @@ function actionErrorMessage(result: Extract<PublishActionResult<unknown>, { ok: 
   return invalidInputCopy(result.code);
 }
 
+/**
+ * 未阻断项区块（Owner 决策 2026-09-18，发布与 Preview 解耦）。
+ * 空数组整段不渲染——不留「暂无提示」这类空壳，与详情页对试读模块本身的处理
+ * 一致（`src/features/public-ui/novel/PreviewChapterList.tsx`）。
+ */
+function PublishWarningList({ warnings }: { warnings: readonly PublishGateWarningReason[] }) {
+  if (warnings.length === 0) return null;
+  return (
+    <div className="mt-2 space-y-1 rounded border border-amber-200 bg-amber-50 px-2 py-1.5 text-amber-900">
+      <p className="text-xs font-medium">以下各项不影响发布，仅作提示：</p>
+      <ul className="space-y-1">
+        {warnings.map((warning) => {
+          const copy = describePublishGateReason(warning);
+          return (
+            <li key={warning} data-testid={`publish-gate-warning-${warning}`} className="text-xs">
+              <span className="font-medium">{copy.label}</span>
+              <span className="ml-1 text-amber-800">{copy.guidance}</span>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
 function PublishOutcomePanel({ result }: { result: ApplyPublishTransitionResult }) {
   if (result.outcome === "published") {
     return (
       <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
         <p className="font-medium">发布成功{result.firstPublish ? "——这是该书目首次对外发布" : ""}。</p>
+        <PublishWarningList warnings={result.warnings} />
         <p className="mt-1 text-xs text-emerald-700">
           公开页面缓存已失效。
           {result.firstPublish
@@ -106,6 +132,7 @@ function PublishOutcomePanel({ result }: { result: ApplyPublishTransitionResult 
           );
         })}
       </ul>
+      <PublishWarningList warnings={gate.warnings} />
     </div>
   );
 }

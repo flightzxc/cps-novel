@@ -142,6 +142,7 @@ import {
 import { requireFreshAdminServiceMutation, type AdminServiceAuthorization } from "@/server/auth/guards";
 
 import { evaluatePublishGate, type PublishGateEvaluation } from "./evaluator";
+import type { PublishGateWarningReason } from "@/contracts/publish-gate";
 import { loadPublishGateFacts } from "./facts";
 import { resolveArticlePublishTimeForWrite } from "./resolve-publish-time";
 
@@ -229,6 +230,15 @@ export type ApplyPublishTransitionResult =
       readonly locale: string;
       /** True only the first time this Article ever reached `published`. */
       readonly firstPublish: boolean;
+      /**
+       * Owner decision 2026-09-18 (publish/preview decoupling): non-blocking
+       * gate findings the Article was published *despite* — today exactly the
+       * preview pair. Carried on the success branch on purpose: "published,
+       * but this book still has no readable 试读章节" is the one moment an
+       * operator can act on it, and dropping it here would make the decoupling
+       * silent instead of explicit. Empty for a fully clean publish.
+       */
+      readonly warnings: readonly PublishGateWarningReason[];
     }
   | { readonly outcome: "rejected"; readonly gate: PublishGateEvaluation }
   | { readonly outcome: "not_found" }
@@ -268,6 +278,8 @@ type TxPublishOutcome =
       /** C-27: `null` for a non-`novel_article` (blog/listicle/guide) — see this module's "Why Novel and Article publish together" section below. */
       readonly novelId: string | null;
       readonly locale: string;
+      /** See the public `ApplyPublishTransitionResult`'s own `warnings` doc. */
+      readonly warnings: readonly PublishGateWarningReason[];
       /**
        * Carried through purely to build the invalidated path after commit
        * (`@/server/publication/revalidate`) — not part of the public
@@ -339,19 +351,44 @@ export async function applyPublishTransition(
         return { outcome: "rejected", gate };
       }
 
-      // Idempotency check: sequential-retry-safe only, NOT concurrency-safe.
-      // `OperationAudit` carries no unique constraint on (actorType, action,
-      // entityType, entityId, requestId) — only a plain index
-      // (`prisma/schema.prisma` — see `operation_audit_request_idx`) — so
-      // this is check-then-insert. Two genuinely concurrent calls with the
-      // same requestId can both pass this check before either commits its
-      // audit row, producing two audit rows and two
-      // `dispatchFirstPublicPublication` calls. A retried call *after* the
-      // original committed (the ordinary "network timeout, client retries"
-      // case) is safe. A partial unique index on `operation_audit` is
-      // registered as a schema follow-up
-      // (`docs/governance/database-governance.md` §13) rather than added
-      // here — this round's schema is frozen.
+      // Service-layer replay check — NOT end-to-end idempotency, and not a
+      // concurrency guard. It answers exactly one question: "has a call with
+      // *this same* `requestId` already published *this same* Article?" A
+      // retry of the identical call (the ordinary "network timeout, caller
+      // retries", or `withDbRetry` re-running this callback after an
+      // ambiguous commit) replays as a no-op. A human clicking 发布 again
+      // generates a **new** `requestId` and is therefore a new operation, not
+      // a replay — it publishes again (and, for an already-published
+      // Article, writes a second audit row). Do not describe this as
+      // idempotent publishing.
+      //
+      // 🔴 Correction (2026-09-18, batch audit-collision fix). An earlier
+      // version of this comment claimed `OperationAudit` "carries no unique
+      // constraint … only a plain index". That is false and it is what let
+      // the batch collision below be reasoned away:
+      //
+      //     operation_audit_admin_request_action_uidx
+      //     UNIQUE (request_id, action) WHERE actor_type = 'admin'
+      //                                   AND request_id IS NOT NULL
+      //     (prisma/migrations/20260804140000_p1_08b_admin_auth_persistence
+      //      /migration.sql:113, shipped 2026-08-04)
+      //
+      // Note what that index is and is not keyed on: (request_id, action) —
+      // *not* `entityId`. So it is strictly narrower than the lookup right
+      // below, which filters by `entityId` as well. Two different Articles
+      // sharing one `requestId` therefore both pass this check and then
+      // collide on INSERT. That is a real P2002, never a replay, and must
+      // never be swallowed as one.
+      //
+      // Admin vs system: the index is partial on `actor_type = 'admin'`, so
+      // it constrains operator-driven publishes only. The `"system"` actor
+      // (`publishDueScheduledArticles`) is outside it entirely — that sweep
+      // is nonetheless safe on its own merits, because it mints a distinct
+      // per-article `requestId` (`scheduled-publish:<id>:<iso>`), not because
+      // the index lets it off.
+      //
+      // The batch path keeps this collision impossible by deriving a stable
+      // per-article `requestId` — see `publishBatchItemRequestId` below.
       const existingAudit = await tx.operationAudit.findFirst({
         where: {
           actorType,
@@ -372,6 +409,11 @@ export async function applyPublishTransition(
           firstPublish: false,
           wrote: false,
           articleType: article.articleType,
+          // Re-evaluated from live facts on this replay rather than read back
+          // out of the original audit row: a replay that lands after the
+          // backfill has since materialized the preview should not keep
+          // reporting a warning that is no longer true.
+          warnings: gate.warnings,
         };
       }
 
@@ -428,9 +470,14 @@ export async function applyPublishTransition(
           beforeSnapshot: facts.novel
             ? { articleStatus: facts.article.status, novelStatus: facts.novel.status }
             : { articleStatus: facts.article.status },
+          // `publishWarnings` records what was knowingly published *despite*
+          // (Owner 2026-09-18 decoupling). Without it the audit row would
+          // read identically for "published with a full 试读" and "published
+          // with none", and the decision to ship the second one would leave
+          // no trace at all.
           afterSnapshot: facts.novel
-            ? { articleStatus: "published", novelStatus: "published" }
-            : { articleStatus: "published" },
+            ? { articleStatus: "published", novelStatus: "published", publishWarnings: [...gate.warnings] }
+            : { articleStatus: "published", publishWarnings: [...gate.warnings] },
         },
       });
 
@@ -444,6 +491,7 @@ export async function applyPublishTransition(
         firstPublish,
         wrote: true,
         articleType: article.articleType,
+        warnings: gate.warnings,
       };
         }),
       { op: "publish-gate.applyPublishTransition", itemId: input.articleId, idempotencyKey: input.requestId },
@@ -515,6 +563,7 @@ export async function applyPublishTransition(
       novelId: txResult.novelId,
       locale: txResult.locale,
       firstPublish: txResult.firstPublish,
+      warnings: txResult.warnings,
     };
   }
   return txResult;
@@ -524,20 +573,95 @@ export async function applyPublishTransition(
 // Batch publish — loops `applyPublishTransition` per item. Never `updateMany`
 // straight to `published`: that is exactly CPS's `changeArticlesStatusByFilter`
 // defect (`P2-07.md` §4 — "如果 P2-07 要做批量发布，必须逐条调用 evaluator（不能
-// updateMany）"). The shared `requestId` plus a per-item `entityId` in the
-// audit idempotency lookup means a *sequential* retry of the whole batch
-// (e.g. after a timeout) redoes exactly the same items without double-
-// writing. This is NOT a claim of concurrency safety: two literally-
-// concurrent callers submitting the same batch requestId can still each
-// pass the per-item idempotency check before either commits, for the same
-// reason documented on `applyPublishTransition`'s `existingAudit` check
-// above (no unique constraint backs it yet).
+// updateMany）"). CPS's shape is read-only reference here and must not be
+// copied in to sidestep anything this file does.
+//
+// 2026-09-18 bug this section now encodes: every item used to be handed the
+// *batch's own* `requestId`, so every successful publish in one batch wrote
+// `operation_audit(actor_type='admin', action='article.publish',
+// request_id=<batch id>)` — and the second one hit
+// `operation_audit_admin_request_action_uidx` (see `applyPublishTransition`'s
+// corrected comment above) with a P2002 that aborted the whole call. It was
+// latent for as long as a batch could only ever produce one successful
+// publish; the 2026-09-18 publish/preview decoupling made many Articles
+// publishable at once and surfaced it on the first real batch.
+//
+// Each item now gets `publishBatchItemRequestId(batchRequestId, articleId)`.
+// Two properties matter and both are load-bearing:
+//   * unique per (batch, article) — no two audit rows in one batch share
+//     (request_id, action);
+//   * **stable** — derived from the article id, never a loop index and never
+//     freshly generated. A re-submitted batch with the same batch requestId
+//     rebuilds byte-identical per-item ids, so the replay check in
+//     `applyPublishTransition` still recognises already-published items and
+//     does not re-fire `dispatchFirstPublicPublication`. A loop index would
+//     break that the moment the selection order or contents changed.
+// The outer admin authorization still uses the raw batch UUID — see
+// `publishArticlesBatchAsAdmin`.
 // ---------------------------------------------------------------------------
 
 const MAX_BATCH_SIZE = 200;
 
+/**
+ * Per-article operation id for one batch. Same construction
+ * `src/server/articles/service.ts`'s `regenerateArticlesBatch` and
+ * `src/server/article-rebind/batch.ts` already use, deliberately — three
+ * batch paths, one convention.
+ *
+ * Length: `operation_audit.request_id` is `VARCHAR(160)`; a UUID batch id
+ * plus `:` plus a UUID article id is 73 characters. The admin-facing
+ * `requestId` validators upstream are unchanged and still see only the raw
+ * batch UUID — this derived value is created *after* authorization and never
+ * travels back out to a caller-supplied field.
+ */
+export function publishBatchItemRequestId(batchRequestId: string, articleId: string): string {
+  return `${batchRequestId}:${articleId}`;
+}
+
+/**
+ * Sanitized identification of an unexpected throw — enough to find the row
+ * and the failing constraint, with no row data in it. Prisma's `code` and
+ * `meta.target` are schema identifiers (constraint/column names), never
+ * values.
+ */
+function describeUnexpectedError(error: unknown): string {
+  if (error && typeof error === "object") {
+    const candidate = error as { name?: unknown; code?: unknown; meta?: { target?: unknown } };
+    const name = typeof candidate.name === "string" ? candidate.name : "Error";
+    const code = typeof candidate.code === "string" ? `:${candidate.code}` : "";
+    const target = Array.isArray(candidate.meta?.target)
+      ? `:${candidate.meta.target.filter((value): value is string => typeof value === "string").join(",")}`
+      : typeof candidate.meta?.target === "string"
+        ? `:${candidate.meta.target}`
+        : "";
+    return `${name}${code}${target}`;
+  }
+  return "Error";
+}
+
 export type PublishArticlesBatchResult = {
+  /**
+   * Only the items this call actually processed to a decided outcome. When
+   * `aborted` is present this is a *prefix* of the requested selection, not
+   * the whole of it — the caller must not present it as a complete tally.
+   */
   readonly results: ReadonlyArray<{ readonly articleId: string; readonly result: ApplyPublishTransitionResult }>;
+  /**
+   * Present only when the loop stopped early on an unexpected throw.
+   *
+   * Everything in `results` before it is already committed and stays
+   * committed — each item is its own transaction, so an abort is never a
+   * batch-wide rollback and must never be reported as one. The aborting item
+   * itself committed nothing: its transaction rolled back, and every
+   * post-commit step (`dispatchFirstPublicPublication`, cache invalidation)
+   * is internally isolated and cannot throw out here.
+   */
+  readonly aborted?: {
+    readonly articleId: string;
+    /** Sanitized class only (e.g. `PrismaClientKnownRequestError:P2002:request_id,action`). Never a raw message. */
+    readonly errorKind: string;
+    readonly notProcessedArticleIds: readonly string[];
+  };
 };
 
 export async function publishArticlesBatch(
@@ -551,14 +675,44 @@ export async function publishArticlesBatch(
     );
   }
   const results: Array<{ articleId: string; result: ApplyPublishTransitionResult }> = [];
-  for (const articleId of input.articleIds) {
-    const result = await applyPublishTransition(db, {
-      articleId,
-      requestId: input.requestId,
-      actor: input.actor,
-      now: input.now,
-    });
-    results.push({ articleId, result });
+  for (const [index, articleId] of input.articleIds.entries()) {
+    try {
+      const result = await applyPublishTransition(db, {
+        articleId,
+        requestId: publishBatchItemRequestId(input.requestId, articleId),
+        actor: input.actor,
+        now: input.now,
+      });
+      results.push({ articleId, result });
+    } catch (error) {
+      // Deliberately fail-fast rather than per-item swallow. An unexpected
+      // throw here is a systemic signal (a constraint the write path did not
+      // know about, a database problem); grinding through the remaining
+      // selection would multiply it, which is the exact failure shape the
+      // 2026-09-14 task burn taught this codebase to stop doing. What we do
+      // NOT do is lose what already happened: `results` keeps every item that
+      // reached a real outcome, and `aborted` names where it stopped.
+      //
+      // No error class is reinterpreted as success here — in particular a
+      // P2002 is reported as a P2002. Treating "unique violation" as
+      // "already done" would be a guess about a row this call never read.
+      const errorKind = describeUnexpectedError(error);
+      console.error("[publish-gate] batch publish aborted", {
+        batchRequestId: input.requestId,
+        articleId,
+        processedCount: results.length,
+        remainingCount: input.articleIds.length - index - 1,
+        errorKind,
+      });
+      return {
+        results,
+        aborted: {
+          articleId,
+          errorKind,
+          notProcessedArticleIds: input.articleIds.slice(index + 1),
+        },
+      };
+    }
   }
   return { results };
 }

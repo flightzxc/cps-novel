@@ -41,6 +41,7 @@ const EXPECTED_TASK_ROUTES = [
   { path: "/api/admin/tasks/items", methods: ["GET"] },
   { path: "/api/admin/tasks/progress", methods: ["GET"] },
   { path: "/api/admin/tasks/retry-failed", methods: ["POST"] },
+  { path: "/api/admin/tasks/retry-catalog-finalize", methods: ["POST"] },
   { path: "/api/admin/tasks/pause", methods: ["POST"] },
   { path: "/api/admin/tasks/resume", methods: ["POST"] },
   { path: "/api/admin/tasks/abort", methods: ["POST"] },

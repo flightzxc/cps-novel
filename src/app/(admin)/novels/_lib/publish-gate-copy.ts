@@ -1,6 +1,7 @@
 import {
   PUBLISH_REQUIRED_METADATA_FIELDS,
   type PublishGateReason,
+  type PublishGateWarningReason,
   type PublishRequiredMetadataField,
   type RequiredMetadataMissingDetail,
 } from "@/contracts/publish-gate";
@@ -68,15 +69,18 @@ export function describePublishGateReason(reason: PublishGateReason): PublishGat
         label: "必填字段缺失",
         guidance: "文章的标题、slug 或正文存在空值，需要通过内容生产流程重新生成或人工修正后再试。",
       };
+    // 🟡 Owner 决策 2026-09-18（发布与 Preview 解耦）：下面两项已不再阻断发布，
+    // 只作提示。文案随之改写——继续写「…后再发布」会把一条不存在的限制重新
+    // 教给操作者，等于用文案把降级固化成契约。
     case "preview_chapter_missing":
       return {
         label: "没有可信试读章节",
-        guidance: "该书目还没有物化落地的试读章节，请先到「目录同步」页面触发目录扫描，等待试读章节落地后再发布。",
+        guidance: "不影响发布：文章可以先发出去，页面只是暂时不展示试读模块。试读会由补采链路异步补齐；长期不恢复请检查该渠道账号的凭据与试读任务。",
       };
     case "preview_body_missing":
       return {
         label: "试读章节正文为空",
-        guidance: "已有试读章节，但正文尚未落地，请检查该书目最近一次内容同步是否成功完成。",
+        guidance: "不影响发布：已有试读章节记录但正文尚未落地，页面同样只是不展示试读模块。请检查该书目最近一次内容同步是否成功完成。",
       };
     case "promo_link_missing":
       return {
@@ -106,4 +110,16 @@ export function describePublishGateReason(reason: PublishGateReason): PublishGat
     default:
       return assertUnreachable(reason);
   }
+}
+
+/**
+ * 一行式的 warning 摘要，给「已发布，但有未阻断项」这种场合用
+ *（`ApplyPublishTransitionResult` 的 `published` 分支带 `warnings`）。
+ * 空数组返回 `null`，调用方据此整段不渲染——不留「暂无提示」这类空壳。
+ */
+export function summarizePublishGateWarnings(
+  warnings: readonly PublishGateWarningReason[],
+): string | null {
+  if (warnings.length === 0) return null;
+  return warnings.map((warning) => describePublishGateReason(warning).label).join("、");
 }

@@ -111,10 +111,40 @@ model ChannelAccount {
   channelSyncTasks     ChannelSyncTask[]
   genericTasks         GenericTask[]
   sideEffects          SideEffectIntent[]
+  holds                ChannelAccountHold[]
 
   @@index([channelId, status], map: "channel_account_channel_status_idx")
   @@index([status, deletedAt], map: "channel_account_status_deleted_idx")
   @@map("channel_account")
+}
+
+/// Account-level deterministic-failure brake (Owner 2026-09-18, 决策 2).
+/// See `prisma/migrations/20260918090000_preview_account_hold/migration.sql`
+/// for the full rationale and `src/lib/tasks/account-hold.ts` for the read
+/// side. `channel_account_hold_active_uidx`
+/// (UNIQUE(channel_account_id) WHERE released_at IS NULL) is a partial unique
+/// index and therefore lives only in that migration, following this schema's
+/// existing convention (`article_locale_slug_active_uidx`,
+/// `channel_sync_active_scope_uidx`).
+model ChannelAccountHold {
+  id               String    @id @default(uuid()) @db.Uuid
+  channelAccountId String    @map("channel_account_id") @db.Uuid
+  scope            String    @db.VarChar(32)
+  reasonCode       String    @map("reason_code") @db.VarChar(64)
+  credentialId     String?   @map("credential_id") @db.Uuid
+  triggeringTaskId String?   @map("triggering_task_id") @db.Uuid
+  triggeringItemId String?   @map("triggering_item_id") @db.Uuid
+  heldAt           DateTime  @default(now()) @map("held_at") @db.Timestamptz(6)
+  releasedAt       DateTime? @map("released_at") @db.Timestamptz(6)
+  releasedBy       String?   @map("released_by") @db.VarChar(160)
+  releaseReason    String?   @map("release_reason") @db.VarChar(300)
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  channelAccount ChannelAccount @relation(fields: [channelAccountId], references: [id], onDelete: Restrict)
+
+  @@index([channelAccountId, scope, heldAt], map: "channel_account_hold_history_idx")
+  @@map("channel_account_hold")
 }
 
 model ChannelAccountCredential {

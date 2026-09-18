@@ -26,8 +26,10 @@
  */
 import {
   createPublishGateResult,
+  createPublishGateWarnings,
   type PublishGateReason,
   type PublishGateResult,
+  type PublishGateWarningReason,
   type PublishRequiredMetadataField,
   type RequiredMetadataMissingDetail,
 } from "@/contracts/publish-gate";
@@ -114,6 +116,19 @@ export type PublishGateEvaluatorDeps = Record<string, never>;
 
 export type PublishGateEvaluation = PublishGateResult & {
   readonly requiredMetadataMissing: RequiredMetadataMissingDetail | null;
+  /**
+   * Non-blocking diagnostics (Owner decision 2026-09-18 — publish/preview
+   * decoupling; see `@/contracts/publish-gate`'s `PUBLISH_GATE_REASONS` doc).
+   * Produced by exactly the same per-condition checks that used to push these
+   * codes into `reasons`, so the facts an operator and the backfill path need
+   * ("which books have no readable preview chapter") are still computed and
+   * still reported — they just no longer decide `publishable`.
+   *
+   * `publishable` is deliberately `reasons.length === 0` and never looks at
+   * this field: a warning that could flip `publishable` would not be a
+   * warning.
+   */
+  readonly warnings: readonly PublishGateWarningReason[];
 };
 
 function isBlank(value: string): boolean {
@@ -141,15 +156,22 @@ function requiredMetadataMissingFields(article: PublishGateArticleFacts): Publis
  * listicle/guide — see this file's header). For that branch, three
  * conditions apply — `required_metadata_missing`, `page_identity_conflict`,
  * and `rights_blocked` (read off `facts.article.status` only — see below) —
- * all Article-level concepts a Novel-less row still has. The other four reasons
+ * all Article-level concepts a Novel-less row still has. The other four codes
  * (`preview_chapter_missing`/`preview_body_missing`/`promo_link_missing`/
  * `promo_link_not_ready`) are entirely Novel-side concepts (试读章节 belongs
  * to the Novel; PromoLink readiness is keyed off the Novel too) that a
  * Novel-less Article cannot fail or pass — they are skipped, not
  * evaluated-and-cleared, for that branch. A `novel_article` (`facts.novel`
- * present) keeps exactly today's seven-reason behavior, byte-for-byte — this
- * fork only ever *narrows* what gets checked, never changes a
- * `novel_article`'s own evaluation.
+ * present) keeps exactly today's behavior for every *blocking* condition,
+ * byte-for-byte — this fork only ever *narrows* what gets checked, never
+ * changes a `novel_article`'s own evaluation.
+ *
+ * Owner decision 2026-09-18 (publish/preview decoupling) changed where the
+ * preview pair's verdict *lands*, not whether it is computed: both codes now
+ * go to `PublishGateEvaluation.warnings` and can never make `publishable`
+ * false. Everything else — promo readiness, rights, page identity, required
+ * metadata — keeps its blocking status unchanged. See
+ * `@/contracts/publish-gate`'s `PUBLISH_GATE_WARNING_REASONS`.
  *
  * `rights_blocked` specifically: `visibility.ts`'s `isRightsBlocked` is
  * `novel.status === "takedown" || article.status === "takedown"` — an OR of
@@ -167,6 +189,7 @@ export function evaluatePublishGate(
   deps: PublishGateEvaluatorDeps = {},
 ): PublishGateEvaluation {
   const reasons: PublishGateReason[] = [];
+  const warnings: PublishGateReason[] = [];
   const novel = facts.novel;
 
   const missingFields = requiredMetadataMissingFields(facts.article);
@@ -177,10 +200,18 @@ export function evaluatePublishGate(
   if (novel) {
     // Novel-side conditions — see this function's header on why these do
     // not apply to a Novel-less (non-novel_article) Article at all.
+    //
+    // Owner decision 2026-09-18: the preview pair is evaluated exactly as
+    // before (same two facts, same either/or ordering — a Novel with no
+    // chapter at all reports `preview_chapter_missing`, never both codes),
+    // but its output goes to `warnings` instead of `reasons`. Deleting the
+    // check was explicitly rejected: `src/server/preview-recovery/backfill.ts`
+    // and the admin surfaces both need to know which books are missing a
+    // readable preview, and this is where that fact is decided.
     if (!facts.preview.hasPreviewChapter) {
-      reasons.push("preview_chapter_missing");
+      warnings.push("preview_chapter_missing");
     } else if (!facts.preview.hasPreviewBody) {
-      reasons.push("preview_body_missing");
+      warnings.push("preview_body_missing");
     }
 
     if (!facts.promoLink) {
@@ -208,6 +239,7 @@ export function evaluatePublishGate(
   const result = createPublishGateResult(reasons);
   return {
     ...result,
+    warnings: createPublishGateWarnings(warnings),
     requiredMetadataMissing:
       missingFields.length > 0
         ? Object.freeze({ reason: "required_metadata_missing", missingFields: Object.freeze(missingFields) })

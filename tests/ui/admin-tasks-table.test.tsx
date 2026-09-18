@@ -192,6 +192,33 @@ describe("TasksTable · 两类任务统一列表", () => {
     expect(screen.queryByText(/本$/)).toBeNull();
   });
 
+  it("失败书数不可定位时显示“未知”和实际失败页数，不伪造 0 本", () => {
+    render(
+      <TasksTable
+        tasks={[
+          task({
+            taskId: "22222222-2222-4222-8222-222222222222",
+            taskType: "catalog_scan",
+            failedCount: 123,
+            bookCounts: {
+              upstreamTotal: 97320,
+              fetched: 97300,
+              failedBooks: null,
+              failedPages: 123,
+              pagesScanned: 1096,
+              pagesTotalExpected: 974,
+              percent: 99.97,
+            },
+          }),
+        ]}
+      />,
+    );
+
+    expect(screen.getByText("未知")).toBeTruthy();
+    expect(screen.getByText("123 页失败")).toBeTruthy();
+    expect(screen.queryByText("0 本")).toBeNull();
+  });
+
   it("目录父任务显示中文阶段和未提交原因，不显示后端 reason key", () => {
     render(<TasksTable tasks={[task({
       taskType: "batch.materialize.v1",

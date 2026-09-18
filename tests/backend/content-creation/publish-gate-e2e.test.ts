@@ -66,8 +66,14 @@ describe("content creation → real evaluatePublishGate", () => {
     const evaluation = evaluatePublishGate(facts);
     expect(evaluation.reasons).not.toContain("required_metadata_missing");
     expect(evaluation.requiredMetadataMissing).toBeNull();
-    expect(evaluation.reasons).toEqual(["preview_chapter_missing"]);
-    expect(evaluation.publishable).toBe(false);
+    // 2026-09-18 publish/preview decoupling: a freshly generated Article
+    // whose Novel has no materialized 试读 yet is exactly the shape this whole
+    // round exists for. The missing preview is still *detected* (warning —
+    // that is what `src/server/preview-recovery/backfill.ts` keys off), and it
+    // no longer stops the article from going out.
+    expect(evaluation.reasons).toEqual([]);
+    expect(evaluation.warnings).toEqual(["preview_chapter_missing"]);
+    expect(evaluation.publishable).toBe(true);
   });
 
   it("(control) the same facts with body forced back to '' still fail required_metadata_missing", async () => {

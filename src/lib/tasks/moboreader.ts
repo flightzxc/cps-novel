@@ -6,11 +6,42 @@ import {
 } from "../flags";
 import { isUniqueConstraintViolation as isUniqueViolation } from "@/lib/db/db-retry";
 import { findNovelSourceItemsByIds } from "@/lib/db/chunked-id-lookup";
+import { findActiveAccountHold, PREVIEW_ACCOUNT_HOLD_SCOPE } from "./account-hold";
+import { mergeTaskControlResult, type TaskControlMarker } from "./task-control";
 
 export const MOBOREADER_TASK_TYPES = Object.freeze({
   catalogScan: "catalog_scan",
   previewRefresh: "moboreader.preview_refresh.v1",
 });
+
+export const MOBOREADER_CATALOG_TARGET_TYPES = Object.freeze({
+  page: "catalog_page",
+  recoveryPage: "catalog_recovery_page",
+  finalize: "catalog_finalize",
+});
+
+export const MOBOREADER_CATALOG_FINALIZE_TARGET_ID = "v1";
+export const MOBOREADER_PREVIEW_STAGE_BATCH_SIZE = 1_000;
+export const MOBOREADER_CATALOG_MAX_ATTEMPTS = 3;
+
+export const MOBOREADER_PREVIEW_EVIDENCE = Object.freeze({
+  dataId: "confirmed_getlistpc_series_id",
+  materialType: "confirmed_runtime_selection_policy",
+  materialTypeGlobalConstant: "not_asserted",
+  materialType1001: "rejected",
+  productionPreviewCall: "enabled",
+});
+
+export function catalogFinalizeGeneration(value: unknown): number {
+  return typeof value === "number" && Number.isSafeInteger(value) && value > 0 ? value : 1;
+}
+
+export function catalogPreviewRequestToken(taskId: string, generation: number): string {
+  const normalized = catalogFinalizeGeneration(generation);
+  return normalized === 1
+    ? `moboreader.preview_refresh.v1:${taskId}`
+    : `moboreader.preview_refresh.v1:${taskId}:g${normalized}`;
+}
 
 export const MOBOREADER_CATALOG_LIMITS = Object.freeze({
   defaultSafetyMaxPages: 2_000,
@@ -148,13 +179,29 @@ export interface CreateMoboreaderPreviewRefreshTaskInput {
   mode?: "dry_run" | "apply";
 }
 
-interface EnqueueMoboreaderPreviewRefreshTaskInput extends CreateMoboreaderPreviewRefreshTaskInput {
+export interface EnqueueMoboreaderPreviewRefreshTaskInput extends CreateMoboreaderPreviewRefreshTaskInput {
   trigger: "manual" | "auto";
   catalogScanTaskId?: string;
 }
 
 export type MoboreaderPreviewTaskCreationResult =
-  | { status: "enqueued"; taskId: string; taskStatus: "pending" | "disabled"; eligibleCount: number; skipReasonCounts: Record<string, number> }
+  | {
+      status: "enqueued";
+      taskId: string;
+      taskStatus: "pending" | "disabled";
+      eligibleCount: number;
+      skipReasonCounts: Record<string, number>;
+      /**
+       * Present exactly when this task was created `disabled` because the
+       * channel account is under an active hold (Owner 2026-09-18 决策 2,
+       * `./account-hold.ts`). Distinguishes "parked by the brake, re-enable
+       * it with `scripts/preview-account-hold.ts --release`" from the older,
+       * unrelated reason a preview task can be born `disabled` (the catalog
+       * feature/write flags being off), which carries no `taskControl` marker
+       * and is not something a release re-enables.
+       */
+      accountHeld?: { holdId: string; reasonCode: string };
+    }
   | { status: "duplicate"; taskId: string }
   | { status: "active_conflict"; taskId: string }
   | { status: "no_eligible_sources"; skipReasonCounts: Record<string, number> };
@@ -540,6 +587,102 @@ export async function createMoboreaderCatalogScanTask(
 
 type TaskDb = PrismaClient | Prisma.TransactionClient;
 
+export async function failMoboreaderCatalogFinalize(
+  tx: Prisma.TransactionClient,
+  input: {
+    catalogTaskId: string;
+    generation: number;
+    actorId: string;
+    requestId?: string;
+    reason: "retry_exhausted" | "lease_expired";
+    now?: Date;
+  },
+): Promise<void> {
+  const now = input.now ?? new Date();
+  const parent = await tx.genericTask.findUniqueOrThrow({
+    where: { id: input.catalogTaskId },
+    select: { result: true },
+  });
+  const result = parent.result && typeof parent.result === "object" && !Array.isArray(parent.result)
+    ? parent.result as Record<string, unknown>
+    : {};
+  await tx.genericTask.update({
+    where: { id: input.catalogTaskId },
+    data: {
+      result: {
+        ...result,
+        finalization: {
+          status: "failed",
+          generation: catalogFinalizeGeneration(input.generation),
+          failedAt: now.toISOString(),
+          reason: input.reason,
+        },
+        terminalState: "partial_failed",
+      },
+    },
+  });
+
+  const requestToken = catalogPreviewRequestToken(input.catalogTaskId, input.generation);
+  const preview = await tx.channelSyncTask.findUnique({
+    where: { requestToken },
+    select: { id: true, status: true, result: true },
+  });
+  const previewResult = preview?.result && typeof preview.result === "object" && !Array.isArray(preview.result)
+    ? preview.result as Record<string, unknown>
+    : {};
+  let failedPreviewItems = 0;
+  if (preview && preview.status === "disabled" && previewResult.buildStatus === "building") {
+    const failed = await tx.channelSyncTaskItem.updateMany({
+      where: { taskId: preview.id, status: "pending" },
+      data: {
+        status: "failed",
+        error: { code: "preview_build_abandoned", message: "Catalog finalizer exhausted before preview activation" },
+        finishedAt: now,
+      },
+    });
+    failedPreviewItems = failed.count;
+    const actualFailedCount = await tx.channelSyncTaskItem.count({ where: { taskId: preview.id, status: "failed" } });
+    await tx.channelSyncTask.update({
+      where: { id: preview.id },
+      data: {
+        status: "failed",
+        failedCount: actualFailedCount,
+        completedAt: now,
+        error: { code: "preview_build_abandoned", message: "Preview staging did not complete" },
+        result: { ...previewResult, buildStatus: "failed", failedAt: now.toISOString() },
+      },
+    });
+    await tx.operationAudit.create({
+      data: {
+        actorType: "worker", actorId: input.actorId,
+        action: "moboreader.preview_refresh.build_failed", entityType: "ChannelSyncTask",
+        entityId: preview.id, requestId: input.requestId,
+        taskType: MOBOREADER_TASK_TYPES.previewRefresh, taskId: preview.id,
+        afterSnapshot: {
+          catalogScanTaskId: input.catalogTaskId,
+          generation: catalogFinalizeGeneration(input.generation),
+          buildStatus: "failed",
+          failedPreviewItems,
+          reason: input.reason,
+        },
+      },
+    });
+  }
+  await tx.operationAudit.create({
+    data: {
+      actorType: "worker", actorId: input.actorId,
+      action: "moboreader.catalog_finalize.failed", entityType: "GenericTask",
+      entityId: input.catalogTaskId, requestId: input.requestId,
+      taskType: MOBOREADER_TASK_TYPES.catalogScan, taskId: input.catalogTaskId,
+      afterSnapshot: {
+        generation: catalogFinalizeGeneration(input.generation),
+        reason: input.reason,
+        failedPreviewItems,
+      },
+    },
+  });
+}
+
 function csvSet(value: string | undefined): Set<string> {
   return new Set((value ?? "").split(",").map((item) => item.trim()).filter(Boolean));
 }
@@ -565,6 +708,292 @@ function validatedPreviewInput(input: EnqueueMoboreaderPreviewRefreshTaskInput) 
     requestId: required(input.requestId, "request_id_required"),
     novelSourceItemIds: ids,
     mode,
+  };
+}
+
+type PreviewPlan = Readonly<{
+  input: ReturnType<typeof validatedPreviewInput>;
+  runtime: MoboreaderPreviewRuntimeConfig;
+  eligibleIds: readonly string[];
+  skipReasonCounts: Record<string, number>;
+  operationScopeHash: string;
+  taskStatus: "pending" | "disabled";
+}>;
+
+async function buildPreviewPlan(
+  db: TaskDb,
+  rawInput: EnqueueMoboreaderPreviewRefreshTaskInput,
+  env: NodeJS.ProcessEnv,
+  now: Date,
+): Promise<PreviewPlan | { status: "no_eligible_sources"; skipReasonCounts: Record<string, number> }> {
+  const input = validatedPreviewInput(rawInput);
+  const skipReasonCounts: Record<string, number> = {};
+  const binding = await db.channelApp.findFirst({
+    where: { id: input.channelAppId, status: "active", channel: { status: "active" }, sourceApp: { status: "active" } },
+    select: { id: true, sourceApp: { select: { code: true } } },
+  });
+  if (!binding) {
+    increment(skipReasonCounts, "inactive_channel_binding", input.novelSourceItemIds.length);
+    return { status: "no_eligible_sources", skipReasonCounts };
+  }
+  const sourceAppAllowlist = csvSet(env[MOBOREADER_PREVIEW_ENV.sourceAppCodes]);
+  if (!sourceAppAllowlist.has(binding.sourceApp.code)) {
+    increment(skipReasonCounts, "source_app_not_allowlisted", input.novelSourceItemIds.length);
+    return { status: "no_eligible_sources", skipReasonCounts };
+  }
+  const account = await db.channelAccount.findFirst({
+    where: {
+      id: input.channelAccountId,
+      channel: { channelApps: { some: { id: input.channelAppId } } },
+      status: "active",
+      deletedAt: null,
+    },
+    select: {
+      id: true,
+      credentials: {
+        where: { status: "active", OR: [{ expiresAt: null }, { expiresAt: { gt: now } }] },
+        select: { id: true },
+        take: 2,
+      },
+    },
+  });
+  if (!account || account.credentials.length !== 1) {
+    increment(skipReasonCounts, account ? "credential_ambiguous" : "account_unavailable", input.novelSourceItemIds.length);
+    return { status: "no_eligible_sources", skipReasonCounts };
+  }
+
+  const runtime = resolveMoboreaderPreviewRuntimeConfig(env);
+  const optionalAllowlist = csvSet(env[MOBOREADER_PREVIEW_ENV.sourceItemAllowlist]);
+  const sources = await findNovelSourceItemsByIds(db, input.novelSourceItemIds, {
+    where: { channelAppId: input.channelAppId },
+    select: {
+      id: true,
+      novelId: true,
+      deletedAt: true,
+      novel: { select: { previewPolicy: { select: { lastRefreshedAt: true } } } },
+    },
+  });
+  const byId = new Map(sources.map((source) => [source.id, source]));
+  const eligibleIds: string[] = [];
+  for (const sourceId of input.novelSourceItemIds) {
+    const source = byId.get(sourceId);
+    if (!source || source.deletedAt || !source.novelId) {
+      increment(skipReasonCounts, "source_unlinked_or_deleted");
+      continue;
+    }
+    if (optionalAllowlist.size > 0 && !optionalAllowlist.has(sourceId)) {
+      increment(skipReasonCounts, "source_item_not_allowlisted");
+      continue;
+    }
+    const refreshedAt = source.novel?.previewPolicy?.lastRefreshedAt;
+    if (refreshedAt && now.valueOf() - refreshedAt.valueOf() < runtime.freshnessMs) {
+      increment(skipReasonCounts, "fresh_preview");
+      continue;
+    }
+    eligibleIds.push(sourceId);
+  }
+  if (eligibleIds.length === 0) return { status: "no_eligible_sources", skipReasonCounts };
+  const enabled = isNovelCatalogSyncEnabled(env);
+  const writeAllowed = isNovelCatalogSyncWriteAllowed(env);
+  return {
+    input,
+    runtime,
+    eligibleIds,
+    skipReasonCounts,
+    operationScopeHash: digest([...eligibleIds].sort()),
+    taskStatus: enabled && writeAllowed ? "pending" : "disabled",
+  };
+}
+
+export interface PreviewStageWriter {
+  <T>(write: (tx: Prisma.TransactionClient) => Promise<T>): Promise<T>;
+}
+
+/**
+ * Auto-preview builder used by catalog finalization. It deliberately never
+ * holds one interactive transaction across eligibility reads and all item
+ * inserts. A disabled/building shell plus unique item keys makes every batch
+ * resumable and idempotent; the task only becomes claimable after activation.
+ */
+export async function stageMoboreaderPreviewRefreshTask(
+  prisma: PrismaClient,
+  rawInput: EnqueueMoboreaderPreviewRefreshTaskInput,
+  writePhase: PreviewStageWriter,
+  env: NodeJS.ProcessEnv = process.env,
+  now = new Date(),
+): Promise<MoboreaderPreviewTaskCreationResult> {
+  const validated = validatedPreviewInput(rawInput);
+  const existing = await prisma.channelSyncTask.findUnique({
+    where: { requestToken: validated.requestToken },
+    select: { id: true, status: true, result: true },
+  });
+  const existingResult = existing?.result && typeof existing.result === "object" && !Array.isArray(existing.result)
+    ? existing.result as Record<string, unknown>
+    : null;
+  if (existing && existingResult?.buildStatus === "superseded" && typeof existingResult.activeTaskId === "string") {
+    return { status: "active_conflict", taskId: existingResult.activeTaskId };
+  }
+  if (existing && existingResult?.buildStatus !== "building") {
+    return { status: "duplicate", taskId: existing.id };
+  }
+
+  const planned = await buildPreviewPlan(prisma, rawInput, env, now);
+  if ("status" in planned) return planned;
+  const active = await prisma.channelSyncTask.findFirst({
+    where: {
+      taskType: MOBOREADER_TASK_TYPES.previewRefresh,
+      channelAccountId: planned.input.channelAccountId,
+      channelAppId: planned.input.channelAppId,
+      operationScopeHash: planned.operationScopeHash,
+      status: { in: ["pending", "processing"] },
+    },
+    orderBy: { createdAt: "asc" },
+  });
+  if (active) return { status: "active_conflict", taskId: active.id };
+
+  const taskId = existing?.id ?? randomUUID();
+  if (!existing) {
+    await writePhase(async (tx) => {
+      await tx.channelSyncTask.create({
+        data: {
+          id: taskId,
+          taskType: MOBOREADER_TASK_TYPES.previewRefresh,
+          channelAccountId: planned.input.channelAccountId,
+          channelAppId: planned.input.channelAppId,
+          operationScopeHash: planned.operationScopeHash,
+          requestToken: planned.input.requestToken,
+          mode: planned.input.mode,
+          status: "disabled",
+          totalCount: 0,
+          params: {
+            trigger: planned.input.trigger,
+            catalogScanTaskId: planned.input.catalogScanTaskId ?? null,
+            runtime: { ...planned.runtime },
+            featureFlagEnabled: isNovelCatalogSyncEnabled(env),
+            allowWriteEnabled: isNovelCatalogSyncWriteAllowed(env),
+            skipReasonCounts: planned.skipReasonCounts,
+            evidence: { ...MOBOREADER_PREVIEW_EVIDENCE },
+          },
+          result: { buildStatus: "building", eligibleCount: planned.eligibleIds.length, skipReasonCounts: planned.skipReasonCounts },
+        },
+      });
+      await tx.operationAudit.create({
+        data: {
+          actorType: "worker", actorId: planned.input.actorId,
+          action: "moboreader.preview_refresh.build_started", entityType: "ChannelSyncTask",
+          entityId: taskId, requestId: planned.input.requestId,
+          taskType: MOBOREADER_TASK_TYPES.previewRefresh, taskId,
+          afterSnapshot: { catalogScanTaskId: planned.input.catalogScanTaskId ?? null, eligibleCount: planned.eligibleIds.length },
+        },
+      });
+    });
+  }
+
+  for (let offset = 0; offset < planned.eligibleIds.length; offset += MOBOREADER_PREVIEW_STAGE_BATCH_SIZE) {
+    const ids = planned.eligibleIds.slice(offset, offset + MOBOREADER_PREVIEW_STAGE_BATCH_SIZE);
+    await writePhase(async (tx) => {
+      const inserted = await tx.channelSyncTaskItem.createMany({
+        data: ids.map((novelSourceItemId) => ({
+          taskId,
+          novelSourceItemId,
+          payload: {
+            trigger: planned.input.trigger,
+            runtime: { ...planned.runtime },
+            actorId: planned.input.actorId,
+            requestId: planned.input.requestId,
+            contractStatus: MOBOREADER_PREVIEW_RUNTIME_STATUS,
+          },
+        })),
+        skipDuplicates: true,
+      });
+      await tx.operationAudit.create({
+        data: {
+          actorType: "worker", actorId: planned.input.actorId,
+          action: "moboreader.preview_refresh.items_staged", entityType: "ChannelSyncTask",
+          entityId: taskId, requestId: planned.input.requestId,
+          taskType: MOBOREADER_TASK_TYPES.previewRefresh, taskId,
+          afterSnapshot: { offset, attemptedCount: ids.length, insertedCount: inserted.count },
+        },
+      });
+    });
+  }
+
+  try {
+    await writePhase(async (tx) => {
+      const totalCount = await tx.channelSyncTaskItem.count({ where: { taskId } });
+      await tx.channelSyncTask.update({
+        where: { id: taskId },
+        data: {
+          status: planned.taskStatus,
+          totalCount,
+          result: { buildStatus: "ready", eligibleCount: totalCount, skipReasonCounts: planned.skipReasonCounts },
+        },
+      });
+      await tx.operationAudit.create({
+        data: {
+          actorType: "worker", actorId: planned.input.actorId,
+          action: planned.taskStatus === "pending" ? "moboreader.preview_refresh.queued" : "moboreader.preview_refresh.queued_disabled",
+          entityType: "ChannelSyncTask", entityId: taskId, requestId: planned.input.requestId,
+          taskType: MOBOREADER_TASK_TYPES.previewRefresh, taskId,
+          afterSnapshot: { trigger: planned.input.trigger, status: planned.taskStatus, eligibleCount: totalCount, skipReasonCounts: planned.skipReasonCounts },
+        },
+      });
+    });
+  } catch (error) {
+    if (!isUniqueViolation(error) || planned.taskStatus !== "pending") throw error;
+    const winner = await prisma.channelSyncTask.findFirst({
+      where: {
+        id: { not: taskId },
+        taskType: MOBOREADER_TASK_TYPES.previewRefresh,
+        channelAccountId: planned.input.channelAccountId,
+        channelAppId: planned.input.channelAppId,
+        operationScopeHash: planned.operationScopeHash,
+        status: { in: ["pending", "processing"] },
+      },
+      orderBy: { createdAt: "asc" },
+      select: { id: true },
+    });
+    if (!winner) throw error;
+    await writePhase(async (tx) => {
+      const skipped = await tx.channelSyncTaskItem.updateMany({
+        where: { taskId, status: "pending" },
+        data: {
+          status: "skipped",
+          result: { skipReason: "active_scope_conflict", activeTaskId: winner.id },
+          error: Prisma.DbNull,
+          finishedAt: now,
+        },
+      });
+      await tx.channelSyncTask.update({
+        where: { id: taskId, status: "disabled" },
+        data: {
+          status: "cancelled",
+          skippedCount: skipped.count,
+          completedAt: now,
+          result: {
+            buildStatus: "superseded",
+            activeTaskId: winner.id,
+            eligibleCount: planned.eligibleIds.length,
+            skipReasonCounts: planned.skipReasonCounts,
+          },
+        },
+      });
+      await tx.operationAudit.create({
+        data: {
+          actorType: "worker", actorId: planned.input.actorId,
+          action: "moboreader.preview_refresh.build_superseded", entityType: "ChannelSyncTask",
+          entityId: taskId, requestId: planned.input.requestId,
+          taskType: MOBOREADER_TASK_TYPES.previewRefresh, taskId,
+          afterSnapshot: { activeTaskId: winner.id, skippedCount: skipped.count },
+        },
+      });
+    });
+    return { status: "active_conflict", taskId: winner.id };
+  }
+
+  return {
+    status: "enqueued", taskId, taskStatus: planned.taskStatus,
+    eligibleCount: planned.eligibleIds.length, skipReasonCounts: planned.skipReasonCounts,
   };
 }
 
@@ -664,9 +1093,30 @@ async function enqueueMoboreaderPreviewRefreshTaskInDb(
   if (active) return { status: "active_conflict", taskId: active.id };
   const enabled = isNovelCatalogSyncEnabled(env);
   const writeAllowed = isNovelCatalogSyncWriteAllowed(env);
-  // Phase D D-1, 做法1 (see the twin comment on the catalog-scan enqueue
-  // above): no more dry_run exemption from the write gate.
-  const taskStatus = enabled && writeAllowed ? "pending" : "disabled";
+  // Account-level deterministic-failure brake (Owner 2026-09-18 决策 2) —
+  // layer 2 of three, see `./account-hold.ts`'s module header. The claim-time
+  // pushdown alone would already stop a held account's work from running;
+  // this exists so the *pending pool itself* stops growing under a hold.
+  // During the 2026-09-14 incident the backlog was produced progressively by
+  // a running catalog materialization, so "held but still accumulating" would
+  // have meant every claim attempt paging through an ever-larger block of
+  // unrunnable items.
+  //
+  // Parked as `disabled` + a `taskControl` marker rather than dropped: the
+  // work is real and must stay recoverable, visible in the task admin, and
+  // re-enablable in one operator command
+  // (`scripts/preview-account-hold.ts --release`). Dropping it would leave no
+  // record that anything was ever supposed to happen for these books.
+  const activeHold = await findActiveAccountHold(db, input.channelAccountId, PREVIEW_ACCOUNT_HOLD_SCOPE);
+  const taskStatus = enabled && writeAllowed && !activeHold ? "pending" : "disabled";
+  const holdMarker: TaskControlMarker | null = activeHold
+    ? {
+        kind: "system_hold",
+        source: "system",
+        at: now.toISOString(),
+        reasonCode: activeHold.reasonCode,
+      }
+    : null;
   await db.channelSyncTask.create({
     data: {
       id: taskId,
@@ -685,15 +1135,11 @@ async function enqueueMoboreaderPreviewRefreshTaskInDb(
         featureFlagEnabled: enabled,
         allowWriteEnabled: writeAllowed,
         skipReasonCounts,
-        evidence: {
-          dataId: "confirmed_getlistpc_series_id",
-          materialType: "confirmed_runtime_selection_policy",
-          materialTypeGlobalConstant: "not_asserted",
-          materialType1001: "rejected",
-          productionPreviewCall: "enabled",
-        },
+        evidence: { ...MOBOREADER_PREVIEW_EVIDENCE },
       },
-      result: { eligibleCount: eligibleIds.length, skipReasonCounts },
+      result: holdMarker
+        ? mergeTaskControlResult({ eligibleCount: eligibleIds.length, skipReasonCounts }, holdMarker)
+        : { eligibleCount: eligibleIds.length, skipReasonCounts },
       items: {
         createMany: {
           data: eligibleIds.map((novelSourceItemId) => ({
@@ -714,7 +1160,11 @@ async function enqueueMoboreaderPreviewRefreshTaskInDb(
     data: {
       actorType: input.trigger === "auto" ? "worker" : "admin",
       actorId: input.actorId,
-      action: taskStatus === "pending" ? "moboreader.preview_refresh.queued" : "moboreader.preview_refresh.queued_disabled",
+      action: taskStatus === "pending"
+        ? "moboreader.preview_refresh.queued"
+        : activeHold
+          ? "moboreader.preview_refresh.queued_account_held"
+          : "moboreader.preview_refresh.queued_disabled",
       entityType: "ChannelSyncTask",
       entityId: taskId,
       requestId: input.requestId,
@@ -725,10 +1175,20 @@ async function enqueueMoboreaderPreviewRefreshTaskInDb(
         status: taskStatus,
         eligibleCount: eligibleIds.length,
         skipReasonCounts,
+        ...(activeHold
+          ? { accountHoldId: activeHold.id, accountHoldReasonCode: activeHold.reasonCode }
+          : {}),
       },
     },
   });
-  return { status: "enqueued", taskId, taskStatus, eligibleCount: eligibleIds.length, skipReasonCounts };
+  return {
+    status: "enqueued",
+    taskId,
+    taskStatus,
+    eligibleCount: eligibleIds.length,
+    skipReasonCounts,
+    ...(activeHold ? { accountHeld: { holdId: activeHold.id, reasonCode: activeHold.reasonCode } } : {}),
+  };
 }
 
 export async function enqueueMoboreaderPreviewRefreshTask(

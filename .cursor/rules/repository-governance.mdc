@@ -1,0 +1,16 @@
+---
+description: cps-novel repository governance entrypoint (always on)
+alwaysApply: true
+---
+
+# 仓库治理入口（Cursor 适配层）
+
+这是**薄适配层**，不是规则正文。规则只有一份，在仓库里：
+
+- `docs/governance/AI_WORKFLOW.md` —— 跨 Agent 工作流唯一真源（必读顺序、commit trailer、
+  CHANGELOG 生成、ADR 边界、X8 部署与身份纪律）。
+- `CLAUDE.md` —— 项目架构事实唯一权威源（项目身份、物理隔离、红线）。
+
+**改动本仓库任何代码之前，先读这两份文件。** 不要依赖本适配层的摘要行事——
+它刻意只有指路，没有细则；把细则抄到这里会让 Cursor 拥有一份和其它 Agent 不同的"项目真源"，
+这正是本约定要防止的事。
