@@ -104,6 +104,16 @@ export async function teardown(): Promise<void> {
 
   const after = snapshotLiveRuntimeDir();
   if (JSON.stringify(before) !== JSON.stringify(after)) {
+    // Belt and braces: empirically (vitest 3.2.7, verified by hand while
+    // building this canary), a globalSetup teardown that only throws does
+    // NOT turn the CLI's own process exit code non-zero -- the error is
+    // printed prominently as a "Startup Error", but `vitest run` still
+    // exits 0, which would make this canary invisible to any CI step that
+    // only checks the exit code. process.exitCode is a plain Node.js
+    // mechanism that survives regardless of how vitest's internal teardown
+    // promise chain handles the throw below, since globalSetup/teardown run
+    // in the SAME process as the CLI itself, never a worker.
+    process.exitCode = 1;
     throw new Error(
       `X8_RUNTIME_LEAK: tests touched ${LIVE_RUNTIME_DIR} -- before=${JSON.stringify(before)} after=${JSON.stringify(after)}`,
     );
