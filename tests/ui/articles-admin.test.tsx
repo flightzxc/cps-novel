@@ -872,6 +872,56 @@ describe("ArticleList · 列表与批量", () => {
       expect(routerRefresh).toHaveBeenCalled();
     });
 
+    /**
+     * Case 6a (2026-09-18 batch audit-collision fix)，文章页入口的呈现侧。
+     *
+     * 中断后必须同时说清三件事：已处理的部分是真的、已发布的不回滚、其余未处理。
+     * 绝不能把一个跑了一半的批次渲染成一份完整统计。
+     */
+    it("批量发布中途中断 → 明说已处理/未处理并提示刷新，不伪装成完整统计", async () => {
+      listActions.publishArticlesBatchAction.mockResolvedValue({
+        ok: true,
+        data: {
+          results: [
+            { articleId: DRAFT_ROW.id, result: { outcome: "published", articleId: DRAFT_ROW.id, novelId: "novel-1", locale: "en", firstPublish: true, warnings: [] } },
+          ],
+          aborted: {
+            articleId: PUBLISHED_ROW.id,
+            errorKind: "PrismaClientKnownRequestError:P2002:request_id,action",
+            notProcessedArticleIds: [],
+          },
+        },
+      });
+      render(<ArticleList rows={[DRAFT_ROW, PUBLISHED_ROW]} canWrite publicOrigin={PUBLIC_ORIGIN} />);
+      fireEvent.click(screen.getByLabelText(`选择 ${DRAFT_ROW.title}`));
+      fireEvent.click(screen.getByLabelText(`选择 ${PUBLISHED_ROW.title}`));
+      fireEvent.click(screen.getByTestId("articles-batch-publish"));
+
+      await vi.waitFor(() => expect(screen.getByRole("status").textContent).toContain("批量发布中断"));
+      const text = screen.getByRole("status").textContent ?? "";
+      expect(text).toContain("已处理 1/2 篇");
+      expect(text).toContain("成功 1");
+      expect(text).toContain("其余 1 篇未处理");
+      expect(text).toContain("已发布的不会回滚");
+      expect(text).toContain("刷新");
+      // 不得出现"完成"这种把中断读成收工的措辞。
+      expect(text).not.toContain("批量发布完成");
+      expect(routerRefresh).toHaveBeenCalled();
+    });
+
+    /**
+     * 整次调用在进入逐篇循环前就失败（授权/校验/上限）——此时确实一篇都没动，
+     * 说出来比甩一个裸码有用。这一支不会带 aborted。
+     */
+    it("整次调用未执行时明确告知没有文章被改动，不再只显示裸码", async () => {
+      listActions.publishArticlesBatchAction.mockResolvedValue({ ok: false, code: "article_batch_publish_failed" });
+      render(<ArticleList rows={[DRAFT_ROW]} canWrite publicOrigin={PUBLIC_ORIGIN} />);
+      fireEvent.click(screen.getByLabelText(`选择 ${DRAFT_ROW.title}`));
+      fireEvent.click(screen.getByTestId("articles-batch-publish"));
+      await vi.waitFor(() => expect(screen.getByRole("status").textContent).toContain("批量发布未执行"));
+      expect(screen.getByRole("status").textContent).toContain("本次没有文章被改动");
+    });
+
     it("canWrite=false 时批量发布按钮禁用", () => {
       render(<ArticleList rows={[DRAFT_ROW]} canWrite={false} publicOrigin={PUBLIC_ORIGIN} />);
       expect((screen.getByTestId("articles-batch-publish") as HTMLButtonElement).disabled).toBe(true);

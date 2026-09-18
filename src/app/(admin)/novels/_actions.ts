@@ -270,7 +270,15 @@ export type PublishNovelsBatchItem =
       readonly novelId: string;
       readonly articleId: string;
       readonly result: ApplyPublishTransitionResult;
-    };
+    }
+  /**
+   * 2026-09-18: the batch stopped before this novel's Article was reached
+   * (`PublishArticlesBatchResult.aborted`). Its own state is whatever it was
+   * before the batch — nothing was attempted for it. It used to fall through
+   * to the `not_found` default below, i.e. the UI told an operator "文章不存在"
+   * about an Article that exists and simply was not processed.
+   */
+  | { readonly kind: "not_processed"; readonly novelId: string; readonly articleId: string };
 
 export type PublishNovelsBatchSummary = {
   readonly published: number;
@@ -278,11 +286,19 @@ export type PublishNovelsBatchSummary = {
   readonly conflict: number;
   readonly notFound: number;
   readonly noArticle: number;
+  /** Selected novels the batch never got to, because it aborted first. */
+  readonly notProcessed: number;
 };
 
 export type PublishNovelsBatchOutcome = {
   readonly items: readonly PublishNovelsBatchItem[];
   readonly summary: PublishNovelsBatchSummary;
+  /**
+   * Set when the underlying batch aborted mid-way. Everything counted in
+   * `summary` really happened; the `notProcessed` items really did not. The
+   * UI must present this as an interrupted run, never as a complete tally.
+   */
+  readonly aborted?: { readonly articleId: string; readonly errorKind: string };
 };
 
 /**
@@ -304,10 +320,15 @@ function summarize(items: readonly PublishNovelsBatchItem[]): PublishNovelsBatch
     conflict: 0,
     notFound: 0,
     noArticle: 0,
+    notProcessed: 0,
   };
   for (const item of items) {
     if (item.kind === "no_article") {
       summary.noArticle += 1;
+      continue;
+    }
+    if (item.kind === "not_processed") {
+      summary.notProcessed += 1;
       continue;
     }
     switch (item.result.outcome) {
@@ -365,19 +386,36 @@ export async function publishNovelsBatchAction(input: {
       serviceDependencies(),
     );
     const resultByArticleId = new Map(batch.results.map((entry) => [entry.articleId, entry.result]));
+    // 2026-09-18: an aborted batch returns a *prefix* of `articleIds`, so the
+    // "exactly one result per input id" assumption below only holds for the
+    // items it actually reached. Everything from the aborting item onward is
+    // `not_processed` — reporting it as `not_found` would be inventing a
+    // result for work that never ran.
+    const notProcessed = new Set<string>(
+      batch.aborted ? [batch.aborted.articleId, ...batch.aborted.notProcessedArticleIds] : [],
+    );
 
     const items: PublishNovelsBatchItem[] = novelIds.map((novelId) => {
       const ref = refs.get(novelId);
       if (!ref) return { novelId, kind: "no_article" as const };
-      // `articleIds` above is built from this same `refs` map, so
-      // `publishArticlesBatchAsAdmin` (via `publishArticlesBatch`'s
-      // one-result-per-input-id loop) is guaranteed to return exactly one
-      // entry for `ref.articleId`. The `not_found` fallback below is a
-      // defensive shape guard, not an expected path.
+      if (notProcessed.has(ref.articleId)) {
+        return { kind: "not_processed" as const, novelId, articleId: ref.articleId };
+      }
+      // `articleIds` above is built from this same `refs` map, so for every
+      // item the batch did reach, `publishArticlesBatchAsAdmin` (via
+      // `publishArticlesBatch`'s one-result-per-input-id loop) is guaranteed
+      // to return exactly one entry for `ref.articleId`. The `not_found`
+      // fallback below is a defensive shape guard, not an expected path.
       const result = resultByArticleId.get(ref.articleId) ?? { outcome: "not_found" as const };
       return { kind: "resolved" as const, novelId, articleId: ref.articleId, result };
     });
 
-    return { items, summary: summarize(items) };
+    return {
+      items,
+      summary: summarize(items),
+      ...(batch.aborted
+        ? { aborted: { articleId: batch.aborted.articleId, errorKind: batch.aborted.errorKind } }
+        : {}),
+    };
   });
 }

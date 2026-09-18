@@ -364,9 +364,14 @@ export function ArticleList({
    * article ids.
    */
   async function batchPublish() {
+    const selectedCount = selected.size;
     const result = await publishArticlesBatchAction({ requestId: crypto.randomUUID(), articleIds: [...selected] });
     if (!result.ok) {
-      setMessage(`批量发布失败：${describeArticleActionErrorCode(result.code)}`);
+      // 这一支意味着**整次调用**在进入逐篇循环之前就失败了（授权、选择校验、
+      // 批量上限），因此没有任何文章被改动 —— 说得出这句话才有价值，
+      // 光甩一个 `article_batch_publish_failed` 裸码对操作者毫无信息量。
+      // 逐篇循环中途出错不会走到这里，它带着已完成的部分从下面的 aborted 分支返回。
+      setMessage(`批量发布未执行：${describeArticleActionErrorCode(result.code)}。本次没有文章被改动，可修正后重试。`);
       return;
     }
     let published = 0;
@@ -378,6 +383,20 @@ export function ArticleList({
       else if (outcome.outcome === "rejected") rejected += 1;
       else if (outcome.outcome === "conflict") conflict += 1;
       else if (outcome.outcome === "not_found") notFound += 1;
+    }
+    const processed = result.data.results.length;
+    if (result.data.aborted) {
+      // 已处理的部分是真的（逐篇独立事务，已提交的不会回滚）；未处理的部分
+      // 同样是真的（它们压根没被尝试）。两边都据实说，不合成一个看起来完整的统计。
+      const notProcessed = selectedCount - processed;
+      setMessage(
+        `批量发布中断：已处理 ${processed}/${selectedCount} 篇（成功 ${published}，拒绝 ${rejected}，冲突 ${conflict}，不存在 ${notFound}）；`
+        + `第 ${processed + 1} 篇出错（${result.data.aborted.errorKind}）后停止，其余 ${notProcessed} 篇未处理、保持原状。`
+        + `已发布的不会回滚，请刷新页面确认实际状态后再决定是否重试。`,
+      );
+      setSelected(new Set());
+      router.refresh();
+      return;
     }
     setMessage(`批量发布完成：成功 ${published}，拒绝 ${rejected}，冲突 ${conflict}，不存在 ${notFound}`);
     setSelected(new Set());

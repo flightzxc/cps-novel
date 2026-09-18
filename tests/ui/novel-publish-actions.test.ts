@@ -298,7 +298,52 @@ describe("publishNovelsBatchAction · 选择解析与批量结果分组", () => 
       { kind: "resolved", novelId: "n2", articleId: "a2", result: { outcome: "conflict" } },
       { kind: "no_article", novelId: "n3" },
     ]);
-    expect(result.data.summary).toEqual({ published: 1, rejected: 0, conflict: 1, notFound: 0, noArticle: 1 });
+    expect(result.data.summary).toEqual({ published: 1, rejected: 0, conflict: 1, notFound: 0, noArticle: 1, notProcessed: 0 });
+  });
+
+  /**
+   * Case 6b (2026-09-18 batch audit-collision fix): 书目页入口。
+   *
+   * 底层 `publishArticlesBatch` 中断后只返回**已处理的前缀**，于是这里"每个
+   * 输入 id 必有一条结果"的假设不再成立。修复前，没轮到的书目会落进
+   * `not_found` 兜底分支 —— 后台会对一篇存在且根本没被尝试过的文章说
+   * 「对应文章不存在」。这条用例钉住：未处理就报未处理，并把中断本身带出去。
+   */
+  it("批量发布中途中断 → 未轮到的书目报 not_processed（不是 not_found），并带出 aborted", async () => {
+    guards.requireAdminActionAccess.mockResolvedValue(granted());
+    readRefs.readPrimaryArticlesForNovels.mockResolvedValue(
+      new Map([
+        ["n1", { articleId: "a1", locale: "en", slug: "s1", status: "draft" }],
+        ["n2", { articleId: "a2", locale: "en", slug: "s2", status: "draft" }],
+        ["n3", { articleId: "a3", locale: "en", slug: "s3", status: "draft" }],
+      ]),
+    );
+    publishGate.publishArticlesBatchAsAdmin.mockResolvedValue({
+      results: [
+        { articleId: "a1", result: { outcome: "published", articleId: "a1", novelId: "n1", locale: "en", firstPublish: true, warnings: [] } },
+      ],
+      aborted: {
+        articleId: "a2",
+        errorKind: "PrismaClientKnownRequestError:P2002:request_id,action",
+        notProcessedArticleIds: ["a3"],
+      },
+    });
+
+    const result = await publishNovelsBatchAction({ novelIds: ["n1", "n2", "n3"], requestId: "req-abort" });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("unreachable");
+    expect(result.data.items).toEqual([
+      { kind: "resolved", novelId: "n1", articleId: "a1", result: { outcome: "published", articleId: "a1", novelId: "n1", locale: "en", firstPublish: true, warnings: [] } },
+      // 出错的那一本和它后面没轮到的那一本，都不是"文章不存在"。
+      { kind: "not_processed", novelId: "n2", articleId: "a2" },
+      { kind: "not_processed", novelId: "n3", articleId: "a3" },
+    ]);
+    expect(result.data.summary).toEqual({ published: 1, rejected: 0, conflict: 0, notFound: 0, noArticle: 0, notProcessed: 2 });
+    expect(result.data.aborted).toEqual({
+      articleId: "a2",
+      errorKind: "PrismaClientKnownRequestError:P2002:request_id,action",
+    });
   });
 
   it("service 抛 PublishLifecycleError('batch_too_large') → lifecycle_error", async () => {
