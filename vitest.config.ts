@@ -36,6 +36,14 @@ export default defineConfig({
           environment: "node",
           testTimeout: 15_000,
           include: ["tests/backend/**/*.test.ts", "tests/integration/**/*.test.ts"],
+          // Test isolation gap fixed 2026-09-19: a global fallback (default
+          // X8_RUNTIME_DIR when the ambient environment does not already
+          // carry one) plus a leak canary that fails the whole run if any
+          // test ever touches this worktree's own .tmp/x8-production-like --
+          // see tests/backend/runtime/_lib/x8-vitest-global-setup.ts's own
+          // header for the full mechanism and why this is a globalSetup
+          // (once per run), not a setupFiles (once per test file).
+          globalSetup: ["tests/backend/runtime/_lib/x8-vitest-global-setup.ts"],
         },
       },
     ],
