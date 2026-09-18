@@ -20,6 +20,7 @@ import { randomUUID } from "node:crypto";
 import { Prisma, PrismaClient } from "@prisma/client";
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { listArticleIdsForFilter, listArticles, type ArticleListInput } from "@/server/articles";
 import {
   publishArticlesBatch,
   publishArticlesBatchAsAdmin,
@@ -431,5 +432,121 @@ describe.skipIf(!enabled)("batch publish · real Postgres (audit unique index in
     expect(result.results.map((entry) => entry.result.outcome)).toEqual(["published", "published"]);
     expect(await statusOf(a.articleId)).toBe("published");
     expect(await statusOf(b.articleId)).toBe("published");
+  });
+});
+
+/**
+ * Cross-page "select all matching" id resolution (2026-09-18).
+ *
+ * The property that matters is not "it returns ids" — it is that the ids are
+ * the *same set* the operator is looking at, and that walking them while
+ * publishing does not skip or repeat rows. Both need a real database: the
+ * shared WHERE compiles to SQL, and the skip/repeat hazard is entirely about
+ * how a keyset cursor behaves when the rows under it are being rewritten.
+ */
+describe.skipIf(!enabled)("cross-page selection · filter → id resolution (real Postgres)", () => {
+  beforeEach(async () => {
+    dispatchFirstPublicPublication.mockClear();
+    await seedScope();
+    await resetFixtures();
+  });
+
+  async function resolveAll(
+    filters: ArticleListInput,
+    limit: number,
+  ): Promise<{ ids: string[]; chunks: number[] }> {
+    const ids: string[] = [];
+    const chunks: number[] = [];
+    let afterId: string | undefined;
+    for (;;) {
+      const page = await listArticleIdsForFilter(db, {
+        ...filters,
+        ...(afterId === undefined ? {} : { afterId }),
+        limit,
+      });
+      ids.push(...page.articleIds);
+      chunks.push(page.articleIds.length);
+      if (page.nextCursor === null) break;
+      afterId = page.nextCursor;
+    }
+    return { ids, chunks };
+  }
+
+  it("Case 3: resolves exactly what the list shows for the same filter — same count, same set", async () => {
+    const drafts: string[] = [];
+    for (let index = 0; index < 5; index += 1) drafts.push((await seedArticle(`res-draft-${index}`)).articleId);
+    const publishedOnes: string[] = [];
+    for (let index = 0; index < 3; index += 1) {
+      publishedOnes.push((await seedArticle(`res-pub-${index}`, { articleStatus: "published" })).articleId);
+    }
+
+    const listed = await listArticles(db, { status: "draft", pageSize: 100 });
+    const listedDraftIds = listed.items.map((item) => item.id).filter((id) => drafts.includes(id));
+    const { ids } = await resolveAll({ status: "draft" }, 200);
+    const resolvedFromThisSuite = ids.filter((id) => drafts.includes(id) || publishedOnes.includes(id));
+
+    // Every draft this suite seeded resolves; not one published article does.
+    expect(new Set(resolvedFromThisSuite)).toEqual(new Set(drafts));
+    expect(listedDraftIds.length).toBe(drafts.length);
+    for (const id of publishedOnes) expect(ids).not.toContain(id);
+  });
+
+  it("resolution and the list agree on the total for the same filter", async () => {
+    for (let index = 0; index < 7; index += 1) await seedArticle(`agree-${index}`);
+    const listed = await listArticles(db, { status: "draft", pageSize: 1 });
+    const { ids } = await resolveAll({ status: "draft" }, 200);
+    expect(ids.length).toBe(listed.total);
+  });
+
+  it("Case 4: >200 matches resolve as 200 + 200 + remainder, never one oversized page", async () => {
+    // 401 rows is the acceptance shape; seeded at a smaller limit here so the
+    // chunk arithmetic is exercised without a 401-row fixture (the limit is the
+    // caller's, and the cap is asserted separately below).
+    for (let index = 0; index < 11; index += 1) await seedArticle(`chunk-${index}`);
+    const { ids, chunks } = await resolveAll({ status: "draft" }, 5);
+    expect(chunks).toEqual([5, 5, 1]);
+    expect(ids).toHaveLength(11);
+    expect(new Set(ids).size).toBe(11); // no repeats across chunks
+    // Strictly ascending by id — the stable spine the cursor walks.
+    expect([...ids].sort()).toEqual(ids);
+  });
+
+  it("refuses a limit above the resolve cap instead of materializing an unbounded id list", async () => {
+    await expect(listArticleIdsForFilter(db, { status: "draft", limit: 201 })).rejects.toMatchObject({
+      code: "invalid_page_size",
+    });
+    await expect(listArticleIdsForFilter(db, { status: "draft", limit: 0 })).rejects.toMatchObject({
+      code: "invalid_page_size",
+    });
+  });
+
+  it("🔴 walking the cursor while publishing neither skips nor repeats a row", async () => {
+    // The hazard this design exists for: the filter is `status=draft` and
+    // publishing removes rows from it, while the list's own ordering column
+    // (`updatedAt`) is rewritten by the same write. An offset walk, or a walk
+    // ordered by `updatedAt`, loses rows here.
+    const seeded: string[] = [];
+    for (let index = 0; index < 9; index += 1) seeded.push((await seedArticle(`walk-${index}`)).articleId);
+
+    const processed: string[] = [];
+    let afterId: string | undefined;
+    for (;;) {
+      const page = await listArticleIdsForFilter(db, {
+        status: "draft",
+        ...(afterId === undefined ? {} : { afterId }),
+        limit: 2,
+      });
+      const mine = page.articleIds.filter((id) => seeded.includes(id));
+      if (mine.length > 0) {
+        await publishArticlesBatch(db, { articleIds: mine, requestId: randomUUID(), actor: ADMIN_ACTOR });
+        processed.push(...mine);
+      }
+      if (page.nextCursor === null) break;
+      afterId = page.nextCursor;
+    }
+
+    expect(new Set(processed)).toEqual(new Set(seeded));
+    expect(processed).toHaveLength(seeded.length); // no repeats
+    for (const id of seeded) expect(await statusOf(id)).toBe("published");
   });
 });

@@ -30,6 +30,7 @@ const listActions = vi.hoisted(() => ({
   publishArticleAction: vi.fn(),
   withdrawArticleAction: vi.fn(),
   publishArticlesBatchAction: vi.fn(),
+  publishArticlesByFilterChunkAction: vi.fn(),
 }));
 
 const editorActions = vi.hoisted(() => ({
@@ -95,6 +96,7 @@ beforeEach(() => {
   listActions.publishArticleAction.mockReset();
   listActions.withdrawArticleAction.mockReset();
   listActions.publishArticlesBatchAction.mockReset();
+  listActions.publishArticlesByFilterChunkAction.mockReset();
   editorActions.updateArticleAction.mockReset();
   routerRefresh.mockReset();
 });
@@ -925,6 +927,181 @@ describe("ArticleList · 列表与批量", () => {
       fireEvent.click(screen.getByTestId("articles-batch-publish"));
       await vi.waitFor(() => expect(screen.getByRole("status").textContent).toContain("批量发布未执行"));
       expect(screen.getByRole("status").textContent).toContain("本次没有文章被改动");
+    });
+
+    /**
+     * 跨页全选（2026-09-18）。Gmail 式两段选择：先选当前页，再选"符合当前筛选
+     * 条件的全部 N 条"。全部只以**筛选条件**存在于前端，ID 由服务端逐批解析。
+     */
+    describe("跨页全选", () => {
+      const FILTERS = { status: "draft" } as const;
+
+      function renderList(props: Partial<Parameters<typeof ArticleList>[0]> = {}) {
+        return render(
+          <ArticleList
+            rows={[DRAFT_ROW, PUBLISHED_ROW]}
+            canWrite
+            publicOrigin={PUBLIC_ORIGIN}
+            total={811}
+            filters={FILTERS}
+            filterSignature={JSON.stringify(FILTERS)}
+            {...props}
+          />,
+        );
+      }
+
+      function chunk(published: number, extra: Record<string, unknown> = {}) {
+        return {
+          ok: true,
+          data: {
+            results: Array.from({ length: published }, (_, index) => ({
+              articleId: `a${index}`,
+              result: { outcome: "published", articleId: `a${index}`, novelId: "n", locale: "en", firstPublish: true, warnings: [] },
+            })),
+            resolvedCount: published,
+            nextCursor: null,
+            ...extra,
+          },
+        };
+      }
+
+      it("Case 1：只勾当前页时不进入跨页模式，发布走原来的显式 id 路径", async () => {
+        listActions.publishArticlesBatchAction.mockResolvedValue({ ok: true, data: { results: [] } });
+        renderList();
+        fireEvent.click(screen.getByLabelText(`选择 ${DRAFT_ROW.title}`));
+        // 只选了一行 → 连"选择全部"的入口都不该出现
+        expect(screen.queryByTestId("articles-select-all-matching")).toBeNull();
+        fireEvent.click(screen.getByTestId("articles-batch-publish"));
+        await vi.waitFor(() => expect(listActions.publishArticlesBatchAction).toHaveBeenCalledTimes(1));
+        expect(listActions.publishArticlesBatchAction.mock.calls[0]![0].articleIds).toEqual([DRAFT_ROW.id]);
+        expect(listActions.publishArticlesByFilterChunkAction).not.toHaveBeenCalled();
+      });
+
+      it("Case 2：当前页全选且总数大于本页 → 出现「选择全部 811 条」，点击后进入跨页模式", () => {
+        renderList();
+        expect(screen.queryByTestId("articles-select-all-matching")).toBeNull();
+        fireEvent.click(screen.getByLabelText("选择当前页"));
+        expect(screen.getByTestId("articles-select-all-matching").textContent).toContain("全部 811 条");
+        fireEvent.click(screen.getByTestId("articles-select-all-matching"));
+        expect(screen.getByTestId("articles-all-matching-banner").textContent).toContain("全部 811 条");
+        expect(screen.getByTestId("articles-selection-count").textContent).toContain("全部 811 条");
+      });
+
+      it("总数不超过当前页时不提供跨页入口（此时「全部」与「本页」是同一批）", () => {
+        renderList({ total: 2 });
+        fireEvent.click(screen.getByLabelText("选择当前页"));
+        expect(screen.queryByTestId("articles-select-all-matching")).toBeNull();
+      });
+
+      it("Case 4：跨页发布把筛选交给服务端逐批解析，按 cursor 连续执行多个 batch，每批各自的 requestId", async () => {
+        listActions.publishArticlesByFilterChunkAction
+          .mockResolvedValueOnce(chunk(200, { nextCursor: "cursor-200" }))
+          .mockResolvedValueOnce(chunk(200, { nextCursor: "cursor-400" }))
+          .mockResolvedValueOnce(chunk(1, { nextCursor: null }));
+        renderList({ total: 401 });
+        fireEvent.click(screen.getByLabelText("选择当前页"));
+        fireEvent.click(screen.getByTestId("articles-select-all-matching"));
+        fireEvent.click(screen.getByTestId("articles-batch-publish"));
+
+        await vi.waitFor(() => expect(screen.queryByTestId("articles-cross-page-done")).toBeTruthy());
+        expect(listActions.publishArticlesByFilterChunkAction).toHaveBeenCalledTimes(3);
+        const calls = listActions.publishArticlesByFilterChunkAction.mock.calls.map((call) => call[0]);
+        // 筛选条件原样下传，前端从不发送 id 列表
+        for (const call of calls) {
+          expect(call.filters).toEqual(FILTERS);
+          expect(call).not.toHaveProperty("articleIds");
+        }
+        // cursor 串起来；首批不带 afterId
+        expect(calls[0]!.afterId).toBeUndefined();
+        expect(calls[1]!.afterId).toBe("cursor-200");
+        expect(calls[2]!.afterId).toBe("cursor-400");
+        // 每批一个独立 requestId（a059537 的逐篇编号依赖它）
+        const requestIds = calls.map((call) => call.requestId);
+        expect(new Set(requestIds).size).toBe(3);
+        expect(screen.getByTestId("articles-cross-page-done").textContent).toContain("成功 401");
+      });
+
+      it("执行期间按钮禁用并显示进度，不允许重复提交", async () => {
+        let release: (value: unknown) => void = () => {};
+        const gate = new Promise((resolve) => { release = resolve; });
+        listActions.publishArticlesByFilterChunkAction
+          .mockImplementationOnce(async () => { await gate; return chunk(200, { nextCursor: null }); });
+        renderList();
+        fireEvent.click(screen.getByLabelText("选择当前页"));
+        fireEvent.click(screen.getByTestId("articles-select-all-matching"));
+        fireEvent.click(screen.getByTestId("articles-batch-publish"));
+
+        await vi.waitFor(() => expect(screen.getByTestId("articles-cross-page-progress")).toBeTruthy());
+        const button = screen.getByTestId("articles-batch-publish") as HTMLButtonElement;
+        expect(button.disabled).toBe(true);
+        expect(button.textContent).toContain("正在批量发布");
+        fireEvent.click(button);
+        expect(listActions.publishArticlesByFilterChunkAction).toHaveBeenCalledTimes(1);
+        release(undefined);
+        await vi.waitFor(() => expect(screen.queryByTestId("articles-cross-page-done")).toBeTruthy());
+      });
+
+      it("Case 6：某一批 aborted → 停止后续批次，如实呈现已成功/未处理，不说「全部失败」", async () => {
+        listActions.publishArticlesByFilterChunkAction
+          .mockResolvedValueOnce(chunk(200, { nextCursor: "cursor-200" }))
+          .mockResolvedValueOnce({
+            ok: true,
+            data: {
+              results: [
+                { articleId: "x1", result: { outcome: "published", articleId: "x1", novelId: "n", locale: "en", firstPublish: true, warnings: [] } },
+              ],
+              resolvedCount: 200,
+              nextCursor: "cursor-400",
+              aborted: { articleId: "x2", errorKind: "PrismaClientKnownRequestError:P2002:request_id,action" },
+            },
+          });
+        renderList({ total: 811 });
+        fireEvent.click(screen.getByLabelText("选择当前页"));
+        fireEvent.click(screen.getByTestId("articles-select-all-matching"));
+        fireEvent.click(screen.getByTestId("articles-batch-publish"));
+
+        await vi.waitFor(() => expect(screen.queryByTestId("articles-cross-page-aborted")).toBeTruthy());
+        // 第三批不得再发
+        expect(listActions.publishArticlesByFilterChunkAction).toHaveBeenCalledTimes(2);
+        const text = screen.getByTestId("articles-cross-page-aborted").textContent ?? "";
+        expect(text).toContain("批量发布已中断");
+        expect(text).toContain("成功 201");
+        expect(text).toContain("发生异常 1");
+        expect(text).toContain("尚未处理 610");
+        expect(text).toContain("不会回滚");
+        expect(text).not.toContain("全部发布失败");
+      });
+
+      it("Case 7：筛选条件变化必须清空跨页全选，不能拿旧条件去发布", () => {
+        const { rerender } = renderList();
+        fireEvent.click(screen.getByLabelText("选择当前页"));
+        fireEvent.click(screen.getByTestId("articles-select-all-matching"));
+        expect(screen.getByTestId("articles-all-matching-banner")).toBeTruthy();
+
+        const nextFilters = { status: "published" } as const;
+        rerender(
+          <ArticleList
+            rows={[DRAFT_ROW, PUBLISHED_ROW]}
+            canWrite
+            publicOrigin={PUBLIC_ORIGIN}
+            total={53}
+            filters={nextFilters}
+            filterSignature={JSON.stringify(nextFilters)}
+          />,
+        );
+        expect(screen.queryByTestId("articles-all-matching-banner")).toBeNull();
+        expect(screen.getByTestId("articles-selection-count").textContent).toContain("已选择 0");
+      });
+
+      it("取消全选回到 0 条", () => {
+        renderList();
+        fireEvent.click(screen.getByLabelText("选择当前页"));
+        fireEvent.click(screen.getByTestId("articles-select-all-matching"));
+        fireEvent.click(screen.getByTestId("articles-clear-all-matching"));
+        expect(screen.queryByTestId("articles-all-matching-banner")).toBeNull();
+        expect(screen.getByTestId("articles-selection-count").textContent).toContain("已选择 0");
+        expect((screen.getByTestId("articles-batch-publish") as HTMLButtonElement).disabled).toBe(true);
+      });
     });
 
     it("canWrite=false 时批量发布按钮禁用", () => {
