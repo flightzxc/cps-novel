@@ -595,6 +595,241 @@ x8_export_catalog_gate_env() {
   esac
 }
 
+# X8_BACKUP_PGPASS_RECONCILE_2026-09-18: pg_basebackup's physical-replication
+# connection authenticates through libpq's pgpass matching, where the
+# "database" field of the connection it opens is the LITERAL string
+# "replication" -- never the real database name. The single-line pgpass
+# file this function replaces only ever carried
+# `postgres:5432:cps_novel:backup_role:<pw>` (matching the LOGICAL backup's
+# `pg_dump -d cps_novel` connection), so pg_basebackup's physical-replication
+# connection never found a matching pgpass row and libpq failed with
+# "fe_sendauth: no password supplied" before a password was ever sent. The
+# server side (backup_role's REPLICATION attribute, pg_hba.conf's
+# `host replication backup_role 172.18.0.0/16 scram-sha-256` line) was never
+# the problem.
+#
+# x8_reconcile_backup_pgpass() makes backup.pgpass carry BOTH rows the two
+# backup connections need, reconciled idempotently on every
+# prepare_x8_environment() call (not just "create if missing" -- a password
+# rotation, or a file left behind by the old single-line code, must also
+# converge):
+#   postgres:5432:cps_novel:backup_role:<pw>     (logical, pg_dump)
+#   postgres:5432:replication:backup_role:<pw>   (physical, pg_basebackup)
+#
+# This function itself never WRITES a wildcard row -- the two lines it ever
+# emits are always the exact `postgres:5432:cps_novel:backup_role:` /
+# `postgres:5432:replication:backup_role:` prefixes above. But libpq's
+# pgpass matching is first-match-wins top-to-bottom, so a *pre-existing*
+# broader rule sitting above one of those two exact rows -- e.g. a
+# hand-edited `postgres:5432:*:backup_role:<stale-pw>`, or a
+# `*:*:*:backup_role:<stale-pw>` left behind by some other process -- would
+# silently shadow it: libpq would keep matching (and authenticating with)
+# the stale broader row forever, never reaching the correct, current-
+# password exact row underneath, and every symptom would look identical to
+# this function doing nothing. P1-2 (2026-09-18 review) closes that: on
+# every reconcile pass, any existing line whose first four `:`-delimited
+# fields are host in {postgres, *}, port in {5432, *}, db in {cps_novel,
+# replication, *}, user exactly `backup_role` is removed -- that is every
+# shape of rule that COULD shadow one of the two canonical rows, whether or
+# not it happens to equal one of them today. A line removed this way that
+# was not already byte-for-byte one of the two canonical prefixes is a
+# genuine stale/wildcard shadowing rule, not routine upgrade churn, and gets
+# counted; if the count is nonzero this function also prints
+# `X8_BACKUP_PGPASS_WARN=removed_shadowing_rules count=<n>` to stderr so an
+# operator notices a rule they did not expect to exist. Deliberately NOT
+# extended to near-miss lines outside this exact 4-field shape (different
+# case, leading whitespace, a missing field, a different port/db spelling
+# libpq would not treat as `postgres`/`5432`/`cps_novel`/`replication`/`*`)
+# -- libpq's own pgpass matching is exact-text, so a line like that could
+# never shadow the canonical rows in the first place, and removing it would
+# just be guessing at intent this function has no basis for. Any other line
+# already present (an operator note, an unrelated host/role pgpass row, one
+# of those non-matching near-miss lines) is preserved byte-for-byte in its
+# original relative order -- this file is bind-mounted into the
+# backup-timer container (infra/production-like/docker-compose.yml) and a
+# reconcile pass has no business rewriting content it doesn't own.
+#
+# The two canonical rows are written FIRST, ahead of every preserved line --
+# a second, structural line of defense on top of the shadowing-rule removal
+# above: even if some future preserved line-shape this function does not
+# recognize as backup_role's turned out to overlap one of the two database
+# fields, first-match-wins means libpq would still reach the canonical row
+# before it, not after.
+#
+# Idempotent and atomic: the target content is computed in memory first; if
+# it already matches the file byte-for-byte, nothing is written (prints
+# UNCHANGED, inode untouched -- a config problem like an unwritable secrets
+# directory then only ever surfaces when a write is actually needed, never
+# on a no-op rerun). Otherwise it writes via mktemp+chmod+mv inside the same
+# directory (atomic rename, so the final path never shows a partial file),
+# under a RETURN trap that removes the temp file on every exit path. The
+# function also defensively turns off `xtrace` for its own body and restores
+# the caller's setting on return, in case a caller has `set -x` on -- the
+# password must never reach a trace line.
+#
+# P2-1: if the target file already exists but this process cannot read it
+# (e.g. a foreign-owned or 0-mode file), this function refuses outright --
+# prints an ERROR and returns 65 -- rather than treating "unreadable" the
+# same as "absent" and overwriting it. Silently replacing a file we could
+# not even inspect could destroy content (an operator's unrelated pgpass
+# rows, or evidence of exactly the kind of stale shadowing row P1-2 above
+# exists to catch) with no record of what was lost.
+#
+# Both status lines (UNCHANGED / RECONCILED) and the P1-2 WARN line go to
+# STDERR, never stdout. (An earlier draft of this comment justified that
+# with a specific example -- `docker compose ... config --format json`
+# piped into scripts/acceptance/x8-validate-compose.mjs's JSON.parse(stdin)
+# -- that turned out to be wrong on review: that pipe's stdin is only
+# `x8_compose config --format json`'s own stdout, a separate command
+# invoked well after prepare_x8_environment() has already returned, never
+# joined to this function by a `|`, so nothing this function could ever
+# print reaches that particular JSON.parse(). The real reason still holds,
+# it is just broader: several prepare_x8_environment() callers run, in the
+# same process on the same stdout file descriptor, a later step whose own
+# stdout an operator or caller treats as data for that whole invocation --
+# wal_gc()'s `--json` path is the clearest example, and
+# infra/local-x8/wal-gc-daily-apply.sh's run_step() captures such an
+# invocation's combined `2>&1` output verbatim into one
+# .tmp/x8-production-like/wal-gc-daily/<stamp>-<step>.txt evidence file.
+# Nothing downstream of that capture calls JSON.parse() on the whole file --
+# every consumer greps for one anchored `^WAL_RETENTION...` line -- so an
+# extra stderr line here is harmless there too; the point of keeping this
+# function's own reporting off stdout is simply to never be the reason some
+# future caller's stdout-as-data assumption breaks, not because of any one
+# pipeline this function's own author could enumerate in advance.
+x8_reconcile_backup_pgpass() {
+  local x8_pgpass_trace_restore=""
+  case "$-" in
+    *x*)
+      x8_pgpass_trace_restore=1
+      set +x
+      ;;
+  esac
+
+  local tmp=""
+  trap '[[ -n "$tmp" ]] && rm -f "$tmp"; [[ -n "$x8_pgpass_trace_restore" ]] && set -x; trap - RETURN' RETURN
+
+  local backup_password
+  backup_password="$(read_secret_value "$P1_12_BACKUP_ROLE_PASSWORD_FILE")" || {
+    echo "ERROR: unable to read backup_role password from $P1_12_BACKUP_ROLE_PASSWORD_FILE" >&2
+    return 65
+  }
+  [[ -n "$backup_password" ]] || {
+    echo "ERROR: backup_role password file $P1_12_BACKUP_ROLE_PASSWORD_FILE is empty" >&2
+    return 65
+  }
+
+  # P2-1: an existing-but-unreadable file (foreign-owned, 0-mode, ACL-denied)
+  # must refuse outright, never fall through to "treat it like an absent
+  # file" -- that would silently overwrite content this process could not
+  # even inspect first, with no record of what was there.
+  if [[ -f "$X8_BACKUP_PGPASS_FILE" && ! -r "$X8_BACKUP_PGPASS_FILE" ]]; then
+    echo "ERROR: $X8_BACKUP_PGPASS_FILE exists but is not readable by this process" >&2
+    return 65
+  fi
+
+  # Slurp the existing file byte-for-byte (including any trailing newlines)
+  # for the later UNCHANGED comparison, and separately walk it line-by-line
+  # to build the kept (preserved) content. `read -r -d ''` is the idiom
+  # that reads to EOF without stripping trailing newlines the way
+  # `$(cat file)` would; its own nonzero exit (no NUL delimiter found) is
+  # expected and harmless here.
+  local existing_content="" line kept="" shadow_removed=0
+  if [[ -f "$X8_BACKUP_PGPASS_FILE" ]]; then
+    IFS= read -r -d '' existing_content <"$X8_BACKUP_PGPASS_FILE" || true
+    while IFS= read -r line || [[ -n "$line" ]]; do
+      # P1-2: drop every line whose first four `:`-delimited fields could
+      # shadow one of the two canonical rows under libpq's first-match-wins
+      # pgpass matching -- host in {postgres,*}, port in {5432,*}, db in
+      # {cps_novel,replication,*}, user exactly backup_role (12 exact
+      # combinations; only the value of the 5th field -- the password -- is
+      # ever a wildcard `*` below). This is deliberately wider than "the two
+      # exact canonical prefixes": any pre-existing row in one of the other
+      # 10 combinations (e.g. `postgres:5432:*:backup_role:...` or
+      # `*:*:*:backup_role:...`) would silently win over a canonical row
+      # placed after it. A near-miss line outside this exact 4-field shape
+      # (different case, a different host/port/db spelling, leading
+      # whitespace, a missing field) cannot shadow the canonical rows under
+      # libpq's exact-text matching, so it is left alone below -- removing
+      # it would just be guessing at intent this function has no basis for.
+      case "$line" in
+        postgres:5432:cps_novel:backup_role:* | \
+        postgres:5432:replication:backup_role:* | \
+        postgres:5432:\*:backup_role:* | \
+        postgres:\*:cps_novel:backup_role:* | \
+        postgres:\*:replication:backup_role:* | \
+        postgres:\*:\*:backup_role:* | \
+        \*:5432:cps_novel:backup_role:* | \
+        \*:5432:replication:backup_role:* | \
+        \*:5432:\*:backup_role:* | \
+        \*:\*:cps_novel:backup_role:* | \
+        \*:\*:replication:backup_role:* | \
+        \*:\*:\*:backup_role:*)
+          # Of the 12 shapes above, only these two exact prefixes are what
+          # every ordinary reconcile pass removes-and-rewrites as routine
+          # upgrade/rotation churn (scenarios B/D/E). Anything else matched
+          # above is a genuine stale/wildcard shadowing rule -- tally it for
+          # the stderr WARN below, never silently.
+          case "$line" in
+            postgres:5432:cps_novel:backup_role:* | postgres:5432:replication:backup_role:*)
+              ;;
+            *)
+              shadow_removed=$((shadow_removed + 1))
+              ;;
+          esac
+          continue
+          ;;
+      esac
+      kept="${kept}${line}"$'\n'
+    done <"$X8_BACKUP_PGPASS_FILE"
+  fi
+
+  if [[ "$shadow_removed" -gt 0 ]]; then
+    echo "X8_BACKUP_PGPASS_WARN=removed_shadowing_rules count=${shadow_removed}" >&2
+  fi
+
+  # Canonical rows first, preserved lines after: a second, structural line
+  # of defense on top of the shadowing-rule removal above (see the function
+  # header comment) -- first-match-wins means libpq reaches the canonical
+  # row before any preserved line, no matter what that preserved line turns
+  # out to be.
+  local new_content
+  new_content="postgres:5432:cps_novel:backup_role:${backup_password}"$'\n'"postgres:5432:replication:backup_role:${backup_password}"$'\n'"${kept}"
+
+  if [[ -f "$X8_BACKUP_PGPASS_FILE" && "$existing_content" == "$new_content" ]]; then
+    echo "X8_BACKUP_PGPASS=UNCHANGED" >&2
+    return 0
+  fi
+
+  local previous_umask
+  previous_umask="$(umask)"
+  umask 077
+  tmp="$(mktemp "${X8_BACKUP_PGPASS_FILE}.XXXXXX" 2>/dev/null)" || {
+    umask "$previous_umask"
+    tmp=""
+    echo "ERROR: unable to create a temporary file next to $X8_BACKUP_PGPASS_FILE (is $X8_SECRET_DIR writable?)" >&2
+    return 65
+  }
+  umask "$previous_umask"
+
+  printf '%s' "$new_content" >"$tmp" || {
+    echo "ERROR: unable to write temporary pgpass content to $tmp" >&2
+    return 65
+  }
+  chmod 600 "$tmp" || {
+    echo "ERROR: unable to chmod temporary pgpass file $tmp" >&2
+    return 65
+  }
+  mv -f "$tmp" "$X8_BACKUP_PGPASS_FILE" || {
+    echo "ERROR: unable to move temporary pgpass file into place at $X8_BACKUP_PGPASS_FILE" >&2
+    return 65
+  }
+
+  local line_count
+  line_count="$(printf '%s' "$new_content" | wc -l | tr -d ' ')"
+  echo "X8_BACKUP_PGPASS=RECONCILED lines=${line_count} backup_role_rules=2" >&2
+}
+
 prepare_x8_environment() {
   # RC-2b: X8_LEVEL selects which docs/p2/V020_RELEASE_CHECKLIST.md flag
   # ladder rung this local topology boots at. Fail fast, before any
@@ -656,14 +891,10 @@ prepare_x8_environment() {
 
   prepare_p1_12_local_environment
 
-  if [[ ! -f "$X8_BACKUP_PGPASS_FILE" ]]; then
-    local backup_password temporary
-    backup_password="$(read_secret_value "$P1_12_BACKUP_ROLE_PASSWORD_FILE")"
-    temporary="${X8_BACKUP_PGPASS_FILE}.tmp.$$"
-    printf 'postgres:5432:cps_novel:backup_role:%s\n' "$backup_password" >"$temporary"
-    chmod 600 "$temporary"
-    mv "$temporary" "$X8_BACKUP_PGPASS_FILE"
-  fi
+  # X8_BACKUP_PGPASS_RECONCILE_2026-09-18: reconcile on every prepare, not
+  # just on first creation -- see x8_reconcile_backup_pgpass()'s own header
+  # comment for why a "file already exists" check is not enough.
+  x8_reconcile_backup_pgpass || return 65
 }
 
 # 2026-09-06 patch work order, P1-6 ("闸门需要的环境应当直接由身份文件构造", not
