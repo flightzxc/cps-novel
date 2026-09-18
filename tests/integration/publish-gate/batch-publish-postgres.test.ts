@@ -330,14 +330,27 @@ describe.skipIf(!enabled)("batch publish · real Postgres (audit unique index in
     expect(await statusOf(a.articleId)).toBe("published");
     // Item 2 aborted, named, and truthfully left alone — not counted as success.
     expect(result.aborted).toMatchObject({ articleId: b.articleId, notProcessedArticleIds: [] });
-    expect(result.aborted!.errorKind).toContain("P2002");
+    // Exact shape, not a substring: this is the whole sanitization contract —
+    // Prisma's class + code + the constraint's column names, and nothing else.
+    // A regression that appended `error.message` (which embeds the conflicting
+    // row's values) would still contain "P2002" and slip past a loose check.
+    expect(result.aborted!.errorKind).toBe("PrismaClientKnownRequestError:P2002:request_id,action");
+    expect(result.aborted!.errorKind).not.toContain(requestId);
     expect(await statusOf(b.articleId)).toBe("draft");
+    // Item 1's audit row carries its OWN derived id — proof that the abort was
+    // the pre-planted squatter row and not the pre-fix shared-id collision,
+    // which would have made item 1 the one item 2 collided with.
+    expect((await publishAuditsFor(a.articleId)).map((row) => row.request_id))
+      .toEqual([publishBatchItemRequestId(requestId, a.articleId)]);
   });
 
   it("Case 4: after a mid-batch abort, committed items stay committed and untouched items are reported as not processed", async () => {
     const a = await seedArticle("abort-a");
     const b = await seedArticle("abort-b");
     const c = await seedArticle("abort-c");
+    // A second unreached item, so `notProcessedArticleIds` pins order and
+    // multiplicity rather than being satisfied by any single-element array.
+    const d = await seedArticle("abort-d");
     const requestId = randomUUID();
     await db.$executeRaw(Prisma.sql`
       INSERT INTO operation_audit (actor_type, actor_id, action, entity_type, entity_id, request_id, created_at)
@@ -345,19 +358,25 @@ describe.skipIf(!enabled)("batch publish · real Postgres (audit unique index in
               ${publishBatchItemRequestId(requestId, b.articleId)}, now())`);
 
     const result = await publishArticlesBatch(db, {
-      articleIds: [a.articleId, b.articleId, c.articleId],
+      articleIds: [a.articleId, b.articleId, c.articleId, d.articleId],
       requestId,
       actor: ADMIN_ACTOR,
     });
 
     expect(result.results.map((entry) => entry.articleId)).toEqual([a.articleId]);
-    expect(result.aborted).toMatchObject({
+    expect(result.aborted).toEqual({
       articleId: b.articleId,
-      notProcessedArticleIds: [c.articleId],
+      errorKind: "PrismaClientKnownRequestError:P2002:request_id,action",
+      notProcessedArticleIds: [c.articleId, d.articleId],
     });
     expect(await statusOf(a.articleId)).toBe("published"); // committed, NOT rolled back
     expect(await statusOf(b.articleId)).toBe("draft");     // its own transaction rolled back
     expect(await statusOf(c.articleId)).toBe("draft");     // never attempted
+    expect(await statusOf(d.articleId)).toBe("draft");     // never attempted
+    // Same proof as Case 5: item 1 used its own derived id, so the abort is
+    // attributable to the squatter row, not to a shared-id collision.
+    expect((await publishAuditsFor(a.articleId)).map((row) => row.request_id))
+      .toEqual([publishBatchItemRequestId(requestId, a.articleId)]);
   });
 
   it("Case 5b: two concurrent submissions of the same batch do not double-publish or double-dispatch", async () => {
@@ -377,12 +396,18 @@ describe.skipIf(!enabled)("batch publish · real Postgres (audit unique index in
     expect(await statusOf(b.articleId)).toBe("published");
     expect(await publishAuditsFor(a.articleId)).toHaveLength(1);
     expect(await publishAuditsFor(b.articleId)).toHaveLength(1);
-    expect(dispatchFirstPublicPublication.mock.calls.length).toBeLessThanOrEqual(2);
-    // Neither call may claim more successes than actually happened.
+    // Exactly one first-publish dispatch per article across BOTH callers —
+    // `toBeLessThanOrEqual` would also accept 0, which would mean neither call
+    // ever published anything.
+    expect(dispatchFirstPublicPublication).toHaveBeenCalledTimes(2);
+    // Neither call may report an article as published that is not actually
+    // published in the database.
     for (const outcome of [left, right]) {
       if (outcome instanceof Error) continue;
-      const published = outcome.results.filter((entry: { result: { outcome: string } }) => entry.result.outcome === "published");
-      expect(published.length).toBeLessThanOrEqual(2);
+      for (const entry of outcome.results as Array<{ articleId: string; result: { outcome: string } }>) {
+        if (entry.result.outcome !== "published") continue;
+        expect(await statusOf(entry.articleId)).toBe("published");
+      }
     }
   });
 

@@ -272,11 +272,13 @@ export type PublishNovelsBatchItem =
       readonly result: ApplyPublishTransitionResult;
     }
   /**
-   * 2026-09-18: the batch stopped before this novel's Article was reached
-   * (`PublishArticlesBatchResult.aborted`). Its own state is whatever it was
-   * before the batch — nothing was attempted for it. It used to fall through
-   * to the `not_found` default below, i.e. the UI told an operator "文章不存在"
-   * about an Article that exists and simply was not processed.
+   * 2026-09-18: the batch aborted at or before this novel's Article
+   * (`PublishArticlesBatchResult.aborted`). Either it was never attempted, or
+   * it was the aborting item itself and its own transaction rolled back —
+   * both leave the Article exactly as it was before the batch, which is the
+   * only claim this kind makes. It used to fall through to the `not_found`
+   * default below, i.e. the UI told an operator "文章不存在" about an Article
+   * that exists and simply did not get published.
    */
   | { readonly kind: "not_processed"; readonly novelId: string; readonly articleId: string };
 

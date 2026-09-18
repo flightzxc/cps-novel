@@ -388,7 +388,11 @@ export function ArticleList({
     if (result.data.aborted) {
       // 已处理的部分是真的（逐篇独立事务，已提交的不会回滚）；未处理的部分
       // 同样是真的（它们压根没被尝试）。两边都据实说，不合成一个看起来完整的统计。
-      const notProcessed = selectedCount - processed;
+      //
+      // 用服务端给出的确切清单，而不是 `已选 - 已处理` 这种减法：出错的那一篇
+      // 既不在 `results` 里、也不在"其余未处理"里（它被尝试过、事务回滚了），
+      // 减法会把它算进"其余"，让「第 N 篇出错，其余 M 篇未处理」这句话自相矛盾。
+      const notProcessed = result.data.aborted.notProcessedArticleIds.length;
       setMessage(
         `批量发布中断：已处理 ${processed}/${selectedCount} 篇（成功 ${published}，拒绝 ${rejected}，冲突 ${conflict}，不存在 ${notFound}）；`
         + `第 ${processed + 1} 篇出错（${result.data.aborted.errorKind}）后停止，其余 ${notProcessed} 篇未处理、保持原状。`

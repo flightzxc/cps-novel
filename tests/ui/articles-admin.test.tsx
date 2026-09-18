@@ -901,9 +901,14 @@ describe("ArticleList · 列表与批量", () => {
       const text = screen.getByRole("status").textContent ?? "";
       expect(text).toContain("已处理 1/2 篇");
       expect(text).toContain("成功 1");
-      expect(text).toContain("其余 1 篇未处理");
+      // 出错的那一篇既不在"已处理"里、也不在"其余未处理"里 —— 它被尝试过、
+      // 事务回滚了。所以这里是 0，不是 1。用 `已选 - 已处理` 做减法会算成 1，
+      // 让同一句话里的「第 2 篇出错」和「其余 1 篇未处理」互相矛盾。
+      expect(text).toContain("其余 0 篇未处理");
       expect(text).toContain("已发布的不会回滚");
       expect(text).toContain("刷新");
+      // 异常类别必须出现在文案里，否则操作者拿不到任何可上报的线索。
+      expect(text).toContain("PrismaClientKnownRequestError:P2002:request_id,action");
       // 不得出现"完成"这种把中断读成收工的措辞。
       expect(text).not.toContain("批量发布完成");
       expect(routerRefresh).toHaveBeenCalled();

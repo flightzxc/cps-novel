@@ -212,8 +212,7 @@ function BatchResultPanel({
           className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900"
           data-testid="batch-publish-aborted"
         >
-          批量发布在第 {summary.published + summary.rejected + summary.conflict + summary.notFound + 1} 项出错后中断
-          （{result.aborted.errorKind}）。下面的统计只覆盖已处理的部分，
+          批量发布中途出错后中断（{result.aborted.errorKind}）。下面的统计只覆盖已处理的部分，
           <span className="font-medium">此前已发布的文章不会回滚</span>，
           未处理 {summary.notProcessed} 项保持原状。请刷新页面确认实际状态后再重试。
         </p>
