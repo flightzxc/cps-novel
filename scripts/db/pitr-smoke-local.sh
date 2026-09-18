@@ -151,6 +151,15 @@ ANCHOR_TIMELINE="$(read_kv "$ANCHOR_DIR/VERIFIED" start_timeline)"
 EXPECTED_NEW_TIMELINE=$((ANCHOR_TIMELINE + 1))
 log "selected anchor=$ANCHOR_NAME (start_wal=$ANCHOR_START_WAL timeline=$ANCHOR_TIMELINE) target=$TARGET_NAME (total_valid=$total keep_base=$KEEP_BASE)"
 
+# Opus review fixup 2026-09-18 (P2-11): if --keep-base (or a thin
+# base-backup-dir) makes the anchor and the newest backup the SAME
+# directory, "replay the anchor's archive forward to the target's own
+# Start-LSN" degenerates to "replay a backup forward to its own start
+# point" -- trivially true and proves nothing about retained WAL actually
+# reaching a LATER backup. Fail fast rather than let this silently report a
+# vacuous PASS.
+[[ "$ANCHOR_NAME" != "$TARGET_NAME" ]] || fail "anchor_equals_target_nothing_to_prove"
+
 [[ -r "$ANCHOR_DIR/base.tar.gz" ]] || fail "anchor_base_tar_missing"
 [[ -r "$TARGET_DIR/backup_manifest" ]] || fail "target_manifest_missing"
 
@@ -201,6 +210,17 @@ for f in /src/*; do
   esac
 done
 echo "ARCHIVE_COPY_COUNT=$copied"
+# Opus review fixup 2026-09-18 (P2-10): a stat on the DESTINATION (/dst,
+# freshly created this run -- never anything but this copy's own output),
+# not a re-derivation from the $copied counter above, so this is an
+# independent check of what actually landed on disk, not just an echo of
+# the loop's own bookkeeping.
+history_count=0
+for f in /dst/*.history; do
+  [[ -e "$f" ]] || continue
+  history_count=$((history_count + 1))
+done
+echo "SMOKE_COPY_HISTORY_FILES=$history_count"
 COPY_ARCHIVE
 copy_rc=$?
 
@@ -208,6 +228,19 @@ copy_rc=$?
 copied_count="$(grep -oE 'ARCHIVE_COPY_COUNT=[0-9]+' "$copy_log" | grep -oE '[0-9]+$' || true)"
 [[ -n "$copied_count" && "$copied_count" -gt 0 ]] || fail "archive_copy_empty"
 log "archive_copy_count=$copied_count"
+
+# Opus review fixup 2026-09-18 (P2-10): this smoke's whole timeline-ID
+# assertion below (EXPECTED_NEW_TIMELINE = anchor's own start_timeline + 1)
+# assumes the copied archive slice is "one continuous run with no prior
+# timeline switch" -- true whenever the local X8 archive has never gone
+# through a real PITR/promotion before. If .history files DID land in /dst
+# (a previous timeline switch is recorded in the archive at or after the
+# anchor), "+1" is no longer a safe guess at what the NEXT promotion's new
+# timeline ID will be -- refuse rather than assert a possibly-wrong number.
+smoke_copy_history_files="$(grep -oE 'SMOKE_COPY_HISTORY_FILES=[0-9]+' "$copy_log" | grep -oE '[0-9]+$' || true)"
+[[ -n "$smoke_copy_history_files" ]] || fail "smoke_copy_history_files_unparseable"
+log "smoke_copy_history_files=$smoke_copy_history_files"
+[[ "$smoke_copy_history_files" == "0" ]] || fail "history_files_present_expected_timeline_ambiguous"
 
 # ---------------------------------------------------------------------------
 # one-time rig container: read-only anchor base backup + read-only copied
@@ -320,7 +353,13 @@ printf '%s' "$log_content" | grep -qE 'recovery stopping (after|before) WAL loca
 has_new_timeline_line=0
 printf '%s' "$log_content" | grep -qE 'selected new timeline ID: [0-9]+' && has_new_timeline_line=1
 has_fatal=0
-printf '%s' "$log_content" | grep -qE 'FATAL:' && has_fatal=1
+# Opus review fixup 2026-09-18 (P2-11): postgres logs "FATAL:  the database
+# system is starting up" for any connection attempt that races the server's
+# own startup/recovery window -- normal, expected chatter while THIS script
+# itself is polling with psql before promotion completes (see the wait loop
+# above), not a real failure. Only a FATAL: line that is NOT that specific,
+# benign, still-starting-up message should ever flip has_fatal.
+printf '%s' "$log_content" | grep -E 'FATAL:' | grep -qv 'the database system is starting up' && has_fatal=1
 
 [[ "$has_stop_phrase" -eq 1 ]] || fail "log_missing_recovery_stopping_phrase"
 [[ "$has_new_timeline_line" -eq 1 ]] || fail "log_missing_selected_new_timeline_line"

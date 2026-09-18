@@ -46,7 +46,17 @@ require_darwin() {
   fi
 }
 
+# Opus review fixup 2026-09-18 (P2-12): --worktree is operator-typed input
+# (unlike wal-gc-daily-apply.sh's X8_LOCAL_WORKTREE, which only ever comes
+# from this script's own rendered plist) -- a relative path here would still
+# resolve *somewhere* (relative to whatever directory launchd/the caller's
+# shell happens to be in when this runs), silently pointing the installed
+# LaunchAgent at the wrong worktree instead of refusing outright.
 require_entrypoint() {
+  if [[ "$WORKTREE" != /* ]]; then
+    echo "LOCAL_WAL_GC_LAUNCHD=REFUSED reason=worktree_not_absolute" >&2
+    exit 65
+  fi
   if [[ ! -f "$WORKTREE/scripts/x8-production-like.sh" ]]; then
     echo "LOCAL_WAL_GC_LAUNCHD=REFUSED reason=worktree_missing_entrypoint" >&2
     exit 65
@@ -65,7 +75,15 @@ render_plist() {
     exit 65
   }
   mkdir -p "$HOME/Library/LaunchAgents"
-  sed -e "s#__X8_LOCAL_WORKTREE__#$WORKTREE#g" -e "s#__HOME__#$HOME#g" "$template" >"$PLIST_DEST"
+  # Opus review fixup 2026-09-18 (P2-12): write-then-rename instead of a
+  # direct `sed ... >"$PLIST_DEST"` -- the latter truncates PLIST_DEST
+  # immediately on open, so a concurrent `launchctl list`/`status` (or a
+  # crash mid-write) could observe a zero-byte or half-written plist. `mv`
+  # within the same directory is atomic; a reader only ever sees the old
+  # complete file or the new complete file, never a partial one.
+  local tmp_plist="${PLIST_DEST}.tmp.$$"
+  sed -e "s#__X8_LOCAL_WORKTREE__#$WORKTREE#g" -e "s#__HOME__#$HOME#g" "$template" >"$tmp_plist"
+  mv "$tmp_plist" "$PLIST_DEST"
 }
 
 install_cmd() {
@@ -84,6 +102,24 @@ install_cmd() {
   preflight_rc=$?
   set -e
   if [[ "$preflight_rc" -ne 0 ]]; then
+    # Opus review fixup 2026-09-18 (P2-12): two different failure classes
+    # were being collapsed into one message. If wal-gc's own formal entry
+    # point actually ran and refused (WAL_RETENTION=REFUSED/LOCKED --
+    # archiver unhealthy, stale backup, locked, ...), the worktree-binding
+    # guard itself already PASSED -- this stack genuinely is this worktree's
+    # own, wal-gc just isn't in a state to run right now. That is not the
+    # same problem as the guard itself rejecting the binding (the
+    # `x8_assert_worktree_stack_binding` "ERROR: compose project ... is
+    # already running from a different worktree" case, which keeps the
+    # original worktree_not_bound_to_stack message below), and must not be
+    # reported with the same reason string.
+    local refused_line
+    refused_line="$(printf '%s\n' "$preflight_out" | grep -m1 -E '^WAL_RETENTION=(REFUSED|LOCKED)' || true)"
+    if [[ -n "$refused_line" ]]; then
+      echo "LOCAL_WAL_GC_LAUNCHD=INSTALL_REFUSED reason=\"stack_refusing:$refused_line\"" >&2
+      printf '%s\n' "$preflight_out" >&2
+      exit 65
+    fi
     echo "LOCAL_WAL_GC_LAUNCHD=REFUSED reason=worktree_not_bound_to_stack" >&2
     printf '%s\n' "$preflight_out" >&2
     exit 65

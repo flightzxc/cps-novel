@@ -47,6 +47,16 @@ X8 本地 Docker VM 磁盘预算按 200GB 总量粗分：
 
 在这组真实数据出现之前，第 1 节右列的所有暂定值都只是"避免上线时凭空拍数字"的占位，不是可以直接部署的生产配置。
 
+**生产前待办（Opus 复核 2026-09-18 补充，本轮不改）**：`infra/production-like/alerts/*`
+（`check-wal-archive.sh`/`check-backup-freshness.sh`/`check-worker-locks.sh`）里的
+`ALERT_COMPOSE_PROJECT` 默认值 `cps-novel-x8-local` 是 RC-7 就有的既有约定，本轮
+（local-X8 日删自动化工单）未改动、也不在本轮范围内改动。但这个默认值本身只对
+local-X8 profile 成立——生产部署的 compose 项目名大概率是另一个值，若这几个
+脚本继续沿用"猜一个默认值"，生产环境一旦项目名对不上就会静默探测/告警到错误
+的容器而不自知。生产部署前必须把这三处的 `ALERT_COMPOSE_PROJECT` 从
+`:=cps-novel-x8-local`（有默认值）改为 `:?`（未设置即报错退出，强制调用方显式
+传入），列为生产前待办事项，本轮不动。
+
 ## 4. 一句话总结
 
 **local-X8 的任何参数取值都不是生产口径**——包括但不限于 `keep-base=2`、

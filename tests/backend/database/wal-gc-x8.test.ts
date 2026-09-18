@@ -387,6 +387,39 @@ describe("wal-gc-x8.sh: only {--apply, --keep-base, --json, --force} are accepte
     expect(result.status).toBe(0);
     expect(existsSync(markerFile)).toBe(true);
   });
+
+  // Opus review fixup 2026-09-18 (P2-7): a *behavioural* companion to the
+  // static "target=(...) contains --max-backup-age-seconds
+  // X8_WAL_GC_MAX_BACKUP_AGE_SECONDS:-93600" assertion in
+  // no-leak-static-guards.test.ts -- that one only proves the literal text
+  // is present in the right place in the source; this one actually runs the
+  // wrapper and captures what wal-retention.sh is invoked with, so a
+  // regression that kept the source text but broke assembly of the
+  // `target` array (e.g. a stray `unset`/reassignment before `exec`) would
+  // still be caught here even though the static check would not notice.
+  function mkWrapperCopyWithArgvCapture(): { wrapperCopy: string; argvFile: string } {
+    const copyDir = mkTestDir("wal-gc-x8-wrapper-argv-");
+    const wrapperCopy = path.join(copyDir, "wal-gc-x8.sh");
+    copyFileSync(scriptPath, wrapperCopy);
+    chmodSync(wrapperCopy, 0o755);
+    const argvFile = path.join(copyDir, "wal-retention.argv");
+    const stub = `#!/usr/bin/env bash\nprintf '%s\\n' "$*" >"${argvFile}"\nexit 0\n`;
+    writeFileSync(path.join(copyDir, "wal-retention.sh"), stub);
+    chmodSync(path.join(copyDir, "wal-retention.sh"), 0o755);
+    return { wrapperCopy, argvFile };
+  }
+
+  it("invokes wal-retention.sh with --max-backup-age-seconds 93600 when no override env var is set", () => {
+    const { wrapperCopy, argvFile } = mkWrapperCopyWithArgvCapture();
+    const env = { ...process.env };
+    delete env.X8_WAL_GC_MAX_BACKUP_AGE_SECONDS;
+
+    const result = spawnSync("bash", [wrapperCopy, "--keep-base", "2", "--json"], { env, encoding: "utf8" });
+
+    expect(result.status).toBe(0);
+    const argv = readFileSync(argvFile, "utf8");
+    expect(argv).toContain("--max-backup-age-seconds 93600");
+  });
 });
 
 describe("wal-gc-x8.sh / x8-production-like.sh: static contracts", () => {
