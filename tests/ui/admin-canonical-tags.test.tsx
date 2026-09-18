@@ -543,7 +543,7 @@ describe("P2-06.5 Canonical Tag 译名 · 固定语种编辑器（F3）", () => 
     expect(translationsForm.queryByLabelText("译名 · fr")).toBeNull();
   });
 
-  it("点击展开后,20 个语位全部可见，且展开态可以再次收起", async () => {
+  it("点击展开后,23 个语位全部可见，且展开态可以再次收起", async () => {
     const item = canonicalTagItem();
     const view = projectAdminCanonicalTagList(canonicalTagList([item]));
     fetchMock.mockResolvedValueOnce(okResponse(projectAdminCanonicalTagDetail(canonicalTagDetail(item))));
@@ -554,7 +554,12 @@ describe("P2-06.5 Canonical Tag 译名 · 固定语种编辑器（F3）", () => 
 
     const translationsForm = within(screen.getByTestId(`canonical-tag-translations-form-${item.id}`));
 
-    expect(TAG_TRANSLATION_LOCALES.length).toBe(20);
+    expect(TAG_TRANSLATION_LOCALES.length).toBe(23);
+    expect(TAG_TRANSLATION_LOCALES).toContain("pt-BR");
+    expect(TAG_TRANSLATION_LOCALES).toContain("zh-Hant");
+    expect(TAG_TRANSLATION_LOCALES).toContain("cs");
+    expect(TAG_TRANSLATION_LOCALES).toContain("pt");
+    expect(TAG_TRANSLATION_LOCALES).toContain("zh-TW");
     fireEvent.click(translationsForm.getByRole("button", { name: /展开全部 \d+ 种语言/ }));
 
     for (const locale of TAG_TRANSLATION_LOCALES) {

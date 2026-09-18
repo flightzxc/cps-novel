@@ -145,7 +145,11 @@ export async function BrowseBody({
         locale={locale}
         chrome={loaded.chrome}
         title={loaded.category?.name || t("collection.allWorksTitle")}
-        description={loaded.category?.description || t("collection.allWorksDescription")}
+        description={
+          loaded.category
+            ? loaded.category.description ?? undefined
+            : t("collection.allWorksDescription")
+        }
         novels={loaded.paged.novels}
         emptyMessage={t("collection.allWorksEmpty")}
       />

@@ -839,6 +839,18 @@ site_setting`。两条都不是搬运偏差本身（PR6 落地时就已经这样
 | --- | --- | --- | --- | --- | --- | --- |
 | `article-list.tsx` 行内「发布」按钮显示条件 `row.status === "draft"` → `row.status === "draft" \|\| row.status === "unpublished"` | 不适用（小说业务偏离，非搬运；CPS 无 `unpublished` 状态可参照） | 不适用 | 不适用 | 不适用（业务偏离，非 COPY/ADAPT/PATTERN_ONLY） | 见本节小节说明；「下线」按钮条件 `row.status === "published"` 未改；`tests/ui/articles-admin.test.tsx`「行内 发布 / 下线 按钮可见性（C-21）」`describe` 块新增/改写三个用例（已下线行显示发布不显示下线/已撤回行两个都不显示/已下线行点击发布调用 `publishArticleAction`），变异（条件改回只 `draft`）复现红 | Claude |
 
+### 2026-09-19 · CanonicalTag 公开站多语言 overlay（`fix/canonical-tag-public-i18n`）
+
+公开站 label 走 CanonicalTagTranslation，不搬 CPS 运行时 `tagNameByLocale` / `i18n-helpers.ts`。运行时 CLI 只读本仓 overlay JSON，禁止读 CPS 路径。下列条目是生成 overlay 时审核过的只读候选，写入本仓后以 provenance（`source` / `sourceLocale` / `reviewStatus`）为准。`pt`→`pt-BR`、`zh-TW`→`zh-Hant` 只作候选，不合格则 `adapted` 或改用新译；禁止把 `zh-CN` 写入 `zh` 或 `zh-Hant`。
+
+| symbol | source_file | source_lines | baseline_commit | port_kind | changed_what | owner |
+| --- | --- | --- | --- | --- | --- | --- |
+| CanonicalTag 译名候选（repair 52 slug × en/ja/zh-Hant/es/ko/pt-BR/th/id/vi/ar） | `data/tags/tag-rule-names-repair-20260515.json` | `1-940` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | 只复用与海阅 slug 精确重合或经 CanonicalTag `display_name_zh` 复核后的 semantic map 的 **display names**；不搬 TagRule / vendor JSON 运行时；**不搬 keywords**。sha256 `7f559e2029e9c1d6dd27b03bc70193f6bdf4f72964c9bd30ce4c0466c2937c7e` | Cursor |
+| CanonicalTag 德语译名候选 `proposedDe` | `data/taxonomy/de-category-tag-i18n.json` | `1-2327` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | 只取 `needsReview=false` 的 `proposedDe`/`deName`（151/151）；不搬 CPS 分类页面与 classifier keywords。sha256 `9d57b68e204ae7d0f3f0a0b9a26c1c3c4f2b687195ff564849d71119f8acd408` | Cursor |
+| CanonicalTag 波兰语译名候选 `plName` | `data/taxonomy/pl-category-tag-i18n.json` | `1-201` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | 只取 `plName` 展示名，不取 keywords。sha256 `20c3a54704c7c4bb73acb47bde0c0f035af31e451b265773890327a9d9b1a888` | Cursor |
+| CanonicalTag 捷克语译名候选 `csName` | `data/taxonomy/cs-category-tag-i18n.json` | `1-1952` | `d77c3b968285698529cf97c7f0f97b286d7a2a9c` | `ADAPT` | 只取 `csName`；**忽略 `csKeywords`**（分类器词，不是展示译名）。sha256 `f1dc0a899d31636672b1f7da79722a1b69f280f593a3bca0de20c2edf1d61c6f` | Cursor |
+| `_tags-minimax-filled.json` 展示名/关键词 | `data/moboreels/_tags-minimax-filled.json`（隔离清单；**不在 v811 HEAD**） | 不适用 | 不适用（事故取证 git object `e70a1c5` `docs/governance/tag-i18n-quarantine.md`；v811 `d77c3b9` 无此文件） | 不适用（**未搬运**） | TAG-I18N-ORDINAL-2026-04-19 永久 `DO_NOT_USE_AS_TRANSLATION_AUTHORITY`。filled sha256 `35b806a823612d1a491a305320821508bd508a8397e780b59912660d95a9e0f0`。本 overlay **零复用** names 与 keywords；命中隔离范围的 107 格（63 en + 44 pt-BR）已按海阅 CanonicalTag 改回本仓 NEW_ROWS，含剔除 `Ldentity Swap` / `BE` 等错位值。classifier 关键词污染未计入译名错误。 | Cursor |
+
 ## 使用说明
 
 - `symbol`：被搬运的具体符号名（函数名/类型名/表名/字段名/组件名等），一行一个符号，不得用文件级粗粒度笼统登记；

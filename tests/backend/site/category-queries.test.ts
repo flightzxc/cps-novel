@@ -18,8 +18,9 @@ const tagRow = {
   novel_id: article.novel.id,
   id: "22222222-2222-4222-8222-222222222222",
   slug: "fantasy",
-  display_name: "Fantasy",
-  canonical_definition: "Fantasy novels",
+  requested_display_name: "Fantasy",
+  en_display_name: "Fantasy",
+  zh_display_name: "奇幻",
   sort_order: 7,
   updated_at: new Date("2026-09-02T00:00:00Z"),
 };
@@ -29,7 +30,7 @@ describe("public category queries · CPS category semantics on CanonicalTag", ()
     const findMany = vi.fn().mockResolvedValue([article]);
     const db = {
       canonicalTag: { findFirst: vi.fn().mockResolvedValue({
-        id: tagRow.id, slug: tagRow.slug, status: "active", canonicalDefinition: tagRow.canonical_definition,
+        id: tagRow.id, slug: tagRow.slug, status: "active", canonicalDefinition: "Fantasy novels",
         sortOrder: tagRow.sort_order, updatedAt: tagRow.updated_at,
         translations: [{ locale: "en", displayName: "Fantasy" }],
       }) },
@@ -39,6 +40,7 @@ describe("public category queries · CPS category semantics on CanonicalTag", ()
     const result = await getPublicCategoryPage(db, "en", "fantasy", 1);
     expect(findMany.mock.calls[0][0].where).toEqual(buildPublicArticleWhere({ locale: "en" }));
     expect(result?.category.name).toBe("Fantasy");
+    expect(result?.category.description).toBeNull();
     expect(result?.novels[0]?.tags).toEqual([expect.objectContaining({ slug: "fantasy" })]);
   });
 
@@ -62,6 +64,8 @@ describe("public category queries · CPS category semantics on CanonicalTag", ()
     expect(sql).toContain("nts.mode = 'manual'");
     expect(sql).toContain("NOT EXISTS");
     expect(sql).toContain("source_label_mapping");
+    expect(sql).toContain("en.locale = 'en'");
+    expect(sql).toContain("zh.locale = 'zh'");
     expect(sql).not.toContain("nct.source = 'auto'");
     expect(JSON.stringify(result.get(article.novel.id))).not.toMatch(/rawToken|externalLabel|sourceLabel/i);
   });

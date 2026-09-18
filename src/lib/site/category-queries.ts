@@ -10,6 +10,7 @@ import type { Prisma, PrismaClient } from "@prisma/client";
 import type { NovelCardView } from "@/features/public-ui/types";
 import type { SiteLocale } from "@/lib/locale/locale-canonical";
 
+import { resolveCanonicalTagLabel } from "./canonical-tag-label";
 import { listPublicArticles, paginateCards, type BrowsePageResult } from "./queries";
 
 type Db = PrismaClient | Prisma.TransactionClient;
@@ -19,7 +20,14 @@ export type PublicCategoryPage = BrowsePageResult & Readonly<{
     id: string;
     slug: string;
     name: string;
-    description: string;
+    /**
+     * Locale-specific long description. Public CanonicalTag rows do not
+     * carry one (canonical_definition is Chinese classifier copy and is
+     * never shown here), so this is null until a dedicated description
+     * translation exists. Callers must omit it — not invent English
+     * `${name} novels.` filler.
+     */
+    description: string | null;
     sortOrder: number;
     updatedAt: Date;
   };
@@ -40,7 +48,7 @@ export async function getPublicCategoryPage(
 
   const tag = await db.canonicalTag.findFirst({
     where: { slug: normalizedSlug, status: "active" },
-    include: { translations: { where: { locale: { in: [locale, "zh"] } } } },
+    include: { translations: { where: { locale: { in: [locale, "en", "zh"] } } } },
   });
   if (!tag) return null;
 
@@ -49,6 +57,7 @@ export async function getPublicCategoryPage(
   const paged = paginateCards(cards, page);
   if (page > paged.totalPages) return null;
   const requested = tag.translations.find((translation) => translation.locale === locale);
+  const en = tag.translations.find((translation) => translation.locale === "en");
   const zh = tag.translations.find((translation) => translation.locale === "zh");
 
   return {
@@ -56,8 +65,13 @@ export async function getPublicCategoryPage(
     category: {
       id: tag.id,
       slug: tag.slug,
-      name: requested?.displayName || zh?.displayName || tag.slug,
-      description: tag.canonicalDefinition,
+      name: resolveCanonicalTagLabel({
+        requested: requested?.displayName,
+        en: en?.displayName,
+        zh: zh?.displayName,
+        slug: tag.slug,
+      }),
+      description: null,
       sortOrder: tag.sortOrder,
       updatedAt: tag.updatedAt,
     },
