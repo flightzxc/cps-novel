@@ -2,6 +2,16 @@
 
 本文件是 **cps-novel 项目架构事实的唯一权威源**。任何与本文件冲突的口头约定、旧草稿、聊天记录一律以本文件为准（除非按下方"冲突裁决顺序"另有更高优先级来源）。
 
+> **开工前先读流程真源：[`docs/governance/AI_WORKFLOW.md`](docs/governance/AI_WORKFLOW.md)**
+>
+> 本文件回答"项目是什么"（架构事实）；`AI_WORKFLOW.md` 回答"怎么干活"
+> （必读顺序、commit trailer 约定、CHANGELOG 生成方式、ADR 边界、X8 部署与身份纪律），
+> 是 Claude Code / Codex / Cursor 共用的**同一份**流程真源。
+>
+> 其它 Agent 的入口：根目录 `AGENTS.md`（Codex 及通用）、
+> `.cursor/rules/repository-governance.mdc`（Cursor）。三者都只是引导层，
+> 规则正文不得复制到任何一处。
+
 ---
 
 ## 1. 项目身份

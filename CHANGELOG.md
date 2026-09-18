@@ -1,0 +1,614 @@
+# CHANGELOG
+
+<!-- 本文件由 `node scripts/generate-changelog.mjs --write` 生成，请勿手工编辑。 -->
+<!-- 叙述性内容写进 commit message；Owner/架构决策写 docs/adr/。 -->
+
+生成时间：2026-09-18 · 共 603 个 commit
+- `bbcd2c1` 2026-09-18 feat(articles): select all matching and publish across pages  — _Claude Opus 5_
+- `a059537` 2026-09-18 fix(publish): correct the interrupted-batch count and tighten its tests  — _Claude Opus 5_
+- `088b046` 2026-09-18 fix(publish): derive a per-article operation id for batch publish  — _Claude Opus 5_
+- `84e8991` 2026-09-18 fix(preview): scope the account hold, make release crash-resumable  — _Claude Opus 5_
+- `578d639` 2026-09-18 feat(preview): account-level deterministic-failure brake  — _Claude Opus 5_
+- `c6d8db6` 2026-09-18 feat(publish): decouple publishing from preview availability  — _Claude Opus 5_
+- `962b55b` 2026-09-18 fix(preview): add the missing preview-backfill recovery path  — _Claude Opus 5_
+- `7dbe624` 2026-09-17 merge: catalog finalize recovery
+- `60a518a` 2026-09-17 fix: harden catalog finalize recovery
+- `e23cdd0` 2026-09-17 fix(ui): unify live catalog progress display
+- `ddcbccd` 2026-09-17 fix(task-admin): report exact catalog progress
+- `dd2ba08` 2026-09-17 fix(catalog): stage idempotent finalize and recovery
+- `12f95d8` 2026-09-17 fix(tasks): retry catalog work with fenced ordering
+- `36234d6` 2026-09-17 merge: WAL retention Gate 1
+- `2d2d3d1` 2026-09-17 docs(audits): note third-party web/worker recreate at 16:45Z and manual catalog_scan WAL load; snapshot must be retaken before Gate 2  — _Claude Fable 5.1_
+- `bb0dbb6` 2026-09-17 docs(audits): X8 WAL retention rollout plan (Gate 1-5, first-apply Owner gate, freeze boundaries)  — _Claude Fable 5.1_
+- `d102089` 2026-09-17 fix(x8): wal-gc/base-backup-now preflight mounts and worktree binding; harden entry tests  — _Claude Fable 5.1_
+- `4bfca0f` 2026-09-17 test(db): wal-gc-x8 refusal paths; --force cannot bypass integrity guards  — _Claude Fable 5.1_
+- `bbec454` 2026-09-17 feat(x8): formal wal-gc/base-backup-now entries force archiver health; compose mounts for base backups  — _Claude Fable 5.1_
+- `8923814` 2026-09-17 fix(db): wal-retention guards must print REFUSED under set -e; time-based archiver predicate; reject malformed VERIFIED  — _Claude Fable 5.1_
+- `e039350` 2026-09-16 test(db): cover apply ordering and refusal paths; rehearsal step 4N  — _Claude Fable 5.1_
+- `0c3ae6b` 2026-09-16 fix(db): fail-closed guards for wal-retention (anchor/plan/archiver/dir-name)  — _Claude Fable 5.1_
+- `07d8cad` 2026-09-16 test(db): rehearse WAL retention end to end in a disposable Docker rig  — _Claude Fable 5.1_
+- `97ab212` 2026-09-16 feat(db): add physical base backup verifier and WAL retention tool  — _Claude Fable 5.1_
+- `077da0a` 2026-09-16 fix(db): allow pg_basebackup .backup and timeline .history in archive_command  — _Claude Fable 5.1_
+- `da59d13` 2026-09-16 feat(tasks): promote pause/abort to formal 'paused'/'cancelled' statuses (X10)  — _Claude Opus 5_
+- `0aeee46` 2026-09-16 feat(tasks): port pause/resume/abort task control; replace circuit breaker with first-occurrence system hold  — _Claude Opus 5_
+- `aead1c6` 2026-09-16 fix(test): repair a type conflict that only appears after integration  — _Claude Opus 5_
+- `e9218df` 2026-09-16 merge: feat/promo-claim-batch-resilience into integration/2026-09-16-night  — _Claude Opus 5_
+- `dffa63d` 2026-09-16 merge: fix/task-claim-skip-ineligible-parents into integration/2026-09-16-night  — _Claude Opus 5_
+- `c0a4d74` 2026-09-16 merge: feature/batch-create-operator-ux into integration/2026-09-16-night  — _Claude Opus 5_
+- `76013d4` 2026-09-16 test(promo-claim): cover the circuit breaker's two load-bearing properties  — _Claude Opus 5_
+- `9f71565` 2026-09-16 fix(promo-claim): move readiness gate off the Web tier; supersedes 176c958  — _Claude Opus 5_
+- `294cb11` 2026-09-16 fix(tasks): stop rendering catalog-batch counts on article.generate.batch.v2  — _Claude Opus 5_
+- `176c958` 2026-09-16 WIP(promo-claim): recurrence safeguards — DO NOT MERGE, fails two architecture guards  — _Claude Opus 5_
+- `2705b4d` 2026-09-16 fix(tasks): push parent-eligibility into selectPending's WHERE clause  — _Claude Opus 5_
+- `3e3613f` 2026-09-16 merge: catalog-batch already-linked regression test into batch-create UX branch  — _Claude Opus 5_
+- `1ac7ec4` 2026-09-16 feat(articles): batch-generate cap indicator, 本页全选, richer rows, template names  — _Claude Opus 5_
+- `845986b` 2026-09-16 feat(articles): locale chips for batch-generate + versioned batch protocol  — _Claude Opus 5_
+- `268d29e` 2026-09-16 feat(articles): SQL-level promo readiness predicate for batch-generate  — _Claude Opus 5_
+- `a47a9fc` 2026-09-16 test(catalog-batch): cover already-linked/ineligible/submitted split with a fast unit test  — _Claude Opus 5_
+- `32e28ee` 2026-09-15 fix(article): enforce promo admission and expose safe errors
+- `5e94169` 2026-09-15 fix(novel): allow short materialization slugs
+- `ed62fe6` 2026-09-15 fix(catalog): prefilter unsupported locale materialization
+- `166fa53` 2026-09-14 docs(decoupling): mark T24-c Preview fencing as NOT RUN  — _Cursor_
+- `d908041` 2026-09-14 fix(decoupling): canonicalize batch generate filter snapshots  — _Cursor_
+- `90f6ab7` 2026-09-14 fix(decoupling): close R2 parent aggregation and batch request freeze  — _Cursor_
+- `1901880` 2026-09-14 fix(decoupling): remediate novel article review blockers  — _Cursor_
+- `fbab06e` 2026-09-14 Record segment D SHA on the review note.  — _Cursor_
+- `d910923` 2026-09-14 Lock write guards and document switch/rollback for Novel-only rows.  — _Cursor_
+- `0965fcb` 2026-09-14 Give ops separate catalog ingest and article-create entry points.  — _Cursor_
+- `68eaf68` 2026-09-14 Split novel materialize from article generate.  — _Cursor_
+- `ef88f9f` 2026-09-14 Retire coupled content_create so leftover catalog tasks fail closed.  — _Cursor_
+- `daafbe4` 2026-09-13 feat(catalog-sync): async filtered batches and owner claim UX
+- `2fdcc05` 2026-09-13 fix: close four pre-UAT locale and taxonomy gaps
+- `4cce5b4` 2026-09-13 fix(admin): /articles 列表行内「发布」入口补 unpublished  — _Claude Fable 5.1_
+- `78a8ef5` 2026-09-12 fix(admin): move type re-exports out of "use server" _actions.ts (module-eval ReferenceError broke all /articles server actions) + use-server export guard  — _Claude Fable 5.1_
+- `1b90916` 2026-09-12 chore(governance): register C-30 rebind table pkeys and table-count baseline so the live dictionary drift check passes  — _Claude Fable 5.1_
+- `3312459` 2026-09-12 chore(ci): move SET TRANSACTION READ ONLY into scripts/lib helper (no-bypass window false positive) + raise CI-bound test timeouts  — _Claude Fable 5.1_
+- `874c4df` 2026-09-12 chore(deps): sync package-lock with optional platform deps (@emnapi/runtime, @emnapi/core) so npm ci passes on linux CI  — _Claude Fable 5.1_
+- `234f7c6` 2026-09-12 fix(grants,publish-ui): close worker_app grants KNOWN_GAPS + runPublish stale-action guard  — _Claude Fable 5.1_
+- `c3c4b17` 2026-09-11 fix(withdraw): permanent 处理中 on Server Action reject + novel takedown grants  — _Claude Fable 5.1_
+- `6fd7bf9` 2026-09-11 fix(blog-detail): decode blog slug + locale-aware canonical (Opus NON_BLOCKING follow-up)  — _Claude Fable 5.1_
+- `d649c9c` 2026-09-11 fix(public): decode non-ASCII slugParam and use locale-prefixed canonical  — _Claude Fable 5.1_
+- `60a17f5` 2026-09-11 fix(claim): treat non-truncated getlistpc pages as complete for readback  — _Claude Fable 5.1_
+- `c9bf7e2` 2026-09-11 docs(l10n): record Changdu official language-code table (Owner 2026-09-11); codes 19/20 = VENDOR_TABLE_ABSENT  — _Claude Fable 5.1_
+- `f696519` 2026-09-11 fix(home-carousel): stop upsert/create from poisoning writes under PostgreSQL (X8 轮 2d ⑥⑦)  — _Claude Fable 5.1_
+- `812c0da` 2026-09-11 fix(grants): grant web_app INSERT on home_carousel_change_log, grant C-30 rebind three-table access, extend RETURNING guard to web_app  — _Claude Fable 5.1_
+- `0072833` 2026-09-11 fix(grants): grant worker_app SELECT on seven tables it can INSERT/UPDATE but never RETURNING-read  — _Claude Fable 5.1_
+- `75dbdee` 2026-09-11 fix(home-carousel): align home_carousel_auto_batch.status writes with its frozen CHECK, generalize CHECK simulation/static guards to all four carousel tables  — _Claude Fable 5.1_
+- `11c60ff` 2026-09-11 fix(home-carousel): widen home_carousel_serving.source CHECK to match what compute has always written  — _Claude Fable 5.1_
+- `c37451d` 2026-09-11 fix(l10n): grant scheduler_app column-scoped SELECT on article/novel/promo_link (P5.2)  — _Claude Fable 5.1_
+- `1da37bf` 2026-09-11 L10N P5.1: scheduler wiring regression closer, declaration-exemption registry, cs chip note, port-registry precision  — _Claude Fable 5.1_
+- `7e8e29e` 2026-09-11 L10N P5: fix gate fallout from carousel/batch-dialog locale wiring  — _Claude Fable 5.1_
+- `a4d5f36` 2026-09-11 L10N P5 §1.G: port-registry P5 section, carousel UAT runbook locale note  — _Claude Fable 5.1_
+- `2f7fe49` 2026-09-11 L10N P5 §1.A: home-carousel cron and admin page go per-locale  — _Claude Fable 5.1_
+- `2dd79a8` 2026-09-11 L10N P5 §5.I: sync stale revalidatePublicBlogPaths comments to P4.1's fix  — _Claude Fable 5.1_
+- `edfa7e3` 2026-09-11 L10N P5 §1.C/§1.D: template options by locale, batch dialog locale grouping  — _Claude Fable 5.1_
+- `2c57045` 2026-09-11 L10N P5 §1.E: deriveLocale blank check, C7-2 precise assertion, batch port-registry note  — _Claude Fable 5.1_
+- `5ee5e06` 2026-09-11 L10N P5 §1.B: catalog-scan chip derived from moboreader 18-code table  — _Claude Fable 5.1_
+- `ffb6db6` 2026-09-11 L10N P5 §4.H: probe apply catch branch keeps the captured raw body  — _Claude Fable 5.1_
+- `b5de04b` 2026-09-11 L10N P4.1: pass locale through to revalidatePublicBlogPaths, sync stale docs  — _Claude Fable 5.1_
+- `315a239` 2026-09-10 docs(l10n): n4 review fix — sync stale whitelist-era statements to the two-layer model  — _Claude Fable 5.1_
+- `7ea700f` 2026-09-10 test(l10n): n2 review fix — cover the unrecognised-Host negotiation gate  — _Claude Fable 5.1_
+- `bd0fcee` 2026-09-10 fix(l10n): n1+n3 review fixes — revalidateTag immediate-purge semantics, locale-aware blog invalidation  — _Claude Fable 5.1_
+- `2f9cea8` 2026-09-10 fix(l10n): B-1 review fix — [locale] novel not-found reads request locale  — _Claude Fable 5.1_
+- `c230cb7` 2026-09-10 docs(l10n): fix P4 misclassification — [locale]/novel/[slugParam]/not-found.tsx IS a real 唯一语种假设 gap, not a bare-path structural case  — _Claude Fable 5.1_
+- `2f18f58` 2026-09-10 docs(l10n): sync README/P1_SHARED_CONTRACTS/text-to-slug comments to the two-layer model  — _Claude Fable 5.1_
+- `8d46ac5` 2026-09-10 test(l10n): root-path negotiation + sitemap default-registry coverage  — _Claude Fable 5.1_
+- `661313c` 2026-09-10 fix(l10n): drop unused vi import from p2-12-vertical-acceptance.test.ts  — _Claude Fable 5.1_
+- `ffa2eb8` 2026-09-10 fix(l10n): break active-locales.ts's transitive unstable_cache import from revalidate.ts; finish remaining test fixups  — _Claude Fable 5.1_
+- `8a61b4b` 2026-09-10 test(l10n): active-locales dynamic-layer coverage (fake db)  — _Claude Fable 5.1_
+- `8c7b8b5` 2026-09-10 test(l10n): update whitelist-dependent tests for the two-layer model  — _Claude Fable 5.1_
+- `7db650d` 2026-09-10 feat(l10n): two-layer public locale model — static SITE_LOCALES + dynamic getActiveLocales, root-path negotiation  — _Claude Fable 5.1_
+- `1a7a43b` 2026-09-10 docs(l10n): P4 evidence lists — CPS static/dynamic layer consumers, whitelist-layer consumers, PUBLIC_SITE_LOCALE classification  — _Claude Fable 5.1_
+- `f59132c` 2026-09-10 test(l10n): fake-db mirrors exact-locale template where after P3; drop null-template wildcard in create dialog  — _Claude Fable 5.1_
+- `836d24d` 2026-09-10 docs(l10n): clarify L10N P3 requireLocale rejection wording in database-governance.md  — _Claude Fable 5.1_
+- `879f790` 2026-09-10 fix(l10n): tighten ArticleTemplate write contract to required locale + bootstrap fail-closed on unchanged/soft-deleted rows (P3 review fix)  — _Claude Fable 5.1_
+- `6cad40d` 2026-09-10 feat(l10n): ArticleTemplate.locale non-null + 15-locale default template assets (P3 §1)  — _Claude Fable 5.1_
+- `e6aa388` 2026-09-10 feat(l10n): P2 creation-chain locale derivation + publish-gate locale check removal  — _Claude Fable 5.1_
+- `34390f8` 2026-09-10 fix(l10n): explicit locale-name exemption registry, persistCatalogPage suspension wiring test, alias snapshot, probe comment fix  — _Claude Fable 5.1_
+- `1f987d9` 2026-09-10 fix(l10n): backfill default target set includes legacy 'unknown' literal, gate audit writes on scanned count  — _Claude Fable 5.1_
+- `c0d1f14` 2026-09-10 feat(l10n): backfill CLI + evidence-line-X probe CLI, not run against X8 (P1 §1.F/G)  — _Claude Fable 5.1_
+- `82cb82f` 2026-09-10 feat(l10n): catalog-sync source-locale filter with __unknown sentinel (P1 §1.E)  — _Claude Fable 5.1_
+- `5a9f695` 2026-09-10 feat(l10n): worker writes NULL not "unknown", per-page suspension eval (P1 §1.D)  — _Claude Fable 5.1_
+- `cd524b6` 2026-09-10 feat(l10n): channel-language.ts registry + resolveSiteLocale delegation (P1 §1.A/C)  — _Claude Fable 5.1_
+- `494f135` 2026-09-10 test(i18n): sentence-count parity gate across locales  — _Claude Fable 5.1_
+- `020f18a` 2026-09-10 feat(seo): public page description meta per CPS shape  — _Claude Fable 5.1_
+- `f1ccf6f` 2026-09-10 feat(i18n): plural collection.workCount + ban # inside plural branches  — _Claude Fable 5.1_
+- `55172c8` 2026-09-10 fix(i18n): apply Owner-approved promise wording (takedownBody, siteDescription) across 15 locales  — _Claude Fable 5.1_
+- `8d21c02` 2026-09-10 fix(i18n): reset the compiled-format cache too, and stop shadowing `en` in the gate  — _Claude Fable 5.1_
+- `986dc87` 2026-09-10 feat(i18n): replace regex-based ICU gate with AST-based plural-aware gate  — _Claude Fable 5.1_
+- `4b55ffb` 2026-09-10 feat(i18n): translate 5 count-bearing keys to full CLDR plural for ru/pl/cs/ar  — _Claude Fable 5.1_
+- `cc3b438` 2026-09-10 feat(i18n): fold previewChaptersDescription/...One into one ICU plural key  — _Claude Fable 5.1_
+- `a644e2e` 2026-09-10 feat(i18n): swap t() render engine to intl-messageformat (zero copy, zero plural)  — _Claude Fable 5.1_
+- `fa45e6e` 2026-09-09 fix(i18n): apply third-party acceptance round 1 (26 naturalness + 甲档 verbatim alignment)  — _Claude Fable 5.1_
+- `dd47f24` 2026-09-09 fix(c30): guard-9 sibling read uses groupBy (real SQL GROUP BY), not in-memory distinct  — _Claude Fable 5.1_
+- `795b2a1` 2026-09-09 fix(c30): chunk + bound the two P3 query-scale gaps from 施工单2复核 §6.3  — _Claude Fable 5.1_
+- `5b2a09b` 2026-09-09 test(c30-3): fix W-2 integration fixture (UUID execution_token) + repo-wide reverse-check sweep  — _Claude Fable 5.1_
+- `485ec47` 2026-09-09 test(c30-3): W-2 budget-gate backend/reverse-check tests + 200-item integration case  — _Claude Fable 5.1_
+- `69ab9b4` 2026-09-09 feat(c30-3): W-2 wall-clock request-budget gate + W-3 budget constants  — _Claude Fable 5.1_
+- `14f8a1a` 2026-09-09 fix(c30-3): W-1 port CPS lease-expiry resume entry to batch rebind client  — _Claude Fable 5.1_
+- `b7bbb50` 2026-09-09 fix(locale): close out WO-3 low-risk items ①②③⑥⑦ (messages catalog)  — _Claude Fable 5.1_
+- `d8c03ed` 2026-09-09 fix(admin): scope header checkbox half-select/disabled to current page  — _Claude Fable 5.1_
+- `5860c8c` 2026-09-09 docs(governance): correct port-registry c37602c mislabel  — _Claude Fable 5.1_
+- `cfb9fd4` 2026-09-09 fix(x8): reconcile the D-9a/D-9b seam and give both disk gates a status line  — _Claude Opus 5_
+- `62dc917` 2026-09-09 fix(x8): gc dry-run lists dangling id+size, and --json always emits a summary (D-9b review)  — _Claude Opus 5_
+- `e31d080` 2026-09-09 feat(x8): explicit release-image retention with gc subcommand and disk preflight (D-9b)  — _Claude Fable 5.1_
+- `ca7b23d` 2026-09-09 fix(x8): make database preparation atomic so a failed up cannot strip the running stack's grants (D-9a)  — _Claude Fable 5.1_
+- `5dd3056` 2026-09-09 test(c30): make the PostgreSQL integration fixtures satisfy the composite promo-link FK and record the first real run  — _Claude Opus 5_
+- `872842d` 2026-09-09 test(c30b): pin the client apply cap and the batch path's write shape  — _Claude Opus 5_
+- `45304bb` 2026-09-09 fix(c30b): wire the expired-preview sweep into submitRebindBatch  — _Claude Opus 5_
+- `fd45a3c` 2026-09-09 fix(c30b): replace two raw NUL bytes in preview.ts with a JS unicode escape  — _Claude Fable 5.1_
+- `23eb50a` 2026-09-09 test(c30b): backend, UI, and env-gated integration coverage for batch rebind  — _Claude Fable 5.1_
+- `1ee90c4` 2026-09-09 feat(c30b): batch-rebind Server Actions, action registry, and admin UI  — _Claude Fable 5.1_
+- `bba0b0b` 2026-09-09 feat(c30b): batch-rebind preview scan and durable execution engine  — _Claude Fable 5.1_
+- `ae84df5` 2026-09-09 refactor(c30b): share the nine-guard classifier and rebind write core with the batch path  — _Claude Fable 5.1_
+- `0a8f150` 2026-09-09 fix(wo2): review follow-ups — stale throw-comments, mock rationale, proxy trust test, switcher hardening, dead localeNav slot  — _Claude Fable 5.1_
+- `7c8a864` 2026-09-09 feat(wo2): locale-aware in-site links, request-locale header, html lang/dir, locale switcher  — _Claude Fable 5.1_
+- `80a3d25` 2026-09-09 feat(wo3): messages fallback + completeness gate + 14-locale translations  — _Claude Fable 5.1_
+- `d1f55a7` 2026-09-09 fix(c30a): remove preview_id RESTRICT FK, pin rebind write shape and CHECK lists  — _Claude Fable 5.1_
+- `f9e3171` 2026-09-09 feat(c30a): 换小说地基 + 单篇换绑（施工工单 单 1）  — _Claude Fable 5.1_
+- `ded5907` 2026-09-09 fix(wo1): review fixes — real [locale] shell smoke coverage, restore getPublicT placement, harden /en redirect  — _Claude Fable 5.1_
+- `3d02cab` 2026-09-09 feat(wo1): shared public page bodies + locale-prefix route skeleton  — _Claude Fable 5.1_
+- `215b109` 2026-09-08 feat(c29b): restrict blog-create locale dropdown to publishable locales (Owner decision 2026-09-08)  — _Claude Fable 5.1_
+- `32cdb27` 2026-09-08 fix(c29b): resolve C-29 review lows — blog SEO copy, page-guard 404, rights routing, dead metaKeywords parse  — _Claude Fable 5.1_
+- `ff6e516` 2026-09-08 fix(c29b): wire blog first-publish through IndexNow/sitemap dispatch and cache invalidation  — _Claude Fable 5.1_
+- `5bf859b` 2026-09-08 feat(articles): C-29 博客公开侧 — /blog 详情与列表 + sitemap 博客家族 + IndexNow 资格  — _Claude Fable 5.1_
+- `f7db0ee` 2026-09-08 docs(p2): P2_01 publish-gate contract — record the locale rule supersession  — _Claude Fable 5.1_
+- `c45849b` 2026-09-08 fix(publish-gate): remove the publishable-locale gate (Owner decision 2026-09-08)  — _Claude Fable 5.1_
+- `cd895fd` 2026-09-08 fix(c28): review nits — unused test rest-params, stale test pointer, write-path wording  — _Claude Fable 5.1_
+- `efef1d1` 2026-09-08 feat(articles): C-28 新建博客后台 — 新建入口 + 创建服务 + 编辑器分叉  — _Claude Fable 5.1_
+- `94ca836` 2026-09-08 fix(publish-gate): C-27 review closures — rights_blocked Article-side half, promo-link binding guard, integration test  — _Claude Fable 5.1_
+- `bce42e0` 2026-09-08 feat(articles): C-27 blog data foundation — novel_id nullable, published CHECK forked by type  — _Claude Fable 5.1_
+- `056f798` 2026-09-08 fix(articles): C-26 review — normalize seoVisibility all/empty, add raw-SQL signal to content-mode scan  — _Claude Fable 5.1_
+- `7a973eb` 2026-09-08 feat(articles): C-26 文章类型与内容模式 — 筛选 + 列 + 内容模式两处写路径维护  — _Claude Fable 5.1_
+- `5b31b1b` 2026-09-08 fix(articles): C-25 review fixes — worker consumes seo-visibility flag too  — _Claude Fable 5.1_
+- `99b7397` 2026-09-08 feat(articles): C-25 SEO 可见性落地 — 后台可筛可看可改 + 公开侧真正生效  — _Claude Fable 5.1_
+- `60ca6e5` 2026-09-08 fix(articles): map publish-lifecycle codes to Chinese copy, cap/reason guards (C-21/22/23 review)  — _Claude Fable 5.1_
+- `44d6efb` 2026-09-08 fix(articles): C-23 导航闭环收尾 — 文章编辑页补返回入口  — _Claude Fable 5.1_
+- `1937583` 2026-09-08 fix(articles): C-22 抬头与入口对齐 — CPS 文案 + 目录同步入口 + 空态引导  — _Claude Fable 5.1_
+- `fd09941` 2026-09-08 fix(articles): C-21 行内发布/下线 + 列表批量发布，明确不做删除  — _Claude Fable 5.1_
+- `9914e80` 2026-09-08 docs(governance): register the C-24 composite index on its non-leading columns; fix a stale path  — _Claude Fable 5.1_
+- `7631158` 2026-09-08 feat(articles): C-24 文章三轴地基（article_type/content_mode/seo_visibility）  — _Claude Fable 5.1_
+- `6a8669a` 2026-09-08 fix(articles): C-20 列与前台 URL 对齐 — 书目/分类/创建时间列 + 中文状态徽章  — _Claude Fable 5.1_
+- `0679a38` 2026-09-08 fix(articles): C-19 筛选与搜索对齐 — 搜索框 + 模板/分类下拉 + 书目提示条  — _Claude Fable 5.1_
+- `8317d0b` 2026-09-08 fix(articles): resolve 公开页 links against SITE_URL, not the admin host (RC-9)  — _Claude Fable 5.1_
+- `9a87931` 2026-09-08 feat(admin): add header select-all to novels/catalog-sync/articles lists (C-17)  — _Claude Fable 5.1_
+- `e28459f` 2026-09-08 fix(tasks): make failed-item retry one-click, reason optional end-to-end (C-16)  — _Claude Fable 5.1_
+- `6194f1a` 2026-09-08 fix(worker): log a traceable databaseErrorHead on finalize failure (D-7b)  — _Claude Fable 5.1_
+- `9fc9c4c` 2026-09-08 fix(tasks): chunk unbounded id-in-list findMany queries (C-15)  — _Claude Fable 5.1_
+- `2737630` 2026-09-07 feat(tasks): raise MoboReader catalog page size ceiling to 100 (C-13)  — _Claude Fable 5.1_
+- `3126944` 2026-09-07 feat(tasks): project catalog_scan task counts as books, not pages (C-12)  — _Claude Fable 5.1_
+- `2277420` 2026-09-07 fix(worker): a finalizeTaskItem write failure fails the item, never the worker (D-7)  — _Claude Fable 5.1_
+- `b05d2b6` 2026-09-07 fix(worker): normalize MoboReader payEpisFrom/allEpis to satisfy DB CHECK (C-11)  — _Claude Fable 5.1_
+- `36acd8b` 2026-09-07 chore(x8): raise the MoboReader catalog safety cap to 6000 pages and pass it to web  — _Claude Fable 5.1_
+- `4882b35` 2026-09-07 fix(tasks): widen stop-reason gate to completed_with_errors/failed (C-10b)  — _Claude Fable 5.1_
+- `7b89c83` 2026-09-07 feat(tasks): move task detail to an independent /tasks/[id] route (C-9)  — _Claude Fable 5.1_
+- `616d99b` 2026-09-07 fix(tasks): surface adapter-level upstream error detail (C-10)  — _Claude Fable 5.1_
+- `20ffc0c` 2026-09-07 fix(credentials): normalize Bearer-prefixed intake once, at the source (D-6)  — _Claude Fable 5.1_
+- `409e04a` 2026-09-07 fix(tests): resolve p1-07 cherry-pick both-keep duplicate from 21aa9ff  — _Claude Fable 5.1_
+- `7cbac41` 2026-09-07 docs(governance): resolve KTF-001 and record the three SideEffectIntent transition boundaries  — _Claude Fable 5.1_
+- `21aa9ff` 2026-09-07 fix(tasks): close generic claim_retry_blocked -> confirmed edge; add readback confirmation boundary  — _Claude Fable 5.1_
+- `3b697f3` 2026-09-07 fix(prisma): name the six hand-written Tagging V3 FKs via @relation map so migrate diff is clean  — _Claude Fable 5.1_
+- `85d5118` 2026-09-07 Phase D steps D-2 + D-4: DB role password alignment + worktree/stack binding  — _Claude Opus 5_
+- `8db2f76` 2026-09-07 docs: document D-1 dry_run write-suppression layers in flag registry  — _Claude Opus 5_
+- `69c27a4` 2026-09-07 Phase D step D-1: dry_run makes zero business writes  — _Claude Opus 5_
+- `2e81d18` 2026-09-07 Revert "Phase C step C-7: retry-failed for generic family creates a new sibling task (CPS parity)"
+- `b89dc31` 2026-09-07 Phase C step C-8: claim-eligibility column + CPS-parity dry-run preview / typed apply confirm  — _Claude Opus 5_
+- `3f78710` 2026-09-07 Phase C step C-7: retry-failed for generic family creates a new sibling task (CPS parity)  — _Claude Opus 5_
+- `4bed200` 2026-09-07 Phase C step C-6: port CPS ImportProgress (flat progress read + polling UI)  — _Claude Opus 5_
+- `c89be5f` 2026-09-06 fix(tasks): preserve protected write results
+- `7141177` 2026-09-06 fix(db): remove legacy catalog scan grants
+- `243a019` 2026-09-06 Phase C step C-5: unify TASK_STATUSES/TASK_ITEM_STATUSES on database-statuses.ts
+- `9d78057` 2026-09-06 Phase C step C-4 (supplemental): fix remaining catalog_scan_task readers found post-drop
+- `65d34a3` 2026-09-06 Phase C step C-4: DROP catalog_scan_task(_item) (separate migration from C-1)
+- `bd32867` 2026-09-06 Phase C step C-2 (supplemental): migrate two more CatalogScanTask consumers
+- `238c176` 2026-09-06 Phase C step C-3: update tests for the two-family task model (C-2)
+- `70497f5` 2026-09-06 Phase C step C-2: switch application layer off CatalogScanTask onto GenericTask
+- `8552d08` 2026-09-06 Phase C step C-1: add generic_task catalog_scan partial indexes (schema-first)
+- `dbe8377` 2026-09-06 docs(governance): record Owner-authorized ownership exception for Parity phases B-E  — _Claude Fable 5.1_
+- `03ae575` 2026-09-06 Phase B: Channel/SourceApp entity fix + catalog-sync form parity  — _Claude Opus 5_
+- `c71c851` 2026-09-06 docs(x8): record the level-table digest binding and gate-side invariant re-check  — _Claude Opus 5_
+- `ed35ae4` 2026-09-06 fix(x8-release-identity): bind level table by source+digest, not resolved values  — _Claude Opus 5_
+- `bb235a3` 2026-09-06 Merge PR #6 head 97d5151 into the release-identity gate branch  — _Claude Opus 5_
+- `97d5151` 2026-09-06 docs: lane F  — _Claude Fable 5.1_
+- `f5a13d1` 2026-09-06 test: tagging flag passthrough + disabled-state  — _Claude Fable 5.1_
+- `1bd425a` 2026-09-06 feat(admin): render tagging disabled state instead of crashing (categories/tags)  — _Claude Fable 5.1_
+- `9a6e6db` 2026-09-06 fix(tagging): wire P2-06.5 feature flags into compose/X8 levels (PR6 lane F)  — _Claude Fable 5.1_
+- `07fd3dc` 2026-09-06 fix(x8): stop write_x8_gate_state() from masking a failed content write  — _Claude Opus 5_
+- `0b5ec49` 2026-09-06 fix(x8): close the four residual second-round terminal-review findings  — _Claude Opus 5_
+- `21624fb` 2026-09-06 fix(x8): close the release-identity gate second-round terminal-review findings  — _Claude Opus 5_
+- `f03e8dd` 2026-09-06 feat(templates): CPS-parity template admin + fix a production status CHECK defect  — _Claude Opus 5_
+- `ce74145` 2026-09-06 docs(x8): reflect the candidate/committed identity and rollback behavior  — _Claude Opus 5_
+- `55e6a25` 2026-09-06 fix(x8): close the release-identity gate terminal-review findings  — _Claude Opus 5_
+- `386bee9` 2026-09-05 docs(x8): correct runbook wording on X8_LEVEL and the gate command  — _Claude Opus 5_
+- `1ffbfef` 2026-09-05 fix(x8): give the catalog-write gate command a release identity  — _Claude Opus 5_
+- `8276361` 2026-09-05 fix(x8): wire MOBOREADER_PREVIEW_SOURCE_APP_CODES into the web service  — _Claude Opus 5_
+- `cdaff8f` 2026-09-05 docs(db): record PR6 lane E carousel grants fix + X8 verification  — _Claude Fable 5.1_
+- `a943fda` 2026-09-05 fix(db): scope carousel grants for scheduler/worker (PR6 lane E)  — _Claude Fable 5.1_
+- `6812374` 2026-09-05 docs(test): correct a stale N-9 test title  — _Claude Fable 5.1_
+- `e0728c1` 2026-09-05 test(tagging): bind the bootstrap SHA pins to the real repo artifacts  — _Claude Fable 5.1_
+- `d25845f` 2026-09-05 fix(pr6): integration seam patches for four fix lanes  — _Claude Fable 5.1_
+- `a91fe8a` 2026-09-05 docs: bootstrap runbook + governance log (N-11/N-12)  — _Claude Fable 5.1_
+- `f5a21b2` 2026-09-05 test(tagging): bootstrap dry-run/apply/idempotency  — _Claude Fable 5.1_
+- `cb40024` 2026-09-05 feat(tagging): add audited CanonicalTag bootstrap CLI (PR6 B-3)  — _Claude Fable 5.1_
+- `5dd3a5e` 2026-09-05 docs: lane D  — _Claude Fable 5.1_
+- `7842422` 2026-09-05 perf(public): load categories once on home (N-9)  — _Claude Fable 5.1_
+- `01ab429` 2026-09-05 test(content-creation): lock templateId selection  — _Claude Fable 5.1_
+- `90e9db4` 2026-09-05 feat(articles): list filters + article_conflict code (PR6 lane D)  — _Claude Fable 5.1_
+- `12a36e0` 2026-09-05 docs: lane B governance entries (port-registry, development-log)  — _Claude Fable 5.1_
+- `71007a8` 2026-09-05 test(public): query budget regression gate + chrome categories reuse (N-9)  — _Claude Fable 5.1_
+- `cdcdf78` 2026-09-05 feat(articles): optimistic lock + body sanitization (N-7/N-8)  — _Claude Fable 5.1_
+- `0d93c18` 2026-09-05 test(templates,articles): bite tests for M6/M7 + 13-action capability wiring  — _Claude Fable 5.1_
+- `5b5dee2` 2026-09-05 docs: correct scheduler registration claims and register N-3/N-4 deviations  — _Claude Fable 5.1_
+- `6575b7c` 2026-09-05 test(carousel): bite tests for merge/queries/compute/cron/actions (PR6 B-2)  — _Claude Fable 5.1_
+- `93562ad` 2026-09-05 feat(carousel): manual slot delete UI + admin three-block views (N-5/N-6)  — _Claude Fable 5.1_
+- `a6e8f02` 2026-09-05 fix(carousel): register cron schedule and honor config (PR6 B-1)  — _Claude Fable 5.1_
+- `a05e41b` 2026-09-05 fix: grant tagging reads to web runtime  — _Claude Fable 5.1_
+- `9aec195` 2026-09-05 fix: package tagging authorities for runtime  — _Claude Fable 5.1_
+- `131617e` 2026-09-05 test: lock public article projection  — _Claude Fable 5.1_
+- `8e46a24` 2026-09-05 test(governance): include carousel setting dictionary record  — _Claude Fable 5.1_
+- `d716ce3` 2026-09-05 docs(governance): register launch parity surfaces  — _Claude Fable 5.1_
+- `6ec8cb0` 2026-09-05 feat(security): add self-service 2FA recovery rotation (M12)  — _Claude Fable 5.1_
+- `0e9793b` 2026-09-05 feat(settings): complete SEO operating configuration (M10)  — _Claude Fable 5.1_
+- `7971ef5` 2026-09-05 feat(taxonomy): expose governed public categories (M8)  — _Claude Fable 5.1_
+- `48d653f` 2026-08-18 docs(p2-06.5): record Admin CPS parity audit and handoff  — _Claude Opus 5_
+- `2d51b0c` 2026-08-18 feat(admin): add P2-06.5 tagging Admin V1 UI  — _Claude Opus 5_
+- `e4e5a1e` 2026-08-17 chore(tagging): sync Lane C Final authority  — _Claude Fable 5.1_
+- `9cf64f6` 2026-08-17 feat(p2-06.5): materialize Lane C Owner Final and freeze C1 parameters  — _Claude Opus 5_
+- `28cdac0` 2026-08-17 docs(p2-06.5): add Lane C closeout for the post-fix review round  — _Claude Opus 5_
+- `998b4ca` 2026-08-17 chore(p2-06.5): close out Lane C post-fix review and v3 reproducibility  — _Claude Opus 5_
+- `da5622c` 2026-08-17 fix(p2-06.5): restore C1 v3 lexicon overlay reproducibility  — _Cursor_
+- `ce0e4f1` 2026-08-17 test(tagging): verify admin contracts and api  — _Claude Fable 5.1_
+- `6c13d2b` 2026-08-17 feat(admin): add tagging contracts and api routes  — _Claude Fable 5.1_
+- `c4136ae` 2026-08-17 feat(tagging): add admin domain services and guards  — _Claude Fable 5.1_
+- `dd16595` 2026-08-17 test(tagging): verify classifier task lifecycle  — _Claude Fable 5.1_
+- `96591a2` 2026-08-17 feat(tagging): add explicit auto classification tasks  — _Claude Fable 5.1_
+- `0644646` 2026-08-17 feat(tagging): add deterministic classifier core  — _Claude Fable 5.1_
+- `e98c38b` 2026-08-17 test(tagging): verify V3 foundation and services  — _Claude Fable 5.1_
+- `ccea182` 2026-08-17 feat(tagging): add resolver and snapshot services  — _Claude Fable 5.1_
+- `f96749a` 2026-08-17 feat(tagging): add V3 persistence foundation  — _Claude Fable 5.1_
+- `a6abf03` 2026-08-17 docs(p2-06.5): keep C1 v3 WIP outside authority baseline  — _Claude Fable 5.1_
+- `f820108` 2026-08-16 docs(p2-06.5): freeze owner-accepted V3 authority baseline  — _Claude Fable 5.1_
+- `db545ec` 2026-09-05 feat(carousel): add managed home carousel pipeline (M5)  — _Claude Fable 5.1_
+- `e9130ff` 2026-09-05 feat(articles): add editing regeneration and SEO serving (M7)  — _Claude Fable 5.1_
+- `ce58710` 2026-09-05 feat(templates): add managed article templates (M6)  — _Claude Fable 5.1_
+- `7934ef8` 2026-09-05 feat(content): enqueue previews after creation (M4)  — _Claude Fable 5.1_
+- `19c647a` 2026-09-05 feat(catalog): expose persistent write-gate state (M2)  — _Claude Fable 5.1_
+- `6685a0d` 2026-09-05 fix(admin): honor 2FA enforcement in capability projection (M0)  — _Claude Fable 5.1_
+- `f99c25e` 2026-09-04 test(auth): pin "unbound identity never reaches the 2FA challenge" and fix QR mock leakage (RC-11 review)  — _Claude Fable 5.1_
+- `b6b69a3` 2026-09-04 docs(governance): register RC-11 admin auth recovery + runbook §2.5  — _Claude Fable 5.1_
+- `71d5330` 2026-09-04 test(auth): cover the RC-11 reset/seed CLIs, QR generation, and stale-session login matrix  — _Claude Fable 5.1_
+- `6058c51` 2026-09-04 feat(auth): render a scannable QR code on the 2FA setup screen (RC-11)  — _Claude Fable 5.1_
+- `0e7b559` 2026-09-04 feat(auth): seed local X8 admin/admin2 accounts and add X8 admin subcommands (RC-11)  — _Claude Fable 5.1_
+- `48c0810` 2026-09-04 feat(auth): add audited local admin auth-state reset CLI (RC-11)  — _Claude Fable 5.1_
+- `657bce2` 2026-09-04 fix(auth): switch ADMIN_TWO_FACTOR_ENFORCEMENT canonical values to true/false (RC-10 Owner correction)  — _Claude Fable 5.1_
+- `fe4ea14` 2026-09-04 feat(auth): add ADMIN_TWO_FACTOR_ENFORCEMENT switch (default required; X8 uat disabled) (RC-10)  — _Claude Fable 5.1_
+- `e160dd8` 2026-09-03 docs(ops): freeze the RC-9 admin-host domain and update the UAT runbook  — _Claude Fable 5.1_
+- `2bf9fe1` 2026-09-03 infra(x8): sync local production-like topology to the RC-9 admin host  — _Claude Fable 5.1_
+- `3370c5a` 2026-09-03 feat(security): isolate admin routes on the zbcwf admin host (RC-9)  — _Claude Fable 5.1_
+- `7b21a40` 2026-09-03 docs(ops): complete RC-8 consumer list, /backups item, admin origin note  — _Claude Fable 5.1_
+- `768f22f` 2026-09-03 feat(ops): freeze pulsenovels.com as the production site origin (RC-8)  — _Claude Fable 5.1_
+- `eadff31` 2026-09-03 docs(governance): register RC-7b health keyword endpoints + log entry  — _Claude Fable 5.1_
+- `545f48a` 2026-09-03 test(health): pin the RC-7b monitor keyword against the raw response body  — _Claude Fable 5.1_
+- `7d9601b` 2026-09-03 feat(health): add CPS-style keyword health endpoints for backup and worker (RC-7b)  — _Claude Fable 5.1_
+- `c175488` 2026-09-03 test(admin): cover RC-4 batch content-creation actions at the action layer (review fixup)  — _Claude Fable 5.1_
+- `72c7f52` 2026-09-03 docs(governance): register RC-4 batch content-creation port + log entry  — _Claude Fable 5.1_
+- `845fdb8` 2026-09-03 feat(admin): add explicit-selection batch content creation on /catalog-sync (RC-4)  — _Claude Fable 5.1_
+- `a820623` 2026-09-03 docs(governance): register RC-7 minimal alert chain port + log entry  — _Claude Fable 5.1_
+- `4b28ddd` 2026-09-03 fix(ops): stop DRY_RUN from writing real debounce state (RC-7 review fixup)  — _Claude Fable 5.1_
+- `5897692` 2026-09-03 feat(ops): port CPS keyword alert chain as minimal alerts for novel (RC-7)  — _Claude Fable 5.1_
+- `fc132f9` 2026-09-03 fix(ops): grant promo:claim at Level UAT so the claim dialog can leave dry_run  — _Claude Fable 5.1_
+- `230cfcc` 2026-09-03 fix(test): read the X8 level table instead of RC-2b's removed literals  — _Claude Fable 5.1_
+- `2c4f370` 2026-09-03 feat(ops): add X8_LEVEL (0|uat|r) so the local topology can boot at Level UAT/R (RC-2b)  — _Claude Fable 5.1_
+- `d7e99c4` 2026-09-03 docs(ops): add Owner local UAT runbook and env pack  — _Claude Fable 5.1_
+- `ff86d2c` 2026-09-03 docs(release): add Level UAT/Level R and record C2b acceptance (RC-2/NT-2)  — _Claude Fable 5.1_
+- `b8f2288` 2026-09-03 fix(flags): accept CPS's full truthy set for the /go tracking write gate (RC-6 review fixup)  — _Claude Fable 5.1_
+- `edf20e3` 2026-09-03 feat(public): add tracking write gate and bot filter to /go redirect (RC-6)  — _Claude Fable 5.1_
+- `665ebfc` 2026-09-03 docs(governance): register RC-3 MoboReader upstream-pacing ports  — _Claude Fable 5.1_
+- `0b3aa32` 2026-09-03 docs(adapter): correct rateLimitAwarePost's note on non-429 retry backoff  — _Claude Fable 5.1_
+- `50da891` 2026-09-03 fix(tasks): clamp moboreader catalog pageSize to CPS hard cap 20 (RC-3 fixup)  — _Claude Fable 5.1_
+- `1c2f21f` 2026-09-03 feat(adapter): port CPS upstream rate discipline to moboreader (RC-3)  — _Claude Fable 5.1_
+- `1e45362` 2026-09-03 docs(governance): register RC-1 promo-link claim launcher port + log entry  — _Claude Fable 5.1_
+- `06aa4fb` 2026-09-03 feat(admin): add promo-link claim launcher on /catalog-sync (RC-1)  — _Claude Fable 5.1_
+- `1b9f82c` 2026-09-03 docs(db): align runtime grants with claim dependencies
+- `8bf407c` 2026-09-03 feat(security): version credential keys from secret files
+- `08ceb27` 2026-09-03 feat(claim): replace homepage readback with exact-target selection
+- `e9ee680` 2026-09-02 test(r1): guard the detail select against dropping publicRedirectCode  — _Claude Opus 5_
+- `80c12d8` 2026-09-02 feat(r1): wire readOnUpstreamHref CTA and siteName brand text
+- `924ba09` 2026-09-01 feat(e2e): publish Book B from existing promo
+- `31d4723` 2026-09-01 feat(promo): harden claim lifecycle and prove Book B smoke
+- `1658c4f` 2026-08-30 docs(canary): record live preflight no-go
+- `5b26912` 2026-08-30 fix(settings): allow postgres submillisecond seed CAS
+- `56eb524` 2026-08-30 merge: add canary parser fix and audited targeted preview consumption
+- `c80665e` 2026-08-30 merge: integrate X8 production-like runtime and script acceptance
+- `40a9ddc` 2026-08-27 docs(u6b): record merge and authorized Docker cache cleanup
+- `72a991e` 2026-08-27 merge: accept U6b locale provenance and D-7 comment corrections
+- `6ed0faf` 2026-08-27 docs(u6): record merge acceptance and canary handoff
+- `457309d` 2026-08-27 merge: accept U6 D-7 admission with backend safety coverage
+- `4f76cdb` 2026-08-27 test(u6): restore whitelist and zero-url safety coverage
+- `ce3cada` 2026-08-27 fix(pr-u6b): attribute language=5 to X8 and drop empty-whitelist comments  — _Cursor_
+- `30842b1` 2026-08-27 fix(pr-u6): unstick 2FA done-step, admit en, polish error/settings UX  — _Cursor_
+- `41538ba` 2026-08-27 docs(canary): record preflight checks and live acceptance blockers
+- `146d35d` 2026-08-27 feat(worker): add audited single-item preview consumption
+- `5a6addf` 2026-08-27 fix(adapter): normalize numeric preview bookId
+- `d37506c` 2026-08-27 docs(x8): record real C2 closeout acceptance
+- `3c4659f` 2026-08-27 fix(content): grant narrow source link updates
+- `7a519cc` 2026-08-27 fix(content): keep creation plan reads within web grants
+- `41804e0` 2026-08-27 docs(c2b): locate getchapterinfo bookId mismatch
+- `c02b4d7` 2026-08-27 test(node): allow for loaded integration hosts
+- `c239f19` 2026-08-27 fix(x8): make database grants idempotent
+- `8ce9dec` 2026-08-27 test(promo): remove retired path reference
+- `e676564` 2026-08-27 docs(adapter): align promo evidence boundary
+- `c0a51ba` 2026-08-27 fix(promo): retire raw evidence compatibility path
+- `00867ce` 2026-08-27 feat(pr-u5): show 2FA recovery codes before reauth and close U4 baselines  — _Cursor_
+- `57ba303` 2026-08-26 docs(ops): record X8 local acceptance
+- `36f4237` 2026-08-26 chore(test): ignore Playwright CLI artifacts
+- `79b8b04` 2026-08-26 fix(db): cast advisory lock results for Prisma
+- `e3f0c3f` 2026-08-26 build: bound X8 Docker context
+- `31e896b` 2026-08-26 fix(infra): harden X8 runtime verification
+- `3fbc655` 2026-08-26 feat(infra): add X8 local production-like topology
+- `5459e0b` 2026-08-26 docs(x12-fixup): correct inverted 2FA comments and register X12 territory crossing
+- `2f49c2f` 2026-08-26 fix(x12): require session-level 2FA for admin APIs
+- `2595e81` 2026-08-26 merge: final candidate e09fd7e into main
+- `e09fd7e` 2026-08-26 merge(final-candidate): fold PR-U4 apple-icon + shared brand-mark geometry  — _Claude Fable 5_
+- `5254411` 2026-08-26 feat(pr-u4): add apple-icon and share one brand-mark geometry  — _Cursor_
+- `6af7b61` 2026-08-26 fix(pr-c7): close six final-batch review tails  — _Claude Fable 5_
+- `4f0cac9` 2026-08-26 refactor(final-batch): converge PR-C5 time-zone placeholder onto U4 modules
+- `23a1274` 2026-08-26 merge(final-batch): PR-U4 public error boundaries / icon / json-ld / admin tz+lang
+- `eed1542` 2026-08-26 merge(final-batch): PR-C4 /settings admin page
+- `43d2793` 2026-08-26 merge(final-batch): PR-C6a error taxonomy + PR-C5 task center / promo-link status
+- `8da1670` 2026-08-26 feat(pr-c5): task center (/tasks) and promo-link status page (/promo-links)  — _Claude Fable 5_
+- `ae73a28` 2026-08-26 feat(pr-c4): build /settings admin page for OG image + IndexNow config  — _Claude Fable 5_
+- `32b2f77` 2026-08-26 fix(pr-c6a): close error-taxonomy custodian-review gaps  — _Claude Fable 5_
+- `50e3714` 2026-08-26 fix(pr-u4): align U4 visuals with the frozen P1-10 direction  — _Cursor_
+- `d087c35` 2026-08-26 merge(pr-c3b): publish lifecycle 文案/校验顺序/穷尽性打磨六文件
+- `0cdb9de` 2026-08-26 merge(unified): X 系列八单并入 Claude 共享线  — _Claude Fable 5_
+- `0adfc3b` 2026-08-26 test(integration): preserve multi-method admin registry parity
+- `3d8f880` 2026-08-26 feat(worker): add durable failure observability
+- `0b357b0` 2026-08-26 feat(ops): register MoboReader foundation safely
+- `5d6b2de` 2026-08-26 feat(auth): add audited admin bootstrap CLI
+- `b4f81da` 2026-08-26 feat(runtime): harden production compose contract
+- `b3ac1ba` 2026-08-26 chore(admin-ui): label task capability
+- `d59c06c` 2026-08-26 feat(task-admin): add guarded task operations
+- `f08f0e4` 2026-08-26 feat(x6): add guarded SiteSetting management
+- `978e86c` 2026-08-26 feat(x2): harden PostgreSQL runtime configuration
+- `65f718b` 2026-08-26 docs(governance): close X7 launch gates
+- `00efb27` 2026-08-26 proposal(p0-s16): clear 21 baseline typecheck errors + wire typecheck into CI  — _Claude Fable 5_
+- `058e172` 2026-08-26 feat(pr-u4): exempt ImageResponse icon from hex-color scan  — _Cursor_
+- `b684894` 2026-08-26 feat(pr-u4): public error boundaries, favicon, json-ld escape, admin tz and lang  — _Cursor_
+- `271d271` 2026-08-26 merge(x5): accept Claude final bundle
+- `95a4818` 2026-08-26 fix(pr-c3b): pass the switch-narrowed object, not its property, to the outcome sentinel  — _Claude Fable 5_
+- `1203ef3` 2026-08-26 fix(pr-c3b): polish publish lifecycle entry copy, validation order and exhaustiveness  — _Claude Fable 5_
+- `5364ba2` 2026-08-26 merge(pr-c3): publish/withdraw/takedown/restore admin entry points
+- `e5d13e9` 2026-08-26 merge(pr-c1b): read-side 2FA step-up + (admin-auth) page whitelist
+- `1909bba` 2026-08-26 feat(pr-c3): wire publish/withdraw/takedown/restore admin entry points
+- `023d541` 2026-08-26 fix(pr-c1b): close read-side 2FA step-up gap + (admin-auth) page whitelist  — _Claude Fable 5_
+- `ba374cf` 2026-08-26 merge(pr-c1): admin login + 2FA UI
+- `c564f16` 2026-08-26 merge(pr-c2): catalog_scan trigger entry
+- `37c700a` 2026-08-26 merge(batch3): e4fee21 into shared line ce7f0f1 (PR-X5 rehearsal)
+- `8095d17` 2026-08-26 feat(pr-c1): admin login + 2FA challenge/setup + logout UI  — _Claude Fable 5_
+- `d43b3d3` 2026-08-26 feat(pr-c2): catalog_scan trigger entry on /catalog-sync  — _Claude Fable 5_
+- `ce7f0f1` 2026-08-26 feat(catalog): capture existing promos before evidence redaction
+- `c7ca2c0` 2026-08-26 test(p0-s12): align IndexNow constraint assertions
+- `deb6b6d` 2026-08-26 fix(p0-s12): load vite config in worker subprocess
+- `bcb2772` 2026-08-21 fix(p0-s12): correct U3 port-registry rows to the single baseline
+- `fcd25c0` 2026-08-21 fix(p0-s12): backfill missing @emnapi/core|runtime lockfile entries
+- `e4fee21` 2026-08-26 merge(p0-batch3): S13 content-creation entry under /catalog-sync
+- `6ce53cf` 2026-08-26 merge(p0-batch3): S14 locale guards + S15 upstream language registry
+- `98d51ac` 2026-08-26 feat(p0-s15): first fill of UPSTREAM_LANGUAGE_REGISTRY from real C2 upstream evidence  — _Claude Fable 5_
+- `c5e250c` 2026-08-26 feat(p0-s13): content-creation trigger entry (dry-run/apply) under /catalog-sync  — _Claude Fable 5_
+- `4ad8d1e` 2026-08-26 fix(p0-s14): D-7 fail-closed guard + force locale threading through public UI  — _Claude Fable 5_
+- `d103cf2` 2026-08-21 merge: accept P0 final integration after Codex owner review
+- `c9ebb93` 2026-08-21 Merge branch 'feature/p0-u3-i18n-copy' into feature/p0-final-integration
+- `66bb345` 2026-08-21 fix(p0-s11): stop §3.9 fake-fetched writes and add missing Article.promoLinkId binding  — _Claude Opus 5_
+- `beed3d8` 2026-08-21 feat(p0-u3): type-safe public UI messages catalog for en without locale fallback  — _Cursor_
+- `593a32c` 2026-08-20 test(p0-s10): broaden U1 open-redirect coverage on GET /go/[code]
+- `38bb912` 2026-08-20 fix(p0-s10): remove dead selfClosing variable (lint warning), keep behavior
+- `3f55a75` 2026-08-20 fix(p0-s10): correct three comments that no longer match their implementation
+- `49c3918` 2026-08-20 fix(p0-s10): CLI arg() no longer swallows a following flag as its value
+- `3a8c806` 2026-08-20 fix(p0-s10): narrow short-id Signal 2 to alphabet + same-target-column
+- `ecdae4c` 2026-08-20 fix(p0-s10): register all 15 SiteLocale keys in slug segmentation rules
+- `03d29ad` 2026-08-20 merge: feature/p0-u1-go-redirect into p0-batch1 integration
+- `2439e20` 2026-08-20 merge: feature/p0-s7a-i18n into p0-batch1 integration
+- `86a7c6b` 2026-08-20 merge: feature/p0-s6-capability-toggle into p0-batch1 integration
+- `186a9bc` 2026-08-20 merge: feature/p0-s5-claim-chain into p0-batch1 integration
+- `49deedc` 2026-08-20 merge: feature/p0-s9-template-wiring into p0-batch1 integration
+- `3a39bf8` 2026-08-20 feat(p0-s9): wire the P2-02 Template Engine into content creation  — _Claude Opus 5_
+- `582dd64` 2026-08-20 feat(p0-s9): merge feature/p2-02-template-engine into S9 base  — _Claude Opus 5_
+- `2761105` 2026-08-20 feat(p0-s7a): locale route infra + hreflang publish-state filtering  — _Claude Fable 5_
+- `7f1777e` 2026-08-20 feat(p0-s5): build the promo-link claim execution chain  — _Claude Fable 5_
+- `7683561` 2026-08-20 feat(p0-s4): content creation pipeline (Novel/Article draft) from NovelSourceItem  — _Claude Fable 5_
+- `2b875f7` 2026-08-20 feat(p0-s6): audited maintenance entry point for ChannelCapability status  — _Claude Fable 5_
+- `9263494` 2026-08-20 feat(p0-u1): public /go redirect route with open-redirect guard and tracking  — _Cursor_
+- `f78b1a7` 2026-08-20 merge: feature/p0-s1-ci into p0-batch0 integration
+- `60f7a47` 2026-08-20 merge: feature/p0-s2-db-retry into p0-batch0 integration
+- `142bd2b` 2026-08-20 merge: feature/p0-s3-jwt-like-semver into p0-batch0 integration
+- `045f5db` 2026-08-20 merge: feature/p0-s8-chapter-id-parser into p0-batch0 integration
+- `26bf783` 2026-08-20 feat(p0-s2): wire withDbRetry into admin session/2FA write paths  — _Claude Fable 5_
+- `bfc1552` 2026-08-20 feat(p0-s2): wire withDbRetry into task-store write paths  — _Claude Fable 5_
+- `d650699` 2026-08-20 feat(p0-s2): wire withDbRetry into credential-service transactions  — _Claude Fable 5_
+- `db2097b` 2026-08-20 feat(p0-s2): wire withDbRetry into publish-gate transactions  — _Claude Fable 5_
+- `0167ad0` 2026-08-20 ci(p0-s1): add minimum quality gate workflow
+- `1553c4a` 2026-08-20 fix(p0-s3): stop credential-material check from rejecting semver strings  — _Claude Fable 5_
+- `909c277` 2026-08-20 fix(p0-s8): accept numeric chapterID via requiredIdentifier, align parser strictness
+
+## v0.2.0
+
+- `eb7dd9d` 2026-08-19 merge: v0.2.0 P2-07~P2-12 round (integration + acceptance) into main  — _Claude Fable 5_
+- `da6a7ee` 2026-08-19 test(p2-12): add vertical acceptance and release gates
+- `8975626` 2026-08-19 refactor(seo): re-export toAbsoluteUrl from single source; widen drift-guard scan roots  — _Claude Fable 5_
+- `f2bb941` 2026-08-19 test(publish-gate): expect handlers third argument after integration wiring  — _Claude Fable 5_
+- `233485c` 2026-08-19 feat(publication): wire IndexNow + sitemap-refresh handlers into dispatcher call site  — _Claude Fable 5_
+- `a68a318` 2026-08-19 merge: Stream C (invalidation infrastructure, P2-09) into v0.2.0 integration  — _Claude Fable 5_
+- `b189f39` 2026-08-19 refactor(seo): consolidate getSiteUrl to single source + repo-wide drift guard  — _Claude Fable 5_
+- `bfd21db` 2026-08-19 docs(p2): matrix fixes from merge review — best-effort window + materialization severity (P2-09)
+- `8b90917` 2026-08-19 fix(flags): restore closing brace lost in keep-both conflict resolution  — _Claude Fable 5_
+- `f9849bf` 2026-08-19 merge: Stream D PR2 (sitemap data collections + GenericTask wiring, GitHub PR #2) into v0.2.0 integration  — _Claude Fable 5_
+- `b05f304` 2026-08-19 merge: Stream D PR1 (static sitemap trio + read-only routes, GitHub PR #1) into v0.2.0 integration  — _Claude Fable 5_
+- `a0d41ae` 2026-08-19 docs(p2): invalidation matrix — write-path inventory + CPS gap mapping (P2-09)
+- `100fc6b` 2026-08-19 feat(publish-gate): wire cache invalidation into every write path (P2-09)
+- `7fc179d` 2026-08-19 feat(publication): public-page cache invalidation broadcast module (P2-09)
+- `8889610` 2026-08-18 merge: Stream E (IndexNow outbox→delivery chain, P2-11) into v0.2.0 integration  — _Claude Fable 5_
+- `39d48ac` 2026-08-18 fix(indexnow): fail-closed SITE_URL, no fallback to CPS's own domain (P2-11)
+- `b3b6bc4` 2026-08-18 fix(seo): enforce sitemap deployment gates
+- `94c3e01` 2026-08-18 feat(seo): wire sitemap refresh tasks
+- `d966771` 2026-08-18 fix(seo): defer SITE_URL validation to runtime
+- `95f989d` 2026-08-18 feat(seo): port static sitemap serving
+- `2817d8f` 2026-08-18 test(indexnow): 99 tests across the outbox/delivery/backfill surface (P2-11)
+- `25a5e12` 2026-08-18 docs(governance): register P2-11 flags and CPS port symbols
+- `a0148cf` 2026-08-18 test(public): narrow unknown error via type guard before status assertion  — _Claude Fable 5_
+- `9f06b9a` 2026-08-18 merge: Stream B PR2 (public site DB wiring, GitHub PR #4) into v0.2.0 integration  — _Claude Fable 5_
+- `2361815` 2026-08-18 feat(indexnow): dispatcher handler + key.txt route + wiring notes (P2-11)
+- `b0e4092` 2026-08-18 feat(indexnow): backfill manifest double-gate tooling (P2-11)
+- `c26f954` 2026-08-18 fix(p2-08): map takedown to notFound 404 and align getSiteUrl with Stream D  — _Cursor_
+- `ec13d13` 2026-08-18 feat(indexnow): delivery worker handler + crash recovery (P2-11)
+- `34cb142` 2026-08-18 feat(indexnow): outbox enqueue with (url, revision) idempotency (P2-11)
+- `0c71b3a` 2026-08-18 feat(indexnow): submit-core primitives + shared contract constants (P2-11)
+- `4f5c3b3` 2026-08-18 feat(p2-08): wire public routes to Postgres via foundation predicates  — _Cursor_
+- `913b6c2` 2026-08-18 merge: Stream B PR1 (public SEO helpers, GitHub PR #3) into v0.2.0 integration  — _Claude Fable 5_
+- `3221c72` 2026-08-18 docs(governance): correct §12 test count 1277→1281 (4 tests added after that row was written)  — _Claude Fable 5_
+- `bf07484` 2026-08-18 docs(publish-gate): document page_identity_conflict's V1 unreachability
+- `76737cc` 2026-08-18 fix(publish-gate): close no-bypass scanner blind spots + un-overclaim wording (必改3)
+- `fb68c54` 2026-08-18 feat(p2-08): port public SEO helpers from CPS  — _Cursor_
+- `b2c6b74` 2026-08-18 docs(governance): register OperationAudit unique-index follow-up (必改2)
+- `57c938a` 2026-08-18 fix(publish-gate): close TOCTOU in applyPublishTransition (必改1)
+- `265e682` 2026-08-18 docs(governance): register P2-07 CPS ports in port-registry.md
+- `bcd197d` 2026-08-18 feat(publish-gate): unified write path + offline/takedown/restore orchestration (P2-07 items 2-3, 5-6)
+- `40ff06c` 2026-08-18 feat(auth): add content:publish admin capability
+- `135d101` 2026-08-18 feat(publish-gate): Hard Gate evaluator against the frozen contract (P2-07 item 1)
+- `6f0b49c` 2026-08-18 feat(publish-gate): port resolveArticlePublishTimeForWrite (P2-07 item 4)
+- `9b54115` 2026-08-18 chore: adopt two low-cost review suggestions (soft-delete note, golden-count tightening)  — _Claude Fable 5_
+- `2036027` 2026-08-18 fix(docs): correct frozen-interface test-count arithmetic; sync §2 to db-retry consolidation  — _Claude Fable 5_
+- `68d80cf` 2026-08-18 fix(domain): sync database-statuses.ts machine truth for the attempt-state split  — _Claude Fable 5_
+- `f4b7f6e` 2026-08-18 fix(db): consolidate remaining P2002 inline checks into db-retry  — _Claude Fable 5_
+- `412a23b` 2026-08-18 docs(p2): freeze v0.2.0 foundation interfaces; update P1 golden-count tests  — _Claude Fable 5_
+- `75d2cc6` 2026-08-18 docs(governance): register Stream F CPS ports in port-registry.md  — _Claude Fable 5_
+- `5ebd1de` 2026-08-18 feat(slug): add public Article URL path builder  — _Claude Fable 5_
+- `256e9e9` 2026-08-18 feat(publication): add publication side-effect dispatcher shape  — _Claude Fable 5_
+- `f89918f` 2026-08-18 feat(publication): add public access-check entry point  — _Claude Fable 5_
+- `fc1f8c0` 2026-08-18 feat(site-settings): add unified typed SiteSetting read accessor  — _Claude Fable 5_
+- `b3dd672` 2026-08-18 feat(publication): add composable public-visibility predicate family  — _Claude Fable 5_
+- `acb1e65` 2026-08-18 feat(db): add db-retry helper, collapse credentials/service.ts predicates  — _Claude Fable 5_
+- `8473471` 2026-08-18 feat(db): v0.2.0 foundation migration — IndexNow parity fields + SiteSetting  — _Claude Fable 5_
+- `c4f0593` 2026-08-17 feat(p2-06.5): materialize Lane C Owner Final and freeze C1 parameters  — _Claude Opus 5_
+- `662cd98` 2026-08-17 docs(p2-06.5): add Lane C closeout for the post-fix review round  — _Claude Opus 5_
+- `082e4dd` 2026-08-17 chore(p2-06.5): close out Lane C post-fix review and v3 reproducibility  — _Claude Opus 5_
+- `337eeda` 2026-08-17 fix(p2-06.5): restore C1 v3 lexicon overlay reproducibility  — _Cursor_
+- `38a2c4b` 2026-08-17 docs(p2-06.5): keep C1 v3 WIP outside authority baseline
+- `85eb0e4` 2026-08-16 docs(p2-06.5): establish V3 implementation baseline pending C1 parameter freeze
+- `c5bf508` 2026-08-10 Merge commit '677e57ba1e20004b1b41875e6e00418db5a0d925'
+- `677e57b` 2026-08-10 Merge commit '032c747b1477b48425d82c9edcd4edf5b24c745d' into feature/p2-06-source-label-integration
+- `9a2bf31` 2026-08-10 Merge commit '8c1e8b4cb513064fceaede747efc447fe5037e6b' into feature/p2-06-source-label-integration
+- `032c747` 2026-08-10 docs(p2-06): state the display-name contract instead of the old write-side gap  — _Claude Opus 5_
+- `8c1e8b4` 2026-08-10 fix(p2-06): preserve manual source label activity
+- `a8b3d49` 2026-08-10 fix(p2-06): roll the task label summary up at the terminal page  — _Claude Opus 5_
+- `4bf5c27` 2026-08-10 fix(admin): align source label read semantics
+- `05fb1b0` 2026-08-09 feat(p2-06): surface source labels in the admin read plane  — _Claude Opus 5_
+- `faf1790` 2026-08-09 feat(p2-06): reconcile source label write lifecycle
+- `7959796` 2026-08-09 Merge commit '82b4b96fcf34e6e46c22c9945e54a879bbf5855e'
+- `82b4b96` 2026-08-09 fix(p2-05): apply eligibility before conflict check
+- `7a6c97c` 2026-08-09 fix(p2-05): finalize material request evidence contract
+- `689b5c7` 2026-08-09 fix(p2-05): align catalog sync and preview batching with CPS parity
+- `f60915c` 2026-08-09 docs(p2-05): freeze owner revised sync and preview contract
+- `135f5f7` 2026-08-08 refactor(p2-04): retire the second auth source now that the kernel owns it  — _Claude Opus 5_
+- `ffde31a` 2026-08-08 refactor(p2-04): adopt content read capabilities in admin auth kernel
+- `e4ce6f5` 2026-08-08 fix(p2-02): bind html attribute authorization to tags and harden raw-text boundary  — _Claude Opus 5_
+- `9223619` 2026-08-08 refactor(p2-04): hold the read-capability binding in the runtime registry  — _Claude Opus 5_
+- `e64bea3` 2026-08-08 test(p2-04): fence the admin read auth plane out of public reading  — _Claude Opus 5_
+- `eb9f73d` 2026-08-08 fix(p2-04): stop reporting query failures as "novel not found"  — _Claude Opus 5_
+- `389e8d0` 2026-08-08 fix(p2-02): constrain template URL and HTML interpolation contexts  — _Claude Opus 5_
+- `0697881` 2026-08-08 test(p2-04): cover content read UI, contract subtraction and route registry  — _Claude Opus 5_
+- `95be431` 2026-08-08 feat(p2-04): add read-only novel content management screens  — _Claude Opus 5_
+- `0302d49` 2026-08-08 feat(p2-04): add admin content read contract and GET routes  — _Claude Opus 5_
+- `3493485` 2026-08-08 feat(p2-05): stage moboreader catalog sync and preview materialization
+- `bfe36a3` 2026-08-08 docs(p2-02): record template engine contract and CPS ports  — _Claude Opus 5_
+- `1b89612` 2026-08-08 test(p2-02): cover template engine behavior and CPS parity  — _Claude Opus 5_
+- `9c6a10e` 2026-08-08 feat(p2-02): assemble article draft from template slots  — _Claude Opus 5_
+- `1ac7979` 2026-08-08 feat(p2-02): implement fail-closed template render core  — _Claude Opus 5_
+- `4bbc259` 2026-08-08 feat(p2-02): register novel template fields and error surface  — _Claude Opus 5_
+- `526a401` 2026-08-08 feat(p2-04): add admin content read kernel
+- `892c1a8` 2026-08-08 fix(p2-01): finalize publish gate contract
+- `794cf34` 2026-08-08 fix(p2-01): align publish contract with owner supersession  — _Claude Fable 5_
+- `52e3e8b` 2026-08-08 feat(p2-01): freeze CPS-parity publication contract  — _Claude Fable 5_
+- `62453d2` 2026-08-06 docs(p1-15): close P1 and prepare P2 handoff
+- `fb8cddb` 2026-08-05 test(p1-13): scope locale parity scan to runtime sources
+- `e6421b6` 2026-08-05 feat(p1-13): implement canonical locale mapping  — _Claude Opus 5_
+- `51ad3ec` 2026-08-05 fix(p1-13): capture reader position before chapter DOM detaches  — _Claude Opus 5_
+- `136640c` 2026-08-05 test(p1-13): complete UI and reader acceptance coverage  — _Claude Opus 5_
+- `39af5a5` 2026-08-05 test(p1-13): complete postgres isolation and restore verification
+- `9aca875` 2026-08-05 fix(p1-13): propagate dry-run mode through worker execution
+- `23c67de` 2026-08-05 test(p1-13): add postgres acceptance and recovery coverage
+- `9b576dd` 2026-08-05 fix(p1-12): remove stale blocked health status
+- `9a934e1` 2026-08-05 docs(p1-12): record final four-container e2e
+- `dbede54` 2026-08-05 docs(p1-12): record health route integration  — _Claude Opus 5_
+- `6ef8d74` 2026-08-05 feat(p1-12): expose runtime health endpoint  — _Claude Opus 5_
+- `bee6a32` 2026-08-05 fix(p1-12): make local image build deterministic
+- `8552aeb` 2026-08-05 test(p1-12): verify runtime metadata and container isolation
+- `47bf893` 2026-08-05 feat(p1-12): add postgres web worker scheduler compose runtime
+- `f69e428` 2026-08-05 feat(p1-12): add immutable runtime metadata and health service
+- `4e0a4b9` 2026-08-05 fix(p1-11): normalize reader settings across hydration boundaries  — _Claude Opus 5_
+- `4a1fb67` 2026-08-05 docs(p1-11): record reader implementation and browser evidence  — _Claude Opus 5_
+- `82faa9b` 2026-08-05 test(p1-11): verify reader persistence navigation and preview boundaries  — _Claude Opus 5_
+- `e3d8a5e` 2026-08-05 feat(p1-11): add dynamic preview chapter navigation  — _Claude Opus 5_
+- `d6df514` 2026-08-05 feat(p1-11): restore reading position by novel and chapter  — _Claude Opus 5_
+- `f96bd3e` 2026-08-05 feat(p1-11): add reader state provider and hydration bootstrap  — _Claude Opus 5_
+- `350d0dd` 2026-08-05 fix(p1-10): preserve frozen reader setting defaults  — _Claude Opus 5_
+- `a187416` 2026-08-05 test(p1-10): add visual baselines for public screens  — _Claude Opus 5_
+- `f6788df` 2026-08-05 feat(p1-10): replace home featured block with full-bleed hero carousel  — _Claude Opus 5_
+- `604439a` 2026-08-05 docs(p1-10): revise visual direction for full-bleed hero carousel  — _Claude Opus 5_
+- `ebddbbd` 2026-08-03 test(p1-10): verify public UI and accessibility contracts  — _Claude Opus 5_
+- `3be24e4` 2026-08-03 feat(p1-10): implement dark public design system and page shells  — _Claude Opus 5_
+- `27d6871` 2026-08-03 docs(p1-10): freeze public visual direction  — _Claude Opus 5_
+- `e88f38e` 2026-08-05 docs(p1-09): record CPS parity and review evidence
+- `fc5c068` 2026-08-05 fix(p1-09): align admin registry and permission boundaries
+- `ddf475e` 2026-08-05 feat(p1-09): admin shell, primitives and channel accounts page  — _Claude Opus 5_
+- `93537a0` 2026-08-05 fix(p1-08): preserve session expiry reasons  — _Claude Opus 5_
+- `2f267e6` 2026-08-05 fix(p1-08b): carry idempotency conflicts through the error envelope  — _Claude Opus 5_
+- `37d12f5` 2026-08-05 fix(p1-08b): bind credential replacement idempotency scope
+- `f896433` 2026-08-04 docs(p1-08b): close secret ingress owner gate
+- `6e1f114` 2026-08-04 test(p1-08b): verify credential ingress and secret boundaries
+- `0a3fa51` 2026-08-04 feat(p1-08b): enable synchronous credential ingress
+- `8695390` 2026-08-04 test(p1-08b): prevent sensitive fields in frontend projections  — _Claude Opus 5_
+- `ee3ecd2` 2026-08-04 feat(p1-08b): add admin and credential frontend contracts  — _Claude Opus 5_
+- `5bf4785` 2026-08-04 fix(p1-08b): expose sanitized task failure codes
+- `95ea7d9` 2026-08-04 docs(p1-08b): hand off frontend contracts and integration evidence
+- `f9ccfd4` 2026-08-04 test(p1-08b): verify auth credential and permission boundaries
+- `6efe21a` 2026-08-04 feat(p1-08b): implement credential task and worker backend
+- `003f6fa` 2026-08-04 feat(p1-08b): add production admin auth persistence
+- `4fc7a95` 2026-08-04 docs(p1-08): register CPS parity and explicit divergences
+- `6c96bfd` 2026-08-04 fix(p1-08): enforce recovery-code session invalidation
+- `f0dcbd9` 2026-08-04 fix(p1-08): align credential lifecycle with CPS evidence
+- `c85cb91` 2026-08-03 docs(p1-08): archive CPS reference research  — _Claude Opus 5_
+- `6e03b12` 2026-08-03 docs(p1-08a): archive Claude frontend contract review  — _Claude Opus 5_
+- `93459d1` 2026-08-03 fix(p1-08a): bind challenges to sessions and define auth transactions
+- `d9792f0` 2026-08-03 test(p1-08a): verify default-deny and authorization boundaries
+- `1f79a4e` 2026-08-03 feat(p1-08a): implement admin auth and capability foundation
+- `36c9ca6` 2026-08-03 fix(p1-07): bound worker shutdown drain timeout
+- `f1b46f0` 2026-08-03 docs(p1-07): archive review and remediation evidence
+- `bd26364` 2026-08-03 fix(p1-07): bound worker shutdown drain and add regressions
+- `c611db3` 2026-08-03 fix(p1-07): serialize parent aggregation and sanitize task errors
+- `1342f93` 2026-08-03 test(p1-07): verify concurrent worker and scheduler invariants
+- `5e837e3` 2026-08-03 feat(p1-07): add singleton scheduler enqueue runtime
+- `2ef89b0` 2026-08-03 feat(p1-07): implement PostgreSQL task claim lease and fencing
+- `419ac82` 2026-08-03 test(p1-06): verify backup restore and database permissions
+- `b8027a6` 2026-08-03 feat(p1-06): add PostgreSQL roles and least-privilege grants
+- `d728772` 2026-08-03 test(p1-05b): verify migration constraints and database invariants
+- `66fa643` 2026-08-03 feat(p1-05b): add initial PostgreSQL migration and constraints
+- `db0d4cd` 2026-08-03 chore(p1-05): add pinned Prisma dependencies  — _Claude Opus 5_
+- `39a2b60` 2026-08-03 fix(p1-05a): restore published article timestamp invariant
+- `cc900d0` 2026-08-03 docs(p1-05a): add Claude re-review of schema and dictionary revision  — _Claude Opus 5_
+- `019aeb0` 2026-08-03 fix(p1-05a): resolve domain schema and dictionary review findings
+- `df56b90` 2026-08-03 docs(p1-05a): add Claude domain review of schema and data dictionary
+- `4b6aa8e` 2026-08-03 feat(p1-05a): draft database dictionary and schema review package
+- `527a890` 2026-08-02 feat(p1-04): bootstrap Next.js + TypeScript engineering skeleton
+- `85a4487` 2026-08-02 docs: archive Claude architecture candidate v0.2.1
+- `5560250` 2026-08-02 docs: add P1 architecture package, parity matrix, and Owner-approved implementation assignment
+- `11c8d80` 2026-08-02 docs: archive Claude architecture candidate v0.2
+- `cb94981` 2026-08-02 docs: archive Claude architecture candidate v0.1
+- `0aa3fbf` 2026-08-02 docs: add Claude architecture design handoff
+- `03795a4` 2026-08-02 Create # 海外小说 CPS P0 收益接口生产只读调研与阶段成果回灌
+- `aa3ced9` 2026-08-02 Create # 海外小说 CPS P0 第二轮生产只读调研
+- `11b1710` 2026-08-02 Create 【台账】Novel v1 调研与待确认事项（按执行人分派）
+- `2e053a9` 2026-08-02 Refactor add function to accept parameters
+- `c6cbde1` 2026-08-02 Initial commit
+
+<!-- 无署名 commit：203 -->

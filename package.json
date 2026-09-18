@@ -15,7 +15,8 @@
     "test": "vitest run",
     "test:ui": "vitest run --project ui",
     "test:backend": "vitest run --project node tests/backend",
-    "test:integration": "vitest run --project node tests/integration"
+    "test:integration": "vitest run --project node tests/integration",
+    "changelog": "node scripts/generate-changelog.mjs --write"
   },
   "dependencies": {
     "@formatjs/intl-localematcher": "0.8.13",

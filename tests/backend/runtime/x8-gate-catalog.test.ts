@@ -254,6 +254,10 @@ function writeGateState(value: "dry-run" | "apply" | "closed") {
 
 const HAPPY_STUB_ENV = {
   STUB_IMAGE_REF: IDENTITY_DEFAULTS.imageRef,
+  // 2026-09-18: `status` compares the identity's gitCommit against each
+  // container's OCI revision label. The happy stack is, by definition, running
+  // exactly what the identity recorded.
+  STUB_IMAGE_REVISION: IDENTITY_DEFAULTS.gitCommit,
   STUB_IMAGE_ID: IDENTITY_DEFAULTS.imageDigest,
   STUB_WEB_CONTAINER_ID: "stub-web-1",
   STUB_WORKER_CONTAINER_ID: "stub-worker-1",
@@ -1318,7 +1322,35 @@ describe("X8 top-level `status` command: also read-only (P2-10)", () => {
     const before = snapshotDir(runtimeDir);
     const result = runStatus();
     expect(result.status, result.stderr).toBe(0);
+    expect(result.stdout).toContain("X8_IDENTITY_STATUS=OK");
     expectIdenticalSnapshots(before, snapshotDir(runtimeDir));
+  });
+
+  /**
+   * 2026-09-18: `status` used to read the committed identity and then report
+   * `compose ps` without ever asking whether the two agree — so an out-of-band
+   * `docker compose up -d --no-deps web worker scheduler` (what the
+   * 2026-09-18 deploys actually did) left the file naming the previous release
+   * and nothing said so. These pin the three answers it now gives.
+   */
+  it("reports DRIFT, non-zero, when a container is running a different commit than the identity records", () => {
+    writeIdentity();
+    writeGateState("closed");
+    const before = snapshotDir(runtimeDir);
+    const result = runStatus({ STUB_WEB_REVISION: "b".repeat(40) });
+    expect(result.status).not.toBe(0);
+    expect(result.stdout).toContain(`X8_IDENTITY_DRIFT=web identity=${IDENTITY_DEFAULTS.gitCommit} running=${"b".repeat(40)}`);
+    expect(result.stderr).toContain("X8_IDENTITY_STATUS=DRIFT");
+    // Detection must stay read-only: naming the drift is not repairing it.
+    expectIdenticalSnapshots(before, snapshotDir(runtimeDir));
+  });
+
+  it("treats an image with no revision label as drift, not as agreement", () => {
+    writeIdentity();
+    writeGateState("closed");
+    const result = runStatus({ STUB_WEB_REVISION: "" });
+    expect(result.status).not.toBe(0);
+    expect(result.stdout).toContain("X8_IDENTITY_DRIFT=web reason=revision_label_missing");
   });
 });
 

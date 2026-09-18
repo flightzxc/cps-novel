@@ -155,6 +155,19 @@ if [[ "${1:-}" == "inspect" ]]; then
     '{{.State.Health.Status}}')
       echo "$health"
       ;;
+    # 2026-09-18: `status` now proves what is actually running by reading the
+    # image's own OCI revision label (x8_report_identity_drift). Defaults to
+    # the identity's own commit so the happy path stays happy; a test sets
+    # STUB_<SERVICE>_REVISION to model an out-of-band recreate, and the empty
+    # string to model an image built without the label at all.
+    '{{index .Config.Labels "org.opencontainers.image.revision"}}')
+      revision_var="STUB_${marker_key}_REVISION"
+      if [[ -n "${!revision_var+set}" ]]; then
+        echo "${!revision_var}"
+      else
+        echo "${STUB_IMAGE_REVISION:-}"
+      fi
+      ;;
     '{{.Image}}')
       post_flag="$(read_marker_flag "${marker_key}_RECREATED" || true)"
       if [[ "$post_flag" == "1" ]]; then
