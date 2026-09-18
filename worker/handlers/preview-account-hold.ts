@@ -31,6 +31,7 @@
 import { Prisma } from "@prisma/client";
 
 import { DETERMINISTIC_CREDENTIAL_FAILURE_CODES } from "../../src/lib/credentials/claim-readiness";
+import { PREVIEW_ACCOUNT_HOLD_SCOPE } from "../../src/lib/tasks/account-hold";
 import { MOBOREADER_TASK_TYPES } from "../../src/lib/tasks/moboreader";
 
 /** The `OperationAudit.action` this module writes — a distinct, greppable value. */
@@ -97,11 +98,12 @@ export async function holdChannelAccountForPreview(
 
   const inserted = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
     INSERT INTO channel_account_hold (
-      id, channel_account_id, reason_code, credential_id,
+      id, channel_account_id, scope, reason_code, credential_id,
       triggering_task_id, triggering_item_id, held_at, created_at, updated_at
     )
     VALUES (
-      gen_random_uuid(), ${params.channelAccountId}::uuid, ${params.reasonCode},
+      gen_random_uuid(), ${params.channelAccountId}::uuid, ${PREVIEW_ACCOUNT_HOLD_SCOPE},
+      ${params.reasonCode},
       ${params.credentialId ?? null}::uuid,
       ${params.taskId}::uuid, ${params.itemId}::uuid,
       transaction_timestamp(), transaction_timestamp(), transaction_timestamp()
@@ -124,6 +126,7 @@ export async function holdChannelAccountForPreview(
       reason: `first-occurrence account-level failure: ${params.reasonCode}`,
       afterSnapshot: {
         holdId,
+        scope: PREVIEW_ACCOUNT_HOLD_SCOPE,
         reasonCode: params.reasonCode,
         triggeringTaskId: params.taskId,
         triggeringItemId: params.itemId,

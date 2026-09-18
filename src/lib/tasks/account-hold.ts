@@ -41,21 +41,41 @@
  *      the row, idempotently, inside the failing item's own finalize
  *      transaction.
  *
- * Deliberately **not** scoped by task type. A credential is not per-task-type,
- * and inventing a scope column would only create a second place for "which
- * work is held" to disagree with reality. Enforcement today is wired into the
- * preview path only (the `channel_sync` family has exactly one registered task
- * type — `moboreader.preview_refresh.v1`, see
- * `createMoboreaderWorkerHandlers`), and the promo-link claim chain keeps its
- * own already-shipped protection untouched.
+ * **Scope.** "Can this credential be decrypted" really is an account-wide
+ * fact, but which *pipeline* a given hold row actually stops is a separate
+ * question, and leaving it implicit would have made the table's name
+ * ("this channel account is held") promise more than its behaviour delivers —
+ * only the preview chain is wired to it. So every row carries an explicit
+ * `scope`, and every one of the three enforcement points below filters on it.
+ * Today the registry has exactly one member, {@link PREVIEW_ACCOUNT_HOLD_SCOPE}:
+ * the `channel_sync` family has exactly one registered task type
+ * (`moboreader.preview_refresh.v1`, see `createMoboreaderWorkerHandlers`), so
+ * "the channel_sync claim path" and "preview work" are the same set. The
+ * promo-link claim chain keeps its own already-shipped, task-level protection
+ * and is deliberately *not* held by these rows; wiring it up later is a new
+ * scope value plus its own enforcement point, not a silent change of meaning
+ * for rows written today.
  */
 import { Prisma, type PrismaClient } from "@prisma/client";
+
+/**
+ * Which pipeline a hold row suppresses. Single source of truth for the value
+ * domain; `channel_account_hold_scope_check` in
+ * `prisma/migrations/20260918090000_preview_account_hold/migration.sql` is its
+ * database-side mirror, and adding a member means changing both.
+ */
+export const CHANNEL_ACCOUNT_HOLD_SCOPES = Object.freeze(["preview"] as const);
+export type ChannelAccountHoldScope = (typeof CHANNEL_ACCOUNT_HOLD_SCOPES)[number];
+
+/** The only scope wired up today — see this module's header, "Scope". */
+export const PREVIEW_ACCOUNT_HOLD_SCOPE = "preview" as const satisfies ChannelAccountHoldScope;
 
 type HoldReadDb = Pick<PrismaClient, "channelAccountHold"> | Prisma.TransactionClient;
 
 export type ActiveAccountHold = {
   readonly id: string;
   readonly channelAccountId: string;
+  readonly scope: ChannelAccountHoldScope;
   readonly reasonCode: string;
   readonly credentialId: string | null;
   readonly heldAt: Date;
@@ -70,13 +90,14 @@ export type ActiveAccountHold = {
 export async function findActiveAccountHold(
   db: HoldReadDb,
   channelAccountId: string,
+  scope: ChannelAccountHoldScope = PREVIEW_ACCOUNT_HOLD_SCOPE,
 ): Promise<ActiveAccountHold | null> {
   const row = await db.channelAccountHold.findFirst({
-    where: { channelAccountId, releasedAt: null },
-    select: { id: true, channelAccountId: true, reasonCode: true, credentialId: true, heldAt: true },
+    where: { channelAccountId, scope, releasedAt: null },
+    select: { id: true, channelAccountId: true, scope: true, reasonCode: true, credentialId: true, heldAt: true },
     orderBy: { heldAt: "desc" },
   });
-  return row ?? null;
+  return row ? { ...row, scope: row.scope as ChannelAccountHoldScope } : null;
 }
 
 /**
@@ -86,16 +107,23 @@ export async function findActiveAccountHold(
  * {@link findActiveAccountHold} first.
  *
  * `accountColumn` is the already-qualified column reference to test (e.g.
- * `t.channel_account_id`). Returns a `NOT EXISTS (...)` fragment: an account
- * with no hold row at all, and an account whose holds are all released, both
- * read as "runnable" — the common case is a bare index probe that finds
- * nothing.
+ * `t.channel_account_id`); `scope` names the pipeline the caller is claiming
+ * for, so a hold placed on one pipeline can never quietly stop another.
+ * Returns an `EXISTS (...)` fragment the caller negates: an account with no
+ * hold row at all, an account held only on a *different* scope, and an account
+ * whose holds are all released all read as "runnable" — the common case is a
+ * bare index probe that finds nothing.
  */
-export function accountHoldExistsSql(accountColumn: Prisma.Sql): Prisma.Sql {
+export function accountHoldExistsSql(
+  accountColumn: Prisma.Sql,
+  scope: ChannelAccountHoldScope,
+): Prisma.Sql {
   return Prisma.sql`
     EXISTS (
       SELECT 1 FROM channel_account_hold h
-      WHERE h.channel_account_id = ${accountColumn} AND h.released_at IS NULL
+      WHERE h.channel_account_id = ${accountColumn}
+        AND h.scope = ${scope}
+        AND h.released_at IS NULL
     )
   `;
 }

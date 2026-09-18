@@ -22,12 +22,19 @@
  *        claim attempts (same status/attempt_count/lease_epoch/updated_at),
  *        so there is no claim→requeue→claim cycle and nothing to undo
  */
-import { randomUUID } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { Prisma, PrismaClient } from "@prisma/client";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
+import { PREVIEW_ACCOUNT_HOLD_SCOPE } from "@/lib/tasks/account-hold";
 import { MOBOREADER_TASK_TYPES } from "@/lib/tasks/moboreader";
 import { claimPendingItem } from "@/lib/tasks/store";
+
+import { releaseAccountHold } from "../../../scripts/preview-account-hold";
+import { encryptCredentialSecretForWorker } from "../../../worker/credentials/crypto";
 
 const enabled = process.env.PREVIEW_HOLD_DATABASE_TEST === "1";
 const db = new PrismaClient({ datasourceUrl: process.env.PREVIEW_HOLD_DATABASE_URL });
@@ -57,7 +64,15 @@ async function seedScope(): Promise<void> {
   }
 }
 
-async function seedPreviewTask(channelAccountId: string, label: string): Promise<SeededTask> {
+function seedPreviewTask(channelAccountId: string, label: string): Promise<SeededTask> {
+  return seedPreviewTaskFor(channelAccountId, CHANNEL_APP, label);
+}
+
+async function seedPreviewTaskFor(
+  channelAccountId: string,
+  channelAppId: string,
+  label: string,
+): Promise<SeededTask> {
   const novelId = randomUUID();
   const sourceItemId = randomUUID();
   const taskId = randomUUID();
@@ -67,10 +82,10 @@ async function seedPreviewTask(channelAccountId: string, label: string): Promise
     VALUES (${novelId}::uuid, ${`nv-${novelId.slice(0, 8)}`}, ${label}, 'd', 'en', ${`slug-${novelId.slice(0, 8)}`}, 'draft', 10, now(), now())`);
   await db.$executeRaw(Prisma.sql`
     INSERT INTO novel_source_item (id, channel_app_id, novel_id, external_book_id, external_agency_id, source_language_code, title, description, raw_payload, raw_payload_schema_version, created_at, updated_at)
-    VALUES (${sourceItemId}::uuid, ${CHANNEL_APP}::uuid, ${novelId}::uuid, ${label}, '7', '1', ${label}, 'd', '{}'::jsonb, 1, now(), now())`);
+    VALUES (${sourceItemId}::uuid, ${channelAppId}::uuid, ${novelId}::uuid, ${label}, '7', '1', ${label}, 'd', '{}'::jsonb, 1, now(), now())`);
   await db.$executeRaw(Prisma.sql`
     INSERT INTO channel_sync_task (id, task_type, channel_account_id, channel_app_id, operation_scope_hash, mode, status, request_token, total_count, params, requested_at, created_at, updated_at)
-    VALUES (${taskId}::uuid, ${MOBOREADER_TASK_TYPES.previewRefresh}, ${channelAccountId}::uuid, ${CHANNEL_APP}::uuid,
+    VALUES (${taskId}::uuid, ${MOBOREADER_TASK_TYPES.previewRefresh}, ${channelAccountId}::uuid, ${channelAppId}::uuid,
             ${taskId.replace(/-/g, "").padEnd(64, "0").slice(0, 64)}, 'apply', 'pending', ${`tok-${taskId}`}, 1, '{}'::jsonb, now(), now(), now())`);
   await db.$executeRaw(Prisma.sql`
     INSERT INTO channel_sync_task_item (id, task_id, novel_source_item_id, status, attempt_count, lease_epoch, payload, created_at, updated_at)
@@ -131,8 +146,8 @@ describe.skipIf(!enabled)("Preview account hold · claim-time pushdown (real Pos
 
   it("Cases 6/8/10: a held account yields nothing, another account still runs, and held items are never written to", async () => {
     await db.$executeRaw(Prisma.sql`
-      INSERT INTO channel_account_hold (id, channel_account_id, reason_code, held_at, created_at, updated_at)
-      VALUES (gen_random_uuid(), ${ACCOUNT_A}::uuid, 'credential_validation_failed', now(), now(), now())`);
+      INSERT INTO channel_account_hold (id, channel_account_id, scope, reason_code, held_at, created_at, updated_at)
+      VALUES (gen_random_uuid(), ${ACCOUNT_A}::uuid, ${PREVIEW_ACCOUNT_HOLD_SCOPE}, 'credential_validation_failed', now(), now(), now())`);
 
     const before = await Promise.all([a1, a2, a3].map((task) => itemFingerprint(task.itemId)));
 
@@ -167,7 +182,7 @@ describe.skipIf(!enabled)("Preview account hold · claim-time pushdown (real Pos
     await db.$executeRaw(Prisma.sql`
       UPDATE channel_account_hold
       SET released_at = now(), released_by = 'hold-probe', release_reason = 'acceptance'
-      WHERE channel_account_id = ${ACCOUNT_A}::uuid AND released_at IS NULL`);
+      WHERE channel_account_id = ${ACCOUNT_A}::uuid AND scope = ${PREVIEW_ACCOUNT_HOLD_SCOPE} AND released_at IS NULL`);
 
     const heldTaskIds = new Set([a1.taskId, a2.taskId, a3.taskId]);
     const claimed: string[] = [];
@@ -181,5 +196,117 @@ describe.skipIf(!enabled)("Preview account hold · claim-time pushdown (real Pos
       await settle(lease.itemId);
     }
     expect(claimed).toEqual(["accountA", "accountA", "accountA"]);
+  });
+});
+
+
+/**
+ * Crash-resume for `--release` (2026-09-18 push-time verification #2), against
+ * real SQL rather than a fake: the re-enable predicate
+ * (`status = 'disabled'` + the `taskControl` marker) and the `result -
+ * 'taskControl'` strip are both database behaviour a mock cannot exercise.
+ *
+ * The scenario is the one that used to leave permanent orphans: the hold row is
+ * already released (the process died right after clearing it) while parked
+ * tasks are still `disabled`. Re-running must finish the job.
+ */
+describe.skipIf(!enabled)("Preview account hold · release is crash-resumable (real Postgres)", () => {
+  const ACCOUNT_C = randomUUID();
+  const CHANNEL_C = randomUUID();
+  const SOURCE_APP_C = randomUUID();
+  const CHANNEL_APP_C = randomUUID();
+  const CREDENTIAL_C = randomUUID();
+  let keyEnv: NodeJS.ProcessEnv;
+  let keyDir: string;
+  let parked: SeededTask;
+  let flagDisabled: SeededTask;
+
+  beforeAll(async () => {
+    keyDir = mkdtempSync(path.join(tmpdir(), "cps-novel-hold-it-keys-"));
+    const v1 = path.join(keyDir, "v1");
+    const fingerprint = path.join(keyDir, "fingerprint");
+    writeFileSync(v1, randomBytes(32).toString("base64"), { mode: 0o600 });
+    writeFileSync(fingerprint, randomBytes(32).toString("base64"), { mode: 0o600 });
+    keyEnv = {
+      NODE_ENV: "test",
+      CHANNEL_CREDENTIAL_ACTIVE_KEY_VERSION: "1",
+      CHANNEL_CREDENTIAL_ENCRYPTION_KEY_V1_FILE: v1,
+      CHANNEL_CREDENTIAL_FINGERPRINT_KEY_FILE: fingerprint,
+    };
+
+    await db.$executeRaw(Prisma.sql`
+      INSERT INTO channel (id, code, name, status, created_at, updated_at)
+      VALUES (${CHANNEL_C}::uuid, ${`ch-${CHANNEL_C.slice(0, 8)}`}, 'resume probe', 'active', now(), now())`);
+    await db.$executeRaw(Prisma.sql`
+      INSERT INTO source_app (id, code, name, status, created_at, updated_at)
+      VALUES (${SOURCE_APP_C}::uuid, ${`sa-${SOURCE_APP_C.slice(0, 8)}`}, 'MoboReader', 'active', now(), now())`);
+    await db.$executeRaw(Prisma.sql`
+      INSERT INTO channel_app (id, channel_id, source_app_id, external_app_id, project_type, status, created_at, updated_at)
+      VALUES (${CHANNEL_APP_C}::uuid, ${CHANNEL_C}::uuid, ${SOURCE_APP_C}::uuid, ${`app-${CHANNEL_APP_C.slice(0, 8)}`}, 1, 'active', now(), now())`);
+    await db.$executeRaw(Prisma.sql`
+      INSERT INTO channel_account (id, channel_id, business_id, account_name, status, created_at, updated_at)
+      VALUES (${ACCOUNT_C}::uuid, ${CHANNEL_C}::uuid, ${`acct-c-${ACCOUNT_C.slice(0, 8)}`}, 'acct-c', 'active', now(), now())`);
+    // A credential the pre-flight can actually decrypt — release refuses otherwise.
+    const secret = encryptCredentialSecretForWorker("jwt-secret", ACCOUNT_C, CREDENTIAL_C, 1, keyEnv);
+    await db.$executeRaw(Prisma.sql`
+      INSERT INTO channel_account_credential
+        (id, channel_account_id, credential_type, encrypted_secret, key_version, secret_fingerprint, fingerprint_prefix, status, created_at, updated_at)
+      VALUES (${CREDENTIAL_C}::uuid, ${ACCOUNT_C}::uuid, 'bearer_jwt', ${Buffer.from(secret)}, 1,
+              ${`hmac-sha256:v1:${"0".repeat(64)}`}, '000000000000', 'active', now(), now())`);
+
+    parked = await seedPreviewTaskFor(ACCOUNT_C, CHANNEL_APP_C, "parked");
+    flagDisabled = await seedPreviewTaskFor(ACCOUNT_C, CHANNEL_APP_C, "flagoff");
+    // `parked` is what the brake disabled: `disabled` + this brake's marker.
+    await db.$executeRaw(Prisma.sql`
+      UPDATE channel_sync_task
+      SET status = 'disabled',
+          result = jsonb_build_object('eligibleCount', 1,
+            'taskControl', jsonb_build_object('kind', 'system_hold', 'source', 'system',
+              'at', '2026-09-18T00:00:00.000Z', 'reasonCode', 'credential_validation_failed'))
+      WHERE id = ${parked.taskId}::uuid`);
+    // `flagDisabled` is the older, unrelated meaning of `disabled`: no marker.
+    await db.$executeRaw(Prisma.sql`
+      UPDATE channel_sync_task SET status = 'disabled', result = jsonb_build_object('eligibleCount', 1)
+      WHERE id = ${flagDisabled.taskId}::uuid`);
+    // The crash shape: the hold row is already released.
+    await db.$executeRaw(Prisma.sql`
+      INSERT INTO channel_account_hold (id, channel_account_id, scope, reason_code, held_at, released_at, released_by, created_at, updated_at)
+      VALUES (gen_random_uuid(), ${ACCOUNT_C}::uuid, ${PREVIEW_ACCOUNT_HOLD_SCOPE}, 'credential_validation_failed',
+              now(), now(), 'crashed-run', now(), now())`);
+  });
+
+  afterAll(() => {
+    rmSync(keyDir, { recursive: true, force: true });
+  });
+
+  it("re-running after a crash finishes the re-enable instead of orphaning the remaining tasks", async () => {
+    const outcome = await releaseAccountHold(
+      db,
+      { channelAccountId: ACCOUNT_C, releasedBy: "ops-probe", releaseReason: "resume after crash" },
+      new Date(),
+      keyEnv,
+    );
+
+    expect(outcome).toEqual({ status: "resumed", reEnabledTaskCount: 1 });
+
+    const rows = await db.$queryRaw<Array<{ id: string; status: string; result: unknown }>>(Prisma.sql`
+      SELECT id, status, result FROM channel_sync_task WHERE id IN (${parked.taskId}::uuid, ${flagDisabled.taskId}::uuid)`);
+    const byId = new Map(rows.map((row) => [row.id, row]));
+    // The braked task is runnable again and its control marker is gone.
+    expect(byId.get(parked.taskId)?.status).toBe("pending");
+    expect((byId.get(parked.taskId)?.result as Record<string, unknown>).taskControl).toBeUndefined();
+    expect((byId.get(parked.taskId)?.result as Record<string, unknown>).eligibleCount).toBe(1);
+    // The flag-disabled task is untouched — a credential release must never
+    // turn a feature flag back on.
+    expect(byId.get(flagDisabled.taskId)?.status).toBe("disabled");
+  });
+
+  it("running again once converged is a clean no-op", async () => {
+    await expect(releaseAccountHold(
+      db,
+      { channelAccountId: ACCOUNT_C, releasedBy: "ops-probe", releaseReason: null },
+      new Date(),
+      keyEnv,
+    )).resolves.toEqual({ status: "no_active_hold" });
   });
 });

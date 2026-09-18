@@ -146,11 +146,12 @@ describe("P1-06 database operations static contracts", () => {
     // parent_task_id field, its self-FK, and the parent/status/created index.
     // The exact count still guards duplicate keys.
     // Owner 2026-09-18 决策 2 (20260918090000_preview_account_hold): the
-    // channel_account_hold table adds 1 table + 12 field records + 5 physical
-    // objects (pkey, FK, the partial-unique active index, the history index,
-    // the release-shape CHECK) -- 1214 + 18 = 1232.
-    expect(records).toHaveLength(1232);
-    expect(new Set(records.map((line) => JSON.parse(line).stable_key)).size).toBe(1232);
+    // channel_account_hold table adds 1 table + 13 field records (including
+    // `scope`) + 6 physical objects (pkey, FK, the partial-unique active
+    // index, the history index, the release-shape CHECK, the scope CHECK)
+    // -- 1214 + 20 = 1234.
+    expect(records).toHaveLength(1234);
+    expect(new Set(records.map((line) => JSON.parse(line).stable_key)).size).toBe(1234);
     const intents = records.map((line) => JSON.parse(line)).filter(
       (record) => record.table_name === "side_effect_intent"
         && ["status", "response_shape", "confirmed_at"].includes(record.field_name),

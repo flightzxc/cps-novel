@@ -10,13 +10,18 @@
  * `tests/integration/tasks/preview-account-hold-postgres.test.ts`。
  */
 import { randomBytes, randomUUID } from "node:crypto";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { DETERMINISTIC_CREDENTIAL_FAILURE_CODES } from "@/lib/credentials/claim-readiness";
-import { findActiveAccountHold, accountHoldExistsSql } from "@/lib/tasks/account-hold";
+import {
+  accountHoldExistsSql,
+  CHANNEL_ACCOUNT_HOLD_SCOPES,
+  findActiveAccountHold,
+  PREVIEW_ACCOUNT_HOLD_SCOPE,
+} from "@/lib/tasks/account-hold";
 import { enqueueMoboreaderPreviewRefreshTask, MOBOREADER_TASK_TYPES } from "@/lib/tasks/moboreader";
 import { readTaskControlMarker } from "@/lib/tasks/task-control";
 
@@ -433,6 +438,68 @@ describe("试读 handler：凭据类失败拉闸，其余不拉", () => {
   });
 });
 
+/**
+ * 2026-09-18 push 前的第三项收尾核验，固化成用例：
+ * **拉闸码里不许混进 transient。**
+ *
+ * 全仓反查过 `credential_*` 五个码的每一处产出点，全部是本地判断，没有一处
+ * 依赖网络结果：
+ *   - `worker/credentials/crypto.ts` —— AES-GCM 解密失败/信封格式/版本不符；
+ *   - `src/lib/credentials/claim-readiness.ts` `classifyCredentialRowsForClaim`
+ *     —— 纯粹数 active 行与比 `expiresAt`；
+ *   - `src/lib/credentials/jwt.ts` `validateCredentialJwtLocally` —— base64
+ *     解码 + `exp` 比较，文件内零 fetch/http；
+ *   - `src/lib/credentials/lifecycle.ts` / `src/server/credentials/service.ts`
+ *     —— 状态机判断。
+ * 因此不存在「上游超时 → 凭据被判 invalid → 后续 preview 看到 credential_missing
+ * → 拉闸」这条把 transient 洗成 deterministic 的路径。
+ *
+ * 下面两条把这个结论钉住：JWT 校验器不得引入网络依赖；拉闸点遇到"长得不像
+ * 失败码"的异常（DB 连接错误、Prisma 错误等）必须原样抛出。
+ */
+describe("拉闸码来源审计（2026-09-18 push 前核验）", () => {
+  it("🔴 本地 JWT 校验器不得引入任何网络依赖——它一旦联网，超时就会被写成 credential_validation_failed", () => {
+    const jwt = readFileSync(new URL("../../../src/lib/credentials/jwt.ts", import.meta.url), "utf8");
+    expect(jwt).not.toMatch(/\bfetch\b|node:http|require\(["']https?|from ["']axios|from ["']undici/);
+  });
+
+  it("🔴 scope 加载器抛出的非失败码异常（如 DB 连接失败）原样抛出，绝不被误判成账号级失败", async () => {
+    const failing = {
+      ...scopeDb(),
+      channelSyncTaskItem: {
+        findUnique: async () => {
+          // Prisma 的连接类错误：message 是一大段说明文字，与任何失败码都不相等。
+          throw new Error("Can't reach database server at `postgres:5432`");
+        },
+      },
+    };
+    const handler = createMoboreaderPreviewHandler(failing as never, {
+      adapter: adapterSpy() as never,
+      env: GATES,
+    });
+
+    await expect(handler({
+      lease: lease(),
+      mode: "apply",
+      signal: new AbortController().signal,
+      heartbeat: async () => true,
+    })).rejects.toThrow(/reach database server/);
+  });
+
+  it("🔴 拉闸判定只认全等的失败码，不做包含匹配——否则一段含有 credential 字样的报错就能拉闸", () => {
+    for (const nearMiss of [
+      "Can't reach database server at `postgres:5432`",
+      "credential_validation_failed: upstream returned 503",
+      "upstream timeout while validating credential",
+      "CREDENTIAL_VALIDATION_FAILED",
+      " credential_validation_failed ",
+    ]) {
+      expect(isAccountLevelPreviewFailure(nearMiss)).toBe(false);
+    }
+    expect(isAccountLevelPreviewFailure("credential_validation_failed")).toBe(true);
+  });
+});
+
 // ---------------------------------------------------------------------------
 // 入队挡板
 // ---------------------------------------------------------------------------
@@ -544,12 +611,17 @@ describe("active hold 判定", () => {
     const findFirst = vi.fn(async () => null);
     await findActiveAccountHold({ channelAccountHold: { findFirst } } as never, ACCOUNT_A);
     expect(findFirst).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { channelAccountId: ACCOUNT_A, releasedAt: null } }),
+      expect.objectContaining({
+        where: { channelAccountId: ACCOUNT_A, scope: PREVIEW_ACCOUNT_HOLD_SCOPE, releasedAt: null },
+      }),
     );
   });
 
   it("🔴 SQL 下推与 findActiveAccountHold 同口径：也只认 released_at IS NULL", () => {
-    const fragment = accountHoldExistsSql({ strings: ["t.channel_account_id"], values: [] } as never);
+    const fragment = accountHoldExistsSql(
+      { strings: ["t.channel_account_id"], values: [] } as never,
+      PREVIEW_ACCOUNT_HOLD_SCOPE,
+    );
     const text = fragment.strings.join("?");
     expect(text).toContain("channel_account_hold");
     expect(text).toContain("released_at IS NULL");
@@ -569,11 +641,14 @@ function releaseDb(options: {
   readonly activeHold?: { id: string } | null;
   readonly credentials?: Array<{ id: string; encryptedSecret: Uint8Array; keyVersion: number }>;
   readonly parkedChunks?: number[];
+  /** What `countParkedTasks` reports — the crash-resume path keys off this. */
+  readonly parkedTaskCount?: number;
 } = {}) {
   const chunks = [...(options.parkedChunks ?? [0])];
   const updateMany = vi.fn(async () => ({ count: 1 }));
   const auditCreate = vi.fn(async () => ({}));
   const executeRaw = vi.fn(async () => chunks.shift() ?? 0);
+  const parked = options.parkedTaskCount ?? (options.parkedChunks ?? [0]).reduce((a, b) => a + b, 0);
   return {
     channelAccountHold: {
       findFirst: vi.fn(async () => (options.activeHold === undefined ? { id: "hold-1" } : options.activeHold)),
@@ -585,7 +660,7 @@ function releaseDb(options: {
     },
     operationAudit: { create: auditCreate },
     $executeRaw: executeRaw,
-    $queryRaw: vi.fn(async () => [{ count: 0n }]),
+    $queryRaw: vi.fn(async () => [{ count: BigInt(parked) }]),
     __updateMany: updateMany,
     __audit: auditCreate,
     __executeRaw: executeRaw,
@@ -713,14 +788,148 @@ describe("解除 hold", () => {
     }
   });
 
-  it("没有 active hold → 明说 no_active_hold，不写任何东西", async () => {
-    const db = releaseDb({ activeHold: null });
+  it("没有 active hold 且没有残留挂起任务 → no_active_hold，连预检都不跑、不写任何东西", async () => {
+    const db = releaseDb({ activeHold: null, parkedTaskCount: 0 });
     const outcome = await releaseAccountHold(
       db as never,
       { channelAccountId: ACCOUNT_A, releasedBy: "ops-1", releaseReason: null },
     );
     expect(outcome).toEqual({ status: "no_active_hold" });
     expect(db.__updateMany).not.toHaveBeenCalled();
+    expect(db.__executeRaw).not.toHaveBeenCalled();
     expect(db.__audit).not.toHaveBeenCalled();
+  });
+
+  /**
+   * 崩溃续跑。释放分两段写（清 hold + 分块放回任务），中间必然可能断电：
+   * 旧版本以「有没有 active hold」作为整个函数的入口条件，于是"hold 已清、
+   * 任务只放回一半"就变成**永久孤儿**——闸已经抬了，没人再挡它们，也没有任何
+   * 命令会再来捡。现在两件事各自收敛，重跑即可续完。
+   */
+  it("🔴 Case: hold 已清、任务只恢复了一部分时进程崩溃 → 重跑继续恢复剩余任务，不产生永久孤儿", async () => {
+    const keys = keyring();
+    try {
+      const credentialId = randomUUID();
+      const db = releaseDb({
+        // 崩溃后的现场：hold 行已经是 released（findFirst 返回 null），
+        // 但还有 120 张 disabled + system_hold 任务没放回去。
+        activeHold: null,
+        parkedTaskCount: 120,
+        parkedChunks: [120],
+        credentials: [{
+          id: credentialId,
+          encryptedSecret: encryptCredentialSecretForWorker("jwt", ACCOUNT_A, credentialId, 1, keys.env),
+          keyVersion: 1,
+        }],
+      });
+
+      const outcome = await releaseAccountHold(
+        db as never,
+        { channelAccountId: ACCOUNT_A, releasedBy: "ops-1", releaseReason: "resume after crash" },
+        new Date(),
+        keys.env,
+      );
+
+      expect(outcome).toEqual({ status: "resumed", reEnabledTaskCount: 120 });
+      // 没有 active hold 可清，所以不该再去写 hold 行……
+      expect(db.__updateMany).not.toHaveBeenCalled();
+      // ……但残留任务确实被放回去了，并且留下了审计。
+      expect(db.__executeRaw).toHaveBeenCalled();
+      expect(firstArgOf(db.__audit.mock.calls[0])).toMatchObject({
+        data: { afterSnapshot: { holdId: null, resumed: true, reEnabledTaskCount: 120 } },
+      });
+    } finally {
+      keys.cleanup();
+    }
+  });
+
+  it("🔴 续跑同样要过凭据预检——放回任务本身就是有风险的动作", async () => {
+    const keys = keyring();
+    const otherKeys = keyring();
+    try {
+      const credentialId = randomUUID();
+      const db = releaseDb({
+        activeHold: null,
+        parkedTaskCount: 30,
+        parkedChunks: [30],
+        credentials: [{
+          id: credentialId,
+          encryptedSecret: encryptCredentialSecretForWorker("jwt", ACCOUNT_A, credentialId, 1, otherKeys.env),
+          keyVersion: 1,
+        }],
+      });
+
+      const outcome = await releaseAccountHold(
+        db as never,
+        { channelAccountId: ACCOUNT_A, releasedBy: "ops-1", releaseReason: null },
+        new Date(),
+        keys.env,
+      );
+
+      expect(outcome).toMatchObject({ status: "refused" });
+      expect(db.__executeRaw).not.toHaveBeenCalled();
+      expect(db.__audit).not.toHaveBeenCalled();
+    } finally {
+      keys.cleanup();
+      otherKeys.cleanup();
+    }
+  });
+
+  it("完全收敛后重跑是干净的 no-op（幂等）", async () => {
+    const db = releaseDb({ activeHold: null, parkedTaskCount: 0 });
+    await expect(releaseAccountHold(
+      db as never,
+      { channelAccountId: ACCOUNT_A, releasedBy: "ops-1", releaseReason: null },
+    )).resolves.toEqual({ status: "no_active_hold" });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Scope
+// ---------------------------------------------------------------------------
+
+describe("hold 的 scope 语义", () => {
+  it("scope 取值域只有 preview，且 PREVIEW_ACCOUNT_HOLD_SCOPE 是它的成员", () => {
+    expect([...CHANNEL_ACCOUNT_HOLD_SCOPES]).toEqual(["preview"]);
+    expect(CHANNEL_ACCOUNT_HOLD_SCOPES).toContain(PREVIEW_ACCOUNT_HOLD_SCOPE);
+  });
+
+  it("🔴 数据库 CHECK 与 TS 取值域同步（两处必须一起改）", () => {
+    const migration = readFileSync(
+      new URL("../../../prisma/migrations/20260918090000_preview_account_hold/migration.sql", import.meta.url),
+      "utf8",
+    );
+    const check = migration.match(/CHECK \("scope" IN \(([^)]*)\)\)/)?.[1] ?? "";
+    const allowed = check.split(",").map((value) => value.trim().replace(/'/g, "")).filter(Boolean);
+    expect(allowed).toEqual([...CHANNEL_ACCOUNT_HOLD_SCOPES]);
+  });
+
+  it("🔴 三个接入点都按 scope 过滤——一条业务线的 hold 不得殃及另一条", async () => {
+    // 1. 读侧
+    const findFirst = vi.fn(async () => null);
+    await findActiveAccountHold({ channelAccountHold: { findFirst } } as never, ACCOUNT_A);
+    expect(findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { channelAccountId: ACCOUNT_A, scope: PREVIEW_ACCOUNT_HOLD_SCOPE, releasedAt: null },
+      }),
+    );
+    // 2. claim 期 SQL 下推
+    const fragment = accountHoldExistsSql(
+      { strings: ["t.channel_account_id"], values: [] } as never,
+      PREVIEW_ACCOUNT_HOLD_SCOPE,
+    );
+    expect(fragment.strings.join("?")).toContain("h.scope =");
+    expect(fragment.values).toContain(PREVIEW_ACCOUNT_HOLD_SCOPE);
+    // 3. 写侧
+    const tx = fakeTx();
+    await holdChannelAccountForPreview(tx as never, {
+      channelAccountId: ACCOUNT_A,
+      reasonCode: "credential_validation_failed",
+      taskId: "11111111-1111-4111-8111-111111111111",
+      itemId: "22222222-2222-4222-8222-222222222222",
+    });
+    const insert = firstArgOf(tx.__queryRaw.mock.calls[0]) as { strings: readonly string[]; values: readonly unknown[] };
+    expect(insert.strings.join("?")).toContain("scope");
+    expect(insert.values).toContain(PREVIEW_ACCOUNT_HOLD_SCOPE);
   });
 });

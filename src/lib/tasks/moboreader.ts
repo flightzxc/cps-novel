@@ -6,7 +6,7 @@ import {
 } from "../flags";
 import { isUniqueConstraintViolation as isUniqueViolation } from "@/lib/db/db-retry";
 import { findNovelSourceItemsByIds } from "@/lib/db/chunked-id-lookup";
-import { findActiveAccountHold } from "./account-hold";
+import { findActiveAccountHold, PREVIEW_ACCOUNT_HOLD_SCOPE } from "./account-hold";
 import { mergeTaskControlResult, type TaskControlMarker } from "./task-control";
 
 export const MOBOREADER_TASK_TYPES = Object.freeze({
@@ -1107,7 +1107,7 @@ async function enqueueMoboreaderPreviewRefreshTaskInDb(
   // re-enablable in one operator command
   // (`scripts/preview-account-hold.ts --release`). Dropping it would leave no
   // record that anything was ever supposed to happen for these books.
-  const activeHold = await findActiveAccountHold(db, input.channelAccountId);
+  const activeHold = await findActiveAccountHold(db, input.channelAccountId, PREVIEW_ACCOUNT_HOLD_SCOPE);
   const taskStatus = enabled && writeAllowed && !activeHold ? "pending" : "disabled";
   const holdMarker: TaskControlMarker | null = activeHold
     ? {

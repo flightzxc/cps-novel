@@ -11,7 +11,7 @@ import type {
   TaskOutcome,
 } from "./types";
 import { TASK_FAMILIES } from "./types";
-import { accountHoldExistsSql } from "./account-hold";
+import { accountHoldExistsSql, PREVIEW_ACCOUNT_HOLD_SCOPE } from "./account-hold";
 import { sanitizePersistedTaskError } from "./errors";
 import {
   catalogFinalizeGeneration,
@@ -110,7 +110,14 @@ async function selectPending(
                 -- requeue -- so there is no claim/requeue cycle to spin on and
                 -- nothing to undo when the hold is released. The worker simply
                 -- finds no work and falls through to its ordinary poll sleep.
-                AND NOT ${accountHoldExistsSql(Prisma.sql`t.channel_account_id`)}
+                --
+                -- Scoped to 'preview' rather than "any hold on this account":
+                -- the channel_sync family is preview work and only preview work
+                -- (createMoboreaderWorkerHandlers registers exactly one task
+                -- type in it), so a hold placed on some future pipeline must
+                -- not silently stop this one. (No backticks inside this
+                -- template literal -- they would terminate it.)
+                AND NOT ${accountHoldExistsSql(Prisma.sql`t.channel_account_id`, PREVIEW_ACCOUNT_HOLD_SCOPE)}
             )
           ORDER BY i.created_at, i.id
           LIMIT 128

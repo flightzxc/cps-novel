@@ -27,6 +27,7 @@ import path from "node:path";
 
 import { Prisma, PrismaClient } from "@prisma/client";
 
+import { PREVIEW_ACCOUNT_HOLD_SCOPE } from "../src/lib/tasks/account-hold";
 import { MOBOREADER_TASK_TYPES } from "../src/lib/tasks/moboreader";
 import { preflightChannelAccountCredential, type CredentialPreflight } from "./preview-backfill-recovery";
 
@@ -85,6 +86,7 @@ export function parsePreviewAccountHoldArgs(argv: readonly string[]): PreviewAcc
 export type ActiveHoldReport = {
   readonly holdId: string;
   readonly channelAccountId: string;
+  readonly scope: string;
   readonly reasonCode: string;
   readonly heldAt: string;
   readonly parkedTaskCount: number;
@@ -99,8 +101,8 @@ export type ActiveHoldReport = {
  */
 export async function listActiveHolds(db: PrismaClient): Promise<readonly ActiveHoldReport[]> {
   const holds = await db.channelAccountHold.findMany({
-    where: { releasedAt: null },
-    select: { id: true, channelAccountId: true, reasonCode: true, heldAt: true },
+    where: { scope: PREVIEW_ACCOUNT_HOLD_SCOPE, releasedAt: null },
+    select: { id: true, channelAccountId: true, scope: true, reasonCode: true, heldAt: true },
     orderBy: { heldAt: "asc" },
   });
   const reports: ActiveHoldReport[] = [];
@@ -109,6 +111,7 @@ export async function listActiveHolds(db: PrismaClient): Promise<readonly Active
     reports.push({
       holdId: hold.id,
       channelAccountId: hold.channelAccountId,
+      scope: hold.scope,
       reasonCode: hold.reasonCode,
       heldAt: hold.heldAt.toISOString(),
       parkedTaskCount,
@@ -129,7 +132,15 @@ async function countParkedTasks(db: PrismaClient, channelAccountId: string): Pro
 }
 
 export type ReleaseOutcome =
+  /** An active hold existed; it was cleared and its parked work was returned to the runnable set. */
   | { readonly status: "released"; readonly holdId: string; readonly reEnabledTaskCount: number }
+  /**
+   * No active hold, but parked work was still sitting there — the crash-resume
+   * path. Re-running `--release` after a process death mid-re-enable lands
+   * here and finishes the job; see {@link releaseAccountHold}.
+   */
+  | { readonly status: "resumed"; readonly reEnabledTaskCount: number }
+  /** Nothing to do: no active hold and no parked work left. */
   | { readonly status: "no_active_hold" }
   | { readonly status: "refused"; readonly preflight: CredentialPreflight };
 
@@ -137,13 +148,30 @@ export type ReleaseOutcome =
  * Releases the account's active hold, then returns the work it had parked to
  * the runnable set.
  *
- * Order is load-bearing: the hold row is cleared *before* the tasks are
- * flipped back to `pending`. The reverse order would create a window where
- * runnable tasks exist while the claim-time pushdown still rejects them, i.e.
- * work that looks live in the admin UI and silently never runs. This way the
- * worst case is the opposite and harmless: the brake is off for a moment
- * while some tasks are still `disabled`, and the very next chunk re-enables
- * them.
+ * **Crash-resumable, and that is load-bearing.** The two writes cannot be one
+ * transaction (re-enabling tens of thousands of tasks is deliberately chunked,
+ * so it spans many transactions), which means a process death can land between
+ * "hold cleared" and "all parked tasks re-enabled". An earlier revision keyed
+ * the whole function on finding an active hold and returned `no_active_hold`
+ * otherwise — so a crash mid-re-enable left the remaining `disabled` tasks
+ * permanently orphaned: the brake was off, nothing was holding them, and no
+ * command would ever pick them up again. This version instead treats the hold
+ * row and the parked tasks as two independently convergent facts:
+ *
+ *   1. if an active hold exists, clear it;
+ *   2. **then, either way**, re-enable whatever parked work remains.
+ *
+ * So the command is idempotent and re-runnable to completion: run it again
+ * after a crash and it reports `resumed` with however many tasks were left.
+ * Running it on a fully-converged account is a no-op (`no_active_hold`, zero
+ * re-enabled).
+ *
+ * Order between the two is also deliberate: the hold is cleared *first*. The
+ * reverse order would open a window where runnable tasks exist while the
+ * claim-time pushdown still rejects them — work that looks live in the admin
+ * UI and silently never runs. This way the worst case is the harmless
+ * opposite: the brake is off for a moment while some tasks are still
+ * `disabled`, and the next chunk (or the next run) re-enables them.
  *
  * Re-enabling only touches rows carrying this brake's `taskControl` marker, so
  * a task that was born `disabled` because the catalog write flag was off stays
@@ -161,42 +189,37 @@ export async function releaseAccountHold(
   env: NodeJS.ProcessEnv = process.env,
 ): Promise<ReleaseOutcome> {
   const hold = await db.channelAccountHold.findFirst({
-    where: { channelAccountId: input.channelAccountId, releasedAt: null },
+    where: {
+      channelAccountId: input.channelAccountId,
+      scope: PREVIEW_ACCOUNT_HOLD_SCOPE,
+      releasedAt: null,
+    },
     select: { id: true },
   });
-  if (!hold) return { status: "no_active_hold" };
+  const parkedTaskCount = await countParkedTasks(db, input.channelAccountId);
+  // Genuinely nothing to converge — skip the pre-flight rather than refusing a
+  // no-op on a broken credential.
+  if (!hold && parkedTaskCount === 0) return { status: "no_active_hold" };
 
+  // Gates both paths: re-enabling parked work is exactly the risky act, so the
+  // resume path is no more exempt from proving the credential than the release
+  // path is.
   const preflight = await preflightChannelAccountCredential(db, input.channelAccountId, now, env);
   if (preflight.status !== "usable") return { status: "refused", preflight };
 
-  const released = await db.channelAccountHold.updateMany({
-    where: { id: hold.id, releasedAt: null },
-    data: { releasedAt: now, releasedBy: input.releasedBy, releaseReason: input.releaseReason },
-  });
-  // Someone else released it in the meantime — not an error, just nothing left
-  // for this call to do beyond re-enabling whatever is still parked below.
-  if (released.count === 0) return { status: "no_active_hold" };
-
-  let reEnabledTaskCount = 0;
-  for (;;) {
-    const chunk = await db.$executeRaw(Prisma.sql`
-      UPDATE channel_sync_task SET
-        status = 'pending',
-        result = result - 'taskControl',
-        updated_at = transaction_timestamp()
-      WHERE id IN (
-        SELECT id FROM channel_sync_task
-        WHERE channel_account_id = ${input.channelAccountId}::uuid
-          AND task_type = ${MOBOREADER_TASK_TYPES.previewRefresh}
-          AND status = 'disabled'
-          AND result->'taskControl'->>'kind' = 'system_hold'
-        ORDER BY created_at, id
-        LIMIT ${RELEASE_REENABLE_CHUNK_SIZE}
-      )
-    `);
-    reEnabledTaskCount += chunk;
-    if (chunk < RELEASE_REENABLE_CHUNK_SIZE) break;
+  let clearedHoldId: string | null = null;
+  if (hold) {
+    const released = await db.channelAccountHold.updateMany({
+      where: { id: hold.id, releasedAt: null },
+      data: { releasedAt: now, releasedBy: input.releasedBy, releaseReason: input.releaseReason },
+    });
+    // count === 0 means someone else released it between the read and this
+    // write. Not an error: fall through to the re-enable below, which is the
+    // half that still needs doing either way.
+    if (released.count > 0) clearedHoldId = hold.id;
   }
+
+  const reEnabledTaskCount = await reEnableParkedTasks(db, input.channelAccountId);
 
   await db.operationAudit.create({
     data: {
@@ -208,13 +231,47 @@ export async function releaseAccountHold(
       taskType: MOBOREADER_TASK_TYPES.previewRefresh,
       reason: input.releaseReason,
       afterSnapshot: {
-        holdId: hold.id,
+        scope: PREVIEW_ACCOUNT_HOLD_SCOPE,
+        holdId: clearedHoldId,
+        resumed: clearedHoldId === null,
         credentialId: preflight.credentialId,
         reEnabledTaskCount,
       },
     },
   });
-  return { status: "released", holdId: hold.id, reEnabledTaskCount };
+
+  return clearedHoldId
+    ? { status: "released", holdId: clearedHoldId, reEnabledTaskCount }
+    : { status: "resumed", reEnabledTaskCount };
+}
+
+/**
+ * Flips every task this brake parked back to `pending`, in bounded chunks.
+ * Each chunk is its own statement, so a crash leaves the already-committed
+ * chunks committed and the remainder still selectable by the same predicate —
+ * which is what makes {@link releaseAccountHold} resumable.
+ */
+async function reEnableParkedTasks(db: PrismaClient, channelAccountId: string): Promise<number> {
+  let total = 0;
+  for (;;) {
+    const chunk = await db.$executeRaw(Prisma.sql`
+      UPDATE channel_sync_task SET
+        status = 'pending',
+        result = result - 'taskControl',
+        updated_at = transaction_timestamp()
+      WHERE id IN (
+        SELECT id FROM channel_sync_task
+        WHERE channel_account_id = ${channelAccountId}::uuid
+          AND task_type = ${MOBOREADER_TASK_TYPES.previewRefresh}
+          AND status = 'disabled'
+          AND result->'taskControl'->>'kind' = 'system_hold'
+        ORDER BY created_at, id
+        LIMIT ${RELEASE_REENABLE_CHUNK_SIZE}
+      )
+    `);
+    total += chunk;
+    if (chunk < RELEASE_REENABLE_CHUNK_SIZE) return total;
+  }
 }
 
 export async function runPreviewAccountHoldCli(

@@ -129,6 +129,7 @@ model ChannelAccount {
 model ChannelAccountHold {
   id               String    @id @default(uuid()) @db.Uuid
   channelAccountId String    @map("channel_account_id") @db.Uuid
+  scope            String    @db.VarChar(32)
   reasonCode       String    @map("reason_code") @db.VarChar(64)
   credentialId     String?   @map("credential_id") @db.Uuid
   triggeringTaskId String?   @map("triggering_task_id") @db.Uuid
@@ -142,7 +143,7 @@ model ChannelAccountHold {
 
   channelAccount ChannelAccount @relation(fields: [channelAccountId], references: [id], onDelete: Restrict)
 
-  @@index([channelAccountId, heldAt], map: "channel_account_hold_history_idx")
+  @@index([channelAccountId, scope, heldAt], map: "channel_account_hold_history_idx")
   @@map("channel_account_hold")
 }
 

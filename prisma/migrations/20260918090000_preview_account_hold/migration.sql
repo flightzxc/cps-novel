@@ -13,10 +13,21 @@
 -- 条目原样留在 pending（不 requeue、不烧终态、不改任何 item 状态），
 -- 等凭据修好后由 scripts/preview-account-hold.ts --release 放行。
 --
--- 粒度刻意只到账号：别的渠道账号完全不受影响，更不是 channel 级全局暂停。
+-- 粒度：**账号 × 业务面（scope）**。
+-- 「凭据能不能解密」确实是整个账号的属性，但一行 hold 实际**挡住的是哪条流水线**
+-- 必须写清楚，否则表名说的是「账号被 hold」、行为却只停了试读，语义与命名对不上。
+-- 本轮只有试读链路接了这道闸（`channel_sync` 家族今天恰好只有
+-- `moboreader.preview_refresh.v1` 一个任务类型），所以 scope 的取值域现在就一个
+-- `'preview'`，并由 CHECK 钉死：将来推广领取链路若要复用，是加一个取值 + 一处
+-- 接线的增量，而不是"这张表一直暗示自己管全业务、其实只管一条线"。
+-- 别的渠道账号完全不受影响，更不是 channel 级全局暂停。
 CREATE TABLE "channel_account_hold" (
     "id" UUID NOT NULL,
     "channel_account_id" UUID NOT NULL,
+    -- 这行 hold 挡住的业务面。取值域的单一真源是
+    -- `CHANNEL_ACCOUNT_HOLD_SCOPES`（src/lib/tasks/account-hold.ts），下面的
+    -- CHECK 是它在数据库侧的镜像——加取值必须同时改两处。
+    "scope" VARCHAR(32) NOT NULL,
     -- 触发本次 hold 的确定性失败码，取值域是 DETERMINISTIC_CREDENTIAL_FAILURE_CODES。
     -- 不在这里加 CHECK：该清单是 TypeScript 侧的单一真源，抄一份到数据库只会
     -- 多出一个需要同步、且迟早跑偏的第二真源。
@@ -40,15 +51,20 @@ ALTER TABLE "channel_account_hold" ADD CONSTRAINT "channel_account_hold_channel_
     FOREIGN KEY ("channel_account_id") REFERENCES "channel_account"("id")
     ON DELETE RESTRICT ON UPDATE CASCADE;
 
--- 每个账号至多一条未解除的 hold。这是 worker 侧 `INSERT ... ON CONFLICT DO NOTHING`
--- 幂等性的依据：两个 worker 副本同时踩到同一个坏凭据，第二条插入被这个索引挡下，
--- 不会写出两条 active hold，也不必先查后插（那才是真正的竞态）。
+-- 每个账号的每个业务面至多一条未解除的 hold。这是 worker 侧
+-- `INSERT ... ON CONFLICT DO NOTHING` 幂等性的依据：两个 worker 副本同时踩到
+-- 同一个坏凭据，第二条插入被这个索引挡下，不会写出两条 active hold，
+-- 也不必先查后插（那才是真正的竞态）。
 CREATE UNIQUE INDEX "channel_account_hold_active_uidx"
-    ON "channel_account_hold"("channel_account_id") WHERE "released_at" IS NULL;
+    ON "channel_account_hold"("channel_account_id", "scope") WHERE "released_at" IS NULL;
 
--- 历史查询（这个账号被 hold 过几次、分别多久）。
+-- 历史查询（这个账号的这条业务线被 hold 过几次、分别多久）。
 CREATE INDEX "channel_account_hold_history_idx"
-    ON "channel_account_hold"("channel_account_id", "held_at");
+    ON "channel_account_hold"("channel_account_id", "scope", "held_at");
+
+-- scope 取值域，与 CHANNEL_ACCOUNT_HOLD_SCOPES 同步。
+ALTER TABLE "channel_account_hold" ADD CONSTRAINT "channel_account_hold_scope_check"
+    CHECK ("scope" IN ('preview'));
 
 -- 解除必须留下责任人。没有这条约束，一次 UPDATE 漏写 released_by 就能把
 -- "谁放行的"这个问题永久变成无解。

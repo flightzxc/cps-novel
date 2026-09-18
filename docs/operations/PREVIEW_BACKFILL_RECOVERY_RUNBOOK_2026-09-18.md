@@ -113,11 +113,28 @@ npx tsx scripts/preview-backfill-recovery.ts \
 （统一收敛到 `upstream_material_read_failed` / `upstream_preview_read_failed`）、
 单书不存在、单书下架、章节缺失、单书 parsing 错误、能力/绑定配置问题。
 
+这五个码的**全部产出点**都已逐一反查过，没有一处依赖网络结果：
+AES-GCM 解密失败（`worker/credentials/crypto.ts`）、数 active 行与比 `expiresAt`
+（`classifyCredentialRowsForClaim`）、base64 解码加 `exp` 比较
+（`validateCredentialJwtLocally`，文件内零 fetch/http）、状态机判断
+（`lifecycle.ts` / `credentials/service.ts`）。所以不存在
+「上游超时 → 凭据被判 invalid → 后续 preview 看到 credential_missing → 拉闸」
+这条把 transient 洗成 deterministic 的路径。判定还是**全等匹配**，
+一段含有 `credential_validation_failed` 字样的长报错不会拉闸。
+
 ### 粒度与状态
 
-粒度是**渠道账号**，不是渠道、不是任务。别的账号完全不受影响。
+粒度是**渠道账号 × 业务面（scope）**，不是渠道、不是任务。别的账号完全不受影响。
+
+「凭据能不能解密」确实是账号级事实，但一行 hold 实际挡住哪条流水线要写清楚，
+否则表名说的是「账号被 hold」、行为却只停试读。所以每行都带 `scope`，
+取值域今天只有 `preview` 一个（`CHANNEL_ACCOUNT_HOLD_SCOPES` 是单一真源，
+数据库 `channel_account_hold_scope_check` 是它的镜像，加值要一起改）。
+推广领取链路保留它自己的任务级保护，**不**受这些行影响。
+
 状态就一行 `channel_account_hold`：`released_at IS NULL` 即生效，
-`channel_account_hold_active_uidx` 保证每个账号至多一条。
+`channel_account_hold_active_uidx (channel_account_id, scope) WHERE released_at IS NULL`
+保证每个账号的每条业务线至多一条。
 
 三层生效：
 
@@ -154,6 +171,13 @@ npx tsx scripts/preview-account-hold.ts --release \
 `preview.account_hold_released` 审计。
 
 因功能开关关闭而 `disabled` 的任务**不带**这个标记，不会被顺手放行。
+
+**中途崩溃了怎么办：直接重跑同一条命令。** 清 hold 与放回任务是两段写、
+必然跨事务，所以「hold 已清、任务只放回一半」是真实可能的现场。
+命令把这两件事当作两个各自收敛的事实：有 active hold 就清掉；
+**无论有没有**，都接着把残留的 `disabled + system_hold` 任务放回去。
+重跑会报 `resumed` 并带上这一次补完的条数；已经完全收敛时报 `no_active_hold`、
+零改动。续跑同样要过凭据预检——放回任务本身就是有风险的动作。
 
 ### 历史事故数据怎么办
 
