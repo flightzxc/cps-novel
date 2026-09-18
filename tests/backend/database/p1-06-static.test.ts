@@ -93,6 +93,13 @@ describe("P1-06 database operations static contracts", () => {
       // Gate 5-Dev (WAL retention daily timer + its fourth alert judgement).
       "infra/production-like/backup-timer.sh",
       "infra/production-like/alerts/check-wal-archive.sh",
+      // Local-X8 auto-apply work order 2026-09-18: daily wal-gc apply
+      // operator + its LaunchAgent installer, and the monthly positive PITR
+      // smoke -- all local-only (infra/local-x8/, scripts/db/*-local.sh),
+      // never part of the production-like/core path.
+      "infra/local-x8/wal-gc-daily-apply.sh",
+      "scripts/x8-local-wal-gc-launchd.sh",
+      "scripts/db/pitr-smoke-local.sh",
     ];
     for (const script of scripts) {
       execFileSync("bash", ["-n", resolve(root, script)]);

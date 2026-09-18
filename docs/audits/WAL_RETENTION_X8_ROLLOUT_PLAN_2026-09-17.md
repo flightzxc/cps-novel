@@ -646,3 +646,88 @@ Docker VM 容量（容器内 df，不是宿主机 df）：
 1. **第一项需要 Owner 批准的真实操作** = **Gate 2 的 `postgres` recreate**（第 4 节）——这是本文档描述的所有操作里，第一个会对活栈做出实际改动的写操作。在此之前的一切（第 1 节的取证、Gate 1 的合并准备）都只读或只发生在 Codex 的合并流程里，不触碰任何正在跑的容器。
 2. Gate 2 之后每一个 Gate 都是前一个的硬前置（Gate N 未 PASS 禁止进入 Gate N+1），第 5 节"首次真实删除"是整条链路里第二个需要 Owner 单独书面批准的动作（第一个是 Gate 4 里的 `pg_create_restore_point`）。
 3. 本文档本身不触发、不安排、不倒计时任何一个 Gate 的执行——这些都是后续会话/后续 Owner 决策的事。
+
+---
+
+## 11. 首删之后：本地放松项（Owner 2026-09-18 批准）
+
+第 5 节"首次真实删除 Owner Gate"已经走完一轮：**首次真实 `wal-gc --apply` 已于
+2026-09-18T05:45Z 完成，删除 2513 个 WAL 段，归档目录现降至约 386 MB**。这满足
+了第 5 节"无 Owner 明确批准禁止执行 `--apply`"这条红线对"第一次"的要求——
+第一次已经按人工报告+批准的流程走完，且没有产生任何 `reconcile_mismatch`/
+非预期残留。证据形态遵循本文档第 8 节"部署状态取证规范"（container
+id/image/StartedAt/RestartCount/health/mounts/脚本哈希/HEAD 八项），由执行
+当时的操作者会话直接留存；本节不重复贴那份原始终端记录，只记录结论与其
+对后续流程的影响。
+
+**首删证据（可核验，Opus 复核 2026-09-18 补充）**：以下四份证据文件都在
+`integration-night` 工作区的 `.tmp/`（不进 git、随该工作区本地存在），本节
+只记录**路径 + 关键字段**（其中 apply 一份额外附 SHA-256），使任何有权访问
+该工作区的人都能直接核对，而不必依赖"执行当时的操作者会话"这一句话：
+
+- preflight（apply 前的最后一次 dry-run）：
+  `integration-night/.tmp/x8-production-like/gate5-evidence/20260918T054412Z-first-apply-preflight-dry-run.txt`
+  —— 关键字段 `planned_delete=2513`。
+- apply（真正执行删除的那一次）：
+  `integration-night/.tmp/x8-production-like/gate5-evidence/20260918T054501Z-first-apply.txt`
+  —— sha256 `1cf58c5b080aaf55e4059c0c7b5fc0935846d5307ff8551b8cd035626d8d5ab4`，
+  关键字段 `WAL_RETENTION=APPLIED deleted=2513 anchor=0000000100000043000000D8`。
+- post（apply 后的确认性 dry-run）：
+  `integration-night/.tmp/x8-production-like/gate5-evidence/20260918T054541Z-post-apply-dry-run.txt`
+  —— 关键字段 `planned_delete=0`、`CAPACITY=OK bytes=385876656`。
+- 删后恢复验证（证明删除后的归档仍是一条可用的恢复链，不是只是"文件都在但
+  没人验证过能不能用"）：
+  `integration-night/.tmp/x8-production-like/gate5-evidence/20260918T054647Z-post-apply-restore/`
+  —— 关键字段 `replay_lsn=43/DB000090`、`selected new timeline ID: 2`。
+
+以上四步之外，Fable 只读终审（2026-09-18T06:58Z）额外核对了：归档目录剩余
+23 个 WAL 段（区间 `D8`..`EE`，连续无缺口）+ 2 个 `.backup` 文件；
+`.wal-retention.state` 的 `last_deleted_count=2513`；宿主 VM 磁盘占用从
+106G 降到 66G；参与本次操作的六个容器 `container id` 前后未变（即整个操作
+没有触发任何容器重建）。
+项（`infra/local-x8/`，见 `docs/operations/WAL_RETENTION_PROFILES.md`）——
+每一项都是"从"人工逐次批准 `--apply`"放松为"日常自动化"，不是放松任何一条
+安全闸门本身：
+
+| 放松项 | 放松前 | 放松后（仅 local-X8） |
+| --- | --- | --- |
+| `--apply` 触发方式 | 每次都是操作者手工跑第 5 节的报告模板 + 人工批准 + 手工执行 `wal-gc --apply` | 本地 macOS LaunchAgent（`infra/local-x8/wal-gc-daily-apply.sh`）每日自动跑同一个 formal 入口（`scripts/x8-production-like.sh wal-gc --apply --json`），带 preflight/apply/post 三段式校验 + `X8_LOCAL_WAL_GC_MAX_DELETE`（默认 3000）熔断 |
+| 恢复链验证节奏 | 只在 Gate 4 时做过一轮完整的 `wal-retention-rehearsal.sh` | **"相关代码变更后必跑"**：`scripts/db/wal-retention-rehearsal.sh`（改动 `wal-retention.sh`/`wal-gc-x8.sh`/`archive-wal.sh`/`backup-physical-base.sh`/`verify-physical-base.sh` 任一个之后）+ **每月**一次 `scripts/db/pitr-smoke-local.sh`（零活库写的正向 PITR 抽查，见其自身文件头注释） |
+| 告警投递 | 未接线（Gate 5 文档 5.2 节仍标"仍待人工"） | **log-only 豁免**：`check-wal-archive.sh` 等判据继续本地跑、继续判定 fire/recover，但不要求接入真实推送通道（`OWNER_WAIVER_ALERT_DELIVERY=yes`，同 `run-alerts.sh` 现有做法）——这是"允许告警只写日志"的豁免，不是"允许判据本身降级" |
+| 26 小时新鲜度阈值 | — | **不改**：`check-wal-archive.sh` 的 `ALERT_BASE_BACKUP_MAX_AGE_SECONDS`、`check-backup-freshness.sh` 的 `ALERT_BACKUP_MAX_AGE_SECONDS`、以及本工单在 `wal-gc-x8.sh` 里显式传给 `wal-retention.sh --max-backup-age-seconds` 的 `X8_WAL_GC_MAX_BACKUP_AGE_SECONDS`——这三处才是真正统一钉在 93600s（26h=日备+2h 缓冲）的地方，继续不因为"已经自动化了"而放宽或收紧 |
+| 归档迁宿主绑定（原 Gate 6） | 计划中的独立 Gate，未排期 | **本地继续延后**：不在本轮范围内实施，仍然只是"已识别的后续工作"，不因为日删自动化而被提前 |
+
+**"26 小时新鲜度阈值"这一行不要和 `X8_BASE_BACKUP_MIN_INTERVAL_SECONDS` 混为一谈**（Opus 复核
+2026-09-18 纠正）：`X8_BASE_BACKUP_MIN_INTERVAL_SECONDS` 的默认值是
+**72000 秒（20 小时）**，见 `scripts/lib/x8-production-like-env.sh`/
+`infra/production-like/backup-timer.sh`——它是 `backup-timer.sh` 自己的**去抖**
+参数（"距离上一份可用备份不到这个时长就跳过、不再打一份新的",
+`PHYSICAL_BASE_BACKUP=SKIPPED_RECENT`），回答的是"要不要现在打新备份"，与
+上表这一行回答的"现有最新备份是否已经新到可以信任"（新鲜度/staleness）是
+两件不同的事，两者不该也从未被钉成同一个数字。上表这一行三处 93600s
+（`check-wal-archive.sh`/`check-backup-freshness.sh`/
+`X8_WAL_GC_MAX_BACKUP_AGE_SECONDS`）**必须比日备周期本身宽出一点缓冲、但又
+必须比"去抖窗口"更紧**——去抖=72000s < 新鲜度=93600s 这个大小关系本身就是
+安全边界的一部分：如果哪天去抖窗口被调得 ≥ 93600s，日备哪怕只迟到一点点，
+`base_backup_stale`/`stale_base_backup` 就会每天必定触发（因为下一次该打的
+备份还没轮到"去抖"允许它打，新鲜度窗口就已经先过期），把一个本该只在真正
+故障时才响的告警变成日常噪音。
+
+**不放松的部分**（对本节所有条目都成立，没有例外）：
+
+- **锚定式删除的判定逻辑本身不变**——`anchor_not_in_archive`/
+  `timeline_unsupported`/`verified_malformed`/`would_empty_archive` 等每一个
+  fail-closed 分支，自动化前后行为完全一致，本节任何一项放松都不触碰
+  `scripts/db/wal-retention.sh` 的判定代码。
+- **`--force` 的作用范围不变**——仍然只解除 `delete_surge_guard` 一项，且本地
+  自动化的每日 operator 命令行**从不**拼接 `--force`（见
+  `infra/local-x8/wal-gc-daily-apply.sh` 自身的静态测试锁死）。
+- **fail-closed 原则不变**——preflight/apply/post 任一段出现
+  `REFUSED`/`LOCKED`/`reconcile_mismatch`/非零退出，当天的自动化直接停止
+  （`LOCAL_WAL_GC=STOPPED`），不重试、不静默跳过、不自动放宽 cap 重跑。
+- **`wal_archive:ro` 不变**——`infra/production-like/backup-timer.sh` 与
+  `docker-compose.yml` 里归档卷对 `backup-timer` 容器的只读挂载，本工单未
+  改动、也不允许改动（红线，见工单第 0 节）。
+- **`backup-timer.sh` 的四步循环永远不 apply 不变**——第 4 步
+  （`wal-gc-x8.sh --json`）永远是 dry-run，本地日删自动化是一个**独立**的
+  LaunchAgent，从不挂在 `backup-timer` 容器的循环里，也不共享它的触发时机。

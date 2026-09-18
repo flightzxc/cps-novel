@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.cpsnovel.x8.wal-gc-apply</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>__X8_LOCAL_WORKTREE__/infra/local-x8/wal-gc-daily-apply.sh</string>
+  </array>
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Hour</key>
+    <integer>2</integer>
+    <key>Minute</key>
+    <integer>30</integer>
+  </dict>
+  <key>RunAtLoad</key>
+  <false/>
+  <key>ProcessType</key>
+  <string>Background</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>X8_LOCAL_WORKTREE</key>
+    <string>__X8_LOCAL_WORKTREE__</string>
+    <key>X8_LEVEL</key>
+    <string>uat</string>
+    <key>PATH</key>
+    <string>/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+  </dict>
+  <key>StandardOutPath</key>
+  <string>__HOME__/Library/Application Support/CPSNovelX8WalGc/logs/launchd.log</string>
+  <key>StandardErrorPath</key>
+  <string>__HOME__/Library/Application Support/CPSNovelX8WalGc/logs/launchd.log</string>
+</dict>
+</plist>

@@ -10,15 +10,29 @@ set -euo pipefail
 # NOT bypass archiver_unreadable/archiver_failing, anchor_not_in_archive,
 # verified_malformed, plan_failed, or any other refusal.
 #
-# WAL-retention rollout work order 2026-09-17, P2-7: the three
-# X8_WAL_ARCHIVE_DIR / X8_BASE_BACKUP_DIR_IN_CONTAINER / X8_WAL_ARCHIVE_MAX_BYTES
-# env-var overrides below exist ONLY so tests/backend/database/wal-gc-x8.test.ts
-# can point this script at a throwaway directory pair without Docker. The
-# formal entry point -- scripts/x8-production-like.sh's wal_gc(), the only
-# supported way to reach this script against a real stack -- always invokes
-# it via `x8_compose exec` with no `-e` at all, so none of these three
-# variables is reachable from a real run; production/rehearsal traffic
-# always gets the hard-coded defaults on the right of each `:-`.
+# WAL-retention rollout work order 2026-09-17, P2-7: the four
+# X8_WAL_ARCHIVE_DIR / X8_BASE_BACKUP_DIR_IN_CONTAINER / X8_WAL_ARCHIVE_MAX_BYTES /
+# X8_WAL_GC_MAX_BACKUP_AGE_SECONDS env-var overrides below exist ONLY so
+# tests/backend/database/wal-gc-x8.test.ts can point this script at a
+# throwaway directory pair without Docker. The formal entry point --
+# scripts/x8-production-like.sh's wal_gc(), the only supported way to reach
+# this script against a real stack -- always invokes it via `x8_compose exec`
+# with no `-e` at all, so none of these four variables is reachable from a
+# real run; production/rehearsal traffic always gets the hard-coded defaults
+# on the right of each `:-`.
+#
+# Local-X8 auto-apply work order 2026-09-18: the 93600-second (26h) default
+# for X8_WAL_GC_MAX_BACKUP_AGE_SECONDS is the X8 LOCAL profile's own value --
+# it means "a daily base-backup cadence plus a 2h grace window", matching
+# infra/production-like/backup-timer.sh's X8_BACKUP_INTERVAL_SECONDS default
+# (86400s) and check-wal-archive.sh's base_backup_stale threshold (same
+# 93600s). It is explicitly passed here (not left to wal-retention.sh's own
+# --max-backup-age-seconds default, which happens to also be 93600 today)
+# specifically so this number stays a single, greppable, documented X8-profile
+# constant instead of an implicit coincidence between two files -- see
+# docs/operations/WAL_RETENTION_PROFILES.md for the production-target value
+# this must NOT be silently reused for (a weekly base-backup cadence needs a
+# materially larger window, e.g. 7 days + 2h = 619200s).
 
 usage() {
   echo "usage: wal-gc-x8.sh [--apply] [--keep-base N] [--json] [--force]" >&2
@@ -56,7 +70,8 @@ target=("$script_dir/wal-retention.sh"
   --archive-dir "${X8_WAL_ARCHIVE_DIR:-/var/lib/postgresql/wal-archive}"
   --base-backup-dir "${X8_BASE_BACKUP_DIR_IN_CONTAINER:-/var/lib/postgresql/base-backups}"
   --require-archiver-healthy
-  --max-bytes "${X8_WAL_ARCHIVE_MAX_BYTES:-21474836480}")
+  --max-bytes "${X8_WAL_ARCHIVE_MAX_BYTES:-21474836480}"
+  --max-backup-age-seconds "${X8_WAL_GC_MAX_BACKUP_AGE_SECONDS:-93600}")
 # bash 3.2 (macOS system bash, this repo's dev/rehearsal host) raises
 # "unbound variable" under `set -u` on `"${args[@]}"` when args is a
 # perfectly ordinary zero-element array (e.g. a plain dry-run with no
