@@ -22,7 +22,10 @@ import { fileURLToPath } from "node:url";
  *      test in tests/backend/runtime/**, tests/backend/database/**, etc.
  *      already does explicitly (this should rarely, ideally never, be the
  *      thing that actually saves a call site -- the static guard in
- *      runtime-dir-isolation-guard.test.ts is the primary defense).
+ *      runtime-dir-isolation-guard.test.ts is the primary STATIC check,
+ *      catching a missing marker before any test ever runs; this fallback
+ *      and the leak canary below are the runtime safety net underneath it,
+ *      not a replacement for it).
  *
  *   2. Leak canary: records whether this repo's own
  *      `.tmp/x8-production-like` directory (and, if present,
@@ -34,6 +37,31 @@ import { fileURLToPath } from "node:url";
  *      silently mutated the live runtime directory is not actually green.
  *      This check is read-only: it never creates, deletes, or otherwise
  *      provisions `.tmp/x8-production-like` itself.
+ *
+ * P2-3 (2026-09-19 hardening, runtime-dir-isolation-guard.test.ts's own
+ * P1-12-direct-source trigger category): the canary ALSO watches this
+ * repo's own `.tmp/p1-12-runtime` directory (existence + mtime only -- it
+ * carries no single file as consistently written as backup.pgpass, so
+ * unlike LIVE_RUNTIME_DIR there is no second per-file check here) for the
+ * same reason -- a spawn that sources scripts/lib/p1-12-local-env.sh
+ * DIRECTLY (skipping scripts/lib/x8-production-like-env.sh's own
+ * `export P1_12_RUNTIME_DIR="$X8_RUNTIME_DIR"` forwarding line) reads
+ * P1_12_RUNTIME_DIR, not X8_RUNTIME_DIR, and defaults to
+ * `$P1_12_PROJECT_ROOT/.tmp/p1-12-runtime` when that is unset
+ * (scripts/lib/p1-12-local-env.sh:1-6) -- so setting only X8_RUNTIME_DIR
+ * (this file's own fallback above, or a call site's own explicit override)
+ * does nothing to protect THAT directory. This canary is the safety net
+ * under runtime-dir-isolation-guard.test.ts's P1_12_RUNTIME_DIR-specific
+ * marker requirement for that trigger category, exactly as
+ * LIVE_RUNTIME_DIR's canary backs its X8_RUNTIME_DIR requirement.
+ *
+ * Caveat shared by both halves of this canary, not just the P1-12 half:
+ * under `vitest --watch`, teardown() only runs when the watch process
+ * itself exits, so a leak from one run in a long-lived watch session is
+ * only ever detected (and only fails the process) at that final exit, not
+ * after the specific run that caused it -- `vitest run` (CI, and this
+ * repo's own test scripts) does not have this gap, since setup()/teardown()
+ * bracket that one run exactly.
  */
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -41,6 +69,7 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, "../../../..");
 const LIVE_RUNTIME_DIR = join(REPO_ROOT, ".tmp", "x8-production-like");
 const LIVE_BACKUP_PGPASS = join(LIVE_RUNTIME_DIR, "secrets", "backup.pgpass");
+const LIVE_P1_12_RUNTIME_DIR = join(REPO_ROOT, ".tmp", "p1-12-runtime");
 
 interface Snapshot {
   runtimeDirExists: boolean;
@@ -48,33 +77,38 @@ interface Snapshot {
   pgpassExists: boolean;
   pgpassIno: number | null;
   pgpassMtimeMs: number | null;
+  // P2-3: LIVE_P1_12_RUNTIME_DIR's own existence/mtime -- see this file's
+  // header comment for why this needs a second, independent watch from
+  // LIVE_RUNTIME_DIR's.
+  p1_12RuntimeDirExists: boolean;
+  p1_12RuntimeDirMtimeMs: number | null;
 }
 
-function snapshotLiveRuntimeDir(): Snapshot {
-  let runtimeDirExists = false;
-  let runtimeDirMtimeMs: number | null = null;
+function statOrNull(path: string): { exists: boolean; mtimeMs: number | null; ino: number | null } {
   try {
-    const stat = statSync(LIVE_RUNTIME_DIR);
-    runtimeDirExists = true;
-    runtimeDirMtimeMs = stat.mtimeMs;
+    const stat = statSync(path);
+    return { exists: true, mtimeMs: stat.mtimeMs, ino: stat.ino };
   } catch {
     // Does not exist -- the expected state in a fresh worktree, and the
     // canary's own baseline in that case.
+    return { exists: false, mtimeMs: null, ino: null };
   }
+}
 
-  let pgpassExists = false;
-  let pgpassIno: number | null = null;
-  let pgpassMtimeMs: number | null = null;
-  try {
-    const stat = statSync(LIVE_BACKUP_PGPASS);
-    pgpassExists = true;
-    pgpassIno = stat.ino;
-    pgpassMtimeMs = stat.mtimeMs;
-  } catch {
-    // Does not exist -- fine.
-  }
+function snapshotLiveRuntimeDir(): Snapshot {
+  const runtimeDir = statOrNull(LIVE_RUNTIME_DIR);
+  const pgpass = statOrNull(LIVE_BACKUP_PGPASS);
+  const p1_12RuntimeDir = statOrNull(LIVE_P1_12_RUNTIME_DIR);
 
-  return { runtimeDirExists, runtimeDirMtimeMs, pgpassExists, pgpassIno, pgpassMtimeMs };
+  return {
+    runtimeDirExists: runtimeDir.exists,
+    runtimeDirMtimeMs: runtimeDir.mtimeMs,
+    pgpassExists: pgpass.exists,
+    pgpassIno: pgpass.ino,
+    pgpassMtimeMs: pgpass.mtimeMs,
+    p1_12RuntimeDirExists: p1_12RuntimeDir.exists,
+    p1_12RuntimeDirMtimeMs: p1_12RuntimeDir.mtimeMs,
+  };
 }
 
 let canaryBefore: Snapshot | undefined;
@@ -115,7 +149,7 @@ export async function teardown(): Promise<void> {
     // in the SAME process as the CLI itself, never a worker.
     process.exitCode = 1;
     throw new Error(
-      `X8_RUNTIME_LEAK: tests touched ${LIVE_RUNTIME_DIR} -- before=${JSON.stringify(before)} after=${JSON.stringify(after)}`,
+      `X8_RUNTIME_LEAK: tests touched ${LIVE_RUNTIME_DIR} and/or ${LIVE_P1_12_RUNTIME_DIR} -- before=${JSON.stringify(before)} after=${JSON.stringify(after)}`,
     );
   }
 }

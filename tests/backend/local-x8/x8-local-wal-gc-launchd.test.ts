@@ -79,7 +79,20 @@ function makeSandbox(): { fakeHome: string; plistDest: string; env: NodeJS.Proce
 }
 
 function runInstall(worktree: string, env: NodeJS.ProcessEnv) {
-  return spawnSync("bash", [scriptPath, "install", "--worktree", worktree], { env, encoding: "utf8" });
+  return spawnSync("bash", [scriptPath, "install", "--worktree", worktree], {
+    // Runtime-dir isolation guard (tests/backend/runtime/runtime-dir-isolation-guard.test.ts,
+    // 2026-09-19 hardening): `install`'s REAL isolation from the live
+    // .tmp/x8-production-like is the `--worktree` argument above, which
+    // always points at makeFakeWorktree()'s fabricated stub
+    // scripts/x8-production-like.sh, never this repo's own root --
+    // scripts/x8-local-wal-gc-launchd.sh's `install` path reads $WORKTREE
+    // (a CLI flag), not X8_RUNTIME_DIR, so setting X8_RUNTIME_DIR here adds
+    // no functional behavior. It exists only as defense-in-depth belt and
+    // braces, satisfying the guard the same way every other X8/P1-12
+    // isolation call site does.
+    env: { ...env, X8_RUNTIME_DIR: mkTestDir("launchd-unused-x8-runtime-") },
+    encoding: "utf8",
+  });
 }
 
 describe("x8-local-wal-gc-launchd.sh install: three preflight-classification outcomes, none of them install anything", () => {
