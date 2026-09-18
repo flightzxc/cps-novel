@@ -4,6 +4,7 @@ import { resolve } from "node:path";
 
 import { describe, expect, it, vi } from "vitest";
 import { parsePreviewOneArgs, runPreviewOne } from "../../../scripts/x8-preview-one";
+import { x8Env } from "./_lib/x8-isolated-runtime";
 
 const root = resolve(import.meta.dirname, "../../..");
 const read = (path: string) => readFileSync(resolve(root, path), "utf8");
@@ -528,7 +529,7 @@ describe("X8 local production-like contracts", () => {
           "docker compose -p \"$P1_12_COMPOSE_PROJECT\" -f docker-compose.yml -f infra/production-like/docker-compose.yml config --format json",
         ].join("; "),
       ],
-      { cwd: root, encoding: "utf8" },
+      { cwd: root, encoding: "utf8", env: x8Env() },
     );
     expect(result.status, result.stderr).toBe(0);
     const validate = spawnSync("node", [resolve(root, "scripts/acceptance/x8-validate-compose.mjs")], {
@@ -569,7 +570,7 @@ describe("X8 local production-like contracts", () => {
               "docker compose -p \"$P1_12_COMPOSE_PROJECT\" -f docker-compose.yml -f infra/production-like/docker-compose.yml config --format json",
             ].join("; "),
           ],
-          { cwd: root, encoding: "utf8", env: { ...process.env, X8_LEVEL: level } },
+          { cwd: root, encoding: "utf8", env: x8Env({ X8_LEVEL: level }) },
         );
         expect(result.status, `${level}: ${result.stderr}`).toBe(0);
         const validate = spawnSync("node", [resolve(root, "scripts/acceptance/x8-validate-compose.mjs")], {
@@ -616,7 +617,7 @@ describe("X8 local production-like contracts", () => {
             "docker compose -p \"$P1_12_COMPOSE_PROJECT\" -f docker-compose.yml -f infra/production-like/docker-compose.yml config --format json",
           ].join("; "),
         ],
-        { cwd: root, encoding: "utf8", env: { ...process.env, X8_LEVEL: "uat" } },
+        { cwd: root, encoding: "utf8", env: x8Env({ X8_LEVEL: "uat" }) },
       );
       expect(result.status, result.stderr).toBe(0);
       const rendered = JSON.parse(result.stdout);

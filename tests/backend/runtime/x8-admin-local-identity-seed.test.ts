@@ -4,6 +4,8 @@ import { resolve } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
+import { x8Env } from "./_lib/x8-isolated-runtime";
+
 const root = resolve(import.meta.dirname, "../../..");
 const read = (path: string) => readFileSync(resolve(root, path), "utf8");
 const envHelper = read("scripts/lib/x8-production-like-env.sh");
@@ -90,7 +92,7 @@ describe("ADMIN_LOCAL_IDENTITY_SEED — X8 three-level render-only verification"
             "docker compose -p \"$P1_12_COMPOSE_PROJECT\" -f docker-compose.yml -f infra/production-like/docker-compose.yml config --format json",
           ].join("; "),
         ],
-        { cwd: root, encoding: "utf8" },
+        { cwd: root, encoding: "utf8", env: x8Env() },
       );
       expect(result.status, result.stderr).toBe(0);
       const config = JSON.parse(result.stdout) as { services: Record<string, { environment?: Record<string, unknown> }> };
