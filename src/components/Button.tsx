@@ -9,14 +9,23 @@ import type {
 /**
  * 行动按钮。
  *
- * 视觉方向「墨与纸」：主按钮是一块纸色填充，压深墨色的字——不是高饱和胶囊。
- * 圆角用中等档（--novel-radius-md），**没有全圆角**：全圆角是 App 商店语言，
- * 中等圆角矩形是出版物语言，这是刻意的区隔点。
+ * PulseNovel 品牌接入（2026-09-19，Owner 决策，推翻了下面这条原本写在这里的
+ * 区隔点声明）：主按钮改为暖黄填充 + 接近胶囊的大圆角
+ * （--novel-radius-pill，见 globals.css）。
+ *
+ * 历史记录，免得以后有人诧异「怎么和注释说的不一样」：这条组件最初的设计
+ * 主张是「视觉方向『墨与纸』：主按钮是一块纸色填充，压深墨色的字——不是高
+ * 饱和胶囊；圆角用中等档，没有全圆角，全圆角是 App 商店语言，中等圆角矩形
+ * 是出版物语言，这是刻意的区隔点」。品牌接入把配色从纸色换成品牌黄之后，
+ * Owner 认为高饱和暖黄 CTA 更适合搭配一个明确的「主按钮」形状锚点，因此只
+ * 对 accent 档单独放开胶囊圆角——outline / quiet 两档维持中等圆角不变，两种
+ * 圆角并存反而让主次关系更清楚（胶囊 = 这一屏最重的动作，矩形 = 次级动作）。
+ * 不做这条决策的地方：没有把胶囊圆角扩散到别的组件，没有引入渐变或炫彩效果。
  *
  * 三个层级：
- *   accent   纸色填充。页面上最重的动作，一屏原则上只出现一次。
- *   outline  描边式。边框用 --novel-border-strong（对比度 3.48:1，满足非文本 3:1）。
- *   quiet    无边框弱化动作。
+ *   accent   品牌黄填充，胶囊圆角。页面上最重的动作，一屏原则上只出现一次。
+ *   outline  描边式，中等圆角。边框用 --novel-border-strong（对比度 3.48:1，满足非文本 3:1）。
+ *   quiet    无边框弱化动作，中等圆角。
  */
 export type ButtonVariant = "accent" | "outline" | "quiet";
 export type ButtonSize = "md" | "lg";
@@ -24,18 +33,18 @@ export type ButtonSize = "md" | "lg";
 const BASE =
   "inline-flex items-center justify-center gap-2 font-medium " +
   "transition-colors select-none whitespace-nowrap " +
-  "disabled:opacity-45 disabled:pointer-events-none";
+  "disabled:opacity-45 disabled:pointer-events-none active:brightness-95";
 
 const VARIANTS: Record<ButtonVariant, string> = {
   accent:
     "bg-novel-accent text-novel-on-accent hover:bg-novel-accent-hover " +
-    "border border-transparent",
+    "border border-transparent rounded-novel-pill",
   outline:
     "bg-transparent text-novel-fg border border-novel-border-strong " +
-    "hover:bg-novel-bg-raised",
+    "hover:bg-novel-bg-raised rounded-novel-md",
   quiet:
     "bg-transparent text-novel-fg-muted border border-transparent " +
-    "hover:text-novel-fg hover:bg-novel-bg-raised",
+    "hover:text-novel-fg hover:bg-novel-bg-raised rounded-novel-md",
 };
 
 const SIZES: Record<ButtonSize, string> = {
@@ -44,7 +53,7 @@ const SIZES: Record<ButtonSize, string> = {
 };
 
 function classesFor(variant: ButtonVariant, size: ButtonSize, extra: string) {
-  return `${BASE} ${VARIANTS[variant]} ${SIZES[size]} rounded-novel-md ${extra}`;
+  return `${BASE} ${VARIANTS[variant]} ${SIZES[size]} ${extra}`;
 }
 
 type CommonProps = {

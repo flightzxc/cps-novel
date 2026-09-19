@@ -23,10 +23,18 @@
   --novel-font-serif: ui-serif, Georgia, Cambria, "Iowan Old Style",
     "Times New Roman", "Songti SC", "Noto Serif CJK SC", serif;
 
-  /* --- 圆角：三档，没有全圆角。全圆角胶囊是 App 商店语言，本站不用。 ----- */
+  /* --- 圆角：三档 + 一个专用档。--------------------------------------------
+     2026-09-19 之前这里是「没有全圆角」的区隔点声明：全圆角胶囊是 App 商店
+     语言，中等圆角矩形是出版物语言。PulseNovel 品牌接入时 Owner 推翻了这条
+     区隔点——主 CTA（Button 的 accent 档）改用接近胶囊的大圆角，依据是
+     暖黄 CTA 体系需要一个视觉上「一望即知是主按钮」的形状锚点。
+     范围收紧在这一个用途上：sm/md/lg 三档不变，outline/quiet 两档按钮也
+     不变——只有 --novel-radius-pill 是新增的，只给 Button 的 accent 档用。
+     两档圆角并存反而让主次关系更清楚：胶囊状的重决策 vs. 矩形的次级动作。 */
   --novel-radius-sm: 6px;
   --novel-radius-md: 10px;
   --novel-radius-lg: 14px;
+  --novel-radius-pill: 999px;
 
   /* --- 封面比例的唯一定义处 ---------------------------------------------
      真实上游封面资产尚未量过，当前 3/4 是待核实值。需要改时只改这一行，
@@ -116,15 +124,42 @@
   --novel-fg-subtle: #8a93a5;
   --novel-border: #2a303d;
   --novel-border-strong: #626c84;
-  --novel-primary: #e0a96d;
-  --novel-primary-hover: #eebc85;
-  --novel-accent: #f0e4ce;
-  --novel-accent-hover: #fbf2e2;
+
+  /* --- PulseNovel 品牌接入（2026-09-19）------------------------------------
+     品牌黄 #FED405 是 Owner 拍板值（实测自 `.brand-assets/` 里字标资产的
+     主色），只用于 logo、当前导航高亮、主 CTA、少量关键 highlight——不是
+     用来把全站染黄。
+
+     --novel-primary 原来是一个柔和暖橙 #e0a96d（强调/链接/当前导航色），
+     现在改走品牌黄体系，与 --novel-accent 同值：这两个 token 语义不同
+     （primary=文字链接与当前导航态，accent=主 CTA 填充），但视觉上应该是
+     同一种黄，不需要造出两种「都叫黄但不一样」的黄。
+     实测对比度（tests/ui/design-tokens.test.ts 会重算，这里只是记录口径）：
+       #FED405 / --novel-bg(#12151c)          ≈ 12.7:1（远超正文 4.5:1）
+       #FED405 / --novel-bg-elevated(#1a1e27) ≈ 11.6:1
+     --novel-primary-hover 跟 --novel-accent-hover 用同一个提亮值，理由同上。
+
+     --novel-accent 原来是纸色 #f0e4ce（墨与纸方向下的主按钮填充），现在改成
+     品牌黄本身：这就是「深色底 + 高亮暖黄」里那块黄。
+     --novel-accent-hover 从 #FED405 往亮处走一点（提高 G/B，不改变色相），
+     实测对比度 #12151c / #FFDE3A ≈ 13.7:1，比常态更高，hover 不会掉出门槛。
+
+     --novel-on-accent / --novel-on-primary 维持 #12151c（黄底压深墨字）不变：
+     这本来就是「黄底深字」要求的落地值，品牌黄比旧纸色更亮，对比度只会更好，
+     没有理由改。
+
+     --novel-focus 原来硬编码成和旧 --novel-accent 相同的纸色值，这里同步
+     跟着品牌黄走，维持「焦点环 = 强调色」这条既有关系；.reader 作用域内会被
+     var(--reader-fg) 覆盖，不受影响。 */
+  --novel-primary: #fed405;
+  --novel-primary-hover: #ffde3a;
+  --novel-accent: #fed405;
+  --novel-accent-hover: #ffde3a;
   --novel-on-accent: #12151c;
   --novel-on-primary: #12151c;
   --novel-danger: #f0938a;
   --novel-success: #7fcca4;
-  --novel-focus: #f0e4ce;
+  --novel-focus: #fed405;
 
   /* 压在主视觉图上的文字。比常规前景更亮——底下是不可控的图像，不是纯色。 */
   --novel-fg-on-media: #f2f4f8;
@@ -275,6 +310,7 @@
   --radius-novel-sm: var(--novel-radius-sm);
   --radius-novel-md: var(--novel-radius-md);
   --radius-novel-lg: var(--novel-radius-lg);
+  --radius-novel-pill: var(--novel-radius-pill);
 }
 
 body {
