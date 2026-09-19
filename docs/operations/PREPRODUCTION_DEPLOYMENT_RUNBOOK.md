@@ -1,0 +1,163 @@
+# CPS Novel preproduction deployment runbook
+
+This runbook is implementation evidence for Phase 2B. Do not execute it on
+`haiyue-vps` until the Owner explicitly starts Phase 2C.
+
+## Release and filesystem identity
+
+```text
+/opt/cps-novel/
+  releases/<approved-40-hex-commit>/
+  current -> releases/<commit>      # convenience only
+  shared/
+    env/preprod.env
+    secrets/
+    backups/{logical,base}/
+    wal-archive/
+    maintenance/
+```
+
+Build only from a clean checkout whose HEAD equals `APPROVED_GIT_COMMIT`:
+
+```bash
+APPROVED_GIT_COMMIT=<40-hex> \
+REGISTRY_IMAGE=<registry>/<repo>/cps-novel \
+scripts/preproduction/build-release-artifact.sh --push
+```
+
+The command uses `prepare_p1_12_local_environment` and the repository's root
+Compose build. It refuses to produce a deployable manifest until the pushed
+image has a registry digest. Record both commit and digest in approval notes.
+The known `v0.2.0` versus package `0.1.0` drift remains an Owner/Release
+decision for Phase 2C.
+
+## One-time Owner sudo steps
+
+1. Install Docker Engine/Compose, PostgreSQL-client-compatible tooling, Ubuntu
+   Nginx 1.24.x, Certbot, and the Nginx Certbot integration from approved OS
+   repositories.
+2. Create `/opt/cps-novel/{releases,shared}` and the shared children above.
+3. Create a deployment group; grant only narrowly scoped file/service access.
+   Do not grant `NOPASSWD: ALL` and do not enable root SSH.
+4. Create secret files as `root:<deployment-group>` mode `0640`, ensuring
+   container UID/GID `1001:1001` can read the files bind-mounted as secrets.
+5. After independently recording the new key material, run
+   `record-secret-identity.sh --initialize` once. An existing manifest is
+   never overwritten. Run `secrets-preflight.sh`; it prints only PASS/FAIL.
+6. Obtain certificates with Certbot. Certbot owns files below
+   `/etc/letsencrypt`; deployment owns the Git-rendered Nginx config.
+7. With explicit approval, run `PREPROD_OWNER_SUDO_APPROVED=YES
+   scripts/preproduction/install-nginx.sh`. It renders, installs, runs
+   `nginx -t`, and gracefully reloads. Never hand-edit the generated file.
+
+## Nginx and crawler matrix
+
+Before target installation run `scripts/preproduction/verify-nginx-matrix.sh`.
+It validates the exact source on nginx 1.24 and checks anonymous/authenticated
+behavior for `/`, a localized route, novel detail, `/login`, admin, API,
+`robots.txt`, sitemap index/family, `_next/static`, 404, maintenance 503,
+rate-limit 429, and upstream 502. Anonymous responses cannot contain the mock
+business marker. 401/404/429/5xx responses retain the anti-index header.
+
+HTTP redirects use fixed configured hosts, never the request Host. ACME only
+serves challenge files and never proxies. `robots.txt` may say `Disallow: /`,
+but Basic Auth is the access control. Authenticated QA may inspect sitemap XML;
+anonymous crawlers cannot.
+
+## Database paths
+
+Fresh initialization requires the exact one-time confirmation:
+
+```bash
+PREPROD_CONFIRM_EMPTY_VOLUME=EMPTY_cps_novel_postgres_data \
+scripts/preproduction/database.sh fresh-init
+```
+
+It refuses a non-empty stable volume. PostgreSQL initdb creates roles only on
+an empty cluster; migration still requires `PREPROD_APPROVED_MIGRATION=YES`.
+After migration, import approved accounts or bootstrap one through the
+existing audited bootstrap tool. Do not register MoboReader, seed novels,
+articles, promos, catalog rows, tasks, or test jobs.
+
+Every persistent start uses `database.sh persistent-check`. It verifies the
+stable volume, migration table, required roles, and real password
+authentication. It never changes role passwords, rotates keys, recreates a
+key, or restores a database.
+
+### Minimal account transfer
+
+The current schema proves the minimal set is `admin_identity` (username,
+self-contained `scrypt$v1` password hash, role/status/session version), plus
+`admin_two_factor` and `admin_recovery_code` only when the stable TOTP key
+identity is exactly the same. Sessions, challenges, and login-attempt lockouts
+are ephemeral and are not moved. `operation_audit` has no FK to admin identity;
+retain the source audit export as evidence rather than importing unrelated
+business audit rows. AdminIdentity's optional business approval relations do
+not require rows for account import.
+
+Use `account-transfer.sh` with either `--two-factor preserve` and matching
+source/target SHA-256 key fingerprints, or `--two-factor reenroll`. A key
+mismatch stops. Password portability is verified against the actual scrypt
+format. `ADMIN_TWO_FACTOR_ENFORCEMENT=true` stays unchanged; re-enrollment must
+be completed through the approved recovery/bootstrap ceremony before release
+verification can pass.
+
+## Maintenance release
+
+Set protected `PREPROD_CURL_CONFIG`, admin username/password-file inputs, the
+approved commit, and migration approval, then run:
+
+```bash
+APPROVED_GIT_COMMIT=<40-hex> PREPROD_APPROVED_MIGRATION=YES \
+scripts/preproduction/release.sh deploy --manifest /absolute/release-manifest.json
+```
+
+The tool controls actual Compose services. Health verifies the image commit
+and database; the auth probe validates the current password implementation,
+2FA enrollment, and decryptability without printing credentials. Any failure
+leaves maintenance enabled. Investigate; do not manually turn traffic back on.
+
+Rollback requires `SCHEMA_COMPATIBLE_WITH_PREVIOUS=YES` and an approved
+previous digest manifest, and must be invoked from that previous immutable
+release directory so its Compose/scripts match the app being restored. It does
+not reverse migrations. If the schema is not
+backward compatible, remain in maintenance and follow a separately approved
+database restore incident plan.
+
+## Backups, WAL, export, and restore
+
+The backup service writes one logical backup daily and retains 14 days. It
+creates and verifies a physical base backup at least weekly, keeps at least two
+verified anchors, continuously archives WAL, and applies fail-closed retention
+anchored to those bases for an approximately seven-day local PITR window.
+
+At least weekly, the Owner manually copies the backup set from VPS to Owner
+Mac, runs `export-backup-manifest.sh`, verifies every checksum, and copies the
+same set plus manifest to NAS. No Mac/NAS credentials belong on the VPS or in
+this repository. VPS-local recovery RPO is the WAL window; whole-VPS-loss
+off-host RPO is only the most recent manual sync cadence, not continuous WAL.
+
+The first G2 restore must use an already exported Mac/NAS copy:
+
+```bash
+OFFHOST_COPY_CONFIRMED=YES scripts/preproduction/restore-offhost-rehearsal.sh \
+  --offhost-dir /absolute/mac-or-nas-copy \
+  --dump /absolute/mac-or-nas-copy/<backup>.dump \
+  --manifest /absolute/mac-or-nas-copy/SHA256SUMS
+```
+
+The rehearsal rejects `/opt/cps-novel/shared` as its source, verifies the
+manifest, restores into a disposable isolated PostgreSQL 16 volume, checks
+migrations, and removes that disposable environment. A physical PITR drill
+uses the same exported copy with `scripts/db/restore-pitr.sh`; it must not use
+the VPS original as supposed off-host evidence.
+
+## Preproduction to production domain
+
+Use the same VPS, PostgreSQL volume, Compose project, and stable secrets. Switch
+in sequence: DNS, TLS, `SITE_URL`, `ADMIN_CANONICAL_ORIGIN`, Nginx server names,
+then regenerate/verify SEO outputs. Explicitly audit sitemap files,
+canonical/hreflang, SiteSetting IndexNow host/key, pending absolute IndexNow
+URLs, and absolute default OG image. The preproduction domain must not remain a
+second public site. IndexNow write/delivery gates remain off until separately
+approved.

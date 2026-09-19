@@ -111,14 +111,16 @@ describe("P1-12 Compose and image contracts", () => {
     expect(worker).toContain("WORKER_TASK_ALLOWLIST: ${WORKER_TASK_ALLOWLIST:?WORKER_TASK_ALLOWLIST is required}");
   });
 
-  it("requires the deployment origin, timezone, tracking salt, and worker allowlist", () => {
+  it("requires the deployment origin/timezone and supports a file-backed tracking salt", () => {
     for (const name of ["web", "worker", "scheduler"]) {
       expect(serviceBlock(name)).toContain("SITE_URL: ${SITE_URL:?SITE_URL is required}");
       expect(serviceBlock(name)).toContain("TZ: ${TZ:?TZ is required}");
     }
-    expect(serviceBlock("web")).toContain(
-      "TRACKING_HASH_SALT: ${TRACKING_HASH_SALT:?TRACKING_HASH_SALT is required}",
-    );
+    expect(serviceBlock("web")).toContain("TRACKING_HASH_SALT: ${TRACKING_HASH_SALT:-}");
+    expect(serviceBlock("web")).toContain("TRACKING_HASH_SALT_FILE: ${TRACKING_HASH_SALT_FILE:-}");
+    const secretLoader = read("scripts/lib/runtime-secret-env.sh");
+    expect(secretLoader).toContain("are mutually exclusive");
+    expect(secretLoader).toContain("or $file_name is required");
     expect(compose).not.toMatch(/WORKER_TASK_ALLOWLIST:\s*credential/);
   });
 
@@ -446,7 +448,9 @@ describe("P1-12 Compose and image contracts", () => {
   });
 
   it("starts the real Worker entry and loops the existing one-shot Scheduler entry", () => {
-    expect(serviceBlock("worker")).toContain('command: ["tsx", "worker/index.ts"]');
+    expect(serviceBlock("worker")).toContain('command: ["bash", "scripts/start-worker.sh"]');
+    expect(read("scripts/start-worker.sh")).toContain("exec tsx worker/index.ts");
+    expect(serviceBlock("worker")).toContain("stop_grace_period: ${WORKER_STOP_GRACE_PERIOD:-45s}");
     expect(serviceBlock("scheduler")).toContain('command: ["bash", "scripts/run-scheduler-loop.sh"]');
     expect(read("scripts/run-scheduler-loop.sh")).toContain("tsx scheduler/index.ts");
   });
@@ -457,6 +461,9 @@ describe("P1-12 Compose and image contracts", () => {
       "infra/postgres/hba-replication-rule.sh",
       "scripts/lib/p1-12-local-env.sh",
       "scripts/p1-12-compose-up.sh",
+      "scripts/start-web.sh",
+      "scripts/start-worker.sh",
+      "scripts/lib/runtime-secret-env.sh",
       "scripts/run-scheduler-loop.sh",
       "scripts/run-p1-12-runtime-verification.sh",
     ]) {
