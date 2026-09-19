@@ -17,7 +17,13 @@ import {
 export interface CategorySeoData {
   name: string;
   slug: string;
-  description: string;
+  /**
+   * Locale-specific category description. When missing, metadata and
+   * JSON-LD omit `description` entirely — never synthesize
+   * `${name} novels.` (that would mix English into non-en pages) and
+   * never fall back to Chinese `canonical_definition`.
+   */
+  description?: string | null;
   siteName: string;
   defaultOgImage?: string | null;
 }
@@ -31,14 +37,15 @@ export function buildCategorySeoMeta(
     ? `/category/${data.slug}?page=${pageNumber}`
     : `/category/${data.slug}`;
   const canonical = buildCanonical(path);
-  const description = truncateDescription(data.description || `${data.name} novels.`);
+  const trimmedDescription = data.description?.trim() ?? "";
+  const description = trimmedDescription ? truncateDescription(trimmedDescription) : undefined;
   const image = resolveOgImage(null, data.defaultOgImage);
   const collectionLd = {
     "@context": "https://schema.org",
     "@type": "CollectionPage",
     name: data.name,
     url: canonical,
-    description: data.description,
+    ...(description ? { description } : {}),
   };
   const breadcrumbLd = {
     "@context": "https://schema.org",
@@ -50,12 +57,12 @@ export function buildCategorySeoMeta(
   };
   return {
     title: data.name,
-    description,
+    description: description ?? "",
     canonical,
     openGraph: {
       type: "website" as const,
       title: data.name,
-      description,
+      ...(description ? { description } : {}),
       url: canonical,
       siteName: data.siteName,
       locale: openGraphLocaleTag(locale),
@@ -64,7 +71,7 @@ export function buildCategorySeoMeta(
     twitter: {
       card: "summary_large_image" as const,
       title: data.name,
-      description,
+      ...(description ? { description } : {}),
       images: [image],
     },
     alternates: {

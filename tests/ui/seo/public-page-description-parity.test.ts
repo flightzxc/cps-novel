@@ -186,7 +186,7 @@ describe("public page <meta name=description>: non-empty, matches og:description
     expect(metadata.description).toBe(t("blog.listDescription"));
   });
 
-  it("category: keeps its existing non-empty synthesized fallback when the category's own description is empty (pre-existing, not touched by this pass)", async () => {
+  it("category: omits meta description when the category has no locale-specific copy (no English novels. fallback)", async () => {
     loadChrome.mockResolvedValue({ settings: SETTINGS_NO_DESCRIPTION, chrome: CHROME });
     getPublicCategoryPage.mockResolvedValue({
       novels: [CARD_WITH_COVER],
@@ -197,7 +197,7 @@ describe("public page <meta name=description>: non-empty, matches og:description
         id: "cat-1",
         slug: "fantasy",
         name: "Fantasy",
-        description: "",
+        description: null,
         sortOrder: 0,
         updatedAt: new Date("2026-09-10T00:00:00Z"),
       },
@@ -208,7 +208,8 @@ describe("public page <meta name=description>: non-empty, matches og:description
       Promise.resolve({ slug: "fantasy" }),
       Promise.resolve({}),
     );
-    assertNonEmptyConsistentDescription(metadata as Record<string, any>, "category");
+    expect(metadata.description).toBe("");
+    expect(JSON.stringify(metadata)).not.toMatch(/novels\./);
   });
 
   it("novel detail: description is the truncated Novel/Article synopsis and matches og:description", async () => {

@@ -21,7 +21,7 @@ export interface SeoOutput {
   openGraph: {
     type: string;
     title: string;
-    description: string;
+    description?: string;
     url: string;
     siteName: string;
     locale: string;
@@ -30,7 +30,7 @@ export interface SeoOutput {
   twitter: {
     card: "summary_large_image";
     title: string;
-    description: string;
+    description?: string;
     images: string[];
   };
   alternates: {

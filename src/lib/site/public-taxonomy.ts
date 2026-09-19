@@ -8,19 +8,28 @@
  * from live SourceLabelMapping edges. Classifier (`source = 'auto'`) rows are
  * deliberately absent and raw SourceLabel values never cross this module's
  * return boundary.
+ *
+ * Label cache: public pages that read this module are `force-dynamic`. The
+ * taxonomy query is not wrapped in `unstable_cache`; `loadPublicCategories`
+ * sits behind request-scoped `React.cache()`, which expires when the request
+ * ends. `unstable_cache` is used only for `getActiveLocales` (300s, locale
+ * switcher membership — not tag labels). Applying a CanonicalTag translation
+ * overlay is visible on the next request without restart and without waiting
+ * 300s. `canonical_definition` is Chinese classifier copy and is not
+ * projected onto the public tag.
  */
 import { Prisma, type PrismaClient } from "@prisma/client";
 
 import type { SiteTag } from "@/features/public-ui/types";
 import { localePrefix } from "@/lib/slug/article-path";
 
+import { resolveCanonicalTagLabel } from "./canonical-tag-label";
 import { asSiteLocale } from "./locale-label";
 
 type Db = PrismaClient | Prisma.TransactionClient;
 
 export type PublicTaxonomyTag = SiteTag & Readonly<{
   id: string;
-  description: string;
   sortOrder: number;
   updatedAt: Date;
 }>;
@@ -29,8 +38,9 @@ type PublicTaxonomyRow = {
   novel_id: string;
   id: string;
   slug: string;
-  display_name: string;
-  canonical_definition: string;
+  requested_display_name: string | null;
+  en_display_name: string | null;
+  zh_display_name: string | null;
   sort_order: number;
   updated_at: Date;
 };
@@ -54,9 +64,13 @@ function project(row: PublicTaxonomyRow, locale: string): PublicTaxonomyTag {
   return Object.freeze({
     id: row.id,
     slug: row.slug,
-    label: row.display_name,
+    label: resolveCanonicalTagLabel({
+      requested: row.requested_display_name,
+      en: row.en_display_name,
+      zh: row.zh_display_name,
+      slug: row.slug,
+    }),
     href: `${prefix}/category/${row.slug}`,
-    description: row.canonical_definition,
     sortOrder: row.sort_order,
     updatedAt: row.updated_at,
   });
@@ -105,8 +119,9 @@ export async function loadPublicTaxonomyByNovelIds(
     SELECT DISTINCT membership.novel_id,
            ct.id,
            ct.slug,
-           COALESCE(requested.display_name, zh.display_name, ct.slug) AS display_name,
-           ct.canonical_definition,
+           requested.display_name AS requested_display_name,
+           en.display_name AS en_display_name,
+           zh.display_name AS zh_display_name,
            ct.sort_order,
            ct.updated_at
     FROM public_membership membership
@@ -114,6 +129,8 @@ export async function loadPublicTaxonomyByNovelIds(
       ON ct.id = membership.canonical_tag_id AND ct.status = 'active'
     LEFT JOIN canonical_tag_translation requested
       ON requested.canonical_tag_id = ct.id AND requested.locale = ${locale}
+    LEFT JOIN canonical_tag_translation en
+      ON en.canonical_tag_id = ct.id AND en.locale = 'en'
     LEFT JOIN canonical_tag_translation zh
       ON zh.canonical_tag_id = ct.id AND zh.locale = 'zh'
     ORDER BY ct.sort_order, ct.slug, membership.novel_id
