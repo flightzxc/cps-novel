@@ -1,6 +1,7 @@
 import { HomeScreen } from "@/features/public-ui/home/HomeScreen";
 import { mockChrome } from "@/features/public-ui/fixtures/mock-chrome";
 import {
+  MOCK_CATEGORIES,
   MOCK_FEATURED_LIST_NO_HERO,
   MOCK_NOVEL_CARDS,
 } from "@/features/public-ui/fixtures/mock-content";
@@ -29,6 +30,7 @@ export default function HomeFallbackPreviewPage() {
       }))}
       novels={MOCK_NOVEL_CARDS}
       browseAllHref="/dev-preview/collection"
+      categories={MOCK_CATEGORIES}
     />
   );
 }

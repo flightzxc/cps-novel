@@ -40,8 +40,13 @@ export function FeaturedNovel({
 }) {
   const t = getPublicT(locale);
   return (
-    <section aria-labelledby="featured-title" className="pt-12 pb-4 md:pt-20 md:pb-8">
-      <div className="border-t border-novel-border pt-6 md:pt-10">
+    // 留白收口（2026-09-19）：原为 `pt-12 pb-4 md:pt-20 md:pb-8` + 内层
+    // `pt-6 md:pt-10`，桌面端页头到眉标之间空出 120px，下沿再叠上题材导航的
+    // `pt-10 md:pt-14` 与作品区的 `pt-12 md:pt-16`。气场要的是「封面大、书名
+    // 大、上下松」，不是「上下各留半屏」——上沿压到 80px（移动 56px），下沿
+    // 只留 32px（移动 24px），其余交给浏览区按原稿 2a/2d 的 8px 承接。
+    <section aria-labelledby="featured-title" className="pt-8 pb-6 md:pt-12 md:pb-8">
+      <div className="border-t border-novel-border pt-6 md:pt-8">
         <p className="text-xs tracking-[0.2em] text-novel-fg-subtle uppercase">
           {eyebrow ?? t("home.featuredEyebrow")}
         </p>

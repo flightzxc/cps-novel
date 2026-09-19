@@ -72,6 +72,21 @@ const TAGS: Record<string, SiteTag> = {
   suspense: { slug: "suspense", label: "悬疑", href: "/dev-preview/collection" },
 };
 
+/**
+ * 首页的全站题材导航（`HomeScreen.categories`）。
+ *
+ * 生产首页一定带这一排（`loadPublicCategories` 返回已治理的公开题材），而两个
+ * dev-preview 首页此前都没传过 `categories`——「主推位下面紧跟一排题材胶囊」
+ * 这个真实组合在预览里一次都没渲染过，留白问题也就没在预览里暴露。补上，让
+ * 预览与生产是同一种版面。
+ */
+export const MOCK_CATEGORIES: SiteTag[] = [
+  TAGS.romance,
+  TAGS.modern,
+  TAGS.fantasy,
+  TAGS.suspense,
+];
+
 const EN = { code: "en", label: "English" };
 
 /**

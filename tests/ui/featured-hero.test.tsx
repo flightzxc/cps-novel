@@ -1,6 +1,6 @@
 import "./setup-cleanup";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { HomeScreen } from "@/features/public-ui/home/HomeScreen";
 import { HERO_AUTOPLAY_MS } from "@/features/public-ui/home/FeaturedHero";
 import {
@@ -107,6 +107,38 @@ describe("轮播行为", () => {
     expect(tabs).toHaveLength(HERO_COUNT);
     expect(tabs[0].getAttribute("aria-selected")).toBe("true");
     expect(tabs[1].getAttribute("aria-selected")).toBe("false");
+  });
+
+  /**
+   * 运营编排位期望 4–6 本，但「期望 4–6 本」不等于凑得出 4–6 本：真实库里只有
+   * 一本带横版物料时，Hero 仍然成立，成立的形态是**一张主视觉 + 没有轮播控件**。
+   * 🔴 不允许为了凑够条目伪造数据，也不允许因为不足多条就把有效的横版主视觉
+   * 退回封面编排版——那等于用「不够多」惩罚「有物料」。
+   */
+  it("只有一本时展示单张主视觉，轮播控件整块不渲染", () => {
+    renderHome(entries([MOCK_FEATURED_LIST[0]]));
+
+    expect(screen.getByTestId("featured-hero")).toBeTruthy();
+    expect(screen.queryByTestId("featured-hero-dots")).toBeNull();
+  });
+
+  /**
+   * 断言的是「定时器根本没被装上」，不是「切换后下标没变」——后者在只有一本时
+   * 恒成立（`(0 + 1) % 1 === 0`），用它当断言等于什么都没测。
+   */
+  it("只有一本时根本不装自动播放定时器", () => {
+    const setInterval = vi.spyOn(window, "setInterval");
+    try {
+      renderHome(entries([MOCK_FEATURED_LIST[0]]));
+      expect(setInterval).not.toHaveBeenCalled();
+
+      setInterval.mockClear();
+      cleanup();
+      renderHome();
+      expect(setInterval).toHaveBeenCalled();
+    } finally {
+      setInterval.mockRestore();
+    }
   });
 
   it("点 dot 可切换", () => {
@@ -220,6 +252,24 @@ describe("Hero 的内容纪律", () => {
     for (const forbidden of ["热门", "排行", "榜", "最热", "推荐榜", "TOP"]) {
       expect(text, `Hero 出现了暗示排名的措辞：${forbidden}`).not.toContain(forbidden);
     }
+  });
+
+  /**
+   * 2026-09-19 实测缺陷的回归闸。
+   *
+   * 按钮带 `whitespace-nowrap`，flex 项又有默认的 `min-width:auto`，所以移动端
+   * 那两枚 `flex-1` 按钮**压不窄**——它们会一起把行顶宽。360px 宽实测：俄语顶出
+   * 内容容器 49px、德语 34px、越南语 13px；而 Hero 是 `overflow-hidden`，第二枚
+   * 按钮直接被裁掉，页面还不横向滚动，肉眼只看得出「按钮怎么少了半截」。
+   * 少了 `flex-wrap` 这个缺陷就会原样回来，所以钉在这里。
+   */
+  it("移动端按钮行可换行——长文案语种不会把第二枚按钮顶出容器被裁掉", () => {
+    const { container } = renderHome();
+
+    const row = container.querySelector('[data-testid="featured-hero"] a[href="/dev-preview/chapter"]')
+      ?.parentElement;
+    expect(row).not.toBeNull();
+    expect(row!.className).toContain("flex-wrap");
   });
 
   it("字段边界照旧：Hero 上不出现作者 / 评分 / 阅读量", () => {

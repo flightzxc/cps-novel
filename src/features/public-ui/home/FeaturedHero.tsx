@@ -205,7 +205,14 @@ export function FeaturedHero({
               {firstParagraph(novel.description)}
             </p>
 
-            <div className="mt-5 flex w-full gap-2.5 md:mt-8 md:w-auto md:gap-3">
+            {/* `flex-wrap` 是必需的，不是保险：按钮走 `whitespace-nowrap`，flex 项
+                又有默认的 `min-width:auto`，所以两枚按钮**不会**被压窄——它们会
+                一起把这一行顶宽。360px 宽的安卓机上实测（2026-09-19）：俄语
+                「Начать ознакомление / Подробнее」把行宽顶出内容容器 49px，德语
+                34px，越南语 13px，而 Hero 自身是 `overflow-hidden`，于是第二枚
+                按钮不是溢出而是**被直接裁掉**，页面还不横向滚动，看不出哪里错了。
+                换行后放不下的那枚自己占满一行，文案再长也只是多一行。 */}
+            <div className="mt-5 flex w-full flex-wrap gap-2.5 md:mt-8 md:w-auto md:gap-3">
               {current.startReadingHref ? (
                 <ButtonLink
                   href={current.startReadingHref}
