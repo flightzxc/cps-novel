@@ -21,7 +21,12 @@ const t = getPublicT(PUBLIC_SITE_LOCALE);
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "cps-novel",
+  // Brand pass (2026-09-19): this is the root metadata's static fallback,
+  // not `SiteSetting.siteName` — that DB value flows through
+  // `chromeFromSiteSetting` into each page's own `generateMetadata` (which
+  // wins over this one). Only the code-level fallback text changed here;
+  // the DB row is untouched (see `chrome.ts` / the brand-name test).
+  title: "PulseNovel",
   description: t("meta.siteDescription"),
   // Public pages override this from generateMetadata (innermost wins).
   // `dev-preview` and `(admin)` keep noindex via their own layouts.
