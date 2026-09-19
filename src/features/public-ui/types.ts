@@ -72,7 +72,11 @@ export interface NovelDetailView {
    * 存在对象存储里（架构文档 §2.1 / §2.2 已把「运营上传物」列为其既有职责）。
    * 不要去渠道接口里找这个字段。
    *
-   * 缺失时首页回落到封面编排版（FeaturedNovel），不做拉伸、不做模糊铺底。
+   * 海阅当前不存在这类素材，生产上这个字段恒为空——真正的底图来源是
+   * `coverUrl`。首页 Hero（`FeaturedHero`）恒渲染，不再由这个字段的有无决定
+   * 出不出现：缺失时用 `coverUrl` 做强模糊氛围底，两者都缺失才纯用
+   * `--novel-bg` 兜底（不做拉伸）。这个字段只是留给将来可能有的运营横版物料
+   * 的高优先级覆盖源。
    */
   heroImageUrl?: string;
   description: string;

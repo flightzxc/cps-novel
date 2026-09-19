@@ -221,8 +221,9 @@ export const MOCK_NOVEL_DETAIL_SPARSE: NovelDetailView = {
  *
  * 🔴 顺序是编排出来的，**不表示排名**。
  *
- * 第 4 本刻意**不带** heroImageUrl：用来验证首页只把有横版物料的放进轮播，
- * 不会拿一个空底图凑数。
+ * 第 4 本（mock-9）刻意**不带** heroImageUrl，只带 coverUrl：用来验证首页
+ * Hero 三档来源优先级里的第二档——没有横版物料时同一个轮播位仍然进 Hero，
+ * 只是改用竖封面做强模糊氛围底，而不是被摘出轮播或让整体回落到别的版面。
  */
 export const MOCK_FEATURED_LIST: NovelDetailView[] = [
   MOCK_NOVEL_DETAIL,
@@ -273,7 +274,7 @@ export const MOCK_FEATURED_LIST: NovelDetailView[] = [
     readOnUpstreamHref: "/dev-preview/novel#mock-go-link",
   },
   {
-    // 无横版物料的一本：不会进轮播
+    // 无横版物料的一本：仍进轮播，走 coverUrl 模糊氛围底
     id: "mock-9",
     title: "Where the Tide Keeps Score",
     coverUrl: mockCover("#4a5b9c", "#181f3c", 8),
@@ -287,12 +288,30 @@ export const MOCK_FEATURED_LIST: NovelDetailView[] = [
   },
 ];
 
-/** 全部不带横版物料——用来验证首页整体回落到封面编排版 */
+/**
+ * 全部不带横版物料、但都带 coverUrl——**这是当前生产的正常路径**，不是回落态。
+ * 用来验证首页 Hero 在没有任何 heroImageUrl 时仍然整体渲染，每一项都用竖封面
+ * 做强模糊氛围底（`/dev-preview/home-fallback` 用的就是这份夹具）。
+ */
 export const MOCK_FEATURED_LIST_NO_HERO: NovelDetailView[] = MOCK_FEATURED_LIST.map(
   (novel) => {
     const withoutHero = { ...novel };
     delete withoutHero.heroImageUrl;
     return withoutHero;
+  },
+);
+
+/**
+ * 全部既不带 heroImageUrl 也不带 coverUrl——三档来源优先级里最兜底的一档：
+ * Hero 仍然渲染（轮播、内容、CTA 都在），只是不渲染任何图层，纯 `--novel-bg`。
+ * 真实生产数据不会走到这条路径（`getHomeCarouselItems` 要求 `coverUrl` 非空
+ * 才会进轮播），这里只是为了让这一档在预览与单测里都能被看到。
+ */
+export const MOCK_FEATURED_LIST_NO_IMAGE: NovelDetailView[] = MOCK_FEATURED_LIST_NO_HERO.map(
+  (novel) => {
+    const withoutCover = { ...novel };
+    delete withoutCover.coverUrl;
+    return withoutCover;
   },
 );
 

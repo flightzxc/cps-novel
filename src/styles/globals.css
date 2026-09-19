@@ -165,6 +165,59 @@
   --novel-fg-on-media: #f2f4f8;
   --novel-fg-muted-on-media: #c8cfdd;
 
+  /* --- Hero 竖封面模糊氛围底（2026-09-19 定稿，2026-09-19 返工重调）--------
+     海阅没有横版主视觉素材，渠道只给竖版封面（实测全部 250×350）。首页 Hero
+     恒渲染，缺横版素材（生产上恒缺）时用这组参数把竖封面处理成模糊氛围底。
+     组件（`FeaturedHero`）只能引用，不允许自己写字面数值——见
+     tests/ui/no-hardcoded-colors.test.ts 与本文件头部的三条纪律。
+
+     scale 不是审美选择，是补救：`filter: blur()` 会在元素四边采样到透明，
+     必须把虚化的边推出可视区之外才不露矩形边界，经验下界
+     ≈ `1 + 2*blur / min(盒宽, 盒高)`。按当前 blur=46px、桌面盒高 620px /
+     移动盒高 560px 算，下界分别 ≈1.148 / ≈1.164；1.18 留了安全余量。
+     🔴 改 blur 必须连带核对这条不等式还成不成立，不能只改一个数就收工。
+
+     --- 返工原因：第一版四值（blur40/scale1.16/brightness0.55/saturate0.7，
+     不带 contrast）技术指标全过，但设计意图没达成 ------------------------
+     Owner 用「隐藏前景文字后采样右侧氛围区（x600–1400,y60–520）合成亮度」
+     复验，发现 6 张真实封面里 4 张的氛围区跟纯 `--novel-bg` 视觉上不可区分
+     （vi 当前生产主推那本 ΔL 只有页面底色亮度的 3.6%），且封面之间氛围区
+     亮度差 120 倍——同一套参数在不同封面上完全失控。根因：`brightness` 是
+     对全图等比缩放的全局乘法，不会收敛不同封面之间的亮度差；6 张真实封面
+     本身亮度跨度就有 3.5 倍（L 0.199–0.69），乘法保留、甚至放大这个跨度。
+
+     解法是新增 `--novel-hero-cover-contrast`（<1，压缩动态范围）：
+     `contrast(k)` 把每张图**自己的**均值往中灰拉（`(v-0.5)*k+0.5`），
+     跟 `brightness` 那种「所有图一起乘同一个数、彼此比值不变」的效果完全
+     不同——它能真正收敛不同封面之间的亮度差，这是全局乘法做不到的事。
+     滤镜链顺序固定 `contrast() blur() brightness() saturate()`
+     （对应 FeaturedHero.tsx 里的写法），contrast 必须在 blur 之前，
+     在模糊摊平极端像素之前先压缩动态范围，效果最强。
+
+     四个值 + 新增 contrast 用 6 张真实生产封面（`.claude/covers/picked/`，
+     全部 250×350，覆盖 L0.199/0.23/0.344/0.613/0.69 与烘焙大字）实测调参，
+     用 Owner 给的复测脚本（`.claude/tools/contrast-audit.mjs`，隐藏文字后
+     采样，不靠亮度阈值滤字形，避免抗锯齿边缘污染读数）逐张验证四项客观门槛：
+       A. 氛围区合成后平均相对亮度 ∈ [0.020, 0.075]；
+       B. 6 张之间该均值最大/最小比值 ≤3；
+       C. 标题/简介最坏情况合成对比度 ≥7:1；
+       D. 标题区超出 `#1A1D24` 的像素占比 ≤1%。
+     下界（A 最低值 0.02466）由 ko（lum0.344，全片调低后最暗的一张）钉死；
+     上界（A 最高值 0.04125）由 zh-Hant（lum0.613，全 6 张里最亮）钉死；
+     D 的 1.42%→0.23% 收口由 th（lum0.69，满屏高饱和烘焙大字，最容易在标题
+     区露出热点）反复调 contrast/brightness 才压下去——**降 brightness 比
+     降 contrast 更有效**：同样让 A 达标，contrast 越低、brightness 越高，
+     th 标题区超限占比越高（对比 trial4 brightness0.78→3.98% 与
+     trial5 brightness0.72→0.23%），因为 brightness 是乘法，会连同图像里
+     残留的高光一起放大，contrast 是对每张图自己的收敛，边际收益递减后
+     再靠堆 brightness 弥补就直接顶到标题区的漏光上限。
+     6 张封面完整实测数字见本轮任务报告「A/B/C/D 逐张数字」一节。 */
+  --novel-hero-cover-contrast: 0.28;
+  --novel-hero-cover-blur: 46px;
+  --novel-hero-cover-scale: 1.18;
+  --novel-hero-cover-brightness: 0.72;
+  --novel-hero-cover-saturate: 0.55;
+
   color-scheme: dark;
   background-color: var(--novel-bg);
   color: var(--novel-fg);
