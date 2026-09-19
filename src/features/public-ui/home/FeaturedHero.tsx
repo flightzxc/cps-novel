@@ -146,6 +146,13 @@ export function FeaturedHero({
   const current = items[index];
   const { novel } = current;
 
+  /**
+   * 环形露头只在 ≥3 本时启用。2 本时做环形会让左右露出同一本邻居，
+   * 1 本时更是左右都露它自己——都属于「告诉用户前后都是这一本」。
+   */
+  const useLoop = count >= 3;
+  const trackIndex = useLoop ? count + index : index;
+
   function onKeyDown(event: KeyboardEvent) {
     if (count < 2) {
       return;
@@ -263,16 +270,20 @@ export function FeaturedHero({
             style={{
               transform:
                 "translateX(calc(-1 * var(--novel-hero-banner-w) / 2 - " +
-                `${count > 1 ? count + index : 0} * (var(--novel-hero-banner-w) + var(--novel-hero-banner-gap))))`,
+                `${trackIndex} * (var(--novel-hero-banner-w) + var(--novel-hero-banner-gap))))`,
             }}
           >
-            {/* 只有一本时不做三份拷贝：否则左右露头露的是同一本书，等于告诉
-                用户「前后都是它」。单本就老老实实只渲染一张，没有露头。 */}
-            {Array.from({ length: count > 1 ? count * 3 : 1 }, (_, slot) => {
+            {/* 数量边界（Owner 2026-09-20 钉死）：
+                  1 本  → 不露头。只渲染一张。
+                  2 本  → **单侧**预览。只渲染一份，不做环形拷贝——两本做环形的话
+                          左右露出的是同一本邻居，等于把同一本书复制到两边。
+                          当前项在第 1 本时右侧露第 2 本，在第 2 本时左侧露第 1 本。
+                  ≥3 本 → 三份拷贝做环形，左右都有不同的邻居可露。
+                🔴 `useLoop` 的判据是 `count >= 3`，不是 `count > 1`。 */}
+            {Array.from({ length: useLoop ? count * 3 : count }, (_, slot) => {
               // 三份拷贝，当前项固定落在中间那份 → 首尾两项也有左右邻居可露头。
               // 只渲染当前项 ±1，其余给一个同尺寸的空位：轨道几何靠宽度维持，
               // 不需要真的把 3n 张封面都下载下来。
-              const trackIndex = count > 1 ? count + index : 0;
               const near = Math.abs(slot - trackIndex) <= 1;
               if (!near) {
                 return (
@@ -333,6 +344,13 @@ function BannerSlide({
     <div
       data-testid={isCurrent ? "featured-hero-banner" : "featured-hero-banner-peek"}
       data-hero-slide-current={isCurrent ? "true" : "false"}
+      // 🔴 `inert` 是这里的承重项，不是锦上添花：露头在视觉上只露一条边，DOM 里
+      // 却是完整 banner。只给「我自己写的」封面/标题/按钮加 tabIndex={-1} 是不
+      // 够的——TagList 里的标签也是 <a href>，实测仍可 Tab 进去（本仓 UI 用例
+      // 「露头项对读屏隐藏，且其中所有可聚焦元素都不可 Tab」就是这么抓到的）。
+      // `inert` 把整棵子树一次性移出 Tab 序列与无障碍树，不必逐个组件穿参数。
+      // 下面各元素的 tabIndex={-1} 保留为双保险（inert 不生效时仍挡住焦点）。
+      inert={isCurrent ? undefined : true}
       aria-hidden={isCurrent ? undefined : true}
       className={
         "flex w-[var(--novel-hero-banner-w)] shrink-0 items-center gap-3.5 " +

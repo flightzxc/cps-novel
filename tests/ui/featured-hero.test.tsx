@@ -135,6 +135,81 @@ describe("主推位形态选择", () => {
   });
 });
 
+describe("露头轮播 · 数量边界与可访问性", () => {
+  function renderN(n: number) {
+    return renderHome(entries(MOCK_FEATURED_LIST.slice(0, n)));
+  }
+  const peeks = (c: HTMLElement) =>
+    [...c.querySelectorAll('[data-testid="featured-hero-banner-peek"]')];
+
+  /** Owner 2026-09-20 钉死的三档边界。 */
+  it("1 本：不露头，只渲染一张", () => {
+    const { container } = renderN(1);
+    expect(container.querySelectorAll('[data-testid="featured-hero-banner"]')).toHaveLength(1);
+    expect(peeks(container)).toHaveLength(0);
+  });
+
+  /**
+   * 2 本做环形的话，左右露出的会是同一本邻居——等于把同一本书复制到两边。
+   * 所以 2 本走单侧预览：当前项之外只有另一本，只能出现在一侧。
+   */
+  it("2 本：单侧预览，同一本邻居不会同时出现在左右两侧", () => {
+    const { container } = renderN(2);
+    const list = peeks(container);
+    expect(list).toHaveLength(1);
+
+    // 露出的必须是「另一本」，不是当前这本
+    const currentTitle = MOCK_FEATURED_LIST[0].title;
+    expect(list[0].textContent).not.toContain(currentTitle);
+    expect(list[0].textContent).toContain(MOCK_FEATURED_LIST[1].title);
+  });
+
+  it("≥3 本：环形，左右各有一个且互不相同", () => {
+    const { container } = renderN(3);
+    const list = peeks(container);
+    expect(list).toHaveLength(2);
+    expect(list[0].textContent).not.toBe(list[1].textContent);
+    // 两侧都不是当前这本
+    for (const el of list) {
+      expect(el.textContent).not.toContain(MOCK_FEATURED_LIST[0].title);
+    }
+  });
+
+  /**
+   * 露头在视觉上只露一条边，DOM 里却是完整内容。不屏蔽的话读屏会把所有主推项
+   * 的标题简介连着念一遍，键盘 Tab 也会走进看不见的按钮里。
+   */
+  it("露头项对读屏隐藏，且其中所有可聚焦元素都不可 Tab", () => {
+    const { container } = renderN(3);
+    const list = peeks(container);
+    expect(list.length).toBeGreaterThan(0);
+
+    for (const el of list) {
+      // 整棵子树移出 Tab 序列与无障碍树。只靠逐元素 tabIndex 是不够的——
+      // TagList 里的标签也是 <a href>，那条路径穿不到参数。
+      expect(el.hasAttribute("inert")).toBe(true);
+      expect(el.getAttribute("aria-hidden")).toBe("true");
+      expect(el.querySelectorAll("a[href], button").length).toBeGreaterThan(0);
+    }
+
+    // 当前项反过来必须完全可达，别把两边一起关掉
+    const cur = container.querySelector('[data-testid="featured-hero-banner"]')!;
+    expect(cur.hasAttribute("inert")).toBe(false);
+    expect(cur.getAttribute("aria-hidden")).toBeNull();
+    for (const f of cur.querySelectorAll("a[href]")) {
+      expect(f.getAttribute("tabindex")).toBeNull();
+    }
+  });
+
+  it("远端项只占位不渲染内容——轨道几何靠宽度维持，不必下载 3n 张封面", () => {
+    const { container } = renderN(5);
+    const track = container.querySelector('[data-testid="featured-hero-track"]')!;
+    // 5 本 → 三份拷贝 15 个槽位，但只有当前项 ±1 共 3 个有内容
+    expect(track.children).toHaveLength(15);
+    expect(track.querySelectorAll("img")).toHaveLength(3);
+  });
+});
+
 describe("Hero 背景来源三档优先级", () => {
   const BASE: NovelDetailView = {
     id: "priority-base",
