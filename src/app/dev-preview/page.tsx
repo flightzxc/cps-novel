@@ -17,12 +17,17 @@ const ENTRIES: PreviewEntry[] = [
   {
     href: "/dev-preview/home",
     title: "首页",
-    note: "通栏出血 Hero + 轮播（4 本有横版物料）+ 作品网格。移动 2 列 / 桌面 5 列。",
+    note: "通栏出血 Hero + 轮播（4 本有横版物料，1 本走 coverUrl 模糊氛围底）+ 作品网格。移动 2 列 / 桌面 5 列。",
   },
   {
     href: "/dev-preview/home-fallback",
-    title: "首页 · 无横版物料回落",
-    note: "主推列表一本都没有横版主视觉时，整体落回封面编排版，页头回到实底。",
+    title: "首页 · 竖封面模糊氛围底（生产正常路径）",
+    note: "主推列表一本都没有横版主视觉，Hero 仍然整体渲染，全部用竖封面做强模糊氛围底。",
+  },
+  {
+    href: "/dev-preview/home-hero-plain",
+    title: "首页 · Hero 无图纯底色",
+    note: "主推项既无 heroImageUrl 也无 coverUrl（生产不会出现）时，Hero 不渲染图层，纯 --novel-bg。",
   },
   {
     href: "/dev-preview/novel",

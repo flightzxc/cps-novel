@@ -23,10 +23,18 @@
   --novel-font-serif: ui-serif, Georgia, Cambria, "Iowan Old Style",
     "Times New Roman", "Songti SC", "Noto Serif CJK SC", serif;
 
-  /* --- 圆角：三档，没有全圆角。全圆角胶囊是 App 商店语言，本站不用。 ----- */
+  /* --- 圆角：三档 + 一个专用档。--------------------------------------------
+     2026-09-19 之前这里是「没有全圆角」的区隔点声明：全圆角胶囊是 App 商店
+     语言，中等圆角矩形是出版物语言。PulseNovel 品牌接入时 Owner 推翻了这条
+     区隔点——主 CTA（Button 的 accent 档）改用接近胶囊的大圆角，依据是
+     暖黄 CTA 体系需要一个视觉上「一望即知是主按钮」的形状锚点。
+     范围收紧在这一个用途上：sm/md/lg 三档不变，outline/quiet 两档按钮也
+     不变——只有 --novel-radius-pill 是新增的，只给 Button 的 accent 档用。
+     两档圆角并存反而让主次关系更清楚：胶囊状的重决策 vs. 矩形的次级动作。 */
   --novel-radius-sm: 6px;
   --novel-radius-md: 10px;
   --novel-radius-lg: 14px;
+  --novel-radius-pill: 999px;
 
   /* --- 封面比例的唯一定义处 ---------------------------------------------
      真实上游封面资产尚未量过，当前 3/4 是待核实值。需要改时只改这一行，
@@ -41,13 +49,28 @@
      mask 是「无边缘感」的关键，不能用纯色遮罩替代：纯色遮罩只是压暗，图片的
      下边缘仍然存在；mask 是把图像本身在底部溶解掉，肉眼找不到边。
 
-     两层压黑负责正文对比度。物料亮度不可控，所以门槛由「压黑起点足够黑」保证，
-     而不是靠挑图——文字锁在左侧 --novel-hero-text-width 内，该区间左向压黑的
-     不透明度不低于 0.9，即使底下是纯白图，合成后仍在受控暗区。
+     🔴 2026-09-19 结构改向后，这段的适用范围缩小了：Hero 主体已改为居中
+     banner（左清晰封面 + 右信息组），正文落在 banner 这块实体面上，**不再
+     依赖左向压黑保证对比度**。原先「文字锁在左侧 340px 压黑区内」那条口径
+     连同 --novel-hero-text-width 一起作废，该 token 已无人引用。
+     两层压黑现在只负责两件事：页头叠在 Hero 上时仍然可读，以及底部并入页面
+     底色。mask 的作用同上——溶解背景氛围层的下边缘，不留硬边。
      实际比值由 tests/ui/design-tokens.test.ts 按最坏情况重算。 */
-  --novel-hero-height: 620px;
-  --novel-hero-height-mobile: 560px;
-  --novel-hero-text-width: 340px;
+  /* 2026-09-19 结构改向：Hero 内容从「左侧 340px 文字压在整屏模糊图上」改为
+     「居中 banner：左清晰封面 + 右信息组」。桌面高度随之从 620 收到 560——
+     banner 本身 400px 高，620 会在上下各留出一段没人要的空带。 */
+  --novel-hero-height: 560px;
+  --novel-hero-height-mobile: 372px;
+  /* 居中 banner 的几何。封面按 --novel-cover-aspect 等比，240 宽 → 320 高，
+     落在 400 高的 banner 里上下各余 40（含 p-7 的 28）。 */
+  /* banner 宽度要比视口窄，差额就是左右「露头」。1440 视口下
+     (1440-1000)/2 - 28 ≈ 192px 露头，与参考稿的比例接近。
+     移动端在下方 media query 里改成 318px。 */
+  --novel-hero-banner-w: 1000px;
+  --novel-hero-banner-gap: 28px;
+  --novel-hero-banner-height: 400px;
+  --novel-hero-cover-width: 240px;
+  --novel-hero-info-width: 620px;
 
   --novel-hero-mask: linear-gradient(
     to bottom,
@@ -116,19 +139,107 @@
   --novel-fg-subtle: #8a93a5;
   --novel-border: #2a303d;
   --novel-border-strong: #626c84;
-  --novel-primary: #e0a96d;
-  --novel-primary-hover: #eebc85;
-  --novel-accent: #f0e4ce;
-  --novel-accent-hover: #fbf2e2;
+
+  /* --- PulseNovel 品牌接入（2026-09-19）------------------------------------
+     品牌黄 #FED405 是 Owner 拍板值（实测自 `.brand-assets/` 里字标资产的
+     主色），只用于 logo、当前导航高亮、主 CTA、少量关键 highlight——不是
+     用来把全站染黄。
+
+     --novel-primary 原来是一个柔和暖橙 #e0a96d（强调/链接/当前导航色），
+     现在改走品牌黄体系，与 --novel-accent 同值：这两个 token 语义不同
+     （primary=文字链接与当前导航态，accent=主 CTA 填充），但视觉上应该是
+     同一种黄，不需要造出两种「都叫黄但不一样」的黄。
+     实测对比度（tests/ui/design-tokens.test.ts 会重算，这里只是记录口径）：
+       #FED405 / --novel-bg(#12151c)          ≈ 12.7:1（远超正文 4.5:1）
+       #FED405 / --novel-bg-elevated(#1a1e27) ≈ 11.6:1
+     --novel-primary-hover 跟 --novel-accent-hover 用同一个提亮值，理由同上。
+
+     --novel-accent 原来是纸色 #f0e4ce（墨与纸方向下的主按钮填充），现在改成
+     品牌黄本身：这就是「深色底 + 高亮暖黄」里那块黄。
+     --novel-accent-hover 从 #FED405 往亮处走一点（提高 G/B，不改变色相），
+     实测对比度 #12151c / #FFDE3A ≈ 13.7:1，比常态更高，hover 不会掉出门槛。
+
+     --novel-on-accent / --novel-on-primary 维持 #12151c（黄底压深墨字）不变：
+     这本来就是「黄底深字」要求的落地值，品牌黄比旧纸色更亮，对比度只会更好，
+     没有理由改。
+
+     --novel-focus 原来硬编码成和旧 --novel-accent 相同的纸色值，这里同步
+     跟着品牌黄走，维持「焦点环 = 强调色」这条既有关系；.reader 作用域内会被
+     var(--reader-fg) 覆盖，不受影响。 */
+  --novel-primary: #fed405;
+  --novel-primary-hover: #ffde3a;
+  --novel-accent: #fed405;
+  --novel-accent-hover: #ffde3a;
   --novel-on-accent: #12151c;
   --novel-on-primary: #12151c;
   --novel-danger: #f0938a;
   --novel-success: #7fcca4;
-  --novel-focus: #f0e4ce;
+  --novel-focus: #fed405;
 
   /* 压在主视觉图上的文字。比常规前景更亮——底下是不可控的图像，不是纯色。 */
   --novel-fg-on-media: #f2f4f8;
   --novel-fg-muted-on-media: #c8cfdd;
+
+  /* --- Hero 竖封面模糊氛围底（2026-09-19 定稿，2026-09-19 返工重调）--------
+     海阅没有横版主视觉素材，渠道只给竖版封面（实测全部 250×350）。首页 Hero
+     恒渲染，缺横版素材（生产上恒缺）时用这组参数把竖封面处理成模糊氛围底。
+     组件（`FeaturedHero`）只能引用，不允许自己写字面数值——见
+     tests/ui/no-hardcoded-colors.test.ts 与本文件头部的三条纪律。
+
+     scale 不是审美选择，是补救：`filter: blur()` 会在元素四边采样到透明，
+     必须把虚化的边推出可视区之外才不露矩形边界，经验下界
+     ≈ `1 + 2*blur / min(盒宽, 盒高)`。按当前 blur=46px、桌面盒高 620px /
+     移动盒高 560px 算，下界分别 ≈1.148 / ≈1.164；1.18 留了安全余量。
+     🔴 改 blur 必须连带核对这条不等式还成不成立，不能只改一个数就收工。
+
+     --- 返工原因：第一版四值（blur40/scale1.16/brightness0.55/saturate0.7，
+     不带 contrast）技术指标全过，但设计意图没达成 ------------------------
+     Owner 用「隐藏前景文字后采样右侧氛围区（x600–1400,y60–520）合成亮度」
+     复验，发现 6 张真实封面里 4 张的氛围区跟纯 `--novel-bg` 视觉上不可区分
+     （vi 当前生产主推那本 ΔL 只有页面底色亮度的 3.6%），且封面之间氛围区
+     亮度差 120 倍——同一套参数在不同封面上完全失控。根因：`brightness` 是
+     对全图等比缩放的全局乘法，不会收敛不同封面之间的亮度差；6 张真实封面
+     本身亮度跨度就有 3.5 倍（L 0.199–0.69），乘法保留、甚至放大这个跨度。
+
+     解法是新增 `--novel-hero-cover-contrast`（<1，压缩动态范围）：
+     `contrast(k)` 把每张图**自己的**均值往中灰拉（`(v-0.5)*k+0.5`），
+     跟 `brightness` 那种「所有图一起乘同一个数、彼此比值不变」的效果完全
+     不同——它能真正收敛不同封面之间的亮度差，这是全局乘法做不到的事。
+     滤镜链顺序固定 `contrast() blur() brightness() saturate()`
+     （对应 FeaturedHero.tsx 里的写法），contrast 必须在 blur 之前，
+     在模糊摊平极端像素之前先压缩动态范围，效果最强。
+
+     四个值 + 新增 contrast 用 6 张真实生产封面（`.claude/covers/picked/`，
+     全部 250×350，覆盖 L0.199/0.23/0.344/0.613/0.69 与烘焙大字）实测调参，
+     用 Owner 给的复测脚本（`.claude/tools/contrast-audit.mjs`，隐藏文字后
+     采样，不靠亮度阈值滤字形，避免抗锯齿边缘污染读数）逐张验证四项客观门槛：
+       A. 氛围区合成后平均相对亮度 ∈ [0.020, 0.075]；
+       B. 6 张之间该均值最大/最小比值 ≤3；
+       C. 标题/简介最坏情况合成对比度 ≥7:1；
+       D. 标题区超出 `#1A1D24` 的像素占比 ≤1%。
+     下界（A 最低值 0.02466）由 ko（lum0.344，全片调低后最暗的一张）钉死；
+     上界（A 最高值 0.04125）由 zh-Hant（lum0.613，全 6 张里最亮）钉死；
+     D 的 1.42%→0.23% 收口由 th（lum0.69，满屏高饱和烘焙大字，最容易在标题
+     区露出热点）反复调 contrast/brightness 才压下去——**降 brightness 比
+     降 contrast 更有效**：同样让 A 达标，contrast 越低、brightness 越高，
+     th 标题区超限占比越高（对比 trial4 brightness0.78→3.98% 与
+     trial5 brightness0.72→0.23%），因为 brightness 是乘法，会连同图像里
+     残留的高光一起放大，contrast 是对每张图自己的收敛，边际收益递减后
+     再靠堆 brightness 弥补就直接顶到标题区的漏光上限。
+     6 张封面完整实测数字见本轮任务报告「A/B/C/D 逐张数字」一节。 */
+  /* 🔴 2026-09-19 结构改向后，这一族的职责**降级**了：背景不再是主体，
+     只是 banner 背后的一层轻氛围。此前为了让背景独自承担主视觉，在这几个
+     旋钮上做过两轮拉扯，结论是做不到——素材只有 250×350 竖封面、自带烘焙
+     大字、6 张真实封面亮度跨度 3.5 倍，参数只能在「整屏黑灰雾」和「漏出
+     封面字形」之间摇摆（实测：压到看不出图时封面间 ΔE 仅 2.8、彩度 2.44；
+     调到主色可感知时，字形下超 #1A1D24 的像素达 10%）。
+     现在封面以清晰形态进了 banner，这里只需要给每本书一点颜色倾向即可，
+     不再有「氛围区必须多亮」这类门槛。 */
+  --novel-hero-cover-contrast: 0.75;
+  --novel-hero-cover-blur: 40px;
+  --novel-hero-cover-scale: 1.16;
+  --novel-hero-cover-brightness: 0.45;
+  --novel-hero-cover-saturate: 1.15;
 
   color-scheme: dark;
   background-color: var(--novel-bg);
@@ -275,6 +386,17 @@
   --radius-novel-sm: var(--novel-radius-sm);
   --radius-novel-md: var(--novel-radius-md);
   --radius-novel-lg: var(--novel-radius-lg);
+  --radius-novel-pill: var(--novel-radius-pill);
+}
+
+/* 移动端把 banner 收窄，留出同样的「露头」关系。
+   写成 media query 而不是在组件里做两套宽度：轨道的位移公式引用的是同一个
+   token，两处宽度必须始终一致，否则当前项就不在正中。 */
+@media (max-width: 767px) {
+  .site {
+    --novel-hero-banner-w: 318px;
+    --novel-hero-banner-gap: 14px;
+  }
 }
 
 body {

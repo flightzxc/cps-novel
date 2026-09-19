@@ -7,7 +7,23 @@ import type { SiteLocale } from "@/lib/locale/locale-canonical";
 import { getPublicT } from "@/lib/locale/messages";
 
 /**
- * 首页主推位 · 封面编排版 —— **无横版主视觉物料时的回落形态**。
+ * 首页主推位 · 封面编排版 —— **2026-09-19 起首页不再使用它**。
+ *
+ * 停用原因：Owner 已确认海阅不存在、也不会等横版主视觉素材，渠道只提供竖版
+ * 封面（实测全部 250×350）。继续让首页按「有没有 heroImageUrl」在这个组件与
+ * FeaturedHero 之间二选一，等于让主推位永久停在这个回落态——于是改成
+ * `FeaturedHero` 恒渲染，缺横版素材时直接用竖封面在 Hero 内部做强模糊氛围底
+ * （`FeaturedHero` 的 `resolveHeroBackground` 三档优先级），不再需要这一版
+ * 完全不同的双栏版面。`HomeScreen` 已经不再引用本文件。
+ *
+ * 保留这个文件（不删除）只是留作历史参照——它曾经是「回落必须是一个完整成立
+ * 的版面」这条设计判断的实现，日后如果又出现「需要一个纯封面、非 Hero 的
+ * 主推版面」的场景，这里有参照可查。🔴 它已经**不在**任何生产渲染路径上，
+ * 也不再被 `/dev-preview/home-fallback` 通过 `HomeScreen` 间接渲染到——
+ * 那个预览路由现在展示的是「Hero + coverUrl 模糊氛围底」这条生产正常路径，
+ * 不是本文件。
+ *
+ * 以下是停用前的原始设计记录，供参照，不代表当前行为：
  *
  * 有物料时首页走 FeaturedHero（通栏出血 + 轮播）。这一版保留下来，因为回落必须
  * 是一个完整成立的版面，而不是「Hero 少了张图」的残缺态：它只需要一张竖版封面。
@@ -40,8 +56,13 @@ export function FeaturedNovel({
 }) {
   const t = getPublicT(locale);
   return (
-    <section aria-labelledby="featured-title" className="pt-12 pb-4 md:pt-20 md:pb-8">
-      <div className="border-t border-novel-border pt-6 md:pt-10">
+    // 留白收口（2026-09-19）：原为 `pt-12 pb-4 md:pt-20 md:pb-8` + 内层
+    // `pt-6 md:pt-10`，桌面端页头到眉标之间空出 120px，下沿再叠上题材导航的
+    // `pt-10 md:pt-14` 与作品区的 `pt-12 md:pt-16`。气场要的是「封面大、书名
+    // 大、上下松」，不是「上下各留半屏」——上沿压到 80px（移动 56px），下沿
+    // 只留 32px（移动 24px），其余交给浏览区按原稿 2a/2d 的 8px 承接。
+    <section aria-labelledby="featured-title" className="pt-8 pb-6 md:pt-12 md:pb-8">
+      <div className="border-t border-novel-border pt-6 md:pt-8">
         <p className="text-xs tracking-[0.2em] text-novel-fg-subtle uppercase">
           {eyebrow ?? t("home.featuredEyebrow")}
         </p>

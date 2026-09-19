@@ -153,7 +153,9 @@ describe("设计 token · 结构", () => {
       "--novel-hero-scrim-y-mobile",
       "--novel-hero-height",
       "--novel-hero-height-mobile",
-      "--novel-hero-text-width",
+      "--novel-hero-banner-height",
+      "--novel-hero-cover-width",
+      "--novel-hero-info-width",
     ]) {
       const defined = css.match(new RegExp(`${token}\\s*:`, "g")) ?? [];
       expect(defined, `${token} 应当只定义一次，实际 ${defined.length} 次`).toHaveLength(1);
@@ -234,24 +236,25 @@ describe("设计 token · WCAG AA 对比度", () => {
 
 describe("Hero 文字对比度 · 最坏情况", () => {
   /**
-   * 主视觉物料是批量生成的，亮度不可控。所以门槛不能靠「挑图」，只能靠
-   * 「压黑起点足够黑」——这里按最坏情况算：**底下是一张纯白图**，
-   * 上面压左向压黑层在文字列内的**最低**不透明度。
+   * 🔴 2026-09-19 结构改向后，这一节的**前提整个换了**，不是改了个数字。
    *
-   * 文字锁在左侧 --novel-hero-text-width（340px）内。左向压黑写的是百分比，
-   * 在 1440 视口下 340px ≈ 23.6%，落在 0% 的 .96 与 26% 的 .9 之间，
-   * 因此文字列内不透明度不低于 0.9，取 0.9 作为最坏值。
+   * 旧前提：文字压在整屏主视觉上，靠左向压黑保证对比度，所以要按「底下是
+   * 一张纯白图 + 压黑层最低不透明度 0.9」算最坏情况。
+   *
+   * 新结构：Hero 主体是居中 banner，正文落在 `--novel-bg-elevated` 这块
+   * **完全不透明**的实体面上。底下是什么图与正文对比度**再无关系**——
+   * 这不是把门槛调松，而是把「封面亮度影响正文可读性」这整类问题从结构上
+   * 消掉了。所以最坏情况就是实体面本身的色值，不需要任何 alpha 合成假设。
+   *
+   * 左向压黑与纵向压黑仍然保留，但职责只剩「页头叠在 Hero 上仍可读」和
+   * 「底部并入页面底色」，不再参与正文对比度，故不在本节断言范围内。
    */
-  const WORST_CASE_SCRIM_ALPHA = 0.9;
-  const WORST_CASE_MEDIA = "#ffffff";
-  /** 压黑层在该处的色值（左向压黑 26% 处那一站） */
-  const SCRIM_COLOR = { r: 10, g: 12, b: 17 };
-
-  /** alpha 合成：scrim over media */
+  /** banner 是不透明实体面，最坏情况就是它自己 —— 与底下的图无关。 */
+  const BANNER_SURFACE = site["--novel-bg-elevated"];
   const composited = {
-    r: Math.round(SCRIM_COLOR.r * WORST_CASE_SCRIM_ALPHA + 255 * (1 - WORST_CASE_SCRIM_ALPHA)),
-    g: Math.round(SCRIM_COLOR.g * WORST_CASE_SCRIM_ALPHA + 255 * (1 - WORST_CASE_SCRIM_ALPHA)),
-    b: Math.round(SCRIM_COLOR.b * WORST_CASE_SCRIM_ALPHA + 255 * (1 - WORST_CASE_SCRIM_ALPHA)),
+    r: parseInt(BANNER_SURFACE.slice(1, 3), 16),
+    g: parseInt(BANNER_SURFACE.slice(3, 5), 16),
+    b: parseInt(BANNER_SURFACE.slice(5, 7), 16),
   };
 
   it("左向压黑的起点与文字列内取值确实是我们假设的那两站", () => {
@@ -281,6 +284,18 @@ describe("Hero 文字对比度 · 最坏情况", () => {
 
   it("即便退到纯白底也不用纯白字", () => {
     expect(isPureWhite(site["--novel-fg-on-media"])).toBe(false);
-    expect(WORST_CASE_MEDIA).toBe("#ffffff"); // 最坏情况的定义，供审阅时对照
+  });
+
+  it("banner 底是不透明实体面，正文对比度不再随封面亮度浮动", () => {
+    // 组件用的是 `bg-novel-bg-elevated`（无 alpha 后缀）。这条断言钉的是
+    // 「最坏情况等于实体面本身」这个前提：一旦有人给它加回 /90 之类的透明度，
+    // 底下的图就会重新参与合成，本节的结论就不再成立。
+    const hero = readFileSync(
+      resolve(here, "../../src/features/public-ui/home/FeaturedHero.tsx"),
+      "utf8",
+    );
+    expect(hero).toMatch(/bg-novel-bg-elevated(?![/\w-])/);
+    // 带 alpha 后缀（bg-novel-bg-elevated/90 之类）就说明底下的图又参与合成了
+    expect(hero).not.toMatch(/bg-novel-bg-elevated\//);
   });
 });

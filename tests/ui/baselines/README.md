@@ -18,7 +18,7 @@
 | 文件 | 屏幕 | 视口 |
 | --- | --- | --- |
 | `home-desktop.png` / `home-mobile.png` | 首页 · 通栏 Hero 轮播 | 1440×900 / 390×844 |
-| `home-fallback-desktop.png` | 首页 · 无横版物料回落 | 1440×900 |
+| `home-fallback-desktop.png` | 首页 · 无横版物料（coverUrl 模糊氛围底，当前生产正常路径） | 1440×900 |
 | `novel-desktop.png` / `novel-mobile.png` | 小说详情（含可试读章节区块） | 1440×900 / 390×844 |
 | `novel-sparse-desktop.png` | 详情 · 极端稀疏（无封面/标签/试读章） | 1440×900 |
 | `chapter-desktop.png` / `chapter-mobile.png` | 章节阅读（阅读作用域），第 1 章 | 1440×900 / 390×844 |
