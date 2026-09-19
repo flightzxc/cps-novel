@@ -39,12 +39,30 @@ afterEach(() => {
 // override mechanism the way wal-gc-daily-apply.sh's run_step does, so the
 // ONLY way to control what it sees is to make the entry point itself a
 // canned script.
-function makeFakeWorktree(entryPointBody: string): string {
+function makeFakeWorktree(entryPointBody: string, opts: { withPlistTemplate?: boolean } = {}): string {
   const dir = mkTestDir("launchd-worktree-");
   mkdirSync(path.join(dir, "scripts"), { recursive: true });
   const entry = path.join(dir, "scripts", "x8-production-like.sh");
   writeFileSync(entry, entryPointBody);
   chmodSync(entry, 0o755);
+  // Opt-in: copy THIS repo's real plist template into the fake worktree, so
+  // the fabricated worktree is one that `install` would actually carry all
+  // the way through render_plist + launchctl if it were allowed to. Only the
+  // Darwin-gate describe below needs that -- it is what turns "the gate
+  // refused" into a load-bearing claim (without the template, deleting
+  // require_darwin would merely swap the refusal reason for
+  // `template_missing` and the plist/launchctl assertions would still pass).
+  if (opts.withPlistTemplate) {
+    const templateDir = path.join(dir, "infra", "local-x8", "launchd");
+    mkdirSync(templateDir, { recursive: true });
+    writeFileSync(
+      path.join(templateDir, "com.cpsnovel.x8.wal-gc-apply.plist.template"),
+      readFileSync(
+        path.resolve(root, "infra/local-x8/launchd/com.cpsnovel.x8.wal-gc-apply.plist.template"),
+        "utf8",
+      ),
+    );
+  }
   return dir;
 }
 
@@ -53,7 +71,21 @@ function makeFakeWorktree(entryPointBody: string): string {
 // "no plist file was written": even if a future refactor reordered
 // render_plist/launchctl, this still catches `launchctl load` actually
 // firing during one of these (expected-to-refuse) scenarios.
-function makeSandbox(): { fakeHome: string; plistDest: string; env: NodeJS.ProcessEnv } {
+//
+// `unameS` is what the PATH-shimmed `uname -s` reports, i.e. what
+// require_darwin() (scripts/x8-local-wal-gc-launchd.sh:42-47) sees. It
+// defaults to "Darwin" because require_darwin is the FIRST thing
+// install_cmd does -- before require_entrypoint and before the preflight
+// call (:89-91) -- so on a non-macOS host (the CI Linux runner) every
+// scenario in this file would otherwise stop at `REFUSED reason=not_darwin`
+// and never reach the preflight-classification / worktree_not_absolute
+// behaviour it exists to cover. Unlike infra/local-x8/wal-gc-daily-apply.sh,
+// this script has no X8_LOCAL_UNAME-style test-mode hook, so shimming the
+// `uname` binary on PATH is the only way to control that input without
+// touching the production script -- and it is the same PATH-shim mechanism
+// this sandbox already used for `launchctl`. The gate itself keeps its own
+// dedicated, host-independent coverage in its own describe below.
+function makeSandbox(unameS = "Darwin"): { fakeHome: string; plistDest: string; env: NodeJS.ProcessEnv } {
   const fakeHome = mkTestDir("launchd-home-");
   mkdirSync(path.join(fakeHome, "Library", "LaunchAgents"), { recursive: true });
   const plistDest = path.join(fakeHome, "Library", "LaunchAgents", "com.cpsnovel.x8.wal-gc-apply.plist");
@@ -65,6 +97,24 @@ function makeSandbox(): { fakeHome: string; plistDest: string; env: NodeJS.Proce
     `#!/usr/bin/env bash\ntouch "${marker}"\necho "shim: launchctl $*" >&2\nexit 0\n`,
   );
   chmodSync(path.join(shimDir, "launchctl"), 0o755);
+
+  // The SUT only ever asks for `uname -s`; anything else falls through to
+  // the real binary, so this shim can never silently change behaviour it
+  // was not written to control.
+  writeFileSync(
+    path.join(shimDir, "uname"),
+    `#!/usr/bin/env bash
+if [[ "\${1:-}" == "-s" ]]; then
+  printf '%s\\n' ${JSON.stringify(unameS)}
+  exit 0
+fi
+for real in /usr/bin/uname /bin/uname; do
+  [[ -x "$real" ]] && exec "$real" "$@"
+done
+printf '%s\\n' ${JSON.stringify(unameS)}
+`,
+  );
+  chmodSync(path.join(shimDir, "uname"), 0o755);
 
   return {
     fakeHome,
@@ -153,6 +203,38 @@ describe("x8-local-wal-gc-launchd.sh: --worktree must be absolute", () => {
 
     expect(result.status).toBe(65);
     expect(result.stderr).toContain("LOCAL_WAL_GC_LAUNCHD=REFUSED reason=worktree_not_absolute");
+    expect(existsSync(plistDest)).toBe(false);
+    expect(existsSync(env.LAUNCHCTL_MARKER as string)).toBe(false);
+  });
+});
+
+// The Darwin-only gate is not merely a precondition the describes above
+// have to get past -- it is a fail-closed contract in its own right, and
+// until now nothing in this repo actually exercised it. This describe is
+// the load-bearing coverage: it is the ONE place that drives the shimmed
+// `uname -s` to a non-Darwin value, and it does so against a worktree that
+// would OTHERWISE install successfully end to end (stub entry point exits 0
+// so preflight passes, and the real plist template is present), so deleting
+// or relaxing require_darwin does not just change a reason string here --
+// it lets this scenario render the plist and call `launchctl load` for
+// real, which the last three assertions catch.
+describe("x8-local-wal-gc-launchd.sh: Darwin-only gate (require_darwin)", () => {
+  it("a non-Darwin host -> REFUSED reason=not_darwin, before the preflight call, plist not written, launchctl never invoked", () => {
+    const worktree = makeFakeWorktree(
+      // Records its own invocation next to itself, so "the gate fired before
+      // preflight" is asserted from evidence rather than inferred from the
+      // reason string.
+      '#!/usr/bin/env bash\ntouch "$(dirname "$0")/../preflight.invoked"\nexit 0\n',
+      { withPlistTemplate: true },
+    );
+    const { plistDest, env } = makeSandbox("Linux");
+
+    const result = runInstall(worktree, env);
+
+    expect(result.status).toBe(65);
+    expect(result.stderr).toContain("LOCAL_WAL_GC_LAUNCHD=REFUSED reason=not_darwin");
+    expect(result.stdout).not.toContain("LOCAL_WAL_GC_LAUNCHD=INSTALLED");
+    expect(existsSync(path.join(worktree, "preflight.invoked"))).toBe(false);
     expect(existsSync(plistDest)).toBe(false);
     expect(existsSync(env.LAUNCHCTL_MARKER as string)).toBe(false);
   });

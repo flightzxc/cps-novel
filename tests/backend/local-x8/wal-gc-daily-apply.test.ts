@@ -82,6 +82,44 @@ function makeShim(): { shimPath: string; callLog: string } {
   return { shimPath, callLog };
 }
 
+// A PATH-shimmed `uname` -- the only way to control what the SUT's own
+// "real OS" probe reports (x8_local_uname()'s `uname -s` fallback,
+// infra/local-x8/wal-gc-daily-apply.sh:152-158) without touching the
+// production script. Used ONLY by the platform-gate describes at the bottom
+// of this file, which need the real probe and the X8_LOCAL_UNAME override to
+// DISAGREE in order to prove which of the two actually decides the gate --
+// on a host whose real uname already matches the expected outcome, those
+// tests prove nothing. The ordinary behavioural tests go through run()
+// instead, which uses the script's own documented X8_LOCAL_UNAME test-mode
+// hook: a PATH shim would be useless there, since the "no node on PATH"
+// test replaces PATH wholesale.
+function makeUnameShim(unameS: string): string {
+  const dir = mkTestDir("wal-gc-daily-uname-shim-");
+  const shim = path.join(dir, "uname");
+  // The SUT only ever asks for `uname -s`; anything else falls through to
+  // the real binary, so this shim can never silently change behaviour it
+  // was not written to control.
+  writeFileSync(
+    shim,
+    `#!/usr/bin/env bash
+if [[ "\${1:-}" == "-s" ]]; then
+  printf '%s\\n' ${JSON.stringify(unameS)}
+  exit 0
+fi
+for real in /usr/bin/uname /bin/uname; do
+  [[ -x "$real" ]] && exec "$real" "$@"
+done
+printf '%s\\n' ${JSON.stringify(unameS)}
+`,
+  );
+  chmodSync(shim, 0o755);
+  return dir;
+}
+
+function shimmedPath(shimDir: string): string {
+  return `${shimDir}:${process.env.PATH ?? ""}`;
+}
+
 function makeWorktree(): string {
   const dir = mkTestDir("wal-gc-daily-worktree-");
   mkdirSync(path.join(dir, "scripts"), { recursive: true });
@@ -114,6 +152,19 @@ function run(opts: RunOpts) {
   const env: NodeJS.ProcessEnv = {
     ...process.env,
     X8_LOCAL_TEST_MODE: "1",
+    // Hard gate 1 (infra/local-x8/wal-gc-daily-apply.sh:159) refuses any
+    // host that is not Darwin, and it runs before everything this helper's
+    // callers actually assert on. Without this the entire suite exits 65 at
+    // that gate on a Linux CI runner and never reaches the preflight /
+    // apply / post / lock / evidence contracts it exists to cover. This is
+    // the script's OWN documented test-mode hook (x8_local_uname(),
+    // :152-158), gated behind X8_LOCAL_TEST_MODE=1 exactly like
+    // X8_LOCAL_WAL_GC_ENTRY on the next line -- not a relaxation of the
+    // gate, which keeps its own dedicated (and host-independent) coverage
+    // in the "Darwin-only hard gate" describe below. It is set before the
+    // extraEnv merge at the end of this function, so an individual test can
+    // still override it.
+    X8_LOCAL_UNAME: "Darwin",
     X8_LOCAL_WAL_GC_ENTRY: opts.shimPath,
     X8_LOCAL_WORKTREE: opts.worktree,
     X8_LOCAL_RUNTIME_DIR: opts.runtimeDir,
@@ -520,6 +571,11 @@ describe("wal-gc-daily-apply.sh: additional branch coverage (P2-9)", () => {
       env: {
         ...process.env,
         X8_LOCAL_TEST_MODE: "1",
+        // Same reason as run()'s own default: hard gate 1 (Darwin) runs
+        // before hard gate 2 (X8_LOCAL_WORKTREE absolute), so without this
+        // the refusal this test is named after is unreachable on a
+        // non-macOS host.
+        X8_LOCAL_UNAME: "Darwin",
         X8_LOCAL_WORKTREE: "relative/worktree/path",
         X8_LOCAL_RUNTIME_DIR: runtimeDir,
         CALL_LOG: callLog,
@@ -636,20 +692,32 @@ describe("wal-gc-daily-apply.sh: mutex lock", () => {
 });
 
 describe("wal-gc-daily-apply.sh: Darwin-only hard gate", () => {
-  it("X8_LOCAL_UNAME=Linux under test mode -> REFUSED reason=not_darwin, exit 65, history logs REFUSED", () => {
+  // Opus review fixup 2026-09-18 (P2-8/P2-13): runtime dir creation +
+  // history.log now happen before this hard gate runs (P2-13), so every
+  // spawn here -- like every other one in this file -- must pin
+  // X8_LOCAL_RUNTIME_DIR to a throwaway directory. Without it these tests
+  // would touch the real default (~/Library/Application
+  // Support/CPSNovelX8WalGc) on every run, which is exactly the test
+  // pollution this work order's own audit found sitting in that real
+  // directory.
+  //
+  // 2026-09-19 (CI Linux runner): both cases below now pin what the REAL
+  // `uname -s` probe reports via a PATH shim, so each one asserts the thing
+  // it is named after on ANY host. Previously the first case passed on a
+  // Linux runner even if X8_LOCAL_UNAME were ignored outright (the real
+  // uname already said Linux), and the second case was a literal
+  // `expect(true).toBe(true)` placeholder.
+  it("X8_LOCAL_UNAME=Linux under test mode beats a Darwin-reporting host -> REFUSED reason=not_darwin, exit 65, history logs REFUSED", () => {
     const worktree = makeWorktree();
-    // Opus review fixup 2026-09-18 (P2-8/P2-13): runtime dir creation +
-    // history.log now happen before this hard gate runs (P2-13), so this
-    // spawn -- like every other one in this file -- must pin
-    // X8_LOCAL_RUNTIME_DIR to a throwaway directory. Without it, this test
-    // would touch the real default (~/Library/Application
-    // Support/CPSNovelX8WalGc) on every run, which is exactly the test
-    // pollution this work order's own audit found sitting in that real
-    // directory.
     const runtimeDir = mkTestDir("wal-gc-daily-runtime-");
+    // The shimmed real probe says Darwin, so the ONLY thing that can produce
+    // a not_darwin refusal here is X8_LOCAL_UNAME genuinely being honored
+    // under test mode.
+    const unameShimDir = makeUnameShim("Darwin");
     const result = spawnSync("bash", [scriptPath], {
       env: {
         ...process.env,
+        PATH: shimmedPath(unameShimDir),
         X8_LOCAL_TEST_MODE: "1",
         X8_LOCAL_UNAME: "Linux",
         X8_LOCAL_WORKTREE: worktree,
@@ -665,23 +733,48 @@ describe("wal-gc-daily-apply.sh: Darwin-only hard gate", () => {
     expect(readFileSync(historyPath, "utf8")).toContain("result=REFUSED reason=not_darwin");
   });
 
-  it("a real (non-Darwin) host is refused even without any override, when not on macOS", () => {
-    // This repo's CI/dev host is macOS (see red-line notes), so this only
-    // documents intent; the Linux-uname case above is the actual behavioural
-    // proof, exercised without touching the real OS.
-    expect(true).toBe(true);
+  it("a non-Darwin host is refused with no override at all (the gate itself, not the override)", () => {
+    const worktree = makeWorktree();
+    const runtimeDir = mkTestDir("wal-gc-daily-runtime-");
+    // No X8_LOCAL_TEST_MODE and no X8_LOCAL_UNAME anywhere: the refusal here
+    // can only come from the real `uname -s` probe, which the shim pins to a
+    // non-Darwin value. This is the fail-closed contract itself.
+    const unameShimDir = makeUnameShim("Linux");
+    const result = spawnSync("bash", [scriptPath], {
+      env: {
+        ...process.env,
+        PATH: shimmedPath(unameShimDir),
+        X8_LOCAL_WORKTREE: worktree,
+        X8_LOCAL_RUNTIME_DIR: runtimeDir,
+      },
+      encoding: "utf8",
+    });
+
+    expect(result.status).toBe(65);
+    expect(result.stdout).toContain("LOCAL_WAL_GC=REFUSED reason=not_darwin");
+    const historyPath = path.join(runtimeDir, "logs", "history.log");
+    expect(existsSync(historyPath)).toBe(true);
+    expect(readFileSync(historyPath, "utf8")).toContain("result=REFUSED reason=not_darwin");
   });
 });
 
 describe("wal-gc-daily-apply.sh: test-mode gate on overrides", () => {
+  // Both cases pin the real `uname -s` probe to Darwin so the run genuinely
+  // gets PAST hard gate 1 and into the code the override would have
+  // affected. Without that, on a Linux host, "the override had no effect"
+  // is indistinguishable from "the script stopped at not_darwin before the
+  // override could ever matter" -- which is how the second case below used
+  // to pass for the wrong reason (and the first used to fail outright).
   it("without X8_LOCAL_TEST_MODE, X8_LOCAL_WAL_GC_ENTRY is ignored (warned, shim never invoked)", () => {
     const { shimPath, callLog } = makeShim();
     const worktree = makeWorktree();
     const runtimeDir = mkTestDir("wal-gc-daily-runtime-");
+    const unameShimDir = makeUnameShim("Darwin");
 
     const result = spawnSync("bash", [scriptPath], {
       env: {
         ...process.env,
+        PATH: shimmedPath(unameShimDir),
         X8_LOCAL_WAL_GC_ENTRY: shimPath,
         X8_LOCAL_WORKTREE: worktree,
         X8_LOCAL_RUNTIME_DIR: runtimeDir,
@@ -691,22 +784,30 @@ describe("wal-gc-daily-apply.sh: test-mode gate on overrides", () => {
     });
 
     expect(result.stdout).toContain("LOCAL_WAL_GC_WARN=override_ignored name=X8_LOCAL_WAL_GC_ENTRY");
+    // Proof the run really did reach run_step rather than stopping at the
+    // Darwin gate -- otherwise the CALL_LOG assertion below is vacuous.
+    expect(result.stdout).not.toContain("LOCAL_WAL_GC=REFUSED reason=not_darwin");
     // The shim was never reached -- it never got a chance to write to CALL_LOG.
+    // This run does exec the fake worktree's own stub scripts/x8-production-like.sh
+    // (the formal entry point), which is exactly the point: the override was
+    // ignored in favour of the real one.
     expect(existsSync(callLog) ? callLines(callLog) : []).toHaveLength(0);
   });
 
-  it("without X8_LOCAL_TEST_MODE, X8_LOCAL_UNAME is ignored (real uname decides the Darwin gate)", () => {
+  it("without X8_LOCAL_TEST_MODE, X8_LOCAL_UNAME is ignored (the real uname probe decides the Darwin gate)", () => {
     const worktree = makeWorktree();
     // Opus review fixup 2026-09-18 (P2-8): this run is NOT in test mode, so
-    // it proceeds past every hard gate on the real host (Darwin) and all
-    // the way into run_step, which -- since X8_LOCAL_WAL_GC_ENTRY is also
-    // not honored outside test mode -- actually execs the fake worktree's
-    // stub scripts/x8-production-like.sh. Real runtime dir isolation matters
-    // even more here than in the gate-only tests above.
+    // it proceeds past every hard gate and all the way into run_step, which
+    // -- since X8_LOCAL_WAL_GC_ENTRY is also not honored outside test mode --
+    // actually execs the fake worktree's stub scripts/x8-production-like.sh.
+    // Real runtime dir isolation matters even more here than in the
+    // gate-only tests above.
     const runtimeDir = mkTestDir("wal-gc-daily-runtime-");
+    const unameShimDir = makeUnameShim("Darwin");
     const result = spawnSync("bash", [scriptPath], {
       env: {
         ...process.env,
+        PATH: shimmedPath(unameShimDir),
         X8_LOCAL_UNAME: "Linux",
         X8_LOCAL_WORKTREE: worktree,
         X8_LOCAL_RUNTIME_DIR: runtimeDir,
@@ -715,8 +816,9 @@ describe("wal-gc-daily-apply.sh: test-mode gate on overrides", () => {
     });
 
     expect(result.stdout).toContain("LOCAL_WAL_GC_WARN=override_ignored name=X8_LOCAL_UNAME");
-    // Real uname on the dev/CI host is Darwin, so the not_darwin refusal
-    // must NOT fire (proving the fake "Linux" value was truly ignored).
+    // The real (shimmed) probe says Darwin, so the not_darwin refusal must
+    // NOT fire -- that is what proves the fake "Linux" value was truly
+    // ignored, on a Darwin host and a Linux one alike.
     expect(result.stdout).not.toContain("LOCAL_WAL_GC=REFUSED reason=not_darwin");
   });
 });
