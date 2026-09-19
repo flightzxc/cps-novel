@@ -68,25 +68,27 @@ class FakeOverlayDb {
   readonly translations = new Map<string, Row>();
   readonly identities: Row[] = [{ id: APPROVER_ID, username: "owner", status: "active" }];
   readonly audits: Row[] = [];
+  onAdvisoryLock: (() => void) | null = null;
 
   seedTag(stableId: string, slug: string, id = TAG_ID) {
     this.tags.set(stableId, { id, stableId, slug });
   }
 
   asClient() {
+    const self = this;
     const client = {
       canonicalTag: {
         findMany: async (args: { where: { stableId: { in: string[] } }; select: unknown }) =>
           args.where.stableId.in.flatMap((stableId) => {
-            const row = this.tags.get(stableId);
+            const row = self.tags.get(stableId);
             return row ? [{ id: row.id, stableId: row.stableId, slug: row.slug }] : [];
           }),
       },
       canonicalTagTranslation: {
-        count: async () => this.translations.size,
+        count: async () => self.translations.size,
         findMany: async (args?: { where?: { canonicalTagId?: { in: string[] } } }) => {
           const ids = args?.where?.canonicalTagId?.in;
-          return [...this.translations.values()].filter((row) =>
+          return [...self.translations.values()].filter((row) =>
             !ids || ids.includes(String(row.canonicalTagId)),
           );
         },
@@ -96,31 +98,34 @@ class FakeOverlayDb {
           update: Row;
         }) => {
           const key = `${args.where.canonicalTagId_locale.canonicalTagId}::${args.where.canonicalTagId_locale.locale}`;
-          const existing = this.translations.get(key);
+          const existing = self.translations.get(key);
           const next = existing
             ? { ...existing, ...args.update }
             : { id: key, ...args.create };
-          this.translations.set(key, next);
+          self.translations.set(key, next);
           return next;
         },
       },
       adminIdentity: {
         findFirst: async (args: { where: { id?: string; username?: string } }) =>
-          this.identities.find((row) => row.id === args.where.id || row.username === args.where.username) ?? null,
+          self.identities.find((row) => row.id === args.where.id || row.username === args.where.username) ?? null,
       },
       operationAudit: {
         findFirst: async (args: { where: { actorType: string; action: string; requestId: string } }) =>
-          this.audits.find((audit) =>
+          self.audits.find((audit) =>
             audit.actorType === args.where.actorType
             && audit.action === args.where.action
             && audit.requestId === args.where.requestId) ?? null,
         create: async (args: { data: Row }) => {
-          const row = { id: BigInt(this.audits.length + 1), ...args.data };
-          this.audits.push(row);
+          const row = { id: BigInt(self.audits.length + 1), ...args.data };
+          self.audits.push(row);
           return { id: row.id };
         },
       },
-      $queryRaw: async () => [{ lock_result: null }],
+      $queryRaw: async () => {
+        self.onAdvisoryLock?.();
+        return [{ lock_result: null }];
+      },
       $transaction: async <T>(callback: (tx: never) => Promise<T>) => callback(client as never),
     };
     return client as unknown as Parameters<typeof runTranslationOverlayCli>[0];
@@ -137,6 +142,8 @@ describe("canonical tag translation overlay artifact", () => {
     expect(loaded.artifact.translation_count).toBe(CANONICAL_TAG_V1_COUNT * SITE_LOCALES.length);
     expect(loaded.artifact.public_locales).toEqual([...SITE_LOCALES]);
     expect(loaded.artifact.overwrite_zh).toBe(false);
+    expect(loaded.artifact.artifact_status).toBe("SEMANTIC_CHECKED");
+    expect(loaded.artifact.artifact_status).not.toBe("REVIEWED");
     expect(loaded.artifact.translations.some((row) => (row.locale as string) === "zh")).toBe(false);
     for (const row of loaded.artifact.translations) {
       expect(SITE_LOCALES).toContain(row.locale);
@@ -152,6 +159,25 @@ describe("canonical tag translation overlay artifact", () => {
     expect(readFileSync(join(REPO_ROOT, "scripts/p2-06-5-production/build-canonical-tag-translation-overlay.py"), "utf8"))
       .not.toMatch(/data\/moboreels\/_tags-minimax-filled/);
     expect(loaded.artifact.cache_note).toMatch(/force-dynamic/);
+  });
+
+  it("keeps cute-baby and cross-dressing labels from child-romance and costume-swap senses", () => {
+    const loaded = loadTranslationOverlayArtifact(REPO_ROOT);
+    const bySlug = (slug: string) => loaded.artifact.translations.filter((row) => row.slug === slug);
+    const baby = bySlug("child-centered-romance");
+    expect(baby).toHaveLength(SITE_LOCALES.length);
+    for (const row of baby) {
+      expect(row.displayName).not.toMatch(/con niñ|com crian|mit Kind|z dzieckiem|s dítětem|с ребёнком|Child-Centered|子連れ|육아 로맨스|مع طفل/i);
+    }
+    expect(baby.find((row) => row.locale === "zh-Hant")?.displayName).toBe("萌寶題材");
+    const dress = bySlug("cross-dressing");
+    expect(dress.find((row) => row.locale === "es")?.displayName).toBe("Vestirse del sexo opuesto");
+    expect(dress.find((row) => row.locale === "pt-BR")?.displayName).toBe("Vestir-se do sexo oposto");
+    expect(dress.find((row) => row.locale === "de")?.displayName).toBe("Crossdressing");
+    expect(dress.find((row) => row.locale === "pl")?.displayName).not.toBe("Przebranie");
+    expect(dress.find((row) => row.locale === "cs")?.displayName).not.toBe("Převlek");
+    expect(dress.find((row) => row.locale === "ru")?.displayName).not.toBe("Переодевание");
+    expect(dress.find((row) => row.locale === "ja")?.displayName).toBe("女装／男装");
   });
 
   it("does not rewrite the frozen CanonicalTag v1 JSON", () => {
@@ -325,5 +351,52 @@ describe("canonical tag translation overlay CLI", () => {
     });
     expect(JSON.stringify(target)).not.toContain("s3cret");
     expect(describeOverlayDatabaseTarget(undefined).configured).toBe(false);
+  });
+
+  it("apply re-plans after the advisory lock so a later request-id does not count identical names as insert", async () => {
+    const db = new FakeOverlayDb();
+    const artifact = parseTranslationOverlayArtifact(miniArtifact()) as TranslationOverlayArtifact;
+    for (const stableId of new Set(artifact.translations.map((row) => row.stableId))) {
+      const slug = artifact.translations.find((row) => row.stableId === stableId)!.slug;
+      db.seedTag(stableId, slug, stableId);
+    }
+    const fillCurrentNames = () => {
+      for (const row of artifact.translations) {
+        const tag = db.tags.get(row.stableId);
+        if (!tag) continue;
+        const canonicalTagId = String(tag.id);
+        db.translations.set(`${canonicalTagId}::${row.locale}`, {
+          canonicalTagId,
+          locale: row.locale,
+          displayName: row.displayName,
+        });
+      }
+    };
+    db.onAdvisoryLock = fillCurrentNames;
+
+    const first = await runTranslationOverlayCli(
+      db.asClient(),
+      baseOptions({ apply: true, requestId: "req-lock-a" }),
+      { artifact, sha256: "fixture-sha" },
+    );
+    expect(first.outcome).toBe("applied");
+    expect(first.insert).toBe(0);
+    expect(first.update).toBe(0);
+    expect(first.unchanged).toBe(TRANSLATION_OVERLAY_EXPECTED_COUNT);
+    expect(first.wrote).toBe(false);
+    expect(db.translations.size).toBe(TRANSLATION_OVERLAY_EXPECTED_COUNT);
+
+    db.onAdvisoryLock = null;
+    const second = await runTranslationOverlayCli(
+      db.asClient(),
+      baseOptions({ apply: true, requestId: "req-lock-b" }),
+      { artifact, sha256: "fixture-sha" },
+    );
+    expect(second.outcome).toBe("applied");
+    expect(second.insert).toBe(0);
+    expect(second.update).toBe(0);
+    expect(second.unchanged).toBe(TRANSLATION_OVERLAY_EXPECTED_COUNT);
+    expect(second.wrote).toBe(false);
+    expect(db.translations.size).toBe(TRANSLATION_OVERLAY_EXPECTED_COUNT);
   });
 });

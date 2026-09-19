@@ -73,8 +73,8 @@ NEW_ROWS: dict[str, list[str]] = {
     "campus": ["Campus", "Campus", "Campus", "Kampus", "Học đường", "วิทยาเขต", "学園", "캠퍼스", "校園", "حرم جامعي", "Campus", "Campus", "Kampus", "Kampus", "Кампус"],
     "character-growth": ["Character Growth", "Crecimiento del personaje", "Crescimento do personagem", "Pertumbuhan karakter", "Trưởng thành nhân vật", "การเติบโตของตัวละคร", "成長譚", "캐릭터 성장", "人物成長", "تطور الشخصية", "Évolution du personnage", "Charakterentwicklung", "Rozwój postaci", "Vývoj postavy", "Рост персонажа"],
     "chef": ["Chef", "Chef", "Chef", "Koki", "Đầu bếp", "เชฟ", "シェフ", "셰프", "廚師", "طاهٍ", "Chef", "Koch", "Szef kuchni", "Šéfkuchař", "Шеф-повар"],
-    "child-centered-romance": ["Child-Centered Romance", "Romance con niños", "Romance com crianças", "Romansa bertema anak", "Ngôn tình có bé", "โรแมนซ์มีลูกน้อย", "子連れ恋愛", "육아 로맨스", "萌寶題材", "رومانسية مع طفل", "Romance autour d’un enfant", "Romanze mit Kind", "Romans z dzieckiem", "Romance s dítětem", "Романтика с ребёнком"],
-    "childhood-sweethearts": ["Childhood Sweethearts", "Novios de la infancia", "Namorados de infância", "Kekasih masa kecil", "Thanh mai trúc mã", "รักวัยเด็ก", "幼なじみ", "소꿉친구", "青梅竹馬", "أحبّاء الطفولة", "Amours d’enfance", "Kinderliebe", "Miłość z dzieciństwa", "Láska z dětství", "Детская любовь"],
+    "child-centered-romance": ["Cute-Baby Romance", "Romance de bebé adorable", "Romance de bebê fofo", "Romansa bayi menggemaskan", "Ngôn tình bé cưng", "โรแมนซ์เบบี้น่ารัก", "萌えベビー題材", "귀여운 아기 소재", "萌寶題材", "ثيمة الطفل اللطيف", "Thématique bébé mignon", "Süßes-Baby-Thema", "Motyw uroczego bobasa", "Téma roztomilého miminka", "Тема милого малыша"],
+    "childhood-sweethearts": ["Childhood Sweethearts", "Novios de la infancia", "Namorados de infância", "Kekasih masa kecil", "Thanh mai trúc mã", "รักวัยเด็ก", "幼なじみ", "소꿉친구", "青梅竹馬", "أحبّاء الطفولة", "Amours d’enfance", "Kinderliebe", "Miłość z dzieciństwa", "Láska z dětství", "Возлюбленные с детства"],
     "comeback": ["Comeback", "Resurgimiento", "Retorno triunfal", "Kebangkitan", "Lật ngược", "คัมแบ็ก", "逆転", "역전", "逆襲", "عودة", "Retour en force", "Comeback", "Powrót", "Comeback", "Камбэк"],
     "comedy": ["Comedy", "Comedia", "Comédia", "Komedi", "Hài hước", "คอมเมดี้", "コメディ", "코미디", "喜劇", "كوميديا", "Comédie", "Komödie", "Komedia", "Komedie", "Комедия"],
     "contemporary-setting": ["Contemporary Setting", "Ambientación contemporánea", "Cenário contemporâneo", "Latar kontemporer", "Bối cảnh đương đại", "ฉากร่วมสมัย", "現代背景", "현대 배경", "當代背景", "خلفية معاصرة", "Cadre contemporain", "Gegenwartsschauplatz", "Współczesne realia", "Současné prostředí", "Современная обстановка"],
@@ -82,12 +82,12 @@ NEW_ROWS: dict[str, list[str]] = {
     "court-intrigue": ["Court Intrigue", "Intrigas palaciegas", "Intriga palaciana", "Intrik istana", "Cung đấu", "การเมืองในวัง", "宮廷陰謀", "궁중 암투", "宮廷權謀", "مؤامرات البلاط", "Intrigue de cour", "Hofintrige", "Intrygi dworskie", "Dvorské intriky", "Придворные интриги"],
     "crime": ["Crime", "Crimen", "Crime", "Kejahatan", "Tội phạm", "อาชญากรรม", "犯罪", "범죄", "犯罪", "جريمة", "Crime", "Krimi", "Kryminał", "Krimi", "Криминал"],
     "criminal-investigation": ["Criminal Investigation", "Investigación criminal", "Investigação criminal", "Investigasi kriminal", "Điều tra hình sự", "สืบสวนคดีอาญา", "刑事捜査", "형사 수사", "刑事偵查", "تحقيق جنائي", "Enquête criminelle", "Kriminalermittlung", "Śledztwo kryminalne", "Kriminální vyšetřování", "Уголовное расследование"],
-    "cross-dressing": ["Cross-dressing", "Cruce de vestuario", "Troca de trajes", "Menyamar lawan jenis", "Giả trang", "แปลงเพศด้วยเครื่องแต่งกาย", "女装／男装", "여장/남장", "異裝", "تنكّر بالملابس", "Travestissement", "Crossdressing", "Przebieranie płci", "Převlek do druhého pohlaví", "Переодевание"],
+    "cross-dressing": ["Cross-dressing", "Vestirse del sexo opuesto", "Vestir-se do sexo oposto", "Menyamar lawan jenis", "Giả trang nam/nữ", "แต่งตัวข้ามเพศ", "女装／男装", "여장/남장", "異裝", "ارتداء ملابس الجنس الآخر", "Travestissement", "Crossdressing", "Przebieranie się za inną płeć", "Převlek do druhého pohlaví", "Переодевание в одежду другого пола"],
     "crown-prince": ["Crown Prince", "Príncipe heredero", "Príncipe herdeiro", "Pangeran mahkota", "Thái tử", "มกุฎราชกุมาร", "皇太子", "태자", "太子", "ولي العهد", "Prince héritier", "Kronprinz", "Następca tronu", "Korunní princ", "Наследный принц"],
     "disability": ["Disability", "Discapacidad", "Deficiência", "Disabilitas", "Khuyết tật", "ความพิการ", "障害のある登場人物", "장애", "殘障角色", "إعاقة", "Handicap", "Behinderung", "Niepełnosprawność", "Postižení", "Инвалидность"],
     "divorce": ["Divorce", "Divorcio", "Divórcio", "Perceraian", "Ly hôn", "หย่าร้าง", "離婚", "이혼", "離婚", "طلاق", "Divorce", "Scheidung", "Rozwód", "Rozvod", "Развод"],
     "doctor": ["Doctor", "Médico", "Médico", "Dokter", "Bác sĩ", "แพทย์", "医師", "의사", "醫生", "طبيب", "Médecin", "Arzt", "Lekarz", "Lékař", "Врач"],
-    "eastern-fantasy": ["Eastern Fantasy", "Fantasía oriental", "Fantasia oriental", "Fantasi timur", "Tiên hiệp phương Đông", "แฟนตาซีตะวันออก", "東方ファンタジー", "동양 판타지", "東方奇幻", "فانتازيا شرقية", "Fantasy orientale", "Östliche Fantasy", "Fantastyka wschodnia", "Východní fantasy", "Восточное фэнтези"],
+    "eastern-fantasy": ["Eastern Fantasy", "Fantasía oriental", "Fantasia oriental", "Fantasi timur", "Kỳ ảo phương Đông", "แฟนตาซีตะวันออก", "東方ファンタジー", "동양 판타지", "東方奇幻", "فانتازيا شرقية", "Fantasy orientale", "Östliche Fantasy", "Fantastyka wschodnia", "Východní fantasy", "Восточное фэнтези"],
     "emotional-healing": ["Emotional Healing", "Sanación emocional", "Cura emocional", "Penyembuhan emosional", "Chữa lành cảm xúc", "เยียวยาใจ", "心の癒し", "감정 치유", "情感治癒", "شفاء عاطفي", "Guérison émotionnelle", "Emotionale Heilung", "Uzdrowienie emocjonalne", "Emoční uzdravení", "Эмоциональное исцеление"],
     "emperor": ["Emperor", "Emperador", "Imperador", "Kaisar", "Hoàng đế", "จักรพรรดิ", "皇帝", "황제", "皇帝", "إمبراطور", "Empereur", "Kaiser", "Cesarz", "Císař", "Император"],
     "ensemble-darling": ["Ensemble Darling", "El consentido de todos", "Queridinho de todos", "Kesayangan semua orang", "Được cả nhà cưng", "Darling ของทุกคน", "全員から愛される", "단체 총아", "團寵", "محبوب الجميع", "Chouchou de tous", "Liebling aller", "Ulubieniec wszystkich", "Miláček všech", "Любимчик всех"],
@@ -110,7 +110,7 @@ NEW_ROWS: dict[str, list[str]] = {
     "happy-ending": ["Happy Ending", "Final feliz", "Final feliz", "Ending bahagia", "Kết thúc có hậu", "แฮปปี้เอนดิ้ง", "ハッピーエンド", "해피엔딩", "圓滿結局", "نهاية سعيدة", "Fin heureuse", "Happy End", "Szczęśliwe zakończenie", "Šťastný konec", "Счастливый финал"],
     "heir": ["Heir", "Heredero", "Herdeiro", "Ahli waris", "Người thừa kế", "ทายาท", "後継者", "후계자", "繼承人", "وريث", "Héritier", "Erbe", "Dziedzic", "Dědic", "Наследник"],
     "hidden-identity": ["Hidden Identity", "Identidad oculta", "Identidade oculta", "Identitas tersembunyi", "Thân phận giấu kín", "ซ่อนตัวตน", "隠された身分", "숨겨진 신분", "隱藏身份", "هوية مخفية", "Identité cachée", "Verborgene Identität", "Ukryta tożsamość", "Skrytá identita", "Скрытая личность"],
-    "historical-fiction": ["Historical Fiction", "Ficción histórica", "Ficção histórica", "Fiksi sejarah", "Tiểu thuyết lịch sử", "นิยายอิงประวัติศาสตร์", "歴史もの", "역사물", "歷史題材", "خيال تاريخي", "Fiction historique", "Historischer Roman", "Fikcja historyczna", "Historická fikce", "Историческая проза"],
+    "historical-fiction": ["Historical Fiction", "Ficción histórica", "Ficção histórica", "Fiksi sejarah", "Tiểu thuyết lịch sử", "นิยายอิงประวัติศาสตร์", "歴史もの", "역사물", "歷史題材", "خيال تاريخي", "Fiction historique", "Historische Thematik", "Fikcja historyczna", "Historická fikce", "Историческая проза"],
     "historical-romance": ["Historical Romance", "Romance histórico", "Romance histórico", "Romansa sejarah", "Ngôn tình cổ đại", "โรแมนซ์ย้อนยุค", "時代恋愛", "사극 로맨스", "古代言情", "رومانسية تاريخية", "Romance historique", "Historische Romanze", "Romans historyczny", "Historická romance", "Историческая романтика"],
     "horror": ["Horror", "Terror", "Terror", "Horor", "Kinh dị", "สยองขวัญ", "ホラー", "호러", "恐怖", "رعب", "Horreur", "Horror", "Horror", "Horor", "Ужасы"],
     "identity-swap": ["Identity Swap", "Intercambio de identidad", "Troca de identidade", "Tukar identitas", "Đổi thân phận", "สลับตัวตน", "身分入れ替え", "신분 교체", "身份互換", "تبادل الهوية", "Échange d’identité", "Identitätstausch", "Zamiana tożsamości", "Výměna identity", "Обмен личностями"],
@@ -125,7 +125,7 @@ NEW_ROWS: dict[str, list[str]] = {
     "love-triangle": ["Love Triangle", "Triángulo amoroso", "Triângulo amoroso", "Segitiga asmara", "Tam giác tình", "รักสามเส้า", "三角関係", "삼각관계", "三角戀", "مثلث عاطفي", "Triangle amoureux", "Liebesdreieck", "Trójkąt miłosny", "Milostný trojúhelník", "Любовный треугольник"],
     "mafia": ["Mafia", "Mafia", "Máfia", "Mafia", "Mafia", "มาเฟีย", "マフィア", "마피아", "黑幫", "مافيا", "Mafia", "Mafia", "Mafia", "Mafie", "Мафия"],
     "maid": ["Maid", "Criada", "Empregada", "Pembantu", "Hầu gái", "สาวใช้", "メイド", "메이드", "女僕", "خادمة", "Femme de chambre", "Zofe", "Pokojówka", "Služka", "Горничная"],
-    "male-audience": ["Male Audience", "Para lectores", "Para leitores", "Untuk pembaca pria", "Dành cho nam", "สำหรับผู้อ่านชาย", "男性向け", "남성향", "男性向", "موجه للرجال", "Public masculin", "Für Leser", "Dla czytelników", "Pro čtenáře", "Для мужской аудитории"],
+    "male-audience": ["Male Audience", "Para lectores", "Para leitores", "Untuk pembaca pria", "Dành cho nam", "สำหรับผู้อ่านชาย", "男性向け", "남성향", "男性向", "موجه للرجال", "Public masculin", "Für männliche Leser", "Dla czytelników męskich", "Pro mužské čtenáře", "Для мужской аудитории"],
     "marriage": ["Marriage", "Matrimonio", "Casamento", "Pernikahan", "Hôn nhân", "การแต่งงาน", "結婚", "결혼", "婚姻題材", "زواج", "Mariage", "Ehe", "Małżeństwo", "Manželství", "Брак"],
     "mature-content": ["Mature Content", "Contenido para adultos", "Conteúdo adulto", "Konten dewasa", "Nội dung người lớn", "เนื้อหาสำหรับผู้ใหญ่", "成人向け", "성인 콘텐츠", "成人向內容", "محتوى للبالغين", "Contenu adulte", "Inhalte für Erwachsene", "Treści dla dorosłych", "Obsah pro dospělé", "Контент 18+"],
     "military": ["Military", "Militar", "Militar", "Militer", "Quân đội", "ทหาร", "軍もの", "군", "軍旅", "عسكري", "Militaire", "Militär", "Wojsko", "Armáda", "Армия"],
@@ -164,7 +164,7 @@ NEW_ROWS: dict[str, list[str]] = {
     "superpowers": ["Superpowers", "Superpoderes", "Superpoderes", "Kekuatan super", "Siêu năng lực", "พลังพิเศษ", "超能力", "초능력", "超能力", "قوى خارقة", "Super-pouvoirs", "Überkräfte", "Supermoce", "SuperSíly", "Суперсилы"],
     "suspense": ["Suspense", "Suspense", "Suspense", "Suspen", "Hồi hộp", "ระทึกขวัญ", "サスペンス", "서스펜스", "懸疑", "تشويق", "Suspense", "Spannung", "Sensacja", "Napínavka", "Саспенс"],
     "sweetness": ["Sweetness", "Dulzura", "Doçura", "Manis", "Ngọt ngào", "หวานชื่น", "甘々", "달달함", "甜寵", "حلاوة", "Douceur", "Süß", "Słodkość", "Sladkost", "Сладость"],
-    "system-fantasy": ["System Fantasy", "Fantasía de sistema", "Fantasia de sistema", "Fantasi sistem", "Hệ thống dị giới", "ระบบแฟนตาซี", "システムもの", "시스템물", "系統流", "فانتازيا النظام", "Fantasy à système", "System-Fantasy", "Fantastyka z systemem", "Systémová fantasy", "Системное фэнтези"],
+    "system-fantasy": ["System Fantasy", "Fantasía de sistema", "Fantasia de sistema", "Fantasi sistem", "Dòng hệ thống", "ระบบแฟนตาซี", "システムもの", "시스템물", "系統流", "فانتازيا النظام", "Fantasy à système", "System-Fantasy", "Fantastyka z systemem", "Systémová fantasy", "Системное фэнтези"],
     "tearjerker": ["Tearjerker", "Drama lacrimógeno", "Drama emocionante", "Mengharukan", "Cảm động", "ซึ้งน้ำตา", "泣ける話", "눈물 자극", "催淚", "مؤثر للدموع", "Histoire à larmes", "Tränendrüse", "Łzawer", "Doják", "Слезоточивая история"],
     "time-loop": ["Time Loop", "Bucle temporal", "Loop temporal", "Lingkaran waktu", "Vòng lặp thời gian", "วนเวลา", "タイムループ", "타임루프", "時間循環", "حلقة زمنية", "Boucle temporelle", "Zeitschleife", "Pętla czasu", "Časová smyčka", "Петля времени"],
     "time-travel": ["Time Travel", "Viaje en el tiempo", "Viagem no tempo", "Perjalanan waktu", "Du hành thời gian", "ย้อนเวลา", "タイムトラベル", "타임슬립", "穿越", "سفر عبر الزمن", "Voyage dans le temps", "Zeitreise", "Podróż w czasie", "Cestování časem", "Путешествие во времени"],
@@ -260,7 +260,11 @@ def main() -> None:
         "child-centered-romance",
         "secret-baby",
         "older-adult-romance",
+        "cross-dressing",
+        "frenemies",
     }
+    # CPS display name collides with another CanonicalTag in that locale.
+    FORCE_NEW = {("historical-romance", "de")}
 
     translations = []
     for tag in tags:
@@ -311,6 +315,9 @@ def main() -> None:
             if locale == "zh-Hant" and display == zh:
                 stamp(new_by_locale[locale], "new", "zh-Hant", "new")
 
+            if (slug, locale) in FORCE_NEW:
+                stamp(new_by_locale[locale], "new", locale, "new")
+
             item = {
                 "stableId": stable_id,
                 "slug": slug,
@@ -336,13 +343,17 @@ def main() -> None:
 
     artifact = {
         "schema_version": 1,
-        "artifact_status": "REVIEWED",
+        "artifact_status": "SEMANTIC_CHECKED",
         "taxonomy_version": "canonical-tag-v1",
         "canonical_v1_sha256": V1_SHA,
         "canonical_v1_count": 123,
         "public_locales": SITE_LOCALES,
         "translation_count": len(translations),
         "overwrite_zh": False,
+        "review_scope": (
+            "Meaning check against CanonicalTag display_name_zh for wrong sense, "
+            "clear ambiguity, and concept mix-up. Not a full linguistic sign-off of every cell."
+        ),
         "cache_note": (
             "Public taxonomy queries are force-dynamic with request-scoped React.cache(); "
             "overlay apply is visible on the next request without restart or waiting for "

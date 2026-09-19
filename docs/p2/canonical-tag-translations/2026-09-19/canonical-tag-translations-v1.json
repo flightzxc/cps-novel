@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "artifact_status": "REVIEWED",
+  "artifact_status": "SEMANTIC_CHECKED",
   "taxonomy_version": "canonical-tag-v1",
   "canonical_v1_sha256": "8bc8cdae8be2176bde170173e98bad2b9fa0e1770818174a57320816eefdccad",
   "canonical_v1_count": 123,
@@ -23,6 +23,7 @@
   ],
   "translation_count": 1845,
   "overwrite_zh": false,
+  "review_scope": "Meaning check against CanonicalTag display_name_zh for wrong sense, clear ambiguity, and concept mix-up. Not a full linguistic sign-off of every cell.",
   "cache_note": "Public taxonomy queries are force-dynamic with request-scoped React.cache(); overlay apply is visible on the next request without restart or waiting for getActiveLocales 300s TTL. getActiveLocales does not cache tag labels.",
   "translations": [
     {
@@ -1649,7 +1650,7 @@
       "stableId": "ct-v1-child-centered-romance",
       "slug": "child-centered-romance",
       "locale": "en",
-      "displayName": "Child-Centered Romance",
+      "displayName": "Cute-Baby Romance",
       "source": "new",
       "sourceLocale": "en",
       "reviewStatus": "new"
@@ -1658,7 +1659,7 @@
       "stableId": "ct-v1-child-centered-romance",
       "slug": "child-centered-romance",
       "locale": "es",
-      "displayName": "Romance con niños",
+      "displayName": "Romance de bebé adorable",
       "source": "new",
       "sourceLocale": "es",
       "reviewStatus": "new"
@@ -1667,7 +1668,7 @@
       "stableId": "ct-v1-child-centered-romance",
       "slug": "child-centered-romance",
       "locale": "pt-BR",
-      "displayName": "Romance com crianças",
+      "displayName": "Romance de bebê fofo",
       "source": "new",
       "sourceLocale": "pt-BR",
       "reviewStatus": "new"
@@ -1676,7 +1677,7 @@
       "stableId": "ct-v1-child-centered-romance",
       "slug": "child-centered-romance",
       "locale": "id",
-      "displayName": "Romansa bertema anak",
+      "displayName": "Romansa bayi menggemaskan",
       "source": "new",
       "sourceLocale": "id",
       "reviewStatus": "new"
@@ -1685,7 +1686,7 @@
       "stableId": "ct-v1-child-centered-romance",
       "slug": "child-centered-romance",
       "locale": "vi",
-      "displayName": "Ngôn tình có bé",
+      "displayName": "Ngôn tình bé cưng",
       "source": "new",
       "sourceLocale": "vi",
       "reviewStatus": "new"
@@ -1694,7 +1695,7 @@
       "stableId": "ct-v1-child-centered-romance",
       "slug": "child-centered-romance",
       "locale": "th",
-      "displayName": "โรแมนซ์มีลูกน้อย",
+      "displayName": "โรแมนซ์เบบี้น่ารัก",
       "source": "new",
       "sourceLocale": "th",
       "reviewStatus": "new"
@@ -1703,7 +1704,7 @@
       "stableId": "ct-v1-child-centered-romance",
       "slug": "child-centered-romance",
       "locale": "ja",
-      "displayName": "子連れ恋愛",
+      "displayName": "萌えベビー題材",
       "source": "new",
       "sourceLocale": "ja",
       "reviewStatus": "new"
@@ -1712,7 +1713,7 @@
       "stableId": "ct-v1-child-centered-romance",
       "slug": "child-centered-romance",
       "locale": "ko",
-      "displayName": "육아 로맨스",
+      "displayName": "귀여운 아기 소재",
       "source": "new",
       "sourceLocale": "ko",
       "reviewStatus": "new"
@@ -1730,7 +1731,7 @@
       "stableId": "ct-v1-child-centered-romance",
       "slug": "child-centered-romance",
       "locale": "ar",
-      "displayName": "رومانسية مع طفل",
+      "displayName": "ثيمة الطفل اللطيف",
       "source": "new",
       "sourceLocale": "ar",
       "reviewStatus": "new"
@@ -1739,7 +1740,7 @@
       "stableId": "ct-v1-child-centered-romance",
       "slug": "child-centered-romance",
       "locale": "fr",
-      "displayName": "Romance autour d’un enfant",
+      "displayName": "Thématique bébé mignon",
       "source": "new",
       "sourceLocale": "fr",
       "reviewStatus": "new"
@@ -1748,7 +1749,7 @@
       "stableId": "ct-v1-child-centered-romance",
       "slug": "child-centered-romance",
       "locale": "de",
-      "displayName": "Romanze mit Kind",
+      "displayName": "Süßes-Baby-Thema",
       "source": "new",
       "sourceLocale": "de",
       "reviewStatus": "new"
@@ -1757,7 +1758,7 @@
       "stableId": "ct-v1-child-centered-romance",
       "slug": "child-centered-romance",
       "locale": "pl",
-      "displayName": "Romans z dzieckiem",
+      "displayName": "Motyw uroczego bobasa",
       "source": "new",
       "sourceLocale": "pl",
       "reviewStatus": "new"
@@ -1766,7 +1767,7 @@
       "stableId": "ct-v1-child-centered-romance",
       "slug": "child-centered-romance",
       "locale": "cs",
-      "displayName": "Romance s dítětem",
+      "displayName": "Téma roztomilého miminka",
       "source": "new",
       "sourceLocale": "cs",
       "reviewStatus": "new"
@@ -1775,7 +1776,7 @@
       "stableId": "ct-v1-child-centered-romance",
       "slug": "child-centered-romance",
       "locale": "ru",
-      "displayName": "Романтика с ребёнком",
+      "displayName": "Тема милого малыша",
       "source": "new",
       "sourceLocale": "ru",
       "reviewStatus": "new"
@@ -1910,7 +1911,7 @@
       "stableId": "ct-v1-childhood-sweethearts",
       "slug": "childhood-sweethearts",
       "locale": "ru",
-      "displayName": "Детская любовь",
+      "displayName": "Возлюбленные с детства",
       "source": "new",
       "sourceLocale": "ru",
       "reviewStatus": "new"
@@ -2873,7 +2874,7 @@
       "stableId": "ct-v1-cross-dressing",
       "slug": "cross-dressing",
       "locale": "es",
-      "displayName": "Cruce de vestuario",
+      "displayName": "Vestirse del sexo opuesto",
       "source": "new",
       "sourceLocale": "es",
       "reviewStatus": "new"
@@ -2882,7 +2883,7 @@
       "stableId": "ct-v1-cross-dressing",
       "slug": "cross-dressing",
       "locale": "pt-BR",
-      "displayName": "Troca de trajes",
+      "displayName": "Vestir-se do sexo oposto",
       "source": "new",
       "sourceLocale": "pt-BR",
       "reviewStatus": "new"
@@ -2900,7 +2901,7 @@
       "stableId": "ct-v1-cross-dressing",
       "slug": "cross-dressing",
       "locale": "vi",
-      "displayName": "Giả trang",
+      "displayName": "Giả trang nam/nữ",
       "source": "new",
       "sourceLocale": "vi",
       "reviewStatus": "new"
@@ -2909,7 +2910,7 @@
       "stableId": "ct-v1-cross-dressing",
       "slug": "cross-dressing",
       "locale": "th",
-      "displayName": "แปลงเพศด้วยเครื่องแต่งกาย",
+      "displayName": "แต่งตัวข้ามเพศ",
       "source": "new",
       "sourceLocale": "th",
       "reviewStatus": "new"
@@ -2945,7 +2946,7 @@
       "stableId": "ct-v1-cross-dressing",
       "slug": "cross-dressing",
       "locale": "ar",
-      "displayName": "تنكّر بالملابس",
+      "displayName": "ارتداء ملابس الجنس الآخر",
       "source": "new",
       "sourceLocale": "ar",
       "reviewStatus": "new"
@@ -2963,34 +2964,34 @@
       "stableId": "ct-v1-cross-dressing",
       "slug": "cross-dressing",
       "locale": "de",
-      "displayName": "Sich verkleiden",
-      "source": "reuse_cps_exact_slug",
+      "displayName": "Crossdressing",
+      "source": "new",
       "sourceLocale": "de",
-      "reviewStatus": "reviewed"
+      "reviewStatus": "new"
     },
     {
       "stableId": "ct-v1-cross-dressing",
       "slug": "cross-dressing",
       "locale": "pl",
-      "displayName": "Przebranie",
-      "source": "reuse_cps_exact_slug",
+      "displayName": "Przebieranie się za inną płeć",
+      "source": "new",
       "sourceLocale": "pl",
-      "reviewStatus": "reviewed"
+      "reviewStatus": "new"
     },
     {
       "stableId": "ct-v1-cross-dressing",
       "slug": "cross-dressing",
       "locale": "cs",
-      "displayName": "Převlek",
-      "source": "reuse_cps_exact_slug",
+      "displayName": "Převlek do druhého pohlaví",
+      "source": "new",
       "sourceLocale": "cs",
-      "reviewStatus": "reviewed"
+      "reviewStatus": "new"
     },
     {
       "stableId": "ct-v1-cross-dressing",
       "slug": "cross-dressing",
       "locale": "ru",
-      "displayName": "Переодевание",
+      "displayName": "Переодевание в одежду другого пола",
       "source": "new",
       "sourceLocale": "ru",
       "reviewStatus": "new"
@@ -3575,7 +3576,7 @@
       "stableId": "ct-v1-eastern-fantasy",
       "slug": "eastern-fantasy",
       "locale": "vi",
-      "displayName": "Tiên hiệp phương Đông",
+      "displayName": "Kỳ ảo phương Đông",
       "source": "new",
       "sourceLocale": "vi",
       "reviewStatus": "new"
@@ -5301,90 +5302,90 @@
       "slug": "frenemies",
       "locale": "en",
       "displayName": "Frenemies",
-      "source": "reuse_repair",
+      "source": "new",
       "sourceLocale": "en",
-      "reviewStatus": "reviewed"
+      "reviewStatus": "new"
     },
     {
       "stableId": "ct-v1-frenemies",
       "slug": "frenemies",
       "locale": "es",
-      "displayName": "Rivales enamorados",
-      "source": "reuse_repair",
+      "displayName": "Amigos-enemigos",
+      "source": "new",
       "sourceLocale": "es",
-      "reviewStatus": "reviewed"
+      "reviewStatus": "new"
     },
     {
       "stableId": "ct-v1-frenemies",
       "slug": "frenemies",
       "locale": "pt-BR",
-      "displayName": "Rivais e Aliados",
-      "source": "reuse_repair",
+      "displayName": "Amigos-inimigos",
+      "source": "new",
       "sourceLocale": "pt-BR",
-      "reviewStatus": "reviewed"
+      "reviewStatus": "new"
     },
     {
       "stableId": "ct-v1-frenemies",
       "slug": "frenemies",
       "locale": "id",
-      "displayName": "Musuh Jadi Teman",
-      "source": "reuse_repair",
+      "displayName": "Musuh dalam selimut",
+      "source": "new",
       "sourceLocale": "id",
-      "reviewStatus": "reviewed"
+      "reviewStatus": "new"
     },
     {
       "stableId": "ct-v1-frenemies",
       "slug": "frenemies",
       "locale": "vi",
-      "displayName": "Bạn thù",
-      "source": "reuse_repair",
+      "displayName": "Bạn-thù",
+      "source": "new",
       "sourceLocale": "vi",
-      "reviewStatus": "reviewed"
+      "reviewStatus": "new"
     },
     {
       "stableId": "ct-v1-frenemies",
       "slug": "frenemies",
       "locale": "th",
-      "displayName": "เพื่อนคู่กัด",
-      "source": "reuse_repair",
+      "displayName": "เพื่อนรักเพื่อนแค้น",
+      "source": "new",
       "sourceLocale": "th",
-      "reviewStatus": "reviewed"
+      "reviewStatus": "new"
     },
     {
       "stableId": "ct-v1-frenemies",
       "slug": "frenemies",
       "locale": "ja",
-      "displayName": "ケンカップル",
-      "source": "reuse_repair",
+      "displayName": "友であり敵",
+      "source": "new",
       "sourceLocale": "ja",
-      "reviewStatus": "reviewed"
+      "reviewStatus": "new"
     },
     {
       "stableId": "ct-v1-frenemies",
       "slug": "frenemies",
       "locale": "ko",
-      "displayName": "애증 관계",
-      "source": "reuse_repair",
+      "displayName": "프렌에미",
+      "source": "new",
       "sourceLocale": "ko",
-      "reviewStatus": "reviewed"
+      "reviewStatus": "new"
     },
     {
       "stableId": "ct-v1-frenemies",
       "slug": "frenemies",
       "locale": "zh-Hant",
-      "displayName": "歡喜冤家",
-      "source": "reuse_repair",
+      "displayName": "亦敵亦友",
+      "source": "new",
       "sourceLocale": "zh-Hant",
-      "reviewStatus": "reviewed"
+      "reviewStatus": "new"
     },
     {
       "stableId": "ct-v1-frenemies",
       "slug": "frenemies",
       "locale": "ar",
-      "displayName": "أعداء وأصدقاء",
-      "source": "reuse_repair",
+      "displayName": "أصدقاء-أعداء",
+      "source": "new",
       "sourceLocale": "ar",
-      "reviewStatus": "reviewed"
+      "reviewStatus": "new"
     },
     {
       "stableId": "ct-v1-frenemies",
@@ -5399,28 +5400,28 @@
       "stableId": "ct-v1-frenemies",
       "slug": "frenemies",
       "locale": "de",
-      "displayName": "Freunde und Rivalen",
-      "source": "reuse_cps_exact_slug",
+      "displayName": "Frenemies",
+      "source": "new",
       "sourceLocale": "de",
-      "reviewStatus": "reviewed"
+      "reviewStatus": "new"
     },
     {
       "stableId": "ct-v1-frenemies",
       "slug": "frenemies",
       "locale": "pl",
-      "displayName": "Przyjaciele i rywale",
-      "source": "reuse_cps_exact_slug",
+      "displayName": "Przyjaciele-wrogowie",
+      "source": "new",
       "sourceLocale": "pl",
-      "reviewStatus": "reviewed"
+      "reviewStatus": "new"
     },
     {
       "stableId": "ct-v1-frenemies",
       "slug": "frenemies",
       "locale": "cs",
-      "displayName": "Přátelé a rivalové",
-      "source": "reuse_cps_exact_slug",
+      "displayName": "Přátelé-nepřátelé",
+      "source": "new",
       "sourceLocale": "cs",
-      "reviewStatus": "reviewed"
+      "reviewStatus": "new"
     },
     {
       "stableId": "ct-v1-frenemies",
@@ -6749,7 +6750,7 @@
       "stableId": "ct-v1-historical-fiction",
       "slug": "historical-fiction",
       "locale": "de",
-      "displayName": "Historischer Roman",
+      "displayName": "Historische Thematik",
       "source": "new",
       "sourceLocale": "de",
       "reviewStatus": "new"
@@ -6884,10 +6885,10 @@
       "stableId": "ct-v1-historical-romance",
       "slug": "historical-romance",
       "locale": "de",
-      "displayName": "Historischer Roman",
-      "source": "reuse_cps_exact_slug",
+      "displayName": "Historische Romanze",
+      "source": "new",
       "sourceLocale": "de",
-      "reviewStatus": "reviewed"
+      "reviewStatus": "new"
     },
     {
       "stableId": "ct-v1-historical-romance",
@@ -8777,7 +8778,7 @@
       "stableId": "ct-v1-male-audience",
       "slug": "male-audience",
       "locale": "de",
-      "displayName": "Für Leser",
+      "displayName": "Für männliche Leser",
       "source": "new",
       "sourceLocale": "de",
       "reviewStatus": "new"
@@ -8786,7 +8787,7 @@
       "stableId": "ct-v1-male-audience",
       "slug": "male-audience",
       "locale": "pl",
-      "displayName": "Dla czytelników",
+      "displayName": "Dla czytelników męskich",
       "source": "new",
       "sourceLocale": "pl",
       "reviewStatus": "new"
@@ -8795,7 +8796,7 @@
       "stableId": "ct-v1-male-audience",
       "slug": "male-audience",
       "locale": "cs",
-      "displayName": "Pro čtenáře",
+      "displayName": "Pro mužské čtenáře",
       "source": "new",
       "sourceLocale": "cs",
       "reviewStatus": "new"
@@ -14000,7 +14001,7 @@
       "stableId": "ct-v1-system-fantasy",
       "slug": "system-fantasy",
       "locale": "vi",
-      "displayName": "Hệ thống dị giới",
+      "displayName": "Dòng hệ thống",
       "source": "new",
       "sourceLocale": "vi",
       "reviewStatus": "new"

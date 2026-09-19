@@ -6,10 +6,14 @@
  * translation display names. It does not create tags, change slugs, rewrite
  * mappings, or touch keywords.
  *
- * Default: dry-run / validate. `--apply` requires `--approver` and
- * `--request-id` and writes one `OperationAudit` row. `zh` rows are skipped
- * unless `--overwrite-zh` is passed (the overlay artifact itself contains
- * none; `zh` stays the P2-06.5 v1 bootstrap baseline).
+ * Default: dry-run / validate (read-only plan). `--apply` requires
+ * `--approver` and `--request-id` and writes one `OperationAudit` row.
+ * Apply order is: transaction → advisory lock → replay check → re-read
+ * translations and rebuild the insert/update/unchanged plan → validate →
+ * write → audit. Dry-run keeps a read-only plan outside the lock.
+ * `zh` rows are skipped unless `--overwrite-zh` is passed (the overlay
+ * artifact itself contains none; `zh` stays the P2-06.5 v1 bootstrap
+ * baseline).
  *
  * Cache: public listing/category/novel pages are `force-dynamic`. Taxonomy
  * loaders use request-scoped `React.cache()` only — not `unstable_cache`.
@@ -52,7 +56,7 @@ export const TRANSLATION_OVERLAY_ADVISORY_LOCK_NAMESPACE = "p2-06-5:canonical-ta
 export const TRANSLATION_OVERLAY_RELATIVE_PATH =
   "docs/p2/canonical-tag-translations/2026-09-19/canonical-tag-translations-v1.json";
 export const TRANSLATION_OVERLAY_SHA256 =
-  "970ffa7c19b757596cf049810841144c0501e887b88cec34bb9cab2e9857bba6";
+  "8630cb847c122485446e25921b86dee714361553bf39de16cba16558a0a80fc2";
 export const TRANSLATION_OVERLAY_EXPECTED_COUNT = CANONICAL_TAG_V1_COUNT * SITE_LOCALES.length;
 export const TRANSLATION_OVERLAY_RECOVERY =
   "Apply is a single PostgreSQL transaction with pg_advisory_xact_lock; any exception rolls back every upsert and leaves no partial CanonicalTagTranslation writes. Replay the same --request-id to no-op. Undo a committed apply by restoring CanonicalTagTranslation from the pre-apply backup or by applying a previous overlay artifact. This CLI never updates CanonicalTag identity, slug, or zh baseline rows.";
@@ -489,34 +493,27 @@ export async function runTranslationOverlayCli(
   loaded: { artifact: TranslationOverlayArtifact; sha256: string },
 ): Promise<TranslationOverlayReport> {
   const plannedRows = rowsToApply(loaded.artifact, options.overwriteZh);
-  const databaseBefore = await db.canonicalTagTranslation.count();
   const skippedZh = loaded.artifact.translations.length - plannedRows.length;
-  const plan = await planTranslationOverlayWrites(db, plannedRows);
-  const counts = {
+  const countBase = {
     overlaySha256: loaded.sha256,
     canonicalV1Sha256: loaded.artifact.canonical_v1_sha256,
     planned: plannedRows.length,
     skippedZh,
-    databaseBefore,
   };
 
   if (!options.apply) {
+    const databaseBefore = await db.canonicalTagTranslation.count();
+    const plan = await planTranslationOverlayWrites(db, plannedRows);
     return overlayReport({
       mode: "dry-run",
       outcome: plan.exception > 0 ? "blocked" : "eligible",
       requestId: options.requestId,
       wrote: false,
       auditId: null,
+      databaseBefore,
       databaseAfter: null,
-      ...counts,
+      ...countBase,
     }, plan);
-  }
-
-  if (plan.exception > 0) {
-    fail(
-      plan.exceptionSamples[0]?.code === "slug_mismatch" ? "artifact_invariant_violation" : "canonical_tag_missing",
-      `overlay apply blocked: ${plan.exception} row(s) missing CanonicalTag or slug mismatch; no writes were attempted`,
-    );
   }
 
   const approver = await resolveApprover(db, options.approver!);
@@ -530,6 +527,9 @@ export async function runTranslationOverlayCli(
       where: { actorType: "system", action: TRANSLATION_OVERLAY_AUDIT_ACTION, requestId: options.requestId },
       select: { id: true, actorId: true, reason: true, afterSnapshot: true },
     });
+    const databaseBefore = await tx.canonicalTagTranslation.count();
+    const plan = await planTranslationOverlayWrites(tx, plannedRows);
+
     if (committed) {
       const snapshot = committed.afterSnapshot as Record<string, unknown> | null;
       const bindingMatches = committed.actorId === approver.id
@@ -542,9 +542,17 @@ export async function runTranslationOverlayCli(
         requestId: options.requestId,
         wrote: false,
         auditId: committed.id.toString(),
+        databaseBefore,
         databaseAfter: databaseBefore,
-        ...counts,
+        ...countBase,
       }, plan);
+    }
+
+    if (plan.exception > 0) {
+      fail(
+        plan.exceptionSamples[0]?.code === "slug_mismatch" ? "artifact_invariant_violation" : "canonical_tag_missing",
+        `overlay apply blocked: ${plan.exception} row(s) missing CanonicalTag or slug mismatch; no writes were attempted`,
+      );
     }
 
     for (const write of plan.writes) {
@@ -595,8 +603,9 @@ export async function runTranslationOverlayCli(
       requestId: options.requestId,
       wrote: plan.writes.length > 0,
       auditId: audit.id.toString(),
+      databaseBefore,
       databaseAfter,
-      ...counts,
+      ...countBase,
     }, plan);
   });
 }
