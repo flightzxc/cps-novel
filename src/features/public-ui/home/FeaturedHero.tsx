@@ -424,14 +424,22 @@ function BannerSlide({
 
         {/* 简介只取第一段：这里是引子，完整简介是详情页的事。
             桌面 2 行截断（2026-09-20 从 3 行收到 2 行）；移动端整段不渲染出来。
-            `<p>` 自身没有 display 工具类，`hidden md:block` 这一对是安全的
-            ——这里与上面 TagList 的处理不同，原因见那段注释。 */}
-        <p
-          data-testid={isCurrent ? "featured-hero-summary" : undefined}
-          className="hidden text-novel-fg-muted md:mt-3 md:line-clamp-2 md:block md:text-[15px] md:leading-[1.6]"
-        >
-          {firstParagraph(novel.description)}
-        </p>
+
+            🔴 「窄屏隐藏」必须由**外层 div** 承担，不能和 `line-clamp-*` 写在
+            同一个元素上。`line-clamp-N` 是靠把 display 设成 `-webkit-box` 生效的，
+            同层再写一个 `md:block` 就把它顶掉——`-webkit-line-clamp` 属性还在，
+            但没有 `-webkit-box` 就完全不起作用，截断静默失效。
+            2026-09-20 真实素材 UAT 抓到：越南语真实简介渲染了 **6 行**而不是 2 行，
+            而 dev-preview 的 mock 文案本来就不足 2 行，整轮单测与截图都没暴露。
+            这与本文件里 `hidden` 输给 `inline-flex` 的那处是同一类坑。 */}
+        <div className="hidden md:mt-3 md:block">
+          <p
+            data-testid={isCurrent ? "featured-hero-summary" : undefined}
+            className="line-clamp-2 text-[15px] leading-[1.6] text-novel-fg-muted"
+          >
+            {firstParagraph(novel.description)}
+          </p>
+        </div>
 
         {/* `flex-wrap` 是必需的，不是保险：按钮走 `whitespace-nowrap`，flex 项又有
             默认的 `min-width:auto`，两枚按钮压不窄，会一起把这一行顶宽。360px 宽

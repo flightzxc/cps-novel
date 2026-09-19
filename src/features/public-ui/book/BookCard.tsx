@@ -68,10 +68,17 @@ export function BookCard({
         >
           {novel.title}
         </h3>
+        {/* 🔴 `hidden md:block` 必须落在外层 div 上，不能和 `line-clamp-3` 同元素：
+            `line-clamp-N` 靠 `display:-webkit-box` 生效，同层的 `md:block` 会把它
+            顶掉，截断静默失效（2026-09-20 在 Hero 简介上实测到，见那处注释）。
+            mock 卡片没有 summary，这条路径在 dev-preview 里根本不渲染，
+            只有接真实内容才会暴露——所以这里按同一口径先修。 */}
         {novel.summary ? (
-          <p className={`mt-2 line-clamp-3 text-sm leading-5 text-novel-fg-muted ${mobileOnlyHidden}`}>
-            {novel.summary}
-          </p>
+          <div className={mobileOnlyHidden}>
+            <p className="mt-2 line-clamp-3 text-sm leading-5 text-novel-fg-muted">
+              {novel.summary}
+            </p>
+          </div>
         ) : null}
       </a>
 

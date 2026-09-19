@@ -495,11 +495,18 @@ describe("Hero 的内容纪律", () => {
   it("简介只取第一段；桌面截断 2 行，移动端整段不显示但留在 DOM 里", () => {
     renderHome();
     const summary = screen.getByTestId("featured-hero-summary");
+    const wrapper = summary.parentElement!;
 
-    expect(summary.className.split(/\s+/)).toContain("hidden");
-    expect(summary.className.split(/\s+/)).toContain("md:block");
-    expect(summary.className.split(/\s+/)).toContain("md:line-clamp-2");
-    expect(summary.className).not.toMatch(/(^|\s)line-clamp-\d/);
+    // 截断在 <p> 自己身上
+    expect(summary.className.split(/\s+/)).toContain("line-clamp-2");
+    // 🔴 承重：clamp 元素上**不许**再出现 display 工具类。`line-clamp-N` 靠
+    // `display:-webkit-box` 生效，同层写个 `block` 就把它顶掉，属性还在但完全
+    // 失效。2026-09-20 真实素材 UAT 下越南语简介因此渲染了 6 行而不是 2 行。
+    // 通用守卫见 tests/ui/tailwind-display-conflicts.test.tsx。
+    expect(summary.className).not.toMatch(/(^|\s)(md:)?(block|hidden|flex|inline-flex)(\s|$)/);
+    // 「窄屏不显示」由外层 div 承担
+    expect(wrapper.className.split(/\s+/)).toContain("hidden");
+    expect(wrapper.className.split(/\s+/)).toContain("md:block");
     // 只有第一段，不含第二段的内容
     expect(summary.textContent).not.toContain("\n");
   });

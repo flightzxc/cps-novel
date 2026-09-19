@@ -104,9 +104,14 @@ describe("首页紧凑档只作用于「首页 × 窄屏」这一格", () => {
 
   function partsOf(container: HTMLElement) {
     const card = container.querySelector('[data-testid="book-card"]')!;
+    const summary = card.querySelector("p.line-clamp-3")!;
     return {
       card,
-      summary: card.querySelector("p.line-clamp-3")!,
+      summary,
+      // 🔴 简介的「窄屏隐藏」在**外层 div** 上，不在 <p> 上：`line-clamp-3` 靠
+      // `display:-webkit-box` 生效，同层再写 `md:block` 会把截断顶掉（2026-09-20
+      // 实测，见 tests/ui/tailwind-display-conflicts.test.tsx）。
+      summaryWrap: summary.parentElement!,
       localeLine: [...card.querySelectorAll("p")].find((p) => p.textContent === "English")!,
       tagWrap: card.querySelector('[data-testid="tag-list"]')!.parentElement!,
       title: card.querySelector("h3")!,
@@ -115,10 +120,10 @@ describe("首页紧凑档只作用于「首页 × 窄屏」这一格", () => {
 
   it("默认档的卡片在任何宽度下都是完整的——聚合页 / 题材页不受影响", () => {
     const { container } = render(<BookGrid locale="en" novels={[FULL]} />);
-    const { card, summary, localeLine, tagWrap, title } = partsOf(container);
+    const { card, summaryWrap, localeLine, tagWrap, title } = partsOf(container);
 
     expect(card.getAttribute("data-card-compact")).toBeNull();
-    for (const el of [summary, localeLine, tagWrap]) {
+    for (const el of [summaryWrap, localeLine, tagWrap]) {
       expect(el.className.split(/\s+/)).not.toContain("hidden");
     }
     // 书名在默认档不截断
@@ -127,14 +132,17 @@ describe("首页紧凑档只作用于「首页 × 窄屏」这一格", () => {
 
   it("首页档在窄屏收起简介 / 语种 / 标签，md 起原样恢复，且内容仍在 DOM 里", () => {
     const { container } = render(<BookGrid locale="en" novels={[FULL]} variant="home" />);
-    const { card, summary, localeLine, tagWrap, title } = partsOf(container);
+    const { card, summary, summaryWrap, localeLine, tagWrap, title } = partsOf(container);
 
     expect(card.getAttribute("data-card-compact")).toBe("mobile");
-    for (const el of [summary, localeLine, tagWrap]) {
+    for (const el of [summaryWrap, localeLine, tagWrap]) {
       const cls = el.className.split(/\s+/);
       expect(cls).toContain("hidden");
       expect(cls).toContain("md:block");
     }
+    // 截断留在 <p> 上，且该元素不许再带 display 工具类
+    expect(summary.className.split(/\s+/)).toContain("line-clamp-3");
+    expect(summary.className).not.toMatch(/(^|\s)(md:)?(block|hidden|flex|inline-flex)(\s|$)/);
     // 🔴 收起 ≠ 不渲染：读屏与爬虫拿到的内容不能随视口宽度缩水
     expect(summary.textContent).toBe(FULL.summary);
     expect(screen.getByText("言情")).toBeTruthy();
