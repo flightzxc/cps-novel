@@ -137,7 +137,13 @@ function writeManifest(baseDir: string, name: string, walRanges: unknown[]): voi
   );
 }
 
-function run(args: string[], extraEnv: NodeJS.ProcessEnv, binDir: string) {
+// Next 16 (node_modules/next/types/global.d.ts:23) declares NODE_ENV as a
+// REQUIRED readonly member of NodeJS.ProcessEnv, so an object literal
+// holding only the overrides a test wants is no longer assignable to it.
+// This never was a complete ProcessEnv anyway -- it is spread ON TOP of
+// one below -- so the override map is the accurate type, and the call
+// sites keep passing exactly what they always passed.
+function run(args: string[], extraEnv: Record<string, string | undefined>, binDir: string) {
   return spawnSync("bash", [scriptPath, ...args], {
     env: {
       ...process.env,
@@ -404,7 +410,13 @@ describe("wal-retention.sh --force: bypasses delete_surge_guard only, not the ot
 
 describe("wal-retention.sh: all WAL_RETENTION judgment lines are on stdout, never stderr", () => {
   it("stderr never contains a WAL_RETENTION= line across the four refusal scenarios above", () => {
-    const scenarios: Array<{ args: string[]; env: NodeJS.ProcessEnv; binDir: string }> = [];
+    // Next 16 (node_modules/next/types/global.d.ts:23) declares NODE_ENV as a
+    // REQUIRED readonly member of NodeJS.ProcessEnv, so an object literal
+    // holding only the overrides a test wants is no longer assignable to it.
+    // This never was a complete ProcessEnv anyway -- it is spread ON TOP of
+    // one below -- so the override map is the accurate type, and the call
+    // sites keep passing exactly what they always passed.
+    const scenarios: Array<{ args: string[]; env: Record<string, string | undefined>; binDir: string }> = [];
 
     {
       const { baseDir, archiveDir } = setupHealthyTriple();
