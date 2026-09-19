@@ -99,7 +99,7 @@ const SCREENS: [string, ReactElement][] = [
     />,
   ],
   [
-    "首页 · 无横版物料回落",
+    "首页 · 无横版物料（coverUrl 模糊氛围底）",
     <HomeScreen
       locale="en"
       key="home-fallback"

@@ -2,6 +2,7 @@ import "./setup-cleanup";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { HomeScreen } from "@/features/public-ui/home/HomeScreen";
+import { FeaturedNovel } from "@/features/public-ui/home/FeaturedNovel";
 import {
   MOCK_CATEGORIES,
   MOCK_FEATURED_LIST,
@@ -82,9 +83,18 @@ describe("主推位到浏览区的留白", () => {
     expect(browse.className).toContain("md:pt-2");
   });
 
-  it("回落到封面编排版时浏览区用同一套顶部留白", () => {
+  /**
+   * 2026-09-19 前：没有 heroImageUrl 时首页整体回落到封面编排版
+   * （FeaturedNovel），这条断言验证的是回落版跟 Hero 版共用同一套顶部留白。
+   * 新契约下没有「回落」这个中间态了——`MOCK_FEATURED_LIST_NO_HERO` 里每一项
+   * 仍带 coverUrl，Hero 照常渲染（模糊氛围底），`hasFeatured` 判断跟着
+   * `hasHero` 走，留白值不变，但理由变了：不再是「两种主推形态共用一套值」，
+   * 而是「同一种形态（Hero），背景来源不同而已」。
+   */
+  it("没有 heroImageUrl 时 Hero 仍渲染，浏览区顶部留白不变", () => {
     renderHome({ featuredList: entries(MOCK_FEATURED_LIST_NO_HERO) });
 
+    expect(screen.getByTestId("featured-hero")).toBeTruthy();
     const browse = screen.getByTestId("home-browse");
     expect(browse.className).toContain("pt-4");
     expect(browse.className).toContain("md:pt-2");
@@ -139,13 +149,20 @@ describe("全站题材导航的归属", () => {
     expect(screen.queryByTestId("home-category-nav")).toBeNull();
   });
 
+  /**
+   * 这条原本查的是 FeaturedNovel（`section[aria-labelledby="featured-title"]`），
+   * 通过 `MOCK_FEATURED_LIST_NO_HERO` 触发首页回落。新契约下 HomeScreen 永远
+   * 不渲染 FeaturedNovel，选择器会落空——改成查 Hero 自己的结构
+   * （`[data-testid="featured-hero"]`），元信息→标签→简介的顺序是同一条不变量，
+   * 只是现在这个不变量归 Hero 管。
+   */
   it("作品自己的标签仍在元信息之后、简介之前，没有被题材导航顶掉", () => {
     const { container } = renderHome({ featuredList: entries(MOCK_FEATURED_LIST_NO_HERO) });
 
-    const featured = container.querySelector('section[aria-labelledby="featured-title"]')!;
-    const meta = featured.querySelector('[data-testid="meta-list"]')!;
-    const tags = featured.querySelector('[data-testid="tag-list"]')!;
-    const summary = featured.querySelector("p.mt-6")!;
+    const hero = container.querySelector('[data-testid="featured-hero"]')!;
+    const meta = hero.querySelector('[data-testid="meta-list"]')!;
+    const tags = hero.querySelector('[data-testid="tag-list"]')!;
+    const summary = hero.querySelector('[data-testid="featured-hero-summary"]')!;
 
     expect(meta.compareDocumentPosition(tags) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(tags.compareDocumentPosition(summary) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
@@ -166,9 +183,23 @@ describe("区块小标题的分隔线节奏", () => {
   });
 });
 
-describe("封面编排版（缺横版物料时的回落）", () => {
+/**
+ * 2026-09-19 前：`HomeScreen` 在没有横版物料时会渲染 `FeaturedNovel`，这个
+ * describe 块验证的就是那次渲染的留白值。`HomeScreen` 现在永远不引用
+ * `FeaturedNovel` 了（见 `HomeScreen.tsx` 与 `FeaturedNovel.tsx` 顶部注释），
+ * 所以不能再通过 `renderHome` 触发它——直接单测这个保留下来的组件本身，
+ * 留白契约数值没有变，只是不再由 HomeScreen 集成测试覆盖到。
+ */
+describe("封面编排版 FeaturedNovel（组件已保留但不再被 HomeScreen 使用）", () => {
   it("上下留白压到 32/48px 与 24/32px，不再上下各留半屏", () => {
-    const { container } = renderHome({ featuredList: entries(MOCK_FEATURED_LIST_NO_HERO) });
+    const { container } = render(
+      <FeaturedNovel
+        locale="en"
+        novel={MOCK_FEATURED_LIST_NO_HERO[0]}
+        detailHref="/dev-preview/novel"
+        startReadingHref="/dev-preview/chapter"
+      />,
+    );
 
     const featured = container.querySelector('section[aria-labelledby="featured-title"]')!;
     expect(featured.className).toContain("pt-8");

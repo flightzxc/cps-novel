@@ -3,9 +3,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { HomeScreen } from "@/features/public-ui/home/HomeScreen";
 import { HERO_AUTOPLAY_MS } from "@/features/public-ui/home/FeaturedHero";
+import type { NovelDetailView } from "@/features/public-ui/types";
 import {
   MOCK_FEATURED_LIST,
   MOCK_FEATURED_LIST_NO_HERO,
+  MOCK_FEATURED_LIST_NO_IMAGE,
   MOCK_NOVEL_CARDS,
 } from "@/features/public-ui/fixtures/mock-content";
 
@@ -47,37 +49,66 @@ function renderHome(featuredList = entries()) {
   );
 }
 
-/** fixture 里带横版物料的本数 */
-const HERO_COUNT = MOCK_FEATURED_LIST.filter((n) => n.heroImageUrl).length;
+/**
+ * fixture 里进入 Hero 轮播的本数。2026-09-19 起首页不再按 heroImageUrl 过滤，
+ * 主推列表里每一项都进 Hero，所以这就是 `MOCK_FEATURED_LIST.length` 本身——
+ * 名字留着不改，是因为下面好几个断言仍然按「轮播项数」而不是「列表长度」
+ * 去读它，含义没变。
+ */
+const HERO_COUNT = MOCK_FEATURED_LIST.length;
 
 beforeEach(() => mockMatchMedia(false));
 afterEach(() => vi.unstubAllGlobals());
 
 describe("主推位形态选择", () => {
-  it("有横版物料时渲染通栏 Hero", () => {
+  it("有主推列表时渲染通栏 Hero", () => {
     renderHome();
     expect(screen.getByTestId("featured-hero")).toBeTruthy();
   });
 
-  it("只把有横版物料的放进轮播，不拿空底图凑数", () => {
-    // fixture 刻意留了一本没有 heroImageUrl
-    expect(HERO_COUNT).toBeLessThan(MOCK_FEATURED_LIST.length);
+  /**
+   * 2026-09-19 前的契约：只把带 heroImageUrl 的放进轮播，没有横版物料的一本
+   * 会被摘出去。Owner 已推翻这条前提——海阅不存在横版素材，继续按物料有无
+   * 摘条目，等于轮播永远摘掉大部分本子。新契约：主推列表里每一项都进 Hero，
+   * 不管有没有 heroImageUrl，摘掉的编排位不复存在。
+   */
+  it("全部主推项都进轮播，不因为没有横版物料被摘出去", () => {
+    // fixture 里 mock-9 刻意不带 heroImageUrl，只带 coverUrl
+    const withoutHeroImage = MOCK_FEATURED_LIST.filter((n) => !n.heroImageUrl);
+    expect(withoutHeroImage.length).toBeGreaterThan(0);
 
     renderHome();
     expect(
       screen.getByTestId("featured-hero-dots").querySelectorAll('[role="tab"]'),
-    ).toHaveLength(HERO_COUNT);
+    ).toHaveLength(MOCK_FEATURED_LIST.length);
   });
 
-  it("一本都没有横版物料时整体回落到封面编排版", () => {
+  /**
+   * 2026-09-19 前的契约：一本都没有横版物料时首页整体回落到封面编排版
+   * （FeaturedNovel）。Owner 已推翻——海阅不存在、也不会等横版素材，继续
+   * 「回落」等于首页主推位永久停在这个例外态。新契约：Hero 恒渲染，没有
+   * heroImageUrl 时改用 coverUrl 做模糊氛围底，FeaturedNovel 不再被使用。
+   */
+  it("一本都没有横版物料时 Hero 仍整体渲染，用 coverUrl 做模糊氛围底", () => {
     const { container } = renderHome(entries(MOCK_FEATURED_LIST_NO_HERO));
 
-    expect(screen.queryByTestId("featured-hero")).toBeNull();
-    // 回落版有自己的眉标与主推标题（书名在下方网格里也会出现，所以按 id 定位）
-    expect(screen.getByText("Featured")).toBeTruthy();
-    expect(container.querySelector("#featured-title")?.textContent).toBe(
-      MOCK_FEATURED_LIST[0].title,
-    );
+    expect(screen.getByTestId("featured-hero")).toBeTruthy();
+    expect(
+      screen.getByTestId("featured-hero-dots").querySelectorAll('[role="tab"]'),
+    ).toHaveLength(MOCK_FEATURED_LIST_NO_HERO.length);
+
+    // 旧的封面编排版必须真的没有被渲染，不只是「没找到就算了」——注意「Featured」
+    // 这个眉标文案 Hero 自己也会显示（`t("home.featuredEyebrow")` 默认值），
+    // 不能拿它当「回落到 FeaturedNovel」的判据，真正的判据是 #featured-title
+    // 这个 id 不存在。
+    expect(container.querySelector('section[aria-labelledby="featured-title"]')).toBeNull();
+
+    // 每一项都应该解析成 cover-atmosphere 背景，而不是被悄悄跳过
+    const layers = container.querySelectorAll('[data-hero-layer="image"]');
+    expect(layers).toHaveLength(MOCK_FEATURED_LIST_NO_HERO.length);
+    for (const layer of layers) {
+      expect(layer.getAttribute("data-hero-background")).toBe("cover-atmosphere");
+    }
   });
 
   it("主推列表为空时主推位整块不渲染，首页直接从网格开始", () => {
@@ -91,6 +122,98 @@ describe("主推位形态选择", () => {
   it("轮播项数落在 4–6 本的编排区间内", () => {
     expect(HERO_COUNT).toBeGreaterThanOrEqual(4);
     expect(HERO_COUNT).toBeLessThanOrEqual(6);
+  });
+
+  it("HomeScreen 在任何情况下都不渲染 FeaturedNovel（旧双栏回落版）", () => {
+    // 三种输入分别对应三档来源优先级：全带 heroImageUrl / 全不带但有 coverUrl /
+    // 两者都没有。旧代码只在第二种情况下会掉进 FeaturedNovel。
+    for (const list of [MOCK_FEATURED_LIST, MOCK_FEATURED_LIST_NO_HERO, MOCK_FEATURED_LIST_NO_IMAGE]) {
+      const { container, unmount } = renderHome(entries(list));
+      expect(container.querySelector('section[aria-labelledby="featured-title"]')).toBeNull();
+      unmount();
+    }
+  });
+});
+
+describe("Hero 背景来源三档优先级", () => {
+  const BASE: NovelDetailView = {
+    id: "priority-base",
+    title: "Priority Fixture",
+    description: "For background priority tests only.",
+    locale: { code: "en", label: "English" },
+    totalChapterCount: 10,
+    tags: [],
+    previewChapters: [],
+  };
+
+  function renderWithNovel(novel: NovelDetailView) {
+    return render(
+      <HomeScreen
+        locale="en"
+        featuredList={[{ novel, detailHref: "/dev-preview/novel" }]}
+        novels={MOCK_NOVEL_CARDS}
+      />,
+    );
+  }
+
+  it("第 1 档：heroImageUrl 存在时清晰铺底，不加模糊/scale", () => {
+    const { container } = renderWithNovel({
+      ...BASE,
+      heroImageUrl: "https://example.test/hero.jpg",
+      coverUrl: "https://example.test/cover.jpg",
+    });
+
+    const outer = container.querySelector('[data-hero-layer="image"]')!;
+    const inner = container.querySelector('[data-hero-layer="image-fill"]')!;
+    expect(outer.getAttribute("data-hero-background")).toBe("hero");
+    expect((inner as HTMLElement).style.backgroundImage).toContain("hero.jpg");
+    expect(inner.className).not.toMatch(/contrast|blur|scale|brightness|saturate/);
+  });
+
+  it("第 2 档：只有 coverUrl 时用它做模糊氛围底", () => {
+    const { container } = renderWithNovel({ ...BASE, coverUrl: "https://example.test/cover.jpg" });
+
+    const outer = container.querySelector('[data-hero-layer="image"]')!;
+    const inner = container.querySelector('[data-hero-layer="image-fill"]')!;
+    expect(outer.getAttribute("data-hero-background")).toBe("cover-atmosphere");
+    expect((inner as HTMLElement).style.backgroundImage).toContain("cover.jpg");
+    expect(inner.className).toContain("var(--novel-hero-cover-contrast)");
+    expect(inner.className).toContain("var(--novel-hero-cover-blur)");
+    expect(inner.className).toContain("var(--novel-hero-cover-scale)");
+    expect(inner.className).toContain("var(--novel-hero-cover-brightness)");
+    expect(inner.className).toContain("var(--novel-hero-cover-saturate)");
+    // 滤镜链顺序固定 contrast → blur → brightness → saturate，contrast 必须在
+    // blur 之前（对原始未模糊图像先压缩动态范围），顺序乱了两个封面之间的
+    // 氛围区亮度收敛效果会变差，见 globals.css 对应 token 注释的返工记录。
+    // 只匹配「函数名后紧跟左括号」的调用形式，避开 --novel-hero-cover-blur
+    // 这类 token 名字里也含有同一个单词的干扰。
+    const filterOrder = inner.className.match(/(contrast|blur|brightness|saturate)\(/g);
+    expect(filterOrder).toEqual(["contrast(", "blur(", "brightness(", "saturate("]);
+  });
+
+  it("第 3 档：两者都没有时不渲染任何图层，Hero 本体仍然渲染", () => {
+    const { container } = renderWithNovel({ ...BASE });
+
+    expect(screen.getByTestId("featured-hero")).toBeTruthy();
+    expect(container.querySelector('[data-hero-layer="image"]')).toBeNull();
+    expect(container.querySelector('[data-hero-layer="image-fill"]')).toBeNull();
+    expect(screen.getByText(BASE.title)).toBeTruthy();
+  });
+
+  it("模糊层与 mask 分属两层：mask 在外层，filter/scale 在内层，不能合并回一层", () => {
+    const { container } = renderWithNovel({ ...BASE, coverUrl: "https://example.test/cover.jpg" });
+
+    const outer = container.querySelector('[data-hero-layer="image"]')!;
+    const inner = container.querySelector('[data-hero-layer="image-fill"]')!;
+
+    expect(outer).not.toBe(inner);
+    expect(outer.contains(inner)).toBe(true);
+    // mask 只能在外层，不能出现在内层
+    expect(outer.className).toContain("mask-image");
+    expect(inner.className).not.toContain("mask-image");
+    // filter/scale 只能在内层，不能出现在外层——否则会把 mask 的渐隐边界一起缩放出去
+    expect(outer.className).not.toMatch(/blur|scale/);
+    expect(inner.className).toMatch(/blur/);
   });
 });
 
@@ -327,8 +450,23 @@ describe("页头在 Hero 上的形态", () => {
     expect(header.className).not.toContain("bg-novel-bg");
   });
 
-  it("回落形态下页头回到实底", () => {
+  /**
+   * 2026-09-19 前：没有 heroImageUrl 时首页整体回落，页头也跟着回到实底。
+   * 新契约下 `MOCK_FEATURED_LIST_NO_HERO` 里的每一项仍然带 coverUrl，Hero
+   * 照常渲染（模糊氛围底），页头因此**仍然浮起**——headerOverlay 只看
+   * `hasHero`（=featuredList 非空），不再关心具体渲染的是哪一档背景。
+   * 页头真正回到实底的唯一情形是主推列表整个为空。
+   */
+  it("没有 heroImageUrl 但仍有 Hero 时页头维持浮起，不回落到实底", () => {
     renderHome(entries(MOCK_FEATURED_LIST_NO_HERO));
+
+    const header = screen.getByTestId("site-header");
+    expect(header.getAttribute("data-header-transparent")).toBe("true");
+    expect(header.className).toContain("bg-transparent");
+  });
+
+  it("主推列表整个为空时页头才回到实底", () => {
+    renderHome([]);
 
     const header = screen.getByTestId("site-header");
     expect(header.getAttribute("data-header-transparent")).toBe("false");
@@ -368,9 +506,24 @@ describe("页头在 Hero 上的形态", () => {
     expect(header().getAttribute("data-header-transparent")).toBe("true");
   });
 
-  it("回落形态下不挂滚动监听——页头本来就是实底", () => {
+  /**
+   * 没有 heroImageUrl 时 Hero 仍然渲染（走 coverUrl 模糊氛围底），页头依旧
+   * 浮起，所以滚动监听依旧要挂——这跟旧契约的「回落态不挂监听」正好相反。
+   * 真正不挂监听的情形是主推列表为空、页头本来就是实底。
+   */
+  it("没有 heroImageUrl 但仍有 Hero 时照样挂滚动监听", () => {
     const addSpy = vi.spyOn(window, "addEventListener");
     renderHome(entries(MOCK_FEATURED_LIST_NO_HERO));
+
+    const scrollListeners = addSpy.mock.calls.filter(([type]) => type === "scroll");
+    expect(scrollListeners.length).toBeGreaterThan(0);
+
+    addSpy.mockRestore();
+  });
+
+  it("主推列表为空时不挂滚动监听——页头本来就是实底", () => {
+    const addSpy = vi.spyOn(window, "addEventListener");
+    renderHome([]);
 
     const scrollListeners = addSpy.mock.calls.filter(([type]) => type === "scroll");
     expect(scrollListeners).toHaveLength(0);

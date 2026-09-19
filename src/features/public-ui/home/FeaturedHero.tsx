@@ -24,7 +24,47 @@ import { useT } from "@/lib/locale/messages/MessagesProvider";
  *
  * 轮播顺序来自运营人工编排位（架构文档的 home_carousel_manual_slot），
  * 🔴 **不表示排名**——文案里不出现「热门 / TOP / 排行 / 榜」任何一种措辞。
+ *
+ * --- Hero 永远出现（2026-09-19 起）-----------------------------------------
+ * 海阅不存在横版主视觉素材，渠道只给竖版封面（实测全部 250×350）。Hero 不再
+ * 由「有没有横版图」决定是否出现——只要主推列表非空，Hero 就渲染；`hasHero`
+ * 判断挪到了 `HomeScreen`，这里的输入契约变成「给什么就渲染什么」。
+ *
+ * 每一项的底图按三档优先级解析（见 `resolveHeroBackground`）：
+ *   1. `heroImageUrl` 存在 → 清晰铺底，不加模糊。这是将来才可能有的运营横版
+ *      物料覆盖源，生产上恒为空，但这条分支必须留着且能工作。
+ *   2. 否则 `coverUrl` 存在 → 竖封面强模糊氛围底。**这是当前生产的正常路径**。
+ *   3. 两者都没有 → 不渲染图层，纯 `--novel-bg`。
+ *
+ * 模糊氛围底必须拆成两层元素（外层 mask+opacity+overflow-hidden、内层
+ * filter+scale+背景图），不能合并：`transform: scale()` 会把 `mask-image`
+ * 的渐隐边界一起缩放出去，底部融入 `--novel-bg` 的效果就没了。scale 存在的
+ * 唯一理由是把 `filter: blur()` 在元素边缘采样出的透明虚边推出可视区——
+ * 经验下界 ≈ `1 + 2*blur / min(盒宽, 盒高)`，改 blur 必须连带核对这条不等式。
+ *
+ * 🔴 滤镜链顺序固定为 `contrast() blur() brightness() saturate()`，不能打乱：
+ * `contrast` 必须在最前，对**原始未模糊图像**先做动态范围压缩——它是唯一
+ * 能把「6 张真实封面亮度跨度 3.5 倍」收敛到「合成后氛围区亮度跨度 ≤3 倍」
+ * 的旋钮：`contrast(k)`（k<1）把每张图自己的均值向中灰拉，跟 `brightness`
+ * 那种对所有图等比缩放、不改变彼此比值的全局乘法完全不同。放在 `blur` 之后
+ * 效果减弱（模糊已经把极端像素摊平了一部分）。具体取值与调参依据见
+ * `src/styles/globals.css` 的 `--novel-hero-cover-*` 一族注释。
  */
+type HeroBackground =
+  | { kind: "hero"; url: string }
+  | { kind: "cover-atmosphere"; url: string }
+  | { kind: "none" };
+
+/** 底图来源优先级：heroImageUrl（清晰） > coverUrl（模糊氛围底） > 无。 */
+function resolveHeroBackground(novel: NovelDetailView): HeroBackground {
+  if (novel.heroImageUrl) {
+    return { kind: "hero", url: novel.heroImageUrl };
+  }
+  if (novel.coverUrl) {
+    return { kind: "cover-atmosphere", url: novel.coverUrl };
+  }
+  return { kind: "none" };
+}
 
 /** 自动播放间隔。hover / focus-within / 用户偏好减少动效时暂停。 */
 export const HERO_AUTOPLAY_MS = 7000;
@@ -132,26 +172,44 @@ export function FeaturedHero({
       onKeyDown={onKeyDown}
     >
       {/* 底图 + mask：图像在底部被溶解，不留边缘。切换只改 opacity，
-          不做位移——位移会把「无边缘」的错觉打破。 */}
-      {items.map((item, i) => (
-        <div
-          key={item.novel.id}
-          data-hero-layer="image"
-          data-hero-active={i === index ? "true" : "false"}
-          aria-hidden="true"
-          className={
-            "absolute inset-0 -z-30 bg-cover bg-center transition-opacity duration-300 ease-out motion-reduce:transition-none " +
-            "[mask-image:var(--novel-hero-mask-mobile)] [-webkit-mask-image:var(--novel-hero-mask-mobile)] " +
-            "md:[mask-image:var(--novel-hero-mask)] md:[-webkit-mask-image:var(--novel-hero-mask)] " +
-            (i === index ? "opacity-100" : "opacity-0")
-          }
-          style={
-            item.novel.heroImageUrl
-              ? { backgroundImage: `url("${item.novel.heroImageUrl}")` }
-              : undefined
-          }
-        />
-      ))}
+          不做位移——位移会把「无边缘」的错觉打破。
+          外层只管 mask/opacity/裁切；内层只管背景图/滤镜/scale——两者不能
+          合并进同一个元素，见组件顶部注释「模糊氛围底必须拆成两层」。 */}
+      {items.map((item, i) => {
+        const background = resolveHeroBackground(item.novel);
+        if (background.kind === "none") {
+          // 两者都没有：不渲染图层，纯 --novel-bg 透出来。
+          return null;
+        }
+        return (
+          <div
+            key={item.novel.id}
+            data-hero-layer="image"
+            data-hero-active={i === index ? "true" : "false"}
+            data-hero-background={background.kind}
+            aria-hidden="true"
+            className={
+              "absolute inset-0 -z-30 overflow-hidden transition-opacity duration-300 ease-out motion-reduce:transition-none " +
+              "[mask-image:var(--novel-hero-mask-mobile)] [-webkit-mask-image:var(--novel-hero-mask-mobile)] " +
+              "md:[mask-image:var(--novel-hero-mask)] md:[-webkit-mask-image:var(--novel-hero-mask)] " +
+              (i === index ? "opacity-100" : "opacity-0")
+            }
+          >
+            <div
+              aria-hidden="true"
+              data-hero-layer="image-fill"
+              className={
+                "absolute inset-0 bg-cover bg-center " +
+                (background.kind === "cover-atmosphere"
+                  ? "[filter:contrast(var(--novel-hero-cover-contrast))_blur(var(--novel-hero-cover-blur))_brightness(var(--novel-hero-cover-brightness))_saturate(var(--novel-hero-cover-saturate))] " +
+                    "[transform:scale(var(--novel-hero-cover-scale))]"
+                  : "")
+              }
+              style={{ backgroundImage: `url("${background.url}")` }}
+            />
+          </div>
+        );
+      })}
 
       {/* 左向压黑：保证白字对比度，起点必须足够黑 */}
       <div
