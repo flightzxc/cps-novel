@@ -161,7 +161,13 @@ function writeVerifiedBackup(baseBackupDir: string, name: string, verifiedEpochS
 
 function runOnce(
   shims: { scriptDir: string; logicalScript: string },
-  extraEnv: NodeJS.ProcessEnv,
+  // Next 16 (node_modules/next/types/global.d.ts:23) declares NODE_ENV as a
+  // REQUIRED readonly member of NodeJS.ProcessEnv, so an object literal
+  // holding only the overrides a test wants is no longer assignable to it.
+  // This never was a complete ProcessEnv anyway -- it is spread ON TOP of
+  // one below -- so the override map is the accurate type, and the call
+  // sites keep passing exactly what they always passed.
+  extraEnv: Record<string, string | undefined>,
   dirs: { baseBackupDir: string; stateDir: string; outputDir: string },
   extraArgs: string[] = [],
 ) {

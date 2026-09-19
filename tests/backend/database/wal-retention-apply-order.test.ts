@@ -154,7 +154,13 @@ function setupBaseAndArchive(): { baseDir: string; archiveDir: string; b1Dir: st
   return { baseDir, archiveDir, b1Dir };
 }
 
-function runWalRetention(args: string[], extraEnv: NodeJS.ProcessEnv, binDir: string) {
+// Next 16 (node_modules/next/types/global.d.ts:23) declares NODE_ENV as a
+// REQUIRED readonly member of NodeJS.ProcessEnv, so an object literal
+// holding only the overrides a test wants is no longer assignable to it.
+// This never was a complete ProcessEnv anyway -- it is spread ON TOP of
+// one below -- so the override map is the accurate type, and the call
+// sites keep passing exactly what they always passed.
+function runWalRetention(args: string[], extraEnv: Record<string, string | undefined>, binDir: string) {
   return spawnSync("bash", [scriptPath, ...args], {
     env: {
       ...process.env,

@@ -116,7 +116,13 @@ function writeVerifiedBackup(baseBackupDir: string, name: string, verifiedEpochS
 // combined stdout+stderr for asserting on the specific alert key.
 function runCheck(
   fnName: string,
-  env: NodeJS.ProcessEnv,
+  // Next 16 (node_modules/next/types/global.d.ts:23) declares NODE_ENV as a
+  // REQUIRED readonly member of NodeJS.ProcessEnv, so an object literal
+  // holding only the overrides a test wants is no longer assignable to it.
+  // This never was a complete ProcessEnv anyway -- it is spread ON TOP of
+  // one below -- so the override map is the accurate type, and the call
+  // sites keep passing exactly what they always passed.
+  env: Record<string, string | undefined>,
   binDir?: string,
 ): { fireTotal: number; output: string; status: number | null } {
   const stateDir = mkTestDir("check-wal-archive-state-");
