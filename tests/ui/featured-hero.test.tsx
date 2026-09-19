@@ -405,12 +405,17 @@ describe("Hero 的内容纪律", () => {
     expect(text.toLowerCase()).not.toMatch(/author|rating|views/);
   });
 
+  /**
+   * 桌面端从 4 行改为 3 行：2026-09-19 结构改向后简介落在定高 400px 的 banner
+   * 里，和封面（240 宽 → 320 高）共处一行，4 行会把信息列顶出 banner。
+   * 「截断」这条契约本身没变——变的只是行数上限。
+   */
   it("简介只取第一段并截断，不让高度随文案变化", () => {
     renderHome();
     const summary = screen.getByTestId("featured-hero-summary");
 
     expect(summary.className).toContain("line-clamp-2");
-    expect(summary.className).toContain("md:line-clamp-4");
+    expect(summary.className).toContain("md:line-clamp-3");
     // 只有第一段，不含第二段的内容
     expect(summary.textContent).not.toContain("\n");
   });

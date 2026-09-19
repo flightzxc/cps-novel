@@ -49,13 +49,24 @@
      mask 是「无边缘感」的关键，不能用纯色遮罩替代：纯色遮罩只是压暗，图片的
      下边缘仍然存在；mask 是把图像本身在底部溶解掉，肉眼找不到边。
 
-     两层压黑负责正文对比度。物料亮度不可控，所以门槛由「压黑起点足够黑」保证，
-     而不是靠挑图——文字锁在左侧 --novel-hero-text-width 内，该区间左向压黑的
-     不透明度不低于 0.9，即使底下是纯白图，合成后仍在受控暗区。
+     🔴 2026-09-19 结构改向后，这段的适用范围缩小了：Hero 主体已改为居中
+     banner（左清晰封面 + 右信息组），正文落在 banner 这块实体面上，**不再
+     依赖左向压黑保证对比度**。原先「文字锁在左侧 340px 压黑区内」那条口径
+     连同 --novel-hero-text-width 一起作废，该 token 已无人引用。
+     两层压黑现在只负责两件事：页头叠在 Hero 上时仍然可读，以及底部并入页面
+     底色。mask 的作用同上——溶解背景氛围层的下边缘，不留硬边。
      实际比值由 tests/ui/design-tokens.test.ts 按最坏情况重算。 */
-  --novel-hero-height: 620px;
-  --novel-hero-height-mobile: 560px;
-  --novel-hero-text-width: 340px;
+  /* 2026-09-19 结构改向：Hero 内容从「左侧 340px 文字压在整屏模糊图上」改为
+     「居中 banner：左清晰封面 + 右信息组」。桌面高度随之从 620 收到 560——
+     banner 本身 400px 高，620 会在上下各留出一段没人要的空带。 */
+  --novel-hero-height: 560px;
+  --novel-hero-height-mobile: 300px;
+  /* 居中 banner 的几何。封面按 --novel-cover-aspect 等比，240 宽 → 320 高，
+     落在 400 高的 banner 里上下各余 40（含 p-7 的 28）。 */
+  --novel-hero-banner-max: 1120px;
+  --novel-hero-banner-height: 400px;
+  --novel-hero-cover-width: 240px;
+  --novel-hero-info-width: 620px;
 
   --novel-hero-mask: linear-gradient(
     to bottom,
@@ -212,11 +223,19 @@
      残留的高光一起放大，contrast 是对每张图自己的收敛，边际收益递减后
      再靠堆 brightness 弥补就直接顶到标题区的漏光上限。
      6 张封面完整实测数字见本轮任务报告「A/B/C/D 逐张数字」一节。 */
-  --novel-hero-cover-contrast: 0.28;
-  --novel-hero-cover-blur: 46px;
-  --novel-hero-cover-scale: 1.18;
-  --novel-hero-cover-brightness: 0.72;
-  --novel-hero-cover-saturate: 0.55;
+  /* 🔴 2026-09-19 结构改向后，这一族的职责**降级**了：背景不再是主体，
+     只是 banner 背后的一层轻氛围。此前为了让背景独自承担主视觉，在这几个
+     旋钮上做过两轮拉扯，结论是做不到——素材只有 250×350 竖封面、自带烘焙
+     大字、6 张真实封面亮度跨度 3.5 倍，参数只能在「整屏黑灰雾」和「漏出
+     封面字形」之间摇摆（实测：压到看不出图时封面间 ΔE 仅 2.8、彩度 2.44；
+     调到主色可感知时，字形下超 #1A1D24 的像素达 10%）。
+     现在封面以清晰形态进了 banner，这里只需要给每本书一点颜色倾向即可，
+     不再有「氛围区必须多亮」这类门槛。 */
+  --novel-hero-cover-contrast: 0.75;
+  --novel-hero-cover-blur: 40px;
+  --novel-hero-cover-scale: 1.16;
+  --novel-hero-cover-brightness: 0.45;
+  --novel-hero-cover-saturate: 1.15;
 
   color-scheme: dark;
   background-color: var(--novel-bg);
