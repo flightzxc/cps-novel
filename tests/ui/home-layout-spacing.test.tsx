@@ -1,6 +1,7 @@
 import "./setup-cleanup";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
+import { SectionHeader } from "@/components/SectionHeader";
 import { HomeScreen } from "@/features/public-ui/home/HomeScreen";
 import { FeaturedNovel } from "@/features/public-ui/home/FeaturedNovel";
 import {
@@ -75,11 +76,12 @@ beforeEach(() => mockMatchMedia(false));
 afterEach(() => vi.unstubAllGlobals());
 
 describe("主推位到浏览区的留白", () => {
-  it("有 Hero 时浏览区顶部只补 8px（移动 16px）——Hero 自己已经留了 72px 内部空间", () => {
+  it("有 Hero 时浏览区顶部只补 8px（移动 12px）——Hero 自己已经留了下沿空间", () => {
     renderHome();
 
     const browse = screen.getByTestId("home-browse");
-    expect(browse.className).toContain("pt-4");
+    // 移动端 16 → 12（2026-09-20 首屏密度轮）。桌面 8px 没动。
+    expect(browse.className).toContain("pt-3");
     expect(browse.className).toContain("md:pt-2");
   });
 
@@ -96,7 +98,7 @@ describe("主推位到浏览区的留白", () => {
 
     expect(screen.getByTestId("featured-hero")).toBeTruthy();
     const browse = screen.getByTestId("home-browse");
-    expect(browse.className).toContain("pt-4");
+    expect(browse.className).toContain("pt-3");
     expect(browse.className).toContain("md:pt-2");
   });
 
@@ -123,8 +125,9 @@ describe("全站题材导航的归属", () => {
 
     const nav = screen.getByTestId("home-category-nav");
     expect(nav.className).not.toMatch(/(^|\s)(md:)?pt-\d/);
-    expect(nav.className).toContain("mb-5");
-    expect(nav.className).toContain("md:mb-6");
+    // 20/24 → 16/20（2026-09-20 首屏密度轮）。承重点仍是「没有 pt-*」。
+    expect(nav.className).toContain("mb-4");
+    expect(nav.className).toContain("md:mb-5");
   });
 
   it("题材导航和作品网格同属浏览区这一个容器", () => {
@@ -170,7 +173,17 @@ describe("全站题材导航的归属", () => {
 });
 
 describe("区块小标题的分隔线节奏", () => {
-  it("标题行下内边距 12px，分隔线到书卡 24px（桌面 32px）", () => {
+  /**
+   * 2026-09-20 首屏密度轮：首页这一处从全站默认的 24/32px 收到 16/20px，
+   * 走的是 `SectionHeader` 新增的 `spacingClassName`。
+   *
+   * 🔴 这条用例因此要同时钉两件事，缺一不可：
+   *   1. 首页拿到的是**收紧后**的值；
+   *   2. `SectionHeader` 自己的**默认值没被顺手改掉**——否则聚合页/题材页
+   *      会跟着一起变紧，而那是本轮明确划出去的范围。
+   * 只断言第 1 条的话，把默认值直接改成 mb-4 也能过，那正是要防住的改法。
+   */
+  it("首页标题块收紧到 16/20px，但 SectionHeader 的全站默认值不变", () => {
     const { container } = renderHome();
 
     const heading = container.querySelector("#all-works")!;
@@ -178,8 +191,14 @@ describe("区块小标题的分隔线节奏", () => {
     const block = rule.parentElement!;
 
     expect(rule.className).toContain("pb-3");
-    expect(block.className).toContain("mb-6");
-    expect(block.className).toContain("md:mb-8");
+    expect(block.className).toContain("mb-4");
+    expect(block.className).toContain("md:mb-5");
+
+    const plain = render(<SectionHeader title="默认档" />);
+    const plainBlock = plain.container.querySelector("h2")!.parentElement!.parentElement!;
+    expect(plainBlock.className).toContain("mb-6");
+    expect(plainBlock.className).toContain("md:mb-8");
+    plain.unmount();
   });
 });
 

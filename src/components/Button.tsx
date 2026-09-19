@@ -28,7 +28,7 @@ import type {
  *   quiet    无边框弱化动作，中等圆角。
  */
 export type ButtonVariant = "accent" | "outline" | "quiet";
-export type ButtonSize = "md" | "lg";
+export type ButtonSize = "md" | "lg" | "cta";
 
 const BASE =
   "inline-flex items-center justify-center gap-2 font-medium " +
@@ -50,6 +50,18 @@ const VARIANTS: Record<ButtonVariant, string> = {
 const SIZES: Record<ButtonSize, string> = {
   md: "text-sm px-4 py-2.5",
   lg: "text-base px-6 py-3.5",
+  /**
+   * 首屏主推位的 CTA。与 `lg` 同字号同横向内边距，只把竖向内边距收一档：
+   * 46px 高（24 行高 + 2×10 内边距 + 2×1 边框）对 54px（`lg`）。
+   *
+   * 为什么新开一档而不是在调用处覆盖 `py-*`：SIZES 与 className 里的工具类
+   * 同层，胜负由生成的 CSS 顺序决定而不是书写顺序——本仓已经在 `hidden` vs
+   * `inline-flex` 上踩过一次（见 FeaturedHero 次级 CTA 的注释）。
+   *
+   * 为什么不直接把 `lg` 改矮：`lg` 在详情页/章节页还有别的调用点，那些地方
+   * 没有首屏高度压力，跟着一起变矮属于顺手改坏。
+   */
+  cta: "text-base px-6 py-2.5",
 };
 
 function classesFor(variant: ButtonVariant, size: ButtonSize, extra: string) {

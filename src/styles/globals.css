@@ -57,19 +57,43 @@
      底色。mask 的作用同上——溶解背景氛围层的下边缘，不留硬边。
      实际比值由 tests/ui/design-tokens.test.ts 按最坏情况重算。 */
   /* 2026-09-19 结构改向：Hero 内容从「左侧 340px 文字压在整屏模糊图上」改为
-     「居中 banner：左清晰封面 + 右信息组」。桌面高度随之从 620 收到 560——
-     banner 本身 400px 高，620 会在上下各留出一段没人要的空带。 */
-  --novel-hero-height: 560px;
-  --novel-hero-height-mobile: 372px;
-  /* 居中 banner 的几何。封面按 --novel-cover-aspect 等比，240 宽 → 320 高，
-     落在 400 高的 banner 里上下各余 40（含 p-7 的 28）。 */
+     「居中 banner：左清晰封面 + 右信息组」。桌面高度随之从 620 收到 560。
+
+     🔴 2026-09-20 首屏密度收口：高度不再靠 justify-center 自平衡，而是由
+     `FeaturedHero` 的列容器用显式 pt/pb 逐段排出来，这两个 token 只是把那串
+     加法的结果固定下来，改任何一段都要回来重算：
+
+       桌面 488 = pt-24(96) + banner(360) + gap-3(12) + dots(12) + pb-2(8)
+       移动 330 = pt-20(80) + banner(220) + gap-2.5(10) + dots(11) + pb-2(8)
+
+     改成显式排布而不是继续居中，是因为居中把上下留白锁成相等：要让
+     banner 顶沿离页头 ~31px（原稿口径）的同时把下沿收到 8px，居中做不到。 */
+  --novel-hero-height: 488px;
+  --novel-hero-height-mobile: 330px;
+  /* 居中 banner 的几何。封面按 --novel-cover-aspect 等比。
+
+     🔴 桌面封面「满高」是刻意的，不是没来得及加内边距：banner 定高 360、
+     上下 padding 为 0，封面 268 宽 → 357.3 高，正好填满 border-box 扣掉
+     1px 边框后的 358 内容高。改 --novel-hero-banner-height 必须同步重算
+     --novel-hero-cover-width = (高 - 2) * 3 / 4，否则封面要么缩水、要么
+     顶出 banner（没有 overflow-hidden 兜底）。
+     移动端不满高：封面 110 宽 → 146.7 高，在 220 的 banner 里居中。
+     🔴 移动端封面宽度取的是区间下沿，不是越大越好：banner 只有 318 宽，
+     封面每加 10px，右侧信息列就少 10px。实测 140 时信息列只剩 132px，
+     「English · 265 chapters」折成两行、把「·」甩到行首；120 时是 150px，
+     英文刚好单行，但只剩 6px 富余——本站要服务 15 个语种，俄语/越南语的
+     语种名和「章」的译法都比英文长，那点富余留不住。110 给到 162px，与
+     改版前（封面 104 → 信息列 172px）基本持平。
+     往上调之前先拿最长的语种实测，别只看英文。 */
   /* banner 宽度要比视口窄，差额就是左右「露头」。1440 视口下
      (1440-1000)/2 - 28 ≈ 192px 露头，与参考稿的比例接近。
      移动端在下方 media query 里改成 318px。 */
   --novel-hero-banner-w: 1000px;
   --novel-hero-banner-gap: 28px;
-  --novel-hero-banner-height: 400px;
-  --novel-hero-cover-width: 240px;
+  --novel-hero-banner-height: 360px;
+  --novel-hero-cover-width: 268px;
+  --novel-hero-banner-height-mobile: 220px;
+  --novel-hero-cover-width-mobile: 110px;
   --novel-hero-info-width: 620px;
 
   --novel-hero-mask: linear-gradient(
@@ -396,6 +420,42 @@
   .site {
     --novel-hero-banner-w: 318px;
     --novel-hero-banner-gap: 14px;
+  }
+}
+
+/* 平板档（2026-09-20 新增）。
+
+   🔴 这是在修一个**既有缺陷**，不是本轮的新几何：改版前 banner 宽度在
+   ≥768 的所有宽度上都是写死的 1000px，而视口 768–1000 根本放不下——实测
+   768 时 banner 落在 l=-123..877，左右各被 Hero 的 overflow-hidden 切掉一块，
+   连左侧封面都缺了 94px，而且一个露头都看不到（邻居全在屏外）。
+   本轮把封面从 240 加宽到 268，让这块缺口更显眼，于是一并收口。
+
+   宽度改成跟着视口走而不是再写死一个数：`calc(100vw - 120px)` 让左右露头
+   恒定在 ~60px，`min()` 把上限收在桌面档的 1000。
+
+   🔴 平板档的封面**不满高**（220 宽 → 293 高，落在 310 的 banner 里居中），
+   与桌面档的「满高」口径不同，这是刻意的取舍：banner 每给封面 10px，右侧
+   信息列就少 10px，而 768 是整条响应式链上信息列最窄的一点。实测按桌面比例
+   走（封面 246 满高）时信息列只剩 308px，两枚 CTA 被顶到换行，信息列高度
+   321px 对 banner 内容高 328px——只剩 7px 富余。本站要服务 15 个语种，德语
+   「Vorschau starten」这类按钮文案比英文长得多，7px 留不住。
+   收到 220 后信息列 334px，CTA 单行放下。
+
+   banner 高度取 330 而不是刚好够用的 310：768 下标题会换到 2 行（桌面是
+   1 行），信息列实测 297px，310 只剩 11px 富余——而 `TagList` 不限制标签
+   数量，多一行标签就是 +32px，直接顶出 banner。330 给到 ~31px，多容一行
+   标签。平板视口高（1024），这 20px 不影响首排封面（实测仍 100% 可见）。
+
+   --novel-hero-height 必须跟着重算：Hero 已改为显式 pt/pb 排布，
+   458 = pt-24(96) + banner(330) + gap-3(12) + dots(12) + pb-2(8)。 */
+@media (min-width: 768px) and (max-width: 1199px) {
+  .site {
+    --novel-hero-banner-w: min(1000px, calc(100vw - 120px));
+    --novel-hero-banner-gap: 20px;
+    --novel-hero-banner-height: 330px;
+    --novel-hero-cover-width: 220px;
+    --novel-hero-height: 458px;
   }
 }
 

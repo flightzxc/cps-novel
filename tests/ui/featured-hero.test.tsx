@@ -481,16 +481,25 @@ describe("Hero 的内容纪律", () => {
   });
 
   /**
-   * 桌面端从 4 行改为 3 行：2026-09-19 结构改向后简介落在定高 400px 的 banner
-   * 里，和封面（240 宽 → 320 高）共处一行，4 行会把信息列顶出 banner。
-   * 「截断」这条契约本身没变——变的只是行数上限。
+   * 行数上限的演变：4 → 3（2026-09-19 结构改向，简介进了定高 banner）
+   * → 2（2026-09-20 首屏密度轮，banner 从 400 收到 360）。
+   *
+   * 移动端这一轮起整段**不显示**（`hidden`，但留在 DOM 里）：390px 下文字列
+   * 只有 ~190px，简介要占掉两行的高度，而那两行在首屏里的代价是下面少露半排
+   * 书卡。留在 DOM 里是刻意的——读屏和爬虫拿到的内容不随视口宽度缩水。
+   *
+   * 🔴 断言必须用 `md:line-clamp-2` 全串匹配，不能只写 `line-clamp-2`：
+   * 后者是前者的子串，`md:` 档改成任何行数都照样通过。同理要显式断言
+   * **没有**无前缀的 `line-clamp-*`（移动端靠 hidden 而不是截断）。
    */
-  it("简介只取第一段并截断，不让高度随文案变化", () => {
+  it("简介只取第一段；桌面截断 2 行，移动端整段不显示但留在 DOM 里", () => {
     renderHome();
     const summary = screen.getByTestId("featured-hero-summary");
 
-    expect(summary.className).toContain("line-clamp-2");
-    expect(summary.className).toContain("md:line-clamp-3");
+    expect(summary.className.split(/\s+/)).toContain("hidden");
+    expect(summary.className.split(/\s+/)).toContain("md:block");
+    expect(summary.className.split(/\s+/)).toContain("md:line-clamp-2");
+    expect(summary.className).not.toMatch(/(^|\s)line-clamp-\d/);
     // 只有第一段，不含第二段的内容
     expect(summary.textContent).not.toContain("\n");
   });

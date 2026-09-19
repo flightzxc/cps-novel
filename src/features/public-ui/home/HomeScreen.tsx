@@ -74,7 +74,7 @@ export function HomeScreen({
    * 页头之后的第一块内容，8px 会让它直接贴到页头，这时仍要自己撑出一段常规
    * 页面留白。
    */
-  const browseTopPadding = hasFeatured ? "pt-4 md:pt-2" : "pt-10 md:pt-14";
+  const browseTopPadding = hasFeatured ? "pt-3 md:pt-2" : "pt-10 md:pt-14";
 
   return (
     <SiteShell locale={locale} chrome={chrome} headerOverlay={hasHero}>
@@ -94,7 +94,7 @@ export function HomeScreen({
             <nav
               aria-label="Browse by category"
               data-testid="home-category-nav"
-              className="mb-5 flex flex-wrap gap-2 md:mb-6"
+              className="mb-4 flex flex-wrap gap-2 md:mb-5"
             >
               {categories.map((category) => (
                 <a
@@ -109,8 +109,12 @@ export function HomeScreen({
           ) : null}
 
           <section aria-labelledby="all-works" className="pb-4">
+            {/* 标题块比全站默认紧一档（16/20 对 24/32）。首屏的每一段留白都在
+                跟「第一排封面露多少」抢像素，这是其中一段；`spacingClassName`
+                只在这里传，聚合页仍是默认值。 */}
             <SectionHeader
               id="all-works"
+              spacingClassName="mb-4 md:mb-5"
               title={t("home.works")}
               action={
                 browseAllHref ? (
@@ -123,7 +127,7 @@ export function HomeScreen({
                 ) : undefined
               }
             />
-            <BookGrid locale={locale} novels={novels} />
+            <BookGrid locale={locale} novels={novels} variant="home" />
           </section>
         </div>
       </Container>

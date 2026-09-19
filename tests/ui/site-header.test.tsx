@@ -19,10 +19,11 @@ describe("页头", () => {
 
     const mark = document.querySelector('[data-brand-slot="mark"]');
     expect(mark).toBeTruthy();
-    // 槽位尺寸固定：正式 Logo 到位后只替换资产，不重构页头
-    expect(mark?.getAttribute("data-brand-slot-size")).toBe("32");
-    expect((mark as HTMLElement).style.width).toBe("32px");
-    expect((mark as HTMLElement).style.height).toBe("32px");
+    // 槽位尺寸固定：正式 Logo 到位后只替换资产，不重构页头。
+    // 32 → 40（2026-09-20 首屏密度轮，+25%）。页头仍是 h-16，只有字标变大。
+    expect(mark?.getAttribute("data-brand-slot-size")).toBe("40");
+    expect((mark as HTMLElement).style.width).toBe("40px");
+    expect((mark as HTMLElement).style.height).toBe("40px");
   });
 
   it("不放 emoji 当 Logo", () => {

@@ -144,7 +144,42 @@ describe("设计 token · 结构", () => {
     expect(occurrences).toHaveLength(1);
   });
 
-  it("Hero 的遮罩与压黑各只定义一次，且组件只能引用不能自造", () => {
+  /**
+   * 单一定义源。承重点是「组件只能引用不能自造」：同一个 token 在基础块里
+   * 出现两次，谁生效就取决于书写顺序，改一处不会全改到。
+   *
+   * 🔴 响应式覆盖是**合法的**第二处，所以这条不能简单放宽成「允许两次」——
+   * 那样基础块里真多写一遍也照样通过。判据是分开算：
+   *   基础块（任何 @media 之外）必须恰好 1 次；
+   *   多出来的每一次都必须落在一个**带宽度条件**的 @media 里。
+   * 2026-09-20 首屏密度轮新增了 768–1199 的平板档，就是走的第二条。
+   */
+  function definitionSites(token: string) {
+    // 先扫出所有 @media 块的区间与条件（媒体块可嵌套，按花括号配对找结尾）
+    const medias: { start: number; end: number; cond: string }[] = [];
+    const mre = /@media([^{]*)\{/g;
+    let m: RegExpExecArray | null;
+    while ((m = mre.exec(css)) !== null) {
+      let depth = 1;
+      let i = mre.lastIndex;
+      while (i < css.length && depth > 0) {
+        if (css[i] === "{") depth += 1;
+        else if (css[i] === "}") depth -= 1;
+        i += 1;
+      }
+      medias.push({ start: m.index, end: i, cond: m[1].trim() });
+    }
+    const sites: (string | null)[] = [];
+    const re = new RegExp(`${token}\\s*:`, "g");
+    let d: RegExpExecArray | null;
+    while ((d = re.exec(css)) !== null) {
+      const host = medias.find((x) => d!.index >= x.start && d!.index < x.end);
+      sites.push(host ? host.cond : null);
+    }
+    return sites;
+  }
+
+  it("Hero 的每个 token 在基础块里只定义一次，额外定义只能来自响应式断点", () => {
     for (const token of [
       "--novel-hero-mask",
       "--novel-hero-mask-mobile",
@@ -154,12 +189,46 @@ describe("设计 token · 结构", () => {
       "--novel-hero-height",
       "--novel-hero-height-mobile",
       "--novel-hero-banner-height",
+      "--novel-hero-banner-w",
+      "--novel-hero-banner-gap",
       "--novel-hero-cover-width",
       "--novel-hero-info-width",
     ]) {
-      const defined = css.match(new RegExp(`${token}\\s*:`, "g")) ?? [];
-      expect(defined, `${token} 应当只定义一次，实际 ${defined.length} 次`).toHaveLength(1);
+      const sites = definitionSites(token);
+      const base = sites.filter((c) => c === null);
+      const responsive = sites.filter((c) => c !== null);
+
+      expect(base, `${token} 在基础块里应当只定义一次，实际 ${base.length} 次`).toHaveLength(1);
+      for (const cond of responsive) {
+        expect(cond, `${token} 的额外定义必须来自宽度断点，实际条件是「${cond}」`).toMatch(
+          /\bwidth\b/,
+        );
+      }
     }
+  });
+
+  /**
+   * 平板档（768–1199）的存在性与自洽。
+   *
+   * 这一档是 2026-09-20 首屏密度轮补的，修的是一个既有缺陷：在它出现之前
+   * banner 宽度在 ≥768 的所有宽度上都写死 1000px，而 768 的视口根本放不下，
+   * banner 左右被 Hero 的 overflow-hidden 切掉、连露头都看不见。
+   *
+   * 断言的是「宽度不再是固定值」这条修复本身，而不是某个具体像素——具体
+   * 几何由跨宽度实测把关，写死在这里只会变成第二份需要同步的真源。
+   */
+  it("平板档存在，且 banner 宽度跟着视口走而不是再写死一个数", () => {
+    const band = css.match(
+      /@media \(min-width: 768px\) and \(max-width: 1199px\)\s*\{[\s\S]*?\n\}/,
+    );
+    expect(band, "缺少 768–1199 的平板档").not.toBeNull();
+    const body = band![0];
+    expect(body).toMatch(/--novel-hero-banner-w:\s*min\(1000px,\s*calc\(100vw - \d+px\)\)/);
+    // 高度与封面必须同时覆盖：只改宽度会让桌面档的封面比例落到窄 banner 上
+    expect(body).toMatch(/--novel-hero-banner-height:/);
+    expect(body).toMatch(/--novel-hero-cover-width:/);
+    // Hero 改成显式 pt/pb 排布后，banner 高度一变，Hero 总高必须跟着重算
+    expect(body).toMatch(/--novel-hero-height:/);
   });
 
   it("mask 是渐隐而不是纯色遮罩——纯色压暗消不掉图片的边", () => {

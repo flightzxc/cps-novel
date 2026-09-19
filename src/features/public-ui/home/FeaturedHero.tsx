@@ -257,9 +257,17 @@ export function FeaturedHero({
           用 --novel-hero-banner-w 而不是百分比，是因为百分比会相对轨道自身
           总宽（随项数变化），公式会随项数漂移。
 
-          pt 让开叠在 Hero 上的页头（移动 56 / 桌面 64），否则 banner 居中时
-          会被页头压住——移动端 Hero 只有 300px，这个重叠非常明显。 */}
-      <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 pt-14 md:gap-5 md:pt-16">
+          🔴 2026-09-20 首屏密度收口：这一列从 `justify-center` 改成
+          `justify-start` + 显式 pt/pb。居中会把上下留白锁成相等，而这一屏
+          需要的是不对称的——顶沿要给叠放的页头让出一段（桌面 96 / 移动 80，
+          页头本身 65），下沿则要尽量收紧，好让下面的浏览区往上提。实测桌面
+          居中态下 dots 到题材导航有 40px，改显式排布后是 16px。
+
+          附带好处：banner 顶沿不再随「有没有 dots」浮动，1 本与 ≥2 本时
+          banner 落在同一个 y 上，切换数量不跳。
+          这串加法的结果固定在 --novel-hero-height{,-mobile}，改任一段都要
+          回 globals.css 同步重算。 */}
+      <div className="absolute inset-0 flex flex-col items-center justify-start gap-2.5 pt-20 pb-2 md:gap-3 md:pt-24">
         <div className="w-full overflow-hidden">
           <div
             data-testid="featured-hero-track"
@@ -353,27 +361,34 @@ function BannerSlide({
       inert={isCurrent ? undefined : true}
       aria-hidden={isCurrent ? undefined : true}
       className={
-        "flex w-[var(--novel-hero-banner-w)] shrink-0 items-center gap-3.5 " +
-        "rounded-novel-lg border border-novel-border bg-novel-bg-elevated p-3.5 " +
+        "flex h-[var(--novel-hero-banner-height-mobile)] w-[var(--novel-hero-banner-w)] " +
+        "shrink-0 items-center gap-3.5 " +
+        "rounded-novel-lg border border-novel-border bg-novel-bg-elevated px-4 py-0 " +
         "transition-opacity duration-500 ease-out motion-reduce:transition-none " +
-        "md:h-[var(--novel-hero-banner-height)] md:gap-9 md:p-7 " +
+        "md:h-[var(--novel-hero-banner-height)] md:gap-9 md:px-7 " +
         (isCurrent ? "" : "opacity-60")
       }
     >
       {/* 封面：清晰、等比、不模糊。左封面右文字，移动端同构只是尺寸更小。
           移动端没有改成「上封面下文字」：实测长标题（越南语/俄语/葡语）在这个
           宽度下换 2 行仍然成立，而纵向排会把 banner 顶到两倍高，反而挤掉下方
-          的浏览区。 */}
+          的浏览区。
+
+          🔴 桌面封面填满 banner 高度（268 宽 → 357.3 高 ≈ 360 减去 1px 边框
+          ×2），banner 的上下 padding 因此必须是 0。这是 2026-09-20 首屏密度
+          轮的核心换算：封面从 240×320 长到 268×357 的同时，banner 反而从 400
+          矮到 360——省下的 40px 直接让给下面的作品网格。
+          改宽度前先看 globals.css 里 --novel-hero-cover-width 的换算注释。 */}
       <a
         href={item.detailHref}
         tabIndex={tab}
         data-testid={isCurrent ? "featured-hero-cover" : undefined}
-        className="block w-[104px] shrink-0 rounded-novel-md md:w-[var(--novel-hero-cover-width)]"
+        className="block w-[var(--novel-hero-cover-width-mobile)] shrink-0 rounded-novel-md md:w-[var(--novel-hero-cover-width)]"
       >
         <CoverImage
           src={novel.coverUrl}
           alt={t("novel.coverAlt", { title: novel.title })}
-          sizeHint="(min-width: 768px) 240px, 104px"
+          sizeHint="(min-width: 768px) 268px, 110px"
         />
       </a>
 
@@ -382,27 +397,38 @@ function BannerSlide({
           {eyebrow ?? t("home.featuredEyebrow")}
         </p>
 
-        <h2 className="mt-1.5 line-clamp-2 font-novel-serif text-[16px] leading-[1.25] font-semibold tracking-tight text-novel-fg md:mt-4 md:line-clamp-3 md:text-[30px] md:leading-[1.2]">
+        <h2 className="mt-1.5 line-clamp-2 font-novel-serif text-[16px] leading-[1.25] font-semibold tracking-tight text-novel-fg md:mt-3 md:line-clamp-2 md:text-[32px] md:leading-[1.2]">
           <a href={item.detailHref} tabIndex={tab} className="rounded-novel-sm">
             {novel.title}
           </a>
         </h2>
 
         <MetaList
-          className="mt-1.5 text-[12px] md:mt-4 md:text-sm"
+          className="mt-1.5 text-[12px] md:mt-3 md:text-sm"
           items={[
             { key: "locale", value: novel.locale.label },
             { key: "chapters", value: t("home.chapterCount", { count: novel.totalChapterCount }) },
           ]}
         />
 
-        <TagList tags={novel.tags} className="mt-2 md:mt-3" label={t("novel.tagsLabel")} />
+        {/* 标签移动端不进 banner（2026-09-20 首屏密度轮）：390px 宽下文字列
+            只有 ~190px，标签换行后能把 banner 顶高一整行，而这一行在首屏里
+            的代价是下面少露半排书卡。题材入口在 banner 正下方的题材导航里
+            仍然完整存在，不是把入口去掉。
+            包一层 div 而不是往 TagList 的 className 里塞 `hidden`：TagList
+            根节点自带 flex 类，同层 display 工具类的胜负由生成的 CSS 顺序
+            决定而不是书写顺序（本仓踩过一次，见次级 CTA 那段注释）。 */}
+        <div className="hidden md:block">
+          <TagList tags={novel.tags} className="mt-3" label={t("novel.tagsLabel")} />
+        </div>
 
         {/* 简介只取第一段：这里是引子，完整简介是详情页的事。
-            移动 2 行 / 桌面 3 行截断——banner 定高 400，4 行会把信息列顶出去。 */}
+            桌面 2 行截断（2026-09-20 从 3 行收到 2 行）；移动端整段不渲染出来。
+            `<p>` 自身没有 display 工具类，`hidden md:block` 这一对是安全的
+            ——这里与上面 TagList 的处理不同，原因见那段注释。 */}
         <p
           data-testid={isCurrent ? "featured-hero-summary" : undefined}
-          className="mt-2 line-clamp-2 text-[12.5px] leading-[1.5] text-novel-fg-muted md:mt-4 md:line-clamp-3 md:text-base md:leading-[1.7]"
+          className="hidden text-novel-fg-muted md:mt-3 md:line-clamp-2 md:block md:text-[15px] md:leading-[1.6]"
         >
           {firstParagraph(novel.description)}
         </p>
@@ -412,13 +438,13 @@ function BannerSlide({
             实测（2026-09-19）：俄语顶出容器 49px、德语 34px、越南语 13px，而 Hero
             是 `overflow-hidden`，第二枚按钮不是溢出而是被直接裁掉，页面还不横向
             滚动。换行后放不下的那枚自己占满一行。 */}
-        <div className="mt-3 flex w-full flex-wrap gap-2 md:mt-6 md:w-auto md:gap-3">
+        <div className="mt-3 flex w-full flex-wrap gap-2 md:mt-4 md:w-auto md:gap-3">
           {item.startReadingHref ? (
             <ButtonLink
               href={item.startReadingHref}
               tabIndex={tab}
               variant="accent"
-              size="lg"
+              size="cta"
               className="flex-1 md:flex-none"
             >
               {t("home.startPreview")}
@@ -434,7 +460,7 @@ function BannerSlide({
               href={item.detailHref}
               tabIndex={tab}
               variant="outline"
-              size="lg"
+              size="cta"
               className="w-full md:w-auto"
             >
               {t("home.viewDetails")}
