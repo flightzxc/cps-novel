@@ -77,3 +77,71 @@ INSERT INTO "site_setting" ("id", "updated_at") VALUES (1, CURRENT_TIMESTAMP);
 `SiteSetting` 有 30s 进程内 TTL 缓存（`getSiteSetting`），后台写入路径会调
 `invalidateSiteSettingCache()`；若你是用别的方式改的值，最多等 30s 才会在前台生效——
 这也是一条「为什么该走后台」的旁证。
+
+---
+
+## 2. 数据库统计信息（`ANALYZE`）
+
+| 项 | 值 |
+| --- | --- |
+| 目标 | `public` schema 下**每一张有行的表**都有列统计（`pg_stats` 非空） |
+| 执行方式 | 对该环境的库执行一次 `ANALYZE;` |
+| 何时执行 | **首次配置**（迁移 + 种子 / 恢复备份之后），以及每次**批量导入内容之后** |
+| 每次发布 | **只校验，不执行**（下方校验语句为只读） |
+| 发现时间 | 2026-09-20 真实数据 UAT |
+
+### 为什么这是运营项，不是代码项
+
+2026-09-20 实测：`/ko` 首页每次加载 **5.1 秒**，并发刷新时撞上 `web_app` 角色的
+`statement_timeout=30s` 直接 500。
+
+真因不在代码里——是 `channel_app` 这张**只有 1 行**的注册表从建库起就没被分析过
+（`pg_stats` 零条目，`last_analyze` / `last_autoanalyze` 均为 NULL）。没有列统计，
+规划器对 `ca.status = 'active'` 只能套默认等值选择率 `0.005`，把
+`source_label_mapping ⋈ channel_app` 估成 1 行（实际 196），于是整条分支看起来
+近乎免费，先展开了 178 万行的标签扇出，才轮到最具选择性的 `novel_id IN (...)`。
+
+只补一句 `ANALYZE channel_app`，查询一字不改就从 **2,696ms → 0.68ms**。
+
+🔴 **这类表永远等不到 autovacuum。** autovacuum 的 analyze 阈值是
+`50 + 0.1 × reltuples`；写一次就不再变的小注册表（`channel_app`、`channel`、
+`channel_capability` 这一族）改动数永远够不到，从建库到下线都不会被自动分析。
+本次普查时 `public` 下有 20+ 张表零统计。
+
+统计信息是**环境属性**：新建库、恢复备份、PG15+ 统计计数器因非正常关闭被重置，
+都会让它重新消失。所以它属于本表，而不是某次代码发布。
+
+### 执行
+
+```bash
+psql "$DATABASE_URL" -c "ANALYZE;"
+```
+
+整库 ANALYZE 只更新统计信息，**不改任何数据、不持有长锁**，可在线执行。
+本次在 5.4 万行量级的库上实测耗时 **11 秒**。
+
+### 校验（只读）
+
+```sql
+-- 期望返回 0：有行却没有列统计的表
+SELECT c.relname
+FROM pg_class c
+JOIN pg_namespace n ON n.oid = c.relnamespace AND n.nspname = 'public'
+WHERE c.relkind = 'r'
+  AND c.reltuples > 0
+  AND NOT EXISTS (
+    SELECT 1 FROM pg_stats s
+    WHERE s.schemaname = 'public' AND s.tablename = c.relname
+  );
+```
+
+> 不要用 `pg_stat_user_tables.last_analyze IS NULL` 当判据：PG15+ 的统计计数器
+> 存在共享内存里，非正常关闭会被清零，于是**已经分析过**的表也会显示 NULL。
+> 本次普查里 54 张表有 49 张 `last_analyze` 为 NULL，但其中大多数 `pg_stats`
+> 是有内容的。唯一可靠的判据是 `pg_stats` 有没有条目。
+
+### 代码侧已有的兜底
+
+`src/lib/site/public-taxonomy.ts` 把首页那条分类查询改写成先物化目标行，
+统计缺失时把最坏情况从 2,696ms 封顶到 15ms（统计齐全时的代价是 +0.4ms）。
+**那是兜底，不是替代**——本项仍要做，否则整库其它查询没有这层保护。
