@@ -1,0 +1,67 @@
+# 环境开通与发布清单
+
+本表记录**每开通一个新环境、以及每次生产发布**都要确认的运营配置项。
+
+它与 `PRODUCTION_RELEASE_BLOCKERS.md` 分工不同：那份表只登记**阻断发布**的高风险
+事项；本表是常规步骤，不阻断发布，但漏掉会让环境跑在错误的配置上。
+
+---
+
+## 1. 站点品牌名（`SiteSetting.siteName`）
+
+| 项 | 值 |
+| --- | --- |
+| 目标值 | `PulseNovel` |
+| 执行方式 | **后台设置页**（`/settings` 的「站点名称」字段） |
+| 适用范围 | 每一个新开通的环境 + 生产 |
+| 决策 | Owner 2026-09-20 |
+
+### 🔴 必须从后台执行，不能用 SQL 绕过
+
+直接 `UPDATE site_setting SET site_name=...` 会绕过三道既有保护：
+
+1. `settings:manage` 能力位与会话新鲜度校验（`requireFreshAdminServiceMutation`）；
+2. `expectedUpdatedAt` 乐观并发——并发编辑时该返回冲突，而不是后写覆盖先写；
+3. `operation_audit`——与业务写**同事务**落审计（`CLAUDE.md` §5 修正 4 的事务边界）。
+
+绕过这三条产生的是一条「谁在什么时候把站点名改成了什么」无法回答的变更。
+
+### 为什么不做成自动默认值
+
+新环境初始化出来的 `site_name` 是 `CPS Novel`，这**不是**某处显式写死的品牌名，而是
+v0.2.0 foundation 迁移里这条语句的副产品：
+
+```sql
+INSERT INTO "site_setting" ("id", "updated_at") VALUES (1, CURRENT_TIMESTAMP);
+```
+
+它不写 `site_name`，继承的是**当时**的列 DEFAULT（`'CPS Novel'`）。迁移按顺序执行，
+这一行在任何后续迁移之前就已定型，而这张单例表此后再无第二次 INSERT。
+
+因此：
+
+- **改列 DEFAULT 无效。** 2026-09-19 曾加过这样一条迁移，2026-09-20 在一次性空库上
+  跑完整迁移链实测：`column_default` 确实变成了 `'PulseNovel'`，行却仍是 `'CPS Novel'`。
+  该迁移已整条回退——留着只会是一个运行时无效、却让人以为已生效的假象。
+- **不用广泛回填。** `UPDATE ... WHERE site_name='CPS Novel'` 会同时改到所有尚未配置过
+  的已有环境（含生产），绕过上面那三道保护。
+- **不修改历史 foundation 迁移。**
+- 也不为了一个品牌默认值单独新建一套 provisioning 机制。
+
+将来若建立正式的环境开通流程，再把品牌配置纳入该流程；在那之前，本表就是唯一提醒。
+
+### 验收
+
+配置后在该环境的公开页确认三处都跟随（它们都读同一个配置项）：
+
+- 页头与页脚字标（`BrandLockup`，DOM 上是 `[data-brand-slot="wordmark"]`）
+- 首页 `<title>`
+- `og:site_name`
+
+> 详情页 / 列表页的 `<title>` **不带** `| PulseNovel` 后缀是本仓库的既有契约——
+> `normalizeMetadataTitle` 会主动剥掉尾部的 `| 站点名`，品牌走 `og:site_name`。
+> 看到没有后缀不要当成缺陷去「修」。
+
+`SiteSetting` 有 30s 进程内 TTL 缓存（`getSiteSetting`），后台写入路径会调
+`invalidateSiteSettingCache()`；若你是用别的方式改的值，最多等 30s 才会在前台生效——
+这也是一条「为什么该走后台」的旁证。

@@ -44,10 +44,16 @@ describe("chromeFromSiteSetting · siteName 接线", () => {
   /**
    * 承重点是「配置值原样透传、代码不做任何替换」，不是某个具体字符串。
    *
-   * 2026-09-19 品牌接入把**新环境**的列默认值从 `CPS Novel` 改成了 `PulseNovel`
-   * （迁移 `20260919120000_site_setting_brand_default_pulsenovel`），但已有环境
-   * 那一行不受默认值影响，仍可能是 `CPS Novel` 或运营改过的任意值。所以两个都
-   * 测：拿到什么就显示什么，代码里不许出现「看到旧品牌名就换成新的」这类特判。
+   * 品牌统一为 PulseNovel 之后，真实环境里这一行可能是任意值：全新环境是
+   * `CPS Novel`（v0.2.0 foundation 迁移的 seed 继承了当时的列 DEFAULT），
+   * 配置过的环境是运营在后台填的值。所以两个都测：拿到什么就显示什么，代码里
+   * 不许出现「看到旧品牌名就换成新的」这类特判——那会让「站点名是运营配置项」
+   * 这条架构事实失效。
+   *
+   * 🔴 不要为了让新环境直接拿到 PulseNovel 去改列 DEFAULT：2026-09-20 空库实测
+   * 证明无效（单例行先于后续迁移定型），相关迁移已回退，依据见
+   * `docs/governance/database-governance.md` §12 与
+   * `docs/governance/ENVIRONMENT_PROVISIONING_CHECKLIST.md`。
    */
   it("配置值原样透传，不做品牌替换——新旧默认值一视同仁", () => {
     for (const name of ["CPS Novel", "PulseNovel"]) {

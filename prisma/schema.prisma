@@ -993,13 +993,22 @@ model SiteSetting {
   id                              Int      @id @default(1)
   /// 站点品牌名，用户可见品牌名的**唯一真源**——前端不得硬编码绕过
   /// （见 `chromeFromSiteSetting` 与 `tests/ui/site-chrome-brand-name.test.ts`）。
-  /// 默认值 2026-09-19 由 `CPS Novel` 改为 `PulseNovel`（迁移
-  /// `20260919120000_site_setting_brand_default_pulsenovel`），只影响将来新建的
-  /// 环境；已有环境（含生产）那一行仍由后台设置页维护，迁移不回填。
+  ///
+  /// 🔴 默认值**刻意保持 `CPS Novel`**，不要再改成 `PulseNovel`。
+  /// 2026-09-19 曾新增一条迁移把列 DEFAULT 改为 `PulseNovel`，2026-09-20 在
+  /// 一次性空库上跑完整迁移链实测证明**它对新环境毫无作用**，已整条回退：
+  /// 单例行由 v0.2.0 foundation 迁移的
+  /// `INSERT INTO "site_setting" ("id","updated_at") VALUES (1, CURRENT_TIMESTAMP)`
+  /// 创建，该语句不写 site_name、继承的是**当时**的列 DEFAULT；迁移按顺序执行，
+  /// 行在后续迁移改默认值之前就已定型，而这张单例表此后再无第二次 INSERT。
+  /// 改这里只会留下一个运行时无效、却让人以为已生效的假象。
+  ///
+  /// 品牌名统一通过后台 SiteSetting 正式配置（`settings:manage` + `expectedUpdatedAt`
+  /// + `operation_audit`），新环境与生产同一条路径，见
+  /// `docs/governance/ENVIRONMENT_PROVISIONING_CHECKLIST.md`。
   /// 🔴 不参与任何 URL 派生：canonical / hreflang / og:url 走 `SITE_URL`
   /// （`src/lib/seo/site-url.ts` 唯一真源），后台源走 `ADMIN_CANONICAL_ORIGIN`。
-  /// 品牌名与部署域名解耦。
-  siteName                        String   @default("PulseNovel") @map("site_name") @db.VarChar(160)
+  siteName                        String   @default("CPS Novel") @map("site_name") @db.VarChar(160)
   siteDescription                 String   @default("") @map("site_description") @db.Text
   homeMetaTitle                   String   @default("") @map("home_meta_title") @db.VarChar(500)
   homeMetaDescription             String   @default("") @map("home_meta_description") @db.Text
