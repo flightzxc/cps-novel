@@ -23,7 +23,7 @@
   ],
   "translation_count": 1845,
   "overwrite_zh": false,
-  "review_scope": "Meaning check against CanonicalTag display_name_zh for wrong sense, clear ambiguity, and concept mix-up. Not a full linguistic sign-off of every cell.",
+  "review_scope": "Meaning check against CanonicalTag display_name_zh for wrong sense, clear ambiguity, and concept mix-up. 2026-09-19 P1 audit applied 51 cells; P2 optional_suggestions were not applied. Not a full linguistic sign-off of every cell.",
   "cache_note": "Public taxonomy queries are force-dynamic with request-scoped React.cache(); overlay apply is visible on the next request without restart or waiting for getActiveLocales 300s TTL. getActiveLocales does not cache tag labels.",
   "translations": [
     {
@@ -624,7 +624,7 @@
       "stableId": "ct-v1-arranged-marriage",
       "slug": "arranged-marriage",
       "locale": "ja",
-      "displayName": "政略結婚",
+      "displayName": "親が決めた結婚",
       "source": "new",
       "sourceLocale": "ja",
       "reviewStatus": "new"
@@ -696,7 +696,7 @@
       "stableId": "ct-v1-arranged-marriage",
       "slug": "arranged-marriage",
       "locale": "ru",
-      "displayName": "Договорной брак",
+      "displayName": "Брак по договорённости семей",
       "source": "new",
       "sourceLocale": "ru",
       "reviewStatus": "new"
@@ -1011,7 +1011,7 @@
       "stableId": "ct-v1-blind-date",
       "slug": "blind-date",
       "locale": "vi",
-      "displayName": "Hẹn mù",
+      "displayName": "Xem mắt",
       "source": "new",
       "sourceLocale": "vi",
       "reviewStatus": "new"
@@ -1020,7 +1020,7 @@
       "stableId": "ct-v1-blind-date",
       "slug": "blind-date",
       "locale": "th",
-      "displayName": "เดทตามนัด",
+      "displayName": "นัดบอด",
       "source": "new",
       "sourceLocale": "th",
       "reviewStatus": "new"
@@ -1290,10 +1290,10 @@
       "stableId": "ct-v1-campus",
       "slug": "campus",
       "locale": "th",
-      "displayName": "รั้วมหาวิทยาลัย",
-      "source": "reuse_repair",
+      "displayName": "ชีวิตในโรงเรียนและมหาวิทยาลัย",
+      "source": "new",
       "sourceLocale": "th",
-      "reviewStatus": "reviewed"
+      "reviewStatus": "new"
     },
     {
       "stableId": "ct-v1-campus",
@@ -1326,10 +1326,10 @@
       "stableId": "ct-v1-campus",
       "slug": "campus",
       "locale": "ar",
-      "displayName": "الحرم الجامعي",
-      "source": "reuse_repair",
+      "displayName": "الحياة المدرسية والجامعية",
+      "source": "new",
       "sourceLocale": "ar",
-      "reviewStatus": "reviewed"
+      "reviewStatus": "new"
     },
     {
       "stableId": "ct-v1-campus",
@@ -1650,7 +1650,7 @@
       "stableId": "ct-v1-child-centered-romance",
       "slug": "child-centered-romance",
       "locale": "en",
-      "displayName": "Cute-Baby Romance",
+      "displayName": "Adorable Kids",
       "source": "new",
       "sourceLocale": "en",
       "reviewStatus": "new"
@@ -1659,7 +1659,7 @@
       "stableId": "ct-v1-child-centered-romance",
       "slug": "child-centered-romance",
       "locale": "es",
-      "displayName": "Romance de bebé adorable",
+      "displayName": "Niños adorables",
       "source": "new",
       "sourceLocale": "es",
       "reviewStatus": "new"
@@ -1668,7 +1668,7 @@
       "stableId": "ct-v1-child-centered-romance",
       "slug": "child-centered-romance",
       "locale": "pt-BR",
-      "displayName": "Romance de bebê fofo",
+      "displayName": "Crianças adoráveis",
       "source": "new",
       "sourceLocale": "pt-BR",
       "reviewStatus": "new"
@@ -1677,7 +1677,7 @@
       "stableId": "ct-v1-child-centered-romance",
       "slug": "child-centered-romance",
       "locale": "id",
-      "displayName": "Romansa bayi menggemaskan",
+      "displayName": "Anak-anak menggemaskan",
       "source": "new",
       "sourceLocale": "id",
       "reviewStatus": "new"
@@ -1695,7 +1695,7 @@
       "stableId": "ct-v1-child-centered-romance",
       "slug": "child-centered-romance",
       "locale": "th",
-      "displayName": "โรแมนซ์เบบี้น่ารัก",
+      "displayName": "เด็กน่ารัก",
       "source": "new",
       "sourceLocale": "th",
       "reviewStatus": "new"
@@ -1956,7 +1956,7 @@
       "stableId": "ct-v1-comeback",
       "slug": "comeback",
       "locale": "vi",
-      "displayName": "Lật ngược",
+      "displayName": "Lội ngược dòng",
       "source": "new",
       "sourceLocale": "vi",
       "reviewStatus": "new"
@@ -2001,7 +2001,7 @@
       "stableId": "ct-v1-comeback",
       "slug": "comeback",
       "locale": "ar",
-      "displayName": "عودة",
+      "displayName": "قلب الموازين",
       "source": "new",
       "sourceLocale": "ar",
       "reviewStatus": "new"
@@ -2028,19 +2028,19 @@
       "stableId": "ct-v1-comeback",
       "slug": "comeback",
       "locale": "pl",
-      "displayName": "Powrót",
-      "source": "reuse_cps_exact_slug",
+      "displayName": "Odwrócenie losu",
+      "source": "new",
       "sourceLocale": "pl",
-      "reviewStatus": "reviewed"
+      "reviewStatus": "new"
     },
     {
       "stableId": "ct-v1-comeback",
       "slug": "comeback",
       "locale": "cs",
-      "displayName": "Návrat",
-      "source": "reuse_cps_exact_slug",
+      "displayName": "Obrat k lepšímu",
+      "source": "new",
       "sourceLocale": "cs",
-      "reviewStatus": "reviewed"
+      "reviewStatus": "new"
     },
     {
       "stableId": "ct-v1-comeback",
@@ -2874,7 +2874,7 @@
       "stableId": "ct-v1-cross-dressing",
       "slug": "cross-dressing",
       "locale": "es",
-      "displayName": "Vestirse del sexo opuesto",
+      "displayName": "Vestirse con ropa del otro género",
       "source": "new",
       "sourceLocale": "es",
       "reviewStatus": "new"
@@ -2883,7 +2883,7 @@
       "stableId": "ct-v1-cross-dressing",
       "slug": "cross-dressing",
       "locale": "pt-BR",
-      "displayName": "Vestir-se do sexo oposto",
+      "displayName": "Vestir roupas do outro gênero",
       "source": "new",
       "sourceLocale": "pt-BR",
       "reviewStatus": "new"
@@ -3984,7 +3984,7 @@
       "stableId": "ct-v1-ensemble-darling",
       "slug": "ensemble-darling",
       "locale": "vi",
-      "displayName": "Được cả nhà cưng",
+      "displayName": "Được mọi người cưng chiều",
       "source": "new",
       "sourceLocale": "vi",
       "reviewStatus": "new"
@@ -4011,7 +4011,7 @@
       "stableId": "ct-v1-ensemble-darling",
       "slug": "ensemble-darling",
       "locale": "ko",
-      "displayName": "단체 총아",
+      "displayName": "모두에게 사랑받는 주인공",
       "source": "new",
       "sourceLocale": "ko",
       "reviewStatus": "new"
@@ -4284,7 +4284,7 @@
       "stableId": "ct-v1-estrangement",
       "slug": "estrangement",
       "locale": "ko",
-      "displayName": "소원",
+      "displayName": "멀어진 관계",
       "source": "new",
       "sourceLocale": "ko",
       "reviewStatus": "new"
@@ -4563,10 +4563,10 @@
       "stableId": "ct-v1-family-feud",
       "slug": "family-feud",
       "locale": "zh-Hant",
-      "displayName": "豪門恩怨",
-      "source": "reuse_repair",
+      "displayName": "家族紛爭",
+      "source": "new",
       "sourceLocale": "zh-Hant",
-      "reviewStatus": "reviewed"
+      "reviewStatus": "new"
     },
     {
       "stableId": "ct-v1-family-feud",
@@ -5328,7 +5328,7 @@
       "stableId": "ct-v1-frenemies",
       "slug": "frenemies",
       "locale": "id",
-      "displayName": "Musuh dalam selimut",
+      "displayName": "Teman sekaligus musuh",
       "source": "new",
       "sourceLocale": "id",
       "reviewStatus": "new"
@@ -7770,7 +7770,7 @@
       "stableId": "ct-v1-legitimate-daughter",
       "slug": "legitimate-daughter",
       "locale": "vi",
-      "displayName": "Con gái đích tôn",
+      "displayName": "Đích nữ",
       "source": "new",
       "sourceLocale": "vi",
       "reviewStatus": "new"
@@ -7779,7 +7779,7 @@
       "stableId": "ct-v1-legitimate-daughter",
       "slug": "legitimate-daughter",
       "locale": "th",
-      "displayName": "ธิดาแท้",
+      "displayName": "บุตรสาวภรรยาเอก",
       "source": "new",
       "sourceLocale": "th",
       "reviewStatus": "new"
@@ -8103,10 +8103,10 @@
       "stableId": "ct-v1-love-after-marriage",
       "slug": "love-after-marriage",
       "locale": "de",
-      "displayName": "Liebe nach der Ehe",
-      "source": "reuse_cps_exact_slug",
+      "displayName": "Erst heiraten, dann lieben",
+      "source": "new",
       "sourceLocale": "de",
-      "reviewStatus": "reviewed"
+      "reviewStatus": "new"
     },
     {
       "stableId": "ct-v1-love-after-marriage",
@@ -8688,7 +8688,7 @@
       "stableId": "ct-v1-male-audience",
       "slug": "male-audience",
       "locale": "es",
-      "displayName": "Para lectores",
+      "displayName": "Público masculino",
       "source": "new",
       "sourceLocale": "es",
       "reviewStatus": "new"
@@ -8697,7 +8697,7 @@
       "stableId": "ct-v1-male-audience",
       "slug": "male-audience",
       "locale": "pt-BR",
-      "displayName": "Para leitores",
+      "displayName": "Público masculino",
       "source": "new",
       "sourceLocale": "pt-BR",
       "reviewStatus": "new"
@@ -9696,10 +9696,10 @@
       "stableId": "ct-v1-mother-in-law",
       "slug": "mother-in-law",
       "locale": "zh-Hant",
-      "displayName": "婆婆",
-      "source": "reuse_repair",
+      "displayName": "婆媳關係",
+      "source": "new",
       "sourceLocale": "zh-Hant",
-      "reviewStatus": "reviewed"
+      "reviewStatus": "new"
     },
     {
       "stableId": "ct-v1-mother-in-law",
@@ -10200,7 +10200,7 @@
       "stableId": "ct-v1-one-night-stand",
       "slug": "one-night-stand",
       "locale": "vi",
-      "displayName": "Một đêm",
+      "displayName": "Tình một đêm",
       "source": "new",
       "sourceLocale": "vi",
       "reviewStatus": "new"
@@ -10209,7 +10209,7 @@
       "stableId": "ct-v1-one-night-stand",
       "slug": "one-night-stand",
       "locale": "th",
-      "displayName": "คืนเดียว",
+      "displayName": "ความสัมพันธ์ชั่วคืน",
       "source": "new",
       "sourceLocale": "th",
       "reviewStatus": "new"
@@ -10245,7 +10245,7 @@
       "stableId": "ct-v1-one-night-stand",
       "slug": "one-night-stand",
       "locale": "ar",
-      "displayName": "ليلة واحدة",
+      "displayName": "علاقة لليلة واحدة",
       "source": "new",
       "sourceLocale": "ar",
       "reviewStatus": "new"
@@ -10290,7 +10290,7 @@
       "stableId": "ct-v1-one-night-stand",
       "slug": "one-night-stand",
       "locale": "ru",
-      "displayName": "Случай на одну ночь",
+      "displayName": "Связь на одну ночь",
       "source": "new",
       "sourceLocale": "ru",
       "reviewStatus": "new"
@@ -12393,7 +12393,7 @@
       "stableId": "ct-v1-single-mom-escape",
       "slug": "single-mom-escape",
       "locale": "ko",
-      "displayName": "미혼모의 탈출",
+      "displayName": "싱글맘의 탈출",
       "source": "new",
       "sourceLocale": "ko",
       "reviewStatus": "new"
@@ -12528,7 +12528,7 @@
       "stableId": "ct-v1-single-mother",
       "slug": "single-mother",
       "locale": "ko",
-      "displayName": "미혼모",
+      "displayName": "싱글맘",
       "source": "new",
       "sourceLocale": "ko",
       "reviewStatus": "new"
@@ -12681,7 +12681,7 @@
       "stableId": "ct-v1-son-in-law-comeback",
       "slug": "son-in-law-comeback",
       "locale": "ar",
-      "displayName": "عودة الصهر",
+      "displayName": "صعود الصهر",
       "source": "new",
       "sourceLocale": "ar",
       "reviewStatus": "new"
@@ -12900,7 +12900,7 @@
       "stableId": "ct-v1-student",
       "slug": "student",
       "locale": "id",
-      "displayName": "Mahasiswa",
+      "displayName": "Pelajar",
       "source": "new",
       "sourceLocale": "id",
       "reviewStatus": "new"
@@ -12909,7 +12909,7 @@
       "stableId": "ct-v1-student",
       "slug": "student",
       "locale": "vi",
-      "displayName": "Học sinh",
+      "displayName": "Học sinh, sinh viên",
       "source": "new",
       "sourceLocale": "vi",
       "reviewStatus": "new"
@@ -12918,7 +12918,7 @@
       "stableId": "ct-v1-student",
       "slug": "student",
       "locale": "th",
-      "displayName": "นักเรียน",
+      "displayName": "นักเรียนและนักศึกษา",
       "source": "new",
       "sourceLocale": "th",
       "reviewStatus": "new"
@@ -12963,7 +12963,7 @@
       "stableId": "ct-v1-student",
       "slug": "student",
       "locale": "fr",
-      "displayName": "Étudiant",
+      "displayName": "Élèves et étudiants",
       "source": "new",
       "sourceLocale": "fr",
       "reviewStatus": "new"
@@ -12972,19 +12972,19 @@
       "stableId": "ct-v1-student",
       "slug": "student",
       "locale": "de",
-      "displayName": "Student",
-      "source": "reuse_cps_exact_slug",
+      "displayName": "Schüler und Studierende",
+      "source": "new",
       "sourceLocale": "de",
-      "reviewStatus": "reviewed"
+      "reviewStatus": "new"
     },
     {
       "stableId": "ct-v1-student",
       "slug": "student",
       "locale": "pl",
-      "displayName": "Student",
-      "source": "reuse_cps_exact_slug",
+      "displayName": "Uczniowie i studenci",
+      "source": "new",
       "sourceLocale": "pl",
-      "reviewStatus": "reviewed"
+      "reviewStatus": "new"
     },
     {
       "stableId": "ct-v1-student",
@@ -12999,7 +12999,7 @@
       "stableId": "ct-v1-student",
       "slug": "student",
       "locale": "ru",
-      "displayName": "Студент",
+      "displayName": "Учащиеся",
       "source": "new",
       "sourceLocale": "ru",
       "reviewStatus": "new"
@@ -13143,31 +13143,28 @@
       "stableId": "ct-v1-substitute-marriage",
       "slug": "substitute-marriage",
       "locale": "en",
-      "displayName": "Marriage Substitute",
-      "source": "reuse_repair",
+      "displayName": "Substitute Bride",
+      "source": "new",
       "sourceLocale": "en",
-      "reviewStatus": "adapted",
-      "sourceSlug": "marriage-substitute"
+      "reviewStatus": "new"
     },
     {
       "stableId": "ct-v1-substitute-marriage",
       "slug": "substitute-marriage",
       "locale": "es",
-      "displayName": "Matrimonio sustituto",
-      "source": "reuse_repair",
+      "displayName": "Novia sustituta",
+      "source": "new",
       "sourceLocale": "es",
-      "reviewStatus": "adapted",
-      "sourceSlug": "marriage-substitute"
+      "reviewStatus": "new"
     },
     {
       "stableId": "ct-v1-substitute-marriage",
       "slug": "substitute-marriage",
       "locale": "pt-BR",
-      "displayName": "Casamento Substituto",
-      "source": "reuse_repair",
+      "displayName": "Noiva substituta",
+      "source": "new",
       "sourceLocale": "pt-BR",
-      "reviewStatus": "adapted",
-      "sourceSlug": "marriage-substitute"
+      "reviewStatus": "new"
     },
     {
       "stableId": "ct-v1-substitute-marriage",
@@ -13183,11 +13180,10 @@
       "stableId": "ct-v1-substitute-marriage",
       "slug": "substitute-marriage",
       "locale": "vi",
-      "displayName": "Thay thế kết hôn",
-      "source": "reuse_repair",
+      "displayName": "Gả thay",
+      "source": "new",
       "sourceLocale": "vi",
-      "reviewStatus": "adapted",
-      "sourceSlug": "marriage-substitute"
+      "reviewStatus": "new"
     },
     {
       "stableId": "ct-v1-substitute-marriage",
@@ -13232,11 +13228,10 @@
       "stableId": "ct-v1-substitute-marriage",
       "slug": "substitute-marriage",
       "locale": "ar",
-      "displayName": "زواج بديل",
-      "source": "reuse_repair",
+      "displayName": "عروس بديلة",
+      "source": "new",
       "sourceLocale": "ar",
-      "reviewStatus": "adapted",
-      "sourceSlug": "marriage-substitute"
+      "reviewStatus": "new"
     },
     {
       "stableId": "ct-v1-substitute-marriage",
@@ -13344,7 +13339,7 @@
       "stableId": "ct-v1-sudden-wealth",
       "slug": "sudden-wealth",
       "locale": "ja",
-      "displayName": "成り上がり",
+      "displayName": "一攫千金",
       "source": "new",
       "sourceLocale": "ja",
       "reviewStatus": "new"
@@ -14712,10 +14707,10 @@
       "stableId": "ct-v1-unrequited-love",
       "slug": "unrequited-love",
       "locale": "zh-Hant",
-      "displayName": "暗戀",
-      "source": "reuse_repair",
+      "displayName": "單戀",
+      "source": "new",
       "sourceLocale": "zh-Hant",
-      "reviewStatus": "reviewed"
+      "reviewStatus": "new"
     },
     {
       "stableId": "ct-v1-unrequited-love",
@@ -15432,7 +15427,7 @@
       "stableId": "ct-v1-warrior-protagonist",
       "slug": "warrior-protagonist",
       "locale": "cs",
-      "displayName": "Válečný protagonista",
+      "displayName": "Hlavní hrdina válečník",
       "source": "new",
       "sourceLocale": "cs",
       "reviewStatus": "new"
@@ -16668,7 +16663,7 @@
       "stableId": "ct-v1-young-adult",
       "slug": "young-adult",
       "locale": "ru",
-      "displayName": "Подростковое",
+      "displayName": "Для подростков",
       "source": "new",
       "sourceLocale": "ru",
       "reviewStatus": "new"
