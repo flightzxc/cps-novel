@@ -130,6 +130,43 @@ describe("全站题材导航的归属", () => {
     expect(nav.className).toContain("md:mb-5");
   });
 
+  /**
+   * 移动端单行横向滚动（2026-09-20）。
+   *
+   * 分类数量由上游内容决定，不是设计能约束的常数——实测 ko 9 个、de 4 个、
+   * vi 2 个。9 个在 390px 下换行成 3 行占 118px，把作品网格往下推 84px，
+   * 首屏可见排数从 1.86 掉到 1.47。
+   *
+   * 🔴 三件事一起钉，少一件这个布局就不成立：
+   *   1. 移动端 `flex-nowrap` + `overflow-x-auto`，md 起换回 `flex-wrap`；
+   *   2. chip 必须 `shrink-0`——不然 flex 会把它们压扁塞进一行，
+   *      "横向滚动"变成"挤成一团"，而且压根不会溢出、也就不会滚动；
+   *   3. `-mx-5` / `px-5` 必须成对，且与 `Container` 的移动端内边距一致。
+   */
+  it("题材导航移动端是单行横向滚动，md 起恢复换行", () => {
+    renderHome();
+    const nav = screen.getByTestId("home-category-nav");
+    const cls = nav.className.split(/\s+/);
+
+    expect(cls).toContain("flex-nowrap");
+    expect(cls).toContain("overflow-x-auto");
+    expect(cls).toContain("md:flex-wrap");
+    expect(cls).toContain("md:overflow-x-visible");
+
+    // 负外边距与内边距成对出现，且与 Container 的移动端 px-5 对齐
+    expect(cls).toContain("-mx-5");
+    expect(cls).toContain("px-5");
+    expect(cls).toContain("md:mx-0");
+    expect(cls).toContain("md:px-0");
+
+    // chip 不许被压缩，否则一行塞得下、根本不会产生滚动
+    for (const chip of nav.querySelectorAll("a")) {
+      expect(chip.className.split(/\s+/), `chip「${chip.textContent}」缺少 shrink-0`).toContain(
+        "shrink-0",
+      );
+    }
+  });
+
   it("题材导航和作品网格同属浏览区这一个容器", () => {
     renderHome();
 

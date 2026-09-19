@@ -90,17 +90,38 @@ export function HomeScreen({
             不是这一格网格的筛选器。放到「作品」标题下面会让人以为点了就筛这
             个列表，同时也会把原稿「分隔线到书卡 32px（移动 24px）」挤掉。 */}
         <div className={browseTopPadding} data-testid="home-browse">
+          {/* 题材导航：**移动端单行横向滚动**，md 起恢复换行。
+
+              2026-09-20 真实数据实测：分类数量由上游内容决定，不是设计能约束的
+              常数——ko 有 9 个、de 4 个、vi 2 个。9 个在 390px 下换行成 3 行、
+              占 118px，把作品网格整整往下推 84px，首屏可见排数从 1.86 掉到 1.47。
+              换行时它是移动端首屏最大的单项消耗，比 dots 加区块标题还多。
+
+              🔴 `-mx-5 px-5` 这一对是承重的，不是装饰：`Container` 移动端是
+              `px-5`，负外边距把滚动视口撑回视口满宽，`px-5` 再把**内容**推回
+              原来的左边距。少了负外边距，最后一个 chip 会停在容器内边距处、
+              看不出"还能滑"；少了 `px-5`，第一个 chip 会贴死屏幕边缘。
+              两个值必须跟 `Container` 的移动端内边距一致，改那边要回来同步。
+
+              滚动条按常规 chip 行的做法隐藏（chip 被切在边缘本身就是可滑动的
+              提示）。不加 `tabIndex`：chip 自己是 `<a>`，键盘 Tab 过去时浏览器
+              会把它滚进视野，横向滚动区不会成为键盘死角。
+              `overscroll-x-contain` 防止滑到尽头时触发浏览器的返回手势。 */}
           {categories.length > 0 ? (
             <nav
               aria-label="Browse by category"
               data-testid="home-category-nav"
-              className="mb-4 flex flex-wrap gap-2 md:mb-5"
+              className={
+                "-mx-5 mb-4 flex flex-nowrap gap-2 overflow-x-auto overscroll-x-contain px-5 " +
+                "[scrollbar-width:none] [&::-webkit-scrollbar]:hidden " +
+                "md:mx-0 md:mb-5 md:flex-wrap md:overflow-x-visible md:px-0"
+              }
             >
               {categories.map((category) => (
                 <a
                   key={category.slug}
                   href={category.href}
-                  className="rounded-full border border-novel-border px-3 py-1.5 text-sm text-novel-fg-muted transition-colors hover:border-novel-primary hover:text-novel-primary"
+                  className="shrink-0 rounded-full border border-novel-border px-3 py-1.5 text-sm whitespace-nowrap text-novel-fg-muted transition-colors hover:border-novel-primary hover:text-novel-primary"
                 >
                   {category.label}
                 </a>

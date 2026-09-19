@@ -62,6 +62,33 @@ function project(row: PublicTaxonomyRow, locale: string): PublicTaxonomyTag {
   });
 }
 
+/**
+ * 🔴 `target_source_item` 这个 CTE 必须保留，而且必须带 `AS MATERIALIZED`。
+ *
+ * 它不是为了可读性拆出来的——它是这条查询唯一能跑得动的形状。
+ *
+ * 2026-09-20 实测（PG16，真实库）：把 `novel_id IN (...)` 直接写在下面那个
+ * UNION 分支的 WHERE 里时，规划器估出 `rows=9`，**实际 1,786,842 行**，然后对
+ * `novel_source_item` 做了 178 万次索引探测（每次返回 0 行）。单条查询
+ * **2,696ms**，六个语种都一样。`/ko` 首页因此每次加载 5.1 秒，并发刷新时还会
+ * 撞上 `web_app` 角色的 `statement_timeout=30s` 直接 500。
+ *
+ * 根因是下面这两行 join 谓词：
+ *   slm.raw_language_scope COLLATE "C" = <nsi>.raw_language_scope COLLATE "C"
+ *   slm.raw_token          COLLATE "C" = sl.external_label_value::text COLLATE "C"
+ * 两侧都套了 `COLLATE` / `::text`，表达式失去可用的统计信息与索引路径，规划器
+ * 对这条链的选择性估计整体塌掉，于是把**最具选择性**的 `novel_id IN (25 个)`
+ * 排到了最后才过滤——先展开 `source_label_mapping × novel_source_item_label`
+ * 的笛卡尔式扇出，再回头一行行丢弃。
+ *
+ * 先物化目标行就把这个顺序钉死了：扇出被限制在这几十行之内。
+ * 实测 2,696ms → **15ms**（175×），六个语种结果集逐行完全一致（已 diff 比对）。
+ *
+ * 不要为了"少一层 CTE"把它内联回去；也不要去掉 `MATERIALIZED`——PG12 起 CTE
+ * 默认可被内联，去掉这个关键字等于把上面那个坏计划放回来。
+ * 真正的治本是消掉那两行 COLLATE/cast（需要改列的排序规则或加表达式索引），
+ * 那属于 `prisma/` 与 `infra/` 的范围，不在本文件能做的事情里。
+ */
 export async function loadPublicTaxonomyByNovelIds(
   db: Db,
   novelIds: readonly string[],
@@ -72,35 +99,39 @@ export async function loadPublicTaxonomyByNovelIds(
 
   const ids = Prisma.join(uniqueIds.map((id) => Prisma.sql`${id}::uuid`));
   const rows = await db.$queryRaw<PublicTaxonomyRow[]>(Prisma.sql`
-    WITH public_membership AS (
+    WITH target_source_item AS MATERIALIZED (
+      SELECT nsi.id, nsi.novel_id, nsi.channel_app_id, nsi.raw_language_scope
+      FROM novel_source_item nsi
+      WHERE nsi.novel_id IN (${ids})
+        AND nsi.status = 'linked'
+        AND nsi.deleted_at IS NULL
+        AND nsi.raw_language_scope IS NOT NULL
+    ),
+    public_membership AS (
       SELECT nct.novel_id, nct.canonical_tag_id
       FROM novel_canonical_tag nct
       JOIN novel_tag_state nts ON nts.novel_id = nct.novel_id AND nts.mode = 'manual'
       WHERE nct.novel_id IN (${ids})
         AND nct.source = 'manual'
       UNION
-      SELECT nsi.novel_id, slm.canonical_tag_id
-      FROM novel_source_item nsi
-      JOIN channel_app ca ON ca.id = nsi.channel_app_id AND ca.status = 'active'
+      SELECT tsi.novel_id, slm.canonical_tag_id
+      FROM target_source_item tsi
+      JOIN channel_app ca ON ca.id = tsi.channel_app_id AND ca.status = 'active'
       JOIN novel_source_item_label nsil
-        ON nsil.novel_source_item_id = nsi.id AND nsil.active IS TRUE
+        ON nsil.novel_source_item_id = tsi.id AND nsil.active IS TRUE
       JOIN source_label sl
         ON sl.id = nsil.source_label_id
-       AND sl.channel_app_id = nsi.channel_app_id
+       AND sl.channel_app_id = tsi.channel_app_id
        AND sl.label_kind = 'series_type'
       JOIN source_label_mapping slm
-        ON slm.channel_app_id = nsi.channel_app_id
-       AND slm.raw_language_scope COLLATE "C" = nsi.raw_language_scope COLLATE "C"
+        ON slm.channel_app_id = tsi.channel_app_id
+       AND slm.raw_language_scope COLLATE "C" = tsi.raw_language_scope COLLATE "C"
        AND slm.raw_token COLLATE "C" = sl.external_label_value::text COLLATE "C"
        AND slm.active IS TRUE
-      WHERE nsi.novel_id IN (${ids})
-        AND NOT EXISTS (
+      WHERE NOT EXISTS (
           SELECT 1 FROM novel_tag_state nts
-          WHERE nts.novel_id = nsi.novel_id AND nts.mode = 'manual'
+          WHERE nts.novel_id = tsi.novel_id AND nts.mode = 'manual'
         )
-        AND nsi.status = 'linked'
-        AND nsi.deleted_at IS NULL
-        AND nsi.raw_language_scope IS NOT NULL
     )
     SELECT DISTINCT membership.novel_id,
            ct.id,
