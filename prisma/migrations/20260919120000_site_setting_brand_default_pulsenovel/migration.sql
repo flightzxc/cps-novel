@@ -1,0 +1,18 @@
+-- PulseNovel 品牌接入（2026-09-19，Owner 拍板）：新环境初始化出来的站点名
+-- 默认值从 'CPS Novel' 改为 'PulseNovel'。
+--
+-- 🔴 只改列默认值，不改既有迁移、不回填既有行。
+--    `site_setting` 是 id=1 的单例表，行由 v0.2.0 foundation 迁移
+--    (20260818120000_v020_foundation_shared) 一次性 seed。列 DEFAULT 只影响
+--    **将来新建的环境**；已有环境（含生产）那一行的值不受影响，仍然只能通过
+--    后台设置页修改——那是运营配置动作，不是迁移的职责。
+--    这也是刻意的：迁移不应该悄悄改掉运营已经配好的站点名。
+--
+-- 品牌名与部署域名解耦：本次不涉及任何 URL 面。canonical / hreflang / og:url /
+-- 绝对链接一律来自 `SITE_URL` 环境变量（`src/lib/seo/site-url.ts` 是唯一真源，
+-- 未配置直接抛 SiteUrlConfigurationError，不回落到 site_name），后台源走
+-- `ADMIN_CANONICAL_ORIGIN`。已静态核证 site_name 未被用于 hostname / canonical /
+-- callback / cookie-domain 派生，只出现在展示面（字标、<title> 文本、
+-- og:site_name、og:image 的 alt、JSON-LD 的 name、后台表单）。
+-- 预生产继续使用 bangbangji 域名，不受本次改动影响。
+ALTER TABLE "site_setting" ALTER COLUMN "site_name" SET DEFAULT 'PulseNovel';

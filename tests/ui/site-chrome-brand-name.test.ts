@@ -41,8 +41,18 @@ describe("chromeFromSiteSetting · siteName 接线", () => {
     expect(chrome.siteName).toBe("海阅");
   });
 
-  it("DB 默认值 CPS Novel 原样透传，不做替换（接线后显示它是预期结果）", () => {
-    const chrome = chromeFromSiteSetting(fakeSettings({ siteName: "CPS Novel" }), "en");
-    expect(chrome.siteName).toBe("CPS Novel");
+  /**
+   * 承重点是「配置值原样透传、代码不做任何替换」，不是某个具体字符串。
+   *
+   * 2026-09-19 品牌接入把**新环境**的列默认值从 `CPS Novel` 改成了 `PulseNovel`
+   * （迁移 `20260919120000_site_setting_brand_default_pulsenovel`），但已有环境
+   * 那一行不受默认值影响，仍可能是 `CPS Novel` 或运营改过的任意值。所以两个都
+   * 测：拿到什么就显示什么，代码里不许出现「看到旧品牌名就换成新的」这类特判。
+   */
+  it("配置值原样透传，不做品牌替换——新旧默认值一视同仁", () => {
+    for (const name of ["CPS Novel", "PulseNovel"]) {
+      const chrome = chromeFromSiteSetting(fakeSettings({ siteName: name }), "en");
+      expect(chrome.siteName).toBe(name);
+    }
   });
 });

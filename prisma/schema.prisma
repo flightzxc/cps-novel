@@ -991,7 +991,15 @@ model IndexNowOutboxAttempt {
 /// parameters per-batch in HomeCarouselAutoBatch.params. See docs/p2/V020_FOUNDATION_INTERFACES.md.
 model SiteSetting {
   id                              Int      @id @default(1)
-  siteName                        String   @default("CPS Novel") @map("site_name") @db.VarChar(160)
+  /// 站点品牌名，用户可见品牌名的**唯一真源**——前端不得硬编码绕过
+  /// （见 `chromeFromSiteSetting` 与 `tests/ui/site-chrome-brand-name.test.ts`）。
+  /// 默认值 2026-09-19 由 `CPS Novel` 改为 `PulseNovel`（迁移
+  /// `20260919120000_site_setting_brand_default_pulsenovel`），只影响将来新建的
+  /// 环境；已有环境（含生产）那一行仍由后台设置页维护，迁移不回填。
+  /// 🔴 不参与任何 URL 派生：canonical / hreflang / og:url 走 `SITE_URL`
+  /// （`src/lib/seo/site-url.ts` 唯一真源），后台源走 `ADMIN_CANONICAL_ORIGIN`。
+  /// 品牌名与部署域名解耦。
+  siteName                        String   @default("PulseNovel") @map("site_name") @db.VarChar(160)
   siteDescription                 String   @default("") @map("site_description") @db.Text
   homeMetaTitle                   String   @default("") @map("home_meta_title") @db.VarChar(500)
   homeMetaDescription             String   @default("") @map("home_meta_description") @db.Text
