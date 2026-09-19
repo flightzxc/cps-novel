@@ -169,15 +169,58 @@ describe("canonical tag translation overlay artifact", () => {
     for (const row of baby) {
       expect(row.displayName).not.toMatch(/con niñ|com crian|mit Kind|z dzieckiem|s dítětem|с ребёнком|Child-Centered|子連れ|육아 로맨스|مع طفل/i);
     }
+    expect(baby.find((row) => row.locale === "en")?.displayName).toBe("Adorable Kids");
+    expect(baby.find((row) => row.locale === "es")?.displayName).toBe("Niños adorables");
+    expect(baby.find((row) => row.locale === "pt-BR")?.displayName).toBe("Crianças adoráveis");
+    expect(baby.find((row) => row.locale === "id")?.displayName).toBe("Anak-anak menggemaskan");
+    expect(baby.find((row) => row.locale === "th")?.displayName).toBe("เด็กน่ารัก");
     expect(baby.find((row) => row.locale === "zh-Hant")?.displayName).toBe("萌寶題材");
+    for (const locale of ["en", "es", "pt-BR", "id", "th"] as const) {
+      expect(baby.find((row) => row.locale === locale)?.displayName).not.toMatch(/Romance|Romansa|โรแมนซ์/i);
+    }
     const dress = bySlug("cross-dressing");
-    expect(dress.find((row) => row.locale === "es")?.displayName).toBe("Vestirse del sexo opuesto");
-    expect(dress.find((row) => row.locale === "pt-BR")?.displayName).toBe("Vestir-se do sexo oposto");
+    expect(dress.find((row) => row.locale === "es")?.displayName).toBe("Vestirse con ropa del otro género");
+    expect(dress.find((row) => row.locale === "pt-BR")?.displayName).toBe("Vestir roupas do outro gênero");
     expect(dress.find((row) => row.locale === "de")?.displayName).toBe("Crossdressing");
     expect(dress.find((row) => row.locale === "pl")?.displayName).not.toBe("Przebranie");
     expect(dress.find((row) => row.locale === "cs")?.displayName).not.toBe("Převlek");
     expect(dress.find((row) => row.locale === "ru")?.displayName).not.toBe("Переодевание");
     expect(dress.find((row) => row.locale === "ja")?.displayName).toBe("女装／男装");
+  });
+
+  it("applies the 79df119 P1 sense-audit cells and leaves P2 optional_suggestions untouched", () => {
+    const deltaPath = join(REPO_ROOT, "docs/p2/canonical-tag-translations/2026-09-19/haiyue-tag-translation-delta-79df119.json");
+    const delta = JSON.parse(readFileSync(deltaPath, "utf8")) as {
+      required_changes: { slug: string; locale: string; stableId: string; before: string; proposedDisplayName: string; priority: string }[];
+      optional_suggestions: { slug: string; locale: string; before: string; proposedDisplayName: string; priority: string }[];
+    };
+    expect(delta.required_changes).toHaveLength(51);
+    expect(delta.optional_suggestions).toHaveLength(21);
+    const loaded = loadTranslationOverlayArtifact(REPO_ROOT);
+    const byKey = new Map(loaded.artifact.translations.map((row) => [`${row.slug}::${row.locale}`, row]));
+    for (const item of delta.required_changes) {
+      expect(item.priority).toBe("P1");
+      const row = byKey.get(`${item.slug}::${item.locale}`);
+      expect(row, `${item.slug}/${item.locale}`).toBeTruthy();
+      expect(row?.stableId).toBe(`ct-v1-${item.slug}`);
+      expect(row?.displayName).toBe(item.proposedDisplayName);
+      expect(row?.displayName).not.toBe(item.before);
+      expect(row?.source).toBe("new");
+    }
+    for (const item of delta.optional_suggestions) {
+      expect(item.priority).toBe("P2");
+      const row = byKey.get(`${item.slug}::${item.locale}`);
+      expect(row?.displayName).toBe(item.before);
+      expect(row?.displayName).not.toBe(item.proposedDisplayName);
+    }
+    const builder = readFileSync(join(REPO_ROOT, "scripts/p2-06-5-production/build-canonical-tag-translation-overlay.py"), "utf8");
+    expect(builder).toMatch(/\("love-after-marriage", "de"\)/);
+    expect(builder).toMatch(/\("campus", "th"\)/);
+    expect(builder).toMatch(/\("substitute-marriage", "en"\)/);
+    expect(builder).toContain("Erst heiraten, dann lieben");
+    expect(builder).toContain("싱글맘");
+    expect(builder).not.toContain("Cute-Baby Romance");
+    expect(builder).not.toContain("Liebe nach der Ehe");
   });
 
   it("does not rewrite the frozen CanonicalTag v1 JSON", () => {

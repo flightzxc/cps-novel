@@ -56,7 +56,7 @@ export const TRANSLATION_OVERLAY_ADVISORY_LOCK_NAMESPACE = "p2-06-5:canonical-ta
 export const TRANSLATION_OVERLAY_RELATIVE_PATH =
   "docs/p2/canonical-tag-translations/2026-09-19/canonical-tag-translations-v1.json";
 export const TRANSLATION_OVERLAY_SHA256 =
-  "8630cb847c122485446e25921b86dee714361553bf39de16cba16558a0a80fc2";
+  "0100fb36e638849ecdcd277792f6658250c51819aef97e1c59c3040316080488";
 export const TRANSLATION_OVERLAY_EXPECTED_COUNT = CANONICAL_TAG_V1_COUNT * SITE_LOCALES.length;
 export const TRANSLATION_OVERLAY_RECOVERY =
   "Apply is a single PostgreSQL transaction with pg_advisory_xact_lock; any exception rolls back every upsert and leaves no partial CanonicalTagTranslation writes. Replay the same --request-id to no-op. Undo a committed apply by restoring CanonicalTagTranslation from the pre-apply backup or by applying a previous overlay artifact. This CLI never updates CanonicalTag identity, slug, or zh baseline rows.";
