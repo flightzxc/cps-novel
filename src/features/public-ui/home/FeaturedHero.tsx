@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useId, useState, useSyncExternalStore } from "react";
 import type { KeyboardEvent } from "react";
 import { ButtonLink } from "@/components/Button";
-import { Container } from "@/components/Container";
 import { CoverImage } from "@/components/CoverImage";
 import { MetaList } from "@/components/MetaList";
 import { TagList } from "@/components/Tag";
@@ -242,118 +241,64 @@ export function FeaturedHero({
           字体、圆角仍全部是 PulseNovel 自己的体系。
 
           dots 只有一份——渲染两份再用 CSS 藏一份，读屏会念两遍。 */}
-      {/* pt 让开叠在 Hero 上的页头（移动 56 / 桌面 64），否则 banner 居中时
-          会被页头压住——移动端 Hero 只有 340px，这个重叠非常明显。 */}
-      <div className="absolute inset-0 flex items-center pt-14 md:pt-16">
-        <Container className="flex flex-col items-center gap-4 md:gap-5">
+      {/* 轨道：当前 banner 居中，前后两张被 Hero 的 overflow-hidden 裁成「露头」。
+          实现方式是整条轨道横向位移，而不是把相邻项单独定位——后者在项数变化
+          时要算一堆边界条件，轨道位移只有一个公式。
+
+          定位公式：轨道左边缘先放到父容器 50%（left-1/2），再左移半个 banner
+          让第 0 项居中，之后每前进一项就再左移「一个 banner + 一个间距」。
+          用 --novel-hero-banner-w 而不是百分比，是因为百分比会相对轨道自身
+          总宽（随项数变化），公式会随项数漂移。
+
+          pt 让开叠在 Hero 上的页头（移动 56 / 桌面 64），否则 banner 居中时
+          会被页头压住——移动端 Hero 只有 300px，这个重叠非常明显。 */}
+      <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 pt-14 md:gap-5 md:pt-16">
+        <div className="w-full overflow-hidden">
           <div
-            data-testid="featured-hero-banner"
+            data-testid="featured-hero-track"
             className={
-              "flex w-full max-w-[var(--novel-hero-banner-max)] items-center gap-3.5 " +
-              "rounded-novel-lg border border-novel-border bg-novel-bg-elevated p-3.5 " +
-              "md:h-[var(--novel-hero-banner-height)] md:gap-9 md:p-7"
+              "relative left-1/2 flex items-stretch gap-[var(--novel-hero-banner-gap)] " +
+              "transition-transform duration-500 ease-out motion-reduce:transition-none"
             }
+            style={{
+              transform:
+                "translateX(calc(-1 * var(--novel-hero-banner-w) / 2 - " +
+                `${count > 1 ? count + index : 0} * (var(--novel-hero-banner-w) + var(--novel-hero-banner-gap))))`,
+            }}
           >
-            {/* 封面：清晰、等比、不模糊。左封面右文字，移动端同构只是尺寸更小。
-                移动端没有改成「上封面下文字」：实测长标题（越南语/俄语/葡语）
-                在这个宽度下换到 2–3 行仍然成立，而纵向排会把 banner 顶到
-                两倍高，反而挤掉下方的浏览区。 */}
-            <a
-              href={current.detailHref}
-              data-testid="featured-hero-cover"
-              className="block w-[104px] shrink-0 rounded-novel-md md:w-[var(--novel-hero-cover-width)]"
-            >
-              <CoverImage
-                src={novel.coverUrl}
-                alt={t("novel.coverAlt", { title: novel.title })}
-                sizeHint="(min-width: 768px) 240px, 104px"
-              />
-            </a>
-
-            <div className="flex min-w-0 flex-1 flex-col items-start md:max-w-[var(--novel-hero-info-width)]">
-            <p className="text-[10px] tracking-[0.18em] text-novel-fg-muted uppercase md:text-xs">
-              {eyebrow ?? t("home.featuredEyebrow")}
-            </p>
-
-            <h2
-              className="mt-1.5 line-clamp-2 font-novel-serif text-[16px] leading-[1.25] font-semibold tracking-tight text-novel-fg md:mt-4 md:line-clamp-3 md:text-[30px] md:leading-[1.2]"
-            >
-              <a href={current.detailHref} className="rounded-novel-sm">
-                {novel.title}
-              </a>
-            </h2>
-
-            <MetaList
-              className="mt-1.5 text-[12px] md:mt-4 md:text-sm"
-              items={[
-                { key: "locale", value: novel.locale.label },
-                { key: "chapters", value: t("home.chapterCount", { count: novel.totalChapterCount }) },
-              ]}
-            />
-
-            <TagList tags={novel.tags} className="mt-2 md:mt-3" label={t("novel.tagsLabel")} />
-
-            {/* 简介只取第一段：这里是引子，完整简介是详情页的事。
-                移动 2 行 / 桌面 4 行截断，保证高度不随文案长短变化。 */}
-            <p
-              data-testid="featured-hero-summary"
-              className="mt-2 line-clamp-2 text-[12.5px] leading-[1.5] text-novel-fg-muted md:mt-4 md:line-clamp-3 md:text-base md:leading-[1.7]"
-            >
-              {firstParagraph(novel.description)}
-            </p>
-
-            {/* `flex-wrap` 是必需的，不是保险：按钮走 `whitespace-nowrap`，flex 项
-                又有默认的 `min-width:auto`，所以两枚按钮**不会**被压窄——它们会
-                一起把这一行顶宽。360px 宽的安卓机上实测（2026-09-19）：俄语
-                「Начать ознакомление / Подробнее」把行宽顶出内容容器 49px，德语
-                34px，越南语 13px，而 Hero 自身是 `overflow-hidden`，于是第二枚
-                按钮不是溢出而是**被直接裁掉**，页面还不横向滚动，看不出哪里错了。
-                换行后放不下的那枚自己占满一行，文案再长也只是多一行。 */}
-            <div className="mt-3 flex w-full flex-wrap gap-2 md:mt-6 md:w-auto md:gap-3">
-              {current.startReadingHref ? (
-                <ButtonLink
-                  href={current.startReadingHref}
-                  variant="accent"
-                  size="lg"
-                  className="flex-1 md:flex-none"
-                >
-                  {t("home.startPreview")}
-                </ButtonLink>
-              ) : null}
-              {/* 次级 CTA 移动端不渲染：文字列只有 ~210px，越南语 / 俄语这类长
-                  文案两枚按钮必然换行，把 banner 顶到接近两倍高。详情入口在
-                  封面和标题上仍然可达，不是把入口去掉。
-                  🔴 `hidden` 必须加在**外层 div** 上，不能加在 ButtonLink 的
-                  className 里：Button 的 BASE 自带 `inline-flex`，两条 display
-                  工具类在同一层，胜负由生成的 CSS 顺序决定而不是书写顺序，
-                  实测 `inline-flex` 赢，按钮照样显示。 */}
-              <div className="hidden flex-1 md:block md:flex-none">
-                <ButtonLink
-                  href={current.detailHref}
-                  variant="outline"
-                  size="lg"
-                  className="w-full md:w-auto"
-                >
-                  {t("home.viewDetails")}
-                </ButtonLink>
-              </div>
-            </div>
-            </div>
-
-            {/* 右侧轻氛围区：本轮不做「下一本预览」，先留空，主次更干净。 */}
-            <div aria-hidden="true" className="hidden flex-1 md:block" />
+            {/* 只有一本时不做三份拷贝：否则左右露头露的是同一本书，等于告诉
+                用户「前后都是它」。单本就老老实实只渲染一张，没有露头。 */}
+            {Array.from({ length: count > 1 ? count * 3 : 1 }, (_, slot) => {
+              // 三份拷贝，当前项固定落在中间那份 → 首尾两项也有左右邻居可露头。
+              // 只渲染当前项 ±1，其余给一个同尺寸的空位：轨道几何靠宽度维持，
+              // 不需要真的把 3n 张封面都下载下来。
+              const trackIndex = count > 1 ? count + index : 0;
+              const near = Math.abs(slot - trackIndex) <= 1;
+              if (!near) {
+                return (
+                  <div
+                    key={`spacer-${slot}`}
+                    aria-hidden="true"
+                    className="w-[var(--novel-hero-banner-w)] shrink-0"
+                  />
+                );
+              }
+              const item = items[slot % count];
+              return (
+                <BannerSlide
+                  key={`slot-${slot}`}
+                  item={item}
+                  isCurrent={slot === trackIndex}
+                  eyebrow={eyebrow}
+                />
+              );
+            })}
           </div>
+        </div>
 
-          {count > 1 ? (
-            <HeroDots
-              count={count}
-              index={index}
-              onSelect={go}
-              baseId={baseId}
-              className="flex"
-            />
-          ) : null}
-        </Container>
+        {count > 1 ? (
+          <HeroDots count={count} index={index} onSelect={go} baseId={baseId} className="flex" />
+        ) : null}
       </div>
 
       {/* 切换时告知读屏用户当前在第几本 */}
@@ -361,6 +306,125 @@ export function FeaturedHero({
         {t("home.slideStatus", { n: index + 1, count, title: novel.title })}
       </p>
     </section>
+  );
+}
+
+/**
+ * 一张 banner。轨道上每一项都渲染，当前项之外的只作为「露头」存在。
+ *
+ * 🔴 非当前项必须 `aria-hidden` + `tabIndex={-1}`：它们在视觉上只露出一条边，
+ * 但 DOM 里是完整内容。不屏蔽的话读屏会把所有主推项的标题简介连着念一遍，
+ * 键盘 Tab 也会走进看不见的按钮里。
+ */
+function BannerSlide({
+  item,
+  isCurrent,
+  eyebrow,
+}: {
+  item: FeaturedHeroItem;
+  isCurrent: boolean;
+  eyebrow?: string;
+}) {
+  const t = useT();
+  const { novel } = item;
+  const tab = isCurrent ? undefined : -1;
+
+  return (
+    <div
+      data-testid={isCurrent ? "featured-hero-banner" : "featured-hero-banner-peek"}
+      data-hero-slide-current={isCurrent ? "true" : "false"}
+      aria-hidden={isCurrent ? undefined : true}
+      className={
+        "flex w-[var(--novel-hero-banner-w)] shrink-0 items-center gap-3.5 " +
+        "rounded-novel-lg border border-novel-border bg-novel-bg-elevated p-3.5 " +
+        "transition-opacity duration-500 ease-out motion-reduce:transition-none " +
+        "md:h-[var(--novel-hero-banner-height)] md:gap-9 md:p-7 " +
+        (isCurrent ? "" : "opacity-60")
+      }
+    >
+      {/* 封面：清晰、等比、不模糊。左封面右文字，移动端同构只是尺寸更小。
+          移动端没有改成「上封面下文字」：实测长标题（越南语/俄语/葡语）在这个
+          宽度下换 2 行仍然成立，而纵向排会把 banner 顶到两倍高，反而挤掉下方
+          的浏览区。 */}
+      <a
+        href={item.detailHref}
+        tabIndex={tab}
+        data-testid={isCurrent ? "featured-hero-cover" : undefined}
+        className="block w-[104px] shrink-0 rounded-novel-md md:w-[var(--novel-hero-cover-width)]"
+      >
+        <CoverImage
+          src={novel.coverUrl}
+          alt={t("novel.coverAlt", { title: novel.title })}
+          sizeHint="(min-width: 768px) 240px, 104px"
+        />
+      </a>
+
+      <div className="flex min-w-0 flex-1 flex-col items-start md:max-w-[var(--novel-hero-info-width)]">
+        <p className="text-[10px] tracking-[0.18em] text-novel-fg-muted uppercase md:text-xs">
+          {eyebrow ?? t("home.featuredEyebrow")}
+        </p>
+
+        <h2 className="mt-1.5 line-clamp-2 font-novel-serif text-[16px] leading-[1.25] font-semibold tracking-tight text-novel-fg md:mt-4 md:line-clamp-3 md:text-[30px] md:leading-[1.2]">
+          <a href={item.detailHref} tabIndex={tab} className="rounded-novel-sm">
+            {novel.title}
+          </a>
+        </h2>
+
+        <MetaList
+          className="mt-1.5 text-[12px] md:mt-4 md:text-sm"
+          items={[
+            { key: "locale", value: novel.locale.label },
+            { key: "chapters", value: t("home.chapterCount", { count: novel.totalChapterCount }) },
+          ]}
+        />
+
+        <TagList tags={novel.tags} className="mt-2 md:mt-3" label={t("novel.tagsLabel")} />
+
+        {/* 简介只取第一段：这里是引子，完整简介是详情页的事。
+            移动 2 行 / 桌面 3 行截断——banner 定高 400，4 行会把信息列顶出去。 */}
+        <p
+          data-testid={isCurrent ? "featured-hero-summary" : undefined}
+          className="mt-2 line-clamp-2 text-[12.5px] leading-[1.5] text-novel-fg-muted md:mt-4 md:line-clamp-3 md:text-base md:leading-[1.7]"
+        >
+          {firstParagraph(novel.description)}
+        </p>
+
+        {/* `flex-wrap` 是必需的，不是保险：按钮走 `whitespace-nowrap`，flex 项又有
+            默认的 `min-width:auto`，两枚按钮压不窄，会一起把这一行顶宽。360px 宽
+            实测（2026-09-19）：俄语顶出容器 49px、德语 34px、越南语 13px，而 Hero
+            是 `overflow-hidden`，第二枚按钮不是溢出而是被直接裁掉，页面还不横向
+            滚动。换行后放不下的那枚自己占满一行。 */}
+        <div className="mt-3 flex w-full flex-wrap gap-2 md:mt-6 md:w-auto md:gap-3">
+          {item.startReadingHref ? (
+            <ButtonLink
+              href={item.startReadingHref}
+              tabIndex={tab}
+              variant="accent"
+              size="lg"
+              className="flex-1 md:flex-none"
+            >
+              {t("home.startPreview")}
+            </ButtonLink>
+          ) : null}
+          {/* 次级 CTA 移动端不渲染：文字列只有 ~210px，长文案语种两枚按钮必然换行。
+              详情入口在封面和标题上仍然可达，不是把入口去掉。
+              🔴 `hidden` 必须加在**外层 div** 上，不能加在 ButtonLink 的 className
+              里：Button 的 BASE 自带 `inline-flex`，两条 display 工具类同层，胜负由
+              生成的 CSS 顺序决定而不是书写顺序，实测 `inline-flex` 赢。 */}
+          <div className="hidden flex-1 md:block md:flex-none">
+            <ButtonLink
+              href={item.detailHref}
+              tabIndex={tab}
+              variant="outline"
+              size="lg"
+              className="w-full md:w-auto"
+            >
+              {t("home.viewDetails")}
+            </ButtonLink>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
 

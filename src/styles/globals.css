@@ -60,10 +60,14 @@
      「居中 banner：左清晰封面 + 右信息组」。桌面高度随之从 620 收到 560——
      banner 本身 400px 高，620 会在上下各留出一段没人要的空带。 */
   --novel-hero-height: 560px;
-  --novel-hero-height-mobile: 300px;
+  --novel-hero-height-mobile: 372px;
   /* 居中 banner 的几何。封面按 --novel-cover-aspect 等比，240 宽 → 320 高，
      落在 400 高的 banner 里上下各余 40（含 p-7 的 28）。 */
-  --novel-hero-banner-max: 1120px;
+  /* banner 宽度要比视口窄，差额就是左右「露头」。1440 视口下
+     (1440-1000)/2 - 28 ≈ 192px 露头，与参考稿的比例接近。
+     移动端在下方 media query 里改成 318px。 */
+  --novel-hero-banner-w: 1000px;
+  --novel-hero-banner-gap: 28px;
   --novel-hero-banner-height: 400px;
   --novel-hero-cover-width: 240px;
   --novel-hero-info-width: 620px;
@@ -383,6 +387,16 @@
   --radius-novel-md: var(--novel-radius-md);
   --radius-novel-lg: var(--novel-radius-lg);
   --radius-novel-pill: var(--novel-radius-pill);
+}
+
+/* 移动端把 banner 收窄，留出同样的「露头」关系。
+   写成 media query 而不是在组件里做两套宽度：轨道的位移公式引用的是同一个
+   token，两处宽度必须始终一致，否则当前项就不在正中。 */
+@media (max-width: 767px) {
+  .site {
+    --novel-hero-banner-w: 318px;
+    --novel-hero-banner-gap: 14px;
+  }
 }
 
 body {

@@ -153,7 +153,6 @@ describe("设计 token · 结构", () => {
       "--novel-hero-scrim-y-mobile",
       "--novel-hero-height",
       "--novel-hero-height-mobile",
-      "--novel-hero-banner-max",
       "--novel-hero-banner-height",
       "--novel-hero-cover-width",
       "--novel-hero-info-width",
