@@ -3,7 +3,10 @@
 <!-- 本文件由 `node scripts/generate-changelog.mjs --write` 生成，请勿手工编辑。 -->
 <!-- 叙述性内容写进 commit message；Owner/架构决策写 docs/adr/。 -->
 
-生成时间：2026-09-19 · 共 658 个 commit
+生成时间：2026-09-20 · 共 661 个 commit
+- `f67f4cd` 2026-09-20 feat(release): GHCR 作为 cps-novel 的 primary artifact transport  — _claude-code · Claude Opus 5_
+- `617fd0c` 2026-09-20 docs(debt): 登记 PR #10 的两条 Phase 2C UAT 前 follow-up  — _claude-code · Claude Opus 5_
+- `9aa2348` 2026-09-20 docs(changelog): record Phase 2B deployment layer  — _codex · GPT-5_
 - `ba469ec` 2026-09-20 test(preprod): lock deployment safety contracts  — _codex · GPT-5_
 - `c55b3dd` 2026-09-20 feat(preprod): implement immutable maintenance releases  — _codex · GPT-5_
 - `47d12e9` 2026-09-20 feat(preprod): add protected host-nginx edge  — _codex · GPT-5_
