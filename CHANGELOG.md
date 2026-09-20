@@ -3,7 +3,9 @@
 <!-- 本文件由 `node scripts/generate-changelog.mjs --write` 生成，请勿手工编辑。 -->
 <!-- 叙述性内容写进 commit message；Owner/架构决策写 docs/adr/。 -->
 
-生成时间：2026-09-20 · 共 687 个 commit
+生成时间：2026-09-20 · 共 689 个 commit
+- `8a663f5` 2026-09-21 fix(preprod): probe ACLs with a real file open  — _Codex · GPT-5_
+- `77742bf` 2026-09-21 docs(changelog): regenerate after ACL diagnostics  — _Codex · GPT-5_
 - `7c7008c` 2026-09-21 test(preprod): expose ACL probe diagnostics  — _Codex · GPT-5_
 - `bf99b5f` 2026-09-21 docs(changelog): regenerate after probe image fix  — _codex · GPT-5-Codex_
 - `3df898a` 2026-09-21 test(preprod): use probe image with run directory  — _codex · GPT-5-Codex_
