@@ -12,17 +12,23 @@ import {
 import { PUBLIC_SITE_LOCALE } from "@/lib/site/locale-label";
 
 /**
- * MOCK_ONLY 预览：首页页面壳，验证三档来源优先级里的第一档——
- * `heroImageUrl` 存在时清晰铺底，不加模糊。夹具里 4/5 本带 heroImageUrl，
- * 第 5 本（mock-9）不带，混在同一个轮播里验证两种底图来源可以共存、
- * 切换时视觉不突兀。
+ * MOCK_ONLY 预览：主推**恰好两本**的边界态。
+ *
+ * 这一档单独留一个预览页，是因为它是露头轮播里唯一需要特判的数量：
+ *   1 本  → 不露头（`/dev-preview/home-hero-plain` 那类单项场景）
+ *   2 本  → **单侧**预览。做环形的话左右露出的会是同一本邻居，等于把同一本书
+ *           复制到两边；所以只渲染一份，当前项在第 1 本时右侧露第 2 本，
+ *           在第 2 本时左侧露第 1 本。
+ *   ≥3 本 → 环形，左右各有一个不同的邻居（`/dev-preview/home`）
+ *
+ * 判据写在 `FeaturedHero` 的 `useLoop = count >= 3`。改那行务必回来看这一页。
  */
-export default function HomePreviewPage() {
+export default function HomeTwoFeaturedPreviewPage() {
   return (
     <HomeScreen
       locale={PUBLIC_SITE_LOCALE}
       chrome={mockChrome(PUBLIC_SITE_LOCALE, "home")}
-      featuredList={MOCK_FEATURED_LIST.map((novel) => ({
+      featuredList={MOCK_FEATURED_LIST.slice(0, 2).map((novel) => ({
         novel,
         detailHref: devPreviewNovelPath(),
         startReadingHref:

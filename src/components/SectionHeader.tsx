@@ -12,6 +12,7 @@ export function SectionHeader({
   description,
   headingLevel = 2,
   id,
+  spacingClassName = "mb-6 md:mb-8",
 }: {
   title: string;
   /** 右侧文字型入口，比如「查看全部」。没有就不渲染。 */
@@ -20,11 +21,19 @@ export function SectionHeader({
   description?: ReactNode;
   headingLevel?: 2 | 3;
   id?: string;
+  /**
+   * 标题块到下方内容的距离。默认是全站口径（24 / 32px）。
+   *
+   * 留这个出口只为首页首屏：那一屏的每一段留白都在跟「第一排书卡露多少」
+   * 抢像素，需要比常规页面紧一档。其余调用点一律不传，保持全站一致——
+   * 不要把它当成「这里想松一点就传一个」的通用旋钮。
+   */
+  spacingClassName?: string;
 }) {
   const Heading = headingLevel === 2 ? "h2" : "h3";
 
   return (
-    <div className="mb-6 md:mb-8">
+    <div className={spacingClassName}>
       <div className="flex items-baseline justify-between gap-4 border-b border-novel-border pb-3">
         <Heading
           id={id}

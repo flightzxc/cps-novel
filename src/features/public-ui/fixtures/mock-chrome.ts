@@ -14,6 +14,11 @@ export function mockChrome(locale: SiteLocale, current?: string): SiteChrome {
   const t = getPublicT(locale);
   return {
     brandHref: "/dev-preview/home",
+    // MOCK_ONLY：生产值来自 `SiteSetting.siteName`（DB，当前仍是
+    // "CPS Novel"，见 tests/ui/site-chrome-brand-name.test.ts）。这里写死
+    // "PulseNovel" 只是为了让 /dev-preview/* 能渲染出真实的品牌锁定组合，
+    // 供品牌接入截图核对，不代表 DB 值已经改过。
+    siteName: "PulseNovel",
     navItems: [
       { label: t("nav.home"), href: "/dev-preview/home", current: current === "home" },
       { label: t("nav.genres"), href: "/dev-preview/collection", current: current === "collection" },

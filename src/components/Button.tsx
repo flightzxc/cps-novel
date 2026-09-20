@@ -9,42 +9,63 @@ import type {
 /**
  * 行动按钮。
  *
- * 视觉方向「墨与纸」：主按钮是一块纸色填充，压深墨色的字——不是高饱和胶囊。
- * 圆角用中等档（--novel-radius-md），**没有全圆角**：全圆角是 App 商店语言，
- * 中等圆角矩形是出版物语言，这是刻意的区隔点。
+ * PulseNovel 品牌接入（2026-09-19，Owner 决策，推翻了下面这条原本写在这里的
+ * 区隔点声明）：主按钮改为暖黄填充 + 接近胶囊的大圆角
+ * （--novel-radius-pill，见 globals.css）。
+ *
+ * 历史记录，免得以后有人诧异「怎么和注释说的不一样」：这条组件最初的设计
+ * 主张是「视觉方向『墨与纸』：主按钮是一块纸色填充，压深墨色的字——不是高
+ * 饱和胶囊；圆角用中等档，没有全圆角，全圆角是 App 商店语言，中等圆角矩形
+ * 是出版物语言，这是刻意的区隔点」。品牌接入把配色从纸色换成品牌黄之后，
+ * Owner 认为高饱和暖黄 CTA 更适合搭配一个明确的「主按钮」形状锚点，因此只
+ * 对 accent 档单独放开胶囊圆角——outline / quiet 两档维持中等圆角不变，两种
+ * 圆角并存反而让主次关系更清楚（胶囊 = 这一屏最重的动作，矩形 = 次级动作）。
+ * 不做这条决策的地方：没有把胶囊圆角扩散到别的组件，没有引入渐变或炫彩效果。
  *
  * 三个层级：
- *   accent   纸色填充。页面上最重的动作，一屏原则上只出现一次。
- *   outline  描边式。边框用 --novel-border-strong（对比度 3.48:1，满足非文本 3:1）。
- *   quiet    无边框弱化动作。
+ *   accent   品牌黄填充，胶囊圆角。页面上最重的动作，一屏原则上只出现一次。
+ *   outline  描边式，中等圆角。边框用 --novel-border-strong（对比度 3.48:1，满足非文本 3:1）。
+ *   quiet    无边框弱化动作，中等圆角。
  */
 export type ButtonVariant = "accent" | "outline" | "quiet";
-export type ButtonSize = "md" | "lg";
+export type ButtonSize = "md" | "lg" | "cta";
 
 const BASE =
   "inline-flex items-center justify-center gap-2 font-medium " +
   "transition-colors select-none whitespace-nowrap " +
-  "disabled:opacity-45 disabled:pointer-events-none";
+  "disabled:opacity-45 disabled:pointer-events-none active:brightness-95";
 
 const VARIANTS: Record<ButtonVariant, string> = {
   accent:
     "bg-novel-accent text-novel-on-accent hover:bg-novel-accent-hover " +
-    "border border-transparent",
+    "border border-transparent rounded-novel-pill",
   outline:
     "bg-transparent text-novel-fg border border-novel-border-strong " +
-    "hover:bg-novel-bg-raised",
+    "hover:bg-novel-bg-raised rounded-novel-md",
   quiet:
     "bg-transparent text-novel-fg-muted border border-transparent " +
-    "hover:text-novel-fg hover:bg-novel-bg-raised",
+    "hover:text-novel-fg hover:bg-novel-bg-raised rounded-novel-md",
 };
 
 const SIZES: Record<ButtonSize, string> = {
   md: "text-sm px-4 py-2.5",
   lg: "text-base px-6 py-3.5",
+  /**
+   * 首屏主推位的 CTA。与 `lg` 同字号同横向内边距，只把竖向内边距收一档：
+   * 46px 高（24 行高 + 2×10 内边距 + 2×1 边框）对 54px（`lg`）。
+   *
+   * 为什么新开一档而不是在调用处覆盖 `py-*`：SIZES 与 className 里的工具类
+   * 同层，胜负由生成的 CSS 顺序决定而不是书写顺序——本仓已经在 `hidden` vs
+   * `inline-flex` 上踩过一次（见 FeaturedHero 次级 CTA 的注释）。
+   *
+   * 为什么不直接把 `lg` 改矮：`lg` 在详情页/章节页还有别的调用点，那些地方
+   * 没有首屏高度压力，跟着一起变矮属于顺手改坏。
+   */
+  cta: "text-base px-6 py-2.5",
 };
 
 function classesFor(variant: ButtonVariant, size: ButtonSize, extra: string) {
-  return `${BASE} ${VARIANTS[variant]} ${SIZES[size]} rounded-novel-md ${extra}`;
+  return `${BASE} ${VARIANTS[variant]} ${SIZES[size]} ${extra}`;
 }
 
 type CommonProps = {

@@ -17,8 +17,8 @@
 
 | 文件 | 屏幕 | 视口 |
 | --- | --- | --- |
-| `home-desktop.png` / `home-mobile.png` | 首页 · 通栏 Hero 轮播 | 1440×900 / 390×844 |
-| `home-fallback-desktop.png` | 首页 · 无横版物料回落 | 1440×900 |
+| `home-desktop.png` / `home-mobile.png` | 首页 · 居中 banner 露头轮播 | 1440×900 / 390×844 |
+| `home-fallback-desktop.png` | 首页 · 无横版物料（coverUrl 模糊氛围底，当前生产正常路径） | 1440×900 |
 | `novel-desktop.png` / `novel-mobile.png` | 小说详情（含可试读章节区块） | 1440×900 / 390×844 |
 | `novel-sparse-desktop.png` | 详情 · 极端稀疏（无封面/标签/试读章） | 1440×900 |
 | `chapter-desktop.png` / `chapter-mobile.png` | 章节阅读（阅读作用域），第 1 章 | 1440×900 / 390×844 |
@@ -70,7 +70,14 @@ root 404 / error 换 URL 即可：
 
 ## 已知约束
 
-1. **内容是 MOCK_ONLY 假数据**，不是真实上游内容；封面与横版主视觉都是内联 SVG 占位。
+1. **内容是 MOCK_ONLY 假数据**，不是真实上游内容；封面是内联 SVG 占位。
+
+   🔴 因此基准图**证明不了**任何与内容长度有关的行为。2026-09-20 有一次实证：
+   Hero 简介的 `line-clamp-2` 因为 display 冲突静默失效，而 mock 文案本来就不足
+   2 行、书卡 mock 更是没有 summary 字段，三个视口的基准图全都看不出异常——
+   是接真实上游内容做只读 UAT 时才暴露的（真实越南语简介渲染了 6 行）。
+   这类问题靠 `tests/ui/tailwind-display-conflicts.test.tsx` 那种结构断言挡，
+   不要指望基准图。真实内容的视觉确认请另跑一次真实素材 UAT。
 2. **依赖本机 Chrome**，不同 Chrome 大版本渲染可能有细微差异；跨机器比对前先确认版本一致。
 3. **承载路由是临时的开发预览路由**，正式 URL 结构冻结后需要重新生成。
    章节页在 P1-11 已改为动态段：第 1 章是 `/dev-preview/chapter/1`，

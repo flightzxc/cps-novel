@@ -111,7 +111,10 @@ export function SiteHeader({
         }
       >
         <Container className="flex h-16 items-center justify-between gap-4">
-          <BrandLockup size={32} href={brandHref} name={brandName} />
+          {/* 字标 32 → 40（+25%）。页头高度维持 h-16 不变：40px 字形在 64px
+              页头里上下各余 12px，仍然宽裕，而抬高页头会直接从首屏预算里扣。
+              40 是 BRAND_MARK_SIZES 里现成的一档，没有新增尺寸。 */}
+          <BrandLockup size={40} href={brandHref} name={brandName} />
 
           <div className="flex items-center gap-3">
             {/* 桌面导航 */}

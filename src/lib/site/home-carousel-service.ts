@@ -19,9 +19,15 @@ import { listPreviewChapterRefs } from "./queries";
  * `tests/backend/public/source-boundaries.test.ts`.
  *
  * `heroImageUrl` still has no DB column and is still not invented here —
- * `toNovelDetailView` never sets it, so `FeaturedHero` (which requires it)
- * stays skipped for real data; only `FeaturedNovel`-style rendering applies.
- * That is Hero UI territory, out of this module's scope.
+ * `toNovelDetailView` never sets it. That used to mean real data skipped
+ * `FeaturedHero` entirely (it required `heroImageUrl`) and fell back to the
+ * `FeaturedNovel` two-column layout instead. As of 2026-09-19 that is no
+ * longer true: `FeaturedHero` renders unconditionally and resolves its own
+ * background per item (`heroImageUrl` clear > `coverUrl` blurred atmosphere
+ * > none), so real rows — which always carry `coverUrl` (`toFeatured` below
+ * rejects a row without one) — render as the cover-atmosphere tier. That
+ * priority logic lives in `FeaturedHero`, out of this module's scope; this
+ * module only has to keep selecting `coverUrl` in `SELECT` below.
  */
 export type HomeCarouselItem = FeaturedEntry;
 

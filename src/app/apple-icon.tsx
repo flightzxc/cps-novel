@@ -8,7 +8,9 @@ import { brandMarkImage } from "./_components/brand-mark-image";
  *
  * The canvas is filled edge to edge on purpose — iOS applies its own corner
  * mask, and a transparent or inset-cornered source would show as a dark square
- * behind it. The mark's own rounded frame sits well inside that mask.
+ * behind it. (2026-09-19: the mark itself no longer draws a rounded frame —
+ * it's the flat PulseNovel glyph now, see `brand-mark-image.tsx` — but the
+ * edge-to-edge canvas rule still holds for the same reason.)
  */
 export const size = { width: 180, height: 180 };
 export const contentType = "image/png";
