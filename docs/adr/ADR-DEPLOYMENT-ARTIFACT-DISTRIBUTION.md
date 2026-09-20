@@ -119,20 +119,28 @@ permissions:
 
 ## 7. 未决项（Owner）
 
-### 7.1 package 可见性（已澄清，非冲突）
+### 7.1 🔴 package 可见性 —— 实测为 public，与要求冲突，待 Owner 处置
 
-本仓库是 **public**，但 package 不会因此变成 public。GitHub 官方文档：
+**实测结论优先于文档。** 2026-09-20 首次推送后验证：
 
-> the package automatically inherits the access permissions **(but not the visibility)**
-> of the linked repository
->
-> When you first publish a package, the default visibility is **private**.
+```bash
+docker logout ghcr.io
+docker pull ghcr.io/flightzxc/cps-novel@sha256:75392b67...
+# → 退出码 0，Downloaded newer image  ⇒ 匿名可拉 ⇒ PUBLIC
+```
 
-package 继承的是**访问权限**而非可见性；首次发布默认 **private**。
-因此「仓库 public → package 必然 public」是错误推论，与「package 保持 private」不冲突。
+官方文档的说法（"inherits the access permissions **but not the visibility**"、
+"When you first publish a package, the default visibility is **private**"）
+在这条路径上**不成立**：从 public 仓库经 Actions + `GITHUB_TOKEN` 发布的 package，
+实际是 public。
 
-🔴 但这只是**默认值**。推送后必须实际核对一次可见性，不要只凭文档断言——
-组织策略、后来的手动改动都可能让默认值不成立。核对方式见 runbook §3。
+这与「package 保持 private」的要求冲突。工单同时禁止把 package 改成 public——
+而它现在已经是 public，不是被谁改的，是默认结果。因此这是需要 Owner 处置的项，
+不是实现层能自行消化的。
+
+> 本 ADR 初版先写成"很可能 public、需裁决"，随后据官方文档改成"不会 public、无冲突"，
+> 最后被实测推翻回来。两次都记下来：**这类问题只能靠实测定性，文档的默认值说法
+> 不可作为判据。**
 
 ### 7.2 版本身份漂移
 

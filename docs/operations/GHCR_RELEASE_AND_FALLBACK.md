@@ -97,38 +97,63 @@ FALLBACK_REQUIRED=YES
 
 命中 `FALLBACK_REQUIRED=YES` 后**另开小工单**走 §4，不要在 GHCR 工单里顺手实现第二套 pipeline。
 
-## 3. package 可见性（首次发布必读）
+## 3. 🔴 package 可见性：实测为 public，与要求冲突
 
-本仓库是 **public**，但**这不会让 package 变成 public**。GitHub 官方文档两句：
+### 实测结果（2026-09-20 首次推送后）
+
+```bash
+docker logout ghcr.io
+docker pull ghcr.io/flightzxc/cps-novel@sha256:75392b678669bac2947cedebebf282c38f96bae4effae5f501ca646a4c12f0f2
+# 退出码 0；Status: Downloaded newer image
+# revision=8609fa0b0b53cfe0c63ade6cd36194271c2c0449
+```
+
+**匿名可拉 ⇒ package 是 PUBLIC。**
+
+### 判据只认实测，不认文档
+
+GitHub 官方文档写的是：
 
 > the package automatically inherits the access permissions **(but not the visibility)**
 > of the linked repository
-> —— *Configuring a package's access control and visibility*
 >
 > When you first publish a package, the default visibility is **private**.
-> —— *Working with the Container registry*
 
-package 继承的是**访问权限**（谁能读写），不是**可见性**（是否匿名可拉）。
-首次发布默认 private。所以「仓库 public → package 必然 public」是错误推论。
+**这两句在本路径上不成立。** 从 public 仓库经 Actions + `GITHUB_TOKEN` 发布，
+实际产出的是 public package。
 
-> 2026-09-20 本 runbook 初版曾写反过这一点，把它当成需要 Owner 裁决的阻塞项。
-> 查官方文档后更正。留着这条记录，是为了让后来的人知道这里曾经被判断错过一次。
+> 本 runbook 在这一点上错过两次：初版写"很可能 public、需 Owner 裁决"；
+> 查文档后改成"不会 public、无冲突"；最后被匿名 pull 实测推翻回 public。
+> 留下这段过程，是为了让后来的人不要再用文档默认值代替一次真实验证。
 
-### 🔴 仍然必须实际核对
+### 必做的验证（每次首发）
 
-文档说的是**默认值**，不是保证。组织策略、别人后来的手动改动，都可能让默认值不成立。
-每次首次发布后核对一次：
+```bash
+docker logout ghcr.io
+docker pull ghcr.io/<owner>/<repo>@sha256:<digest>
+```
 
-- GitHub → 你的头像 → Packages → `cps-novel` → 右侧应显示 **Private**；
-- 或在 package settings 里确认 "Danger Zone → Change visibility" 当前是 Private；
-- 也可匿名验证：未登录状态 `docker pull ghcr.io/flightzxc/cps-novel@sha256:...`
-  应当失败（public package 允许匿名拉取）。
+- **失败**（denied / unauthorized）→ private，符合要求；
+- **成功** → public，**停下报告 Owner**，不得当作"按预期"继续。
 
-若核对发现是 **public**：这不是"按预期"，要停下来报告 Owner。
-🔴 **不得**为了让流程继续而把它留在 public，也不得用扩权方式绕过。
+辅助手段：GitHub → 头像 → Packages → 该 package 页面右侧显示 Public / Private。
+（`gh api user/packages` 需要 `read:packages` scope，缺失时返回 403，不能作为判据。）
 
-> 注：`gh` CLI 的本地 token 若缺 `read:packages` scope，`gh api user/packages` 会返回 403。
-> 核对请走 GitHub UI，或换一个带 `read:packages` 的 token。
+> ⚠️ 另一个**不可靠**的判据：直接 `curl https://ghcr.io/v2/.../manifests/<digest>`
+> 不带 Authorization 会返回 401，无论 public 还是 private——GHCR 对两者都要求
+> Bearer token。据此判成 private 是错的。必须走"先取匿名 token 再请求"，
+> 或者直接用上面的 `docker pull`。
+
+### 处置选项（Owner）
+
+| 选项 | 说明 |
+| --- | --- |
+| a | 在 GitHub UI 把该 package 改为 **Private**（package settings → Danger Zone → Change visibility），需 package admin |
+| b | 书面接受 package 为 public，推翻「保持 private」这一条 |
+| c | 删除该 package 重来（需 `delete:packages`），但只要仓库仍是 public，重推大概率仍是 public |
+| d | 改变仓库可见性（影响面远超本工单） |
+
+🔴 在 Owner 处置之前，**不要**继续往这个 package 推新版本。
 
 ## 4. Fallback：CPS 短剧形态的离线不可变归档运输
 
