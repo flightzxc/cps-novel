@@ -3,7 +3,10 @@
 <!-- 本文件由 `node scripts/generate-changelog.mjs --write` 生成，请勿手工编辑。 -->
 <!-- 叙述性内容写进 commit message；Owner/架构决策写 docs/adr/。 -->
 
-生成时间：2026-09-20 · 共 675 个 commit
+生成时间：2026-09-20 · 共 678 个 commit
+- `1a34ccb` 2026-09-21 fix(release): layer 也验到字节 —— 流式逐层 digest 复算 + 全 blob 内容哈希不变式  — _claude-code · Claude Opus 5_
+- `d44d366` 2026-09-20 test(release): daemon 就绪判据改为"真的报出 driver"，并在起不来时抓容器日志  — _claude-code · Claude Opus 5_
+- `92c4807` 2026-09-20 docs(changelog): 经既有生成器重新生成  — _claude-code · Claude Opus 5_
 - `838c14f` 2026-09-20 docs(release): 记录两种 image store 的实测差异，修正三条被证伪的旧论断  — _claude-code · Claude Opus 5_
 - `d4a80b9` 2026-09-20 test(release): 在两种真实 image store 上实跑镜像身份，并加对抗性归档负例  — _claude-code · Claude Opus 5_
 - `e619a3e` 2026-09-20 fix(release): 归档镜像身份改由内容定义，判据按 image store 字段能力选锚点  — _claude-code · Claude Opus 5_
