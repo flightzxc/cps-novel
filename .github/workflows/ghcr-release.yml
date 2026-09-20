@@ -92,6 +92,11 @@ jobs:
           REGISTRY_IMAGE: ghcr.io/example/placeholder
         run: |
           set -uo pipefail
+          # 🔴 GitHub Actions 的 run 步骤默认 shell 是 `bash -e`（日志里的
+          # `shell: /usr/bin/bash -e {0}`）。本步骤**故意**执行会以 65 退出的命令来
+          # 验证拒绝路径，errexit 会在第一条拒绝处直接中断整步，连 `rc=$?` 都取不到。
+          # 本地用 `bash -c` 跑不带 -e，所以这个差异只在 CI 上暴露。必须显式关掉。
+          set +e
           script=scripts/preproduction/build-release-artifact.sh
           [ -x "$script" ] || { echo "CONTRACT=FAIL reason=script_missing_or_not_executable"; exit 1; }
           fail=0
