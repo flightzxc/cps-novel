@@ -3,7 +3,9 @@
 <!-- 本文件由 `node scripts/generate-changelog.mjs --write` 生成，请勿手工编辑。 -->
 <!-- 叙述性内容写进 commit message；Owner/架构决策写 docs/adr/。 -->
 
-生成时间：2026-09-20 · 共 683 个 commit
+生成时间：2026-09-20 · 共 685 个 commit
+- `3df898a` 2026-09-21 test(preprod): use probe image with run directory  — _codex · GPT-5-Codex_
+- `632d314` 2026-09-21 docs(changelog): regenerate after ACL fixture fix  — _codex · GPT-5-Codex_
 - `9e4b604` 2026-09-21 test(preprod): apply ACLs after final ownership  — _codex · GPT-5-Codex_
 - `94d0688` 2026-09-21 docs(changelog): regenerate after secret consumer fix  — _codex · GPT-5-Codex_
 - `ae8ccb2` 2026-09-21 fix(preprod): classify secret consumers  — _codex · GPT-5-Codex_
