@@ -21,13 +21,26 @@ Build only from a clean checkout whose HEAD equals `APPROVED_GIT_COMMIT`:
 
 ```bash
 APPROVED_GIT_COMMIT=<40-hex> \
-REGISTRY_IMAGE=<registry>/<repo>/cps-novel \
-scripts/preproduction/build-release-artifact.sh --push
+scripts/preproduction/build-release-archive.sh
 ```
 
 The command uses `prepare_p1_12_local_environment` and the repository's root
-Compose build. It refuses to produce a deployable manifest until the pushed
-image has a registry digest. Record both commit and digest in approval notes.
+Compose build, then `docker save` + zstd into an immutable archive. It refuses to
+produce a deployable manifest unless the built image matches the approved commit's
+`org.opencontainers.image.revision`, the target platform, and a well-formed config
+digest. Record the approved commit, the image config digest and the archive SHA256
+in approval notes.
+
+Transport and verification on the VPS are covered by
+`docs/operations/ARCHIVE_RELEASE_TRANSPORT.md`.
+
+> 🔴 Owner decision 2026-09-20: the production artifact transport is an **immutable
+> Docker archive over SSH**, not a registry. `scripts/preproduction/build-release-artifact.sh`
+> (registry / `REGISTRY_IMAGE` / `repo@sha256` push) belongs to the **completed GHCR
+> PoC** and is **not** the production path — see
+> `docs/adr/ADR-DEPLOYMENT-ARTIFACT-DISTRIBUTION.md`. Phase 2C needs no GHCR PAT and
+> no `docker login ghcr.io`.
+
 The known `v0.2.0` versus package `0.1.0` drift remains an Owner/Release
 decision for Phase 2C.
 
@@ -117,8 +130,9 @@ and database; the auth probe validates the current password implementation,
 2FA enrollment, and decryptability without printing credentials. Any failure
 leaves maintenance enabled. Investigate; do not manually turn traffic back on.
 
-Rollback requires `SCHEMA_COMPATIBLE_WITH_PREVIOUS=YES` and an approved
-previous digest manifest, and must be invoked from that previous immutable
+Rollback requires `SCHEMA_COMPATIBLE_WITH_PREVIOUS=YES` and the approved
+previous release manifest (identity = approved commit + image config digest +
+archive SHA256), and must be invoked from that previous immutable
 release directory so its Compose/scripts match the app being restored. It does
 not reverse migrations. If the schema is not
 backward compatible, remain in maintenance and follow a separately approved

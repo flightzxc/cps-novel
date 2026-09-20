@@ -60,10 +60,12 @@ describe("Phase 2B preproduction deployment contract", () => {
       "preprod_compose stop worker",
       "preprod_compose stop web",
       'database.sh\" migrate-approved',
-      "preprod_compose up -d --no-deps web",
+      // Phase 2C：应用服务改走 preprod_compose_app_up（内含 --no-build --pull never），
+      // 生命周期顺序不变。
+      "preprod_compose_app_up web",
       'verify-release.sh\"',
-      "preprod_compose up -d --no-deps worker",
-      "preprod_compose up -d --no-deps scheduler",
+      "preprod_compose_app_up worker",
+      "preprod_compose_app_up scheduler",
       "PREPROD_RELEASE_VERIFIED=YES maintenance_off",
     ];
     let offset = release.indexOf("deploy() {");

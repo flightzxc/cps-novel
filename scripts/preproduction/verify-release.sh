@@ -28,7 +28,8 @@ node -e '
 ' "$health" "$GIT_COMMIT" || { echo "RELEASE_VERIFY=FAIL reason=health_identity_db"; exit 65; }
 
 "$root/scripts/preproduction/database.sh" persistent-check >/dev/null
-preprod_compose run --rm --no-deps \
+# 🔴 应用镜像入口：禁 pull、禁就地 build（见 lib.sh 的 preprod_compose_app_run）。
+preprod_compose_app_run \
   -e DATABASE_URL="$P1_12_WEB_DATABASE_URL" \
   -e PREPROD_ADMIN_USERNAME="$PREPROD_ADMIN_USERNAME" \
   -e PREPROD_ADMIN_PASSWORD_FILE=/run/preprod-admin/password \

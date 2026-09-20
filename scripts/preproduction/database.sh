@@ -71,7 +71,8 @@ case "${1:-}" in
     [[ "${PREPROD_APPROVED_MIGRATION:-}" == "YES" ]] || {
       echo "DATABASE_MIGRATION=REFUSED reason=approval_required"; exit 65;
     }
-    preprod_compose run --rm --no-deps \
+    # 🔴 应用镜像入口：禁 pull、禁就地 build。
+    preprod_compose_app_run \
       -e DATABASE_URL="$P1_12_MIGRATION_DATABASE_URL" web \
       npx --no-install prisma migrate deploy
     echo "DATABASE_MIGRATION=PASS"

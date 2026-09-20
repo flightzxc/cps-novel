@@ -193,7 +193,19 @@ src/lib/flags/feature-flags.ts           Feature Flag 与写入闸
 
 ---
 
-## 6. 技术栈
+## 6. 部署工件运输
+
+- **cps-novel（本仓）primary**：不可变 Docker 归档 → SSH → `docker load`。
+- **CPS 短剧（参照项目）**：同上。
+- **两者现在相同，是 Owner 基于海阅 GHCR PoC 实测后主动裁决**，不是 Agent 为了统一擅自对齐。
+- GHCR 已在 Phase 2C 完成 PoC 并验证可用，但**未被选为生产运输方式**（不是「GHCR 不可用」）。
+- 🔴 不得仅为「两个 CPS 项目一致」或「registry 更现代」把任一项目切换成另一套运输方式。
+
+详见 [`docs/adr/ADR-DEPLOYMENT-ARTIFACT-DISTRIBUTION.md`](docs/adr/ADR-DEPLOYMENT-ARTIFACT-DISTRIBUTION.md)。
+
+---
+
+## 7. 技术栈
 
 - **前端**：Next.js 16 + React 19 + TypeScript 5 + Tailwind CSS v4
 - **测试**：Vitest
@@ -202,7 +214,7 @@ src/lib/flags/feature-flags.ts           Feature Flag 与写入闸
 
 ---
 
-## 7. 开发命令
+## 8. 开发命令
 
 ```bash
 npm run dev        # 本地开发服务器
@@ -214,7 +226,7 @@ npm run test       # vitest run
 
 ---
 
-## 8. 当前阶段
+## 9. 当前阶段
 
 **P1 已收口，P2-12 竖向验收与 P0 收尾已落地。** 当前处于 v0.2.0 上线前加固和发布证据收口阶段；
 feature/write flags 仍按 `docs/p2/V020_RELEASE_CHECKLIST.md` 保持 fail-closed，未经检查单与 Owner 审批不得开闸。
