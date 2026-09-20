@@ -279,15 +279,14 @@ describe("real Linux Docker bind-mount ACL behavior", () => {
     const files = ["app", "postgres", "nginx", "host", "backup"];
     try {
       for (const name of files) await writeFile(path.join(dir, name), `${name}\n`, { mode: 0o600 });
-      expect(spawnSync("setfacl", ["-m", "u:1001:r--", path.join(dir, "app")]).status).toBe(0);
-      expect(spawnSync("setfacl", ["-m", "u:999:r--", path.join(dir, "postgres")]).status).toBe(0);
-      expect(spawnSync("setfacl", ["-m", "u:33:r--", path.join(dir, "nginx")]).status).toBe(0);
-      expect(spawnSync("setfacl", ["-m", "u:33:--x", dir]).status).toBe(0);
-
-      const chown = spawnSync("docker", ["run", "--rm", "--pull", "never", "--network", "none",
-        "--mount", `type=bind,src=${dir},dst=/work`, "busybox:latest", "/bin/sh", "-c",
-        "chown 2000:2000 /work/app /work/postgres /work/nginx /work/host && chown 0:0 /work/backup"]);
-      expect(chown.status).toBe(0);
+      // Linux may clear extended ACLs when ownership changes. Establish the
+      // final neutral owners first, then install the ACL exactly as Owner would.
+      expect(spawnSync("sudo", ["-n", "chown", "2000:2000", ...files.slice(0, 4).map((name) => path.join(dir, name))]).status).toBe(0);
+      expect(spawnSync("sudo", ["-n", "chown", "0:0", path.join(dir, "backup")]).status).toBe(0);
+      expect(spawnSync("sudo", ["-n", "setfacl", "-m", "u:1001:r--", path.join(dir, "app")]).status).toBe(0);
+      expect(spawnSync("sudo", ["-n", "setfacl", "-m", "u:999:r--", path.join(dir, "postgres")]).status).toBe(0);
+      expect(spawnSync("sudo", ["-n", "setfacl", "-m", "u:33:r--", path.join(dir, "nginx")]).status).toBe(0);
+      expect(spawnSync("sudo", ["-n", "setfacl", "-m", "u:33:--x", dir]).status).toBe(0);
 
       const canRead = (uid: number, name: string) => spawnSync("docker", ["run", "--rm", "--pull", "never",
         "--network", "none", "--read-only", "--cap-drop", "ALL", "--security-opt", "no-new-privileges",
