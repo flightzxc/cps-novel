@@ -113,7 +113,13 @@ beforeAll(() => {
   packageImage("b", TAG_B, COMMIT_B);
   for (const store of STORES) {
     startDaemon(store);
-    evidence[store] = daemonEvidence(dockerHostFor(store));
+    const e = daemonEvidence(dockerHostFor(store));
+    // 🔴 起来过 ≠ 现在可用。就绪之后立刻再取一次证据，空值即当场失败，
+    // 不让整组测试带着一台已经死掉的 daemon 继续跑。
+    if (!e.driver) {
+      throw new Error(`${store} daemon reported no driver right after becoming ready: ${JSON.stringify(e)}`);
+    }
+    evidence[store] = e;
   }
 }, 600_000);
 

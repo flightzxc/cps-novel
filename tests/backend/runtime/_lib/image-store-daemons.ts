@@ -38,11 +38,36 @@ export function hostDockerAvailable(): boolean {
   return spawnSync("docker", ["info", "--format", "{{.ServerVersion}}"], { encoding: "utf8" }).status === 0;
 }
 
-function daemonReady(host: string): boolean {
-  return spawnSync("docker", ["info", "--format", "{{.Driver}}"], {
+function daemonProbe(host: string): { ok: boolean; detail: string } {
+  const r = spawnSync("docker", ["info", "--format", "{{.Driver}}"], {
     env: { ...process.env, DOCKER_HOST: host },
     encoding: "utf8",
-  }).status === 0;
+  });
+  // 🔴 判据是"真的报出了 driver"，不是"退出码为 0"。只看退出码的话，
+  // daemon 起来过又立刻死掉这种情况会被判成就绪，整组测试带着不可用的
+  // daemon 继续跑，产出一堆互不相关的单条失败，真正的死因反而看不见。
+  const driver = (r.stdout ?? "").trim();
+  return {
+    ok: r.status === 0 && driver !== "",
+    detail: `status=${r.status} stdout=${JSON.stringify(driver)} stderr=${JSON.stringify((r.stderr ?? "").trim().slice(0, 200))}`,
+  };
+}
+
+function daemonReady(host: string): boolean {
+  return daemonProbe(host).ok;
+}
+
+/** 起不来时把容器自己的状态与日志抓出来——否则只能看到"连不上"这句空话。 */
+function diagnose(container: string): string {
+  const state = spawnSync("docker", [
+    "inspect", "-f", "status={{.State.Status}} exit={{.State.ExitCode}} err={{.State.Error}}", container,
+  ], { encoding: "utf8" });
+  const logs = spawnSync("docker", ["logs", "--tail", "40", container], { encoding: "utf8" });
+  return [
+    `  container state: ${(state.stdout ?? state.stderr ?? "").trim()}`,
+    `  container logs (tail 40):`,
+    `${(logs.stdout ?? "") + (logs.stderr ?? "")}`.split("\n").map((l) => `    ${l}`).join("\n"),
+  ].join("\n");
 }
 
 /** 返回该 daemon 实际报告的 store 证据，用于在报告里留痕（而不是我们声称它是什么）。 */
@@ -59,7 +84,7 @@ export function daemonEvidence(host: string): { serverVersion: string; driver: s
   };
 }
 
-export function startDaemon(store: Store, timeoutMs = 120_000): string {
+export function startDaemon(store: Store, timeoutMs = 180_000): string {
   const host = dockerHostFor(store);
   // 外部已经提供好 daemon（CI 里可能用 service container）就直接用。
   if (daemonReady(host)) return host;
@@ -83,11 +108,17 @@ export function startDaemon(store: Store, timeoutMs = 120_000): string {
     throw new Error(`failed to start ${store} test daemon: ${started.stderr || started.stdout}`);
   }
   const deadline = Date.now() + timeoutMs;
+  let last = "";
   while (Date.now() < deadline) {
-    if (daemonReady(host)) return host;
+    const probe = daemonProbe(host);
+    if (probe.ok) return host;
+    last = probe.detail;
     spawnSync("sleep", ["1"]);
   }
-  throw new Error(`${store} test daemon did not become ready within ${timeoutMs}ms`);
+  throw new Error(
+    `${store} test daemon did not become ready within ${timeoutMs}ms\n`
+    + `  host: ${host}\n  last probe: ${last}\n${diagnose(spec.container)}`,
+  );
 }
 
 export function stopDaemon(store: Store): void {
