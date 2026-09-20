@@ -46,6 +46,12 @@ prepare_p1_12_local_environment
 [[ "$GIT_COMMIT" == "$APPROVED_GIT_COMMIT" ]] || refuse derived_commit
 
 local_image="$CPS_NOVEL_APP_IMAGE"
+
+# 🔴 平台在**构建输入端**显式选定，不是只在构建后检查。
+# 只做事后检查的话，在 arm64 主机上会先花十几分钟构建出一个 arm64 镜像、
+# 再在最后一步被拒——而且一旦哪天事后检查被放宽，就再没有东西选定平台了。
+target_platform="${RELEASE_TARGET_PLATFORM:-linux/amd64}"
+export DOCKER_DEFAULT_PLATFORM="$target_platform"
 docker compose -p "$P1_12_COMPOSE_PROJECT" -f "$root/docker-compose.yml" build web
 
 # --- 身份校验：三条都必须过，任何一条不过就不产出归档 ---------------------
@@ -57,7 +63,6 @@ docker compose -p "$P1_12_COMPOSE_PROJECT" -f "$root/docker-compose.yml" build w
 #    谁把 NODE_BASE_IMAGE 换成一个 tag 或多架构索引 digest，arm64 机器就会静默
 #    产出 arm64 镜像，装到 amd64 的 VPS 上直接跑不起来，而且要到部署时才发现。
 #    这里把它变成显式断言。
-target_platform="${RELEASE_TARGET_PLATFORM:-linux/amd64}"
 actual_platform="$(docker image inspect "$local_image" --format '{{.Os}}/{{.Architecture}}')"
 [[ "$actual_platform" == "$target_platform" ]] || {
   echo "ARCHIVE_BUILD=REFUSED reason=platform_mismatch expected=$target_platform actual=$actual_platform"

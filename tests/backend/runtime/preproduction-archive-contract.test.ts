@@ -162,14 +162,29 @@ describe("校验器：篡改一律拒绝", () => {
     expect(out).toContain("reason=archive_sha_mismatch");
   });
 
-  it("拒绝形状不合法的 commit / config digest", async () => {
+  // reason 以**字段名**命名（manifest_<field>），由 lib.sh 里的统一解析器给出。
+  it("拒绝形状不合法的 commit / config digest / image_tag", async () => {
     const bad = await makeArchivePair({ approved_git_commit: "abc1234" });
     expect(run(VERIFY, ["--manifest", bad.manifestPath]).out).toContain(
-      "reason=manifest_commit_shape",
+      "reason=manifest_approved_git_commit",
     );
     const bad2 = await makeArchivePair({ image_config_digest: "not-a-digest" });
     expect(run(VERIFY, ["--manifest", bad2.manifestPath]).out).toContain(
-      "reason=manifest_config_digest_shape",
+      "reason=manifest_image_config_digest",
+    );
+    // 🔴 把 config digest 拼成 repo@sha256 是伪造的 registry 引用，必须单独挡掉
+    const forged = await makeArchivePair({
+      image_tag: `cps-novel@sha256:${"b".repeat(64)}`,
+    });
+    expect(run(VERIFY, ["--manifest", forged.manifestPath]).out).toContain(
+      "reason=manifest_image_tag",
+    );
+  });
+
+  it("🔴 拒绝越出目录的 archive_filename", async () => {
+    const escape = await makeArchivePair({ archive_filename: "../outside.tar.zst" });
+    expect(run(VERIFY, ["--manifest", escape.manifestPath]).out).toContain(
+      "reason=manifest_archive_filename",
     );
   });
 
@@ -188,17 +203,31 @@ describe("校验器：篡改一律拒绝", () => {
     expect(out).toContain("reason=archive_unreadable");
   });
 
-  it("manifest 不可读即拒绝", () => {
+  // 不可读是"输入用不了"（EX_NOINPUT=66），与"内容不合格"（65）刻意分开：
+  // 前者多半是路径写错，后者是工件有问题，运维处置完全不同。
+  it("manifest 不可读即拒绝（退出码 66，与内容不合格区分开）", () => {
     const { status, out } = run(VERIFY, ["--manifest", "/nonexistent/manifest.json"]);
-    expect(status).toBe(65);
+    expect(status).toBe(66);
     expect(out).toContain("reason=manifest_unreadable");
   });
 
-  it("🔴 校验器用 config digest 而不是 tag 去 inspect", async () => {
+  /**
+   * 🔴 判据方向在本轮被**加强**了，这条断言随之改写。
+   *
+   * 旧行为：按 manifest 的 config digest 去 `docker image inspect`。
+   * 那只证明"那个镜像在本机存在"——本机可能早就缓存着它，而同名 tag 却指向
+   * 别的镜像，而 Compose 用的正是 tag。
+   *
+   * 新行为：从 **tag** 解析出 ID，再与 config digest 比对（preprod_assert_local_image）。
+   * 真实行为验证见 preproduction-archive-consumer.test.ts 的负例 1–3。
+   */
+  it("🔴 校验器从 tag 出发核对身份，而不是只按 digest inspect", async () => {
     const source = await readFile(path.join(root, VERIFY), "utf8");
-    expect(source).toContain('docker image inspect "$config_digest"');
-    expect(source).toContain("loaded_digest_mismatch");
-    expect(source).toContain("revision_mismatch");
+    expect(source).toContain("preprod_assert_local_image");
+    expect(source).toContain('"$image_tag"');
+    // 不再自带第二份 manifest 解析实现
+    expect(source).toContain("preprod_read_release_manifest");
+    expect(source).not.toContain("require(process.argv[1])");
   });
 });
 

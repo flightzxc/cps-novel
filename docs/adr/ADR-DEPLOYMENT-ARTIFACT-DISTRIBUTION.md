@@ -142,21 +142,47 @@ visibility = public
 
 ## 8. 未决项
 
-### 8.1 🔴 `release.sh` 的 manifest 契约与归档运输不兼容（阻塞 Phase 2C）
+### 8.1 ~~`release.sh` 不兼容~~ → 已接线（2026-09-20 第二轮）
 
-`scripts/preproduction/release.sh` 当前要求：
+原记录：`release.sh` 与 `preflight.sh` 都要求 manifest 的镜像字段匹配
+`@sha256:`（registry manifest digest），而 `docker load` 进来的镜像 `RepoDigests=[]`，
+归档 manifest 因此喂不进消费端。
 
-```bash
-[[ "$manifest_image" =~ @sha256:[0-9a-f]{64}$ ]] || REFUSED reason=manifest_identity
-export CPS_NOVEL_APP_IMAGE="$manifest_image"
+**已修复。** 消费链统一为：
+
+```text
+preprod_read_release_manifest()   lib.sh 里的唯一 manifest 解析器
+  → deploy 与 rollback 共用，不存在第二份实现
+  → JSON.parse 解析（不是 require()），校验 schemaVersion / transport / 字段形状 / 路径安全
+  → 导出 PREPROD_RELEASE_{COMMIT,IMAGE_REF,IMAGE_DIGEST,PLATFORM,ARCHIVE,ARCHIVE_SHA256}
+
+preprod_assert_local_image()      从 **tag** 解析 ID 并与 config digest 比对
+preprod_assert_container_image()  启动后核对**实际容器**的 Image ID
+preprod_compose_app_up/run()      应用镜像入口一律 --no-build --pull never
 ```
 
-`repo@sha256:` 是 **registry manifest digest**。`docker load` 进来的镜像没有 RepoDigest，
-compose 无法用 `name@sha256:` 解析本地镜像。因此归档运输的 manifest 喂不进现有 `release.sh`。
+配套：`infra/preproduction/docker-compose.yml` 给 web/worker/scheduler 加
+`pull_policy: never`（绕过脚本直接 `docker compose up` 时的第二道闸）；
+`preprod.env.example` 不再定义 `CPS_NOVEL_APP_IMAGE` / `GIT_COMMIT`，
+`preprod_load_env()` 检测到 shared env 覆盖 manifest 指定值即失败。
 
-需要的最小改动（属 `scripts/preproduction/**`，本轮授权明确排除，**未执行**）：
-让 `release.sh` 接受 `transport: "archive"` 的 manifest，用 `image_tag` 作为
-`CPS_NOVEL_APP_IMAGE`，并在使用前用 `image_config_digest` 核对本地镜像身份。
+🔴 **三种 digest 的区分写进了 runbook §3.4**：image ID / config digest 是本链路的身份；
+registry manifest digest（`repo@sha256:`）在本链路**不存在**；把前者拼成后者是伪造引用，
+解析器以 `manifest_image_tag_digest_forgery` 拒绝。
+
+### 8.1.1 目标 Docker 兼容性：已验证与待验证
+
+| 项 | 状态 |
+| --- | --- |
+| 同一 daemon 内 save → load → 身份一致 | ✅ 本机实测（含真实 312MB 归档与小镜像回环） |
+| 归档格式（`docker save` OCI/Docker v2 tar + zstd） | ✅ 与 Docker 29 客户端兼容 |
+| 目标平台 `linux/amd64` | ✅ 构建输入 + 构建后 + 装载后三处断言；VPS Phase 1 实测 `x86_64` |
+| **目标机 Docker 版本与 image store 后端** | ⚠️ **待目标机验证**。containerd image store 与经典 graphdriver 在
+`docker load` 后对 `.Id` 的呈现可能不同；本机验证**不能**替代目标机验证 |
+
+🔴 目标机首次装载后必须实跑一次 `verify-release-archive.sh --load` 确认
+`preprod_assert_local_image` 通过。**不得为了通过校验去改 VPS 的 Docker 存储后端**——
+那是改环境去迁就校验，不是验证。
 
 ### 8.2 版本身份漂移
 

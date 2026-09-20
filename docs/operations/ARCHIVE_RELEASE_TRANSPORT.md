@@ -69,27 +69,58 @@ rsync -avP --chmod=F600 \
 
 ## 3. VPS 上的校验与装载
 
-**顺序不可调换。先离线校验完整性，再决定要不要装进 Docker。**
+🔴 **本节所有命令都在 haiyue-vps 上执行，一律写成 `ssh haiyue-vps '<绝对路径命令>'`。**
+不要再写依赖"当前终端在哪台机器、当前目录在哪"的裸命令——那是发布事故的常见起点。
+
+设该 release 的仓库目录为 `$REL=/opt/cps-novel/releases/<approved_commit>`，
+工件 staging 目录为 `/opt/cps-novel/shared/artifacts/staging`。
+
+### 3.0 宿主机工具前置条件（缺失即失败，**不临时安装**）
+
+| 工具 | 何时需要 | 用途 |
+| --- | --- | --- |
+| `bash` | 总是 | 脚本宿主 |
+| `sha256sum` 或 `shasum` | 总是 | 归档校验和 |
+| **`node`** | 总是 | manifest 按 JSON 数据解析 |
+| `docker` | `--load` 时 | 装载与 inspect |
+| `zstd` | `--load` 时 | 解压 |
+
+校验器会先查这些工具，缺哪个就报 `reason=tool_missing_<name>` 并在**任何服务变更之前**退出。
+🔴 不要在发布窗口里临时 `apt-get install` 补工具——那等于在未经验证的主机状态上继续发布。
+
+### 3.1 批准记录
 
 ```bash
-cd /opt/cps-novel/shared/artifacts/staging
+# APPROVED_GIT_COMMIT 来自 Owner 的批准记录，由操作者显式提供。
+# 🔴 收到一份自洽的 archive + manifest **不等于**它被批准发布：
+#    manifest 说自己是哪个 commit，只是它的自述。
+export APPROVED_GIT_COMMIT=<Owner 批准记录里的 40-hex>
+```
 
-# 1) 离线完整性：manifest 形状 + 归档 SHA256
-scripts/preproduction/verify-release-archive.sh --manifest <commit>.json
+`release.sh` 会比对 `APPROVED_GIT_COMMIT` 与 manifest 内的 commit，不一致即
+`reason=owner_approved_commit` 拒绝。
+
+### 3.2 顺序不可调换
+
+```bash
+# 1) 离线完整性：manifest 形状 + 归档 SHA256（不碰 Docker）
+ssh haiyue-vps '/opt/cps-novel/releases/<commit>/scripts/preproduction/verify-release-archive.sh \
+  --manifest /opt/cps-novel/shared/artifacts/staging/<commit>.json'
 # → VERIFY_OFFLINE=PASS
 
 # 2) 装载并核对镜像身份
-scripts/preproduction/verify-release-archive.sh --manifest <commit>.json --load
+ssh haiyue-vps '/opt/cps-novel/releases/<commit>/scripts/preproduction/verify-release-archive.sh \
+  --manifest /opt/cps-novel/shared/artifacts/staging/<commit>.json --load'
 # → VERIFY=PASS
 ```
 
-不想依赖仓库脚本时的等价手工命令：
+不依赖仓库脚本时的等价手工命令（同样全绝对路径）：
 
 ```bash
-shasum -a 256 -c cps-novel-*.tar.zst.sha256      # 或 sha256sum -c
-zstd -d -c cps-novel-*.tar.zst | docker load
-docker image inspect <image_config_digest> \
-  --format '{{.Id}} {{.Os}}/{{.Architecture}} {{index .Config.Labels "org.opencontainers.image.revision"}}'
+ssh haiyue-vps 'cd /opt/cps-novel/shared/artifacts/staging && \
+  sha256sum -c <archive>.sha256 && \
+  zstd -d -c <archive> | docker load && \
+  docker image inspect <image_tag> --format "{{.Id}} {{.Os}}/{{.Architecture}} {{index .Config.Labels \"org.opencontainers.image.revision\"}}"'
 ```
 
 必须全部成立：
@@ -97,17 +128,29 @@ docker image inspect <image_config_digest> \
 | 项 | 判据 |
 | --- | --- |
 | 归档 SHA256 | == manifest 的 `archive_sha256` |
-| 装载后 image ID | == manifest 的 `image_config_digest` |
+| **从 tag 解析出的 image ID** | == manifest 的 `image_config_digest` |
 | revision 标签 | == manifest 的 `approved_git_commit` |
-| 平台 | == manifest 的 `image_platform` |
+| 平台 | == manifest 的 `image_platform`（`linux/amd64`） |
 
-🔴 **任何一项不一致 → STOP，不得继续部署。** 不要"重传一次看看"就放行；
-先确认是传输损坏还是工件本身被换过。
+🔴 **任何一项不一致 → STOP，不得继续部署。**
 
-### 为什么用 config digest 而不是 tag 去 inspect
+### 3.3 为什么必须从 tag 出发核对
 
-tag 在任何一台机器上都能被指向别的镜像。`docker save`/`load` **不保留 RepoDigest**，
-所以 registry 那套 `repo@sha256:` 在这里不存在；**config digest 是唯一跨主机稳定的身份**。
+按 `image_config_digest` 去 `inspect` 只能证明"那个镜像在本机存在"，这是个弱得多的命题：
+本机可能早就缓存着它，而同名 **tag 却指向别的镜像**——而 Compose 用的正是 tag。
+所以判据是「tag 解析出来的 ID == manifest 的 config digest」，不是反过来。
+
+### 3.4 三种 digest 不是一回事
+
+| 名称 | 是什么 | 在本链路里的角色 |
+| --- | --- | --- |
+| **image ID / config digest** | 镜像 config blob 的 sha256，`docker image inspect .Id` | ✅ **本链路的身份**。`save`/`load` 跨主机保持不变 |
+| **registry manifest digest** | registry 上 manifest 的 sha256，即 `repo@sha256:` | ❌ 本链路**不存在**。`docker load` 后 `RepoDigests=[]` |
+| **layer digest** | 单层 tar 的 sha256 | 不用于身份判定 |
+
+🔴 **禁止把 config digest 拼成 `repo@sha256:` 去糊弄校验**——那是一个任何 registry 上都不
+存在的引用，只会让身份校验"看起来通过"。`preprod_read_release_manifest()` 会以
+`reason=manifest_image_tag_digest_forgery` 拒绝带 `@` 的 `image_tag`。
 
 ## 4. Artifact staging 与保留
 
@@ -123,7 +166,7 @@ tag 在任何一台机器上都能被指向别的镜像。`docker save`/`load` *
 
 | 阶段 | 规则 |
 | --- | --- |
-| staging | 传输落地点。校验通过后 `mv` 到 `verified/`；校验失败就地删除，不要留着 |
+| staging | 传输落地点。校验通过后 `ssh haiyue-vps 'mv /opt/cps-novel/shared/artifacts/staging/<files> /opt/cps-novel/shared/artifacts/verified/'`；校验失败就地删除，不要留着 |
 | verified | 已 `docker load` 成功的工件 |
 | retention | **至少保留 2 份**：当前发布 + 上一个可回滚版本 |
 | cleanup | 超出保留数的按 `built_at` 从旧到新删除；**永远不删当前 `current` 指向的那一份和它的前一份** |
@@ -168,7 +211,9 @@ package has more than 5,000 downloads` —— 本 package 下载量为个位数�
   BuildKit 不读本地镜像库、`FROM` 一律经 registry，本机构建时需通过
   `docker-compose.yml` 既有的 `P1_12_NODE_BASE_IMAGE` 覆盖点指向可达的 registry 副本。
   覆盖前必须核对副本与 Dockerfile 固定 digest 的 config digest 一致。
-- **VPS 需要 `zstd`**。校验与解压都用到它；若 VPS 上没有，需先安装
-  （`apt-get install -y zstd`）。这是 Phase 2C 的一项前置条件。
+- **VPS 需要 `zstd` 与 `node`**（见 §3.0 的完整工具表）。这是 Phase 2C 的一次性前置准备，
+  必须在发布窗口**之前**完成，不要在窗口内临时安装。
+- **目标平台已有实测证据**：haiyue-vps Phase 1 输出 `Architecture: x86-64` / `uname: x86_64`，
+  因此目标固定为 `linux/amd64`；构建端在输入与产出两侧都断言该平台，目标机装载后再断言一次。
 - **版本身份漂移**：Git tag `v0.2.0` 与 `package.json` 的 `0.1.0` 不一致。
   身份以 approved commit + config digest + archive SHA256 为准，不要用 `0.1.0-*` 当身份。

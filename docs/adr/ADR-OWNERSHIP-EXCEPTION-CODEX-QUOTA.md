@@ -72,6 +72,7 @@ Owner 授权：**Codex 额度不足期间，Claude 可以直接写入 Codex 独�
 | 2026-09-20 | PR #10 收口 + PR #14 stacked 归一化 | PR 合并与 base 改指，无仓库文件写入 | Claude |
 | 2026-09-20 | Phase 2C · GHCR Bootstrap + 部署工件运输固化 | `.github/workflows/ghcr-release.yml`（新增）、`docs/adr/ADR-DEPLOYMENT-ARTIFACT-DISTRIBUTION.md`（新增）、`docs/operations/GHCR_RELEASE_AND_FALLBACK.md`（新增）、`docs/governance/P1_RISK_AND_DEBT_REGISTER.md`、`CLAUDE.md`（仅事实指针）、`CHANGELOG.md`（仅生成器） | Claude |
 | 2026-09-20 | Phase 2C · artifact transport 切换为不可变归档（Owner 推翻同日 GHCR 裁决） | `scripts/preproduction/build-release-archive.sh`、`scripts/preproduction/verify-release-archive.sh`（均为**新增**）、`tests/backend/runtime/preproduction-archive-contract.test.ts`（新增）、`docs/adr/`、`docs/operations/`、`CLAUDE.md`、`CHANGELOG.md`、删除 `.github/workflows/ghcr-release.yml` | Claude |
+| 2026-09-20 | Phase 2C · 归档 → release consumer 最小闭环接线 | `scripts/preproduction/{lib,preflight,release,verify-release,database,verify-release-archive,build-release-archive}.sh`、`infra/preproduction/{docker-compose.yml,preprod.env.example}`、`tests/backend/runtime/preproduction-archive-{contract,consumer}.test.ts`、`docs/adr/`、`docs/operations/`、`CHANGELOG.md` | Claude |
 
 新增任务请在此表追加一行，不要另起文档。
 

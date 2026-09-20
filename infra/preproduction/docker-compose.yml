@@ -14,6 +14,10 @@ services:
       - ./scripts/db/archive-wal.sh:/app/scripts/db/archive-wal.sh:ro
 
   web:
+    # 🔴 pull_policy: never —— 应用镜像只能来自已验证的归档 docker load，
+    # 不允许从任何 registry 拉取。这是脚本层 --pull never 之外的第二道闸：
+    # 有人绕过 preprod_compose_app_up 直接 `docker compose up` 时它仍然生效。
+    pull_policy: never
     environment:
       TRACKING_HASH_SALT: ""
       TRACKING_HASH_SALT_FILE: /run/secrets/tracking_hash_salt
@@ -30,7 +34,11 @@ services:
       - totp_encryption_key
 
   worker:
+    pull_policy: never
     stop_grace_period: 45s
+
+  scheduler:
+    pull_policy: never
 
   backup-timer:
     image: postgres:16.14
