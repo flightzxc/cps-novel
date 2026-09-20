@@ -28,7 +28,8 @@ The command uses `prepare_p1_12_local_environment` and the repository's root
 Compose build, then `docker save` + zstd into an immutable archive. It refuses to
 produce a deployable manifest unless the built image matches the approved commit's
 `org.opencontainers.image.revision`, the target platform, and a well-formed config
-digest. Record the approved commit, the image config digest and the archive SHA256
+digest. Record the approved commit, BOTH OCI digests (platform manifest and config)
+and the archive SHA256
 in approval notes.
 
 Transport and verification on the VPS are covered by
@@ -131,7 +132,8 @@ and database; the auth probe validates the current password implementation,
 leaves maintenance enabled. Investigate; do not manually turn traffic back on.
 
 Rollback requires `SCHEMA_COMPATIBLE_WITH_PREVIOUS=YES` and the approved
-previous release manifest (identity = approved commit + image config digest +
+previous release manifest (identity = approved commit + OCI platform manifest digest
++ OCI config digest +
 archive SHA256), and must be invoked from that previous immutable
 release directory so its Compose/scripts match the app being restored. It does
 not reverse migrations. If the schema is not

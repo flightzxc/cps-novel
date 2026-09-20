@@ -115,11 +115,15 @@ image/config digest、`org.opencontainers.image.revision` 标签、release manif
 
 ```text
 identity = approved_git_commit
-         + image_config_digest   （save/load 不保留 RepoDigest，config digest 才跨主机稳定）
-         + archive_sha256        （传输完整性）
+         + oci.platform_manifest.digest   （linux/amd64 实际使用的那份清单）
+         + oci.config.digest              （清单引用的 config blob）
+         + archive_sha256                 （传输完整性）
 ```
 
 🔴 `image_tag` 只是人类可读的定位符，**单独不构成身份**——tag 在任何一台机器上都能被指到别的镜像。
+
+🔴 **两个 digest 都要在案**，因为不同 image store 报不同的那一个（见 §8.1.1）。
+两者都由构建期解析归档内容得出，随归档运输，目标机可精确复现。
 
 🔴 **禁止退化成**：`git pull` / VPS 上临时 build / `latest` tag / 可变镜像引用。
 
@@ -127,7 +131,8 @@ identity = approved_git_commit
 
 `docker save` 的输出与其压缩结果**不保证跨次构建逐字节相同**。因此 `archive_sha256`
 的作用是**传输完整性**（这一份归档在路上没被改动），不是「同一 commit 必然产出同一归档」。
-跨主机稳定的身份是 **config digest**。不要把 archive SHA256 当成可重现性证明。
+跨主机稳定的是**内容 digest 本身**（manifest digest 与 config digest 都由内容唯一决定）。
+不要把 archive SHA256 当成可重现性证明。
 
 ## 7. 现存的 GHCR PoC 工件
 
@@ -145,8 +150,8 @@ visibility = public
 ### 8.1 ~~`release.sh` 不兼容~~ → 已接线（2026-09-20 第二轮）
 
 原记录：`release.sh` 与 `preflight.sh` 都要求 manifest 的镜像字段匹配
-`@sha256:`（registry manifest digest），而 `docker load` 进来的镜像 `RepoDigests=[]`，
-归档 manifest 因此喂不进消费端。
+`@sha256:`（registry manifest digest），而经典 graphdriver 上 `docker load` 进来的镜像
+`RepoDigests=[]`，归档 manifest 因此喂不进消费端。
 
 **已修复。** 消费链统一为：
 
@@ -170,19 +175,73 @@ preprod_compose_app_up/run()      应用镜像入口一律 --no-build --pull nev
 registry manifest digest（`repo@sha256:`）在本链路**不存在**；把前者拼成后者是伪造引用，
 解析器以 `manifest_image_tag_digest_forgery` 拒绝。
 
-### 8.1.1 目标 Docker 兼容性：已验证与待验证
+### 8.1.1 目标 Docker 兼容性：已实测（2026-09-20 结案）
+
+**此前标为"待目标机验证"的那一项成立了，并已修复。** 记录实测事实：
 
 | 项 | 状态 |
 | --- | --- |
-| 同一 daemon 内 save → load → 身份一致 | ✅ 本机实测（含真实 312MB 归档与小镜像回环） |
-| 归档格式（`docker save` OCI/Docker v2 tar + zstd） | ✅ 与 Docker 29 客户端兼容 |
-| 目标平台 `linux/amd64` | ✅ 构建输入 + 构建后 + 装载后三处断言；VPS Phase 1 实测 `x86_64` |
-| **目标机 Docker 版本与 image store 后端** | ⚠️ **待目标机验证**。containerd image store 与经典 graphdriver 在
-`docker load` 后对 `.Id` 的呈现可能不同；本机验证**不能**替代目标机验证 |
+| 同一 daemon 内 save → load → 身份一致 | ✅ 本机实测 |
+| 归档格式（`docker save` OCI + zstd） | ✅ 与 Docker 29 兼容 |
+| 目标平台 `linux/amd64` | ✅ 构建输入 + 构建后 + 装载后三处断言；VPS 实测 `x86_64` |
+| 目标机 image store 后端 | ✅ **已实测**：`haiyue-vps` = Docker 29.8.1 + `overlayfs` + `io.containerd.snapshotter.v1` |
 
-🔴 目标机首次装载后必须实跑一次 `verify-release-archive.sh --load` 确认
-`preprod_assert_local_image` 通过。**不得为了通过校验去改 VPS 的 Docker 存储后端**——
-那是改环境去迁就校验，不是验证。
+#### 实测到的差异
+
+| 读数 | 经典 graphdriver（overlay2） | containerd image store |
+| --- | --- | --- |
+| `docker image inspect .Id` | **config digest** | **OCI manifest digest** |
+| `docker image inspect .Descriptor` | **键不存在** | `{mediaType, digest, size}` |
+| `docker image inspect .RepoDigests` | `[]` | `[repo@sha256:<manifest digest>]` |
+| `docker inspect <容器> .Image` | config digest | manifest digest |
+| `docker inspect <容器> .ImageManifestDescriptor` | **键不存在** | 有，且带 `platform` |
+
+🔴 **被证伪的三条既有论断**（原文曾写在本 ADR 与 runbook 中）：
+
+1. ~~"`.Id` 就是 config digest"~~ —— 只在经典 graphdriver 上成立。
+2. ~~"`docker save`/`load` 不保留 RepoDigest"~~ —— containerd store 上 `RepoDigests` **非空**，
+   填的是本地 OCI manifest digest。它**不是** registry manifest digest（该镜像从未推过任何 registry），
+   容易被误读成 registry 引用。
+3. ~~"config digest 才跨主机稳定"~~ —— 表述不准。config digest 作为**内容哈希**始终稳定；
+   不稳定的是"宿主机用哪个字段把它报出来"。在 containerd store 上 config digest
+   **无法**作为镜像引用解析（`docker image inspect sha256:<config>` → `No such image`）。
+
+🔴 **Docker 29 的 dind 默认就是 containerd snapshotter**（实测：不传 flag 即为
+`overlayfs + io.containerd.snapshotter.v1`，要经典后端必须显式
+`--feature=containerd-snapshotter=false`）。所以这不是边缘配置，而是正在变成默认形态。
+
+#### 修复：身份从归档内容定义，判据按字段能力选
+
+```text
+归档 index.json
+  └─ 按 image_tag **唯一命中**的 target descriptor   （绝不取 manifests[0]）
+      └─（是 index 时再下一跳）linux/amd64 platform manifest
+          └─ config descriptor → config blob
+```
+
+三个 descriptor（mediaType / digest / size）全部写进 release manifest
+（`schemaVersion: 2`，见 §8.1.2），每一个 digest 都按归档内 blob 的**原始字节**复算。
+
+消费端按**字段能力**选锚点，不按 Docker 版本号或 storage-driver 字符串猜：
+
+```text
+image inspect 有 .Descriptor   → 以 Descriptor 比 target descriptor；冲突即拒绝
+image inspect 无 .Descriptor   → .Id 比 config digest
+容器有 .ImageManifestDescriptor → 比**选中的平台 manifest**，不是外层 index
+容器无该字段                    → .Image 比 config digest
+两种情况都另外核对平台与 revision
+```
+
+🔴 **禁止**实现成 `actual == manifest_digest || actual == config_digest` 然后放行：
+那样一个装着错误镜像、但恰好某个 digest 对上的环境也会通过。字段在场但内容冲突时必须
+拒绝，不得回退到另一个 SHA 再试一次。这条有专门的变异测试守着。
+
+### 8.1.2 为什么升到 schemaVersion 2
+
+v1 只有一个 `image_config_digest`，而且那个值是构建机 `docker inspect .Id` 的直接抄录。
+在 containerd 构建机上抄下来的其实是 manifest digest —— 字段名说是 config，内容却不是。
+**自动给 v1 补字段等于把一个已知错误的值换个名字继续用**，所以 v1 被明确拒绝并提示重建，
+不原地升级、不静默降级。v1 工件保留作诊断材料。
 
 ### 8.2 版本身份漂移
 

@@ -114,43 +114,81 @@ ssh haiyue-vps '/opt/cps-novel/releases/<commit>/scripts/preproduction/verify-re
 # → VERIFY=PASS
 ```
 
-不依赖仓库脚本时的等价手工命令（同样全绝对路径）：
+🔴 **手工核对时不要只看一个 digest。** 目标机报哪个 digest 取决于它的 image store：
 
 ```bash
+# 先确认这台机器是哪种 image store
+ssh haiyue-vps 'docker info --format "{{.Driver}}"; docker info | grep -i driver-type'
+#   overlay2                                  → 经典 graphdriver
+#   overlayfs + io.containerd.snapshotter.v1  → containerd image store（haiyue-vps 就是这种）
+
 ssh haiyue-vps 'cd /opt/cps-novel/shared/artifacts/staging && \
   sha256sum -c <archive>.sha256 && \
   zstd -d -c <archive> | docker load && \
-  docker image inspect <image_tag> --format "{{.Id}} {{.Os}}/{{.Architecture}} {{index .Config.Labels \"org.opencontainers.image.revision\"}}"'
+  docker image inspect <image_tag> --format "Id={{.Id}} Desc={{json .Descriptor}} {{.Os}}/{{.Architecture}} rev={{index .Config.Labels \"org.opencontainers.image.revision\"}}"'
 ```
 
 必须全部成立：
 
 | 项 | 判据 |
 | --- | --- |
-| 归档 SHA256 | == manifest 的 `archive_sha256` |
-| **从 tag 解析出的 image ID** | == manifest 的 `image_config_digest` |
+| 归档 SHA256 | == manifest 的 `archive_sha256`，**且** == 构建交付记录里那个值 |
+| 有 `.Descriptor`（containerd store） | `.Descriptor.digest` == manifest 的 `oci.target.digest` |
+| 无 `.Descriptor`（经典 store） | `.Id` == manifest 的 `oci.config.digest` |
 | revision 标签 | == manifest 的 `approved_git_commit` |
 | 平台 | == manifest 的 `image_platform`（`linux/amd64`） |
 
 🔴 **任何一项不一致 → STOP，不得继续部署。**
+🔴 **不要**因为"另一个 digest 对上了"就放行。有 `.Descriptor` 就以它为准；
+它在场却对不上，说明 tag 指向的不是被批准的那个镜像。
 
 ### 3.3 为什么必须从 tag 出发核对
 
-按 `image_config_digest` 去 `inspect` 只能证明"那个镜像在本机存在"，这是个弱得多的命题：
+按 manifest 里的某个 digest 去 `inspect` 只能证明"那个对象在本机存在"，这是个弱得多的命题：
 本机可能早就缓存着它，而同名 **tag 却指向别的镜像**——而 Compose 用的正是 tag。
-所以判据是「tag 解析出来的 ID == manifest 的 config digest」，不是反过来。
+所以判据方向是「**从 tag 出发**解析出这台机器报的身份，再与 manifest 比对」，不是反过来。
+具体比哪个字段由 image store 的字段能力决定（见 §3.4 与 ADR §8.1.1）。
 
-### 3.4 三种 digest 不是一回事
+### 3.4 四种 digest 不是一回事
 
 | 名称 | 是什么 | 在本链路里的角色 |
 | --- | --- | --- |
-| **image ID / config digest** | 镜像 config blob 的 sha256，`docker image inspect .Id` | ✅ **本链路的身份**。`save`/`load` 跨主机保持不变 |
-| **registry manifest digest** | registry 上 manifest 的 sha256，即 `repo@sha256:` | ❌ 本链路**不存在**。`docker load` 后 `RepoDigests=[]` |
-| **layer digest** | 单层 tar 的 sha256 | 不用于身份判定 |
+| **config digest** | 镜像 config blob 的 sha256 | ✅ 身份之一。**经典 store** 的 `.Id` 报的是它 |
+| **OCI manifest digest** | 镜像清单（3KB 左右的 JSON）的 sha256 | ✅ 身份之一。**containerd store** 的 `.Id` 与 `.Descriptor.digest` 报的是它 |
+| **registry manifest digest** | registry 上 manifest 的 sha256，即 `repo@sha256:` | ❌ 本链路**不存在**：镜像从未推过任何 registry |
+| **layer digest** | 单层 tar 的 sha256 | 只核存在性与长度，不用于身份判定 |
+
+🔴 三者极易混淆的地方：containerd store 上 `RepoDigests` **非空**，长得像
+`cps-novel@sha256:…` —— 但那是**本地 OCI manifest digest**，不是 registry manifest digest。
+拿它当 registry 引用去 pull 会失败，因为该镜像根本没被推过。
+
+🔴 还有第四个容易误认的值：归档里的 `repositories` 文件含一个 Docker v1 遗留 chain ID，
+与上述任何一个都不是一回事，任何判据都不要用它。
 
 🔴 **禁止把 config digest 拼成 `repo@sha256:` 去糊弄校验**——那是一个任何 registry 上都不
 存在的引用，只会让身份校验"看起来通过"。`preprod_read_release_manifest()` 会以
 `reason=manifest_image_tag_digest_forgery` 拒绝带 `@` 的 `image_tag`。
+
+### 3.5 release manifest 是 schemaVersion 2
+
+身份字段来自**解析归档实际内容**，不是抄构建机的 `docker inspect .Id`：
+
+```json
+"oci": {
+  "target":            { "mediaType": "...", "digest": "sha256:…", "size": 3142 },
+  "platform_manifest": { "mediaType": "...", "digest": "sha256:…", "size": 3142 },
+  "config":            { "mediaType": "...", "digest": "sha256:…", "size": 13439 }
+}
+```
+
+单清单布局下 `target` 与 `platform_manifest` 是同一对象，但语义不同：前者是归档
+`index.json` 里指向本 tag 的条目，后者是 `linux/amd64` 实际使用的那份清单。
+多平台 index 下两者不同，**容器校验要比后者**。
+
+🔴 `schemaVersion: 1` 的旧 manifest 会被**明确拒绝**并提示重建
+（`reason=manifest_schema_v1_unsupported`），不会被自动补字段。v1 里那个
+`image_config_digest` 在 containerd 构建机上存的其实是 manifest digest，
+字段名与内容不符，自动升级只会把错误值换个名字继续用。
 
 ## 4. Artifact staging 与保留
 
