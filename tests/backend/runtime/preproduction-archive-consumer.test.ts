@@ -71,6 +71,9 @@ async function makeArchive(
   dir: string,
   tagToSave: string,
   manifestOverrides: Record<string, unknown> = {},
+  // 🔴 build-manifest 会核对"归档里镜像的 revision == 批准的 commit"，
+  // 所以造 B 的归档时必须传 COMMIT_B——这正是它该拦住的那类错配。
+  commit: string = COMMIT_A,
 ) {
   const archiveName = `probe-${Math.random().toString(36).slice(2, 8)}.tar.zst`;
   const archivePath = path.join(dir, archiveName);
@@ -78,22 +81,23 @@ async function makeArchive(
   if (saved.status !== 0) throw new Error(`save failed: ${saved.stderr}`);
   const body = await readFile(archivePath);
   const sha = createHash("sha256").update(body).digest("hex");
-  const manifest = {
-    schemaVersion: 1,
-    transport: "archive",
-    approved_git_commit: COMMIT_A,
-    version: "0.0.0-probe",
-    image_tag: SHARED_TAG,
-    image_config_digest: digestA,
-    image_platform: platform,
-    archive_filename: archiveName,
-    archive_sha256: sha,
-    built_at: "2026-09-20T00:00:00Z",
-    source_repository: "https://github.com/flightzxc/cps-novel",
-    ...manifestOverrides,
-  };
+  // 🔴 manifest 经**生产构建器同一条路径**生成（image-identity.mjs build-manifest），
+  // 身份字段来自解析归档实际内容。测试自己拼 manifest 会和生产实现悄悄分叉。
   const manifestPath = path.join(dir, `${Math.random().toString(36).slice(2, 8)}.json`);
-  await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+  const made = spawnSync("node", [
+    path.join(root, "scripts/preproduction/image-identity.mjs"), "build-manifest",
+    "--archive", archivePath, "--tag", SHARED_TAG, "--platform", platform,
+    "--commit", commit, "--version", "0.0.0-probe",
+    "--archive-filename", archiveName, "--archive-sha256", sha,
+    "--built-at", "2026-09-20T00:00:00Z",
+    "--source-repository", "https://github.com/flightzxc/cps-novel",
+    "--out", manifestPath,
+  ], { encoding: "utf8" });
+  if (made.status !== 0) throw new Error(`build-manifest failed: ${made.stdout}${made.stderr}`);
+  if (Object.keys(manifestOverrides).length > 0) {
+    const current = JSON.parse(await readFile(manifestPath, "utf8"));
+    await writeFile(manifestPath, `${JSON.stringify({ ...current, ...manifestOverrides }, null, 2)}\n`);
+  }
   return { manifestPath, archivePath, archiveName, sha };
 }
 
@@ -133,10 +137,13 @@ describe.skipIf(!dockerOk)("归档消费端身份校验（真实 docker 行为�
       `'${VERIFY}' --manifest '${manifestPath}' --load >/dev/null 2>&1;
        docker tag '${TAG_B}' '${SHARED_TAG}';
        source '${LIB}';
-       preprod_assert_local_image '${SHARED_TAG}' '${digestA}' '${COMMIT_A}' '${platform}'`,
+       preprod_read_release_manifest '${manifestPath}';
+       preprod_assert_local_image '${SHARED_TAG}'`,
     );
     expect(r.status).not.toBe(0);
-    expect(`${r.stdout}${r.stderr}`).toContain("reason=tag_digest_mismatch");
+    // 锚点随 image store 不同（经典比 config digest，containerd 比 Descriptor），
+    // 但两种形态都必须拒绝。
+    expect(`${r.stdout}${r.stderr}`).toMatch(/IMAGE=REFUSED reason=(id_config_digest_mismatch|descriptor_digest_mismatch)/);
   }, 180_000);
 
   it("🔴 负例 2：manifest 的 image_tag 指向另一个镜像 → 拒绝", async () => {
@@ -144,27 +151,31 @@ describe.skipIf(!dockerOk)("归档消费端身份校验（真实 docker 行为�
     const { manifestPath } = await makeArchive(work, SHARED_TAG, { image_tag: TAG_B });
     const r = sh(`'${VERIFY}' --manifest '${manifestPath}' --load`);
     expect(r.status).not.toBe(0);
-    // image_tag 指向 B，但 manifest 声明的 digest 是 A
-    expect(`${r.stdout}${r.stderr}`).toContain("reason=tag_digest_mismatch");
+    // v2 下更早暴露：归档 index.json 里根本没有指向该 tag 的条目。
+    expect(`${r.stdout}${r.stderr}`).toContain("reason=target_not_found_for_tag");
   }, 180_000);
 
   it("🔴 负例 3：正确镜像已缓存，但传入的是错误归档 → 拒绝", async () => {
-    // 先把正确的 A 以 SHARED_TAG 缓存在本地（模拟"上一版还在机器上"）
+    // manifest 描述 A（由 A 的归档生成），随后把归档文件换成 B 的内容并同步 sha，
+    // 这样"归档与它旁边的 sha 自洽"这关过得去，破绽只在归档内容 ≠ manifest 所述。
     spawnSync("docker", ["tag", TAG_A, SHARED_TAG]);
-    // 传入的归档里装的却是 B，且 manifest 的 sha 与该归档自洽（所以校验和这关过得去）
+    const good = await makeArchive(work, SHARED_TAG);            // manifest 描述 A
     spawnSync("docker", ["tag", TAG_B, SHARED_TAG]);
-    const wrong = await makeArchive(work, SHARED_TAG); // 归档内容 = B，manifest.digest = A
-    spawnSync("docker", ["tag", TAG_A, SHARED_TAG]); // 恢复缓存为 A
-    const r = sh(`'${VERIFY}' --manifest '${wrong.manifestPath}' --load`);
+    const wrongBody = await makeArchive(work, SHARED_TAG, {}, COMMIT_B); // 归档内容 = B
+    spawnSync("docker", ["tag", TAG_A, SHARED_TAG]);              // 本地缓存恢复为正确的 A
+    const m = JSON.parse(await readFile(good.manifestPath, "utf8"));
+    m.archive_filename = wrongBody.archiveName;
+    m.archive_sha256 = wrongBody.sha;
+    await writeFile(good.manifestPath, `${JSON.stringify(m, null, 2)}\n`);
+    const r = sh(`'${VERIFY}' --manifest '${good.manifestPath}' --load`);
     expect(r.status).not.toBe(0);
-    // 装载后同名 tag 被归档里的 B 覆盖 → 与 manifest 的 A digest 不符
-    expect(`${r.stdout}${r.stderr}`).toContain("reason=tag_digest_mismatch");
+    expect(`${r.stdout}${r.stderr}`).toMatch(/archive_manifest_.*_disagree/);
   }, 180_000);
 
   it("🔴 负例 4：镜像缺失 → 拒绝，且不得触发 pull / build", async () => {
     untag(SHARED_TAG);
     const r = sh(
-      `source '${LIB}'; preprod_assert_local_image '${SHARED_TAG}' '${digestA}' '${COMMIT_A}' '${platform}'`,
+      `source '${LIB}'; preprod_assert_local_image '${SHARED_TAG}'`,
     );
     expect(r.status).not.toBe(0);
     expect(`${r.stdout}${r.stderr}`).toContain("reason=image_missing");
@@ -195,25 +206,30 @@ describe.skipIf(!dockerOk)("归档消费端身份校验（真实 docker 行为�
   it("🔴 运行中容器的镜像身份：真容器，真 inspect", async () => {
     const nameOk = "cps-novel-probe-ok";
     const nameBad = "cps-novel-probe-bad";
+    spawnSync("docker", ["tag", TAG_A, SHARED_TAG]);
+    const { manifestPath } = await makeArchive(work, SHARED_TAG);
     spawnSync("docker", ["rm", "-f", nameOk, nameBad]);
     spawnSync("docker", ["run", "-d", "--name", nameOk, TAG_A, "sleep", "60"]);
     spawnSync("docker", ["run", "-d", "--name", nameBad, TAG_B, "sleep", "60"]);
     try {
       // preprod_compose 用桩替换（测的是身份比对，不是 compose 本身），
       // 但 docker inspect 的是**真实运行中的容器**。
+      // 身份从 manifest 读，不再由调用方传 digest —— 传值就等于让调用方决定判据。
       const good = sh(
         `source '${LIB}'; preprod_compose() { docker ps -q --filter name=${nameOk}; };
-         preprod_assert_container_image '${digestA}' web`,
+         preprod_read_release_manifest '${manifestPath}';
+         preprod_assert_container_image web`,
       );
-      expect(good.stdout).toContain("RUNTIME_IMAGE=PASS");
+      expect(`${good.stdout}${good.stderr}`).toContain("RUNTIME_IMAGE=PASS");
       expect(good.status).toBe(0);
 
       const bad = sh(
         `source '${LIB}'; preprod_compose() { docker ps -q --filter name=${nameBad}; };
-         preprod_assert_container_image '${digestA}' web`,
+         preprod_read_release_manifest '${manifestPath}';
+         preprod_assert_container_image web`,
       );
       expect(bad.status).not.toBe(0);
-      expect(`${bad.stdout}${bad.stderr}`).toContain("reason=container_image_mismatch");
+      expect(`${bad.stdout}${bad.stderr}`).toMatch(/container_image_mismatch|container_manifest_digest_mismatch/);
     } finally {
       spawnSync("docker", ["rm", "-f", nameOk, nameBad]);
     }

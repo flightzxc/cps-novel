@@ -110,6 +110,21 @@ jobs:
       - name: Prisma migrate deploy
         run: npx prisma migrate deploy
 
+      # 🔴 镜像身份可移植性测试要在**两种真实 image store** 上各跑一遍
+      # （经典 graphdriver 与 containerd image store）。两者都用 dind 起，
+      # 不改 runner 自己的 Docker 存储后端。这里只做预拉取与证据留痕：
+      # 让慢速 pull 不占用测试超时，并把 runner 的 Docker 形态记进日志。
+      #
+      # 背景：2026-09-20 目标机（containerd image store）拒收了一份内容正确的
+      # 归档，而当时"Mac 绿 + amd64 CI 绿"完全没有触及 store 维度。
+      # CPU 架构与 image store 后端是两件事。
+      - name: Prepare image-store test daemons
+        run: |
+          docker version
+          docker info --format 'runner store: {{.Driver}} (server {{.ServerVersion}})'
+          docker pull -q docker:29-dind
+          docker pull -q busybox:latest
+
       - name: Vitest (ui + node projects, full run)
         run: npm test
 
