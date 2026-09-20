@@ -69,8 +69,17 @@ Owner 授权：**Codex 额度不足期间，Claude 可以直接写入 Codex 独�
 | 日期 | 任务 | 涉及路径 | 执行方 |
 | --- | --- | --- | --- |
 | 2026-09-19 | GitHub Actions local-X8 平台测试修复 | `tests/backend/local-x8/x8-local-wal-gc-launchd.test.ts`（必要时 + `scripts/x8-local-wal-gc-launchd.sh`） | Claude（独立会话） |
+| 2026-09-20 | PR #10 收口 + PR #14 stacked 归一化 | PR 合并与 base 改指，无仓库文件写入 | Claude |
+| 2026-09-20 | Phase 2C · GHCR Bootstrap + 部署工件运输固化 | `.github/workflows/ghcr-release.yml`（新增）、`docs/adr/ADR-DEPLOYMENT-ARTIFACT-DISTRIBUTION.md`（新增）、`docs/operations/GHCR_RELEASE_AND_FALLBACK.md`（新增）、`docs/governance/P1_RISK_AND_DEBT_REGISTER.md`、`CLAUDE.md`（仅事实指针）、`CHANGELOG.md`（仅生成器） | Claude |
 
 新增任务请在此表追加一行，不要另起文档。
+
+🔴 **2026-09-20 的 GHCR Bootstrap 一轮并未写入 §3.2 的 Codex 独占目录**：
+`.github/`、`docs/`、`CLAUDE.md`、`CHANGELOG.md` 都不在 §3.1/§3.2 任一独占表里。
+之所以仍登记在此，是因为 Owner 是以「Codex/Cursor 今日不可用」为由做的单次指派，
+需要一条能从 Git 追溯的记录。该轮的授权边界同时**明确排除**了
+`infra/`、`scripts/preproduction/**`、`Dockerfile`、`docker-compose.yml` 与后端运行时代码——
+必须改动这些时要求 STOP 并报告，实际执行中未触碰其中任何一个。
 
 ## 6. 被本例外解除阻塞、但仍待 Owner 产品决策的项
 

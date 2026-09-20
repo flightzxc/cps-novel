@@ -193,7 +193,18 @@ src/lib/flags/feature-flags.ts           Feature Flag 与写入闸
 
 ---
 
-## 6. 技术栈
+## 6. 部署工件运输
+
+- **cps-novel（本仓）primary**：GHCR 不可变 digest —— `ghcr.io/flightzxc/cps-novel@sha256:...`，VPS 侧 pull-by-digest。
+- **CPS 短剧（参照项目）**：离线 Docker 归档运输（`docker save` → SSH → `docker load`）。
+- **两者不同是刻意设计**，不是遗留不一致；**cps-novel 的 fallback** 才是 CPS 那套不可变归档运输。
+- 🔴 不得仅为「两个 CPS 项目统一」而把任一项目切换成另一项目的运输方式。
+
+详见 [`docs/adr/ADR-DEPLOYMENT-ARTIFACT-DISTRIBUTION.md`](docs/adr/ADR-DEPLOYMENT-ARTIFACT-DISTRIBUTION.md)。
+
+---
+
+## 7. 技术栈
 
 - **前端**：Next.js 16 + React 19 + TypeScript 5 + Tailwind CSS v4
 - **测试**：Vitest
@@ -202,7 +213,7 @@ src/lib/flags/feature-flags.ts           Feature Flag 与写入闸
 
 ---
 
-## 7. 开发命令
+## 8. 开发命令
 
 ```bash
 npm run dev        # 本地开发服务器
@@ -214,7 +225,7 @@ npm run test       # vitest run
 
 ---
 
-## 8. 当前阶段
+## 9. 当前阶段
 
 **P1 已收口，P2-12 竖向验收与 P0 收尾已落地。** 当前处于 v0.2.0 上线前加固和发布证据收口阶段；
 feature/write flags 仍按 `docs/p2/V020_RELEASE_CHECKLIST.md` 保持 fail-closed，未经检查单与 Owner 审批不得开闸。
