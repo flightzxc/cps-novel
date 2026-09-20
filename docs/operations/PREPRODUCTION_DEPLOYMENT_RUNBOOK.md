@@ -75,6 +75,17 @@ decision for Phase 2C.
    to `0640`; `getfacl` must still show `group::---`, one named consumer only,
    and `other::---`. `preprod-curl.conf` has no named ACL. The root-owned
    `backup_role.pgpass` has no named ACL.
+
+   The three traverse directories are **not** chmod-ed here on purpose: they stay
+   `drwxr-x--- deploy:deploy`, so `other::---` already holds and the only named
+   entry is `u:33:--x`. `secrets-preflight.sh` enforces that `other::---`
+   explicitly (`reason=nginx_traverse_other`). Without that check a directory set
+   to `other::r-x` still shows exactly one named ACL and a mask containing `x`,
+   so preflight would report PASS while any UID could traverse and list the
+   secrets directory — verified on real Linux ACLs. `group::` is deliberately
+   left as `r-x`: that group is the owning `deploy` principal itself, and the
+   mask is likewise not pinned to `--x`, because `setfacl` recomputes the mask
+   from `group::` and would otherwise reject the established layout.
 5. Confirm Docker reports neither rootless nor userns remapping, then perform
    the one sudo-backed Nginx identity check. Any failure stops the rollout:
 

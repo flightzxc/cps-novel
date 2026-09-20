@@ -129,6 +129,24 @@ assert_single_consumer_acl() {
   fi
 }
 
+# 🔴 目录不能复用 assert_file_base_acl：目录的 user:: 是 rwx 而不是 rw-。
+# 这里补上原先漏掉的那一条 —— other 必须完全没有权限。
+# 不补的话：给 secrets 目录设成 other::r-x，named ACL 仍然只有 u:33:--x、
+# 计数仍是 1、mask 仍含 x，preflight 照样 PASS，而任何 UID 都能穿越并列出
+# secrets 目录（文件内容仍受各自 ACL 保护，但"只给 UID 33 traverse"这条
+# 不变式已经不成立）。实测确认过：UID 4242 能 ls 出目录内容。
+#
+# group:: **刻意不强制为 ---**：现网三个目录是 drwxr-x--- deploy:deploy，
+# group 就是 owner 本人所在的组；强制 --- 会与 Owner 既定布局冲突。
+# 同理 mask 不收紧到精确 --x —— group::r-x 存在时 setfacl 会把 mask 重算成
+# r-x，收紧会把现网判死。named 条目本身已被钉死为 --x，且全目录仅此一条，
+# 所以 mask 放宽也无法让任何 UID 越过 traverse。
+assert_directory_traverse_acl() {
+  local path="$1" uid="$2"
+  [[ "$(acl_entry "$path" other)" == "---" ]] || fail nginx_traverse_other
+  assert_single_consumer_acl "$path" "$uid" "--x"
+}
+
 assert_no_named_acl() {
   [[ "$(named_acl_count "$1")" == "0" ]] || fail unexpected_named_acl
   [[ -z "$(acl_mask "$1")" ]] || fail unexpected_acl_mask
@@ -178,7 +196,7 @@ if [[ "${PREPROD_TEST_MODE:-0}" == "1" && -n "${PREPROD_TEST_NGINX_TRAVERSE_PATH
 fi
 for directory in "${nginx_traverse_directories[@]}"; do
   [[ -d "$directory" && ! -L "$directory" ]] || fail nginx_traverse_directory
-  assert_single_consumer_acl "$directory" "33" "--x"
+  assert_directory_traverse_acl "$directory" "33"
 done
 
 # Fail closed if either container identity can read any secret outside its

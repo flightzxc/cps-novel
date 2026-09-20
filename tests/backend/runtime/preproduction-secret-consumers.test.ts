@@ -258,6 +258,33 @@ describe("secret consumer preflight model", () => {
     expect(result.stdout).toContain("reason=negative_access_app");
   });
 
+  it("fails closed when a traverse directory grants any access to others", async () => {
+    const { fixture, env } = await fullStubFixture();
+    // 🔴 只把一个 traverse 目录的 other 位放开，其余一切不变：named ACL 仍然
+    // 只有唯一的 u:33:--x、计数仍是 1、mask 仍含 x。补丁前这会一路 PASS，
+    // 而任何 UID 都能穿越并列出 secrets 目录 —— "只给 UID 33 traverse"
+    // 这条不变式其实没有被强制。已在真实 Linux ACL 上实证（UID 4242 能 ls）。
+    await writeFile(path.join(fixture, "bin", "getfacl"), [
+      "#!/usr/bin/env bash",
+      'path="${@: -1}"; name="${path##*/}"',
+      "echo 'user::rw-'",
+      'case "$name" in',
+      "  channel_credential_encryption_key_v1|channel_credential_fingerprint_key|totp_encryption_key|tracking_hash_salt|admin-smoke-password) echo 'user:1001:r--' ; echo 'mask::r--' ;;",
+      "  postgres_admin_password|migration_owner_password|web_app_password|worker_app_password|scheduler_app_password|analyst_ro_password|backup_role_password) echo 'user:999:r--' ; echo 'mask::r--' ;;",
+      "  nginx-preprod.htpasswd) echo 'user:33:r--' ; echo 'mask::r--' ;;",
+      "  nginx-a|nginx-b|nginx-c) echo 'user:33:--x' ; echo 'mask::--x' ;;",
+      "esac",
+      "echo 'group::---'",
+      // 单点改动：nginx-b 放开 other 的遍历位
+      'if [[ "$name" == "nginx-b" ]]; then echo \'other::--x\'; else echo \'other::---\'; fi',
+      "",
+    ].join("\n"), { mode: 0o700 });
+
+    const result = spawnSync("bash", [preflightPath], { env, encoding: "utf8" });
+    expect(`${result.stdout}${result.stderr}`).toContain("reason=nginx_traverse_other");
+    expect(result.status).not.toBe(0);
+  });
+
   it("locks backup-timer to the root consumer model", async () => {
     const overlay = await readFile(path.join(root, "infra/preproduction/docker-compose.yml"), "utf8");
     const block = overlay.slice(overlay.indexOf("  backup-timer:"), overlay.indexOf("\nvolumes:"));
