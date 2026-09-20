@@ -3,7 +3,9 @@
 <!-- 本文件由 `node scripts/generate-changelog.mjs --write` 生成，请勿手工编辑。 -->
 <!-- 叙述性内容写进 commit message；Owner/架构决策写 docs/adr/。 -->
 
-生成时间：2026-09-20 · 共 681 个 commit
+生成时间：2026-09-20 · 共 683 个 commit
+- `9e4b604` 2026-09-21 test(preprod): apply ACLs after final ownership  — _codex · GPT-5-Codex_
+- `94d0688` 2026-09-21 docs(changelog): regenerate after secret consumer fix  — _codex · GPT-5-Codex_
 - `ae8ccb2` 2026-09-21 fix(preprod): classify secret consumers  — _codex · GPT-5-Codex_
 - `d9f7090` 2026-09-21 merge: 归档镜像身份跨 image store 可移植，并把 layer 也验到字节 (#16)  — _claude-code · Claude Opus 5_
 - `dea3521` 2026-09-21 docs(changelog): 经既有生成器重新生成  — _claude-code · Claude Opus 5_
