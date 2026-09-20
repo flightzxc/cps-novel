@@ -3,7 +3,12 @@
 <!-- 本文件由 `node scripts/generate-changelog.mjs --write` 生成，请勿手工编辑。 -->
 <!-- 叙述性内容写进 commit message；Owner/架构决策写 docs/adr/。 -->
 
-生成时间：2026-09-20 · 共 661 个 commit
+生成时间：2026-09-20 · 共 666 个 commit
+- `44df22e` 2026-09-20 feat(release): artifact transport 改为不可变归档，GHCR 降为已完成的 PoC  — _claude-code · Claude Opus 5_
+- `add5fc2` 2026-09-20 docs(release): 实测推翻文档——GHCR package 实际是 public，停下待 Owner 处置  — _claude-code · Claude Opus 5_
+- `8609fa0` 2026-09-20 docs(release): 更正 package 可见性口径——不继承仓库可见性，首次发布默认 private  — _claude-code · Claude Opus 5_
+- `257ae88` 2026-09-20 fix(ci): 契约自检步骤必须显式关掉 errexit  — _claude-code · Claude Opus 5_
+- `34c523f` 2026-09-20 docs(changelog): 经既有生成器重新生成  — _claude-code · Claude Opus 5_
 - `f67f4cd` 2026-09-20 feat(release): GHCR 作为 cps-novel 的 primary artifact transport  — _claude-code · Claude Opus 5_
 - `617fd0c` 2026-09-20 docs(debt): 登记 PR #10 的两条 Phase 2C UAT 前 follow-up  — _claude-code · Claude Opus 5_
 - `9aa2348` 2026-09-20 docs(changelog): record Phase 2B deployment layer  — _codex · GPT-5_
