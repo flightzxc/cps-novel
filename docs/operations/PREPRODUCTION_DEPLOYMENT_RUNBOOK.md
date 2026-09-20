@@ -48,19 +48,55 @@ decision for Phase 2C.
 ## One-time Owner sudo steps
 
 1. Install Docker Engine/Compose, PostgreSQL-client-compatible tooling, Ubuntu
-   Nginx 1.24.x, Certbot, and the Nginx Certbot integration from approved OS
-   repositories.
+   Nginx 1.24.x, Certbot, the Nginx Certbot integration, and `acl` from approved
+   OS repositories.
 2. Create `/opt/cps-novel/{releases,shared}` and the shared children above.
-3. Create a deployment group; grant only narrowly scoped file/service access.
-   Do not grant `NOPASSWD: ALL` and do not enable root SSH.
-4. Create secret files as `root:<deployment-group>` mode `0640`, ensuring
-   container UID/GID `1001:1001` can read the files bind-mounted as secrets.
-5. After independently recording the new key material, run
+3. Do not put `www-data` in a deployment group. Grant consumers only the
+   per-file ACLs in `scripts/preproduction/secret-consumers.tsv`; PostgreSQL is
+   UID/GID `999:999`, the application is `1001:1001`, and `backup-timer` stays
+   root because its PostgreSQL image command does not start the server entrypoint.
+4. Apply the permission model once, as Owner, before initializing identity or
+   starting PostgreSQL. These commands assume the fixed target identities
+   `deploy=1000:1000` and `www-data=33:33`; stop if the target differs:
+
+   ```bash
+   sudo chown 1000:1000 \
+     /opt/cps-novel/shared/secrets/{channel_credential_encryption_key_v1,channel_credential_fingerprint_key,totp_encryption_key,tracking_hash_salt,admin-smoke-password,postgres_admin_password,migration_owner_password,web_app_password,worker_app_password,scheduler_app_password,analyst_ro_password,backup_role_password,nginx-preprod.htpasswd,preprod-curl.conf}
+   sudo chown 0:0 /opt/cps-novel/shared/secrets/backup_role.pgpass
+   sudo chmod 0600 /opt/cps-novel/shared/secrets/{channel_credential_encryption_key_v1,channel_credential_fingerprint_key,totp_encryption_key,tracking_hash_salt,admin-smoke-password,postgres_admin_password,migration_owner_password,web_app_password,worker_app_password,scheduler_app_password,analyst_ro_password,backup_role_password,nginx-preprod.htpasswd,preprod-curl.conf,backup_role.pgpass}
+   sudo setfacl -b /opt/cps-novel/shared/secrets/{channel_credential_encryption_key_v1,channel_credential_fingerprint_key,totp_encryption_key,tracking_hash_salt,admin-smoke-password,postgres_admin_password,migration_owner_password,web_app_password,worker_app_password,scheduler_app_password,analyst_ro_password,backup_role_password,nginx-preprod.htpasswd,preprod-curl.conf,backup_role.pgpass}
+   sudo setfacl -m u:1001:r-- /opt/cps-novel/shared/secrets/{channel_credential_encryption_key_v1,channel_credential_fingerprint_key,totp_encryption_key,tracking_hash_salt,admin-smoke-password}
+   sudo setfacl -m u:999:r-- /opt/cps-novel/shared/secrets/{postgres_admin_password,migration_owner_password,web_app_password,worker_app_password,scheduler_app_password,analyst_ro_password,backup_role_password}
+   sudo setfacl -m u:33:r-- /opt/cps-novel/shared/secrets/nginx-preprod.htpasswd
+   sudo setfacl -m u:33:--x /opt/cps-novel /opt/cps-novel/shared /opt/cps-novel/shared/secrets
+   ```
+
+   A named read ACL changes the file's displayed group-mode mask from `0600`
+   to `0640`; `getfacl` must still show `group::---`, one named consumer only,
+   and `other::---`. `preprod-curl.conf` has no named ACL. The root-owned
+   `backup_role.pgpass` has no named ACL.
+5. Confirm Docker reports neither rootless nor userns remapping, then perform
+   the one sudo-backed Nginx identity check. Any failure stops the rollout:
+
+   ```bash
+   docker info --format '{{json .SecurityOptions}}'
+   sudo -u www-data test -x /opt/cps-novel
+   sudo -u www-data test -x /opt/cps-novel/shared
+   sudo -u www-data test -x /opt/cps-novel/shared/secrets
+   sudo -u www-data test -r /opt/cps-novel/shared/secrets/nginx-preprod.htpasswd
+   sudo -u www-data test ! -r /opt/cps-novel/shared/secrets/postgres_admin_password
+   ```
+
+6. After independently recording the new key material, run
    `record-secret-identity.sh --initialize` once. An existing manifest is
-   never overwritten. Run `secrets-preflight.sh`; it prints only PASS/FAIL.
-6. Obtain certificates with Certbot. Certbot owns files below
+   never overwritten. `secrets-preflight.sh --host-only` reports
+   `CONSUMER_ACCESS=UNVERIFIED`; it is not release approval. The ordinary
+   non-sudo `secrets-preflight.sh` performs the APP/POSTGRES/root positive
+   probes, all cross-consumer negative probes, and static Nginx ACL validation.
+   It uses the already-loaded `CPS_NOVEL_APP_IMAGE` with `--pull never`.
+7. Obtain certificates with Certbot. Certbot owns files below
    `/etc/letsencrypt`; deployment owns the Git-rendered Nginx config.
-7. With explicit approval, run `PREPROD_OWNER_SUDO_APPROVED=YES
+8. With explicit approval, run `PREPROD_OWNER_SUDO_APPROVED=YES
    scripts/preproduction/install-nginx.sh`. It renders, installs, runs
    `nginx -t`, and gracefully reloads. Never hand-edit the generated file.
 

@@ -151,11 +151,13 @@ describe("stable secret negative checks", () => {
     const dir = await fixture();
     const pass = check(dir);
     expect(pass.status).toBe(0);
-    expect(pass.stdout.trim()).toBe("SECRET_PREFLIGHT=PASS");
+    expect(pass.stdout).toContain("SECRET_CONSUMER_MATRIX=PASS count=15");
+    expect(pass.stdout).toContain("SECRET_PREFLIGHT=HOST_ONLY CONSUMER_ACCESS=UNVERIFIED");
+    expect(pass.stdout).not.toContain("SECRET_PREFLIGHT=PASS");
     await chmod(path.join(dir, "web_app_password"), 0o644);
     const fail = check(dir);
     expect(fail.status).not.toBe(0);
-    expect(fail.stdout.trim()).toBe("SECRET_PREFLIGHT=FAIL");
+    expect(fail.stdout).toContain("SECRET_PREFLIGHT=FAIL reason=secret_mode");
   });
 
   it("rejects stable encryption identity drift", async () => {
@@ -163,6 +165,6 @@ describe("stable secret negative checks", () => {
     await writeFile(path.join(dir, "totp_encryption_key"), "different\n", { mode: 0o640 });
     const result = check(dir);
     expect(result.status).not.toBe(0);
-    expect(result.stdout.trim()).toBe("SECRET_PREFLIGHT=FAIL");
+    expect(result.stdout).toContain("SECRET_PREFLIGHT=FAIL reason=secret_identity_mismatch");
   });
 });
