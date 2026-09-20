@@ -183,7 +183,7 @@ describe("secret consumer preflight model", () => {
     const script = await readFile(preflightPath, "utf8");
     expect(script).toContain("--pull never --network none --read-only --cap-drop ALL");
     expect(script).toContain("--security-opt no-new-privileges --user \"$uid:$gid\"");
-    expect(script).toContain("--entrypoint /bin/sh \"$CPS_NOVEL_APP_IMAGE\" -c 'test -r /run/check'");
+    expect(script).toContain("--entrypoint /bin/sh \"$CPS_NOVEL_APP_IMAGE\" -c 'exec 3</run/check'");
     expect(script).not.toContain("alpine:3.20");
     expect(script).not.toMatch(/docker\s+pull/);
   });
@@ -246,7 +246,7 @@ describe("secret consumer preflight model", () => {
     for (const call of runs) {
       expect(call).toContain("--pull never --network none --read-only --cap-drop ALL");
       expect(call).toContain("--security-opt no-new-privileges");
-      expect(call).toContain("--entrypoint /bin/sh approved-app:test -c test -r /run/check");
+      expect(call).toContain("--entrypoint /bin/sh approved-app:test -c exec 3</run/check");
     }
     expect(calls.some((call) => call.startsWith("pull "))).toBe(false);
   });
@@ -294,7 +294,7 @@ describe("real Linux Docker bind-mount ACL behavior", () => {
         "--network", "none", "--read-only", "--cap-drop", "ALL", "--security-opt", "no-new-privileges",
         "--user", `${uid}:${uid}`, "--mount", `type=bind,src=${path.join(dir, name)},dst=/run/check,readonly`,
         "--entrypoint", "/bin/sh", probeImage, "-c",
-        "id; ls -ldn /run /run/check; stat -c 'mode=%a owner=%u:%g' /run/check; test -r /run/check"],
+        "id; ls -ldn /run /run/check; stat -c 'mode=%a owner=%u:%g' /run/check; exec 3</run/check"],
       { encoding: "utf8" });
 
       const failureContext = (name: string, result: ReturnType<typeof probe>) => {
@@ -329,7 +329,7 @@ describe("real Linux Docker bind-mount ACL behavior", () => {
       const nginxHostPath = spawnSync("docker", ["run", "--rm", "--pull", "never", "--network", "none",
         "--read-only", "--cap-drop", "ALL", "--security-opt", "no-new-privileges", "--user", "33:33",
         "--mount", `type=bind,src=${dir},dst=/run/secrets,readonly`, "--entrypoint", "/bin/sh", probeImage,
-        "-c", "test -r /run/secrets/nginx"]);
+        "-c", "exec 3</run/secrets/nginx"]);
       expect(nginxHostPath.status).toBe(0);
     } finally {
       await rm(dir, { recursive: true, force: true });

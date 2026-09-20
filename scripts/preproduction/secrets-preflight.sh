@@ -81,10 +81,13 @@ docker image inspect "$CPS_NOVEL_APP_IMAGE" >/dev/null 2>&1 || fail probe_image_
 
 probe_readable() {
   local uid="$1" gid="$2" path="$3"
+  # Open the file for reading so the kernel evaluates the bind-mounted inode's
+  # DAC/ACL. BusyBox `test -r` only inspects mode bits and can reject a valid
+  # named-user ACL, which would make the probe report a false negative.
   docker run --rm --pull never --network none --read-only --cap-drop ALL \
     --security-opt no-new-privileges --user "$uid:$gid" \
     --mount "type=bind,src=$path,dst=/run/check,readonly" \
-    --entrypoint /bin/sh "$CPS_NOVEL_APP_IMAGE" -c 'test -r /run/check' >/dev/null 2>&1
+    --entrypoint /bin/sh "$CPS_NOVEL_APP_IMAGE" -c 'exec 3</run/check' >/dev/null 2>&1
 }
 
 numeric_owner() {
