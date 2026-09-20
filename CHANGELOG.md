@@ -3,7 +3,20 @@
 <!-- 本文件由 `node scripts/generate-changelog.mjs --write` 生成，请勿手工编辑。 -->
 <!-- 叙述性内容写进 commit message；Owner/架构决策写 docs/adr/。 -->
 
-生成时间：2026-09-20 · 共 678 个 commit
+生成时间：2026-09-20 · 共 691 个 commit
+- `3c61166` 2026-09-21 fix(preprod): traverse 目录必须 other::---，否则任何 UID 都能列出 secrets 目录  — _claude-code · Claude Opus 5_
+- `8a6959d` 2026-09-21 docs(changelog): regenerate after ACL open probe  — _Codex · GPT-5_
+- `8a663f5` 2026-09-21 fix(preprod): probe ACLs with a real file open  — _Codex · GPT-5_
+- `77742bf` 2026-09-21 docs(changelog): regenerate after ACL diagnostics  — _Codex · GPT-5_
+- `7c7008c` 2026-09-21 test(preprod): expose ACL probe diagnostics  — _Codex · GPT-5_
+- `bf99b5f` 2026-09-21 docs(changelog): regenerate after probe image fix  — _codex · GPT-5-Codex_
+- `3df898a` 2026-09-21 test(preprod): use probe image with run directory  — _codex · GPT-5-Codex_
+- `632d314` 2026-09-21 docs(changelog): regenerate after ACL fixture fix  — _codex · GPT-5-Codex_
+- `9e4b604` 2026-09-21 test(preprod): apply ACLs after final ownership  — _codex · GPT-5-Codex_
+- `94d0688` 2026-09-21 docs(changelog): regenerate after secret consumer fix  — _codex · GPT-5-Codex_
+- `ae8ccb2` 2026-09-21 fix(preprod): classify secret consumers  — _codex · GPT-5-Codex_
+- `d9f7090` 2026-09-21 merge: 归档镜像身份跨 image store 可移植，并把 layer 也验到字节 (#16)  — _claude-code · Claude Opus 5_
+- `dea3521` 2026-09-21 docs(changelog): 经既有生成器重新生成  — _claude-code · Claude Opus 5_
 - `1a34ccb` 2026-09-21 fix(release): layer 也验到字节 —— 流式逐层 digest 复算 + 全 blob 内容哈希不变式  — _claude-code · Claude Opus 5_
 - `d44d366` 2026-09-20 test(release): daemon 就绪判据改为"真的报出 driver"，并在起不来时抓容器日志  — _claude-code · Claude Opus 5_
 - `92c4807` 2026-09-20 docs(changelog): 经既有生成器重新生成  — _claude-code · Claude Opus 5_

@@ -32,10 +32,24 @@ Application rollback is permitted only after an explicit determination that
 the previous app is compatible with the current schema. It never performs a
 down migration. Database restore is a separate incident procedure.
 
+Secret access is classified by `scripts/preproduction/secret-consumers.tsv`,
+not by the inventory alone. File-backed Docker secrets retain host numeric
+ownership and ACL semantics: application consumers are `1001:1001`, the
+PostgreSQL init consumer is `999:999`, Host Nginx is `33:33`, the deploy-only
+curl config is `1000:1000`, and the backup timer's non-server command remains
+root. Named POSIX ACLs grant each container/host consumer only its own files;
+`www-data` receives traverse-only ACLs on the fixed parent directories and is
+not added to the deployment group. Rootless Docker or user-namespace remapping
+is unsupported and fails preflight because those modes invalidate direct host
+UID/GID reasoning.
+
 ## Consequences
 
 - Short planned downtime is accepted; Phase 2B does not create blue/green.
 - Certbot owns certificate material. The deployment tool owns the rendered
   site config. Manual edits to the installed generated config are unsupported.
+- Host-only secret validation never represents consumer access verification;
+  a release requires positive and cross-consumer negative probes using the
+  already-loaded approved application image with registry pulls disabled.
 - Phase 2C must resolve the package/tag version drift before production
   release policy can use a human version label.
