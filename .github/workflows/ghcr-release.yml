@@ -23,18 +23,21 @@
 # 要真正推上 GHCR 必须显式选 `push`。这条默认值是刻意的，原因见下面
 # "package 可见性" 一段。
 #
-# --- package 可见性（Owner 必读）-------------------------------------------
-# 本仓库当前是 **public**（`gh api repos/flightzxc/cps-novel --jq .visibility`
-# → `public`）。从 Actions 用 GITHUB_TOKEN 首次推送到 GHCR 时，package 会被自动
-# 关联到本仓库并**继承仓库的可见性**——也就是说，在 public 仓库下首次推送很可能
-# 直接产生一个 **public** package。
+# --- package 可见性 --------------------------------------------------------
+# 本仓库是 public，但**这不会让 package 变成 public**。GitHub 官方文档两句话：
 #
-# 而本工单的要求是 package 必须保持 private，且明确禁止把 package 改成 public。
-# 这两者在当前仓库可见性下存在冲突，**必须由 Owner 先裁决**，不能由工作流默默决定：
-#   a) 首次推送后立刻在 GitHub UI 把该 package 的 visibility 改为 private；或
-#   b) 接受 package 为 public（需 Owner 书面推翻"保持 private"这条）；或
-#   c) 改变仓库可见性（影响面远超本工单，不在此处建议）。
-# 在 Owner 裁决之前，请保持 `publish: dry-run`。
+#   "the package automatically inherits the access permissions
+#    (but not the visibility) of the linked repository"
+#      —— docs/packages/learn-github-packages/configuring-a-packages-access-control-and-visibility
+#   "When you first publish a package, the default visibility is private."
+#      —— docs/packages/working-with-a-github-packages-registry/working-with-the-container-registry
+#
+# 即：package 继承的是**访问权限**，不是可见性；首次发布默认 **private**。
+# 因此"仓库 public → package 必然 public"是错的，二者之间没有冲突。
+#
+# 🔴 推送后仍必须**实际核对**一次 package 可见性，不要只凭文档断言——
+# 文档说的是默认值，组织策略或后来的手动改动都可能让它不成立。
+# 核对方式见 docs/operations/GHCR_RELEASE_AND_FALLBACK.md §3。
 # ---------------------------------------------------------------------------
 
 name: GHCR release

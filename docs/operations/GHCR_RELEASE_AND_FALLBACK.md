@@ -19,7 +19,7 @@ token、VPS 拉取镜像、`docker up/restart`、Nginx、Certbot、PostgreSQL、
 
 - 拿到 Owner 批准的 **40-hex** commit（短码不接受，工作流会直接拒绝）；
 - 该 commit 必须已经推到远端，否则 checkout 取不到；
-- 确认 §3 的 package 可见性问题已由 Owner 裁决（**首次发布必看**）。
+- 首次发布后按 §3 实际核对一次 package 可见性（**首次发布必看**）。
 
 ### 1.2 触发
 
@@ -99,25 +99,36 @@ FALLBACK_REQUIRED=YES
 
 ## 3. package 可见性（首次发布必读）
 
-**本仓库当前是 `public`。**
+本仓库是 **public**，但**这不会让 package 变成 public**。GitHub 官方文档两句：
 
-从 Actions 用 `GITHUB_TOKEN` 首次推送到 GHCR 时，package 会自动关联到本仓库并
-**继承仓库可见性**——在 public 仓库下，首次推送很可能直接产生一个 **public** package。
+> the package automatically inherits the access permissions **(but not the visibility)**
+> of the linked repository
+> —— *Configuring a package's access control and visibility*
+>
+> When you first publish a package, the default visibility is **private**.
+> —— *Working with the Container registry*
 
-而现行要求是 package 保持 **private**，且明确禁止把 package 改成 public。
-这两条在当前仓库可见性下冲突。**必须 Owner 先裁决**，可选处置：
+package 继承的是**访问权限**（谁能读写），不是**可见性**（是否匿名可拉）。
+首次发布默认 private。所以「仓库 public → package 必然 public」是错误推论。
 
-| 选项 | 说明 | 谁来做 |
-| --- | --- | --- |
-| a | 首次推送后立刻在 GitHub UI 把该 package 改为 private | Owner（需 package admin 权限） |
-| b | 接受 package 为 public | Owner 书面推翻「保持 private」这一条 |
-| c | 改变仓库可见性 | 影响面远超本工单，不在此建议 |
+> 2026-09-20 本 runbook 初版曾写反过这一点，把它当成需要 Owner 裁决的阻塞项。
+> 查官方文档后更正。留着这条记录，是为了让后来的人知道这里曾经被判断错过一次。
 
-在裁决之前保持 `publish: dry-run`。工作流不会替 Owner 做这个决定。
+### 🔴 仍然必须实际核对
 
-> 注：`gh` CLI 的本地 token 若缺 `read:packages` scope，`gh api user/packages` 会返回 403，
-> 无法用它核对 package 可见性。核对请在 GitHub UI 的 Packages 页面进行，或用带
-> `read:packages` 的 token。
+文档说的是**默认值**，不是保证。组织策略、别人后来的手动改动，都可能让默认值不成立。
+每次首次发布后核对一次：
+
+- GitHub → 你的头像 → Packages → `cps-novel` → 右侧应显示 **Private**；
+- 或在 package settings 里确认 "Danger Zone → Change visibility" 当前是 Private；
+- 也可匿名验证：未登录状态 `docker pull ghcr.io/flightzxc/cps-novel@sha256:...`
+  应当失败（public package 允许匿名拉取）。
+
+若核对发现是 **public**：这不是"按预期"，要停下来报告 Owner。
+🔴 **不得**为了让流程继续而把它留在 public，也不得用扩权方式绕过。
+
+> 注：`gh` CLI 的本地 token 若缺 `read:packages` scope，`gh api user/packages` 会返回 403。
+> 核对请走 GitHub UI，或换一个带 `read:packages` 的 token。
 
 ## 4. Fallback：CPS 短剧形态的离线不可变归档运输
 
