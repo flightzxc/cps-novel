@@ -195,10 +195,11 @@ src/lib/flags/feature-flags.ts           Feature Flag 与写入闸
 
 ## 6. 部署工件运输
 
-- **cps-novel（本仓）primary**：GHCR 不可变 digest —— `ghcr.io/flightzxc/cps-novel@sha256:...`，VPS 侧 pull-by-digest。
-- **CPS 短剧（参照项目）**：离线 Docker 归档运输（`docker save` → SSH → `docker load`）。
-- **两者不同是刻意设计**，不是遗留不一致；**cps-novel 的 fallback** 才是 CPS 那套不可变归档运输。
-- 🔴 不得仅为「两个 CPS 项目统一」而把任一项目切换成另一项目的运输方式。
+- **cps-novel（本仓）primary**：不可变 Docker 归档 → SSH → `docker load`。
+- **CPS 短剧（参照项目）**：同上。
+- **两者现在相同，是 Owner 基于海阅 GHCR PoC 实测后主动裁决**，不是 Agent 为了统一擅自对齐。
+- GHCR 已在 Phase 2C 完成 PoC 并验证可用，但**未被选为生产运输方式**（不是「GHCR 不可用」）。
+- 🔴 不得仅为「两个 CPS 项目一致」或「registry 更现代」把任一项目切换成另一套运输方式。
 
 详见 [`docs/adr/ADR-DEPLOYMENT-ARTIFACT-DISTRIBUTION.md`](docs/adr/ADR-DEPLOYMENT-ARTIFACT-DISTRIBUTION.md)。
 

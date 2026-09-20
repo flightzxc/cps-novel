@@ -2,156 +2,172 @@
 
 ```text
 ADR_ID              = DEPLOYMENT-ARTIFACT-DISTRIBUTION
-DECISION_STATUS     = ACCEPTED
+DECISION_STATUS     = ACCEPTED（2026-09-20 第二次裁决，推翻同日第一次裁决）
 DECISION_DATE       = 2026-09-20
-DECIDED_BY          = Owner（GHCR Bootstrap 工单）
-SCOPE               = cps-novel（CPS 海阅）的部署工件运输；并记录 CPS 短剧的现状以作对照
+DECIDED_BY          = Owner
+SCOPE               = cps-novel（CPS 海阅）的部署工件运输；并记录 CPS 短剧现状以作对照
+GHCR_STATUS         = POC_COMPLETED_NOT_SELECTED
 BUILDS_ON           = ADR-PREPRODUCTION-MAINTENANCE-DEPLOYMENT（Phase 2B）
-IMPLEMENTED_BY      = .github/workflows/ghcr-release.yml
-                      scripts/preproduction/build-release-artifact.sh（Phase 2B 既有，本轮未改）
-RUNBOOK             = docs/operations/GHCR_RELEASE_AND_FALLBACK.md
+IMPLEMENTED_BY      = scripts/preproduction/build-release-archive.sh
+                      scripts/preproduction/verify-release-archive.sh
+RUNBOOK             = docs/operations/ARCHIVE_RELEASE_TRANSPORT.md
 ```
 
 ## 1. 决定
 
-**两个 CPS 项目使用不同的部署工件运输方式，这是刻意的，不是遗留不一致。**
-
-### CPS 短剧（参照项目）
-
-```text
-Primary artifact transport:
-  approved commit → 构建不可变镜像 → docker save → 归档 → SHA256
-  → SSH/SCP → docker load
-```
-
-### CPS 海阅（cps-novel，本仓）
+**cps-novel 的生产 artifact transport 是「不可变 Docker 归档 → SSH → docker load」，
+与 CPS 短剧相同。GHCR 经完整 PoC 验证可用，但不被选为生产运输方式。**
 
 ```text
-Primary artifact transport:
-  Owner-approved 40-hex commit
-    → GitHub Actions（.github/workflows/ghcr-release.yml）
-    → 仓库既有 Docker build contract
-    → ghcr.io/flightzxc/cps-novel
-    → 不可变 repo@sha256 digest
-    → release manifest
-    → Phase 2C VPS pull-by-digest
+approved 40-hex Git commit
+  → build immutable image（仓库既有 build contract）
+  → 验证 build metadata（平台 / revision label / config digest）
+  → docker save
+  → zstd 压缩
+  → SHA256 manifest
+  → SCP/SSH → haiyue-vps
+  → VPS 上校验 SHA256
+  → docker load
+  → 核对 image config digest
+  → 核对 org.opencontainers.image.revision
+  → Phase 2C release manifest → 部署
 ```
 
-### CPS 海阅的 fallback
+## 2. 🔴 两个 CPS 项目现在用同一套运输方式——这不是 LLM 的「统一」
 
-```text
-Fallback artifact transport（仅在 FALLBACK_REQUIRED=YES 时启用）:
-  与 CPS 短剧同形态的离线不可变归档运输
-```
+| 项目 | Primary artifact transport |
+| --- | --- |
+| CPS 短剧 | immutable Docker archive → SSH → `docker load` |
+| CPS 海阅（本仓） | immutable Docker archive → SSH → `docker load` |
 
-## 2. 🔴 给未来的 Claude / Codex / Cursor / Luna
+**两边相同，是 Owner 在海阅这边完整跑过 GHCR PoC、评估实际运维复杂度之后主动裁决的结果，
+不是任何 Agent 为了「两个项目形式统一」擅自对齐。**
 
-**不得仅仅为了「两个 CPS 项目统一」，就把其中一个项目的 artifact transport
-擅自切换成另一个项目的那套。**
-
-这条差异是经过决策的结果，不是没人来得及统一。看到两个项目运输方式不同时，
-正确反应是读本 ADR，而不是提一个「对齐」的重构。要改，必须有 Owner 的新决策，
+🔴 反过来也成立：**未来的 Claude / Codex / Cursor / Luna 不得仅仅因为「两个项目应该一致」
+或「registry 更现代」就把任一项目切换成另一套运输方式。** 要改必须有 Owner 的新决策，
 并在本 ADR 追加一条记录。
 
-## 3. 为什么不同
-
-**CPS 短剧不动**：它已经有一条成熟稳定的 archive 发布链在生产上跑着。
-为了形式统一去重构一条正在服务生产流量的发布流程，收益是审美上的，风险是真实的。
-
-**cps-novel 走 GHCR**：它是新建的部署体系，Phase 2B 已经围绕 **registry digest**
-建立了 release manifest 与身份契约——`ADR-PREPRODUCTION-MAINTENANCE-DEPLOYMENT`
-写明「发布工件的权威身份只有 approved 40-hex commit + registry `repo@sha256:...`」，
-`build-release-artifact.sh` 在拿不到 `repo@sha256` 时直接拒绝
-（`reason=immutable_registry_digest_missing`）。这套契约本来就以 registry 为前提，
-GHCR 是与之最贴合的运输方式，而不是额外引入的一层。
-
-换句话说：短剧是「已有成熟链路，不重构」；海阅是「新链路，从一开始就按 digest 设计」。
-
-## 4. 不可变身份
-
-两条路线都只认不可变身份，可变 tag 一律不构成发布身份。
-
-**GHCR 路线（primary）** 的身份至少包含：
-
-- Owner 批准的 40-hex Git commit；
-- `ghcr.io/flightzxc/cps-novel@sha256:...`；
-- 镜像标签 `org.opencontainers.image.revision`，必须等于该 commit；
-- release manifest（`.tmp/preproduction-release/<commit>.json`）里 commit 与 digest 一致。
-
-**归档 fallback 路线** 的身份至少包含：
-
-- Owner 批准的 40-hex Git commit；
-- 归档文件的 SHA256；
-- Docker image / config digest；
-- `org.opencontainers.image.revision` 标签。
-
-🔴 **两条路线都禁止退化成**：
+## 3. 决策演进（不要抹掉这段）
 
 ```text
-git pull main            # 运输的是源码不是工件，且 main 不是批准过的 commit
-VPS 上临时 build         # 产物不可重现，身份无法事前批准
-latest tag               # 可变引用，不构成身份
+2026-09-20 第一次裁决  选定 GHCR 作为 cps-novel 的 primary transport
+        ↓
+        完成真实 PoC（见 §4，全部通过）
+        ↓
+        PoC 暴露出为达成 private package 所需的额外运维面（见 §5）
+        ↓
+2026-09-20 第二次裁决  Owner 主动改为 CPS 形态的不可变归档运输
 ```
 
-## 5. fallback 的触发与边界
+保留这段是因为：不写下来的话，后来的人看到仓库里既有 GHCR 的痕迹又不用它，只能靠猜——
+而最常见的猜测（「大概没跑通」）恰恰是错的。
 
-fallback **只记录，不在本轮实现**。真正命中 `FALLBACK_REQUIRED=YES` 之后另开小工单。
+## 4. GHCR PoC 结果：技术上跑通了
 
-触发条件（见 runbook 的失败预算一节）：GHCR 连续两次尝试失败，且失败原因属于
-auth / package 权限 / registry 连通性 / push-pull 可靠性，并且没有明确、低风险、
-确定性的修复。
+🔴 **不得把本 ADR 描述成「GHCR 不可用」。** 正确表述是：
 
-🔴 **不得用以下方式硬顶过去**：扩大 token scope、把 package 改成 public、
-动用 repository admin、放松仓库安全设置、修改 VPS SSH/安全配置。
-这些都不是"修好了"，是把问题换成了一个更难发现的问题。
+> **GHCR technically works, but is not selected as the production transport for
+> current cps-novel deployment.**
 
-## 6. 权限姿态
+实测全部通过（run 35492063736，approved commit `8609fa0b…`）：
 
-发布工作流只用 `GITHUB_TOKEN`，**不为 CI 创建 PAT**。权限最小化：
+| 项 | 结果 |
+| --- | --- |
+| GitHub Actions 登录 GHCR（`GITHUB_TOKEN`，`packages: write`） | ✅ |
+| push image | ✅ |
+| 取得 `repo@sha256` digest | ✅ `sha256:75392b67…` |
+| pull-by-digest | ✅ |
+| `org.opencontainers.image.revision` == approved commit | ✅ |
 
-```yaml
-permissions:
-  contents: read      # 文件顶层默认
-# packages: write 只加在真正推送的那个 job 上
+## 5. 为什么不选它
+
+PoC 同时暴露出一条真实约束：
+
+```text
+public repository + Actions/GITHUB_TOKEN 创建 package
+  → 实际产出 public package
 ```
 
-本仓库 Actions 的默认 `GITHUB_TOKEN` 权限是 `read`；job 级显式声明覆盖该默认值。
+（GitHub 文档：「by default if a workflow **creates** a package using the `GITHUB_TOKEN`,
+the package **inherits the visibility and permissions model of the repository** where the
+workflow is run」。）
 
-## 7. 未决项（Owner）
+要得到 private package，必须额外引入：classic PAT、private-first bootstrap、
+package 删除重建、Manage Actions access 配置、每次发布后的额外可见性验证、
+「public 仓库授权给 private package 时 fork 可能可读」这条敞口，
+以及 source-label 在后续 push 时是否会重新关联这一条仍需继续验证的行为。
 
-### 7.1 🔴 package 可见性 —— 实测为 public，与要求冲突，待 Owner 处置
+对照当前实际场景——**单台 VPS、低发布频率、已有一条 CPS 侧成熟验证过的归档运输链**——
+这些复杂度换来的收益不足。
 
-**实测结论优先于文档。** 2026-09-20 首次推送后验证：
+附带收益：生产路径不再需要 GHCR PAT，VPS 上不再需要 `docker login ghcr.io`，
+也不需要 `read:packages` 凭据。**整条链上少了一个外部依赖与一份长期凭据。**
+
+## 6. 只改运输，身份纪律一条不动
+
+Phase 2B 建立的以下纪律全部原样保留：approved 40-hex commit、不可变镜像、
+image/config digest、`org.opencontainers.image.revision` 标签、release manifest、
+不可变 release 目录、稳定的 Compose/数据身份、rollback 契约。
+
+**本次只修改 artifact transport 这一项。**
+
+### 归档路线的身份构成
+
+```text
+identity = approved_git_commit
+         + image_config_digest   （save/load 不保留 RepoDigest，config digest 才跨主机稳定）
+         + archive_sha256        （传输完整性）
+```
+
+🔴 `image_tag` 只是人类可读的定位符，**单独不构成身份**——tag 在任何一台机器上都能被指到别的镜像。
+
+🔴 **禁止退化成**：`git pull` / VPS 上临时 build / `latest` tag / 可变镜像引用。
+
+### 关于「归档可重现性」的准确表述
+
+`docker save` 的输出与其压缩结果**不保证跨次构建逐字节相同**。因此 `archive_sha256`
+的作用是**传输完整性**（这一份归档在路上没被改动），不是「同一 commit 必然产出同一归档」。
+跨主机稳定的身份是 **config digest**。不要把 archive SHA256 当成可重现性证明。
+
+## 7. 现存的 GHCR PoC 工件
+
+```text
+ghcr.io/flightzxc/cps-novel
+visibility = public
+状态       = POC artifact only, NOT production source
+```
+
+它没有 VPS 消费者、没有生产依赖。**不得**在任何 runbook 或脚本中把它当作生产来源。
+是否删除见 runbook；本轮不执行删除。
+
+## 8. 未决项
+
+### 8.1 🔴 `release.sh` 的 manifest 契约与归档运输不兼容（阻塞 Phase 2C）
+
+`scripts/preproduction/release.sh` 当前要求：
 
 ```bash
-docker logout ghcr.io
-docker pull ghcr.io/flightzxc/cps-novel@sha256:75392b67...
-# → 退出码 0，Downloaded newer image  ⇒ 匿名可拉 ⇒ PUBLIC
+[[ "$manifest_image" =~ @sha256:[0-9a-f]{64}$ ]] || REFUSED reason=manifest_identity
+export CPS_NOVEL_APP_IMAGE="$manifest_image"
 ```
 
-官方文档的说法（"inherits the access permissions **but not the visibility**"、
-"When you first publish a package, the default visibility is **private**"）
-在这条路径上**不成立**：从 public 仓库经 Actions + `GITHUB_TOKEN` 发布的 package，
-实际是 public。
+`repo@sha256:` 是 **registry manifest digest**。`docker load` 进来的镜像没有 RepoDigest，
+compose 无法用 `name@sha256:` 解析本地镜像。因此归档运输的 manifest 喂不进现有 `release.sh`。
 
-这与「package 保持 private」的要求冲突。工单同时禁止把 package 改成 public——
-而它现在已经是 public，不是被谁改的，是默认结果。因此这是需要 Owner 处置的项，
-不是实现层能自行消化的。
+需要的最小改动（属 `scripts/preproduction/**`，本轮授权明确排除，**未执行**）：
+让 `release.sh` 接受 `transport: "archive"` 的 manifest，用 `image_tag` 作为
+`CPS_NOVEL_APP_IMAGE`，并在使用前用 `image_config_digest` 核对本地镜像身份。
 
-> 本 ADR 初版先写成"很可能 public、需裁决"，随后据官方文档改成"不会 public、无冲突"，
-> 最后被实测推翻回来。两次都记下来：**这类问题只能靠实测定性，文档的默认值说法
-> 不可作为判据。**
+### 8.2 版本身份漂移
 
-### 7.2 版本身份漂移
+Git tag `v0.2.0` 与 `package.json` 的 `0.1.0` 不一致。本轮不改。生产身份继续依赖
+approved commit + config digest + archive SHA256，不依赖人类可读版本号。
 
-Git tag `v0.2.0` 与 `package.json` 的 `0.1.0` 不一致。Phase 2B 已记录该漂移并
-声明「commit 与 digest 才是权威」（`build-release-artifact.sh` 把这句话写进了
-manifest 的 `versionIdentityIssue` 字段）。Phase 2C 必须在使用人类可读版本号作为
-发布策略之前解决它。本 ADR 不解决。
+## 9. 后果
 
-## 8. 后果
-
-- 海阅的发布从此有一个可被下游按 digest 消费的不可变工件，VPS 侧是 pull-by-digest，
-  不再需要把镜像通过 SSH 搬过去；
-- 代价是发布链多了一个外部依赖（GHCR 的可用性与鉴权），这正是要保留 fallback 的原因；
-- 两个 CPS 项目的运输方式长期不同，需要本 ADR 一直存在来解释这件事。
+- 发布链不再依赖 GHCR 的可用性与鉴权，也不需要在 VPS 上放 registry 凭据；
+- 代价是工件要经 SCP 搬运（数百 MB 级），发布耗时取决于上行带宽；
+- 构建主机成为发布链的一环：必须保证构建出的镜像平台与 VPS 一致
+  （`build-release-archive.sh` 已加显式平台断言，默认 `linux/amd64`）；
+- 两个 CPS 项目的运输方式现在相同，需要本 ADR 一直存在来解释「为什么相同」，
+  正如它此前解释「为什么不同」。

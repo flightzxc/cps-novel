@@ -71,6 +71,7 @@ Owner 授权：**Codex 额度不足期间，Claude 可以直接写入 Codex 独�
 | 2026-09-19 | GitHub Actions local-X8 平台测试修复 | `tests/backend/local-x8/x8-local-wal-gc-launchd.test.ts`（必要时 + `scripts/x8-local-wal-gc-launchd.sh`） | Claude（独立会话） |
 | 2026-09-20 | PR #10 收口 + PR #14 stacked 归一化 | PR 合并与 base 改指，无仓库文件写入 | Claude |
 | 2026-09-20 | Phase 2C · GHCR Bootstrap + 部署工件运输固化 | `.github/workflows/ghcr-release.yml`（新增）、`docs/adr/ADR-DEPLOYMENT-ARTIFACT-DISTRIBUTION.md`（新增）、`docs/operations/GHCR_RELEASE_AND_FALLBACK.md`（新增）、`docs/governance/P1_RISK_AND_DEBT_REGISTER.md`、`CLAUDE.md`（仅事实指针）、`CHANGELOG.md`（仅生成器） | Claude |
+| 2026-09-20 | Phase 2C · artifact transport 切换为不可变归档（Owner 推翻同日 GHCR 裁决） | `scripts/preproduction/build-release-archive.sh`、`scripts/preproduction/verify-release-archive.sh`（均为**新增**）、`tests/backend/runtime/preproduction-archive-contract.test.ts`（新增）、`docs/adr/`、`docs/operations/`、`CLAUDE.md`、`CHANGELOG.md`、删除 `.github/workflows/ghcr-release.yml` | Claude |
 
 新增任务请在此表追加一行，不要另起文档。
 
@@ -80,6 +81,14 @@ Owner 授权：**Codex 额度不足期间，Claude 可以直接写入 Codex 独�
 需要一条能从 Git 追溯的记录。该轮的授权边界同时**明确排除**了
 `infra/`、`scripts/preproduction/**`、`Dockerfile`、`docker-compose.yml` 与后端运行时代码——
 必须改动这些时要求 STOP 并报告，实际执行中未触碰其中任何一个。
+
+🔴 **2026-09-20 第二轮（artifact transport 切换）确实写入了 Codex 独占目录**：
+`scripts/preproduction/` 与 `tests/backend/`。两者都由该轮工单**显式点名**
+（工单 §5 指定新增 `scripts/preproduction/build-release-archive.sh`，§13 要求配套测试）。
+边界是**只新增文件**：`scripts/preproduction/release.sh`、`build-release-artifact.sh`、
+`infra/`、`Dockerfile`、`docker-compose.yml` 一行未改。
+其中 `release.sh` 的 manifest 契约与归档运输不兼容，属**已识别但未执行**的改动，
+已记录在 `ADR-DEPLOYMENT-ARTIFACT-DISTRIBUTION` §8.1，留待 Owner 另行授权。
 
 ## 6. 被本例外解除阻塞、但仍待 Owner 产品决策的项
 
