@@ -1,0 +1,160 @@
+# Installed under /etc/nginx/conf.d on Ubuntu nginx 1.24.x.
+limit_req_zone $binary_remote_addr zone=cps_preprod_general:10m rate=10r/s;
+limit_req_zone $binary_remote_addr zone=cps_preprod_login:10m rate=2r/s;
+limit_req_zone $binary_remote_addr zone=cps_preprod_api:10m rate=5r/s;
+limit_req_status 429;
+
+upstream cps_novel_preprod_web {
+    server __UPSTREAM__;
+    keepalive 16;
+}
+
+server {
+    listen 80 default_server;
+    server_name _;
+    return 444;
+}
+
+server {
+    listen 80;
+    server_name www.bangbangji.cloud;
+    location ^~ /.well-known/acme-challenge/ {
+        root /var/lib/letsencrypt;
+        default_type text/plain;
+        try_files $uri =404;
+        include /etc/nginx/snippets/cps-novel-preprod-security.conf;
+    }
+    location / { return 301 https://www.bangbangji.cloud$request_uri; }
+}
+
+server {
+    listen 80;
+    server_name zbcwf.bangbangji.cloud;
+    location ^~ /.well-known/acme-challenge/ {
+        root /var/lib/letsencrypt;
+        default_type text/plain;
+        try_files $uri =404;
+        include /etc/nginx/snippets/cps-novel-preprod-security.conf;
+    }
+    location / { return 301 https://zbcwf.bangbangji.cloud$request_uri; }
+}
+
+server {
+    listen 443 ssl http2;
+    server_name www.bangbangji.cloud;
+    ssl_certificate /etc/letsencrypt/live/www.bangbangji.cloud/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/www.bangbangji.cloud/privkey.pem;
+    access_log /var/log/nginx/cps-novel-preprod-public.access.log;
+    error_log /var/log/nginx/cps-novel-preprod-public.error.log warn;
+    error_page 503 /__preprod_maintenance.html;
+
+    location = /__preprod_maintenance.html {
+        internal;
+        root /opt/cps-novel/shared/maintenance;
+        include /etc/nginx/snippets/cps-novel-preprod-security.conf;
+    }
+    location ^~ /.well-known/acme-challenge/ {
+        root /var/lib/letsencrypt;
+        default_type text/plain;
+        try_files $uri =404;
+        include /etc/nginx/snippets/cps-novel-preprod-security.conf;
+    }
+    # Defense in depth for RC-9: public host never proxies admin surfaces.
+    location ~ ^/(?:dashboard|novels|catalog-sync|promo-links|previews|home-carousel|templates|articles|categories|tags|tasks|revenue|settings|channel-accounts|login|two-factor)(?:/|$) {
+        include /etc/nginx/snippets/cps-novel-preprod-security.conf;
+        return 404;
+    }
+    location ^~ /api/admin/ {
+        include /etc/nginx/snippets/cps-novel-preprod-security.conf;
+        return 404;
+    }
+    location = /api/admin {
+        include /etc/nginx/snippets/cps-novel-preprod-security.conf;
+        return 404;
+    }
+    location ^~ /api/ {
+        include /etc/nginx/snippets/cps-novel-preprod-protected.conf;
+        limit_req zone=cps_preprod_api burst=10 nodelay;
+        proxy_pass http://cps_novel_preprod_web;
+        include /etc/nginx/snippets/cps-novel-preprod-proxy.conf;
+    }
+    location ^~ /_next/static/ {
+        include /etc/nginx/snippets/cps-novel-preprod-protected.conf;
+        limit_req zone=cps_preprod_general burst=20 nodelay;
+        proxy_pass http://cps_novel_preprod_web;
+        include /etc/nginx/snippets/cps-novel-preprod-proxy.conf;
+        expires 1h;
+        add_header Cache-Control "private, max-age=3600" always;
+    }
+    location / {
+        include /etc/nginx/snippets/cps-novel-preprod-protected.conf;
+        limit_req zone=cps_preprod_general burst=20 nodelay;
+        proxy_pass http://cps_novel_preprod_web;
+        include /etc/nginx/snippets/cps-novel-preprod-proxy.conf;
+    }
+}
+
+server {
+    listen 443 ssl http2;
+    server_name zbcwf.bangbangji.cloud;
+    ssl_certificate /etc/letsencrypt/live/zbcwf.bangbangji.cloud/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/zbcwf.bangbangji.cloud/privkey.pem;
+    access_log /var/log/nginx/cps-novel-preprod-admin.access.log;
+    error_log /var/log/nginx/cps-novel-preprod-admin.error.log warn;
+    error_page 503 /__preprod_maintenance.html;
+
+    location = /__preprod_maintenance.html {
+        internal;
+        root /opt/cps-novel/shared/maintenance;
+        include /etc/nginx/snippets/cps-novel-preprod-security.conf;
+    }
+    location ^~ /.well-known/acme-challenge/ {
+        root /var/lib/letsencrypt;
+        default_type text/plain;
+        try_files $uri =404;
+        include /etc/nginx/snippets/cps-novel-preprod-security.conf;
+    }
+    location = /login {
+        include /etc/nginx/snippets/cps-novel-preprod-protected.conf;
+        limit_req zone=cps_preprod_login burst=3 nodelay;
+        proxy_pass http://cps_novel_preprod_web;
+        include /etc/nginx/snippets/cps-novel-preprod-proxy.conf;
+    }
+    location ^~ /api/health {
+        include /etc/nginx/snippets/cps-novel-preprod-protected.conf;
+        limit_req zone=cps_preprod_api burst=10 nodelay;
+        proxy_pass http://cps_novel_preprod_web;
+        include /etc/nginx/snippets/cps-novel-preprod-proxy.conf;
+    }
+    location ^~ /api/admin/ {
+        include /etc/nginx/snippets/cps-novel-preprod-protected.conf;
+        limit_req zone=cps_preprod_api burst=10 nodelay;
+        proxy_pass http://cps_novel_preprod_web;
+        include /etc/nginx/snippets/cps-novel-preprod-proxy.conf;
+    }
+    location = /api/admin {
+        include /etc/nginx/snippets/cps-novel-preprod-protected.conf;
+        limit_req zone=cps_preprod_api burst=10 nodelay;
+        proxy_pass http://cps_novel_preprod_web;
+        include /etc/nginx/snippets/cps-novel-preprod-proxy.conf;
+    }
+    location ~ ^/(?:dashboard|novels|catalog-sync|promo-links|previews|home-carousel|templates|articles|categories|tags|tasks|revenue|settings|channel-accounts|two-factor)(?:/|$) {
+        include /etc/nginx/snippets/cps-novel-preprod-protected.conf;
+        limit_req zone=cps_preprod_api burst=10 nodelay;
+        proxy_pass http://cps_novel_preprod_web;
+        include /etc/nginx/snippets/cps-novel-preprod-proxy.conf;
+    }
+    location / {
+        include /etc/nginx/snippets/cps-novel-preprod-security.conf;
+        return 404;
+    }
+}
+
+server {
+    listen 443 ssl default_server;
+    server_name _;
+    ssl_certificate /etc/letsencrypt/live/www.bangbangji.cloud/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/www.bangbangji.cloud/privkey.pem;
+    include /etc/nginx/snippets/cps-novel-preprod-security.conf;
+    return 404;
+}

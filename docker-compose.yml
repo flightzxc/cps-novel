@@ -85,10 +85,14 @@ services:
       NEXT_PUBLIC_BUILD_VERSION: ${NEXT_PUBLIC_BUILD_VERSION:?NEXT_PUBLIC_BUILD_VERSION is required}
       SITE_URL: ${SITE_URL:?SITE_URL is required}
       SITEMAP_STATIC_DIR: /app/runtime/static-sitemaps
-      TRACKING_HASH_SALT: ${TRACKING_HASH_SALT:?TRACKING_HASH_SALT is required}
+      # Production/preproduction may supply this value through a stable Docker
+      # secret instead of placing key material in the compose env file.
+      TRACKING_HASH_SALT: ${TRACKING_HASH_SALT:-}
+      TRACKING_HASH_SALT_FILE: ${TRACKING_HASH_SALT_FILE:-}
       TZ: ${TZ:?TZ is required}
       ADMIN_CANONICAL_ORIGIN: ${ADMIN_CANONICAL_ORIGIN:-http://127.0.0.1:3000}
-      TOTP_ENCRYPTION_KEY: ${TOTP_ENCRYPTION_KEY:?TOTP_ENCRYPTION_KEY is required}
+      TOTP_ENCRYPTION_KEY: ${TOTP_ENCRYPTION_KEY:-}
+      TOTP_ENCRYPTION_KEY_FILE: ${TOTP_ENCRYPTION_KEY_FILE:-}
       CHANNEL_CREDENTIAL_ACTIVE_KEY_VERSION: ${CHANNEL_CREDENTIAL_ACTIVE_KEY_VERSION:?CHANNEL_CREDENTIAL_ACTIVE_KEY_VERSION is required}
       CHANNEL_CREDENTIAL_ENCRYPTION_KEY_V1_FILE: /run/secrets/channel_credential_encryption_key_v1
       CHANNEL_CREDENTIAL_FINGERPRINT_KEY_FILE: /run/secrets/channel_credential_fingerprint_key
@@ -112,6 +116,9 @@ services:
       # only; unset (Level 0, production) is byte-for-byte today's behaviour.
       PROMO_CLAIM_ROLES: ${PROMO_CLAIM_ROLES:-}
       PROMO_CLAIM_USER_IDS: ${PROMO_CLAIM_USER_IDS:-}
+      # RC-6 safety valve. Preproduction pins this to 1 in its environment;
+      # the root compose must pass it through or /go keeps writing events.
+      PUBLIC_TRACKING_WRITE_DISABLED: ${PUBLIC_TRACKING_WRITE_DISABLED:-}
       # RC-10: global 2FA enforcement switch (src/lib/auth/
       # two-factor-enforcement.ts). Canonical values "true" (enforced) /
       # "false" (disabled) -- "required"/"disabled" remain accepted synonyms.
@@ -210,7 +217,11 @@ services:
 
   worker:
     <<: *app-runtime
-    command: ["tsx", "worker/index.ts"]
+    command: ["bash", "scripts/start-worker.sh"]
+    # Must exceed WORKER_SHUTDOWN_DRAIN_TIMEOUT_MS plus cleanup time. The
+    # preproduction preflight validates the configured pair instead of
+    # assuming this default remains safe after an operator override.
+    stop_grace_period: ${WORKER_STOP_GRACE_PERIOD:-45s}
     environment:
       NODE_ENV: production
       DATABASE_URL: ${P1_12_WORKER_DATABASE_URL:?P1_12_WORKER_DATABASE_URL is required}

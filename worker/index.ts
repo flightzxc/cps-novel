@@ -23,6 +23,7 @@ import { createArticleGenerateBatchWorkerHandlers } from "./handlers/article-gen
 import {
   createWorkerFailureWebhookReporterFromEnv,
   parseShutdownDrainTimeoutEnv,
+  runWorkerProcess,
   runWorker,
 } from "./runtime";
 
@@ -90,11 +91,8 @@ export async function main(): Promise<void> {
   );
   const failureReporter = createWorkerFailureWebhookReporterFromEnv(process.env);
   const prisma = new PrismaClient();
-  const controller = new AbortController();
-  const stop = () => controller.abort();
-  process.once("SIGINT", stop);
-  process.once("SIGTERM", stop);
-  try {
+  await runWorkerProcess({
+    run: async (signal) => {
     const handlers = createWorkerHandlers(prisma);
     const allowlist = resolveWorkerStartupAllowlist(
       process.env.WORKER_TASK_ALLOWLIST,
@@ -105,15 +103,13 @@ export async function main(): Promise<void> {
       workerId: process.env.WORKER_ID ?? `worker-${process.pid}`,
       handlers,
       allowlist,
-      signal: controller.signal,
+      signal,
       shutdownDrainTimeoutMs,
       onTaskFailure: failureReporter?.onTaskFailure,
     });
-  } finally {
-    process.removeListener("SIGINT", stop);
-    process.removeListener("SIGTERM", stop);
-    await prisma.$disconnect();
-  }
+    },
+    disconnect: () => prisma.$disconnect(),
+  });
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

@@ -3,15 +3,70 @@
 <!-- 本文件由 `node scripts/generate-changelog.mjs --write` 生成，请勿手工编辑。 -->
 <!-- 叙述性内容写进 commit message；Owner/架构决策写 docs/adr/。 -->
 
-生成时间：2026-09-18 · 共 603 个 commit
+生成时间：2026-09-19 · 共 658 个 commit
+- `ba469ec` 2026-09-20 test(preprod): lock deployment safety contracts  — _codex · GPT-5_
+- `c55b3dd` 2026-09-20 feat(preprod): implement immutable maintenance releases  — _codex · GPT-5_
+- `47d12e9` 2026-09-20 feat(preprod): add protected host-nginx edge  — _codex · GPT-5_
+- `b33035b` 2026-09-20 docs(checklist): 精确化品牌名配置口径——首次开通 / 生产首次品牌切换才写入  — _claude-code · Claude Opus 5_
+- `6154ad7` 2026-09-20 fix(docs): 更正分类查询慢的归因——真因是 channel_app 零统计，不是 COLLATE  — _claude-code · Claude Opus 5_
+- `84d0e19` 2026-09-20 perf(taxonomy): 先物化目标源条目，公共分类查询 2696ms → 15ms；题材导航移动端改单行横滚  — _claude-code · Claude Opus 5_
+- `4a0809b` 2026-09-20 fix(home): 修 line-clamp 被同层 display 顶掉导致简介截断静默失效  — _claude-code · Claude Opus 5_
+- `1fe01e6` 2026-09-20 feat(home): 收紧首屏信息密度，桌面第一排封面 28%→100%，移动 0.93→1.86 排  — _claude-code · Claude Opus 5_
+- `d02036d` 2026-09-20 merge: 同步 integration 最新 base（含 #11 / #12 两条基线 CI 修复）  — _claude-code · Claude Opus 5_
+- `978d6c4` 2026-09-20 merge: 清掉 Next 16 遗留的 62 条 tsc 基线错误 (#12)  — _claude-code · Claude Opus 5_
+- `307f5f1` 2026-09-20 merge: 同步 integration 最新 base（含 #11 平台测试修复）  — _claude-code · Claude Opus 5_
+- `99f86c1` 2026-09-20 merge: local-X8 平台测试在 Linux runner 上真实跑起来 (#11)  — _claude-code · Claude Opus 5_
+- `7e3a72f` 2026-09-20 revert(brand): 撤回站点名默认值迁移，改为后台配置并立清单  — _claude-code · Claude Opus 5_
+- `6038bd1` 2026-09-20 feat(home): 露头轮播按主推数量分三档，露头整块 inert 隔离  — _claude-code · Claude Opus 5_
+- `c2f6404` 2026-09-19 feat(home): 主推 banner 改为左右露头的居中轮播  — _claude-code · Claude Opus 5_
+- `d0e46fb` 2026-09-19 feat(home): 首页主推位改为居中 banner，封面以清晰形态回到主位  — _claude-code · Claude Opus 5_
+- `6309935` 2026-09-19 fix(types): 收窄测试 helper 的 env 形参，清掉 Next 16 遗留的 62 条 tsc 基线错误  — _claude-code · Claude Opus 5_
+- `fbe31a8` 2026-09-19 merge: 首页主推统一走 Hero（竖封面模糊氛围底）  — _claude-code · Claude Opus 5_
+- `0509f9d` 2026-09-19 feat(home): 首页主推统一走 Hero，缺横版素材时用竖封面做模糊氛围底  — _claude-code · Claude Sonnet 5 · reviewed: claude-code · Claude Opus 5_
+- `950f9b3` 2026-09-19 feat(brand): 新环境站点名默认值改为 PulseNovel  — _claude-code · Claude Opus 5_
+- `d81a716` 2026-09-19 test(local-x8): 让两份 local-X8 测试在 Linux runner 上真实跑起来  — _claude-code · Claude Opus 5_
+- `0b024e3` 2026-09-19 docs(adr): 记录 Codex 额度不足期间的目录分权例外  — _claude-code · Claude Opus 5_
+- `c1bee8b` 2026-09-19 chore(baselines): 重生成首页三张视觉基准图  — _claude-code · Claude Opus 5_
+- `26130de` 2026-09-19 merge: PulseNovel 品牌接入 + 首页主推位留白收紧  — _claude-code · Claude Opus 5_
+- `ae28a4e` 2026-09-19 fix(home): 按评审稿收紧主推位到作品区的留白，修复移动端 CTA 被裁  — _claude-code · Claude Opus 5_
+- `80e6316` 2026-09-19 feat(brand): PulseNovel 品牌接入（字标 + 暖黄强调色 + 胶囊主 CTA）  — _claude-code · Claude Sonnet 5 · reviewed: claude-code · Claude Opus 5_
+- `4ba5bd9` 2026-09-19 merge: p2-12 vertical acceptance expects warnings[] into integration/2026-09-16-night  — _claude-code · Fable 5.1_
+- `86941f1` 2026-09-19 test(publish): p2-12 vertical acceptance expects warnings[] after preview decoupling  — _claude-code · Claude Sonnet 5_
+- `e96d262` 2026-09-19 merge: runtime-dir test isolation into integration/2026-09-16-night  — _claude-code · Fable 5.1 · reviewed: claude-code · Claude Opus 5_
+- `5dd0a4f` 2026-09-19 test(x8): file-scoped isolation guard (aliases, integration root, p1-12 runtime), canary watches both runtime dirs  — _claude-code · Claude Sonnet 5_
+- `8bbd25d` 2026-09-19 fix(x8): x8Env() extra-env param must not require NodeJS.ProcessEnv  — _claude-code · Claude Sonnet 5_
+- `c569b31` 2026-09-19 fix(x8): leak canary must set process.exitCode, not just throw  — _claude-code · Claude Sonnet 5_
+- `22044aa` 2026-09-19 test(x8): vitest default X8_RUNTIME_DIR, leak canary, static isolation guard  — _claude-code · Claude Sonnet 5_
+- `0db2da7` 2026-09-19 test(x8): isolate every runtime-dir-touching spawn behind a temp X8_RUNTIME_DIR  — _claude-code · Claude Sonnet 5_
+- `56dd433` 2026-09-19 merge: ADR-WAL-RETENTION-X8 into integration/2026-09-16-night  — _claude-code · Fable 5.1_
+- `bbc5e23` 2026-09-19 merge: X8 backup_role pgpass reconcile (cps_novel + replication)  — _codex · GPT-5-Codex · reviewed: claude-code · Claude Opus 5_
+- `5008dee` 2026-09-19 docs(adr): WAL retention for X8 -- anchored cleanup, timer never applies, first-apply owner gate, local auto-apply profile  — _claude-code · Claude Sonnet 5 · reviewed: claude-code · Fable 5.1_
+- `8133347` 2026-09-19 merge: governance workflow source + preview backfill recovery into integration/2026-09-16-night  — _claude-code · Fable 5.1_
+- `91eca23` 2026-09-19 fix(x8): pgpass reconcile removes shadowing wildcard rules, canonical rows first, unreadable file refused; deployment note corrected  — _Claude Fable 5.1_
+- `6758e71` 2026-09-19 chore(governance): one workflow source for every agent, generated changelog, identity drift detection  — _claude-code · Claude Opus 5_
+- `48fae2e` 2026-09-19 test+docs(x8): pgpass reconcile scenarios A-E, no-wildcard, no-leak; deployment note  — _Claude Fable 5.1_
+- `c557d0d` 2026-09-19 fix(x8): reconcile backup_role pgpass with cps_novel + replication rules (idempotent, atomic)  — _Claude Fable 5.1_
 - `bbcd2c1` 2026-09-18 feat(articles): select all matching and publish across pages  — _Claude Opus 5_
+- `7b8d176` 2026-09-18 merge: WAL retention local auto-apply (local profile)
 - `a059537` 2026-09-18 fix(publish): correct the interrupted-batch count and tighten its tests  — _Claude Opus 5_
 - `088b046` 2026-09-18 fix(publish): derive a per-article operation id for batch publish  — _Claude Opus 5_
+- `de568e0` 2026-09-18 fix(local-x8): apply-after-delete safety, history semantics, test isolation, no-leak guard hardening  — _Claude Fable 5.1_
+- `11f9ce0` 2026-09-18 docs+test: retention profiles, local relaxations, no-leak static guards  — _Claude Fable 5.1_
+- `b6e8402` 2026-09-18 feat(db): monthly positive PITR smoke (no live writes)  — _Claude Fable 5.1_
+- `61db7cb` 2026-09-18 feat(local-x8): daily wal-gc apply via LaunchAgent operator (local profile only)  — _Claude Fable 5.1_
 - `84e8991` 2026-09-18 fix(preview): scope the account hold, make release crash-resumable  — _Claude Opus 5_
 - `578d639` 2026-09-18 feat(preview): account-level deterministic-failure brake  — _Claude Opus 5_
 - `c6d8db6` 2026-09-18 feat(publish): decouple publishing from preview availability  — _Claude Opus 5_
 - `962b55b` 2026-09-18 fix(preview): add the missing preview-backfill recovery path  — _Claude Opus 5_
+- `0592cb9` 2026-09-18 merge: WAL retention Gate 5 (timer + alerts)
+- `de745c0` 2026-09-17 fix(x8): gate 5 final nits (logical-only init, marker isolation, initdb mount guard)  — _Claude Fable 5.1_
+- `36a22cd` 2026-09-17 test(x8): gate 5 review coverage  — _Claude Fable 5.1_
+- `2f6a3c5` 2026-09-17 fix(x8): gate 5 review fixes (timer degrade, logical-only, subnet env, alert dir from mounts, test-mode overrides)  — _Claude Fable 5.1_
 - `7dbe624` 2026-09-17 merge: catalog finalize recovery
+- `6aad514` 2026-09-17 test(wal-retention): cover backup-timer four-step loop + check-wal-archive.sh, update Gate 5 docs  — _Claude Fable 5.1_
+- `461b1e8` 2026-09-17 feat(alerts): add check-wal-archive.sh (Gate 5-Dev judgement 4)  — _Claude Fable 5.1_
+- `96f503a` 2026-09-17 feat(x8): expand backup-timer to a four-step daily loop, wire physical base-backup + WAL-gc dry-run  — _Claude Fable 5.1_
+- `5b8916d` 2026-09-17 fix(wal-retention): gate archive_not_writable behind --apply only  — _Claude Fable 5.1_
 - `60a518a` 2026-09-17 fix: harden catalog finalize recovery
 - `e23cdd0` 2026-09-17 fix(ui): unify live catalog progress display
 - `ddcbccd` 2026-09-17 fix(task-admin): report exact catalog progress
@@ -611,4 +666,4 @@
 - `2e053a9` 2026-08-02 Refactor add function to accept parameters
 - `c6cbde1` 2026-08-02 Initial commit
 
-<!-- 无署名 commit：203 -->
+<!-- 无署名 commit：205 -->

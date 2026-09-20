@@ -1,0 +1,85 @@
+# Host Nginx is intentionally not a service here. Ubuntu nginx 1.24 owns the
+# edge and proxies only to web's loopback binding from the root compose file.
+services:
+  postgres:
+    entrypoint: ["/bin/bash", "/opt/cps-novel-preprod/postgres-entrypoint.sh"]
+    command: ["postgres", "-c", "config_file=/etc/postgresql/postgresql.conf", "-c", "listen_addresses=*"]
+    environment:
+      P1_06_WAL_ARCHIVE_DIR: /var/lib/postgresql/wal-archive
+    volumes:
+      - ${PREPROD_SHARED_ROOT:-/opt/cps-novel/shared}/wal-archive:/var/lib/postgresql/wal-archive
+      - ${PREPROD_SHARED_ROOT:-/opt/cps-novel/shared}/backups/base:/var/lib/postgresql/base-backups
+      - ./infra/postgres/pitr/postgresql.conf.example:/etc/postgresql/postgresql.conf:ro
+      - ./infra/preproduction/postgres-entrypoint.sh:/opt/cps-novel-preprod/postgres-entrypoint.sh:ro
+      - ./scripts/db/archive-wal.sh:/app/scripts/db/archive-wal.sh:ro
+
+  web:
+    environment:
+      TRACKING_HASH_SALT: ""
+      TRACKING_HASH_SALT_FILE: /run/secrets/tracking_hash_salt
+      TOTP_ENCRYPTION_KEY: ""
+      TOTP_ENCRYPTION_KEY_FILE: /run/secrets/totp_encryption_key
+      PUBLIC_TRACKING_WRITE_DISABLED: "1"
+      ADMIN_TWO_FACTOR_ENFORCEMENT: "true"
+      BACKUP_OUTPUT_DIR: /var/lib/cps-novel/backups/logical
+      BACKUP_STATUS_FILE: /var/lib/cps-novel/backups/last-success.json
+    volumes:
+      - ${PREPROD_SHARED_ROOT:-/opt/cps-novel/shared}/backups:/var/lib/cps-novel/backups:ro
+    secrets:
+      - tracking_hash_salt
+      - totp_encryption_key
+
+  worker:
+    stop_grace_period: 45s
+
+  backup-timer:
+    image: postgres:16.14
+    restart: unless-stopped
+    command: ["/bin/bash", "/opt/cps-novel-preprod/backup-loop.sh"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PGHOST: postgres
+      PGPORT: "5432"
+      PGDATABASE: cps_novel
+      PGUSER: backup_role
+      PGPASSFILE: /run/secrets/backup_role_pgpass
+      PREPROD_BACKUP_INTERVAL_SECONDS: "86400"
+      PREPROD_LOGICAL_RETENTION_DAYS: "14"
+      PREPROD_BASE_BACKUP_MIN_AGE_SECONDS: "604800"
+    volumes:
+      - ./infra/preproduction/backup-loop.sh:/opt/cps-novel-preprod/backup-loop.sh:ro
+      - ./scripts/db/backup-logical.sh:/app/scripts/db/backup-logical.sh:ro
+      - ./scripts/db/backup-physical-base.sh:/app/scripts/db/backup-physical-base.sh:ro
+      - ./scripts/db/verify-physical-base.sh:/app/scripts/db/verify-physical-base.sh:ro
+      - ./scripts/db/wal-retention.sh:/app/scripts/db/wal-retention.sh:ro
+      - ${PREPROD_SHARED_ROOT:-/opt/cps-novel/shared}/backups:/var/lib/cps-novel/backups
+      - ${PREPROD_SHARED_ROOT:-/opt/cps-novel/shared}/wal-archive:/var/lib/postgresql/wal-archive
+    secrets:
+      - backup_role_pgpass
+    networks:
+      - runtime
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+
+networks:
+  runtime:
+    name: cps_novel_runtime
+
+volumes:
+  postgres_data:
+    name: cps_novel_postgres_data
+  sitemap_static:
+    name: cps_novel_sitemap_static
+
+secrets:
+  tracking_hash_salt:
+    file: ${PREPROD_SHARED_ROOT:-/opt/cps-novel/shared}/secrets/tracking_hash_salt
+  totp_encryption_key:
+    file: ${PREPROD_SHARED_ROOT:-/opt/cps-novel/shared}/secrets/totp_encryption_key
+  backup_role_pgpass:
+    file: ${PREPROD_SHARED_ROOT:-/opt/cps-novel/shared}/secrets/backup_role.pgpass

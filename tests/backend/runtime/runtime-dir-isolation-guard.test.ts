@@ -232,7 +232,7 @@ function maskForStructure(source: string): string {
     if (k < 0) return true;
     const c = source[k];
     if ("([{,;:=!&|?+~%^<>*-".includes(c)) return true;
-    let wordEnd = k + 1;
+    const wordEnd = k + 1;
     let wordStart = wordEnd;
     while (wordStart > 0 && /[A-Za-z0-9_$]/.test(source[wordStart - 1])) wordStart--;
     const word = source.slice(wordStart, wordEnd);
