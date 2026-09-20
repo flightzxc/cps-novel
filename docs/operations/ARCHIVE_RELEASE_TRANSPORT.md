@@ -156,7 +156,7 @@ ssh haiyue-vps 'cd /opt/cps-novel/shared/artifacts/staging && \
 | **config digest** | 镜像 config blob 的 sha256 | ✅ 身份之一。**经典 store** 的 `.Id` 报的是它 |
 | **OCI manifest digest** | 镜像清单（3KB 左右的 JSON）的 sha256 | ✅ 身份之一。**containerd store** 的 `.Id` 与 `.Descriptor.digest` 报的是它 |
 | **registry manifest digest** | registry 上 manifest 的 sha256，即 `repo@sha256:` | ❌ 本链路**不存在**：镜像从未推过任何 registry |
-| **layer digest** | 单层 tar 的 sha256 | 只核存在性与长度，不用于身份判定 |
+| **layer digest** | 单层 tar 的 sha256 | ✅ 逐层按原始字节复算并与 `layers[].digest` 核对（流式，不缓冲） |
 
 🔴 三者极易混淆的地方：containerd store 上 `RepoDigests` **非空**，长得像
 `cps-novel@sha256:…` —— 但那是**本地 OCI manifest digest**，不是 registry manifest digest。

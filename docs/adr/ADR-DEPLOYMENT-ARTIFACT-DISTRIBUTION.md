@@ -222,6 +222,19 @@ registry manifest digest（`repo@sha256:`）在本链路**不存在**；把前�
 三个 descriptor（mediaType / digest / size）全部写进 release manifest
 （`schemaVersion: 2`，见 §8.1.2），每一个 digest 都按归档内 blob 的**原始字节**复算。
 
+🔴 **被引用的每一个 content descriptor 都验到字节，layer 也不例外。**
+layer 不缓冲进内存，而是在同一次流式扫描里边读边 `sha256.update()`，
+entry 结束得到实际 digest 再与 `layers[].digest` 核对
+（实测：324MB 归档 0.83s→0.87s、RSS 115.2MB→116.7MB）。
+另有一条覆盖**全部** blob 的不变式：`blobs/sha256/<hex>` 的 `<hex>` 必须等于该文件的内容哈希，
+未被本 tag 引用的 blob 也不放过。
+
+🔴 **不能用"`archive_sha256` 已覆盖"替代逐层复算。** `archive_sha256` 是**传输完整性**——
+证明这一份文件在路上没被改动；而伪造者同时控制归档与随行 manifest 时可以把两边一起重算。
+descriptor chain 的价值恰恰在于**独立于"是谁把文件递给你的"**。链条验到 config 就停，
+等于镜像真正的文件系统内容完全没验：改掉层内若干字节、保持文件名与 size 不变，
+在没有逐层复算的实现里会一路绿灯。
+
 消费端按**字段能力**选锚点，不按 Docker 版本号或 storage-driver 字符串猜：
 
 ```text

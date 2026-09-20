@@ -71,6 +71,11 @@ function buildOnHost(tag: string, commit: string) {
     `LABEL org.opencontainers.image.revision=${commit}`,
     "LABEL org.opencontainers.image.source=https://github.com/flightzxc/cps-novel",
     `RUN echo ${commit} > /probe-id`,
+    // 🔴 刻意造一个 >1MiB 的层：解析器对超过缓冲上限的 entry 走的是
+    // **不缓冲、纯流式**的哈希分支，而真实镜像的层几乎都在那条路径上。
+    // 如果测试镜像的层全都小到会被缓冲，那条分支就一行没测到。
+    // 用随机数据以免被压缩回 1MiB 以下。
+    "RUN dd if=/dev/urandom of=/big.bin bs=1024 count=3072 2>/dev/null",
     'CMD ["sleep", "600"]',
     "",
   ].join("\n"));
@@ -598,6 +603,66 @@ describe.runIf(HOST_DOCKER)("归档与 manifest 层面的负例（与 store 无�
     writeJson(p, a);
     const r = verifyOffline(p);
     expect(r.stdout, r.stdout).toContain("config_size_mismatch");
+    expect(r.status).not.toBe(0);
+  });
+
+  /**
+   * 🔴 工单点名的那条：layer 被改一个字节，但
+   *   - 文件名 blobs/sha256/<digest> 保持不变
+   *   - layer size 保持不变
+   *   - archive SHA256 与 release manifest 的 archive_sha256 **一起重算**
+   * 于是传输完整性这关完全过得去。只有逐层内容哈希能抓住它。
+   *
+   * 这条同时证明 reason 必须明确指向 layer，而不是被 archive_sha_mismatch 提前挡掉——
+   * 后者只说明"文件在路上变了"，前者才说明"这份归档装的不是被批准的那个镜像"。
+   */
+  it("🔴 layer 被改 1 字节（size/文件名不变、archive SHA 同步重算）→ layer digest mismatch", () => {
+    const entries = readTarZst(archive.a);
+    const idx = JSON.parse(entries.find((e) => e.name === "index.json")!.body.toString("utf8"));
+    const mBlob = entries.find((e) => e.name === `blobs/sha256/${idx.manifests[0].digest.slice(7)}`)!;
+    const layers = JSON.parse(mBlob.body.toString("utf8")).layers;
+    // 🔴 挑最大的那一层：必须 >1MiB，才能确保走的是不缓冲的流式哈希分支。
+    const biggest = layers.reduce((a: any, b: any) => (b.size > a.size ? b : a));
+    const victimName = `blobs/sha256/${biggest.digest.slice(7)}`;
+    const victim = entries.find((e) => e.name === victimName)!;
+    expect(victim.body.length, "被篡改的层必须超过缓冲上限，否则测不到流式分支")
+      .toBeGreaterThan(1024 * 1024);
+    const before = victim.body.length;
+    // 翻转最后一个字节：长度不变、文件名不变
+    victim.body = Buffer.from(victim.body);
+    victim.body[victim.body.length - 1] ^= 0xff;
+    expect(victim.body.length, "长度必须保持不变，否则会被 size 检查提前抓住").toBe(before);
+
+    const bad = path.join(work, "layertamper.tar.zst");
+    writeTarZst(bad, entries);
+
+    const a = readJson<any>(manifest.a);
+    a.archive_filename = "layertamper.tar.zst";
+    a.archive_sha256 = sha256File(bad);   // 🔴 传输完整性这关刻意让它过
+    const p = path.join(work, "layertamper.json");
+    writeJson(p, a);
+
+    const r = verifyOffline(p);
+    expect(r.stdout, r.stdout).toContain("layer_digest_mismatch");
+    expect(r.stdout, "不得被 archive SHA 提前挡掉——那样等于没验 layer")
+      .not.toContain("archive_sha_mismatch");
+    expect(r.status).not.toBe(0);
+  });
+
+  it("🔴 归档里任何 blob 的内容与其 digest 文件名不符即拒绝（含未被引用的）", () => {
+    const entries = readTarZst(archive.a);
+    // 追加一个文件名不是其内容哈希的 blob：本次 tag 根本不引用它，
+    // 但它的存在说明这份归档已经不可信。
+    entries.push({ name: `blobs/sha256/${"9".repeat(64)}`, body: Buffer.from("not-the-right-bytes") });
+    const bad = path.join(work, "strayblob.tar.zst");
+    writeTarZst(bad, entries);
+    const a = readJson<any>(manifest.a);
+    a.archive_filename = "strayblob.tar.zst";
+    a.archive_sha256 = sha256File(bad);
+    const p = path.join(work, "strayblob.json");
+    writeJson(p, a);
+    const r = verifyOffline(p);
+    expect(r.stdout, r.stdout).toContain("blob_content_digest_mismatch");
     expect(r.status).not.toBe(0);
   });
 

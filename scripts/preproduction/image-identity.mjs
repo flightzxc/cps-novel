@@ -8,6 +8,13 @@
 // 🔴 本模块判定的是**内容身份**，不是"某个 digest 眼熟"：
 //   - 所有 digest 一律按归档内 blob 的**原始字节**复算，不 JSON.parse 后重新
 //     stringify 再哈希（那会得到另一个哈希，且对字段顺序敏感）；
+//   - **被引用的每一个 content descriptor 都要验到字节**，layer 也不例外：
+//     layer 不缓冲进内存，改为在同一次流式扫描里边读边 sha256.update()，
+//     entry 结束得到实际 digest 再与 descriptor 核对。
+//     🔴 不能用"archive_sha256 已覆盖"搪塞：那只是**传输完整性**，
+//     伪造者同时控制归档与随行 manifest 时可以一起重算；descriptor chain 的
+//     价值恰恰在于独立于"是谁把文件递给你的"。链条验到 config 就停，
+//     等于镜像真正的文件系统内容完全没验。
 //   - descriptor 声明的 size 必须等于实际字节长度；
 //   - mediaType 必须与被解释的对象类型一致；
 //   - target → platform manifest → config 的引用关系必须实际走通；
@@ -54,9 +61,9 @@ const DIGEST_RE = /^sha256:[0-9a-f]{64}$/;
 // --- tar 流式读取 ----------------------------------------------------------
 //
 // 🔴 不把归档整包读进内存。单次解压扫描：
-//   - 小对象（index/manifest/config 一类）按上限缓冲；
-//   - 大 layer 只记录名字与长度，用于"所需内容是否齐备"的存在性与长度核对
-//     （其字节完整性已由整包 archive_sha256 覆盖）。
+//   - 小对象（index/manifest/config 一类）按上限缓冲，供解析与校验；
+//   - 大 layer **不缓冲**，但同样边读边 sha256.update()，结束时得到实际 digest。
+// 两者都得到逐字节的内容哈希，区别只在要不要把字节留在内存里。
 // 🔴 同时挡掉路径穿越、危险链接与重复关键条目造成的歧义。
 
 const BLOCK = 512;
@@ -92,15 +99,17 @@ async function scanArchive(archivePath) {
     zstd.on("error", () => resolve(-1));
   });
 
-  const entries = new Map();      // name -> { size }
+  const entries = new Map();      // name -> { size, sha256 }
   const blobs = new Map();        // name -> Buffer
   let buffered = 0;
 
   let pending = Buffer.alloc(0);
-  let mode = "header";            // header | data | skip
+  // 🔴 pad 与 skip 必须分开：两者都"不缓冲"，但填充字节**不能**算进内容哈希。
+  let mode = "header";            // header | data | skip | pad | done
   let current = null;
   let remaining = 0, padding = 0;
   let chunks = null;
+  let hasher = null;              // 当前 entry 的流式 sha256（无论是否缓冲）
   let zeroBlocks = 0;
   let failure = null;
 
@@ -163,13 +172,16 @@ async function scanArchive(archivePath) {
         remaining = size;
         padding = (BLOCK - (size % BLOCK)) % BLOCK;
         const keep = size <= MAX_BUFFERED_ENTRY && buffered + size <= MAX_BUFFERED_TOTAL;
-        if (keep) { current = name; chunks = []; mode = "data"; }
-        else { current = null; chunks = null; mode = "skip"; }
+        current = name;
+        hasher = createHash("sha256");
+        if (keep) { chunks = []; mode = "data"; }
+        else { chunks = null; mode = "skip"; }
         if (remaining === 0) {
-          if (current) { blobs.set(current, Buffer.alloc(0)); }
-          current = null; chunks = null;
-          mode = padding > 0 ? "skip" : "header";
-          remaining = padding; padding = 0;
+          if (chunks) blobs.set(current, Buffer.alloc(0));
+          entries.get(current).sha256 = hasher.digest("hex");
+          current = null; chunks = null; hasher = null;
+          if (padding > 0) { remaining = padding; padding = 0; mode = "pad"; }
+          else { mode = "header"; }
         }
         continue;
       }
@@ -178,7 +190,12 @@ async function scanArchive(archivePath) {
         const avail = pending.length - offset;
         if (avail === 0) break;
         const take = Math.min(avail, remaining);
-        if (mode === "data" && take > 0) chunks.push(pending.subarray(offset, offset + take));
+        if (take > 0) {
+          const slice = pending.subarray(offset, offset + take);
+          // 🔴 缓冲与否都要喂给 hasher —— layer 正是靠这条拿到内容哈希。
+          hasher.update(slice);
+          if (mode === "data") chunks.push(slice);
+        }
         offset += take;
         remaining -= take;
         if (remaining > 0) break;
@@ -187,9 +204,21 @@ async function scanArchive(archivePath) {
           const body = Buffer.concat(chunks);
           blobs.set(current, body);
           buffered += body.length;
-          current = null; chunks = null;
         }
-        if (padding > 0) { remaining = padding; padding = 0; mode = "skip"; continue; }
+        entries.get(current).sha256 = hasher.digest("hex");
+        current = null; chunks = null; hasher = null;
+        if (padding > 0) { remaining = padding; padding = 0; mode = "pad"; continue; }
+        mode = "header";
+        continue;
+      }
+
+      if (mode === "pad") {
+        const avail = pending.length - offset;
+        if (avail === 0) break;
+        const take = Math.min(avail, remaining);
+        offset += take;
+        remaining -= take;
+        if (remaining > 0) break;
         mode = "header";
         continue;
       }
@@ -326,7 +355,8 @@ function resolveIdentity(scanned, tag, wantPlatform) {
     refuse("IDENTITY", "config_revision_shape");
   }
 
-  // 🔴 所选镜像所需的层必须**全部在归档内**，不能指望运行时从网络补齐。
+  // 🔴 所选镜像所需的层必须**全部在归档内**，不能指望运行时从网络补齐；
+  //    而且每一层都要验到**字节**。
   const layers = platformManifest.parsed.layers;
   if (!Array.isArray(layers) || layers.length === 0) refuse("IDENTITY", "layers_shape");
   for (const [i, l] of layers.entries()) {
@@ -337,6 +367,29 @@ function resolveIdentity(scanned, tag, wantPlatform) {
     if (!e) refuse("IDENTITY", "layer_blob_absent", { index: i, digest: l.digest });
     if (typeof l.size === "number" && l.size !== e.size) {
       refuse("IDENTITY", "layer_size_mismatch", { index: i, declared: l.size, actual: e.size });
+    }
+    // 🔴 逐层内容哈希。文件名与 size 都保持不变、只改层内若干字节的篡改，
+    //    只能在这一步被抓住 —— archive_sha256 是传输完整性，伪造者连同
+    //    随行 manifest 一起重算就能过；descriptor chain 必须自己验到字节。
+    const actual = `sha256:${e.sha256}`;
+    if (actual !== l.digest) {
+      refuse("IDENTITY", "layer_digest_mismatch", { index: i, expected: l.digest, actual });
+    }
+  }
+
+  // 🔴 OCI layout 的硬性要求：blobs/<algo>/<hex> 的 <hex> 就是该文件的内容哈希。
+  //    上面逐层核对的是"被引用的层"；这条覆盖归档里**所有** blob，
+  //    包括未被本 tag 引用的那些 —— 一个内容与文件名对不上的 blob，
+  //    说明这份归档已经不可信，不该因为"本次没用到它"就放过。
+  for (const [name, e] of entries) {
+    if (!name.startsWith("blobs/sha256/")) continue;
+    const named = name.slice("blobs/sha256/".length);
+    if (!/^[0-9a-f]{64}$/.test(named)) {
+      refuse("IDENTITY", "blob_name_not_digest", { entry: name });
+    }
+    if (e.sha256 !== named) {
+      refuse("IDENTITY", "blob_content_digest_mismatch",
+        { entry: name, actual: `sha256:${e.sha256}` });
     }
   }
 
