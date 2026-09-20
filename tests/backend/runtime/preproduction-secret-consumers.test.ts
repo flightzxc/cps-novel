@@ -269,8 +269,9 @@ describe("secret consumer preflight model", () => {
 
 describe("real Linux Docker bind-mount ACL behavior", () => {
   it.skipIf(process.platform !== "linux")("allows only each declared numeric consumer", async () => {
+    const probeImage = "docker:29-dind";
     expect(spawnSync("sh", ["-c", "command -v setfacl"]).status).toBe(0);
-    expect(spawnSync("docker", ["image", "inspect", "busybox:latest"]).status).toBe(0);
+    expect(spawnSync("docker", ["image", "inspect", probeImage]).status).toBe(0);
     const security = spawnSync("docker", ["info", "--format", "{{json .SecurityOptions}}"], { encoding: "utf8" });
     expect(security.status).toBe(0);
     expect(security.stdout).not.toMatch(/rootless|userns/i);
@@ -288,27 +289,31 @@ describe("real Linux Docker bind-mount ACL behavior", () => {
       expect(spawnSync("sudo", ["-n", "setfacl", "-m", "u:33:r--", path.join(dir, "nginx")]).status).toBe(0);
       expect(spawnSync("sudo", ["-n", "setfacl", "-m", "u:33:--x", dir]).status).toBe(0);
 
-      const canRead = (uid: number, name: string) => spawnSync("docker", ["run", "--rm", "--pull", "never",
+      const probe = (uid: number, name: string) => spawnSync("docker", ["run", "--rm", "--pull", "never",
         "--network", "none", "--read-only", "--cap-drop", "ALL", "--security-opt", "no-new-privileges",
         "--user", `${uid}:${uid}`, "--mount", `type=bind,src=${path.join(dir, name)},dst=/run/check,readonly`,
-        "--entrypoint", "/bin/sh", "busybox:latest", "-c", "test -r /run/check"]).status === 0;
+        "--entrypoint", "/bin/sh", probeImage, "-c", "test -r /run/check"], { encoding: "utf8" });
 
-      expect(canRead(1001, "app")).toBe(true);
-      expect(canRead(999, "app")).toBe(false);
-      expect(canRead(999, "postgres")).toBe(true);
-      expect(canRead(1001, "postgres")).toBe(false);
-      expect(canRead(33, "nginx")).toBe(true);
-      expect(canRead(1001, "nginx")).toBe(false);
-      expect(canRead(999, "nginx")).toBe(false);
-      expect(canRead(1001, "host")).toBe(false);
-      expect(canRead(999, "host")).toBe(false);
-      expect(canRead(0, "backup")).toBe(true);
-      expect(canRead(1001, "backup")).toBe(false);
-      expect(canRead(999, "backup")).toBe(false);
+      const appPositive = probe(1001, "app");
+      expect(appPositive.status, appPositive.stderr).toBe(0);
+      expect(probe(999, "app").status).not.toBe(0);
+      const postgresPositive = probe(999, "postgres");
+      expect(postgresPositive.status, postgresPositive.stderr).toBe(0);
+      expect(probe(1001, "postgres").status).not.toBe(0);
+      const nginxPositive = probe(33, "nginx");
+      expect(nginxPositive.status, nginxPositive.stderr).toBe(0);
+      expect(probe(1001, "nginx").status).not.toBe(0);
+      expect(probe(999, "nginx").status).not.toBe(0);
+      expect(probe(1001, "host").status).not.toBe(0);
+      expect(probe(999, "host").status).not.toBe(0);
+      const backupPositive = probe(0, "backup");
+      expect(backupPositive.status, backupPositive.stderr).toBe(0);
+      expect(probe(1001, "backup").status).not.toBe(0);
+      expect(probe(999, "backup").status).not.toBe(0);
 
       const nginxHostPath = spawnSync("docker", ["run", "--rm", "--pull", "never", "--network", "none",
         "--read-only", "--cap-drop", "ALL", "--security-opt", "no-new-privileges", "--user", "33:33",
-        "--mount", `type=bind,src=${dir},dst=/run/secrets,readonly`, "--entrypoint", "/bin/sh", "busybox:latest",
+        "--mount", `type=bind,src=${dir},dst=/run/secrets,readonly`, "--entrypoint", "/bin/sh", probeImage,
         "-c", "test -r /run/secrets/nginx"]);
       expect(nginxHostPath.status).toBe(0);
     } finally {
