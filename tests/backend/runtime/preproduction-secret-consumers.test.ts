@@ -289,25 +289,40 @@ describe("real Linux Docker bind-mount ACL behavior", () => {
       expect(spawnSync("sudo", ["-n", "setfacl", "-m", "u:33:r--", path.join(dir, "nginx")]).status).toBe(0);
       expect(spawnSync("sudo", ["-n", "setfacl", "-m", "u:33:--x", dir]).status).toBe(0);
 
+      const aclState = (name: string) => spawnSync("getfacl", ["-cpn", path.join(dir, name)], { encoding: "utf8" });
       const probe = (uid: number, name: string) => spawnSync("docker", ["run", "--rm", "--pull", "never",
         "--network", "none", "--read-only", "--cap-drop", "ALL", "--security-opt", "no-new-privileges",
         "--user", `${uid}:${uid}`, "--mount", `type=bind,src=${path.join(dir, name)},dst=/run/check,readonly`,
-        "--entrypoint", "/bin/sh", probeImage, "-c", "test -r /run/check"], { encoding: "utf8" });
+        "--entrypoint", "/bin/sh", probeImage, "-c",
+        "id; ls -ldn /run /run/check; stat -c 'mode=%a owner=%u:%g' /run/check; test -r /run/check"],
+      { encoding: "utf8" });
+
+      const failureContext = (name: string, result: ReturnType<typeof probe>) => {
+        const acl = aclState(name);
+        return [
+          `getfacl status=${acl.status}`,
+          acl.stdout,
+          acl.stderr,
+          `docker status=${result.status}`,
+          result.stdout,
+          result.stderr,
+        ].join("\n");
+      };
 
       const appPositive = probe(1001, "app");
-      expect(appPositive.status, appPositive.stderr).toBe(0);
+      expect(appPositive.status, failureContext("app", appPositive)).toBe(0);
       expect(probe(999, "app").status).not.toBe(0);
       const postgresPositive = probe(999, "postgres");
-      expect(postgresPositive.status, postgresPositive.stderr).toBe(0);
+      expect(postgresPositive.status, failureContext("postgres", postgresPositive)).toBe(0);
       expect(probe(1001, "postgres").status).not.toBe(0);
       const nginxPositive = probe(33, "nginx");
-      expect(nginxPositive.status, nginxPositive.stderr).toBe(0);
+      expect(nginxPositive.status, failureContext("nginx", nginxPositive)).toBe(0);
       expect(probe(1001, "nginx").status).not.toBe(0);
       expect(probe(999, "nginx").status).not.toBe(0);
       expect(probe(1001, "host").status).not.toBe(0);
       expect(probe(999, "host").status).not.toBe(0);
       const backupPositive = probe(0, "backup");
-      expect(backupPositive.status, backupPositive.stderr).toBe(0);
+      expect(backupPositive.status, failureContext("backup", backupPositive)).toBe(0);
       expect(probe(1001, "backup").status).not.toBe(0);
       expect(probe(999, "backup").status).not.toBe(0);
 
