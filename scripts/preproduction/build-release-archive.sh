@@ -5,8 +5,13 @@ set +x
 # Phase 2C · 不可变镜像归档构建器（CPS 短剧形态的离线运输）。
 #
 # 产物是一个自包含的归档：approved commit → 镜像 → docker save → zstd → SHA256。
-# 下游（Phase 2C 部署）在 VPS 上校验 SHA256 → docker load → 核对 config digest 与
+# 下游（Phase 2C 部署）在目标机上校验 SHA256 → docker load → 核对镜像身份与
 # revision label，全程不需要任何 registry、不需要 docker login、不需要 PAT。
+#
+# 🔴 身份字段一律来自**解析归档实际内容**（scripts/preproduction/image-identity.mjs），
+# 不再把构建机 `docker inspect .Id` 无条件当成 config digest 写进 manifest。
+# 那个值是随 image store 后端漂移的：经典 graphdriver 报 config digest，
+# containerd image store 报 manifest digest。构建机恰好是哪一种，不该决定工件身份。
 #
 # 🔴 不自行发明 build 规则。镜像身份仍由仓库既有的 `scripts/lib/p1-12-local-env.sh`
 # 派生（APP_VERSION / GIT_COMMIT / BUILD_DATE / 镜像标签），与
@@ -74,10 +79,9 @@ revision="$(docker image inspect "$local_image" \
   --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')"
 [[ "$revision" == "$APPROVED_GIT_COMMIT" ]] || refuse revision_label
 
-# 3) config digest（即 image ID）。归档装载后靠它认身份——
-#    `docker save`/`load` 不保留 RepoDigest，config digest 才是跨主机稳定的那个。
-image_id="$(docker image inspect "$local_image" --format '{{.Id}}')"
-[[ "$image_id" =~ ^sha256:[0-9a-f]{64}$ ]] || refuse image_id_shape
+# 3) 🔴 这里**不再**读 `.Id` 当作 config digest。见文件头说明。
+#    真正的 config digest 在归档产出后由 image-identity.mjs 从 config blob 的
+#    原始字节算出来。
 
 source_repo="$(docker image inspect "$local_image" \
   --format '{{index .Config.Labels "org.opencontainers.image.source"}}')"
@@ -105,36 +109,78 @@ archive_sha="$(shasum -a 256 "$archive" | awk '{print $1}')"
 # SHA256SUMS 用相对文件名，便于在 VPS 上 `shasum -a 256 -c SHA256SUMS`。
 printf '%s  %s\n' "$archive_sha" "$archive_name" > "$archive_dir/${archive_name}.sha256"
 
-# --- release manifest ------------------------------------------------------
+# --- 解析归档实际内容，得到身份 -------------------------------------------
 #
-# 🔴 身份不能只靠 tag。`image_tag` 只是人类可读的定位符，真正的身份是
-# approved_git_commit + image_config_digest + archive_sha256 三者一致。
+# 🔴 顺序很重要：先产出归档，再**从归档里**把身份读出来。反过来（先记下构建机
+# 的读数、再产出归档）就是上一轮出事的形态——manifest 说的和归档里的可以不一致，
+# 而且没人会发现。
+identity="$("$root/scripts/preproduction/image-identity.mjs" resolve \
+  --archive "$archive" --tag "$local_image" --platform "$target_platform")" || {
+  echo "ARCHIVE_BUILD=REFUSED reason=identity_resolve"
+  echo "$identity"
+  exit 65
+}
+
+read -r target_digest target_media target_size \
+       manifest_digest manifest_media manifest_size \
+       config_digest config_size resolved_platform resolved_revision <<<"$(
+  node -e '
+    const id = JSON.parse(process.argv[1]);
+    process.stdout.write([
+      id.oci.target.digest, id.oci.target.mediaType, id.oci.target.size,
+      id.oci.platform_manifest.digest, id.oci.platform_manifest.mediaType, id.oci.platform_manifest.size,
+      id.oci.config.digest, id.oci.config.size,
+      id.image_platform, id.image_revision,
+    ].join(" "));
+  ' "$identity")"
+
+# 归档解析出来的事实必须与批准记录一致；不一致说明归档与批准对象不是一回事。
+[[ "$resolved_revision" == "$APPROVED_GIT_COMMIT" ]] || refuse archive_revision
+[[ "$resolved_platform" == "$target_platform" ]] || refuse archive_platform
+
+# 🔴 用**下游同一套判据**回检构建机上的镜像。构建器自己验一遍，
+# 等于在发货前就跑了一次消费端的判定逻辑；两边规则漂移会在这里当场暴露。
+docker image inspect "$local_image" --format '{{json .}}' \
+  | "$root/scripts/preproduction/image-identity.mjs" assert-image \
+      --target-digest "$target_digest" --target-mediatype "$target_media" \
+      --target-size "$target_size" --config-digest "$config_digest" \
+      --platform "$target_platform" --revision "$APPROVED_GIT_COMMIT" || {
+  echo "ARCHIVE_BUILD=REFUSED reason=builder_self_check"
+  exit 65
+}
+
+# --- release manifest（schemaVersion 2）------------------------------------
+#
+# 🔴 身份不能只靠 tag，也不能只靠任何单一 digest。三类对象语义各不相同：
+#   target descriptor   —— 归档 index.json 里指向本 tag 的那个对象
+#   platform manifest   —— linux/amd64 实际使用的那份清单（单清单布局下与 target 同一对象）
+#   config              —— 清单引用的 config blob
+# containerd image store 认 manifest digest，经典 graphdriver 认 config digest，
+# 两者都必须在案，消费端才能按自己的字段能力去判。
 manifest="$archive_dir/${APPROVED_GIT_COMMIT}.json"
 [[ ! -e "$manifest" ]] || refuse manifest_exists
-node -e '
-  const fs=require("fs");
-  const [p,commit,version,tag,imageId,platform,archiveName,archiveSha,builtAt,sourceRepo]=process.argv.slice(1);
-  fs.writeFileSync(p, JSON.stringify({
-    schemaVersion: 1,
-    transport: "archive",
-    approved_git_commit: commit,
-    version,
-    image_tag: tag,
-    image_config_digest: imageId,
-    image_platform: platform,
-    archive_filename: archiveName,
-    archive_sha256: archiveSha,
-    built_at: builtAt,
-    source_repository: sourceRepo,
-    identityNote: "Identity = approved_git_commit + image_config_digest + archive_sha256. image_tag alone is NOT identity.",
-    versionIdentityIssue: "git tag v0.2.0 differs from package.json 0.1.0; commit and digest are authoritative",
-  },null,2)+"\n", {mode:0o600,flag:"wx"});
-' "$manifest" "$APPROVED_GIT_COMMIT" "$APP_VERSION" "$local_image" "$image_id" \
-  "$actual_platform" "$archive_name" "$archive_sha" "$BUILD_DATE" "$source_repo"
+"$root/scripts/preproduction/image-identity.mjs" build-manifest \
+  --archive "$archive" --tag "$local_image" --platform "$target_platform" \
+  --commit "$APPROVED_GIT_COMMIT" --version "$APP_VERSION" \
+  --archive-filename "$archive_name" --archive-sha256 "$archive_sha" \
+  --built-at "$BUILD_DATE" --source-repository "$source_repo" \
+  --out "$manifest" >/dev/null || { echo "ARCHIVE_BUILD=REFUSED reason=manifest_build"; exit 65; }
+
+# 🔴 最后再把 manifest 与归档双向核一遍。走的是消费端将来用的同一条路径：
+# "manifest 自洽"毫无意义，必须是"manifest 所述 == 归档实际内容"。
+"$root/scripts/preproduction/image-identity.mjs" verify-archive-against-manifest \
+  --manifest "$manifest" --archive "$archive" >/dev/null || {
+  echo "ARCHIVE_BUILD=REFUSED reason=manifest_archive_disagree"
+  rm -f "$manifest"
+  exit 65
+}
 
 echo "ARCHIVE_BUILD=PASS"
 echo "ARCHIVE_FILE=$archive"
 echo "ARCHIVE_SHA256=$archive_sha"
-echo "IMAGE_CONFIG_DIGEST=$image_id"
-echo "IMAGE_PLATFORM=$actual_platform"
+echo "IMAGE_TARGET_DIGEST=$target_digest"
+echo "IMAGE_PLATFORM_MANIFEST_DIGEST=$manifest_digest"
+echo "IMAGE_CONFIG_DIGEST=$config_digest"
+echo "IMAGE_PLATFORM=$resolved_platform"
+echo "IMAGE_REVISION=$resolved_revision"
 echo "RELEASE_MANIFEST=$manifest"

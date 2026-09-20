@@ -201,7 +201,12 @@ src/lib/flags/feature-flags.ts           Feature Flag 与写入闸
 - GHCR 已在 Phase 2C 完成 PoC 并验证可用，但**未被选为生产运输方式**（不是「GHCR 不可用」）。
 - 🔴 不得仅为「两个 CPS 项目一致」或「registry 更现代」把任一项目切换成另一套运输方式。
 
-详见 [`docs/adr/ADR-DEPLOYMENT-ARTIFACT-DISTRIBUTION.md`](docs/adr/ADR-DEPLOYMENT-ARTIFACT-DISTRIBUTION.md)。
+- 🔴 镜像身份判据**按 image store 的字段能力选锚点**，不按 Docker 版本号猜：
+  containerd store 用 `.Descriptor`，经典 graphdriver 用 `.Id`。两者报的 digest 不是同一个。
+  唯一实现在 `scripts/preproduction/image-identity.mjs`，构建器与消费端共用，禁止另写一份。
+
+详见 [`docs/adr/ADR-DEPLOYMENT-ARTIFACT-DISTRIBUTION.md`](docs/adr/ADR-DEPLOYMENT-ARTIFACT-DISTRIBUTION.md)
+（§8.1.1 记录了两种 image store 的实测差异与被证伪的三条旧论断）。
 
 ---
 

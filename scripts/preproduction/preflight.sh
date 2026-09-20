@@ -25,24 +25,28 @@ preprod_load_env || fail env_file 66
 [[ "${ARTICLE_BLOG_ALLOW_WRITE:-}" == "false" && "${ARTICLE_NOVEL_REBIND_ALLOW_WRITE:-}" == "false" ]] || fail article_writes
 [[ "${GIT_COMMIT:-}" =~ ^[0-9a-f]{40}$ ]] || fail git_commit
 [[ -n "${CPS_NOVEL_APP_IMAGE:-}" ]] || fail app_image_unset
-[[ -z "${EXPECTED_RELEASE_COMMIT:-}" || "$GIT_COMMIT" == "$EXPECTED_RELEASE_COMMIT" ]] || fail release_commit_mismatch
-[[ -z "${EXPECTED_RELEASE_IMAGE:-}" || "$CPS_NOVEL_APP_IMAGE" == "$EXPECTED_RELEASE_IMAGE" ]] || fail release_image_mismatch
+# 🔴 preflight **自己重读 manifest**，不接受上游用环境变量传进来的 digest。
+# 上游传值意味着 preflight 校验的是"上游说的身份"，而不是"批准记录里的身份"——
+# 一旦上游哪天算错了（上一轮就是），preflight 会拿着同一个错值一路绿灯。
+# 同时这让 preflight 可以独立运行，测试不必先跑 release.sh。
+if [[ -n "${PREPROD_RELEASE_MANIFEST:-}" ]]; then
+  preprod_read_release_manifest "$PREPROD_RELEASE_MANIFEST" || fail release_manifest
+  [[ "$GIT_COMMIT" == "$PREPROD_RELEASE_COMMIT" ]] || fail release_commit_mismatch
+  [[ "$CPS_NOVEL_APP_IMAGE" == "$PREPROD_RELEASE_IMAGE_REF" ]] || fail release_image_mismatch
+fi
 
-# 🔴 这里原本只检查 `CPS_NOVEL_APP_IMAGE =~ @sha256:`，那是 **registry manifest
-# digest** 的形状。归档运输下 `docker load` 进来的镜像没有 RepoDigest，Compose
-# 也无法用 `name@sha256:` 解析本地镜像——沿用那条正则等于把归档工件全部判死；
-# 而把 config digest 拼成 `repo@sha256:` 去糊弄它，是在伪造一个任何 registry 上
-# 都不存在的引用，只会让校验"看起来通过"。
+# 🔴 对**本地镜像实体**核身份。锚点由字段能力决定，不由 Docker 版本号决定：
+#   containerd image store → .Descriptor 与 manifest 的 target descriptor 比
+#   经典 graphdriver       → .Id 与 config digest 比
+# 外加平台与 revision 一致性。判定逻辑在 image-identity.mjs，与构建器、
+# 归档校验器、deploy/rollback 同一份实现。
 #
-# 改为对**本地镜像实体**做三项核对：tag 解析出的 ID == manifest 的 config digest、
-# revision 标签 == approved commit、平台 == 期望平台。缺镜像直接失败，
-# 绝不让后面的 compose 去 pull 或就地 build。
-if [[ -n "${EXPECTED_RELEASE_IMAGE_DIGEST:-}" ]]; then
-  preprod_assert_local_image \
-    "$CPS_NOVEL_APP_IMAGE" \
-    "$EXPECTED_RELEASE_IMAGE_DIGEST" \
-    "$GIT_COMMIT" \
-    "${EXPECTED_RELEASE_PLATFORM:-}" || fail app_image_identity
+# 历史注记：这里曾经检查 `CPS_NOVEL_APP_IMAGE =~ @sha256:`（registry manifest
+# digest 的形状）。归档运输下 `docker load` 进来的镜像在经典后端没有 RepoDigest，
+# Compose 也无法用 `name@sha256:` 解析本地镜像——那条正则会把归档工件全部判死。
+# 缺镜像直接失败，绝不让后面的 compose 去 pull 或就地 build。
+if [[ -n "${PREPROD_RELEASE_TARGET_DIGEST:-}" ]]; then
+  preprod_assert_local_image "$CPS_NOVEL_APP_IMAGE" || fail app_image_identity
 fi
 
 drain="${WORKER_SHUTDOWN_DRAIN_TIMEOUT_MS:-30000}"
@@ -57,7 +61,7 @@ preprod_compose config --quiet || fail compose_config
 # 🔴 渲染后的 Compose 配置里，三个应用服务实际拿到的 image 必须就是 manifest 那个。
 # 前面校验的是 shell 变量，这里校验的是**插值之后真正交给 Compose 的值**——
 # 中间任何一层（env-file、override 文件、默认值）把它换掉，都在这一步暴露。
-if [[ -n "${EXPECTED_RELEASE_IMAGE:-}" ]]; then
+if [[ -n "${PREPROD_RELEASE_IMAGE_REF:-}" ]]; then
   rendered="$(preprod_compose config --format json)" || fail compose_config_render
   node -e '
     const cfg = JSON.parse(process.argv[1]);
@@ -67,6 +71,6 @@ if [[ -n "${EXPECTED_RELEASE_IMAGE:-}" ]]; then
       if (!svc) { console.log("missing:" + name); process.exit(1); }
       if (svc.image !== want) { console.log(name + ":" + svc.image); process.exit(1); }
     }
-  ' "$rendered" "$EXPECTED_RELEASE_IMAGE" || fail compose_image_mismatch
+  ' "$rendered" "$PREPROD_RELEASE_IMAGE_REF" || fail compose_image_mismatch
 fi
 echo "PREPROD_PREFLIGHT=PASS"

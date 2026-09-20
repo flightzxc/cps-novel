@@ -45,10 +45,9 @@ maintenance_off() {
 read_manifest() {
   local manifest="$1"
   preprod_read_release_manifest "$manifest" || exit $?
+  manifest_path="$manifest"
   manifest_commit="$PREPROD_RELEASE_COMMIT"
   manifest_image="$PREPROD_RELEASE_IMAGE_REF"
-  manifest_digest="$PREPROD_RELEASE_IMAGE_DIGEST"
-  manifest_platform="$PREPROD_RELEASE_PLATFORM"
   [[ "${APPROVED_GIT_COMMIT:-}" == "$manifest_commit" ]] || {
     echo "RELEASE=REFUSED reason=owner_approved_commit"; exit 65;
   }
@@ -56,9 +55,9 @@ read_manifest() {
   # APPROVED_GIT_COMMIT 是 Owner 的批准记录，必须由操作者在环境里显式给出，
   # 且与 manifest 内的 commit 一致；manifest 自己说自己被批准了不算数。
   export GIT_COMMIT="$manifest_commit" CPS_NOVEL_APP_IMAGE="$manifest_image"
-  # 本地镜像实体核对：tag → ID == config digest、revision、平台。
-  # 在停服务/迁移之前做，尽早失败。
-  preprod_assert_local_image "$manifest_image" "$manifest_digest" "$manifest_commit" "$manifest_platform" || {
+  # 本地镜像实体核对：按字段能力选锚点（containerd 用 .Descriptor，经典用 .Id），
+  # 外加平台与 revision。在停服务/迁移之前做，尽早失败。
+  preprod_assert_local_image "$manifest_image" || {
     echo "RELEASE=REFUSED reason=app_image_identity"; exit 65;
   }
 }
@@ -69,8 +68,7 @@ deploy() {
   [[ "$(git -C "$root" rev-parse HEAD)" == "$manifest_commit" ]] || {
     echo "RELEASE=REFUSED reason=checkout_commit"; exit 65;
   }
-  EXPECTED_RELEASE_COMMIT="$manifest_commit" EXPECTED_RELEASE_IMAGE="$manifest_image" \
-    EXPECTED_RELEASE_IMAGE_DIGEST="$manifest_digest" EXPECTED_RELEASE_PLATFORM="$manifest_platform" \
+  PREPROD_RELEASE_MANIFEST="$manifest_path" \
     "$root/scripts/preproduction/preflight.sh"
   write_state preflight_passed "$manifest_commit" "$manifest_image"
   maintenance_on
@@ -93,7 +91,7 @@ deploy() {
   preprod_compose_app_up web
   # 🔴 启动之后再核一次**实际容器**用的镜像。预检核的是配置与本地镜像，
   # 容器可能是上一轮遗留的、也可能因为别的原因起到了另一个镜像上。
-  preprod_assert_container_image "$manifest_digest" web || {
+  preprod_assert_container_image web || {
     echo "RELEASE=REFUSED reason=runtime_image_mismatch"; exit 65;
   }
   write_state web_started "$manifest_commit" "$manifest_image"
@@ -102,7 +100,7 @@ deploy() {
 
   preprod_compose_app_up worker
   preprod_compose_app_up scheduler
-  preprod_assert_container_image "$manifest_digest" worker scheduler || {
+  preprod_assert_container_image worker scheduler || {
     echo "RELEASE=REFUSED reason=runtime_image_mismatch"; exit 65;
   }
   PREPROD_RELEASE_VERIFIED=YES maintenance_off
@@ -124,8 +122,7 @@ rollback() {
   }
   # 🔴 与 deploy 同一套预检。回滚常被当成"退回到已知可用的东西"而省掉校验，
   # 但回滚同样是一次把某个镜像放上线的动作，身份校验不能比 deploy 弱。
-  EXPECTED_RELEASE_COMMIT="$manifest_commit" EXPECTED_RELEASE_IMAGE="$manifest_image" \
-    EXPECTED_RELEASE_IMAGE_DIGEST="$manifest_digest" EXPECTED_RELEASE_PLATFORM="$manifest_platform" \
+  PREPROD_RELEASE_MANIFEST="$manifest_path" \
     "$root/scripts/preproduction/preflight.sh"
   maintenance_on
   trap 'if [[ "$failed" == "1" ]]; then write_state rollback_failed "$manifest_commit" "$manifest_image"; echo "ROLLBACK=FAILED maintenance=ON"; fi' EXIT
@@ -136,13 +133,13 @@ rollback() {
   # 🔴 数据与密钥身份不变：这里不碰 postgres 服务、不动 cps_novel_postgres_data
   # 卷、不恢复任何备份。回滚的是应用镜像，不是数据库。
   preprod_compose_app_up web
-  preprod_assert_container_image "$manifest_digest" web || {
+  preprod_assert_container_image web || {
     echo "ROLLBACK=REFUSED reason=runtime_image_mismatch"; exit 65;
   }
   "$root/scripts/preproduction/verify-release.sh"
   preprod_compose_app_up worker
   preprod_compose_app_up scheduler
-  preprod_assert_container_image "$manifest_digest" worker scheduler || {
+  preprod_assert_container_image worker scheduler || {
     echo "ROLLBACK=REFUSED reason=runtime_image_mismatch"; exit 65;
   }
   PREPROD_RELEASE_VERIFIED=YES maintenance_off

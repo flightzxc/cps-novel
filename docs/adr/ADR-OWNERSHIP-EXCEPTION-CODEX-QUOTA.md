@@ -91,6 +91,20 @@ Owner 授权：**Codex 额度不足期间，Claude 可以直接写入 Codex 独�
 其中 `release.sh` 的 manifest 契约与归档运输不兼容，属**已识别但未执行**的改动，
 已记录在 `ADR-DEPLOYMENT-ARTIFACT-DISTRIBUTION` §8.1，留待 Owner 另行授权。
 
+🔴 **2026-09-20 第四轮（archive image identity portability 修复）同样写入 Codex 独占目录**：
+`scripts/preproduction/`、`tests/backend/`、`.github/workflows/ci.yml`、`docs/`、`CLAUDE.md`。
+全部由该轮工单**显式点名**（工单 §2 逐条列出允许修改的文件，含 release/preflight/
+verify-release 与"必要的共享解析辅助模块"、对应测试、双 image-store 实测所需的最小 CI 接线、
+ADR/runbook/ownership/生成式 CHANGELOG）。
+
+与第二轮不同，本轮**不是"只新增文件"**：`lib.sh`、`preflight.sh`、`release.sh`、
+`verify-release-archive.sh`、`build-release-archive.sh` 都被改写——这正是工单要解决的问题
+（判据锚点散在多处且选错）。边界内**未触碰**：业务代码、数据库 schema、`prisma/`、
+`infra/preproduction/docker-compose.yml`、`Dockerfile`、Nginx、真实 secrets、GHCR。
+
+新增的共享模块 `scripts/preproduction/image-identity.mjs` 是工单 §2 所称
+"scripts/preproduction 内必要的共享解析辅助模块"。
+
 ## 6. 被本例外解除阻塞、但仍待 Owner 产品决策的项
 
 以下项此前的阻塞理由是「属 Codex 目录」，本例外解除了该理由，但它们本身还需要

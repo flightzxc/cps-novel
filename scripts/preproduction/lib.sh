@@ -54,114 +54,112 @@ preprod_compose_app_run() {
 # --- release manifest：统一读取入口 ----------------------------------------
 #
 # 🔴 deploy 与 rollback 必须走同一个读取器，否则两条路径的身份校验会各自漂移。
-# 🔴 按 JSON **数据**解析（JSON.parse + readFileSync），不用 require()——
-#    require 会按扩展名决定行为，指到一个 .js 就变成执行代码。
+# 🔴 解析与判定的**唯一实现**在 scripts/preproduction/image-identity.mjs。
+#    这里只负责把结果搬进 shell 变量，不在 bash 里再写一份规则。
 #
 # 成功后导出（调用方只认这几个变量，不再自己解析 manifest）：
-#   PREPROD_RELEASE_COMMIT          approved 40-hex commit
-#   PREPROD_RELEASE_IMAGE_REF       交给 Compose 的镜像引用（= image_tag）
-#   PREPROD_RELEASE_IMAGE_DIGEST    config digest，跨主机稳定的身份
-#   PREPROD_RELEASE_PLATFORM        目标平台
-#   PREPROD_RELEASE_ARCHIVE         归档文件名（纯文件名，不含路径）
-#   PREPROD_RELEASE_ARCHIVE_SHA256  归档 SHA256
+#   PREPROD_RELEASE_COMMIT            approved 40-hex commit
+#   PREPROD_RELEASE_IMAGE_REF         交给 Compose 的镜像引用（= image_tag）
+#   PREPROD_RELEASE_PLATFORM          目标平台
+#   PREPROD_RELEASE_REVISION          镜像 revision 标签（== commit）
+#   PREPROD_RELEASE_ARCHIVE           归档文件名（纯文件名，不含路径）
+#   PREPROD_RELEASE_ARCHIVE_SHA256    归档 SHA256
+#   PREPROD_RELEASE_TARGET_DIGEST     归档 index 中指向本 tag 的对象
+#   PREPROD_RELEASE_TARGET_MEDIATYPE  同上的 mediaType
+#   PREPROD_RELEASE_TARGET_SIZE       同上的字节数
+#   PREPROD_RELEASE_MANIFEST_DIGEST   linux/amd64 实际使用的那份清单
+#   PREPROD_RELEASE_CONFIG_DIGEST     清单引用的 config blob
+#
+# 🔴 刻意不再导出名为 PREPROD_RELEASE_IMAGE_DIGEST 的变量。那个名字没有说清
+#    "哪一种 digest"，正是上一轮把 manifest digest 和 config digest 混为一谈的入口。
 preprod_read_release_manifest() {
   local manifest="$1"
-  [[ "$manifest" = /* && -r "$manifest" ]] || {
-    echo "MANIFEST=REFUSED reason=manifest_unreadable"; return 66;
-  }
+  [[ "$manifest" = /* ]] || { echo "MANIFEST=REFUSED reason=manifest_path_not_absolute"; return 66; }
   command -v node >/dev/null 2>&1 || { echo "MANIFEST=REFUSED reason=node_missing"; return 69; }
 
-  local parsed
-  parsed="$(node -e '
-    const fs = require("node:fs");
-    let m;
-    try { m = JSON.parse(fs.readFileSync(process.argv[1], "utf8")); }
-    catch { console.log("reason=manifest_not_json"); process.exit(1); }
-    const bad = (r) => { console.log("reason=" + r); process.exit(1); };
-    if (m === null || typeof m !== "object" || Array.isArray(m)) bad("manifest_not_object");
-    if (m.schemaVersion !== 1) bad("manifest_schema_version");
-    // 🔴 只接受归档运输。registry 形态的 manifest（GHCR PoC 遗留）一律拒绝：
-    // 生产运输方式只有一种，留后门就会有人从后门进来。
-    if (m.transport !== "archive") bad("manifest_transport");
-    const str = (k, re) => {
-      const v = m[k];
-      if (typeof v !== "string" || !re.test(v)) bad("manifest_" + k);
-      return v;
-    };
-    const commit = str("approved_git_commit", /^[0-9a-f]{40}$/);
-    const tag = str("image_tag", /^[A-Za-z0-9][A-Za-z0-9._\/-]*:[A-Za-z0-9][A-Za-z0-9._-]*$/);
-    // 🔴 image_tag 不得带 @sha256:。把 config digest 拼成 repo@sha256 是伪造的
-    // registry 引用——config digest 与 registry manifest digest 是两个不同的东西，
-    // 拼出来的引用在任何 registry 上都不存在，只会让身份校验看起来通过。
-    if (tag.includes("@")) bad("manifest_image_tag_digest_forgery");
-    const digest = str("image_config_digest", /^sha256:[0-9a-f]{64}$/);
-    const platform = str("image_platform", /^[a-z0-9]+\/[a-z0-9_]+$/);
-    const archive = str("archive_filename", /^[A-Za-z0-9][A-Za-z0-9._-]*$/);
-    // 🔴 归档文件名必须是纯文件名：带 / 或 .. 就能让校验目标越出允许目录。
-    if (archive.includes("/") || archive.includes("..")) bad("manifest_archive_path");
-    const sha = str("archive_sha256", /^[0-9a-f]{64}$/);
-    process.stdout.write([commit, tag, digest, platform, archive, sha].join("\n"));
-  ' "$manifest")" || {
-    echo "MANIFEST=REFUSED $parsed"; return 65;
-  }
+  local parsed status
+  parsed="$(node "$PREPROD_REPO_ROOT/scripts/preproduction/image-identity.mjs" \
+    read-manifest --manifest "$manifest")"
+  status=$?
+  if (( status != 0 )); then echo "$parsed"; return "$status"; fi
 
   {
     read -r PREPROD_RELEASE_COMMIT
     read -r PREPROD_RELEASE_IMAGE_REF
-    read -r PREPROD_RELEASE_IMAGE_DIGEST
     read -r PREPROD_RELEASE_PLATFORM
+    read -r PREPROD_RELEASE_REVISION
     read -r PREPROD_RELEASE_ARCHIVE
     read -r PREPROD_RELEASE_ARCHIVE_SHA256
+    read -r PREPROD_RELEASE_TARGET_DIGEST
+    read -r PREPROD_RELEASE_TARGET_MEDIATYPE
+    read -r PREPROD_RELEASE_TARGET_SIZE
+    read -r PREPROD_RELEASE_MANIFEST_DIGEST
+    read -r PREPROD_RELEASE_MANIFEST_MEDIATYPE
+    read -r PREPROD_RELEASE_MANIFEST_SIZE
+    read -r PREPROD_RELEASE_CONFIG_DIGEST
+    read -r PREPROD_RELEASE_CONFIG_SIZE
   } <<<"$parsed"
-  export PREPROD_RELEASE_COMMIT PREPROD_RELEASE_IMAGE_REF PREPROD_RELEASE_IMAGE_DIGEST \
-    PREPROD_RELEASE_PLATFORM PREPROD_RELEASE_ARCHIVE PREPROD_RELEASE_ARCHIVE_SHA256
+  export PREPROD_RELEASE_COMMIT PREPROD_RELEASE_IMAGE_REF PREPROD_RELEASE_PLATFORM \
+    PREPROD_RELEASE_REVISION PREPROD_RELEASE_ARCHIVE PREPROD_RELEASE_ARCHIVE_SHA256 \
+    PREPROD_RELEASE_TARGET_DIGEST PREPROD_RELEASE_TARGET_MEDIATYPE PREPROD_RELEASE_TARGET_SIZE \
+    PREPROD_RELEASE_MANIFEST_DIGEST PREPROD_RELEASE_MANIFEST_MEDIATYPE PREPROD_RELEASE_MANIFEST_SIZE \
+    PREPROD_RELEASE_CONFIG_DIGEST PREPROD_RELEASE_CONFIG_SIZE
 }
 
 # --- 本地镜像身份 ----------------------------------------------------------
 #
-# 🔴 "manifest 指定的 ID 在本地存在"**不等于**"tag 指向它"。
-# load 之后有人 `docker tag` 把同名 tag 指到别的镜像，或者本机早就缓存着一个
-# 同名旧 tag —— 两种情况下按 digest inspect 都能成功，但 Compose 用的是 tag。
-# 所以必须**从 tag 出发**解析出 ID，再与 manifest 的 config digest 比对。
+# 🔴 "manifest 指定的 digest 在本地存在"**不等于**"tag 指向它"。load 之后有人
+# `docker tag` 把同名 tag 指到别的镜像，或本机早就缓存着一个同名旧 tag —— 两种
+# 情况下按 digest inspect 都能成功，但 Compose 用的是 tag。所以**从 tag 出发**。
+#
+# 🔴 判据锚点按字段能力选，不按 Docker 版本号或 storage-driver 字符串猜：
+#     有 .Descriptor（containerd image store）→ 以 Descriptor 为准，冲突即拒绝；
+#     无 .Descriptor（经典 graphdriver）      → .Id 即 config digest。
+# 判定逻辑在 image-identity.mjs assert-image，与构建器、preflight、deploy 同一份。
 preprod_assert_local_image() {
-  local ref="$1" want_digest="$2" want_commit="$3" want_platform="${4:-}"
-  local actual_id
-  actual_id="$(docker image inspect "$ref" --format '{{.Id}}' 2>/dev/null)" || {
+  local ref="$1"
+  local inspected
+  inspected="$(docker image inspect "$ref" --format '{{json .}}' 2>/dev/null)" || {
     echo "IMAGE=REFUSED reason=image_missing ref=$ref"; return 65;
   }
-  [[ "$actual_id" == "$want_digest" ]] || {
-    echo "IMAGE=REFUSED reason=tag_digest_mismatch ref=$ref expected=$want_digest actual=$actual_id"
-    return 65
-  }
-  local revision
-  revision="$(docker image inspect "$ref" \
-    --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' 2>/dev/null)"
-  [[ "$revision" == "$want_commit" ]] || {
-    echo "IMAGE=REFUSED reason=revision_mismatch expected=$want_commit actual=$revision"; return 65;
-  }
-  if [[ -n "$want_platform" ]]; then
-    local platform
-    platform="$(docker image inspect "$ref" --format '{{.Os}}/{{.Architecture}}' 2>/dev/null)"
-    [[ "$platform" == "$want_platform" ]] || {
-      echo "IMAGE=REFUSED reason=platform_mismatch expected=$want_platform actual=$platform"; return 65;
-    }
-  fi
+  printf '%s' "$inspected" | node "$PREPROD_REPO_ROOT/scripts/preproduction/image-identity.mjs" \
+    assert-image \
+    --target-digest "$PREPROD_RELEASE_TARGET_DIGEST" \
+    --target-mediatype "$PREPROD_RELEASE_TARGET_MEDIATYPE" \
+    --target-size "$PREPROD_RELEASE_TARGET_SIZE" \
+    --config-digest "$PREPROD_RELEASE_CONFIG_DIGEST" \
+    --platform "$PREPROD_RELEASE_PLATFORM" \
+    --revision "$PREPROD_RELEASE_REVISION"
 }
 
 # --- 运行中容器的镜像身份 --------------------------------------------------
 #
 # 🔴 预检通过 ≠ 容器真的用了那个镜像。容器可能是上一轮遗留的、可能因为
-# pull_policy/缓存起到了别的镜像。启动之后必须再核一次**实际容器**的 Image ID。
+# pull_policy/缓存起到了别的镜像。启动之后必须再核一次**实际容器**。
+#
+# 🔴 有 .ImageManifestDescriptor 时与**选中的平台 manifest** 比，而不是拿外层
+# index digest 比：多平台 index 下容器跑的是某一个平台的清单，外层 digest 永远不等。
 preprod_assert_container_image() {
-  local want_digest="$1"; shift
-  local service cid actual
+  local service cid inspected
   for service in "$@"; do
     cid="$(preprod_compose ps -q "$service" 2>/dev/null | head -1)"
     [[ -n "$cid" ]] || { echo "RUNTIME_IMAGE=REFUSED reason=container_missing service=$service"; return 65; }
-    actual="$(docker inspect "$cid" --format '{{.Image}}' 2>/dev/null)"
-    [[ "$actual" == "$want_digest" ]] || {
-      echo "RUNTIME_IMAGE=REFUSED reason=container_image_mismatch service=$service expected=$want_digest actual=$actual"
-      return 65
+    inspected="$(docker inspect "$cid" --format '{{json .}}' 2>/dev/null)" || {
+      echo "RUNTIME_IMAGE=REFUSED reason=container_uninspectable service=$service"; return 65;
+    }
+    printf '%s' "$inspected" | node "$PREPROD_REPO_ROOT/scripts/preproduction/image-identity.mjs" \
+      assert-container \
+      --platform-manifest-digest "$PREPROD_RELEASE_MANIFEST_DIGEST" \
+      --config-digest "$PREPROD_RELEASE_CONFIG_DIGEST" \
+      --platform "$PREPROD_RELEASE_PLATFORM" \
+      --service "$service" || return 65
+
+    # 容器指向的镜像实体本身也要核 revision 与平台——
+    # 只比对 digest 不足以说明"这个镜像是被批准那一个"。
+    local image_ref
+    image_ref="$(docker inspect "$cid" --format '{{.Image}}' 2>/dev/null)"
+    preprod_assert_local_image "$image_ref" >/dev/null || {
+      echo "RUNTIME_IMAGE=REFUSED reason=container_image_identity service=$service"; return 65;
     }
   done
   echo "RUNTIME_IMAGE=PASS services=$*"

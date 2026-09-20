@@ -46,16 +46,25 @@ async function makeArchivePair(overrides: Record<string, unknown> = {}) {
   const body = randomBytes(2048);
   await writeFile(path.join(dir, archiveName), body);
   const sha = createHash("sha256").update(body).digest("hex");
+  const MANIFEST_MEDIA = "application/vnd.oci.image.manifest.v1+json";
   const manifest = {
-    schemaVersion: 1,
+    schemaVersion: 2,
     transport: "archive",
     approved_git_commit: "a".repeat(40),
     version: "0.1.0",
     image_tag: "cps-novel:0.1.0-abcdef0",
-    image_config_digest: `sha256:${"b".repeat(64)}`,
     image_platform: "linux/amd64",
+    image_revision: "a".repeat(40),
     archive_filename: archiveName,
     archive_sha256: sha,
+    oci: {
+      target: { mediaType: MANIFEST_MEDIA, digest: `sha256:${"b".repeat(64)}`, size: 3142 },
+      platform_manifest: { mediaType: MANIFEST_MEDIA, digest: `sha256:${"b".repeat(64)}`, size: 3142 },
+      config: {
+        mediaType: "application/vnd.oci.image.config.v1+json",
+        digest: `sha256:${"c".repeat(64)}`, size: 13439,
+      },
+    },
     built_at: "2026-09-20T00:00:00Z",
     source_repository: "https://github.com/flightzxc/cps-novel",
     ...overrides,
@@ -111,23 +120,24 @@ describe("归档构建器的身份断言写在脚本里，不能被悄悄拿掉"
     // revision label 必须等于 approved commit
     expect(source).toContain("revision_label");
     expect(source).toContain("org.opencontainers.image.revision");
-    // config digest 是跨主机稳定的身份（save/load 不保留 RepoDigest）
-    expect(source).toContain("image_config_digest");
+    // 🔴 身份来自**解析归档内容**，不再抄构建机的 docker inspect .Id
+    expect(source).toContain("image-identity.mjs");
+    expect(source).toContain("build-manifest");
+    expect(source, "构建器不得再把 .Id 当作身份").not.toMatch(/\{\{\.Id\}\}/);
   });
 
-  it("manifest 明确声明 tag 本身不是身份", async () => {
-    const source = await readFile(path.join(root, BUILD), "utf8");
-    expect(source).toContain("image_tag alone is NOT identity");
+  it("manifest 生成只有一份实现，且声明 tag 本身不是身份", async () => {
+    const shared = await readFile(path.join(root, "scripts/preproduction/image-identity.mjs"), "utf8");
+    expect(shared).toContain("image_tag alone is NOT identity");
     for (const field of [
-      "approved_git_commit",
-      "image_config_digest",
-      "archive_filename",
-      "archive_sha256",
-      "built_at",
-      "source_repository",
+      "approved_git_commit", "image_revision",
+      "archive_filename", "archive_sha256", "built_at", "source_repository",
     ]) {
-      expect(source, `manifest 缺字段 ${field}`).toContain(field);
+      expect(shared, `manifest 缺字段 ${field}`).toContain(field);
     }
+    // 🔴 schemaVersion: 2 只能出现在共享模块里；构建器、测试都不得各拼一份。
+    const build = await readFile(path.join(root, BUILD), "utf8");
+    expect(build).not.toContain("schemaVersion: 2");
   });
 
   it("先写 .partial 再改名 —— 中途失败不留下看似成功的半截归档", async () => {
@@ -138,11 +148,18 @@ describe("归档构建器的身份断言写在脚本里，不能被悄悄拿掉"
 });
 
 describe("校验器：篡改一律拒绝", () => {
-  it("完好的归档 + manifest 通过离线校验", async () => {
+  /**
+   * 🔴 本文件的 fixture 是**假归档**（随机字节 + 手写 manifest），只用来钉
+   * "形状/拒绝路径"。v2 之后校验器还会解压归档、核对引用链，所以形状合法的
+   * 假归档必然止步于内容解析——这条断言证明那道闸确实存在，而不是形状过了就放行。
+   * 真归档的正例在 preproduction-image-store-portability.test.ts（两种 image store 实跑）。
+   */
+  it("形状合法但内容不是真归档 → 止步于内容解析，不会被当成通过", async () => {
     const { manifestPath } = await makeArchivePair();
     const { status, out } = run(VERIFY, ["--manifest", manifestPath]);
-    expect(out).toContain("VERIFY_OFFLINE=PASS");
-    expect(status).toBe(0);
+    expect(out).not.toContain("VERIFY_OFFLINE=PASS");
+    expect(out).toMatch(/ARCHIVE=REFUSED|IDENTITY=REFUSED/);
+    expect(status).not.toBe(0);
   });
 
   it("🔴 归档被篡改一个字节即拒绝", async () => {
@@ -168,9 +185,15 @@ describe("校验器：篡改一律拒绝", () => {
     expect(run(VERIFY, ["--manifest", bad.manifestPath]).out).toContain(
       "reason=manifest_approved_git_commit",
     );
-    const bad2 = await makeArchivePair({ image_config_digest: "not-a-digest" });
+    const bad2 = await makeArchivePair({
+      oci: {
+        target: { mediaType: "application/vnd.oci.image.manifest.v1+json", digest: `sha256:${"b".repeat(64)}`, size: 3142 },
+        platform_manifest: { mediaType: "application/vnd.oci.image.manifest.v1+json", digest: `sha256:${"b".repeat(64)}`, size: 3142 },
+        config: { mediaType: "application/vnd.oci.image.config.v1+json", digest: "not-a-digest", size: 1 },
+      },
+    });
     expect(run(VERIFY, ["--manifest", bad2.manifestPath]).out).toContain(
-      "reason=manifest_image_config_digest",
+      "reason=manifest_oci_config_digest",
     );
     // 🔴 把 config digest 拼成 repo@sha256 是伪造的 registry 引用，必须单独挡掉
     const forged = await makeArchivePair({
@@ -224,7 +247,7 @@ describe("校验器：篡改一律拒绝", () => {
   it("🔴 校验器从 tag 出发核对身份，而不是只按 digest inspect", async () => {
     const source = await readFile(path.join(root, VERIFY), "utf8");
     expect(source).toContain("preprod_assert_local_image");
-    expect(source).toContain('"$image_tag"');
+    expect(source).toContain('"$PREPROD_RELEASE_IMAGE_REF"');
     // 不再自带第二份 manifest 解析实现
     expect(source).toContain("preprod_read_release_manifest");
     expect(source).not.toContain("require(process.argv[1])");
