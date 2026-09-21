@@ -205,6 +205,71 @@ privilege_check_failure_reason() {
   fi
 }
 
+# --- pg_hba.conf replication subnet: runtime containment check -------------
+#
+# Every check above this point in persistent-check is STATIC: it compares
+# text on disk (this process's own SQL, and -- via
+# tests/backend/runtime/preproduction-deployment-contract.test.ts --
+# infra/preproduction/docker-compose.yml's ipam.config[0].subnet,
+# infra/postgres/hba-replication-rule.sh's default, and the base
+# docker-compose.yml's X8_RUNTIME_SUBNET default). Host incident (measured,
+# not hypothetical): a host can have all three of those agreeing, and this
+# check still fail -- the LIVE cps_novel_runtime network was created BEFORE
+# the ipam pin landed and was never recreated afterward, so it kept its
+# stale auto-allocated subnet (172.16.1.0/24) while the pg_hba.conf rule
+# baked at initdb time (172.18.0.0/16) never changed. Every replication
+# connection from that network was rejected. No static text comparison can
+# catch that: it requires asking Docker and the running container what is
+# ACTUALLY in effect, which is what this does.
+#
+# Containment, not equality: the CIDR baked into pg_hba.conf is a PERMITTED
+# RANGE, not a value the live network must match exactly. A live subnet
+# that is a narrower range inside it (a /24 inside the baked /16, say) is a
+# perfectly valid deployment and must not be flagged; only a live subnet
+# that reaches outside the baked range is the defect. ipv4_cidr_contains
+# below does real integer range containment for exactly that reason -- a
+# naive string/prefix compare of the two CIDR texts would reject that
+# legitimate narrower-subnet case as a false positive.
+ipv4_cidr_range() {
+  # $1 = CIDR (a.b.c.d/bits). Prints "<range_start> <range_end>" (both
+  # 32-bit unsigned values, as decimal integers) on success. Fails (no
+  # output, non-zero exit) on anything that is not a syntactically
+  # well-formed IPv4 CIDR -- callers must treat that as "value unusable",
+  # never silently substitute a permissive default range for it.
+  local cidr="$1" ip bits a b c d ip_int mask octet start end
+  ip="${cidr%%/*}"
+  bits="${cidr#*/}"
+  [[ "$bits" =~ ^[0-9]+$ ]] && ((bits >= 0 && bits <= 32)) || return 1
+  IFS=. read -r a b c d <<<"$ip"
+  for octet in "$a" "$b" "$c" "$d"; do
+    [[ "$octet" =~ ^[0-9]+$ ]] && ((octet >= 0 && octet <= 255)) || return 1
+  done
+  ip_int=$(((a << 24) + (b << 16) + (c << 8) + d))
+  if ((bits == 0)); then
+    mask=0
+  else
+    mask=$(((0xFFFFFFFF << (32 - bits)) & 0xFFFFFFFF))
+  fi
+  start=$((ip_int & mask))
+  end=$((start | ((~mask) & 0xFFFFFFFF)))
+  printf '%s %s\n' "$start" "$end"
+}
+
+# $1 = outer CIDR (the pg_hba.conf rule's permitted range), $2 = inner CIDR
+# (the live network's actual subnet). True (exit 0) iff inner's whole
+# address range lies within outer's (equal ranges count as contained).
+# Exit 2 (not 0, not a plain 1) if either CIDR fails to parse, so a caller
+# under `set -e` cannot mistake a parse failure for "not contained" and
+# quietly fall through the wrong branch.
+ipv4_cidr_contains() {
+  local outer inner outer_start outer_end inner_start inner_end
+  outer="$(ipv4_cidr_range "$1")" || return 2
+  inner="$(ipv4_cidr_range "$2")" || return 2
+  read -r outer_start outer_end <<<"$outer"
+  read -r inner_start inner_end <<<"$inner"
+  ((inner_start >= outer_start && inner_end <= outer_end))
+}
+
 case "${1:-}" in
   fresh-init)
     [[ "${PREPROD_CONFIRM_EMPTY_VOLUME:-}" == "EMPTY_cps_novel_postgres_data" ]] || {
@@ -257,6 +322,42 @@ case "${1:-}" in
       exit 65
     }
     echo "DATABASE_PRIVILEGE_CHECK=PASS"
+
+    # Runtime companion to the static drift test in
+    # tests/backend/runtime/preproduction-deployment-contract.test.ts: that
+    # test only proves the compose/script DEFAULTS agree with each other on
+    # disk. It cannot see whether the LIVE cps_novel_runtime network was
+    # ever actually recreated to pick up a changed pin -- see the block
+    # comment on ipv4_cidr_contains() above for the measured host incident
+    # this specifically catches.
+    docker network inspect cps_novel_runtime >/dev/null 2>&1 || {
+      echo "DATABASE_REPLICATION_SUBNET_CHECK=FAIL reason=network_missing" >&2; exit 65;
+    }
+    live_subnet="$(docker network inspect cps_novel_runtime \
+      --format '{{ if .IPAM.Config }}{{ (index .IPAM.Config 0).Subnet }}{{ end }}' 2>/dev/null)"
+    [[ -n "$live_subnet" ]] || {
+      echo "DATABASE_REPLICATION_SUBNET_CHECK=FAIL reason=network_missing" >&2; exit 65;
+    }
+    # The exact rule infra/postgres/hba-replication-rule.sh appends:
+    # "host replication backup_role <subnet> scram-sha-256". Read it from
+    # the RUNNING container's actual pg_hba.conf (PGDATA=/var/lib/postgresql/
+    # data on the postgres:16.14 image, mounted directly at that path by
+    # docker-compose.yml -- no PGDATA subdirectory), not from the script's
+    # default -- the whole point is that this value was baked once, at
+    # initdb time, and is never re-derived afterward.
+    hba_rule_line="$(preprod_compose exec -T postgres \
+      grep -E '^host replication backup_role ' /var/lib/postgresql/data/pg_hba.conf 2>/dev/null | tail -1)" || true
+    hba_rule_subnet="$(printf '%s\n' "$hba_rule_line" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/[0-9]+' | tail -1)" || true
+    [[ -n "$hba_rule_subnet" ]] || {
+      echo "DATABASE_REPLICATION_SUBNET_CHECK=FAIL reason=hba_rule_missing" >&2; exit 65;
+    }
+    if ipv4_cidr_contains "$hba_rule_subnet" "$live_subnet"; then
+      echo "DATABASE_REPLICATION_SUBNET_CHECK=PASS live_subnet=${live_subnet} hba_rule_subnet=${hba_rule_subnet}"
+    else
+      echo "DATABASE_REPLICATION_SUBNET_CHECK=FAIL reason=subnet_not_contained live_subnet=${live_subnet} hba_rule_subnet=${hba_rule_subnet}" >&2
+      exit 65
+    fi
+
     echo "DATABASE_PERSISTENT_CHECK=PASS"
     ;;
   migrate-approved)
