@@ -368,6 +368,21 @@ not reverse migrations. If the schema is not
 backward compatible, remain in maintenance and follow a separately approved
 database restore incident plan.
 
+Rollback also replays `infra/postgres/grants.sql` from that same previous
+release checkout (before the app containers come back up), so runtime role
+privileges match the code being restored instead of whatever grants the
+release being rolled back FROM last committed via `migrate-approved` --
+without this, a deploy that had tightened a grant (e.g. `7141177`, `a943fda`)
+would leave the restored, older application running with privileges it
+never had before, or missing one it still depends on. This is a grants
+replay only, not a schema change or a data restore, and it does not by
+itself make an incompatible schema safe to roll back onto: the operator
+approving `SCHEMA_COMPATIBLE_WITH_PREVIOUS=YES` must also confirm the
+grants delta between the two releases' `infra/postgres/grants.sql` is
+itself backward compatible with the previous release's code (i.e. nothing
+that code still legitimately needs was only ever granted by the newer
+release and now gets revoked back out from under it).
+
 ## Backups, WAL, export, and restore
 
 The backup service writes one logical backup daily and retains 14 days. It

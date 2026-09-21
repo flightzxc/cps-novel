@@ -192,6 +192,42 @@ describe("Phase 2B preproduction deployment contract", () => {
     expect(release).toContain('echo "ROLLBACK=FAILED maintenance=ON"');
   });
 
+  it("rollback() replays the previous release's grants before bringing the app back up", async () => {
+    const release = await text("scripts/preproduction/release.sh");
+    const rollbackStart = release.indexOf("rollback() {");
+    expect(rollbackStart).toBeGreaterThan(-1);
+    // MAJOR-2 fix: rollback() must replay the previous release's own
+    // grants.sql (this checkout's copy, since rollback runs from the
+    // previous immutable release directory) before the app comes back up --
+    // otherwise the restored old app keeps running against whatever grants
+    // the release being rolled back FROM last committed.
+    const ordered = [
+      "preprod_compose stop web",
+      // The redirect form (`<"$root/...`) is matched, not a bare substring,
+      // so this finds the actual command rather than its own header
+      // comment (which also mentions the path in prose).
+      '<"$root/infra/postgres/grants.sql"',
+      "preprod_compose_app_up web",
+    ];
+    let offset = rollbackStart;
+    for (const token of ordered) {
+      const next = release.indexOf(token, offset);
+      expect(next, token).toBeGreaterThan(offset);
+      offset = next;
+    }
+    // The grants replay uses the identical shape database.sh's
+    // migrate-approved case uses.
+    const grantsReplayOffset = release.indexOf('<"$root/infra/postgres/grants.sql"', rollbackStart);
+    expect(grantsReplayOffset).toBeGreaterThan(-1);
+    const rollbackGrantsCommand = release.slice(
+      release.lastIndexOf("preprod_compose exec", grantsReplayOffset),
+      grantsReplayOffset,
+    );
+    expect(rollbackGrantsCommand).toContain("-U postgres");
+    expect(rollbackGrantsCommand).toContain("--single-transaction");
+    expect(rollbackGrantsCommand).toContain("-v ON_ERROR_STOP=1");
+  });
+
   it("refuses fresh init without exact empty-volume confirmation", async () => {
     const dir = await mkdtemp(path.join(tmpdir(), "preprod-db-test-"));
     const envFile = path.join(dir, "preprod.env");
