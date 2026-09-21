@@ -545,3 +545,110 @@ describe("stable secret negative checks", () => {
     expect(result.stdout).toContain("SECRET_PREFLIGHT=FAIL reason=secret_identity_mismatch");
   });
 });
+
+describe("preprod runtime network subnet must match the baked pg_hba.conf replication rule", () => {
+  // Host incident (measured, not hypothetical): infra/preproduction/
+  // docker-compose.yml's `runtime` network had no ipam config, so Docker
+  // auto-allocated a subnet for cps_novel_runtime -- observed as
+  // 172.16.1.0/24 on the affected host. infra/postgres/hba-replication-rule.sh
+  // is sourced once, at initdb time, to append a pg_hba.conf rule for
+  // backup_role scoped to X8_RUNTIME_SUBNET (default 172.18.0.0/16) --
+  // and that rule is never re-derived afterward. The two subnets drifted
+  // apart, so every replication connection was rejected ("no pg_hba.conf
+  // entry for replication connection from host ..."), which made
+  // pg_basebackup -- and therefore PITR -- impossible. This test pins the
+  // fix (an explicit ipam block on the compose network) in place: if
+  // either side's subnet changes without updating the other, the test
+  // must fail for that reason, not pass by accident.
+  //
+  // There is a THIRD copy of this same default that must stay locked to
+  // the other two: the base docker-compose.yml's
+  // `postgres.environment.X8_RUNTIME_SUBNET` (`${X8_RUNTIME_SUBNET:-...}`)
+  // is what actually gets read by infra/postgres/init-roles.sh (via
+  // hba-replication-rule.sh) at real initdb time on the host -- it is the
+  // value that ends up baked into the live pg_hba.conf. The preproduction
+  // compose's `ipam.config[0].subnet` only pins the *network*; without
+  // also pinning this third default, all static checks can pass while the
+  // value actually baked into pg_hba.conf still drifts.
+
+  function extractComposeRuntimeSubnet(composeYaml: string): string {
+    // Top-level `networks:` key starts a line with no leading whitespace.
+    // Slice from there to the next top-level key (or EOF) so we don't
+    // accidentally match a `subnet:` that belongs to some other stanza.
+    const networksIdx = composeYaml.search(/^networks:/m);
+    expect(
+      networksIdx,
+      "expected a top-level `networks:` key in infra/preproduction/docker-compose.yml",
+    ).toBeGreaterThanOrEqual(0);
+    const afterNetworks = composeYaml.slice(networksIdx + "networks:".length);
+    const nextTopLevelKeyIdx = afterNetworks.search(/\n[A-Za-z0-9_.-]+:/);
+    const networksBlock =
+      nextTopLevelKeyIdx === -1 ? afterNetworks : afterNetworks.slice(0, nextTopLevelKeyIdx);
+
+    expect(
+      networksBlock,
+      "expected the `networks:` block to declare the `runtime` network named cps_novel_runtime",
+    ).toMatch(/runtime:\s*\n\s*name:\s*cps_novel_runtime/);
+
+    const subnetMatch = networksBlock.match(/ipam:\s*\n\s*config:\s*\n\s*-\s*subnet:\s*([0-9.]+\/[0-9]+)/);
+    expect(
+      subnetMatch,
+      `expected an ipam.config[0].subnet under the runtime network, found block:\n${networksBlock}`,
+    ).not.toBeNull();
+    return subnetMatch![1];
+  }
+
+  // Shared by hba-replication-rule.sh (`X8_RUNTIME_SUBNET:-<cidr>}` in its
+  // own `${X8_RUNTIME_SUBNET:-...}` default) and the base docker-compose.yml
+  // (`X8_RUNTIME_SUBNET: ${X8_RUNTIME_SUBNET:-<cidr>}` under
+  // `postgres.environment`) -- both spell the default the same way, so one
+  // extractor covers either source text.
+  function extractX8RuntimeSubnetDefault(source: string, sourceLabel: string): string {
+    const match = source.match(/X8_RUNTIME_SUBNET:-([0-9.]+\/[0-9]+)\}/);
+    expect(match, `expected ${sourceLabel} to default X8_RUNTIME_SUBNET to a CIDR subnet`).not.toBeNull();
+    return match![1];
+  }
+
+  it("keeps the compose-declared runtime subnet equal to hba-replication-rule.sh's default", async () => {
+    const composeYaml = await text("infra/preproduction/docker-compose.yml");
+    const hbaScript = await text("infra/postgres/hba-replication-rule.sh");
+
+    const composeSubnet = extractComposeRuntimeSubnet(composeYaml);
+    const hbaSubnet = extractX8RuntimeSubnetDefault(hbaScript, "infra/postgres/hba-replication-rule.sh");
+
+    expect(
+      composeSubnet,
+      `infra/preproduction/docker-compose.yml's runtime network subnet (${composeSubnet}) must equal ` +
+        `infra/postgres/hba-replication-rule.sh's default X8_RUNTIME_SUBNET (${hbaSubnet}). A mismatch ` +
+        `means Docker will allocate (or auto-reallocate on recreate) an address range that the ` +
+        `pg_hba.conf replication rule baked in at initdb time does not permit: replication ` +
+        `connections are rejected, pg_basebackup fails, and there is no physical base backup to ` +
+        `anchor PITR recovery.`,
+    ).toBe(hbaSubnet);
+  });
+
+  it("keeps the base docker-compose.yml's X8_RUNTIME_SUBNET default locked to the same value", async () => {
+    // This is the copy that is actually live at real initdb time: the base
+    // docker-compose.yml's `postgres.environment.X8_RUNTIME_SUBNET` is what
+    // infra/postgres/init-roles.sh reads (via hba-replication-rule.sh) when
+    // it bakes the pg_hba.conf replication rule on a brand-new PGDATA. The
+    // preceding test only compares the preproduction compose's *network*
+    // subnet against hba-replication-rule.sh's own fallback default; if
+    // this third copy drifts, that comparison can stay green while the
+    // value actually baked into a live pg_hba.conf does not match either.
+    const baseComposeYaml = await text("docker-compose.yml");
+    const hbaScript = await text("infra/postgres/hba-replication-rule.sh");
+
+    const baseComposeSubnet = extractX8RuntimeSubnetDefault(baseComposeYaml, "docker-compose.yml");
+    const hbaSubnet = extractX8RuntimeSubnetDefault(hbaScript, "infra/postgres/hba-replication-rule.sh");
+
+    expect(
+      baseComposeSubnet,
+      `docker-compose.yml's postgres.environment.X8_RUNTIME_SUBNET default (${baseComposeSubnet}) must ` +
+        `equal infra/postgres/hba-replication-rule.sh's default (${hbaSubnet}). This is the value that ` +
+        `is actually read at real initdb time (via infra/postgres/init-roles.sh), so a drift here bakes ` +
+        `a pg_hba.conf replication rule scoped to a subnet nothing else agrees on, even if the ` +
+        `preproduction compose's pinned network subnet still matches hba-replication-rule.sh's default.`,
+    ).toBe(hbaSubnet);
+  });
+});

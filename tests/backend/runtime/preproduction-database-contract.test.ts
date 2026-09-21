@@ -237,12 +237,15 @@ describe("preproduction database.sh: DATABASE_PRIVILEGE_CHECK contract (persiste
     }
     // Sanity: this scan must actually find the known emit sites, or the
     // pattern itself has drifted and the assertions above are vacuously
-    // true. 5 FAIL/REFUSED sites: volume_missing, postgres_not_running,
+    // true. 9 FAIL/REFUSED sites: volume_missing, postgres_not_running,
     // role_auth, DATABASE_PRIVILEGE_CHECK=FAIL, DATABASE_PERSISTENT_CHECK=
-    // FAIL reason=privilege_check. 2 PASS sites: DATABASE_PRIVILEGE_CHECK
-    // and DATABASE_PERSISTENT_CHECK.
-    expect(failOrRefusedCount, "expected to find every known FAIL/REFUSED emit site in persistent-check").toBe(5);
-    expect(passCount, "expected to find every known PASS emit site in persistent-check").toBe(2);
+    // FAIL reason=privilege_check, and the runtime replication-subnet
+    // containment check's four (network_missing x2 -- network absent, and
+    // network present but reporting no subnet -- hba_rule_missing,
+    // subnet_not_contained). 3 PASS sites: DATABASE_PRIVILEGE_CHECK,
+    // DATABASE_REPLICATION_SUBNET_CHECK, and DATABASE_PERSISTENT_CHECK.
+    expect(failOrRefusedCount, "expected to find every known FAIL/REFUSED emit site in persistent-check").toBe(9);
+    expect(passCount, "expected to find every known PASS emit site in persistent-check").toBe(3);
   });
 
   it("defines verify_database_privileges() with the exact heredoc delimiter the disposable-Postgres harness extracts", async () => {
@@ -559,9 +562,17 @@ describe("preproduction database.sh: cross-file stdout/stderr stream guard (stru
     // a false positive against approval_required, which must stay on stdout.
     expect(Array.from(guarded.keys())).toEqual(["persistent-check"]);
     expect(Array.from(guarded.get("persistent-check") ?? [])).toEqual(
-      expect.arrayContaining(["volume_missing", "postgres_not_running", "role_auth", "privilege_check"]),
+      expect.arrayContaining([
+        "volume_missing",
+        "postgres_not_running",
+        "role_auth",
+        "privilege_check",
+        "network_missing",
+        "hba_rule_missing",
+        "subnet_not_contained",
+      ]),
     );
-    expect(guarded.get("persistent-check")?.size).toBe(4);
+    expect(guarded.get("persistent-check")?.size).toBe(7);
   });
 
   it("scanned at least one real database.sh spawnSync call (guards against a vacuous pass)", async () => {

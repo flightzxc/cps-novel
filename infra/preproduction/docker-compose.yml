@@ -94,6 +94,51 @@ services:
 networks:
   runtime:
     name: cps_novel_runtime
+    # Pinned subnet -- do not remove the ipam block.
+    #
+    # Without an explicit ipam config Docker auto-allocates a subnet for
+    # this network, and that allocation is silent and can change on any
+    # `docker network rm` + recreate (it depends on what other networks
+    # already exist on the host at creation time). Measured on this host:
+    # auto-allocation picked 172.16.1.0/24. That is the latent bug, not
+    # just the current mismatch -- even if today's auto-allocated subnet
+    # happened to match, a future recreate could silently pick a different
+    # one again.
+    #
+    # infra/postgres/hba-replication-rule.sh bakes a pg_hba.conf
+    # replication rule for backup_role at initdb time, scoped to
+    # X8_RUNTIME_SUBNET (default 172.18.0.0/16, see docker-compose.yml's
+    # `postgres.environment.X8_RUNTIME_SUBNET`). That rule is written once
+    # and is never re-derived afterward, so this network's subnet must
+    # match it -- not the other way round. A mismatch rejects every
+    # replication connection ("no pg_hba.conf entry for replication
+    # connection from host ...", observed on this host from 172.16.1.3),
+    # which makes pg_basebackup, and therefore PITR, impossible.
+    #
+    # Keep this exactly equal to hba-replication-rule.sh's default subnet;
+    # tests/backend/runtime/preproduction-deployment-contract.test.ts
+    # asserts the two cannot drift apart.
+    #
+    # Changing this subnet on an EXISTING deployment requires removing the
+    # network first (Docker will not re-IPAM a network in place). Do NOT
+    # manually `docker network rm cps_novel_runtime` after stopping the
+    # containers -- verified broken: `docker network rm` succeeds even with
+    # stopped containers attached, but the stopped container keeps a
+    # reference to the removed network id, so the next `up` fails
+    # ("failed to set up container networking: network <old id> not
+    # found") and postgres stays `exited`. Use one of, instead:
+    #   - `docker compose down` (WITHOUT `-v`/`--volumes`) then `up`; or
+    #   - stop the containers, then plain `up -d` -- Compose detects the
+    #     IPAM change itself and replaces the network in place (observed:
+    #     Stopping -> Network Removed -> Creating -> Created -> Starting).
+    # Verified on Compose v5.0.1; confirm the same self-replacement
+    # behaviour against the host's actual compose version before relying
+    # on it. Either path leaves the postgres_data volume untouched --
+    # `-v`/`--volumes` on `down` is what would delete it
+    # (cps_novel_postgres_data), so never pass that flag here.
+    ipam:
+      config:
+        - subnet: 172.18.0.0/16
 
 volumes:
   postgres_data:
