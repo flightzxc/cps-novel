@@ -205,6 +205,63 @@ describe("secret consumer preflight model", () => {
     expect(script).not.toMatch(/docker\s+pull/);
   });
 
+  // 🔴 Every test above (and below) that exercises nginx_traverse_directories /
+  // maintenance_page / maintenance_marker runs with PREPROD_TEST_MODE=1 and
+  // supplies its own PREPROD_TEST_NGINX_TRAVERSE_PATHS / _MAINTENANCE_PAGE /
+  // _MAINTENANCE_MARKER override -- none of them ever executes the hardcoded
+  // production default literals. A production default that silently drops
+  // `/opt/cps-novel/shared/maintenance` (or points the page/marker at the
+  // wrong path) would leave every dynamic test above fully green while nginx
+  // can no longer stat the marker or read the 503 page on the real target --
+  // the maintenance gate would silently no-op exactly as it did before this
+  // fix. These three assertions read the script as text (no execution) so
+  // they pin the literals themselves, independent of any override.
+  it("pins the production default nginx_traverse_directories to all four fixed paths", async () => {
+    const script = await readFile(preflightPath, "utf8");
+    expect(
+      script,
+      "nginx_traverse_directories no longer lists all four fixed paths -- " +
+      "a dropped entry (most likely /opt/cps-novel/shared/maintenance) means " +
+      "nginx can no longer traverse into that directory in production, so it " +
+      "can neither stat the maintenance marker nor read the 503 page, and the " +
+      "maintenance gate silently no-ops even though every dynamic test here " +
+      "passes (they all override this list via PREPROD_TEST_NGINX_TRAVERSE_PATHS)",
+    ).toContain(
+      "nginx_traverse_directories=(/opt/cps-novel /opt/cps-novel/shared /opt/cps-novel/shared/secrets /opt/cps-novel/shared/maintenance)",
+    );
+  });
+
+  it("pins the production default maintenance page path", async () => {
+    const script = await readFile(preflightPath, "utf8");
+    expect(
+      script,
+      "maintenance_page's production default no longer points at " +
+      "/opt/cps-novel/shared/maintenance/__preprod_maintenance.html -- nginx's " +
+      "error_page 503 serves exactly that file from that directory, so a wrong " +
+      "default means the probe_readable check below validates the wrong path " +
+      "(or nothing) while production nginx cannot read the real page it must " +
+      "serve; every dynamic test here overrides this via PREPROD_TEST_MAINTENANCE_PAGE " +
+      "and would stay green regardless",
+    ).toContain(
+      'maintenance_page="/opt/cps-novel/shared/maintenance/__preprod_maintenance.html"',
+    );
+  });
+
+  it("pins the production default maintenance marker path", async () => {
+    const script = await readFile(preflightPath, "utf8");
+    expect(
+      script,
+      "maintenance_marker's production default no longer points at " +
+      "/opt/cps-novel/shared/maintenance/enabled -- that is the exact path " +
+      "cps-novel-preprod-protected.conf stats with `if (-f ...)`, so a wrong " +
+      "default means the probe_visible check below can never observe the real " +
+      "marker nginx actually gates on; every dynamic test here overrides this " +
+      "via PREPROD_TEST_MAINTENANCE_MARKER and would stay green regardless",
+    ).toContain(
+      'maintenance_marker="/opt/cps-novel/shared/maintenance/enabled"',
+    );
+  });
+
   it("fails on rootless or userns Docker before any probe", async () => {
     const fixture = await secretFixture();
     const bin = path.join(fixture, "bin");
