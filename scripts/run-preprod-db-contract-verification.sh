@@ -200,6 +200,18 @@ psql_grants_replay() {
     <"$file" 2>&1
 }
 
+# Deliberately the PRE-FIX shape: identical to psql_grants_replay() minus
+# --single-transaction. Used ONLY by the atomicity case's mutation-proof
+# sub-case (CASE 3b below), to prove the flag is actually load-bearing
+# rather than assuming it -- never used against a database anything else in
+# this script depends on afterward.
+psql_grants_replay_no_single_transaction() {
+  local db="$1" file="$2"
+  docker exec -i "$container_name" \
+    psql --no-psqlrc -v ON_ERROR_STOP=1 -U postgres -d "$db" \
+    <"$file" 2>&1
+}
+
 privilege_check() {
   local db="$1"
   printf '%s' "$privilege_check_sql" | docker exec -i "$container_name" \
@@ -287,18 +299,45 @@ echo "PREPROD_DB_CONTRACT_CASE_NEGATIVE_PRE_FIX=PASS"
 # ===========================================================================
 # CASE 3 (negative, atomicity): a grants.sql replay that fails PARTWAY
 # THROUGH must leave privileges EXACTLY as it found them -- never
-# "REVOKE committed, GRANT missing". The failing statement is injected right
-# after backup_role's ALL-TABLES/ALL-SEQUENCES grants (grants.sql line 52-53)
-# and well before web_app's admin-table grants (line ~102) -- so if
-# --single-transaction did NOT hold, backup_role's grants (which ran BEFORE
-# the injected failure) would already be durably committed while web_app's
-# (which run AFTER it) would not: a clear, checkable partial-commit
-# signature, not a coincidence that would pass either way.
+# "REVOKE committed, GRANT missing".
+#
+# Review fix (round 1): the original version of this case started from an
+# UNGRANTED database (grants never replayed, before-state f,f) and asserted
+# the after-state was still f,f. That does not discriminate: starting from
+# f, the after-state is f whether or not --single-transaction is present --
+# with the flag, the whole failed transaction rolls back to f; without it,
+# the REVOKEs on an already-privilege-less role are simply no-ops, the
+# injected failure aborts before any GRANT lands, and the result is still f
+# either way. A test that passes regardless of the fix under test has no
+# teeth. The hazard --single-transaction actually protects against is a
+# database whose grants are ALREADY GOOD (t) -- so this case now seeds a
+# genuinely granted database first, and a SEPARATE mutation sub-case (3b,
+# below) proves the flag's ABSENCE actually causes damage on an identically
+# seeded database, so both directions are visible side by side.
 # ===========================================================================
 docker exec "$container_name" createdb -U postgres -O migration_owner cps_novel_atomicity >/dev/null
 DATABASE_URL="$(owner_url cps_novel_atomicity)" npx prisma migrate deploy >/dev/null
 echo "PREPROD_DB_CONTRACT_CASE_ATOMICITY_SETUP=PASS database=cps_novel_atomicity migrations=applied grants=NOT_REPLAYED"
 
+# Seed: a NORMAL, successful, unmodified grants.sql replay -- the state that
+# actually matters for this hazard is "already granted", not "never granted".
+seed_output="$(psql_grants_replay cps_novel_atomicity "$grants_sql")" \
+  || fail "ATOMICITY" "seed_grants_replay_failed_on_atomicity_database: $seed_output"
+
+before_backup_select="$(scalar_bool cps_novel_atomicity "SELECT has_table_privilege('backup_role','public.operation_audit','SELECT')")"
+before_web_select="$(scalar_bool cps_novel_atomicity "SELECT has_table_privilege('web_app','public.admin_identity','SELECT')")"
+[[ "$before_backup_select" == "t" && "$before_web_select" == "t" ]] \
+  || fail "ATOMICITY" "seed_replay_did_not_actually_grant_privileges backup=$before_backup_select web=$before_web_select"
+echo "PREPROD_DB_CONTRACT_CASE_ATOMICITY_SEED=PASS before=backup:${before_backup_select},web:${before_web_select}"
+
+# Same injection as before -- right after backup_role's ALL-TABLES/
+# ALL-SEQUENCES grants (grants.sql line 52-53) and well before web_app's
+# admin-table grants (line ~102). Position does not matter for THIS
+# sub-case's correctness (--single-transaction rolls back the WHOLE file
+# regardless of where the failure lands, including statements that already
+# ran to completion earlier in the same file) -- it matters for sub-case 3b
+# below, and this file is reused there unmodified, per the review's explicit
+# instruction to run "the same broken grants file" in both directions.
 anchor='GRANT SELECT ON ALL SEQUENCES IN SCHEMA public TO backup_role;'
 broken_grants="$secret_dir/grants-broken.sql"
 awk -v anchor="$anchor" -v injected=0 '
@@ -311,11 +350,6 @@ awk -v anchor="$anchor" -v injected=0 '
 grep -qF 'preprod_db_contract_nonexistent_table_xyz' "$broken_grants" \
   || fail "ATOMICITY" "broken_grants_injection_anchor_not_found_in_grants_sql"
 
-before_backup_select="$(scalar_bool cps_novel_atomicity "SELECT has_table_privilege('backup_role','public.operation_audit','SELECT')")"
-before_web_select="$(scalar_bool cps_novel_atomicity "SELECT has_table_privilege('web_app','public.admin_identity','SELECT')")"
-[[ "$before_backup_select" == "f" && "$before_web_select" == "f" ]] \
-  || fail "ATOMICITY" "unexpected_pre_existing_privileges_before_broken_replay backup=$before_backup_select web=$before_web_select"
-
 if psql_grants_replay cps_novel_atomicity "$broken_grants" >"$secret_dir"/atomicity-replay.log 2>&1; then
   atomicity_replay_output="$(cat "$secret_dir"/atomicity-replay.log)"
   rm -f "$secret_dir"/atomicity-replay.log
@@ -325,11 +359,64 @@ rm -f "$secret_dir"/atomicity-replay.log
 
 after_backup_select="$(scalar_bool cps_novel_atomicity "SELECT has_table_privilege('backup_role','public.operation_audit','SELECT')")"
 after_web_select="$(scalar_bool cps_novel_atomicity "SELECT has_table_privilege('web_app','public.admin_identity','SELECT')")"
-if [[ "$after_backup_select" != "f" || "$after_web_select" != "f" ]]; then
-  fail "ATOMICITY" "privileges_changed_after_failed_replay_BEFORE=backup:$before_backup_select,web:$before_web_select_AFTER=backup:$after_backup_select,web:$after_web_select"
+if [[ "$after_backup_select" != "t" || "$after_web_select" != "t" ]]; then
+  fail "ATOMICITY" "privileges_changed_after_failed_replay_BEFORE=backup:$before_backup_select,web:${before_web_select}_AFTER=backup:$after_backup_select,web:$after_web_select"
 fi
 echo "PREPROD_DB_CONTRACT_CASE_ATOMICITY_STATE_UNCHANGED=PASS before=backup:${before_backup_select},web:${before_web_select} after=backup:${after_backup_select},web:${after_web_select}"
 echo "PREPROD_DB_CONTRACT_CASE_ATOMICITY=PASS"
+
+# ===========================================================================
+# CASE 3b (negative, mutation proof): the two-directional proof the flag is
+# load-bearing. A SEPARATE throwaway database, seeded IDENTICALLY (a normal
+# successful grants.sql replay first, so the before-state is genuinely
+# granted, t/t) -- then the SAME broken_grants file from case 3 above is
+# replayed again, this time WITHOUT --single-transaction. Without the flag,
+# psql autocommits each statement as it runs: grants.sql's REVOKE block (the
+# file's first ~15 statements) commits immediately, stripping every role,
+# and the injected failure then aborts the file before any of the
+# re-GRANTs can land -- so the roles end up STRIPPED, not restored.
+#
+# web_app is the discriminating signal: its admin_identity/operation_audit
+# grants (grants.sql lines ~72, ~102) sit AFTER the injection anchor
+# (line 53), so neither has re-run by the time the script dies -- they must
+# come back f. backup_role's OWN ALL-TABLES/ALL-SEQUENCES re-grant
+# (lines 52-53) sits BEFORE the injection anchor, so it re-commits and
+# succeeds before the script ever reaches the injected failure -- backup_role
+# is therefore expected to come back t, not f. This is reported for
+# transparency (it is itself a real, illustrative instance of "some roles'
+# grants land, others don't" -- the exact partial-application shape
+# --single-transaction exists to prevent) but only the web_app signals gate
+# pass/fail, since they are the ones this specific injection position can
+# actually discriminate.
+# ===========================================================================
+docker exec "$container_name" createdb -U postgres -O migration_owner cps_novel_atomicity_mutation >/dev/null
+DATABASE_URL="$(owner_url cps_novel_atomicity_mutation)" npx prisma migrate deploy >/dev/null
+echo "PREPROD_DB_CONTRACT_CASE_ATOMICITY_MUTATION_SETUP=PASS database=cps_novel_atomicity_mutation migrations=applied grants=NOT_REPLAYED"
+
+mutation_seed_output="$(psql_grants_replay cps_novel_atomicity_mutation "$grants_sql")" \
+  || fail "ATOMICITY_MUTATION" "seed_grants_replay_failed_on_mutation_database: $mutation_seed_output"
+
+before_mut_backup="$(scalar_bool cps_novel_atomicity_mutation "SELECT has_table_privilege('backup_role','public.operation_audit','SELECT')")"
+before_mut_web_admin="$(scalar_bool cps_novel_atomicity_mutation "SELECT has_table_privilege('web_app','public.admin_identity','SELECT')")"
+before_mut_web_audit="$(scalar_bool cps_novel_atomicity_mutation "SELECT has_table_privilege('web_app','public.operation_audit','SELECT')")"
+[[ "$before_mut_backup" == "t" && "$before_mut_web_admin" == "t" && "$before_mut_web_audit" == "t" ]] \
+  || fail "ATOMICITY_MUTATION" "seed_replay_did_not_actually_grant_privileges backup=$before_mut_backup web_admin=$before_mut_web_admin web_audit=$before_mut_web_audit"
+
+if psql_grants_replay_no_single_transaction cps_novel_atomicity_mutation "$broken_grants" \
+  >"$secret_dir"/atomicity-mutation-replay.log 2>&1; then
+  mutation_replay_output="$(cat "$secret_dir"/atomicity-mutation-replay.log)"
+  rm -f "$secret_dir"/atomicity-mutation-replay.log
+  fail "ATOMICITY_MUTATION" "broken_grants_without_single_transaction_unexpectedly_succeeded: $mutation_replay_output"
+fi
+rm -f "$secret_dir"/atomicity-mutation-replay.log
+
+after_mut_backup="$(scalar_bool cps_novel_atomicity_mutation "SELECT has_table_privilege('backup_role','public.operation_audit','SELECT')")"
+after_mut_web_admin="$(scalar_bool cps_novel_atomicity_mutation "SELECT has_table_privilege('web_app','public.admin_identity','SELECT')")"
+after_mut_web_audit="$(scalar_bool cps_novel_atomicity_mutation "SELECT has_table_privilege('web_app','public.operation_audit','SELECT')")"
+if [[ "$after_mut_web_admin" != "f" || "$after_mut_web_audit" != "f" ]]; then
+  fail "ATOMICITY_MUTATION" "without_single_transaction_did_not_strip_web_app_privileges_the_way_the_pre_fix_bug_did before=backup:${before_mut_backup},web_admin:${before_mut_web_admin},web_audit:${before_mut_web_audit} after=backup:${after_mut_backup},web_admin:${after_mut_web_admin},web_audit:${after_mut_web_audit}"
+fi
+echo "PREPROD_DB_CONTRACT_CASE_ATOMICITY_MUTATION=PASS without_single_transaction_strips=web_admin_identity:${after_mut_web_admin},web_operation_audit:${after_mut_web_audit} backup_role_operation_audit:${after_mut_backup}_(re-granted_before_injection_point_in_file_order,_expected)"
 
 # ===========================================================================
 # CASE 4 (negative, check has teeth): revoke one specific privilege
