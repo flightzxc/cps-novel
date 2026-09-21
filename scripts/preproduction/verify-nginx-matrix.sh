@@ -156,7 +156,19 @@ wait
 grep -q 429 "$tmp/rate-codes"
 
 docker stop "$mock" >/dev/null
-[[ "$(request www.bangbangji.cloud / 1)" == "502" ]]
+code="$(request www.bangbangji.cloud / 1)"
+# Measured on the real (Linux) target with `bash -x`: once the mock upstream
+# container is stopped, Docker Desktop on macOS resets the connection during
+# proxy_pass (nginx -> 502), while on native Linux Docker the SYN goes
+# unanswered until `proxy_connect_timeout 3s` expires (nginx -> 504). Both
+# are the edge legitimately reporting "upstream unreachable" for the same
+# failure condition -- accept both. Do not narrow this back to 502-only:
+# that is macOS-specific behaviour, and it previously made this case die
+# silently under `set -e` (exit 1, zero output) on Linux, the platform this
+# gate exists to protect.
+[[ "$code" == "502" || "$code" == "504" ]] || {
+  echo "NGINX_MATRIX=FAIL case=upstream_down code=$code"; exit 65;
+}
 grep -qi '^X-Robots-Tag: noindex, nofollow, noarchive' "$tmp/headers"
 
 # --- Stage-1 bootstrap template: rendered independently of the edge/mock
