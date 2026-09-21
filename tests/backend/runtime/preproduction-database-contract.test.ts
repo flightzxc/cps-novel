@@ -144,6 +144,54 @@ describe("preproduction database.sh: DATABASE_PRIVILEGE_CHECK contract (persiste
     expect(persistentPassIndex, "DATABASE_PERSISTENT_CHECK=PASS must remain the case's final success line").toBeGreaterThan(passEmitIndex);
   });
 
+  it("routes every persistent-check FAIL/REFUSED line to stderr and every PASS line to stdout", async () => {
+    // verify-release.sh calls this subcommand as
+    // `database.sh persistent-check >/dev/null` (lib.sh documents the same
+    // rule for the app-runtime gate: "拒绝走 stderr、PASS 走 stdout"). A
+    // FAIL/REFUSED line left on stdout is silently swallowed by that
+    // redirect -- a real failure during `release.sh deploy` would then
+    // surface to the operator as a bare non-zero exit code with no reason
+    // at all. Scoped to the persistent-check case specifically: that is the
+    // only subcommand any caller in this repo pipes to >/dev/null today
+    // (release.sh's own `migrate-approved` call, and `fresh-init`, are not
+    // redirected by anyone, so their REFUSED lines are not part of this
+    // defect and are out of scope here).
+    //
+    // Structural, not a hardcoded list: scans every `echo "DATABASE_...="`
+    // emit site in the case body via regex, so a future failure branch
+    // added without `>&2` trips this even if no one remembers to update
+    // this test by hand.
+    const source = await text("scripts/preproduction/database.sh");
+    const caseStart = source.indexOf("persistent-check)");
+    const caseEnd = source.indexOf("\n  migrate-approved)", caseStart);
+    const caseBody = source.slice(caseStart, caseEnd);
+
+    const lines = caseBody.split("\n");
+    const emitPattern = /echo "(DATABASE_[A-Z_]+)=(FAIL|REFUSED|PASS)\b[^"]*"/;
+    let failOrRefusedCount = 0;
+    let passCount = 0;
+    for (const line of lines) {
+      const match = line.match(emitPattern);
+      if (!match) continue;
+      const [, marker, kind] = match;
+      if (kind === "FAIL" || kind === "REFUSED") {
+        failOrRefusedCount += 1;
+        expect(line, `${marker}=${kind} line must redirect to stderr (>&2): ${line.trim()}`).toContain(">&2");
+      } else {
+        passCount += 1;
+        expect(line, `${marker}=PASS line must stay on stdout (no >&2): ${line.trim()}`).not.toContain(">&2");
+      }
+    }
+    // Sanity: this scan must actually find the known emit sites, or the
+    // pattern itself has drifted and the assertions above are vacuously
+    // true. 5 FAIL/REFUSED sites: volume_missing, postgres_not_running,
+    // role_auth, DATABASE_PRIVILEGE_CHECK=FAIL, DATABASE_PERSISTENT_CHECK=
+    // FAIL reason=privilege_check. 2 PASS sites: DATABASE_PRIVILEGE_CHECK
+    // and DATABASE_PERSISTENT_CHECK.
+    expect(failOrRefusedCount, "expected to find every known FAIL/REFUSED emit site in persistent-check").toBe(5);
+    expect(passCount, "expected to find every known PASS emit site in persistent-check").toBe(2);
+  });
+
   it("defines verify_database_privileges() with the exact heredoc delimiter the disposable-Postgres harness extracts", async () => {
     const source = await text("scripts/preproduction/database.sh");
     expect(source).toContain("<<'DATABASE_PRIVILEGE_CHECK_SQL'");
