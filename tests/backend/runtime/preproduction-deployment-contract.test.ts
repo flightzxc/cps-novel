@@ -545,3 +545,73 @@ describe("stable secret negative checks", () => {
     expect(result.stdout).toContain("SECRET_PREFLIGHT=FAIL reason=secret_identity_mismatch");
   });
 });
+
+describe("preprod runtime network subnet must match the baked pg_hba.conf replication rule", () => {
+  // Host incident (measured, not hypothetical): infra/preproduction/
+  // docker-compose.yml's `runtime` network had no ipam config, so Docker
+  // auto-allocated a subnet for cps_novel_runtime -- observed as
+  // 172.16.1.0/24 on the affected host. infra/postgres/hba-replication-rule.sh
+  // is sourced once, at initdb time, to append a pg_hba.conf rule for
+  // backup_role scoped to X8_RUNTIME_SUBNET (default 172.18.0.0/16) --
+  // and that rule is never re-derived afterward. The two subnets drifted
+  // apart, so every replication connection was rejected ("no pg_hba.conf
+  // entry for replication connection from host ..."), which made
+  // pg_basebackup -- and therefore PITR -- impossible. This test pins the
+  // fix (an explicit ipam block on the compose network) in place: if
+  // either side's subnet changes without updating the other, the test
+  // must fail for that reason, not pass by accident.
+
+  function extractComposeRuntimeSubnet(composeYaml: string): string {
+    // Top-level `networks:` key starts a line with no leading whitespace.
+    // Slice from there to the next top-level key (or EOF) so we don't
+    // accidentally match a `subnet:` that belongs to some other stanza.
+    const networksIdx = composeYaml.search(/^networks:/m);
+    expect(
+      networksIdx,
+      "expected a top-level `networks:` key in infra/preproduction/docker-compose.yml",
+    ).toBeGreaterThanOrEqual(0);
+    const afterNetworks = composeYaml.slice(networksIdx + "networks:".length);
+    const nextTopLevelKeyIdx = afterNetworks.search(/\n[A-Za-z0-9_.-]+:/);
+    const networksBlock =
+      nextTopLevelKeyIdx === -1 ? afterNetworks : afterNetworks.slice(0, nextTopLevelKeyIdx);
+
+    expect(
+      networksBlock,
+      "expected the `networks:` block to declare the `runtime` network named cps_novel_runtime",
+    ).toMatch(/runtime:\s*\n\s*name:\s*cps_novel_runtime/);
+
+    const subnetMatch = networksBlock.match(/ipam:\s*\n\s*config:\s*\n\s*-\s*subnet:\s*([0-9.]+\/[0-9]+)/);
+    expect(
+      subnetMatch,
+      `expected an ipam.config[0].subnet under the runtime network, found block:\n${networksBlock}`,
+    ).not.toBeNull();
+    return subnetMatch![1];
+  }
+
+  function extractHbaRuleDefaultSubnet(hbaScript: string): string {
+    const match = hbaScript.match(/X8_RUNTIME_SUBNET:-([0-9.]+\/[0-9]+)\}/);
+    expect(
+      match,
+      "expected hba-replication-rule.sh to default X8_RUNTIME_SUBNET to a CIDR subnet",
+    ).not.toBeNull();
+    return match![1];
+  }
+
+  it("keeps the compose-declared runtime subnet equal to hba-replication-rule.sh's default", async () => {
+    const composeYaml = await text("infra/preproduction/docker-compose.yml");
+    const hbaScript = await text("infra/postgres/hba-replication-rule.sh");
+
+    const composeSubnet = extractComposeRuntimeSubnet(composeYaml);
+    const hbaSubnet = extractHbaRuleDefaultSubnet(hbaScript);
+
+    expect(
+      composeSubnet,
+      `infra/preproduction/docker-compose.yml's runtime network subnet (${composeSubnet}) must equal ` +
+        `infra/postgres/hba-replication-rule.sh's default X8_RUNTIME_SUBNET (${hbaSubnet}). A mismatch ` +
+        `means Docker will allocate (or auto-reallocate on recreate) an address range that the ` +
+        `pg_hba.conf replication rule baked in at initdb time does not permit: replication ` +
+        `connections are rejected, pg_basebackup fails, and there is no physical base backup to ` +
+        `anchor PITR recovery.`,
+    ).toBe(hbaSubnet);
+  });
+});
