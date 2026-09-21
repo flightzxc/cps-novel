@@ -59,6 +59,21 @@ On the admin host, `location ^~ /api/health` becoming `location =
 (`/api/health-anything` matching a prefix): an exact match cannot match
 anything but that literal path, regardless of maintenance state.
 
+That exact match, however, also stopped covering two legitimate sub-routes
+the old prefix used to reach: `/api/health/worker` and `/api/health/backup`
+(see `src/app/api/health/`), which without further changes fall through to
+the admin host's catch-all `location /` and 404. A later adversarial
+review caught this as a functional regression, not just a security fix:
+the admin host gets a second, narrower block, `location ^~
+/api/health/` (WITH a trailing slash), which restores that coverage
+without reopening the prefix-match hole -- a literal-string prefix match
+on `/api/health/` cannot match `/api/health-anything` (no trailing
+slash), so the original bug stays closed. Unlike the exact-match block,
+this one uses the maintenance-gated `cps-novel-preprod-protected.conf`,
+not the nomaintenance snippet: these sub-routes have no requirement to
+stay reachable through a maintenance window the way the top-level health
+check itself does.
+
 **2. The admin host's asset allowlist is exactly one location:
 `^~ /_next/static/`.** `src/app/(admin)` and `src/app/(admin-auth)` were
 checked for Next's image-optimizer component; there are zero imports of it

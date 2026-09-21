@@ -45,10 +45,15 @@ describe("Phase 2B preproduction deployment contract", () => {
 
     // Both hosts' /api/health locations must be exact matches on the
     // nomaintenance snippet -- a `^~` prefix on the admin host previously
-    // also matched /api/health-anything (measured evidence).
+    // also matched /api/health-anything (measured evidence). A bare `^~
+    // /api/health` (no trailing slash) prefix must not exist anywhere, but
+    // `^~ /api/health/` (WITH a trailing slash, MINOR-7 fix) legitimately
+    // does, on the admin host only, to keep /api/health/worker and
+    // /api/health/backup reachable -- distinguish the two by requiring a
+    // non-slash character right after "/api/health" for the banned form.
     const publicHealth = nginx.indexOf("location = /api/health {");
     expect(publicHealth).toBeGreaterThan(-1);
-    expect(nginx).not.toContain("location ^~ /api/health");
+    expect(nginx).not.toMatch(/location \^~ \/api\/health[^/]/);
     const occurrences = nginx.split("location = /api/health {").length - 1;
     expect(occurrences).toBe(2);
     // Each exact-match /api/health block must include the nomaintenance
@@ -92,6 +97,23 @@ describe("Phase 2B preproduction deployment contract", () => {
       source.split("\n").map((line) => line.trim()).filter((line) => line.length > 0 && !line.startsWith("#"));
     const protectedFunctional = functionalLines(protectedSnippet).filter((line) => !line.includes("maintenance/enabled"));
     expect(functionalLines(nomaintenanceSnippet)).toEqual(protectedFunctional);
+  });
+
+  it("MINOR-7: restores /api/health/ sub-route coverage on the admin host without reopening the prefix-match hole", async () => {
+    const nginx = await text("infra/preproduction/nginx/cps-novel-preprod.conf.template");
+
+    // /api/health/worker and /api/health/backup (see src/app/api/health/)
+    // were served by the old `^~ /api/health` prefix match before it was
+    // narrowed to the exact `=` match to close the /api/health-anything
+    // hole. The admin-only sub-route block below must exist exactly once,
+    // be maintenance-gated (protected.conf), and deliberately NOT reuse the
+    // nomaintenance snippet -- only the exact-match /api/health block is
+    // exempt from maintenance.
+    expect(nginx.split("location ^~ /api/health/ {").length - 1).toBe(1);
+    const healthSubrouteStart = nginx.indexOf("location ^~ /api/health/ {");
+    const healthSubrouteBody = nginx.slice(healthSubrouteStart, nginx.indexOf("\n    }", healthSubrouteStart));
+    expect(healthSubrouteBody).toContain("cps-novel-preprod-protected.conf");
+    expect(healthSubrouteBody).not.toContain("cps-novel-preprod-protected-nomaintenance.conf");
   });
 
   it("keeps the bootstrap stage HTTP-only and incapable of serving application content", async () => {

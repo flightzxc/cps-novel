@@ -95,6 +95,17 @@ grep -qi '^X-Robots-Tag: noindex, nofollow, noarchive' "$tmp/headers"
 [[ "$(request zbcwf.bangbangji.cloud /api/health 1)" == "200" ]] || {
   echo "NGINX_MATRIX=FAIL case=admin_health_authenticated"; exit 65;
 }
+# MINOR-7: /api/health/worker and /api/health/backup (see src/app/api/
+# health/) were served by the old `^~ /api/health` prefix match; the exact
+# `=` match above does not cover them (it matches only the literal path).
+# `location ^~ /api/health/` (trailing slash) restores that coverage --
+# must not 404.
+[[ "$(request zbcwf.bangbangji.cloud /api/health/worker)" == "401" ]] || {
+  echo "NGINX_MATRIX=FAIL case=admin_health_worker_subroute_anonymous"; exit 65;
+}
+[[ "$(request zbcwf.bangbangji.cloud /api/health/worker 1)" == "200" ]] || {
+  echo "NGINX_MATRIX=FAIL case=admin_health_worker_subroute_authenticated"; exit 65;
+}
 # Measured evidence: the old `^~ /api/health` prefix also matched this path.
 # The exact `=` match must not.
 [[ "$(request zbcwf.bangbangji.cloud /api/health-anything)" == "404" ]] || {
@@ -125,6 +136,16 @@ grep -qF '<h1>Maintenance in progress</h1>' "$tmp/body" || { echo "NGINX_MATRIX=
 [[ "$(request www.bangbangji.cloud /api/health 1)" == "200" ]] || { echo "NGINX_MATRIX=FAIL case=maintenance_public_health_authenticated"; exit 65; }
 [[ "$(request zbcwf.bangbangji.cloud /api/health 0)" == "401" ]] || { echo "NGINX_MATRIX=FAIL case=maintenance_admin_health_anonymous"; exit 65; }
 [[ "$(request zbcwf.bangbangji.cloud /api/health 1)" == "200" ]] || { echo "NGINX_MATRIX=FAIL case=maintenance_admin_health_authenticated"; exit 65; }
+# MINOR-7: unlike the top-level /api/health exact match (nomaintenance
+# snippet), the /api/health/ sub-route block deliberately uses the
+# maintenance-gated protected.conf -- prove it actually IS gated, not just
+# that it exists.
+[[ "$(request zbcwf.bangbangji.cloud /api/health/worker 1)" == "503" ]] || {
+  echo "NGINX_MATRIX=FAIL case=maintenance_admin_health_worker_subroute_gated"; exit 65;
+}
+grep -qF '<h1>Maintenance in progress</h1>' "$tmp/body" || {
+  echo "NGINX_MATRIX=FAIL case=maintenance_admin_health_worker_subroute_body"; exit 65;
+}
 rm "$tmp/shared/maintenance/enabled"
 
 : >"$tmp/rate-codes"

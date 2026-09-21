@@ -150,6 +150,26 @@ server {
         proxy_pass http://cps_novel_preprod_web;
         include /etc/nginx/snippets/cps-novel-preprod-proxy.conf;
     }
+    # MINOR-7 fix: /api/health/worker and /api/health/backup (see
+    # src/app/api/health/) were served by the old `^~ /api/health` prefix
+    # match before it was narrowed to the exact `=` match above to close the
+    # /api/health-anything hole (measured evidence, see the comment just
+    # above and the ADR). Without this block those legitimate sub-routes
+    # fall all the way through to `location /` below and 404. A trailing
+    # slash on this prefix restores that coverage without reopening the
+    # false-match issue: nginx prefix matching is a literal string
+    # comparison, and "/api/health-anything" does not start with the string
+    # "/api/health/" (no trailing slash), so it still falls through to 404.
+    # Maintenance-gated (protected.conf, not the nomaintenance snippet used
+    # by the exact-match block above) -- unlike the top-level health check
+    # itself, these sub-routes have no requirement to stay reachable through
+    # a maintenance window.
+    location ^~ /api/health/ {
+        include /etc/nginx/snippets/cps-novel-preprod-protected.conf;
+        limit_req zone=cps_preprod_api burst=10 nodelay;
+        proxy_pass http://cps_novel_preprod_web;
+        include /etc/nginx/snippets/cps-novel-preprod-proxy.conf;
+    }
     location ^~ /api/admin/ {
         include /etc/nginx/snippets/cps-novel-preprod-protected.conf;
         limit_req zone=cps_preprod_api burst=10 nodelay;
