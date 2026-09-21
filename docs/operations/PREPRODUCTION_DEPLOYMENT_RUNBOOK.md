@@ -379,9 +379,10 @@ replay only, not a schema change or a data restore, and it does not by
 itself make an incompatible schema safe to roll back onto: the operator
 approving `SCHEMA_COMPATIBLE_WITH_PREVIOUS=YES` must also confirm the
 grants delta between the two releases' `infra/postgres/grants.sql` is
-itself backward compatible with the previous release's code (i.e. nothing
-that code still legitimately needs was only ever granted by the newer
-release and now gets revoked back out from under it).
+itself backward compatible with the previous release's code (i.e. the
+newer release's `grants.sql` did not tighten or revoke a grant that the
+previous release's code still legitimately needs -- the same hazard the
+replay above exists to undo, e.g. `7141177`, `a943fda`).
 
 ## Backups, WAL, export, and restore
 
