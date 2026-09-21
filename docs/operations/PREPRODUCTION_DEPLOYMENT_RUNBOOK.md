@@ -146,6 +146,34 @@ stable volume, migration table, required roles, and real password
 authentication. It never changes role passwords, rotates keys, recreates a
 key, or restores a database.
 
+### Runtime network subnet is pinned (replication)
+
+`infra/preproduction/docker-compose.yml`'s `runtime` network
+(`cps_novel_runtime`) declares an explicit `ipam.config[0].subnet:
+172.18.0.0/16`. This is pinned deliberately, not incidental: without it,
+Docker auto-allocates a subnet on network creation, and that allocation is
+silent and can change again on any future `docker network rm` + recreate.
+
+That matters because `infra/postgres/hba-replication-rule.sh` writes a
+`pg_hba.conf` replication rule for `backup_role` **once, at initdb time**,
+scoped to `X8_RUNTIME_SUBNET` (same default, `172.18.0.0/16`) — it is never
+re-derived or refreshed afterward. The network must therefore be made to
+match the already-baked rule, not the other way round; editing
+`pg_hba.conf`/`init-roles.sh` after the fact is out of scope here and is not
+how this is fixed. A mismatch (measured on a real host: auto-allocation
+picked `172.16.1.0/24`) rejects every replication connection (`FATAL: no
+pg_hba.conf entry for replication connection from host ...`), which makes
+`pg_basebackup` — and therefore physical base backups and PITR — impossible.
+`tests/backend/runtime/preproduction-deployment-contract.test.ts` asserts
+the compose subnet and the script's default subnet cannot drift apart.
+
+Operationally: changing this subnet on an **existing** deployment requires
+removing the network first — Docker will not re-IPAM a network in place —
+which means stopping every container attached to it (`docker compose down`,
+or stop the containers then `docker network rm cps_novel_runtime`) before
+the next `up` recreates it with the new range. The `postgres_data` volume is
+unaffected; this is a network-only change.
+
 ### Grants replay (`migrate-approved`) and `DATABASE_PRIVILEGE_CHECK`
 
 `migrate-approved` now replays `infra/postgres/grants.sql` immediately after
