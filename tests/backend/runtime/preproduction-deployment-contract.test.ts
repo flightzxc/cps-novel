@@ -60,7 +60,7 @@ describe("Phase 2B preproduction deployment contract", () => {
       "preprod_compose stop worker",
       "preprod_compose stop web",
       'database.sh\" migrate-approved',
-      // Phase 2C：应用服务改走 preprod_compose_app_up（内含 --no-build --pull never），
+      // Phase 2C：应用服务改走 preprod_compose_app_up（内含不可变工件闸门，见 lib.sh），
       // 生命周期顺序不变。
       "preprod_compose_app_up web",
       'verify-release.sh\"',

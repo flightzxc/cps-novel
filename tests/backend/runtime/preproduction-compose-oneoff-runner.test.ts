@@ -46,11 +46,19 @@ const sh = (script: string, env: Record<string, string> = {}) =>
 
 const both = (r: { stdout: string | null; stderr: string | null }) => `${r.stdout ?? ""}${r.stderr ?? ""}`;
 
-/** 从 `docker compose <sub> --help` 真实输出里抽出长 flag 集合。 */
+/**
+ * 从 `docker compose <sub> --help` 抽出长 flag 集合。
+ * 🔴 锚定到 flag 表那一列，与 lib.sh 的 preprod_compose_subcommand_has_flag 同一条
+ * 规则：满篇找 `--token` 会把描述文字里顺口提到的同名 flag 也算进来，而"以为 run
+ * 支持某个 flag"正是本轮事故本身。
+ */
 function cliFlags(subcommand: string): Set<string> {
   const help = spawnSync("docker", ["compose", subcommand, "--help"], { encoding: "utf8" });
   const flags = new Set<string>();
-  for (const match of (help.stdout ?? "").matchAll(/(?:^|\s)(--[a-zA-Z][a-zA-Z0-9-]*)/g)) flags.add(match[1]);
+  for (const line of (help.stdout ?? "").split("\n")) {
+    const match = /^\s+(?:-[a-zA-Z], )?(--[a-zA-Z][a-zA-Z0-9-]*)(?:\s|$)/.exec(line);
+    if (match) flags.add(match[1]);
+  }
   return flags;
 }
 
@@ -263,6 +271,11 @@ describe.skipIf(!dockerOk)("one-off 应用容器的真实运行时行为", () =>
         "",
       ].join("\n"),
     );
+    // 只少了 pull_policy: never 的 overlay —— 新增那道闸门的锚点。
+    await writeFile(
+      rigFile("infra/preproduction/docker-compose.nopullpolicy.yml"),
+      ["services:", "  app:", "    build: !reset null", "", ""].join("\n"),
+    );
     await writeFile(
       rigFile("env/preprod.env"),
       [
@@ -395,6 +408,39 @@ describe.skipIf(!dockerOk)("one-off 应用容器的真实运行时行为", () =>
     expect(both(r)).toContain("APP_RUNTIME=REFUSED reason=app_image_identity");
   }, 120_000);
 
+  it("🔴 overlay 掉了 pull_policy: never → 拒绝 pull_policy_not_never", () => {
+    // `run --pull` 在 Compose v2.32.0 及更早并不存在，所以"不 pull"真正承重的是
+    // 渲染后的 pull_policy，而不是那个 flag。这一条就是它的锚点。
+    const r = rigRun(
+      [
+        "preprod_load_env",
+        `preprod_compose() { docker compose --env-file "$PREPROD_ENV_FILE" -p cps-novel -f '${rigFile("docker-compose.yml")}' -f '${rigFile("infra/preproduction/docker-compose.nopullpolicy.yml")}' "$@"; }`,
+        "preprod_compose_app_run app true",
+      ].join("\n"),
+      { CPS_NOVEL_APP_IMAGE: PRESENT_TAG },
+    );
+    expect(r.status).not.toBe(0);
+    expect(both(r)).toContain("APP_RUNTIME=REFUSED reason=pull_policy_not_never services=app");
+  }, 120_000);
+
+  it("🔴 拒绝理由必须走 stderr —— verify-release.sh 把 one-off 的 stdout 整条丢弃", () => {
+    const r = rigRun(`preprod_load_env; preprod_compose_app_run app true >/dev/null`, {
+      CPS_NOVEL_APP_IMAGE: ABSENT_TAG,
+    });
+    expect(r.status).not.toBe(0);
+    // 复刻 verify-release.sh 的 `>/dev/null`：理由若走 stdout，现场只剩裸退出码。
+    expect(r.stderr).toContain("APP_RUNTIME=REFUSED reason=approved_image_missing");
+  }, 120_000);
+
+  it("没有 manifest 时明说身份未核（unverified_no_manifest），不冒充已核", () => {
+    const r = rigRun(`preprod_load_env; preprod_compose_app_run app true`, {
+      CPS_NOVEL_APP_IMAGE: PRESENT_TAG,
+    });
+    expect(r.status).toBe(0);
+    expect(r.stdout).toContain("APP_RUNTIME=PASS");
+    expect(r.stdout).toContain("identity=unverified_no_manifest");
+  }, 120_000);
+
   it("preprod_compose_app_up 走同一道闸门（镜像缺失即拒绝，不进 compose）", () => {
     const r = rigRun(`preprod_load_env; preprod_compose_app_up app`, { CPS_NOVEL_APP_IMAGE: ABSENT_TAG });
     expect(r.status).not.toBe(0);
@@ -501,7 +547,7 @@ describe.skipIf(!dockerOk)("两个 one-off 调用方发出的 argv 必须被目�
     const argv = (runCall ?? "").split(" ");
     expect(runCall).toContain("--rm");
     expect(runCall).toContain("--no-deps");
-    expect(runCall).toContain("--pull never");
+    if (cliFlags("run").has("--pull")) expect(runCall).toContain("--pull never");
     expect(runCall).toContain("-e DATABASE_URL=");
     expect(runCall).toContain("web npx --no-install prisma migrate deploy");
     // 🔴 本轮事故的回归锚点：发出的每个 flag 都必须在真实 `run --help` 里存在。
@@ -541,9 +587,11 @@ describe.skipIf(!dockerOk)("两个 one-off 调用方发出的 argv 必须被目�
     for (const flag of emittedFlags(argv.slice(upIndex + 1, serviceIndex))) {
       expect(supported.has(flag), `docker compose up 不认识 ${flag}`).toBe(true);
     }
-    // up 侧仍然保留 --no-build（该子命令确实支持），契约没有被削弱。
-    expect(upCall).toContain("--pull never");
-    expect(upCall).toContain("--no-build");
+    // up 侧的两个 flag 都按能力追加；该子命令支持它们时必须真的带上，
+    // 契约没有因为"改成按能力判定"而被削弱。
+    if (supported.has("--pull")) expect(upCall).toContain("--pull never");
+    if (supported.has("--no-build")) expect(upCall).toContain("--no-build");
+    expect(supported.has("--no-build"), "up 侧 --no-build 是既有契约，不该消失").toBe(true);
   }, 120_000);
 
   it("CASE 6 静态面：verify-release.sh 的 one-off 仍然带齐 secret / bind / env 入参", async () => {
