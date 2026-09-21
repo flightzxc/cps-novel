@@ -27,6 +27,83 @@ describe("Phase 2B preproduction deployment contract", () => {
     expect(nginx).toContain("location ^~ /api/admin/");
   });
 
+  it("exempts /api/health from the maintenance gate without weakening auth, and allowlists admin static assets minimally", async () => {
+    const nginx = await text("infra/preproduction/nginx/cps-novel-preprod.conf.template");
+    const protectedSnippet = await text("infra/preproduction/nginx/cps-novel-preprod-protected.conf");
+    const nomaintenanceSnippet = await text("infra/preproduction/nginx/cps-novel-preprod-protected-nomaintenance.conf");
+
+    // The nomaintenance snippet must keep Basic Auth and the security
+    // headers, but must NOT gate on the maintenance marker -- that `if`
+    // runs in the rewrite phase, before auth_basic's access phase, so
+    // leaving it in would make maintenance win over authentication again.
+    expect(protectedSnippet).toContain("if (-f /opt/cps-novel/shared/maintenance/enabled) { return 503; }");
+    expect(nomaintenanceSnippet).not.toContain("maintenance/enabled");
+    expect(nomaintenanceSnippet).not.toMatch(/return 503/);
+    expect(nomaintenanceSnippet).toContain('auth_basic "CPS Novel Preproduction";');
+    expect(nomaintenanceSnippet).toContain("auth_basic_user_file /opt/cps-novel/shared/secrets/nginx-preprod.htpasswd");
+    expect(nomaintenanceSnippet).toContain("cps-novel-preprod-security.conf");
+
+    // Both hosts' /api/health locations must be exact matches on the
+    // nomaintenance snippet -- a `^~` prefix on the admin host previously
+    // also matched /api/health-anything (measured evidence).
+    const publicHealth = nginx.indexOf("location = /api/health {");
+    expect(publicHealth).toBeGreaterThan(-1);
+    expect(nginx).not.toContain("location ^~ /api/health");
+    const occurrences = nginx.split("location = /api/health {").length - 1;
+    expect(occurrences).toBe(2);
+    // Each exact-match /api/health block must include the nomaintenance
+    // snippet, not the maintenance-gated one.
+    for (const block of nginx.split("location = /api/health {").slice(1)) {
+      const body = block.slice(0, block.indexOf("\n    }"));
+      expect(body).toContain("cps-novel-preprod-protected-nomaintenance.conf");
+    }
+
+    // Admin host gets exactly one new asset location: /_next/static/ only.
+    // No next/image import exists under src/app/(admin) or
+    // src/app/(admin-auth), so /_next/image and /favicon.ico are
+    // deliberately not allowlisted.
+    expect(nginx).toContain("location ^~ /_next/static/");
+    expect(nginx.split("location ^~ /_next/static/").length - 1).toBe(2);
+    expect(nginx).not.toContain("/_next/image");
+    expect(nginx).not.toContain("favicon.ico");
+
+    // IPv6 stays unserved everywhere; this is a recorded decision, not an
+    // oversight. Matched as an active directive (start of a non-comment
+    // line), not a substring, since the file's own comment explains the
+    // decision using that same bracket syntax in prose.
+    expect(nginx).not.toMatch(/^\s*listen \[::]/m);
+  });
+
+  it("keeps the bootstrap stage HTTP-only and incapable of serving application content", async () => {
+    const bootstrap = await text("infra/preproduction/nginx/cps-novel-preprod-bootstrap.conf.template");
+    expect(bootstrap).not.toContain("ssl_certificate");
+    expect(bootstrap).not.toContain("proxy_pass");
+    expect(bootstrap).not.toContain("upstream");
+    expect(bootstrap).not.toMatch(/^\s*listen \[::]/m);
+    expect(bootstrap).toContain("listen 80 default_server;");
+    expect(bootstrap).toContain("server_name www.bangbangji.cloud;");
+    expect(bootstrap).toContain("server_name zbcwf.bangbangji.cloud;");
+    expect(bootstrap.match(/\.well-known\/acme-challenge/g)?.length).toBe(2);
+    expect(bootstrap).toContain("cps-novel-preprod-security.conf");
+  });
+
+  it("hands the default site over before testing, and only reloads after a passing test", async () => {
+    const install = await text("scripts/preproduction/install-nginx.sh");
+    const defaultSiteOffset = install.indexOf("sites-enabled/default");
+    const firstNginxTestOffset = install.indexOf("nginx -t");
+    expect(defaultSiteOffset).toBeGreaterThan(-1);
+    expect(firstNginxTestOffset).toBeGreaterThan(-1);
+    expect(defaultSiteOffset).toBeLessThan(firstNginxTestOffset);
+    // The site config is written to its live path before the test runs (see
+    // report: this repo's nginx.conf glob only picks up files at fixed
+    // system paths, so there is no way to `nginx -t` a candidate without
+    // placing it there); a full rollback of every touched path is the
+    // safety net instead of a reload-before-test ordering bug.
+    expect(install).toContain("rollback_all");
+    expect(install).toContain("--bootstrap");
+    expect(install.indexOf("rollback_all")).toBeLessThan(install.indexOf("systemctl reload nginx"));
+  });
+
   it("pins stable Compose/data identity and closes dangerous preproduction writes", async () => {
     const rootCompose = await text("docker-compose.yml");
     const overlay = await text("infra/preproduction/docker-compose.yml");
