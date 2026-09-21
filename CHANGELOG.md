@@ -3,7 +3,13 @@
 <!-- 本文件由 `node scripts/generate-changelog.mjs --write` 生成，请勿手工编辑。 -->
 <!-- 叙述性内容写进 commit message；Owner/架构决策写 docs/adr/。 -->
 
-生成时间：2026-09-21 · 共 727 个 commit
+生成时间：2026-09-21 · 共 733 个 commit
+- `4e2d98d` 2026-09-21 test(preprod-edge): pin N1/N2/N3 guards with two-directional mutation coverage  — _Claude Code · claude-sonnet-5_
+- `96b453c` 2026-09-21 docs(preprod-runbook): fix inverted grants-delta hazard sentence (NIT)  — _Claude Code · claude-sonnet-5_
+- `660c7d4` 2026-09-21 docs(preprod-db): fix stale comment claiming no other connection survives migrate-approved  — _Claude Code · claude-sonnet-5_
+- `d2bdcb1` 2026-09-21 fix(preprod-edge): --expect-live makes the post-maintenance anonymous re-check self-checking (N3)  — _Claude Code · claude-sonnet-5_
+- `e9f8761` 2026-09-21 fix(preprod-edge): name the retained nginx backup dir, keep default-site record permanent (N1/N2)  — _Claude Code · claude-sonnet-5_
+- `0484c6f` 2026-09-21 docs(changelog): 经既有生成器重新生成  — _Claude Code · claude-opus-5_
 - `530e4f6` 2026-09-21 merge: 修复维护态匿名面失验、回滚不重放 grants、信号毁备份（复核 MAJOR-1/2/3）  — _Claude Code · claude-opus-5_
 - `d6b8ec5` 2026-09-21 merge: 修复权限证明层三处假绿与 reason 兜底（复核 MAJOR-4/MINOR-5）  — _Claude Code · claude-opus-5_
 - `093e9ac` 2026-09-21 fix(preprod-edge): restore /api/health/ sub-route coverage on admin host (MINOR-7)  — _Claude Code · claude-sonnet-5_
