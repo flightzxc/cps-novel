@@ -22,11 +22,23 @@ preprod_load_env
 # release and already did, successfully, in the full call made earlier in
 # the same deploy()/rollback() invocation.
 mode="full"
-case "${1:-}" in
-  "") mode="full" ;;
-  --anonymous-only) mode="anonymous_only" ;;
-  *) echo "usage: verify-release.sh [--anonymous-only]" >&2; exit 64 ;;
-esac
+expect_live=0
+for arg in "$@"; do
+  case "$arg" in
+    --anonymous-only) mode="anonymous_only" ;;
+    # N3 fix: without this, a post-maintenance_off `--anonymous-only` call
+    # whose maintenance marker somehow never got removed (maintenance_off's
+    # `rm -f` failing silently, a stale mount, ...) would silently take
+    # run_anonymous_matrix()'s 503 branch below and PASS without ever
+    # exercising the 401 branch it exists to prove -- the exact vacuous-pass
+    # shape this session already found three separate instances of
+    # elsewhere. --expect-live makes that failure loud instead: it refuses
+    # up front, before run_anonymous_matrix() runs at all, if the marker is
+    # still present.
+    --expect-live) expect_live=1 ;;
+    *) echo "usage: verify-release.sh [--anonymous-only] [--expect-live]" >&2; exit 64 ;;
+  esac
+done
 
 shared="${PREPROD_SHARED_ROOT:-/opt/cps-novel/shared}"
 maintenance_marker="$shared/maintenance/enabled"
@@ -100,6 +112,15 @@ run_anonymous_matrix() {
 }
 
 if [[ "$mode" == "anonymous_only" ]]; then
+  # N3 fix: this check must run BEFORE run_anonymous_matrix, not inside it --
+  # run_anonymous_matrix's whole point is to accept EITHER branch depending
+  # on the marker (that is what makes it reusable for the deploy()/rollback()
+  # call made while maintenance is still on), so it can never itself tell
+  # "genuinely mid-maintenance" apart from "marker never got cleared". Only
+  # the caller knows which one this particular invocation is supposed to be.
+  if ((expect_live)) && [[ -f "$maintenance_marker" ]]; then
+    echo "RELEASE_VERIFY=FAIL reason=expect_live_maintenance_marker_present marker=$maintenance_marker"; exit 65;
+  fi
   run_anonymous_matrix
   echo "RELEASE_VERIFY=PASS mode=anonymous_only"
   exit 0

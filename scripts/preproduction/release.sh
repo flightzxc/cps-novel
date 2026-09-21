@@ -115,7 +115,12 @@ deploy() {
   # means the business surface is NOT correctly gated at this exact moment
   # -- re-close the gate immediately rather than leaving it off while the
   # generic EXIT trap below reports the failure.
-  "$root/scripts/preproduction/verify-release.sh" --anonymous-only || {
+  #
+  # N3 fix: --expect-live makes this call self-checking -- it fails outright
+  # if the maintenance marker is somehow still present (maintenance_off's
+  # `rm -f` above failing silently, a stale mount, ...), instead of silently
+  # taking the matrix's 503 branch and passing without ever exercising 401.
+  "$root/scripts/preproduction/verify-release.sh" --anonymous-only --expect-live || {
     maintenance_on
     echo "RELEASE=FAILED reason=anonymous_reverify_failed"; exit 65;
   }
@@ -190,7 +195,10 @@ rollback() {
   # is what actually proves anonymous callers get 401 now that the rolled-
   # back release is really live. Re-close the gate on failure rather than
   # leaving it off.
-  "$root/scripts/preproduction/verify-release.sh" --anonymous-only || {
+  #
+  # N3 fix: --expect-live, same reasoning as deploy() above -- fails outright
+  # if the marker is still present instead of passing vacuously.
+  "$root/scripts/preproduction/verify-release.sh" --anonymous-only --expect-live || {
     maintenance_on
     echo "ROLLBACK=FAILED reason=anonymous_reverify_failed"; exit 65;
   }
