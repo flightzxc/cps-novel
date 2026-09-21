@@ -168,11 +168,26 @@ pg_hba.conf entry for replication connection from host ...`), which makes
 the compose subnet and the script's default subnet cannot drift apart.
 
 Operationally: changing this subnet on an **existing** deployment requires
-removing the network first — Docker will not re-IPAM a network in place —
-which means stopping every container attached to it (`docker compose down`,
-or stop the containers then `docker network rm cps_novel_runtime`) before
-the next `up` recreates it with the new range. The `postgres_data` volume is
-unaffected; this is a network-only change.
+removing the network first — Docker will not re-IPAM a network in place.
+**Do not** manually run `docker network rm cps_novel_runtime` after
+stopping the containers — verified broken on a real host: `docker network
+rm` succeeds even with stopped containers attached, but a stopped container
+keeps a reference to the removed network id, so the next `up` fails
+(`Error response from daemon: failed to set up container networking:
+network <old id> not found`) and postgres stays `exited`. Use one of these
+instead:
+
+- `docker compose down` **without** `-v`/`--volumes`, then `up` — clean; or
+- stop the containers, then plain `up -d` — Compose detects the IPAM
+  change itself and replaces the network in place (observed:
+  `Stopping -> Network Removed -> Creating -> Created -> Starting`).
+
+Both were verified working on Compose v5.0.1 — confirm the same
+self-replacement behaviour against the host's actual compose version before
+relying on it in production. The `postgres_data` volume is unaffected by
+either path; this is a network-only change **only as long as `down` is never
+given `-v`/`--volumes`** — that flag is what would delete
+`cps_novel_postgres_data`.
 
 ### Grants replay (`migrate-approved`) and `DATABASE_PRIVILEGE_CHECK`
 
