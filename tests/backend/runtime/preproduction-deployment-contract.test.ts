@@ -104,6 +104,62 @@ describe("Phase 2B preproduction deployment contract", () => {
     expect(install.indexOf("rollback_all")).toBeLessThan(install.indexOf("systemctl reload nginx"));
   });
 
+  it("never destroys nginx backups on interrupt, and restore_one fails closed (MAJOR-3/MINOR-6)", async () => {
+    const install = await text("scripts/preproduction/install-nginx.sh");
+
+    // Only the disposable rendered-candidate file is auto-deleted; the old
+    // combined trap also wiped $file_backup_dir on INT/TERM, which is what
+    // let a SIGTERM during `sudo nginx -t` destroy the live site config
+    // (see release-path reviewer finding MAJOR-3).
+    expect(install).toContain('trap \'rm -f "$rendered"\' EXIT');
+    // No trap is registered for INT/TERM at all any more (only the disposable
+    // rendered-candidate file is cleaned up automatically, via EXIT above).
+    // `rm -rf "$file_backup_dir"` legitimately still appears elsewhere, as
+    // explicit cleanup on the two confirmed-successful exit paths near the
+    // bottom of the script -- what must never happen is that cleanup running
+    // from an INT/TERM trap, which is what this asserts against.
+    expect(install).not.toMatch(/trap[^\n]*INT TERM/);
+    expect(install).not.toMatch(/trap[^\n]*rm -rf "\$file_backup_dir"/);
+
+    // restore_one must refuse to delete a live file when the backup
+    // directory itself is missing/unreadable, rather than reading "no
+    // backup" as "this file should not exist".
+    const restoreOneStart = install.indexOf("restore_one() {");
+    expect(restoreOneStart).toBeGreaterThan(-1);
+    const restoreOneBody = install.slice(restoreOneStart, install.indexOf("sudo rm -f \"$dst\"", restoreOneStart));
+    expect(restoreOneBody).toContain("backup_dir_missing");
+    expect(restoreOneBody).toMatch(/!\s*-d\s*"\$file_backup_dir"/);
+
+    // MINOR-6: a rollback that restores a state which itself fails `nginx
+    // -t` must be reported distinctly and must not reload -- not silently
+    // swallowed by `set -e` with no NGINX_INSTALL= line, and not the same
+    // reason as an ordinary candidate-config test failure.
+    expect(install).toContain("reason=rollback_state_invalid");
+    const secondTestOffset = install.indexOf("if sudo nginx -t; then");
+    expect(secondTestOffset).toBeGreaterThan(install.indexOf("rollback_all\n"));
+    const invalidReasonOffset = install.indexOf("reason=rollback_state_invalid");
+    expect(invalidReasonOffset).toBeGreaterThan(secondTestOffset);
+    // The only reload between the second `nginx -t` and the distinct
+    // REFUSED line must be inside that `if` block's own success branch
+    // (the ordinary nginx_test_failed path) -- not on the failure path that
+    // falls through to reason=rollback_state_invalid. Anchor on the
+    // success branch's closing `exit 65\n  fi` (2-space indent, matching
+    // the outer `if sudo nginx -t; then`) and assert no further reload
+    // exists after it, before the distinct reason.
+    const successBranchEnd = install.indexOf("exit 65\n  fi\n", secondTestOffset);
+    expect(successBranchEnd).toBeGreaterThan(secondTestOffset);
+    const afterSuccessBranch = install.slice(successBranchEnd, invalidReasonOffset);
+    expect(afterSuccessBranch).not.toContain("systemctl reload nginx");
+
+    // The default-site backup/state files are restored FROM inside
+    // rollback_all() (a `cp -a`, still expected there) but must not be
+    // DELETED there -- that must wait until the caller's post-rollback
+    // `nginx -t` has actually confirmed success (MINOR-6's ordering fix).
+    const rollbackAllBody = install.slice(install.indexOf("rollback_all() {"), install.indexOf("if ! sudo nginx -t; then"));
+    expect(rollbackAllBody).toContain('sudo cp -a "$default_site_backup" "$default_site"');
+    expect(rollbackAllBody).not.toContain('rm -f "$default_site_backup"');
+  });
+
   it("pins stable Compose/data identity and closes dangerous preproduction writes", async () => {
     const rootCompose = await text("docker-compose.yml");
     const overlay = await text("infra/preproduction/docker-compose.yml");

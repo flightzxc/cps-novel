@@ -90,19 +90,41 @@ without the `__UPSTREAM__` substitution the full template needs, since it
 has no upstream block to substitute into.
 
 Root cause three (the duplicate-default-server failure) is fixed in
-`install-nginx.sh`: before rendering or installing anything, it checks
-whether `/etc/nginx/sites-enabled/default` exists and declares
-`default_server`; if so, it records what that file was (symlink and
-target, or a plain file, via `cp -a`, which preserves a symlink as a
-symlink) under the shared root and removes it, before `nginx -t` ever
-runs. Every file this invocation is about to overwrite -- snippets and
-the site config -- is also backed up first. `nginx -t` runs before
-`systemctl reload`, so a serving nginx process is never handed an invalid
-config; if the test fails, every backed-up path (snippets, site config,
-default-site file) is restored, `nginx -t` is re-run to confirm the
-restore itself is valid, and only then does the script reload and report
-`NGINX_INSTALL=REFUSED reason=nginx_test_failed`. This is a full rollback
-of everything the invocation touched, not a partial one.
+`install-nginx.sh`: the candidate config is rendered (a local temp file)
+and the files this invocation is about to overwrite -- snippets and the
+site config -- are backed up first; only THEN, and still before `nginx -t`
+ever runs, does it check whether `/etc/nginx/sites-enabled/default` exists
+and declares `default_server`, and if so record what that file was
+(symlink and target, or a plain file, via `cp -a`, which preserves a
+symlink as a symlink) under the shared root and remove it. `nginx -t` runs
+before `systemctl reload`, so a serving nginx process is never handed an
+invalid config; if the test fails, every backed-up path (snippets, site
+config, default-site file) is restored, `nginx -t` is re-run to confirm
+the restore itself is valid, and only then does the script reload and
+report `NGINX_INSTALL=REFUSED reason=nginx_test_failed`. This is a full
+rollback of everything the invocation touched, not a partial one.
+
+Two further hardenings to that rollback path, both from a later
+adversarial review with a reproduced failure: first, the backup directory
+used to be deleted by the same trap that also cleaned up the disposable
+rendered-candidate file, registered for `EXIT INT TERM` -- a signal
+delivered while `sudo nginx -t` runs as the foreground child is deferred
+by bash until that command returns, so the trap could fire and destroy the
+backups before the rollback below ever used them, making every "no
+backup" read as "this file should not exist" and deleting the live site
+config and security snippet. The backup directory (and, if disabled, the
+default-site backup/state files) are now only ever cleaned up on a
+confirmed-successful exit path, never via a signal trap, and `restore_one`
+refuses to delete anything and aborts with `NGINX_INSTALL=REFUSED
+reason=backup_dir_missing` if the backup directory itself is gone or
+unreadable rather than guessing. Second, if the state this invocation
+found was already broken before it ran (e.g. an old site config and the
+default site both present, so `nginx -t` fails even after a byte-for-byte
+restore), the script now reports that distinctly as `NGINX_INSTALL=REFUSED
+reason=rollback_state_invalid` and does not reload -- and keeps the
+default-site backup/state files on disk in that case, since they are
+removed only after that second `nginx -t` has actually confirmed the
+restore is valid, not unconditionally inside the restore step itself.
 
 ## Consequences
 
