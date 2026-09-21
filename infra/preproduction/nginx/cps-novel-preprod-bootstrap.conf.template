@@ -1,0 +1,58 @@
+# Installed under /etc/nginx/conf.d on Ubuntu nginx 1.24.x.
+#
+# Stage-1, HTTP-only bootstrap config. It is installed BEFORE DNS is pointed
+# at this host and BEFORE any TLS certificate exists, so it must:
+#   - reference no TLS certificate material anywhere (so `nginx -t` passes
+#     with zero certs on disk), and
+#   - define no backend pool and forward nothing to one anywhere (so it is
+#     structurally incapable of serving application content, even by
+#     accident).
+# Its only job is to answer the ACME HTTP-01 challenge on both preprod
+# hostnames so certbot can obtain the first certificate; everything else on
+# a known host is a bare 404, and unknown hosts are closed. Once a
+# certificate exists, cps-novel-preprod.conf.template replaces this file at
+# the same install path (see scripts/preproduction/install-nginx.sh).
+#
+# IPv6 is intentionally unserved here too, for the same reason as the main
+# template: no AAAA records exist yet.
+#
+# Modeled on cps-novel-preprod.conf.template (a conf.d drop-in for Ubuntu's
+# nginx), not on infra/production-like/nginx/bootstrap.conf.template (a full
+# nginx.conf for a container) -- the two bootstrap stages solve different
+# problems and only happen to share a name.
+
+server {
+    listen 80 default_server;
+    server_name _;
+    return 444;
+}
+
+server {
+    listen 80;
+    server_name www.bangbangji.cloud;
+    location ^~ /.well-known/acme-challenge/ {
+        root /var/lib/letsencrypt;
+        default_type text/plain;
+        try_files $uri =404;
+        include /etc/nginx/snippets/cps-novel-preprod-security.conf;
+    }
+    location / {
+        include /etc/nginx/snippets/cps-novel-preprod-security.conf;
+        return 404;
+    }
+}
+
+server {
+    listen 80;
+    server_name zbcwf.bangbangji.cloud;
+    location ^~ /.well-known/acme-challenge/ {
+        root /var/lib/letsencrypt;
+        default_type text/plain;
+        try_files $uri =404;
+        include /etc/nginx/snippets/cps-novel-preprod-security.conf;
+    }
+    location / {
+        include /etc/nginx/snippets/cps-novel-preprod-security.conf;
+        return 404;
+    }
+}

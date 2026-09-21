@@ -1,4 +1,11 @@
 # Installed under /etc/nginx/conf.d on Ubuntu nginx 1.24.x.
+# IPv6 is intentionally unserved: no `listen [::]` directive exists anywhere
+# in this file. Only A records exist for www.bangbangji.cloud and
+# zbcwf.bangbangji.cloud (no AAAA records), so nothing can reach this host
+# over IPv6 today; leaving the listener unbound is strictly more closed than
+# opening it. Do not add `listen [::]` without first creating the AAAA
+# records and revisiting this decision (also see the Docker test rig in
+# verify-nginx-matrix.sh, where IPv6 is often unavailable).
 limit_req_zone $binary_remote_addr zone=cps_preprod_general:10m rate=10r/s;
 limit_req_zone $binary_remote_addr zone=cps_preprod_login:10m rate=2r/s;
 limit_req_zone $binary_remote_addr zone=cps_preprod_api:10m rate=5r/s;
@@ -72,6 +79,17 @@ server {
         include /etc/nginx/snippets/cps-novel-preprod-security.conf;
         return 404;
     }
+    # Exact match beats the `^~ /api/` prefix regardless of file order (nginx
+    # always prefers an exact `=` match); kept adjacent to it for
+    # readability. Health stays reachable through a maintenance window
+    # (nomaintenance snippet) but stays behind the same Basic Auth as
+    # everything else -- see cps-novel-preprod-protected-nomaintenance.conf.
+    location = /api/health {
+        include /etc/nginx/snippets/cps-novel-preprod-protected-nomaintenance.conf;
+        limit_req zone=cps_preprod_api burst=10 nodelay;
+        proxy_pass http://cps_novel_preprod_web;
+        include /etc/nginx/snippets/cps-novel-preprod-proxy.conf;
+    }
     location ^~ /api/ {
         include /etc/nginx/snippets/cps-novel-preprod-protected.conf;
         limit_req zone=cps_preprod_api burst=10 nodelay;
@@ -120,8 +138,14 @@ server {
         proxy_pass http://cps_novel_preprod_web;
         include /etc/nginx/snippets/cps-novel-preprod-proxy.conf;
     }
-    location ^~ /api/health {
-        include /etc/nginx/snippets/cps-novel-preprod-protected.conf;
+    # Exact match, not `^~` prefix: a prefix match here also caught
+    # unrelated paths like /api/health-anything (measured evidence), because
+    # `^~` only means "stop checking regex locations", not "stop at the
+    # first `/`". Health stays reachable through a maintenance window but
+    # stays behind the same Basic Auth as everything else -- see
+    # cps-novel-preprod-protected-nomaintenance.conf.
+    location = /api/health {
+        include /etc/nginx/snippets/cps-novel-preprod-protected-nomaintenance.conf;
         limit_req zone=cps_preprod_api burst=10 nodelay;
         proxy_pass http://cps_novel_preprod_web;
         include /etc/nginx/snippets/cps-novel-preprod-proxy.conf;
@@ -131,6 +155,22 @@ server {
         limit_req zone=cps_preprod_api burst=10 nodelay;
         proxy_pass http://cps_novel_preprod_web;
         include /etc/nginx/snippets/cps-novel-preprod-proxy.conf;
+    }
+    # Minimal admin asset allowlist: /_next/static/ only. There are zero
+    # image-optimizer component imports under src/app/(admin) and
+    # src/app/(admin-auth) (a plain HTML image tag is used deliberately --
+    # see src/app/(admin)/settings/_components/site-settings-client.tsx
+    # around line 333), so no image-optimizer route or site icon path is
+    # added here; a missing site icon is cosmetic. Maintenance-gated
+    # (protected.conf) is fine for static assets -- unlike /api/health this
+    # location has no reason to be reachable during a maintenance window.
+    location ^~ /_next/static/ {
+        include /etc/nginx/snippets/cps-novel-preprod-protected.conf;
+        limit_req zone=cps_preprod_general burst=20 nodelay;
+        proxy_pass http://cps_novel_preprod_web;
+        include /etc/nginx/snippets/cps-novel-preprod-proxy.conf;
+        expires 1h;
+        add_header Cache-Control "private, max-age=3600" always;
     }
     location = /api/admin {
         include /etc/nginx/snippets/cps-novel-preprod-protected.conf;
