@@ -90,6 +90,20 @@ probe_readable() {
     --entrypoint /bin/sh "$CPS_NOVEL_APP_IMAGE" -c 'exec 3</run/check' >/dev/null 2>&1
 }
 
+probe_visible() {
+  local uid="$1" gid="$2" path="$3"
+  # Nginx's `if (-f path)` maintenance gate only stat()s the marker -- that
+  # needs search/execute on every parent directory but, unlike an actual
+  # read, no permission bits on the target itself. Probing with `[ -e ]`
+  # (a stat, not an open-for-read) mirrors that exactly, so this can never
+  # report a false failure for a marker whose own mode happens to be tight,
+  # nor a false pass for one hidden behind a directory the uid cannot enter.
+  docker run --rm --pull never --network none --read-only --cap-drop ALL \
+    --security-opt no-new-privileges --user "$uid:$gid" \
+    --mount "type=bind,src=$path,dst=/run/check,readonly" \
+    --entrypoint /bin/sh "$CPS_NOVEL_APP_IMAGE" -c '[ -e /run/check ]' >/dev/null 2>&1
+}
+
 numeric_owner() {
   stat -c '%u:%g' "$1" 2>/dev/null || stat -f '%u:%g' "$1"
 }
@@ -136,7 +150,7 @@ assert_single_consumer_acl() {
 # secrets 目录（文件内容仍受各自 ACL 保护，但"只给 UID 33 traverse"这条
 # 不变式已经不成立）。实测确认过：UID 4242 能 ls 出目录内容。
 #
-# group:: **刻意不强制为 ---**：现网三个目录是 drwxr-x--- deploy:deploy，
+# group:: **刻意不强制为 ---**：现网四个目录是 drwxr-x--- deploy:deploy，
 # group 就是 owner 本人所在的组；强制 --- 会与 Owner 既定布局冲突。
 # 同理 mask 不收紧到精确 --x —— group::r-x 存在时 setfacl 会把 mask 重算成
 # r-x，收紧会把现网判死。named 条目本身已被钉死为 --x，且全目录仅此一条，
@@ -188,9 +202,11 @@ for index in "${!names[@]}"; do
   esac
 done
 
-# The Nginx worker gets read access to one file and traverse-only access to the
-# three fixed directories. No deployment-group membership is part of the model.
-nginx_traverse_directories=(/opt/cps-novel /opt/cps-novel/shared /opt/cps-novel/shared/secrets)
+# The Nginx worker gets read access to two files -- the htpasswd and the
+# maintenance page it serves as its 503 error document -- and traverse-only
+# access to the four fixed directories. No deployment-group membership is
+# part of the model.
+nginx_traverse_directories=(/opt/cps-novel /opt/cps-novel/shared /opt/cps-novel/shared/secrets /opt/cps-novel/shared/maintenance)
 if [[ "${PREPROD_TEST_MODE:-0}" == "1" && -n "${PREPROD_TEST_NGINX_TRAVERSE_PATHS:-}" ]]; then
   IFS=: read -r -a nginx_traverse_directories <<<"$PREPROD_TEST_NGINX_TRAVERSE_PATHS"
 fi
@@ -198,6 +214,38 @@ for directory in "${nginx_traverse_directories[@]}"; do
   [[ -d "$directory" && ! -L "$directory" ]] || fail nginx_traverse_directory
   assert_directory_traverse_acl "$directory" "33"
 done
+
+# 🔴 Traverse-only access to the maintenance directory is necessary but not
+# sufficient: `cps-novel-preprod-protected.conf`'s `error_page 503` also has
+# to actually READ the page it serves, and `if (-f .../enabled)` has to be
+# able to STAT the marker. Neither of those was covered before -- a
+# maintenance directory with the right traverse ACL but an unreadable page,
+# or one nginx cannot even stat the marker in, still let this preflight PASS
+# while the maintenance gate silently never fired on the real target.
+maintenance_page="/opt/cps-novel/shared/maintenance/__preprod_maintenance.html"
+if [[ "${PREPROD_TEST_MODE:-0}" == "1" && -n "${PREPROD_TEST_MAINTENANCE_PAGE:-}" ]]; then
+  maintenance_page="$PREPROD_TEST_MAINTENANCE_PAGE"
+fi
+[[ -f "$maintenance_page" && ! -L "$maintenance_page" ]] || fail maintenance_page_missing
+probe_readable "33" "33" "$maintenance_page" || fail maintenance_page_unreadable 66
+
+# The marker only exists while maintenance is actually on -- its absence here
+# is the normal, expected state between deploys, not a defect. So this can
+# only ever prove visibility, never prove absence-is-fine: when the marker
+# exists we fail closed if www-data cannot stat it, and when it does not
+# exist we say so explicitly (`SKIPPED reason=marker_absent`) instead of
+# printing a VERIFIED/PASS claim for a probe that never actually ran, so a
+# real maintenance window can never be mistaken for "already checked".
+maintenance_marker="/opt/cps-novel/shared/maintenance/enabled"
+if [[ "${PREPROD_TEST_MODE:-0}" == "1" && -n "${PREPROD_TEST_MAINTENANCE_MARKER:-}" ]]; then
+  maintenance_marker="$PREPROD_TEST_MAINTENANCE_MARKER"
+fi
+if [[ -e "$maintenance_marker" ]]; then
+  probe_visible "33" "33" "$maintenance_marker" || fail maintenance_marker_not_visible 66
+  echo "MAINTENANCE_MARKER_PROBE=VERIFIED path=$maintenance_marker"
+else
+  echo "MAINTENANCE_MARKER_PROBE=SKIPPED reason=marker_absent path=$maintenance_marker"
+fi
 
 # Fail closed if either container identity can read any secret outside its
 # declared class. This is deliberately independent of the positive probes.
