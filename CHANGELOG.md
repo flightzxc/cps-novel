@@ -3,7 +3,11 @@
 <!-- 本文件由 `node scripts/generate-changelog.mjs --write` 生成，请勿手工编辑。 -->
 <!-- 叙述性内容写进 commit message；Owner/架构决策写 docs/adr/。 -->
 
-生成时间：2026-09-20 · 共 691 个 commit
+生成时间：2026-09-21 · 共 695 个 commit
+- `fa5172f` 2026-09-21 fix(preprod): 独立复核回合 —— 闸门补 pull_policy 一腿、拒绝走 stderr、订正根因记述  — _claude-code · Claude Opus 5 · reviewed: claude-code · Fable 5.1_
+- `d7aa095` 2026-09-21 fix(preprod): one-off 应用容器改为不依赖 CLI flag 的不可变工件闸门  — _claude-code · Claude Opus 5_
+- `45859da` 2026-09-21 merge: preproduction secret consumer permission model (#17)  — _claude-code · Claude Opus 5_
+- `825e664` 2026-09-21 docs(changelog): 经既有生成器重新生成  — _claude-code · Claude Opus 5_
 - `3c61166` 2026-09-21 fix(preprod): traverse 目录必须 other::---，否则任何 UID 都能列出 secrets 目录  — _claude-code · Claude Opus 5_
 - `8a6959d` 2026-09-21 docs(changelog): regenerate after ACL open probe  — _Codex · GPT-5_
 - `8a663f5` 2026-09-21 fix(preprod): probe ACLs with a real file open  — _Codex · GPT-5_
