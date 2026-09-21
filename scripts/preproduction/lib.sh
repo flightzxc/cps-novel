@@ -39,16 +39,86 @@ preprod_compose() {
     -f "$PREPROD_REPO_ROOT/infra/preproduction/docker-compose.yml" "$@"
 }
 
-# 🔴 应用镜像入口一律经此函数，绝不允许隐式 pull 或就地 build。
-# 根 compose 的 x-app-runtime 同时带 image: 与 build:，镜像缺失时 `up` 会直接
-# 在目标机上构建——那等于把"发布的是被批准的那个工件"这条契约作废。
-# --no-build 挡构建，--pull never 挡拉取；overlay 里的 pull_policy: never 是第二道。
-preprod_compose_app_up() {
-  preprod_compose up -d --no-deps --no-build --pull never "$@"
+# --- Compose CLI 能力探测 ---------------------------------------------------
+#
+# 🔴 按 `--help` 里**真实存在的 flag** 判定，不按 `docker compose version` 的
+# 版本号猜行为。本轮 B2 事故的根因就是"假设 `run --no-build` 永远存在"：
+# 目标机的 Compose v5.5.1 里 `run` 根本没有这个 flag（`up` 仍然有），
+# 于是 migrate-approved 以 `unknown flag: --no-build` 直接失败在 migration 入口。
+# 🔴 只认 `--help` 的 flag 表那一列。裸 `grep -- "$2"` 会被描述文字里顺口提到的
+# 同名 flag 骗过去——而"以为 run 支持 --no-build"正是本轮事故本身。
+preprod_compose_subcommand_has_flag() {
+  docker compose "$1" --help 2>/dev/null \
+    | grep -qE "^[[:space:]]+(-[a-zA-Z], )?$2([[:space:]]|$)"
 }
 
+# --- 应用镜像入口的不可变工件闸门 -------------------------------------------
+#
+# 🔴 目标机三条硬约束，缺一不可：**不 build、不 pull、批准镜像缺失即 FAIL CLOSED**。
+#
+# 这三条过去全押在 CLI flag 上（`--no-build --pull never`）。那是错的，且已被实测
+# 证伪：Compose v5 的 `run` 没有 `--no-build`，而只要 merged config 里还留着
+# build: 段、批准镜像本地又缺失，`run --pull never` 就会**就地构建并以 0 退出**
+# ——契约在没人察觉的地方失效，目标机上跑的不再是被批准的那个工件。
+# （实测矩阵见 tests/backend/runtime/preproduction-compose-oneoff-runner.test.ts，
+#  v5.0.1 与 v5.5.1 行为一致。）
+#
+# 因此闸门下沉到两处**不依赖 flag** 的地方：
+#   1) preproduction 的 merged config 里根本没有 build: 段
+#      —— overlay 用 `build: !reset null` 抹掉；注意普通 `build: null` 覆盖不掉
+#         基文件（实测 build 仍在），只有 `!reset` 有效；
+#   2) 批准镜像必须已经在本地，否则拒绝 —— 绝不把"镜像缺失"这件事交给 Compose
+#      去"解决"。这与 CPS 短剧的 `frozen_image_missing` 预检是同一条不变量
+#      （PRODUCTION_UPDATE_SOP §15：compose 文件里有 build: 段不等于允许构建）。
+preprod_assert_app_runtime_immutable() {
+  [[ -n "${CPS_NOVEL_APP_IMAGE:-}" ]] || {
+    echo "APP_RUNTIME=REFUSED reason=app_image_unset"; return 65;
+  }
+  local rendered
+  rendered="$(preprod_compose config)" || {
+    echo "APP_RUNTIME=REFUSED reason=compose_config"; return 65;
+  }
+  # 查的是**合并结果**，不是某个文件的文本：overlay 被漏掉 -f、被替换、
+  # 或被降级成不带 `!reset` 的写法，都只会在这一步暴露。
+  if grep -qxE ' {4}build:' <<<"$rendered"; then
+    echo "APP_RUNTIME=REFUSED reason=build_capability_present"; return 65
+  fi
+  docker image inspect "$CPS_NOVEL_APP_IMAGE" >/dev/null 2>&1 || {
+    echo "APP_RUNTIME=REFUSED reason=approved_image_missing ref=$CPS_NOVEL_APP_IMAGE"; return 65;
+  }
+  # manifest 已加载时（deploy / rollback 路径）判据升级为完整身份比对，
+  # 而不只是"这个 tag 在本地存在"：retag / 同名旧缓存都要在这里被拒绝。
+  if [[ -n "${PREPROD_RELEASE_TARGET_DIGEST:-}" ]]; then
+    # 成功时不重复刷屏（preflight / read_manifest 已经打过 PASS），
+    # 失败时把判定器的**具体 reason** 原样带出来，否则现场只剩一句笼统的拒绝。
+    local identity
+    if ! identity="$(preprod_assert_local_image "$CPS_NOVEL_APP_IMAGE" 2>&1)"; then
+      echo "$identity"
+      echo "APP_RUNTIME=REFUSED reason=app_image_identity ref=$CPS_NOVEL_APP_IMAGE"
+      return 65
+    fi
+  fi
+  return 0
+}
+
+# 🔴 应用镜像入口一律经这两个函数。闸门在 preprod_assert_app_runtime_immutable，
+# flag 只是第二、第三道：`--pull never` 挡拉取（overlay 的 `pull_policy: never`
+# 是绕过脚本时的兜底），`--no-build` 在**该子命令确实支持它**时才追加。
+preprod_compose_app_up() {
+  preprod_assert_app_runtime_immutable || return 65
+  local flags=(--pull never)
+  if preprod_compose_subcommand_has_flag up "--no-build"; then flags+=(--no-build); fi
+  preprod_compose up -d --no-deps "${flags[@]}" "$@"
+}
+
+# one-off（migration / verify-admin-auth）与 up 共用同一套闸门和同一份 Compose
+# 运行时定义——network / user / workdir / env / secrets / 挂载都来自同一个 merged
+# config，不另起一套 `docker run`，避免第二套会各自漂移的运行时。
 preprod_compose_app_run() {
-  preprod_compose run --rm --no-deps --no-build --pull never "$@"
+  preprod_assert_app_runtime_immutable || return 65
+  local flags=(--pull never)
+  if preprod_compose_subcommand_has_flag run "--no-build"; then flags+=(--no-build); fi
+  preprod_compose run --rm --no-deps "${flags[@]}" "$@"
 }
 
 # --- release manifest：统一读取入口 ----------------------------------------

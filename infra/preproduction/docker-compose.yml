@@ -14,6 +14,19 @@ services:
       - ./scripts/db/archive-wal.sh:/app/scripts/db/archive-wal.sh:ro
 
   web:
+    # 🔴 build: !reset null —— 目标机上**不存在构建源**。
+    #
+    # 根 compose 的 x-app-runtime 同时带 image: 与 build:（构建机需要 build:，
+    # build-release-archive.sh 只用根文件构建，不加载本 overlay）。目标机上留着
+    # 它是危险的：Compose v5 的 `run` 没有 `--no-build` 可用，而镜像缺失时
+    # `run --pull never` 会**就地构建并以 0 退出**——目标机于是跑着一个没被批准、
+    # 没经过归档校验、身份与 release manifest 无关的工件。抹掉 build: 段之后，
+    # 镜像缺失只能以 "No such image" 失败，这正是要的 fail-closed。
+    #
+    # 必须是 `!reset`：普通 `build: null` 覆盖不掉基文件里的 mapping（实测 merged
+    # config 里 build: 仍在）。`!reset` 在 Compose v5.0.1 / v5.5.1 上均已实测生效。
+    # CPS 短剧的生产 overlay 用同一语法清空 ports（docker-compose.prod.example.yml）。
+    build: !reset null
     # 🔴 pull_policy: never —— 应用镜像只能来自已验证的归档 docker load，
     # 不允许从任何 registry 拉取。这是脚本层 --pull never 之外的第二道闸：
     # 有人绕过 preprod_compose_app_up 直接 `docker compose up` 时它仍然生效。
@@ -34,10 +47,14 @@ services:
       - totp_encryption_key
 
   worker:
+    # 同 web：目标机不得具备就地构建能力，见上面的说明。
+    build: !reset null
     pull_policy: never
     stop_grace_period: 45s
 
   scheduler:
+    # 同 web：目标机不得具备就地构建能力，见上面的说明。
+    build: !reset null
     pull_policy: never
 
   backup-timer:

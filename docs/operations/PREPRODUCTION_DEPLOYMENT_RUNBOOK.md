@@ -145,6 +145,63 @@ stable volume, migration table, required roles, and real password
 authentication. It never changes role passwords, rotates keys, recreates a
 key, or restores a database.
 
+### Application image entry points: no build, no pull, fail closed
+
+Every container that runs the application image goes through
+`preprod_compose_app_up` / `preprod_compose_app_run` in
+`scripts/preproduction/lib.sh`. Both call the same gate first:
+
+1. `CPS_NOVEL_APP_IMAGE` must be set — `APP_RUNTIME=REFUSED reason=app_image_unset`.
+2. The **merged** preproduction Compose config must contain no `build:` section —
+   `APP_RUNTIME=REFUSED reason=build_capability_present`. The preproduction
+   overlay removes it with `build: !reset null`; a plain `build: null` does not
+   override the base file and is not a valid substitute.
+3. The approved image must already be loaded locally —
+   `APP_RUNTIME=REFUSED reason=approved_image_missing`. A missing image is a
+   transport/release problem, never something Compose is allowed to "solve".
+4. On the deploy/rollback path (release manifest loaded) the image must also
+   pass the full identity comparison — `APP_RUNTIME=REFUSED reason=app_image_identity`.
+
+🔴 Do not reintroduce a hard-coded `--no-build` on `docker compose run`. That
+flag exists on `up` and **not** on `run` in Compose v5 (verified on the target's
+v5.5.1 and on v5.0.1); the scripts append it only where the subcommand's own
+`--help` advertises it. Never infer flag support from the version string.
+
+🔴 A `build:` section in a Compose file is not permission to build. With the
+build source still merged in and the approved image absent,
+`docker compose run --pull never` builds the image on the spot and exits 0 —
+measured, not assumed. That is why the gate is in the merged config and in the
+image precondition, not in a CLI flag.
+
+### Recovering a partial fresh-init (initdb PASS, migration not run)
+
+🔴 A `fresh-init` that stopped **after** initdb and role initialization but
+**before** migration has produced a valid PostgreSQL 16 foundation, not a
+disposable failed volume. In that state:
+
+- Do **not** re-run `fresh-init` — it refuses a non-empty volume by design, and
+  the `initdb`-time role ceremony cannot run again on an initialized cluster.
+- Do **not** delete or recreate `cps_novel_postgres_data`.
+- Do **not** hand-run `prisma migrate deploy`, `psql` DDL, or `ALTER ROLE`.
+
+Resume with migration only, once the release tooling defect is fixed and the
+approved image is loaded on the host. The release identity is deliberately
+absent from the shared env file, so export it from the approved manifest
+through the same reader deploy uses:
+
+```bash
+source scripts/preproduction/lib.sh
+preprod_read_release_manifest /absolute/release-manifest.json
+export CPS_NOVEL_APP_IMAGE="$PREPROD_RELEASE_IMAGE_REF" GIT_COMMIT="$PREPROD_RELEASE_COMMIT"
+
+PREPROD_APPROVED_MIGRATION=YES scripts/preproduction/database.sh migrate-approved
+scripts/preproduction/database.sh persistent-check
+```
+
+`migrate-approved` runs the one-off through `preprod_compose_app_run`, so the
+gate above applies: an absent or wrong approved image stops here rather than
+being built or pulled on the target.
+
 ### Minimal account transfer
 
 The current schema proves the minimal set is `admin_identity` (username,
