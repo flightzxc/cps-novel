@@ -498,6 +498,36 @@ describe("Phase 2B preproduction deployment contract", () => {
   });
 });
 
+describe("verify-nginx-matrix.sh upstream-down case", () => {
+  it("accepts both 502 and 504 as upstream-unreachable, and still asserts the anti-index header", async () => {
+    const matrix = await text("scripts/preproduction/verify-nginx-matrix.sh");
+
+    // Measured on the real (Linux) target with `bash -x`: once the mock
+    // upstream container is stopped, Docker Desktop on macOS resets the
+    // connection during proxy_pass (nginx -> 502), while native Linux
+    // Docker leaves the SYN unanswered until `proxy_connect_timeout 3s`
+    // fires (nginx -> 504). Both are the edge legitimately reporting
+    // "upstream unreachable" for the same failure condition. Narrowing
+    // this back to 502-only previously made the whole matrix die silently
+    // under `set -e` (exit 1, zero output) on Linux -- pin both codes here
+    // so that regression can't come back unnoticed.
+    const stopOffset = matrix.indexOf('docker stop "$mock"');
+    expect(stopOffset).toBeGreaterThan(-1);
+    const nextBlankLine = matrix.indexOf("\n\n", stopOffset);
+    const caseBody = matrix.slice(stopOffset, nextBlankLine === -1 ? matrix.length : nextBlankLine);
+
+    expect(caseBody).toMatch(/\[\[\s*"\$code"\s*==\s*"502"\s*\|\|\s*"\$code"\s*==\s*"504"\s*\]\]/);
+    expect(caseBody).toContain("case=upstream_down");
+    expect(caseBody).toContain("exit 65");
+
+    // The actual security invariant this case exists to protect: the
+    // error response must still carry the anti-index header, whichever of
+    // the two legitimate codes nginx returned. Must not be weakened while
+    // relaxing the status-code check above.
+    expect(caseBody).toContain('grep -qi \'^X-Robots-Tag: noindex, nofollow, noarchive\' "$tmp/headers"');
+  });
+});
+
 describe("stable secret negative checks", () => {
   const required = [
     "postgres_admin_password", "migration_owner_password", "web_app_password", "worker_app_password",
