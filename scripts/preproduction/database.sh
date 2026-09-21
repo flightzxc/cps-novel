@@ -325,14 +325,33 @@ case "${1:-}" in
     # release's containers still running against a database whose grants
     # this same attempt may have just disturbed -- restoring the running
     # release's own committed grants.sql (via `git show <running commit>`)
-    # is what protects it from losing access mid-flight. That hazard does
-    # not exist on this path: scripts/preproduction/release.sh's deploy()
-    # stops scheduler, worker, and web (release.sh lines ~78-83) BEFORE
-    # calling `database.sh migrate-approved` (release.sh line ~88) -- there
-    # is no running release's containers left connected to this database
-    # while migrate-approved runs, so nothing here can strip access out from
-    # under a live container. A failed migrate-approved simply leaves
-    # release.sh's own maintenance-page/failed-state handling to take over.
+    # is what protects it from losing access mid-flight. That specific
+    # hazard does not exist on this path FOR THE THREE APPLICATION SERVICES:
+    # scripts/preproduction/release.sh's deploy() stops scheduler, worker,
+    # and web (release.sh lines ~78-83) BEFORE calling `database.sh
+    # migrate-approved` (release.sh line ~88), so none of those three
+    # containers is left connected while this replay runs.
+    #
+    # It is NOT true, though, that nothing is left connected: infra/
+    # preproduction/docker-compose.yml also defines a `backup-timer` service
+    # (PGUSER: backup_role, `restart: unless-stopped`), which deploy() never
+    # stops -- it can still hold an open connection as backup_role while this
+    # REVOKE/GRANT replay runs. That is benign here, not a gap: REVOKE and
+    # GRANT take no relation lock (measured), so this replay cannot block
+    # behind, or be blocked by, backup-timer's connection -- unlike
+    # `prisma migrate deploy`'s DDL, which CAN block behind `pg_dump`'s
+    # AccessShareLock; that lock-ordering hazard is pre-existing and separate
+    # from grants replay, not something introduced or fixed here.
+    #
+    # A failed migrate-approved simply leaves release.sh's own
+    # maintenance-page/failed-state handling to take over -- but only for
+    # the deploy() call path. The runbook also documents a hand invocation
+    # of `migrate-approved` (docs/operations/PREPRODUCTION_DEPLOYMENT_
+    # RUNBOOK.md: "grants must be replayed (via migrate-approved, or by
+    # hand ...)"), and that path does NOT enjoy the "application services
+    # already stopped" premise at all -- scheduler/worker/web may be running
+    # normally, connected to this same database, when an operator runs this
+    # subcommand directly outside of deploy().
     ;;
   *) usage ;;
 esac
