@@ -47,9 +47,10 @@ decision for Phase 2C.
 
 ## One-time Owner sudo steps
 
-1. Install Docker Engine/Compose, PostgreSQL-client-compatible tooling, Ubuntu
-   Nginx 1.24.x, Certbot, the Nginx Certbot integration, and `acl` from approved
-   OS repositories.
+1. Install Docker Engine/Compose, Node.js (the release manifest reader, image
+   identity checks and `release.sh` all shell out to `node`),
+   PostgreSQL-client-compatible tooling, Ubuntu Nginx 1.24.x, Certbot, the Nginx
+   Certbot integration, and `acl` from approved OS repositories.
 2. Create `/opt/cps-novel/{releases,shared}` and the shared children above.
 3. Do not put `www-data` in a deployment group. Grant consumers only the
    per-file ACLs in `scripts/preproduction/secret-consumers.tsv`; PostgreSQL is
@@ -144,6 +145,89 @@ Every persistent start uses `database.sh persistent-check`. It verifies the
 stable volume, migration table, required roles, and real password
 authentication. It never changes role passwords, rotates keys, recreates a
 key, or restores a database.
+
+### Application image entry points: no build, no pull, fail closed
+
+Every container that runs the application image goes through
+`preprod_compose_app_up` / `preprod_compose_app_run` in
+`scripts/preproduction/lib.sh`. Both call the same gate first:
+
+1. `CPS_NOVEL_APP_IMAGE` must be set — `APP_RUNTIME=REFUSED reason=app_image_unset`.
+2. The **merged** preproduction Compose config must contain no `build:` section —
+   `APP_RUNTIME=REFUSED reason=build_capability_present`. The preproduction
+   overlay removes it with `build: !reset null`; a plain `build: null` does not
+   override the base file and is not a valid substitute.
+3. Every rendered service running the approved image must declare
+   `pull_policy: never` — `APP_RUNTIME=REFUSED reason=pull_policy_not_never`.
+4. The approved image must already be loaded locally —
+   `APP_RUNTIME=REFUSED reason=approved_image_missing`. A missing image is a
+   transport/release problem, never something Compose is allowed to "solve".
+5. On the deploy/rollback path (release manifest loaded) the image must also
+   pass the full identity comparison — `APP_RUNTIME=REFUSED reason=app_image_identity`.
+   Without a manifest, the gate prints `identity=unverified_no_manifest`: only
+   the tag's presence was checked, not that it is the approved artifact.
+
+Refusals go to stderr, the `APP_RUNTIME=PASS …` line to stdout, because
+`verify-release.sh` discards the one-off's stdout.
+
+🔴 Do not reintroduce a hard-coded `--no-build` on `docker compose run`. That
+flag has **never** existed on `run` (checked on Compose v2.24.0, v2.29.7,
+v2.32.0, v2.36.0, v5.0.1, v5.5.1); it exists only on `up`. `--pull` likewise did
+not exist on `run` before v2.36.0. The scripts append either flag only where the
+subcommand's own `--help` advertises it, and the contract does not rest on them.
+Never infer flag support from the version string.
+
+🔴 A `build:` section in a Compose file is not permission to build. With the
+build source still merged in and the approved image absent,
+`docker compose run --pull never` builds the image on the spot and exits 0 —
+measured, not assumed. That is why the gate is in the merged config and in the
+image precondition, not in a CLI flag.
+
+### Recovering a partial fresh-init (initdb PASS, migration not run)
+
+🔴 A `fresh-init` that stopped **after** initdb and role initialization but
+**before** migration has produced a valid PostgreSQL 16 foundation, not a
+disposable failed volume. In that state:
+
+- Do **not** re-run `fresh-init` — it refuses a non-empty volume by design, and
+  the `initdb`-time role ceremony cannot run again on an initialized cluster.
+- Do **not** delete or recreate `cps_novel_postgres_data`.
+- Do **not** hand-run `prisma migrate deploy`, `psql` DDL, or `ALTER ROLE`.
+
+Resume with migration only, once the release tooling defect is fixed and the
+approved image is loaded on the host. Preconditions, all of them load-bearing:
+
+- Run it in **bash**. `lib.sh` derives its repo root from `BASH_SOURCE`; under
+  zsh that resolves to the wrong directory and the manifest reader fails.
+- `cd` into the release checkout at the approved commit first — every path below
+  is relative, and `migrate-approved` does not verify the checkout's commit.
+- `postgres` must already be running. The one-off uses `--no-deps` and will not
+  start it, and `persistent-check` cannot be used as a pre-check because
+  `_prisma_migrations` does not exist yet. `preprod_compose up -d postgres` is
+  idempotent and does not touch the initialized volume.
+- Node.js must be installed on the host (the manifest reader and the gate's
+  identity comparison both need it).
+
+The release identity is deliberately absent from the shared env file, so export
+it from the approved manifest through the same reader deploy uses. Going through
+`preprod_read_release_manifest` is what arms the identity leg of the gate —
+exporting only `CPS_NOVEL_APP_IMAGE` by hand leaves it at tag-presence.
+
+```bash
+cd /opt/cps-novel/releases/<approved-40-hex-commit>
+bash
+source scripts/preproduction/lib.sh
+preprod_read_release_manifest /absolute/release-manifest.json
+export CPS_NOVEL_APP_IMAGE="$PREPROD_RELEASE_IMAGE_REF" GIT_COMMIT="$PREPROD_RELEASE_COMMIT"
+
+preprod_compose up -d postgres
+PREPROD_APPROVED_MIGRATION=YES scripts/preproduction/database.sh migrate-approved
+scripts/preproduction/database.sh persistent-check
+```
+
+`migrate-approved` runs the one-off through `preprod_compose_app_run`, so the
+gate above applies: with the manifest loaded, an absent or wrong approved image
+stops here rather than being built or pulled on the target.
 
 ### Minimal account transfer
 

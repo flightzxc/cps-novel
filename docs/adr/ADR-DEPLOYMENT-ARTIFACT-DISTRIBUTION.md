@@ -163,7 +163,7 @@ preprod_read_release_manifest()   lib.sh 里的唯一 manifest 解析器
 
 preprod_assert_local_image()      从 **tag** 解析 ID 并与 config digest 比对
 preprod_assert_container_image()  启动后核对**实际容器**的 Image ID
-preprod_compose_app_up/run()      应用镜像入口一律 --no-build --pull never
+preprod_compose_app_up/run()      应用镜像入口；闸门见 §8.1.3，不再只靠 CLI flag
 ```
 
 配套：`infra/preproduction/docker-compose.yml` 给 web/worker/scheduler 加
@@ -255,6 +255,85 @@ v1 只有一个 `image_config_digest`，而且那个值是构建机 `docker insp
 在 containerd 构建机上抄下来的其实是 manifest digest —— 字段名说是 config，内容却不是。
 **自动给 v1 补字段等于把一个已知错误的值换个名字继续用**，所以 v1 被明确拒绝并提示重建，
 不原地升级、不静默降级。v1 工件保留作诊断材料。
+
+### 8.1.3 目标 Compose 兼容性：`run` 没有 `--no-build`（2026-09-21 结案）
+
+**现象。** B2 fresh-init 在 migration 入口失败：
+
+```text
+fresh-init → initdb PASS → roles PASS → migrate-approved
+  → preprod_compose_app_run → unknown flag: --no-build
+```
+
+不是目标机损坏。也**不是** Compose 改了 flag——这一点第一版记错了，必须纠正：
+`docker compose run --no-build` **从来就不存在**。实测 `docker/compose-bin` 各版本：
+
+| Compose | `run --no-build` | `run --pull` | `up --no-build` |
+| --- | --- | --- | --- |
+| v2.24.0 / v2.29.7 / v2.32.0 | 无 | **无** | 有 |
+| v2.36.0 / v5.0.1 / v5.5.1 | 无 | 有 | 有 |
+
+这个 flag 在 `e274902`（2026-09-20）被写进 `preprod_compose_app_run`，而当时仓库里
+**没有任何测试引用过这两个应用镜像入口**（`git grep preprod_compose_app_run -- tests/`
+在 45859da 上为空）。也就是说这条命令行从写下到 B2 那天，**一次都没有被真的执行过**。
+
+所以真正的教训是「one-off 这条路从没真跑过」，而不是「Compose 升级了」。对应的控制
+不是"盯版本号"，而是：**脚本发出的每个 flag 必须对着该子命令真实的 `--help` 核过**，
+并且这条路径要有真 daemon 的用例。顺带同一个坑的第二处：`--pull` 在 v2.32.0 及更早
+也不存在，所以它同样按能力追加，"不 pull"真正承重的是 overlay 的 `pull_policy: never`。
+
+**为什么"删掉那个 flag"不是合格修法。** 实测矩阵（`docker compose` v5.5.1 与
+v5.0.1 行为一致，rig 与生产同形状：服务同时带 `image:` 与 `build:`）：
+
+| merged config 里的 build 段 | 本地有批准镜像 | `run --rm --no-deps --pull never` |
+| --- | --- | --- |
+| 在 | 有 | PASS，不 build 不 pull |
+| 在 | **无** | 🔴 **就地 build，exit 0** |
+| 无 | 有 | PASS，不 build 不 pull |
+| 无 | **无** | FAIL：`No such image`，不 build 不 pull |
+
+也就是说：只要 build 段还在 merged config 里，`--pull never` 挡不住构建；
+一旦镜像因为运输/装载问题缺失，目标机会**静默地**跑上一个没被批准、没经过归档
+校验、身份与 release manifest 无关的工件，而部署脚本一路绿灯。
+
+**决定。** 不可变工件纪律从 CLI flag 下沉到不依赖 flag 的 merged-config / 本地镜像事实：
+
+1. `infra/preproduction/docker-compose.yml` 用 `build: !reset null` 把
+   web / worker / scheduler 的构建源从 **merged config** 里抹掉。目标机上不存在
+   构建源，`run` 有没有 `--no-build` 都不再重要。
+   - 必须是 `!reset`：普通 `build: null` 覆盖不掉基文件（实测 merged config 里
+     build 段仍在）。`!reset` 在 v5.0.1 / v5.5.1 上均已实测生效，且 CPS 短剧的
+     生产 overlay 早已用同一语法清空 `ports`。
+   - 构建机不受影响：`build-release-archive.sh` 只加载根 compose 构建，从不加载
+     本 overlay；根 compose 的 `build:` 原样保留。
+   - `!reset` 不改变插值时机：基文件 `build.args` 里的必填变量（`BUILD_DATE` 等）
+     仍然必填，本次改动对 env 契约零影响（实测）。
+2. `preprod_assert_app_runtime_immutable()` 在**每一次** `up` / `run` 之前 fail
+   closed，断言的全是 merged config / 本地镜像的事实，一条都不依赖 flag：
+   镜像变量有值 → merged config 没有 build 段（overlay 被漏掉 `-f`、被换掉、被
+   降级写法都在这里暴露）→ 渲染后每个跑批准镜像的服务都带 `pull_policy: never`
+   → 批准镜像已在本地 → manifest 已加载时再过完整身份比对。这与 CPS 短剧的
+   `frozen_image_missing` 预检是同一条不变量（`PRODUCTION_UPDATE_SOP` §15：
+   "compose 文件里有 `build:` 段不等于允许构建"）。
+   - 拒绝一律走 **stderr**：`verify-release.sh` 把 one-off 的 stdout 整条
+     `>/dev/null`，理由若走 stdout，现场就只剩一个裸的非零退出码。
+   - 没加载 manifest 时（独立的 `migrate-approved` 恢复路径）只证明了"这个 tag
+     在本地存在"，因此显式打 `identity=unverified_no_manifest`，不冒充已核身份。
+
+`--no-build` 与 `--pull never` 退化为锦上添花的第二道，且只在**该子命令的
+`--help` 真的有它**时才追加——不支持就不加，契约不因此变松，因为它本来就不靠
+flag 站住。
+
+**不选 B 方案（专用 `docker run` one-off runner）的理由。** migration 与
+verify-admin-auth 这两个 one-off 需要与正式服务完全一致的 network / user /
+workdir / env / secrets / bind mounts。手抄一份 `docker run` 等于再造一套会各自
+漂移的运行时，而 A 方案让 one-off 继续复用同一份 merged config，重复度为零。
+CPS 短剧那侧的 `docker run --pull never` one-off 是另一类用途（`--network none`
+的自包含探针，不需要数据库与 secrets），不构成反例。
+
+**回归锚点。** `tests/backend/runtime/preproduction-compose-oneoff-runner.test.ts`
+用真 daemon 跑上表全部四格，并把"脚本发出的每个 flag 必须存在于该子命令真实
+`--help`"变成用例——这正是上一轮 CI 缺的那一层。
 
 ### 8.2 版本身份漂移
 
