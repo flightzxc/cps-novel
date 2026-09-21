@@ -164,6 +164,47 @@ $$;
 DATABASE_PRIVILEGE_CHECK_SQL
 }
 
+# Derives the DATABASE_PRIVILEGE_CHECK=FAIL reason from
+# verify_database_privileges()'s captured stderr ($1). Every failure mode
+# must still produce SOME reason -- never let this go empty and abort the
+# caller's `set -euo pipefail` shell before a reason is ever printed.
+#
+# Under set -o pipefail, `grep -o 'PRIVILEGE_CHECK_FAILED reason=.*' | tail
+# -1 | sed ...` exits non-zero as a PIPELINE whenever grep finds no match
+# (grep's own exit status 1 is the rightmost non-zero status in the
+# pipeline, even though tail and sed both exit 0) -- true for every failure
+# mode that does NOT emit our own RAISE EXCEPTION text: connection refused,
+# "role does not exist", psql not found, a plain syntax error, etc. Left
+# unguarded (as this used to be, inlined directly in the persistent-check
+# case with no `|| true`), that non-zero pipeline aborts the assignment
+# under `set -e` immediately -- before either of the two `>&2` lines below
+# it ever runs -- producing exactly the reason-less bare-exit the stderr
+# work was meant to eliminate. The `|| true` here is what
+# scripts/run-preprod-db-contract-verification.sh's REASON_FALLBACK case
+# proves is load-bearing (remove it and that case's structured sub-case
+# stays green while its no-match sub-case starts aborting silently instead
+# of returning "unknown ...").
+#
+# The sed strips the FULL "PRIVILEGE_CHECK_FAILED reason=" prefix (not just
+# "PRIVILEGE_CHECK_FAILED "): the persistent-check case below interpolates
+# this value back into its OWN "reason=${privilege_reason}" text, so leaving
+# the inner "reason=" on meant every structured failure emitted a doubled
+# "DATABASE_PRIVILEGE_CHECK=FAIL reason=reason=<x>" -- caught by
+# scripts/run-preprod-db-contract-verification.sh's REASON_FALLBACK_STRUCTURED
+# sub-case while writing this fix.
+privilege_check_failure_reason() {
+  local output="$1" reason
+  reason="$(printf '%s\n' "$output" | grep -o 'PRIVILEGE_CHECK_FAILED reason=.*' | tail -1 | sed 's/^PRIVILEGE_CHECK_FAILED reason=//')" || true
+  if [[ -n "$reason" ]]; then
+    printf '%s\n' "$reason"
+  else
+    # No structured PRIVILEGE_CHECK_FAILED line -- surface the raw psql
+    # stderr instead of a bare "unknown" so the operator has something to
+    # act on.
+    printf 'unknown detail=%s\n' "$(printf '%s' "$output" | tr '\n' ' ')"
+  fi
+}
+
 case "${1:-}" in
   fresh-init)
     [[ "${PREPROD_CONFIRM_EMPTY_VOLUME:-}" == "EMPTY_cps_novel_postgres_data" ]] || {
@@ -210,8 +251,8 @@ case "${1:-}" in
         | grep -qx "$role" || { echo "DATABASE_PERSISTENT_CHECK=FAIL reason=role_auth" >&2; exit 65; }
     done
     privilege_check_output="$(verify_database_privileges)" || {
-      privilege_reason="$(printf '%s\n' "$privilege_check_output" | grep -o 'PRIVILEGE_CHECK_FAILED reason=.*' | tail -1 | sed 's/^PRIVILEGE_CHECK_FAILED //')"
-      echo "DATABASE_PRIVILEGE_CHECK=FAIL reason=${privilege_reason:-unknown}" >&2
+      privilege_reason="$(privilege_check_failure_reason "$privilege_check_output")"
+      echo "DATABASE_PRIVILEGE_CHECK=FAIL reason=${privilege_reason}" >&2
       echo "DATABASE_PERSISTENT_CHECK=FAIL reason=privilege_check" >&2
       exit 65
     }
@@ -240,11 +281,18 @@ case "${1:-}" in
     # -U postgres, NOT -U migration_owner: grants.sql's blanket
     # `REVOKE ALL PRIVILEGES ON ALL FUNCTIONS IN SCHEMA public FROM PUBLIC`
     # also touches postgres-owned extension functions (e.g.
-    # pg_stat_statements). migration_owner does not own those functions, so a
-    # REVOKE issued as migration_owner is not guaranteed to be idempotent on
-    # a repeat run -- only the bootstrap superuser (postgres) stays
-    # idempotent every time. See scripts/x8-production-like.sh's own comment
-    # on this exact point (its prepare_database(), X8_DB_PREP_STEP=grants).
+    # pg_stat_statements). Only a function's owner (or a superuser) can
+    # actually change its privileges; migration_owner does not own those
+    # extension functions. PostgreSQL's REVOKE is lenient about this --  it
+    # emits a WARNING, not an ERROR, when the issuing role lacks ownership --
+    # so the statement would not abort, it would just silently have NO
+    # EFFECT on those specific functions, leaving their privileges wrong
+    # rather than merely "not idempotent". Only the bootstrap superuser
+    # (postgres) actually owns everything grants.sql touches, so it is the
+    # only role that can apply every statement in the file for real. This
+    # also matches the X8-proven path: see scripts/x8-production-like.sh's
+    # own comment on this exact point (its prepare_database(),
+    # X8_DB_PREP_STEP=grants).
     #
     # --single-transaction: grants.sql REVOKEs every privilege up front and
     # then re-GRANTs them line by line (see that file's own header comment).
