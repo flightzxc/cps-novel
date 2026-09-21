@@ -182,11 +182,19 @@ case "${1:-}" in
     echo "DATABASE_FRESH_INIT=PASS foundation_rows=NOT_APPLIED account_bootstrap=REQUIRED"
     ;;
   persistent-check)
+    # 🔴 verify-release.sh calls this subcommand as
+    # `database.sh persistent-check >/dev/null` (see lib.sh's own comment on
+    # preprod_assert_app_runtime_immutable for the same rule stated for the
+    # app-runtime gate: "拒绝走 stderr、PASS 走 stdout"). Every FAIL/REFUSED
+    # line in this case -- pre-existing ones included -- must go to stderr,
+    # or a real failure during `release.sh deploy` surfaces to the operator
+    # as a bare non-zero exit code with no reason at all. Only PASS lines
+    # (which callers grep stdout for) stay on stdout.
     docker volume inspect cps_novel_postgres_data >/dev/null 2>&1 || {
-      echo "DATABASE_PERSISTENT_CHECK=FAIL reason=volume_missing"; exit 65;
+      echo "DATABASE_PERSISTENT_CHECK=FAIL reason=volume_missing" >&2; exit 65;
     }
     preprod_compose ps --status running postgres | grep -q postgres || {
-      echo "DATABASE_PERSISTENT_CHECK=FAIL reason=postgres_not_running"; exit 69;
+      echo "DATABASE_PERSISTENT_CHECK=FAIL reason=postgres_not_running" >&2; exit 69;
     }
     verify_roles_and_schema
     for pair in \
@@ -199,12 +207,12 @@ case "${1:-}" in
       role="${pair%%:*}"; password_file="${pair#*:}"
       preprod_compose exec -T -e CHECK_ROLE="$role" -e CHECK_PASSWORD_FILE="$password_file" postgres \
         bash -ceu 'export PGPASSWORD="$(<"$CHECK_PASSWORD_FILE")"; psql --no-psqlrc -h 127.0.0.1 -U "$CHECK_ROLE" -d cps_novel -Atqc "SELECT current_user"' \
-        | grep -qx "$role" || { echo "DATABASE_PERSISTENT_CHECK=FAIL reason=role_auth"; exit 65; }
+        | grep -qx "$role" || { echo "DATABASE_PERSISTENT_CHECK=FAIL reason=role_auth" >&2; exit 65; }
     done
     privilege_check_output="$(verify_database_privileges)" || {
       privilege_reason="$(printf '%s\n' "$privilege_check_output" | grep -o 'PRIVILEGE_CHECK_FAILED reason=.*' | tail -1 | sed 's/^PRIVILEGE_CHECK_FAILED //')"
-      echo "DATABASE_PRIVILEGE_CHECK=FAIL reason=${privilege_reason:-unknown}"
-      echo "DATABASE_PERSISTENT_CHECK=FAIL reason=privilege_check"
+      echo "DATABASE_PRIVILEGE_CHECK=FAIL reason=${privilege_reason:-unknown}" >&2
+      echo "DATABASE_PERSISTENT_CHECK=FAIL reason=privilege_check" >&2
       exit 65
     }
     echo "DATABASE_PRIVILEGE_CHECK=PASS"
