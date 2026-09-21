@@ -28,6 +28,183 @@ SELECT 1 FROM "_prisma_migrations" LIMIT 1;
 SQL
 }
 
+# docs/governance/database-governance.md:433 requires infra/postgres/grants.sql
+# to be replayed after every migration. The mature X8 path
+# (scripts/x8-production-like.sh prepare_database(), X8_DB_PREP_STEP=grants)
+# already does this; persistent-check asserts the ACTUAL, observable result of
+# that replay (rather than re-deriving expectations by hand) so drift between
+# grants.sql and this check shows up immediately.
+#
+# scripts/run-preprod-db-contract-verification.sh extracts the SQL below
+# VERBATIM out of this file -- between the `<<'DATABASE_PRIVILEGE_CHECK_SQL'`
+# heredoc open and its closing `DATABASE_PRIVILEGE_CHECK_SQL` delimiter line
+# below -- rather than keeping a second copy of its own. That is the single
+# source of truth this check and the disposable-Postgres proof harness share;
+# do not fork a second copy of this SQL anywhere else.
+#
+# Every assertion below is derived from reading infra/postgres/grants.sql
+# itself, not guessed (line numbers as of this change):
+#   - "at least one table privilege in public" for web_app/worker_app/
+#     scheduler_app/analyst_ro/backup_role: grants.sql:52-53 (backup_role),
+#     :99 (web_app/analyst_ro), :316-329 (worker_app), :454 (scheduler_app).
+#   - backup_role SELECT on every table/sequence in public: grants.sql:52-53.
+#   - web_app SELECT+INSERT+UPDATE on the six Admin-auth tables:
+#     grants.sql:102-105.
+#   - web_app DELETE on admin_recovery_code/admin_login_attempt only:
+#     grants.sql:106.
+#   - web_app SELECT+INSERT (never UPDATE/DELETE) on operation_audit:
+#     grants.sql:72 (SELECT, part of the shared web_app/analyst_ro list),
+#     :215 (INSERT). No GRANT UPDATE/DELETE ... operation_audit ... TO
+#     web_app exists anywhere in the file.
+#   - web_app USAGE on every sequence in public: grants.sql:472.
+#   - migration_owner CREATE on schema public: grants.sql:38.
+#   - worker_app/scheduler_app/analyst_ro have NO SELECT on admin_two_factor/
+#     admin_recovery_code/admin_two_factor_challenge: the only GRANTs
+#     touching those three tables anywhere in the file are grants.sql:102-106,
+#     all TO web_app.
+verify_database_privileges() {
+  preprod_compose exec -T postgres psql --no-psqlrc -v ON_ERROR_STOP=1 \
+    -U postgres -d cps_novel <<'DATABASE_PRIVILEGE_CHECK_SQL' 2>&1 >/dev/null
+DO $$
+DECLARE
+  role_name text;
+  table_name text;
+BEGIN
+  -- Positive: each runtime role holds at least one TABLE privilege in
+  -- schema public. Catches "grants.sql was never applied" / "grants were
+  -- wiped" wholesale, before any of the narrower checks below even matter.
+  FOREACH role_name IN ARRAY ARRAY['web_app','worker_app','scheduler_app','analyst_ro','backup_role'] LOOP
+    IF NOT EXISTS (
+      SELECT 1 FROM pg_tables t
+      WHERE t.schemaname = 'public'
+        AND has_table_privilege(
+          role_name, format('%I.%I', t.schemaname, t.tablename),
+          'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER'
+        )
+    ) THEN
+      RAISE EXCEPTION 'PRIVILEGE_CHECK_FAILED reason=role_has_zero_table_privileges role=% schema=public', role_name;
+    END IF;
+  END LOOP;
+
+  -- backup_role must SELECT every table and every sequence in public --
+  -- pg_dump COPYs each one; a single missing grant fails the whole backup.
+  FOR table_name IN SELECT format('%I.%I', schemaname, tablename) FROM pg_tables WHERE schemaname = 'public' LOOP
+    IF NOT has_table_privilege('backup_role', table_name, 'SELECT') THEN
+      RAISE EXCEPTION 'PRIVILEGE_CHECK_FAILED reason=backup_role_missing_table_select table=%', table_name;
+    END IF;
+  END LOOP;
+  FOR table_name IN SELECT format('%I.%I', schemaname, sequencename) FROM pg_sequences WHERE schemaname = 'public' LOOP
+    IF NOT has_sequence_privilege('backup_role', table_name, 'SELECT') THEN
+      RAISE EXCEPTION 'PRIVILEGE_CHECK_FAILED reason=backup_role_missing_sequence_select sequence=%', table_name;
+    END IF;
+  END LOOP;
+
+  -- web_app Admin-auth table set: SELECT+INSERT+UPDATE on all six.
+  FOREACH table_name IN ARRAY ARRAY[
+    'admin_identity','admin_session','admin_two_factor',
+    'admin_two_factor_challenge','admin_recovery_code','admin_login_attempt'
+  ] LOOP
+    IF NOT (
+      has_table_privilege('web_app', format('public.%I', table_name), 'SELECT') AND
+      has_table_privilege('web_app', format('public.%I', table_name), 'INSERT') AND
+      has_table_privilege('web_app', format('public.%I', table_name), 'UPDATE')
+    ) THEN
+      RAISE EXCEPTION 'PRIVILEGE_CHECK_FAILED reason=web_app_missing_admin_auth_privilege table=%', table_name;
+    END IF;
+  END LOOP;
+
+  -- web_app DELETE on exactly admin_recovery_code and admin_login_attempt.
+  FOREACH table_name IN ARRAY ARRAY['admin_recovery_code','admin_login_attempt'] LOOP
+    IF NOT has_table_privilege('web_app', format('public.%I', table_name), 'DELETE') THEN
+      RAISE EXCEPTION 'PRIVILEGE_CHECK_FAILED reason=web_app_missing_delete table=%', table_name;
+    END IF;
+  END LOOP;
+
+  -- web_app SELECT+INSERT on operation_audit; explicitly NOT UPDATE/DELETE
+  -- (append-only -- no such grant exists anywhere in grants.sql).
+  IF NOT (
+    has_table_privilege('web_app', 'public.operation_audit', 'SELECT') AND
+    has_table_privilege('web_app', 'public.operation_audit', 'INSERT')
+  ) THEN
+    RAISE EXCEPTION 'PRIVILEGE_CHECK_FAILED reason=web_app_missing_operation_audit_privilege';
+  END IF;
+  IF has_table_privilege('web_app', 'public.operation_audit', 'UPDATE') THEN
+    RAISE EXCEPTION 'PRIVILEGE_CHECK_FAILED reason=web_app_unexpected_operation_audit_update';
+  END IF;
+  IF has_table_privilege('web_app', 'public.operation_audit', 'DELETE') THEN
+    RAISE EXCEPTION 'PRIVILEGE_CHECK_FAILED reason=web_app_unexpected_operation_audit_delete';
+  END IF;
+
+  -- web_app USAGE on every sequence in public.
+  FOR table_name IN SELECT format('%I.%I', schemaname, sequencename) FROM pg_sequences WHERE schemaname = 'public' LOOP
+    IF NOT has_sequence_privilege('web_app', table_name, 'USAGE') THEN
+      RAISE EXCEPTION 'PRIVILEGE_CHECK_FAILED reason=web_app_missing_sequence_usage sequence=%', table_name;
+    END IF;
+  END LOOP;
+
+  -- migration_owner CREATE on schema public.
+  IF NOT has_schema_privilege('migration_owner', 'public', 'CREATE') THEN
+    RAISE EXCEPTION 'PRIVILEGE_CHECK_FAILED reason=migration_owner_missing_schema_create';
+  END IF;
+
+  -- Negative: worker_app/scheduler_app/analyst_ro must have NO SELECT on the
+  -- three most sensitive Admin-auth tables. grants.sql only ever grants
+  -- these to web_app; this proves the check has teeth against a too-broad
+  -- future grant, not just against a missing one.
+  FOREACH role_name IN ARRAY ARRAY['worker_app','scheduler_app','analyst_ro'] LOOP
+    IF has_table_privilege(role_name, 'public.admin_two_factor', 'SELECT')
+      OR has_table_privilege(role_name, 'public.admin_recovery_code', 'SELECT')
+      OR has_table_privilege(role_name, 'public.admin_two_factor_challenge', 'SELECT')
+    THEN
+      RAISE EXCEPTION 'PRIVILEGE_CHECK_FAILED reason=unexpected_admin_auth_select role=%', role_name;
+    END IF;
+  END LOOP;
+END
+$$;
+DATABASE_PRIVILEGE_CHECK_SQL
+}
+
+# Derives the DATABASE_PRIVILEGE_CHECK=FAIL reason from
+# verify_database_privileges()'s captured stderr ($1). Every failure mode
+# must still produce SOME reason -- never let this go empty and abort the
+# caller's `set -euo pipefail` shell before a reason is ever printed.
+#
+# Under set -o pipefail, `grep -o 'PRIVILEGE_CHECK_FAILED reason=.*' | tail
+# -1 | sed ...` exits non-zero as a PIPELINE whenever grep finds no match
+# (grep's own exit status 1 is the rightmost non-zero status in the
+# pipeline, even though tail and sed both exit 0) -- true for every failure
+# mode that does NOT emit our own RAISE EXCEPTION text: connection refused,
+# "role does not exist", psql not found, a plain syntax error, etc. Left
+# unguarded (as this used to be, inlined directly in the persistent-check
+# case with no `|| true`), that non-zero pipeline aborts the assignment
+# under `set -e` immediately -- before either of the two `>&2` lines below
+# it ever runs -- producing exactly the reason-less bare-exit the stderr
+# work was meant to eliminate. The `|| true` here is what
+# scripts/run-preprod-db-contract-verification.sh's REASON_FALLBACK case
+# proves is load-bearing (remove it and that case's structured sub-case
+# stays green while its no-match sub-case starts aborting silently instead
+# of returning "unknown ...").
+#
+# The sed strips the FULL "PRIVILEGE_CHECK_FAILED reason=" prefix (not just
+# "PRIVILEGE_CHECK_FAILED "): the persistent-check case below interpolates
+# this value back into its OWN "reason=${privilege_reason}" text, so leaving
+# the inner "reason=" on meant every structured failure emitted a doubled
+# "DATABASE_PRIVILEGE_CHECK=FAIL reason=reason=<x>" -- caught by
+# scripts/run-preprod-db-contract-verification.sh's REASON_FALLBACK_STRUCTURED
+# sub-case while writing this fix.
+privilege_check_failure_reason() {
+  local output="$1" reason
+  reason="$(printf '%s\n' "$output" | grep -o 'PRIVILEGE_CHECK_FAILED reason=.*' | tail -1 | sed 's/^PRIVILEGE_CHECK_FAILED reason=//')" || true
+  if [[ -n "$reason" ]]; then
+    printf '%s\n' "$reason"
+  else
+    # No structured PRIVILEGE_CHECK_FAILED line -- surface the raw psql
+    # stderr instead of a bare "unknown" so the operator has something to
+    # act on.
+    printf 'unknown detail=%s\n' "$(printf '%s' "$output" | tr '\n' ' ')"
+  fi
+}
+
 case "${1:-}" in
   fresh-init)
     [[ "${PREPROD_CONFIRM_EMPTY_VOLUME:-}" == "EMPTY_cps_novel_postgres_data" ]] || {
@@ -46,11 +223,19 @@ case "${1:-}" in
     echo "DATABASE_FRESH_INIT=PASS foundation_rows=NOT_APPLIED account_bootstrap=REQUIRED"
     ;;
   persistent-check)
+    # 🔴 verify-release.sh calls this subcommand as
+    # `database.sh persistent-check >/dev/null` (see lib.sh's own comment on
+    # preprod_assert_app_runtime_immutable for the same rule stated for the
+    # app-runtime gate: "拒绝走 stderr、PASS 走 stdout"). Every FAIL/REFUSED
+    # line in this case -- pre-existing ones included -- must go to stderr,
+    # or a real failure during `release.sh deploy` surfaces to the operator
+    # as a bare non-zero exit code with no reason at all. Only PASS lines
+    # (which callers grep stdout for) stay on stdout.
     docker volume inspect cps_novel_postgres_data >/dev/null 2>&1 || {
-      echo "DATABASE_PERSISTENT_CHECK=FAIL reason=volume_missing"; exit 65;
+      echo "DATABASE_PERSISTENT_CHECK=FAIL reason=volume_missing" >&2; exit 65;
     }
     preprod_compose ps --status running postgres | grep -q postgres || {
-      echo "DATABASE_PERSISTENT_CHECK=FAIL reason=postgres_not_running"; exit 69;
+      echo "DATABASE_PERSISTENT_CHECK=FAIL reason=postgres_not_running" >&2; exit 69;
     }
     verify_roles_and_schema
     for pair in \
@@ -63,8 +248,15 @@ case "${1:-}" in
       role="${pair%%:*}"; password_file="${pair#*:}"
       preprod_compose exec -T -e CHECK_ROLE="$role" -e CHECK_PASSWORD_FILE="$password_file" postgres \
         bash -ceu 'export PGPASSWORD="$(<"$CHECK_PASSWORD_FILE")"; psql --no-psqlrc -h 127.0.0.1 -U "$CHECK_ROLE" -d cps_novel -Atqc "SELECT current_user"' \
-        | grep -qx "$role" || { echo "DATABASE_PERSISTENT_CHECK=FAIL reason=role_auth"; exit 65; }
+        | grep -qx "$role" || { echo "DATABASE_PERSISTENT_CHECK=FAIL reason=role_auth" >&2; exit 65; }
     done
+    privilege_check_output="$(verify_database_privileges)" || {
+      privilege_reason="$(privilege_check_failure_reason "$privilege_check_output")"
+      echo "DATABASE_PRIVILEGE_CHECK=FAIL reason=${privilege_reason}" >&2
+      echo "DATABASE_PERSISTENT_CHECK=FAIL reason=privilege_check" >&2
+      exit 65
+    }
+    echo "DATABASE_PRIVILEGE_CHECK=PASS"
     echo "DATABASE_PERSISTENT_CHECK=PASS"
     ;;
   migrate-approved)
@@ -76,6 +268,90 @@ case "${1:-}" in
       -e DATABASE_URL="$P1_12_MIGRATION_DATABASE_URL" web \
       npx --no-install prisma migrate deploy
     echo "DATABASE_MIGRATION=PASS"
+
+    # docs/governance/database-governance.md:433 requires infra/postgres/
+    # grants.sql to be replayed after every migration. The mature X8 path
+    # (scripts/x8-production-like.sh prepare_database(), X8_DB_PREP_STEP=grants)
+    # already does this; this preproduction path never did, which left every
+    # runtime role at zero table privileges the moment a migration created or
+    # altered any object -- measured on the real host: web_app and
+    # backup_role each had SELECT on 0 of 54 tables, which also breaks
+    # pg_dump for backup_role. Replay uses the EXACT X8-proven shape:
+    #
+    # -U postgres, NOT -U migration_owner: grants.sql's blanket
+    # `REVOKE ALL PRIVILEGES ON ALL FUNCTIONS IN SCHEMA public FROM PUBLIC`
+    # also touches postgres-owned extension functions (e.g.
+    # pg_stat_statements). Only a function's owner (or a superuser) can
+    # actually change its privileges; migration_owner does not own those
+    # extension functions. PostgreSQL's REVOKE is lenient about this --  it
+    # emits a WARNING, not an ERROR, when the issuing role lacks ownership --
+    # so the statement would not abort, it would just silently have NO
+    # EFFECT on those specific functions, leaving their privileges wrong
+    # rather than merely "not idempotent". Only the bootstrap superuser
+    # (postgres) actually owns everything grants.sql touches, so it is the
+    # only role that can apply every statement in the file for real. This
+    # also matches the X8-proven path: see scripts/x8-production-like.sh's
+    # own comment on this exact point (its prepare_database(),
+    # X8_DB_PREP_STEP=grants).
+    #
+    # --single-transaction: grants.sql REVOKEs every privilege up front and
+    # then re-GRANTs them line by line (see that file's own header comment).
+    # Without --single-transaction, psql commits each statement as it runs --
+    # a mid-file failure (disk full, connection drop, a lock timeout against
+    # `SET lock_timeout` below) could leave the REVOKE half committed and the
+    # GRANT half never applied, stripping every runtime role down to zero
+    # privileges. With --single-transaction the REVOKE block and the GRANT
+    # block either both land or both roll back -- there is no window where
+    # only the REVOKE half is durable.
+    if ! preprod_compose exec -T postgres psql --no-psqlrc -v ON_ERROR_STOP=1 --single-transaction \
+      -U postgres -d cps_novel <"$root/infra/postgres/grants.sql" >/dev/null; then
+      # --single-transaction means PostgreSQL has ALREADY rolled this failed
+      # attempt back, atomically, to whatever state grants.sql found in place
+      # when it started. Do NOT replay grants.sql a second time here -- there
+      # is nothing to repair, and a second replay would just be a redundant
+      # transaction on top of a state that was never actually altered
+      # (mirrors scripts/x8-production-like.sh's own comment on this exact
+      # point: "不要再重放一次"). Print a copy-pasteable recovery command for
+      # an operator to run by hand after investigating -- never auto-execute
+      # it here.
+      echo "DATABASE_GRANTS=REFUSED reason=grants_replay_failed" >&2
+      echo "DATABASE_GRANTS_RECOVERY_COMMAND=preprod_compose exec -T postgres psql --no-psqlrc -v ON_ERROR_STOP=1 --single-transaction -U postgres -d cps_novel < infra/postgres/grants.sql  # run from the release checkout root after: source scripts/preproduction/lib.sh && preprod_load_env" >&2
+      exit 65
+    fi
+    echo "DATABASE_GRANTS=PASS"
+
+    # Deliberately NOT porting x8_restore_grants_for_running_release(): that
+    # function exists because a FAILED X8 `up` can leave the PREVIOUS
+    # release's containers still running against a database whose grants
+    # this same attempt may have just disturbed -- restoring the running
+    # release's own committed grants.sql (via `git show <running commit>`)
+    # is what protects it from losing access mid-flight. That specific
+    # hazard does not exist on this path FOR THE THREE APPLICATION SERVICES:
+    # scripts/preproduction/release.sh's deploy() stops scheduler, worker,
+    # and web (release.sh lines ~78-83) BEFORE calling `database.sh
+    # migrate-approved` (release.sh line ~88), so none of those three
+    # containers is left connected while this replay runs.
+    #
+    # It is NOT true, though, that nothing is left connected: infra/
+    # preproduction/docker-compose.yml also defines a `backup-timer` service
+    # (PGUSER: backup_role, `restart: unless-stopped`), which deploy() never
+    # stops -- it can still hold an open connection as backup_role while this
+    # REVOKE/GRANT replay runs. That is benign here, not a gap: REVOKE and
+    # GRANT take no relation lock (measured), so this replay cannot block
+    # behind, or be blocked by, backup-timer's connection -- unlike
+    # `prisma migrate deploy`'s DDL, which CAN block behind `pg_dump`'s
+    # AccessShareLock; that lock-ordering hazard is pre-existing and separate
+    # from grants replay, not something introduced or fixed here.
+    #
+    # A failed migrate-approved simply leaves release.sh's own
+    # maintenance-page/failed-state handling to take over -- but only for
+    # the deploy() call path. The runbook also documents a hand invocation
+    # of `migrate-approved` (docs/operations/PREPRODUCTION_DEPLOYMENT_
+    # RUNBOOK.md: "grants must be replayed (via migrate-approved, or by
+    # hand ...)"), and that path does NOT enjoy the "application services
+    # already stopped" premise at all -- scheduler/worker/web may be running
+    # normally, connected to this same database, when an operator runs this
+    # subcommand directly outside of deploy().
     ;;
   *) usage ;;
 esac

@@ -146,6 +146,69 @@ stable volume, migration table, required roles, and real password
 authentication. It never changes role passwords, rotates keys, recreates a
 key, or restores a database.
 
+### Grants replay (`migrate-approved`) and `DATABASE_PRIVILEGE_CHECK`
+
+`migrate-approved` now replays `infra/postgres/grants.sql` immediately after
+`prisma migrate deploy` succeeds (`echo "DATABASE_MIGRATION=PASS"` stays
+where it already was; the replay and its own `DATABASE_GRANTS=PASS` line
+follow it). Before this change the preproduction path never replayed grants
+at all — measured on the real host, `web_app` and `backup_role` each held
+SELECT on 0 of 54 tables, which also breaks `pg_dump` for `backup_role`. The
+replay uses the exact invocation the mature X8 path
+(`scripts/x8-production-like.sh prepare_database()`) already proved safe:
+
+```bash
+preprod_compose exec -T postgres psql --no-psqlrc -v ON_ERROR_STOP=1 --single-transaction \
+  -U postgres -d cps_novel < infra/postgres/grants.sql
+```
+
+- **`-U postgres`, not `-U migration_owner`**: `grants.sql`'s blanket
+  `REVOKE ALL PRIVILEGES ON ALL FUNCTIONS IN SCHEMA public FROM PUBLIC` also
+  touches postgres-owned extension functions (e.g. `pg_stat_statements`).
+  `migration_owner` does not own those functions, so a `REVOKE` issued as
+  `migration_owner` is not guaranteed to stay idempotent on a repeat run —
+  only the bootstrap superuser does.
+- **`--single-transaction`**: `grants.sql` REVOKEs every privilege up front
+  and re-GRANTs them line by line. Without `--single-transaction`, psql
+  commits each statement as it runs, so a mid-file failure could leave the
+  REVOKE half committed and the GRANT half missing, stripping every runtime
+  role to zero privileges. With it, the REVOKE block and the GRANT block
+  either both land or both roll back — there is no partially-applied state.
+
+If the replay fails, `database.sh` prints `DATABASE_GRANTS=REFUSED
+reason=grants_replay_failed` and does **not** retry automatically —
+`--single-transaction` means PostgreSQL has already rolled the attempt back
+atomically, so a second replay would be redundant, not corrective. Recover
+by hand, from the release checkout root, after investigating why it failed:
+
+```bash
+source scripts/preproduction/lib.sh && preprod_load_env
+preprod_compose exec -T postgres psql --no-psqlrc -v ON_ERROR_STOP=1 --single-transaction \
+  -U postgres -d cps_novel < infra/postgres/grants.sql
+```
+
+`persistent-check` now also asserts `DATABASE_PRIVILEGE_CHECK`: real
+`has_table_privilege`/`has_schema_privilege`/`has_sequence_privilege` checks
+derived from what `grants.sql` actually grants (not re-guessed by hand) —
+every runtime role holds at least one table privilege, `backup_role` can
+SELECT every table and sequence, `web_app` has the exact Admin-auth and
+`operation_audit` privileges `grants.sql` grants and nothing more (no
+UPDATE/DELETE on `operation_audit`), and `worker_app`/`scheduler_app`/
+`analyst_ro` have no SELECT on the three most sensitive Admin-auth tables. A
+failure prints `DATABASE_PRIVILEGE_CHECK=FAIL reason=<specific role/table/
+privilege>`, and `DATABASE_PERSISTENT_CHECK` fails with it — recover by
+replaying grants with the command above, then re-run `persistent-check`.
+
+`backup-loop.sh` (`infra/preproduction/backup-loop.sh`) runs the logical
+backup (`backup-logical.sh`, which connects as `backup_role`) **before** the
+physical base backup on every cycle, and the physical base backup is
+skipped entirely if the logical step fails (`set -euo pipefail` stops
+`run_once()` there). Without `backup_role`'s grants, the logical backup
+fails immediately and the physical base backup is never taken either — so
+grants must be replayed (via `migrate-approved`, or by hand with the
+recovery command above on an already-migrated database) before
+`backup-timer` is ever started.
+
 ### Application image entry points: no build, no pull, fail closed
 
 Every container that runs the application image goes through
@@ -229,6 +292,40 @@ scripts/preproduction/database.sh persistent-check
 gate above applies: with the manifest loaded, an absent or wrong approved image
 stops here rather than being built or pulled on the target.
 
+### Bootstrapping the first admin identity
+
+`scripts/bootstrap-admin-identity.ts` is the existing audited bootstrap tool
+referenced above. It is dry-run by default, requires an explicit `--apply`
+to write, takes the password only through `BOOTSTRAP_ADMIN_PASSWORD` (never
+argv, never the host shell environment on the host side), and is safe to
+replay with the same `--request-id`: a committed replay returns the already-
+created identity instead of erroring or creating a second one. On the
+preproduction host, run it through `preprod_compose_app_run` (same
+immutable-artifact gate as `migrate-approved`/`verify-release.sh`) with the
+password read inside the container from a read-only bind mount, so it never
+touches argv or the host shell's environment:
+
+```bash
+preprod_compose_app_run \
+  -e DATABASE_URL="$P1_12_WEB_DATABASE_URL" \
+  -v /opt/cps-novel/shared/secrets/admin-smoke-password:/run/preprod-admin/password:ro \
+  web sh -c 'BOOTSTRAP_ADMIN_PASSWORD="$(cat /run/preprod-admin/password)" BOOTSTRAP_ADMIN_OPERATOR=<operator> tsx scripts/bootstrap-admin-identity.ts --username <name> --reason <why> --request-id <stable-id>'
+```
+
+Sequence:
+
+1. **Dry-run** first (the command above, no `--apply`) — confirms
+   `outcome: "eligible"` (or `"replayed"` if this exact `--request-id` was
+   already committed) before anything is written.
+2. **Apply** — add `--apply` to the same command (with the same
+   `--username`, `--reason`, and `--request-id`) to actually create the
+   identity and its `OperationAudit` row, atomically.
+3. **Same-request-id replay** — re-running the identical `--apply` command
+   (same `--request-id`) afterward, deliberately or by accident, must return
+   `outcome: "replayed"`, `wrote: false` — it must never error and must
+   never create a second identity. This is the property that makes it safe
+   to re-run this step if a deploy fails partway through and needs retrying.
+
 ### Minimal account transfer
 
 The current schema proves the minimal set is `admin_identity` (username,
@@ -270,6 +367,22 @@ release directory so its Compose/scripts match the app being restored. It does
 not reverse migrations. If the schema is not
 backward compatible, remain in maintenance and follow a separately approved
 database restore incident plan.
+
+Rollback also replays `infra/postgres/grants.sql` from that same previous
+release checkout (before the app containers come back up), so runtime role
+privileges match the code being restored instead of whatever grants the
+release being rolled back FROM last committed via `migrate-approved` --
+without this, a deploy that had tightened a grant (e.g. `7141177`, `a943fda`)
+would leave the restored, older application running with privileges it
+never had before, or missing one it still depends on. This is a grants
+replay only, not a schema change or a data restore, and it does not by
+itself make an incompatible schema safe to roll back onto: the operator
+approving `SCHEMA_COMPATIBLE_WITH_PREVIOUS=YES` must also confirm the
+grants delta between the two releases' `infra/postgres/grants.sql` is
+itself backward compatible with the previous release's code (i.e. the
+newer release's `grants.sql` did not tighten or revoke a grant that the
+previous release's code still legitimately needs -- the same hazard the
+replay above exists to undo, e.g. `7141177`, `a943fda`).
 
 ## Backups, WAL, export, and restore
 

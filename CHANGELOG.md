@@ -3,7 +3,45 @@
 <!-- 本文件由 `node scripts/generate-changelog.mjs --write` 生成，请勿手工编辑。 -->
 <!-- 叙述性内容写进 commit message；Owner/架构决策写 docs/adr/。 -->
 
-生成时间：2026-09-21 · 共 695 个 commit
+生成时间：2026-09-21 · 共 733 个 commit
+- `4e2d98d` 2026-09-21 test(preprod-edge): pin N1/N2/N3 guards with two-directional mutation coverage  — _Claude Code · claude-sonnet-5_
+- `96b453c` 2026-09-21 docs(preprod-runbook): fix inverted grants-delta hazard sentence (NIT)  — _Claude Code · claude-sonnet-5_
+- `660c7d4` 2026-09-21 docs(preprod-db): fix stale comment claiming no other connection survives migrate-approved  — _Claude Code · claude-sonnet-5_
+- `d2bdcb1` 2026-09-21 fix(preprod-edge): --expect-live makes the post-maintenance anonymous re-check self-checking (N3)  — _Claude Code · claude-sonnet-5_
+- `e9f8761` 2026-09-21 fix(preprod-edge): name the retained nginx backup dir, keep default-site record permanent (N1/N2)  — _Claude Code · claude-sonnet-5_
+- `0484c6f` 2026-09-21 docs(changelog): 经既有生成器重新生成  — _Claude Code · claude-opus-5_
+- `530e4f6` 2026-09-21 merge: 修复维护态匿名面失验、回滚不重放 grants、信号毁备份（复核 MAJOR-1/2/3）  — _Claude Code · claude-opus-5_
+- `d6b8ec5` 2026-09-21 merge: 修复权限证明层三处假绿与 reason 兜底（复核 MAJOR-4/MINOR-5）  — _Claude Code · claude-opus-5_
+- `093e9ac` 2026-09-21 fix(preprod-edge): restore /api/health/ sub-route coverage on admin host (MINOR-7)  — _Claude Code · claude-sonnet-5_
+- `50ecbbe` 2026-09-21 test(preprod-edge): prove the protected/nomaintenance nginx snippets don't diverge (NIT)  — _Claude Code · claude-sonnet-5_
+- `974c292` 2026-09-21 fix(preprod-edge): stop install-nginx.sh from destroying backups on signal (MAJOR-3/MINOR-6)  — _Claude Code · claude-sonnet-5_
+- `7fa1d58` 2026-09-21 fix(preprod-edge): replay previous release's grants on rollback (MAJOR-2)  — _Claude Code · claude-sonnet-5_
+- `a091bd1` 2026-09-21 fix(preprod-edge): re-verify anonymous surfaces after maintenance_off (MAJOR-1)  — _Claude Code · claude-sonnet-5_
+- `a3af471` 2026-09-21 fix(preprod-db): reason= assertions now require the real guarding SQL construct  — _Claude Code · claude-sonnet-5_
+- `272f8d5` 2026-09-21 fix(preprod-db): harness teeth for backup_role/negative checks + real drift trip-wire  — _Claude Code · claude-sonnet-5_
+- `e898355` 2026-09-21 fix(preprod-db): unreachable reason fallback + doubtful idempotency rationale  — _Claude Code · claude-sonnet-5_
+- `d9cc759` 2026-09-21 test(preprod): guard against database.sh stdout/stderr stream regressions  — _Claude Code · claude-sonnet-5_
+- `e392228` 2026-09-21 fix(test): assert persistent-check's volume_missing reason on stderr  — _Claude Code · claude-sonnet-5_
+- `6705f91` 2026-09-21 docs(changelog): 经既有生成器重新生成  — _Claude Code · claude-opus-5_
+- `4f8b053` 2026-09-21 docs(governance): 记录预生产控制面首次启动的范围限定，blocker 保持 OPEN  — _Claude Code · claude-opus-5_
+- `36cebb7` 2026-09-21 merge: preproduction edge maintenance exemption, admin assets, bootstrap stage  — _Claude Code · claude-opus-5_
+- `540b8a9` 2026-09-21 merge: preproduction grants replay and privilege contract  — _Claude Code · claude-opus-5_
+- `253196a` 2026-09-21 fix(preprod): make the atomicity case discriminate (seed a granted state, add mutation proof)  — _Claude Code · claude-sonnet-5_
+- `4a87bcc` 2026-09-21 test(preprod): structural guard that FAIL/REFUSED goes to stderr, PASS to stdout  — _Claude Code · claude-sonnet-5_
+- `2394c33` 2026-09-21 fix(preprod): route persistent-check FAIL/REFUSED lines to stderr  — _Claude Code · claude-sonnet-5_
+- `6c07082` 2026-09-21 docs(preprod): document grants replay, recovery, and admin bootstrap  — _Claude Code · claude-sonnet-5_
+- `0a310f3` 2026-09-21 test(preprod): real PostgreSQL 16.14 proof for the grants-replay fix  — _Claude Code · claude-sonnet-5_
+- `10f9d6c` 2026-09-21 test(preprod): static contract for database.sh grants replay and privilege check  — _Claude Code · claude-sonnet-5_
+- `e20ee8e` 2026-09-21 docs(adr): 记录 preprod edge 维护豁免/admin 资产白名单/bootstrap 阶段三项决策  — _Claude Code · claude-sonnet-5_
+- `44b0027` 2026-09-21 fix(preprod): replay grants.sql after migrate-approved, assert privileges in persistent-check  — _Claude Code · claude-sonnet-5_
+- `b4cc30e` 2026-09-21 test(preprod-nginx): 部署契约测试补静态断言覆盖本轮改动  — _Claude Code · claude-sonnet-5_
+- `d186da6` 2026-09-21 test(preprod-nginx): matrix 补维护态匿名探针 + admin 静态资产 + bootstrap 阶段  — _Claude Code · claude-sonnet-5_
+- `82d87a1` 2026-09-21 fix(preprod-nginx): verify-release.sh 改为状态感知探针矩阵  — _Claude Code · claude-sonnet-5_
+- `c9ca178` 2026-09-21 fix(preprod-nginx): install-nginx.sh 交接默认站点 + nginx -t 先测后 reload + 全量回滚  — _Claude Code · claude-sonnet-5_
+- `e28522e` 2026-09-21 fix(preprod-nginx): render-nginx.sh 支持 --bootstrap 渲染  — _Claude Code · claude-sonnet-5_
+- `34b94ac` 2026-09-21 fix(preprod-nginx): /api/health 豁免维护闸门 + admin 最小静态资产白名单 + bootstrap 阶段模板  — _Claude Code · claude-sonnet-5_
+- `195f970` 2026-09-21 merge: preproduction one-off runner immutable artifact gate (#18)  — _claude-code · Claude Opus 5 · reviewed: claude-code · Fable 5.1_
+- `c2b28b4` 2026-09-21 docs(changelog): 经既有生成器重新生成  — _claude-code · Claude Opus 5_
 - `fa5172f` 2026-09-21 fix(preprod): 独立复核回合 —— 闸门补 pull_policy 一腿、拒绝走 stderr、订正根因记述  — _claude-code · Claude Opus 5 · reviewed: claude-code · Fable 5.1_
 - `d7aa095` 2026-09-21 fix(preprod): one-off 应用容器改为不依赖 CLI flag 的不可变工件闸门  — _claude-code · Claude Opus 5_
 - `45859da` 2026-09-21 merge: preproduction secret consumer permission model (#17)  — _claude-code · Claude Opus 5_
