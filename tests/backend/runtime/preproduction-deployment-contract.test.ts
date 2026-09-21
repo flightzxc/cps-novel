@@ -144,6 +144,12 @@ describe("Phase 2B preproduction deployment contract", () => {
       "preprod_compose_app_up worker",
       "preprod_compose_app_up scheduler",
       "PREPROD_RELEASE_VERIFIED=YES maintenance_off",
+      // MAJOR-1 fix: the full verify-release.sh call above always runs
+      // while maintenance is still on, so its anonymous-surface 401
+      // expectations are dead code in the only automated path unless a
+      // SECOND, cheap call happens after maintenance_off and before
+      // RELEASE=PASS.
+      'verify-release.sh\" --anonymous-only',
     ];
     let offset = release.indexOf("deploy() {");
     for (const token of ordered) {
@@ -151,9 +157,39 @@ describe("Phase 2B preproduction deployment contract", () => {
       expect(next, token).toBeGreaterThan(offset);
       offset = next;
     }
+    expect(release.indexOf('verify-release.sh" --anonymous-only')).toBeLessThan(release.indexOf('echo "RELEASE=PASS"'));
     expect(release).toContain('echo "RELEASE=FAILED maintenance=ON"');
     expect(release).toContain("SCHEMA_COMPATIBLE_WITH_PREVIOUS");
     expect(release).not.toMatch(/migrate (down|reset)/);
+  });
+
+  it("rollback() also re-verifies anonymous surfaces after maintenance_off, before ROLLBACK=PASS", async () => {
+    const release = await text("scripts/preproduction/release.sh");
+    const rollbackStart = release.indexOf("rollback() {");
+    expect(rollbackStart).toBeGreaterThan(-1);
+    const ordered = [
+      "maintenance_on",
+      "preprod_compose stop scheduler",
+      "preprod_compose stop worker",
+      "preprod_compose stop web",
+      "preprod_compose_app_up web",
+      'verify-release.sh\"',
+      "preprod_compose_app_up worker",
+      "preprod_compose_app_up scheduler",
+      "PREPROD_RELEASE_VERIFIED=YES maintenance_off",
+      // MAJOR-1 fix, same reasoning as deploy() above.
+      'verify-release.sh\" --anonymous-only',
+    ];
+    let offset = rollbackStart;
+    for (const token of ordered) {
+      const next = release.indexOf(token, offset);
+      expect(next, token).toBeGreaterThan(offset);
+      offset = next;
+    }
+    expect(release.indexOf('verify-release.sh" --anonymous-only', rollbackStart)).toBeLessThan(
+      release.indexOf('echo "ROLLBACK=PASS"'),
+    );
+    expect(release).toContain('echo "ROLLBACK=FAILED maintenance=ON"');
   });
 
   it("refuses fresh init without exact empty-volume confirmation", async () => {

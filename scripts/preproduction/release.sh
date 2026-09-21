@@ -104,6 +104,21 @@ deploy() {
     echo "RELEASE=REFUSED reason=runtime_image_mismatch"; exit 65;
   }
   PREPROD_RELEASE_VERIFIED=YES maintenance_off
+  # 🔴 MAJOR-1 fix: the full verify-release.sh call above (line ~98) always
+  # runs while maintenance is still on, so its state-aware anonymous matrix
+  # always takes the maintenance branch there -- the 401 expectations for
+  # anonymous /, /robots.txt, /sitemap.xml, and admin /login never actually
+  # exercise the real, live-traffic state in that call (see
+  # verify-release.sh's own comment on --anonymous-only). This second, cheap
+  # call is what proves anonymous callers really get 401, not leaked
+  # business content, now that maintenance is genuinely off. A failure here
+  # means the business surface is NOT correctly gated at this exact moment
+  # -- re-close the gate immediately rather than leaving it off while the
+  # generic EXIT trap below reports the failure.
+  "$root/scripts/preproduction/verify-release.sh" --anonymous-only || {
+    maintenance_on
+    echo "RELEASE=FAILED reason=anonymous_reverify_failed"; exit 65;
+  }
   ln -sfn "/opt/cps-novel/releases/$manifest_commit" /opt/cps-novel/current
   write_state ready "$manifest_commit" "$manifest_image"
   failed=0
@@ -143,6 +158,16 @@ rollback() {
     echo "ROLLBACK=REFUSED reason=runtime_image_mismatch"; exit 65;
   }
   PREPROD_RELEASE_VERIFIED=YES maintenance_off
+  # 🔴 MAJOR-1 fix: same reasoning as deploy() above -- the full
+  # verify-release.sh call three lines up always runs while maintenance is
+  # still on, so this cheap, anonymous-only re-check after maintenance_off
+  # is what actually proves anonymous callers get 401 now that the rolled-
+  # back release is really live. Re-close the gate on failure rather than
+  # leaving it off.
+  "$root/scripts/preproduction/verify-release.sh" --anonymous-only || {
+    maintenance_on
+    echo "ROLLBACK=FAILED reason=anonymous_reverify_failed"; exit 65;
+  }
   write_state rolled_back "$manifest_commit" "$manifest_image"
   failed=0
   trap - EXIT
