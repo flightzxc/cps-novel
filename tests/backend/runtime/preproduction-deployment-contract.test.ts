@@ -74,6 +74,26 @@ describe("Phase 2B preproduction deployment contract", () => {
     expect(nginx).not.toMatch(/^\s*listen \[::]/m);
   });
 
+  it("keeps the protected and nomaintenance nginx snippets from diverging", async () => {
+    const protectedSnippet = await text("infra/preproduction/nginx/cps-novel-preprod-protected.conf");
+    const nomaintenanceSnippet = await text("infra/preproduction/nginx/cps-novel-preprod-protected-nomaintenance.conf");
+
+    // Real divergence test, not just an itemized allowlist of expected
+    // lines in the sibling test: the nomaintenance snippet's non-comment,
+    // non-blank lines must equal the protected snippet's non-comment,
+    // non-blank lines with exactly the maintenance `if` gate removed.
+    // Anything else that diverges between the two (a changed
+    // auth_basic_user_file path, a dropped security-header include, an
+    // extra directive added to one but not the other) fails here instead of
+    // only being caught if it happens to collide with one of the itemized
+    // assertions elsewhere -- this is the test the ADR's Consequences
+    // section actually claims exists.
+    const functionalLines = (source: string) =>
+      source.split("\n").map((line) => line.trim()).filter((line) => line.length > 0 && !line.startsWith("#"));
+    const protectedFunctional = functionalLines(protectedSnippet).filter((line) => !line.includes("maintenance/enabled"));
+    expect(functionalLines(nomaintenanceSnippet)).toEqual(protectedFunctional);
+  });
+
   it("keeps the bootstrap stage HTTP-only and incapable of serving application content", async () => {
     const bootstrap = await text("infra/preproduction/nginx/cps-novel-preprod-bootstrap.conf.template");
     expect(bootstrap).not.toContain("ssl_certificate");
