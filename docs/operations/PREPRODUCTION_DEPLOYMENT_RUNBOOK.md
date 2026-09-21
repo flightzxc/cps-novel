@@ -52,6 +52,14 @@ decision for Phase 2C.
    PostgreSQL-client-compatible tooling, Ubuntu Nginx 1.24.x, Certbot, the Nginx
    Certbot integration, and `acl` from approved OS repositories.
 2. Create `/opt/cps-novel/{releases,shared}` and the shared children above.
+   Also seed the maintenance page once from the repo checkout, so it exists
+   before the first `release.sh deploy` ever runs `maintenance on`:
+   `install -m 0644 infra/preproduction/maintenance/__preprod_maintenance.html
+   /opt/cps-novel/shared/maintenance/__preprod_maintenance.html`. Every
+   `deploy`/`rollback` re-installs this file at the start of its own
+   `maintenance on`, so this manual copy is a one-time bootstrap only --
+   without it, Step 6's `secrets-preflight.sh` has nothing at that path yet
+   and fails `reason=maintenance_page_missing`.
 3. Do not put `www-data` in a deployment group. Grant consumers only the
    per-file ACLs in `scripts/preproduction/secret-consumers.tsv`; PostgreSQL is
    UID/GID `999:999`, the application is `1001:1001`, and `backup-timer` stays
@@ -69,7 +77,7 @@ decision for Phase 2C.
    sudo setfacl -m u:1001:r-- /opt/cps-novel/shared/secrets/{channel_credential_encryption_key_v1,channel_credential_fingerprint_key,totp_encryption_key,tracking_hash_salt,admin-smoke-password}
    sudo setfacl -m u:999:r-- /opt/cps-novel/shared/secrets/{postgres_admin_password,migration_owner_password,web_app_password,worker_app_password,scheduler_app_password,analyst_ro_password,backup_role_password}
    sudo setfacl -m u:33:r-- /opt/cps-novel/shared/secrets/nginx-preprod.htpasswd
-   sudo setfacl -m u:33:--x /opt/cps-novel /opt/cps-novel/shared /opt/cps-novel/shared/secrets
+   sudo setfacl -m u:33:--x /opt/cps-novel /opt/cps-novel/shared /opt/cps-novel/shared/secrets /opt/cps-novel/shared/maintenance
    ```
 
    A named read ACL changes the file's displayed group-mode mask from `0600`
@@ -77,7 +85,7 @@ decision for Phase 2C.
    and `other::---`. `preprod-curl.conf` has no named ACL. The root-owned
    `backup_role.pgpass` has no named ACL.
 
-   The three traverse directories are **not** chmod-ed here on purpose: they stay
+   The four traverse directories are **not** chmod-ed here on purpose: they stay
    `drwxr-x--- deploy:deploy`, so `other::---` already holds and the only named
    entry is `u:33:--x`. `secrets-preflight.sh` enforces that `other::---`
    explicitly (`reason=nginx_traverse_other`). Without that check a directory set
@@ -87,6 +95,30 @@ decision for Phase 2C.
    left as `r-x`: that group is the owning `deploy` principal itself, and the
    mask is likewise not pinned to `--x`, because `setfacl` recomputes the mask
    from `group::` and would otherwise reject the established layout.
+
+   🔴 `/opt/cps-novel/shared/maintenance` is the fourth directory, and it needs
+   more than traverse: `cps-novel-preprod-protected.conf` does
+   `if (-f .../maintenance/enabled) { return 503; }` and, on that branch,
+   `error_page 503` serves `.../maintenance/__preprod_maintenance.html`
+   straight out of that directory (`root /opt/cps-novel/shared/maintenance`).
+   The `enabled` marker only ever needs www-data to **stat** it (covered by
+   the directory's own traverse ACL above -- `-f` never opens the file), but
+   the **page** has to be actually **readable** by www-data, the same as
+   `nginx-preprod.htpasswd`. Measured on the real target before this fix: the
+   directory had `other::---` and no `u:33:--x` entry at all (not even a
+   too-permissive one), so nginx's worker got `DENIED` on both `stat
+   .../enabled` and reading the page. `release.sh deploy` would still flip
+   `maintenance on`, believe traffic was gated, and serve the site normally
+   the whole time -- the maintenance window silently never took effect, and
+   `verify-release.sh`'s own marker check (run as the `deploy` user, who
+   *can* see the marker) would not catch it either. `secrets-preflight.sh`
+   now asserts both halves: the directory ACL above (`reason=
+   nginx_traverse_directory` / the `assert_directory_traverse_acl` reasons),
+   and separately that the page is www-data-readable
+   (`reason=maintenance_page_missing` / `reason=maintenance_page_unreadable`).
+   The page file itself needs no extra `chown`/`chmod`/ACL beyond what Step 2's
+   `install -m 0644` already gives it (world-readable), since directory
+   traverse is the only thing that was actually missing.
 5. Confirm Docker reports neither rootless nor userns remapping, then perform
    the one sudo-backed Nginx identity check. Any failure stops the rollout:
 
@@ -95,7 +127,9 @@ decision for Phase 2C.
    sudo -u www-data test -x /opt/cps-novel
    sudo -u www-data test -x /opt/cps-novel/shared
    sudo -u www-data test -x /opt/cps-novel/shared/secrets
+   sudo -u www-data test -x /opt/cps-novel/shared/maintenance
    sudo -u www-data test -r /opt/cps-novel/shared/secrets/nginx-preprod.htpasswd
+   sudo -u www-data test -r /opt/cps-novel/shared/maintenance/__preprod_maintenance.html
    sudo -u www-data test ! -r /opt/cps-novel/shared/secrets/postgres_admin_password
    ```
 
@@ -104,8 +138,14 @@ decision for Phase 2C.
    never overwritten. `secrets-preflight.sh --host-only` reports
    `CONSUMER_ACCESS=UNVERIFIED`; it is not release approval. The ordinary
    non-sudo `secrets-preflight.sh` performs the APP/POSTGRES/root positive
-   probes, all cross-consumer negative probes, and static Nginx ACL validation.
-   It uses the already-loaded `CPS_NOVEL_APP_IMAGE` with `--pull never`.
+   probes, all cross-consumer negative probes, static Nginx ACL validation on
+   all four traverse directories, a real uid-33 read probe of the maintenance
+   page, and -- only while a maintenance window is actually open, since the
+   marker does not otherwise exist -- a real uid-33 stat probe of the marker
+   (`MAINTENANCE_MARKER_PROBE=VERIFIED`; outside a maintenance window it
+   prints `MAINTENANCE_MARKER_PROBE=SKIPPED reason=marker_absent` instead of
+   silently claiming that check ran). It uses the already-loaded
+   `CPS_NOVEL_APP_IMAGE` with `--pull never`.
 7. Obtain certificates with Certbot. Certbot owns files below
    `/etc/letsencrypt`; deployment owns the Git-rendered Nginx config.
 8. With explicit approval, run `PREPROD_OWNER_SUDO_APPROVED=YES
