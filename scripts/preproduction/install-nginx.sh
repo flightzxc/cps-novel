@@ -47,6 +47,29 @@ file_backup_dir="$(mktemp -d /tmp/cps-novel-preprod-nginx-backup.XXXXXX)"
 # script -- never implicitly via a signal trap.
 trap 'rm -f "$rendered"' EXIT
 
+# N2 fix: $file_backup_dir is a `mktemp -d`-random path under /tmp, which
+# Ubuntu's systemd-tmpfiles/boot cleanup can remove -- and every path that
+# deliberately KEEPS it (the rollback_state_invalid and backup_dir_missing
+# REFUSED reasons below, plus an invocation that is interrupted before ever
+# reaching either) previously printed nothing about where it actually is, so
+# an operator re-running after an interruption had no way to find the one
+# copy of whatever this invocation backed up. This handler ONLY
+# echoes the retained path on INT/TERM; it must never delete anything --
+# that deletion was MAJOR-3 (see the EXIT trap above and its comment). After
+# echoing, it restores the signal's default disposition and re-raises it
+# against this process, so the script still terminates promptly on
+# interrupt exactly as it did with no trap registered at all (the EXIT trap
+# above still runs on the way out, and still only ever removes $rendered) --
+# it does not swallow the signal and let the script carry on past the point
+# it was told to stop.
+on_interrupt() {
+  echo "NGINX_INSTALL_INTERRUPTED backup_dir=$file_backup_dir" >&2
+  trap - INT TERM
+  kill -s "$1" "$$"
+}
+trap 'on_interrupt INT' INT
+trap 'on_interrupt TERM' TERM
+
 if ((bootstrap)); then
   "$root/scripts/preproduction/render-nginx.sh" --bootstrap --output "$rendered" >/dev/null
 else
@@ -135,7 +158,7 @@ rollback_all() {
     # exist" is exactly what let a stray signal delete a live, previously-
     # installed file. Refuse instead of guessing.
     if [[ ! -d "$file_backup_dir" || ! -r "$file_backup_dir" ]]; then
-      echo "NGINX_INSTALL=REFUSED reason=backup_dir_missing"
+      echo "NGINX_INSTALL=REFUSED reason=backup_dir_missing backup_dir=$file_backup_dir"
       exit 70
     fi
     if [[ -e "$file_backup_dir/$name" ]]; then
@@ -157,8 +180,25 @@ rollback_all() {
     # actually confirmed the restore is valid loses that record if the
     # restored state itself turns out to fail `nginx -t` (e.g. the host was
     # already broken -- an old site.conf and the default site both present
-    # -- before this invocation ever ran). The caller removes them once it
-    # has confirmed success.
+    # -- before this invocation ever ran).
+    #
+    # N1 fix: the caller does NOT remove them on a later confirmed success
+    # either, not just here. They used to be deleted on both of this script's
+    # confirmed-successful exit paths (the nginx_test_failed-after-rollback
+    # branch below, and the ordinary PASS path at the bottom), which made
+    # ADR-PREPROD-EDGE-MAINTENANCE-AND-ADMIN-ASSETS.md's claim that the
+    # script "record[s] what that file was ... under the shared root" true
+    # only until the very next successful run -- for Ubuntu's stock
+    # `kind=symlink` default site the *target* under sites-available/ still
+    # survives, so a human could still re-link it by hand, but for a
+    # `kind=file` default site the content was gone for good after the first
+    # successful install, with no record left of what it had been. They are
+    # kept permanently now: a later run leaves them alone regardless, because
+    # by then $default_site has already been removed by the run that created
+    # them, so `[[ -e "$default_site" ]] || [[ -L "$default_site" ]]` is
+    # false and this whole default-site block (including this backup/state
+    # write) is skipped entirely -- default_site_disabled stays 0 and nothing
+    # here ever looks at the retained files again.
   fi
 }
 
@@ -172,10 +212,11 @@ if ! sudo nginx -t; then
   # guarantees explicit instead.
   if sudo nginx -t; then
     sudo systemctl reload nginx
+    # N1 fix: $file_backup_dir (the snippet/site-config backups) is still
+    # disposable once restored and confirmed, so it is still removed here.
+    # $default_site_backup/$default_site_state are NOT -- see the N1 comment
+    # on the write side above, in rollback_all().
     rm -rf "$file_backup_dir"
-    if [[ "$default_site_disabled" == "1" ]]; then
-      sudo rm -f "$default_site_backup" "$default_site_state"
-    fi
     echo "NGINX_INSTALL=REFUSED reason=nginx_test_failed"
     exit 65
   fi
@@ -185,13 +226,13 @@ if ! sudo nginx -t; then
   # nginx. Do not reload, and leave the backup/state files in place for an
   # operator to inspect: they are otherwise the only record of what this
   # invocation found, and would be lost silently.
-  echo "NGINX_INSTALL=REFUSED reason=rollback_state_invalid"
+  echo "NGINX_INSTALL=REFUSED reason=rollback_state_invalid backup_dir=$file_backup_dir"
   exit 71
 fi
 
 sudo systemctl reload nginx
+# N1 fix: as above, $file_backup_dir is still disposable and removed on a
+# genuine PASS; $default_site_backup/$default_site_state are kept permanently
+# instead of being deleted here -- see the N1 comment in rollback_all().
 rm -rf "$file_backup_dir"
-if [[ "$default_site_disabled" == "1" ]]; then
-  sudo rm -f "$default_site_backup" "$default_site_state"
-fi
 echo "NGINX_INSTALL=PASS"

@@ -119,27 +119,52 @@ the restore itself is valid, and only then does the script reload and
 report `NGINX_INSTALL=REFUSED reason=nginx_test_failed`. This is a full
 rollback of everything the invocation touched, not a partial one.
 
-Two further hardenings to that rollback path, both from a later
-adversarial review with a reproduced failure: first, the backup directory
-used to be deleted by the same trap that also cleaned up the disposable
-rendered-candidate file, registered for `EXIT INT TERM` -- a signal
-delivered while `sudo nginx -t` runs as the foreground child is deferred
-by bash until that command returns, so the trap could fire and destroy the
-backups before the rollback below ever used them, making every "no
-backup" read as "this file should not exist" and deleting the live site
-config and security snippet. The backup directory (and, if disabled, the
-default-site backup/state files) are now only ever cleaned up on a
-confirmed-successful exit path, never via a signal trap, and `restore_one`
-refuses to delete anything and aborts with `NGINX_INSTALL=REFUSED
-reason=backup_dir_missing` if the backup directory itself is gone or
-unreadable rather than guessing. Second, if the state this invocation
-found was already broken before it ran (e.g. an old site config and the
-default site both present, so `nginx -t` fails even after a byte-for-byte
-restore), the script now reports that distinctly as `NGINX_INSTALL=REFUSED
-reason=rollback_state_invalid` and does not reload -- and keeps the
-default-site backup/state files on disk in that case, since they are
-removed only after that second `nginx -t` has actually confirmed the
-restore is valid, not unconditionally inside the restore step itself.
+Several further hardenings to that rollback path, all from later
+adversarial review rounds with reproduced failures: first, the backup
+directory used to be deleted by the same trap that also cleaned up the
+disposable rendered-candidate file, registered for `EXIT INT TERM` -- a
+signal delivered while `sudo nginx -t` runs as the foreground child is
+deferred by bash until that command returns, so the trap could fire and
+destroy the backups before the rollback below ever used them, making every
+"no backup" read as "this file should not exist" and deleting the live
+site config and security snippet. The backup directory is now only ever
+*deleted* on a confirmed-successful exit path, never via a signal trap,
+and `restore_one` refuses to delete anything and aborts with
+`NGINX_INSTALL=REFUSED reason=backup_dir_missing` if the backup directory
+itself is gone or unreadable rather than guessing. Second, if the state
+this invocation found was already broken before it ran (e.g. an old site
+config and the default site both present, so `nginx -t` fails even after a
+byte-for-byte restore), the script now reports that distinctly as
+`NGINX_INSTALL=REFUSED reason=rollback_state_invalid` and does not reload.
+
+Third: `$file_backup_dir` is an anonymous `mktemp -d` path under `/tmp`,
+which Ubuntu's systemd-tmpfiles/boot cleanup can remove -- every path that
+deliberately keeps it around (`reason=rollback_state_invalid`,
+`reason=backup_dir_missing`, and an invocation interrupted before reaching
+either) now names it: both REFUSED lines append `backup_dir=$file_backup_dir`,
+and an `INT`/`TERM` handler installed alongside the disposable-file `EXIT`
+trap ONLY echoes that same path to stderr before re-raising the signal --
+it never deletes anything, so it cannot reintroduce the first hardening's
+failure mode.
+
+Fourth: the default-site backup/state files (`$default_site_backup` and
+`$default_site_state`, fixed paths under the shared root, not anonymous
+`mktemp` ones) are no longer deleted on any exit path, including a
+confirmed-successful install -- they are only ever restored back onto
+`$default_site` via `cp -a`, during a rollback. They used to be deleted
+after a confirmed success (both the ordinary `NGINX_INSTALL=PASS` path and
+the "rolled back to a config that itself now passes `nginx -t`" path),
+which made this document's claim, above, that the script "record[s] what
+that file was ... under the shared root" true only up to the very next
+successful run: for Ubuntu's stock `kind=symlink` default site that was
+still recoverable (the real file under `sites-available/` survives), but
+for a `kind=file` default site the content was gone for good after the
+first successful install. They are permanent records now. This is safe on
+a later run: by the time a run ever creates them, `$default_site` has
+already been removed, so a subsequent invocation's `[[ -e "$default_site" ]]
+|| [[ -L "$default_site" ]]` test is false, `default_site_disabled` stays
+`0`, and that whole handover block -- including the backup/state write --
+is skipped entirely, so the retained files are simply never touched again.
 
 ## Consequences
 
