@@ -45,10 +45,15 @@ describe("Phase 2B preproduction deployment contract", () => {
 
     // Both hosts' /api/health locations must be exact matches on the
     // nomaintenance snippet -- a `^~` prefix on the admin host previously
-    // also matched /api/health-anything (measured evidence).
+    // also matched /api/health-anything (measured evidence). A bare `^~
+    // /api/health` (no trailing slash) prefix must not exist anywhere, but
+    // `^~ /api/health/` (WITH a trailing slash, MINOR-7 fix) legitimately
+    // does, on the admin host only, to keep /api/health/worker and
+    // /api/health/backup reachable -- distinguish the two by requiring a
+    // non-slash character right after "/api/health" for the banned form.
     const publicHealth = nginx.indexOf("location = /api/health {");
     expect(publicHealth).toBeGreaterThan(-1);
-    expect(nginx).not.toContain("location ^~ /api/health");
+    expect(nginx).not.toMatch(/location \^~ \/api\/health[^/]/);
     const occurrences = nginx.split("location = /api/health {").length - 1;
     expect(occurrences).toBe(2);
     // Each exact-match /api/health block must include the nomaintenance
@@ -72,6 +77,43 @@ describe("Phase 2B preproduction deployment contract", () => {
     // line), not a substring, since the file's own comment explains the
     // decision using that same bracket syntax in prose.
     expect(nginx).not.toMatch(/^\s*listen \[::]/m);
+  });
+
+  it("keeps the protected and nomaintenance nginx snippets from diverging", async () => {
+    const protectedSnippet = await text("infra/preproduction/nginx/cps-novel-preprod-protected.conf");
+    const nomaintenanceSnippet = await text("infra/preproduction/nginx/cps-novel-preprod-protected-nomaintenance.conf");
+
+    // Real divergence test, not just an itemized allowlist of expected
+    // lines in the sibling test: the nomaintenance snippet's non-comment,
+    // non-blank lines must equal the protected snippet's non-comment,
+    // non-blank lines with exactly the maintenance `if` gate removed.
+    // Anything else that diverges between the two (a changed
+    // auth_basic_user_file path, a dropped security-header include, an
+    // extra directive added to one but not the other) fails here instead of
+    // only being caught if it happens to collide with one of the itemized
+    // assertions elsewhere -- this is the test the ADR's Consequences
+    // section actually claims exists.
+    const functionalLines = (source: string) =>
+      source.split("\n").map((line) => line.trim()).filter((line) => line.length > 0 && !line.startsWith("#"));
+    const protectedFunctional = functionalLines(protectedSnippet).filter((line) => !line.includes("maintenance/enabled"));
+    expect(functionalLines(nomaintenanceSnippet)).toEqual(protectedFunctional);
+  });
+
+  it("MINOR-7: restores /api/health/ sub-route coverage on the admin host without reopening the prefix-match hole", async () => {
+    const nginx = await text("infra/preproduction/nginx/cps-novel-preprod.conf.template");
+
+    // /api/health/worker and /api/health/backup (see src/app/api/health/)
+    // were served by the old `^~ /api/health` prefix match before it was
+    // narrowed to the exact `=` match to close the /api/health-anything
+    // hole. The admin-only sub-route block below must exist exactly once,
+    // be maintenance-gated (protected.conf), and deliberately NOT reuse the
+    // nomaintenance snippet -- only the exact-match /api/health block is
+    // exempt from maintenance.
+    expect(nginx.split("location ^~ /api/health/ {").length - 1).toBe(1);
+    const healthSubrouteStart = nginx.indexOf("location ^~ /api/health/ {");
+    const healthSubrouteBody = nginx.slice(healthSubrouteStart, nginx.indexOf("\n    }", healthSubrouteStart));
+    expect(healthSubrouteBody).toContain("cps-novel-preprod-protected.conf");
+    expect(healthSubrouteBody).not.toContain("cps-novel-preprod-protected-nomaintenance.conf");
   });
 
   it("keeps the bootstrap stage HTTP-only and incapable of serving application content", async () => {
@@ -102,6 +144,62 @@ describe("Phase 2B preproduction deployment contract", () => {
     expect(install).toContain("rollback_all");
     expect(install).toContain("--bootstrap");
     expect(install.indexOf("rollback_all")).toBeLessThan(install.indexOf("systemctl reload nginx"));
+  });
+
+  it("never destroys nginx backups on interrupt, and restore_one fails closed (MAJOR-3/MINOR-6)", async () => {
+    const install = await text("scripts/preproduction/install-nginx.sh");
+
+    // Only the disposable rendered-candidate file is auto-deleted; the old
+    // combined trap also wiped $file_backup_dir on INT/TERM, which is what
+    // let a SIGTERM during `sudo nginx -t` destroy the live site config
+    // (see release-path reviewer finding MAJOR-3).
+    expect(install).toContain('trap \'rm -f "$rendered"\' EXIT');
+    // No trap is registered for INT/TERM at all any more (only the disposable
+    // rendered-candidate file is cleaned up automatically, via EXIT above).
+    // `rm -rf "$file_backup_dir"` legitimately still appears elsewhere, as
+    // explicit cleanup on the two confirmed-successful exit paths near the
+    // bottom of the script -- what must never happen is that cleanup running
+    // from an INT/TERM trap, which is what this asserts against.
+    expect(install).not.toMatch(/trap[^\n]*INT TERM/);
+    expect(install).not.toMatch(/trap[^\n]*rm -rf "\$file_backup_dir"/);
+
+    // restore_one must refuse to delete a live file when the backup
+    // directory itself is missing/unreadable, rather than reading "no
+    // backup" as "this file should not exist".
+    const restoreOneStart = install.indexOf("restore_one() {");
+    expect(restoreOneStart).toBeGreaterThan(-1);
+    const restoreOneBody = install.slice(restoreOneStart, install.indexOf("sudo rm -f \"$dst\"", restoreOneStart));
+    expect(restoreOneBody).toContain("backup_dir_missing");
+    expect(restoreOneBody).toMatch(/!\s*-d\s*"\$file_backup_dir"/);
+
+    // MINOR-6: a rollback that restores a state which itself fails `nginx
+    // -t` must be reported distinctly and must not reload -- not silently
+    // swallowed by `set -e` with no NGINX_INSTALL= line, and not the same
+    // reason as an ordinary candidate-config test failure.
+    expect(install).toContain("reason=rollback_state_invalid");
+    const secondTestOffset = install.indexOf("if sudo nginx -t; then");
+    expect(secondTestOffset).toBeGreaterThan(install.indexOf("rollback_all\n"));
+    const invalidReasonOffset = install.indexOf("reason=rollback_state_invalid");
+    expect(invalidReasonOffset).toBeGreaterThan(secondTestOffset);
+    // The only reload between the second `nginx -t` and the distinct
+    // REFUSED line must be inside that `if` block's own success branch
+    // (the ordinary nginx_test_failed path) -- not on the failure path that
+    // falls through to reason=rollback_state_invalid. Anchor on the
+    // success branch's closing `exit 65\n  fi` (2-space indent, matching
+    // the outer `if sudo nginx -t; then`) and assert no further reload
+    // exists after it, before the distinct reason.
+    const successBranchEnd = install.indexOf("exit 65\n  fi\n", secondTestOffset);
+    expect(successBranchEnd).toBeGreaterThan(secondTestOffset);
+    const afterSuccessBranch = install.slice(successBranchEnd, invalidReasonOffset);
+    expect(afterSuccessBranch).not.toContain("systemctl reload nginx");
+
+    // The default-site backup/state files are restored FROM inside
+    // rollback_all() (a `cp -a`, still expected there) but must not be
+    // DELETED there -- that must wait until the caller's post-rollback
+    // `nginx -t` has actually confirmed success (MINOR-6's ordering fix).
+    const rollbackAllBody = install.slice(install.indexOf("rollback_all() {"), install.indexOf("if ! sudo nginx -t; then"));
+    expect(rollbackAllBody).toContain('sudo cp -a "$default_site_backup" "$default_site"');
+    expect(rollbackAllBody).not.toContain('rm -f "$default_site_backup"');
   });
 
   it("pins stable Compose/data identity and closes dangerous preproduction writes", async () => {
@@ -144,6 +242,12 @@ describe("Phase 2B preproduction deployment contract", () => {
       "preprod_compose_app_up worker",
       "preprod_compose_app_up scheduler",
       "PREPROD_RELEASE_VERIFIED=YES maintenance_off",
+      // MAJOR-1 fix: the full verify-release.sh call above always runs
+      // while maintenance is still on, so its anonymous-surface 401
+      // expectations are dead code in the only automated path unless a
+      // SECOND, cheap call happens after maintenance_off and before
+      // RELEASE=PASS.
+      'verify-release.sh\" --anonymous-only',
     ];
     let offset = release.indexOf("deploy() {");
     for (const token of ordered) {
@@ -151,9 +255,75 @@ describe("Phase 2B preproduction deployment contract", () => {
       expect(next, token).toBeGreaterThan(offset);
       offset = next;
     }
+    expect(release.indexOf('verify-release.sh" --anonymous-only')).toBeLessThan(release.indexOf('echo "RELEASE=PASS"'));
     expect(release).toContain('echo "RELEASE=FAILED maintenance=ON"');
     expect(release).toContain("SCHEMA_COMPATIBLE_WITH_PREVIOUS");
     expect(release).not.toMatch(/migrate (down|reset)/);
+  });
+
+  it("rollback() also re-verifies anonymous surfaces after maintenance_off, before ROLLBACK=PASS", async () => {
+    const release = await text("scripts/preproduction/release.sh");
+    const rollbackStart = release.indexOf("rollback() {");
+    expect(rollbackStart).toBeGreaterThan(-1);
+    const ordered = [
+      "maintenance_on",
+      "preprod_compose stop scheduler",
+      "preprod_compose stop worker",
+      "preprod_compose stop web",
+      "preprod_compose_app_up web",
+      'verify-release.sh\"',
+      "preprod_compose_app_up worker",
+      "preprod_compose_app_up scheduler",
+      "PREPROD_RELEASE_VERIFIED=YES maintenance_off",
+      // MAJOR-1 fix, same reasoning as deploy() above.
+      'verify-release.sh\" --anonymous-only',
+    ];
+    let offset = rollbackStart;
+    for (const token of ordered) {
+      const next = release.indexOf(token, offset);
+      expect(next, token).toBeGreaterThan(offset);
+      offset = next;
+    }
+    expect(release.indexOf('verify-release.sh" --anonymous-only', rollbackStart)).toBeLessThan(
+      release.indexOf('echo "ROLLBACK=PASS"'),
+    );
+    expect(release).toContain('echo "ROLLBACK=FAILED maintenance=ON"');
+  });
+
+  it("rollback() replays the previous release's grants before bringing the app back up", async () => {
+    const release = await text("scripts/preproduction/release.sh");
+    const rollbackStart = release.indexOf("rollback() {");
+    expect(rollbackStart).toBeGreaterThan(-1);
+    // MAJOR-2 fix: rollback() must replay the previous release's own
+    // grants.sql (this checkout's copy, since rollback runs from the
+    // previous immutable release directory) before the app comes back up --
+    // otherwise the restored old app keeps running against whatever grants
+    // the release being rolled back FROM last committed.
+    const ordered = [
+      "preprod_compose stop web",
+      // The redirect form (`<"$root/...`) is matched, not a bare substring,
+      // so this finds the actual command rather than its own header
+      // comment (which also mentions the path in prose).
+      '<"$root/infra/postgres/grants.sql"',
+      "preprod_compose_app_up web",
+    ];
+    let offset = rollbackStart;
+    for (const token of ordered) {
+      const next = release.indexOf(token, offset);
+      expect(next, token).toBeGreaterThan(offset);
+      offset = next;
+    }
+    // The grants replay uses the identical shape database.sh's
+    // migrate-approved case uses.
+    const grantsReplayOffset = release.indexOf('<"$root/infra/postgres/grants.sql"', rollbackStart);
+    expect(grantsReplayOffset).toBeGreaterThan(-1);
+    const rollbackGrantsCommand = release.slice(
+      release.lastIndexOf("preprod_compose exec", grantsReplayOffset),
+      grantsReplayOffset,
+    );
+    expect(rollbackGrantsCommand).toContain("-U postgres");
+    expect(rollbackGrantsCommand).toContain("--single-transaction");
+    expect(rollbackGrantsCommand).toContain("-v ON_ERROR_STOP=1");
   });
 
   it("refuses fresh init without exact empty-volume confirmation", async () => {

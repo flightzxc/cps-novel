@@ -104,6 +104,21 @@ deploy() {
     echo "RELEASE=REFUSED reason=runtime_image_mismatch"; exit 65;
   }
   PREPROD_RELEASE_VERIFIED=YES maintenance_off
+  # 🔴 MAJOR-1 fix: the full verify-release.sh call above (line ~98) always
+  # runs while maintenance is still on, so its state-aware anonymous matrix
+  # always takes the maintenance branch there -- the 401 expectations for
+  # anonymous /, /robots.txt, /sitemap.xml, and admin /login never actually
+  # exercise the real, live-traffic state in that call (see
+  # verify-release.sh's own comment on --anonymous-only). This second, cheap
+  # call is what proves anonymous callers really get 401, not leaked
+  # business content, now that maintenance is genuinely off. A failure here
+  # means the business surface is NOT correctly gated at this exact moment
+  # -- re-close the gate immediately rather than leaving it off while the
+  # generic EXIT trap below reports the failure.
+  "$root/scripts/preproduction/verify-release.sh" --anonymous-only || {
+    maintenance_on
+    echo "RELEASE=FAILED reason=anonymous_reverify_failed"; exit 65;
+  }
   ln -sfn "/opt/cps-novel/releases/$manifest_commit" /opt/cps-novel/current
   write_state ready "$manifest_commit" "$manifest_image"
   failed=0
@@ -129,9 +144,35 @@ rollback() {
   preprod_compose stop scheduler
   preprod_compose stop worker
   preprod_compose stop web
-  # Application rollback only: deliberately no down migration and no restore.
+  # Application rollback only: no down migration and no data/volume restore.
   # 🔴 数据与密钥身份不变：这里不碰 postgres 服务、不动 cps_novel_postgres_data
-  # 卷、不恢复任何备份。回滚的是应用镜像，不是数据库。
+  # 卷、不恢复任何备份。回滚的是应用镜像，不是数据库 -- but its GRANTS (role
+  # privileges, not data) ARE replayed below: see MAJOR-2 fix.
+  #
+  # 🔴 MAJOR-2 fix: rollback() previously never touched grants at all, so it
+  # left the (old, restored) app running against whatever privileges the
+  # release being rolled back FROM last committed via `database.sh
+  # migrate-approved` -- which may have tightened a grant the old code still
+  # depends on (precedent: 7141177 removed legacy catalog scan grants;
+  # a943fda scoped carousel grants). $root here is THIS invocation's own
+  # checkout, and the runbook requires rollback to be invoked from the
+  # previous release's immutable directory (so its Compose/scripts match the
+  # app being restored) -- so $root/infra/postgres/grants.sql is naturally
+  # that previous release's own, already-approved grants file. Replaying it
+  # is "restore the running release's own grants", not a new decision made
+  # here. Runs BEFORE the app comes back up, using the identical shape
+  # database.sh's migrate-approved case uses: -U postgres (not
+  # migration_owner -- grants.sql's blanket `REVOKE ALL ... FROM PUBLIC`
+  # also touches postgres-owned extension functions, which migration_owner
+  # does not own), --single-transaction (the REVOKE-then-GRANT body is
+  # all-or-nothing; a mid-file failure must not strip every runtime role to
+  # zero privileges), -v ON_ERROR_STOP=1. On failure, --single-transaction
+  # means Postgres has already rolled the attempt back atomically -- do not
+  # replay a second time, just refuse.
+  if ! preprod_compose exec -T postgres psql --no-psqlrc -v ON_ERROR_STOP=1 --single-transaction \
+    -U postgres -d cps_novel <"$root/infra/postgres/grants.sql" >/dev/null; then
+    echo "ROLLBACK=REFUSED reason=grants_replay_failed"; exit 65;
+  fi
   preprod_compose_app_up web
   preprod_assert_container_image web || {
     echo "ROLLBACK=REFUSED reason=runtime_image_mismatch"; exit 65;
@@ -143,6 +184,16 @@ rollback() {
     echo "ROLLBACK=REFUSED reason=runtime_image_mismatch"; exit 65;
   }
   PREPROD_RELEASE_VERIFIED=YES maintenance_off
+  # 🔴 MAJOR-1 fix: same reasoning as deploy() above -- the full
+  # verify-release.sh call three lines up always runs while maintenance is
+  # still on, so this cheap, anonymous-only re-check after maintenance_off
+  # is what actually proves anonymous callers get 401 now that the rolled-
+  # back release is really live. Re-close the gate on failure rather than
+  # leaving it off.
+  "$root/scripts/preproduction/verify-release.sh" --anonymous-only || {
+    maintenance_on
+    echo "ROLLBACK=FAILED reason=anonymous_reverify_failed"; exit 65;
+  }
   write_state rolled_back "$manifest_commit" "$manifest_image"
   failed=0
   trap - EXIT
