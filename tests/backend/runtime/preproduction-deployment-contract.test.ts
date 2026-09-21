@@ -154,14 +154,34 @@ describe("Phase 2B preproduction deployment contract", () => {
     // let a SIGTERM during `sudo nginx -t` destroy the live site config
     // (see release-path reviewer finding MAJOR-3).
     expect(install).toContain('trap \'rm -f "$rendered"\' EXIT');
-    // No trap is registered for INT/TERM at all any more (only the disposable
-    // rendered-candidate file is cleaned up automatically, via EXIT above).
-    // `rm -rf "$file_backup_dir"` legitimately still appears elsewhere, as
-    // explicit cleanup on the two confirmed-successful exit paths near the
-    // bottom of the script -- what must never happen is that cleanup running
-    // from an INT/TERM trap, which is what this asserts against.
-    expect(install).not.toMatch(/trap[^\n]*INT TERM/);
+    // N2 fix: install-nginx.sh DOES register INT/TERM handlers again -- but
+    // only to echo the retained (mktemp-random, otherwise anonymous)
+    // $file_backup_dir path before re-raising the signal, never to delete
+    // anything. `rm -rf "$file_backup_dir"` legitimately still appears
+    // elsewhere, as explicit cleanup on the two confirmed-successful exit
+    // paths near the bottom of the script -- what must never happen is that
+    // cleanup running from an INT/TERM handler, which is what this still
+    // asserts against.
+    expect(install).toMatch(/trap 'on_interrupt INT' INT/);
+    expect(install).toMatch(/trap 'on_interrupt TERM' TERM/);
+    const onInterruptStart = install.indexOf("on_interrupt() {");
+    expect(onInterruptStart).toBeGreaterThan(-1);
+    const onInterruptBody = install.slice(onInterruptStart, install.indexOf("\n}", onInterruptStart));
+    expect(onInterruptBody).toContain('echo "NGINX_INSTALL_INTERRUPTED backup_dir=$file_backup_dir" >&2');
+    expect(onInterruptBody).not.toMatch(/\brm\b/);
+    // It must also re-raise the signal (not swallow it and let the script
+    // carry on past the point it was told to stop): reset the disposition to
+    // default, then send itself the same signal it caught.
+    expect(onInterruptBody).toContain('trap - INT TERM');
+    expect(onInterruptBody).toContain('kill -s "$1" "$$"');
     expect(install).not.toMatch(/trap[^\n]*rm -rf "\$file_backup_dir"/);
+
+    // N2 fix: every REFUSED line that deliberately keeps $file_backup_dir
+    // around now names it, so an operator re-running after either of these
+    // doesn't have to guess which anonymous /tmp directory is the one that
+    // matters.
+    expect(install).toContain("reason=backup_dir_missing backup_dir=$file_backup_dir");
+    expect(install).toContain("reason=rollback_state_invalid backup_dir=$file_backup_dir");
 
     // restore_one must refuse to delete a live file when the backup
     // directory itself is missing/unreadable, rather than reading "no
@@ -200,6 +220,62 @@ describe("Phase 2B preproduction deployment contract", () => {
     const rollbackAllBody = install.slice(install.indexOf("rollback_all() {"), install.indexOf("if ! sudo nginx -t; then"));
     expect(rollbackAllBody).toContain('sudo cp -a "$default_site_backup" "$default_site"');
     expect(rollbackAllBody).not.toContain('rm -f "$default_site_backup"');
+  });
+
+  it("N1: keeps the default-site handover record after a successful install, on both success paths", async () => {
+    const install = await text("scripts/preproduction/install-nginx.sh");
+
+    // Before this fix, `sudo rm -f "$default_site_backup" "$default_site_state"`
+    // ran on both confirmed-successful exit paths -- the ordinary
+    // NGINX_INSTALL=PASS path at the bottom, and the "rolled back to a
+    // config that itself now passes nginx -t" branch of the
+    // reason=nginx_test_failed path above it. For Ubuntu's stock
+    // `kind=symlink` default site the target under sites-available/ still
+    // survives that deletion, but for a `kind=file` default site the
+    // content becomes unrecoverable the moment those two lines run. This is
+    // the load-bearing guard: that exact deletion command must not exist
+    // anywhere in the file any more, on either path. (The explanatory
+    // comments near both success paths legitimately mention the variable
+    // names in prose, so this checks for the `sudo rm -f` command shape
+    // specifically, not a bare substring match on the names.)
+    expect(install).not.toMatch(/sudo rm -f "\$default_site_backup"/);
+    expect(install).not.toMatch(/sudo rm -f "\$default_site_state"/);
+    expect(install).not.toMatch(/rm -f "\$default_site_backup" "\$default_site_state"/);
+
+    // $file_backup_dir (the snippet/site-config backups) is still genuinely
+    // disposable and must still be cleaned up on both confirmed-successful
+    // exit paths -- this fix must not have also swept that cleanup away.
+    // Anchor each `rm -rf "$file_backup_dir"` to its own success path by
+    // requiring it appear before that path's own REFUSED/PASS line.
+    const finalPassIndex = install.lastIndexOf('echo "NGINX_INSTALL=PASS"');
+    const finalCleanupIndex = install.lastIndexOf('rm -rf "$file_backup_dir"', finalPassIndex);
+    expect(finalCleanupIndex).toBeGreaterThan(-1);
+    expect(finalCleanupIndex).toBeLessThan(finalPassIndex);
+
+    const nginxTestFailedIndex = install.indexOf("reason=nginx_test_failed");
+    expect(nginxTestFailedIndex).toBeGreaterThan(-1);
+    const rollbackSuccessCleanupIndex = install.lastIndexOf('rm -rf "$file_backup_dir"', nginxTestFailedIndex);
+    expect(rollbackSuccessCleanupIndex).toBeGreaterThan(-1);
+    expect(rollbackSuccessCleanupIndex).toBeLessThan(nginxTestFailedIndex);
+    // The two cleanup sites must be genuinely distinct occurrences (one per
+    // success path), not the same line matched twice.
+    expect(rollbackSuccessCleanupIndex).not.toBe(finalCleanupIndex);
+
+    // A later run must not trip over the retained files: the write side
+    // (recording $default_site_state and $default_site_backup) only runs
+    // inside the block gated on $default_site itself still existing -- a
+    // successful prior run already `rm -f`'d it -- so the whole handover,
+    // including this write, is naturally skipped on the next invocation,
+    // and default_site_disabled stays 0.
+    const handoverGuardIndex = install.indexOf('if { [[ -e "$default_site" ]] || [[ -L "$default_site" ]]; }');
+    expect(handoverGuardIndex).toBeGreaterThan(-1);
+    const handoverGuardEnd = install.indexOf("\nfi\n", handoverGuardIndex);
+    expect(handoverGuardEnd).toBeGreaterThan(handoverGuardIndex);
+    const handoverBody = install.slice(handoverGuardIndex, handoverGuardEnd);
+    expect(handoverBody).toContain("default_site_state");
+    expect(handoverBody).toContain('sudo cp -a "$default_site" "$default_site_backup"');
+    expect(handoverBody).toContain('sudo rm -f "$default_site"');
+    expect(handoverBody).toContain("default_site_disabled=1");
   });
 
   it("pins stable Compose/data identity and closes dangerous preproduction writes", async () => {
@@ -259,6 +335,10 @@ describe("Phase 2B preproduction deployment contract", () => {
     expect(release).toContain('echo "RELEASE=FAILED maintenance=ON"');
     expect(release).toContain("SCHEMA_COMPATIBLE_WITH_PREVIOUS");
     expect(release).not.toMatch(/migrate (down|reset)/);
+    // N3 fix: the post-maintenance_off call must pass --expect-live, so it
+    // cannot pass vacuously by silently taking the 503 branch if the
+    // maintenance marker were somehow still present.
+    expect(release).toContain('verify-release.sh" --anonymous-only --expect-live');
   });
 
   it("rollback() also re-verifies anonymous surfaces after maintenance_off, before ROLLBACK=PASS", async () => {
@@ -288,6 +368,49 @@ describe("Phase 2B preproduction deployment contract", () => {
       release.indexOf('echo "ROLLBACK=PASS"'),
     );
     expect(release).toContain('echo "ROLLBACK=FAILED maintenance=ON"');
+    // N3 fix, same reasoning as deploy() above.
+    expect(release.indexOf('verify-release.sh" --anonymous-only --expect-live', rollbackStart)).toBeGreaterThan(
+      rollbackStart,
+    );
+  });
+
+  it("N3: --expect-live makes the post-maintenance anonymous re-check self-checking, not vacuously passable", async () => {
+    const verifyRelease = await text("scripts/preproduction/verify-release.sh");
+
+    // The flag must be parsed independently of --anonymous-only (both can be
+    // given together), not require a fixed single-positional order.
+    expect(verifyRelease).toMatch(/--expect-live\)\s*expect_live=1/);
+
+    // The maintenance-marker check must run BEFORE run_anonymous_matrix is
+    // ever called in the anonymous_only branch -- otherwise the matrix's own
+    // marker-aware 503 branch would already have consumed the "marker
+    // present" case and returned PASS without this guard ever having a
+    // chance to fire (the exact vacuous-pass shape this fix exists to
+    // close).
+    const anonymousOnlyBranchStart = verifyRelease.indexOf('if [[ "$mode" == "anonymous_only" ]]; then');
+    expect(anonymousOnlyBranchStart).toBeGreaterThan(-1);
+    // Anchor on the actual bare call (alone on its own 2-space-indented
+    // line), not just the substring "run_anonymous_matrix" -- the comment
+    // explaining this ordering legitimately names the function twice before
+    // the real call does, so a bare indexOf would find the comment instead.
+    const branchTail = verifyRelease.slice(anonymousOnlyBranchStart);
+    const runMatrixCallMatch = /\n {2}run_anonymous_matrix\n/.exec(branchTail);
+    expect(runMatrixCallMatch, `expected a bare run_anonymous_matrix call:\n${branchTail}`).not.toBeNull();
+    const runMatrixCallIndex = anonymousOnlyBranchStart + (runMatrixCallMatch as RegExpExecArray).index;
+    const expectLiveGuardIndex = verifyRelease.indexOf("expect_live", anonymousOnlyBranchStart);
+    expect(expectLiveGuardIndex).toBeGreaterThan(anonymousOnlyBranchStart);
+    expect(expectLiveGuardIndex).toBeLessThan(runMatrixCallIndex);
+
+    const guardBody = verifyRelease.slice(expectLiveGuardIndex, runMatrixCallIndex);
+    expect(guardBody).toMatch(/\[\[\s*-f\s*"\$maintenance_marker"\s*\]\]/);
+    expect(guardBody).toContain("exit 65");
+    expect(guardBody).toContain("RELEASE_VERIFY=FAIL");
+
+    // release.sh must actually pass the flag on both post-maintenance calls
+    // (also pinned directly on release.sh in the deploy()/rollback() tests
+    // above; re-asserted here to keep this guard's own test self-contained).
+    const release = await text("scripts/preproduction/release.sh");
+    expect(release.split('verify-release.sh" --anonymous-only --expect-live').length - 1).toBe(2);
   });
 
   it("rollback() replays the previous release's grants before bringing the app back up", async () => {
