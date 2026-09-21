@@ -13,11 +13,63 @@ const text = (relative: string) => readFile(path.join(root, relative), "utf8");
 // would therefore always find them and could never fail even if someone
 // later added a real (non-commented) second invocation. Strip comment-only
 // lines first so these assertions check the executable shape, not prose.
+//
+// Strips BOTH shell "#" comments (used outside the DO $$ heredoc) AND SQL
+// "--" comments (used inside it, e.g. the prose above
+// verify_database_privileges()'s enumeration loops). Review MAJOR-4a: the
+// PRIVILEGE_CHECK_FAILED reason= tokens asserted later in this file used to
+// be checked against the RAW file text, so a mutation that deletes a whole
+// enumeration loop (has_table_privilege calls, RAISE EXCEPTION, all of it)
+// while leaving behind a "--" comment that merely names the same reason
+// string still passed 12/12 -- the reviewer reproduced this. Stripping both
+// comment styles before matching closes that gap; blank lines are also
+// dropped since nothing downstream depends on them.
 const stripComments = (source: string) =>
   source
     .split("\n")
-    .filter((line) => !line.trim().startsWith("#"))
+    .filter((line) => {
+      const trimmed = line.trim();
+      return trimmed.length > 0 && !trimmed.startsWith("#") && !trimmed.startsWith("--");
+    })
     .join("\n");
+
+// Review MAJOR-4a, part 2: stripping comments defeats a mutation that
+// leaves the reason string ONLY inside a comment, but a bare
+// `executable.toContain("reason=X")` on the comment-stripped text would
+// still pass if someone kept the literal reason token in some inert,
+// unreachable spot (a stray string, a different RAISE branch, ...) without
+// the real guarding construct. This targets the actual SQL: it requires (a)
+// a real, non-commented `RAISE EXCEPTION ... reason=<reason>` line, AND (b)
+// the specific has_table_privilege/has_sequence_privilege/has_schema_privilege
+// call (and, for the enumeration checks, the FOR/FOREACH loop header) that
+// must immediately guard it, within a bounded window of the lines
+// immediately preceding that RAISE EXCEPTION in the comment-stripped
+// verify_database_privileges() body. 12 lines is generous headroom: the
+// largest real gap between a guard's opening construct and its RAISE
+// EXCEPTION in the current source is 9 lines (role_has_zero_table_privileges
+// and web_app_missing_admin_auth_privilege).
+const assertReasonBackedBySql = (
+  executableLines: string[],
+  reason: string,
+  constructs: RegExp[],
+  label: string,
+) => {
+  const raiseIdx = executableLines.findIndex(
+    (line) => line.includes("RAISE EXCEPTION") && line.includes(`reason=${reason}`),
+  );
+  expect(
+    raiseIdx,
+    `expected a non-commented "RAISE EXCEPTION ... reason=${reason}" line in verify_database_privileges()`,
+  ).toBeGreaterThanOrEqual(0);
+  const windowStart = Math.max(0, raiseIdx - 12);
+  const block = executableLines.slice(windowStart, raiseIdx + 1).join("\n");
+  for (const construct of constructs) {
+    expect(
+      block,
+      `expected ${label} to guard reason=${reason}; searched (comment-stripped):\n${block}`,
+    ).toMatch(construct);
+  }
+};
 
 /**
  * docs/governance/database-governance.md:433 requires infra/postgres/
@@ -202,25 +254,112 @@ describe("preproduction database.sh: DATABASE_PRIVILEGE_CHECK contract (persiste
     expect(source).toContain("-d cps_novel <<'DATABASE_PRIVILEGE_CHECK_SQL'");
   });
 
-  it("asserts every privilege infra/postgres/grants.sql actually grants (positive and negative)", async () => {
+  it("asserts every privilege infra/postgres/grants.sql actually grants (positive and negative), backed by the real SQL construct behind each reason", async () => {
     const source = await text("scripts/preproduction/database.sh");
     const grants = await text("infra/postgres/grants.sql");
+    const executableLines = stripComments(source).split("\n");
 
-    // Positive assertions the SQL must contain (see the block comment above
-    // verify_database_privileges() in database.sh for the grants.sql line
-    // numbers backing each one).
-    expect(source).toContain("reason=role_has_zero_table_privileges");
-    expect(source).toContain("reason=backup_role_missing_table_select");
-    expect(source).toContain("reason=backup_role_missing_sequence_select");
-    expect(source).toContain("reason=web_app_missing_admin_auth_privilege");
-    expect(source).toContain("reason=web_app_missing_delete");
-    expect(source).toContain("reason=web_app_missing_operation_audit_privilege");
-    expect(source).toContain("reason=web_app_missing_sequence_usage");
-    expect(source).toContain("reason=migration_owner_missing_schema_create");
+    // Positive assertions: each reason= token must be backed by its real
+    // RAISE EXCEPTION plus the specific has_*_privilege construct guarding
+    // it (see the block comment above verify_database_privileges() in
+    // database.sh for the grants.sql line numbers backing each one).
+    assertReasonBackedBySql(
+      executableLines,
+      "role_has_zero_table_privileges",
+      [
+        /FOREACH role_name IN ARRAY ARRAY\['web_app','worker_app','scheduler_app','analyst_ro','backup_role'\] LOOP/,
+        /has_table_privilege\(/,
+        /'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER'/,
+      ],
+      "the 5-role zero-table-privileges FOREACH + has_table_privilege(...) call",
+    );
+    assertReasonBackedBySql(
+      executableLines,
+      "backup_role_missing_table_select",
+      [
+        /FOR table_name IN SELECT format\('%I\.%I', schemaname, tablename\) FROM pg_tables WHERE schemaname = 'public' LOOP/,
+        /has_table_privilege\('backup_role', table_name, 'SELECT'\)/,
+      ],
+      "the backup_role table-enumeration loop",
+    );
+    assertReasonBackedBySql(
+      executableLines,
+      "backup_role_missing_sequence_select",
+      [
+        /FOR table_name IN SELECT format\('%I\.%I', schemaname, sequencename\) FROM pg_sequences WHERE schemaname = 'public' LOOP/,
+        /has_sequence_privilege\('backup_role', table_name, 'SELECT'\)/,
+      ],
+      "the backup_role sequence-enumeration loop",
+    );
+    assertReasonBackedBySql(
+      executableLines,
+      "web_app_missing_admin_auth_privilege",
+      [
+        /'admin_identity','admin_session','admin_two_factor',/,
+        /'admin_two_factor_challenge','admin_recovery_code','admin_login_attempt'/,
+        /has_table_privilege\('web_app', format\('public\.%I', table_name\), 'SELECT'\)/,
+        /has_table_privilege\('web_app', format\('public\.%I', table_name\), 'INSERT'\)/,
+        /has_table_privilege\('web_app', format\('public\.%I', table_name\), 'UPDATE'\)/,
+      ],
+      "the web_app admin-auth SELECT+INSERT+UPDATE FOREACH",
+    );
+    assertReasonBackedBySql(
+      executableLines,
+      "web_app_missing_delete",
+      [
+        /FOREACH table_name IN ARRAY ARRAY\['admin_recovery_code','admin_login_attempt'\] LOOP/,
+        /has_table_privilege\('web_app', format\('public\.%I', table_name\), 'DELETE'\)/,
+      ],
+      "the web_app DELETE-on-two-tables FOREACH",
+    );
+    assertReasonBackedBySql(
+      executableLines,
+      "web_app_missing_operation_audit_privilege",
+      [
+        /has_table_privilege\('web_app', 'public\.operation_audit', 'SELECT'\)/,
+        /has_table_privilege\('web_app', 'public\.operation_audit', 'INSERT'\)/,
+      ],
+      "the operation_audit SELECT+INSERT check",
+    );
+    assertReasonBackedBySql(
+      executableLines,
+      "web_app_missing_sequence_usage",
+      [
+        /FOR table_name IN SELECT format\('%I\.%I', schemaname, sequencename\) FROM pg_sequences WHERE schemaname = 'public' LOOP/,
+        /has_sequence_privilege\('web_app', table_name, 'USAGE'\)/,
+      ],
+      "the web_app sequence USAGE loop",
+    );
+    assertReasonBackedBySql(
+      executableLines,
+      "migration_owner_missing_schema_create",
+      [/has_schema_privilege\('migration_owner', 'public', 'CREATE'\)/],
+      "the migration_owner schema CREATE check",
+    );
     // Negative assertions.
-    expect(source).toContain("reason=web_app_unexpected_operation_audit_update");
-    expect(source).toContain("reason=web_app_unexpected_operation_audit_delete");
-    expect(source).toContain("reason=unexpected_admin_auth_select");
+    assertReasonBackedBySql(
+      executableLines,
+      "web_app_unexpected_operation_audit_update",
+      [/IF has_table_privilege\('web_app', 'public\.operation_audit', 'UPDATE'\) THEN/],
+      "the operation_audit UPDATE negative check",
+    );
+    assertReasonBackedBySql(
+      executableLines,
+      "web_app_unexpected_operation_audit_delete",
+      [/IF has_table_privilege\('web_app', 'public\.operation_audit', 'DELETE'\) THEN/],
+      "the operation_audit DELETE negative check",
+    );
+    assertReasonBackedBySql(
+      executableLines,
+      "unexpected_admin_auth_select",
+      [
+        /FOREACH role_name IN ARRAY ARRAY\['worker_app','scheduler_app','analyst_ro'\] LOOP/,
+        /has_table_privilege\(role_name, 'public\.admin_two_factor', 'SELECT'\)/,
+        /has_table_privilege\(role_name, 'public\.admin_recovery_code', 'SELECT'\)/,
+        /has_table_privilege\(role_name, 'public\.admin_two_factor_challenge', 'SELECT'\)/,
+      ],
+      "the worker/scheduler/analyst negative admin-auth SELECT FOREACH",
+    );
 
     // Cross-check against the real grants.sql text so this suite fails
     // loudly if grants.sql's shape ever stops matching what database.sh
