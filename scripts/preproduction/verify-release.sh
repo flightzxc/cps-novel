@@ -11,24 +11,102 @@ preprod_load_env
 : "${PREPROD_ADMIN_PASSWORD_FILE:?PREPROD_ADMIN_PASSWORD_FILE is required}"
 [[ -r "$PREPROD_CURL_CONFIG" && -r "$PREPROD_ADMIN_PASSWORD_FILE" ]] || { echo "RELEASE_VERIFY=FAIL"; exit 66; }
 
+shared="${PREPROD_SHARED_ROOT:-/opt/cps-novel/shared}"
+maintenance_marker="$shared/maintenance/enabled"
+# Must match infra/preproduction/maintenance/__preprod_maintenance.html.
+# Checked literally so a generic nginx/upstream error page, or business
+# content leaking through, cannot be mistaken for the real maintenance page.
+maintenance_needle="<h1>Maintenance in progress</h1>"
+
+tmp="$(mktemp -d "${TMPDIR:-/tmp}/cps-novel-verify-release.XXXXXX")"
+trap 'rm -rf "$tmp"' EXIT INT TERM
+
+# probe URL [AUTH]  -- sets $code, writes body to $tmp/body, headers to $tmp/headers.
+probe() {
+  local url="$1" auth="${2:-0}"
+  local args=(--silent --show-error --output "$tmp/body" --dump-header "$tmp/headers" --write-out '%{http_code}')
+  ((auth)) && args+=(--config "$PREPROD_CURL_CONFIG")
+  code="$(curl "${args[@]}" "$url")"
+}
+
+assert_robots_tag() {
+  grep -qi '^X-Robots-Tag: noindex, nofollow, noarchive' "$tmp/headers" || {
+    echo "RELEASE_VERIFY=FAIL reason=missing_robots_tag url=$1"; exit 65;
+  }
+}
+
+# --- /api/health anonymous: must be exactly 401 on both hosts -- never 200
+# (that would mean the health endpoint leaked past auth), never 503 (that
+# would mean the maintenance gate is still swallowing it, which is the
+# original bug this lane fixes). ---
+for url in https://www.bangbangji.cloud/api/health https://zbcwf.bangbangji.cloud/api/health; do
+  probe "$url"
+  [[ "$code" == "401" ]] || {
+    echo "RELEASE_VERIFY=FAIL reason=health_anonymous_not_401 url=$url code=$code"; exit 65;
+  }
+  assert_robots_tag "$url"
+done
+
+# --- /api/health authenticated: identity + database must be current, on
+# both hosts (the admin host's health location was the very one carrying
+# the prefix-match bug, so it is no longer enough to only check the public
+# host here). ---
+for url in https://www.bangbangji.cloud/api/health https://zbcwf.bangbangji.cloud/api/health; do
+  health="$(curl --silent --show-error --fail --config "$PREPROD_CURL_CONFIG" "$url")" || {
+    echo "RELEASE_VERIFY=FAIL reason=health_unreachable url=$url"; exit 65;
+  }
+  node -e '
+    const h=JSON.parse(process.argv[1]); const expected=process.argv[2];
+    if (!h.ok || h.build?.commit !== expected || h.database?.status !== "passed") process.exit(1);
+  ' "$health" "$GIT_COMMIT" || {
+    echo "RELEASE_VERIFY=FAIL reason=health_identity_db url=$url"; exit 65;
+  }
+done
+
+# --- State-aware anonymous matrix. Maintenance flips the expected code from
+# 401 to 503 for business/login surfaces, but never to 200, and a 503 is
+# only accepted when it is provably the real maintenance page (marker file
+# present AND exact known body), not any other source of 503/502. Outside a
+# maintenance window this is exactly as strict as the previous check (401
+# only); during one, it additionally proves the maintenance response itself
+# is correct, which the previous check could not do at all (it required
+# 401|404 unconditionally and would fail during any maintenance window). ---
+maintenance_on=0
+[[ -f "$maintenance_marker" ]] && maintenance_on=1
+
 for url in \
   https://www.bangbangji.cloud/ \
-  https://www.bangbangji.cloud/api/health \
   https://www.bangbangji.cloud/robots.txt \
   https://www.bangbangji.cloud/sitemap.xml \
   https://zbcwf.bangbangji.cloud/login; do
-  code="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' "$url")"
-  [[ "$code" == "401" || "$code" == "404" ]] || { echo "RELEASE_VERIFY=FAIL reason=anonymous_access"; exit 65; }
+  probe "$url"
+  assert_robots_tag "$url"
+  if ((maintenance_on)); then
+    [[ "$code" == "503" ]] || {
+      echo "RELEASE_VERIFY=FAIL reason=maintenance_expected_503 url=$url code=$code"; exit 65;
+    }
+    grep -qF "$maintenance_needle" "$tmp/body" || {
+      echo "RELEASE_VERIFY=FAIL reason=maintenance_body_mismatch url=$url"; exit 65;
+    }
+  else
+    [[ "$code" == "401" ]] || {
+      echo "RELEASE_VERIFY=FAIL reason=anonymous_not_401 url=$url code=$code"; exit 65;
+    }
+  fi
 done
 
-health="$(curl --silent --show-error --fail --config "$PREPROD_CURL_CONFIG" https://www.bangbangji.cloud/api/health)"
-node -e '
-  const h=JSON.parse(process.argv[1]); const expected=process.argv[2];
-  if (!h.ok || h.build?.commit !== expected || h.database?.status !== "passed") process.exit(1);
-' "$health" "$GIT_COMMIT" || { echo "RELEASE_VERIFY=FAIL reason=health_identity_db"; exit 65; }
+# --- Admin-only surfaces on the public host stay 404 regardless of
+# maintenance state -- this was never checked before at all. ---
+for url in https://www.bangbangji.cloud/dashboard https://www.bangbangji.cloud/api/admin; do
+  probe "$url"
+  [[ "$code" == "404" ]] || {
+    echo "RELEASE_VERIFY=FAIL reason=admin_surface_not_404 url=$url code=$code"; exit 65;
+  }
+  assert_robots_tag "$url"
+done
 
 "$root/scripts/preproduction/database.sh" persistent-check >/dev/null
-# 🔴 应用镜像入口：禁 pull、禁就地 build（见 lib.sh 的 preprod_compose_app_run）。
+# 🔴 应用镜像入口:禁 pull、禁就地 build(见 lib.sh 的 preprod_compose_app_run)。
 preprod_compose_app_run \
   -e DATABASE_URL="$P1_12_WEB_DATABASE_URL" \
   -e PREPROD_ADMIN_USERNAME="$PREPROD_ADMIN_USERNAME" \
