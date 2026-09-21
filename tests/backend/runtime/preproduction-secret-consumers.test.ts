@@ -52,9 +52,20 @@ async function fullStubFixture(allowAppPostgres = false) {
   const fixture = await secretFixture();
   const bin = path.join(fixture, "bin");
   const log = path.join(fixture, "docker.log");
-  const traverse = ["nginx-a", "nginx-b", "nginx-c"].map((name) => path.join(fixture, name));
+  // nginx-d stands in for /opt/cps-novel/shared/maintenance: the fourth
+  // traverse-only directory, which also holds the maintenance page nginx
+  // must be able to READ (not just traverse) and the marker it must be able
+  // to STAT while it exists.
+  const traverse = ["nginx-a", "nginx-b", "nginx-c", "nginx-d"].map((name) => path.join(fixture, name));
   await mkdir(bin);
   for (const directory of traverse) await mkdir(directory);
+
+  const maintenancePage = path.join(fixture, "nginx-d", "__preprod_maintenance.html");
+  const maintenanceMarker = path.join(fixture, "nginx-d", "enabled");
+  // The marker is deliberately NOT created here: between deploys it does not
+  // exist, and that has to be the default fixture shape so the happy path
+  // exercises the honest "absent" branch, not a lucky "always present" one.
+  await writeFile(maintenancePage, "<h1>Maintenance in progress</h1>\n", { mode: 0o644 });
 
   await writeFile(path.join(bin, "id"), [
     "#!/usr/bin/env bash",
@@ -80,7 +91,7 @@ async function fullStubFixture(allowAppPostgres = false) {
     "  channel_credential_encryption_key_v1|channel_credential_fingerprint_key|totp_encryption_key|tracking_hash_salt|admin-smoke-password) echo 'user:1001:r--' ; echo 'mask::r--' ;;",
     "  postgres_admin_password|migration_owner_password|web_app_password|worker_app_password|scheduler_app_password|analyst_ro_password|backup_role_password) echo 'user:999:r--' ; echo 'mask::r--' ;;",
     "  nginx-preprod.htpasswd) echo 'user:33:r--' ; echo 'mask::r--' ;;",
-    "  nginx-a|nginx-b|nginx-c) echo 'user:33:--x' ; echo 'mask::--x' ;;",
+    "  nginx-a|nginx-b|nginx-c|nginx-d) echo 'user:33:--x' ; echo 'mask::--x' ;;",
     "esac",
     "echo 'group::---'",
     "echo 'other::---'",
@@ -99,6 +110,8 @@ async function fullStubFixture(allowAppPostgres = false) {
     "  1001:1001:channel_credential_encryption_key_v1|1001:1001:channel_credential_fingerprint_key|1001:1001:totp_encryption_key|1001:1001:tracking_hash_salt|1001:1001:admin-smoke-password) exit 0 ;;",
     "  999:999:postgres_admin_password|999:999:migration_owner_password|999:999:web_app_password|999:999:worker_app_password|999:999:scheduler_app_password|999:999:analyst_ro_password|999:999:backup_role_password) exit 0 ;;",
     "  0:0:backup_role.pgpass) exit 0 ;;",
+    "  33:33:__preprod_maintenance.html) exit 0 ;;",
+    "  33:33:enabled) exit 0 ;;",
     "esac",
     'if [[ "${ALLOW_APP_POSTGRES:-0}" == "1" && "$user" == "1001:1001" && "$name" == "postgres_admin_password" ]]; then exit 0; fi',
     "exit 1",
@@ -108,12 +121,16 @@ async function fullStubFixture(allowAppPostgres = false) {
   return {
     fixture,
     log,
+    maintenancePage,
+    maintenanceMarker,
     env: {
       ...process.env,
       PATH: `${bin}:${process.env.PATH}`,
       PREPROD_TEST_MODE: "1",
       PREPROD_SECRET_ROOT: fixture,
       PREPROD_TEST_NGINX_TRAVERSE_PATHS: traverse.join(":"),
+      PREPROD_TEST_MAINTENANCE_PAGE: maintenancePage,
+      PREPROD_TEST_MAINTENANCE_MARKER: maintenanceMarker,
       CPS_NOVEL_APP_IMAGE: "approved-app:test",
       SECRET_PROBE_LOG: log,
       ALLOW_APP_POSTGRES: allowAppPostgres ? "1" : "0",
@@ -240,9 +257,13 @@ describe("secret consumer preflight model", () => {
     const result = spawnSync("bash", [preflightPath], { env: setup.env, encoding: "utf8" });
     expect(result.status, `${result.stdout}\n${result.stderr}`).toBe(0);
     expect(result.stdout).toContain("SECRET_PREFLIGHT=PASS CONSUMER_ACCESS=VERIFIED");
+    // The marker fixture is absent by default (the normal between-deploys
+    // state): this must be reported explicitly, never folded into a silent
+    // PASS, so "never checked" can't be misread as "confirmed visible".
+    expect(result.stdout).toContain("MAINTENANCE_MARKER_PROBE=SKIPPED reason=marker_absent");
     const calls = (await readFile(setup.log, "utf8")).trim().split("\n");
     const runs = calls.filter((call) => call.startsWith("run "));
-    expect(runs).toHaveLength(31);
+    expect(runs).toHaveLength(32);
     for (const call of runs) {
       expect(call).toContain("--pull never --network none --read-only --cap-drop ALL");
       expect(call).toContain("--security-opt no-new-privileges");
@@ -272,7 +293,7 @@ describe("secret consumer preflight model", () => {
       "  channel_credential_encryption_key_v1|channel_credential_fingerprint_key|totp_encryption_key|tracking_hash_salt|admin-smoke-password) echo 'user:1001:r--' ; echo 'mask::r--' ;;",
       "  postgres_admin_password|migration_owner_password|web_app_password|worker_app_password|scheduler_app_password|analyst_ro_password|backup_role_password) echo 'user:999:r--' ; echo 'mask::r--' ;;",
       "  nginx-preprod.htpasswd) echo 'user:33:r--' ; echo 'mask::r--' ;;",
-      "  nginx-a|nginx-b|nginx-c) echo 'user:33:--x' ; echo 'mask::--x' ;;",
+      "  nginx-a|nginx-b|nginx-c|nginx-d) echo 'user:33:--x' ; echo 'mask::--x' ;;",
       "esac",
       "echo 'group::---'",
       // 单点改动：nginx-b 放开 other 的遍历位
@@ -283,6 +304,68 @@ describe("secret consumer preflight model", () => {
     const result = spawnSync("bash", [preflightPath], { env, encoding: "utf8" });
     expect(`${result.stdout}${result.stderr}`).toContain("reason=nginx_traverse_other");
     expect(result.status).not.toBe(0);
+  });
+
+  it("fails closed when the maintenance directory is missing the www-data traverse ACL", async () => {
+    const { fixture, env } = await fullStubFixture();
+    // 🔴 Reproduces the real defect measured on the target verbatim: the
+    // other three traverse directories keep their `u:33:--x` entry, but
+    // nginx-d (stand-in for /opt/cps-novel/shared/maintenance) has none --
+    // `other::---` still holds, so this is not the "other opened up" case
+    // above, it is the actual production shape (drwxr-x--- with no ACL for
+    // www-data at all). Before this guard existed for a 4th directory, that
+    // shape simply wasn't checked here, so nginx could never traverse into
+    // the maintenance directory and the whole gate silently never fired.
+    await writeFile(path.join(fixture, "bin", "getfacl"), [
+      "#!/usr/bin/env bash",
+      'path="${@: -1}"; name="${path##*/}"',
+      "echo 'user::rw-'",
+      'case "$name" in',
+      "  channel_credential_encryption_key_v1|channel_credential_fingerprint_key|totp_encryption_key|tracking_hash_salt|admin-smoke-password) echo 'user:1001:r--' ; echo 'mask::r--' ;;",
+      "  postgres_admin_password|migration_owner_password|web_app_password|worker_app_password|scheduler_app_password|analyst_ro_password|backup_role_password) echo 'user:999:r--' ; echo 'mask::r--' ;;",
+      "  nginx-preprod.htpasswd) echo 'user:33:r--' ; echo 'mask::r--' ;;",
+      "  nginx-a|nginx-b|nginx-c) echo 'user:33:--x' ; echo 'mask::--x' ;;",
+      "esac",
+      "echo 'group::---'",
+      "echo 'other::---'",
+      "",
+    ].join("\n"), { mode: 0o700 });
+
+    const result = spawnSync("bash", [preflightPath], { env, encoding: "utf8" });
+    expect(result.status).not.toBe(0);
+    expect(result.stdout).toContain("reason=unexpected_named_acl");
+  });
+
+  it("fails closed when the maintenance page is not readable by www-data", async () => {
+    const { fixture, env } = await fullStubFixture();
+    // 🔴 Same fixture as the happy path, minus the one whitelist line that
+    // lets uid 33 open the maintenance page for reading. Reproduces the
+    // second half of the real defect: even with the directory ACL fixed,
+    // nginx's `error_page 503` still can't render the page it is supposed
+    // to serve if the file itself isn't readable by www-data.
+    await writeFile(path.join(fixture, "bin", "docker"), [
+      "#!/usr/bin/env bash",
+      'printf "%s\\n" "$*" >>"$SECRET_PROBE_LOG"',
+      'if [[ "$1" == "info" ]]; then echo \"[\\\"name=seccomp\\\"]\"; exit 0; fi',
+      'if [[ "$1" == "image" && "$2" == "inspect" ]]; then exit 0; fi',
+      '[[ "$1" == "run" ]] || exit 97',
+      "user=''; source_path=''",
+      'while (($#)); do case "$1" in --user) user="$2"; shift 2 ;; --mount) source_path="${2#*src=}"; source_path="${source_path%%,dst=*}"; shift 2 ;; *) shift ;; esac; done',
+      'name="${source_path##*/}"',
+      'case "$user:$name" in',
+      "  1001:1001:channel_credential_encryption_key_v1|1001:1001:channel_credential_fingerprint_key|1001:1001:totp_encryption_key|1001:1001:tracking_hash_salt|1001:1001:admin-smoke-password) exit 0 ;;",
+      "  999:999:postgres_admin_password|999:999:migration_owner_password|999:999:web_app_password|999:999:worker_app_password|999:999:scheduler_app_password|999:999:analyst_ro_password|999:999:backup_role_password) exit 0 ;;",
+      "  0:0:backup_role.pgpass) exit 0 ;;",
+      "  33:33:enabled) exit 0 ;;",
+      "esac",
+      'if [[ "${ALLOW_APP_POSTGRES:-0}" == "1" && "$user" == "1001:1001" && "$name" == "postgres_admin_password" ]]; then exit 0; fi',
+      "exit 1",
+      "",
+    ].join("\n"), { mode: 0o700 });
+
+    const result = spawnSync("bash", [preflightPath], { env, encoding: "utf8" });
+    expect(result.status).not.toBe(0);
+    expect(result.stdout).toContain("reason=maintenance_page_unreadable");
   });
 
   it("locks backup-timer to the root consumer model", async () => {
