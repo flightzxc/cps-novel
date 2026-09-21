@@ -1,3 +1,4 @@
+import { readFileSync, readdirSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
@@ -249,5 +250,199 @@ describe("preproduction database.sh: DATABASE_PRIVILEGE_CHECK contract (persiste
         expect(statement, `unexpected extra grant touching ${table}: ${statement.trim()}`).toContain("web_app");
       }
     }
+  });
+});
+
+/**
+ * Cross-lane regression guard (2026-09-21 integration). The database lane
+ * moved every FAIL/REFUSED reason line in database.sh's persistent-check
+ * case from stdout to stderr -- scripts/preproduction/verify-release.sh:108
+ * calls `database.sh persistent-check >/dev/null`, and lib.sh's own comment
+ * on preprod_assert_app_runtime_immutable documents the exact same trap
+ * ("拒绝走 stderr、PASS 走 stdout") for the sibling app-runtime gate. That
+ * move was correct. But a PRE-EXISTING test in a DIFFERENT lane's file
+ * (tests/backend/runtime/preproduction-deployment-contract.test.ts, "fails
+ * the persistent path when the stable volume is absent") still asserted the
+ * reason against `result.stdout`, and because each lane only ran its own
+ * test file during development, the mismatch was never observed until
+ * integration.
+ *
+ * This guard generalizes that fix into a structural regression check
+ * instead of a one-off assertion patch: it reads database.sh's OWN case
+ * bodies to discover, for itself, which subcommands' FAIL/REFUSED lines are
+ * ALL already on stderr (today: persistent-check only -- fresh-init's
+ * REFUSED lines deliberately stay on stdout, since no caller redirects that
+ * subcommand's stdout; migrate-approved is a genuine MIX -- its
+ * approval_required REFUSED line is un-redirected stdout by design, while
+ * its grants_replay_failed REFUSED line already went to stderr before this
+ * change -- and is therefore correctly left unguarded rather than guessed
+ * at per-reason), then scans every tests/backend/runtime/*.test.ts file for
+ * a spawnSync(...) invocation of database.sh with one of those subcommands,
+ * followed by a `result.stdout).toContain("<reason>")`-shaped assertion
+ * naming one of that subcommand's own stderr-only reasons. It is
+ * deliberately NOT a hardcoded allowlist of today's known cases -- a future
+ * subcommand added to database.sh with an all-stderr FAIL/REFUSED contract,
+ * paired with a test anywhere in tests/backend/runtime/ that gets its
+ * stream wrong for it, trips this without anyone updating this file by
+ * hand.
+ *
+ * Pragmatic scope, by design: a line-window scan over spawnSync(...) call
+ * TEXT, not a real JS/TS parser. It only recognizes the one call shape
+ * every real spawnSync invocation of database.sh in this repo currently
+ * uses -- `spawnSync("bash", [path.join(root,
+ * "scripts/preproduction/database.sh"), "<subcommand>"], ...)` -- and only
+ * looks for `.stdout).toContain("...")` in the text between that call and
+ * the next spawnSync-of-database.sh / the next `it(` / a fixed character
+ * cap, whichever comes first. "invocationsFound" below is a vacuous-pass
+ * guard: if the call shape this scanner recognizes ever stops matching
+ * anything real (e.g. every call site gets refactored through a shared
+ * helper), that count drops to 0 and the sanity test fails loudly instead
+ * of this guard silently checking nothing forever.
+ */
+
+const RUNTIME_DIR = path.join(root, "tests", "backend", "runtime");
+const SELF_FILE = path.join(RUNTIME_DIR, "preproduction-database-contract.test.ts");
+
+interface FailLine {
+  content: string;
+  toStderr: boolean;
+}
+
+// For every `<label>)` case in database.sh's `case "${1:-}" in ... esac`,
+// collects every `echo "...=FAIL..."` / `echo "...=REFUSED..."` line in
+// that case's body, and whether it redirects to stderr (`>&2` immediately
+// after the closing quote, before the next `;`/newline -- database.sh's own
+// style throughout every case). A label is "guarded" (returned in the map)
+// only when EVERY one of its FAIL/REFUSED lines already goes to stderr --
+// a label with a genuine mix (migrate-approved today) is deliberately left
+// out rather than guessing which of its reasons are which.
+function parseDatabaseShGuardedReasons(source: string): Map<string, Set<string>> {
+  const labelRe = /^ {2}([a-zA-Z0-9_-]+)\)\s*$/gm;
+  const labels: { name: string; index: number; bodyStart: number }[] = [];
+  let m: RegExpExecArray | null;
+  while ((m = labelRe.exec(source)) !== null) {
+    labels.push({ name: m[1], index: m.index, bodyStart: m.index + m[0].length });
+  }
+  const guarded = new Map<string, Set<string>>();
+  for (let i = 0; i < labels.length; i++) {
+    const body = source.slice(labels[i].bodyStart, i + 1 < labels.length ? labels[i + 1].index : source.length);
+    const echoRe = /echo\s+"((?:[^"\\]|\\.)*)"([^\n;]*)/g;
+    const failLines: FailLine[] = [];
+    let em: RegExpExecArray | null;
+    while ((em = echoRe.exec(body)) !== null) {
+      const content = em[1];
+      if (/=(FAIL|REFUSED)\b/.test(content)) failLines.push({ content, toStderr: em[2].includes(">&2") });
+    }
+    if (failLines.length > 0 && failLines.every((f) => f.toStderr)) {
+      const reasons = new Set<string>();
+      for (const f of failLines) {
+        const rm = f.content.match(/reason=([A-Za-z0-9_]+)/);
+        if (rm) reasons.add(rm[1]);
+      }
+      guarded.set(labels[i].name, reasons);
+    }
+  }
+  return guarded;
+}
+
+function listRuntimeTestFiles(): string[] {
+  return readdirSync(RUNTIME_DIR)
+    .filter((name) => name.endsWith(".test.ts"))
+    .map((name) => path.join(RUNTIME_DIR, name))
+    .filter((file) => file !== SELF_FILE);
+}
+
+interface StreamViolation {
+  file: string;
+  line: number;
+  subcommand: string;
+  reason: string;
+  snippet: string;
+}
+
+function scanForWrongStreamAssertions(guardedReasons: Map<string, Set<string>>): {
+  invocationsFound: number;
+  violations: StreamViolation[];
+} {
+  // Matches the ONE call shape every real spawnSync-of-database.sh call in
+  // this repo uses: `...database.sh"), "<subcommand>"...` (see this file's
+  // header comment above on scope).
+  const invokeRe = /database\.sh['"`]\s*\)\s*,\s*['"`]([a-zA-Z0-9_-]+)['"`]/g;
+  let invocationsFound = 0;
+  const violations: StreamViolation[] = [];
+  for (const file of listRuntimeTestFiles()) {
+    const raw = readFileSync(file, "utf8");
+    invokeRe.lastIndex = 0;
+    const matches: { index: number; subcommand: string }[] = [];
+    let m: RegExpExecArray | null;
+    while ((m = invokeRe.exec(raw)) !== null) matches.push({ index: m.index, subcommand: m[1] });
+    invocationsFound += matches.length;
+
+    for (let i = 0; i < matches.length; i++) {
+      const { index, subcommand } = matches[i];
+      const reasons = guardedReasons.get(subcommand);
+      if (!reasons || reasons.size === 0) continue; // this subcommand's reasons are not (yet) an all-stderr contract.
+
+      const nextInvokeIndex = i + 1 < matches.length ? matches[i + 1].index : raw.length;
+      const nextItMatch = /\n\s*it(?:\.\w+)?\(/.exec(raw.slice(index + 1));
+      const nextItIndex = nextItMatch ? index + 1 + nextItMatch.index : raw.length;
+      const blockEnd = Math.min(nextInvokeIndex, nextItIndex, index + 4000, raw.length);
+      const block = raw.slice(index, blockEnd);
+
+      const stdoutAssertRe = /\.stdout\)\.toContain\(\s*(['"`])((?:(?!\1)[^\\]|\\.)*)\1\s*\)/g;
+      let am: RegExpExecArray | null;
+      while ((am = stdoutAssertRe.exec(block)) !== null) {
+        const asserted = am[2];
+        const hit = Array.from(reasons).find((r) => asserted.includes(r) || r.includes(asserted));
+        if (!hit) continue;
+        violations.push({
+          file: file.slice(root.length + 1),
+          line: raw.slice(0, index + am.index).split("\n").length,
+          subcommand,
+          reason: hit,
+          snippet: am[0],
+        });
+      }
+    }
+  }
+  return { invocationsFound, violations };
+}
+
+describe("preproduction database.sh: cross-file stdout/stderr stream guard (structural)", () => {
+  it("classifies database.sh's own case labels by stream, as a floor against silent parser drift", async () => {
+    const source = await text("scripts/preproduction/database.sh");
+    const guarded = parseDatabaseShGuardedReasons(source);
+    // Today's known shape: persistent-check is the only fully-stderr
+    // FAIL/REFUSED contract. fresh-init stays fully on stdout (no caller
+    // redirects it). migrate-approved is a genuine mix (approval_required
+    // on stdout by design, grants_replay_failed already on stderr) and is
+    // therefore correctly NOT guarded -- guessing per-reason here would risk
+    // a false positive against approval_required, which must stay on stdout.
+    expect(Array.from(guarded.keys())).toEqual(["persistent-check"]);
+    expect(Array.from(guarded.get("persistent-check") ?? [])).toEqual(
+      expect.arrayContaining(["volume_missing", "postgres_not_running", "role_auth", "privilege_check"]),
+    );
+    expect(guarded.get("persistent-check")?.size).toBe(4);
+  });
+
+  it("scanned at least one real database.sh spawnSync call (guards against a vacuous pass)", async () => {
+    const source = await text("scripts/preproduction/database.sh");
+    const { invocationsFound } = scanForWrongStreamAssertions(parseDatabaseShGuardedReasons(source));
+    expect(invocationsFound).toBeGreaterThan(0);
+  });
+
+  it("no test in tests/backend/runtime/*.test.ts asserts an all-stderr database.sh reason against result.stdout", async () => {
+    const source = await text("scripts/preproduction/database.sh");
+    const { violations } = scanForWrongStreamAssertions(parseDatabaseShGuardedReasons(source));
+    expect(
+      violations,
+      violations
+        .map(
+          (v) =>
+            `${v.file}:${v.line} asserts "${v.reason}" (a stderr-only database.sh ${v.subcommand} reason) ` +
+            `against result.stdout instead of result.stderr -- ${v.snippet}`,
+        )
+        .join("\n"),
+    ).toEqual([]);
   });
 });
