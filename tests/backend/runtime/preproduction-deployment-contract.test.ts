@@ -179,7 +179,14 @@ describe("Phase 2B preproduction deployment contract", () => {
       env: { ...process.env, PREPROD_ENV_FILE: envFile, PATH: `${bin}:${process.env.PATH}` }, encoding: "utf8",
     });
     expect(result.status).not.toBe(0);
-    expect(result.stdout).toContain("volume_missing");
+    // Reason lines for `persistent-check` go to stderr, not stdout: the only
+    // production caller runs `database.sh persistent-check >/dev/null`
+    // (scripts/preproduction/verify-release.sh:108), so a reason printed to
+    // stdout would be silently swallowed there -- see
+    // scripts/preproduction/lib.sh's own comment on this exact trap
+    // ("拒绝走 stderr、PASS 走 stdout"), which database.sh's persistent-check
+    // case now follows for every FAIL/REFUSED line.
+    expect(result.stderr).toContain("volume_missing");
   });
 
   it("rejects a TOTP-preserving account transfer when key identities differ", () => {
