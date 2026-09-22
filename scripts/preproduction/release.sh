@@ -94,6 +94,12 @@ deploy() {
   preprod_assert_container_image web || {
     echo "RELEASE=REFUSED reason=runtime_image_mismatch"; exit 65;
   }
+  # 🔴 目标机首次真实部署实测：`up -d` 只等依赖项健康，不等 web 自己的
+  # healthcheck——容器 Started 不到一秒后面这行 verify-release.sh 就跑了，
+  # 那时 /api/health 还是 502。显式等 web 变 healthy 再往下走。
+  preprod_wait_for_service_health web || {
+    echo "RELEASE=FAILED reason=health_wait_failed service=web"; exit 65;
+  }
   write_state web_started "$manifest_commit" "$manifest_image"
   "$root/scripts/preproduction/verify-release.sh"
   write_state verified "$manifest_commit" "$manifest_image"
@@ -102,6 +108,11 @@ deploy() {
   preprod_compose_app_up scheduler
   preprod_assert_container_image worker scheduler || {
     echo "RELEASE=REFUSED reason=runtime_image_mismatch"; exit 65;
+  }
+  # 同上：worker/scheduler 同样必须等自己 healthy，不能只核完镜像身份就
+  # 直接放行到 maintenance_off。
+  preprod_wait_for_service_health worker scheduler || {
+    echo "RELEASE=FAILED reason=health_wait_failed service=worker,scheduler"; exit 65;
   }
   PREPROD_RELEASE_VERIFIED=YES maintenance_off
   # 🔴 MAJOR-1 fix: the full verify-release.sh call above (line ~98) always
@@ -182,11 +193,19 @@ rollback() {
   preprod_assert_container_image web || {
     echo "ROLLBACK=REFUSED reason=runtime_image_mismatch"; exit 65;
   }
+  # 🔴 与 deploy() 同一个坑、同一个修法：up -d 不等 web 自己的 healthcheck，
+  # 回滚同样必须等它真的 healthy 再调用 verify-release.sh。
+  preprod_wait_for_service_health web || {
+    echo "ROLLBACK=FAILED reason=health_wait_failed service=web"; exit 65;
+  }
   "$root/scripts/preproduction/verify-release.sh"
   preprod_compose_app_up worker
   preprod_compose_app_up scheduler
   preprod_assert_container_image worker scheduler || {
     echo "ROLLBACK=REFUSED reason=runtime_image_mismatch"; exit 65;
+  }
+  preprod_wait_for_service_health worker scheduler || {
+    echo "ROLLBACK=FAILED reason=health_wait_failed service=worker,scheduler"; exit 65;
   }
   PREPROD_RELEASE_VERIFIED=YES maintenance_off
   # 🔴 MAJOR-1 fix: same reasoning as deploy() above -- the full

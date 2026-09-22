@@ -136,11 +136,24 @@ preprod_assert_app_runtime_immutable() {
 # 断言的那三条 merged-config / 本地镜像事实；`--pull never` 与 `--no-build` 退化为
 # 锦上添花的第二道，且**只在该子命令确实支持该 flag 时**才追加——不支持就不加，
 # 契约不因此变松，因为它本来就不靠 flag 站住。
+#
+# 🔴 目标机首次真实部署撞过的坑：`up -d` 只等**依赖项**（depends_on: condition:
+# service_healthy）健康，不等被启动服务自己的 healthcheck——web 容器
+# `Started` 之后不到一秒，release.sh 就调用了 verify-release.sh，那时
+# /api/health 还在 502。与上面 --pull/--no-build 同一条纪律：承重的是调用方
+# 在这之后显式调用的 preprod_wait_for_service_health（显式轮询
+# `docker inspect` 的 .State.Health.Status，见下），不是这里追加的 --wait。
+# --wait 连同 --wait-timeout 只在两者都被 --help 探测到时才追加（且用同一个
+# 超时值），纯属锦上添花：探测不到就不加，正确性不因此改变。
 preprod_compose_app_up() {
   preprod_assert_app_runtime_immutable || return 65
+  local timeout="${PREPROD_HEALTH_WAIT_TIMEOUT_SECONDS:-180}"
   local flags=()
   if preprod_compose_subcommand_has_flag up "--pull"; then flags+=(--pull never); fi
   if preprod_compose_subcommand_has_flag up "--no-build"; then flags+=(--no-build); fi
+  if preprod_compose_subcommand_has_flag up "--wait" && preprod_compose_subcommand_has_flag up "--wait-timeout"; then
+    flags+=(--wait --wait-timeout "$timeout")
+  fi
   preprod_compose up -d --no-deps ${flags[@]+"${flags[@]}"} "$@"
 }
 
@@ -267,4 +280,77 @@ preprod_assert_container_image() {
     }
   done
   echo "RUNTIME_IMAGE=PASS services=$*"
+}
+
+# --- 应用服务健康等待 --------------------------------------------------------
+#
+# 🔴 目标机首次真实部署的实测时间线：web 容器 StartedAt=02:27:40.594Z，
+# release.sh 在 02:27:41 就调用了 verify-release.sh —— 不到一秒——那时
+# /api/health 还是 502。事后重新探测：容器早已 healthy，认证过的 /api/health
+# 也是 200。应用只是还没启动完；`docker compose up -d` 只等**依赖项**的
+# healthcheck（depends_on: condition: service_healthy），从不等被启动服务自己
+# 的。这个函数就是缺的那一等：显式轮询 `docker inspect` 的
+# .State.Health.Status，直到 healthy、直到容器退出、或直到超时——三选一，
+# 不会无限挂起。
+#
+# 🔴 与 preprod_assert_app_runtime_immutable 同一条纪律（见该函数与
+# preprod_compose_app_up 上面的注释）：承重机制不押在 CLI flag 上
+# （`up --wait` 在 v2.36 之前不存在，即使存在，其自身默认超时行为也不受这里
+# 控制）。preprod_compose_app_up 探测到时会锦上添花地追加 --wait/--wait-timeout，
+# 但让 release.sh 真正拒绝提前 verify 的是调用方显式调用的这个函数。
+#
+# 🔴 没有定义 healthcheck 的服务：Docker 永远不会把它标成 healthy/unhealthy——
+# `.State.Health` 这个字段压根不存在。硬等一个不会出现的状态就是挂死到超时，
+# 所以这里的决定是：退化为"容器处于 running"这一底线判据，立即通过。
+# 三个应用服务（web/worker/scheduler）目前在 docker-compose.yml 里都定义了
+# healthcheck（web 是 HTTP，worker/scheduler 是 /proc/1/cmdline 进程存活检查），
+# 这个分支目前不会在生产路径触发，但函数本身必须对"未来某个服务没有
+# healthcheck"这件事既不假设也不挂死。
+#
+# 🔴 容器已退出/崩溃：不必等到超时才失败——立刻拒绝，原因与最后已知状态
+# 一并打出，比空等到超时线索更多。
+#
+# 拒绝走 stderr、PASS 走 stdout，与 preprod_assert_app_runtime_immutable /
+# preprod_assert_container_image 同一条约定。
+preprod_wait_for_service_health() {
+  local timeout="${PREPROD_HEALTH_WAIT_TIMEOUT_SECONDS:-180}"
+  local interval="${PREPROD_HEALTH_WAIT_INTERVAL_SECONDS:-2}"
+  local service cid elapsed sample status running container_status
+  for service in "$@"; do
+    cid="$(preprod_compose ps -q "$service" 2>/dev/null | head -1)"
+    [[ -n "$cid" ]] || {
+      echo "HEALTH_WAIT=FAIL reason=container_missing service=$service" >&2; return 65;
+    }
+    elapsed=0
+    while true; do
+      sample="$(docker inspect "$cid" \
+        --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}|{{.State.Running}}|{{.State.Status}}' \
+        2>/dev/null)" || {
+        echo "HEALTH_WAIT=FAIL reason=container_uninspectable service=$service" >&2; return 65;
+      }
+      IFS='|' read -r status running container_status <<<"$sample"
+
+      if [[ "$status" == "none" ]]; then
+        # 无 healthcheck：不可能等一个永远不会出现的状态，running 即视为就绪。
+        if [[ "$running" == "true" ]]; then
+          echo "HEALTH_WAIT=PASS service=$service health=no_healthcheck"
+          break
+        fi
+      elif [[ "$status" == "healthy" ]]; then
+        echo "HEALTH_WAIT=PASS service=$service health=healthy"
+        break
+      fi
+
+      if [[ "$running" != "true" ]]; then
+        echo "HEALTH_WAIT=FAIL reason=container_exited service=$service status=$container_status health=$status" >&2
+        return 65
+      fi
+      if (( elapsed >= timeout )); then
+        echo "HEALTH_WAIT=FAIL reason=timeout service=$service last_status=$status timeout=${timeout}s" >&2
+        return 65
+      fi
+      sleep "$interval"
+      elapsed=$(( elapsed + interval ))
+    done
+  done
 }
