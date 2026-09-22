@@ -41,6 +41,7 @@ function channel(overrides: Partial<ChannelScanOption> = {}): ChannelScanOption 
     code: "changdu",
     name: "Changdu",
     channelApps: [{ id: "app-1", sourceAppCode: "moboreader", sourceAppName: "MoboReader" }],
+    hasActiveChannelAccounts: true,
     channelAccounts: [{ id: "acct-1", businessId: "biz-1", accountName: "主账户" }],
     ...overrides,
   };
@@ -141,7 +142,7 @@ describe("默认态：渠道 → 剧场 → 语种 → 账户 依次生效", () 
   });
 
   it("渠道下没有启用中的账户时，账户下拉禁用并显示占位项", () => {
-    renderForm({ channels: [channel({ channelAccounts: [] })] });
+    renderForm({ channels: [channel({ channelAccounts: [], hasActiveChannelAccounts: false })] });
     const select = screen.getByLabelText("渠道账户") as HTMLSelectElement;
     expect(select.disabled).toBe(true);
     expect(screen.getByText("（该渠道下没有启用中的账户）")).toBeTruthy();
@@ -319,6 +320,40 @@ describe("缺少 content:publish", () => {
 
     await click(button);
     expect(actions.applyCatalogScanTaskAction).not.toHaveBeenCalled();
+  });
+});
+
+describe("渠道已注册但零渠道账号：显式提示，禁用提交，独立于 content:publish 提示", () => {
+  it("显式「未配置渠道账号」提示出现，提交按钮禁用，Action 不会被调用", async () => {
+    renderForm({ channels: [channel({ channelAccounts: [], hasActiveChannelAccounts: false })] });
+    await click(languageChip("英文"));
+
+    expect(screen.getByTestId("catalog-scan-no-channel-accounts").textContent).toContain(
+      "未配置渠道账号",
+    );
+    const button = submitButton();
+    expect(button.disabled).toBe(true);
+
+    await click(button);
+    expect(actions.applyCatalogScanTaskAction).not.toHaveBeenCalled();
+  });
+
+  it("两个条件都不满足时（无渠道账号 + content:publish 未授予），两条提示同时可见，互不覆盖", () => {
+    renderForm({
+      channels: [channel({ channelAccounts: [], hasActiveChannelAccounts: false })],
+      contentPublishGranted: false,
+      contentPublishBlockedReason: "缺少能力位 内容发布（content:publish），请联系管理员授予",
+    });
+
+    expect(screen.getByTestId("catalog-scan-no-channel-accounts")).toBeTruthy();
+    expect(screen.getByText(/缺少能力位 内容发布/)).toBeTruthy();
+  });
+
+  it("该渠道有可用账号时不显示该提示，也不影响其它渠道的提交", async () => {
+    renderForm();
+    await click(languageChip("英文"));
+    expect(screen.queryByTestId("catalog-scan-no-channel-accounts")).toBeNull();
+    expect(submitButton().disabled).toBe(false);
   });
 });
 

@@ -34,10 +34,25 @@ import { prisma } from "@/app/api/admin/_lib/deps";
  * `channelApp.status === "active"` AND `channelApp.channel.status ===
  * "active"` AND at least one `channelAccount` under that channel with
  * `status === "active"` and `deletedAt: null` — see
- * `src/lib/tasks/moboreader.ts`'s `createMoboreaderCatalogScanTask`. Filtering
- * to the same shape here means every option this form offers is guaranteed
- * to pass that lookup (barring a race between page render and submit, which
- * the factory itself still catches via `active_channel_binding_required`).
+ * `src/lib/tasks/moboreader.ts`'s `createMoboreaderCatalogScanTask`.
+ *
+ * The WHERE clause deliberately does *not* also require
+ * `channelAccounts: { some: … } }` (unlike the nested `select` below, which
+ * still does) — a channel that is registered and has an active `ChannelApp`
+ * but zero `ChannelAccount` rows would otherwise vanish from this list
+ * entirely, looking identical to "no such channel" in the UI. That is the
+ * same "visible but disabled, say why" convention `P1_ADMIN_PARITY_SPEC.md`
+ * §6 already uses for 北斗, and the one `readClaimEligibleChannelAppOptions`
+ * below already follows for `ChannelApp`-level capability gating. The
+ * channel is still returned in that case, just with an empty
+ * `channelAccounts` array and `hasActiveChannelAccounts: false` — the
+ * consumer form surfaces that explicitly ("未配置渠道账号") and disables
+ * submission for it, rather than the option quietly not existing. Every
+ * option this read returns still passes `channelApp.status`/`channel.status`
+ * — only the account-existence requirement moved from "hide the row" to
+ * "show the row, flag it, and let the client-side + factory-side gates do
+ * the rest" (the factory's own runtime check still catches a page-render/
+ * submit race via `active_channel_binding_required`).
  */
 
 export type ChannelAppChipOption = {
@@ -51,6 +66,15 @@ export type ChannelScanOption = {
   readonly code: string;
   readonly name: string;
   readonly channelApps: readonly ChannelAppChipOption[];
+  /**
+   * Explicit "does this channel have at least one usable channel account"
+   * signal, computed here so the consumer never has to infer it from
+   * `channelAccounts.length` itself. Always `channelAccounts.length > 0`
+   * (the nested `select` below is already scoped to `status: "active",
+   * deletedAt: null`), but named for what it means rather than left as an
+   * implicit array-length check at the call site.
+   */
+  readonly hasActiveChannelAccounts: boolean;
   readonly channelAccounts: readonly {
     readonly id: string;
     readonly businessId: string;
@@ -62,7 +86,6 @@ export async function readActiveChannelScanOptions(): Promise<readonly ChannelSc
   const rows = await prisma.channel.findMany({
     where: {
       status: "active",
-      channelAccounts: { some: { status: "active", deletedAt: null } },
       channelApps: { some: { status: "active" } },
     },
     orderBy: { name: "asc" },
@@ -92,6 +115,7 @@ export async function readActiveChannelScanOptions(): Promise<readonly ChannelSc
       sourceAppCode: app.sourceApp.code,
       sourceAppName: app.sourceApp.name,
     })),
+    hasActiveChannelAccounts: row.channelAccounts.length > 0,
     channelAccounts: row.channelAccounts.map((account) => ({
       id: account.id,
       businessId: account.businessId,
