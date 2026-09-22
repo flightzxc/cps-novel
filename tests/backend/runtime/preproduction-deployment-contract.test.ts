@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { chmod, mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
@@ -7,6 +7,27 @@ import { describe, expect, it } from "vitest";
 
 const root = process.cwd();
 const text = (relative: string) => readFile(path.join(root, relative), "utf8");
+const both = (r: { stdout: string | null; stderr: string | null }) => `${r.stdout ?? ""}${r.stderr ?? ""}`;
+
+// Defect B behavioral test only: proves the real trap text under bash 5's
+// errexit-triggered EXIT trap semantics (see the test for the empirical
+// finding). Only bash's own version determines whether this reproduces --
+// macOS's system bash (3.2.57, this repo's own dev machine) does NOT
+// reproduce it, which is exactly why the host bug went unnoticed until a
+// real deploy on a modern-bash target. `bash:5.2` gives deterministic,
+// hermetic bash-5 semantics without touching any real host.
+const BASH5_IMAGE = "bash:5.2";
+const bash5Available = spawnSync("docker", ["image", "inspect", BASH5_IMAGE], { encoding: "utf8" }).status === 0;
+
+/** Extracts a `trap '...' EXIT` body verbatim from a slice of release.sh's source. */
+function extractTrapBody(source: string, funcToken: string, nextToken?: string): string {
+  const start = source.indexOf(funcToken);
+  expect(start, `${funcToken} not found`).toBeGreaterThan(-1);
+  const region = nextToken ? source.slice(start, source.indexOf(nextToken, start)) : source.slice(start);
+  const match = /trap '([^']*)' EXIT/.exec(region);
+  expect(match, `no EXIT trap found for ${funcToken}`).toBeTruthy();
+  return match![1];
+}
 
 describe("Phase 2B preproduction deployment contract", () => {
   it("keeps Host Nginx 1.24-compatible, fixed-host, protected, and anti-indexed", async () => {
@@ -314,9 +335,16 @@ describe("Phase 2B preproduction deployment contract", () => {
       // Phase 2C：应用服务改走 preprod_compose_app_up（内含不可变工件闸门，见 lib.sh），
       // 生命周期顺序不变。
       "preprod_compose_app_up web",
+      // Defect A fix: `up -d` only waits for *dependencies'* healthchecks, not
+      // the started service's own -- the real deploy that motivated this fix
+      // called verify-release.sh under a second after web's StartedAt, while
+      // /api/health was still 502. preprod_wait_for_service_health must run
+      // after web is started and BEFORE the first verify-release.sh call.
+      "preprod_wait_for_service_health web",
       'verify-release.sh\"',
       "preprod_compose_app_up worker",
       "preprod_compose_app_up scheduler",
+      "preprod_wait_for_service_health worker scheduler",
       "PREPROD_RELEASE_VERIFIED=YES maintenance_off",
       // MAJOR-1 fix: the full verify-release.sh call above always runs
       // while maintenance is still on, so its anonymous-surface 401
@@ -325,10 +353,27 @@ describe("Phase 2B preproduction deployment contract", () => {
       // RELEASE=PASS.
       'verify-release.sh\" --anonymous-only',
     ];
-    let offset = release.indexOf("deploy() {");
+    const deployStart = release.indexOf("deploy() {");
+    // Bounded to end before rollback(): rollback() repeats almost the same
+    // call shapes (same preprod_compose stop / preprod_compose_app_up /
+    // preprod_wait_for_service_health / verify-release.sh tokens), so an
+    // unbounded search from deployStart to EOF can silently re-match a
+    // token that was REMOVED from deploy() against rollback()'s own,
+    // untouched copy further down the file -- which would make this loop
+    // pass while testing the wrong function. Confirmed empirically: without
+    // this bound, deleting deploy()'s own `preprod_wait_for_service_health
+    // web` call did not fail this test (the search fell through to
+    // rollback()'s copy instead).
+    const deployEnd = release.indexOf("rollback() {");
+    expect(deployStart).toBeGreaterThan(-1);
+    expect(deployEnd).toBeGreaterThan(deployStart);
+    let offset = deployStart;
     for (const token of ordered) {
       const next = release.indexOf(token, offset);
       expect(next, token).toBeGreaterThan(offset);
+      expect(next, `${token} not found inside deploy() (fell through to rollback() or later)`).toBeLessThan(
+        deployEnd,
+      );
       offset = next;
     }
     expect(release.indexOf('verify-release.sh" --anonymous-only')).toBeLessThan(release.indexOf('echo "RELEASE=PASS"'));
@@ -351,9 +396,15 @@ describe("Phase 2B preproduction deployment contract", () => {
       "preprod_compose stop worker",
       "preprod_compose stop web",
       "preprod_compose_app_up web",
+      // Defect A fix: same reasoning as deploy() above -- rollback() re-starts
+      // web via the same preprod_compose_app_up, which has the same `up -d`
+      // gap, so it needs the same explicit health-wait before the first
+      // verify-release.sh call.
+      "preprod_wait_for_service_health web",
       'verify-release.sh\"',
       "preprod_compose_app_up worker",
       "preprod_compose_app_up scheduler",
+      "preprod_wait_for_service_health worker scheduler",
       "PREPROD_RELEASE_VERIFIED=YES maintenance_off",
       // MAJOR-1 fix, same reasoning as deploy() above.
       'verify-release.sh\" --anonymous-only',
@@ -372,6 +423,201 @@ describe("Phase 2B preproduction deployment contract", () => {
     expect(release.indexOf('verify-release.sh" --anonymous-only --expect-live', rollbackStart)).toBeGreaterThan(
       rollbackStart,
     );
+  });
+
+  it("Defect B fix: the EXIT trap in deploy()/rollback() is fail-closed and never reads a bare, function-scoped $failed", async () => {
+    const release = await text("scripts/preproduction/release.sh");
+    const deployTrap = extractTrapBody(release, "deploy() {", "rollback() {");
+    const rollbackTrap = extractTrapBody(release, "rollback() {");
+
+    for (const [label, body] of [
+      ["deploy", deployTrap],
+      ["rollback", rollbackTrap],
+    ] as const) {
+      // Real host bug: a bare `"$failed"` reference in the trap crashed with
+      // "release.sh: line 1: failed: unbound variable" under set -u once the
+      // trap fired outside deploy()/rollback()'s local scope (empirically
+      // reproduced against bash 5 -- see the behavioral test below; it does
+      // NOT reproduce on this repo's own dev-machine bash, 3.2.57, which is
+      // exactly why the host only found it on a real deploy). Because
+      // `"${failed:-1}"` never contains the literal substring "$failed"
+      // (the `$` is immediately followed by `{`, not `f`), this assertion
+      // alone is enough to prove the bare form is gone.
+      expect(body, `${label}() trap must not reference a bare $failed`).not.toMatch(/\$failed\b/);
+      // Fail-closed: if the flag can't be read at all, the trap must still
+      // decide "failed", not silently imply success. Guard the exact
+      // default value (1 == failed), not just presence of a `:-` default.
+      expect(body, `${label}() trap must default the unset case to failed (1)`).toMatch(/\$\{failed:-1\}/);
+      expect(body, `${label}() trap default must not be fail-open (0)`).not.toMatch(/\$\{failed:-0\}/);
+    }
+
+    // Byte-identical emitted strings and write_state calls, per the task's
+    // own requirement -- the fix must change only how $failed is read.
+    expect(deployTrap).toContain('write_state failed "$manifest_commit" "$manifest_image"');
+    expect(deployTrap).toContain('echo "RELEASE=FAILED maintenance=ON"');
+    expect(rollbackTrap).toContain('write_state rollback_failed "$manifest_commit" "$manifest_image"');
+    expect(rollbackTrap).toContain('echo "ROLLBACK=FAILED maintenance=ON"');
+  });
+
+  describe.skipIf(!bash5Available)(
+    "Defect B behavioral: release.sh's real EXIT trap under bash 5 errexit semantics (Docker bash:5.2)",
+    () => {
+      // Minimal, hermetic reproduction of deploy()/rollback()'s own shape
+      // (`local failed=1` + `trap '<the real extracted body>' EXIT` inside a
+      // `set -euo pipefail` function), executing the REAL trap text lifted
+      // verbatim from release.sh -- not a hand-copied duplicate -- so a
+      // regression to the bare `$failed` form is caught by actually running
+      // it under bash 5, not just by pattern-matching the source.
+      async function runSim(trapBody: string, shouldFail: boolean) {
+        const dir = await mkdtemp(path.join(tmpdir(), "preprod-trap-bash5-"));
+        const harness = [
+          "#!/usr/bin/env bash",
+          "set -euo pipefail",
+          'write_state() { echo "STATE_WRITTEN=$1"; }',
+          // Mirrors the real shape exactly: manifest_commit/manifest_image
+          // are set by read_manifest() (a DIFFERENT function, called before
+          // the trap is installed) without `local`, so they are genuine
+          // script-global variables in release.sh -- only `failed` is
+          // `local` to deploy()/rollback() itself. Declaring them `local`
+          // here too would test a shape release.sh doesn't actually have.
+          "read_manifest_like() {",
+          '  manifest_commit="m1"',
+          '  manifest_image="img1"',
+          "}",
+          "sim() {",
+          '  local should_fail="$1" failed=1',
+          "  read_manifest_like",
+          `  trap '${trapBody}' EXIT`,
+          '  if [[ "$should_fail" == "1" ]]; then false; fi',
+          "  failed=0",
+          "  trap - EXIT",
+          '  echo "SIM_PASS"',
+          "}",
+          'sim "$1"',
+          "",
+        ].join("\n");
+        await writeFile(path.join(dir, "sim.sh"), harness, { mode: 0o700 });
+        return spawnSync(
+          "docker",
+          ["run", "--rm", "-v", `${dir}:/scratch:ro`, BASH5_IMAGE, "bash", "/scratch/sim.sh", shouldFail ? "1" : "0"],
+          { encoding: "utf8" },
+        );
+      }
+
+      it("deploy()'s real trap prints RELEASE=FAILED (and does not crash) when a step fails under set -e", async () => {
+        const release = await text("scripts/preproduction/release.sh");
+        const trapBody = extractTrapBody(release, "deploy() {", "rollback() {");
+
+        const failRun = await runSim(trapBody, true);
+        expect(both(failRun), "trap must not crash with unbound variable").not.toContain("unbound variable");
+        expect(both(failRun)).toContain("STATE_WRITTEN=failed");
+        expect(both(failRun)).toContain("RELEASE=FAILED maintenance=ON");
+        expect(failRun.status).not.toBe(0);
+
+        const passRun = await runSim(trapBody, false);
+        expect(passRun.status).toBe(0);
+        expect(both(passRun)).toContain("SIM_PASS");
+        expect(both(passRun)).not.toContain("RELEASE=FAILED maintenance=ON");
+      }, 60_000);
+
+      it("rollback()'s real trap prints ROLLBACK=FAILED (and does not crash) when a step fails under set -e", async () => {
+        const release = await text("scripts/preproduction/release.sh");
+        const trapBody = extractTrapBody(release, "rollback() {");
+
+        const failRun = await runSim(trapBody, true);
+        expect(both(failRun), "trap must not crash with unbound variable").not.toContain("unbound variable");
+        expect(both(failRun)).toContain("STATE_WRITTEN=rollback_failed");
+        expect(both(failRun)).toContain("ROLLBACK=FAILED maintenance=ON");
+        expect(failRun.status).not.toBe(0);
+
+        const passRun = await runSim(trapBody, false);
+        expect(passRun.status).toBe(0);
+        expect(both(passRun)).toContain("SIM_PASS");
+        expect(both(passRun)).not.toContain("ROLLBACK=FAILED maintenance=ON");
+      }, 60_000);
+    },
+  );
+
+  describe("Defect A guard: preprod_wait_for_service_health (lib.sh)", () => {
+    const LIB = path.join(root, "scripts/preproduction/lib.sh");
+
+    async function rigHealthWait(dockerScript: string, args: string[], env: Record<string, string> = {}) {
+      const dir = await mkdtemp(path.join(tmpdir(), "preprod-health-wait-"));
+      const bin = path.join(dir, "bin");
+      await mkdir(bin, { recursive: true });
+      await writeFile(path.join(bin, "docker"), dockerScript, { mode: 0o700 });
+      const harness = [
+        "#!/usr/bin/env bash",
+        // Matches every real caller: lib.sh is always sourced into a shell
+        // that already has this set (release.sh, verify-release.sh, ...).
+        "set -euo pipefail",
+        `source '${LIB}'`,
+        // Stub preprod_compose itself (rather than faking `docker compose`)
+        // -- this function's own job is the polling logic that runs AFTER
+        // `preprod_compose ps -q "$service"` resolves a container id; the
+        // fake `docker` binary above is what answers the `docker inspect`
+        // calls the polling loop actually makes.
+        'preprod_compose() { echo "fake-cid"; }',
+        'preprod_wait_for_service_health "$@"',
+      ].join("\n");
+      return spawnSync("bash", ["-c", harness, "--", ...args], {
+        env: { ...process.env, PATH: `${bin}:${process.env.PATH ?? ""}`, ...env },
+        encoding: "utf8",
+      });
+    }
+
+    const dockerFake = (body: string) => `#!/usr/bin/env bash\n${body}\nexit 1\n`;
+
+    it("bounded timeout: fails with a distinct, greppable reason naming the service and its last health status", async () => {
+      const r = await rigHealthWait(
+        dockerFake('if [[ "$1" == "inspect" ]]; then echo "starting|true|running"; exit 0; fi'),
+        ["web"],
+        { PREPROD_HEALTH_WAIT_TIMEOUT_SECONDS: "2", PREPROD_HEALTH_WAIT_INTERVAL_SECONDS: "1" },
+      );
+      expect(r.status).not.toBe(0);
+      expect(r.stderr).toContain("HEALTH_WAIT=FAIL reason=timeout service=web last_status=starting timeout=2s");
+    }, 30_000);
+
+    it("no healthcheck defined: does not hang forever waiting for a status that will never appear -- passes once running", async () => {
+      const r = await rigHealthWait(
+        dockerFake('if [[ "$1" == "inspect" ]]; then echo "none|true|running"; exit 0; fi'),
+        ["worker"],
+        { PREPROD_HEALTH_WAIT_TIMEOUT_SECONDS: "60", PREPROD_HEALTH_WAIT_INTERVAL_SECONDS: "1" },
+      );
+      expect(r.status).toBe(0);
+      expect(r.stdout).toContain("HEALTH_WAIT=PASS service=worker health=no_healthcheck");
+    }, 15_000);
+
+    it("polls until healthy rather than sampling only once", async () => {
+      const dir = await mkdtemp(path.join(tmpdir(), "preprod-health-wait-counter-"));
+      const counterFile = path.join(dir, "count");
+      const r = await rigHealthWait(
+        dockerFake(
+          [
+            'if [[ "$1" == "inspect" ]]; then',
+            `  n=$(( $(cat '${counterFile}' 2>/dev/null || echo 0) + 1 ))`,
+            `  echo "$n" > '${counterFile}'`,
+            '  if (( n < 3 )); then echo "starting|true|running"; else echo "healthy|true|running"; fi',
+            "  exit 0",
+            "fi",
+          ].join("\n"),
+        ),
+        ["web"],
+        { PREPROD_HEALTH_WAIT_TIMEOUT_SECONDS: "30", PREPROD_HEALTH_WAIT_INTERVAL_SECONDS: "1" },
+      );
+      expect(r.status).toBe(0);
+      expect(r.stdout).toContain("HEALTH_WAIT=PASS service=web health=healthy");
+    }, 30_000);
+
+    it("a crashed/exited container fails fast, without waiting out the full timeout", async () => {
+      const r = await rigHealthWait(
+        dockerFake('if [[ "$1" == "inspect" ]]; then echo "unhealthy|false|exited"; exit 0; fi'),
+        ["scheduler"],
+        { PREPROD_HEALTH_WAIT_TIMEOUT_SECONDS: "30", PREPROD_HEALTH_WAIT_INTERVAL_SECONDS: "5" },
+      );
+      expect(r.status).not.toBe(0);
+      expect(r.stderr).toContain("HEALTH_WAIT=FAIL reason=container_exited service=scheduler status=exited health=unhealthy");
+    }, 15_000);
   });
 
   it("N3: --expect-live makes the post-maintenance anonymous re-check self-checking, not vacuously passable", async () => {
