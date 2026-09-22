@@ -427,6 +427,58 @@ format. `ADMIN_TWO_FACTOR_ENFORCEMENT=true` stays unchanged; re-enrollment must
 be completed through the approved recovery/bootstrap ceremony before release
 verification can pass.
 
+### Foundation assets (channels, tags, translations, templates)
+
+A freshly provisioned preproduction database has **every foundation-asset
+table at zero rows** — no Channel, no SourceApp, no ChannelApp, no
+CanonicalTag, no translations, no ArticleTemplate. The admin UI then shows
+empty shells and `INCOMPLETE` diagnostics, and nothing in a normal deploy
+fills them: the migrations that created these tables are additive-only and
+carry no seed data.
+
+Seeding them is a separate, explicitly-run step:
+
+```bash
+cd /opt/cps-novel/releases/<SHA>
+PREPROD_FOUNDATION_OPERATOR=<operator> \
+PREPROD_FOUNDATION_APPROVER=<AdminIdentity uuid or username> \
+  scripts/preproduction/foundation-assets.sh status   # read-only census
+scripts/preproduction/foundation-assets.sh plan       # dry-run every stage
+scripts/preproduction/foundation-assets.sh apply      # seed, then ANALYZE
+```
+
+`status` prints one `FOUNDATION_ASSET=<name> state=… actual=… expected=…`
+line per asset and distinguishes `MISSING` / `VERSION_MISMATCH` /
+`NO_ACCOUNT` / `NO_CREDENTIAL` / `FEATURE_DISABLED` / `OK`, so "no rows yet",
+"wrong artifact version" and "registered but no channel account" never
+collapse into one indistinguishable "not ready".
+
+That script is an orchestrator only. Every write happens inside one of four
+already-reviewed CLIs, run in dependency order (see the script's own header
+for the full list and row counts). It never creates a ChannelAccount or
+credential, never promotes a capability to `enabled`, never opens a
+feature/write gate, and never touches SiteSetting or admin/2FA.
+
+🔴 Two of those four stages read hash-pinned artifacts under `docs/p2/**`,
+and `docs/` is **not** in the application image. The script bind-mounts the
+release checkout's own `docs/` read-only for exactly those two stages. Both
+CLIs hash-verify what they read and fail closed on `SHA-256 mismatch`, so a
+wrong mount is rejected rather than silently accepted.
+
+`apply` is resumable: each stage's request-id is stable, a stage already at
+its expected shape is reported `ALREADY_SATISFIED` and skipped rather than
+rewritten, and progress is recorded in
+`$PREPROD_SHARED_ROOT/foundation-assets-state.json`. An interrupted run is
+resumed by rerunning `apply` — never by clearing tables and starting over.
+
+The final step runs a whole-database `ANALYZE` and verifies it, per
+`docs/governance/ENVIRONMENT_PROVISIONING_CHECKLIST.md` §2. This is not
+optional housekeeping: every table this step writes is a small registry that
+is written once and never changes, so it can never reach autovacuum's
+`50 + 0.1 × reltuples` analyze threshold, and the checklist records a real
+case where adding one `ANALYZE channel_app` took an unchanged query from
+2,696ms to 0.68ms.
+
 ## Maintenance release
 
 Set protected `PREPROD_CURL_CONFIG`, admin username/password-file inputs, the
