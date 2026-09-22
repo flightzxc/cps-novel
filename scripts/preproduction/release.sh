@@ -73,7 +73,17 @@ deploy() {
   write_state preflight_passed "$manifest_commit" "$manifest_image"
   maintenance_on
   write_state maintenance "$manifest_commit" "$manifest_image"
-  trap 'if [[ "$failed" == "1" ]]; then write_state failed "$manifest_commit" "$manifest_image"; echo "RELEASE=FAILED maintenance=ON"; fi' EXIT
+  # 🔴 目标机实测：`local failed=1` 的 EXIT trap 在 verify-release.sh 以非零
+  # 退出触发 `set -euo pipefail` 隐式 exit 时，於 bash 5 下会在 `$failed` 已经
+  # 脱离函数作用域之后才求值——"release.sh: line 1: failed: unbound variable"，
+  # trap 本身在打印 FAILED 之前就先炸了。后果在同一次真实运行里两条都应验了：
+  # "RELEASE=FAILED maintenance=ON" 没打印，write_state failed 也没跑，
+  # release-state.json 只停在上一个成功状态，运维现场没有任何"部署失败"的
+  # 记录。`bash -c 3.2` 巧合地不触发（本仓库开发机默认就是它），但目标机与
+  # CI 跑的是更新的 bash，这条差异已经现场实测复现（见本 commit 的测试）。
+  # 修法：用 `${failed:-1}` 代替裸 `$failed`——fail-closed，读不到就当失败，
+  # 一个坏掉的 trap 永远不能悄悄冒充成功。
+  trap 'if [[ "${failed:-1}" == "1" ]]; then write_state failed "$manifest_commit" "$manifest_image"; echo "RELEASE=FAILED maintenance=ON"; fi' EXIT
 
   preprod_compose stop scheduler
   write_state scheduler_stopped "$manifest_commit" "$manifest_image"
@@ -94,6 +104,12 @@ deploy() {
   preprod_assert_container_image web || {
     echo "RELEASE=REFUSED reason=runtime_image_mismatch"; exit 65;
   }
+  # 🔴 目标机首次真实部署实测：`up -d` 只等依赖项健康，不等 web 自己的
+  # healthcheck——容器 Started 不到一秒后面这行 verify-release.sh 就跑了，
+  # 那时 /api/health 还是 502。显式等 web 变 healthy 再往下走。
+  preprod_wait_for_service_health web || {
+    echo "RELEASE=FAILED reason=health_wait_failed service=web"; exit 65;
+  }
   write_state web_started "$manifest_commit" "$manifest_image"
   "$root/scripts/preproduction/verify-release.sh"
   write_state verified "$manifest_commit" "$manifest_image"
@@ -102,6 +118,11 @@ deploy() {
   preprod_compose_app_up scheduler
   preprod_assert_container_image worker scheduler || {
     echo "RELEASE=REFUSED reason=runtime_image_mismatch"; exit 65;
+  }
+  # 同上：worker/scheduler 同样必须等自己 healthy，不能只核完镜像身份就
+  # 直接放行到 maintenance_off。
+  preprod_wait_for_service_health worker scheduler || {
+    echo "RELEASE=FAILED reason=health_wait_failed service=worker,scheduler"; exit 65;
   }
   PREPROD_RELEASE_VERIFIED=YES maintenance_off
   # 🔴 MAJOR-1 fix: the full verify-release.sh call above (line ~98) always
@@ -145,7 +166,9 @@ rollback() {
   PREPROD_RELEASE_MANIFEST="$manifest_path" \
     "$root/scripts/preproduction/preflight.sh"
   maintenance_on
-  trap 'if [[ "$failed" == "1" ]]; then write_state rollback_failed "$manifest_commit" "$manifest_image"; echo "ROLLBACK=FAILED maintenance=ON"; fi' EXIT
+  # 🔴 与 deploy() 同一个 bug、同一个修法——见上面那条注释。fail-closed：
+  # `${failed:-1}` 读不到就当失败。
+  trap 'if [[ "${failed:-1}" == "1" ]]; then write_state rollback_failed "$manifest_commit" "$manifest_image"; echo "ROLLBACK=FAILED maintenance=ON"; fi' EXIT
   preprod_compose stop scheduler
   preprod_compose stop worker
   preprod_compose stop web
@@ -182,11 +205,19 @@ rollback() {
   preprod_assert_container_image web || {
     echo "ROLLBACK=REFUSED reason=runtime_image_mismatch"; exit 65;
   }
+  # 🔴 与 deploy() 同一个坑、同一个修法：up -d 不等 web 自己的 healthcheck，
+  # 回滚同样必须等它真的 healthy 再调用 verify-release.sh。
+  preprod_wait_for_service_health web || {
+    echo "ROLLBACK=FAILED reason=health_wait_failed service=web"; exit 65;
+  }
   "$root/scripts/preproduction/verify-release.sh"
   preprod_compose_app_up worker
   preprod_compose_app_up scheduler
   preprod_assert_container_image worker scheduler || {
     echo "ROLLBACK=REFUSED reason=runtime_image_mismatch"; exit 65;
+  }
+  preprod_wait_for_service_health worker scheduler || {
+    echo "ROLLBACK=FAILED reason=health_wait_failed service=worker,scheduler"; exit 65;
   }
   PREPROD_RELEASE_VERIFIED=YES maintenance_off
   # 🔴 MAJOR-1 fix: same reasoning as deploy() above -- the full
