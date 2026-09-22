@@ -3,7 +3,36 @@
 <!-- 本文件由 `node scripts/generate-changelog.mjs --write` 生成，请勿手工编辑。 -->
 <!-- 叙述性内容写进 commit message；Owner/架构决策写 docs/adr/。 -->
 
-生成时间：2026-09-21 · 共 733 个 commit
+生成时间：2026-09-22 · 共 768 个 commit
+- `4a45ac6` 2026-09-23 chore(preprod): sync C-13 catalog scan runtime values  — _codex · GPT-5_
+- `1acc83c` 2026-09-22 docs(runbook): 基础资产播种步骤与 foundation-assets.sh 入口  — _Claude Code · claude-opus-5_
+- `3482049` 2026-09-22 merge: /settings 保存反馈与置灰成因的交互修复（6f1fa51）  — _Claude Code · claude-sonnet-5 · reviewed: Claude Code · claude-opus-5_
+- `9d3080f` 2026-09-22 fix(foundation): 实体标签改为从冻结常量派生，修正 dry-run 把渠道与剧场说反  — _Claude Code · claude-opus-5_
+- `5254ae1` 2026-09-22 preproduction: add foundation-assets.sh orchestrator for the 9 zero-row asset groups  — _Claude Code · claude-sonnet-5_
+- `3319377` 2026-09-22 catalog-sync: show channels with zero channel accounts instead of hiding them  — _Claude Code · claude-sonnet-5_
+- `7aa4817` 2026-09-22 merge: 把 origin/main 的 CanonicalTag 公开多语成果合回部署线（PR #8 / #9）  — _Claude Code · claude-opus-5_
+- `6f1fa51` 2026-09-22 fix(settings): 保存回执落到各自区块，并说明按钮为什么是灰的  — _Claude Code · claude-sonnet-5 · reviewed: Claude Code · claude-opus-5_
+- `921119d` 2026-09-22 merge: deploy 等待服务健康再验证；失败 trap 改为 fail-closed（#23）  — _Claude Code · claude-opus-5 · reviewed: Claude Code · claude-opus-5_
+- `bf34252` 2026-09-22 tests: pin health-wait ordering and the fail-closed trap contract  — _Claude Code · claude-sonnet-5_
+- `770688a` 2026-09-22 preproduction: make deploy()/rollback()'s failure trap fail-closed  — _Claude Code · claude-sonnet-5_
+- `1980f57` 2026-09-22 preproduction: wait for app service health before verifying a deploy/rollback  — _Claude Code · claude-sonnet-5_
+- `c411f76` 2026-09-22 merge: maintenance 目录纳入 nginx traverse 契约（#22）  — _Claude Code · claude-opus-5 · reviewed: Claude Code · claude-opus-5_
+- `182496f` 2026-09-22 test(preprod): statically pin the production defaults the dynamic probes skip  — _Claude Code · claude-sonnet-5_
+- `b655cc1` 2026-09-22 docs(preprod-runbook): document the fourth traverse dir and page readability  — _Claude Code · claude-sonnet-5_
+- `abd7e12` 2026-09-22 test(preprod): cover the maintenance traverse/page/marker preflight guards  — _Claude Code · claude-sonnet-5_
+- `35c8a11` 2026-09-22 fix(preprod): extend nginx traverse contract to the maintenance directory  — _Claude Code · claude-sonnet-5_
+- `fea6ac2` 2026-09-22 merge: 矩阵「上游宕机」断言接受 502/504（#21）  — _Claude Code · claude-opus-5_
+- `e8ce136` 2026-09-22 test: pin verify-nginx-matrix.sh's upstream-down code set and header check  — _Claude Code · claude-sonnet-5_
+- `a5aa130` 2026-09-22 fix: accept 502 and 504 as legitimate upstream-down codes in nginx matrix  — _Claude Code · claude-sonnet-5_
+- `fa23f18` 2026-09-21 merge: 固定预生产 runtime 子网以匹配已烤入的 pg_hba 复制规则（#20）  — _Claude Code · claude-opus-5 · reviewed: Claude Code · fable-5.1_
+- `0033820` 2026-09-21 fix(preprod): assert the LIVE replication subnet against the baked pg_hba.conf rule  — _Claude Code · claude-sonnet-5_
+- `abae6a3` 2026-09-21 test(preprod): lock the base docker-compose.yml X8_RUNTIME_SUBNET default too  — _Claude Code · claude-sonnet-5_
+- `7214e36` 2026-09-21 docs(preprod): remove broken `docker network rm` subnet-change instruction  — _Claude Code · claude-sonnet-5_
+- `0a42142` 2026-09-21 docs(preprod): record the pinned runtime subnet and why in the runbook  — _Claude Code · claude-sonnet-5_
+- `96d00df` 2026-09-21 test(preprod): assert runtime subnet cannot drift from hba-replication-rule.sh  — _Claude Code · claude-sonnet-5_
+- `45252b6` 2026-09-21 fix(preprod): pin cps_novel_runtime subnet to match baked pg_hba.conf rule  — _Claude Code · claude-sonnet-5_
+- `79a85ad` 2026-09-21 merge: 收口正式部署前的五条部署链缺陷（#19）  — _Claude Code · claude-opus-5 · reviewed: Claude Code · fable-5.1_
+- `2bc7266` 2026-09-21 docs(changelog): 经既有生成器重新生成  — _Claude Code · claude-opus-5_
 - `4e2d98d` 2026-09-21 test(preprod-edge): pin N1/N2/N3 guards with two-directional mutation coverage  — _Claude Code · claude-sonnet-5_
 - `96b453c` 2026-09-21 docs(preprod-runbook): fix inverted grants-delta hazard sentence (NIT)  — _Claude Code · claude-sonnet-5_
 - `660c7d4` 2026-09-21 docs(preprod-db): fix stale comment claiming no other connection survives migrate-approved  — _Claude Code · claude-sonnet-5_
@@ -105,7 +134,13 @@
 - `26130de` 2026-09-19 merge: PulseNovel 品牌接入 + 首页主推位留白收紧  — _claude-code · Claude Opus 5_
 - `ae28a4e` 2026-09-19 fix(home): 按评审稿收紧主推位到作品区的留白，修复移动端 CTA 被裁  — _claude-code · Claude Opus 5_
 - `80e6316` 2026-09-19 feat(brand): PulseNovel 品牌接入（字标 + 暖黄强调色 + 胶囊主 CTA）  — _claude-code · Claude Sonnet 5 · reviewed: claude-code · Claude Opus 5_
+- `8a89916` 2026-09-19 docs: log CanonicalTag public i18n closeout
+- `ec88dae` 2026-09-19 merge: P1 CanonicalTag translation sense-audit
+- `030226f` 2026-09-19 fix(i18n): apply P1 CanonicalTag translation sense-audit cells  — _Cursor_
+- `ba2d59c` 2026-09-19 merge: public CanonicalTag i18n overlay
+- `79df119` 2026-09-19 fix(i18n): correct overlay senses and re-plan apply after lock  — _Cursor_
 - `4ba5bd9` 2026-09-19 merge: p2-12 vertical acceptance expects warnings[] into integration/2026-09-16-night  — _claude-code · Fable 5.1_
+- `bc4aad6` 2026-09-19 fix(i18n): localize public CanonicalTag labels without CPS filled names  — _Cursor_
 - `86941f1` 2026-09-19 test(publish): p2-12 vertical acceptance expects warnings[] after preview decoupling  — _claude-code · Claude Sonnet 5_
 - `e96d262` 2026-09-19 merge: runtime-dir test isolation into integration/2026-09-16-night  — _claude-code · Fable 5.1 · reviewed: claude-code · Claude Opus 5_
 - `5dd0a4f` 2026-09-19 test(x8): file-scoped isolation guard (aliases, integration root, p1-12 runtime), canary watches both runtime dirs  — _claude-code · Claude Sonnet 5_
@@ -741,4 +776,4 @@
 - `2e053a9` 2026-08-02 Refactor add function to accept parameters
 - `c6cbde1` 2026-08-02 Initial commit
 
-<!-- 无署名 commit：205 -->
+<!-- 无署名 commit：208 -->
