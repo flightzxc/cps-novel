@@ -155,27 +155,52 @@ function expectField(entity: string, field: string, expected: unknown, actual: u
   if (stableJson(expected) !== stableJson(actual)) drift(entity, field, expected, actual);
 }
 
+/**
+ * 🔴 Entity labels are DERIVED from the frozen constants above, never written
+ * out as literals. Before this, they were stale literals from *before* the
+ * 2026-09-06 Phase B entity fix and named the two entities backwards: a
+ * dry-run against an empty database reported `channel:moboreader` /
+ * `source_app:changdu` / `channel_app:moboreader/changdu/moboreader` while
+ * the code -- correctly -- validated and would have created channel
+ * `changdu` / sourceApp `moboreader`. The rows written were right; only the
+ * report was wrong.
+ *
+ * That is not cosmetic here. This file's own header records that these two
+ * entities "were previously reversed here and in production"; an operator
+ * reading a dry-run that misnames what it is about to write is exactly how
+ * that mistake gets repeated, or gets masked after the fact. Deriving the
+ * strings makes the label structurally incapable of drifting from the
+ * constant it describes. Guarded by
+ * `tests/backend/foundation/register-moboreader-foundation.test.ts`.
+ */
+const CHANNEL_LABEL = `channel:${MOBOREADER_FOUNDATION.channel.code}`;
+const SOURCE_APP_LABEL = `source_app:${MOBOREADER_FOUNDATION.sourceApp.code}`;
+const CHANNEL_APP_LABEL =
+  `channel_app:${MOBOREADER_FOUNDATION.channel.code}`
+  + `/${MOBOREADER_FOUNDATION.sourceApp.code}`
+  + `/${MOBOREADER_FOUNDATION.channelApp.externalAppId}`;
+
 /** Pure validation/planning helper used by dry-run and by the locked write path. */
 export function inspectFoundationSnapshot(snapshot: FoundationSnapshot): FoundationInspection {
   const missing: string[] = [];
   if (!snapshot.channel) {
-    missing.push("channel:moboreader");
+    missing.push(CHANNEL_LABEL);
   } else {
-    expectField("channel:moboreader", "code", MOBOREADER_FOUNDATION.channel.code, snapshot.channel.code);
-    expectField("channel:moboreader", "name", MOBOREADER_FOUNDATION.channel.name, snapshot.channel.name);
-    expectField("channel:moboreader", "status", MOBOREADER_FOUNDATION.channel.status, snapshot.channel.status);
+    expectField(CHANNEL_LABEL, "code", MOBOREADER_FOUNDATION.channel.code, snapshot.channel.code);
+    expectField(CHANNEL_LABEL, "name", MOBOREADER_FOUNDATION.channel.name, snapshot.channel.name);
+    expectField(CHANNEL_LABEL, "status", MOBOREADER_FOUNDATION.channel.status, snapshot.channel.status);
   }
 
   if (!snapshot.sourceApp) {
-    missing.push("source_app:changdu");
+    missing.push(SOURCE_APP_LABEL);
   } else {
-    expectField("source_app:changdu", "code", MOBOREADER_FOUNDATION.sourceApp.code, snapshot.sourceApp.code);
-    expectField("source_app:changdu", "name", MOBOREADER_FOUNDATION.sourceApp.name, snapshot.sourceApp.name);
-    expectField("source_app:changdu", "status", MOBOREADER_FOUNDATION.sourceApp.status, snapshot.sourceApp.status);
+    expectField(SOURCE_APP_LABEL, "code", MOBOREADER_FOUNDATION.sourceApp.code, snapshot.sourceApp.code);
+    expectField(SOURCE_APP_LABEL, "name", MOBOREADER_FOUNDATION.sourceApp.name, snapshot.sourceApp.name);
+    expectField(SOURCE_APP_LABEL, "status", MOBOREADER_FOUNDATION.sourceApp.status, snapshot.sourceApp.status);
   }
 
   if (!snapshot.channelApp) {
-    missing.push("channel_app:moboreader/changdu/moboreader");
+    missing.push(CHANNEL_APP_LABEL);
   } else {
     if (snapshot.channel) expectField("channel_app", "channelId", snapshot.channel.id, snapshot.channelApp.channelId);
     if (snapshot.sourceApp) expectField("channel_app", "sourceAppId", snapshot.sourceApp.id, snapshot.channelApp.sourceAppId);
@@ -362,12 +387,12 @@ export async function registerMoboreaderFoundation(
     let channel = beforeSnapshot.channel;
     if (!channel) {
       channel = await tx.channel.create({ data: MOBOREADER_FOUNDATION.channel });
-      created.push("channel:moboreader");
+      created.push(CHANNEL_LABEL);
     }
     let sourceApp = beforeSnapshot.sourceApp;
     if (!sourceApp) {
       sourceApp = await tx.sourceApp.create({ data: MOBOREADER_FOUNDATION.sourceApp });
-      created.push("source_app:changdu");
+      created.push(SOURCE_APP_LABEL);
     }
     let channelApp = beforeSnapshot.channelApp;
     if (!channelApp) {
@@ -378,7 +403,7 @@ export async function registerMoboreaderFoundation(
           ...MOBOREADER_FOUNDATION.channelApp,
         },
       });
-      created.push("channel_app:moboreader/changdu/moboreader");
+      created.push(CHANNEL_APP_LABEL);
     }
 
     const existingCapabilities = new Map(beforeSnapshot.capabilities.map((row) => [row.capabilityKey, row]));

@@ -277,3 +277,40 @@ describe("parseCliOptions", () => {
     ).not.toThrow();
   });
 });
+
+describe("实体标签与冻结常量一致（回归守卫）", () => {
+  // 🔴 这三个标签曾经是 2026-09-06 Phase B 实体订正**之前**的旧字面量，
+  // 把两个实体的名字说反了：空库 dry-run 报 `channel:moboreader` /
+  // `source_app:changdu`，而代码实际校验并会创建的是 channel `changdu` /
+  // sourceApp `moboreader`。写进库的行一直是对的，错的只有报告。
+  //
+  // 本文件头部自陈这两个实体「previously reversed here and in production」——
+  // 一份误报自己将写入什么的 dry-run，正是让同样的错误重演、或在事后被掩盖的路径。
+  // 所以标签必须从 MOBOREADER_FOUNDATION 派生，这条用例钉死这一点。
+  function missingLabelsOnEmptyDatabase(): readonly string[] {
+    const empty: FoundationSnapshot = {
+      channel: null,
+      sourceApp: null,
+      channelApp: null,
+      capabilities: [],
+    };
+    return inspectFoundationSnapshot(empty).missing;
+  }
+
+  it("空库 dry-run 报出的实体名与冻结常量逐字相同，而不是反过来", () => {
+    const missing = missingLabelsOnEmptyDatabase();
+    expect(missing).toContain(`channel:${MOBOREADER_FOUNDATION.channel.code}`);
+    expect(missing).toContain(`source_app:${MOBOREADER_FOUNDATION.sourceApp.code}`);
+    expect(missing).toContain(
+      `channel_app:${MOBOREADER_FOUNDATION.channel.code}`
+      + `/${MOBOREADER_FOUNDATION.sourceApp.code}`
+      + `/${MOBOREADER_FOUNDATION.channelApp.externalAppId}`,
+    );
+  });
+
+  it("绝不把 channel 报成 sourceApp 的 code、也不把 sourceApp 报成 channel 的 code", () => {
+    const missing = missingLabelsOnEmptyDatabase();
+    expect(missing).not.toContain(`channel:${MOBOREADER_FOUNDATION.sourceApp.code}`);
+    expect(missing).not.toContain(`source_app:${MOBOREADER_FOUNDATION.channel.code}`);
+  });
+});
