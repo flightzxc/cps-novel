@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useId, useState, type FormEvent } from "react";
 
 import type { AdminCapabilityState } from "@/contracts";
 import { buttonClassName } from "@/components/ui/button";
@@ -27,12 +27,104 @@ function formatTime(value: string): string {
   }).format(new Date(value));
 }
 
+function formatClock(value: Date): string {
+  return new Intl.DateTimeFormat("zh-CN", {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  }).format(value);
+}
+
 type Notice = { readonly tone: "ok" | "info" | "error"; readonly text: string };
 
+type Section = "site" | "og" | "indexNow";
+
+const SECTION_LABEL: Record<Section, string> = {
+  site: "站点 SEO 设置",
+  og: "OG 兜底图",
+  indexNow: "IndexNow 配置",
+};
+
+function noticeClassName(tone: Notice["tone"]): string {
+  return `rounded-lg border px-3 py-2 text-sm ${
+    tone === "ok"
+      ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+      : tone === "info"
+        ? "border-blue-200 bg-blue-50 text-blue-800"
+        : "border-red-200 bg-red-50 text-red-800"
+  }`;
+}
+
 /**
- * Site settings screen (PR-C4). Two independent sections — OG fallback image
- * and IndexNow delivery config — each with its own reason input and its own
- * submit, because the PATCH contract in
+ * 同一个表达式同时决定「按钮灰不灰」与「为什么灰」，两者不可能漂移成
+ * 「灰了但说不出原因」或「说了原因按钮却是亮的」。
+ *
+ * `invalid` 必须排在 `!dirty` 之前：站点区的 `siteDirty` 在友链 JSON
+ * 无效时被强制为 false，此时说「内容未改动」是错的。
+ */
+function saveBlockReason(input: {
+  busy: boolean;
+  invalid: string | null;
+  dirty: boolean;
+  reasonFilled: boolean;
+}): string | null {
+  if (input.busy) return "正在保存…";
+  if (input.invalid) return input.invalid;
+  if (!input.dirty) {
+    // 修改原因不参与 dirty 判定（内容确实没变），这里必须把这点说出来——
+    // 否则运营填完原因看到按钮仍是灰的，会以为表单坏了。
+    return input.reasonFilled ? "内容未改动，无需保存（修改原因不计为改动）" : "内容未改动，无需保存";
+  }
+  if (!input.reasonFilled) return "请填写修改原因";
+  return null;
+}
+
+function SectionSubmitFooter({
+  section,
+  label,
+  hintId,
+  blockReason,
+  notice,
+}: {
+  section: Section;
+  label: string;
+  hintId: string;
+  blockReason: string | null;
+  notice: Notice | null;
+}) {
+  return (
+    <div className="flex flex-wrap items-center gap-3">
+      <button
+        type="submit"
+        disabled={blockReason !== null}
+        title={blockReason ?? undefined}
+        aria-describedby={blockReason ? hintId : undefined}
+        className={buttonClassName("primary")}
+      >
+        {label}
+      </button>
+      {blockReason && (
+        <p id={hintId} data-testid={`${section}-block-reason`} className="text-xs text-gray-500">
+          {blockReason}
+        </p>
+      )}
+      {notice && (
+        <p role="status" data-testid={`${section}-notice`} className={noticeClassName(notice.tone)}>
+          {/* 回执现在靠「长在哪个卡片里」表明归属；这条只给读屏——
+              role="status" 的播报没有位置信息，不补一句就会退回成
+              「一句没有主语的『已保存』」。 */}
+          <span className="sr-only">{SECTION_LABEL[section]}：</span>
+          {notice.text}
+        </p>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Site settings screen (PR-C4). Three independent sections — site SEO
+ * settings, OG fallback image, and IndexNow delivery config — each with its
+ * own reason input and its own submit, because the PATCH contract in
  * `@/server/site-settings/service.ts#normalizedPatch` is field-level: a
  * request only carries the keys `Object.prototype.hasOwnProperty` finds on
  * the body, and untouched fields are merged in server-side from the row that
@@ -56,7 +148,12 @@ export function SiteSettingsClient({
   const blocked = capabilityBlockReason("settings:manage", settingsManage);
 
   const [current, setCurrent] = useState<SiteSettingView | null>(setting);
-  const [notice, setNotice] = useState<Notice | null>(null);
+  const [notices, setNotices] = useState<Record<Section, Notice | null>>({
+    site: null,
+    og: null,
+    indexNow: null,
+  });
+  const hintIdPrefix = useId();
   const [siteBusy, setSiteBusy] = useState(false);
   const [ogBusy, setOgBusy] = useState(false);
   const [indexNowBusy, setIndexNowBusy] = useState(false);
@@ -97,7 +194,11 @@ export function SiteSettingsClient({
     );
   }
 
-  function applyServerSetting(next: SiteSettingView, section: "site" | "og" | "indexNow" | "all") {
+  function setSectionNotice(section: Section, next: Notice | null) {
+    setNotices((prev) => ({ ...prev, [section]: next }));
+  }
+
+  function applyServerSetting(next: SiteSettingView, section: Section | "all") {
     setCurrent(next);
     // Success only resets the section that was submitted, so an uncommitted
     // draft in the other section survives. A 409 refetch uses `"all"` because
@@ -136,10 +237,10 @@ export function SiteSettingsClient({
     expectedUpdatedAt: string,
     setBusy: (value: boolean) => void,
     clearReason: () => void,
-    section: "site" | "og" | "indexNow",
+    section: Section,
   ) {
     setBusy(true);
-    setNotice(null);
+    setSectionNotice(section, null);
     const result = await adminFetch<SiteSettingMutationResult>(SITE_SETTINGS_PATH, {
       method: "PATCH",
       body: { expectedUpdatedAt, reason: reasonValue.trim(), ...fields },
@@ -147,7 +248,7 @@ export function SiteSettingsClient({
     setBusy(false);
 
     if (!result.ok) {
-      setNotice({ tone: "error", text: errorEnvelopeCopy(result.envelope) });
+      setSectionNotice(section, { tone: "error", text: errorEnvelopeCopy(result.envelope) });
       // `site_setting_conflict` covers both the plain optimistic-lock loss
       // and the (practically unreachable, since every submit mints a fresh
       // request id) idempotency-binding mismatch — either way the row the
@@ -159,10 +260,11 @@ export function SiteSettingsClient({
 
     applyServerSetting(result.data.setting, section);
     clearReason();
-    setNotice(
+    setSectionNotice(
+      section,
       result.data.replayed
         ? { tone: "info", text: "该请求此前已生效，未重复写入" }
-        : { tone: "ok", text: "已保存" },
+        : { tone: "ok", text: `已保存 · ${formatClock(new Date())}` },
     );
   }
 
@@ -209,6 +311,25 @@ export function SiteSettingsClient({
     || siteFields.ga4MeasurementId !== (current.ga4MeasurementId ?? "")
     || JSON.stringify(parsedFriendLinks) !== JSON.stringify(current.friendLinks)
   );
+
+  const siteBlockReason = saveBlockReason({
+    busy: siteBusy,
+    invalid: friendLinksValid ? null : "友链 JSON 格式无效，请修正后再保存",
+    dirty: siteDirty,
+    reasonFilled: siteReason.trim().length > 0,
+  });
+  const ogBlockReason = saveBlockReason({
+    busy: ogBusy,
+    invalid: null,
+    dirty: ogDirty,
+    reasonFilled: ogReasonFilled,
+  });
+  const indexNowBlockReason = saveBlockReason({
+    busy: indexNowBusy,
+    invalid: null,
+    dirty: indexNowDirty,
+    reasonFilled: indexNowReasonFilled,
+  });
 
   async function handleOgSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -260,21 +381,6 @@ export function SiteSettingsClient({
 
   return (
     <div className="space-y-6">
-      {notice && (
-        <p
-          role="status"
-          className={`rounded-lg border px-3 py-2 text-sm ${
-            notice.tone === "ok"
-              ? "border-emerald-200 bg-emerald-50 text-emerald-800"
-              : notice.tone === "info"
-                ? "border-blue-200 bg-blue-50 text-blue-800"
-                : "border-red-200 bg-red-50 text-red-800"
-          }`}
-        >
-          {notice.text}
-        </p>
-      )}
-
       <section className="space-y-4 rounded-xl border border-gray-200 bg-white p-6">
         <div>
           <h2 className="text-base font-semibold text-gray-900">站点、SEO 与页脚</h2>
@@ -291,7 +397,13 @@ export function SiteSettingsClient({
           <label className="block"><span className="mb-1 block text-xs text-gray-500">页脚免责声明</span><textarea value={footerDisclaimerText} onChange={(event) => setFooterDisclaimerText(event.target.value)} rows={2} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" /></label>
           <label className="block"><span className="mb-1 block text-xs text-gray-500">友链 JSON</span><textarea value={friendLinksJson} onChange={(event) => setFriendLinksJson(event.target.value)} rows={5} aria-invalid={!friendLinksValid} className="w-full rounded-lg border border-gray-300 px-3 py-2 font-mono text-xs" />{!friendLinksValid ? <span className="mt-1 block text-xs text-red-700">JSON 格式无效</span> : null}</label>
           <label className="block"><span className="mb-1 block text-xs text-gray-500">修改原因（必填，写入审计）</span><input value={siteReason} onChange={(event) => setSiteReason(event.target.value)} required className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" /></label>
-          <button type="submit" disabled={siteBusy || !siteDirty || !siteReason.trim() || !friendLinksValid} className={buttonClassName("primary")}>保存站点 SEO 设置</button>
+          <SectionSubmitFooter
+            section="site"
+            label="保存站点 SEO 设置"
+            hintId={`${hintIdPrefix}-site`}
+            blockReason={siteBlockReason}
+            notice={notices.site}
+          />
         </form>
       </section>
 
@@ -355,13 +467,13 @@ export function SiteSettingsClient({
             />
           </label>
 
-          <button
-            type="submit"
-            disabled={ogBusy || !ogDirty || !ogReasonFilled}
-            className={buttonClassName("primary")}
-          >
-            保存 OG 兜底图
-          </button>
+          <SectionSubmitFooter
+            section="og"
+            label="保存 OG 兜底图"
+            hintId={`${hintIdPrefix}-og`}
+            blockReason={ogBlockReason}
+            notice={notices.og}
+          />
         </form>
       </section>
 
@@ -448,13 +560,13 @@ export function SiteSettingsClient({
             />
           </label>
 
-          <button
-            type="submit"
-            disabled={indexNowBusy || !indexNowDirty || !indexNowReasonFilled}
-            className={buttonClassName("primary")}
-          >
-            保存 IndexNow 配置
-          </button>
+          <SectionSubmitFooter
+            section="indexNow"
+            label="保存 IndexNow 配置"
+            hintId={`${hintIdPrefix}-indexNow`}
+            blockReason={indexNowBlockReason}
+            notice={notices.indexNow}
+          />
         </form>
       </section>
 

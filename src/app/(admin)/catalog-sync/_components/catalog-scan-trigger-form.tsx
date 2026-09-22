@@ -208,6 +208,12 @@ export function CatalogScanTriggerForm({
   );
   const channelAppOptions = selectedChannel?.channelApps ?? [];
   const accountOptions = selectedChannel?.channelAccounts ?? [];
+  // Explicit flag from the read side (`ChannelScanOption.hasActiveChannelAccounts`)
+  // rather than `accountOptions.length > 0` here — a channel with zero
+  // active accounts is now a real, visible option (see
+  // `../_lib/read-channel-apps.ts`'s doc comment), and this drives both the
+  // "未配置渠道账号" notice below and `canSubmit`.
+  const hasActiveChannelAccounts = selectedChannel?.hasActiveChannelAccounts ?? false;
 
   function onChannelChange(id: string) {
     setChannelId(id);
@@ -268,7 +274,12 @@ export function CatalogScanTriggerForm({
   // submit-time `validate()` check (like every other required field here),
   // so an operator who clicks submit before picking a language sees the
   // "请至少选择一种语种" message instead of a button that never responds.
-  const canSubmit = !submitting && contentPublishGranted && channelAppOptions.length > 0 && accountOptions.length > 0;
+  // Gated on `hasActiveChannelAccounts` (not `accountOptions.length > 0`) and
+  // `contentPublishGranted` (the content:publish write gate) independently —
+  // either one being unmet must disable submit, and their notices below are
+  // shown independently too so both can be visible at once.
+  const canSubmit =
+    !submitting && contentPublishGranted && channelAppOptions.length > 0 && hasActiveChannelAccounts;
 
   return (
     <section
@@ -289,7 +300,7 @@ export function CatalogScanTriggerForm({
           data-testid="catalog-scan-no-channel-apps"
           className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800"
         >
-          没有可用的活跃渠道应用（渠道、渠道账户、渠道应用需均为启用状态），请先在「渠道账户」页配置后再回来创建任务。
+          没有可用的活跃渠道应用（渠道与渠道应用需均为启用状态），请先在「渠道账户」页配置后再回来创建任务。
         </p>
       ) : (
         <form className="mt-3 space-y-4" onSubmit={onSubmit} noValidate>
@@ -377,10 +388,10 @@ export function CatalogScanTriggerForm({
               onChange={(event) => setChannelAccountId(event.target.value)}
               aria-label="渠道账户"
               aria-invalid={Boolean(fieldErrors.channelAccount)}
-              disabled={accountOptions.length === 0}
+              disabled={!hasActiveChannelAccounts}
               className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-blue-500 focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
             >
-              {accountOptions.length === 0 && <option value="">（该渠道下没有启用中的账户）</option>}
+              {!hasActiveChannelAccounts && <option value="">（该渠道下没有启用中的账户）</option>}
               {accountOptions.map((account) => (
                 <option key={account.id} value={account.id}>
                   {account.accountName}（{account.businessId}）
@@ -393,6 +404,24 @@ export function CatalogScanTriggerForm({
               </p>
             )}
           </label>
+
+          {/*
+            Independent of the `contentPublishGranted` notice below (and of
+            the channels-empty state above it) — a channel can be selectable
+            (active, with an active channel app) yet still have zero active
+            channel accounts (see `../_lib/read-channel-apps.ts`). Both
+            notices render off separate conditions, so when neither is
+            satisfied both are visible at once, never one masking the other.
+          */}
+          {selectedChannel && !hasActiveChannelAccounts && (
+            <p
+              role="status"
+              data-testid="catalog-scan-no-channel-accounts"
+              className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800"
+            >
+              未配置渠道账号：该渠道下没有启用中的渠道账号，请先在「渠道账户」页添加后再提交。
+            </p>
+          )}
 
           {!contentPublishGranted && contentPublishBlockedReason && (
             <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">

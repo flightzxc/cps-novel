@@ -60,6 +60,10 @@ function renderClient(
   );
 }
 
+function siteForm(): HTMLElement {
+  return screen.getByRole("form", { name: "保存站点 SEO 设置" });
+}
+
 function ogForm(): HTMLElement {
   return screen.getByRole("form", { name: "保存 OG 兜底图" });
 }
@@ -213,7 +217,9 @@ describe("写：字段级编辑——只发改动的字段", () => {
     await type(within(ogForm()).getByLabelText("修改原因（必填，写入审计）"), "更新封面");
     await submit(ogForm());
 
-    await waitFor(() => expect(screen.getByRole("status").textContent).toBe("已保存"));
+    await waitFor(() =>
+      expect(within(ogForm()).getByRole("status").textContent).toContain("已保存"),
+    );
     expect((within(indexNowForm()).getByLabelText("indexNowHost") as HTMLInputElement).value).toBe(
       "draft.example.com",
     );
@@ -282,7 +288,9 @@ describe("写：结果分支", () => {
     renderClient();
     await submitOgChange();
 
-    await waitFor(() => expect(screen.getByRole("status").textContent).toBe("已保存"));
+    await waitFor(() =>
+      expect(within(ogForm()).getByRole("status").textContent).toContain("已保存"),
+    );
     expect(screen.getByText(/最近更新/).textContent).toContain("2026");
   });
 
@@ -297,7 +305,9 @@ describe("写：结果分支", () => {
     await submitOgChange();
 
     await waitFor(() =>
-      expect(screen.getByRole("status").textContent).toBe("该请求此前已生效，未重复写入"),
+      expect(within(ogForm()).getByRole("status").textContent).toContain(
+        "该请求此前已生效，未重复写入",
+      ),
     );
   });
 
@@ -315,7 +325,7 @@ describe("写：结果分支", () => {
     await submitOgChange();
 
     await waitFor(() =>
-      expect(screen.getByRole("status").textContent).toContain("站点设置已被其他操作人修改"),
+      expect(within(ogForm()).getByRole("status").textContent).toContain("站点设置已被其他操作人修改"),
     );
     await waitFor(() => expect(calls).toHaveLength(2));
     expect(calls[1].init?.method ?? "GET").toBe("GET");
@@ -346,7 +356,7 @@ describe("写：结果分支", () => {
     await submitOgChange();
 
     await waitFor(() =>
-      expect(screen.getByRole("status").textContent).toContain("该请求标识已用于另一次不同的提交"),
+      expect(within(ogForm()).getByRole("status").textContent).toContain("该请求标识已用于另一次不同的提交"),
     );
     await waitFor(() => expect(calls).toHaveLength(2));
   });
@@ -360,7 +370,7 @@ describe("写：结果分支", () => {
     await submitOgChange();
 
     await waitFor(() =>
-      expect(screen.getByRole("status").textContent).toBe("站点设置参数无效，请检查后重试"),
+      expect(within(ogForm()).getByRole("status").textContent).toContain("站点设置参数无效，请检查后重试"),
     );
     expect(calls).toHaveLength(1);
   });
@@ -374,7 +384,7 @@ describe("写：结果分支", () => {
     await submitOgChange();
 
     await waitFor(() =>
-      expect(screen.getByRole("status").textContent).toBe("站点设置单例缺失，请联系运维检查部署"),
+      expect(within(ogForm()).getByRole("status").textContent).toContain("站点设置单例缺失，请联系运维检查部署"),
     );
     expect(calls).toHaveLength(1);
   });
@@ -388,7 +398,7 @@ describe("写：结果分支", () => {
     await submitOgChange();
 
     await waitFor(() =>
-      expect(screen.getByRole("status").textContent).toBe("操作失败，请稍后重试"),
+      expect(within(ogForm()).getByRole("status").textContent).toContain("操作失败，请稍后重试"),
     );
   });
 
@@ -401,7 +411,7 @@ describe("写：结果分支", () => {
     await submitOgChange();
 
     await waitFor(() =>
-      expect(screen.getByRole("status").textContent).toContain("操作过于频繁"),
+      expect(within(ogForm()).getByRole("status").textContent).toContain("操作过于频繁"),
     );
   });
 });
@@ -440,4 +450,238 @@ describe("写：request-id", () => {
     await type(within(ogForm()).getByLabelText("修改原因（必填，写入审计）"), "更新封面");
     await submit(ogForm());
   }
+});
+
+/**
+ * 2026-09-22 预生产 UAT：Owner 把「OG 表单保存成功」连续两次误判为「保存失败」——
+ * 回执是页面顶部的单一横幅，跟提交的表单不在同一屏，也不说明是哪个 section 存的。
+ * 这组用例锁死修复后的行为：回执长在被提交的那个 form 里、紧贴它自己的提交按钮，
+ * 且按钮置灰的原因随时可读。
+ */
+describe("写：区块内回执与置灰原因", () => {
+  function successBody(next: Partial<AdminSiteSettingView> = {}, replayed = false) {
+    return {
+      ok: true,
+      data: {
+        setting: { ...BASE_SETTING, defaultOgImage: "https://cdn.example.com/next.jpg", ...next },
+        replayed,
+      },
+    };
+  }
+
+  it("回执只落在被提交的那一区，页面顶部不再有共用横幅", async () => {
+    queueFetch({ body: successBody() });
+    renderClient();
+
+    await type(within(ogForm()).getByLabelText("图片地址"), "https://cdn.example.com/next.jpg");
+    await type(within(ogForm()).getByLabelText("修改原因（必填，写入审计）"), "更新封面");
+    await submit(ogForm());
+
+    await waitFor(() =>
+      expect(within(ogForm()).getByRole("status").textContent).toContain("已保存"),
+    );
+    // 另外两个 section 没提交，不该凭空冒出回执——这正是事故报告里
+    // 「OG 保存成功，绿色『已保存』却挂在站点 SEO 卡片正上方」的反面锁定。
+    expect(within(siteForm()).queryByRole("status")).toBeNull();
+    expect(within(indexNowForm()).queryByRole("status")).toBeNull();
+    expect(screen.getAllByRole("status")).toHaveLength(1);
+  });
+
+  it("回执紧贴该区自己的提交按钮所在的容器", async () => {
+    queueFetch({ body: successBody() });
+    renderClient();
+
+    await type(within(ogForm()).getByLabelText("图片地址"), "https://cdn.example.com/next.jpg");
+    await type(within(ogForm()).getByLabelText("修改原因（必填，写入审计）"), "更新封面");
+    await submit(ogForm());
+
+    const notice = await waitFor(() => within(ogForm()).getByRole("status"));
+    const button = within(ogForm()).getByRole("button", { name: "保存 OG 兜底图" });
+    expect(button.parentElement!.contains(notice)).toBe(true);
+  });
+
+  it("错误回执同样落在该区，不冒出第二个页面级横幅", async () => {
+    queueFetch({ status: 400, body: { ok: false, status: 400, code: "site_setting_invalid" } });
+    renderClient();
+
+    await type(within(ogForm()).getByLabelText("图片地址"), "https://cdn.example.com/next.jpg");
+    await type(within(ogForm()).getByLabelText("修改原因（必填，写入审计）"), "更新封面");
+    await submit(ogForm());
+
+    await waitFor(() =>
+      expect(within(ogForm()).getByRole("status").textContent).toContain(
+        "站点设置参数无效，请检查后重试",
+      ),
+    );
+    expect(screen.getAllByRole("status")).toHaveLength(1);
+  });
+
+  it("replayed:true 的语义在区块化之后原样保留", async () => {
+    queueFetch({ body: successBody({}, true) });
+    renderClient();
+
+    await type(within(ogForm()).getByLabelText("图片地址"), "https://cdn.example.com/next.jpg");
+    await type(within(ogForm()).getByLabelText("修改原因（必填，写入审计）"), "更新封面");
+    await submit(ogForm());
+
+    await waitFor(() =>
+      expect(within(ogForm()).getByRole("status").textContent).toContain(
+        "该请求此前已生效，未重复写入",
+      ),
+    );
+  });
+
+  it("成功后修改原因被清空，但成功态留在原地——两者不再是同一个视觉变化", async () => {
+    queueFetch({ body: successBody() });
+    renderClient();
+
+    await type(within(ogForm()).getByLabelText("图片地址"), "https://cdn.example.com/next.jpg");
+    await type(within(ogForm()).getByLabelText("修改原因（必填，写入审计）"), "更新封面");
+    await submit(ogForm());
+
+    await waitFor(() =>
+      expect(within(ogForm()).getByRole("status").textContent).toContain("已保存"),
+    );
+    expect(
+      (within(ogForm()).getByLabelText("修改原因（必填，写入审计）") as HTMLInputElement).value,
+    ).toBe("");
+    // 输入框清空之后按钮确实又灰了，但灰的原因写明是「内容未改动」，
+    // 不是「提交失败」——这条断言正面锁死两者在视觉/语义上不可混淆。
+    expect(within(ogForm()).getByTestId("og-block-reason").textContent).toBe(
+      "内容未改动，无需保存",
+    );
+  });
+
+  describe("置灰四种成因各给不同文案（站点 SEO 区）", () => {
+    it("什么都没改", () => {
+      renderClient();
+      expect(within(siteForm()).getByTestId("site-block-reason").textContent).toBe(
+        "内容未改动，无需保存",
+      );
+    });
+
+    it("只填了修改原因、内容没改——原因不计为改动，必须把这点说出来", async () => {
+      renderClient();
+      await type(
+        within(siteForm()).getByLabelText("修改原因（必填，写入审计）"),
+        "只是想留个备注",
+      );
+      expect(within(siteForm()).getByTestId("site-block-reason").textContent).toBe(
+        "内容未改动，无需保存（修改原因不计为改动）",
+      );
+    });
+
+    it("改了站点名称但没填原因", async () => {
+      renderClient();
+      await type(within(siteForm()).getByLabelText("站点名称"), "New Site Name");
+      expect(within(siteForm()).getByTestId("site-block-reason").textContent).toBe(
+        "请填写修改原因",
+      );
+    });
+
+    it("友链 JSON 无效——易犯的回归是 siteDirty 恒为 false 时被误判成「内容未改动」", async () => {
+      renderClient();
+      await type(within(siteForm()).getByLabelText("友链 JSON"), "{");
+      const reason = within(siteForm()).getByTestId("site-block-reason").textContent;
+      expect(reason).toBe("友链 JSON 格式无效，请修正后再保存");
+      expect(reason).not.toBe("内容未改动，无需保存");
+    });
+  });
+
+  it("按钮 aria-describedby / title 与提示文案一致；可保存时二者都不存在", async () => {
+    renderClient();
+    const button = within(siteForm()).getByRole("button", { name: "保存站点 SEO 设置" });
+    const hint = within(siteForm()).getByTestId("site-block-reason");
+    expect(button.getAttribute("aria-describedby")).toBe(hint.id);
+    expect(button.getAttribute("title")).toBe(hint.textContent);
+
+    await type(within(siteForm()).getByLabelText("站点名称"), "New Site Name");
+    await type(within(siteForm()).getByLabelText("修改原因（必填，写入审计）"), "改名");
+
+    expect(button.getAttribute("aria-describedby")).toBeNull();
+    expect(button.hasAttribute("title")).toBe(false);
+    expect(within(siteForm()).queryByTestId("site-block-reason")).toBeNull();
+  });
+
+  it("OG 区同一套解释同样生效：改了地址没填原因 → 请填写修改原因", async () => {
+    renderClient();
+    await type(within(ogForm()).getByLabelText("图片地址"), "https://cdn.example.com/new.jpg");
+    expect(within(ogForm()).getByTestId("og-block-reason").textContent).toBe("请填写修改原因");
+  });
+
+  it("IndexNow 区同一套解释同样生效：改了 host 没填原因 → 请填写修改原因", async () => {
+    renderClient();
+    await type(within(indexNowForm()).getByLabelText("indexNowHost"), "new.example.com");
+    expect(within(indexNowForm()).getByTestId("indexNow-block-reason").textContent).toBe(
+      "请填写修改原因",
+    );
+  });
+
+  it("保存中：按钮禁用且提示「正在保存…」，resolve 后变成已保存", async () => {
+    let resolveFetch!: (response: Response) => void;
+    const pending = new Promise<Response>((resolve) => {
+      resolveFetch = resolve;
+    });
+    vi.stubGlobal("fetch", vi.fn(async () => pending));
+    renderClient();
+
+    await type(within(ogForm()).getByLabelText("图片地址"), "https://cdn.example.com/next.jpg");
+    await type(within(ogForm()).getByLabelText("修改原因（必填，写入审计）"), "更新封面");
+    await submit(ogForm());
+
+    expect(within(ogForm()).getByTestId("og-block-reason").textContent).toBe("正在保存…");
+    expect(
+      (within(ogForm()).getByRole("button", { name: "保存 OG 兜底图" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
+
+    resolveFetch(new Response(JSON.stringify(successBody()), { status: 200 }));
+
+    await waitFor(() =>
+      expect(within(ogForm()).getByRole("status").textContent).toContain("已保存"),
+    );
+  });
+
+  it("提交另一区不会顶掉上一区已经拿到的回执——两张回执各自留在自己的卡片里", async () => {
+    queueFetch(
+      { body: successBody() },
+      {
+        body: {
+          ok: true,
+          data: {
+            setting: {
+              ...BASE_SETTING,
+              defaultOgImage: "https://cdn.example.com/next.jpg",
+              siteName: "New Site Name",
+              updatedAt: "2026-08-20T03:00:00.000Z",
+            },
+            replayed: true,
+          },
+        },
+      },
+    );
+    renderClient();
+
+    await type(within(ogForm()).getByLabelText("图片地址"), "https://cdn.example.com/next.jpg");
+    await type(within(ogForm()).getByLabelText("修改原因（必填，写入审计）"), "更新封面");
+    await submit(ogForm());
+    await waitFor(() =>
+      expect(within(ogForm()).getByRole("status").textContent).toContain("已保存"),
+    );
+
+    await type(within(siteForm()).getByLabelText("站点名称"), "New Site Name");
+    await type(within(siteForm()).getByLabelText("修改原因（必填，写入审计）"), "改名");
+    await submit(siteForm());
+
+    // 站点区收到的是 replayed 文案，OG 区仍留着它自己那张「已保存」——
+    // 证明回执是按区块各存各的，不是同一块横幅被后来者顶掉。回到页面级
+    // 单横幅（或提交时清空所有区）都会让这条变红。
+    await waitFor(() =>
+      expect(within(siteForm()).getByRole("status").textContent).toContain(
+        "该请求此前已生效，未重复写入",
+      ),
+    );
+    expect(within(ogForm()).getByRole("status").textContent).toContain("已保存");
+    expect(screen.getAllByRole("status")).toHaveLength(2);
+  });
 });

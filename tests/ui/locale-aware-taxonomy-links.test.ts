@@ -27,8 +27,9 @@ const tagRow = {
   novel_id: NOVEL_ID,
   id: "22222222-2222-4222-8222-222222222222",
   slug: "fantasy",
-  display_name: "Fantasy",
-  canonical_definition: "Fantasy novels",
+  requested_display_name: "Fantasy",
+  en_display_name: "Fantasy",
+  zh_display_name: "奇幻",
   sort_order: 7,
   updated_at: new Date("2026-09-02T00:00:00Z"),
 };
@@ -51,6 +52,15 @@ describe("public-taxonomy.ts · category href locale-prefixing", () => {
   it("preserves a hyphenated locale code verbatim", async () => {
     const result = await loadPublicTaxonomyByNovelIds(fakeDb([tagRow]), [NOVEL_ID], "pt-BR");
     expect(result.get(NOVEL_ID)?.[0]?.href).toBe("/pt-BR/category/fantasy");
+  });
+
+  it("keeps slug/href identity when the public label is localized", async () => {
+    const localized = { ...tagRow, requested_display_name: "판타지" };
+    const result = await loadPublicTaxonomyByNovelIds(fakeDb([localized]), [NOVEL_ID], "ko");
+    const tag = result.get(NOVEL_ID)?.[0];
+    expect(tag?.label).toBe("판타지");
+    expect(tag?.slug).toBe("fantasy");
+    expect(tag?.href).toBe("/ko/category/fantasy");
   });
 
   it("falls back to the bare path (no prefix) for a locale string outside the registered set, rather than throwing", async () => {

@@ -231,7 +231,9 @@ export function resolveSiteLocale(
  * 静默产生一个没有任何校验拦截的孤儿语种译名」这类错误——CPS 生产实现
  * （`tags/_components/locale-field-editor.tsx`）已验证过这个交互模式。
  *
- * 20 项 = CPS 现行 19 码 + Novel 所需的 `zh`。
+ * 23 项 = CPS 现行 19 码 + Novel 所需的 `zh` + 公开站补齐的 `pt-BR` /
+ * `zh-Hant` / `cs`。只追加、不删除：`pt` / `zh-TW` / `zh-CN` 等 legacy
+ * 码仍可在后台编辑，但不计入公开站 `SITE_LOCALES` coverage。
  *
  * 🔴 `zh` 在这张表里不是普通一项：它是 canonical taxonomy v1 目前**唯一**
  * 实际有数据的语种，也是查询 resolver 的全局回退——
@@ -248,7 +250,8 @@ export function resolveSiteLocale(
 export const TAG_TRANSLATION_LOCALES = [
   "en", "zh", "zh-CN", "zh-TW", "ja", "ko", "es", "fr", "de", "pt",
   "it", "ru", "ar", "th", "vi", "id", "ms", "tr", "pl", "nl",
-] as const; // 20 项 = CPS 现行 19 码 + Novel 所需 zh
+  "pt-BR", "zh-Hant", "cs",
+] as const; // 23 项 = CPS 19 码 + zh + 公开站 pt-BR / zh-Hant / cs
 
 /**
  * 默认展开的语种（其余折叠，按钮渐进展开）。`zh` 必须在这里——见上方关于
@@ -262,7 +265,9 @@ export const TAG_TRANSLATION_DEFAULT_EXPANDED = ["zh", "en"] as const;
 export const TAG_LOCALE_LABELS: Readonly<Record<string, string>> = Object.freeze({
   en: "English", zh: "中文", "zh-CN": "简体中文", "zh-TW": "繁體中文",
   ja: "日本語", ko: "한국어", es: "Español", fr: "Français", de: "Deutsch",
-  pt: "Português", it: "Italiano", ru: "Русский", ar: "العربية", th: "ไทย",
+  pt: "Português", "pt-BR": "Português (Brasil)", it: "Italiano",
+  ru: "Русский", ar: "العربية", th: "ไทย",
   vi: "Tiếng Việt", id: "Bahasa Indonesia", ms: "Bahasa Melayu",
-  tr: "Türkçe", pl: "Polski", nl: "Nederlands",
+  tr: "Türkçe", pl: "Polski", nl: "Nederlands", cs: "Čeština",
+  "zh-Hant": "繁體中文",
 });
