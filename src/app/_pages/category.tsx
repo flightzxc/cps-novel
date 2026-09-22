@@ -91,7 +91,7 @@ export async function CategoryBody({
       locale={locale}
       chrome={loaded.chrome}
       title={loaded.category.category.name}
-      description={loaded.category.category.description}
+      description={loaded.category.category.description ?? undefined}
       novels={loaded.category.novels}
       emptyMessage={t("collection.categoryEmpty")}
     />

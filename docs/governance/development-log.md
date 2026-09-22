@@ -22,6 +22,20 @@
 
 ---
 
+## 2026-09-19 · CanonicalTag 公开站多语言修复收口（PR #8 / #9 已合 main）
+
+- 背景与根因：公开站已有 locale 化页面，但 CanonicalTag v1 冻结产物仅有 zh 展示名；公开 resolver 原先按 requested → zh → slug 取值，导致 ko/ja/ru 等页面的筛选 chip、卡片/详情标签和分类标题继续显示中文。渠道 raw tag → CanonicalTag mapping、stable identity 与 slug 本身没有问题，本轮只修展示层 i18n。
+- 公开解析契约：CanonicalTag 展示名统一走 `CanonicalTagTranslation`，fallback 冻结为 **requested locale → en → zh → slug**；前端继续消费服务端 `label`，不在组件侧再建第二套 i18n。分类页同时停止把中文 `canonical_definition` 泄漏到非中文页面；缺 locale-specific description 时直接省略 HTML/meta/JSON-LD description，不生成 `${name} novels.` 英文混排兜底。URL、slug、筛选 identity、渠道 mapping 和分类算法均未改。
+- 翻译资产：覆盖 123 个 CanonicalTag × 15 个公开 locale = **1,845** 个 displayName 单元格，不含 zh 基准。CPS 事故资产 `_tags-minimax-filled.json` 按 `TAG-I18N-ORDINAL-2026-04-19` 隔离，**零复用** names/keywords；仅把已修复/审过的 CPS display-name 资产作为候选（repair + de/pl/cs），classifier keywords 不进入 overlay。
+- 独立语义审校：以 `79df119` / overlay SHA `8630cb847c122485446e25921b86dee714361553bf39de16cba16558a0a80fc2` 为冻结对象，全量检查 1,845 格；P1 定点修正 **51 格 / 24 个标签**，P2 自然度建议 **21 格未应用**。15 个原 CPS 复用格通过精确 `FORCE_NEW(slug, locale)` 防止 builder 再次覆盖旧候选；最终 overlay 仍为 1,845 格，冻结 CanonicalTag v1 / zh / slug / identity 未变。最终 overlay SHA：`0100fb36e638849ecdcd277792f6658250c51819aef97e1c59c3040316080488`。
+- Git 收口：PR #8 `fix(i18n): public CanonicalTag labels without quarantined CPS filled names` 已合入 main，merge commit `ba2d59c7302a0797b80c06cf5d49d8881a3e1b6f`；PR #9 `fix(i18n): apply P1 CanonicalTag translation sense-audit cells` 已合入 main，merge commit `ec88daeb1ca38f295a9192c7dc0317058ac3a1d0`，当前该提交包含 51 格 P1 差量与审校留痕。
+- 测试/CI：P1 差量核验确认实际 displayName diff **恰好 51 格**、P2 21 格零改、无额外译名变化；overlay/公开站相关定向测试通过。PR #9 GitHub Actions Full Vitest 通过；全仓 TypeScript 仍命中既有 **23 条** WAL 测试 `ProcessEnv.NODE_ENV` 基线错误（`wal-gc-x8.test.ts` / `wal-retention-apply-order.test.ts` / `wal-retention-guards.test.ts`），本轮未新增 typecheck 错误。
+- X8 状态：PR #8 版本曾在 `cps-novel-x8-local / novel.test` 完成真实 PostgreSQL overlay apply 与新代码 smoke；当时 123 → 1,968（123×16，含 zh），zh/slug hash 不变，同 request-id replay 与不同 request-id 幂等均通过。**PR #9 的最终 51 格 P1 overlay 尚未重新写入 X8，也未做 post-#9 页面复验**；Owner 决定与后续问题修复合并重建/验收，不为本小改动单独重启本地服务。
+- 生产边界：**未执行 production overlay apply、未部署生产**。后续在其他问题收口后统一重建 X8；若数据库仍停留在 PR #8 overlay，则最终 artifact 首次 dry-run 的预期为 `insert=0 / update=51 / unchanged=1794 / exception=0`，数量不符先停止排查。X8 通过后再进入生产备份 → overlay dry-run → apply → 应用部署 → ko/ja/en/ru smoke。
+- 版本登记：本轮是未发布的公开站 i18n 修复收口，**不新增 version-registry 发布版本**；待真实生产 release/deploy 时再登记版本号与生产证据。
+
+---
+
 ## 2026-09-07 · Tagging V3 FK 具名对齐（零 schema migration，仅 Prisma `map:`）
 
 - 根因：`20260816160000_p2_06_5_tagging_v3` 手写迁移给 6 条 FK 取了短名，`schema.prisma` 对应 `@relation` 未写 `map:`，致 `prisma migrate diff --exit-code` 恒 exit 2，`scripts/p1-13-postgres-verification.sh` 等脚本从未跑到 grants/测试。

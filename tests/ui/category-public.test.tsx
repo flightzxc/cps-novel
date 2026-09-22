@@ -20,4 +20,14 @@ describe("public category SEO · CPS v8.3.6 semantic port", () => {
     expect(seo.robots).toEqual({ index: false, follow: true });
     delete process.env.SITE_URL;
   });
+
+  it("omits description when the category has no locale-specific copy — never `${name} novels.`", () => {
+    process.env.SITE_URL = "https://novel.example";
+    const seo = buildCategorySeoMeta({ name: "Fantasy", slug: "fantasy", siteName: "Novel", defaultOgImage: "/og.jpg" }, 1, "ko");
+    expect(seo.description).toBe("");
+    expect(JSON.stringify(seo)).not.toMatch(/novels\./);
+    const jsonLd = JSON.parse(seo.other["application/ld+json"]);
+    expect(jsonLd[0].description).toBeUndefined();
+    delete process.env.SITE_URL;
+  });
 });
