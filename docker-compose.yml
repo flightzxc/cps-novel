@@ -135,6 +135,28 @@ services:
       SITEMAP_AUTO_REFRESH_ALLOW_WRITE: ${SITEMAP_AUTO_REFRESH_ALLOW_WRITE:-false}
       FEATURE_PROMO_LINK_CLAIM: ${FEATURE_PROMO_LINK_CLAIM:-false}
       PROMO_LINK_CLAIM_ALLOW_WRITE: ${PROMO_LINK_CLAIM_ALLOW_WRITE:-false}
+      # 阶段2 第2步（`docs/adr/ADR-PROMO-CLAIM-BATCH-LIFECYCLE.md`）: the batch
+      # enqueue action (`src/app/(admin)/catalog-sync/_actions.ts` ->
+      # `enqueueCatalogBatch`, `src/lib/tasks/catalog-batch.ts`) reads
+      # `PROMO_CLAIM_LIFECYCLE_V1_ENABLED` from the WEB process's own
+      # `process.env` at submission time to decide whether a new promo_claim
+      # batch is stamped with `lifecycleVersion`/`lifecycleRole: "batch"` — so
+      # web must carry this var, not just worker. `worker` also needs the
+      # sizing knobs (window/shard min/max) for enumeration
+      # (`worker/handlers/catalog-batch.ts`'s `resolvePromoClaimLifecycleConfig`
+      # call), so the same six keys are duplicated there below. `scheduler`
+      # (第3步) is not wired yet — its own copy is that step's job, not this
+      # one's. Every default here matches `src/lib/tasks/promo-claim-
+      # lifecycle.ts`'s `PROMO_CLAIM_LIFECYCLE_DEFAULTS`; the switch defaults
+      # closed (D8), so leaving these unset reproduces today's behavior
+      # byte-for-byte in every environment, including every X8_LEVEL.
+      PROMO_CLAIM_LIFECYCLE_V1_ENABLED: ${PROMO_CLAIM_LIFECYCLE_V1_ENABLED:-false}
+      PROMO_CLAIM_BATCH_APPROVAL_TTL_MINUTES: ${PROMO_CLAIM_BATCH_APPROVAL_TTL_MINUTES:-1440}
+      PROMO_CLAIM_SHARD_WINDOW_MINUTES: ${PROMO_CLAIM_SHARD_WINDOW_MINUTES:-90}
+      PROMO_CLAIM_SHARD_SIZE_MAX: ${PROMO_CLAIM_SHARD_SIZE_MAX:-1000}
+      PROMO_CLAIM_SHARD_SIZE_MIN: ${PROMO_CLAIM_SHARD_SIZE_MIN:-50}
+      PROMO_CLAIM_CREDENTIAL_SAFETY_MARGIN_MINUTES: ${PROMO_CLAIM_CREDENTIAL_SAFETY_MARGIN_MINUTES:-30}
+      PROMO_CLAIM_SHARD_DEADLINE_GRACE_MINUTES: ${PROMO_CLAIM_SHARD_DEADLINE_GRACE_MINUTES:-10}
       # X8 gate identity work order (2026-09-05), 施工项二: content creation
       # on Web enqueues moboreader.preview_refresh.v1 (src/server/content-
       # creation/preview-enqueue.ts), whose eligibility check in
@@ -241,6 +263,23 @@ services:
       SITEMAP_AUTO_REFRESH_ALLOW_WRITE: ${SITEMAP_AUTO_REFRESH_ALLOW_WRITE:-false}
       FEATURE_PROMO_LINK_CLAIM: ${FEATURE_PROMO_LINK_CLAIM:-false}
       PROMO_LINK_CLAIM_ALLOW_WRITE: ${PROMO_LINK_CLAIM_ALLOW_WRITE:-false}
+      # 阶段2 第2步：`worker/handlers/catalog-batch.ts`'s enumeration reads its
+      # own copy of the sizing knobs (via `resolvePromoClaimLifecycleConfig`)
+      # to size a lifecycle batch's shards — see the web service block's own
+      # comment on this same six-key group for the full rationale (why
+      # `PROMO_CLAIM_LIFECYCLE_V1_ENABLED` itself is only ever READ on web at
+      # enqueue time, yet still listed here: the worker's `catalog-batch`
+      # handler resolves the whole config eagerly at construction and would
+      # throw on a malformed override even for a non-lifecycle batch, so its
+      # own env must carry the same six keys, not just the enable switch).
+      # `scheduler` (第3步) is not wired yet.
+      PROMO_CLAIM_LIFECYCLE_V1_ENABLED: ${PROMO_CLAIM_LIFECYCLE_V1_ENABLED:-false}
+      PROMO_CLAIM_BATCH_APPROVAL_TTL_MINUTES: ${PROMO_CLAIM_BATCH_APPROVAL_TTL_MINUTES:-1440}
+      PROMO_CLAIM_SHARD_WINDOW_MINUTES: ${PROMO_CLAIM_SHARD_WINDOW_MINUTES:-90}
+      PROMO_CLAIM_SHARD_SIZE_MAX: ${PROMO_CLAIM_SHARD_SIZE_MAX:-1000}
+      PROMO_CLAIM_SHARD_SIZE_MIN: ${PROMO_CLAIM_SHARD_SIZE_MIN:-50}
+      PROMO_CLAIM_CREDENTIAL_SAFETY_MARGIN_MINUTES: ${PROMO_CLAIM_CREDENTIAL_SAFETY_MARGIN_MINUTES:-30}
+      PROMO_CLAIM_SHARD_DEADLINE_GRACE_MINUTES: ${PROMO_CLAIM_SHARD_DEADLINE_GRACE_MINUTES:-10}
       # C-25 review fix (P0): `worker/handlers/sitemap-refresh.ts`'s
       # `createSitemapFamilyBuilder(db)` and `worker/handlers/indexnow-
       # delivery.ts`'s `isNovelIndexNowEligible` -> `isHiddenFromPublicView`
