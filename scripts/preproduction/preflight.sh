@@ -25,6 +25,13 @@ preprod_load_env || fail env_file 66
 # 详细说明与 docs/adr/ADR-PREPROD-APPROVED-OPEN-WRITE-GATES.md）。这里只把它
 # 判出的 reason 转交给 fail()；取证行留到最终 PASS 之前打印。
 write_gates_evidence="$(preprod_assert_write_gates)" || fail "$write_gates_evidence"
+# 阶段2 第5步（`docs/adr/ADR-PROMO-CLAIM-BATCH-LIFECYCLE.md`）：领推广链接
+# 生命周期的七项配置必须与 `resolvePromoClaimLifecycleConfig`
+# （`src/lib/tasks/promo-claim-lifecycle.ts`）逐条一致地校验通过，否则
+# fail closed 在这里——不要等到部署完之后才在 scheduler 的报错日志里发现
+# 一处配置笔误。见 lib.sh 里 `preprod_assert_promo_claim_lifecycle_config()`
+# 上方的详细说明。
+lifecycle_config_evidence="$(preprod_assert_promo_claim_lifecycle_config)" || fail "$lifecycle_config_evidence"
 [[ "${FEATURE_NOVEL_TAG_AUTO:-}" == "false" && "${AUTO_WRITE_AUTHORIZED:-}" == "NO" ]] || fail auto_tagging
 [[ "${ARTICLE_BLOG_ALLOW_WRITE:-}" == "false" && "${ARTICLE_NOVEL_REBIND_ALLOW_WRITE:-}" == "false" ]] || fail article_writes
 [[ "${GIT_COMMIT:-}" =~ ^[0-9a-f]{40}$ ]] || fail git_commit
@@ -78,4 +85,5 @@ if [[ -n "${PREPROD_RELEASE_IMAGE_REF:-}" ]]; then
   ' "$rendered" "$PREPROD_RELEASE_IMAGE_REF" || fail compose_image_mismatch
 fi
 echo "$write_gates_evidence"
+echo "$lifecycle_config_evidence"
 echo "PREPROD_PREFLIGHT=PASS"

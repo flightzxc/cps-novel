@@ -141,6 +141,147 @@ preprod_assert_write_gates() {
   return 0
 }
 
+# --- 领推广链接生命周期配置门禁（阶段2 第5步，`docs/adr/
+# ADR-PROMO-CLAIM-BATCH-LIFECYCLE.md`，D8） -----------------------------
+#
+# 背景：`src/lib/tasks/promo-claim-lifecycle.ts` 的
+# `resolvePromoClaimLifecycleConfig` 对七项配置做严格解析——六个数值项
+# （批准有效期/放行窗口/分片上下限/凭据安全余量/截止宽限）任何一项非法
+# （非整数、越界、`shardSizeMin > shardSizeMax`）都会抛出
+# `PromoClaimLifecycleConfigError`。但这个解析只在 web 入队、worker 枚举、
+# scheduler 每轮 tick 时才真正被调用——尤其是 scheduler：它的 tick 循环
+# 设计成"这一轮抛错、记日志、下一轮再试"（不会让配置错误崩掉整个进程），于是
+# 一处配置笔误的后果不是"部署失败"而是**静默失效**：容器一直 healthy、
+# 其它任务照常跑，只有生命周期分片永远不会被放行，且这条线索只在 scheduler
+# 自己的日志里才看得到。preflight 因此需要在部署前用同一套规则把这类笔误
+# 挡在外面。
+#
+# 下面六个数值判定逐条对应 `resolvePromoClaimLifecycleConfig` 里的
+# `positiveInteger`/`nonNegativeInteger`：
+#   - 未设置或去空白后为空串 → 用回退默认值，不算错误（`raw === undefined ||
+#     raw.trim() === ""` 的逐字对应）；
+#   - 否则必须是十进制整数字面量（可带前导负号），且满足正数
+#     （`> 0`）或非负（`>= 0`）——对应 TS 的 `Number.isSafeInteger(parsed) &&
+#     parsed > 0 / >= 0`；
+#   - `shardSizeMin` 的有效值（显式或回退默认）不得超过 `shardSizeMax` 的
+#     有效值。
+# 🔴 刻意不追认 JS `Number()` 能解析的全部写法（科学计数法 `1e3`、十六进制
+# `0x10`、前导 `+`）——环境变量里几乎不会出现这些写法，纯十进制整数正则
+# 对配置笔误更保守（宁可对一个古怪写法 fail closed，也不要把它悄悄当成
+# 数字接受）。`tests/backend/runtime/
+# promo-claim-lifecycle-config-gate.test.ts` 的"双跑"用例只用双方都无歧义
+# 同意的十进制样例（含负数/小数/非数字/空白/越界/min>max）核对两边判定一致，
+# 不覆盖这类奇特写法。
+#
+# 🔴 与 TS 解析器唯一刻意不同的一条：开关本身。`isPromoClaimLifecycleEnabled`
+# 对开关值从不报错——任何不等于精确字符串 `"true"` 的值都被 TS 静默当作
+# `"false"`（fail-closed 语义上没问题，D8 要求代码默认关闭）。但这意味着
+# 运营把目标机 env 里的开关笔误成 `"TRUE"`（大写）、`"1"` 这类值时，TS 侧
+# 完全不会报错，只会在完全不知情的情况下继续跑着"关闭"的旧行为——这正是
+# 本函数要拦的那类静默失效，只是发生在开关字段而不是数值字段。preflight
+# 因此对开关额外收紧成"只接受精确的 true / false / 未设置（含空白字符串）"，
+# 比 TS 本身更严格；这是有意的策略叠加，不是与 TS"不一致"——上面六个数值
+# 字段的判断规则才是必须逐条对齐 TS 的部分。
+#
+# 失败时把 `promo_claim_lifecycle_config_invalid variable=... value=...
+# reason=...` 写到 stdout（供调用方转交 `fail()`）并 `return 65`；成功时
+# 打印取证行 `PREPROD_PROMO_CLAIM_LIFECYCLE_CONFIG=PASS enabled=...
+# approvalTtlMinutes=... ...`（沿用有效值——未设置项显示回退默认值）并
+# `return 0`。
+#
+# 🔴 bash 3.2/5 双兼容，同 `preprod_assert_write_gates` 的约定：不用关联
+# 数组、`${var,,}`；用 `10#$digits` 强制十进制求值，避免 bash 算术把
+# `"008"` 这类带前导零的字面量误判成非法八进制数字（真实见过的坑：
+# `(( 008 ))` 在 bash 里因为 `8`/`9` 不是合法八进制数字而直接报语法错误，
+# 而 JS 的 `Number("008")` 是合法的十进制 `8`）。
+_pcl_trim() {
+  printf '%s' "$1" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//'
+}
+
+_pcl_is_integer_literal() {
+  [[ "$1" =~ ^-?[0-9]{1,15}$ ]]
+}
+
+# 把一个已通过 `_pcl_is_integer_literal` 校验的字面量转成十进制数值，
+# 用 `10#` 前缀强制按十进制求值（见上面注释），符号单独处理以避免
+# `10#-5` 这种 bash 不接受的写法。
+_pcl_decimal_value() {
+  local literal="$1" sign=1 digits="$1"
+  if [[ "$literal" == -* ]]; then sign=-1; digits="${literal#-}"; fi
+  echo $(( sign * 10#$digits ))
+}
+
+# $1=变量名（写进 reason 行）$2=原始值 $3=回退默认值 $4=positive|nonneg。
+# 成功时把有效值（未设置时是回退默认值，否则是解析后的十进制数）打印到
+# stdout 并 return 0；失败时把 reason 行打印到 stdout 并 return 65——与
+# 下面 `preprod_assert_promo_claim_lifecycle_config` 里 "$(...)" 捕获后
+# `|| { echo "$out"; return 65; }` 的用法配对，同一个函数体只会走其中一条
+# 输出路径，不会两条都打印。
+_pcl_resolve_integer() {
+  local variable="$1" raw="$2" fallback="$3" bound="$4" trimmed value
+  trimmed="$(_pcl_trim "$raw")"
+  if [[ -z "$trimmed" ]]; then printf '%s' "$fallback"; return 0; fi
+  if ! _pcl_is_integer_literal "$trimmed"; then
+    echo "promo_claim_lifecycle_config_invalid variable=$variable value=$raw reason=not_an_integer"
+    return 65
+  fi
+  value="$(_pcl_decimal_value "$trimmed")"
+  if [[ "$bound" == "positive" ]]; then
+    if (( value <= 0 )); then
+      echo "promo_claim_lifecycle_config_invalid variable=$variable value=$raw reason=must_be_positive"
+      return 65
+    fi
+  else
+    if (( value < 0 )); then
+      echo "promo_claim_lifecycle_config_invalid variable=$variable value=$raw reason=must_be_non_negative"
+      return 65
+    fi
+  fi
+  printf '%s' "$value"
+  return 0
+}
+
+preprod_assert_promo_claim_lifecycle_config() {
+  local enabled_raw enabled
+  enabled_raw="${PROMO_CLAIM_LIFECYCLE_V1_ENABLED:-}"
+  enabled="$(_pcl_trim "$enabled_raw")"
+  case "$enabled" in
+    "") enabled="false" ;;
+    "true"|"false") ;;
+    *)
+      echo "promo_claim_lifecycle_config_invalid variable=PROMO_CLAIM_LIFECYCLE_V1_ENABLED value=$enabled_raw reason=must_be_true_false_or_unset"
+      return 65
+      ;;
+  esac
+
+  local approval_ttl shard_window shard_min shard_max safety_margin grace out
+  out="$(_pcl_resolve_integer PROMO_CLAIM_BATCH_APPROVAL_TTL_MINUTES "${PROMO_CLAIM_BATCH_APPROVAL_TTL_MINUTES:-}" 1440 positive)" \
+    || { echo "$out"; return 65; }
+  approval_ttl="$out"
+  out="$(_pcl_resolve_integer PROMO_CLAIM_SHARD_WINDOW_MINUTES "${PROMO_CLAIM_SHARD_WINDOW_MINUTES:-}" 90 positive)" \
+    || { echo "$out"; return 65; }
+  shard_window="$out"
+  out="$(_pcl_resolve_integer PROMO_CLAIM_SHARD_SIZE_MIN "${PROMO_CLAIM_SHARD_SIZE_MIN:-}" 50 positive)" \
+    || { echo "$out"; return 65; }
+  shard_min="$out"
+  out="$(_pcl_resolve_integer PROMO_CLAIM_SHARD_SIZE_MAX "${PROMO_CLAIM_SHARD_SIZE_MAX:-}" 1000 positive)" \
+    || { echo "$out"; return 65; }
+  shard_max="$out"
+  if (( shard_min > shard_max )); then
+    echo "promo_claim_lifecycle_config_invalid variable=PROMO_CLAIM_SHARD_SIZE_MIN value=$shard_min reason=exceeds_max max=$shard_max"
+    return 65
+  fi
+  out="$(_pcl_resolve_integer PROMO_CLAIM_CREDENTIAL_SAFETY_MARGIN_MINUTES "${PROMO_CLAIM_CREDENTIAL_SAFETY_MARGIN_MINUTES:-}" 30 nonneg)" \
+    || { echo "$out"; return 65; }
+  safety_margin="$out"
+  out="$(_pcl_resolve_integer PROMO_CLAIM_SHARD_DEADLINE_GRACE_MINUTES "${PROMO_CLAIM_SHARD_DEADLINE_GRACE_MINUTES:-}" 10 nonneg)" \
+    || { echo "$out"; return 65; }
+  grace="$out"
+
+  echo "PREPROD_PROMO_CLAIM_LIFECYCLE_CONFIG=PASS enabled=$enabled approvalTtlMinutes=$approval_ttl shardWindowMinutes=$shard_window shardSizeMin=$shard_min shardSizeMax=$shard_max credentialSafetyMarginMinutes=$safety_margin deadlineGraceMinutes=$grace"
+  return 0
+}
+
 preprod_compose() {
   docker compose --env-file "$PREPROD_ENV_FILE" -p cps-novel \
     -f "$PREPROD_REPO_ROOT/docker-compose.yml" \
