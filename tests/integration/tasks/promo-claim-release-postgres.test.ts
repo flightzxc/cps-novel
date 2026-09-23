@@ -576,6 +576,91 @@ describe.skipIf(!enabled).sequential("promo-claim lifecycle: 阶段2 第3步 sch
     });
   });
 
+  /**
+   * 阶段2 第4步（施工任务 3.2）：D4 前置检查原先只在 `eligibility ===
+   * "deadline_missed_retry"` 时跑；本步把条件改成"只要 `releaseCount > 0`"，
+   * 覆盖"批次级暂停→恢复"这条同样可能已经产生 getcode 副作用的路径——
+   * `resumePromoClaimBatch`（`src/lib/tasks/promo-claim-batch-control.ts`）
+   * 把已放行过的分片交还成 `disabled` + `awaiting_release`，同时原样保留
+   * `releaseCount`。这里不经过批次级恢复接口本身（那是 3.1 的范围，有自己独立
+   * 的测试），而是直接构造"暂停又恢复后"的最终数据形状——分片
+   * `awaiting_release`、`releaseCount: 1`——因为本描述块只关心 scheduler 这
+   * 一侧的放行判定，不重复验证级联恢复本身的正确性。
+   */
+  describe("阶段2 第4步：批次级暂停→恢复后再放行必须重新过 D4（不论标记是 awaiting_release 还是 deadline_missed）", () => {
+    async function simulatePausedThenResumedShard(shardId: string, now: Date): Promise<void> {
+      const shard = await owner.genericTask.findUniqueOrThrow({ where: { id: shardId } });
+      const marker = { kind: "awaiting_release", source: "manual", at: now.toISOString() };
+      await owner.genericTask.update({
+        where: { id: shardId },
+        data: { status: "disabled", result: { ...(shard.result as Record<string, unknown>), taskControl: marker } },
+      });
+    }
+
+    it("恢复后的 awaiting_release 分片，其 pending 条目已有意图记录时，scheduler 拒绝重新放行并转人工", async () => {
+      const { shardIds } = await buildLifecycleShards(owner, foundation, 1, "release-resumed-unsafe");
+      const items = await owner.genericTaskItem.findMany({ where: { taskId: shardIds[0] } });
+      const bookId = items[0]!.targetId;
+
+      const releasedAt = new Date("2026-09-23T09:00:00.000Z");
+      const first = await runPromoClaimReleaseTick(scheduler, { now: releasedAt, env: LIFECYCLE_ON_ENV, logger: () => {} });
+      expect(first[0]).toMatchObject({ action: "released" });
+      expect((await owner.genericTask.findUniqueOrThrow({ where: { id: shardIds[0] } })).params).toMatchObject({ releaseCount: 1 });
+
+      // 模拟"曾经准备过 getcode 调用"：这本书已经有一条意图记录（同 D4 既有
+      // 用例的做法）。
+      await owner.$executeRaw(Prisma.sql`
+        INSERT INTO side_effect_intent (
+          id, effect_key, operation_type, idempotency_key, target_type, target_id,
+          channel_account_id, status, request_summary
+        ) VALUES (
+          ${randomUUID()}::uuid, ${randomUUID().replaceAll("-", "").padEnd(64, "0")}, 'promo_link.claim_promo',
+          ${randomUUID().replaceAll("-", "").padEnd(64, "0")}, 'promo_link', ${randomUUID()},
+          ${foundation.accountId}::uuid, 'confirmed', ${JSON.stringify({ novelSourceItemId: bookId, offerType: "existing_promo" })}::jsonb
+        )
+      `);
+
+      // 批次级暂停→恢复：分片交还成 disabled + awaiting_release，releaseCount
+      // 原样保留为 1（不是 0，也不经过 deadline_missed）。
+      const resumedAt = new Date(releasedAt.getTime() + 10 * 60_000);
+      await simulatePausedThenResumedShard(shardIds[0]!, resumedAt);
+      expect((await owner.genericTask.findUniqueOrThrow({ where: { id: shardIds[0] } })).params).toMatchObject({ releaseCount: 1 });
+
+      const retry = await runPromoClaimReleaseTick(scheduler, { now: resumedAt, env: LIFECYCLE_ON_ENV, logger: () => {} });
+      expect(retry[0]).toMatchObject({ action: "deadline_missed_twice", shardId: shardIds[0], detail: { reason: "unsafe_to_auto_retry" } });
+      const shard = await owner.genericTask.findUniqueOrThrow({ where: { id: shardIds[0] } });
+      expect(shard.status).toBe("disabled");
+      // `reason`（自由文本）只写在审计行里，标记本身只带 reasonCode——同
+      // 既有的"pending 条目已存在意图记录"用例（本文件上方）同一断言口径，
+      // 这里最初误写成断言标记上也有 `reason` 字段，被一次性容器真实跑测
+      // 抓到（AssertionError: expected reason "unsafe_to_auto_retry", 实际
+      // 是 null）后订正。
+      expect(readTaskControlMarker(shard.result)).toMatchObject({ reasonCode: "deadline_missed_twice" });
+      // D4 拒绝重放的条目本身仍然 pending、零写入。
+      const item = await owner.genericTaskItem.findFirstOrThrow({ where: { taskId: shardIds[0] } });
+      expect(item.status).toBe("pending");
+      expect(item.attemptCount).toBe(0);
+    });
+
+    it("恢复后的 awaiting_release 分片，pending 条目无意图记录且 attempt_count = 0 时，正常重新放行且 releaseCount + 1", async () => {
+      const { shardIds } = await buildLifecycleShards(owner, foundation, 1, "release-resumed-safe");
+      const releasedAt = new Date("2026-09-23T09:00:00.000Z");
+      const first = await runPromoClaimReleaseTick(scheduler, { now: releasedAt, env: LIFECYCLE_ON_ENV, logger: () => {} });
+      expect(first[0]).toMatchObject({ action: "released" });
+
+      const resumedAt = new Date(releasedAt.getTime() + 10 * 60_000);
+      await simulatePausedThenResumedShard(shardIds[0]!, resumedAt);
+      expect(await owner.sideEffectIntent.count({ where: { channelAccountId: foundation.accountId } })).toBe(0);
+
+      const retry = await runPromoClaimReleaseTick(scheduler, { now: resumedAt, env: LIFECYCLE_ON_ENV, logger: () => {} });
+      expect(retry[0]).toMatchObject({ action: "released", shardId: shardIds[0] });
+      const shard = await owner.genericTask.findUniqueOrThrow({ where: { id: shardIds[0] } });
+      expect(shard.status).toBe("pending");
+      expect(shard.params).toMatchObject({ releaseCount: 2 });
+      expect(readTaskControlMarker(shard.result)).toBeUndefined();
+    });
+  });
+
   describe("批次批准时刻先后：多批次时先放行更早批准的那个", () => {
     it("两个批次各一个分片，先提交的批次先被选中放行", async () => {
       const first = await buildLifecycleShards(owner, foundation, 1, "release-order-a");

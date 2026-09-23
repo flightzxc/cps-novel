@@ -11,15 +11,22 @@ import { isUniqueConstraintViolation, withDbRetry } from "@/lib/db/db-retry";
 import {
   CATALOG_BATCH_TASK_TYPE,
   catalogFinalizeGeneration,
+  isLifecycleShardParams,
   MOBOREADER_CATALOG_FINALIZE_TARGET_ID,
   MOBOREADER_CATALOG_TARGET_TYPES,
   MOBOREADER_TASK_TYPES,
   PARENT_BATCH_TASK_TYPES,
   PROMO_LINK_CLAIM_TASK_TYPE,
+  abortPromoClaimBatchTx,
   isParentBatchTaskType,
   mergeTaskControlResult,
+  pausePromoClaimBatchTx,
+  reapprovePromoClaimBatchTx,
   readTaskControlMarker,
+  resolvePromoClaimLifecycleConfig,
+  resumePromoClaimBatchTx,
   terminatePendingTaskItems,
+  type PromoClaimBatchControlError,
   type TaskControlMarker,
   type TaskFamily,
 } from "@/lib/tasks";
@@ -53,6 +60,20 @@ export const TASK_RESUME_AUDIT_ACTION = "task.resume";
 export const TASK_ABORT_AUDIT_ACTION = "task.abort";
 /** `terminatePendingTaskItems`'s reason code for items cascaded by a manual abort — distinct from `task_system_hold` (the worker's own halt) so the two are never confused when reading an item's own `error.code`. */
 export const TASK_ABORT_TERMINATION_REASON = "task_manually_aborted";
+
+// 阶段2 第4步（施工任务 3.1/3.3）：批次级暂停/恢复/中止/重新批准。这四个
+// 动作只对生命周期批次（`lifecycleVersion === 1 && lifecycleRole ===
+// "batch"`）生效，级联到它名下的分片——与上面单任务的 pause/resume/abort
+// 完全独立的一组 entry id / audit action，绝不复用 `task.pause` 等字面量，
+// 这样一次幂等重放的 `committedAudit` 查询不会在两组语义之间互相误判。
+export const PROMO_CLAIM_BATCH_PAUSE_ENTRY_ID = "admin.api.promo_claim_batch.pause";
+export const PROMO_CLAIM_BATCH_RESUME_ENTRY_ID = "admin.api.promo_claim_batch.resume";
+export const PROMO_CLAIM_BATCH_ABORT_ENTRY_ID = "admin.api.promo_claim_batch.abort";
+export const PROMO_CLAIM_BATCH_REAPPROVE_ENTRY_ID = "admin.api.promo_claim_batch.reapprove";
+export const PROMO_CLAIM_BATCH_PAUSE_AUDIT_ACTION = "promo_claim_batch.pause";
+export const PROMO_CLAIM_BATCH_RESUME_AUDIT_ACTION = "promo_claim_batch.resume";
+export const PROMO_CLAIM_BATCH_ABORT_AUDIT_ACTION = "promo_claim_batch.abort";
+export const PROMO_CLAIM_BATCH_REAPPROVE_AUDIT_ACTION = "promo_claim_batch.reapprove";
 
 // Phase C: catalog_scan folded into GenericTask (taskType = "catalog_scan");
 // it is no longer a physical family.
@@ -438,6 +459,13 @@ type LockedParentRow = {
    * CHECK-enforced column values), never by reading this field.
    */
   result: Prisma.JsonValue | null;
+  /**
+   * 阶段2 第4步：`resumeTask` 需要判定"这是一个生命周期分片"
+   * （`isLifecycleShardParams`）以拒绝对分片的直接单任务恢复——见
+   * `resumeTask` 自身的 doc comment。其余调用点（`pauseTask`/`abortTask`）
+   * 不读这个字段，多选出来的这一列对它们零影响。
+   */
+  params: Prisma.JsonValue | null;
 };
 
 type AuditRow = {
@@ -820,6 +848,10 @@ function taskSummary(row: TaskListRow, bookCounts?: CatalogBookCountsDto): TaskS
     "active_scope_conflict",
     "missing_locale",
     "unsupported_locale",
+    // 阶段2 第4步（施工任务 3.4）：书已挂在另一个批次仍在排队的生命周期
+    // 分片下——见 `worker/handlers/catalog-batch.ts` 的 `queuedElsewhere`
+    // 查询、`task-copy.ts` 的 `queued_in_other_batch` 中文说明。
+    "queued_in_other_batch",
   ]);
   const blockedReasonCounts = resultObject?.blockedReasonCounts && typeof resultObject.blockedReasonCounts === "object" && !Array.isArray(resultObject.blockedReasonCounts)
     ? Object.fromEntries(Object.entries(resultObject.blockedReasonCounts as Record<string, unknown>)
@@ -1352,12 +1384,12 @@ async function lockParent(
   let rows: LockedParentRow[];
   if (family === "channel_sync") {
     rows = await tx.$queryRaw(Prisma.sql`
-      SELECT id, status, task_type, channel_account_id, channel_app_id, result
+      SELECT id, status, task_type, channel_account_id, channel_app_id, result, params
       FROM channel_sync_task WHERE id = ${taskId}::uuid FOR UPDATE
     `);
   } else {
     rows = await tx.$queryRaw(Prisma.sql`
-      SELECT id, status, task_type, channel_account_id, channel_app_id, result
+      SELECT id, status, task_type, channel_account_id, channel_app_id, result, params
       FROM generic_task WHERE id = ${taskId}::uuid FOR UPDATE
     `);
   }
@@ -2136,6 +2168,15 @@ export async function resumeTask(
         if (parent.status !== "paused") {
           throw new TaskAdminError("task_admin_state_conflict", 409);
         }
+        // 阶段2 第4步：拒绝对一个生命周期分片的直接单任务恢复——分片一旦被
+        // 暂停，只能通过批次级恢复（`resumePromoClaimBatch`）交还成
+        // `disabled` + `awaiting_release`，重新交给 scheduler 走 D1/D5/D4
+        // 全套前置检查。如果这里放行，运营通过 `/tasks/<shardId>` 上的旧版
+        // 通用"恢复"按钮就能直接把分片改回 `pending`，绕开这些检查——见
+        // `isLifecycleShardParams` 自己的 doc comment。
+        if (parent.task_type === PROMO_LINK_CLAIM_TASK_TYPE && isLifecycleShardParams(parent.params)) {
+          throw new TaskAdminError("task_admin_state_conflict", 409);
+        }
 
         await checkResumePrecondition(tx, parent.task_type, parent.channel_account_id, now);
 
@@ -2268,6 +2309,240 @@ export async function abortTask(
         });
       }),
     { op: "task-admin.abortTask", itemId: taskId, idempotencyKey: input.requestId },
+  );
+}
+
+// ---------------------------------------------------------------------
+// 阶段2 第4步（施工任务 3.1/3.3）：批次级暂停 / 恢复 / 中止 / 重新批准。
+//
+// 这四个函数只是薄壳：2FA（`requireFreshAdminServiceMutation`）、幂等重放
+// （`committedAudit` + 本文件既有的 `replayTaskControl`/`replayAbort` 同一
+// 手法）、把 `@/lib/tasks/promo-claim-batch-control.ts` 返回的判别联合翻译成
+// `TaskAdminError`——真正的批次↔分片级联判定与写入全部在那个模块里，这里不
+// 重复实现。只对生命周期批次（`lifecycleVersion === 1 && lifecycleRole ===
+// "batch"` 的 `batch.materialize.v1` 父任务）生效；对任何其它任务调用，
+// `pausePromoClaimBatchTx` 等函数会返回 `not_lifecycle_batch`，翻译成
+// `task_admin_invalid_request`（400）——旧路径的单任务 `pauseTask`/
+// `resumeTask`/`abortTask` 完全不受影响，行为零变化。
+// ---------------------------------------------------------------------
+
+export type PromoClaimBatchControlDto = Readonly<{
+  batchId: string;
+  status: "paused" | "pending" | "cancelled";
+  pausedShardCount?: number;
+  releasedShardCount?: number;
+  terminatedShardCount?: number;
+  terminatedItemCount?: number;
+  wrote: boolean;
+  auditId: string;
+}>;
+
+export type PromoClaimBatchReapproveDto = Readonly<{
+  batchId: string;
+  status: "pending";
+  approvedAt: string;
+  approvalValidUntil: string;
+  wrote: boolean;
+  auditId: string;
+}>;
+
+function throwPromoClaimBatchControlError(error: PromoClaimBatchControlError): never {
+  if (error === "not_found") throw new TaskAdminError("task_admin_not_found", 404);
+  if (error === "not_lifecycle_batch") throw new TaskAdminError("task_admin_invalid_request", 400);
+  throw new TaskAdminError("task_admin_state_conflict", 409);
+}
+
+function replayPromoClaimBatchPause(audit: AuditRow, actorId: string, batchId: string, reason: string | null): PromoClaimBatchControlDto {
+  const after = jsonObject(audit.afterSnapshot);
+  if (
+    audit.actorId !== actorId || audit.entityId !== batchId || audit.reason !== reason
+    || after?.status !== "paused" || !Array.isArray(after.pausedShardIds)
+  ) {
+    throw new TaskAdminError("task_admin_idempotency_conflict", 409);
+  }
+  return Object.freeze({
+    batchId, status: "paused" as const, pausedShardCount: after.pausedShardIds.length, wrote: false, auditId: audit.id.toString(),
+  });
+}
+
+function replayPromoClaimBatchResume(audit: AuditRow, actorId: string, batchId: string): PromoClaimBatchControlDto {
+  const after = jsonObject(audit.afterSnapshot);
+  if (
+    audit.actorId !== actorId || audit.entityId !== batchId || audit.reason !== null
+    || after?.status !== "pending" || !Array.isArray(after.releasedShardIds)
+  ) {
+    throw new TaskAdminError("task_admin_idempotency_conflict", 409);
+  }
+  return Object.freeze({
+    batchId, status: "pending" as const, releasedShardCount: after.releasedShardIds.length, wrote: false, auditId: audit.id.toString(),
+  });
+}
+
+function replayPromoClaimBatchAbort(audit: AuditRow, actorId: string, batchId: string, reason: string | null): PromoClaimBatchControlDto {
+  const after = jsonObject(audit.afterSnapshot);
+  if (
+    audit.actorId !== actorId || audit.entityId !== batchId || audit.reason !== reason
+    || after?.status !== "cancelled" || !Array.isArray(after.terminatedShardIds) || typeof after.terminatedItemCount !== "number"
+  ) {
+    throw new TaskAdminError("task_admin_idempotency_conflict", 409);
+  }
+  return Object.freeze({
+    batchId, status: "cancelled" as const, terminatedShardCount: after.terminatedShardIds.length,
+    terminatedItemCount: after.terminatedItemCount, wrote: false, auditId: audit.id.toString(),
+  });
+}
+
+function replayPromoClaimBatchReapprove(audit: AuditRow, actorId: string, batchId: string): PromoClaimBatchReapproveDto {
+  const after = jsonObject(audit.afterSnapshot);
+  if (
+    audit.actorId !== actorId || audit.entityId !== batchId || audit.reason !== null
+    || after?.status !== "pending" || typeof after.approvedAt !== "string" || typeof after.approvalValidUntil !== "string"
+  ) {
+    throw new TaskAdminError("task_admin_idempotency_conflict", 409);
+  }
+  return Object.freeze({
+    batchId, status: "pending" as const, approvedAt: after.approvedAt, approvalValidUntil: after.approvalValidUntil,
+    wrote: false, auditId: audit.id.toString(),
+  });
+}
+
+export async function pausePromoClaimBatch(
+  input: { authorization: AdminServiceAuthorization; requestId: string; taskId: unknown; reason?: unknown },
+  dependencies: TaskAdminMutationDependencies,
+): Promise<PromoClaimBatchControlDto> {
+  const context = await requireFreshAdminServiceMutation(input.authorization, "task:manage", {
+    identities: dependencies.identities,
+    sessions: dependencies.sessions,
+    entryId: PROMO_CLAIM_BATCH_PAUSE_ENTRY_ID,
+    requestId: input.requestId,
+    env: dependencies.env,
+    now: dependencies.now,
+  });
+  const batchId = uuid(input.taskId);
+  const reason = optionalBoundedText(input.reason, 2_000);
+  const now = dependencies.now ?? new Date();
+
+  return withDbRetry(
+    () =>
+      dependencies.db.$transaction(async (tx) => {
+        await lockMutationRequest(tx, input.requestId);
+        const prior = await committedAudit(tx, PROMO_CLAIM_BATCH_PAUSE_AUDIT_ACTION, input.requestId);
+        if (prior) return replayPromoClaimBatchPause(prior, context.identity.id, batchId, reason);
+
+        const result = await pausePromoClaimBatchTx(tx, { batchId, actorId: context.identity.id, reason, requestId: input.requestId, now });
+        if (!result.ok) throwPromoClaimBatchControlError(result.error);
+        return Object.freeze({
+          batchId: result.batchId, status: "paused" as const, pausedShardCount: result.pausedShardIds.length,
+          wrote: true, auditId: result.auditId,
+        });
+      }),
+    { op: "task-admin.pausePromoClaimBatch", itemId: batchId, idempotencyKey: input.requestId },
+  );
+}
+
+export async function resumePromoClaimBatch(
+  input: { authorization: AdminServiceAuthorization; requestId: string; taskId: unknown },
+  dependencies: TaskAdminMutationDependencies,
+): Promise<PromoClaimBatchControlDto> {
+  const context = await requireFreshAdminServiceMutation(input.authorization, "task:manage", {
+    identities: dependencies.identities,
+    sessions: dependencies.sessions,
+    entryId: PROMO_CLAIM_BATCH_RESUME_ENTRY_ID,
+    requestId: input.requestId,
+    env: dependencies.env,
+    now: dependencies.now,
+  });
+  const batchId = uuid(input.taskId);
+  const now = dependencies.now ?? new Date();
+
+  return withDbRetry(
+    () =>
+      dependencies.db.$transaction(async (tx) => {
+        await lockMutationRequest(tx, input.requestId);
+        const prior = await committedAudit(tx, PROMO_CLAIM_BATCH_RESUME_AUDIT_ACTION, input.requestId);
+        if (prior) return replayPromoClaimBatchResume(prior, context.identity.id, batchId);
+
+        const result = await resumePromoClaimBatchTx(tx, { batchId, actorId: context.identity.id, requestId: input.requestId, now });
+        if (!result.ok) throwPromoClaimBatchControlError(result.error);
+        return Object.freeze({
+          batchId: result.batchId, status: "pending" as const, releasedShardCount: result.releasedShardIds.length,
+          wrote: true, auditId: result.auditId,
+        });
+      }),
+    { op: "task-admin.resumePromoClaimBatch", itemId: batchId, idempotencyKey: input.requestId },
+  );
+}
+
+export async function abortPromoClaimBatch(
+  input: { authorization: AdminServiceAuthorization; requestId: string; taskId: unknown; reason?: unknown },
+  dependencies: TaskAdminMutationDependencies,
+): Promise<PromoClaimBatchControlDto> {
+  const context = await requireFreshAdminServiceMutation(input.authorization, "task:manage", {
+    identities: dependencies.identities,
+    sessions: dependencies.sessions,
+    entryId: PROMO_CLAIM_BATCH_ABORT_ENTRY_ID,
+    requestId: input.requestId,
+    env: dependencies.env,
+    now: dependencies.now,
+  });
+  const batchId = uuid(input.taskId);
+  const reason = optionalBoundedText(input.reason, 2_000);
+  const now = dependencies.now ?? new Date();
+
+  return withDbRetry(
+    () =>
+      dependencies.db.$transaction(async (tx) => {
+        await lockMutationRequest(tx, input.requestId);
+        const prior = await committedAudit(tx, PROMO_CLAIM_BATCH_ABORT_AUDIT_ACTION, input.requestId);
+        if (prior) return replayPromoClaimBatchAbort(prior, context.identity.id, batchId, reason);
+
+        const result = await abortPromoClaimBatchTx(tx, { batchId, actorId: context.identity.id, reason, requestId: input.requestId, now });
+        if (!result.ok) throwPromoClaimBatchControlError(result.error);
+        return Object.freeze({
+          batchId: result.batchId, status: "cancelled" as const, terminatedShardCount: result.terminatedShardIds.length,
+          terminatedItemCount: result.terminatedItemCount, wrote: true, auditId: result.auditId,
+        });
+      }),
+    { op: "task-admin.abortPromoClaimBatch", itemId: batchId, idempotencyKey: input.requestId },
+  );
+}
+
+/**
+ * 3.3：重新批准。仅当批次停在 `system_hold:approval_expired` 且从未放行过
+ * 任何分片时允许——见 `reapprovePromoClaimBatchTx` 自己的 doc comment。
+ */
+export async function reapprovePromoClaimBatch(
+  input: { authorization: AdminServiceAuthorization; requestId: string; taskId: unknown },
+  dependencies: TaskAdminMutationDependencies,
+): Promise<PromoClaimBatchReapproveDto> {
+  const context = await requireFreshAdminServiceMutation(input.authorization, "task:manage", {
+    identities: dependencies.identities,
+    sessions: dependencies.sessions,
+    entryId: PROMO_CLAIM_BATCH_REAPPROVE_ENTRY_ID,
+    requestId: input.requestId,
+    env: dependencies.env,
+    now: dependencies.now,
+  });
+  const batchId = uuid(input.taskId);
+  const now = dependencies.now ?? new Date();
+  const env = dependencies.env ?? process.env;
+  const config = resolvePromoClaimLifecycleConfig(env);
+
+  return withDbRetry(
+    () =>
+      dependencies.db.$transaction(async (tx) => {
+        await lockMutationRequest(tx, input.requestId);
+        const prior = await committedAudit(tx, PROMO_CLAIM_BATCH_REAPPROVE_AUDIT_ACTION, input.requestId);
+        if (prior) return replayPromoClaimBatchReapprove(prior, context.identity.id, batchId);
+
+        const result = await reapprovePromoClaimBatchTx(tx, { batchId, actorId: context.identity.id, requestId: input.requestId, now, config });
+        if (!result.ok) throwPromoClaimBatchControlError(result.error);
+        return Object.freeze({
+          batchId: result.batchId, status: "pending" as const, approvedAt: result.approvedAt, approvalValidUntil: result.approvalValidUntil,
+          wrote: true, auditId: result.auditId,
+        });
+      }),
+    { op: "task-admin.reapprovePromoClaimBatch", itemId: batchId, idempotencyKey: input.requestId },
   );
 }
 

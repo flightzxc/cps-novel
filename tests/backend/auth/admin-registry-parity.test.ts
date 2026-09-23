@@ -45,6 +45,11 @@ const EXPECTED_TASK_ROUTES = [
   { path: "/api/admin/tasks/pause", methods: ["POST"] },
   { path: "/api/admin/tasks/resume", methods: ["POST"] },
   { path: "/api/admin/tasks/abort", methods: ["POST"] },
+  // 阶段2 第4步（施工任务 3.1/3.3）：批次级暂停/恢复/中止/重新批准。
+  { path: "/api/admin/tasks/promo-claim-batch/pause", methods: ["POST"] },
+  { path: "/api/admin/tasks/promo-claim-batch/resume", methods: ["POST"] },
+  { path: "/api/admin/tasks/promo-claim-batch/abort", methods: ["POST"] },
+  { path: "/api/admin/tasks/promo-claim-batch/reapprove", methods: ["POST"] },
   { path: "/api/admin/tasks/manual-reviews", methods: ["GET"] },
   { path: "/api/admin/tasks/manual-reviews/resolve", methods: ["POST"] },
   { path: "/api/admin/promo-links", methods: ["GET"] },

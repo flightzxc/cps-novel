@@ -155,7 +155,12 @@ describe("promo-claim-release: releasePromoClaimShardsForAccount 分支（假 tx
 
   describe("(b) D4 前置检查：错过截止时间后重新放行前，已有意图记录的条目必须挡住重放", () => {
     function buildRetryScenario() {
-      const shard = shardRow({ resultTaskControl: { kind: "system_hold", source: "system", at: "2026-09-22T00:00:00.000Z", reasonCode: "deadline_missed" }, params: { missedDeadlineCount: 1 } });
+      // releaseCount: 1——一个真实的"错过截止时间等待重新放行"分片必然已经被
+      // 放行过至少一次（3.2 收口：D4 前置检查现在按 `releaseCount > 0` 触发，
+      // 不再只看 `deadline_missed_retry` 这个 eligibility 分支本身，这个字段
+      // 如果仍留着构造函数的默认值 0，这条用例会因为"看起来像从未放行过"而
+      // 悄悄跳过 D4 检查——2026-09-23 补齐 3.2 后在这里真实抓到过）。
+      const shard = shardRow({ resultTaskControl: { kind: "system_hold", source: "system", at: "2026-09-22T00:00:00.000Z", reasonCode: "deadline_missed" }, params: { missedDeadlineCount: 1, releaseCount: 1 } });
       const batchParams = { approvedAt: "2026-09-20T00:00:00.000Z", approvalValidUntil: "2026-09-21T00:00:00.000Z", firstReleasedAt: "2026-09-20T01:00:00.000Z" };
       return makeFakeTx([
         ...admissionFreeRules(),

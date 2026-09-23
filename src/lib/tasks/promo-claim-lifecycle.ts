@@ -74,6 +74,41 @@ export function isPromoClaimLifecycleRole(value: unknown): value is PromoClaimLi
     && (PROMO_CLAIM_LIFECYCLE_ROLES as readonly string[]).includes(value);
 }
 
+function plainParamsObject(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
+}
+
+/**
+ * 阶段2 第4步：从一个已读出的 `GenericTask.params`（任意 JSON 值，未经校验）
+ * 判定"这是一个生命周期批次父任务"——`lifecycleVersion` 必须精确等于 1
+ * （而不是"存在即算数"，理由同 {@link PROMO_CLAIM_LIFECYCLE_VERSION} 自己的
+ * doc comment：给未来版本演进留空间）且 `lifecycleRole` 精确等于 `"batch"`。
+ * 供任务管理后台的 mutation service 模块（批次级暂停/恢复/中止/重新批准）与
+ * `src/lib/tasks/promo-claim-batch-control.ts` 共用，避免这条判定散落成两份
+ * 字面量比较。
+ */
+export function isLifecycleBatchParams(params: unknown): boolean {
+  const p = plainParamsObject(params);
+  return p?.lifecycleVersion === PROMO_CLAIM_LIFECYCLE_VERSION && p?.lifecycleRole === PROMO_CLAIM_LIFECYCLE_ROLE_BATCH;
+}
+
+/**
+ * 阶段2 第4步：同上，判定"这是一个生命周期分片子任务"。用于任务管理后台
+ * mutation service 模块的 `resumeTask` 拒绝对分片的直接单任务
+ * 恢复——分片一旦被暂停，只能通过批次级恢复（`resumePromoClaimBatch`）交还
+ * `disabled` + `awaiting_release`，绝不允许直接跳回 `pending`（设计 §5.1 /
+ * 施工任务 3.1："被暂停的已放行分片不得直接改回 pending"）。如果不挡住
+ * 直接单任务恢复，运营通过 `/tasks/<shardId>` 上的旧版通用"恢复"按钮
+ * 仍能绕过 scheduler 的 D4/凭据前置检查，重新放出一个可能已经调用过
+ * getcode 的分片。
+ */
+export function isLifecycleShardParams(params: unknown): boolean {
+  const p = plainParamsObject(params);
+  return p?.lifecycleVersion === PROMO_CLAIM_LIFECYCLE_VERSION && p?.lifecycleRole === PROMO_CLAIM_LIFECYCLE_ROLE_SHARD;
+}
+
 // ---------------------------------------------------------------------
 // 系统暂停原因码（新增于 `kind: "system_hold"` 之上，`reasonCode` 字段仍是
 // `src/lib/tasks/task-control.ts` 里的自由字符串，这里只是把这一族的字面量

@@ -4,6 +4,7 @@ export * from "./article-generate";
 export * from "./parent-batch";
 export * from "./legacy-content-create";
 export * from "./moboreader";
+export * from "./promo-claim-batch-control";
 export * from "./promo-claim-lifecycle";
 export * from "./promo-claim-release";
 export * from "./promo-link-claim";

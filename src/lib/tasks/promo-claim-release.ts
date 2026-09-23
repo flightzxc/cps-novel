@@ -61,7 +61,15 @@ import { recomputeParentTask } from "./store";
 export const PROMO_CLAIM_INTENT_OPERATION_TYPE = "promo_link.claim_promo";
 
 const ACTIVE_TASK_STATUSES = ["pending", "processing"] as const;
-const HELD_BATCH_STATUSES = ["paused", "cancelled", "disabled"] as const;
+/**
+ * 阶段2 第4步：导出（原为模块私有）供
+ * `src/lib/tasks/promo-claim-batch-control.ts`（批次级暂停/恢复/中止，
+ * 施工任务 3.1）复用同一份"批次已经不是正常状态"判据——批次级暂停的可放行性
+ * 判定与本文件 `selectNextReleasableShard` 排除已暂停/已中止/系统暂停批次的
+ * 判定必须是同一份数组，不能各自维护一份字面量，否则两处对"正常"的定义迟早
+ * 会漂移。
+ */
+export const HELD_BATCH_STATUSES = ["paused", "cancelled", "disabled"] as const;
 
 // ---------------------------------------------------------------------
 // 纯判定（可独立单测，不接触数据库）。
@@ -701,7 +709,7 @@ export async function releasePromoClaimShardsForAccount(
 
   const candidate = await selectNextReleasableShard(tx, accountId);
   if (!candidate) return { channelAccountId: accountId, action: "no_eligible_shard" };
-  const { batch, shard, eligibility } = candidate;
+  const { batch, shard } = candidate;
 
   // D1 批准时钟：只在这个批次从未放行过任何分片时生效。
   if (
@@ -726,10 +734,20 @@ export async function releasePromoClaimShardsForAccount(
     };
   }
 
-  // D4 前置检查：只对"错过截止时间后重新放行"的分片生效，第一次放行
-  // （`awaiting_release`）不需要——它从未被放行过，不可能有任何 getcode
-  // 副作用。
-  if (eligibility === "deadline_missed_retry") {
+  // D4 前置检查（施工任务 3.2 收口）：只要这个分片曾经被放行过至少一次
+  // （`releaseCount > 0`），不论它现在的标记是 `awaiting_release`（例如
+  // 批次级暂停后又被恢复——`resumePromoClaimBatch` 会把已放行过的分片交还
+  // 成 `disabled` + `awaiting_release`，同时原样保留 `releaseCount`，见
+  // `src/lib/tasks/promo-claim-batch-control.ts`）还是
+  // `system_hold:deadline_missed`（错过截止时间自动等待重新放行），放行前
+  // 都必须重新跑一遍这条安全检查。原先只在 `eligibility ===
+  // "deadline_missed_retry"` 时检查，遗漏了"手动暂停→恢复"这条同样可能已经
+  // 产生 getcode 副作用的路径——一个已经被放行过、其中某个条目已经调用过
+  // getcode（或已有意图记录）的分片，如果被人工暂停后又恢复，不能被当成
+  // "第一次放行"直接免检。第一次放行（`releaseCount === 0`）则完全不变——
+  // 它从未被放行过，结构上不可能有任何 getcode 副作用。
+  const releaseCount = typeof shard.params.releaseCount === "number" ? shard.params.releaseCount : 0;
+  if (releaseCount > 0) {
     const unsafe = await hasUnsafePendingItems(tx, shard.id, accountId);
     if (unsafe) {
       const missedDeadlineCount = typeof shard.params.missedDeadlineCount === "number" ? shard.params.missedDeadlineCount : 1;

@@ -6,6 +6,8 @@ import {
   computeShardSize,
   evaluateCredentialReadiness,
   isApprovalExpired,
+  isLifecycleBatchParams,
+  isLifecycleShardParams,
   isPastDeadlineWithGrace,
   isPromoClaimLifecycleEnabled,
   isPromoClaimLifecycleRole,
@@ -344,5 +346,38 @@ describe("deadline + grace (§5.6/§5.7 second line of defense)", () => {
     expect(isPastDeadlineWithGrace(null, 10, now)).toBe(true);
     expect(isPastDeadlineWithGrace(undefined, 10, now)).toBe(true);
     expect(isPastDeadlineWithGrace("not-a-date", 10, now)).toBe(true);
+  });
+});
+
+describe("阶段2 第4步：isLifecycleBatchParams / isLifecycleShardParams", () => {
+  it("批次参数（lifecycleVersion=1, lifecycleRole=batch）判定为批次，不是分片", () => {
+    const params = { lifecycleVersion: PROMO_CLAIM_LIFECYCLE_VERSION, lifecycleRole: PROMO_CLAIM_LIFECYCLE_ROLE_BATCH, approvedAt: "2026-09-23T00:00:00.000Z" };
+    expect(isLifecycleBatchParams(params)).toBe(true);
+    expect(isLifecycleShardParams(params)).toBe(false);
+  });
+
+  it("分片参数（lifecycleVersion=1, lifecycleRole=shard）判定为分片，不是批次", () => {
+    const params = { lifecycleVersion: PROMO_CLAIM_LIFECYCLE_VERSION, lifecycleRole: PROMO_CLAIM_LIFECYCLE_ROLE_SHARD, shardIndex: 0 };
+    expect(isLifecycleShardParams(params)).toBe(true);
+    expect(isLifecycleBatchParams(params)).toBe(false);
+  });
+
+  it("角色字段缺失（旧数据/非生命周期任务）两者都判定为 false", () => {
+    const params = { lifecycleVersion: PROMO_CLAIM_LIFECYCLE_VERSION };
+    expect(isLifecycleBatchParams(params)).toBe(false);
+    expect(isLifecycleShardParams(params)).toBe(false);
+  });
+
+  it("lifecycleVersion 不精确等于 1 时两者都判定为 false（为将来版本演进留空间）", () => {
+    const params = { lifecycleVersion: 2, lifecycleRole: "shard" };
+    expect(isLifecycleShardParams(params)).toBe(false);
+    expect(isLifecycleBatchParams({ lifecycleVersion: 2, lifecycleRole: "batch" })).toBe(false);
+  });
+
+  it("非对象 / null / undefined 输入两者都 fail-closed 为 false", () => {
+    for (const value of [null, undefined, "shard", 1, []]) {
+      expect(isLifecycleBatchParams(value)).toBe(false);
+      expect(isLifecycleShardParams(value)).toBe(false);
+    }
   });
 });

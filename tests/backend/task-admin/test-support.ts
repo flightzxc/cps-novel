@@ -56,7 +56,12 @@ export async function issueTaskAuthorization(
       | "/api/admin/tasks/manual-reviews/resolve"
       | "/api/admin/tasks/pause"
       | "/api/admin/tasks/resume"
-      | "/api/admin/tasks/abort";
+      | "/api/admin/tasks/abort"
+      // 阶段2 第4步（施工任务 3.1/3.3）：批次级暂停/恢复/中止/重新批准。
+      | "/api/admin/tasks/promo-claim-batch/pause"
+      | "/api/admin/tasks/promo-claim-batch/resume"
+      | "/api/admin/tasks/promo-claim-batch/abort"
+      | "/api/admin/tasks/promo-claim-batch/reapprove";
     requestId?: string;
     env?: NodeJS.ProcessEnv;
   },
@@ -116,6 +121,13 @@ type FakeParent = {
   completedAt: Date | null;
   result: unknown;
   error: unknown;
+  /**
+   * 阶段2 第4步：`lockParent`（`src/server/task-admin/service.ts`）现在也
+   * SELECT 这一列，供 `resumeTask` 判定"这是一个生命周期分片"以拒绝对分片的
+   * 直接单任务恢复。默认未设置（`undefined`）——每一条既有用例都不受影响，
+   * 因为 `isLifecycleShardParams(undefined)` 恒为 `false`。
+   */
+  params?: unknown;
 };
 
 export type FakeCredential = {
@@ -344,6 +356,7 @@ export class TaskAdminFakeDb {
               channel_account_id: row.channelAccountId,
               channel_app_id: row.channelAppId,
               result: row.result,
+              params: row.params ?? null,
             }];
           }
         }
