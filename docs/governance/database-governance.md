@@ -110,6 +110,28 @@ Migration 演进，当前 Credential 状态增量为
 | `schedule_run` | ORIGINAL_REQUIRED | 确定 scheduled instant、revision、DST/misfire 语义 | schedule+scheduled_for 唯一；manual trigger 独立唯一 | `globalThis` 去重 |
 | `cron_run` | ORIGINAL_REQUIRED | 一次 Scheduler enqueue 结果及唯一 Task 关联 | schedule_run、generic_task 分别 1:1 | Scheduler 持有凭证 |
 
+#### 阶段2（`docs/adr/ADR-PROMO-CLAIM-BATCH-LIFECYCLE.md`）：领推广链接生命周期新增 JSON 键
+
+同 Phase C 的 11 个 CatalogScan 专属字段、v0.2.0 foundation 的 IndexNow attempt 字段一样，以下都是落在 `generic_task.params`/`generic_task.result`/`generic_task_item.payload` 这三个既有 JSONB 列内部的新增键，不是新增数据库对象或列，因此**不新增** `database-schema-dictionary.jsonl` 记录——三列各自的字典记录（`db:public:generic_task:params`/`db:public:generic_task:result`/`db:public:generic_task_item:payload`）本就是 `json_schema_version: "1"`，本次新增键都是向后兼容的可选追加（旧任务行没有这些键时按"非生命周期任务"处理，见 `src/lib/tasks/promo-claim-lifecycle.ts` 与 `worker/handlers/promo-link-claim.ts` 对 `lifecycle: "shard_v1"`/`lifecycleRole` 缺失时的兼容分支），不构成破坏性结构变更，`json_schema_version` 维持 `"1"` 不变。
+
+- **批次父任务**（`generic_task.task_type = 'batch.materialize.v1'`，`operation = 'promo_claim'` 且开关开启时）`params` 新增：
+  - `lifecycleVersion`（固定 `1`）、`lifecycleRole`（固定 `"batch"`，与分片的 `"shard"` 区分，见 D1/D6 批准时钟与死锁修复说明）；
+  - `approvedAt`（提交时刻）、`approvalValidUntil`（= `approvedAt + PROMO_CLAIM_BATCH_APPROVAL_TTL_MINUTES`，D1 批准时钟的截止）；
+  - `firstReleasedAt`（首个分片放行时刻，放行前缺失，一旦写入即永久有效，批次不再因创建时间要求重新批准）。
+- **批次父任务** `result.shardPlan`（枚举完成后写入，一次性，不随分片进度更新）：`{ shardSize, shardCount, windowMinutes, shardSizeMin, shardSizeMax, sizingBasis: { sampleCount, source, p90Seconds } }`——`sizingBasis.source` 取值 `"measured_recent_completed_items"` 或 `"fallback_insufficient_sample"`，记录分片大小计算依据的实测单本耗时与样本量（D3）。
+- **批次父任务** `result.blockedReasonCounts` 新增枚举值 `queued_in_other_batch`：枚举时发现某本书已挂在另一个批次仍在排队（`disabled`/`paused`）的生命周期分片下，阻断计入该原因（施工任务 3.4，阻止跨批次对同一本书重复排队）。
+- **分片子任务**（`generic_task.task_type = 'promo_link.claim.v1'`，`params.lifecycleRole = "shard"`）`params` 新增：
+  - `lifecycleVersion`（固定 `1`）、`lifecycleRole`（固定 `"shard"`）、`shardIndex`（分片在批次内的序号，从 0 起）；
+  - `releaseCount`（放行次数，初始 0）、`missedDeadlineCount`（错过截止时间次数，初始 0，达到 2 进入 `deadline_missed_twice`）；
+  - `releasedAt`/`deadlineAt`（scheduler 放行时才写入；放行前缺失——`selectPending` 的下推条件正是靠"生命周期分片但 `deadlineAt` 缺失或已过"挡住未放行/已过期分片的条目领取，见 `src/lib/tasks/store.ts`）。
+- **分片子任务的条目**（`generic_task_item.payload`，`target_type = 'novel_source_item'`）新增 `lifecycle: "shard_v1"`：handler（`worker/handlers/promo-link-claim.ts`）据此改用任务级 `deadlineAt + PROMO_CLAIM_SHARD_DEADLINE_GRACE_MINUTES` 宽限判定过期，不再依赖载荷里的 `expiresAt`（该字段仍保留写入作兼容值，不再被读取判过期）。
+- **任务控制标记**（`generic_task.result.taskControl`，`src/lib/tasks/task-control.ts`）：
+  - 新增 `kind: "awaiting_release"`——分片枚举出来时的初始标记（状态 `disabled`），与恢复到"等待放行"时复用同一 `kind`；
+  - `kind: "system_hold"` 新增五个 `reasonCode`：`approval_expired`（批准时钟到期，只能人工重新批准）、`credential_not_ready`（凭据三条件不满足，条件满足后 scheduler 自动恢复）、`deadline_missed`（首次错过截止时间，满足 D4 前置检查后自动重新放行）、`deadline_missed_twice`（连续两次错过，只能人工处理）、`lifecycle_disabled`（回退开关已关闭，重新开启后自动恢复）。
+- `taskControl` 里 `awaiting_release` 与上述五个 `system_hold.reasonCode` 均只是既有 `result` JSONB 内的自由文本字段值扩充，不改变 `TASK_CONTROL_KINDS` 之外的任何 CHECK 约束（`task_control.ts` 本身新增的常量 `TASK_CONTROL_KINDS`/`PROMO_CLAIM_SYSTEM_HOLD_REASON_CODES` 是应用层枚举，不是数据库 CHECK）。
+
+`node scripts/check-database-dictionary-drift.mjs` 复核：以上改动均在既有 JSONB 列内部，字典 `recordCount`/`activeCount`/表数/约束数与本节上一条变更日志行（2026-09-23，`recordCount: 1234`）逐字相同，drift 为 0。
+
 ### 3.5 Outbox 与首页轮播
 
 | 表 | 分类 | 字段责任 | 关键约束 | DROP |

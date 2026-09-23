@@ -119,6 +119,122 @@ scripts or SQL), confirm the worker validation succeeds, and confirm its
 procedure and the read-only query are in
 `docs/governance/ENVIRONMENT_PROVISIONING_CHECKLIST.md` §3.
 
+### 领推广链接生命周期（阶段2，`docs/adr/ADR-PROMO-CLAIM-BATCH-LIFECYCLE.md`）
+
+以下内容中文书写（运维说明），代码标识、环境变量、状态枚举原样保留英文。
+
+#### 开启 / 关闭步骤与审批要求
+
+- 开关 `PROMO_CLAIM_LIFECYCLE_V1_ENABLED` 代码默认 `false`，预生产模板
+  （`infra/preproduction/preprod.env.example`）同样保持默认关闭。开启是一项**独立的、
+  需要 Owner 单独批准的运维操作**，不随发布自动发生（D8）。
+- 预生产 UAT 开启：Owner 批准后，改目标机 `/opt/cps-novel/shared/env/preprod.env`——
+  把 `PROMO_CLAIM_LIFECYCLE_V1_ENABLED` 改成 `"true"`（做 UAT 场景验证时，可一并调小
+  `PROMO_CLAIM_SHARD_WINDOW_MINUTES`/`PROMO_CLAIM_BATCH_APPROVAL_TTL_MINUTES` 等其余
+  六项，配合更快触发多次放行/错过截止时间/凭据暂停）。
+- **不是发新版**：`CPS_NOVEL_APP_IMAGE`、`GIT_COMMIT` 均不变。执行步骤：
+  1. `source scripts/preproduction/lib.sh && scripts/preproduction/preflight.sh`——
+     阶段2 第5步起，preflight 会用与
+     `resolvePromoClaimLifecycleConfig`（`src/lib/tasks/promo-claim-lifecycle.ts`）
+     逐条一致的规则校验这七项配置（`preprod_assert_promo_claim_lifecycle_config()`），
+     数值笔误、开关笔误（如 `"TRUE"`）都会在这一步 fail closed，不会等到部署完之后
+     才在 scheduler 的报错日志里发现；
+  2. 依次 `preprod_compose_app_up web`、`preprod_compose_app_up worker`、
+     `preprod_compose_app_up scheduler`（`up -d --no-deps`，只重建这三个应用服务，
+     postgres 与其它服务不受影响）；
+  3. 不需要跑任何 migration、不需要停机。
+- 关闭（紧急回退）：把开关改回 `"false"`，重复上面三步。已按新生命周期创建的批次
+  进入系统暂停 `lifecycle_disabled`；已经放行的那一个分片正常跑完；不会有任何条目
+  被改写成失败（设计 §5.1）。
+
+#### 如何观察
+
+- **scheduler 结构化日志事件名**（`console.info`/`console.error` 一行一个 JSON
+  事件，`component: "promo_claim_release"`）：
+  - `promo_claim_release.tick`：每轮对每个候选渠道账号的判定结果，`action` 字段取值
+    见 `PromoClaimReleaseAction`（`released`/`admission_blocked`/`deadline_missed`/
+    `deadline_missed_twice`/`lifecycle_disabled`/`promo_feature_disabled`/
+    `approval_expired`/`credential_not_ready`/`no_eligible_shard`/
+    `skipped_active_scope_conflict`）；
+  - `promo_claim_release.tick_error`：某个账号这一轮判定时抛出的错误（已单独捕获，
+    不影响其它账号）；
+  - `promo_claim_release.tick_failed`（`scheduler/index.ts`）：整轮调用本身抛出的
+    错误——**这是配置笔误的静默失效信号**：`resolvePromoClaimLifecycleConfig` 解析
+    失败会在这里每 60 秒（`SCHEDULER_INTERVAL_SECONDS`）报一次错、进程不会崩溃，
+    容器仍然 healthy，所有生命周期分片会一直卡在等待放行——出现这个事件名说明生命
+    周期功能已经在静默失效，需要立即核对目标机 env 的七项配置。
+- **任务中心批次页**：批次详情显示总数/已领取/已有推广码/人工核对/失败/剩余六类
+  计数、按实测速度估算的完成时间（保守串行估算，见 ADR 第 7 节第 9 条）、当前放行
+  的分片及其截止时间、批次状态与暂停原因（中文说明 + 恢复方式）；分片列表显示每片
+  的状态、放行次数、放行时刻、截止时间、计数。
+- **只读 SQL 检查"同一账号至多一个分片处于 pending/processing"**（D6 不变量）：
+
+  ```sql
+  SELECT channel_account_id, count(*)
+  FROM generic_task
+  WHERE task_type = 'promo_link.claim.v1'
+    AND params->>'lifecycleVersion' = '1' AND params->>'lifecycleRole' = 'shard'
+    AND status IN ('pending', 'processing')
+  GROUP BY channel_account_id
+  HAVING count(*) > 1;
+  ```
+
+  预期返回 0 行；出现任意一行按 P0 处理。
+
+#### 暂停原因与恢复方式一览（设计 §5.8 + 施工中新增的规则）
+
+| 原因 | 标记 | 恢复方式 |
+| --- | --- | --- |
+| 运营手动暂停（批次级） | `paused` | 批次级恢复（`task:manage`，需 2FA） |
+| 批准过期（从未放行过任何分片） | `system_hold: approval_expired` | 只能批次级"重新批准" |
+| 凭据未就绪 | `system_hold: credential_not_ready` | 凭据满足 D5 三项条件后，scheduler 自动恢复 |
+| 错过截止时间（第 1 次） | `system_hold: deadline_missed` | 满足 D4 前置检查后，scheduler 自动重新放行 |
+| 连续两次错过截止时间 | `system_hold: deadline_missed_twice` | **只能批次级中止**，无单独的"重新放行这一片"操作（设计 §5.8 本身的选择，不是遗漏）；需要继续处理这些书目须批次级中止后重新提交一个新批次 |
+| D4 前置检查发现不安全条目（已放行过、可能有 getcode 副作用） | `system_hold: deadline_missed_twice`，`reason: "unsafe_to_auto_retry"` | 同上，只能批次级中止，人工核对具体条目 |
+| 回退开关已关闭 | `system_hold: lifecycle_disabled` | 重新开启开关后，scheduler 自动恢复 |
+
+补充规则（实施期间收口，详见 ADR 第 7 节）：
+
+- **单任务暂停 / 恢复对生命周期分片一律拒绝**：在分片自己的任务详情页点旧版单任务
+  "暂停"/"恢复"按钮会收到 `409`（`task_admin_state_conflict`）——只能走批次级操作，
+  界面上批次详情页已经隐藏了这两个按钮，直接访问分片详情页仍会被服务端拒绝；
+- **单任务"中止"仍然允许**：放弃这一片、批次继续，是合理的人工处置；
+- **系统暂停中的批次不能再手动暂停**：批次已经处于任一 `system_hold` 原因码下时，
+  批次级"暂停"操作会返回 `state_conflict`，避免系统暂停与人工暂停的标记互相覆盖。
+
+#### grants 说明
+
+`scheduler_app` 在阶段2新增的最小权限（`infra/postgres/grants.sql`，随部署
+`migrate-approved` 步骤重放，不需要单独操作）：
+
+- `channel_account_credential` 非秘密列级 SELECT（`id`/`channel_account_id`/
+  `status`/`last_validated_at`/`expires_at`/`created_at`）——D5 凭据三条件判定；
+- `side_effect_intent` 三列级 SELECT（`operation_type`/`channel_account_id`/
+  `request_summary`）——D4 前置检查；
+- `operation_audit` 表级 SELECT + INSERT（原因见 ADR 第 7 节第 1 条：Prisma
+  `.create()` 的 RETURNING 需要列读权限，与 `web_app`/`worker_app` 既有形状一致）。
+- `generic_task`/`generic_task_item` 的 SELECT/UPDATE 复用既有授权，未新增。
+
+`scheduler_app` 从不读取凭据密文列（`encrypted_secret`/`secret_fingerprint`），
+`scheduler/` 目录与本模块的文本守卫（禁止出现 `decrypt`/`createDecipheriv`/
+`CHANNEL_CREDENTIAL_` 字样）保证这一点不会在未来悄悄被打破。
+
+#### 从 v0.4.0 回滚到 v0.3.0 的影响与步骤建议
+
+- v0.3.0（回滚目标）的代码完全不认识生命周期分片这套概念：它只按旧的 `disabled` +
+  `channelSyncTask`/`generic_task` 现有语义读写，**不会主动改动**任何带
+  `lifecycleVersion`/`lifecycleRole` 参数的行——`disabled` 分片会原样停在
+  `disabled`，其名下的条目会原样停在 `pending`，不会被旧代码误判成任何一种旧含义并
+  改写成失败；
+- `grants.sql` 重放会去掉 `scheduler_app` 在阶段2新增的三项权限（回滚到 v0.3.0 版本
+  的 `grants.sql`），对 v0.3.0 的 scheduler 代码无影响（它本来就不会用到这些权限）；
+- **建议顺序**：回滚前先把开关改回 `"false"`（走上面"关闭"的三步），等当前唯一
+  放行中的那一个分片（D6：每账号至多一个）跑完收尾，再执行 `release.sh rollback`。
+  不这样做也不会产生数据损坏——生命周期分片停在原地不会自动消失，只是回滚后的旧代码
+  完全不知道要去处理它们，运营需要在升级回前进版本（roll forward）后手动继续；
+- 回滚不会把任何条目写成失败：v0.3.0 的旧代码从不读取、也从不写入
+  `lifecycleVersion`/`deadlineAt` 这些字段，条目该是什么状态就还是什么状态。
+
 ## One-time Owner sudo steps
 
 1. Install Docker Engine/Compose, Node.js (the release manifest reader, image

@@ -204,3 +204,67 @@ ORDER BY created_at;
 > 只比对到期时间，**不要**比对令牌内容，也不要比对指纹：各环境的指纹密钥不同，同一枚
 > 令牌在两个环境里的指纹本来就不一样，比不出结果。令牌自带签发时刻，两次独立登录得到
 > 同一秒到期的令牌几乎不可能，所以到期时间相同即视为同一枚令牌被复制了。
+
+## 4. 领推广链接生命周期开关（`PROMO_CLAIM_LIFECYCLE_V1_ENABLED`，阶段2）
+
+🔴 **规则**：新环境开通时，本开关与配套六项数值配置一律保持模板默认值（开关
+`false`，六项数值用 `src/lib/tasks/promo-claim-lifecycle.ts` 的
+`PROMO_CLAIM_LIFECYCLE_DEFAULTS`）。**不要**在新环境首次开通这一步就顺手把开关打开
+——这是一项独立的、需要 Owner 单独批准的运维操作，不属于"环境开通"本身，与本表其它
+"首次配置一次、后续只读校验"的项目性质不同。
+
+### 为什么
+
+开关决定新提交的"领取推广链接"批次走旧逻辑（提交时算 6 小时、不分片）还是本阶段的
+"批次 → 分片 → 条目"生命周期。它默认关闭是设计冻结的决策之一（D8，
+`docs/adr/ADR-PROMO-CLAIM-BATCH-LIFECYCLE.md`）：开启前必须先完成预生产 UAT（8 万级
+模拟 + 真实验收），再由 Owner 决定各目标环境各自的配置，不能靠"新环境照抄一份看起来
+能跑的 env 文件"就顺带打开。
+
+### 什么时候做
+
+只有以下两种情形需要触碰这一节：
+
+1. 预生产完成 UAT 并经 Owner 批准，要在预生产开启做真实验收（见
+   `docs/operations/PREPRODUCTION_DEPLOYMENT_RUNBOOK.md` 的"领推广链接生命周期"一节）；
+2. 某个目标环境经 Owner 批准，要把生命周期正式转正为默认行为。
+
+新环境首次开通、以及其它任何普通发布，本节只做只读校验，确认开关仍是模板默认值。
+
+### 执行（仅限上述两种情形，且已获 Owner 批准）
+
+按 `docs/operations/PREPRODUCTION_DEPLOYMENT_RUNBOOK.md` 的"领推广链接生命周期"一节
+执行——改目标机 `shared/env/preprod.env`（或对应环境的等价文件）、跑
+`scripts/preproduction/preflight.sh`（会用与 TS 解析器逐条一致的规则校验这七项配置，
+配错在这一步就 fail closed）、只重建 web/worker/scheduler 三个应用服务，不是发新版、
+不需要跑 migration。
+
+### 验收（只读）
+
+```sql
+-- 只看非秘密的任务参数，确认当前有没有生命周期批次、处于什么状态。
+SELECT id, status, params->>'lifecycleVersion' AS lifecycle_version,
+       params->>'lifecycleRole' AS lifecycle_role,
+       params->>'shardIndex' AS shard_index
+FROM generic_task
+WHERE params->>'lifecycleVersion' = '1'
+ORDER BY created_at DESC
+LIMIT 50;
+
+-- 同一渠道账号任意时刻至多一个分片处于 pending/processing（D6 不变量）。
+SELECT channel_account_id, count(*)
+FROM generic_task
+WHERE task_type = 'promo_link.claim.v1'
+  AND params->>'lifecycleVersion' = '1' AND params->>'lifecycleRole' = 'shard'
+  AND status IN ('pending', 'processing')
+GROUP BY channel_account_id
+HAVING count(*) > 1;
+```
+
+判据：
+
+- 开关未经 Owner 批准开启时，目标机 env 里 `PROMO_CLAIM_LIFECYCLE_V1_ENABLED` 必须是
+  `false`（或未设置）；`scripts/preproduction/preflight.sh` 的
+  `PREPROD_PROMO_CLAIM_LIFECYCLE_CONFIG=PASS enabled=false ...` 取证行确认这一点；
+- 第二条查询必须返回 0 行——出现任意一行都是 D6 不变量被打破，按 P0 处理，不要先尝试
+  "看看会不会自己恢复"。
