@@ -43,7 +43,7 @@ const ALL_CLOSED: Required<GateEnv> = {
 
 function runGate(overrides: GateEnv) {
   const merged: GateEnv = { ...ALL_CLOSED, ...overrides };
-  const env: NodeJS.ProcessEnv = { PATH: process.env.PATH, HOME: process.env.HOME };
+  const env: NodeJS.ProcessEnv = { NODE_ENV: "test", PATH: process.env.PATH, HOME: process.env.HOME };
   for (const [key, value] of Object.entries(merged)) {
     if (value === undefined) continue; // deliberately absent from env, not just empty
     env[key] = value;
@@ -55,7 +55,7 @@ function runGate(overrides: GateEnv) {
 /** Variant of runGate that lets a key be forced *unset* even though ALL_CLOSED sets it. */
 function runGateUnset(overrides: GateEnv, unset: Array<keyof GateEnv>) {
   const merged: GateEnv = { ...ALL_CLOSED, ...overrides };
-  const env: NodeJS.ProcessEnv = { PATH: process.env.PATH, HOME: process.env.HOME };
+  const env: NodeJS.ProcessEnv = { NODE_ENV: "test", PATH: process.env.PATH, HOME: process.env.HOME };
   for (const [key, value] of Object.entries(merged)) {
     if ((unset as string[]).includes(key)) continue;
     if (value === undefined) continue;
@@ -337,7 +337,7 @@ describe("preflight.sh 真实行为（不 mock，走到写闸判定之后稳定�
   }
 
   function runPreflight(envFile: string) {
-    const env: NodeJS.ProcessEnv = { PATH: process.env.PATH, HOME: process.env.HOME, PREPROD_ENV_FILE: envFile };
+    const env: NodeJS.ProcessEnv = { NODE_ENV: "test", PATH: process.env.PATH, HOME: process.env.HOME, PREPROD_ENV_FILE: envFile };
     return spawnSync("bash", [PREFLIGHT], { encoding: "utf8", env });
   }
 
