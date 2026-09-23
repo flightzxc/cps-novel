@@ -214,8 +214,16 @@ export const LIST_LIMIT_NOTE =
  * field absent. `kind` is audit/display metadata only (who/why) — it is
  * never what decides whether a row is paused/cancelled; that is the `status`
  * column itself, read directly by `TaskControlButtons`.
+ *
+ * `"awaiting_release"` (promo-claim lifecycle, `docs/adr/ADR-PROMO-CLAIM-
+ * BATCH-LIFECYCLE.md`) is a fifth additive meaning of a `disabled` row: a
+ * lifecycle shard (`promo_link.claim.v1` child task) enumerated but not yet
+ * released by the scheduler. It never changes eligibility here either — a
+ * `disabled` row (this kind or `system_hold`) is already refused by every
+ * resume/retry mutation, which key on `status` alone (see `task-control.ts`'s
+ * own module doc for the exact statuses each accepts).
  */
-export type TaskControlKind = "paused" | "aborted" | "system_hold";
+export type TaskControlKind = "paused" | "aborted" | "system_hold" | "awaiting_release";
 export type TaskControlSummary = Readonly<{
   kind: TaskControlKind;
   source: "manual" | "system";
@@ -230,6 +238,7 @@ const TASK_CONTROL_KIND_LABELS: Readonly<Record<TaskControlKind, string>> = Obje
   paused: "人工暂停",
   aborted: "人工中止",
   system_hold: "系统保护停止",
+  awaiting_release: "等待放行",
 });
 
 /** Unknown kinds pass through verbatim, same discipline as `taskStatusLabel`. */
@@ -237,8 +246,32 @@ export function taskControlKindLabel(kind: string): string {
   return TASK_CONTROL_KIND_LABELS[kind as TaskControlKind] ?? kind;
 }
 
+/**
+ * Chinese copy for the promo-claim lifecycle's five `system_hold`
+ * `reasonCode` values (`src/lib/tasks/promo-claim-lifecycle.ts`'s
+ * `PROMO_CLAIM_SYSTEM_HOLD_REASON_CODES`). Every other `reasonCode` this
+ * codebase already writes (e.g. `credential_validation_failed` from
+ * `worker/handlers/promo-link-claim-system-hold.ts`) is deliberately left
+ * out — `taskControlSummaryLine` falls back to the raw code for anything not
+ * in this map, unchanged from before this addition.
+ */
+const SYSTEM_HOLD_REASON_CODE_LABELS: Readonly<Record<string, string>> = Object.freeze({
+  approval_expired: "批准已过期",
+  credential_not_ready: "凭据未就绪",
+  deadline_missed: "错过截止时间",
+  deadline_missed_twice: "连续两次错过截止时间",
+  lifecycle_disabled: "生命周期开关已关闭",
+});
+
+/** Unknown reason codes pass through verbatim, same discipline as `taskControlKindLabel`. */
+export function systemHoldReasonCodeLabel(reasonCode: string): string {
+  return SYSTEM_HOLD_REASON_CODE_LABELS[reasonCode] ?? reasonCode;
+}
+
 /** Compact one-line summary for the tasks-list table's status cell. */
 export function taskControlSummaryLine(control: TaskControlSummary): string {
   const label = taskControlKindLabel(control.kind);
-  return control.kind === "system_hold" && control.reasonCode ? `${label}（${control.reasonCode}）` : label;
+  return control.kind === "system_hold" && control.reasonCode
+    ? `${label}（${systemHoldReasonCodeLabel(control.reasonCode)}）`
+    : label;
 }

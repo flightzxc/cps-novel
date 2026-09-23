@@ -42,10 +42,39 @@
  * the admin service (pause/resume/abort + DTO projection) and tests alike,
  * the same "Web/worker-safe shared policy" shape as
  * `src/lib/credentials/claim-readiness.ts`'s `classifyCredentialRowsForClaim`.
+ *
+ * Promo-claim lifecycle (阶段2 第 1 步, `docs/adr/ADR-PROMO-CLAIM-BATCH-
+ * LIFECYCLE.md`) adds a fifth meaning to a `disabled` row's marker, additive
+ * next to the fourth (`kind: "system_hold"`, described above) and never
+ * colliding with the three pre-existing unmarked meanings: `kind:
+ * "awaiting_release"` — a lifecycle shard (`promo_link.claim.v1` child task)
+ * created `disabled` by `worker/handlers/catalog-batch.ts`'s enumeration
+ * (step 2, not yet built) *before* the scheduler (step 3, not yet built) has
+ * ever released it. Same rule as every other kind here: `status ===
+ * "disabled"` is what makes the row non-runnable; this marker is audit/
+ * display metadata (which of the five reasons), never itself consulted by
+ * the admin mutation service's `resumeTask`/`abortTask`/`retryFailedTask`
+ * (the task-admin module under `src/server`) to decide eligibility — those already
+ * key on `status` alone (`"paused"` for resume, `{"pending","processing",
+ * "paused"}` for abort, `{"failed","completed_with_errors"}` for retry), so
+ * a `disabled` "awaiting_release" row is structurally refused by all three
+ * without needing a new check: only the scheduler is meant to move a shard
+ * out of `awaiting_release` (D7), never a manual resume/retry.
+ *
+ * The lifecycle's five `system_hold` `reasonCode` values
+ * (`approval_expired`/`credential_not_ready`/`deadline_missed`/
+ * `deadline_missed_twice`/`lifecycle_disabled`) are free-form strings under
+ * the existing `kind: "system_hold"`, exactly like every other reasonCode
+ * this module already carries (e.g. `credential_validation_failed` from
+ * `worker/handlers/promo-link-claim-system-hold.ts`) — they are not enums
+ * enforced here. The literal set lives in `src/lib/tasks/promo-claim-
+ * lifecycle.ts`'s `PROMO_CLAIM_SYSTEM_HOLD_REASON_CODES`, not in this module,
+ * so this file stays the generic (kind, source, reasonCode) shape and the
+ * lifecycle's own vocabulary stays in its own domain module.
  */
 import type { Prisma } from "@prisma/client";
 
-export const TASK_CONTROL_KINDS = ["paused", "aborted", "system_hold"] as const;
+export const TASK_CONTROL_KINDS = ["paused", "aborted", "system_hold", "awaiting_release"] as const;
 export type TaskControlKind = (typeof TASK_CONTROL_KINDS)[number];
 
 export const TASK_CONTROL_SOURCES = ["manual", "system"] as const;
