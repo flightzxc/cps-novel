@@ -87,8 +87,8 @@ describe("classifyPromoClaimItemOutcome（六分类口径，F1 钉死）", () =>
     expect(classifyPromoClaimItemOutcome("success", "already_fetched")).toBe("withCode");
   });
 
-  it("success + capability_disabled（能力位在枚举后被关闭）并入 manualReview，不计入已领取/已有推广码", () => {
-    expect(classifyPromoClaimItemOutcome("success", "capability_disabled")).toBe("manualReview");
+  it("success + capability_disabled（能力位在枚举后被关闭）并入 failed（Opus 第二轮复核修正），不进人工核对列表", () => {
+    expect(classifyPromoClaimItemOutcome("success", "capability_disabled")).toBe("failed");
   });
 
   it("success + 任何未识别的 decision 字符串（fail-safe）并入 manualReview，不静默计成已领取", () => {
@@ -166,8 +166,8 @@ describe("derivePromoClaimBatchCounts", () => {
       total: 11,
       claimed: 2, // claimed, readback_recovered
       withCode: 3, // already_available, skipped+already_fetched, success+already_fetched
-      manualReview: 2, // manual_review_required, capability_disabled
-      failed: 1,
+      manualReview: 1, // manual_review_required
+      failed: 2, // failed(status), capability_disabled（Opus 第二轮复核修正，不再算进 manualReview）
       skipped: 1, // 只有 decision=null 的 skipped 才落在这里，already_fetched 那条已经分流到 withCode
       remaining: 2, // pending, processing
     });

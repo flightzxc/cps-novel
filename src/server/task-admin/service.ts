@@ -1179,9 +1179,11 @@ type PromoClaimShardAggregateRow = {
  * `generic_task_item.status`：同一个 `status = 'success'` 底下，
  * `result.decision` 可能是 `claimed`/`readback_recovered`（真正新领到码）、
  * `already_available`/`already_fetched`（本来就有码）、
- * `manual_review_required`/`capability_disabled`（收尾了但没拿到码，需要
- * 人工核对），必须按 decision 而不是 status 才能分清楚。只对生命周期批次
- * 调用；只有一次数据库往返，不管批次有多少个分片。
+ * `manual_review_required`（收尾了但没拿到码，需要人工核对）、
+ * `capability_disabled`（执行时领取能力被关闭，没调用 getcode、没创建
+ * side_effect_intent，永远不会出现在"人工核对"列表里，按失败计），必须按
+ * decision 而不是 status 才能分清楚。只对生命周期批次调用；只有一次数据库
+ * 往返，不管批次有多少个分片。
  */
 async function loadPromoClaimBatchLifecycle(
   db: PrismaClient,
@@ -1211,10 +1213,12 @@ async function loadPromoClaimBatchLifecycle(
         SELECT
           -- 必须与 classifyPromoClaimItemOutcome（src/domain/catalog-batch.ts）
           -- 逐字一致——该函数的 doc comment 是这份分类口径的权威说明，包含
-          -- 为什么 already_fetched 并入 with_code、capability_disabled 与
-          -- 任何未知 decision 并入 manual_review 的理由。CASE 穷举到 ELSE，
-          -- 保证每个条目恰好落入六个桶之一，不会被静默漏计。(No backticks
-          -- inside this template literal -- they would terminate it.)
+          -- 为什么 already_fetched 并入 with_code、capability_disabled 并入
+          -- failed（而不是 manual_review：这条路径不调用 getcode、不创建
+          -- side_effect_intent，永远不会出现在人工核对列表里）、任何未知
+          -- decision 并入 manual_review 的理由。CASE 穷举到 ELSE，保证每个
+          -- 条目恰好落入六个桶之一，不会被静默漏计。(No backticks inside
+          -- this template literal -- they would terminate it.)
           CASE
             WHEN i.status IN ('pending', 'processing') THEN 'remaining'
             WHEN i.status = 'failed' THEN 'failed'
@@ -1222,6 +1226,7 @@ async function loadPromoClaimBatchLifecycle(
             WHEN i.status = 'skipped' THEN 'skipped'
             WHEN i.status = 'success' AND i.result->>'decision' IN ('claimed', 'readback_recovered') THEN 'claimed'
             WHEN i.status = 'success' AND i.result->>'decision' IN ('already_available', 'already_fetched') THEN 'with_code'
+            WHEN i.status = 'success' AND i.result->>'decision' = 'capability_disabled' THEN 'failed'
             ELSE 'manual_review'
           END AS bucket
         FROM generic_task_item i

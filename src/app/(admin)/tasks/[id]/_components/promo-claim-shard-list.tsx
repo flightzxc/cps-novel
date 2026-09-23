@@ -28,7 +28,7 @@ export function PromoClaimShardList({ data }: { data: PromoClaimBatchLifecycleDt
         <SummaryCard label="已领取" value={data.counts.claimed} tone="green" />
         <SummaryCard label="已有推广码" value={data.counts.withCode} tone="green" />
         <SummaryCard label="人工核对" value={data.counts.manualReview} tone="amber" />
-        <SummaryCard label="失败" value={data.counts.failed} tone="red" />
+        <SummaryCard label="失败" value={data.counts.failed} tone="red" description="含执行时领取能力被关闭的条目" />
         <SummaryCard label="跳过" value={data.counts.skipped} tone="amber" />
         <SummaryCard label="剩余" value={data.counts.remaining} tone="blue" />
       </div>
@@ -89,7 +89,7 @@ export function PromoClaimShardList({ data }: { data: PromoClaimBatchLifecycleDt
   );
 }
 
-function SummaryCard({ label, value, tone }: { label: string; value: number; tone?: "green" | "amber" | "red" | "blue" }) {
+function SummaryCard({ label, value, tone, description }: { label: string; value: number; tone?: "green" | "amber" | "red" | "blue"; description?: string }) {
   const toneClass = tone === "green"
     ? "border-green-100 bg-green-50/50 text-green-700"
     : tone === "amber"
@@ -103,6 +103,7 @@ function SummaryCard({ label, value, tone }: { label: string; value: number; ton
     <div className={`rounded-xl border p-4 shadow-sm ${toneClass}`}>
       <p className="text-xs opacity-70">{label}</p>
       <p className="mt-1 text-2xl font-bold">{value.toLocaleString("zh-CN")}</p>
+      {description && <p className="mt-0.5 text-xs opacity-60">{description}</p>}
     </div>
   );
 }

@@ -199,17 +199,19 @@ export type CatalogBatchSummary = Readonly<{
 // ---------------------------------------------------------------------
 
 /**
- * Opus 复核（2026-09-24 F1）钉死的六分类口径——每个条目按
- * `(generic_task_item.status, result.decision)` 精确落入以下六个桶中的
- * 恰好一个，互斥、加总等于条目总数：
+ * Opus 复核（2026-09-24 F1，同日第二轮复核修正 capability_disabled 归类）
+ * 钉死的六分类口径——每个条目按 `(generic_task_item.status, result.decision)`
+ * 精确落入以下六个桶中的恰好一个，互斥、加总等于条目总数：
  *
  *   - `claimed`（已领取） = status=success ∧ decision ∈ {claimed, readback_recovered}
  *   - `withCode`（已有推广码） = (status=success ∧ decision ∈ {already_available, already_fetched})
  *                              ∨ (status=skipped ∧ decision=already_fetched)
  *   - `manualReview`（人工核对） = status=success ∧ decision=manual_review_required
- *     （另见 {@link classifyPromoClaimItemOutcome} 的 doc comment：
- *     `capability_disabled` 与任何未知 decision 同样并入这一桶，不静默吞掉）
- *   - `failed`（失败） = status=failed
+ *     （另见 {@link classifyPromoClaimItemOutcome} 的 doc comment：任何未识别的
+ *     decision 同样并入这一桶，不静默吞掉）
+ *   - `failed`（失败） = status=failed ∨ (status=success ∧ decision=capability_disabled)
+ *     （`capability_disabled` 归入这里而不是 `manualReview`：理由见下方
+ *     {@link classifyPromoClaimItemOutcome} 的 doc comment）
  *   - `skipped`（跳过） = status=skipped ∧ decision≠already_fetched（含人工中止前未尝试）
  *   - `remaining`（剩余） = status ∈ {pending, processing}
  *
@@ -229,16 +231,21 @@ export type PromoClaimItemOutcomeBucket = "claimed" | "withCode" | "manualReview
  *
  * `already_fetched`（真正执行时 apply 模式下、`scope.existingPromoLink.status
  * === 'fetched'` 分支，`worker/handlers/promo-link-claim.ts`）与
- * `capability_disabled`（能力位在枚举之后、真正执行之前被关闭）这两个
- * `status=success` 的 decision 值，Opus 给的六分类表原文没有为它们各自
- * 单独定义桶位——处理方式（已向 Owner/Opus 说明，未擅自新增第七个桶）：
+ * `capability_disabled`（能力位在枚举之后、真正执行之前被关闭，同一个
+ * handler 文件约 1147-1152 行）这两个 `status=success` 的 decision 值，
+ * Opus 给的六分类表原文没有为它们各自单独定义桶位——处理方式：
  *   - `already_fetched` 并入 `withCode`：与 `already_available` 语义完全
  *     相同（都是"这本书已经有推广码，本次没有发起新的上游调用"），只是
  *     达成路径不同（DB 里的 PromoLink 记录 vs 上游预读命中）。
- *   - `capability_disabled` 并入 `manualReview`：条目本身正常收尾、不是
- *     失败，但没有拿到码，且是"渠道能力位被关闭"这种需要运营介入排查的
- *     状态，不能被计进"已领取"或"已有推广码"掩盖问题。
- *   - 任何其它未识别的 decision 字符串（例如未来 worker 新增的分支）同样
+ *   - `capability_disabled` 并入 `failed`（Opus 复核第二轮修正：最初误并入
+ *     `manualReview`，已改正）：这条路径只在 PromoLink 上写 `errorKind:
+ *     'capability_disabled'`，既不调用 getcode，也不创建
+ *     `side_effect_intent`；后台"人工核对"列表是按 `manual_review_required`
+ *     的意图记录驱动展示的，这类条目永远不会出现在那份列表里——继续算进
+ *     `manualReview` 会让批次汇总计数和人工核对列表的实际条目数对不上，
+ *     运营会去列表里找根本不存在的条目。它的真实语义是"执行时领取能力被
+ *     关闭、没拿到码、需要开启能力后重新提交"，属于失败，应计入 `failed`。
+ *   - 任何其它未识别的 decision 字符串（例如未来 worker 新增的分支）仍然
  *     并入 `manualReview`——fail-safe：宁可让运营多看一眼真正发生了什么，
  *     也不能把一个陌生的结果悄悄计成"已领取"或"已有推广码"。
  */
@@ -252,7 +259,8 @@ export function classifyPromoClaimItemOutcome(
   if (status === "success") {
     if (decision === "claimed" || decision === "readback_recovered") return "claimed";
     if (decision === "already_available" || decision === "already_fetched") return "withCode";
-    // manual_review_required / capability_disabled / 任何未知值。
+    if (decision === "capability_disabled") return "failed";
+    // manual_review_required / 任何未知值。
     return "manualReview";
   }
   // 理论上不会出现的 status（不在 generic_task_item 的 CHECK 约束取值内）

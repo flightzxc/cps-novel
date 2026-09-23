@@ -719,8 +719,8 @@ describe.skipIf(!enabled).sequential("promo-claim lifecycle: 阶段2 第4步 批
         total: 11,
         claimed: 2, // claimed, readback_recovered
         withCode: 3, // already_available, skipped+already_fetched, success+already_fetched
-        manualReview: 2, // manual_review_required, capability_disabled
-        failed: 1,
+        manualReview: 1, // manual_review_required
+        failed: 2, // failed(status), capability_disabled（Opus 第二轮复核修正：不进人工核对列表，按失败计）
         skipped: 1, // 只有人工中止级联（无 decision）落在这里，already_fetched 那条已分流到 withCode
         remaining: 2, // pending, processing
       });
@@ -728,7 +728,7 @@ describe.skipIf(!enabled).sequential("promo-claim lifecycle: 阶段2 第4步 批
         + lifecycle.counts.failed + lifecycle.counts.skipped + lifecycle.counts.remaining).toBe(lifecycle.counts.total);
       // 分片自己的六个字段同样正确（批次汇总只有一个分片，两者应该相等）。
       expect(lifecycle.shards[0]).toMatchObject({
-        totalCount: 11, claimedCount: 2, withCodeCount: 3, manualReviewCount: 2, failedCount: 1, skippedCount: 1, remainingCount: 2,
+        totalCount: 11, claimedCount: 2, withCodeCount: 3, manualReviewCount: 1, failedCount: 2, skippedCount: 1, remainingCount: 2,
       });
     });
 
