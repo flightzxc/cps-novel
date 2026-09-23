@@ -50,6 +50,7 @@ import { createPublicRedirectCode } from "../../src/lib/redirect";
 import { decryptCredentialSecretForWorker } from "../credentials/crypto";
 import { holdChannelAccountForPreview, isAccountLevelPreviewFailure } from "./preview-account-hold";
 import { bindPromoLinkToArticles } from "./promo-link-binding";
+import { logUpstreamCallObservation } from "../observability/upstream-call-log";
 
 export interface MoboreaderCatalogPayload {
   pageIndex: number;
@@ -1324,6 +1325,7 @@ export function createMoboreaderCatalogHandler(
   const adapter = dependencies.adapter ?? createMoboreaderReadAdapter({
     rateGate: moboreaderUpstreamRateGate,
     upstreamRateLimitPolicy: upstreamRateLimitPolicyFromEnv(env),
+    onUpstreamObservation: logUpstreamCallObservation,
   });
   const now = dependencies.now ?? (() => new Date());
   return async ({ lease, mode, signal }) => {
@@ -1591,6 +1593,7 @@ export function createMoboreaderPreviewHandler(
     timeoutMs: runtime.timeoutMs,
     rateGate: moboreaderUpstreamRateGate,
     upstreamRateLimitPolicy: upstreamRateLimitPolicyFromEnv(env),
+    onUpstreamObservation: logUpstreamCallObservation,
   });
   return async ({ lease, mode, signal }) => {
     if (!isNovelCatalogSyncEnabled(env)) {

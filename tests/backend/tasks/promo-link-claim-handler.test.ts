@@ -970,6 +970,52 @@ describe("P0-S5 promo-link claim handler — frozen novel claim contract", () =>
     expect(intent).toMatchObject({ status: "manual_review_required" });
   });
 
+  it("path 3b (Phase 1 observability): a malformed getcode envelope carries its non-sensitive envelopeStatus/envelopeCode into the manual-review intent trail, never the response message", async () => {
+    const db = seedFoundation(new FakePromoLinkClaimHandlerDb(), {
+      rawPayload: { agencyId: "agency-1", seriesId: "series-1", language: "en" },
+      capabilityStatus: "enabled",
+    });
+    seedActiveCredential(db);
+    // `parseClaimResponse` (src/lib/adapters/promo-link-claim.ts) always
+    // throws `malformed_payload` with `ambiguous: true` for a non-success
+    // `{status, code}` envelope — this fixture is what that error looks
+    // like once classified, carrying the diagnostic-only envelope fields
+    // this Phase 1 change adds. The upstream `message` field (e.g. a
+    // free-text failure reason) is deliberately absent from the error and
+    // must never appear anywhere in the recorded evidence.
+    const adapter: PromoLinkClaimAdapter = {
+      claimPromo: vi.fn().mockRejectedValue(
+        new PromoLinkClaimAdapterError("malformed_payload", false, true, null, false, 500),
+      ),
+      readPromoAfterClaim: vi.fn().mockResolvedValue({ status: "missing" }),
+    };
+    const handler = createPromoLinkClaimHandler(db.asPrismaClient(), {
+      env: { ...APPLY_ENV, PROMO_LINK_CLAIM_READBACK_INTERVAL_MS: "0" },
+      adapter,
+    });
+    const outcome = await handler({
+      lease: { ...baseLease(), payload: makePayload() },
+      mode: "apply",
+      signal: new AbortController().signal,
+      heartbeat: async () => true,
+    });
+    expect(outcome).toMatchObject({ status: "success", result: { decision: "manual_review_required" } });
+    await db.runProtectedWrite((outcome as { protectedWrite: (tx: unknown) => Promise<void> }).protectedWrite as never);
+
+    const intent = [...db.intents.values()][0];
+    expect(intent).toMatchObject({
+      status: "manual_review_required",
+      responseShape: {
+        failureCategory: "malformed_payload",
+        upstreamEnvelopeStatus: false,
+        upstreamEnvelopeCode: 500,
+        readbackConfirmed: false,
+        readbackStatus: "promo_missing",
+      },
+    });
+    expect(JSON.stringify(intent?.responseShape)).not.toContain("message");
+  });
+
   it("fault injection: retries only readback after an ambiguous getcode timeout and atomically recovers", async () => {
     const db = seedFoundation(new FakePromoLinkClaimHandlerDb(), {
       rawPayload: { agencyId: "agency-1", seriesId: "series-1", language: "en" },

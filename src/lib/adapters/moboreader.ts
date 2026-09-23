@@ -12,6 +12,12 @@ import {
   parseRetryAfter,
   type MoboreaderRateGate,
 } from "./moboreader-rate-limit";
+import {
+  NOOP_UPSTREAM_OBSERVATION,
+  NO_GATEWAY_OBSERVATION_HEADERS,
+  extractGatewayObservationHeaders,
+  type OnUpstreamObservation,
+} from "./upstream-observation";
 
 const MOBOREADER_ORIGIN = "https://kocserver-cn.cdreader.com";
 
@@ -20,6 +26,18 @@ export const MOBOREADER_READ_ENDPOINTS = Object.freeze({
   getbydataid: "/api/v1/material/getbydataid",
   getchapterinfo: "/api/v1/res/getchapterinfo",
 });
+
+/** Reverse lookup for observation events: every dispatched path is one of
+ * `MOBOREADER_READ_ENDPOINTS`'s values (`post()` allowlists it below), so
+ * this always resolves — used only to report the short logical endpoint
+ * name, never the path itself, on `UpstreamCallObservation.endpoint`. */
+const MOBOREADER_READ_ENDPOINT_NAMES_BY_PATH: ReadonlyMap<string, string> = new Map(
+  Object.entries(MOBOREADER_READ_ENDPOINTS).map(([name, path]) => [path, name]),
+);
+
+function readEndpointName(path: string): string {
+  return MOBOREADER_READ_ENDPOINT_NAMES_BY_PATH.get(path) ?? path;
+}
 
 export const MOBOREADER_DEFAULT_TIMEOUT_MS = 15_000;
 export const MOBOREADER_MAX_READ_ATTEMPTS = 3;
@@ -192,6 +210,18 @@ interface AdapterOptions {
   rateGate?: MoboreaderRateGate;
   /** See `UpstreamRateLimitPolicyOptions`. */
   upstreamRateLimitPolicy?: UpstreamRateLimitPolicyOptions;
+  /**
+   * Phase 1 upstream-call observation (see `./upstream-observation.ts`).
+   * Defaults to a no-op — every pre-existing test/call site that does not
+   * pass this is byte-for-byte unaffected. Production wiring
+   * (`worker/handlers/moboreader.ts`) passes a structured-log sink.
+   */
+  onUpstreamObservation?: OnUpstreamObservation;
+  /** Clock used only for `UpstreamCallObservation.latencyMs`/`gateWaitMs`
+   * timestamps. Never read by any retry/backoff/budget decision — those
+   * keep using `upstreamRateLimitPolicy.now` (rate-limit path) or plain
+   * wall-clock `sleep` (legacy path), unchanged. Defaults to `Date.now`. */
+  now?: () => number;
 }
 
 function record(value: unknown): Record<string, unknown> {
@@ -499,6 +529,8 @@ export function createMoboreaderReadAdapter(options: AdapterOptions = {}): Mobor
   const sleep = options.sleep ?? ((milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)));
   const rateGate = options.rateGate ?? NOOP_MOBOREADER_RATE_GATE;
   const policy = options.upstreamRateLimitPolicy;
+  const onUpstreamObservation = options.onUpstreamObservation ?? NOOP_UPSTREAM_OBSERVATION;
+  const observationNow = options.now ?? Date.now;
   if (timeoutMs < 1 || maxAttempts < 1 || maxAttempts > MOBOREADER_MAX_READ_ATTEMPTS) {
     throw new Error("Invalid MoboReader read safety limits");
   }
@@ -508,9 +540,13 @@ export function createMoboreaderReadAdapter(options: AdapterOptions = {}): Mobor
    * is not supplied — i.e. for every existing caller/test.
    */
   async function legacyPost(path: string, body: Record<string, unknown>, token: string, signal?: AbortSignal): Promise<unknown> {
+    const endpoint = readEndpointName(path);
     for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      const gateWaitStartedAt = observationNow();
       await rateGate.wait();
+      const gateWaitMs = observationNow() - gateWaitStartedAt;
       const scoped = composeSignal(signal, timeoutMs);
+      const dispatchStartedAt = observationNow();
       try {
         const response = await fetchImpl(`${MOBOREADER_ORIGIN}${path}`, {
           method: "POST",
@@ -520,6 +556,14 @@ export function createMoboreaderReadAdapter(options: AdapterOptions = {}): Mobor
           signal: scoped.signal,
         });
         if (!response.ok) {
+          onUpstreamObservation({
+            endpoint,
+            httpStatus: response.status,
+            outcome: "http_error",
+            latencyMs: observationNow() - dispatchStartedAt,
+            gateWaitMs,
+            gatewayHeaders: extractGatewayObservationHeaders(response.headers),
+          });
           const retryable = shouldRetryStatus(response.status);
           if (retryable && attempt < maxAttempts) {
             await sleep(retryAfterMs(response) ?? Math.min(250 * 2 ** (attempt - 1), 2_000));
@@ -528,14 +572,53 @@ export function createMoboreaderReadAdapter(options: AdapterOptions = {}): Mobor
           throw new MoboreaderAdapterError("upstream_http_error", retryable, response.status);
         }
         try {
-          return await response.json();
+          const json = await response.json();
+          onUpstreamObservation({
+            endpoint,
+            httpStatus: response.status,
+            outcome: "ok",
+            latencyMs: observationNow() - dispatchStartedAt,
+            gateWaitMs,
+            gatewayHeaders: extractGatewayObservationHeaders(response.headers),
+          });
+          return json;
         } catch {
+          // Transport succeeded (2xx); the body just wasn't parsable JSON.
+          // Still `"ok"` from the wire-protocol perspective this event
+          // reports on — see `UpstreamCallOutcome`'s doc comment.
+          onUpstreamObservation({
+            endpoint,
+            httpStatus: response.status,
+            outcome: "ok",
+            latencyMs: observationNow() - dispatchStartedAt,
+            gateWaitMs,
+            gatewayHeaders: extractGatewayObservationHeaders(response.headers),
+          });
           throw new MoboreaderAdapterError("malformed_payload", false, response.status);
         }
       } catch (error) {
         if (error instanceof MoboreaderAdapterError) throw error;
-        if (signal?.aborted) throw new MoboreaderAdapterError("transport_error", false);
-        const code = scoped.timedOut() ? "request_timeout" : "transport_error";
+        if (signal?.aborted) {
+          onUpstreamObservation({
+            endpoint,
+            httpStatus: null,
+            outcome: "transport_error",
+            latencyMs: observationNow() - dispatchStartedAt,
+            gateWaitMs,
+            gatewayHeaders: NO_GATEWAY_OBSERVATION_HEADERS,
+          });
+          throw new MoboreaderAdapterError("transport_error", false);
+        }
+        const timedOut = scoped.timedOut();
+        onUpstreamObservation({
+          endpoint,
+          httpStatus: null,
+          outcome: timedOut ? "timeout" : "transport_error",
+          latencyMs: observationNow() - dispatchStartedAt,
+          gateWaitMs,
+          gatewayHeaders: NO_GATEWAY_OBSERVATION_HEADERS,
+        });
+        const code = timedOut ? "request_timeout" : "transport_error";
         if (attempt === maxAttempts) throw new MoboreaderAdapterError(code, true);
         await sleep(Math.min(250 * 2 ** (attempt - 1), 2_000));
       } finally {
@@ -585,11 +668,15 @@ export function createMoboreaderReadAdapter(options: AdapterOptions = {}): Mobor
     const totalBudgetMs = rateLimitPolicy.totalBudgetMs ?? MOBOREADER_RATE_LIMIT_TOTAL_BUDGET_MS;
     const pageIndex = typeof body.pageIndex === "number" && Number.isFinite(body.pageIndex) ? body.pageIndex : null;
     const startedAt = nowFn();
+    const endpoint = readEndpointName(path);
     let attempt = 0;
 
     for (;;) {
+      const gateWaitStartedAt = observationNow();
       await rateGate.wait();
+      const gateWaitMs = observationNow() - gateWaitStartedAt;
       const scoped = composeSignal(signal, timeoutMs);
+      const dispatchStartedAt = observationNow();
       let response: Response;
       try {
         response = await fetchImpl(`${MOBOREADER_ORIGIN}${path}`, {
@@ -602,18 +689,54 @@ export function createMoboreaderReadAdapter(options: AdapterOptions = {}): Mobor
       } catch (error) {
         scoped.cleanup();
         if (error instanceof MoboreaderAdapterError) throw error;
-        if (signal?.aborted) throw new MoboreaderAdapterError("transport_error", false);
-        throw new MoboreaderAdapterError(scoped.timedOut() ? "request_timeout" : "transport_error", true);
+        if (signal?.aborted) {
+          onUpstreamObservation({
+            endpoint,
+            httpStatus: null,
+            outcome: "transport_error",
+            latencyMs: observationNow() - dispatchStartedAt,
+            gateWaitMs,
+            gatewayHeaders: NO_GATEWAY_OBSERVATION_HEADERS,
+          });
+          throw new MoboreaderAdapterError("transport_error", false);
+        }
+        const timedOut = scoped.timedOut();
+        onUpstreamObservation({
+          endpoint,
+          httpStatus: null,
+          outcome: timedOut ? "timeout" : "transport_error",
+          latencyMs: observationNow() - dispatchStartedAt,
+          gateWaitMs,
+          gatewayHeaders: NO_GATEWAY_OBSERVATION_HEADERS,
+        });
+        throw new MoboreaderAdapterError(timedOut ? "request_timeout" : "transport_error", true);
       }
       scoped.cleanup();
 
       if (response.ok) {
+        onUpstreamObservation({
+          endpoint,
+          httpStatus: response.status,
+          outcome: "ok",
+          latencyMs: observationNow() - dispatchStartedAt,
+          gateWaitMs,
+          gatewayHeaders: extractGatewayObservationHeaders(response.headers),
+        });
         try {
           return await response.json();
         } catch {
           throw new MoboreaderAdapterError("malformed_payload", false, response.status);
         }
       }
+
+      onUpstreamObservation({
+        endpoint,
+        httpStatus: response.status,
+        outcome: "http_error",
+        latencyMs: observationNow() - dispatchStartedAt,
+        gateWaitMs,
+        gatewayHeaders: extractGatewayObservationHeaders(response.headers),
+      });
 
       const status = response.status;
       if (!shouldRetryStatus(status)) {
