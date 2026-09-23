@@ -61,6 +61,7 @@ import {
 } from "../../src/lib/tasks/promo-link-claim-limits";
 import {
   isPastDeadlineWithGrace,
+  PROMO_CLAIM_LIFECYCLE_ROLE_SHARD,
   PROMO_CLAIM_SHARD_LIFECYCLE_TAG,
   resolvePromoClaimLifecycleConfig,
 } from "../../src/lib/tasks/promo-claim-lifecycle";
@@ -1015,6 +1016,20 @@ function readShardDeadlineAt(params: unknown): string | null {
   return typeof value === "string" ? value : null;
 }
 
+/**
+ * `GenericTask.params.lifecycleRole` — distinguishes a **batch** parent
+ * (`batch.materialize.v1`) from a **shard** parent (`promo_link.claim.v1`);
+ * both can carry `lifecycleVersion: 1`, but only a shard ever gets a
+ * `deadlineAt`. See `src/lib/tasks/promo-claim-lifecycle.ts`'s
+ * `PROMO_CLAIM_LIFECYCLE_ROLES` doc comment for the batch-deadlock bug this
+ * distinction exists to prevent (2026-09-23 review finding).
+ */
+function readShardTaskLifecycleRole(params: unknown): string | null {
+  if (!params || typeof params !== "object" || Array.isArray(params)) return null;
+  const value = (params as Record<string, unknown>).lifecycleRole;
+  return typeof value === "string" ? value : null;
+}
+
 // ---------------------------------------------------------------------
 // Handler
 // ---------------------------------------------------------------------
@@ -1074,6 +1089,16 @@ export function createPromoLinkClaimHandler(
         where: { id: lease.taskId },
         select: { params: true },
       });
+      // 载荷与任务角色不一致的防御（2026-09-23 复核追加）：条目载荷标记为
+      // shard_v1，但所属任务的 params.lifecycleRole 不是 "shard"（例如挂错
+      // 到批次父任务上，或角色字段缺失/写错）。正常路径下不会发生——枚举
+      // 只会给分片任务的条目打这个标记，`selectPending` 的下推也已经把
+      // 角色不对的父任务排除在生命周期判定之外——这里是数据不一致时的第二
+      // 道防线，一律按过期处理（fail-closed），不去猜测"应该当哪种任务处理"。
+      const role = readShardTaskLifecycleRole(parentTask?.params);
+      if (role !== PROMO_CLAIM_LIFECYCLE_ROLE_SHARD) {
+        return { status: "failed", error: { code: "task_expired", message: "Promo link claim shard item's parent task is not a lifecycle shard (lifecycleRole mismatch)" } };
+      }
       const deadlineAt = readShardDeadlineAt(parentTask?.params);
       if (isPastDeadlineWithGrace(deadlineAt, lifecycleConfig.deadlineGraceMinutes, now())) {
         return { status: "failed", error: { code: "task_expired", message: "Promo link claim shard deadline (plus grace period) has passed" } };

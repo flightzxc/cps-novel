@@ -43,6 +43,37 @@ export const PROMO_CLAIM_LIFECYCLE_VERSION = 1 as const;
  */
 export const PROMO_CLAIM_SHARD_LIFECYCLE_TAG = "shard_v1" as const;
 
+/**
+ * `params.lifecycleRole` 的取值——区分同样带 `lifecycleVersion: 1` 的两种
+ * 父任务：**批次**（`batch.materialize.v1`，设计 §5.2）与**分片**
+ * （`promo_link.claim.v1`，设计 §5.3）。
+ *
+ * 为什么不能只按 `lifecycleVersion === 1` 判定"是否要求 `deadlineAt`"：
+ * 批次父任务在设计 §5.2 里同样写 `lifecycleVersion: 1`（连同
+ * `approvedAt`/`approvalValidUntil`），但批次**没有** `deadlineAt`——那是
+ * 分片放行时才会写的字段（§5.3/§5.4）。如果 `selectPending` 的下推只看
+ * `lifecycleVersion`，批次自己枚举时建的条目（`catalog_filter_snapshot`，
+ * 挂在批次父任务下，不是挂在分片下）就会被"要求 `deadlineAt` 存在"这条
+ * 判定永远挡住——批次永远领不到自己的枚举条目，第 2 步一落地就是一个死锁
+ * （2026-09-23 复核实证：对 `{"lifecycleVersion":1,"approvedAt":"..."}`
+ * 这样的批次参数，旧谓词求值为 false）。
+ *
+ * 修法是让下推条件同时判定"版本"与"角色"两个字段，只在角色精确等于
+ * `"shard"` 时才要求 `deadlineAt`；角色是 `"batch"`（或角色字段缺失，
+ * 兼容不认识 `lifecycleRole` 的旧数据）的父任务完全不受这条下推影响，
+ * 按现有逻辑正常放行。
+ */
+export const PROMO_CLAIM_LIFECYCLE_ROLES = Object.freeze(["batch", "shard"] as const);
+export type PromoClaimLifecycleRole = (typeof PROMO_CLAIM_LIFECYCLE_ROLES)[number];
+
+export const PROMO_CLAIM_LIFECYCLE_ROLE_BATCH: PromoClaimLifecycleRole = "batch";
+export const PROMO_CLAIM_LIFECYCLE_ROLE_SHARD: PromoClaimLifecycleRole = "shard";
+
+export function isPromoClaimLifecycleRole(value: unknown): value is PromoClaimLifecycleRole {
+  return typeof value === "string"
+    && (PROMO_CLAIM_LIFECYCLE_ROLES as readonly string[]).includes(value);
+}
+
 // ---------------------------------------------------------------------
 // 系统暂停原因码（新增于 `kind: "system_hold"` 之上，`reasonCode` 字段仍是
 // `src/lib/tasks/task-control.ts` 里的自由字符串，这里只是把这一族的字面量

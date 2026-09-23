@@ -8,9 +8,13 @@ import {
   isApprovalExpired,
   isPastDeadlineWithGrace,
   isPromoClaimLifecycleEnabled,
+  isPromoClaimLifecycleRole,
   isPromoClaimSystemHoldReasonCode,
   PROMO_CLAIM_LIFECYCLE_DEFAULTS,
   PROMO_CLAIM_LIFECYCLE_ENV,
+  PROMO_CLAIM_LIFECYCLE_ROLE_BATCH,
+  PROMO_CLAIM_LIFECYCLE_ROLE_SHARD,
+  PROMO_CLAIM_LIFECYCLE_ROLES,
   PROMO_CLAIM_LIFECYCLE_VERSION,
   PROMO_CLAIM_SHARD_LIFECYCLE_TAG,
   PROMO_CLAIM_SYSTEM_HOLD_REASON_CODES,
@@ -43,6 +47,23 @@ describe("promo-claim-lifecycle: constants", () => {
     }
     expect(isPromoClaimSystemHoldReasonCode("credential_validation_failed")).toBe(false);
     expect(isPromoClaimSystemHoldReasonCode(123)).toBe(false);
+  });
+
+  /**
+   * 2026-09-23 复核追加：`lifecycleRole` 区分批次（batch.materialize.v1）
+   * 与分片（promo_link.claim.v1）两种父任务——两者都可能带
+   * `lifecycleVersion: 1`，但只有分片会有 `deadlineAt`。见本文件顶部常量
+   * 的文档注释，说明为什么只按版本号判定会死锁批次自己的枚举条目。
+   */
+  it("recognizes exactly the two frozen lifecycleRole values", () => {
+    expect(PROMO_CLAIM_LIFECYCLE_ROLES).toEqual(["batch", "shard"]);
+    expect(PROMO_CLAIM_LIFECYCLE_ROLE_BATCH).toBe("batch");
+    expect(PROMO_CLAIM_LIFECYCLE_ROLE_SHARD).toBe("shard");
+    expect(isPromoClaimLifecycleRole("batch")).toBe(true);
+    expect(isPromoClaimLifecycleRole("shard")).toBe(true);
+    expect(isPromoClaimLifecycleRole("shard_v1")).toBe(false);
+    expect(isPromoClaimLifecycleRole(undefined)).toBe(false);
+    expect(isPromoClaimLifecycleRole(1)).toBe(false);
   });
 });
 

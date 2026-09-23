@@ -157,15 +157,26 @@ async function selectPending(
                 -- this has to live inside the parent EXISTS -- ahead of the
                 -- LIMIT -- so a blocked shard's items are never fetched,
                 -- locked and then discarded (zero writes: no lease, no
-                -- attempt_count bump, no error). A non-lifecycle task has no
-                -- lifecycleVersion key at all, so the
-                -- IS DISTINCT FROM '1' check below is true for it, making
-                -- this whole clause a no-op -- every existing taskType is
-                -- unaffected. (No backticks inside this template literal --
-                -- they would terminate it; see promo-link-claim-system-
-                -- hold.ts's own header for the same note.)
+                -- attempt_count bump, no error).
+                --
+                -- 必须同时判定 lifecycleVersion 与 lifecycleRole，不能只看
+                -- lifecycleVersion（2026-09-23 复核发现的批次死锁缺陷）：
+                -- 批次父任务（batch.materialize.v1，设计 §5.2）同样写
+                -- lifecycleVersion=1，但批次没有 deadlineAt——那是分片放行
+                -- 时才写的字段。只按版本号判定会把"要求 deadlineAt"这条
+                -- 规则也套到批次头上，导致批次自己的枚举条目
+                -- （catalog_filter_snapshot）永远领不到、整个批次死锁。
+                -- 只有 lifecycleRole 精确等于 'shard' 的父任务才受这条
+                -- 下推约束；lifecycleRole = 'batch'、或者角色字段缺失（旧
+                -- 数据/非生命周期任务，二者都没有 lifecycleVersion key，
+                -- 第一个 IS DISTINCT FROM 判断已经把它们排除在外），这条
+                -- 子句整体是 no-op，完全不受影响。(No backticks inside
+                -- this template literal -- they would terminate it; see
+                -- promo-link-claim-system-hold.ts's own header for the
+                -- same note.)
                 AND (
                   t.params->>'lifecycleVersion' IS DISTINCT FROM '1'
+                  OR t.params->>'lifecycleRole' IS DISTINCT FROM 'shard'
                   OR (
                     t.params->>'deadlineAt' IS NOT NULL
                     AND (t.params->>'deadlineAt')::timestamptz > transaction_timestamp()
