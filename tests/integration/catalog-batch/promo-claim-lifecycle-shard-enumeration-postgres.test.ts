@@ -353,6 +353,50 @@ describe.skipIf(!enabled).sequential("promo-claim lifecycle: 阶段2 第2步枚�
     expect(shards).toHaveLength(Math.ceil(memberCount / expectedShardSize));
   }, 60_000);
 
+  /**
+   * 设计 §5.3/D3："S = min(1000, floor(...))——1000 只是上限"。前两条用例的
+   * p90（回退 5 秒 / 实测 20 秒）算出来的原始值本来就远小于 1000，从不触发
+   * 这条上限本身，光靠它们不足以证明"上限确实生效"，而不是"从来没到过上限
+   * 而已"。这里刻意用一个很小的 p90（1 秒）把未裁剪前的原始值推到远超
+   * 1000，专门验证 1000 这个上限真的把它压回去了。
+   */
+  it("clamps the shard size at the configured upper bound (1000) when the raw computed size would exceed it", async () => {
+    const channel = foundation.channels[0]!;
+    const tinyDurationSeconds = 1;
+    await seedCompletedClaimHistory(prisma, {
+      channelAppId: channel.channelAppId, channelAccountId: channel.accountId, count: 60, durationSeconds: tinyDurationSeconds,
+    });
+    // 未裁剪前 floor(90*42/1) = 3780，远超上限 1000——用 1200 本书保证真的能
+    // 看到"超过 1000 之后被切成第二片"，而不是巧合地一片就装完。
+    const memberCount = 1_200;
+    const ids = await seedCatalogRows(prisma, { channelAppId: channel.channelAppId, count: memberCount, prefix: "shard-cap" });
+    await bulkLinkAllSourceItems(prisma, channel.channelAppId);
+
+    const enqueued = await enqueueCatalogBatch(prisma, {
+      operation: "promo_claim",
+      selection: normalizeCatalogSelection({ scope: "explicit_ids", ids }),
+      actorId: foundation.actorId,
+      requestId: randomUUID(),
+      channelAccounts: { [channel.channelAppId]: channel.accountId },
+    }, new Date(), true, undefined, LIFECYCLE_ON_ENV);
+    const lease = await claimPendingItem(prisma, {
+      family: "generic", taskTypes: [CATALOG_BATCH_TASK_TYPE], workerId: "shard-cap-probe", leaseMs: 60_000,
+    });
+    const outcome = await createCatalogBatchHandler(prisma, { env: LIFECYCLE_ON_ENV })(handlerContext(lease!));
+    await finalizeTaskItem(prisma, lease!, outcome);
+
+    const parent = await prisma.genericTask.findUniqueOrThrow({ where: { id: enqueued.taskId } });
+    expect(parent.result).toMatchObject({
+      shardPlan: {
+        shardSize: 1_000,
+        sizingBasis: { sampleCount: 60, source: "measured_recent_completed_items", p90Seconds: tinyDurationSeconds },
+      },
+    });
+    const shards = await prisma.genericTask.findMany({ where: { parentTaskId: enqueued.taskId }, orderBy: { totalCount: "desc" } });
+    expect(shards).toHaveLength(2);
+    expect(shards.map((s) => s.totalCount).sort((a, b) => b - a)).toEqual([1_000, 200]);
+  }, 60_000);
+
   it("switch off: the same data still builds exactly one pending child task under the legacy TTL, byte-for-byte unchanged", async () => {
     process.env.FEATURE_PROMO_LINK_CLAIM = "true";
     process.env.PROMO_LINK_CLAIM_ALLOW_WRITE = "true";
