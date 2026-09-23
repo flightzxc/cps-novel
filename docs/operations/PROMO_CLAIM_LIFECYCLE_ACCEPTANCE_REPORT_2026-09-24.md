@@ -126,9 +126,11 @@ PROMO_CLAIM_BATCH_CONTROL_POSTGRES_VERIFICATION=PASS
 `scripts/preproduction/lib.sh` 新增 `preprod_assert_promo_claim_lifecycle_config()`，规则与 `resolvePromoClaimLifecycleConfig`（`src/lib/tasks/promo-claim-lifecycle.ts`）逐条一致：
 
 - 六个数值项（批准有效期/放行窗口/分片上下限/凭据安全余量/截止宽限）：未设置或去空白后为空串→用回退默认值；否则必须是十进制整数字面量，满足正数（`>0`）或非负（`>=0`）；`shardSizeMin` 不得超过 `shardSizeMax`。
-- 开关：额外收紧为严格 `true`/`false`/未设置——比 TS 解析器本身更严格（TS 对非法开关值从不报错，只会静默当 `false`）。
+- 开关：**原值必须恰好是 `""`（未设置/显式空串）、`"true"`、`"false"` 三者之一，不做任何 trim**——其它任何值（含首尾空白、`"TRUE"`/`"1"`/`"yes"`/`"on"`/`"False"` 等）一律 FAIL。比 TS 解析器本身更严格（TS 对非法开关值从不报错，只会静默当 `false`）。
 
-测试证据（`tests/backend/runtime/preproduction-promo-claim-lifecycle-config-gate.test.ts`，本报告执行 2026-09-24）：
+**2026-09-24 Opus 复核发现并已修复的一处问题**：初版实现在比较前先对开关原值做 `_pcl_trim`。`isPromoClaimLifecycleEnabled`（TS）是 `env[...] === "true"` 严格字符串相等、不 trim；于是目标机 env 里若把开关写成带首尾空白的形态（如 `" true"`），旧实现会把它 trim 成合法的 `"true"` 而 PASS、打印 `enabled=true`，但运行时 TS 侧按严格相等判定为 `false`——preflight 说"已开启"，实际运行时是关闭的，这正是这道门禁本该消除的"两边判定不一致"，却被门禁自己的 trim 制造了出来。修法：去掉开关判定里的 `_pcl_trim` 调用，直接匹配原始值（`scripts/preproduction/lib.sh` 的 `preprod_assert_promo_claim_lifecycle_config()`）。初版的"双跑"一致性测试只覆盖了六个数值项（49 条），没有覆盖开关，所以没能抓住这处不一致。
+
+测试证据（`tests/backend/runtime/preproduction-promo-claim-lifecycle-config-gate.test.ts`，本报告执行 2026-09-24，含 Opus 复核后新增的开关双跑测试）：
 
 ```
 ✓ preprod_assert_promo_claim_lifecycle_config: 全部未设置 -> PASS，取回退默认值 (3 tests)
@@ -136,19 +138,22 @@ PROMO_CLAIM_BATCH_CONTROL_POSTGRES_VERIFICATION=PASS
 ✓ preprod_assert_promo_claim_lifecycle_config: 六个数值项——非整数/越界/min>max (26 tests)
 ✓ preflight.sh 接线：调用行真的存在，取证行真的在最终 PASS 之前 (2 tests)
 ✓ preflight.sh 真实行为（不 mock）：配置门禁在写闸判定之后、git_commit 判定之前生效 (4 tests)
-✓ TS 解析器 vs shell 校验：数值项判定一致性（防两边漂移） (49 tests)
+✓ TS 解析器 vs shell 校验：数值项判定一致性（防两边漂移） (57 tests，含新增的首尾空白样例 " 90"/"90 ")
+✓ TS 解析器 vs shell 校验：开关判定必须逐值一致（不得靠 trim 制造假一致） (10 tests，新增)
 ✓ bash 5 下的行为对照（docker bash:5.2） (4 tests)
 
 Test Files  1 passed (1)
-     Tests  92 passed (92)
+     Tests  110 passed (110)
 ```
 
 变异证据（本报告执行，均已复原）：
 
-1. **删除 `preflight.sh` 的调用行** `lifecycle_config_evidence="$(preprod_assert_promo_claim_lifecycle_config)" || fail "$lifecycle_config_evidence"` → 3 条依赖真跑 `preflight.sh` 的用例转红（"接线"文本用例 + 两条真实行为用例）；`cp` 恢复后重跑 92/92 全绿，`git diff --quiet -- scripts/preproduction/preflight.sh` 确认无残留。
-2. **放宽 `lib.sh` 的正整数下界判断**（`if (( value <= 0 ))` 改成恒假 `if false`）→ 16 条用例转红，含全部四个正整数字段的"0"/负数取值用例，以及"双跑"防漂移测试里所有涉及正整数字段边界的组合；`cp` 恢复后重跑 92/92 全绿，`git diff --quiet -- scripts/preproduction/lib.sh` 确认无残留。
+1. **删除 `preflight.sh` 的调用行** `lifecycle_config_evidence="$(preprod_assert_promo_claim_lifecycle_config)" || fail "$lifecycle_config_evidence"` → 3 条依赖真跑 `preflight.sh` 的用例转红（"接线"文本用例 + 两条真实行为用例）；`cp` 恢复后重跑 110/110 全绿，`git diff --quiet -- scripts/preproduction/preflight.sh` 确认无残留。
+2. **放宽 `lib.sh` 的正整数下界判断**（`if (( value <= 0 ))` 改成恒假 `if false`）→ 16 条用例转红，含全部四个正整数字段的"0"/负数取值用例，以及"双跑"防漂移测试里所有涉及正整数字段边界的组合；`cp` 恢复后重跑 110/110 全绿，`git diff --quiet -- scripts/preproduction/lib.sh` 确认无残留。
+3. **（Opus 复核发现问题后新增）把 trim 加回开关判定**（`enabled_raw="$(_pcl_trim "${PROMO_CLAIM_LIFECYCLE_V1_ENABLED:-}")"`）→ 精确 2 条用例转红：`" true"`/`"true "` 这两个专门针对"trim 制造假一致"的用例（其余 8 个开关双跑用例不受影响，因为它们的原值即便 trim 后仍然不是合法的 `true`/`false`，如 `"TRUE"`/`"1"`）；`cp` 恢复后重跑 110/110 全绿，`git diff --quiet -- scripts/preproduction/lib.sh` 确认无残留。
+4. **（Opus 复核发现问题后新增）让开关额外接受 `"yes"`**（`case` 分支改成 `"true"|"yes") enabled="true" ;;`）→ 精确 1 条用例转红（`"yes"` 那一条，断言"shell 必须 FAIL"却观察到 `rc=0`）；`cp` 恢复后重跑 110/110 全绿，`git diff --quiet -- scripts/preproduction/lib.sh` 确认无残留。
 
-两次变异均按"改坏 → 转红 → 用 `cp` 备份恢复（非 `git checkout`，因为改动集混有本步计划内的编辑）→ `git diff --quiet` 确认逐字节复原 → 重跑转绿"的顺序执行，脚本用 `set +e` 避免中途因非零退出码提前中断。
+四次变异均按"改坏 → 转红 → 用 `cp` 备份恢复（非 `git checkout`，因为改动集混有本步计划内的编辑）→ `git diff --quiet` 确认逐字节复原 → 重跑转绿"的顺序执行，脚本用 `set +e` 避免中途因非零退出码提前中断。
 
 ---
 

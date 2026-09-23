@@ -179,9 +179,20 @@ preprod_assert_write_gates() {
 # 运营把目标机 env 里的开关笔误成 `"TRUE"`（大写）、`"1"` 这类值时，TS 侧
 # 完全不会报错，只会在完全不知情的情况下继续跑着"关闭"的旧行为——这正是
 # 本函数要拦的那类静默失效，只是发生在开关字段而不是数值字段。preflight
-# 因此对开关额外收紧成"只接受精确的 true / false / 未设置（含空白字符串）"，
-# 比 TS 本身更严格；这是有意的策略叠加，不是与 TS"不一致"——上面六个数值
-# 字段的判断规则才是必须逐条对齐 TS 的部分。
+# 因此对开关额外收紧成"只接受精确的 true / false / 未设置"，比 TS 本身更
+# 严格；这是有意的策略叠加，不是与 TS"不一致"——上面六个数值字段的判断规则
+# 才是必须逐条对齐 TS 的部分。
+#
+# 🔴 2026-09-24 Opus 复核发现并修复：开关判定**不得** trim。`isPromoClaimLifecycleEnabled`
+# 是 `env[...] === "true"` 严格字符串相等，同样不 trim——`" true"`（TS 侧不
+# 等于 `"true"`，按 `false` 处理）如果这里先 `_pcl_trim` 再比较，会被 trim
+# 成合法的 `"true"` 而 PASS 并打印 `enabled=true`，但运行时 TS 侧实际按
+# `false` 跑——门禁本身制造了一次"两边判定不一致"，与这道门禁存在的目的
+# （消除"preflight 说合法、运行时其实不是那么回事"）正相反。因此下面的
+# `case` 直接匹配 `$enabled_raw`（未经任何 trim 的原始值），不引入
+# `_pcl_trim`；只有原值恰好是空串（未设置或显式设为空）、`"true"`、`"false"`
+# 三种之一才合法，首尾带任何空白、`"TRUE"`/`"1"`/`"yes"`/`"on"`/`"False"`
+# 等一律 FAIL。
 #
 # 失败时把 `promo_claim_lifecycle_config_invalid variable=... value=...
 # reason=...` 写到 stdout（供调用方转交 `fail()`）并 `return 65`；成功时
@@ -244,10 +255,11 @@ _pcl_resolve_integer() {
 preprod_assert_promo_claim_lifecycle_config() {
   local enabled_raw enabled
   enabled_raw="${PROMO_CLAIM_LIFECYCLE_V1_ENABLED:-}"
-  enabled="$(_pcl_trim "$enabled_raw")"
-  case "$enabled" in
+  # 🔴 不 trim——原因见上方 2026-09-24 Opus 复核的说明。直接匹配原始值。
+  case "$enabled_raw" in
     "") enabled="false" ;;
-    "true"|"false") ;;
+    "true") enabled="true" ;;
+    "false") enabled="false" ;;
     *)
       echo "promo_claim_lifecycle_config_invalid variable=PROMO_CLAIM_LIFECYCLE_V1_ENABLED value=$enabled_raw reason=must_be_true_false_or_unset"
       return 65

@@ -4,6 +4,7 @@ import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { describe, expect, it } from "vitest";
 import {
+  isPromoClaimLifecycleEnabled,
   PromoClaimLifecycleConfigError,
   resolvePromoClaimLifecycleConfig,
 } from "@/lib/tasks/promo-claim-lifecycle";
@@ -289,15 +290,20 @@ describe("preflight.sh 真实行为（不 mock）：配置门禁在写闸判定�
  * "双跑"防漂移：同一组合法/非法样例同时喂给 TS 解析器
  * （`resolvePromoClaimLifecycleConfig`）和 shell 校验
  * （`preprod_assert_promo_claim_lifecycle_config`），断言两边对
- * "是否合法"的判断一致。只覆盖六个数值项——开关字段的行为差异是有意为之
- * 的策略叠加，详见 lib.sh 该函数上方的说明，不在本组"一致性"断言范围内。
+ * "是否合法"的判断一致。本组只覆盖六个数值项——这六项的判断规则要求逐条对齐
+ * TS（"accept/reject 一致"是对称断言）。开关字段单独在下面一组用不对称的
+ * 断言覆盖："shell PASS 时打印的 enabled= 必须等于 TS 的判定结果；shell
+ * FAIL 时不要求 TS 也报错"——因为开关的 FAIL 集合本来就刻意比 TS 更严格
+ * （lib.sh 该函数上方的说明），对称的"accept/reject 一致"不适用于开关。
  *
  * 样例刻意只用双方都无歧义同意的十进制写法（纯数字、可选前导负号、小数点、
  * 空白、越界）——不覆盖 JS 独有的科学计数法/十六进制/前导 "+" 这类写法，
- * lib.sh 的函数注释已说明这个刻意的范围收窄。
+ * lib.sh 的函数注释已说明这个刻意的范围收窄。含首尾空白的样例（` 90`/`90 `）
+ * 专门核对 `_pcl_trim` 与 JS `Number()` 的 ToNumber 空白处理是否一致——两边
+ * 都会把首尾空白去掉再解析，这一组不应该出现分歧。
  */
 describe("TS 解析器 vs shell 校验：数值项判定一致性（防两边漂移）", () => {
-  const numericSamples = ["", "  ", "50", "1440", "0", "-1", "-5", "12.5", "abc", "1 2", "008", "3000000"];
+  const numericSamples = ["", "  ", "50", "1440", "0", "-1", "-5", "12.5", "abc", "1 2", "008", "3000000", " 90", "90 "];
 
   const positiveFields: Array<{ env: keyof LifecycleEnv; tsKey: "approvalTtlMinutes" | "shardWindowMinutes" }> = [
     { env: "PROMO_CLAIM_BATCH_APPROVAL_TTL_MINUTES", tsKey: "approvalTtlMinutes" },
@@ -339,6 +345,49 @@ describe("TS 解析器 vs shell 校验：数值项判定一致性（防两边漂
       expect(shellAccepts(env), `min=${min} max=${max}`).toBe(tsAccepts(env));
     }
   });
+});
+
+/**
+ * 2026-09-24 Opus 复核：开关判定原先没有"双跑"覆盖——单靠上面数值项那组
+ * "accept/reject 一致"断言抓不住"两边都 accept，但 accept 的含义不一样"这
+ * 类漂移。真实发生过的例子（本组新增前的 bug）：shell 侧先 `_pcl_trim` 再
+ * 比较，于是 `" true"`（首尾带空白）被 trim 成合法的 `"true"` 而 PASS、
+ * 打印 `enabled=true`；但 TS 的 `isPromoClaimLifecycleEnabled` 是
+ * `env[...] === "true"` 严格相等、不 trim，对 `" true"` 判定为 `false`——
+ * preflight 说"生命周期已开启"，运行时实际是关闭的,这正是这道门禁本该
+ * 消除的"两边判定不一致"，却被门禁自己的 trim 制造了出来。
+ *
+ * 断言形状与上面数值项那组不同（不对称，理由见上面数值项 describe 的
+ * doc comment）：
+ *   - 原值恰好是 `""`/`"true"`/`"false"` 三者之一时，shell 必须 PASS，且
+ *     打印的 `enabled=` 必须等于 TS 判定的布尔值（转成小写字符串）；
+ *   - 其余任何原值（含首尾空白、大小写变体、`"1"`/`"yes"`/`"on"` 这类
+ *     常见其它语言的"真值"写法），shell 必须 FAIL——不要求 TS 也报错
+ *     （TS 对这些值从不报错，只会静默当 `false`，这正是 shell 要拦的
+ *     那类静默失效）。
+ */
+describe("TS 解析器 vs shell 校验：开关判定必须逐值一致（不得靠 trim 制造假一致）", () => {
+  const enabledSamples = ["true", "false", "", " true", "true ", "TRUE", "1", "yes", "on", "False"];
+
+  function tsEnabledString(raw: string): "true" | "false" {
+    return isPromoClaimLifecycleEnabled({ NODE_ENV: "test", PROMO_CLAIM_LIFECYCLE_V1_ENABLED: raw } as NodeJS.ProcessEnv)
+      ? "true"
+      : "false";
+  }
+
+  for (const sample of enabledSamples) {
+    const isExactMatch = sample === "" || sample === "true" || sample === "false";
+    it(`PROMO_CLAIM_LIFECYCLE_V1_ENABLED=${JSON.stringify(sample)} -> ${isExactMatch ? "shell PASS 且 enabled= 与 TS 一致" : "shell 必须 FAIL"}`, () => {
+      const r = runGate({ PROMO_CLAIM_LIFECYCLE_V1_ENABLED: sample });
+      if (isExactMatch) {
+        expect(r.status).toBe(0);
+        expect(r.stdout).toContain(`enabled=${tsEnabledString(sample)}`);
+      } else {
+        expect(r.status).toBe(65);
+        expect(r.stdout).toContain("variable=PROMO_CLAIM_LIFECYCLE_V1_ENABLED");
+      }
+    });
+  }
 });
 
 describe("bash 5 下的行为对照（docker bash:5.2，不可用则跳过）", () => {
