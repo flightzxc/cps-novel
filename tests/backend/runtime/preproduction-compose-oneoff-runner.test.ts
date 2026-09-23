@@ -152,6 +152,41 @@ describe.skipIf(!dockerOk)("真实仓库 compose 文件：preproduction 目标�
     }
   });
 
+  it("阶段2（ADR-PROMO-CLAIM-BATCH-LIFECYCLE）：领推广生命周期七项配置真的透传到 web/worker/scheduler 的合并渲染结果", () => {
+    // 施工任务第5步 2.1：`infra/preproduction/preprod.env.example` 只是一份
+    // 静态模板文本，光断言模板文件内容不能证明这些变量真的会被 Compose
+    // 送到三个应用服务的运行时环境——`docker-compose.yml` 的
+    // `${VAR:-default}` 插值、`infra/preproduction/docker-compose.yml`
+    // overlay 是否意外覆盖同名 key，都只有在渲染合并配置之后才能验证。这里
+    // 不传任何 PROMO_CLAIM_* 环境变量，断言合并结果落到
+    // `src/lib/tasks/promo-claim-lifecycle.ts` 的 `PROMO_CLAIM_LIFECYCLE_DEFAULTS`
+    // 同一组默认值——预生产模板保持开关默认关闭（D8），这组默认值就是模板
+    // 生效时三个进程实际会看到的值。
+    const json = renderConfig(
+      ["docker-compose.yml", "infra/preproduction/docker-compose.yml"],
+      ["--format", "json"],
+    );
+    expect(json.status).toBe(0);
+    const config = JSON.parse(json.stdout ?? "{}") as {
+      services: Record<string, { environment?: Record<string, string> }>;
+    };
+    const expectedDefaults: Record<string, string> = {
+      PROMO_CLAIM_LIFECYCLE_V1_ENABLED: "false",
+      PROMO_CLAIM_BATCH_APPROVAL_TTL_MINUTES: "1440",
+      PROMO_CLAIM_SHARD_WINDOW_MINUTES: "90",
+      PROMO_CLAIM_SHARD_SIZE_MAX: "1000",
+      PROMO_CLAIM_SHARD_SIZE_MIN: "50",
+      PROMO_CLAIM_CREDENTIAL_SAFETY_MARGIN_MINUTES: "30",
+      PROMO_CLAIM_SHARD_DEADLINE_GRACE_MINUTES: "10",
+    };
+    for (const name of ["web", "worker", "scheduler"]) {
+      const env = config.services[name]?.environment ?? {};
+      for (const [key, value] of Object.entries(expectedDefaults)) {
+        expect(env[key], `${name}.environment.${key}`).toBe(value);
+      }
+    }
+  });
+
   it("构建机能力没有被误删：只加载根 compose 时 build 段仍在", () => {
     const json = renderConfig(["docker-compose.yml"], ["--format", "json"]);
     expect(json.status).toBe(0);
