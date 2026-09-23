@@ -18,13 +18,18 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
  * covers all five categories individually (one dedicated it() per category,
  * so a regression in any single one is unambiguous about which broke), plus
  * the absolute prohibitions (never `rmi -f`, never any `-a`/`-af`), the
- * dry-run/apply split, N validation, dangling-layer handling, and the
- * previous-identity ledger's transition-period fallback.
+ * dry-run/apply split, N validation, dangling-layer handling, the
+ * previous-identity ledger's transition-period fallback, and the candidate
+ * scope: release tags of every version, nothing else.
  */
 
 const STUB_DOCKER_SCRIPT = readFileSync(resolve(import.meta.dirname, "fixtures/x8-gc-stub-docker.sh"), "utf8");
 const root = resolve(import.meta.dirname, "../../..");
 const launcher = resolve(root, "scripts/x8-production-like.sh");
+// The version scripts/lib/p1-12-local-env.sh bakes into every image tag
+// (`cps-novel:${APP_VERSION}-${GIT_COMMIT:0:7}`) -- read live, so a future
+// bump that gc cannot see fails here instead of silently filling the disk.
+const PACKAGE_VERSION: string = JSON.parse(readFileSync(resolve(root, "package.json"), "utf8")).version;
 
 let workDir: string;
 let runtimeDir: string;
@@ -69,6 +74,9 @@ function imagesLine(createdAt: string, tag: string): string {
   return `${createdAt}|${tag}`;
 }
 
+// Deliberately still 0.1.0 tags: that is what every legacy release image on
+// the real host is tagged, and those must stay gc candidates after the
+// version bump. Other versions are covered by the "version-agnostic" block.
 const TAGS = {
   newest: "cps-novel:0.1.0-newest1",
   second: "cps-novel:0.1.0-second2",
@@ -122,6 +130,37 @@ function stubLogLines(): string[] {
     return [];
   }
 }
+
+/** Bash `case` glob, the same matcher x8_gc()'s own bash-side filter uses. */
+function globMatches(pattern: string, tag: string): boolean {
+  return spawnSync("bash", ["-c", 'case "$2" in $1) exit 0 ;; esac; exit 1', "_", pattern, tag]).status === 0;
+}
+
+// Tags the real builder produces or has produced -- every one must be a gc
+// candidate, whatever the version.
+const RELEASE_TAGS = [
+  "cps-novel:0.1.0-62453d2",
+  `cps-novel:${PACKAGE_VERSION}-abc1234`,
+  "cps-novel:0.3.0-abc1234",
+  "cps-novel:9.9.9-deadbee",
+  "cps-novel:10.20.30-abc1234",
+  "cps-novel:1.0.0-rc.1-abc1234",
+];
+
+// Never a gc candidate: other stacks' images, and anything in this repo's
+// own namespace that is not a `<version>-<sha>` release tag (a hand-made
+// pin, a test tag, a registry alias, a base image).
+const NON_RELEASE_TAGS = [
+  "postgres:16.14",
+  "nginx:1.28.0-alpine",
+  "cps-admin:8.3.6-rollback",
+  "cps-admin-web:8.2.18-0ec20c4",
+  "cps-novel:latest",
+  "cps-novel:rollback-hold",
+  "cps-novel:compose-contract",
+  "cps-novel-node-base:0.3.0-abc1234",
+  "ghcr.io/example/cps-novel:0.3.0-abc1234",
+];
 
 describe("X8 D-9b release-image retention gc (x8_gc)", () => {
   describe("§4.2 category 1: currently committed identity", () => {
@@ -237,7 +276,7 @@ describe("X8 D-9b release-image retention gc (x8_gc)", () => {
       expect(result.stdout).toContain("X8_GC_DANGLING_COUNT=2");
       // §4.2 asks for the id AND size of each dangling layer, not just a
       // count: `docker image prune -f` is the one host-wide action in this
-      // function (it is not restricted to cps-novel:0.1.0-* the way every
+      // function (it is not restricted to cps-novel release tags the way every
       // `rmi` is), so a dry-run has to make that blast radius reviewable
       // before an --apply is ever run. The stub returns bare ids with no
       // "|size" field, which also pins the missing-size fallback.
@@ -345,30 +384,95 @@ describe("X8 D-9b release-image retention gc (x8_gc)", () => {
     });
   });
 
-  describe("scope: only cps-novel:0.1.0-* tags are ever candidates", () => {
+  describe("scope: only cps-novel:<version>-<sha> release tags are ever candidates", () => {
     it("never lets a non-matching tag the stub might return leak into the delete set (bash-side filter, not just --filter)", () => {
       // The stub deliberately ignores --filter and returns whatever
       // STUB_GC_IMAGES says -- this proves x8_gc() applies its OWN
-      // `cps-novel:0.1.0-*` shape check on top, not just the docker flag.
+      // release-tag shape check on top, not just the docker flag.
       const result = run("x8_gc --keep 1", {
         STUB_GC_PS_IMAGES: "",
         STUB_GC_IMAGES: [
           imagesLine("2026-09-09 06:00:00 +0000 UTC", TAGS.newest),
-          imagesLine("2026-09-09 05:00:00 +0000 UTC", "cps-admin:8.3.6-rollback"),
-          imagesLine("2026-09-09 04:00:00 +0000 UTC", "postgres:16.14"),
-          imagesLine("2026-09-09 03:00:00 +0000 UTC", "nginx:1.28.0-alpine"),
+          ...NON_RELEASE_TAGS.map((tag) => imagesLine("2026-09-09 05:00:00 +0000 UTC", tag)),
         ].join("\n"),
       });
       expect(result.status, result.stderr).toBe(0);
-      expect(result.stdout).not.toContain("cps-admin");
-      expect(result.stdout).not.toContain("postgres:16.14");
-      expect(result.stdout).not.toContain("nginx:1.28.0-alpine");
+      for (const tag of NON_RELEASE_TAGS) {
+        expect(result.stdout).not.toContain(tag);
+      }
       expect(result.stdout).toContain("X8_GC_CANDIDATES=1");
+    });
+
+    it("hands docker a --filter reference glob that matches every release version and nothing else", () => {
+      // The other half of the double filter: the stub cannot evaluate the
+      // glob, so read back what x8_gc() actually passed and evaluate it
+      // here. Bash globbing stands in for docker's Go path.Match: the two
+      // agree on `*` and `[0-9]` for slash-free tags, and every slashed
+      // negative below already fails on the anchored `cps-novel:` prefix.
+      const result = run("x8_gc --keep 1", { STUB_GC_PS_IMAGES: "" });
+      expect(result.status, result.stderr).toBe(0);
+      const referenceFilters = stubLogLines().flatMap((line) => {
+        const match = /--filter=reference=(\S+)/.exec(line);
+        return match ? [match[1]] : [];
+      });
+      expect(referenceFilters).toHaveLength(1);
+      const [pattern] = referenceFilters;
+      for (const tag of RELEASE_TAGS) {
+        expect(globMatches(pattern, tag), `${pattern} should match ${tag}`).toBe(true);
+      }
+      for (const tag of NON_RELEASE_TAGS) {
+        expect(globMatches(pattern, tag), `${pattern} must not match ${tag}`).toBe(false);
+      }
+    });
+  });
+
+  describe("version-agnostic: tags from any release version are candidates, not just 0.1.0", () => {
+    // Regression: the filter used to be a literal `cps-novel:0.1.0-*`. Once
+    // package.json moved past 0.1.0, every newly built image was invisible
+    // to gc -- never deleted, ~1.2GB more per `up` -- while it kept looking
+    // only at the legacy 0.1.0 tags.
+    it("treats the tag this checkout's own build produces (package.json version) as a candidate", () => {
+      const ownBuildTag = `cps-novel:${PACKAGE_VERSION}-abc1234`;
+      const result = run("x8_gc --keep 1", {
+        STUB_GC_PS_IMAGES: "",
+        STUB_GC_IMAGES: imagesLine("2026-09-23 12:00:00 +0000 UTC", ownBuildTag),
+      });
+      expect(result.status, result.stderr).toBe(0);
+      expect(result.stdout).toContain("X8_GC_CANDIDATES=1");
+      expect(result.stdout).toContain(`X8_GC_KEEP_IMAGE=${ownBuildTag} reason=recent`);
+    });
+
+    it("ranks legacy and post-bump tags together by creation time, deletes across both, and keeps the in-use floor", () => {
+      const post = {
+        future: "cps-novel:9.9.9-future1",
+        newer: "cps-novel:0.3.0-post0002",
+        older: "cps-novel:0.3.0-post0001",
+      };
+      const result = run("x8_gc --keep 2 --apply", {
+        STUB_GC_IMAGES: [
+          imagesLine("2026-09-25 00:00:00 +0000 UTC", post.future),
+          imagesLine("2026-09-24 00:00:00 +0000 UTC", post.newer),
+          imagesLine("2026-09-23 00:00:00 +0000 UTC", post.older),
+          imagesLine("2026-09-09 06:00:00 +0000 UTC", TAGS.newest),
+          imagesLine("2026-09-09 05:00:00 +0000 UTC", TAGS.second),
+          imagesLine("2026-08-07 00:00:00 +0000 UTC", TAGS.oldestInUse),
+        ].join("\n"),
+        // Default PS fixture: the oldest 0.1.0 tag still backs a container.
+      });
+      expect(result.status, `stdout:\n${result.stdout}\nstderr:\n${result.stderr}`).toBe(0);
+      expect(result.stdout).toContain("X8_GC_CANDIDATES=6");
+      expect(result.stdout).toContain(`X8_GC_KEEP_IMAGE=${post.future} reason=recent`);
+      expect(result.stdout).toContain(`X8_GC_KEEP_IMAGE=${post.newer} reason=previous(inferred: no ledger file yet),recent`);
+      expect(result.stdout).toContain(`X8_GC_KEEP_IMAGE=${TAGS.oldestInUse} reason=in-use`);
+      for (const tag of [post.older, TAGS.newest, TAGS.second]) {
+        expect(result.stdout).toContain(`X8_GC_REMOVED=${tag}`);
+      }
+      expect(result.stdout).toContain("X8_GC_REMOVED_COUNT=3");
     });
   });
 
   describe("no candidates", () => {
-    it("is a clean no-op when no cps-novel:0.1.0-* tags exist at all", () => {
+    it("is a clean no-op when no cps-novel release tags exist at all", () => {
       const result = run("x8_gc --apply", { STUB_GC_PS_IMAGES: "", STUB_GC_IMAGES: "" });
       expect(result.status, result.stderr).toBe(0);
       expect(result.stdout).toContain("X8_GC_CANDIDATES=0");

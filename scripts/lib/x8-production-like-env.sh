@@ -1299,7 +1299,7 @@ x8_require_free_disk_kib() {
     # deployment acceptance checklist can grep for it.
     echo "X8_DISK_PREFLIGHT=refused scenario=\"$scenario\" free_kib=${free_kib} min_kib=${min_kib}" >&2
     echo "ERROR: insufficient free disk space for $scenario -- ${free_kib} KiB available, ${min_kib} KiB required." >&2
-    echo "Reclaim space manually before retrying, e.g.: docker image prune -f   # dangling layers only -- never 'docker image prune -a' or 'docker system prune -a', which would also delete OTHER stacks' images on this host (see 施工工单_D9_up数据库准备原子化与镜像保留_2026-09-09.md 第六节 for the reviewed docker rmi command that only targets this stack's own old cps-novel:0.1.0-* release images)." >&2
+    echo "Reclaim space manually before retrying, e.g.: docker image prune -f   # dangling layers only -- never 'docker image prune -a' or 'docker system prune -a', which would also delete OTHER stacks' images on this host (see 施工工单_D9_up数据库准备原子化与镜像保留_2026-09-09.md 第六节 for the reviewed docker rmi command that only targets this stack's own old cps-novel:<version>-<sha> release images, of any version)." >&2
     return 69
   fi
   echo "X8_DISK_PREFLIGHT=ok scenario=\"$scenario\" free_kib=${free_kib} min_kib=${min_kib}" >&2

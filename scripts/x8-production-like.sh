@@ -69,8 +69,9 @@ usage() {
     '     first.' \
     '' \
     '     施工工单_D9_up数据库准备原子化与镜像保留_2026-09-09.md, D-9b: `gc`' \
-    '     deletes stale `cps-novel:0.1.0-*` release-image tags. Defaults to' \
-    '     dry-run (prints the keep/delete plan, deletes nothing); --apply' \
+    '     deletes stale `cps-novel:<version>-<sha>` release-image tags of' \
+    '     any version. Defaults to dry-run (prints the keep/delete plan,' \
+    '     deletes nothing); --apply' \
     '     actually runs it. Keeps: the currently committed release image, the' \
     '     previous one, the most recent N by creation time (N: --keep, or' \
     '     $X8_GC_KEEP / $X8_GC_KEEP_RECENT, default 5), and any image any' \
@@ -514,11 +515,11 @@ build_app_image() {
 }
 
 # 施工工单_D9_up数据库准备原子化与镜像保留_2026-09-09.md, D-9b §4: explicit
-# retention gc for `cps-novel:0.1.0-*` release images. Every `up` bakes a new
-# ~1.2GB tag and nothing in this repo ever deleted one -- 36 tags/~43GB and
-# ~30GB of dangling layers had accumulated by the time this work order was
-# written, entirely because cleanup was a thing a human had to remember, and
-# usually only remembered once the disk was already full.
+# retention gc for `cps-novel:<version>-<sha>` release images. Every `up`
+# bakes a new ~1.2GB tag and nothing in this repo ever deleted one -- 36
+# tags/~43GB and ~30GB of dangling layers had accumulated by the time this
+# work order was written, entirely because cleanup was a thing a human had
+# to remember, and usually only remembered once the disk was already full.
 #
 # §4.2's retention set (implemented verbatim below, five categories, union):
 #   1. the image the CURRENTLY COMMITTED release identity points at
@@ -549,12 +550,21 @@ build_app_image() {
 #     check is supposed to keep that from ever being attempted in the first
 #     place, but omitting `-f` is what makes docker itself the second,
 #     independent line of defense if that check is ever wrong.
-#   - NEVER touch anything outside `cps-novel:0.1.0-*` -- `postgres:16.14`,
-#     `nginx:1.28.0-alpine`, and every `cps-admin-*` tag are filtered out
-#     twice: once by the `--filter=reference=...` docker itself is asked to
-#     apply, and again by a plain bash-side tag-shape check on whatever comes
-#     back, so a `--filter` that were ever dropped or misbehaved could not
-#     silently widen the deletion candidate set.
+#   - NEVER touch anything outside this repo's own release tags, i.e. the
+#     `cps-novel:${APP_VERSION}-${GIT_COMMIT:0:7}` shape that
+#     scripts/lib/p1-12-local-env.sh builds, matched as the glob
+#     `cps-novel:[0-9]*.[0-9]*.[0-9]*-*` -- `postgres:16.14`,
+#     `nginx:1.28.0-alpine`, every `cps-admin-*` tag, and any non-release tag
+#     in the `cps-novel` repo itself (`:latest`, a hand-made pin) are filtered
+#     out twice: once by the `--filter=reference=...` docker itself is asked
+#     to apply, and again by a plain bash-side tag-shape check on whatever
+#     comes back, so a `--filter` that were ever dropped or misbehaved could
+#     not silently widen the deletion candidate set. The version is matched
+#     by SHAPE, never as a literal: this glob used to be `cps-novel:0.1.0-*`,
+#     which silently stopped matching every image built after package.json
+#     moved to 0.3.0 -- gc kept looking only at the legacy 0.1.0 tags while
+#     each new `up` added ~1.2GB it could never see. Docker applies the
+#     glob with Go's path.Match, which honors `[0-9]` the same way bash does.
 #
 # Deliberately does NOT call prepare_x8_environment() (§4.4): a stray `gc`
 # invocation (a human running it standalone, not through `up`) must never
@@ -680,7 +690,7 @@ x8_gc() {
   local line
   while IFS= read -r line; do
     [[ -n "$line" ]] && raw_lines+=("$line")
-  done < <(docker images --filter="reference=cps-novel:0.1.0-*" --format '{{.CreatedAt}}|{{.Repository}}:{{.Tag}}' 2>/dev/null | sort -r)
+  done < <(docker images --filter="reference=cps-novel:[0-9]*.[0-9]*.[0-9]*-*" --format '{{.CreatedAt}}|{{.Repository}}:{{.Tag}}' 2>/dev/null | sort -r)
 
   local -a all_tags=()
   local candidate_tag
@@ -697,9 +707,9 @@ x8_gc() {
       candidate_tag="${line#*|}"
       # Second, bash-side filter -- see this function's header comment on
       # why this is deliberate defense-in-depth, not redundant with
-      # --filter above.
+      # --filter above. Same glob, kept literal in both places.
       case "$candidate_tag" in
-        cps-novel:0.1.0-*) all_tags+=("$candidate_tag") ;;
+        cps-novel:[0-9]*.[0-9]*.[0-9]*-*) all_tags+=("$candidate_tag") ;;
       esac
     done
   fi
@@ -830,7 +840,7 @@ x8_gc() {
     # "how many" is not enough for an operator to decide whether a later
     # --apply is safe to run, because `docker image prune -f` is the one
     # host-wide (cross-project) action in this whole function: the layers it
-    # reclaims are not restricted to cps-novel:0.1.0-* the way every `rmi`
+    # reclaims are not restricted to cps-novel release tags the way every `rmi`
     # above is. Listing them is what makes that blast radius reviewable
     # BEFORE anything is deleted. Size is whatever `docker images` reports
     # ("143MB"), not a raw byte count -- it is never summed, only shown.

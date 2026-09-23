@@ -32,7 +32,7 @@
 
 X8 本地 Docker VM 磁盘预算按 200GB 总量粗分：
 
-- **50GB 必要占用**：应用镜像（`cps-novel:0.1.0-*` 系列，`x8_gc()` 已做保留策略）、`postgres_data`（当前 3.81GB 量级，见 `project_phase8_readiness_audit`）、系统本身。
+- **50GB 必要占用**：应用镜像（`cps-novel:<version>-<sha>` 系列，不分版本，`x8_gc()` 已做保留策略）、`postgres_data`（当前 3.81GB 量级，见 `project_phase8_readiness_audit`）、系统本身。
 - **60–80GB WAL 归档**：本表第 1 节的 `--max-bytes` 预算区间，与 `wal_archive` 具名卷共享同一块 Docker VM 虚拟盘（见 rollout 计划第 7 节"归档迁宿主绑定"，Gate 6，未在本轮范围）。
 - **基准备份 + 校验临时空间**：`base-backups` 目录本身（当前 keep-base=2，每份约与 `postgres_data` 同量级）+ `verify-physical-base.sh` 解包校验用的 `.verify-<stamp>` 临时目录（校验完成后清理，但峰值期间两者同时占用）。
 - **40–50GB 紧急余量**：不计入任何一项预算，专门应对"某一项估算偏差 + 同一时刻多个操作并发"的组合情况——这不是一个具体功能的预算，是留白。

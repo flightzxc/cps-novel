@@ -3,12 +3,12 @@
 # fixture -- a stub `docker` CLI for tests/backend/runtime/x8-image-retention.test.ts.
 # Models exactly the six invocation shapes x8_gc() (scripts/x8-production-like.sh)
 # issues, and nothing else:
-#   docker images --filter="reference=cps-novel:0.1.0-*" --format '...'   (candidates)
-#   docker images --filter="dangling=true" --format '{{.ID}}'            (dangling)
-#   docker ps -a --format '{{.Image}}'                                   (in-use)
-#   docker image inspect <tag> --format '{{.Size}}'                      (size accounting)
-#   docker rmi <tag>                                                     (deletion)
-#   docker image prune -f                                                (dangling cleanup)
+#   docker images --filter="reference=cps-novel:[0-9]*.[0-9]*.[0-9]*-*" --format '...'   (candidates)
+#   docker images --filter="dangling=true" --format '{{.ID}}'                           (dangling)
+#   docker ps -a --format '{{.Image}}'                                                  (in-use)
+#   docker image inspect <tag> --format '{{.Size}}'                                     (size accounting)
+#   docker rmi <tag>                                                                    (deletion)
+#   docker image prune -f                                                               (dangling cleanup)
 # Every invocation is appended, verbatim, to $STUB_GC_LOG when set, so a
 # test can assert both what WAS called (e.g. `rmi` argv) and -- just as
 # important for this work order -- what NEVER was (no `-f` on `rmi`, no
@@ -18,9 +18,10 @@
 # $STUB_GC_IMAGES for ANY `docker images` call whose args do not literally
 # contain "dangling=true", regardless of what the reference filter actually
 # says. This is intentional, not laziness -- it is what lets a test prove
-# x8_gc() applies its OWN bash-side `cps-novel:0.1.0-*` shape check on
-# whatever docker hands back, rather than trusting the `--filter` flag alone
-# to keep cps-admin-*/postgres/nginx entries out of the candidate set.
+# x8_gc() applies its OWN bash-side release-tag shape check on whatever
+# docker hands back, rather than trusting the `--filter` flag alone to keep
+# cps-admin-*/postgres/nginx entries out of the candidate set. The reference
+# glob itself is tested separately, by reading it back out of $STUB_GC_LOG.
 set -euo pipefail
 
 if [[ -n "${STUB_GC_LOG:-}" ]]; then
