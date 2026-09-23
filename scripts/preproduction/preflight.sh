@@ -19,8 +19,12 @@ preprod_load_env || fail env_file 66
 [[ "${ADMIN_TWO_FACTOR_ENFORCEMENT:-}" == "true" ]] || fail two_factor_enforcement
 [[ "${FEATURE_INDEXNOW_OUTBOX:-}" == "false" && "${INDEXNOW_OUTBOX_ALLOW_WRITE:-}" == "false" ]] || fail indexnow_outbox
 [[ "${FEATURE_INDEXNOW_DELIVERY:-}" == "false" && "${INDEXNOW_DELIVERY_ALLOW_WRITE:-}" == "false" ]] || fail indexnow_delivery
-[[ "${FEATURE_NOVEL_CATALOG_SYNC:-}" == "false" && "${NOVEL_CATALOG_SYNC_ALLOW_WRITE:-}" == "false" ]] || fail catalog_write
-[[ "${FEATURE_PROMO_LINK_CLAIM:-}" == "false" && "${PROMO_LINK_CLAIM_ALLOW_WRITE:-}" == "false" ]] || fail promo_write
+# 🔴 目录同步（2026-09-22 Owner 批准）与推广领取（2026-09-23 Owner 批准）写闸
+# 不再要求恒为 "false"：判定收敛进 lib.sh 的 preprod_assert_write_gates()
+# （封闭枚举 + PREPROD_APPROVED_OPEN_WRITE_GATES 显式登记制，见该函数上方的
+# 详细说明与 docs/adr/ADR-PREPROD-APPROVED-OPEN-WRITE-GATES.md）。这里只把它
+# 判出的 reason 转交给 fail()；取证行留到最终 PASS 之前打印。
+write_gates_evidence="$(preprod_assert_write_gates)" || fail "$write_gates_evidence"
 [[ "${FEATURE_NOVEL_TAG_AUTO:-}" == "false" && "${AUTO_WRITE_AUTHORIZED:-}" == "NO" ]] || fail auto_tagging
 [[ "${ARTICLE_BLOG_ALLOW_WRITE:-}" == "false" && "${ARTICLE_NOVEL_REBIND_ALLOW_WRITE:-}" == "false" ]] || fail article_writes
 [[ "${GIT_COMMIT:-}" =~ ^[0-9a-f]{40}$ ]] || fail git_commit
@@ -73,4 +77,5 @@ if [[ -n "${PREPROD_RELEASE_IMAGE_REF:-}" ]]; then
     }
   ' "$rendered" "$PREPROD_RELEASE_IMAGE_REF" || fail compose_image_mismatch
 fi
+echo "$write_gates_evidence"
 echo "PREPROD_PREFLIGHT=PASS"

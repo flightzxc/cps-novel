@@ -45,6 +45,78 @@ Transport and verification on the VPS are covered by
 The known `v0.2.0` versus package `0.1.0` drift remains an Owner/Release
 decision for Phase 2C.
 
+### Write-gate registration (`PREPROD_APPROVED_OPEN_WRITE_GATES`)
+
+Most write gates in `shared/env/preprod.env` must be `"false"` on both
+their `FEATURE_*` and `*_ALLOW_WRITE` variables, or `preflight.sh` refuses.
+Two gates are the Owner-approved exception: catalog sync (`catalog_write`)
+and promo-link claim (`promo_write`), opened 2026-09-22/23. Either may be
+non-`false` **only if its name also appears** in the shared env's
+`PREPROD_APPROVED_OPEN_WRITE_GATES` (comma-separated; see
+`preprod_assert_write_gates()` in `scripts/preproduction/lib.sh` and
+`docs/adr/ADR-PREPROD-APPROVED-OPEN-WRITE-GATES.md` for the full contract,
+including the exact failure reasons). The registrable names are a closed
+set of exactly those two -- opening any other write gate means extending
+that function first and getting Owner approval, not just editing this env
+file.
+
+**One-time step when upgrading an existing host to this runbook's
+version**: before running `release.sh deploy`, add
+`PREPROD_APPROVED_OPEN_WRITE_GATES=catalog_write,promo_write` to
+`/opt/cps-novel/shared/env/preprod.env`. Without it, the next preflight run
+fails `reason=catalog_write` even though the host's actual catalog/promo
+variables are unchanged -- the failure is the missing registration, not a
+change in what's open.
+
+**The registration key does NOT help a rollback to a release older than
+this one.** `release.sh rollback` refuses to run unless invoked from
+*inside the target (older) release's own checkout*
+(`/opt/cps-novel/releases/<target-commit>/`, enforced by its
+`invoke_from_previous_release` check), and it runs `preflight.sh` from
+*that checkout* -- the older release's own copy of the script, which has no
+notion of `PREPROD_APPROVED_OPEN_WRITE_GATES` and still hard-requires the
+catalog/promo pairs to be exactly `"false"`. Adding the registration key to
+the shared env changes nothing for that older `preflight.sh`; the key only
+affects deploys and rollbacks that run a checkout at or after this commit.
+So: rolling back to a release before this one, while catalog/promo are
+still open on the target host, always fails `reason=catalog_write`
+regardless of this key. Before doing that, Owner must separately approve
+temporarily setting `FEATURE_NOVEL_CATALOG_SYNC` /
+`NOVEL_CATALOG_SYNC_ALLOW_WRITE` / `FEATURE_PROMO_LINK_CLAIM` /
+`PROMO_LINK_CLAIM_ALLOW_WRITE` back to `false` in the shared env before the
+rollback runs -- consistent with what that older release itself expects,
+and it means catalog sync / promo-link claim stop working once rolled
+back, by design. The alternative is to roll forward (fix and deploy a
+newer commit) instead of rolling back past this one. Do not patch the
+older release's checkout to work around this.
+
+### Channel credentials: one environment, one credential
+
+With `promo_write` open, the channel credential stored in this host's
+database can drive real upstream writes. Every environment (production,
+preproduction, the local X8 stack, any other dev stack) must obtain its own
+channel credential by logging in to the upstream from that environment's
+own operator flow. A real credential that is live in preproduction or
+production must never be copied into X8, a local stack, or any other
+environment -- and the reverse: a token already entered into X8/local must
+not be entered into this host.
+
+Why: a per-environment encryption key only protects that environment's own
+ciphertext. On 2026-09-23 a read-only audit found that the preproduction
+credential was the same short-lived token that had also been entered into
+the local X8 stack, whose V1 encryption key had once been exposed
+(`SEC-CREDENTIAL-KEY-ROTATION-2026-09-01`). No leak of the preproduction key
+was found and no plaintext token was found in the preproduction database or
+logs; the risk was the recoverable second copy. See the blocker's note in
+`docs/governance/PRODUCTION_RELEASE_BLOCKERS.md`.
+
+Every time a credential is added, renewed, or replaced here: obtain a fresh
+token for this host only, enter it only through `/channel-accounts` (never
+scripts or SQL), confirm the worker validation succeeds, and confirm its
+`expires_at` matches no credential row in any other environment. The
+procedure and the read-only query are in
+`docs/governance/ENVIRONMENT_PROVISIONING_CHECKLIST.md` §3.
+
 ## One-time Owner sudo steps
 
 1. Install Docker Engine/Compose, Node.js (the release manifest reader, image
