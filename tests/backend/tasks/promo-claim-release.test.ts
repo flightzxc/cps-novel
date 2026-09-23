@@ -88,4 +88,35 @@ describe("promo-claim-release: 与 worker/handlers/promo-link-claim.ts 的意图
     expect(source).toContain(`operationType: "${PROMO_CLAIM_INTENT_OPERATION_TYPE}"`);
     expect(PROMO_CLAIM_INTENT_OPERATION_TYPE).toBe("promo_link.claim_promo");
   });
+
+  /**
+   * Opus 复核（2026-09-23）指出的缺口：既有的 D4 集成用例是手写插入
+   * `side_effect_intent`、键名写死成 `novelSourceItemId`，如果
+   * `worker/handlers/promo-link-claim.ts` 未来把 `requestSummary` 的键名
+   * 改了（或 `promo-claim-release.ts` 的 SQL 提取键改了），D4 前置检查会在
+   * 真实数据下静默失效——但两处的集成/单测都还是绿的，因为它们各自手写的
+   * 键名从未真正跟着 handler 的源码走。这条测试同时钉死两侧源码文本里的
+   * 键名，任何一侧改了拼写而另一侧没跟着改，这里就会先转红。
+   *
+   * 正则容忍换行/缩进等空白差异，但键名与右侧表达式必须逐字匹配——不能只
+   * 匹配裸的 `novelSourceItemId` 子串：`promo-link-claim.ts` 里还有一处
+   * 语义完全不同的 `novelSourceItemId: scope.source.id`（`promoLink.upsert`
+   * 的 `create` 数据），这条正则要求前面紧跟 `requestSummary:` 这个对象
+   * 字面量，只命中 `prepareSideEffectIntent` 调用点那一处。
+   */
+  it("D4 关联键 novelSourceItemId：worker 写意图记录与 scheduler 读意图记录用的是同一个键名", () => {
+    const handlerSource = readFileSync(
+      resolve(process.cwd(), "worker/handlers/promo-link-claim.ts"),
+      "utf8",
+    );
+    expect(handlerSource).toMatch(
+      /requestSummary:\s*\{\s*offerType:\s*payload\.offerType,\s*novelSourceItemId:\s*scope\.source\.id\s*\}/,
+    );
+
+    const releaseSource = readFileSync(
+      resolve(process.cwd(), "src/lib/tasks/promo-claim-release.ts"),
+      "utf8",
+    );
+    expect(releaseSource).toContain("se.request_summary ->> 'novelSourceItemId'");
+  });
 });

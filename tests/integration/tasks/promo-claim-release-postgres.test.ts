@@ -394,6 +394,69 @@ describe.skipIf(!enabled).sequential("promo-claim lifecycle: 阶段2 第3步 sch
     });
   });
 
+  describe("§5.6 处理中条目不判超时（Opus 复核 2026-09-23 补测）", () => {
+    /**
+     * 设计 §5.6 最后一句："处于 processing 的条目不受截止时间影响，正常
+     * 收尾；只要该分片仍有 processing 条目就先跳过本轮"——
+     * `releasePromoClaimShardsForAccount` 里 `if (counts.processing > 0)
+     * continue;` 就是这一条的落地。这里用 2 本书的分片（覆盖默认的
+     * shardSizeMax=1）验证：即使 deadlineAt 已过，只要还有一个条目在
+     * processing，本轮既不能把分片判成 deadline_missed（不能增加
+     * missedDeadlineCount、不能写系统暂停标记、不能动分片状态），也不能
+     * 因为"看起来已经过期"就去动那个 pending 条目——分片仍然占着账号的
+     * 准入名额，本轮只能是 admission_blocked。等 processing 条目真正收尾
+     * （成功/失败）之后，下一轮才应该正常判定为 deadline_missed。
+     */
+    it("分片仍有 processing 条目时，即使已过 deadlineAt 也只是 admission_blocked——零改写；等该条目收尾后才判 deadline_missed", async () => {
+      const twoPerShardEnv: NodeJS.ProcessEnv = { ...LIFECYCLE_ON_ENV, PROMO_CLAIM_SHARD_SIZE_MAX: "2" };
+      const { shardIds } = await buildLifecycleShards(owner, foundation, 2, "release-processing-guard", twoPerShardEnv);
+      expect(shardIds).toHaveLength(1); // 2 本书、shardSizeMax=2，落在同一片。
+
+      const releasedAt = new Date("2026-09-23T09:00:00.000Z");
+      const first = await runPromoClaimReleaseTick(scheduler, { now: releasedAt, env: twoPerShardEnv, logger: () => {} });
+      expect(first[0]).toMatchObject({ action: "released", shardId: shardIds[0] });
+
+      const items = await owner.genericTaskItem.findMany({ where: { taskId: shardIds[0] }, orderBy: { createdAt: "asc" } });
+      expect(items).toHaveLength(2);
+      const [processingItem, pendingItem] = items;
+      // 模拟 worker 正持有其中一个条目的租约（尚未收尾）。
+      await owner.genericTaskItem.update({
+        where: { id: processingItem!.id },
+        data: {
+          status: "processing", attemptCount: 1, executionToken: randomUUID(), lockedBy: "opus-gap-fake-worker",
+          lockedUntil: new Date(releasedAt.getTime() + 5 * 60_000), heartbeatAt: releasedAt, startedAt: releasedAt,
+        },
+      });
+      const shardParamsBeforeGuard = (await owner.genericTask.findUniqueOrThrow({ where: { id: shardIds[0] } })).params;
+
+      const pastDeadline = new Date(releasedAt.getTime() + 91 * 60_000);
+      const guarded = await runPromoClaimReleaseTick(scheduler, { now: pastDeadline, env: twoPerShardEnv, logger: () => {} });
+      expect(guarded).toEqual([{ channelAccountId: foundation.accountId, action: "admission_blocked" }]);
+
+      const shardAfterGuard = await owner.genericTask.findUniqueOrThrow({ where: { id: shardIds[0] } });
+      expect(shardAfterGuard.status).toBe("pending"); // 未被判 deadline_missed、未被 disabled。
+      expect(readTaskControlMarker(shardAfterGuard.result)).toBeUndefined(); // 没有写任何系统暂停标记。
+      expect(shardAfterGuard.params).toEqual(shardParamsBeforeGuard); // missedDeadlineCount 等参数一个字节都没变。
+
+      const itemsAfterGuard = await owner.genericTaskItem.findMany({ where: { taskId: shardIds[0] } });
+      const stillProcessing = itemsAfterGuard.find((item) => item.id === processingItem!.id)!;
+      const stillPending = itemsAfterGuard.find((item) => item.id === pendingItem!.id)!;
+      expect(stillProcessing.status).toBe("processing");
+      expect(stillProcessing.attemptCount).toBe(1); // 零改写——scheduler 完全没碰这个条目。
+      expect(stillPending.status).toBe("pending");
+      expect(stillPending.attemptCount).toBe(0);
+
+      // processing 条目正常收尾（成功），另一个条目继续保持 pending。
+      await owner.genericTaskItem.update({
+        where: { id: processingItem!.id },
+        data: { status: "success", executionToken: null, lockedBy: null, lockedUntil: null, heartbeatAt: null, finishedAt: pastDeadline },
+      });
+
+      const missedNow = await runPromoClaimReleaseTick(scheduler, { now: pastDeadline, env: twoPerShardEnv, logger: () => {} });
+      expect(missedNow[0]).toMatchObject({ action: "deadline_missed", shardId: shardIds[0], detail: { missedDeadlineCount: 1 } });
+    });
+  });
+
   describe("D4/§5.7 错过截止时间", () => {
     it("第 1 次错过：条目保持 pending、分片进 deadline_missed，零条目写成失败；满足 D4 前置条件后下一轮自动重新放行", async () => {
       const { shardIds } = await buildLifecycleShards(owner, foundation, 1, "release-missed-once");
@@ -451,6 +514,42 @@ describe.skipIf(!enabled).sequential("promo-claim lifecycle: 阶段2 第3步 sch
       const item = await owner.genericTaskItem.findFirstOrThrow({ where: { taskId: shardIds[0] } });
       expect(item.status).toBe("pending");
       expect(item.attemptCount).toBe(0);
+    });
+
+    /**
+     * Opus 复核（2026-09-23）补测：D4 前置检查的"从未尝试过"这一半条件是
+     * `attempt_count = 0`，与"没有意图记录"是两个独立的判据（设计 §5.7 第 2
+     * 条原文就是"必须都满足"）。上面那条用例只覆盖了"有意图记录、
+     * attempt_count 仍是 0"；这里反过来覆盖"attempt_count != 0、但没有任何
+     * 意图记录"——模拟"worker 曾经拿到过这个条目的租约（比如租约到期被
+     * `recoverExpiredItem` 收回、退回 pending），但从未真正走到准备 getcode
+     * 调用那一步"。这种条目同样不安全，不能自动重新放行。
+     */
+    it("D4 前置检查：pending 条目 attempt_count != 0（曾经被拿到过租约）但没有任何意图记录时，同样拒绝自动重新放行", async () => {
+      const { shardIds } = await buildLifecycleShards(owner, foundation, 1, "release-missed-attempted");
+      const releasedAt = new Date("2026-09-23T09:00:00.000Z");
+      const first = await runPromoClaimReleaseTick(scheduler, { now: releasedAt, env: LIFECYCLE_ON_ENV, logger: () => {} });
+      expect(first[0]).toMatchObject({ action: "released" });
+
+      const pastDeadline = new Date(releasedAt.getTime() + 91 * 60_000);
+      const miss1 = await runPromoClaimReleaseTick(scheduler, { now: pastDeadline, env: LIFECYCLE_ON_ENV, logger: () => {} });
+      expect(miss1[0]).toMatchObject({ action: "deadline_missed", detail: { missedDeadlineCount: 1 } });
+
+      // 模拟"曾经被 worker 拿到过租约、后来又退回 pending"：attempt_count
+      // 推到 1，条目仍是 pending，且这个账号名下没有任何 side_effect_intent。
+      await owner.genericTaskItem.updateMany({ where: { taskId: shardIds[0] }, data: { attemptCount: 1 } });
+      const intentCount = await owner.sideEffectIntent.count({ where: { channelAccountId: foundation.accountId } });
+      expect(intentCount).toBe(0);
+
+      const retry = await runPromoClaimReleaseTick(scheduler, { now: pastDeadline, env: LIFECYCLE_ON_ENV, logger: () => {} });
+      expect(retry[0]).toMatchObject({ action: "deadline_missed_twice", shardId: shardIds[0], detail: { reason: "unsafe_to_auto_retry" } });
+
+      const item = await owner.genericTaskItem.findFirstOrThrow({ where: { taskId: shardIds[0] } });
+      expect(item.status).toBe("pending");
+      expect(item.attemptCount).toBe(1); // D4 只读不写——零改写。
+      const shard = await owner.genericTask.findUniqueOrThrow({ where: { id: shardIds[0] } });
+      expect(shard.status).toBe("disabled");
+      expect(readTaskControlMarker(shard.result)).toMatchObject({ reasonCode: "deadline_missed_twice" });
     });
 
     it("连续两次单纯超时（无意图记录）→ deadline_missed_twice；此后不再被 select-next 选中（需要人工处理）", async () => {
