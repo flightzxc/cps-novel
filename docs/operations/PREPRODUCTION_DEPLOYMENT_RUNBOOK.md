@@ -45,6 +45,29 @@ Transport and verification on the VPS are covered by
 The known `v0.2.0` versus package `0.1.0` drift remains an Owner/Release
 decision for Phase 2C.
 
+### Write-gate registration (`PREPROD_APPROVED_OPEN_WRITE_GATES`)
+
+Most write gates in `shared/env/preprod.env` must be `"false"` on both
+their `FEATURE_*` and `*_ALLOW_WRITE` variables, or `preflight.sh` refuses.
+Two gates are the Owner-approved exception: catalog sync (`catalog_write`)
+and promo-link claim (`promo_write`), opened 2026-09-22/23. Either may be
+non-`false` **only if its name also appears** in the shared env's
+`PREPROD_APPROVED_OPEN_WRITE_GATES` (comma-separated; see
+`preprod_assert_write_gates()` in `scripts/preproduction/lib.sh` and
+`docs/adr/ADR-PREPROD-APPROVED-OPEN-WRITE-GATES.md` for the full contract,
+including the exact failure reasons). The registrable names are a closed
+set of exactly those two -- opening any other write gate means extending
+that function first and getting Owner approval, not just editing this env
+file.
+
+**One-time step when upgrading an existing host to this runbook's
+version**: before running `release.sh deploy` or `rollback`, add
+`PREPROD_APPROVED_OPEN_WRITE_GATES=catalog_write,promo_write` to
+`/opt/cps-novel/shared/env/preprod.env`. Without it, the next preflight run
+fails `reason=catalog_write` even though the host's actual catalog/promo
+variables are unchanged -- the failure is the missing registration, not a
+change in what's open.
+
 ## One-time Owner sudo steps
 
 1. Install Docker Engine/Compose, Node.js (the release manifest reader, image

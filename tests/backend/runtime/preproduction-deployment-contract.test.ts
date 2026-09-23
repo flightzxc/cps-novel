@@ -299,7 +299,7 @@ describe("Phase 2B preproduction deployment contract", () => {
     expect(handoverBody).toContain("default_site_disabled=1");
   });
 
-  it("pins stable Compose/data identity and closes dangerous preproduction writes", async () => {
+  it("pins stable Compose/data identity, closes hard-gated preproduction writes, and registers the two Owner-approved open ones", async () => {
     const rootCompose = await text("docker-compose.yml");
     const overlay = await text("infra/preproduction/docker-compose.yml");
     const env = await text("infra/preproduction/preprod.env.example");
@@ -313,15 +313,52 @@ describe("Phase 2B preproduction deployment contract", () => {
     expect(env).toContain("P1_12_COMPOSE_PROJECT=cps-novel");
     expect(env).toContain("PUBLIC_TRACKING_WRITE_DISABLED=1");
     expect(env).toContain("FEATURE_ARTICLE_SEO_VISIBILITY=true");
+    // catalog_write / promo_write are no longer required to be "false" here --
+    // Owner approved opening both (2026-09-22 / 2026-09-23) and the closed-enum
+    // registration in PREPROD_APPROVED_OPEN_WRITE_GATES is what now keeps
+    // preflight.sh fail-closed for any OTHER write gate. See
+    // preprod_assert_write_gates() in scripts/preproduction/lib.sh and
+    // docs/adr/ADR-PREPROD-APPROVED-OPEN-WRITE-GATES.md.
     for (const closed of [
-      "NOVEL_CATALOG_SYNC_ALLOW_WRITE=false",
-      "PROMO_LINK_CLAIM_ALLOW_WRITE=false",
       "INDEXNOW_OUTBOX_ALLOW_WRITE=false",
       "INDEXNOW_DELIVERY_ALLOW_WRITE=false",
       "AUTO_WRITE_AUTHORIZED=NO",
       "ARTICLE_BLOG_ALLOW_WRITE=false",
       "ARTICLE_NOVEL_REBIND_ALLOW_WRITE=false",
     ]) expect(env).toContain(closed);
+
+    expect(env).toContain("PREPROD_APPROVED_OPEN_WRITE_GATES=catalog_write,promo_write");
+    expect(env).toContain("FEATURE_NOVEL_CATALOG_SYNC=true");
+    expect(env).toContain("NOVEL_CATALOG_SYNC_ALLOW_WRITE=true");
+    expect(env).toContain("FEATURE_PROMO_LINK_CLAIM=true");
+    expect(env).toContain("PROMO_LINK_CLAIM_ALLOW_WRITE=true");
+    expect(env).toContain("PROMO_CLAIM_ROLES=");
+    expect(env).toContain("PROMO_CLAIM_USER_IDS=REQUIRED_ADMIN_IDENTITY_UUID");
+    // promo:claim is granted per-identity (PROMO_CLAIM_USER_IDS), deliberately
+    // not per-role (PROMO_CLAIM_ROLES) -- see src/lib/auth/capabilities.ts,
+    // "promo:claim" has defaultRoles: []. The real admin UUID differs per
+    // environment and must never be committed to this repo.
+    const uuidPattern = /^PROMO_CLAIM_USER_IDS=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/im;
+    expect(env).not.toMatch(uuidPattern);
+
+    // Anti-drift: any registrable write gate left open in this template must
+    // also be listed in PREPROD_APPROVED_OPEN_WRITE_GATES, or a host built
+    // fresh from this example would fail its own preflight.sh immediately.
+    const readVar = (name: string) => new RegExp(`^${name}=(.*)$`, "m").exec(env)?.[1]?.trim();
+    const approvedList = (readVar("PREPROD_APPROVED_OPEN_WRITE_GATES") ?? "")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const registrableGates: Array<{ name: string; vars: string[] }> = [
+      { name: "catalog_write", vars: ["FEATURE_NOVEL_CATALOG_SYNC", "NOVEL_CATALOG_SYNC_ALLOW_WRITE"] },
+      { name: "promo_write", vars: ["FEATURE_PROMO_LINK_CLAIM", "PROMO_LINK_CLAIM_ALLOW_WRITE"] },
+    ];
+    for (const gate of registrableGates) {
+      const isOpen = gate.vars.some((v) => readVar(v) === "true");
+      if (isOpen) {
+        expect(approvedList, `${gate.name} is open in the template but not registered`).toContain(gate.name);
+      }
+    }
   });
 
   it("orders real service lifecycle and leaves failures in maintenance", async () => {

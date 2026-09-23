@@ -33,6 +33,114 @@ preprod_load_env() {
   [[ -z "$inherited_commit" ]] || export GIT_COMMIT="$inherited_commit"
 }
 
+# --- 写闸登记制：PREPROD_APPROVED_OPEN_WRITE_GATES -------------------------
+#
+# 背景：预生产（bangbangji.cloud）自 2026-09-22 起不再是零业务数据环境。
+# Owner 已批准并在目标机打开了目录同步写闸（2026-09-22）与推广领取写闸
+# （2026-09-23）。旧版 preflight 要求这两组写闸的两个变量恒为 "false"——
+# 那条规则原本是对的（预生产曾经真的零写），但 Owner 批准开闸之后，它就会在
+# 每次 deploy/rollback 时把这次批准判成 FAIL，而最省事的"绕过"是把闸门关回
+# false，这会静默停掉已经批准的功能。
+#
+# 决策（Owner 2026-09-23，见 docs/adr/ADR-PREPROD-APPROVED-OPEN-WRITE-GATES.md）：
+# 把"两个变量必须全为 false"改成"开启前必须先在共享 env 里显式登记"。
+#
+# 🔴 可登记的写闸是一个封闭枚举，只有两个：
+#   catalog_write → FEATURE_NOVEL_CATALOG_SYNC + NOVEL_CATALOG_SYNC_ALLOW_WRITE
+#   promo_write   → FEATURE_PROMO_LINK_CLAIM + PROMO_LINK_CLAIM_ALLOW_WRITE
+# 之所以是封闭枚举而不是"登记什么值都认"：登记列表本身只是共享 env 里的一行
+# 文本，任何有权改目标机 env 的人都能编辑它——如果登记值本身没有约束，这道闸
+# 就退化成"写你想开的名字，自动通过"，等于没有检查。封闭枚举把"新开一个写闸"
+# 这件事钉在代码改动上（必须先把新名字加进下面的 case 分支，且要经 Owner 批准
+# 走一遍代码审查），而不是一次 env 编辑就能绕过。其它写闸
+# （indexnow_outbox / indexnow_delivery / auto_tagging / article_writes /
+# tracking_write_gate / two_factor_enforcement）不在这个枚举里，原样硬关，
+# 判定逻辑一行都不动。
+#
+# 🔴 每个可登记写闸的两个变量必须严格等于 "true" 或 "false"（大小写敏感，
+# 不认 "TRUE"/"1"/空字符串/未设置）。未设置也算非法，而不是默认当 false 处理：
+# 这两个变量描述的是"目标机 env 里写没写清楚这件事"，而不是"没写就当作最安全的
+# 值"——本仓库吃过默认值掩盖配置缺失的亏，这里不重蹈。为保持与旧版 reason 的
+# 连续性，"已登记但值非法"与"未登记但值非法"统一归为
+# catalog_write_invalid / promo_write_invalid（不复用未登记时的
+# catalog_write / promo_write，这样两类失败在事故排查时不会混在一起）。
+#
+# 🔴 dry-run 组合（FEATURE=true 但 ALLOW_WRITE=false）对已登记的写闸合法：
+# 目录同步的 dry-run 模式就是这个组合——只探测/计算，不落库。已登记写闸的
+# 两个变量各自 true/false 的任意组合都放行，因为"登记"批准的是"这个写闸这一轮
+# 可以处于非 fail-closed 状态"，具体是全开、半开（dry-run）还是登记了但两个都
+# 仍是 false，都是运维当下的选择，不需要 preflight 再替 Owner 做二次判断。
+#
+# 失败时把 reason 码写到 stdout（供调用方转交 fail()）并 return 65；
+# 成功时打印取证行 "PREPROD_WRITE_GATES=PASS approved=... open=..." 并 return 0。
+# 🔴 bash 3.2/5 双兼容：不用关联数组、${var,,}、mapfile/readarray；数组判空一律
+# 用 "${arr[@]+"${arr[@]}"}" 守卫（bash 3.2 对空数组 + set -u 会报
+# unbound variable，4.4 之前都有这个坑）。
+preprod_assert_write_gates() {
+  local raw="${PREPROD_APPROVED_OPEN_WRITE_GATES:-}"
+  local catalog_approved=0 promo_approved=0
+  local -a parts
+  IFS=',' read -ra parts <<<"$raw"
+  local item trimmed
+  for item in ${parts[@]+"${parts[@]}"}; do
+    trimmed="$(printf '%s' "$item" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+    [[ -n "$trimmed" ]] || continue
+    case "$trimmed" in
+      catalog_write) catalog_approved=1 ;;
+      promo_write) promo_approved=1 ;;
+      *)
+        echo "approved_open_write_gate_unknown value=$trimmed"
+        return 65
+        ;;
+    esac
+  done
+
+  local feature_catalog="${FEATURE_NOVEL_CATALOG_SYNC:-}"
+  local allow_catalog="${NOVEL_CATALOG_SYNC_ALLOW_WRITE:-}"
+  if [[ "$feature_catalog" != "true" && "$feature_catalog" != "false" ]] \
+    || [[ "$allow_catalog" != "true" && "$allow_catalog" != "false" ]]; then
+    echo "catalog_write_invalid"
+    return 65
+  fi
+
+  local feature_promo="${FEATURE_PROMO_LINK_CLAIM:-}"
+  local allow_promo="${PROMO_LINK_CLAIM_ALLOW_WRITE:-}"
+  if [[ "$feature_promo" != "true" && "$feature_promo" != "false" ]] \
+    || [[ "$allow_promo" != "true" && "$allow_promo" != "false" ]]; then
+    echo "promo_write_invalid"
+    return 65
+  fi
+
+  local catalog_open=0 promo_open=0
+  [[ "$feature_catalog" == "true" || "$allow_catalog" == "true" ]] && catalog_open=1
+  [[ "$feature_promo" == "true" || "$allow_promo" == "true" ]] && promo_open=1
+
+  if (( catalog_open == 1 && catalog_approved == 0 )); then
+    echo "catalog_write"
+    return 65
+  fi
+  if (( promo_open == 1 && promo_approved == 0 )); then
+    echo "promo_write"
+    return 65
+  fi
+
+  local approved_list="" open_list=""
+  if (( catalog_approved == 1 )); then approved_list="catalog_write"; fi
+  if (( promo_approved == 1 )); then
+    if [[ -n "$approved_list" ]]; then approved_list="$approved_list,promo_write"; else approved_list="promo_write"; fi
+  fi
+  [[ -n "$approved_list" ]] || approved_list="none"
+
+  if (( catalog_open == 1 )); then open_list="catalog_write"; fi
+  if (( promo_open == 1 )); then
+    if [[ -n "$open_list" ]]; then open_list="$open_list,promo_write"; else open_list="promo_write"; fi
+  fi
+  [[ -n "$open_list" ]] || open_list="none"
+
+  echo "PREPROD_WRITE_GATES=PASS approved=$approved_list open=$open_list"
+  return 0
+}
+
 preprod_compose() {
   docker compose --env-file "$PREPROD_ENV_FILE" -p cps-novel \
     -f "$PREPROD_REPO_ROOT/docker-compose.yml" \
