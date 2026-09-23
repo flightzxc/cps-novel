@@ -253,5 +253,7 @@ package has more than 5,000 downloads` —— 本 package 下载量为个位数�
   必须在发布窗口**之前**完成，不要在窗口内临时安装。
 - **目标平台已有实测证据**：haiyue-vps Phase 1 输出 `Architecture: x86-64` / `uname: x86_64`，
   因此目标固定为 `linux/amd64`；构建端在输入与产出两侧都断言该平台，目标机装载后再断言一次。
-- **版本身份漂移**：Git tag `v0.2.0` 与 `package.json` 的 `0.1.0` 不一致。
-  身份以 approved commit + config digest + archive SHA256 为准，不要用 `0.1.0-*` 当身份。
+- **版本身份漂移**：已于 v0.3.0 统一（Owner 2026-09-23 裁决）——`package.json`、
+  环境变量模板的 `APP_VERSION`/`NEXT_PUBLIC_BUILD_VERSION`、镜像版本前缀均为 `0.3.0`。
+  身份仍以 approved commit + config digest + archive SHA256 为准，不依赖人类可读
+  版本号当身份——这一原则不因漂移消除而改变。
