@@ -131,9 +131,23 @@ function stubLogLines(): string[] {
   }
 }
 
-/** Bash `case` glob, the same matcher x8_gc()'s own bash-side filter uses. */
+/**
+ * Bash `case` glob, the same matcher x8_gc()'s own bash-side filter uses.
+ * A pure string match that never sources anything, but this file mentions
+ * X8 trigger literals, so runtime-dir-isolation-guard.test.ts requires every
+ * spawn here to be isolated: pass a minimal explicit env (nothing inherited
+ * from the developer's shell) whose X8_RUNTIME_DIR points at a path that is
+ * never created.
+ */
+const GLOB_MATCH_ENV: NodeJS.ProcessEnv = {
+  NODE_ENV: "test",
+  PATH: process.env.PATH,
+  X8_RUNTIME_DIR: join(tmpdir(), "x8-gc-glob-match-never-created"),
+};
 function globMatches(pattern: string, tag: string): boolean {
-  return spawnSync("bash", ["-c", 'case "$2" in $1) exit 0 ;; esac; exit 1', "_", pattern, tag]).status === 0;
+  return spawnSync("bash", ["-c", 'case "$2" in $1) exit 0 ;; esac; exit 1', "_", pattern, tag], {
+    env: GLOB_MATCH_ENV,
+  }).status === 0;
 }
 
 // Tags the real builder produces or has produced -- every one must be a gc
