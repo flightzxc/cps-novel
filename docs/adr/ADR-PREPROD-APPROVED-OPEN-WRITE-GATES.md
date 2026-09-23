@@ -124,7 +124,7 @@ account rather than an entire role.
   requires a code change (extending the enum in
   `preprod_assert_write_gates()`) and Owner approval -- registering an
   unlisted name in the env file alone does nothing but fail preflight.
-- Before deploying or rolling back this version on the target host, the
+- Before deploying this version (or any later one) on the target host, the
   operator must add `PREPROD_APPROVED_OPEN_WRITE_GATES=catalog_write,
   promo_write` to `/opt/cps-novel/shared/env/preprod.env`. Skipping this
   step makes the very next `preflight.sh` run fail with
@@ -132,6 +132,21 @@ account rather than an entire role.
   target host's actual `FEATURE_NOVEL_CATALOG_SYNC` /
   `NOVEL_CATALOG_SYNC_ALLOW_WRITE` values are unchanged and were already
   Owner-approved.
+- **Residual risk, not fixed by this change: the registration key does
+  nothing for a rollback to a release older than this one.**
+  `scripts/preproduction/release.sh`'s `rollback()` requires the invoking
+  checkout's `HEAD` to equal the target (older) commit
+  (`invoke_from_previous_release`) and runs `preflight.sh` *from that
+  checkout* -- the older release's own copy of the script, which has never
+  heard of `PREPROD_APPROVED_OPEN_WRITE_GATES` and still hard-requires
+  both catalog/promo pairs to be exactly `"false"`. So rolling back past
+  this commit while catalog/promo are open on the target host always fails
+  `reason=catalog_write`, key or no key. The only ways through are (a)
+  Owner-approved, temporary `false` on all four catalog/promo variables in
+  the shared env before that rollback runs -- which also means catalog
+  sync and promo-link claim stop working post-rollback, matching what the
+  older release itself expects -- or (b) roll forward instead of back.
+  This is not something to fix by patching the older release's checkout.
 - `preprod_assert_write_gates()` is a pure function of environment
   variables with no side effects, so it can be (and is) tested directly by
   sourcing `lib.sh`, without running the rest of preflight or touching any

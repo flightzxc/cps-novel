@@ -61,12 +61,34 @@ that function first and getting Owner approval, not just editing this env
 file.
 
 **One-time step when upgrading an existing host to this runbook's
-version**: before running `release.sh deploy` or `rollback`, add
+version**: before running `release.sh deploy`, add
 `PREPROD_APPROVED_OPEN_WRITE_GATES=catalog_write,promo_write` to
 `/opt/cps-novel/shared/env/preprod.env`. Without it, the next preflight run
 fails `reason=catalog_write` even though the host's actual catalog/promo
 variables are unchanged -- the failure is the missing registration, not a
 change in what's open.
+
+**The registration key does NOT help a rollback to a release older than
+this one.** `release.sh rollback` refuses to run unless invoked from
+*inside the target (older) release's own checkout*
+(`/opt/cps-novel/releases/<target-commit>/`, enforced by its
+`invoke_from_previous_release` check), and it runs `preflight.sh` from
+*that checkout* -- the older release's own copy of the script, which has no
+notion of `PREPROD_APPROVED_OPEN_WRITE_GATES` and still hard-requires the
+catalog/promo pairs to be exactly `"false"`. Adding the registration key to
+the shared env changes nothing for that older `preflight.sh`; the key only
+affects deploys and rollbacks that run a checkout at or after this commit.
+So: rolling back to a release before this one, while catalog/promo are
+still open on the target host, always fails `reason=catalog_write`
+regardless of this key. Before doing that, Owner must separately approve
+temporarily setting `FEATURE_NOVEL_CATALOG_SYNC` /
+`NOVEL_CATALOG_SYNC_ALLOW_WRITE` / `FEATURE_PROMO_LINK_CLAIM` /
+`PROMO_LINK_CLAIM_ALLOW_WRITE` back to `false` in the shared env before the
+rollback runs -- consistent with what that older release itself expects,
+and it means catalog sync / promo-link claim stop working once rolled
+back, by design. The alternative is to roll forward (fix and deploy a
+newer commit) instead of rolling back past this one. Do not patch the
+older release's checkout to work around this.
 
 ## One-time Owner sudo steps
 
