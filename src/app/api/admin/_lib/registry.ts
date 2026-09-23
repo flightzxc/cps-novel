@@ -266,6 +266,10 @@ export const ADMIN_CONTENT_CREATION_BATCH_ACTIONS = [
 export const ADMIN_CATALOG_BATCH_ACTIONS = [
   { id: "admin.catalog_batch.context", capability: "content:view", mutation: false },
   { id: "admin.catalog_batch.summary", capability: "content:view", mutation: false },
+  // 阶段2 第4步（施工任务 3.6）：提交前预估"预计分 N 片、预计耗时 X 小时"——
+  // 只读，同 `admin.catalog_batch.context` 一样的能力门槛（能看到条目列表
+  // 就能看到提交这些条目会怎样）。
+  { id: "admin.catalog_batch.promo_claim_estimate", capability: "content:view", mutation: false },
 ] as const satisfies AdminRegistry["actions"];
 
 export const ADMIN_ARTICLE_TEMPLATE_ACTIONS = [

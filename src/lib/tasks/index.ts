@@ -7,6 +7,7 @@ export * from "./moboreader";
 export * from "./promo-claim-batch-control";
 export * from "./promo-claim-lifecycle";
 export * from "./promo-claim-release";
+export * from "./promo-claim-shard-sizing";
 export * from "./promo-link-claim";
 export * from "./promo-link-claim-limits";
 export * from "./registry";

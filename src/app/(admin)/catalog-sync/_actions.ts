@@ -13,10 +13,11 @@ import {
   type CatalogBatchEnqueueResult,
   type CatalogBatchSummary,
   type CatalogSelection,
+  type PromoClaimShardEstimate,
   type PromoLinkClaimCredentialWarning,
 } from "@/domain/catalog-batch";
 import { CatalogBatchInputError, enqueueCatalogBatch } from "@/lib/tasks/catalog-batch";
-import { readCatalogBatchContext, readCatalogBatchSummary } from "@/server/catalog-batch";
+import { estimatePromoClaimShardPlan, readCatalogBatchContext, readCatalogBatchSummary } from "@/server/catalog-batch";
 import { resolveClaimCredentialAdmission } from "@/lib/credentials/claim-readiness";
 import {
   isNovelCatalogSyncEnabled,
@@ -498,6 +499,40 @@ export async function readCatalogBatchContextAction(input: {
   try {
     await authorizeAction("admin.catalog_batch.context", input.requestId);
     const data = await readCatalogBatchContext(prisma, normalizeCatalogSelection(input.selection));
+    return { ok: true, data };
+  } catch (error) {
+    return catalogBatchInputFailure(error) ?? { ok: false, kind: "access_denied", envelope: toErrorEnvelope(error) };
+  }
+}
+
+/**
+ * 阶段2 第4步（施工任务 3.6）：提交确认弹窗"预计分 N 片、预计耗时 X 小时"
+ * 的只读预估——只在 `PROMO_CLAIM_LIFECYCLE_V1_ENABLED` 开启时才有意义调用；
+ * 开关关闭时也能正常返回（`estimatePromoClaimShardPlan` 不读开关本身），
+ * 但前端只在开关开启且操作是领推广时才会调这个 action。
+ */
+export async function readPromoClaimShardEstimateAction(input: {
+  selection: CatalogSelection;
+  channelAccounts: Readonly<Record<string, string>>;
+  requestId: string;
+}): Promise<CatalogBatchActionResult<PromoClaimShardEstimate>> {
+  try {
+    await authorizeAction("admin.catalog_batch.promo_claim_estimate", input.requestId);
+    if (!input.channelAccounts || typeof input.channelAccounts !== "object" || Array.isArray(input.channelAccounts)) {
+      return { ok: false, kind: "invalid_input", code: "channel_accounts_invalid" };
+    }
+    if (Object.keys(input.channelAccounts).length > CATALOG_BATCH_CONFIG_MAX_ENTRIES) {
+      return { ok: false, kind: "invalid_input", code: "channel_accounts_invalid" };
+    }
+    for (const [channelAppId, accountId] of Object.entries(input.channelAccounts)) {
+      if (!CONFIG_UUID.test(channelAppId.trim()) || typeof accountId !== "string" || !CONFIG_UUID.test(accountId.trim())) {
+        return { ok: false, kind: "invalid_input", code: "channel_accounts_invalid" };
+      }
+    }
+    const normalizedAccounts = Object.fromEntries(Object.entries(input.channelAccounts).map(([k, v]) => [k.trim(), v.trim()]));
+    const selection = normalizeCatalogSelection(input.selection);
+    const context = await readCatalogBatchContext(prisma, selection);
+    const data = await estimatePromoClaimShardPlan(prisma, context, normalizedAccounts);
     return { ok: true, data };
   } catch (error) {
     return catalogBatchInputFailure(error) ?? { ok: false, kind: "access_denied", envelope: toErrorEnvelope(error) };

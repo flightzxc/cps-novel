@@ -21,8 +21,6 @@ import {
   PROMO_LINK_CLAIM_TASK_TYPE,
 } from "../../src/lib/tasks/promo-link-claim-limits";
 import {
-  computeShardSize,
-  PROMO_CLAIM_LIFECYCLE_DEFAULTS,
   PROMO_CLAIM_LIFECYCLE_ROLE_BATCH,
   PROMO_CLAIM_LIFECYCLE_ROLE_SHARD,
   PROMO_CLAIM_LIFECYCLE_VERSION,
@@ -30,6 +28,7 @@ import {
   resolvePromoClaimLifecycleConfig,
   type PromoClaimLifecycleConfig,
 } from "../../src/lib/tasks/promo-claim-lifecycle";
+import { resolveLifecycleShardSize, type LifecycleSizingBasis } from "../../src/lib/tasks/promo-claim-shard-sizing";
 import { mergeTaskControlResult } from "../../src/lib/tasks/task-control";
 import { createHandlerRegistry, type TaskHandler } from "../../src/lib/tasks";
 import { isPromoLinkClaimEnabled, isPromoLinkClaimWriteAllowed } from "../../src/lib/flags";
@@ -95,12 +94,6 @@ export function isLifecycleBatchPayload(payload: CatalogBatchPayload): boolean {
     && payload.lifecycleVersion === PROMO_CLAIM_LIFECYCLE_VERSION
     && payload.lifecycleRole === PROMO_CLAIM_LIFECYCLE_ROLE_BATCH;
 }
-
-export type LifecycleSizingBasis = Readonly<{
-  p90Seconds: number;
-  sampleCount: number;
-  source: "measured_recent_completed_items" | "fallback_insufficient_sample";
-}>;
 
 export type LifecycleShardGroupPlan = Readonly<{
   channelAppId: string;
@@ -168,64 +161,11 @@ export function chunkMembersIntoShards<T>(members: readonly T[], shardSize: numb
   return shards;
 }
 
-/**
- * 设计 §5.3 第一步：该渠道账号最近 500 条已结束 `promo_link.claim.v1` 条目
- * （`started_at`/`finished_at` 均非空——`maxAttempts: 1` 且该任务类型从不产生
- * `retry` 结局，所以这个条件就是"已终态"）的执行耗时 p90（秒）与样本量。
- * 样本为空时 `p90Seconds` 为 `null`；调用方按"样本量 < 50"决定是否改用回退值
- * （设计原文"样本不足(例如 < 50 条)按 5 秒"），而不是依赖 `computeShardSize`
- * 内部“非正数才回退”的兜底——那条兜底只保证"没有样本"时安全，这里还要额外
- * 保证"样本太少、统计意义不足"时同样回退。
- */
-async function measureRecentShardP90(
-  tx: Prisma.TransactionClient,
-  channelAccountId: string,
-): Promise<{ p90Seconds: number | null; sampleCount: number }> {
-  const rows = await tx.$queryRaw<Array<{ p90_seconds: number | null; sample_count: number }>>(Prisma.sql`
-    SELECT
-      percentile_cont(0.9) WITHIN GROUP (ORDER BY recent.duration_seconds) AS p90_seconds,
-      count(*)::int AS sample_count
-    FROM (
-      SELECT EXTRACT(EPOCH FROM (i.finished_at - i.started_at)) AS duration_seconds
-      FROM generic_task_item i
-      JOIN generic_task t ON t.id = i.task_id
-      WHERE t.task_type = ${PROMO_LINK_CLAIM_TASK_TYPE}
-        AND t.channel_account_id = ${channelAccountId}::uuid
-        AND i.started_at IS NOT NULL
-        AND i.finished_at IS NOT NULL
-      ORDER BY i.finished_at DESC
-      LIMIT 500
-    ) recent
-  `);
-  const row = rows[0];
-  return { p90Seconds: row?.p90_seconds ?? null, sampleCount: row?.sample_count ?? 0 };
-}
-
-const LIFECYCLE_MIN_SAMPLE_COUNT = 50;
-
-async function resolveLifecycleShardSize(
-  tx: Prisma.TransactionClient,
-  channelAccountId: string,
-  config: PromoClaimLifecycleConfig,
-): Promise<{ shardSize: number; sizingBasis: LifecycleSizingBasis }> {
-  const { p90Seconds, sampleCount } = await measureRecentShardP90(tx, channelAccountId);
-  const sufficientSample = sampleCount >= LIFECYCLE_MIN_SAMPLE_COUNT && p90Seconds !== null && p90Seconds > 0;
-  const effectiveP90 = sufficientSample ? p90Seconds! : PROMO_CLAIM_LIFECYCLE_DEFAULTS.fallbackP90ItemSeconds;
-  const shardSize = computeShardSize({
-    p90ItemSeconds: sufficientSample ? p90Seconds : null,
-    windowMinutes: config.shardWindowMinutes,
-    min: config.shardSizeMin,
-    max: config.shardSizeMax,
-  });
-  return {
-    shardSize,
-    sizingBasis: {
-      p90Seconds: effectiveP90,
-      sampleCount,
-      source: sufficientSample ? "measured_recent_completed_items" : "fallback_insufficient_sample",
-    },
-  };
-}
+// 阶段2 第4步（施工任务 3.6）：p90 取样 + 分片大小解析抽到
+// `src/lib/tasks/promo-claim-shard-sizing.ts`，供本文件（枚举时）与目录
+// 同步页提交前的预估（Web 侧）共用同一套逻辑，不再各写一份——见该模块自己
+// 的 doc comment。`measureRecentShardP90`/`LIFECYCLE_MIN_SAMPLE_COUNT` 不再
+// 在本文件重复定义；`LifecycleSizingBasis` 类型也一并从那里导入。
 
 function selectionWhere(selection: NormalizedCatalogSelection): Prisma.NovelSourceItemWhereInput {
   if (selection.scope === "explicit_ids") return { deletedAt: null };

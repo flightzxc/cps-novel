@@ -170,6 +170,7 @@ describe("P2-04 内容路由登记", () => {
       "admin.content_creation.batch_apply",
       "admin.catalog_batch.context",
       "admin.catalog_batch.summary",
+      "admin.catalog_batch.promo_claim_estimate",
       "admin.article_template.create",
       "admin.article_template.update",
       "admin.article_template.status",

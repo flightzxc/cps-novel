@@ -122,6 +122,15 @@ export type CatalogBatchContext = Readonly<{
     eligibleCount: number;
     templates: readonly Readonly<{ key: string; name: string }> [];
   }>[];
+  /**
+   * 阶段2 第4步（施工任务 3.6）：`PROMO_CLAIM_LIFECYCLE_V1_ENABLED` 在读取
+   * 这个上下文时是否开启——只是一个纯环境变量读取，不是这次查询本身的结果，
+   * 放在这里是为了让 `PromoLinkClaimDialog` 不需要单独发一次请求就知道要不
+   * 要显示"预计分 N 片、预计耗时 X 小时"。可选字段，缺失按 `false` 处理
+   * （现有构造这个类型的测试 fixture 不用全部改）——开关关闭或字段缺失时，
+   * 旧对话框行为逐字不变。
+   */
+  lifecycleEnabled?: boolean;
 }>;
 
 /**
@@ -144,6 +153,34 @@ export type CatalogBatchEnqueueResult = Readonly<{
   taskId: string;
   phase: CatalogBatchPhase;
   credentialWarnings?: readonly PromoLinkClaimCredentialWarning[];
+}>;
+
+/**
+ * 阶段2 第4步（施工任务 3.6，设计 §5.9）：目录同步页提交确认弹窗"预计分 N
+ * 片、预计耗时 X 小时"的预估结果。分片大小/p90 取样复用
+ * `src/lib/tasks/promo-claim-shard-sizing.ts` 与枚举时同一套逻辑（不是第二
+ * 份实现）。只在开关开启且操作为领推广时才会被调用——旧路径、开关关闭时
+ * 前端根本不请求这个预估。
+ *
+ * `estimatedHours` 的口径（设计原文只写"预计耗时 X 小时"，没有给多渠道账号
+ * 场景的精确算法，这是本步的实现判断，已在交付报告里列为待 Owner 确认的
+ * 解读）：同一渠道账号任意时刻至多一个分片在跑（D6），所以同一账号名下
+ * 多个分组的分片按窗口时间顺序相加；不同渠道账号并行执行，取账号间的最大
+ * 值作为总预计耗时的上界——这是一个保守估算，不是精确预测。
+ */
+export type PromoClaimShardEstimateGroup = Readonly<{
+  channelAppId: string;
+  channelAccountId: string;
+  eligibleCount: number;
+  shardSize: number;
+  shardCount: number;
+}>;
+
+export type PromoClaimShardEstimate = Readonly<{
+  totalShardCount: number;
+  estimatedHours: number;
+  windowMinutes: number;
+  groups: readonly PromoClaimShardEstimateGroup[];
 }>;
 
 export type CatalogBatchSummary = Readonly<{
