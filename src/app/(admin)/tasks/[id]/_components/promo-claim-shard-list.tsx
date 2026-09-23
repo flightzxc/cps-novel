@@ -23,12 +23,13 @@ export function PromoClaimShardList({ data }: { data: PromoClaimBatchLifecycleDt
 
   return (
     <section className="space-y-4" data-testid="promo-claim-shard-list">
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-6">
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-7">
         <SummaryCard label="总数" value={data.counts.total} />
-        <SummaryCard label="已领取" value={data.counts.claimed} />
+        <SummaryCard label="已领取" value={data.counts.claimed} tone="green" />
         <SummaryCard label="已有推广码" value={data.counts.withCode} tone="green" />
         <SummaryCard label="人工核对" value={data.counts.manualReview} tone="amber" />
         <SummaryCard label="失败" value={data.counts.failed} tone="red" />
+        <SummaryCard label="跳过" value={data.counts.skipped} tone="amber" />
         <SummaryCard label="剩余" value={data.counts.remaining} tone="blue" />
       </div>
 
@@ -55,13 +56,11 @@ export function PromoClaimShardList({ data }: { data: PromoClaimBatchLifecycleDt
               <th className="px-3 py-2">放行次数</th>
               <th className="px-3 py-2">放行时刻</th>
               <th className="px-3 py-2">截止时间</th>
-              <th className="px-3 py-2">条目（总/码/核对/败/余）</th>
+              <th className="px-3 py-2">条目（总/领/码/核对/败/跳/余）</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
             {data.shards.map((shard) => {
-              const remaining = Math.max(0, shard.totalCount - shard.successCount - shard.failedCount - shard.skippedCount);
-              const withCode = shard.successCount - shard.manualReviewCount;
               const holdHint = shard.holdReasonCode ? systemHoldRecoveryHint(shard.holdReasonCode) : undefined;
               return (
                 <tr key={shard.taskId} data-testid="promo-claim-shard-row">
@@ -78,7 +77,7 @@ export function PromoClaimShardList({ data }: { data: PromoClaimBatchLifecycleDt
                   <td className="px-3 py-2">{formatDateTime(shard.releasedAt)}</td>
                   <td className="px-3 py-2">{formatDateTime(shard.deadlineAt)}</td>
                   <td className="px-3 py-2 font-mono text-xs">
-                    {shard.totalCount} / {withCode} / {shard.manualReviewCount} / {shard.failedCount} / {remaining}
+                    {shard.totalCount} / {shard.claimedCount} / {shard.withCodeCount} / {shard.manualReviewCount} / {shard.failedCount} / {shard.skippedCount} / {shard.remainingCount}
                   </td>
                 </tr>
               );

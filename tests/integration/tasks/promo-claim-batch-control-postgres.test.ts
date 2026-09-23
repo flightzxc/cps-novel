@@ -259,6 +259,56 @@ describe.skipIf(!enabled).sequential("promo-claim lifecycle: 阶段2 第4步 批
       expect(audit.actorType).toBe("admin");
     });
 
+    /**
+     * Opus 复核（2026-09-24 F3）测试缺口：把 `pausePromoClaimBatchTx` 里级联
+     * 挑选"当前已放行"分片的状态集合从 `["pending", "processing"]` 改成只剩
+     * `["pending"]`，此前的 15 例集成测试全部仍然通过——说明缺一个"分片本身
+     * 处于 processing（而不是 pending）时同样会被暂停级联覆盖"的场景。这里
+     * 真实用 claimPendingItem 拿到租约，让分片状态经 recomputeParentTask
+     * 变成 processing，再验证批次暂停仍然把它级联为 paused，且正在处理中
+     * 的条目本身（租约字段）完全不受触碰。
+     */
+    it("已放行分片里的条目处于 processing（分片自身状态也是 processing）时，批次暂停仍然级联覆盖到它，且不触碰处理中的条目", async () => {
+      const { batchId, shardIds } = await buildLifecycleShards(foundation, 1, "pause-processing");
+      // 这里必须用真实当前时刻（不是本文件其它场景常用的固定 NOW 常量
+      // 2026-08-26）——claimPendingItem 的 selectPending 下推条件比较的是
+      // 数据库真实的 transaction_timestamp()，如果 deadlineAt 是按一个早已
+      // 过去的固定 now 算出来的，真实 claim 会因为"deadlineAt 已过"被
+      // selectPending 正确挡住（零写入，符合设计），但这条用例恰恰需要真的
+      // claim 到这个条目才能测到"processing"这个状态，所以这里改用
+      // new Date()（一次性容器上真实撞过这个坑：lease 为 null）。
+      const releasedAt = new Date();
+      await runPromoClaimReleaseTick(scheduler, { now: releasedAt, env: LIFECYCLE_ON_ENV, logger: () => {} });
+      expect((await owner.genericTask.findUniqueOrThrow({ where: { id: shardIds[0] } })).status).toBe("pending");
+
+      const lease = await claimPendingItem(worker, {
+        family: "generic", taskTypes: [PROMO_LINK_CLAIM_TASK_TYPE], workerId: "pcbc-processing-guard", leaseMs: 120_000,
+      });
+      expect(lease).not.toBeNull();
+      const shardBeforePause = await owner.genericTask.findUniqueOrThrow({ where: { id: shardIds[0] } });
+      expect(shardBeforePause.status).toBe("processing"); // recomputeParentTask：有条目 processing 时分片本身也是 processing。
+      const itemBeforePause = await owner.genericTaskItem.findUniqueOrThrow({ where: { id: lease!.itemId } });
+      expect(itemBeforePause.status).toBe("processing");
+
+      const { authorization, requestId, dependencies } = await batchControlTicket("/api/admin/tasks/promo-claim-batch/pause");
+      const result = await pausePromoClaimBatch({ authorization, requestId, taskId: batchId }, dependencies);
+      expect(result).toMatchObject({ status: "paused", pausedShardCount: 1, wrote: true });
+
+      const shardAfterPause = await owner.genericTask.findUniqueOrThrow({ where: { id: shardIds[0] } });
+      expect(shardAfterPause.status).toBe("paused");
+      // 正在处理中的条目本身——状态、租约字段（execution_token/locked_by/
+      // lease_epoch）全部原样不动，暂停只改 generic_task，从不改
+      // generic_task_item（同设计 §5.4 第 6 条 "只改 generic_task 这一张
+      // 任务表，不改条目表" 的既有纪律，批次级暂停复用同一条纪律）。
+      const itemAfterPause = await owner.genericTaskItem.findUniqueOrThrow({ where: { id: lease!.itemId } });
+      expect(itemAfterPause).toMatchObject({
+        status: "processing",
+        executionToken: itemBeforePause.executionToken,
+        lockedBy: itemBeforePause.lockedBy,
+        leaseEpoch: itemBeforePause.leaseEpoch,
+      });
+    });
+
     it("拒绝暂停一个已经中止（cancelled）的批次", async () => {
       const { batchId } = await buildLifecycleShards(foundation, 1, "pause-cancelled");
       const { authorization, requestId, dependencies } = await batchControlTicket("/api/admin/tasks/promo-claim-batch/abort");
@@ -500,6 +550,51 @@ describe.skipIf(!enabled).sequential("promo-claim lifecycle: 阶段2 第4步 批
       expect((batchC.result as { blockedReasonCounts?: Record<string, number> }).blockedReasonCounts?.queued_in_other_batch ?? 0).toBe(0);
     });
 
+    /**
+     * Opus 复核（2026-09-24 F4）测试缺口：把 worker/handlers/catalog-batch.ts
+     * 里 `queuedElsewhere` 查询的 `t.status IN ('disabled', 'paused')` 改成
+     * 只剩 `'disabled'`，此前的 15 例集成测试全部仍然通过——说明缺一个"分片
+     * 因为批次级暂停而处于 paused（不是从未放行过的 disabled）时，同一本书
+     * 仍然会被 queued_in_other_batch 挡住"的场景。
+     */
+    it("批次 A 的分片因批次级暂停而处于 paused 时，批次 B 的重叠书同样被 queued_in_other_batch 挡住", async () => {
+      const overlapping = await seedBooks(owner, foundation.channelAppId, 1, "overlap-paused");
+      const enqueuedA = await enqueueCatalogBatch(owner, {
+        operation: "promo_claim",
+        selection: normalizeCatalogSelection({ scope: "explicit_ids", ids: overlapping }),
+        actorId: foundation.actorId,
+        requestId: randomUUID(),
+        channelAccounts: { [foundation.channelAppId]: foundation.accountId },
+      }, new Date(), true, undefined, LIFECYCLE_ON_ENV);
+      const leaseA = await claimPendingItem(worker, { family: "generic", taskTypes: [CATALOG_BATCH_TASK_TYPE], workerId: "pcbc-queued-paused-a", leaseMs: 60_000 });
+      const outcomeA = await createCatalogBatchHandler(worker, { env: LIFECYCLE_ON_ENV })(handlerContext(leaseA!));
+      await finalizeTaskItem(worker, leaseA!, outcomeA);
+      // 放行后再批次级暂停：分片从 disabled(awaiting_release) 变成 pending，
+      // 再变成 paused——不是"从未放行过的排队 disabled"这条既有覆盖路径。
+      await runPromoClaimReleaseTick(scheduler, { now: NOW, env: LIFECYCLE_ON_ENV, logger: () => {} });
+      const shardA = await owner.genericTask.findFirstOrThrow({ where: { parentTaskId: enqueuedA.taskId } });
+      expect(shardA.status).toBe("pending");
+      const pauseTicket = await batchControlTicket("/api/admin/tasks/promo-claim-batch/pause");
+      await pausePromoClaimBatch({ authorization: pauseTicket.authorization, requestId: pauseTicket.requestId, taskId: enqueuedA.taskId }, pauseTicket.dependencies);
+      expect((await owner.genericTask.findUniqueOrThrow({ where: { id: shardA.id } })).status).toBe("paused");
+
+      const enqueuedB = await enqueueCatalogBatch(owner, {
+        operation: "promo_claim",
+        selection: normalizeCatalogSelection({ scope: "explicit_ids", ids: overlapping }),
+        actorId: foundation.actorId,
+        requestId: randomUUID(),
+        channelAccounts: { [foundation.channelAppId]: foundation.accountId },
+      }, new Date(), true, undefined, LIFECYCLE_ON_ENV);
+      const leaseB = await claimPendingItem(worker, { family: "generic", taskTypes: [CATALOG_BATCH_TASK_TYPE], workerId: "pcbc-queued-paused-b", leaseMs: 60_000 });
+      const outcomeB = await createCatalogBatchHandler(worker, { env: LIFECYCLE_ON_ENV })(handlerContext(leaseB!));
+      await finalizeTaskItem(worker, leaseB!, outcomeB);
+
+      const batchB = await owner.genericTask.findUniqueOrThrow({ where: { id: enqueuedB.taskId } });
+      expect(batchB.result).toMatchObject({ blockedReasonCounts: { queued_in_other_batch: 1 }, submittedCount: 0 });
+      const shardsB = await owner.genericTask.findMany({ where: { parentTaskId: enqueuedB.taskId } });
+      expect(shardsB).toHaveLength(0); // 唯一一本书被挡住，批次 B 一片都没建。
+    });
+
     it("开关关闭（旧路径）时不查 queuedElsewhere，判定逐字不变", async () => {
       const overlapping = await seedBooks(owner, foundation.channelAppId, 1, "legacy-overlap");
       const offEnv: NodeJS.ProcessEnv = { ...LIFECYCLE_ON_ENV, PROMO_CLAIM_LIFECYCLE_V1_ENABLED: "false" };
@@ -549,6 +644,92 @@ describe.skipIf(!enabled).sequential("promo-claim lifecycle: 阶段2 第4步 批
       expect(lifecycle.shardPlan).toMatchObject({ windowMinutes: 90, shardCount: 2 });
       expect(typeof lifecycle.etaMinutes).toBe("number");
       expect(lifecycle.etaMinutes).toBeGreaterThan(0);
+    });
+
+    /**
+     * Opus 复核（2026-09-24 F1）要求的六分类真实数据验收：直接把
+     * generic_task_item 的 (status, result) 写成 worker/handlers/
+     * promo-link-claim.ts 各个真实分支会落库的形状（claimed/
+     * readback_recovered/already_available/already_fetched 的 success 与
+     * skipped 两种形态/manual_review_required/capability_disabled/failed/
+     * 人工中止级联的 skipped/pending/processing），而不是重新驱动一遍完整
+     * 的 claimPromo 适配器模拟——这里要验收的是 loadPromoClaimBatchLifecycle
+     * 那条聚合 SQL 的 CASE 分类是否正确，只依赖最终持久化的
+     * (status, result.decision) 形状，与"这个形状是怎么被 worker 写出来的"
+     * 无关；claimPromo 适配器本身的分支覆盖是 worker 那条测试线自己的职责。
+     */
+    it("六分类口径：混合 decision 的真实条目聚合出正确的六桶计数，互斥且加总等于总数", async () => {
+      const mixedEnv: NodeJS.ProcessEnv = { ...LIFECYCLE_ON_ENV, PROMO_CLAIM_SHARD_SIZE_MIN: "50", PROMO_CLAIM_SHARD_SIZE_MAX: "1000" };
+      const bookIds = await seedBooks(owner, foundation.channelAppId, 11, "mixed-decision");
+      const enqueued = await enqueueCatalogBatch(owner, {
+        operation: "promo_claim",
+        selection: normalizeCatalogSelection({ scope: "explicit_ids", ids: bookIds }),
+        actorId: foundation.actorId,
+        requestId: randomUUID(),
+        channelAccounts: { [foundation.channelAppId]: foundation.accountId },
+      }, new Date(), true, undefined, mixedEnv);
+      const lease = await claimPendingItem(worker, { family: "generic", taskTypes: [CATALOG_BATCH_TASK_TYPE], workerId: "pcbc-mixed-decision", leaseMs: 60_000 });
+      const outcome = await createCatalogBatchHandler(worker, { env: mixedEnv })(handlerContext(lease!));
+      await finalizeTaskItem(worker, lease!, outcome);
+      const shards = await owner.genericTask.findMany({ where: { parentTaskId: enqueued.taskId } });
+      expect(shards).toHaveLength(1); // 11 本全部落进同一片（shardSizeMax=1000 远大于 11）。
+      const shardId = shards[0]!.id;
+      await runPromoClaimReleaseTick(scheduler, { now: NOW, env: mixedEnv, logger: () => {} }); // 放行，让分片进入真实的 pending 状态。
+
+      const items = await owner.genericTaskItem.findMany({ where: { taskId: shardId }, orderBy: { targetId: "asc" } });
+      expect(items).toHaveLength(11);
+      const finishedAt = new Date();
+      const writes: Array<{ status: string; result: Record<string, unknown> | typeof Prisma.JsonNull; error?: Record<string, unknown> }> = [
+        { status: "success", result: { decision: "claimed" } },
+        { status: "success", result: { decision: "readback_recovered" } },
+        { status: "success", result: { decision: "already_available" } },
+        { status: "skipped", result: { decision: "already_fetched" } }, // dry-run 形态（理论上生命周期分片不会出现，仍需分类正确）。
+        { status: "success", result: { decision: "already_fetched" } }, // apply 模式下真实会出现的形态。
+        { status: "success", result: { decision: "manual_review_required" } },
+        { status: "success", result: { decision: "capability_disabled" } },
+        { status: "failed", result: Prisma.JsonNull, error: { code: "claim_failed", message: "upstream error" } },
+        { status: "skipped", result: Prisma.JsonNull, error: { code: "task_manually_aborted", message: "aborted before attempt" } },
+        { status: "pending", result: Prisma.JsonNull },
+        { status: "processing", result: Prisma.JsonNull },
+      ];
+      for (const [index, item] of items.entries()) {
+        const write = writes[index]!;
+        await owner.genericTaskItem.update({
+          where: { id: item.id },
+          data: {
+            status: write.status,
+            result: write.result as Prisma.InputJsonValue,
+            error: (write.error ?? Prisma.JsonNull) as Prisma.InputJsonValue,
+            ...(write.status === "success" || write.status === "failed" || write.status === "skipped" ? { finishedAt } : {}),
+            // generic_task_item_lease_shape_check：processing 行要求
+            // execution_token/locked_by/locked_until 均非空——直接写
+            // status='processing' 而不带租约字段会被真实约束拒绝（一次性
+            // 容器上真实撞过一次）。
+            ...(write.status === "processing"
+              ? { executionToken: randomUUID(), lockedBy: "pcbc-mixed-decision-fixture", lockedUntil: new Date(finishedAt.getTime() + 60_000), heartbeatAt: finishedAt }
+              : {}),
+          },
+        });
+      }
+
+      const context = await readContext();
+      const detail = await getAdminTaskDetail(owner, context, { family: "generic", taskId: enqueued.taskId });
+      const lifecycle = detail.catalogBatch!.promoClaimLifecycle!;
+      expect(lifecycle.counts).toEqual({
+        total: 11,
+        claimed: 2, // claimed, readback_recovered
+        withCode: 3, // already_available, skipped+already_fetched, success+already_fetched
+        manualReview: 2, // manual_review_required, capability_disabled
+        failed: 1,
+        skipped: 1, // 只有人工中止级联（无 decision）落在这里，already_fetched 那条已分流到 withCode
+        remaining: 2, // pending, processing
+      });
+      expect(lifecycle.counts.claimed + lifecycle.counts.withCode + lifecycle.counts.manualReview
+        + lifecycle.counts.failed + lifecycle.counts.skipped + lifecycle.counts.remaining).toBe(lifecycle.counts.total);
+      // 分片自己的六个字段同样正确（批次汇总只有一个分片，两者应该相等）。
+      expect(lifecycle.shards[0]).toMatchObject({
+        totalCount: 11, claimedCount: 2, withCodeCount: 3, manualReviewCount: 2, failedCount: 1, skippedCount: 1, remainingCount: 2,
+      });
     });
 
     it("非生命周期批次（旧路径 novel_materialize）：promoClaimLifecycle 缺失，parentRawStatus 仍然填充", async () => {

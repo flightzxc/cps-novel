@@ -845,6 +845,19 @@ export type TaskDetailDto = TaskSummaryDto & Readonly<{
    */
   parentRawStatus?: string;
   /**
+   * 阶段2 第4步（Opus 复核 2026-09-24 F2）：这个任务本身是不是一个生命周期
+   * 分片（`promo_link.claim.v1` 且 `params.lifecycleVersion===1 &&
+   * params.lifecycleRole==="shard"`）——一个派生布尔值，不是原始 `params`
+   * 本身（`params` 在这份 DTO 上是禁止字段，见"X9 read DTO allowlists"
+   * 契约测试）。detail 页面据此隐藏单任务的"暂停"/"恢复"按钮，改为引导到
+   * 批次页面——服务端 `pauseTask`/`resumeTask` 对生命周期分片都会返回 409
+   * （见各自的 doc comment）。缺省为 `false`，不是缺失；不需要"absent means
+   * false"这条本文件其它可选字段的约定，因为这里判定成本极低（已经在手的
+   * `row.task_type`/`row.params`），没有"付出额外查询代价才值得省略"的
+   * 顾虑。
+   */
+  isLifecyclePromoClaimShard: boolean;
+  /**
    * C-10b: the *origin* failed item's richer derived stop-reason line (e.g.
    * `"upstream_error (HTTP 401) @ 第 1 页"`, the same `deriveItemStopReason`
    * output `TaskItemDto.stopReason` uses) — read via one extra query in
@@ -1149,21 +1162,26 @@ type PromoClaimShardAggregateRow = {
   status: string;
   result: Prisma.JsonValue | null;
   total_count: number;
-  success_count: number;
+  claimed_count: number;
+  with_code_count: number;
+  manual_review_count: number;
   failed_count: number;
   skipped_count: number;
-  manual_review_count: number;
+  remaining_count: number;
 };
 
 /**
- * 阶段2 第4步（施工任务 3.5）：批次详情页的分片列表 + 领取统计 + 预计完成
- * 时间。一次聚合 SQL 查询拿到每个分片自身的状态/参数与它名下条目的计数——
- * "人工核对"通过 `generic_task_item.result->>'decision' =
- * 'manual_review_required'` 识别：这类条目的 `status` 仍然是 `success`
- * （worker/handlers/promo-link-claim.ts 对人工核对场景就是这样写的——已经
- * 收尾，不是失败，只是没有真正拿到新推广码），单看 `status` 无法把它和真正
- * 拿到码的条目区分开。只对生命周期批次调用；只有一次数据库往返，不管批次
- * 有多少个分片。
+ * 阶段2 第4步（施工任务 3.5，F1 复核收口）：批次详情页的分片列表 + 领取
+ * 统计 + 预计完成时间。一次聚合 SQL 查询拿到每个分片自身的状态/参数与它
+ * 名下条目按六分类口径（{@link classifyPromoClaimItemOutcome} 的 doc
+ * comment 有完整定义，这里的 LATERAL 子查询里的 CASE 表达式必须与它逐字
+ * 一致）算好的计数——不是把条目整表拉到 Node 里分类，也不是只看
+ * `generic_task_item.status`：同一个 `status = 'success'` 底下，
+ * `result.decision` 可能是 `claimed`/`readback_recovered`（真正新领到码）、
+ * `already_available`/`already_fetched`（本来就有码）、
+ * `manual_review_required`/`capability_disabled`（收尾了但没拿到码，需要
+ * 人工核对），必须按 decision 而不是 status 才能分清楚。只对生命周期批次
+ * 调用；只有一次数据库往返，不管批次有多少个分片。
  */
 async function loadPromoClaimBatchLifecycle(
   db: PrismaClient,
@@ -1172,16 +1190,46 @@ async function loadPromoClaimBatchLifecycle(
 ): Promise<PromoClaimBatchLifecycleDto> {
   const rows = await db.$queryRaw<PromoClaimShardAggregateRow[]>(Prisma.sql`
     SELECT s.id AS shard_id, s.params, s.status, s.result,
-      COUNT(i.id)::int AS total_count,
-      COUNT(*) FILTER (WHERE i.status = 'success')::int AS success_count,
-      COUNT(*) FILTER (WHERE i.status = 'failed')::int AS failed_count,
-      COUNT(*) FILTER (WHERE i.status = 'skipped')::int AS skipped_count,
-      COUNT(*) FILTER (WHERE i.status = 'success' AND i.result->>'decision' = 'manual_review_required')::int AS manual_review_count
+      COALESCE(b.total, 0)::int AS total_count,
+      COALESCE(b.claimed, 0)::int AS claimed_count,
+      COALESCE(b.with_code, 0)::int AS with_code_count,
+      COALESCE(b.manual_review, 0)::int AS manual_review_count,
+      COALESCE(b.failed, 0)::int AS failed_count,
+      COALESCE(b.skipped, 0)::int AS skipped_count,
+      COALESCE(b.remaining, 0)::int AS remaining_count
     FROM generic_task s
-    LEFT JOIN generic_task_item i ON i.task_id = s.id
+    LEFT JOIN LATERAL (
+      SELECT
+        COUNT(*)::int AS total,
+        COUNT(*) FILTER (WHERE bucket = 'claimed')::int AS claimed,
+        COUNT(*) FILTER (WHERE bucket = 'with_code')::int AS with_code,
+        COUNT(*) FILTER (WHERE bucket = 'manual_review')::int AS manual_review,
+        COUNT(*) FILTER (WHERE bucket = 'failed')::int AS failed,
+        COUNT(*) FILTER (WHERE bucket = 'skipped')::int AS skipped,
+        COUNT(*) FILTER (WHERE bucket = 'remaining')::int AS remaining
+      FROM (
+        SELECT
+          -- 必须与 classifyPromoClaimItemOutcome（src/domain/catalog-batch.ts）
+          -- 逐字一致——该函数的 doc comment 是这份分类口径的权威说明，包含
+          -- 为什么 already_fetched 并入 with_code、capability_disabled 与
+          -- 任何未知 decision 并入 manual_review 的理由。CASE 穷举到 ELSE，
+          -- 保证每个条目恰好落入六个桶之一，不会被静默漏计。(No backticks
+          -- inside this template literal -- they would terminate it.)
+          CASE
+            WHEN i.status IN ('pending', 'processing') THEN 'remaining'
+            WHEN i.status = 'failed' THEN 'failed'
+            WHEN i.status = 'skipped' AND i.result->>'decision' = 'already_fetched' THEN 'with_code'
+            WHEN i.status = 'skipped' THEN 'skipped'
+            WHEN i.status = 'success' AND i.result->>'decision' IN ('claimed', 'readback_recovered') THEN 'claimed'
+            WHEN i.status = 'success' AND i.result->>'decision' IN ('already_available', 'already_fetched') THEN 'with_code'
+            ELSE 'manual_review'
+          END AS bucket
+        FROM generic_task_item i
+        WHERE i.task_id = s.id
+      ) item_bucket
+    ) b ON true
     WHERE s.parent_task_id = ${batchId}::uuid AND s.task_type = ${PROMO_LINK_CLAIM_TASK_TYPE}
       AND s.params->>'lifecycleVersion' = '1' AND s.params->>'lifecycleRole' = 'shard'
-    GROUP BY s.id
     ORDER BY (s.params->>'shardIndex')::int ASC
   `);
   const shards: PromoClaimShardSummaryDto[] = rows.map((row) => {
@@ -1196,10 +1244,12 @@ async function loadPromoClaimBatchLifecycle(
       ...(typeof params.releasedAt === "string" ? { releasedAt: params.releasedAt } : {}),
       ...(typeof params.deadlineAt === "string" ? { deadlineAt: params.deadlineAt } : {}),
       totalCount: row.total_count,
-      successCount: row.success_count,
+      claimedCount: row.claimed_count,
+      withCodeCount: row.with_code_count,
       manualReviewCount: row.manual_review_count,
       failedCount: row.failed_count,
       skippedCount: row.skipped_count,
+      remainingCount: row.remaining_count,
       ...(marker ? { holdKind: marker.kind, ...(marker.reasonCode ? { holdReasonCode: marker.reasonCode } : {}) } : {}),
     });
   });
@@ -1281,6 +1331,11 @@ export async function getAdminTaskDetail(
   const promoClaimLifecycle = isLifecycleBatch
     ? await loadPromoClaimBatchLifecycle(db, taskId, rawRow.result)
     : undefined;
+  // Opus 复核 2026-09-24 F2：见 `TaskDetailDto.isLifecyclePromoClaimShard`
+  // 自己的 doc comment。
+  const isLifecyclePromoClaimShard = family === "generic"
+    && row.task_type === PROMO_LINK_CLAIM_TASK_TYPE
+    && isLifecycleShardParams(rawRow.params);
   const summary = taskSummary(row, bookCounts);
   return Object.freeze({
     ...summary,
@@ -1292,6 +1347,7 @@ export async function getAdminTaskDetail(
     // 批次级暂停/恢复/中止按钮的可点性——见 `TaskDetailDto.parentRawStatus`
     // 自己的 doc comment。
     ...(isParentBatchTaskType(row.task_type) ? { parentRawStatus: rawRow.status } : {}),
+    isLifecyclePromoClaimShard,
     ...(row.mode !== undefined ? { mode: row.mode } : {}),
     ...(row.channel_account_id ? { channelAccountId: row.channel_account_id } : {}),
     createdAt: iso(row.created_at),
@@ -2190,6 +2246,19 @@ export async function pauseTask(
         if (prior) return replayTaskControl(prior, context.identity.id, family, taskId, reason, "paused");
 
         if (!["pending", "processing"].includes(parent.status)) {
+          throw new TaskAdminError("task_admin_state_conflict", 409);
+        }
+        // 阶段2 第4步（Opus 复核 2026-09-24 F2）：拒绝对一个已放行的生命周期
+        // 分片的直接单任务暂停——与 resumeTask 的同名拦截对称，理由也对称：
+        // 单任务暂停会把分片改成 paused 且不再占用 D6 名额，scheduler 会
+        // 接着放行同批次下一片；但这一片只能通过批次级暂停+恢复才能交还成
+        // disabled+awaiting_release 重新计入 D4/D1/D5 检查，单任务恢复对
+        // 生命周期分片已经被禁止（见下面 resumeTask 的同一条判断）——如果
+        // 这里不挡，运营会把一个已放行的分片"暂停"成一个既不会被批次恢复
+        // 逻辑发现（它不是从批次级暂停走到 paused 的）、又不能自己单独恢复
+        // 的孤儿状态。单任务"中止"仍然允许——放弃这一片、批次继续，是合理
+        // 的人工处置，不产生类似的语义混乱。
+        if (family === "generic" && parent.task_type === PROMO_LINK_CLAIM_TASK_TYPE && isLifecycleShardParams(parent.params)) {
           throw new TaskAdminError("task_admin_state_conflict", 409);
         }
 

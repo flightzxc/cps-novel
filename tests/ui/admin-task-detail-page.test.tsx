@@ -72,6 +72,7 @@ function detail(overrides: Partial<TaskDetailDto> = {}): TaskDetailDto {
     taskId: TASK_ID,
     taskType: "moboreader.sync",
     status: "completed_with_errors",
+    isLifecyclePromoClaimShard: false,
     totalCount: 10,
     successCount: 7,
     failedCount: 3,
@@ -653,16 +654,16 @@ describe("/tasks/[id] · 生命周期批次：批次级控制 + 分片列表", (
               taskId: "30000000-0000-4000-8000-000000000001", shardIndex: 0, status: "pending",
               releaseCount: 1, missedDeadlineCount: 0,
               releasedAt: "2026-09-23T09:00:00.000Z", deadlineAt: "2026-09-23T10:30:00.000Z",
-              totalCount: 1, successCount: 0, manualReviewCount: 0, failedCount: 0, skippedCount: 0,
+              totalCount: 1, claimedCount: 0, withCodeCount: 0, manualReviewCount: 0, failedCount: 0, skippedCount: 0, remainingCount: 1,
             },
             {
               taskId: "30000000-0000-4000-8000-000000000002", shardIndex: 1, status: "disabled",
               releaseCount: 0, missedDeadlineCount: 0,
-              totalCount: 1, successCount: 0, manualReviewCount: 0, failedCount: 0, skippedCount: 0,
+              totalCount: 1, claimedCount: 0, withCodeCount: 0, manualReviewCount: 0, failedCount: 0, skippedCount: 0, remainingCount: 1,
               holdKind: "awaiting_release",
             },
           ],
-          counts: { total: 2, claimed: 0, withCode: 0, manualReview: 0, failed: 0, remaining: 2 },
+          counts: { total: 2, claimed: 0, withCode: 0, manualReview: 0, failed: 0, skipped: 0, remaining: 2 },
           etaMinutes: 120,
         },
       },
@@ -683,8 +684,10 @@ describe("/tasks/[id] · 生命周期批次：批次级控制 + 分片列表", (
     expect(screen.queryByTestId("catalog-batch-child-tasks")).toBeNull(); // 改用富信息分片列表，不重复渲染通用子任务列表。
 
     const shardList = screen.getByTestId("promo-claim-shard-list");
+    expect(shardList.textContent).toContain("已领取");
     expect(shardList.textContent).toContain("已有推广码");
     expect(shardList.textContent).toContain("人工核对");
+    expect(shardList.textContent).toContain("跳过"); // F1：新增独立的"跳过"卡片，不再并进"已领取"。
     expect(screen.getAllByTestId("promo-claim-shard-row")).toHaveLength(2);
     expect(screen.getByTestId("promo-claim-eta").textContent).toContain("2.0 小时");
   });
@@ -717,5 +720,57 @@ describe("/tasks/[id] · 生命周期批次：批次级控制 + 分片列表", (
 
     expect(screen.getByTestId("system-hold-recovery-hint").textContent).toContain("禁止自动重试");
     expect(screen.queryByTestId("promo-claim-batch-reapprove-open")).toBeNull(); // 只有 approval_expired 才显示重新批准。
+  });
+});
+
+/**
+ * 阶段2 第4步（Opus 复核 2026-09-24 F2）：生命周期分片自己的任务详情页
+ * （/tasks/<shardId>，taskType=promo_link.claim.v1）——单任务的"暂停"/
+ * "恢复"必须隐藏并引导到批次页面，"中止"仍然可用。
+ */
+describe("/tasks/[id] · 生命周期分片自己的详情页：暂停/恢复隐藏，引导到批次页面", () => {
+  it("分片处于 pending 时：隐藏暂停按钮、显示引导说明；中止按钮仍然可用", async () => {
+    getAdminTaskDetail.mockResolvedValue(detail({
+      taskType: "promo_link.claim.v1",
+      status: "pending",
+      isLifecyclePromoClaimShard: true,
+    }));
+    listAdminTaskItems.mockResolvedValue(itemsResult([]));
+
+    render(await renderPage());
+
+    expect(screen.queryByTestId("task-pause-open")).toBeNull();
+    expect(screen.queryByTestId("task-resume-open")).toBeNull();
+    expect(screen.getByTestId("task-abort-open")).toBeTruthy();
+    expect(screen.getByTestId("lifecycle-shard-control-redirect-note").textContent).toContain("批次详情页");
+  });
+
+  it("分片处于 paused 时：隐藏恢复按钮、显示引导说明；中止按钮仍然可用", async () => {
+    getAdminTaskDetail.mockResolvedValue(detail({
+      taskType: "promo_link.claim.v1",
+      status: "paused",
+      isLifecyclePromoClaimShard: true,
+    }));
+    listAdminTaskItems.mockResolvedValue(itemsResult([]));
+
+    render(await renderPage());
+
+    expect(screen.queryByTestId("task-resume-open")).toBeNull();
+    expect(screen.getByTestId("task-abort-open")).toBeTruthy();
+    expect(screen.getByTestId("lifecycle-shard-control-redirect-note")).toBeTruthy();
+  });
+
+  it("非生命周期的 promo_link.claim.v1 任务（旧路径子任务）：正常显示暂停按钮，不显示引导说明", async () => {
+    getAdminTaskDetail.mockResolvedValue(detail({
+      taskType: "promo_link.claim.v1",
+      status: "pending",
+      isLifecyclePromoClaimShard: false,
+    }));
+    listAdminTaskItems.mockResolvedValue(itemsResult([]));
+
+    render(await renderPage());
+
+    expect(screen.getByTestId("task-pause-open")).toBeTruthy();
+    expect(screen.queryByTestId("lifecycle-shard-control-redirect-note")).toBeNull();
   });
 });

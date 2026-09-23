@@ -125,6 +125,24 @@ describe("systemHoldRecoveryHint", () => {
     expect(hint).not.toBe(systemHoldRecoveryHint("deadline_missed_twice"));
   });
 
+  /**
+   * Opus 复核（2026-09-24 F5）：deadline_missed_twice 的分片是 disabled——
+   * 单任务"暂停/恢复/中止"里只有"中止"接受 disabled，所以运营唯一可行的
+   * 人工处置路径是批次级中止。两条分支（单纯超时两次 / 有副作用风险）都
+   * 必须给出这条具体做法，不能只停在"需要人工处理"这种运营不知道能做什么
+   * 的空话上。
+   */
+  it("deadline_missed_twice 两条分支都给出具体做法：批次级中止 + 已调用接口的条目去人工核对", () => {
+    const generic = systemHoldRecoveryHint("deadline_missed_twice");
+    const unsafe = systemHoldRecoveryHint("deadline_missed_twice", "unsafe_to_auto_retry");
+    for (const hint of [generic, unsafe]) {
+      expect(hint).toContain("中止");
+      expect(hint).toContain("未尝试条目");
+      expect(hint).toContain("重新提交剩余书目");
+      expect(hint).toContain("人工核对");
+    }
+  });
+
   it("lifecycle_disabled 说明重新开启开关后自动恢复", () => {
     const hint = systemHoldRecoveryHint("lifecycle_disabled");
     expect(hint).toContain("重新开启开关");

@@ -291,6 +291,7 @@ export default async function TaskDetailPage({
                 family={detail.family}
                 taskId={detail.taskId}
                 status={detail.catalogBatch ? parentRawStatus : detail.status}
+                isLifecycleShard={detail.isLifecyclePromoClaimShard}
               />
             )}
             {isRetryableTaskStatus(detail.status) && !detail.catalogBatch && detail.failedCount > 0 && (

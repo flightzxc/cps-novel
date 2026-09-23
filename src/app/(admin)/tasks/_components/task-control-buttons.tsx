@@ -60,10 +60,22 @@ export function TaskControlButtons({
   family,
   taskId,
   status,
+  isLifecycleShard = false,
 }: {
   family: TaskFamily;
   taskId: string;
   status: string;
+  /**
+   * 阶段2 第4步（Opus 复核 2026-09-24 F2）：这个任务是不是一个生命周期分片
+   * （`promo_link.claim.v1` 且 `lifecycleVersion=1`/`lifecycleRole="shard"`）。
+   * 为真时隐藏"暂停"/"恢复"——服务端 `pauseTask`/`resumeTask` 都会对生命周期
+   * 分片返回 409（与批次级暂停/恢复对称：分片只能通过批次级操作交还成
+   * disabled+awaiting_release，不能被单任务恢复直接改回 pending，也不能被
+   * 单任务暂停成一个既不会被批次恢复发现、又不能自己单独恢复的孤儿状态）。
+   * 改为显示引导到批次页面的说明文字，不是等运营点击后才展示一个通用的
+   * 409 错误——"中止"仍然允许，放弃这一片、批次继续是合理的人工处置。
+   */
+  isLifecycleShard?: boolean;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState<ControlAction | null>(null);
@@ -80,11 +92,12 @@ export function TaskControlButtons({
   // for it and does not take it as a prop.
   const isActive = status === "pending" || status === "processing";
   const isPaused = status === "paused";
-  const canPause = isActive;
-  const canResume = isPaused;
+  const canPause = isActive && !isLifecycleShard;
+  const canResume = isPaused && !isLifecycleShard;
   const canAbort = isActive || isPaused;
+  const showLifecycleRedirectNote = isLifecycleShard && (isActive || isPaused);
 
-  if (!canPause && !canResume && !canAbort) return null;
+  if (!canPause && !canResume && !canAbort && !showLifecycleRedirectNote) return null;
 
   function openDialog(action: ControlAction) {
     setErrorMessage(null);
@@ -141,6 +154,12 @@ export function TaskControlButtons({
           </button>
         )}
       </div>
+
+      {showLifecycleRedirectNote && (
+        <p className="max-w-xs text-right text-xs text-gray-500" data-testid="lifecycle-shard-control-redirect-note">
+          该分片由领推广批次生命周期管理，暂停/恢复请前往批次详情页操作（批次级操作会自动级联到分片）；中止这一片可以直接在这里执行。
+        </p>
+      )}
 
       {errorMessage && !open && (
         <p role="alert" data-testid="task-control-error" className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">

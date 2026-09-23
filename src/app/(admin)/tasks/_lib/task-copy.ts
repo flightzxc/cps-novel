@@ -273,20 +273,27 @@ export function systemHoldReasonCodeLabel(reasonCode: string): string {
 }
 
 /**
- * 阶段2 第4步（施工任务 3.5，设计 §5.8 暂停与恢复一览表）：每个系统暂停
- * 原因对应的中文恢复方式说明——严格按该表格逐条实现，不是重新编一份措辞：
+ * 阶段2 第4步（施工任务 3.5，设计 §5.8 暂停与恢复一览表；Opus 复核
+ * 2026-09-24 F5 补齐"需要人工处理"两条的具体做法）：每个系统暂停原因
+ * 对应的中文恢复方式说明——严格按该表格逐条实现，不是重新编一份措辞：
  *
  *   - approval_expired → 只能运营"重新批准"（页面另有按钮，这里的文案不
  *     重复"点击下方按钮"这类与具体 UI 绑死的措辞，只说明"需要做什么"）；
  *   - credential_not_ready → 凭据校验通过且剩余有效期足够后自动恢复；
  *   - deadline_missed → 满足条件（条目从未尝试过）后 scheduler 自动重新
  *     放行；
- *   - deadline_missed_twice → 需要人工处理；`reason` 恰好是
- *     `unsafe_to_auto_retry` 时（`src/lib/tasks/promo-claim-release.ts`
+ *   - deadline_missed_twice → 需要人工处理，且要给出具体做法：这类分片是
+ *     `disabled`，单任务"暂停/恢复/中止"里只有"中止"接受 `disabled`（见
+ *     `pauseTask`/`resumeTask`/`abortTask` 的既有 status 白名单），所以唯一
+ *     可行的人工处置路径是批次级中止——统一给出"在批次上执行『中止』（终止
+ *     所有未尝试条目），核对后重新提交剩余书目"这条具体做法；`reason` 恰好
+ *     是 `unsafe_to_auto_retry` 时（`src/lib/tasks/promo-claim-release.ts`
  *     的 `holdShardSystemHold` 调用点唯一会写的这个自由文本原因）额外说明
- *     "存在已尝试或已调用过领取接口的条目，禁止自动重试"——这是设计原文
- *     明确要求的分支措辞，不能用同一句话覆盖两种截然不同的成因（单纯超时
- *     两次 vs. 有副作用风险）；
+ *     "存在已尝试或已调用过领取接口的条目，禁止自动重试"，并补一句"已调用
+ *     过领取接口的条目请在『人工核对』里处理"——这是设计原文明确要求的分支
+ *     措辞，不能用同一句话覆盖两种截然不同的成因（单纯超时两次 vs. 有副
+ *     作用风险），但两者最终能做的具体操作是同一条（批次级中止），所以共用
+ *     同一段"具体做法"文案，只是成因说明不同；
  *   - lifecycle_disabled → 重新开启开关后自动恢复。
  *
  * 未知原因码返回 `undefined`（不是空字符串）——调用方据此决定要不要渲染
@@ -294,6 +301,7 @@ export function systemHoldReasonCodeLabel(reasonCode: string): string {
  * 的自由字符串"这条既有约定保持一致。
  */
 export function systemHoldRecoveryHint(reasonCode: string, reason?: string | null): string | undefined {
+  const deadlineMissedTwiceAction = "可在批次上执行『中止』（终止所有未尝试条目），核对后重新提交剩余书目；已调用过领取接口的条目请在『人工核对』里处理。";
   switch (reasonCode) {
     case "approval_expired":
       return "批次批准已过期，且从未放行过任何分片——只能由运营重新批准后才会继续放行。";
@@ -303,8 +311,8 @@ export function systemHoldRecoveryHint(reasonCode: string, reason?: string | nul
       return "分片错过了执行截止时间——待处理条目全部满足自动重放条件（从未尝试过、没有任何调用副作用）后，系统会在下一轮自动重新放行。";
     case "deadline_missed_twice":
       return reason === "unsafe_to_auto_retry"
-        ? "存在已尝试或已调用过领取接口的条目，禁止自动重试——需要人工处理。"
-        : "该分片连续两次错过执行截止时间——需要人工处理（吞吐或上游可能出了问题）。";
+        ? `存在已尝试或已调用过领取接口的条目，禁止自动重试——需要人工处理。${deadlineMissedTwiceAction}`
+        : `该分片连续两次错过执行截止时间（吞吐或上游可能出了问题），系统不会再自动重试——需要人工处理。${deadlineMissedTwiceAction}`;
     case "lifecycle_disabled":
       return "领推广链接生命周期开关当前已关闭——重新开启开关后，系统会自动恢复放行。";
     default:

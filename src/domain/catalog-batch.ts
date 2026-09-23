@@ -198,6 +198,68 @@ export type CatalogBatchSummary = Readonly<{
 // 生效——旧路径批次继续用上面既有的 `childTasks`/`blockedReasonCounts`。
 // ---------------------------------------------------------------------
 
+/**
+ * Opus 复核（2026-09-24 F1）钉死的六分类口径——每个条目按
+ * `(generic_task_item.status, result.decision)` 精确落入以下六个桶中的
+ * 恰好一个，互斥、加总等于条目总数：
+ *
+ *   - `claimed`（已领取） = status=success ∧ decision ∈ {claimed, readback_recovered}
+ *   - `withCode`（已有推广码） = (status=success ∧ decision ∈ {already_available, already_fetched})
+ *                              ∨ (status=skipped ∧ decision=already_fetched)
+ *   - `manualReview`（人工核对） = status=success ∧ decision=manual_review_required
+ *     （另见 {@link classifyPromoClaimItemOutcome} 的 doc comment：
+ *     `capability_disabled` 与任何未知 decision 同样并入这一桶，不静默吞掉）
+ *   - `failed`（失败） = status=failed
+ *   - `skipped`（跳过） = status=skipped ∧ decision≠already_fetched（含人工中止前未尝试）
+ *   - `remaining`（剩余） = status ∈ {pending, processing}
+ *
+ * 分类逻辑的唯一权威实现是 {@link classifyPromoClaimItemOutcome}；
+ * `src/server/task-admin/service.ts` 的聚合 SQL（LATERAL 子查询里的 CASE
+ * 表达式）必须与它逐字一致——那边为了避免把上万条条目整表拉到 Node 里分类
+ * 才直接在 SQL 里算，这个 TS 函数专门用于单测钉死分类口径本身，SQL 那份由
+ * 真实 Postgres 集成测试（用 worker 真实写入的各种 decision 值）验证。
+ */
+export type PromoClaimItemOutcomeBucket = "claimed" | "withCode" | "manualReview" | "failed" | "skipped" | "remaining";
+
+/**
+ * 单个条目的六分类判定。`decision` 传 `null`/`undefined` 表示条目的
+ * `result` 里没有这个字段（例如人工中止级联把 `error.code =
+ * 'task_manually_aborted'` 写在 `error` 而不是 `result.decision` 上的
+ * skipped 条目）。
+ *
+ * `already_fetched`（真正执行时 apply 模式下、`scope.existingPromoLink.status
+ * === 'fetched'` 分支，`worker/handlers/promo-link-claim.ts`）与
+ * `capability_disabled`（能力位在枚举之后、真正执行之前被关闭）这两个
+ * `status=success` 的 decision 值，Opus 给的六分类表原文没有为它们各自
+ * 单独定义桶位——处理方式（已向 Owner/Opus 说明，未擅自新增第七个桶）：
+ *   - `already_fetched` 并入 `withCode`：与 `already_available` 语义完全
+ *     相同（都是"这本书已经有推广码，本次没有发起新的上游调用"），只是
+ *     达成路径不同（DB 里的 PromoLink 记录 vs 上游预读命中）。
+ *   - `capability_disabled` 并入 `manualReview`：条目本身正常收尾、不是
+ *     失败，但没有拿到码，且是"渠道能力位被关闭"这种需要运营介入排查的
+ *     状态，不能被计进"已领取"或"已有推广码"掩盖问题。
+ *   - 任何其它未识别的 decision 字符串（例如未来 worker 新增的分支）同样
+ *     并入 `manualReview`——fail-safe：宁可让运营多看一眼真正发生了什么，
+ *     也不能把一个陌生的结果悄悄计成"已领取"或"已有推广码"。
+ */
+export function classifyPromoClaimItemOutcome(
+  status: string,
+  decision: string | null | undefined,
+): PromoClaimItemOutcomeBucket {
+  if (status === "pending" || status === "processing") return "remaining";
+  if (status === "failed") return "failed";
+  if (status === "skipped") return decision === "already_fetched" ? "withCode" : "skipped";
+  if (status === "success") {
+    if (decision === "claimed" || decision === "readback_recovered") return "claimed";
+    if (decision === "already_available" || decision === "already_fetched") return "withCode";
+    // manual_review_required / capability_disabled / 任何未知值。
+    return "manualReview";
+  }
+  // 理论上不会出现的 status（不在 generic_task_item 的 CHECK 约束取值内）
+  // ——fail-safe 同上，不静默吞掉。
+  return "manualReview";
+}
+
 /** 一个生命周期分片（`promo_link.claim.v1` 子任务）在批次详情页需要展示的字段。 */
 export type PromoClaimShardSummaryDto = Readonly<{
   taskId: string;
@@ -208,12 +270,14 @@ export type PromoClaimShardSummaryDto = Readonly<{
   missedDeadlineCount: number;
   releasedAt?: string;
   deadlineAt?: string;
+  /** 以下七个字段全部按 {@link classifyPromoClaimItemOutcome} 的六分类口径预先聚合好——不是原始 generic_task_item.status 计数,页面/领域层不需要再重新派生。 */
   totalCount: number;
-  successCount: number;
-  /** 成功条目中，最终落在"人工核对"（`result.decision === 'manual_review_required'`）的数量——这些条目的 `generic_task_item.status` 仍是 `success`,不是失败,但没有真正拿到新推广码。 */
+  claimedCount: number;
+  withCodeCount: number;
   manualReviewCount: number;
   failedCount: number;
   skippedCount: number;
+  remainingCount: number;
   /** 分片当前是否处于系统暂停/人工暂停/人工中止（disabled/paused/cancelled 且带 taskControl 标记）。 */
   holdKind?: string;
   holdReasonCode?: string;
@@ -264,32 +328,37 @@ export type PromoClaimBatchLifecycleDto = Readonly<{
     shardSize?: number;
   }>;
   shards: readonly PromoClaimShardSummaryDto[];
+  /** 六类计数，见 {@link classifyPromoClaimItemOutcome} 的分类口径——六项互斥、加总等于 `total`。 */
   counts: Readonly<{
     total: number;
     claimed: number;
     withCode: number;
     manualReview: number;
     failed: number;
+    skipped: number;
     remaining: number;
   }>;
   etaMinutes: number | null;
 }>;
 
-/** 五类计数的纯派生逻辑，从每个分片已经聚合好的条目计数汇总——不重新扫描 `generic_task_item`。 */
+/**
+ * 六类计数的纯派生逻辑——每个分片自己的六个桶已经在
+ * `loadPromoClaimBatchLifecycle`（`src/server/task-admin/service.ts`）的
+ * 聚合 SQL 里按 {@link classifyPromoClaimItemOutcome} 同一套口径算好，这里
+ * 只是逐分片求和，不重新扫描 `generic_task_item`、也不重新做分类判定。
+ */
 export function derivePromoClaimBatchCounts(
-  shards: readonly Pick<PromoClaimShardSummaryDto, "totalCount" | "successCount" | "manualReviewCount" | "failedCount" | "skippedCount">[],
+  shards: readonly Pick<PromoClaimShardSummaryDto, "totalCount" | "claimedCount" | "withCodeCount" | "manualReviewCount" | "failedCount" | "skippedCount" | "remainingCount">[],
 ): PromoClaimBatchLifecycleDto["counts"] {
-  const total = shards.reduce((sum, shard) => sum + shard.totalCount, 0);
-  const success = shards.reduce((sum, shard) => sum + shard.successCount, 0);
-  const manualReview = shards.reduce((sum, shard) => sum + shard.manualReviewCount, 0);
-  const failed = shards.reduce((sum, shard) => sum + shard.failedCount, 0);
-  const skipped = shards.reduce((sum, shard) => sum + shard.skippedCount, 0);
+  const sum = (key: "totalCount" | "claimedCount" | "withCodeCount" | "manualReviewCount" | "failedCount" | "skippedCount" | "remainingCount") =>
+    shards.reduce((total, shard) => total + shard[key], 0);
   return Object.freeze({
-    total,
-    claimed: success + failed + skipped,
-    withCode: success - manualReview,
-    manualReview,
-    failed,
-    remaining: Math.max(0, total - success - failed - skipped),
+    total: sum("totalCount"),
+    claimed: sum("claimedCount"),
+    withCode: sum("withCodeCount"),
+    manualReview: sum("manualReviewCount"),
+    failed: sum("failedCount"),
+    skipped: sum("skippedCount"),
+    remaining: sum("remainingCount"),
   });
 }
