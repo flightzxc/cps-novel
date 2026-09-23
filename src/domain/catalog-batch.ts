@@ -154,3 +154,105 @@ export type CatalogBatchSummary = Readonly<{
   alreadyLinkedCount: number | null;
   blockedCount: number | null;
 }>;
+
+// ---------------------------------------------------------------------
+// 阶段2 第4步（施工任务 3.5）：批次详情页"分片列表 / 领取统计 / 预计完成
+// 时间"。只对生命周期批次（lifecycleVersion=1 且 lifecycleRole=batch）
+// 生效——旧路径批次继续用上面既有的 `childTasks`/`blockedReasonCounts`。
+// ---------------------------------------------------------------------
+
+/** 一个生命周期分片（`promo_link.claim.v1` 子任务）在批次详情页需要展示的字段。 */
+export type PromoClaimShardSummaryDto = Readonly<{
+  taskId: string;
+  shardIndex: number;
+  /** 分片自己的原始 `generic_task.status`（disabled/pending/processing/paused/cancelled/completed/completed_with_errors/failed）。 */
+  status: string;
+  releaseCount: number;
+  missedDeadlineCount: number;
+  releasedAt?: string;
+  deadlineAt?: string;
+  totalCount: number;
+  successCount: number;
+  /** 成功条目中，最终落在"人工核对"（`result.decision === 'manual_review_required'`）的数量——这些条目的 `generic_task_item.status` 仍是 `success`,不是失败,但没有真正拿到新推广码。 */
+  manualReviewCount: number;
+  failedCount: number;
+  skippedCount: number;
+  /** 分片当前是否处于系统暂停/人工暂停/人工中止（disabled/paused/cancelled 且带 taskControl 标记）。 */
+  holdKind?: string;
+  holdReasonCode?: string;
+}>;
+
+/** 分片任务状态里代表"已经不会再变化"的终态集合——`disabled`/`paused` 都不算终态（还可能被 scheduler/运营继续推进）。 */
+const SHARD_TERMINAL_STATUSES = new Set(["completed", "completed_with_errors", "failed", "cancelled"]);
+
+export function isShardTerminalStatus(status: string): boolean {
+  return SHARD_TERMINAL_STATUSES.has(status);
+}
+
+/**
+ * 按批次 `shardPlan.windowMinutes`（或调用方传入的回退值）与当前放行分片的
+ * 剩余窗口时间估算完成时间（分钟）。同一渠道账号任意时刻至多一个分片处于
+ * pending/processing（D6），所以这是一个保守的串行估算：当前放行分片按剩余
+ * 窗口时间计，其余尚未终结的分片各按整窗口时间计——不是精确预测（真实吞吐
+ * 可能明显快于窗口上限，错过截止时间时也可能明显更慢），而是给运营一个
+ * "最多还要等多久"量级的参考。全部分片都已终态时返回 0；一个分片都没有
+ * （理论上不会发生，枚举总会建至少一片）时返回 `null`。
+ */
+export function estimatePromoClaimBatchEtaMinutes(
+  shards: readonly Pick<PromoClaimShardSummaryDto, "status" | "deadlineAt">[],
+  windowMinutes: number,
+  now: Date,
+): number | null {
+  if (shards.length === 0) return null;
+  const pending = shards.filter((shard) => !isShardTerminalStatus(shard.status));
+  if (pending.length === 0) return 0;
+  const active = pending.find((shard) => shard.status === "pending" || shard.status === "processing");
+  // 没有分片处于 pending/processing（例如批次刚被暂停，或者所有排队分片都
+  // 还没被 scheduler 选中）——不存在"当前放行分片"这个特殊槽位，每个未终态
+  // 分片都按整窗口时间计，不能再额外加一份 activeRemainingMinutes。
+  if (!active) return pending.length * windowMinutes;
+  const activeRemainingMinutes = active.deadlineAt
+    ? Math.max(0, Math.ceil((new Date(active.deadlineAt).getTime() - now.getTime()) / 60_000))
+    : windowMinutes;
+  const queuedCount = pending.length - 1;
+  return activeRemainingMinutes + queuedCount * windowMinutes;
+}
+
+export type PromoClaimBatchLifecycleDto = Readonly<{
+  shardPlan?: Readonly<{
+    windowMinutes: number;
+    shardSizeMin: number;
+    shardSizeMax: number;
+    shardCount: number;
+    shardSize?: number;
+  }>;
+  shards: readonly PromoClaimShardSummaryDto[];
+  counts: Readonly<{
+    total: number;
+    claimed: number;
+    withCode: number;
+    manualReview: number;
+    failed: number;
+    remaining: number;
+  }>;
+  etaMinutes: number | null;
+}>;
+
+/** 五类计数的纯派生逻辑，从每个分片已经聚合好的条目计数汇总——不重新扫描 `generic_task_item`。 */
+export function derivePromoClaimBatchCounts(
+  shards: readonly Pick<PromoClaimShardSummaryDto, "totalCount" | "successCount" | "manualReviewCount" | "failedCount" | "skippedCount">[],
+): PromoClaimBatchLifecycleDto["counts"] {
+  const total = shards.reduce((sum, shard) => sum + shard.totalCount, 0);
+  const success = shards.reduce((sum, shard) => sum + shard.successCount, 0);
+  const manualReview = shards.reduce((sum, shard) => sum + shard.manualReviewCount, 0);
+  const failed = shards.reduce((sum, shard) => sum + shard.failedCount, 0);
+  const skipped = shards.reduce((sum, shard) => sum + shard.skippedCount, 0);
+  return Object.freeze({
+    total,
+    claimed: success + failed + skipped,
+    withCode: success - manualReview,
+    manualReview,
+    failed,
+    remaining: Math.max(0, total - success - failed - skipped),
+  });
+}

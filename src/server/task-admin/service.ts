@@ -11,11 +11,13 @@ import { isUniqueConstraintViolation, withDbRetry } from "@/lib/db/db-retry";
 import {
   CATALOG_BATCH_TASK_TYPE,
   catalogFinalizeGeneration,
+  isLifecycleBatchParams,
   isLifecycleShardParams,
   MOBOREADER_CATALOG_FINALIZE_TARGET_ID,
   MOBOREADER_CATALOG_TARGET_TYPES,
   MOBOREADER_TASK_TYPES,
   PARENT_BATCH_TASK_TYPES,
+  PROMO_CLAIM_LIFECYCLE_DEFAULTS,
   PROMO_LINK_CLAIM_TASK_TYPE,
   abortPromoClaimBatchTx,
   isParentBatchTaskType,
@@ -38,7 +40,13 @@ import {
 import { resolveClaimCredentialAdmission } from "@/lib/credentials/claim-readiness";
 import type { ArticleGenerateBlockedReason } from "@/domain/article-generation";
 import { TASK_ITEM_STATUSES, TASK_STATUSES } from "@/domain/database-statuses";
-import { deriveCatalogBatchPhase } from "@/domain/catalog-batch";
+import {
+  deriveCatalogBatchPhase,
+  derivePromoClaimBatchCounts,
+  estimatePromoClaimBatchEtaMinutes,
+  type PromoClaimBatchLifecycleDto,
+  type PromoClaimShardSummaryDto,
+} from "@/domain/catalog-batch";
 import {
   requireFreshAdminServiceMutation,
   type AdminServiceAuthorization,
@@ -147,6 +155,14 @@ export type TaskSummaryDto = Readonly<{
     blockedCount?: number;
     blockedReasonCounts?: Readonly<Record<string, number>>;
     childTasks?: readonly Readonly<{ taskId: string; taskType: string; status: string }>[];
+    /**
+     * 阶段2 第4步（施工任务 3.5）：只对生命周期批次（`lifecycleVersion === 1
+     * && lifecycleRole === "batch"` 的 `batch.materialize.v1`）填充——分片
+     * 列表、领取统计、预计完成时间。旧路径批次（`novel_materialize`/
+     * `article.generate.*`/开关关闭时的 `promo_claim`）继续只用上面的
+     * `childTasks`，这个字段始终缺失，不是空对象。
+     */
+    promoClaimLifecycle?: PromoClaimBatchLifecycleDto;
   }>;
   /**
    * C-10 (Phase E rework, 2026-09-07): the task's own stable stop-reason
@@ -817,6 +833,18 @@ export type TaskDetailDto = TaskSummaryDto & Readonly<{
   catalogScanConfig?: CatalogScanConfigDto;
   catalogScanAudit?: CatalogScanAuditDto;
   /**
+   * 阶段2 第4步（施工任务 3.5，旧路径缺陷修复）：只对 parent-batch 任务类型
+   * 填充——批次自身、未经派生的原始 `status` 列值（`deriveCatalogBatchParentRow`
+   * 派生之前）。批次自己的枚举条目一旦处理完，`status` 列几乎总是很快变成
+   * 终态（通常是 `completed`），即使它的分片/子任务仍在运行——`taskSummary`
+   * 顶层的 `status` 字段是"派生后"的展示状态（会正确地把仍有活跃子任务的批次
+   * 显示成 processing），但批次级暂停/恢复/中止的服务端接口只认这个原始列值。
+   * 页面必须用这个字段（而不是派生后的 `status`）来决定是否显示暂停/恢复/
+   * 中止按钮，否则会出现"按钮显示可点，点了却 409"（2026-09-23 Owner 实际
+   * 遇到：父批次 bfae6a25 已完成，真正在跑的是子任务）。
+   */
+  parentRawStatus?: string;
+  /**
    * C-10b: the *origin* failed item's richer derived stop-reason line (e.g.
    * `"upstream_error (HTTP 401) @ 第 1 页"`, the same `deriveItemStopReason`
    * output `TaskItemDto.stopReason` uses) — read via one extra query in
@@ -1115,6 +1143,83 @@ async function deriveCatalogBatchParentRow(db: PrismaClient, row: TaskListRow): 
   };
 }
 
+type PromoClaimShardAggregateRow = {
+  shard_id: string;
+  params: Prisma.JsonValue | null;
+  status: string;
+  result: Prisma.JsonValue | null;
+  total_count: number;
+  success_count: number;
+  failed_count: number;
+  skipped_count: number;
+  manual_review_count: number;
+};
+
+/**
+ * 阶段2 第4步（施工任务 3.5）：批次详情页的分片列表 + 领取统计 + 预计完成
+ * 时间。一次聚合 SQL 查询拿到每个分片自身的状态/参数与它名下条目的计数——
+ * "人工核对"通过 `generic_task_item.result->>'decision' =
+ * 'manual_review_required'` 识别：这类条目的 `status` 仍然是 `success`
+ * （worker/handlers/promo-link-claim.ts 对人工核对场景就是这样写的——已经
+ * 收尾，不是失败，只是没有真正拿到新推广码），单看 `status` 无法把它和真正
+ * 拿到码的条目区分开。只对生命周期批次调用；只有一次数据库往返，不管批次
+ * 有多少个分片。
+ */
+async function loadPromoClaimBatchLifecycle(
+  db: PrismaClient,
+  batchId: string,
+  batchResult: unknown,
+): Promise<PromoClaimBatchLifecycleDto> {
+  const rows = await db.$queryRaw<PromoClaimShardAggregateRow[]>(Prisma.sql`
+    SELECT s.id AS shard_id, s.params, s.status, s.result,
+      COUNT(i.id)::int AS total_count,
+      COUNT(*) FILTER (WHERE i.status = 'success')::int AS success_count,
+      COUNT(*) FILTER (WHERE i.status = 'failed')::int AS failed_count,
+      COUNT(*) FILTER (WHERE i.status = 'skipped')::int AS skipped_count,
+      COUNT(*) FILTER (WHERE i.status = 'success' AND i.result->>'decision' = 'manual_review_required')::int AS manual_review_count
+    FROM generic_task s
+    LEFT JOIN generic_task_item i ON i.task_id = s.id
+    WHERE s.parent_task_id = ${batchId}::uuid AND s.task_type = ${PROMO_LINK_CLAIM_TASK_TYPE}
+      AND s.params->>'lifecycleVersion' = '1' AND s.params->>'lifecycleRole' = 'shard'
+    GROUP BY s.id
+    ORDER BY (s.params->>'shardIndex')::int ASC
+  `);
+  const shards: PromoClaimShardSummaryDto[] = rows.map((row) => {
+    const params = jsonPlainObject(row.params) ?? {};
+    const marker = readTaskControlMarker(row.result);
+    return Object.freeze({
+      taskId: row.shard_id,
+      shardIndex: typeof params.shardIndex === "number" ? params.shardIndex : 0,
+      status: row.status,
+      releaseCount: typeof params.releaseCount === "number" ? params.releaseCount : 0,
+      missedDeadlineCount: typeof params.missedDeadlineCount === "number" ? params.missedDeadlineCount : 0,
+      ...(typeof params.releasedAt === "string" ? { releasedAt: params.releasedAt } : {}),
+      ...(typeof params.deadlineAt === "string" ? { deadlineAt: params.deadlineAt } : {}),
+      totalCount: row.total_count,
+      successCount: row.success_count,
+      manualReviewCount: row.manual_review_count,
+      failedCount: row.failed_count,
+      skippedCount: row.skipped_count,
+      ...(marker ? { holdKind: marker.kind, ...(marker.reasonCode ? { holdReasonCode: marker.reasonCode } : {}) } : {}),
+    });
+  });
+  const shardPlanRaw = jsonPlainObject(jsonPlainObject(batchResult)?.shardPlan);
+  const shardPlan = shardPlanRaw ? Object.freeze({
+    windowMinutes: typeof shardPlanRaw.windowMinutes === "number" ? shardPlanRaw.windowMinutes : PROMO_CLAIM_LIFECYCLE_DEFAULTS.shardWindowMinutes,
+    shardSizeMin: typeof shardPlanRaw.shardSizeMin === "number" ? shardPlanRaw.shardSizeMin : PROMO_CLAIM_LIFECYCLE_DEFAULTS.shardSizeMin,
+    shardSizeMax: typeof shardPlanRaw.shardSizeMax === "number" ? shardPlanRaw.shardSizeMax : PROMO_CLAIM_LIFECYCLE_DEFAULTS.shardSizeMax,
+    shardCount: typeof shardPlanRaw.shardCount === "number" ? shardPlanRaw.shardCount : shards.length,
+    ...(typeof shardPlanRaw.shardSize === "number" ? { shardSize: shardPlanRaw.shardSize } : {}),
+  }) : undefined;
+  const windowMinutes = shardPlan?.windowMinutes ?? PROMO_CLAIM_LIFECYCLE_DEFAULTS.shardWindowMinutes;
+  return Object.freeze({
+    shardPlan,
+    shards: Object.freeze(shards),
+    counts: derivePromoClaimBatchCounts(shards),
+    etaMinutes: estimatePromoClaimBatchEtaMinutes(shards, windowMinutes, new Date()),
+  });
+}
+
 export async function getAdminTaskDetail(
   db: PrismaClient,
   context: AdminAuthContext,
@@ -1168,12 +1273,25 @@ export async function getAdminTaskDetail(
     where: { parentTaskId: taskId, originTaskId: null }, orderBy: { createdAt: "asc" },
     select: { id: true, taskType: true, status: true },
   }) : [];
+  // 阶段2 第4步（施工任务 3.5）：只对生命周期批次（batch.materialize.v1 且
+  // params.lifecycleVersion=1/lifecycleRole=batch）加这一次额外聚合查询。
+  const isLifecycleBatch = family === "generic"
+    && row.task_type === CATALOG_BATCH_TASK_TYPE
+    && isLifecycleBatchParams(rawRow.params);
+  const promoClaimLifecycle = isLifecycleBatch
+    ? await loadPromoClaimBatchLifecycle(db, taskId, rawRow.result)
+    : undefined;
   const summary = taskSummary(row, bookCounts);
   return Object.freeze({
     ...summary,
     ...(summary.catalogBatch ? { catalogBatch: { ...summary.catalogBatch,
       childTasks: childTasks.map((child) => ({ taskId: child.id, taskType: child.taskType, status: child.status })),
+      ...(promoClaimLifecycle ? { promoClaimLifecycle } : {}),
     } } : {}),
+    // 旧路径缺陷修复（3.5）：批次自身未经派生的原始 status 列值，供页面决定
+    // 批次级暂停/恢复/中止按钮的可点性——见 `TaskDetailDto.parentRawStatus`
+    // 自己的 doc comment。
+    ...(isParentBatchTaskType(row.task_type) ? { parentRawStatus: rawRow.status } : {}),
     ...(row.mode !== undefined ? { mode: row.mode } : {}),
     ...(row.channel_account_id ? { channelAccountId: row.channel_account_id } : {}),
     createdAt: iso(row.created_at),

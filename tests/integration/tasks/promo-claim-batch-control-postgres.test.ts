@@ -36,8 +36,11 @@ import {
   PROMO_LINK_CLAIM_CAPABILITY_KEY,
   PROMO_LINK_CLAIM_TASK_TYPE,
 } from "@/lib/tasks/promo-link-claim-limits";
+import { P2_04_ADMIN_REGISTRY } from "@/app/api/admin/_lib/registry";
+import { requireAdminRouteAccess } from "@/server/auth/guards";
 import {
   abortPromoClaimBatch,
+  getAdminTaskDetail,
   pausePromoClaimBatch,
   reapprovePromoClaimBatch,
   resumePromoClaimBatch,
@@ -203,6 +206,16 @@ async function batchControlTicket(pathname:
   const admin = seedTaskAdmin(stores);
   const ticket = await issueTaskAuthorization(stores, { token: admin.token, pathname });
   return { ...ticket, admin, dependencies: { db: web, identities: stores, sessions: stores, now: NOW } };
+}
+
+/** 一个只读的 `AdminAuthContext`——同 `tests/integration/catalog-batch/postgres.test.ts` 的 `adminContext` 同一手法。 */
+async function readContext() {
+  const stores = newStores();
+  const admin = seedTaskAdmin(stores);
+  return (await requireAdminRouteAccess(
+    { pathname: "/api/admin/tasks/detail", method: "GET", sessionToken: admin.token },
+    { identities: stores, sessions: stores, registry: P2_04_ADMIN_REGISTRY, now: NOW },
+  )).context;
 }
 
 describe.skipIf(!enabled).sequential("promo-claim lifecycle: 阶段2 第4步 批次级操作 (real Postgres)", () => {
@@ -506,6 +519,52 @@ describe.skipIf(!enabled).sequential("promo-claim lifecycle: 阶段2 第4步 批
       const batch = await owner.genericTask.findUniqueOrThrow({ where: { id: enqueued.taskId } });
       expect((batch.result as { blockedReasonCounts?: Record<string, number> }).blockedReasonCounts?.queued_in_other_batch ?? 0).toBe(0);
       expect(batch.result).toMatchObject({ submittedCount: 1 });
+    });
+  });
+
+  describe("3.5 批次详情 DTO：分片列表 / 领取统计 / 预计完成时间 / parentRawStatus", () => {
+    it("生命周期批次：getAdminTaskDetail 返回 promoClaimLifecycle（分片列表+统计+ETA）与 parentRawStatus（用于旧路径按钮可点性判定）", async () => {
+      const { batchId, shardIds } = await buildLifecycleShards(foundation, 2, "detail-dto");
+      // 放行第一片并让它成功完成（真正跑一遍 handler，制造真实的
+      // success/manual_review 条目，而不是手写伪造行）。
+      const released = await runPromoClaimReleaseTick(scheduler, { now: NOW, env: LIFECYCLE_ON_ENV, logger: () => {} });
+      expect(released[0]).toMatchObject({ action: "released", shardId: shardIds[0] });
+
+      const context = await readContext();
+      const detail = await getAdminTaskDetail(owner, context, { family: "generic", taskId: batchId });
+
+      // 批次自己的枚举条目已经处理完，raw status 几乎总是很快变成终态
+      // （通常是 completed），即使分片仍在运行——这正是旧路径缺陷的根因。
+      expect(detail.parentRawStatus).toBe("completed");
+      // 派生后展示状态则正确反映"仍有分片在跑" -> processing。
+      expect(detail.status).toBe("processing");
+
+      expect(detail.catalogBatch?.promoClaimLifecycle).toBeDefined();
+      const lifecycle = detail.catalogBatch!.promoClaimLifecycle!;
+      expect(lifecycle.shards).toHaveLength(2);
+      expect(lifecycle.shards[0]).toMatchObject({ taskId: shardIds[0], shardIndex: 0, status: "pending", releaseCount: 1 });
+      expect(lifecycle.shards[1]).toMatchObject({ taskId: shardIds[1], shardIndex: 1, status: "disabled", releaseCount: 0, holdKind: "awaiting_release" });
+      expect(lifecycle.counts.total).toBe(2);
+      expect(lifecycle.counts.remaining).toBe(2); // 都还没真正处理完（items 仍 pending，只是分片本身已放行）。
+      expect(lifecycle.shardPlan).toMatchObject({ windowMinutes: 90, shardCount: 2 });
+      expect(typeof lifecycle.etaMinutes).toBe("number");
+      expect(lifecycle.etaMinutes).toBeGreaterThan(0);
+    });
+
+    it("非生命周期批次（旧路径 novel_materialize）：promoClaimLifecycle 缺失，parentRawStatus 仍然填充", async () => {
+      const bookIds = await seedBooks(owner, foundation.channelAppId, 1, "detail-dto-legacy");
+      await owner.$executeRaw(Prisma.sql`UPDATE novel_source_item SET status = 'pending', novel_id = NULL WHERE id = ${bookIds[0]}::uuid`);
+      const enqueued = await enqueueCatalogBatch(owner, {
+        operation: "novel_materialize",
+        selection: normalizeCatalogSelection({ scope: "explicit_ids", ids: bookIds }),
+        actorId: foundation.actorId,
+        requestId: randomUUID(),
+      }, new Date(), true, undefined, LIFECYCLE_ON_ENV);
+
+      const context = await readContext();
+      const detail = await getAdminTaskDetail(owner, context, { family: "generic", taskId: enqueued.taskId });
+      expect(detail.catalogBatch?.promoClaimLifecycle).toBeUndefined();
+      expect(detail.parentRawStatus).toBeDefined();
     });
   });
 
