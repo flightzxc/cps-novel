@@ -333,16 +333,46 @@ export function createCatalogBatchHandler(
           if (payload.selection.scope === "all_filtered") selectedCount += rows.length;
           observedCount += rows.length;
           let activePromo = new Set<string>();
+          // 阶段2 第4步（施工任务 3.4）：`activePromo` 只挡 status IN
+          // ('pending','processing') 的领取任务，挡不住挂在另一个批次"仍在
+          // 排队"（disabled/paused）的生命周期分片下的书——见本函数上面
+          // "也不查旧的 active_scope_conflict" 那段既有说明对这个盲区的解释。
+          // 生命周期分片会排队数小时（甚至更久，如果卡在某个 system_hold），
+          // 这个盲区被放大：同一本书完全可能同时挂在两个批次各自的排队分片
+          // 下。只对"这次正在枚举的批次自己是生命周期批次"生效——非生命周期
+          // 路径（开关关闭、或旧路径 novel_materialize）的判定逐字不变。
+          let queuedElsewhere = new Set<string>();
           if (payload.operation === "promo_claim" && rows.length) {
+            const ids = rows.map((r) => r.id);
             const active = await tx.genericTaskItem.findMany({ where: {
-              targetType: CONTENT_CREATE_TARGET_TYPE, targetId: { in: rows.map((r) => r.id) },
+              targetType: CONTENT_CREATE_TARGET_TYPE, targetId: { in: ids },
               task: { taskType: PROMO_LINK_CLAIM_TASK_TYPE, status: { in: ["pending", "processing"] } },
             }, select: { targetId: true } });
             activePromo = new Set(active.map((r) => r.targetId));
+
+            if (isLifecycleBatch) {
+              const queued = await tx.$queryRaw<Array<{ target_id: string }>>(Prisma.sql`
+                SELECT DISTINCT i.target_id
+                FROM generic_task_item i
+                JOIN generic_task t ON t.id = i.task_id
+                WHERE i.target_type = ${CONTENT_CREATE_TARGET_TYPE}
+                  AND i.target_id = ANY(${ids}::text[])
+                  AND i.status = 'pending'
+                  AND t.task_type = ${PROMO_LINK_CLAIM_TASK_TYPE}
+                  AND t.status IN ('disabled', 'paused')
+                  AND t.params->>'lifecycleVersion' = '1'
+                  AND t.params->>'lifecycleRole' = 'shard'
+              `);
+              queuedElsewhere = new Set(queued.map((row) => row.target_id));
+            }
           }
           for (const row of rows) {
             if (payload.operation === "promo_claim" && activePromo.has(row.id)) {
               blockedReasonCounts.active_item_conflict = (blockedReasonCounts.active_item_conflict ?? 0) + 1;
+              continue;
+            }
+            if (payload.operation === "promo_claim" && queuedElsewhere.has(row.id)) {
+              blockedReasonCounts.queued_in_other_batch = (blockedReasonCounts.queued_in_other_batch ?? 0) + 1;
               continue;
             }
             if (payload.operation === "novel_materialize" && row.status === "linked" && row.novelId !== null) {
@@ -413,15 +443,22 @@ export function createCatalogBatchHandler(
             //
             // 也不查旧的 `active_scope_conflict`（每片的 `operationScopeHash`
             // 由这一片自己的书目集合算出，天然与其它分片、其它批次不同，
-            // 结构上不会撞见活跃范围唯一约束）。这不代表跨批次并发提交完全
-            // 不可能让同一本书出现在两个尚未放行的分片里——`activePromo` 逐
-            // 条目过滤只挡 `status IN ('pending','processing')` 的任务，挡不住
-            // 挂在另一个"仍在排队、尚未放行"的 disabled 分片下的书（旧路径
-            // 双闸关闭时的 disabled 子任务同样有这个盲区，非本步新增）。真正
-            // 防止对同一本书重复调用非幂等 getcode 的是 handler 里完全未改动
-            // 的红线：`SideEffectIntent` 唯一性、`PromoLink.idempotencyKey`
-            // upsert、以及 `existingPromoLink?.status === "fetched"` 的提前
-            // 短路——这三层在条目真正执行时生效，与它挂在哪个任务/分片下无关。
+            // 结构上不会撞见活跃范围唯一约束）。
+            //
+            // 阶段2 第4步（施工任务 3.4）收口：上面新增的 `queuedElsewhere`
+            // 查询已经把"挂在另一个批次仍在排队（disabled/paused）的生命周期
+            // 分片下的书"计入 `queued_in_other_batch` 阻断，不再是盲区——但只
+            // 覆盖生命周期批次（`isLifecycleBatch` 为真）这一侧；旧路径双闸
+            // 关闭时创建的 `disabled` 子任务（`promoFeatureEnabled`/
+            // `promoWriteAllowed` 任一为 false 时，本函数下方"非生命周期"
+            // 分支会把整组子任务直接建成 `disabled`）仍然不在 `activePromo`/
+            // `queuedElsewhere` 任一查询的覆盖范围内——这是旧路径本身既有的
+            // 盲区，本步不改旧路径判定，留作已知限制。真正防止对同一本书
+            // 重复调用非幂等 getcode 的是 handler 里完全未改动的红线：
+            // `SideEffectIntent` 唯一性、`PromoLink.idempotencyKey` upsert、
+            // 以及 `existingPromoLink?.status === "fetched"` 的提前短路——这
+            // 三层在条目真正执行时生效，与它挂在哪个任务/分片下无关，是这里
+            // 两道枚举时预检查之外的最后一道防线。
             const { shardSize, sizingBasis } = await resolveLifecycleShardSize(tx, channelAccountId!, lifecycleConfig);
             const shardBuckets = chunkMembersIntoShards(members, shardSize);
             for (const [shardIndex, shardMembers] of shardBuckets.entries()) {

@@ -113,6 +113,10 @@ const CATALOG_BATCH_BLOCKED_REASON_LABELS: Readonly<Record<string, string>> = Ob
   active_scope_conflict: "当前范围已有进行中的任务",
   missing_locale: "来源语言缺失",
   unsupported_locale: "来源语言暂不受产品支持",
+  // 阶段2 第4步（施工任务 3.4）：书已挂在另一个批次仍在排队（尚未放行/已
+  // 暂停）的生命周期分片下——见 `worker/handlers/catalog-batch.ts` 的
+  // `queuedElsewhere` 查询。
+  queued_in_other_batch: "已在其它排队中的批次里",
 });
 
 export function catalogBatchPhaseLabel(phase: string): string {
