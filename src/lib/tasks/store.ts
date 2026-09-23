@@ -148,6 +148,29 @@ async function selectPending(
               WHERE t.id = i.task_id
                 AND t.status IN ('pending', 'processing')
                 AND t.task_type = ANY(${taskTypes}::text[])
+                -- Promo-claim lifecycle pushdown (阶段2 step1, docs/adr/
+                -- ADR-PROMO-CLAIM-BATCH-LIFECYCLE.md). Same placement
+                -- rationale as the channel_sync branch's account-hold
+                -- pushdown above: a lifecycle shard's items must never be
+                -- claimable before the scheduler has released the shard
+                -- (deadlineAt absent) or after its deadline has passed, and
+                -- this has to live inside the parent EXISTS -- ahead of the
+                -- LIMIT -- so a blocked shard's items are never fetched,
+                -- locked and then discarded (zero writes: no lease, no
+                -- attempt_count bump, no error). A non-lifecycle task has no
+                -- lifecycleVersion key at all, so the
+                -- IS DISTINCT FROM '1' check below is true for it, making
+                -- this whole clause a no-op -- every existing taskType is
+                -- unaffected. (No backticks inside this template literal --
+                -- they would terminate it; see promo-link-claim-system-
+                -- hold.ts's own header for the same note.)
+                AND (
+                  t.params->>'lifecycleVersion' IS DISTINCT FROM '1'
+                  OR (
+                    t.params->>'deadlineAt' IS NOT NULL
+                    AND (t.params->>'deadlineAt')::timestamptz > transaction_timestamp()
+                  )
+                )
             )
             AND (
               -- Phase C: catalog-scan pages must still be claimed strictly in

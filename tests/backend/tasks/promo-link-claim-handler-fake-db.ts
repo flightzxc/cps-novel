@@ -63,6 +63,8 @@ export type FakeSideEffectIntent = {
 };
 export type FakeAudit = { actorType: string; actorId: string; action: string; entityType: string; entityId: string; requestId: string; afterSnapshot?: unknown };
 export type FakeArticle = { id: string; novelId: string; locale: string; promoLinkId: string | null; deletedAt: Date | null };
+/** 阶段2 step1: only the one field the handler's shard-deadline check reads (`GenericTask.params.deadlineAt`). */
+export type FakeGenericTask = { id: string; params: unknown };
 
 let idCounter = 0;
 function nextId(prefix: string): string {
@@ -80,6 +82,7 @@ export class FakePromoLinkClaimHandlerDb {
   readonly articles = new Map<string, FakeArticle>();
   readonly intents = new Map<string, FakeSideEffectIntent>();
   readonly audits: FakeAudit[] = [];
+  readonly genericTasks = new Map<string, FakeGenericTask>();
   readonly calls: string[] = [];
   private undoLog: Array<() => void> | null = null;
 
@@ -114,6 +117,12 @@ export class FakePromoLinkClaimHandlerDb {
 
   seedArticle(article: FakeArticle): this {
     this.articles.set(article.id, article);
+    return this;
+  }
+
+  /** 阶段2 step1: seeds the parent GenericTask row a shard_v1 item's deadline check reads (`params.deadlineAt`). */
+  seedGenericTask(task: FakeGenericTask): this {
+    this.genericTasks.set(task.id, task);
     return this;
   }
 
@@ -290,6 +299,13 @@ export class FakePromoLinkClaimHandlerDb {
     return { ...row };
   };
 
+  /** 阶段2 step1: mirrors `db.genericTask.findUnique({ where: { id }, select: { params: true } })`, the only shape `worker/handlers/promo-link-claim.ts` issues against this table. */
+  private genericTaskFindUnique = async (args: { where: { id: string }; select?: { params?: boolean } }) => {
+    this.calls.push("genericTask.findUnique");
+    const row = this.genericTasks.get(args.where.id);
+    return row ? { params: row.params } : null;
+  };
+
   private operationAuditCreate = async (args: { data: FakeAudit }) => {
     this.calls.push("operationAudit.create");
     this.audits.push({ ...args.data });
@@ -307,6 +323,7 @@ export class FakePromoLinkClaimHandlerDb {
       channelCapability: { findUnique: this.channelCapabilityFindUnique },
       channelAccountCredential: { findMany: this.channelAccountCredentialFindMany },
       promoLink: { findUnique: this.promoLinkFindUnique, upsert: this.promoLinkUpsert, update: this.promoLinkUpdate },
+      genericTask: { findUnique: this.genericTaskFindUnique },
       article: { findMany: this.articleFindMany, update: this.articleUpdate },
       sideEffectIntent: {
         findUnique: this.sideEffectIntentFindUnique,
