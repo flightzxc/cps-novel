@@ -30,6 +30,7 @@ import {
   NOOP_UPSTREAM_OBSERVATION,
   NO_GATEWAY_OBSERVATION_HEADERS,
   extractGatewayObservationHeaders,
+  safeObserve,
   type OnUpstreamObservation,
 } from "./upstream-observation";
 
@@ -409,14 +410,14 @@ export function createPromoLinkClaimAdapter(
         signal: scoped.signal,
       });
       if (!response.ok) {
-        onUpstreamObservation({
+        safeObserve(onUpstreamObservation, () => ({
           endpoint,
           httpStatus: response.status,
           outcome: "http_error",
           latencyMs: observationNow() - dispatchStartedAt,
           gateWaitMs,
           gatewayHeaders: extractGatewayObservationHeaders(response.headers),
-        });
+        }));
         const ambiguous = mutation && ambiguousHttpStatus(response.status);
         throw new PromoLinkClaimAdapterError(
           "upstream_http_error",
@@ -427,14 +428,18 @@ export function createPromoLinkClaimAdapter(
       }
       try {
         const json = await response.json();
-        onUpstreamObservation({
+        // `safeObserve` runs after the response body is already parsed and
+        // captured in `json`, so a throwing observation callback below can
+        // never turn this success into anything else — see the doc comment
+        // on `safeObserve` for why this matters most on `getcode`.
+        safeObserve(onUpstreamObservation, () => ({
           endpoint,
           httpStatus: response.status,
           outcome: "ok",
           latencyMs: observationNow() - dispatchStartedAt,
           gateWaitMs,
           gatewayHeaders: extractGatewayObservationHeaders(response.headers),
-        });
+        }));
         return json;
       } catch {
         // Transport succeeded (2xx); the body just wasn't parsable JSON —
@@ -442,27 +447,27 @@ export function createPromoLinkClaimAdapter(
         // reports on. The (separate) business-envelope diagnostics for a
         // parsed-but-non-success envelope live on `PromoLinkClaimAdapterError.
         // envelopeStatus/envelopeCode`, not here.
-        onUpstreamObservation({
+        safeObserve(onUpstreamObservation, () => ({
           endpoint,
           httpStatus: response.status,
           outcome: "ok",
           latencyMs: observationNow() - dispatchStartedAt,
           gateWaitMs,
           gatewayHeaders: extractGatewayObservationHeaders(response.headers),
-        });
+        }));
         throw new PromoLinkClaimAdapterError("malformed_payload", false, mutation, response.status);
       }
     } catch (error) {
       if (error instanceof PromoLinkClaimAdapterError) throw error;
       const timedOut = scoped.timedOut();
-      onUpstreamObservation({
+      safeObserve(onUpstreamObservation, () => ({
         endpoint,
         httpStatus: null,
         outcome: timedOut ? "timeout" : "transport_error",
         latencyMs: observationNow() - dispatchStartedAt,
         gateWaitMs,
         gatewayHeaders: NO_GATEWAY_OBSERVATION_HEADERS,
-      });
+      }));
       throw new PromoLinkClaimAdapterError(
         timedOut ? "request_timeout" : "transport_error",
         !mutation,

@@ -9,9 +9,13 @@
  *
  * ── Why this exists ─────────────────────────────────────────────────────
  * A preproduction measurement found every promo claim costs ~4.45s = 3
- * upstream requests × the shared 1100ms rate gate
- * (`./moboreader-rate-limit.ts`). Unknown until now: whether `getcode`
- * (the claim mutation) has its own gateway rate limit distinct from the
+ * upstream requests × the shared rate gate (`./moboreader-rate-limit.ts`;
+ * `MOBOREADER_MIN_REQUEST_INTERVAL_MS` defaults to 1100ms in code, but the
+ * preproduction environment that produced the 4.45s figure had it
+ * configured to 1500ms via `MOBOREADER_UPSTREAM_MIN_REQUEST_INTERVAL_MS` —
+ * 3 × 1500ms, not 3 × the code default. Do not use 1100ms to re-derive or
+ * sanity-check that figure). Unknown until now: whether `getcode` (the
+ * claim mutation) has its own gateway rate limit distinct from the
  * `x-ratelimit-limit: 60` observed only on `getlistpc`; each endpoint's
  * real latency; how much of the 4.45s is gate wait vs. actual transit. This
  * module's events are the raw material for that later analysis — they do
@@ -59,6 +63,39 @@ export type OnUpstreamObservation = (observation: UpstreamCallObservation) => vo
  * constructing an adapter without it — as every pre-existing test and call
  * site does — adds no work beyond one no-op function call. */
 export const NOOP_UPSTREAM_OBSERVATION: OnUpstreamObservation = () => {};
+
+/**
+ * The only place either adapter (`./moboreader.ts`, `./promo-link-claim.ts`)
+ * may invoke `onUpstreamObservation`. Builds the event with `buildObservation`
+ * (which typically calls `extractGatewayObservationHeaders`) and calls the
+ * callback, all inside one try/catch that swallows any exception from
+ * either step.
+ *
+ * This is not defensive-for-its-own-sake: today's production sink
+ * (`worker/observability/upstream-call-log.ts`) already guards itself, so
+ * this mostly protects against a *future* callback that doesn't. But
+ * without this wrapper, an exception here lands in the same `try` block
+ * that dispatched the request, and the surrounding `catch` cannot tell a
+ * telemetry failure apart from a real transport failure — it would
+ * misclassify the request as `transport_error`/`malformed_payload`. On
+ * `getcode` specifically — a non-idempotent mutation whose ambiguous-error
+ * path always means "never call getcode again, go to readback-only
+ * recovery" — that misclassification would turn "upstream already issued a
+ * code, the callback just threw" into "result unknown" → manual review.
+ * Observation is supposed to have zero effect on behavior; this is the
+ * boundary that guarantees it, no matter what a future callback does.
+ */
+export function safeObserve(
+  onUpstreamObservation: OnUpstreamObservation,
+  buildObservation: () => UpstreamCallObservation,
+): void {
+  try {
+    onUpstreamObservation(buildObservation());
+  } catch {
+    // Deliberately silent — see doc comment above. The request's own
+    // result/error, already determined by the caller, is unaffected.
+  }
+}
 
 /** Header names matched verbatim (case-insensitive) in addition to the
  * `/^(x-)?ratelimit/i` pattern below. Kong's own latency-breakdown headers

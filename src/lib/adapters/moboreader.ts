@@ -16,6 +16,7 @@ import {
   NOOP_UPSTREAM_OBSERVATION,
   NO_GATEWAY_OBSERVATION_HEADERS,
   extractGatewayObservationHeaders,
+  safeObserve,
   type OnUpstreamObservation,
 } from "./upstream-observation";
 
@@ -556,14 +557,14 @@ export function createMoboreaderReadAdapter(options: AdapterOptions = {}): Mobor
           signal: scoped.signal,
         });
         if (!response.ok) {
-          onUpstreamObservation({
+          safeObserve(onUpstreamObservation, () => ({
             endpoint,
             httpStatus: response.status,
             outcome: "http_error",
             latencyMs: observationNow() - dispatchStartedAt,
             gateWaitMs,
             gatewayHeaders: extractGatewayObservationHeaders(response.headers),
-          });
+          }));
           const retryable = shouldRetryStatus(response.status);
           if (retryable && attempt < maxAttempts) {
             await sleep(retryAfterMs(response) ?? Math.min(250 * 2 ** (attempt - 1), 2_000));
@@ -573,51 +574,51 @@ export function createMoboreaderReadAdapter(options: AdapterOptions = {}): Mobor
         }
         try {
           const json = await response.json();
-          onUpstreamObservation({
+          safeObserve(onUpstreamObservation, () => ({
             endpoint,
             httpStatus: response.status,
             outcome: "ok",
             latencyMs: observationNow() - dispatchStartedAt,
             gateWaitMs,
             gatewayHeaders: extractGatewayObservationHeaders(response.headers),
-          });
+          }));
           return json;
         } catch {
           // Transport succeeded (2xx); the body just wasn't parsable JSON.
           // Still `"ok"` from the wire-protocol perspective this event
           // reports on — see `UpstreamCallOutcome`'s doc comment.
-          onUpstreamObservation({
+          safeObserve(onUpstreamObservation, () => ({
             endpoint,
             httpStatus: response.status,
             outcome: "ok",
             latencyMs: observationNow() - dispatchStartedAt,
             gateWaitMs,
             gatewayHeaders: extractGatewayObservationHeaders(response.headers),
-          });
+          }));
           throw new MoboreaderAdapterError("malformed_payload", false, response.status);
         }
       } catch (error) {
         if (error instanceof MoboreaderAdapterError) throw error;
         if (signal?.aborted) {
-          onUpstreamObservation({
+          safeObserve(onUpstreamObservation, () => ({
             endpoint,
             httpStatus: null,
             outcome: "transport_error",
             latencyMs: observationNow() - dispatchStartedAt,
             gateWaitMs,
             gatewayHeaders: NO_GATEWAY_OBSERVATION_HEADERS,
-          });
+          }));
           throw new MoboreaderAdapterError("transport_error", false);
         }
         const timedOut = scoped.timedOut();
-        onUpstreamObservation({
+        safeObserve(onUpstreamObservation, () => ({
           endpoint,
           httpStatus: null,
           outcome: timedOut ? "timeout" : "transport_error",
           latencyMs: observationNow() - dispatchStartedAt,
           gateWaitMs,
           gatewayHeaders: NO_GATEWAY_OBSERVATION_HEADERS,
-        });
+        }));
         const code = timedOut ? "request_timeout" : "transport_error";
         if (attempt === maxAttempts) throw new MoboreaderAdapterError(code, true);
         await sleep(Math.min(250 * 2 ** (attempt - 1), 2_000));
@@ -690,38 +691,38 @@ export function createMoboreaderReadAdapter(options: AdapterOptions = {}): Mobor
         scoped.cleanup();
         if (error instanceof MoboreaderAdapterError) throw error;
         if (signal?.aborted) {
-          onUpstreamObservation({
+          safeObserve(onUpstreamObservation, () => ({
             endpoint,
             httpStatus: null,
             outcome: "transport_error",
             latencyMs: observationNow() - dispatchStartedAt,
             gateWaitMs,
             gatewayHeaders: NO_GATEWAY_OBSERVATION_HEADERS,
-          });
+          }));
           throw new MoboreaderAdapterError("transport_error", false);
         }
         const timedOut = scoped.timedOut();
-        onUpstreamObservation({
+        safeObserve(onUpstreamObservation, () => ({
           endpoint,
           httpStatus: null,
           outcome: timedOut ? "timeout" : "transport_error",
           latencyMs: observationNow() - dispatchStartedAt,
           gateWaitMs,
           gatewayHeaders: NO_GATEWAY_OBSERVATION_HEADERS,
-        });
+        }));
         throw new MoboreaderAdapterError(timedOut ? "request_timeout" : "transport_error", true);
       }
       scoped.cleanup();
 
       if (response.ok) {
-        onUpstreamObservation({
+        safeObserve(onUpstreamObservation, () => ({
           endpoint,
           httpStatus: response.status,
           outcome: "ok",
           latencyMs: observationNow() - dispatchStartedAt,
           gateWaitMs,
           gatewayHeaders: extractGatewayObservationHeaders(response.headers),
-        });
+        }));
         try {
           return await response.json();
         } catch {
@@ -729,14 +730,14 @@ export function createMoboreaderReadAdapter(options: AdapterOptions = {}): Mobor
         }
       }
 
-      onUpstreamObservation({
+      safeObserve(onUpstreamObservation, () => ({
         endpoint,
         httpStatus: response.status,
         outcome: "http_error",
         latencyMs: observationNow() - dispatchStartedAt,
         gateWaitMs,
         gatewayHeaders: extractGatewayObservationHeaders(response.headers),
-      });
+      }));
 
       const status = response.status;
       if (!shouldRetryStatus(status)) {

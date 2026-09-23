@@ -16,6 +16,7 @@ import {
   createMoboreaderReadAdapter,
   createPromoLinkClaimAdapter,
   extractGatewayObservationHeaders,
+  safeObserve,
   type ClaimPromoRequest,
   type UpstreamCallObservation,
 } from "@/lib/adapters";
@@ -511,6 +512,138 @@ describe("parseClaimResponse envelope diagnostics (PromoLinkClaimAdapterError.en
     expect(error).toBeInstanceOf(PromoLinkClaimAdapterError);
     expect((error as PromoLinkClaimAdapterError).envelopeStatus).toBeNull();
     expect((error as PromoLinkClaimAdapterError).envelopeCode).toBeNull();
+  });
+});
+
+describe("safeObserve (a throwing onUpstreamObservation must never change the adapter's own result or error)", () => {
+  // Opus review of b6b5fe9: before this fix, every emission site called
+  // `onUpstreamObservation(...)` directly inside the request's own try
+  // block. Today's production sink already guards itself, so nothing
+  // breaks today — but a *future* callback that throws would have its
+  // exception land in the surrounding `catch`, which cannot tell a
+  // telemetry failure apart from a real transport failure. On `getcode` —
+  // a non-idempotent mutation whose ambiguous-error path means "never call
+  // getcode again, go to readback-only recovery" — that would turn
+  // "upstream already issued a code, the callback just threw" into "result
+  // unknown" → manual review. `safeObserve` is the fix; these tests prove
+  // it holds under a callback engineered to throw on every single call.
+
+  function throwingObservation(): never {
+    throw new Error("observation callback exploded");
+  }
+
+  it("safeObserve itself swallows a throwing callback and still lets a non-throwing one see the built event", () => {
+    expect(() => safeObserve(throwingObservation, () => ({
+      endpoint: "getcode",
+      httpStatus: 200,
+      outcome: "ok",
+      latencyMs: 0,
+      gateWaitMs: 0,
+      gatewayHeaders: {},
+    }))).not.toThrow();
+
+    const seen: UpstreamCallObservation[] = [];
+    safeObserve((o) => seen.push(o), () => ({
+      endpoint: "getlistpc",
+      httpStatus: 200,
+      outcome: "ok",
+      latencyMs: 1,
+      gateWaitMs: 2,
+      gatewayHeaders: {},
+    }));
+    expect(seen).toHaveLength(1);
+    expect(seen[0].endpoint).toBe("getlistpc");
+  });
+
+  it("safeObserve also swallows an exception thrown while building the event (e.g. from header extraction)", () => {
+    const callback = vi.fn();
+    expect(() => safeObserve(callback, () => { throw new Error("boom while building"); })).not.toThrow();
+    expect(callback).not.toHaveBeenCalled();
+  });
+
+  it("getcode success still resolves with the parsed kocCode result — not an ambiguous/manual-review error — when the observation callback throws", async () => {
+    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({
+      status: true, code: 200, data: { kocCode: "239FFB", publicUrl: null, homeLink: null },
+    }), { status: 200 })) as unknown as typeof fetch;
+    const adapter = createPromoLinkClaimAdapter({ fetchImpl, onUpstreamObservation: throwingObservation });
+
+    await expect(adapter.claimPromo(claimRequest, "jwt-token")).resolves.toEqual({
+      upstreamCode: "239FFB",
+      webUrl: null,
+      appUrl: null,
+    });
+  });
+
+  it("getlistpc (readback) success still resolves normally when the observation callback throws", async () => {
+    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({
+      status: true, code: 200, data: { totalCount: 0, list: [] },
+    }), { status: 200 })) as unknown as typeof fetch;
+    const adapter = createPromoLinkClaimAdapter({ fetchImpl, onUpstreamObservation: throwingObservation });
+
+    await expect(adapter.readPromoAfterClaim!(claimRequest, "jwt-token")).resolves.toEqual({
+      status: "target_not_located",
+      reason: "title_no_match",
+      totalCount: 0,
+    });
+  });
+
+  it("a getcode HTTP error still throws the original error type/classification (ambiguous flag unchanged) when the observation callback throws", async () => {
+    const fetchImpl = vi.fn(async () => new Response("err", { status: 503 })) as unknown as typeof fetch;
+    const withoutObservation = createPromoLinkClaimAdapter({ fetchImpl });
+    const withThrowingObservation = createPromoLinkClaimAdapter({ fetchImpl, onUpstreamObservation: throwingObservation });
+
+    const [baseline, mutated] = await Promise.all([
+      withoutObservation.claimPromo(claimRequest, "jwt-token").catch((e) => e),
+      withThrowingObservation.claimPromo(claimRequest, "jwt-token").catch((e) => e),
+    ]);
+    expect(baseline).toBeInstanceOf(PromoLinkClaimAdapterError);
+    expect(mutated).toBeInstanceOf(PromoLinkClaimAdapterError);
+    expect({ code: mutated.code, status: mutated.status, retryable: mutated.retryable, ambiguous: mutated.ambiguous })
+      .toEqual({ code: baseline.code, status: baseline.status, retryable: baseline.retryable, ambiguous: baseline.ambiguous });
+    expect(mutated).toMatchObject({ code: "upstream_http_error", status: 503, retryable: false, ambiguous: true });
+  });
+
+  it("a getcode timeout still throws request_timeout with the same ambiguous flag when the observation callback throws", async () => {
+    function hangingFetch(): typeof fetch {
+      return (async (_url: RequestInfo | URL, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError")), { once: true });
+      })) as unknown as typeof fetch;
+    }
+    const withoutObservation = createPromoLinkClaimAdapter({ fetchImpl: hangingFetch(), timeoutMs: 5 });
+    const withThrowingObservation = createPromoLinkClaimAdapter({
+      fetchImpl: hangingFetch(), timeoutMs: 5, onUpstreamObservation: throwingObservation,
+    });
+
+    const [baseline, mutated] = await Promise.all([
+      withoutObservation.claimPromo(claimRequest, "jwt-token").catch((e) => e),
+      withThrowingObservation.claimPromo(claimRequest, "jwt-token").catch((e) => e),
+    ]);
+    expect(baseline).toBeInstanceOf(PromoLinkClaimAdapterError);
+    expect(mutated).toBeInstanceOf(PromoLinkClaimAdapterError);
+    expect({ code: mutated.code, retryable: mutated.retryable, ambiguous: mutated.ambiguous })
+      .toEqual({ code: baseline.code, retryable: baseline.retryable, ambiguous: baseline.ambiguous });
+    expect(mutated).toMatchObject({ code: "request_timeout", retryable: false, ambiguous: true });
+  });
+
+  it("MoboReader getlistpc success still resolves normally when the observation callback throws (legacy path)", async () => {
+    const fetchImpl = vi.fn(async () => new Response(JSON.stringify(listBooksBody()), { status: 200 }));
+    const adapter = createMoboreaderReadAdapter({ fetchImpl, onUpstreamObservation: throwingObservation });
+    await expect(adapter.listBooks(listRequest(), "token")).resolves.toMatchObject({ totalCount: 0 });
+  });
+
+  it("MoboReader getlistpc HTTP error still throws the same classification when the observation callback throws (legacy path)", async () => {
+    const fetchImpl = vi.fn(async () => new Response("nope", { status: 401 }));
+    const withoutObservation = createMoboreaderReadAdapter({ fetchImpl, maxAttempts: 1 });
+    const withThrowingObservation = createMoboreaderReadAdapter({ fetchImpl, maxAttempts: 1, onUpstreamObservation: throwingObservation });
+
+    const [baseline, mutated] = await Promise.all([
+      withoutObservation.listBooks(listRequest(), "token").catch((e) => e),
+      withThrowingObservation.listBooks(listRequest(), "token").catch((e) => e),
+    ]);
+    expect(baseline).toBeInstanceOf(MoboreaderAdapterError);
+    expect(mutated).toBeInstanceOf(MoboreaderAdapterError);
+    expect({ code: mutated.code, status: mutated.status, retryable: mutated.retryable })
+      .toEqual({ code: baseline.code, status: baseline.status, retryable: baseline.retryable });
   });
 });
 
