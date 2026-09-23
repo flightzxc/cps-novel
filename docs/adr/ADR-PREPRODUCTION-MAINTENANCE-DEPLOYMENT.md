@@ -53,3 +53,8 @@ UID/GID reasoning.
   already-loaded approved application image with registry pulls disabled.
 - Phase 2C must resolve the package/tag version drift before production
   release policy can use a human version label.
+
+> **Follow-up (2026-09-23, Owner decision)**: the package/tag version drift noted
+> above has been resolved — `package.json`, the env templates, and the image tag
+> prefix are unified at `v0.3.0`. Release identity remains approved commit +
+> config digest, unchanged by this.

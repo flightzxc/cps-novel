@@ -123,7 +123,7 @@
 ### P1-NB-09 · Admin 侧栏版本显示存在 dev fallback
 
 - **现状**：`src/app/(admin)/_components/admin-shell.tsx` 的 `BUILD_VERSION` 缺失时回退到
-  `v0.1.0-dev`；该值只用于侧栏展示，构建身份
+  `v0.3.0-dev`（随 v0.3.0 版本身份统一同步更新，2026-09-23）；该值只用于侧栏展示，构建身份
   权威仍是镜像内只读 `.build-metadata.json`。
 - **风险**：正式构建若忘记注入 `NEXT_PUBLIC_BUILD_VERSION`，管理员看到的版本号与真实镜像不一致，
   影响支持沟通和截图证据。

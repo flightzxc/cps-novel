@@ -42,8 +42,10 @@ Transport and verification on the VPS are covered by
 > `docs/adr/ADR-DEPLOYMENT-ARTIFACT-DISTRIBUTION.md`. Phase 2C needs no GHCR PAT and
 > no `docker login ghcr.io`.
 
-The known `v0.2.0` versus package `0.1.0` drift remains an Owner/Release
-decision for Phase 2C.
+The `v0.2.0` versus package `0.1.0` drift has been unified at `v0.3.0`
+(Owner decision, 2026-09-23) — `package.json`, the env templates'
+`APP_VERSION`/`NEXT_PUBLIC_BUILD_VERSION`, and the image tag prefix all read
+`0.3.0` from this release onward.
 
 ### Write-gate registration (`PREPROD_APPROVED_OPEN_WRITE_GATES`)
 

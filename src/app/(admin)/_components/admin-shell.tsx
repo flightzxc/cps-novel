@@ -5,7 +5,7 @@ import { AdminSidebar } from "@/features/admin-ui/sidebar";
 
 import { logoutAction } from "../../(admin-auth)/_lib/logout-action";
 
-const BUILD_VERSION = process.env.NEXT_PUBLIC_BUILD_VERSION?.trim() || "v0.1.0-dev";
+const BUILD_VERSION = process.env.NEXT_PUBLIC_BUILD_VERSION?.trim() || "v0.3.0-dev";
 
 /**
  * Sidebar + header + content. Takes the already-projected session so the shell

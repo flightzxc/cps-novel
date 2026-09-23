@@ -44,7 +44,10 @@ umask 077
 node -e '
   const fs=require("fs");
   const [path,commit,version,tag,digest,builtAt]=process.argv.slice(1);
-  fs.writeFileSync(path, JSON.stringify({schemaVersion:1,commit,version,tag,image:digest,builtAt,versionIdentityIssue:"git tag v0.2.0 differs from package.json 0.1.0; commit and digest are authoritative"},null,2)+"\n", {mode:0o600,flag:"wx"});
+  // versionIdentityIssue (git tag v0.2.0 vs package.json 0.1.0) was resolved
+  // by unifying package.json/env templates/image tag prefix to 0.3.0
+  // (Owner decision, 2026-09-23); no longer written here.
+  fs.writeFileSync(path, JSON.stringify({schemaVersion:1,commit,version,tag,image:digest,builtAt},null,2)+"\n", {mode:0o600,flag:"wx"});
 ' "$manifest" "$GIT_COMMIT" "$APP_VERSION" "$registry_tag" "$repo_digest" "$BUILD_DATE"
 echo "RELEASE_BUILD=PASS"
 echo "RELEASE_MANIFEST=$manifest"

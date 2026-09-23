@@ -100,10 +100,19 @@ describe("cross-agent governance entrypoints", () => {
     expect(read(WORKFLOW_PATH), `${WORKFLOW_PATH} must be the source for "${detail}"`).toContain(detail);
   });
 
-  it("the legacy development log stays frozen and says so", () => {
+  /**
+   * Updated 2026-09-23 (Owner decision, v0.3.0): the log's pre-2026-09-07
+   * per-commit style stays retired, but the file itself is no longer purely
+   * historical -- it resumed for release-level entries only (one per formal
+   * release), so the old "stays frozen" wording would now be false. This
+   * checks the new policy is stated and still links back to the one workflow
+   * source, which is the invariant this file actually guards.
+   */
+  it("the development log documents the v0.3.0 release-level policy and points at the workflow source", () => {
     const log = read("docs/governance/development-log.md");
-    expect(log).toContain("LEGACY");
-    expect(log).toContain("冻结");
+    expect(log).toContain("发版级");
+    expect(log).toContain("v0.3.0");
+    expect(log).toContain("冻结"); // pre-2026-09-07 per-commit entries remain frozen/historical
     expect(log).toContain(WORKFLOW_PATH.split("/").pop());
   });
 

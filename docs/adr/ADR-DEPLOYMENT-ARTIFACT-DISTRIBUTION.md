@@ -340,6 +340,10 @@ CPS 短剧那侧的 `docker run --pull never` one-off 是另一类用途（`--ne
 Git tag `v0.2.0` 与 `package.json` 的 `0.1.0` 不一致。本轮不改。生产身份继续依赖
 approved commit + config digest + archive SHA256，不依赖人类可读版本号。
 
+> **后续（2026-09-23，Owner 裁决）**：上述版本漂移已于 v0.3.0 统一——`package.json`
+> 与环境变量模板的版本号一致。生产身份判定原则不变，仍以 approved commit +
+> config digest + archive SHA256 为准。
+
 ## 9. 后果
 
 - 发布链不再依赖 GHCR 的可用性与鉴权，也不需要在 VPS 上放 registry 凭据；

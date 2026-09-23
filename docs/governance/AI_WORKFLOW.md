@@ -32,7 +32,9 @@
 5. 涉及数据库时 —— `docs/governance/database-governance.md` 与
    `database-schema-dictionary.jsonl`（任何 schema 改动必须同步字典，CI 有 drift 检查）。
 
-`docs/governance/development-log.md` **已于 2026-09-07 冻结**，只作历史参考，不要再往里写。
+`docs/governance/development-log.md` 2026-09-07 冻结的是**逐改动手记**；自 v0.3.0 起
+解冻为**只记发版级条目**（一次正式发版一条，见该文件顶部规则与下方"发版治理"一节）。
+日常改代码仍不要往里写——只有执行正式发版的人在发布完成后补一条。
 
 ## 提交约定
 
@@ -100,3 +102,26 @@ scripts/x8-production-like.sh status
 会把身份文件与**容器实际镜像的 `org.opencontainers.image.revision`** 逐个比对，
 不一致就打印 `X8_IDENTITY_DRIFT=...` 并以非零码退出。
 **不要凭身份文件断言线上跑的是什么**——以 `status` 或 `/api/health` 的 `build.commit` 为准。
+
+## 发版治理
+
+每次**正式发版**（预生产或生产，不含日常 X8 本地起停）必须做完以下几件事，
+缺一项就不算收官（Owner 2026-09-23 裁决，完整版见仓库外的发版治理规程）：
+
+1. **Git**：给 Final SHA 打 annotated tag（例如 `v0.3.0`），tag 说明写本次范围摘要；
+   之后运行 `node scripts/generate-changelog.mjs --write` 重新生成 CHANGELOG 并提交
+   ——不要手改 `CHANGELOG.md`（见上面"CHANGELOG 是生成的，不是写的"一节）。
+2. **版本台账** `docs/governance/version-registry.md`：新增一行 `Version | Date (+0800)
+   | Bump | Summary | Commit / Release | Status`，并按需要补一段"当前快照"叙述。
+3. **开发日志** `docs/governance/development-log.md`：按其顶部规则追加一条**发版级**
+   条目（一次发版一条，CPS 模板：变更类型 / 背景 / 变更内容 / 影响范围 / 验证方式 /
+   后续待办）——日常 commit 不写这里，只有这一步写。
+4. **Notion 手账**：有 Notion 连接时，先写完上面两步的本地文件 → 再同步 Notion 台账 →
+   再读一遍 Notion 核对一致；没有连接时，生成交接提示词（模板见发版治理规程），
+   由发版执行者交 Owner 转 ChatGPT 写入。**Notion 连接失败或缺失不阻断技术发布**
+   ——但交接提示词必须完整，不能"以后再说"。
+5. **最终汇报**附一节"发版治理完成情况"，逐项写明上面四步是"完成"还是"未完成 /
+   待办"，不要笼统写"已发版"带过。
+
+范围诚实是前提：汇报里任何功能只能是**已上线** / **已合入但开关默认关闭（等于未上线）**
+/ **仅设计完成、未合入** / **进行中**四档之一，禁止把后三档写成"已发布"。
