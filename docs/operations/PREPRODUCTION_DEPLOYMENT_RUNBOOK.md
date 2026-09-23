@@ -90,6 +90,33 @@ back, by design. The alternative is to roll forward (fix and deploy a
 newer commit) instead of rolling back past this one. Do not patch the
 older release's checkout to work around this.
 
+### Channel credentials: one environment, one credential
+
+With `promo_write` open, the channel credential stored in this host's
+database can drive real upstream writes. Every environment (production,
+preproduction, the local X8 stack, any other dev stack) must obtain its own
+channel credential by logging in to the upstream from that environment's
+own operator flow. A real credential that is live in preproduction or
+production must never be copied into X8, a local stack, or any other
+environment -- and the reverse: a token already entered into X8/local must
+not be entered into this host.
+
+Why: a per-environment encryption key only protects that environment's own
+ciphertext. On 2026-09-23 a read-only audit found that the preproduction
+credential was the same short-lived token that had also been entered into
+the local X8 stack, whose V1 encryption key had once been exposed
+(`SEC-CREDENTIAL-KEY-ROTATION-2026-09-01`). No leak of the preproduction key
+was found and no plaintext token was found in the preproduction database or
+logs; the risk was the recoverable second copy. See the blocker's note in
+`docs/governance/PRODUCTION_RELEASE_BLOCKERS.md`.
+
+Every time a credential is added, renewed, or replaced here: obtain a fresh
+token for this host only, enter it only through `/channel-accounts` (never
+scripts or SQL), confirm the worker validation succeeds, and confirm its
+`expires_at` matches no credential row in any other environment. The
+procedure and the read-only query are in
+`docs/governance/ENVIRONMENT_PROVISIONING_CHECKLIST.md` §3.
+
 ## One-time Owner sudo steps
 
 1. Install Docker Engine/Compose, Node.js (the release manifest reader, image
