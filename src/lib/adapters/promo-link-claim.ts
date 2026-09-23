@@ -26,6 +26,13 @@
  */
 
 import { NOOP_MOBOREADER_RATE_GATE, type MoboreaderRateGate } from "./moboreader-rate-limit";
+import {
+  NOOP_UPSTREAM_OBSERVATION,
+  NO_GATEWAY_OBSERVATION_HEADERS,
+  extractGatewayObservationHeaders,
+  safeObserve,
+  type OnUpstreamObservation,
+} from "./upstream-observation";
 
 const MOBOREADER_ORIGIN = "https://kocserver-cn.cdreader.com";
 
@@ -33,6 +40,25 @@ export const MOBOREADER_PROMO_ENDPOINTS = Object.freeze({
   claim: "/api/v1/res/getcode",
   readback: "/api/v1/res/getlistpc",
 });
+
+/**
+ * Lookup for observation events: reports the *wire* endpoint name
+ * (`"getcode"` / `"getlistpc"`), not this module's internal `claim`/
+ * `readback` aliases — the readback call dispatches to the very same
+ * `getlistpc` upstream endpoint the catalog/Preview adapter uses
+ * (`MOBOREADER_READ_ENDPOINTS.getlistpc` in `./moboreader.ts`), so its
+ * observation events must be identifiable as `getlistpc` calls too, not a
+ * third, adapter-local name. `post()` allowlists every dispatched path
+ * against `MOBOREADER_PROMO_ENDPOINTS`'s values, so this always resolves.
+ */
+const MOBOREADER_PROMO_ENDPOINT_NAMES_BY_PATH: ReadonlyMap<string, string> = new Map([
+  [MOBOREADER_PROMO_ENDPOINTS.claim, "getcode"],
+  [MOBOREADER_PROMO_ENDPOINTS.readback, "getlistpc"],
+]);
+
+function promoEndpointName(path: string): string {
+  return MOBOREADER_PROMO_ENDPOINT_NAMES_BY_PATH.get(path) ?? path;
+}
 
 export const MOBOREADER_PROMO_TIMEOUT_MS = 15_000;
 /** P-10 proved that getlistpc delivers 100 rows when 100 are requested. */
@@ -55,6 +81,20 @@ export class PromoLinkClaimAdapterError extends Error {
     readonly retryable: boolean,
     readonly ambiguous: boolean,
     readonly status: number | null = null,
+    /**
+     * Non-sensitive business-envelope diagnostics, populated only by
+     * `parseClaimResponse` when `getcode`'s `{status, code}` envelope is
+     * not the success shape. `null` for every other throw site (HTTP-layer
+     * errors, the readback parser, transport/timeout). Never the response
+     * `message` field — that may be long, free-text, or sensitive, and is
+     * deliberately never captured here or anywhere else in this adapter.
+     * A boolean/number value is passed through as-is; any other shape is
+     * reduced to a `typeof`-style descriptor by `describeEnvelopeStatus`/
+     * `describeEnvelopeCode` so this can never leak an arbitrary upstream
+     * value.
+     */
+    readonly envelopeStatus: boolean | string | null = null,
+    readonly envelopeCode: number | string | null = null,
   ) {
     super(`PromoLink claim failed: ${code}${status === null ? "" : ` (${status})`}`);
     this.name = "PromoLinkClaimAdapterError";
@@ -125,6 +165,19 @@ export interface PromoLinkClaimAdapterOptions {
    * sits in front of that contract, unchanged.
    */
   rateGate?: MoboreaderRateGate;
+  /**
+   * Phase 1 upstream-call observation (see `./upstream-observation.ts`).
+   * Defaults to a no-op — every pre-existing test/call site that does not
+   * pass this is byte-for-byte unaffected. Production wiring
+   * (`worker/handlers/promo-link-claim.ts`) passes a structured-log sink.
+   * One event per dispatch (claim or readback); never fired for the
+   * pre-dispatch `signal.aborted` short-circuit below, since no gate wait
+   * or network call happens on that path.
+   */
+  onUpstreamObservation?: OnUpstreamObservation;
+  /** Clock used only for `UpstreamCallObservation.latencyMs`/`gateWaitMs`
+   * timestamps. Defaults to `Date.now`. */
+  now?: () => number;
 }
 
 function asRecord(value: unknown, ambiguous: boolean): Record<string, unknown> {
@@ -140,10 +193,44 @@ function nonBlank(value: unknown): string | null {
   return normalized ? normalized : null;
 }
 
+const ENVELOPE_DIAGNOSTIC_MAX_LENGTH = 100;
+
+/** Diagnostic-only, non-sensitive shape of `getcode`'s envelope `status`
+ * field: the real value when it is itself already a safe primitive
+ * (boolean), otherwise just its type name — see
+ * `PromoLinkClaimAdapterError.envelopeStatus`'s doc comment. */
+function describeEnvelopeStatus(value: unknown): boolean | string {
+  if (typeof value === "boolean") return value;
+  if (value === null) return "typeof object (null)";
+  if (value === undefined) return "typeof undefined";
+  return `typeof ${typeof value}`;
+}
+
+/** Diagnostic-only, non-sensitive shape of `getcode`'s envelope `code`
+ * field: the real value when it is a finite number or a length-capped
+ * string, otherwise just its type name — see
+ * `PromoLinkClaimAdapterError.envelopeCode`'s doc comment. */
+function describeEnvelopeCode(value: unknown): number | string {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string") {
+    return value.length > ENVELOPE_DIAGNOSTIC_MAX_LENGTH ? value.slice(0, ENVELOPE_DIAGNOSTIC_MAX_LENGTH) : value;
+  }
+  if (value === null) return "typeof object (null)";
+  if (value === undefined) return "typeof undefined";
+  return `typeof ${typeof value}`;
+}
+
 function parseClaimResponse(value: unknown): ClaimPromoResult {
   const envelope = asRecord(value, true);
   if (envelope.status !== true || envelope.code !== 200) {
-    throw new PromoLinkClaimAdapterError("malformed_payload", false, true);
+    throw new PromoLinkClaimAdapterError(
+      "malformed_payload",
+      false,
+      true,
+      null,
+      describeEnvelopeStatus(envelope.status),
+      describeEnvelopeCode(envelope.code),
+    );
   }
   const data = asRecord(envelope.data, true);
   const upstreamCode = nonBlank(data.kocCode);
@@ -280,6 +367,8 @@ export function createPromoLinkClaimAdapter(
   const fetchImpl = options.fetchImpl ?? fetch;
   const timeoutMs = options.timeoutMs ?? MOBOREADER_PROMO_TIMEOUT_MS;
   const rateGate = options.rateGate ?? NOOP_MOBOREADER_RATE_GATE;
+  const onUpstreamObservation = options.onUpstreamObservation ?? NOOP_UPSTREAM_OBSERVATION;
+  const observationNow = options.now ?? Date.now;
   if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1) {
     throw new Error("Invalid MoboReader promo timeout");
   }
@@ -298,11 +387,15 @@ export function createPromoLinkClaimAdapter(
     if (signal?.aborted) {
       throw new PromoLinkClaimAdapterError("transport_error", false, false);
     }
+    const endpoint = promoEndpointName(path);
     // Wait-only pacing door — see `PromoLinkClaimAdapterOptions.rateGate`.
     // No retry semantics live here or below; a single dispatch, exactly as
     // before RC-3.
+    const gateWaitStartedAt = observationNow();
     await rateGate.wait();
+    const gateWaitMs = observationNow() - gateWaitStartedAt;
     const scoped = scopedSignal(signal, timeoutMs);
+    const dispatchStartedAt = observationNow();
     try {
       const response = await fetchImpl(`${MOBOREADER_ORIGIN}${path}`, {
         method: "POST",
@@ -317,6 +410,14 @@ export function createPromoLinkClaimAdapter(
         signal: scoped.signal,
       });
       if (!response.ok) {
+        safeObserve(onUpstreamObservation, () => ({
+          endpoint,
+          httpStatus: response.status,
+          outcome: "http_error",
+          latencyMs: observationNow() - dispatchStartedAt,
+          gateWaitMs,
+          gatewayHeaders: extractGatewayObservationHeaders(response.headers),
+        }));
         const ambiguous = mutation && ambiguousHttpStatus(response.status);
         throw new PromoLinkClaimAdapterError(
           "upstream_http_error",
@@ -326,14 +427,49 @@ export function createPromoLinkClaimAdapter(
         );
       }
       try {
-        return await response.json();
+        const json = await response.json();
+        // `safeObserve` runs after the response body is already parsed and
+        // captured in `json`, so a throwing observation callback below can
+        // never turn this success into anything else — see the doc comment
+        // on `safeObserve` for why this matters most on `getcode`.
+        safeObserve(onUpstreamObservation, () => ({
+          endpoint,
+          httpStatus: response.status,
+          outcome: "ok",
+          latencyMs: observationNow() - dispatchStartedAt,
+          gateWaitMs,
+          gatewayHeaders: extractGatewayObservationHeaders(response.headers),
+        }));
+        return json;
       } catch {
+        // Transport succeeded (2xx); the body just wasn't parsable JSON —
+        // still `"ok"` from the wire-protocol perspective this event
+        // reports on. The (separate) business-envelope diagnostics for a
+        // parsed-but-non-success envelope live on `PromoLinkClaimAdapterError.
+        // envelopeStatus/envelopeCode`, not here.
+        safeObserve(onUpstreamObservation, () => ({
+          endpoint,
+          httpStatus: response.status,
+          outcome: "ok",
+          latencyMs: observationNow() - dispatchStartedAt,
+          gateWaitMs,
+          gatewayHeaders: extractGatewayObservationHeaders(response.headers),
+        }));
         throw new PromoLinkClaimAdapterError("malformed_payload", false, mutation, response.status);
       }
     } catch (error) {
       if (error instanceof PromoLinkClaimAdapterError) throw error;
+      const timedOut = scoped.timedOut();
+      safeObserve(onUpstreamObservation, () => ({
+        endpoint,
+        httpStatus: null,
+        outcome: timedOut ? "timeout" : "transport_error",
+        latencyMs: observationNow() - dispatchStartedAt,
+        gateWaitMs,
+        gatewayHeaders: NO_GATEWAY_OBSERVATION_HEADERS,
+      }));
       throw new PromoLinkClaimAdapterError(
-        scoped.timedOut() ? "request_timeout" : "transport_error",
+        timedOut ? "request_timeout" : "transport_error",
         !mutation,
         mutation,
       );
@@ -373,11 +509,23 @@ export interface ClassifiedClaimFailure {
   failureCategory: PromoLinkClaimAdapterErrorCode;
   retryable: boolean;
   ambiguous: boolean;
+  /** See `PromoLinkClaimAdapterError.envelopeStatus`. `null` unless the
+   * failure was a non-success `getcode` envelope. */
+  envelopeStatus: boolean | string | null;
+  /** See `PromoLinkClaimAdapterError.envelopeCode`. `null` unless the
+   * failure was a non-success `getcode` envelope. */
+  envelopeCode: number | string | null;
 }
 
 export function classifyClaimPromoFailure(error: unknown): ClassifiedClaimFailure {
   if (error instanceof PromoLinkClaimAdapterError) {
-    return { failureCategory: error.code, retryable: error.retryable, ambiguous: error.ambiguous };
+    return {
+      failureCategory: error.code,
+      retryable: error.retryable,
+      ambiguous: error.ambiguous,
+      envelopeStatus: error.envelopeStatus,
+      envelopeCode: error.envelopeCode,
+    };
   }
-  return { failureCategory: "transport_error", retryable: false, ambiguous: true };
+  return { failureCategory: "transport_error", retryable: false, ambiguous: true, envelopeStatus: null, envelopeCode: null };
 }

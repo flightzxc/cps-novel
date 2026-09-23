@@ -39,6 +39,7 @@ import {
   moboreaderUpstreamRateGate,
   type ClaimPromoRequest,
   type ClaimPromoResult,
+  type ClassifiedClaimFailure,
   type PromoLinkClaimAdapter,
   type ReadPromoAfterClaimResult,
 } from "../../src/lib/adapters";
@@ -62,6 +63,7 @@ import { createPublicRedirectCode } from "../../src/lib/redirect";
 import { resolveClaimCredentialReadiness } from "../credentials/claim-readiness";
 import { maybeHaltTaskOnGlobalFailure } from "./promo-link-claim-system-hold";
 import { bindPromoLinkToArticles } from "./promo-link-binding";
+import { logUpstreamCallObservation } from "../observability/upstream-call-log";
 
 // ---------------------------------------------------------------------
 // Payload
@@ -556,6 +558,28 @@ function readbackFailureEvidence(
 }
 
 /**
+ * Phase 1 observability addition (see `src/lib/adapters/promo-link-claim.ts`'s
+ * `PromoLinkClaimAdapterError.envelopeStatus`/`envelopeCode`): records the
+ * non-sensitive `getcode` business-envelope shape on the "结果不明"
+ * (ambiguous → manual review) intent trail, so the ~1.7% of claims that
+ * land in manual review after a non-success envelope can finally be told
+ * apart from every other ambiguous cause instead of collapsing into one
+ * undifferentiated `malformed_payload`. Returns `{}` (no keys added) when
+ * neither diagnostic is available, which is every non-envelope failure —
+ * classification, readback recovery, and manual-review routing are
+ * unchanged either way. Never includes the response `message` field.
+ */
+function claimEnvelopeDiagnostics(
+  classified: Pick<ClassifiedClaimFailure, "envelopeStatus" | "envelopeCode">,
+): Record<string, string | number | null | boolean> {
+  if (classified.envelopeStatus === null && classified.envelopeCode === null) return {};
+  return {
+    upstreamEnvelopeStatus: classified.envelopeStatus,
+    upstreamEnvelopeCode: classified.envelopeCode,
+  };
+}
+
+/**
  * Thin adapter onto the shared `resolveClaimCredentialReadiness`
  * (`src/lib/credentials/claim-readiness.ts`) — the actual decrypt/validate
  * policy lives there now, shared with the pre-flight admission gate in
@@ -888,7 +912,11 @@ async function claimViaAdapter(
       await transitionSideEffectIntent(db, {
         effectKey,
         status: "claim_retry_blocked",
-        responseShape: { failureCategory: classified.failureCategory, ...recoveryEvidence },
+        responseShape: {
+          failureCategory: classified.failureCategory,
+          ...claimEnvelopeDiagnostics(classified),
+          ...recoveryEvidence,
+        },
       });
       await transitionSideEffectIntent(db, { effectKey, status: "manual_review_required" });
       return {
@@ -970,7 +998,10 @@ export function createPromoLinkClaimHandler(
   // against one shared clock. This only makes the dispatch wait its turn;
   // it does not add or change retries (the getcode call/error contract
   // above stays frozen).
-  const adapter = dependencies.adapter ?? createPromoLinkClaimAdapter({ rateGate: moboreaderUpstreamRateGate });
+  const adapter = dependencies.adapter ?? createPromoLinkClaimAdapter({
+    rateGate: moboreaderUpstreamRateGate,
+    onUpstreamObservation: logUpstreamCallObservation,
+  });
   const env = dependencies.env ?? process.env;
   const now = dependencies.now ?? (() => new Date());
   const readbackPolicy = resolvePromoLinkClaimReadbackPolicy(env);
