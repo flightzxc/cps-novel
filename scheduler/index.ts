@@ -1,6 +1,12 @@
 import { pathToFileURL } from "node:url";
 import { PrismaClient } from "@prisma/client";
-import { HANDLERS, createHandlerRegistry, runSchedulerOnce, type ScheduleDefinition } from "../src/lib/tasks";
+import {
+  HANDLERS,
+  createHandlerRegistry,
+  runPromoClaimReleaseTick,
+  runSchedulerOnce,
+  type ScheduleDefinition,
+} from "../src/lib/tasks";
 import { queryActiveLocales } from "../src/lib/locale/active-locales";
 import {
   DEFAULT_HOME_CAROUSEL_CONFIG,
@@ -78,12 +84,31 @@ export const HOME_CAROUSEL_SCHEDULE: ScheduleDefinition = buildHomeCarouselSched
 
 export const SCHEDULES: readonly ScheduleDefinition[] = Object.freeze([HOME_CAROUSEL_SCHEDULE]);
 
+/**
+ * 正式修复第 2 阶段第 3 步：领推广链接生命周期分片的放行 / 暂停
+ * （`src/lib/tasks/promo-claim-release.ts`，纯数据库读写，不调用任何上游、
+ * 不接触凭据密文）。与上面既有的首页轮播入队逻辑相互独立——任一个失败都不
+ * 应该阻塞另一个，所以单独包一层 try/catch：`runPromoClaimReleaseTick`
+ * 自己已经把"每个渠道账号各自的错误"都吞掉记录了，这里只兜底
+ * `resolvePromoClaimLifecycleConfig` 这类在整个 tick 开始前就可能抛出的
+ * 配置错误（例如环境变量被改成非法值）——记一条日志，等下一轮（60 秒后）
+ * 再试，而不是让整个 scheduler 进程因为这一个功能的配置问题而崩溃退出。
+ */
+async function runPromoClaimReleaseTickSafely(prisma: PrismaClient): Promise<void> {
+  try {
+    await runPromoClaimReleaseTick(prisma, { now: new Date() });
+  } catch (error) {
+    console.error("promo_claim_release.tick_failed", error);
+  }
+}
+
 export async function main(): Promise<void> {
   const prisma = new PrismaClient();
   try {
     homeCarouselConfig = await getHomeCarouselConfig(prisma);
     homeCarouselActiveLocales = await queryActiveLocales(prisma);
     await runSchedulerOnce(prisma, SCHEDULER_HANDLERS, SCHEDULES);
+    await runPromoClaimReleaseTickSafely(prisma);
   } finally {
     await prisma.$disconnect();
   }

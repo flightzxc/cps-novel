@@ -450,7 +450,9 @@ GRANT SELECT ON TABLE home_carousel_change_log, indexnow_outbox_attempt,
   tracking_event, indexnow_outbox, schedule_run, cron_run, article_template
 TO worker_app;
 
--- Scheduler only creates scheduling and GenericTask metadata. It never reads Credential/Auth secrets.
+-- Scheduler only creates scheduling and GenericTask metadata. It never reads Credential/Auth secrets
+-- (阶段2 第3步 below still holds: it reads only the non-secret columns of
+-- channel_account_credential, never encrypted_secret/secret_fingerprint).
 GRANT SELECT, INSERT, UPDATE ON TABLE schedule_run, cron_run, generic_task, generic_task_item TO scheduler_app;
 
 -- L10N P5.2: scheduler now resolves the home-carousel cron's active-locale
@@ -468,6 +470,53 @@ GRANT SELECT, INSERT, UPDATE ON TABLE schedule_run, cron_run, generic_task, gene
 GRANT SELECT (locale, deleted_at, status, novel_id, promo_link_id) ON article TO scheduler_app;
 GRANT SELECT (id, deleted_at, status) ON novel TO scheduler_app;
 GRANT SELECT (id, novel_id, status, deleted_at, web_url, app_url) ON promo_link TO scheduler_app;
+
+-- 阶段2 第3步（`docs/adr/ADR-PROMO-CLAIM-BATCH-LIFECYCLE.md`，设计 §5.4/§7,
+-- D7）: scheduler 每轮对每个渠道账号判定"放行 / 暂停"一个领推广链接生命周期
+-- 分片。三条新增权限，全部是这一个判定实际需要的最小集合，逐条对应
+-- `src/lib/tasks/promo-claim-release.ts` 的一次真实查询：
+--   - `channel_account_credential`：只授权非秘密列的列级 SELECT，与
+--     `web_app`/`analyst_ro` 在本文件上面的既有列表同一份列子集（比较：
+--     `web_app` 的列表还多出 `credential_type`/`key_version`/
+--     `fingerprint_prefix`/`updated_at`——scheduler 判定 D5 凭据三条件根本
+--     不需要这四列，所以不给）。绝不授权 `encrypted_secret`/
+--     `secret_fingerprint`——scheduler 永远不解密、不接触任何密钥，
+--     `tests/backend/auth/credential-contracts.test.ts` 的文本守卫同时锁住
+--     这一点。
+--   - `side_effect_intent`：只授权 `operation_type`/`channel_account_id`/
+--     `request_summary` 三列的列级 SELECT——设计 §5.7 第 2 条"错过截止时间
+--     重新放行前"的前置检查只需要判定"这个渠道账号是否已经为某个
+--     `novelSourceItemId`（`request_summary ->> 'novelSourceItemId'`）准备过
+--     一次 `promo_link.claim_promo` 意图"，不需要 `target_id`/`status`/
+--     `response_shape`/`promo_link_id` 等 `web_app`/`analyst_ro` 能看到的
+--     其它列。
+--   - `operation_audit`：INSERT-only，与 `web_app` 在本文件上面的既有授权
+--     同一形状（append-only 审计表，从不 UPDATE/DELETE）；写入所需的
+--     `id` 自增列由下面已有的
+--     `GRANT USAGE, SELECT ON ALL SEQUENCES ... TO ..., scheduler_app`
+--     覆盖，不需要单独再授权某个具体序列。
+-- `generic_task`/`generic_task_item` 的 SELECT/UPDATE 已经在上面
+-- (schedule_run/cron_run/generic_task/generic_task_item 那一行) 表级授权给
+-- scheduler_app，本步的放行/暂停写入（分片与批次的 status/params/result）
+-- 不需要再新增。
+GRANT SELECT (
+  id, channel_account_id, status, last_validated_at, expires_at, created_at
+) ON channel_account_credential TO scheduler_app;
+GRANT SELECT (
+  operation_type, channel_account_id, request_summary
+) ON side_effect_intent TO scheduler_app;
+-- RETURNING fix (同一仓库已两次撞过的坑，见 2026-09-11 "worker_app RETURNING
+-- 权限缺口全仓审计" 那一行，以及 feedback_scheduler_worker_db_reads_need_
+-- grants.md)：Prisma 的 `.create()` 在没有显式 `select` 时，一律编译成携带
+-- `RETURNING <全部标量列>` 的 SQL，PostgreSQL 对 RETURNING 的每一列都按
+-- SELECT 权限校验——只给 INSERT 会让 `auditSystemAction`
+-- （`src/lib/tasks/promo-claim-release.ts` 的 `tx.operationAudit.create()`）
+-- 第一条就 `permission denied for table operation_audit` 整体回滚，一次性
+-- Postgres 容器上真实复现过。`operation_audit` 对 `web_app`/`worker_app`
+-- 一直是表级 SELECT（无隐藏敏感列，本文件上方两处既有授权同此形状），故
+-- scheduler_app 同样给表级、不再单独收窄到某几列。
+GRANT SELECT ON TABLE operation_audit TO scheduler_app;
+GRANT INSERT ON TABLE operation_audit TO scheduler_app;
 
 GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO web_app, worker_app, scheduler_app;
 

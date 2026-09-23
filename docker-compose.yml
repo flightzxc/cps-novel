@@ -135,6 +135,31 @@ services:
       SITEMAP_AUTO_REFRESH_ALLOW_WRITE: ${SITEMAP_AUTO_REFRESH_ALLOW_WRITE:-false}
       FEATURE_PROMO_LINK_CLAIM: ${FEATURE_PROMO_LINK_CLAIM:-false}
       PROMO_LINK_CLAIM_ALLOW_WRITE: ${PROMO_LINK_CLAIM_ALLOW_WRITE:-false}
+      # 阶段2 第2步（`docs/adr/ADR-PROMO-CLAIM-BATCH-LIFECYCLE.md`）: the batch
+      # enqueue action (`src/app/(admin)/catalog-sync/_actions.ts` ->
+      # `enqueueCatalogBatch`, `src/lib/tasks/catalog-batch.ts`) reads
+      # `PROMO_CLAIM_LIFECYCLE_V1_ENABLED` from the WEB process's own
+      # `process.env` at submission time to decide whether a new promo_claim
+      # batch is stamped with `lifecycleVersion`/`lifecycleRole: "batch"` — so
+      # web must carry this var, not just worker. `worker` also needs the
+      # sizing knobs (window/shard min/max) for enumeration
+      # (`worker/handlers/catalog-batch.ts`'s `resolvePromoClaimLifecycleConfig`
+      # call), so the same six keys are duplicated there below. `scheduler`
+      # (第3步) now also carries the same seven keys — see that service
+      # block's own comment for why `runPromoClaimReleaseTick`
+      # (`src/lib/tasks/promo-claim-release.ts`) needs its own copy of the
+      # switch and every sizing/grace knob, not just the switch. Every
+      # default here matches `src/lib/tasks/promo-claim-
+      # lifecycle.ts`'s `PROMO_CLAIM_LIFECYCLE_DEFAULTS`; the switch defaults
+      # closed (D8), so leaving these unset reproduces today's behavior
+      # byte-for-byte in every environment, including every X8_LEVEL.
+      PROMO_CLAIM_LIFECYCLE_V1_ENABLED: ${PROMO_CLAIM_LIFECYCLE_V1_ENABLED:-false}
+      PROMO_CLAIM_BATCH_APPROVAL_TTL_MINUTES: ${PROMO_CLAIM_BATCH_APPROVAL_TTL_MINUTES:-1440}
+      PROMO_CLAIM_SHARD_WINDOW_MINUTES: ${PROMO_CLAIM_SHARD_WINDOW_MINUTES:-90}
+      PROMO_CLAIM_SHARD_SIZE_MAX: ${PROMO_CLAIM_SHARD_SIZE_MAX:-1000}
+      PROMO_CLAIM_SHARD_SIZE_MIN: ${PROMO_CLAIM_SHARD_SIZE_MIN:-50}
+      PROMO_CLAIM_CREDENTIAL_SAFETY_MARGIN_MINUTES: ${PROMO_CLAIM_CREDENTIAL_SAFETY_MARGIN_MINUTES:-30}
+      PROMO_CLAIM_SHARD_DEADLINE_GRACE_MINUTES: ${PROMO_CLAIM_SHARD_DEADLINE_GRACE_MINUTES:-10}
       # X8 gate identity work order (2026-09-05), 施工项二: content creation
       # on Web enqueues moboreader.preview_refresh.v1 (src/server/content-
       # creation/preview-enqueue.ts), whose eligibility check in
@@ -241,6 +266,24 @@ services:
       SITEMAP_AUTO_REFRESH_ALLOW_WRITE: ${SITEMAP_AUTO_REFRESH_ALLOW_WRITE:-false}
       FEATURE_PROMO_LINK_CLAIM: ${FEATURE_PROMO_LINK_CLAIM:-false}
       PROMO_LINK_CLAIM_ALLOW_WRITE: ${PROMO_LINK_CLAIM_ALLOW_WRITE:-false}
+      # 阶段2 第2步：`worker/handlers/catalog-batch.ts`'s enumeration reads its
+      # own copy of the sizing knobs (via `resolvePromoClaimLifecycleConfig`)
+      # to size a lifecycle batch's shards — see the web service block's own
+      # comment on this same six-key group for the full rationale (why
+      # `PROMO_CLAIM_LIFECYCLE_V1_ENABLED` itself is only ever READ on web at
+      # enqueue time, yet still listed here: the worker's `catalog-batch`
+      # handler resolves the whole config eagerly at construction and would
+      # throw on a malformed override even for a non-lifecycle batch, so its
+      # own env must carry the same six keys, not just the enable switch).
+      # `scheduler` (第3步) now carries the same seven keys too — see that
+      # service block's own comment.
+      PROMO_CLAIM_LIFECYCLE_V1_ENABLED: ${PROMO_CLAIM_LIFECYCLE_V1_ENABLED:-false}
+      PROMO_CLAIM_BATCH_APPROVAL_TTL_MINUTES: ${PROMO_CLAIM_BATCH_APPROVAL_TTL_MINUTES:-1440}
+      PROMO_CLAIM_SHARD_WINDOW_MINUTES: ${PROMO_CLAIM_SHARD_WINDOW_MINUTES:-90}
+      PROMO_CLAIM_SHARD_SIZE_MAX: ${PROMO_CLAIM_SHARD_SIZE_MAX:-1000}
+      PROMO_CLAIM_SHARD_SIZE_MIN: ${PROMO_CLAIM_SHARD_SIZE_MIN:-50}
+      PROMO_CLAIM_CREDENTIAL_SAFETY_MARGIN_MINUTES: ${PROMO_CLAIM_CREDENTIAL_SAFETY_MARGIN_MINUTES:-30}
+      PROMO_CLAIM_SHARD_DEADLINE_GRACE_MINUTES: ${PROMO_CLAIM_SHARD_DEADLINE_GRACE_MINUTES:-10}
       # C-25 review fix (P0): `worker/handlers/sitemap-refresh.ts`'s
       # `createSitemapFamilyBuilder(db)` and `worker/handlers/indexnow-
       # delivery.ts`'s `isNovelIndexNowEligible` -> `isHiddenFromPublicView`
@@ -330,6 +373,36 @@ services:
       SCHEDULER_INTERVAL_SECONDS: ${SCHEDULER_INTERVAL_SECONDS:-60}
       FEATURE_INDEXNOW_DELIVERY: ${FEATURE_INDEXNOW_DELIVERY:-false}
       INDEXNOW_DELIVERY_ALLOW_WRITE: ${INDEXNOW_DELIVERY_ALLOW_WRITE:-false}
+      # 阶段2 第3步（`docs/adr/ADR-PROMO-CLAIM-BATCH-LIFECYCLE.md`，设计
+      # §5.4/§7）：`scheduler/index.ts`'s `main()` now calls
+      # `runPromoClaimReleaseTick` (`src/lib/tasks/promo-claim-release.ts`)
+      # every tick. It resolves the full `resolvePromoClaimLifecycleConfig`
+      # (window/approval-TTL/shard min-max/credential safety margin) from
+      # its OWN `process.env` before deciding whether to release/hold a
+      # channel account's next shard — a malformed override would throw at
+      # tick start (fail-closed, same posture web/worker already take for
+      # this config), so scheduler needs the same seven keys the web/worker
+      # blocks above already carry, not just the enable switch. It ALSO
+      # needs the two `FEATURE_PROMO_LINK_CLAIM`/`PROMO_LINK_CLAIM_ALLOW_WRITE`
+      # double-gate flags — a lifecycle shard is never released unless both
+      # are `true` (设计 §5.4 第2步遗留待办，本步收口于
+      # `releasePromoClaimShardsForAccount`), independent of the lifecycle
+      # switch itself. Every default matches `src/lib/tasks/promo-claim-
+      # lifecycle.ts`'s `PROMO_CLAIM_LIFECYCLE_DEFAULTS` and the web/worker
+      # blocks' own defaults above, byte-for-byte. Scheduler still never
+      # receives the worker-only bounded promo readback retry policy (see
+      # the worker service block's own two `PROMO_LINK_CLAIM_READBACK_`-
+      # prefixed keys) — those gate retries scheduler never performs (it
+      # releases task rows; it never calls the upstream adapter).
+      PROMO_CLAIM_LIFECYCLE_V1_ENABLED: ${PROMO_CLAIM_LIFECYCLE_V1_ENABLED:-false}
+      PROMO_CLAIM_BATCH_APPROVAL_TTL_MINUTES: ${PROMO_CLAIM_BATCH_APPROVAL_TTL_MINUTES:-1440}
+      PROMO_CLAIM_SHARD_WINDOW_MINUTES: ${PROMO_CLAIM_SHARD_WINDOW_MINUTES:-90}
+      PROMO_CLAIM_SHARD_SIZE_MAX: ${PROMO_CLAIM_SHARD_SIZE_MAX:-1000}
+      PROMO_CLAIM_SHARD_SIZE_MIN: ${PROMO_CLAIM_SHARD_SIZE_MIN:-50}
+      PROMO_CLAIM_CREDENTIAL_SAFETY_MARGIN_MINUTES: ${PROMO_CLAIM_CREDENTIAL_SAFETY_MARGIN_MINUTES:-30}
+      PROMO_CLAIM_SHARD_DEADLINE_GRACE_MINUTES: ${PROMO_CLAIM_SHARD_DEADLINE_GRACE_MINUTES:-10}
+      FEATURE_PROMO_LINK_CLAIM: ${FEATURE_PROMO_LINK_CLAIM:-false}
+      PROMO_LINK_CLAIM_ALLOW_WRITE: ${PROMO_LINK_CLAIM_ALLOW_WRITE:-false}
     healthcheck:
       test:
         - CMD-SHELL

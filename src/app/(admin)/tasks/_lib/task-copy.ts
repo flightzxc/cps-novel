@@ -113,6 +113,10 @@ const CATALOG_BATCH_BLOCKED_REASON_LABELS: Readonly<Record<string, string>> = Ob
   active_scope_conflict: "当前范围已有进行中的任务",
   missing_locale: "来源语言缺失",
   unsupported_locale: "来源语言暂不受产品支持",
+  // 阶段2 第4步（施工任务 3.4）：书已挂在另一个批次仍在排队（尚未放行/已
+  // 暂停）的生命周期分片下——见 `worker/handlers/catalog-batch.ts` 的
+  // `queuedElsewhere` 查询。
+  queued_in_other_batch: "已在其它排队中的批次里",
 });
 
 export function catalogBatchPhaseLabel(phase: string): string {
@@ -214,8 +218,16 @@ export const LIST_LIMIT_NOTE =
  * field absent. `kind` is audit/display metadata only (who/why) — it is
  * never what decides whether a row is paused/cancelled; that is the `status`
  * column itself, read directly by `TaskControlButtons`.
+ *
+ * `"awaiting_release"` (promo-claim lifecycle, `docs/adr/ADR-PROMO-CLAIM-
+ * BATCH-LIFECYCLE.md`) is a fifth additive meaning of a `disabled` row: a
+ * lifecycle shard (`promo_link.claim.v1` child task) enumerated but not yet
+ * released by the scheduler. It never changes eligibility here either — a
+ * `disabled` row (this kind or `system_hold`) is already refused by every
+ * resume/retry mutation, which key on `status` alone (see `task-control.ts`'s
+ * own module doc for the exact statuses each accepts).
  */
-export type TaskControlKind = "paused" | "aborted" | "system_hold";
+export type TaskControlKind = "paused" | "aborted" | "system_hold" | "awaiting_release";
 export type TaskControlSummary = Readonly<{
   kind: TaskControlKind;
   source: "manual" | "system";
@@ -230,6 +242,7 @@ const TASK_CONTROL_KIND_LABELS: Readonly<Record<TaskControlKind, string>> = Obje
   paused: "人工暂停",
   aborted: "人工中止",
   system_hold: "系统保护停止",
+  awaiting_release: "等待放行",
 });
 
 /** Unknown kinds pass through verbatim, same discipline as `taskStatusLabel`. */
@@ -237,8 +250,80 @@ export function taskControlKindLabel(kind: string): string {
   return TASK_CONTROL_KIND_LABELS[kind as TaskControlKind] ?? kind;
 }
 
+/**
+ * Chinese copy for the promo-claim lifecycle's five `system_hold`
+ * `reasonCode` values (`src/lib/tasks/promo-claim-lifecycle.ts`'s
+ * `PROMO_CLAIM_SYSTEM_HOLD_REASON_CODES`). Every other `reasonCode` this
+ * codebase already writes (e.g. `credential_validation_failed` from
+ * `worker/handlers/promo-link-claim-system-hold.ts`) is deliberately left
+ * out — `taskControlSummaryLine` falls back to the raw code for anything not
+ * in this map, unchanged from before this addition.
+ */
+const SYSTEM_HOLD_REASON_CODE_LABELS: Readonly<Record<string, string>> = Object.freeze({
+  approval_expired: "批准已过期",
+  credential_not_ready: "凭据未就绪",
+  deadline_missed: "错过截止时间",
+  deadline_missed_twice: "连续两次错过截止时间",
+  lifecycle_disabled: "生命周期开关已关闭",
+});
+
+/** Unknown reason codes pass through verbatim, same discipline as `taskControlKindLabel`. */
+export function systemHoldReasonCodeLabel(reasonCode: string): string {
+  return SYSTEM_HOLD_REASON_CODE_LABELS[reasonCode] ?? reasonCode;
+}
+
+/**
+ * 阶段2 第4步（施工任务 3.5，设计 §5.8 暂停与恢复一览表；Opus 复核
+ * 2026-09-24 F5 补齐"需要人工处理"两条的具体做法）：每个系统暂停原因
+ * 对应的中文恢复方式说明——严格按该表格逐条实现，不是重新编一份措辞：
+ *
+ *   - approval_expired → 只能运营"重新批准"（页面另有按钮，这里的文案不
+ *     重复"点击下方按钮"这类与具体 UI 绑死的措辞，只说明"需要做什么"）；
+ *   - credential_not_ready → 凭据校验通过且剩余有效期足够后自动恢复；
+ *   - deadline_missed → 满足条件（条目从未尝试过）后 scheduler 自动重新
+ *     放行；
+ *   - deadline_missed_twice → 需要人工处理，且要给出具体做法：这类分片是
+ *     `disabled`，单任务"暂停/恢复/中止"里只有"中止"接受 `disabled`（见
+ *     `pauseTask`/`resumeTask`/`abortTask` 的既有 status 白名单），所以唯一
+ *     可行的人工处置路径是批次级中止——统一给出"在批次上执行『中止』（终止
+ *     所有未尝试条目），核对后重新提交剩余书目"这条具体做法；`reason` 恰好
+ *     是 `unsafe_to_auto_retry` 时（`src/lib/tasks/promo-claim-release.ts`
+ *     的 `holdShardSystemHold` 调用点唯一会写的这个自由文本原因）额外说明
+ *     "存在已尝试或已调用过领取接口的条目，禁止自动重试"，并补一句"已调用
+ *     过领取接口的条目请在『人工核对』里处理"——这是设计原文明确要求的分支
+ *     措辞，不能用同一句话覆盖两种截然不同的成因（单纯超时两次 vs. 有副
+ *     作用风险），但两者最终能做的具体操作是同一条（批次级中止），所以共用
+ *     同一段"具体做法"文案，只是成因说明不同；
+ *   - lifecycle_disabled → 重新开启开关后自动恢复。
+ *
+ * 未知原因码返回 `undefined`（不是空字符串）——调用方据此决定要不要渲染
+ * 这一行，同 `TaskControlSummary.reasonCode` 本身"可能是这五个已知值之外
+ * 的自由字符串"这条既有约定保持一致。
+ */
+export function systemHoldRecoveryHint(reasonCode: string, reason?: string | null): string | undefined {
+  const deadlineMissedTwiceAction = "可在批次上执行『中止』（终止所有未尝试条目），核对后重新提交剩余书目；已调用过领取接口的条目请在『人工核对』里处理。";
+  switch (reasonCode) {
+    case "approval_expired":
+      return "批次批准已过期，且从未放行过任何分片——只能由运营重新批准后才会继续放行。";
+    case "credential_not_ready":
+      return "渠道账号凭据未就绪（未校验、状态不可用，或剩余有效期不足一个放行窗口）——凭据校验通过且剩余有效期足够后，系统会自动恢复放行。";
+    case "deadline_missed":
+      return "分片错过了执行截止时间——待处理条目全部满足自动重放条件（从未尝试过、没有任何调用副作用）后，系统会在下一轮自动重新放行。";
+    case "deadline_missed_twice":
+      return reason === "unsafe_to_auto_retry"
+        ? `存在已尝试或已调用过领取接口的条目，禁止自动重试——需要人工处理。${deadlineMissedTwiceAction}`
+        : `该分片连续两次错过执行截止时间（吞吐或上游可能出了问题），系统不会再自动重试——需要人工处理。${deadlineMissedTwiceAction}`;
+    case "lifecycle_disabled":
+      return "领推广链接生命周期开关当前已关闭——重新开启开关后，系统会自动恢复放行。";
+    default:
+      return undefined;
+  }
+}
+
 /** Compact one-line summary for the tasks-list table's status cell. */
 export function taskControlSummaryLine(control: TaskControlSummary): string {
   const label = taskControlKindLabel(control.kind);
-  return control.kind === "system_hold" && control.reasonCode ? `${label}（${control.reasonCode}）` : label;
+  return control.kind === "system_hold" && control.reasonCode
+    ? `${label}（${systemHoldReasonCodeLabel(control.reasonCode)}）`
+    : label;
 }

@@ -86,6 +86,48 @@ describe("X10 task control — pause", () => {
     expect(fake.parentUpdateCalls.size).toBe(0);
   });
 
+  /**
+   * 阶段2 第4步（Opus 复核 2026-09-24 F2）：拒绝对一个已放行的生命周期分片
+   * 直接单任务暂停——与 resumeTask 的同名拦截对称（见下面"X10 task control
+   * — resume"里的同一条用例）。如果这里不挡，运营会把一个已放行的分片
+   * "暂停"成一个既不会被批次级恢复发现（它不是从批次级暂停走到 paused
+   * 的）、又不能自己单独恢复（resumeTask 已经拦截）的孤儿状态。
+   */
+  it("拒绝对生命周期分片（promo_link.claim.v1, lifecycleRole=shard）的直接单任务暂停", async () => {
+    const stores = newStores();
+    const admin = seedTaskAdmin(stores);
+    const ticket = await issueTaskAuthorization(stores, { token: admin.token, pathname: "/api/admin/tasks/pause" });
+    const fake = new TaskAdminFakeDb();
+    const parent = fake.parents.get("generic")!;
+    parent.status = "pending";
+    parent.taskType = PROMO_LINK_CLAIM_TASK_TYPE;
+    parent.params = { lifecycleVersion: 1, lifecycleRole: "shard", shardIndex: 0, releaseCount: 1, missedDeadlineCount: 0 };
+
+    await expect(pauseTask(
+      { ...ticket, family: "generic", taskId: TASK_ID },
+      { db: fake.asPrismaClient(), identities: stores, sessions: stores, now: NOW },
+    )).rejects.toMatchObject({ code: "task_admin_state_conflict", status: 409 });
+    expect(fake.parents.get("generic")!.status).toBe("pending"); // 未被改写。
+    expect(fake.parentUpdateCalls.size).toBe(0);
+  });
+
+  /** 对照：同样的 promo_link.claim.v1 任务，如果不是生命周期分片（无 lifecycleVersion/lifecycleRole），走旧路径正常暂停——只挡"生命周期分片"这一种，不是整个任务类型。 */
+  it("非生命周期的 promo_link.claim.v1 任务（旧路径子任务）仍然可以直接单任务暂停", async () => {
+    const stores = newStores();
+    const admin = seedTaskAdmin(stores);
+    const ticket = await issueTaskAuthorization(stores, { token: admin.token, pathname: "/api/admin/tasks/pause" });
+    const fake = new TaskAdminFakeDb();
+    const parent = fake.parents.get("generic")!;
+    parent.status = "pending";
+    parent.taskType = PROMO_LINK_CLAIM_TASK_TYPE;
+
+    const result = await pauseTask(
+      { ...ticket, family: "generic", taskId: TASK_ID, reason: REASON },
+      { db: fake.asPrismaClient(), identities: stores, sessions: stores, now: NOW },
+    );
+    expect(result).toMatchObject({ status: "paused", wrote: true });
+  });
+
   it("safely replays the same committed request id instead of pausing twice", async () => {
     const stores = newStores();
     const admin = seedTaskAdmin(stores);
@@ -190,6 +232,50 @@ describe("X10 task control — resume", () => {
       { ...ticket, family: "generic", taskId: TASK_ID },
       { db: fake.asPrismaClient(), identities: stores, sessions: stores, now: NOW },
     )).rejects.toMatchObject({ code: "task_admin_state_conflict", status: 409 });
+  });
+
+  /**
+   * 阶段2 第4步（施工任务 3.1）：拒绝对一个生命周期分片的直接单任务恢复——
+   * 分片一旦被暂停，只能通过批次级恢复交还成 disabled + awaiting_release，
+   * 重新交给 scheduler 走 D1/D5/D4 全套前置检查。如果这里放行，运营通过
+   * `/tasks/<shardId>` 上的这个旧版通用"恢复"按钮就能直接把分片改回
+   * pending，绕开这些检查。
+   */
+  it("拒绝对生命周期分片（promo_link.claim.v1, lifecycleRole=shard）的直接单任务恢复", async () => {
+    const stores = newStores();
+    const admin = seedTaskAdmin(stores);
+    const ticket = await issueTaskAuthorization(stores, { token: admin.token, pathname: "/api/admin/tasks/resume" });
+    const fake = new TaskAdminFakeDb();
+    const parent = fake.parents.get("generic")!;
+    parent.status = "paused";
+    parent.taskType = PROMO_LINK_CLAIM_TASK_TYPE;
+    parent.params = { lifecycleVersion: 1, lifecycleRole: "shard", shardIndex: 0, releaseCount: 1, missedDeadlineCount: 0 };
+    parent.result = mergeTaskControlResult(parent.result, pausedMarker(admin.identity.id));
+
+    await expect(resumeTask(
+      { ...ticket, family: "generic", taskId: TASK_ID },
+      { db: fake.asPrismaClient(), identities: stores, sessions: stores, now: NOW },
+    )).rejects.toMatchObject({ code: "task_admin_state_conflict", status: 409 });
+    expect(fake.parents.get("generic")!.status).toBe("paused"); // 未被改写。
+    expect(fake.parentUpdateCalls.size).toBe(0);
+  });
+
+  /** 对照：同样的 promo_link.claim.v1 任务，如果不是生命周期分片（无 lifecycleVersion/lifecycleRole），走旧路径正常恢复——只挡"生命周期分片"这一种，不是整个任务类型。 */
+  it("非生命周期的 promo_link.claim.v1 任务（旧路径子任务）仍然可以直接单任务恢复", async () => {
+    const stores = newStores();
+    const admin = seedTaskAdmin(stores);
+    const ticket = await issueTaskAuthorization(stores, { token: admin.token, pathname: "/api/admin/tasks/resume" });
+    const fake = new TaskAdminFakeDb();
+    const parent = fake.parents.get("generic")!;
+    parent.status = "paused";
+    parent.taskType = PROMO_LINK_CLAIM_TASK_TYPE;
+    parent.result = mergeTaskControlResult(parent.result, pausedMarker(admin.identity.id));
+
+    const result = await resumeTask(
+      { ...ticket, family: "generic", taskId: TASK_ID },
+      { db: fake.asPrismaClient(), identities: stores, sessions: stores, now: NOW },
+    );
+    expect(result).toMatchObject({ status: "pending", wrote: true });
   });
 
   it("refuses to resume a 'cancelled' (aborted) task", async () => {

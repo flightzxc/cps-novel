@@ -100,6 +100,13 @@ export const ADMIN_TASK_ROUTES = [
   { id: "admin.api.task.pause", path: "/api/admin/tasks/pause", methods: ["POST"], capability: "task:manage" },
   { id: "admin.api.task.resume", path: "/api/admin/tasks/resume", methods: ["POST"], capability: "task:manage" },
   { id: "admin.api.task.abort", path: "/api/admin/tasks/abort", methods: ["POST"], capability: "task:manage" },
+  // 阶段2 第4步（施工任务 3.1/3.3）：批次级暂停/恢复/中止/重新批准——只对
+  // 生命周期批次（promo_claim）生效，独立于上面 X10 的单任务控制路由，同一
+  // `task:manage` 高风险能力（要求当前会话已完成 2FA）。
+  { id: "admin.api.promo_claim_batch.pause", path: "/api/admin/tasks/promo-claim-batch/pause", methods: ["POST"], capability: "task:manage" },
+  { id: "admin.api.promo_claim_batch.resume", path: "/api/admin/tasks/promo-claim-batch/resume", methods: ["POST"], capability: "task:manage" },
+  { id: "admin.api.promo_claim_batch.abort", path: "/api/admin/tasks/promo-claim-batch/abort", methods: ["POST"], capability: "task:manage" },
+  { id: "admin.api.promo_claim_batch.reapprove", path: "/api/admin/tasks/promo-claim-batch/reapprove", methods: ["POST"], capability: "task:manage" },
   { id: "admin.api.task.manual_reviews", path: "/api/admin/tasks/manual-reviews", methods: ["GET"], capability: "task:manage" },
   { id: "admin.api.task.manual_review.resolve", path: "/api/admin/tasks/manual-reviews/resolve", methods: ["POST"], capability: "task:manage" },
   { id: "admin.api.promo_link.list", path: "/api/admin/promo-links", methods: ["GET"], capability: "task:manage" },
@@ -259,6 +266,10 @@ export const ADMIN_CONTENT_CREATION_BATCH_ACTIONS = [
 export const ADMIN_CATALOG_BATCH_ACTIONS = [
   { id: "admin.catalog_batch.context", capability: "content:view", mutation: false },
   { id: "admin.catalog_batch.summary", capability: "content:view", mutation: false },
+  // 阶段2 第4步（施工任务 3.6）：提交前预估"预计分 N 片、预计耗时 X 小时"——
+  // 只读，同 `admin.catalog_batch.context` 一样的能力门槛（能看到条目列表
+  // 就能看到提交这些条目会怎样）。
+  { id: "admin.catalog_batch.promo_claim_estimate", capability: "content:view", mutation: false },
 ] as const satisfies AdminRegistry["actions"];
 
 export const ADMIN_ARTICLE_TEMPLATE_ACTIONS = [

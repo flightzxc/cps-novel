@@ -4,13 +4,14 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { buttonClassName } from "@/components/ui/button";
-import type { CatalogBatchContext, CatalogSelection } from "@/domain/catalog-batch";
+import type { CatalogBatchContext, CatalogSelection, PromoClaimShardEstimate } from "@/domain/catalog-batch";
 import { errorEnvelopeCopy } from "@/features/admin-ui/error-copy";
 
 import {
   enqueuePromoLinkClaimAction,
   readCatalogBatchContextAction,
   readCatalogBatchSummaryAction,
+  readPromoClaimShardEstimateAction,
 } from "../_actions";
 
 type Stage = "loading" | "form" | "submitting" | "counting" | "error";
@@ -47,6 +48,10 @@ export function PromoLinkClaimDialog({
   const [taskId, setTaskId] = useState<string | null>(null);
   const [summary, setSummary] = useState<{ submittedCount: number | null; ineligibleCount: number | null } | null>(null);
   const [isFrozen, setIsFrozen] = useState(false);
+  // 阶段2 第4步（施工任务 3.6，设计 §5.9）："预计分 N 片、预计耗时 X 小时"——
+  // 只在开关开启时才有意义；开关关闭时 `context.lifecycleEnabled` 缺失
+  // （按 `false` 处理），下面这条对话框的行为逐字不变（含"单账户自动提交"）。
+  const [estimate, setEstimate] = useState<PromoClaimShardEstimate | null>(null);
 
   const groups = useMemo(
     () => (context?.channelGroups ?? []) as readonly Group[],
@@ -59,6 +64,14 @@ export function PromoLinkClaimDialog({
   const needsAccountChoice = useMemo(
     () => groups.some((group) => group.accounts.length !== 1),
     [groups],
+  );
+  const lifecycleEnabled = context?.lifecycleEnabled === true;
+  // 所有还有资格条目的渠道分组都已经选好账户——单账户分组已经被默认值
+  // 填好，只有多账户分组需要运营手动选择。在这之前不请求预估（请求了也只
+  // 会是"还差几个账户没选"的半成品数字，容易误导）。
+  const allAccountsChosen = useMemo(
+    () => groups.every((group) => group.eligibleCount === 0 || Boolean(accounts[group.channelAppId])),
+    [groups, accounts],
   );
 
   useEffect(() => {
@@ -160,10 +173,29 @@ export function PromoLinkClaimDialog({
   }, [accounts, context, groups, invalidGroup, onSubmitted, poll, promoClaimGranted, taskId]);
 
   useEffect(() => {
-    if (context && stage === "form" && !needsAccountChoice && !invalidGroup && promoClaimGranted && !submittedRef.current) {
+    // 开关开启时不再自动提交——运营必须先看到"预计分 N 片、预计耗时 X 小时"
+    // 再手动点击确认（下面的按钮可见性条件已经加了 `lifecycleEnabled`）。
+    // 开关关闭（`lifecycleEnabled` 为 `false`）时这条判断逐字不变，单账户
+    // 分组仍然自动提交一次。
+    if (context && stage === "form" && !needsAccountChoice && !invalidGroup && promoClaimGranted && !lifecycleEnabled && !submittedRef.current) {
       void submit();
     }
-  }, [context, invalidGroup, needsAccountChoice, promoClaimGranted, stage, submit]);
+  }, [context, invalidGroup, lifecycleEnabled, needsAccountChoice, promoClaimGranted, stage, submit]);
+
+  useEffect(() => {
+    if (!context || !lifecycleEnabled || !allAccountsChosen || stage !== "form") { setEstimate(null); return; }
+    let cancelled = false;
+    void readPromoClaimShardEstimateAction({
+      selection: selectionRef.current, channelAccounts: accounts, requestId: crypto.randomUUID(),
+    }).then((result) => {
+      if (cancelled || !mountedRef.current) return;
+      if (result.ok) setEstimate(result.data);
+    }).catch(() => {
+      // 预估失败不阻断提交——只是不显示这行文案，同 credentialWarnings 的
+      // "advisory only" 纪律：预估从来不是准入判断的一部分。
+    });
+    return () => { cancelled = true; };
+  }, [accounts, allAccountsChosen, context, lifecycleEnabled, stage]);
 
   const canSubmit = Boolean(context)
     && promoClaimGranted
@@ -212,6 +244,15 @@ export function PromoLinkClaimDialog({
         {promoClaimBlockedReason && (
           <p className="rounded border border-amber-200 bg-amber-50 p-2 text-sm text-amber-800">{promoClaimBlockedReason}</p>
         )}
+        {lifecycleEnabled && !taskId && stage === "form" && (
+          <p className="rounded border border-blue-200 bg-blue-50 p-2 text-sm text-blue-900" data-testid="promo-claim-shard-estimate">
+            {allAccountsChosen
+              ? (estimate
+                ? `预计分 ${estimate.totalShardCount.toLocaleString("zh-CN")} 片，预计耗时 ${estimate.estimatedHours.toLocaleString("zh-CN")} 小时`
+                : "正在估算分片数与预计耗时…")
+              : "选好账户后即可估算分片数与预计耗时"}
+          </p>
+        )}
         {taskId && <Link href={`/tasks/${taskId}`} className="text-sm text-blue-700 underline">查看任务</Link>}
         {stage === "counting" && (
           <p role="status" className="rounded border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">
@@ -228,7 +269,7 @@ export function PromoLinkClaimDialog({
           <button type="button" className={buttonClassName("secondary")} onClick={onClose} disabled={stage === "submitting"}>
             关闭
           </button>
-          {!taskId && (needsAccountChoice || stage === "error") && (
+          {!taskId && (needsAccountChoice || stage === "error" || lifecycleEnabled) && (
             <button type="button" className={buttonClassName("primary")} disabled={!canSubmit} onClick={() => void submit()}>
               领取推广链接
             </button>

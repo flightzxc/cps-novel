@@ -202,6 +202,13 @@ describe("P0-S5 promo-link claim handler — payload and pure helpers", () => {
     expect(() => parsePromoLinkClaimPayload(makePayload({ expiresAt: "not-a-date" }))).toThrow("task_expiry_invalid");
   });
 
+  it("accepts an absent lifecycle field, accepts exactly 'shard_v1', and rejects any other value (阶段2 step1)", () => {
+    expect(parsePromoLinkClaimPayload(makePayload()).lifecycle).toBeUndefined();
+    expect(parsePromoLinkClaimPayload(makePayload({ lifecycle: "shard_v1" }))).toMatchObject({ lifecycle: "shard_v1" });
+    expect(() => parsePromoLinkClaimPayload(makePayload({ lifecycle: "shard_v2" }))).toThrow("claim_payload_invalid");
+    expect(() => parsePromoLinkClaimPayload(makePayload({ lifecycle: "" }))).toThrow("claim_payload_invalid");
+  });
+
   it("redacts the upstream code to a length marker and never the raw value", () => {
     expect(redactUpstreamCode("REALCODE1")).toBe("[redacted_code:length=9]");
     expect(redactUpstreamCode(null)).toBeNull();
@@ -258,6 +265,149 @@ describe("P0-S5 promo-link claim handler — gates and structural failures", () 
       heartbeat: async () => true,
     });
     expect(outcome).toMatchObject({ status: "failed", error: { code: "claim_source_binding_missing" } });
+  });
+});
+
+/**
+ * 阶段2 step1 (`docs/adr/ADR-PROMO-CLAIM-BATCH-LIFECYCLE.md`): a
+ * `lifecycle: "shard_v1"` item ignores its own payload `expiresAt` and
+ * instead uses the parent `GenericTask.params.deadlineAt` (+ the configured
+ * grace period, default 10 minutes) as the authoritative deadline. A legacy
+ * item (no `lifecycle`) keeps the prior byte-for-byte behavior — covered
+ * above by "fails a stale task without touching the database".
+ */
+describe("P0-S5 promo-link claim handler — lifecycle shard deadline (阶段2 step1)", () => {
+  function makeShardPayload(overrides: Record<string, unknown> = {}) {
+    // A payload `expiresAt` far in the future -- if the handler mistakenly
+    // fell back to legacy behavior for a shard item, every test below that
+    // expects `task_expired` would instead pass through to the next gate,
+    // making the assertion fail loudly rather than silently passing for the
+    // wrong reason.
+    return makePayload({ lifecycle: "shard_v1", expiresAt: new Date(Date.now() + 3_600_000).toISOString(), ...overrides });
+  }
+
+  it("fails task_expired off the parent task's deadlineAt even though the payload's own expiresAt is still valid", async () => {
+    const db = new FakePromoLinkClaimHandlerDb();
+    db.seedGenericTask({ id: "task-1", params: { lifecycleVersion: 1, lifecycleRole: "shard", deadlineAt: new Date(Date.now() - 20 * 60_000).toISOString() } });
+    const handler = createPromoLinkClaimHandler(db.asPrismaClient(), { env: ENABLED_ENV });
+    const outcome = await handler({
+      lease: { ...baseLease(), payload: makeShardPayload() },
+      mode: "apply",
+      signal: new AbortController().signal,
+      heartbeat: async () => true,
+    });
+    expect(outcome).toMatchObject({ status: "failed", error: { code: "task_expired" } });
+    expect(db.calls).toEqual(["genericTask.findUnique"]);
+  });
+
+  it("does not fail on expiry when the parent task's deadlineAt (plus grace) is still in the future", async () => {
+    const db = new FakePromoLinkClaimHandlerDb();
+    db.seedGenericTask({ id: "task-1", params: { lifecycleVersion: 1, lifecycleRole: "shard", deadlineAt: new Date(Date.now() + 60_000).toISOString() } });
+    const handler = createPromoLinkClaimHandler(db.asPrismaClient(), { env: APPLY_ENV });
+    const outcome = await handler({
+      lease: { ...baseLease(), payload: makeShardPayload() },
+      mode: "apply",
+      signal: new AbortController().signal,
+      heartbeat: async () => true,
+    });
+    // Passed the expiry gate -- falls through to the next real gate instead
+    // (no source item seeded), proving this was not short-circuited to
+    // task_expired.
+    expect(outcome).toMatchObject({ status: "failed", error: { code: "claim_source_binding_missing" } });
+  });
+
+  /**
+   * 2026-09-23 复核追加：批次死锁缺陷的回归用例。一个 lifecycleVersion=1、
+   * lifecycleRole="batch"（或角色字段缺失/写错）的父任务，即使 deadlineAt
+   * 恰好也在未来，其分片条目仍必须 fail-closed 为 task_expired——因为
+   * "把 shard_v1 条目挂在批次任务下"本身就是数据不一致，不能因为凑巧
+   * deadlineAt 有效就放行。
+   */
+  it("fails closed as task_expired when the parent task's lifecycleRole is 'batch' (or missing), even with a valid future deadlineAt", async () => {
+    const batchRole = new FakePromoLinkClaimHandlerDb();
+    batchRole.seedGenericTask({ id: "task-1", params: { lifecycleVersion: 1, lifecycleRole: "batch", deadlineAt: new Date(Date.now() + 60_000).toISOString() } });
+    const batchRoleOutcome = await createPromoLinkClaimHandler(batchRole.asPrismaClient(), { env: ENABLED_ENV })({
+      lease: { ...baseLease(), payload: makeShardPayload() },
+      mode: "apply",
+      signal: new AbortController().signal,
+      heartbeat: async () => true,
+    });
+    expect(batchRoleOutcome).toMatchObject({ status: "failed", error: { code: "task_expired" } });
+
+    const missingRole = new FakePromoLinkClaimHandlerDb();
+    missingRole.seedGenericTask({ id: "task-1", params: { lifecycleVersion: 1, deadlineAt: new Date(Date.now() + 60_000).toISOString() } });
+    const missingRoleOutcome = await createPromoLinkClaimHandler(missingRole.asPrismaClient(), { env: ENABLED_ENV })({
+      lease: { ...baseLease(), payload: makeShardPayload() },
+      mode: "apply",
+      signal: new AbortController().signal,
+      heartbeat: async () => true,
+    });
+    expect(missingRoleOutcome).toMatchObject({ status: "failed", error: { code: "task_expired" } });
+  });
+
+  it("stays within the grace period just past the raw deadline, but expires once grace is also exhausted", async () => {
+    // Default grace is 10 minutes (PROMO_CLAIM_LIFECYCLE_DEFAULTS). 5
+    // minutes past the raw deadline is inside grace; 15 minutes past is not.
+    const dbWithinGrace = new FakePromoLinkClaimHandlerDb();
+    dbWithinGrace.seedGenericTask({ id: "task-1", params: { lifecycleRole: "shard", deadlineAt: new Date(Date.now() - 5 * 60_000).toISOString() } });
+    const withinGraceOutcome = await createPromoLinkClaimHandler(dbWithinGrace.asPrismaClient(), { env: APPLY_ENV })({
+      lease: { ...baseLease(), payload: makeShardPayload() },
+      mode: "apply",
+      signal: new AbortController().signal,
+      heartbeat: async () => true,
+    });
+    expect(withinGraceOutcome).not.toMatchObject({ error: { code: "task_expired" } });
+
+    const dbPastGrace = new FakePromoLinkClaimHandlerDb();
+    dbPastGrace.seedGenericTask({ id: "task-1", params: { lifecycleRole: "shard", deadlineAt: new Date(Date.now() - 15 * 60_000).toISOString() } });
+    const pastGraceOutcome = await createPromoLinkClaimHandler(dbPastGrace.asPrismaClient(), { env: ENABLED_ENV })({
+      lease: { ...baseLease(), payload: makeShardPayload() },
+      mode: "apply",
+      signal: new AbortController().signal,
+      heartbeat: async () => true,
+    });
+    expect(pastGraceOutcome).toMatchObject({ status: "failed", error: { code: "task_expired" } });
+  });
+
+  it("fails closed as task_expired when the parent task's params carry no deadlineAt at all (role is correctly 'shard')", async () => {
+    const db = new FakePromoLinkClaimHandlerDb();
+    db.seedGenericTask({ id: "task-1", params: { lifecycleVersion: 1, lifecycleRole: "shard" } });
+    const handler = createPromoLinkClaimHandler(db.asPrismaClient(), { env: ENABLED_ENV });
+    const outcome = await handler({
+      lease: { ...baseLease(), payload: makeShardPayload() },
+      mode: "apply",
+      signal: new AbortController().signal,
+      heartbeat: async () => true,
+    });
+    expect(outcome).toMatchObject({ status: "failed", error: { code: "task_expired" } });
+  });
+
+  it("fails closed as task_expired when the parent task row does not exist at all", async () => {
+    const db = new FakePromoLinkClaimHandlerDb(); // no seedGenericTask call
+    const handler = createPromoLinkClaimHandler(db.asPrismaClient(), { env: ENABLED_ENV });
+    const outcome = await handler({
+      lease: { ...baseLease(), payload: makeShardPayload() },
+      mode: "apply",
+      signal: new AbortController().signal,
+      heartbeat: async () => true,
+    });
+    expect(outcome).toMatchObject({ status: "failed", error: { code: "task_expired" } });
+  });
+
+  it("a legacy item (no lifecycle) ignores the parent task's deadlineAt entirely, even when it has already passed", async () => {
+    const db = new FakePromoLinkClaimHandlerDb();
+    db.seedGenericTask({ id: "task-1", params: { deadlineAt: new Date(Date.now() - 20 * 60_000).toISOString() } });
+    const handler = createPromoLinkClaimHandler(db.asPrismaClient(), { env: APPLY_ENV });
+    const outcome = await handler({
+      // No `lifecycle` field -- legacy item; its own expiresAt (60s in the
+      // future) is what must govern, not the seeded (already-expired) parent.
+      lease: { ...baseLease(), payload: makePayload() },
+      mode: "apply",
+      signal: new AbortController().signal,
+      heartbeat: async () => true,
+    });
+    expect(outcome).not.toMatchObject({ error: { code: "task_expired" } });
+    expect(db.calls).not.toContain("genericTask.findUnique");
   });
 });
 

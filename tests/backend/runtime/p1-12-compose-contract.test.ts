@@ -143,6 +143,30 @@ describe("P1-12 Compose and image contracts", () => {
     expect(releaseChecklist).toContain("getcode` 仍严格零 retry");
   });
 
+  it("阶段2 第3步：scheduler 与 web/worker 携带同一份领推广生命周期配置与 promo 双闸，唯独不带 readback 策略", () => {
+    const web = serviceBlock("web");
+    const worker = serviceBlock("worker");
+    const scheduler = serviceBlock("scheduler");
+    const lifecycleKeys = [
+      "PROMO_CLAIM_LIFECYCLE_V1_ENABLED: ${PROMO_CLAIM_LIFECYCLE_V1_ENABLED:-false}",
+      "PROMO_CLAIM_BATCH_APPROVAL_TTL_MINUTES: ${PROMO_CLAIM_BATCH_APPROVAL_TTL_MINUTES:-1440}",
+      "PROMO_CLAIM_SHARD_WINDOW_MINUTES: ${PROMO_CLAIM_SHARD_WINDOW_MINUTES:-90}",
+      "PROMO_CLAIM_SHARD_SIZE_MAX: ${PROMO_CLAIM_SHARD_SIZE_MAX:-1000}",
+      "PROMO_CLAIM_SHARD_SIZE_MIN: ${PROMO_CLAIM_SHARD_SIZE_MIN:-50}",
+      "PROMO_CLAIM_CREDENTIAL_SAFETY_MARGIN_MINUTES: ${PROMO_CLAIM_CREDENTIAL_SAFETY_MARGIN_MINUTES:-30}",
+      "PROMO_CLAIM_SHARD_DEADLINE_GRACE_MINUTES: ${PROMO_CLAIM_SHARD_DEADLINE_GRACE_MINUTES:-10}",
+    ];
+    for (const line of lifecycleKeys) {
+      expect(web).toContain(line);
+      expect(worker).toContain(line);
+      expect(scheduler).toContain(line);
+    }
+    expect(scheduler).toContain("FEATURE_PROMO_LINK_CLAIM: ${FEATURE_PROMO_LINK_CLAIM:-false}");
+    expect(scheduler).toContain("PROMO_LINK_CLAIM_ALLOW_WRITE: ${PROMO_LINK_CLAIM_ALLOW_WRITE:-false}");
+    expect(scheduler).not.toContain("PROMO_LINK_CLAIM_READBACK_ATTEMPTS");
+    expect(scheduler).not.toContain("PROMO_LINK_CLAIM_READBACK_INTERVAL_MS");
+  });
+
   it("passes all ten double-gate variables only to their relevant processes, default off", () => {
     const expectedByService = {
       web: DOUBLE_GATE_FLAGS.filter((flag) => !flag.includes("INDEXNOW_DELIVERY")),
