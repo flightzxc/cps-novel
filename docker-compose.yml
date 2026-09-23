@@ -145,8 +145,11 @@ services:
       # sizing knobs (window/shard min/max) for enumeration
       # (`worker/handlers/catalog-batch.ts`'s `resolvePromoClaimLifecycleConfig`
       # call), so the same six keys are duplicated there below. `scheduler`
-      # (第3步) is not wired yet — its own copy is that step's job, not this
-      # one's. Every default here matches `src/lib/tasks/promo-claim-
+      # (第3步) now also carries the same seven keys — see that service
+      # block's own comment for why `runPromoClaimReleaseTick`
+      # (`src/lib/tasks/promo-claim-release.ts`) needs its own copy of the
+      # switch and every sizing/grace knob, not just the switch. Every
+      # default here matches `src/lib/tasks/promo-claim-
       # lifecycle.ts`'s `PROMO_CLAIM_LIFECYCLE_DEFAULTS`; the switch defaults
       # closed (D8), so leaving these unset reproduces today's behavior
       # byte-for-byte in every environment, including every X8_LEVEL.
@@ -272,7 +275,8 @@ services:
       # handler resolves the whole config eagerly at construction and would
       # throw on a malformed override even for a non-lifecycle batch, so its
       # own env must carry the same six keys, not just the enable switch).
-      # `scheduler` (第3步) is not wired yet.
+      # `scheduler` (第3步) now carries the same seven keys too — see that
+      # service block's own comment.
       PROMO_CLAIM_LIFECYCLE_V1_ENABLED: ${PROMO_CLAIM_LIFECYCLE_V1_ENABLED:-false}
       PROMO_CLAIM_BATCH_APPROVAL_TTL_MINUTES: ${PROMO_CLAIM_BATCH_APPROVAL_TTL_MINUTES:-1440}
       PROMO_CLAIM_SHARD_WINDOW_MINUTES: ${PROMO_CLAIM_SHARD_WINDOW_MINUTES:-90}
@@ -369,6 +373,36 @@ services:
       SCHEDULER_INTERVAL_SECONDS: ${SCHEDULER_INTERVAL_SECONDS:-60}
       FEATURE_INDEXNOW_DELIVERY: ${FEATURE_INDEXNOW_DELIVERY:-false}
       INDEXNOW_DELIVERY_ALLOW_WRITE: ${INDEXNOW_DELIVERY_ALLOW_WRITE:-false}
+      # 阶段2 第3步（`docs/adr/ADR-PROMO-CLAIM-BATCH-LIFECYCLE.md`，设计
+      # §5.4/§7）：`scheduler/index.ts`'s `main()` now calls
+      # `runPromoClaimReleaseTick` (`src/lib/tasks/promo-claim-release.ts`)
+      # every tick. It resolves the full `resolvePromoClaimLifecycleConfig`
+      # (window/approval-TTL/shard min-max/credential safety margin) from
+      # its OWN `process.env` before deciding whether to release/hold a
+      # channel account's next shard — a malformed override would throw at
+      # tick start (fail-closed, same posture web/worker already take for
+      # this config), so scheduler needs the same seven keys the web/worker
+      # blocks above already carry, not just the enable switch. It ALSO
+      # needs the two `FEATURE_PROMO_LINK_CLAIM`/`PROMO_LINK_CLAIM_ALLOW_WRITE`
+      # double-gate flags — a lifecycle shard is never released unless both
+      # are `true` (设计 §5.4 第2步遗留待办，本步收口于
+      # `releasePromoClaimShardsForAccount`), independent of the lifecycle
+      # switch itself. Every default matches `src/lib/tasks/promo-claim-
+      # lifecycle.ts`'s `PROMO_CLAIM_LIFECYCLE_DEFAULTS` and the web/worker
+      # blocks' own defaults above, byte-for-byte. Scheduler still never
+      # receives the worker-only bounded promo readback retry policy (see
+      # the worker service block's own two `PROMO_LINK_CLAIM_READBACK_`-
+      # prefixed keys) — those gate retries scheduler never performs (it
+      # releases task rows; it never calls the upstream adapter).
+      PROMO_CLAIM_LIFECYCLE_V1_ENABLED: ${PROMO_CLAIM_LIFECYCLE_V1_ENABLED:-false}
+      PROMO_CLAIM_BATCH_APPROVAL_TTL_MINUTES: ${PROMO_CLAIM_BATCH_APPROVAL_TTL_MINUTES:-1440}
+      PROMO_CLAIM_SHARD_WINDOW_MINUTES: ${PROMO_CLAIM_SHARD_WINDOW_MINUTES:-90}
+      PROMO_CLAIM_SHARD_SIZE_MAX: ${PROMO_CLAIM_SHARD_SIZE_MAX:-1000}
+      PROMO_CLAIM_SHARD_SIZE_MIN: ${PROMO_CLAIM_SHARD_SIZE_MIN:-50}
+      PROMO_CLAIM_CREDENTIAL_SAFETY_MARGIN_MINUTES: ${PROMO_CLAIM_CREDENTIAL_SAFETY_MARGIN_MINUTES:-30}
+      PROMO_CLAIM_SHARD_DEADLINE_GRACE_MINUTES: ${PROMO_CLAIM_SHARD_DEADLINE_GRACE_MINUTES:-10}
+      FEATURE_PROMO_LINK_CLAIM: ${FEATURE_PROMO_LINK_CLAIM:-false}
+      PROMO_LINK_CLAIM_ALLOW_WRITE: ${PROMO_LINK_CLAIM_ALLOW_WRITE:-false}
     healthcheck:
       test:
         - CMD-SHELL
