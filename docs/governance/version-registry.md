@@ -17,6 +17,20 @@ Compose runtime 与 Health 身份一致性验证（`/api/health` 的 `metadataCo
 
 ## 当前快照
 
+### v0.4.0 —— 准备中（未发布）
+
+- 开发线 `integration/v0.4.0-2026-09-24`（基于 `v0.3.0` 收官提交 `1da7ed7`），合入
+  `feat/promo-claim-lifecycle-v1` @ `537490e`：领推广链接生命周期与自动分片（正式修复第 2 阶段，
+  23 提交，逐步经 Opus 复核）+ 版本身份升到 0.4.0。
+- 范围四档：**已合入但开关默认关闭（等于未上线）**——生命周期与自动分片全部能力
+  （`PROMO_CLAIM_LIFECYCLE_V1_ENABLED` 代码默认 `false`）；**开关无关、随部署生效**——
+  scheduler_app 新增最小权限（部署时 `migrate-approved` 重放）、发版前生命周期配置校验、
+  旧路径已终态父批次不再显示中止按钮、单任务暂停/恢复对生命周期分片返回 409。
+- 预生产开启开关、UAT（方案见 `docs/operations/PROMO_CLAIM_LIFECYCLE_UAT_PLAN_2026-09-24.md`）
+  须另经 Owner 批准；部署前目标机须把 `APP_VERSION` / `NEXT_PUBLIC_BUILD_VERSION` 改为
+  `0.4.0` / `v0.4.0`。
+- **未发布、未部署、未打 tag**——发布完成后由发版执行者据实更新本节。
+
 ### v0.3.0 —— 已发布到预生产（2026-09-23 23:26 +0800，`RELEASE=PASS`）
 
 - 身份：Final SHA `a31a1468816904920bcf326537426bfe0d4a1ae4`，annotated tag `v0.3.0`，
@@ -45,6 +59,7 @@ Compose runtime 与 Health 身份一致性验证（`/api/health` 的 `metadataCo
 
 | Version | Date (+0800) | Bump | Summary | Commit / Release | Status |
 | --- | ---: | --- | --- | --- | --- |
+| `v0.4.0` | 发布时填写 | MINOR | 领推广链接生命周期与自动分片（正式修复第 2 阶段，开关默认关闭）；scheduler_app 最小权限；发版前生命周期配置校验。详见"当前快照" | 发布时填写 | 🟡 准备中（未发布） |
 | `v0.3.0` | 2026-09-23（23:26） | MINOR | 预生产写闸登记制 + 凭据 blocker 重评估与一套环境一套凭据；上游请求观测（领推广正式修复第 1 阶段）；版本身份统一到 0.3.0；开发日志发版级 + 发版治理 + 台账 CPS 格式；X8 镜像清理按版本形状。详见"当前快照" | annotated tag `v0.3.0` → `a31a1468816904920bcf326537426bfe0d4a1ae4`；镜像 `cps-novel:0.3.0-a31a146`；`RELEASE=PASS` | ✅ 预生产已发布；生产未上线 |
 | 预生产部署 | 2026-09-22（约 15:24） | — | 基础资产补齐 + 合回 PR #8/#9 多语成果（CanonicalTag 1,845 格公开多语译名落库），`RELEASE=PASS` | 镜像 `cps-novel:0.1.0-9728551`；merge commit `97285515b00b2f6d810b2944f8daf1f5aef10ad8`（PR #24，author date 2026-09-22T16:16:46+09:00） | ✅ 预生产部署成功；未打 tag |
 | 预生产部署 | 2026-09-22（约 11:35） | — | 预生产首次正式部署：等待服务健康再验证；失败 trap 由可静默失败改为 fail-closed，`RELEASE=PASS` | 镜像 `cps-novel:0.1.0-921119d`；merge commit `921119dc3c6544848aad7d306c2525c7971ed376`（PR #23，author date 2026-09-22T12:02:04+09:00） | ✅ 预生产首次正式部署成功；未打 tag |
