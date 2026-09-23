@@ -39,6 +39,57 @@
 
 ## 发版记录（新条目在最上面）
 
+### 2026-09-24 01:33 - claude-code（Claude Opus 5.5，发版执行）
+
+**变更类型**：预生产正式发布 `v0.4.0`（MINOR）；生命周期开关保持关闭。
+
+**背景**：
+- 8 万条领推广任务因统一 6 小时有效期大面积过期；正式修复第 2 阶段（生命周期、自动分片、
+  按账号放行）五步施工全部完成并逐步复核，D1–D9 冻结。
+- 按 Owner 冻结的顺序，先把能力以"开关默认关闭"的形态部署到预生产；新渠道凭据录入并验证、
+  Owner 批准开开关之后，再做三级真实 UAT（几百本 → 2,000～3,000 本多分片 → 剩余约 7.6 万本）。
+
+**变更内容**（开发线 `integration/v0.4.0-2026-09-24`，基于 `v0.3.0` 收官提交 `1da7ed7`）：
+- 合入 `feat/promo-claim-lifecycle-v1` @ `537490e`（23 提交）：批次→分片→条目三层生命周期；
+  scheduler 按账号事务级咨询锁放行/暂停（批准时钟、凭据就绪、错过截止时间与 D4 前置检查）；
+  scheduler_app 最小权限；批次级暂停/恢复/中止/重新批准；跨批次排队阻断
+  `queued_in_other_batch`；批次详情六类计数与分片列表；提交前预估分片；发版前生命周期配置校验；
+  ADR 实施偏差、运维文档、数据字典 JSON 键、UAT 方案与验收报告。
+- 版本身份升到 0.4.0。Final SHA `8e83da49f79f3943a6c6062f5f5b1014a3a72e67`，annotated tag `v0.4.0`。
+
+**影响范围**：
+- 预生产 web / worker / scheduler 换镜像 `cps-novel:0.4.0-8e83da4`（归档 sha256
+  `42f857f9ad0b0f19560433bee9fb92c0caf6c3f8f2210358fc53ad467a2e99e3`，发布目录
+  `/opt/cps-novel/releases/8e83da49f79f3943a6c6062f5f5b1014a3a72e67`）；postgres 容器未重建。
+- 无数据库迁移；grants 新增 scheduler_app 最小权限（已随部署重放）；compose 只增加环境变量透传。
+- 目标机环境变量只改 `APP_VERSION=0.4.0`、`NEXT_PUBLIC_BUILD_VERSION=v0.4.0`（备份
+  `preprod.env.bak-20260923T173306Z`）；**未设置任何生命周期配置，开关按默认值关闭**。
+- 开关无关、随部署生效：已终态的旧路径父批次不再显示中止按钮；单任务暂停/恢复对生命周期
+  分片返回 409（当前库中生命周期分片为 0）。
+- 回滚到 `a31a146`（v0.3.0）：库结构兼容；把两个版本变量改回 0.3.0；旧版 grants 重放会去掉
+  scheduler 新权限，对旧代码无害；开关关闭、无生命周期数据，无需额外处置。
+
+**验证方式**：
+- 本地质量门禁：typecheck 0 错；`npm test` 6334 通过 / 0 失败；`next build` 通过；字典漂移 0；
+  三个一次性 Postgres 集成脚本 18/18、18/18、17/17。
+- 发布前逻辑备份 `cps-novel-20260923T172917Z.dump`（`LOGICAL_BACKUP=PASS`）。
+- 归档 `VERIFY_OFFLINE=PASS`、`VERIFY=PASS anchor=descriptor`。
+- `release.sh deploy`：`PREPROD_WRITE_GATES=PASS`、
+  `PREPROD_PROMO_CLAIM_LIFECYCLE_CONFIG=PASS enabled=false`（七项取默认值）、`PREPROD_PREFLIGHT=PASS`、
+  `DATABASE_MIGRATION=PASS`、`DATABASE_GRANTS=PASS`、三服务镜像身份与健康 PASS、
+  `RELEASE_VERIFY=PASS`（含匿名复验）、`RELEASE=PASS`（01:33:23–01:33:59 +0800）。
+- 部署后独立核对：`/api/health` 版本 0.4.0、commit `8e83da4`、`metadataConsistency=passed`；
+  scheduler_app 实际只有凭据表 6 个非秘密列与意图记录 3 列的读权限、读不到 `encrypted_secret`、
+  可写审计；生命周期分片 0；worker/scheduler 无错误日志。
+
+**后续待办**（按 Owner 冻结顺序，均须另行授权）：
+- 新渠道凭据独立获取、只录入预生产、不同步 X8；录入后验证凭据状态与剩余有效期满足生命周期要求。
+- Owner 批准后开启 `PROMO_CLAIM_LIFECYCLE_V1_ENABLED`，按
+  `docs/operations/PROMO_CLAIM_LIFECYCLE_UAT_PLAN_2026-09-24.md` 做三级真实 UAT（选项 C：不新增模拟能力）。
+- 既有遗留（另行授权）：预生产 `backup-timer` 自 2026-09-22 起停止；nginx 429 与 sudo 项；
+  61 条领推广人工核对；`preproduction-secret-consumers.test.ts` 高负载偶发超时。
+- Notion 手账：本会话无连接器，已生成 ChatGPT 交接提示词，待 Owner 转交后回填链接。
+
 ### 2026-09-23 23:26 - claude-code（Claude Opus 5.5，发版执行）
 
 **变更类型**：预生产正式发布 `v0.3.0`（MINOR）。

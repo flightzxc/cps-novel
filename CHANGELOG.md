@@ -3,7 +3,36 @@
 <!-- 本文件由 `node scripts/generate-changelog.mjs --write` 生成，请勿手工编辑。 -->
 <!-- 叙述性内容写进 commit message；Owner/架构决策写 docs/adr/。 -->
 
-生成时间：2026-09-23 · 共 786 个 commit
+生成时间：2026-09-23 · 共 812 个 commit
+
+## v0.4.0
+
+- `8e83da4` 2026-09-24 chore(release): 版本身份升到 0.4.0 + 版本台账登记 v0.4.0 准备中  — _claude-code · Claude Opus 5.5_
+- `e923ac2` 2026-09-24 merge: 领推广链接生命周期与自动分片（正式修复第 2 阶段）  — _claude-code · Claude Opus 5.5_
+- `537490e` 2026-09-24 fix(preprod): 开关判定去掉trim，消除与TS解析器的两边不一致(Opus复核)  — _claude-code · Claude Sonnet 5 · reviewed: claude-code · Claude Opus 5.5_
+- `ea522a6` 2026-09-24 docs(promo-claim): UAT方案与验收报告(设计§九逐项对照)  — _claude-code · Claude Sonnet 5 · reviewed: claude-code · Claude Opus 5.5_
+- `d639884` 2026-09-24 docs(promo-claim): ADR补实施偏差、运维文档补生命周期一节、数据字典补JSON键说明  — _claude-code · Claude Sonnet 5 · reviewed: claude-code · Claude Opus 5.5_
+- `42e081d` 2026-09-24 feat(preprod): 发版前校验领推广生命周期七项配置，与 TS 解析器逐条对齐  — _claude-code · Claude Sonnet 5 · reviewed: claude-code · Claude Opus 5.5_
+- `fe328ab` 2026-09-24 chore(preprod): 领推广生命周期七项配置加入预生产模板并加合并渲染契约测试  — _claude-code · Claude Sonnet 5 · reviewed: claude-code · Claude Opus 5.5_
+- `a961a16` 2026-09-24 fix(promo-claim): capability_disabled 归入失败而非人工核对  — _claude-code · Claude Sonnet 5 · reviewed: claude-code · Claude Opus 5.5_
+- `719b45f` 2026-09-24 fix(tasks): Opus复核第4步返工F1-F5：计数口径改造/单任务暂停旁路/测试缺口/文案  — _claude-code · Claude Sonnet 5 · reviewed: claude-code · Claude Opus 5.5_
+- `7fd0e1b` 2026-09-24 feat(catalog-sync): 提交确认弹窗预计分片数与预计耗时(3.6) + 抽出共享分片取样  — _claude-code · Claude Sonnet 5 · reviewed: claude-code · Claude Opus 5.5_
+- `d792e84` 2026-09-23 feat(tasks-ui): 批次级控制按钮 + 分片列表 + 修复旧路径中止按钮误判(3.5 UI)  — _claude-code · Claude Sonnet 5 · reviewed: claude-code · Claude Opus 5.5_
+- `95d910b` 2026-09-23 feat(task-admin): 批次详情DTO补齐分片列表/领取统计/预计完成时间 + 修复旧路径中止按钮误判(3.5后端)  — _claude-code · Claude Sonnet 5 · reviewed: claude-code · Claude Opus 5.5_
+- `9e95884` 2026-09-23 feat(tasks): 领推广批次枚举时阻断跨批次排队冲突(3.4)  — _claude-code · Claude Sonnet 5 · reviewed: claude-code · Claude Opus 5.5_
+- `553d356` 2026-09-23 feat(tasks): 领推广批次级暂停/恢复/中止/重新批准(3.1/3.3) + D4前置检查覆盖批次暂停恢复路径(3.2)  — _claude-code · Claude Sonnet 5 · reviewed: claude-code · Claude Opus 5.5_
+- `7204496` 2026-09-23 test(tasks): 补齐 Opus 复核发现的三处放行测试缺口  — _claude-code · Claude Sonnet 5 · reviewed: claude-code · Claude Opus 5.5_
+- `e047ed4` 2026-09-23 chore(compose): scheduler 服务补上领推广生命周期配置与 promo 双闸透传  — _claude-code · Claude Sonnet 5 · reviewed: claude-code · Claude Opus 5.5_
+- `6893eb3` 2026-09-23 feat(grants): scheduler_app 放行最小权限 + 数据字典对齐 + 真实 Postgres 验收  — _claude-code · Claude Sonnet 5 · reviewed: claude-code · Claude Opus 5.5_
+- `1b6484e` 2026-09-23 feat(tasks): 领推广批次生命周期 scheduler 放行/暂停模块 + 接线  — _claude-code · Claude Sonnet 5 · reviewed: claude-code · Claude Opus 5.5_
+- `0253a09` 2026-09-23 chore(compose): 领推广生命周期配置透传到 web 与 worker  — _claude-code · Claude Sonnet 5 · reviewed: claude-code · Claude Opus 5.5_
+- `5462ff0` 2026-09-23 test(tasks): 补一条分片大小上限真正生效的集成用例  — _claude-code · Claude Sonnet 5 · reviewed: claude-code · Claude Opus 5.5_
+- `d350b73` 2026-09-23 feat(tasks): 领推广批次入队打生命周期标记 + 枚举时切分片  — _claude-code · Claude Sonnet 5 · reviewed: claude-code · Claude Opus 5.5_
+- `214e006` 2026-09-23 fix(tasks): 领推广生命周期下推与 handler 补上 lifecycleRole，修复批次死锁  — _claude-code · Claude Sonnet 5 · reviewed: claude-code · Claude Opus 5.5_
+- `77b14df` 2026-09-23 feat(tasks): 领取查询下推截止时间判定与 handler 分片截止判定  — _claude-code · Claude Sonnet 5 · reviewed: claude-code · Claude Opus 5.5_
+- `017d157` 2026-09-23 feat(tasks): 领推广生命周期基础模块与任务控制标记  — _claude-code · Claude Sonnet 5 · reviewed: claude-code · Claude Opus 5.5_
+- `ff1f79a` 2026-09-23 docs(adr): 领推广批次生命周期 ADR 入库  — _claude-code · Claude Sonnet 5 · reviewed: claude-code · Claude Opus 5.5_
+- `1da7ed7` 2026-09-24 docs(release): v0.3.0 预生产发布收官——版本台账、开发日志、CHANGELOG、CLAUDE.md、Notion 草稿  — _claude-code · Claude Opus 5.5_
 
 ## v0.3.0
 
