@@ -234,10 +234,9 @@ npm run test       # vitest run
 ## 9. 当前阶段
 
 **P1 已收口，P2-12 竖向验收与 P0 收尾已落地；`v0.2.0` 已于 2026-08-19 打 tag（P2-07～P2-12 轮次）。**
-预生产已于 2026-09-22 两次正式部署（merge `921119d`、`9728551`，均 `RELEASE=PASS`，镜像仍是 `0.1.0-<sha>` 前缀），
-部署代码已包含 `v0.2.0` 内容；版本台账没有生产部署记录，生产环境尚未上线。
-当前处于 **v0.3.0 发版准备**阶段（未发布、未打 tag），本轮范围与进度以
-`docs/governance/version-registry.md` 的「当前快照」为准，本节不复述。
+预生产已于 2026-09-22 两次正式部署（merge `921119d`、`9728551`，镜像 `0.1.0-<sha>` 前缀），
+**`v0.3.0` 已于 2026-09-23 发布到预生产**（tag `v0.3.0` → `a31a146`，镜像 `cps-novel:0.3.0-a31a146`，`RELEASE=PASS`）；
+生产环境尚未上线。范围、进度与后续以 `docs/governance/version-registry.md` 的「当前快照」为准，本节不复述。
 
 feature/write flags 默认 fail-closed，分级开闸以 `docs/p2/V020_RELEASE_CHECKLIST.md` §3 为准，未经 Owner 审批不得开闸。
 已批准的例外：预生产的 `catalog_write` / `promo_write` 两组写闸已由 Owner 批准在目标机开启（2026-09-22 / 09-23），

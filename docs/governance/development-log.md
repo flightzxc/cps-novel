@@ -37,6 +37,71 @@
 
 ---
 
+## 发版记录（新条目在最上面）
+
+### 2026-09-23 23:26 - claude-code（Claude Opus 5.5，发版执行）
+
+**变更类型**：预生产正式发布 `v0.3.0`（MINOR）。
+
+**背景**：
+- 预生产的目录同步与领推广两组写闸已由 Owner 批准开启，而旧发版前检查一律要求写闸
+  关闭——不改的话任何新部署都会被发版前检查拦下。
+- 8 万条领推广任务因统一 6 小时有效期大面积过期；正式修复按完整方案分阶段推进，
+  第 1 阶段先补上游请求观测，作为后续阶段的基线。
+- git tag `v0.2.0` 与 `package.json` 0.1.0 的版本身份漂移需要收口；Owner 要求发版
+  治理对齐 CPS 短剧（Git/tag、版本台账、开发日志、Notion 手账）。
+
+**变更内容**（开发线 `integration/v0.3.0-2026-09-23`，基于 `a9317e5`）：
+- 预生产写闸登记制：新增 `PREPROD_APPROVED_OPEN_WRITE_GATES`（闭集
+  `catalog_write` / `promo_write`），发版前检查改为"开着的写闸必须显式登记"，
+  其余写闸仍强制关闭（`fix/preprod-approved-open-write-gates` @ `b9fe386`）。
+- `SEC-CREDENTIAL-KEY-ROTATION-2026-09-01` 预生产重评估（Owner 裁决不阻断本轮，
+  生产关闭条件不变）+ "一套环境一套渠道 credential"规则。
+- 上游请求观测：`upstream_call` 结构化事件，只记录限流头、延迟与信封状态，
+  禁止 JWT / Cookie / 推广码 / 链接 / 书名 / 响应正文；观测异常在调用点隔离，
+  不改变请求结果（`feat/upstream-call-observability` @ `3dd996c`）。
+- 版本身份统一到 0.3.0；开发日志解冻为发版级；`AI_WORKFLOW.md` 新增发版治理；
+  版本台账改为 CPS 同款格式（`chore/release-v0.3.0-prep` @ `f8dc929`）。
+- 本地 X8 旧镜像清理按版本形状匹配（`23cce42`）；`CLAUDE.md` 当前阶段更新
+  （`6ac60f3`）；x8_gc 新测试补运行目录隔离（`a31a146`）。
+- Final SHA `a31a1468816904920bcf326537426bfe0d4a1ae4`，annotated tag `v0.3.0`。
+
+**影响范围**：
+- 预生产 web / worker / scheduler 换镜像 `cps-novel:0.3.0-a31a146`（归档 sha256
+  `de4284d9bc2450a38b4f021eb3e373cc17bac769fa5b278300ab8b8bcd94aeb9`，发布目录
+  `/opt/cps-novel/releases/a31a1468816904920bcf326537426bfe0d4a1ae4`）；postgres
+  容器未重建（`49fcbd95027c` 前后一致）。
+- 无数据库迁移、无 grants 变更、无 compose 变更。
+- 目标机环境变量只改 `APP_VERSION=0.3.0`、`NEXT_PUBLIC_BUILD_VERSION=v0.3.0`
+  （备份 `preprod.env.bak-20260923T152433Z`）；写闸状态与 worker allowlist 不变。
+- 未上线：领推广生命周期与自动分片（第 2 阶段，`feat/promo-claim-lifecycle-v1`
+  施工中）。
+- 回滚到 `9728551`：库结构兼容；但须先把 `APP_VERSION` / `NEXT_PUBLIC_BUILD_VERSION`
+  改回 0.1.0，且旧版发版前检查不认登记制，须先经批准关闭两组写闸。
+
+**验证方式**：
+- 本地质量门禁：typecheck 0 错；`npm test` 431 文件 / 6009 通过 / 0 失败；
+  `next build` 通过；数据库字典漂移 0。
+- 发布前逻辑备份 `cps-novel-20260923T135245Z.dump`（`LOGICAL_BACKUP=PASS`）。
+- 归档 `VERIFY_OFFLINE=PASS`、`VERIFY=PASS anchor=descriptor`。
+- `release.sh deploy`：`PREPROD_WRITE_GATES=PASS`、`PREPROD_PREFLIGHT=PASS`、
+  `DATABASE_MIGRATION=PASS`、`DATABASE_GRANTS=PASS`、三服务镜像身份与健康 PASS、
+  `RELEASE_VERIFY=PASS`（含匿名复验）、`RELEASE=PASS`（23:25:32–23:26:09 +0800）。
+- 部署后独立核对：`/api/health` 版本 0.3.0、commit `a31a146`、
+  `metadataConsistency=passed`、database passed；worker/scheduler 无错误日志。
+
+**后续待办**：
+- 领推广生命周期第 2 阶段（第 4 步返工中；第 5 步在本开发线上做），计划 `v0.4.0`。
+- 预生产 `backup-timer` 自 2026-09-22 起停止，没有每日备份（重启会连带执行 WAL
+  保留清理，需 Owner 拍板）。
+- 渠道令牌 2026-09-24 13:54（+0800）到期；续签后新令牌只录入预生产。
+- 后台页 429（nginx 限速与 3 秒刷新预取）修复及 nginx sudo 项。
+- 61 条领推广人工核对待 Owner 在后台处置。
+- `preproduction-secret-consumers.test.ts` 高负载下偶发 15 秒超时（单跑稳定）。
+- Notion 手账：本会话无 Notion 连接器，已生成 ChatGPT 交接提示词，待 Owner 转交后回填链接。
+
+---
+
 以下为 2026-09-07 冻结前的历史内容。
 
 ---

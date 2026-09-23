@@ -3,7 +3,28 @@
 <!-- 本文件由 `node scripts/generate-changelog.mjs --write` 生成，请勿手工编辑。 -->
 <!-- 叙述性内容写进 commit message；Owner/架构决策写 docs/adr/。 -->
 
-生成时间：2026-09-22 · 共 768 个 commit
+生成时间：2026-09-23 · 共 786 个 commit
+
+## v0.3.0
+
+- `a31a146` 2026-09-23 test(x8): gc 的 bash 通配匹配辅助函数补上运行目录隔离，修复隔离守卫  — _claude-code · Claude Opus 5.5_
+- `6ac60f3` 2026-09-23 docs(claude-md): §9 当前阶段改写为 v0.2.0 tag 后、v0.3.0 发版准备中  — _claude-code · Claude Opus 5.5 · reviewed: claude-code · Claude Opus 5.5_
+- `23cce42` 2026-09-23 fix(x8): gc matches release images of every version, not just 0.1.0  — _claude-code · Claude Opus 5.5 · reviewed: claude-code · Claude Opus 5.5_
+- `abc2198` 2026-09-23 merge: 上游请求观测（领推广正式修复第 1 阶段）  — _claude-code · Claude Opus 5.5_
+- `c97782b` 2026-09-23 merge: v0.3.0 版本身份统一 + 开发日志发版级 + 发版治理 + 版本台账 CPS 格式  — _claude-code · Claude Opus 5.5_
+- `094edc0` 2026-09-23 merge: 预生产写闸登记制 + 凭据密钥 blocker 重评估与一套环境一套凭据  — _claude-code · Claude Opus 5.5_
+- `f8dc929` 2026-09-23 docs(governance): AGENTS.md 开发日志口径同步为发版级 + 台账第二阶段进度更正  — _claude-code · Claude Opus 5.5_
+- `a7d10b9` 2026-09-23 docs(governance): 版本台账改为 CPS 同款格式  — _claude-code · Claude Sonnet 5 · reviewed: claude-code · Claude Opus 5.5_
+- `a24d20b` 2026-09-23 docs(governance): 开发日志解冻为发版级记录 + AI_WORKFLOW 发版治理  — _claude-code · Claude Sonnet 5 · reviewed: claude-code · Claude Opus 5.5_
+- `78abb1a` 2026-09-23 chore(release): 版本身份统一到 0.3.0  — _claude-code · Claude Sonnet 5 · reviewed: claude-code · Claude Opus 5.5_
+- `b9fe386` 2026-09-23 test(preprod): 写闸登记制测试的 env 字面量补 NODE_ENV，修复类型检查  — _claude-code · Claude Opus 5.5_
+- `3dd996c` 2026-09-23 fix(adapters): 观测回调异常必须在调用点隔离,不得污染上游调用的结果分类  — _claude-code · Claude Sonnet 5 · reviewed: claude-code · Claude Opus 5.5_
+- `7c4b8f4` 2026-09-23 feat(adapters): MoboReader上游请求观测补齐(Phase 1,只观测不改行为)  — _claude-code · Claude Sonnet 5 · reviewed: claude-code · Claude Opus 5.5_
+- `9c33fab` 2026-09-23 docs(governance): 凭据密钥 blocker 预生产重评估 + 一套环境一套渠道 credential  — _claude-code · Claude Opus 5.5_
+- `9d6d303` 2026-09-23 fix(preprod): 补 preflight 接线的行为测试承重 + 修正回滚文档  — _claude-code · Claude Sonnet 5 · reviewed: claude-code · Claude Opus 5.5_
+- `ea3afd1` 2026-09-23 fix(preprod): write gates move from always-closed to explicit registration  — _claude-code · Claude Sonnet 5 · reviewed: claude-code · Claude Opus 5.5_
+- `a9317e5` 2026-09-23 Merge pull request #25 from flightzxc/chore/preprod-moboreader-c13-env-2026-09-23
+- `82bbe38` 2026-09-23 docs(changelog): regenerate after preprod C-13 env sync  — _codex · GPT-5_
 - `4a45ac6` 2026-09-23 chore(preprod): sync C-13 catalog scan runtime values  — _codex · GPT-5_
 - `1acc83c` 2026-09-22 docs(runbook): 基础资产播种步骤与 foundation-assets.sh 入口  — _Claude Code · claude-opus-5_
 - `3482049` 2026-09-22 merge: /settings 保存反馈与置灰成因的交互修复（6f1fa51）  — _Claude Code · claude-sonnet-5 · reviewed: Claude Code · claude-opus-5_
@@ -776,4 +797,4 @@
 - `2e053a9` 2026-08-02 Refactor add function to accept parameters
 - `c6cbde1` 2026-08-02 Initial commit
 
-<!-- 无署名 commit：208 -->
+<!-- 无署名 commit：209 -->
