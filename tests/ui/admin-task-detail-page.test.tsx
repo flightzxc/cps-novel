@@ -537,3 +537,185 @@ describe("/tasks/[id] · C-12 bookCounts 单位切换", () => {
     expect(screen.getByText("4 / 2000")).toBeTruthy();
   });
 });
+
+/**
+ * 阶段2 第4步（施工任务 3.5，旧路径缺陷修复）：非生命周期的目录批次父任务，
+ * 在自身原始状态（`parentRawStatus`）已经是自然终态（completed/
+ * completed_with_errors/failed）但仍有未完成子任务时，不能显示会 409 的
+ * 暂停/恢复/中止按钮——2026-09-23 Owner 实际遇到：父批次 bfae6a25 已完成，
+ * 真正在跑的是子任务，点击"中止"返回 409。
+ */
+describe("/tasks/[id] · 旧路径缺陷修复：批次自身已完成但仍有子任务在运行", () => {
+  it("parentRawStatus=completed 且有未完成子任务时，不渲染暂停/恢复/中止按钮，改为提示到子任务列表", async () => {
+    getAdminTaskDetail.mockResolvedValue(detail({
+      taskType: "batch.materialize.v1",
+      status: "processing", // 派生后的展示状态——正确反映"仍有子任务在跑"。
+      parentRawStatus: "completed", // 批次自身原始列值——已经是终态，旧代码会拿它去调 pause/abort 导致 409。
+      catalogBatch: {
+        phase: "executing",
+        submittedCount: 2,
+        ineligibleCount: 0,
+        blockedCount: 0,
+        blockedReasonCounts: {},
+        childTasks: [{ taskId: "20000000-0000-4000-8000-000000000001", taskType: "promo_link.claim.v1", status: "pending" }],
+      },
+    }));
+    listAdminTaskItems.mockResolvedValue(itemsResult([]));
+
+    render(await renderPage());
+
+    expect(screen.queryByTestId("task-pause-open")).toBeNull();
+    expect(screen.queryByTestId("task-abort-open")).toBeNull();
+    expect(screen.queryByTestId("task-resume-open")).toBeNull();
+    expect(screen.getByTestId("parent-batch-active-children-note")).toBeTruthy();
+  });
+
+  it("parentRawStatus=completed 但所有子任务都已终态时，不显示提示（也没有按钮可点，因为 completed 本来就不满足单任务按钮的可点性）", async () => {
+    getAdminTaskDetail.mockResolvedValue(detail({
+      taskType: "batch.materialize.v1",
+      status: "completed",
+      parentRawStatus: "completed",
+      catalogBatch: {
+        phase: "completed",
+        submittedCount: 2,
+        ineligibleCount: 0,
+        blockedCount: 0,
+        blockedReasonCounts: {},
+        childTasks: [{ taskId: "20000000-0000-4000-8000-000000000001", taskType: "promo_link.claim.v1", status: "completed" }],
+      },
+    }));
+    listAdminTaskItems.mockResolvedValue(itemsResult([]));
+
+    render(await renderPage());
+
+    expect(screen.queryByTestId("parent-batch-active-children-note")).toBeNull();
+    expect(screen.queryByTestId("task-abort-open")).toBeNull(); // completed 本就不满足单任务按钮的可点性。
+  });
+
+  it("parentRawStatus 是 pending/processing（批次自己还没走完）时，即使有未完成子任务，也正常显示单任务控制按钮，不显示提示", async () => {
+    getAdminTaskDetail.mockResolvedValue(detail({
+      taskType: "batch.materialize.v1",
+      status: "processing",
+      parentRawStatus: "processing",
+      catalogBatch: {
+        phase: "materializing",
+        submittedCount: null,
+        ineligibleCount: null,
+        blockedCount: 0,
+        blockedReasonCounts: {},
+        childTasks: [],
+      },
+    }));
+    listAdminTaskItems.mockResolvedValue(itemsResult([]));
+
+    render(await renderPage());
+
+    expect(screen.queryByTestId("parent-batch-active-children-note")).toBeNull();
+    expect(screen.getByTestId("task-pause-open")).toBeTruthy();
+  });
+
+  it("非批次任务（没有 catalogBatch）完全不受影响：parentRawStatus 缺失时按钮沿用 detail.status 判定，逐字不变", async () => {
+    getAdminTaskDetail.mockResolvedValue(detail({ status: "processing" }));
+    listAdminTaskItems.mockResolvedValue(itemsResult([]));
+
+    render(await renderPage());
+
+    expect(screen.getByTestId("task-pause-open")).toBeTruthy();
+    expect(screen.queryByTestId("parent-batch-active-children-note")).toBeNull();
+  });
+});
+
+/**
+ * 阶段2 第4步（施工任务 3.5）：生命周期批次改用批次级暂停/恢复/中止控制
+ * （`PromoClaimBatchControlButtons`），并渲染分片列表——不是通用的单任务
+ * `TaskControlButtons`/子任务链接列表。
+ */
+describe("/tasks/[id] · 生命周期批次：批次级控制 + 分片列表", () => {
+  function lifecycleDetail(overrides: Partial<TaskDetailDto> = {}): TaskDetailDto {
+    return detail({
+      taskType: "batch.materialize.v1",
+      status: "processing",
+      parentRawStatus: "completed",
+      catalogBatch: {
+        phase: "executing",
+        submittedCount: 2,
+        ineligibleCount: 0,
+        blockedCount: 0,
+        blockedReasonCounts: {},
+        childTasks: [
+          { taskId: "30000000-0000-4000-8000-000000000001", taskType: "promo_link.claim.v1", status: "pending" },
+          { taskId: "30000000-0000-4000-8000-000000000002", taskType: "promo_link.claim.v1", status: "disabled" },
+        ],
+        promoClaimLifecycle: {
+          shardPlan: { windowMinutes: 90, shardSizeMin: 50, shardSizeMax: 1000, shardCount: 2, shardSize: 1 },
+          shards: [
+            {
+              taskId: "30000000-0000-4000-8000-000000000001", shardIndex: 0, status: "pending",
+              releaseCount: 1, missedDeadlineCount: 0,
+              releasedAt: "2026-09-23T09:00:00.000Z", deadlineAt: "2026-09-23T10:30:00.000Z",
+              totalCount: 1, successCount: 0, manualReviewCount: 0, failedCount: 0, skippedCount: 0,
+            },
+            {
+              taskId: "30000000-0000-4000-8000-000000000002", shardIndex: 1, status: "disabled",
+              releaseCount: 0, missedDeadlineCount: 0,
+              totalCount: 1, successCount: 0, manualReviewCount: 0, failedCount: 0, skippedCount: 0,
+              holdKind: "awaiting_release",
+            },
+          ],
+          counts: { total: 2, claimed: 0, withCode: 0, manualReview: 0, failed: 0, remaining: 2 },
+          etaMinutes: 120,
+        },
+      },
+      ...overrides,
+    });
+  }
+
+  it("渲染批次级暂停按钮而不是通用单任务按钮；分片列表包含计数、放行次数与截止时间", async () => {
+    getAdminTaskDetail.mockResolvedValue(lifecycleDetail());
+    listAdminTaskItems.mockResolvedValue(itemsResult([]));
+
+    render(await renderPage());
+
+    expect(screen.getByTestId("promo-claim-batch-pause-open")).toBeTruthy();
+    expect(screen.queryByTestId("task-pause-open")).toBeNull();
+    expect(screen.queryByTestId("task-abort-open")).toBeNull();
+    expect(screen.queryByTestId("parent-batch-active-children-note")).toBeNull();
+    expect(screen.queryByTestId("catalog-batch-child-tasks")).toBeNull(); // 改用富信息分片列表，不重复渲染通用子任务列表。
+
+    const shardList = screen.getByTestId("promo-claim-shard-list");
+    expect(shardList.textContent).toContain("已有推广码");
+    expect(shardList.textContent).toContain("人工核对");
+    expect(screen.getAllByTestId("promo-claim-shard-row")).toHaveLength(2);
+    expect(screen.getByTestId("promo-claim-eta").textContent).toContain("2.0 小时");
+  });
+
+  it("批次处于 system_hold:approval_expired 时显示重新批准按钮；恢复方式说明中文可见", async () => {
+    getAdminTaskDetail.mockResolvedValue(lifecycleDetail({
+      parentRawStatus: "disabled",
+      taskControl: { kind: "system_hold", source: "system", at: "2026-09-23T09:00:00.000Z", reasonCode: "approval_expired" },
+    }));
+    listAdminTaskItems.mockResolvedValue(itemsResult([]));
+
+    render(await renderPage());
+
+    expect(screen.getByTestId("promo-claim-batch-reapprove-open")).toBeTruthy();
+    expect(screen.queryByTestId("promo-claim-batch-pause-open")).toBeNull(); // 已经是 disabled，暂停按钮不出现。
+    expect(screen.getByTestId("system-hold-recovery-hint").textContent).toContain("重新批准");
+  });
+
+  it("批次处于 system_hold:deadline_missed_twice 且 reason=unsafe_to_auto_retry 时，说明存在已尝试或已调用过领取接口的条目", async () => {
+    getAdminTaskDetail.mockResolvedValue(lifecycleDetail({
+      parentRawStatus: "disabled",
+      taskControl: {
+        kind: "system_hold", source: "system", at: "2026-09-23T09:00:00.000Z",
+        reasonCode: "deadline_missed_twice", reason: "unsafe_to_auto_retry",
+      },
+    }));
+    listAdminTaskItems.mockResolvedValue(itemsResult([]));
+
+    render(await renderPage());
+
+    expect(screen.getByTestId("system-hold-recovery-hint").textContent).toContain("禁止自动重试");
+    expect(screen.queryByTestId("promo-claim-batch-reapprove-open")).toBeNull(); // 只有 approval_expired 才显示重新批准。
+  });
+});

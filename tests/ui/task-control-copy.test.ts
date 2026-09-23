@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   systemHoldReasonCodeLabel,
+  systemHoldRecoveryHint,
   taskControlKindLabel,
   taskControlSummaryLine,
   type TaskControlSummary,
@@ -90,5 +91,51 @@ describe("task-control copy", () => {
 
   it("still falls back to the raw code for a system_hold reasonCode outside the lifecycle's five", () => {
     expect(systemHoldReasonCodeLabel("credential_validation_failed")).toBe("credential_validation_failed");
+  });
+});
+
+/**
+ * 阶段2 第4步（施工任务 3.5，设计 §5.8 暂停与恢复一览表）：每个系统暂停
+ * 原因对应的中文恢复方式说明。
+ */
+describe("systemHoldRecoveryHint", () => {
+  it("approval_expired 说明只能运营重新批准", () => {
+    expect(systemHoldRecoveryHint("approval_expired")).toContain("重新批准");
+  });
+
+  it("credential_not_ready 说明凭据校验通过且剩余有效期足够后自动恢复", () => {
+    const hint = systemHoldRecoveryHint("credential_not_ready");
+    expect(hint).toContain("自动恢复");
+  });
+
+  it("deadline_missed 说明满足条件后自动重新放行", () => {
+    const hint = systemHoldRecoveryHint("deadline_missed");
+    expect(hint).toContain("自动重新放行");
+  });
+
+  it("deadline_missed_twice 默认说明需要人工处理", () => {
+    const hint = systemHoldRecoveryHint("deadline_missed_twice");
+    expect(hint).toContain("人工处理");
+    expect(hint).not.toContain("禁止自动重试");
+  });
+
+  it("deadline_missed_twice 且 reason=unsafe_to_auto_retry 时，额外说明存在已尝试或已调用过领取接口的条目", () => {
+    const hint = systemHoldRecoveryHint("deadline_missed_twice", "unsafe_to_auto_retry");
+    expect(hint).toContain("禁止自动重试");
+    expect(hint).not.toBe(systemHoldRecoveryHint("deadline_missed_twice"));
+  });
+
+  it("lifecycle_disabled 说明重新开启开关后自动恢复", () => {
+    const hint = systemHoldRecoveryHint("lifecycle_disabled");
+    expect(hint).toContain("重新开启开关");
+    expect(hint).toContain("自动恢复");
+  });
+
+  it("五个已知原因码互不相同，且未知原因码返回 undefined（不是空字符串，调用方据此决定是否渲染）", () => {
+    const hints = [
+      "approval_expired", "credential_not_ready", "deadline_missed", "deadline_missed_twice", "lifecycle_disabled",
+    ].map((code) => systemHoldRecoveryHint(code));
+    expect(new Set(hints).size).toBe(5);
+    expect(systemHoldRecoveryHint("credential_validation_failed")).toBeUndefined();
   });
 });

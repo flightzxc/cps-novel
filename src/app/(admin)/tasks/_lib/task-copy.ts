@@ -272,6 +272,46 @@ export function systemHoldReasonCodeLabel(reasonCode: string): string {
   return SYSTEM_HOLD_REASON_CODE_LABELS[reasonCode] ?? reasonCode;
 }
 
+/**
+ * 阶段2 第4步（施工任务 3.5，设计 §5.8 暂停与恢复一览表）：每个系统暂停
+ * 原因对应的中文恢复方式说明——严格按该表格逐条实现，不是重新编一份措辞：
+ *
+ *   - approval_expired → 只能运营"重新批准"（页面另有按钮，这里的文案不
+ *     重复"点击下方按钮"这类与具体 UI 绑死的措辞，只说明"需要做什么"）；
+ *   - credential_not_ready → 凭据校验通过且剩余有效期足够后自动恢复；
+ *   - deadline_missed → 满足条件（条目从未尝试过）后 scheduler 自动重新
+ *     放行；
+ *   - deadline_missed_twice → 需要人工处理；`reason` 恰好是
+ *     `unsafe_to_auto_retry` 时（`src/lib/tasks/promo-claim-release.ts`
+ *     的 `holdShardSystemHold` 调用点唯一会写的这个自由文本原因）额外说明
+ *     "存在已尝试或已调用过领取接口的条目，禁止自动重试"——这是设计原文
+ *     明确要求的分支措辞，不能用同一句话覆盖两种截然不同的成因（单纯超时
+ *     两次 vs. 有副作用风险）；
+ *   - lifecycle_disabled → 重新开启开关后自动恢复。
+ *
+ * 未知原因码返回 `undefined`（不是空字符串）——调用方据此决定要不要渲染
+ * 这一行，同 `TaskControlSummary.reasonCode` 本身"可能是这五个已知值之外
+ * 的自由字符串"这条既有约定保持一致。
+ */
+export function systemHoldRecoveryHint(reasonCode: string, reason?: string | null): string | undefined {
+  switch (reasonCode) {
+    case "approval_expired":
+      return "批次批准已过期，且从未放行过任何分片——只能由运营重新批准后才会继续放行。";
+    case "credential_not_ready":
+      return "渠道账号凭据未就绪（未校验、状态不可用，或剩余有效期不足一个放行窗口）——凭据校验通过且剩余有效期足够后，系统会自动恢复放行。";
+    case "deadline_missed":
+      return "分片错过了执行截止时间——待处理条目全部满足自动重放条件（从未尝试过、没有任何调用副作用）后，系统会在下一轮自动重新放行。";
+    case "deadline_missed_twice":
+      return reason === "unsafe_to_auto_retry"
+        ? "存在已尝试或已调用过领取接口的条目，禁止自动重试——需要人工处理。"
+        : "该分片连续两次错过执行截止时间——需要人工处理（吞吐或上游可能出了问题）。";
+    case "lifecycle_disabled":
+      return "领推广链接生命周期开关当前已关闭——重新开启开关后，系统会自动恢复放行。";
+    default:
+      return undefined;
+  }
+}
+
 /** Compact one-line summary for the tasks-list table's status cell. */
 export function taskControlSummaryLine(control: TaskControlSummary): string {
   const label = taskControlKindLabel(control.kind);

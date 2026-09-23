@@ -29,6 +29,12 @@ describe("task-copy · batch blocked reason labels", () => {
     ]);
     expect(labels.join(" ")).not.toContain("internal_reason");
   });
+
+  /** 阶段2 第4步（施工任务 3.4）：跨批次排队冲突的中文说明。 */
+  it("labels the cross-batch queued conflict in Chinese", () => {
+    const labels = catalogBatchBlockedReasons({ queued_in_other_batch: 5 });
+    expect(labels).toEqual(["已在其它排队中的批次里：5 条"]);
+  });
 });
 
 /**

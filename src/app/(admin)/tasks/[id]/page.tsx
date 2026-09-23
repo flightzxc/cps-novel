@@ -23,6 +23,7 @@ import { requireContentPage } from "../../novels/_lib/content-page-guard";
 import { sessionView } from "../../_lib/page-guard";
 import { RetryFailedButton } from "../_components/retry-failed-button";
 import { RetryCatalogFinalizeButton } from "../_components/retry-catalog-finalize-button";
+import { PromoClaimBatchControlButtons } from "../_components/promo-claim-batch-control-buttons";
 import { TaskControlButtons } from "../_components/task-control-buttons";
 import {
   isRetryableTaskStatus,
@@ -31,12 +32,26 @@ import {
   catalogBatchBlockedReasons,
   catalogBatchPhaseLabel,
   shouldDropSkippedFilterForTaskType,
+  systemHoldReasonCodeLabel,
+  systemHoldRecoveryHint,
   taskControlKindLabel,
   taskFamilyLabel,
 } from "../_lib/task-copy";
 import { TaskConfigSummary } from "./_components/task-config-summary";
 import { TaskDetailProgress } from "./_components/task-detail-progress";
 import { TaskItemsSection, type TaskDetailItemRow } from "./_components/task-items-section";
+import { PromoClaimShardList } from "./_components/promo-claim-shard-list";
+
+/**
+ * 阶段2 第4步（施工任务 3.5，旧路径缺陷修复）：一个 parent-batch 子任务
+ * 状态里，代表"这个子任务还没有走到终点"的集合——用来判定"批次自身原始状态
+ * 已经是自然终态（completed/completed_with_errors/failed），但仍有未完成
+ * 子任务"这种旧路径 bug 场景（2026-09-23 Owner 实际遇到：父批次 bfae6a25）。
+ * `disabled`/`paused` 也算"还没到终点"——它们随时可能被恢复继续跑。
+ */
+const CHILD_ACTIVE_STATUSES = new Set(["pending", "processing", "disabled", "paused"]);
+/** 批次自身原始状态"自然走到终点"的集合——不含 disabled/paused/cancelled（那三个是显式的暂停/中止状态，`TaskControlButtons` 用 `parentRawStatus` 已经能正确处理，不需要这条"仍有子任务在跑"的兜底说明）。 */
+const PARENT_NATURALLY_TERMINAL_STATUSES = new Set(["completed", "completed_with_errors", "failed"]);
 
 export const dynamic = "force-dynamic";
 
@@ -134,6 +149,15 @@ export default async function TaskDetailPage({
   ]);
 
   const isTerminal = isTerminalTaskStatus(detail.status);
+  // 阶段2 第4步（施工任务 3.5）。
+  const isLifecycleBatch = Boolean(detail.catalogBatch?.promoClaimLifecycle);
+  // 旧路径缺陷修复：批次级暂停/恢复/中止按钮的可点性必须用批次自身未经
+  // 派生的原始 status（`parentRawStatus`），不是页面展示用的派生状态——见
+  // `TaskDetailDto.parentRawStatus` 自己的 doc comment。非批次任务两者相等。
+  const parentRawStatus = detail.parentRawStatus ?? detail.status;
+  const hasUnfinishedChildren = (detail.catalogBatch?.childTasks ?? []).some((child) => CHILD_ACTIVE_STATUSES.has(child.status));
+  const showStaleParentControlNote = Boolean(detail.catalogBatch) && !isLifecycleBatch
+    && PARENT_NATURALLY_TERMINAL_STATUSES.has(parentRawStatus) && hasUnfinishedChildren;
   const processed = detail.successCount + detail.failedCount + detail.skippedCount;
   const percent = detail.totalCount > 0 ? Math.round((processed / detail.totalCount) * 100) : 0;
   const isCatalogScan = detail.taskType === "catalog_scan";
@@ -227,7 +251,7 @@ export default async function TaskDetailPage({
                 ) : (
                   <>
                     系统于 {formatDateTime(detail.taskControl.at)} 自动停止
-                    {detail.taskControl.reasonCode && <>，原因：{detail.taskControl.reasonCode}（批次级系统性故障，非个别子项问题）</>}
+                    {detail.taskControl.reasonCode && <>，原因：{systemHoldReasonCodeLabel(detail.taskControl.reasonCode)}（{detail.taskControl.reasonCode}）</>}
                   </>
                 )}
                 {typeof detail.taskControl.terminatedPendingItemCount === "number" && (
@@ -235,13 +259,40 @@ export default async function TaskDetailPage({
                 )}
               </p>
             )}
+            {/*
+              阶段2 第4步（施工任务 3.5，设计 §5.8）：每个系统暂停原因的
+              中文恢复方式说明——只对生命周期批次自己的五个原因码渲染
+              （其它 system_hold 原因码，例如批次级系统性故障，
+              `systemHoldRecoveryHint` 返回 undefined，这里不渲染）。
+            */}
+            {detail.taskControl?.kind === "system_hold" && detail.taskControl.reasonCode
+              && systemHoldRecoveryHint(detail.taskControl.reasonCode, detail.taskControl.reason) && (
+              <p className="mt-1 max-w-md text-xs text-amber-700" data-testid="system-hold-recovery-hint">
+                恢复方式：{systemHoldRecoveryHint(detail.taskControl.reasonCode, detail.taskControl.reason)}
+              </p>
+            )}
           </div>
           <div className="flex flex-col items-end gap-2">
-            <TaskControlButtons
-              family={detail.family}
-              taskId={detail.taskId}
-              status={detail.status}
-            />
+            {isLifecycleBatch ? (
+              <PromoClaimBatchControlButtons
+                taskId={detail.taskId}
+                parentRawStatus={parentRawStatus}
+                holdReasonCode={detail.taskControl?.reasonCode}
+              />
+            ) : showStaleParentControlNote ? (
+              // 旧路径缺陷修复（3.5）：批次自身已经是自然终态（通常
+              // completed），但仍有未完成子任务时，不显示会 409 的暂停/
+              // 恢复/中止按钮，改为提示到下方子任务列表操作。
+              <p className="max-w-xs text-right text-xs text-gray-500" data-testid="parent-batch-active-children-note">
+                批次自身已完成，仍有子任务在运行——请在下方子任务列表中对相应子任务执行暂停/恢复/中止。
+              </p>
+            ) : (
+              <TaskControlButtons
+                family={detail.family}
+                taskId={detail.taskId}
+                status={detail.catalogBatch ? parentRawStatus : detail.status}
+              />
+            )}
             {isRetryableTaskStatus(detail.status) && !detail.catalogBatch && detail.failedCount > 0 && (
               <RetryFailedButton family={detail.family} taskId={detail.taskId} failedCount={detail.failedCount} />
             )}
@@ -284,7 +335,14 @@ export default async function TaskDetailPage({
                 ))}
               </div>
             )}
-            {(detail.catalogBatch.childTasks?.length ?? 0) > 0 && (
+            {/*
+              阶段2 第4步（施工任务 3.5）：生命周期批次改用富信息的分片
+              列表（状态/放行次数/放行时刻/截止时间/计数），不再重复渲染
+              这个只有 taskType+status 的通用子任务列表；旧路径批次
+              （novel_materialize / article.generate.* / 开关关闭时的
+              promo_claim）继续用这个通用列表，逐字不变。
+            */}
+            {!isLifecycleBatch && (detail.catalogBatch.childTasks?.length ?? 0) > 0 && (
               <ul className="mt-3 space-y-2 text-sm" data-testid="catalog-batch-child-tasks">
                 {detail.catalogBatch.childTasks?.map((child) => (
                   <li key={child.taskId} className="flex items-center justify-between rounded border border-gray-100 px-3 py-2">
@@ -295,6 +353,9 @@ export default async function TaskDetailPage({
               </ul>
             )}
           </section>
+        )}
+        {detail.catalogBatch?.promoClaimLifecycle && (
+          <PromoClaimShardList data={detail.catalogBatch.promoClaimLifecycle} />
         )}
         {isTerminal && (bookCounts ? (
           <div className="grid grid-cols-2 gap-4 lg:grid-cols-4" data-testid="task-detail-static-summary">
