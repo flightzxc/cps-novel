@@ -18,6 +18,6 @@ Codex 以及任何按 `AGENTS.md` 约定寻找入口的 Agent，从这里开始�
 
 - 每个 commit 带 `Agent:` / `Model:` trailer；经复核的再加 `Reviewed-By-Agent:` / `Reviewed-By-Model:`。
 - `CHANGELOG.md` 由 `node scripts/generate-changelog.mjs --write` 生成，**不要手写**。
-- `docs/governance/development-log.md` 已于 2026-09-07 冻结，不要再追加。
+- `docs/governance/development-log.md` 自 v0.3.0 起只记发版级条目（一次正式发版一条，由发版执行者在发布后写）；日常改动不要往里写。
 - Owner/架构决策写 `docs/adr/`，不要塞进 CHANGELOG。
 - 数据库改动必须同步 `docs/governance/database-schema-dictionary.jsonl`（CI 有 drift 检查）。

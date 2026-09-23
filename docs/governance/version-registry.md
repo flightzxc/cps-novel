@@ -27,7 +27,9 @@ Compose runtime 与 Health 身份一致性验证（`/api/health` 的 `metadataCo
   `feat/upstream-call-observability`、`chore/release-v0.3.0-prep`（本分支：版本身份统一 +
   开发日志解冻为发版级 + `AI_WORKFLOW.md` 发版治理段 + 本台账改版）。
 - 本轮**不上线**：第二阶段生命周期 / 自动分片能力（分支 `feat/promo-claim-lifecycle-v1`）
-  仍在施工中，第 2 步尚未完成，相关开关代码默认 `false`；本轮不合入、不开启。
+  仍在施工中（截至 2026-09-23：第 1、2 步已复核，第 3 步施工中，共 5 步）；五步全部完成并复核前
+  不交主控并入。即便日后并入，开关 `PROMO_CLAIM_LIFECYCLE_V1_ENABLED` 代码默认 `false`，
+  等于未上线；预生产开启须另经 Owner 批准。
 - **未发布、未部署、未打 tag**——本节只是发版准备阶段的记录，不得视为已发布版本。
   v0.3.0 的最终发布日期、合入分支清单与实际 Bump 结果，在正式发布完成后由发版执行者
   据实更新本节。
