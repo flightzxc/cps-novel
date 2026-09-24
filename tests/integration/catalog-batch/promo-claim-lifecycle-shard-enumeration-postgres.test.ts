@@ -75,25 +75,28 @@ const scaleCount = Number.isSafeInteger(requestedScaleCount) && requestedScaleCo
 const LIFECYCLE_ON_ENV = { NODE_ENV: "test", PROMO_CLAIM_LIFECYCLE_V1_ENABLED: "true" } as NodeJS.ProcessEnv;
 const LIFECYCLE_OFF_ENV = { NODE_ENV: "test" } as NodeJS.ProcessEnv;
 
-/** Bulk-links every still-`pending` `novel_source_item` under `channelAppId` to a fresh `Novel` row, one statement — the per-row `linkSources` helper `postgres.test.ts` uses is only ever exercised at fixture scale (≤101 rows) elsewhere; at 20k+ rows the same 1-row-at-a-time loop would dominate this suite's wall clock. */
+/**
+ * Bulk-links every still-`pending` `novel_source_item` under `channelAppId` to a fresh `Novel` row, one statement — the per-row `linkSources` helper `postgres.test.ts` uses is only ever exercised at fixture scale (≤101 rows) elsewhere; at 20k+ rows the same 1-row-at-a-time loop would dominate this suite's wall clock.
+ *
+ * The new novel id is minted inside `source_rows` itself so the UPDATE only joins `nsi.id = sr.id` (primary key). An earlier shape re-joined `inserted_novels` back to `source_rows` on a computed `business_id`; CTEs carry no statistics, the planner estimated that join at ~1 row and chose a Nested Loop, and at 80,000 rows it went O(n²) and never finished inside the 180 s test timeout (see `promo-claim-catalog-position-sort-postgres.test.ts` for the EXPLAIN ANALYZE diagnosis). `source_rows` is referenced twice and calls a volatile function, so PostgreSQL materializes it once and both consumers see the same `new_novel_id`; `inserted_novels` is not read by the UPDATE but a data-modifying CTE always runs to completion.
+ */
 async function bulkLinkAllSourceItems(db: PrismaClient, channelAppId: string): Promise<number> {
   const affected = await db.$executeRaw(Prisma.sql`
     WITH source_rows AS (
-      SELECT id, row_number() OVER (ORDER BY id) AS rn
+      SELECT id, row_number() OVER (ORDER BY id) AS rn, gen_random_uuid() AS new_novel_id
       FROM novel_source_item
       WHERE channel_app_id = ${channelAppId}::uuid AND novel_id IS NULL
     ),
     inserted_novels AS (
       INSERT INTO novel (id, business_id, title, description, locale, slug, created_at, updated_at)
-      SELECT gen_random_uuid(), 'shard-enum-nv-' || rn, 'Shard enum fixture ' || rn, 'shard enum fixture', 'en',
+      SELECT new_novel_id, 'shard-enum-nv-' || rn, 'Shard enum fixture ' || rn, 'shard enum fixture', 'en',
              'shard-enum-nv-' || rn, transaction_timestamp(), transaction_timestamp()
       FROM source_rows
-      RETURNING id, business_id
+      RETURNING id
     )
     UPDATE novel_source_item nsi
-    SET novel_id = iv.id, status = 'linked'
+    SET novel_id = sr.new_novel_id, status = 'linked'
     FROM source_rows sr
-    JOIN inserted_novels iv ON iv.business_id = 'shard-enum-nv-' || sr.rn
     WHERE nsi.id = sr.id
   `);
   return affected;
