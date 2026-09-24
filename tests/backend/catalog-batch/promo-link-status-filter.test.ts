@@ -1,25 +1,27 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { CatalogSelectionInputError, normalizeCatalogSelection } from "@/domain/catalog-batch";
 import {
-  classifyPromoLinkRowStatus,
+  classifyPromoLinkRowStatuses,
+  MANUAL_REVIEW_ID_CAP,
   promoLinkStatusIdConstraint,
-  type PromoLinkStatusSets,
+  PromoLinkManualReviewScaleError,
+  resolvePromoLinkStatusContext,
+  type PromoLinkStatusContext,
 } from "@/lib/tasks/promo-link-status-filter";
 
 /**
- * B-4（施工提示词_Sonnet_B4_目录同步页推广链接状态筛选_2026-09-24）：纯函数
- * 单测——`normalizeCatalogSelection`'s 新字段校验、`promoLinkStatusIdConstraint`/
- * `classifyPromoLinkRowStatus` 的三桶互斥/覆盖全部判定。真正的数据库查询
- * 正确性（`resolvePromoLinkStatusSets` 本身、以及"全选一致性"）由
- * `tests/integration/catalog-batch/promo-link-status-filter-postgres.test.ts`
- * 的真实 Postgres 用例覆盖——这里只锁死不依赖数据库的判定逻辑本身。
+ * B-4（施工提示词_Sonnet_B4_目录同步页推广链接状态筛选_2026-09-24；Opus
+ * 复核 2026-09-24 追加规模修复）：纯函数/DB-mock 单测——`normalizeCatalogSelection`
+ * 的新字段校验、`promoLinkStatusIdConstraint`（现在对"已领取"/"未领取"产出
+ * `promoLinks` 关系过滤器,不再是全量 id 列表）、`classifyPromoLinkRowStatuses`
+ * （页面级、按传入的少量 id 查询,不加载全表）、以及"人工核对中"桶的硬上限
+ * 保护。真正的规模正确性（8 万级书目/3.5 万+已领取时不报错）由
+ * `tests/integration/catalog-batch/postgres.test.ts` 的真实 Postgres 规模
+ * 回归用例覆盖——mock 测试测不出 Prisma/Postgres 的参数数量上限。
  */
 
-function sets(overrides: Partial<{ fetched: readonly string[]; manualReview: readonly string[] }> = {}): PromoLinkStatusSets {
-  return {
-    fetchedSourceItemIds: new Set(overrides.fetched ?? []),
-    manualReviewSourceItemIds: new Set(overrides.manualReview ?? []),
-  };
+function context(manualReviewIds: readonly string[] = []): PromoLinkStatusContext {
+  return { manualReviewIds };
 }
 
 describe("normalizeCatalogSelection · promoLinkStatus (B-4)", () => {
@@ -61,58 +63,123 @@ describe("normalizeCatalogSelection · promoLinkStatus (B-4)", () => {
   });
 });
 
-describe("promoLinkStatusIdConstraint (B-4)", () => {
-  it("undefined filter ('全部') -> no id constraint at all", () => {
-    expect(promoLinkStatusIdConstraint(undefined, sets({ fetched: ["a"], manualReview: ["b"] }))).toEqual({});
+describe("promoLinkStatusIdConstraint (B-4, Opus 复核后的规模修复)", () => {
+  it("undefined filter ('全部') -> no constraint at all, even with a non-empty context", () => {
+    expect(promoLinkStatusIdConstraint(undefined, context(["a", "b"]))).toEqual({});
   });
 
-  it("'claimed' -> id IN the fetched set only", () => {
-    expect(promoLinkStatusIdConstraint("claimed", sets({ fetched: ["a", "b"], manualReview: ["c"] })))
-      .toEqual({ id: { in: expect.arrayContaining(["a", "b"]) } });
+  it("'claimed' -> a promoLinks relation filter, never an id list -- context is not read at all", () => {
+    expect(promoLinkStatusIdConstraint("claimed", context(["a", "b"]))).toEqual({
+      promoLinks: { some: { status: "fetched", deletedAt: null } },
+    });
+    // Omitting context entirely must not throw or change the result -- "claimed" never needs it.
+    expect(promoLinkStatusIdConstraint("claimed", undefined)).toEqual({
+      promoLinks: { some: { status: "fetched", deletedAt: null } },
+    });
   });
 
-  it("'manual_review' -> id IN the manual-review set, minus anything already fetched", () => {
-    // "b" is in both sets -- a book that first hit manual review and later
-    // succeeded on retry must count as claimed, not manual_review.
-    const result = promoLinkStatusIdConstraint("manual_review", sets({ fetched: ["b"], manualReview: ["b", "c"] }));
-    expect(result).toEqual({ id: { in: ["c"] } });
+  it("'manual_review' -> id IN the context's (already fetched-excluded) manual-review id list", () => {
+    expect(promoLinkStatusIdConstraint("manual_review", context(["c"]))).toEqual({ id: { in: ["c"] } });
   });
 
-  it("'not_claimed' -> id NOT IN the union of fetched + manual-review-minus-fetched", () => {
-    const result = promoLinkStatusIdConstraint("not_claimed", sets({ fetched: ["a"], manualReview: ["a", "b"] }));
-    expect(result.id && "notIn" in result.id ? new Set(result.id.notIn) : null).toEqual(new Set(["a", "b"]));
+  it("'manual_review' with an empty/absent context -> id IN [] (matches nothing), never undefined behavior", () => {
+    expect(promoLinkStatusIdConstraint("manual_review", context([]))).toEqual({ id: { in: [] } });
+    expect(promoLinkStatusIdConstraint("manual_review", undefined)).toEqual({ id: { in: [] } });
   });
 
-  it("'not_claimed' with both sets empty -> no id constraint (never an empty notIn)", () => {
-    expect(promoLinkStatusIdConstraint("not_claimed", sets())).toEqual({});
+  it("'not_claimed' -> a promoLinks 'none' relation filter PLUS id NOT IN the (small) manual-review set", () => {
+    expect(promoLinkStatusIdConstraint("not_claimed", context(["a", "b"]))).toEqual({
+      promoLinks: { none: { status: "fetched", deletedAt: null } },
+      id: { notIn: ["a", "b"] },
+    });
   });
 
-  it("the three buckets are mutually exclusive and exhaustive over a fixed universe", () => {
-    const universe = ["a", "b", "c", "d", "e"];
-    const s = sets({ fetched: ["a", "b"], manualReview: ["b", "c"] }); // "b" overlaps both -> must land in "claimed" only
-    const claimed = new Set((promoLinkStatusIdConstraint("claimed", s).id as { in: string[] }).in);
-    const manualReview = new Set((promoLinkStatusIdConstraint("manual_review", s).id as { in: string[] }).in);
-    const notClaimedConstraint = promoLinkStatusIdConstraint("not_claimed", s).id as { notIn: string[] };
-    const notClaimed = new Set(universe.filter((id) => !notClaimedConstraint.notIn.includes(id)));
+  it("'not_claimed' with an empty manual-review set -> just the relation filter, no id key at all (never an empty notIn)", () => {
+    expect(promoLinkStatusIdConstraint("not_claimed", context([]))).toEqual({
+      promoLinks: { none: { status: "fetched", deletedAt: null } },
+    });
+    expect(promoLinkStatusIdConstraint("not_claimed", undefined)).toEqual({
+      promoLinks: { none: { status: "fetched", deletedAt: null } },
+    });
+  });
 
-    for (const id of universe) {
-      const memberships = [claimed.has(id), manualReview.has(id), notClaimed.has(id)].filter(Boolean).length;
-      expect(memberships).toBe(1);
-    }
-    expect(claimed.size + manualReview.size + notClaimed.size).toBe(universe.length);
+  it("never materializes an 'already claimed' id list -- the whole point of the scale fix -- regardless of how large the context's manualReviewIds happens to be", () => {
+    // A relation filter's shape does not grow with catalog size -- assert
+    // the "claimed" result stays a fixed small object even when the
+    // (unrelated) manual-review context is non-trivial.
+    const bigManualReview = Array.from({ length: 4_000 }, (_, i) => `manual-${i}`);
+    const result = promoLinkStatusIdConstraint("claimed", context(bigManualReview));
+    expect(JSON.stringify(result).length).toBeLessThan(200);
   });
 });
 
-describe("classifyPromoLinkRowStatus (B-4)", () => {
-  it("claimed takes priority over manual_review when a row is in both sets", () => {
-    expect(classifyPromoLinkRowStatus("x", sets({ fetched: ["x"], manualReview: ["x"] }))).toBe("claimed");
+describe("resolvePromoLinkStatusContext (B-4, 硬上限保护)", () => {
+  function fakeDb(rows: Array<{ id: string }>) {
+    return { promoLink: { findMany: vi.fn() }, $queryRaw: vi.fn().mockResolvedValue(rows) };
+  }
+
+  it("returns the raw-SQL result verbatim as manualReviewIds when under the cap", async () => {
+    const db = fakeDb([{ id: "a" }, { id: "b" }]);
+    const result = await resolvePromoLinkStatusContext(db);
+    expect(result).toEqual({ manualReviewIds: ["a", "b"] });
   });
 
-  it("manual_review when only in the manual-review set", () => {
-    expect(classifyPromoLinkRowStatus("x", sets({ manualReview: ["x"] }))).toBe("manual_review");
+  it(`throws PromoLinkManualReviewScaleError when the result exceeds MANUAL_REVIEW_ID_CAP (${MANUAL_REVIEW_ID_CAP})`, async () => {
+    const overCap = Array.from({ length: MANUAL_REVIEW_ID_CAP + 1 }, (_, i) => ({ id: `id-${i}` }));
+    const db = fakeDb(overCap);
+    await expect(resolvePromoLinkStatusContext(db)).rejects.toThrow(PromoLinkManualReviewScaleError);
   });
 
-  it("not_claimed when in neither set", () => {
-    expect(classifyPromoLinkRowStatus("x", sets({ fetched: ["y"], manualReview: ["z"] }))).toBe("not_claimed");
+  it("does not throw at exactly the cap (boundary)", async () => {
+    const atCap = Array.from({ length: MANUAL_REVIEW_ID_CAP }, (_, i) => ({ id: `id-${i}` }));
+    const db = fakeDb(atCap);
+    const result = await resolvePromoLinkStatusContext(db);
+    expect(result.manualReviewIds).toHaveLength(MANUAL_REVIEW_ID_CAP);
+  });
+});
+
+describe("classifyPromoLinkRowStatuses (B-4, page-scoped only)", () => {
+  it("makes zero queries for an empty row-id list", async () => {
+    const promoLinkFindMany = vi.fn();
+    const queryRaw = vi.fn();
+    const result = await classifyPromoLinkRowStatuses({ promoLink: { findMany: promoLinkFindMany }, $queryRaw: queryRaw }, []);
+    expect(result.size).toBe(0);
+    expect(promoLinkFindMany).not.toHaveBeenCalled();
+    expect(queryRaw).not.toHaveBeenCalled();
+  });
+
+  it("scopes both underlying queries to exactly the given row ids -- never a full-table scan", async () => {
+    const promoLinkFindMany = vi.fn().mockResolvedValue([]);
+    const queryRaw = vi.fn().mockResolvedValue([]);
+    await classifyPromoLinkRowStatuses({ promoLink: { findMany: promoLinkFindMany }, $queryRaw: queryRaw }, ["x", "y"]);
+    expect(promoLinkFindMany).toHaveBeenCalledWith({
+      where: { novelSourceItemId: { in: ["x", "y"] }, status: "fetched", deletedAt: null },
+      select: { novelSourceItemId: true },
+      distinct: ["novelSourceItemId"],
+    });
+    expect(queryRaw).toHaveBeenCalledTimes(1);
+  });
+
+  it("claimed takes priority over manual_review when a row is in both result sets", async () => {
+    const db = {
+      promoLink: { findMany: vi.fn().mockResolvedValue([{ novelSourceItemId: "x" }]) },
+      $queryRaw: vi.fn().mockResolvedValue([{ id: "x" }]),
+    };
+    const result = await classifyPromoLinkRowStatuses(db, ["x"]);
+    expect(result.get("x")).toBe("claimed");
+  });
+
+  it("manual_review when only in the manual-review result", async () => {
+    const db = { promoLink: { findMany: vi.fn().mockResolvedValue([]) }, $queryRaw: vi.fn().mockResolvedValue([{ id: "x" }]) };
+    const result = await classifyPromoLinkRowStatuses(db, ["x"]);
+    expect(result.get("x")).toBe("manual_review");
+  });
+
+  it("not_claimed when in neither result, and every requested id is present in the map", async () => {
+    const db = { promoLink: { findMany: vi.fn().mockResolvedValue([]) }, $queryRaw: vi.fn().mockResolvedValue([]) };
+    const result = await classifyPromoLinkRowStatuses(db, ["x", "y"]);
+    expect(result.get("x")).toBe("not_claimed");
+    expect(result.get("y")).toBe("not_claimed");
+    expect(result.size).toBe(2);
   });
 });

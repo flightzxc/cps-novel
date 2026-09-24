@@ -29,12 +29,13 @@ const prismaMock = vi.hoisted(() => ({
   genericTaskItem: {
     findMany: vi.fn(),
   },
-  // B-4: `readSourceItemsPage` now unconditionally resolves the
-  // promo-link-status ID sets (for the "领取资格" column) before building
-  // its `where` clause. None of the four existing cases below care about
-  // promo-link status -- they exercise the C-8 `source_not_linked`/
-  // `item_already_active_elsewhere` reasons only -- so these default to
-  // "nothing claimed, nothing in manual review" and are never overridden.
+  // B-4 (Opus 复核后的规模修复): `readSourceItemsPage` always classifies the
+  // *current page's* rows (`classifyPromoLinkRowStatuses`, scoped to just
+  // their ids) for the "领取资格" column -- never a full-table set. None of
+  // the four existing C-8 cases below care about promo-link status -- these
+  // default to "nothing claimed, nothing in manual review" and are never
+  // overridden. When a page has zero rows, neither call fires at all (see
+  // `classifyPromoLinkRowStatuses`'s own empty-input short-circuit).
   promoLink: {
     findMany: vi.fn().mockResolvedValue([]),
   },
@@ -161,23 +162,38 @@ describe("readSourceItemsPage · 领取资格投影 (C-8)", () => {
   });
 });
 
-describe("readSourceItemsPage · 推广链接状态投影 (B-4)", () => {
-  it("resolves the promo-link-status sets with the documented shape (fetched, non-deleted PromoLink rows; manual_review_required intents)", async () => {
+describe("readSourceItemsPage · 推广链接状态投影 (B-4, Opus 复核后的规模修复)", () => {
+  it("classifyPromoLinkRowStatuses is scoped to exactly the current page's row ids (never a full-table set)", async () => {
     vi.clearAllMocks();
-    prismaMock.novelSourceItem.findMany.mockResolvedValue([]);
-    prismaMock.novelSourceItem.count.mockResolvedValue(0);
+    prismaMock.novelSourceItem.findMany.mockResolvedValue([
+      baseRow({ id: "src-a", status: "linked", novelId: "novel-a" }),
+      baseRow({ id: "src-b", status: "linked", novelId: "novel-b" }),
+    ]);
+    prismaMock.novelSourceItem.count.mockResolvedValue(2);
     prismaMock.genericTaskItem.findMany.mockResolvedValue([]);
     prismaMock.promoLink.findMany.mockResolvedValue([]);
     prismaMock.$queryRaw.mockResolvedValue([]);
 
-    await readSourceItemsPage({});
+    await readSourceItemsPage({ status: "linked" });
 
     expect(prismaMock.promoLink.findMany).toHaveBeenCalledWith({
-      where: { status: "fetched", deletedAt: null },
+      where: { novelSourceItemId: { in: ["src-a", "src-b"] }, status: "fetched", deletedAt: null },
       select: { novelSourceItemId: true },
       distinct: ["novelSourceItemId"],
     });
     expect(prismaMock.$queryRaw).toHaveBeenCalledTimes(1);
+  });
+
+  it("an empty page makes zero promo-link-status queries at all", async () => {
+    vi.clearAllMocks();
+    prismaMock.novelSourceItem.findMany.mockResolvedValue([]);
+    prismaMock.novelSourceItem.count.mockResolvedValue(0);
+    prismaMock.genericTaskItem.findMany.mockResolvedValue([]);
+
+    await readSourceItemsPage({});
+
+    expect(prismaMock.promoLink.findMany).not.toHaveBeenCalled();
+    expect(prismaMock.$queryRaw).not.toHaveBeenCalled();
   });
 
   it("a row with a fetched PromoLink -> already_has_promo_code, taking priority over item_already_active_elsewhere", async () => {
@@ -205,7 +221,7 @@ describe("readSourceItemsPage · 推广链接状态投影 (B-4)", () => {
     prismaMock.novelSourceItem.count.mockResolvedValue(1);
     prismaMock.genericTaskItem.findMany.mockResolvedValue([]);
     prismaMock.promoLink.findMany.mockResolvedValue([]);
-    prismaMock.$queryRaw.mockResolvedValue([{ source_item_id: "src-manual" }]);
+    prismaMock.$queryRaw.mockResolvedValue([{ id: "src-manual" }]);
 
     const page = await readSourceItemsPage({ status: "linked" });
 
@@ -222,7 +238,7 @@ describe("readSourceItemsPage · 推广链接状态投影 (B-4)", () => {
     prismaMock.novelSourceItem.count.mockResolvedValue(1);
     prismaMock.genericTaskItem.findMany.mockResolvedValue([]);
     prismaMock.promoLink.findMany.mockResolvedValue([{ novelSourceItemId: "src-both" }]);
-    prismaMock.$queryRaw.mockResolvedValue([{ source_item_id: "src-both" }]);
+    prismaMock.$queryRaw.mockResolvedValue([{ id: "src-both" }]);
 
     const page = await readSourceItemsPage({ status: "linked" });
 

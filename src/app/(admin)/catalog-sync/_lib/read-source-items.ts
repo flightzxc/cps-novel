@@ -4,9 +4,9 @@ import { normalizeCatalogSelection, type CatalogFilterSnapshot, type PromoLinkSt
 import { UNKNOWN_SOURCE_LOCALE_FILTER } from "@/lib/locale/channel-language";
 import { PROMO_LINK_CLAIM_TARGET_TYPE, PROMO_LINK_CLAIM_TASK_TYPE } from "@/lib/tasks/promo-link-claim-limits";
 import {
-  classifyPromoLinkRowStatus,
+  classifyPromoLinkRowStatuses,
   promoLinkStatusIdConstraint,
-  resolvePromoLinkStatusSets,
+  resolvePromoLinkStatusContext,
 } from "@/lib/tasks/promo-link-status-filter";
 
 import { prisma } from "@/app/api/admin/_lib/deps";
@@ -209,13 +209,15 @@ export async function readSourceItemsPage(
   // -- by this point it is always one of the three values, or absent.
   const promoLinkStatus = canonical.promoLinkStatus as PromoLinkStatusFilter | undefined;
 
-  // B-4: resolved unconditionally, not only when `promoLinkStatus` is set --
-  // the "领取资格" column below must show "已有推广码"/"人工核对中" for every
-  // row on every filter view, not only when the operator has narrowed by
-  // this specific filter. Both source queries are bounded (~thousands of
-  // rows total, see `promo-link-status-filter.ts`'s module header), so this
-  // is one bounded pair of extra queries per page load, not a per-row cost.
-  const promoSets = await resolvePromoLinkStatusSets(db);
+  // B-4 (Opus 复核后的规模修复): only resolved for the two filter values
+  // that actually need a (small, capped) id list -- "claimed" compiles to a
+  // pure `promoLinks` relation filter (no extra query at all), and "全部"
+  // needs nothing. Never resolved unconditionally regardless of scale --
+  // see `promo-link-status-filter.ts`'s module header for why the old
+  // "always resolve two full sets" shape broke past ~33k claimed books.
+  const promoLinkStatusContext = promoLinkStatus === "manual_review" || promoLinkStatus === "not_claimed"
+    ? await resolvePromoLinkStatusContext(db)
+    : undefined;
 
   const where = {
     deletedAt: null,
@@ -226,7 +228,7 @@ export async function readSourceItemsPage(
         ? { sourceLocale: null }
         : { sourceLocale: sourceLocaleFilter.locale }
       : {}),
-    ...promoLinkStatusIdConstraint(promoLinkStatus, promoSets),
+    ...promoLinkStatusIdConstraint(promoLinkStatus, promoLinkStatusContext),
   };
 
   const [rows, total] = await Promise.all([
@@ -282,6 +284,12 @@ export async function readSourceItemsPage(
     )
     : new Set<string>();
 
+  // B-4 (Opus 复核后的规模修复): scoped to exactly this page's row ids
+  // (≤200, the largest `CATALOG_PAGE_SIZE_OPTIONS` entry) -- the "领取资格"
+  // column only ever needs to label the rows actually being rendered, never
+  // a full-catalog set. See `classifyPromoLinkRowStatuses`'s doc comment.
+  const promoRowStatuses = await classifyPromoLinkRowStatuses(db, rows.map((row) => row.id));
+
   return {
     items: rows.map((row) => {
       const sourceNotLinked = row.status !== "linked" || !row.novelId;
@@ -293,7 +301,7 @@ export async function readSourceItemsPage(
       // `processing` task item targets the row right now, while
       // `already_has_promo_code`/`manual_review_pending` both describe a
       // *terminal* outcome of a past attempt.
-      const promoRowStatus = classifyPromoLinkRowStatus(row.id, promoSets);
+      const promoRowStatus = promoRowStatuses.get(row.id) ?? "not_claimed";
       const ineligibleReason = sourceNotLinked
         ? ("source_not_linked" as const)
         : promoRowStatus === "claimed"

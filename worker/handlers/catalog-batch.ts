@@ -22,8 +22,8 @@ import {
 } from "../../src/lib/tasks/promo-link-claim-limits";
 import {
   promoLinkStatusIdConstraint,
-  resolvePromoLinkStatusSets,
-  type PromoLinkStatusSets,
+  resolvePromoLinkStatusContext,
+  type PromoLinkStatusContext,
 } from "../../src/lib/tasks/promo-link-status-filter";
 import {
   PROMO_CLAIM_LIFECYCLE_ROLE_BATCH,
@@ -173,24 +173,26 @@ export function chunkMembersIntoShards<T>(members: readonly T[], shardSize: numb
 // 在本文件重复定义；`LifecycleSizingBasis` 类型也一并从那里导入。
 
 /**
- * B-4: `promoSets` is only ever non-undefined for an `all_filtered`
- * selection that actually carries a `promoLinkStatus` filter -- `undefined`
- * here (either scope, or `all_filtered` without that field) means "no
- * promo-link-status narrowing", matching `promoLinkStatusIdConstraint`'s own
- * "absent filter -> `{}`" contract, and also covers every historical
- * persisted selection payload from before this field existed (old batches
- * replay/resume through the exact same code path, byte-for-byte unchanged).
+ * B-4 (Opus 复核后的规模修复): `promoLinkStatusContext` is only ever
+ * non-undefined for an `all_filtered` selection whose `promoLinkStatus` is
+ * `"manual_review"`/`"not_claimed"` -- `"claimed"` needs no context at all
+ * (a pure `promoLinks` relation filter), and `undefined` here (either scope,
+ * or `all_filtered` without the field, or `promoLinkStatus === "claimed"`)
+ * means "nothing more to resolve", matching `promoLinkStatusIdConstraint`'s
+ * own contract. This also covers every historical persisted selection
+ * payload from before this field existed (old batches replay/resume through
+ * the exact same code path, byte-for-byte unchanged).
  */
 function selectionWhere(
   selection: NormalizedCatalogSelection,
-  promoSets: PromoLinkStatusSets | undefined,
+  promoLinkStatusContext: PromoLinkStatusContext | undefined,
 ): Prisma.NovelSourceItemWhereInput {
   if (selection.scope === "explicit_ids") return { deletedAt: null };
   const f = selection.filter;
   return { deletedAt: null, status: f.status,
     ...(f.search ? { title: { contains: f.search, mode: "insensitive" } } : {}),
     ...(f.sourceLocale ? { sourceLocale: f.sourceLocale === "__unknown" ? null : f.sourceLocale } : {}),
-    ...(promoSets ? promoLinkStatusIdConstraint(f.promoLinkStatus, promoSets) : {}),
+    ...promoLinkStatusIdConstraint(f.promoLinkStatus, promoLinkStatusContext),
   };
 }
 
@@ -199,19 +201,21 @@ async function streamSelection(
   selection: NormalizedCatalogSelection,
   visit: (rows: readonly SnapshotRow[]) => Promise<void>,
 ): Promise<void> {
-  // B-4: resolved once, up front, for the whole enumeration -- not per page
-  // -- so the same two bounded ID sets narrow every page of a multi-page
-  // `all_filtered` enumeration consistently. Only resolved when there is
-  // something to narrow by: an `explicit_ids` selection never carries a
-  // filter at all, and the common case (no promo-link-status filter chosen)
-  // must not pay for two extra queries on every enumeration.
-  const promoSets = selection.scope === "all_filtered" && selection.filter.promoLinkStatus
-    ? await resolvePromoLinkStatusSets(tx)
+  // B-4 (Opus 复核后的规模修复): resolved once, up front, for the whole
+  // enumeration -- not per page -- so the same (small, capped) id list
+  // narrows every page of a multi-page `all_filtered` enumeration
+  // consistently. Only resolved for the two filter values that actually
+  // need it: `"claimed"` is a pure relation filter (no query at all), and
+  // the common case (no promo-link-status filter chosen) must not pay for
+  // an extra query on every enumeration either.
+  const promoLinkStatusContext = selection.scope === "all_filtered"
+    && (selection.filter.promoLinkStatus === "manual_review" || selection.filter.promoLinkStatus === "not_claimed")
+    ? await resolvePromoLinkStatusContext(tx)
     : undefined;
   if (selection.scope === "explicit_ids") {
     for (let i = 0; i < selection.ids.length; i += CATALOG_BATCH_CHUNK_SIZE) {
       const rows = await tx.novelSourceItem.findMany({
-        where: { ...selectionWhere(selection, promoSets), id: { in: selection.ids.slice(i, i + CATALOG_BATCH_CHUNK_SIZE) } },
+        where: { ...selectionWhere(selection, promoLinkStatusContext), id: { in: selection.ids.slice(i, i + CATALOG_BATCH_CHUNK_SIZE) } },
         orderBy: { id: "asc" }, select: ROW_SELECT,
       });
       await visit(rows);
@@ -221,7 +225,7 @@ async function streamSelection(
   let after: string | undefined;
   while (true) {
     // `AND`-composed rather than a second `id` key spread on top of
-    // `selectionWhere`'s own result -- when `promoLinkStatus` is "claimed"/
+    // `selectionWhere`'s own result -- when `promoLinkStatus` is
     // "manual_review"/"not_claimed", `selectionWhere` already returns an
     // `id: { in/notIn }` constraint of its own, and a naive
     // `{ ...selectionWhere(...), id: { gt: after } }` spread would silently
@@ -229,8 +233,8 @@ async function streamSelection(
     // promo-link-status narrowing on every page after the first.
     const rows = await tx.novelSourceItem.findMany({
       where: after
-        ? { AND: [selectionWhere(selection, promoSets), { id: { gt: after } }] }
-        : selectionWhere(selection, promoSets),
+        ? { AND: [selectionWhere(selection, promoLinkStatusContext), { id: { gt: after } }] }
+        : selectionWhere(selection, promoLinkStatusContext),
       orderBy: { id: "asc" }, take: CATALOG_BATCH_CHUNK_SIZE, select: ROW_SELECT,
     });
     if (!rows.length) return;
