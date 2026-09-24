@@ -4,6 +4,11 @@ import { resolve } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
+import {
+  MOBOREADER_PER_ENDPOINT_RATE_GATE_DEFAULTS,
+  MOBOREADER_UPSTREAM_PER_ENDPOINT_RATE_GATE_ENV,
+} from "@/lib/adapters/moboreader-rate-limit";
+
 const root = resolve(import.meta.dirname, "../../..");
 const read = (path: string) => readFileSync(resolve(root, path), "utf8");
 const compose = read("docker-compose.yml");
@@ -166,6 +171,134 @@ describe("P1-12 Compose and image contracts", () => {
     expect(scheduler).not.toContain("PROMO_LINK_CLAIM_READBACK_ATTEMPTS");
     expect(scheduler).not.toContain("PROMO_LINK_CLAIM_READBACK_INTERVAL_MS");
   });
+
+  /**
+   * 阶段4-A v0.4.2 组装缺陷修复：8 项按接口限速配置一个都没透传给 worker——
+   * 预生产把开关设成 true，preflight 照样打印 enabled=true（它只校验 env
+   * 文件里的值本身合法，不管有没有透传进容器），但容器里读到的仍是"未设置"，
+   * 开关形同虚设。变量名与默认值直接从 TS 常量派生（
+   * `MOBOREADER_UPSTREAM_PER_ENDPOINT_RATE_GATE_ENV` /
+   * `MOBOREADER_PER_ENDPOINT_RATE_GATE_DEFAULTS`），而不是在测试里重复写死
+   * 一份字面量——以后代码侧改了默认值、这里的期望值跟着自动改，不会因为
+   * 两边各写一份而漂移。上游适配器只由 worker 的 handler 构造（web /
+   * scheduler 都不调用），所以只断言 worker，且顺带断言 web/scheduler
+   * 都不带（不是"抄漏了范围"）。
+   */
+  it("阶段4-A：按接口限速的八项配置只透传给 worker，默认值与 TS 常量逐字一致", () => {
+    const web = serviceBlock("web");
+    const worker = serviceBlock("worker");
+    const scheduler = serviceBlock("scheduler");
+    const ENV = MOBOREADER_UPSTREAM_PER_ENDPOINT_RATE_GATE_ENV;
+    const D = MOBOREADER_PER_ENDPOINT_RATE_GATE_DEFAULTS;
+    const expectedDefaults: Record<string, string> = {
+      [ENV.enabled]: "false",
+      [ENV.intervalGetlistpc]: String(D.intervalMs),
+      [ENV.intervalGetcode]: String(D.intervalMs),
+      [ENV.hostMinGapMs]: String(D.hostMinGapMs),
+      [ENV.remainingFloorGetlistpc]: String(D.remainingFloorGetlistpc),
+      [ENV.remainingFloorGetcode]: String(D.remainingFloorGetcode),
+      [ENV.rateWindowMaxWaitMs]: String(D.rateWindowMaxWaitMs),
+      [ENV.cooldownAnomalyThresholdMs]: String(D.cooldownAnomalyThresholdMs),
+    };
+    expect(Object.keys(expectedDefaults)).toHaveLength(8);
+    for (const [key, fallback] of Object.entries(expectedDefaults)) {
+      const line = `${key}: \${${key}:-${fallback}}`;
+      expect(worker, `worker missing: ${line}`).toContain(line);
+      expect(web, `web should NOT carry ${key}`).not.toContain(key);
+      expect(scheduler, `scheduler should NOT carry ${key}`).not.toContain(key);
+    }
+  });
+
+  const dockerComposeAvailableForRateGate = spawnSync("docker", ["compose", "version"], {
+    stdio: "ignore",
+  }).status === 0;
+
+  it.skipIf(!dockerComposeAvailableForRateGate)(
+    "阶段4-A：合并渲染后（预生产 overlay 叠加）worker 服务真的收到这八项配置，且显式设值原样到达",
+    () => {
+      const baseEnv: NodeJS.ProcessEnv = {
+        ...process.env,
+        CPS_NOVEL_APP_IMAGE: "cps-novel:compose-contract",
+        APP_VERSION: "0.1.0",
+        GIT_COMMIT: "a".repeat(40),
+        BUILD_DATE: "2026-08-26T00:00:00Z",
+        NEXT_PUBLIC_BUILD_VERSION: "v0.1.0",
+        P1_12_COMPOSE_PROJECT: "cps-novel-compose-contract",
+        P1_12_WEB_DATABASE_URL: "postgresql://web:pw@postgres/cps_novel",
+        P1_12_WORKER_DATABASE_URL: "postgresql://worker:pw@postgres/cps_novel",
+        P1_12_SCHEDULER_DATABASE_URL: "postgresql://scheduler:pw@postgres/cps_novel",
+        P1_12_POSTGRES_ADMIN_PASSWORD_FILE: "/tmp/postgres",
+        P1_12_MIGRATION_OWNER_PASSWORD_FILE: "/tmp/migration",
+        P1_12_WEB_APP_PASSWORD_FILE: "/tmp/web",
+        P1_12_WORKER_APP_PASSWORD_FILE: "/tmp/worker",
+        P1_12_SCHEDULER_APP_PASSWORD_FILE: "/tmp/scheduler",
+        P1_12_ANALYST_RO_PASSWORD_FILE: "/tmp/analyst",
+        P1_12_BACKUP_ROLE_PASSWORD_FILE: "/tmp/backup",
+        SITE_URL: "https://novel.example",
+        TRACKING_HASH_SALT: "compose-contract-salt",
+        TZ: "Asia/Tokyo",
+        TOTP_ENCRYPTION_KEY: "totp-contract-key",
+        CHANNEL_CREDENTIAL_ACTIVE_KEY_VERSION: "1",
+        CHANNEL_CREDENTIAL_ENCRYPTION_KEY_V1_FILE: "/tmp/credential-v1",
+        CHANNEL_CREDENTIAL_FINGERPRINT_KEY_FILE: "/tmp/credential-fingerprint",
+        WORKER_TASK_ALLOWLIST: "credential.validate.v1,credential.supersede.v1,catalog_scan",
+      };
+
+      function renderWorkerEnv(env: NodeJS.ProcessEnv): Record<string, string> {
+        const result = spawnSync(
+          "docker",
+          [
+            "compose",
+            "-f", resolve(root, "docker-compose.yml"),
+            "-f", resolve(root, "infra/preproduction/docker-compose.yml"),
+            "config", "--format", "json",
+          ],
+          { cwd: root, env, encoding: "utf8" },
+        );
+        expect(result.status, result.stderr).toBe(0);
+        const rendered = JSON.parse(result.stdout) as { services: { worker: { environment: Record<string, string> } } };
+        return rendered.services.worker.environment;
+      }
+
+      // 1) 未显式设置 -> 合并渲染后仍带着这八个 key，且值等于 TS 常量的默认值。
+      const ENV = MOBOREADER_UPSTREAM_PER_ENDPOINT_RATE_GATE_ENV;
+      const D = MOBOREADER_PER_ENDPOINT_RATE_GATE_DEFAULTS;
+      const defaultRendered = renderWorkerEnv(baseEnv);
+      expect(defaultRendered[ENV.enabled]).toBe("false");
+      expect(defaultRendered[ENV.intervalGetlistpc]).toBe(String(D.intervalMs));
+      expect(defaultRendered[ENV.intervalGetcode]).toBe(String(D.intervalMs));
+      expect(defaultRendered[ENV.hostMinGapMs]).toBe(String(D.hostMinGapMs));
+      expect(defaultRendered[ENV.remainingFloorGetlistpc]).toBe(String(D.remainingFloorGetlistpc));
+      expect(defaultRendered[ENV.remainingFloorGetcode]).toBe(String(D.remainingFloorGetcode));
+      expect(defaultRendered[ENV.rateWindowMaxWaitMs]).toBe(String(D.rateWindowMaxWaitMs));
+      expect(defaultRendered[ENV.cooldownAnomalyThresholdMs]).toBe(String(D.cooldownAnomalyThresholdMs));
+
+      // 2) 显式设值（模拟预生产 preprod.env 把开关打开、间隔改成爬坡值）->
+      //    原样到达合并渲染后的 worker 环境 —— 这正是 v0.4.2 组装时发现"两边
+      //    不一致"（preflight 说 enabled=true，容器里其实收不到）的那个缺陷,
+      //    本条用例就是防它再次发生的契约。
+      const explicitEnv: NodeJS.ProcessEnv = {
+        ...baseEnv,
+        [ENV.enabled]: "true",
+        [ENV.intervalGetlistpc]: "1500",
+        [ENV.intervalGetcode]: "1500",
+        [ENV.hostMinGapMs]: "300",
+        [ENV.remainingFloorGetlistpc]: "10",
+        [ENV.remainingFloorGetcode]: "15",
+        [ENV.rateWindowMaxWaitMs]: "45000",
+        [ENV.cooldownAnomalyThresholdMs]: "600000",
+      };
+      const explicitRendered = renderWorkerEnv(explicitEnv);
+      expect(explicitRendered[ENV.enabled]).toBe("true");
+      expect(explicitRendered[ENV.intervalGetlistpc]).toBe("1500");
+      expect(explicitRendered[ENV.intervalGetcode]).toBe("1500");
+      expect(explicitRendered[ENV.hostMinGapMs]).toBe("300");
+      expect(explicitRendered[ENV.remainingFloorGetlistpc]).toBe("10");
+      expect(explicitRendered[ENV.remainingFloorGetcode]).toBe("15");
+      expect(explicitRendered[ENV.rateWindowMaxWaitMs]).toBe("45000");
+      expect(explicitRendered[ENV.cooldownAnomalyThresholdMs]).toBe("600000");
+    },
+  );
 
   it("passes all ten double-gate variables only to their relevant processes, default off", () => {
     const expectedByService = {

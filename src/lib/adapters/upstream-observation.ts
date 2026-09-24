@@ -52,6 +52,25 @@ export interface UpstreamCallObservation {
   /** Wall-clock time spent inside `rateGate.wait()` immediately before this
    * attempt was dispatched. */
   gateWaitMs: number;
+  /**
+   * RC-4 (阶段 4-A per-endpoint rate gate): the portion of `gateWaitMs`
+   * attributable to this endpoint's own FIFO spacing, when the gate
+   * reports a breakdown (`MoboreaderRateGateWaitInfo`, see
+   * `./moboreader-rate-limit.ts`). `null` when the gate doesn't report one
+   * (the legacy single-queue gate's `wait()` resolves to `undefined`, and
+   * the no-op gate always does) — never fabricated, never defaulted to 0,
+   * so a log reader can tell "no breakdown available" apart from "waited
+   * zero ms".
+   */
+  endpointGateWaitMs: number | null;
+  /** RC-4: the portion of `gateWaitMs` attributable to the host-level
+   * minimum gap between ANY two dispatches. `null` under the same
+   * condition as `endpointGateWaitMs`. */
+  hostGateWaitMs: number | null;
+  /** RC-4: this endpoint's locally-tracked `x-ratelimit-remaining` shadow
+   * immediately before this dispatch was allowed to proceed, as reported
+   * by the gate. `null` when unknown or the gate doesn't track it. */
+  remainingBeforeDispatch: number | null;
   /** Allowlisted response headers only — see module header. Empty when no
    * HTTP response was received. */
   gatewayHeaders: Readonly<Record<string, string>>;
@@ -100,11 +119,17 @@ export function safeObserve(
 /** Header names matched verbatim (case-insensitive) in addition to the
  * `/^(x-)?ratelimit/i` pattern below. Kong's own latency-breakdown headers
  * are included because they are the one thing that can attribute latency
- * to "gateway" vs. "origin" without guessing. */
+ * to "gateway" vs. "origin" without guessing. `date` (RC-4 review fix,
+ * 必改3) is the response's own origin-server clock reading — not
+ * sensitive, and the only way `createMoboreaderPerEndpointRateGate`'s
+ * `observe()` can correct `x-ratelimit-reset` (an absolute epoch second)
+ * for clock skew between this host and upstream instead of comparing it
+ * straight against local `now()`. */
 const GATEWAY_HEADER_EXACT_ALLOWLIST = new Set([
   "retry-after",
   "x-kong-upstream-latency",
   "x-kong-proxy-latency",
+  "date",
 ]);
 
 const GATEWAY_HEADER_PATTERN_ALLOWLIST = /^(x-)?ratelimit/i;

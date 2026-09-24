@@ -390,10 +390,31 @@ export function createPromoLinkClaimAdapter(
     const endpoint = promoEndpointName(path);
     // Wait-only pacing door — see `PromoLinkClaimAdapterOptions.rateGate`.
     // No retry semantics live here or below; a single dispatch, exactly as
-    // before RC-3.
+    // before RC-3. RC-4: `endpoint` lets a per-endpoint gate queue getcode
+    // and getlistpc-readback separately; the legacy/no-op gates ignore it.
     const gateWaitStartedAt = observationNow();
-    await rateGate.wait();
+    const gateWaitInfo = await rateGate.wait(endpoint);
     const gateWaitMs = observationNow() - gateWaitStartedAt;
+    const endpointGateWaitMs = gateWaitInfo ? gateWaitInfo.endpointGateWaitMs : null;
+    const hostGateWaitMs = gateWaitInfo ? gateWaitInfo.hostGateWaitMs : null;
+    const remainingBeforeDispatch = gateWaitInfo ? gateWaitInfo.remainingBeforeDispatch : null;
+    // RC-4 review fix (必改2, round 3): re-check the SAME condition as the
+    // pre-wait guard above, now that `wait()` — which under the
+    // per-endpoint gate can block for tens of seconds (429 cooldown /
+    // floor pause), not the sub-2s window this file's original guard was
+    // written for — has actually returned. Without this, a lease/request
+    // aborted *during* that wait reaches `scopedSignal` with an
+    // already-aborted `signal`; `scopedSignal` does check `parent?.aborted`
+    // at construction (unlike `composeSignal` in `./moboreader.ts`), so
+    // `fetchImpl` is never actually dispatched — but the `catch` block
+    // below cannot tell that apart from "aborted mid-flight" and would
+    // classify it `ambiguous: true` on getcode: a request that was NEVER
+    // SENT would manufacture a false "result unknown, go to manual
+    // review". Same error shape as the pre-wait check: never dispatched,
+    // not retryable, not ambiguous.
+    if (signal?.aborted) {
+      throw new PromoLinkClaimAdapterError("transport_error", false, false);
+    }
     const scoped = scopedSignal(signal, timeoutMs);
     const dispatchStartedAt = observationNow();
     try {
@@ -410,13 +431,23 @@ export function createPromoLinkClaimAdapter(
         signal: scoped.signal,
       });
       if (!response.ok) {
+        const gatewayHeaders = extractGatewayObservationHeaders(response.headers);
+        // RC-4: feed the gate back (429 cooldown / remaining shadow)
+        // before classifying the failure below. This call cannot change
+        // getcode's frozen ambiguous/retryable classification — it only
+        // ever affects a *later* dispatch's `wait()`, never this one's
+        // return value or the error thrown here.
+        rateGate.observe?.(endpoint, { httpStatus: response.status, gatewayHeaders });
         safeObserve(onUpstreamObservation, () => ({
           endpoint,
           httpStatus: response.status,
           outcome: "http_error",
           latencyMs: observationNow() - dispatchStartedAt,
           gateWaitMs,
-          gatewayHeaders: extractGatewayObservationHeaders(response.headers),
+          endpointGateWaitMs,
+          hostGateWaitMs,
+          remainingBeforeDispatch,
+          gatewayHeaders,
         }));
         const ambiguous = mutation && ambiguousHttpStatus(response.status);
         throw new PromoLinkClaimAdapterError(
@@ -426,6 +457,8 @@ export function createPromoLinkClaimAdapter(
           response.status,
         );
       }
+      const gatewayHeaders = extractGatewayObservationHeaders(response.headers);
+      rateGate.observe?.(endpoint, { httpStatus: response.status, gatewayHeaders });
       try {
         const json = await response.json();
         // `safeObserve` runs after the response body is already parsed and
@@ -438,7 +471,10 @@ export function createPromoLinkClaimAdapter(
           outcome: "ok",
           latencyMs: observationNow() - dispatchStartedAt,
           gateWaitMs,
-          gatewayHeaders: extractGatewayObservationHeaders(response.headers),
+          endpointGateWaitMs,
+          hostGateWaitMs,
+          remainingBeforeDispatch,
+          gatewayHeaders,
         }));
         return json;
       } catch {
@@ -453,7 +489,10 @@ export function createPromoLinkClaimAdapter(
           outcome: "ok",
           latencyMs: observationNow() - dispatchStartedAt,
           gateWaitMs,
-          gatewayHeaders: extractGatewayObservationHeaders(response.headers),
+          endpointGateWaitMs,
+          hostGateWaitMs,
+          remainingBeforeDispatch,
+          gatewayHeaders,
         }));
         throw new PromoLinkClaimAdapterError("malformed_payload", false, mutation, response.status);
       }
@@ -466,6 +505,9 @@ export function createPromoLinkClaimAdapter(
         outcome: timedOut ? "timeout" : "transport_error",
         latencyMs: observationNow() - dispatchStartedAt,
         gateWaitMs,
+        endpointGateWaitMs,
+        hostGateWaitMs,
+        remainingBeforeDispatch,
         gatewayHeaders: NO_GATEWAY_OBSERVATION_HEADERS,
       }));
       throw new PromoLinkClaimAdapterError(

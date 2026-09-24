@@ -544,8 +544,32 @@ export function createMoboreaderReadAdapter(options: AdapterOptions = {}): Mobor
     const endpoint = readEndpointName(path);
     for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
       const gateWaitStartedAt = observationNow();
-      await rateGate.wait();
+      // RC-4: `endpoint` lets a per-endpoint gate queue this dispatch
+      // against its own interval; the legacy/no-op gates ignore it. The
+      // resolved breakdown (if any) only feeds the observation event
+      // below — it never changes retry/backoff/error behavior.
+      const gateWaitInfo = await rateGate.wait(endpoint);
       const gateWaitMs = observationNow() - gateWaitStartedAt;
+      const endpointGateWaitMs = gateWaitInfo ? gateWaitInfo.endpointGateWaitMs : null;
+      const hostGateWaitMs = gateWaitInfo ? gateWaitInfo.hostGateWaitMs : null;
+      const remainingBeforeDispatch = gateWaitInfo ? gateWaitInfo.remainingBeforeDispatch : null;
+      // RC-4 review fix (必改2, round 3): `wait()` above can now block for
+      // tens of seconds (429 cooldown / floor pause under the per-endpoint
+      // gate), not the sub-2s window this adapter was originally written
+      // for — check the same condition its own catch block already
+      // checks (`signal?.aborted` below) BEFORE ever constructing
+      // `composeSignal`/dispatching `fetchImpl`. This also closes a real
+      // gap in `composeSignal` itself: unlike `scopedSignal` in
+      // `./promo-link-claim.ts`, it does NOT check `parent?.aborted` at
+      // construction — only registers an `abort` *event listener* — so a
+      // signal that was already aborted before `composeSignal` is called
+      // would never propagate into `scoped.signal`, and `fetchImpl` would
+      // actually be dispatched over the network despite the caller having
+      // asked to cancel. This explicit check prevents that for the
+      // abort-during-wait race regardless of `composeSignal`'s own gap.
+      if (signal?.aborted) {
+        throw new MoboreaderAdapterError("transport_error", false);
+      }
       const scoped = composeSignal(signal, timeoutMs);
       const dispatchStartedAt = observationNow();
       try {
@@ -557,13 +581,22 @@ export function createMoboreaderReadAdapter(options: AdapterOptions = {}): Mobor
           signal: scoped.signal,
         });
         if (!response.ok) {
+          const gatewayHeaders = extractGatewayObservationHeaders(response.headers);
+          // RC-4: feed the gate back before deciding retry/throw, so a 429
+          // it just saw already starts its cooldown for the *next*
+          // dispatch to this endpoint — this call never affects the
+          // retry/backoff decision made below, which is unchanged.
+          rateGate.observe?.(endpoint, { httpStatus: response.status, gatewayHeaders });
           safeObserve(onUpstreamObservation, () => ({
             endpoint,
             httpStatus: response.status,
             outcome: "http_error",
             latencyMs: observationNow() - dispatchStartedAt,
             gateWaitMs,
-            gatewayHeaders: extractGatewayObservationHeaders(response.headers),
+            endpointGateWaitMs,
+            hostGateWaitMs,
+            remainingBeforeDispatch,
+            gatewayHeaders,
           }));
           const retryable = shouldRetryStatus(response.status);
           if (retryable && attempt < maxAttempts) {
@@ -572,6 +605,8 @@ export function createMoboreaderReadAdapter(options: AdapterOptions = {}): Mobor
           }
           throw new MoboreaderAdapterError("upstream_http_error", retryable, response.status);
         }
+        const gatewayHeaders = extractGatewayObservationHeaders(response.headers);
+        rateGate.observe?.(endpoint, { httpStatus: response.status, gatewayHeaders });
         try {
           const json = await response.json();
           safeObserve(onUpstreamObservation, () => ({
@@ -580,7 +615,10 @@ export function createMoboreaderReadAdapter(options: AdapterOptions = {}): Mobor
             outcome: "ok",
             latencyMs: observationNow() - dispatchStartedAt,
             gateWaitMs,
-            gatewayHeaders: extractGatewayObservationHeaders(response.headers),
+            endpointGateWaitMs,
+            hostGateWaitMs,
+            remainingBeforeDispatch,
+            gatewayHeaders,
           }));
           return json;
         } catch {
@@ -593,7 +631,10 @@ export function createMoboreaderReadAdapter(options: AdapterOptions = {}): Mobor
             outcome: "ok",
             latencyMs: observationNow() - dispatchStartedAt,
             gateWaitMs,
-            gatewayHeaders: extractGatewayObservationHeaders(response.headers),
+            endpointGateWaitMs,
+            hostGateWaitMs,
+            remainingBeforeDispatch,
+            gatewayHeaders,
           }));
           throw new MoboreaderAdapterError("malformed_payload", false, response.status);
         }
@@ -606,6 +647,9 @@ export function createMoboreaderReadAdapter(options: AdapterOptions = {}): Mobor
             outcome: "transport_error",
             latencyMs: observationNow() - dispatchStartedAt,
             gateWaitMs,
+            endpointGateWaitMs,
+            hostGateWaitMs,
+            remainingBeforeDispatch,
             gatewayHeaders: NO_GATEWAY_OBSERVATION_HEADERS,
           }));
           throw new MoboreaderAdapterError("transport_error", false);
@@ -617,6 +661,9 @@ export function createMoboreaderReadAdapter(options: AdapterOptions = {}): Mobor
           outcome: timedOut ? "timeout" : "transport_error",
           latencyMs: observationNow() - dispatchStartedAt,
           gateWaitMs,
+          endpointGateWaitMs,
+          hostGateWaitMs,
+          remainingBeforeDispatch,
           gatewayHeaders: NO_GATEWAY_OBSERVATION_HEADERS,
         }));
         const code = timedOut ? "request_timeout" : "transport_error";
@@ -674,8 +721,17 @@ export function createMoboreaderReadAdapter(options: AdapterOptions = {}): Mobor
 
     for (;;) {
       const gateWaitStartedAt = observationNow();
-      await rateGate.wait();
+      const gateWaitInfo = await rateGate.wait(endpoint);
       const gateWaitMs = observationNow() - gateWaitStartedAt;
+      const endpointGateWaitMs = gateWaitInfo ? gateWaitInfo.endpointGateWaitMs : null;
+      const hostGateWaitMs = gateWaitInfo ? gateWaitInfo.hostGateWaitMs : null;
+      const remainingBeforeDispatch = gateWaitInfo ? gateWaitInfo.remainingBeforeDispatch : null;
+      // RC-4 review fix (必改2, round 3) — see `legacyPost`'s identical
+      // check above for the full rationale (abort-during-wait race +
+      // `composeSignal`'s missing already-aborted guard).
+      if (signal?.aborted) {
+        throw new MoboreaderAdapterError("transport_error", false);
+      }
       const scoped = composeSignal(signal, timeoutMs);
       const dispatchStartedAt = observationNow();
       let response: Response;
@@ -697,6 +753,9 @@ export function createMoboreaderReadAdapter(options: AdapterOptions = {}): Mobor
             outcome: "transport_error",
             latencyMs: observationNow() - dispatchStartedAt,
             gateWaitMs,
+            endpointGateWaitMs,
+            hostGateWaitMs,
+            remainingBeforeDispatch,
             gatewayHeaders: NO_GATEWAY_OBSERVATION_HEADERS,
           }));
           throw new MoboreaderAdapterError("transport_error", false);
@@ -708,6 +767,9 @@ export function createMoboreaderReadAdapter(options: AdapterOptions = {}): Mobor
           outcome: timedOut ? "timeout" : "transport_error",
           latencyMs: observationNow() - dispatchStartedAt,
           gateWaitMs,
+          endpointGateWaitMs,
+          hostGateWaitMs,
+          remainingBeforeDispatch,
           gatewayHeaders: NO_GATEWAY_OBSERVATION_HEADERS,
         }));
         throw new MoboreaderAdapterError(timedOut ? "request_timeout" : "transport_error", true);
@@ -715,13 +777,18 @@ export function createMoboreaderReadAdapter(options: AdapterOptions = {}): Mobor
       scoped.cleanup();
 
       if (response.ok) {
+        const gatewayHeaders = extractGatewayObservationHeaders(response.headers);
+        rateGate.observe?.(endpoint, { httpStatus: response.status, gatewayHeaders });
         safeObserve(onUpstreamObservation, () => ({
           endpoint,
           httpStatus: response.status,
           outcome: "ok",
           latencyMs: observationNow() - dispatchStartedAt,
           gateWaitMs,
-          gatewayHeaders: extractGatewayObservationHeaders(response.headers),
+          endpointGateWaitMs,
+          hostGateWaitMs,
+          remainingBeforeDispatch,
+          gatewayHeaders,
         }));
         try {
           return await response.json();
@@ -730,14 +797,25 @@ export function createMoboreaderReadAdapter(options: AdapterOptions = {}): Mobor
         }
       }
 
-      safeObserve(onUpstreamObservation, () => ({
-        endpoint,
-        httpStatus: response.status,
-        outcome: "http_error",
-        latencyMs: observationNow() - dispatchStartedAt,
-        gateWaitMs,
-        gatewayHeaders: extractGatewayObservationHeaders(response.headers),
-      }));
+      {
+        const gatewayHeaders = extractGatewayObservationHeaders(response.headers);
+        // RC-4: feed the gate back (429 cooldown / remaining shadow)
+        // *before* this function's own rate-limit retry/backoff decision
+        // below — that decision is entirely unchanged; the gate's own
+        // pacing only affects the *next* dispatch's `wait()`.
+        rateGate.observe?.(endpoint, { httpStatus: response.status, gatewayHeaders });
+        safeObserve(onUpstreamObservation, () => ({
+          endpoint,
+          httpStatus: response.status,
+          outcome: "http_error",
+          latencyMs: observationNow() - dispatchStartedAt,
+          gateWaitMs,
+          endpointGateWaitMs,
+          hostGateWaitMs,
+          remainingBeforeDispatch,
+          gatewayHeaders,
+        }));
+      }
 
       const status = response.status;
       if (!shouldRetryStatus(status)) {

@@ -539,6 +539,9 @@ describe("safeObserve (a throwing onUpstreamObservation must never change the ad
       outcome: "ok",
       latencyMs: 0,
       gateWaitMs: 0,
+      endpointGateWaitMs: null,
+      hostGateWaitMs: null,
+      remainingBeforeDispatch: null,
       gatewayHeaders: {},
     }))).not.toThrow();
 
@@ -549,6 +552,9 @@ describe("safeObserve (a throwing onUpstreamObservation must never change the ad
       outcome: "ok",
       latencyMs: 1,
       gateWaitMs: 2,
+      endpointGateWaitMs: null,
+      hostGateWaitMs: null,
+      remainingBeforeDispatch: null,
       gatewayHeaders: {},
     }));
     expect(seen).toHaveLength(1);
@@ -657,6 +663,9 @@ describe("logUpstreamCallObservation (production sink wired at worker/handlers/m
         outcome: "ok",
         latencyMs: 123,
         gateWaitMs: 456,
+        endpointGateWaitMs: 400,
+        hostGateWaitMs: 56,
+        remainingBeforeDispatch: 11,
         gatewayHeaders: { "x-ratelimit-limit": "60" },
       });
       expect(logSpy).toHaveBeenCalledTimes(1);
@@ -669,6 +678,9 @@ describe("logUpstreamCallObservation (production sink wired at worker/handlers/m
         outcome: "ok",
         latencyMs: 123,
         gateWaitMs: 456,
+        endpointGateWaitMs: 400,
+        hostGateWaitMs: 56,
+        remainingBeforeDispatch: 11,
         gatewayHeaders: { "x-ratelimit-limit": "60" },
       });
     } finally {
@@ -685,6 +697,9 @@ describe("logUpstreamCallObservation (production sink wired at worker/handlers/m
         outcome: "transport_error",
         latencyMs: 1,
         gateWaitMs: 0,
+        endpointGateWaitMs: null,
+        hostGateWaitMs: null,
+        remainingBeforeDispatch: null,
         gatewayHeaders: {},
       })).not.toThrow();
     } finally {
