@@ -39,6 +39,61 @@
 
 ## 发版记录（新条目在最上面）
 
+### 2026-09-25 03:57 - claude-code（Claude Opus 5.5，发版执行）
+
+**变更类型**：预生产正式发布 `v0.4.2`（PATCH）；按接口限速开关保持关闭。
+
+**背景**：
+- 第二级 UAT 实测领取约 790 本 / 小时：每本书要调三次上游（领取前预读、领取、领取后回读），而本地是一道 1,500 ms 的
+  全局闸门，所有接口排同一队。上游网关实际按接口各自计数（每接口每分钟 60 次）。照此速度剩余约 7.6 万本需 96 小时以上，
+  而渠道令牌 10-01 02:08 到期。Owner 批准在正式领取前先做第 4 阶段（按接口限速）和第 5 阶段（按页预读），
+  并同意 4-A 与 5-A 一起发版。
+
+**变更内容**（开发线 `integration/v0.4.2-2026-09-25`，基于 `v0.4.1` 收官提交 `a2e08a9`）：
+- 合入 `feat/moboreader-per-endpoint-rate-limit` @ `ce9fdc0`（4-A）：getlistpc / getcode 各自间隔（默认 1,200 ms，下限 1,000）、
+  主机级最小间隔 250 ms、余量地板 8 / 12、窗口最长等待 60 s；开关 `MOBOREADER_UPSTREAM_PER_ENDPOINT_RATE_GATE_ENABLED`
+  默认 `false`，关闭时沿用旧的全局闸门。复核中修正：`x-ratelimit-reset` 实测是绝对时间（约为当前加 60 秒的滚动窗口）而非
+  剩余秒数；余量地板不允许 0；经外部审阅后再修三处真缺陷——429 的 `Retry-After` 曾被截到 60 秒（提前放行）、闸门等待
+  结束后未再查中止信号（中止后仍发请求会造成假"结果不明"）、改用响应 Date 头换算以免本机时钟偏差；组装时发现 compose
+  没把八项新配置透传给 worker（预检说开了、容器里却是关的），补透传并加从配置常量派生变量清单的契约测试。
+- 合入 `feat/catalog-position-registration` @ `e2c9002`（5-A）：`novel_source_item.catalog_position` 新列登记书在目录中的
+  页坐标（可信签名 = 空 name、orderType 0、每页 100）；生命周期分片按页排序并给同页 ≥2 本的成员打提示键，供 5-B 使用；
+  本版不改任何上游调用行为。
+- 版本身份升到 0.4.2。Final SHA `33cd67bd34c34af1d3dbcbf78e6f2636d175c889`，annotated tag `v0.4.2`。
+
+**影响范围**：
+- 预生产 web / worker / scheduler 换镜像 `cps-novel:0.4.2-33cd67b`（归档 sha256
+  `802a331c00eabf20172184f8152078108fec353020ccb57714053abaa0a2fbca`）；postgres 容器未重建（`49fcbd95027c`）。
+- 数据库迁移 `20260924090000_p5a_catalog_position`（加可空 JSONB 列，无索引，不改已有数据）；grants 无变更；compose 仅新增
+  worker 的八项配置透传。目标机环境变量只改 `APP_VERSION` / `NEXT_PUBLIC_BUILD_VERSION`（备份
+  `preprod.env.bak-20260924T195612Z`），未写入任何新的限速配置；生命周期开关保持开启。
+- 回滚到 `0a25469`（v0.4.1）：应用层兼容（旧代码不读新列，不需要撤销迁移），两个版本变量改回 0.4.1。
+
+**验证方式**：
+- 本地质量门禁（HEAD `33cd67b`）：typecheck 0 错；`next build` 通过；迁移 + 字典漂移 0（1,235 条）；集成脚本
+  catalog-batch 24/24（+5 自身跳过）、batch-control 18/18、release 18/18、phase-d 83/83；8 万规模枚举约 10 秒；残留 0。
+  `npm test` 6,672 通过 / 2 失败 / 312 跳过：两条失败都在 `preproduction-secret-consumers.test.ts`，满载下 15 秒超时，
+  单独重跑两次均 19 通过 / 1 跳过，该文件及其输入本版未改动，归入既有待办 B-6。
+- 复核变异（均变红后恢复）：reset 一律按相对秒解析、getcode 地板放行 0、等待后不查中止信号、冷却再次截短、未登记成员排到前面、
+  可信判定忽略 orderType、重扫时不更新页坐标（此条单元测试未拦住，只被 phase-d 真实数据库用例拦住）。
+- 构建前确认 npm 官方源可达；本机与目标机双重核对归档 checksum、source SHA（`approved_git_commit` = `image_revision` =
+  Final）、架构 amd64；增量 git bundle 在目标机校验后建发布目录，树哈希与本地一致。
+- 发布前逻辑备份 `cps-novel-20260924T195132Z.dump`（183 MB，PASS）；`release.sh deploy` 全部步骤 PASS（含
+  `PREPROD_PROMO_CLAIM_LIFECYCLE_CONFIG=PASS enabled=true`、`PREPROD_MOBOREADER_RATE_GATE_CONFIG=PASS enabled=false`、
+  `DATABASE_MIGRATION=PASS`），`RELEASE=PASS`（03:56:57–03:57:35 +0800）。
+- 部署后独立核对：health 0.4.2 / `33cd67b` / meta passed / db passed；worker 容器内按接口限速开关 `false`、旧间隔 1500，
+  三容器生命周期开关 true；迁移已登记、列为可空 JSONB，97,647 本书页坐标均为空（待全量扫描）；后台路径只在后台域名可达、
+  公开域名 404，未登录访问后台只返回登录跳转；三服务近 5 分钟无错误日志；无在跑任务（仅 B-2 的 80,006 条待处理试读刷新任务）。
+  公开站 `sitemap.xml` 返回 503 为既有情况（静态站点地图卷自 09-12 创建起为空），与本版无关。
+
+**后续待办**：
+- 另行授权：预生产开启 4-A（先两接口 1,500 ms 跑 24 小时，再降 1,200 ms）；按"空 name、orderType 0、每页 100"跑一次全量
+  目录扫描（约 977 页）登记页码。
+- 5-B（按页预读与回读，证据时效 W = 3 分钟，写意图前判断"证据年龄 + 预计排队 ≤ W"）待施工；上预生产前做 P5 页排序稳定性探测
+  （6 次只读）；5-C 等 5-B 实测后再定；随后第三级正式领取剩余约 7.6 万本。
+- 既有待办：B-1（生产启用前修）、B-2、B-3、B-5、B-6；backup-timer 停止、nginx 429 与 sudo 项、61 条人工核对。
+- Notion 手账：已生成 ChatGPT 交接提示词，待 Owner 转交。
+
 ### 2026-09-24 16:27 - claude-code（Claude Opus 5.5，发版执行）
 
 **变更类型**：预生产正式发布 `v0.4.1`（PATCH）。

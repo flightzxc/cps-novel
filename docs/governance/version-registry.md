@@ -17,17 +17,29 @@ Compose runtime 与 Health 身份一致性验证（`/api/health` 的 `metadataCo
 
 ## 当前快照
 
-### v0.4.2 —— 准备中（未发布）
+### v0.4.2 —— 已发布到预生产（2026-09-25 03:57 +0800，`RELEASE=PASS`；按接口限速开关关闭）
 
-- 开发线 `integration/v0.4.2-2026-09-25`（基于 `v0.4.1` 收官提交 `a2e08a9`），合入：
-  `feat/moboreader-per-endpoint-rate-limit` @ `ce9fdc0`（领推广正式修复第 4 阶段·4-A，按接口分别限速，经 Opus 多轮复核及外部审阅修正）、
+- 身份：Final SHA `33cd67bd34c34af1d3dbcbf78e6f2636d175c889`，annotated tag `v0.4.2`，开发线
+  `integration/v0.4.2-2026-09-25`（基于 `v0.4.1` 收官提交 `a2e08a9`）；镜像 `cps-novel:0.4.2-33cd67b`（linux/amd64，config digest
+  `sha256:e8659dacfb8a7ab14aaa7ae3e989b7efbf5d9ac9db9e74d92e9142d1dc5c5037`，归档 sha256
+  `802a331c00eabf20172184f8152078108fec353020ccb57714053abaa0a2fbca`）；发布目录
+  `/opt/cps-novel/releases/33cd67bd34c34af1d3dbcbf78e6f2636d175c889`；`/api/health` 版本 0.4.2、commit `33cd67b`、
+  `metadataConsistency=passed`。
+- 合入：`feat/moboreader-per-endpoint-rate-limit` @ `ce9fdc0`（领推广正式修复第 4 阶段·4-A，经 Opus 多轮复核及外部审阅修正：
+  `x-ratelimit-reset` 按绝对时间解析、429 冷却不截短、等待后重查中止信号、按响应 Date 换算防时钟偏差、补齐 worker 配置透传）、
   `feat/catalog-position-registration` @ `e2c9002`（第 5 阶段·5-A，目录页位置登记）+ 版本身份升到 0.4.2。
-- 范围四档：**已合入但开关默认关闭（等于未上线）**——按接口分别限速（`MOBOREADER_UPSTREAM_PER_ENDPOINT_RATE_GATE_ENABLED`
-  默认 `false`，关闭时与旧的单一全局闸门逐字节一致）；**随部署生效、不改执行行为**——`novel_source_item.catalog_position`
-  新列（有数据库迁移）、目录扫描登记页坐标、生命周期分片按页排序与提示键；发版前检查新增限速配置校验。
-- 部署后另行授权：预生产开启 4-A（先两接口 1,500 ms 跑 24 小时，再降 1,200 ms）；按"空 name、orderType 0、每页 100"
-  跑一次全量目录扫描登记页码。第 5 阶段·5-B（按页预读与回读）施工中，不在本版。
-- **未发布、未部署、未打 tag**——部署须 Owner 另行授权，发布完成后由发版执行者据实更新本节。
+- **已合入但开关默认关闭（等于未上线）**：按接口分别限速（`MOBOREADER_UPSTREAM_PER_ENDPOINT_RATE_GATE_ENABLED` 未配置即 `false`，
+  关闭时沿用旧的单一全局闸门 1,500 ms）。部署后核对 worker 容器内该开关为 `false`、旧间隔 1500，发版前检查
+  `PREPROD_MOBOREADER_RATE_GATE_CONFIG=PASS enabled=false`。
+- **随部署生效、不改执行行为**：`novel_source_item.catalog_position` 新列；目录扫描登记页坐标（可信签名 = 空 name、
+  orderType 0、每页 100）；生命周期分片按页排序与提示键；发版前限速配置校验。部署时 97,647 本书的页坐标均为空，
+  须跑一次全量目录扫描才会登记。
+- 数据库：迁移 `20260924090000_p5a_catalog_position`（加可空 JSONB 列，无索引、不改已有数据）；grants 无变更。
+  配置：目标机 `APP_VERSION` 0.4.1→0.4.2、`NEXT_PUBLIC_BUILD_VERSION` v0.4.1→v0.4.2（备份 `preprod.env.bak-20260924T195612Z`）；
+  生命周期开关保持开启。发布前逻辑备份 `cps-novel-20260924T195132Z.dump`。
+- 部署后另行授权：预生产开启 4-A（先两接口 1,500 ms 跑 24 小时，再降 1,200 ms）；按上述坐标跑一次全量目录扫描（约 977 页）
+  登记页码。第 5 阶段·5-B（按页预读与回读）待施工，不在本版。
+- 回滚到 `0a25469`（v0.4.1）：应用层兼容（旧代码不读新列，无需撤销迁移）；两个版本变量改回 0.4.1。
 
 ### v0.4.1 —— 已发布到预生产（2026-09-24 16:27 +0800，`RELEASE=PASS`；生命周期开关开启）
 
@@ -98,7 +110,7 @@ Compose runtime 与 Health 身份一致性验证（`/api/health` 的 `metadataCo
 
 | Version | Date (+0800) | Bump | Summary | Commit / Release | Status |
 | --- | ---: | --- | --- | --- | --- |
-| `v0.4.2` | 发布时填写 | PATCH | 领推广按接口分别限速（4-A，开关默认关闭）+ 目录页位置登记（5-A，含迁移，不改执行行为）。详见"当前快照" | 发布时填写 | 🟡 准备中（未发布） |
+| `v0.4.2` | 2026-09-25（03:57） | PATCH | 领推广按接口分别限速（4-A，开关默认关闭）+ 目录页位置登记（5-A，含迁移，不改执行行为）。详见"当前快照" | annotated tag `v0.4.2` → `33cd67bd34c34af1d3dbcbf78e6f2636d175c889`；镜像 `cps-novel:0.4.2-33cd67b`；`RELEASE=PASS` | ✅ 预生产已发布（按接口限速开关关闭）；生产未上线 |
 | `v0.4.1` | 2026-09-24（16:27） | PATCH | 目录同步页推广链接状态筛选（未领取 / 已领取 / 人工核对中）与"已有推广码"显示（待办 B-4）。详见"当前快照" | annotated tag `v0.4.1` → `0a2546968d258304990918276b201026c8cccf66`；镜像 `cps-novel:0.4.1-0a25469`；`RELEASE=PASS` | ✅ 预生产已发布；生产未上线 |
 | `v0.4.0` | 2026-09-24（01:33） | MINOR | 领推广链接生命周期与自动分片（正式修复第 2 阶段，开关默认关闭、未上线）；scheduler_app 最小权限；发版前生命周期配置校验。详见"当前快照" | annotated tag `v0.4.0` → `8e83da49f79f3943a6c6062f5f5b1014a3a72e67`；镜像 `cps-novel:0.4.0-8e83da4`；`RELEASE=PASS` | ✅ 预生产已发布（生命周期开关关闭）；生产未上线 |
 | `v0.3.0` | 2026-09-23（23:26） | MINOR | 预生产写闸登记制 + 凭据 blocker 重评估与一套环境一套凭据；上游请求观测（领推广正式修复第 1 阶段）；版本身份统一到 0.3.0；开发日志发版级 + 发版治理 + 台账 CPS 格式；X8 镜像清理按版本形状。详见"当前快照" | annotated tag `v0.3.0` → `a31a1468816904920bcf326537426bfe0d4a1ae4`；镜像 `cps-novel:0.3.0-a31a146`；`RELEASE=PASS` | ✅ 预生产已发布；生产未上线 |

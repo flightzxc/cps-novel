@@ -3,7 +3,19 @@
 <!-- 本文件由 `node scripts/generate-changelog.mjs --write` 生成，请勿手工编辑。 -->
 <!-- 叙述性内容写进 commit message；Owner/架构决策写 docs/adr/。 -->
 
-生成时间：2026-09-24 · 共 817 个 commit
+生成时间：2026-09-24 · 共 826 个 commit
+
+## v0.4.2
+
+- `33cd67b` 2026-09-25 chore(release): 版本身份升到 0.4.2 + 版本台账登记 v0.4.2 准备中  — _claude-code · Claude Opus 5.5_
+- `e1d7bf9` 2026-09-25 merge: 目录页位置登记（领推广正式修复第 5 阶段·5-A）  — _claude-code · Claude Opus 5.5_
+- `8345a50` 2026-09-25 merge: MoboReader 上游按接口分别限速（领推广正式修复第 4 阶段·4-A）  — _claude-code · Claude Opus 5.5_
+- `ce9fdc0` 2026-09-25 fix(compose): 补齐4-A按接口限速八项配置的worker透传（v0.4.2组装发现的开关形同虚设缺陷）  — _claude-code · Claude Sonnet 5 · reviewed: claude-code · Claude Opus 5.5_
+- `a629881` 2026-09-25 fix(adapters): 不截短上游429冷却+等待后重查中止信号+响应Date防时钟偏差（4-A第三轮复核必改项）  — _claude-code · Claude Sonnet 5 · reviewed: claude-code · Claude Opus 5.5_
+- `e2c9002` 2026-09-25 feat(promo-claim): 领推广链接正式修复第5阶段·5-A——目录页位置登记  — _claude-code · Claude Sonnet 5 · reviewed: claude-code · Claude Opus 5.5_
+- `7b54f11` 2026-09-25 fix(adapters): 修正 x-ratelimit-reset 语义与余量地板下限（Opus 复核4-A必改项）  — _claude-code · Claude Sonnet 5 · reviewed: claude-code · Claude Opus 5.5_
+- `e810b7e` 2026-09-25 feat(adapters): MoboReader 上游按接口分别限速（阶段4-A）  — _claude-code · Claude Sonnet 5 · reviewed: claude-code · Claude Opus 5.5_
+- `a2e08a9` 2026-09-24 docs(release): v0.4.1 预生产发布收官——版本台账、开发日志、CHANGELOG、CLAUDE.md、Notion 草稿  — _claude-code · Claude Opus 5.5_
 
 ## v0.4.1
 
