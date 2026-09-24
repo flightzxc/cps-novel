@@ -1,9 +1,25 @@
+import type { PrismaClient } from "@prisma/client";
 import { NOVEL_SOURCE_ITEM_STATUSES, type NovelSourceItemStatus } from "@/domain/database-statuses";
-import { normalizeCatalogSelection, type CatalogFilterSnapshot } from "@/domain/catalog-batch";
+import { normalizeCatalogSelection, type CatalogFilterSnapshot, type PromoLinkStatusFilter } from "@/domain/catalog-batch";
 import { UNKNOWN_SOURCE_LOCALE_FILTER } from "@/lib/locale/channel-language";
 import { PROMO_LINK_CLAIM_TARGET_TYPE, PROMO_LINK_CLAIM_TASK_TYPE } from "@/lib/tasks/promo-link-claim-limits";
+import {
+  classifyPromoLinkRowStatus,
+  promoLinkStatusIdConstraint,
+  resolvePromoLinkStatusSets,
+} from "@/lib/tasks/promo-link-status-filter";
 
 import { prisma } from "@/app/api/admin/_lib/deps";
+
+/**
+ * B-4: injectable so a real-Postgres integration test can exercise this
+ * exact query shape under the `web_app` role (this file's whole point is a
+ * page-local read straight off the shared client -- see the module header
+ * below -- so there was never a `src/server/**` seam to inject through
+ * before). Defaults to the same singleton every existing caller already got
+ * implicitly; `page.tsx`'s call site is untouched.
+ */
+export type SourceItemsDb = Pick<PrismaClient, "novelSourceItem" | "genericTaskItem" | "promoLink" | "$queryRaw">;
 
 /**
  * Read side for `/catalog-sync`.
@@ -67,7 +83,19 @@ export type SourceItemRow = {
    * the two conditions that reason covers at claim time.
    */
   readonly promoClaimEligible: boolean;
-  readonly promoClaimIneligibleReason: "source_not_linked" | "item_already_active_elsewhere" | null;
+  /**
+   * B-4: `already_has_promo_code`/`manual_review_pending` are new, checked
+   * ahead of the two original reasons (see `readSourceItemsPage`'s priority
+   * order below) -- a book that already reached `fetched` or is sitting in
+   * manual review is never just "not linked yet"/"has an active task", it
+   * already has an outcome worth surfacing on its own.
+   */
+  readonly promoClaimIneligibleReason:
+    | "source_not_linked"
+    | "item_already_active_elsewhere"
+    | "already_has_promo_code"
+    | "manual_review_pending"
+    | null;
 };
 
 export type SourceItemsPage = {
@@ -93,13 +121,25 @@ export type SourceItemFilters = {
    * Absent/empty means "全部语种" — no filter.
    */
   readonly sourceLocale?: string;
+  /**
+   * B-4: `"not_claimed" | "claimed" | "manual_review"` (see
+   * `PROMO_LINK_STATUS_FILTER_VALUES`, `@/domain/catalog-batch`), or absent
+   * for "全部" — no filter. Takes an intersection with `status`/`sourceLocale`,
+   * never a replacement.
+   */
+  readonly promoLinkStatus?: string;
 };
 
 /** The list and an all-filtered batch must describe exactly the same rows. */
 export function canonicalCatalogFilter(filters: SourceItemFilters): CatalogFilterSnapshot {
   const normalized = normalizeCatalogSelection({
     scope: "all_filtered",
-    filter: { status: filters.status, search: filters.search, sourceLocale: filters.sourceLocale },
+    filter: {
+      status: filters.status,
+      search: filters.search,
+      sourceLocale: filters.sourceLocale,
+      promoLinkStatus: filters.promoLinkStatus,
+    },
   });
   return normalized.scope === "all_filtered" ? normalized.filter : { status: "pending" };
 }
@@ -154,13 +194,28 @@ function parseSourceLocaleFilter(
  * other three for visibility (why is this one not creating? because it is
  * `linked`/`ignored`/`stale`), it is just not the default.
  */
-export async function readSourceItemsPage(filters: SourceItemFilters): Promise<SourceItemsPage> {
+export async function readSourceItemsPage(
+  filters: SourceItemFilters,
+  db: SourceItemsDb = prisma,
+): Promise<SourceItemsPage> {
   const page = normalizePage(filters.page);
   const pageSize = normalizePageSize(filters.pageSize);
   const canonical = canonicalCatalogFilter(filters);
   const status = normalizeStatus(canonical.status) ?? "pending";
   const search = normalizeSearch(canonical.search);
   const sourceLocaleFilter = parseSourceLocaleFilter(canonical.sourceLocale);
+  // `canonicalCatalogFilter` already ran this through `normalizeCatalogSelection`'s
+  // strict enum check (throws on anything outside `PROMO_LINK_STATUS_FILTER_VALUES`)
+  // -- by this point it is always one of the three values, or absent.
+  const promoLinkStatus = canonical.promoLinkStatus as PromoLinkStatusFilter | undefined;
+
+  // B-4: resolved unconditionally, not only when `promoLinkStatus` is set --
+  // the "领取资格" column below must show "已有推广码"/"人工核对中" for every
+  // row on every filter view, not only when the operator has narrowed by
+  // this specific filter. Both source queries are bounded (~thousands of
+  // rows total, see `promo-link-status-filter.ts`'s module header), so this
+  // is one bounded pair of extra queries per page load, not a per-row cost.
+  const promoSets = await resolvePromoLinkStatusSets(db);
 
   const where = {
     deletedAt: null,
@@ -171,10 +226,11 @@ export async function readSourceItemsPage(filters: SourceItemFilters): Promise<S
         ? { sourceLocale: null }
         : { sourceLocale: sourceLocaleFilter.locale }
       : {}),
+    ...promoLinkStatusIdConstraint(promoLinkStatus, promoSets),
   };
 
   const [rows, total] = await Promise.all([
-    prisma.novelSourceItem.findMany({
+    db.novelSourceItem.findMany({
       where,
       // A timestamp alone is not stable when rows share a last-seen value.
       orderBy: [{ lastSeenAt: "desc" }, { id: "asc" }],
@@ -202,7 +258,7 @@ export async function readSourceItemsPage(filters: SourceItemFilters): Promise<S
         },
       },
     }),
-    prisma.novelSourceItem.count({ where }),
+    db.novelSourceItem.count({ where }),
   ]);
 
   // C-8: same "cross-task overlap" query `createPromoLinkClaimTask`
@@ -214,7 +270,7 @@ export async function readSourceItemsPage(filters: SourceItemFilters): Promise<S
   const activeElsewhere = linkedRowIds.length > 0
     ? new Set(
       (
-        await prisma.genericTaskItem.findMany({
+        await db.genericTaskItem.findMany({
           where: {
             targetType: PROMO_LINK_CLAIM_TARGET_TYPE,
             targetId: { in: linkedRowIds },
@@ -229,11 +285,24 @@ export async function readSourceItemsPage(filters: SourceItemFilters): Promise<S
   return {
     items: rows.map((row) => {
       const sourceNotLinked = row.status !== "linked" || !row.novelId;
+      // B-4: priority order (top to bottom) -- a row that has already
+      // reached a promo-link outcome (fetched, or a manual-review intent) is
+      // reported as that outcome ahead of "currently has an active task"
+      // (`item_already_active_elsewhere`), since in practice these do not
+      // overlap: `item_already_active_elsewhere` means a `pending`/
+      // `processing` task item targets the row right now, while
+      // `already_has_promo_code`/`manual_review_pending` both describe a
+      // *terminal* outcome of a past attempt.
+      const promoRowStatus = classifyPromoLinkRowStatus(row.id, promoSets);
       const ineligibleReason = sourceNotLinked
         ? ("source_not_linked" as const)
-        : activeElsewhere.has(row.id)
-          ? ("item_already_active_elsewhere" as const)
-          : null;
+        : promoRowStatus === "claimed"
+          ? ("already_has_promo_code" as const)
+          : promoRowStatus === "manual_review"
+            ? ("manual_review_pending" as const)
+            : activeElsewhere.has(row.id)
+              ? ("item_already_active_elsewhere" as const)
+              : null;
       return {
         id: row.id,
         title: row.title,

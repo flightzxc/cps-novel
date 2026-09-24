@@ -21,6 +21,11 @@ import {
   PROMO_LINK_CLAIM_TASK_TYPE,
 } from "../../src/lib/tasks/promo-link-claim-limits";
 import {
+  promoLinkStatusIdConstraint,
+  resolvePromoLinkStatusSets,
+  type PromoLinkStatusSets,
+} from "../../src/lib/tasks/promo-link-status-filter";
+import {
   PROMO_CLAIM_LIFECYCLE_ROLE_BATCH,
   PROMO_CLAIM_LIFECYCLE_ROLE_SHARD,
   PROMO_CLAIM_LIFECYCLE_VERSION,
@@ -167,12 +172,25 @@ export function chunkMembersIntoShards<T>(members: readonly T[], shardSize: numb
 // 的 doc comment。`measureRecentShardP90`/`LIFECYCLE_MIN_SAMPLE_COUNT` 不再
 // 在本文件重复定义；`LifecycleSizingBasis` 类型也一并从那里导入。
 
-function selectionWhere(selection: NormalizedCatalogSelection): Prisma.NovelSourceItemWhereInput {
+/**
+ * B-4: `promoSets` is only ever non-undefined for an `all_filtered`
+ * selection that actually carries a `promoLinkStatus` filter -- `undefined`
+ * here (either scope, or `all_filtered` without that field) means "no
+ * promo-link-status narrowing", matching `promoLinkStatusIdConstraint`'s own
+ * "absent filter -> `{}`" contract, and also covers every historical
+ * persisted selection payload from before this field existed (old batches
+ * replay/resume through the exact same code path, byte-for-byte unchanged).
+ */
+function selectionWhere(
+  selection: NormalizedCatalogSelection,
+  promoSets: PromoLinkStatusSets | undefined,
+): Prisma.NovelSourceItemWhereInput {
   if (selection.scope === "explicit_ids") return { deletedAt: null };
   const f = selection.filter;
   return { deletedAt: null, status: f.status,
     ...(f.search ? { title: { contains: f.search, mode: "insensitive" } } : {}),
     ...(f.sourceLocale ? { sourceLocale: f.sourceLocale === "__unknown" ? null : f.sourceLocale } : {}),
+    ...(promoSets ? promoLinkStatusIdConstraint(f.promoLinkStatus, promoSets) : {}),
   };
 }
 
@@ -181,10 +199,19 @@ async function streamSelection(
   selection: NormalizedCatalogSelection,
   visit: (rows: readonly SnapshotRow[]) => Promise<void>,
 ): Promise<void> {
+  // B-4: resolved once, up front, for the whole enumeration -- not per page
+  // -- so the same two bounded ID sets narrow every page of a multi-page
+  // `all_filtered` enumeration consistently. Only resolved when there is
+  // something to narrow by: an `explicit_ids` selection never carries a
+  // filter at all, and the common case (no promo-link-status filter chosen)
+  // must not pay for two extra queries on every enumeration.
+  const promoSets = selection.scope === "all_filtered" && selection.filter.promoLinkStatus
+    ? await resolvePromoLinkStatusSets(tx)
+    : undefined;
   if (selection.scope === "explicit_ids") {
     for (let i = 0; i < selection.ids.length; i += CATALOG_BATCH_CHUNK_SIZE) {
       const rows = await tx.novelSourceItem.findMany({
-        where: { ...selectionWhere(selection), id: { in: selection.ids.slice(i, i + CATALOG_BATCH_CHUNK_SIZE) } },
+        where: { ...selectionWhere(selection, promoSets), id: { in: selection.ids.slice(i, i + CATALOG_BATCH_CHUNK_SIZE) } },
         orderBy: { id: "asc" }, select: ROW_SELECT,
       });
       await visit(rows);
@@ -193,8 +220,17 @@ async function streamSelection(
   }
   let after: string | undefined;
   while (true) {
+    // `AND`-composed rather than a second `id` key spread on top of
+    // `selectionWhere`'s own result -- when `promoLinkStatus` is "claimed"/
+    // "manual_review"/"not_claimed", `selectionWhere` already returns an
+    // `id: { in/notIn }` constraint of its own, and a naive
+    // `{ ...selectionWhere(...), id: { gt: after } }` spread would silently
+    // clobber it (object spread replaces the whole `id` key), losing the
+    // promo-link-status narrowing on every page after the first.
     const rows = await tx.novelSourceItem.findMany({
-      where: { ...selectionWhere(selection), ...(after ? { id: { gt: after } } : {}) },
+      where: after
+        ? { AND: [selectionWhere(selection, promoSets), { id: { gt: after } }] }
+        : selectionWhere(selection, promoSets),
       orderBy: { id: "asc" }, take: CATALOG_BATCH_CHUNK_SIZE, select: ROW_SELECT,
     });
     if (!rows.length) return;

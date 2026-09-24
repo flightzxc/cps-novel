@@ -17,6 +17,12 @@ import {
 import { readCatalogBatchSummary } from "@/server/catalog-batch";
 import { requireAdminRouteAccess } from "@/server/auth/guards";
 import { getAdminTaskDetail, getAdminTaskProgress, listAdminTasks } from "@/server/task-admin";
+import { PROMO_LINK_CLAIM_CAPABILITY_KEY } from "@/lib/tasks/promo-link-claim-limits";
+import { buildPromoLinkIdempotencyKey, UPSTREAM_EXISTING_PROMO_OFFER_TYPE } from "@/lib/tasks/promo-link-claim";
+import { createPublicRedirectCode } from "@/lib/redirect";
+import { prepareSideEffectIntent, transitionSideEffectIntent } from "@/lib/tasks/side-effect-intent";
+import { PROMO_CLAIM_INTENT_OPERATION_TYPE } from "@/lib/tasks/promo-claim-release";
+import { readSourceItemsPage } from "@/app/(admin)/catalog-sync/_lib/read-source-items";
 import { createCatalogBatchHandler } from "../../../worker/handlers/catalog-batch";
 import { createNovelMaterializeHandler } from "../../../worker/handlers/novel-materialize";
 import { processOneWorkerCycle } from "../../../worker/runtime";
@@ -32,6 +38,15 @@ import { newStores, NOW, seedTaskAdmin } from "../../backend/task-admin/test-sup
 const enabled = process.env.CATALOG_BATCH_DATABASE_TEST === "1";
 const owner = new PrismaClient({ datasourceUrl: process.env.CATALOG_BATCH_OWNER_DATABASE_URL });
 const worker = new PrismaClient({ datasourceUrl: process.env.CATALOG_BATCH_WORKER_DATABASE_URL });
+// B-4 (施工提示词_Sonnet_B4_目录同步页推广链接状态筛选_2026-09-24): the
+// first test in this file to actually exercise `readSourceItemsPage` under
+// the real `web_app` role -- this env var has existed on the verification
+// script since before this task, but nothing used it (the page previously
+// only ever touched `novel_source_item`/`generic_task_item`, both already
+// covered by other tests). `promo_link`/`side_effect_intent` are new reads
+// for this role, so this is the actual grants-sufficiency proof, not just a
+// correctness proof.
+const web = new PrismaClient({ datasourceUrl: process.env.CATALOG_BATCH_WEB_DATABASE_URL });
 let foundation: CatalogFoundation;
 const requestedScaleCount = Number.parseInt(process.env.CATALOG_BATCH_SCALE_COUNT ?? "12051", 10);
 const scaleCount = Number.isSafeInteger(requestedScaleCount) && requestedScaleCount > 0 ? requestedScaleCount : 12_051;
@@ -68,6 +83,66 @@ async function linkSources(ids: readonly string[]) {
     } });
     await owner.novelSourceItem.update({ where: { id }, data: { novelId: novel.id, status: "linked" } });
   }
+}
+
+/** Same as `linkSources`, but for exactly one id and returns the new `novelId` -- B-4's PromoLink fixtures need it for the required `novelId` FK. */
+async function linkSource(id: string): Promise<string> {
+  const novel = await owner.novel.create({ data: {
+    businessId: `catalog-promo-status-${randomUUID()}`, title: "Promo status fixture", description: "Promo status fixture",
+    locale: "en", slug: `catalog-promo-status-${randomUUID()}`,
+  } });
+  await owner.novelSourceItem.update({ where: { id }, data: { novelId: novel.id, status: "linked" } });
+  return novel.id;
+}
+
+function hex64(): string {
+  return createHash("sha256").update(randomUUID()).digest("hex");
+}
+
+/** B-4: seeds a `fetched` PromoLink -- the "已有推广码" state `promoLinkStatusIdConstraint`/`classifyPromoLinkRowStatus` (`@/lib/tasks/promo-link-status-filter`) detect. */
+async function seedFetchedPromoLink(input: { novelSourceItemId: string; novelId: string; channelAppId: string; channelAccountId: string }): Promise<void> {
+  await owner.promoLink.create({ data: {
+    id: randomUUID(),
+    novelId: input.novelId,
+    novelSourceItemId: input.novelSourceItemId,
+    channelAppId: input.channelAppId,
+    channelAccountId: input.channelAccountId,
+    offerType: UPSTREAM_EXISTING_PROMO_OFFER_TYPE,
+    publicRedirectCode: createPublicRedirectCode(),
+    idempotencyKey: buildPromoLinkIdempotencyKey({
+      channelAppId: input.channelAppId, novelSourceItemId: input.novelSourceItemId,
+      channelAccountId: input.channelAccountId, offerType: UPSTREAM_EXISTING_PROMO_OFFER_TYPE,
+    }),
+    status: "fetched",
+  } });
+}
+
+/**
+ * B-4: seeds a `manual_review_required` `side_effect_intent` -- the "人工核对中"
+ * state. `manual_review_required` is only reachable from `claim_retry_blocked`
+ * (`isAllowedSideEffectTransition`, `src/lib/tasks/side-effect-intent.ts`),
+ * so this drives an intent through the same two transitions
+ * `worker/handlers/promo-link-claim.ts` does, rather than inventing a
+ * shortcut into the terminal status.
+ */
+async function seedManualReviewIntent(input: { novelSourceItemId: string; channelAppId: string; channelAccountId: string }): Promise<void> {
+  const effectKey = hex64();
+  const idempotencyKey = buildPromoLinkIdempotencyKey({
+    channelAppId: input.channelAppId, novelSourceItemId: input.novelSourceItemId,
+    channelAccountId: input.channelAccountId, offerType: UPSTREAM_EXISTING_PROMO_OFFER_TYPE,
+  });
+  await prepareSideEffectIntent(owner, {
+    effectKey,
+    operationType: PROMO_CLAIM_INTENT_OPERATION_TYPE,
+    idempotencyKey,
+    targetType: "promo_link",
+    targetId: idempotencyKey,
+    channelAppId: input.channelAppId,
+    channelAccountId: input.channelAccountId,
+    requestSummary: { offerType: UPSTREAM_EXISTING_PROMO_OFFER_TYPE, novelSourceItemId: input.novelSourceItemId },
+  });
+  await transitionSideEffectIntent(owner, { effectKey, status: "claim_retry_blocked" });
+  await transitionSideEffectIntent(owner, { effectKey, status: "manual_review_required" });
 }
 
 async function materialize(taskId: string) {
@@ -120,7 +195,7 @@ describe.skipIf(!enabled).sequential("catalog batch on disposable PostgreSQL 16.
     await truncateCatalogDatabase(owner);
     foundation = await seedCatalogFoundation(owner);
   });
-  afterAll(async () => Promise.all([owner.$disconnect(), worker.$disconnect()]));
+  afterAll(async () => Promise.all([owner.$disconnect(), worker.$disconnect(), web.$disconnect()]));
 
   it("enqueue is O(1), stores only the selector, and requestId replay keeps the same parent", async () => {
     await seedCatalogRows(owner, { channelAppId: foundation.channels[0]!.channelAppId, count: 101, prefix: "enqueue" });
@@ -659,5 +734,201 @@ describe.skipIf(!enabled).sequential("catalog batch on disposable PostgreSQL 16.
     expect(await owner.novel.count()).toBe(1);
     expect(await owner.article.count()).toBe(0);
     expect((await owner.novelSourceItem.findUniqueOrThrow({ where: { id: templateId } })).novelId).toBeNull();
+  });
+
+  // -------------------------------------------------------------------
+  // B-4（施工提示词_Sonnet_B4_目录同步页推广链接状态筛选_2026-09-24）：
+  // 目录同步页新增的"推广链接状态"筛选（未领取/已领取/人工核对中）。
+  // -------------------------------------------------------------------
+
+  /**
+   * Seeds, per locale (`en`/`ja`): one `linked` book with a `fetched`
+   * PromoLink ("已领取"), one `linked` book with a `manual_review_required`
+   * intent and no PromoLink ("人工核对中"), two `linked` books with neither
+   * ("未领取"), and one still-`pending` (never linked) book -- the last one
+   * proves the `status` filter's intersection with `promoLinkStatus` really
+   * excludes unlinked books, rather than the promo-link-status filter
+   * accidentally treating them as "未领取" too.
+   */
+  async function seedPromoLinkStatusFixture() {
+    const channel = foundation.channels[0]!;
+    await owner.channelCapability.create({ data: {
+      channelAppId: channel.channelAppId, capabilityKey: PROMO_LINK_CLAIM_CAPABILITY_KEY, status: "enabled",
+      sideEffecting: true, evidenceLevel: "OWNER_APPROVED_WRITE_PROBE",
+    } });
+    const ids: Record<string, string> = {};
+    for (const locale of ["en", "ja"] as const) {
+      const [claimedId] = await seedCatalogRows(owner, { channelAppId: channel.channelAppId, count: 1, prefix: `pls-${locale}-claimed`, sourceLocale: locale });
+      const [manualId] = await seedCatalogRows(owner, { channelAppId: channel.channelAppId, count: 1, prefix: `pls-${locale}-manual`, sourceLocale: locale });
+      const freeIds = await seedCatalogRows(owner, { channelAppId: channel.channelAppId, count: 2, prefix: `pls-${locale}-free`, sourceLocale: locale });
+      const [pendingId] = await seedCatalogRows(owner, { channelAppId: channel.channelAppId, count: 1, prefix: `pls-${locale}-pending`, sourceLocale: locale });
+
+      const claimedNovelId = await linkSource(claimedId!);
+      await seedFetchedPromoLink({ novelSourceItemId: claimedId!, novelId: claimedNovelId, channelAppId: channel.channelAppId, channelAccountId: channel.accountId });
+
+      await linkSource(manualId!);
+      await seedManualReviewIntent({ novelSourceItemId: manualId!, channelAppId: channel.channelAppId, channelAccountId: channel.accountId });
+
+      await linkSources(freeIds);
+      // pendingId is deliberately left unlinked (status stays "pending").
+
+      ids[`${locale}-claimed`] = claimedId!;
+      ids[`${locale}-manual`] = manualId!;
+      ids[`${locale}-free`] = freeIds.join(",");
+      ids[`${locale}-pending`] = pendingId!;
+    }
+    return { channel, ids };
+  }
+
+  it("推广链接状态三态互斥、覆盖全部，并与 status/sourceLocale 取交集 (web_app role)", async () => {
+    const { ids } = await seedPromoLinkStatusFixture();
+    const enFreeIds = ids["en-free"]!.split(",");
+
+    const claimed = await readSourceItemsPage({ status: "linked", sourceLocale: "en", promoLinkStatus: "claimed" }, web);
+    expect(claimed.items.map((item) => item.id)).toEqual([ids["en-claimed"]]);
+    expect(claimed.items[0]).toMatchObject({ promoClaimEligible: false, promoClaimIneligibleReason: "already_has_promo_code" });
+
+    const manualReview = await readSourceItemsPage({ status: "linked", sourceLocale: "en", promoLinkStatus: "manual_review" }, web);
+    expect(manualReview.items.map((item) => item.id)).toEqual([ids["en-manual"]]);
+    expect(manualReview.items[0]).toMatchObject({ promoClaimEligible: false, promoClaimIneligibleReason: "manual_review_pending" });
+
+    const notClaimed = await readSourceItemsPage({ status: "linked", sourceLocale: "en", promoLinkStatus: "not_claimed" }, web);
+    expect(new Set(notClaimed.items.map((item) => item.id))).toEqual(new Set(enFreeIds));
+    for (const item of notClaimed.items) {
+      expect(item).toMatchObject({ promoClaimEligible: true, promoClaimIneligibleReason: null });
+    }
+
+    // Mutual exclusivity + completeness, intersected with status=linked: the
+    // three buckets, summed, equal every `linked` `en` row -- the unlinked
+    // `en-pending` row must not appear in any bucket or in the unfiltered
+    // "linked" total, proving the `status` intersection actually excludes it.
+    const allLinkedEn = await readSourceItemsPage({ status: "linked", sourceLocale: "en" }, web);
+    expect(allLinkedEn.total).toBe(4);
+    expect(claimed.total + manualReview.total + notClaimed.total).toBe(allLinkedEn.total);
+    expect(allLinkedEn.items.map((item) => item.id)).not.toContain(ids["en-pending"]);
+
+    // sourceLocale intersection: the `ja` claimed book must not leak into
+    // the `en`-scoped "claimed" bucket (already implied by the exact
+    // `toEqual` above; asserted again explicitly for clarity).
+    expect(claimed.items.map((item) => item.id)).not.toContain(ids["ja-claimed"]);
+  });
+
+  it("一个还没到 fetched 的 PromoLink（例如 status=pending）不算已领取——判定必须看 status，不能只看'存在 PromoLink 行'", async () => {
+    const channel = foundation.channels[0]!;
+    const [id] = await seedCatalogRows(owner, { channelAppId: channel.channelAppId, count: 1, prefix: "pls-pending-link", sourceLocale: "en" });
+    const novelId = await linkSource(id!);
+    // A PromoLink row exists, but its status is still "pending" (upstream
+    // call not resolved yet) -- this must NOT be counted as "已领取". Only a
+    // real Postgres query (not a mocked `findMany`) can catch a mutation
+    // that drops the `status: "fetched"` condition from the WHERE clause,
+    // since a mock ignores its call args and just returns canned rows.
+    await owner.promoLink.create({ data: {
+      id: randomUUID(), novelId, novelSourceItemId: id!, channelAppId: channel.channelAppId, channelAccountId: channel.accountId,
+      offerType: UPSTREAM_EXISTING_PROMO_OFFER_TYPE, publicRedirectCode: createPublicRedirectCode(),
+      idempotencyKey: buildPromoLinkIdempotencyKey({ channelAppId: channel.channelAppId, novelSourceItemId: id!, channelAccountId: channel.accountId, offerType: UPSTREAM_EXISTING_PROMO_OFFER_TYPE }),
+      status: "pending",
+    } });
+
+    const claimed = await readSourceItemsPage({ status: "linked", promoLinkStatus: "claimed" }, web);
+    expect(claimed.items.map((item) => item.id)).not.toContain(id);
+    const notClaimed = await readSourceItemsPage({ status: "linked", promoLinkStatus: "not_claimed" }, web);
+    expect(notClaimed.items.map((item) => item.id)).toContain(id);
+    const page = await readSourceItemsPage({ status: "linked" }, web);
+    expect(page.items.find((item) => item.id === id)).toMatchObject({ promoClaimEligible: true, promoClaimIneligibleReason: null });
+  });
+
+  it("一个还没进入人工核对的 side_effect_intent（status=prepared，尚未转态）不算人工核对中——判定必须看 status，不能只看'存在同 operation_type 的意图记录'", async () => {
+    const channel = foundation.channels[0]!;
+    const [id] = await seedCatalogRows(owner, { channelAppId: channel.channelAppId, count: 1, prefix: "pls-prepared-intent", sourceLocale: "en" });
+    await linkSource(id!);
+    const idempotencyKey = buildPromoLinkIdempotencyKey({ channelAppId: channel.channelAppId, novelSourceItemId: id!, channelAccountId: channel.accountId, offerType: UPSTREAM_EXISTING_PROMO_OFFER_TYPE });
+    // Prepared but never transitioned -- the claim attempt has not (yet)
+    // been decided as needing manual review. Only a real Postgres query
+    // (not a mocked `$queryRaw`) can catch a mutation that drops the
+    // `status = 'manual_review_required'` condition from the SQL, since a
+    // mock ignores its call args and just returns canned rows.
+    await prepareSideEffectIntent(owner, {
+      effectKey: hex64(), operationType: PROMO_CLAIM_INTENT_OPERATION_TYPE, idempotencyKey,
+      targetType: "promo_link", targetId: idempotencyKey,
+      channelAppId: channel.channelAppId, channelAccountId: channel.accountId,
+      requestSummary: { offerType: UPSTREAM_EXISTING_PROMO_OFFER_TYPE, novelSourceItemId: id },
+    });
+
+    const manualReview = await readSourceItemsPage({ status: "linked", promoLinkStatus: "manual_review" }, web);
+    expect(manualReview.items.map((item) => item.id)).not.toContain(id);
+    const notClaimed = await readSourceItemsPage({ status: "linked", promoLinkStatus: "not_claimed" }, web);
+    expect(notClaimed.items.map((item) => item.id)).toContain(id);
+  });
+
+  it("一本书先进入人工核对、后来重试拿到码 -> 只算已领取，不再算人工核对中 (claimed 优先)", async () => {
+    const channel = foundation.channels[0]!;
+    const [id] = await seedCatalogRows(owner, { channelAppId: channel.channelAppId, count: 1, prefix: "pls-retried", sourceLocale: "en" });
+    const novelId = await linkSource(id!);
+    await seedManualReviewIntent({ novelSourceItemId: id!, channelAppId: channel.channelAppId, channelAccountId: channel.accountId });
+    await seedFetchedPromoLink({ novelSourceItemId: id!, novelId, channelAppId: channel.channelAppId, channelAccountId: channel.accountId });
+
+    const claimed = await readSourceItemsPage({ status: "linked", promoLinkStatus: "claimed" }, web);
+    expect(claimed.items.map((item) => item.id)).toContain(id);
+    const manualReview = await readSourceItemsPage({ status: "linked", promoLinkStatus: "manual_review" }, web);
+    expect(manualReview.items.map((item) => item.id)).not.toContain(id);
+  });
+
+  it(
+    "全选一致性：全选 + 未领取 + en 提交后，worker 枚举入片的书恰好等于界面筛选结果（有码书/人工核对书零入片）(worker_app role)",
+    async () => {
+      const { channel, ids } = await seedPromoLinkStatusFixture();
+      const enFreeIds = new Set(ids["en-free"]!.split(","));
+      process.env.FEATURE_PROMO_LINK_CLAIM = "true";
+      process.env.PROMO_LINK_CLAIM_ALLOW_WRITE = "true";
+
+      const listed = await readSourceItemsPage({ status: "linked", sourceLocale: "en", promoLinkStatus: "not_claimed", pageSize: "50" }, web);
+      expect(new Set(listed.items.map((item) => item.id))).toEqual(enFreeIds);
+
+      const selection = normalizeCatalogSelection({
+        scope: "all_filtered",
+        filter: { status: "linked", sourceLocale: "en", promoLinkStatus: "not_claimed" },
+      });
+      const enqueued = await enqueueCatalogBatch(owner, {
+        operation: "promo_claim", selection, actorId: foundation.actorId, requestId: randomUUID(),
+        channelAccounts: { [channel.channelAppId]: channel.accountId },
+      });
+      await materialize(enqueued.taskId);
+
+      const parent = await owner.genericTask.findUniqueOrThrow({ where: { id: enqueued.taskId } });
+      expect(parent.result).toMatchObject({ enumerationStatus: "completed", submittedCount: enFreeIds.size });
+
+      const child = await owner.genericTask.findFirstOrThrow({ where: { parentTaskId: enqueued.taskId }, include: { items: true } });
+      const enumeratedIds = new Set(child.items.map((item) => item.targetId));
+      expect(enumeratedIds).toEqual(enFreeIds);
+      expect(enumeratedIds.has(ids["en-claimed"]!)).toBe(false);
+      expect(enumeratedIds.has(ids["en-manual"]!)).toBe(false);
+      expect(enumeratedIds.has(ids["ja-claimed"]!)).toBe(false);
+      expect(enumeratedIds.has(ids["en-pending"]!)).toBe(false);
+    },
+  );
+
+  it("旧的 selection 负载（没有 promoLinkStatus 字段）向后兼容——等价于'全部'，枚举不做任何推广链接状态 narrowing", async () => {
+    const { channel, ids } = await seedPromoLinkStatusFixture();
+    process.env.FEATURE_PROMO_LINK_CLAIM = "true";
+    process.env.PROMO_LINK_CLAIM_ALLOW_WRITE = "true";
+
+    // No `promoLinkStatus` at all -- simulates a selection persisted before
+    // this field existed (or a stale client not yet redeployed).
+    const selection = normalizeCatalogSelection({ scope: "all_filtered", filter: { status: "linked", sourceLocale: "en" } });
+    expect(selection).toMatchObject({ scope: "all_filtered", filter: { status: "linked", sourceLocale: "en" } });
+    if (selection.scope === "all_filtered") expect(selection.filter).not.toHaveProperty("promoLinkStatus");
+
+    const enqueued = await enqueueCatalogBatch(owner, {
+      operation: "promo_claim", selection, actorId: foundation.actorId, requestId: randomUUID(),
+      channelAccounts: { [channel.channelAppId]: channel.accountId },
+    });
+    await materialize(enqueued.taskId);
+
+    const child = await owner.genericTask.findFirstOrThrow({ where: { parentTaskId: enqueued.taskId }, include: { items: true } });
+    const enumeratedIds = new Set(child.items.map((item) => item.targetId));
+    // All 4 `en` linked rows (1 claimed + 1 manual review + 2 free) are
+    // eligible per the pre-existing `status === "linked" && novelId !== null`
+    // check -- an absent `promoLinkStatus` must not narrow this at all.
+    expect(enumeratedIds).toEqual(new Set([ids["en-claimed"], ids["en-manual"], ...ids["en-free"]!.split(",")]));
   });
 });

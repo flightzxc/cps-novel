@@ -36,3 +36,31 @@ describe("SourceItemFilters 分页大小", () => {
     expect((screen.getByLabelText("每页条数") as HTMLSelectElement).value).toBe("200");
   });
 });
+
+describe("SourceItemFilters 推广链接状态 (B-4)", () => {
+  beforeEach(() => {
+    push.mockReset();
+    window.history.replaceState({}, "", "/catalog-sync?page=1&status=linked");
+  });
+
+  it("默认显示全部，并提供未领取/已领取/人工核对中三个选项", () => {
+    render(<SourceItemFilters values={{ status: "linked" }} />);
+    const select = screen.getByLabelText("推广链接状态") as HTMLSelectElement;
+    expect(select.value).toBe("");
+    expect(Array.from(select.options).map((option) => option.value)).toEqual(["", "not_claimed", "claimed", "manual_review"]);
+    expect(Array.from(select.options).map((option) => option.textContent)).toEqual(["全部", "未领取", "已领取", "人工核对中"]);
+  });
+
+  it("提交时把选中的推广链接状态传入查询参数，并与既有筛选一起保留、回到第一页", () => {
+    render(<SourceItemFilters values={{ status: "linked", sourceLocale: "en", promoLinkStatus: "claimed" }} />);
+    fireEvent.change(screen.getByLabelText("推广链接状态"), { target: { value: "not_claimed" } });
+    fireEvent.click(screen.getByRole("button", { name: "搜索" }));
+    expect(push).toHaveBeenCalledWith("/catalog-sync?search=&status=linked&sourceLocale=en&promoLinkStatus=not_claimed&pageSize=100");
+  });
+
+  it("URL / prop 改变时重新同步该字段", () => {
+    const { rerender } = render(<SourceItemFilters values={{ status: "linked", promoLinkStatus: "claimed" }} />);
+    rerender(<SourceItemFilters values={{ status: "linked", promoLinkStatus: "manual_review" }} />);
+    expect((screen.getByLabelText("推广链接状态") as HTMLSelectElement).value).toBe("manual_review");
+  });
+});
