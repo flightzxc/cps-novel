@@ -168,6 +168,20 @@ export const PROMO_CLAIM_LIFECYCLE_DEFAULTS = Object.freeze({
   fallbackP90ItemSeconds: 5,
 });
 
+/**
+ * 5-A（`设计_领推广按接口限速与预读集合化_阶段4-5_2026-09-24.md` §6.1/§6.2/
+ * §十三 术语表，Owner 裁决 E8）：一个页组（同一 `pageIndex` 上落在本次枚举
+ * 选集里的本数）要走"页预读提示"（`preReadMode: "page"`）而不是"逐本提示"
+ * 的最小目标本数。只在 `worker/handlers/catalog-batch.ts` 枚举切分片时用来
+ * 计算分片条目载荷的 `catalogPageHint`/`preReadMode` 两个提示键——**5-A
+ * 本身不读取这两个键、不改变任何执行行为**，`worker/handlers/
+ * promo-link-claim.ts` 要到 5-B 落地才会消费它们（见该设计 §6.3 第 1 步）。
+ * 5-B 若需要让这个阈值可配置，在那一步再接环境变量（同 §7.3"页组密度阈值"
+ * 配置项）；5-A 先固定为 Owner 裁决的默认值 2——1 本时页读与标题读同价、却
+ * 把证据年龄放宽到窗口 W，不值得（设计 §6.1"页密度决定收益"）。
+ */
+export const PROMO_CLAIM_PAGE_GROUP_MIN_MEMBERS = 2;
+
 export class PromoClaimLifecycleConfigError extends Error {
   constructor(readonly variable: string, message?: string) {
     super(message ?? `${variable} must be a positive integer`);

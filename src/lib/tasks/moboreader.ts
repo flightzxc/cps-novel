@@ -345,6 +345,96 @@ export function resolveMoboreaderCatalogSafetyMaxPages(
   return positiveInteger(parsed, "safety_max_pages_invalid");
 }
 
+// ---------------------------------------------------------------------
+// 5-A：目录页位置登记（设计_领推广按接口限速与预读集合化_阶段4-5_2026-09-24.md
+// §6.1/§6.2/§7.2, Owner 裁决 E5）
+// ---------------------------------------------------------------------
+
+/**
+ * `novel_source_item.catalog_position`（JSONB，可空）的形状。目录扫描
+ * （`persistCatalogPage`，含恢复页）在写每一行书目时把这一行当时所在的页
+ * 坐标登记进来——**只是定位提示，从不是推广领取的证据身份**：证据身份仍是
+ * 四维（`agencyId/seriesId/language/projectType`）+ `observedAt`（设计
+ * §6.1/§6.3）。`pageSize`/`orderType`/`nameEmpty` 三个字段一起构成"坐标
+ * 签名"，供 {@link isTrustedCatalogPosition} 判定这条登记是否与当前信任
+ * 坐标一致——不一致的登记（例如 C-13 之前 `pageSize=20` 的历史扫描,
+ * 或一次带标题搜索的扫描）被读取方当作未登记处理，不需要任何迁移清理即可
+ * "自然失效"。
+ */
+export interface CatalogPosition {
+  /** 上游 `getlistpc` 的页码（1 起），与该次扫描请求的 `pageIndex` 一致。 */
+  pageIndex: number;
+  /** 该次扫描请求的 `pageSize`——用于坐标签名匹配，而非"当前实际每页行数"。 */
+  pageSize: number;
+  /** 该次扫描请求的 `orderType`——同上，用于坐标签名匹配。 */
+  orderType: number;
+  /** 该次扫描请求的 `name` 是否为空字符串（`true` = 全目录空 name 列表）。 */
+  nameEmpty: boolean;
+  /** 登记时刻（ISO 字符串）——供 5-B 的证据时效窗口判定复用。 */
+  observedAt: string;
+  /** 产生这条登记的 `generic_task.id`（目录扫描或恢复页任务）。 */
+  scanTaskId: string;
+}
+
+/**
+ * 当前信任的目录页坐标签名（设计 §6.1/§十三 术语表"页坐标"）：全目录空
+ * `name` 列表、`orderType 0`、`pageSize` 等于 C-13 冻结的探测值（100）。
+ * 这是**读取方**（本文件外，`worker/handlers/catalog-batch.ts` 的枚举排序、
+ * 未来 5-B 的页坐标预读）用来判定一条登记是否可信的唯一依据——不是写入时的
+ * 门槛：`persistCatalogPage` 对任何一次扫描（无论坐标是否与此一致）都会
+ * 如实登记该次扫描自己的真实坐标（见 {@link buildCatalogPosition}），"旧的
+ * 20 本/页登记自然失效"正是靠读取方在这里比对签名，而不是靠写入时过滤。
+ */
+export const CATALOG_POSITION_TRUSTED_SIGNATURE = Object.freeze({
+  nameEmpty: true,
+  orderType: 0,
+  pageSize: MOBOREADER_CATALOG_LIMITS.maxPageSize,
+});
+
+/**
+ * 由一次目录扫描（或恢复页）的请求坐标构造 {@link CatalogPosition}。纯函数，
+ * 如实记录调用方传入的坐标——是否与 {@link CATALOG_POSITION_TRUSTED_SIGNATURE}
+ * 一致由读取方（{@link isTrustedCatalogPosition}）判定，这里不做任何过滤。
+ */
+export function buildCatalogPosition(input: {
+  pageIndex: number;
+  pageSize: number;
+  orderType: number;
+  name: string;
+  observedAt: Date;
+  scanTaskId: string;
+}): CatalogPosition {
+  return {
+    pageIndex: input.pageIndex,
+    pageSize: input.pageSize,
+    orderType: input.orderType,
+    nameEmpty: input.name === "",
+    observedAt: input.observedAt.toISOString(),
+    scanTaskId: input.scanTaskId,
+  };
+}
+
+/**
+ * 判定一个已从数据库读出的 `catalog_position` JSON 值是否是"读取方可信"的
+ * 登记：形状完整、`pageIndex` 是正整数，且坐标签名
+ * （`pageSize`/`orderType`/`nameEmpty`）与 {@link CATALOG_POSITION_TRUSTED_SIGNATURE}
+ * 精确一致。`null`/`undefined`/形状不对/签名不一致一律返回 `false`——调用方
+ * （枚举排序）把这些都当作"未登记"，排到分组末尾，与真正没有 `catalog_position`
+ * 的行处理方式完全相同（这正是"旧的 20 本/页登记自然失效"的落地点）。
+ */
+export function isTrustedCatalogPosition(value: unknown): value is CatalogPosition {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const v = value as Partial<CatalogPosition>;
+  return (
+    typeof v.pageIndex === "number" && Number.isInteger(v.pageIndex) && v.pageIndex > 0
+    && v.pageSize === CATALOG_POSITION_TRUSTED_SIGNATURE.pageSize
+    && v.orderType === CATALOG_POSITION_TRUSTED_SIGNATURE.orderType
+    && v.nameEmpty === CATALOG_POSITION_TRUSTED_SIGNATURE.nameEmpty
+    && typeof v.observedAt === "string" && v.observedAt.length > 0
+    && typeof v.scanTaskId === "string" && v.scanTaskId.length > 0
+  );
+}
+
 /**
  * Normalizes an upstream `payEpisFrom` to the `paid_from_chapter` column's
  * semantics: the DB CHECK on both `novel` and `novel_source_item` is
