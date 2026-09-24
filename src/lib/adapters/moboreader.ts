@@ -553,6 +553,23 @@ export function createMoboreaderReadAdapter(options: AdapterOptions = {}): Mobor
       const endpointGateWaitMs = gateWaitInfo ? gateWaitInfo.endpointGateWaitMs : null;
       const hostGateWaitMs = gateWaitInfo ? gateWaitInfo.hostGateWaitMs : null;
       const remainingBeforeDispatch = gateWaitInfo ? gateWaitInfo.remainingBeforeDispatch : null;
+      // RC-4 review fix (必改2, round 3): `wait()` above can now block for
+      // tens of seconds (429 cooldown / floor pause under the per-endpoint
+      // gate), not the sub-2s window this adapter was originally written
+      // for — check the same condition its own catch block already
+      // checks (`signal?.aborted` below) BEFORE ever constructing
+      // `composeSignal`/dispatching `fetchImpl`. This also closes a real
+      // gap in `composeSignal` itself: unlike `scopedSignal` in
+      // `./promo-link-claim.ts`, it does NOT check `parent?.aborted` at
+      // construction — only registers an `abort` *event listener* — so a
+      // signal that was already aborted before `composeSignal` is called
+      // would never propagate into `scoped.signal`, and `fetchImpl` would
+      // actually be dispatched over the network despite the caller having
+      // asked to cancel. This explicit check prevents that for the
+      // abort-during-wait race regardless of `composeSignal`'s own gap.
+      if (signal?.aborted) {
+        throw new MoboreaderAdapterError("transport_error", false);
+      }
       const scoped = composeSignal(signal, timeoutMs);
       const dispatchStartedAt = observationNow();
       try {
@@ -709,6 +726,12 @@ export function createMoboreaderReadAdapter(options: AdapterOptions = {}): Mobor
       const endpointGateWaitMs = gateWaitInfo ? gateWaitInfo.endpointGateWaitMs : null;
       const hostGateWaitMs = gateWaitInfo ? gateWaitInfo.hostGateWaitMs : null;
       const remainingBeforeDispatch = gateWaitInfo ? gateWaitInfo.remainingBeforeDispatch : null;
+      // RC-4 review fix (必改2, round 3) — see `legacyPost`'s identical
+      // check above for the full rationale (abort-during-wait race +
+      // `composeSignal`'s missing already-aborted guard).
+      if (signal?.aborted) {
+        throw new MoboreaderAdapterError("transport_error", false);
+      }
       const scoped = composeSignal(signal, timeoutMs);
       const dispatchStartedAt = observationNow();
       let response: Response;

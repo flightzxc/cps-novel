@@ -16,9 +16,33 @@ import {
   RESET_ABSOLUTE_EPOCH_THRESHOLD_SECONDS,
   createMoboreaderPerEndpointRateGate,
   isMoboreaderPerEndpointRateGateEnabled,
+  parseRetryAfterUncapped,
   resolveMoboreaderPerEndpointRateGateConfig,
   type MoboreaderRateGateEvent,
 } from "@/lib/adapters/moboreader-rate-limit";
+
+describe("parseRetryAfterUncapped (RC-4 review fix 必改1)", () => {
+  it("delta-seconds is never capped, however large", () => {
+    expect(parseRetryAfterUncapped("120", 0)).toBe(120_000);
+    expect(parseRetryAfterUncapped("999999", 0)).toBe(999_999_000); // far beyond MOBOREADER_RETRY_AFTER_CAP_MS
+  });
+
+  it("HTTP-date is never capped, however far in the future", () => {
+    const now = Date.parse("Wed, 21 Oct 2026 07:28:00 GMT");
+    expect(parseRetryAfterUncapped("Wed, 21 Oct 2026 07:30:00 GMT", now)).toBe(120_000);
+  });
+
+  it("shares the same '-5' shape trap fix as parseRetryAfter: garbage never parses as a past date and never returns a negative/zero-via-clamp trick", () => {
+    for (const value of [null, undefined, "", "   ", "soon", "-5"]) {
+      expect(parseRetryAfterUncapped(value, 0)).toBeNull();
+    }
+  });
+
+  it("a past HTTP-date clamps to 0, not negative", () => {
+    const now = Date.parse("Wed, 21 Oct 2026 07:28:00 GMT");
+    expect(parseRetryAfterUncapped("Wed, 21 Oct 2026 07:27:00 GMT", now)).toBe(0);
+  });
+});
 
 function fakeClock(startMs = 0) {
   let now = startMs;
@@ -38,6 +62,7 @@ function baseOptions(clock: ReturnType<typeof fakeClock>, onEvent?: (e: Moboread
     hostMinGapMs: 250,
     remainingFloor: { getlistpc: 8, getcode: 12 },
     rateWindowMaxWaitMs: 60_000,
+    cooldownAnomalyThresholdMs: 900_000,
     now: clock.now,
     sleep: clock.sleep,
     onEvent,
@@ -234,6 +259,109 @@ describe("createMoboreaderPerEndpointRateGate: remaining-quota floor pause (§5.
     });
   });
 
+  // 2026-09-26 Opus 复核 3rd round，必改3：用响应 Date 头换算重置时刻，防本机
+  // 时钟偏差——不直接拿 x-ratelimit-reset 跟本机 now() 比。
+  describe("[Opus fix 必改3] x-ratelimit-reset corrected for clock skew using the response's own Date header", () => {
+    const REALISTIC_NOW_MS = 1_700_000_000_000;
+    const nowSeconds = REALISTIC_NOW_MS / 1_000;
+
+    it("[mutation target] local clock is SLOW (upstream's Date reads 10s ahead) -> pause uses the skew-corrected duration, not the naive one", async () => {
+      const clock = fakeClock(REALISTIC_NOW_MS);
+      const gate = createMoboreaderPerEndpointRateGate(baseOptions(clock));
+      const resetAtEpochSeconds = nowSeconds + 40;
+      const dateHeaderMs = REALISTIC_NOW_MS + 10_000; // upstream's own clock is 10s ahead of ours
+      await gate.wait("getlistpc");
+      gate.observe!("getlistpc", {
+        httpStatus: 200,
+        gatewayHeaders: headers({
+          "x-ratelimit-remaining": "3",
+          "x-ratelimit-reset": String(resetAtEpochSeconds),
+          date: new Date(dateHeaderMs).toUTCString(),
+        }),
+      });
+      await gate.wait("getlistpc");
+      // Skew-corrected: delta (reset − Date, in upstream's own clock) is
+      // 30s; +1s rounding margin = 31s from OUR receipt instant. A naive
+      // "compare reset straight to local now()" would instead wait the
+      // full 40s (the value this mutation target regresses to).
+      expect(clock.now()).toBe(REALISTIC_NOW_MS + 31_000);
+    });
+
+    it("local clock is FAST (upstream's Date reads 10s behind) -> pause is correspondingly longer, not shorter", async () => {
+      const clock = fakeClock(REALISTIC_NOW_MS);
+      const gate = createMoboreaderPerEndpointRateGate(baseOptions(clock));
+      const resetAtEpochSeconds = nowSeconds + 40;
+      const dateHeaderMs = REALISTIC_NOW_MS - 10_000; // upstream's own clock is 10s behind ours
+      await gate.wait("getcode");
+      gate.observe!("getcode", {
+        httpStatus: 200,
+        gatewayHeaders: headers({
+          "x-ratelimit-remaining": "5",
+          "x-ratelimit-reset": String(resetAtEpochSeconds),
+          date: new Date(dateHeaderMs).toUTCString(),
+        }),
+      });
+      await gate.wait("getcode");
+      // delta (reset − Date) = 50s; +1s margin = 51s.
+      expect(clock.now()).toBe(REALISTIC_NOW_MS + 51_000);
+    });
+
+    it("skew beyond the suspect threshold falls back to the naive comparison and fires clock_skew_suspected", async () => {
+      const clock = fakeClock(REALISTIC_NOW_MS);
+      const events: MoboreaderRateGateEvent[] = [];
+      const gate = createMoboreaderPerEndpointRateGate(baseOptions(clock, (e) => events.push(e)));
+      const resetAtEpochSeconds = nowSeconds + 40;
+      const hugeSkewMs = 400_000; // > MOBOREADER_RATE_GATE_CLOCK_SKEW_THRESHOLD_MS (300_000)
+      const dateHeaderMs = REALISTIC_NOW_MS - hugeSkewMs;
+      await gate.wait("getlistpc");
+      gate.observe!("getlistpc", {
+        httpStatus: 200,
+        gatewayHeaders: headers({
+          "x-ratelimit-remaining": "2",
+          "x-ratelimit-reset": String(resetAtEpochSeconds),
+          date: new Date(dateHeaderMs).toUTCString(),
+        }),
+      });
+      await gate.wait("getlistpc");
+      expect(clock.now()).toBe(REALISTIC_NOW_MS + 40_000); // naive fallback, not skew-corrected
+      expect(events).toContainEqual({ type: "clock_skew_suspected", endpoint: "getlistpc", skewMs: hugeSkewMs });
+    });
+
+    it("a missing Date header falls back to the naive comparison and fires clock_skew_suspected with skewMs: null", async () => {
+      const clock = fakeClock(REALISTIC_NOW_MS);
+      const events: MoboreaderRateGateEvent[] = [];
+      const gate = createMoboreaderPerEndpointRateGate(baseOptions(clock, (e) => events.push(e)));
+      const resetAtEpochSeconds = nowSeconds + 40;
+      await gate.wait("getcode");
+      gate.observe!("getcode", {
+        httpStatus: 200,
+        gatewayHeaders: headers({ "x-ratelimit-remaining": "1", "x-ratelimit-reset": String(resetAtEpochSeconds) }),
+      });
+      await gate.wait("getcode");
+      expect(clock.now()).toBe(REALISTIC_NOW_MS + 40_000);
+      expect(events).toContainEqual({ type: "clock_skew_suspected", endpoint: "getcode", skewMs: null });
+    });
+
+    it("an unparsable Date header is treated the same as a missing one", async () => {
+      const clock = fakeClock(REALISTIC_NOW_MS);
+      const events: MoboreaderRateGateEvent[] = [];
+      const gate = createMoboreaderPerEndpointRateGate(baseOptions(clock, (e) => events.push(e)));
+      const resetAtEpochSeconds = nowSeconds + 40;
+      await gate.wait("getlistpc");
+      gate.observe!("getlistpc", {
+        httpStatus: 200,
+        gatewayHeaders: headers({
+          "x-ratelimit-remaining": "1",
+          "x-ratelimit-reset": String(resetAtEpochSeconds),
+          date: "not a valid http-date",
+        }),
+      });
+      await gate.wait("getlistpc");
+      expect(clock.now()).toBe(REALISTIC_NOW_MS + 40_000);
+      expect(events).toContainEqual({ type: "clock_skew_suspected", endpoint: "getlistpc", skewMs: null });
+    });
+  });
+
   it("clears the floor-pause shadow once satisfied, so a later call doesn't re-pause on stale data", async () => {
     const clock = fakeClock();
     const gate = createMoboreaderPerEndpointRateGate(baseOptions(clock));
@@ -267,7 +395,7 @@ describe("createMoboreaderPerEndpointRateGate: 429 cooldown", () => {
     expect(events).toContainEqual({ type: "cooldown", endpoint: "getcode", status: 429, waitMs: 10_000 });
   });
 
-  it("caps the cooldown at rateWindowMaxWaitMs when retry-after is absent/huge", async () => {
+  it("uses rateWindowMaxWaitMs only as the DEFAULT when retry-after is absent — not as a cap", async () => {
     const clock = fakeClock();
     const gate = createMoboreaderPerEndpointRateGate(baseOptions(clock));
     await gate.wait("getcode");
@@ -283,6 +411,72 @@ describe("createMoboreaderPerEndpointRateGate: 429 cooldown", () => {
     gate.observe!("getcode", { httpStatus: 429, gatewayHeaders: headers({ "retry-after": "30" }) });
     await gate.wait("getlistpc"); // unaffected by getcode's cooldown
     expect(clock.now()).toBe(250); // just the host gap
+  });
+
+  // 2026-09-26 Opus 复核 3rd round，必改1：绝不截短一个合法的上游冷却。
+  describe("[Opus fix 必改1] a legitimate upstream Retry-After is never truncated to rateWindowMaxWaitMs", () => {
+    it("[mutation target] Retry-After: 120 (> the old 60s cap) -> still NOT released at t=60s, only at t=120s", async () => {
+      const clock = fakeClock();
+      const gate = createMoboreaderPerEndpointRateGate(baseOptions(clock));
+      await gate.wait("getcode"); // t=0
+      gate.observe!("getcode", { httpStatus: 429, gatewayHeaders: headers({ "retry-after": "120" }) });
+      // A second concurrent call that only needs to wait until t=60000
+      // (host gap / interval) must still be held past that instant by the
+      // cooldown — probing the boundary this way (rather than manually
+      // sleeping 60s in the test) fails loudly if truncation regresses.
+      const released = await gate.wait("getcode");
+      expect(clock.now()).toBe(120_000); // NOT 60_000
+      expect(released?.endpointGateWaitMs).toBe(120_000);
+    });
+
+    it("Retry-After as an HTTP-date 120s in the future is honored the same way as the delta-seconds form", async () => {
+      const clock = fakeClock();
+      const gate = createMoboreaderPerEndpointRateGate(baseOptions(clock, undefined));
+      await gate.wait("getcode"); // t=0 -> real epoch 0 = 1970-01-01T00:00:00Z
+      gate.observe!("getcode", {
+        httpStatus: 429,
+        gatewayHeaders: headers({ "retry-after": new Date(120_000).toUTCString() }),
+      });
+      await gate.wait("getcode");
+      expect(clock.now()).toBe(120_000);
+    });
+
+    it("[mutation target] an anomalously large Retry-After (e.g. 20 minutes) is honored in FULL, not silently shortened to 60s", async () => {
+      const clock = fakeClock();
+      const events: MoboreaderRateGateEvent[] = [];
+      const gate = createMoboreaderPerEndpointRateGate(baseOptions(clock, (e) => events.push(e)));
+      const twentyMinutesSeconds = 20 * 60;
+      await gate.wait("getcode"); // t=0
+      gate.observe!("getcode", { httpStatus: 429, gatewayHeaders: headers({ "retry-after": String(twentyMinutesSeconds) }) });
+      await gate.wait("getcode");
+      expect(clock.now()).toBe(twentyMinutesSeconds * 1_000); // full 20 minutes, not capped at 60s
+      expect(events).toContainEqual({
+        type: "cooldown_anomaly",
+        endpoint: "getcode",
+        status: 429,
+        waitMs: twentyMinutesSeconds * 1_000,
+        thresholdMs: 900_000,
+      });
+    });
+
+    it("does NOT fire cooldown_anomaly for an ordinary Retry-After under the threshold", async () => {
+      const clock = fakeClock();
+      const events: MoboreaderRateGateEvent[] = [];
+      const gate = createMoboreaderPerEndpointRateGate(baseOptions(clock, (e) => events.push(e)));
+      await gate.wait("getcode");
+      gate.observe!("getcode", { httpStatus: 429, gatewayHeaders: headers({ "retry-after": "30" }) });
+      await gate.wait("getcode");
+      expect(events.some((e) => e.type === "cooldown_anomaly")).toBe(false);
+    });
+
+    it("missing/invalid retry-after still falls back to rateWindowMaxWaitMs as a DEFAULT (unchanged behavior)", async () => {
+      const clock = fakeClock();
+      const gate = createMoboreaderPerEndpointRateGate(baseOptions(clock));
+      await gate.wait("getcode");
+      gate.observe!("getcode", { httpStatus: 429, gatewayHeaders: headers({ "retry-after": "not-a-number" }) });
+      await gate.wait("getcode");
+      expect(clock.now()).toBe(60_000);
+    });
   });
 });
 
@@ -360,6 +554,7 @@ describe("resolveMoboreaderPerEndpointRateGateConfig", () => {
       hostMinGapMs: 250,
       remainingFloor: { getlistpc: 8, getcode: 12 },
       rateWindowMaxWaitMs: 60_000,
+      cooldownAnomalyThresholdMs: 900_000,
     });
     expect(MOBOREADER_PER_ENDPOINT_RATE_GATE_DEFAULTS.intervalMs).toBe(1_200);
   });
@@ -373,11 +568,13 @@ describe("resolveMoboreaderPerEndpointRateGateConfig", () => {
       MOBOREADER_UPSTREAM_REMAINING_FLOOR__GETLISTPC: "10",
       MOBOREADER_UPSTREAM_REMAINING_FLOOR__GETCODE: "15",
       MOBOREADER_UPSTREAM_RATE_WINDOW_MAX_WAIT_MS: "45000",
+      MOBOREADER_UPSTREAM_RETRY_AFTER_ANOMALY_THRESHOLD_MS: "600000",
     });
     expect(config.endpointIntervalMs).toEqual({ getlistpc: 1_500, getcode: 1_500 });
     expect(config.hostMinGapMs).toBe(300);
     expect(config.remainingFloor).toEqual({ getlistpc: 10, getcode: 15 });
     expect(config.rateWindowMaxWaitMs).toBe(45_000);
+    expect(config.cooldownAnomalyThresholdMs).toBe(600_000);
   });
 
   it("untracked-endpoint default interval reuses the EXISTING shared MOBOREADER_UPSTREAM_MIN_REQUEST_INTERVAL_MS, not the new per-endpoint default", () => {
@@ -406,6 +603,7 @@ describe("resolveMoboreaderPerEndpointRateGateConfig", () => {
     MOBOREADER_UPSTREAM_PER_ENDPOINT_RATE_GATE_ENV.remainingFloorGetlistpc,
     MOBOREADER_UPSTREAM_PER_ENDPOINT_RATE_GATE_ENV.remainingFloorGetcode,
     MOBOREADER_UPSTREAM_PER_ENDPOINT_RATE_GATE_ENV.rateWindowMaxWaitMs,
+    MOBOREADER_UPSTREAM_PER_ENDPOINT_RATE_GATE_ENV.cooldownAnomalyThresholdMs,
   ])("fails fast on a non-integer override for %s", (key) => {
     expect(() => resolveMoboreaderPerEndpointRateGateConfig({ NODE_ENV: "test", [key]: "not-a-number" }))
       .toThrow(MoboreaderRateLimitConfigError);

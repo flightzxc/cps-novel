@@ -160,8 +160,11 @@ export function resolveMoboreaderUpstreamRateLimitConfig(
 // ── Retry-After parsing ─────────────────────────────────────────────────
 
 /**
- * Parses `Retry-After` per RFC 9110: either delta-seconds (`"120"`) or an
- * HTTP-date (`"Wed, 21 Oct 2026 07:28:00 GMT"`).
+ * Core RFC 9110 `Retry-After` parsing: either delta-seconds (`"120"`) or
+ * an HTTP-date (`"Wed, 21 Oct 2026 07:28:00 GMT"`), returned as an
+ * **uncapped** millisecond duration. Shared by `parseRetryAfter` (capped)
+ * and `parseRetryAfterUncapped` (not capped — RC-4 review fix, 必改1) so
+ * the two call sites can never drift apart on the actual parsing rules.
  *
  * The HTTP-date branch must check for a letter *before* calling
  * `Date.parse` — `Date.parse("-5")` returns a valid (year-interpreted)
@@ -174,11 +177,7 @@ export function resolveMoboreaderUpstreamRateLimitConfig(
  *
  * @param now Injected (not `Date.now()`) so callers can pin it in tests.
  */
-export function parseRetryAfter(
-  headerValue: string | null | undefined,
-  now: number,
-  capMs: number = MOBOREADER_RETRY_AFTER_CAP_MS,
-): number | null {
+function parseRetryAfterMs(headerValue: string | null | undefined, now: number): number | null {
   if (typeof headerValue !== "string") return null;
   const raw = headerValue.trim();
   if (raw.length === 0) return null;
@@ -186,15 +185,57 @@ export function parseRetryAfter(
   if (/^\d+$/.test(raw)) {
     const seconds = Number(raw);
     if (!Number.isFinite(seconds) || seconds < 0) return null;
-    return Math.min(seconds * 1_000, capMs);
+    return seconds * 1_000;
   }
 
   if (!/[A-Za-z]/.test(raw)) return null;
   const at = Date.parse(raw);
   if (Number.isNaN(at)) return null;
   const delta = at - now;
-  if (delta <= 0) return 0;
-  return Math.min(delta, capMs);
+  return delta <= 0 ? 0 : delta;
+}
+
+/**
+ * Parses `Retry-After` and caps it at `capMs` (default
+ * `MOBOREADER_RETRY_AFTER_CAP_MS`). Used by this file's bounded 429/503
+ * retry loop (`computeRetryDelayMs`/`canAffordRetry`, wired through
+ * `./moboreader.ts`'s `rateLimitAwarePost`) — that cap protects a
+ * SINGLE logical request's own retry budget
+ * (`MOBOREADER_RATE_LIMIT_TOTAL_BUDGET_MS`), a different concept from the
+ * per-endpoint gate's inter-request 429 cooldown below, which must NOT
+ * cap this value (see `parseRetryAfterUncapped`'s doc comment). This
+ * function's behavior for any given input is unchanged by the
+ * `parseRetryAfterMs` extraction above.
+ *
+ * @param now Injected (not `Date.now()`) so callers can pin it in tests.
+ */
+export function parseRetryAfter(
+  headerValue: string | null | undefined,
+  now: number,
+  capMs: number = MOBOREADER_RETRY_AFTER_CAP_MS,
+): number | null {
+  const ms = parseRetryAfterMs(headerValue, now);
+  return ms === null ? null : Math.min(ms, capMs);
+}
+
+/**
+ * Same RFC 9110 `Retry-After` parsing as `parseRetryAfter`, but **never
+ * caps the result** — RC-4 review fix (必改1, design review round 3):
+ * used only by `createMoboreaderPerEndpointRateGate`'s 429 cooldown.
+ * Capping a legitimate upstream-granted cooldown at this gate's own
+ * `rateWindowMaxWaitMs` would let a client re-request before the upstream
+ * has actually allowed it again — mistaking "we don't want to wait that
+ * long" for "the upstream has allowed it again", which is backwards: a
+ * 429 with `Retry-After: 120` means the NEXT request before 120s is
+ * elapsed will *also* 429. See `createMoboreaderPerEndpointRateGate`'s
+ * `observe()` for how the result is used (cooldown = this value when
+ * present; `rateWindowMaxWaitMs` only as the DEFAULT when it is missing
+ * or unparsable, never as a cap on a value that *was* parsed).
+ *
+ * @param now Injected (not `Date.now()`) so callers can pin it in tests.
+ */
+export function parseRetryAfterUncapped(headerValue: string | null | undefined, now: number): number | null {
+  return parseRetryAfterMs(headerValue, now);
 }
 
 // ── Backoff + jitter ─────────────────────────────────────────────────────
@@ -472,7 +513,21 @@ function isTrackedRateGateEndpoint(endpoint: string): endpoint is MoboreaderTrac
 export type MoboreaderRateGateEvent =
   | { type: "floor_pause"; endpoint: string; remaining: number; floor: number; waitMs: number }
   | { type: "cooldown"; endpoint: string; status: number; waitMs: number }
-  | { type: "headers_missing"; endpoint: string };
+  /** RC-4 review fix (必改1): fired whenever a 429's `Retry-After` is
+   * honored in full (never truncated) but exceeds
+   * `cooldownAnomalyThresholdMs` — an operator-visible flag that upstream
+   * asked for an unusually long cooldown, without ever silently shortening
+   * it. `waitMs` is the actual (uncapped) cooldown being applied. */
+  | { type: "cooldown_anomaly"; endpoint: string; status: number; waitMs: number; thresholdMs: number }
+  | { type: "headers_missing"; endpoint: string }
+  /** RC-4 review fix (必改3): fired when `x-ratelimit-reset` (an absolute
+   * epoch second) could not be corrected against the response's own
+   * `Date` header — either `Date` was missing/unparsable (`skewMs: null`)
+   * or the two clocks disagreed by more than
+   * `MOBOREADER_RATE_GATE_CLOCK_SKEW_THRESHOLD_MS`. The gate still
+   * proceeds (falls back to comparing `reset` straight against local
+   * `now()`, the pre-fix behavior) — this event is purely diagnostic. */
+  | { type: "clock_skew_suspected"; endpoint: string; skewMs: number | null };
 
 export type OnMoboreaderRateGateEvent = (event: MoboreaderRateGateEvent) => void;
 
@@ -488,9 +543,22 @@ interface EndpointShadowState {
   /** Last observed `x-ratelimit-remaining` for this endpoint, or `null` if
    * never observed (or the last observation didn't carry it). */
   remaining: number | null;
-  /** Absolute ms epoch this endpoint's rate-limit window is believed to
-   * reset at, derived from `x-ratelimit-reset` — best-effort (see
-   * `observe`'s doc comment on why this is deliberately conservative). */
+  /**
+   * Absolute ms epoch (on THIS host's clock) this endpoint's rate-limit
+   * window is believed to reset at, derived from `x-ratelimit-reset` and,
+   * where possible, corrected for clock skew against the response's own
+   * `Date` header (see `observe`'s doc comment). Only ever used as the
+   * ceiling for a low-quota floor pause (`rateWindowMaxWaitMs`) — never
+   * for the 429 cooldown, which is governed entirely by `cooldownUntil`
+   * below.
+   *
+   * 🔴 Under sustained traffic this value is observed to sit at roughly
+   * `now + 60s` and slide forward with every request (design §5.2's "随每
+   * 请求后移" observation) — it is a **sliding window observation**, not
+   * "the instant the quota refills to full" and not a fixed window
+   * boundary. Treat any floor-pause built from it as what it actually is:
+   * a conservative ~60s heuristic, not a precise appointment.
+   */
   windowResetAt: number | null;
   /** When `remaining` first dropped to/below the floor, for the "distance
    * to 60s from first observed low-remaining" fallback (design §5.2.1). */
@@ -524,9 +592,34 @@ export interface CreateMoboreaderPerEndpointRateGateOptions {
    * `remaining` count is at or below this, the endpoint pauses until the
    * window is believed to have reset. */
   remainingFloor: Readonly<Record<MoboreaderTrackedRateGateEndpoint, number>>;
-  /** Ceiling on any single floor-pause or 429-cooldown wait (design §5.2
-   * item 1 / §5.4's "429 冷却 / 窗口重置上限"). */
+  /**
+   * RC-4 review fix (必改1) — THREE DIFFERENT concepts share this part of
+   * the file; keeping them straight is load-bearing:
+   *
+   *   1. **`x-ratelimit-reset`** (upstream's own window observation): a
+   *      sliding, approximate signal — see `EndpointShadowState.
+   *      windowResetAt`'s doc comment. Used ONLY to compute the ceiling
+   *      for concept 3 below.
+   *   2. **`Retry-After`** (the response's own cooldown instruction on a
+   *      429): authoritative and MUST be honored in full — see
+   *      `parseRetryAfterUncapped`'s doc comment. `rateWindowMaxWaitMs`
+   *      is used here ONLY as the fallback default when `Retry-After` is
+   *      missing or unparsable; it is never a cap on a value that *was*
+   *      successfully parsed (that was this field's role before this
+   *      review round, and it was wrong — see `observe`'s 429 branch).
+   *   3. **This field** (`rateWindowMaxWaitMs`): the default/ceiling for
+   *      the CLIENT'S OWN low-quota floor pause (design §5.2 item 1) —
+   *      "we haven't been told anything by upstream, but our own shadow
+   *      count is low, so pause defensively for about this long." This is
+   *      the field's ONLY remaining role after this review round.
+   */
   rateWindowMaxWaitMs: number;
+  /**
+   * RC-4 review fix (必改1): threshold above which an honored (never
+   * truncated) `Retry-After` is considered operator-notable — fires
+   * `rate_gate.cooldown_anomaly` but never shortens the actual cooldown.
+   */
+  cooldownAnomalyThresholdMs: number;
   /** Injected clock, for tests. Defaults to `Date.now`. */
   now?: () => number;
   /** Injected sleep, for tests — must actually advance whatever clock
@@ -545,6 +638,18 @@ export interface CreateMoboreaderPerEndpointRateGateOptions {
  * `rateWindowMaxWaitMs`, 60_000ms by default).
  */
 export const RESET_ABSOLUTE_EPOCH_THRESHOLD_SECONDS = 1_000_000_000;
+
+/**
+ * RC-4 review fix (必改3): if the response's own `Date` header disagrees
+ * with this host's clock by more than this much, the disagreement is
+ * treated as suspicious (a broken/misconfigured clock somewhere) rather
+ * than trustworthy skew-correction data — `observe` falls back to
+ * comparing `x-ratelimit-reset` straight against local `now()` (the
+ * pre-fix behavior) and fires `rate_gate.cooldown_anomaly`'s sibling
+ * event, `rate_gate.clock_skew_suspected`, instead of applying a
+ * correction that could itself be wrong in either direction.
+ */
+export const MOBOREADER_RATE_GATE_CLOCK_SKEW_THRESHOLD_MS = 300_000;
 
 /**
  * RC-4 per-endpoint rate gate (design §5.1–§5.3). A single global FIFO
@@ -672,6 +777,7 @@ export function createMoboreaderPerEndpointRateGate(
   const REMAINING_HEADER = "x-ratelimit-remaining";
   const RESET_HEADER = "x-ratelimit-reset";
   const RETRY_AFTER_HEADER = "retry-after";
+  const DATE_HEADER = "date";
 
   function parseNonNegativeIntegerHeader(raw: string | undefined): number | null {
     if (typeof raw !== "string") return null;
@@ -679,6 +785,15 @@ export function createMoboreaderPerEndpointRateGate(
     if (!/^\d+$/.test(trimmed)) return null;
     const parsed = Number(trimmed);
     return Number.isSafeInteger(parsed) ? parsed : null;
+  }
+
+  /** RC-4 review fix (必改3): `null` on a missing/unparsable `Date`
+   * header — never fabricated, so `observe` can tell "no skew data" apart
+   * from "zero skew". */
+  function parseHttpDateMs(raw: string | undefined): number | null {
+    if (typeof raw !== "string" || raw.trim() === "") return null;
+    const parsed = Date.parse(raw);
+    return Number.isNaN(parsed) ? null : parsed;
   }
 
   function observe(endpoint: string, info: MoboreaderRateGateObserveInfo): void {
@@ -710,40 +825,95 @@ export function createMoboreaderPerEndpointRateGate(
     // `x-ratelimit-reset` semantics — PINNED by a read-only comparison of
     // 8 real predproduction `upstream_call` events against the worker's
     // own docker-log timestamps (2026-09-24 10:24–11:37 UTC, Opus review
-    // of this commit): the header's value is an **absolute Unix epoch
-    // second** (e.g. log instant 1790245469 → header value 1790245529,
-    // consistently ~59–60s ahead of the log instant) — NOT "seconds
-    // remaining in the window" as this port originally assumed. A value
-    // this large (>= `RESET_ABSOLUTE_EPOCH_THRESHOLD_SECONDS`, chosen
-    // well below any real epoch second and far above any plausible
-    // "seconds remaining" value) is treated as that absolute instant;
-    // anything smaller is treated as relative-seconds-from-now, kept only
-    // as a defensive fallback in case a future/different gateway ever
-    // sends the older convention. Both branches are then capped at
-    // `now() + rateWindowMaxWaitMs` (the same 60s ceiling `wait()` already
-    // enforces via `floorHitAt`, applied here too so a bad/huge value
-    // can never make this field itself report more than one window's
-    // worth of wait) — and if the result is not strictly in the future,
-    // it is discarded as `null` (a stale/incorrectly-signed value must
-    // never make the endpoint wait *less*, so it falls back to the
-    // `floorHitAt`-based ceiling in `wait()` instead of a bogus instant).
+    // round 2): the header's value is an **absolute Unix epoch second**
+    // (e.g. log instant 1790245469 → header value 1790245529, consistently
+    // ~59–60s ahead of the log instant) — NOT "seconds remaining in the
+    // window" as this port originally assumed. A value this large
+    // (>= `RESET_ABSOLUTE_EPOCH_THRESHOLD_SECONDS`, chosen well below any
+    // real epoch second and far above any plausible "seconds remaining"
+    // value) is treated as that absolute instant; anything smaller is
+    // treated as relative-seconds-from-now, kept only as a defensive
+    // fallback in case a future/different gateway ever sends the older
+    // convention.
+    //
+    // 🔴 This is ONLY ever used as the ceiling for the client's own
+    // low-quota floor pause (concept 3 on
+    // `CreateMoboreaderPerEndpointRateGateOptions.rateWindowMaxWaitMs`) —
+    // never for the 429 cooldown below, which is governed entirely by
+    // `Retry-After`. And per `EndpointShadowState.windowResetAt`'s doc
+    // comment, under sustained traffic this header is observed to sit at
+    // roughly `now+60s` and slide forward with every request — it is a
+    // sliding window OBSERVATION, not "quota refills to full at this
+    // instant" and not a fixed window boundary, so any floor-pause built
+    // from it is a ~60s heuristic, not a precise appointment.
     const parsedResetRaw = parseNonNegativeIntegerHeader(info.gatewayHeaders[RESET_HEADER]);
     if (parsedResetRaw !== null) {
       const nowMs = now();
-      const candidateMs = parsedResetRaw >= RESET_ABSOLUTE_EPOCH_THRESHOLD_SECONDS
-        ? parsedResetRaw * 1_000
-        : nowMs + parsedResetRaw * 1_000;
-      const cappedMs = Math.min(candidateMs, nowMs + options.rateWindowMaxWaitMs);
+      let baseCandidateMs: number;
+      if (parsedResetRaw >= RESET_ABSOLUTE_EPOCH_THRESHOLD_SECONDS) {
+        // RC-4 review fix (必改3): `reset` is upstream's absolute epoch
+        // second, so comparing it straight to local `now()` assumes the
+        // two clocks agree. Correct for skew using the response's own
+        // `Date` header wherever it lets us: compute "how many seconds
+        // upstream itself says are left" purely in upstream's own clock
+        // (`reset − Date`), then apply that DURATION starting from OUR
+        // OWN receipt instant — immune to a constant offset between the
+        // two clocks, unlike comparing `reset` directly to local `now()`.
+        const dateHeaderMs = parseHttpDateMs(info.gatewayHeaders[DATE_HEADER]);
+        const skewMs = dateHeaderMs === null ? null : Math.abs(nowMs - dateHeaderMs);
+        if (dateHeaderMs !== null && skewMs !== null && skewMs <= MOBOREADER_RATE_GATE_CLOCK_SKEW_THRESHOLD_MS) {
+          const deltaSeconds = parsedResetRaw - Math.floor(dateHeaderMs / 1_000);
+          // +1s margin: both `reset` and `Date` are whole seconds, so the
+          // true sub-second remainder is unknown — round up, never down,
+          // so this can only make the endpoint wait a little longer,
+          // never less.
+          baseCandidateMs = nowMs + deltaSeconds * 1_000 + 1_000;
+        } else {
+          // `Date` missing/unparsable, or the two clocks disagree by more
+          // than the suspect threshold — fall back to the pre-fix
+          // behavior (compare `reset` straight to local `now()`) rather
+          // than trust a correction that could itself be wrong.
+          onEvent({ type: "clock_skew_suspected", endpoint, skewMs });
+          baseCandidateMs = parsedResetRaw * 1_000;
+        }
+      } else {
+        // Relative-seconds fallback (older/different gateway convention)
+        // — always relative to our own clock; there is no "upstream
+        // instant" to skew-correct against.
+        baseCandidateMs = nowMs + parsedResetRaw * 1_000;
+      }
+      // Capped at `now() + rateWindowMaxWaitMs` (concept 3's own ceiling —
+      // see the doc comment on that field) so a bad/huge value can never
+      // make this field itself report more than one window's worth of
+      // wait — and if the result is not strictly in the future, it is
+      // discarded as `null` (a stale/incorrectly-signed value must never
+      // make the endpoint wait *less*, so it falls back to the
+      // `floorHitAt`-based ceiling in `wait()` instead of a bogus instant).
+      const cappedMs = Math.min(baseCandidateMs, nowMs + options.rateWindowMaxWaitMs);
       state.windowResetAt = cappedMs > nowMs ? cappedMs : null;
     }
 
     if (info.httpStatus === 429) {
-      const parsedRetryAfterMs = parseRetryAfter(
-        info.gatewayHeaders[RETRY_AFTER_HEADER] ?? null,
-        now(),
-        options.rateWindowMaxWaitMs,
-      );
+      // RC-4 review fix (必改1): `Retry-After` (concept 2 on
+      // `CreateMoboreaderPerEndpointRateGateOptions.rateWindowMaxWaitMs`)
+      // is honored IN FULL, uncapped — see `parseRetryAfterUncapped`'s
+      // doc comment for why truncating a legitimate upstream cooldown is
+      // backwards. `rateWindowMaxWaitMs` is used here ONLY as the
+      // fallback DEFAULT when `Retry-After` is missing/unparsable, never
+      // as a cap on a value that *was* parsed.
+      const parsedRetryAfterMs = parseRetryAfterUncapped(info.gatewayHeaders[RETRY_AFTER_HEADER] ?? null, now());
       const waitMs = parsedRetryAfterMs ?? options.rateWindowMaxWaitMs;
+      if (parsedRetryAfterMs !== null && parsedRetryAfterMs > options.cooldownAnomalyThresholdMs) {
+        // Never shortens `waitMs` — purely an operator-visible flag that
+        // upstream asked for an unusually long cooldown.
+        onEvent({
+          type: "cooldown_anomaly",
+          endpoint,
+          status: info.httpStatus,
+          waitMs: parsedRetryAfterMs,
+          thresholdMs: options.cooldownAnomalyThresholdMs,
+        });
+      }
       state.cooldownUntil = now() + waitMs;
       state.lastCooldownStatus = info.httpStatus;
       onEvent({ type: "cooldown", endpoint, status: info.httpStatus, waitMs });
@@ -776,6 +946,10 @@ export const MOBOREADER_UPSTREAM_PER_ENDPOINT_RATE_GATE_ENV = Object.freeze({
   remainingFloorGetlistpc: "MOBOREADER_UPSTREAM_REMAINING_FLOOR__GETLISTPC",
   remainingFloorGetcode: "MOBOREADER_UPSTREAM_REMAINING_FLOOR__GETCODE",
   rateWindowMaxWaitMs: "MOBOREADER_UPSTREAM_RATE_WINDOW_MAX_WAIT_MS",
+  /** RC-4 review fix (必改1). See `MoboreaderRateGateEvent`'s
+   * `cooldown_anomaly` variant and the three-concepts doc comment on
+   * `CreateMoboreaderPerEndpointRateGateOptions.rateWindowMaxWaitMs`. */
+  cooldownAnomalyThresholdMs: "MOBOREADER_UPSTREAM_RETRY_AFTER_ANOMALY_THRESHOLD_MS",
 });
 
 export const MOBOREADER_PER_ENDPOINT_RATE_GATE_DEFAULTS = Object.freeze({
@@ -791,6 +965,10 @@ export const MOBOREADER_PER_ENDPOINT_RATE_GATE_DEFAULTS = Object.freeze({
   remainingFloorGetlistpc: 8,
   remainingFloorGetcode: 12,
   rateWindowMaxWaitMs: 60_000,
+  /** 15 minutes — chosen as "long enough that a normal 429 cooldown never
+   * trips it, short enough that a genuinely anomalous upstream instruction
+   * still gets an operator's attention within one shift". */
+  cooldownAnomalyThresholdMs: 900_000,
 });
 
 /**
@@ -813,6 +991,7 @@ export interface MoboreaderPerEndpointRateGateConfig {
   readonly hostMinGapMs: number;
   readonly remainingFloor: Readonly<Record<MoboreaderTrackedRateGateEndpoint, number>>;
   readonly rateWindowMaxWaitMs: number;
+  readonly cooldownAnomalyThresholdMs: number;
 }
 
 function perEndpointIntervalConfig(env: NodeJS.ProcessEnv, key: string, code: string): number {
@@ -871,6 +1050,9 @@ export function resolveMoboreaderPerEndpointRateGateConfig(
   const rateWindowMaxWaitMs = positiveIntegerConfig(
     env, ENV.rateWindowMaxWaitMs, D.rateWindowMaxWaitMs, "per_endpoint_rate_window_max_wait_invalid",
   );
+  const cooldownAnomalyThresholdMs = positiveIntegerConfig(
+    env, ENV.cooldownAnomalyThresholdMs, D.cooldownAnomalyThresholdMs, "per_endpoint_cooldown_anomaly_threshold_invalid",
+  );
   // Untracked endpoints (getbydataid/getchapterinfo) keep the legacy
   // shared interval, unchanged — design §5.3: their gateway limits were
   // never observed and are out of this design's tuning scope.
@@ -882,6 +1064,7 @@ export function resolveMoboreaderPerEndpointRateGateConfig(
     hostMinGapMs,
     remainingFloor: Object.freeze({ getlistpc: remainingFloorGetlistpc, getcode: remainingFloorGetcode }),
     rateWindowMaxWaitMs,
+    cooldownAnomalyThresholdMs,
   });
 }
 
@@ -920,6 +1103,7 @@ function buildProductionMoboreaderRateGate(): MoboreaderRateGate {
       hostMinGapMs: config.hostMinGapMs,
       remainingFloor: config.remainingFloor,
       rateWindowMaxWaitMs: config.rateWindowMaxWaitMs,
+      cooldownAnomalyThresholdMs: config.cooldownAnomalyThresholdMs,
       onEvent: defaultMoboreaderRateGateEventSink,
     });
   } catch {

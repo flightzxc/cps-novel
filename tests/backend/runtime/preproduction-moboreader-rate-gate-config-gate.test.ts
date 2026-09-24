@@ -37,6 +37,7 @@ type RateGateEnv = Partial<{
   MOBOREADER_UPSTREAM_REMAINING_FLOOR__GETLISTPC: string;
   MOBOREADER_UPSTREAM_REMAINING_FLOOR__GETCODE: string;
   MOBOREADER_UPSTREAM_RATE_WINDOW_MAX_WAIT_MS: string;
+  MOBOREADER_UPSTREAM_RETRY_AFTER_ANOMALY_THRESHOLD_MS: string;
 }>;
 
 function runGate(overrides: RateGateEnv) {
@@ -50,13 +51,13 @@ function runGate(overrides: RateGateEnv) {
 }
 
 describe("preprod_assert_moboreader_rate_gate_config: 全部未设置 -> PASS，取回退默认值", () => {
-  it("七项全部未设置 -> PASS，报出与设计 §5.4/E2-E4 逐字一致的默认值", () => {
+  it("八项全部未设置 -> PASS，报出与设计 §5.4/E2-E4 逐字一致的默认值（含必改1新增的 cooldownAnomalyThresholdMs）", () => {
     const r = runGate({});
     expect(r.status).toBe(0);
     expect(r.stdout).toContain(
       "PREPROD_MOBOREADER_RATE_GATE_CONFIG=PASS enabled=false intervalGetlistpcMs=1200 " +
         "intervalGetcodeMs=1200 hostMinGapMs=250 remainingFloorGetlistpc=8 " +
-        "remainingFloorGetcode=12 rateWindowMaxWaitMs=60000",
+        "remainingFloorGetcode=12 rateWindowMaxWaitMs=60000 cooldownAnomalyThresholdMs=900000",
     );
   });
 
@@ -241,6 +242,38 @@ describe("preprod_assert_moboreader_rate_gate_config: 窗口重置上限——�
   });
 });
 
+/**
+ * 必改1新增：Retry-After 异常阈值——只决定何时多发一条 cooldown_anomaly
+ * 观测事件，不改变实际冷却时长（那部分逻辑在 TS 侧，本门禁只管这个数值
+ * 本身合法）。校验规则与窗口重置上限同构（正整数）。
+ */
+describe("preprod_assert_moboreader_rate_gate_config: Retry-After 异常阈值（必改1新增）——正整数", () => {
+  it("MOBOREADER_UPSTREAM_RETRY_AFTER_ANOMALY_THRESHOLD_MS=0 -> FAIL reason=must_be_positive", () => {
+    const r = runGate({ MOBOREADER_UPSTREAM_RETRY_AFTER_ANOMALY_THRESHOLD_MS: "0" });
+    expect(r.status).toBe(65);
+    expect(r.stdout).toContain("variable=MOBOREADER_UPSTREAM_RETRY_AFTER_ANOMALY_THRESHOLD_MS");
+    expect(r.stdout).toContain("reason=must_be_positive");
+  });
+
+  it("MOBOREADER_UPSTREAM_RETRY_AFTER_ANOMALY_THRESHOLD_MS=-1 -> FAIL reason=must_be_positive", () => {
+    const r = runGate({ MOBOREADER_UPSTREAM_RETRY_AFTER_ANOMALY_THRESHOLD_MS: "-1" });
+    expect(r.status).toBe(65);
+    expect(r.stdout).toContain("reason=must_be_positive");
+  });
+
+  it("MOBOREADER_UPSTREAM_RETRY_AFTER_ANOMALY_THRESHOLD_MS=abc -> FAIL reason=not_an_integer", () => {
+    const r = runGate({ MOBOREADER_UPSTREAM_RETRY_AFTER_ANOMALY_THRESHOLD_MS: "abc" });
+    expect(r.status).toBe(65);
+    expect(r.stdout).toContain("reason=not_an_integer");
+  });
+
+  it("MOBOREADER_UPSTREAM_RETRY_AFTER_ANOMALY_THRESHOLD_MS=600000 -> PASS 报出显式值", () => {
+    const r = runGate({ MOBOREADER_UPSTREAM_RETRY_AFTER_ANOMALY_THRESHOLD_MS: "600000" });
+    expect(r.status).toBe(0);
+    expect(r.stdout).toContain("cooldownAnomalyThresholdMs=600000");
+  });
+});
+
 describe("preflight.sh 接线：调用行真的存在，取证行真的在最终 PASS 之前", () => {
   it("调用行本身同时含 $(preprod_assert_moboreader_rate_gate_config) 与 || fail", async () => {
     const preflight = await readFile(PREFLIGHT, "utf8");
@@ -365,6 +398,8 @@ describe("TS 解析器 vs shell 校验：数值项判定一致性（防两边漂
     "MOBOREADER_UPSTREAM_RATE_WINDOW_MAX_WAIT_MS",
     "MOBOREADER_UPSTREAM_REMAINING_FLOOR__GETLISTPC",
     "MOBOREADER_UPSTREAM_REMAINING_FLOOR__GETCODE",
+    // 必改1新增。
+    "MOBOREADER_UPSTREAM_RETRY_AFTER_ANOMALY_THRESHOLD_MS",
   ] as const;
 
   function tsAccepts(env: RateGateEnv): boolean {
@@ -471,5 +506,11 @@ describe("bash 5 下的行为对照（docker bash:5.2，不可用则跳过）", 
     const r = runGateBash5({ MOBOREADER_UPSTREAM_MIN_REQUEST_INTERVAL_MS__GETCODE: "120" });
     expect(r.status).toBe(65);
     expect(r.stdout).toContain("reason=below_interval_floor");
+  });
+
+  maybeIt("FAIL：地板配成 0（必改1修正后，正整数不再允许 0）", () => {
+    const r = runGateBash5({ MOBOREADER_UPSTREAM_REMAINING_FLOOR__GETLISTPC: "0" });
+    expect(r.status).toBe(65);
+    expect(r.stdout).toContain("reason=must_be_positive");
   });
 });

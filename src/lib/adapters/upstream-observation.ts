@@ -119,11 +119,17 @@ export function safeObserve(
 /** Header names matched verbatim (case-insensitive) in addition to the
  * `/^(x-)?ratelimit/i` pattern below. Kong's own latency-breakdown headers
  * are included because they are the one thing that can attribute latency
- * to "gateway" vs. "origin" without guessing. */
+ * to "gateway" vs. "origin" without guessing. `date` (RC-4 review fix,
+ * 必改3) is the response's own origin-server clock reading — not
+ * sensitive, and the only way `createMoboreaderPerEndpointRateGate`'s
+ * `observe()` can correct `x-ratelimit-reset` (an absolute epoch second)
+ * for clock skew between this host and upstream instead of comparing it
+ * straight against local `now()`. */
 const GATEWAY_HEADER_EXACT_ALLOWLIST = new Set([
   "retry-after",
   "x-kong-upstream-latency",
   "x-kong-proxy-latency",
+  "date",
 ]);
 
 const GATEWAY_HEADER_PATTERN_ALLOWLIST = /^(x-)?ratelimit/i;

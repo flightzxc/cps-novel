@@ -398,6 +398,23 @@ export function createPromoLinkClaimAdapter(
     const endpointGateWaitMs = gateWaitInfo ? gateWaitInfo.endpointGateWaitMs : null;
     const hostGateWaitMs = gateWaitInfo ? gateWaitInfo.hostGateWaitMs : null;
     const remainingBeforeDispatch = gateWaitInfo ? gateWaitInfo.remainingBeforeDispatch : null;
+    // RC-4 review fix (必改2, round 3): re-check the SAME condition as the
+    // pre-wait guard above, now that `wait()` — which under the
+    // per-endpoint gate can block for tens of seconds (429 cooldown /
+    // floor pause), not the sub-2s window this file's original guard was
+    // written for — has actually returned. Without this, a lease/request
+    // aborted *during* that wait reaches `scopedSignal` with an
+    // already-aborted `signal`; `scopedSignal` does check `parent?.aborted`
+    // at construction (unlike `composeSignal` in `./moboreader.ts`), so
+    // `fetchImpl` is never actually dispatched — but the `catch` block
+    // below cannot tell that apart from "aborted mid-flight" and would
+    // classify it `ambiguous: true` on getcode: a request that was NEVER
+    // SENT would manufacture a false "result unknown, go to manual
+    // review". Same error shape as the pre-wait check: never dispatched,
+    // not retryable, not ambiguous.
+    if (signal?.aborted) {
+      throw new PromoLinkClaimAdapterError("transport_error", false, false);
+    }
     const scoped = scopedSignal(signal, timeoutMs);
     const dispatchStartedAt = observationNow();
     try {

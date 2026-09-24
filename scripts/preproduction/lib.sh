@@ -324,6 +324,14 @@ preprod_assert_promo_claim_lifecycle_config() {
 #     `positiveIntegerConfig`（原为 `nonNegativeIntegerConfig`）。默认分别 8 / 12
 #     （两个默认值本身早已 ≥ 1，不受此次收紧影响）。
 #   - `MOBOREADER_UPSTREAM_RATE_WINDOW_MAX_WAIT_MS`：正整数，默认 60000。
+#     🔴 2026-09-26 Opus 复核第三轮修正：这个数只是"客户端自己的低余量暂停
+#     默认/上限"，**不再**用来截短 429 的 Retry-After 冷却（见下一条）——
+#     `src/lib/adapters/moboreader-rate-limit.ts` 的 `observe()` 与
+#     `parseRetryAfterUncapped` 的 doc comment。
+#   - `MOBOREADER_UPSTREAM_RETRY_AFTER_ANOMALY_THRESHOLD_MS`（必改1新增）：
+#     正整数，默认 900000（15 分钟）。上游 429 的 Retry-After 永远原值冷却、
+#     绝不截短；这个数只决定超过多少算"异常"而额外发一条
+#     `rate_gate.cooldown_anomaly` 观测事件，本身不改变实际冷却时长。
 #
 # 失败时把 `moboreader_rate_gate_config_invalid variable=... value=...
 # reason=...` 写到 stdout 并 `return 65`；成功时打印取证行
@@ -361,7 +369,7 @@ preprod_assert_moboreader_rate_gate_config() {
       ;;
   esac
 
-  local interval_getlistpc interval_getcode host_gap floor_getlistpc floor_getcode max_wait out
+  local interval_getlistpc interval_getcode host_gap floor_getlistpc floor_getcode max_wait cooldown_anomaly_threshold out
   out="$(_mrg_resolve_integer_min MOBOREADER_UPSTREAM_MIN_REQUEST_INTERVAL_MS__GETLISTPC "${MOBOREADER_UPSTREAM_MIN_REQUEST_INTERVAL_MS__GETLISTPC:-}" 1200 1000 below_interval_floor)" \
     || { echo "$out"; return 65; }
   interval_getlistpc="$out"
@@ -380,8 +388,11 @@ preprod_assert_moboreader_rate_gate_config() {
   out="$(_mrg_resolve_integer_min MOBOREADER_UPSTREAM_RATE_WINDOW_MAX_WAIT_MS "${MOBOREADER_UPSTREAM_RATE_WINDOW_MAX_WAIT_MS:-}" 60000 1 must_be_positive)" \
     || { echo "$out"; return 65; }
   max_wait="$out"
+  out="$(_mrg_resolve_integer_min MOBOREADER_UPSTREAM_RETRY_AFTER_ANOMALY_THRESHOLD_MS "${MOBOREADER_UPSTREAM_RETRY_AFTER_ANOMALY_THRESHOLD_MS:-}" 900000 1 must_be_positive)" \
+    || { echo "$out"; return 65; }
+  cooldown_anomaly_threshold="$out"
 
-  echo "PREPROD_MOBOREADER_RATE_GATE_CONFIG=PASS enabled=$enabled intervalGetlistpcMs=$interval_getlistpc intervalGetcodeMs=$interval_getcode hostMinGapMs=$host_gap remainingFloorGetlistpc=$floor_getlistpc remainingFloorGetcode=$floor_getcode rateWindowMaxWaitMs=$max_wait"
+  echo "PREPROD_MOBOREADER_RATE_GATE_CONFIG=PASS enabled=$enabled intervalGetlistpcMs=$interval_getlistpc intervalGetcodeMs=$interval_getcode hostMinGapMs=$host_gap remainingFloorGetlistpc=$floor_getlistpc remainingFloorGetcode=$floor_getcode rateWindowMaxWaitMs=$max_wait cooldownAnomalyThresholdMs=$cooldown_anomaly_threshold"
   return 0
 }
 

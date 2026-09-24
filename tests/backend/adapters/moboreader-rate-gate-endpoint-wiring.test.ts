@@ -132,6 +132,52 @@ describe("createMoboreaderReadAdapter: RC-4 endpoint wiring", () => {
     await adapter.listBooks({ name: "", orderType: 0, pageIndex: 1, pageSize: 100, projectType: 1 }, "token");
     expect(waits).toEqual(["getlistpc", "getlistpc"]);
   });
+
+  // 2026-09-26 Opus 复核 3rd round，必改2：闸门等待结束后必须再检查一次中止
+  // 信号，不能只在等待前查一次——RC-4 后冷却可达数十秒，等待窗口远大于
+  // pre-RC-4 的 1.5 秒。
+  describe("[Opus fix 必改2] re-checks the abort signal after wait() resolves, before ever dispatching fetch", () => {
+    it("[mutation target] legacy retry path: abort fired DURING the gate wait -> fetch never called, non-retryable, non-ambiguous-shaped error", async () => {
+      const controller = new AbortController();
+      const fetchImpl = vi.fn(async () => jsonResponse({ data: { list: [], totalCount: 0 } }));
+      const abortDuringWaitGate: MoboreaderRateGate = {
+        wait: async () => { controller.abort(); return undefined; },
+      };
+      const adapter = createMoboreaderReadAdapter({ fetchImpl, rateGate: abortDuringWaitGate });
+      await expect(
+        adapter.listBooks({ name: "", orderType: 0, pageIndex: 1, pageSize: 100, projectType: 1 }, "token", controller.signal),
+      ).rejects.toMatchObject({ code: "transport_error", retryable: false });
+      expect(fetchImpl).not.toHaveBeenCalled();
+    });
+
+    it("[mutation target] RC-3 rate-limit-aware path: abort fired DURING the gate wait -> fetch never called", async () => {
+      const controller = new AbortController();
+      const fetchImpl = vi.fn(async () => jsonResponse({ data: { list: [], totalCount: 0 } }));
+      const abortDuringWaitGate: MoboreaderRateGate = {
+        wait: async () => { controller.abort(); return undefined; },
+      };
+      const adapter = createMoboreaderReadAdapter({
+        fetchImpl, rateGate: abortDuringWaitGate,
+        upstreamRateLimitPolicy: { now: () => 0, random: () => 0 },
+      });
+      await expect(
+        adapter.listBooks({ name: "", orderType: 0, pageIndex: 1, pageSize: 100, projectType: 1 }, "token", controller.signal),
+      ).rejects.toMatchObject({ code: "transport_error", retryable: false });
+      expect(fetchImpl).not.toHaveBeenCalled();
+    });
+
+    it("an abort that happens BEFORE wait() is called (pre-existing behavior) still never dispatches fetch", async () => {
+      const controller = new AbortController();
+      controller.abort();
+      const fetchImpl = vi.fn(async () => jsonResponse({ data: { list: [], totalCount: 0 } }));
+      const adapter = createMoboreaderReadAdapter({ fetchImpl });
+      const result = await adapter.listBooks(
+        { name: "", orderType: 0, pageIndex: 1, pageSize: 100, projectType: 1 }, "token", controller.signal,
+      ).catch((e) => e);
+      expect(fetchImpl).not.toHaveBeenCalled();
+      expect(result).toMatchObject({ code: "transport_error" });
+    });
+  });
 });
 
 describe("createPromoLinkClaimAdapter: RC-4 endpoint wiring", () => {
@@ -184,5 +230,38 @@ describe("createPromoLinkClaimAdapter: RC-4 endpoint wiring", () => {
     const adapter = createPromoLinkClaimAdapter({ fetchImpl, rateGate: gate });
     await expect(adapter.claimPromo(claimRequest, "jwt-token")).rejects.toThrow();
     expect(observations).toHaveLength(0);
+  });
+
+  // 2026-09-26 Opus 复核 3rd round，必改2。
+  describe("[Opus fix 必改2] re-checks the abort signal after wait() resolves, before ever dispatching fetch", () => {
+    it("[mutation target] getcode: abort fired DURING the gate wait -> fetch never called, and the error is NOT ambiguous (never dispatched, not 'result unknown')", async () => {
+      const controller = new AbortController();
+      const fetchImpl = vi.fn(async () => jsonResponse(successBody()));
+      const abortDuringWaitGate: MoboreaderRateGate = {
+        wait: async () => { controller.abort(); return undefined; },
+      };
+      const adapter = createPromoLinkClaimAdapter({ fetchImpl, rateGate: abortDuringWaitGate });
+      await expect(adapter.claimPromo(claimRequest, "jwt-token", controller.signal)).rejects.toMatchObject({
+        code: "transport_error",
+        retryable: false,
+        ambiguous: false, // the load-bearing assertion: NOT "result unknown"
+      });
+      expect(fetchImpl).not.toHaveBeenCalled();
+    });
+
+    it("[mutation target] readback (getlistpc): abort fired DURING the gate wait -> fetch never called", async () => {
+      const controller = new AbortController();
+      const fetchImpl = vi.fn(async () => jsonResponse({ data: { totalCount: 0, list: [] }, code: 200, message: "ok", status: true }));
+      const abortDuringWaitGate: MoboreaderRateGate = {
+        wait: async () => { controller.abort(); return undefined; },
+      };
+      const adapter = createPromoLinkClaimAdapter({ fetchImpl, rateGate: abortDuringWaitGate });
+      await expect(adapter.readPromoAfterClaim!(claimRequest, "jwt-token", controller.signal)).rejects.toMatchObject({
+        code: "transport_error",
+        retryable: false,
+        ambiguous: false,
+      });
+      expect(fetchImpl).not.toHaveBeenCalled();
+    });
   });
 });
