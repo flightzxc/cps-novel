@@ -29,6 +29,13 @@ export function logUpstreamCallObservation(observation: UpstreamCallObservation)
       outcome: observation.outcome,
       latencyMs: observation.latencyMs,
       gateWaitMs: observation.gateWaitMs,
+      // RC-4 (阶段 4-A per-endpoint rate gate): `null` when the gate in use
+      // doesn't report a breakdown (legacy single-queue / no-op gate) —
+      // see `UpstreamCallObservation`'s doc comments in
+      // `src/lib/adapters/upstream-observation.ts`.
+      endpointGateWaitMs: observation.endpointGateWaitMs,
+      hostGateWaitMs: observation.hostGateWaitMs,
+      remainingBeforeDispatch: observation.remainingBeforeDispatch,
       gatewayHeaders: observation.gatewayHeaders,
     }));
   } catch {

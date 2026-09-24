@@ -294,6 +294,96 @@ preprod_assert_promo_claim_lifecycle_config() {
   return 0
 }
 
+# --- MoboReader 上游按接口限速配置门禁（阶段 4-A，设计《领推广按接口限速与
+# 预读集合化 · 阶段4-5》§5.6/§十三）--------------------------------------
+#
+# 背景与判定规则和上面 `preprod_assert_promo_claim_lifecycle_config`
+# 完全同构（同一份 D8 教训：一处配置笔误如果只在运行时"悄悄变慢/变快"，很难
+# 在生产被发现），因此直接复用它上方定义的 `_pcl_trim` / `_pcl_is_integer_literal`
+# / `_pcl_decimal_value`（这三个是不带业务语义的十进制字面量解析工具，不是
+# 生命周期专属）。开关判定的"严格 true/false/未设置、不 trim"纪律，逐字照抄
+# `preprod_assert_promo_claim_lifecycle_config` 上方那条 2026-09-24 Opus 复核
+# 说明——同一类静默失效，同一个修法。
+#
+# 六个数值项对应 `src/lib/adapters/moboreader-rate-limit.ts` 的
+# `resolveMoboreaderPerEndpointRateGateConfig`：
+#   - `MOBOREADER_UPSTREAM_MIN_REQUEST_INTERVAL_MS__GETLISTPC` / `__GETCODE`：
+#     未设置回落到设计 §5.4/E2 的硬编码默认 1200（**不是**回落到既有共享变量
+#     `MOBOREADER_UPSTREAM_MIN_REQUEST_INTERVAL_MS`——那个变量只被"其余接口"
+#     沿用，见 `resolveMoboreaderPerEndpointRateGateConfig` 的
+#     `defaultIntervalMs`，本门禁不校验它，它已有自己的
+#     `resolveMoboreaderUpstreamRateLimitConfig` 校验路径）；必须是十进制整数
+#     且 `>= 1000`（设计 §5.6 的安全下限——"防止手误把间隔配成 120"，TS 侧同一
+#     下限常量 `MOBOREADER_PER_ENDPOINT_INTERVAL_FLOOR_MS`）。
+#   - `MOBOREADER_UPSTREAM_HOST_MIN_GAP_MS`：非负整数，默认 250。
+#   - `MOBOREADER_UPSTREAM_REMAINING_FLOOR__GETLISTPC` / `__GETCODE`：非负整数
+#     （🔴 与设计 §5.6 原文"地板必须 ≥ 1"字面不同——工单交接的口径是"非负整数"，
+#     即允许配成 0；TS 侧 `nonNegativeIntegerConfig` 同样允许 0。这是本轮对
+#     设计文档一处措辞张力的取舍，收窄到"更宽松、但与 TS 逐字一致"的一侧，
+#     未回到 Owner 重新拍板——按任务纪律在交接材料里单列说明），默认分别
+#     8 / 12。
+#   - `MOBOREADER_UPSTREAM_RATE_WINDOW_MAX_WAIT_MS`：正整数，默认 60000。
+#
+# 失败时把 `moboreader_rate_gate_config_invalid variable=... value=...
+# reason=...` 写到 stdout 并 `return 65`；成功时打印取证行
+# `PREPROD_MOBOREADER_RATE_GATE_CONFIG=PASS enabled=... ...`（沿用有效值——
+# 未设置项显示回退默认值）并 `return 0`。
+_mrg_resolve_integer_min() {
+  local variable="$1" raw="$2" fallback="$3" min="$4" reason="$5" trimmed value
+  trimmed="$(_pcl_trim "$raw")"
+  if [[ -z "$trimmed" ]]; then printf '%s' "$fallback"; return 0; fi
+  if ! _pcl_is_integer_literal "$trimmed"; then
+    echo "moboreader_rate_gate_config_invalid variable=$variable value=$raw reason=not_an_integer"
+    return 65
+  fi
+  value="$(_pcl_decimal_value "$trimmed")"
+  if (( value < min )); then
+    echo "moboreader_rate_gate_config_invalid variable=$variable value=$raw reason=$reason"
+    return 65
+  fi
+  printf '%s' "$value"
+  return 0
+}
+
+preprod_assert_moboreader_rate_gate_config() {
+  local enabled_raw enabled
+  enabled_raw="${MOBOREADER_UPSTREAM_PER_ENDPOINT_RATE_GATE_ENABLED:-}"
+  # 🔴 不 trim——理由同 `preprod_assert_promo_claim_lifecycle_config` 上方的
+  # 2026-09-24 说明，直接匹配原始值。
+  case "$enabled_raw" in
+    "") enabled="false" ;;
+    "true") enabled="true" ;;
+    "false") enabled="false" ;;
+    *)
+      echo "moboreader_rate_gate_config_invalid variable=MOBOREADER_UPSTREAM_PER_ENDPOINT_RATE_GATE_ENABLED value=$enabled_raw reason=must_be_true_false_or_unset"
+      return 65
+      ;;
+  esac
+
+  local interval_getlistpc interval_getcode host_gap floor_getlistpc floor_getcode max_wait out
+  out="$(_mrg_resolve_integer_min MOBOREADER_UPSTREAM_MIN_REQUEST_INTERVAL_MS__GETLISTPC "${MOBOREADER_UPSTREAM_MIN_REQUEST_INTERVAL_MS__GETLISTPC:-}" 1200 1000 below_interval_floor)" \
+    || { echo "$out"; return 65; }
+  interval_getlistpc="$out"
+  out="$(_mrg_resolve_integer_min MOBOREADER_UPSTREAM_MIN_REQUEST_INTERVAL_MS__GETCODE "${MOBOREADER_UPSTREAM_MIN_REQUEST_INTERVAL_MS__GETCODE:-}" 1200 1000 below_interval_floor)" \
+    || { echo "$out"; return 65; }
+  interval_getcode="$out"
+  out="$(_mrg_resolve_integer_min MOBOREADER_UPSTREAM_HOST_MIN_GAP_MS "${MOBOREADER_UPSTREAM_HOST_MIN_GAP_MS:-}" 250 0 must_be_non_negative)" \
+    || { echo "$out"; return 65; }
+  host_gap="$out"
+  out="$(_mrg_resolve_integer_min MOBOREADER_UPSTREAM_REMAINING_FLOOR__GETLISTPC "${MOBOREADER_UPSTREAM_REMAINING_FLOOR__GETLISTPC:-}" 8 0 must_be_non_negative)" \
+    || { echo "$out"; return 65; }
+  floor_getlistpc="$out"
+  out="$(_mrg_resolve_integer_min MOBOREADER_UPSTREAM_REMAINING_FLOOR__GETCODE "${MOBOREADER_UPSTREAM_REMAINING_FLOOR__GETCODE:-}" 12 0 must_be_non_negative)" \
+    || { echo "$out"; return 65; }
+  floor_getcode="$out"
+  out="$(_mrg_resolve_integer_min MOBOREADER_UPSTREAM_RATE_WINDOW_MAX_WAIT_MS "${MOBOREADER_UPSTREAM_RATE_WINDOW_MAX_WAIT_MS:-}" 60000 1 must_be_positive)" \
+    || { echo "$out"; return 65; }
+  max_wait="$out"
+
+  echo "PREPROD_MOBOREADER_RATE_GATE_CONFIG=PASS enabled=$enabled intervalGetlistpcMs=$interval_getlistpc intervalGetcodeMs=$interval_getcode hostMinGapMs=$host_gap remainingFloorGetlistpc=$floor_getlistpc remainingFloorGetcode=$floor_getcode rateWindowMaxWaitMs=$max_wait"
+  return 0
+}
+
 preprod_compose() {
   docker compose --env-file "$PREPROD_ENV_FILE" -p cps-novel \
     -f "$PREPROD_REPO_ROOT/docker-compose.yml" \

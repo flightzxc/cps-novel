@@ -32,6 +32,12 @@ write_gates_evidence="$(preprod_assert_write_gates)" || fail "$write_gates_evide
 # 一处配置笔误。见 lib.sh 里 `preprod_assert_promo_claim_lifecycle_config()`
 # 上方的详细说明。
 lifecycle_config_evidence="$(preprod_assert_promo_claim_lifecycle_config)" || fail "$lifecycle_config_evidence"
+# 阶段 4-A（设计《领推广按接口限速与预读集合化 · 阶段4-5》§5.6）：MoboReader
+# 上游按接口限速的六项配置必须与 `resolveMoboreaderPerEndpointRateGateConfig`
+# （`src/lib/adapters/moboreader-rate-limit.ts`）逐条一致地校验通过——同一个
+# "别等部署完才在日志里发现笔误"的理由，见 lib.sh 里
+# `preprod_assert_moboreader_rate_gate_config()` 上方的详细说明。
+rate_gate_config_evidence="$(preprod_assert_moboreader_rate_gate_config)" || fail "$rate_gate_config_evidence"
 [[ "${FEATURE_NOVEL_TAG_AUTO:-}" == "false" && "${AUTO_WRITE_AUTHORIZED:-}" == "NO" ]] || fail auto_tagging
 [[ "${ARTICLE_BLOG_ALLOW_WRITE:-}" == "false" && "${ARTICLE_NOVEL_REBIND_ALLOW_WRITE:-}" == "false" ]] || fail article_writes
 [[ "${GIT_COMMIT:-}" =~ ^[0-9a-f]{40}$ ]] || fail git_commit
@@ -86,4 +92,5 @@ if [[ -n "${PREPROD_RELEASE_IMAGE_REF:-}" ]]; then
 fi
 echo "$write_gates_evidence"
 echo "$lifecycle_config_evidence"
+echo "$rate_gate_config_evidence"
 echo "PREPROD_PREFLIGHT=PASS"
