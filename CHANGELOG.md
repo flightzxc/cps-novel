@@ -3,7 +3,15 @@
 <!-- 本文件由 `node scripts/generate-changelog.mjs --write` 生成，请勿手工编辑。 -->
 <!-- 叙述性内容写进 commit message；Owner/架构决策写 docs/adr/。 -->
 
-生成时间：2026-09-23 · 共 812 个 commit
+生成时间：2026-09-24 · 共 817 个 commit
+
+## v0.4.1
+
+- `0a25469` 2026-09-24 chore(release): 版本身份升到 0.4.1 + 版本台账登记 v0.4.1 准备中  — _claude-code · Claude Opus 5.5_
+- `7fe003f` 2026-09-24 merge: 目录同步页推广链接状态筛选（待办 B-4）  — _claude-code · Claude Opus 5.5_
+- `42114d9` 2026-09-24 fix(catalog-sync): 修复推广链接状态筛选的规模上限缺陷（Opus 复核）  — _claude-code · Claude Sonnet 5 · reviewed: claude-code · Claude Opus 5.5_
+- `f56e867` 2026-09-24 feat(catalog-sync): 目录同步页新增推广链接状态筛选（B-4）  — _claude-code · Claude Sonnet 5 · reviewed: claude-code · Claude Opus 5.5_
+- `c4bdcbb` 2026-09-24 docs(release): v0.4.0 预生产发布收官——版本台账、开发日志、CHANGELOG、CLAUDE.md、Notion 草稿  — _claude-code · Claude Opus 5.5_
 
 ## v0.4.0
 

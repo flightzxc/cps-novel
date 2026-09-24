@@ -235,9 +235,9 @@ npm run test       # vitest run
 
 **P1 已收口，P2-12 竖向验收与 P0 收尾已落地；`v0.2.0` 已于 2026-08-19 打 tag（P2-07～P2-12 轮次）。**
 预生产已于 2026-09-22 两次正式部署（merge `921119d`、`9728551`，镜像 `0.1.0-<sha>` 前缀），
-`v0.3.0` 于 2026-09-23 发布到预生产；**`v0.4.0` 已于 2026-09-24 发布到预生产**（tag `v0.4.0` → `8e83da4`，
-镜像 `cps-novel:0.4.0-8e83da4`，`RELEASE=PASS`），其中领推广生命周期能力开关默认关闭、未上线，开启与 UAT 须 Owner 另行批准；
-生产环境尚未上线。范围、进度与后续以 `docs/governance/version-registry.md` 的「当前快照」为准，本节不复述。
+`v0.3.0` 于 2026-09-23、`v0.4.0` 于 2026-09-24 01:33 发布到预生产；**`v0.4.1` 已于 2026-09-24 16:27 发布到预生产**
+（tag `v0.4.1` → `0a25469`，镜像 `cps-novel:0.4.1-0a25469`，`RELEASE=PASS`）。领推广生命周期开关已于 2026-09-24 经 Owner 批准
+在预生产开启，正进行三级真实 UAT；生产环境尚未上线。范围、进度与后续以 `docs/governance/version-registry.md` 的「当前快照」为准，本节不复述。
 
 feature/write flags 默认 fail-closed，分级开闸以 `docs/p2/V020_RELEASE_CHECKLIST.md` §3 为准，未经 Owner 审批不得开闸。
 已批准的例外：预生产的 `catalog_write` / `promo_write` 两组写闸已由 Owner 批准在目标机开启（2026-09-22 / 09-23），

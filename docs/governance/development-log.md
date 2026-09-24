@@ -39,6 +39,49 @@
 
 ## 发版记录（新条目在最上面）
 
+### 2026-09-24 16:27 - claude-code（Claude Opus 5.5，发版执行）
+
+**变更类型**：预生产正式发布 `v0.4.1`（PATCH）。
+
+**背景**：
+- 第一级 UAT 中 Owner 误把已领到码的书再次提交（无害：`already_fetched`，无上游调用），暴露目录同步页无法区分
+  "已领取 / 未领取"、且有码书仍显示"可领取"（待办 B-4）。Owner 定为核心功能：必须在正式领取剩余约 7.6 万本
+  之前完成，第二级 UAT 等其上线后用"已建立书目 + 俄语 + 未领取 + 全选"一并验证。
+
+**变更内容**（开发线 `integration/v0.4.1-2026-09-24`，基于 `v0.4.0` 收官提交 `c4bdcbb`）：
+- 合入 `feat/catalog-sync-promo-link-status-filter` @ `42114d9`：独立的"推广链接状态"筛选（未领取 / 已领取 /
+  人工核对中）与书目状态、语种取交集；领取资格列显示"已有推广码""人工核对中"；全选提交后 worker 枚举与界面
+  筛选共用同一判定；修复全选多页枚举时分页游标覆盖筛选条件的缺陷。
+- 复核打回一次：首版把全部已领取 ID 拼成 in/notIn，实测 Prisma 6.19.2 在 8 万 ID 时报错（参数上限 32767，
+  notIn 不可拆分），正式跑到约 3.3 万本时筛选与全选枚举都会失效；改为库内关联过滤（`promoLinks some/none`），
+  人工核对集合库内计算并设 5,000 上限，补 3.6 万+ 已领取的规模回归测试。
+- 版本身份升到 0.4.1。Final SHA `0a2546968d258304990918276b201026c8cccf66`，annotated tag `v0.4.1`。
+
+**影响范围**：
+- 预生产 web / worker / scheduler 换镜像 `cps-novel:0.4.1-0a25469`（归档 sha256
+  `b6fe79a64f699afc8561ef5b593436a9e3a56ac72c50fb4a4b9ad21fde05abf4`）；postgres 容器未重建。
+- 无数据库迁移、无 grants / compose / 部署脚本变更；目标机环境变量只改 `APP_VERSION` / `NEXT_PUBLIC_BUILD_VERSION`
+  （备份 `preprod.env.bak-20260924T082608Z`），生命周期开关保持开启。
+- 回滚到 `8e83da4`（v0.4.0）：完全兼容，两个版本变量改回 0.4.0。
+
+**验证方式**：
+- 本地质量门禁：typecheck 0 错；`npm test` 6373 通过 / 0 失败；`next build` 通过；字典漂移 0；集成脚本
+  catalog-batch 24/24（+4 自身跳过）、batch-control 18/18、release 18/18。复核变异：未领取不排除人工核对、已领取
+  不看 status、领取资格优先级对调，均变红。
+- 构建：公司网络下两次因 npm 官方源超时失败（依赖层失去缓存），切换网络后成功；未改构建输入。部署前在本机与
+  目标机双重核对归档 checksum、source SHA（`approved_git_commit` = `image_revision` = Final）、架构 amd64。
+- 发布前逻辑备份 `cps-novel-20260924T082520Z.dump`；`release.sh deploy` 全部步骤 PASS（含
+  `PREPROD_PROMO_CLAIM_LIFECYCLE_CONFIG=PASS enabled=true`），`RELEASE=PASS`（16:26:24–16:27:03 +0800）。
+- 部署后独立核对：health 0.4.1 / `0a25469` / meta passed / db passed；三容器生命周期开关 true；无错误日志；
+  以同一口径核对俄语 2,978 = 已领取 156 + 人工核对中 0 + 未领取 2,822。
+
+**后续待办**：
+- 第二级 UAT：Owner 以"已建立书目 + 俄语 + 未领取 + 全选"提交（预期 2,822 本、约 4 片），同时验证筛选不含已领取、
+  不漏书，以及多分片接力、批次暂停 / 恢复、防重复领取、六类统计与人工核对。
+- 既有待办：B-1（生产启用前修，补 D5 替换后自动恢复验收）、B-2（8 万个试读刷新任务待处理）、B-3（排队分片时
+  批次显示"已停用"）；backup-timer 停止、nginx 429 与 sudo 项、61 条人工核对。
+- Notion 手账：已生成 ChatGPT 交接提示词，待 Owner 转交。
+
 ### 2026-09-24 01:33 - claude-code（Claude Opus 5.5，发版执行）
 
 **变更类型**：预生产正式发布 `v0.4.0`（MINOR）；生命周期开关保持关闭。
