@@ -1,7 +1,18 @@
+/**
+ * B-4（施工提示词_Sonnet_B4_目录同步页推广链接状态筛选_2026-09-24）：目录
+ * 同步页新增的"推广链接状态"筛选，与既有的书目状态/语种筛选彼此独立、取
+ * 交集生效。三态互斥、覆盖全部——`undefined`（字段整体缺席）代表"全部"，
+ * 不是第四个值，这样一个没有这个字段的历史 `all_filtered` selection 负载
+ * （旧批次重放、旧持久化任务）天然落到"全部"，不需要任何迁移或兼容分支。
+ */
+export const PROMO_LINK_STATUS_FILTER_VALUES = ["not_claimed", "claimed", "manual_review"] as const;
+export type PromoLinkStatusFilter = (typeof PROMO_LINK_STATUS_FILTER_VALUES)[number];
+
 export type CatalogFilterSnapshot = Readonly<{
   status?: string;
   search?: string;
   sourceLocale?: string;
+  promoLinkStatus?: string;
 }>;
 
 export type CatalogSelection =
@@ -12,6 +23,7 @@ export type NormalizedCatalogFilterSnapshot = Readonly<{
   status: "pending" | "linked" | "ignored" | "stale";
   search?: string;
   sourceLocale?: string;
+  promoLinkStatus?: PromoLinkStatusFilter;
 }>;
 
 export type NormalizedCatalogSelection =
@@ -54,12 +66,20 @@ export function normalizeCatalogSelection(selection: CatalogSelection): Normaliz
   if (search && search.length > 200) throw new CatalogSelectionInputError("filter_search_too_long");
   const sourceLocale = raw.sourceLocale?.trim();
   if (sourceLocale && sourceLocale.length > 16) throw new CatalogSelectionInputError("filter_source_locale_too_long");
+  if (raw.promoLinkStatus !== undefined && typeof raw.promoLinkStatus !== "string") {
+    throw new CatalogSelectionInputError("filter_promo_link_status_invalid");
+  }
+  const promoLinkStatus = raw.promoLinkStatus?.trim();
+  if (promoLinkStatus && !(PROMO_LINK_STATUS_FILTER_VALUES as readonly string[]).includes(promoLinkStatus)) {
+    throw new CatalogSelectionInputError("filter_promo_link_status_invalid");
+  }
   return Object.freeze({
     scope: "all_filtered",
     filter: Object.freeze({
       status: status as NormalizedCatalogFilterSnapshot["status"],
       ...(search ? { search } : {}),
       ...(sourceLocale ? { sourceLocale } : {}),
+      ...(promoLinkStatus ? { promoLinkStatus: promoLinkStatus as PromoLinkStatusFilter } : {}),
     }),
   });
 }

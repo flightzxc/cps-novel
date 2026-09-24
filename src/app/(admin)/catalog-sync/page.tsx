@@ -20,6 +20,7 @@ type SearchParams = {
   status?: string;
   search?: string;
   sourceLocale?: string;
+  promoLinkStatus?: string;
   pageSize?: string;
 };
 
@@ -55,6 +56,7 @@ export default async function CatalogSyncPage({
         status: params.status,
         search: params.search,
         sourceLocale: params.sourceLocale,
+        promoLinkStatus: params.promoLinkStatus,
         pageSize: params.pageSize,
       })
     : null;
@@ -98,7 +100,7 @@ export default async function CatalogSyncPage({
             </div>
             <ContentPagination
               basePath="/catalog-sync"
-              params={{ status: params.status, search: params.search, sourceLocale: params.sourceLocale, pageSize: String(page.pageSize) }}
+              params={{ status: params.status, search: params.search, sourceLocale: params.sourceLocale, promoLinkStatus: params.promoLinkStatus, pageSize: String(page.pageSize) }}
               page={page.page}
               totalPages={page.totalPages}
               total={page.total}

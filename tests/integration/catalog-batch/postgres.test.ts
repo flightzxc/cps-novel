@@ -17,6 +17,12 @@ import {
 import { readCatalogBatchSummary } from "@/server/catalog-batch";
 import { requireAdminRouteAccess } from "@/server/auth/guards";
 import { getAdminTaskDetail, getAdminTaskProgress, listAdminTasks } from "@/server/task-admin";
+import { PROMO_LINK_CLAIM_CAPABILITY_KEY } from "@/lib/tasks/promo-link-claim-limits";
+import { buildPromoLinkIdempotencyKey, UPSTREAM_EXISTING_PROMO_OFFER_TYPE } from "@/lib/tasks/promo-link-claim";
+import { createPublicRedirectCode } from "@/lib/redirect";
+import { prepareSideEffectIntent, transitionSideEffectIntent } from "@/lib/tasks/side-effect-intent";
+import { PROMO_CLAIM_INTENT_OPERATION_TYPE } from "@/lib/tasks/promo-claim-release";
+import { readSourceItemsPage } from "@/app/(admin)/catalog-sync/_lib/read-source-items";
 import { createCatalogBatchHandler } from "../../../worker/handlers/catalog-batch";
 import { createNovelMaterializeHandler } from "../../../worker/handlers/novel-materialize";
 import { processOneWorkerCycle } from "../../../worker/runtime";
@@ -32,6 +38,15 @@ import { newStores, NOW, seedTaskAdmin } from "../../backend/task-admin/test-sup
 const enabled = process.env.CATALOG_BATCH_DATABASE_TEST === "1";
 const owner = new PrismaClient({ datasourceUrl: process.env.CATALOG_BATCH_OWNER_DATABASE_URL });
 const worker = new PrismaClient({ datasourceUrl: process.env.CATALOG_BATCH_WORKER_DATABASE_URL });
+// B-4 (施工提示词_Sonnet_B4_目录同步页推广链接状态筛选_2026-09-24): the
+// first test in this file to actually exercise `readSourceItemsPage` under
+// the real `web_app` role -- this env var has existed on the verification
+// script since before this task, but nothing used it (the page previously
+// only ever touched `novel_source_item`/`generic_task_item`, both already
+// covered by other tests). `promo_link`/`side_effect_intent` are new reads
+// for this role, so this is the actual grants-sufficiency proof, not just a
+// correctness proof.
+const web = new PrismaClient({ datasourceUrl: process.env.CATALOG_BATCH_WEB_DATABASE_URL });
 let foundation: CatalogFoundation;
 const requestedScaleCount = Number.parseInt(process.env.CATALOG_BATCH_SCALE_COUNT ?? "12051", 10);
 const scaleCount = Number.isSafeInteger(requestedScaleCount) && requestedScaleCount > 0 ? requestedScaleCount : 12_051;
@@ -68,6 +83,167 @@ async function linkSources(ids: readonly string[]) {
     } });
     await owner.novelSourceItem.update({ where: { id }, data: { novelId: novel.id, status: "linked" } });
   }
+}
+
+/** Same as `linkSources`, but for exactly one id and returns the new `novelId` -- B-4's PromoLink fixtures need it for the required `novelId` FK. */
+async function linkSource(id: string): Promise<string> {
+  const novel = await owner.novel.create({ data: {
+    businessId: `catalog-promo-status-${randomUUID()}`, title: "Promo status fixture", description: "Promo status fixture",
+    locale: "en", slug: `catalog-promo-status-${randomUUID()}`,
+  } });
+  await owner.novelSourceItem.update({ where: { id }, data: { novelId: novel.id, status: "linked" } });
+  return novel.id;
+}
+
+/**
+ * B-4 规模回归（Opus 复核 2026-09-24）：把 `channelAppId` 下所有仍是
+ * `novel_id IS NULL` 的 `NovelSourceItem` 一次性批量 link 到各自新建的
+ * `Novel`——`linkSources`/`linkSource` 的逐行版本在 3.6 万+ 行规模下会让
+ * 这条测试的挂钟时间失控。写法借用 `promo-claim-lifecycle-shard-
+ * enumeration-postgres.test.ts` 的 `bulkLinkAllSourceItems`（同一个
+ * WITH-CTE 批量 INSERT+UPDATE 手法）。
+ *
+ * 🔴 诊断记录（写在这里供以后排查同类问题；两处独立根因，缺一都不够快）：
+ *   1) 这条语句如果通过 `Prisma.sql` 参数化（`${channelAppId}::uuid`）经
+ *      `$executeRaw` 发送，比起 `$executeRawUnsafe` 直接内联字面量要慢
+ *      得多——Prisma 对"多个 CTE + 窗口函数 + 后续 UPDATE...FROM...JOIN"
+ *      这一特定组合走参数化路径时触发了下面第 2 点的同一类误判，只是表现
+ *      在 Prisma 自己的查询构造层。已改用 `$executeRawUnsafe`（`channelAppId`
+ *      永远来自 `seedCatalogFoundation` 的 `randomUUID()`，不是外部输入；
+ *      调用前的 UUID 形状校验只是纵深防御）。
+ *   2) 真正的根因、且单靠第 1 点不够：`novel_source_item` 在每个测试的
+ *      `beforeEach` 里被 `TRUNCATE`，本测试再批量插入 3.6 万+ 行——这时表的
+ *      统计信息（`pg_class.reltuples`）还停留在 autovacuum 尚未追上的旧值
+ *      （截断后接近 0），查询规划器会把 `source_rows`/`inserted_novels`
+ *      这两个 CTE 的基数错估成"约 1 行"，进而把最后的 UPDATE...FROM...JOIN
+ *      选成 Nested Loop——3.6 万 × 3.6 万 ≈ 13 亿次比较，实测把这一条语句
+ *      从 <1 秒拖到 100+ 秒（用 `EXPLAIN (ANALYZE)` 复现确认："Rows Removed
+ *      by Join Filter: 1308232730"）。真正修复是批量插入之后、这条 UPDATE
+ *      之前显式 `ANALYZE novel_source_item`（下方 `$executeRawUnsafe` 前
+ *      那一条）——统计信息一新鲜，规划器就会正确选出 Merge/Hash Join，
+ *      执行时间回到 <1 秒。两个原因中，第 2 点是主因（单独修复它就已经把
+ *      耗时从 100+ 秒降到 <1 秒；第 1 点在没有它时同样慢，因为 Prisma 参数化
+ *      路径下的这个误判本质上也是规划期的基数误估，换成 `$executeRawUnsafe`
+ *      并不能单独解决，两处都要修）。`promo-claim-lifecycle-shard-
+ *      enumeration-postgres.test.ts` 的 `bulkLinkAllSourceItems` 是同一种
+ *      "TRUNCATE 后批量插入、不 ANALYZE 就批量 UPDATE...JOIN"写法，可能有
+ *      同样的隐藏耗时——那个文件默认不随本脚本跑（有自己独立的开关），
+ *      不在本次改动范围内，留作后续可能要清理的已知项。
+ */
+async function bulkLinkAllUnderChannel(channelAppId: string): Promise<number> {
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(channelAppId)) {
+    throw new Error(`bulkLinkAllUnderChannel: unexpected channelAppId shape: ${channelAppId}`);
+  }
+  // 见上方模块头诊断记录第 2 点：批量插入之后统计信息是旧的，规划器会把
+  // 下面 UPDATE 的 CTE-CTE JOIN 基数错估成"约 1 行"从而选中 Nested Loop。
+  await owner.$executeRawUnsafe(`ANALYZE novel_source_item`);
+  return owner.$executeRawUnsafe(`
+    WITH source_rows AS (
+      SELECT id, row_number() OVER (ORDER BY id) AS rn
+      FROM novel_source_item
+      WHERE channel_app_id = '${channelAppId}'::uuid AND novel_id IS NULL
+    ),
+    inserted_novels AS (
+      INSERT INTO novel (id, business_id, title, description, locale, slug, created_at, updated_at)
+      SELECT gen_random_uuid(), 'promo-status-scale-nv-' || rn, 'Promo status scale fixture ' || rn, 'promo status scale fixture', 'en',
+             'promo-status-scale-nv-' || rn, transaction_timestamp(), transaction_timestamp()
+      FROM source_rows
+      RETURNING id, business_id
+    )
+    UPDATE novel_source_item nsi
+    SET novel_id = iv.id, status = 'linked'
+    FROM source_rows sr
+    JOIN inserted_novels iv ON iv.business_id = 'promo-status-scale-nv-' || sr.rn
+    WHERE nsi.id = sr.id
+  `);
+}
+
+/**
+ * B-4 规模回归：bulk-inserts one `fetched` PromoLink per given (already
+ * linked) `novelSourceItemId`, in a single `INSERT ... SELECT` -- the
+ * per-row `owner.promoLink.create()` loop `seedFetchedPromoLink` uses is
+ * only exercised at fixture scale (a handful of rows) elsewhere; at
+ * tens-of-thousands scale the same one-row-at-a-time loop would dominate
+ * this test's wall clock. `public_redirect_code`/`idempotency_key` are
+ * generated deterministically from a per-row sequence number / the row's
+ * own id rather than through `createPublicRedirectCode()`/
+ * `buildPromoLinkIdempotencyKey()` -- this is a disposable fixture, not an
+ * exercise of the real claim path, so all that matters is satisfying the
+ * columns' own uniqueness/length constraints.
+ */
+async function bulkSeedFetchedPromoLinks(input: { channelAppId: string; channelAccountId: string; ids: readonly string[] }): Promise<void> {
+  if (input.ids.length === 0) return;
+  await owner.$executeRaw(Prisma.sql`
+    INSERT INTO promo_link (
+      id, novel_id, novel_source_item_id, channel_app_id, channel_account_id,
+      offer_type, origin, public_redirect_code, idempotency_key, status,
+      created_at, updated_at
+    )
+    SELECT
+      gen_random_uuid(),
+      nsi.novel_id,
+      nsi.id,
+      ${input.channelAppId}::uuid,
+      ${input.channelAccountId}::uuid,
+      'read',
+      'upstream_existing',
+      'scale-rc-' || row_number() OVER (ORDER BY nsi.id),
+      'scale-idem-' || nsi.id::text,
+      'fetched',
+      transaction_timestamp(), transaction_timestamp()
+    FROM novel_source_item nsi
+    WHERE nsi.id = ANY(${[...input.ids]}::uuid[]) AND nsi.novel_id IS NOT NULL
+  `);
+}
+
+function hex64(): string {
+  return createHash("sha256").update(randomUUID()).digest("hex");
+}
+
+/** B-4: seeds a `fetched` PromoLink -- the "已有推广码" state `promoLinkStatusIdConstraint`/`classifyPromoLinkRowStatus` (`@/lib/tasks/promo-link-status-filter`) detect. */
+async function seedFetchedPromoLink(input: { novelSourceItemId: string; novelId: string; channelAppId: string; channelAccountId: string }): Promise<void> {
+  await owner.promoLink.create({ data: {
+    id: randomUUID(),
+    novelId: input.novelId,
+    novelSourceItemId: input.novelSourceItemId,
+    channelAppId: input.channelAppId,
+    channelAccountId: input.channelAccountId,
+    offerType: UPSTREAM_EXISTING_PROMO_OFFER_TYPE,
+    publicRedirectCode: createPublicRedirectCode(),
+    idempotencyKey: buildPromoLinkIdempotencyKey({
+      channelAppId: input.channelAppId, novelSourceItemId: input.novelSourceItemId,
+      channelAccountId: input.channelAccountId, offerType: UPSTREAM_EXISTING_PROMO_OFFER_TYPE,
+    }),
+    status: "fetched",
+  } });
+}
+
+/**
+ * B-4: seeds a `manual_review_required` `side_effect_intent` -- the "人工核对中"
+ * state. `manual_review_required` is only reachable from `claim_retry_blocked`
+ * (`isAllowedSideEffectTransition`, `src/lib/tasks/side-effect-intent.ts`),
+ * so this drives an intent through the same two transitions
+ * `worker/handlers/promo-link-claim.ts` does, rather than inventing a
+ * shortcut into the terminal status.
+ */
+async function seedManualReviewIntent(input: { novelSourceItemId: string; channelAppId: string; channelAccountId: string }): Promise<void> {
+  const effectKey = hex64();
+  const idempotencyKey = buildPromoLinkIdempotencyKey({
+    channelAppId: input.channelAppId, novelSourceItemId: input.novelSourceItemId,
+    channelAccountId: input.channelAccountId, offerType: UPSTREAM_EXISTING_PROMO_OFFER_TYPE,
+  });
+  await prepareSideEffectIntent(owner, {
+    effectKey,
+    operationType: PROMO_CLAIM_INTENT_OPERATION_TYPE,
+    idempotencyKey,
+    targetType: "promo_link",
+    targetId: idempotencyKey,
+    channelAppId: input.channelAppId,
+    channelAccountId: input.channelAccountId,
+    requestSummary: { offerType: UPSTREAM_EXISTING_PROMO_OFFER_TYPE, novelSourceItemId: input.novelSourceItemId },
+  });
+  await transitionSideEffectIntent(owner, { effectKey, status: "claim_retry_blocked" });
+  await transitionSideEffectIntent(owner, { effectKey, status: "manual_review_required" });
 }
 
 async function materialize(taskId: string) {
@@ -120,7 +296,7 @@ describe.skipIf(!enabled).sequential("catalog batch on disposable PostgreSQL 16.
     await truncateCatalogDatabase(owner);
     foundation = await seedCatalogFoundation(owner);
   });
-  afterAll(async () => Promise.all([owner.$disconnect(), worker.$disconnect()]));
+  afterAll(async () => Promise.all([owner.$disconnect(), worker.$disconnect(), web.$disconnect()]));
 
   it("enqueue is O(1), stores only the selector, and requestId replay keeps the same parent", async () => {
     await seedCatalogRows(owner, { channelAppId: foundation.channels[0]!.channelAppId, count: 101, prefix: "enqueue" });
@@ -660,4 +836,302 @@ describe.skipIf(!enabled).sequential("catalog batch on disposable PostgreSQL 16.
     expect(await owner.article.count()).toBe(0);
     expect((await owner.novelSourceItem.findUniqueOrThrow({ where: { id: templateId } })).novelId).toBeNull();
   });
+
+  // -------------------------------------------------------------------
+  // B-4（施工提示词_Sonnet_B4_目录同步页推广链接状态筛选_2026-09-24）：
+  // 目录同步页新增的"推广链接状态"筛选（未领取/已领取/人工核对中）。
+  // -------------------------------------------------------------------
+
+  /**
+   * Seeds, per locale (`en`/`ja`): one `linked` book with a `fetched`
+   * PromoLink ("已领取"), one `linked` book with a `manual_review_required`
+   * intent and no PromoLink ("人工核对中"), two `linked` books with neither
+   * ("未领取"), and one still-`pending` (never linked) book -- the last one
+   * proves the `status` filter's intersection with `promoLinkStatus` really
+   * excludes unlinked books, rather than the promo-link-status filter
+   * accidentally treating them as "未领取" too.
+   */
+  async function seedPromoLinkStatusFixture() {
+    const channel = foundation.channels[0]!;
+    await owner.channelCapability.create({ data: {
+      channelAppId: channel.channelAppId, capabilityKey: PROMO_LINK_CLAIM_CAPABILITY_KEY, status: "enabled",
+      sideEffecting: true, evidenceLevel: "OWNER_APPROVED_WRITE_PROBE",
+    } });
+    const ids: Record<string, string> = {};
+    for (const locale of ["en", "ja"] as const) {
+      const [claimedId] = await seedCatalogRows(owner, { channelAppId: channel.channelAppId, count: 1, prefix: `pls-${locale}-claimed`, sourceLocale: locale });
+      const [manualId] = await seedCatalogRows(owner, { channelAppId: channel.channelAppId, count: 1, prefix: `pls-${locale}-manual`, sourceLocale: locale });
+      const freeIds = await seedCatalogRows(owner, { channelAppId: channel.channelAppId, count: 2, prefix: `pls-${locale}-free`, sourceLocale: locale });
+      const [pendingId] = await seedCatalogRows(owner, { channelAppId: channel.channelAppId, count: 1, prefix: `pls-${locale}-pending`, sourceLocale: locale });
+
+      const claimedNovelId = await linkSource(claimedId!);
+      await seedFetchedPromoLink({ novelSourceItemId: claimedId!, novelId: claimedNovelId, channelAppId: channel.channelAppId, channelAccountId: channel.accountId });
+
+      await linkSource(manualId!);
+      await seedManualReviewIntent({ novelSourceItemId: manualId!, channelAppId: channel.channelAppId, channelAccountId: channel.accountId });
+
+      await linkSources(freeIds);
+      // pendingId is deliberately left unlinked (status stays "pending").
+
+      ids[`${locale}-claimed`] = claimedId!;
+      ids[`${locale}-manual`] = manualId!;
+      ids[`${locale}-free`] = freeIds.join(",");
+      ids[`${locale}-pending`] = pendingId!;
+    }
+    return { channel, ids };
+  }
+
+  it("推广链接状态三态互斥、覆盖全部，并与 status/sourceLocale 取交集 (web_app role)", async () => {
+    const { ids } = await seedPromoLinkStatusFixture();
+    const enFreeIds = ids["en-free"]!.split(",");
+
+    const claimed = await readSourceItemsPage({ status: "linked", sourceLocale: "en", promoLinkStatus: "claimed" }, web);
+    expect(claimed.items.map((item) => item.id)).toEqual([ids["en-claimed"]]);
+    expect(claimed.items[0]).toMatchObject({ promoClaimEligible: false, promoClaimIneligibleReason: "already_has_promo_code" });
+
+    const manualReview = await readSourceItemsPage({ status: "linked", sourceLocale: "en", promoLinkStatus: "manual_review" }, web);
+    expect(manualReview.items.map((item) => item.id)).toEqual([ids["en-manual"]]);
+    expect(manualReview.items[0]).toMatchObject({ promoClaimEligible: false, promoClaimIneligibleReason: "manual_review_pending" });
+
+    const notClaimed = await readSourceItemsPage({ status: "linked", sourceLocale: "en", promoLinkStatus: "not_claimed" }, web);
+    expect(new Set(notClaimed.items.map((item) => item.id))).toEqual(new Set(enFreeIds));
+    for (const item of notClaimed.items) {
+      expect(item).toMatchObject({ promoClaimEligible: true, promoClaimIneligibleReason: null });
+    }
+
+    // Mutual exclusivity + completeness, intersected with status=linked: the
+    // three buckets, summed, equal every `linked` `en` row -- the unlinked
+    // `en-pending` row must not appear in any bucket or in the unfiltered
+    // "linked" total, proving the `status` intersection actually excludes it.
+    const allLinkedEn = await readSourceItemsPage({ status: "linked", sourceLocale: "en" }, web);
+    expect(allLinkedEn.total).toBe(4);
+    expect(claimed.total + manualReview.total + notClaimed.total).toBe(allLinkedEn.total);
+    expect(allLinkedEn.items.map((item) => item.id)).not.toContain(ids["en-pending"]);
+
+    // sourceLocale intersection: the `ja` claimed book must not leak into
+    // the `en`-scoped "claimed" bucket (already implied by the exact
+    // `toEqual` above; asserted again explicitly for clarity).
+    expect(claimed.items.map((item) => item.id)).not.toContain(ids["ja-claimed"]);
+  });
+
+  it("一个还没到 fetched 的 PromoLink（例如 status=pending）不算已领取——判定必须看 status，不能只看'存在 PromoLink 行'", async () => {
+    const channel = foundation.channels[0]!;
+    const [id] = await seedCatalogRows(owner, { channelAppId: channel.channelAppId, count: 1, prefix: "pls-pending-link", sourceLocale: "en" });
+    const novelId = await linkSource(id!);
+    // A PromoLink row exists, but its status is still "pending" (upstream
+    // call not resolved yet) -- this must NOT be counted as "已领取". Only a
+    // real Postgres query (not a mocked `findMany`) can catch a mutation
+    // that drops the `status: "fetched"` condition from the WHERE clause,
+    // since a mock ignores its call args and just returns canned rows.
+    await owner.promoLink.create({ data: {
+      id: randomUUID(), novelId, novelSourceItemId: id!, channelAppId: channel.channelAppId, channelAccountId: channel.accountId,
+      offerType: UPSTREAM_EXISTING_PROMO_OFFER_TYPE, publicRedirectCode: createPublicRedirectCode(),
+      idempotencyKey: buildPromoLinkIdempotencyKey({ channelAppId: channel.channelAppId, novelSourceItemId: id!, channelAccountId: channel.accountId, offerType: UPSTREAM_EXISTING_PROMO_OFFER_TYPE }),
+      status: "pending",
+    } });
+
+    const claimed = await readSourceItemsPage({ status: "linked", promoLinkStatus: "claimed" }, web);
+    expect(claimed.items.map((item) => item.id)).not.toContain(id);
+    const notClaimed = await readSourceItemsPage({ status: "linked", promoLinkStatus: "not_claimed" }, web);
+    expect(notClaimed.items.map((item) => item.id)).toContain(id);
+    const page = await readSourceItemsPage({ status: "linked" }, web);
+    expect(page.items.find((item) => item.id === id)).toMatchObject({ promoClaimEligible: true, promoClaimIneligibleReason: null });
+  });
+
+  it("一个还没进入人工核对的 side_effect_intent（status=prepared，尚未转态）不算人工核对中——判定必须看 status，不能只看'存在同 operation_type 的意图记录'", async () => {
+    const channel = foundation.channels[0]!;
+    const [id] = await seedCatalogRows(owner, { channelAppId: channel.channelAppId, count: 1, prefix: "pls-prepared-intent", sourceLocale: "en" });
+    await linkSource(id!);
+    const idempotencyKey = buildPromoLinkIdempotencyKey({ channelAppId: channel.channelAppId, novelSourceItemId: id!, channelAccountId: channel.accountId, offerType: UPSTREAM_EXISTING_PROMO_OFFER_TYPE });
+    // Prepared but never transitioned -- the claim attempt has not (yet)
+    // been decided as needing manual review. Only a real Postgres query
+    // (not a mocked `$queryRaw`) can catch a mutation that drops the
+    // `status = 'manual_review_required'` condition from the SQL, since a
+    // mock ignores its call args and just returns canned rows.
+    await prepareSideEffectIntent(owner, {
+      effectKey: hex64(), operationType: PROMO_CLAIM_INTENT_OPERATION_TYPE, idempotencyKey,
+      targetType: "promo_link", targetId: idempotencyKey,
+      channelAppId: channel.channelAppId, channelAccountId: channel.accountId,
+      requestSummary: { offerType: UPSTREAM_EXISTING_PROMO_OFFER_TYPE, novelSourceItemId: id },
+    });
+
+    const manualReview = await readSourceItemsPage({ status: "linked", promoLinkStatus: "manual_review" }, web);
+    expect(manualReview.items.map((item) => item.id)).not.toContain(id);
+    const notClaimed = await readSourceItemsPage({ status: "linked", promoLinkStatus: "not_claimed" }, web);
+    expect(notClaimed.items.map((item) => item.id)).toContain(id);
+  });
+
+  it("一本书先进入人工核对、后来重试拿到码 -> 只算已领取，不再算人工核对中 (claimed 优先)", async () => {
+    const channel = foundation.channels[0]!;
+    const [id] = await seedCatalogRows(owner, { channelAppId: channel.channelAppId, count: 1, prefix: "pls-retried", sourceLocale: "en" });
+    const novelId = await linkSource(id!);
+    await seedManualReviewIntent({ novelSourceItemId: id!, channelAppId: channel.channelAppId, channelAccountId: channel.accountId });
+    await seedFetchedPromoLink({ novelSourceItemId: id!, novelId, channelAppId: channel.channelAppId, channelAccountId: channel.accountId });
+
+    const claimed = await readSourceItemsPage({ status: "linked", promoLinkStatus: "claimed" }, web);
+    expect(claimed.items.map((item) => item.id)).toContain(id);
+    const manualReview = await readSourceItemsPage({ status: "linked", promoLinkStatus: "manual_review" }, web);
+    expect(manualReview.items.map((item) => item.id)).not.toContain(id);
+  });
+
+  it(
+    "全选一致性：全选 + 未领取 + en 提交后，worker 枚举入片的书恰好等于界面筛选结果（有码书/人工核对书零入片）(worker_app role)",
+    async () => {
+      const { channel, ids } = await seedPromoLinkStatusFixture();
+      const enFreeIds = new Set(ids["en-free"]!.split(","));
+      process.env.FEATURE_PROMO_LINK_CLAIM = "true";
+      process.env.PROMO_LINK_CLAIM_ALLOW_WRITE = "true";
+
+      const listed = await readSourceItemsPage({ status: "linked", sourceLocale: "en", promoLinkStatus: "not_claimed", pageSize: "50" }, web);
+      expect(new Set(listed.items.map((item) => item.id))).toEqual(enFreeIds);
+
+      const selection = normalizeCatalogSelection({
+        scope: "all_filtered",
+        filter: { status: "linked", sourceLocale: "en", promoLinkStatus: "not_claimed" },
+      });
+      const enqueued = await enqueueCatalogBatch(owner, {
+        operation: "promo_claim", selection, actorId: foundation.actorId, requestId: randomUUID(),
+        channelAccounts: { [channel.channelAppId]: channel.accountId },
+      });
+      await materialize(enqueued.taskId);
+
+      const parent = await owner.genericTask.findUniqueOrThrow({ where: { id: enqueued.taskId } });
+      expect(parent.result).toMatchObject({ enumerationStatus: "completed", submittedCount: enFreeIds.size });
+
+      const child = await owner.genericTask.findFirstOrThrow({ where: { parentTaskId: enqueued.taskId }, include: { items: true } });
+      const enumeratedIds = new Set(child.items.map((item) => item.targetId));
+      expect(enumeratedIds).toEqual(enFreeIds);
+      expect(enumeratedIds.has(ids["en-claimed"]!)).toBe(false);
+      expect(enumeratedIds.has(ids["en-manual"]!)).toBe(false);
+      expect(enumeratedIds.has(ids["ja-claimed"]!)).toBe(false);
+      expect(enumeratedIds.has(ids["en-pending"]!)).toBe(false);
+    },
+  );
+
+  it("旧的 selection 负载（没有 promoLinkStatus 字段）向后兼容——等价于'全部'，枚举不做任何推广链接状态 narrowing", async () => {
+    const { channel, ids } = await seedPromoLinkStatusFixture();
+    process.env.FEATURE_PROMO_LINK_CLAIM = "true";
+    process.env.PROMO_LINK_CLAIM_ALLOW_WRITE = "true";
+
+    // No `promoLinkStatus` at all -- simulates a selection persisted before
+    // this field existed (or a stale client not yet redeployed).
+    const selection = normalizeCatalogSelection({ scope: "all_filtered", filter: { status: "linked", sourceLocale: "en" } });
+    expect(selection).toMatchObject({ scope: "all_filtered", filter: { status: "linked", sourceLocale: "en" } });
+    if (selection.scope === "all_filtered") expect(selection.filter).not.toHaveProperty("promoLinkStatus");
+
+    const enqueued = await enqueueCatalogBatch(owner, {
+      operation: "promo_claim", selection, actorId: foundation.actorId, requestId: randomUUID(),
+      channelAccounts: { [channel.channelAppId]: channel.accountId },
+    });
+    await materialize(enqueued.taskId);
+
+    const child = await owner.genericTask.findFirstOrThrow({ where: { parentTaskId: enqueued.taskId }, include: { items: true } });
+    const enumeratedIds = new Set(child.items.map((item) => item.targetId));
+    // All 4 `en` linked rows (1 claimed + 1 manual review + 2 free) are
+    // eligible per the pre-existing `status === "linked" && novelId !== null`
+    // check -- an absent `promoLinkStatus` must not narrow this at all.
+    expect(enumeratedIds).toEqual(new Set([ids["en-claimed"], ids["en-manual"], ...ids["en-free"]!.split(",")]));
+  });
+
+  /**
+   * 🔴 规模回归（Opus 复核 2026-09-24）：v1 实现把"已领取"物化成一份全量 id
+   * 集合再拼 `id: { in }`/`id: { notIn }`，在一次性 postgres:16.14 +
+   * 本仓库 Prisma 6.19.2 上实测 8 万个 id 时 `notIn` 报 "Query parameter
+   * limit exceeded … negation filters"、`in` 报 "too many bind variables
+   * in prepared statement, expected maximum of 32767"——预生产正式领取
+   * 剩余约 7.6 万本、已领取一旦过约 3.3 万本就会全灭。这条用例复现在那条
+   * 边界之上（3.6 万已领取），断言三态筛选页面查询都不报错、计数正确，
+   * 且"全选 + 未领取"提交后的枚举跨 `CATALOG_BATCH_CHUNK_SIZE`（50）多页、
+   * 入片集合与"未领取"桶逐字相等（已领取零入片、无遗漏）。
+   */
+  it(
+    "规模回归：3.6 万+ 已领取书目下，三态筛选与'全选+未领取'枚举均不报错、计数与集合精确（web_app/worker_app role）",
+    async () => {
+      const channel = foundation.channels[0]!;
+      await owner.channelCapability.create({ data: {
+        channelAppId: channel.channelAppId, capabilityKey: PROMO_LINK_CLAIM_CAPABILITY_KEY, status: "enabled",
+        sideEffecting: true, evidenceLevel: "OWNER_APPROVED_WRITE_PROBE",
+      } });
+      process.env.FEATURE_PROMO_LINK_CLAIM = "true";
+      process.env.PROMO_LINK_CLAIM_ALLOW_WRITE = "true";
+
+      const CLAIMED_COUNT = 36_000; // past the ~32,767 bind-variable ceiling and the observed ~33k notIn failure point
+      const NOT_CLAIMED_COUNT = 130; // > CATALOG_BATCH_CHUNK_SIZE (50) -- forces streamSelection's cursor loop across 3 pages
+      const MANUAL_REVIEW_COUNT = 40; // well under MANUAL_REVIEW_ID_CAP (5,000)
+
+      const seedStartedAt = performance.now();
+      let stepStartedAt = seedStartedAt;
+      const lap = (label: string) => {
+        const now = performance.now();
+        // eslint-disable-next-line no-console
+        console.info(`PROMO_LINK_STATUS_SCALE_METRIC phase=seed step=${label} elapsedMs=${Math.round(now - stepStartedAt)}`);
+        stepStartedAt = now;
+      };
+      const claimedIds = await seedCatalogRows(owner, { channelAppId: channel.channelAppId, count: CLAIMED_COUNT, prefix: "scale-claimed", sourceLocale: "en" });
+      lap("seedCatalogRows_claimed");
+      const freeIds = await seedCatalogRows(owner, { channelAppId: channel.channelAppId, count: NOT_CLAIMED_COUNT, prefix: "scale-free", sourceLocale: "en" });
+      const manualIds = await seedCatalogRows(owner, { channelAppId: channel.channelAppId, count: MANUAL_REVIEW_COUNT, prefix: "scale-manual", sourceLocale: "en" });
+      lap("seedCatalogRows_free_and_manual");
+      const linked = await bulkLinkAllUnderChannel(channel.channelAppId);
+      lap("bulkLinkAllUnderChannel");
+      expect(linked).toBe(CLAIMED_COUNT + NOT_CLAIMED_COUNT + MANUAL_REVIEW_COUNT);
+      await bulkSeedFetchedPromoLinks({ channelAppId: channel.channelAppId, channelAccountId: channel.accountId, ids: claimedIds });
+      lap("bulkSeedFetchedPromoLinks");
+      for (const id of manualIds) {
+        await seedManualReviewIntent({ novelSourceItemId: id, channelAppId: channel.channelAppId, channelAccountId: channel.accountId });
+      }
+      lap("seedManualReviewIntent_loop");
+      // 见 `bulkLinkAllUnderChannel` 模块头诊断记录第 2 点同一类问题：刚
+      // 批量插入的 3.6 万行 `promo_link` 统计信息也是旧的（截断后接近 0），
+      // 不显式 ANALYZE 的话，下面"已领取"/"未领取"两个 `promoLinks: {some/
+      // none}` 关系过滤器（编译成 EXISTS/NOT EXISTS 子查询）的基数估计会
+      // 严重失真，拖慢紧接着的页面列表查询与 worker 枚举。
+      await owner.$executeRawUnsafe(`ANALYZE promo_link`);
+      lap("analyzePromoLink");
+      const seedElapsedMs = Math.round(performance.now() - seedStartedAt);
+      // eslint-disable-next-line no-console
+      console.info(`PROMO_LINK_STATUS_SCALE_METRIC phase=seed claimed=${CLAIMED_COUNT} notClaimed=${NOT_CLAIMED_COUNT} manualReview=${MANUAL_REVIEW_COUNT} elapsedMs=${seedElapsedMs}`);
+
+      const queryStartedAt = performance.now();
+      const claimedPage = await readSourceItemsPage({ status: "linked", promoLinkStatus: "claimed", pageSize: "50" }, web);
+      expect(claimedPage.total).toBe(CLAIMED_COUNT);
+      const notClaimedPage = await readSourceItemsPage({ status: "linked", promoLinkStatus: "not_claimed", pageSize: "50" }, web);
+      expect(notClaimedPage.total).toBe(NOT_CLAIMED_COUNT);
+      const manualReviewPage = await readSourceItemsPage({ status: "linked", promoLinkStatus: "manual_review", pageSize: "50" }, web);
+      expect(manualReviewPage.total).toBe(MANUAL_REVIEW_COUNT);
+      // Mutual exclusivity + completeness at scale too.
+      expect(claimedPage.total + notClaimedPage.total + manualReviewPage.total)
+        .toBe(CLAIMED_COUNT + NOT_CLAIMED_COUNT + MANUAL_REVIEW_COUNT);
+      // eslint-disable-next-line no-console
+      console.info(`PROMO_LINK_STATUS_SCALE_METRIC phase=listing elapsedMs=${Math.round(performance.now() - queryStartedAt)}`);
+
+      const selection = normalizeCatalogSelection({
+        scope: "all_filtered",
+        filter: { status: "linked", promoLinkStatus: "not_claimed" },
+      });
+      const enqueued = await enqueueCatalogBatch(owner, {
+        operation: "promo_claim", selection, actorId: foundation.actorId, requestId: randomUUID(),
+        channelAccounts: { [channel.channelAppId]: channel.accountId },
+      });
+      const enumerateStartedAt = performance.now();
+      await materialize(enqueued.taskId);
+      // eslint-disable-next-line no-console
+      console.info(`PROMO_LINK_STATUS_SCALE_METRIC phase=enumerate elapsedMs=${Math.round(performance.now() - enumerateStartedAt)}`);
+
+      const parent = await owner.genericTask.findUniqueOrThrow({ where: { id: enqueued.taskId } });
+      expect(parent.result).toMatchObject({ enumerationStatus: "completed", submittedCount: NOT_CLAIMED_COUNT });
+
+      const child = await owner.genericTask.findFirstOrThrow({ where: { parentTaskId: enqueued.taskId }, include: { items: true } });
+      expect(child.items).toHaveLength(NOT_CLAIMED_COUNT);
+      const enumeratedIds = new Set(child.items.map((item) => item.targetId));
+      expect(enumeratedIds).toEqual(new Set(freeIds));
+      const claimedIdSet = new Set(claimedIds);
+      const manualIdSet = new Set(manualIds);
+      for (const id of enumeratedIds) {
+        expect(claimedIdSet.has(id)).toBe(false);
+        expect(manualIdSet.has(id)).toBe(false);
+      }
+    },
+    180_000,
+  );
 });

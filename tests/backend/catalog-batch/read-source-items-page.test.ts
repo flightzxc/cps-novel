@@ -3,6 +3,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const prismaMock = vi.hoisted(() => ({
   novelSourceItem: { findMany: vi.fn(), count: vi.fn() },
   genericTaskItem: { findMany: vi.fn() },
+  // B-4: `readSourceItemsPage` now unconditionally resolves the
+  // promo-link-status ID sets (for the "领取资格" column) before building
+  // its `where` clause -- these two stub to "nothing claimed / nothing in
+  // manual review" by default so every pre-existing test in this file (none
+  // of which cares about promo-link status) is unaffected.
+  promoLink: { findMany: vi.fn() },
+  $queryRaw: vi.fn(),
 }));
 
 vi.mock("@/app/api/admin/_lib/deps", () => ({ prisma: prismaMock }));
@@ -14,6 +21,8 @@ describe("catalog source page query contract", () => {
     vi.clearAllMocks();
     prismaMock.novelSourceItem.findMany.mockResolvedValue([]);
     prismaMock.novelSourceItem.count.mockResolvedValue(0);
+    prismaMock.promoLink.findMany.mockResolvedValue([]);
+    prismaMock.$queryRaw.mockResolvedValue([]);
   });
 
   it("defaults to page 1 with 100 rows and a deterministic last-seen/id order", async () => {

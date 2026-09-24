@@ -10,8 +10,21 @@ export type SourceItemFilterValues = {
   readonly search?: string;
   readonly status?: string;
   readonly sourceLocale?: string;
+  readonly promoLinkStatus?: string;
   readonly pageSize?: string;
 };
+
+/**
+ * B-4：与"来源条目状态"/"来源语种"取交集的独立筛选，值集固定为
+ * `PROMO_LINK_STATUS_FILTER_VALUES`（`@/domain/catalog-batch`）——不像
+ * 语种筛选那样开放任意字符串,这里的三个值都对应服务端一次性算好的有界 ID
+ * 集合,新增第四个值需要同时改服务端判定,所以就地列出而不是从别处派生。
+ */
+const PROMO_LINK_STATUS_FILTER_OPTIONS: ReadonlyArray<{ value: string; label: string }> = [
+  { value: "not_claimed", label: "未领取" },
+  { value: "claimed", label: "已领取" },
+  { value: "manual_review", label: "人工核对中" },
+];
 
 /**
  * L10N P1 §1.E: one option per resolvable moboreader locale (18 codes, see
@@ -84,6 +97,19 @@ export function SourceItemFilters({ values }: { values: SourceItemFilterValues }
             </option>
           ))}
           <option value={UNKNOWN_SOURCE_LOCALE_FILTER}>未知语种</option>
+        </select>
+        <select
+          name="promoLinkStatus"
+          defaultValue={values.promoLinkStatus ?? ""}
+          aria-label="推广链接状态"
+          className="rounded-lg border border-gray-300 bg-white py-2 pl-3 pr-8 text-sm text-gray-900 focus:border-blue-500 focus:outline-none disabled:bg-gray-100 disabled:text-gray-500"
+        >
+          <option value="">全部</option>
+          {PROMO_LINK_STATUS_FILTER_OPTIONS.map((item) => (
+            <option key={item.value} value={item.value}>
+              {item.label}
+            </option>
+          ))}
         </select>
         <select
           name="pageSize"

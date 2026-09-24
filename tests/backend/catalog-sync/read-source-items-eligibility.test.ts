@@ -29,6 +29,17 @@ const prismaMock = vi.hoisted(() => ({
   genericTaskItem: {
     findMany: vi.fn(),
   },
+  // B-4 (Opus 复核后的规模修复): `readSourceItemsPage` always classifies the
+  // *current page's* rows (`classifyPromoLinkRowStatuses`, scoped to just
+  // their ids) for the "领取资格" column -- never a full-table set. None of
+  // the four existing C-8 cases below care about promo-link status -- these
+  // default to "nothing claimed, nothing in manual review" and are never
+  // overridden. When a page has zero rows, neither call fires at all (see
+  // `classifyPromoLinkRowStatuses`'s own empty-input short-circuit).
+  promoLink: {
+    findMany: vi.fn().mockResolvedValue([]),
+  },
+  $queryRaw: vi.fn().mockResolvedValue([]),
 }));
 
 vi.mock("@/app/api/admin/_lib/deps", () => ({ prisma: prismaMock }));
@@ -147,6 +158,110 @@ describe("readSourceItemsPage · 领取资格投影 (C-8)", () => {
     expect(byId.get("src-linked-2")).toMatchObject({
       promoClaimEligible: false,
       promoClaimIneligibleReason: "item_already_active_elsewhere",
+    });
+  });
+});
+
+describe("readSourceItemsPage · 推广链接状态投影 (B-4, Opus 复核后的规模修复)", () => {
+  it("classifyPromoLinkRowStatuses is scoped to exactly the current page's row ids (never a full-table set)", async () => {
+    vi.clearAllMocks();
+    prismaMock.novelSourceItem.findMany.mockResolvedValue([
+      baseRow({ id: "src-a", status: "linked", novelId: "novel-a" }),
+      baseRow({ id: "src-b", status: "linked", novelId: "novel-b" }),
+    ]);
+    prismaMock.novelSourceItem.count.mockResolvedValue(2);
+    prismaMock.genericTaskItem.findMany.mockResolvedValue([]);
+    prismaMock.promoLink.findMany.mockResolvedValue([]);
+    prismaMock.$queryRaw.mockResolvedValue([]);
+
+    await readSourceItemsPage({ status: "linked" });
+
+    expect(prismaMock.promoLink.findMany).toHaveBeenCalledWith({
+      where: { novelSourceItemId: { in: ["src-a", "src-b"] }, status: "fetched", deletedAt: null },
+      select: { novelSourceItemId: true },
+      distinct: ["novelSourceItemId"],
+    });
+    expect(prismaMock.$queryRaw).toHaveBeenCalledTimes(1);
+  });
+
+  it("an empty page makes zero promo-link-status queries at all", async () => {
+    vi.clearAllMocks();
+    prismaMock.novelSourceItem.findMany.mockResolvedValue([]);
+    prismaMock.novelSourceItem.count.mockResolvedValue(0);
+    prismaMock.genericTaskItem.findMany.mockResolvedValue([]);
+
+    await readSourceItemsPage({});
+
+    expect(prismaMock.promoLink.findMany).not.toHaveBeenCalled();
+    expect(prismaMock.$queryRaw).not.toHaveBeenCalled();
+  });
+
+  it("a row with a fetched PromoLink -> already_has_promo_code, taking priority over item_already_active_elsewhere", async () => {
+    prismaMock.novelSourceItem.findMany.mockResolvedValue([
+      baseRow({ id: "src-claimed", status: "linked", novelId: "novel-1" }),
+    ]);
+    prismaMock.novelSourceItem.count.mockResolvedValue(1);
+    // Also active elsewhere -- proves already_has_promo_code wins the priority order.
+    prismaMock.genericTaskItem.findMany.mockResolvedValue([{ targetId: "src-claimed" }]);
+    prismaMock.promoLink.findMany.mockResolvedValue([{ novelSourceItemId: "src-claimed" }]);
+    prismaMock.$queryRaw.mockResolvedValue([]);
+
+    const page = await readSourceItemsPage({ status: "linked" });
+
+    expect(page.items[0]).toMatchObject({
+      promoClaimEligible: false,
+      promoClaimIneligibleReason: "already_has_promo_code",
+    });
+  });
+
+  it("a row with a manual_review_required intent (and no fetched link) -> manual_review_pending", async () => {
+    prismaMock.novelSourceItem.findMany.mockResolvedValue([
+      baseRow({ id: "src-manual", status: "linked", novelId: "novel-1" }),
+    ]);
+    prismaMock.novelSourceItem.count.mockResolvedValue(1);
+    prismaMock.genericTaskItem.findMany.mockResolvedValue([]);
+    prismaMock.promoLink.findMany.mockResolvedValue([]);
+    prismaMock.$queryRaw.mockResolvedValue([{ id: "src-manual" }]);
+
+    const page = await readSourceItemsPage({ status: "linked" });
+
+    expect(page.items[0]).toMatchObject({
+      promoClaimEligible: false,
+      promoClaimIneligibleReason: "manual_review_pending",
+    });
+  });
+
+  it("a row in manual review that later got a fetched link -> already_has_promo_code (claimed beats manual_review)", async () => {
+    prismaMock.novelSourceItem.findMany.mockResolvedValue([
+      baseRow({ id: "src-both", status: "linked", novelId: "novel-1" }),
+    ]);
+    prismaMock.novelSourceItem.count.mockResolvedValue(1);
+    prismaMock.genericTaskItem.findMany.mockResolvedValue([]);
+    prismaMock.promoLink.findMany.mockResolvedValue([{ novelSourceItemId: "src-both" }]);
+    prismaMock.$queryRaw.mockResolvedValue([{ id: "src-both" }]);
+
+    const page = await readSourceItemsPage({ status: "linked" });
+
+    expect(page.items[0]).toMatchObject({
+      promoClaimEligible: false,
+      promoClaimIneligibleReason: "already_has_promo_code",
+    });
+  });
+
+  it("a row not linked yet still reports source_not_linked even if it happens to appear in the promo-link sets (defensive; should not occur in practice)", async () => {
+    prismaMock.novelSourceItem.findMany.mockResolvedValue([
+      baseRow({ id: "src-unlinked", status: "pending", novelId: null }),
+    ]);
+    prismaMock.novelSourceItem.count.mockResolvedValue(1);
+    prismaMock.genericTaskItem.findMany.mockResolvedValue([]);
+    prismaMock.promoLink.findMany.mockResolvedValue([{ novelSourceItemId: "src-unlinked" }]);
+    prismaMock.$queryRaw.mockResolvedValue([]);
+
+    const page = await readSourceItemsPage({});
+
+    expect(page.items[0]).toMatchObject({
+      promoClaimEligible: false,
+      promoClaimIneligibleReason: "source_not_linked",
     });
   });
 });

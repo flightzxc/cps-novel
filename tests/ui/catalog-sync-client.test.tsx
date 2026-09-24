@@ -67,3 +67,26 @@ describe("Promo link claim", () => {
     await waitFor(() => expect(actions.enqueuePromoLinkClaimAction).toHaveBeenCalledWith(expect.objectContaining({ channelAccounts: { app: "a2" } })));
   });
 });
+
+describe("领取资格列 · 推广链接状态 (B-4)", () => {
+  it("已有推广码的行显示裸文本“已有推广码”，不带“不可领取 · ”前缀", () => {
+    const claimedRow = row("claimed-1", "Claimed Book");
+    render(<CatalogSyncClient items={[{ ...claimedRow, promoClaimEligible: false, promoClaimIneligibleReason: "already_has_promo_code" }]} total={1} filter={{ status: "linked" }} catalogGate={{ featureEnabled: true }} contentPublish="granted" promoClaimGranted promoClaimBlockedReason={null} />);
+    const cell = screen.getByTestId("promo-claim-eligibility-ineligible");
+    expect(cell.textContent).toBe("已有推广码");
+  });
+
+  it("人工核对中的行显示裸文本“人工核对中”，不带“不可领取 · ”前缀", () => {
+    const manualRow = row("manual-1", "Manual Review Book");
+    render(<CatalogSyncClient items={[{ ...manualRow, promoClaimEligible: false, promoClaimIneligibleReason: "manual_review_pending" }]} total={1} filter={{ status: "linked" }} catalogGate={{ featureEnabled: true }} contentPublish="granted" promoClaimGranted promoClaimBlockedReason={null} />);
+    const cell = screen.getByTestId("promo-claim-eligibility-ineligible");
+    expect(cell.textContent).toBe("人工核对中");
+  });
+
+  it("原有两种不可领取原因仍保留“不可领取 · ”前缀，未被本次改动影响", () => {
+    const notLinkedRow = { ...row("not-linked-1", "Not Linked Book"), promoClaimEligible: false, promoClaimIneligibleReason: "source_not_linked" as const };
+    render(<CatalogSyncClient items={[notLinkedRow]} total={1} filter={{ status: "pending" }} catalogGate={{ featureEnabled: true }} contentPublish="granted" promoClaimGranted promoClaimBlockedReason={null} />);
+    const cell = screen.getByTestId("promo-claim-eligibility-ineligible");
+    expect(cell.textContent).toBe("不可领取 · 来源条目尚未关联书目");
+  });
+});
