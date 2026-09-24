@@ -332,6 +332,31 @@ services:
       # production-like rehearsal environment.
       MOBOREADER_UPSTREAM_RECOMMENDED_PAGE_SIZE: ${MOBOREADER_UPSTREAM_RECOMMENDED_PAGE_SIZE:-20}
       MOBOREADER_UPSTREAM_MIN_REQUEST_INTERVAL_MS: ${MOBOREADER_UPSTREAM_MIN_REQUEST_INTERVAL_MS:-1100}
+      # 阶段4-A（设计《领推广按接口限速与预读集合化 · 阶段4-5》§5.4/§十三）：
+      # 按接口限速的八项配置。上游适配器只由 worker 的 handler 构造
+      # （`worker/handlers/moboreader.ts`、`worker/handlers/
+      # promo-link-claim.ts`；web / scheduler 都不调用），所以只需透传给
+      # worker，同 MIN_REQUEST_INTERVAL_MS 上面这条的既有做法一致。
+      #
+      # 🔴 这里补的正是 v0.4.2 组装时发现的缺陷：预生产 preprod.env 把开关
+      # 设成 true、`preflight.sh` 的 `preprod_assert_moboreader_rate_gate_
+      # config` 也照样打印 enabled=true（它只校验 env 文件里的值本身合法，
+      # 不管这个值有没有透传进容器），但 worker 容器实际收不到这个变量——
+      # `resolveMoboreaderPerEndpointRateGateConfig` 在 worker 进程里读到的
+      # 是"未设置"，开关形同虚设，预检说开了、容器里其实还是关的。
+      #
+      # 默认值逐条对齐 `resolveMoboreaderPerEndpointRateGateConfig`
+      # （`src/lib/adapters/moboreader-rate-limit.ts`）里各自的硬编码回退，
+      # 不是照抄 MIN_REQUEST_INTERVAL_MS 那种"沿用既有共享变量"——两个接口
+      # 间隔各自默认 1200ms，不回落到上面那个 1100ms 的共享变量。
+      MOBOREADER_UPSTREAM_PER_ENDPOINT_RATE_GATE_ENABLED: ${MOBOREADER_UPSTREAM_PER_ENDPOINT_RATE_GATE_ENABLED:-false}
+      MOBOREADER_UPSTREAM_MIN_REQUEST_INTERVAL_MS__GETLISTPC: ${MOBOREADER_UPSTREAM_MIN_REQUEST_INTERVAL_MS__GETLISTPC:-1200}
+      MOBOREADER_UPSTREAM_MIN_REQUEST_INTERVAL_MS__GETCODE: ${MOBOREADER_UPSTREAM_MIN_REQUEST_INTERVAL_MS__GETCODE:-1200}
+      MOBOREADER_UPSTREAM_HOST_MIN_GAP_MS: ${MOBOREADER_UPSTREAM_HOST_MIN_GAP_MS:-250}
+      MOBOREADER_UPSTREAM_REMAINING_FLOOR__GETLISTPC: ${MOBOREADER_UPSTREAM_REMAINING_FLOOR__GETLISTPC:-8}
+      MOBOREADER_UPSTREAM_REMAINING_FLOOR__GETCODE: ${MOBOREADER_UPSTREAM_REMAINING_FLOOR__GETCODE:-12}
+      MOBOREADER_UPSTREAM_RATE_WINDOW_MAX_WAIT_MS: ${MOBOREADER_UPSTREAM_RATE_WINDOW_MAX_WAIT_MS:-60000}
+      MOBOREADER_UPSTREAM_RETRY_AFTER_ANOMALY_THRESHOLD_MS: ${MOBOREADER_UPSTREAM_RETRY_AFTER_ANOMALY_THRESHOLD_MS:-900000}
       MOBOREADER_PREVIEW_CHUNK_SIZE: ${MOBOREADER_PREVIEW_CHUNK_SIZE:-25}
       MOBOREADER_PREVIEW_CONCURRENCY: ${MOBOREADER_PREVIEW_CONCURRENCY:-2}
       MOBOREADER_PREVIEW_TIMEOUT_MS: ${MOBOREADER_PREVIEW_TIMEOUT_MS:-20000}
