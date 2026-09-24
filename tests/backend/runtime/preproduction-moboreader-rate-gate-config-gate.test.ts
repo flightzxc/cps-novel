@@ -152,24 +152,65 @@ describe("preprod_assert_moboreader_rate_gate_config: 两个接口间隔——10
   }
 });
 
-describe("preprod_assert_moboreader_rate_gate_config: 主机级间隔与地板——非负整数", () => {
-  const nonNegVars = [
-    "MOBOREADER_UPSTREAM_HOST_MIN_GAP_MS",
+describe("preprod_assert_moboreader_rate_gate_config: 主机级间隔——非负整数", () => {
+  it("MOBOREADER_UPSTREAM_HOST_MIN_GAP_MS=0 -> PASS（非负允许 0）", () => {
+    const r = runGate({ MOBOREADER_UPSTREAM_HOST_MIN_GAP_MS: "0" });
+    expect(r.status).toBe(0);
+  });
+
+  it("MOBOREADER_UPSTREAM_HOST_MIN_GAP_MS=-1 -> FAIL reason=must_be_non_negative", () => {
+    const r = runGate({ MOBOREADER_UPSTREAM_HOST_MIN_GAP_MS: "-1" });
+    expect(r.status).toBe(65);
+    expect(r.stdout).toContain("variable=MOBOREADER_UPSTREAM_HOST_MIN_GAP_MS");
+    expect(r.stdout).toContain("reason=must_be_non_negative");
+  });
+
+  it("MOBOREADER_UPSTREAM_HOST_MIN_GAP_MS=abc -> FAIL reason=not_an_integer", () => {
+    const r = runGate({ MOBOREADER_UPSTREAM_HOST_MIN_GAP_MS: "abc" });
+    expect(r.status).toBe(65);
+    expect(r.stdout).toContain("reason=not_an_integer");
+  });
+
+  it("MOBOREADER_UPSTREAM_HOST_MIN_GAP_MS=008（带前导零）-> PASS = 8（不被 bash 算术误判成非法八进制）", () => {
+    const r = runGate({ MOBOREADER_UPSTREAM_HOST_MIN_GAP_MS: "008" });
+    expect(r.status).toBe(0);
+    expect(r.stdout).toContain("hostMinGapMs=8");
+  });
+});
+
+/**
+ * 2026-09-25 Opus 复核修正：设计 §5.6 原文"地板必须 ≥ 1"，上一版本这里按
+ * "非负整数、允许 0"实现是工单交接时的笔误，不是 Owner 改口——地板是 getcode
+ * 撞 429（=结果不明）之前的主动减速保险，配成 0 等于一个配置就能把这道保险
+ * 整体关掉。现在两个地板变量与两个接口间隔、窗口重置上限一样按"正整数、拒绝
+ * 0"校验，reason 统一复用 `must_be_positive`（与 `MOBOREADER_UPSTREAM_RATE_
+ * WINDOW_MAX_WAIT_MS` 的 reason 一致，不再有独立的 `must_be_non_negative`
+ * 分支）。
+ */
+describe("preprod_assert_moboreader_rate_gate_config: 两个地板——正整数（[Opus fix] 不再允许 0，设计 §5.6）", () => {
+  const floorVars = [
     "MOBOREADER_UPSTREAM_REMAINING_FLOOR__GETLISTPC",
     "MOBOREADER_UPSTREAM_REMAINING_FLOOR__GETCODE",
   ] as const;
 
-  for (const key of nonNegVars) {
-    it(`${key}=0 -> PASS（非负允许 0）`, () => {
+  for (const key of floorVars) {
+    it(`${key}=0 -> FAIL reason=must_be_positive（[Opus fix]：不再是"非负允许 0"）`, () => {
       const r = runGate({ [key]: "0" } as RateGateEnv);
+      expect(r.status).toBe(65);
+      expect(r.stdout).toContain(`variable=${key}`);
+      expect(r.stdout).toContain("reason=must_be_positive");
+    });
+
+    it(`${key}=1（恰好等于下限）-> PASS（边界不误杀）`, () => {
+      const r = runGate({ [key]: "1" } as RateGateEnv);
       expect(r.status).toBe(0);
     });
 
-    it(`${key}=-1 -> FAIL reason=must_be_non_negative`, () => {
+    it(`${key}=-1 -> FAIL reason=must_be_positive`, () => {
       const r = runGate({ [key]: "-1" } as RateGateEnv);
       expect(r.status).toBe(65);
       expect(r.stdout).toContain(`variable=${key}`);
-      expect(r.stdout).toContain("reason=must_be_non_negative");
+      expect(r.stdout).toContain("reason=must_be_positive");
     });
 
     it(`${key}=abc -> FAIL reason=not_an_integer`, () => {
@@ -179,10 +220,10 @@ describe("preprod_assert_moboreader_rate_gate_config: 主机级间隔与地板�
     });
   }
 
-  it("MOBOREADER_UPSTREAM_HOST_MIN_GAP_MS=008（带前导零）-> PASS = 8（不被 bash 算术误判成非法八进制）", () => {
-    const r = runGate({ MOBOREADER_UPSTREAM_HOST_MIN_GAP_MS: "008" });
+  it("MOBOREADER_UPSTREAM_REMAINING_FLOOR__GETLISTPC=008（带前导零）-> PASS = 8", () => {
+    const r = runGate({ MOBOREADER_UPSTREAM_REMAINING_FLOOR__GETLISTPC: "008" });
     expect(r.status).toBe(0);
-    expect(r.stdout).toContain("hostMinGapMs=8");
+    expect(r.stdout).toContain("remainingFloorGetlistpc=8");
   });
 });
 
@@ -316,12 +357,15 @@ describe("TS 解析器 vs shell 校验：数值项判定一致性（防两边漂
     "MOBOREADER_UPSTREAM_MIN_REQUEST_INTERVAL_MS__GETLISTPC",
     "MOBOREADER_UPSTREAM_MIN_REQUEST_INTERVAL_MS__GETCODE",
   ] as const;
-  const nonNegFields = [
-    "MOBOREADER_UPSTREAM_HOST_MIN_GAP_MS",
+  // 只有主机级间隔仍是"非负、允许 0"。
+  const nonNegFields = ["MOBOREADER_UPSTREAM_HOST_MIN_GAP_MS"] as const;
+  // [Opus fix] 两个地板从"非负"改为"正整数"，与窗口重置上限同组——设计 §5.6
+  // "地板必须 ≥ 1"，0 必须拒绝。
+  const positiveFields = [
+    "MOBOREADER_UPSTREAM_RATE_WINDOW_MAX_WAIT_MS",
     "MOBOREADER_UPSTREAM_REMAINING_FLOOR__GETLISTPC",
     "MOBOREADER_UPSTREAM_REMAINING_FLOOR__GETCODE",
   ] as const;
-  const positiveFields = ["MOBOREADER_UPSTREAM_RATE_WINDOW_MAX_WAIT_MS"] as const;
 
   function tsAccepts(env: RateGateEnv): boolean {
     const fullEnv: NodeJS.ProcessEnv = { NODE_ENV: "test", ...env };

@@ -316,12 +316,13 @@ preprod_assert_promo_claim_lifecycle_config() {
 #     且 `>= 1000`（设计 §5.6 的安全下限——"防止手误把间隔配成 120"，TS 侧同一
 #     下限常量 `MOBOREADER_PER_ENDPOINT_INTERVAL_FLOOR_MS`）。
 #   - `MOBOREADER_UPSTREAM_HOST_MIN_GAP_MS`：非负整数，默认 250。
-#   - `MOBOREADER_UPSTREAM_REMAINING_FLOOR__GETLISTPC` / `__GETCODE`：非负整数
-#     （🔴 与设计 §5.6 原文"地板必须 ≥ 1"字面不同——工单交接的口径是"非负整数"，
-#     即允许配成 0；TS 侧 `nonNegativeIntegerConfig` 同样允许 0。这是本轮对
-#     设计文档一处措辞张力的取舍，收窄到"更宽松、但与 TS 逐字一致"的一侧，
-#     未回到 Owner 重新拍板——按任务纪律在交接材料里单列说明），默认分别
-#     8 / 12。
+#   - `MOBOREADER_UPSTREAM_REMAINING_FLOOR__GETLISTPC` / `__GETCODE`：正整数
+#     （`>= 1`，0 拒绝）——严格对齐设计 §5.6 原文"地板必须 ≥ 1"。🔴 2026-09-25
+#     Opus 复核修正：上一版本这里曾写"非负整数、允许 0"，那是工单交接时的笔误，
+#     不是 Owner 改口；地板是 getcode 撞 429（=结果不明）之前的主动减速保险，
+#     配成 0 等于运维一个配置就能把这道保险关掉，与设计原意相反。TS 侧同步改回
+#     `positiveIntegerConfig`（原为 `nonNegativeIntegerConfig`）。默认分别 8 / 12
+#     （两个默认值本身早已 ≥ 1，不受此次收紧影响）。
 #   - `MOBOREADER_UPSTREAM_RATE_WINDOW_MAX_WAIT_MS`：正整数，默认 60000。
 #
 # 失败时把 `moboreader_rate_gate_config_invalid variable=... value=...
@@ -370,10 +371,10 @@ preprod_assert_moboreader_rate_gate_config() {
   out="$(_mrg_resolve_integer_min MOBOREADER_UPSTREAM_HOST_MIN_GAP_MS "${MOBOREADER_UPSTREAM_HOST_MIN_GAP_MS:-}" 250 0 must_be_non_negative)" \
     || { echo "$out"; return 65; }
   host_gap="$out"
-  out="$(_mrg_resolve_integer_min MOBOREADER_UPSTREAM_REMAINING_FLOOR__GETLISTPC "${MOBOREADER_UPSTREAM_REMAINING_FLOOR__GETLISTPC:-}" 8 0 must_be_non_negative)" \
+  out="$(_mrg_resolve_integer_min MOBOREADER_UPSTREAM_REMAINING_FLOOR__GETLISTPC "${MOBOREADER_UPSTREAM_REMAINING_FLOOR__GETLISTPC:-}" 8 1 must_be_positive)" \
     || { echo "$out"; return 65; }
   floor_getlistpc="$out"
-  out="$(_mrg_resolve_integer_min MOBOREADER_UPSTREAM_REMAINING_FLOOR__GETCODE "${MOBOREADER_UPSTREAM_REMAINING_FLOOR__GETCODE:-}" 12 0 must_be_non_negative)" \
+  out="$(_mrg_resolve_integer_min MOBOREADER_UPSTREAM_REMAINING_FLOOR__GETCODE "${MOBOREADER_UPSTREAM_REMAINING_FLOOR__GETCODE:-}" 12 1 must_be_positive)" \
     || { echo "$out"; return 65; }
   floor_getcode="$out"
   out="$(_mrg_resolve_integer_min MOBOREADER_UPSTREAM_RATE_WINDOW_MAX_WAIT_MS "${MOBOREADER_UPSTREAM_RATE_WINDOW_MAX_WAIT_MS:-}" 60000 1 must_be_positive)" \

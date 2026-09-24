@@ -13,6 +13,7 @@ import {
   MOBOREADER_PER_ENDPOINT_RATE_GATE_DEFAULTS,
   MOBOREADER_UPSTREAM_PER_ENDPOINT_RATE_GATE_ENV,
   MoboreaderRateLimitConfigError,
+  RESET_ABSOLUTE_EPOCH_THRESHOLD_SECONDS,
   createMoboreaderPerEndpointRateGate,
   isMoboreaderPerEndpointRateGateEnabled,
   resolveMoboreaderPerEndpointRateGateConfig,
@@ -171,6 +172,66 @@ describe("createMoboreaderPerEndpointRateGate: remaining-quota floor pause (§5.
     gate.observe!("getcode", { httpStatus: 200, gatewayHeaders: headers({ "x-ratelimit-remaining": "5" }) }); // no reset header
     await gate.wait("getcode");
     expect(clock.now()).toBe(60_000);
+  });
+
+  // 2026-09-25 Opus 复核：用预生产真实 `upstream_call` 事件与 docker 日志
+  // 时间戳核实了 8 个样本（2026-09-24 10:24–11:37 UTC）——`x-ratelimit-reset`
+  // 恒等于"日志时刻 + 59～60 秒"的**绝对 Unix 秒级时间戳**（例：日志瞬间
+  // 1790245469 → 头值 1790245529），不是"距重置还有几秒"的相对值。以下三组
+  // 用真实量级的 fake now（模拟 2023-11-14 附近的 epoch 毫秒）区分两种解读——
+  // 用小 now（如 0）会让"绝对"与"相对"的算术结果因为 60s 硬顶而巧合相同，
+  // 掩盖这处语义差异，所以必须用大 now。
+  describe("[Opus fix] x-ratelimit-reset is an absolute Unix epoch second, not seconds-remaining", () => {
+    const REALISTIC_NOW_MS = 1_700_000_000_000; // ~2023-11-14, epoch-scale on purpose
+
+    it("a header >= RESET_ABSOLUTE_EPOCH_THRESHOLD_SECONDS is read as an absolute epoch second", async () => {
+      const clock = fakeClock(REALISTIC_NOW_MS);
+      const gate = createMoboreaderPerEndpointRateGate(baseOptions(clock));
+      const nowSeconds = REALISTIC_NOW_MS / 1_000;
+      const resetAtEpochSeconds = nowSeconds + 30; // 30s in the future, absolute
+      expect(resetAtEpochSeconds).toBeGreaterThanOrEqual(RESET_ABSOLUTE_EPOCH_THRESHOLD_SECONDS);
+      await gate.wait("getlistpc"); // t = REALISTIC_NOW_MS
+      gate.observe!("getlistpc", {
+        httpStatus: 200,
+        gatewayHeaders: headers({ "x-ratelimit-remaining": "3", "x-ratelimit-reset": String(resetAtEpochSeconds) }),
+      });
+      await gate.wait("getlistpc");
+      // Correct (absolute) reading: waits exactly 30s. A buggy "always
+      // relative" reading would instead add the whole ~1.7 billion raw
+      // value to `now`, get capped at the 60s ceiling, and wait 60s —
+      // this is exactly the assertion the "revert to always-relative"
+      // mutation must turn red.
+      expect(clock.now()).toBe(REALISTIC_NOW_MS + 30_000);
+    });
+
+    it("a small header value (< threshold) is still read as relative-seconds-from-now (defensive fallback for an older/different gateway)", async () => {
+      const clock = fakeClock(REALISTIC_NOW_MS);
+      const gate = createMoboreaderPerEndpointRateGate(baseOptions(clock));
+      await gate.wait("getcode");
+      gate.observe!("getcode", {
+        httpStatus: 200,
+        gatewayHeaders: headers({ "x-ratelimit-remaining": "5", "x-ratelimit-reset": "20" }),
+      });
+      await gate.wait("getcode");
+      expect(clock.now()).toBe(REALISTIC_NOW_MS + 20_000);
+    });
+
+    it("an absolute epoch second that is already in the past is discarded (null), not treated as 'reset already happened, go now'", async () => {
+      const clock = fakeClock(REALISTIC_NOW_MS);
+      const gate = createMoboreaderPerEndpointRateGate(baseOptions(clock));
+      const nowSeconds = REALISTIC_NOW_MS / 1_000;
+      const pastAbsoluteSeconds = nowSeconds - 1; // 1 second in the past, still >= threshold
+      await gate.wait("getlistpc"); // t = REALISTIC_NOW_MS, floorHitAt set here on the observe below
+      gate.observe!("getlistpc", {
+        httpStatus: 200,
+        gatewayHeaders: headers({ "x-ratelimit-remaining": "1", "x-ratelimit-reset": String(pastAbsoluteSeconds) }),
+      });
+      await gate.wait("getlistpc");
+      // A past instant must never shorten the wait — falls back to the
+      // floorHitAt + rateWindowMaxWaitMs (60s) ceiling, same as an absent
+      // header, not to "0 wait because the reset instant already passed".
+      expect(clock.now()).toBe(REALISTIC_NOW_MS + 60_000);
+    });
   });
 
   it("clears the floor-pause shadow once satisfied, so a later call doesn't re-pause on stale data", async () => {
@@ -350,12 +411,27 @@ describe("resolveMoboreaderPerEndpointRateGateConfig", () => {
       .toThrow(MoboreaderRateLimitConfigError);
   });
 
-  it("allows a remaining floor of exactly 0 (non-negative, not positive)", () => {
-    const config = resolveMoboreaderPerEndpointRateGateConfig({
+  // 2026-09-25 Opus 复核修正：地板必须是正整数（design §5.6 "地板必须 ≥ 1"），
+  // 0 会拒绝——上一版本这里允许 0 是工单交接时的笔误，不是 Owner 改口；地板是
+  // getcode 撞 429（=结果不明）之前的主动减速保险，配成 0 等于一个配置就能
+  // 把这道保险整体关掉。
+  it("[Opus fix] rejects a remaining floor of exactly 0 — floor must be positive, not merely non-negative", () => {
+    expect(() => resolveMoboreaderPerEndpointRateGateConfig({
       NODE_ENV: "test",
       MOBOREADER_UPSTREAM_REMAINING_FLOOR__GETLISTPC: "0",
+    })).toThrow(MoboreaderRateLimitConfigError);
+    expect(() => resolveMoboreaderPerEndpointRateGateConfig({
+      NODE_ENV: "test",
+      MOBOREADER_UPSTREAM_REMAINING_FLOOR__GETCODE: "0",
+    })).toThrow(MoboreaderRateLimitConfigError);
+  });
+
+  it("accepts a remaining floor of exactly 1 (the minimum legal value)", () => {
+    const config = resolveMoboreaderPerEndpointRateGateConfig({
+      NODE_ENV: "test",
+      MOBOREADER_UPSTREAM_REMAINING_FLOOR__GETLISTPC: "1",
     });
-    expect(config.remainingFloor.getlistpc).toBe(0);
+    expect(config.remainingFloor.getlistpc).toBe(1);
   });
 
   it("rejects a negative remaining floor", () => {

@@ -536,6 +536,17 @@ export interface CreateMoboreaderPerEndpointRateGateOptions {
 }
 
 /**
+ * Threshold distinguishing an absolute Unix epoch second from a relative
+ * seconds-from-now value in `x-ratelimit-reset` (see `observe`'s doc
+ * comment on this constant's use for the evidence pinning this). Chosen
+ * as 1e9 (2001-09-09T01:46:40Z): far below any real current-or-near-future
+ * epoch second, and far above any plausible "seconds remaining in this
+ * rate-limit window" value (this gate's own ceiling for that is
+ * `rateWindowMaxWaitMs`, 60_000ms by default).
+ */
+export const RESET_ABSOLUTE_EPOCH_THRESHOLD_SECONDS = 1_000_000_000;
+
+/**
  * RC-4 per-endpoint rate gate (design §5.1–§5.3). A single global FIFO
  * mutex (not one queue per endpoint) serializes every `wait()` call
  * regardless of endpoint — this is deliberate, not an accidental
@@ -696,18 +707,34 @@ export function createMoboreaderPerEndpointRateGate(
       }
     }
 
-    // `x-ratelimit-reset`'s exact semantics (relative seconds vs.
-    // something else) are, per design §5.2, meant to be pinned by a
-    // read-only analysis of real `upstream_call` logs before/alongside
-    // rollout — not by this port. Interpreted here as "seconds remaining
-    // in the current window" (the common Kong convention, and consistent
-    // with design §5.2's "随每次请求后移" observation), but the
-    // `rateWindowMaxWaitMs` cap in `wait()` above bounds the damage of a
-    // wrong interpretation to "waits up to 60s longer than strictly
-    // necessary" — never less, never a crash.
-    const parsedResetSeconds = parseNonNegativeIntegerHeader(info.gatewayHeaders[RESET_HEADER]);
-    if (parsedResetSeconds !== null) {
-      state.windowResetAt = now() + parsedResetSeconds * 1_000;
+    // `x-ratelimit-reset` semantics — PINNED by a read-only comparison of
+    // 8 real predproduction `upstream_call` events against the worker's
+    // own docker-log timestamps (2026-09-24 10:24–11:37 UTC, Opus review
+    // of this commit): the header's value is an **absolute Unix epoch
+    // second** (e.g. log instant 1790245469 → header value 1790245529,
+    // consistently ~59–60s ahead of the log instant) — NOT "seconds
+    // remaining in the window" as this port originally assumed. A value
+    // this large (>= `RESET_ABSOLUTE_EPOCH_THRESHOLD_SECONDS`, chosen
+    // well below any real epoch second and far above any plausible
+    // "seconds remaining" value) is treated as that absolute instant;
+    // anything smaller is treated as relative-seconds-from-now, kept only
+    // as a defensive fallback in case a future/different gateway ever
+    // sends the older convention. Both branches are then capped at
+    // `now() + rateWindowMaxWaitMs` (the same 60s ceiling `wait()` already
+    // enforces via `floorHitAt`, applied here too so a bad/huge value
+    // can never make this field itself report more than one window's
+    // worth of wait) — and if the result is not strictly in the future,
+    // it is discarded as `null` (a stale/incorrectly-signed value must
+    // never make the endpoint wait *less*, so it falls back to the
+    // `floorHitAt`-based ceiling in `wait()` instead of a bogus instant).
+    const parsedResetRaw = parseNonNegativeIntegerHeader(info.gatewayHeaders[RESET_HEADER]);
+    if (parsedResetRaw !== null) {
+      const nowMs = now();
+      const candidateMs = parsedResetRaw >= RESET_ABSOLUTE_EPOCH_THRESHOLD_SECONDS
+        ? parsedResetRaw * 1_000
+        : nowMs + parsedResetRaw * 1_000;
+      const cappedMs = Math.min(candidateMs, nowMs + options.rateWindowMaxWaitMs);
+      state.windowResetAt = cappedMs > nowMs ? cappedMs : null;
     }
 
     if (info.httpStatus === 429) {
@@ -829,10 +856,16 @@ export function resolveMoboreaderPerEndpointRateGateConfig(
   const getlistpc = perEndpointIntervalConfig(env, ENV.intervalGetlistpc, "per_endpoint_interval_getlistpc_invalid");
   const getcode = perEndpointIntervalConfig(env, ENV.intervalGetcode, "per_endpoint_interval_getcode_invalid");
   const hostMinGapMs = nonNegativeIntegerConfig(env, ENV.hostMinGapMs, D.hostMinGapMs, "per_endpoint_host_min_gap_invalid");
-  const remainingFloorGetlistpc = nonNegativeIntegerConfig(
+  // Design §5.6: "地板必须 ≥ 1" — a floor of 0 would mean "never slow down
+  // proactively, only react after 429", defeating the point of this being
+  // a *proactive* insurance ahead of getcode's 429 = ambiguous-result
+  // path. Positive, not non-negative (Opus review of this commit: the
+  // task brief's earlier "非负整数" was a drafting error, corrected here
+  // to match the design text).
+  const remainingFloorGetlistpc = positiveIntegerConfig(
     env, ENV.remainingFloorGetlistpc, D.remainingFloorGetlistpc, "per_endpoint_remaining_floor_getlistpc_invalid",
   );
-  const remainingFloorGetcode = nonNegativeIntegerConfig(
+  const remainingFloorGetcode = positiveIntegerConfig(
     env, ENV.remainingFloorGetcode, D.remainingFloorGetcode, "per_endpoint_remaining_floor_getcode_invalid",
   );
   const rateWindowMaxWaitMs = positiveIntegerConfig(
