@@ -160,8 +160,14 @@ describe("P1-06 database operations static contracts", () => {
     // `scope`) + 6 physical objects (pkey, FK, the partial-unique active
     // index, the history index, the release-shape CHECK, the scope CHECK)
     // -- 1214 + 20 = 1234.
-    expect(records).toHaveLength(1234);
-    expect(new Set(records.map((line) => JSON.parse(line).stable_key)).size).toBe(1234);
+    // 领推广链接正式修复第 5 阶段·5-A (20260924090000_p5a_catalog_position,
+    // 设计_领推广按接口限速与预读集合化_阶段4-5_2026-09-24.md §7.2, E5) adds
+    // 1 more: the single new nullable JSONB field record
+    // `novel_source_item.catalog_position` -- no new table, no new
+    // constraint/index (deliberately unindexed, see that field record's own
+    // `notes`) -- running total 1234 + 1 = 1235.
+    expect(records).toHaveLength(1235);
+    expect(new Set(records.map((line) => JSON.parse(line).stable_key)).size).toBe(1235);
     const intents = records.map((line) => JSON.parse(line)).filter(
       (record) => record.table_name === "side_effect_intent"
         && ["status", "response_shape", "confirmed_at"].includes(record.field_name),

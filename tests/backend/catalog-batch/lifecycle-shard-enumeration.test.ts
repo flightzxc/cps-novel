@@ -2,13 +2,16 @@ import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
 
 import {
+  assignCatalogPageHints,
   buildLifecycleShardPlan,
   chunkMembersIntoShards,
   isLifecycleBatchPayload,
   parsePayload,
+  sortMembersByCatalogPosition,
   type LifecycleShardGroupPlan,
 } from "../../../worker/handlers/catalog-batch";
 import type { CatalogBatchPayload } from "@/lib/tasks/catalog-batch";
+import { CATALOG_POSITION_TRUSTED_SIGNATURE, type CatalogPosition } from "@/lib/tasks/moboreader";
 
 /**
  * 领推广链接生命周期，正式修复第 2 阶段第 2 步（`docs/adr/ADR-PROMO-CLAIM-
@@ -224,5 +227,131 @@ describe("buildLifecycleShardPlan: shardPlan shape (设计 §5.2)", () => {
     const plan = buildLifecycleShardPlan([], config);
     expect(plan).toMatchObject({ windowMinutes: 90, shardSizeMin: 50, shardSizeMax: 1_000, shardCount: 0, groups: [] });
     expect(plan).not.toHaveProperty("shardSize");
+  });
+});
+
+/**
+ * 领推广链接正式修复第 5 阶段·5-A（`设计_领推广按接口限速与预读集合化_
+ * 阶段4-5_2026-09-24.md` §6.2 第 2/3 条，Owner 裁决 E5/E8）：目录页位置登记
+ * 之后，枚举切分片按页坐标排序 + 计算两个载荷提示键，这两块与数据库无关的
+ * 纯逻辑单独单测。真正在真实成员集合（含 8 万级规模）上验证排序与提示键落
+ * 到分片条目 payload 里，见 `tests/integration/catalog-batch/
+ * promo-claim-catalog-position-sort-postgres.test.ts`。
+ */
+function trustedPosition(pageIndex: number, overrides: Partial<CatalogPosition> = {}): CatalogPosition {
+  return {
+    pageIndex,
+    pageSize: CATALOG_POSITION_TRUSTED_SIGNATURE.pageSize,
+    orderType: CATALOG_POSITION_TRUSTED_SIGNATURE.orderType,
+    nameEmpty: CATALOG_POSITION_TRUSTED_SIGNATURE.nameEmpty,
+    observedAt: "2026-09-24T00:00:00.000Z",
+    scanTaskId: randomUUID(),
+    ...overrides,
+  };
+}
+
+function member(id: string, catalogPosition: unknown = null) {
+  return { id, catalogPosition };
+}
+
+describe("sortMembersByCatalogPosition (5-A 设计 §6.2 第 2 条)", () => {
+  it("sorts by trusted pageIndex ascending, ignoring input order", () => {
+    const a = member("a", trustedPosition(3));
+    const b = member("b", trustedPosition(1));
+    const c = member("c", trustedPosition(2));
+    expect(sortMembersByCatalogPosition([a, b, c]).map((m) => m.id)).toEqual(["b", "c", "a"]);
+  });
+
+  it("breaks a same-page tie by id ascending", () => {
+    const a = member("b-id", trustedPosition(5));
+    const b = member("a-id", trustedPosition(5));
+    expect(sortMembersByCatalogPosition([a, b]).map((m) => m.id)).toEqual(["a-id", "b-id"]);
+  });
+
+  it("sorts every unregistered (null) member to the tail, by id ascending among themselves", () => {
+    const registered = member("z", trustedPosition(1));
+    const unregA = member("b", null);
+    const unregB = member("a", null);
+    const sorted = sortMembersByCatalogPosition([unregA, registered, unregB]);
+    expect(sorted.map((m) => m.id)).toEqual(["z", "a", "b"]);
+  });
+
+  it("treats a signature-mismatched registration (e.g. legacy pageSize=20) exactly like unregistered — not adopted for sort order", () => {
+    const trusted = member("trusted", trustedPosition(1));
+    const staleLegacy = member("stale", trustedPosition(1, { pageSize: 20 }));
+    const namedSearch = member("named", trustedPosition(1, { nameEmpty: false }));
+    const sorted = sortMembersByCatalogPosition([staleLegacy, namedSearch, trusted]);
+    // The trusted-page-1 member sorts first; the two mismatched-signature
+    // members fall to the tail in id order, exactly as if they had no
+    // catalog_position at all — this is the mutation target for "坐标签名
+    // 不匹配仍被采信 → 红" (设计 9.2 验收第 3 条).
+    expect(sorted.map((m) => m.id)).toEqual(["trusted", "named", "stale"]);
+  });
+
+  it("degrades to plain id-ascending order when nothing is registered — byte-identical to pre-5-A behavior", () => {
+    const members = [member("c"), member("a"), member("b")];
+    expect(sortMembersByCatalogPosition(members).map((m) => m.id)).toEqual(["a", "b", "c"]);
+  });
+
+  it("does not mutate the input array", () => {
+    const members = [member("b", trustedPosition(2)), member("a", trustedPosition(1))];
+    const copy = [...members];
+    sortMembersByCatalogPosition(members);
+    expect(members).toEqual(copy);
+  });
+});
+
+describe("assignCatalogPageHints (5-A 设计 §6.1/§6.2 第 3 条, E8 阈值=2)", () => {
+  it("assigns preReadMode='page' when a page group has at least the threshold's worth of members", () => {
+    const members = [
+      member("a", trustedPosition(7)),
+      member("b", trustedPosition(7)),
+    ];
+    const hints = assignCatalogPageHints(members, 2);
+    expect(hints.get("a")).toEqual({ catalogPageHint: 7, preReadMode: "page" });
+    expect(hints.get("b")).toEqual({ catalogPageHint: 7, preReadMode: "page" });
+  });
+
+  it("assigns preReadMode='title' when a page group has fewer members than the threshold (boundary: exactly one below)", () => {
+    const members = [member("solo", trustedPosition(9))];
+    const hints = assignCatalogPageHints(members, 2);
+    expect(hints.get("solo")).toEqual({ catalogPageHint: 9, preReadMode: "title" });
+  });
+
+  it("threshold is inclusive: a page group exactly at the threshold counts as 'page'", () => {
+    const members = [member("a", trustedPosition(4)), member("b", trustedPosition(4))];
+    expect(assignCatalogPageHints(members, 2).get("a")?.preReadMode).toBe("page");
+  });
+
+  it("an unregistered member always gets catalogPageHint=null and preReadMode='title', regardless of how many other unregistered members exist", () => {
+    const members = [member("a", null), member("b", null), member("c", null)];
+    const hints = assignCatalogPageHints(members, 2);
+    for (const id of ["a", "b", "c"]) {
+      expect(hints.get(id)).toEqual({ catalogPageHint: null, preReadMode: "title" });
+    }
+  });
+
+  it("a signature-mismatched registration is treated as unregistered for hinting too", () => {
+    const stale = member("stale", trustedPosition(1, { orderType: 1 }));
+    const trusted1 = member("t1", trustedPosition(1));
+    const trusted2 = member("t2", trustedPosition(1));
+    const hints = assignCatalogPageHints([stale, trusted1, trusted2], 2);
+    expect(hints.get("stale")).toEqual({ catalogPageHint: null, preReadMode: "title" });
+    // The two genuinely-page-1 members still form a group of 2 without the
+    // mismatched one padding the count.
+    expect(hints.get("t1")?.preReadMode).toBe("page");
+  });
+
+  it("page-group size is computed over the whole member list, independent of any later shard slicing", () => {
+    const members = Array.from({ length: 5 }, (_, i) => member(`m${i}`, trustedPosition(1)));
+    const hints = assignCatalogPageHints(members, 2);
+    for (const m of members) expect(hints.get(m.id)?.preReadMode).toBe("page");
+  });
+
+  it("defaults minGroupMembers to PROMO_CLAIM_PAGE_GROUP_MIN_MEMBERS (2) when not passed explicitly", () => {
+    const solo = member("solo", trustedPosition(1));
+    expect(assignCatalogPageHints([solo]).get("solo")?.preReadMode).toBe("title");
+    const pair = [member("a", trustedPosition(2)), member("b", trustedPosition(2))];
+    expect(assignCatalogPageHints(pair).get("a")?.preReadMode).toBe("page");
   });
 });

@@ -8,9 +8,12 @@ import { describe, expect, it, vi } from "vitest";
 import { MoboreaderAdapterError, type ListBooksResponse, type MoboreaderBook } from "@/lib/adapters";
 import { ID_IN_LIST_CHUNK_SIZE } from "@/lib/db/chunked-id-lookup";
 import {
+  buildCatalogPosition,
+  CATALOG_POSITION_TRUSTED_SIGNATURE,
   enqueueMoboreaderPreviewRefreshTask,
   catalogPreviewRequestToken,
   failMoboreaderCatalogFinalize,
+  isTrustedCatalogPosition,
   MOBOREADER_CATALOG_MAX_ATTEMPTS,
   MOBOREADER_CATALOG_LIMITS,
   MOBOREADER_PREVIEW_STAGE_BATCH_SIZE,
@@ -1177,5 +1180,136 @@ describe("persistCatalogPage wiring: per-page suspension evaluation (Opus NON_BL
     } finally {
       keys.cleanup();
     }
+  });
+
+  // 领推广链接正式修复第 5 阶段·5-A（设计 §6.2/§7.2, E5）：`persistCatalogPage`
+  // 每一行都要把 `catalogPosition` 写进 `novelSourceItem.upsert` 的 `create`
+  // 载荷里，且绝不能把页码混进 `rawPayload`（`rawPayload` 是已批准的"原始
+  // 上游证据"边界，见设计 §6.2）。用假事务做单测——不需要真实 Postgres 就能
+  // 覆盖"登记写错页码字段"/"不写 observedAt"/"把页码混进 rawPayload"三类
+  // 变异（真实 Postgres 上的等价验收见 `tests/integration/tasks/
+  // p2-05-postgres.test.ts` 新增用例）。
+  it("persistCatalogPage writes catalogPosition on every row's create payload, matching the page's own coordinate, without leaking the page index into rawPayload", async () => {
+    const keys = credentialKeyring();
+    try {
+      await withProcessEnvOverlay(keys.env, async () => {
+        const encryptedSecret = new Uint8Array(
+          encryptCredentialSecretForWorker("bare-token", ACCOUNT_ID, CREDENTIAL_ID, 1),
+        );
+        const outerDb = fakeOuterDb(encryptedSecret);
+        // 10 本、pageSize 10——returnedCount === pageSize，与既有
+        // `fakeCatalogPageTx()` 用例同样的形状（stopReason 为 null，不触发
+        // 该假事务未桩的 `$executeRaw` 分支），全部 conflictCount=0（无冲突，
+        // 语种正常解析）。
+        const books = suspensionBooks(10, 0);
+        const response: ListBooksResponse = {
+          items: books,
+          totalCount: 100,
+          rawEvidence: { totalCount: 100, __boundary: "approved_raw_evidence" } as const,
+        };
+        const adapter = {
+          listBooks: vi.fn(async () => response),
+          fetchBookMaterial: vi.fn(),
+          fetchPreviewChapters: vi.fn(),
+        };
+        const handler = createMoboreaderCatalogHandler(outerDb, {
+          adapter,
+          env: { NODE_ENV: "test", FEATURE_NOVEL_CATALOG_SYNC: "true", NOVEL_CATALOG_SYNC_ALLOW_WRITE: "true" },
+        });
+        const before = Date.now();
+        const outcome = await handler({
+          lease: {
+            family: "generic", taskType: "catalog_scan", mode: "apply", itemId: "item-1", taskId: "task-1",
+            workerId: "worker", executionToken: "token", leaseEpoch: 1n, attemptCount: 1, lockedUntil: new Date(),
+            payload: suspensionPayload,
+          },
+          mode: "apply", signal: new AbortController().signal, heartbeat: async () => true,
+        });
+
+        const { tx, upsertCreateCalls } = fakeCatalogPageTx();
+        await outcome.protectedWrite!(tx);
+
+        expect(upsertCreateCalls).toHaveLength(10);
+        for (const created of upsertCreateCalls) {
+          expect(created.catalogPosition).toMatchObject({
+            pageIndex: suspensionPayload.pageIndex,
+            pageSize: suspensionPayload.pageSize,
+            orderType: suspensionPayload.orderType,
+            nameEmpty: true,
+            scanTaskId: "task-1",
+          });
+          const observedAt = Date.parse((created.catalogPosition as { observedAt: string }).observedAt);
+          expect(observedAt).toBeGreaterThanOrEqual(before);
+        }
+        // 页码/坐标绝不能混进 rawPayload——这里必须与书目自己的 rawEvidence
+        // 逐字相等，多一个 pageIndex 键都会让这条断言变红。
+        expect(upsertCreateCalls[0]!.rawPayload).toEqual({ language: "3", languageName: "英语", __boundary: "approved_raw_evidence" });
+      });
+    } finally {
+      keys.cleanup();
+    }
+  });
+});
+
+/**
+ * 领推广链接正式修复第 5 阶段·5-A（`设计_领推广按接口限速与预读集合化_
+ * 阶段4-5_2026-09-24.md` §6.1/§6.2/E5）：目录页位置登记的两个纯函数——
+ * `buildCatalogPosition`（写侧，如实记录扫描坐标）与
+ * `isTrustedCatalogPosition`（读侧，坐标签名匹配判定）。真正在 `persistCatalogPage`
+ * 里写入并在真实 Postgres 上核对，见 `tests/integration/tasks/
+ * p2-05-postgres.test.ts` 新增的用例。
+ */
+describe("buildCatalogPosition / isTrustedCatalogPosition (5-A 页位置登记)", () => {
+  const observedAt = new Date("2026-09-24T12:00:00.000Z");
+
+  it("buildCatalogPosition records the scan's own coordinate verbatim, deriving nameEmpty from name===''", () => {
+    const position = buildCatalogPosition({
+      pageIndex: 5, pageSize: 100, orderType: 0, name: "", observedAt, scanTaskId: "task-1",
+    });
+    expect(position).toEqual({
+      pageIndex: 5, pageSize: 100, orderType: 0, nameEmpty: true,
+      observedAt: "2026-09-24T12:00:00.000Z", scanTaskId: "task-1",
+    });
+  });
+
+  it("buildCatalogPosition records nameEmpty=false for a named (title-search) scan — still recorded, trust judged separately", () => {
+    const position = buildCatalogPosition({
+      pageIndex: 1, pageSize: 100, orderType: 0, name: "some title", observedAt, scanTaskId: "task-2",
+    });
+    expect(position.nameEmpty).toBe(false);
+    expect(isTrustedCatalogPosition(position)).toBe(false);
+  });
+
+  it("buildCatalogPosition records a non-canonical pageSize verbatim (e.g. the pre-C-13 20/page value) — still recorded, trust judged separately", () => {
+    const position = buildCatalogPosition({
+      pageIndex: 1, pageSize: 20, orderType: 0, name: "", observedAt, scanTaskId: "task-3",
+    });
+    expect(position.pageSize).toBe(20);
+    expect(isTrustedCatalogPosition(position)).toBe(false);
+  });
+
+  it("isTrustedCatalogPosition accepts exactly the canonical signature (empty name, orderType 0, pageSize = MOBOREADER_CATALOG_LIMITS.maxPageSize)", () => {
+    const position = buildCatalogPosition({
+      pageIndex: 42, pageSize: MOBOREADER_CATALOG_LIMITS.maxPageSize, orderType: 0, name: "", observedAt, scanTaskId: "task-4",
+    });
+    expect(isTrustedCatalogPosition(position)).toBe(true);
+    expect(CATALOG_POSITION_TRUSTED_SIGNATURE).toEqual({ nameEmpty: true, orderType: 0, pageSize: MOBOREADER_CATALOG_LIMITS.maxPageSize });
+  });
+
+  it.each([
+    ["null", null],
+    ["undefined", undefined],
+    ["a plain string", "not-an-object"],
+    ["an array", []],
+    ["missing scanTaskId", { pageIndex: 1, pageSize: 100, orderType: 0, nameEmpty: true, observedAt: observedAt.toISOString() }],
+    ["missing observedAt", { pageIndex: 1, pageSize: 100, orderType: 0, nameEmpty: true, scanTaskId: "t" }],
+    ["pageIndex = 0 (not a valid 1-based page)", { pageIndex: 0, pageSize: 100, orderType: 0, nameEmpty: true, observedAt: observedAt.toISOString(), scanTaskId: "t" }],
+    ["pageIndex negative", { pageIndex: -1, pageSize: 100, orderType: 0, nameEmpty: true, observedAt: observedAt.toISOString(), scanTaskId: "t" }],
+    ["pageIndex not an integer", { pageIndex: 1.5, pageSize: 100, orderType: 0, nameEmpty: true, observedAt: observedAt.toISOString(), scanTaskId: "t" }],
+    ["orderType mismatched (1 instead of 0)", { pageIndex: 1, pageSize: 100, orderType: 1, nameEmpty: true, observedAt: observedAt.toISOString(), scanTaskId: "t" }],
+    ["nameEmpty mismatched (false)", { pageIndex: 1, pageSize: 100, orderType: 0, nameEmpty: false, observedAt: observedAt.toISOString(), scanTaskId: "t" }],
+    ["pageSize mismatched (legacy 20)", { pageIndex: 1, pageSize: 20, orderType: 0, nameEmpty: true, observedAt: observedAt.toISOString(), scanTaskId: "t" }],
+  ])("isTrustedCatalogPosition rejects: %s", (_label, value) => {
+    expect(isTrustedCatalogPosition(value)).toBe(false);
   });
 });

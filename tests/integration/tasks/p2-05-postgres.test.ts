@@ -16,12 +16,15 @@ import {
   claimPendingItem,
   createMoboreaderCatalogScanTask,
   createMoboreaderPreviewRefreshTask,
+  isTrustedCatalogPosition,
+  MOBOREADER_CATALOG_LIMITS,
   MOBOREADER_PREVIEW_EVIDENCE,
   stageMoboreaderPreviewRefreshTask,
   type PreviewStageWriter,
 } from "@/lib/tasks";
 import { encryptCredentialSecretForWorker } from "../../../worker/credentials/crypto";
 import {
+  catalogRecoveryFingerprint,
   createMoboreaderCatalogHandler,
   createMoboreaderPreviewHandler,
   createMoboreaderWorkerHandlers,
@@ -555,6 +558,122 @@ describe.skipIf(!enabled).sequential("P2-05 PostgreSQL 16.14 write paths", () =>
     expect(rerun).toMatchObject({ status: "duplicate", taskId: duplicate.taskId });
     expect(await owner.novelSourceItem.count()).toBe(1);
     expect(await owner.sourceLabel.count()).toBe(4);
+  });
+
+  // 领推广链接正式修复第 5 阶段·5-A（设计_领推广按接口限速与预读集合化_
+  // 阶段4-5_2026-09-24.md §6.2/§7.2/§9.2 第 1 条，Owner 裁决 E5）：目录扫描
+  // 写每一行书目时一并登记 `catalog_position`，含恢复页。
+  it("5-A: registers catalog_position on a freshly-created source item, matching the scan's own page coordinate (trusted signature)", async () => {
+    const created = await createMoboreaderCatalogScanTask(owner, {
+      channelAccountId: ids.account,
+      channelAppId: ids.channelApp,
+      pageStart: 1,
+      pageEnd: 1,
+      pageSize: 100,
+      requestToken: randomUUID(),
+      actorId: "owner",
+      requestId: randomUUID(),
+      mode: "apply",
+    }, gates);
+    const before = Date.now();
+    expect(await consume()).toBe(true);
+    const source = await owner.novelSourceItem.findFirstOrThrow({ where: { externalBookId: "book-1" } });
+    expect(source.catalogPosition).toMatchObject({
+      pageIndex: 1, pageSize: 100, orderType: 0, nameEmpty: true, scanTaskId: created.taskId,
+    });
+    const observedAt = Date.parse((source.catalogPosition as { observedAt: string }).observedAt);
+    expect(observedAt).toBeGreaterThanOrEqual(before);
+    // pageSize 100 是 C-13 冻结的信任坐标——这一登记应当被读取方判定为可信。
+    expect(isTrustedCatalogPosition(source.catalogPosition)).toBe(true);
+  });
+
+  it("5-A: a non-canonical pageSize scan (e.g. the CPS-parity default of 1/20) still records catalog_position verbatim, but the registration is judged untrusted by the reader", async () => {
+    const created = await enqueue("apply"); // enqueue() hardcodes pageSize: 1
+    expect(await consume()).toBe(true);
+    const source = await owner.novelSourceItem.findFirstOrThrow({ where: { externalBookId: "book-1" } });
+    expect(source.catalogPosition).toMatchObject({ pageIndex: 1, pageSize: 1, orderType: 0, nameEmpty: true, scanTaskId: created.taskId });
+    expect(isTrustedCatalogPosition(source.catalogPosition)).toBe(false);
+  });
+
+  it("5-A: a later re-scan (different task) overwrites catalog_position with its own coordinate and scanTaskId — the row is not stuck with the first scan's stale registration", async () => {
+    const first = await enqueue("apply");
+    expect(await consume()).toBe(true);
+    const afterFirst = await owner.novelSourceItem.findFirstOrThrow({ where: { externalBookId: "book-1" } });
+    expect(afterFirst.catalogPosition).toMatchObject({ pageIndex: 1, pageSize: 1, scanTaskId: first.taskId });
+
+    const second = await createMoboreaderCatalogScanTask(owner, {
+      channelAccountId: ids.account,
+      channelAppId: ids.channelApp,
+      pageStart: 1,
+      pageEnd: 1,
+      pageSize: MOBOREADER_CATALOG_LIMITS.maxPageSize,
+      requestToken: randomUUID(),
+      actorId: "owner",
+      requestId: randomUUID(),
+      mode: "apply",
+    }, gates);
+    expect(await consume()).toBe(true);
+    const afterSecond = await owner.novelSourceItem.findUniqueOrThrow({ where: { id: afterFirst.id } });
+    expect(afterSecond.catalogPosition).toMatchObject({
+      pageIndex: 1, pageSize: MOBOREADER_CATALOG_LIMITS.maxPageSize, scanTaskId: second.taskId,
+    });
+    expect(isTrustedCatalogPosition(afterSecond.catalogPosition)).toBe(true);
+  });
+
+  it("5-A: a recovery-page write (persistCatalogPage recoveryOnly) registers catalog_position with the same coordinate as the recovery task's own payload", async () => {
+    const taskId = randomUUID();
+    const missingIdentities = [{ externalBookId: "book-1", sourceLanguageCode: "2" }];
+    const gapFingerprint = catalogRecoveryFingerprint(missingIdentities);
+    const basePayload = {
+      pageIndex: 1,
+      pageSize: MOBOREADER_CATALOG_LIMITS.maxPageSize,
+      name: "",
+      orderType: 0,
+      projectType: 1,
+      safetyMaxPages: MOBOREADER_CATALOG_LIMITS.defaultSafetyMaxPages,
+      requestedPageEnd: 1,
+      scheduledPageEnd: 1,
+      expiresAt: new Date(Date.now() + 3_600_000).toISOString(),
+      source: "manual" as const,
+      actorId: "owner",
+      requestId: randomUUID(),
+    };
+    // 直接构造任务/条目（不经 `scripts/catalog-finalize-recovery.ts`）——本用例
+    // 只关心"恢复页写入书目时是否登记 catalog_position"这一件事，恢复页本身
+    // 的批准前置条件（task 必须 paused、gapFingerprint 复核等）是那个 CLI
+    // 脚本自己的业务规程，不是 `persistCatalogPage`/handler 的职责，见
+    // worker/handlers/moboreader.ts 对 recoveryPayload 分支的处理（不检查
+    // task.status）。
+    await owner.genericTask.create({
+      data: {
+        id: taskId,
+        taskType: "catalog_scan",
+        channelAppId: ids.channelApp,
+        channelAccountId: ids.account,
+        operationScopeHash: randomUUID().replaceAll("-", "").padEnd(64, "0"),
+        mode: "apply",
+        status: "pending",
+        requestToken: randomUUID(),
+        totalCount: 1,
+        params: { projectType: 1, pageStart: 1, pageEnd: 1, pageSize: MOBOREADER_CATALOG_LIMITS.maxPageSize },
+        items: {
+          create: {
+            targetType: "catalog_recovery_page",
+            targetId: "1",
+            payload: { ...basePayload, kind: "catalog_recovery_page", missingIdentities, gapFingerprint },
+          },
+        },
+      },
+    });
+    const before = Date.now();
+    expect(await consumeOneCycle(adapter("book-1"))).toBe(true);
+    const source = await owner.novelSourceItem.findFirstOrThrow({ where: { externalBookId: "book-1" } });
+    expect(source.catalogPosition).toMatchObject({
+      pageIndex: 1, pageSize: MOBOREADER_CATALOG_LIMITS.maxPageSize, orderType: 0, nameEmpty: true, scanTaskId: taskId,
+    });
+    const observedAt = Date.parse((source.catalogPosition as { observedAt: string }).observedAt);
+    expect(observedAt).toBeGreaterThanOrEqual(before);
+    expect(isTrustedCatalogPosition(source.catalogPosition)).toBe(true);
   });
 
   it("commits the terminal page before a separately claimed finalize phase", async () => {

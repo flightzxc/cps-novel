@@ -17,6 +17,7 @@ import {
   isNovelCatalogSyncWriteAllowed,
 } from "../../src/lib/flags";
 import {
+  buildCatalogPosition,
   clampTotalChapterCount,
   catalogFinalizeGeneration,
   catalogPreviewRequestToken,
@@ -629,6 +630,18 @@ async function persistCatalogPage(
     })),
   );
   let pageUnknownLocaleCount = 0;
+  // 5-A（设计 §6.2/§7.2, E5）：这一整页只有一个页坐标，页内每一行登记的
+  // `catalogPosition` 都相同——如实记录本次扫描请求自己的坐标（含恢复页,
+  // `input.payload` 是同一个 `MoboreaderCatalogPayload` 形状），是否可信由
+  // 读取方 `isTrustedCatalogPosition` 判定，这里不做任何过滤。
+  const catalogPosition = buildCatalogPosition({
+    pageIndex: input.payload.pageIndex,
+    pageSize: input.payload.pageSize,
+    orderType: input.payload.orderType,
+    name: input.payload.name,
+    observedAt: now,
+    scanTaskId: input.taskId,
+  }) as unknown as Prisma.InputJsonObject;
   for (const [bookIndex, book] of input.response.items.entries()) {
     const languageResolution = pageLanguageResolutions[bookIndex];
     const sourceLocale = pickBookSourceLocale(languageResolution, suspendedLanguageCodes);
@@ -652,6 +665,7 @@ async function persistCatalogPage(
       sourceCreatedAtRaw: book.createTime,
       lastSeenAt: now,
       rawPayload: book.rawEvidence as Prisma.InputJsonObject,
+      catalogPosition,
     } satisfies Prisma.NovelSourceItemCreateManyInput;
     let source: { id: string; novelId: string | null; status: string };
     if (input.recoveryOnly) {
@@ -699,6 +713,7 @@ async function persistCatalogPage(
           lastSeenAt: now,
           deletedAt: null,
           rawPayload: book.rawEvidence as Prisma.InputJsonObject,
+          catalogPosition,
         },
         select: { id: true, novelId: true, status: true },
       });

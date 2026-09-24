@@ -29,6 +29,7 @@ import {
   PROMO_CLAIM_LIFECYCLE_ROLE_BATCH,
   PROMO_CLAIM_LIFECYCLE_ROLE_SHARD,
   PROMO_CLAIM_LIFECYCLE_VERSION,
+  PROMO_CLAIM_PAGE_GROUP_MIN_MEMBERS,
   PROMO_CLAIM_SHARD_LIFECYCLE_TAG,
   resolvePromoClaimLifecycleConfig,
   type PromoClaimLifecycleConfig,
@@ -37,9 +38,92 @@ import { resolveLifecycleShardSize, type LifecycleSizingBasis } from "../../src/
 import { mergeTaskControlResult } from "../../src/lib/tasks/task-control";
 import { createHandlerRegistry, type TaskHandler } from "../../src/lib/tasks";
 import { isPromoLinkClaimEnabled, isPromoLinkClaimWriteAllowed } from "../../src/lib/flags";
+import { isTrustedCatalogPosition } from "../../src/lib/tasks/moboreader";
 
-type SnapshotRow = { id: string; channelAppId: string; sourceLocale: string | null; status: string; novelId: string | null };
-const ROW_SELECT = { id: true, channelAppId: true, sourceLocale: true, status: true, novelId: true } as const;
+type SnapshotRow = {
+  id: string;
+  channelAppId: string;
+  sourceLocale: string | null;
+  status: string;
+  novelId: string | null;
+  catalogPosition: unknown;
+};
+const ROW_SELECT = {
+  id: true, channelAppId: true, sourceLocale: true, status: true, novelId: true, catalogPosition: true,
+} as const;
+
+// ---------------------------------------------------------------------
+// 5-A（设计_领推广按接口限速与预读集合化_阶段4-5_2026-09-24.md §6.2/§6.5/
+// §7.2，Owner 裁决 E5/E8）：页位置登记之后，生命周期分片枚举按页排序 +
+// 载荷两个提示键。**不改变任何执行行为**——`catalogPageHint`/`preReadMode`
+// 只是提示，`worker/handlers/promo-link-claim.ts` 一行未改、也不读取它们
+// （5-B 才会消费，见设计 §6.3 第 1 步）；排序改变的只是"哪本书落在哪个分片
+// 的第几条"，`chunkMembersIntoShards`/分片大小公式/D1–D9 判定/B-4 筛选全部
+// 不变。`catalog_position` 全为空（登记为空，例如 5-A 刚上线、目录还没重新
+// 扫描过一轮）时，排序退化为纯 id 升序——与改动前逐字相同。
+// ---------------------------------------------------------------------
+
+/** 提取一行的可信页坐标（签名不一致或缺失一律视为"未登记"）。 */
+function trustedPageIndexOf(catalogPosition: unknown): number | null {
+  return isTrustedCatalogPosition(catalogPosition) ? catalogPosition.pageIndex : null;
+}
+
+/**
+ * 设计 §6.2 第 2 条："把成员按 (pageIndex 升序, 无登记者排最后, id 升序)
+ * 排序后再按 S 切片"。纯函数，独立单测覆盖三段比较顺序与"全部未登记时退化
+ * 为纯 id 升序"（9.2 验收第 2 条）。`members` 不被就地修改。
+ */
+export function sortMembersByCatalogPosition<T extends { id: string; catalogPosition: unknown }>(
+  members: readonly T[],
+): T[] {
+  return [...members].sort((a, b) => {
+    const pageA = trustedPageIndexOf(a.catalogPosition);
+    const pageB = trustedPageIndexOf(b.catalogPosition);
+    if (pageA !== null && pageB !== null && pageA !== pageB) return pageA - pageB;
+    if (pageA !== null && pageB === null) return -1;
+    if (pageA === null && pageB !== null) return 1;
+    return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+  });
+}
+
+export type CatalogPageHint = Readonly<{
+  catalogPageHint: number | null;
+  preReadMode: "page" | "title";
+}>;
+
+/**
+ * 设计 §6.1/§6.2 第 3 条："按页组的目标本数决定走页模式还是逐本模式"。页组
+ * 的范围是**整个渠道应用+渠道账号分组的本次枚举选集**（不是某一个分片内），
+ * 因为页密度是"这一页上有多少本是本批次目标"这一上游事实的性质，与之后怎么
+ * 切分片无关（设计 §6.1"页密度决定收益"的 78 本/页、2.9 本/页两个例子都是
+ * 按整批选集算的）。未登记（`catalogPageHint: null`）的书恒定走
+ * `preReadMode: "title"`（与"页组本数 1"同一判定分支：1 本时页读与标题读
+ * 同价，见 `PROMO_CLAIM_PAGE_GROUP_MIN_MEMBERS` 的文档注释）。纯函数，独立
+ * 单测覆盖阈值边界（本数等于/低于/高于阈值）与全部未登记的退化情形。
+ */
+export function assignCatalogPageHints<T extends { id: string; catalogPosition: unknown }>(
+  members: readonly T[],
+  minGroupMembers: number = PROMO_CLAIM_PAGE_GROUP_MIN_MEMBERS,
+): ReadonlyMap<string, CatalogPageHint> {
+  const pageIndexById = new Map<string, number>();
+  const countByPageIndex = new Map<number, number>();
+  for (const member of members) {
+    const pageIndex = trustedPageIndexOf(member.catalogPosition);
+    if (pageIndex === null) continue;
+    pageIndexById.set(member.id, pageIndex);
+    countByPageIndex.set(pageIndex, (countByPageIndex.get(pageIndex) ?? 0) + 1);
+  }
+  const hints = new Map<string, CatalogPageHint>();
+  for (const member of members) {
+    const pageIndex = pageIndexById.get(member.id) ?? null;
+    const groupSize = pageIndex === null ? 0 : (countByPageIndex.get(pageIndex) ?? 0);
+    hints.set(member.id, {
+      catalogPageHint: pageIndex,
+      preReadMode: groupSize >= minGroupMembers ? "page" : "title",
+    });
+  }
+  return hints;
+}
 
 export function parsePayload(value: unknown): CatalogBatchPayload {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("catalog_batch_payload_invalid");
@@ -411,9 +495,12 @@ export function createCatalogBatchHandler(
           }
 
           if (isLifecycleBatch) {
-            // 设计 §5.3：每个分组内按现有成员顺序（`members` 的顺序即
-            // `streamSelection` 按 id 升序流式读取的顺序，未被本步改变）每 S
-            // 本切成一个分片。分片一律建成 disabled + awaiting_release——不
+            // 设计 §5.3：每个分组内每 S 本切成一个分片。`members` 本身仍是
+            // `streamSelection` 按 id 升序流式读取的顺序；切片前先经过 5-A
+            // 的 `sortMembersByCatalogPosition` 重排（按页坐标，未登记者退回
+            // id 升序，见下方 `orderedMembers`），全部未登记时与"直接按
+            // `members` 原序切片"逐字等价。分片一律建成 disabled +
+            // awaiting_release——不
             // 走旧的 `isPromoLinkClaimEnabled`/`isPromoLinkClaimWriteAllowed`
             // 双闸判断（那是给"立即可跑的子任务"设计的）。真正放行前的 promo
             // 功能开关检查是第3步 scheduler 的职责；`worker/handlers/
@@ -440,7 +527,14 @@ export function createCatalogBatchHandler(
             // 三层在条目真正执行时生效，与它挂在哪个任务/分片下无关，是这里
             // 两道枚举时预检查之外的最后一道防线。
             const { shardSize, sizingBasis } = await resolveLifecycleShardSize(tx, channelAccountId!, lifecycleConfig);
-            const shardBuckets = chunkMembersIntoShards(members, shardSize);
+            // 5-A（设计 §6.2 第 2/3 条）：先按页坐标排序，再切片——同一分片内
+            // 相邻的书就落在同一页或相邻页，无登记的书聚在分组尾部走逐本路径
+            // （§6.5：分片大小公式、D1–D9 判定不受排序影响）。页组本数按排序前
+            // 的整组成员计算，与切片边界无关（见 `assignCatalogPageHints` 的
+            // 文档注释）。
+            const orderedMembers = sortMembersByCatalogPosition(members);
+            const pageHints = assignCatalogPageHints(members);
+            const shardBuckets = chunkMembersIntoShards(orderedMembers, shardSize);
             for (const [shardIndex, shardMembers] of shardBuckets.entries()) {
               const scopeHash = operationScopeHash(
                 shardMembers.map((m) => ({ novelSourceItemId: m.id, offerType: UPSTREAM_EXISTING_PROMO_OFFER_TYPE })),
@@ -484,6 +578,11 @@ export function createCatalogBatchHandler(
                     // worker/handlers/promo-link-claim.ts 对 shard_v1 的说明。
                     expiresAt: payload.expiresAt,
                     lifecycle: PROMO_CLAIM_SHARD_LIFECYCLE_TAG,
+                    // 5-A（设计 §6.2 第 3 条）：只是提示，不是证据身份——
+                    // `worker/handlers/promo-link-claim.ts` 在 5-B 落地前一行
+                    // 未改、也不读取这两个键。
+                    catalogPageHint: pageHints.get(member.id)?.catalogPageHint ?? null,
+                    preReadMode: pageHints.get(member.id)?.preReadMode ?? "title",
                   },
                 })) });
               }

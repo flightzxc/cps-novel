@@ -386,6 +386,15 @@ model NovelSourceItem {
   status                  String    @default("pending") @db.VarChar(32)
   rawPayload              Json      @map("raw_payload") @db.JsonB
   rawPayloadSchemaVersion Int       @default(1) @map("raw_payload_schema_version")
+  // 5-A（设计_领推广按接口限速与预读集合化_阶段4-5_2026-09-24.md §6.2/§7.2, E5）:
+  // 目录扫描把这一行所在的页坐标登记在这里——`{ pageIndex, pageSize, orderType,
+  // nameEmpty, observedAt, scanTaskId }`（见 `src/lib/tasks/moboreader.ts` 的
+  // `CatalogPosition`/`buildCatalogPosition`）。只是"页只是定位"的性能提示，
+  // 从不是证据身份；读取方（枚举排序、未来 5-B 的页坐标预读）只认签名
+  // （`pageSize`/`orderType`/`nameEmpty`）与当前信任坐标一致的登记
+  // （`isTrustedCatalogPosition`），旧的 20 本/页登记因签名不同自然失效。
+  // 刻意与 `rawPayload`（已批准的"原始上游证据"边界）分列，不混入页码。
+  catalogPosition         Json?     @map("catalog_position") @db.JsonB
   deletedAt               DateTime? @map("deleted_at") @db.Timestamptz(6)
   createdAt               DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt               DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)

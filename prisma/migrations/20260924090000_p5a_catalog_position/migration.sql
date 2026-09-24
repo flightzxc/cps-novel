@@ -1,0 +1,20 @@
+-- 领推广链接正式修复第 5 阶段·5-A：目录页位置登记（设计_领推广按接口限速与
+-- 预读集合化_阶段4-5_2026-09-24.md §6.2/§7.2，Owner 裁决 E5）。
+--
+-- 只加一个可空 JSONB 列，本迁移不改变任何既有行为：`catalog_position` 在
+-- 目录扫描下一次运行前对所有存量行都是 NULL，枚举排序把 NULL（未登记）
+-- 一律排到本组末尾，等价于今天纯 id 升序——这也是"5-A 无需开关"的物理落地
+-- （见 §十 施工拆分表）。
+--
+-- 内容形状：`{ pageIndex, pageSize, orderType, nameEmpty, observedAt,
+-- scanTaskId }`，由 `worker/handlers/moboreader.ts` 的 `persistCatalogPage`
+-- 在写每一行书目时一并写入（含恢复页，见 `recoveryOnly` 分支复用同一份
+-- `createData`）。刻意与 `raw_payload`（已批准的"原始上游证据"边界）分列——
+-- 页码只是定位提示，从不是推广领取的证据身份（四维 + observedAt 仍是唯一
+-- 证据身份，见设计 §6.1/§6.3）。
+--
+-- 不建索引：8 万行规模的排序只发生在 `worker/handlers/catalog-batch.ts`
+-- 枚举切分片的一次性事务读取里（`ORDER BY id` 的既有游标分页之后，应用层
+-- 对已取出的整批成员排序），不是数据库侧的 WHERE/ORDER BY 查询条件，见设计
+-- E5 的理由与本轮 8 万级枚举耗时的实测记录。
+ALTER TABLE "novel_source_item" ADD COLUMN "catalog_position" JSONB;
