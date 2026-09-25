@@ -30,6 +30,16 @@ function extractTrapBody(source: string, funcToken: string, nextToken?: string):
 }
 
 describe("Phase 2B preproduction deployment contract", () => {
+  it("pins the preproduction rate limits without changing the login limit", async () => {
+    const nginx = await text("infra/preproduction/nginx/cps-novel-preprod.conf.template");
+    expect(nginx).toContain("zone=cps_preprod_general:10m rate=30r/s;");
+    expect(nginx).toContain("zone=cps_preprod_api:10m rate=20r/s;");
+    expect(nginx).toContain("zone=cps_preprod_login:10m rate=2r/s;");
+    expect(nginx.match(/limit_req zone=cps_preprod_general burst=100 nodelay;/g)).toHaveLength(3);
+    expect(nginx.match(/limit_req zone=cps_preprod_api burst=60 nodelay;/g)).toHaveLength(7);
+    expect(nginx.match(/limit_req zone=cps_preprod_login burst=3 nodelay;/g)).toHaveLength(1);
+  });
+
   it("keeps Host Nginx 1.24-compatible, fixed-host, protected, and anti-indexed", async () => {
     const nginx = await text("infra/preproduction/nginx/cps-novel-preprod.conf.template");
     const protectedSnippet = await text("infra/preproduction/nginx/cps-novel-preprod-protected.conf");

@@ -14,6 +14,11 @@ import { TASK_FAMILIES } from "./types";
 import { accountHoldExistsSql, PREVIEW_ACCOUNT_HOLD_SCOPE } from "./account-hold";
 import { sanitizePersistedTaskError } from "./errors";
 import {
+  enqueueSitemapFollowUpIfRequested,
+  lockSitemapRefreshScope,
+  SITEMAP_REFRESH_TASK_TYPE,
+} from "./sitemap-refresh";
+import {
   catalogFinalizeGeneration,
   failMoboreaderCatalogFinalize,
 } from "./moboreader";
@@ -517,6 +522,10 @@ export async function recoverExpiredItem(
     if (!row) return null;
     const maxAttempts = input.maxAttemptsByType[row.task_type] ?? 3;
     const terminal = row.attempt_count >= maxAttempts;
+    if (terminal && input.family === "generic" && row.task_type === SITEMAP_REFRESH_TASK_TYPE) {
+      // Match enqueue's advisory-lock order before locking the parent row.
+      await lockSitemapRefreshScope(tx);
+    }
     const error = json(sanitizePersistedTaskError({
       code: "stale_processing",
       message: `Processing lease expired at attempt ${row.attempt_count} of ${maxAttempts}`,
@@ -598,6 +607,9 @@ export async function recoverExpiredItem(
       });
     }
     await recomputeParentTask(tx, input.family, row.task_id);
+    if (terminal && input.family === "generic" && row.task_type === SITEMAP_REFRESH_TASK_TYPE) {
+      await enqueueSitemapFollowUpIfRequested(tx, row.task_id);
+    }
     return {
       family: input.family,
       taskType: row.task_type,
@@ -787,6 +799,11 @@ export async function finalizeTaskItem(
   await withDbRetry(
     () =>
       prisma.$transaction(async (tx) => {
+        if (lease.family === "generic" && lease.taskType === SITEMAP_REFRESH_TASK_TYPE
+          && outcome.status !== "retry") {
+          // Serialize the terminal transition with publication triggers.
+          await lockSitemapRefreshScope(tx);
+        }
         let terminalOutcome = outcome;
         if (outcome.status === "retry") {
           if (outcome.protectedWrite) throw new Error("retry outcome cannot carry protectedWrite");
@@ -909,6 +926,9 @@ export async function finalizeTaskItem(
       },
     });
     await recomputeParentTask(tx, lease.family, lease.taskId);
+    if (lease.family === "generic" && lease.taskType === SITEMAP_REFRESH_TASK_TYPE) {
+      await enqueueSitemapFollowUpIfRequested(tx, lease.taskId);
+    }
       }, outcome.transactionIsolationLevel || outcome.transactionTimeoutMs ? {
         ...(outcome.transactionIsolationLevel ? { isolationLevel: outcome.transactionIsolationLevel } : {}),
         ...(outcome.transactionTimeoutMs ? { timeout: outcome.transactionTimeoutMs } : {}),

@@ -96,7 +96,6 @@ export function createSitemapRefreshHandler(
   db: PrismaClient,
   dependencies: SitemapRefreshHandlerDependencies = {},
 ): TaskHandler {
-  const buildFamily = dependencies.buildFamily ?? createSitemapFamilyBuilder(db);
   const refresh = dependencies.refresh ?? refreshStaticSitemap;
   const releaseLock = dependencies.releaseLock ?? releaseSitemapGenerationLock;
   const now = dependencies.now ?? (() => new Date());
@@ -117,6 +116,7 @@ export function createSitemapRefreshHandler(
     }
     const payload = parseSitemapRefreshPayload(lease.payload);
     await heartbeat();
+    const buildFamily = dependencies.buildFamily ?? createSitemapFamilyBuilder(db);
 
     const refreshOnce = () => refresh({
       buildFamily,
