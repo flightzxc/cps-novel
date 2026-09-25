@@ -180,6 +180,23 @@ describe("admin capabilities", () => {
     ).toBe(true);
   });
 
+  it("grants promo:claim to two listed identities, and still requires completed 2FA", async () => {
+    const adminId = "11111111-1111-4111-8111-111111111111";
+    const admin2Id = "22222222-2222-4222-8222-222222222222";
+    const env = { NODE_ENV: "test", PROMO_CLAIM_ROLES: "", PROMO_CLAIM_USER_IDS: `${adminId},${admin2Id}` } as NodeJS.ProcessEnv;
+    const { stores } = fixture({ twoFactorCompletedAt: null });
+    const base = await requireAdminSession(TOKEN, { identities: stores, sessions: stores, now: NOW });
+    for (const id of [adminId, admin2Id]) {
+      const context = { ...base, identity: { ...base.identity, id } };
+      expect(hasAdminCapability(context, "promo:claim", env)).toBe(true);
+      expect(() => requireHighRiskAdminCapability(context, "promo:claim", env))
+        .toThrowError(expect.objectContaining({ code: "admin_two_factor_required" }));
+      expect(() => requireHighRiskAdminCapability({ ...context, twoFactorCompleted: true }, "promo:claim", env))
+        .not.toThrow();
+    }
+    expect(hasAdminCapability({ identity: { ...base.identity, id: "33333333-3333-4333-8333-333333333333" } }, "promo:claim", env)).toBe(false);
+  });
+
   it("keeps every pre-existing high-risk capability marked as requiring 2FA", async () => {
     const capabilities: AdminCapability[] = [
       "credential:manage",

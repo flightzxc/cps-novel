@@ -64,6 +64,17 @@ these tables) — see `docs/operations/OWNER_LOCAL_UAT_RUNBOOK_2026-09-03.md` §
 the X8 container invocation form. Never writes `novel_canonical_tag` — that table is
 only ever written by the admin manual-tagging mutation path.
 
+## Additional admin identity
+
+`add-admin-identity.ts` adds an active `super_admin` to a nonempty identity table.
+It is dry-run by default; `--apply` creates the identity and audit atomically.
+The command reads `ADD_ADMIN_PASSWORD_FILE` inside the container, checks it
+against the existing `admin` password hash, then makes a new salted hash.
+It never accepts a password in argv or enrolls 2FA. Same-request-id retries
+replay without another write. For the fixed preproduction values, read-only
+secret mount, allowlist update and web-only restart, follow
+`docs/operations/ADMIN_IDENTITY_ADD_2026-09-25.md`.
+
 ## MoboReader foundation registration
 
 `register-moboreader-foundation.ts` 只登记冻结的 MoboReader / Changdu 基础档案，不创建凭证、
