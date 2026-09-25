@@ -11,7 +11,17 @@
 ```sql
 SELECT username, id, role, status, session_version
 FROM admin_identity WHERE username IN ('admin', 'admin2') ORDER BY username;
+
+SELECT i.username, i.status, i.session_version,
+       f.enabled, f.confirmed_at, f.key_version, f.recovery_codes_rotated_at,
+       encode(sha256(convert_to(f.encrypted_secret,'UTF8')),'hex') AS secret_digest,
+       (SELECT count(*) FROM admin_recovery_code r WHERE r.identity_id=i.id AND r.used_at IS NULL) AS unused_recovery_codes,
+       (SELECT count(*) FROM admin_session s WHERE s.identity_id=i.id AND s.revoked_at IS NULL) AS live_sessions
+FROM admin_identity i LEFT JOIN admin_two_factor f ON f.identity_id=i.id
+ORDER BY i.username;
 ```
+
+保存第二条查询的 admin 行作为建号前快照；建号及 2FA 绑定后重跑，逐字段对比 admin 行，确认其 2FA 密文摘要、恢复码、会话及版本未变。仅记录摘要，不输出密文。
 
 ## 建号：预演、执行、回放
 
@@ -41,6 +51,22 @@ preprod_compose_app_run \
 ```
 
 建号输出的 `identityId` 是 admin2 的 ID。用上面的 SQL 再查一次，确认 `username='admin2'` 对应 ID 与输出一致，且两行均为 `super_admin`、`active`。审计核对 `action='admin_identity.add'`、`actor_id='owner'`、固定 reason/request-id、`entity_id=<admin2 ID>`；不得查询或打印密码散列。建号后 admin2 应无 2FA、恢复码、会话记录；admin 原有安全状态与会话不变。Owner 首次登录 admin2 后按现有流程绑定独立 TOTP，并离线保存新生成的 10 个恢复码。
+
+`scripts/bootstrap-admin-identity.ts` 只接受空身份表。建好 admin2 后再次运行该冷启动命令会永久被拒，这是预期行为；不能为使其回放成功而放宽空表校验。
+
+完成 admin2 的独立 2FA 绑定后，分别验证两个账号的密码与 2FA 状态。每次应输出 `ADMIN_AUTH_VERIFY=PASS`：
+
+```bash
+for admin_username in admin2 admin; do
+  preprod_compose_app_run \
+    -e DATABASE_URL="$P1_12_WEB_DATABASE_URL" \
+    -e PREPROD_ADMIN_USERNAME="$admin_username" \
+    -e PREPROD_ADMIN_PASSWORD_FILE=/run/preprod-admin/password \
+    -e TOTP_ENCRYPTION_KEY_FILE=/run/secrets/totp_encryption_key \
+    -v /opt/cps-novel/shared/secrets/admin-smoke-password:/run/preprod-admin/password:ro \
+    web tsx scripts/preproduction/verify-admin-auth.ts
+done
+```
 
 ## 完成 `promo:claim` 权限
 
@@ -78,7 +104,7 @@ done
 
 保存并逐字比较前后 worker/scheduler 两行的 ID、Created、Image；均相同才可证明没有重建。`PROMO_CLAIM_USER_IDS` 只在 `docker-compose.yml` 的 web 环境透传；`preprod_compose_app_up web` 内部使用 `up -d --no-deps`，不会请求重建 worker/scheduler。另核对 web 为新白名单配置、镜像身份通过、健康检查通过。
 
-最后分别使用 admin 与 admin2 的独立浏览器会话完成 2FA，在 `/catalog-sync` 选择事先批准的窄范围、有效渠道账号，**顺序**提交两次互不冲突的 promo claim。两次都要返回成功和各自 task ID；用各自 request-id 核对 `operation_audit` 中 `action='catalog_batch.queued'`、`after_snapshot.operation='promo_claim'`、`actor_id` 分别等于 admin/admin2 UUID，`entity_id` 对应各自 task ID。不要用界面按钮可见性代替实际提交验证。
+最后分别使用 admin 与 admin2 的独立浏览器会话完成 2FA，在 `/catalog-sync` 选择事先批准的窄范围、有效渠道账号，**顺序**提交两次互不冲突的 promo claim。**每一次实际提交都会调用上游 getcode，且不幂等；admin 和 admin2 的每一次提交均须 Owner 单独授权。**两次都要返回成功和各自 task ID；用各自 request-id 核对 `operation_audit` 中 `action='catalog_batch.queued'`、`after_snapshot.operation='promo_claim'`、`actor_id` 分别等于 admin/admin2 UUID，`entity_id` 对应各自 task ID。不要用界面按钮可见性代替实际提交验证。
 
 ```sql
 SELECT a.request_id, a.actor_id, i.username, a.entity_id AS task_id, a.created_at
