@@ -599,6 +599,15 @@ Sequence:
    never create a second identity. This is the property that makes it safe
    to re-run this step if a deploy fails partway through and needs retrying.
 
+### Adding an additional admin identity
+
+For adding a second administrator to a nonempty identity table, use
+[`ADMIN_IDENTITY_ADD_2026-09-25.md`](ADMIN_IDENTITY_ADD_2026-09-25.md).
+The new command verifies the existing admin password from a read-only file,
+rehashes it with a fresh salt, and leaves the new account's 2FA enrollment to
+its first login. The operator guide includes the per-identity `promo:claim`
+allowlist update and the web-only restart procedure.
+
 ### Minimal account transfer
 
 The current schema proves the minimal set is `admin_identity` (username,
