@@ -17,12 +17,28 @@ Compose runtime 与 Health 身份一致性验证（`/api/health` 的 `metadataCo
 
 ## 当前快照
 
-### v0.4.3 —— 准备中（2026-09-25）
+### v0.4.3 —— 已发布到预生产（2026-09-25 22:35 +0800，`RELEASE=PASS`）
 
-- 开发线：`integration/v0.4.3-2026-09-25`，基于 v0.4.2 收官提交 `e1e9396`；Final SHA、镜像归档和部署结果待第一、二阶段分别核实。
-- 范围：合入已获 Opus 复核的 admin2 一次性建号命令与运维手册（`f036cc4`）、分片枚举真实库用例的 helper 规划器修复（`4329620`），并把预生产模板更新为 admin/admin2 两个 identity UUID 白名单示例；不扩大到待办 B-8、B-9 或其他产品功能。
-- 版本身份升到 0.4.3。无新增数据库迁移或 grants 变更。第一阶段仅完成本地合并、门禁、镜像归档；**未部署、未创建 admin2、未更改目标机 env**。
-- 第二阶段须等 Owner 在后台暂停当前正式领取批次，且只读核实暂停已生效并获得明确授权；真实领取提交验收另待 Owner 单独授权。
+- 身份：开发线 `integration/v0.4.3-2026-09-25`（基于 v0.4.2 收官提交 `e1e9396`）；Final SHA
+  `505feeaae04ae1a23df3e7f6a27795f4128636f3`，annotated tag `v0.4.3`；镜像
+  `cps-novel:0.4.3-505feea`（linux/amd64，config digest
+  `sha256:e601019cf1009564496deba6d5952cd2d64c4cff21c17b63cbd6f483d10a9f31`，归档 sha256
+  `fecbd3eaee7063a3f128cd02c08e55217e159a31cc56be4a5e1e6d888bfb02e5`）；发布目录
+  `/opt/cps-novel/releases/505feeaae04ae1a23df3e7f6a27795f4128636f3`。
+- 合入已获 Opus 复核的 admin2 一次性建号命令与运维手册（`f036cc4`）、分片枚举真实库用例的 helper 规划器修复（`4329620`），
+  并把预生产模板更新为 admin/admin2 双 identity UUID 白名单示例；版本身份升到 0.4.3。无新增数据库迁移或 grants 变更。
+- Owner 在后台暂停正式领取批次 `eba8f359-a569-43d7-bb55-b71fecc02f6e` 后授权部署；部署前核实批次暂停、
+  处理中的分片条目为 0、非终态领取意图为 0。在线逻辑备份 `cps-novel-20260925T142332Z.dump`
+  （190,409,997 字节，sha256 `45676de334f0d932a50fcea284e0c3071b36c44ae2a734278bca1c3a3fa881c9`）；
+  发版脚本 `RELEASE=PASS`，健康接口版本、提交、metadata 与数据库检查通过，postgres 容器未重建。
+- 目标机先只改 `APP_VERSION` 0.4.2→0.4.3、`NEXT_PUBLIC_BUILD_VERSION` v0.4.2→v0.4.3（备份
+  `preprod.env.bak-20260925T143330Z`）。admin2 建号经预演、创建和同一 request-id 回放，identity ID
+  `c5fd40e2-6f1d-4543-8251-27fb5ac941ac`；独立 2FA 尚待 Owner 现场绑定。随后把该 ID 追加到
+  `PROMO_CLAIM_USER_IDS`（备份 `preprod.env.bak-20260925T144425Z`），`PROMO_CLAIM_ROLES` 保持空；
+  只重建 web，worker/scheduler 容器 ID、创建时间、镜像前后不变。admin 原有 2FA 密文摘要建号前后不变。
+- **待完成**：Owner 绑定 admin2 2FA 并离线保存恢复码后，分别核验 admin2/admin 的认证；正式领取批次仍暂停，
+  由 Owner 自行决定何时恢复。admin/admin2 真实提交领取验收涉及不幂等上游 getcode，待正式领取结束后每次由 Owner 单独授权。
+  生产未上线。
 
 ### v0.4.2 —— 已发布到预生产（2026-09-25 03:57 +0800，`RELEASE=PASS`；按接口限速开关关闭）
 
@@ -117,7 +133,7 @@ Compose runtime 与 Health 身份一致性验证（`/api/health` 的 `metadataCo
 
 | Version | Date (+0800) | Bump | Summary | Commit / Release | Status |
 | --- | ---: | --- | --- | --- | --- |
-| `v0.4.3` | 2026-09-25（准备中） | PATCH | admin2 建号命令与双身份白名单模板；分片枚举真实库 helper 修复；无迁移或 grants 变更。详见“当前快照” | `integration/v0.4.3-2026-09-25`；Final SHA、镜像归档待核实 | ⏳ 本地准备中；未部署 |
+| `v0.4.3` | 2026-09-25（22:35） | PATCH | admin2 独立身份建号与双 UUID 领取白名单；分片枚举真实库 helper 修复；无迁移或 grants 变更。详见“当前快照” | annotated tag `v0.4.3` → `505feeaae04ae1a23df3e7f6a27795f4128636f3`；镜像 `cps-novel:0.4.3-505feea`；`RELEASE=PASS` | ✅ 预生产已发布；admin2 2FA 绑定与双账号验证待完成；生产未上线 |
 | `v0.4.2` | 2026-09-25（03:57） | PATCH | 领推广按接口分别限速（4-A，开关默认关闭）+ 目录页位置登记（5-A，含迁移，不改执行行为）。详见"当前快照" | annotated tag `v0.4.2` → `33cd67bd34c34af1d3dbcbf78e6f2636d175c889`；镜像 `cps-novel:0.4.2-33cd67b`；`RELEASE=PASS` | ✅ 预生产已发布（按接口限速开关关闭）；生产未上线 |
 | `v0.4.1` | 2026-09-24（16:27） | PATCH | 目录同步页推广链接状态筛选（未领取 / 已领取 / 人工核对中）与"已有推广码"显示（待办 B-4）。详见"当前快照" | annotated tag `v0.4.1` → `0a2546968d258304990918276b201026c8cccf66`；镜像 `cps-novel:0.4.1-0a25469`；`RELEASE=PASS` | ✅ 预生产已发布；生产未上线 |
 | `v0.4.0` | 2026-09-24（01:33） | MINOR | 领推广链接生命周期与自动分片（正式修复第 2 阶段，开关默认关闭、未上线）；scheduler_app 最小权限；发版前生命周期配置校验。详见"当前快照" | annotated tag `v0.4.0` → `8e83da49f79f3943a6c6062f5f5b1014a3a72e67`；镜像 `cps-novel:0.4.0-8e83da4`；`RELEASE=PASS` | ✅ 预生产已发布（生命周期开关关闭）；生产未上线 |

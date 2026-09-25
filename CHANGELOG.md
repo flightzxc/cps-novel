@@ -3,7 +3,25 @@
 <!-- 本文件由 `node scripts/generate-changelog.mjs --write` 生成，请勿手工编辑。 -->
 <!-- 叙述性内容写进 commit message；Owner/架构决策写 docs/adr/。 -->
 
-生成时间：2026-09-24 · 共 826 个 commit
+生成时间：2026-09-25 · 共 841 个 commit
+
+## v0.4.3
+
+- `505feea` 2026-09-25 构建(发版)：版本身份升至 0.4.3 并登记准备中  — _codex · GPT-6_
+- `a773357` 2026-09-25 文档(预生产)：推广领取白名单示例改为 admin 与 admin2  — _codex · GPT-6_
+- `447631e` 2026-09-25 合并分片枚举真实库 helper 的规划器修复  — _codex · GPT-6_
+- `80e990f` 2026-09-25 合并 admin2 建号命令与独立两步验证交接  — _codex · GPT-6 · reviewed: claude-code · Claude Opus 5.5_
+- `f036cc4` 2026-09-25 docs(ops): complete admin2 verification and claim approval steps  — _codex · GPT-6_
+- `0462026` 2026-09-25 test(admin): cover replay password, argv, and true concurrency  — _codex · GPT-6_
+- `35b204e` 2026-09-25 test(admin): fail PostgreSQL verification when integration skips  — _codex · GPT-6_
+- `89ecc08` 2026-09-25 docs(ops): remove whitespace from mutation evidence  — _codex · GPT-6_
+- `3b1f61f` 2026-09-25 test(auth): isolate admin child-table access assertion  — _codex · GPT-6_
+- `ea757a6` 2026-09-25 test(auth): record mutation evidence and tighten 2FA isolation check  — _codex · GPT-6_
+- `605875a` 2026-09-25 docs(ops): document admin2 creation and promo allowlist handoff  — _codex · GPT-6_
+- `b8d4b58` 2026-09-25 test(auth): verify secondary admin isolation and grants  — _codex · GPT-6_
+- `9163877` 2026-09-25 feat(auth): add audited secondary admin identity command  — _codex · GPT-6_
+- `4329620` 2026-09-25 test(catalog-batch): 分片枚举集成用例的批量挂书 helper 改为单 CTE，修 8 万行 Nested Loop 退化  — _claude-code · Claude Opus 5.5 · reviewed: claude-code · Claude Opus 5.5_
+- `e1e9396` 2026-09-25 docs(release): v0.4.2 预生产发布收官——版本台账、开发日志、CHANGELOG、CLAUDE.md、Notion 草稿  — _claude-code · Claude Opus 5.5_
 
 ## v0.4.2
 

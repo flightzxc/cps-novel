@@ -39,6 +39,55 @@
 
 ## 发版记录（新条目在最上面）
 
+### 2026-09-25 22:35 - codex（GPT-6，发版执行）
+
+**变更类型**：预生产正式发布 `v0.4.3`（PATCH）；正式领取批次由 Owner 暂停后部署。
+
+**背景**：
+- Owner 需要与 admin 同密码、同权限、但独立 2FA 的 admin2 预生产后台身份。当前正式领取长任务正在运行；
+  本次部署会重启 worker，因此 Owner 先在后台暂停批次 `eba8f359-a569-43d7-bb55-b71fecc02f6e`，
+  再授权只在 `haiyue-vps` 执行第二阶段。真实领取提交验收须等该批次结束后逐次另行授权。
+
+**变更内容**（开发线 `integration/v0.4.3-2026-09-25`，基于 v0.4.2 收官提交 `e1e9396`）：
+- 合入 `feat/add-admin-identity-cli`（复核修正至 `f036cc4`）：一次性建号命令、独立密码盐与 2FA 建号流程、
+  真实 PostgreSQL 验证运行器、变异测试证据和运维手册；预生产模板增加双 identity UUID 白名单示例。
+- 合入分片枚举真实库用例的 helper 规划器修复（`4329620`）；版本身份升至 0.4.3。Final SHA
+  `505feeaae04ae1a23df3e7f6a27795f4128636f3`，annotated tag `v0.4.3`。
+- 部署后按手册预检、预演、创建与同一 request-id 回放 admin2，SQL 核对身份与审计；admin2 identity ID
+  `c5fd40e2-6f1d-4543-8251-27fb5ac941ac`。将该 ID 追加到 `PROMO_CLAIM_USER_IDS`，只重建 web。
+
+**影响范围**：
+- 预生产 web/worker/scheduler 换镜像 `cps-novel:0.4.3-505feea`（linux/amd64；config digest
+  `sha256:e601019cf1009564496deba6d5952cd2d64c4cff21c17b63cbd6f483d10a9f31`；归档 sha256
+  `fecbd3eaee7063a3f128cd02c08e55217e159a31cc56be4a5e1e6d888bfb02e5`）；postgres 容器 ID 保持
+  `49fcbd95027c4f08c40fb45a8b008424235816da85361ee93c610d03da6f9b13`，无新迁移或 grants 变更。
+- 目标机环境变量先只改 `APP_VERSION` 0.4.2→0.4.3、`NEXT_PUBLIC_BUILD_VERSION` v0.4.2→v0.4.3
+  （备份 `preprod.env.bak-20260925T143330Z`）；建号后再把 `PROMO_CLAIM_USER_IDS` 从 admin 单个 UUID 改为
+  admin/admin2 两个 UUID（备份 `preprod.env.bak-20260925T144425Z`），`PROMO_CLAIM_ROLES` 仍为空。
+  第二次变更只重建 web，worker/scheduler 的容器 ID、Created 与镜像前后逐项相同。
+- 回滚目标为 v0.4.2（`33cd67bd34c34af1d3dbcbf78e6f2636d175c889`），数据库结构兼容；
+  账号和白名单属于独立的运维状态，回滚前须按运维手册评估。
+
+**验证方式**：
+- 第一阶段本地 `npm ci`、Prisma generate、`tsc --noEmit`、`npm run build`、五组真实 PostgreSQL 验证运行器通过；
+  全量 `npm test` 为 446 文件通过 / 32 跳过、6,692 测试通过 / 314 跳过；镜像与代码身份、amd64 架构核对通过。
+- 部署前只读确认批次暂停，generic_task_item 处理中为 0、promo 非终态意图为 0；在线逻辑备份
+  `cps-novel-20260925T142332Z.dump`（190,409,997 字节，sha256
+  `45676de334f0d932a50fcea284e0c3071b36c44ae2a734278bca1c3a3fa881c9`，`LOGICAL_BACKUP=PASS`）。
+  git bundle、镜像归档与 manifest 在目标机校验通过；`release.sh deploy` 的 `RELEASE=PASS` / `RELEASE_EXIT=0`。
+- 部署后 health 返回 0.4.3 / Final commit / `metadataConsistency=passed` / database passed；worker 内按接口
+  限速开关仍为 true、getlistpc/getcode 间隔仍各 1,500 ms，生命周期开关仍为 true；后台路由域名隔离正常，
+  web/worker/scheduler 近 5 分钟错误日志均为 0。
+- admin2 建号结果依次为 `eligible` / `created` / `replayed`；admin 既有 2FA 密文摘要与恢复码数量建号前后不变；
+  admin2 初始无 2FA、恢复码和会话记录。白名单生效后 web 的两个 UUID 与空角色配置已核对，
+  worker/scheduler 未因白名单变更重建。
+
+**后续待办**：
+- Owner 现场绑定 admin2 独立 2FA 并离线保存恢复码后，分别运行 admin2/admin 的 `verify-admin-auth.ts`，
+  再核对 admin 原 2FA 密文摘要不变。当前该步骤等待 Owner 完成绑定。
+- 正式领取批次仍暂停；仅 Owner 在后台决定何时恢复。真实 promo claim 提交验收每次均须 Owner 单独授权，
+  目前未执行。生产未上线；Notion 手账交接提示词已生成，待 Owner 转交并回填页面链接。
+
 ### 2026-09-25 03:57 - claude-code（Claude Opus 5.5，发版执行）
 
 **变更类型**：预生产正式发布 `v0.4.2`（PATCH）；按接口限速开关保持关闭。
