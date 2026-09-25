@@ -3,7 +3,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
-import { PrismaClient } from "@prisma/client";
+import { Prisma, PrismaClient } from "@prisma/client";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import {
@@ -25,6 +25,7 @@ function url(name: string): string | undefined {
 }
 const owner = new PrismaClient({ datasourceUrl: url("ADD_ADMIN_IDENTITY_OWNER_DATABASE_URL") });
 const web = new PrismaClient({ datasourceUrl: url("ADD_ADMIN_IDENTITY_WEB_DATABASE_URL") });
+const concurrentWeb = new PrismaClient({ datasourceUrl: url("ADD_ADMIN_IDENTITY_WEB_DATABASE_URL") });
 const PASSWORD = "correct horse battery staple";
 const REASON = "Owner approved secondary preproduction admin account with independent 2FA and equivalent admin permissions";
 const REQUEST_ID = "preprod-2026-09-25-add-admin2";
@@ -49,7 +50,7 @@ describe.skipIf(!enabled).sequential("add admin identity with real PostgreSQL an
     await writeFile(passwordFile, `${PASSWORD}\n`, { mode: 0o600 });
   });
   afterAll(async () => {
-    await Promise.all([owner, web].map((client) => client.$disconnect()));
+    await Promise.all([owner, web, concurrentWeb].map((client) => client.$disconnect()));
     if (secretDir) await rm(secretDir, { recursive: true, force: true });
   });
 
@@ -166,4 +167,76 @@ describe.skipIf(!enabled).sequential("add admin identity with real PostgreSQL an
       .rejects.toMatchObject({ code: "jwt_invalid", status: 401 });
     expect((await owner.adminIdentity.findUniqueOrThrow({ where: { id: adminId } })).status).toBe("active");
   });
+
+  it("serializes two overlapping web_app transactions for one username", async () => {
+    const username = "race-admin2";
+    let releaseStart!: () => void;
+    let releaseReads!: () => void;
+    const bothStarted = new Promise<void>((resolve) => { releaseStart = resolve; });
+    const bothReadTarget = new Promise<void>((resolve) => { releaseReads = resolve; });
+    let entered = 0;
+    let active = 0;
+    let maxActive = 0;
+    let lockAttempts = 0;
+    let unlockedTargetReads = 0;
+    type AddDb = Parameters<typeof runAddAdminCli>[0];
+
+    const withBarrier = (client: PrismaClient): AddDb => ({
+      adminIdentity: client.adminIdentity,
+      operationAudit: client.operationAudit,
+      $transaction: async <T>(callback: (tx: AddDb) => Promise<T>) => client.$transaction(async (tx) => {
+        active += 1;
+        maxActive = Math.max(maxActive, active);
+        entered += 1;
+        if (entered === 2) releaseStart();
+        try {
+          await bothStarted;
+          let lockSeen = false;
+          const identity = {
+            findUnique: async (args: { where: { username?: string; id?: string }; select?: unknown }) => {
+              const found = await tx.adminIdentity.findUnique(args as never);
+              // If the advisory lock is deleted, hold both absent-name reads
+              // until they have happened. Both inserts then race in PostgreSQL.
+              if (args.where.username === username && !lockSeen) {
+                unlockedTargetReads += 1;
+                if (unlockedTargetReads === 2) releaseReads();
+                await bothReadTarget;
+              }
+              return found;
+            },
+            create: (args: Parameters<typeof tx.adminIdentity.create>[0]) => tx.adminIdentity.create(args),
+          };
+          const wrappedTx = {
+            adminIdentity: identity,
+            operationAudit: tx.operationAudit,
+            $queryRaw: async (sql: Prisma.Sql) => {
+              const ordinal = ++lockAttempts;
+              lockSeen = true;
+              const result = await tx.$queryRaw(sql);
+              // Hold the first lock while the second transaction attempts it.
+              if (ordinal === 1) await new Promise((resolve) => setTimeout(resolve, 100));
+              return result;
+            },
+          } as unknown as AddDb;
+          return await callback(wrappedTx);
+        } finally {
+          active -= 1;
+        }
+      }),
+    } as unknown as AddDb);
+
+    const results = await Promise.allSettled([
+      runAddAdminCli(withBarrier(web), addOptions({ username, requestId: "race-first" }), addEnv()),
+      runAddAdminCli(withBarrier(concurrentWeb), addOptions({ username, requestId: "race-second" }), addEnv()),
+    ]);
+    const created = results.filter((result): result is PromiseFulfilledResult<Awaited<ReturnType<typeof runAddAdminCli>>> => result.status === "fulfilled");
+    const rejected = results.filter((result): result is PromiseRejectedResult => result.status === "rejected");
+    expect(maxActive).toBe(2);
+    expect(created).toHaveLength(1);
+    expect(created[0].value.outcome).toBe("created");
+    expect(rejected).toHaveLength(1);
+    expect(rejected[0].reason).toMatchObject({ code: "username_exists" });
+    expect(lockAttempts).toBe(2);
+    expect(await owner.adminIdentity.count({ where: { username } })).toBe(1);
+  }, 20_000);
 });

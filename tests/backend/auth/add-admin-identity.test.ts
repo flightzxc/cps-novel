@@ -130,6 +130,14 @@ describe("add admin CLI arguments and password file", () => {
     expect(() => parseAddAdminCliOptions(["--username", "ADMIN", "--same-password-as", "admin", "--reason", REASON, "--request-id", REQUEST_ID], env()))
       .toThrowError(expect.objectContaining({ code: "self_reference" }));
   });
+  it("rejects --password=value without echoing the supplied value", () => {
+    const secret = "distinct-password-that-must-not-appear";
+    let error: unknown;
+    try { parseAddAdminCliOptions([...argv, `--password=${secret}`], env()); }
+    catch (caught) { error = caught; }
+    expect(error).toMatchObject({ code: "password_forbidden_in_argv" });
+    expect(String(error)).not.toContain(secret);
+  });
   it("rejects missing, relative, multiline, empty and short password files", async () => {
     const db = new FakeDb();
     for (const file of ["relative", path.join(secretDir, "missing")]) {
@@ -211,6 +219,19 @@ describe("add admin CLI behavior", () => {
     expect(db.identities.size).toBe(2);
     expect(db.audits).toHaveLength(1);
   });
+  it("refuses replay of the same request id with a different password file", async () => {
+    const db = new FakeDb();
+    await runAddAdminCli(db.asClient(), options({ apply: true }), env());
+    const changedFile = path.join(secretDir, "changed-password");
+    await writeFile(changedFile, "a different password for replay\n", { mode: 0o600 });
+    for (const apply of [false, true]) {
+      await expect(runAddAdminCli(db.asClient(), options({ apply }), {
+        ...env(), ADD_ADMIN_PASSWORD_FILE: changedFile,
+      })).rejects.toMatchObject({ code: "request_id_conflict" });
+    }
+    expect(db.identities.size).toBe(2);
+    expect(db.audits).toHaveLength(1);
+  });
   it("rejects changed request bindings", async () => {
     const db = new FakeDb();
     await runAddAdminCli(db.asClient(), options({ apply: true }), env());
@@ -226,14 +247,16 @@ describe("add admin CLI behavior", () => {
       .rejects.toMatchObject({ code: "username_exists" });
     expect(db.identities.size).toBe(2);
   });
-  it("serializes concurrent creates of the same username", async () => {
+  it("rejects a second create after the fake transaction queue commits", async () => {
     const db = new FakeDb();
     const results = await Promise.allSettled([
       runAddAdminCli(db.asClient(), options({ apply: true, requestId: "first" }), env()),
       runAddAdminCli(db.asClient(), options({ apply: true, requestId: "second" }), env()),
     ]);
     expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
-    expect(results.filter((r) => r.status === "rejected")).toHaveLength(1);
+    const rejected = results.filter((r): r is PromiseRejectedResult => r.status === "rejected");
+    expect(rejected).toHaveLength(1);
+    expect(rejected[0].reason).toMatchObject({ code: "username_exists" });
     expect(db.identities.size).toBe(2);
   });
 });
