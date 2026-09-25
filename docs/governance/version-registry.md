@@ -38,6 +38,14 @@ Compose runtime 与 Health 身份一致性验证（`/api/health` 的 `metadataCo
 - **待完成**：Owner 绑定 admin2 2FA 并离线保存恢复码后，分别核验 admin2/admin 的认证；正式领取批次仍暂停，
   由 Owner 自行决定何时恢复。admin/admin2 真实提交领取验收涉及不幂等上游 getcode，待正式领取结束后每次由 Owner 单独授权。
   生产未上线。
+- **部署后配置变更（2026-09-26 00:44 +0900 / 2026-09-25 15:44 UTC）**：Owner 批准在 `haiyue-vps` 的预生产 worker 白名单保留原有项并追加
+  `article.generate.v1`、`article.generate.batch.v1`、`article.generate.batch.v2`、`sitemap_refresh`，同时打开
+  `FEATURE_SITEMAP_AUTO_REFRESH=true` 与 `SITEMAP_AUTO_REFRESH_ALLOW_WRITE=true`。目标机 env 备份为
+  `preprod.env.bak-20260925T154337Z`（变更前 SHA-256 `f09c48868e0ad690676f4879b2e1ed877326d51c7bbb4d053beb5aea90ed025f`；
+  变更后 `b7d49e35ab19bfa23d558f9952e52f98285ef69573f56bb600cd885686384d1d`）；diff 只有上述三处。只重建 web 与 worker，
+  两者 healthy 且仍运行 v0.4.3 已批准镜像；scheduler 与 postgres 的容器 ID、Created 未变。配置断言、健康接口和批次暂停检查通过。
+  首次发布、批量生成和 sitemap 文件的业务验收待 Owner 在后台操作后进行；决策与风险见
+  [`ADR-PREPROD-ARTICLE-GENERATION-SITEMAP-CONFIG.md`](../adr/ADR-PREPROD-ARTICLE-GENERATION-SITEMAP-CONFIG.md)。
 
 ### v0.4.2 —— 已发布到预生产（2026-09-25 03:57 +0800，`RELEASE=PASS`；按接口限速开关关闭）
 
