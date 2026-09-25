@@ -83,6 +83,9 @@ class FakeDb {
     return {
       adminIdentity: root.adminIdentity,
       operationAudit: root.operationAudit,
+      get adminTwoFactor(): never { throw new Error("2FA must not be accessed"); },
+      get adminRecoveryCode(): never { throw new Error("recovery codes must not be accessed"); },
+      get adminSession(): never { throw new Error("sessions must not be accessed"); },
       $transaction: async <T>(callback: (tx: ReturnType<FakeDb["client"]>) => Promise<T>) => {
         this.calls.push("$transaction");
         let release!: () => void;
@@ -184,6 +187,14 @@ describe("add admin CLI behavior", () => {
     const visible = JSON.stringify({ report, audit: db.audits[0] }, (_, value) => typeof value === "bigint" ? value.toString() : value);
     expect(visible).not.toContain(PASSWORD);
     expect(visible).not.toContain("scrypt$");
+  });
+  it("never accesses 2FA, recovery-code or session tables while adding an identity", async () => {
+    const db = new FakeDb();
+    await expect(runAddAdminCli(db.asClient(), options({ apply: true }), env()))
+      .resolves.toMatchObject({ outcome: "created", wrote: true });
+    expect(db.calls).toEqual(expect.not.arrayContaining([
+      "adminTwoFactor", "adminRecoveryCode", "adminSession",
+    ]));
   });
   it("rolls back the identity if the audit insert fails", async () => {
     const db = new FakeDb(); db.failNextAudit = true;

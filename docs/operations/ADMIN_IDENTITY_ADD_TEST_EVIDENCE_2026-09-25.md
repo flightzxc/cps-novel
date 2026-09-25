@@ -136,9 +136,9 @@ index bc06025..f6b449d 100644
 ## 门禁记录
 
 - `npx tsc --noEmit --incremental false`：PASS。
-- 显式路径 vitest：`Test Files 9 passed`，`Tests 141 passed | 3 skipped`。
+- 显式路径 vitest：`Test Files 9 passed`，`Tests 142 passed | 3 skipped`。
 - `bash scripts/run-add-admin-identity-postgres-verification.sh`：`Test Files 1 passed`、`ADD_ADMIN_IDENTITY_DICTIONARY_DRIFT=0`、`ADD_ADMIN_IDENTITY_POSTGRES_VERIFICATION=PASS`、一次性库已清理。
-- `npm test`（本地 Docker 可用）：`Test Files 446 passed | 32 skipped`、`Tests 6689 passed | 313 skipped`。
+- `npm test`（本地 Docker 可用）：`Test Files 446 passed | 32 skipped`、`Tests 6690 passed | 313 skipped`。
 - `npx eslint` 仅检查本任务修改的 TypeScript 文件：PASS。
 - `npm run lint` 全仓：3 项既有错误，位于 `promo-link-claim-dialog.tsx`、`promo-claim-release.ts`、`canonical-tag-translation-overlay.test.ts`；这三处相对开发线基准 commit 无 diff，本任务未改动。
 - 改动前全量 `npm test` 在默认沙箱中有 2 项 Docker socket 不可访问失败，分别位于 `preproduction-image-store-portability.test.ts` 和 `x8-gate-catalog.test.ts`；在本地 Docker 受控权限下的改动后全量测试全部通过。
