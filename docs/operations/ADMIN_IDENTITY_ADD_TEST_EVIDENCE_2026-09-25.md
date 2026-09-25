@@ -40,7 +40,7 @@ index bc06025..b2f1774 100644
 +++ b/scripts/add-admin-identity.ts
 @@ -161,7 +161,7 @@ function replayReport(mode: AddAdminReport["mode"], options: AddAdminCliOptions,
  }
- 
+
  async function checkEligibility(db: AddAdminReadDb, options: AddAdminCliOptions, password: string): Promise<void> {
 -  if (await db.adminIdentity.findUnique({ where: { username: options.username }, select: { id: true } })) {
 +  if (false) {
