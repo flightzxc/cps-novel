@@ -88,7 +88,7 @@ describe.skipIf(!enabled).sequential("add admin identity with real PostgreSQL an
     expect(created).toMatchObject({ outcome: "created", wrote: true });
     const admin2Id = created.identityId!;
     const admin2 = await owner.adminIdentity.findUniqueOrThrow({ where: { id: admin2Id } });
-    expect(admin2).toMatchObject({ username: "admin2", role: "super_admin", status: "active", sessionVersion: 0 });
+    expect(admin2).toMatchObject({ username: "admin2", role: "super_admin", sessionVersion: 0 });
     expect(admin2.passwordHash).not.toBe(adminBefore.passwordHash);
     expect(await owner.adminTwoFactor.count({ where: { identityId: admin2Id } })).toBe(0);
     expect(await owner.adminRecoveryCode.count({ where: { identityId: admin2Id } })).toBe(0);
@@ -100,8 +100,10 @@ describe.skipIf(!enabled).sequential("add admin identity with real PostgreSQL an
     expect(await owner.adminLoginAttempt.count({ where: { identifierHash: hashLoginAttemptIdentifier("user", "admin") } })).toBe(0);
     expect(await owner.adminLoginAttempt.count({ where: { identifierHash: hashLoginAttemptIdentifier("ip", "192.0.2.20") } })).toBe(1);
     const login = await authenticateAdminLogin({ username: "admin2", password: PASSWORD, ip: "192.0.2.20", identities, sessions, attempts });
+    expect(admin2.status).toBe("active");
     expect(login.context.identity.twoFactorEnabled).toBe(false);
     const pending = await startTwoFactorSetup({ identityId: admin2Id, identities, twoFactor, encryptionKey: KEY });
+    expect(await owner.adminTwoFactor.findUniqueOrThrow({ where: { identityId: adminId } })).toEqual(adminBefore.twoFactor);
     const confirmed = await confirmTwoFactorSetup({
       identityId: admin2Id, code: generateTotpCode(pending.manualKey), identities,
       twoFactor, transactions, encryptionKey: KEY,
