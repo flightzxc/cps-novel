@@ -86,7 +86,7 @@
 - Owner 现场绑定 admin2 独立 2FA 并离线保存恢复码后，分别运行 admin2/admin 的 `verify-admin-auth.ts`，
   再核对 admin 原 2FA 密文摘要不变。当前该步骤等待 Owner 完成绑定。
 - 正式领取批次仍暂停；仅 Owner 在后台决定何时恢复。真实 promo claim 提交验收每次均须 Owner 单独授权，
-  目前未执行。生产未上线；Notion 手账交接提示词已生成，待 Owner 转交并回填页面链接。
+  目前未执行。生产未上线；[Notion 手账](https://app.notion.com/p/3e4601b5fd3481b5a39bcf48408015c2)已直接同步并读回核对。
 
 ### 2026-09-25 03:57 - claude-code（Claude Opus 5.5，发版执行）
 

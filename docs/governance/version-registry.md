@@ -11,9 +11,8 @@ Compose runtime 与 Health 身份一致性验证（`/api/health` 的 `metadataCo
 `src/server/health/service.ts`）；正式远端 CI 和发布流程仍未配置，不得把本地门禁结果登记
 为已发布。
 
-> Notion 权威页：**待新建后回填链接**（由 ChatGPT 按发版治理规程在海阅项目文档下新建
-> 独立发版手账页后，由 Owner 回填本行）。本文件是仓库内的镜像，Notion 台账需人工同步；
-> 本文件变更不会自动写入 Notion。
+> Notion 权威页：[海阅 版本管理与发版手账](https://app.notion.com/p/3e4601b5fd3481b5a39bcf48408015c2)。
+> 本文件是仓库内镜像；v0.4.3 已直接同步到 Notion 并读回核对。本文件变更不会自动写入 Notion。
 
 ## 当前快照
 
