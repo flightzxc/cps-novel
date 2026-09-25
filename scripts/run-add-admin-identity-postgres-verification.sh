@@ -76,7 +76,28 @@ docker exec \
 ADD_ADMIN_IDENTITY_DATABASE_TEST=1 \
 ADD_ADMIN_IDENTITY_OWNER_DATABASE_URL="$owner_url" \
 ADD_ADMIN_IDENTITY_WEB_DATABASE_URL="$web_url" \
-npm exec vitest run -- --project node tests/integration/auth/add-admin-identity-postgres.test.ts
+  npm exec vitest run -- --project node tests/integration/auth/add-admin-identity-postgres.test.ts \
+    --reporter=default --reporter=json --outputFile="$secret_dir/integration-result.json"
+
+# Vitest exits 0 when every test in a file was skipped. A green CLI exit is
+# therefore insufficient evidence that the disposable database was exercised.
+node - "$secret_dir/integration-result.json" "$project_root/tests/integration/auth/add-admin-identity-postgres.test.ts" <<'NODE'
+const fs = require("node:fs");
+const path = require("node:path");
+const report = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+const expected = path.resolve(process.argv[3]);
+const files = report.testResults ?? [];
+const file = files[0];
+const passed = file?.assertionResults?.filter((test) => test.status === "passed").length ?? 0;
+const skipped = report.numPendingTests ?? -1;
+if (files.length !== 1 || path.resolve(file?.name ?? "") !== expected
+    || file.status !== "passed" || passed < 1 || skipped !== 0
+    || report.numFailedTests !== 0 || report.numPassedTests !== passed) {
+  console.error(`ADD_ADMIN_IDENTITY_INTEGRATION=FAIL reason=not_executed passed=${passed} skipped=${skipped}`);
+  process.exit(1);
+}
+console.log(`ADD_ADMIN_IDENTITY_INTEGRATION=PASS passed=${passed} skipped=0`);
+NODE
 
 DATABASE_URL="$owner_url" node scripts/check-database-dictionary-drift.mjs
 
