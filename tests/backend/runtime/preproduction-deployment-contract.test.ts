@@ -337,7 +337,10 @@ describe("Phase 2B preproduction deployment contract", () => {
       "ARTICLE_NOVEL_REBIND_ALLOW_WRITE=false",
     ]) expect(env).toContain(closed);
 
-    expect(env).toContain("PREPROD_APPROVED_OPEN_WRITE_GATES=catalog_write,promo_write");
+    expect(env).toContain("PREPROD_APPROVED_OPEN_WRITE_GATES=catalog_write,promo_write,sitemap_write");
+    expect(env).toContain("FEATURE_SITEMAP_AUTO_REFRESH=true");
+    expect(env).toContain("SITEMAP_AUTO_REFRESH_ALLOW_WRITE=true");
+    expect(env).toContain("article.generate.v1,article.generate.batch.v1,article.generate.batch.v2,sitemap_refresh");
     expect(env).toContain("FEATURE_NOVEL_CATALOG_SYNC=true");
     expect(env).toContain("NOVEL_CATALOG_SYNC_ALLOW_WRITE=true");
     expect(env).toContain("FEATURE_PROMO_LINK_CLAIM=true");
@@ -360,6 +363,7 @@ describe("Phase 2B preproduction deployment contract", () => {
       .map((s) => s.trim())
       .filter(Boolean);
     const registrableGates: Array<{ name: string; vars: string[] }> = [
+      { name: "sitemap_write", vars: ["FEATURE_SITEMAP_AUTO_REFRESH", "SITEMAP_AUTO_REFRESH_ALLOW_WRITE"] },
       { name: "catalog_write", vars: ["FEATURE_NOVEL_CATALOG_SYNC", "NOVEL_CATALOG_SYNC_ALLOW_WRITE"] },
       { name: "promo_write", vars: ["FEATURE_PROMO_LINK_CLAIM", "PROMO_LINK_CLAIM_ALLOW_WRITE"] },
     ];
@@ -973,5 +977,27 @@ describe("preprod runtime network subnet must match the baked pg_hba.conf replic
         `a pg_hba.conf replication rule scoped to a subnet nothing else agrees on, even if the ` +
         `preproduction compose's pinned network subnet still matches hba-replication-rule.sh's default.`,
     ).toBe(hbaSubnet);
+  });
+});
+
+
+describe("approved sitemap template renders into runtime services", () => {
+  it("passes sitemap flags to web/worker and the task allowlist to worker", () => {
+    const result = spawnSync("docker", ["compose", "--env-file", "infra/preproduction/preprod.env.example",
+      "-f", "docker-compose.yml", "-f", "infra/preproduction/docker-compose.yml", "config", "--format", "json"], {
+      encoding: "utf8", env: { NODE_ENV: "test", PATH: process.env.PATH, HOME: process.env.HOME,
+        GIT_COMMIT: "845ca02ac9351163dd69b0de328b2d8aad1e012f", CPS_NOVEL_APP_IMAGE: "cps-novel:wo2-contract" },
+    });
+    expect(result.status, result.stderr).toBe(0);
+    const config = JSON.parse(result.stdout);
+    for (const service of ["web", "worker"]) {
+      expect(config.services[service].environment.FEATURE_SITEMAP_AUTO_REFRESH).toBe("true");
+      expect(config.services[service].environment.SITEMAP_AUTO_REFRESH_ALLOW_WRITE).toBe("true");
+    }
+    const tasks = config.services.worker.environment.WORKER_TASK_ALLOWLIST.split(",");
+    for (const task of ["article.generate.v1", "article.generate.batch.v1", "article.generate.batch.v2", "sitemap_refresh"])
+      expect(tasks).toContain(task);
+    expect(config.services.scheduler.environment.FEATURE_SITEMAP_AUTO_REFRESH).toBeUndefined();
+    expect(config.services.scheduler.environment.SITEMAP_AUTO_REFRESH_ALLOW_WRITE).toBeUndefined();
   });
 });

@@ -45,7 +45,7 @@ read as unexplained drift rather than as a documented, approved delta.
 ## Decision
 
 Replace "these two gates' variables must always equal `false`" with
-"opening either of these two gates requires explicit registration in a new,
+"opening a registrable gate requires explicit registration in a
 closed-enum env variable."
 
 **`PREPROD_APPROVED_OPEN_WRITE_GATES`** (comma-separated, optional
@@ -56,9 +56,10 @@ from `preflight.sh` in place of the two removed hardcoded checks.
 
 The frozen semantics:
 
-1. The registrable set is a **closed enum of exactly two names**:
+1. The registrable set is a **closed enum of exactly three names (extended 2026-09-26)**:
    `catalog_write` (the catalog-sync pair) and `promo_write` (the
-   promo-link-claim pair). Any other token in the list -- a typo, a name for
+   promo-link-claim pair), and `sitemap_write` (`FEATURE_SITEMAP_AUTO_REFRESH` /
+   `SITEMAP_AUTO_REFRESH_ALLOW_WRITE`). Any other token in the list -- a typo, a name for
    a gate not on this list, anything -- is a hard failure
    (`reason=approved_open_write_gate_unknown`), naming the offending value.
    Every other write gate this repository already hard-closes
@@ -68,7 +69,7 @@ The frozen semantics:
 2. Each registrable gate's two variables must each be the literal string
    `"true"` or `"false"`, case-sensitively. Anything else -- `"TRUE"`,
    `"1"`, empty, or simply unset -- is invalid
-   (`catalog_write_invalid` / `promo_write_invalid`), whether or not the
+   (`catalog_write_invalid` / `promo_write_invalid` / `sitemap_write_invalid`), whether or not the
    gate is registered. Unset does not default to `false`: the point of
    these two variables is to say explicitly what state the host is in, and
    a missing variable says nothing.
@@ -79,13 +80,14 @@ The frozen semantics:
    non-closed state this cycle," not one specific combination.
 4. An unregistered gate must still have both variables exactly `false`,
    with the pre-existing `reason=catalog_write` / `reason=promo_write`
-   codes, so any monitoring or runbook keyed on those reason strings keeps
+   codes, plus `reason=sitemap_write` for sitemap, so existing monitoring
+   or runbooks keyed on the old reason strings keep
    working unchanged.
 5. On success, preflight now prints an extra evidence line before
    `PREPROD_PREFLIGHT=PASS`:
    `PREPROD_WRITE_GATES=PASS approved=<list|none> open=<list|none>`.
 
-`infra/preproduction/preprod.env.example` is updated to match the target
+The original 2026-09-23 `infra/preproduction/preprod.env.example` update matched the target
 host's actual 2026-09-22/23 state: both pairs `true`,
 `PREPROD_APPROVED_OPEN_WRITE_GATES=catalog_write,promo_write`, the worker
 allowlist extended with the four new task names, and
@@ -120,11 +122,12 @@ account rather than an entire role.
 
 ## Consequences
 
-- Opening any write gate beyond `catalog_write` / `promo_write` still
+- Opening any write gate beyond `catalog_write` / `promo_write` / `sitemap_write` still
   requires a code change (extending the enum in
   `preprod_assert_write_gates()`) and Owner approval -- registering an
   unlisted name in the env file alone does nothing but fail preflight.
-- Before deploying this version (or any later one) on the target host, the
+- Historical 2026-09-23 migration (superseded for current upgrades by the
+  2026-09-26 upgrade order below): before deploying that version on the target host, the
   operator must add `PREPROD_APPROVED_OPEN_WRITE_GATES=catalog_write,
   promo_write` to `/opt/cps-novel/shared/env/preprod.env`. Skipping this
   step makes the very next `preflight.sh` run fail with
@@ -155,3 +158,40 @@ account rather than an entire role.
   part of preflight's observable stdout contract for anyone parsing deploy
   logs; a future change to `preprod_assert_write_gates()` that removes or
   reformats it should be treated as a breaking change to that contract.
+
+
+## 2026-09-26 extension: sitemap registration and upgrade order
+
+The repository's version registry records Owner approval at 2026-09-26
+00:44 +0900 under v0.4.3: append `article.generate.v1`,
+`article.generate.batch.v1`, `article.generate.batch.v2`, `sitemap_refresh`
+and open both sitemap flags. Its v0.4.4 snapshot records those settings
+retained. These are historical release records, **not a fresh host check**.
+The template now reproduces that approved profile; registration extends the
+existing shell enum, without adding a second runtime registry.
+
+`sitemap_write` follows the same strict literal boolean and registration
+rules as catalog/promo. Either flag true requires registration, including
+both single-sided combinations; registration permits all four combinations.
+The runtime TS helpers still parse only exact `"true"`; malformed or absent
+values fail closed there, while preflight rejects them as
+`sitemap_write_invalid` to surface configuration mistakes. Runtime writing
+still requires both flags. Registration is a deployment approval check,
+not another runtime feature flag, so it is not passed into app containers.
+Compose already passes the two sitemap flags to web and worker, with false
+fallbacks; scheduler does not consume them.
+
+Before deploying the new preflight, an authorized operator must back up the
+shared host env and append `sitemap_write` to its existing approved list
+(expected historical value: `catalog_write,promo_write,sitemap_write`).
+Preserve all existing approved entries and actual switch values; do not
+close an approved gate merely to make preflight pass. Inspect the env diff,
+then run the new preflight and retain its approved/open evidence. This work
+only supplies code and instructions: no host access or env change occurred.
+
+Order matters: the old two-name preflight rejects the new name as unknown.
+Adding the entry and invoking the new release must therefore be coordinated;
+do not run the old preflight between them. A rollback that invokes an older
+checkout needs an Owner-reviewed env compatibility plan (the old enum will
+reject `sitemap_write`); prefer rolling forward. Removing registration is
+not authorization to leave the sitemap gate unmanaged on an older release.

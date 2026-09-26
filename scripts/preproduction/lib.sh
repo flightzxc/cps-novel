@@ -45,9 +45,11 @@ preprod_load_env() {
 # 决策（Owner 2026-09-23，见 docs/adr/ADR-PREPROD-APPROVED-OPEN-WRITE-GATES.md）：
 # 把"两个变量必须全为 false"改成"开启前必须先在共享 env 里显式登记"。
 #
-# 🔴 可登记的写闸是一个封闭枚举，只有两个：
+# 🔴 可登记的写闸是一个封闭枚举，只有三个：
 #   catalog_write → FEATURE_NOVEL_CATALOG_SYNC + NOVEL_CATALOG_SYNC_ALLOW_WRITE
 #   promo_write   → FEATURE_PROMO_LINK_CLAIM + PROMO_LINK_CLAIM_ALLOW_WRITE
+#   sitemap_write → FEATURE_SITEMAP_AUTO_REFRESH + SITEMAP_AUTO_REFRESH_ALLOW_WRITE
+# sitemap: Owner 2026-09-26 approval; repository release evidence, not a live host check.
 # 之所以是封闭枚举而不是"登记什么值都认"：登记列表本身只是共享 env 里的一行
 # 文本，任何有权改目标机 env 的人都能编辑它——如果登记值本身没有约束，这道闸
 # 就退化成"写你想开的名字，自动通过"，等于没有检查。封闭枚举把"新开一个写闸"
@@ -62,8 +64,8 @@ preprod_load_env() {
 # 这两个变量描述的是"目标机 env 里写没写清楚这件事"，而不是"没写就当作最安全的
 # 值"——本仓库吃过默认值掩盖配置缺失的亏，这里不重蹈。为保持与旧版 reason 的
 # 连续性，"已登记但值非法"与"未登记但值非法"统一归为
-# catalog_write_invalid / promo_write_invalid（不复用未登记时的
-# catalog_write / promo_write，这样两类失败在事故排查时不会混在一起）。
+# catalog_write_invalid / promo_write_invalid / sitemap_write_invalid（不复用未登记时的
+# catalog_write / promo_write / sitemap_write，这样两类失败在事故排查时不会混在一起）。
 #
 # 🔴 dry-run 组合（FEATURE=true 但 ALLOW_WRITE=false）对已登记的写闸合法：
 # 目录同步的 dry-run 模式就是这个组合——只探测/计算，不落库。已登记写闸的
@@ -78,7 +80,7 @@ preprod_load_env() {
 # unbound variable，4.4 之前都有这个坑）。
 preprod_assert_write_gates() {
   local raw="${PREPROD_APPROVED_OPEN_WRITE_GATES:-}"
-  local catalog_approved=0 promo_approved=0
+  local catalog_approved=0 promo_approved=0 sitemap_approved=0
   local -a parts
   IFS=',' read -ra parts <<<"$raw"
   local item trimmed
@@ -88,6 +90,7 @@ preprod_assert_write_gates() {
     case "$trimmed" in
       catalog_write) catalog_approved=1 ;;
       promo_write) promo_approved=1 ;;
+      sitemap_write) sitemap_approved=1 ;;
       *)
         echo "approved_open_write_gate_unknown value=$trimmed"
         return 65
@@ -124,17 +127,33 @@ preprod_assert_write_gates() {
     return 65
   fi
 
+  local feature_sitemap="${FEATURE_SITEMAP_AUTO_REFRESH:-}"
+  local allow_sitemap="${SITEMAP_AUTO_REFRESH_ALLOW_WRITE:-}"
+  if [[ "$feature_sitemap" != "true" && "$feature_sitemap" != "false" ]] \
+    || [[ "$allow_sitemap" != "true" && "$allow_sitemap" != "false" ]]; then
+    echo "sitemap_write_invalid"
+    return 65
+  fi
+  local sitemap_open=0
+  [[ "$feature_sitemap" == "true" || "$allow_sitemap" == "true" ]] && sitemap_open=1
+  if (( sitemap_open == 1 && sitemap_approved == 0 )); then
+    echo "sitemap_write"
+    return 65
+  fi
+
   local approved_list="" open_list=""
   if (( catalog_approved == 1 )); then approved_list="catalog_write"; fi
   if (( promo_approved == 1 )); then
     if [[ -n "$approved_list" ]]; then approved_list="$approved_list,promo_write"; else approved_list="promo_write"; fi
   fi
+  if (( sitemap_approved == 1 )); then approved_list="${approved_list:+$approved_list,}sitemap_write"; fi
   [[ -n "$approved_list" ]] || approved_list="none"
 
   if (( catalog_open == 1 )); then open_list="catalog_write"; fi
   if (( promo_open == 1 )); then
     if [[ -n "$open_list" ]]; then open_list="$open_list,promo_write"; else open_list="promo_write"; fi
   fi
+  if (( sitemap_open == 1 )); then open_list="${open_list:+$open_list,}sitemap_write"; fi
   [[ -n "$open_list" ]] || open_list="none"
 
   echo "PREPROD_WRITE_GATES=PASS approved=$approved_list open=$open_list"

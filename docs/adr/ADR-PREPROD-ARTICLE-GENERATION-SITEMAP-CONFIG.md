@@ -28,3 +28,14 @@ v0.4.3 已发布到预生产，但 worker 白名单尚未包含文章生成任�
 2. 在 scheduler 入队每日兜底刷新，由 worker 执行，以覆盖发布后的下线或撤回。
 3. 提供命令行 sitemap 生成与正式 dry-run，恢复发布清单原有验收路径。
 4. 将 sitemap 写闸加入预生产写闸登记封闭枚举，并同步 preflight、env 模板与契约测试。
+
+
+## 2026-09-26 工单 2：登记机制补齐（待独立复核与发布）
+
+依据版本台账 v0.4.3 的 2026-09-26 00:44 +0900 配置记录及 v0.4.4 保持开启记录，
+env 示例对齐四个任务与 sitemap 双闸，并在现有封闭枚举增加 `sitemap_write`。
+本次仅据历史发布证据开发，未实时核验主机、未操作真实开关。
+运维必须先备份并将 `sitemap_write` 追加到主机批准名单，再发布新 preflight；
+旧 preflight 不认识该名字，升级与回滚顺序详见
+[写闸登记 ADR](ADR-PREPROD-APPROVED-OPEN-WRITE-GATES.md#2026-09-26-extension-sitemap-registration-and-upgrade-order)。
+本节只落实原后续项 4，不代表手动入口、CLI 或每日调度已经完成。
