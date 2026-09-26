@@ -3,7 +3,7 @@ import type { Prisma, PrismaClient } from "@prisma/client";
 import type { NovelCardView, NovelDetailView, ChapterView } from "@/features/public-ui/types";
 import type { SiteLocale } from "@/lib/locale/locale-canonical";
 import { parseArticleSlugParam } from "@/lib/slug/article-path";
-import { checkNovelArticlePublicAccess } from "@/server/publication/access";
+import { resolveNovelArticlePublicAccess } from "@/server/publication/access";
 import {
   buildPrimaryArticleWhere,
   buildPublicListArticleWhere,
@@ -123,14 +123,10 @@ export async function resolvePublicArticleBySlugParam(
   const parsed = parseArticleSlugParam(slugParam);
   if (!parsed) return { kind: "not_found" };
 
-  const access = await checkNovelArticlePublicAccess(db, { locale, slug: parsed.slugPart });
+  const access = await resolveNovelArticlePublicAccess(db, { locale, slug: parsed.slugPart });
   if (access.kind === "not_found") return { kind: "not_found" };
 
-  const article = await db.article.findFirst({
-    where: buildPrimaryArticleWhere({ locale, slug: parsed.slugPart }),
-    select: { id: true, title: true, publicPageShortId: true },
-  });
-  if (!article || article.publicPageShortId !== parsed.shortId) {
+  if (access.publicPageShortId !== parsed.shortId) {
     return { kind: "not_found" };
   }
 
@@ -141,11 +137,11 @@ export async function resolvePublicArticleBySlugParam(
       novelId: access.novelId,
       slugPart: parsed.slugPart,
       shortId: parsed.shortId,
-      title: article.title,
+      title: access.title,
     };
   }
 
-  return { kind: access.kind, title: article.title };
+  return { kind: access.kind, title: access.title };
 }
 
 function toPublicArticle(

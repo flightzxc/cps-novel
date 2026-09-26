@@ -1,4 +1,5 @@
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "@/lib/db/web-prisma";
+export { prisma } from "@/lib/db/web-prisma";
 import { cookies } from "next/headers";
 
 import {
@@ -16,11 +17,6 @@ import { P2_04_ADMIN_REGISTRY } from "./registry";
  * prefix keeps it off the router, and P1-09's write boundary is `src/app/**`.
  * `src/server/**` stays Codex-owned.
  */
-const globalForPrisma = globalThis as unknown as { adminPrisma?: PrismaClient };
-
-export const prisma: PrismaClient = globalForPrisma.adminPrisma ?? new PrismaClient();
-if (process.env.NODE_ENV !== "production") globalForPrisma.adminPrisma = prisma;
-
 /** P1-08B credentials, P2-04 content reads, and X9 task administration. */
 export const ADMIN_REGISTRY = P2_04_ADMIN_REGISTRY;
 

@@ -95,17 +95,20 @@ export function AdminSidebar({
                   {item.children.map((child) => {
                     const childActive = isNavItemActive(pathname, child);
                     const childState = itemState(child, capabilities);
+                    const childClassName = `flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-sm ${
+                      childActive ? ACTIVE : IDLE
+                    } ${childState.disabled ? "cursor-not-allowed opacity-50" : ""}`;
                     return (
                       <li key={child.href}>
-                        <span
-                          className={`flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-sm ${
-                            childActive ? ACTIVE : IDLE
-                          } ${childState.disabled ? "cursor-not-allowed opacity-50" : ""}`}
-                          title={childState.reason ?? "本期未建"}
-                          aria-disabled="true"
-                        >
-                          <span className="truncate">{child.label}</span>
-                        </span>
+                        {childState.disabled ? (
+                          <span className={childClassName} title={childState.reason ?? "本期未建"} aria-disabled="true">
+                            <span className="truncate">{child.label}</span>
+                          </span>
+                        ) : (
+                          <Link href={child.href} className={childClassName} aria-current={childActive ? "page" : undefined}>
+                            <span className="truncate">{child.label}</span>
+                          </Link>
+                        )}
                       </li>
                     );
                   })}

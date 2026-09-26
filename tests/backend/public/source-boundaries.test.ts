@@ -8,11 +8,11 @@ function stripComments(source: string): string {
 }
 
 describe("public wiring source boundaries", () => {
-  it("reuses the adminPrisma global key and does not import admin deps or cookies", async () => {
+  it("reuses the neutral web Prisma module and does not import admin deps or cookies", async () => {
     const source = stripComments(
       await readFile(path.resolve(process.cwd(), "src/app/_lib/public-deps.ts"), "utf8"),
     );
-    expect(source).toContain("adminPrisma");
+    expect(source).toContain("@/lib/db/web-prisma");
     expect(source).not.toMatch(/from ["']@\/app\/api\/admin\/_lib\/deps["']/);
     expect(source).not.toContain("next/headers");
     expect(source).not.toMatch(/\bcookies\s*\(/);

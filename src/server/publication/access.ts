@@ -81,10 +81,31 @@ export async function checkNovelArticlePublicAccess(
   input: NovelArticleAccessInput,
   env: NodeJS.ProcessEnv = process.env,
 ): Promise<NovelArticleAccessResult> {
+  const access = await resolveNovelArticlePublicAccess(db, input, env);
+  if (access.kind === "published") return { kind: access.kind, articleId: access.articleId, novelId: access.novelId };
+  return { kind: access.kind };
+}
+
+type NovelArticleAccessWithIdentity =
+  | { readonly kind: "not_found" }
+  | (Exclude<NovelArticleAccessResult, { kind: "not_found" }> & {
+      readonly title: string;
+      readonly publicPageShortId: string | null;
+    });
+
+/** Same visibility decision plus URL identity, read from one database snapshot.
+ * The legacy check above intentionally retains its exact response shape. */
+export async function resolveNovelArticlePublicAccess(
+  db: PrismaClient | Prisma.TransactionClient,
+  input: NovelArticleAccessInput,
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<NovelArticleAccessWithIdentity> {
   const article = await db.article.findFirst({
     where: buildPrimaryArticleWhere({ locale: input.locale, slug: input.slug }),
     select: {
       id: true,
+      title: true,
+      publicPageShortId: true,
       novelId: true,
       status: true,
       seoVisibility: true,
@@ -115,7 +136,7 @@ export async function checkNovelArticlePublicAccess(
   const articleState = { status: article.status };
 
   if (isRightsBlocked(novelState, articleState)) {
-    return { kind: "takedown" };
+    return { kind: "takedown", title: article.title, publicPageShortId: article.publicPageShortId };
   }
   // C-25: hidden is a pure 404 — deliberately checked before
   // `isPubliclyAccessible` so a published, promo-ready Article that has been
@@ -125,16 +146,16 @@ export async function checkNovelArticlePublicAccess(
     return { kind: "not_found" };
   }
   if (isPubliclyAccessible(novelState, articleState, article.promoLink)) {
-    return { kind: "published", articleId: article.id, novelId: article.novelId };
+    return { kind: "published", articleId: article.id, novelId: article.novelId, title: article.title, publicPageShortId: article.publicPageShortId };
   }
   if (isNoIndexRemovalState(novelState, articleState)) {
-    return { kind: "unavailable" };
+    return { kind: "unavailable", title: article.title, publicPageShortId: article.publicPageShortId };
   }
   if (isPublicationStatePublic(novelState, articleState)) {
     // Both sides published but the promo link degraded after the
     // publish-time gate passed (see isPubliclyAccessible's doc comment).
     // Real content exists; a plain 404 would be wrong.
-    return { kind: "unavailable" };
+    return { kind: "unavailable", title: article.title, publicPageShortId: article.publicPageShortId };
   }
   return { kind: "not_found" };
 }

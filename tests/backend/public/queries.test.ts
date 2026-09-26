@@ -36,6 +36,7 @@ function listed(overrides: Record<string, unknown> = {}) {
 }
 
 describe("resolvePublicArticleBySlugParam", () => {
+  afterEach(() => vi.unstubAllEnvs());
   it("returns not_found when the slug param cannot be parsed", async () => {
     const db = { article: { findFirst: vi.fn() } } as unknown as PrismaClient;
     await expect(resolvePublicArticleBySlugParam(db, "no-short-id", "en")).resolves.toEqual({
@@ -47,11 +48,9 @@ describe("resolvePublicArticleBySlugParam", () => {
   it("returns not_found when the short id does not match", async () => {
     const db = {
       article: {
-        findFirst: vi.fn().mockImplementation(async ({ select }: { select: Record<string, unknown> }) => {
-          if ("publicPageShortId" in select) {
-            return { id: "article-1", title: "Lantern", publicPageShortId: "otherid" };
-          }
+        findFirst: vi.fn().mockImplementation(async () => {
           return {
+            title: "Lantern", publicPageShortId: "otherid",
             id: "article-1",
             novelId: "novel-1",
             status: "published",
@@ -70,11 +69,9 @@ describe("resolvePublicArticleBySlugParam", () => {
   it("returns published when access and short id both match", async () => {
     const db = {
       article: {
-        findFirst: vi.fn().mockImplementation(async ({ select }: { select: Record<string, unknown> }) => {
-          if ("publicPageShortId" in select) {
-            return { id: "article-1", title: "Lantern", publicPageShortId: "abc123" };
-          }
+        findFirst: vi.fn().mockImplementation(async () => {
           return {
+            title: "Lantern", publicPageShortId: "abc123",
             id: "article-1",
             novelId: "novel-1",
             status: "published",
@@ -93,16 +90,37 @@ describe("resolvePublicArticleBySlugParam", () => {
       shortId: "abc123",
       title: "Lantern",
     });
+    expect(db.article.findFirst).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ["draft", "published", "public", READY_PROMO, "not_found"],
+    ["published", "published", "hidden", READY_PROMO, "not_found"],
+    ["published", "published", "seo_only", READY_PROMO, "published"],
+    ["published", "published", "public", BLANK_PROMO, "unavailable"],
+    ["published", "takedown", "public", READY_PROMO, "takedown"],
+  ])("keeps visibility for %s/%s/%s", async (status, novelStatus, seoVisibility, promoLink, kind) => {
+    vi.stubEnv("FEATURE_ARTICLE_SEO_VISIBILITY", "true");
+    const findFirst = vi.fn().mockResolvedValue({
+      id: "a", title: "Lantern", publicPageShortId: "abc123", novelId: "n",
+      status, seoVisibility, novel: { status: novelStatus }, promoLink,
+    });
+    const db = { article: { findFirst } } as unknown as PrismaClient;
+    const result = await resolvePublicArticleBySlugParam(db, "lantern-pabc123", "en");
+    expect(result.kind).toBe(kind);
+    expect(findFirst).toHaveBeenCalledTimes(1);
+    expect(findFirst.mock.calls[0][0]).toMatchObject({
+      where: { AND: [{ deletedAt: null }, { locale: "en", slug: "lantern" }] },
+      select: { title: true, publicPageShortId: true, promoLink: { select: { status: true, webUrl: true, appUrl: true } } },
+    });
   });
 
   it("returns unavailable / takedown from the foundation access check", async () => {
     const takedownDb = {
       article: {
-        findFirst: vi.fn().mockImplementation(async ({ select }: { select: Record<string, unknown> }) => {
-          if ("publicPageShortId" in select) {
-            return { id: "article-1", title: "Lantern", publicPageShortId: "abc123" };
-          }
+        findFirst: vi.fn().mockImplementation(async () => {
           return {
+            title: "Lantern", publicPageShortId: "abc123",
             id: "article-1",
             novelId: "novel-1",
             status: "takedown",
@@ -119,11 +137,9 @@ describe("resolvePublicArticleBySlugParam", () => {
 
     const unpublishedDb = {
       article: {
-        findFirst: vi.fn().mockImplementation(async ({ select }: { select: Record<string, unknown> }) => {
-          if ("publicPageShortId" in select) {
-            return { id: "article-1", title: "Lantern", publicPageShortId: "abc123" };
-          }
+        findFirst: vi.fn().mockImplementation(async () => {
           return {
+            title: "Lantern", publicPageShortId: "abc123",
             id: "article-1",
             novelId: "novel-1",
             status: "unpublished",
