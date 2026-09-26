@@ -24,11 +24,12 @@ const workerEnabledEnv: NodeJS.ProcessEnv = {
 };
 const input = { reason: "article_first_publish", triggeredBy: "publish-gate" };
 
-function transactionDb(activeId?: string) {
+function transactionDb(activeId?: string, activeStatus: "pending" | "processing" = "pending") {
   const tx = {
     $queryRaw: vi.fn().mockResolvedValue([{ pg_advisory_xact_lock: null }]),
+    $executeRaw: vi.fn().mockResolvedValue(1),
     genericTask: {
-      findFirst: vi.fn().mockResolvedValue(activeId ? { id: activeId } : null),
+      findFirst: vi.fn().mockResolvedValue(activeId ? { id: activeId, status: activeStatus } : null),
       create: vi.fn().mockResolvedValue({}),
     },
   };
@@ -101,12 +102,22 @@ describe("Sitemap refresh enqueue", () => {
     });
   });
 
-  it("coalesces a pending or processing global task", async () => {
+  it("coalesces a pending global task without requesting a follow-up", async () => {
     const tx = transactionDb("active-task");
     process.env.FEATURE_SITEMAP_AUTO_REFRESH = "true";
     await expect(enqueueSitemapRefreshForPublication(input, tx as never))
       .resolves.toEqual({ status: "coalesced", taskId: "active-task" });
     expect(tx.genericTask.create).not.toHaveBeenCalled();
+    expect(tx.$executeRaw).not.toHaveBeenCalled();
+  });
+
+  it("marks a processing task once for a later refresh, even after repeated triggers", async () => {
+    const tx = transactionDb("active-task", "processing");
+    const results = await Promise.all([1, 2, 3].map(() =>
+      enqueueSitemapRefresh(input, tx as never, { env: enabledEnv })));
+    expect(results).toEqual(Array(3).fill({ status: "coalesced", taskId: "active-task" }));
+    expect(tx.genericTask.create).not.toHaveBeenCalled();
+    expect(tx.$executeRaw).toHaveBeenCalledTimes(3);
   });
 
   it("serializes concurrent PrismaClient enqueue calls into queued plus coalesced", async () => {

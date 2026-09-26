@@ -16,6 +16,7 @@ export const SITEMAP_REFRESH_OPERATION_SCOPE_HASH = createHash("sha256")
 // released with the surrounding transaction and cannot permanently suppress
 // a later refresh.
 export const SITEMAP_REFRESH_ADVISORY_LOCK = Object.freeze({ namespace: 50_210, scope: 1 });
+const FOLLOW_UP_REQUESTED_KEY = "followUpRequested";
 
 export type SitemapRefreshEnqueueInput = Readonly<{
   reason: string;
@@ -40,6 +41,15 @@ function normalized(value: string, field: string, maxLength: number): string {
   return result;
 }
 
+export async function lockSitemapRefreshScope(tx: Prisma.TransactionClient): Promise<void> {
+  await tx.$queryRaw(Prisma.sql`
+    SELECT pg_advisory_xact_lock(
+      ${SITEMAP_REFRESH_ADVISORY_LOCK.namespace}::int,
+      ${SITEMAP_REFRESH_ADVISORY_LOCK.scope}::int
+    )::text AS lock_result
+  `);
+}
+
 async function enqueueInTransaction(
   tx: Prisma.TransactionClient,
   rawInput: SitemapRefreshEnqueueInput,
@@ -48,12 +58,7 @@ async function enqueueInTransaction(
   const reason = normalized(rawInput.reason, "reason", 500);
   const triggeredBy = normalized(rawInput.triggeredBy, "triggeredBy", 160);
 
-  await tx.$queryRaw(Prisma.sql`
-    SELECT pg_advisory_xact_lock(
-      ${SITEMAP_REFRESH_ADVISORY_LOCK.namespace}::int,
-      ${SITEMAP_REFRESH_ADVISORY_LOCK.scope}::int
-    )::text AS lock_result
-  `);
+  await lockSitemapRefreshScope(tx);
 
   const active = await tx.genericTask.findFirst({
     where: {
@@ -62,9 +67,21 @@ async function enqueueInTransaction(
       status: { in: ["pending", "processing"] },
     },
     orderBy: { createdAt: "asc" },
-    select: { id: true },
+    select: { id: true, status: true },
   });
-  if (active) return { status: "coalesced", taskId: active.id };
+  if (active) {
+    if (active.status === "processing") {
+      // The active-scope partial unique index forbids a second pending task
+      // until this one is terminal. Persist one bit for its finalize transaction.
+      await tx.$executeRaw(Prisma.sql`
+        UPDATE generic_task
+        SET params = jsonb_set(params, ${[FOLLOW_UP_REQUESTED_KEY]}::text[], 'true'::jsonb, true),
+            updated_at = transaction_timestamp()
+        WHERE id = ${active.id}::uuid AND status = 'processing'
+      `);
+    }
+    return { status: "coalesced", taskId: active.id };
+  }
 
   const taskId = randomUUID();
   await tx.genericTask.create({
@@ -87,6 +104,24 @@ async function enqueueInTransaction(
     },
   });
   return { status: "queued", taskId };
+}
+
+/** Called after the original task becomes terminal, in the same locked transaction. */
+export async function enqueueSitemapFollowUpIfRequested(
+  tx: Prisma.TransactionClient,
+  taskId: string,
+): Promise<void> {
+  const task = await tx.genericTask.findUnique({
+    where: { id: taskId },
+    select: { status: true, params: true },
+  });
+  if (!task || !["completed", "completed_with_errors", "failed"].includes(task.status)) return;
+  if (!task.params || typeof task.params !== "object" || Array.isArray(task.params)
+    || (task.params as Record<string, unknown>)[FOLLOW_UP_REQUESTED_KEY] !== true) return;
+  await enqueueInTransaction(tx, {
+    reason: "article_first_publish_follow_up",
+    triggeredBy: "sitemap-refresh",
+  }, () => `sitemap-refresh:follow-up:${taskId}`);
 }
 
 function isPrismaClient(db: PublicationDispatchDb): db is PrismaClient {

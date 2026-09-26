@@ -6,9 +6,9 @@
 # opening it. Do not add `listen [::]` without first creating the AAAA
 # records and revisiting this decision (also see the Docker test rig in
 # verify-nginx-matrix.sh, where IPv6 is often unavailable).
-limit_req_zone $binary_remote_addr zone=cps_preprod_general:10m rate=10r/s;
+limit_req_zone $binary_remote_addr zone=cps_preprod_general:10m rate=30r/s;
 limit_req_zone $binary_remote_addr zone=cps_preprod_login:10m rate=2r/s;
-limit_req_zone $binary_remote_addr zone=cps_preprod_api:10m rate=5r/s;
+limit_req_zone $binary_remote_addr zone=cps_preprod_api:10m rate=20r/s;
 limit_req_status 429;
 
 upstream cps_novel_preprod_web {
@@ -86,19 +86,19 @@ server {
     # everything else -- see cps-novel-preprod-protected-nomaintenance.conf.
     location = /api/health {
         include /etc/nginx/snippets/cps-novel-preprod-protected-nomaintenance.conf;
-        limit_req zone=cps_preprod_api burst=10 nodelay;
+        limit_req zone=cps_preprod_api burst=60 nodelay;
         proxy_pass http://cps_novel_preprod_web;
         include /etc/nginx/snippets/cps-novel-preprod-proxy.conf;
     }
     location ^~ /api/ {
         include /etc/nginx/snippets/cps-novel-preprod-protected.conf;
-        limit_req zone=cps_preprod_api burst=10 nodelay;
+        limit_req zone=cps_preprod_api burst=60 nodelay;
         proxy_pass http://cps_novel_preprod_web;
         include /etc/nginx/snippets/cps-novel-preprod-proxy.conf;
     }
     location ^~ /_next/static/ {
         include /etc/nginx/snippets/cps-novel-preprod-protected.conf;
-        limit_req zone=cps_preprod_general burst=20 nodelay;
+        limit_req zone=cps_preprod_general burst=100 nodelay;
         proxy_pass http://cps_novel_preprod_web;
         include /etc/nginx/snippets/cps-novel-preprod-proxy.conf;
         expires 1h;
@@ -106,7 +106,7 @@ server {
     }
     location / {
         include /etc/nginx/snippets/cps-novel-preprod-protected.conf;
-        limit_req zone=cps_preprod_general burst=20 nodelay;
+        limit_req zone=cps_preprod_general burst=100 nodelay;
         proxy_pass http://cps_novel_preprod_web;
         include /etc/nginx/snippets/cps-novel-preprod-proxy.conf;
     }
@@ -146,7 +146,7 @@ server {
     # cps-novel-preprod-protected-nomaintenance.conf.
     location = /api/health {
         include /etc/nginx/snippets/cps-novel-preprod-protected-nomaintenance.conf;
-        limit_req zone=cps_preprod_api burst=10 nodelay;
+        limit_req zone=cps_preprod_api burst=60 nodelay;
         proxy_pass http://cps_novel_preprod_web;
         include /etc/nginx/snippets/cps-novel-preprod-proxy.conf;
     }
@@ -166,13 +166,13 @@ server {
     # a maintenance window.
     location ^~ /api/health/ {
         include /etc/nginx/snippets/cps-novel-preprod-protected.conf;
-        limit_req zone=cps_preprod_api burst=10 nodelay;
+        limit_req zone=cps_preprod_api burst=60 nodelay;
         proxy_pass http://cps_novel_preprod_web;
         include /etc/nginx/snippets/cps-novel-preprod-proxy.conf;
     }
     location ^~ /api/admin/ {
         include /etc/nginx/snippets/cps-novel-preprod-protected.conf;
-        limit_req zone=cps_preprod_api burst=10 nodelay;
+        limit_req zone=cps_preprod_api burst=60 nodelay;
         proxy_pass http://cps_novel_preprod_web;
         include /etc/nginx/snippets/cps-novel-preprod-proxy.conf;
     }
@@ -186,7 +186,7 @@ server {
     # location has no reason to be reachable during a maintenance window.
     location ^~ /_next/static/ {
         include /etc/nginx/snippets/cps-novel-preprod-protected.conf;
-        limit_req zone=cps_preprod_general burst=20 nodelay;
+        limit_req zone=cps_preprod_general burst=100 nodelay;
         proxy_pass http://cps_novel_preprod_web;
         include /etc/nginx/snippets/cps-novel-preprod-proxy.conf;
         expires 1h;
@@ -194,13 +194,13 @@ server {
     }
     location = /api/admin {
         include /etc/nginx/snippets/cps-novel-preprod-protected.conf;
-        limit_req zone=cps_preprod_api burst=10 nodelay;
+        limit_req zone=cps_preprod_api burst=60 nodelay;
         proxy_pass http://cps_novel_preprod_web;
         include /etc/nginx/snippets/cps-novel-preprod-proxy.conf;
     }
     location ~ ^/(?:dashboard|novels|catalog-sync|promo-links|previews|home-carousel|templates|articles|categories|tags|tasks|revenue|settings|channel-accounts|two-factor)(?:/|$) {
         include /etc/nginx/snippets/cps-novel-preprod-protected.conf;
-        limit_req zone=cps_preprod_api burst=10 nodelay;
+        limit_req zone=cps_preprod_api burst=60 nodelay;
         proxy_pass http://cps_novel_preprod_web;
         include /etc/nginx/snippets/cps-novel-preprod-proxy.conf;
     }
