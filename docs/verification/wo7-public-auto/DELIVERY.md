@@ -2,6 +2,8 @@
 
 状态：实现分支交付，尚未合并、未上线。实际开关保持原状，G7=NO；未修改主机、部署、preflight、worker 白名单、CanonicalTag/B2/C1 冻结产物。无 schema 或 grants 变更。
 
+> 2026-09-27 Opus 复核修订已追加：worker 关闸观察静默，三项千次调用守卫及全量/真实库门禁通过。最新命令、尾行和变异恢复见 [OPUS_REVISION.md](OPUS_REVISION.md)；下文原验收数据保留为首次交付记录。
+
 ## 1. 身份与裁决
 
 - 分支：`feat/tagging-public-auto-projection`。
