@@ -99,3 +99,22 @@ export async function dispatchFirstPublicPublication(
 
   return result;
 }
+
+/** Called once per publication operation (including a batch's committed
+ * prefix). Kept distinct from first-publication SEO effects: republishing
+ * also needs preview, and batches must aggregate before creating tasks. */
+export async function dispatchPublicationPreviews(
+  input: import("./preview-enqueue").PublicationPreviewInput,
+  db: PrismaClient,
+): Promise<import("./preview-enqueue").PublicationPreviewResult | undefined> {
+  try {
+    const { enqueuePublicationPreviews } = await import("./preview-enqueue");
+    return await enqueuePublicationPreviews(db, input);
+  } catch (error) {
+    const failure = error as { name?: string; code?: string };
+    console.error("[PublicationDispatcher] preview planning failed after commit", {
+      requestId: input.requestId, errorKind: failure?.name ?? "Error", code: failure?.code,
+    });
+    return undefined;
+  }
+}

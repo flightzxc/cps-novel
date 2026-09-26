@@ -1147,6 +1147,28 @@ async function enqueueMoboreaderPreviewRefreshTaskInDb(
       novel: { select: { previewPolicy: { select: { lastRefreshedAt: true } } } },
     },
   });
+  // Serialize intersecting books across account/application groups, not just
+  // identical request tokens or whole-task scopes. Sorted locks avoid deadlock.
+  const novelIds = [...new Set(sources.flatMap((source) => source.novelId ? [source.novelId] : []))].sort();
+  const busyNovels = new Set<string | null>();
+  for (let offset = 0; offset < novelIds.length; offset += 1_000) {
+    const chunk = novelIds.slice(offset, offset + 1_000);
+    await db.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended('preview:' || ${input.mode} || ':' || id, 0))
+      FROM (SELECT unnest(${chunk}::text[]) AS id ORDER BY id) AS books`;
+    const inFlight = await db.channelSyncTaskItem.findMany({
+      where: {
+        status: { in: ["pending", "processing"] },
+        novelSourceItem: { novelId: { in: chunk } },
+        task: {
+          taskType: MOBOREADER_TASK_TYPES.previewRefresh,
+          mode: input.mode,
+          status: { in: ["pending", "processing", "paused", "disabled"] },
+        },
+      },
+      select: { novelSourceItem: { select: { novelId: true } } },
+    });
+    for (const item of inFlight) busyNovels.add(item.novelSourceItem.novelId);
+  }
   const byId = new Map(sources.map((source) => [source.id, source]));
   const eligibleIds: string[] = [];
   for (const sourceId of input.novelSourceItemIds) {
@@ -1164,6 +1186,11 @@ async function enqueueMoboreaderPreviewRefreshTaskInDb(
       increment(skipReasonCounts, "fresh_preview");
       continue;
     }
+    if (busyNovels.has(source.novelId)) {
+      increment(skipReasonCounts, "preview_in_flight");
+      continue;
+    }
+    busyNovels.add(source.novelId);
     eligibleIds.push(sourceId);
   }
   if (eligibleIds.length === 0) return { status: "no_eligible_sources", skipReasonCounts };

@@ -771,12 +771,14 @@ describe("MoboReader preview enqueue: chunked id lookup (C-15)", () => {
       findManyCallSizes.push(batch.length);
       return batch.map((id) => ({
         id,
-        novelId: "11111111-1111-4111-8111-111111111111",
+        novelId: id,
         deletedAt: null,
         novel: { previewPolicy: null },
       }));
     });
     const db = {
+      $executeRaw: vi.fn(async () => 0),
+      channelSyncTaskItem: { findMany: vi.fn(async () => []) },
       channelSyncTask: {
         findUnique: async () => null,
         findFirst: async () => null,

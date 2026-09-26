@@ -14,7 +14,7 @@ beforeEach(() => {
 });
 
 describe("materializeNovelFromSourceItem preview wiring", () => {
-  it("a committed materialize immediately invokes preview enqueue; an idempotent repeat does not", async () => {
+  it("materialization and an idempotent repeat never enqueue previews", async () => {
     const fake = new FakeContentCreationDb();
     const source = fake.seedSourceItem({ title: "Preview after create" });
     const input = {
@@ -25,21 +25,12 @@ describe("materializeNovelFromSourceItem preview wiring", () => {
     };
 
     const created = await materializeNovelFromSourceItem(fake.asPrismaClient(), input);
-    expect(created).toMatchObject({
-      outcome: "created",
-      previewEnqueue: { queued: true, status: "duplicate", taskId: "stable-task" },
-    });
-    expect(enqueue).toHaveBeenCalledTimes(1);
-    expect(enqueue).toHaveBeenCalledWith(
-      fake.asPrismaClient(),
-      expect.objectContaining({
-        novelSourceItemIds: [source.id],
-        requestToken: `moboreader.preview_refresh.v1:novel_materialize:${source.id}`,
-      }),
-    );
+    expect(created).toMatchObject({ outcome: "created" });
+    expect(created).not.toHaveProperty("previewEnqueue");
+    expect(enqueue).not.toHaveBeenCalled();
 
     const repeated = await materializeNovelFromSourceItem(fake.asPrismaClient(), { ...input, requestId: "request-2" });
     expect(repeated.outcome).toBe("already_exists");
-    expect(enqueue).toHaveBeenCalledTimes(1);
+    expect(enqueue).not.toHaveBeenCalled();
   });
 });

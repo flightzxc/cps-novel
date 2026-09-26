@@ -21,6 +21,7 @@ import { applyPublishTransition, publishArticlesBatch } from "@/server/publish-g
 import { FakePublishGateDb } from "./fake-db";
 
 vi.mock("@/server/publication/dispatcher", () => ({
+  dispatchPublicationPreviews: vi.fn(async () => undefined),
   dispatchFirstPublicPublication: vi.fn().mockResolvedValue({ errors: [] }),
 }));
 

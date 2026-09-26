@@ -508,6 +508,8 @@ function enqueueDb(options: { activeHold?: { id: string; reasonCode: string } | 
   const created: Array<Record<string, unknown>> = [];
   const audits: Array<Record<string, unknown>> = [];
   return {
+    $executeRaw: vi.fn(async () => 0),
+    channelSyncTaskItem: { findMany: vi.fn(async () => []) },
     channelAccountHold: {
       findFirst: vi.fn(async ({ where }: { where: { channelAccountId: string } }) =>
         options.activeHold && where.channelAccountId === ACCOUNT_A

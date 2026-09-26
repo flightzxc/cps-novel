@@ -700,7 +700,7 @@ describe.skipIf(!enabled).sequential("P2-05 PostgreSQL 16.14 write paths", () =>
     });
     expect(await owner.channelSyncTask.count({
       where: { requestToken: `moboreader.preview_refresh.v1:${created.taskId}` },
-    })).toBe(1);
+    })).toBe(0);
   });
 
   it.each([
@@ -1423,7 +1423,7 @@ describe.skipIf(!enabled).sequential("P2-05 PostgreSQL 16.14 write paths", () =>
       terminalState: "partial_failed",
       completeness: { expected: 3, actual: 1, fetchedUniqueSourceItems: 1, duplicateObservations: 0 },
       droppedLabels: { count: 1 },
-      previewEnqueue: { status: "enqueued", eligibleCount: 1 },
+      previewEnqueue: null,
     });
     const failedItem = await owner.genericTaskItem.findFirstOrThrow({
       where: { taskId: created.taskId, targetType: "catalog_page", targetId: "2" },
@@ -1435,30 +1435,37 @@ describe.skipIf(!enabled).sequential("P2-05 PostgreSQL 16.14 write paths", () =>
     });
     expect(await owner.channelSyncTask.count({
       where: { requestToken: `moboreader.preview_refresh.v1:${created.taskId}` },
-    })).toBe(1);
+    })).toBe(0);
     expect(await owner.novelSourceItem.findUniqueOrThrow({ where: { id: linked.source.id } })).toMatchObject({ status: "linked" });
     expect(JSON.stringify(task.error)).not.toContain("upstream body must not persist");
   });
 
-  it.each([false, true])("enqueues the linked batch and executes the frozen request contract (targeted=%s)", async (targeted) => {
+  it.each([false, true])("catalog queues no preview; manual rebuild executes the frozen contract (targeted=%s)", async (targeted) => {
     const touched = await seedLinkedSource("book-1", "scope-touched");
     const outside = await seedLinkedSource("book-outside", "scope-outside");
     const created = await enqueue("apply");
     expect(await consume()).toBe(true);
+    expect(await owner.channelSyncTask.count()).toBe(0);
+    await createMoboreaderPreviewRefreshTask(worker, {
+      channelAccountId: ids.account, channelAppId: ids.channelApp,
+      novelSourceItemIds: [touched.source.id],
+      requestToken: `moboreader.preview_refresh.v1:${created.taskId}`,
+      actorId: "owner", requestId: randomUUID(),
+    }, gates);
     const preview = await owner.channelSyncTask.findUniqueOrThrow({
       where: { requestToken: `moboreader.preview_refresh.v1:${created.taskId}` },
       include: { items: true },
     });
     expect((await owner.genericTask.findUniqueOrThrow({ where: { id: created.taskId } })).result).toMatchObject({
-      previewEnqueue: { status: "enqueued", taskId: preview.id, eligibleCount: 1 },
+      previewEnqueue: null,
     });
     expect(preview).toMatchObject({
       taskType: "moboreader.preview_refresh.v1",
       status: "pending",
       totalCount: 1,
       params: {
-        trigger: "auto",
-        catalogScanTaskId: created.taskId,
+        trigger: "manual",
+        catalogScanTaskId: null,
         runtime: { chunkSize: 25, concurrency: 2, timeoutMs: 20_000, freshnessMs: 86_400_000 },
         evidence: {
           dataId: "confirmed_getlistpc_series_id",
@@ -1528,9 +1535,16 @@ describe.skipIf(!enabled).sequential("P2-05 PostgreSQL 16.14 write paths", () =>
 
   it.each(["getbydataid", "getchapterinfo", "source_app_excluded", "channel_inactive", "account_disabled"])(
     "targeting cannot bypass a closed preview boundary (%s)", async (boundary) => {
-      await seedLinkedSource("book-1", `disabled-${boundary}`);
+      const touched = await seedLinkedSource("book-1", `disabled-${boundary}`);
       const created = await enqueue("apply");
       await consume();
+      expect(await owner.channelSyncTask.count()).toBe(0);
+      await createMoboreaderPreviewRefreshTask(worker, {
+        channelAccountId: ids.account, channelAppId: ids.channelApp,
+        novelSourceItemIds: [touched.source.id],
+        requestToken: `moboreader.preview_refresh.v1:${created.taskId}`,
+        actorId: "owner", requestId: randomUUID(),
+      }, gates);
       const preview = await owner.channelSyncTask.findUniqueOrThrow({
         where: { requestToken: `moboreader.preview_refresh.v1:${created.taskId}` }, include: { items: true },
       });

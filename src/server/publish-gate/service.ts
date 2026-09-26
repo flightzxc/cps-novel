@@ -132,7 +132,7 @@ import { chunkIds } from "@/lib/db/chunked-id-lookup";
 import { withDbRetry } from "@/lib/db/db-retry";
 import { enqueueIndexNow } from "@/lib/indexnow/dispatch-handler";
 import { enqueueSitemapRefreshForPublication } from "@/lib/tasks/sitemap-refresh";
-import { dispatchFirstPublicPublication } from "@/server/publication/dispatcher";
+import { dispatchFirstPublicPublication, dispatchPublicationPreviews } from "@/server/publication/dispatcher";
 import {
   revalidatePublicArticlePaths,
   revalidatePublicArticleSet,
@@ -317,6 +317,7 @@ class PublishConflictSignal extends Error {}
 export async function applyPublishTransition(
   db: PrismaClient,
   input: ApplyPublishTransitionInput,
+  batchPreviewArticleIds?: string[],
 ): Promise<ApplyPublishTransitionResult> {
   const now = input.now ?? new Date();
   const actorType = auditActorType(input.actor);
@@ -531,6 +532,13 @@ export async function applyPublishTransition(
     );
   }
 
+  if (txResult.outcome === "published" && txResult.wrote) {
+    if (batchPreviewArticleIds) batchPreviewArticleIds.push(txResult.articleId);
+    else await dispatchPublicationPreviews({
+      articleIds: [txResult.articleId], requestId: input.requestId, actorId,
+    }, db);
+  }
+
   // Cache invalidation fires on every real write (`wrote`), not only
   // `firstPublish` — unlike the IndexNow/sitemap dispatch above, which is a
   // one-time "this URL is new" event, a later republish (takedown → restore
@@ -675,46 +683,53 @@ export async function publishArticlesBatch(
     );
   }
   const results: Array<{ articleId: string; result: ApplyPublishTransitionResult }> = [];
-  for (const [index, articleId] of input.articleIds.entries()) {
-    try {
-      const result = await applyPublishTransition(db, {
-        articleId,
-        requestId: publishBatchItemRequestId(input.requestId, articleId),
-        actor: input.actor,
-        now: input.now,
-      });
-      results.push({ articleId, result });
-    } catch (error) {
-      // Deliberately fail-fast rather than per-item swallow. An unexpected
-      // throw here is a systemic signal (a constraint the write path did not
-      // know about, a database problem); grinding through the remaining
-      // selection would multiply it, which is the exact failure shape the
-      // 2026-09-14 task burn taught this codebase to stop doing. What we do
-      // NOT do is lose what already happened: `results` keeps every item that
-      // reached a real outcome, and `aborted` names where it stopped.
-      //
-      // No error class is reinterpreted as success here — in particular a
-      // P2002 is reported as a P2002. Treating "unique violation" as
-      // "already done" would be a guess about a row this call never read.
-      const errorKind = describeUnexpectedError(error);
-      console.error("[publish-gate] batch publish aborted", {
-        batchRequestId: input.requestId,
-        articleId,
-        processedCount: results.length,
-        remainingCount: input.articleIds.length - index - 1,
-        errorKind,
-      });
-      return {
-        results,
-        aborted: {
+  const previewArticleIds: string[] = [];
+  try {
+    for (const [index, articleId] of input.articleIds.entries()) {
+      try {
+        const result = await applyPublishTransition(db, {
           articleId,
+          requestId: publishBatchItemRequestId(input.requestId, articleId),
+          actor: input.actor,
+          now: input.now,
+        }, previewArticleIds);
+        results.push({ articleId, result });
+      } catch (error) {
+        // Deliberately fail-fast rather than per-item swallow. An unexpected
+        // throw here is a systemic signal (a constraint the write path did not
+        // know about, a database problem); grinding through the remaining
+        // selection would multiply it, which is the exact failure shape the
+        // 2026-09-14 task burn taught this codebase to stop doing. What we do
+        // NOT do is lose what already happened: `results` keeps every item that
+        // reached a real outcome, and `aborted` names where it stopped.
+        //
+        // No error class is reinterpreted as success here — in particular a
+        // P2002 is reported as a P2002. Treating "unique violation" as
+        // "already done" would be a guess about a row this call never read.
+        const errorKind = describeUnexpectedError(error);
+        console.error("[publish-gate] batch publish aborted", {
+          batchRequestId: input.requestId,
+          articleId,
+          processedCount: results.length,
+          remainingCount: input.articleIds.length - index - 1,
           errorKind,
-          notProcessedArticleIds: input.articleIds.slice(index + 1),
-        },
-      };
+        });
+        return {
+          results,
+          aborted: {
+            articleId,
+            errorKind,
+            notProcessedArticleIds: input.articleIds.slice(index + 1),
+          },
+        };
+      }
     }
+    return { results };
+  } finally {
+    if (previewArticleIds.length) await dispatchPublicationPreviews({
+      articleIds: previewArticleIds, requestId: input.requestId, actorId: auditActorId(input.actor),
+    }, db);
   }
-  return { results };
 }
 
 // ---------------------------------------------------------------------------
