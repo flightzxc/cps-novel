@@ -67,11 +67,11 @@ Owner 确认正式领取批次仍暂停并明确授权第二阶段，仅限 `hai
 - 源码与镜像身份一致；归档 SHA-256 `fc13c5a682b75e0147d230e63aef20e0770ee32a084d89297222b96f4e440a53`；config digest `sha256:664adc8eeade6a71c79ae3130bd0bb99902f030737ef6406f57eef9dbc041922`。
   `RELEASE=PASS` / `RELEASE_EXIT=0`；health 0.4.4 / Final / metadata passed / database passed；四容器 healthy，
   三服务近 5 分钟错误日志 0；域名隔离正常。按接口限速与生命周期开关仍 true，两接口各 1,500 ms。
-- 两次新文章发布实地验收待 Owner 操作；发布前基线为库内 11 本、旧 XML 8 本，runId `3bfcfc37-427b-4222-9ba5-d9db5ef33436`。
+- 两次新文章发布实地验收通过：首次于 2026-09-26 12:21:02（+0800）刷新成功，runId `d6c8ea3e-b4aa-4767-8651-c98cf319fc81`，XML 与数据库均为 12 本；第二次于 12:22:35 刷新成功，runId `7f450f7e-52e2-4c3d-adb2-2fe5b1ff30df`，XML 与数据库均为 13 本。两次任务 completed、条目及 status.json 均 success，URL 逐项一致（无缺失或多余）。web 容器内用 Node http 携带 Host: www.bangbangji.cloud 请求；同一 worker 自 04:14:08 UTC 启动后未重启（RestartCount=0），确认缓存不再跨刷新冻结。发布前基线为库内 11 本、旧 XML 8 本，runId `3bfcfc37-427b-4222-9ba5-d9db5ef33436`。
 
-**后续待办**：两次发布实地验收完成前保持领取暂停；文章发布与恢复均由 Owner 操作。
+**后续待办**：两次发布实地验收已通过；截至核对时领取批次仍 paused、processing 条目 0，恢复由 Owner 操作。
 满载 UI 测试偶发超时经 Opus 登记 B-14，本版不改测试。手动刷新、每日兜底、命令行生成及写闸登记顺延；生产未上线。
-Notion 手账已直接同步并读回核对，实地验收仍明确标为待完成。
+Notion 手账已同步两次实地验收结果并读回核对。
 
 ### 2026-09-25 22:35 - codex（GPT-6，发版执行）
 

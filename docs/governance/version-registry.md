@@ -12,7 +12,7 @@ Compose runtime 与 Health 身份一致性验证（`/api/health` 的 `metadataCo
 为已发布。
 
 > Notion 权威页：[海阅 版本管理与发版手账](https://app.notion.com/p/3e4601b5fd3481b5a39bcf48408015c2)。
-> 本文件是仓库内镜像；v0.4.4 已直接同步到 Notion 并读回核对（两次发布实地验收仍待完成）。本文件变更不会自动写入 Notion。
+> 本文件是仓库内镜像；v0.4.4 已直接同步到 Notion 并读回核对（两次发布实地验收已通过）。本文件变更不会自动写入 Notion。
 
 ## 当前快照
 
@@ -38,7 +38,7 @@ Compose runtime 与 Health 身份一致性验证（`/api/health` 的 `metadataCo
 - 本地门禁：tsc 0，相关单测 41 passed，sitemap 真实库 5 passed / 0 skipped，五组指定真实库运行器与
   分片枚举 4 项、页位置排序 1 项通过；迁移、数据库 schema、字典 drift 0。全量按 Owner 批准降低到 4 workers 后
   446 文件 / 6,695 项通过（33 文件 / 319 项环境门禁跳过）；原满载 UI 超时经 Opus 判定无关，登记 B-14，本版不改测试。
-- **实地验收**：两次新文章发布实地验收待 Owner 操作；发布前基线为库内 11 本、旧 XML 8 本，runId `3bfcfc37-427b-4222-9ba5-d9db5ef33436`。
+- **实地验收**：两次新文章发布实地验收通过：首次于 2026-09-26 12:21:02（+0800）刷新成功，runId `d6c8ea3e-b4aa-4767-8651-c98cf319fc81`，XML 与数据库均为 12 本；第二次于 12:22:35 刷新成功，runId `7f450f7e-52e2-4c3d-adb2-2fe5b1ff30df`，XML 与数据库均为 13 本。两次任务 completed、条目及 status.json 均 success，URL 逐项一致（无缺失或多余）。web 容器内用 Node http 携带 Host: www.bangbangji.cloud 请求；同一 worker 自 04:14:08 UTC 启动后未重启（RestartCount=0），确认缓存不再跨刷新冻结。发布前基线为库内 11 本、旧 XML 8 本，runId `3bfcfc37-427b-4222-9ba5-d9db5ef33436`。
 - 正式领取批次由 Owner 恢复；手动刷新、每日兜底、命令行生成、写闸登记及 B-8/B-9/B-14 修复不纳入本版。
   回滚目标 v0.4.3 Final `505feeaae04ae1a23df3e7f6a27795f4128636f3`，数据库结构兼容；生产未上线。
 
@@ -166,7 +166,7 @@ Compose runtime 与 Health 身份一致性验证（`/api/health` 的 `metadataCo
 
 | Version | Date (+0800) | Bump | Summary | Commit / Release | Status |
 | --- | ---: | --- | --- | --- | --- |
-| `v0.4.4` | 2026-09-26（12:14） | PATCH | sitemap 候选缓存与 processing 发布漏刷修复；预生产 nginx 模板同步；无迁移或 grants 变更 | annotated tag `v0.4.4` → `205220ebc6f460e85e6fbc8901f592c979c87b83`；镜像 `cps-novel:0.4.4-205220e`；`RELEASE=PASS` | 预生产已发布；两次发布实地验收待完成；生产未上线 |
+| `v0.4.4` | 2026-09-26（12:14） | PATCH | sitemap 候选缓存与 processing 发布漏刷修复；预生产 nginx 模板同步；无迁移或 grants 变更 | annotated tag `v0.4.4` → `205220ebc6f460e85e6fbc8901f592c979c87b83`；镜像 `cps-novel:0.4.4-205220e`；`RELEASE=PASS` | 预生产已发布；两次发布实地验收已通过；生产未上线 |
 | `v0.4.3` | 2026-09-25（22:35） | PATCH | admin2 独立身份建号与双 UUID 领取白名单；分片枚举真实库 helper 修复；无迁移或 grants 变更。详见“当前快照” | annotated tag `v0.4.3` → `505feeaae04ae1a23df3e7f6a27795f4128636f3`；镜像 `cps-novel:0.4.3-505feea`；`RELEASE=PASS` | ✅ 预生产已发布；admin2 2FA 绑定与双账号验证待完成；生产未上线 |
 | `v0.4.2` | 2026-09-25（03:57） | PATCH | 领推广按接口分别限速（4-A，开关默认关闭）+ 目录页位置登记（5-A，含迁移，不改执行行为）。详见"当前快照" | annotated tag `v0.4.2` → `33cd67bd34c34af1d3dbcbf78e6f2636d175c889`；镜像 `cps-novel:0.4.2-33cd67b`；`RELEASE=PASS` | ✅ 预生产已发布（按接口限速开关关闭）；生产未上线 |
 | `v0.4.1` | 2026-09-24（16:27） | PATCH | 目录同步页推广链接状态筛选（未领取 / 已领取 / 人工核对中）与"已有推广码"显示（待办 B-4）。详见"当前快照" | annotated tag `v0.4.1` → `0a2546968d258304990918276b201026c8cccf66`；镜像 `cps-novel:0.4.1-0a25469`；`RELEASE=PASS` | ✅ 预生产已发布；生产未上线 |
