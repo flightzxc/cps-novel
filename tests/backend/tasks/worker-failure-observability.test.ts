@@ -81,6 +81,34 @@ function recoveryCyclePrisma(attemptCount: number) {
 }
 
 describe("X10 worker failure emission boundaries", () => {
+  it("WO7 invokes post-commit observers after recovery and isolates their failures", async () => {
+    const db = recoveryCyclePrisma(3);
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const afterItemCommit = vi.fn(async () => {
+      expect(db.committed()).toBe(true);
+      throw new Error("observer failed");
+    });
+    const handlers = createHandlerRegistry({ "runtime.failure": {
+      family: "generic", handler: async () => ({ status: "success" }), afterItemCommit,
+    } });
+    await expect(processOneWorkerCycle({ prisma: db.prisma, workerId: "wo7", handlers,
+      allowlist: buildWorkerAllowlist("runtime.failure", handlers), signal: new AbortController().signal,
+    })).resolves.toBe(true);
+    expect(afterItemCommit).toHaveBeenCalledWith("00000000-0000-4000-8000-000000000012");
+  });
+
+  it("WO7 does not invoke post-commit observers for requeued leases", async () => {
+    const db = recoveryCyclePrisma(1);
+    const afterItemCommit = vi.fn();
+    const handlers = createHandlerRegistry({ "runtime.failure": {
+      family: "generic", handler: async () => ({ status: "success" }), afterItemCommit,
+    } });
+    await processOneWorkerCycle({ prisma: db.prisma, workerId: "wo7", handlers,
+      allowlist: buildWorkerAllowlist("runtime.failure", handlers), signal: new AbortController().signal,
+    });
+    expect(afterItemCommit).not.toHaveBeenCalled();
+  });
+
   it("aborts the handler signal immediately when an explicit heartbeat loses ownership", async () => {
     // claim succeeds, handler heartbeat loses the fenced row, finalize also
     // loses it and is swallowed as the expected LeaseLostError boundary.

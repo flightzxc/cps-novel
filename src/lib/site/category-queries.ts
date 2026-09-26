@@ -3,7 +3,7 @@
  * to Novel's CanonicalTag membership: active category, published-only cards,
  * stable pagination, and an empty category treated as not found rather than
  * publishing a thin page. Membership is supplied by public-taxonomy.ts and
- * therefore remains manual FULL_SNAPSHOT union mapped derivation, never auto.
+ * therefore respects manual FULL_SNAPSHOT and the shared auto feature gate.
  */
 import type { Prisma, PrismaClient } from "@prisma/client";
 

@@ -1,3 +1,4 @@
+import { initializeMaterializedTaskTags } from "../../src/server/tagging/materialization";
 import type { PrismaClient } from "@prisma/client";
 import { NOVEL_MATERIALIZE_TASK_TYPE } from "../../src/lib/tasks/catalog-batch";
 import { createHandlerRegistry, type TaskHandler } from "../../src/lib/tasks";
@@ -49,5 +50,5 @@ export function createNovelMaterializeHandler(db: PrismaClient): TaskHandler {
 }
 
 export function createNovelMaterializeWorkerHandlers(db: PrismaClient) {
-  return createHandlerRegistry({ [NOVEL_MATERIALIZE_TASK_TYPE]: { family: "generic", maxAttempts: 3, handler: createNovelMaterializeHandler(db) } });
+  return createHandlerRegistry({ [NOVEL_MATERIALIZE_TASK_TYPE]: { family: "generic", maxAttempts: 3, handler: createNovelMaterializeHandler(db), afterItemCommit: (taskId) => initializeMaterializedTaskTags(db, taskId) } });
 }

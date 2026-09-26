@@ -281,6 +281,7 @@ async function handleFinalizeFailure(
   }));
   try {
     await finalizeTaskItem(options.prisma, lease, failedOutcome);
+    if (failedOutcome.status !== "retry") await notifyItemCommitted(options, lease.taskType, lease.taskId);
     if (!retryCatalogFinalize) await emitWorkerTaskFailure({
       family: lease.family,
       taskType: lease.taskType,
@@ -305,6 +306,15 @@ async function handleFinalizeFailure(
       attempt: lease.attemptCount,
       errorKind: "finalize_failed",
     }));
+  }
+}
+
+async function notifyItemCommitted(options: WorkerRuntimeOptions, taskType: string, taskId: string): Promise<void> {
+  try {
+    await options.handlers[taskType]?.afterItemCommit?.(taskId);
+  } catch (error) {
+    // Observers never turn a committed business operation into a failed item.
+    console.error("[worker-after-item-commit]", { taskType, taskId, error: sanitizePersistedTaskError(error) });
   }
 }
 
@@ -333,6 +343,7 @@ export async function processOneWorkerCycle(options: WorkerRuntimeOptions): Prom
     });
     if (recovered) {
       if (recovered.action === "failed") {
+        await notifyItemCommitted(options, recovered.taskType, recovered.taskId);
         await emitWorkerTaskFailure({
           family: recovered.family,
           taskType: recovered.taskType,
@@ -457,6 +468,7 @@ export async function processOneWorkerCycle(options: WorkerRuntimeOptions): Prom
       }
       try {
         await finalizeTaskItem(options.prisma, lease, outcome);
+        if (outcome.status !== "retry") await notifyItemCommitted(options, lease.taskType, lease.taskId);
       } catch (finalizeError) {
         // `LeaseLostError` keeps its pre-existing meaning (someone else now
         // owns this item's fencing token) and pre-existing handling: rethrow

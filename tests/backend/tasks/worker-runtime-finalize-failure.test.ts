@@ -132,6 +132,18 @@ function catalogHandlers() {
 }
 
 describe("D-7: a finalizeTaskItem failure fails the item, never the worker process", () => {
+  it("WO7 observes the committed fallback terminal state exactly once", async () => {
+    const db = buildFinalizeFailureCyclePrisma(checkViolationError("fixture_check"), { succeeds: true });
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const afterItemCommit = vi.fn(async () => {});
+    const base = handlers();
+    const registry = { ...base, "runtime.failure": { ...base["runtime.failure"], afterItemCommit } };
+    await processOneWorkerCycle({ prisma: db.prisma, workerId: "wo7", handlers: registry,
+      allowlist: buildWorkerAllowlist("runtime.failure", registry), signal: new AbortController().signal,
+    });
+    expect(afterItemCommit).toHaveBeenCalledTimes(1);
+  });
+
   it("requeues the same catalog page after its first commit failure and emits no terminal alert", async () => {
     const db = buildFinalizeFailureCyclePrisma(
       checkViolationError("novel_source_item_metadata_check"),
