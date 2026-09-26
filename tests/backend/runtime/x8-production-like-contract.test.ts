@@ -35,12 +35,13 @@ const x8Levels = JSON.parse(read("scripts/lib/x8-levels.json")) as Record<
   string,
   {
     workerTaskAllowlist: string;
+    workerLightTaskAllowlist: string;
     promoClaimRoles: string;
     adminTwoFactorEnforcement: string;
     flags: Record<string, string>;
   }
 >;
-const LEVEL_0_ALLOWLIST = "credential.validate.v1,credential.supersede.v1,catalog_scan,home_carousel.compute.v1";
+const LEVEL_0_ALLOWLIST = "credential.validate.v1,credential.supersede.v1,catalog_scan";
 
 describe("X8 targeted preview operator boundary", () => {
   const options = {
@@ -419,8 +420,8 @@ describe("X8 local production-like contracts", () => {
       expect(x8Levels[level].workerTaskAllowlist).not.toContain("indexnow_delivery");
     }
     expect(x8Levels.uat.workerTaskAllowlist).not.toContain("sitemap_refresh");
-    expect(x8Levels.r.workerTaskAllowlist).toContain("sitemap_refresh");
-    for (const level of ["0", "uat", "r"]) expect(x8Levels[level].workerTaskAllowlist).toContain("home_carousel.compute.v1");
+    expect(x8Levels.r.workerLightTaskAllowlist).toContain("sitemap_refresh");
+    for (const level of ["0", "uat", "r"]) expect(x8Levels[level].workerLightTaskAllowlist).toContain("home_carousel.compute.v1");
   });
 
   it("PR6 fix B-1 #4: the scheduler actually registers the schedule the allowlist reserves a slot for", async () => {
@@ -434,7 +435,7 @@ describe("X8 local production-like contracts", () => {
     expect(definition).toBeDefined();
     const sample = definition!.build(new Date("2026-09-05T19:00:00.000Z"));
     expect(sample.taskType).toBe(HOME_CAROUSEL_TASK_TYPE);
-    for (const level of ["0", "uat", "r"]) expect(x8Levels[level].workerTaskAllowlist).toContain(sample.taskType);
+    for (const level of ["0", "uat", "r"]) expect(x8Levels[level].workerLightTaskAllowlist).toContain(sample.taskType);
   });
 
   it("RC-10: disables ADMIN_TWO_FACTOR_ENFORCEMENT only at Level UAT, and exports/asserts it end to end", () => {
@@ -518,7 +519,7 @@ describe("X8 local production-like contracts", () => {
 
   const composeAvailable = spawnSync("docker", ["compose", "version"], { stdio: "ignore" }).status === 0;
 
-  it.skipIf(!composeAvailable)("renders to the exact isolated six-service topology", () => {
+  it.skipIf(!composeAvailable)("renders to the exact isolated seven-service topology", () => {
     const result = spawnSync(
       "bash",
       [

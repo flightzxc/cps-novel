@@ -255,8 +255,155 @@ services:
       SITE_URL: ${SITE_URL:?SITE_URL is required}
       SITEMAP_STATIC_DIR: /app/runtime/static-sitemaps
       TZ: ${TZ:?TZ is required}
+      WORKER_LANE: ${WORKER_LANE:-main}
       WORKER_ID: ${WORKER_ID:-compose-worker}
       WORKER_TASK_ALLOWLIST: ${WORKER_TASK_ALLOWLIST:?WORKER_TASK_ALLOWLIST is required}
+      WORKER_SHUTDOWN_DRAIN_TIMEOUT_MS: ${WORKER_SHUTDOWN_DRAIN_TIMEOUT_MS:-30000}
+      FEATURE_NOVEL_CATALOG_SYNC: ${FEATURE_NOVEL_CATALOG_SYNC:-false}
+      NOVEL_CATALOG_SYNC_ALLOW_WRITE: ${NOVEL_CATALOG_SYNC_ALLOW_WRITE:-false}
+      FEATURE_INDEXNOW_DELIVERY: ${FEATURE_INDEXNOW_DELIVERY:-false}
+      INDEXNOW_DELIVERY_ALLOW_WRITE: ${INDEXNOW_DELIVERY_ALLOW_WRITE:-false}
+      FEATURE_SITEMAP_AUTO_REFRESH: ${FEATURE_SITEMAP_AUTO_REFRESH:-false}
+      SITEMAP_AUTO_REFRESH_ALLOW_WRITE: ${SITEMAP_AUTO_REFRESH_ALLOW_WRITE:-false}
+      FEATURE_PROMO_LINK_CLAIM: ${FEATURE_PROMO_LINK_CLAIM:-false}
+      PROMO_LINK_CLAIM_ALLOW_WRITE: ${PROMO_LINK_CLAIM_ALLOW_WRITE:-false}
+      # 阶段2 第2步：`worker/handlers/catalog-batch.ts`'s enumeration reads its
+      # own copy of the sizing knobs (via `resolvePromoClaimLifecycleConfig`)
+      # to size a lifecycle batch's shards — see the web service block's own
+      # comment on this same six-key group for the full rationale (why
+      # `PROMO_CLAIM_LIFECYCLE_V1_ENABLED` itself is only ever READ on web at
+      # enqueue time, yet still listed here: the worker's `catalog-batch`
+      # handler resolves the whole config eagerly at construction and would
+      # throw on a malformed override even for a non-lifecycle batch, so its
+      # own env must carry the same six keys, not just the enable switch).
+      # `scheduler` (第3步) now carries the same seven keys too — see that
+      # service block's own comment.
+      PROMO_CLAIM_LIFECYCLE_V1_ENABLED: ${PROMO_CLAIM_LIFECYCLE_V1_ENABLED:-false}
+      PROMO_CLAIM_BATCH_APPROVAL_TTL_MINUTES: ${PROMO_CLAIM_BATCH_APPROVAL_TTL_MINUTES:-1440}
+      PROMO_CLAIM_SHARD_WINDOW_MINUTES: ${PROMO_CLAIM_SHARD_WINDOW_MINUTES:-90}
+      PROMO_CLAIM_SHARD_SIZE_MAX: ${PROMO_CLAIM_SHARD_SIZE_MAX:-1000}
+      PROMO_CLAIM_SHARD_SIZE_MIN: ${PROMO_CLAIM_SHARD_SIZE_MIN:-50}
+      PROMO_CLAIM_CREDENTIAL_SAFETY_MARGIN_MINUTES: ${PROMO_CLAIM_CREDENTIAL_SAFETY_MARGIN_MINUTES:-30}
+      PROMO_CLAIM_SHARD_DEADLINE_GRACE_MINUTES: ${PROMO_CLAIM_SHARD_DEADLINE_GRACE_MINUTES:-10}
+      # C-25 review fix (P0): `worker/handlers/sitemap-refresh.ts`'s
+      # `createSitemapFamilyBuilder(db)` and `worker/handlers/indexnow-
+      # delivery.ts`'s `isNovelIndexNowEligible` -> `isHiddenFromPublicView`
+      # both default their `env` param to `process.env` -- i.e. the WORKER
+      # process's own env, not the web service's. Omitting this var here
+      # silently pinned the worker's read of the flag to "false" regardless
+      # of what web had, letting a hidden/seo_only Article's stale sitemap
+      # entry or IndexNow submission survive past the toggle. web AND worker
+      # both consume this flag; only the scheduler is enqueue-only and has
+      # no public-site read path to gate. registered:
+      # docs/governance/feature-flag-registry.md.
+      FEATURE_ARTICLE_SEO_VISIBILITY: ${FEATURE_ARTICLE_SEO_VISIBILITY:-false}
+      # C-29 (规划_文章管理能力补齐_博客类型可见性换小说_2026-09-08.md §三/C-29):
+      # `src/lib/seo/sitemap.ts`'s `createSitemapFamilyBuilder` reads
+      # `isArticleBlogEnabled(env)` (default `process.env`, so this is the
+      # WORKER process's own copy) to decide whether to emit the `blogpage`
+      # sitemap family at all -- omitting this var here would silently pin
+      # that read to "false" regardless of what web had, the same class of
+      # gap `FEATURE_ARTICLE_SEO_VISIBILITY` above was fixed for. NOT a
+      # double-gate here -- the write-gate sibling of this flag stays
+      # web-only (see the web service block's own comment on that pair);
+      # the worker never performs the blog write, only reads this flag to
+      # gate sitemap emission. registered: docs/governance/feature-flag-registry.md.
+      FEATURE_ARTICLE_BLOG: ${FEATURE_ARTICLE_BLOG:-false}
+      # PR6 lane F: same P2-06.5 tagging double-gate as the web service --
+      # worker/handlers/novel-tag-backfill.ts reads all four directly via
+      # process.env (isTaggingEnabled/isAutoTaggingEnabled/
+      # isAutoTagWriteAuthorized). AUTO_WRITE_AUTHORIZED must stay "NO".
+      FEATURE_P2_06_5_TAGGING: ${FEATURE_P2_06_5_TAGGING:-false}
+      FEATURE_P2_06_5_TAG_ADMIN_WRITE: ${FEATURE_P2_06_5_TAG_ADMIN_WRITE:-false}
+      FEATURE_NOVEL_TAG_AUTO: ${FEATURE_NOVEL_TAG_AUTO:-false}
+      AUTO_WRITE_AUTHORIZED: ${AUTO_WRITE_AUTHORIZED:-NO}
+      MOBOREADER_CATALOG_SAFETY_MAX_PAGES: ${MOBOREADER_CATALOG_SAFETY_MAX_PAGES:-2000}
+      # C-13 (施工工单_C13_每页100本与节流余量_2026-09-07.md): worker validates
+      # each catalog_scan item's pageSize against MOBOREADER_CATALOG_LIMITS
+      # .maxPageSize (worker/handlers/moboreader.ts), and paces requests to
+      # the upstream host via resolveMoboreaderUpstreamRateLimitConfig
+      # (src/lib/adapters/moboreader-rate-limit.ts). Neither reads this
+      # RECOMMENDED_PAGE_SIZE value directly -- it is set here only so
+      # worker's env matches web's for operational visibility (`docker
+      # compose config` / `docker inspect` show the same value on both
+      # services) -- but the MIN_REQUEST_INTERVAL_MS pacing knob below is
+      # read by worker directly and matters here. Defaults stay CPS values
+      # (20 / 1100ms); see scripts/lib/x8-production-like-env.sh for the
+      # non-default probed-safe values (100 / 1500ms) used in the X8
+      # production-like rehearsal environment.
+      MOBOREADER_UPSTREAM_RECOMMENDED_PAGE_SIZE: ${MOBOREADER_UPSTREAM_RECOMMENDED_PAGE_SIZE:-20}
+      MOBOREADER_UPSTREAM_MIN_REQUEST_INTERVAL_MS: ${MOBOREADER_UPSTREAM_MIN_REQUEST_INTERVAL_MS:-1100}
+      # 阶段4-A（设计《领推广按接口限速与预读集合化 · 阶段4-5》§5.4/§十三）：
+      # 按接口限速的八项配置。上游适配器只由 worker 的 handler 构造
+      # （`worker/handlers/moboreader.ts`、`worker/handlers/
+      # promo-link-claim.ts`；web / scheduler 都不调用），所以只需透传给
+      # worker，同 MIN_REQUEST_INTERVAL_MS 上面这条的既有做法一致。
+      #
+      # 🔴 这里补的正是 v0.4.2 组装时发现的缺陷：预生产 preprod.env 把开关
+      # 设成 true、`preflight.sh` 的 `preprod_assert_moboreader_rate_gate_
+      # config` 也照样打印 enabled=true（它只校验 env 文件里的值本身合法，
+      # 不管这个值有没有透传进容器），但 worker 容器实际收不到这个变量——
+      # `resolveMoboreaderPerEndpointRateGateConfig` 在 worker 进程里读到的
+      # 是"未设置"，开关形同虚设，预检说开了、容器里其实还是关的。
+      #
+      # 默认值逐条对齐 `resolveMoboreaderPerEndpointRateGateConfig`
+      # （`src/lib/adapters/moboreader-rate-limit.ts`）里各自的硬编码回退，
+      # 不是照抄 MIN_REQUEST_INTERVAL_MS 那种"沿用既有共享变量"——两个接口
+      # 间隔各自默认 1200ms，不回落到上面那个 1100ms 的共享变量。
+      MOBOREADER_UPSTREAM_PER_ENDPOINT_RATE_GATE_ENABLED: ${MOBOREADER_UPSTREAM_PER_ENDPOINT_RATE_GATE_ENABLED:-false}
+      MOBOREADER_UPSTREAM_MIN_REQUEST_INTERVAL_MS__GETLISTPC: ${MOBOREADER_UPSTREAM_MIN_REQUEST_INTERVAL_MS__GETLISTPC:-1200}
+      MOBOREADER_UPSTREAM_MIN_REQUEST_INTERVAL_MS__GETCODE: ${MOBOREADER_UPSTREAM_MIN_REQUEST_INTERVAL_MS__GETCODE:-1200}
+      MOBOREADER_UPSTREAM_HOST_MIN_GAP_MS: ${MOBOREADER_UPSTREAM_HOST_MIN_GAP_MS:-250}
+      MOBOREADER_UPSTREAM_REMAINING_FLOOR__GETLISTPC: ${MOBOREADER_UPSTREAM_REMAINING_FLOOR__GETLISTPC:-8}
+      MOBOREADER_UPSTREAM_REMAINING_FLOOR__GETCODE: ${MOBOREADER_UPSTREAM_REMAINING_FLOOR__GETCODE:-12}
+      MOBOREADER_UPSTREAM_RATE_WINDOW_MAX_WAIT_MS: ${MOBOREADER_UPSTREAM_RATE_WINDOW_MAX_WAIT_MS:-60000}
+      MOBOREADER_UPSTREAM_RETRY_AFTER_ANOMALY_THRESHOLD_MS: ${MOBOREADER_UPSTREAM_RETRY_AFTER_ANOMALY_THRESHOLD_MS:-900000}
+      MOBOREADER_PREVIEW_CHUNK_SIZE: ${MOBOREADER_PREVIEW_CHUNK_SIZE:-25}
+      MOBOREADER_PREVIEW_CONCURRENCY: ${MOBOREADER_PREVIEW_CONCURRENCY:-2}
+      MOBOREADER_PREVIEW_TIMEOUT_MS: ${MOBOREADER_PREVIEW_TIMEOUT_MS:-20000}
+      MOBOREADER_PREVIEW_FRESHNESS_MS: ${MOBOREADER_PREVIEW_FRESHNESS_MS:-86400000}
+      MOBOREADER_PREVIEW_SOURCE_APP_CODES: ${MOBOREADER_PREVIEW_SOURCE_APP_CODES:-moboreader}
+      MOBOREADER_PREVIEW_SOURCE_ITEM_ALLOWLIST: ${MOBOREADER_PREVIEW_SOURCE_ITEM_ALLOWLIST:-}
+      PROMO_LINK_CLAIM_READBACK_ATTEMPTS: ${PROMO_LINK_CLAIM_READBACK_ATTEMPTS:-3}
+      PROMO_LINK_CLAIM_READBACK_INTERVAL_MS: ${PROMO_LINK_CLAIM_READBACK_INTERVAL_MS:-2000}
+      WORKER_FAILURE_WEBHOOK_URL: ${WORKER_FAILURE_WEBHOOK_URL:-}
+      WORKER_FAILURE_WEBHOOK_TIMEOUT_MS: ${WORKER_FAILURE_WEBHOOK_TIMEOUT_MS:-5000}
+      WORKER_FAILURE_WEBHOOK_COOLDOWN_SECONDS: ${WORKER_FAILURE_WEBHOOK_COOLDOWN_SECONDS:-1800}
+      CHANNEL_CREDENTIAL_ACTIVE_KEY_VERSION: ${CHANNEL_CREDENTIAL_ACTIVE_KEY_VERSION:?CHANNEL_CREDENTIAL_ACTIVE_KEY_VERSION is required}
+      CHANNEL_CREDENTIAL_ENCRYPTION_KEY_V1_FILE: /run/secrets/channel_credential_encryption_key_v1
+      CHANNEL_CREDENTIAL_FINGERPRINT_KEY_FILE: /run/secrets/channel_credential_fingerprint_key
+    volumes:
+      - sitemap_static:/app/runtime/static-sitemaps
+    secrets:
+      - channel_credential_encryption_key_v1
+      - channel_credential_fingerprint_key
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - node -e 'const value=require("node:fs").readFileSync("/proc/1/cmdline","utf8");if(!value.includes("worker/index.ts"))process.exit(1)'
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  worker-light:
+    <<: *app-runtime
+    command: ["bash", "scripts/start-worker.sh"]
+    # Must exceed WORKER_SHUTDOWN_DRAIN_TIMEOUT_MS plus cleanup time. The
+    # preproduction preflight validates the configured pair instead of
+    # assuming this default remains safe after an operator override.
+    stop_grace_period: ${WORKER_STOP_GRACE_PERIOD:-45s}
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: ${P1_12_WORKER_DATABASE_URL:?P1_12_WORKER_DATABASE_URL is required}
+      APP_VERSION: ${APP_VERSION:?APP_VERSION is required}
+      GIT_COMMIT: ${GIT_COMMIT:?GIT_COMMIT is required}
+      SITE_URL: ${SITE_URL:?SITE_URL is required}
+      SITEMAP_STATIC_DIR: /app/runtime/static-sitemaps
+      TZ: ${TZ:?TZ is required}
+      WORKER_LANE: light
+      WORKER_ID: ${WORKER_LIGHT_ID:?WORKER_LIGHT_ID is required}
+      WORKER_TASK_ALLOWLIST: ${WORKER_LIGHT_TASK_ALLOWLIST:?WORKER_LIGHT_TASK_ALLOWLIST is required}
       WORKER_SHUTDOWN_DRAIN_TIMEOUT_MS: ${WORKER_SHUTDOWN_DRAIN_TIMEOUT_MS:-30000}
       FEATURE_NOVEL_CATALOG_SYNC: ${FEATURE_NOVEL_CATALOG_SYNC:-false}
       NOVEL_CATALOG_SYNC_ALLOW_WRITE: ${NOVEL_CATALOG_SYNC_ALLOW_WRITE:-false}

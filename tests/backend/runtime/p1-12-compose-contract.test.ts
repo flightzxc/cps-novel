@@ -36,10 +36,10 @@ function serviceBlock(name: string): string {
 }
 
 describe("P1-12 Compose and image contracts", () => {
-  it("defines exactly the four approved resident services", () => {
+  it("defines exactly the five approved resident services", () => {
     const serviceSection = compose.slice(compose.indexOf("services:"), compose.indexOf("\nnetworks:"));
     const services = Array.from(serviceSection.matchAll(/^  ([a-z][a-z0-9_-]*):$/gm), (match) => match[1]);
-    expect(services).toEqual(["postgres", "web", "worker", "scheduler"]);
+    expect(services).toEqual(["postgres", "web", "worker", "worker-light", "scheduler"]);
   });
 
   it("fails closed on one exact application image variable without latest", () => {
@@ -218,7 +218,9 @@ describe("P1-12 Compose and image contracts", () => {
     () => {
       const baseEnv: NodeJS.ProcessEnv = {
         ...process.env,
-        CPS_NOVEL_APP_IMAGE: "cps-novel:compose-contract",
+        WORKER_LIGHT_ID: "compose-light",
+      WORKER_LIGHT_TASK_ALLOWLIST: "sitemap_refresh,sitemap.daily_fallback.v1,home_carousel.compute.v1",
+      CPS_NOVEL_APP_IMAGE: "cps-novel:compose-contract",
         APP_VERSION: "0.1.0",
         GIT_COMMIT: "a".repeat(40),
         BUILD_DATE: "2026-08-26T00:00:00Z",
@@ -431,7 +433,7 @@ describe("P1-12 Compose and image contracts", () => {
 
   it("documents the exact staged worker allowlist and X11 delivery hard gate", () => {
     expect(envExample).toContain(
-      "WORKER_TASK_ALLOWLIST=credential.validate.v1,credential.supersede.v1,catalog_scan,home_carousel.compute.v1",
+      "WORKER_TASK_ALLOWLIST=credential.validate.v1,credential.supersede.v1,catalog_scan",
     );
     expect(envExample).toContain("After the C2b parser fix is accepted, append: moboreader.preview_refresh.v1");
     expect(envExample).toContain("With the claim double-gates in the SAME release change, append: promo_link.claim.v1");
@@ -501,7 +503,7 @@ describe("P1-12 Compose and image contracts", () => {
   it("sets non-root application users, healthchecks, and bounded json-file logs", () => {
     expect(compose).toContain('user: "1001:1001"');
     expect(dockerfile).toContain("USER nextjs");
-    for (const name of ["postgres", "web", "worker", "scheduler"]) {
+    for (const name of ["postgres", "web", "worker", "worker-light", "scheduler"]) {
       expect(serviceBlock(name)).toContain("healthcheck:");
     }
     expect(compose).toContain("max-size: 10m");
@@ -548,6 +550,8 @@ describe("P1-12 Compose and image contracts", () => {
   it.skipIf(!dockerComposeAvailable)("Compose rejects an unset or empty allowlist and accepts an explicit one", () => {
     const baseEnv: NodeJS.ProcessEnv = {
       ...process.env,
+      WORKER_LIGHT_ID: "compose-light",
+      WORKER_LIGHT_TASK_ALLOWLIST: "sitemap_refresh,sitemap.daily_fallback.v1,home_carousel.compute.v1",
       CPS_NOVEL_APP_IMAGE: "cps-novel:compose-contract",
       APP_VERSION: "0.1.0",
       GIT_COMMIT: "a".repeat(40),

@@ -98,6 +98,8 @@ const RENDER_ENV: Record<string, string> = {
   CHANNEL_CREDENTIAL_ACTIVE_KEY_VERSION: "1",
   CHANNEL_CREDENTIAL_ENCRYPTION_KEY_V1_FILE: "/opt/cps-novel/shared/secrets/channel_credential_encryption_key_v1",
   CHANNEL_CREDENTIAL_FINGERPRINT_KEY_FILE: "/opt/cps-novel/shared/secrets/channel_credential_fingerprint_key",
+  WORKER_LIGHT_ID: "compose-light",
+  WORKER_LIGHT_TASK_ALLOWLIST: "sitemap_refresh,sitemap.daily_fallback.v1,home_carousel.compute.v1",
   WORKER_TASK_ALLOWLIST: "credential.validate.v1",
 };
 
