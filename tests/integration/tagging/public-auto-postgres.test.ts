@@ -85,7 +85,7 @@ describe.skipIf(!enabled).sequential("WO7 public auto real roles", () => {
     await owner.sourceLabelMapping.createMany({ data: [0, 1].map(i => ({ channelAppId: app, rawLanguageScope: rawScope, rawToken: "Mapped", canonicalTagId: tags[i], mappingVersion: "fixture", approvedBy: admin })) });
     const promo = await owner.promoLink.create({ data: { novelId: novel, novelSourceItemId: source, channelAppId: app, channelAccountId: account, offerType: "cps", publicRedirectCode: "wo7read", idempotencyKey: hash, origin: "claimed", status: "fetched", webUrl: "https://example.test/read", fetchedAt: new Date() } });
     await owner.article.create({ data: { id: article, novelId: novel, promoLinkId: promo.id, locale: "en", slug: "tagged", publicPageShortId: "wo7tagged", title: "Tagged", body: "Body", status: "published", publishedAt: new Date("2026-09-01") } });
-    await snapshot(novel, [[0, 999], [2, 50], [3, 50], [4, 100]]);
+    await snapshot(novel, [[0, 1], [2, 50], [3, 50], [4, 100]]);
     await owner.canonicalTag.update({ where: { id: tags[4] }, data: { status: "inactive" } });
   }, 30_000);
   afterEach(() => { vi.restoreAllMocks(); vi.unstubAllEnvs(); });
