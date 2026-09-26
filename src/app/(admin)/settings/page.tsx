@@ -5,6 +5,7 @@ import { getSiteUrl } from "@/lib/seo/site-url";
 import { prisma } from "../../api/admin/_lib/deps";
 import { AdminShell } from "../_components/admin-shell";
 import { capabilityViews, requireAdminPage, sessionView } from "../_lib/page-guard";
+import { SitemapCard } from "./_components/sitemap-card";
 import { SiteSettingsClient } from "./_components/site-settings-client";
 
 export const dynamic = "force-dynamic";
@@ -69,6 +70,7 @@ export default async function SettingsPage() {
         expectedIndexNowHost={indexNowGuidance.host}
         expectedIndexNowKeyLocation={indexNowGuidance.keyLocation}
       />
+      <SitemapCard settingsManage={settingsManage} />
     </AdminShell>
   );
 }
