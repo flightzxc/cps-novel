@@ -32,6 +32,7 @@ const EXPECTED_CONTENT_GET_ROUTES = [
 ] as const;
 
 const EXPECTED_SITE_SETTING_ROUTES = [
+  { path: "/api/admin/sitemap", methods: ["GET", "POST"] },
   { path: "/api/admin/site-settings", methods: ["GET", "PATCH"] },
 ] as const;
 

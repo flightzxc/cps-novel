@@ -1,6 +1,7 @@
 import { ADMIN_PAGE_ROOTS, type AdminRegistry } from "@/server/auth/registry";
 
 export const ADMIN_SITE_SETTING_ROUTES = Object.freeze([
+  { id: "admin.api.sitemap", path: "/api/admin/sitemap", methods: ["GET", "POST"], capability: "settings:manage" },
   {
     id: "admin.api.site_settings",
     path: "/api/admin/site-settings",

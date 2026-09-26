@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, readdir, readlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { PrismaClient } from "@prisma/client";
@@ -17,6 +17,13 @@ import {
 import { generateStaticSitemaps } from "@/lib/seo/static-sitemap-generator";
 import { refreshStaticSitemap } from "@/lib/seo/sitemap-refresh-state";
 import { createSitemapRefreshHandler } from "../../../worker/handlers/sitemap-refresh";
+
+import { PostgreSQLAdminIdentityStore, PostgreSQLSessionStore } from "@/lib/auth/postgres";
+import { hashAdminSessionToken } from "@/lib/auth/session";
+import { requireAdminRouteAccess } from "@/server/auth/guards";
+import { P2_04_ADMIN_REGISTRY } from "@/app/api/admin/_lib/registry";
+import { getAdminSitemapState, requestAdminSitemapRefresh, SITEMAP_ADMIN_AUDIT_ACTION } from "@/server/sitemap-admin/service";
+import { parseSitemapArgs, runSitemapCli } from "../../../scripts/generate-static-sitemaps";
 
 const enabled = process.env.SITEMAP_REFRESH_DATABASE_TEST === "1";
 const owner = new PrismaClient({ datasourceUrl: process.env.SITEMAP_REFRESH_OWNER_DATABASE_URL });
@@ -134,6 +141,25 @@ async function scopedTasks() {
   });
 }
 
+async function admin(role = "super_admin") {
+  const token = randomUUID();
+  const now = new Date();
+  const identity = await owner.adminIdentity.create({ data: { username: `sitemap-${token}`, passwordHash: "scrypt$v1$test-only", sessionVersion: 1, role } });
+  await owner.adminSession.create({ data: {
+    tokenHash: hashAdminSessionToken(token), identityId: identity.id, sessionVersion: 1,
+    issuedAt: now, lastSeenAt: now, absoluteExpiresAt: new Date(now.valueOf() + 3600000),
+  } });
+  const deps = { db: web, identities: new PostgreSQLAdminIdentityStore(web), sessions: new PostgreSQLSessionStore(web),
+    env: { ...enabledEnv, ADMIN_TWO_FACTOR_ENFORCEMENT: "disabled" }, now };
+  async function authorize(requestId = randomUUID(), origin = "https://admin.example") {
+    const auth = await requireAdminRouteAccess({ pathname: "/api/admin/sitemap", method: "POST", sessionToken: token,
+      requestId, origin, canonicalOrigin: "https://admin.example",
+    }, { ...deps, registry: P2_04_ADMIN_REGISTRY });
+    return { authorization: auth.serviceAuthorization!, requestId, reason: "manual test" };
+  }
+  return { deps, authorize, identity };
+}
+
 describe.skipIf(!enabled).sequential("sitemap refresh on disposable PostgreSQL 16.14", () => {
   beforeAll(() => { process.env.SITE_URL = "https://sitemap-test.example"; });
   beforeEach(resetDatabase);
@@ -217,4 +243,99 @@ describe.skipIf(!enabled).sequential("sitemap refresh on disposable PostgreSQL 1
     expect((await scopedTasks()).filter(({ status }) => status === "pending")).toHaveLength(1);
     expect(await scopedTasks()).toHaveLength(2);
   });
+  it("authorizes real web_app sessions, coalesces concurrent clicks and audits in one transaction", async () => {
+    const session = await admin();
+    const requests = await Promise.all(Array.from({ length: 8 }, () => session.authorize()));
+    const results = await Promise.all(requests.map((input) => requestAdminSitemapRefresh(input, session.deps)));
+    expect(results.filter((result) => result.status === "queued")).toHaveLength(1);
+    expect(new Set(results.map((result) => result.status !== "disabled" && result.taskId)).size).toBe(1);
+    expect(await scopedTasks()).toHaveLength(1);
+    expect(await owner.operationAudit.count({ where: { action: SITEMAP_ADMIN_AUDIT_ACTION } })).toBe(8);
+    await requestAdminSitemapRefresh(requests[0], session.deps);
+    expect(await owner.operationAudit.count({ where: { action: SITEMAP_ADMIN_AUDIT_ACTION } })).toBe(8);
+  });
+
+  it("serializes concurrent retries of the same request into one task and one audit", async () => {
+    const session = await admin();
+    const request = await session.authorize();
+    const results = await Promise.all(Array.from({ length: 8 }, () => requestAdminSitemapRefresh(request, session.deps)));
+    expect(results.filter((result) => result.status === "queued")).toHaveLength(1);
+    expect(await scopedTasks()).toHaveLength(1);
+    expect(await owner.operationAudit.count({ where: { action: SITEMAP_ADMIN_AUDIT_ACTION } })).toBe(1);
+  });
+
+  it("rejects unauthorized roles, foreign origins, revoked privileges, and disabled gates without task writes", async () => {
+    const denied = await admin("viewer");
+    await expect(denied.authorize()).rejects.toMatchObject({ code: "admin_capability_denied" });
+    const allowed = await admin();
+    await expect(allowed.authorize(randomUUID(), "https://foreign.example")).rejects.toMatchObject({ code: "admin_origin_denied" });
+    const input = await allowed.authorize();
+    expect(await requestAdminSitemapRefresh(input, { ...allowed.deps, env: { ...allowed.deps.env, SITEMAP_AUTO_REFRESH_ALLOW_WRITE: "false" } })).toEqual({ status: "disabled" });
+    await owner.adminIdentity.update({ where: { id: allowed.identity.id }, data: { role: "viewer" } });
+    await expect(requestAdminSitemapRefresh(input, allowed.deps)).rejects.toMatchObject({ code: "admin_capability_denied" });
+    expect(await scopedTasks()).toHaveLength(0);
+    expect(await owner.operationAudit.count()).toBe(0);
+  });
+
+  it("rolls back enqueue when its audit cannot be inserted", async () => {
+    const session = await admin();
+    const input = await session.authorize();
+    // Fault injection stays inside the same real DB transaction; no grant changes.
+    const db = { $transaction: (fn: (tx: unknown) => Promise<unknown>) => web.$transaction(async (tx) => {
+      const proxy = new Proxy(tx, { get(target, key) { return key === "operationAudit" ? {
+        findFirst: target.operationAudit.findFirst.bind(target.operationAudit), create: async () => { throw new Error("audit fault"); },
+      } : Reflect.get(target, key); } });
+      return fn(proxy);
+    }) } as unknown as PrismaClient;
+    await expect(requestAdminSitemapRefresh(input, { ...session.deps, db })).rejects.toThrow("audit fault");
+    expect(await scopedTasks()).toHaveLength(0);
+    expect(await owner.genericTaskItem.count()).toBe(0);
+  });
+
+  it("CLI dry-run computes locale counts with zero database and file writes", async () => {
+    await publishedKoreanArticle(1);
+    const root = await rootDir();
+    await writeFile(path.join(root, "canary"), "unchanged");
+    const previousRoot = process.env.SITEMAP_STATIC_DIR;
+    process.env.SITEMAP_STATIC_DIR = root;
+    const before = await owner.$queryRaw<Array<{ snapshot: unknown }>>`SELECT jsonb_agg(to_jsonb(t)) AS snapshot FROM (SELECT * FROM article) t`;
+    try {
+      const result = await runSitemapCli(web, parseSitemapArgs(["--dry-run"]));
+      expect(result).toMatchObject({ status: "dry_run", counts: { ko: expect.any(Number) } });
+      expect("counts" in result && result.counts.ko).toBeGreaterThan(0);
+      expect(await scopedTasks()).toHaveLength(0);
+      expect(await owner.operationAudit.count()).toBe(0);
+      expect(await readdir(root)).toEqual(["canary"]);
+      expect(await readFile(path.join(root, "canary"), "utf8")).toBe("unchanged");
+      expect(await owner.$queryRaw`SELECT jsonb_agg(to_jsonb(t)) AS snapshot FROM (SELECT * FROM article) t`).toEqual(before);
+    } finally {
+      if (previousRoot === undefined) delete process.env.SITEMAP_STATIC_DIR; else process.env.SITEMAP_STATIC_DIR = previousRoot;
+    }
+  });
+
+  it("CLI apply enqueues as web_app; worker publishes atomically and status reports pending/processing/failure", async () => {
+    const root = await rootDir();
+    const expectedUrl = await publishedKoreanArticle(1);
+    const preview = await runSitemapCli(web, parseSitemapArgs(["--dry-run"]));
+    const args = parseSitemapArgs(["--apply", "--reason", "CLI fixture"]);
+    await expect(runSitemapCli(owner, args, enabledEnv)).rejects.toThrow("web_app");
+    expect((await runSitemapCli(web, args, enabledEnv)).status).toBe("queued");
+    expect((await getAdminSitemapState(web, root, enabledEnv)).task?.status).toBe("pending");
+    const lease = await claim();
+    expect((await getAdminSitemapState(web, root, enabledEnv)).task?.status).toBe("processing");
+    const outcome = await createSitemapRefreshHandler(worker, { rootDir: root, env: enabledEnv })(context(lease));
+    await finalizeTaskItem(worker, lease, outcome);
+    expect(await xml(root)).toContain(expectedUrl);
+    const current = await readlink(path.join(root, "current"));
+    expect((await getAdminSitemapState(web, root, enabledEnv)).published?.urlCount).toBe("urlCount" in preview ? preview.urlCount : -1);
+    const next = await runSitemapCli(web, { ...args, requestId: randomUUID() }, enabledEnv);
+    expect(next.status).toBe("queued");
+    const nextLease = await claim();
+    const failure = await createSitemapRefreshHandler(worker, { rootDir: root, env: enabledEnv, buildFamily: async () => { throw new Error("fixture build failure"); } })(context(nextLease));
+    await finalizeTaskItem(worker, nextLease, failure);
+    expect((await getAdminSitemapState(web, root, enabledEnv)).task?.status).toBe("failed");
+    expect(await readlink(path.join(root, "current"))).toBe(current);
+    expect(await xml(root)).toContain(expectedUrl);
+  });
+
 });
