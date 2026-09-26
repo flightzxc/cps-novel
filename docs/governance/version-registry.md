@@ -12,21 +12,35 @@ Compose runtime 与 Health 身份一致性验证（`/api/health` 的 `metadataCo
 为已发布。
 
 > Notion 权威页：[海阅 版本管理与发版手账](https://app.notion.com/p/3e4601b5fd3481b5a39bcf48408015c2)。
-> 本文件是仓库内镜像；v0.4.3 已直接同步到 Notion 并读回核对。本文件变更不会自动写入 Notion。
+> 本文件是仓库内镜像；v0.4.4 已直接同步到 Notion 并读回核对（两次发布实地验收仍待完成）。本文件变更不会自动写入 Notion。
 
 ## 当前快照
 
-### v0.4.4 —— 准备中（2026-09-26）
+### v0.4.4 —— 已发布到预生产（2026-09-26 12:14 +0800，`RELEASE=PASS`）
 
-- 开发线：`integration/v0.4.4-2026-09-26`，基于 `fb68856`，以 `--no-ff` 合入
-  `fix/sitemap-refresh-stale-cache` @ `cc7a54c`；Claude Opus 5.5 已复核通过。
-- PATCH 范围：每次 sitemap 刷新重建候选 builder；processing 期间的发布触发持久化补刷标记，
-  在任务终态或租约耗尽回收时入队一次尾随刷新。沿用既有 JSONB 与 advisory lock，无 schema、迁移或 grants 变更。
-- 预生产 nginx 模板同步 Owner 已实施的限流：general `30r/s` / burst `100`，api `20r/s` / burst `60`；
-  登录仍为 `2r/s` / burst `3`，production-like 模板不变。版本身份统一为 0.4.4。
-- 本阶段执行本地完整门禁、推送集成分支与构建核对 linux/amd64 镜像归档；尚未部署，Final SHA 和归档身份以交付记录为准。
-  预生产须等 Owner 暂停批次并明确授权；恢复前由 Owner 分两次发布测试文章，核对韩语 sitemap 收录数依次为 12、13。
-- 手动刷新、每日兜底、命令行生成及写闸登记顺延；B-8、B-9 与领推广功能变更不纳入本版。
+- 身份：开发线 `integration/v0.4.4-2026-09-26`，基于 `fb68856`，以 `--no-ff` 合入
+  `fix/sitemap-refresh-stale-cache` @ `cc7a54c`，合并提交 `56727e0` 带 Claude Opus 5.5 复核 trailer。
+  Final SHA `205220ebc6f460e85e6fbc8901f592c979c87b83`，annotated tag `v0.4.4`；镜像 `cps-novel:0.4.4-205220e`（linux/amd64）。
+  config digest `sha256:664adc8eeade6a71c79ae3130bd0bb99902f030737ef6406f57eef9dbc041922`，platform manifest digest `sha256:bbb07762665f46073b3437174a91dbfacd5d65b75e882aa6561778fa88ba8851`；
+  归档 SHA-256 `fc13c5a682b75e0147d230e63aef20e0770ee32a084d89297222b96f4e440a53`；发布目录 `/opt/cps-novel/releases/205220ebc6f460e85e6fbc8901f592c979c87b83`。
+- PATCH：每次 sitemap 刷新重建候选 builder；processing 期间发布在现有 JSONB 中标记需补刷，
+  终态或租约耗尽回收时经同一 advisory lock 入队一个尾随刷新；普通重试保留标记。
+  预生产 nginx 仓库模板同步 general `30r/s` / burst `100`、api `20r/s` / burst `60`；登录和 production-like 模板不变。
+  本轮未修改主机 nginx 配置。无 schema、迁移或 grants 文件变更，迁移步骤为 `No pending migrations to apply`。
+- Owner 授权仅在 `haiyue-vps` 部署。前后只读确认正式领取批次 `eba8f359-a569-43d7-bb55-b71fecc02f6e` 为 paused，
+  处理中条目和非终态领取意图均为 0。在线逻辑备份 `cps-novel-20260926T040719Z.dump`（190,425,974 字节，
+  SHA-256 `1d89e68861ebdcd3d6a2d253bad4665458885cda5db4808edd3cfcd073966c39`）；`LOGICAL_BACKUP=PASS`。postgres 容器 ID、Created 未变。
+- 目标机 env 备份 `preprod.env.bak-20260926T041343Z`，只改 `APP_VERSION` 0.4.3→0.4.4、
+  `NEXT_PUBLIC_BUILD_VERSION` v0.4.3→v0.4.4。未更改其他配置、账号、白名单或批次状态。
+  按接口限速与生命周期开关保持 true，两接口各 1,500 ms；sitemap 双闸与 worker allowlist 保持开启。
+- 目标机代码 commit/tree、归档 SHA-256、载入镜像 revision/平台核对通过。`RELEASE_EXIT=0`，release-state 为 ready，
+  四容器 healthy；health 返回 0.4.4 / Final / metadata passed / database passed；后台域名隔离通过，三服务近 5 分钟错误日志 0。
+- 本地门禁：tsc 0，相关单测 41 passed，sitemap 真实库 5 passed / 0 skipped，五组指定真实库运行器与
+  分片枚举 4 项、页位置排序 1 项通过；迁移、数据库 schema、字典 drift 0。全量按 Owner 批准降低到 4 workers 后
+  446 文件 / 6,695 项通过（33 文件 / 319 项环境门禁跳过）；原满载 UI 超时经 Opus 判定无关，登记 B-14，本版不改测试。
+- **实地验收**：两次新文章发布实地验收待 Owner 操作；发布前基线为库内 11 本、旧 XML 8 本，runId `3bfcfc37-427b-4222-9ba5-d9db5ef33436`。
+- 正式领取批次由 Owner 恢复；手动刷新、每日兜底、命令行生成、写闸登记及 B-8/B-9/B-14 修复不纳入本版。
+  回滚目标 v0.4.3 Final `505feeaae04ae1a23df3e7f6a27795f4128636f3`，数据库结构兼容；生产未上线。
 
 ### v0.4.3 —— 已发布到预生产（2026-09-25 22:35 +0800，`RELEASE=PASS`）
 
@@ -152,7 +166,7 @@ Compose runtime 与 Health 身份一致性验证（`/api/health` 的 `metadataCo
 
 | Version | Date (+0800) | Bump | Summary | Commit / Release | Status |
 | --- | ---: | --- | --- | --- | --- |
-| `v0.4.4` | 2026-09-26 | PATCH | 修复 sitemap 跨刷新候选缓存与 processing 期间发布漏刷；同步预生产 nginx 限流；无迁移或 grants 变更 | `integration/v0.4.4-2026-09-26`；修复 `cc7a54c` 经 Opus 复核 | 准备中；未部署 |
+| `v0.4.4` | 2026-09-26（12:14） | PATCH | sitemap 候选缓存与 processing 发布漏刷修复；预生产 nginx 模板同步；无迁移或 grants 变更 | annotated tag `v0.4.4` → `205220ebc6f460e85e6fbc8901f592c979c87b83`；镜像 `cps-novel:0.4.4-205220e`；`RELEASE=PASS` | 预生产已发布；两次发布实地验收待完成；生产未上线 |
 | `v0.4.3` | 2026-09-25（22:35） | PATCH | admin2 独立身份建号与双 UUID 领取白名单；分片枚举真实库 helper 修复；无迁移或 grants 变更。详见“当前快照” | annotated tag `v0.4.3` → `505feeaae04ae1a23df3e7f6a27795f4128636f3`；镜像 `cps-novel:0.4.3-505feea`；`RELEASE=PASS` | ✅ 预生产已发布；admin2 2FA 绑定与双账号验证待完成；生产未上线 |
 | `v0.4.2` | 2026-09-25（03:57） | PATCH | 领推广按接口分别限速（4-A，开关默认关闭）+ 目录页位置登记（5-A，含迁移，不改执行行为）。详见"当前快照" | annotated tag `v0.4.2` → `33cd67bd34c34af1d3dbcbf78e6f2636d175c889`；镜像 `cps-novel:0.4.2-33cd67b`；`RELEASE=PASS` | ✅ 预生产已发布（按接口限速开关关闭）；生产未上线 |
 | `v0.4.1` | 2026-09-24（16:27） | PATCH | 目录同步页推广链接状态筛选（未领取 / 已领取 / 人工核对中）与"已有推广码"显示（待办 B-4）。详见"当前快照" | annotated tag `v0.4.1` → `0a2546968d258304990918276b201026c8cccf66`；镜像 `cps-novel:0.4.1-0a25469`；`RELEASE=PASS` | ✅ 预生产已发布；生产未上线 |

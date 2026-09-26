@@ -3,7 +3,16 @@
 <!-- 本文件由 `node scripts/generate-changelog.mjs --write` 生成，请勿手工编辑。 -->
 <!-- 叙述性内容写进 commit message；Owner/架构决策写 docs/adr/。 -->
 
-生成时间：2026-09-25 · 共 841 个 commit
+生成时间：2026-09-26 · 共 847 个 commit
+
+## v0.4.4
+
+- `205220e` 2026-09-26 发布：准备海阅 v0.4.4 版本身份  — _codex · GPT-6_
+- `56727e0` 2026-09-26 合并(sitemap)：纳入已获 Opus 复核的刷新缺陷修复  — _codex · GPT-6 · reviewed: claude-code · Claude Opus 5.5_
+- `cc7a54c` 2026-09-26 fix(sitemap): 修复候选缓存跨刷新复用与处理中发布漏刷  — _codex · GPT-6_
+- `fb68856` 2026-09-26 docs(preprod): 记录文章生成与 sitemap 配置开闸  — _codex · GPT-6_
+- `f9aa18e` 2026-09-26 文档(发版)：回填 v0.4.3 Notion 手账直连结果  — _codex · GPT-6_
+- `6dcefc3` 2026-09-25 文档(发版)：v0.4.3 预生产发布治理收官  — _codex · GPT-6_
 
 ## v0.4.3
 

@@ -39,6 +39,40 @@
 
 ## 发版记录（新条目在最上面）
 
+### 2026-09-26 12:14 - codex（GPT-6，发版执行）
+
+**变更类型**：预生产正式发布 `v0.4.4`（PATCH）。
+
+**背景**：预生产首次开启 sitemap 自动刷新后，库内 11 本符合收录条件但 XML 仅 8 本。
+候选 builder 被 worker 长期持有导致缓存冻结，处理中发布又被合并而无后续刷新。
+Owner 确认正式领取批次仍暂停并明确授权第二阶段，仅限 `haiyue-vps`。
+
+**变更内容**：
+- 修复 `cc7a54c` 经 Opus 复核，以合并提交 `56727e0` 纳入；每次刷新新建 builder，processing 期间
+  标记需补刷，任务终态或租约耗尽回收时补一个任务。沿用现有 JSONB、部分唯一索引与 advisory lock。
+- 同步预生产 nginx 仓库模板 general 30r/s / burst 100、api 20r/s / burst 60；登录与 production-like 不动。
+- 升版 Final `205220ebc6f460e85e6fbc8901f592c979c87b83`，tag `v0.4.4`；发版治理提交与运行镜像身份分离。
+
+**影响范围**：
+- web/worker/scheduler 换为 `cps-novel:0.4.4-205220e`，linux/amd64；postgres 未重建。
+- 无 schema、迁移或 grants 文件变更；部署沿用既有脚本，迁移无待执行项，既有 grants 回放通过。
+- env 备份 `preprod.env.bak-20260926T041343Z`，只改两个版本变量到 0.4.4 / v0.4.4。
+  其他配置、主机 nginx、admin2、白名单与批次状态均未改动；恢复批次由 Owner 操作。
+
+**验证方式**：
+- 本地 tsc、相关单测 41 项、sitemap 真库 5 项、五组指定真库运行器、两个额外真库文件均通过，drift 0；
+  全量 4 workers：446 文件、6,695 项 passed；镜像内生产构建通过。
+- 部署前后批次 paused、processing 条目 0、非终态领取意图 0；在线备份 `cps-novel-20260926T040719Z.dump`，
+  190,425,974 字节，SHA-256 `1d89e68861ebdcd3d6a2d253bad4665458885cda5db4808edd3cfcd073966c39`，`LOGICAL_BACKUP=PASS`。
+- 源码与镜像身份一致；归档 SHA-256 `fc13c5a682b75e0147d230e63aef20e0770ee32a084d89297222b96f4e440a53`；config digest `sha256:664adc8eeade6a71c79ae3130bd0bb99902f030737ef6406f57eef9dbc041922`。
+  `RELEASE=PASS` / `RELEASE_EXIT=0`；health 0.4.4 / Final / metadata passed / database passed；四容器 healthy，
+  三服务近 5 分钟错误日志 0；域名隔离正常。按接口限速与生命周期开关仍 true，两接口各 1,500 ms。
+- 两次新文章发布实地验收待 Owner 操作；发布前基线为库内 11 本、旧 XML 8 本，runId `3bfcfc37-427b-4222-9ba5-d9db5ef33436`。
+
+**后续待办**：两次发布实地验收完成前保持领取暂停；文章发布与恢复均由 Owner 操作。
+满载 UI 测试偶发超时经 Opus 登记 B-14，本版不改测试。手动刷新、每日兜底、命令行生成及写闸登记顺延；生产未上线。
+Notion 手账已直接同步并读回核对，实地验收仍明确标为待完成。
+
 ### 2026-09-25 22:35 - codex（GPT-6，发版执行）
 
 **变更类型**：预生产正式发布 `v0.4.3`（PATCH）；正式领取批次由 Owner 暂停后部署。
