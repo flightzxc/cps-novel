@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { describe, expect, it } from "vitest";
+import { isSitemapAutoRefreshEnabled, isSitemapAutoRefreshWriteAllowed } from "../../../src/lib/flags/feature-flags";
 
 /**
  * PREPROD_APPROVED_OPEN_WRITE_GATES：写闸从"恒为 false"改成"封闭枚举 + 显式登记制"。
@@ -25,6 +26,8 @@ const LIB = path.join(root, "scripts/preproduction/lib.sh");
 const PREFLIGHT = path.join(root, "scripts/preproduction/preflight.sh");
 
 type GateEnv = {
+  FEATURE_SITEMAP_AUTO_REFRESH?: string;
+  SITEMAP_AUTO_REFRESH_ALLOW_WRITE?: string;
   PREPROD_APPROVED_OPEN_WRITE_GATES?: string;
   FEATURE_NOVEL_CATALOG_SYNC?: string;
   NOVEL_CATALOG_SYNC_ALLOW_WRITE?: string;
@@ -32,9 +35,11 @@ type GateEnv = {
   PROMO_LINK_CLAIM_ALLOW_WRITE?: string;
 };
 
-/** All four gate variables false and unregistered -- the pre-change default shape. */
+/** All six gate variables false and unregistered. */
 const ALL_CLOSED: Required<GateEnv> = {
   PREPROD_APPROVED_OPEN_WRITE_GATES: "",
+    FEATURE_SITEMAP_AUTO_REFRESH: "false",
+    SITEMAP_AUTO_REFRESH_ALLOW_WRITE: "false",
   FEATURE_NOVEL_CATALOG_SYNC: "false",
   NOVEL_CATALOG_SYNC_ALLOW_WRITE: "false",
   FEATURE_PROMO_LINK_CLAIM: "false",
@@ -313,6 +318,8 @@ describe("preflight.sh 真实行为（不 mock，走到写闸判定之后稳定�
     FEATURE_INDEXNOW_DELIVERY: "false",
     INDEXNOW_DELIVERY_ALLOW_WRITE: "false",
     PREPROD_APPROVED_OPEN_WRITE_GATES: "",
+    FEATURE_SITEMAP_AUTO_REFRESH: "false",
+    SITEMAP_AUTO_REFRESH_ALLOW_WRITE: "false",
     FEATURE_NOVEL_CATALOG_SYNC: "false",
     NOVEL_CATALOG_SYNC_ALLOW_WRITE: "false",
     FEATURE_PROMO_LINK_CLAIM: "false",
@@ -340,6 +347,16 @@ describe("preflight.sh 真实行为（不 mock，走到写闸判定之后稳定�
     const env: NodeJS.ProcessEnv = { NODE_ENV: "test", PATH: process.env.PATH, HOME: process.env.HOME, PREPROD_ENV_FILE: envFile };
     return spawnSync("bash", [PREFLIGHT], { encoding: "utf8", env });
   }
+
+  it.each([false, true])("sitemap preflight integration registered=%s", async (registered) => {
+    const file = await writePreflightEnvFile({
+      FEATURE_SITEMAP_AUTO_REFRESH: "true", SITEMAP_AUTO_REFRESH_ALLOW_WRITE: "true",
+      PREPROD_APPROVED_OPEN_WRITE_GATES: registered ? "sitemap_write" : "",
+    });
+    const result = runPreflight(file);
+    expect(result.status).toBe(65);
+    expect(result.stdout).toContain(`PREPROD_PREFLIGHT=FAIL reason=${registered ? "git_commit" : "sitemap_write"}`);
+  });
 
   it("catalog 打开且未登记 -> 在写闸判定处 FAIL reason=catalog_write，退出码 65", async () => {
     const envFile = await writePreflightEnvFile({
@@ -398,6 +415,15 @@ describe("bash 5 下的行为对照（docker bash:5.2，不可用则跳过）", 
     return spawnSync("docker", args, { encoding: "utf8" });
   }
 
+  maybeIt("sitemap bash 5 registration, single-side and invalid checks", () => {
+    for (const feature of ["false", "true"]) for (const write of ["false", "true"]) {
+      const flags = { FEATURE_SITEMAP_AUTO_REFRESH: feature, SITEMAP_AUTO_REFRESH_ALLOW_WRITE: write };
+      expect(runGateBash5(flags).status).toBe(feature === "true" || write === "true" ? 65 : 0);
+      expect(runGateBash5({ ...flags, PREPROD_APPROVED_OPEN_WRITE_GATES: "sitemap_write" }).status).toBe(0);
+    }
+    expect(runGateBash5({ FEATURE_SITEMAP_AUTO_REFRESH: "TRUE" }).stdout.trim()).toBe("sitemap_write_invalid");
+  });
+
   maybeIt("PASS：全关未登记", () => {
     const r = runGateBash5({});
     expect(r.status).toBe(0);
@@ -434,5 +460,57 @@ describe("bash 5 下的行为对照（docker bash:5.2，不可用则跳过）", 
     });
     expect(r.status).toBe(0);
     expect(r.stdout).toContain("PREPROD_WRITE_GATES=PASS approved=catalog_write open=catalog_write");
+  });
+});
+
+
+describe("sitemap registration and runtime parsing", () => {
+  for (const feature of ["false", "true"]) for (const write of ["false", "true"]) {
+    for (const registered of [false, true]) {
+      it(`${feature}/${write}, registered=${registered}`, () => {
+        const env = {
+          NODE_ENV: "test" as const,
+          FEATURE_SITEMAP_AUTO_REFRESH: feature,
+          SITEMAP_AUTO_REFRESH_ALLOW_WRITE: write,
+          PREPROD_APPROVED_OPEN_WRITE_GATES: registered ? "sitemap_write" : "",
+        };
+        const result = runGate(env);
+        const open = feature === "true" || write === "true";
+        expect(result.status).toBe(open && !registered ? 65 : 0);
+        expect(result.stdout.trim()).toBe(open && !registered ? "sitemap_write" :
+          `PREPROD_WRITE_GATES=PASS approved=${registered ? "sitemap_write" : "none"} open=${open ? "sitemap_write" : "none"}`);
+        expect(isSitemapAutoRefreshEnabled(env)).toBe(feature === "true");
+        expect(isSitemapAutoRefreshWriteAllowed(env)).toBe(write === "true");
+      });
+    }
+  }
+  for (const registered of [false, true]) for (const key of ["FEATURE_SITEMAP_AUTO_REFRESH", "SITEMAP_AUTO_REFRESH_ALLOW_WRITE"] as const) {
+    for (const value of [undefined, "", "TRUE", "1", " true", "false "]) {
+      it(`rejects ${key}=${String(value)}, registered=${registered}`, () => {
+        const env = { NODE_ENV: "test" as const, PREPROD_APPROVED_OPEN_WRITE_GATES: registered ? "sitemap_write" : "", [key]: value };
+        const result = runGate(env);
+        expect(result.status).toBe(65);
+        expect(result.stdout.trim()).toBe("sitemap_write_invalid");
+        expect(isSitemapAutoRefreshEnabled(env)).toBe(false);
+        expect(isSitemapAutoRefreshWriteAllowed(env)).toBe(false);
+      });
+    }
+  }
+  it("accepts the historical template profile and emits all three gates", async () => {
+    const template = await readFile(path.join(root, "infra/preproduction/preprod.env.example"), "utf8");
+    const keys = Object.keys(ALL_CLOSED);
+    const values = Object.fromEntries(template.split("\n").filter((line) => keys.includes(line.split("=")[0]))
+      .map((line) => [line.split("=")[0], line.slice(line.indexOf("=") + 1)]));
+    const result = runGate(values);
+    expect(result.status).toBe(0);
+    expect(result.stdout.trim()).toBe("PREPROD_WRITE_GATES=PASS approved=catalog_write,promo_write,sitemap_write open=catalog_write,promo_write,sitemap_write");
+  });
+
+  it("normalizes duplicate approvals; unknown names still fail closed", () => {
+    expect(runGate({ PREPROD_APPROVED_OPEN_WRITE_GATES: " sitemap_write ,sitemap_write," }).stdout)
+      .toContain("approved=sitemap_write open=none");
+    const result = runGate({ PREPROD_APPROVED_OPEN_WRITE_GATES: "sitemap_write,sitemap" });
+    expect(result.status).toBe(65);
+    expect(result.stdout).toContain("approved_open_write_gate_unknown value=sitemap");
   });
 });
