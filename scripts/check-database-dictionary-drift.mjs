@@ -119,6 +119,14 @@ function assertStaticConsistency(schemaTables, records) {
     }
   }
 
+  for (const record of active.filter((item) => item.data_type === "function")) {
+    if (record.record_kind !== "constraint" || record.managed_by !== "migration_sql"
+      || record.function_schema !== "public" || record.function_identity_arguments !== ""
+      || record.function_return_type !== "trigger" || record.function_security !== "invoker") {
+      problems.push(`invalid registered trigger function contract ${record.stable_key}`);
+    }
+  }
+
   // C-30A (施工工单_C30_换小说_移植CPS换租客_2026-09-08.md §4A.1): three new
   // models (ArticleNovelRebindPreview/Batch/BatchItem) push the count from
   // 49 to 52 -- updated alongside the migration that adds them, same as the
@@ -135,7 +143,7 @@ function assertStaticConsistency(schemaTables, records) {
 async function assertCatalogConsistency(records) {
   const prisma = new PrismaClient();
   try {
-    const [tables, columns, constraints, indexes, triggers] = await Promise.all([
+    const [tables, columns, constraints, indexes, triggers, functions] = await Promise.all([
       prisma.$queryRawUnsafe(`
         SELECT tablename AS name
         FROM pg_tables
@@ -165,6 +173,14 @@ async function assertCatalogConsistency(records) {
         JOIN pg_namespace n ON n.oid = r.relnamespace
         WHERE n.nspname = 'public' AND NOT t.tgisinternal
       `),
+      prisma.$queryRawUnsafe(`
+        SELECT n.nspname AS schema_name, p.proname AS name,
+               pg_get_function_identity_arguments(p.oid) AS identity_arguments,
+               format_type(p.prorettype, NULL) AS return_type,
+               p.prosecdef AS security_definer
+        FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+        WHERE n.nspname = 'public' AND p.prokind = 'f'
+      `),
     ]);
 
     const actualTables = new Set(tables.map(({ name }) => name));
@@ -188,6 +204,17 @@ async function assertCatalogConsistency(records) {
         problems.push(`dictionary field missing from database ${record.table_name}.${record.field_name}`);
       }
       if (record.record_kind !== "constraint" || record.managed_by === "application_contract") {
+        continue;
+      }
+      if (record.data_type === "function") {
+        const fn = functions.find((candidate) =>
+          candidate.schema_name === record.function_schema
+          && candidate.name === record.physical_name
+          && candidate.identity_arguments === record.function_identity_arguments);
+        if (!fn || fn.return_type !== record.function_return_type
+          || fn.security_definer !== (record.function_security === "definer")) {
+          problems.push(`dictionary function missing or incompatible ${record.physical_name}`);
+        }
         continue;
       }
       expectedPhysical.add(record.physical_name);

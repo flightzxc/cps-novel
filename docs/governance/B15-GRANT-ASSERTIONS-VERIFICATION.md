@@ -1,6 +1,8 @@
-# B-15：x6 权限契约修复与 x9 排查交付
+# B-15：x6 权限契约与 x9 人工核对数据库防线
 
-日期：2026-09-27。分支：`fix/b15-grant-assertions`。本单为本地待复核交付，未合并、未开 PR、未发版、未操作任何既有部署或远端主机。
+日期：2026-09-27。分支：`fix/b15-grant-assertions`。当前 x9 已按 Owner 裁决实现方案 (a)，真实库通过，待发布。**全量门禁仍未通过：非白名单 Docker Bash 5 对照用例在两轮全量和单文件复核中持续超时，且产生 Vitest 通信错误；未按例外放行。**已将指定开发线合入本工作分支；未将本分支合回开发线，未推送、未开 PR、未发版、未操作任何既有部署或远端主机。
+
+第 1–4 节保留 `f406f4b` 的 x6 已复核交付与当时的 x9 调查证据，其中“待裁决 / 未实施 / 已知失败”均为历史状态。当前实现与验证见第 5 节。
 
 ## 1. 基线与范围
 
@@ -142,7 +144,7 @@ Tests  1 failed | 2 passed (3)
 X9_DISPOSABLE_DATABASE_CLEANED=yes
 ```
 
-**已知失败、待 Owner 裁决**，不修改、不隐藏、不记为门禁全绿。Web 列授权与双管理员 CAS 两条通过；失败的旧用例挡在首个 worker 错误断言，不能把后续 owner 分支写成此次已执行。
+**历史状态（f406f4b）：已知失败、待 Owner 裁决**，当时不修改、不隐藏、不记为门禁全绿。Web 列授权与双管理员 CAS 两条通过；失败的旧用例挡在首个 worker 错误断言，不能把后续 owner 分支写成此次已执行。
 完整路径清单、静态核查、B-10 边界、两方案与实施文件范围见 [x9 ADR 提案](../adr/ADR-B15-MANUAL-REVIEW-BOUNDARY.md)。推荐 (a)，尚未实施。
 
 ### 额外运行器与隔离
@@ -150,3 +152,86 @@ X9_DISPOSABLE_DATABASE_CLEANED=yes
 最终交付没有 grants 改动，phase-d/publication-preview 的条件门禁不适用；变异为 disposable 库中的临时额外授权，已恢复，不是待部署权限变更。
 `git diff --exit-code -- infra/postgres/grants.sql tests/integration/task-admin/x9-postgres.test.ts prisma src/lib/tasks worker` 用于确认禁止范围没有改动。
 参考 CPS 旧工作区保持 HEAD `d77c3b968285698529cf97c7f0f97b286d7a2a9c` 且 status 0 行；X 系列参考仓保持原有 HEAD/status 字节一致（只读比较，不清理既有改动）。未搬运 CPS 代码。
+
+## 5. x9 方案 (a) 实施（Owner 2026-09-27 裁决）
+
+### 基线、合并与交付定位
+
+- 同一 worktree / 分支继续，保留已复核的 `f406f4b27f8369964e993586ccccae23cdc7c606`。
+- `git fetch origin` 后确认 `origin/integration/v0.5.0-2026-09-27` 为 `17d07ccb588358f18fd32191cfc26ac2170fe30c`，执行 `git merge --no-ff --no-commit origin/integration/v0.5.0-2026-09-27`。
+- 实际没有冲突；`database-governance.md` 自动合并。开发线的 `schedule_run.skip_reason`、字典记录、治理说明和 x6 的派生契约均保留；没有冲突文件需要手工取舍。
+- 独立 node_modules 目录，非符号链接；重新 `npx prisma generate` 后客户端含 `skipReason`。
+- 合并暂存状态的 `npm run typecheck`、x6（4）、worker-light（12）、phase-d（83）全通过，随后独立提交 `351d2d39ce3e8a91e67d6167fab11ea0ba2bf911`，中文说明及 `Agent: codex` / `Model: GPT-6`。
+- 实现提交是本报告所在的后续提交；最终交付回复给出完整实现 HEAD，避免在提交内容内自引用尚未生成的 SHA。未 push / PR / 发版。
+
+### 实现边界
+
+**x9 当前为真实库通过，不再是已知失败。** 应用层拒绝与数据库层拒绝分别断言：前者仍为 `Illegal side-effect transition`；后者检查专用消息与 SQLSTATE `42501`。
+
+新迁移 `20260927090000_side_effect_manual_review_guard` 的 SQL 全文如下；没有修改历史迁移、Prisma schema 或 grants：
+
+```sql
+CREATE FUNCTION public.reject_side_effect_manual_review_exit()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY INVOKER
+AS $$
+BEGIN
+  IF current_user <> 'web_app' THEN
+    RAISE EXCEPTION USING
+      ERRCODE = '42501',
+      MESSAGE = 'side_effect_manual_review_exit_requires_web_app';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION
+  public.reject_side_effect_manual_review_exit()
+  FROM PUBLIC;
+
+CREATE TRIGGER side_effect_manual_review_exit_guard
+BEFORE UPDATE ON public.side_effect_intent
+FOR EACH ROW
+WHEN (
+  OLD.status = 'manual_review_required'
+  AND NEW.status IS DISTINCT FROM OLD.status
+)
+EXECUTE FUNCTION public.reject_side_effect_manual_review_exit();
+```
+
+触发器只对人工核对状态出边执行。`current_user` 必须为 web_app；同状态更新及其它起点无新增限制。migration_owner 的 schema 迁移照常，但直接改走人工核对状态也被拒；特殊修复必须另走显式、审计化维护决策。没有 owner 白名单、GUC/actor 旁路或 SECURITY DEFINER。
+
+现有全函数 EXECUTE revoke 继续有效，运行角色没有新增函数授权；真实库证明函数 EXECUTE 被撤销时触发器仍工作。worker 保留 INSERT/UPDATE/SELECT，Web 精确保持 status/response_shape/confirmed_at 三列 UPDATE。角色关系与 SET ROLE/禁用触发器的负例使用真实 worker 连接；bootstrap 的角色切换仅用于一次性库测试，不给 worker 新增成员资格。
+
+字典新增函数与触发器两个 constraint / migration_sql 记录，data_type 分别为 function / permission_trigger；记录 1236→1238，active 1166→1168，trigger 2→3，表数仍 53。检查器只对已登记函数校验 schema、名称、零参数签名、trigger 返回类型和 invoker 属性；没有要求补登记历史函数。
+
+### 测试覆盖和迁移证据
+
+x9 共 27 条真实库用例，每个库两次 grants 回放后各执行一次。包括：
+
+- worker 通用 transition 与专用 readback 对人工核对出边的应用拒绝；prepared / claim_retry_blocked 回读确认成功。
+- 原始 SQL / Prisma updateMany × confirmed / failed / prepared / claim_retry_blocked 共 8 个数据库拒绝用例，比较整行确保 status、response_shape、confirmed_at 等不变。
+- owner 出边拒绝；worker 无 Web/owner 成员资格，不能 SET ROLE 或禁用 trigger；bootstrap SET LOCAL ROLE 的 current_user/session_user 区分。
+- worker 同状态更新、其它四种起点成功；Web effect_confirmed / no_effect_confirmed 两裁决、双管理员 CAS 单赢家、重放只留一条审计。
+- 临时撤销 Web 审计 INSERT 后人工裁决整笔回滚，finally 恢复权限；真实 finalizeTaskItem/protectedWrite 内先写 PromoLink、Article、审计及任务/任务条目，随后注入违规状态写，整笔事务回滚，所有快照不变。
+
+空库从零执行全部 20 条迁移；存量路径在独立数据库执行原 19 条迁移，插入五种状态意图及 `schedule_run.skip_reason` 样本，再执行新迁移。历史迁移名称/校验和/完成时间和样本整行摘要保持一致；两库各两次原子 grants 回放通过，再 deploy 无待执行迁移。静态及 live drift 为 0。
+
+全部 18 个原运行器、最终门禁、迁移与回放标记、每条命令尾行、变异和清理记录见 [本次完整证据](evidence/b15-x9-2026-09-27.md)。原 catalog-batch 的 5 skipped 未计作通过，另在真实库开启三个生命周期开关补跑 11 条，0 skipped。
+
+p1-05b / p1-06 按 Owner 要求不修改：原始退出码均 1，实际分别在第 79 / 196 行 lint 命中 B-16 的 3 个旧错误。p1-06 的 43 表、3 迁移旧断言及 Bash 3.2 的失败不中止问题单列交接，不能记作通过；已执行的源库/恢复库 drift 与真实库测试如实记录，未执行的后续步骤不倒填。
+
+### 全量首轮与复跑
+
+`npm test -- --maxWorkers=4` 首轮 exit 1：3 个文件、4 条用例失败，另有 2 个 Vitest `onTaskUpdate` Unhandled Error。失败包括 B-14 的文章列表 5s 超时，以及非白名单的 Lane B sampler 两条 90s 超时、sitemap Bash 5 用例 15s 超时；这些不能直接按 B-6/B-14 例外算通过。
+保留首轮日志，依 B-14 例外以 `npm test -- --maxWorkers=2` 完整重跑；没有跳过用例、提高超时阈值或修改相关测试。第二轮 exit 1，剩余 Docker Bash 5 文件 3 条超时及 2 个通信超时；sampler 与 B-14 均通过。随后以单 worker 隔离复核该文件，仍 3 failed / 65 passed / 1 Unhandled Error，因此没有启动原计划的第三轮串行全量。该文件及执行脚本相对合并基线完全相同；当前保留门禁阻断，不擅自扩大例外白名单。各轮结果与错误检查列在完整证据中。`npm run build` exit 0，静态 drift exit 0。
+
+### 改动文件与红线
+
+- `prisma/migrations/20260927090000_side_effect_manual_review_guard/migration.sql`：唯一新增数据库防线。
+- `scripts/run-x9-postgres-verification.sh`、`tests/integration/task-admin/x9-postgres.test.ts`：双迁移路径、双回放与 27 条分层断言。
+- `scripts/check-database-dictionary-drift.mjs`、`tests/backend/database/p1-06-static.test.ts`、`docs/governance/database-schema-dictionary.jsonl`：函数精确 catalog 校验与数量/对象登记。
+- `docs/governance/database-governance.md`、`docs/adr/ADR-B15-MANUAL-REVIEW-BOUNDARY.md`、本报告和证据文件：Owner 决策、权限边界与验证记录。
+
+相对合并提交核对 `src/`、`worker/`、grants、Prisma schema、历史迁移和 p1-05b/p1-06 运行器无差异。生命周期业务逻辑和状态机业务图未改。参考 CPS 两工作区保持执行前 HEAD/status 字节一致。

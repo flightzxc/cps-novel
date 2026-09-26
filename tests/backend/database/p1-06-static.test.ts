@@ -167,8 +167,9 @@ describe("P1-06 database operations static contracts", () => {
     // constraint/index (deliberately unindexed, see that field record's own
     // `notes`) -- running total 1234 + 1 = 1235.
     // WO5 adds schedule_run.skip_reason (nullable, no new physical constraint).
-    expect(records).toHaveLength(1236);
-    expect(new Set(records.map((line) => JSON.parse(line).stable_key)).size).toBe(1236);
+    // B-15 adds the manual-review trigger and its invoker function.
+    expect(records).toHaveLength(1238);
+    expect(new Set(records.map((line) => JSON.parse(line).stable_key)).size).toBe(1238);
     const intents = records.map((line) => JSON.parse(line)).filter(
       (record) => record.table_name === "side_effect_intent"
         && ["status", "response_shape", "confirmed_at"].includes(record.field_name),

@@ -422,7 +422,7 @@ C-30A（换小说地基，`20260911090000_c30_novel_rebind_foundation`）新增�
 - Worker 是 at-least-once。claim 或过期回收每次易主都生成新 token 并令 epoch +1；heartbeat 不改变 epoch。
 - pending claim 使用 `status='pending'` 专用查询；recovery 使用 `status='processing' AND locked_until < transaction_timestamp()` 专用查询。
 - public code 和 credential fingerprint 的应用层预查只用于提示，正确性由数据库唯一约束保证。
-- `side_effect_intent` 在外部调用前独立事务提交；未确认结果进入 `claim_retry_blocked`。通用 worker 迁移图中 `claim_retry_blocked` 只能进入 `manual_review_required`；由 readback 证据确认（`prepared`/`claim_retry_blocked` → `confirmed`）只经 `confirmSideEffectIntentByReadbackInTransaction` 专用边界并与业务写同事务；`manual_review_required` 的出边只属于 X9 人工裁决。
+- `side_effect_intent` 在外部调用前独立事务提交；未确认结果进入 `claim_retry_blocked`。通用 worker 迁移图中 `claim_retry_blocked` 只能进入 `manual_review_required`；由 readback 证据确认（`prepared`/`claim_retry_blocked` → `confirmed`）只经 `confirmSideEffectIntentByReadbackInTransaction` 专用边界并与业务写同事务；`manual_review_required` 的出边只属于 X9 人工裁决。B-15（Owner 2026-09-27）以 `side_effect_manual_review_exit_guard` BEFORE UPDATE 触发器保证：仅有效 `current_user = web_app` 能改走；函数 `reject_side_effect_manual_review_exit()` 为 SECURITY INVOKER，其他角色（包括 migration_owner）报 SQLSTATE 42501 / `side_effect_manual_review_exit_requires_web_app`。同状态更新放行；其它起点保持不变。
 - `operation_audit` 和本地业务写同事务；不建立独立审计库。
 - `(url, revision)` 是 IndexNow 唯一幂等身份。
 - ScheduleRun 与 CronRun/Task 的 marker 和 enqueue 在同一事务完成，禁止“只有 marker 没有 task”。
@@ -444,14 +444,16 @@ C-30A（换小说地基，`20260911090000_c30_novel_rebind_foundation`）新增�
 
 | 角色 | 对象所有权 / DDL | 读取 | 写入 | 额外限制 |
 | --- | --- | --- | --- | --- |
-| `migration_owner` | 唯一应用对象 Owner；执行 Migration | 全部 | 全部 | 不作为应用运行身份 |
+| `migration_owner` | 唯一应用对象 Owner；执行 Migration | 全部 | 全部（人工核对状态出边仍被 B-15 trigger 拒绝） | 不作为应用运行身份；特殊状态修复须另行显式、审计化维护决策 |
 | `web_app` | 无 | S0/S1 与公开章节正文；凭证仅元数据；`site_setting`；仅为发布门禁与公开 `/go` 读取 `promo_link.web_url/app_url` | 后台元数据、任务入队、Audit 追加；同步 add/replace 可 INSERT 新密文及轮换元数据；`site_setting` 仅站点设置服务的 13 列 + `carousel_config_json` + `updated_at` UPDATE（受控入口与派生契约见 `B15-GRANT-ASSERTIONS-VERIFICATION.md`）；X9 人工裁决仅可 UPDATE `side_effect_intent(status,response_shape,confirmed_at)` | 禁止 SELECT/解密已保存 `encrypted_secret`、完整 fingerprint、`promo_link.upstream_code` 与原始上游 payload；目的 URL 只供受控发布/跳转服务使用，不进入通用后台投影或审计；SiteSetting 禁止 INSERT/DELETE/其他列 UPDATE；人工裁决不得改 intent identity/evidence/linkage；超时 `30s / 5s / 60s`（statement / lock / idle transaction） |
-| `worker_app` | 无 | 完成任务与凭证处理所需全部列，显式包括 `side_effect_intent`（含 attempt fingerprint）；`site_setting` | 业务/任务状态与追加日志；仅章节撤回正文允许 DELETE | `operation_audit` 等追加日志禁止 UPDATE/DELETE；SiteSetting 只读；通用 intent transition 无 `manual_review_required` 出边，且 `claim_retry_blocked` 无 `confirmed` 出边（readback 确认走专用边界）；超时 `5min / 15s / 5min` |
+| `worker_app` | 无 | 完成任务与凭证处理所需全部列，显式包括 `side_effect_intent`（含 attempt fingerprint）；`site_setting` | 业务/任务状态与追加日志；仅章节撤回正文允许 DELETE | `operation_audit` 等追加日志禁止 UPDATE/DELETE；SiteSetting 只读；数据库 trigger 拒绝离开 `manual_review_required`（不能靠直接 SQL 绕过）；通用 intent transition 无该出边，且 `claim_retry_blocked` 无 `confirmed` 出边（readback 确认走专用边界）；超时 `5min / 15s / 5min` |
 | `analyst_ro` | 无 | S0/S1 列 | 无 | `default_transaction_read_only=on`；`statement_timeout=30s`；禁止 S2/S3 |
 | `backup_role` | 无 | 完整逻辑/物理备份所需全部表、序列 | 无 | `REPLICATION` 仅用于 `pg_basebackup`；凭证仅由备份系统托管 |
 | `scheduler_app` | 无 | schedule/generic task 元数据 | 仅创建/更新 schedule 与 GenericTask 元数据 | 禁止 Auth/Credential secret；不导入 Worker handler registry；无 Credential key；超时 `1min / 5s / 60s` |
 
 `infra/postgres/roles.sql` 不含密码；登录凭证由运行时 secret manager 或一次性测试脚本生成。
+B-15 触发器函数无需向运行角色授予 EXECUTE；现有全函数 REVOKE 后触发器仍正常执行。对象 owner 可以迁移 schema，但直接迁移人工核对状态同样被拒；特殊修复必须另走显式、审计化维护决策，不增加 owner 白名单。函数物理契约以字典 `data_type=function` 登记 public schema、零参数签名、trigger 返回类型与 invoker 属性，live drift 会逐项验证；既有未登记函数不在新增检查范围。
+
 `infra/postgres/grants.sql` 必须在每次 Migration 后重放；未来对象默认关闭，新增表或敏感列必须显式评审后授予。
 `PUBLIC` 没有 `public` schema 的 `CREATE`，运行角色没有数据库 `TEMPORARY` 或 schema `CREATE`。
 
@@ -568,3 +570,7 @@ P1-08B 新增独立 `scheduler_app`，只授予 schedule/generic task 元数据�
 ### 2026-09-26 工单 5：周期扫描跳过原因
 
 增量迁移 `20260926150000_periodic_sweep_skip_reason` 为 schedule_run 添加可空 varchar(96) skip_reason。记录 previous_scan_in_flight / misfire_skip，复用 skipped 状态及时间桶唯一键。scheduler_app 使用现有表级授权；不扩大凭据权限。
+
+### 2026-09-27 B-15：人工核对状态的数据库防线
+
+增量迁移 `20260927090000_side_effect_manual_review_guard` 新增上述函数与触发器，不修改 grants 或 Prisma schema。字典新增两条 migration_sql 物理对象记录，recordCount=1238、activeCount=1168、triggerCount=3，53 张表不变。空库/存量库各两次原子 grants 回放、角色边界、状态不变、Web 裁决、原子回滚、全量门禁及变异证据见 [B-15 验证报告](B15-GRANT-ASSERTIONS-VERIFICATION.md)。本改动已实现，待发布。

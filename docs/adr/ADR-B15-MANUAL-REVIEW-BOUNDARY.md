@@ -1,13 +1,14 @@
-# B-15：SideEffectIntent 人工核对出边的数据库防线（待 Owner 裁决）
+# B-15：SideEffectIntent 人工核对出边的数据库防线（Owner 已裁决方案 a）
 
 - 日期：2026-09-27
-- 状态：**提案，未裁决、未实施**。本单只排查 x9，不修改其测试、grants、迁移或生命周期逻辑。
-- 基线：`origin/integration/v0.4.5-2026-09-26` → `7f9dfe3a9b8122de1375540b08341c9d6e2dda62`，Final `ff1d2dd`。
+- 状态：**已裁决（Owner 2026-09-27 选 (a)）、已实现，待发布**。本次增加数据库防线与测试；grants、领取 handler 和状态机业务图保持不变。
+- 历史调查基线：`origin/integration/v0.4.5-2026-09-26` → `7f9dfe3a9b8122de1375540b08341c9d6e2dda62`，Final `ff1d2dd`。
+- 实施基线：已复核 `f406f4b` 合入 `17d07cc`，合并提交 `351d2d39ce3e8a91e67d6167fab11ea0ba2bf911`。
 - 关联：[B-15 验证报告](../governance/B15-GRANT-ASSERTIONS-VERIFICATION.md)、[领推广生命周期 ADR](ADR-PROMO-CLAIM-BATCH-LIFECYCLE.md)。仓外登记为 `产品原型及文档/cps海阅/待办登记_领推广生命周期_2026-09-24.md` B-10/B-15。
 
 ## 1. 结论与权限事实
 
-**x9 用例目前为“已知失败、待 Owner 裁决”。**
+**历史排查结论（f406f4b）：旧 x9 用例为已知失败。现已拆分应用/数据库断言并实现方案 (a)，当前验证结果见第 7 节。**
 `tests/integration/task-admin/x9-postgres.test.ts:144–161` 在真实 worker 连接上调用状态机，期望数据库 permission denied，实际先被应用状态机拒绝。
 这不是 v0.4.5 回归；主控已在 v0.4.4 `845ca02` 复现相同失败。本单没有再次运行旧版本。
 
@@ -15,7 +16,7 @@
 历史 `1b9f82c`（2026-09-03）的 diff **仅新增 worker SELECT**，INSERT/UPDATE 在该提交之前已存在；不能把三种权限都归因于该提交。
 `prisma/migrations/20260803090000_p1_initial_schema/migration.sql:1237` 只有状态值域 CHECK，不能表达 OLD → NEW 迁移约束。
 全量迁移内的两个 trigger 保护推广短码与追加审计（同文件 `:1318,:1333`），无 side_effect_intent 状态迁移 trigger；x6 live catalog 也确认 `triggerCount=2`。
-因此 worker 用原始 SQL 或 Prisma updateMany 直接改这列，在权限/触发器层没有人工核对出边的专属防线；当前代码的应用层拒绝依然有效。
+因此在 f406f4b 时，worker 用原始 SQL 或 Prisma updateMany 直接改这列，没有数据库专属防线。以下第 1–4 节路径表保留该历史调查快照；本次新增防线后的差异见第 7 节。
 
 ## 2. 所有现有状态写入路径与角色
 
@@ -79,7 +80,7 @@ rg -n 'side_effect_intent|TRIGGER' prisma/migrations
 | B-10 仅核查 | worker/CLI 只提供证据，不出人工核对状态 | 同样不需要出边 |
 | 绕过与局限 | 不防可信 owner/superuser 通过 DDL 禁用防线；也不证明 Web 的直接 SQL 一定经过服务审计 | 静态扫描不能等价于数据库约束，对别名、动态 SQL、脚本、后续新增目录要持续维护 |
 
-### (a) 待批准后的实施清单
+### (a) Owner 已批准的实施清单
 
 1. 新增 `prisma/migrations/<新时间戳>_side_effect_manual_review_guard/migration.sql`，不修改历史迁移。创建 `BEFORE UPDATE` 行级 trigger，条件是 `OLD.status = 'manual_review_required' AND NEW.status IS DISTINCT FROM OLD.status`。用 SECURITY INVOKER 函数检查真实 `current_user = 'web_app'`，否则抛专用错误（建议 SQLSTATE 42501）。不要用可由应用设置的 GUC/actor 字段判断，不使用会把 current_user 变成 owner 的 SECURITY DEFINER。
 2. 同状态更新允许；所有非人工核对起点保持原语义。worker 不应有 SET ROLE web_app/migration_owner 成员资格或禁用 trigger 的能力，真实库测试覆盖角色关系。维护迁移用 owner 改 schema 不受影响；owner 若直接迁移人工核对状态也会被 trigger 拒绝，特殊修复需要显式、审计化的维护决策，不能悄悄加 owner 白名单。
@@ -102,8 +103,21 @@ rg -n 'side_effect_intent|TRIGGER' prisma/migrations
 
 ## 6. 推荐及生命周期红线
 
-**推荐 (a)，待 Owner 批准。** 人工核对意味着上游结果不明，通用 worker 已有较宽 UPDATE，数据库拒绝可防后续脚本或代码遗漏状态机守卫；这与当前“只有 X9 人工裁决能出边”的应用规则一致，且无需改变领取流程。
+**Owner 于 2026-09-27 选择 (a)，以下为裁决理由。** 人工核对意味着上游结果不明，通用 worker 已有较宽 UPDATE，数据库拒绝可防后续脚本或代码遗漏状态机守卫；这与当前“只有 X9 人工裁决能出边”的应用规则一致，且无需改变领取流程。
 (b) 可作为 Owner 明确接受风险后的选择，不能把只改报错文本描述成恢复数据库保证。
 
 两方案均不改变预读保留、独立提交意图、maxAttempts=1、结果不明只回读、租约围栏、原子确认。方案 (a) 的 trigger 只检查人工核对起点，对 prepared/blocked 的正常确认无影响。
 数据库 trigger 不能代替预读/精确回读证据，也不能替代同事务确认；未来 B-10 若提出自动出边/自动对账，必须单独裁决并重验这些红线。
+
+## 7. 方案 (a) 实现记录（2026-09-27）
+
+- 合并提交 `351d2d39ce3e8a91e67d6167fab11ea0ba2bf911`：保留 f406f4b，合入开发线 17d07cc，无冲突；合并门禁 tsc/x6/worker-light/phase-d 全绿。
+- 新迁移 `20260927090000_side_effect_manual_review_guard`；函数 `public.reject_side_effect_manual_review_exit()`，触发器 `side_effect_manual_review_exit_guard`。
+- 只检查 OLD.status=manual_review_required 且 NEW.status IS DISTINCT FROM OLD.status。SECURITY INVOKER 检查 current_user，唯一允许值 web_app；专用错误 `side_effect_manual_review_exit_requires_web_app` / SQLSTATE `42501`。
+- 同状态更新和其它起点放行。migration_owner 直接出边也拒绝，这是有意限制；有审计的特殊维护须另行显式决策。owner 的 DDL 权限不因此消失。
+- 不更改 worker INSERT/UPDATE/SELECT、Web 三列 UPDATE；全函数 EXECUTE revoke 后触发器仍有效。没有新增运行角色函数授权，也不把 TypeScript 服务名当角色身份。
+- JSONL 新增函数/触发器两记录；drift 工具核查已登记函数的 schema、签名、返回类型和 invoker。现有函数无需追补登记。
+- x9 覆盖原始 SQL/Prisma 的全部人工核对出边拒绝、owner 拒绝、SET ROLE/禁用 trigger 拒绝、有效角色与登录角色差异、同状态放行、其它起点、应用/回读守卫、Web 两种裁决、CAS、幂等及两类事务回滚。
+- x9 运行器同时验证空库 20 迁移和存量 19→20 迁移；存量保留五种意图状态及 schedule_run.skip_reason 样本，每库两次 grants 回放，旧数据/历史迁移校验和不变。
+- x9、迁移/回放、变异、tsc、build、drift 已通过；全量因非白名单 Docker Bash 5 对照测试超时及 Vitest 通信错误仍阻断，不能宣称总门禁全绿。
+- 完整运行器结果、变异及命令尾行见 [B-15 验证报告](../governance/B15-GRANT-ASSERTIONS-VERIFICATION.md)。未部署，B-10 的自动核查/对账仍未实施。
