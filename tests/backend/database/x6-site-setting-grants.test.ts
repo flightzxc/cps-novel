@@ -6,6 +6,8 @@ import { describe, expect, it } from "vitest";
 import { resolveAdminRoute } from "@/server/auth/registry";
 import { P2_04_ADMIN_REGISTRY } from "@/app/api/admin/_lib/registry";
 
+import { managedSiteSettingUpdateColumns } from "./_lib/site-setting-write-contract";
+
 const root = resolve(import.meta.dirname, "../../..");
 const read = (path: string) => readFileSync(resolve(root, path), "utf8");
 
@@ -26,15 +28,9 @@ describe("X6 SiteSetting infrastructure and registry contracts", () => {
   it("grants Web and Worker reads and only the governed settings columns to Web UPDATE", () => {
     const grants = read("infra/postgres/grants.sql");
     expect(grants).toContain("GRANT SELECT ON TABLE site_setting TO web_app, worker_app;");
-    const updateGrant = grants.match(/GRANT UPDATE \(([\s\S]*?)\) ON site_setting TO web_app;/)?.[1] ?? "";
-    for (const column of [
-      "site_name", "site_description", "home_meta_title", "home_meta_description",
-      "default_og_image", "google_search_console_verification", "footer_copyright_text",
-      "footer_disclaimer_text", "friend_links", "indexnow_host", "indexnow_key",
-      "indexnow_key_location", "ga4_measurement_id", "carousel_config_json", "updated_at",
-    ]) {
-      expect(updateGrant).toContain(column);
-    }
+    const updateColumns = [...grants.matchAll(/GRANT UPDATE \(([^;]*?)\) ON site_setting TO web_app;/g)]
+      .flatMap((match) => match[1].split(",").map((column) => column.trim()));
+    expect([...new Set(updateColumns)].sort()).toEqual(managedSiteSettingUpdateColumns());
     expect(grants).not.toMatch(/GRANT[^;]+site_setting[^;]+analyst_ro/s);
     // PR6 lane E gave scheduler_app a column-scoped SELECT (id,
     // carousel_config_json) exception -- see
@@ -72,23 +68,11 @@ describe("X6 SiteSetting infrastructure and registry contracts", () => {
         expect(record.read_roles).not.toContain("scheduler_app");
       }
     }
-    for (const field of [
-      "site_name",
-      "site_description",
-      "home_meta_title",
-      "home_meta_description",
-      "default_og_image",
-      "google_search_console_verification",
-      "footer_copyright_text",
-      "footer_disclaimer_text",
-      "friend_links",
-      "indexnow_host",
-      "indexnow_key",
-      "indexnow_key_location",
-      "ga4_measurement_id",
-      "carousel_config_json",
-      "updated_at",
-    ]) {
+    const writableFields = [...fields.values()]
+      .filter((record) => record.write_roles.includes("web_app"))
+      .map((record) => record.field_name).sort();
+    expect(writableFields).toEqual(managedSiteSettingUpdateColumns());
+    for (const field of managedSiteSettingUpdateColumns()) {
       expect(fields.get(field)?.write_roles).toEqual(["migration_owner", "web_app"]);
     }
     expect(fields.get("id")?.write_roles).toEqual(["migration_owner"]);

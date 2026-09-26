@@ -8,6 +8,8 @@ import { requireAdminRouteAccess } from "@/server/auth/guards";
 import { P2_04_ADMIN_REGISTRY } from "@/app/api/admin/_lib/registry";
 import { updateAdminSiteSetting } from "@/server/site-settings/service";
 
+import { managedSiteSettingUpdateColumns } from "../../backend/database/_lib/site-setting-write-contract";
+
 import { TestOnlyInMemoryAuthStores } from "../../backend/auth/test-only-in-memory-stores";
 
 const enabled = process.env.X6_SITE_SETTING_DATABASE_TEST === "1";
@@ -142,25 +144,25 @@ describe.skipIf(!enabled).sequential("X6 SiteSetting PostgreSQL role boundary", 
     expect(audit.reason).toBe("x6 disposable verification");
   });
 
-  it("limits web_app to the four managed fields plus updated_at", async () => {
-    await expectDenied(() => web.$executeRawUnsafe("UPDATE site_setting SET site_name='denied' WHERE id=1"));
-    await expectDenied(() => web.$executeRawUnsafe("INSERT INTO site_setting (id, updated_at) VALUES (1, now())"));
-    await expectDenied(() => web.$executeRawUnsafe("DELETE FROM site_setting WHERE id=1"));
+  it("limits web_app UPDATE to the managed service fields and Prisma update timestamp", async () => {
+    // Effective privileges include table grants and inherited role grants too.
+    const writable = await owner.$queryRaw<Array<{ column_name: string }>>`
+      SELECT attname AS column_name
+      FROM pg_attribute
+      WHERE attrelid = 'public.site_setting'::regclass
+        AND attnum > 0 AND NOT attisdropped
+        AND has_column_privilege('web_app', attrelid, attnum, 'UPDATE')
+      ORDER BY attname
+    `;
+    expect(writable.map(({ column_name }) => column_name)).toEqual(managedSiteSettingUpdateColumns());
 
-    const writable = await owner.$queryRawUnsafe<Array<{ column_name: string }>>(`
-      SELECT column_name
-      FROM information_schema.column_privileges
-      WHERE table_schema='public' AND table_name='site_setting'
-        AND grantee='web_app' AND privilege_type='UPDATE'
-      ORDER BY column_name
-    `);
-    expect(writable.map(({ column_name: columnName }) => columnName)).toEqual([
-      "default_og_image",
-      "indexnow_host",
-      "indexnow_key",
-      "indexnow_key_location",
-      "updated_at",
-    ]);
+    // No-op id write avoids confusing singleton/CHECK failure with role denial.
+    await expect(web.$executeRaw`UPDATE site_setting SET id=id WHERE id=1`)
+      .rejects.toThrow(/permission denied for table site_setting/i);
+    await expect(web.$executeRaw`INSERT INTO site_setting (id, updated_at) VALUES (1, now())`)
+      .rejects.toThrow(/permission denied for table site_setting/i);
+    await expect(web.$executeRaw`DELETE FROM site_setting WHERE id=1`)
+      .rejects.toThrow(/permission denied for table site_setting/i);
   });
 
   it("allows worker_app to read but not mutate SiteSetting", async () => {
