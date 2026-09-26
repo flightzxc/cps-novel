@@ -43,7 +43,9 @@ worker 终态检查使用未完成条目的存在性查询，不在每本提交�
 
 ## 4. 验证与证据
 
-见同目录 `validation.txt`（命令和尾行）、`explain.txt`（完整四份执行计划）、`mutations.txt`（五项故障与恢复）。
+见同目录 `validation.txt`（命令和尾行）、`explain.txt`（完整四份执行计划）、`mutations.txt`（五项故障与恢复）、`changed-files.txt`（完整改动清单）。
+
+最终结果：tsc 0；定向 80 passed；全量 453 files / 6,781 tests passed，0 failed，无 Unhandled Error；独立 PG16 26 passed、skipped=0、字典 drift=0；build exit=0。收尾优化追加 23 项回归通过，排序编辑合同守卫所在套件 23 项通过。
 
 - 冻结旧投影来自 `69765e1`，放在 tests/fixtures，仅更改测试导入路径；真实库中同一 fixture 下新旧五个消费面逐项和 JSON 字节相等，覆盖自动、manual 空集合和标签翻译回退。
 - 开启用例验证仅靠文本非空的分类进入分类页、书卡、详情、首页/页脚和 sitemap；关闭仍为空时 404 且不进 sitemap。历史 run、空指针、停用标签不暴露，manual 非空/空快照均独占。
