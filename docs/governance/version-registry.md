@@ -16,6 +16,19 @@ Compose runtime 与 Health 身份一致性验证（`/api/health` 的 `metadataCo
 
 ## 当前快照
 
+### v0.4.5 —— 准备中（2026-09-26）
+
+- 开发线：`integration/v0.4.5-2026-09-26`，基于 v0.4.4 收官线 `845ca02`，
+  工单 1–4 与 7a 依次以 `--no-ff` 合入，集成基线 `d841df8`；五个合并提交均带 Claude Opus 5.5 复核 trailer。
+- PATCH 范围：试读改为文章发布后触发；sitemap 写闸登记、后台手动刷新与命令行；
+  数据库连接池合一、详情页去重复查询、侧栏二级菜单链接。无 schema、迁移或 grants 变更。
+- 试读触发逻辑已合入、尚未部署；试读仍不加入 worker 白名单，实际不执行。
+  7a 仅设计完成，前台自动标签代码未开发；不取消 80,006 条旧试读积压、不补已发布文章试读，不含工单 5/6/7。
+- 本阶段仅本地升版、完整门禁、推送及构建核对 linux/amd64 镜像归档；升版提交即 Final SHA，以第一阶段交付记录为准。
+  预生产部署须等 Owner 暂停批次并明确授权，实地验收必须在 Owner 恢复批次之前完成。
+- 部署时先备份 env，在既有批准名单追加 `sitemap_write` 并同步两个版本变量，再运行新版 preflight；
+  保持已批准写闸和其他实际配置。回滚目标 v0.4.4 Final `205220e`，须先备份并从批准名单移除 `sitemap_write`。
+
 ### v0.4.4 —— 已发布到预生产（2026-09-26 12:14 +0800，`RELEASE=PASS`）
 
 - 身份：开发线 `integration/v0.4.4-2026-09-26`，基于 `fb68856`，以 `--no-ff` 合入
@@ -166,6 +179,7 @@ Compose runtime 与 Health 身份一致性验证（`/api/health` 的 `metadataCo
 
 | Version | Date (+0800) | Bump | Summary | Commit / Release | Status |
 | --- | ---: | --- | --- | --- | --- |
+| `v0.4.5` | 2026-09-26 | PATCH | 发布后触发试读；sitemap 写闸登记、手动刷新与 CLI；连接池、详情页及侧栏优化；7a 仅设计；无迁移或 grants 变更 | `integration/v0.4.5-2026-09-26`；集成基线 `d841df8` 经 Opus 复核 | 准备中；未部署；试读仍不开放执行 |
 | `v0.4.4` | 2026-09-26（12:14） | PATCH | sitemap 候选缓存与 processing 发布漏刷修复；预生产 nginx 模板同步；无迁移或 grants 变更 | annotated tag `v0.4.4` → `205220ebc6f460e85e6fbc8901f592c979c87b83`；镜像 `cps-novel:0.4.4-205220e`；`RELEASE=PASS` | 预生产已发布；两次发布实地验收已通过；生产未上线 |
 | `v0.4.3` | 2026-09-25（22:35） | PATCH | admin2 独立身份建号与双 UUID 领取白名单；分片枚举真实库 helper 修复；无迁移或 grants 变更。详见“当前快照” | annotated tag `v0.4.3` → `505feeaae04ae1a23df3e7f6a27795f4128636f3`；镜像 `cps-novel:0.4.3-505feea`；`RELEASE=PASS` | ✅ 预生产已发布；admin2 2FA 绑定与双账号验证待完成；生产未上线 |
 | `v0.4.2` | 2026-09-25（03:57） | PATCH | 领推广按接口分别限速（4-A，开关默认关闭）+ 目录页位置登记（5-A，含迁移，不改执行行为）。详见"当前快照" | annotated tag `v0.4.2` → `33cd67bd34c34af1d3dbcbf78e6f2636d175c889`；镜像 `cps-novel:0.4.2-33cd67b`；`RELEASE=PASS` | ✅ 预生产已发布（按接口限速开关关闭）；生产未上线 |
