@@ -74,8 +74,12 @@ export async function initializeMaterializedTaskTags(
   try {
     const task = await db.genericTask.findUnique({ where: { id: taskId }, select: { taskType: true, mode: true } });
     if (task?.taskType !== "novel.materialize.v1" || task.mode !== "apply") return;
-    const unfinished = await db.genericTaskItem.count({ where: { taskId, status: { in: ["pending", "processing"] } } });
-    if (unfinished !== 0) return;
+    // Existence probe, not COUNT: counting a shrinking 80k-item remainder
+    // after every commit would make batch completion checks quadratic.
+    const unfinished = await db.genericTaskItem.findFirst({
+      where: { taskId, status: { in: ["pending", "processing"] } }, select: { id: true },
+    });
+    if (unfinished !== null) return;
     const novelIds: string[] = [];
     let after: string | undefined;
     while (true) {

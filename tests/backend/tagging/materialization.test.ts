@@ -16,8 +16,8 @@ describe("post-commit materialization tagging", () => {
     await initializeCreatedNovelTags(ids[0], { db: noDb, env: closed });
     await initializeCreatedNovelBatchTags(ids, "batch", { db: noDb, env: closed });
     await initializeMaterializedTaskTags(noDb, "task", { env: closed });
-    expect(createTaggingAutoClassifyTask).not.toHaveBeenCalled();
-    expect(initializeNovelTagSnapshot).not.toHaveBeenCalled();
+    expect(vi.mocked(createTaggingAutoClassifyTask).mock.calls.length).toBe(0);
+    expect(vi.mocked(initializeNovelTagSnapshot).mock.calls.length).toBe(0);
     expect(console.info).toHaveBeenCalledTimes(3);
     expect(console.error).not.toHaveBeenCalled();
   });
@@ -42,13 +42,13 @@ describe("post-commit materialization tagging", () => {
     expect(console.error).toHaveBeenCalledTimes(2);
   });
   it("waits until every item is terminal, then uses only persisted created novel IDs", async () => {
-    const count = vi.fn().mockResolvedValueOnce(1).mockResolvedValue(0);
+    const findFirst = vi.fn().mockResolvedValueOnce({ id: "pending-item" }).mockResolvedValue(null);
     const findMany = vi.fn().mockResolvedValue([
       { id: "item-a", result: { outcome: "created", novelId: ids[0] } },
       { id: "item-b", result: { outcome: "already_exists", novelId: ids[1] } },
       { id: "item-c", result: null },
     ]);
-    const db = { genericTask: { findUnique: vi.fn().mockResolvedValue({ taskType: "novel.materialize.v1", mode: "apply" }) }, genericTaskItem: { count, findMany } } as unknown as PrismaClient;
+    const db = { genericTask: { findUnique: vi.fn().mockResolvedValue({ taskType: "novel.materialize.v1", mode: "apply" }) }, genericTaskItem: { findFirst, findMany } } as unknown as PrismaClient;
     await initializeMaterializedTaskTags(db, "task", { env });
     expect(findMany).not.toHaveBeenCalled();
     await initializeMaterializedTaskTags(db, "task", { env });
@@ -57,7 +57,7 @@ describe("post-commit materialization tagging", () => {
   it("does not create empty tasks and cannot raise the hard limit", async () => {
     await initializeCreatedNovelBatchTags([], "empty", { db: noDb, env });
     await initializeCreatedNovelBatchTags(ids, "oversize", { db: noDb, env, segmentSize: 5001 });
-    expect(createTaggingAutoClassifyTask).not.toHaveBeenCalled();
+    expect(vi.mocked(createTaggingAutoClassifyTask).mock.calls.length).toBe(0);
     expect(console.error).toHaveBeenCalledTimes(1);
   });
 });
