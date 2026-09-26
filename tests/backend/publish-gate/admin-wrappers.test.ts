@@ -11,6 +11,7 @@ import { NOW, issueAuthorization, newStores, seedAdmin } from "./test-support";
 // already removed in L10N P2, before `isPublishableLocale` itself was
 // deleted in P4. Nothing in this file's call path reads either symbol.
 vi.mock("@/server/publication/dispatcher", () => ({
+  dispatchPublicationPreviews: vi.fn(async () => undefined),
   dispatchFirstPublicPublication: vi.fn().mockResolvedValue({ errors: [] }),
 }));
 

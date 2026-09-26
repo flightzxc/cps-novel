@@ -16,9 +16,6 @@ import type { SiteLocale } from "@/lib/locale/locale-canonical";
 
 import { createNovelWithBusinessIdRetry } from "./business-id";
 import {
-  enqueueContentCreationPreview,
-} from "./preview-enqueue";
-import {
   auditActorId,
   auditActorType,
   deriveLocale,
@@ -294,14 +291,8 @@ export async function materializeNovelFromSourceItem(
         ),
       { op: "content-creation.materializeNovelFromSourceItem", sourceItemId: novelSourceItemId, idempotencyKey: requestId },
     );
-    if (result.outcome !== "created" || input.deferPreviewEnqueue) return result;
-    const previewEnqueue = await enqueueContentCreationPreview(db, {
-      novelSourceItemIds: [novelSourceItemId],
-      requestToken: `moboreader.preview_refresh.v1:novel_materialize:${novelSourceItemId}`,
-      requestId,
-      actorId,
-    });
-    return { ...result, previewEnqueue };
+    // Preview is requested only after publication; materialization is metadata-only.
+    return result;
   } catch (error) {
     if (error instanceof ContentCreationConflictSignal) {
       return { outcome: "concurrent_creation_conflict" };

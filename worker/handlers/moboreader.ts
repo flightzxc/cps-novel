@@ -20,7 +20,6 @@ import {
   buildCatalogPosition,
   clampTotalChapterCount,
   catalogFinalizeGeneration,
-  catalogPreviewRequestToken,
   failMoboreaderCatalogFinalize,
   MOBOREADER_CATALOG_MAX_ATTEMPTS,
   MOBOREADER_CATALOG_FINALIZE_TARGET_ID,
@@ -30,7 +29,6 @@ import {
   normalizePaidFromChapter,
   paidFromChapterForUpdate,
   resolveMoboreaderPreviewRuntimeConfig,
-  stageMoboreaderPreviewRefreshTask,
   totalChapterCountForUpdate,
   MOBOREADER_TASK_TYPES,
 } from "../../src/lib/tasks/moboreader";
@@ -1106,21 +1104,8 @@ async function runCatalogFinalize(
     },
   });
 
-  let previewEnqueue: Prisma.InputJsonObject | null = null;
-  if (touchedSourceItemIds.length > 0) {
-    const preview = await stageMoboreaderPreviewRefreshTask(db, {
-      trigger: "auto",
-      catalogScanTaskId: lease.taskId,
-      channelAccountId: task.channelAccountId,
-      channelAppId: task.channelAppId,
-      novelSourceItemIds: touchedSourceItemIds,
-      requestToken: catalogPreviewRequestToken(lease.taskId, generation),
-      actorId: payload.actorId,
-      requestId: payload.requestId,
-      mode: "apply",
-    }, (write) => withTaskLeaseTransaction(db, lease, write), env, now);
-    previewEnqueue = preview as unknown as Prisma.InputJsonObject;
-  }
+  // Catalog scans never prefetch preview content; publication owns that trigger.
+  const previewEnqueue = null;
 
   const expected = typeof priorResult.batchExpectedCount === "number"
     ? priorResult.batchExpectedCount
@@ -1571,7 +1556,7 @@ export function createMoboreaderCatalogHandler(
     // what an apply run would have decided. Only the write is conditional:
     // dry_run must terminate the item without ever calling
     // `persistCatalogPage` (source-item upsert, label writes, PromoLink
-    // upsert + article binding, and an auto preview-refresh enqueue). Status
+    // upsert + article binding). Preview is queued after publication. Status
     // stays "success" rather than "skipped" — `guardedFinalize`
     // (`src/lib/tasks/store.ts`) enforces the pre-existing Phase C parity
     // invariant that a catalog-page item is success/failed only, never

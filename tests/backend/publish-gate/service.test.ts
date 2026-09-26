@@ -20,6 +20,7 @@ import { FakePublishGateDb } from "./fake-db";
 
 const dispatchFirstPublicPublication = vi.fn().mockResolvedValue({ errors: [] });
 vi.mock("@/server/publication/dispatcher", () => ({
+  dispatchPublicationPreviews: vi.fn(async () => undefined),
   dispatchFirstPublicPublication: (...args: unknown[]) => dispatchFirstPublicPublication(...args),
 }));
 

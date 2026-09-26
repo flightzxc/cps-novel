@@ -65,6 +65,7 @@ export type MaterializeNovelFromSourceItemInput = {
   readonly mode?: "dry_run" | "apply";
   readonly actor: CreateContentActor;
   readonly requestId: string;
+  /** @deprecated Materialization never enqueues preview; retained for caller compatibility. */
   readonly deferPreviewEnqueue?: boolean;
 };
 

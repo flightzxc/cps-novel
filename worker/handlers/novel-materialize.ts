@@ -1,8 +1,7 @@
 import type { PrismaClient } from "@prisma/client";
 import { NOVEL_MATERIALIZE_TASK_TYPE } from "../../src/lib/tasks/catalog-batch";
 import { createHandlerRegistry, type TaskHandler } from "../../src/lib/tasks";
-import { enqueueMoboreaderPreviewRefreshTask } from "../../src/lib/tasks/moboreader";
-import { materializeNovelFromSourceItemInTransaction, resolveContentPreviewAccount } from "../../src/server/content-creation";
+import { materializeNovelFromSourceItemInTransaction } from "../../src/server/content-creation";
 
 type Payload = { novelSourceItemId: string; channelAppId: string; actorId: string; requestId: string; expiresAt: string };
 type ParsedPayload =
@@ -41,16 +40,7 @@ export function createNovelMaterializeHandler(db: PrismaClient): TaskHandler {
         actor: { type: "admin", adminId: payload.actorId },
         requestId: payload.requestId,
       });
-      if (result.outcome === "created") {
-        const accountId = await resolveContentPreviewAccount(tx, payload.channelAppId);
-        const preview = accountId ? await enqueueMoboreaderPreviewRefreshTask(tx, {
-          trigger: "auto", channelAccountId: accountId, channelAppId: payload.channelAppId,
-          novelSourceItemIds: [payload.novelSourceItemId],
-          requestToken: `content_preview:${lease.itemId}`, actorId: payload.actorId,
-          requestId: payload.requestId, mode: "apply",
-        }) : { queued: false as const, reason: "no_channel_account" as const };
-        return { status: "success", result: { ...result, previewEnqueue: preview } };
-      }
+      if (result.outcome === "created") return { status: "success", result };
       if (result.outcome === "already_exists") return { status: "skipped", result };
       if (result.outcome === "concurrent_creation_conflict") throw new Error("novel_materialize_concurrent_conflict");
       return { status: "failed", error: { code: result.outcome, message: "Novel materialization was blocked by current source state" } };

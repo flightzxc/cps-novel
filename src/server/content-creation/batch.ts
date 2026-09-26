@@ -66,7 +66,7 @@ import {
   type CreateContentActor,
   type CreateContentResult,
 } from "./service";
-import { enqueueContentCreationPreview, type ContentCreationPreviewEnqueueResult } from "./preview-enqueue";
+import { type ContentCreationPreviewEnqueueResult } from "./preview-enqueue";
 
 // ---------------------------------------------------------------------------
 // Batch-level input validation (throws — malformed caller input, mirrors
@@ -268,18 +268,7 @@ export async function applyContentCreationBatch(
   input: ContentCreationBatchInput,
 ): Promise<ContentCreationBatchApplyResult> {
   const items = await runSequentialBudgetedBatch(db, "apply", input, classifyApplyOutcome);
-  const createdIds = items
-    .filter((item) => item.status === "created")
-    .map((item) => item.novelSourceItemId);
-  const previewEnqueue = createdIds.length > 0
-    ? await enqueueContentCreationPreview(db, {
-        novelSourceItemIds: createdIds,
-        requestToken: `moboreader.preview_refresh.v1:content_create_batch:${input.requestId}`,
-        requestId: input.requestId,
-        actorId: input.actor.type === "admin" ? input.actor.adminId : input.actor.source,
-      })
-    : undefined;
-  return { items, counts: countBy(items, APPLY_STATUSES), ...(previewEnqueue ? { previewEnqueue } : {}) };
+  return { items, counts: countBy(items, APPLY_STATUSES) };
 }
 
 // ---------------------------------------------------------------------------
