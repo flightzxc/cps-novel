@@ -17,6 +17,7 @@ C1_FINAL_RUN_ID                = 2026-08-17-owner-final-c1-final
 TEXT_PARAMETERS                = title=30; description=30; threshold=30; maxTextTags=3
 KEYWORD_ELIGIBILITY_VERSION    = keyword-eligibility-v2
 KEYWORD_ELIGIBILITY_SHA256     = e796ba1ed79b344f790a70853d2e9773d6265e307615b2a60da28b90a6164854
+PUBLIC_AUTO_PROJECTION_STATUS = APPROVED; IMPLEMENTATION_PENDING; FLAG_OFF
 AUTO_WRITE_AUTHORIZED          = NO
 PRODUCTION_IMPLEMENTATION_AUTHORIZED = YES
 PRODUCTION_IMPLEMENTATION_STATUS     = COMPLETE
@@ -34,6 +35,51 @@ SEO contract”的时间范围，不改变其余 Tagging V3 语义。`/categorie
 CanonicalTag，并按 `sortOrder, stableId` 排序。有效分类仍是 manual FULL_SNAPSHOT 或 automatic
 mode 下的 mapped read-derived 结果；公开路径不物化 mapped、不执行任何 auto write。空分类 404
 且不进 sitemap。`AUTO_WRITE_AUTHORIZED=NO` 保持冻结。
+
+## 2026-09-26 Owner amendment · public tag projection includes qualified auto (CPS parity)
+
+Owner 已批准公开投影纳入 qualified auto 的口径；代码待实现，开关当前关闭。本节是设计合同，
+不代表接线完成或功能已上线，也不改变历史 production implementation 状态所指的既有实现范围。
+
+1. **取代范围**：本节仅取代 2026-09-05 修订中“有效分类仍是 manual FULL_SNAPSHOT 或 automatic
+   mode 下的 mapped read-derived 结果”这一句。该修订其余内容继续有效：只消费 active
+   CanonicalTag，分类目录按 `sortOrder, stableId` 排序，空分类 404 且不进 sitemap；公开路径
+   不物化 mapped、不运行 classifier、不执行任何写入。09-05 原文保留作为历史记录。
+2. **公开生效标签**：manual mode 的 FULL_SNAPSHOT 是唯一结果，显式空快照合法，绝不回退到
+   mapped 或 auto。automatic mode 为 mapped ∪ qualified auto；auto 只读取
+   `NovelTagState.currentAutoRunId` 所指运行的合格结果，指针为空时无 auto，不混入历史 run。
+   两层命中同一标签时去重并按 mapped 归属；所有公开标签只消费 active CanonicalTag，
+   automatic 并集如含兜底标签则排除（不以兜底补空 manual）。单书标签展示时 mapped 在前，
+   mapped 段沿用当前公开投影的 `sortOrder, slug` 顺序，以保持兼容；auto 在后按 score 降序，
+   同分按 stableId 稳定排序。此单书展示顺序与分类目录的 `sortOrder, stableId` 排序分别适用。
+3. **同一开关**：`FEATURE_NOVEL_TAG_AUTO` 同时控制后台生效标签与公开投影是否纳入 auto，
+   不增加第二个公开 auto 开关。关闭时公开结果必须与修订前逐字节一致，包括内容、顺序和空值
+   行为；新增 auto 合并、去重、排序与兜底过滤不得改变关闭分支的既有结果。
+4. **统一消费面**：`/category/[slug]`、`/browse?category=`、首页与页脚分类入口、分类 sitemap、
+   书卡标签和书目详情标签必须消费同一个公开投影，禁止各自计算 membership 或 auto 资格。
+5. **生命周期（修订第 9 节）**：登记两个待接线的生产调用方：单本建书
+   `worker/handlers/novel-materialize.ts` 与批量建书 `batch.materialize.v1`。建书入口已经存在，
+   但尚未调用首次定类；第 9 节“当前仓库没有 Novel 创建/绑定 production caller”的历史描述
+   由本节纠正，不能据此视为 `initializeNovelTagSnapshot(novelId)` 已经接线。后续实现必须
+   在这些入口接入首次分类。批量仅针对本批新建书目，新增“指定书目 ID 集合”任务范围：
+   集合总量必须有明确硬上限（工单 7 实现时落实并校验），按 C-15 每段 ≤5,000 分块；
+   分块不取消总量上限，不得无限分块扫描全库。禁止用语种范围替代本批 ID 集合，以免小批
+   建书变为全语种存量回填。开关未开时建书照常成功，仅记录分类跳过；仍不注册周期性全库扫描。
+6. **写闸不变**：本修订不授权 G7，`AUTO_WRITE_AUTHORIZED=NO` 保持不动，直至 Owner 另行
+   明确授权。允许代码在所有相关开关关闭时 dark 部署。实际打开必须同时具备 Owner 设置
+   G7（`AUTO_WRITE_AUTHORIZED=YES`）、`FEATURE_NOVEL_TAG_AUTO=true`、worker 白名单纳入
+   `tagging.auto_classify`，并继续满足第 11 节既有 master/write gates。各项必须按
+   [预生产已批准写闸登记制](ADR-PREPROD-APPROVED-OPEN-WRITE-GATES.md) 登记并进入发布记录。
+   当前 `scripts/preproduction/preflight.sh` 对 auto flag 非 `false` 或 Owner gate 非 `NO`
+   硬拒；须由未来开闸那次变更改为登记制，本修订不改脚本、不更改任何实际开关或写入权限。
+7. **打开前质量检查**：预生产按语种抽样 dry-run，Owner 审阅命中质量后才能开闸。C1 冻结
+   参数下文本分类精度约 73%，仅作既有校准参考，不代表各语种质量承诺；每书最多 3 个文本
+   标签（`maxTextTags=3`），其余 C1 参数和 CanonicalTag/B2 冻结值全部保持不变。存量回填使用
+   现有 `scripts/p2-06-5-production/tagging-backfill.ts` 的 `initialize_missing`，须单独审批、
+   避开正式领取期间；本次不执行回填。
+8. **当前状态与实施边界**：公开口径已批准、代码待实现、开关关闭（见顶部状态块）；G7 仍为
+   NO。本次只修订 ADR 与 feature flag 登记说明，不包含代码、测试、配置、grants、生成字典、
+   开闸、回填或预生产 preflight 变更。后续工单 7 从本修订复核通过的精确 HEAD 开始实现。
 
 ## 1. Context
 
@@ -79,6 +125,8 @@ evidence 已完成或接近冻结，本阶段不重新研究 taxonomy、B1/B2 �
 8. auto 生命周期只有新 Novel 初始化和显式 backfill/reclassification；不增加周期性全库扫描。
 9. `channel × locale × source identity` 严格隔离。不能按标题、时间或现实作品概念跨实体合并。
 10. Tag 不属于 publish hard gate，也不是本期 public SEO contract。
+    注：保留历史原文；public SEO 范围已由 2026-09-05 与 2026-09-26 Owner amendments 修订，
+    公开分类投影及受开关控制的 qualified auto 口径以上述修订为准；不属于 publish hard gate 不变。
 
 ## 3. Superseded Decisions
 
