@@ -93,7 +93,7 @@ export const OMITTED_CPS_NAV_ITEMS: readonly { readonly cps: string; readonly re
  * admin surface). Note this list is not what keeps `/settings` clickable in
  * the sidebar today — `itemState` in `./sidebar.tsx` already special-cases
  * any entry with `children` as "built" regardless of this array, and the
- * `/settings` entry has two (still-unbuilt) children. It is kept accurate
+ * `/settings` entry has two children (security is implemented; API configuration is a placeholder). It is kept accurate
  * here anyway because it is this module's registry of "pages that actually
  * exist" and because a future change to that special case must not silently
  * relabel `/settings` as unbuilt.
@@ -110,6 +110,7 @@ export const ADMIN_IMPLEMENTED_PAGES: readonly string[] = Object.freeze([
   "/tasks",
   "/promo-links",
   "/settings",
+  // Session-only self-service page; no settings:manage grant required.
   "/settings/security",
 ]);
 
