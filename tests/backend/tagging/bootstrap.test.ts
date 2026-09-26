@@ -291,6 +291,16 @@ describe("tagging bootstrap artifact loading", () => {
    */
   it("accepts the repository's real artifacts, binding the pinned SHA-256 to the bytes actually shipped", () => {
     const artifacts = loadTaggingBootstrapArtifacts(REPO_ROOT);
+    // WO-7: slug/stableId secondary ordering is equivalent only while
+    // the frozen bootstrap gives every active tag a distinct sortOrder.
+    const plan = buildCanonicalPlan(artifacts.canonical, NO_OP_ELIGIBILITY);
+    expect(plan.tags).toHaveLength(123);
+    expect(new Set(plan.tags.map((tag) => tag.sortOrder)).size).toBe(plan.tags.length);
+    const route = readFileSync(join(REPO_ROOT, "src/app/api/admin/_lib/tagging-route.ts"), "utf8");
+    const mutation = route.split("export function canonicalTagMutation(")[1].split("export function sourceLabelMappingMutation(")[0];
+    // Opening a sort-order editor invalidates the equivalence assumption,
+    // even before an operator actually creates duplicate values.
+    expect(mutation).not.toMatch(/sortOrder|sort_order/);
     expect(artifacts.canonicalSha256).toBe(CANONICAL_ARTIFACT_SHA256);
     expect(artifacts.mappingSha256).toBe(MAPPING_ARTIFACT_SHA256);
     expect(createHash("sha256").update(readFileSync(join(REPO_ROOT, CANONICAL_ARTIFACT_RELATIVE_PATH))).digest("hex")).toBe(

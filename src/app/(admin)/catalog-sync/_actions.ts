@@ -1,5 +1,7 @@
 "use server";
 
+import { initializeCreatedNovelTags } from "@/server/tagging/materialization";
+
 import { randomUUID } from "node:crypto";
 
 import { headers } from "next/headers";
@@ -228,6 +230,7 @@ export async function applyNovelMaterializeAction(input: {
       requestId: input.requestId,
     });
     if (data.outcome === "created") {
+      await initializeCreatedNovelTags(data.novelId, { db: prisma });
       revalidatePath("/catalog-sync");
       revalidatePath("/novels");
     }

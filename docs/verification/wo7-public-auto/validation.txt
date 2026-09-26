@@ -1,0 +1,83 @@
+WO7 validation evidence. Product code checkpoint b3f751b; later commits add evidence and a sort-editor contract assertion.
+All commands executed in /Users/chenweifeng/Documents/cps海阅/wo7-public-auto-tags.
+All final commands exited 0.
+
+$ npm run typecheck
+
+> cps-novel@0.4.5 typecheck
+> tsc --noEmit
+
+
+$ npm test -- tests/backend/tasks/worker-failure-observability.test.ts tests/backend/tasks/worker-runtime-finalize-failure.test.ts tests/backend/tagging/materialization.test.ts tests/backend/tagging/novel-id-scope.test.ts tests/backend/tagging/bootstrap.test.ts tests/backend/site/category-queries.test.ts tests/backend/site/public-query-budget.test.ts tests/ui/admin-tagging-regression.test.tsx tests/ui/admin-secret-boundary.test.tsx --maxWorkers=4
+ ✓ |node| tests/backend/site/category-queries.test.ts (6 tests) 11ms
+ ✓ |node| tests/backend/tagging/materialization.test.ts (7 tests) 9ms
+
+ Test Files  9 passed (9)
+      Tests  80 passed (80)
+   Start at  00:30:16
+   Duration  1.56s (transform 869ms, setup 0ms, collect 1.86s, tests 369ms, environment 911ms, prepare 586ms)
+
+
+$ npm test -- tests/backend/tagging/materialization.test.ts tests/backend/tasks/worker-failure-observability.test.ts tests/backend/tasks/worker-runtime-finalize-failure.test.ts --maxWorkers=4
+ ✓ |node| tests/backend/tasks/worker-failure-observability.test.ts (8 tests) 12ms
+ ✓ |node| tests/backend/tasks/worker-runtime-finalize-failure.test.ts (8 tests) 12ms
+
+ Test Files  3 passed (3)
+      Tests  23 passed (23)
+   Start at  00:35:33
+   Duration  485ms (transform 278ms, setup 0ms, collect 704ms, tests 32ms, environment 0ms, prepare 135ms)
+
+
+$ npm test -- tests/backend/tagging/bootstrap.test.ts --maxWorkers=4
+
+ ✓ |node| tests/backend/tagging/bootstrap.test.ts (23 tests) 34ms
+
+ Test Files  1 passed (1)
+      Tests  23 passed (23)
+   Start at  00:38:37
+   Duration  364ms (transform 80ms, setup 0ms, collect 105ms, tests 34ms, environment 0ms, prepare 50ms)
+
+
+$ npm test -- --maxWorkers=4
+ ✓ |ui| tests/ui/article-rebind-page-wiring.test.ts (3 tests) 2ms
+ ✓ |ui| tests/ui/seo/novel-hreflang-regression.test.ts (2 tests) 2ms
+
+ Test Files  453 passed | 35 skipped (488)
+      Tests  6781 passed | 348 skipped (7129)
+   Start at  00:37:39
+   Duration  117.84s (transform 5.41s, setup 0ms, collect 30.78s, tests 333.40s, environment 36.03s, prepare 18.82s)
+
+
+$ bash scripts/run-tagging-public-auto-postgres-verification.sh
+   ✓ WO7 public auto real roles > records isolated 25-book classification throughput for the future approval checklist  931ms
+   ✓ WO7 public auto real roles > EXPLAIN bounds source probes at representative volume with and without small-table statistics  50079ms
+
+ Test Files  2 passed (2)
+      Tests  26 passed (26)
+   Start at  00:37:47
+   Duration  53.48s (transform 430ms, setup 0ms, collect 746ms, tests 52.39s, environment 0ms, prepare 65ms)
+
+JSON report written to /var/folders/y7/z3lp3zhj21jfby__zf_nf8680000gn/T/cps-novel-tagging-public-auto-secrets.8Kd7RM/integration-result.json
+WO7_INTEGRATION=PASS passed=26 skipped=0
+{"status":"ok","models":53,"recordCount":1235,"activeCount":1165,"tableCount":53,"constraintCount":252,"indexCount":224,"triggerCount":2}
+P2_06_5_DICTIONARY_DRIFT=0
+P2_06_5_POSTGRES_VERIFICATION=PASS
+P2_06_5_DISPOSABLE_DATABASE_CLEANED=yes
+
+$ npm run build
+├ ƒ /templates
+├ ƒ /two-factor/challenge
+└ ƒ /two-factor/setup
+
+
+ƒ Proxy (Middleware)
+
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand
+
+
+Full suite: 0 failed; no Unhandled Error/Unhandled Rejection/Uncaught Exception.
+preproduction-secret-consumers and articles-admin passed; no failure-triggered double rerun required.
+Independent PostgreSQL suite: passed=26 skipped=0; dictionary drift=0; disposable database cleaned.
+Build: Compiled successfully; route generation complete; exit=0.
+No changes to prisma/, infra/, src/lib/flags/, scripts/preproduction/, worker/handlers/catalog-batch.ts or tests/ui/admin-tagging-regression.test.tsx.

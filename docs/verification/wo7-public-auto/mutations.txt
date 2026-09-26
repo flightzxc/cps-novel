@@ -1,0 +1,55 @@
+Mutations executed separately, never concurrently. Checkpoint 78938a2; gate mutation repeated at b3f751b after existence-probe optimization.
+1: force flag-on public SQL when disabled.
+2: remove nct.classification_run_id = nts.current_auto_run_id.
+3: replace explicit novel ID scope with locale=en.
+4: remove batch gate-before-read.
+5: keep overlapping tag in auto layer instead of mapped layer.
+
+Mutation 1
+Test command: npm test -- tests/backend/site/category-queries.test.ts --maxWorkers=4
+Test exit=1
+Restore: original bytes restored; git diff --quiet exit=0
+ FAIL  |node| tests/backend/site/category-queries.test.ts > public category queries · CPS category semantics on CanonicalTag > manual FULL_SNAPSHOT overrides mapping (including empty); automatic/missing state derives mapping and excludes auto
+AssertionError: expected '\n    WITH target_source_item AS MATE…' not to contain 'nct.source = \'auto\''
+ Test Files  1 failed (1)
+      Tests  1 failed | 5 passed (6)
+
+Mutation 2
+Test command: bash scripts/run-tagging-public-auto-postgres-verification.sh
+Test exit=1
+Restore: original bytes restored; git diff --quiet exit=0
+ FAIL  |node| tests/integration/tagging/public-auto-postgres.test.ts > WO7 public auto real roles > manual snapshot including empty overrides all; historical and null run pointers exclude auto
+AssertionError: expected [ 'mapped-b', 'mapped-a', …(2) ] to deeply equal [ 'mapped-b', 'mapped-a' ]
+ Test Files  1 failed | 1 passed (2)
+      Tests  1 failed | 25 passed (26)
+
+Mutation 3
+Test command: npm test -- tests/backend/tagging/materialization.test.ts --maxWorkers=4
+Test exit=1
+Restore: original bytes restored; git diff --quiet exit=0
+ FAIL  |node| tests/backend/tagging/materialization.test.ts > post-commit materialization tagging > segments sorted unique IDs; stable per-segment replay IDs; never a locale scope
+AssertionError: expected [ …(3) ] to deeply equal [ { kind: 'novels', …(1) }, …(2) ]
+ FAIL  |node| tests/backend/tagging/materialization.test.ts > post-commit materialization tagging > waits until every item is terminal, then uses only persisted created novel IDs
+AssertionError: expected { kind: 'locale', locale: 'en' } to deeply equal { kind: 'novels', …(1) }
+ Test Files  1 failed (1)
+      Tests  2 failed | 5 passed (7)
+
+Mutation 4
+Test command: npm test -- tests/backend/tagging/materialization.test.ts --maxWorkers=4
+Test exit=1
+Restore: original bytes restored; git diff --quiet exit=0
+ FAIL  |node| tests/backend/tagging/materialization.test.ts > post-commit materialization tagging > FEATURE_P2_06_5_TAGGING closed: no queries or enqueue, with skip evidence
+ FAIL  |node| tests/backend/tagging/materialization.test.ts > post-commit materialization tagging > FEATURE_NOVEL_TAG_AUTO closed: no queries or enqueue, with skip evidence
+ FAIL  |node| tests/backend/tagging/materialization.test.ts > post-commit materialization tagging > AUTO_WRITE_AUTHORIZED closed: no queries or enqueue, with skip evidence
+AssertionError: expected 1 to be +0 // Object.is equality
+ Test Files  1 failed (1)
+      Tests  3 failed | 4 passed (7)
+
+Mutation 5
+Test command: bash scripts/run-tagging-public-auto-postgres-verification.sh
+Test exit=1
+Restore: original bytes restored; git diff --quiet exit=0
+ FAIL  |node| tests/integration/tagging/public-auto-postgres.test.ts > WO7 public auto real roles > current auto union keeps mapped priority and orders tied text by stableId, excludes inactive
+AssertionError: expected [ Array(4) ] to deeply equal [ 'mapped-b', 'mapped-a', …(2) ]
+ Test Files  1 failed | 1 passed (2)
+      Tests  1 failed | 25 passed (26)

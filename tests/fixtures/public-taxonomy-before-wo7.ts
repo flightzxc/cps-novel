@@ -1,3 +1,4 @@
+// Frozen from 69765e1 for flag-off equivalence tests. Do not update with production code.
 /**
  * Public CanonicalTag projection.
  *
@@ -5,9 +6,9 @@
  * operator-owned sort field. Novel keeps that serving contract, but adapts
  * the membership rule to ADR-P2-06-5: a manual FULL_SNAPSHOT is authoritative
  * (including an empty snapshot); automatic or missing state derives membership
- * from live SourceLabelMapping edges. With FEATURE_NOVEL_TAG_AUTO enabled,
- * automatic membership also includes the current auto run, with mapped
- * provenance winning duplicates. Raw source labels never cross this boundary.
+ * from live SourceLabelMapping edges. Classifier (`source = 'auto'`) rows are
+ * deliberately absent and raw SourceLabel values never cross this module's
+ * return boundary.
  *
  * Label cache: public pages that read this module are `force-dynamic`. The
  * taxonomy query is not wrapped in `unstable_cache`; `loadPublicCategories`
@@ -18,14 +19,13 @@
  * 300s. `canonical_definition` is Chinese classifier copy and is not
  * projected onto the public tag.
  */
-import { isAutoTaggingEnabled } from "@/lib/flags/feature-flags";
 import { Prisma, type PrismaClient } from "@prisma/client";
 
 import type { SiteTag } from "@/features/public-ui/types";
 import { localePrefix } from "@/lib/slug/article-path";
 
-import { resolveCanonicalTagLabel } from "./canonical-tag-label";
-import { asSiteLocale } from "./locale-label";
+import { resolveCanonicalTagLabel } from "@/lib/site/canonical-tag-label";
+import { asSiteLocale } from "@/lib/site/locale-label";
 
 type Db = PrismaClient | Prisma.TransactionClient;
 
@@ -136,89 +136,12 @@ export async function loadPublicTaxonomyByNovelIds(
   db: Db,
   novelIds: readonly string[],
   locale: string,
-  env: NodeJS.ProcessEnv = process.env,
 ): Promise<ReadonlyMap<string, readonly PublicTaxonomyTag[]>> {
   const uniqueIds = [...new Set(novelIds)];
   if (uniqueIds.length === 0) return new Map();
 
   const ids = Prisma.join(uniqueIds.map((id) => Prisma.sql`${id}::uuid`));
-  const rows = await db.$queryRaw<PublicTaxonomyRow[]>(isAutoTaggingEnabled(env) ? Prisma.sql`
-    WITH target_source_item AS MATERIALIZED (
-      SELECT nsi.id, nsi.novel_id, nsi.channel_app_id, nsi.raw_language_scope
-      FROM novel_source_item nsi
-      WHERE nsi.novel_id IN (${ids})
-        AND nsi.status = 'linked'
-        AND nsi.deleted_at IS NULL
-        AND nsi.raw_language_scope IS NOT NULL
-    ),
-    base_membership AS MATERIALIZED (
-      SELECT nct.novel_id, nct.canonical_tag_id, 0 AS source_rank, NULL::double precision AS score
-      FROM novel_canonical_tag nct
-      JOIN novel_tag_state nts ON nts.novel_id = nct.novel_id AND nts.mode = 'manual'
-      WHERE nct.novel_id IN (${ids})
-        AND nct.source = 'manual'
-      UNION
-      SELECT tsi.novel_id, slm.canonical_tag_id, 0 AS source_rank, NULL::double precision AS score
-      FROM target_source_item tsi
-      JOIN channel_app ca ON ca.id = tsi.channel_app_id AND ca.status = 'active'
-      JOIN novel_source_item_label nsil
-        ON nsil.novel_source_item_id = tsi.id AND nsil.active IS TRUE
-      JOIN source_label sl
-        ON sl.id = nsil.source_label_id
-       AND sl.channel_app_id = tsi.channel_app_id
-       AND sl.label_kind = 'series_type'
-      JOIN source_label_mapping slm
-        ON slm.channel_app_id = tsi.channel_app_id
-       AND slm.raw_language_scope COLLATE "C" = tsi.raw_language_scope COLLATE "C"
-       AND slm.raw_token COLLATE "C" = sl.external_label_value::text COLLATE "C"
-       AND slm.active IS TRUE
-      WHERE NOT EXISTS (
-          SELECT 1 FROM novel_tag_state nts
-          WHERE nts.novel_id = tsi.novel_id AND nts.mode = 'manual'
-        )
-    )
-    , auto_membership AS MATERIALIZED (
-      SELECT nct.novel_id, nct.canonical_tag_id, 1 AS source_rank, nct.score
-      FROM novel_tag_state nts
-      JOIN novel_canonical_tag nct
-        ON nct.novel_id = nts.novel_id
-       AND nct.classification_run_id = nts.current_auto_run_id
-       AND nct.source = 'auto'
-      WHERE nts.novel_id IN (${ids}) AND nts.mode = 'automatic'
-    ), public_membership AS (
-      SELECT * FROM base_membership
-      UNION ALL
-      SELECT automatic.* FROM auto_membership automatic
-      WHERE NOT EXISTS (
-        SELECT 1 FROM base_membership mapped
-        WHERE mapped.novel_id = automatic.novel_id
-          AND mapped.canonical_tag_id = automatic.canonical_tag_id
-      )
-    )
-    SELECT membership.novel_id,
-           ct.id,
-           ct.slug,
-           requested.display_name AS requested_display_name,
-           en.display_name AS en_display_name,
-           zh.display_name AS zh_display_name,
-           ct.sort_order,
-           ct.updated_at
-    FROM public_membership membership
-    JOIN canonical_tag ct
-      ON ct.id = membership.canonical_tag_id AND ct.status = 'active'
-    LEFT JOIN canonical_tag_translation requested
-      ON requested.canonical_tag_id = ct.id AND requested.locale = ${locale}
-    LEFT JOIN canonical_tag_translation en
-      ON en.canonical_tag_id = ct.id AND en.locale = 'en'
-    LEFT JOIN canonical_tag_translation zh
-      ON zh.canonical_tag_id = ct.id AND zh.locale = 'zh'
-    ORDER BY membership.source_rank,
-             CASE WHEN membership.source_rank = 0 THEN ct.sort_order END,
-             CASE WHEN membership.source_rank = 0 THEN ct.slug END,
-             CASE WHEN membership.source_rank = 1 THEN membership.score END DESC,
-             CASE WHEN membership.source_rank = 1 THEN ct.stable_id END,
-             membership.novel_id
-  ` : Prisma.sql`
+  const rows = await db.$queryRaw<PublicTaxonomyRow[]>(Prisma.sql`
     WITH target_source_item AS MATERIALIZED (
       SELECT nsi.id, nsi.novel_id, nsi.channel_app_id, nsi.raw_language_scope
       FROM novel_source_item nsi
