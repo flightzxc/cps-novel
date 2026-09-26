@@ -779,7 +779,7 @@ describe.skipIf(!enabled).sequential("catalog batch on disposable PostgreSQL 16.
     expect(await readCatalogBatchSummary(owner, expired.taskId, foundation.actorId)).toMatchObject({ phase: "expired" });
   });
 
-  it("content success queues preview atomically; CAS loser and retired protocol leave no partial business rows", async () => {
+  it("content success queues no preview (publication-triggered since v0.4.5); CAS loser and retired protocol leave no partial business rows", async () => {
     const appId = foundation.channels[0]!.channelAppId;
     const [successId, casId, templateId] = await seedCatalogRows(owner, { channelAppId: appId, count: 3, prefix: "content" });
 
@@ -791,8 +791,8 @@ describe.skipIf(!enabled).sequential("catalog batch on disposable PostgreSQL 16.
     await finalizeTaskItem(worker, successLease, successOutcome);
     expect(await owner.novel.count()).toBe(1);
     expect(await owner.article.count()).toBe(0);
-    const preview = await owner.channelSyncTask.findFirst({ where: { taskType: "moboreader.preview_refresh.v1", items: { some: { novelSourceItemId: successId } } }, include: { items: true } });
-    expect(preview?.items.map((item) => item.novelSourceItemId)).toContain(successId);
+    // 工单 1（v0.4.5）：建书只落元数据，试读改由文章发布时触发（ADR-PUBLICATION-PREVIEW-ENQUEUE），此处必须零试读任务。
+    expect(await owner.channelSyncTask.count({ where: { taskType: "moboreader.preview_refresh.v1", items: { some: { novelSourceItemId: successId } } } })).toBe(0);
     const committedCounts = {
       novels: await owner.novel.count(), articles: await owner.article.count(),
       previewTasks: await owner.channelSyncTask.count(), previewItems: await owner.channelSyncTaskItem.count(),
