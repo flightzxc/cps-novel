@@ -1,3 +1,4 @@
+import { INDEXNOW_SWEEP_SCHEDULE, INDEXNOW_SWEEP_TASK_TYPE } from "../src/lib/tasks/indexnow-sweep";
 import { SITEMAP_DAILY_FALLBACK_SCHEDULE, SITEMAP_DAILY_FALLBACK_TASK_TYPE } from "../src/lib/tasks/periodic-sweep";
 import { pathToFileURL } from "node:url";
 import { PrismaClient } from "@prisma/client";
@@ -36,6 +37,10 @@ import {
  */
 export const SCHEDULER_HANDLERS = createHandlerRegistry({
   ...HANDLERS,
+  [INDEXNOW_SWEEP_TASK_TYPE]: {
+    family: "generic", maxAttempts: 3,
+    handler: async () => { throw new Error("indexnow.sweep.v1 must be executed by the worker process"); },
+  },
   [SITEMAP_DAILY_FALLBACK_TASK_TYPE]: {
     family: "generic", maxAttempts: 3,
     handler: async () => { throw new Error("daily fallback must be executed by the worker process"); },
@@ -87,7 +92,7 @@ export const HOME_CAROUSEL_SCHEDULE: ScheduleDefinition = buildHomeCarouselSched
   () => homeCarouselActiveLocales,
 );
 
-export const SCHEDULES: readonly ScheduleDefinition[] = Object.freeze([HOME_CAROUSEL_SCHEDULE, SITEMAP_DAILY_FALLBACK_SCHEDULE]);
+export const SCHEDULES: readonly ScheduleDefinition[] = Object.freeze([HOME_CAROUSEL_SCHEDULE, SITEMAP_DAILY_FALLBACK_SCHEDULE, INDEXNOW_SWEEP_SCHEDULE]);
 
 /**
  * 正式修复第 2 阶段第 3 步：领推广链接生命周期分片的放行 / 暂停

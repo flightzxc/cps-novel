@@ -1,3 +1,4 @@
+import { createIndexNowSweepWorkerHandlers } from "./handlers/indexnow-sweep";
 import { pathToFileURL } from "node:url";
 import { PrismaClient } from "@prisma/client";
 import { assertCredentialKeyringReady } from "../src/lib/credentials/keyring";
@@ -83,6 +84,7 @@ export function createWorkerHandlers(prisma: PrismaClient) {
     ...createMoboreaderWorkerHandlers(prisma),
     ...createPromoLinkClaimWorkerHandlers(prisma),
     ...createIndexNowWorkerHandlers(prisma),
+    ...createIndexNowSweepWorkerHandlers(),
     ...createSitemapRefreshWorkerHandlers(prisma),
     ...createSitemapDailyFallbackWorkerHandlers(),
     ...createHomeCarouselWorkerHandlers(prisma),
@@ -105,17 +107,19 @@ export async function main(): Promise<void> {
   await runWorkerProcess({
     run: async (signal) => {
     const handlers = createWorkerHandlers(prisma);
+    const lane = parseWorkerLane(process.env.WORKER_LANE);
     const allowlist = resolveWorkerStartupAllowlist(
       process.env.WORKER_TASK_ALLOWLIST,
       handlers,
       console,
-      parseWorkerLane(process.env.WORKER_LANE),
+      lane,
     );
     await runWorker({
       prisma,
       workerId: process.env.WORKER_ID ?? `worker-${process.pid}`,
       handlers,
       allowlist,
+      lane,
       signal,
       shutdownDrainTimeoutMs,
       onTaskFailure: failureReporter?.onTaskFailure,

@@ -16,7 +16,7 @@
 
 ## 行为与接口
 
-`worker-light` 复用现有 worker 入口、镜像、worker_app 角色、健康检查、告警配置和 sitemap 共享卷。首版只消费 `sitemap_refresh,sitemap.daily_fallback.v1,home_carousel.compute.v1`。配置策略由 `src/lib/tasks/worker-lanes.mjs` 单点提供，TypeScript 启动入口和 preflight 共用；AST 守卫通过 TypeScript 符号解析追踪 adapter 的导入及转导出。
+`worker-light` 复用现有 worker 入口、镜像、worker_app 角色、健康检查、告警配置和 sitemap 共享卷。首版消费 `sitemap_refresh,sitemap.daily_fallback.v1,home_carousel.compute.v1`。工单 6 后批准集合另含 `indexnow.sweep.v1,indexnow_delivery`；预生产模板仅追加扫描，投递要等生产步骤 8–9 与双闸一起开放。light 对投递与其它任务公平轮转，main 禁止两个 IndexNow 类型。配置策略由 `src/lib/tasks/worker-lanes.mjs` 单点提供，TypeScript 启动入口和 preflight 共用；AST 守卫通过 TypeScript 符号解析追踪 adapter 的导入及转导出。
 
 `buildPeriodicSweepSchedule` 支持每分钟及指定时区的每日扫描。`ScheduledTaskInput.periodicSweep` 开启时间窗口校验与按任务类型在途合并；返回值新增 `skipped` / `skipReason`。分钟扫描仍只接受当前分钟。每日扫描固定当天当地时间的桶，sitemap 为东京 04:00，允许 [04:00, 04:15) 内入队；过窗候选记 `misfire_skip`，不补历史日期。生产 tick 从 PostgreSQL 读取时钟，取得 advisory lock 后再次核对窗口；同桶唯一键保留。scheduler 每轮结束后睡到下一个 interval 整数倍边界加 2 秒，超时跳过已过边界，不连跑。已有首页轮播的到期语义和领取分片放行逻辑不改。
 
@@ -47,7 +47,9 @@
 | home_carousel.compute.v1 | 否 | light | worker/handlers/home-carousel.ts:17–44，本地候选/展示表计算 |
 | sitemap_refresh | 否 | light | worker/handlers/sitemap-refresh.ts:101–181，查库生成静态文件 |
 | sitemap.daily_fallback.v1 | 否 | light | worker/handlers/sitemap-daily-fallback.ts:7–21，仅调用合并入队接口 |
-| indexnow_delivery | 否（调用 IndexNow） | 保持关闭，留工单 6 | worker/handlers/indexnow-delivery.ts:149–237 |
+| indexnow_delivery | 否（调用 IndexNow） | light 批准，默认关闭；生产步骤 8–9 才加入白名单 | worker/handlers/indexnow-delivery.ts:149–237 |
+
+| indexnow.sweep.v1 | 否 | light；delivery 双闸关闭时 scheduler 不入队 | worker/handlers/indexnow-sweep.ts |
 
 上游集合只包含表中前三项；未将“不调用 MoboReader”等同于“允许进入轻量通道”。
 

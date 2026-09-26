@@ -85,6 +85,7 @@ describe("X1 worker startup allowlist", () => {
       "credential.supersede.v1",
       "credential.validate.v1",
       "home_carousel.compute.v1",
+      "indexnow.sweep.v1",
       "indexnow_delivery",
       "moboreader.preview_refresh.v1",
       "novel.materialize.v1",
