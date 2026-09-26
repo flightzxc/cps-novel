@@ -20,3 +20,4 @@ export * from "./credentials";
 export * from "./publish-gate";
 export * from "./admin-content";
 export * from "./tagging-admin";
+export * from "./sitemap-admin";

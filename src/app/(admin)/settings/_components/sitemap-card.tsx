@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import type { AdminCapabilityState } from "@/contracts";
 import { adminFetch } from "@/features/admin-ui/admin-fetch";
 import { buttonClassName } from "@/components/ui/button";
-import type { SitemapAdminState, SitemapRequestResult } from "@/server/sitemap-admin/service";
+import type { SitemapAdminState, SitemapRequestResult } from "@/contracts";
 
 const labels: Record<string, string> = {
   pending: "已入队，等待执行", processing: "处理中", completed: "已完成", completed_with_errors: "完成但有错误",

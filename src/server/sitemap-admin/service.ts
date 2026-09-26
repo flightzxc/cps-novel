@@ -1,3 +1,4 @@
+import type { SitemapAdminState, SitemapRequestResult } from "@/contracts";
 import type { PrismaClient } from "@prisma/client";
 import type { AdminIdentityStore, SessionStore } from "@/lib/auth/ports";
 import { isSitemapAutoRefreshEnabled, isSitemapAutoRefreshWriteAllowed } from "@/lib/flags";
@@ -8,13 +9,6 @@ import { SiteSettingValidationError } from "@/server/site-settings/service";
 
 export const SITEMAP_ADMIN_ENTRY_ID = "admin.api.sitemap";
 export const SITEMAP_ADMIN_AUDIT_ACTION = "sitemap.refresh.request";
-export type SitemapRequestResult = { status: "disabled" } | { status: "queued" | "coalesced"; taskId: string };
-export type SitemapAdminState = {
-  enabled: boolean;
-  task: { id: string; status: string; createdAt: string; completedAt: string | null } | null;
-  lastGeneration: { status: string; finishedAt: string | null };
-  published: { generatedAt: string; urlCount: number } | null;
-};
 
 export function sitemapManualEnabled(env: NodeJS.ProcessEnv = process.env) {
   return isSitemapAutoRefreshEnabled(env) && isSitemapAutoRefreshWriteAllowed(env);
