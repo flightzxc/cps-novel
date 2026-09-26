@@ -1,6 +1,6 @@
 import { verifyPublicAutoPlans } from "./public-auto-explain";
 import { randomUUID } from "node:crypto";
-import { Prisma, PrismaClient } from "@prisma/client";
+import { PrismaClient } from "@prisma/client";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import * as projection from "@/lib/site/public-taxonomy";
 import * as legacy from "../../fixtures/public-taxonomy-before-wo7";
@@ -30,7 +30,6 @@ function client(role: string) {
 }
 const owner = client("OWNER"), web = client("WEB"), worker = client("WORKER");
 const env: NodeJS.ProcessEnv = { NODE_ENV: "test", FEATURE_P2_06_5_TAGGING: "true", FEATURE_NOVEL_TAG_AUTO: "true", AUTO_WRITE_AUTHORIZED: "YES" };
-const off = { ...env, FEATURE_NOVEL_TAG_AUTO: "false" };
 const hash = "a".repeat(64);
 const channel = randomUUID(), app = randomUUID(), sourceApp = randomUUID(), admin = randomUUID(), account = randomUUID();
 const tags = Array.from({ length: 5 }, () => randomUUID());

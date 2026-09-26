@@ -6,9 +6,9 @@ import { TaggingError } from "@/lib/tagging/contracts";
 import { summarizeDbError } from "@/lib/db/db-retry";
 import { createTaggingAutoClassifyTask, initializeNovelTagSnapshot, type InitializeNovelTagSnapshotDependencies } from "./tasks";
 
-function gatesOpen(env: NodeJS.ProcessEnv, context: string): boolean {
+function gatesOpen(env: NodeJS.ProcessEnv, context: string, logClosed = true): boolean {
   const open = isTaggingEnabled(env) && isAutoTaggingEnabled(env) && isAutoTagWriteAuthorized(env);
-  if (!open) console.info("[tagging-initialize]", { context, status: "skipped", reason: "tagging_gates_closed" });
+  if (!open && logClosed) console.info("[tagging-initialize]", { context, status: "skipped", reason: "tagging_gates_closed" });
   return open;
 }
 
@@ -70,7 +70,8 @@ export async function initializeMaterializedTaskTags(
   taskId: string,
   options: Omit<MaterializationTaggingDependencies, "db"> = {},
 ): Promise<void> {
-  if (!gatesOpen(options.env ?? process.env, taskId)) return;
+  // This observer runs after every item; closed gates must not log per item.
+  if (!gatesOpen(options.env ?? process.env, taskId, false)) return;
   try {
     const task = await db.genericTask.findUnique({ where: { id: taskId }, select: { taskType: true, mode: true } });
     if (task?.taskType !== "novel.materialize.v1" || task.mode !== "apply") return;

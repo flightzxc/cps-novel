@@ -18,8 +18,18 @@ describe("post-commit materialization tagging", () => {
     await initializeMaterializedTaskTags(noDb, "task", { env: closed });
     expect(vi.mocked(createTaggingAutoClassifyTask).mock.calls.length).toBe(0);
     expect(vi.mocked(initializeNovelTagSnapshot).mock.calls.length).toBe(0);
-    expect(console.info).toHaveBeenCalledTimes(3);
+    expect(console.info).toHaveBeenCalledTimes(2);
+    expect(console.info).toHaveBeenNthCalledWith(1, "[tagging-initialize]", expect.objectContaining({ context: ids[0], reason: "tagging_gates_closed" }));
+    expect(console.info).toHaveBeenNthCalledWith(2, "[tagging-initialize]", expect.objectContaining({ context: "batch", reason: "tagging_gates_closed" }));
     expect(console.error).not.toHaveBeenCalled();
+  });
+  it.each(["FEATURE_P2_06_5_TAGGING", "FEATURE_NOVEL_TAG_AUTO", "AUTO_WRITE_AUTHORIZED"])("%s closed: 1000 worker observations remain silent", async key => {
+    const closed = { ...env, [key]: key === "AUTO_WRITE_AUTHORIZED" ? "NO" : "false" };
+    for (let i = 0; i < 1000; i++) await initializeMaterializedTaskTags(noDb, `task-${i}`, { env: closed });
+    expect(console.info).not.toHaveBeenCalled();
+    expect(console.error).not.toHaveBeenCalled();
+    expect(createTaggingAutoClassifyTask).not.toHaveBeenCalled();
+    expect(initializeNovelTagSnapshot).not.toHaveBeenCalled();
   });
   it("segments sorted unique IDs; stable per-segment replay IDs; never a locale scope", async () => {
     await initializeCreatedNovelBatchTags([...ids].reverse(), "task-a", { db: noDb, env, segmentSize: 2 });
