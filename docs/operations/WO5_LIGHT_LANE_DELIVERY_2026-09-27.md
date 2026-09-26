@@ -48,7 +48,6 @@
 | sitemap_refresh | 否 | light | worker/handlers/sitemap-refresh.ts:101–181，查库生成静态文件 |
 | sitemap.daily_fallback.v1 | 否 | light | worker/handlers/sitemap-daily-fallback.ts:7–21，仅调用合并入队接口 |
 | indexnow_delivery | 否（调用 IndexNow） | light 批准，默认关闭；生产步骤 8–9 才加入白名单 | worker/handlers/indexnow-delivery.ts:149–237 |
-
 | indexnow.sweep.v1 | 否 | light；delivery 双闸关闭时 scheduler 不入队 | worker/handlers/indexnow-sweep.ts |
 
 上游集合只包含表中前三项；未将“不调用 MoboReader”等同于“允许进入轻量通道”。

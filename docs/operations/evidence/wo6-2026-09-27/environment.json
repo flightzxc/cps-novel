@@ -1,0 +1,9 @@
+{
+  "observed_at": "2026-09-27T04:05:46+09:00",
+  "uptime": "4:05  1 user, load averages: 73.87 59.13 49.14",
+  "node": {
+    "arch": "arm64",
+    "version": "v24.12.0"
+  },
+  "note": "Read-only observation. No unrelated processes or host settings changed. High load coincided with existing test timeouts; full gate is not considered passed."
+}

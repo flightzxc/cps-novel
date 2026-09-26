@@ -1,0 +1,176 @@
+[
+  {
+    "name": "typecheck",
+    "command": "npm run typecheck",
+    "exit": 0,
+    "seconds": 1.86
+  },
+  {
+    "name": "full-test-final",
+    "command": "npm test -- --maxWorkers=4",
+    "exit": 1,
+    "seconds": 297.74
+  },
+  {
+    "name": "run-add-admin-identity-postgres-verification",
+    "command": "bash scripts/run-add-admin-identity-postgres-verification.sh",
+    "exit": 0,
+    "seconds": 16.41
+  },
+  {
+    "name": "run-catalog-batch-postgres-verification",
+    "command": "bash scripts/run-catalog-batch-postgres-verification.sh",
+    "exit": 0,
+    "seconds": 44.9
+  },
+  {
+    "name": "run-indexnow-sweep-postgres-verification",
+    "command": "bash scripts/run-indexnow-sweep-postgres-verification.sh",
+    "exit": 0,
+    "seconds": 54.36
+  },
+  {
+    "name": "run-p1-05b-postgres-verification",
+    "command": "bash scripts/run-p1-05b-postgres-verification.sh",
+    "exit": 1,
+    "seconds": 162.84
+  },
+  {
+    "name": "run-p1-06-postgres-verification",
+    "command": "bash scripts/run-p1-06-postgres-verification.sh",
+    "exit": 1,
+    "seconds": 152.96
+  },
+  {
+    "name": "run-p1-08b-postgres-verification",
+    "command": "bash scripts/run-p1-08b-postgres-verification.sh",
+    "exit": 0,
+    "seconds": 168.83
+  },
+  {
+    "name": "run-phase-b-entity-fix-postgres-verification",
+    "command": "bash scripts/run-phase-b-entity-fix-postgres-verification.sh",
+    "exit": 0,
+    "seconds": 42.04
+  },
+  {
+    "name": "run-phase-d-postgres-verification",
+    "command": "bash scripts/run-phase-d-postgres-verification.sh",
+    "exit": 0,
+    "seconds": 117.21
+  },
+  {
+    "name": "run-phase-d-role-password-postgres-verification",
+    "command": "bash scripts/run-phase-d-role-password-postgres-verification.sh",
+    "exit": 0,
+    "seconds": 30.44
+  },
+  {
+    "name": "run-preview-account-hold-postgres-verification",
+    "command": "bash scripts/run-preview-account-hold-postgres-verification.sh",
+    "exit": 0,
+    "seconds": 18.83
+  },
+  {
+    "name": "run-preview-opening-postgres-verification",
+    "command": "bash scripts/run-preview-opening-postgres-verification.sh",
+    "exit": 0,
+    "seconds": 17.54
+  },
+  {
+    "name": "run-promo-claim-batch-control-postgres-verification",
+    "command": "bash scripts/run-promo-claim-batch-control-postgres-verification.sh",
+    "exit": 0,
+    "seconds": 19.86
+  },
+  {
+    "name": "run-promo-claim-release-postgres-verification",
+    "command": "bash scripts/run-promo-claim-release-postgres-verification.sh",
+    "exit": 0,
+    "seconds": 24.7
+  },
+  {
+    "name": "run-publication-preview-postgres-verification",
+    "command": "bash scripts/run-publication-preview-postgres-verification.sh",
+    "exit": 1,
+    "seconds": 228.42
+  },
+  {
+    "name": "run-sitemap-refresh-postgres-verification",
+    "command": "bash scripts/run-sitemap-refresh-postgres-verification.sh",
+    "exit": 0,
+    "seconds": 23.42
+  },
+  {
+    "name": "run-tagging-public-auto-postgres-verification",
+    "command": "bash scripts/run-tagging-public-auto-postgres-verification.sh",
+    "exit": 0,
+    "seconds": 151.51
+  },
+  {
+    "name": "run-worker-light-postgres-verification",
+    "command": "bash scripts/run-worker-light-postgres-verification.sh",
+    "exit": 0,
+    "seconds": 15.35
+  },
+  {
+    "name": "run-x6-site-setting-postgres-verification",
+    "command": "bash scripts/run-x6-site-setting-postgres-verification.sh",
+    "exit": 2,
+    "seconds": 3.53
+  },
+  {
+    "name": "run-x9-postgres-verification",
+    "command": "bash scripts/run-x9-postgres-verification.sh",
+    "exit": 1,
+    "seconds": 11.03
+  },
+  {
+    "name": "build",
+    "command": "npm run build",
+    "exit": 0,
+    "seconds": 82.24
+  },
+  {
+    "name": "compose-root",
+    "command": "docker compose -f docker-compose.yml config --format json",
+    "exit": 0,
+    "seconds": 0.21
+  },
+  {
+    "name": "compose-preproduction",
+    "command": "docker compose -f docker-compose.yml -f infra/preproduction/docker-compose.yml config --format json",
+    "exit": 0,
+    "seconds": 0.26
+  },
+  {
+    "name": "compose-production-like",
+    "command": "docker compose -f docker-compose.yml -f infra/production-like/docker-compose.yml config --format json",
+    "exit": 0,
+    "seconds": 0.26
+  },
+  {
+    "name": "articles-admin-rerun-1",
+    "command": "npm test -- --maxWorkers=4 tests/ui/articles-admin.test.tsx",
+    "exit": 1,
+    "seconds": 13.34
+  },
+  {
+    "name": "articles-admin-rerun-2",
+    "command": "npm test -- --maxWorkers=4 tests/ui/articles-admin.test.tsx",
+    "exit": 1,
+    "seconds": 15.0
+  },
+  {
+    "name": "publication-preview-rerun",
+    "command": "bash scripts/run-publication-preview-postgres-verification.sh",
+    "exit": 0,
+    "seconds": 81.98
+  },
+  {
+    "name": "full-test-confirmation",
+    "command": "npm test -- --maxWorkers=4",
+    "exit": 1,
+    "seconds": 845.16
+  }
+]

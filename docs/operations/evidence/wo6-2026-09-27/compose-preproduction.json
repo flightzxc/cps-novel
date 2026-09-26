@@ -1,0 +1,16 @@
+{
+  "main": {
+    "WORKER_LANE": "main",
+    "WORKER_TASK_ALLOWLIST": "catalog_scan"
+  },
+  "light": {
+    "WORKER_LANE": "light",
+    "WORKER_TASK_ALLOWLIST": "sitemap_refresh,sitemap.daily_fallback.v1,home_carousel.compute.v1,indexnow.sweep.v1",
+    "FEATURE_INDEXNOW_DELIVERY": "false",
+    "INDEXNOW_DELIVERY_ALLOW_WRITE": "false"
+  },
+  "scheduler": {
+    "FEATURE_INDEXNOW_DELIVERY": "false",
+    "INDEXNOW_DELIVERY_ALLOW_WRITE": "false"
+  }
+}

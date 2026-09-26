@@ -1,0 +1,146 @@
+{
+  "articles-admin-rerun-1.log": {
+    "bytes": 16075,
+    "sha256": "46bbe9d8e7e8408e5936a964f9efd3894afbdb4d562508aa5b9082d9dcd7d3a5"
+  },
+  "articles-admin-rerun-2.log": {
+    "bytes": 16081,
+    "sha256": "9cee586f02f12b21101e761ddd58f94369988a0fffd2136c92a2a5e0485f6e2f"
+  },
+  "build.log": {
+    "bytes": 3390,
+    "sha256": "100a49be21a1810d98294b44a6001e748b294e5b374a1b2c4358a99ae2f8d360"
+  },
+  "compose-preproduction.log": {
+    "bytes": 26840,
+    "sha256": "2c9d0ab2f39f608a10ca7e3ef78bd6a0390cad354a1cf167334a90b50aae9bed"
+  },
+  "compose-production-like.log": {
+    "bytes": 31506,
+    "sha256": "56330198fd5d8d61735488eea313988bb67a071b78f18377ab2f52903918bd2d"
+  },
+  "compose-root.log": {
+    "bytes": 23295,
+    "sha256": "03a7db83e57624689dc4eb8311eac8272de63e48d77ee13d14c373fbc279dcb3"
+  },
+  "full-test-confirmation.log": {
+    "bytes": 209857,
+    "sha256": "0c109aa151ccc423d12573c149017dc125b230b20faa90c7a4cda73b1b8093f0"
+  },
+  "full-test-final.log": {
+    "bytes": 123835,
+    "sha256": "7f35bcf84f8ff77d92e5c07b2bdea50202640585617418e0f2a3e8632bc52338"
+  },
+  "full-test.log": {
+    "bytes": 100137,
+    "sha256": "3ab59839f0690e8ea7f3f478930fc70f9afc05908a0490faacad614516766353"
+  },
+  "mutation-01-closed-enqueue.log": {
+    "bytes": 3390,
+    "sha256": "e9c84996d32a11f37c07035f2555a43cfc5795e4ec1bdecc8b738fb75cc39e02"
+  },
+  "mutation-02-delivery-not-light.log": {
+    "bytes": 10678,
+    "sha256": "02b175113f075b58940695d902ba251fb4a56f2f799501e7aed044721e701225"
+  },
+  "mutation-03-no-placeholder.log": {
+    "bytes": 2402,
+    "sha256": "fc972fa56f8cf6541484f361658295560041ef521b46ecade1eb218474a3583f"
+  },
+  "mutation-04-no-coalescing.log": {
+    "bytes": 5826,
+    "sha256": "bab02ce32c15ba6aeb7826c1cf8d309152a8215b8ee510b289f42645f68166b8"
+  },
+  "mutation-05-no-fairness.log": {
+    "bytes": 5292,
+    "sha256": "49a0ec83344b10a2ca62aa796b4a5a081c2133b4afbd39ca10176d984311f767"
+  },
+  "publication-preview-rerun.log": {
+    "bytes": 3704,
+    "sha256": "bab12755fe96e2360229bc66a6d535ace9123ff8427acaf3f1a514222082f442"
+  },
+  "run-add-admin-identity-postgres-verification.log": {
+    "bytes": 1104,
+    "sha256": "f092335eedff0f5d10cc15cc0d648b6331f73598396ae104c2c6f2beba335b07"
+  },
+  "run-catalog-batch-postgres-verification.log": {
+    "bytes": 6053,
+    "sha256": "dd9d16552eff1374e621713ac526e54e5b89951d69d4ca279ce94eb0a7ca0b12"
+  },
+  "run-indexnow-sweep-postgres-verification.log": {
+    "bytes": 3509,
+    "sha256": "639346457b6defdd241f2e762d3f0361fe6e45bf972f6ba703ebe709fa6355a2"
+  },
+  "run-p1-05b-postgres-verification.log": {
+    "bytes": 9409,
+    "sha256": "1414b0ca2f55233f5a12ed861a5841228876cc96e22fd30b179a829f2c181b81"
+  },
+  "run-p1-06-postgres-verification.log": {
+    "bytes": 9962,
+    "sha256": "c2ce18f9401f6ec09ef2ba8428812401f9a2f6cd74f8e8fe3d0a39056e70f41d"
+  },
+  "run-p1-08b-postgres-verification.log": {
+    "bytes": 13679,
+    "sha256": "3d73a3920468c4ff93fb623a0a502e14cba54711ee282ceab09e15158ef75600"
+  },
+  "run-phase-b-entity-fix-postgres-verification.log": {
+    "bytes": 4978,
+    "sha256": "0f6c76573feddc6ad990137e6505e54e1b53d91328330b5f954cd12ea0e46242"
+  },
+  "run-phase-d-postgres-verification.log": {
+    "bytes": 19543,
+    "sha256": "697afcaf6f8a4f7cb7ffd2657fce3f915ccfbeadae261fa8499c81d4c3182a19"
+  },
+  "run-phase-d-role-password-postgres-verification.log": {
+    "bytes": 721,
+    "sha256": "67d50d6e3e30dd4144588fd0a532903930c6fa5401a4e9c0ca964b4b7cba1f06"
+  },
+  "run-preview-account-hold-postgres-verification.log": {
+    "bytes": 800,
+    "sha256": "a5ce847dbc2390294cdaf66f240340507f0d2637ad9cc3f5be4350d5df1af8fa"
+  },
+  "run-preview-opening-postgres-verification.log": {
+    "bytes": 4654,
+    "sha256": "6f1ab9b108d6f495feaa57c44b7a184f0711a0621525441ec9818544cc1d6af6"
+  },
+  "run-promo-claim-batch-control-postgres-verification.log": {
+    "bytes": 3863,
+    "sha256": "0334f107e48448ec266a7dfc041507561faf7db713780d45d100caba129efd36"
+  },
+  "run-promo-claim-release-postgres-verification.log": {
+    "bytes": 2053,
+    "sha256": "58f6020bb0bffaa17f8e8158b9daf945478641b9596b762d2e7397d51488c6c6"
+  },
+  "run-publication-preview-postgres-verification.log": {
+    "bytes": 9706,
+    "sha256": "5becd47c712bf33a5d63458ef461469967cb0362ddedad36c8cae8023cb58ed3"
+  },
+  "run-sitemap-refresh-postgres-verification.log": {
+    "bytes": 1543,
+    "sha256": "7824f397e18171d40884ddb1b17d3f383ec3a08a52a7a318772a567e64cbf255"
+  },
+  "run-tagging-public-auto-postgres-verification.log": {
+    "bytes": 67844,
+    "sha256": "5c4b670937eabd2485c7082c094f5ef2f492e485cf0b249e7f0419ca14fd72d7"
+  },
+  "run-worker-light-postgres-verification.log": {
+    "bytes": 1186,
+    "sha256": "0599d6f20d2ffa37ac47b57fc8d307ada01c803997be271f0d9197a093772971"
+  },
+  "run-x6-site-setting-postgres-verification.log": {
+    "bytes": 219,
+    "sha256": "71591af1241d1a604cf2fef9cbaf10d4a712f69bf8a3f1950feb9925498d1295"
+  },
+  "run-x9-postgres-verification.log": {
+    "bytes": 1904,
+    "sha256": "b535b548b976965abe0a2d2a79d52dfd47add346d207b7d4c513cadaa14e94db"
+  },
+  "targeted.log": {
+    "bytes": 895,
+    "sha256": "c224e251543a635822382f3e1e7789257509564683343ceff9a1434e67a08efb"
+  },
+  "typecheck.log": {
+    "bytes": 45,
+    "sha256": "a27a5afdc84bb0db112539a441e523357da08020e453d8b18749f3dc11b88ad1"
+  }
+}
