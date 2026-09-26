@@ -684,7 +684,7 @@ preprod_assert_container_image() {
 # 🔴 没有定义 healthcheck 的服务：Docker 永远不会把它标成 healthy/unhealthy——
 # `.State.Health` 这个字段压根不存在。硬等一个不会出现的状态就是挂死到超时，
 # 所以这里的决定是：退化为"容器处于 running"这一底线判据，立即通过。
-# 三个应用服务（web/worker/scheduler）目前在 docker-compose.yml 里都定义了
+# 四个应用服务（web/worker/worker-light/scheduler）目前在 docker-compose.yml 里都定义了
 # healthcheck（web 是 HTTP，worker/scheduler 是 /proc/1/cmdline 进程存活检查），
 # 这个分支目前不会在生产路径触发，但函数本身必须对"未来某个服务没有
 # healthcheck"这件事既不假设也不挂死。
@@ -735,4 +735,19 @@ preprod_wait_for_service_health() {
       elapsed=$(( elapsed + interval ))
     done
   done
+}
+
+# Shared dependency-free policy: no second allowlist or parser in shell.
+preprod_assert_worker_lanes() {
+  node --input-type=module - "$root/src/lib/tasks/worker-lanes.mjs" <<'JS'
+import { pathToFileURL } from "node:url";
+const { validateWorkerLaneEnvironment } = await import(pathToFileURL(process.argv[2]));
+try {
+  const config = validateWorkerLaneEnvironment(process.env);
+  console.log(`PREPROD_WORKER_LANES=PASS main=${config.mainId} light=${config.lightId}`);
+} catch (error) {
+  console.error(error.message);
+  process.exit(65);
+}
+JS
 }

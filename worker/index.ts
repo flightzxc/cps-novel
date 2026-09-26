@@ -27,6 +27,9 @@ import {
   runWorker,
 } from "./runtime";
 
+import { assertWorkerLane, parseWorkerLane, type WorkerLane } from "../src/lib/tasks/worker-lanes.mjs";
+import { createSitemapDailyFallbackWorkerHandlers } from "./handlers/sitemap-daily-fallback";
+
 export interface WorkerStartupLogger {
   info(message: string): void;
   error(message: string): void;
@@ -50,6 +53,7 @@ export function resolveWorkerStartupAllowlist(
   raw: string | undefined,
   handlers: TaskHandlerRegistry,
   logger: WorkerStartupLogger = console,
+  lane: WorkerLane = "main",
 ): WorkerAllowlistConfig {
   const allowlist = buildWorkerAllowlist(raw, handlers);
   const level = allowlist.invalid.length > 0 ? "error" : "info";
@@ -64,6 +68,12 @@ export function resolveWorkerStartupAllowlist(
   if (level === "error") logger.error(event);
   else logger.info(event);
   if (!allowlist.willConsume) throw new WorkerStartupConfigurationError();
+  try {
+    assertWorkerLane(lane, allowlist.effective);
+  } catch (error) {
+    logger.error(JSON.stringify({ event: "worker_lane_rejected", lane, reason: (error as Error).message }));
+    throw error;
+  }
   return allowlist;
 }
 
@@ -74,6 +84,7 @@ export function createWorkerHandlers(prisma: PrismaClient) {
     ...createPromoLinkClaimWorkerHandlers(prisma),
     ...createIndexNowWorkerHandlers(prisma),
     ...createSitemapRefreshWorkerHandlers(prisma),
+    ...createSitemapDailyFallbackWorkerHandlers(),
     ...createHomeCarouselWorkerHandlers(prisma),
     ...createTaggingWorkerHandlers(prisma),
     ...createCatalogBatchWorkerHandlers(prisma),
@@ -97,6 +108,8 @@ export async function main(): Promise<void> {
     const allowlist = resolveWorkerStartupAllowlist(
       process.env.WORKER_TASK_ALLOWLIST,
       handlers,
+      console,
+      parseWorkerLane(process.env.WORKER_LANE),
     );
     await runWorker({
       prisma,

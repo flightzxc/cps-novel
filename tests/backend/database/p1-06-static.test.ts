@@ -166,8 +166,9 @@ describe("P1-06 database operations static contracts", () => {
     // `novel_source_item.catalog_position` -- no new table, no new
     // constraint/index (deliberately unindexed, see that field record's own
     // `notes`) -- running total 1234 + 1 = 1235.
-    expect(records).toHaveLength(1235);
-    expect(new Set(records.map((line) => JSON.parse(line).stable_key)).size).toBe(1235);
+    // WO5 adds schedule_run.skip_reason (nullable, no new physical constraint).
+    expect(records).toHaveLength(1236);
+    expect(new Set(records.map((line) => JSON.parse(line).stable_key)).size).toBe(1236);
     const intents = records.map((line) => JSON.parse(line)).filter(
       (record) => record.table_name === "side_effect_intent"
         && ["status", "response_shape", "confirmed_at"].includes(record.field_name),

@@ -25,7 +25,7 @@ v0.4.3 已发布到预生产，但 worker 白名单尚未包含文章生成任�
 ## 后续：v0.4.4
 
 1. 后台提供手动刷新 sitemap 的按钮与状态反馈。
-2. 在 scheduler 入队每日兜底刷新，由 worker 执行，以覆盖发布后的下线或撤回。
+2. **已实现、待发布（工单 5）**：在 scheduler 入队每日兜底扫描，由 worker-light 经合并入口刷新，以覆盖发布后的下线或撤回。
 3. 提供命令行 sitemap 生成与正式 dry-run，恢复发布清单原有验收路径。
 4. 将 sitemap 写闸加入预生产写闸登记封闭枚举，并同步 preflight、env 模板与契约测试。
 
@@ -39,3 +39,7 @@ env 示例对齐四个任务与 sitemap 双闸，并在现有封闭枚举增加 
 旧 preflight 不认识该名字，升级与回滚顺序详见
 [写闸登记 ADR](ADR-PREPROD-APPROVED-OPEN-WRITE-GATES.md#2026-09-26-extension-sitemap-registration-and-upgrade-order)。
 本节只落实原后续项 4，不代表手动入口、CLI 或每日调度已经完成。
+
+### 2026-09-26 工单 5
+
+后续项 2（每日兜底）已实现、待发布：东京时间 04:00 入队扫描控制任务，经 worker-light 调用现有 sitemap 合并入口。两项写闸任一关闭则成功跳过。文章生成三类暂留主通道：无上游调用，但不同小说同名 slug 的并发分配尚未证明安全，交 Owner 后续决定。

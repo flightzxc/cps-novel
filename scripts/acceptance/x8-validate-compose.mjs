@@ -1,3 +1,4 @@
+import { validateWorkerLaneEnvironment } from "../../src/lib/tasks/worker-lanes.mjs";
 import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
@@ -32,7 +33,7 @@ for await (const chunk of process.stdin) input += chunk;
 const config = JSON.parse(input);
 const services = config.services ?? {};
 const serviceNames = Object.keys(services).sort();
-const expectedServices = ["backup-timer", "nginx", "postgres", "scheduler", "web", "worker"];
+const expectedServices = ["backup-timer", "nginx", "postgres", "scheduler", "web", "worker", "worker-light"];
 if (JSON.stringify(serviceNames) !== JSON.stringify(expectedServices)) {
   fail(`resident services are ${serviceNames.join(",")}`);
 }
@@ -207,4 +208,14 @@ for (const [name, service] of [["web", web], ["worker", worker]]) {
     );
   }
 }
+
+const lightWorker = services["worker-light"];
+if (lightWorker?.environment?.WORKER_TASK_ALLOWLIST !== levelEntry.workerLightTaskAllowlist
+  || lightWorker?.environment?.WORKER_LANE !== "light"
+  || lightWorker?.environment?.WORKER_ID === worker.environment?.WORKER_ID) {
+  throw new Error("worker-light lane configuration drift");
+}
+
+validateWorkerLaneEnvironment({ ...worker.environment, WORKER_LIGHT_ID: lightWorker.environment.WORKER_ID, WORKER_LIGHT_TASK_ALLOWLIST: lightWorker.environment.WORKER_TASK_ALLOWLIST });
+
 console.log(`X8_COMPOSE_ISOLATION=PASS (X8_LEVEL=${level})`);
