@@ -72,6 +72,7 @@ grace="${WORKER_STOP_GRACE_PERIOD:-45s}"
 grace_ms=$((10#${grace%s} * 1000))
 (( grace_ms >= drain + 10000 )) || fail worker_shutdown_margin
 
+preprod_assert_worker_lanes || fail worker_lanes
 "$root/scripts/preproduction/secrets-preflight.sh"
 preprod_compose config --quiet || fail compose_config
 
@@ -83,7 +84,7 @@ if [[ -n "${PREPROD_RELEASE_IMAGE_REF:-}" ]]; then
   node -e '
     const cfg = JSON.parse(process.argv[1]);
     const want = process.argv[2];
-    for (const name of ["web", "worker", "scheduler"]) {
+    for (const name of ["web", "worker", "worker-light", "scheduler"]) {
       const svc = cfg.services?.[name];
       if (!svc) { console.log("missing:" + name); process.exit(1); }
       if (svc.image !== want) { console.log(name + ":" + svc.image); process.exit(1); }

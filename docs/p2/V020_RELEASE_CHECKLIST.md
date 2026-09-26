@@ -161,7 +161,7 @@
       内一起改，任务消费原子规则见本节开头）。
 - [ ] `FEATURE_PROMO_LINK_CLAIM=true` / `PROMO_LINK_CLAIM_ALLOW_WRITE=true`（同一次变更内
       一起改）。
-- [ ] `WORKER_TASK_ALLOWLIST=credential.validate.v1,credential.supersede.v1,catalog_scan,home_carousel.compute.v1,moboreader.preview_refresh.v1,promo_link.claim.v1,batch.materialize.v1,content.create.v1,novel.materialize.v1,article.generate.v1,article.generate.batch.v1,article.generate.batch.v2`
+- [ ] `WORKER_TASK_ALLOWLIST=credential.validate.v1,credential.supersede.v1,catalog_scan,moboreader.preview_refresh.v1,promo_link.claim.v1,batch.materialize.v1,content.create.v1,novel.materialize.v1,article.generate.v1,article.generate.batch.v1,article.generate.batch.v2`
       与上面两对双闸在**同一次变更**中一起生效；C2b 已验收（见上），
       `moboreader.preview_refresh.v1` 不再需要保持 pending-only。
 - [ ] `home_carousel.compute.v1` 已在 Web action、Scheduler、Worker handler 和 X8 UAT/R allowlist
@@ -333,3 +333,5 @@ Level UAT（步骤 0）与 Level R（步骤 6 的收益上线开闸）分别在�
 
 - [ ] 保留 `npm test`、`npm run typecheck`、`npm run lint`、migration status/deploy、dry-run 和 HTTP route 验收的完整命令与原始输出。
 - [ ] 证据仅写 `/tmp` 或 `/private/tmp`，过程输出使用脱敏工具，不得把 URL 签名、JWT、cookie、password 或 `DATABASE_URL` 写入 PR。
+
+工单 5：各级轻量通道独立消费 `sitemap_refresh,sitemap.daily_fallback.v1,home_carousel.compute.v1`，主通道不重复消费；各级原有写闸状态不变。

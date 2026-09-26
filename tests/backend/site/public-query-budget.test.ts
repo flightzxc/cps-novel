@@ -1,5 +1,5 @@
 import type { PrismaClient } from "@prisma/client";
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   getPublicChapterView,
@@ -184,7 +184,10 @@ beforeEach(() => {
   invalidateSiteSettingCache();
 });
 
-describe("公开侧一次渲染的查询数（cold cache）", () => {
+afterEach(() => vi.unstubAllEnvs());
+
+describe.each(["false", "true"])("公开侧一次渲染的查询数（cold cache, auto=%s）", (flag) => {
+  beforeEach(() => vi.stubEnv("FEATURE_NOVEL_TAG_AUTO", flag));
   it("首页（N-9 已接线，lane D）：categories 只查一次，合计 ≤ 5 次新增查询（原 ≤ 7）", async () => {
     const db = new CountingFakeDb();
     const client = db.asPrismaClient();

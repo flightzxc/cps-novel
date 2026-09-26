@@ -1533,7 +1533,7 @@ up_x8() {
   X8_IDENTITY_DEPLOY_IN_PROGRESS=1
   trap 'x8_up_exit_trap' EXIT
   prepare_database
-  x8_compose up -d web worker scheduler
+  x8_compose up -d web worker worker-light scheduler
 
   # 2026-09-06 patch (second round), group 1 P0: `up -d` only confirms these
   # three containers were CREATED and started -- nothing about whether the
@@ -1550,7 +1550,7 @@ up_x8() {
   # relies on (x8_gate_wait_ready()) and fails `up` -- before promotion,
   # while the EXIT trap above is still armed -- the moment any of them is
   # not running/healthy.
-  x8_wait_services_healthy web worker scheduler
+  x8_wait_services_healthy web worker worker-light scheduler
 
   # M2/RC-… : persisted operator choice remains authoritative, but drift
   # between it and what the containers actually have must never be silent.
@@ -1643,7 +1643,7 @@ verify_x8() {
   validate_rendered_topology
   local running
   running="$(x8_compose ps --status running --services | sort | tr '\n' ',' | sed 's/,$//')"
-  [[ "$running" == "backup-timer,nginx,postgres,scheduler,web,worker" ]] || {
+  [[ "$running" == "backup-timer,nginx,postgres,scheduler,web,worker,worker-light" ]] || {
     echo "ERROR: not all X8 services are running: $running" >&2
     exit 1
   }
@@ -2464,7 +2464,7 @@ gate_catalog() {
 # assumption -- which it is not. `up` promotes it only after build, database
 # prep, recreate and every health probe pass (see up_x8), so for the SUPPORTED
 # deploy path the file is right by construction; but an out-of-band
-# `docker compose up -d --no-deps web worker scheduler` (an entirely reasonable
+# `docker compose up -d --no-deps web worker worker-light scheduler` (an entirely reasonable
 # thing to do while iterating, and what the 2026-09-18 deploys actually did)
 # swaps the image underneath without touching it. The file then names the
 # previous release and nothing says so.
@@ -2479,7 +2479,7 @@ gate_catalog() {
 # contradict the identity, it just has nothing to compare against.
 x8_report_identity_drift() {
   local drifted=0 service container actual
-  for service in web worker scheduler; do
+  for service in web worker worker-light scheduler; do
     container="$(x8_gate_compose ps -q "$service" 2>/dev/null || true)"
     if [[ -z "$container" ]]; then
       echo "X8_IDENTITY_RUNTIME_ABSENT=$service"

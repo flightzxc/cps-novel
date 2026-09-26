@@ -21,7 +21,10 @@ import {
   type AutoClassificationDependencies,
 } from "./auto-classification";
 
+import { normalizeTaggingNovelIds } from "@/lib/tagging/novel-id-scope";
+
 export type TaggingTaskScope =
+  | { kind: "novels"; novelIds: readonly string[] }
   | { kind: "novel"; novelId: string }
   | { kind: "locale"; locale: string }
   | { kind: "all" };
@@ -47,7 +50,8 @@ export interface CreateTaggingAutoClassifyTaskInput {
 export type TaggingTaskCreationResult =
   | { status: "enqueued"; taskId: string; taskStatus: "pending"; eligibleCount: number }
   | { status: "duplicate"; taskId: string; eligibleCount: number }
-  | { status: "no_eligible_novels"; eligibleCount: 0 };
+  | { status: "no_eligible_novels"; eligibleCount: 0 }
+  | { status: "skipped"; reason: "tagging_gates_closed"; eligibleCount: 0 };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -55,6 +59,7 @@ function requireInput(input: CreateTaggingAutoClassifyTaskInput) {
   const mode = input.mode ?? "dry_run";
   if (mode !== "dry_run" && mode !== "apply") throw new TaggingError("DATA_INVARIANT_VIOLATION", "Invalid Tagging task mode");
   if (!input.requestId.trim() || input.requestId.length > 120) throw new TaggingError("DATA_INVARIANT_VIOLATION", "requestId is required and must not exceed 120 characters");
+  if (input.scope.kind === "novels") normalizeTaggingNovelIds(input.scope.novelIds);
   if (input.scope.kind === "novel" && !UUID.test(input.scope.novelId)) throw new TaggingError("DATA_INVARIANT_VIOLATION", "novelId must be a UUID");
   if (input.scope.kind === "locale" && !input.scope.locale.trim()) throw new TaggingError("DATA_INVARIANT_VIOLATION", "locale must not be empty");
   return { mode };
@@ -67,12 +72,14 @@ function requireEnqueueGates(mode: "dry_run" | "apply", env: NodeJS.ProcessEnv):
 }
 
 function scopeForQuery(scope: TaggingTaskScope) {
+  if (scope.kind === "novels") return { novelIds: normalizeTaggingNovelIds(scope.novelIds) };
   if (scope.kind === "novel") return { novelId: scope.novelId };
   if (scope.kind === "locale") return { locale: scope.locale };
   return { all: true as const };
 }
 
 function scopeSnapshot(scope: TaggingTaskScope) {
+  if (scope.kind === "novels") return { kind: scope.kind, novelIds: normalizeTaggingNovelIds(scope.novelIds) };
   if (scope.kind === "novel") return { kind: scope.kind, novelId: scope.novelId };
   if (scope.kind === "locale") return { kind: scope.kind, locale: scope.locale };
   return { kind: scope.kind };
@@ -212,6 +219,11 @@ export async function initializeNovelTagSnapshot(
   novelId: string,
   dependencies: InitializeNovelTagSnapshotDependencies,
 ): Promise<TaggingTaskCreationResult> {
+  const env = dependencies.env ?? process.env;
+  if (!isTaggingEnabled(env) || !isAutoTaggingEnabled(env) || !isAutoTagWriteAuthorized(env)) {
+    console.info("[tagging-initialize]", { status: "skipped", reason: "tagging_gates_closed", novelId });
+    return { status: "skipped", reason: "tagging_gates_closed", eligibleCount: 0 };
+  }
   const snapshot = await readNovelClassificationSnapshot(dependencies.db, novelId);
   if (snapshot.currentAutoRunId !== null || snapshot.mode === "manual") {
     return { status: "no_eligible_novels", eligibleCount: 0 };

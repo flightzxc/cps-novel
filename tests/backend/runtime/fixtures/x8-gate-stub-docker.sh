@@ -110,6 +110,13 @@ if [[ "${1:-}" == "inspect" ]]; then
     # alongside web/worker -- only .State.Health.Status is exercised by that
     # path, but the other fields are filled in for symmetry with web/worker
     # in case a future test needs them.
+    "${STUB_LIGHT_CONTAINER_ID:-__none__}")
+      label_project="${STUB_LIGHT_LABEL_PROJECT:-}"; label_service="${STUB_LIGHT_LABEL_SERVICE:-}"
+      label_config_files="${STUB_LIGHT_LABEL_CONFIG_FILES:-}"; env_json="${STUB_LIGHT_ENV_JSON:-[]}"
+      label_working_dir="${STUB_LIGHT_LABEL_WORKING_DIR:-/fixture}"
+      pre_image="${STUB_LIGHT_LABEL_IMAGE:-}"; marker_key=LIGHT
+      health="${STUB_LIGHT_HEALTH:-healthy}"
+      ;;
     "${STUB_SCHEDULER_CONTAINER_ID:-__none__}")
       label_project="${STUB_SCHEDULER_LABEL_PROJECT:-}"; label_service="${STUB_SCHEDULER_LABEL_SERVICE:-}"
       label_config_files="${STUB_SCHEDULER_LABEL_CONFIG_FILES:-}"; env_json="${STUB_SCHEDULER_ENV_JSON:-[]}"
@@ -258,6 +265,9 @@ if [[ "${1:-}" == "compose" ]]; then
             exit 1
           fi
           echo "${STUB_WORKER_CONTAINER_ID:-}"
+          ;;
+        worker-light)
+          echo "${STUB_LIGHT_CONTAINER_ID:-}"
           ;;
         scheduler)
           if [[ "${STUB_PS_FAIL_SCHEDULER:-}" == "1" ]]; then

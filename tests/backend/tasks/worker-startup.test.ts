@@ -89,6 +89,7 @@ describe("X1 worker startup allowlist", () => {
       "moboreader.preview_refresh.v1",
       "novel.materialize.v1",
       "promo_link.claim.v1",
+      "sitemap.daily_fallback.v1",
       "sitemap_refresh",
       "tagging.auto_classify",
     ]);

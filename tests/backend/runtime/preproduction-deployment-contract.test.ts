@@ -340,7 +340,7 @@ describe("Phase 2B preproduction deployment contract", () => {
     expect(env).toContain("PREPROD_APPROVED_OPEN_WRITE_GATES=catalog_write,promo_write,sitemap_write");
     expect(env).toContain("FEATURE_SITEMAP_AUTO_REFRESH=true");
     expect(env).toContain("SITEMAP_AUTO_REFRESH_ALLOW_WRITE=true");
-    expect(env).toContain("article.generate.v1,article.generate.batch.v1,article.generate.batch.v2,sitemap_refresh");
+    expect(env).toContain("article.generate.v1,article.generate.batch.v1,article.generate.batch.v2");
     expect(env).toContain("FEATURE_NOVEL_CATALOG_SYNC=true");
     expect(env).toContain("NOVEL_CATALOG_SYNC_ALLOW_WRITE=true");
     expect(env).toContain("FEATURE_PROMO_LINK_CLAIM=true");
@@ -395,7 +395,7 @@ describe("Phase 2B preproduction deployment contract", () => {
       'verify-release.sh\"',
       "preprod_compose_app_up worker",
       "preprod_compose_app_up scheduler",
-      "preprod_wait_for_service_health worker scheduler",
+      "preprod_wait_for_service_health worker worker-light scheduler",
       "PREPROD_RELEASE_VERIFIED=YES maintenance_off",
       // MAJOR-1 fix: the full verify-release.sh call above always runs
       // while maintenance is still on, so its anonymous-surface 401
@@ -455,7 +455,7 @@ describe("Phase 2B preproduction deployment contract", () => {
       'verify-release.sh\"',
       "preprod_compose_app_up worker",
       "preprod_compose_app_up scheduler",
-      "preprod_wait_for_service_health worker scheduler",
+      "preprod_wait_for_service_health worker worker-light scheduler",
       "PREPROD_RELEASE_VERIFIED=YES maintenance_off",
       // MAJOR-1 fix, same reasoning as deploy() above.
       'verify-release.sh\" --anonymous-only',
@@ -995,8 +995,10 @@ describe("approved sitemap template renders into runtime services", () => {
       expect(config.services[service].environment.SITEMAP_AUTO_REFRESH_ALLOW_WRITE).toBe("true");
     }
     const tasks = config.services.worker.environment.WORKER_TASK_ALLOWLIST.split(",");
-    for (const task of ["article.generate.v1", "article.generate.batch.v1", "article.generate.batch.v2", "sitemap_refresh"])
+    for (const task of ["article.generate.v1", "article.generate.batch.v1", "article.generate.batch.v2"])
       expect(tasks).toContain(task);
+    expect(config.services["worker-light"].environment.WORKER_TASK_ALLOWLIST.split(",")).toContain("sitemap_refresh");
+    expect(tasks).not.toContain("sitemap_refresh");
     expect(config.services.scheduler.environment.FEATURE_SITEMAP_AUTO_REFRESH).toBeUndefined();
     expect(config.services.scheduler.environment.SITEMAP_AUTO_REFRESH_ALLOW_WRITE).toBeUndefined();
   });

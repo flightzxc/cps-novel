@@ -8,6 +8,8 @@ if [[ ! "$interval" =~ ^[1-9][0-9]*$ ]] || (( interval > 86400 )); then
   exit 1
 fi
 
+source "$(dirname "${BASH_SOURCE[0]}")/lib/scheduler-timing.sh"
+
 child_pid=""
 stop() {
   if [[ -n "$child_pid" ]]; then
@@ -24,7 +26,7 @@ while true; do
   wait "$child_pid"
   child_pid=""
 
-  sleep "$interval" &
+  sleep "$(scheduler_sleep_seconds "$(date +%s)" "$interval")" &
   child_pid="$!"
   wait "$child_pid"
   child_pid=""

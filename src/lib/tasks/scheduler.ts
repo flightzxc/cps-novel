@@ -22,6 +22,10 @@ export interface ScheduledTaskInput {
   channelAppId?: string;
   params?: Prisma.InputJsonValue;
   items: ScheduledTaskItemInput[];
+  /** Coalescing scan controls only. Existing schedules are unchanged. */
+  periodicSweep?: boolean;
+  /** Daily controls may arrive within this window; minute scans omit it. */
+  dailySweepWindowMinutes?: number;
 }
 
 export interface ScheduleDefinition {
@@ -31,7 +35,8 @@ export interface ScheduleDefinition {
 }
 
 export interface SchedulerEnqueueResult {
-  status: "enqueued" | "duplicate";
+  status: "enqueued" | "duplicate" | "skipped";
+  skipReason?: "previous_scan_in_flight" | "misfire_skip";
   scheduleRunId?: string;
   cronRunId?: string;
   taskId?: string;
@@ -61,7 +66,16 @@ export async function enqueueScheduledTask(
   if (input.items.length === 0) throw new Error("Scheduled task must contain at least one item");
   if (Number.isNaN(input.scheduledFor.valueOf())) throw new Error("scheduledFor must be valid");
 
+  if (input.dailySweepWindowMinutes !== undefined && (!input.periodicSweep
+    || !Number.isInteger(input.dailySweepWindowMinutes) || input.dailySweepWindowMinutes < 1)) {
+    throw new Error("daily_sweep_window_invalid");
+  }
+
   return prisma.$transaction(async (tx) => {
+    if (input.periodicSweep) {
+      if (input.misfirePolicy !== "skip") throw new Error("periodic_sweep_requires_skip");
+      await tx.$queryRaw(Prisma.sql`SELECT pg_advisory_xact_lock(50211, hashtext(${input.taskType}))::text`);
+    }
     const scheduleRunId = randomUUID();
     const inserted = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
       INSERT INTO schedule_run (
@@ -78,6 +92,26 @@ export async function enqueueScheduledTask(
     `);
     if (inserted.length === 0) return { status: "duplicate" };
 
+    if (input.periodicSweep) {
+      const [clock] = await tx.$queryRaw<Array<{ now: Date }>>(Prisma.sql`SELECT clock_timestamp() AS now`);
+      const currentMinute = Math.floor(clock.now.getTime() / 60_000) * 60_000;
+      const active = await tx.genericTask.findFirst({
+        where: { taskType: input.taskType, status: { in: ["pending", "processing"] } },
+        select: { id: true },
+      });
+      const scheduledMs = input.scheduledFor.getTime();
+      const inWindow = input.dailySweepWindowMinutes === undefined
+        ? scheduledMs === currentMinute
+        : clock.now.getTime() >= scheduledMs
+          && clock.now.getTime() < scheduledMs + input.dailySweepWindowMinutes * 60_000;
+      const skipReason = !inWindow
+        ? "misfire_skip" : active ? "previous_scan_in_flight" : undefined;
+      if (skipReason) {
+        await tx.$executeRaw(Prisma.sql`UPDATE schedule_run SET status = 'skipped',
+          skip_reason = ${skipReason}, updated_at = transaction_timestamp() WHERE id = ${scheduleRunId}::uuid`);
+        return { status: "skipped", scheduleRunId, skipReason };
+      }
+    }
     const taskId = randomUUID();
     const identity = `${input.scheduleKey}\n${input.scheduleRevision}\n${input.scheduledFor.toISOString()}`;
     await tx.genericTask.create({
@@ -124,11 +158,12 @@ export async function runSchedulerOnce(
   prisma: PrismaClient,
   registry: TaskHandlerRegistry,
   definitions: readonly ScheduleDefinition[],
-  now = new Date(),
+  now?: Date,
 ): Promise<SchedulerEnqueueResult[]> {
+  const tickTime = now ?? (await prisma.$queryRaw<Array<{ now: Date }>>`SELECT clock_timestamp() AS now`)[0].now;
   const results: SchedulerEnqueueResult[] = [];
   for (const definition of definitions) {
-    for (const scheduledFor of definition.dueInstants(now)) {
+    for (const scheduledFor of definition.dueInstants(tickTime)) {
       const input = definition.build(scheduledFor);
       if (input.scheduleKey !== definition.scheduleKey) {
         throw new Error(`Schedule definition key mismatch: ${definition.scheduleKey}`);

@@ -50,6 +50,7 @@
  * `"skipped_already_linked"` for anything that in fact got created just
  * before the cutoff).
  */
+import { initializeCreatedNovelBatchTags } from "@/server/tagging/materialization";
 import type { PrismaClient } from "@prisma/client";
 
 import { summarizeDbError } from "@/lib/db/db-retry";
@@ -268,6 +269,11 @@ export async function applyContentCreationBatch(
   input: ContentCreationBatchInput,
 ): Promise<ContentCreationBatchApplyResult> {
   const items = await runSequentialBudgetedBatch(db, "apply", input, classifyApplyOutcome);
+  await initializeCreatedNovelBatchTags(
+    items.flatMap((item) => item.result?.outcome === "created" ? [item.result.novelId] : []),
+    input.requestId,
+    { db },
+  );
   return { items, counts: countBy(items, APPLY_STATUSES) };
 }
 

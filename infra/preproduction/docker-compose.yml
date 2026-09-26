@@ -52,6 +52,11 @@ services:
     pull_policy: never
     stop_grace_period: 45s
 
+  worker-light:
+    build: !reset null
+    pull_policy: never
+    stop_grace_period: 45s
+
   scheduler:
     # 同 web：目标机不得具备就地构建能力，见上面的说明。
     build: !reset null

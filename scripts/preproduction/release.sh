@@ -87,7 +87,7 @@ deploy() {
 
   preprod_compose stop scheduler
   write_state scheduler_stopped "$manifest_commit" "$manifest_image"
-  preprod_compose stop worker
+  preprod_compose stop worker worker-light
   write_state worker_stopped "$manifest_commit" "$manifest_image"
   preprod_compose stop web
   write_state web_stopped "$manifest_commit" "$manifest_image"
@@ -114,15 +114,15 @@ deploy() {
   "$root/scripts/preproduction/verify-release.sh"
   write_state verified "$manifest_commit" "$manifest_image"
 
-  preprod_compose_app_up worker
+  preprod_compose_app_up worker worker-light
   preprod_compose_app_up scheduler
-  preprod_assert_container_image worker scheduler || {
+  preprod_assert_container_image worker worker-light scheduler || {
     echo "RELEASE=REFUSED reason=runtime_image_mismatch"; exit 65;
   }
   # 同上：worker/scheduler 同样必须等自己 healthy，不能只核完镜像身份就
   # 直接放行到 maintenance_off。
-  preprod_wait_for_service_health worker scheduler || {
-    echo "RELEASE=FAILED reason=health_wait_failed service=worker,scheduler"; exit 65;
+  preprod_wait_for_service_health worker worker-light scheduler || {
+    echo "RELEASE=FAILED reason=health_wait_failed service=worker,worker-light,scheduler"; exit 65;
   }
   PREPROD_RELEASE_VERIFIED=YES maintenance_off
   # 🔴 MAJOR-1 fix: the full verify-release.sh call above (line ~98) always
@@ -170,7 +170,7 @@ rollback() {
   # `${failed:-1}` 读不到就当失败。
   trap 'if [[ "${failed:-1}" == "1" ]]; then write_state rollback_failed "$manifest_commit" "$manifest_image"; echo "ROLLBACK=FAILED maintenance=ON"; fi' EXIT
   preprod_compose stop scheduler
-  preprod_compose stop worker
+  preprod_compose stop worker worker-light
   preprod_compose stop web
   # Application rollback only: no down migration and no data/volume restore.
   # 🔴 数据与密钥身份不变：这里不碰 postgres 服务、不动 cps_novel_postgres_data
@@ -211,13 +211,13 @@ rollback() {
     echo "ROLLBACK=FAILED reason=health_wait_failed service=web"; exit 65;
   }
   "$root/scripts/preproduction/verify-release.sh"
-  preprod_compose_app_up worker
+  preprod_compose_app_up worker worker-light
   preprod_compose_app_up scheduler
-  preprod_assert_container_image worker scheduler || {
+  preprod_assert_container_image worker worker-light scheduler || {
     echo "ROLLBACK=REFUSED reason=runtime_image_mismatch"; exit 65;
   }
-  preprod_wait_for_service_health worker scheduler || {
-    echo "ROLLBACK=FAILED reason=health_wait_failed service=worker,scheduler"; exit 65;
+  preprod_wait_for_service_health worker worker-light scheduler || {
+    echo "ROLLBACK=FAILED reason=health_wait_failed service=worker,worker-light,scheduler"; exit 65;
   }
   PREPROD_RELEASE_VERIFIED=YES maintenance_off
   # 🔴 MAJOR-1 fix: same reasoning as deploy() above -- the full

@@ -22,6 +22,8 @@ import {
 } from "@/lib/tagging/keyword-eligibility";
 import { fingerprint, sha256 } from "@/lib/tagging/stable-json";
 
+import { normalizeTaggingNovelIds } from "@/lib/tagging/novel-id-scope";
+
 type Db = PrismaClient | Prisma.TransactionClient;
 
 interface SourceIdentityRow {
@@ -197,11 +199,16 @@ export async function readNovelClassificationSnapshot(db: Db, novelId: string): 
 
 export async function readNovelClassificationSnapshots(
   db: Db,
-  scope: { novelId?: string; locale?: string; all?: true },
+  scope: { novelId?: string; novelIds?: readonly string[]; locale?: string; all?: true },
 ): Promise<NovelClassificationSnapshot[]> {
+  // Explicit empty selection is never an unbounded query. The total cap also
+  // bounds each read to C-15's <=5,000 IDs; callers segment before this API.
+  const ids = scope.novelIds === undefined ? undefined : normalizeTaggingNovelIds(scope.novelIds);
+  if (ids?.length === 0) return [];
   const novels = await db.novel.findMany({
     where: {
       deletedAt: null,
+      ...(ids ? { id: { in: ids } } : {}),
       ...(scope.novelId ? { id: scope.novelId } : {}),
       ...(scope.locale ? { locale: scope.locale } : {}),
     },

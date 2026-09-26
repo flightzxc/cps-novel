@@ -71,6 +71,8 @@ export interface TaskHandlerRegistration {
   family: TaskFamily;
   handler: TaskHandler;
   maxAttempts?: number;
+  /** Best-effort observer after item finalization/recovery has committed. */
+  afterItemCommit?: (taskId: string) => Promise<void>;
 }
 
 export type TaskHandlerRegistry = Readonly<Record<string, TaskHandlerRegistration>>;

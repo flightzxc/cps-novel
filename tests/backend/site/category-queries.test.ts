@@ -1,7 +1,7 @@
 import type { PrismaClient } from "@prisma/client";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { getPublicCategoryPage } from "@/lib/site/category-queries";
 import { loadPublicTaxonomyByNovelIds } from "@/lib/site/public-taxonomy";
@@ -24,6 +24,8 @@ const tagRow = {
   sort_order: 7,
   updated_at: new Date("2026-09-02T00:00:00Z"),
 };
+
+afterEach(() => vi.unstubAllEnvs());
 
 describe("public category queries · CPS category semantics on CanonicalTag", () => {
   it("uses the central published-only predicate and returns a populated category", async () => {
@@ -57,6 +59,7 @@ describe("public category queries · CPS category semantics on CanonicalTag", ()
   });
 
   it("manual FULL_SNAPSHOT overrides mapping (including empty); automatic/missing state derives mapping and excludes auto", async () => {
+    vi.stubEnv("FEATURE_NOVEL_TAG_AUTO", "false");
     const query = vi.fn().mockResolvedValue([tagRow]);
     const result = await loadPublicTaxonomyByNovelIds({ $queryRaw: query } as unknown as PrismaClient, [article.novel.id], "en");
     const sql = (query.mock.calls[0][0] as { strings: readonly string[] }).strings.join(" ");
@@ -68,6 +71,17 @@ describe("public category queries · CPS category semantics on CanonicalTag", ()
     expect(sql).toContain("zh.locale = 'zh'");
     expect(sql).not.toContain("nct.source = 'auto'");
     expect(JSON.stringify(result.get(article.novel.id))).not.toMatch(/rawToken|externalLabel|sourceLabel/i);
+  });
+
+  it("includes only the current auto run when enabled, with mapped priority", async () => {
+    vi.stubEnv("FEATURE_NOVEL_TAG_AUTO", "true");
+    const query = vi.fn().mockResolvedValue([tagRow]);
+    await loadPublicTaxonomyByNovelIds({ $queryRaw: query } as unknown as PrismaClient, [article.novel.id], "en");
+    const sql = query.mock.calls[0][0].strings.join(" ");
+    expect(sql).toContain("nct.source = 'auto'");
+    expect(sql).toContain("nct.classification_run_id = nts.current_auto_run_id");
+    expect(sql).toContain("mapped.canonical_tag_id = automatic.canonical_tag_id");
+    expect(sql).toContain("target_source_item AS MATERIALIZED");
   });
 
   it("keeps AUTO_WRITE_AUTHORIZED=NO: public consumers contain no auto mutation call", async () => {

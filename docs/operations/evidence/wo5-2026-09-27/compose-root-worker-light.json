@@ -1,0 +1,125 @@
+{
+  "build": {
+    "context": "/Users/chenweifeng/Documents/cps海阅/wo5-light-lane",
+    "dockerfile": "Dockerfile",
+    "args": {
+      "APP_VERSION": "0.4.5",
+      "BUILD_DATE": "/tmp/wo5-fixture",
+      "GIT_COMMIT": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "NEXT_PUBLIC_BUILD_VERSION": "/tmp/wo5-fixture",
+      "NODE_BASE_IMAGE": "node:20-alpine@sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb8363f609372293"
+    }
+  },
+  "command": [
+    "bash",
+    "scripts/start-worker.sh"
+  ],
+  "depends_on": {
+    "postgres": {
+      "condition": "service_healthy",
+      "required": true
+    }
+  },
+  "entrypoint": null,
+  "environment": {
+    "APP_VERSION": "0.4.5",
+    "AUTO_WRITE_AUTHORIZED": "NO",
+    "CHANNEL_CREDENTIAL_ACTIVE_KEY_VERSION": "/tmp/wo5-fixture",
+    "CHANNEL_CREDENTIAL_ENCRYPTION_KEY_V1_FILE": "/run/secrets/channel_credential_encryption_key_v1",
+    "CHANNEL_CREDENTIAL_FINGERPRINT_KEY_FILE": "/run/secrets/channel_credential_fingerprint_key",
+    "DATABASE_URL": "/tmp/wo5-fixture",
+    "FEATURE_ARTICLE_BLOG": "false",
+    "FEATURE_ARTICLE_SEO_VISIBILITY": "false",
+    "FEATURE_INDEXNOW_DELIVERY": "false",
+    "FEATURE_NOVEL_CATALOG_SYNC": "false",
+    "FEATURE_NOVEL_TAG_AUTO": "false",
+    "FEATURE_P2_06_5_TAGGING": "false",
+    "FEATURE_P2_06_5_TAG_ADMIN_WRITE": "false",
+    "FEATURE_PROMO_LINK_CLAIM": "false",
+    "FEATURE_SITEMAP_AUTO_REFRESH": "false",
+    "GIT_COMMIT": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "INDEXNOW_DELIVERY_ALLOW_WRITE": "false",
+    "MOBOREADER_CATALOG_SAFETY_MAX_PAGES": "2000",
+    "MOBOREADER_PREVIEW_CHUNK_SIZE": "25",
+    "MOBOREADER_PREVIEW_CONCURRENCY": "2",
+    "MOBOREADER_PREVIEW_FRESHNESS_MS": "86400000",
+    "MOBOREADER_PREVIEW_SOURCE_APP_CODES": "moboreader",
+    "MOBOREADER_PREVIEW_SOURCE_ITEM_ALLOWLIST": "",
+    "MOBOREADER_PREVIEW_TIMEOUT_MS": "20000",
+    "MOBOREADER_UPSTREAM_HOST_MIN_GAP_MS": "250",
+    "MOBOREADER_UPSTREAM_MIN_REQUEST_INTERVAL_MS": "1100",
+    "MOBOREADER_UPSTREAM_MIN_REQUEST_INTERVAL_MS__GETCODE": "1200",
+    "MOBOREADER_UPSTREAM_MIN_REQUEST_INTERVAL_MS__GETLISTPC": "1200",
+    "MOBOREADER_UPSTREAM_PER_ENDPOINT_RATE_GATE_ENABLED": "false",
+    "MOBOREADER_UPSTREAM_RATE_WINDOW_MAX_WAIT_MS": "60000",
+    "MOBOREADER_UPSTREAM_RECOMMENDED_PAGE_SIZE": "20",
+    "MOBOREADER_UPSTREAM_REMAINING_FLOOR__GETCODE": "12",
+    "MOBOREADER_UPSTREAM_REMAINING_FLOOR__GETLISTPC": "8",
+    "MOBOREADER_UPSTREAM_RETRY_AFTER_ANOMALY_THRESHOLD_MS": "900000",
+    "NODE_ENV": "production",
+    "NOVEL_CATALOG_SYNC_ALLOW_WRITE": "false",
+    "PROMO_CLAIM_BATCH_APPROVAL_TTL_MINUTES": "1440",
+    "PROMO_CLAIM_CREDENTIAL_SAFETY_MARGIN_MINUTES": "30",
+    "PROMO_CLAIM_LIFECYCLE_V1_ENABLED": "false",
+    "PROMO_CLAIM_SHARD_DEADLINE_GRACE_MINUTES": "10",
+    "PROMO_CLAIM_SHARD_SIZE_MAX": "1000",
+    "PROMO_CLAIM_SHARD_SIZE_MIN": "50",
+    "PROMO_CLAIM_SHARD_WINDOW_MINUTES": "90",
+    "PROMO_LINK_CLAIM_ALLOW_WRITE": "false",
+    "PROMO_LINK_CLAIM_READBACK_ATTEMPTS": "3",
+    "PROMO_LINK_CLAIM_READBACK_INTERVAL_MS": "2000",
+    "SITEMAP_AUTO_REFRESH_ALLOW_WRITE": "false",
+    "SITEMAP_STATIC_DIR": "/app/runtime/static-sitemaps",
+    "SITE_URL": "/tmp/wo5-fixture",
+    "TZ": "/tmp/wo5-fixture",
+    "WORKER_FAILURE_WEBHOOK_COOLDOWN_SECONDS": "1800",
+    "WORKER_FAILURE_WEBHOOK_TIMEOUT_MS": "5000",
+    "WORKER_FAILURE_WEBHOOK_URL": "",
+    "WORKER_ID": "light",
+    "WORKER_LANE": "light",
+    "WORKER_SHUTDOWN_DRAIN_TIMEOUT_MS": "30000",
+    "WORKER_TASK_ALLOWLIST": "sitemap_refresh,sitemap.daily_fallback.v1,home_carousel.compute.v1"
+  },
+  "healthcheck": {
+    "test": [
+      "CMD-SHELL",
+      "node -e 'const value=require(\"node:fs\").readFileSync(\"/proc/1/cmdline\",\"utf8\");if(!value.includes(\"worker/index.ts\"))process.exit(1)'"
+    ],
+    "timeout": "5s",
+    "interval": "15s",
+    "retries": 3,
+    "start_period": "10s"
+  },
+  "image": "cps-novel:wo5",
+  "logging": {
+    "driver": "json-file",
+    "options": {
+      "max-file": "3",
+      "max-size": "10m"
+    }
+  },
+  "networks": {
+    "runtime": null
+  },
+  "restart": "unless-stopped",
+  "secrets": [
+    {
+      "source": "channel_credential_encryption_key_v1",
+      "target": "/run/secrets/channel_credential_encryption_key_v1"
+    },
+    {
+      "source": "channel_credential_fingerprint_key",
+      "target": "/run/secrets/channel_credential_fingerprint_key"
+    }
+  ],
+  "stop_grace_period": "45s",
+  "user": "1001:1001",
+  "volumes": [
+    {
+      "type": "volume",
+      "source": "sitemap_static",
+      "target": "/app/runtime/static-sitemaps",
+      "volume": {}
+    }
+  ]
+}

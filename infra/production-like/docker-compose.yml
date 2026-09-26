@@ -1,4 +1,8 @@
 services:
+  worker-light:
+    environment:
+      WORKER_LANE: light
+
   postgres:
     entrypoint: ["/bin/bash", "/opt/cps-novel-x8/postgres-entrypoint.sh"]
     command: ["postgres", "-c", "config_file=/etc/postgresql/postgresql.conf", "-c", "listen_addresses=*"]

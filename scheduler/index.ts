@@ -1,3 +1,4 @@
+import { SITEMAP_DAILY_FALLBACK_SCHEDULE, SITEMAP_DAILY_FALLBACK_TASK_TYPE } from "../src/lib/tasks/periodic-sweep";
 import { pathToFileURL } from "node:url";
 import { PrismaClient } from "@prisma/client";
 import {
@@ -33,8 +34,12 @@ import {
  * `handler` must never actually execute — if it does, that is a wiring bug,
  * not a degraded-but-working path.
  */
-const SCHEDULER_HANDLERS = createHandlerRegistry({
+export const SCHEDULER_HANDLERS = createHandlerRegistry({
   ...HANDLERS,
+  [SITEMAP_DAILY_FALLBACK_TASK_TYPE]: {
+    family: "generic", maxAttempts: 3,
+    handler: async () => { throw new Error("daily fallback must be executed by the worker process"); },
+  },
   [HOME_CAROUSEL_TASK_TYPE]: {
     family: "generic",
     maxAttempts: 3,
@@ -82,7 +87,7 @@ export const HOME_CAROUSEL_SCHEDULE: ScheduleDefinition = buildHomeCarouselSched
   () => homeCarouselActiveLocales,
 );
 
-export const SCHEDULES: readonly ScheduleDefinition[] = Object.freeze([HOME_CAROUSEL_SCHEDULE]);
+export const SCHEDULES: readonly ScheduleDefinition[] = Object.freeze([HOME_CAROUSEL_SCHEDULE, SITEMAP_DAILY_FALLBACK_SCHEDULE]);
 
 /**
  * 正式修复第 2 阶段第 3 步：领推广链接生命周期分片的放行 / 暂停

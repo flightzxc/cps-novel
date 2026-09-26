@@ -453,6 +453,9 @@ TO worker_app;
 -- Scheduler only creates scheduling and GenericTask metadata. It never reads Credential/Auth secrets
 -- (阶段2 第3步 below still holds: it reads only the non-secret columns of
 -- channel_account_credential, never encrypted_secret/secret_fingerprint).
+-- WO5: periodic scans read pending/processing generic_task, acquire transaction advisory
+-- locks and persist schedule_run.skip_reason. Table grants include the new column;
+-- no credential or external-service privileges are added to scheduler_app.
 GRANT SELECT, INSERT, UPDATE ON TABLE schedule_run, cron_run, generic_task, generic_task_item TO scheduler_app;
 
 -- L10N P5.2: scheduler now resolves the home-carousel cron's active-locale

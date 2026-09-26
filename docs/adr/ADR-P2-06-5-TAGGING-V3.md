@@ -17,7 +17,7 @@ C1_FINAL_RUN_ID                = 2026-08-17-owner-final-c1-final
 TEXT_PARAMETERS                = title=30; description=30; threshold=30; maxTextTags=3
 KEYWORD_ELIGIBILITY_VERSION    = keyword-eligibility-v2
 KEYWORD_ELIGIBILITY_SHA256     = e796ba1ed79b344f790a70853d2e9773d6265e307615b2a60da28b90a6164854
-PUBLIC_AUTO_PROJECTION_STATUS = APPROVED; IMPLEMENTATION_PENDING; FLAG_OFF
+PUBLIC_AUTO_PROJECTION_STATUS = APPROVED; IMPLEMENTED; FLAG_OFF
 AUTO_WRITE_AUTHORIZED          = NO
 PRODUCTION_IMPLEMENTATION_AUTHORIZED = YES
 PRODUCTION_IMPLEMENTATION_STATUS     = COMPLETE
@@ -80,6 +80,21 @@ Owner 已批准公开投影纳入 qualified auto 的口径；代码待实现，�
 8. **当前状态与实施边界**：公开口径已批准、代码待实现、开关关闭（见顶部状态块）；G7 仍为
    NO。本次只修订 ADR 与 feature flag 登记说明，不包含代码、测试、配置、grants、生成字典、
    开闸、回填或预生产 preflight 变更。后续工单 7 从本修订复核通过的精确 HEAD 开始实现。
+
+### 工单 7 实现记录（2026-09-27）
+
+- 工单 7 已实现 dark 代码，实际开关保持关闭，G7 / `AUTO_WRITE_AUTHORIZED` 仍为 NO；
+  本工单仅交付实现分支，由主控另行合入，不代表功能上线。
+- web apply 建书在事务提交后首次定类；dry-run 不接线。旧 web 批量无生产调用方，
+  保留弃用状态并在收尾接线。worker 在子任务全部条目终态后，从持久化的 created 结果取 ID。
+- Owner 补充裁决：不改建书分组，**批量按 5,000 分段建任务**；每个 ID 集合硬上限 5,000，
+  请求身份由子任务 ID、段序号及段内排序 ID 哈希派生；不扫描批外书目。三道闸任一关闭，
+  新增定类路径查询前返回并记录跳过；分类失败不能回滚建书。
+- 分类目录第二排序键实际为 `slug`（09-05 起已上线的行为）；冻结 bootstrap 为 123 个标签
+  赋予互不重复的 `sortOrder=index*10`，与合同所述 `stableId` 第二排序键在输出上等价。
+  两种开关状态均保留现有排序，增加 active `sortOrder` 唯一性守卫；将来出现重复须再统一调整。
+- 公开投影只在原 auto 开关开启时读当前运行，保留 manual 空快照、mapped 优先与文本分数排序。
+  海阅无 `isFallback` 字段，不引入兜底概念。其余合同及 CanonicalTag / B2 / C1 冻结值不改。
 
 ## 1. Context
 

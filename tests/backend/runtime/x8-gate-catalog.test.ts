@@ -177,7 +177,7 @@ afterEach(() => {
 // case where a test deliberately points the identity at a DIFFERENT,
 // custom-built table instead.
 const LEVEL_0_ENV = {
-  WORKER_TASK_ALLOWLIST: "credential.validate.v1,credential.supersede.v1,catalog_scan,home_carousel.compute.v1",
+  WORKER_TASK_ALLOWLIST: "credential.validate.v1,credential.supersede.v1,catalog_scan",
   PROMO_CLAIM_ROLES: "",
   ADMIN_TWO_FACTOR_ENFORCEMENT: "true",
   ADMIN_LOCAL_IDENTITY_SEED: "",
@@ -288,7 +288,7 @@ const HAPPY_STUB_ENV = {
   STUB_WORKER_ENV_JSON: JSON.stringify([
     "FEATURE_NOVEL_CATALOG_SYNC=false",
     "NOVEL_CATALOG_SYNC_ALLOW_WRITE=false",
-    "WORKER_TASK_ALLOWLIST=credential.validate.v1,credential.supersede.v1,catalog_scan,home_carousel.compute.v1",
+    "WORKER_TASK_ALLOWLIST=credential.validate.v1,credential.supersede.v1,catalog_scan",
     "FEATURE_PROMO_LINK_CLAIM=false",
   ]),
   // Keep the health-check poll instant in tests; only a dedicated
@@ -878,7 +878,7 @@ describe("X8 gate command: the three-way pre-check catches drift the reference i
       STUB_WORKER_ENV_JSON: JSON.stringify([
         "FEATURE_NOVEL_CATALOG_SYNC=false",
         "NOVEL_CATALOG_SYNC_ALLOW_WRITE=false",
-        "WORKER_TASK_ALLOWLIST=credential.validate.v1,credential.supersede.v1,catalog_scan,home_carousel.compute.v1",
+        "WORKER_TASK_ALLOWLIST=credential.validate.v1,credential.supersede.v1,catalog_scan",
         "FEATURE_PROMO_LINK_CLAIM=true", // drifted: baseline (Level 0) says "false"
       ]),
     });

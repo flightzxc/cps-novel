@@ -96,6 +96,10 @@ x8_level_config() {
     }
     const lines = [
       `WORKER_TASK_ALLOWLIST=${entry.workerTaskAllowlist}`,
+      `WORKER_LIGHT_TASK_ALLOWLIST=${entry.workerLightTaskAllowlist}`,
+      "WORKER_LANE=main",
+      "WORKER_ID=compose-worker",
+      "WORKER_LIGHT_ID=compose-worker-light",
       // Not a double-gate flag: the promo:claim admin capability grant. The
       // claim dialog on /catalog-sync refuses apply mode without it, so a
       // Level UAT topology that only flipped FEATURE_PROMO_LINK_CLAIM would

@@ -81,6 +81,7 @@ const BASE_ENV = {
   STUB_IMAGE_ID: IMAGE_ID,
   STUB_WEB_CONTAINER_ID: "stub-web-1",
   STUB_WORKER_CONTAINER_ID: "stub-worker-1",
+  STUB_LIGHT_CONTAINER_ID: "stub-light-1",
   STUB_SCHEDULER_CONTAINER_ID: "stub-scheduler-1",
   X8_GATE_READY_RETRIES: "1",
   X8_GATE_READY_SLEEP_SECONDS: "0",
@@ -125,7 +126,7 @@ describe("X8 release identity lifecycle: candidate write -> health check -> prom
       write_x8_identity_candidate
       X8_IDENTITY_DEPLOY_IN_PROGRESS=1
       trap 'x8_up_exit_trap' EXIT
-      x8_wait_services_healthy web worker scheduler
+      x8_wait_services_healthy web worker worker-light scheduler
       promote_x8_identity_candidate
       echo "LIFECYCLE_DONE=1"
     `;
@@ -171,11 +172,37 @@ describe("X8 release identity lifecycle: candidate write -> health check -> prom
       write_x8_identity_candidate
       X8_IDENTITY_DEPLOY_IN_PROGRESS=1
       trap 'x8_up_exit_trap' EXIT
-      x8_wait_services_healthy web worker scheduler
+      x8_wait_services_healthy web worker worker-light scheduler
       promote_x8_identity_candidate
       echo "LIFECYCLE_DONE=1"
     `;
     const result = runLifecycle(script, { STUB_WORKER_HEALTH: "unhealthy" });
+    expect(result.status).not.toBe(0);
+    expect(result.stdout).not.toContain("LIFECYCLE_DONE=1");
+    // Never promoted: no committed identity file at all (this was the
+    // first-ever deploy in this throwaway runtime dir).
+    expect(() => statSync(identityFilePath())).toThrow();
+    expect(result.stderr).toContain("did not report healthy");
+    // The failure marker records what happened and says the (nonexistent)
+    // previously committed identity was left untouched -- accurate here,
+    // since there never was one.
+    const marker = readFileSync(failureMarkerPath(), "utf8");
+    expect(marker).toContain("candidate identity was written but before it was promoted");
+    expect(marker).toContain("previously_committed_identity=<none");
+  });
+
+  it("does NOT promote when worker-light never reports healthy, even though web and scheduler do", () => {
+    const script = `
+      set -euo pipefail
+      source "${launcher}"
+      write_x8_identity_candidate
+      X8_IDENTITY_DEPLOY_IN_PROGRESS=1
+      trap 'x8_up_exit_trap' EXIT
+      x8_wait_services_healthy web worker worker-light scheduler
+      promote_x8_identity_candidate
+      echo "LIFECYCLE_DONE=1"
+    `;
+    const result = runLifecycle(script, { STUB_LIGHT_HEALTH: "unhealthy" });
     expect(result.status).not.toBe(0);
     expect(result.stdout).not.toContain("LIFECYCLE_DONE=1");
     // Never promoted: no committed identity file at all (this was the
@@ -197,7 +224,7 @@ describe("X8 release identity lifecycle: candidate write -> health check -> prom
       write_x8_identity_candidate
       X8_IDENTITY_DEPLOY_IN_PROGRESS=1
       trap 'x8_up_exit_trap' EXIT
-      x8_wait_services_healthy web worker scheduler
+      x8_wait_services_healthy web worker worker-light scheduler
       promote_x8_identity_candidate
       echo "LIFECYCLE_DONE=1"
     `;
@@ -230,7 +257,7 @@ describe("X8 release identity lifecycle: candidate write -> health check -> prom
       write_x8_identity_candidate
       X8_IDENTITY_DEPLOY_IN_PROGRESS=1
       trap 'x8_up_exit_trap' EXIT
-      x8_wait_services_healthy web worker scheduler
+      x8_wait_services_healthy web worker worker-light scheduler
       promote_x8_identity_candidate
       echo "LIFECYCLE_DONE=1"
     `;
@@ -258,7 +285,7 @@ describe("X8 release identity lifecycle: candidate write -> health check -> prom
       write_x8_identity_candidate
       X8_IDENTITY_DEPLOY_IN_PROGRESS=1
       trap 'x8_up_exit_trap' EXIT
-      x8_wait_services_healthy web worker scheduler
+      x8_wait_services_healthy web worker worker-light scheduler
       promote_x8_identity_candidate
       false
     `;
@@ -334,7 +361,7 @@ describe("X8 release identity lifecycle: candidate write -> health check -> prom
         write_x8_identity_candidate
         X8_IDENTITY_DEPLOY_IN_PROGRESS=1
         trap 'x8_up_exit_trap' EXIT
-        x8_wait_services_healthy web worker scheduler
+        x8_wait_services_healthy web worker worker-light scheduler
         promote_x8_identity_candidate
         echo "LIFECYCLE_DONE=1"
       `;
@@ -357,7 +384,7 @@ describe("X8 release identity lifecycle: candidate write -> health check -> prom
         write_x8_identity_candidate
         X8_IDENTITY_DEPLOY_IN_PROGRESS=1
         trap 'x8_up_exit_trap' EXIT
-        x8_wait_services_healthy web worker scheduler
+        x8_wait_services_healthy web worker worker-light scheduler
         promote_x8_identity_candidate
         echo "LIFECYCLE_DONE=1"
       `;
@@ -388,7 +415,7 @@ describe("X8 release identity lifecycle: candidate write -> health check -> prom
         write_x8_identity_candidate
         X8_IDENTITY_DEPLOY_IN_PROGRESS=1
         trap 'x8_up_exit_trap' EXIT
-        x8_wait_services_healthy web worker scheduler
+        x8_wait_services_healthy web worker worker-light scheduler
         promote_x8_identity_candidate
         echo "LIFECYCLE_DONE=1"
       `;
