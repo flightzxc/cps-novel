@@ -104,6 +104,29 @@ describe.skipIf(!enabled).sequential("WO5 real roles, schedule isolation and wor
     expect(await enqueueScheduledTask(scheduler, registry, value)).toMatchObject({ status: "skipped", skipReason: "misfire_skip" });
     expect(await owner.genericTask.count()).toBe(0);
   });
+  it("admits a daily bucket nine minutes late, deduplicates and preserves in-flight coalescing", async () => {
+    const value = await input();
+    // Anchor to the real PostgreSQL clock; exact Tokyo times live in the unit suite.
+    const bucket = new Date(value.scheduledFor.getTime() - 9 * 60000);
+    const daily = buildPeriodicSweepSchedule({ scheduleKey: "daily-window", taskType: type, timezone: "UTC", cadence: { kind: "daily", hour: bucket.getUTCHours(), minute: bucket.getUTCMinutes() } });
+    const first = await enqueueScheduledTask(scheduler, registry, daily.build(bucket));
+    expect(first.status).toBe("enqueued");
+    expect((await enqueueScheduledTask(scheduler, registry, daily.build(bucket))).status).toBe("duplicate");
+    const concurrent = { ...daily.build(bucket), scheduleKey: "daily-other" };
+    const skipped = await enqueueScheduledTask(scheduler, registry, concurrent);
+    expect(skipped).toMatchObject({ status: "skipped", skipReason: "previous_scan_in_flight" });
+    expect(await owner.scheduleRun.findUnique({ where: { id: skipped.scheduleRunId } })).toMatchObject({ status: "skipped", skipReason: "previous_scan_in_flight" });
+    expect(await owner.genericTask.count()).toBe(1);
+  });
+  it("records an expired daily window as misfire_skip without creating tasks", async () => {
+    const value = await input();
+    const bucket = new Date(value.scheduledFor.getTime() - 20 * 60000);
+    const daily = buildPeriodicSweepSchedule({ scheduleKey: "expired-daily", taskType: type, timezone: "UTC", cadence: { kind: "daily", hour: bucket.getUTCHours(), minute: bucket.getUTCMinutes() } });
+    const result = await enqueueScheduledTask(scheduler, registry, daily.build(bucket));
+    expect(result).toMatchObject({ status: "skipped", skipReason: "misfire_skip" });
+    expect(await owner.scheduleRun.findUnique({ where: { id: result.scheduleRunId } })).toMatchObject({ status: "skipped", skipReason: "misfire_skip" });
+    expect(await owner.genericTask.count()).toBe(0);
+  });
   it("rejects a scan whose policy regresses to bounded catch-up", async () => {
     const value = await input(); value.misfirePolicy = "bounded_catch_up";
     await expect(enqueueScheduledTask(scheduler, registry, value)).rejects.toThrow("periodic_sweep_requires_skip");

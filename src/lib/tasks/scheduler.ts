@@ -22,8 +22,10 @@ export interface ScheduledTaskInput {
   channelAppId?: string;
   params?: Prisma.InputJsonValue;
   items: ScheduledTaskItemInput[];
-  /** Current-minute, coalescing scan controls only. Existing schedules are unchanged. */
+  /** Coalescing scan controls only. Existing schedules are unchanged. */
   periodicSweep?: boolean;
+  /** Daily controls may arrive within this window; minute scans omit it. */
+  dailySweepWindowMinutes?: number;
 }
 
 export interface ScheduleDefinition {
@@ -64,6 +66,11 @@ export async function enqueueScheduledTask(
   if (input.items.length === 0) throw new Error("Scheduled task must contain at least one item");
   if (Number.isNaN(input.scheduledFor.valueOf())) throw new Error("scheduledFor must be valid");
 
+  if (input.dailySweepWindowMinutes !== undefined && (!input.periodicSweep
+    || !Number.isInteger(input.dailySweepWindowMinutes) || input.dailySweepWindowMinutes < 1)) {
+    throw new Error("daily_sweep_window_invalid");
+  }
+
   return prisma.$transaction(async (tx) => {
     if (input.periodicSweep) {
       if (input.misfirePolicy !== "skip") throw new Error("periodic_sweep_requires_skip");
@@ -92,7 +99,12 @@ export async function enqueueScheduledTask(
         where: { taskType: input.taskType, status: { in: ["pending", "processing"] } },
         select: { id: true },
       });
-      const skipReason = input.scheduledFor.getTime() !== currentMinute
+      const scheduledMs = input.scheduledFor.getTime();
+      const inWindow = input.dailySweepWindowMinutes === undefined
+        ? scheduledMs === currentMinute
+        : clock.now.getTime() >= scheduledMs
+          && clock.now.getTime() < scheduledMs + input.dailySweepWindowMinutes * 60_000;
+      const skipReason = !inWindow
         ? "misfire_skip" : active ? "previous_scan_in_flight" : undefined;
       if (skipReason) {
         await tx.$executeRaw(Prisma.sql`UPDATE schedule_run SET status = 'skipped',

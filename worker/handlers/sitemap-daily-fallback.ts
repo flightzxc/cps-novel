@@ -1,4 +1,3 @@
-import type { PrismaClient } from "@prisma/client";
 import { isSitemapAutoRefreshEnabled, isSitemapAutoRefreshWriteAllowed } from "../../src/lib/flags";
 import { createHandlerRegistry, type TaskHandler } from "../../src/lib/tasks";
 import { enqueueSitemapRefresh } from "../../src/lib/tasks/sitemap-refresh";
@@ -16,7 +15,7 @@ export function createSitemapDailyFallbackHandler(env: NodeJS.ProcessEnv = proce
     },
   });
 }
-export function createSitemapDailyFallbackWorkerHandlers(_db: PrismaClient) {
+export function createSitemapDailyFallbackWorkerHandlers() {
   return createHandlerRegistry({
     [SITEMAP_DAILY_FALLBACK_TASK_TYPE]: { family: "generic", maxAttempts: 3, handler: createSitemapDailyFallbackHandler() },
   });

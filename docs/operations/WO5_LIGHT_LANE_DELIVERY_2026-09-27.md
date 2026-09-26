@@ -16,7 +16,7 @@
 
 `worker-light` 复用现有 worker 入口、镜像、worker_app 角色、健康检查、告警配置和 sitemap 共享卷。首版只消费 `sitemap_refresh,sitemap.daily_fallback.v1,home_carousel.compute.v1`。配置策略由 `src/lib/tasks/worker-lanes.mjs` 单点提供，TypeScript 启动入口和 preflight 共用；AST 守卫通过 TypeScript 符号解析追踪 adapter 的导入及转导出。
 
-`buildPeriodicSweepSchedule` 支持每分钟及指定时区的每日扫描。`ScheduledTaskInput.periodicSweep` 开启当前分钟校验与按任务类型在途合并；返回值新增 `skipped` / `skipReason`。生产 tick 从 PostgreSQL 读取时钟，取得 advisory lock 后再次核对时间窗口，错过不补跑；同桶唯一键保留。已有首页轮播和领取分片放行逻辑不改。
+`buildPeriodicSweepSchedule` 支持每分钟及指定时区的每日扫描。`ScheduledTaskInput.periodicSweep` 开启时间窗口校验与按任务类型在途合并；返回值新增 `skipped` / `skipReason`。分钟扫描仍只接受当前分钟。每日扫描固定当天当地时间的桶，sitemap 为东京 04:00，允许 [04:00, 04:15) 内入队；过窗候选记 `misfire_skip`，不补历史日期。生产 tick 从 PostgreSQL 读取时钟，取得 advisory lock 后再次核对窗口；同桶唯一键保留。scheduler 每轮结束后睡到下一个 interval 整数倍边界加 2 秒，超时跳过已过边界，不连跑。已有首页轮播的到期语义和领取分片放行逻辑不改。
 
 新增迁移 `20260926150000_periodic_sweep_skip_reason`：schedule_run.skip_reason 为可空 varchar(96)，持久化 `previous_scan_in_flight` / `misfire_skip`。现有 scheduler_app 表级授权覆盖新增字段及读写，grants 注明用途；真实角色验证和字典检查通过，不增加凭据权限。
 

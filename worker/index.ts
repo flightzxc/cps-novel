@@ -84,7 +84,7 @@ export function createWorkerHandlers(prisma: PrismaClient) {
     ...createPromoLinkClaimWorkerHandlers(prisma),
     ...createIndexNowWorkerHandlers(prisma),
     ...createSitemapRefreshWorkerHandlers(prisma),
-    ...createSitemapDailyFallbackWorkerHandlers(prisma),
+    ...createSitemapDailyFallbackWorkerHandlers(),
     ...createHomeCarouselWorkerHandlers(prisma),
     ...createTaggingWorkerHandlers(prisma),
     ...createCatalogBatchWorkerHandlers(prisma),

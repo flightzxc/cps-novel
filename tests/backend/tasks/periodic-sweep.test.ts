@@ -11,12 +11,20 @@ describe("periodic sweep schedules", () => {
     expect(registration.family).toBe("generic");
     await expect(registration.handler({} as TaskHandlerContext)).rejects.toThrow("worker process");
   });
-  it("uses only Tokyo's current 04:00 minute, with no missed-day catch-up", () => {
-    expect(SITEMAP_DAILY_FALLBACK_SCHEDULE.dueInstants(new Date("2026-09-26T19:00:59Z"))).toEqual([new Date("2026-09-26T19:00:00Z")]);
-    for (const time of ["2026-09-26T18:59:59Z", "2026-09-26T19:01:00Z", "2026-09-29T20:00:00Z"]) {
+  it("keeps Tokyo's same-day 04:00 bucket, including expired candidates for skip recording", () => {
+    const bucket = new Date("2026-09-26T19:00:00Z");
+    for (const time of ["2026-09-26T19:00:30Z", "2026-09-26T19:07:00Z", "2026-09-26T19:09:00Z", "2026-09-26T19:20:00Z"]) {
+      expect(SITEMAP_DAILY_FALLBACK_SCHEDULE.dueInstants(new Date(time))).toEqual([bucket]);
+    }
+    for (const time of ["2026-09-26T18:59:59Z", "2026-09-27T15:00:00Z", "2026-09-29T18:00:00Z"]) {
       expect(SITEMAP_DAILY_FALLBACK_SCHEDULE.dueInstants(new Date(time))).toEqual([]);
     }
-    expect(SITEMAP_DAILY_FALLBACK_SCHEDULE.build(new Date())).toMatchObject({ misfirePolicy: "skip", periodicSweep: true, maxCatchUpRuns: 0, taskType: "sitemap.daily_fallback.v1" });
+    expect(SITEMAP_DAILY_FALLBACK_SCHEDULE.dueInstants(new Date("2026-09-29T19:09:00Z"))).toEqual([new Date("2026-09-29T19:00:00Z")]);
+    expect(SITEMAP_DAILY_FALLBACK_SCHEDULE.build(bucket)).toMatchObject({ misfirePolicy: "skip", periodicSweep: true, dailySweepWindowMinutes: 15, maxCatchUpRuns: 0, taskType: "sitemap.daily_fallback.v1" });
+  });
+  it("resolves the offset at the daily bucket when daylight saving changes later that day", () => {
+    const schedule = buildPeriodicSweepSchedule({ scheduleKey: "dst", taskType: "scan", timezone: "America/New_York", cadence: { kind: "daily", hour: 0, minute: 0 } });
+    expect(schedule.dueInstants(new Date("2026-03-08T12:00:00Z"))).toEqual([new Date("2026-03-08T05:00:00Z")]);
   });
   it("supports minute scans without enumerating history", () => {
     const schedule = buildPeriodicSweepSchedule({ scheduleKey: "scan", taskType: "scan", timezone: "UTC", cadence: { kind: "minute" } });

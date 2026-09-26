@@ -26,8 +26,11 @@ describe("worker-light rendered deployment contract", () => {
     expect(light.environment.WORKER_TASK_ALLOWLIST).toBe(env.WORKER_LIGHT_TASK_ALLOWLIST);
     expect(light.environment.WORKER_ID).toBe(env.WORKER_LIGHT_ID);
     expect(light.environment.WORKER_LANE).toBe("light");
-    const { WORKER_ID: _id, WORKER_TASK_ALLOWLIST: _types, WORKER_LANE: _lane, ...shared } = main.environment;
-    const { WORKER_ID: _lid, WORKER_TASK_ALLOWLIST: _ltypes, WORKER_LANE: _llane, ...lightShared } = light.environment;
+    const sharedEnvironment = (environment: Record<string, string>) => Object.fromEntries(
+      Object.entries(environment).filter(([key]) => !["WORKER_ID", "WORKER_TASK_ALLOWLIST", "WORKER_LANE"].includes(key)),
+    );
+    const shared = sharedEnvironment(main.environment);
+    const lightShared = sharedEnvironment(light.environment);
     expect(lightShared).toEqual(shared);
     for (const key of ["image", "command", "healthcheck", "logging", "secrets", "volumes", "stop_grace_period"]) expect(light[key], key).toEqual(main[key]);
     if (overlay === files[1]) { expect(light.build).toBeUndefined(); expect(light.pull_policy).toBe("never"); }
