@@ -236,15 +236,18 @@ npm run test       # vitest run
 **P1 已收口，P2-12 竖向验收与 P0 收尾已落地；`v0.2.0` 已于 2026-08-19 打 tag（P2-07～P2-12 轮次）。**
 预生产已于 2026-09-22 两次正式部署（merge `921119d`、`9728551`，镜像 `0.1.0-<sha>` 前缀），
 `v0.3.0` 于 2026-09-23、`v0.4.0` / `v0.4.1` 于 2026-09-24、`v0.4.2` 于 2026-09-25 发布到预生产；
-**`v0.4.4` 已于 2026-09-26 12:14 +0800 发布到预生产**（tag `v0.4.4` → `205220e`，镜像
-`cps-novel:0.4.4-205220e`，`RELEASE=PASS`）。修复 sitemap 候选缓存跨刷新复用与处理中发布漏刷；
-同步预生产 nginx 仓库模板。无新迁移或 grants 变更；目标机只改两个版本变量。
-两次新文章发布实地验收通过：同一 worker 未重启，韩语 sitemap 收录数依次 12 / 13，与数据库逐项一致。
+**`v0.4.5` 已于 2026-09-26 22:53 +0800 发布到预生产**（tag `v0.4.5` → `ff1d2dd`，镜像
+`cps-novel:0.4.5-ff1d2dd`，`RELEASE=PASS`）。发布后试读触发逻辑、sitemap 写闸登记/手动刷新/CLI、
+连接池/详情页查询及侧栏链接已上线；试读不在 worker 白名单内，实际不执行。7a 仅设计完成，前台自动标签未开发。
+无 schema、迁移或 grants 变更；目标机只改两个版本变量并在批准名单追加 sitemap_write。
+Owner 发布实地验收通过：旧试读任务保持 pending、总数 80,006 不变；自动及手动 sitemap 刷新成功，
+35 URL 与库内 14 本韩语书一致；Sitemap 卡片和侧栏目测通过。
 正式领取批次截至验收时仍暂停，恢复批次由 Owner 操作。
 领推广生命周期开关与按接口限速开关保持开启，两个接口间隔各 1,500 ms；生产环境尚未上线。
 范围、进度与后续以 `docs/governance/version-registry.md` 的「当前快照」为准，本节不复述。
 
 feature/write flags 默认 fail-closed，分级开闸以 `docs/p2/V020_RELEASE_CHECKLIST.md` §3 为准，未经 Owner 审批不得开闸。
-已批准的例外：预生产的 `catalog_write` / `promo_write` 两组写闸已由 Owner 批准在目标机开启（2026-09-22 / 09-23），
+已批准的例外：预生产的 `catalog_write` / `promo_write` 已由 Owner 批准开启（2026-09-22 / 09-23），
+`sitemap_write` 现有开启状态于 v0.4.5 经 Owner 授权追加登记（2026-09-26），
 开着的写闸须按 `docs/adr/ADR-PREPROD-APPROVED-OPEN-WRITE-GATES.md` 显式登记——这是已批准状态，不是漂移，不得为让 preflight 通过而关回。
 IndexNow delivery 的首个生产 schedule 另立 X11，X11 验收前 delivery 双闸和 worker allowlist 消费均不得开放。

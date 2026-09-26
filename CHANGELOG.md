@@ -3,7 +3,29 @@
 <!-- 本文件由 `node scripts/generate-changelog.mjs --write` 生成，请勿手工编辑。 -->
 <!-- 叙述性内容写进 commit message；Owner/架构决策写 docs/adr/。 -->
 
-生成时间：2026-09-26 · 共 847 个 commit
+生成时间：2026-09-26 · 共 866 个 commit
+- `bdf2d42` 2026-09-26 文档(发版)：同步海阅 v0.4.5 最终发布提交  — _codex · GPT-6_
+
+## v0.4.5
+
+- `ff1d2dd` 2026-09-26 测试(目录批量)：建书后不再排试读，更新过时断言  — _claude-code · Claude Opus 5.5_
+- `69765e1` 2026-09-26 发布：准备海阅 v0.4.5 版本身份  — _codex · GPT-6_
+- `d841df8` 2026-09-26 合并(标签)：纳入 7a ADR 修订——公开投影纳入受开关控制的文本分类（已获 Opus 复核）  — _claude-code · Claude Opus 5.5 · reviewed: claude-code · Claude Opus 5.5_
+- `b3c7158` 2026-09-26 合并(sitemap)：纳入工单 4 后台手动刷新与命令行（已获 Opus 复核）  — _claude-code · Claude Opus 5.5 · reviewed: claude-code · Claude Opus 5.5_
+- `296090d` 2026-09-26 合并(前台)：纳入工单 3 连接池合一、详情页去重复查询、侧栏二级菜单（已获 Opus 复核）  — _claude-code · Claude Opus 5.5 · reviewed: claude-code · Claude Opus 5.5_
+- `cc9f8da` 2026-09-26 合并(预生产)：纳入工单 2 sitemap 写闸登记与模板对齐（已获 Opus 复核）  — _claude-code · Claude Opus 5.5 · reviewed: claude-code · Claude Opus 5.5_
+- `fbde6b7` 2026-09-26 合并(试读)：纳入工单 1 试读改为发布时触发（已获 Opus 复核）  — _claude-code · Claude Opus 5.5 · reviewed: claude-code · Claude Opus 5.5_
+- `93bf532` 2026-09-26 fix(sitemap): move admin types into shared contracts  — _codex · GPT-6 Sol_
+- `512b6b5` 2026-09-26 feat(sitemap): add audited admin refresh and read-only CLI preview  — _codex · GPT-6 Sol_
+- `09e155d` 2026-09-26 feat(preview): enqueue grouped book previews after committed publication  — _codex · GPT-6 Sol_
+- `a8677fc` 2026-09-26 test(preprod): close sitemap gate in rate-limit preflight fixture  — _codex · GPT-6 Sol_
+- `15c74e8` 2026-09-26 docs(tagging): approve gated public qualified-auto projection  — _codex · GPT-6 Sol_
+- `64832c1` 2026-09-26 fix(admin): link implemented permitted sidebar children  — _codex · GPT-6 Sol_
+- `6150526` 2026-09-26 fix(public): resolve detail URL identity in the visibility query  — _codex · GPT-6 Sol_
+- `a67af2c` 2026-09-26 fix(web): share neutral Prisma pool in production and development  — _codex · GPT-6 Sol_
+- `baa5760` 2026-09-26 fix(preprod): register approved sitemap write gate and align template  — _codex · GPT-6 Sol_
+- `845ca02` 2026-09-26 文档(验收)：回填 v0.4.4 两次发布 sitemap 实测结果  — _codex · GPT-6_
+- `4a0cd47` 2026-09-26 文档(发版)：收官 v0.4.4 预生产部署治理  — _codex · GPT-6_
 
 ## v0.4.4
 

@@ -39,6 +39,45 @@
 
 ## 发版记录（新条目在最上面）
 
+### 2026-09-26 22:53 - codex（GPT-6，发版执行）
+
+**变更类型**：预生产正式发布 `v0.4.5`（PATCH）。
+
+**背景**：工单 1–4 与 7a 经 Opus 复核并集成；Owner 指定 Final `ff1d2dd7c8d46dba8e9267687eafbb9347b55387`，
+授权在批次暂停期间仅向 `haiyue-vps` 部署。
+
+**变更内容**：文章发布后触发试读；sitemap 写闸登记、后台手动刷新与 CLI；连接池、详情页查询和侧栏链接优化。
+试读触发逻辑已上线，但试读不在白名单内，实际不执行；7a 仅设计完成，前台自动标签代码未开发。
+annotated tag `v0.4.5` 固定在 Final，治理提交不改变运行身份。
+
+**影响范围**：web/worker/scheduler 使用 `cps-novel:0.4.5-ff1d2dd`（linux/amd64），postgres 未重建。
+无 schema、迁移或 grants 变更。env 备份 `preprod.env.bak-v045-20260926T145200Z`，
+仅将两个版本变量升级、批准写闸名单追加 sitemap_write；已批准开关、白名单、账号、nginx 与批次状态保持。
+未取消旧试读积压、未补试读，未操作其它主机或 X8。
+
+**验证方式**：
+
+- tsc 0、build 通过；全量 4 workers：451 文件 / 6,760 项 passed，34 文件 / 337 项 skipped，
+  0 failed、0 Unhandled Error；七组指定真实库运行器及 B-8 两文件通过，迁移/schema/字典 drift 0。
+  Final 仅修正 catalog-batch 真库断言，按 Owner 授权复跑四组而不重复全量/build/tsc。
+- 在线逻辑备份 `cps-novel-20260926T144540Z.dump`，190,429,479 字节，
+  SHA-256 `07d15cc425b32b39274f01ee0fca3cba003b9db6dba4195fcb807c10c2a422c8`。
+  镜像归档 SHA-256 `c195dfc04fdf170933884329e179d914012afe76d8f8a6dbfad14d03e2772d02`。
+- 批次 paused，processing 条目与非终态领取意图均 0；preflight 批准和实际开启写闸均为
+  catalog_write,promo_write,sitemap_write。RELEASE=PASS / EXIT=0；health 0.4.5 / Final / metadata/database passed，
+  四容器 healthy，三服务近 5 分钟错误日志 0。
+- sitemap 只读 dry-run 总计 34 URL（ko=20，其余 14 语种各 1），XML 与库内 13 本韩语书匹配。
+  Owner 发布短 ID `968nrdfv` 后书页 13→14、总 URL 34→35；发布自动刷新和两次手动刷新均 success，
+  XML/候选/数据库逐项一致，手动审计 `276009` / `276011` 齐全。
+- 该书已有旧 pending 试读任务且 attempt=0；发布前后总数均 80,006、新增 0，符合 preview_in_flight 预期。
+  “无旧任务新增 pending”的分支本次未实地覆盖。Owner 确认 Sitemap 卡片正常、账号安全可点击、API 配置仍灰色。
+
+**后续待办**：截至验收领取批次仍 paused，恢复由 Owner 操作；试读执行仍未开放，7a 前台代码未开发，
+工单 5/6/7、B-14/B-15/B-16 不在本轮处理。前版 admin2 待办独立保留；生产未上线。
+回滚目标 v0.4.4 Final `205220e`，须先备份并恢复 env（移除 sitemap_write 和恢复版本变量），本次未回滚。
+Notion 当前快照、版本表及本版详细手账已同步并读回核对，交接材料已保留。
+
+
 ### 2026-09-26 12:14 - codex（GPT-6，发版执行）
 
 **变更类型**：预生产正式发布 `v0.4.4`（PATCH）。
