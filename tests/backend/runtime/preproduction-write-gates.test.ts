@@ -33,9 +33,11 @@ type GateEnv = {
   NOVEL_CATALOG_SYNC_ALLOW_WRITE?: string;
   FEATURE_PROMO_LINK_CLAIM?: string;
   PROMO_LINK_CLAIM_ALLOW_WRITE?: string;
+  FEATURE_NOVEL_TAG_AUTO?: string;
+  AUTO_WRITE_AUTHORIZED?: string;
 };
 
-/** All six gate variables false and unregistered. */
+/** All eight gate variables closed and unregistered (auto_tag_write's pair uses "false"/"NO", not "false"/"false"). */
 const ALL_CLOSED: Required<GateEnv> = {
   PREPROD_APPROVED_OPEN_WRITE_GATES: "",
     FEATURE_SITEMAP_AUTO_REFRESH: "false",
@@ -44,6 +46,8 @@ const ALL_CLOSED: Required<GateEnv> = {
   NOVEL_CATALOG_SYNC_ALLOW_WRITE: "false",
   FEATURE_PROMO_LINK_CLAIM: "false",
   PROMO_LINK_CLAIM_ALLOW_WRITE: "false",
+  FEATURE_NOVEL_TAG_AUTO: "false",
+  AUTO_WRITE_AUTHORIZED: "NO",
 };
 
 function runGate(overrides: GateEnv) {
@@ -156,6 +160,91 @@ describe("preprod_assert_write_gates: 登记制放行", () => {
     });
     expect(r.status).toBe(0);
     expect(r.stdout).toContain("PREPROD_WRITE_GATES=PASS approved=catalog_write open=catalog_write");
+  });
+});
+
+describe("preprod_assert_write_gates: auto_tag_write 登记（2026-09-28 新增第四项，值域与前三个不同）", () => {
+  it("两值都关（false/NO），未登记 -> PASS approved=none open=none", () => {
+    const r = runGate({});
+    expect(r.status).toBe(0);
+    expect(r.stdout).toContain("PREPROD_WRITE_GATES=PASS approved=none open=none");
+  });
+
+  it("FEATURE_NOVEL_TAG_AUTO=true 单开，未登记 -> FAIL auto_tag_write", () => {
+    const r = runGate({ FEATURE_NOVEL_TAG_AUTO: "true" });
+    expect(r.status).toBe(65);
+    expect(r.stdout.trim()).toBe("auto_tag_write");
+  });
+
+  it("AUTO_WRITE_AUTHORIZED=YES 单开，未登记 -> FAIL auto_tag_write", () => {
+    const r = runGate({ AUTO_WRITE_AUTHORIZED: "YES" });
+    expect(r.status).toBe(65);
+    expect(r.stdout.trim()).toBe("auto_tag_write");
+  });
+
+  it.each([
+    ["false", "NO"],
+    ["true", "NO"],
+    ["false", "YES"],
+    ["true", "YES"],
+  ])("登记 auto_tag_write 后，FEATURE=%s / AUTHORIZED=%s 四种组合均 PASS", (feature, authorized) => {
+    const r = runGate({
+      PREPROD_APPROVED_OPEN_WRITE_GATES: "auto_tag_write",
+      FEATURE_NOVEL_TAG_AUTO: feature,
+      AUTO_WRITE_AUTHORIZED: authorized,
+    });
+    const open = feature === "true" || authorized === "YES";
+    expect(r.status).toBe(0);
+    expect(r.stdout).toContain(`PREPROD_WRITE_GATES=PASS approved=auto_tag_write open=${open ? "auto_tag_write" : "none"}`);
+  });
+
+  it("登记 auto_tag_write，但 catalog 为 true -> FAIL catalog_write（登记不互相授权）", () => {
+    const r = runGate({
+      PREPROD_APPROVED_OPEN_WRITE_GATES: "auto_tag_write",
+      FEATURE_NOVEL_TAG_AUTO: "true",
+      AUTO_WRITE_AUTHORIZED: "YES",
+      FEATURE_NOVEL_CATALOG_SYNC: "true",
+    });
+    expect(r.status).toBe(65);
+    expect(r.stdout.trim()).toBe("catalog_write");
+  });
+
+  it("登记 catalog_write,promo_write,sitemap_write,auto_tag_write 且全部打开 -> PASS，四项都在 approved/open", () => {
+    const r = runGate({
+      PREPROD_APPROVED_OPEN_WRITE_GATES: "catalog_write,promo_write,sitemap_write,auto_tag_write",
+      FEATURE_NOVEL_CATALOG_SYNC: "true", NOVEL_CATALOG_SYNC_ALLOW_WRITE: "true",
+      FEATURE_PROMO_LINK_CLAIM: "true", PROMO_LINK_CLAIM_ALLOW_WRITE: "true",
+      FEATURE_SITEMAP_AUTO_REFRESH: "true", SITEMAP_AUTO_REFRESH_ALLOW_WRITE: "true",
+      FEATURE_NOVEL_TAG_AUTO: "true", AUTO_WRITE_AUTHORIZED: "YES",
+    });
+    expect(r.status).toBe(0);
+    expect(r.stdout).toContain(
+      "PREPROD_WRITE_GATES=PASS approved=catalog_write,promo_write,sitemap_write,auto_tag_write "
+      + "open=catalog_write,promo_write,sitemap_write,auto_tag_write",
+    );
+  });
+
+  it.each([
+    ["FEATURE_NOVEL_TAG_AUTO", "TRUE"],
+    ["FEATURE_NOVEL_TAG_AUTO", "1"],
+    ["FEATURE_NOVEL_TAG_AUTO", ""],
+    ["AUTO_WRITE_AUTHORIZED", "yes"],
+    ["AUTO_WRITE_AUTHORIZED", "true"],
+    ["AUTO_WRITE_AUTHORIZED", "false"],
+    ["AUTO_WRITE_AUTHORIZED", ""],
+  ])("已登记 + %s=%s（值域非法） -> FAIL auto_tag_write_invalid", (key, value) => {
+    const r = runGate({ PREPROD_APPROVED_OPEN_WRITE_GATES: "auto_tag_write", [key]: value });
+    expect(r.status).toBe(65);
+    expect(r.stdout.trim()).toBe("auto_tag_write_invalid");
+  });
+
+  it("已登记 + AUTO_WRITE_AUTHORIZED 完全未设置 -> FAIL auto_tag_write_invalid（未设置不等于 NO）", () => {
+    const r = runGateUnset(
+      { PREPROD_APPROVED_OPEN_WRITE_GATES: "auto_tag_write", FEATURE_NOVEL_TAG_AUTO: "true" },
+      ["AUTO_WRITE_AUTHORIZED"],
+    );
+    expect(r.status).toBe(65);
+    expect(r.stdout.trim()).toBe("auto_tag_write_invalid");
   });
 });
 
@@ -277,12 +366,19 @@ describe("preflight.sh 接线（文本层：去掉注释后核查真正的调用
     );
   });
 
-  it("其它写闸的硬关判定原样保留（indexnow_outbox / indexnow_delivery / auto_tagging / article_writes）", async () => {
+  it("其它写闸的硬关判定原样保留（indexnow_outbox / indexnow_delivery / article_writes）", async () => {
     const preflight = await readFile(PREFLIGHT, "utf8");
     expect(preflight).toContain("|| fail indexnow_outbox");
     expect(preflight).toContain("|| fail indexnow_delivery");
-    expect(preflight).toContain("|| fail auto_tagging");
     expect(preflight).toContain("|| fail article_writes");
+  });
+
+  it("原硬编码 auto_tagging 恒 false/NO 判定已删除（2026-09-28 起改由 auto_tag_write 登记制覆盖）", async () => {
+    const preflight = await readFile(PREFLIGHT, "utf8");
+    expect(preflight).not.toMatch(
+      /\[\[\s*"\$\{FEATURE_NOVEL_TAG_AUTO:-\}"\s*==\s*"false"\s*&&\s*"\$\{AUTO_WRITE_AUTHORIZED:-\}"\s*==\s*"NO"\s*\]\]\s*\|\|\s*fail auto_tagging/,
+    );
+    expect(preflight).not.toContain("|| fail auto_tagging");
   });
 
   it("取证行 echo \"$write_gates_evidence\" 在最后一次 echo PREPROD_PREFLIGHT=PASS 之前", async () => {
@@ -358,6 +454,23 @@ describe("preflight.sh 真实行为（不 mock，走到写闸判定之后稳定�
     expect(result.stdout).toContain(`PREPROD_PREFLIGHT=FAIL reason=${registered ? "git_commit" : "sitemap_write"}`);
   });
 
+  it.each([false, true])("auto_tag_write preflight integration registered=%s", async (registered) => {
+    const file = await writePreflightEnvFile({
+      FEATURE_NOVEL_TAG_AUTO: "true", AUTO_WRITE_AUTHORIZED: "YES",
+      PREPROD_APPROVED_OPEN_WRITE_GATES: registered ? "auto_tag_write" : "",
+    });
+    const result = runPreflight(file);
+    expect(result.status).toBe(65);
+    expect(result.stdout).toContain(`PREPROD_PREFLIGHT=FAIL reason=${registered ? "git_commit" : "auto_tag_write"}`);
+  });
+
+  it("auto_tag_write 值非法（AUTO_WRITE_AUTHORIZED=yes 小写）-> FAIL reason=auto_tag_write_invalid，退出码 65", async () => {
+    const file = await writePreflightEnvFile({ AUTO_WRITE_AUTHORIZED: "yes" });
+    const result = runPreflight(file);
+    expect(result.status).toBe(65);
+    expect(result.stdout).toContain("PREPROD_PREFLIGHT=FAIL reason=auto_tag_write_invalid");
+  });
+
   it("catalog 打开且未登记 -> 在写闸判定处 FAIL reason=catalog_write，退出码 65", async () => {
     const envFile = await writePreflightEnvFile({
       FEATURE_NOVEL_CATALOG_SYNC: "true",
@@ -422,6 +535,16 @@ describe("bash 5 下的行为对照（docker bash:5.2，不可用则跳过）", 
       expect(runGateBash5({ ...flags, PREPROD_APPROVED_OPEN_WRITE_GATES: "sitemap_write" }).status).toBe(0);
     }
     expect(runGateBash5({ FEATURE_SITEMAP_AUTO_REFRESH: "TRUE" }).stdout.trim()).toBe("sitemap_write_invalid");
+  });
+
+  maybeIt("auto_tag_write bash 5 registration, single-side and invalid checks (different value domain: YES/NO)", () => {
+    for (const feature of ["false", "true"]) for (const authorized of ["NO", "YES"]) {
+      const flags = { FEATURE_NOVEL_TAG_AUTO: feature, AUTO_WRITE_AUTHORIZED: authorized };
+      expect(runGateBash5(flags).status).toBe(feature === "true" || authorized === "YES" ? 65 : 0);
+      expect(runGateBash5({ ...flags, PREPROD_APPROVED_OPEN_WRITE_GATES: "auto_tag_write" }).status).toBe(0);
+    }
+    expect(runGateBash5({ AUTO_WRITE_AUTHORIZED: "yes" }).stdout.trim()).toBe("auto_tag_write_invalid");
+    expect(runGateBash5({ FEATURE_NOVEL_TAG_AUTO: "TRUE" }).stdout.trim()).toBe("auto_tag_write_invalid");
   });
 
   maybeIt("PASS：全关未登记", () => {

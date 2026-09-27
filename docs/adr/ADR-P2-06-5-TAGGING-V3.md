@@ -410,6 +410,17 @@ auto apply 必须 master、auto 与 Owner gate 同时开放；任何 CLI/Admin/W
 开启后读数据和生成计划，但不得产生 Tag business write。manual/mapping Admin mutation 另受注册的
 `tag:manage` capability、2FA 与 `FEATURE_P2_06_5_TAG_ADMIN_WRITE` 保护。
 
+**预生产部署闸门（2026-09-28 新增，不改变以上任何生产语义）**：`scripts/preproduction/
+preflight.sh` 曾对 `FEATURE_NOVEL_TAG_AUTO`/`AUTO_WRITE_AUTHORIZED` 硬编码要求恒为
+`false`/`NO`。现改为与 catalog_write/promo_write/sitemap_write 一致的封闭枚举登记制
+第四项 `auto_tag_write`（`scripts/preproduction/lib.sh` 的 `preprod_assert_write_gates()`；
+`FEATURE_NOVEL_TAG_AUTO` 仍是精确 `"true"`/`"false"`，`AUTO_WRITE_AUTHORIZED` 仍是精确
+`"YES"`/`"NO"`，两者任一处于"开"态且未在 `PREPROD_APPROVED_OPEN_WRITE_GATES` 登记
+`auto_tag_write` 即 fail closed）。预生产当前两个变量仍是 `false`/`NO` 且未登记——这只是
+为将来 Owner 批准开闸预先接好登记通道，本身不构成也不需要 G7 授权。详见
+[ADR-PREPROD-APPROVED-OPEN-WRITE-GATES.md 2026-09-28 节](ADR-PREPROD-APPROVED-OPEN-WRITE-GATES.md#2026-09-28-extension-auto_tag_write-registration-no-host-state-change)
+与 `docs/verification/wo7-public-auto/DELIVERY.md` §5「开闸前检查清单草稿」第 1 条。
+
 ## 12. Migration and Bootstrap Strategy
 
 唯一裁决：**schema migration + explicit bootstrap CLI**。

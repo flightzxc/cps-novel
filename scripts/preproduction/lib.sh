@@ -45,27 +45,39 @@ preprod_load_env() {
 # 决策（Owner 2026-09-23，见 docs/adr/ADR-PREPROD-APPROVED-OPEN-WRITE-GATES.md）：
 # 把"两个变量必须全为 false"改成"开启前必须先在共享 env 里显式登记"。
 #
-# 🔴 可登记的写闸是一个封闭枚举，只有三个：
-#   catalog_write → FEATURE_NOVEL_CATALOG_SYNC + NOVEL_CATALOG_SYNC_ALLOW_WRITE
-#   promo_write   → FEATURE_PROMO_LINK_CLAIM + PROMO_LINK_CLAIM_ALLOW_WRITE
-#   sitemap_write → FEATURE_SITEMAP_AUTO_REFRESH + SITEMAP_AUTO_REFRESH_ALLOW_WRITE
+# 🔴 可登记的写闸是一个封闭枚举，只有四个（2026-09-28 扩展见下）：
+#   catalog_write   → FEATURE_NOVEL_CATALOG_SYNC + NOVEL_CATALOG_SYNC_ALLOW_WRITE
+#   promo_write     → FEATURE_PROMO_LINK_CLAIM + PROMO_LINK_CLAIM_ALLOW_WRITE
+#   sitemap_write   → FEATURE_SITEMAP_AUTO_REFRESH + SITEMAP_AUTO_REFRESH_ALLOW_WRITE
+#   auto_tag_write  → FEATURE_NOVEL_TAG_AUTO + AUTO_WRITE_AUTHORIZED
 # sitemap: Owner 2026-09-26 approval; repository release evidence, not a live host check.
+# auto_tag_write: added 2026-09-28 so a future Owner approval to open the front-end
+# auto-tag gate only needs an env registration + this already-shipped preflight, not
+# another preflight code change on the critical path. Preprod's actual values stay
+# FEATURE_NOVEL_TAG_AUTO=false / AUTO_WRITE_AUTHORIZED=NO and UNREGISTERED as of this
+# change — see docs/adr/ADR-PREPROD-APPROVED-OPEN-WRITE-GATES.md's 2026-09-28 section.
 # 之所以是封闭枚举而不是"登记什么值都认"：登记列表本身只是共享 env 里的一行
 # 文本，任何有权改目标机 env 的人都能编辑它——如果登记值本身没有约束，这道闸
 # 就退化成"写你想开的名字，自动通过"，等于没有检查。封闭枚举把"新开一个写闸"
 # 这件事钉在代码改动上（必须先把新名字加进下面的 case 分支，且要经 Owner 批准
 # 走一遍代码审查），而不是一次 env 编辑就能绕过。其它写闸
-# （indexnow_outbox / indexnow_delivery / auto_tagging / article_writes /
+# （indexnow_outbox / indexnow_delivery / article_writes /
 # tracking_write_gate / two_factor_enforcement）不在这个枚举里，原样硬关，
 # 判定逻辑一行都不动。
 #
-# 🔴 每个可登记写闸的两个变量必须严格等于 "true" 或 "false"（大小写敏感，
-# 不认 "TRUE"/"1"/空字符串/未设置）。未设置也算非法，而不是默认当 false 处理：
-# 这两个变量描述的是"目标机 env 里写没写清楚这件事"，而不是"没写就当作最安全的
-# 值"——本仓库吃过默认值掩盖配置缺失的亏，这里不重蹈。为保持与旧版 reason 的
-# 连续性，"已登记但值非法"与"未登记但值非法"统一归为
-# catalog_write_invalid / promo_write_invalid / sitemap_write_invalid（不复用未登记时的
-# catalog_write / promo_write / sitemap_write，这样两类失败在事故排查时不会混在一起）。
+# 🔴 每个可登记写闸的两个变量必须严格等于各自域下的两个合法值（大小写敏感，
+# 不认宽松变体）。未设置也算非法，而不是默认当"关"处理：这两个变量描述的是
+# "目标机 env 里写没写清楚这件事"，而不是"没写就当作最安全的值"——本仓库吃过
+# 默认值掩盖配置缺失的亏，这里不重蹈。catalog/promo/sitemap 三个的域都是
+# "true"/"false"；auto_tag_write 不同——它复用 FEATURE_NOVEL_TAG_AUTO 既有的
+# 精确 "true"/"false" 解析，但 AUTO_WRITE_AUTHORIZED 的域是精确 "YES"/"NO"
+# （`isAutoTagWriteAuthorized`，`src/lib/flags/feature-flags.ts`，Owner 最终生产
+# 闸门的既有约定，不是本次新造）——因此 auto_tag_write 的"合法性"判定与另外三个
+# 分别校验，不能共用同一段 "true"/"false" 判定代码。为保持与旧版 reason 的
+# 连续性，"已登记但值非法"与"未登记但值非法"统一归为 catalog_write_invalid /
+# promo_write_invalid / sitemap_write_invalid / auto_tag_write_invalid（不复用未登记时的
+# catalog_write / promo_write / sitemap_write / auto_tag_write，这样两类失败在事故
+# 排查时不会混在一起）。
 #
 # 🔴 dry-run 组合（FEATURE=true 但 ALLOW_WRITE=false）对已登记的写闸合法：
 # 目录同步的 dry-run 模式就是这个组合——只探测/计算，不落库。已登记写闸的
@@ -80,7 +92,7 @@ preprod_load_env() {
 # unbound variable，4.4 之前都有这个坑）。
 preprod_assert_write_gates() {
   local raw="${PREPROD_APPROVED_OPEN_WRITE_GATES:-}"
-  local catalog_approved=0 promo_approved=0 sitemap_approved=0
+  local catalog_approved=0 promo_approved=0 sitemap_approved=0 auto_tag_approved=0
   local -a parts
   IFS=',' read -ra parts <<<"$raw"
   local item trimmed
@@ -91,6 +103,7 @@ preprod_assert_write_gates() {
       catalog_write) catalog_approved=1 ;;
       promo_write) promo_approved=1 ;;
       sitemap_write) sitemap_approved=1 ;;
+      auto_tag_write) auto_tag_approved=1 ;;
       *)
         echo "approved_open_write_gate_unknown value=$trimmed"
         return 65
@@ -141,12 +154,35 @@ preprod_assert_write_gates() {
     return 65
   fi
 
+  # auto_tag_write: same registration discipline as the three above, but a
+  # different value domain on its second variable -- FEATURE_NOVEL_TAG_AUTO
+  # is the usual exact "true"/"false", while AUTO_WRITE_AUTHORIZED is exact
+  # "YES"/"NO" (the pre-existing production Owner gate parsed by
+  # `isAutoTagWriteAuthorized`, `src/lib/flags/feature-flags.ts` -- not a new
+  # convention invented here). Preprod today ships both at their closed
+  # values (false/NO) and unregistered; this only prepares the registration
+  # path for a future Owner approval.
+  local feature_auto_tag="${FEATURE_NOVEL_TAG_AUTO:-}"
+  local allow_auto_tag="${AUTO_WRITE_AUTHORIZED:-}"
+  if [[ "$feature_auto_tag" != "true" && "$feature_auto_tag" != "false" ]] \
+    || [[ "$allow_auto_tag" != "YES" && "$allow_auto_tag" != "NO" ]]; then
+    echo "auto_tag_write_invalid"
+    return 65
+  fi
+  local auto_tag_open=0
+  [[ "$feature_auto_tag" == "true" || "$allow_auto_tag" == "YES" ]] && auto_tag_open=1
+  if (( auto_tag_open == 1 && auto_tag_approved == 0 )); then
+    echo "auto_tag_write"
+    return 65
+  fi
+
   local approved_list="" open_list=""
   if (( catalog_approved == 1 )); then approved_list="catalog_write"; fi
   if (( promo_approved == 1 )); then
     if [[ -n "$approved_list" ]]; then approved_list="$approved_list,promo_write"; else approved_list="promo_write"; fi
   fi
   if (( sitemap_approved == 1 )); then approved_list="${approved_list:+$approved_list,}sitemap_write"; fi
+  if (( auto_tag_approved == 1 )); then approved_list="${approved_list:+$approved_list,}auto_tag_write"; fi
   [[ -n "$approved_list" ]] || approved_list="none"
 
   if (( catalog_open == 1 )); then open_list="catalog_write"; fi
@@ -154,6 +190,7 @@ preprod_assert_write_gates() {
     if [[ -n "$open_list" ]]; then open_list="$open_list,promo_write"; else open_list="promo_write"; fi
   fi
   if (( sitemap_open == 1 )); then open_list="${open_list:+$open_list,}sitemap_write"; fi
+  if (( auto_tag_open == 1 )); then open_list="${open_list:+$open_list,}auto_tag_write"; fi
   [[ -n "$open_list" ]] || open_list="none"
 
   echo "PREPROD_WRITE_GATES=PASS approved=$approved_list open=$open_list"
