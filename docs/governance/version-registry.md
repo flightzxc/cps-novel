@@ -12,19 +12,42 @@ Compose runtime 与 Health 身份一致性验证（`/api/health` 的 `metadataCo
 为已发布。
 
 > Notion 权威页：[海阅 版本管理与发版手账](https://app.notion.com/p/3e4601b5fd3481b5a39bcf48408015c2)。
-> 本文件是仓库内镜像；v0.4.5 已直接同步到 Notion 并读回核对（发布、手动刷新及后台目测验收通过）。本文件变更不会自动写入 Notion。
+> 本文件是仓库内镜像；v0.5.0 当前快照、版本表与详细手账已直接同步到 Notion 并读回核对（Owner 已接受执行节点审计证据）。本文件变更不会自动写入 Notion。
 
 ## 当前快照
 
-### v0.5.0 —— 准备中（2026-09-27）
+### v0.5.0 —— 已发布到预生产（2026-09-27 13:21:23 +0800，`RELEASE=PASS`）
 
-- 开发线：`integration/v0.5.0-2026-09-27`，集成基线 `33a93c5`；工单 5、7、试读运维脚本、B-15 和工单 6 已经 Opus 复核并以 `--no-ff` 合入。
-- MINOR 范围：worker-light 轻量通道、周期扫描底座、sitemap 每日兜底、scheduler 整间隔对齐；B-15 权限契约与人工核对出边数据库防线；IndexNow 分钟扫描与轻量投递接线；建书首次定类及前台文本分类投影。
-- 两条增量迁移：`20260926150000_periodic_sweep_skip_reason`、`20260927090000_side_effect_manual_review_guard`。迁移后的数据库兼容 v0.4.5，不做 down migration。
-- 本版本尚未部署。IndexNow 与前台自动标签已合入但开关默认关闭（等于未上线）；试读运维脚本已合入，仅运维用。
-- 按 Owner 2026-09-27 授权同步预生产模板的主白名单，加入 `moboreader.preview_refresh.v1`；主机已于当日加入。本阶段不修改主机、批次、能力行或任何运行开关。
-- 第一阶段仅本地升版、串行完整门禁、推送及构建核对 linux/amd64 镜像归档；升版提交即 Final SHA，以第一阶段交付记录为准。部署须等 Owner 暂停批次并明确授权，归档核对后停下。
-- 回滚目标 v0.4.5 Final `ff1d2dd`；后续部署按新版 compose 处理 worker-light，并保持已有写闸登记。tag 和发版治理在部署验收后执行，tag 指向 Final。
+- 开发线 `integration/v0.5.0-2026-09-27`，集成基线 `33a93c5`；工单 5、7、试读运维脚本、B-15 和工单 6 已经 Opus 复核并以 `--no-ff` 合入。
+  Final `807aad3dae88c6cf560f663e55c8662407717c80`；annotated tag `v0.5.0` 固定在 Final，后续治理提交不改变发布身份。
+- 镜像 `cps-novel:0.5.0-807aad3`（linux/amd64），归档 327,247,775 字节，SHA-256
+  `ec1aa747df1abc7c811d1815fa4312775ec883c172ad46930a5b4d65fc8a9219`；config digest
+  `sha256:a8cecd3b24d6424a1362aa652d9031bb71fc066579f70d16107f25c8934b97a7`；platform manifest digest
+  `sha256:85aee9572dd24f070d8e2dd38ba1031560cd11bc4c255845f373006e739ce34c`。
+- **已上线（预生产）**：worker-light 轻量通道、周期扫描底座、sitemap 每日兜底、scheduler 整间隔对齐、B-15 权限契约及人工核对出边数据库防线；试读已在主 worker 实际执行并通过本次发布验收。
+  **已合入但开关关闭（等于未上线）**：IndexNow 分钟扫描与轻量投递接线、前台自动标签。
+  试读运维脚本已合入，仅运维用；本次不回填。生产未上线。
+- 两条增量迁移 `20260926150000_periodic_sweep_skip_reason`、`20260927090000_side_effect_manual_review_guard` 已应用，现有 20 条迁移完成；grants 回放通过。
+  触发器启用且 SECURITY INVOKER；只允许 web_app 改走 manual_review_required，迁移后的数据库兼容 v0.4.5。
+- 本地串行门禁：typecheck 0、build 通过；全量 461 文件 / 6,869 项 passed，37 文件 / 416 项 skipped，0 failed、0 Unhandled Error。
+  全部 19 个 PostgreSQL 运行器均执行：17 个通过（含 x6/x9）；p1-05b / p1-06 因 B-16 三条旧 lint 错误退出 1，如实保留，不记通过。
+  p1-06 另有旧 43 表 / 3 迁移断言和 Bash 3.2 fail-fast 问题，仍未修复。分片枚举 4 项、页位置排序 1 项单独通过；静态及 live 字典 drift 0。
+  x9 空库 20 迁移、存量 19→20 迁移验证通过，两库各两次 grants 回放后均 27 passed。
+- 部署仅限 `haiyue-vps`。在线逻辑备份 `cps-novel-v050-20260927T051542Z.dump`，194,525,163 字节，SHA-256
+  `5eec21945b03f883dee13d14ac566396eb0a0db18da8bfdc60a9b74014240448`；备份及 restore-list 核对通过。
+  env 备份 `preprod.env.bak-v050-20260927T051948Z`；仅升级两个版本号、新增三个 lane/light 变量，主白名单仅移出 sitemap_refresh 与 home_carousel.compute.v1、保留 preview。
+  先改 env 再跑新版 preflight/release；写闸保持 catalog_write,promo_write,sitemap_write，IndexNow 四开关、自动标签和 AUTO_WRITE_AUTHORIZED 保持关闭。
+- `RELEASE=PASS` / `RELEASE_EXIT=0`，release-state ready、current 指向 Final；health 0.5.0 / Final / metadata/database passed，五服务 healthy，postgres 未重建；验收后近 5 分钟错误日志 0、IndexNow 扫描行 0。
+- **Owner 实地操作及只读验收通过**：文章 `ef51fcc9-d744-4c3a-8e03-4504a973b5fa`（短 ID `u7nnliaz`）于 16:29:41 +0800 发布，published / public。
+  手动 sitemap `a9e9a65a-25b2-41bc-9369-20d336ba4bb6` 与发布自动 sitemap `c8aea19e-833e-4eb4-80f7-6342123114d9` 均 completed / 条目 success，分别 35 / 36 URL；
+  审计 356053 / 356059 的 actor_id 均为 cps-novel-preprod-worker-light-1。
+  新试读任务 `ed166a49-23db-406b-bda2-9c885d2b4007` 一次成功，审计 356061 为主 worker；3 章正文分别 2,488 / 2,573 / 2,266 字符，主 worker 的两次上游请求均 HTTP 200，429 为 0。
+- **验收口径裁决**：当前版本不输出 Docker 成功处理记录；Owner 于 2026-09-27 明确接受 `task_item.success` 数据库审计作为执行节点证据，随后授权 tag 和治理收官。没有把数据库审计描述为 Docker 日志。
+- **09-27 前序配置补记**：本次部署之前已打开两项读取能力（审计 276013 / 276014）、将试读加入主白名单、取消 80,006 条旧试读积压；这些不是本次发布执行中的操作。本次未修改能力行、批次状态、账号、nginx 或其它主机/X8。
+- 验收后正式批次 `eba8f359-a569-43d7-bb55-b71fecc02f6e` 仍 paused；其它运行态领取任务、两类 processing 条目、非终态领取意图均为 0。恢复由 Owner 操作。
+  每日兜底下一次预计 2026-09-28 04:00 JST（03:00 +0800，15 分钟窗口），由主控次日核对，本次未等待或手动触发。
+- 回滚目标 v0.4.5 Final `ff1d2dd7c8d46dba8e9267687eafbb9347b55387`；先以新版 compose 停掉 scheduler/worker/worker-light 并排空，再恢复 env 备份、执行旧版回滚并移除已停止的 light 容器，保留 sitemap 卷、不做 down migration。本次未触发回滚。
+  B-16、admin2 前版待办独立保留。完整结果与证据见 [v0.5.0 发布记录](releases/v0.5.0-preproduction.md)。
 
 ### v0.4.5 —— 已发布到预生产（2026-09-26 22:53:14 +0800，`RELEASE=PASS`）
 
@@ -236,7 +259,7 @@ Compose runtime 与 Health 身份一致性验证（`/api/health` 的 `metadataCo
 
 | Version | Date (+0800) | Bump | Summary | Commit / Release | Status |
 | --- | ---: | --- | --- | --- | --- |
-| `v0.5.0` | 2026-09-27 | MINOR | 轻量通道与周期扫描、sitemap 每日兜底、B-15 数据库防线；IndexNow 与自动标签接线默认关闭；两条增量迁移 | `integration/v0.5.0-2026-09-27`；集成基线 `33a93c5` 经 Opus 复核 | 准备中；本版本未部署 |
+| `v0.5.0` | 2026-09-27 13:21 | MINOR | 轻量通道、周期扫描、sitemap 每日兜底、B-15 防线；试读实际执行通过；IndexNow 与自动标签开关关闭 | tag `v0.5.0` → `807aad3dae88c6cf560f663e55c8662407717c80`；image `cps-novel:0.5.0-807aad3` | 预生产已发布；Owner 验收通过；批次仍暂停；生产未上线 |
 | `v0.4.5` | 2026-09-26 22:53 | PATCH | 发布后触发试读；sitemap 写闸、手动刷新与 CLI；连接池、详情页与侧栏；7a 仅设计；无迁移/grants 变更 | tag `v0.4.5` → `ff1d2dd7c8d46dba8e9267687eafbb9347b55387`；image `cps-novel:0.4.5-ff1d2dd` | 预生产已发布；实地验收通过；试读不执行；生产未上线 |
 | `v0.4.4` | 2026-09-26（12:14） | PATCH | sitemap 候选缓存与 processing 发布漏刷修复；预生产 nginx 模板同步；无迁移或 grants 变更 | annotated tag `v0.4.4` → `205220ebc6f460e85e6fbc8901f592c979c87b83`；镜像 `cps-novel:0.4.4-205220e`；`RELEASE=PASS` | 预生产已发布；两次发布实地验收已通过；生产未上线 |
 | `v0.4.3` | 2026-09-25（22:35） | PATCH | admin2 独立身份建号与双 UUID 领取白名单；分片枚举真实库 helper 修复；无迁移或 grants 变更。详见“当前快照” | annotated tag `v0.4.3` → `505feeaae04ae1a23df3e7f6a27795f4128636f3`；镜像 `cps-novel:0.4.3-505feea`；`RELEASE=PASS` | ✅ 预生产已发布；admin2 2FA 绑定与双账号验证待完成；生产未上线 |

@@ -3,7 +3,34 @@
 <!-- 本文件由 `node scripts/generate-changelog.mjs --write` 生成，请勿手工编辑。 -->
 <!-- 叙述性内容写进 commit message；Owner/架构决策写 docs/adr/。 -->
 
-生成时间：2026-09-26 · 共 866 个 commit
+生成时间：2026-09-27 · 共 890 个 commit
+
+## v0.5.0
+
+- `807aad3` 2026-09-27 发布：准备海阅 v0.5.0 版本身份  — _codex · GPT-6_
+- `33a93c5` 2026-09-27 合并(IndexNow)：纳入工单 6 到期扫描接线与轻量通道公平轮转（已获 Opus 复核）  — _claude-code · Claude Opus 5.5 · reviewed: claude-code · Claude Opus 5.5_
+- `feb95f2` 2026-09-27 合并(权限)：纳入 B-15——x6 权限契约派生与 x9 人工核对出边数据库防线（已获 Opus 复核）  — _claude-code · Claude Opus 5.5 · reviewed: claude-code · Claude Opus 5.5_
+- `c033e73` 2026-09-27 docs(indexnow): 归档工单六实测与未通过门禁证据  — _codex · GPT-6_
+- `6bda48e` 2026-09-27 修复：为人工核对意图出边增加数据库角色防线  — _codex · GPT-6_
+- `d1e6769` 2026-09-27 实现：接入 IndexNow 分钟扫描与轻量通道公平轮转  — _codex · GPT-6_
+- `351d2d3` 2026-09-27 合并：将 v0.5.0 开发线并入 B-15 修复分支  — _codex · GPT-6_
+- `17d07cc` 2026-09-27 合并(试读)：纳入试读开放运维命令与 B-17 运行器（已获 Opus 复核并已用于预生产）  — _claude-code · Claude Opus 5.5 · reviewed: claude-code · Claude Opus 5.5_
+- `3bb62c7` 2026-09-27 合并(标签)：纳入工单 7 建书首次定类接线与公开投影纳入文本分类（dark，已获 Opus 复核）  — _claude-code · Claude Opus 5.5 · reviewed: claude-code · Claude Opus 5.5_
+- `9febb7e` 2026-09-27 合并(调度)：纳入工单 5 轻量任务通道、定时入队底座与 sitemap 每日兜底（已获 Opus 复核）  — _claude-code · Claude Opus 5.5 · reviewed: claude-code · Claude Opus 5.5_
+- `b26eb18` 2026-09-27 文档：补充工单 5 调度修订门禁和变异恢复证据  — _codex · GPT-6_
+- `5f69119` 2026-09-27 文档：补充工单 7 复核修订门禁与日志变异证据  — _codex · GPT-6_
+- `a9357b8` 2026-09-27 修复：对齐 scheduler 时钟边界并允许每日扫描窗口内补触发  — _codex · GPT-6_
+- `188deef` 2026-09-27 修复：标签开关关闭时静默处理逐条 worker 观察  — _codex · GPT-6_
+- `df74079` 2026-09-27 运维(试读开放)：新增预生产清积压/补发布脚本，并补齐 B-17 缺失运行器  — _claude-code · Claude Sonnet 5_
+- `f406f4b` 2026-09-27 修复(B-15)：从受控写入清单派生 x6 权限契约并完成 x9 排查  — _codex · GPT-6_
+- `3045fe0` 2026-09-27 文档：附最终门禁命令及尾行输出  — _codex · GPT-6_
+- `676c518` 2026-09-27 交付：补齐工单七验证证据与开闸前检查草稿  — _codex · GPT-6_
+- `b3f751b` 2026-09-27 优化：批量收尾以存在性探测判断未完成条目  — _codex · GPT-6_
+- `7f9dfe3` 2026-09-27 文档(发版)：收官海阅 v0.4.5 预生产部署与实地验收  — _codex · GPT-6_
+- `78938a2` 2026-09-27 测试：用低分重复标签锁定映射归属优先  — _codex · GPT-6_
+- `d88d98d` 2026-09-27 实现：建书首次定类分段入队与公开自动标签暗接线  — _codex · GPT-6_
+- `d96023b` 2026-09-27 文档：记录轻量通道验收证据与发布回滚清单  — _codex · GPT-6_
+- `d502504` 2026-09-27 功能：新增轻量任务通道与 sitemap 每日兜底调度  — _codex · GPT-6_
 - `bdf2d42` 2026-09-26 文档(发版)：同步海阅 v0.4.5 最终发布提交  — _codex · GPT-6_
 
 ## v0.4.5

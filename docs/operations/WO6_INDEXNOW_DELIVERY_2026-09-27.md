@@ -1,6 +1,7 @@
 # 工单 6：IndexNow 扫描与轻量投递交付
 
 状态：已在独立分支实现，**全量测试门禁尚未通过，不能视为完整验收通过**；待复核合入与生产开闸验收；未修改任何部署主机、未开闸、未合并、未建 PR、未发版。
+主控复核（2026-09-27）：开发时的全量失败由多会话并发造成的高负载（load 46～74）引起；低负载复跑，全量 6,869 passed / 0 failed、无 Unhandled Error，x6/x9 运行器全绿，已集成于 integration/v0.5.0 @ 33a93c5。
 
 - 分支：`feat/indexnow-sweep-wiring`。
 - worktree：`/Users/chenweifeng/Documents/cps海阅/wo6-indexnow-sweep`，不在 `/tmp`。

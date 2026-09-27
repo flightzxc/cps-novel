@@ -120,4 +120,5 @@ rg -n 'side_effect_intent|TRIGGER' prisma/migrations
 - x9 覆盖原始 SQL/Prisma 的全部人工核对出边拒绝、owner 拒绝、SET ROLE/禁用 trigger 拒绝、有效角色与登录角色差异、同状态放行、其它起点、应用/回读守卫、Web 两种裁决、CAS、幂等及两类事务回滚。
 - x9 运行器同时验证空库 20 迁移和存量 19→20 迁移；存量保留五种意图状态及 schedule_run.skip_reason 样本，每库两次 grants 回放，旧数据/历史迁移校验和不变。
 - x9、迁移/回放、变异、tsc、build、drift 已通过；全量因非白名单 Docker Bash 5 对照测试超时及 Vitest 通信错误仍阻断，不能宣称总门禁全绿。
+主控复核（2026-09-27）：开发时的全量失败由多会话并发造成的高负载（load 46～74）引起；低负载复跑，全量 6,869 passed / 0 failed、无 Unhandled Error，x6/x9 运行器全绿，已集成于 integration/v0.5.0 @ 33a93c5。
 - 完整运行器结果、变异及命令尾行见 [B-15 验证报告](../governance/B15-GRANT-ASSERTIONS-VERIFICATION.md)。未部署，B-10 的自动核查/对账仍未实施。

@@ -39,6 +39,38 @@
 
 ## 发版记录（新条目在最上面）
 
+### 2026-09-27 13:21 - codex（GPT-6，发版执行）
+
+**变更类型**：预生产正式发布 `v0.5.0`（MINOR），部署及验收仅限 `haiyue-vps`。
+
+**背景**：工单 5、7、试读运维脚本、B-15、工单 6 经 Opus 复核集成；Owner 授权在正式领取批次暂停期间部署 Final `807aad3dae88c6cf560f663e55c8662407717c80`，并亲自完成手动 Sitemap 刷新和测试文章发布。
+
+**变更内容**：worker-light、周期扫描底座、sitemap 每日兜底、scheduler 整间隔对齐和 B-15 人工核对出边数据库防线已上线预生产；试读实际执行验收通过。
+IndexNow 接线与前台自动标签已合入但开关关闭，等于未上线；试读运维脚本仅运维用。
+annotated tag `v0.5.0` 指向 Final，CHANGELOG 从 Git 生成；三处开发期门禁失败描述保留原文，并追加 Owner 指定的低负载复核结论。
+
+**影响范围**：web/worker/worker-light/scheduler 使用 `cps-novel:0.5.0-807aad3`（linux/amd64），postgres 未重建。
+应用两条增量迁移：`20260926150000_periodic_sweep_skip_reason`、`20260927090000_side_effect_manual_review_guard`，grants 回放通过。
+env 备份 `preprod.env.bak-v050-20260927T051948Z`；只改两个版本号、三个 lane/light 变量、主白名单移出 sitemap 与轮播但保留 preview；其它开关保持。
+补记 09-27 **部署前已完成**的配置变化：两项读取能力打开（审计 276013 / 276014）、试读加入主白名单、取消 80,006 条旧积压；本次发版未再次执行这些操作，未回填、未改能力行/批次/账号/nginx，未操作其它主机或 X8。
+
+**验证方式**：
+
+- typecheck 0、build 通过；全量 `npm test -- --maxWorkers=4`：461 文件 / 6,869 项 passed，37 文件 / 416 项 skipped，0 failed、0 Unhandled Error；本轮不需要 B-6/B-14 超时例外。
+- 全部 19 个 PostgreSQL 运行器串行执行，17 个通过（含 x6 / x9），p1-05b / p1-06 保留 B-16 三条旧 lint 错误，不记通过；p1-06 旧数量断言及 Bash 3.2 fail-fast 问题另行如实登记。
+  B-8 两文件分别 4 / 1 项通过，静态/live drift 0；x9 空库 20 迁移、存量 19→20、每库两次 grants 回放及四轮 27 项通过。
+- 在线逻辑备份 `cps-novel-v050-20260927T051542Z.dump`，194,525,163 字节，SHA-256 `5eec21945b03f883dee13d14ac566396eb0a0db18da8bfdc60a9b74014240448`；restore-list 通过。
+  镜像归档 SHA-256 `ec1aa747df1abc7c811d1815fa4312775ec883c172ad46930a5b4d65fc8a9219`，本地/目标机身份一致。
+- `PREPROD_WORKER_LANES=PASS`、写闸检查通过，`RELEASE=PASS` / EXIT=0；health 0.5.0 / Final / metadata/database passed；五服务 healthy，验收后近 5 分钟错误 0，IndexNow schedule_run 为 0。
+- Owner 手动刷新和文章 `u7nnliaz` 发布自动刷新均成功，最新 36 URL。审计 356053 / 356059 确认 light 实际执行；试读任务 `ed166a49-23db-406b-bda2-9c885d2b4007` 一次成功，审计 356061 确认主 worker，3 章正文 2,488 / 2,573 / 2,266 字符；上游两次 HTTP 200，429 为 0。
+- 当前版本未输出 Docker 成功处理日志；Owner 明确接受 `task_item.success` 数据库审计替代该项执行节点证据，并授权 tag 与治理收官。最后暂停闸门通过，批次仍 paused，其它运行领取任务、处理中条目及非终态领取意图均 0。
+
+**后续待办**：恢复领取批次由 Owner 操作；每日兜底预计 2026-09-28 04:00 JST（03:00 +0800）由主控核对，本次不等待或触发。
+IndexNow/自动标签待另行开闸授权，B-16、admin2 前版待办独立保留，生产未上线。
+回滚目标 v0.4.5 Final `ff1d2dd`，须以新版 compose 先停 light 等后台服务并排空、恢复 env 备份后执行旧版回滚；不做 down migration，本次未回滚。
+完整命令结果与身份见 [v0.5.0 发布记录](releases/v0.5.0-preproduction.md)。
+Notion 当前快照、版本表、本版详细手账及开发日志镜像已同步并读回核对。
+
 ### 2026-09-26 22:53 - codex（GPT-6，发版执行）
 
 **变更类型**：预生产正式发布 `v0.4.5`（PATCH）。
