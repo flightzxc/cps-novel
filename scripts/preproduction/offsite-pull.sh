@@ -61,6 +61,26 @@ set +x
 #     [--backup-timer-container cps-novel-backup-timer-1] \
 #     [--keep 14]
 #
+# 🔴 --gate mode (2026-09-28, NAS readonly-key round): when a caller does NOT
+# hold the `deploy` user's own ssh key -- e.g. a UGREEN NAS pulling over the
+# internet with its own dedicated, restricted key -- pass `--gate`. The
+# transport changes from direct `ssh $host docker ps|exec ...` (which needs
+# `deploy`'s full docker-group access, i.e. host-root-equivalent) to talking
+# ONLY to scripts/preproduction/offsite-readonly-gate.sh, installed server-side
+# as an ssh forced command (`command="..."` in authorized_keys) for that
+# dedicated key: `ssh $host list` and `ssh $host get <name>` replace every
+# `docker ps`/`docker exec` call this script would otherwise make itself. The
+# gate enforces its own fixed remote directory and container lookup server-side
+# -- `--remote-dir` and `--backup-timer-container` are therefore meaningless in
+# gate mode; passing `--backup-timer-container` together with `--gate` is a
+# usage error (there is nothing for it to select). Every local step after the
+# transport -- staging, sha256 recomputation, atomic promotion, retention,
+# SHA256SUMS regeneration -- is byte-for-byte the same code path either way.
+# See docs/operations/OFFSITE_BACKUP_UGREEN_NAS.md for the NAS-side setup this
+# mode exists for, and offsite-readonly-gate.sh's own header comment for the
+# server-side security model (forced command, exact two-verb allowlist, no
+# stdin-script execution, filename allowlist + list-membership check on `get`).
+#
 # Prints exactly one machine-readable result line on success:
 #   OFFSITE_PULL=PASS file=<name> size=<bytes> sha256=<hex> status=<pulled|already_present>
 # or on failure:
@@ -72,9 +92,10 @@ remote_dir="/var/lib/cps-novel/backups/logical"
 local_dir=""
 keep=14
 backup_timer_container=""
+gate_mode=0
 
 usage() {
-  echo "usage: offsite-pull.sh --local-dir DIR [--remote-host HOST] [--remote-dir DIR] [--backup-timer-container NAME] [--keep N]" >&2
+  echo "usage: offsite-pull.sh --local-dir DIR [--remote-host HOST] [--remote-dir DIR] [--backup-timer-container NAME] [--keep N] [--gate]" >&2
   exit 64
 }
 
@@ -85,6 +106,7 @@ while (($#)); do
     --local-dir) local_dir="${2:-}"; shift 2 ;;
     --backup-timer-container) backup_timer_container="${2:-}"; shift 2 ;;
     --keep) keep="${2:-}"; shift 2 ;;
+    --gate) gate_mode=1; shift ;;
     *) usage ;;
   esac
 done
@@ -92,6 +114,11 @@ done
 if ! [[ -n "$local_dir" && "$local_dir" = /* ]]; then usage; fi
 if ! [[ "$remote_dir" = /* ]]; then usage; fi
 if ! [[ "$keep" =~ ^[1-9][0-9]*$ ]]; then usage; fi
+# --gate talks only to offsite-readonly-gate.sh, which picks its own
+# container server-side (see this file's header comment) -- a
+# --backup-timer-container value would silently do nothing, which is worse
+# than refusing outright.
+if [[ "$gate_mode" -eq 1 && -n "$backup_timer_container" ]]; then usage; fi
 
 fail() {
   echo "OFFSITE_PULL=FAIL reason=$1${2:+ detail=$2}"
@@ -148,12 +175,19 @@ ssh_opts="${OFFSITE_PULL_SSH_OPTS:-}"
 # container with that same bind mount works -- the flag name says
 # "backup-timer" because that is the intended, always-available target once
 # it is running, not because the mechanism requires that specific service.
-if [[ -z "$backup_timer_container" ]]; then
-  # shellcheck disable=SC2086
-  backup_timer_container="$(ssh $ssh_opts "$remote_host" docker ps --filter name=cps-novel-backup-timer --format '{{.Names}}' | head -1)"
+# Skipped entirely in --gate mode: the gate (offsite-readonly-gate.sh) does
+# its own fixed, server-side container lookup for every `list`/`get` call --
+# there is no container name for THIS script to discover or pass along.
+if [[ "$gate_mode" -eq 0 ]]; then
+  if [[ -z "$backup_timer_container" ]]; then
+    # shellcheck disable=SC2086
+    backup_timer_container="$(ssh $ssh_opts "$remote_host" docker ps --filter name=cps-novel-backup-timer --format '{{.Names}}' | head -1)"
+  fi
+  if ! [[ -n "$backup_timer_container" ]]; then fail backup_timer_container_not_found; fi
+  echo "OFFSITE_PULL_BACKUP_TIMER_CONTAINER=$backup_timer_container" >&2
+else
+  echo "OFFSITE_PULL_TRANSPORT=gate" >&2
 fi
-if ! [[ -n "$backup_timer_container" ]]; then fail backup_timer_container_not_found; fi
-echo "OFFSITE_PULL_BACKUP_TIMER_CONTAINER=$backup_timer_container" >&2
 
 # --- 1) remote listing, run INSIDE the target container as root (`-u 0`).
 # 🔴 `-u 0` is required, not optional: verified live that `web` (the
@@ -177,9 +211,19 @@ echo "OFFSITE_PULL_BACKUP_TIMER_CONTAINER=$backup_timer_container" >&2
 # discipline. The postgres:16.14 image backup-timer runs (and the app
 # image `web`/`worker`/etc. run, for the fallback case) is Debian-based --
 # has /bin/sh and GNU stat.
-# shellcheck disable=SC2086
-remote_listing="$(
-  ssh $ssh_opts "$remote_host" docker exec -u 0 -i "$backup_timer_container" sh -s -- "$remote_dir" <<'REMOTE_SCRIPT'
+# 🔴 --gate mode: this whole listing step becomes a single `ssh $host list`
+# call to offsite-readonly-gate.sh instead of a `docker exec ... sh -s`
+# heredoc -- the gate is what runs that heredoc now (its OWN, fixed, not
+# stdin-supplied copy of the same "both sidecars present" logic, server-side),
+# and hands back one already-complete-only, already-sorted-by-nothing line per
+# backup as `name=X size=Y mtime=Z sha256=W`. Reformatted below into the exact
+# same `COMPLETE <mtime> <name>` shape the direct-docker path produces, so
+# every line after this branch (latest-selection, transfer, retention,
+# manifest) is identical code regardless of transport.
+if [[ "$gate_mode" -eq 0 ]]; then
+  # shellcheck disable=SC2086
+  remote_listing="$(
+    ssh $ssh_opts "$remote_host" docker exec -u 0 -i "$backup_timer_container" sh -s -- "$remote_dir" <<'REMOTE_SCRIPT'
 set -eu
 dir="$1"
 cd "$dir"
@@ -193,7 +237,21 @@ for dump in *.dump; do
   fi
 done
 REMOTE_SCRIPT
-)" || fail remote_listing_failed
+  )" || fail remote_listing_failed
+else
+  # shellcheck disable=SC2086
+  if ! gate_listing="$(ssh $ssh_opts "$remote_host" list)"; then fail remote_listing_failed; fi
+  remote_listing=""
+  if [[ -n "$gate_listing" ]]; then
+    while IFS= read -r gate_line; do
+      if ! [[ -n "$gate_line" ]]; then continue; fi
+      gate_name="${gate_line#*name=}"; gate_name="${gate_name%% *}"
+      gate_mtime="${gate_line#*mtime=}"; gate_mtime="${gate_mtime%% *}"
+      if ! [[ -n "$gate_name" && -n "$gate_mtime" ]]; then continue; fi
+      remote_listing="$remote_listing"$'\n'"COMPLETE $gate_mtime $gate_name"
+    done <<<"$gate_listing"
+  fi
+fi
 
 latest_complete="$(printf '%s\n' "$remote_listing" | awk '$1=="COMPLETE"{print $2, $3}' | sort -k1,1n | tail -1 | awk '{print $2}')"
 if ! [[ -n "$latest_complete" ]]; then fail no_complete_backup_found; fi
@@ -234,12 +292,28 @@ if [[ "$pull_status" == "pulled" ]]; then
   # the way rsync's own --partial gave, but correctness (verified by the
   # sha256 recomputation below) does not depend on that, only convenience on
   # a dropped connection does.
-  for suffix in "" ".sha256" ".metadata"; do
-    # shellcheck disable=SC2086
-    if ! ssh $ssh_opts "$remote_host" docker exec -u 0 "$backup_timer_container" cat "$remote_dir/${latest_complete}${suffix}" > "$staging_dir/${latest_complete}${suffix}"; then
-      fail transfer_failed "${latest_complete}${suffix}"
-    fi
-  done
+  # 🔴 --gate mode: same three files, but each one is a single `ssh $host get
+  # <name>` call to offsite-readonly-gate.sh instead of a direct `docker exec
+  # ... cat` -- the gate does that `docker exec -u 0 <container> cat ...`
+  # itself, server-side, only after re-validating the filename against its own
+  # allowlist regex and the current `list` result (see that script's header).
+  # This is a straight transport swap: the bytes streamed back and everything
+  # done with them below (recompute sha256, atomic promote) are unchanged.
+  if [[ "$gate_mode" -eq 0 ]]; then
+    for suffix in "" ".sha256" ".metadata"; do
+      # shellcheck disable=SC2086
+      if ! ssh $ssh_opts "$remote_host" docker exec -u 0 "$backup_timer_container" cat "$remote_dir/${latest_complete}${suffix}" > "$staging_dir/${latest_complete}${suffix}"; then
+        fail transfer_failed "${latest_complete}${suffix}"
+      fi
+    done
+  else
+    for suffix in "" ".sha256" ".metadata"; do
+      # shellcheck disable=SC2086
+      if ! ssh $ssh_opts "$remote_host" get "${latest_complete}${suffix}" > "$staging_dir/${latest_complete}${suffix}"; then
+        fail transfer_failed "${latest_complete}${suffix}"
+      fi
+    done
+  fi
 
   # --- 4) local re-computation, NOT trusting the transferred hash file's
   # correctness claim about itself -- recompute from the bytes that actually

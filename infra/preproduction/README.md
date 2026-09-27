@@ -225,3 +225,29 @@ for Mac do not enforce Unix permissions the way a real Linux host's
 filesystem does, so a named volume was needed for a faithful reproduction)
 confirming pull, verification, in-progress detection, and retention all
 still work end to end over the new transport.
+
+**`--gate` mode (2026-09-28, NAS readonly-key round)**: everything above
+still applies when the caller already holds `deploy`'s own full ssh key
+(docker-group membership, i.e. host-root-equivalent) -- fine for the Owner's
+own Mac, sitting behind the same trust boundary as every release. It is
+**not** fine for a caller that should not have that much power, e.g. a home
+UGREEN NAS pulling over the internet with its own dedicated key. For that
+case pass `--gate` instead: the transport becomes two calls,
+`ssh $host list` / `ssh $host get <name>`, to
+`scripts/preproduction/offsite-readonly-gate.sh` installed server-side as an
+ssh forced command (`command="..."` + `restrict` in `authorized_keys`) for
+that dedicated key -- no `docker ps`/`docker exec` call is ever made
+directly by this script in that mode, and the gate itself never executes
+anything supplied over stdin or SSH_ORIGINAL_COMMAND (contrast with the
+`docker exec ... sh -s --` heredoc above, which is always this file's own
+fixed script, not attacker-reachable bytes). `--remote-dir` and
+`--backup-timer-container` are meaningless with `--gate` (the gate fixes
+both server-side); passing `--backup-timer-container` together with
+`--gate` is refused as a usage error. Every step after the transport --
+staging, sha256 recomputation, atomic promotion, retention, `SHA256SUMS`
+regeneration -- is the same code path either way. See
+`scripts/preproduction/offsite-readonly-gate.sh`'s own header comment for
+the server-side security model (exact two-verb allowlist, filename
+allowlist + current-`list`-membership check on `get`, audit logging) and
+`docs/operations/OFFSITE_BACKUP_UGREEN_NAS.md` for the Owner-facing,
+step-by-step NAS install guide this mode exists for.

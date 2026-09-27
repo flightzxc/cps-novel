@@ -1247,6 +1247,18 @@ has the mount). Also confirmed live that `-u 0` is required, not optional:
 `web` runs as UID 1001 by default, and a plain `docker exec` without it gets
 `Permission denied` on these files.
 
+🔴 **NAS readonly-key round (2026-09-28):** the transport above requires
+`deploy`'s own full ssh key -- fine for the Owner's own Mac, not fine for a
+home NAS pulling over the internet, since that key is docker-group
+membership, i.e. host-root-equivalent. For a NAS (or any caller that should
+not hold that much power), `offsite-pull.sh --gate` talks only to
+`scripts/preproduction/offsite-readonly-gate.sh`, installed server-side as
+an ssh forced command (`command=` + `restrict`) for a separate, dedicated
+key that can only `list` completed backups and `get` one by exact,
+allowlisted filename -- see `infra/preproduction/README.md`'s "Offsite
+backup pull" section and `docs/operations/OFFSITE_BACKUP_UGREEN_NAS.md` for
+the full Owner-facing setup.
+
 The first G2 restore must use an already exported Mac/NAS copy:
 
 ```bash
