@@ -24,6 +24,7 @@ for attempt in $(seq 1 60); do
   sleep 1
 done
 [[ "$ready" == 1 ]] || { docker logs "$container"; echo 'BRAND_IMAGE=FAIL reason=http'; exit 65; }
+grep -Eq '^HTTP/[0-9.]+ 200([[:space:]]|$)' "$tmp/headers" || { echo 'BRAND_IMAGE=FAIL reason=status'; exit 65; }
 grep -qi '^Content-Type: image/png' "$tmp/headers" || { echo 'BRAND_IMAGE=FAIL reason=content_type'; exit 65; }
 cmp public/brand/og-default.png "$tmp/image.png" || { echo 'BRAND_IMAGE=FAIL reason=bytes'; exit 65; }
 checksum="$(shasum -a 256 "$tmp/image.png" | awk '{print $1}')"
