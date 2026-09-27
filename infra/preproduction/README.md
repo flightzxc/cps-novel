@@ -102,17 +102,48 @@ running it against haiyue-vps.
 backup set to a Mac, runs `export-backup-manifest.sh`, copies to NAS" step
 this directory's runbook previously described entirely by hand. It runs on
 the Owner's own Mac or NAS -- **never on haiyue-vps** -- and only ever
-initiates read-only `ssh` calls (`ls`/`stat`/`test`, never a write) plus an
-`rsync` pull over that same ssh session. No VPS or Mac/NAS credential is
-stored on the other side in either direction.
+initiates read-only `ssh haiyue-vps docker exec -u 0 <container> ...` calls
+(`ls`/`stat`/`cat`, never a write) to read backup files, streamed back over
+that same ssh session. No VPS or Mac/NAS credential is stored on the other
+side in either direction.
+
+🔴 **Transport is `docker exec`, not direct file access or rsync** (revised
+from this branch's first draft): the backup files under
+`/opt/cps-novel/shared/backups/logical` are root:root mode `0600` on the
+host, and the `deploy` ssh user has no passwordless `sudo` to read them
+directly (confirmed live). Routing every read through `docker exec -u 0`
+into an already-running container that has that directory bind-mounted
+needs no VPS-side permission change and no sudo grant -- `deploy` already
+runs `docker` directly for every release and every read-only diagnostic in
+this repository, and `docker exec -u 0` on any container is inherently as
+privileged as host root for whatever is bind-mounted into it. Because of
+this, `--remote-dir` is the path **as seen inside that container**
+(`/var/lib/cps-novel/backups/logical`, per
+`infra/preproduction/docker-compose.yml`'s bind mount of
+`${PREPROD_SHARED_ROOT}/backups:/var/lib/cps-novel/backups`), not the host
+path outside it. `-u 0` is confirmed necessary, not just defensive: `web`
+(the fallback target, see below) runs as UID 1001 by default, and a plain
+`docker exec` without `-u 0` gets `Permission denied` on these files
+(confirmed live).
 
 ```bash
 scripts/preproduction/offsite-pull.sh \
   --remote-host haiyue-vps \
-  --remote-dir /opt/cps-novel/shared/backups/logical \
+  --remote-dir /var/lib/cps-novel/backups/logical \
   --local-dir /absolute/path/on/mac-or-nas \
+  [--backup-timer-container cps-novel-backup-timer-1] \
   --keep 14
 ```
+
+`--backup-timer-container` defaults to auto-discovering a running
+`cps-novel-backup-timer*` container (read-only `docker ps --filter`); pass
+it explicitly to target a different running container that mounts the same
+directory (e.g. `cps-novel-web-1`, which mounts it read-only) when
+backup-timer itself is not running -- confirmed necessary in practice: as of
+2026-09-27, `cps-novel-backup-timer-1` on haiyue-vps has been `Exited(137)`
+since 2026-09-22 (flagged separately, being handled by the Owner/main
+session -- unrelated to this script, which only needs *some* currently
+running container with the mount, not specifically that one).
 
 It identifies the most recently COMPLETED logical backup (both the `.sha256`
 and `.metadata` sidecar `scripts/db/backup-logical.sh` writes last must
@@ -172,23 +203,19 @@ tail -f ~/Library/Logs/cps-novel-offsite-pull.err.log   # stderr, incl. any IN_P
 launchctl start cloud.bangbangji.cps-novel.offsite-pull # trigger one run immediately instead of waiting for 07:15
 ```
 
-**🔴 Known blocker, verified 2026-09-27 (read-only ssh), not yet fixed**: the
-backup files under `/opt/cps-novel/shared/backups/logical` on haiyue-vps are
-currently owned `root:root` mode `0600` (the `backup-timer` container runs
-its entrypoint as root, with no `user:` override in
-`infra/preproduction/docker-compose.yml`, so files it creates on the
-bind-mounted host directory inherit that ownership). The `deploy` ssh user
-this script (and every other read-only diagnostic in this repository) uses
-to reach haiyue-vps has **no** passwordless `sudo` (`sudo -n -l` returns
-`a password is required`, confirmed live) and cannot read those files, so
-`offsite-pull.sh`'s `rsync` step fails with `Permission denied` against the
-real host today -- confirmed live, not a hypothetical. The script's own
-logic (remote listing, mtime-based latest-selection including a real
-lexical-sort trap found on the host, in-progress detection, checksum
-verification, retention) was instead rehearsed end-to-end against a
-disposable local sshd container (see this branch's commit message for the
-full walkthrough) precisely because the real host currently refuses the
-transfer. This must be fixed, with Owner sign-off, before this mechanism can
-run against production for real -- see
-`docs/operations/PREPRODUCTION_DEPLOYMENT_RUNBOOK.md`'s "Offsite backup pull"
-section for the specific remediation options considered.
+**Permission blocker: resolved by the `docker exec -u 0` transport above**,
+no VPS-side change needed. An earlier draft of this script read backup files
+directly over ssh (`rsync`/plain file access) and hit a real
+`Permission denied` against the root:root `0600` files with no passwordless
+`sudo` available -- see this branch's commit history for that finding. The
+`docker exec -u 0` redesign sidesteps it entirely, verified live: real
+read-only listing + sha256 against haiyue-vps's actual backup set (through
+`cps-novel-web-1`, since `backup-timer` itself is currently down -- a
+separate, already-flagged issue, not a permission problem), and a full local
+rehearsal (disposable ssh server with the host's own Docker socket mounted,
+`docker exec`-ing into a second disposable container holding a real
+root:root `0600` pg_dump on a named volume -- bind mounts on Docker Desktop
+for Mac do not enforce Unix permissions the way a real Linux host's
+filesystem does, so a named volume was needed for a faithful reproduction)
+confirming pull, verification, in-progress detection, and retention all
+still work end to end over the new transport.

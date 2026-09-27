@@ -3,9 +3,32 @@ set -euo pipefail
 set +x
 
 # Runs on the Owner's Mac or NAS, NEVER on haiyue-vps. It pulls the most
-# recent COMPLETE logical backup off the VPS over `ssh`/`rsync` (read-only on
-# the VPS side -- this script never writes anything remote), verifies it
-# locally, and prunes older local copies down to a retention count.
+# recent COMPLETE logical backup off the VPS, verifies it locally, and
+# prunes older local copies down to a retention count.
+#
+# 🔴 Transport (review fix, 2026-09-27): goes through `ssh haiyue-vps docker
+# exec -u 0 <container> ...` for every remote read (`ls`, `stat`, `cat`),
+# NOT direct ssh file access. The `deploy` ssh user this script
+# authenticates as already runs `docker` directly for every release and
+# every read-only diagnostic in this repository -- the SAME access this
+# script now reuses, no new grant. This sidesteps a real blocker found
+# during the first-round rehearsal: the backup files under
+# /opt/cps-novel/shared/backups/logical are root:root mode 0600 on the HOST,
+# and `deploy` has no passwordless sudo (`sudo -n -l` confirmed refuses
+# live) to read them directly. `docker exec -u 0` sidesteps that without
+# any VPS-side permission change, sudo grant, or change to any service:
+# being able to run `docker exec -u 0` on an arbitrary container is
+# inherently as privileged as host root for anything bind-mounted into that
+# container (a property of `deploy`'s docker-group membership, which every
+# release and every read-only diagnostic here already relies on) --
+# confirmed necessary live, not merely convenient: `web` (the fallback
+# target used below when backup-timer is down) runs as UID 1001 by default,
+# so a plain `docker exec` without `-u 0` gets `Permission denied` on these
+# files. `--remote-dir` is therefore the path AS SEEN INSIDE the target
+# container (/var/lib/cps-novel/backups/logical, per
+# infra/preproduction/docker-compose.yml's own bind mount of
+# ${PREPROD_SHARED_ROOT}/backups:/var/lib/cps-novel/backups), not the host
+# path outside it.
 #
 # 🔴 No VPS credential of any kind is stored by this script or belongs on
 # the VPS. It authenticates purely via the invoking user's own `ssh`
@@ -15,11 +38,10 @@ set +x
 # of which this script hardcodes).
 #
 # Why "pull mode": the VPS never receives Mac/NAS credentials, an SSH key,
-# or any outbound destination -- it only has to answer read-only `ssh`
-# commands (`ls`, `stat`, `cat` a checksum file) issued FROM the Mac/NAS,
-# and serve file bytes over the SAME already-authenticated ssh session via
-# rsync. A push design would require the reverse: VPS-resident credentials
-# for the Mac/NAS, which is exactly the boundary this design avoids.
+# or any outbound destination -- it only has to answer read-only `ssh
+# ... docker exec` commands (`ls`, `stat`, `cat`) issued FROM the Mac/NAS.
+# A push design would require the reverse: VPS-resident credentials for the
+# Mac/NAS, which is exactly the boundary this design avoids.
 #
 # Completion detection: scripts/db/backup-logical.sh's own sequence is
 # pg_dump --file=X.dump (writes the .dump), pg_restore --list (read-only
@@ -34,8 +56,9 @@ set +x
 # Usage:
 #   scripts/preproduction/offsite-pull.sh \
 #     --remote-host haiyue-vps \
-#     --remote-dir /opt/cps-novel/shared/backups/logical \
+#     --remote-dir /var/lib/cps-novel/backups/logical \
 #     --local-dir /absolute/path/on/mac-or-nas \
+#     [--backup-timer-container cps-novel-backup-timer-1] \
 #     [--keep 14]
 #
 # Prints exactly one machine-readable result line on success:
@@ -45,12 +68,13 @@ set +x
 # and exits non-zero on failure.
 
 remote_host="haiyue-vps"
-remote_dir="/opt/cps-novel/shared/backups/logical"
+remote_dir="/var/lib/cps-novel/backups/logical"
 local_dir=""
 keep=14
+backup_timer_container=""
 
 usage() {
-  echo "usage: offsite-pull.sh --local-dir DIR [--remote-host HOST] [--remote-dir DIR] [--keep N]" >&2
+  echo "usage: offsite-pull.sh --local-dir DIR [--remote-host HOST] [--remote-dir DIR] [--backup-timer-container NAME] [--keep N]" >&2
   exit 64
 }
 
@@ -59,14 +83,15 @@ while (($#)); do
     --remote-host) remote_host="${2:-}"; shift 2 ;;
     --remote-dir) remote_dir="${2:-}"; shift 2 ;;
     --local-dir) local_dir="${2:-}"; shift 2 ;;
+    --backup-timer-container) backup_timer_container="${2:-}"; shift 2 ;;
     --keep) keep="${2:-}"; shift 2 ;;
     *) usage ;;
   esac
 done
 
-[[ -n "$local_dir" && "$local_dir" = /* ]] || usage
-[[ "$remote_dir" = /* ]] || usage
-[[ "$keep" =~ ^[1-9][0-9]*$ ]] || usage
+if ! [[ -n "$local_dir" && "$local_dir" = /* ]]; then usage; fi
+if ! [[ "$remote_dir" = /* ]]; then usage; fi
+if ! [[ "$keep" =~ ^[1-9][0-9]*$ ]]; then usage; fi
 
 fail() {
   echo "OFFSITE_PULL=FAIL reason=$1${2:+ detail=$2}"
@@ -74,7 +99,6 @@ fail() {
 }
 
 command -v ssh >/dev/null 2>&1 || fail tool_missing ssh
-command -v rsync >/dev/null 2>&1 || fail tool_missing rsync
 if command -v sha256sum >/dev/null 2>&1; then
   sha256_of() { sha256sum "$1" | awk '{print $1}'; }
 else
@@ -101,38 +125,78 @@ trap cleanup EXIT INT TERM
 # documents at length for its own arrays. A plain string has no such
 # hazard, and unquoted expansion below is deliberate word-splitting (this
 # is how an operator passes e.g. "-o ProxyJump=bastion") -- shellcheck
-# SC2086 is intentionally not applied to these two lines.
+# SC2086 is intentionally not applied to these lines.
 ssh_opts="${OFFSITE_PULL_SSH_OPTS:-}"
 
-# --- 1) remote listing: only .dump files whose BOTH sidecars already exist
-# are "complete". "Most recent" is decided by the .metadata sidecar's mtime
-# (written LAST by backup-logical.sh, so it is the real completion instant),
-# NOT by filename sort -- confirmed live on haiyue-vps (2026-09-27, read-only)
-# that filenames are NOT reliably chronologically sortable: a manually made
+# --- 0) discover the backup-timer container name if not given explicitly.
+# Read-only `docker ps` over ssh -- lists, does not start/stop/exec anything
+# by itself. `--filter name=...` narrows server-side so a host running
+# multiple projects (this one has been observed to, e.g. cps-novel-x8-local-*
+# elsewhere) does not return an ambiguous multi-line match.
+#
+# 🔴 `docker ps` (no `-a`) only lists RUNNING containers -- if backup-timer
+# is not currently running, auto-discovery correctly fails closed here
+# rather than silently falling back to some other guessed container. This
+# is not hypothetical: verified live on haiyue-vps, 2026-09-27, that
+# cps-novel-backup-timer-1 has been Exited (137) since 2026-09-22 (flagged
+# separately as an operational issue, unrelated to this script -- see this
+# branch's own report). For that situation, pass
+# `--backup-timer-container cps-novel-web-1` explicitly: `web` also mounts
+# the same backups directory (`infra/preproduction/docker-compose.yml`,
+# read-only) and was the container this script's own real-host verification
+# actually used while backup-timer was down. Any currently-running
+# container with that same bind mount works -- the flag name says
+# "backup-timer" because that is the intended, always-available target once
+# it is running, not because the mechanism requires that specific service.
+if [[ -z "$backup_timer_container" ]]; then
+  # shellcheck disable=SC2086
+  backup_timer_container="$(ssh $ssh_opts "$remote_host" docker ps --filter name=cps-novel-backup-timer --format '{{.Names}}' | head -1)"
+fi
+if ! [[ -n "$backup_timer_container" ]]; then fail backup_timer_container_not_found; fi
+echo "OFFSITE_PULL_BACKUP_TIMER_CONTAINER=$backup_timer_container" >&2
+
+# --- 1) remote listing, run INSIDE the target container as root (`-u 0`).
+# 🔴 `-u 0` is required, not optional: verified live that `web` (the
+# fallback target above) runs as UID 1001 by default
+# (root docker-compose.yml's `x-app-runtime` anchor), so a plain `docker
+# exec` without `-u 0` gets `Permission denied` on the root:root 0600
+# backup files -- confirmed live on haiyue-vps. `docker exec -u 0` on an
+# arbitrary container is exactly as privileged as host root for anything
+# bind-mounted into that container; this is an inherent property of being
+# able to run `docker exec` at all (i.e. of `deploy`'s docker-group
+# membership, which every release and every read-only diagnostic in this
+# repository already relies on), not a new privilege this script requests.
+# Only .dump files whose BOTH sidecars already exist are "complete". "Most
+# recent" is decided by the .metadata sidecar's mtime (written LAST by
+# backup-logical.sh, so it is the real completion instant), NOT by filename
+# sort -- confirmed live on haiyue-vps (2026-09-27, read-only) that
+# filenames are NOT reliably chronologically sortable: a manually made
 # backup there is named "cps-novel-v050-20260927T051542Z.dump", which sorts
-# after every plain "cps-novel-<timestamp>.dump" name lexically only because
-# 'v' > every digit, not because of any guaranteed naming discipline. Runs
-# entirely read-only on the VPS (ls/stat/test only, no write, no delete).
+# after every plain "cps-novel-<timestamp>.dump" name lexically only
+# because 'v' > every digit, not because of any guaranteed naming
+# discipline. The postgres:16.14 image backup-timer runs (and the app
+# image `web`/`worker`/etc. run, for the fallback case) is Debian-based --
+# has /bin/sh and GNU stat.
 # shellcheck disable=SC2086
 remote_listing="$(
-  ssh $ssh_opts "$remote_host" bash -s -- "$remote_dir" <<'REMOTE_SCRIPT'
-set -euo pipefail
+  ssh $ssh_opts "$remote_host" docker exec -u 0 -i "$backup_timer_container" sh -s -- "$remote_dir" <<'REMOTE_SCRIPT'
+set -eu
 dir="$1"
 cd "$dir"
-shopt -s nullglob
 for dump in *.dump; do
-  if [[ -f "${dump}.sha256" && -f "${dump}.metadata" ]]; then
-    mtime="$(stat -c '%Y' "${dump}.metadata" 2>/dev/null || stat -f '%m' "${dump}.metadata")"
+  [ -e "$dump" ] || continue
+  if [ -f "${dump}.sha256" ] && [ -f "${dump}.metadata" ]; then
+    mtime="$(stat -c '%Y' "${dump}.metadata")"
     echo "COMPLETE $mtime $dump"
   else
     echo "IN_PROGRESS 0 $dump" >&2
   fi
 done
 REMOTE_SCRIPT
-)" || fail ssh_listing_failed
+)" || fail remote_listing_failed
 
 latest_complete="$(printf '%s\n' "$remote_listing" | awk '$1=="COMPLETE"{print $2, $3}' | sort -k1,1n | tail -1 | awk '{print $2}')"
-[[ -n "$latest_complete" ]] || fail no_complete_backup_found
+if ! [[ -n "$latest_complete" ]]; then fail no_complete_backup_found; fi
 
 echo "OFFSITE_PULL_REMOTE_LATEST=$latest_complete" >&2
 
@@ -164,23 +228,30 @@ if [[ "$pull_status" == "pulled" ]]; then
   # private staging directory first -- nothing lands in $local_dir under its
   # final name until it has verified, so a reader of $local_dir never
   # observes a partially-transferred file under a name retention/restore
-  # code expects to be complete.
+  # code expects to be complete. Streamed via `docker exec ... cat` piped
+  # through ssh (review fix: replaces the rsync transport the first-round
+  # rehearsal used -- see this file's header comment); no resume-on-interrupt
+  # the way rsync's own --partial gave, but correctness (verified by the
+  # sha256 recomputation below) does not depend on that, only convenience on
+  # a dropped connection does.
   for suffix in "" ".sha256" ".metadata"; do
-    rsync -e "ssh $ssh_opts" -a --partial \
-      "$remote_host:$remote_dir/${latest_complete}${suffix}" \
-      "$staging_dir/${latest_complete}${suffix}" \
-      || fail rsync_failed "${latest_complete}${suffix}"
+    # shellcheck disable=SC2086
+    if ! ssh $ssh_opts "$remote_host" docker exec -u 0 "$backup_timer_container" cat "$remote_dir/${latest_complete}${suffix}" > "$staging_dir/${latest_complete}${suffix}"; then
+      fail transfer_failed "${latest_complete}${suffix}"
+    fi
   done
 
   # --- 4) local re-computation, NOT trusting the transferred hash file's
   # correctness claim about itself -- recompute from the bytes that actually
-  # landed locally and compare to what traveled alongside them. This is what
-  # actually proves the transfer was not corrupted; a bit-identical sidecar
-  # file proves nothing about the (much larger) .dump next to it.
+  # landed locally and compare to what traveled alongside them (the same
+  # value backup-logical.sh computed on the remote side when it made this
+  # backup). This is what actually proves the transfer was not corrupted; a
+  # bit-identical sidecar file proves nothing about the (much larger) .dump
+  # next to it.
   expected_sha256="$(awk '{print $1}' "$staging_dir/${latest_complete}.sha256")"
-  [[ -n "$expected_sha256" ]] || fail sidecar_unparseable "${latest_complete}.sha256"
+  if ! [[ -n "$expected_sha256" ]]; then fail sidecar_unparseable "${latest_complete}.sha256"; fi
   actual_sha256="$(sha256_of "$staging_dir/$latest_complete")"
-  [[ "$expected_sha256" == "$actual_sha256" ]] || fail checksum_mismatch "expected=$expected_sha256 actual=$actual_sha256"
+  if ! [[ "$expected_sha256" == "$actual_sha256" ]]; then fail checksum_mismatch "expected=$expected_sha256 actual=$actual_sha256"; fi
 
   size_bytes="$(wc -c <"$staging_dir/$latest_complete" | tr -d ' ')"
 
@@ -211,11 +282,11 @@ local_stat_mtime() {
 }
 all_local_dumps=()
 while IFS= read -r name; do
-  [[ -n "$name" ]] || continue
+  if ! [[ -n "$name" ]]; then continue; fi
   all_local_dumps+=("$name")
 done < <(
   cd "$local_dir" && for f in cps-novel-*.dump; do
-    [[ -f "$f" && -f "${f}.metadata" ]] || continue
+    if ! [[ -f "$f" && -f "${f}.metadata" ]]; then continue; fi
     printf '%s %s\n' "$(local_stat_mtime "${f}.metadata")" "$f"
   done 2>/dev/null | sort -k1,1n | awk '{print $2}'
 )

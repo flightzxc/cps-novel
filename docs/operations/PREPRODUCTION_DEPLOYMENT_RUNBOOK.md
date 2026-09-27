@@ -859,54 +859,50 @@ off-host RPO is only the most recent manual sync cadence, not continuous WAL.
 
 `scripts/preproduction/offsite-pull.sh` automates the manual step above. It
 runs on the Owner's own Mac or NAS — **never on haiyue-vps** — and only ever
-initiates read-only `ssh` (`ls`/`stat`/`test`) plus an `rsync` pull over that
-same session; no credential moves in either direction. It identifies the most
-recently COMPLETED logical backup (both `.sha256` and `.metadata` sidecars
-`scripts/db/backup-logical.sh` writes last must already exist — an in-progress
-`.dump` has neither yet and is skipped, not treated as an error), decided by
-that `.metadata` file's own mtime rather than filename sort (filenames are
-**not** reliably chronologically sortable — confirmed live on haiyue-vps,
-2026-09-27: a manually made backup there is literally named
-`cps-novel-v050-20260927T051542Z.dump`, which sorts after every plain
-`cps-novel-<timestamp>.dump` name only because `v` > every digit). It pulls
-into a private staging directory, recomputes sha256 locally against the
-transferred bytes, and only then atomically promotes the verified triple;
-retention keeps the newest `--keep` (default 14) local copies. Every run also
-regenerates `SHA256SUMS` in `--local-dir` via the existing
-`scripts/preproduction/export-backup-manifest.sh` — no separate manifest
-format invented — so the pulled directory is immediately usable, with no
-extra manual step, as the `--offhost-dir`/`--manifest` pair the "Backups,
-WAL, export, and restore" section's `restore-offhost-rehearsal.sh` command
-below already expects. See `infra/preproduction/README.md`'s "Offsite backup
-pull" section for the full command and
+initiates read-only `ssh haiyue-vps docker exec -u 0 <container> ...` calls
+(`ls`/`stat`/`cat`) over that same ssh session; no credential moves in
+either direction. `--remote-dir` is the path as seen **inside** the target
+container (`/var/lib/cps-novel/backups/logical`), not the host path. It
+identifies the most recently COMPLETED logical backup (both `.sha256` and
+`.metadata` sidecars `scripts/db/backup-logical.sh` writes last must already
+exist — an in-progress `.dump` has neither yet and is skipped, not treated
+as an error), decided by that `.metadata` file's own mtime rather than
+filename sort (filenames are **not** reliably chronologically sortable —
+confirmed live on haiyue-vps, 2026-09-27: a manually made backup there is
+literally named `cps-novel-v050-20260927T051542Z.dump`, which sorts after
+every plain `cps-novel-<timestamp>.dump` name only because `v` > every
+digit). It pulls into a private staging directory, recomputes sha256 locally
+against the transferred bytes, and only then atomically promotes the
+verified triple; retention keeps the newest `--keep` (default 14) local
+copies. Every run also regenerates `SHA256SUMS` in `--local-dir` via the
+existing `scripts/preproduction/export-backup-manifest.sh` — no separate
+manifest format invented — so the pulled directory is immediately usable,
+with no extra manual step, as the `--offhost-dir`/`--manifest` pair the
+"Backups, WAL, export, and restore" section's `restore-offhost-rehearsal.sh`
+command below already expects. See `infra/preproduction/README.md`'s
+"Offsite backup pull" section for the full command and
 `infra/preproduction/offsite-pull.plist.example` for the (not-installed)
 launchd scheduling template.
 
-🔴 **Known blocker, verified 2026-09-27 (read-only ssh), not yet fixed**:
-`/opt/cps-novel/shared/backups/logical` on haiyue-vps is owned `root:root`
-mode `0600` (the `backup-timer` container's entrypoint runs as root, with no
-`user:` override in `infra/preproduction/docker-compose.yml`). The `deploy`
-ssh user has **no** passwordless `sudo` (`sudo -n -l` → `a password is
-required`, confirmed live), so `offsite-pull.sh`'s `rsync` step fails with
-`Permission denied` against the real host today. The script's own logic was
-instead rehearsed end-to-end (remote listing, the mtime-vs-filename trap
-above, in-progress detection, checksum verification success/failure,
-idempotent re-run, retention pruning) against a disposable local `sshd`
-container built for this purpose, precisely because the real host currently
-refuses the transfer. Remediation options for Owner to choose between before
-this can run against production, none of which this branch implements
-(all are VPS-side WRITE changes, outside a read-only ssh mandate):
-  - Add a `user:` override on `backup-timer` (e.g. matching `deploy`'s own
-    uid:gid) so files it writes are owned by `deploy` instead of root, at the
-    cost of an infra-visible behavior change to a service that currently runs
-    as root by omission rather than by decision.
-  - Give `deploy` narrowly-scoped passwordless `sudo` limited to reading that
-    one directory (e.g. an `rsync --server` wrapper), leaving `backup-timer`
-    itself untouched.
-  - Have `backup-loop.sh` explicitly `chgrp`/`chmod` each backup output to a
-    dedicated read group `deploy` is added to, after `backup-logical.sh`
-    finishes writing it — the narrowest change, but adds a step to a script
-    this repository has otherwise kept deliberately simple.
+🔴 **Permission blocker (found in this branch's first draft, which read
+files directly over ssh/rsync) resolved by the `docker exec -u 0` transport
+above — no VPS-side change needed.** `/opt/cps-novel/shared/backups/logical`
+on haiyue-vps is owned `root:root` mode `0600`, and `deploy` has no
+passwordless `sudo` to read it directly (confirmed live). `docker exec -u 0`
+into any already-running container that has the directory bind-mounted
+sidesteps this without touching backup-timer, granting sudo, or changing any
+permission on the host — `deploy`'s ability to run `docker exec` at all
+already implies root-equivalent access to anything bind-mounted into any
+container on the host, the same access every release and read-only
+diagnostic in this repository already depends on. Verified live
+(2026-09-27): real read-only listing of the actual backup set plus sha256 of
+the latest complete one, through `cps-novel-web-1` (`backup-timer` itself is
+currently `Exited` — a separate, already-flagged issue unrelated to this
+transport, being handled by the Owner directly; `offsite-pull.sh` retains
+`--backup-timer-container` to target whichever currently-running container
+has the mount). Also confirmed live that `-u 0` is required, not optional:
+`web` runs as UID 1001 by default, and a plain `docker exec` without it gets
+`Permission denied` on these files.
 
 The first G2 restore must use an already exported Mac/NAS copy:
 
