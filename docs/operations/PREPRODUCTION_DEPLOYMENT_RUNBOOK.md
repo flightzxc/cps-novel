@@ -678,6 +678,130 @@ is written once and never changes, so it can never reach autovacuum's
 case where adding one `ANALYZE channel_app` took an unchanged query from
 2,696ms to 0.68ms.
 
+## Capacity: memory tuning and controlled postgres recreate
+
+haiyue-vps is both preproduction and the eventual production host (Owner
+2026-09-27) — 4 vCPU, 15.62 GiB RAM, **no swap**, 193 GB SSD (26 GB used).
+`infra/postgres/pitr/postgresql.conf.example` and
+`infra/preproduction/docker-compose.yml` carry memory/shm tuning sized
+against exactly these numbers; see that compose file's own inline comments
+(and `infra/preproduction/README.md`'s "Capacity" section) for every value's
+rationale and the full connection-count and memory-budget arithmetic. In
+short: `shared_buffers=4GB`, `effective_cache_size=10GB`, `work_mem=16MB`,
+`maintenance_work_mem=512MB`, SSD-appropriate `random_page_cost`/
+`effective_io_concurrency`, `postgres` gets `shm_size: 1gb`, and `web`/
+`worker`/`worker-light`/`scheduler` each get a `mem_limit` with
+`NODE_OPTIONS=--max-old-space-size` set to ~75% of it (the only backstop
+against an unbounded process leak taking the whole host down, given there is
+no swap to fall back on).
+
+**Why this needs its own release step.** `scripts/preproduction/release.sh`
+deliberately never touches the `postgres` service — its `deploy()` and
+`rollback()` only stop/start `web`/`worker`/`worker-light`/`scheduler`.
+`postgresql.conf` and `shm_size` are read only when the postgres **container**
+is created, never re-read by `docker compose restart`. Confirmed live
+(2026-09-27, read-only ssh): the running `cps-novel-postgres-1` container was
+created 2026-09-22 from that day's release checkout and still reports
+Docker's 64 MiB `shm_size` default and every Postgres GUC's stock default
+(`shared_buffers=128MB`, `work_mem=4MB`, `effective_cache_size=4GB`,
+`random_page_cost=4`, `effective_io_concurrency=1`, `max_connections=100`)
+— five days and several application releases after this repository's own
+`postgresql.conf.example` already carried different WAL/observability values,
+because nothing had ever recreated the container itself.
+
+**`scripts/preproduction/recreate-postgres.sh`** is the only sanctioned way
+to apply such a change to a running cluster. Invoke it from the release
+checkout whose `postgresql.conf.example`/`shm_size` you want applied (same
+"invoke from the checkout you mean" convention `rollback` already uses):
+
+```bash
+PREPROD_RECREATE_POSTGRES_CONFIRMED=YES scripts/preproduction/recreate-postgres.sh
+```
+
+It, in order: records an exact per-table row-count fingerprint (every public
+table, hashed); stops `scheduler`, then `worker`/`worker-light` (the
+claim-generating services), then refuses if any lease-based task-item table
+(`generic_task_item`/`channel_sync_task_item`) still has a `processing` row
+— a worker that drained cleanly on `SIGTERM` releases its lease back to
+`pending` rather than leaving it `processing`, so a non-zero count here means
+something did not drain cleanly and the script does not guess it is safe to
+proceed; stops `web`; takes a fresh on-line logical backup (in addition to
+whatever `backup-timer`'s own daily run last produced) via the already-running
+`backup-timer` container and the same `scripts/db/backup-logical.sh` the
+daily loop uses; stops and removes (never `-v`) and recreates only the
+`postgres` container; waits for it healthy; reads back every tuned GUC via
+`SHOW` and the container's own `shm_size` via `docker inspect`, refusing on
+any mismatch; re-computes the row-count fingerprint and refuses on any
+difference; brings `web` back up and re-runs `database.sh persistent-check`
+(the same role/grant/privilege contract check every deploy already runs);
+brings `worker`/`worker-light`/`scheduler` back up; and prints
+`RECREATE_POSTGRES_DOWNTIME_SECONDS=<n>` measured from stopping `web` to
+`web` reporting healthy again. It never runs a migration, never replays
+`infra/postgres/grants.sql`, and never touches the `cps_novel_postgres_data`
+volume (verified via the volume's own `CreatedAt` timestamp, unchanged
+before/after).
+
+**Local rehearsal (2026-09-27), real end-to-end run, not a dry run**: using
+an isolated local Compose stack seeded with a real pre-built
+`cps-novel:0.5.0-807aad3` image (did not touch the running
+`cps-novel-x8-local-*` stack or haiyue-vps; the rehearsal's own `runtime`
+network subnet was temporarily changed from the pinned `172.18.0.0/16` to
+`172.24.0.0/16` purely to avoid colliding with that already-running X8
+network on the same machine, then reverted — unrelated to this change's own
+content). Sequence actually executed: `database.sh fresh-init` with the
+OLD (pre-this-branch) `postgresql.conf.example`/compose content to reproduce
+haiyue-vps's real current state (confirmed via `SHOW`: `shared_buffers=128MB`,
+`work_mem=4MB`, `ShmSize=67108864`, on a real freshly-migrated 54-table, 20
+applied migrations database) → swapped in this branch's NEW content →
+ran `recreate-postgres.sh` for real. Measured result, this run's own log:
+
+```
+RECREATE_POSTGRES_PRECHECK=PASS generic_task_item_processing=0 channel_sync_task_item_processing=0
+RECREATE_POSTGRES_BACKUP=PASS output=.../cps-novel-20260927T101205Z-pre-recreate.dump
+HEALTH_WAIT=PASS service=postgres health=healthy
+RECREATE_POSTGRES_GUC=PASS shared_buffers=4GB          (... all ten tuned GUCs, all PASS ...)
+RECREATE_POSTGRES_SHM=PASS bytes=1073741824
+RECREATE_POSTGRES_FINGERPRINT=PASS md5=4ee9276e5ff2916ae6d53cab0404b559
+HEALTH_WAIT=PASS service=web health=healthy
+DATABASE_PERSISTENT_CHECK=PASS
+HEALTH_WAIT=PASS service=worker health=healthy
+HEALTH_WAIT=PASS service=worker-light health=healthy
+HEALTH_WAIT=PASS service=scheduler health=healthy
+RECREATE_POSTGRES_DOWNTIME_SECONDS=15
+RECREATE_POSTGRES=PASS
+```
+
+Independently confirmed outside the script's own checks: `docker volume
+inspect cps_novel_postgres_data` reported the SAME `CreatedAt`
+(`2026-09-27T10:09:10Z`) both before and after — the postgres container's own
+`Created` was `2026-09-27T10:12:06Z`, i.e. strictly after the volume, proving
+the volume was reused, not recreated; `web`/`worker` container logs showed
+ordinary clean startup (`CREDENTIAL_SECRET_PREFLIGHT=PASS`, `✓ Ready`,
+`worker_task_allowlist` with zero `invalid` entries) — the "Healthy" status
+was not a fluke of a permissive healthcheck. All rehearsal containers,
+network, and the disposable volume were removed afterward (`docker compose
+down`, `docker volume rm`); the temporary subnet edit was reverted;
+`git diff` confirmed no residue was left in the tracked compose file.
+
+**15 seconds measured downtime on this rehearsal is a floor, not a
+guarantee for the real host**: the rehearsal's database held only schema +
+20 migration rows (a few hundred KB) and its `postgres:16.14` image was
+already locally cached, so its own container recreation and `web`'s Next.js
+cold start dominated the timing. Production's ~1.1 GiB of actual data will
+add proportionally more crash-recovery/startup I/O time before `pg_isready`
+reports healthy, and the real host's own image pull is not a factor (image
+identity is enforced local-only, matching every other `preprod_compose_app_up`
+call). Budget for this being measured in tens of seconds to low single-digit
+minutes on the real host, not 15 seconds flat, and treat the script's own
+printed `RECREATE_POSTGRES_DOWNTIME_SECONDS` as the authoritative number for
+that specific run rather than this estimate.
+
+**Requires Owner authorization before running against haiyue-vps**: this
+stops every application service and the database itself for the duration of
+the recreate. Treat it exactly like a `release.sh deploy` — same
+maintenance-window expectations, same "announce before, verify after"
+discipline — even though it is a separate script.
+
 ## Maintenance release
 
 Set protected `PREPROD_CURL_CONFIG`, admin username/password-file inputs, the
@@ -730,6 +854,59 @@ Mac, runs `export-backup-manifest.sh`, verifies every checksum, and copies the
 same set plus manifest to NAS. No Mac/NAS credentials belong on the VPS or in
 this repository. VPS-local recovery RPO is the WAL window; whole-VPS-loss
 off-host RPO is only the most recent manual sync cadence, not continuous WAL.
+
+### Offsite backup pull (capacity work order, Owner 2026-09-27)
+
+`scripts/preproduction/offsite-pull.sh` automates the manual step above. It
+runs on the Owner's own Mac or NAS — **never on haiyue-vps** — and only ever
+initiates read-only `ssh` (`ls`/`stat`/`test`) plus an `rsync` pull over that
+same session; no credential moves in either direction. It identifies the most
+recently COMPLETED logical backup (both `.sha256` and `.metadata` sidecars
+`scripts/db/backup-logical.sh` writes last must already exist — an in-progress
+`.dump` has neither yet and is skipped, not treated as an error), decided by
+that `.metadata` file's own mtime rather than filename sort (filenames are
+**not** reliably chronologically sortable — confirmed live on haiyue-vps,
+2026-09-27: a manually made backup there is literally named
+`cps-novel-v050-20260927T051542Z.dump`, which sorts after every plain
+`cps-novel-<timestamp>.dump` name only because `v` > every digit). It pulls
+into a private staging directory, recomputes sha256 locally against the
+transferred bytes, and only then atomically promotes the verified triple;
+retention keeps the newest `--keep` (default 14) local copies. Every run also
+regenerates `SHA256SUMS` in `--local-dir` via the existing
+`scripts/preproduction/export-backup-manifest.sh` — no separate manifest
+format invented — so the pulled directory is immediately usable, with no
+extra manual step, as the `--offhost-dir`/`--manifest` pair the "Backups,
+WAL, export, and restore" section's `restore-offhost-rehearsal.sh` command
+below already expects. See `infra/preproduction/README.md`'s "Offsite backup
+pull" section for the full command and
+`infra/preproduction/offsite-pull.plist.example` for the (not-installed)
+launchd scheduling template.
+
+🔴 **Known blocker, verified 2026-09-27 (read-only ssh), not yet fixed**:
+`/opt/cps-novel/shared/backups/logical` on haiyue-vps is owned `root:root`
+mode `0600` (the `backup-timer` container's entrypoint runs as root, with no
+`user:` override in `infra/preproduction/docker-compose.yml`). The `deploy`
+ssh user has **no** passwordless `sudo` (`sudo -n -l` → `a password is
+required`, confirmed live), so `offsite-pull.sh`'s `rsync` step fails with
+`Permission denied` against the real host today. The script's own logic was
+instead rehearsed end-to-end (remote listing, the mtime-vs-filename trap
+above, in-progress detection, checksum verification success/failure,
+idempotent re-run, retention pruning) against a disposable local `sshd`
+container built for this purpose, precisely because the real host currently
+refuses the transfer. Remediation options for Owner to choose between before
+this can run against production, none of which this branch implements
+(all are VPS-side WRITE changes, outside a read-only ssh mandate):
+  - Add a `user:` override on `backup-timer` (e.g. matching `deploy`'s own
+    uid:gid) so files it writes are owned by `deploy` instead of root, at the
+    cost of an infra-visible behavior change to a service that currently runs
+    as root by omission rather than by decision.
+  - Give `deploy` narrowly-scoped passwordless `sudo` limited to reading that
+    one directory (e.g. an `rsync --server` wrapper), leaving `backup-timer`
+    itself untouched.
+  - Have `backup-loop.sh` explicitly `chgrp`/`chmod` each backup output to a
+    dedicated read group `deploy` is added to, after `backup-logical.sh`
+    finishes writing it — the narrowest change, but adds a step to a script
+    this repository has otherwise kept deliberately simple.
 
 The first G2 restore must use an already exported Mac/NAS copy:
 

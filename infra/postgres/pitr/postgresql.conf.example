@@ -1,6 +1,34 @@
 # P1-06/X2 reference only. This is a repository configuration contract, not
 # evidence that a production cluster has loaded it. Follow the PostgreSQL
 # hardening runbook to install, restart, create the extension, and verify.
+#
+# 🔴 Capacity work order (Owner 2026-09-27): haiyue-vps IS the baseline for
+# every value below -- there is no separate preproduction machine, this box
+# cuts over to production in place. Measured facts (read-only, 2026-09-27):
+# 4 vCPU, 16 GiB RAM, NO swap, 193 GB SSD (26 GB used), postgres ~1.1 GiB
+# resident, load ~0.3-0.35. These GUCs only take effect the next time the
+# postgres CONTAINER is recreated, not on a plain `docker compose restart`
+# and never on an application deploy -- scripts/preproduction/release.sh
+# deliberately never touches the postgres service (see that script's own
+# comments). The only sanctioned way to apply an edit here to a running
+# cluster is scripts/preproduction/recreate-postgres.sh.
+#
+# Connection budget behind max_connections staying at 100 (verified live on
+# haiyue-vps 2026-09-27: web_app=9, worker_app=4, postgres=2, 20 total
+# active out of 100): web and worker/worker-light/scheduler each open one
+# Prisma Client with no connection_limit override, so each process's pool
+# defaults to Prisma's `num_physical_cpus * 2 + 1` = 4*2+1 = 9 on this
+# 4-vCPU host (confirmed live: web_app's pool was observed to hold exactly
+# 9). worker and worker-light are TWO separate Node processes that both
+# authenticate as the SAME worker_app role (docker-compose.yml: both read
+# P1_12_WORKER_DATABASE_URL), so their pools are additive, not shared:
+# worst case web_app 9 + worker_app (9+9=18) + scheduler_app 9 (scheduler
+# runs one short-lived tsx process per tick, never overlapping itself) = 36
+# app-process connections. Add backup_role (pg_dump/pg_basebackup, <=2
+# concurrent), migration_owner (one-shot `prisma migrate deploy`, <=2), and
+# an operator/analyst_ro ad hoc margin (~10) for `preprod_compose exec`
+# sessions and reporting queries: 36 + 2 + 2 + 10 = 50, comfortably under
+# 100 with superuser_reserved_connections left at its default (3).
 max_connections = 100
 log_min_duration_statement = 500ms
 shared_preload_libraries = 'pg_stat_statements'
@@ -14,3 +42,52 @@ archive_command = 'P1_06_WAL_ARCHIVE_DIR=/var/lib/postgresql/wal-archive /app/sc
 max_wal_senders = 4
 wal_compression = on
 log_checkpoints = on
+
+# --- Memory and planner tuning (16 GiB host, app processes share the same
+# box, no swap, SSD) --------------------------------------------------------
+#
+# shared_buffers = 4GB (25% of 16 GiB): the conventional starting point for
+# a dedicated-ish Postgres instance, kept at the low end of the usual 25-40%
+# range specifically because this box is NOT dedicated to Postgres -- four
+# Node app processes run here too. See infra/preproduction/docker-compose.yml
+# for their mem_limit budget; that file's own comment walks the full 16 GiB
+# accounting (app limits + this shared_buffers value + headroom for OS page
+# cache all have to fit).
+shared_buffers = 4GB
+# effective_cache_size = 10GB: NOT an allocation -- only the query planner's
+# estimate of how much RAM (shared_buffers + OS page cache) is realistically
+# available for caching. Set near (16 GiB total - ~5.5 GiB app mem_limit
+# budget - ~0.5 GiB margin) so the planner does not overestimate cache
+# effectiveness and skip index scans it shouldn't.
+effective_cache_size = 10GB
+# work_mem = 16MB: the 4MB default starves sorts/hashes/merge-joins on this
+# workload's catalog/tag/reporting queries. Worst-case exposure is bounded:
+# max_connections(100) x work_mem(16MB) = 1.6 GB even if every backend
+# sorted simultaneously (never observed; see the connection-budget note
+# above -- realistic peak concurrency is ~50, i.e. ~800MB worst case).
+work_mem = 16MB
+# maintenance_work_mem = 512MB: speeds up CREATE INDEX / VACUUM / migrate
+# deploy. Worst-case exposure: autovacuum_max_workers (default 3) x 512MB =
+# 1.5 GB, which the shm/mem budget in infra/preproduction/docker-compose.yml
+# accounts for.
+maintenance_work_mem = 512MB
+# random_page_cost = 1.1: SSD-appropriate (default 4 assumes spinning disks
+# where a random read costs ~4x a sequential one; an SSD's random-read
+# penalty is close to negligible).
+random_page_cost = 1.1
+# effective_io_concurrency = 200: SSD can service many concurrent I/O
+# requests; the Postgres default (1) assumes a single spinning disk head.
+effective_io_concurrency = 200
+# max_parallel_workers_per_gather stays at its own default (2) -- explicit
+# here so the value is read off this file rather than assumed. Matched
+# against max_parallel_workers below so a single query cannot alone consume
+# every worker slot on a 4-vCPU host.
+max_parallel_workers_per_gather = 2
+# max_worker_processes = 8: Postgres's own default: headroom for autovacuum
+# workers, parallel workers, and background workers (logical replication
+# launcher, etc.) to coexist without contending for the same pool slot.
+max_worker_processes = 8
+# max_parallel_workers = 4: capped to the host's actual core count (4 vCPU)
+# so the planner cannot schedule more parallel workers than there are cores
+# to run them on, even though max_worker_processes leaves room for 8.
+max_parallel_workers = 4

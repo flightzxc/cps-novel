@@ -1,9 +1,52 @@
 # Host Nginx is intentionally not a service here. Ubuntu nginx 1.24 owns the
 # edge and proxies only to web's loopback binding from the root compose file.
 services:
+  # Capacity work order (Owner 2026-09-27): postgres deliberately carries NO
+  # mem_limit, unlike the four app services below. Two reasons:
+  #   1) effective_cache_size=10GB (infra/postgres/pitr/
+  #      postgresql.conf.example) is the planner's estimate of *host-wide*
+  #      OS page cache available for caching beyond shared_buffers. A cgroup
+  #      mem_limit on this container would cap page-cache reclaim to that
+  #      container's own cgroup, not the host, undermining exactly the
+  #      assumption effective_cache_size encodes -- capping Postgres itself
+  #      fights the tuning done above it, it does not defend it.
+  #   2) Postgres's memory model bounds the actual risk this task cares
+  #      about (a leaking process eating all RAM with no swap to fall back
+  #      on) far better than Node's growing heap does on its own: per-
+  #      connection work_mem is capped (16MB, worst case 100 x 16MB=1.6GB),
+  #      maintenance_work_mem likewise (512MB x autovacuum_max_workers(3) =
+  #      1.5GB worst case), and shared_buffers is a fixed 4GB segment sized
+  #      at container start, not a growing allocation.
+  #   Budget check (16 GiB host, no swap, verified free -h 2026-09-27: 15.62
+  #   GiB total): shared_buffers(4GB) + worst-case work_mem(1.6GB) +
+  #   worst-case maintenance_work_mem(1.5GB) + per-backend overhead
+  #   (~2-3MB x realistic ~50 peak connections ~= 150MB) ~= 7.3GB Postgres
+  #   ceiling, well inside "shared_buffers + 2g" (6GB) suggested as a floor
+  #   for an explicit limit -- if this container is later given one, 8g is
+  #   the number to use. App mem_limits (web 2g + worker 2g + worker-light
+  #   1g + scheduler 512m = 5.5GB) + this ~7.3GB Postgres ceiling = ~12.8GB,
+  #   leaving >2.5GB for the OS, Docker's own overhead, and the page cache
+  #   effective_cache_size is counting on.
   postgres:
     entrypoint: ["/bin/bash", "/opt/cps-novel-preprod/postgres-entrypoint.sh"]
     command: ["postgres", "-c", "config_file=/etc/postgresql/postgresql.conf", "-c", "listen_addresses=*"]
+    # Capacity work order (Owner 2026-09-27): Docker's default (64 MiB) is
+    # too small for PostgreSQL parallel query workers, which stage data in
+    # POSIX shared memory (/dev/shm) before it lands in shared_buffers --
+    # observed failure mode elsewhere is "could not resize shared memory
+    # segment ... No space left on device" the first time a parallel hash
+    # join or sort actually needs it, not at startup. 1 GiB is generous
+    # headroom relative to work_mem(16MB) x max_parallel_workers(4) and
+    # leaves shared_buffers(4GB, see infra/postgres/pitr/
+    # postgresql.conf.example) untouched -- shm_size only affects the
+    # separate /dev/shm tmpfs, not the shared_buffers segment itself.
+    # 🔴 This value is NOT synced to infra/production-like/docker-compose.yml
+    # (the local X8 rehearsal overlay, used on developer machines with
+    # varying RAM/Docker-VM budgets, not the 16 GiB haiyue-vps baseline this
+    # file is scoped to) -- see that file's own postgres block, left
+    # untouched, and infra/preproduction/README.md for the explicit
+    # rationale.
+    shm_size: "1gb"
     environment:
       P1_06_WAL_ARCHIVE_DIR: /var/lib/postgresql/wal-archive
     volumes:
@@ -31,7 +74,20 @@ services:
     # 不允许从任何 registry 拉取。这是脚本层 --pull never 之外的第二道闸：
     # 有人绕过 preprod_compose_app_up 直接 `docker compose up` 时它仍然生效。
     pull_policy: never
+    # Capacity work order (Owner 2026-09-27): no swap on this host (verified
+    # read-only, 2026-09-27) -- an unbounded Node process leak could exhaust
+    # host memory and take Postgres down with it via the OOM killer's choice
+    # of victim. mem_limit is the container-level backstop; NODE_OPTIONS'
+    # --max-old-space-size is the in-process backstop underneath it, set to
+    # ~75% of mem_limit (1536 of 2048 MiB) so V8 triggers its own GC/OOM
+    # well before the container's cgroup limit kills the process outright --
+    # the gap between the two also covers Node's non-heap memory (buffers,
+    # native modules, the RSS the heap limit does not itself account for).
+    # See infra/preproduction/README.md for the full 16 GiB host budget
+    # (four app mem_limits + Postgres headroom + OS page cache).
+    mem_limit: 2g
     environment:
+      NODE_OPTIONS: "--max-old-space-size=1536"
       TRACKING_HASH_SALT: ""
       TRACKING_HASH_SALT_FILE: /run/secrets/tracking_hash_salt
       TOTP_ENCRYPTION_KEY: ""
@@ -51,16 +107,42 @@ services:
     build: !reset null
     pull_policy: never
     stop_grace_period: 45s
+    # Same rationale as web's own comment above. Worker's peak heap use is
+    # the moboreader/catalog-sync adapters buffering upstream JSON pages in
+    # memory; 2g/1536m matches web's budget as the conservative starting
+    # point pending real memory-usage evidence from production traffic.
+    mem_limit: 2g
+    environment:
+      NODE_OPTIONS: "--max-old-space-size=1536"
 
   worker-light:
     build: !reset null
     pull_policy: never
     stop_grace_period: 45s
+    # worker-light only ever runs the light lane's allowlist (sitemap /
+    # carousel / daily-fallback tasks -- see WORKER_LIGHT_TASK_ALLOWLIST),
+    # a materially smaller working set than worker's catalog/moboreader
+    # lane, hence half worker's budget rather than the same 2g.
+    mem_limit: 1g
+    environment:
+      NODE_OPTIONS: "--max-old-space-size=768"
 
   scheduler:
     # 同 web：目标机不得具备就地构建能力，见上面的说明。
     build: !reset null
     pull_policy: never
+    # scheduler/index.ts only enqueues/ticks (no upstream fetch, no large
+    # buffering) and scripts/run-scheduler-loop.sh execs `tsx
+    # scheduler/index.ts &` as a plain bash background job inside the SAME
+    # container/cgroup -- POSIX process environment inheritance means that
+    # child process sees this NODE_OPTIONS without any extra wiring (bash
+    # `&` does not strip the environment; verified locally, see this
+    # branch's rehearsal notes). 512m / 384m stays generous headroom above
+    # scheduler's observed idle footprint (~2 MiB RSS on haiyue-vps,
+    # measured 2026-09-27) for its short-lived per-tick tsx process.
+    mem_limit: 512m
+    environment:
+      NODE_OPTIONS: "--max-old-space-size=384"
 
   backup-timer:
     image: postgres:16.14
