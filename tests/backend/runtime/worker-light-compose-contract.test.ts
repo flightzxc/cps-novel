@@ -27,12 +27,33 @@ describe("worker-light rendered deployment contract", () => {
     expect(light.environment.WORKER_ID).toBe(env.WORKER_LIGHT_ID);
     expect(light.environment.WORKER_LANE).toBe("light");
     const sharedEnvironment = (environment: Record<string, string>) => Object.fromEntries(
-      Object.entries(environment).filter(([key]) => !["WORKER_ID", "WORKER_TASK_ALLOWLIST", "WORKER_LANE"].includes(key)),
+      Object.entries(environment).filter(([key]) => !["WORKER_ID", "WORKER_TASK_ALLOWLIST", "WORKER_LANE", "NODE_OPTIONS"].includes(key)),
     );
     const shared = sharedEnvironment(main.environment);
     const lightShared = sharedEnvironment(light.environment);
     expect(lightShared).toEqual(shared);
     for (const key of ["image", "command", "healthcheck", "logging", "secrets", "volumes", "stop_grace_period"]) expect(light[key], key).toEqual(main[key]);
     if (overlay === files[1]) { expect(light.build).toBeUndefined(); expect(light.pull_policy).toBe("never"); }
+    // Capacity work order (Owner 2026-09-27): NODE_OPTIONS is excluded from
+    // sharedEnvironment() above like the other lane-specific keys, but
+    // unlike those (which are always set on both services), NODE_OPTIONS is
+    // ONLY set by the preproduction overlay's own capacity mem_limit/heap
+    // budget (infra/preproduction/docker-compose.yml) -- neither the base
+    // compose file nor infra/production-like/docker-compose.yml (local X8
+    // rehearsal, deliberately not synced to this capacity work, see that
+    // file's own README section) set it at all. worker-light legitimately
+    // gets a SMALLER heap cap than worker (768 vs 1536 MiB, matching its
+    // smaller 1g vs 2g mem_limit), so asserting equality here would be
+    // asserting the wrong thing -- this asserts the actual intended values
+    // instead, so a value silently drifting to match worker's (defeating
+    // worker-light's whole point) or a value from this overlay leaking into
+    // the other two files would both be caught.
+    if (overlay === files[1]) {
+      expect(main.environment.NODE_OPTIONS).toBe("--max-old-space-size=1536");
+      expect(light.environment.NODE_OPTIONS).toBe("--max-old-space-size=768");
+    } else {
+      expect(main.environment.NODE_OPTIONS).toBeUndefined();
+      expect(light.environment.NODE_OPTIONS).toBeUndefined();
+    }
   });
 });

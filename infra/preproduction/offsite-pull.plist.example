@@ -1,0 +1,113 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Capacity work order (Owner 2026-09-27): launchd template for
+  scripts/preproduction/offsite-pull.sh, running on the Owner's own Mac (NOT
+  on haiyue-vps -- this file is never installed there, and the VPS never
+  receives Mac/NAS credentials in either direction; see
+  infra/preproduction/README.md's "Offsite backup pull" section).
+
+  🔴 This file is a TEMPLATE, not installed by anything in this repository.
+  Copy it, edit every /REPLACE_ME/ path below for your own machine, then
+  install it by hand (see the README section named above for the exact
+  `launchctl` commands and how to verify it actually ran). Committing this
+  file as-is with real paths filled in is a mistake -- it belongs in each
+  Owner's own machine, not in the repository.
+
+  Runs daily at 07:15 local time -- after haiyue-vps's own backup-timer
+  (infra/preproduction/docker-compose.yml, PREPROD_BACKUP_INTERVAL_SECONDS
+  default 86400, no fixed time-of-day guarantee) has had a full day's
+  opportunity to produce that day's logical backup, and well outside any
+  release/maintenance window this repository's runbook documents.
+-->
+<plist version="1.0">
+  <dict>
+    <key>Label</key>
+    <string>cloud.bangbangji.cps-novel.offsite-pull</string>
+
+    <key>ProgramArguments</key>
+    <array>
+      <!-- 🔴 REPLACE_ME: absolute path to bash (usually /bin/bash; a
+           Homebrew bash on Apple Silicon is typically /opt/homebrew/bin/bash
+           -- either works, offsite-pull.sh only needs bash 3.2+). -->
+      <string>/bin/bash</string>
+      <!-- 🔴 REPLACE_ME: absolute path to this checkout's
+           scripts/preproduction/offsite-pull.sh. launchd jobs do not run
+           inside a cloned repo's working directory, so this must be
+           absolute, not relative. -->
+      <string>/REPLACE_ME/path/to/cps-novel/scripts/preproduction/offsite-pull.sh</string>
+      <string>--remote-host</string>
+      <string>haiyue-vps</string>
+      <string>--remote-dir</string>
+      <string>/opt/cps-novel/shared/backups/logical</string>
+      <string>--local-dir</string>
+      <!-- 🔴 REPLACE_ME: where pulled backups live on this Mac/NAS. Must be
+           a path this launchd job's own user account can write, and ideally
+           on a volume separate from this Mac's own boot disk (Time
+           Machine's own destination, a NAS mount, or an external drive) --
+           the whole point of this pull is surviving loss of the machine
+           that made the backup, not just loss of the VPS. -->
+      <string>/REPLACE_ME/Volumes/Backups/cps-novel-offsite/logical</string>
+      <string>--keep</string>
+      <string>14</string>
+    </array>
+
+    <!-- 07:15 local time, every day. -->
+    <key>StartCalendarInterval</key>
+    <dict>
+      <key>Hour</key>
+      <integer>7</integer>
+      <key>Minute</key>
+      <integer>15</integer>
+    </dict>
+
+    <!-- If the Mac was asleep at 07:15, launchd runs the job once it wakes
+         -- do not lose a day's pull to a closed laptop lid. -->
+    <key>RunAtLoad</key>
+    <false/>
+    <key>StartInterval</key>
+    <false/>
+
+    <!-- 🔴 REPLACE_ME: absolute log paths (parent directory must already
+         exist; launchd will not create it). Check these after installing --
+         see the README section on verifying an install. -->
+    <key>StandardOutPath</key>
+    <string>/REPLACE_ME/Library/Logs/cps-novel-offsite-pull.log</string>
+    <key>StandardErrorPath</key>
+    <string>/REPLACE_ME/Library/Logs/cps-novel-offsite-pull.err.log</string>
+
+    <!-- 🔴 Both REPLACE_ME-conditional, and BOTH belong in the SAME
+         EnvironmentVariables dict if you need either -- a plist cannot
+         repeat a <key>EnvironmentVariables</key> twice in one <dict>.
+           - OFFSITE_PULL_SSH_OPTS: only if your ssh client needs extra
+             options to reach haiyue-vps that are not already in
+             ~/.ssh/config (e.g. a KexAlgorithms override some macOS/OpenSSH
+             combinations need for this specific host -- see this
+             repository's own operational notes on that host's quirks).
+             Prefer a `Host haiyue-vps` block in ~/.ssh/config instead when
+             possible -- that also covers interactive use of the same host,
+             not just this scheduled job.
+           - PATH: launchd jobs run with a minimal PATH (not a login shell's
+             PATH), which can omit /opt/homebrew/bin. offsite-pull.sh only
+             calls ssh, rsync, and (sha256sum or shasum); macOS ships all of
+             these under /usr/bin, so launchd's own default is normally
+             enough -- only set this if `which rsync` on your machine
+             resolves somewhere else (a Homebrew rsync, for a newer version
+             than Apple's).
+         Leave the whole block commented out if neither applies -- an empty
+         <string></string> value is NOT the same as omitting the key. -->
+    <!--
+    <key>EnvironmentVariables</key>
+    <dict>
+      <key>OFFSITE_PULL_SSH_OPTS</key>
+      <string>-o KexAlgorithms=curve25519-sha256</string>
+      <key>PATH</key>
+      <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+    </dict>
+    -->
+
+    <key>ProcessType</key>
+    <string>Background</string>
+  </dict>
+</plist>
