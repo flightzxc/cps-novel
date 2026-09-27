@@ -198,13 +198,19 @@ relation_sql="SELECT
   (SELECT count(*) FROM novel_chapter c LEFT JOIN novel n ON n.id=c.novel_id WHERE n.id IS NULL) +
   (SELECT count(*) FROM novel_chapter_content x LEFT JOIN novel_chapter c ON c.id=x.novel_chapter_id WHERE c.id IS NULL)"
 
+# 🔴 同 B-16 复核发现的 macOS bash 3.2.57 坑：裸 `[[ ]]` 独立语句判假时
+# `set -e` 不中止脚本，改成显式 `||` 短路，判断逻辑不变。
 source_migrations="$(query "$source_database" "$migration_sql" | tr -d '[:space:]')"
 restore_migrations="$(query "$restore_database" "$migration_sql" | tr -d '[:space:]')"
-[[ "$source_migrations" -gt 0 && "$source_migrations" == "$restore_migrations" ]]
+[[ "$source_migrations" -gt 0 && "$source_migrations" == "$restore_migrations" ]] || {
+  echo "migration count mismatch: source=$source_migrations restore=$restore_migrations" >&2
+  exit 1
+}
 source_rows="$(query "$source_database" "$row_sql")"
 restore_rows="$(query "$restore_database" "$row_sql")"
-[[ "$source_rows" == "$restore_rows" ]]
-[[ "$(query "$restore_database" "$relation_sql" | tr -d '[:space:]')" == 0 ]]
+[[ "$source_rows" == "$restore_rows" ]] || { echo "row counts diverged: source=$source_rows restore=$restore_rows" >&2; exit 1; }
+restore_orphan_count="$(query "$restore_database" "$relation_sql" | tr -d '[:space:]')"
+[[ "$restore_orphan_count" == 0 ]] || { echo "orphaned rows found in restore: $restore_orphan_count" >&2; exit 1; }
 
 expect_restore_denied() {
   local sql="$1"

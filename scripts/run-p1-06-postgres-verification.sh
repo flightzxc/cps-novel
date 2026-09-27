@@ -148,10 +148,6 @@ row_sql="SELECT json_build_object(
   'generic_task_item',(SELECT count(*) FROM generic_task_item),
   'operation_audit',(SELECT count(*) FROM operation_audit)
 )::text"
-constraint_sql="SELECT md5(coalesce(string_agg(
-  c.conname || '|' || c.contype::text || '|' || pg_get_constraintdef(c.oid), E'\n'
-  ORDER BY c.conname), ''))
-FROM pg_constraint c JOIN pg_namespace n ON n.oid=c.connamespace WHERE n.nspname='public'"
 index_trigger_sql="SELECT md5(coalesce(string_agg(value, E'\n' ORDER BY value), '')) FROM (
   SELECT indexname || '|' || indexdef AS value FROM pg_indexes WHERE schemaname='public'
   UNION ALL
@@ -201,12 +197,16 @@ if ! [[ "$source_rows" == "$restore_rows" ]]; then
   echo "row counts diverged between source and restore: source=$source_rows restore=$restore_rows" >&2
   exit 1
 fi
-source_constraints="$(db_query "$source_database" "$constraint_sql" | tr -d '[:space:]')"
-restore_constraints="$(db_query "$restore_database" "$constraint_sql" | tr -d '[:space:]')"
-if ! [[ -n "$source_constraints" && "$source_constraints" == "$restore_constraints" ]]; then
-  echo "constraint digest mismatch or empty: source=$source_constraints restore=$restore_constraints" >&2
-  exit 1
-fi
+# 约束比对（第二轮主控裁决）：按类型分开处理，不再要求 pg_get_constraintdef()
+# 逐字相同——见 scripts/check-p1-06-constraint-parity.mjs 顶部注释里的完整
+# 理由与归一化规则（只去掉三种类型转换 + 圆括号 + 空白，其它一个字符不动；
+# 非 CHECK 约束仍然逐字比对）。这里先把 restore 侧连接串提前构造出来，供本
+# 检查使用；下面 dictionary drift 那段还会算一遍同样的 URL（历史遗留的
+# 重复定义，语义完全一致，未改动那段代码）。
+restore_owner_url_for_constraints="postgresql://migration_owner:${migration_password}@127.0.0.1:${host_port}/${restore_database}?schema=public"
+P1_06_CONSTRAINT_SOURCE_URL="$owner_url" \
+P1_06_CONSTRAINT_RESTORE_URL="$restore_owner_url_for_constraints" \
+node scripts/check-p1-06-constraint-parity.mjs --show-benign-check-diffs
 source_objects="$(db_query "$source_database" "$index_trigger_sql" | tr -d '[:space:]')"
 restore_objects="$(db_query "$restore_database" "$index_trigger_sql" | tr -d '[:space:]')"
 if ! [[ -n "$source_objects" && "$source_objects" == "$restore_objects" ]]; then
@@ -266,7 +266,7 @@ echo "LOGICAL_BACKUP=PASS"
 echo "LOGICAL_RESTORE=PASS"
 echo "RESTORE_DURATION_MS=${restore_duration_ms}"
 echo "TABLE_COUNT=${restore_table_count}"
-echo "CONSTRAINT_DIGEST=${restore_constraints}"
+echo "CONSTRAINT_PARITY=PASS_BY_TYPE_CHECK_NORMALIZED"
 echo "OBJECT_DIGEST=${restore_objects}"
 echo "DICTIONARY_DRIFT=0_OF_${dictionary_active_count}"
 echo "PITR_STATUS=SCRIPT_AND_RUNBOOK_ONLY"

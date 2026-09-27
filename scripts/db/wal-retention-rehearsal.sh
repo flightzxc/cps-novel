@@ -311,9 +311,14 @@ step2() {
 
   local target_seg
   target_seg="$(dexec psql -d rig -t -A -c "SELECT pg_walfile_name('$RP_M3_LSN');")"
+  # 这条 [[ ]] 是 bash -c "..." 字符串里的子进程代码，它的退出码由
+  # wait_until() 用 `if "$@" >/dev/null 2>&1; then return 0; fi` 显式读取
+  # （见本文件 wait_until 定义），不依赖那个子进程自己的 set -e 传播，跟
+  # B-16 复核那个 macOS bash 3.2.57 坑不是同一回事；行尾注释是给静态守卫
+  # 用的字面标记，同时也是合法的 bash 注释，不影响这段子进程脚本的执行。
   wait_until 120 "last_archived_wal >= $target_seg" bash -c "
     seg=\$(docker exec -u postgres '$RIG_CONTAINER' psql -d rig -t -A -c \"SELECT last_archived_wal FROM pg_stat_archiver;\")
-    [[ -n \"\$seg\" && \"\$seg\" > '$target_seg' || \"\$seg\" == '$target_seg' ]]
+    [[ -n \"\$seg\" && \"\$seg\" > '$target_seg' || \"\$seg\" == '$target_seg' ]] # bare-dbracket-ok: function return
   "
   local waited=$?
   local last_archived

@@ -73,7 +73,9 @@ for _ in $(seq 1 60); do
   fi
   sleep 1
 done
-[[ "$ready" == "yes" ]]
+# 🔴 同 B-16 复核发现的 macOS bash 3.2.57 坑：裸 `[[ ]]` 独立语句判假时
+# `set -e` 不中止脚本，改成显式 `||` 短路，判断逻辑不变。
+[[ "$ready" == "yes" ]] || { echo "postgres did not become ready" >&2; exit 1; }
 
 docker exec -i "$container_name" psql --no-psqlrc -U x6_admin -d postgres \
   <"$project_root/infra/postgres/roles.sql" >/dev/null

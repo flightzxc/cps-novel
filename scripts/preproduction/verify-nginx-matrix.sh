@@ -68,17 +68,24 @@ for path in "${paths[@]}"; do
   ! grep -q BUSINESS_CONTENT "$tmp/body"
   grep -qi '^X-Robots-Tag: noindex, nofollow, noarchive' "$tmp/headers"
   code="$(request www.bangbangji.cloud "$path" 1)"
-  if [[ "$path" == "/missing" ]]; then [[ "$code" == "404" ]]; else [[ "$code" == "200" ]]; fi
+  # 🔴 同 B-16 复核发现的 macOS bash 3.2.57 坑：裸 `[[ ]]` 独立语句判假时
+  # `set -e` 不中止脚本（`[ ]`/`test`/`false` 都正常，只有 `[[ ]]` 不会）。
+  # then/else 分支各自只有一条裸 `[[ ]]`，同样中招，改成显式 `||` 短路。
+  if [[ "$path" == "/missing" ]]; then
+    [[ "$code" == "404" ]] || { echo "NGINX_MATRIX=FAIL path=$path authenticated expected=404 got=$code"; exit 65; }
+  else
+    [[ "$code" == "200" ]] || { echo "NGINX_MATRIX=FAIL path=$path authenticated expected=200 got=$code"; exit 65; }
+  fi
 done
 for path in /login /dashboard /api/admin; do
-  [[ "$(request www.bangbangji.cloud "$path")" == "404" ]]
+  [[ "$(request www.bangbangji.cloud "$path")" == "404" ]] || { echo "NGINX_MATRIX=FAIL case=public_host_admin_path path=$path"; exit 65; }
   ! grep -q BUSINESS_CONTENT "$tmp/body"
   grep -qi '^X-Robots-Tag: noindex, nofollow, noarchive' "$tmp/headers"
 done
-[[ "$(request zbcwf.bangbangji.cloud /login)" == "401" ]]
-[[ "$(request zbcwf.bangbangji.cloud /login 1)" == "200" ]]
-[[ "$(request zbcwf.bangbangji.cloud /)" == "404" ]]
-[[ "$(request wrong.bangbangji.cloud /)" == "404" ]]
+[[ "$(request zbcwf.bangbangji.cloud /login)" == "401" ]] || { echo "NGINX_MATRIX=FAIL case=admin_login_anonymous"; exit 65; }
+[[ "$(request zbcwf.bangbangji.cloud /login 1)" == "200" ]] || { echo "NGINX_MATRIX=FAIL case=admin_login_authenticated"; exit 65; }
+[[ "$(request zbcwf.bangbangji.cloud /)" == "404" ]] || { echo "NGINX_MATRIX=FAIL case=admin_root_anonymous"; exit 65; }
+[[ "$(request wrong.bangbangji.cloud /)" == "404" ]] || { echo "NGINX_MATRIX=FAIL case=unknown_host"; exit 65; }
 
 # --- Admin host: exact-match /api/health closes the prefix-match hole, and
 # /_next/static/ is the one new asset location (see ADR). ---
@@ -115,11 +122,14 @@ grep -qi '^X-Robots-Tag: noindex, nofollow, noarchive' "$tmp/headers"
   echo "NGINX_MATRIX=FAIL case=admin_health_anything_authenticated"; exit 65;
 }
 
+# 🔴 同 B-16 复核发现的 macOS bash 3.2.57 坑：裸 `[[ ]]` 独立语句判假时
+# `set -e` 不中止脚本，改成显式 `||` 短路，判断逻辑不变。
 location="$(curl --noproxy '*' --silent --output /dev/null --write-out '%{redirect_url}' \
   --resolve "www.bangbangji.cloud:$http_port:127.0.0.1" "http://www.bangbangji.cloud:$http_port/path?q=1")"
-[[ "$location" == "https://www.bangbangji.cloud/path?q=1" ]]
-[[ "$(curl --noproxy '*' --silent --output /dev/null --write-out '%{http_code}' \
-  --resolve "www.bangbangji.cloud:$http_port:127.0.0.1" "http://www.bangbangji.cloud:$http_port/.well-known/acme-challenge/probe")" == "200" ]]
+[[ "$location" == "https://www.bangbangji.cloud/path?q=1" ]] || { echo "NGINX_MATRIX=FAIL case=http_https_redirect_query location=$location"; exit 65; }
+acme_probe_status="$(curl --noproxy '*' --silent --output /dev/null --write-out '%{http_code}' \
+  --resolve "www.bangbangji.cloud:$http_port:127.0.0.1" "http://www.bangbangji.cloud:$http_port/.well-known/acme-challenge/probe")"
+[[ "$acme_probe_status" == "200" ]] || { echo "NGINX_MATRIX=FAIL case=acme_challenge_http status=$acme_probe_status"; exit 65; }
 
 # --- Maintenance ON: business/login surfaces are gated (both anonymous and
 # authenticated -- previously only authenticated was tested here), the body
