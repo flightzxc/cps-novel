@@ -148,13 +148,6 @@ row_sql="SELECT json_build_object(
   'generic_task_item',(SELECT count(*) FROM generic_task_item),
   'operation_audit',(SELECT count(*) FROM operation_audit)
 )::text"
-index_trigger_sql="SELECT md5(coalesce(string_agg(value, E'\n' ORDER BY value), '')) FROM (
-  SELECT indexname || '|' || indexdef AS value FROM pg_indexes WHERE schemaname='public'
-  UNION ALL
-  SELECT tgname || '|' || pg_get_triggerdef(t.oid) FROM pg_trigger t
-  JOIN pg_class c ON c.oid=t.tgrelid JOIN pg_namespace n ON n.oid=c.relnamespace
-  WHERE n.nspname='public' AND NOT t.tgisinternal
-) objects"
 migration_sql="SELECT count(*) FROM _prisma_migrations WHERE finished_at IS NOT NULL AND rolled_back_at IS NULL"
 
 # 期望表数不再写死——直接和 check-database-dictionary-drift.mjs 里
@@ -197,22 +190,25 @@ if ! [[ "$source_rows" == "$restore_rows" ]]; then
   echo "row counts diverged between source and restore: source=$source_rows restore=$restore_rows" >&2
   exit 1
 fi
-# 约束比对（第二轮主控裁决）：按类型分开处理，不再要求 pg_get_constraintdef()
-# 逐字相同——见 scripts/check-p1-06-constraint-parity.mjs 顶部注释里的完整
-# 理由与归一化规则（只去掉三种类型转换 + 圆括号 + 空白，其它一个字符不动；
-# 非 CHECK 约束仍然逐字比对）。这里先把 restore 侧连接串提前构造出来，供本
-# 检查使用；下面 dictionary drift 那段还会算一遍同样的 URL（历史遗留的
-# 重复定义，语义完全一致，未改动那段代码）。
+# 约束 + 索引/触发器比对（第二轮定约束、第三轮把同款方法扩到索引谓词）：
+# 按类型分开处理，不再要求 pg_get_constraintdef()/pg_get_indexdef() 逐字
+# 相同——见 scripts/check-p1-06-constraint-parity.mjs 顶部注释里的完整理由
+# 与归一化规则（只去掉三种类型转换 + 圆括号 + 空白，其它一个字符不动；非
+# CHECK 约束、触发器、普通索引仍然逐字比对；部分索引只有 WHERE 谓词这段走
+# 归一化，WHERE 之前的部分——索引名/表/列/唯一性/方法——逐字比对）。这里
+# 先把 restore 侧连接串提前构造出来，供本检查使用；下面 dictionary drift
+# 那段还会算一遍同样的 URL（历史遗留的重复定义，语义完全一致，未改动那段
+# 代码）。脚本成功时在 stdout 打一行 JSON，包含按归一化后文本算出的
+# constraintDigest/objectDigest，供下面 echo 尾行复用（不是原始
+# pg_get_constraintdef() 的逐字 md5，而是归一化后的——同一份数据不会再因为
+# 这个已知良性差异在不同环境算出两个不同摘要）。
 restore_owner_url_for_constraints="postgresql://migration_owner:${migration_password}@127.0.0.1:${host_port}/${restore_database}?schema=public"
-P1_06_CONSTRAINT_SOURCE_URL="$owner_url" \
-P1_06_CONSTRAINT_RESTORE_URL="$restore_owner_url_for_constraints" \
-node scripts/check-p1-06-constraint-parity.mjs --show-benign-check-diffs
-source_objects="$(db_query "$source_database" "$index_trigger_sql" | tr -d '[:space:]')"
-restore_objects="$(db_query "$restore_database" "$index_trigger_sql" | tr -d '[:space:]')"
-if ! [[ -n "$source_objects" && "$source_objects" == "$restore_objects" ]]; then
-  echo "index/trigger digest mismatch or empty: source=$source_objects restore=$restore_objects" >&2
-  exit 1
-fi
+schema_parity_json="$(P1_06_CONSTRAINT_SOURCE_URL="$owner_url" \
+  P1_06_CONSTRAINT_RESTORE_URL="$restore_owner_url_for_constraints" \
+  node scripts/check-p1-06-constraint-parity.mjs --show-benign-check-diffs --show-benign-index-diffs)"
+echo "$schema_parity_json"
+constraint_digest="$(node -e 'process.stdout.write(JSON.parse(process.argv[1]).constraintDigest)' "$(tail -n1 <<<"$schema_parity_json")")"
+object_digest="$(node -e 'process.stdout.write(JSON.parse(process.argv[1]).objectDigest)' "$(tail -n1 <<<"$schema_parity_json")")"
 source_migration_count="$(db_query "$source_database" "$migration_sql" | tr -d '[:space:]')"
 if ! [[ "$source_migration_count" == "$expected_migration_count" ]]; then
   echo "source migration count mismatch: got=$source_migration_count expected=$expected_migration_count" >&2
@@ -266,8 +262,8 @@ echo "LOGICAL_BACKUP=PASS"
 echo "LOGICAL_RESTORE=PASS"
 echo "RESTORE_DURATION_MS=${restore_duration_ms}"
 echo "TABLE_COUNT=${restore_table_count}"
-echo "CONSTRAINT_PARITY=PASS_BY_TYPE_CHECK_NORMALIZED"
-echo "OBJECT_DIGEST=${restore_objects}"
+echo "CONSTRAINT_DIGEST=${constraint_digest}"
+echo "OBJECT_DIGEST=${object_digest}"
 echo "DICTIONARY_DRIFT=0_OF_${dictionary_active_count}"
 echo "PITR_STATUS=SCRIPT_AND_RUNBOOK_ONLY"
 echo "P1_06_VERIFICATION=PASS"

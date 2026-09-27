@@ -127,6 +127,8 @@ echo "SECRET_LOG_SCAN=PASS"
 web_health="$("${compose[@]}" ps -q web | xargs docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}')"
 # 这条也是裸 `[[ ]]`，同上一并修——判断逻辑（含原有的 unhealthy/starting
 # 具体取值）一个字不动，只补 `||` 短路让它能真正生效。
+# B-16 起开始真正生效，修复后尚未运行；下次运行如果在这里失败，先查原意，
+# 不得直接放宽。
 [[ "$web_health" == "unhealthy" || "$web_health" == "starting" ]] || { echo "web health unexpected: $web_health" >&2; exit 1; }
 
 echo "DOCKER_BUILD=PASS"
