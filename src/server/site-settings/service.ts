@@ -191,7 +191,8 @@ export async function getGa4MeasurementId(
 const SITE_SETTING_AUDIT_ACTION = "site_setting.update";
 const SITE_SETTING_ENTITY_ID = "1";
 const SITE_SETTING_ENTRY_ID = "admin.api.site_settings";
-const WRITABLE_FIELDS = [
+/** Managed input fields; also the source for the database UPDATE contract. */
+export const SITE_SETTING_WRITABLE_FIELDS = [
   "siteName",
   "siteDescription",
   "homeMetaTitle",
@@ -207,7 +208,7 @@ const WRITABLE_FIELDS = [
   "ga4MeasurementId",
 ] as const;
 
-type WritableField = (typeof WRITABLE_FIELDS)[number];
+type WritableField = (typeof SITE_SETTING_WRITABLE_FIELDS)[number];
 export type SiteSettingFriendLink = Readonly<{ name: string; url: string; nofollow: boolean }>;
 type WritableValues = {
   siteName: string;
@@ -373,25 +374,25 @@ function normalizeFriendLinks(value: unknown): SiteSettingFriendLink[] {
 
 function normalizedPatch(input: UpdateSiteSettingInput): WritablePatch {
   const patch: WritablePatch = {};
-  const textFields: ReadonlyArray<readonly [Exclude<WritableField, "friendLinks" | "ga4MeasurementId">, number]> = [
-    ["siteName", 160], ["siteDescription", 5000], ["homeMetaTitle", 500],
-    ["homeMetaDescription", 2000], ["defaultOgImage", 4096],
-    ["googleSearchConsoleVerification", 255], ["footerCopyrightText", 5000],
-    ["footerDisclaimerText", 5000], ["indexNowHost", 255], ["indexNowKey", 255],
-    ["indexNowKeyLocation", 255],
-  ];
-  for (const [field, maxLength] of textFields) {
+  const textLimits: Record<Exclude<WritableField, "friendLinks" | "ga4MeasurementId">, number> = {
+    siteName: 160, siteDescription: 5000, homeMetaTitle: 500,
+    homeMetaDescription: 2000, defaultOgImage: 4096,
+    googleSearchConsoleVerification: 255, footerCopyrightText: 5000,
+    footerDisclaimerText: 5000, indexNowHost: 255, indexNowKey: 255,
+    indexNowKeyLocation: 255,
+  };
+  for (const field of SITE_SETTING_WRITABLE_FIELDS) {
     if (!Object.prototype.hasOwnProperty.call(input, field)) continue;
-    (patch as Record<string, unknown>)[field] = textValue(input[field], field, maxLength);
-  }
-  if (Object.prototype.hasOwnProperty.call(input, "friendLinks")) {
-    patch.friendLinks = normalizeFriendLinks(input.friendLinks);
-  }
-  if (Object.prototype.hasOwnProperty.call(input, "ga4MeasurementId")) {
-    const raw = textValue(input.ga4MeasurementId, "ga4MeasurementId", 64);
-    const normalized = normalizeGa4MeasurementId(raw);
-    if (raw && !normalized) throw new SiteSettingValidationError("ga4MeasurementId is invalid");
-    patch.ga4MeasurementId = normalized;
+    if (field === "friendLinks") {
+      patch.friendLinks = normalizeFriendLinks(input.friendLinks);
+    } else if (field === "ga4MeasurementId") {
+      const raw = textValue(input.ga4MeasurementId, field, 64);
+      const normalized = normalizeGa4MeasurementId(raw);
+      if (raw && !normalized) throw new SiteSettingValidationError("ga4MeasurementId is invalid");
+      patch.ga4MeasurementId = normalized;
+    } else {
+      patch[field] = textValue(input[field], field, textLimits[field]);
+    }
   }
   if (Object.keys(patch).length === 0) {
     throw new SiteSettingValidationError("At least one SiteSetting field is required");
@@ -473,7 +474,7 @@ function requestFingerprint(input: {
       actorId: input.actorId,
       expectedUpdatedAt: input.expectedUpdatedAt.toISOString(),
       reason: input.reason,
-      patch: WRITABLE_FIELDS.flatMap((field) =>
+      patch: SITE_SETTING_WRITABLE_FIELDS.flatMap((field) =>
         input.patch[field] === undefined ? [] : [[field, input.patch[field]]],
       ),
     }))

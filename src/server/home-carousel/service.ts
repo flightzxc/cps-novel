@@ -217,6 +217,9 @@ async function auth(authorization: AdminServiceAuthorization, entryId: string, r
   return requireFreshAdminServiceMutation(authorization, "settings:manage", { identities: deps.identities, sessions: deps.sessions, env: deps.env, now: deps.now, entryId, requestId });
 }
 
+/** SiteSetting columns owned by the guarded carousel configuration writer. */
+export const HOME_CAROUSEL_SITE_SETTING_WRITABLE_FIELDS = ["carouselConfigJson"] as const;
+
 export async function updateHomeCarouselConfig(input: { authorization: AdminServiceAuthorization; requestId: string; cronSchedule: string; cronTimezone: string; cronEnabled: boolean }, deps: HomeCarouselDependencies) {
   const context = await auth(input.authorization, "admin.home_carousel.config", input.requestId, deps);
   const config = normalizeHomeCarouselConfig(input);
@@ -241,7 +244,7 @@ export async function updateHomeCarouselConfig(input: { authorization: AdminServ
     // envelope for any route that surfaces it) instead of two.
     const existing = await tx.siteSetting.findUnique({ where: { id: 1 }, select: { id: true } });
     if (!existing) throw new SiteSettingNotSeededError();
-    await tx.siteSetting.update({ where: { id: 1 }, data: { carouselConfigJson: config } });
+    await tx.siteSetting.update({ where: { id: 1 }, data: { [HOME_CAROUSEL_SITE_SETTING_WRITABLE_FIELDS[0]]: config } });
     await tx.operationAudit.create({ data: { actorType: "admin", actorId: context.identity.id, action: "home_carousel.config", entityType: "SiteSetting", entityId: "1", requestId: input.requestId, afterSnapshot: config } });
     return config;
   });

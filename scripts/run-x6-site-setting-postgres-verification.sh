@@ -91,9 +91,13 @@ analyst_url="postgresql://analyst_ro:${analyst_password}@127.0.0.1:${host_port}/
 DATABASE_URL="$owner_url" npx prisma validate
 DATABASE_URL="$owner_url" npx prisma generate
 DATABASE_URL="$owner_url" npx prisma migrate deploy
-docker exec -i "$container_name" \
-  psql --no-psqlrc -U migration_owner -d "$database_name" \
-  <"$project_root/infra/postgres/grants.sql" >/dev/null
+# Verify replay remains idempotent before testing the final effective grants.
+for replay in 1 2; do
+  docker exec -i "$container_name" \
+    psql --no-psqlrc --single-transaction -v ON_ERROR_STOP=1 -U migration_owner -d "$database_name" \
+    <"$project_root/infra/postgres/grants.sql" >/dev/null
+done
+echo "X6_GRANTS_REPLAY=PASS"
 
 X6_SITE_SETTING_DATABASE_TEST=1 \
 X6_OWNER_DATABASE_URL="$owner_url" \
