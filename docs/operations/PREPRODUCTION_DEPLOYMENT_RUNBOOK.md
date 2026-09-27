@@ -254,6 +254,11 @@ procedure and the read-only query are in
    per-file ACLs in `scripts/preproduction/secret-consumers.tsv`; PostgreSQL is
    UID/GID `999:999`, the application is `1001:1001`, and `backup-timer` stays
    root because its PostgreSQL image command does not start the server entrypoint.
+   `web` additionally gets `group_add: ["1000"]` (`infra/preproduction/
+   docker-compose.yml`) so it can traverse `/opt/cps-novel/shared/backups`
+   (`deploy:deploy` 1000:1000, mode `0750`) to read `backup-timer`'s
+   `last-success.json` for `/api/health/backup` -- see "backup-timer is a
+   standing service" below.
 4. Apply the permission model once, as Owner, before initializing identity or
    starting PostgreSQL. These commands assume the fixed target identities
    `deploy=1000:1000` and `www-data=33:33`; stop if the target differs:
@@ -481,6 +486,82 @@ fails immediately and the physical base backup is never taken either — so
 grants must be replayed (via `migrate-approved`, or by hand with the
 recovery command above on an already-migrated database) before
 `backup-timer` is ever started.
+
+### backup-timer is a standing service, not a one-shot tool
+
+🔴 2026-09-21 -> 2026-09-27 incident: a rollout plan treated `backup-timer` as
+a one-shot tool — start it, wait for it to print `PREPROD_BACKUP_RUN=PASS`
+once, then `preprod_compose stop backup-timer` — and said a later "postdeploy"
+step would make it resident again. That step never existed in `release.sh`.
+The container sat `Exited` for 5 days with zero daily backups running. `exit
+137` on every `docker stop`/`compose stop backup-timer` is **normal, not a
+failure signal**: `backup-loop.sh` runs as PID 1 under `bash`, which ignores
+`SIGTERM`, so `stop` always escalates to `SIGKILL` after its 10s grace period.
+
+The fix (2026-09-27, Owner-approved): `scripts/preproduction/release.sh`'s
+`deploy()` and `rollback()` both call `preprod_ensure_backup_timer_running`
+(`scripts/preproduction/lib.sh`) as their last step **before** `maintenance_off`
+— after worker/scheduler are confirmed healthy, before traffic comes back.
+That call:
+
+- waits for any already-running backup loop to go idle — i.e. PID 1
+  (`backup-loop.sh`) has its `sleep` child, which only exists after
+  `run_once()` has fully finished (`ps -eo ppid=,comm=` shows `1 sleep`) —
+  before recreating it, bounded by
+  `PREPROD_BACKUP_TIMER_IDLE_TIMEOUT_SECONDS` (default 900s) — recreating over
+  a live `pg_dump` would `SIGKILL` it mid-write, and `scripts/db/
+  backup-logical.sh`'s `pg_dump --file=...` is **not atomic** (the `.sha256`/
+  `.metadata` sidecars are written afterward, so a killed dump leaves a
+  `.dump` file with no sidecars);
+- recreates it with `preprod_compose up -d --no-deps backup-timer` — **always**
+  with `--no-deps`. Never run `up`/`up -d backup-timer` for it by hand without
+  `--no-deps`: on 2026-09-22 that recreated `postgres` too, via
+  `depends_on: postgres: condition: service_healthy`;
+- asserts the recreated container is actually `running`, not stuck
+  `Restarting`, and bound to this release's own checkout (`docker inspect`'s
+  `com.docker.compose.project.working_dir` label), then prints
+  `BACKUP_TIMER=RUNNING`; any failure is `RELEASE=FAILED reason=
+  backup_timer_not_running` (`ROLLBACK=FAILED` on the rollback path) and
+  behaves like any other failed release step — maintenance stays **on**.
+
+This recreate's own immediate `run_once()` (backup-loop.sh runs it at
+container start, before ever sleeping) doubles as a post-release backup.
+`release.sh` deliberately does **not** wait for that run to reach
+`PREPROD_BACKUP_RUN=PASS` — a weekly cycle can include a physical base backup
+plus restore verification that takes minutes, and coupling deploy/rollback
+duration to that is unnecessary; ongoing backup freshness is covered
+independently by the container's own healthcheck and by `/api/health/backup`.
+
+For an ad-hoc backup at any other time, never stop-then-start the container —
+`exec` into the running one instead:
+
+```bash
+preprod_compose exec -T backup-timer /bin/bash /app/scripts/db/backup-logical.sh --output <file>
+```
+
+Any other manual `compose`/`docker` command that touches `backup-timer` (a
+one-off restart, a manual `up`, …) must also pass `--no-deps`, for the same
+reason as above.
+
+🔴 Do not stop `backup-timer` before `migrate-approved`/grants replay "to be
+safe". Measured on this host 2026-09-27, postgres:16.14: with another session
+holding `ACCESS SHARE` on every table (what `pg_dump` holds for the duration
+of a logical backup), the full `grants.sql` transaction (`REVOKE ALL ON ALL
+TABLES`, `GRANT`, `ALTER DEFAULT PRIVILEGES`) under `lock_timeout='10s'`
+completed in 0s — `GRANT`/`REVOKE` take no table locks. A DDL `ALTER TABLE`
+under `lock_timeout=3s` did time out in the same test, but
+`database.sh migrate-approved` sets no `lock_timeout` for migrations, so a DDL
+migration would at most wait out one dump's duration (~20s order of
+magnitude). `release.sh` therefore never stops `backup-timer` around
+migrate/grants.
+
+`/api/health/backup` (`src/server/health/backup-status.ts`) depends on two
+things that are easy to silently regress: `web`'s `group_add: ["1000"]` (its
+only way to traverse the 1000:1000-owned, mode-`0750` backups directory), and
+`backup-loop.sh` `chmod`-ing the published status file to `0644` before the
+final `mv` (without it, the file stays `root:root 0600` and unreadable to
+`web` regardless of directory access). Both are covered by
+`tests/backend/runtime/preproduction-backup-health-readable.test.ts`.
 
 ### Application image entry points: no build, no pull, fail closed
 

@@ -8,7 +8,13 @@ Source of truth for the single-instance Host-Nginx deployment described in
   overrides described below (`shm_size`, `mem_limit`, `NODE_OPTIONS`).
 - `nginx/`: Ubuntu nginx 1.24 source templates/snippets.
 - `backup-loop.sh`: daily logical, weekly verified physical, continuous-WAL
-  retention wiring.
+  retention wiring. The `backup-timer` service's healthcheck only tells you
+  the loop is stuck or failing while the container is *running* -- it has no
+  way to see a stopped container at all (2026-09-22 incident: an ops step
+  used backup-timer for a one-off backup, then stopped it, and nothing
+  restarted it for 5 days). Don't start/stop this service for an ad-hoc
+  backup; `exec` into the running container instead:
+  `preprod_compose exec -T backup-timer /bin/bash /app/scripts/db/backup-logical.sh --output <file>`.
 - `offsite-pull.plist.example`: launchd template for
   `scripts/preproduction/offsite-pull.sh` (see "Offsite backup pull" below).
   Not installed by anything here -- copy, edit, and `launchctl load` it by

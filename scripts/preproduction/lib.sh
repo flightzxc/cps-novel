@@ -788,3 +788,122 @@ try {
 }
 JS
 }
+
+# --- backup-timer 常驻性：release.sh 部署/回滚的收尾一步 --------------------
+#
+# 背景（2026-09-21 -> 2026-09-27 事故）：一份 2026-09-21 的上线方案把
+# backup-timer 当一次性工具用——起容器、等它自己 PASS、`preprod_compose stop
+# backup-timer`——并说会"作为 postdeploy 步骤"让它常驻，但 release.sh 里从来
+# 没有这一步。容器就那样停在 Exited，一停 5 天（2026-09-22 -> 2026-09-27），
+# 期间没有任何每日备份。`docker stop` 对它的 exit 137 是正常现象，不代表异常：
+# `backup-loop.sh` 是 PID 1 的 bash，忽略 SIGTERM，`stop` 10 秒后必然 SIGKILL。
+#
+# 这个函数就是补上的那一步：release.sh 的 deploy()/rollback() 各自在收尾、
+# maintenance_off 之前调用它一次，让 backup-timer 常驻在**这一轮发布的脚本**
+# 上（`preprod_compose_app_up` 对应用镜像做的事，这里对 backup-timer 的
+# infra 脚本做同一件事——它的 volumes 挂的是仓库里的 .sh 文件，不是镜像内
+# 打包的）。它的 run_once() 在容器起来后立刻跑一次，顺带充当"发布后备份"。
+#
+# 🔴 recreate 前必须等它的循环空闲：`up -d --no-deps` 对一个仍在跑
+# `run_once()` 的旧容器是先 SIGTERM 后（10 秒后）SIGKILL，而
+# `scripts/db/backup-logical.sh` 的 `pg_dump --file=...` 不是原子写
+# （`.sha256`/`.metadata` 是事后才写的旁车文件）——半途被杀会留下一个没有
+# 旁车文件的残缺 `.dump`。空闲的判据是结构性的：`backup-loop.sh` 只有在
+# `run_once()` 整轮结束后才执行 `sleep … & wait`，所以"PID 1 的子进程里有
+# sleep"⇔ 空闲（2026-09-27 目标机实测空闲时 `ps -eo ppid=,comm=` 为
+# `0 bash` / `1 sleep`）。🔴 不要改回"按进程名黑名单判忙"：run_once 的步骤间
+# 还有 `pg_restore --list`、`sha256sum` 等不在任何名单里的命令（恰在旁车文件
+# 写出之前），而 `ps comm` 截断到 15 字符，`pg_archivecleanup` 永远匹配不上。
+# 超时（默认 15 分钟，可用
+# `PREPROD_BACKUP_TIMER_IDLE_TIMEOUT_SECONDS` 覆盖——周备份窗口下的物理基准
+# 备份+校验可能跑得比日常逻辑备份久）非阻塞地失败，明说
+# `reason=backup_timer_busy`，绝不硬闯。容器压根不存在（首次真实部署）或存在
+# 但没在跑，跳过这一段轮询，直接进入 recreate。
+#
+# 🔴 recreate 之后不等 `PREPROD_BACKUP_RUN=PASS`：那要等第一次
+# `run_once()`——可能含每周物理基准备份+恢复校验——完整跑完，会把部署耗时和
+# 一次可能长达数分钟甚至更久的周期性任务绑死。备份是否成功由独立的
+# healthcheck（infra/preproduction/docker-compose.yml 的 freshness
+# healthcheck）和 `/api/health/backup` 覆盖，不需要 release.sh 在这里现场验证。
+# 这里只断言"容器起来了、在跑、没有在重启循环、绑的是这一次发布的 repo 目录"。
+#
+# 🔴 bash 3.2/5 双兼容（同 lib.sh 其它函数的纪律）：不用裸 `[[ ]]` 单独成行
+# 做断言，一律 `[[ ]] || { ...; return; }` 或包在 `if` 里。
+#
+# 拒绝走 stderr、PASS 走 stdout，与本文件其它 `preprod_assert_*`/
+# `preprod_wait_for_service_health` 同一条约定。
+preprod_ensure_backup_timer_running() {
+  local idle_timeout="${PREPROD_BACKUP_TIMER_IDLE_TIMEOUT_SECONDS:-900}"
+  local poll_interval=5
+  local elapsed=0
+  local cid running
+
+  cid="$(preprod_compose ps -q backup-timer 2>/dev/null | head -1)"
+  if [[ -n "$cid" ]]; then
+    running="$(docker inspect "$cid" --format '{{.State.Running}}' 2>/dev/null || echo false)"
+    if [[ "$running" == "true" ]]; then
+      local psout
+      while true; do
+        if psout="$(preprod_compose exec -T backup-timer ps -eo ppid=,comm= </dev/null 2>/dev/null)"; then
+          if awk '$1 == 1 && $2 == "sleep" { idle = 1 } END { exit idle ? 0 : 1 }' <<<"$psout"; then
+            break
+          fi
+        else
+          # exec 失败：容器在两次检查之间停掉了就直接 recreate；还在跑却 exec
+          # 不进去，按忙处理，交给下面的超时兜底。
+          running="$(docker inspect "$cid" --format '{{.State.Running}}' 2>/dev/null || echo false)"
+          if [[ "$running" != "true" ]]; then
+            break
+          fi
+        fi
+        if (( elapsed >= idle_timeout )); then
+          echo "BACKUP_TIMER=FAILED reason=backup_timer_busy" >&2
+          return 65
+        fi
+        sleep "$poll_interval"
+        elapsed=$(( elapsed + poll_interval ))
+      done
+    fi
+  fi
+
+  # 🔴 与 preprod_compose_app_up 同一条纪律：绝不漏 --no-deps。少了它，
+  # `up -d backup-timer` 会经 depends_on: postgres: condition: service_healthy
+  # 连带重建 postgres——2026-09-22 在目标机真实发生过一次。
+  preprod_compose up -d --no-deps backup-timer </dev/null || {
+    echo "BACKUP_TIMER=FAILED reason=up_failed" >&2
+    return 65
+  }
+
+  sleep 5
+
+  cid="$(preprod_compose ps -q backup-timer 2>/dev/null | head -1)"
+  [[ -n "$cid" ]] || {
+    echo "BACKUP_TIMER=FAILED reason=container_missing" >&2
+    return 65
+  }
+
+  local inspected status restarting working_dir
+  inspected="$(docker inspect "$cid" --format \
+    '{{.State.Status}}|{{.State.Restarting}}|{{index .Config.Labels "com.docker.compose.project.working_dir"}}' \
+    2>/dev/null)" || {
+    echo "BACKUP_TIMER=FAILED reason=container_uninspectable" >&2
+    return 65
+  }
+  IFS='|' read -r status restarting working_dir <<<"$inspected"
+
+  if [[ "$status" != "running" ]]; then
+    echo "BACKUP_TIMER=FAILED reason=not_running status=$status" >&2
+    return 65
+  fi
+  if [[ "$restarting" != "false" ]]; then
+    echo "BACKUP_TIMER=FAILED reason=restarting" >&2
+    return 65
+  fi
+  if [[ "$working_dir" != "$PREPROD_REPO_ROOT" ]]; then
+    echo "BACKUP_TIMER=FAILED reason=working_dir_mismatch expected=$PREPROD_REPO_ROOT actual=$working_dir" >&2
+    return 65
+  fi
+
+  echo "BACKUP_TIMER=RUNNING container=${cid:0:12}"
+  return 0
+}

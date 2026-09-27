@@ -124,6 +124,18 @@ deploy() {
   preprod_wait_for_service_health worker worker-light scheduler || {
     echo "RELEASE=FAILED reason=health_wait_failed service=worker,worker-light,scheduler"; exit 65;
   }
+  # 🔴 补上 2026-09-21 上线方案里那个从未真正存在过的"postdeploy"步骤：
+  # backup-timer 是常驻服务，不是一次性工具，必须在这里 recreate 到本次发布
+  # 的脚本上，紧接着才能 maintenance_off——放在这之前、失败即 exit 65，行为与
+  # 任何其它服务的健康失败一样 fail-closed（trap 打印 RELEASE=FAILED
+  # maintenance=ON）。不在 migrate-approved 之前停它：2026-09-27 实测，另一
+  # 会话持有全表 ACCESS SHARE（等价 pg_dump 持有的锁）时，grants.sql 那套
+  # REVOKE/GRANT/ALTER DEFAULT PRIVILEGES 在 lock_timeout=10s 下 0 秒完成——
+  # GRANT/REVOKE 不取表锁；真正的 DDL migration 在 lock_timeout=3s 下确实会
+  # 超时，但 `database.sh migrate-approved` 对 migration 不设 lock_timeout，
+  # 最多等出一次 dump 的时长（~20s 量级），因此这里不需要、也不应该在
+  # migrate/grants 之前停 backup-timer。
+  preprod_ensure_backup_timer_running || { echo "RELEASE=FAILED reason=backup_timer_not_running"; exit 65; }
   PREPROD_RELEASE_VERIFIED=YES maintenance_off
   # 🔴 MAJOR-1 fix: the full verify-release.sh call above (line ~98) always
   # runs while maintenance is still on, so its state-aware anonymous matrix
@@ -219,6 +231,11 @@ rollback() {
   preprod_wait_for_service_health worker worker-light scheduler || {
     echo "ROLLBACK=FAILED reason=health_wait_failed service=worker,worker-light,scheduler"; exit 65;
   }
+  # 🔴 与 deploy() 同一个坑、同一个修法（见上方注释）：backup-timer 是常驻
+  # 服务，回滚同样要在这里把它 recreate 到（回滚后的）这一次发布的脚本上，
+  # 紧接着才能 maintenance_off；不在 grants 重放之前停它，理由同上
+  # （2026-09-27 锁测量：GRANT/REVOKE 不取表锁，不与 pg_dump 冲突）。
+  preprod_ensure_backup_timer_running || { echo "ROLLBACK=FAILED reason=backup_timer_not_running"; exit 65; }
   PREPROD_RELEASE_VERIFIED=YES maintenance_off
   # 🔴 MAJOR-1 fix: same reasoning as deploy() above -- the full
   # verify-release.sh call three lines up always runs while maintenance is

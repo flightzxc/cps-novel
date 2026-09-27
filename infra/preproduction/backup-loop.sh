@@ -59,6 +59,20 @@ run_once() {
 
   temp_status="${status_file}.$$"
   printf '{"finishedAt":"%s","exitCode":0}\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" >"$temp_status"
+  # 2026-09-27 (Owner-approved): under the `umask 077` set at
+  # the top of this script (correctly kept for everything else -- the dumps
+  # themselves must stay 0600), this temp file would otherwise land 0600
+  # root:root, and so would the published status file after `mv`. web runs
+  # as 1001:1001 and only gets `group_add: ["1000"]` on the bind mount's
+  # *directory* (infra/preproduction/docker-compose.yml) -- that grants
+  # traverse/list, never a read on a 0600-root file. Without this chmod,
+  # /api/health/backup's status-file branch (src/server/health/
+  # backup-status.ts) can never successfully read the file and permanently
+  # reports "failed" regardless of real backup freshness. Content here is
+  # only `{"finishedAt","exitCode"}` -- non-sensitive -- so widen to 0644 on
+  # the TEMP file BEFORE the publishing `mv`, so the published path never
+  # exists at the wrong mode even momentarily.
+  chmod 0644 "$temp_status"
   mv "$temp_status" "$status_file"
   echo "PREPROD_BACKUP_RUN=PASS"
 }
