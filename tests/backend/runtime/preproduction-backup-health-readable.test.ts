@@ -4,7 +4,7 @@ import { spawnSync } from "node:child_process";
 import { describe, expect, it, beforeAll } from "vitest";
 
 /**
- * 2026-09-27 (Owner-approved, single infra change): `/api/health/backup`
+ * 2026-09-27 (Owner-approved): `/api/health/backup`
  * (`src/server/health/backup-status.ts`) has returned `{"backupStatus":
  * "failed", ...}` forever, regardless of real backup freshness. Root cause
  * (measured on the real host):

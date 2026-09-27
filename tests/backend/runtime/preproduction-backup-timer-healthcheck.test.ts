@@ -7,7 +7,7 @@ import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import { DEFAULT_STALE_THRESHOLD_HOURS } from "@/server/health/backup-status";
 
 /**
- * 2026-09-27 (Owner-approved, single infra change): `backup-timer` (infra/
+ * 2026-09-27 (Owner-approved): `backup-timer` (infra/
  * preproduction/docker-compose.yml) sat Exited for 5 days (2026-09-22 ->
  * 2026-09-27) after an ops step stopped it post one-off backup. This
  * healthcheck would NOT have caught that (a stopped container has no health

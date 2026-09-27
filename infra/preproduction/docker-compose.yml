@@ -31,7 +31,7 @@ services:
     # 不允许从任何 registry 拉取。这是脚本层 --pull never 之外的第二道闸：
     # 有人绕过 preprod_compose_app_up 直接 `docker compose up` 时它仍然生效。
     pull_policy: never
-    # 2026-09-27 (Owner-approved, single change): web (1001:1001) needs to
+    # 2026-09-27 (Owner-approved): web (1001:1001) needs to
     # enter/read /opt/cps-novel/shared/backups (deploy:deploy 1000:1000,
     # mode 0750) to read backup-timer's last-success.json for
     # /api/health/backup -- without a supplementary group, stat() on that
@@ -111,7 +111,7 @@ services:
       options:
         max-size: 10m
         max-file: "3"
-    # Freshness healthcheck (2026-09-27, Owner-approved, single change):
+    # Freshness healthcheck (2026-09-27, Owner-approved):
     # backup-loop.sh writes last-success.json ONLY at the very end of a fully
     # successful run_once() (set -euo pipefail means a failed run never
     # touches it). Healthy iff that file exists and its mtime is under 26h
