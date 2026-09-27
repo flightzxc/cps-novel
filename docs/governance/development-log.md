@@ -39,6 +39,22 @@
 
 ## 发版记录（新条目在最上面）
 
+### 2026-09-27 23:21 - codex（GPT-6，发版执行；时间 +0800）
+
+**变更类型**：预生产正式发布 `v0.5.1`（PATCH），应用部署和数据库重建分别获 Owner 授权。
+
+**背景**：Opus 已复核并集成 B-16、自动标签评估/登记位、容量与异地备份、备份常驻修复；本次只升版、门禁、构建、部署与验收。
+
+**变更内容**：Final `f4d3d3595926051f3488cb1e3203c25340cbacf9`；四应用内存限制生效；backup-timer 重建到 Final 并完成首轮备份，backup health 修复已生效；另行受控重建 postgres，使十项 GUC 与 1 GiB shm 生效。无新迁移；Owner 修正交接后，deploy 运行空迁移检查及事务性 grants 重放。env 仅改两个版本号。
+
+**影响范围**：仅 `haiyue-vps` 预生产；应用仍是 Final 镜像。数据库重建停机 35 秒，原数据卷复用、指纹一致，未触发回退；postgres 挂载的 Final 发布目录不得删除。异地拉取待在 Mac/NAS 安装；自动标签和 IndexNow 仍关闭；B-16 仅测试与运维脚本。
+
+**验证方式**：本地 6,952 tests / 466 files passed、22 个运行器全绿、typecheck/build/Compose 通过、lint 0 error、drift 0。线上 RELEASE 与 RECREATE_POSTGRES 均 PASS；十项 GUC、shm、数据卷 CreatedAt、指纹、persistent-check、Final health、全部服务健康与零错误日志通过。Owner 两次手动 Sitemap 各 36 URL 成功，轻量 worker 审计 356063/356065。最后暂停闸门通过，批次未恢复。
+
+**09-27 运维事实补记（Owner 交接）**：backup-timer 自 09-22 停摆 5 天，09-27 经 Owner 批准恢复常驻，根因是旧流程将其当一次性工具而缺少常驻收尾；09-27 12:14Z 经 Owner 批准手工补做物理基础备份 `base/20260927T121441Z`（366M，VERIFIED，WAL 连续无缺口），此前唯一可用备份为 09-21 空库基线。这两项是本次部署前的运维事实，不冒称本轮操作。
+
+**后续待办**：批次由 Owner 恢复；Notion 交接待转交同步；异地拉取待安装；B-18/B-19 后续项保留。原回退稿在 v0.5.0 目录调用不存在脚本的步骤作废，以 Owner 本次补充的两条旧配置回退路径为准。完整证据见 [发布记录](releases/v0.5.1-preproduction.md)。
+
 ### 2026-09-27 13:21 - codex（GPT-6，发版执行）
 
 **变更类型**：预生产正式发布 `v0.5.0`（MINOR），部署及验收仅限 `haiyue-vps`。

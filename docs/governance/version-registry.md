@@ -16,14 +16,20 @@ Compose runtime 与 Health 身份一致性验证（`/api/health` 的 `metadataCo
 
 ## 当前快照
 
-### v0.5.1 —— 准备中（2026-09-27；本版本未部署）
+### v0.5.1 —— 已发布到预生产（2026-09-27 23:21:12 +0800，`RELEASE=PASS`）
 
-- 集成基线 `c3726ef0aa71fb365c3aea9714b20a53061645f1`，开发线 `integration/v0.5.1-2026-09-27`；B-16、自动标签只读评估与写闸登记位、容量与异地备份、备份常驻修复均经 Opus 复核合入。
-- 第一阶段仅本地升版、串行完整门禁、GitHub 推送及 linux/amd64 镜像归档核验；升版提交即 Final，以第一阶段交付记录为准。不连接运维主机，线上领取照常运行；白名单与业务开关不变，无新迁移。
-- 第二阶段仅限 `haiyue-vps`，须 Owner 暂停批次并单独授权；主机 env 只改两个版本变量，应用部署不重建 postgres。tag、CHANGELOG、发版级日志与 Notion 交接在部署验收后收官。
-- 第三阶段数据库受控重建须 Owner 再次单独授权，目前阻断：v0.5.0 不含新增重建脚本，Owner 将补齐使用旧配置的数据库回退步骤，先本地演练证明可行。第一、二阶段不受影响。
-- 范围：B-16 仅测试与运维脚本；数据库容量参数随第三阶段生效，当前已合入未生效；应用内存限制和备份常驻修复待第二阶段部署；异地拉取已合入，待在 Owner 的 Mac 或 NAS 安装；自动标签登记位已合入，开关仍关闭（等于未上线）。
-- 应用回滚目标 v0.5.0 Final `807aad3dae88c6cf560f663e55c8662407717c80`，不要求回退数据库参数。仅新参数导致数据库无法启动时，按 Owner 提供且已演练的步骤恢复旧配置；不临时改造旧发布目录。
+- Final `f4d3d3595926051f3488cb1e3203c25340cbacf9`；集成基线 `c3726ef` 经 Opus 复核，发版分支 `release/v0.5.1-2026-09-27`。annotated tag `v0.5.1` 固定在 Final，后续治理提交不改变部署身份。
+- 镜像 `cps-novel:0.5.1-f4d3d35`（linux/amd64）；归档 327,146,077 字节，SHA256 `05438ed18db069f7e7df2e290f439d96559260f8925ea414184f8058349abac9`。目标机源码 commit/tree、归档及载入镜像身份核验通过。
+- 第一阶段：typecheck 0、lint 0 errors / 19 warnings、全量 466 文件 / 6,952 测试 passed，37 文件 / 416 测试 skipped，0 failed、无 Unhandled Error；build、三套 Compose、全部 22 个运行器通过。p1-12 runtime 按 Owner 指示排除，B-19 未复现；无新迁移，静态及 live 字典 drift 0。
+- 第二阶段单独获授权，仅部署 `haiyue-vps`。线上 20 条迁移名称、校验和及完成状态与 Final 一致；Owner 修正原交接指令，允许 `PREPROD_APPROVED_MIGRATION=YES`：实际为空迁移检查与事务性 grants 重放，二者通过。env 先备份，仅改两个版本变量；应用部署后 postgres 原容器 ID 保持 `49fcbd95027c…`。
+- 应用四服务与 postgres 全部 healthy；health 返回 0.5.1 / Final，metadata/database passed；近五分钟错误日志 0。内存限制：web/worker 2 GiB（堆 1536 MiB），worker-light 1 GiB（堆 768 MiB），scheduler 512 MiB（堆 384 MiB）。写闸批准列表仍为 catalog_write,promo_write,sitemap_write；auto_tag_write 未登记、未开启；IndexNow 仍关闭。
+- backup-timer 自动重建到 Final 字面目录，`BACKUP_TIMER=RUNNING`、首轮 `PREPROD_BACKUP_RUN=PASS`，容器 healthy，后台主机 `/api/health/backup` 返回 `backupStatus=ok`。之后每日备份时刻随本次部署时刻调整，这是预期行为。
+- Owner 手动 Sitemap 实地验收通过：`d908325f-8c6c-4666-a952-2316611ef491` 和 `c2275819-b9ca-4256-bb49-52ad1716bab8` 均 completed / item success，各 36 URL、error null；审计 356063 / 356065 的执行者均为 `cps-novel-preprod-worker-light-1`。沿用 v0.5.0 已接受的数据库审计证据口径，不冒称 Docker 成功日志。
+- 第三阶段另行获 Owner 授权，且 Owner 已补齐并报告两条旧配置回退路径本地演练通过。再次核对暂停闸门和 `1 sleep` 后，从 Final 字面目录执行重建；`RECREATE_POSTGRES=PASS`、10 项 GUC PASS、shm=1073741824、指纹 `8dedd651ac4745461dca876121a0e008` 一致，实测停机 35 秒。persistent-check 三行 PASS，迁移仍 20 条；没有触发回退。
+- 数据卷 `cps_novel_postgres_data` 的 CreatedAt 前后均为 `2026-09-21T11:57:29+09:00`；postgres 新 ID `691f4c3e43d7a8dd7acee843a62156c858b783fa8712d5ed366283dd236f525e`。**postgres 已挂载 `/opt/cps-novel/releases/f4d3d3595926051f3488cb1e3203c25340cbacf9` 下的配置，该目录在下次从其它目录重建 postgres 前不得删除。**
+- 范围：应用内存限制、备份常驻修复、数据库容量参数已在预生产生效；B-16 仅测试与运维脚本；异地拉取已合入，待在 Owner 的 Mac 或 NAS 安装；自动标签登记位已合入但开关关闭（等于未上线）。没有修改能力行、业务开关、白名单、批次状态、nginx、其它主机或 X8。
+- 最终批次 `eba8f359-a569-43d7-bb55-b71fecc02f6e` 仍 paused，运行领取任务、在途条目及非终态意图均为 0；恢复由 Owner 操作。应用回滚目标 v0.5.0 `807aad3`，不要求回退数据库参数；旧参数回退必须使用 Owner 修订的旧目录 lib.sh 函数流程，不能在 v0.5.0 目录调用不存在的重建脚本。
+- 详细备份、参数与证据见 [v0.5.1 发布记录](releases/v0.5.1-preproduction.md)。Notion 交接材料已生成，尚未直接写入或读回 Notion。
 
 ### v0.5.0 —— 已发布到预生产（2026-09-27 13:21:23 +0800，`RELEASE=PASS`）
 
@@ -268,7 +274,7 @@ Compose runtime 与 Health 身份一致性验证（`/api/health` 的 `metadataCo
 
 | Version | Date (+0800) | Bump | Summary | Commit / Release | Status |
 | --- | ---: | --- | --- | --- | --- |
-| `v0.5.1` | 2026-09-27 | PATCH | B-16 测试与运维脚本、自动标签只读评估与登记位、容量与异地备份、备份常驻修复；无新迁移 | `release/v0.5.1-2026-09-27`；集成基线 `c3726ef` 经 Opus 复核 | 准备中；本版本未部署；数据库重建另行授权 |
+| `v0.5.1` | 2026-09-27 23:21 | PATCH | B-16 测试运维修复；应用容量、备份常驻、数据库参数生效；异地拉取待安装；自动标签仍关闭；无新迁移 | tag `v0.5.1` → `f4d3d3595926051f3488cb1e3203c25340cbacf9`；image `cps-novel:0.5.1-f4d3d35` | 预生产已发布；数据库重建及 Owner Sitemap 验收通过；批次保持暂停 |
 | `v0.5.0` | 2026-09-27 13:21 | MINOR | 轻量通道、周期扫描、sitemap 每日兜底、B-15 防线；试读实际执行通过；IndexNow 与自动标签开关关闭 | tag `v0.5.0` → `807aad3dae88c6cf560f663e55c8662407717c80`；image `cps-novel:0.5.0-807aad3` | 预生产已发布；Owner 验收通过；批次仍暂停；生产未上线 |
 | `v0.4.5` | 2026-09-26 22:53 | PATCH | 发布后触发试读；sitemap 写闸、手动刷新与 CLI；连接池、详情页与侧栏；7a 仅设计；无迁移/grants 变更 | tag `v0.4.5` → `ff1d2dd7c8d46dba8e9267687eafbb9347b55387`；image `cps-novel:0.4.5-ff1d2dd` | 预生产已发布；实地验收通过；试读不执行；生产未上线 |
 | `v0.4.4` | 2026-09-26（12:14） | PATCH | sitemap 候选缓存与 processing 发布漏刷修复；预生产 nginx 模板同步；无迁移或 grants 变更 | annotated tag `v0.4.4` → `205220ebc6f460e85e6fbc8901f592c979c87b83`；镜像 `cps-novel:0.4.4-205220e`；`RELEASE=PASS` | 预生产已发布；两次发布实地验收已通过；生产未上线 |

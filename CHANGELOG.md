@@ -3,7 +3,31 @@
 <!-- 本文件由 `node scripts/generate-changelog.mjs --write` 生成，请勿手工编辑。 -->
 <!-- 叙述性内容写进 commit message；Owner/架构决策写 docs/adr/。 -->
 
-生成时间：2026-09-27 · 共 890 个 commit
+生成时间：2026-09-27 · 共 911 个 commit
+
+## v0.5.1
+
+- `f4d3d35` 2026-09-27 发布：准备海阅 v0.5.1 版本身份  — _codex · GPT-6_
+- `c3726ef` 2026-09-27 合并(备份常驻)：backup-timer 新鲜度健康检查、/api/health/backup 可读、发布与回滚收尾保证其常驻（已获 Opus 复核）  — _claude-code · Claude Opus 5.5 · reviewed: claude-code · Claude Opus 5.5_
+- `2de3d2c` 2026-09-27 文档(预生产)：注释去掉已不成立的"single change"字样  — _claude-code · Claude Opus 5.5 · reviewed: claude-code · Claude Opus 5.5_
+- `a22da00` 2026-09-27 修复(预生产)：backup-timer 空闲判定改为结构性判据（PID 1 的 sleep 子进程）  — _claude-code · Claude Opus 5.5 · reviewed: claude-code · Claude Opus 5.5_
+- `cebe3e2` 2026-09-27 文档(预生产)：runbook 明确 backup-timer 是常驻服务，并记录 group_add/0644 依赖  — _claude-code · Claude Sonnet 5_
+- `df2866c` 2026-09-27 修复(预生产)：release.sh 部署/回滚补上让 backup-timer 常驻的收尾步骤  — _claude-code · Claude Sonnet 5_
+- `85bbbac` 2026-09-27 修复(预生产)：web 增补 group_add 并把状态文件放宽到 0644，使 /api/health/backup 能读到真实新鲜度  — _claude-code · Claude Sonnet 5_
+- `0614b8e` 2026-09-27 合并(容量与异地备份)：按 haiyue-vps 定值数据库内存参数与容器内存上限，新增受控 postgres 重建与异地备份只读拉取（已获 Opus 复核）  — _claude-code · Claude Opus 5.5 · reviewed: claude-code · Claude Opus 5.5_
+- `d8ef45a` 2026-09-27 合并(自动标签)：纳入只读开闸评估脚本，preflight 写闸新增 auto_tag_write 登记位（已获 Opus 复核）  — _claude-code · Claude Opus 5.5 · reviewed: claude-code · Claude Opus 5.5_
+- `c85d83e` 2026-09-27 合并(B-16)：修复两个真实库运行器的 lint 与过期断言，p1-06 约束/索引比对归一化，全仓库清扫 bash 3.2 裸 [[ ]] 空断言（已获 Opus 复核）  — _claude-code · Claude Opus 5.5 · reviewed: claude-code · Claude Opus 5.5_
+- `942a90f` 2026-09-27 修复(受控postgres重建)：领推广批次暂停闸门查询结构性错误 + 补全真实演练证据  — _claude-code · Claude Sonnet 5_
+- `fedafe9` 2026-09-27 修复(B-16 第三轮)：p1-06 索引/触发器归一化扩展 + p1-12 未跑断言留痕  — _claude-code · Claude Sonnet 5_
+- `b7b591b` 2026-09-27 测试(预生产)：订正 backup-timer 健康检查测试头注释的因果表述  — _claude-code · Claude Opus 5.5 · reviewed: claude-code · Claude Opus 5.5_
+- `107e6ee` 2026-09-27 文档(预生产)：README 补充 backup-timer 停机风险提醒  — _claude-code · Claude Sonnet 5_
+- `dbf622c` 2026-09-27 修复(预生产)：backup-timer 增加 last-success.json 新鲜度健康检查  — _claude-code · Claude Sonnet 5_
+- `1317959` 2026-09-27 修复(B-16 第二轮)：p1-06 约束比对按类型归一化 + 全仓库 bash 3.2 裸 [[ ]] 清扫  — _claude-code · Claude Sonnet 5_
+- `7b5447d` 2026-09-27 修复(异地拉取)：改用 docker exec -u 0 传输，免除 VPS 侧权限变更  — _claude-code · Claude Sonnet 5_
+- `593c511` 2026-09-27 新增前台自动标签开闸质量评估脚本，preflight 写闸改登记制  — _claude-code · Claude Sonnet 5_
+- `8cbf5fd` 2026-09-27 容量参数(内存/shm/mem_limit)与异地备份拉取:受控postgres重建脚本  — _claude-code · Claude Sonnet 5_
+- `02cc3fd` 2026-09-27 修复(B-16)：清空 3 处 lint 错误，让两个真实库运行器可从头跑到尾  — _claude-code · Claude Sonnet 5_
+- `d6288b1` 2026-09-27 文档(发版)：收官海阅 v0.5.0 预生产部署与实地验收  — _codex · GPT-6_
 
 ## v0.5.0
 
