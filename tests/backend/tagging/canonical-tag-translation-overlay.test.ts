@@ -75,20 +75,21 @@ class FakeOverlayDb {
   }
 
   asClient() {
-    const self = this;
+    // 下面全是箭头函数，`this` 词法绑定到 `asClient()` 调用时的实例本身，
+    // 不需要 `const self = this` 这层别名（消掉 no-this-alias，断言不变）。
     const client = {
       canonicalTag: {
         findMany: async (args: { where: { stableId: { in: string[] } }; select: unknown }) =>
           args.where.stableId.in.flatMap((stableId) => {
-            const row = self.tags.get(stableId);
+            const row = this.tags.get(stableId);
             return row ? [{ id: row.id, stableId: row.stableId, slug: row.slug }] : [];
           }),
       },
       canonicalTagTranslation: {
-        count: async () => self.translations.size,
+        count: async () => this.translations.size,
         findMany: async (args?: { where?: { canonicalTagId?: { in: string[] } } }) => {
           const ids = args?.where?.canonicalTagId?.in;
-          return [...self.translations.values()].filter((row) =>
+          return [...this.translations.values()].filter((row) =>
             !ids || ids.includes(String(row.canonicalTagId)),
           );
         },
@@ -98,32 +99,32 @@ class FakeOverlayDb {
           update: Row;
         }) => {
           const key = `${args.where.canonicalTagId_locale.canonicalTagId}::${args.where.canonicalTagId_locale.locale}`;
-          const existing = self.translations.get(key);
+          const existing = this.translations.get(key);
           const next = existing
             ? { ...existing, ...args.update }
             : { id: key, ...args.create };
-          self.translations.set(key, next);
+          this.translations.set(key, next);
           return next;
         },
       },
       adminIdentity: {
         findFirst: async (args: { where: { id?: string; username?: string } }) =>
-          self.identities.find((row) => row.id === args.where.id || row.username === args.where.username) ?? null,
+          this.identities.find((row) => row.id === args.where.id || row.username === args.where.username) ?? null,
       },
       operationAudit: {
         findFirst: async (args: { where: { actorType: string; action: string; requestId: string } }) =>
-          self.audits.find((audit) =>
+          this.audits.find((audit) =>
             audit.actorType === args.where.actorType
             && audit.action === args.where.action
             && audit.requestId === args.where.requestId) ?? null,
         create: async (args: { data: Row }) => {
-          const row = { id: BigInt(self.audits.length + 1), ...args.data };
-          self.audits.push(row);
+          const row = { id: BigInt(this.audits.length + 1), ...args.data };
+          this.audits.push(row);
           return { id: row.id };
         },
       },
       $queryRaw: async () => {
-        self.onAdvisoryLock?.();
+        this.onAdvisoryLock?.();
         return [{ lock_result: null }];
       },
       $transaction: async <T>(callback: (tx: never) => Promise<T>) => callback(client as never),

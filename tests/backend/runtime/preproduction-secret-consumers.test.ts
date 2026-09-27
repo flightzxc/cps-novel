@@ -327,14 +327,22 @@ describe("secret consumer preflight model", () => {
       expect(call).toContain("--entrypoint /bin/sh approved-app:test -c exec 3</run/check");
     }
     expect(calls.some((call) => call.startsWith("pull "))).toBe(false);
-  });
+  }, 30000);
+  // ↑ 这条要跑 32 个（桩）docker run 子进程，独立跑只要 ~2.3s，但在全量
+  // test:backend 并发 worker + 本机常驻 Docker 容器一起抢 CPU 时，观测到
+  // 稳定超过 vitest.config.ts 里 `node` project 的全局 15s（B-16 复核时两次
+  // 复现）。断言内容一个字没动，只是把这条测试自己的超时预算按仓库里同类
+  // 子进程重活儿测试的先例（如 x8-gate-catalog.test.ts、
+  // worker-light-postgres.test.ts 用的 10000/30000）放宽到 30s。
 
   it("fails when APP can read even one PostgreSQL secret", async () => {
     const setup = await fullStubFixture(true);
     const result = spawnSync("bash", [preflightPath], { env: setup.env, encoding: "utf8" });
     expect(result.status).not.toBe(0);
     expect(result.stdout).toContain("reason=negative_access_app");
-  });
+  }, 30000);
+  // ↑ 同上面 "runs all positive..." 那条：也是 fullStubFixture() 起手的
+  // 子进程重活儿，同一次 B-16 复核里在全量 test:backend 并发下观测到过超时。
 
   it("fails closed when a traverse directory grants any access to others", async () => {
     const { fixture, env } = await fullStubFixture();
@@ -361,7 +369,8 @@ describe("secret consumer preflight model", () => {
     const result = spawnSync("bash", [preflightPath], { env, encoding: "utf8" });
     expect(`${result.stdout}${result.stderr}`).toContain("reason=nginx_traverse_other");
     expect(result.status).not.toBe(0);
-  });
+  }, 30000);
+  // ↑ 同一批 fullStubFixture() 子进程重活儿测试，超时预算放宽理由同上。
 
   it("fails closed when the maintenance directory is missing the www-data traverse ACL", async () => {
     const { fixture, env } = await fullStubFixture();
@@ -391,7 +400,8 @@ describe("secret consumer preflight model", () => {
     const result = spawnSync("bash", [preflightPath], { env, encoding: "utf8" });
     expect(result.status).not.toBe(0);
     expect(result.stdout).toContain("reason=unexpected_named_acl");
-  });
+  }, 30000);
+  // ↑ 同一批 fullStubFixture() 子进程重活儿测试，超时预算放宽理由同上。
 
   it("fails closed when the maintenance page is not readable by www-data", async () => {
     const { fixture, env } = await fullStubFixture();
@@ -423,7 +433,8 @@ describe("secret consumer preflight model", () => {
     const result = spawnSync("bash", [preflightPath], { env, encoding: "utf8" });
     expect(result.status).not.toBe(0);
     expect(result.stdout).toContain("reason=maintenance_page_unreadable");
-  });
+  }, 30000);
+  // ↑ 同一批 fullStubFixture() 子进程重活儿测试，超时预算放宽理由同上。
 
   it("locks backup-timer to the root consumer model", async () => {
     const overlay = await readFile(path.join(root, "infra/preproduction/docker-compose.yml"), "utf8");
