@@ -229,7 +229,7 @@ _pcl_trim() {
 }
 
 _pcl_is_integer_literal() {
-  [[ "$1" =~ ^-?[0-9]{1,15}$ ]]
+  [[ "$1" =~ ^-?[0-9]{1,15}$ ]] # bare-dbracket-ok: function return
 }
 
 # 把一个已通过 `_pcl_is_integer_literal` 校验的字面量转成十进制数值，

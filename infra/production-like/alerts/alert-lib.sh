@@ -64,7 +64,7 @@ alert_should_suppress() {
   [[ "${last}" =~ ^[0-9]+$ ]] || last=0
   now="$(date +%s)"
   delta=$(( now - last ))
-  [[ ${delta} -lt ${ALERT_DEBOUNCE_SECONDS} ]]
+  [[ ${delta} -lt ${ALERT_DEBOUNCE_SECONDS} ]] # bare-dbracket-ok: function return
 }
 
 # Records that an alert for this key was delivered, starting its debounce

@@ -183,7 +183,10 @@ export function PromoLinkClaimDialog({
   }, [context, invalidGroup, lifecycleEnabled, needsAccountChoice, promoClaimGranted, stage, submit]);
 
   useEffect(() => {
-    if (!context || !lifecycleEnabled || !allAccountsChosen || stage !== "form") { setEstimate(null); return; }
+    // 保持"回到未选定状态时不显示上一次的旧预估"这条行为，但不在 effect 里
+    // 同步 setState（react-hooks/set-state-in-effect）——真正的重置发生在
+    // 触发 `allAccountsChosen` 变化的唯一位置：账户 <select> 的 onChange。
+    if (!context || !lifecycleEnabled || !allAccountsChosen || stage !== "form") return;
     let cancelled = false;
     void readPromoClaimShardEstimateAction({
       selection: selectionRef.current, channelAccounts: accounts, requestId: crypto.randomUUID(),
@@ -230,6 +233,10 @@ export function PromoLinkClaimDialog({
               onChange={(event) => {
                 if (!isFrozen) {
                   setAccounts((current) => ({ ...current, [group.channelAppId]: event.target.value }));
+                  // 账户选择一变化，`allAccountsChosen` 就可能翻转——同步清空上一次
+                  // 的预估结果，避免展示过期数字（原来这一步在 effect 里同步
+                  // setState，现在挪到触发变化的事件处理里，行为逐字不变）。
+                  setEstimate(null);
                 }
               }}
               className="mt-1 w-full rounded border border-gray-300 bg-white p-2 text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-500"

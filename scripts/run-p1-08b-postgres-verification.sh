@@ -135,7 +135,9 @@ CHANNEL_CREDENTIAL_FINGERPRINT_KEY_FILE="$secret_dir/credential-fingerprint.key"
 npx vitest run --project node tests/integration/credentials/p1-08b-credential-worker.test.ts
 
 server_version="$(docker exec "$container_name" psql -U p108b_admin -d "$database_name" -Atc "SHOW server_version")"
-[[ "$server_version" == 16.14* ]]
+# 🔴 同 B-16 复核发现的 macOS bash 3.2.57 坑：裸 `[[ ]]` 独立语句判假时
+# `set -e` 不中止脚本，改成显式 `||` 短路，判断逻辑不变。
+[[ "$server_version" == 16.14* ]] || { echo "unexpected server_version: $server_version" >&2; exit 1; }
 echo "POSTGRES_VERSION=${server_version}"
 echo "MIGRATION_DEPLOY=PASS"
 echo "MIGRATION_REAPPLY=PASS"

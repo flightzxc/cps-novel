@@ -121,6 +121,35 @@ describe("PromoLinkClaimDialog · 阶段2 第4步：生命周期开关开启时�
     await waitFor(() => expect(screen.getByTestId("promo-claim-shard-estimate").textContent).toContain("预计分 2 片"));
   });
 
+  it("切换账户后，新预估落定前不显示上一次的旧结果（而是正在估算）", async () => {
+    // 回归用例：effect 里原先同步 setEstimate(null) 重置预估——为了消掉
+    // react-hooks/set-state-in-effect，这次改成在触发 allAccountsChosen
+    // 变化的唯一位置（账户 <select> 的 onChange）里做同样的重置。这条用例
+    // 专门证明"切换账户后，在新预估落定前，不会闪现上一个账户的旧数字"这条
+    // 行为没有被改掉。
+    const multi = { ...lifecycleSingle, channelGroups: [{ ...lifecycleSingle.channelGroups[0], accounts: [{ id: "a1", name: "One" }, { id: "a2", name: "Two" }] }] };
+    let resolveSecond!: (value: { ok: true; data: { totalShardCount: number; estimatedHours: number; windowMinutes: number; groups: never[] } }) => void;
+    const secondPromise = new Promise<{ ok: true; data: { totalShardCount: number; estimatedHours: number; windowMinutes: number; groups: never[] } }>((resolve) => {
+      resolveSecond = resolve;
+    });
+    actions.readPromoClaimShardEstimateAction
+      .mockResolvedValueOnce({ ok: true, data: { totalShardCount: 2, estimatedHours: 3, windowMinutes: 90, groups: [] } })
+      .mockImplementationOnce(() => secondPromise);
+
+    renderDialog(multi);
+    await screen.findByText("Channel（1 条）");
+    fireEvent.change(screen.getByDisplayValue("选择账户"), { target: { value: "a1" } });
+    await waitFor(() => expect(screen.getByTestId("promo-claim-shard-estimate").textContent).toContain("预计分 2 片"));
+
+    fireEvent.change(screen.getByDisplayValue("One"), { target: { value: "a2" } });
+    // 新请求还没落定——不能显示上一个账户（a1）的旧结果。
+    expect(screen.getByTestId("promo-claim-shard-estimate").textContent).toContain("正在估算");
+    expect(screen.getByTestId("promo-claim-shard-estimate").textContent).not.toContain("预计分 2 片");
+
+    resolveSecond({ ok: true, data: { totalShardCount: 5, estimatedHours: 7, windowMinutes: 90, groups: [] } });
+    await waitFor(() => expect(screen.getByTestId("promo-claim-shard-estimate").textContent).toContain("预计分 5 片"));
+  });
+
   it("预估请求失败时不阻断提交——只是不显示具体数字", async () => {
     actions.readPromoClaimShardEstimateAction.mockRejectedValue(new Error("network"));
     actions.enqueuePromoLinkClaimAction.mockResolvedValue({ ok: true, data: { taskId: "p5", phase: "queued" } });

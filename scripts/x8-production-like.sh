@@ -1610,7 +1610,9 @@ verify_postgres() {
   x8_compose exec -T postgres /bin/bash <<'POSTGRES_VERIFY'
 set -euo pipefail
 extension="$(psql --no-psqlrc -U postgres -d cps_novel -Atc "SELECT extname FROM pg_extension WHERE extname='pg_stat_statements'")"
-[[ "$extension" == "pg_stat_statements" ]]
+# 这条在容器里跑的是 bash 5，set -e 本来就对裸 [[ ]] 生效；为了和 B-16 复核
+# 里其它同款断言（macOS bash 3.2.57 坑）统一写法，一并改成显式 `||` 短路。
+[[ "$extension" == "pg_stat_statements" ]] || { echo "ERROR: pg_stat_statements extension missing" >&2; exit 1; }
 
 verify_role() {
   local role="$1" password_file="$2" expected="$3"
@@ -1630,7 +1632,7 @@ verify_role scheduler_app "$P1_12_SCHEDULER_APP_PASSWORD_FILE" '60|5|60'
 
 analyst_password="$(tr -d '\r\n' <"$P1_12_ANALYST_RO_PASSWORD_FILE")"
 analyst_read_only="$(PGPASSWORD="$analyst_password" psql --no-psqlrc -h 127.0.0.1 -U analyst_ro -d cps_novel -Atc 'SHOW default_transaction_read_only')"
-[[ "$analyst_read_only" == "on" ]]
+[[ "$analyst_read_only" == "on" ]] || { echo "ERROR: analyst_ro is not read-only: $analyst_read_only" >&2; exit 1; }
 echo "X8_POSTGRES_RUNTIME=PASS"
 POSTGRES_VERIFY
 }
@@ -1659,13 +1661,15 @@ verify_x8() {
 
   redirect_status="$(curl --silent --output /dev/null --write-out '%{http_code}' \
     --resolve novel.test:80:127.0.0.1 http://novel.test/api/health)"
-  [[ "$redirect_status" == "308" ]]
+  # 🔴 同 B-16 复核发现的 macOS bash 3.2.57 坑：裸 `[[ ]]` 独立语句判假时
+  # `set -e` 不中止脚本，改成显式 `||` 短路，判断逻辑不变。
+  [[ "$redirect_status" == "308" ]] || { echo "ERROR: unexpected redirect status: $redirect_status" >&2; exit 1; }
   robots="$(curl --silent --show-error --fail --cacert "$ca_root" --resolve novel.test:443:127.0.0.1 \
     https://novel.test/robots.txt)"
   grep -F 'https://novel.test/sitemap.xml' <<<"$robots" >/dev/null
   sitemap_status="$(curl --silent --show-error --cacert "$ca_root" --resolve novel.test:443:127.0.0.1 \
     --output /dev/null --write-out '%{http_code}' https://novel.test/sitemap.xml)"
-  [[ "$sitemap_status" == "503" ]]
+  [[ "$sitemap_status" == "503" ]] || { echo "ERROR: unexpected sitemap status: $sitemap_status" >&2; exit 1; }
 
   openssl s_client -connect 127.0.0.1:443 -servername novel.test </dev/null 2>/dev/null \
     | openssl x509 -noout -ext subjectAltName | grep -F 'DNS:novel.test' >/dev/null

@@ -36,9 +36,12 @@ DOCKER_BUILDKIT=0 docker build --pull=false --platform linux/amd64 \
 
 bash "$project_root/scripts/p1-12-compose-up.sh"
 
+# 🔴 同 B-16 复核发现的 macOS bash 3.2.57 坑：裸 `[[ ]]` 独立语句判假时
+# `set -e` 不中止脚本（`[ ]`/`test`/`false` 都正常，只有 `[[ ]]` 不会）。
+# 下面几条断言原来全是裸 `[[ ]]`，改成显式 `||` 短路，判断逻辑不变。
 expected_services=$'postgres\nweb\nworker\nscheduler'
 actual_services="$("${compose[@]}" config --services)"
-[[ "$actual_services" == "$expected_services" ]]
+[[ "$actual_services" == "$expected_services" ]] || { echo "compose services mismatch: $actual_services" >&2; exit 1; }
 
 for service in postgres web worker scheduler; do
   state="$("${compose[@]}" ps -q "$service" | xargs docker inspect --format '{{.State.Status}}')"
@@ -46,20 +49,20 @@ for service in postgres web worker scheduler; do
 done
 
 postgres_health="$("${compose[@]}" ps -q postgres | xargs docker inspect --format '{{.State.Health.Status}}')"
-[[ "$postgres_health" == "healthy" ]]
+[[ "$postgres_health" == "healthy" ]] || { echo "postgres health check failed: $postgres_health" >&2; exit 1; }
 echo "POSTGRES_HEALTH=PASS"
 
 image_user="$(docker image inspect "$CPS_NOVEL_APP_IMAGE" --format '{{.Config.User}}')"
-[[ "$image_user" == "nextjs" ]]
+[[ "$image_user" == "nextjs" ]] || { echo "image user mismatch: $image_user" >&2; exit 1; }
 oci_identity="$(docker image inspect "$CPS_NOVEL_APP_IMAGE" --format '{{index .Config.Labels "org.opencontainers.image.version"}}|{{index .Config.Labels "org.opencontainers.image.revision"}}|{{index .Config.Labels "org.opencontainers.image.created"}}')"
-[[ "$oci_identity" == "$APP_VERSION|$GIT_COMMIT|$BUILD_DATE" ]]
+[[ "$oci_identity" == "$APP_VERSION|$GIT_COMMIT|$BUILD_DATE" ]] || { echo "OCI image identity mismatch: $oci_identity" >&2; exit 1; }
 
 metadata="$(docker run --rm --pull never --network none --entrypoint node "$CPS_NOVEL_APP_IMAGE" -e '
   const fs = require("node:fs");
   const metadata = JSON.parse(fs.readFileSync("/app/.build-metadata.json", "utf8"));
   process.stdout.write([metadata.version, metadata.commit, metadata.builtAt].join("|"));
 ')"
-[[ "$metadata" == "$APP_VERSION|$GIT_COMMIT|$BUILD_DATE" ]]
+[[ "$metadata" == "$APP_VERSION|$GIT_COMMIT|$BUILD_DATE" ]] || { echo "build metadata mismatch: $metadata" >&2; exit 1; }
 echo "IMAGE_METADATA=PASS"
 
 "${compose[@]}" exec -T web node -e '
@@ -122,7 +125,11 @@ done
 echo "SECRET_LOG_SCAN=PASS"
 
 web_health="$("${compose[@]}" ps -q web | xargs docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}')"
-[[ "$web_health" == "unhealthy" || "$web_health" == "starting" ]]
+# 这条也是裸 `[[ ]]`，同上一并修——判断逻辑（含原有的 unhealthy/starting
+# 具体取值）一个字不动，只补 `||` 短路让它能真正生效。
+# B-16 起开始真正生效，修复后尚未运行；下次运行如果在这里失败，先查原意，
+# 不得直接放宽。
+[[ "$web_health" == "unhealthy" || "$web_health" == "starting" ]] || { echo "web health unexpected: $web_health" >&2; exit 1; }
 
 echo "DOCKER_BUILD=PASS"
 echo "COMPOSE_SERVICES=postgres,web,worker,scheduler"

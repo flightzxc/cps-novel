@@ -6,9 +6,12 @@ umask 077
 : "${PREPROD_BACKUP_INTERVAL_SECONDS:=86400}"
 : "${PREPROD_LOGICAL_RETENTION_DAYS:=14}"
 : "${PREPROD_BASE_BACKUP_MIN_AGE_SECONDS:=604800}"
-[[ "$PREPROD_BACKUP_INTERVAL_SECONDS" =~ ^[1-9][0-9]*$ ]]
-[[ "$PREPROD_LOGICAL_RETENTION_DAYS" =~ ^[1-9][0-9]*$ ]]
-[[ "$PREPROD_BASE_BACKUP_MIN_AGE_SECONDS" =~ ^[1-9][0-9]*$ ]]
+# 这三条在容器里跑的是 bash 5，set -e 本来就对裸 [[ ]] 生效；为了和其它同款
+# 断言（B-16 复核发现的 macOS bash 3.2.57 坑：裸 `[[ ]]` 独立语句判假时
+# set -e 不中止脚本）统一写法，一并改成显式 `||` 短路，判断逻辑不变。
+[[ "$PREPROD_BACKUP_INTERVAL_SECONDS" =~ ^[1-9][0-9]*$ ]] || { echo "PREPROD_BACKUP_INTERVAL_SECONDS must be a positive integer: $PREPROD_BACKUP_INTERVAL_SECONDS" >&2; exit 1; }
+[[ "$PREPROD_LOGICAL_RETENTION_DAYS" =~ ^[1-9][0-9]*$ ]] || { echo "PREPROD_LOGICAL_RETENTION_DAYS must be a positive integer: $PREPROD_LOGICAL_RETENTION_DAYS" >&2; exit 1; }
+[[ "$PREPROD_BASE_BACKUP_MIN_AGE_SECONDS" =~ ^[1-9][0-9]*$ ]] || { echo "PREPROD_BASE_BACKUP_MIN_AGE_SECONDS must be a positive integer: $PREPROD_BASE_BACKUP_MIN_AGE_SECONDS" >&2; exit 1; }
 
 logical_dir=/var/lib/cps-novel/backups/logical
 base_dir=/var/lib/cps-novel/backups/base

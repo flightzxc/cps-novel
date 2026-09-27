@@ -653,7 +653,7 @@ export async function releasePromoClaimShardsForAccount(
     FOR UPDATE
   `);
 
-  let admissionBlocked = activeShardRows.length > 0;
+  const admissionBlocked = activeShardRows.length > 0;
   for (const raw of activeShardRows) {
     const shard = toShardRow(raw);
     const counts = await shardItemCounts(tx, shard.id);

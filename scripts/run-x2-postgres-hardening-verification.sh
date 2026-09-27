@@ -76,9 +76,13 @@ role_settings() {
     | tr -d '\r[:space:]'
 }
 
-[[ "$(role_settings web_app)" == "30|5|60" ]]
-[[ "$(role_settings worker_app)" == "300|15|300" ]]
-[[ "$(role_settings scheduler_app)" == "60|5|60" ]]
+# 🔴 macOS 系统 bash 冻结在 3.2.57，裸 `[[ ... ]]` 独立语句判假时 `set -e`
+# 不会中止脚本（`[ ]`/`test`/`false` 都正常，只有 `[[ ]]` 不会——B-16 复核
+# 已用最小复现验证）。下面几条 role/cluster/extension 断言原来全是裸
+# `[[ ]]`，改成 `[[ ]] || { ...; exit 1; }`，判断逻辑不变。
+[[ "$(role_settings web_app)" == "30|5|60" ]] || { echo "web_app role timeout settings mismatch: $(role_settings web_app)" >&2; exit 1; }
+[[ "$(role_settings worker_app)" == "300|15|300" ]] || { echo "worker_app role timeout settings mismatch: $(role_settings worker_app)" >&2; exit 1; }
+[[ "$(role_settings scheduler_app)" == "60|5|60" ]] || { echo "scheduler_app role timeout settings mismatch: $(role_settings scheduler_app)" >&2; exit 1; }
 
 cluster_settings="$(docker exec "$container_name" \
   psql --no-psqlrc -U x2_admin -d postgres --tuples-only --no-align \
@@ -89,7 +93,7 @@ cluster_settings="$(docker exec "$container_name" \
     current_setting('compute_query_id') || '|' ||
     current_setting('pg_stat_statements.track')" \
   | tr -d '\r[:space:]')"
-[[ "$cluster_settings" == "100|500ms|pg_stat_statements|auto|all" ]]
+[[ "$cluster_settings" == "100|500ms|pg_stat_statements|auto|all" ]] || { echo "cluster settings mismatch: $cluster_settings" >&2; exit 1; }
 
 docker exec "$container_name" psql --no-psqlrc -U x2_admin -d postgres \
   --command="CREATE EXTENSION IF NOT EXISTS pg_stat_statements" >/dev/null
@@ -98,7 +102,7 @@ extension_probe="$(docker exec "$container_name" \
   --command="SELECT (SELECT count(*) FROM pg_stat_statements) >= 0
              AND EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_stat_statements')" \
   | tr -d '\r[:space:]')"
-[[ "$extension_probe" == "t" ]]
+[[ "$extension_probe" == "t" ]] || { echo "pg_stat_statements extension probe failed: $extension_probe" >&2; exit 1; }
 
 echo "X2_ROLE_TIMEOUTS=PASS"
 echo "X2_POSTGRESQL_CONFIG=PASS"
