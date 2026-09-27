@@ -396,6 +396,17 @@ describe("Phase 2B preproduction deployment contract", () => {
       "preprod_compose_app_up worker",
       "preprod_compose_app_up scheduler",
       "preprod_wait_for_service_health worker worker-light scheduler",
+      // 2026-09-27 fix: backup-timer sat Exited for 5 days (2026-09-22 ->
+      // 2026-09-27) because a 2026-09-21 rollout plan treated it as a
+      // one-shot tool and the "postdeploy" step that was supposed to make it
+      // resident again never existed in this file. preprod_ensure_backup_
+      // timer_running (lib.sh) is that missing step -- it must run after
+      // worker/scheduler are healthy (so it recreates onto a release that is
+      // actually up) and BEFORE maintenance_off (fail-closed: a backup-timer
+      // that isn't running must behave exactly like any other failed service
+      // and leave maintenance on, not slip through to a live site with no
+      // resident backups).
+      "preprod_ensure_backup_timer_running",
       "PREPROD_RELEASE_VERIFIED=YES maintenance_off",
       // MAJOR-1 fix: the full verify-release.sh call above always runs
       // while maintenance is still on, so its anonymous-surface 401
@@ -435,6 +446,10 @@ describe("Phase 2B preproduction deployment contract", () => {
     // cannot pass vacuously by silently taking the 503 branch if the
     // maintenance marker were somehow still present.
     expect(release).toContain('verify-release.sh" --anonymous-only --expect-live');
+    // 2026-09-27 fix: a not-running backup-timer must fail the release with
+    // its own distinct, greppable reason -- not silently fall through to
+    // maintenance_off with no backups running.
+    expect(release).toContain('preprod_ensure_backup_timer_running || { echo "RELEASE=FAILED reason=backup_timer_not_running"; exit 65; }');
   });
 
   it("rollback() also re-verifies anonymous surfaces after maintenance_off, before ROLLBACK=PASS", async () => {
@@ -456,6 +471,11 @@ describe("Phase 2B preproduction deployment contract", () => {
       "preprod_compose_app_up worker",
       "preprod_compose_app_up scheduler",
       "preprod_wait_for_service_health worker worker-light scheduler",
+      // 2026-09-27 fix, same reasoning as deploy() above: rollback() must
+      // also recreate backup-timer onto (the rolled-back) release's own
+      // scripts before maintenance_off, and fail closed if it doesn't come
+      // back up.
+      "preprod_ensure_backup_timer_running",
       "PREPROD_RELEASE_VERIFIED=YES maintenance_off",
       // MAJOR-1 fix, same reasoning as deploy() above.
       'verify-release.sh\" --anonymous-only',
@@ -474,6 +494,8 @@ describe("Phase 2B preproduction deployment contract", () => {
     expect(release.indexOf('verify-release.sh" --anonymous-only --expect-live', rollbackStart)).toBeGreaterThan(
       rollbackStart,
     );
+    // 2026-09-27 fix: same distinct-reason requirement as deploy() above.
+    expect(release).toContain('preprod_ensure_backup_timer_running || { echo "ROLLBACK=FAILED reason=backup_timer_not_running"; exit 65; }');
   });
 
   it("Defect B fix: the EXIT trap in deploy()/rollback() is fail-closed and never reads a bare, function-scoped $failed", async () => {
@@ -669,6 +691,185 @@ describe("Phase 2B preproduction deployment contract", () => {
       expect(r.status).not.toBe(0);
       expect(r.stderr).toContain("HEALTH_WAIT=FAIL reason=container_exited service=scheduler status=exited health=unhealthy");
     }, 15_000);
+  });
+
+  describe("2026-09-27 fix: preprod_ensure_backup_timer_running (lib.sh)", () => {
+    // Isolated behavioral rig, same shape as "Defect A guard" above: sources
+    // the REAL lib.sh, stubs the `docker` binary on PATH, and stubs
+    // `preprod_compose` as a shell function (so this exercises the function's
+    // actual polling/recreate logic, not a hand-copied duplicate of it). The
+    // ordering assertions above already pin WHERE release.sh calls this
+    // function (after worker/scheduler health, before maintenance_off) and
+    // its exact failure-reason text; this rig instead proves what the
+    // function itself DOES: always recreate with --no-deps, wait out a busy
+    // backup loop before recreating, time out if it never goes idle, and
+    // fail distinctly when the container isn't running afterward.
+    const LIB = path.join(root, "scripts/preproduction/lib.sh");
+
+    async function rigBackupTimer(composeFnBody: string, dockerScript: string, env: Record<string, string> = {}) {
+      const dir = await mkdtemp(path.join(tmpdir(), "preprod-backup-timer-"));
+      const bin = path.join(dir, "bin");
+      await mkdir(bin, { recursive: true });
+      await writeFile(path.join(bin, "docker"), dockerScript, { mode: 0o700 });
+      const composeLog = path.join(dir, "compose.log");
+      const harness = [
+        "#!/usr/bin/env bash",
+        "set -euo pipefail",
+        `source '${LIB}'`,
+        `COMPOSE_LOG='${composeLog}'`,
+        "preprod_compose() {",
+        '  echo "$*" >> "$COMPOSE_LOG"',
+        composeFnBody,
+        "}",
+        "preprod_ensure_backup_timer_running",
+      ].join("\n");
+      const runScript = path.join(dir, "run.sh");
+      await writeFile(runScript, harness, { mode: 0o700 });
+      const result = spawnSync("bash", [runScript], {
+        env: { ...process.env, PATH: `${bin}:${process.env.PATH ?? ""}`, ...env },
+        encoding: "utf8",
+      });
+      let composeLogContent = "";
+      try {
+        composeLogContent = await readFile(composeLog, "utf8");
+      } catch {
+        // Never written -- fine, some scenarios fail before any compose call.
+      }
+      return { result, composeLogContent };
+    }
+
+    // `fmt` distinguishes the two distinct `docker inspect` call shapes this
+    // function makes: the initial "is a pre-existing container running"
+    // probe (`{{.State.Running}}` alone) vs. the post-recreate assertion
+    // (`{{.State.Status}}|{{.State.Restarting}}|...working_dir`, identified
+    // here by the presence of "Restarting").
+    const dockerFake = (status: string, restarting: string, workingDir: string) => [
+      "#!/usr/bin/env bash",
+      'if [[ "$1" == "inspect" ]]; then',
+      '  fmt="$4"',
+      '  case "$fmt" in',
+      `    *Restarting*) echo "${status}|${restarting}|${workingDir}" ;;`,
+      '    *) echo "true" ;;',
+      "  esac",
+      "  exit 0",
+      "fi",
+      "exit 1",
+    ].join("\n");
+
+    // No pre-existing container (first-ever release): `ps -q backup-timer`
+    // must return empty on the FIRST call (nothing to wait out) and a real
+    // id on the SECOND call (after `up` recreates it) -- a counter file
+    // distinguishes the two, same technique as the "polls until healthy"
+    // test above.
+    function freshContainerComposeBody(psCounter: string): string {
+      return [
+        '  case "$1" in',
+        "    ps)",
+        `      n=$(( $(cat '${psCounter}' 2>/dev/null || echo 0) + 1 ))`,
+        `      echo "$n" > '${psCounter}'`,
+        '      if (( n == 1 )); then echo ""; else echo "deadbeef0001cid"; fi',
+        "      ;;",
+        "    up) return 0 ;;",
+        '    exec) echo "" ;;',
+        "  esac",
+      ].join("\n");
+    }
+
+    it("recreates with --no-deps and reports BACKUP_TIMER=RUNNING when the container comes back healthy", async () => {
+      const dir = await mkdtemp(path.join(tmpdir(), "preprod-backup-timer-fresh-"));
+      const psCounter = path.join(dir, "ps-count");
+      const { result, composeLogContent } = await rigBackupTimer(
+        freshContainerComposeBody(psCounter),
+        dockerFake("running", "false", root),
+      );
+      expect(result.status, both(result)).toBe(0);
+      expect(result.stdout).toContain("BACKUP_TIMER=RUNNING container=deadbeef0001");
+      // 2026-09-22 real incident: `up -d backup-timer` WITHOUT --no-deps
+      // recreated postgres via depends_on. This is the load-bearing
+      // regression guard for that exact incident, at the exact call site
+      // that generates the flag.
+      expect(composeLogContent).toContain("up -d --no-deps backup-timer");
+    }, 15_000);
+
+    it("fails with a distinct reason when the recreated container is not running", async () => {
+      const dir = await mkdtemp(path.join(tmpdir(), "preprod-backup-timer-notrunning-"));
+      const psCounter = path.join(dir, "ps-count");
+      const { result } = await rigBackupTimer(
+        freshContainerComposeBody(psCounter),
+        dockerFake("exited", "false", root),
+      );
+      expect(result.status).not.toBe(0);
+      expect(result.stderr).toContain("BACKUP_TIMER=FAILED reason=not_running");
+    }, 15_000);
+
+    it("fails with a distinct reason when the recreated container is stuck restarting", async () => {
+      const dir = await mkdtemp(path.join(tmpdir(), "preprod-backup-timer-restarting-"));
+      const psCounter = path.join(dir, "ps-count");
+      const { result } = await rigBackupTimer(
+        freshContainerComposeBody(psCounter),
+        dockerFake("running", "true", root),
+      );
+      expect(result.status).not.toBe(0);
+      expect(result.stderr).toContain("BACKUP_TIMER=FAILED reason=restarting");
+    }, 15_000);
+
+    it("fails with a distinct reason when the recreated container's working_dir does not match this release checkout", async () => {
+      const dir = await mkdtemp(path.join(tmpdir(), "preprod-backup-timer-wd-"));
+      const psCounter = path.join(dir, "ps-count");
+      const { result } = await rigBackupTimer(
+        freshContainerComposeBody(psCounter),
+        dockerFake("running", "false", "/some/other/checkout"),
+      );
+      expect(result.status).not.toBe(0);
+      expect(result.stderr).toContain("BACKUP_TIMER=FAILED reason=working_dir_mismatch");
+    }, 15_000);
+
+    it("waits out a busy backup loop (pg_dump in progress) before recreating, rather than killing it mid-dump", async () => {
+      const dir = await mkdtemp(path.join(tmpdir(), "preprod-backup-timer-busy-"));
+      const execCounter = path.join(dir, "exec-count");
+      const composeFnBody = [
+        '  case "$1" in',
+        '    ps) echo "existingcid0001" ;;',
+        "    exec)",
+        `      n=$(( $(cat '${execCounter}' 2>/dev/null || echo 0) + 1 ))`,
+        `      echo "$n" > '${execCounter}'`,
+        // Busy on the first poll only -- proves this waited at least one
+        // 5s cycle rather than recreating immediately over a live pg_dump.
+        '      if (( n == 1 )); then echo "pg_dump"; else echo ""; fi',
+        "      ;;",
+        "    up) return 0 ;;",
+        "  esac",
+      ].join("\n");
+      const { result, composeLogContent } = await rigBackupTimer(
+        composeFnBody,
+        dockerFake("running", "false", root),
+        { PREPROD_BACKUP_TIMER_IDLE_TIMEOUT_SECONDS: "60" },
+      );
+      expect(result.status, both(result)).toBe(0);
+      expect(result.stdout).toContain("BACKUP_TIMER=RUNNING");
+      const execCalls = composeLogContent.split("\n").filter((l) => l.startsWith("exec ")).length;
+      expect(execCalls, "expected at least 2 busy-poll iterations before recreating").toBeGreaterThanOrEqual(2);
+    }, 20_000);
+
+    it("fails with reason=backup_timer_busy when the loop never goes idle within the bounded timeout", async () => {
+      const dir = await mkdtemp(path.join(tmpdir(), "preprod-backup-timer-busy-timeout-"));
+      const composeFnBody = [
+        '  case "$1" in',
+        '    ps) echo "existingcid0002" ;;',
+        '    exec) echo "pg_dump" ;;',
+        "    up) return 0 ;;",
+        "  esac",
+      ].join("\n");
+      const { result } = await rigBackupTimer(
+        composeFnBody,
+        dockerFake("running", "false", root),
+        // Small on purpose: proves the timeout is real and bounded, without
+        // this test waiting out the 900s production default.
+        { PREPROD_BACKUP_TIMER_IDLE_TIMEOUT_SECONDS: "3" },
+      );
+      expect(result.status).not.toBe(0);
+      expect(result.stderr).toContain("BACKUP_TIMER=FAILED reason=backup_timer_busy");
+    }, 20_000);
   });
 
   it("N3: --expect-live makes the post-maintenance anonymous re-check self-checking, not vacuously passable", async () => {
