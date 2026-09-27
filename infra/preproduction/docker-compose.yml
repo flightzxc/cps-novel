@@ -95,6 +95,40 @@ services:
       options:
         max-size: 10m
         max-file: "3"
+    # Freshness healthcheck (2026-09-27, Owner-approved, single change):
+    # backup-loop.sh writes last-success.json ONLY at the very end of a fully
+    # successful run_once() (set -euo pipefail means a failed run never
+    # touches it). Healthy iff that file exists and its mtime is under 26h
+    # (1560min) old -- 24h loop interval + 2h grace, kept equal to
+    # `DEFAULT_STALE_THRESHOLD_HOURS` in src/server/health/backup-status.ts
+    # (see tests/backend/runtime/preproduction-backup-timer-healthcheck.test.ts,
+    # which derives both numbers from those two sources and fails if they
+    # drift). No `$` in the test string -- Compose would try to interpolate it.
+    #
+    # What this DETECTS: the loop hung, or every run has failed, for >26h
+    # while the container keeps running -- surfaces as `unhealthy` in
+    # `docker compose ps` / `docker inspect .State.Health.Status`.
+    #
+    # 🔴 What this does NOT detect: a STOPPED/Exited container has no health
+    # status at all -- this was the actual 2026-09-22 -> 2026-09-27 silent
+    # failure (5 days). An ops step used backup-timer as a one-shot backup
+    # then ran `stop backup-timer`, and nothing restarted it. A healthcheck
+    # cannot substitute for checking the container is running. For an
+    # ad-hoc backup, exec into the running container instead of a
+    # start-then-stop cycle:
+    #   preprod_compose exec -T backup-timer /bin/bash \
+    #     /app/scripts/db/backup-logical.sh --output <file>
+    healthcheck:
+      test: ["CMD-SHELL", "find /var/lib/cps-novel/backups/last-success.json -mmin -1560 | grep -q ."]
+      interval: 5m
+      timeout: 10s
+      retries: 3
+      # A stale marker left over from before a restart must not flip the
+      # container unhealthy while the first run_once() is still in
+      # progress -- it starts immediately at container start, and on some
+      # cycles includes a weekly pg_basebackup + restore verification that
+      # can take many minutes as the DB grows.
+      start_period: 1h
 
 networks:
   runtime:
