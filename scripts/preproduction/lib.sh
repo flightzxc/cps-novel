@@ -771,11 +771,13 @@ JS
 # `run_once()` 的旧容器是先 SIGTERM 后（10 秒后）SIGKILL，而
 # `scripts/db/backup-logical.sh` 的 `pg_dump --file=...` 不是原子写
 # （`.sha256`/`.metadata` 是事后才写的旁车文件）——半途被杀会留下一个没有
-# 旁车文件的残缺 `.dump`。轮询 backup-timer 容器**自己**的进程表（`pg_dump`/
-# `pg_basebackup`/`pg_verifybackup`/`tar`/`pg_archivecleanup` 都是
-# `backup-logical.sh`/`backup-physical-base.sh`/`verify-physical-base.sh`/
-# `wal-retention.sh` 在这个容器里就地起的子进程，不是在 postgres 容器里），
-# 一个都不在才算空闲。超时（默认 15 分钟，可用
+# 旁车文件的残缺 `.dump`。空闲的判据是结构性的：`backup-loop.sh` 只有在
+# `run_once()` 整轮结束后才执行 `sleep … & wait`，所以"PID 1 的子进程里有
+# sleep"⇔ 空闲（2026-09-27 目标机实测空闲时 `ps -eo ppid=,comm=` 为
+# `0 bash` / `1 sleep`）。🔴 不要改回"按进程名黑名单判忙"：run_once 的步骤间
+# 还有 `pg_restore --list`、`sha256sum` 等不在任何名单里的命令（恰在旁车文件
+# 写出之前），而 `ps comm` 截断到 15 字符，`pg_archivecleanup` 永远匹配不上。
+# 超时（默认 15 分钟，可用
 # `PREPROD_BACKUP_TIMER_IDLE_TIMEOUT_SECONDS` 覆盖——周备份窗口下的物理基准
 # 备份+校验可能跑得比日常逻辑备份久）非阻塞地失败，明说
 # `reason=backup_timer_busy`，绝不硬闯。容器压根不存在（首次真实部署）或存在
@@ -803,18 +805,19 @@ preprod_ensure_backup_timer_running() {
   if [[ -n "$cid" ]]; then
     running="$(docker inspect "$cid" --format '{{.State.Running}}' 2>/dev/null || echo false)"
     if [[ "$running" == "true" ]]; then
-      local psout busy proc
+      local psout
       while true; do
-        psout="$(preprod_compose exec -T backup-timer ps -eo comm= </dev/null 2>/dev/null || true)"
-        busy=0
-        for proc in pg_dump pg_basebackup pg_verifybackup tar pg_archivecleanup; do
-          if grep -qx "$proc" <<<"$psout"; then
-            busy=1
+        if psout="$(preprod_compose exec -T backup-timer ps -eo ppid=,comm= </dev/null 2>/dev/null)"; then
+          if awk '$1 == 1 && $2 == "sleep" { idle = 1 } END { exit idle ? 0 : 1 }' <<<"$psout"; then
             break
           fi
-        done
-        if (( busy == 0 )); then
-          break
+        else
+          # exec 失败：容器在两次检查之间停掉了就直接 recreate；还在跑却 exec
+          # 不进去，按忙处理，交给下面的超时兜底。
+          running="$(docker inspect "$cid" --format '{{.State.Running}}' 2>/dev/null || echo false)"
+          if [[ "$running" != "true" ]]; then
+            break
+          fi
         fi
         if (( elapsed >= idle_timeout )); then
           echo "BACKUP_TIMER=FAILED reason=backup_timer_busy" >&2

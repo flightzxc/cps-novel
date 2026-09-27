@@ -824,7 +824,18 @@ describe("Phase 2B preproduction deployment contract", () => {
       expect(result.stderr).toContain("BACKUP_TIMER=FAILED reason=working_dir_mismatch");
     }, 15_000);
 
-    it("waits out a busy backup loop (pg_dump in progress) before recreating, rather than killing it mid-dump", async () => {
+    // `ps -eo ppid=,comm=` inside backup-timer, as measured on the target on
+    // 2026-09-27: idle is exactly "PID 1 (backup-loop.sh) has a `sleep`
+    // child" -- backup-loop.sh only reaches `sleep … & wait` after run_once()
+    // finishes. BUSY deliberately shows a step that is on no process-name
+    // list (sha256sum, which backup-logical.sh runs right before writing the
+    // .sha256/.metadata sidecars) plus a `sleep` that is NOT PID 1's child:
+    // the earlier name-blacklist check would have called this idle and
+    // SIGKILLed the loop between pg_dump and its sidecars.
+    const PS_IDLE = `printf '%s\\n' '      0 bash' '      1 sleep' '      0 ps'`;
+    const PS_BUSY = `printf '%s\\n' '      0 bash' '      1 bash' '     57 sha256sum' '     58 sleep' '      0 ps'`;
+
+    it("waits out a busy backup loop (a run_once step in progress) before recreating, rather than killing it mid-run", async () => {
       const dir = await mkdtemp(path.join(tmpdir(), "preprod-backup-timer-busy-"));
       const execCounter = path.join(dir, "exec-count");
       const composeFnBody = [
@@ -834,8 +845,8 @@ describe("Phase 2B preproduction deployment contract", () => {
         `      n=$(( $(cat '${execCounter}' 2>/dev/null || echo 0) + 1 ))`,
         `      echo "$n" > '${execCounter}'`,
         // Busy on the first poll only -- proves this waited at least one
-        // 5s cycle rather than recreating immediately over a live pg_dump.
-        '      if (( n == 1 )); then echo "pg_dump"; else echo ""; fi',
+        // 5s cycle rather than recreating immediately over a live run.
+        `      if (( n == 1 )); then ${PS_BUSY}; else ${PS_IDLE}; fi`,
         "      ;;",
         "    up) return 0 ;;",
         "  esac",
@@ -856,11 +867,11 @@ describe("Phase 2B preproduction deployment contract", () => {
       const composeFnBody = [
         '  case "$1" in',
         '    ps) echo "existingcid0002" ;;',
-        '    exec) echo "pg_dump" ;;',
+        `    exec) ${PS_BUSY} ;;`,
         "    up) return 0 ;;",
         "  esac",
       ].join("\n");
-      const { result } = await rigBackupTimer(
+      const { result, composeLogContent } = await rigBackupTimer(
         composeFnBody,
         dockerFake("running", "false", root),
         // Small on purpose: proves the timeout is real and bounded, without
@@ -869,7 +880,42 @@ describe("Phase 2B preproduction deployment contract", () => {
       );
       expect(result.status).not.toBe(0);
       expect(result.stderr).toContain("BACKUP_TIMER=FAILED reason=backup_timer_busy");
+      expect(composeLogContent, "must never recreate over a busy loop").not.toContain("up -d");
     }, 20_000);
+
+    it("recreates without waiting when exec fails because the container stopped between checks", async () => {
+      const dir = await mkdtemp(path.join(tmpdir(), "preprod-backup-timer-gone-"));
+      const inspectCounter = path.join(dir, "inspect-count");
+      const composeFnBody = [
+        '  case "$1" in',
+        '    ps) echo "existingcid0003" ;;',
+        "    exec) return 1 ;;",
+        "    up) return 0 ;;",
+        "  esac",
+      ].join("\n");
+      // First {{.State.Running}} probe: running (so the idle wait starts);
+      // the re-probe after the failed exec: not running.
+      const dockerScript = [
+        "#!/usr/bin/env bash",
+        'if [[ "$1" == "inspect" ]]; then',
+        '  case "$4" in',
+        `    *Restarting*) echo "running|false|${root}" ;;`,
+        "    *)",
+        `      n=$(( $(cat '${inspectCounter}' 2>/dev/null || echo 0) + 1 ))`,
+        `      echo "$n" > '${inspectCounter}'`,
+        '      if (( n == 1 )); then echo "true"; else echo "false"; fi',
+        "      ;;",
+        "  esac",
+        "  exit 0",
+        "fi",
+        "exit 1",
+      ].join("\n");
+      const { result, composeLogContent } = await rigBackupTimer(composeFnBody, dockerScript);
+      expect(result.status, both(result)).toBe(0);
+      expect(composeLogContent).toContain("up -d --no-deps backup-timer");
+      const execCalls = composeLogContent.split("\n").filter((l) => l.startsWith("exec ")).length;
+      expect(execCalls).toBe(1);
+    }, 15_000);
   });
 
   it("N3: --expect-live makes the post-maintenance anonymous re-check self-checking, not vacuously passable", async () => {

@@ -504,9 +504,10 @@ The fix (2026-09-27, Owner-approved): `scripts/preproduction/release.sh`'s
 — after worker/scheduler are confirmed healthy, before traffic comes back.
 That call:
 
-- waits for any already-running backup loop to go idle (no `pg_dump` /
-  `pg_basebackup` / `pg_verifybackup` / `tar` / `pg_archivecleanup` in the
-  container's own process table) before recreating it, bounded by
+- waits for any already-running backup loop to go idle — i.e. PID 1
+  (`backup-loop.sh`) has its `sleep` child, which only exists after
+  `run_once()` has fully finished (`ps -eo ppid=,comm=` shows `1 sleep`) —
+  before recreating it, bounded by
   `PREPROD_BACKUP_TIMER_IDLE_TIMEOUT_SECONDS` (default 900s) — recreating over
   a live `pg_dump` would `SIGKILL` it mid-write, and `scripts/db/
   backup-logical.sh`'s `pg_dump --file=...` is **not atomic** (the `.sha256`/
