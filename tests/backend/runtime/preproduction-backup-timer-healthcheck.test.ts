@@ -8,9 +8,11 @@ import { DEFAULT_STALE_THRESHOLD_HOURS } from "@/server/health/backup-status";
 
 /**
  * 2026-09-27 (Owner-approved, single infra change): `backup-timer` (infra/
- * preproduction/docker-compose.yml) ran `backup-loop.sh` silently dead for 5
- * days (2026-09-22 -> 2026-09-27) before anything surfaced it, because the
- * service had no healthcheck at all. `backup-loop.sh` writes a success
+ * preproduction/docker-compose.yml) sat Exited for 5 days (2026-09-22 ->
+ * 2026-09-27) after an ops step stopped it post one-off backup. This
+ * healthcheck would NOT have caught that (a stopped container has no health
+ * status); it covers the other silent mode -- the container running while
+ * the loop hangs or every run fails. `backup-loop.sh` writes a success
  * marker (`status_file=`) atomically, ONLY at the end of a fully successful
  * `run_once()` -- `set -euo pipefail` means a failed run never touches it.
  * The added healthcheck is healthy iff that marker file exists and is
