@@ -796,11 +796,273 @@ minutes on the real host, not 15 seconds flat, and treat the script's own
 printed `RECREATE_POSTGRES_DOWNTIME_SECONDS` as the authoritative number for
 that specific run rather than this estimate.
 
+**Fingerprint-timing bug found and fixed after the round above (Opus review
+round 2, 2026-09-27)**: the round-1 rehearsal above ran against an idle
+stack with no scheduler — it could not have surfaced a bug that only shows
+up under live writes. The row-count fingerprint was originally taken
+immediately after the confirmation gate, before any service was stopped;
+on a host with real traffic (scheduler writing `schedule_run` every tick,
+worker writing task items, web writing `operation_audit`), "before" and
+"after" would almost never match, and the script would report a false
+`fingerprint_mismatch` and abort with the database already recreated and
+every application service stopped — i.e. leave the site down over a false
+alarm. Fixed by moving the fingerprint capture to after every application
+service is stopped (see this script's own header comment on fingerprint
+timing, and `scripts/db/backup-logical.sh`'s read-only-against-the-database
+sequence that makes the exact post-stop moment safe to pick).
+
+**Rehearsed with real live writes, not an idle stack (2026-09-27, capacity
+work order finisher round)**: a fresh isolated local Compose stack (project
+name `cps-novel`, fixed by `preprod_compose` -- inherently distinct from the
+already-running `cps-novel-x8-local-*` project, which this rehearsal never
+touched; the runtime network's pinned subnet was temporarily changed from
+172.18.0.0/16 to 172.24.0.0/16 purely to avoid colliding with that other
+project's own 172.18.0.0/16 network on the same machine, then reverted --
+confirmed via `git diff` afterward), seeded via `database.sh fresh-init` +
+`migrate-approved` against the real `cps-novel:0.5.0-807aad3` image, brought
+up full (`web`/`worker`/`worker-light`/`scheduler`/`backup-timer`) with
+`SCHEDULER_INTERVAL_SECONDS=20`. The home-carousel cron was set to run every
+minute via `UPDATE site_setting SET carousel_config_json = carousel_config_json
+|| '{"cronSchedule":"* * * * *","cronEnabled":true}'::jsonb WHERE id = 1`
+(the method noted in this work order), which reliably produces one new
+`schedule_run` row (`schedule_key='home-carousel-daily'`) per wall-clock
+minute -- confirmed real growth, not a static table:
+
+```
+T0=3 rows at 2026-09-27T11:42:05Z
+T1=5 rows at 2026-09-27T11:44:45Z (distinct home-carousel-daily rows for
+  scheduled_for = 11:42:00, 11:43:00, 11:44:00, one INSERT per minute)
+```
+
+Exercised via two separate invocations against this same live-writes stack
+-- a deliberately reintroduced "mutant" copy of the script (never committed;
+built and run from a temp copy under `scripts/preproduction/`, deleted
+afterward) with the fingerprint capture moved back to its original (buggy)
+position immediately after the confirmation gate, before any service is
+stopped, plus a `sleep 65` inserted right after that capture (still before
+`preprod_compose stop scheduler`) to deterministically widen the same race
+window real production traffic — writing across many tables every few
+seconds — would hit far more often without needing a sleep at all; then the
+actual fixed script (this file, unmodified) against the same stack
+immediately after recovering it:
+
+```
+--- mutant (fingerprint captured before stopping any service, widened with sleep 65) ---
+RECREATE_POSTGRES_PROMO_CLAIM_GATE=PASS active_parent_batches=0 active_claim_tasks=0 non_terminal_side_effect_intents=0
+MUTANT_FINGERPRINT_BEFORE_CAPTURED_AT=2026-09-27T11:49:24Z schedule_run_rows=10
+MUTANT_POST_SLEEP_AT=2026-09-27T11:50:29Z schedule_run_rows=11
+RECREATE_POSTGRES_PRECHECK=PASS generic_task_item_processing=0 channel_sync_task_item_processing=0
+RECREATE_POSTGRES_BACKUP=PASS output=.../cps-novel-20260927T115030Z-pre-recreate.dump
+HEALTH_WAIT=PASS service=postgres health=healthy
+RECREATE_POSTGRES_GUC=PASS shared_buffers=4GB          (... all ten tuned GUCs, all PASS ...)
+RECREATE_POSTGRES=FAIL reason=fingerprint_mismatch before=f11eee5ac30b0f3694b4059960eb7a46 after=2f29fe64a31a72702fd17bd1115d40ef
+RECREATE_POSTGRES=FAILED_TRAP exit_code=65
+--- postgres_recreated=YES: the container has already been stopped, removed, and recreated ... ---
+
+--- fixed script (fingerprint captured after all services stopped; run immediately after manually recovering the application per the trap's own printed commands) ---
+RECREATE_POSTGRES_PROMO_CLAIM_GATE=PASS active_parent_batches=0 active_claim_tasks=0 non_terminal_side_effect_intents=0
+RECREATE_POSTGRES_PRECHECK=PASS generic_task_item_processing=0 channel_sync_task_item_processing=0 indexnow_outbox_processing=0(non_blocking) home_carousel_auto_batch_processing=0(non_blocking)
+RECREATE_POSTGRES_BACKUP=PASS output=.../cps-novel-20260927T115119Z-pre-recreate.dump
+HEALTH_WAIT=PASS service=postgres health=healthy
+RECREATE_POSTGRES_GUC=PASS shared_buffers=4GB          (... all ten tuned GUCs, all PASS ...)
+RECREATE_POSTGRES_SHM=PASS bytes=1073741824
+RECREATE_POSTGRES_FINGERPRINT=PASS md5=393bf0bcb5b860b5601fe2d862d43504
+HEALTH_WAIT=PASS service=web health=healthy
+DATABASE_PERSISTENT_CHECK=PASS
+HEALTH_WAIT=PASS service=worker health=healthy
+HEALTH_WAIT=PASS service=worker-light health=healthy
+HEALTH_WAIT=PASS service=scheduler health=healthy
+RECREATE_POSTGRES_DOWNTIME_SECONDS=14
+RECREATE_POSTGRES=PASS
+```
+
+Same live scheduler, same live carousel cron, same stack -- the only
+difference between the two runs is where the fingerprint is captured. The
+mutant reliably reproduces the exact failure mode the round-2 fix exists to
+prevent (false `fingerprint_mismatch` abort with postgres already
+recreated); the fixed script, run immediately afterward against the same
+kind of live writes, passes cleanly.
+
+**Promo-claim batch pause gate, corrected and tested against real data
+(2026-09-27)**: the round-3 version of `assert_promo_claim_batch_paused()`
+above had its own bug, found by a read-only production audit rather than by
+a rehearsal: it defined "batch" as `generic_task` rows with `task_type =
+'promo_link.claim.v1' AND parent_task_id IS NULL` — but per the code (see
+the script's own header comment, precondition 1b), a row with that
+`task_type` is *always* a shard (a child of a `batch.materialize.v1` row);
+no batch row has ever had that task_type, so the query matched zero rows on
+every host and the check always trivially passed without checking anything.
+Confirmed live on production, 2026-09-27: the real in-flight batch
+`eba8f359-a569-43d7-bb55-b71fecc02f6e` (status=`paused`) plus 7 other
+`batch.materialize.v1` parents (all `completed`) all have
+`promo_link.claim.v1` children; zero rows anywhere have `task_type =
+'promo_link.claim.v1' AND parent_task_id IS NULL`.
+
+Fixed to three independent conditions, all checked against the real
+`batch.materialize.v1` / `promo_link.claim.v1` parent-child shape: (a) no
+`generic_task` row that has at least one `promo_link.claim.v1` child is
+itself `pending`/`processing`; (b) no `promo_link.claim.v1` row itself is
+`pending`/`processing` (unchanged from round 3); (c) no `side_effect_intent`
+row is `prepared`/`claim_retry_blocked` (unchanged from round 3). A
+completed, cancelled, disabled, or paused parent batch never blocks — only
+a parent or shard genuinely mid-flight does.
+
+Re-tested against real rows built with the repository's own
+`enqueueCatalogBatch` + the real worker enumeration handler
+(`createCatalogBatchHandler`) + `pausePromoClaimBatchTx` (via the
+`tests/integration/tasks/promo-claim-batch-control-postgres.test.ts`
+disposable-Postgres fixture pattern — same real `batch.materialize.v1` /
+`promo_link.claim.v1` shape production uses, not a hand-written row shape),
+plus the real `prepareSideEffectIntent` for the non-terminal-intent case:
+
+```
+--- case 1: parent batch status='processing' (real batch.materialize.v1 + real promo_link.claim.v1 child, built via enqueueCatalogBatch + the real worker enumeration handler + finalizeTaskItem; only the status column is then force-set to 'processing' via raw SQL, since the current single-item batch design otherwise always commits "shards exist" and "item finished" atomically in the same transaction -- see the rehearsal harness's own comment) -> must refuse ---
+CASE_1_BATCH_STATUS=processing shardCount=1
+CASE_1_CORRECTED_GATE active_parent_batches=1 active_claim_tasks=0 non_terminal_side_effect_intents=0 pass=false
+
+--- case 2: parent batch status='paused' (via the real pausePromoClaimBatchTx), one shard's side_effect_intent still 'prepared' (via the real prepareSideEffectIntent) -> must refuse ---
+CASE_2_BATCH_STATUS=paused
+CASE_2_CORRECTED_GATE active_parent_batches=0 active_claim_tasks=0 non_terminal_side_effect_intents=1 pass=false
+
+--- case 3: parent batch status='paused' (real pausePromoClaimBatchTx), a second unrelated parent batch status='completed' (real, from its own enumeration item finishing), the one side_effect_intent row transitioned to 'confirmed' (real transitionSideEffectIntentInTransaction) -> must pass ---
+CASE_3_PAUSED_BATCH_STATUS=paused CASE_3_COMPLETED_BATCH_STATUS=completed
+CASE_3_CORRECTED_GATE active_parent_batches=0 active_claim_tasks=0 non_terminal_side_effect_intents=0 pass=true
+
+--- case 4 (mutation): condition (a) reverted to the round-3 query (task_type='promo_link.claim.v1' AND parent_task_id IS NULL) run against case 1's exact database state (parent batch 'processing' with a real promo_link.claim.v1 child) -> must wrongly PASS, proving the round-3 query never checked anything ---
+CASE_1_MUTANT_CONDITION_A_ROUND3_QUERY not_paused_batches=0 (expected 0 -- proves the round-3 query never matched a real row)
+```
+
+All four cases run against a disposable Postgres 16.14 container (same pattern as
+`scripts/run-promo-claim-batch-control-postgres-verification.sh`: fresh
+container, real six-role `infra/postgres/roles.sql`, `prisma migrate deploy`,
+`infra/postgres/grants.sql` replay), with the fixture data built by a
+temporary vitest file reusing this repository's own `enqueueCatalogBatch`,
+`createCatalogBatchHandler` (the real worker enumeration handler),
+`finalizeTaskItem`, `pausePromoClaimBatchTx`, `prepareSideEffectIntent`, and
+`transitionSideEffectIntentInTransaction` -- never a hand-written row shape.
+The temporary test file and its disposable container/database were deleted
+after capturing this output; it was never committed.
+
 **Requires Owner authorization before running against haiyue-vps**: this
 stops every application service and the database itself for the duration of
 the recreate. Treat it exactly like a `release.sh deploy` — same
 maintenance-window expectations, same "announce before, verify after"
 discipline — even though it is a separate script.
+
+### Failure and rollback
+
+**The release directory this script runs from must not be deleted until it
+is run again from a different one.** The postgres container's
+`postgresql.conf`/init-script bind mounts resolve to this invocation's own
+release directory on disk — verified live on haiyue-vps, 2026-09-27: the
+running container's mount source is the literal path of the release
+directory it was created from (e.g.
+`/opt/cps-novel/releases/<commit>/infra/postgres/pitr/postgresql.conf.example`),
+**not** a symlink such as `/opt/cps-novel/current` that could later move out
+from under it. Deleting that directory while postgres still has it
+bind-mounted either breaks the mount or (depending on the host's bind-mount
+semantics) silently keeps serving the old inode with no path left to inspect
+it from. Whichever release directory `recreate-postgres.sh` was last run
+from is the one to keep until it is run again from a different one — this
+is a stronger constraint than the ordinary "keep the last few releases"
+retention every other release directory follows.
+
+`recreate-postgres.sh` prints an `EXIT_TRAP` diagnostic on any failure (see
+its own `on_exit` trap): current status of every service, whether postgres
+itself was already recreated (the point past which "just leave the old
+container running" stopped being an option), and the exact commands to
+bring the application back up. Two situations after that:
+
+**(a) The new config doesn't come up cleanly** — postgres fails its health
+wait, or any `SHOW`/`shm_size` check comes back wrong. Roll back to the
+previous release's own config by invoking this same script again **from
+that previous release's checkout**, passing `PREPROD_RECREATE_EXPECT_*`
+overrides that match what that checkout's `postgresql.conf.example`/compose
+`shm_size` actually specify (every expected-value default in the script is
+overridable this way — see the script's own header comment). Rolling back
+to a pre-this-branch checkout (i.e. Postgres's own out-of-the-box defaults,
+no tuning applied at all) means:
+
+```bash
+PREPROD_RECREATE_POSTGRES_CONFIRMED=YES \
+PREPROD_RECREATE_EXPECT_SHARED_BUFFERS=128MB \
+PREPROD_RECREATE_EXPECT_EFFECTIVE_CACHE_SIZE=4GB \
+PREPROD_RECREATE_EXPECT_WORK_MEM=4MB \
+PREPROD_RECREATE_EXPECT_MAINTENANCE_WORK_MEM=64MB \
+PREPROD_RECREATE_EXPECT_RANDOM_PAGE_COST=4 \
+PREPROD_RECREATE_EXPECT_EFFECTIVE_IO_CONCURRENCY=1 \
+PREPROD_RECREATE_EXPECT_MAX_PARALLEL_WORKERS_PER_GATHER=2 \
+PREPROD_RECREATE_EXPECT_MAX_WORKER_PROCESSES=8 \
+PREPROD_RECREATE_EXPECT_MAX_PARALLEL_WORKERS=8 \
+PREPROD_RECREATE_EXPECT_MAX_CONNECTIONS=100 \
+PREPROD_RECREATE_EXPECT_SHM_SIZE_BYTES=67108864 \
+  scripts/preproduction/recreate-postgres.sh
+```
+
+(`max_parallel_workers`'s out-of-the-box default is `8`, not `4` — this
+repository's tuning is the only place that narrows it to match the host's 4
+vCPUs; every other value above is Postgres's own stock default or Docker's
+own default `shm_size`.) This still recreates the postgres container (same
+volume, same promo-claim pause gate, same fingerprint check, same
+backup-first discipline) — a rollback is not exempt from any of this
+script's own safety checks, it just applies older config instead of newer.
+
+**Local rehearsal of (a), real run (2026-09-27)**: after the fingerprint-
+timing rehearsal above had already applied this branch's NEW config
+successfully, `recreate-postgres.sh` was invoked again (2026-09-27, capacity
+work order finisher round) with the `PREPROD_RECREATE_EXPECT_*` override set
+above (simulating an operator invoking it from a previous, pre-this-branch
+release checkout) while `infra/postgres/pitr/postgresql.conf.example` and
+`infra/preproduction/docker-compose.yml` on disk were swapped back to their
+exact pre-this-branch content (`git show 8cbf5fd^:...`, this branch's parent
+commit), keeping only the rehearsal's own already-pinned 172.24.0.0/16
+subnet override so the running stack's network stayed consistent -- both
+files were restored to this branch's real tracked content immediately after
+(`git diff` confirmed zero residue). Measured `SHOW`/`shm_size` read-back,
+this run's own real output:
+
+```
+RECREATE_POSTGRES_PROMO_CLAIM_GATE=PASS active_parent_batches=0 active_claim_tasks=0 non_terminal_side_effect_intents=0
+RECREATE_POSTGRES_PRECHECK=PASS generic_task_item_processing=0 channel_sync_task_item_processing=0 indexnow_outbox_processing=0(non_blocking) home_carousel_auto_batch_processing=0(non_blocking)
+RECREATE_POSTGRES_BACKUP=PASS output=.../cps-novel-20260927T115236Z-pre-recreate.dump
+HEALTH_WAIT=PASS service=postgres health=healthy
+RECREATE_POSTGRES_GUC=PASS shared_buffers=128MB
+RECREATE_POSTGRES_GUC=PASS effective_cache_size=4GB
+RECREATE_POSTGRES_GUC=PASS work_mem=4MB
+RECREATE_POSTGRES_GUC=PASS maintenance_work_mem=64MB
+RECREATE_POSTGRES_GUC=PASS random_page_cost=4
+RECREATE_POSTGRES_GUC=PASS effective_io_concurrency=1
+RECREATE_POSTGRES_GUC=PASS max_parallel_workers_per_gather=2
+RECREATE_POSTGRES_GUC=PASS max_worker_processes=8
+RECREATE_POSTGRES_GUC=PASS max_parallel_workers=8
+RECREATE_POSTGRES_GUC=PASS max_connections=100
+RECREATE_POSTGRES_SHM=PASS bytes=67108864
+RECREATE_POSTGRES_FINGERPRINT=PASS md5=4b928b7cf821e51be4f7f271ed97abfa
+HEALTH_WAIT=PASS service=web health=healthy
+DATABASE_PERSISTENT_CHECK=PASS
+HEALTH_WAIT=PASS service=worker health=healthy
+HEALTH_WAIT=PASS service=worker-light health=healthy
+HEALTH_WAIT=PASS service=scheduler health=healthy
+RECREATE_POSTGRES_DOWNTIME_SECONDS=14
+RECREATE_POSTGRES=PASS
+```
+
+Every value read back is the exact factory default this override set
+targets (Postgres's own out-of-the-box defaults, or Docker's default
+`shm_size`) -- proving the rollback path applies older config exactly as
+faithfully as the forward path applies the newer one, through the identical
+promo-claim-gate / fingerprint / backup-first sequence.
+
+**(b) Only the fingerprint or a health check fails, postgres itself came up
+fine** — investigate why the fingerprint or health check failed (a stuck
+lease that slipped past the promo-claim/task-item gates, an unrelated crash)
+before doing anything else; do **not** assume it is safe to just restart the
+application. Once the cause is understood and resolved, bring the
+application back up by hand with the exact commands the `on_exit` trap
+already printed (`preprod_compose_app_up web` → wait healthy →
+`preprod_compose_app_up worker worker-light` → `preprod_compose_app_up
+scheduler` → wait healthy), then re-run `database.sh persistent-check` to
+confirm the role/grant contract is intact before calling it done.
 
 ## Maintenance release
 
