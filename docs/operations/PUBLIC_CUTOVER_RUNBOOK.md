@@ -148,9 +148,9 @@ cp -p "$PREPROD_ENV_FILE" "$cutover_save/preprod.env"
 sudo cp -a /etc/nginx "$cutover_save/nginx"
 preprod_compose ps -q postgres > "$cutover_save/postgres.cid"
 preprod_compose ps -q web worker worker-light scheduler | xargs docker inspect --format '{{.Name}} {{.Image}}' > "$cutover_save/images.txt"
-preprod_compose exec -T backup-timer /bin/bash /app/scripts/db/backup-logical.sh --output "/backups/logical/public-cutover-$cutover_stamp.dump"
-preprod_compose exec -T backup-timer pg_restore --list "/backups/logical/public-cutover-$cutover_stamp.dump" >/dev/null
-preprod_compose exec -T backup-timer sh -c "cd /backups/logical && sha256sum -c public-cutover-$cutover_stamp.dump.sha256"
+preprod_compose exec -T backup-timer /bin/bash /app/scripts/db/backup-logical.sh --output "/var/lib/cps-novel/backups/logical/public-cutover-$cutover_stamp.dump"
+preprod_compose exec -T backup-timer pg_restore --list "/var/lib/cps-novel/backups/logical/public-cutover-$cutover_stamp.dump" >/dev/null
+preprod_compose exec -T backup-timer sh -c "cd /var/lib/cps-novel/backups/logical && sha256sum -c public-cutover-$cutover_stamp.dump.sha256"
 ```
 
 备份及其 metadata/sha256 必须完整。任何失败不切换；不停止 backup-timer。
