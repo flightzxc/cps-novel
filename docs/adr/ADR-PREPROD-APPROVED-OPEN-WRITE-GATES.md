@@ -56,22 +56,28 @@ from `preflight.sh` in place of the two removed hardcoded checks.
 
 The frozen semantics:
 
-1. The registrable set is a **closed enum of exactly three names (extended 2026-09-26)**:
-   `catalog_write` (the catalog-sync pair) and `promo_write` (the
-   promo-link-claim pair), and `sitemap_write` (`FEATURE_SITEMAP_AUTO_REFRESH` /
-   `SITEMAP_AUTO_REFRESH_ALLOW_WRITE`). Any other token in the list -- a typo, a name for
-   a gate not on this list, anything -- is a hard failure
-   (`reason=approved_open_write_gate_unknown`), naming the offending value.
-   Every other write gate this repository already hard-closes
-   (`indexnow_outbox`, `indexnow_delivery`, `auto_tagging`,
-   `article_writes`, the tracking write gate, two-factor enforcement) is
-   untouched by this change and keeps its unconditional `false` check.
-2. Each registrable gate's two variables must each be the literal string
-   `"true"` or `"false"`, case-sensitively. Anything else -- `"TRUE"`,
-   `"1"`, empty, or simply unset -- is invalid
-   (`catalog_write_invalid` / `promo_write_invalid` / `sitemap_write_invalid`), whether or not the
-   gate is registered. Unset does not default to `false`: the point of
-   these two variables is to say explicitly what state the host is in, and
+1. The registrable set is a **closed enum, now four names (extended 2026-09-26
+   with `sitemap_write`, then 2026-09-28 with `auto_tag_write`)**:
+   `catalog_write` (the catalog-sync pair), `promo_write` (the
+   promo-link-claim pair), `sitemap_write` (`FEATURE_SITEMAP_AUTO_REFRESH` /
+   `SITEMAP_AUTO_REFRESH_ALLOW_WRITE`), and `auto_tag_write`
+   (`FEATURE_NOVEL_TAG_AUTO` / `AUTO_WRITE_AUTHORIZED`, see the 2026-09-28
+   section below for that pair's different value domain). Any other token in
+   the list -- a typo, a name for a gate not on this list, anything -- is a
+   hard failure (`reason=approved_open_write_gate_unknown`), naming the
+   offending value. Every other write gate this repository already
+   hard-closes (`indexnow_outbox`, `indexnow_delivery`, `article_writes`,
+   the tracking write gate, two-factor enforcement) is untouched by this
+   change and keeps its unconditional `false` check.
+2. Each registrable gate's two variables must each be exactly one of that
+   pair's two legal literal strings, case-sensitively -- `"true"`/`"false"`
+   for three of the four pairs, `"true"`/`"false"` and `"YES"`/`"NO"` for
+   `auto_tag_write`. Anything else -- `"TRUE"`, `"1"`, `"yes"`, empty, or
+   simply unset -- is invalid (`catalog_write_invalid` /
+   `promo_write_invalid` / `sitemap_write_invalid` /
+   `auto_tag_write_invalid`), whether or not the gate is registered. Unset
+   does not default to the closed value: the point of these two variables is
+   to say explicitly what state the host is in, and
    a missing variable says nothing.
 3. A registered gate may sit in any combination of its two variables,
    including `FEATURE_*=true` with `*_ALLOW_WRITE=false` (catalog sync's
@@ -195,3 +201,66 @@ do not run the old preflight between them. A rollback that invokes an older
 checkout needs an Owner-reviewed env compatibility plan (the old enum will
 reject `sitemap_write`); prefer rolling forward. Removing registration is
 not authorization to leave the sitemap gate unmanaged on an older release.
+
+## 2026-09-28 extension: `auto_tag_write` registration (no host state change)
+
+Context: the front-end auto-tag round's first step (a read-only quality
+evaluation of the text classifier, `scripts/tagging-auto-preview.ts` --
+never writes a tag, never runs a backfill, never flips a flag) also asked to
+convert `preflight.sh`'s hard, unconditional rejection of an open
+`FEATURE_NOVEL_TAG_AUTO`/`AUTO_WRITE_AUTHORIZED` pair into the same
+registration discipline `catalog_write`/`promo_write`/`sitemap_write`
+already use, so that a *future* Owner approval to open the gate only needs
+an env registration, not another `preflight.sh` code change on the critical
+path. This extension supplies exactly that registration plumbing. It does
+**not** open the gate, does not change any value on the target host, and is
+not itself the Owner approval that would be required to open it.
+
+The registrable enum is now **four names**: the three above plus
+`auto_tag_write`, covering `FEATURE_NOVEL_TAG_AUTO` /
+`AUTO_WRITE_AUTHORIZED`. Its validity check differs from the other three in
+one respect worth calling out explicitly: `FEATURE_NOVEL_TAG_AUTO` still
+uses the exact `"true"`/`"false"` domain every other registrable gate's
+`FEATURE_*` variable uses, but `AUTO_WRITE_AUTHORIZED`'s domain is exact
+`"YES"`/`"NO"` -- the pre-existing production Owner gate convention
+(`isAutoTagWriteAuthorized`, `src/lib/flags/feature-flags.ts`; see also
+`docs/governance/feature-flag-registry.md` and ADR-P2-06-5-TAGGING-V3.md §11),
+not a new value shape invented for this registration. Anything else on
+either variable -- unset, empty, `"true"`/`"false"` on the wrong side, any
+casing variant -- is `auto_tag_write_invalid`, whether or not the gate is
+registered, matching the other three gates' "unset is not the same as
+false" rule. Either variable in its open state (`FEATURE_NOVEL_TAG_AUTO =
+"true"` or `AUTO_WRITE_AUTHORIZED = "YES"`) while unregistered is
+`reason=auto_tag_write`.
+
+**Preprod's actual values are unchanged by this extension**:
+`FEATURE_NOVEL_TAG_AUTO=false`, `AUTO_WRITE_AUTHORIZED=NO`, and
+`auto_tag_write` is deliberately **not** appended to
+`PREPROD_APPROVED_OPEN_WRITE_GATES` in `infra/preproduction/
+preprod.env.example` or on the target host -- registration is not required
+until Owner actually approves opening the gate. Unlike the sitemap
+extension above, this means deploying the preflight version that ships this
+extension needs **no** coordinated host env edit beforehand: the gate stays
+closed and unregistered, `preprod_assert_write_gates()` still returns
+`approved=catalog_write,promo_write,sitemap_write
+open=catalog_write,promo_write,sitemap_write` (auto_tag_write absent from
+both lists) against the current host env, exactly as before this change.
+
+The upgrade-order lesson from the sitemap extension still applies for
+*next* time, though: when Owner does approve opening `auto_tag_write`, the
+target host's `PREPROD_APPROVED_OPEN_WRITE_GATES` must be updated to
+include it, and that host env edit must land before -- or in the same
+deploy window as -- the first `preflight.sh` run that would observe the
+gate open (i.e. before `FEATURE_NOVEL_TAG_AUTO`/`AUTO_WRITE_AUTHORIZED` are
+actually flipped). Getting that order backwards fails the very next
+`deploy()`/`rollback()` with `reason=auto_tag_write`, the same failure mode
+`catalog_write`/`promo_write` hit in 2026-09-22/23 before this ADR existed.
+This extension ships the registration path ahead of time specifically so
+that future sequencing problem does not recur -- but it does not eliminate
+the need to sequence the *actual* approval correctly when it happens.
+
+Every other invariant from the 2026-09-23/09-26 sections above (closed
+enum tied to a code change, strict literal booleans, dry-run combinations
+legal once registered, the `PREPROD_WRITE_GATES=PASS approved=...
+open=...` evidence line contract, pure-function testability by sourcing
+`lib.sh`) applies unchanged to `auto_tag_write`.

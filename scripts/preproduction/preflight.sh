@@ -19,11 +19,13 @@ preprod_load_env || fail env_file 66
 [[ "${ADMIN_TWO_FACTOR_ENFORCEMENT:-}" == "true" ]] || fail two_factor_enforcement
 [[ "${FEATURE_INDEXNOW_OUTBOX:-}" == "false" && "${INDEXNOW_OUTBOX_ALLOW_WRITE:-}" == "false" ]] || fail indexnow_outbox
 [[ "${FEATURE_INDEXNOW_DELIVERY:-}" == "false" && "${INDEXNOW_DELIVERY_ALLOW_WRITE:-}" == "false" ]] || fail indexnow_delivery
-# 🔴 目录同步（2026-09-22 Owner 批准）与推广领取（2026-09-23 Owner 批准）写闸
-# 不再要求恒为 "false"：判定收敛进 lib.sh 的 preprod_assert_write_gates()
-# （封闭枚举 + PREPROD_APPROVED_OPEN_WRITE_GATES 显式登记制，见该函数上方的
-# 详细说明与 docs/adr/ADR-PREPROD-APPROVED-OPEN-WRITE-GATES.md）。这里只把它
-# 判出的 reason 转交给 fail()；取证行留到最终 PASS 之前打印。
+# 🔴 目录同步（2026-09-22 Owner 批准）、推广领取（2026-09-23 Owner 批准）、
+# sitemap（2026-09-26 Owner 批准）与自动打标签公开写闸（auto_tag_write，
+# 2026-09-28 新增登记位，本轮预生产值仍关闭且未登记）不再要求恒为 "false"：
+# 判定收敛进 lib.sh 的 preprod_assert_write_gates()（封闭枚举 +
+# PREPROD_APPROVED_OPEN_WRITE_GATES 显式登记制，见该函数上方的详细说明与
+# docs/adr/ADR-PREPROD-APPROVED-OPEN-WRITE-GATES.md）。这里只把它判出的
+# reason 转交给 fail()；取证行留到最终 PASS 之前打印。
 write_gates_evidence="$(preprod_assert_write_gates)" || fail "$write_gates_evidence"
 # 阶段2 第5步（`docs/adr/ADR-PROMO-CLAIM-BATCH-LIFECYCLE.md`）：领推广链接
 # 生命周期的七项配置必须与 `resolvePromoClaimLifecycleConfig`
@@ -38,7 +40,11 @@ lifecycle_config_evidence="$(preprod_assert_promo_claim_lifecycle_config)" || fa
 # "别等部署完才在日志里发现笔误"的理由，见 lib.sh 里
 # `preprod_assert_moboreader_rate_gate_config()` 上方的详细说明。
 rate_gate_config_evidence="$(preprod_assert_moboreader_rate_gate_config)" || fail "$rate_gate_config_evidence"
-[[ "${FEATURE_NOVEL_TAG_AUTO:-}" == "false" && "${AUTO_WRITE_AUTHORIZED:-}" == "NO" ]] || fail auto_tagging
+# 🔴 auto tagging（FEATURE_NOVEL_TAG_AUTO / AUTO_WRITE_AUTHORIZED）的硬编码恒
+# false/NO 判定已删除，改由上面的 preprod_assert_write_gates()（封闭枚举第四
+# 项 auto_tag_write）覆盖——同 2026-09-23 catalog/promo、2026-09-26 sitemap
+# 那次改法一致，不是遗漏。本轮预生产实际值仍是 false/NO 且未登记，行为不变；
+# 区别只在于将来 Owner 批准开闸时不必再改一次 preflight 代码。
 [[ "${ARTICLE_BLOG_ALLOW_WRITE:-}" == "false" && "${ARTICLE_NOVEL_REBIND_ALLOW_WRITE:-}" == "false" ]] || fail article_writes
 [[ "${GIT_COMMIT:-}" =~ ^[0-9a-f]{40}$ ]] || fail git_commit
 [[ -n "${CPS_NOVEL_APP_IMAGE:-}" ]] || fail app_image_unset
