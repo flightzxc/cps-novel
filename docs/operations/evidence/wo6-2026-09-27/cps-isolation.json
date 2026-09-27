@@ -1,0 +1,18 @@
+{
+  "snapshot_before_final_gates": {
+    "head": "5096765a7d53ba704bc8d07322864c366cb41895",
+    "status_sha256": "ea53d26ea21ebd3dace6e7ec9a2cdd2ee4e2ffab4463d38af3392451c38cb5ea",
+    "status_lines": 198
+  },
+  "after_final_gates": {
+    "head": "5096765a7d53ba704bc8d07322864c366cb41895",
+    "status_sha256": "ea53d26ea21ebd3dace6e7ec9a2cdd2ee4e2ffab4463d38af3392451c38cb5ea",
+    "status_lines": 198
+  },
+  "unchanged": true,
+  "frozen_reference": {
+    "head": "d77c3b968285698529cf97c7f0f97b286d7a2a9c",
+    "status_lines": 0
+  },
+  "access": "Only git show 3a76877:<path> for CPS source; no worktree content writes."
+}

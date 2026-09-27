@@ -50,6 +50,24 @@ function assertRegisteredUpstream(types: string[], registered: readonly string[]
 }
 
 describe("worker lane safety and shared configuration", () => {
+  it.each(["indexnow.sweep.v1", "indexnow_delivery"])("IndexNow %s is light-only even without overlap", type => {
+    const handlers = createWorkerHandlers({} as PrismaClient);
+    expect(resolveWorkerStartupAllowlist(type, handlers, quiet, "light").effective).toEqual([type]);
+    expect(() => resolveWorkerStartupAllowlist(type, handlers, quiet, "main")).toThrow("worker_main_indexnow_forbidden");
+    expect(() => validateWorkerLaneEnvironment({ ...env, WORKER_TASK_ALLOWLIST: type,
+      WORKER_LIGHT_TASK_ALLOWLIST: "sitemap_refresh" })).toThrow("worker_main_indexnow_forbidden");
+  });
+  it("AST allows IndexNow handlers while upstream registration stays enforced", () => {
+    for (const file of ["indexnow-delivery.ts", "indexnow-sweep.ts"]) {
+      expect(upstreamDependency(path.resolve("worker/handlers", file)), file).toBe(false);
+    }
+  });
+  it("preproduction includes scan but keeps delivery dark", () => {
+    const source = readFileSync("infra/preproduction/preprod.env.example", "utf8");
+    const light = source.match(/^WORKER_LIGHT_TASK_ALLOWLIST=(.*)$/m)![1].split(",");
+    expect(light).toContain("indexnow.sweep.v1");
+    expect(light).not.toContain("indexnow_delivery");
+  });
   it("defaults to main and rejects invalid lanes", () => {
     expect(parseWorkerLane(undefined)).toBe("main");
     expect(() => parseWorkerLane("typo")).toThrow("worker_lane_invalid");

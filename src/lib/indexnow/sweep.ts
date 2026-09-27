@@ -29,12 +29,9 @@
  * the same worker-task machinery; the tradeoff and its correctness argument
  * are documented in this Stream's report to the round's coordinator.
  *
- * Wiring a periodic trigger (cron/`ScheduleRun`) onto this function is out of
- * this PR's scope, matching the precedent
- * `src/server/publish-gate/service.ts`'s `publishDueScheduledArticles` sets
- * for its own "the gated primitive a future trigger calls" scheduled-publish
- * sweep — this function is directly callable today (a script, a test, or a
- * future scheduler handler).
+ * `indexnow.sweep.v1` now runs this primitive on worker-light via the
+ * minute schedule, with a 200-row per-scan budget. Direct callers retain
+ * the historical default; first publication still creates its first item.
  */
 import type { Prisma, PrismaClient } from "@prisma/client";
 

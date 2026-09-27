@@ -1,3 +1,6 @@
+import { assertWorkerLane, type WorkerLane } from "../../src/lib/tasks/worker-lanes.mjs";
+import { buildWorkerAllowlist } from "../../src/lib/tasks/registry";
+import { INDEXNOW_DELIVERY_TASK_TYPE } from "../../src/lib/indexnow/outbox-contract";
 import type { PrismaClient } from "@prisma/client";
 import {
   LeaseLostError,
@@ -29,6 +32,7 @@ import {
 } from "./failure-reporter";
 
 export interface WorkerRuntimeOptions {
+  lane?: WorkerLane;
   prisma: PrismaClient;
   workerId: string;
   handlers: TaskHandlerRegistry;
@@ -511,10 +515,30 @@ export async function runWorker(options: WorkerRuntimeOptions): Promise<void> {
     options.shutdownDrainTimeoutMs ?? DEFAULT_SHUTDOWN_DRAIN_TIMEOUT_MS,
   );
   if (!options.allowlist.willConsume) return;
+  const lane = options.lane ?? "main";
+  assertWorkerLane(lane, options.allowlist.effective);
+  // Separate queue selection only; leases, recovery, fencing and shutdown still
+  // use the exact same cycle. A busy group never forces an idle polling sleep.
+  const groups = [
+    options.allowlist.effective.filter(type => type !== INDEXNOW_DELIVERY_TASK_TYPE),
+    options.allowlist.effective.filter(type => type === INDEXNOW_DELIVERY_TASK_TYPE),
+  ].map(types => buildWorkerAllowlist(types.join(","), options.handlers));
+  let preferred = 0;
+  const cycle = async () => {
+    if (lane !== "light") return processOneWorkerCycle({ ...options, shutdownDrainTimeoutMs });
+    for (const index of [preferred, 1 - preferred]) {
+      if (!groups[index].willConsume) continue;
+      if (await processOneWorkerCycle({ ...options, allowlist: groups[index], shutdownDrainTimeoutMs })) {
+        preferred = 1 - index;
+        return true;
+      }
+    }
+    return false;
+  };
   await runDrainLoop({
     signal: options.signal,
     pollMs: options.pollMs ?? 1_000,
-    cycle: () => processOneWorkerCycle({ ...options, shutdownDrainTimeoutMs }),
+    cycle,
   });
 }
 

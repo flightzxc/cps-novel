@@ -205,7 +205,7 @@
 
 > Level UAT 全部已核对，在此基础上加开 Sitemap 写闸。IndexNow 双闸仍保持关闭——
 > X11（scheduler 每分钟 sweep-control schedule/去重/misfire=`skip`/worker due-sweep）
-> 硬前置未满足前不得触碰，与 §3 步骤 7–9 的既有裁决一致。
+> 已实现，待生产开闸验收；Owner 批准步骤 8–9 前不得打开 delivery，与 §3 顺序一致。
 >
 > 生产域名 = `https://pulsenovels.com`（冻结，2026-09-03 Owner）；这是本节起唯一合法的
 > `SITE_URL` 值，与本节以上 Level 0 / Level UAT 使用的 `https://novel.test`（X8 本地）
@@ -230,10 +230,10 @@
       `https://zbcwf.pulsenovels.com/` 404（后台主机不服务公开首页）。
 - [ ] `FEATURE_SITEMAP_AUTO_REFRESH=true` / `SITEMAP_AUTO_REFRESH_ALLOW_WRITE=true`（同一次
       变更内一起改）。
-- [ ] `WORKER_TASK_ALLOWLIST` 在 Level UAT 五项基础上追加 `sitemap_refresh`，与上一条
+- [ ] `WORKER_LIGHT_TASK_ALLOWLIST` 包含 `sitemap_refresh`（主通道不追加），与上一条
       **同一次发布变更**中一起生效，对应 §3.1 表步骤 6。
 - [ ] IndexNow 双闸维持 `false`：`FEATURE_INDEXNOW_OUTBOX`、`INDEXNOW_OUTBOX_ALLOW_WRITE`、
-      `FEATURE_INDEXNOW_DELIVERY`、`INDEXNOW_DELIVERY_ALLOW_WRITE`（X11 硬前置未满足）。
+      `FEATURE_INDEXNOW_DELIVERY`、`INDEXNOW_DELIVERY_ALLOW_WRITE`（X11 已实现，待生产开闸验收）。
 - [ ] `FEATURE_P2_06_5_TAGGING=true` / `FEATURE_P2_06_5_TAG_ADMIN_WRITE=true`（PR6 fix
       lane F；由 Level UAT 延续，生产同样需要 Canonical Tag / 来源映射 / 小说标签的
       正常读写，而不是禁用态面板）。
@@ -250,14 +250,14 @@
 ### Level 1：只开 IndexNow enqueue 双闸观察
 
 - [ ] 开 `FEATURE_INDEXNOW_OUTBOX=true` + `INDEXNOW_OUTBOX_ALLOW_WRITE=true`。
-- [ ] delivery 双闸仍 off，Worker allowlist 仍不消费 `indexnow_delivery`。
+- [ ] delivery 双闸仍 off，`WORKER_LIGHT_TASK_ALLOWLIST` 仍不含 `indexnow_delivery`，主通道禁止扫描和投递类型。
 - [ ] 抽查 outbox URL/locale/revision/去重和任务量，确认无跨域、无空白 promo、无异常堆积后再进 Level 2。
 
 ### Level 2：最后开 IndexNow worker 双闸
 
 - [ ] **X11 硬前置已验收；未满足时本 Level 不得开始。**
 - [ ] 单独审批 `FEATURE_INDEXNOW_DELIVERY=true` + `INDEXNOW_DELIVERY_ALLOW_WRITE=true`。
-- [ ] 与上述双闸在**同一次发布变更**中将 `indexnow_delivery` 纳入 Worker allowlist，避免 write gate 关闭时把 pending 任务消费成 failed。
+- [ ] 与上述双闸在**同一次发布变更**中将 `indexnow_delivery` 仅纳入 `WORKER_LIGHT_TASK_ALLOWLIST`，避免双闸关闭时消费 pending 条目；主通道禁止该类型。
 - [ ] 观察 HTTP 403/422、终态失败率和 retry/dead-letter；命中 stop condition 立即回关 worker 双闸并人工复核。
 
 ### 3.1 开闸顺序表（步骤 8–9 受 X11 硬门禁）
@@ -267,20 +267,23 @@
 | 0 | **Level UAT**（本地 `https://novel.test`，不对外）：Owner 16 步验收全过，claim 双闸 + 五项 allowlist 在同一次本地变更中一起开、一起关 | `docs/operations/OWNER_LOCAL_UAT_RUNBOOK_2026-09-03.md` 16 步全过且 Owner 未改 env / 未跑脚本 / 未改库；未过之前不得进入步骤 1 的生产部署 |
 | 1 | 以全 flag off + Level 0 allowlist 部署 | compose config 确认 allowlist 非空、无未注册 taskType；worker 启动日志已打印 requested/effective/invalid |
 | 2 | 验证 `SiteSetting` 与 `/indexnow-key.txt` | host 与 `SITE_URL` 一致，key 不进日志/证据 |
-| 3 | 打开 IndexNow outbox enqueue 双闸 | delivery 双闸仍 off，allowlist 仍不含 `indexnow_delivery` |
+| 3 | 打开 IndexNow outbox enqueue 双闸 | delivery 双闸仍 off，light allowlist 仍不含 `indexnow_delivery`；main 禁止两个 IndexNow 类型 |
 | 4 | 观察 outbox URL/locale/revision/去重/任务量 | 异常即回关 outbox 双闸，不进后续步骤 |
 | 5 | 完成 Sitemap fixture、正式 locale dry-run 与 HTTP route 验收 | D-7 / 目录权限 / 分片 / `lastmod` 全部 PASS |
-| 6 | 同次变更开 Sitemap 写闸并加 `sitemap_refresh` allowlist——即 **Level R**（收益上线）的开闸动作：`FEATURE_SITEMAP_AUTO_REFRESH` + `SITEMAP_AUTO_REFRESH_ALLOW_WRITE` + allowlist 三者同一次变更 | 任一侧不能同时生效即整体回滚 |
-| 7 | 验收 X11 首个生产 schedule | scheduler 每分钟只入队 sweep-control generic task；去重有效；misfire=`skip`；scheduler 无凭证/无外部调用；worker 能执行现有 due sweep |
+| 6 | 同次变更开 Sitemap 写闸并加 `sitemap_refresh` light allowlist——即 **Level R**（收益上线）的开闸动作：`FEATURE_SITEMAP_AUTO_REFRESH` + `SITEMAP_AUTO_REFRESH_ALLOW_WRITE` + allowlist 三者同一次变更 | 任一侧不能同时生效即整体回滚 |
+| 7 | X11 已实现，核验候选版本与本地完整链路证据，待生产开闸验收 | delivery 仍关闭，生产不入队；核对版本、注册、通道及权限；分钟桶/去重/skip/扫描/投递/公平轮转已由同版本真实库与模拟端点验证，生产运行证据在步骤 8–9 补齐 |
 | 8 | 在 X11 PASS 后，于一次发布变更中打开 delivery 双闸 | **X11 未 PASS 时严禁改为 true**；步骤 8 不得单独部署；Level R 明确 IndexNow 仍 `false`，此步骤晚于 Level R 独立审批 |
-| 9 | 在与步骤 8 同一次变更中加入 `indexnow_delivery` allowlist 并验证 sweep/delivery | 步骤 8–9 必须原子同发/同回滚；403/422/终态失败率越线即同时回关双闸并移除 allowlist |
+| 9 | 在与步骤 8 同一次变更中仅向 `WORKER_LIGHT_TASK_ALLOWLIST` 加入 `indexnow_delivery` 并验证 sweep/delivery | 步骤 8–9 必须原子同发/同回滚；403/422/终态失败率越线即同时回关双闸并从 light allowlist 移除投递类型 |
 
 Level UAT（步骤 0）与 Level R（步骤 6 的收益上线开闸）分别在“## 3. Flag 分级开放”中有完整字段清单，
 本表只标注它们在整体开闸顺序里的位置，不重复列出每个字段。
 
-**X11 misfire 裁决：**显式采用 `skip`，只生成当前时间桶。sweep 本身扫描数据库中全部当前到期行，
-历史桶 `bounded_catch_up` 只会重复扫描并增加开闸压力。X11 未落地前，
-`FEATURE_INDEXNOW_DELIVERY` / `INDEXNOW_DELIVERY_ALLOW_WRITE` 必须保持 `false`，且 allowlist 必须排除 `indexnow_delivery`。
+**X11 misfire 裁决：**显式采用 `skip`，只生成当前时间桶。sweep 每分钟处理当前到期候选，定时 handler 每次最多 200 条；历史桶 `bounded_catch_up` 只会重复扫描并增加压力。
+X11 **已实现，待生产开闸验收**：`indexnow.sweep.v1` 与 `indexnow_delivery` 均只属于轻量通道，投递与其它轻量任务公平轮转。
+任一 delivery 闸未严格为 `true` 时不生成扫描时间桶；关闭环境每日不会新增 1,440 个空扫描。
+开启后保留空扫描，以覆盖陈旧 processing 回收；不增加 scheduler outbox 读权限。
+预生产只把扫描类型加入轻量白名单，四个 IndexNow 变量仍为 `false`，preflight 硬关不变。
+生产步骤 8–9 必须原子生效和回关；详细 env、证据及回关草稿见 [工单 6 生产开闸草稿](../operations/WO6_INDEXNOW_PRODUCTION_OPENING_DRAFT.md)。
 
 ## 4. D-7 与 Sitemap 开放时序
 
@@ -327,7 +330,7 @@ Level UAT（步骤 0）与 Level R（步骤 6 的收益上线开闸）分别在�
 - [ ] `OperationAudit.requestId` 唯一索引（解决真并发同 requestId 的审计/派发双写窗口）。
 - [ ] 开缓存轮的有界 TTL 兜底。
 - [ ] 章节物化写口接入失效矩阵。
-- [ ] X11：落地 scheduler 每分钟 sweep-control schedule、去重、misfire=`skip` 与 worker due-sweep 验收；它是上表步骤 8–9 的硬前置。
+- [ ] X11：已实现，待生产开闸验收。步骤 7 核验候选版本本地证据，Owner 批准后步骤 8–9 原子开闸并补齐生产运行证据。
 
 ## 7. 发布证据归档
 

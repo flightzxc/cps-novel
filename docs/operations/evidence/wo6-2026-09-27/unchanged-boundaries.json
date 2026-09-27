@@ -1,0 +1,38 @@
+{
+  "infra/postgres/grants.sql": {
+    "identical_to_base": true,
+    "sha256": "f33476168de621008a302bc4345ad62f951787b71eac92768427320453c62f02"
+  },
+  "prisma/schema.prisma": {
+    "identical_to_base": true,
+    "sha256": "cb170df2423f046bfdaa32053636ba507c42edef3b6d94adf3ec9488edce17f8"
+  },
+  "docs/governance/database-schema-dictionary.jsonl": {
+    "identical_to_base": true,
+    "sha256": "dfa2b3f4ff3177573b2ea10d1fd051a83c48bd99527b0e150b18f0a325971473"
+  },
+  "scripts/preproduction/preflight.sh": {
+    "identical_to_base": true,
+    "sha256": "754d896b08c3610c0609f257e223aa5985e4bf0fda1ae73b5f3e69e7b68ff083"
+  },
+  "worker/handlers/indexnow-delivery.ts": {
+    "identical_to_base": true,
+    "sha256": "28d0ecceb16b441296a1f49539caf4e46a8c07ada5d1e69839f387489928d4c6"
+  },
+  "src/lib/indexnow/delivery-primitives.ts": {
+    "identical_to_base": true,
+    "sha256": "d152aff48d2732f8cbcde79c2bf8ef13f8679eb0cc47595df648b59b9cecdd25"
+  },
+  "tests/ui/articles-admin.test.tsx": {
+    "identical_to_base": true,
+    "sha256": "401536be8ad9758447da7969f25022a0a4f6cef5b6a70c536d5cb4516bd2bcb9"
+  },
+  "tests/integration/tasks/publication-preview-postgres.test.ts": {
+    "identical_to_base": true,
+    "sha256": "015f2751a96ce0f80db23dadb8db13473e3c405d6d96281407d8ca33c2b6dfd0"
+  },
+  "processOneWorkerCycle": {
+    "identical_to_base": true,
+    "sha256": "e4d650dab57672252dec6b52bbf3f902c8cc29ac4364a634029c97339b63e668"
+  }
+}
