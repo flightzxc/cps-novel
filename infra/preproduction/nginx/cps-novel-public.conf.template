@@ -54,7 +54,7 @@ gzip_min_length 1024;
 upstream cps_novel_edge_web { server __UPSTREAM__; keepalive 16; }
 server { listen 80 default_server; server_name _; return 444; }
 server {
-    listen 443 ssl default_server;
+    listen 443 ssl http2 default_server;
     server_name _;
     ssl_certificate /etc/letsencrypt/live/__PUBLIC_CERT__/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/__PUBLIC_CERT__/privkey.pem;
@@ -90,7 +90,6 @@ server {
     error_log /var/log/nginx/cps-novel-public.error.log warn;
     error_page 503 /__preprod_maintenance.html;
     include /etc/nginx/snippets/cps-novel-edge-public-security.conf;
-    proxy_hide_header X-Robots-Tag;
     location = /__preprod_maintenance.html {
         internal;
         root /opt/cps-novel/shared/maintenance;
@@ -265,7 +264,7 @@ server {
         proxy_pass http://cps_novel_edge_web;
         include /etc/nginx/snippets/cps-novel-preprod-proxy.conf;
     }
-    location ^~ /api/health/ {
+    location ~ ^/api/health/(?:worker|backup)$ {
         auth_basic "CPS Novel Administration";
         auth_basic_user_file /opt/cps-novel/shared/secrets/nginx-preprod.htpasswd;
         include /etc/nginx/snippets/cps-novel-edge-maintenance.conf;

@@ -61,6 +61,10 @@ describe.each(['rehearsal','public'])('%s rendered route contract', mode => {
 it('keeps preprod template and its rendered bytes identical to the approved baseline', () => {
   const before = execFileSync('git', ['show','02f9996:infra/preproduction/nginx/cps-novel-preprod.conf.template'], { encoding:'utf8' });
   expect(text('infra/preproduction/nginx/cps-novel-preprod.conf.template')).toBe(before);
+  for (const name of ['security', 'protected', 'protected-nomaintenance', 'proxy']) {
+    const file = `infra/preproduction/nginx/cps-novel-preprod-${name}.conf`;
+    expect(readFileSync(file)).toEqual(execFileSync('git', ['show', `02f9996:${file}`]));
+  }
   const dir=mkdtempSync(path.join(tmpdir(),'cutover-render-')); const output=path.join(dir,'site.conf');
   try { execFileSync('/bin/bash',['scripts/preproduction/render-nginx.sh','--output',output]); expect(readFileSync(output,'utf8')).toBe(before.replaceAll('__UPSTREAM__','127.0.0.1:3000')); }
   finally { rmSync(dir,{recursive:true,force:true}); }
