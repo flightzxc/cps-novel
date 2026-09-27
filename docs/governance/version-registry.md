@@ -16,6 +16,16 @@ Compose runtime 与 Health 身份一致性验证（`/api/health` 的 `metadataCo
 
 ## 当前快照
 
+### v0.5.0 —— 准备中（2026-09-27）
+
+- 开发线：`integration/v0.5.0-2026-09-27`，集成基线 `33a93c5`；工单 5、7、试读运维脚本、B-15 和工单 6 已经 Opus 复核并以 `--no-ff` 合入。
+- MINOR 范围：worker-light 轻量通道、周期扫描底座、sitemap 每日兜底、scheduler 整间隔对齐；B-15 权限契约与人工核对出边数据库防线；IndexNow 分钟扫描与轻量投递接线；建书首次定类及前台文本分类投影。
+- 两条增量迁移：`20260926150000_periodic_sweep_skip_reason`、`20260927090000_side_effect_manual_review_guard`。迁移后的数据库兼容 v0.4.5，不做 down migration。
+- 本版本尚未部署。IndexNow 与前台自动标签已合入但开关默认关闭（等于未上线）；试读运维脚本已合入，仅运维用。
+- 按 Owner 2026-09-27 授权同步预生产模板的主白名单，加入 `moboreader.preview_refresh.v1`；主机已于当日加入。本阶段不修改主机、批次、能力行或任何运行开关。
+- 第一阶段仅本地升版、串行完整门禁、推送及构建核对 linux/amd64 镜像归档；升版提交即 Final SHA，以第一阶段交付记录为准。部署须等 Owner 暂停批次并明确授权，归档核对后停下。
+- 回滚目标 v0.4.5 Final `ff1d2dd`；后续部署按新版 compose 处理 worker-light，并保持已有写闸登记。tag 和发版治理在部署验收后执行，tag 指向 Final。
+
 ### v0.4.5 —— 已发布到预生产（2026-09-26 22:53:14 +0800，`RELEASE=PASS`）
 
 - 身份：开发线 `integration/v0.4.5-2026-09-26`，基于 v0.4.4 收官线 `845ca02`，
@@ -226,6 +236,7 @@ Compose runtime 与 Health 身份一致性验证（`/api/health` 的 `metadataCo
 
 | Version | Date (+0800) | Bump | Summary | Commit / Release | Status |
 | --- | ---: | --- | --- | --- | --- |
+| `v0.5.0` | 2026-09-27 | MINOR | 轻量通道与周期扫描、sitemap 每日兜底、B-15 数据库防线；IndexNow 与自动标签接线默认关闭；两条增量迁移 | `integration/v0.5.0-2026-09-27`；集成基线 `33a93c5` 经 Opus 复核 | 准备中；本版本未部署 |
 | `v0.4.5` | 2026-09-26 22:53 | PATCH | 发布后触发试读；sitemap 写闸、手动刷新与 CLI；连接池、详情页与侧栏；7a 仅设计；无迁移/grants 变更 | tag `v0.4.5` → `ff1d2dd7c8d46dba8e9267687eafbb9347b55387`；image `cps-novel:0.4.5-ff1d2dd` | 预生产已发布；实地验收通过；试读不执行；生产未上线 |
 | `v0.4.4` | 2026-09-26（12:14） | PATCH | sitemap 候选缓存与 processing 发布漏刷修复；预生产 nginx 模板同步；无迁移或 grants 变更 | annotated tag `v0.4.4` → `205220ebc6f460e85e6fbc8901f592c979c87b83`；镜像 `cps-novel:0.4.4-205220e`；`RELEASE=PASS` | 预生产已发布；两次发布实地验收已通过；生产未上线 |
 | `v0.4.3` | 2026-09-25（22:35） | PATCH | admin2 独立身份建号与双 UUID 领取白名单；分片枚举真实库 helper 修复；无迁移或 grants 变更。详见“当前快照” | annotated tag `v0.4.3` → `505feeaae04ae1a23df3e7f6a27795f4128636f3`；镜像 `cps-novel:0.4.3-505feea`；`RELEASE=PASS` | ✅ 预生产已发布；admin2 2FA 绑定与双账号验证待完成；生产未上线 |
