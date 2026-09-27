@@ -1,0 +1,322 @@
+# Ubuntu nginx 1.24, included once at http level. No IPv6 listener.
+# Concentrated starting limits; renderer substitutes these literal values.
+# @PAGE_CONN=10
+# @PAGE_RATE=12r/s
+# @PAGE_BURST=30
+# @PREFETCH_CONN=4
+# @PREFETCH_RATE=5r/s
+# @PREFETCH_BURST=20
+# @GO_CONN=16
+# @GO_RATE=10r/s
+# @GO_BURST=20
+# @BOT_PAGE_RATE=10r/m
+# @BOT_PAGE_BURST=2
+# @BOT_GO_RATE=1r/m
+# @BOT_GO_BURST=1
+# @STATIC_RATE=50r/s
+# @STATIC_BURST=200
+map $http_user_agent $cps_training_bot {
+    default "";
+    ~*ClaudeBot ClaudeBot;
+    ~*GPTBot GPTBot;
+    ~*Bytespider Bytespider;
+    ~*CCBot CCBot;
+}
+# Next 16.1.6 sends next-router-prefetch: 1 or 2. A nonempty value
+# selects the prefetch budget; it never bypasses the crawler budget.
+map $http_next_router_prefetch $cps_page_key { "" $server_name; default ""; }
+map $http_next_router_prefetch $cps_prefetch_key { "" ""; default $server_name; }
+map $http_next_router_prefetch $cps_prefetch_ip { "" ""; default $binary_remote_addr; }
+map $host $cps_public_robots { default "__PUBLIC_ROBOTS__"; }
+map $host $cps_public_hsts { default "__PUBLIC_HSTS__"; }
+limit_conn_zone $cps_page_key zone=cps_edge_page_conn:10m;
+limit_req_zone $cps_page_key zone=cps_edge_page_rate:10m rate=__PAGE_RATE__;
+limit_conn_zone $cps_prefetch_key zone=cps_edge_prefetch_conn:10m;
+limit_req_zone $cps_prefetch_ip zone=cps_edge_prefetch_rate:10m rate=__PREFETCH_RATE__;
+limit_conn_zone $server_name zone=cps_edge_go_conn:10m;
+limit_req_zone $binary_remote_addr zone=cps_edge_go_rate:10m rate=__GO_RATE__;
+limit_req_zone $cps_training_bot zone=cps_edge_bot_page:10m rate=__BOT_PAGE_RATE__;
+limit_req_zone $cps_training_bot zone=cps_edge_bot_go:10m rate=__BOT_GO_RATE__;
+limit_req_zone $binary_remote_addr zone=cps_edge_static:10m rate=__STATIC_RATE__;
+limit_req_zone $binary_remote_addr zone=cps_edge_admin_general:10m rate=30r/s;
+limit_req_zone $binary_remote_addr zone=cps_edge_admin_login:10m rate=2r/s;
+limit_req_zone $binary_remote_addr zone=cps_edge_admin_api:10m rate=20r/s;
+limit_req_status 429;
+limit_conn_status 429;
+log_format cps_edge_json escape=json
+    '{"time":"$time_iso8601","host":"$host","remote_addr":"$remote_addr",'
+    '"request":"$request","status":$status,"limit_req_status":"$limit_req_status",'
+    '"limit_conn_status":"$limit_conn_status","request_time":$request_time,'
+    '"upstream_response_time":"$upstream_response_time","user_agent":"$http_user_agent"}';
+gzip_types text/css application/javascript text/javascript application/json application/xml text/xml image/svg+xml text/plain;
+gzip_vary on;
+gzip_min_length 1024;
+upstream cps_novel_edge_web { server __UPSTREAM__; keepalive 16; }
+server { listen 80 default_server; server_name _; return 444; }
+server {
+    listen 443 ssl default_server;
+    server_name _;
+    ssl_certificate /etc/letsencrypt/live/__PUBLIC_CERT__/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/__PUBLIC_CERT__/privkey.pem;
+    include /etc/nginx/snippets/cps-novel-edge-admin-security.conf;
+    return 404;
+}
+server {
+    listen 80;
+    server_name __PUBLIC_HOST__;
+    location ^~ /.well-known/acme-challenge/ {
+        root /var/lib/letsencrypt;
+        default_type text/plain;
+        try_files $uri =404;
+    }
+    location / { return 301 https://__PUBLIC_HOST__$request_uri; }
+}
+server {
+    listen 80;
+    server_name __ADMIN_HOST__;
+    location ^~ /.well-known/acme-challenge/ {
+        root /var/lib/letsencrypt;
+        default_type text/plain;
+        try_files $uri =404;
+    }
+    location / { return 301 https://__ADMIN_HOST__$request_uri; }
+}
+server {
+    listen 443 ssl http2;
+    server_name __PUBLIC_HOST__;
+    ssl_certificate /etc/letsencrypt/live/__PUBLIC_CERT__/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/__PUBLIC_CERT__/privkey.pem;
+    access_log /var/log/nginx/cps-novel-public.access.log cps_edge_json;
+    error_log /var/log/nginx/cps-novel-public.error.log warn;
+    error_page 503 /__preprod_maintenance.html;
+    include /etc/nginx/snippets/cps-novel-edge-public-security.conf;
+    proxy_hide_header X-Robots-Tag;
+    location = /__preprod_maintenance.html {
+        internal;
+        root /opt/cps-novel/shared/maintenance;
+        include /etc/nginx/snippets/cps-novel-edge-public-security.conf;
+        add_header Cache-Control "no-store" always;
+    }
+    location ^~ /.well-known/acme-challenge/ {
+        root /var/lib/letsencrypt;
+        default_type text/plain;
+        try_files $uri =404;
+    }
+    location ~ ^/(?:dashboard|novels|catalog-sync|promo-links|previews|home-carousel|templates|articles|categories|tags|tasks|revenue|settings|channel-accounts|login|two-factor)(?:/|$) {
+        include /etc/nginx/snippets/cps-novel-edge-public-security.conf;
+        return 404;
+    }
+    location ^~ /api/admin/ {
+        include /etc/nginx/snippets/cps-novel-edge-public-security.conf;
+        return 404;
+    }
+    location = /api/admin {
+        include /etc/nginx/snippets/cps-novel-edge-public-security.conf;
+        return 404;
+    }
+    location ^~ /api/health/ {
+        include /etc/nginx/snippets/cps-novel-edge-public-security.conf;
+        return 404;
+    }
+    location = /api/health {
+        __PUBLIC_AUTH__
+        include /etc/nginx/snippets/cps-novel-edge-public-security.conf;
+        proxy_hide_header Cache-Control;
+        add_header Cache-Control "no-store" always;
+        proxy_pass http://cps_novel_edge_web;
+        include /etc/nginx/snippets/cps-novel-preprod-proxy.conf;
+    }
+    location = /robots.txt {
+        __PUBLIC_AUTH__
+        include /etc/nginx/snippets/cps-novel-edge-maintenance.conf;
+        include /etc/nginx/snippets/cps-novel-edge-public-security.conf;
+        proxy_hide_header Cache-Control;
+        add_header Cache-Control "no-store" always;
+        proxy_pass http://cps_novel_edge_web;
+        include /etc/nginx/snippets/cps-novel-preprod-proxy.conf;
+    }
+    location = /sitemap.xml {
+        __PUBLIC_AUTH__
+        include /etc/nginx/snippets/cps-novel-edge-maintenance.conf;
+        include /etc/nginx/snippets/cps-novel-edge-public-security.conf;
+        proxy_hide_header Cache-Control;
+        add_header Cache-Control "no-store" always;
+        proxy_pass http://cps_novel_edge_web;
+        include /etc/nginx/snippets/cps-novel-preprod-proxy.conf;
+    }
+    location ^~ /sitemap/ {
+        __PUBLIC_AUTH__
+        include /etc/nginx/snippets/cps-novel-edge-maintenance.conf;
+        include /etc/nginx/snippets/cps-novel-edge-public-security.conf;
+        proxy_hide_header Cache-Control;
+        add_header Cache-Control "no-store" always;
+        proxy_pass http://cps_novel_edge_web;
+        include /etc/nginx/snippets/cps-novel-preprod-proxy.conf;
+    }
+    location = /indexnow-key.txt {
+        __PUBLIC_AUTH__
+        include /etc/nginx/snippets/cps-novel-edge-maintenance.conf;
+        include /etc/nginx/snippets/cps-novel-edge-public-security.conf;
+        proxy_hide_header Cache-Control;
+        add_header Cache-Control "no-store" always;
+        proxy_pass http://cps_novel_edge_web;
+        include /etc/nginx/snippets/cps-novel-preprod-proxy.conf;
+    }
+    location ^~ /_next/static/ {
+        __PUBLIC_AUTH__
+        include /etc/nginx/snippets/cps-novel-edge-maintenance.conf;
+        include /etc/nginx/snippets/cps-novel-edge-public-security.conf;
+        limit_req zone=cps_edge_static burst=__STATIC_BURST__ nodelay;
+        proxy_hide_header Cache-Control;
+        proxy_hide_header Expires;
+        add_header Cache-Control "public, max-age=31536000, immutable";
+        proxy_pass http://cps_novel_edge_web;
+        include /etc/nginx/snippets/cps-novel-preprod-proxy.conf;
+    }
+    location ^~ /brand/ {
+        __PUBLIC_AUTH__
+        include /etc/nginx/snippets/cps-novel-edge-maintenance.conf;
+        include /etc/nginx/snippets/cps-novel-edge-public-security.conf;
+        proxy_hide_header Cache-Control;
+        proxy_hide_header Expires;
+        add_header Cache-Control "public, max-age=86400";
+        proxy_pass http://cps_novel_edge_web;
+        include /etc/nginx/snippets/cps-novel-preprod-proxy.conf;
+    }
+    location ~ ^/(?:(?:__SITE_LOCALES__)/)?go(?:/|$) {
+        __PUBLIC_AUTH__
+        include /etc/nginx/snippets/cps-novel-edge-maintenance.conf;
+        include /etc/nginx/snippets/cps-novel-edge-public-security.conf;
+        limit_conn cps_edge_go_conn __GO_CONN__;
+        limit_req zone=cps_edge_go_rate burst=__GO_BURST__ nodelay;
+        limit_req zone=cps_edge_bot_go burst=__BOT_GO_BURST__ nodelay;
+        proxy_pass http://cps_novel_edge_web;
+        include /etc/nginx/snippets/cps-novel-preprod-proxy.conf;
+    }
+    location ^~ /api/ {
+        __PUBLIC_AUTH__
+        include /etc/nginx/snippets/cps-novel-edge-maintenance.conf;
+        include /etc/nginx/snippets/cps-novel-edge-public-security.conf;
+        limit_req zone=cps_edge_admin_api burst=60 nodelay;
+        proxy_pass http://cps_novel_edge_web;
+        include /etc/nginx/snippets/cps-novel-preprod-proxy.conf;
+    }
+    location ~ ^/(?:__SITE_LOCALES__)(?:/(?:novel|browse|category|blog)(?:/|$)|/?$) {
+        __PUBLIC_AUTH__
+        include /etc/nginx/snippets/cps-novel-edge-maintenance.conf;
+        include /etc/nginx/snippets/cps-novel-edge-public-security.conf;
+        limit_conn cps_edge_page_conn __PAGE_CONN__;
+        limit_req zone=cps_edge_page_rate burst=__PAGE_BURST__ nodelay;
+        limit_conn cps_edge_prefetch_conn __PREFETCH_CONN__;
+        limit_req zone=cps_edge_prefetch_rate burst=__PREFETCH_BURST__ nodelay;
+        limit_req zone=cps_edge_bot_page burst=__BOT_PAGE_BURST__ nodelay;
+        proxy_pass http://cps_novel_edge_web;
+        include /etc/nginx/snippets/cps-novel-preprod-proxy.conf;
+    }
+    location / {
+        __PUBLIC_AUTH__
+        include /etc/nginx/snippets/cps-novel-edge-maintenance.conf;
+        include /etc/nginx/snippets/cps-novel-edge-public-security.conf;
+        limit_conn cps_edge_page_conn __PAGE_CONN__;
+        limit_req zone=cps_edge_page_rate burst=__PAGE_BURST__ nodelay;
+        limit_conn cps_edge_prefetch_conn __PREFETCH_CONN__;
+        limit_req zone=cps_edge_prefetch_rate burst=__PREFETCH_BURST__ nodelay;
+        limit_req zone=cps_edge_bot_page burst=__BOT_PAGE_BURST__ nodelay;
+        proxy_pass http://cps_novel_edge_web;
+        include /etc/nginx/snippets/cps-novel-preprod-proxy.conf;
+    }
+}
+server {
+    listen 443 ssl http2;
+    server_name __ADMIN_HOST__;
+    ssl_certificate /etc/letsencrypt/live/__ADMIN_CERT__/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/__ADMIN_CERT__/privkey.pem;
+    access_log /var/log/nginx/cps-novel-admin.access.log cps_edge_json;
+    error_log /var/log/nginx/cps-novel-admin.error.log warn;
+    error_page 503 /__preprod_maintenance.html;
+    include /etc/nginx/snippets/cps-novel-edge-admin-security.conf;
+    location = /__preprod_maintenance.html {
+        internal;
+        root /opt/cps-novel/shared/maintenance;
+        include /etc/nginx/snippets/cps-novel-edge-admin-security.conf;
+        add_header Cache-Control "no-store" always;
+    }
+    location ^~ /.well-known/acme-challenge/ {
+        root /var/lib/letsencrypt;
+        default_type text/plain;
+        try_files $uri =404;
+    }
+    location = /login {
+        auth_basic "CPS Novel Administration";
+        auth_basic_user_file /opt/cps-novel/shared/secrets/nginx-preprod.htpasswd;
+        include /etc/nginx/snippets/cps-novel-edge-maintenance.conf;
+        include /etc/nginx/snippets/cps-novel-edge-admin-security.conf;
+        limit_req zone=cps_edge_admin_login burst=3 nodelay;
+        proxy_pass http://cps_novel_edge_web;
+        include /etc/nginx/snippets/cps-novel-preprod-proxy.conf;
+    }
+    location = /api/health {
+        auth_basic "CPS Novel Administration";
+        auth_basic_user_file /opt/cps-novel/shared/secrets/nginx-preprod.htpasswd;
+        include /etc/nginx/snippets/cps-novel-edge-admin-security.conf;
+        limit_req zone=cps_edge_admin_api burst=60 nodelay;
+        proxy_hide_header Cache-Control;
+        add_header Cache-Control "no-store" always;
+        proxy_pass http://cps_novel_edge_web;
+        include /etc/nginx/snippets/cps-novel-preprod-proxy.conf;
+    }
+    location ^~ /api/health/ {
+        auth_basic "CPS Novel Administration";
+        auth_basic_user_file /opt/cps-novel/shared/secrets/nginx-preprod.htpasswd;
+        include /etc/nginx/snippets/cps-novel-edge-maintenance.conf;
+        include /etc/nginx/snippets/cps-novel-edge-admin-security.conf;
+        limit_req zone=cps_edge_admin_api burst=60 nodelay;
+        proxy_hide_header Cache-Control;
+        add_header Cache-Control "no-store" always;
+        proxy_pass http://cps_novel_edge_web;
+        include /etc/nginx/snippets/cps-novel-preprod-proxy.conf;
+    }
+    location ^~ /api/admin/ {
+        auth_basic "CPS Novel Administration";
+        auth_basic_user_file /opt/cps-novel/shared/secrets/nginx-preprod.htpasswd;
+        include /etc/nginx/snippets/cps-novel-edge-maintenance.conf;
+        include /etc/nginx/snippets/cps-novel-edge-admin-security.conf;
+        limit_req zone=cps_edge_admin_api burst=60 nodelay;
+        proxy_pass http://cps_novel_edge_web;
+        include /etc/nginx/snippets/cps-novel-preprod-proxy.conf;
+    }
+    location = /api/admin {
+        auth_basic "CPS Novel Administration";
+        auth_basic_user_file /opt/cps-novel/shared/secrets/nginx-preprod.htpasswd;
+        include /etc/nginx/snippets/cps-novel-edge-maintenance.conf;
+        include /etc/nginx/snippets/cps-novel-edge-admin-security.conf;
+        limit_req zone=cps_edge_admin_api burst=60 nodelay;
+        proxy_pass http://cps_novel_edge_web;
+        include /etc/nginx/snippets/cps-novel-preprod-proxy.conf;
+    }
+    location ~ ^/(?:dashboard|novels|catalog-sync|promo-links|previews|home-carousel|templates|articles|categories|tags|tasks|revenue|settings|channel-accounts|two-factor)(?:/|$) {
+        auth_basic "CPS Novel Administration";
+        auth_basic_user_file /opt/cps-novel/shared/secrets/nginx-preprod.htpasswd;
+        include /etc/nginx/snippets/cps-novel-edge-maintenance.conf;
+        include /etc/nginx/snippets/cps-novel-edge-admin-security.conf;
+        limit_req zone=cps_edge_admin_api burst=60 nodelay;
+        proxy_pass http://cps_novel_edge_web;
+        include /etc/nginx/snippets/cps-novel-preprod-proxy.conf;
+    }
+    location ^~ /_next/static/ {
+        auth_basic "CPS Novel Administration";
+        auth_basic_user_file /opt/cps-novel/shared/secrets/nginx-preprod.htpasswd;
+        include /etc/nginx/snippets/cps-novel-edge-maintenance.conf;
+        include /etc/nginx/snippets/cps-novel-edge-admin-security.conf;
+        limit_req zone=cps_edge_admin_general burst=100 nodelay;
+        proxy_hide_header Cache-Control;
+        add_header Cache-Control "private, max-age=3600";
+        proxy_pass http://cps_novel_edge_web;
+        include /etc/nginx/snippets/cps-novel-preprod-proxy.conf;
+    }
+    location / {
+        include /etc/nginx/snippets/cps-novel-edge-admin-security.conf;
+        return 404;
+    }
+}
+__REDIRECT_SERVERS__

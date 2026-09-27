@@ -9,6 +9,13 @@ command -v nginx >/dev/null 2>&1 || { echo "NGINX_INSTALL=FAIL reason=nginx_miss
 version="$(nginx -v 2>&1)"
 [[ "$version" == *"nginx/1.24."* ]] || { echo "NGINX_INSTALL=REFUSED reason=nginx_version"; exit 65; }
 
+# New cutover operations use a persistent, complete rollback inventory.
+for arg in "$@"; do
+  case "$arg" in
+    --mode|--hsts-max-age|--bootstrap-public|--restore-backup)
+      exec "$root/scripts/preproduction/install-public-nginx.sh" "$@" ;;
+  esac
+done
 bootstrap=0
 for arg in "$@"; do
   case "$arg" in

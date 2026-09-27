@@ -1,0 +1,12 @@
+# Additive certificate bootstrap: retain the installed preproduction site.
+# No upstream, TLS listener, or application content.
+server {
+    listen 80;
+    server_name pulsenovels.com www.pulsenovels.com zbcwf.pulsenovels.com;
+    location ^~ /.well-known/acme-challenge/ {
+        root /var/lib/letsencrypt;
+        default_type text/plain;
+        try_files $uri =404;
+    }
+    location / { return 404; }
+}

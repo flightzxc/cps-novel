@@ -66,7 +66,7 @@ The frozen semantics:
    the list -- a typo, a name for a gate not on this list, anything -- is a
    hard failure (`reason=approved_open_write_gate_unknown`), naming the
    offending value. Every other write gate this repository already
-   hard-closes (`indexnow_outbox`, `indexnow_delivery`, `article_writes`,
+   hard-closes (`article_writes`,
    the tracking write gate, two-factor enforcement) is untouched by this
    change and keeps its unconditional `false` check.
 2. Each registrable gate's two variables must each be exactly one of that
@@ -264,3 +264,17 @@ enum tied to a code change, strict literal booleans, dry-run combinations
 legal once registered, the `PREPROD_WRITE_GATES=PASS approved=...
 open=...` evidence line contract, pure-function testability by sourcing
 `lib.sh`) applies unchanged to `auto_tag_write`.
+
+## 2026-09-28：公网化登记扩展（代码准备，不代表开闸）
+
+封闭枚举新增 `indexnow_outbox`、`indexnow_delivery`，只允许在 SITE_URL 为
+`https://pulsenovels.com` 且后台为 `https://zbcwf.pulsenovels.com` 的正式模式登记。
+预生产仍要求 IndexNow 四项严格 false，且不得登记这两项。正式模式未登记的组也必须双 false。
+登记后保持既有语义：每项只能严格 true/false，可关闭、dry-run 或全开。
+
+`indexnow_delivery` 登记依赖 `indexnow_outbox` 登记，并必须与轻量白名单包含
+`indexnow_delivery` 完全一致（同步添加、同步撤销）；不以当前双开关值替代登记状态。
+主通道任何时候都禁止两个 IndexNow 类型，自动标签的 true/false + YES/NO 语义不变。
+
+preflight 输出 `PREPROD_SITE_MODE=preprod|public`，模式由既有 SITE_URL 推导，无新增 env。
+实际开闸仍按工单 6 分步审批；本补丁和切换日均不登记、不打开 IndexNow。

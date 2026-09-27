@@ -3,6 +3,20 @@ set -euo pipefail
 set +x
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+# Run the legacy matrix and new modes sequentially.
+mode=all
+if [[ "${1:-}" == --mode ]]; then mode="${2:-}"; shift 2; fi
+case "$mode" in
+  all)
+    "$0" --mode preprod
+    "$0" --mode rehearsal
+    "$0" --mode public
+    echo "NGINX_MATRIX_ALL=PASS"
+    exit 0 ;;
+  rehearsal|public) exec node "$root/scripts/preproduction/verify-public-nginx.mjs" "$mode" "$@" ;;
+  preprod) ;;
+  *) echo 'NGINX_MATRIX=FAIL reason=mode'; exit 64 ;;
+esac
 for command in docker curl openssl; do command -v "$command" >/dev/null 2>&1 || { echo "NGINX_MATRIX=FAIL"; exit 69; }; done
 tmp="$(mktemp -d "${TMPDIR:-/tmp}/cps-nginx-matrix.XXXXXX")"
 network="cps-nginx-matrix-$$"
