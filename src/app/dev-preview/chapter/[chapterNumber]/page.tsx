@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { ChapterScreen } from "@/features/public-ui/chapter/ChapterScreen";
 import { mockChrome } from "@/features/public-ui/fixtures/mock-chrome";
 import {
+  MOCK_NOVEL_CARDS,
   MOCK_PREVIEW_CHAPTER_TOTAL,
   getMockChapterView,
 } from "@/features/public-ui/fixtures/mock-content";
@@ -76,6 +77,8 @@ export default async function ChapterPreviewPage({
       locale={PUBLIC_SITE_LOCALE}
       chrome={mockChrome(PUBLIC_SITE_LOCALE)}
       chapter={chapter}
+      related={MOCK_NOVEL_CARDS.slice(0, 6)}
+      newReleases={MOCK_NOVEL_CARDS.slice(4, 10)}
     />
   );
 }
