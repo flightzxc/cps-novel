@@ -38,14 +38,22 @@ const messages = {
     closeMenu: "メニューを閉じる",
     about: "このサイトについて",
     copyright: "コンテンツと著作権",
-    footerNote: "本サイトでは無料で試し読みできる章をご用意しています。全編は原作プラットフォームでお楽しみいただけます。",
+    // 運営コピー第1ラウンド・A班翻訳: C（Owner 2026-09-29「当サイト／原作
+    // プラットフォーム／試し読み」表現の削除）に合わせて新しい英語原文
+    // （"New chapters are added regularly."）を再翻訳。「本サイト」「原作
+    // プラットフォーム」は使わない。
+    footerNote: "新しい章を随時追加しています。",
+    // WO-1 §5.4/§6.4 (new key): the locale switcher's trigger-button aria
+    // label. Consumed starting WO-2 — this key only exists so WO-2/WO-3
+    // don't both need to touch en.ts (see the work order's rationale).
     language: "言語",
   },
   home: {
     works: "作品",
     viewAll: "すべて見る",
     featuredEyebrow: "おすすめ",
-    startPreview: "試し読みを開始",
+    // C: "Start preview" → "Start reading"。「試し読み」表現を削除。
+    startPreview: "読み始める",
     viewDetails: "詳細を見る",
     carouselLabel: "おすすめ作品",
     carouselRole: "カルーセル",
@@ -59,47 +67,58 @@ const messages = {
     tagsLabel: "タグ",
     genreTags: "ジャンルタグ",
     chapterCount: "全{count}章",
-    previewCount: "試し読み：{count}章",
-    startPreview: "試し読みを開始",
+    // C: 「試し読み」表現を削除、{count} の位置は変更なし。
+    previewCount: "{count}章読めます",
+    startPreview: "読み始める",
     readOnUpstream: "続きを読む",
     synopsis: "あらすじ",
-    previewChapters: "試し読みできる章",
-    // 施工工单_I18N_复数能力 §6.2 折键：ja 的 Intl.PluralRules 只解出 other 一档
-    // （no one category），one 分支在 ja 永远选不中，会被门禁的 CLDR
-    // 类别覆盖检查判为多余分支——因此这里只保留原 previewChaptersDescription
-    // 一句（已含 {count}，任意数量下都语法正确），原 …One 版本"すべて"
-    // 省略的单数措辞变体停用，不再单独出现。
-    previewChaptersDescription:
-      "{count, plural, other {本サイトでは{count}章を試し読みいただけます。すべて原作プラットフォームより提供されています。}}",
-    noPreviewChapters: "この作品にはまだ試し読みできる章がありません。",
+    // A3折衷案の実装後、このキーはコンポーネントから参照されなくなった
+    // （見出しは下の chapterListTitle に置き換え）。key 集合を維持するため
+    // 値のみ残し、Cに合わせて「試し読み」表現を削除。
+    previewChapters: "章",
+    // 施工工单_I18N_复数能力 §6.2 折键：ja の Intl.PluralRules は other の
+    // 一カテゴリのみ解決される（no one category）ため、one 分岐は ja では
+    // 選ばれることがなく、门禁の CLDR カテゴリカバレッジ検査で余剰分岐と
+    // 判定される——そのため other 分岐のみを残す（{count} を含み、どの数量
+    // でも文法的に成立する）。C: 「本サイト」「原作プラットフォーム」表現を
+    // 削除、plural パラメータ/カテゴリは変更なし。
+    previewChaptersDescription: "{count, plural, other {今すぐ{count}章を無料で読めます。}}",
+    // 公開とPreviewの分離後、「0章」ブロック全体が描画されなくなったため
+    // 参照なし。Cに合わせて英語原文の趣旨どおり翻訳のみ更新。
+    noPreviewChapters: "まだ読める章がありません。",
     relatedWorks: "関連作品",
     chapterHeading: "第{number}章",
-    // C（Owner 2026-09-29 拍板）+ A3/A4/B1 新增键：先用英文占位，满足
-    // messages-completeness 门禁；由后续翻译单译成本语言（本单不翻译）。
-    chapterListTitle: "Chapter list",
-    chapterListCount: "{count, plural, other {{count} chapters total}}",
-    lockedChapterHint: "Locked — tap to continue reading",
-    expandAllChapters: "Show all {count} chapters",
-    readMoreChapters: "Read more chapters",
-    continueReadingModalTitle: "Continue reading",
-    continueReadingModalBody: "Chapter {number} and the rest of the book are available here.",
-    closeDialog: "Close",
-    newReleases: "New releases",
-    continueReadingBarLabel: "Continue reading bar",
+    // A3/B2/A4/B1 新規キー・運営コピー第1ラウンドA班翻訳済み。Owner原則:
+    // 「本サイト」「原作プラットフォーム」「試し読み」「プレビュー」を
+    // 使わない（本サイトが公式サイトそのものという前提で記述）。
+    chapterListTitle: "章一覧",
+    chapterListCount: "{count, plural, other {全{count}章}}",
+    lockedChapterHint: "ロック中 — タップして続きを読む",
+    expandAllChapters: "全{count}章を表示",
+    readMoreChapters: "さらに章を読む",
+    continueReadingModalTitle: "続きを読む",
+    continueReadingModalBody: "第{number}章など、残りの内容もここで読めます。",
+    closeDialog: "閉じる",
+    newReleases: "新着",
+    continueReadingBarLabel: "続きを読むバー",
   },
   chapter: {
     nav: "章のナビゲーション",
     previous: "前の章",
     next: "次の章",
     firstChapter: "これが最初の章です",
-    lastPreviewChapter: "これが試し読みできる最後の章です",
+    // C: 「試し読み」表現を削除、firstChapter と同じ文型を維持。
+    lastPreviewChapter: "これが最後の章です",
     heading: "第{number}章",
     readerSettings: "読書設定",
     closeReaderSettings: "読書設定を閉じる",
-    previewPosition: "試し読み {index} / {total}",
-    endOfPreview: "本サイトでの試し読みはここまでです。",
+    // C: 「試し読み」接頭辞を削除、{index}/{total} の位置は変更なし。
+    previewPosition: "{index} / {total}",
+    // C: 「試し読み」「本サイト」表現を削除。
+    endOfPreview: "現在読めるのはここまでです。",
     continuePrompt: "続きを読みますか？",
-    remainingOnOrigin: "続きの章は原作プラットフォームでお読みいただけます。",
+    // C: 「原作プラットフォーム」表現を削除。
+    remainingOnOrigin: "読み進めると物語が続きます。",
     readOnUpstream: "続きを読む",
     theme: "テーマ",
     fontSize: "文字サイズ",
@@ -121,7 +140,8 @@ const messages = {
     workCount: "{count}作品",
     empty: "ここではまだ読める作品がありません。",
     allWorksTitle: "すべての作品",
-    allWorksDescription: "本サイトで現在読める作品です。",
+    // C: 「本サイトで」表現を削除。
+    allWorksDescription: "現在読める作品です。",
     allWorksEmpty: "まだ公開されている作品がありません。",
     genreDescription: "このコレクションで読める作品です。",
     genreEmpty: "このコレクションにはまだ作品がありません。",
@@ -131,18 +151,22 @@ const messages = {
   },
   unavailable: {
     unpublishedTitle: "この作品は一時的にご利用いただけません",
-    unpublishedBody: "本サイトから削除されました。復帰した場合、このアドレスは引き続きご利用いただけます。",
+    // C: 「本サイトから削除されました」の文を削除、アドレスの有効性のみ残す。
+    unpublishedBody: "復帰した場合、このアドレスは引き続きご利用いただけます。",
     takedownTitle: "この作品は取り下げられました",
-    takedownBody: "権利者からの要請により、本サイトではこの作品の提供を終了しました。",
+    // C: 「本サイトでは」表現を削除。
+    takedownBody: "権利者からの要請により、この作品はここでは提供されていません。",
     returnHome: "ホームに戻る",
   },
   blog: {
     listTitle: "Blog",
-    listDescription: "本サイトの記事や最新情報です。",
+    // C: 「本サイトの」表現を削除。
+    listDescription: "記事と最新情報です。",
     empty: "まだブログ記事がありません。",
     publishedOn: "{date}に公開",
     unpublishedTitle: "この記事は一時的にご利用いただけません",
-    unpublishedBody: "本サイトから削除されました。復帰した場合、このアドレスは引き続きご利用いただけます。",
+    // C: unavailable.unpublishedBody と同じ理由で修正。
+    unpublishedBody: "復帰した場合、このアドレスは引き続きご利用いただけます。",
   },
   errorPage: {
     title: "問題が発生しました",
@@ -163,7 +187,8 @@ const messages = {
   meta: {
     notFound: "見つかりません",
     chapterNotFound: "章が見つかりません",
-    siteDescription: "小説を探して試し読みしよう。",
+    // C: 「試し読み」表現を削除。
+    siteDescription: "小説を見つけて、無料の章から読み始めよう。",
   },
 } satisfies LocaleMessages;
 

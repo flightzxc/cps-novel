@@ -38,14 +38,18 @@ const messages = {
     closeMenu: "Закрыть меню",
     about: "О сайте",
     copyright: "Контент и авторские права",
-    footerNote: "На этом сайте доступны бесплатные главы для ознакомления. Полная история — на оригинальной платформе.",
+    // 运营前端与SEO优化第一轮 · C（Owner 2026-09-29 拍板）：去掉"этот
+    // сайт"/"оригинальная платформа"，按本站就是官方站点处理，按新英文
+    // "New chapters are added regularly." 重新翻译。
+    footerNote: "Новые главы публикуются регулярно.",
     language: "Язык",
   },
   home: {
     works: "Произведения",
     viewAll: "Смотреть все",
     featuredEyebrow: "Избранное",
-    startPreview: "Начать ознакомление",
+    // C: 去掉"ознакомление/preview"，按新英文"Start reading"重新翻译。
+    startPreview: "Начать чтение",
     viewDetails: "Подробнее",
     carouselLabel: "Избранные произведения",
     carouselRole: "карусель",
@@ -63,50 +67,66 @@ const messages = {
     // 施工工单_I18N_复数能力 §六.1: 名词随数量变形（one/few/many/other，Intl.PluralRules("ru") 实测）。
     chapterCount:
       "{count, plural, one {{count} глава} few {{count} главы} many {{count} глав} other {{count} главы}}",
-    // 施工工单_I18N_复数能力 §六.1: 名词随数量变形（one/few/many/other）。
+    // C: 去掉"ознакомительный"（preview），按新英文"{count} chapters
+    // available"重新翻译；{count} 变量位置不变。ru 的 one 类别不止对应字面
+    // 1（21/101/121 等也落在 one，Intl.PluralRules("ru").select(21) ===
+    // "one"），one 分支用 {count} 而非硬编码「1」。
     previewCount:
-      "{count, plural, one {{count} ознакомительная глава} few {{count} ознакомительные главы} many {{count} ознакомительных глав} other {{count} ознакомительные главы}}",
-    startPreview: "Начать ознакомление",
+      "{count, plural, one {{count} глава доступна} few {{count} главы доступны} many {{count} глав доступно} other {{count} главы доступны}}",
+    // C: 去掉"ознакомление"，按新英文"Start reading"重新翻译。
+    startPreview: "Начать чтение",
     readOnUpstream: "Продолжить чтение",
     synopsis: "Описание",
-    previewChapters: "Ознакомительные главы",
-    // 施工工单_I18N_复数能力 §六.1/步骤 3: 承诺句，四档补全；few/many/other 为
-    // 步骤 3 新译。one 分支改用 {count}，不沿用步骤 2 折键时保留的硬编码「1」
-    // ——与英语不同，ru 的 one 类别不止对应字面 1（21/101/121 等个位为 1、
-    // 十位非 1 的数同样落在 one，实测 Intl.PluralRules("ru").select(21) ===
-    // "one"），硬编码「1」在 count=21/101 时会显示错误的「1 ознакомительная
-    // глава」。
+    // C: 已停用（组件改用 chapterListTitle），按新英文"Chapters"重新翻译。
+    previewChapters: "Главы",
+    // 施工工单_I18N_复数能力 §六.1/步骤 3 + C（本轮）：已停用（组件改用
+    // chapterListCount）。按新英文"{count, plural, one {1 chapter free to
+    // read now.} other {{count} chapters free to read now.}}"重新翻译，
+    // 去掉"на этом сайте"/"оригинальной платформой"。one 分支用 {count}
+    // 而非硬编码「1」（理由同上 previewCount）。
     previewChaptersDescription:
-      "{count, plural, one {{count} ознакомительная глава на этом сайте — предоставлена оригинальной платформой.} few {{count} ознакомительные главы на этом сайте — предоставлены оригинальной платформой.} many {{count} ознакомительных глав на этом сайте — все предоставлены оригинальной платформой.} other {{count} ознакомительные главы на этом сайте — предоставлены оригинальной платформой.}}",
-    noPreviewChapters: "У этой книги пока нет ознакомительных глав.",
+      "{count, plural, one {{count} глава доступна бесплатно прямо сейчас.} few {{count} главы доступны бесплатно прямо сейчас.} many {{count} глав доступно бесплатно прямо сейчас.} other {{count} главы доступны бесплатно прямо сейчас.}}",
+    // C: 已停用，按新英文"No chapters to read yet."重新翻译。
+    noPreviewChapters: "Пока нет глав для чтения.",
     relatedWorks: "Похожие произведения",
     chapterHeading: "Глава {number}",
-    // C（Owner 2026-09-29 拍板）+ A3/A4/B1 新增键：先用英文占位，满足
-    // messages-completeness 门禁；由后续翻译单译成本语言（本单不翻译）。
-    chapterListTitle: "Chapter list",
-    chapterListCount: "{count, plural, few {{count} chapters total} many {{count} chapters total} one {1 chapter total} other {{count} chapters total}}",
-    lockedChapterHint: "Locked — tap to continue reading",
-    expandAllChapters: "Show all {count} chapters",
-    readMoreChapters: "Read more chapters",
-    continueReadingModalTitle: "Continue reading",
-    continueReadingModalBody: "Chapter {number} and the rest of the book are available here.",
-    closeDialog: "Close",
-    newReleases: "New releases",
-    continueReadingBarLabel: "Continue reading bar",
+    // A3/B2 新增键：章节列表区块标题，不使用"полный список/все главы"这类
+    // 宣称完整性的措辞。
+    chapterListTitle: "Список глав",
+    // A3/B2 新增键，ICU plural（ru: one/few/many/other）。one 分支用
+    // {count} 而非硬编码「1」（理由同上）。
+    chapterListCount:
+      "{count, plural, one {Всего {count} глава} few {Всего {count} главы} many {Всего {count} глав} other {Всего {count} главы}}",
+    lockedChapterHint: "Заблокировано — нажмите, чтобы продолжить чтение",
+    // A3 新增键，ICU plural（ru: one/few/many/other），与 chapterCount 的
+    // 名词变形一致。
+    expandAllChapters:
+      "Показать все {count, plural, one {{count} главу} few {{count} главы} many {{count} глав} other {{count} главы}}",
+    readMoreChapters: "Читать больше глав",
+    continueReadingModalTitle: "Продолжить чтение",
+    continueReadingModalBody: "Глава {number} и остальная часть книги доступны здесь.",
+    closeDialog: "Закрыть",
+    newReleases: "Новинки",
+    continueReadingBarLabel: "Панель продолжения чтения",
   },
   chapter: {
     nav: "Навигация по главам",
     previous: "Предыдущая глава",
     next: "Следующая глава",
     firstChapter: "Это первая глава",
-    lastPreviewChapter: "Это последняя ознакомительная глава",
+    // C: 去掉"ознакомительная"，与上面 firstChapter 保持同一种句式。
+    lastPreviewChapter: "Это последняя глава",
     heading: "Глава {number}",
     readerSettings: "Настройки чтения",
     closeReaderSettings: "Закрыть настройки чтения",
-    previewPosition: "Ознакомление {index} / {total}",
-    endOfPreview: "На этом ознакомительный фрагмент на сайте заканчивается.",
+    // C: 去掉"Ознакомление"前缀，{index}/{total} 两个变量位置不变；用
+    // "из"代替"/"以避免与英文原文字面完全相同（触发 leftover-English 门禁）。
+    previewPosition: "{index} из {total}",
+    // C: 去掉"ознакомительный фрагмент"/"на сайте"。
+    endOfPreview: "Пока это всё, что доступно.",
     continuePrompt: "Хотите продолжить чтение?",
-    remainingOnOrigin: "Следующие главы продолжаются на оригинальной платформе.",
+    // C: 去掉"оригинальной платформе"。
+    remainingOnOrigin: "Читайте дальше, чтобы продолжить историю.",
     readOnUpstream: "Продолжить чтение",
     theme: "Тема",
     fontSize: "Размер шрифта",
@@ -130,7 +150,8 @@ const messages = {
       "{count, plural, one {{count} произведение} few {{count} произведения} many {{count} произведений} other {{count} произведения}}",
     empty: "Здесь пока нет произведений для чтения.",
     allWorksTitle: "Все произведения",
-    allWorksDescription: "Произведения, доступные для чтения на этом сайте сейчас.",
+    // C: 去掉"на этом сайте"。
+    allWorksDescription: "Произведения, доступные для чтения.",
     allWorksEmpty: "Пока нет публично доступных произведений.",
     genreDescription: "Произведения, которые можно прочитать в этой подборке.",
     genreEmpty: "В этой подборке пока нет произведений.",
@@ -140,18 +161,24 @@ const messages = {
   },
   unavailable: {
     unpublishedTitle: "Эта книга временно недоступна",
-    unpublishedBody: "Она была удалена с этого сайта. Если она вернётся, этот адрес продолжит работать.",
+    // C: 原两句去掉第一句里的"удалена с этого сайта"（"暂时不可用"已由
+    // unpublishedTitle 承担），只保留地址持久性提示，沿用旧译文的第二句。
+    unpublishedBody: "Если она вернётся, этот адрес продолжит работать.",
     takedownTitle: "Эта книга была отозвана",
-    takedownBody: "По запросу правообладателя этот сайт больше не предлагает эту книгу.",
+    // C: 去掉"этот сайт"，用"здесь"（here）对应新英文"no longer offered
+    // here"。
+    takedownBody: "По запросу правообладателя эта книга больше не предлагается здесь.",
     returnHome: "Вернуться на главную",
   },
   blog: {
     listTitle: "Blog",
-    listDescription: "Статьи и новости этого сайта.",
+    // C: 去掉"этого сайта"。
+    listDescription: "Статьи и новости.",
     empty: "Пока нет записей в блоге.",
     publishedOn: "Опубликовано {date}",
     unpublishedTitle: "Эта запись временно недоступна",
-    unpublishedBody: "Она была удалена с этого сайта. Если она вернётся, этот адрес продолжит работать.",
+    // C: 同 unavailable.unpublishedBody 的理由。
+    unpublishedBody: "Если она вернётся, этот адрес продолжит работать.",
   },
   errorPage: {
     title: "Что-то пошло не так",
@@ -172,7 +199,8 @@ const messages = {
   meta: {
     notFound: "Не найдено",
     chapterNotFound: "Глава не найдена",
-    siteDescription: "Открывайте романы и читайте ознакомительные главы.",
+    // C: 去掉"ознакомительные"（preview）。
+    siteDescription: "Открывайте романы и начинайте читать бесплатные главы.",
   },
 } satisfies LocaleMessages;
 

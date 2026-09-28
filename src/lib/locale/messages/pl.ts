@@ -38,14 +38,18 @@ const messages = {
     closeMenu: "Zamknij menu",
     about: "O stronie",
     copyright: "Treść i prawa autorskie",
-    footerNote: "Ta strona oferuje darmowe przykładowe rozdziały. Pełna historia jest dostępna na oryginalnej platformie.",
+    // 运营前端与SEO优化第一轮 · C（Owner 2026-09-29 拍板）：去掉"ta
+    // strona"/"oryginalna platforma"，按本站就是官方站点处理，按新英文
+    // "New chapters are added regularly." 重新翻译。
+    footerNote: "Nowe rozdziały są dodawane regularnie.",
     language: "Język",
   },
   home: {
     works: "Dzieła",
     viewAll: "Zobacz wszystko",
     featuredEyebrow: "Wyróżnione",
-    startPreview: "Rozpocznij przykład",
+    // C: 去掉"przykład"（preview），按新英文"Start reading"重新翻译。
+    startPreview: "Zacznij czytać",
     viewDetails: "Zobacz szczegóły",
     carouselLabel: "Wyróżnione dzieła",
     carouselRole: "karuzela",
@@ -65,47 +69,63 @@ const messages = {
     // other 为小数专用罕见分支，与 many 同文，非漏翻译）。
     chapterCount:
       "{count, plural, one {{count} rozdział} few {{count} rozdziały} many {{count} rozdziałów} other {{count} rozdziałów}}",
-    // 施工工单_I18N_复数能力 §六.1: 名词随数量变形（one/few/many/other）。
+    // C: 去掉"przykładowy"（preview），按新英文"{count} chapters
+    // available"重新翻译；{count} 变量位置不变；分支与 chapterCount 的名词
+    // 变形一致，other 与 many 同文（小数专用罕见分支）。
     previewCount:
-      "{count, plural, one {{count} przykładowy rozdział} few {{count} przykładowe rozdziały} many {{count} przykładowych rozdziałów} other {{count} przykładowych rozdziałów}}",
-    startPreview: "Rozpocznij przykład",
+      "{count, plural, one {{count} rozdział dostępny} few {{count} rozdziały dostępne} many {{count} rozdziałów dostępnych} other {{count} rozdziałów dostępnych}}",
+    // C: 去掉"przykład"。
+    startPreview: "Zacznij czytać",
     readOnUpstream: "Czytaj dalej",
     synopsis: "Opis fabuły",
-    previewChapters: "Przykładowe rozdziały",
-    // 施工工单_I18N_复数能力 §六.1/步骤 3: 承诺句，四档补全（one 分支沿用步骤 2
-    // 折键时逐字保留的原文；few/many 为步骤 3 新译，other 与 many 同文——
-    // 小数专用罕见分支，非漏翻译）。
+    // C: 已停用（组件改用 chapterListTitle），按新英文"Chapters"重新翻译。
+    previewChapters: "Rozdziały",
+    // 施工工单_I18N_复数能力 §六.1/步骤 3 + C（本轮）：已停用（组件改用
+    // chapterListCount）。按新英文"{count, plural, one {1 chapter free to
+    // read now.} other {{count} chapters free to read now.}}"重新翻译，
+    // 去掉"na tej stronie"/"oryginalną platformę"。
     previewChaptersDescription:
-      "{count, plural, one {1 przykładowy rozdział na tej stronie, dostarczony przez oryginalną platformę.} few {{count} przykładowe rozdziały na tej stronie, dostarczone przez oryginalną platformę.} many {{count} przykładowych rozdziałów na tej stronie, wszystkie dostarczone przez oryginalną platformę.} other {{count} przykładowych rozdziałów na tej stronie, wszystkie dostarczone przez oryginalną platformę.}}",
-    noPreviewChapters: "Ta książka nie ma jeszcze przykładowych rozdziałów.",
+      "{count, plural, one {{count} rozdział dostępny do czytania za darmo już teraz.} few {{count} rozdziały dostępne do czytania za darmo już teraz.} many {{count} rozdziałów dostępnych do czytania za darmo już teraz.} other {{count} rozdziałów dostępnych do czytania za darmo już teraz.}}",
+    // C: 已停用，按新英文"No chapters to read yet."重新翻译。
+    noPreviewChapters: "Nie ma jeszcze rozdziałów do przeczytania.",
     relatedWorks: "Powiązane dzieła",
     chapterHeading: "Rozdział {number}",
-    // C（Owner 2026-09-29 拍板）+ A3/A4/B1 新增键：先用英文占位，满足
-    // messages-completeness 门禁；由后续翻译单译成本语言（本单不翻译）。
-    chapterListTitle: "Chapter list",
-    chapterListCount: "{count, plural, few {{count} chapters total} many {{count} chapters total} one {1 chapter total} other {{count} chapters total}}",
-    lockedChapterHint: "Locked — tap to continue reading",
-    expandAllChapters: "Show all {count} chapters",
-    readMoreChapters: "Read more chapters",
-    continueReadingModalTitle: "Continue reading",
-    continueReadingModalBody: "Chapter {number} and the rest of the book are available here.",
-    closeDialog: "Close",
-    newReleases: "New releases",
-    continueReadingBarLabel: "Continue reading bar",
+    // A3/B2 新增键：章节列表区块标题，不使用"pełna lista/wszystkie
+    // rozdziały"这类宣称完整性的措辞。
+    chapterListTitle: "Lista rozdziałów",
+    // A3/B2 新增键，ICU plural（pl: one/few/many/other，other 与 many 同文）。
+    chapterListCount:
+      "{count, plural, one {Łącznie {count} rozdział} few {Łącznie {count} rozdziały} many {Łącznie {count} rozdziałów} other {Łącznie {count} rozdziałów}}",
+    lockedChapterHint: "Zablokowane — dotknij, aby kontynuować czytanie",
+    // A3 新增键，ICU plural（pl: one/few/many/other），与 chapterCount 的
+    // 名词变形一致。
+    expandAllChapters:
+      "Pokaż wszystkie {count, plural, one {{count} rozdział} few {{count} rozdziały} many {{count} rozdziałów} other {{count} rozdziałów}}",
+    readMoreChapters: "Czytaj więcej rozdziałów",
+    continueReadingModalTitle: "Kontynuuj czytanie",
+    continueReadingModalBody: "Rozdział {number} i reszta książki są tutaj dostępne.",
+    closeDialog: "Zamknij",
+    newReleases: "Nowości",
+    continueReadingBarLabel: "Pasek kontynuacji czytania",
   },
   chapter: {
     nav: "Nawigacja po rozdziałach",
     previous: "Poprzedni rozdział",
     next: "Następny rozdział",
     firstChapter: "To jest pierwszy rozdział",
-    lastPreviewChapter: "To jest ostatni przykładowy rozdział",
+    // C: 去掉"przykładowy"，与上面 firstChapter 保持同一种句式。
+    lastPreviewChapter: "To jest ostatni rozdział",
     heading: "Rozdział {number}",
     readerSettings: "Ustawienia czytania",
     closeReaderSettings: "Zamknij ustawienia czytania",
-    previewPosition: "Przykład {index} / {total}",
-    endOfPreview: "To koniec przykładu na tej stronie.",
+    // C: 去掉"Przykład"前缀，{index}/{total} 两个变量位置不变；用
+    // "z"代替"/"以避免与英文原文字面完全相同（触发 leftover-English 门禁）。
+    previewPosition: "{index} z {total}",
+    // C: 去掉"przykładu"/"na tej stronie"。
+    endOfPreview: "To wszystko, co jest teraz dostępne.",
     continuePrompt: "Chcesz czytać dalej?",
-    remainingOnOrigin: "Kolejne rozdziały są kontynuowane na oryginalnej platformie.",
+    // C: 去掉"oryginalnej platformie"。
+    remainingOnOrigin: "Czytaj dalej, aby kontynuować historię.",
     readOnUpstream: "Czytaj dalej",
     theme: "Motyw",
     fontSize: "Rozmiar czcionki",
@@ -129,7 +149,8 @@ const messages = {
       "{count, plural, one {{count} dzieło} few {{count} dzieła} many {{count} dzieł} other {{count} dzieł}}",
     empty: "Nie ma tu jeszcze żadnych dzieł do przeczytania.",
     allWorksTitle: "Wszystkie dzieła",
-    allWorksDescription: "Dzieła obecnie dostępne do czytania na tej stronie.",
+    // C: 去掉"na tej stronie"。
+    allWorksDescription: "Dzieła obecnie dostępne do czytania.",
     allWorksEmpty: "Nie ma jeszcze publicznie dostępnych dzieł.",
     genreDescription: "Dzieła, które możesz przeczytać w tej kolekcji.",
     genreEmpty: "Nie ma jeszcze dzieł w tej kolekcji.",
@@ -139,18 +160,24 @@ const messages = {
   },
   unavailable: {
     unpublishedTitle: "Ta książka jest tymczasowo niedostępna",
-    unpublishedBody: "Została usunięta z tej strony. Jeśli powróci, ten adres nadal będzie działać.",
+    // C: 原两句去掉第一句里的"usunięta z tej strony"（"暂时不可用"已由
+    // unpublishedTitle 承担），只保留地址持久性提示，沿用旧译文的第二句。
+    unpublishedBody: "Jeśli powróci, ten adres nadal będzie działać.",
     takedownTitle: "Ta książka została wycofana",
-    takedownBody: "Na prośbę właściciela praw ta strona nie oferuje już tej książki.",
+    // C: 去掉"ta strona"，用"tutaj"（here）对应新英文"no longer offered
+    // here"。
+    takedownBody: "Na prośbę właściciela praw ta książka nie jest już tutaj oferowana.",
     returnHome: "Powrót do strony głównej",
   },
   blog: {
     listTitle: "Blog",
-    listDescription: "Artykuły i aktualności z tej strony.",
+    // C: 去掉"z tej strony"。
+    listDescription: "Artykuły i aktualności.",
     empty: "Nie ma jeszcze wpisów na blogu.",
     publishedOn: "Opublikowano {date}",
     unpublishedTitle: "Ten wpis jest tymczasowo niedostępny",
-    unpublishedBody: "Został usunięty z tej strony. Jeśli powróci, ten adres nadal będzie działać.",
+    // C: 同 unavailable.unpublishedBody 的理由。
+    unpublishedBody: "Jeśli powróci, ten adres nadal będzie działać.",
   },
   errorPage: {
     title: "Coś poszło nie tak",
@@ -171,7 +198,8 @@ const messages = {
   meta: {
     notFound: "Nie znaleziono",
     chapterNotFound: "Nie znaleziono rozdziału",
-    siteDescription: "Odkryj powieści i czytaj przykładowe rozdziały.",
+    // C: 去掉"przykładowe"（preview）。
+    siteDescription: "Odkrywaj powieści i zacznij czytać darmowe rozdziały.",
   },
 } satisfies LocaleMessages;
 

@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 
+import { SITE_LOCALES, type SiteLocale } from "@/lib/locale/locale-canonical";
+import { CATALOGS } from "@/lib/locale/messages";
 import { en } from "@/lib/locale/messages/en";
 
 /**
@@ -24,6 +26,85 @@ const BANNED_PATTERNS: readonly { name: string; pattern: RegExp }[] = [
   { name: "preview", pattern: /preview/i },
 ];
 
+/**
+ * 运营前端与 SEO 优化第一轮翻译收尾（2026-09-29）：把同一条守卫扩展到
+ * `SITE_LOCALES` 里全部 14 个非英文语种。禁用词表直接来自 A/B/C 三组翻译时
+ * 各自产出的禁用词表（`.tmp/i18n/group-{a,b,c}-banned.txt`，翻译期间的临时
+ * 产物，不入库——本文件把内容原样固化下来，作为可长期回归的门禁数据，不是
+ * 重新拟定的词表）：
+ *  - A 组（ko/ja/zh-Hant/th/vi）：`group-a-banned.txt`
+ *  - B 组（es/fr/de/pt-BR/id）：`group-b-banned.txt`
+ *  - C 组（ru/pl/cs/ar）：`group-c-banned.txt`
+ *
+ * 检查范围与上面的英文守卫一致：该语种目录里全部公开文案的字符串值，
+ * 大小写不敏感（CJK/泰文/阿拉伯文没有大小写概念，`.toLowerCase()` 对它们是
+ * 无操作，不影响判定）。用词表里的原始词做子串匹配，不做分词/词形归并——
+ * 与英文守卫的整词正则一样，只是这里的"词"由母语者给定，不是这份测试自己
+ * 猜的。
+ */
+const NON_EN_BANNED_TERMS: Readonly<Record<Exclude<SiteLocale, "en">, readonly string[]>> = {
+  ko: ["이 사이트", "본 사이트", "당사이트", "원작 플랫폼", "원본 플랫폼", "원문 플랫폼", "미리보기", "프리뷰", "시험판"],
+  ja: ["本サイト", "当サイト", "このサイト", "原作プラットフォーム", "元のプラットフォーム", "試し読み", "試読", "プレビュー"],
+  "zh-Hant": ["本站", "本網站", "本平台", "原始平台", "原平台", "原網站", "試讀", "預覽"],
+  th: ["เว็บไซต์นี้", "เว็บนี้", "แพลตฟอร์มต้นฉบับ", "แพลตฟอร์มต้นทาง", "ตัวอย่าง", "พรีวิว"],
+  vi: ["trang này", "trang web này", "nền tảng gốc", "nền tảng ban đầu", "xem trước", "bản xem trước", "bản dùng thử", "bản demo"],
+  es: ["este sitio", "plataforma original", "vista previa", "avance"],
+  fr: ["ce site", "plateforme d'origine", "aperçu"],
+  de: ["diese Website", "Originalplattform", "Vorschau", "Leseprobe"],
+  "pt-BR": ["este site", "plataforma original", "prévia"],
+  id: ["situs ini", "platform asli", "pratinjau"],
+  ru: ["этот сайт", "оригинальная платформа", "предпросмотр", "ознакомительный фрагмент"],
+  pl: ["ta strona", "oryginalna platforma", "podgląd", "zapowiedź"],
+  cs: ["tento web", "původní platforma", "náhled", "ukázka"],
+  ar: ["هذا الموقع", "المنصة الأصلية", "معاينة"],
+};
+
+/**
+ * 非英文语种的例外清单，作用域是 `locale:key`（与
+ * `tests/ui/messages-completeness.test.ts` 的 `ALLOW_SAME_AS_EN_SCOPED` 同一
+ * 记法）。每条都必须是"字面重合、上下文里意思无关"——真的在表达"本站/原
+ * 平台/预览"含义的命中不登记在这里，交主控裁决是否要改译文（见下面
+ * `PENDING_OWNER_REVIEW_SCOPED`）。
+ *
+ * 首次全量扫描（2026-09-29，翻译收尾）命中 3 处字面重合，均为该语种的
+ * "this page"（英文原文 `errorPage.body`/`notFoundPage.title`/
+ * `notFoundPage.body` 本身就是 "This page could not be loaded"/"This page
+ * could not be found"/"this page is no longer here"）与禁用词表里的
+ * "这个网站/这个页面"类词形撞了字面：
+ *
+ *  - `vi:errorPage.body` / `vi:notFoundPage.title` / `vi:notFoundPage.body`：
+ *    越南语"trang này"= "this page"（通用"本页"，不是"trang web này"=
+ *    "this website"），三处都是对英文原文里"this page"的直译，不是站点/
+ *    平台身份声明。
+ *  - `pl:notFoundPage.body`：波兰语"ta strona"在这里同样是"this page"
+ *    （"strona"本义就是"页面"），对应英文原文"this page is no longer
+ *    here"，同样不是站点/平台身份声明。
+ */
+const ALLOWED_EXCEPTIONS_SCOPED: ReadonlySet<string> = new Set([
+  "vi:errorPage.body",
+  "vi:notFoundPage.title",
+  "vi:notFoundPage.body",
+  "pl:notFoundPage.body",
+]);
+
+/**
+ * 真的命中"本站/原平台/预览"含义、但落在这次翻译单 27 个键（17 个既有键 +
+ * 10 个新键）之外的条目——按交接指令"不要自己改译文，在回报里列出来，由
+ * 主控决定"，这里只做登记，不改动任何语种文件。用独立于
+ * `ALLOWED_EXCEPTIONS_SCOPED` 的集合存放，是为了不把"待裁决"和"字面重合、
+ * 已确认无关"这两类性质完全不同的条目混在一起——前者仍然可能需要改译文，
+ * 只是不该在这条收尾单里顺手改掉。
+ *
+ *  - `ja:nav.about`："このサイトについて"= "About this site"，字面含
+ *    "このサイト"（this site）。`git diff -- src/lib/locale/messages/ja.ts`
+ *    确认这一行在本分支的改动里是上下文行、未被本轮触碰——它是本轮开工前
+ *    就已存在的既有译文，`nav.about` 也不在本轮 27 个键的清单里
+ *    （`docs/i18n/ops-seo-round1-copy-manifest.md`）。是否要按 C 的判定标准
+ *    把它改成不带指示代词的"サイトについて"或"概要"，交主控裁决；本单只
+ *    报告，不改。
+ */
+const PENDING_OWNER_REVIEW_SCOPED: ReadonlySet<string> = new Set(["ja:nav.about"]);
+
 function flattenLeaves(node: unknown, prefix: string[] = []): Map<string, unknown> {
   const out = new Map<string, unknown>();
   if (node !== null && typeof node === "object" && !Array.isArray(node)) {
@@ -37,6 +118,8 @@ function flattenLeaves(node: unknown, prefix: string[] = []): Map<string, unknow
   out.set(prefix.join("."), node);
   return out;
 }
+
+const NON_EN_LOCALES = SITE_LOCALES.filter((locale): locale is Exclude<SiteLocale, "en"> => locale !== "en");
 
 describe("en 公开文案守卫 · 不提本站/原平台/预览（C，Owner 2026-09-29）", () => {
   it("每一条英文文案都不含 this site / original platform / source platform / preview（大小写不敏感）", () => {
@@ -58,6 +141,39 @@ describe("en 公开文案守卫 · 不提本站/原平台/预览（C，Owner 202
     const leaves = flattenLeaves(en);
     for (const key of ALLOWED_EXCEPTIONS) {
       expect(leaves.has(key), `${key} 不是 en 目录里的真实键`).toBe(true);
+    }
+  });
+});
+
+describe("非英文语种公开文案守卫 · 不提本站/原平台/预览（翻译收尾，2026-09-29）", () => {
+  for (const locale of NON_EN_LOCALES) {
+    const terms = NON_EN_BANNED_TERMS[locale];
+
+    it(`${locale}: 每一条译文都不含该语种登记的禁用词（大小写不敏感）`, () => {
+      const leaves = flattenLeaves(CATALOGS[locale]);
+      const offenders: string[] = [];
+      for (const [key, value] of leaves) {
+        if (typeof value !== "string") continue;
+        const scoped = `${locale}:${key}`;
+        if (ALLOWED_EXCEPTIONS_SCOPED.has(scoped)) continue;
+        if (PENDING_OWNER_REVIEW_SCOPED.has(scoped)) continue;
+        const lowered = value.toLowerCase();
+        for (const term of terms) {
+          if (lowered.includes(term.toLowerCase())) {
+            offenders.push(`${key}: contains "${term}" — "${value}"`);
+          }
+        }
+      }
+      expect(offenders).toEqual([]);
+    });
+  }
+
+  it("非英文语种例外清单（含待主控裁决清单）本身没有游离条目——每个键必须真的存在于对应语种目录里", () => {
+    for (const scoped of [...ALLOWED_EXCEPTIONS_SCOPED, ...PENDING_OWNER_REVIEW_SCOPED]) {
+      const [locale, ...keyParts] = scoped.split(":");
+      const key = keyParts.join(":");
+      const leaves = flattenLeaves(CATALOGS[locale as SiteLocale]);
+      expect(leaves.has(key), `${scoped} 不是 ${locale} 目录里的真实键`).toBe(true);
     }
   });
 });

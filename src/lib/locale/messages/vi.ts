@@ -38,14 +38,22 @@ const messages = {
     closeMenu: "Đóng menu",
     about: "Giới thiệu",
     copyright: "Nội dung và bản quyền",
-    footerNote: "Trang này cung cấp các chương xem trước miễn phí. Toàn bộ câu chuyện có trên nền tảng gốc.",
+    // Bản dịch vòng 1 của đội vận hành · nhóm A: theo C (Owner chốt
+    // 2026-09-29 bỏ cách nói "trang này / nền tảng gốc / xem trước"), dịch
+    // lại theo nguyên văn tiếng Anh mới ("New chapters are added
+    // regularly."). Không dùng "trang này" hay "nền tảng gốc".
+    footerNote: "Chương mới được cập nhật thường xuyên.",
+    // WO-1 §5.4/§6.4 (new key): the locale switcher's trigger-button aria
+    // label. Consumed starting WO-2 — this key only exists so WO-2/WO-3
+    // don't both need to touch en.ts (see the work order's rationale).
     language: "Ngôn ngữ",
   },
   home: {
     works: "Tác phẩm",
     viewAll: "Xem tất cả",
     featuredEyebrow: "Nổi bật",
-    startPreview: "Bắt đầu xem trước",
+    // C: "Start preview" → "Start reading", bỏ chữ "xem trước".
+    startPreview: "Bắt đầu đọc",
     viewDetails: "Xem chi tiết",
     carouselLabel: "Tác phẩm nổi bật",
     carouselRole: "băng chuyền",
@@ -59,47 +67,60 @@ const messages = {
     tagsLabel: "Thẻ",
     genreTags: "Thẻ thể loại",
     chapterCount: "{count} chương",
-    previewCount: "{count} chương xem trước",
-    startPreview: "Bắt đầu xem trước",
+    // C: bỏ chữ "xem trước", vị trí {count} không đổi.
+    previewCount: "{count} chương có thể đọc",
+    startPreview: "Bắt đầu đọc",
     readOnUpstream: "Tiếp tục đọc",
     synopsis: "Tóm tắt",
-    previewChapters: "Chương xem trước",
-    // 施工工单_I18N_复数能力 §6.2 折键：vi 的 Intl.PluralRules 只解出 other 一档
-    // （no one category），one 分支在 vi 永远选不中，会被门禁的 CLDR
-    // 类别覆盖检查判为多余分支——因此这里只保留原 previewChaptersDescription
-    // 一句（已含 {count}，任意数量下都语法正确），原 …One 的单数措辞变体停用，
-    // 不再单独出现。
-    previewChaptersDescription:
-      "{count, plural, other {{count} chương xem trước trên trang này, tất cả do nền tảng gốc cung cấp.}}",
-    noPreviewChapters: "Cuốn sách này chưa có chương xem trước.",
+    // Khóa này không còn được component nào tham chiếu sau khi triển khai
+    // phương án A3 (tiêu đề đã đổi sang chapterListTitle bên dưới); giữ
+    // giá trị chỉ để không đổi tập hợp khóa, theo C bỏ chữ "xem trước".
+    previewChapters: "Chương",
+    // 施工工单_I18N_复数能力 §6.2 折键：Intl.PluralRules của vi chỉ phân
+    // giải được duy nhất hạng mục other (no one category), nhánh one ở vi
+    // không bao giờ được chọn nên bị门禁 kiểm tra độ phủ hạng mục CLDR coi
+    // là nhánh thừa——vì vậy chỉ giữ nhánh other (đã có {count}, đúng ngữ
+    // pháp với mọi số lượng). C: bỏ "trang này", "nền tảng gốc"; tham số/
+    // hạng mục plural không đổi.
+    previewChaptersDescription: "{count, plural, other {Hiện có {count} chương đọc miễn phí.}}",
+    // Sau khi tách phát hành khỏi Preview, khối "0 chương" không còn được
+    // render nên không còn tham chiếu; theo C cập nhật bản dịch đúng ý
+    // nguyên văn mới.
+    noPreviewChapters: "Chưa có chương nào để đọc.",
     relatedWorks: "Tác phẩm liên quan",
     chapterHeading: "Chương {number}",
-    // C（Owner 2026-09-29 拍板）+ A3/A4/B1 新增键：先用英文占位，满足
-    // messages-completeness 门禁；由后续翻译单译成本语言（本单不翻译）。
-    chapterListTitle: "Chapter list",
-    chapterListCount: "{count, plural, other {{count} chapters total}}",
-    lockedChapterHint: "Locked — tap to continue reading",
-    expandAllChapters: "Show all {count} chapters",
-    readMoreChapters: "Read more chapters",
-    continueReadingModalTitle: "Continue reading",
-    continueReadingModalBody: "Chapter {number} and the rest of the book are available here.",
-    closeDialog: "Close",
-    newReleases: "New releases",
-    continueReadingBarLabel: "Continue reading bar",
+    // Khóa mới A3/B2/A4/B1 · Bản dịch vòng 1 của đội vận hành, nhóm A đã
+    // hoàn tất. Nguyên tắc Owner: không mang nghĩa "trang này / nền tảng
+    // gốc / xem trước / bản xem trước" (coi trang này chính là trang chính
+    // thức).
+    chapterListTitle: "Danh sách chương",
+    chapterListCount: "{count, plural, other {Tổng {count} chương}}",
+    lockedChapterHint: "Đã khoá — chạm để tiếp tục đọc",
+    expandAllChapters: "Xem tất cả {count} chương",
+    readMoreChapters: "Đọc thêm chương",
+    continueReadingModalTitle: "Tiếp tục đọc",
+    continueReadingModalBody: "Chương {number} và phần còn lại của cuốn sách đều có sẵn ở đây.",
+    closeDialog: "Đóng",
+    newReleases: "Tác phẩm mới",
+    continueReadingBarLabel: "Thanh tiếp tục đọc",
   },
   chapter: {
     nav: "Điều hướng chương",
     previous: "Chương trước",
     next: "Chương sau",
     firstChapter: "Đây là chương đầu tiên",
-    lastPreviewChapter: "Đây là chương xem trước cuối cùng",
+    // C: bỏ chữ "xem trước", giữ cùng cấu trúc câu với firstChapter.
+    lastPreviewChapter: "Đây là chương cuối cùng",
     heading: "Chương {number}",
     readerSettings: "Cài đặt đọc",
     closeReaderSettings: "Đóng cài đặt đọc",
-    previewPosition: "Xem trước {index} / {total}",
-    endOfPreview: "Phần xem trước trên trang này kết thúc tại đây.",
+    // C: bỏ tiền tố "xem trước", {index}/{total} không đổi.
+    previewPosition: "{index} / {total}",
+    // C: bỏ "xem trước", "trang này".
+    endOfPreview: "Hiện chỉ có sẵn đến đây.",
     continuePrompt: "Bạn muốn đọc tiếp không?",
-    remainingOnOrigin: "Các chương sau tiếp tục trên nền tảng gốc.",
+    // C: bỏ "nền tảng gốc".
+    remainingOnOrigin: "Đọc tiếp để theo dõi câu chuyện.",
     readOnUpstream: "Tiếp tục đọc",
     theme: "Giao diện",
     fontSize: "Cỡ chữ",
@@ -121,7 +142,8 @@ const messages = {
     workCount: "{count} tác phẩm",
     empty: "Chưa có tác phẩm nào để đọc ở đây.",
     allWorksTitle: "Tất cả tác phẩm",
-    allWorksDescription: "Các tác phẩm hiện có thể đọc trên trang này.",
+    // C: bỏ "trên trang này".
+    allWorksDescription: "Các tác phẩm hiện có thể đọc.",
     allWorksEmpty: "Chưa có tác phẩm nào công khai.",
     genreDescription: "Các tác phẩm bạn có thể đọc trong bộ sưu tập này.",
     genreEmpty: "Chưa có tác phẩm nào trong bộ sưu tập này.",
@@ -131,18 +153,23 @@ const messages = {
   },
   unavailable: {
     unpublishedTitle: "Cuốn sách này tạm thời không có sẵn",
-    unpublishedBody: "Cuốn sách đã bị gỡ khỏi trang này. Nếu quay lại, địa chỉ này vẫn sẽ hoạt động.",
+    // C: bỏ câu "đã bị gỡ khỏi trang này", chỉ giữ lời nhắc địa chỉ vẫn
+    // hoạt động.
+    unpublishedBody: "Nếu quay lại, địa chỉ này vẫn sẽ hoạt động.",
     takedownTitle: "Cuốn sách này đã bị gỡ bỏ",
-    takedownBody: "Theo yêu cầu của chủ sở hữu bản quyền, trang này không còn cung cấp cuốn sách này nữa.",
+    // C: bỏ "trang này".
+    takedownBody: "Theo yêu cầu của chủ sở hữu bản quyền, cuốn sách này không còn được cung cấp ở đây.",
     returnHome: "Về trang chủ",
   },
   blog: {
     listTitle: "Blog",
-    listDescription: "Bài viết và cập nhật từ trang này.",
+    // C: bỏ "từ trang này".
+    listDescription: "Bài viết và cập nhật.",
     empty: "Chưa có bài viết blog nào.",
     publishedOn: "Đăng ngày {date}",
     unpublishedTitle: "Bài viết này tạm thời không có sẵn",
-    unpublishedBody: "Bài viết đã bị gỡ khỏi trang này. Nếu quay lại, địa chỉ này vẫn sẽ hoạt động.",
+    // C: cùng lý do với unavailable.unpublishedBody.
+    unpublishedBody: "Nếu quay lại, địa chỉ này vẫn sẽ hoạt động.",
   },
   errorPage: {
     title: "Đã xảy ra lỗi",
@@ -163,7 +190,8 @@ const messages = {
   meta: {
     notFound: "Không tìm thấy",
     chapterNotFound: "Không tìm thấy chương",
-    siteDescription: "Khám phá tiểu thuyết và đọc chương xem trước.",
+    // C: bỏ "xem trước".
+    siteDescription: "Khám phá tiểu thuyết và bắt đầu đọc chương miễn phí.",
   },
 } satisfies LocaleMessages;
 
