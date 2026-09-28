@@ -12,7 +12,7 @@ Compose runtime 与 Health 身份一致性验证（`/api/health` 的 `metadataCo
 为已发布。
 
 > Notion 权威页：[海阅 版本管理与发版手账](https://app.notion.com/p/3e4601b5fd3481b5a39bcf48408015c2)。
-> 本文件是仓库内镜像；v0.5.0 当前快照、版本表与详细手账已直接同步到 Notion 并读回核对（Owner 已接受执行节点审计证据）。本文件变更不会自动写入 Notion。
+> 本文件是仓库内镜像；v0.5.0、后补的 v0.5.1 与 v0.5.2 当前快照、版本表及详细手账已直接同步到 Notion 并读回核对。本文件后续变更不会自动写入 Notion。
 
 ## 当前快照
 
@@ -22,7 +22,7 @@ Compose runtime 与 Health 身份一致性验证（`/api/health` 的 `metadataCo
 - 第一阶段：tsc 0、lint 0 errors / 19 warnings、全量 470 文件 / 7,086 测试 passed，0 failed、无 Unhandled Error；build、22 个真实库运行器（排除 p1-12）、nginx 矩阵、公开切换变异、品牌图与三套 Compose 通过；静态/live 字典 drift 0。无新迁移、白名单或业务开关变更。
 - Owner 单独授权后仅部署 `haiyue-vps`：暂停闸门前后通过；线上 20 条迁移名称、校验和及完成状态与 Final 一致；新鲜在线备份及 restore-list 通过。env 先备份，仅改两个版本变量；`PREPROD_APPROVED_MIGRATION=YES` 下无待应用迁移、grants 回放通过。`RELEASE=PASS`；五个应用服务及 postgres healthy，postgres 容器 ID 不变、`shared_buffers=4GB`。health 返回 0.5.2 / Final，backup health 为 ok，品牌 PNG 的 HTTP 200、类型及 SHA256 匹配，近五分钟错误日志 0。
 - 公网化代码已合入并部署到预生产，正式 nginx 未安装、功能未生效；NAS 入口已合入，待 Owner 授权手工安装；B-20 随将来的正式模式生效。IndexNow 与自动标签未登记或开启；预生产域名、nginx、DNS、证书、能力行与批次状态未改。批次仍暂停，由 Owner 恢复。
-- 回滚目标 v0.5.1 Final `f4d3d3595926051f3488cb1e3203c25340cbacf9`；使用原发布目录及 env 备份 `preprod.env.bak-v052-20260928T035019Z`，不重建 postgres。postgres 仍挂载 v0.5.1 发布目录中的配置，该目录不得删除。详细证据见 [v0.5.2 发布记录](releases/v0.5.2-preproduction.md)；Notion 交接提示词已生成，未直接同步或读回。
+- Owner 随后独立复核：版本 0.5.2、五个应用容器的新镜像与健康、数据库未重建且参数保持、备份健康、分享图逐字节一致、网站外观不变。回滚目标 v0.5.1 Final `f4d3d3595926051f3488cb1e3203c25340cbacf9`；使用原发布目录及 env 备份 `preprod.env.bak-v052-20260928T035019Z`，不重建 postgres。postgres 仍挂载 v0.5.1 发布目录中的配置，该目录不得删除。详细证据见 [v0.5.2 发布记录](releases/v0.5.2-preproduction.md)；Notion 已同步并读回核对。
 
 ### v0.5.1 —— 已发布到预生产（2026-09-27 23:21:12 +0800，`RELEASE=PASS`）
 
@@ -37,7 +37,7 @@ Compose runtime 与 Health 身份一致性验证（`/api/health` 的 `metadataCo
 - 数据卷 `cps_novel_postgres_data` 的 CreatedAt 前后均为 `2026-09-21T11:57:29+09:00`；postgres 新 ID `691f4c3e43d7a8dd7acee843a62156c858b783fa8712d5ed366283dd236f525e`。**postgres 已挂载 `/opt/cps-novel/releases/f4d3d3595926051f3488cb1e3203c25340cbacf9` 下的配置，该目录在下次从其它目录重建 postgres 前不得删除。**
 - 范围：应用内存限制、备份常驻修复、数据库容量参数已在预生产生效；B-16 仅测试与运维脚本；异地拉取已合入，待在 Owner 的 Mac 或 NAS 安装；自动标签登记位已合入但开关关闭（等于未上线）。没有修改能力行、业务开关、白名单、批次状态、nginx、其它主机或 X8。
 - 最终批次 `eba8f359-a569-43d7-bb55-b71fecc02f6e` 仍 paused，运行领取任务、在途条目及非终态意图均为 0；恢复由 Owner 操作。应用回滚目标 v0.5.0 `807aad3`，不要求回退数据库参数；旧参数回退必须使用 Owner 修订的旧目录 lib.sh 函数流程，不能在 v0.5.0 目录调用不存在的重建脚本。
-- 详细备份、参数与证据见 [v0.5.1 发布记录](releases/v0.5.1-preproduction.md)。Notion 交接材料已生成，尚未直接写入或读回 Notion。
+- 详细备份、参数与证据见 [v0.5.1 发布记录](releases/v0.5.1-preproduction.md)。当次仅生成 Notion 交接材料；2026-09-28 已在 v0.5.2 手账同步时补录并读回。
 
 ### v0.5.0 —— 已发布到预生产（2026-09-27 13:21:23 +0800，`RELEASE=PASS`）
 
