@@ -55,6 +55,23 @@ export type TaggingTaskCreationResult =
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
+// Prisma's interactive-transaction default timeout is 5,000ms. Measured
+// 2026-09-28: the genericTask create + nested createMany of all itemRows +
+// operationAudit create took ~2.7s locally (PG 16.14 on Apple M5 Pro) for
+// 43,431 items -- the English locale, the largest single locale in
+// production. A read-only CPU benchmark run on both databases put the
+// production VPS (AMD EPYC 9354P, 4 vCPU) at ~2.7-2.9x slower, i.e. ~8s
+// there: over the default, so the default would fail with P2028. 120,000ms
+// leaves ~15x headroom over that estimate (and still ~7x if the locale doubles).
+export const TAGGING_TASK_TRANSACTION_TIMEOUT_MS = 120_000;
+// maxWait bounds only the wait for a pooled connection before the transaction
+// starts, not its runtime. The backfill CLI has its own idle client, but this
+// function is also reached from web server actions and the worker's
+// post-materialization hook, where a starved pool should fail within seconds
+// rather than hold a request for the full timeout. 10,000ms is 5x Prisma's
+// 2,000ms default.
+export const TAGGING_TASK_TRANSACTION_MAX_WAIT_MS = 10_000;
+
 function requireInput(input: CreateTaggingAutoClassifyTaskInput) {
   const mode = input.mode ?? "dry_run";
   if (mode !== "dry_run" && mode !== "apply") throw new TaggingError("DATA_INVARIANT_VIOLATION", "Invalid Tagging task mode");
@@ -198,7 +215,7 @@ export async function createTaggingAutoClassifyTask(
         taskId,
         afterSnapshot: { lifecycle: input.lifecycle, mode, scope: scopeSnapshot(input.scope), eligibleCount: itemRows.length, payloadFingerprint },
       } });
-    });
+    }, { timeout: TAGGING_TASK_TRANSACTION_TIMEOUT_MS, maxWait: TAGGING_TASK_TRANSACTION_MAX_WAIT_MS });
   } catch (error) {
     if (!isUniqueViolation(error)) throw error;
     const prior = await input.db.genericTask.findUnique({ where: { requestToken } });
