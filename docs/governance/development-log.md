@@ -39,6 +39,20 @@
 
 ## 发版记录（新条目在最上面）
 
+### 2026-09-28 11:52 - codex（GPT-6，发版执行；时间 +0800）
+
+**变更类型**：预生产正式发布 `v0.5.2`（PATCH），第二阶段经 Owner 单独授权，仅部署 `haiyue-vps`。
+
+**背景**：公网化改造、NAS 受限只读入口与 B-20 已由 Opus 复核集成；本次只做升版、门禁、归档、预生产部署与治理，不做功能开发或正式公网切换。
+
+**变更内容**：Final `efe51b58418cb340d53c40e35e68d7e1f6db5e93`；annotated tag `v0.5.2` 固定在 Final。env 备份后只改 `APP_VERSION` 和 `NEXT_PUBLIC_BUILD_VERSION`；20 条迁移无待应用项，按脚本门禁带 `PREPROD_APPROVED_MIGRATION=YES` 重放 grants。应用及 backup-timer 更新，postgres 未重建。
+
+**影响范围**：仅 `haiyue-vps` 预生产。公网化代码已合入并部署，但正式 nginx 未安装、功能未生效；NAS 入口已合入，待 Owner 授权手工安装；B-20 随将来的正式模式生效。IndexNow 与自动标签仍关闭；域名、nginx、DNS、证书、白名单、能力行和批次状态均未改。postgres 挂载的 v0.5.1 发布目录不得删除。
+
+**验证方式**：本地 470 文件 / 7,086 测试、22 个真实库运行器、tsc/build/Compose、nginx 矩阵/公开切换变异/品牌图均通过，lint 0 error，drift 0；线上备份及 restore-list、迁移校验、归档身份、`RELEASE=PASS`、完整 verify-release、健康与备份 health、品牌图 SHA、全部服务近五分钟零错误日志通过。postgres ID 不变且 `shared_buffers=4GB`；最后暂停闸门通过。
+
+**后续待办**：批次只由 Owner 恢复；正式 nginx 待切换日单独授权，NAS 入口待 Owner 授权手工安装；Notion 交接提示词待同步并读回。回滚使用 v0.5.1 原目录及本次 env 备份，不重建 postgres。完整证据见 [发布记录](releases/v0.5.2-preproduction.md)。
+
 ### 2026-09-27 23:21 - codex（GPT-6，发版执行；时间 +0800）
 
 **变更类型**：预生产正式发布 `v0.5.1`（PATCH），应用部署和数据库重建分别获 Owner 授权。

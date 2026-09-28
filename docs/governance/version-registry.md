@@ -16,13 +16,13 @@ Compose runtime 与 Health 身份一致性验证（`/api/health` 的 `metadataCo
 
 ## 当前快照
 
-### v0.5.2 —— 准备中（2026-09-28；本版本未部署）
+### v0.5.2 —— 已发布到预生产（2026-09-28 11:52:32 +0800，`RELEASE=PASS`）
 
-- 集成基线 `5d04dcdbc5a8b30e840e0c746ea7a084c7438208`，开发线 `integration/v0.5.2-2026-09-28`；公网化改造、NAS 受限拉取入口和 B-20 经 Opus 复核合入。发版分支为 `release/v0.5.2-2026-09-28`。
-- 第一阶段仅在本地升版、运行完整门禁、推送 GitHub 和构建 linux/amd64 镜像归档；Final 与归档身份以第一阶段交付为准。不连接运维主机；无新迁移，不改白名单或业务开关。
-- 第二阶段须 Owner 确认批次暂停并明确授权，仅部署 `haiyue-vps`。目标机 env 只改 `APP_VERSION` 和 `NEXT_PUBLIC_BUILD_VERSION`；保留预生产 `SITE_URL` / `ADMIN_CANONICAL_ORIGIN`，不安装或修改 nginx、DNS、证书或 NAS 入口。部署验收后再打 Final tag、生成 CHANGELOG 并完成发版治理。
-- 公网化代码待部署到预生产，正式 nginx 到切换日才安装，因此公网模式未生效；NAS 入口已合入，待 Owner 授权手工安装；B-20 随正式模式生效。IndexNow 与自动标签保持未开启。
-- 回滚目标 v0.5.1 Final `f4d3d3595926051f3488cb1e3203c25340cbacf9`；使用原发布目录及本次 env 备份，不重建 postgres。postgres 仍挂载该发布目录中的配置，目录不得删除。
+- 集成基线 `5d04dcdbc5a8b30e840e0c746ea7a084c7438208` 经 Opus 复核；Final `efe51b58418cb340d53c40e35e68d7e1f6db5e93`，annotated tag `v0.5.2` 固定在 Final。镜像 `cps-novel:0.5.2-efe51b5`（linux/amd64），归档 SHA256 `802d6e903f62183ac58e3e768118b69c0fbfb58d224033f05386eca4c6803c10`。
+- 第一阶段：tsc 0、lint 0 errors / 19 warnings、全量 470 文件 / 7,086 测试 passed，0 failed、无 Unhandled Error；build、22 个真实库运行器（排除 p1-12）、nginx 矩阵、公开切换变异、品牌图与三套 Compose 通过；静态/live 字典 drift 0。无新迁移、白名单或业务开关变更。
+- Owner 单独授权后仅部署 `haiyue-vps`：暂停闸门前后通过；线上 20 条迁移名称、校验和及完成状态与 Final 一致；新鲜在线备份及 restore-list 通过。env 先备份，仅改两个版本变量；`PREPROD_APPROVED_MIGRATION=YES` 下无待应用迁移、grants 回放通过。`RELEASE=PASS`；五个应用服务及 postgres healthy，postgres 容器 ID 不变、`shared_buffers=4GB`。health 返回 0.5.2 / Final，backup health 为 ok，品牌 PNG 的 HTTP 200、类型及 SHA256 匹配，近五分钟错误日志 0。
+- 公网化代码已合入并部署到预生产，正式 nginx 未安装、功能未生效；NAS 入口已合入，待 Owner 授权手工安装；B-20 随将来的正式模式生效。IndexNow 与自动标签未登记或开启；预生产域名、nginx、DNS、证书、能力行与批次状态未改。批次仍暂停，由 Owner 恢复。
+- 回滚目标 v0.5.1 Final `f4d3d3595926051f3488cb1e3203c25340cbacf9`；使用原发布目录及 env 备份 `preprod.env.bak-v052-20260928T035019Z`，不重建 postgres。postgres 仍挂载 v0.5.1 发布目录中的配置，该目录不得删除。详细证据见 [v0.5.2 发布记录](releases/v0.5.2-preproduction.md)；Notion 交接提示词已生成，未直接同步或读回。
 
 ### v0.5.1 —— 已发布到预生产（2026-09-27 23:21:12 +0800，`RELEASE=PASS`）
 
@@ -282,7 +282,7 @@ Compose runtime 与 Health 身份一致性验证（`/api/health` 的 `metadataCo
 
 | Version | Date (+0800) | Bump | Summary | Commit / Release | Status |
 | --- | ---: | --- | --- | --- | --- |
-| `v0.5.2` | 2026-09-28 | PATCH | 公网化代码、NAS 受限拉取入口、B-20；无新迁移；正式模式与 NAS 入口均待后续授权生效 | `release/v0.5.2-2026-09-28`；集成基线 `5d04dcd` 经 Opus 复核 | 准备中；本版本未部署；第二阶段待 Owner 暂停批次并授权 |
+| `v0.5.2` | 2026-09-28 11:52 | PATCH | 公网化代码预置、NAS 受限拉取入口预置、B-20；无新迁移；正式模式未生效 | tag `v0.5.2` → `efe51b58418cb340d53c40e35e68d7e1f6db5e93`；image `cps-novel:0.5.2-efe51b5` | 预生产已发布；批次保持暂停；NAS 入口待 Owner 授权安装 |
 | `v0.5.1` | 2026-09-27 23:21 | PATCH | B-16 测试运维修复；应用容量、备份常驻、数据库参数生效；异地拉取待安装；自动标签仍关闭；无新迁移 | tag `v0.5.1` → `f4d3d3595926051f3488cb1e3203c25340cbacf9`；image `cps-novel:0.5.1-f4d3d35` | 预生产已发布；数据库重建及 Owner Sitemap 验收通过；批次保持暂停 |
 | `v0.5.0` | 2026-09-27 13:21 | MINOR | 轻量通道、周期扫描、sitemap 每日兜底、B-15 防线；试读实际执行通过；IndexNow 与自动标签开关关闭 | tag `v0.5.0` → `807aad3dae88c6cf560f663e55c8662407717c80`；image `cps-novel:0.5.0-807aad3` | 预生产已发布；Owner 验收通过；批次仍暂停；生产未上线 |
 | `v0.4.5` | 2026-09-26 22:53 | PATCH | 发布后触发试读；sitemap 写闸、手动刷新与 CLI；连接池、详情页与侧栏；7a 仅设计；无迁移/grants 变更 | tag `v0.4.5` → `ff1d2dd7c8d46dba8e9267687eafbb9347b55387`；image `cps-novel:0.4.5-ff1d2dd` | 预生产已发布；实地验收通过；试读不执行；生产未上线 |

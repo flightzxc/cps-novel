@@ -3,7 +3,21 @@
 <!-- 本文件由 `node scripts/generate-changelog.mjs --write` 生成，请勿手工编辑。 -->
 <!-- 叙述性内容写进 commit message；Owner/架构决策写 docs/adr/。 -->
 
-生成时间：2026-09-27 · 共 911 个 commit
+生成时间：2026-09-28 · 共 922 个 commit
+
+## v0.5.2
+
+- `efe51b5` 2026-09-28 发布：准备海阅 v0.5.2 版本身份  — _codex · GPT-6_
+- `5d04dcd` 2026-09-28 修复(B-20)：公网模式下后台站补发 HSTS，与公开站同值；预演模式两站均不发送，矩阵同步断言  — _claude-code · Claude Opus 5.5_
+- `0352745` 2026-09-28 合并(异地备份)：NAS 受限只读钥匙入口与 offsite-pull --gate 模式、绿联 NAS 安装说明（已获 Opus 复核）  — _claude-code · Claude Opus 5.5 · reviewed: claude-code · Claude Opus 5.5_
+- `aa18577` 2026-09-28 合并(公网化改造)：正式站 nginx 三模式模板、preflight 按 SITE_URL 判定正式模式与 IndexNow 登记制、海阅默认分享图、切换手册（已获 Opus 复核）  — _claude-code · Claude Opus 5.5 · reviewed: claude-code · Claude Opus 5.5_
+- `6d6c1df` 2026-09-28 记录公网切换全部门禁及变异恢复证据  — _codex · GPT-6_
+- `3fb539f` 2026-09-28 严格核对镜像分享图的 HTTP 200 状态  — _codex · GPT-6_
+- `641c93d` 2026-09-28 校准切换手册的持久备份目录  — _codex · GPT-6_
+- `c960604` 2026-09-28 加固公网响应头继承并验证真实 HTTPS 限流  — _codex · GPT-6_
+- `16a99ab` 2026-09-28 实现海阅公网切换边缘配置与正式发布门禁  — _codex · GPT-6_
+- `c7bcae6` 2026-09-28 feat(异地备份): NAS 受限只读钥匙 + 绿联 NAS 安装说明  — _claude-code · Claude Sonnet 5_
+- `02f9996` 2026-09-28 文档(发版)：收官海阅 v0.5.1 预生产部署与数据库重建  — _codex · GPT-6_
 
 ## v0.5.1
 
