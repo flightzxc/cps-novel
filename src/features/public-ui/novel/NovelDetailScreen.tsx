@@ -140,7 +140,7 @@ export function NovelDetailScreen({
         {related && related.length > 0 ? (
           <section aria-labelledby="related-works" className="pt-14 md:pt-20">
             <SectionHeader id="related-works" title={relatedTitle ?? t("novel.relatedWorks")} />
-            <BookGrid locale={locale} novels={related} />
+            <BookGrid locale={locale} novels={related} minimal />
           </section>
         ) : null}
 
@@ -148,7 +148,7 @@ export function NovelDetailScreen({
         {newReleases && newReleases.length > 0 ? (
           <section aria-labelledby="new-releases" className="pt-14 md:pt-20 pb-14 md:pb-20">
             <SectionHeader id="new-releases" title={t("novel.newReleases")} />
-            <BookGrid locale={locale} novels={newReleases} />
+            <BookGrid locale={locale} novels={newReleases} minimal />
           </section>
         ) : null}
       </Container>

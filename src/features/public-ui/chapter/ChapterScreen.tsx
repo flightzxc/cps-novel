@@ -264,7 +264,7 @@ function ChapterScreenBody({
         {related && related.length > 0 ? (
           <section aria-labelledby="chapter-related-works" className="pt-14 md:pt-20">
             <SectionHeader id="chapter-related-works" title={relatedTitle ?? t("novel.relatedWorks")} />
-            <BookGrid locale={locale} novels={related} />
+            <BookGrid locale={locale} novels={related} minimal />
           </section>
         ) : null}
 
@@ -272,7 +272,7 @@ function ChapterScreenBody({
         {newReleases && newReleases.length > 0 ? (
           <section aria-labelledby="chapter-new-releases" className="pt-14 pb-14 md:pt-20 md:pb-20">
             <SectionHeader id="chapter-new-releases" title={t("novel.newReleases")} />
-            <BookGrid locale={locale} novels={newReleases} />
+            <BookGrid locale={locale} novels={newReleases} minimal />
           </section>
         ) : null}
       </Container>

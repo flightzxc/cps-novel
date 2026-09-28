@@ -72,13 +72,15 @@ export default async function ChapterPreviewPage({
     notFound();
   }
 
+  // 🔴 两段切片不重叠（2026-09-29 主控复核，同 dev-preview/novel/page.tsx）：
+  // 共 10 本假数据，related 取前 6 本、newReleases 取剩下 4 本。
   return (
     <ChapterScreen
       locale={PUBLIC_SITE_LOCALE}
       chrome={mockChrome(PUBLIC_SITE_LOCALE)}
       chapter={chapter}
       related={MOCK_NOVEL_CARDS.slice(0, 6)}
-      newReleases={MOCK_NOVEL_CARDS.slice(4, 10)}
+      newReleases={MOCK_NOVEL_CARDS.slice(6, 10)}
     />
   );
 }

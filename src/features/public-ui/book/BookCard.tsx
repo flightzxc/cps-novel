@@ -30,15 +30,26 @@ import { getPublicT } from "@/lib/locale/messages";
  * 基本只剩首词。14px 让两行能读出一个书名来。
  * 同时加 `break-words`：3 列槽位窄，而 `grid-cols-*` 的轨道是
  * `minmax(0,1fr)` —— 不给断词的话，一个长到放不下的单词会横着溢出槽位。
+ *
+ * --- minimal（A4/B3 相关推荐/新书推荐，运营原文口径）---------------------
+ * "相关推荐"/"新书推荐"两个模块运营原文要求"只显示封面加书名"——不是
+ * `compactOnMobile` 那种"窄屏收起、md 起恢复"的响应式口子，是**任何宽度下
+ * 都不渲染简介与标签**。`minimal` 只影响这一件事：跳过 summary 段落与
+ * TagList 整块，不跟 `compactOnMobile` 混用（两个模块目前也没有传
+ * `compactOnMobile`）。首页 / 聚合页 / 题材页的 `BookCard` 调用点不传这个
+ * 参数，行为完全不变。
  */
 export function BookCard({
   locale,
   novel,
   compactOnMobile = false,
+  minimal = false,
 }: {
   locale: SiteLocale;
   novel: NovelCardView;
   compactOnMobile?: boolean;
+  /** 只渲染封面 + 书名，不渲染简介与标签（A4/B3 推荐模块用）。 */
+  minimal?: boolean;
 }) {
   const t = getPublicT(locale);
   const mobileOnlyHidden = compactOnMobile ? "hidden md:block" : "";
@@ -47,6 +58,7 @@ export function BookCard({
       className="group"
       data-testid="book-card"
       data-card-compact={compactOnMobile ? "mobile" : undefined}
+      data-card-minimal={minimal ? "true" : undefined}
     >
       <a
         href={novel.href}
@@ -73,7 +85,7 @@ export function BookCard({
             顶掉，截断静默失效（2026-09-20 在 Hero 简介上实测到，见那处注释）。
             mock 卡片没有 summary，这条路径在 dev-preview 里根本不渲染，
             只有接真实内容才会暴露——所以这里按同一口径先修。 */}
-        {novel.summary ? (
+        {!minimal && novel.summary ? (
           <div className={mobileOnlyHidden}>
             <p className="mt-2 line-clamp-3 text-sm leading-5 text-novel-fg-muted">
               {novel.summary}
@@ -85,9 +97,11 @@ export function BookCard({
       {/* 标签为空时 TagList 返回 null，整块消失，不留空位。
           包一层 div 承接 `hidden`：TagList 根节点自带 flex 类，同层 display
           工具类的胜负由生成的 CSS 顺序决定，不能直接塞进它的 className。 */}
-      <div className={mobileOnlyHidden}>
-        <TagList tags={novel.tags} className="mt-2" label={t("novel.tagsLabel")} />
-      </div>
+      {!minimal ? (
+        <div className={mobileOnlyHidden}>
+          <TagList tags={novel.tags} className="mt-2" label={t("novel.tagsLabel")} />
+        </div>
+      ) : null}
     </article>
   );
 }

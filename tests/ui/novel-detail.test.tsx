@@ -196,6 +196,33 @@ describe("小说详情页 · 推荐结构", () => {
     expect(screen.getByRole("heading", { name: "New releases" })).toBeTruthy();
     expect(container.querySelectorAll('[data-testid="book-card"]')).toHaveLength(5);
   });
+
+  // 运营原文口径：推荐模块的卡片只显示封面加书名，不显示标签（也不显示简介）
+  // ——即便候选书本身带标签（MOCK_NOVEL_CARDS 的前两本都带），推荐区块里也
+  // 不能渲染出来。首页/分类页的 BookCard 不受影响，见 book-card.test.tsx。
+  it("推荐模块的卡片只有封面和书名，不显示标签", () => {
+    const { container } = render(
+      <NovelDetailScreen
+        locale="en"
+        novel={MOCK_NOVEL_DETAIL}
+        related={MOCK_NOVEL_CARDS.slice(0, 2)}
+        newReleases={MOCK_NOVEL_CARDS.slice(2, 4)}
+      />,
+    );
+
+    const relatedSection = container.querySelector("#related-works")!;
+    const newReleasesSection = container.querySelector("#new-releases")!;
+    expect(relatedSection.querySelector('[data-testid="tag-list"]')).toBeNull();
+    expect(newReleasesSection.querySelector('[data-testid="tag-list"]')).toBeNull();
+    // MOCK_NOVEL_CARDS 前两本分别带 "言情"/"都市"/"言情" 标签——确认这些
+    // 标签文字确实没有出现在推荐区块内（不是标签区块隐藏了但文字还在）。
+    expect(relatedSection.textContent).not.toContain("言情");
+    expect(relatedSection.textContent).not.toContain("都市");
+    // 卡片仍然是同一个 book-card，且每张卡片本身没有打上 minimal 标记之外的差异。
+    for (const card of relatedSection.querySelectorAll('[data-testid="book-card"]')) {
+      expect(card.getAttribute("data-card-minimal")).toBe("true");
+    }
+  });
 });
 
 /**

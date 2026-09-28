@@ -79,35 +79,22 @@ import { loadPublicTaxonomyByNovelIds, type PublicTaxonomyTag } from "./public-t
 export const RELATED_NOVELS_TARGET = 6;
 export const NEW_RELEASES_TARGET = 6;
 
-// TTL/池容量默认值——沿用 CPS `getRelatedDramasPoolTtlMs` 等同款env覆盖 +
-// 兜底默认的模式（`readRelatedDramasPositiveIntEnv`），0/负数/非数字都回落
-// 默认值，不把 0 当成"关闭缓存"（那样 SQL 查询会在每个请求执行）。
-const DEFAULT_POOL_TTL_SECONDS = 1800;
-const DEFAULT_POOL_SIZE = 500;
+// TTL/池容量——2026-09-29 主控复核裁定：改回代码常量，不读环境变量。
+//
+// 本仓的规矩是"TS 解析、preflight、compose 透传三处必须一致"
+// （见 `docker-compose.yml`/`.env.example`/`docs/operations/
+// PREPRODUCTION_DEPLOYMENT_RUNBOOK.md` 的既有环境变量登记方式）——第一版
+// 加了 `SITE_RELATED_NOVELS_POOL_TTL_SECONDS`/`_POOL_SIZE`/
+// `_POOL_MAX_ENTRIES` 三个环境变量读取，但没有同步登记到 compose/
+// .env.example/preprod.env.example，运维在服务器上改这三个值也不会生效，
+// 违反了这条规矩。这里改成最简单的做法：直接用代码常量，不读 env。
+// 🔴 将来确实需要调整这三个值时，改这里的常量并发一个新版本，不要再加
+// 环境变量读取——除非同时把 TS 解析/compose 透传/.env.example 三处一起补上。
+export const RELATED_NOVELS_POOL_TTL_SECONDS = 1800;
+export const RELATED_NOVELS_POOL_SIZE = 500;
 // 键空间 = 已注册语种数（本仓按 locale 建池，不是 CPS 那种 (category, locale)
 // 组合），15 个语种已经是上限，给一点余量即可。
-const DEFAULT_POOL_MAX_ENTRIES = SITE_LOCALES.length + 5;
-
-function readPositiveIntEnv(raw: string | undefined, fallback: number): number {
-  if (!raw) return fallback;
-  const parsed = Number(raw);
-  if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
-  return Math.floor(parsed);
-}
-
-export function getRelatedNovelsPoolTtlMs(env: NodeJS.ProcessEnv = process.env): number {
-  return (
-    readPositiveIntEnv(env.SITE_RELATED_NOVELS_POOL_TTL_SECONDS, DEFAULT_POOL_TTL_SECONDS) * 1000
-  );
-}
-
-export function getRelatedNovelsPoolSize(env: NodeJS.ProcessEnv = process.env): number {
-  return readPositiveIntEnv(env.SITE_RELATED_NOVELS_POOL_SIZE, DEFAULT_POOL_SIZE);
-}
-
-export function getRelatedNovelsPoolMaxEntries(env: NodeJS.ProcessEnv = process.env): number {
-  return readPositiveIntEnv(env.SITE_RELATED_NOVELS_POOL_MAX_ENTRIES, DEFAULT_POOL_MAX_ENTRIES);
-}
+export const RELATED_NOVELS_POOL_MAX_ENTRIES = SITE_LOCALES.length + 5;
 
 interface PoolEntry {
   articleId: string;
@@ -158,8 +145,8 @@ let relatedNovelsPoolCache: BoundedTtlCache<PoolEntry[]> | null = null;
 function getRelatedNovelsPoolCacheInstance(): BoundedTtlCache<PoolEntry[]> {
   if (!relatedNovelsPoolCache) {
     relatedNovelsPoolCache = createBoundedTtlCache<PoolEntry[]>({
-      maxEntries: getRelatedNovelsPoolMaxEntries(),
-      ttlMs: getRelatedNovelsPoolTtlMs(),
+      maxEntries: RELATED_NOVELS_POOL_MAX_ENTRIES,
+      ttlMs: RELATED_NOVELS_POOL_TTL_SECONDS * 1000,
     });
   }
   return relatedNovelsPoolCache;
@@ -178,9 +165,8 @@ export async function getRelatedNovelsPoolCached(
   locale: SiteLocale,
   db: PrismaClient | Prisma.TransactionClient,
 ): Promise<PoolEntry[]> {
-  const poolSize = getRelatedNovelsPoolSize();
   return getRelatedNovelsPoolCacheInstance().getOrLoad(locale, () =>
-    fetchRelatedNovelsPoolFresh(locale, poolSize, db),
+    fetchRelatedNovelsPoolFresh(locale, RELATED_NOVELS_POOL_SIZE, db),
   );
 }
 

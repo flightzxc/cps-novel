@@ -34,6 +34,29 @@ describe("书籍卡片", () => {
     expect(screen.getByText("都市")).toBeTruthy();
   });
 
+  /**
+   * A4/B3 推荐模块新增的 `minimal` 口子（运营原文口径：推荐卡片只显示封面
+   * 加书名）。默认（不传 `minimal`）行为必须完全不变——首页/聚合页/题材页
+   * 都不传这个参数，下面这条用例锁的就是"不传就是原样"。
+   */
+  it("minimal=true 时只渲染封面与书名，不渲染标签（即便 novel 带标签）", () => {
+    const { container } = render(<BookCard locale="en" novel={WITH_TAGS} minimal />);
+
+    expect(screen.getByRole("heading", { name: WITH_TAGS.title })).toBeTruthy();
+    expect(screen.getByAltText(`Cover of ${WITH_TAGS.title}`)).toBeTruthy();
+    expect(container.querySelector('[data-testid="tag-list"]')).toBeNull();
+    expect(screen.queryByText("言情")).toBeNull();
+    expect(screen.queryByText("都市")).toBeNull();
+    expect(container.querySelector('[data-card-minimal]')?.getAttribute("data-card-minimal")).toBe(
+      "true",
+    );
+  });
+
+  it("不传 minimal 时行为不变（默认档仍然渲染标签）", () => {
+    render(<BookCard locale="en" novel={WITH_TAGS} />);
+    expect(screen.getByText("言情")).toBeTruthy();
+  });
+
   it("标签为空时整个标签区块消失，不留空位", () => {
     const { container } = render(<BookCard locale="en" novel={WITHOUT_TAGS} />);
     expect(container.querySelector('[data-testid="tag-list"]')).toBeNull();
