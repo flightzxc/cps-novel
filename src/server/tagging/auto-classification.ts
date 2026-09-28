@@ -22,7 +22,7 @@ import {
 } from "@/lib/tagging/keyword-eligibility";
 import { fingerprint, sha256 } from "@/lib/tagging/stable-json";
 
-import { normalizeTaggingNovelIds } from "@/lib/tagging/novel-id-scope";
+import { normalizeTaggingNovelIds, TAGGING_NOVEL_IDS_MAX } from "@/lib/tagging/novel-id-scope";
 
 type Db = PrismaClient | Prisma.TransactionClient;
 
@@ -205,18 +205,58 @@ export async function readNovelClassificationSnapshots(
   // bounds each read to C-15's <=5,000 IDs; callers segment before this API.
   const ids = scope.novelIds === undefined ? undefined : normalizeTaggingNovelIds(scope.novelIds);
   if (ids?.length === 0) return [];
-  const novels = await db.novel.findMany({
-    where: {
-      deletedAt: null,
-      ...(ids ? { id: { in: ids } } : {}),
-      ...(scope.novelId ? { id: scope.novelId } : {}),
-      ...(scope.locale ? { locale: scope.locale } : {}),
-    },
-    orderBy: { id: "asc" },
-    select: NOVEL_CLASSIFICATION_SELECT,
-  });
-  if (scope.novelId && novels.length === 0) throw new TaggingError("NOVEL_NOT_FOUND");
-  return novels.map((novel) => classificationSnapshotFromRow(novel as NovelInputRow));
+
+  // A bound novelId/novelIds selection can never exceed TAGGING_NOVEL_IDS_MAX
+  // (a single id, or a list normalizeTaggingNovelIds already capped at 5,000),
+  // so it stays a single query.
+  if (ids || scope.novelId) {
+    const novels = await db.novel.findMany({
+      where: {
+        deletedAt: null,
+        ...(ids ? { id: { in: ids } } : {}),
+        ...(scope.novelId ? { id: scope.novelId } : {}),
+      },
+      orderBy: { id: "asc" },
+      select: NOVEL_CLASSIFICATION_SELECT,
+    });
+    if (scope.novelId && novels.length === 0) throw new TaggingError("NOVEL_NOT_FOUND");
+    return novels.map((novel) => classificationSnapshotFromRow(novel as NovelInputRow));
+  }
+
+  // locale / all scopes have no upper bound on how many Novels can match --
+  // unlike novelId/novelIds above, nothing caps them at TAGGING_NOVEL_IDS_MAX
+  // before this query runs. This select's relation preload (sourceItems,
+  // tagState) folds every matched id into the *same* prepared statement as
+  // bind variables, and Postgres' prepared-statement bind-variable ceiling is
+  // 32,767. Measured against production data: a `locale: "en"` scope with
+  // 43,431 novels always fails with
+  // `P2035 too many bind variables in prepared statement, expected maximum
+  // of 32767, received 32768`, while a 7,918-novel locale succeeds in ~0.7s.
+  // So we page this read by id (keyset pagination: `id > <last page's last
+  // id>`), capping every page at TAGGING_NOVEL_IDS_MAX (the same 5,000 the
+  // explicit-selection path is already bound to) and concatenating pages in
+  // ascending-id order -- the exact order and where-clause the single query
+  // above used to produce, which callers rely on (payloadFingerprint hashes
+  // novelIds in this order for request-id idempotency).
+  const where: Prisma.NovelWhereInput = {
+    deletedAt: null,
+    ...(scope.locale ? { locale: scope.locale } : {}),
+  };
+  const snapshots: NovelClassificationSnapshot[] = [];
+  let cursorId: string | undefined;
+  for (;;) {
+    const page = await db.novel.findMany({
+      where: cursorId ? { ...where, id: { gt: cursorId } } : where,
+      orderBy: { id: "asc" },
+      take: TAGGING_NOVEL_IDS_MAX,
+      select: NOVEL_CLASSIFICATION_SELECT,
+    });
+    if (page.length === 0) break;
+    for (const novel of page) snapshots.push(classificationSnapshotFromRow(novel as NovelInputRow));
+    cursorId = page[page.length - 1]!.id;
+    if (page.length < TAGGING_NOVEL_IDS_MAX) break;
+  }
+  return snapshots;
 }
 
 export async function resolveAutoClassificationAuthorities(

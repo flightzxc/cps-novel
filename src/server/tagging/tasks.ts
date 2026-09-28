@@ -55,6 +55,15 @@ export type TaggingTaskCreationResult =
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
+// Prisma's interactive-transaction default timeout is 5,000ms. Locally, the
+// genericTask create + nested createMany of all itemRows + operationAudit
+// create measured ~2.7s for 43,431 items (the full English locale, the
+// largest single locale in production); a slower production VPS leaves too
+// little headroom against that default, risking P2028 (transaction timeout).
+// 120,000ms covers the full-locale case with wide margin.
+export const TAGGING_TASK_TRANSACTION_TIMEOUT_MS = 120_000;
+export const TAGGING_TASK_TRANSACTION_MAX_WAIT_MS = 120_000;
+
 function requireInput(input: CreateTaggingAutoClassifyTaskInput) {
   const mode = input.mode ?? "dry_run";
   if (mode !== "dry_run" && mode !== "apply") throw new TaggingError("DATA_INVARIANT_VIOLATION", "Invalid Tagging task mode");
@@ -198,7 +207,7 @@ export async function createTaggingAutoClassifyTask(
         taskId,
         afterSnapshot: { lifecycle: input.lifecycle, mode, scope: scopeSnapshot(input.scope), eligibleCount: itemRows.length, payloadFingerprint },
       } });
-    });
+    }, { timeout: TAGGING_TASK_TRANSACTION_TIMEOUT_MS, maxWait: TAGGING_TASK_TRANSACTION_MAX_WAIT_MS });
   } catch (error) {
     if (!isUniqueViolation(error)) throw error;
     const prior = await input.db.genericTask.findUnique({ where: { requestToken } });

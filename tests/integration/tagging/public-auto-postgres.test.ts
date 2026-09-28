@@ -1,6 +1,6 @@
 import { verifyPublicAutoPlans } from "./public-auto-explain";
 import { randomUUID } from "node:crypto";
-import { PrismaClient } from "@prisma/client";
+import { Prisma, PrismaClient } from "@prisma/client";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import * as projection from "@/lib/site/public-taxonomy";
 import * as legacy from "../../fixtures/public-taxonomy-before-wo7";
@@ -209,5 +209,40 @@ describe.skipIf(!enabled).sequential("WO7 public auto real roles", () => {
   it("EXPLAIN bounds source probes at representative volume with and without small-table statistics", async () => {
     await verifyPublicAutoPlans(owner, web, { app, admin, mappedTag: tags[0], textTag: tags[2], templateNovel: novel, rawScope });
   }, 180_000);
+
+  it("locale scope past Postgres' 32,767 bind-variable ceiling enqueues the full locale and stays idempotent", async () => {
+    // Real production shape: 43,431 books in the English locale. This picks a
+    // count just past the ceiling (32,767) that P2035 requires to reproduce
+    // without needing the full 43,431-row fixture.
+    const bulkLocale = "wo7-bulk";
+    const bulkCount = 33_000;
+    // Set-based bulk insert (as verifyPublicAutoPlans above does for its
+    // 80,000-row EXPLAIN fixture) rather than one row per bind variable --
+    // this keeps seeding itself far under the 32,767 ceiling we are testing.
+    await owner.$executeRawUnsafe(`INSERT INTO novel (id, business_id, title, description, locale, slug, updated_at)
+      SELECT md5('wo7-bulk-' || i)::uuid, 'wo7-bulk-' || i, 'Bulk story', '', '${bulkLocale}', 'wo7-bulk-' || i, now()
+      FROM generate_series(1, ${bulkCount}) i`);
+    await owner.$executeRaw(Prisma.sql`INSERT INTO novel_source_item (id, channel_app_id, novel_id, external_book_id, source_language_code, source_locale, raw_language_scope, title, description, status, raw_payload, updated_at)
+      SELECT md5(n.id::text || '-bulk-source')::uuid, ${app}::uuid, n.id, n.business_id, ${bulkLocale}, ${bulkLocale}, ${rawScope}, n.title, '', 'linked', '{}'::jsonb, now()
+      FROM novel n WHERE n.slug LIKE 'wo7-bulk-%'`);
+    expect(await owner.novel.count({ where: { locale: bulkLocale } })).toBe(bulkCount);
+
+    const requestId = randomUUID();
+    const first = await createTaggingAutoClassifyTask({
+      db: web, env, dependencies: dependencies(),
+      lifecycle: "initialize_missing", mode: "apply",
+      scope: { kind: "locale", locale: bulkLocale }, requestId,
+    });
+    if (first.status !== "enqueued") throw new Error(`expected enqueued, got ${JSON.stringify(first)}`);
+    expect(first.eligibleCount).toBe(bulkCount);
+    expect(await owner.genericTaskItem.count({ where: { taskId: first.taskId } })).toBe(bulkCount);
+
+    const duplicate = await createTaggingAutoClassifyTask({
+      db: web, env, dependencies: dependencies(),
+      lifecycle: "initialize_missing", mode: "apply",
+      scope: { kind: "locale", locale: bulkLocale }, requestId,
+    });
+    expect(duplicate).toMatchObject({ status: "duplicate", taskId: first.taskId, eligibleCount: bulkCount });
+  }, 300_000);
 
 });
