@@ -16,12 +16,14 @@ Compose runtime 与 Health 身份一致性验证（`/api/health` 的 `metadataCo
 
 ## 当前快照
 
-### v0.5.3 —— 准备中（2026-09-28；本版本未部署）
+### v0.5.3 —— 已发布到预生产（2026-09-28 17:10:36 +0800，`RELEASE=PASS`）
 
-- 集成基线 `14fe2e41f8da3b4920c00e957a5952e5775e1176` 经 Opus 复核，发版分支为 `release/v0.5.3-2026-09-28`。本版仅修复大语种自动标签建任务：按 id 键集分页读取、显式设置建任务事务超时；英文回填由自动标签开闸线另行执行。
-- 第一阶段仅在本地升版、运行完整门禁、推送 GitHub 和构建 linux/amd64 镜像归档；Final 与归档身份以第一阶段交付为准。不连接运维主机；无新迁移，不改白名单或业务开关。
-- 第二阶段须 Owner 确认领取批次暂停并明确授权，仅部署 `haiyue-vps`。部署前检查 `tagging.auto_classify` 是否有 pending 或 processing 任务；目标机 env 只改 `APP_VERSION` 和 `NEXT_PUBLIC_BUILD_VERSION`，已有标签开关、写闸登记和白名单原样保留。验收后再打 Final tag、生成 CHANGELOG 并完成发版治理。
-- 回滚目标 v0.5.2 Final `efe51b58418cb340d53c40e35e68d7e1f6db5e93`；使用原发布目录及本次 env 备份，不重建 postgres。
+- 集成基线 `14fe2e41f8da3b4920c00e957a5952e5775e1176` 经 Opus 复核；Final `2cec4502091df773f8ed6954486e5cf137954b8f`，annotated tag `v0.5.3` 固定在 Final。镜像 `cps-novel:0.5.3-2cec450`（linux/amd64），归档 SHA256 `cb2fc89ff299d4304cb626b1185021229756391358cc922086d09a344a59f42c`。
+- 第一阶段：tsc 0、lint 0 errors / 19 warnings、全量 470 文件 / 7,089 测试 passed，0 failed、无 Unhandled Error；build、22 个真实库运行器（排除 p1-12）、nginx 矩阵、公开切换变异、品牌图与三套 Compose 通过；迁移及静态/live 字典 drift 0。无新迁移或业务配置修改。
+- Owner 单独授权后仅部署 `haiyue-vps`：领取批次前后 paused，定类任务和条目无 pending/processing；线上 20 条迁移名称、校验和及完成状态与 Final 一致。新鲜在线备份及 restore-list 通过。env 先备份，仅改两个版本变量；标签开关、写闸登记和主白名单原样保留。`PREPROD_APPROVED_MIGRATION=YES` 下无待应用迁移，grants 回放通过，`RELEASE=PASS`。
+- 五个应用服务及 postgres 均 healthy，近五分钟错误日志 0；postgres 容器 ID 保持 `691f4c3e43d7a8dd7acee843a62156c858b783fa8712d5ed366283dd236f525e`，未重建。health 返回 0.5.3 / Final，backup health 为 ok；预检写闸输出部署前后完全一致，品牌 PNG 的 HTTP 200、类型及 SHA256 匹配。
+- 本版仅修复大语种自动标签建任务分页读取与事务超时，代码已部署到预生产；英文回填由自动标签开闸线另行执行。本次没有开启标签开关：目标机实测 `FEATURE_NOVEL_TAG_AUTO=false`、`AUTO_WRITE_AUTHORIZED=NO`，auto_tag_write 未登记；未改 nginx、证书、DNS、NAS 入口、其它业务开关或批次状态。
+- 回滚目标 v0.5.2 Final `efe51b58418cb340d53c40e35e68d7e1f6db5e93`；使用原发布目录及 env 备份 `preprod.env.bak-v053-20260928T090640Z`，不重建 postgres。详细证据见 [v0.5.3 发布记录](releases/v0.5.3-preproduction.md)；[Notion 发版手账](https://app.notion.com/p/3e4601b5fd3481b5a39bcf48408015c2)已同步并读回。
 
 ### v0.5.2 —— 已发布到预生产（2026-09-28 11:52:32 +0800，`RELEASE=PASS`）
 
@@ -289,7 +291,7 @@ Compose runtime 与 Health 身份一致性验证（`/api/health` 的 `metadataCo
 
 | Version | Date (+0800) | Bump | Summary | Commit / Release | Status |
 | --- | ---: | --- | --- | --- | --- |
-| `v0.5.3` | 2026-09-28 | PATCH | 大语种自动标签建任务分页与事务超时修复；无新迁移；英文回填另行执行 | `release/v0.5.3-2026-09-28`；集成基线 `14fe2e4` 经 Opus 复核 | 准备中；本版本未部署；第二阶段待 Owner 暂停批次并授权 |
+| `v0.5.3` | 2026-09-28 17:10 | PATCH | 大语种自动标签建任务分页与事务超时修复；无新迁移；英文回填另行执行 | tag `v0.5.3` → `2cec4502091df773f8ed6954486e5cf137954b8f`；image `cps-novel:0.5.3-2cec450` | 预生产已发布；领取批次保持暂停；标签开闸与英文回填另行执行 |
 | `v0.5.2` | 2026-09-28 11:52 | PATCH | 公网化代码预置、NAS 受限拉取入口预置、B-20；无新迁移；正式模式未生效 | tag `v0.5.2` → `efe51b58418cb340d53c40e35e68d7e1f6db5e93`；image `cps-novel:0.5.2-efe51b5` | 预生产已发布；批次保持暂停；NAS 入口待 Owner 授权安装 |
 | `v0.5.1` | 2026-09-27 23:21 | PATCH | B-16 测试运维修复；应用容量、备份常驻、数据库参数生效；异地拉取待安装；自动标签仍关闭；无新迁移 | tag `v0.5.1` → `f4d3d3595926051f3488cb1e3203c25340cbacf9`；image `cps-novel:0.5.1-f4d3d35` | 预生产已发布；数据库重建及 Owner Sitemap 验收通过；批次保持暂停 |
 | `v0.5.0` | 2026-09-27 13:21 | MINOR | 轻量通道、周期扫描、sitemap 每日兜底、B-15 防线；试读实际执行通过；IndexNow 与自动标签开关关闭 | tag `v0.5.0` → `807aad3dae88c6cf560f663e55c8662407717c80`；image `cps-novel:0.5.0-807aad3` | 预生产已发布；Owner 验收通过；批次仍暂停；生产未上线 |

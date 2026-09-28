@@ -3,11 +3,19 @@
 <!-- 本文件由 `node scripts/generate-changelog.mjs --write` 生成，请勿手工编辑。 -->
 <!-- 叙述性内容写进 commit message；Owner/架构决策写 docs/adr/。 -->
 
-生成时间：2026-09-28 · 共 922 个 commit
+生成时间：2026-09-28 · 共 927 个 commit
+
+## v0.5.3
+
+- `2cec450` 2026-09-28 发布：准备海阅 v0.5.3 版本身份  — _codex · GPT-6_
+- `14fe2e4` 2026-09-28 合并(自动标签回填)：大语种建任务按 id 键集分页读取，事务显式超时（英文 43,431 本 P2035 修复，已获 Opus 复核）  — _claude-code · Claude Opus 5.5 · reviewed: claude-code · Claude Opus 5.5_
+- `e170605` 2026-09-28 文档(发版)：收官海阅 v0.5.2 预生产部署与治理  — _codex · GPT-6_
 
 ## v0.5.2
 
 - `efe51b5` 2026-09-28 发布：准备海阅 v0.5.2 版本身份  — _codex · GPT-6_
+- `005835e` 2026-09-28 复核(自动标签回填)：事务 maxWait 改为 10 秒，超时取值写明生产实测依据  — _claude-code · Claude Opus 5.5_
+- `f35844b` 2026-09-28 修复(自动标签回填)：大语种建任务分页读取并放宽事务超时（英文 43,431 本 P2035）  — _claude-code · Claude Sonnet 5_
 - `5d04dcd` 2026-09-28 修复(B-20)：公网模式下后台站补发 HSTS，与公开站同值；预演模式两站均不发送，矩阵同步断言  — _claude-code · Claude Opus 5.5_
 - `0352745` 2026-09-28 合并(异地备份)：NAS 受限只读钥匙入口与 offsite-pull --gate 模式、绿联 NAS 安装说明（已获 Opus 复核）  — _claude-code · Claude Opus 5.5 · reviewed: claude-code · Claude Opus 5.5_
 - `aa18577` 2026-09-28 合并(公网化改造)：正式站 nginx 三模式模板、preflight 按 SITE_URL 判定正式模式与 IndexNow 登记制、海阅默认分享图、切换手册（已获 Opus 复核）  — _claude-code · Claude Opus 5.5 · reviewed: claude-code · Claude Opus 5.5_

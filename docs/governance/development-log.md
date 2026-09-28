@@ -39,6 +39,20 @@
 
 ## 发版记录（新条目在最上面）
 
+### 2026-09-28 17:10 - codex（GPT-6，发版执行；时间 +0800）
+
+**变更类型**：预生产正式发布 `v0.5.3`（PATCH），第二阶段经 Owner 单独授权，仅部署 `haiyue-vps`。
+
+**背景**：大语种自动标签建任务的分页与事务超时修复已由 Opus 复核集成；本次只升版、门禁、归档、部署与治理，不执行英文回填。
+
+**变更内容**：Final `2cec4502091df773f8ed6954486e5cf137954b8f`，annotated tag `v0.5.3` 固定在 Final。env 备份后只改 `APP_VERSION` 和 `NEXT_PUBLIC_BUILD_VERSION`；20 条迁移无待应用项，脚本按批准标志重放 grants。五个应用服务更新，postgres 未重建。
+
+**影响范围**：仅 `haiyue-vps` 预生产。标签开关、写闸登记、主白名单、领取批次 paused 状态均保持部署前值；未操作 nginx、证书、DNS、NAS 入口或其它主机。英文回填由自动标签开闸线另行执行。
+
+**验证方式**：本地 470 文件 / 7,089 测试、22 个真实库运行器、tsc/build/Compose、nginx 矩阵/公开切换变异/品牌图均通过，lint 0 error，drift 0。线上新鲜备份及 restore-list、迁移与归档身份、`RELEASE=PASS`、完整 verify-release、健康与 backup health、部署前后配置对比和全部服务近五分钟零错误日志通过；postgres ID 不变，批次仍 paused。
+
+**后续待办**：领取批次只由 Owner 恢复；英文回填由自动标签开闸线执行。[Notion 手账](https://app.notion.com/p/3e4601b5fd3481b5a39bcf48408015c2)已同步并读回。回滚使用 v0.5.2 原发布目录及本次 env 备份，不重建 postgres。完整证据见 [发布记录](releases/v0.5.3-preproduction.md)。
+
 ### 2026-09-28 11:52 - codex（GPT-6，发版执行；时间 +0800）
 
 **变更类型**：预生产正式发布 `v0.5.2`（PATCH），第二阶段经 Owner 单独授权，仅部署 `haiyue-vps`。
