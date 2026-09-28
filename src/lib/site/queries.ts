@@ -41,7 +41,7 @@ export const HOME_GRID_LIMIT = 20;
 export const BROWSE_PAGE_SIZE = 20;
 export const PREVIEW_CHAPTER_TAKE = 64;
 
-const ARTICLE_CARD_SELECT = {
+export const ARTICLE_CARD_SELECT = {
   id: true,
   title: true,
   slug: true,
@@ -83,7 +83,7 @@ const ARTICLE_DETAIL_SELECT = {
   },
 } as const;
 
-type ListedArticle = Prisma.ArticleGetPayload<{ select: typeof ARTICLE_CARD_SELECT }>;
+export type ListedArticle = Prisma.ArticleGetPayload<{ select: typeof ARTICLE_CARD_SELECT }>;
 type ListedArticleDetail = Prisma.ArticleGetPayload<{ select: typeof ARTICLE_DETAIL_SELECT }>;
 
 /**
@@ -99,7 +99,7 @@ type ListedArticleDetail = Prisma.ArticleGetPayload<{ select: typeof ARTICLE_DET
  * they add an explicit `row.novel === null` check and return `null` — the
  * same "not this view model" answer they already give for promo-not-ready.
  */
-type ListedArticleWithNovel = ListedArticle & { novel: NonNullable<ListedArticle["novel"]> };
+export type ListedArticleWithNovel = ListedArticle & { novel: NonNullable<ListedArticle["novel"]> };
 type ListedArticleDetailWithNovel = ListedArticleDetail & { novel: NonNullable<ListedArticleDetail["novel"]> };
 
 export type PublicArticleAccess =
@@ -144,7 +144,7 @@ export async function resolvePublicArticleBySlugParam(
   return { kind: access.kind, title: access.title };
 }
 
-function toPublicArticle(
+export function toPublicArticle(
   row: ListedArticleWithNovel,
   tags: readonly PublicTaxonomyTag[] = [],
 ): PublicArticleRecord {
@@ -178,7 +178,7 @@ function toPublicArticleDetail(
 // PUBLIC_NOVEL_RECORD }` requirement already makes this unreachable for
 // `listPublicArticles`/`listPublicCategories`'s query today; the check here
 // is what lets the type checker see that instead of a `!` assertion.
-function filterPromoReady(rows: ListedArticle[]): ListedArticleWithNovel[] {
+export function filterPromoReady(rows: ListedArticle[]): ListedArticleWithNovel[] {
   return rows.filter((row): row is ListedArticleWithNovel => row.novel !== null && isPromoReady(row.promoLink));
 }
 

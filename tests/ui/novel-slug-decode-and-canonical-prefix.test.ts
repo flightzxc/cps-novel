@@ -66,6 +66,9 @@ vi.mock("@/app/_lib/public-load", () => ({
   loadNovelDetail: vi.fn(),
   loadChapterView: vi.fn(),
   loadHreflangSiblings: vi.fn(),
+  // A4/B3：默认给空结果，这份用例只关心 slug 解码与 canonical 前缀，与
+  // 推荐数据无关。
+  loadRelatedAndNewReleases: vi.fn().mockResolvedValue({ related: [], newReleases: [] }),
 }));
 
 const publicLoad = await import("@/app/_lib/public-load");
@@ -126,6 +129,8 @@ const CHAPTER = {
     coverUrl: "/covers/lantern.jpg",
   },
   previewPosition: { index: 1, total: 3 },
+  totalChapterCount: 12,
+  previewChapters: [],
 };
 
 beforeEach(() => {

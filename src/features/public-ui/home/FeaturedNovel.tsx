@@ -91,7 +91,6 @@ export function FeaturedNovel({
             <MetaList
               className="mt-4"
               items={[
-                { key: "locale", value: novel.locale.label },
                 { key: "chapters", value: t("home.chapterCount", { count: novel.totalChapterCount }) },
               ]}
             />

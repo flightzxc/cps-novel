@@ -406,7 +406,6 @@ function BannerSlide({
         <MetaList
           className="mt-1.5 text-[12px] md:mt-3 md:text-sm"
           items={[
-            { key: "locale", value: novel.locale.label },
             { key: "chapters", value: t("home.chapterCount", { count: novel.totalChapterCount }) },
           ]}
         />

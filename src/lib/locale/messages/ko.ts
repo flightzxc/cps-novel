@@ -74,6 +74,18 @@ const messages = {
     noPreviewChapters: "이 작품은 아직 미리보기 챕터가 없습니다.",
     relatedWorks: "관련 작품",
     chapterHeading: "{number}장",
+    // C（Owner 2026-09-29 拍板）+ A3/A4/B1 新增键：先用英文占位，满足
+    // messages-completeness 门禁；由后续翻译单译成本语言（本单不翻译）。
+    chapterListTitle: "Chapter list",
+    chapterListCount: "{count, plural, other {{count} chapters total}}",
+    lockedChapterHint: "Locked — tap to continue reading",
+    expandAllChapters: "Show all {count} chapters",
+    readMoreChapters: "Read more chapters",
+    continueReadingModalTitle: "Continue reading",
+    continueReadingModalBody: "Chapter {number} and the rest of the book are available here.",
+    closeDialog: "Close",
+    newReleases: "New releases",
+    continueReadingBarLabel: "Continue reading bar",
   },
   chapter: {
     nav: "챕터 내비게이션",

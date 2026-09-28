@@ -3,8 +3,12 @@
 import { useRef, useState } from "react";
 import { ButtonLink } from "@/components/Button";
 import { Container } from "@/components/Container";
+import { SectionHeader } from "@/components/SectionHeader";
+import { BookGrid } from "@/features/public-ui/book/BookGrid";
 import { SiteShell, type SiteChrome } from "@/features/public-ui/layout/SiteShell";
-import type { ChapterView } from "@/features/public-ui/types";
+import { StickyCTA } from "@/features/public-ui/layout/StickyCTA";
+import { PreviewChapterList } from "@/features/public-ui/novel/PreviewChapterList";
+import type { ChapterView, NovelCardView } from "@/features/public-ui/types";
 import type { SiteLocale } from "@/lib/locale/locale-canonical";
 import { useT } from "@/lib/locale/messages/MessagesProvider";
 import { BookAttributionBar } from "./BookAttributionBar";
@@ -46,6 +50,9 @@ export function ChapterScreen({
   chrome,
   initialSettings,
   onSettingsChange,
+  related,
+  relatedTitle,
+  newReleases,
 }: {
   locale: SiteLocale;
   chapter: ChapterView;
@@ -54,26 +61,43 @@ export function ChapterScreen({
   initialSettings?: Partial<ReaderSettings>;
   /** 设置变更的外部观察点。持久化本身由 Provider 负责，这里只是通知。 */
   onSettingsChange?: (next: ReaderSettings) => void;
+  /** "相关推荐"（A4/B3）：与小说页同一份数据契约，候选不足时正常显示。 */
+  related?: NovelCardView[];
+  relatedTitle?: string;
+  /** "新书推荐"（A4/B3）：与小说页同一份数据契约。 */
+  newReleases?: NovelCardView[];
 }) {
   return (
     <SiteShell locale={locale} chrome={chrome}>
       <ChapterScreenBody
+        locale={locale}
         chapter={chapter}
         initialSettings={initialSettings}
         onSettingsChange={onSettingsChange}
+        related={related}
+        relatedTitle={relatedTitle}
+        newReleases={newReleases}
       />
     </SiteShell>
   );
 }
 
 function ChapterScreenBody({
+  locale,
   chapter,
   initialSettings,
   onSettingsChange,
+  related,
+  relatedTitle,
+  newReleases,
 }: {
+  locale: SiteLocale;
   chapter: ChapterView;
   initialSettings?: Partial<ReaderSettings>;
   onSettingsChange?: (next: ReaderSettings) => void;
+  related?: NovelCardView[];
+  relatedTitle?: string;
+  newReleases?: NovelCardView[];
 }) {
   const t = useT();
   const readerSettingsContext = useReaderSettingsContext();
@@ -129,10 +153,7 @@ function ChapterScreenBody({
         {/* 章节标题与设置入口，站点作用域 */}
         <div className="relative flex items-start justify-between gap-4 pt-8 md:pt-12">
           <div>
-            <p className="text-sm text-novel-fg-subtle tabular-nums">
-              {t("chapter.heading", { number: chapter.number })}
-            </p>
-            <h1 className="mt-2 font-novel-serif text-2xl leading-tight font-semibold tracking-tight text-balance text-novel-fg md:text-3xl">
+            <h1 className="font-novel-serif text-2xl leading-tight font-semibold tracking-tight text-balance text-novel-fg md:text-3xl">
               {chapter.title}
             </h1>
           </div>
@@ -230,7 +251,34 @@ function ChapterScreenBody({
             </div>
           ) : null}
         </div>
+
+        {/* --- 章节列表（B2）：与小说页复用同一个组件、同一套规则 --- */}
+        <PreviewChapterList
+          locale={locale}
+          chapters={chapter.previewChapters}
+          totalChapterCount={chapter.totalChapterCount}
+          readOnUpstreamHref={chapter.readOnUpstreamHref}
+        />
+
+        {/* --- 相关推荐（A4/B3）：无数据即整块不渲染，不留空框 --- */}
+        {related && related.length > 0 ? (
+          <section aria-labelledby="chapter-related-works" className="pt-14 md:pt-20">
+            <SectionHeader id="chapter-related-works" title={relatedTitle ?? t("novel.relatedWorks")} />
+            <BookGrid locale={locale} novels={related} />
+          </section>
+        ) : null}
+
+        {/* --- 新书推荐（A4/B3）：无数据即整块不渲染，不留空框 --- */}
+        {newReleases && newReleases.length > 0 ? (
+          <section aria-labelledby="chapter-new-releases" className="pt-14 pb-14 md:pt-20 md:pb-20">
+            <SectionHeader id="chapter-new-releases" title={t("novel.newReleases")} />
+            <BookGrid locale={locale} novels={newReleases} />
+          </section>
+        ) : null}
       </Container>
+
+      {/* --- 固定底部浮窗（B1，章节页必做）：没有公开跳转码时不渲染 --- */}
+      <StickyCTA locale={locale} href={chapter.readOnUpstreamHref} />
     </>
   );
 }

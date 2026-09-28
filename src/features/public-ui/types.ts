@@ -134,6 +134,10 @@ export interface ChapterView {
   nextHref?: string;
   /** 章末的正式阅读入口，同样来自公开跳转码。 */
   readOnUpstreamHref?: string;
+  /** 总章数。客观标量，供 B2 嵌入的章节列表组件派生锁定条目数；🔴 绝不据此生成任何章节行。 */
+  totalChapterCount: number;
+  /** 所属小说的实际可试读章节（B2）：章节页嵌入与小说页同一个章节列表组件，需要同一份数据。 */
+  previewChapters: PreviewChapterRef[];
 }
 
 /** 内容不可阅读时的两种状态 */

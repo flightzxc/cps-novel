@@ -8,6 +8,7 @@ import {
   loadChrome,
   loadHreflangSiblings,
   loadNovelDetail,
+  loadRelatedAndNewReleases,
 } from "@/app/_lib/public-load";
 import { noIndexMetadata, toNextMetadata } from "@/app/_lib/seo-metadata";
 import { NovelDetailScreen } from "@/features/public-ui/novel/NovelDetailScreen";
@@ -137,7 +138,10 @@ export async function NovelBody({
     );
   }
 
-  const novel = await loadNovelDetail(access.articleId);
+  const [novel, recommendations] = await Promise.all([
+    loadNovelDetail(access.articleId),
+    loadRelatedAndNewReleases(locale, access.articleId, access.novelId),
+  ]);
   if (!novel) notFound();
 
   // See `buildNovelMetadata` above — locale-prefixed path, not the
@@ -163,7 +167,13 @@ export async function NovelBody({
     <>
       {seo.other ? <JsonLd json={seo.other["application/ld+json"]} /> : null}
       {faqJsonLd ? <JsonLd json={JSON.stringify(faqJsonLd)} /> : null}
-      <NovelDetailScreen locale={locale} chrome={chrome} novel={novel} />
+      <NovelDetailScreen
+        locale={locale}
+        chrome={chrome}
+        novel={novel}
+        related={recommendations.related}
+        newReleases={recommendations.newReleases}
+      />
     </>
   );
 }

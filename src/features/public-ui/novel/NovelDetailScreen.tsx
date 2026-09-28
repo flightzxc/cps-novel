@@ -6,6 +6,7 @@ import { SectionHeader } from "@/components/SectionHeader";
 import { TagList } from "@/components/Tag";
 import { BookGrid } from "@/features/public-ui/book/BookGrid";
 import { SiteShell, type SiteChrome } from "@/features/public-ui/layout/SiteShell";
+import { StickyCTA } from "@/features/public-ui/layout/StickyCTA";
 import type { NovelCardView, NovelDetailView } from "@/features/public-ui/types";
 import type { SiteLocale } from "@/lib/locale/locale-canonical";
 import { getPublicT } from "@/lib/locale/messages";
@@ -34,13 +35,16 @@ export function NovelDetailScreen({
   chrome,
   related,
   relatedTitle,
+  newReleases,
 }: {
   locale: SiteLocale;
   novel: NovelDetailView;
   chrome?: SiteChrome;
-  /** 内容推荐是可选结构：本轮不接推荐数据，无数据即整块不渲染，不留空框。 */
+  /** "相关推荐"（A4/B3）：候选不足时正常显示已有的几本；一本都没有时整块不渲染，不留空框。 */
   related?: NovelCardView[];
   relatedTitle?: string;
+  /** "新书推荐"（A4/B3）：同语种已发布小说页按 publishedAt 倒序，排除当前书与已出现在 related 里的书。 */
+  newReleases?: NovelCardView[];
 }) {
   const t = getPublicT(locale);
   const firstPreviewChapter = novel.previewChapters[0];
@@ -69,7 +73,6 @@ export function NovelDetailScreen({
               <MetaList
                 className="mt-4"
                 items={[
-                  { key: "locale", value: novel.locale.label },
                   { key: "chapters", value: t("novel.chapterCount", { count: novel.totalChapterCount }) },
                   hasPreview && {
                     key: "preview",
@@ -124,22 +127,34 @@ export function NovelDetailScreen({
             </div>
           </section>
 
-          {novel.contentBody ? (
-            <section aria-label="Article content" className="prose prose-neutral mt-10 max-w-[68ch]" dangerouslySetInnerHTML={{ __html: novel.contentBody }} />
-          ) : null}
-
-          {/* --- 可试读章节区块（嵌入本页） --- */}
-          <PreviewChapterList locale={locale} chapters={novel.previewChapters} />
+          {/* --- 章节列表区块（嵌入本页） --- */}
+          <PreviewChapterList
+            locale={locale}
+            chapters={novel.previewChapters}
+            totalChapterCount={novel.totalChapterCount}
+            readOnUpstreamHref={novel.readOnUpstreamHref}
+          />
         </article>
 
-        {/* --- 可选的内容推荐结构：无数据即整块不渲染 --- */}
+        {/* --- 相关推荐（A4/B3）：无数据即整块不渲染，不留空框 --- */}
         {related && related.length > 0 ? (
           <section aria-labelledby="related-works" className="pt-14 md:pt-20">
             <SectionHeader id="related-works" title={relatedTitle ?? t("novel.relatedWorks")} />
             <BookGrid locale={locale} novels={related} />
           </section>
         ) : null}
+
+        {/* --- 新书推荐（A4/B3）：无数据即整块不渲染，不留空框 --- */}
+        {newReleases && newReleases.length > 0 ? (
+          <section aria-labelledby="new-releases" className="pt-14 md:pt-20 pb-14 md:pb-20">
+            <SectionHeader id="new-releases" title={t("novel.newReleases")} />
+            <BookGrid locale={locale} novels={newReleases} />
+          </section>
+        ) : null}
       </Container>
+
+      {/* --- 固定底部浮窗（B1）：没有公开跳转码时不渲染 --- */}
+      <StickyCTA locale={locale} href={novel.readOnUpstreamHref} />
     </SiteShell>
   );
 }

@@ -72,6 +72,18 @@ const messages = {
     noPreviewChapters: "Aucun chapitre de ce livre n'est encore proposé en extrait.",
     relatedWorks: "Œuvres associées",
     chapterHeading: "Chapitre {number}",
+    // C（Owner 2026-09-29 拍板）+ A3/A4/B1 新增键：先用英文占位，满足
+    // messages-completeness 门禁；由后续翻译单译成本语言（本单不翻译）。
+    chapterListTitle: "Chapter list",
+    chapterListCount: "{count, plural, many {{count} chapters total} one {1 chapter total} other {{count} chapters total}}",
+    lockedChapterHint: "Locked — tap to continue reading",
+    expandAllChapters: "Show all {count} chapters",
+    readMoreChapters: "Read more chapters",
+    continueReadingModalTitle: "Continue reading",
+    continueReadingModalBody: "Chapter {number} and the rest of the book are available here.",
+    closeDialog: "Close",
+    newReleases: "New releases",
+    continueReadingBarLabel: "Continue reading bar",
   },
   chapter: {
     nav: "Navigation des chapitres",

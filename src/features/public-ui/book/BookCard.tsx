@@ -82,10 +82,6 @@ export function BookCard({
         ) : null}
       </a>
 
-      {novel.locale ? (
-        <p className={`mt-1 text-xs text-novel-fg-subtle ${mobileOnlyHidden}`}>{novel.locale.label}</p>
-      ) : null}
-
       {/* 标签为空时 TagList 返回 null，整块消失，不留空位。
           包一层 div 承接 `hidden`：TagList 根节点自带 flex 类，同层 display
           工具类的胜负由生成的 CSS 顺序决定，不能直接塞进它的 className。 */}

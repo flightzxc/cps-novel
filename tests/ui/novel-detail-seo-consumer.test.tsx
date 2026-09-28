@@ -46,6 +46,9 @@ vi.mock("@/app/_lib/public-load", () => ({
   loadNovelDetail: vi.fn(),
   loadChapterView: vi.fn(),
   loadHreflangSiblings: vi.fn(),
+  // A4/B3：默认给空结果，这份用例只关心 contentBody/FAQ JSON-LD 渲染，与
+  // 推荐数据无关。
+  loadRelatedAndNewReleases: vi.fn().mockResolvedValue({ related: [], newReleases: [] }),
 }));
 
 const publicLoad = await import("@/app/_lib/public-load");
@@ -145,7 +148,15 @@ describe("novel/[slugParam] · generateMetadata 优先 seoMetadata", () => {
 });
 
 describe("novel/[slugParam] · 页面渲染", () => {
-  it("渲染 Article.body（contentBody）与其中的 FAQ JSON-LD", async () => {
+  /**
+   * A2/D2：`NovelDetailScreen.tsx` 不再把 `contentBody` 整段用
+   * `dangerouslySetInnerHTML` 插进页面（那是第二个 H1 的来源）——`Article.
+   * body` 数据本身与它在 FAQ JSON-LD 里的用途保留不动
+   * （`novel-detail.tsx` 页面层仍然读 `novel.contentBody` 抽取 FAQ）。原用例
+   * 名字与断言都建立在"contentBody 会被可视渲染"这个前提上，现在反过来：
+   * 断言 contentBody 里的文本**不**出现在可见页面里，FAQ JSON-LD 仍然要有。
+   */
+  it("不再可视渲染 Article.body（contentBody），但其中的 FAQ JSON-LD 仍然生成（A2/D2）", async () => {
     loadChrome.mockResolvedValue({ settings: SETTINGS, chrome: CHROME });
     loadArticleAccess.mockResolvedValue(ACCESS);
     loadNovelDetail.mockResolvedValue(DETAIL_WITH_SEO);
@@ -154,7 +165,7 @@ describe("novel/[slugParam] · 页面渲染", () => {
     const tree = await novelModule.default(params());
     render(tree);
 
-    expect(screen.getByText("Yes, the preview chapters are free.")).toBeTruthy();
+    expect(screen.queryByText("Yes, the preview chapters are free.")).toBeNull();
 
     const scripts = Array.from(document.querySelectorAll('script[type="application/ld+json"]'));
     const faqScript = scripts.find((el) => (el.textContent ?? "").includes("FAQPage"));

@@ -112,30 +112,33 @@ describe("首页紧凑档只作用于「首页 × 窄屏」这一格", () => {
       // `display:-webkit-box` 生效，同层再写 `md:block` 会把截断顶掉（2026-09-20
       // 实测，见 tests/ui/tailwind-display-conflicts.test.tsx）。
       summaryWrap: summary.parentElement!,
-      localeLine: [...card.querySelectorAll("p")].find((p) => p.textContent === "English")!,
       tagWrap: card.querySelector('[data-testid="tag-list"]')!.parentElement!,
       title: card.querySelector("h3")!,
     };
   }
 
+  // A1：语言代码展示已从 BookCard 删除，原先这里还断言过 localeLine（`<p>`
+  // 文本为 "English"）在默认档/首页紧凑档的显隐——那个元素已经不存在，
+  // 下面两条用例去掉了对它的取值与断言，其余（summaryWrap/tagWrap/title）
+  // 不受影响，照旧验证。
   it("默认档的卡片在任何宽度下都是完整的——聚合页 / 题材页不受影响", () => {
     const { container } = render(<BookGrid locale="en" novels={[FULL]} />);
-    const { card, summaryWrap, localeLine, tagWrap, title } = partsOf(container);
+    const { card, summaryWrap, tagWrap, title } = partsOf(container);
 
     expect(card.getAttribute("data-card-compact")).toBeNull();
-    for (const el of [summaryWrap, localeLine, tagWrap]) {
+    for (const el of [summaryWrap, tagWrap]) {
       expect(el.className.split(/\s+/)).not.toContain("hidden");
     }
     // 书名在默认档不截断
     expect(title.className).not.toMatch(/line-clamp-/);
   });
 
-  it("首页档在窄屏收起简介 / 语种 / 标签，md 起原样恢复，且内容仍在 DOM 里", () => {
+  it("首页档在窄屏收起简介 / 标签，md 起原样恢复，且内容仍在 DOM 里", () => {
     const { container } = render(<BookGrid locale="en" novels={[FULL]} variant="home" />);
-    const { card, summary, summaryWrap, localeLine, tagWrap, title } = partsOf(container);
+    const { card, summary, summaryWrap, tagWrap, title } = partsOf(container);
 
     expect(card.getAttribute("data-card-compact")).toBe("mobile");
-    for (const el of [summaryWrap, localeLine, tagWrap]) {
+    for (const el of [summaryWrap, tagWrap]) {
       const cls = el.className.split(/\s+/);
       expect(cls).toContain("hidden");
       expect(cls).toContain("md:block");

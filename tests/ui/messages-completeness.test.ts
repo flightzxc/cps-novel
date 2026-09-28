@@ -216,8 +216,31 @@ const EXPECTED_PLURAL_CATEGORIES: Readonly<Record<SiteLocale, readonly string[]>
  *    the etymological source of the English word, not a leftover.
  *  - `pagination.label` ("Pagination") in `fr`: same — French is the
  *    etymological source of the English word.
+ *  - `novel.chapterListTitle` / `novel.chapterListCount` / `novel.
+ *    lockedChapterHint` / `novel.expandAllChapters` / `novel.
+ *    readMoreChapters` / `novel.continueReadingModalTitle` / `novel.
+ *    continueReadingModalBody` / `novel.closeDialog` / `novel.newReleases` /
+ *    `novel.continueReadingBarLabel`：运营前端与 SEO 优化第一轮
+ *    （2026-09-29，A3/A4/B1）新增的 UI 文案键。本单只写英文原文，其它 14
+ *    个语种先填英文原文占位以满足这条门禁——翻译单尚未派发，占位是
+ *    交接文档里明确要求的过渡态，不是漏翻译（清单见
+ *    `docs/i18n/ops-seo-round1-copy-manifest.md`）。翻译单落地后应从这个
+ *    allowlist 里移除对应键。
  */
-const ALLOW_SAME_AS_EN: ReadonlySet<string> = new Set(["blog.listTitle", "pagination.pageOf"]);
+const ALLOW_SAME_AS_EN: ReadonlySet<string> = new Set([
+  "blog.listTitle",
+  "pagination.pageOf",
+  "novel.chapterListTitle",
+  "novel.chapterListCount",
+  "novel.lockedChapterHint",
+  "novel.expandAllChapters",
+  "novel.readMoreChapters",
+  "novel.continueReadingModalTitle",
+  "novel.continueReadingModalBody",
+  "novel.closeDialog",
+  "novel.newReleases",
+  "novel.continueReadingBarLabel",
+]);
 const ALLOW_SAME_AS_EN_SCOPED: ReadonlySet<string> = new Set(["fr:nav.genres", "fr:pagination.label"]);
 
 const NON_EN_LOCALES = SITE_LOCALES.filter((locale) => locale !== "en");

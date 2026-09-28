@@ -195,6 +195,8 @@ export function toChapterView(
     paragraphs,
     novel,
     previewPosition: { index: index + 1, total: previewChapters.length },
+    totalChapterCount: article.novel.totalChapterCount,
+    previewChapters: toPreviewChapterRefs(article, previewChapters),
     previousHref: previous
       ? buildChapterPath({
           locale,

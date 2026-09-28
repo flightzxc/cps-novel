@@ -263,6 +263,8 @@ describe("public page <meta name=description>: non-empty, matches og:description
         coverUrl: "/covers/lantern.jpg",
       },
       previewPosition: { index: 1, total: 3 },
+      totalChapterCount: 3,
+      previewChapters: [],
     });
     loadHreflangSiblings.mockResolvedValue([]);
 
