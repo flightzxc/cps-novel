@@ -1,3 +1,4 @@
+import { SITE_MODE_CASES } from "./site-mode-fixture";
 import { createHash } from "node:crypto";
 import { chmod, mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -1248,5 +1249,14 @@ describe("approved sitemap template renders into runtime services", () => {
     expect(tasks).not.toContain("sitemap_refresh");
     expect(config.services.scheduler.environment.FEATURE_SITEMAP_AUTO_REFRESH).toBeUndefined();
     expect(config.services.scheduler.environment.SITEMAP_AUTO_REFRESH_ALLOW_WRITE).toBeUndefined();
+  });
+});
+
+
+describe.each(SITE_MODE_CASES)("$mode deployment mode", (site) => {
+  it("derives mode from SITE_URL and rejects a mismatched admin origin", () => {
+    const run = (admin: string) => spawnSync("/bin/bash", ["-c", 'source scripts/preproduction/lib.sh; preprod_site_mode'], { encoding: "utf8", env: { NODE_ENV: "test", PATH: process.env.PATH, SITE_URL: site.SITE_URL, ADMIN_CANONICAL_ORIGIN: admin } });
+    expect(run(site.ADMIN_CANONICAL_ORIGIN).stdout.trim()).toBe(site.mode);
+    expect(run(site.SITE_URL).status).toBe(65);
   });
 });

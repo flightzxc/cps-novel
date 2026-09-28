@@ -1,3 +1,4 @@
+import { SITE_MODE_CASES } from "./site-mode-fixture";
 import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -297,11 +298,11 @@ describe("preflight.sh 接线：调用行真的存在，取证行真的在最终
   });
 });
 
-describe("preflight.sh 真实行为（不 mock）：配置门禁在生命周期判定之后、git_commit 判定之前生效", () => {
+describe.each(SITE_MODE_CASES)("$mode preflight.sh 真实行为（不 mock）：配置门禁在生命周期判定之后、git_commit 判定之前生效", (site) => {
   const BASE_ENV: Record<string, string> = {
     P1_12_COMPOSE_PROJECT: "cps-novel",
-    SITE_URL: "https://www.bangbangji.cloud",
-    ADMIN_CANONICAL_ORIGIN: "https://zbcwf.bangbangji.cloud",
+    SITE_URL: site.SITE_URL,
+    ADMIN_CANONICAL_ORIGIN: site.ADMIN_CANONICAL_ORIGIN,
     PUBLIC_TRACKING_WRITE_DISABLED: "1",
     ADMIN_TWO_FACTOR_ENFORCEMENT: "true",
     FEATURE_INDEXNOW_OUTBOX: "false",

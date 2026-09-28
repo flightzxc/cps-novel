@@ -1,3 +1,4 @@
+import { SITE_MODE_CASES } from "./site-mode-fixture";
 import { chmod, cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -82,8 +83,8 @@ const RENDER_ENV: Record<string, string> = {
   BUILD_DATE: "2026-09-21T00:00:00Z",
   NEXT_PUBLIC_BUILD_VERSION: "v0.1.0",
   P1_12_COMPOSE_PROJECT: "cps-novel",
-  SITE_URL: "https://www.bangbangji.cloud",
-  ADMIN_CANONICAL_ORIGIN: "https://zbcwf.bangbangji.cloud",
+  SITE_URL: SITE_MODE_CASES[0].SITE_URL,
+  ADMIN_CANONICAL_ORIGIN: SITE_MODE_CASES[0].ADMIN_CANONICAL_ORIGIN,
   TZ: "Asia/Tokyo",
   P1_12_WEB_DATABASE_URL: "postgresql://web_app:placeholder@postgres/cps_novel",
   P1_12_WORKER_DATABASE_URL: "postgresql://worker_app:placeholder@postgres/cps_novel",
@@ -644,5 +645,15 @@ describe.skipIf(!dockerOk)("两个 one-off 调用方发出的 argv 必须被目�
     ]) expect(oneOff, token).toContain(token);
     const supported = cliFlags("run");
     expect(supported.has("--rm")).toBe(true);
+  });
+});
+
+describe.skipIf(!dockerOk).each(SITE_MODE_CASES)("$mode compose domains", (site) => {
+  it("passes both origins to the web service", () => {
+    const r = spawnSync("docker", ["compose", "-p", "cps-novel", "-f", "docker-compose.yml", "-f", "infra/preproduction/docker-compose.yml", "config", "--format", "json"], { env: { ...process.env, ...RENDER_ENV, ...site }, encoding: "utf8" });
+    expect(r.status, r.stderr).toBe(0);
+    const web = JSON.parse(r.stdout).services.web.environment;
+    expect(web.SITE_URL).toBe(site.SITE_URL);
+    expect(web.ADMIN_CANONICAL_ORIGIN).toBe(site.ADMIN_CANONICAL_ORIGIN);
   });
 });

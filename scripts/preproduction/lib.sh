@@ -33,6 +33,42 @@ preprod_load_env() {
   [[ -z "$inherited_commit" ]] || export GIT_COMMIT="$inherited_commit"
 }
 
+# Derived deployment mode; no additional environment input or URL fallback.
+preprod_site_mode() {
+  case "${SITE_URL:-}" in
+    https://www.bangbangji.cloud)
+      [[ "${ADMIN_CANONICAL_ORIGIN:-}" == https://zbcwf.bangbangji.cloud ]] || { echo admin_origin; return 65; }
+      echo preprod ;;
+    https://pulsenovels.com)
+      [[ "${ADMIN_CANONICAL_ORIGIN:-}" == https://zbcwf.pulsenovels.com ]] || { echo admin_origin; return 65; }
+      echo public ;;
+    *) echo site_url; return 65 ;;
+  esac
+}
+
+# Same comma/whitespace token boundaries as worker-lanes.mjs parseTaskTypes;
+# contract tests compare the two parsers. Kept shell-only for bash 3.2/5 checks.
+preprod_allowlist_has() {
+  printf '%s' "$1" | tr ',[:space:]' '\n' | grep -Fx "$2" >/dev/null
+}
+preprod_assert_indexnow_gates() {
+  local mode="$1" outbox="$2" delivery="$3"
+  if [[ "$mode" != public ]] && (( outbox || delivery )); then echo indexnow_registration_requires_public; return 65; fi
+  if (( delivery && ! outbox )); then echo indexnow_delivery_requires_outbox; return 65; fi
+  local feature="${FEATURE_INDEXNOW_OUTBOX:-}" allow="${INDEXNOW_OUTBOX_ALLOW_WRITE:-}"
+  if [[ "$feature" != true && "$feature" != false ]] || [[ "$allow" != true && "$allow" != false ]]; then echo indexnow_outbox_invalid; return 65; fi
+  if (( ! outbox )) && [[ "$feature" != false || "$allow" != false ]]; then echo indexnow_outbox; return 65; fi
+  feature="${FEATURE_INDEXNOW_DELIVERY:-}"; allow="${INDEXNOW_DELIVERY_ALLOW_WRITE:-}"
+  if [[ "$feature" != true && "$feature" != false ]] || [[ "$allow" != true && "$allow" != false ]]; then echo indexnow_delivery_invalid; return 65; fi
+  if (( ! delivery )) && [[ "$feature" != false || "$allow" != false ]]; then echo indexnow_delivery; return 65; fi
+  local light_delivery=0
+  if preprod_allowlist_has "${WORKER_LIGHT_TASK_ALLOWLIST:-}" indexnow_delivery; then light_delivery=1; fi
+  if (( delivery != light_delivery )); then echo indexnow_delivery_allowlist_mismatch; return 65; fi
+  if preprod_allowlist_has "${WORKER_TASK_ALLOWLIST:-}" indexnow_delivery || preprod_allowlist_has "${WORKER_TASK_ALLOWLIST:-}" indexnow.sweep.v1; then
+    echo worker_main_indexnow_forbidden; return 65
+  fi
+}
+
 # --- 写闸登记制：PREPROD_APPROVED_OPEN_WRITE_GATES -------------------------
 #
 # 背景：预生产（bangbangji.cloud）自 2026-09-22 起不再是零业务数据环境。
@@ -45,11 +81,12 @@ preprod_load_env() {
 # 决策（Owner 2026-09-23，见 docs/adr/ADR-PREPROD-APPROVED-OPEN-WRITE-GATES.md）：
 # 把"两个变量必须全为 false"改成"开启前必须先在共享 env 里显式登记"。
 #
-# 🔴 可登记的写闸是一个封闭枚举，只有四个（2026-09-28 扩展见下）：
+# 🔴 可登记的写闸是一个封闭枚举，共六个（2026-09-28 公网化新增 IndexNow 两项）：
 #   catalog_write   → FEATURE_NOVEL_CATALOG_SYNC + NOVEL_CATALOG_SYNC_ALLOW_WRITE
 #   promo_write     → FEATURE_PROMO_LINK_CLAIM + PROMO_LINK_CLAIM_ALLOW_WRITE
 #   sitemap_write   → FEATURE_SITEMAP_AUTO_REFRESH + SITEMAP_AUTO_REFRESH_ALLOW_WRITE
 #   auto_tag_write  → FEATURE_NOVEL_TAG_AUTO + AUTO_WRITE_AUTHORIZED
+#   indexnow_outbox / indexnow_delivery → 只在 public 模式允许登记，delivery 依赖 outbox
 # sitemap: Owner 2026-09-26 approval; repository release evidence, not a live host check.
 # auto_tag_write: added 2026-09-28 so a future Owner approval to open the front-end
 # auto-tag gate only needs an env registration + this already-shipped preflight, not
@@ -61,7 +98,7 @@ preprod_load_env() {
 # 就退化成"写你想开的名字，自动通过"，等于没有检查。封闭枚举把"新开一个写闸"
 # 这件事钉在代码改动上（必须先把新名字加进下面的 case 分支，且要经 Owner 批准
 # 走一遍代码审查），而不是一次 env 编辑就能绕过。其它写闸
-# （indexnow_outbox / indexnow_delivery / article_writes /
+# （article_writes /
 # tracking_write_gate / two_factor_enforcement）不在这个枚举里，原样硬关，
 # 判定逻辑一行都不动。
 #
@@ -93,6 +130,7 @@ preprod_load_env() {
 preprod_assert_write_gates() {
   local raw="${PREPROD_APPROVED_OPEN_WRITE_GATES:-}"
   local catalog_approved=0 promo_approved=0 sitemap_approved=0 auto_tag_approved=0
+  local outbox_approved=0 delivery_approved=0
   local -a parts
   IFS=',' read -ra parts <<<"$raw"
   local item trimmed
@@ -104,6 +142,8 @@ preprod_assert_write_gates() {
       promo_write) promo_approved=1 ;;
       sitemap_write) sitemap_approved=1 ;;
       auto_tag_write) auto_tag_approved=1 ;;
+      indexnow_outbox) outbox_approved=1 ;;
+      indexnow_delivery) delivery_approved=1 ;;
       *)
         echo "approved_open_write_gate_unknown value=$trimmed"
         return 65
@@ -176,6 +216,10 @@ preprod_assert_write_gates() {
     return 65
   fi
 
+  local site_mode
+  site_mode="$(preprod_site_mode)" || { echo "$site_mode"; return 65; }
+  preprod_assert_indexnow_gates "$site_mode" "$outbox_approved" "$delivery_approved" || return 65
+
   local approved_list="" open_list=""
   if (( catalog_approved == 1 )); then approved_list="catalog_write"; fi
   if (( promo_approved == 1 )); then
@@ -183,6 +227,8 @@ preprod_assert_write_gates() {
   fi
   if (( sitemap_approved == 1 )); then approved_list="${approved_list:+$approved_list,}sitemap_write"; fi
   if (( auto_tag_approved == 1 )); then approved_list="${approved_list:+$approved_list,}auto_tag_write"; fi
+  if (( outbox_approved )); then approved_list="${approved_list:+$approved_list,}indexnow_outbox"; fi
+  if (( delivery_approved )); then approved_list="${approved_list:+$approved_list,}indexnow_delivery"; fi
   [[ -n "$approved_list" ]] || approved_list="none"
 
   if (( catalog_open == 1 )); then open_list="catalog_write"; fi
@@ -191,6 +237,8 @@ preprod_assert_write_gates() {
   fi
   if (( sitemap_open == 1 )); then open_list="${open_list:+$open_list,}sitemap_write"; fi
   if (( auto_tag_open == 1 )); then open_list="${open_list:+$open_list,}auto_tag_write"; fi
+  if [[ "$FEATURE_INDEXNOW_OUTBOX" == true || "$INDEXNOW_OUTBOX_ALLOW_WRITE" == true ]]; then open_list="${open_list:+$open_list,}indexnow_outbox"; fi
+  if [[ "$FEATURE_INDEXNOW_DELIVERY" == true || "$INDEXNOW_DELIVERY_ALLOW_WRITE" == true ]]; then open_list="${open_list:+$open_list,}indexnow_delivery"; fi
   [[ -n "$open_list" ]] || open_list="none"
 
   echo "PREPROD_WRITE_GATES=PASS approved=$approved_list open=$open_list"

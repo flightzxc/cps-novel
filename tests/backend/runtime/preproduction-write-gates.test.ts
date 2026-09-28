@@ -1,3 +1,4 @@
+import { SITE_MODE_CASES } from "./site-mode-fixture";
 import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -26,6 +27,12 @@ const LIB = path.join(root, "scripts/preproduction/lib.sh");
 const PREFLIGHT = path.join(root, "scripts/preproduction/preflight.sh");
 
 type GateEnv = {
+  SITE_URL?: string;
+  ADMIN_CANONICAL_ORIGIN?: string;
+  FEATURE_INDEXNOW_OUTBOX?: string;
+  INDEXNOW_OUTBOX_ALLOW_WRITE?: string;
+  FEATURE_INDEXNOW_DELIVERY?: string;
+  INDEXNOW_DELIVERY_ALLOW_WRITE?: string;
   FEATURE_SITEMAP_AUTO_REFRESH?: string;
   SITEMAP_AUTO_REFRESH_ALLOW_WRITE?: string;
   PREPROD_APPROVED_OPEN_WRITE_GATES?: string;
@@ -39,6 +46,12 @@ type GateEnv = {
 
 /** All eight gate variables closed and unregistered (auto_tag_write's pair uses "false"/"NO", not "false"/"false"). */
 const ALL_CLOSED: Required<GateEnv> = {
+  SITE_URL: SITE_MODE_CASES[0].SITE_URL,
+  ADMIN_CANONICAL_ORIGIN: SITE_MODE_CASES[0].ADMIN_CANONICAL_ORIGIN,
+  FEATURE_INDEXNOW_OUTBOX: "false",
+  INDEXNOW_OUTBOX_ALLOW_WRITE: "false",
+  FEATURE_INDEXNOW_DELIVERY: "false",
+  INDEXNOW_DELIVERY_ALLOW_WRITE: "false",
   PREPROD_APPROVED_OPEN_WRITE_GATES: "",
     FEATURE_SITEMAP_AUTO_REFRESH: "false",
     SITEMAP_AUTO_REFRESH_ALLOW_WRITE: "false",
@@ -249,11 +262,11 @@ describe("preprod_assert_write_gates: auto_tag_write 登记（2026-09-28 新增�
 });
 
 describe("preprod_assert_write_gates: 封闭枚举拒绝未知值", () => {
-  it("登记 indexnow_outbox（枚举外）-> FAIL approved_open_write_gate_unknown，并带出问题的值", () => {
-    const r = runGate({ PREPROD_APPROVED_OPEN_WRITE_GATES: "indexnow_outbox" });
+  it("登记 unapproved_gate（枚举外）-> FAIL approved_open_write_gate_unknown，并带出问题的值", () => {
+    const r = runGate({ PREPROD_APPROVED_OPEN_WRITE_GATES: "unapproved_gate" });
     expect(r.status).toBe(65);
     expect(r.stdout).toContain("approved_open_write_gate_unknown");
-    expect(r.stdout).toContain("indexnow_outbox");
+    expect(r.stdout).toContain("unapproved_gate");
   });
 
   it("登记拼写错误 catalog_writ -> FAIL unknown", () => {
@@ -366,10 +379,9 @@ describe("preflight.sh 接线（文本层：去掉注释后核查真正的调用
     );
   });
 
-  it("其它写闸的硬关判定原样保留（indexnow_outbox / indexnow_delivery / article_writes）", async () => {
+  it("IndexNow 登记检查接线，article_writes 仍硬关", async () => {
     const preflight = await readFile(PREFLIGHT, "utf8");
-    expect(preflight).toContain("|| fail indexnow_outbox");
-    expect(preflight).toContain("|| fail indexnow_delivery");
+    expect(await readFile(LIB, "utf8")).toContain("preprod_assert_indexnow_gates ");
     expect(preflight).toContain("|| fail article_writes");
   });
 
@@ -402,11 +414,11 @@ describe("preflight.sh 接线（文本层：去掉注释后核查真正的调用
  * 本机文件系统之外的东西。env 用干净对象传入（只带 PATH/HOME/PREPROD_ENV_FILE），
  * 不继承本机可能存在的 GIT_COMMIT / CPS_NOVEL_APP_IMAGE 等变量。
  */
-describe("preflight.sh 真实行为（不 mock，走到写闸判定之后稳定停在 reason=git_commit）", () => {
+describe.each(SITE_MODE_CASES)("$mode preflight.sh 真实行为（不 mock，走到写闸判定之后稳定停在 reason=git_commit）", (site) => {
   const BASE_ENV: Record<string, string> = {
     P1_12_COMPOSE_PROJECT: "cps-novel",
-    SITE_URL: "https://www.bangbangji.cloud",
-    ADMIN_CANONICAL_ORIGIN: "https://zbcwf.bangbangji.cloud",
+    SITE_URL: site.SITE_URL,
+    ADMIN_CANONICAL_ORIGIN: site.ADMIN_CANONICAL_ORIGIN,
     PUBLIC_TRACKING_WRITE_DISABLED: "1",
     ADMIN_TWO_FACTOR_ENFORCEMENT: "true",
     FEATURE_INDEXNOW_OUTBOX: "false",
@@ -497,9 +509,9 @@ describe("preflight.sh 真实行为（不 mock，走到写闸判定之后稳定�
     expect(r.stdout).not.toContain("reason=promo_write");
   });
 
-  it("登记枚举外的值 indexnow_outbox -> FAIL reason=approved_open_write_gate_unknown", async () => {
+  it("登记枚举外的值 unapproved_gate -> FAIL reason=approved_open_write_gate_unknown", async () => {
     const envFile = await writePreflightEnvFile({
-      PREPROD_APPROVED_OPEN_WRITE_GATES: "indexnow_outbox",
+      PREPROD_APPROVED_OPEN_WRITE_GATES: "unapproved_gate",
     });
     const r = runPreflight(envFile);
     expect(r.status).toBe(65);
@@ -560,7 +572,7 @@ describe("bash 5 下的行为对照（docker bash:5.2，不可用则跳过）", 
   });
 
   maybeIt("FAIL unknown：登记了枚举外的值", () => {
-    const r = runGateBash5({ PREPROD_APPROVED_OPEN_WRITE_GATES: "indexnow_outbox" });
+    const r = runGateBash5({ PREPROD_APPROVED_OPEN_WRITE_GATES: "unapproved_gate" });
     expect(r.status).toBe(65);
     expect(r.stdout).toContain("approved_open_write_gate_unknown");
   });

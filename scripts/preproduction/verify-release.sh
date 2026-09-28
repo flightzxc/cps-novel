@@ -6,6 +6,8 @@ root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 # shellcheck source=scripts/preproduction/lib.sh
 source "$root/scripts/preproduction/lib.sh"
 preprod_load_env
+site_mode="$(preprod_site_mode)" || { echo "RELEASE_VERIFY=FAIL reason=$site_mode"; exit 65; }
+echo "PREPROD_SITE_MODE=$site_mode"
 
 # 🔴 MAJOR-1 fix: --anonymous-only runs a cheap subset (the state-aware
 # anonymous matrix + admin-surface-404 checks + X-Robots-Tag assertions --
@@ -59,13 +61,20 @@ probe() {
 }
 
 assert_robots_tag() {
+  if [[ "$site_mode" == public && "$1" == "$SITE_URL/"* ]]; then
+    if grep -qi '^X-Robots-Tag:' "$tmp/headers"; then
+      echo "RELEASE_VERIFY=FAIL reason=public_robots_tag url=$1"; exit 65
+    fi
+    grep -qi '^Strict-Transport-Security: max-age=' "$tmp/headers" || { echo 'RELEASE_VERIFY=FAIL reason=public_hsts'; exit 65; }
+    return 0
+  fi
   grep -qi '^X-Robots-Tag: noindex, nofollow, noarchive' "$tmp/headers" || {
     echo "RELEASE_VERIFY=FAIL reason=missing_robots_tag url=$1"; exit 65;
   }
 }
 
 # --- State-aware anonymous matrix. Maintenance flips the expected code from
-# 401 to 503 for business/login surfaces, but never to 200, and a 503 is
+# the live expectation (public 200, protected 401) to 503, and a 503 is
 # only accepted when it is provably the real maintenance page (marker file
 # present AND exact known body), not any other source of 503/502. Outside a
 # maintenance window this is exactly as strict as the previous check (401
@@ -82,10 +91,10 @@ run_anonymous_matrix() {
 
   local url
   for url in \
-    https://www.bangbangji.cloud/ \
-    https://www.bangbangji.cloud/robots.txt \
-    https://www.bangbangji.cloud/sitemap.xml \
-    https://zbcwf.bangbangji.cloud/login; do
+    "${SITE_URL}/" \
+    "${SITE_URL}/robots.txt" \
+    "${SITE_URL}/sitemap.xml" \
+    "${ADMIN_CANONICAL_ORIGIN}/login"; do
     probe "$url"
     assert_robots_tag "$url"
     if ((maintenance_on)); then
@@ -96,13 +105,15 @@ run_anonymous_matrix() {
         echo "RELEASE_VERIFY=FAIL reason=maintenance_body_mismatch url=$url"; exit 65;
       }
     else
-      [[ "$code" == "401" ]] || {
-        echo "RELEASE_VERIFY=FAIL reason=anonymous_not_401 url=$url code=$code"; exit 65;
+      local expected=401
+      if [[ "$site_mode" == public && "$url" == "$SITE_URL/"* ]]; then expected=200; fi
+      [[ "$code" == "$expected" ]] || {
+        echo "RELEASE_VERIFY=FAIL reason=anonymous_status url=$url expected=$expected code=$code"; exit 65;
       }
     fi
   done
 
-  for url in https://www.bangbangji.cloud/dashboard https://www.bangbangji.cloud/api/admin; do
+  for url in "${SITE_URL}/dashboard" "${SITE_URL}/api/admin"; do
     probe "$url"
     [[ "$code" == "404" ]] || {
       echo "RELEASE_VERIFY=FAIL reason=admin_surface_not_404 url=$url code=$code"; exit 65;
@@ -131,14 +142,17 @@ fi
 : "${PREPROD_ADMIN_PASSWORD_FILE:?PREPROD_ADMIN_PASSWORD_FILE is required}"
 [[ -r "$PREPROD_CURL_CONFIG" && -r "$PREPROD_ADMIN_PASSWORD_FILE" ]] || { echo "RELEASE_VERIFY=FAIL"; exit 66; }
 
-# --- /api/health anonymous: must be exactly 401 on both hosts -- never 200
+# --- /api/health anonymous: public mode public host is 200; protected hosts 401.
+# Preprod is exactly 401 on both hosts -- never 200
 # (that would mean the health endpoint leaked past auth), never 503 (that
 # would mean the maintenance gate is still swallowing it, which is the
 # original bug this lane fixes). ---
-for url in https://www.bangbangji.cloud/api/health https://zbcwf.bangbangji.cloud/api/health; do
+for url in "${SITE_URL}/api/health" "${ADMIN_CANONICAL_ORIGIN}/api/health"; do
   probe "$url"
-  [[ "$code" == "401" ]] || {
-    echo "RELEASE_VERIFY=FAIL reason=health_anonymous_not_401 url=$url code=$code"; exit 65;
+  expected=401
+  if [[ "$site_mode" == public && "$url" == "$SITE_URL/api/health" ]]; then expected=200; fi
+  [[ "$code" == "$expected" ]] || {
+    echo "RELEASE_VERIFY=FAIL reason=health_anonymous_status url=$url expected=$expected code=$code"; exit 65;
   }
   assert_robots_tag "$url"
 done
@@ -147,7 +161,7 @@ done
 # both hosts (the admin host's health location was the very one carrying
 # the prefix-match bug, so it is no longer enough to only check the public
 # host here). ---
-for url in https://www.bangbangji.cloud/api/health https://zbcwf.bangbangji.cloud/api/health; do
+for url in "${SITE_URL}/api/health" "${ADMIN_CANONICAL_ORIGIN}/api/health"; do
   health="$(curl --silent --show-error --fail --config "$PREPROD_CURL_CONFIG" "$url")" || {
     echo "RELEASE_VERIFY=FAIL reason=health_unreachable url=$url"; exit 65;
   }

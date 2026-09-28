@@ -13,12 +13,10 @@ fail() { echo "PREPROD_PREFLIGHT=FAIL reason=$1"; exit "${2:-65}"; }
 # 镜像引用悄悄换回 env 文件里的旧值，而后续检查全都对着旧值做，一路绿灯。
 preprod_load_env || fail env_file 66
 [[ "${P1_12_COMPOSE_PROJECT:-}" == "cps-novel" ]] || fail compose_project
-[[ "${SITE_URL:-}" == "https://www.bangbangji.cloud" ]] || fail site_url
-[[ "${ADMIN_CANONICAL_ORIGIN:-}" == "https://zbcwf.bangbangji.cloud" ]] || fail admin_origin
+site_mode="$(preprod_site_mode)" || fail "$site_mode"
+echo "PREPROD_SITE_MODE=$site_mode"
 [[ "${PUBLIC_TRACKING_WRITE_DISABLED:-}" == "1" ]] || fail tracking_write_gate
 [[ "${ADMIN_TWO_FACTOR_ENFORCEMENT:-}" == "true" ]] || fail two_factor_enforcement
-[[ "${FEATURE_INDEXNOW_OUTBOX:-}" == "false" && "${INDEXNOW_OUTBOX_ALLOW_WRITE:-}" == "false" ]] || fail indexnow_outbox
-[[ "${FEATURE_INDEXNOW_DELIVERY:-}" == "false" && "${INDEXNOW_DELIVERY_ALLOW_WRITE:-}" == "false" ]] || fail indexnow_delivery
 # 🔴 目录同步（2026-09-22 Owner 批准）、推广领取（2026-09-23 Owner 批准）、
 # sitemap（2026-09-26 Owner 批准）与自动打标签公开写闸（auto_tag_write，
 # 2026-09-28 新增登记位，本轮预生产值仍关闭且未登记）不再要求恒为 "false"：
