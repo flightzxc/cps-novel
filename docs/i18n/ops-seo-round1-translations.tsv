@@ -404,3 +404,4 @@ zh-Hant	novel.readMoreChapters	Read more chapters	閱讀更多章節	"章节列�
 zh-Hant	novel.startPreview	Start reading	開始閱讀	详情页行动区主按钮	按钮标签，≤20 字符
 zh-Hant	unavailable.takedownBody	At the rights holder's request, this book is no longer offered here.	應版權方要求,本書已不再提供閱讀。	撤回（takedown）状态页正文	单句正文，≤80 字符
 zh-Hant	unavailable.unpublishedBody	If it returns, this address will still work.	若日後恢復,此網址仍可使用。	下架（unpublished）状态页正文	"正文段落；原两句改一句，去掉的那句由同一屏的 `unavailable.unpublishedTitle`（""This book is temporarily unavailable""）承担""为什么不可用""这层含义"
+ja	nav.about	About	私たちについて	顶部导航'关于'链接（本轮 27 键之外，因 Owner 规则一并修改）	导航项，≤12 字符

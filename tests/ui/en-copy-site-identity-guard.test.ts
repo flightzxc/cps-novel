@@ -95,15 +95,13 @@ const ALLOWED_EXCEPTIONS_SCOPED: ReadonlySet<string> = new Set([
  * 已确认无关"这两类性质完全不同的条目混在一起——前者仍然可能需要改译文，
  * 只是不该在这条收尾单里顺手改掉。
  *
- *  - `ja:nav.about`："このサイトについて"= "About this site"，字面含
- *    "このサイト"（this site）。`git diff -- src/lib/locale/messages/ja.ts`
- *    确认这一行在本分支的改动里是上下文行、未被本轮触碰——它是本轮开工前
- *    就已存在的既有译文，`nav.about` 也不在本轮 27 个键的清单里
- *    （`docs/i18n/ops-seo-round1-copy-manifest.md`）。是否要按 C 的判定标准
- *    把它改成不带指示代词的"サイトについて"或"概要"，交主控裁决；本单只
- *    报告，不改。
+ * 曾登记 `ja:nav.about`："このサイトについて"= "About this site"，字面含
+ * "このサイト"（this site），且不在本轮 27 个键清单里。主控裁决
+ * （2026-09-29）：按 Owner 规则改掉，已改为"私たちについて"（与
+ * zh-Hant「關於我們」/ de「Über uns」同一处理方式），不再含禁用词，条目已
+ * 从这里移除，回到正常断言覆盖。当前无待裁决条目。
  */
-const PENDING_OWNER_REVIEW_SCOPED: ReadonlySet<string> = new Set(["ja:nav.about"]);
+const PENDING_OWNER_REVIEW_SCOPED: ReadonlySet<string> = new Set([]);
 
 function flattenLeaves(node: unknown, prefix: string[] = []): Map<string, unknown> {
   const out = new Map<string, unknown>();
