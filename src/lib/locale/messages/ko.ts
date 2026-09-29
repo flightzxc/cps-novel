@@ -95,7 +95,8 @@ const messages = {
     expandAllChapters: "전체 {count}장 보기",
     readMoreChapters: "챕터 더 읽기",
     continueReadingModalTitle: "이어서 읽기",
-    continueReadingModalBody: "{number}장을 비롯한 나머지 내용을 여기서 볼 수 있습니다.",
+    // GPT 验收后修订（2026-09-29）：随英文 "Continue with Chapter {number} and the rest of the story." 重译；不再说"여기서"（就在这里）。
+    continueReadingModalBody: "{number}장과 나머지 이야기를 이어서 읽어 보세요.",
     closeDialog: "닫기",
     newReleases: "신작",
     continueReadingBarLabel: "이어서 읽기 바",
@@ -106,14 +107,15 @@ const messages = {
     next: "다음 챕터",
     firstChapter: "첫 번째 챕터입니다",
     // C: "preview" 표현 제거, firstChapter와 동일한 문형 유지.
-    lastPreviewChapter: "마지막 챕터입니다",
+    // GPT 验收后修订（2026-09-29）：随英文 "This is the last free chapter" 补上"무료"（免费）。
+    lastPreviewChapter: "마지막 무료 챕터입니다",
     heading: "{number}장",
     readerSettings: "읽기 설정",
     closeReaderSettings: "읽기 설정 닫기",
     // C: "미리보기" 접두어 제거, {index}/{total} 위치 동일.
     previewPosition: "{index} / {total}",
     // C: "미리보기", "이 사이트" 표현 제거.
-    endOfPreview: "지금은 여기까지 이용할 수 있습니다.",
+    endOfPreview: "지금 읽을 수 있는 내용은 여기까지입니다.",
     continuePrompt: "계속 읽으시겠어요?",
     // C: "원작 플랫폼" 표현 제거.
     remainingOnOrigin: "이어서 읽으면 이야기가 계속됩니다.",

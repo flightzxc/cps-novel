@@ -97,7 +97,8 @@ const messages = {
     expandAllChapters: "全{count}章を表示",
     readMoreChapters: "さらに章を読む",
     continueReadingModalTitle: "続きを読む",
-    continueReadingModalBody: "第{number}章など、残りの内容もここで読めます。",
+    // GPT 验收后修订（2026-09-29）：随英文 "Continue with Chapter {number} and the rest of the story." 重译；去掉"など"的举例语气，也不再说"ここで"（就在这里）。
+    continueReadingModalBody: "第{number}章と物語の続きを読み進めましょう。",
     closeDialog: "閉じる",
     newReleases: "新着",
     continueReadingBarLabel: "続きを読むバー",
@@ -108,7 +109,8 @@ const messages = {
     next: "次の章",
     firstChapter: "これが最初の章です",
     // C: 「試し読み」表現を削除、firstChapter と同じ文型を維持。
-    lastPreviewChapter: "これが最後の章です",
+    // GPT 验收后修订（2026-09-29）：随英文 "This is the last free chapter" 改为"無料で読める最後の章"。
+    lastPreviewChapter: "これが無料で読める最後の章です",
     heading: "第{number}章",
     readerSettings: "読書設定",
     closeReaderSettings: "読書設定を閉じる",
@@ -152,7 +154,7 @@ const messages = {
   unavailable: {
     unpublishedTitle: "この作品は一時的にご利用いただけません",
     // C: 「本サイトから削除されました」の文を削除、アドレスの有効性のみ残す。
-    unpublishedBody: "復帰した場合、このアドレスは引き続きご利用いただけます。",
+    unpublishedBody: "再公開された場合、このURLは引き続き使えます。",
     takedownTitle: "この作品は取り下げられました",
     // C: 「本サイトでは」表現を削除。
     takedownBody: "権利者からの要請により、この作品はここでは提供されていません。",
@@ -166,7 +168,7 @@ const messages = {
     publishedOn: "{date}に公開",
     unpublishedTitle: "この記事は一時的にご利用いただけません",
     // C: unavailable.unpublishedBody と同じ理由で修正。
-    unpublishedBody: "復帰した場合、このアドレスは引き続きご利用いただけます。",
+    unpublishedBody: "再公開された場合、このURLは引き続き使えます。",
   },
   errorPage: {
     title: "問題が発生しました",

@@ -111,7 +111,8 @@ const messages = {
       "{count, plural, zero {عرض الفصول} one {عرض فصل واحد} two {عرض فصلين} few {عرض {count} فصول} many {عرض {count} فصلاً} other {عرض {count} فصل}}",
     readMoreChapters: "قراءة المزيد من الفصول",
     continueReadingModalTitle: "متابعة القراءة",
-    continueReadingModalBody: "الفصل {number} وبقية الكتاب متاحة هنا.",
+    // GPT 验收后修订（2026-09-29）：随英文 "Continue with Chapter {number} and the rest of the story." 重译；不再说"هنا"（就在这里）。
+    continueReadingModalBody: "تابع القراءة مع الفصل {number} وبقية القصة.",
     closeDialog: "إغلاق",
     newReleases: "إصدارات جديدة",
     continueReadingBarLabel: "شريط متابعة القراءة",
@@ -122,7 +123,8 @@ const messages = {
     next: "الفصل التالي",
     firstChapter: "هذا هو الفصل الأول",
     // C: 去掉"معاينة"，与上面 firstChapter 保持同一种句式。
-    lastPreviewChapter: "هذا هو الفصل الأخير",
+    // GPT 验收后修订（2026-09-29）：随英文 "This is the last free chapter" 补上"مجاني"（免费）。
+    lastPreviewChapter: "هذا هو آخر فصل مجاني",
     heading: "الفصل {number}",
     readerSettings: "إعدادات القراءة",
     closeReaderSettings: "إغلاق إعدادات القراءة",
@@ -133,7 +135,7 @@ const messages = {
     endOfPreview: "هذا كل ما هو متاح حاليًا.",
     continuePrompt: "هل تريد متابعة القراءة؟",
     // C: 去掉"المنصة الأصلية"。
-    remainingOnOrigin: "تابع القراءة لمتابعة القصة.",
+    remainingOnOrigin: "تابع القراءة لتكتشف بقية القصة.",
     readOnUpstream: "متابعة القراءة",
     theme: "المظهر",
     fontSize: "حجم الخط",

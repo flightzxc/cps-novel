@@ -103,9 +103,11 @@ export const en = {
     expandAllChapters: "Show all {count} chapters",
     // 章节列表末尾的"阅读更多章节"按钮，跳 readOnUpstreamHref。
     readMoreChapters: "Read more chapters",
-    // 点击锁定条目弹出的确认弹窗文案。
+    // 点击锁定条目弹出的确认弹窗文案。正文用"Continue with …"而不是
+    // "… are available here"：弹窗按钮会跳转到别处，"here"会让读者以为
+    // 内容就在当前页（GPT 验收后修订，2026-09-29）。
     continueReadingModalTitle: "Continue reading",
-    continueReadingModalBody: "Chapter {number} and the rest of the book are available here.",
+    continueReadingModalBody: "Continue with Chapter {number} and the rest of the story.",
     closeDialog: "Close",
     // A4/B3："新书推荐"模块标题（"相关推荐"复用上面已有的 relatedWorks）。
     newReleases: "New releases",
@@ -117,8 +119,10 @@ export const en = {
     previous: "Previous chapter",
     next: "Next chapter",
     firstChapter: "This is the first chapter",
-    // C: 去掉"preview"一词，与上面 firstChapter 保持同一种句式。
-    lastPreviewChapter: "This is the last chapter",
+    // C: 去掉"preview"一词，与上面 firstChapter 保持同一种句式。GPT 验收后
+    // 修订（2026-09-29）：补上"free"——可读的最后一章之后可能还有锁定章节，
+    // "last chapter"会被理解为全书终章。
+    lastPreviewChapter: "This is the last free chapter",
     // D4：ChapterScreen.tsx 已删除 H1 正上方渲染这个键的那个 <p>，键本身
     // 保留（不影响其它 14 语种的 key 集合），当前已无渲染点。
     heading: "Chapter {number}",

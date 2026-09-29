@@ -68,7 +68,7 @@ const messages = {
     // （仅整百万命中，如 1000000/2000000），门禁要求必须写，文本与 other
     // 分支相同，不是漏翻译。B 组翻译单（2026-09-29）按新英文原文重译。
     previewChaptersDescription:
-      "{count, plural, one {1 capítulo disponible para leer ahora.} many {{count} capítulos disponibles para leer ahora.} other {{count} capítulos disponibles para leer ahora.}}",
+      "{count, plural, one {1 capítulo gratis para leer ahora.} many {{count} capítulos gratis para leer ahora.} other {{count} capítulos gratis para leer ahora.}}",
     noPreviewChapters: "Aún no hay capítulos para leer.",
     relatedWorks: "Obras relacionadas",
     chapterHeading: "Capítulo {number}",
@@ -79,7 +79,8 @@ const messages = {
     expandAllChapters: "Mostrar todos los {count} capítulos",
     readMoreChapters: "Leer más capítulos",
     continueReadingModalTitle: "Continuar leyendo",
-    continueReadingModalBody: "El capítulo {number} y el resto del libro están disponibles aquí.",
+    // GPT 验收后修订（2026-09-29）：随英文 "Continue with Chapter {number} and the rest of the story." 重译；不再说"aquí"（就在这里）。
+    continueReadingModalBody: "Continúa con el capítulo {number} y el resto de la historia.",
     closeDialog: "Cerrar",
     newReleases: "Novedades",
     continueReadingBarLabel: "Barra de continuar leyendo",
@@ -89,7 +90,8 @@ const messages = {
     previous: "Capítulo anterior",
     next: "Capítulo siguiente",
     firstChapter: "Este es el primer capítulo",
-    lastPreviewChapter: "Este es el último capítulo",
+    // GPT 验收后修订（2026-09-29）：随英文 "This is the last free chapter" 补上"gratis"（免费）。
+    lastPreviewChapter: "Este es el último capítulo gratis",
     heading: "Capítulo {number}",
     readerSettings: "Ajustes de lectura",
     closeReaderSettings: "Cerrar ajustes de lectura",

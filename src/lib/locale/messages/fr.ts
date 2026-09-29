@@ -79,7 +79,8 @@ const messages = {
     expandAllChapters: "Afficher tous les {count} chapitres",
     readMoreChapters: "Lire plus de chapitres",
     continueReadingModalTitle: "Continuer la lecture",
-    continueReadingModalBody: "Le chapitre {number} et le reste du livre sont disponibles ici.",
+    // GPT 验收后修订（2026-09-29）：随英文 "Continue with Chapter {number} and the rest of the story." 重译；不再说"ici"（就在这里）。
+    continueReadingModalBody: "Poursuivez avec le chapitre {number} et la suite de l'histoire.",
     closeDialog: "Fermer",
     newReleases: "Nouveautés",
     continueReadingBarLabel: "Barre pour continuer la lecture",
@@ -89,7 +90,8 @@ const messages = {
     previous: "Chapitre précédent",
     next: "Chapitre suivant",
     firstChapter: "Ceci est le premier chapitre",
-    lastPreviewChapter: "Ceci est le dernier chapitre",
+    // GPT 验收后修订（2026-09-29）：随英文 "This is the last free chapter" 补上"gratuit"（免费）。
+    lastPreviewChapter: "Ceci est le dernier chapitre gratuit",
     heading: "Chapitre {number}",
     readerSettings: "Réglages de lecture",
     closeReaderSettings: "Fermer les réglages de lecture",

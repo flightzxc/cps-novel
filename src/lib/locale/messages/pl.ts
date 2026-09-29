@@ -103,7 +103,8 @@ const messages = {
       "Pokaż wszystkie {count, plural, one {{count} rozdział} few {{count} rozdziały} many {{count} rozdziałów} other {{count} rozdziałów}}",
     readMoreChapters: "Czytaj więcej rozdziałów",
     continueReadingModalTitle: "Kontynuuj czytanie",
-    continueReadingModalBody: "Rozdział {number} i reszta książki są tutaj dostępne.",
+    // GPT 验收后修订（2026-09-29）：随英文 "Continue with Chapter {number} and the rest of the story." 重译；不再说"tutaj"（就在这里）。
+    continueReadingModalBody: "Kontynuuj od rozdziału {number} i poznaj resztę historii.",
     closeDialog: "Zamknij",
     newReleases: "Nowości",
     continueReadingBarLabel: "Pasek kontynuacji czytania",
@@ -114,7 +115,8 @@ const messages = {
     next: "Następny rozdział",
     firstChapter: "To jest pierwszy rozdział",
     // C: 去掉"przykładowy"，与上面 firstChapter 保持同一种句式。
-    lastPreviewChapter: "To jest ostatni rozdział",
+    // GPT 验收后修订（2026-09-29）：随英文 "This is the last free chapter" 补上"darmowy"（免费）。
+    lastPreviewChapter: "To jest ostatni darmowy rozdział",
     heading: "Rozdział {number}",
     readerSettings: "Ustawienia czytania",
     closeReaderSettings: "Zamknij ustawienia czytania",

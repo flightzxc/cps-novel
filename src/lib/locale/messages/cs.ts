@@ -104,7 +104,8 @@ const messages = {
       "Zobrazit {count, plural, one {{count} kapitolu} few {{count} kapitoly} many {{count} kapitoly} other {{count} kapitol}}",
     readMoreChapters: "Číst další kapitoly",
     continueReadingModalTitle: "Pokračovat ve čtení",
-    continueReadingModalBody: "Kapitola {number} a zbytek knihy jsou zde dostupné.",
+    // GPT 验收后修订（2026-09-29）：随英文 "Continue with Chapter {number} and the rest of the story." 重译；不再说"zde"（就在这里）。
+    continueReadingModalBody: "Pokračujte kapitolou {number} a zbytkem příběhu.",
     closeDialog: "Zavřít",
     newReleases: "Novinky",
     continueReadingBarLabel: "Panel pokračování čtení",
@@ -115,7 +116,8 @@ const messages = {
     next: "Další kapitola",
     firstChapter: "Toto je první kapitola",
     // C: 去掉"ukázková"，与上面 firstChapter 保持同一种句式。
-    lastPreviewChapter: "Toto je poslední kapitola",
+    // GPT 验收后修订（2026-09-29）：随英文 "This is the last free chapter" 补上"bezplatná"（免费）。
+    lastPreviewChapter: "Toto je poslední bezplatná kapitola",
     heading: "Kapitola {number}",
     readerSettings: "Nastavení čtení",
     closeReaderSettings: "Zavřít nastavení čtení",

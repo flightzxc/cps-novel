@@ -97,7 +97,8 @@ const messages = {
     expandAllChapters: "แสดงทั้งหมด {count} ตอน",
     readMoreChapters: "อ่านตอนเพิ่มเติม",
     continueReadingModalTitle: "อ่านต่อ",
-    continueReadingModalBody: "ตอนที่ {number} และเนื้อหาที่เหลือของเล่มนี้มีให้อ่านที่นี่",
+    // GPT 验收后修订（2026-09-29）：随英文 "Continue with Chapter {number} and the rest of the story." 重译；不再说"ที่นี่"（就在这里）。
+    continueReadingModalBody: "อ่านต่อตั้งแต่ตอนที่ {number} และเรื่องราวที่เหลือ",
     closeDialog: "ปิด",
     newReleases: "ผลงานใหม่",
     continueReadingBarLabel: "แถบอ่านต่อ",
@@ -108,7 +109,8 @@ const messages = {
     next: "ตอนถัดไป",
     firstChapter: "นี่คือตอนแรก",
     // C: ตัดคำว่า "ตัวอย่าง" ออก คงรูปประโยคเดียวกับ firstChapter
-    lastPreviewChapter: "นี่คือตอนสุดท้าย",
+    // GPT 验收后修订（2026-09-29）：随英文 "This is the last free chapter" 补上"ฟรี"（免费）。
+    lastPreviewChapter: "นี่คือตอนฟรีตอนสุดท้าย",
     heading: "ตอนที่ {number}",
     readerSettings: "ตั้งค่าการอ่าน",
     closeReaderSettings: "ปิดการตั้งค่าการอ่าน",

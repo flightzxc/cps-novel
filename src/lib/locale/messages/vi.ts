@@ -99,7 +99,8 @@ const messages = {
     expandAllChapters: "Xem tất cả {count} chương",
     readMoreChapters: "Đọc thêm chương",
     continueReadingModalTitle: "Tiếp tục đọc",
-    continueReadingModalBody: "Chương {number} và phần còn lại của cuốn sách đều có sẵn ở đây.",
+    // GPT 验收后修订（2026-09-29）：随英文 "Continue with Chapter {number} and the rest of the story." 重译；不再说"ở đây"（就在这里）。
+    continueReadingModalBody: "Hãy đọc tiếp từ chương {number} và phần còn lại của câu chuyện.",
     closeDialog: "Đóng",
     newReleases: "Tác phẩm mới",
     continueReadingBarLabel: "Thanh tiếp tục đọc",
@@ -110,7 +111,8 @@ const messages = {
     next: "Chương sau",
     firstChapter: "Đây là chương đầu tiên",
     // C: bỏ chữ "xem trước", giữ cùng cấu trúc câu với firstChapter.
-    lastPreviewChapter: "Đây là chương cuối cùng",
+    // GPT 验收后修订（2026-09-29）：随英文 "This is the last free chapter" 补上"miễn phí"（免费）。
+    lastPreviewChapter: "Đây là chương miễn phí cuối cùng",
     heading: "Chương {number}",
     readerSettings: "Cài đặt đọc",
     closeReaderSettings: "Đóng cài đặt đọc",
@@ -158,7 +160,7 @@ const messages = {
     unpublishedBody: "Nếu quay lại, địa chỉ này vẫn sẽ hoạt động.",
     takedownTitle: "Cuốn sách này đã bị gỡ bỏ",
     // C: bỏ "trang này".
-    takedownBody: "Theo yêu cầu của chủ sở hữu bản quyền, cuốn sách này không còn được cung cấp ở đây.",
+    takedownBody: "Theo yêu cầu của chủ sở hữu bản quyền, sách này không còn được cung cấp ở đây.",
     returnHome: "Về trang chủ",
   },
   blog: {

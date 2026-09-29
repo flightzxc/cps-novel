@@ -73,12 +73,13 @@ const messages = {
     chapterHeading: "Bab {number}",
     // A3/A4/B1 新增键：B 组翻译单（2026-09-29）译入印尼语，替换英文占位。
     chapterListTitle: "Daftar bab",
-    chapterListCount: "{count, plural, other {{count} bab total}}",
+    chapterListCount: "{count, plural, other {Total {count} bab}}",
     lockedChapterHint: "Terkunci — ketuk untuk melanjutkan membaca",
     expandAllChapters: "Tampilkan semua {count} bab",
-    readMoreChapters: "Baca lebih banyak bab",
+    readMoreChapters: "Baca bab lainnya",
     continueReadingModalTitle: "Lanjutkan membaca",
-    continueReadingModalBody: "Bab {number} dan sisa buku ini tersedia di sini.",
+    // GPT 验收后修订（2026-09-29）：随英文 "Continue with Chapter {number} and the rest of the story." 重译；不再说"di sini"（就在这里）。
+    continueReadingModalBody: "Lanjutkan dengan Bab {number} dan kelanjutan ceritanya.",
     closeDialog: "Tutup",
     newReleases: "Terbitan baru",
     continueReadingBarLabel: "Bilah lanjutkan membaca",
@@ -88,7 +89,8 @@ const messages = {
     previous: "Bab sebelumnya",
     next: "Bab berikutnya",
     firstChapter: "Ini adalah bab pertama",
-    lastPreviewChapter: "Ini adalah bab terakhir",
+    // GPT 验收后修订（2026-09-29）：随英文 "This is the last free chapter" 补上"gratis"（免费）。
+    lastPreviewChapter: "Ini adalah bab gratis terakhir",
     heading: "Bab {number}",
     readerSettings: "Pengaturan membaca",
     closeReaderSettings: "Tutup pengaturan membaca",

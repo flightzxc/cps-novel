@@ -72,7 +72,8 @@ describe("章节切换 · 渲染出的导航", () => {
 
   // C: `chapter.lastPreviewChapter` 去掉"preview"一词，从 "This is the last
   // preview chapter" 改成 "This is the last chapter"（与上面的 firstChapter
-  // 保持同一种句式），断言跟随新文案。
+  // 保持同一种句式）；GPT 验收后（2026-09-29）再补上 "free"：可读的最后一章
+  // 之后可能还有锁定章节，"last chapter"会被读成全书终章。断言跟随新文案。
   it("首章不渲染上一章，末章不渲染下一章——不留死链", () => {
     const { unmount } = render(<ChapterScreen locale="en" chapter={getMockChapterView(1)!} />);
     expect(screen.queryByRole("link", { name: "Previous chapter" })).toBeNull();
@@ -81,7 +82,7 @@ describe("章节切换 · 渲染出的导航", () => {
 
     render(<ChapterScreen locale="en" chapter={getMockChapterView(MOCK_PREVIEW_CHAPTER_TOTAL)!} />);
     expect(screen.queryByRole("link", { name: "Next chapter" })).toBeNull();
-    expect(screen.getByText("This is the last chapter")).toBeTruthy();
+    expect(screen.getByText("This is the last free chapter")).toBeTruthy();
   });
 
   it("导航链接保留 rel=prev/next 语义", () => {

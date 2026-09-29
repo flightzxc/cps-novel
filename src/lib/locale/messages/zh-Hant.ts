@@ -89,11 +89,12 @@ const messages = {
     // 「本站」「原始平台」「試讀」「預覽」的意思，按本站就是官方站點處理。
     chapterListTitle: "章節列表",
     chapterListCount: "{count, plural, other {共{count}章}}",
-    lockedChapterHint: "已鎖定 — 點擊繼續閱讀",
+    lockedChapterHint: "已鎖定，點擊繼續閱讀",
     expandAllChapters: "顯示全部{count}章",
     readMoreChapters: "閱讀更多章節",
     continueReadingModalTitle: "繼續閱讀",
-    continueReadingModalBody: "第{number}章及本書其餘內容都在這裡。",
+    // GPT 验收后修订（2026-09-29）：随英文 "Continue with Chapter {number} and the rest of the story." 重译；不再说"在這裡"（就在这里）。
+    continueReadingModalBody: "繼續閱讀第{number}章及故事的其餘部分。",
     closeDialog: "關閉",
     newReleases: "新書上架",
     continueReadingBarLabel: "繼續閱讀列",
@@ -104,7 +105,8 @@ const messages = {
     next: "下一章",
     firstChapter: "這是第一章",
     // C: 去掉「試讀」表述，與上面 firstChapter 保持同一種句式。
-    lastPreviewChapter: "這是最後一章",
+    // GPT 验收后修订（2026-09-29）：随英文 "This is the last free chapter" 补上"免費"。
+    lastPreviewChapter: "這是最後一個免費章節",
     heading: "第{number}章",
     readerSettings: "閱讀設定",
     closeReaderSettings: "關閉閱讀設定",
@@ -114,7 +116,7 @@ const messages = {
     endOfPreview: "目前可閱讀的內容到此為止。",
     continuePrompt: "想繼續閱讀嗎？",
     // C: 去掉「原始平台」表述。
-    remainingOnOrigin: "繼續閱讀,故事仍在延續。",
+    remainingOnOrigin: "繼續閱讀，故事仍在延續。",
     readOnUpstream: "繼續閱讀",
     theme: "主題",
     fontSize: "字體大小",
@@ -148,10 +150,10 @@ const messages = {
   unavailable: {
     unpublishedTitle: "本書暫時無法閱讀",
     // C: 去掉「本書已從本站下架」這句，只保留地址持續有效的提示。
-    unpublishedBody: "若日後恢復,此網址仍可使用。",
+    unpublishedBody: "若日後恢復，此網址仍可使用。",
     takedownTitle: "本書已被撤回",
     // C: 去掉「本站」表述。
-    takedownBody: "應版權方要求,本書已不再提供閱讀。",
+    takedownBody: "應版權方要求，本書已不再提供閱讀。",
     returnHome: "回首頁",
   },
   blog: {
@@ -162,7 +164,7 @@ const messages = {
     publishedOn: "發佈於 {date}",
     unpublishedTitle: "本篇文章暫時無法閱讀",
     // C: 同 unavailable.unpublishedBody 的理由修改。
-    unpublishedBody: "若日後恢復,此網址仍可使用。",
+    unpublishedBody: "若日後恢復，此網址仍可使用。",
   },
   errorPage: {
     title: "發生錯誤",
@@ -184,7 +186,7 @@ const messages = {
     notFound: "找不到頁面",
     chapterNotFound: "找不到章節",
     // C: 去掉「試讀」表述。
-    siteDescription: "探索小說,開始閱讀免費章節。",
+    siteDescription: "探索小說，開始閱讀免費章節。",
   },
 } satisfies LocaleMessages;
 

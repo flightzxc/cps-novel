@@ -104,7 +104,8 @@ const messages = {
       "Показать все {count, plural, one {{count} главу} few {{count} главы} many {{count} глав} other {{count} главы}}",
     readMoreChapters: "Читать больше глав",
     continueReadingModalTitle: "Продолжить чтение",
-    continueReadingModalBody: "Глава {number} и остальная часть книги доступны здесь.",
+    // GPT 验收后修订（2026-09-29）：随英文 "Continue with Chapter {number} and the rest of the story." 重译；不再说"здесь"（就在这里）。
+    continueReadingModalBody: "Продолжите чтение с главы {number} и до конца истории.",
     closeDialog: "Закрыть",
     newReleases: "Новинки",
     continueReadingBarLabel: "Панель продолжения чтения",
@@ -115,7 +116,8 @@ const messages = {
     next: "Следующая глава",
     firstChapter: "Это первая глава",
     // C: 去掉"ознакомительная"，与上面 firstChapter 保持同一种句式。
-    lastPreviewChapter: "Это последняя глава",
+    // GPT 验收后修订（2026-09-29）：随英文 "This is the last free chapter" 补上"бесплатная"（免费）。
+    lastPreviewChapter: "Это последняя бесплатная глава",
     heading: "Глава {number}",
     readerSettings: "Настройки чтения",
     closeReaderSettings: "Закрыть настройки чтения",

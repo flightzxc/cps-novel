@@ -157,6 +157,9 @@ describe("PreviewChapterList · 锁定章节", () => {
 
     const modal = screen.getByTestId("continue-reading-modal");
     expect(modal).toBeTruthy();
+    // 弹窗按钮会跳转到别处，正文不能说内容"available here"（就在当前页）
+    expect(modal.textContent).toContain("Continue with Chapter 2 and the rest of the story.");
+    expect(modal.textContent).not.toContain("available here");
     const link = within(modal).getByRole("link", { name: "Continue reading" });
     expect(link.getAttribute("href")).toBe("/go/abc123");
     expect(link.getAttribute("rel")).toBe("nofollow sponsored");
