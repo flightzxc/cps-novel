@@ -40,6 +40,7 @@ export function ChapterListBody({
   chapters,
   lockedStartNumber,
   lockedCount,
+  totalChapterCount,
   readOnUpstreamHref,
 }: {
   locale: SiteLocale;
@@ -48,6 +49,12 @@ export function ChapterListBody({
   lockedStartNumber: number;
   /** 已经按"有没有 readOnUpstreamHref"折算过的锁定条目数——0 表示不渲染任何锁定 UI。 */
   lockedCount: number;
+  /**
+   * 全书总章数（`Novel.totalChapterCount`）。"展开全部 N 章"按钮上的 N 用它，
+   * 不用 `lockedCount`：展开后列表显示的是真实章节 + 锁定条目，即整本书，
+   * 按钮写"全部 N 章"时 N 必须是全书总数（否则 265 章的书会写成"全部 262 章"）。
+   */
+  totalChapterCount: number;
   readOnUpstreamHref?: string;
 }) {
   const t = getPublicT(locale);
@@ -103,7 +110,7 @@ export function ChapterListBody({
           className="mt-4 text-sm font-medium text-novel-accent underline-offset-4 hover:underline"
           data-testid="expand-all-chapters"
         >
-          {t("novel.expandAllChapters", { count: lockedCount })}
+          {t("novel.expandAllChapters", { count: totalChapterCount })}
         </button>
       ) : null}
 

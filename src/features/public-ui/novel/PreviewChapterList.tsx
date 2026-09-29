@@ -88,6 +88,7 @@ export function PreviewChapterList({
         chapters={chapters}
         lockedStartNumber={maxRealNumber + 1}
         lockedCount={hasLocked ? lockedCount : 0}
+        totalChapterCount={totalChapterCount}
         readOnUpstreamHref={readOnUpstreamHref}
       />
     </section>

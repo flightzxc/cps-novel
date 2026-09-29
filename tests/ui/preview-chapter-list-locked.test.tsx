@@ -80,12 +80,53 @@ describe("PreviewChapterList · 锁定章节", () => {
     // 50 - 1 = 49 条锁定，首屏封顶 30
     expect(screen.getAllByTestId("locked-chapter-item")).toHaveLength(30);
     const expandButton = screen.getByTestId("expand-all-chapters");
-    expect(expandButton.textContent).toContain("49");
+    // 按钮写的是"全部 N 章"，N = 全书总章数 50（不是锁定条目数 49）
+    expect(expandButton.textContent).toBe("Show all 50 chapters");
 
     fireEvent.click(expandButton);
 
     expect(screen.getAllByTestId("locked-chapter-item")).toHaveLength(49);
     expect(screen.queryByTestId("expand-all-chapters")).toBeNull();
+  });
+
+  it("“展开全部”按钮上的数字是全书总章数：3 章真实 + 262 条锁定 = 265，不是 262", () => {
+    render(
+      <PreviewChapterList
+        locale="en"
+        chapters={chapters(3)}
+        totalChapterCount={265}
+        readOnUpstreamHref="/go/abc123"
+      />,
+    );
+    const expandButton = screen.getByTestId("expand-all-chapters");
+    expect(expandButton.textContent).toBe("Show all 265 chapters");
+    expect(expandButton.textContent).not.toContain("262");
+
+    fireEvent.click(expandButton);
+
+    // 展开后列表确实显示了全书 265 章：3 条真实链接 + 262 条锁定条目
+    const list = screen.getByTestId("preview-chapter-list");
+    expect(within(list).getAllByTestId("chapter-list-link")).toHaveLength(3);
+    expect(within(list).getAllByTestId("locked-chapter-item")).toHaveLength(262);
+  });
+
+  it("真实章节编号有缺口时，按钮数字仍然是全书总章数（锁定区间从最大真实编号之后起算）", () => {
+    // 真实编号 1、2、5；总章数 50 → 锁定条目 50 - 5 = 45 条。
+    // 按钮既不是 45（锁定条目数），也不是 48（真实条数 3 + 锁定条目数 45）。
+    const gapped: PreviewChapterRef[] = [1, 2, 5].map((number) => ({
+      number,
+      title: `Chapter ${number}`,
+      href: `/dev-preview/novel/${number}`,
+    }));
+    render(
+      <PreviewChapterList
+        locale="en"
+        chapters={gapped}
+        totalChapterCount={50}
+        readOnUpstreamHref="/go/abc123"
+      />,
+    );
+    expect(screen.getByTestId("expand-all-chapters").textContent).toBe("Show all 50 chapters");
   });
 
   it("锁定条目 ≤ 30 条时不渲染“展开全部”按钮", () => {
