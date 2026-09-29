@@ -39,6 +39,20 @@
 
 ## 发版记录（新条目在最上面）
 
+### 2026-09-29 18:20 - codex（GPT-6，发版执行；时间 +0800）
+
+**变更类型**：预生产正式发布 `v0.5.4`（PATCH）；经 Owner 单独授权，仅部署 `haiyue-vps`。
+
+**背景**：运营前端与 SEO 优化第一轮经 Opus 复核、集成。章节列表采用 Owner 2026-09-29 修订的 D-12 折中方案。15 个语种译文经 GPT 两轮第三方验收：首轮 `PASS_WITH_FIXES`，修订后增量验收 `PASS`。
+
+**变更内容**：Final `0260d8d89c8aba83ba7eb8887ae94461489a927c`，annotated tag `v0.5.4` 固定于 Final。去除语言代码和重复的小说页文章正文，章节列表锁定方案、推荐区、固定底栏与章节页 SEO 调整随本版部署。目标机 env 备份后只改两个版本号；没有新迁移、环境变量、Compose 或功能开发。
+
+**影响范围**：仅带访问密码的预生产；正式域名切换后才对公网可见。自动标签既有开关、授权、写闸登记与主白名单均按部署前值保留；领取批次继续 paused。未操作 nginx、证书、DNS、NAS、其它主机或 postgres 重建。
+
+**验证方式**：本地 tsc 0、lint 0 error、474 文件 / 7,133 测试 0 failed、build、迁移及字典 drift 0、22 个真实库运行器、nginx 矩阵、公开切换变异、品牌图和三套 Compose 全绿。线上 20 条迁移与 Final 一致，新鲜备份及 restore-list PASS、归档身份 PASS；`PREPROD_APPROVED_MIGRATION=YES` 部署后 `RELEASE=PASS`，health 0.5.4 / Final、五服务 healthy、postgres ID 不变、backup health ok、写闸输出一致、各服务近五分钟错误日志 0。指定韩语小说页及章节页 HTML 静态结构核对见[发布记录](releases/v0.5.4-preproduction.md)。
+
+**后续待办**：领取批次仅由 Owner 恢复；浏览器交互与 375px 截图如未在本次验收完成，按发布记录补验。回滚使用 v0.5.3 原发布目录及本次 env 备份，无 down migration，不重建 postgres。
+
 ### 2026-09-28 17:10 - codex（GPT-6，发版执行；时间 +0800）
 
 **变更类型**：预生产正式发布 `v0.5.3`（PATCH），第二阶段经 Owner 单独授权，仅部署 `haiyue-vps`。

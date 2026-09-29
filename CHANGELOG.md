@@ -3,7 +3,20 @@
 <!-- 本文件由 `node scripts/generate-changelog.mjs --write` 生成，请勿手工编辑。 -->
 <!-- 叙述性内容写进 commit message；Owner/架构决策写 docs/adr/。 -->
 
-生成时间：2026-09-28 · 共 927 个 commit
+生成时间：2026-09-29 · 共 937 个 commit
+
+## v0.5.4
+
+- `0260d8d` 2026-09-29 发布：准备海阅 v0.5.4 版本身份  — _codex · GPT-6_
+- `c4ea5bb` 2026-09-29 合并(运营前端与SEO第一轮)：删语言代码与嵌入正文(单H1)、章节列表锁定折中方案、相关/新书推荐与固定底栏照搬CPS v8.5.1、去掉本站/原平台/预览文案(15语种)、章节页三级面包屑（已获 Opus 复核；译文经 GPT 验收）  — _claude-code · Claude Opus 5.5 · reviewed: claude-code · Claude Opus 5.5_
+- `73a314b` 2026-09-29 i18n: 按 GPT 验收结果修订运营第一轮文案（2 处英文原文重译 + 13 处采纳意见）  — _claude-code · Claude Sonnet 5_
+- `2f9ce9c` 2026-09-29 fix(public-ui): "展开全部 N 章"按钮显示全书总章数而非锁定条目数  — _claude-code · Claude Sonnet 5_
+- `126d1ec` 2026-09-29 i18n: 主控裁决 ja:nav.about，去掉"本站"指示代词  — _claude-code · Claude Sonnet 5_
+- `4daa674` 2026-09-29 i18n: 运营前端与 SEO 优化第一轮翻译收尾（14 语种落地 + 守卫扩展）  — _claude-code · Claude Sonnet 5_
+- `3bb0b19` 2026-09-29 fix(public-ui,site): 主控复核三处修正（推荐卡片精简/env透传/mock不重叠）  — _claude-code · Claude Sonnet 5_
+- `377f042` 2026-09-29 chore(dev-preview): 给小说页/章节页假数据接上相关推荐与新书推荐  — _claude-code · Claude Sonnet 5_
+- `0037ca0` 2026-09-29 feat(public-ui,seo): 运营前端与 SEO 优化第一轮（A1-A4/B1-B3/C/D3-D5）  — _claude-code · Claude Sonnet 5_
+- `46cea2e` 2026-09-28 文档(发版)：收官海阅 v0.5.3 预生产部署与治理  — _codex · GPT-6_
 
 ## v0.5.3
 

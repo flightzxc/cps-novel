@@ -16,12 +16,13 @@ Compose runtime 与 Health 身份一致性验证（`/api/health` 的 `metadataCo
 
 ## 当前快照
 
-### v0.5.4 —— 准备中（2026-09-29；本版本尚未部署）
+### v0.5.4 —— 已发布到预生产（2026-09-29，`RELEASE=PASS`）
 
-- 集成基线 `c4ea5bb85721cc68df7310b3a17f59b156f4f909` 经 Opus 复核，译文经 GPT 两轮第三方验收（第一轮 PASS_WITH_FIXES，修订后增量 PASS）。发版分支 `release/v0.5.4-2026-09-29`；Final 与归档身份以第一阶段交付为准。
+- 集成基线 `c4ea5bb85721cc68df7310b3a17f59b156f4f909` 经 Opus 复核，译文经 GPT 两轮第三方验收（第一轮 PASS_WITH_FIXES，修订后增量 PASS）。Final `0260d8d89c8aba83ba7eb8887ae94461489a927c`，annotated tag `v0.5.4` 固定于 Final；镜像 `cps-novel:0.5.4-0260d8d`（linux/amd64），归档 SHA256 `acc69c44b4271e06562d1b606f3391d4b6a95caa15008f641bb243168048197f`。
 - 本版仅发布运营前端与 SEO 优化第一轮，含 Owner 于 2026-09-29 裁决的 D-12 章节列表锁定折中方案。无新迁移、环境变量或 Compose 改动，不开发新功能。
-- 第一阶段只在本地升版、运行完整门禁、推送 GitHub 并构建 linux/amd64 镜像归档，不连接运维主机。第二阶段须 Owner 确认领取批次暂停并单独授权，仅部署 `haiyue-vps`；部署前若有 pending 或 processing 定类任务则停下。目标机 env 只改两个版本号，现有标签开关、写闸登记与白名单原样保留。
-- 回滚目标 v0.5.3 Final `2cec4502091df773f8ed6954486e5cf137954b8f`；使用其原发布目录和本次 env 备份，不重建 postgres。改动部署到带访问密码的预生产后才生效，正式域名切换后才对公网可见。
+- 第一阶段本地 tsc、lint（0 error）、全量 474 文件 / 7,133 测试、build、22 个真实库运行器、nginx 矩阵、公开切换变异、品牌图及三套 Compose 全部通过；迁移与字典 drift 0。第二阶段经 Owner 单独授权，仅部署 `haiyue-vps`：部署前批次 paused、定类任务无 pending/processing，线上 20 条迁移与 Final 一致；新鲜在线备份及 restore-list 通过。
+- 目标机 env 备份后只改两个版本号；标签开关、写闸登记与白名单原样保留。`PREPROD_APPROVED_MIGRATION=YES` 下 `RELEASE=PASS`；health 为 0.5.4 / Final，五个应用服务及 postgres healthy，postgres 容器 ID 不变，backup health ok、近五分钟错误日志 0，preflight 写闸输出一致；批次仍 paused。
+- 回滚目标 v0.5.3 Final `2cec4502091df773f8ed6954486e5cf137954b8f`；使用其原发布目录和本次 env 备份 `preprod.env.bak-v054-20260929T101615Z`，不重建 postgres。改动已在带访问密码的预生产生效，正式域名切换后才对公网可见。详细证据见 [v0.5.4 发布记录](releases/v0.5.4-preproduction.md)。
 
 ### v0.5.3 —— 已发布到预生产（2026-09-28 17:10:36 +0800，`RELEASE=PASS`）
 
@@ -298,7 +299,7 @@ Compose runtime 与 Health 身份一致性验证（`/api/health` 的 `metadataCo
 
 | Version | Date (+0800) | Bump | Summary | Commit / Release | Status |
 | --- | ---: | --- | --- | --- | --- |
-| `v0.5.4` | 2026-09-29 | PATCH | 运营前端与 SEO 优化第一轮；D-12 章节列表折中方案；无新迁移 | `release/v0.5.4-2026-09-29`；集成基线 `c4ea5bb` 经 Opus 复核 | 准备中；本版本尚未部署；第二阶段待 Owner 暂停批次并授权 |
+| `v0.5.4` | 2026-09-29 | PATCH | 运营前端与 SEO 优化第一轮；D-12 章节列表折中方案；无新迁移 | tag `v0.5.4` → `0260d8d89c8aba83ba7eb8887ae94461489a927c`；image `cps-novel:0.5.4-0260d8d` | 预生产已发布；领取批次保持暂停；正式域名切换后才对公网可见 |
 | `v0.5.3` | 2026-09-28 17:10 | PATCH | 大语种自动标签建任务分页与事务超时修复；无新迁移；英文回填另行执行 | tag `v0.5.3` → `2cec4502091df773f8ed6954486e5cf137954b8f`；image `cps-novel:0.5.3-2cec450` | 预生产已发布；领取批次保持暂停；标签开闸与英文回填另行执行 |
 | `v0.5.2` | 2026-09-28 11:52 | PATCH | 公网化代码预置、NAS 受限拉取入口预置、B-20；无新迁移；正式模式未生效 | tag `v0.5.2` → `efe51b58418cb340d53c40e35e68d7e1f6db5e93`；image `cps-novel:0.5.2-efe51b5` | 预生产已发布；批次保持暂停；NAS 入口待 Owner 授权安装 |
 | `v0.5.1` | 2026-09-27 23:21 | PATCH | B-16 测试运维修复；应用容量、备份常驻、数据库参数生效；异地拉取待安装；自动标签仍关闭；无新迁移 | tag `v0.5.1` → `f4d3d3595926051f3488cb1e3203c25340cbacf9`；image `cps-novel:0.5.1-f4d3d35` | 预生产已发布；数据库重建及 Owner Sitemap 验收通过；批次保持暂停 |
