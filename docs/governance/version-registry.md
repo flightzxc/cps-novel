@@ -16,6 +16,13 @@ Compose runtime 与 Health 身份一致性验证（`/api/health` 的 `metadataCo
 
 ## 当前快照
 
+### v0.5.4 —— 准备中（2026-09-29；本版本尚未部署）
+
+- 集成基线 `c4ea5bb85721cc68df7310b3a17f59b156f4f909` 经 Opus 复核，译文经 GPT 两轮第三方验收（第一轮 PASS_WITH_FIXES，修订后增量 PASS）。发版分支 `release/v0.5.4-2026-09-29`；Final 与归档身份以第一阶段交付为准。
+- 本版仅发布运营前端与 SEO 优化第一轮，含 Owner 于 2026-09-29 裁决的 D-12 章节列表锁定折中方案。无新迁移、环境变量或 Compose 改动，不开发新功能。
+- 第一阶段只在本地升版、运行完整门禁、推送 GitHub 并构建 linux/amd64 镜像归档，不连接运维主机。第二阶段须 Owner 确认领取批次暂停并单独授权，仅部署 `haiyue-vps`；部署前若有 pending 或 processing 定类任务则停下。目标机 env 只改两个版本号，现有标签开关、写闸登记与白名单原样保留。
+- 回滚目标 v0.5.3 Final `2cec4502091df773f8ed6954486e5cf137954b8f`；使用其原发布目录和本次 env 备份，不重建 postgres。改动部署到带访问密码的预生产后才生效，正式域名切换后才对公网可见。
+
 ### v0.5.3 —— 已发布到预生产（2026-09-28 17:10:36 +0800，`RELEASE=PASS`）
 
 - 集成基线 `14fe2e41f8da3b4920c00e957a5952e5775e1176` 经 Opus 复核；Final `2cec4502091df773f8ed6954486e5cf137954b8f`，annotated tag `v0.5.3` 固定在 Final。镜像 `cps-novel:0.5.3-2cec450`（linux/amd64），归档 SHA256 `cb2fc89ff299d4304cb626b1185021229756391358cc922086d09a344a59f42c`。
@@ -291,6 +298,7 @@ Compose runtime 与 Health 身份一致性验证（`/api/health` 的 `metadataCo
 
 | Version | Date (+0800) | Bump | Summary | Commit / Release | Status |
 | --- | ---: | --- | --- | --- | --- |
+| `v0.5.4` | 2026-09-29 | PATCH | 运营前端与 SEO 优化第一轮；D-12 章节列表折中方案；无新迁移 | `release/v0.5.4-2026-09-29`；集成基线 `c4ea5bb` 经 Opus 复核 | 准备中；本版本尚未部署；第二阶段待 Owner 暂停批次并授权 |
 | `v0.5.3` | 2026-09-28 17:10 | PATCH | 大语种自动标签建任务分页与事务超时修复；无新迁移；英文回填另行执行 | tag `v0.5.3` → `2cec4502091df773f8ed6954486e5cf137954b8f`；image `cps-novel:0.5.3-2cec450` | 预生产已发布；领取批次保持暂停；标签开闸与英文回填另行执行 |
 | `v0.5.2` | 2026-09-28 11:52 | PATCH | 公网化代码预置、NAS 受限拉取入口预置、B-20；无新迁移；正式模式未生效 | tag `v0.5.2` → `efe51b58418cb340d53c40e35e68d7e1f6db5e93`；image `cps-novel:0.5.2-efe51b5` | 预生产已发布；批次保持暂停；NAS 入口待 Owner 授权安装 |
 | `v0.5.1` | 2026-09-27 23:21 | PATCH | B-16 测试运维修复；应用容量、备份常驻、数据库参数生效；异地拉取待安装；自动标签仍关闭；无新迁移 | tag `v0.5.1` → `f4d3d3595926051f3488cb1e3203c25340cbacf9`；image `cps-novel:0.5.1-f4d3d35` | 预生产已发布；数据库重建及 Owner Sitemap 验收通过；批次保持暂停 |
