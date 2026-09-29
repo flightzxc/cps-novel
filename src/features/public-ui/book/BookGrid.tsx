@@ -33,11 +33,14 @@ export function BookGrid({
   novels,
   emptyMessage,
   variant = "default",
+  minimal = false,
 }: {
   locale: SiteLocale;
   novels: NovelCardView[];
   emptyMessage?: string;
   variant?: "default" | "home";
+  /** 转发给 `BookCard` 的 `minimal`（A4/B3 推荐模块：只显示封面 + 书名）。 */
+  minimal?: boolean;
 }) {
   const isHome = variant === "home";
   const message = emptyMessage ?? getPublicT(locale)("collection.empty");
@@ -66,7 +69,7 @@ export function BookGrid({
     >
       {novels.map((novel) => (
         <li key={novel.id}>
-          <BookCard locale={locale} novel={novel} compactOnMobile={isHome} />
+          <BookCard locale={locale} novel={novel} compactOnMobile={isHome} minimal={minimal} />
         </li>
       ))}
     </ul>

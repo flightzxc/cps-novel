@@ -38,14 +38,21 @@ const messages = {
     closeMenu: "關閉選單",
     about: "關於我們",
     copyright: "內容與著作權",
-    footerNote: "本站提供免費試讀章節,完整故事請前往原始平台閱讀。",
+    // 運營文案第一輪・A組翻譯：按 C（Owner 2026-09-29"去掉本站/原平台/試讀"
+    // 拍板）用新英文原文("New chapters are added regularly.")重新翻譯，
+    // 不使用「本站」「原始平台」等表述。
+    footerNote: "新章節定期更新。",
+    // WO-1 §5.4/§6.4 (new key): the locale switcher's trigger-button aria
+    // label. Consumed starting WO-2 — this key only exists so WO-2/WO-3
+    // don't both need to touch en.ts (see the work order's rationale).
     language: "語言",
   },
   home: {
     works: "作品",
     viewAll: "查看全部",
     featuredEyebrow: "精選",
-    startPreview: "開始試讀",
+    // C: "Start preview" → "Start reading"，去掉「試讀」表述。
+    startPreview: "開始閱讀",
     viewDetails: "查看詳情",
     carouselLabel: "精選作品",
     carouselRole: "輪播",
@@ -59,35 +66,57 @@ const messages = {
     tagsLabel: "標籤",
     genreTags: "類型標籤",
     chapterCount: "共{count}章",
-    previewCount: "試讀{count}章",
-    startPreview: "開始試讀",
+    // C: 去掉「試讀」表述，{count} 位置不變。
+    previewCount: "{count}章可讀",
+    startPreview: "開始閱讀",
     readOnUpstream: "繼續閱讀",
     synopsis: "劇情簡介",
-    previewChapters: "試讀章節",
-    // 施工工单_I18N_复数能力 §6.2 折键：zh-Hant 的 Intl.PluralRules 只解出 other
-    // 一档（no one category），one 分支在 zh-Hant 永远选不中，会被门禁的 CLDR
-    // 类别覆盖检查判为多余分支——因此这里只保留原 previewChaptersDescription
-    // 一句（已含 {count}，任意数量下都语法正确），原 …One 的单数措辞变体停用，
-    // 不再单独出现。
-    previewChaptersDescription:
-      "{count, plural, other {本站提供{count}章試讀,均由原始平台提供。}}",
-    noPreviewChapters: "本書目前尚無試讀章節。",
+    // A3 折中方案上線後此鍵已不再被組件引用(標題改用下面的
+    // chapterListTitle)，保留值只為維持 key 集合，按 C 去掉「試讀」表述。
+    previewChapters: "章節",
+    // 施工工单_I18N_复数能力 §6.2 折键：zh-Hant 的 Intl.PluralRules 只解出
+    // other 一檔(no one category)，one 分支在 zh-Hant 永遠選不中，會被門禁
+    // 的 CLDR 類別覆蓋檢查判為多餘分支——因此只保留 other 分支(已含
+    // {count}，任意數量下都語法正確)。C: 去掉「本站」「原始平台」表述，
+    // plural 參數/類別不變。
+    previewChaptersDescription: "{count, plural, other {現在可免費閱讀{count}章。}}",
+    // 發布與 Preview 解耦後「零章節」整塊不渲染，已無引用；按 C 把英文原文
+    // 的意思同步改譯。
+    noPreviewChapters: "目前尚無可閱讀的章節。",
     relatedWorks: "相關作品",
     chapterHeading: "第{number}章",
+    // A3/B2/A4/B1 新增鍵・運營文案第一輪 A 組翻譯完成。Owner 原則：不出現
+    // 「本站」「原始平台」「試讀」「預覽」的意思，按本站就是官方站點處理。
+    chapterListTitle: "章節列表",
+    chapterListCount: "{count, plural, other {共{count}章}}",
+    lockedChapterHint: "已鎖定，點擊繼續閱讀",
+    expandAllChapters: "顯示全部{count}章",
+    readMoreChapters: "閱讀更多章節",
+    continueReadingModalTitle: "繼續閱讀",
+    // GPT 验收后修订（2026-09-29）：随英文 "Continue with Chapter {number} and the rest of the story." 重译；不再说"在這裡"（就在这里）。
+    continueReadingModalBody: "繼續閱讀第{number}章及故事的其餘部分。",
+    closeDialog: "關閉",
+    newReleases: "新書上架",
+    continueReadingBarLabel: "繼續閱讀列",
   },
   chapter: {
     nav: "章節導覽",
     previous: "上一章",
     next: "下一章",
     firstChapter: "這是第一章",
-    lastPreviewChapter: "這是最後一章試讀章節",
+    // C: 去掉「試讀」表述，與上面 firstChapter 保持同一種句式。
+    // GPT 验收后修订（2026-09-29）：随英文 "This is the last free chapter" 补上"免費"。
+    lastPreviewChapter: "這是最後一個免費章節",
     heading: "第{number}章",
     readerSettings: "閱讀設定",
     closeReaderSettings: "關閉閱讀設定",
-    previewPosition: "試讀 {index} / {total}",
-    endOfPreview: "本站的試讀到此結束。",
+    // C: 去掉「試讀」前綴，{index}/{total} 位置不變。
+    previewPosition: "{index} / {total}",
+    // C: 去掉「試讀」「本站」表述。
+    endOfPreview: "目前可閱讀的內容到此為止。",
     continuePrompt: "想繼續閱讀嗎？",
-    remainingOnOrigin: "後續章節請前往原始平台繼續閱讀。",
+    // C: 去掉「原始平台」表述。
+    remainingOnOrigin: "繼續閱讀，故事仍在延續。",
     readOnUpstream: "繼續閱讀",
     theme: "主題",
     fontSize: "字體大小",
@@ -109,7 +138,8 @@ const messages = {
     workCount: "{count}部作品",
     empty: "這裡目前還沒有可閱讀的作品。",
     allWorksTitle: "全部作品",
-    allWorksDescription: "目前本站可供閱讀的作品。",
+    // C: 去掉「本站」表述。
+    allWorksDescription: "目前可供閱讀的作品。",
     allWorksEmpty: "目前尚無公開作品。",
     genreDescription: "您可以在此合輯中閱讀的作品。",
     genreEmpty: "此合輯目前尚無作品。",
@@ -119,18 +149,22 @@ const messages = {
   },
   unavailable: {
     unpublishedTitle: "本書暫時無法閱讀",
-    unpublishedBody: "本書已從本站下架。若日後恢復,此網址仍可使用。",
+    // C: 去掉「本書已從本站下架」這句，只保留地址持續有效的提示。
+    unpublishedBody: "若日後恢復，此網址仍可使用。",
     takedownTitle: "本書已被撤回",
-    takedownBody: "應版權方要求,本站不再提供本書。",
+    // C: 去掉「本站」表述。
+    takedownBody: "應版權方要求，本書已不再提供閱讀。",
     returnHome: "回首頁",
   },
   blog: {
     listTitle: "Blog",
-    listDescription: "本站的文章與最新消息。",
+    // C: 去掉「本站的」表述。
+    listDescription: "文章與最新消息。",
     empty: "目前尚無部落格文章。",
     publishedOn: "發佈於 {date}",
     unpublishedTitle: "本篇文章暫時無法閱讀",
-    unpublishedBody: "本文已從本站下架。若日後恢復,此網址仍可使用。",
+    // C: 同 unavailable.unpublishedBody 的理由修改。
+    unpublishedBody: "若日後恢復，此網址仍可使用。",
   },
   errorPage: {
     title: "發生錯誤",
@@ -151,7 +185,8 @@ const messages = {
   meta: {
     notFound: "找不到頁面",
     chapterNotFound: "找不到章節",
-    siteDescription: "探索小說,閱讀試讀章節。",
+    // C: 去掉「試讀」表述。
+    siteDescription: "探索小說，開始閱讀免費章節。",
   },
 } satisfies LocaleMessages;
 

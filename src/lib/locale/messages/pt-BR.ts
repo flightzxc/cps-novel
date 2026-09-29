@@ -38,14 +38,14 @@ const messages = {
     closeMenu: "Fechar menu",
     about: "Sobre",
     copyright: "Conteúdo e direitos autorais",
-    footerNote: "Este site oferece capítulos de amostra gratuitos. A história completa está na plataforma original.",
+    footerNote: "Novos capítulos são adicionados regularmente.",
     language: "Idioma",
   },
   home: {
     works: "Obras",
     viewAll: "Ver tudo",
     featuredEyebrow: "Destaque",
-    startPreview: "Ler amostra",
+    startPreview: "Começar a ler",
     viewDetails: "Ver detalhes",
     carouselLabel: "Obras em destaque",
     carouselRole: "carrossel",
@@ -59,33 +59,46 @@ const messages = {
     tagsLabel: "Etiquetas",
     genreTags: "Etiquetas de gênero",
     chapterCount: "Capítulos: {count}",
-    previewCount: "Capítulos de amostra: {count}",
-    startPreview: "Ler amostra",
+    previewCount: "{count} capítulos disponíveis",
+    startPreview: "Começar a ler",
     readOnUpstream: "Continuar lendo",
     synopsis: "Sinopse",
-    previewChapters: "Capítulos de amostra",
-    // 施工工单_I18N_复数能力 §6.2 折键（逐字保留，未改写文案）+ §5.1 第二条：pt-BR 的
-    // CLDR 类别含 many（仅整百万命中，如 1000000/2000000），门禁要求必须写，
-    // 文本与 other 分支相同，不是漏翻译。
+    previewChapters: "Capítulos",
+    // 施工工单_I18N_复数能力 §6.2 折键 + §5.1 第二条：pt-BR 的 CLDR 类别含 many
+    // （仅整百万命中，如 1000000/2000000），门禁要求必须写，文本与 other
+    // 分支相同，不是漏翻译。B 组翻译单（2026-09-29）按新英文原文重译。
     previewChaptersDescription:
-      "{count, plural, one {1 capítulo de amostra neste site, fornecido pela plataforma original.} many {{count} capítulos de amostra neste site, todos fornecidos pela plataforma original.} other {{count} capítulos de amostra neste site, todos fornecidos pela plataforma original.}}",
-    noPreviewChapters: "Este livro ainda não tem capítulos de amostra.",
+      "{count, plural, one {1 capítulo grátis para ler agora.} many {{count} capítulos grátis para ler agora.} other {{count} capítulos grátis para ler agora.}}",
+    noPreviewChapters: "Ainda não há capítulos para ler.",
     relatedWorks: "Obras relacionadas",
     chapterHeading: "Capítulo {number}",
+    // A3/A4/B1 新增键：B 组翻译单（2026-09-29）译入巴西葡萄牙语，替换英文占位。
+    chapterListTitle: "Lista de capítulos",
+    chapterListCount: "{count, plural, many {{count} capítulos no total} one {1 capítulo no total} other {{count} capítulos no total}}",
+    lockedChapterHint: "Bloqueado — toque para continuar lendo",
+    expandAllChapters: "Mostrar todos os {count} capítulos",
+    readMoreChapters: "Ler mais capítulos",
+    continueReadingModalTitle: "Continuar lendo",
+    // GPT 验收后修订（2026-09-29）：随英文 "Continue with Chapter {number} and the rest of the story." 重译；不再说"aqui"（就在这里）。
+    continueReadingModalBody: "Continue com o capítulo {number} e o restante da história.",
+    closeDialog: "Fechar",
+    newReleases: "Lançamentos",
+    continueReadingBarLabel: "Barra para continuar lendo",
   },
   chapter: {
     nav: "Navegação de capítulos",
     previous: "Capítulo anterior",
     next: "Próximo capítulo",
     firstChapter: "Este é o primeiro capítulo",
-    lastPreviewChapter: "Este é o último capítulo de amostra",
+    // GPT 验收后修订（2026-09-29）：随英文 "This is the last free chapter" 补上"grátis"（免费）。
+    lastPreviewChapter: "Este é o último capítulo grátis",
     heading: "Capítulo {number}",
     readerSettings: "Configurações de leitura",
     closeReaderSettings: "Fechar configurações de leitura",
-    previewPosition: "Amostra {index} / {total}",
-    endOfPreview: "Aqui termina a amostra neste site.",
+    previewPosition: "{index} / {total}",
+    endOfPreview: "Isso é tudo que está disponível no momento.",
     continuePrompt: "Quer continuar lendo?",
-    remainingOnOrigin: "Os próximos capítulos continuam na plataforma original.",
+    remainingOnOrigin: "Continue lendo para acompanhar a história.",
     readOnUpstream: "Continuar lendo",
     theme: "Tema",
     fontSize: "Tamanho da fonte",
@@ -110,7 +123,7 @@ const messages = {
     workCount: "{count, plural, one {Obra: {count}} many {Obras: {count}} other {Obras: {count}}}",
     empty: "Ainda não há obras para ler aqui.",
     allWorksTitle: "Todas as obras",
-    allWorksDescription: "Obras disponíveis para leitura neste site no momento.",
+    allWorksDescription: "Obras disponíveis para leitura no momento.",
     allWorksEmpty: "Ainda não há obras disponíveis publicamente.",
     genreDescription: "Obras que você pode ler nesta coleção.",
     genreEmpty: "Ainda não há obras nesta coleção.",
@@ -120,18 +133,18 @@ const messages = {
   },
   unavailable: {
     unpublishedTitle: "Este livro está temporariamente indisponível",
-    unpublishedBody: "Ele foi removido deste site. Se retornar, este endereço continuará funcionando.",
+    unpublishedBody: "Se retornar, este endereço continuará funcionando.",
     takedownTitle: "Este livro foi retirado",
-    takedownBody: "A pedido do detentor dos direitos, este site não oferece mais este livro.",
+    takedownBody: "A pedido do detentor dos direitos, este livro não está mais disponível aqui.",
     returnHome: "Voltar ao início",
   },
   blog: {
     listTitle: "Blog",
-    listDescription: "Artigos e novidades deste site.",
+    listDescription: "Artigos e novidades.",
     empty: "Ainda não há publicações no blog.",
     publishedOn: "Publicado em {date}",
     unpublishedTitle: "Esta publicação está temporariamente indisponível",
-    unpublishedBody: "Ela foi removida deste site. Se retornar, este endereço continuará funcionando.",
+    unpublishedBody: "Se retornar, este endereço continuará funcionando.",
   },
   errorPage: {
     title: "Ocorreu um erro",
@@ -152,7 +165,7 @@ const messages = {
   meta: {
     notFound: "Não encontrado",
     chapterNotFound: "Capítulo não encontrado",
-    siteDescription: "Descubra romances e leia capítulos de amostra.",
+    siteDescription: "Descubra romances e comece a ler capítulos grátis.",
   },
 } satisfies LocaleMessages;
 

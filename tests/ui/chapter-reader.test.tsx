@@ -16,24 +16,42 @@ function openPanel() {
   fireEvent.click(screen.getByTestId("reader-settings-toggle"));
 }
 
+// C: `chapter.previewPosition` 去掉 "Preview " 前缀，从 "Preview {index} /
+// {total}" 改成 "{index} / {total}"，下面几处断言跟随新文案。
 describe("章节页 · 结构与字段边界", () => {
   it("轻量书籍归属条标出所属小说与当前试读范围", () => {
     render(<ChapterScreen locale="en" chapter={MOCK_CHAPTER} />);
 
     const bar = screen.getByTestId("book-attribution-bar");
     expect(bar.textContent).toContain(MOCK_CHAPTER.novel.title);
-    expect(bar.textContent).toContain("Preview 1 / 3");
+    expect(bar.textContent).toContain("1 / 3");
   });
 
+  /**
+   * B2（Owner 2026-09-29 修订 D-12 第 2 条）之后，章节页嵌入了与小说页同一个
+   * 章节列表组件，它会展示 `totalChapterCount`（"N chapters total"）——这是
+   * 有意的新增内容，不是把总章数泄漏进了试读进度指示器。原断言
+   * "不出现 265" 的真实意图是"归属条的试读进度分母不是总章数"，把检查范围
+   * 收紧到 `book-attribution-bar` 本身，而不是整页文本，才是这条用例真正
+   * 该守的边界；页面别处出现总章数（章节列表说明、以及本来就存在的元信息）
+   * 是这一轮新增的正常内容。
+   */
   it("试读范围的分母是可试读章数，不是总章数，也不出现全书进度百分比", () => {
-    const { container } = render(<ChapterScreen locale="en" chapter={MOCK_CHAPTER} />);
-    const text = container.textContent ?? "";
+    render(<ChapterScreen locale="en" chapter={MOCK_CHAPTER} />);
+    const bar = screen.getByTestId("book-attribution-bar");
 
-    expect(text).toContain("Preview 1 / 3");
-    expect(text).not.toContain("265");
-    expect(text).not.toMatch(/\d+(\.\d+)?%/);
+    expect(bar.textContent).toContain("1 / 3");
+    expect(bar.textContent).not.toContain("265");
+    expect(bar.textContent).not.toMatch(/\d+(\.\d+)?%/);
   });
 
+  // D4 删除了 H1 正上方单独渲染 `chapter.heading`（"Chapter {number}"）的那个
+  // <p>；"Chapter 1" 这个文本现在来自 B2 新增的、章节页嵌入的章节列表——
+  // 真实章节链接里同一个 `novel.chapterHeading` 键渲染的编号徽标（章节页的
+  // 章节列表复用与详情页相同的 `PreviewChapterList` 组件），巧合地仍然存在，
+  // 但语义已经不同（不再是"当前章节标题上方的小字"，而是"章节列表里第 1
+  // 条真实链接的编号"）。保留这条断言是为了不丢失"章号这个信息确实存在于
+  // 页面上"这件事，但它现在验证的是 B2 而不是 D4 之前的那个元素。
   it("渲染章号、章名与全部段落", () => {
     render(<ChapterScreen locale="en" chapter={MOCK_CHAPTER} />);
 
@@ -70,19 +88,24 @@ describe("章节页 · 章节导航", () => {
     expect(screen.getByRole("link", { name: "Next chapter" })).toBeTruthy();
   });
 
+  // C: `chapter.endOfPreview` / `chapter.remainingOnOrigin` 文案改写（去掉
+  // "the preview" / "this site" / "original platform"），断言跟随新文案。
+  // B1：章节页现在还有固定底部浮窗（StickyCTA），它也渲染一个 "Continue
+  // reading" 链接——用 getAllByRole 取第一个（DOM 顺序里章末 CTA 在浮窗之
+  // 前），不代表放宽断言，只是同名链接从 1 个变成 2 个后要挑对目标。
   it("最后一章试读时正式阅读升为主动作", () => {
     render(<ChapterScreen locale="en" chapter={MOCK_CHAPTER_LAST} />);
 
-    expect(screen.getByText("That's the end of the preview on this site.")).toBeTruthy();
+    expect(screen.getByText("That's everything available right now.")).toBeTruthy();
     expect(
-      screen.getByRole("link", { name: "Continue reading" }).className,
+      screen.getAllByRole("link", { name: "Continue reading" })[0]!.className,
     ).toContain("bg-novel-accent");
   });
 
   it("非最后一章时正式阅读保持次动作", () => {
     render(<ChapterScreen locale="en" chapter={MOCK_CHAPTER} />);
 
-    const link = screen.getByRole("link", { name: "Continue reading" });
+    const link = screen.getAllByRole("link", { name: "Continue reading" })[0]!;
     expect(link.className).not.toContain("bg-novel-accent");
     expect(link.className).toContain("border-novel-border-strong");
   });
@@ -91,9 +114,10 @@ describe("章节页 · 章节导航", () => {
     const chapterWithoutGoLink = { ...MOCK_CHAPTER, readOnUpstreamHref: undefined };
     render(<ChapterScreen locale="en" chapter={chapterWithoutGoLink} />);
 
+    // 没有跳转码时，章末 CTA 与 StickyCTA（B1）都不渲染。
     expect(screen.queryByRole("link", { name: "Continue reading" })).toBeNull();
     expect(screen.queryByText("Want to keep reading?")).toBeNull();
-    expect(screen.queryByText("Later chapters continue on the original platform.")).toBeNull();
+    expect(screen.queryByText("Keep reading to continue the story.")).toBeNull();
   });
 
   it("最后一章没有公开跳转码时，试读结束提示与 CTA 同样整块不渲染（R1-1）", () => {
@@ -101,7 +125,7 @@ describe("章节页 · 章节导航", () => {
     render(<ChapterScreen locale="en" chapter={lastWithoutGoLink} />);
 
     expect(screen.queryByRole("link", { name: "Continue reading" })).toBeNull();
-    expect(screen.queryByText("That's the end of the preview on this site.")).toBeNull();
+    expect(screen.queryByText("That's everything available right now.")).toBeNull();
   });
 });
 

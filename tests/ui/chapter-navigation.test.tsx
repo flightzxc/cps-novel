@@ -70,6 +70,10 @@ describe("章节切换 · 渲染出的导航", () => {
     );
   });
 
+  // C: `chapter.lastPreviewChapter` 去掉"preview"一词，从 "This is the last
+  // preview chapter" 改成 "This is the last chapter"（与上面的 firstChapter
+  // 保持同一种句式）；GPT 验收后（2026-09-29）再补上 "free"：可读的最后一章
+  // 之后可能还有锁定章节，"last chapter"会被读成全书终章。断言跟随新文案。
   it("首章不渲染上一章，末章不渲染下一章——不留死链", () => {
     const { unmount } = render(<ChapterScreen locale="en" chapter={getMockChapterView(1)!} />);
     expect(screen.queryByRole("link", { name: "Previous chapter" })).toBeNull();
@@ -78,7 +82,7 @@ describe("章节切换 · 渲染出的导航", () => {
 
     render(<ChapterScreen locale="en" chapter={getMockChapterView(MOCK_PREVIEW_CHAPTER_TOTAL)!} />);
     expect(screen.queryByRole("link", { name: "Next chapter" })).toBeNull();
-    expect(screen.getByText("This is the last preview chapter")).toBeTruthy();
+    expect(screen.getByText("This is the last free chapter")).toBeTruthy();
   });
 
   it("导航链接保留 rel=prev/next 语义", () => {
@@ -88,16 +92,18 @@ describe("章节切换 · 渲染出的导航", () => {
     expect(screen.getByRole("link", { name: "Next chapter" }).getAttribute("rel")).toBe("next");
   });
 
+  // C: `chapter.previewPosition` 去掉 "Preview " 前缀，从 "Preview {index} /
+  // {total}" 改成 "{index} / {total}"，断言跟随新文案。
   it("试读进度随章号推进，分母恒为可试读章数", () => {
     const { unmount } = render(<ChapterScreen locale="en" chapter={getMockChapterView(2)!} />);
     expect(screen.getByTestId("book-attribution-bar").textContent).toContain(
-      `Preview 2 / ${MOCK_PREVIEW_CHAPTER_TOTAL}`,
+      `2 / ${MOCK_PREVIEW_CHAPTER_TOTAL}`,
     );
     unmount();
 
     render(<ChapterScreen locale="en" chapter={getMockChapterView(3)!} />);
     expect(screen.getByTestId("book-attribution-bar").textContent).toContain(
-      `Preview 3 / ${MOCK_PREVIEW_CHAPTER_TOTAL}`,
+      `3 / ${MOCK_PREVIEW_CHAPTER_TOTAL}`,
     );
   });
 

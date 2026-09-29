@@ -1,0 +1,407 @@
+语种	键	英文原文	译文	语境	长度限制
+ar	blog.listDescription	Articles and updates.	مقالات وتحديثات.	博客列表页说明	SEO description 候选来源之一，≤60 字符
+ar	blog.unpublishedBody	If it returns, this address will still work.	إذا عاد، سيظل هذا العنوان يعمل.	博客文章下架状态正文（与 13 同结构、独立键）	同 13
+ar	chapter.endOfPreview	That's everything available right now.	هذا كل ما هو متاح حاليًا.	章节页章末提示（最后一章可试读时）	单句提示，≤60 字符
+ar	chapter.lastPreviewChapter	This is the last free chapter	هذا هو آخر فصل مجاني	"章节页 `ChapterPager` 末章位提示（替代""下一章""按钮）；指“可免费读的最后一章”，之后可能还有锁定章节，故不能写成全书终章"	"行内提示文字，≤40 字符，句式与相邻的 `chapter.firstChapter`（""This is the first chapter""）保持一致"
+ar	chapter.previewPosition	{index} / {total}	{index} من {total}	"章节页 `BookAttributionBar` 试读进度指示（""第 N / 共 M""）"	行内小字，含 `{index}`/`{total}` 两个插值
+ar	chapter.remainingOnOrigin	Keep reading to continue the story.	تابع القراءة لتكتشف بقية القصة.	章节页章末提示（非最后一章时的次级说明）	单句提示，≤60 字符
+ar	collection.allWorksDescription	Works currently available to read.	أعمال متاحة للقراءة حاليًا.	全部作品聚合页说明	SEO description 候选来源之一，≤80 字符
+ar	home.startPreview	Start reading	ابدأ القراءة	"首页 Hero/FeaturedNovel 的""开始试读""按钮"	按钮标签，≤20 字符
+ar	meta.siteDescription	Discover novels and start reading free chapters.	اكتشف الروايات وابدأ بقراءة فصول مجانية.	全站兜底 meta description（`SiteSetting.siteDescription` 为空时的回退）	SEO meta description，≤160 字符
+ar	nav.footerNote	New chapters are added regularly.	تُضاف فصول جديدة بانتظام.	页脚静态说明行（`SiteFooter`，不是 `SiteSetting.footer_disclaimer_text` 那个后台可编辑字段）	页脚单行，建议 ≤60 字符（原两句改一句，为了让句数门禁对本键直接跳过比较，不强制改写 14 语种）
+ar	novel.chapterListCount	{count, plural, one {1 chapter total} other {{count} chapters total}}	{count, plural, zero {المجموع: لا فصول} one {المجموع: فصل واحد} two {المجموع: فصلان} few {المجموع: {count} فصول} many {المجموع: {count} فصلاً} other {المجموع: {count} فصل}}	章节列表标题下方的数量说明（替代旧的 `novel.previewChaptersDescription`），ICU plural，参数 `{count}` = `totalChapterCount`	单行说明；每个语种必须覆盖自己的 CLDR 复数类别集合（`tests/ui/messages-completeness.test.ts` 的 `EXPECTED_PLURAL_CATEGORIES` 表），不多不少
+ar	novel.chapterListTitle	Chapter list	قائمة الفصول	章节列表区块标题（小说页 + 章节页，替代旧的 `novel.previewChapters`）	"区块标题，≤20 字符；不得使用""完整目录/全部章节""等宣称完整性的措辞"
+ar	novel.closeDialog	Close	إغلاق	弹窗关闭按钮（通用）	按钮标签，≤15 字符
+ar	novel.continueReadingBarLabel	Continue reading bar	شريط متابعة القراءة	固定底部浮窗（StickyCTA）的 `aria-label`，读屏 landmark 名称	读屏专用，不可见，不限长度
+ar	novel.continueReadingModalBody	Continue with Chapter {number} and the rest of the story.	تابع القراءة مع الفصل {number} وبقية القصة.	弹窗正文，参数 `{number}` = 点击的锁定章节号；弹窗按钮会跳转到别处，不得写成“内容就在这里/当前页”	弹窗正文单句，含插值，≤80 字符（不含插值）
+ar	novel.continueReadingModalTitle	Continue reading	متابعة القراءة	点击锁定章节弹出的确认弹窗标题	弹窗标题，≤25 字符
+ar	novel.expandAllChapters	Show all {count} chapters	{count, plural, zero {عرض الفصول} one {عرض فصل واحد} two {عرض فصلين} few {عرض {count} فصول} many {عرض {count} فصلاً} other {عرض {count} فصل}}	"""展开全部 N 章""按钮，参数 `{count}` = 全书总章数（`totalChapterCount`），不是锁定条目数"	按钮标签，含插值，≤40 字符（不含插值）
+ar	novel.lockedChapterHint	Locked — tap to continue reading	مُقفَل — اضغط لمتابعة القراءة	锁定章节按钮的读屏专用提示（视觉上只有锁图标 + 章节号，`sr-only`）	读屏文本，不限长度但建议简短（≤50 字符）
+ar	novel.newReleases	New releases	إصدارات جديدة	"""新书推荐""模块标题（""相关推荐""复用既有的 `novel.relatedWorks`，不是新键）"	区块标题，≤20 字符
+ar	novel.noPreviewChapters	No chapters to read yet.	لا توجد فصول للقراءة بعد.	"已停用（发布与 Preview 解耦后""零章节""整块不渲染，`PreviewChapterList.tsx` 直接返回 null），仅为保持 key 集合不变而保留"	已停用，无展示位置限制
+ar	novel.previewChapters	Chapters	الفصول	A3 上线后已不再被组件引用（原章节区块标题，现改用 `chapterListTitle`），仅为保持其它 14 语种 key 集合不变而保留	已停用，无展示位置限制
+ar	novel.previewChaptersDescription	{count, plural, one {1 chapter free to read now.} other {{count} chapters free to read now.}}	{count, plural, zero {لا توجد فصول متاحة للقراءة مجانًا الآن.} one {يمكنك الآن قراءة فصل واحد مجانًا.} two {يمكنك الآن قراءة فصلين مجانًا.} few {يمكنك الآن قراءة {count} فصول مجانًا.} many {يمكنك الآن قراءة {count} فصلاً مجانًا.} other {يمكنك الآن قراءة {count} فصل مجانًا.}}	A3 上线后已不再被组件引用（原章节区块的单复数说明，现改用 `chapterListCount`），仅为保持 key 集合不变而保留；ICU plural（`one`/`other`），参数 `{count}`	已停用，无展示位置限制；分支需保持 `one`/`other` 两个 CLDR 类别
+ar	novel.previewCount	{count} chapters available	{count, plural, zero {لا فصول متاحة} one {فصل واحد متاح} two {فصلان متاحان} few {{count} فصول متاحة} many {{count} فصلاً متاحاً} other {{count} فصل متاح}}	"详情页元信息行""{count} 章可试读"""	元信息行内联文本，含 `{count}` 插值，≤30 字符（不含插值）
+ar	novel.readMoreChapters	Read more chapters	قراءة المزيد من الفصول	"章节列表末尾""阅读更多章节""按钮，跳 `readOnUpstreamHref`"	按钮标签，≤25 字符
+ar	novel.startPreview	Start reading	ابدأ القراءة	详情页行动区主按钮	按钮标签，≤20 字符
+ar	unavailable.takedownBody	At the rights holder's request, this book is no longer offered here.	بناءً على طلب صاحب الحقوق، لم يعد هذا الكتاب متوفرًا هنا.	撤回（takedown）状态页正文	单句正文，≤80 字符
+ar	unavailable.unpublishedBody	If it returns, this address will still work.	إذا عاد، سيظل هذا العنوان يعمل.	下架（unpublished）状态页正文	"正文段落；原两句改一句，去掉的那句由同一屏的 `unavailable.unpublishedTitle`（""This book is temporarily unavailable""）承担""为什么不可用""这层含义"
+cs	blog.listDescription	Articles and updates.	Články a novinky.	博客列表页说明	SEO description 候选来源之一，≤60 字符
+cs	blog.unpublishedBody	If it returns, this address will still work.	Pokud se vrátí, tato adresa bude nadále fungovat.	博客文章下架状态正文（与 13 同结构、独立键）	同 13
+cs	chapter.endOfPreview	That's everything available right now.	To je prozatím vše, co je k dispozici.	章节页章末提示（最后一章可试读时）	单句提示，≤60 字符
+cs	chapter.lastPreviewChapter	This is the last free chapter	Toto je poslední bezplatná kapitola	"章节页 `ChapterPager` 末章位提示（替代""下一章""按钮）；指“可免费读的最后一章”，之后可能还有锁定章节，故不能写成全书终章"	"行内提示文字，≤40 字符，句式与相邻的 `chapter.firstChapter`（""This is the first chapter""）保持一致"
+cs	chapter.previewPosition	{index} / {total}	{index} z {total}	"章节页 `BookAttributionBar` 试读进度指示（""第 N / 共 M""）"	行内小字，含 `{index}`/`{total}` 两个插值
+cs	chapter.remainingOnOrigin	Keep reading to continue the story.	Čtěte dál, abyste pokračovali v příběhu.	章节页章末提示（非最后一章时的次级说明）	单句提示，≤60 字符
+cs	collection.allWorksDescription	Works currently available to read.	Díla aktuálně dostupná ke čtení.	全部作品聚合页说明	SEO description 候选来源之一，≤80 字符
+cs	home.startPreview	Start reading	Začít číst	"首页 Hero/FeaturedNovel 的""开始试读""按钮"	按钮标签，≤20 字符
+cs	meta.siteDescription	Discover novels and start reading free chapters.	Objevujte romány a začněte číst bezplatné kapitoly.	全站兜底 meta description（`SiteSetting.siteDescription` 为空时的回退）	SEO meta description，≤160 字符
+cs	nav.footerNote	New chapters are added regularly.	Nové kapitoly přibývají pravidelně.	页脚静态说明行（`SiteFooter`，不是 `SiteSetting.footer_disclaimer_text` 那个后台可编辑字段）	页脚单行，建议 ≤60 字符（原两句改一句，为了让句数门禁对本键直接跳过比较，不强制改写 14 语种）
+cs	novel.chapterListCount	{count, plural, one {1 chapter total} other {{count} chapters total}}	{count, plural, one {Celkem {count} kapitola} few {Celkem {count} kapitoly} many {Celkem {count} kapitoly} other {Celkem {count} kapitol}}	章节列表标题下方的数量说明（替代旧的 `novel.previewChaptersDescription`），ICU plural，参数 `{count}` = `totalChapterCount`	单行说明；每个语种必须覆盖自己的 CLDR 复数类别集合（`tests/ui/messages-completeness.test.ts` 的 `EXPECTED_PLURAL_CATEGORIES` 表），不多不少
+cs	novel.chapterListTitle	Chapter list	Seznam kapitol	章节列表区块标题（小说页 + 章节页，替代旧的 `novel.previewChapters`）	"区块标题，≤20 字符；不得使用""完整目录/全部章节""等宣称完整性的措辞"
+cs	novel.closeDialog	Close	Zavřít	弹窗关闭按钮（通用）	按钮标签，≤15 字符
+cs	novel.continueReadingBarLabel	Continue reading bar	Panel pokračování čtení	固定底部浮窗（StickyCTA）的 `aria-label`，读屏 landmark 名称	读屏专用，不可见，不限长度
+cs	novel.continueReadingModalBody	Continue with Chapter {number} and the rest of the story.	Pokračujte kapitolou {number} a zbytkem příběhu.	弹窗正文，参数 `{number}` = 点击的锁定章节号；弹窗按钮会跳转到别处，不得写成“内容就在这里/当前页”	弹窗正文单句，含插值，≤80 字符（不含插值）
+cs	novel.continueReadingModalTitle	Continue reading	Pokračovat ve čtení	点击锁定章节弹出的确认弹窗标题	弹窗标题，≤25 字符
+cs	novel.expandAllChapters	Show all {count} chapters	Zobrazit {count, plural, one {{count} kapitolu} few {{count} kapitoly} many {{count} kapitoly} other {{count} kapitol}}	"""展开全部 N 章""按钮，参数 `{count}` = 全书总章数（`totalChapterCount`），不是锁定条目数"	按钮标签，含插值，≤40 字符（不含插值）
+cs	novel.lockedChapterHint	Locked — tap to continue reading	Uzamčeno — klepnutím budete pokračovat ve čtení	锁定章节按钮的读屏专用提示（视觉上只有锁图标 + 章节号，`sr-only`）	读屏文本，不限长度但建议简短（≤50 字符）
+cs	novel.newReleases	New releases	Novinky	"""新书推荐""模块标题（""相关推荐""复用既有的 `novel.relatedWorks`，不是新键）"	区块标题，≤20 字符
+cs	novel.noPreviewChapters	No chapters to read yet.	Zatím zde nejsou žádné kapitoly ke čtení.	"已停用（发布与 Preview 解耦后""零章节""整块不渲染，`PreviewChapterList.tsx` 直接返回 null），仅为保持 key 集合不变而保留"	已停用，无展示位置限制
+cs	novel.previewChapters	Chapters	Kapitoly	A3 上线后已不再被组件引用（原章节区块标题，现改用 `chapterListTitle`），仅为保持其它 14 语种 key 集合不变而保留	已停用，无展示位置限制
+cs	novel.previewChaptersDescription	{count, plural, one {1 chapter free to read now.} other {{count} chapters free to read now.}}	{count, plural, one {{count} kapitola je nyní zdarma k přečtení.} few {{count} kapitoly jsou nyní zdarma k přečtení.} many {{count} kapitoly jsou nyní zdarma k přečtení.} other {{count} kapitol je nyní zdarma k přečtení.}}	A3 上线后已不再被组件引用（原章节区块的单复数说明，现改用 `chapterListCount`），仅为保持 key 集合不变而保留；ICU plural（`one`/`other`），参数 `{count}`	已停用，无展示位置限制；分支需保持 `one`/`other` 两个 CLDR 类别
+cs	novel.previewCount	{count} chapters available	{count, plural, one {{count} kapitola dostupná} few {{count} kapitoly dostupné} many {{count} kapitoly dostupné} other {{count} kapitol dostupných}}	"详情页元信息行""{count} 章可试读"""	元信息行内联文本，含 `{count}` 插值，≤30 字符（不含插值）
+cs	novel.readMoreChapters	Read more chapters	Číst další kapitoly	"章节列表末尾""阅读更多章节""按钮，跳 `readOnUpstreamHref`"	按钮标签，≤25 字符
+cs	novel.startPreview	Start reading	Začít číst	详情页行动区主按钮	按钮标签，≤20 字符
+cs	unavailable.takedownBody	At the rights holder's request, this book is no longer offered here.	Na žádost držitele práv už tato kniha zde není nabízena.	撤回（takedown）状态页正文	单句正文，≤80 字符
+cs	unavailable.unpublishedBody	If it returns, this address will still work.	Pokud se vrátí, tato adresa bude nadále fungovat.	下架（unpublished）状态页正文	"正文段落；原两句改一句，去掉的那句由同一屏的 `unavailable.unpublishedTitle`（""This book is temporarily unavailable""）承担""为什么不可用""这层含义"
+de	blog.listDescription	Articles and updates.	Artikel und Neuigkeiten.	博客列表页说明	SEO description 候选来源之一，≤60 字符
+de	blog.unpublishedBody	If it returns, this address will still work.	Falls er zurückkehrt, funktioniert diese Adresse weiterhin.	博客文章下架状态正文（与 13 同结构、独立键）	同 13
+de	chapter.endOfPreview	That's everything available right now.	Das ist im Moment alles, was verfügbar ist.	章节页章末提示（最后一章可试读时）	单句提示，≤60 字符
+de	chapter.lastPreviewChapter	This is the last free chapter	Dies ist das letzte kostenlose Kapitel	"章节页 `ChapterPager` 末章位提示（替代""下一章""按钮）；指“可免费读的最后一章”，之后可能还有锁定章节，故不能写成全书终章"	"行内提示文字，≤40 字符，句式与相邻的 `chapter.firstChapter`（""This is the first chapter""）保持一致"
+de	chapter.previewPosition	{index} / {total}	{index} / {total}	"章节页 `BookAttributionBar` 试读进度指示（""第 N / 共 M""）"	行内小字，含 `{index}`/`{total}` 两个插值
+de	chapter.remainingOnOrigin	Keep reading to continue the story.	Lies weiter, um die Geschichte fortzusetzen.	章节页章末提示（非最后一章时的次级说明）	单句提示，≤60 字符
+de	collection.allWorksDescription	Works currently available to read.	Werke, die derzeit gelesen werden können.	全部作品聚合页说明	SEO description 候选来源之一，≤80 字符
+de	home.startPreview	Start reading	Lesen starten	"首页 Hero/FeaturedNovel 的""开始试读""按钮"	按钮标签，≤20 字符
+de	meta.siteDescription	Discover novels and start reading free chapters.	Entdecke Romane und lies kostenlose Kapitel.	全站兜底 meta description（`SiteSetting.siteDescription` 为空时的回退）	SEO meta description，≤160 字符
+de	nav.footerNote	New chapters are added regularly.	Es werden regelmäßig neue Kapitel hinzugefügt.	页脚静态说明行（`SiteFooter`，不是 `SiteSetting.footer_disclaimer_text` 那个后台可编辑字段）	页脚单行，建议 ≤60 字符（原两句改一句，为了让句数门禁对本键直接跳过比较，不强制改写 14 语种）
+de	novel.chapterListCount	{count, plural, one {1 chapter total} other {{count} chapters total}}	{count, plural, one {1 Kapitel insgesamt} other {{count} Kapitel insgesamt}}	章节列表标题下方的数量说明（替代旧的 `novel.previewChaptersDescription`），ICU plural，参数 `{count}` = `totalChapterCount`	单行说明；每个语种必须覆盖自己的 CLDR 复数类别集合（`tests/ui/messages-completeness.test.ts` 的 `EXPECTED_PLURAL_CATEGORIES` 表），不多不少
+de	novel.chapterListTitle	Chapter list	Kapitelliste	章节列表区块标题（小说页 + 章节页，替代旧的 `novel.previewChapters`）	"区块标题，≤20 字符；不得使用""完整目录/全部章节""等宣称完整性的措辞"
+de	novel.closeDialog	Close	Schließen	弹窗关闭按钮（通用）	按钮标签，≤15 字符
+de	novel.continueReadingBarLabel	Continue reading bar	Leiste zum Weiterlesen	固定底部浮窗（StickyCTA）的 `aria-label`，读屏 landmark 名称	读屏专用，不可见，不限长度
+de	novel.continueReadingModalBody	Continue with Chapter {number} and the rest of the story.	Lies mit Kapitel {number} und dem Rest der Geschichte weiter.	弹窗正文，参数 `{number}` = 点击的锁定章节号；弹窗按钮会跳转到别处，不得写成“内容就在这里/当前页”	弹窗正文单句，含插值，≤80 字符（不含插值）
+de	novel.continueReadingModalTitle	Continue reading	Weiterlesen	点击锁定章节弹出的确认弹窗标题	弹窗标题，≤25 字符
+de	novel.expandAllChapters	Show all {count} chapters	Alle {count} Kapitel anzeigen	"""展开全部 N 章""按钮，参数 `{count}` = 全书总章数（`totalChapterCount`），不是锁定条目数"	按钮标签，含插值，≤40 字符（不含插值）
+de	novel.lockedChapterHint	Locked — tap to continue reading	Gesperrt – tippen, um weiterzulesen	锁定章节按钮的读屏专用提示（视觉上只有锁图标 + 章节号，`sr-only`）	读屏文本，不限长度但建议简短（≤50 字符）
+de	novel.newReleases	New releases	Neuerscheinungen	"""新书推荐""模块标题（""相关推荐""复用既有的 `novel.relatedWorks`，不是新键）"	区块标题，≤20 字符
+de	novel.noPreviewChapters	No chapters to read yet.	Für dieses Buch gibt es noch keine Kapitel zum Lesen.	"已停用（发布与 Preview 解耦后""零章节""整块不渲染，`PreviewChapterList.tsx` 直接返回 null），仅为保持 key 集合不变而保留"	已停用，无展示位置限制
+de	novel.previewChapters	Chapters	Kapitel	A3 上线后已不再被组件引用（原章节区块标题，现改用 `chapterListTitle`），仅为保持其它 14 语种 key 集合不变而保留	已停用，无展示位置限制
+de	novel.previewChaptersDescription	{count, plural, one {1 chapter free to read now.} other {{count} chapters free to read now.}}	{count, plural, one {1 Kapitel jetzt kostenlos lesbar.} other {{count} Kapitel jetzt kostenlos lesbar.}}	A3 上线后已不再被组件引用（原章节区块的单复数说明，现改用 `chapterListCount`），仅为保持 key 集合不变而保留；ICU plural（`one`/`other`），参数 `{count}`	已停用，无展示位置限制；分支需保持 `one`/`other` 两个 CLDR 类别
+de	novel.previewCount	{count} chapters available	{count} Kapitel verfügbar	"详情页元信息行""{count} 章可试读"""	元信息行内联文本，含 `{count}` 插值，≤30 字符（不含插值）
+de	novel.readMoreChapters	Read more chapters	Weitere Kapitel lesen	"章节列表末尾""阅读更多章节""按钮，跳 `readOnUpstreamHref`"	按钮标签，≤25 字符
+de	novel.startPreview	Start reading	Lesen starten	详情页行动区主按钮	按钮标签，≤20 字符
+de	unavailable.takedownBody	At the rights holder's request, this book is no longer offered here.	Auf Wunsch des Rechteinhabers wird dieses Buch hier nicht mehr angeboten.	撤回（takedown）状态页正文	单句正文，≤80 字符
+de	unavailable.unpublishedBody	If it returns, this address will still work.	Falls es zurückkehrt, funktioniert diese Adresse weiterhin.	下架（unpublished）状态页正文	"正文段落；原两句改一句，去掉的那句由同一屏的 `unavailable.unpublishedTitle`（""This book is temporarily unavailable""）承担""为什么不可用""这层含义"
+en	blog.listDescription	Articles and updates.	Articles and updates.	博客列表页说明	SEO description 候选来源之一，≤60 字符
+en	blog.unpublishedBody	If it returns, this address will still work.	If it returns, this address will still work.	博客文章下架状态正文（与 13 同结构、独立键）	同 13
+en	chapter.endOfPreview	That's everything available right now.	That's everything available right now.	章节页章末提示（最后一章可试读时）	单句提示，≤60 字符
+en	chapter.lastPreviewChapter	This is the last free chapter	This is the last free chapter	"章节页 `ChapterPager` 末章位提示（替代""下一章""按钮）；指“可免费读的最后一章”，之后可能还有锁定章节，故不能写成全书终章"	"行内提示文字，≤40 字符，句式与相邻的 `chapter.firstChapter`（""This is the first chapter""）保持一致"
+en	chapter.previewPosition	{index} / {total}	{index} / {total}	"章节页 `BookAttributionBar` 试读进度指示（""第 N / 共 M""）"	行内小字，含 `{index}`/`{total}` 两个插值
+en	chapter.remainingOnOrigin	Keep reading to continue the story.	Keep reading to continue the story.	章节页章末提示（非最后一章时的次级说明）	单句提示，≤60 字符
+en	collection.allWorksDescription	Works currently available to read.	Works currently available to read.	全部作品聚合页说明	SEO description 候选来源之一，≤80 字符
+en	home.startPreview	Start reading	Start reading	"首页 Hero/FeaturedNovel 的""开始试读""按钮"	按钮标签，≤20 字符
+en	meta.siteDescription	Discover novels and start reading free chapters.	Discover novels and start reading free chapters.	全站兜底 meta description（`SiteSetting.siteDescription` 为空时的回退）	SEO meta description，≤160 字符
+en	nav.footerNote	New chapters are added regularly.	New chapters are added regularly.	页脚静态说明行（`SiteFooter`，不是 `SiteSetting.footer_disclaimer_text` 那个后台可编辑字段）	页脚单行，建议 ≤60 字符（原两句改一句，为了让句数门禁对本键直接跳过比较，不强制改写 14 语种）
+en	novel.chapterListCount	{count, plural, one {1 chapter total} other {{count} chapters total}}	{count, plural, one {1 chapter total} other {{count} chapters total}}	章节列表标题下方的数量说明（替代旧的 `novel.previewChaptersDescription`），ICU plural，参数 `{count}` = `totalChapterCount`	单行说明；每个语种必须覆盖自己的 CLDR 复数类别集合（`tests/ui/messages-completeness.test.ts` 的 `EXPECTED_PLURAL_CATEGORIES` 表），不多不少
+en	novel.chapterListTitle	Chapter list	Chapter list	章节列表区块标题（小说页 + 章节页，替代旧的 `novel.previewChapters`）	"区块标题，≤20 字符；不得使用""完整目录/全部章节""等宣称完整性的措辞"
+en	novel.closeDialog	Close	Close	弹窗关闭按钮（通用）	按钮标签，≤15 字符
+en	novel.continueReadingBarLabel	Continue reading bar	Continue reading bar	固定底部浮窗（StickyCTA）的 `aria-label`，读屏 landmark 名称	读屏专用，不可见，不限长度
+en	novel.continueReadingModalBody	Continue with Chapter {number} and the rest of the story.	Continue with Chapter {number} and the rest of the story.	弹窗正文，参数 `{number}` = 点击的锁定章节号；弹窗按钮会跳转到别处，不得写成“内容就在这里/当前页”	弹窗正文单句，含插值，≤80 字符（不含插值）
+en	novel.continueReadingModalTitle	Continue reading	Continue reading	点击锁定章节弹出的确认弹窗标题	弹窗标题，≤25 字符
+en	novel.expandAllChapters	Show all {count} chapters	Show all {count} chapters	"""展开全部 N 章""按钮，参数 `{count}` = 全书总章数（`totalChapterCount`），不是锁定条目数"	按钮标签，含插值，≤40 字符（不含插值）
+en	novel.lockedChapterHint	Locked — tap to continue reading	Locked — tap to continue reading	锁定章节按钮的读屏专用提示（视觉上只有锁图标 + 章节号，`sr-only`）	读屏文本，不限长度但建议简短（≤50 字符）
+en	novel.newReleases	New releases	New releases	"""新书推荐""模块标题（""相关推荐""复用既有的 `novel.relatedWorks`，不是新键）"	区块标题，≤20 字符
+en	novel.noPreviewChapters	No chapters to read yet.	No chapters to read yet.	"已停用（发布与 Preview 解耦后""零章节""整块不渲染，`PreviewChapterList.tsx` 直接返回 null），仅为保持 key 集合不变而保留"	已停用，无展示位置限制
+en	novel.previewChapters	Chapters	Chapters	A3 上线后已不再被组件引用（原章节区块标题，现改用 `chapterListTitle`），仅为保持其它 14 语种 key 集合不变而保留	已停用，无展示位置限制
+en	novel.previewChaptersDescription	{count, plural, one {1 chapter free to read now.} other {{count} chapters free to read now.}}	{count, plural, one {1 chapter free to read now.} other {{count} chapters free to read now.}}	A3 上线后已不再被组件引用（原章节区块的单复数说明，现改用 `chapterListCount`），仅为保持 key 集合不变而保留；ICU plural（`one`/`other`），参数 `{count}`	已停用，无展示位置限制；分支需保持 `one`/`other` 两个 CLDR 类别
+en	novel.previewCount	{count} chapters available	{count} chapters available	"详情页元信息行""{count} 章可试读"""	元信息行内联文本，含 `{count}` 插值，≤30 字符（不含插值）
+en	novel.readMoreChapters	Read more chapters	Read more chapters	"章节列表末尾""阅读更多章节""按钮，跳 `readOnUpstreamHref`"	按钮标签，≤25 字符
+en	novel.startPreview	Start reading	Start reading	详情页行动区主按钮	按钮标签，≤20 字符
+en	unavailable.takedownBody	At the rights holder's request, this book is no longer offered here.	At the rights holder's request, this book is no longer offered here.	撤回（takedown）状态页正文	单句正文，≤80 字符
+en	unavailable.unpublishedBody	If it returns, this address will still work.	If it returns, this address will still work.	下架（unpublished）状态页正文	"正文段落；原两句改一句，去掉的那句由同一屏的 `unavailable.unpublishedTitle`（""This book is temporarily unavailable""）承担""为什么不可用""这层含义"
+es	blog.listDescription	Articles and updates.	Artículos y novedades.	博客列表页说明	SEO description 候选来源之一，≤60 字符
+es	blog.unpublishedBody	If it returns, this address will still work.	Si vuelve a estar disponible, esta dirección seguirá funcionando.	博客文章下架状态正文（与 13 同结构、独立键）	同 13
+es	chapter.endOfPreview	That's everything available right now.	Esto es todo lo disponible por ahora.	章节页章末提示（最后一章可试读时）	单句提示，≤60 字符
+es	chapter.lastPreviewChapter	This is the last free chapter	Este es el último capítulo gratis	"章节页 `ChapterPager` 末章位提示（替代""下一章""按钮）；指“可免费读的最后一章”，之后可能还有锁定章节，故不能写成全书终章"	"行内提示文字，≤40 字符，句式与相邻的 `chapter.firstChapter`（""This is the first chapter""）保持一致"
+es	chapter.previewPosition	{index} / {total}	{index} / {total}	"章节页 `BookAttributionBar` 试读进度指示（""第 N / 共 M""）"	行内小字，含 `{index}`/`{total}` 两个插值
+es	chapter.remainingOnOrigin	Keep reading to continue the story.	Sigue leyendo para continuar la historia.	章节页章末提示（非最后一章时的次级说明）	单句提示，≤60 字符
+es	collection.allWorksDescription	Works currently available to read.	Obras disponibles actualmente para leer.	全部作品聚合页说明	SEO description 候选来源之一，≤80 字符
+es	home.startPreview	Start reading	Comenzar a leer	"首页 Hero/FeaturedNovel 的""开始试读""按钮"	按钮标签，≤20 字符
+es	meta.siteDescription	Discover novels and start reading free chapters.	Descubre novelas y empieza a leer capítulos gratis.	全站兜底 meta description（`SiteSetting.siteDescription` 为空时的回退）	SEO meta description，≤160 字符
+es	nav.footerNote	New chapters are added regularly.	Añadimos capítulos nuevos con regularidad.	页脚静态说明行（`SiteFooter`，不是 `SiteSetting.footer_disclaimer_text` 那个后台可编辑字段）	页脚单行，建议 ≤60 字符（原两句改一句，为了让句数门禁对本键直接跳过比较，不强制改写 14 语种）
+es	novel.chapterListCount	{count, plural, one {1 chapter total} other {{count} chapters total}}	{count, plural, many {{count} capítulos en total} one {1 capítulo en total} other {{count} capítulos en total}}	章节列表标题下方的数量说明（替代旧的 `novel.previewChaptersDescription`），ICU plural，参数 `{count}` = `totalChapterCount`	单行说明；每个语种必须覆盖自己的 CLDR 复数类别集合（`tests/ui/messages-completeness.test.ts` 的 `EXPECTED_PLURAL_CATEGORIES` 表），不多不少
+es	novel.chapterListTitle	Chapter list	Lista de capítulos	章节列表区块标题（小说页 + 章节页，替代旧的 `novel.previewChapters`）	"区块标题，≤20 字符；不得使用""完整目录/全部章节""等宣称完整性的措辞"
+es	novel.closeDialog	Close	Cerrar	弹窗关闭按钮（通用）	按钮标签，≤15 字符
+es	novel.continueReadingBarLabel	Continue reading bar	Barra de continuar leyendo	固定底部浮窗（StickyCTA）的 `aria-label`，读屏 landmark 名称	读屏专用，不可见，不限长度
+es	novel.continueReadingModalBody	Continue with Chapter {number} and the rest of the story.	Continúa con el capítulo {number} y el resto de la historia.	弹窗正文，参数 `{number}` = 点击的锁定章节号；弹窗按钮会跳转到别处，不得写成“内容就在这里/当前页”	弹窗正文单句，含插值，≤80 字符（不含插值）
+es	novel.continueReadingModalTitle	Continue reading	Continuar leyendo	点击锁定章节弹出的确认弹窗标题	弹窗标题，≤25 字符
+es	novel.expandAllChapters	Show all {count} chapters	Mostrar todos los {count} capítulos	"""展开全部 N 章""按钮，参数 `{count}` = 全书总章数（`totalChapterCount`），不是锁定条目数"	按钮标签，含插值，≤40 字符（不含插值）
+es	novel.lockedChapterHint	Locked — tap to continue reading	Bloqueado: toca para continuar leyendo	锁定章节按钮的读屏专用提示（视觉上只有锁图标 + 章节号，`sr-only`）	读屏文本，不限长度但建议简短（≤50 字符）
+es	novel.newReleases	New releases	Novedades	"""新书推荐""模块标题（""相关推荐""复用既有的 `novel.relatedWorks`，不是新键）"	区块标题，≤20 字符
+es	novel.noPreviewChapters	No chapters to read yet.	Aún no hay capítulos para leer.	"已停用（发布与 Preview 解耦后""零章节""整块不渲染，`PreviewChapterList.tsx` 直接返回 null），仅为保持 key 集合不变而保留"	已停用，无展示位置限制
+es	novel.previewChapters	Chapters	Capítulos	A3 上线后已不再被组件引用（原章节区块标题，现改用 `chapterListTitle`），仅为保持其它 14 语种 key 集合不变而保留	已停用，无展示位置限制
+es	novel.previewChaptersDescription	{count, plural, one {1 chapter free to read now.} other {{count} chapters free to read now.}}	{count, plural, one {1 capítulo gratis para leer ahora.} many {{count} capítulos gratis para leer ahora.} other {{count} capítulos gratis para leer ahora.}}	A3 上线后已不再被组件引用（原章节区块的单复数说明，现改用 `chapterListCount`），仅为保持 key 集合不变而保留；ICU plural（`one`/`other`），参数 `{count}`	已停用，无展示位置限制；分支需保持 `one`/`other` 两个 CLDR 类别
+es	novel.previewCount	{count} chapters available	{count} capítulos disponibles	"详情页元信息行""{count} 章可试读"""	元信息行内联文本，含 `{count}` 插值，≤30 字符（不含插值）
+es	novel.readMoreChapters	Read more chapters	Leer más capítulos	"章节列表末尾""阅读更多章节""按钮，跳 `readOnUpstreamHref`"	按钮标签，≤25 字符
+es	novel.startPreview	Start reading	Comenzar a leer	详情页行动区主按钮	按钮标签，≤20 字符
+es	unavailable.takedownBody	At the rights holder's request, this book is no longer offered here.	A petición del titular de los derechos, este libro ya no está disponible aquí.	撤回（takedown）状态页正文	单句正文，≤80 字符
+es	unavailable.unpublishedBody	If it returns, this address will still work.	Si vuelve a estar disponible, esta dirección seguirá funcionando.	下架（unpublished）状态页正文	"正文段落；原两句改一句，去掉的那句由同一屏的 `unavailable.unpublishedTitle`（""This book is temporarily unavailable""）承担""为什么不可用""这层含义"
+fr	blog.listDescription	Articles and updates.	Articles et actualités.	博客列表页说明	SEO description 候选来源之一，≤60 字符
+fr	blog.unpublishedBody	If it returns, this address will still work.	S'il revient, cette adresse fonctionnera toujours.	博客文章下架状态正文（与 13 同结构、独立键）	同 13
+fr	chapter.endOfPreview	That's everything available right now.	C'est tout ce qui est disponible pour le moment.	章节页章末提示（最后一章可试读时）	单句提示，≤60 字符
+fr	chapter.lastPreviewChapter	This is the last free chapter	Ceci est le dernier chapitre gratuit	"章节页 `ChapterPager` 末章位提示（替代""下一章""按钮）；指“可免费读的最后一章”，之后可能还有锁定章节，故不能写成全书终章"	"行内提示文字，≤40 字符，句式与相邻的 `chapter.firstChapter`（""This is the first chapter""）保持一致"
+fr	chapter.previewPosition	{index} / {total}	{index} / {total}	"章节页 `BookAttributionBar` 试读进度指示（""第 N / 共 M""）"	行内小字，含 `{index}`/`{total}` 两个插值
+fr	chapter.remainingOnOrigin	Keep reading to continue the story.	Continuez la lecture pour suivre la suite de l'histoire.	章节页章末提示（非最后一章时的次级说明）	单句提示，≤60 字符
+fr	collection.allWorksDescription	Works currently available to read.	Œuvres actuellement disponibles à la lecture.	全部作品聚合页说明	SEO description 候选来源之一，≤80 字符
+fr	home.startPreview	Start reading	Commencer la lecture	"首页 Hero/FeaturedNovel 的""开始试读""按钮"	按钮标签，≤20 字符
+fr	meta.siteDescription	Discover novels and start reading free chapters.	Découvrez des romans et commencez à lire des chapitres gratuits.	全站兜底 meta description（`SiteSetting.siteDescription` 为空时的回退）	SEO meta description，≤160 字符
+fr	nav.footerNote	New chapters are added regularly.	De nouveaux chapitres sont ajoutés régulièrement.	页脚静态说明行（`SiteFooter`，不是 `SiteSetting.footer_disclaimer_text` 那个后台可编辑字段）	页脚单行，建议 ≤60 字符（原两句改一句，为了让句数门禁对本键直接跳过比较，不强制改写 14 语种）
+fr	novel.chapterListCount	{count, plural, one {1 chapter total} other {{count} chapters total}}	{count, plural, many {{count} chapitres au total} one {1 chapitre au total} other {{count} chapitres au total}}	章节列表标题下方的数量说明（替代旧的 `novel.previewChaptersDescription`），ICU plural，参数 `{count}` = `totalChapterCount`	单行说明；每个语种必须覆盖自己的 CLDR 复数类别集合（`tests/ui/messages-completeness.test.ts` 的 `EXPECTED_PLURAL_CATEGORIES` 表），不多不少
+fr	novel.chapterListTitle	Chapter list	Liste des chapitres	章节列表区块标题（小说页 + 章节页，替代旧的 `novel.previewChapters`）	"区块标题，≤20 字符；不得使用""完整目录/全部章节""等宣称完整性的措辞"
+fr	novel.closeDialog	Close	Fermer	弹窗关闭按钮（通用）	按钮标签，≤15 字符
+fr	novel.continueReadingBarLabel	Continue reading bar	Barre pour continuer la lecture	固定底部浮窗（StickyCTA）的 `aria-label`，读屏 landmark 名称	读屏专用，不可见，不限长度
+fr	novel.continueReadingModalBody	Continue with Chapter {number} and the rest of the story.	Poursuivez avec le chapitre {number} et la suite de l'histoire.	弹窗正文，参数 `{number}` = 点击的锁定章节号；弹窗按钮会跳转到别处，不得写成“内容就在这里/当前页”	弹窗正文单句，含插值，≤80 字符（不含插值）
+fr	novel.continueReadingModalTitle	Continue reading	Continuer la lecture	点击锁定章节弹出的确认弹窗标题	弹窗标题，≤25 字符
+fr	novel.expandAllChapters	Show all {count} chapters	Afficher tous les {count} chapitres	"""展开全部 N 章""按钮，参数 `{count}` = 全书总章数（`totalChapterCount`），不是锁定条目数"	按钮标签，含插值，≤40 字符（不含插值）
+fr	novel.lockedChapterHint	Locked — tap to continue reading	Verrouillé : appuyez pour continuer la lecture	锁定章节按钮的读屏专用提示（视觉上只有锁图标 + 章节号，`sr-only`）	读屏文本，不限长度但建议简短（≤50 字符）
+fr	novel.newReleases	New releases	Nouveautés	"""新书推荐""模块标题（""相关推荐""复用既有的 `novel.relatedWorks`，不是新键）"	区块标题，≤20 字符
+fr	novel.noPreviewChapters	No chapters to read yet.	Aucun chapitre à lire pour le moment.	"已停用（发布与 Preview 解耦后""零章节""整块不渲染，`PreviewChapterList.tsx` 直接返回 null），仅为保持 key 集合不变而保留"	已停用，无展示位置限制
+fr	novel.previewChapters	Chapters	Chapitres	A3 上线后已不再被组件引用（原章节区块标题，现改用 `chapterListTitle`），仅为保持其它 14 语种 key 集合不变而保留	已停用，无展示位置限制
+fr	novel.previewChaptersDescription	{count, plural, one {1 chapter free to read now.} other {{count} chapters free to read now.}}	{count, plural, one {1 chapitre gratuit à lire dès maintenant.} many {{count} chapitres gratuits à lire dès maintenant.} other {{count} chapitres gratuits à lire dès maintenant.}}	A3 上线后已不再被组件引用（原章节区块的单复数说明，现改用 `chapterListCount`），仅为保持 key 集合不变而保留；ICU plural（`one`/`other`），参数 `{count}`	已停用，无展示位置限制；分支需保持 `one`/`other` 两个 CLDR 类别
+fr	novel.previewCount	{count} chapters available	{count} chapitres disponibles	"详情页元信息行""{count} 章可试读"""	元信息行内联文本，含 `{count}` 插值，≤30 字符（不含插值）
+fr	novel.readMoreChapters	Read more chapters	Lire plus de chapitres	"章节列表末尾""阅读更多章节""按钮，跳 `readOnUpstreamHref`"	按钮标签，≤25 字符
+fr	novel.startPreview	Start reading	Commencer la lecture	详情页行动区主按钮	按钮标签，≤20 字符
+fr	unavailable.takedownBody	At the rights holder's request, this book is no longer offered here.	À la demande du titulaire des droits, ce livre n'est plus proposé ici.	撤回（takedown）状态页正文	单句正文，≤80 字符
+fr	unavailable.unpublishedBody	If it returns, this address will still work.	S'il revient, cette adresse fonctionnera toujours.	下架（unpublished）状态页正文	"正文段落；原两句改一句，去掉的那句由同一屏的 `unavailable.unpublishedTitle`（""This book is temporarily unavailable""）承担""为什么不可用""这层含义"
+id	blog.listDescription	Articles and updates.	Artikel dan pembaruan.	博客列表页说明	SEO description 候选来源之一，≤60 字符
+id	blog.unpublishedBody	If it returns, this address will still work.	Jika kembali, alamat ini akan tetap berfungsi.	博客文章下架状态正文（与 13 同结构、独立键）	同 13
+id	chapter.endOfPreview	That's everything available right now.	Itulah semua yang tersedia saat ini.	章节页章末提示（最后一章可试读时）	单句提示，≤60 字符
+id	chapter.lastPreviewChapter	This is the last free chapter	Ini adalah bab gratis terakhir	"章节页 `ChapterPager` 末章位提示（替代""下一章""按钮）；指“可免费读的最后一章”，之后可能还有锁定章节，故不能写成全书终章"	"行内提示文字，≤40 字符，句式与相邻的 `chapter.firstChapter`（""This is the first chapter""）保持一致"
+id	chapter.previewPosition	{index} / {total}	{index} / {total}	"章节页 `BookAttributionBar` 试读进度指示（""第 N / 共 M""）"	行内小字，含 `{index}`/`{total}` 两个插值
+id	chapter.remainingOnOrigin	Keep reading to continue the story.	Terus membaca untuk melanjutkan cerita.	章节页章末提示（非最后一章时的次级说明）	单句提示，≤60 字符
+id	collection.allWorksDescription	Works currently available to read.	Karya yang saat ini tersedia untuk dibaca.	全部作品聚合页说明	SEO description 候选来源之一，≤80 字符
+id	home.startPreview	Start reading	Mulai membaca	"首页 Hero/FeaturedNovel 的""开始试读""按钮"	按钮标签，≤20 字符
+id	meta.siteDescription	Discover novels and start reading free chapters.	Temukan novel dan mulai membaca bab gratis.	全站兜底 meta description（`SiteSetting.siteDescription` 为空时的回退）	SEO meta description，≤160 字符
+id	nav.footerNote	New chapters are added regularly.	Bab baru ditambahkan secara berkala.	页脚静态说明行（`SiteFooter`，不是 `SiteSetting.footer_disclaimer_text` 那个后台可编辑字段）	页脚单行，建议 ≤60 字符（原两句改一句，为了让句数门禁对本键直接跳过比较，不强制改写 14 语种）
+id	novel.chapterListCount	{count, plural, one {1 chapter total} other {{count} chapters total}}	{count, plural, other {Total {count} bab}}	章节列表标题下方的数量说明（替代旧的 `novel.previewChaptersDescription`），ICU plural，参数 `{count}` = `totalChapterCount`	单行说明；每个语种必须覆盖自己的 CLDR 复数类别集合（`tests/ui/messages-completeness.test.ts` 的 `EXPECTED_PLURAL_CATEGORIES` 表），不多不少
+id	novel.chapterListTitle	Chapter list	Daftar bab	章节列表区块标题（小说页 + 章节页，替代旧的 `novel.previewChapters`）	"区块标题，≤20 字符；不得使用""完整目录/全部章节""等宣称完整性的措辞"
+id	novel.closeDialog	Close	Tutup	弹窗关闭按钮（通用）	按钮标签，≤15 字符
+id	novel.continueReadingBarLabel	Continue reading bar	Bilah lanjutkan membaca	固定底部浮窗（StickyCTA）的 `aria-label`，读屏 landmark 名称	读屏专用，不可见，不限长度
+id	novel.continueReadingModalBody	Continue with Chapter {number} and the rest of the story.	Lanjutkan dengan Bab {number} dan kelanjutan ceritanya.	弹窗正文，参数 `{number}` = 点击的锁定章节号；弹窗按钮会跳转到别处，不得写成“内容就在这里/当前页”	弹窗正文单句，含插值，≤80 字符（不含插值）
+id	novel.continueReadingModalTitle	Continue reading	Lanjutkan membaca	点击锁定章节弹出的确认弹窗标题	弹窗标题，≤25 字符
+id	novel.expandAllChapters	Show all {count} chapters	Tampilkan semua {count} bab	"""展开全部 N 章""按钮，参数 `{count}` = 全书总章数（`totalChapterCount`），不是锁定条目数"	按钮标签，含插值，≤40 字符（不含插值）
+id	novel.lockedChapterHint	Locked — tap to continue reading	Terkunci — ketuk untuk melanjutkan membaca	锁定章节按钮的读屏专用提示（视觉上只有锁图标 + 章节号，`sr-only`）	读屏文本，不限长度但建议简短（≤50 字符）
+id	novel.newReleases	New releases	Terbitan baru	"""新书推荐""模块标题（""相关推荐""复用既有的 `novel.relatedWorks`，不是新键）"	区块标题，≤20 字符
+id	novel.noPreviewChapters	No chapters to read yet.	Belum ada bab untuk dibaca.	"已停用（发布与 Preview 解耦后""零章节""整块不渲染，`PreviewChapterList.tsx` 直接返回 null），仅为保持 key 集合不变而保留"	已停用，无展示位置限制
+id	novel.previewChapters	Chapters	Bab	A3 上线后已不再被组件引用（原章节区块标题，现改用 `chapterListTitle`），仅为保持其它 14 语种 key 集合不变而保留	已停用，无展示位置限制
+id	novel.previewChaptersDescription	{count, plural, one {1 chapter free to read now.} other {{count} chapters free to read now.}}	{count, plural, other {{count} bab gratis untuk dibaca sekarang.}}	A3 上线后已不再被组件引用（原章节区块的单复数说明，现改用 `chapterListCount`），仅为保持 key 集合不变而保留；ICU plural（`one`/`other`），参数 `{count}`	已停用，无展示位置限制；分支需保持 `one`/`other` 两个 CLDR 类别
+id	novel.previewCount	{count} chapters available	{count} bab tersedia	"详情页元信息行""{count} 章可试读"""	元信息行内联文本，含 `{count}` 插值，≤30 字符（不含插值）
+id	novel.readMoreChapters	Read more chapters	Baca bab lainnya	"章节列表末尾""阅读更多章节""按钮，跳 `readOnUpstreamHref`"	按钮标签，≤25 字符
+id	novel.startPreview	Start reading	Mulai membaca	详情页行动区主按钮	按钮标签，≤20 字符
+id	unavailable.takedownBody	At the rights holder's request, this book is no longer offered here.	Atas permintaan pemegang hak, buku ini tidak lagi tersedia di sini.	撤回（takedown）状态页正文	单句正文，≤80 字符
+id	unavailable.unpublishedBody	If it returns, this address will still work.	Jika kembali, alamat ini akan tetap berfungsi.	下架（unpublished）状态页正文	"正文段落；原两句改一句，去掉的那句由同一屏的 `unavailable.unpublishedTitle`（""This book is temporarily unavailable""）承担""为什么不可用""这层含义"
+ja	blog.listDescription	Articles and updates.	記事と最新情報です。	博客列表页说明	SEO description 候选来源之一，≤60 字符
+ja	blog.unpublishedBody	If it returns, this address will still work.	再公開された場合、このURLは引き続き使えます。	博客文章下架状态正文（与 13 同结构、独立键）	同 13
+ja	chapter.endOfPreview	That's everything available right now.	現在読めるのはここまでです。	章节页章末提示（最后一章可试读时）	单句提示，≤60 字符
+ja	chapter.lastPreviewChapter	This is the last free chapter	これが無料で読める最後の章です	"章节页 `ChapterPager` 末章位提示（替代""下一章""按钮）；指“可免费读的最后一章”，之后可能还有锁定章节，故不能写成全书终章"	"行内提示文字，≤40 字符，句式与相邻的 `chapter.firstChapter`（""This is the first chapter""）保持一致"
+ja	chapter.previewPosition	{index} / {total}	{index} / {total}	"章节页 `BookAttributionBar` 试读进度指示（""第 N / 共 M""）"	行内小字，含 `{index}`/`{total}` 两个插值
+ja	chapter.remainingOnOrigin	Keep reading to continue the story.	読み進めると物語が続きます。	章节页章末提示（非最后一章时的次级说明）	单句提示，≤60 字符
+ja	collection.allWorksDescription	Works currently available to read.	現在読める作品です。	全部作品聚合页说明	SEO description 候选来源之一，≤80 字符
+ja	home.startPreview	Start reading	読み始める	"首页 Hero/FeaturedNovel 的""开始试读""按钮"	按钮标签，≤20 字符
+ja	meta.siteDescription	Discover novels and start reading free chapters.	小説を見つけて、無料の章から読み始めよう。	全站兜底 meta description（`SiteSetting.siteDescription` 为空时的回退）	SEO meta description，≤160 字符
+ja	nav.footerNote	New chapters are added regularly.	新しい章を随時追加しています。	页脚静态说明行（`SiteFooter`，不是 `SiteSetting.footer_disclaimer_text` 那个后台可编辑字段）	页脚单行，建议 ≤60 字符（原两句改一句，为了让句数门禁对本键直接跳过比较，不强制改写 14 语种）
+ja	novel.chapterListCount	{count, plural, one {1 chapter total} other {{count} chapters total}}	{count, plural, other {全{count}章}}	章节列表标题下方的数量说明（替代旧的 `novel.previewChaptersDescription`），ICU plural，参数 `{count}` = `totalChapterCount`	单行说明；每个语种必须覆盖自己的 CLDR 复数类别集合（`tests/ui/messages-completeness.test.ts` 的 `EXPECTED_PLURAL_CATEGORIES` 表），不多不少
+ja	novel.chapterListTitle	Chapter list	章一覧	章节列表区块标题（小说页 + 章节页，替代旧的 `novel.previewChapters`）	"区块标题，≤20 字符；不得使用""完整目录/全部章节""等宣称完整性的措辞"
+ja	novel.closeDialog	Close	閉じる	弹窗关闭按钮（通用）	按钮标签，≤15 字符
+ja	novel.continueReadingBarLabel	Continue reading bar	続きを読むバー	固定底部浮窗（StickyCTA）的 `aria-label`，读屏 landmark 名称	读屏专用，不可见，不限长度
+ja	novel.continueReadingModalBody	Continue with Chapter {number} and the rest of the story.	第{number}章と物語の続きを読み進めましょう。	弹窗正文，参数 `{number}` = 点击的锁定章节号；弹窗按钮会跳转到别处，不得写成“内容就在这里/当前页”	弹窗正文单句，含插值，≤80 字符（不含插值）
+ja	novel.continueReadingModalTitle	Continue reading	続きを読む	点击锁定章节弹出的确认弹窗标题	弹窗标题，≤25 字符
+ja	novel.expandAllChapters	Show all {count} chapters	全{count}章を表示	"""展开全部 N 章""按钮，参数 `{count}` = 全书总章数（`totalChapterCount`），不是锁定条目数"	按钮标签，含插值，≤40 字符（不含插值）
+ja	novel.lockedChapterHint	Locked — tap to continue reading	ロック中 — タップして続きを読む	锁定章节按钮的读屏专用提示（视觉上只有锁图标 + 章节号，`sr-only`）	读屏文本，不限长度但建议简短（≤50 字符）
+ja	novel.newReleases	New releases	新着	"""新书推荐""模块标题（""相关推荐""复用既有的 `novel.relatedWorks`，不是新键）"	区块标题，≤20 字符
+ja	novel.noPreviewChapters	No chapters to read yet.	まだ読める章がありません。	"已停用（发布与 Preview 解耦后""零章节""整块不渲染，`PreviewChapterList.tsx` 直接返回 null），仅为保持 key 集合不变而保留"	已停用，无展示位置限制
+ja	novel.previewChapters	Chapters	章	A3 上线后已不再被组件引用（原章节区块标题，现改用 `chapterListTitle`），仅为保持其它 14 语种 key 集合不变而保留	已停用，无展示位置限制
+ja	novel.previewChaptersDescription	{count, plural, one {1 chapter free to read now.} other {{count} chapters free to read now.}}	{count, plural, other {今すぐ{count}章を無料で読めます。}}	A3 上线后已不再被组件引用（原章节区块的单复数说明，现改用 `chapterListCount`），仅为保持 key 集合不变而保留；ICU plural（`one`/`other`），参数 `{count}`	已停用，无展示位置限制；分支需保持 `one`/`other` 两个 CLDR 类别
+ja	novel.previewCount	{count} chapters available	{count}章読めます	"详情页元信息行""{count} 章可试读"""	元信息行内联文本，含 `{count}` 插值，≤30 字符（不含插值）
+ja	novel.readMoreChapters	Read more chapters	さらに章を読む	"章节列表末尾""阅读更多章节""按钮，跳 `readOnUpstreamHref`"	按钮标签，≤25 字符
+ja	novel.startPreview	Start reading	読み始める	详情页行动区主按钮	按钮标签，≤20 字符
+ja	unavailable.takedownBody	At the rights holder's request, this book is no longer offered here.	権利者からの要請により、この作品はここでは提供されていません。	撤回（takedown）状态页正文	单句正文，≤80 字符
+ja	unavailable.unpublishedBody	If it returns, this address will still work.	再公開された場合、このURLは引き続き使えます。	下架（unpublished）状态页正文	"正文段落；原两句改一句，去掉的那句由同一屏的 `unavailable.unpublishedTitle`（""This book is temporarily unavailable""）承担""为什么不可用""这层含义"
+ko	blog.listDescription	Articles and updates.	글과 소식입니다.	博客列表页说明	SEO description 候选来源之一，≤60 字符
+ko	blog.unpublishedBody	If it returns, this address will still work.	다시 게시되면 이 주소는 계속 사용할 수 있습니다.	博客文章下架状态正文（与 13 同结构、独立键）	同 13
+ko	chapter.endOfPreview	That's everything available right now.	지금 읽을 수 있는 내용은 여기까지입니다.	章节页章末提示（最后一章可试读时）	单句提示，≤60 字符
+ko	chapter.lastPreviewChapter	This is the last free chapter	마지막 무료 챕터입니다	"章节页 `ChapterPager` 末章位提示（替代""下一章""按钮）；指“可免费读的最后一章”，之后可能还有锁定章节，故不能写成全书终章"	"行内提示文字，≤40 字符，句式与相邻的 `chapter.firstChapter`（""This is the first chapter""）保持一致"
+ko	chapter.previewPosition	{index} / {total}	{index} / {total}	"章节页 `BookAttributionBar` 试读进度指示（""第 N / 共 M""）"	行内小字，含 `{index}`/`{total}` 两个插值
+ko	chapter.remainingOnOrigin	Keep reading to continue the story.	이어서 읽으면 이야기가 계속됩니다.	章节页章末提示（非最后一章时的次级说明）	单句提示，≤60 字符
+ko	collection.allWorksDescription	Works currently available to read.	현재 읽을 수 있는 작품입니다.	全部作品聚合页说明	SEO description 候选来源之一，≤80 字符
+ko	home.startPreview	Start reading	읽기 시작	"首页 Hero/FeaturedNovel 的""开始试读""按钮"	按钮标签，≤20 字符
+ko	meta.siteDescription	Discover novels and start reading free chapters.	소설을 만나보고 무료 챕터부터 읽어보세요.	全站兜底 meta description（`SiteSetting.siteDescription` 为空时的回退）	SEO meta description，≤160 字符
+ko	nav.footerNote	New chapters are added regularly.	새 챕터가 정기적으로 업데이트됩니다.	页脚静态说明行（`SiteFooter`，不是 `SiteSetting.footer_disclaimer_text` 那个后台可编辑字段）	页脚单行，建议 ≤60 字符（原两句改一句，为了让句数门禁对本键直接跳过比较，不强制改写 14 语种）
+ko	novel.chapterListCount	{count, plural, one {1 chapter total} other {{count} chapters total}}	{count, plural, other {총 {count}장}}	章节列表标题下方的数量说明（替代旧的 `novel.previewChaptersDescription`），ICU plural，参数 `{count}` = `totalChapterCount`	单行说明；每个语种必须覆盖自己的 CLDR 复数类别集合（`tests/ui/messages-completeness.test.ts` 的 `EXPECTED_PLURAL_CATEGORIES` 表），不多不少
+ko	novel.chapterListTitle	Chapter list	챕터 목록	章节列表区块标题（小说页 + 章节页，替代旧的 `novel.previewChapters`）	"区块标题，≤20 字符；不得使用""完整目录/全部章节""等宣称完整性的措辞"
+ko	novel.closeDialog	Close	닫기	弹窗关闭按钮（通用）	按钮标签，≤15 字符
+ko	novel.continueReadingBarLabel	Continue reading bar	이어서 읽기 바	固定底部浮窗（StickyCTA）的 `aria-label`，读屏 landmark 名称	读屏专用，不可见，不限长度
+ko	novel.continueReadingModalBody	Continue with Chapter {number} and the rest of the story.	{number}장과 나머지 이야기를 이어서 읽어 보세요.	弹窗正文，参数 `{number}` = 点击的锁定章节号；弹窗按钮会跳转到别处，不得写成“内容就在这里/当前页”	弹窗正文单句，含插值，≤80 字符（不含插值）
+ko	novel.continueReadingModalTitle	Continue reading	이어서 읽기	点击锁定章节弹出的确认弹窗标题	弹窗标题，≤25 字符
+ko	novel.expandAllChapters	Show all {count} chapters	전체 {count}장 보기	"""展开全部 N 章""按钮，参数 `{count}` = 全书总章数（`totalChapterCount`），不是锁定条目数"	按钮标签，含插值，≤40 字符（不含插值）
+ko	novel.lockedChapterHint	Locked — tap to continue reading	잠김 — 탭하면 이어서 읽기	锁定章节按钮的读屏专用提示（视觉上只有锁图标 + 章节号，`sr-only`）	读屏文本，不限长度但建议简短（≤50 字符）
+ko	novel.newReleases	New releases	신작	"""新书推荐""模块标题（""相关推荐""复用既有的 `novel.relatedWorks`，不是新键）"	区块标题，≤20 字符
+ko	novel.noPreviewChapters	No chapters to read yet.	아직 읽을 수 있는 챕터가 없습니다.	"已停用（发布与 Preview 解耦后""零章节""整块不渲染，`PreviewChapterList.tsx` 直接返回 null），仅为保持 key 集合不变而保留"	已停用，无展示位置限制
+ko	novel.previewChapters	Chapters	챕터	A3 上线后已不再被组件引用（原章节区块标题，现改用 `chapterListTitle`），仅为保持其它 14 语种 key 集合不变而保留	已停用，无展示位置限制
+ko	novel.previewChaptersDescription	{count, plural, one {1 chapter free to read now.} other {{count} chapters free to read now.}}	{count, plural, other {지금 {count}개 챕터를 무료로 읽을 수 있습니다.}}	A3 上线后已不再被组件引用（原章节区块的单复数说明，现改用 `chapterListCount`），仅为保持 key 集合不变而保留；ICU plural（`one`/`other`），参数 `{count}`	已停用，无展示位置限制；分支需保持 `one`/`other` 两个 CLDR 类别
+ko	novel.previewCount	{count} chapters available	{count}장 이용 가능	"详情页元信息行""{count} 章可试读"""	元信息行内联文本，含 `{count}` 插值，≤30 字符（不含插值）
+ko	novel.readMoreChapters	Read more chapters	챕터 더 읽기	"章节列表末尾""阅读更多章节""按钮，跳 `readOnUpstreamHref`"	按钮标签，≤25 字符
+ko	novel.startPreview	Start reading	읽기 시작	详情页行动区主按钮	按钮标签，≤20 字符
+ko	unavailable.takedownBody	At the rights holder's request, this book is no longer offered here.	저작권자의 요청에 따라 이 작품은 더 이상 제공되지 않습니다.	撤回（takedown）状态页正文	单句正文，≤80 字符
+ko	unavailable.unpublishedBody	If it returns, this address will still work.	다시 게시되면 이 주소는 계속 사용할 수 있습니다.	下架（unpublished）状态页正文	"正文段落；原两句改一句，去掉的那句由同一屏的 `unavailable.unpublishedTitle`（""This book is temporarily unavailable""）承担""为什么不可用""这层含义"
+pl	blog.listDescription	Articles and updates.	Artykuły i aktualności.	博客列表页说明	SEO description 候选来源之一，≤60 字符
+pl	blog.unpublishedBody	If it returns, this address will still work.	Jeśli powróci, ten adres nadal będzie działać.	博客文章下架状态正文（与 13 同结构、独立键）	同 13
+pl	chapter.endOfPreview	That's everything available right now.	To wszystko, co jest teraz dostępne.	章节页章末提示（最后一章可试读时）	单句提示，≤60 字符
+pl	chapter.lastPreviewChapter	This is the last free chapter	To jest ostatni darmowy rozdział	"章节页 `ChapterPager` 末章位提示（替代""下一章""按钮）；指“可免费读的最后一章”，之后可能还有锁定章节，故不能写成全书终章"	"行内提示文字，≤40 字符，句式与相邻的 `chapter.firstChapter`（""This is the first chapter""）保持一致"
+pl	chapter.previewPosition	{index} / {total}	{index} z {total}	"章节页 `BookAttributionBar` 试读进度指示（""第 N / 共 M""）"	行内小字，含 `{index}`/`{total}` 两个插值
+pl	chapter.remainingOnOrigin	Keep reading to continue the story.	Czytaj dalej, aby kontynuować historię.	章节页章末提示（非最后一章时的次级说明）	单句提示，≤60 字符
+pl	collection.allWorksDescription	Works currently available to read.	Dzieła obecnie dostępne do czytania.	全部作品聚合页说明	SEO description 候选来源之一，≤80 字符
+pl	home.startPreview	Start reading	Zacznij czytać	"首页 Hero/FeaturedNovel 的""开始试读""按钮"	按钮标签，≤20 字符
+pl	meta.siteDescription	Discover novels and start reading free chapters.	Odkrywaj powieści i zacznij czytać darmowe rozdziały.	全站兜底 meta description（`SiteSetting.siteDescription` 为空时的回退）	SEO meta description，≤160 字符
+pl	nav.footerNote	New chapters are added regularly.	Nowe rozdziały są dodawane regularnie.	页脚静态说明行（`SiteFooter`，不是 `SiteSetting.footer_disclaimer_text` 那个后台可编辑字段）	页脚单行，建议 ≤60 字符（原两句改一句，为了让句数门禁对本键直接跳过比较，不强制改写 14 语种）
+pl	novel.chapterListCount	{count, plural, one {1 chapter total} other {{count} chapters total}}	{count, plural, one {Łącznie {count} rozdział} few {Łącznie {count} rozdziały} many {Łącznie {count} rozdziałów} other {Łącznie {count} rozdziałów}}	章节列表标题下方的数量说明（替代旧的 `novel.previewChaptersDescription`），ICU plural，参数 `{count}` = `totalChapterCount`	单行说明；每个语种必须覆盖自己的 CLDR 复数类别集合（`tests/ui/messages-completeness.test.ts` 的 `EXPECTED_PLURAL_CATEGORIES` 表），不多不少
+pl	novel.chapterListTitle	Chapter list	Lista rozdziałów	章节列表区块标题（小说页 + 章节页，替代旧的 `novel.previewChapters`）	"区块标题，≤20 字符；不得使用""完整目录/全部章节""等宣称完整性的措辞"
+pl	novel.closeDialog	Close	Zamknij	弹窗关闭按钮（通用）	按钮标签，≤15 字符
+pl	novel.continueReadingBarLabel	Continue reading bar	Pasek kontynuacji czytania	固定底部浮窗（StickyCTA）的 `aria-label`，读屏 landmark 名称	读屏专用，不可见，不限长度
+pl	novel.continueReadingModalBody	Continue with Chapter {number} and the rest of the story.	Kontynuuj od rozdziału {number} i poznaj resztę historii.	弹窗正文，参数 `{number}` = 点击的锁定章节号；弹窗按钮会跳转到别处，不得写成“内容就在这里/当前页”	弹窗正文单句，含插值，≤80 字符（不含插值）
+pl	novel.continueReadingModalTitle	Continue reading	Kontynuuj czytanie	点击锁定章节弹出的确认弹窗标题	弹窗标题，≤25 字符
+pl	novel.expandAllChapters	Show all {count} chapters	Pokaż wszystkie {count, plural, one {{count} rozdział} few {{count} rozdziały} many {{count} rozdziałów} other {{count} rozdziałów}}	"""展开全部 N 章""按钮，参数 `{count}` = 全书总章数（`totalChapterCount`），不是锁定条目数"	按钮标签，含插值，≤40 字符（不含插值）
+pl	novel.lockedChapterHint	Locked — tap to continue reading	Zablokowane — dotknij, aby kontynuować czytanie	锁定章节按钮的读屏专用提示（视觉上只有锁图标 + 章节号，`sr-only`）	读屏文本，不限长度但建议简短（≤50 字符）
+pl	novel.newReleases	New releases	Nowości	"""新书推荐""模块标题（""相关推荐""复用既有的 `novel.relatedWorks`，不是新键）"	区块标题，≤20 字符
+pl	novel.noPreviewChapters	No chapters to read yet.	Nie ma jeszcze rozdziałów do przeczytania.	"已停用（发布与 Preview 解耦后""零章节""整块不渲染，`PreviewChapterList.tsx` 直接返回 null），仅为保持 key 集合不变而保留"	已停用，无展示位置限制
+pl	novel.previewChapters	Chapters	Rozdziały	A3 上线后已不再被组件引用（原章节区块标题，现改用 `chapterListTitle`），仅为保持其它 14 语种 key 集合不变而保留	已停用，无展示位置限制
+pl	novel.previewChaptersDescription	{count, plural, one {1 chapter free to read now.} other {{count} chapters free to read now.}}	{count, plural, one {{count} rozdział dostępny do czytania za darmo już teraz.} few {{count} rozdziały dostępne do czytania za darmo już teraz.} many {{count} rozdziałów dostępnych do czytania za darmo już teraz.} other {{count} rozdziałów dostępnych do czytania za darmo już teraz.}}	A3 上线后已不再被组件引用（原章节区块的单复数说明，现改用 `chapterListCount`），仅为保持 key 集合不变而保留；ICU plural（`one`/`other`），参数 `{count}`	已停用，无展示位置限制；分支需保持 `one`/`other` 两个 CLDR 类别
+pl	novel.previewCount	{count} chapters available	{count, plural, one {{count} rozdział dostępny} few {{count} rozdziały dostępne} many {{count} rozdziałów dostępnych} other {{count} rozdziałów dostępnych}}	"详情页元信息行""{count} 章可试读"""	元信息行内联文本，含 `{count}` 插值，≤30 字符（不含插值）
+pl	novel.readMoreChapters	Read more chapters	Czytaj więcej rozdziałów	"章节列表末尾""阅读更多章节""按钮，跳 `readOnUpstreamHref`"	按钮标签，≤25 字符
+pl	novel.startPreview	Start reading	Zacznij czytać	详情页行动区主按钮	按钮标签，≤20 字符
+pl	unavailable.takedownBody	At the rights holder's request, this book is no longer offered here.	Na prośbę właściciela praw ta książka nie jest już tutaj oferowana.	撤回（takedown）状态页正文	单句正文，≤80 字符
+pl	unavailable.unpublishedBody	If it returns, this address will still work.	Jeśli powróci, ten adres nadal będzie działać.	下架（unpublished）状态页正文	"正文段落；原两句改一句，去掉的那句由同一屏的 `unavailable.unpublishedTitle`（""This book is temporarily unavailable""）承担""为什么不可用""这层含义"
+pt-BR	blog.listDescription	Articles and updates.	Artigos e novidades.	博客列表页说明	SEO description 候选来源之一，≤60 字符
+pt-BR	blog.unpublishedBody	If it returns, this address will still work.	Se retornar, este endereço continuará funcionando.	博客文章下架状态正文（与 13 同结构、独立键）	同 13
+pt-BR	chapter.endOfPreview	That's everything available right now.	Isso é tudo que está disponível no momento.	章节页章末提示（最后一章可试读时）	单句提示，≤60 字符
+pt-BR	chapter.lastPreviewChapter	This is the last free chapter	Este é o último capítulo grátis	"章节页 `ChapterPager` 末章位提示（替代""下一章""按钮）；指“可免费读的最后一章”，之后可能还有锁定章节，故不能写成全书终章"	"行内提示文字，≤40 字符，句式与相邻的 `chapter.firstChapter`（""This is the first chapter""）保持一致"
+pt-BR	chapter.previewPosition	{index} / {total}	{index} / {total}	"章节页 `BookAttributionBar` 试读进度指示（""第 N / 共 M""）"	行内小字，含 `{index}`/`{total}` 两个插值
+pt-BR	chapter.remainingOnOrigin	Keep reading to continue the story.	Continue lendo para acompanhar a história.	章节页章末提示（非最后一章时的次级说明）	单句提示，≤60 字符
+pt-BR	collection.allWorksDescription	Works currently available to read.	Obras disponíveis para leitura no momento.	全部作品聚合页说明	SEO description 候选来源之一，≤80 字符
+pt-BR	home.startPreview	Start reading	Começar a ler	"首页 Hero/FeaturedNovel 的""开始试读""按钮"	按钮标签，≤20 字符
+pt-BR	meta.siteDescription	Discover novels and start reading free chapters.	Descubra romances e comece a ler capítulos grátis.	全站兜底 meta description（`SiteSetting.siteDescription` 为空时的回退）	SEO meta description，≤160 字符
+pt-BR	nav.footerNote	New chapters are added regularly.	Novos capítulos são adicionados regularmente.	页脚静态说明行（`SiteFooter`，不是 `SiteSetting.footer_disclaimer_text` 那个后台可编辑字段）	页脚单行，建议 ≤60 字符（原两句改一句，为了让句数门禁对本键直接跳过比较，不强制改写 14 语种）
+pt-BR	novel.chapterListCount	{count, plural, one {1 chapter total} other {{count} chapters total}}	{count, plural, many {{count} capítulos no total} one {1 capítulo no total} other {{count} capítulos no total}}	章节列表标题下方的数量说明（替代旧的 `novel.previewChaptersDescription`），ICU plural，参数 `{count}` = `totalChapterCount`	单行说明；每个语种必须覆盖自己的 CLDR 复数类别集合（`tests/ui/messages-completeness.test.ts` 的 `EXPECTED_PLURAL_CATEGORIES` 表），不多不少
+pt-BR	novel.chapterListTitle	Chapter list	Lista de capítulos	章节列表区块标题（小说页 + 章节页，替代旧的 `novel.previewChapters`）	"区块标题，≤20 字符；不得使用""完整目录/全部章节""等宣称完整性的措辞"
+pt-BR	novel.closeDialog	Close	Fechar	弹窗关闭按钮（通用）	按钮标签，≤15 字符
+pt-BR	novel.continueReadingBarLabel	Continue reading bar	Barra para continuar lendo	固定底部浮窗（StickyCTA）的 `aria-label`，读屏 landmark 名称	读屏专用，不可见，不限长度
+pt-BR	novel.continueReadingModalBody	Continue with Chapter {number} and the rest of the story.	Continue com o capítulo {number} e o restante da história.	弹窗正文，参数 `{number}` = 点击的锁定章节号；弹窗按钮会跳转到别处，不得写成“内容就在这里/当前页”	弹窗正文单句，含插值，≤80 字符（不含插值）
+pt-BR	novel.continueReadingModalTitle	Continue reading	Continuar lendo	点击锁定章节弹出的确认弹窗标题	弹窗标题，≤25 字符
+pt-BR	novel.expandAllChapters	Show all {count} chapters	Mostrar todos os {count} capítulos	"""展开全部 N 章""按钮，参数 `{count}` = 全书总章数（`totalChapterCount`），不是锁定条目数"	按钮标签，含插值，≤40 字符（不含插值）
+pt-BR	novel.lockedChapterHint	Locked — tap to continue reading	Bloqueado — toque para continuar lendo	锁定章节按钮的读屏专用提示（视觉上只有锁图标 + 章节号，`sr-only`）	读屏文本，不限长度但建议简短（≤50 字符）
+pt-BR	novel.newReleases	New releases	Lançamentos	"""新书推荐""模块标题（""相关推荐""复用既有的 `novel.relatedWorks`，不是新键）"	区块标题，≤20 字符
+pt-BR	novel.noPreviewChapters	No chapters to read yet.	Ainda não há capítulos para ler.	"已停用（发布与 Preview 解耦后""零章节""整块不渲染，`PreviewChapterList.tsx` 直接返回 null），仅为保持 key 集合不变而保留"	已停用，无展示位置限制
+pt-BR	novel.previewChapters	Chapters	Capítulos	A3 上线后已不再被组件引用（原章节区块标题，现改用 `chapterListTitle`），仅为保持其它 14 语种 key 集合不变而保留	已停用，无展示位置限制
+pt-BR	novel.previewChaptersDescription	{count, plural, one {1 chapter free to read now.} other {{count} chapters free to read now.}}	{count, plural, one {1 capítulo grátis para ler agora.} many {{count} capítulos grátis para ler agora.} other {{count} capítulos grátis para ler agora.}}	A3 上线后已不再被组件引用（原章节区块的单复数说明，现改用 `chapterListCount`），仅为保持 key 集合不变而保留；ICU plural（`one`/`other`），参数 `{count}`	已停用，无展示位置限制；分支需保持 `one`/`other` 两个 CLDR 类别
+pt-BR	novel.previewCount	{count} chapters available	{count} capítulos disponíveis	"详情页元信息行""{count} 章可试读"""	元信息行内联文本，含 `{count}` 插值，≤30 字符（不含插值）
+pt-BR	novel.readMoreChapters	Read more chapters	Ler mais capítulos	"章节列表末尾""阅读更多章节""按钮，跳 `readOnUpstreamHref`"	按钮标签，≤25 字符
+pt-BR	novel.startPreview	Start reading	Começar a ler	详情页行动区主按钮	按钮标签，≤20 字符
+pt-BR	unavailable.takedownBody	At the rights holder's request, this book is no longer offered here.	A pedido do detentor dos direitos, este livro não está mais disponível aqui.	撤回（takedown）状态页正文	单句正文，≤80 字符
+pt-BR	unavailable.unpublishedBody	If it returns, this address will still work.	Se retornar, este endereço continuará funcionando.	下架（unpublished）状态页正文	"正文段落；原两句改一句，去掉的那句由同一屏的 `unavailable.unpublishedTitle`（""This book is temporarily unavailable""）承担""为什么不可用""这层含义"
+ru	blog.listDescription	Articles and updates.	Статьи и новости.	博客列表页说明	SEO description 候选来源之一，≤60 字符
+ru	blog.unpublishedBody	If it returns, this address will still work.	Если она вернётся, этот адрес продолжит работать.	博客文章下架状态正文（与 13 同结构、独立键）	同 13
+ru	chapter.endOfPreview	That's everything available right now.	Пока это всё, что доступно.	章节页章末提示（最后一章可试读时）	单句提示，≤60 字符
+ru	chapter.lastPreviewChapter	This is the last free chapter	Это последняя бесплатная глава	"章节页 `ChapterPager` 末章位提示（替代""下一章""按钮）；指“可免费读的最后一章”，之后可能还有锁定章节，故不能写成全书终章"	"行内提示文字，≤40 字符，句式与相邻的 `chapter.firstChapter`（""This is the first chapter""）保持一致"
+ru	chapter.previewPosition	{index} / {total}	{index} из {total}	"章节页 `BookAttributionBar` 试读进度指示（""第 N / 共 M""）"	行内小字，含 `{index}`/`{total}` 两个插值
+ru	chapter.remainingOnOrigin	Keep reading to continue the story.	Читайте дальше, чтобы продолжить историю.	章节页章末提示（非最后一章时的次级说明）	单句提示，≤60 字符
+ru	collection.allWorksDescription	Works currently available to read.	Произведения, доступные для чтения.	全部作品聚合页说明	SEO description 候选来源之一，≤80 字符
+ru	home.startPreview	Start reading	Начать чтение	"首页 Hero/FeaturedNovel 的""开始试读""按钮"	按钮标签，≤20 字符
+ru	meta.siteDescription	Discover novels and start reading free chapters.	Открывайте романы и начинайте читать бесплатные главы.	全站兜底 meta description（`SiteSetting.siteDescription` 为空时的回退）	SEO meta description，≤160 字符
+ru	nav.footerNote	New chapters are added regularly.	Новые главы публикуются регулярно.	页脚静态说明行（`SiteFooter`，不是 `SiteSetting.footer_disclaimer_text` 那个后台可编辑字段）	页脚单行，建议 ≤60 字符（原两句改一句，为了让句数门禁对本键直接跳过比较，不强制改写 14 语种）
+ru	novel.chapterListCount	{count, plural, one {1 chapter total} other {{count} chapters total}}	{count, plural, one {Всего {count} глава} few {Всего {count} главы} many {Всего {count} глав} other {Всего {count} главы}}	章节列表标题下方的数量说明（替代旧的 `novel.previewChaptersDescription`），ICU plural，参数 `{count}` = `totalChapterCount`	单行说明；每个语种必须覆盖自己的 CLDR 复数类别集合（`tests/ui/messages-completeness.test.ts` 的 `EXPECTED_PLURAL_CATEGORIES` 表），不多不少
+ru	novel.chapterListTitle	Chapter list	Список глав	章节列表区块标题（小说页 + 章节页，替代旧的 `novel.previewChapters`）	"区块标题，≤20 字符；不得使用""完整目录/全部章节""等宣称完整性的措辞"
+ru	novel.closeDialog	Close	Закрыть	弹窗关闭按钮（通用）	按钮标签，≤15 字符
+ru	novel.continueReadingBarLabel	Continue reading bar	Панель продолжения чтения	固定底部浮窗（StickyCTA）的 `aria-label`，读屏 landmark 名称	读屏专用，不可见，不限长度
+ru	novel.continueReadingModalBody	Continue with Chapter {number} and the rest of the story.	Продолжите чтение с главы {number} и до конца истории.	弹窗正文，参数 `{number}` = 点击的锁定章节号；弹窗按钮会跳转到别处，不得写成“内容就在这里/当前页”	弹窗正文单句，含插值，≤80 字符（不含插值）
+ru	novel.continueReadingModalTitle	Continue reading	Продолжить чтение	点击锁定章节弹出的确认弹窗标题	弹窗标题，≤25 字符
+ru	novel.expandAllChapters	Show all {count} chapters	Показать все {count, plural, one {{count} главу} few {{count} главы} many {{count} глав} other {{count} главы}}	"""展开全部 N 章""按钮，参数 `{count}` = 全书总章数（`totalChapterCount`），不是锁定条目数"	按钮标签，含插值，≤40 字符（不含插值）
+ru	novel.lockedChapterHint	Locked — tap to continue reading	Заблокировано — нажмите, чтобы продолжить чтение	锁定章节按钮的读屏专用提示（视觉上只有锁图标 + 章节号，`sr-only`）	读屏文本，不限长度但建议简短（≤50 字符）
+ru	novel.newReleases	New releases	Новинки	"""新书推荐""模块标题（""相关推荐""复用既有的 `novel.relatedWorks`，不是新键）"	区块标题，≤20 字符
+ru	novel.noPreviewChapters	No chapters to read yet.	Пока нет глав для чтения.	"已停用（发布与 Preview 解耦后""零章节""整块不渲染，`PreviewChapterList.tsx` 直接返回 null），仅为保持 key 集合不变而保留"	已停用，无展示位置限制
+ru	novel.previewChapters	Chapters	Главы	A3 上线后已不再被组件引用（原章节区块标题，现改用 `chapterListTitle`），仅为保持其它 14 语种 key 集合不变而保留	已停用，无展示位置限制
+ru	novel.previewChaptersDescription	{count, plural, one {1 chapter free to read now.} other {{count} chapters free to read now.}}	{count, plural, one {{count} глава доступна бесплатно прямо сейчас.} few {{count} главы доступны бесплатно прямо сейчас.} many {{count} глав доступно бесплатно прямо сейчас.} other {{count} главы доступны бесплатно прямо сейчас.}}	A3 上线后已不再被组件引用（原章节区块的单复数说明，现改用 `chapterListCount`），仅为保持 key 集合不变而保留；ICU plural（`one`/`other`），参数 `{count}`	已停用，无展示位置限制；分支需保持 `one`/`other` 两个 CLDR 类别
+ru	novel.previewCount	{count} chapters available	{count, plural, one {{count} глава доступна} few {{count} главы доступны} many {{count} глав доступно} other {{count} главы доступны}}	"详情页元信息行""{count} 章可试读"""	元信息行内联文本，含 `{count}` 插值，≤30 字符（不含插值）
+ru	novel.readMoreChapters	Read more chapters	Читать больше глав	"章节列表末尾""阅读更多章节""按钮，跳 `readOnUpstreamHref`"	按钮标签，≤25 字符
+ru	novel.startPreview	Start reading	Начать чтение	详情页行动区主按钮	按钮标签，≤20 字符
+ru	unavailable.takedownBody	At the rights holder's request, this book is no longer offered here.	По запросу правообладателя эта книга больше не предлагается здесь.	撤回（takedown）状态页正文	单句正文，≤80 字符
+ru	unavailable.unpublishedBody	If it returns, this address will still work.	Если она вернётся, этот адрес продолжит работать.	下架（unpublished）状态页正文	"正文段落；原两句改一句，去掉的那句由同一屏的 `unavailable.unpublishedTitle`（""This book is temporarily unavailable""）承担""为什么不可用""这层含义"
+th	blog.listDescription	Articles and updates.	บทความและข่าวสาร	博客列表页说明	SEO description 候选来源之一，≤60 字符
+th	blog.unpublishedBody	If it returns, this address will still work.	หากกลับมา ที่อยู่นี้จะยังใช้งานได้	博客文章下架状态正文（与 13 同结构、独立键）	同 13
+th	chapter.endOfPreview	That's everything available right now.	ตอนนี้มีเนื้อหาให้อ่านเพียงเท่านี้	章节页章末提示（最后一章可试读时）	单句提示，≤60 字符
+th	chapter.lastPreviewChapter	This is the last free chapter	นี่คือตอนฟรีตอนสุดท้าย	"章节页 `ChapterPager` 末章位提示（替代""下一章""按钮）；指“可免费读的最后一章”，之后可能还有锁定章节，故不能写成全书终章"	"行内提示文字，≤40 字符，句式与相邻的 `chapter.firstChapter`（""This is the first chapter""）保持一致"
+th	chapter.previewPosition	{index} / {total}	{index} / {total}	"章节页 `BookAttributionBar` 试读进度指示（""第 N / 共 M""）"	行内小字，含 `{index}`/`{total}` 两个插值
+th	chapter.remainingOnOrigin	Keep reading to continue the story.	อ่านต่อเพื่อติดตามเรื่องราว	章节页章末提示（非最后一章时的次级说明）	单句提示，≤60 字符
+th	collection.allWorksDescription	Works currently available to read.	ผลงานที่พร้อมให้อ่านในขณะนี้	全部作品聚合页说明	SEO description 候选来源之一，≤80 字符
+th	home.startPreview	Start reading	เริ่มอ่าน	"首页 Hero/FeaturedNovel 的""开始试读""按钮"	按钮标签，≤20 字符
+th	meta.siteDescription	Discover novels and start reading free chapters.	ค้นพบนิยายและเริ่มอ่านตอนฟรี	全站兜底 meta description（`SiteSetting.siteDescription` 为空时的回退）	SEO meta description，≤160 字符
+th	nav.footerNote	New chapters are added regularly.	มีตอนใหม่อัปเดตอย่างสม่ำเสมอ	页脚静态说明行（`SiteFooter`，不是 `SiteSetting.footer_disclaimer_text` 那个后台可编辑字段）	页脚单行，建议 ≤60 字符（原两句改一句，为了让句数门禁对本键直接跳过比较，不强制改写 14 语种）
+th	novel.chapterListCount	{count, plural, one {1 chapter total} other {{count} chapters total}}	{count, plural, other {ทั้งหมด {count} ตอน}}	章节列表标题下方的数量说明（替代旧的 `novel.previewChaptersDescription`），ICU plural，参数 `{count}` = `totalChapterCount`	单行说明；每个语种必须覆盖自己的 CLDR 复数类别集合（`tests/ui/messages-completeness.test.ts` 的 `EXPECTED_PLURAL_CATEGORIES` 表），不多不少
+th	novel.chapterListTitle	Chapter list	รายการตอน	章节列表区块标题（小说页 + 章节页，替代旧的 `novel.previewChapters`）	"区块标题，≤20 字符；不得使用""完整目录/全部章节""等宣称完整性的措辞"
+th	novel.closeDialog	Close	ปิด	弹窗关闭按钮（通用）	按钮标签，≤15 字符
+th	novel.continueReadingBarLabel	Continue reading bar	แถบอ่านต่อ	固定底部浮窗（StickyCTA）的 `aria-label`，读屏 landmark 名称	读屏专用，不可见，不限长度
+th	novel.continueReadingModalBody	Continue with Chapter {number} and the rest of the story.	อ่านต่อตั้งแต่ตอนที่ {number} และเรื่องราวที่เหลือ	弹窗正文，参数 `{number}` = 点击的锁定章节号；弹窗按钮会跳转到别处，不得写成“内容就在这里/当前页”	弹窗正文单句，含插值，≤80 字符（不含插值）
+th	novel.continueReadingModalTitle	Continue reading	อ่านต่อ	点击锁定章节弹出的确认弹窗标题	弹窗标题，≤25 字符
+th	novel.expandAllChapters	Show all {count} chapters	แสดงทั้งหมด {count} ตอน	"""展开全部 N 章""按钮，参数 `{count}` = 全书总章数（`totalChapterCount`），不是锁定条目数"	按钮标签，含插值，≤40 字符（不含插值）
+th	novel.lockedChapterHint	Locked — tap to continue reading	ล็อกอยู่ — แตะเพื่ออ่านต่อ	锁定章节按钮的读屏专用提示（视觉上只有锁图标 + 章节号，`sr-only`）	读屏文本，不限长度但建议简短（≤50 字符）
+th	novel.newReleases	New releases	ผลงานใหม่	"""新书推荐""模块标题（""相关推荐""复用既有的 `novel.relatedWorks`，不是新键）"	区块标题，≤20 字符
+th	novel.noPreviewChapters	No chapters to read yet.	ยังไม่มีตอนให้อ่าน	"已停用（发布与 Preview 解耦后""零章节""整块不渲染，`PreviewChapterList.tsx` 直接返回 null），仅为保持 key 集合不变而保留"	已停用，无展示位置限制
+th	novel.previewChapters	Chapters	ตอน	A3 上线后已不再被组件引用（原章节区块标题，现改用 `chapterListTitle`），仅为保持其它 14 语种 key 集合不变而保留	已停用，无展示位置限制
+th	novel.previewChaptersDescription	{count, plural, one {1 chapter free to read now.} other {{count} chapters free to read now.}}	{count, plural, other {อ่านฟรีได้แล้ว {count} ตอน}}	A3 上线后已不再被组件引用（原章节区块的单复数说明，现改用 `chapterListCount`），仅为保持 key 集合不变而保留；ICU plural（`one`/`other`），参数 `{count}`	已停用，无展示位置限制；分支需保持 `one`/`other` 两个 CLDR 类别
+th	novel.previewCount	{count} chapters available	มี {count} ตอนให้อ่าน	"详情页元信息行""{count} 章可试读"""	元信息行内联文本，含 `{count}` 插值，≤30 字符（不含插值）
+th	novel.readMoreChapters	Read more chapters	อ่านตอนเพิ่มเติม	"章节列表末尾""阅读更多章节""按钮，跳 `readOnUpstreamHref`"	按钮标签，≤25 字符
+th	novel.startPreview	Start reading	เริ่มอ่าน	详情页行动区主按钮	按钮标签，≤20 字符
+th	unavailable.takedownBody	At the rights holder's request, this book is no longer offered here.	ตามคำร้องขอของเจ้าของลิขสิทธิ์ หนังสือเล่มนี้ไม่มีให้บริการที่นี่อีกต่อไป	撤回（takedown）状态页正文	单句正文，≤80 字符
+th	unavailable.unpublishedBody	If it returns, this address will still work.	หากกลับมา ที่อยู่นี้จะยังใช้งานได้	下架（unpublished）状态页正文	"正文段落；原两句改一句，去掉的那句由同一屏的 `unavailable.unpublishedTitle`（""This book is temporarily unavailable""）承担""为什么不可用""这层含义"
+vi	blog.listDescription	Articles and updates.	Bài viết và cập nhật.	博客列表页说明	SEO description 候选来源之一，≤60 字符
+vi	blog.unpublishedBody	If it returns, this address will still work.	Nếu quay lại, địa chỉ này vẫn sẽ hoạt động.	博客文章下架状态正文（与 13 同结构、独立键）	同 13
+vi	chapter.endOfPreview	That's everything available right now.	Hiện chỉ có sẵn đến đây.	章节页章末提示（最后一章可试读时）	单句提示，≤60 字符
+vi	chapter.lastPreviewChapter	This is the last free chapter	Đây là chương miễn phí cuối cùng	"章节页 `ChapterPager` 末章位提示（替代""下一章""按钮）；指“可免费读的最后一章”，之后可能还有锁定章节，故不能写成全书终章"	"行内提示文字，≤40 字符，句式与相邻的 `chapter.firstChapter`（""This is the first chapter""）保持一致"
+vi	chapter.previewPosition	{index} / {total}	{index} / {total}	"章节页 `BookAttributionBar` 试读进度指示（""第 N / 共 M""）"	行内小字，含 `{index}`/`{total}` 两个插值
+vi	chapter.remainingOnOrigin	Keep reading to continue the story.	Đọc tiếp để theo dõi câu chuyện.	章节页章末提示（非最后一章时的次级说明）	单句提示，≤60 字符
+vi	collection.allWorksDescription	Works currently available to read.	Các tác phẩm hiện có thể đọc.	全部作品聚合页说明	SEO description 候选来源之一，≤80 字符
+vi	home.startPreview	Start reading	Bắt đầu đọc	"首页 Hero/FeaturedNovel 的""开始试读""按钮"	按钮标签，≤20 字符
+vi	meta.siteDescription	Discover novels and start reading free chapters.	Khám phá tiểu thuyết và bắt đầu đọc chương miễn phí.	全站兜底 meta description（`SiteSetting.siteDescription` 为空时的回退）	SEO meta description，≤160 字符
+vi	nav.footerNote	New chapters are added regularly.	Chương mới được cập nhật thường xuyên.	页脚静态说明行（`SiteFooter`，不是 `SiteSetting.footer_disclaimer_text` 那个后台可编辑字段）	页脚单行，建议 ≤60 字符（原两句改一句，为了让句数门禁对本键直接跳过比较，不强制改写 14 语种）
+vi	novel.chapterListCount	{count, plural, one {1 chapter total} other {{count} chapters total}}	{count, plural, other {Tổng {count} chương}}	章节列表标题下方的数量说明（替代旧的 `novel.previewChaptersDescription`），ICU plural，参数 `{count}` = `totalChapterCount`	单行说明；每个语种必须覆盖自己的 CLDR 复数类别集合（`tests/ui/messages-completeness.test.ts` 的 `EXPECTED_PLURAL_CATEGORIES` 表），不多不少
+vi	novel.chapterListTitle	Chapter list	Danh sách chương	章节列表区块标题（小说页 + 章节页，替代旧的 `novel.previewChapters`）	"区块标题，≤20 字符；不得使用""完整目录/全部章节""等宣称完整性的措辞"
+vi	novel.closeDialog	Close	Đóng	弹窗关闭按钮（通用）	按钮标签，≤15 字符
+vi	novel.continueReadingBarLabel	Continue reading bar	Thanh tiếp tục đọc	固定底部浮窗（StickyCTA）的 `aria-label`，读屏 landmark 名称	读屏专用，不可见，不限长度
+vi	novel.continueReadingModalBody	Continue with Chapter {number} and the rest of the story.	Hãy đọc tiếp từ chương {number} và phần còn lại của câu chuyện.	弹窗正文，参数 `{number}` = 点击的锁定章节号；弹窗按钮会跳转到别处，不得写成“内容就在这里/当前页”	弹窗正文单句，含插值，≤80 字符（不含插值）
+vi	novel.continueReadingModalTitle	Continue reading	Tiếp tục đọc	点击锁定章节弹出的确认弹窗标题	弹窗标题，≤25 字符
+vi	novel.expandAllChapters	Show all {count} chapters	Xem tất cả {count} chương	"""展开全部 N 章""按钮，参数 `{count}` = 全书总章数（`totalChapterCount`），不是锁定条目数"	按钮标签，含插值，≤40 字符（不含插值）
+vi	novel.lockedChapterHint	Locked — tap to continue reading	Đã khoá — chạm để tiếp tục đọc	锁定章节按钮的读屏专用提示（视觉上只有锁图标 + 章节号，`sr-only`）	读屏文本，不限长度但建议简短（≤50 字符）
+vi	novel.newReleases	New releases	Tác phẩm mới	"""新书推荐""模块标题（""相关推荐""复用既有的 `novel.relatedWorks`，不是新键）"	区块标题，≤20 字符
+vi	novel.noPreviewChapters	No chapters to read yet.	Chưa có chương nào để đọc.	"已停用（发布与 Preview 解耦后""零章节""整块不渲染，`PreviewChapterList.tsx` 直接返回 null），仅为保持 key 集合不变而保留"	已停用，无展示位置限制
+vi	novel.previewChapters	Chapters	Chương	A3 上线后已不再被组件引用（原章节区块标题，现改用 `chapterListTitle`），仅为保持其它 14 语种 key 集合不变而保留	已停用，无展示位置限制
+vi	novel.previewChaptersDescription	{count, plural, one {1 chapter free to read now.} other {{count} chapters free to read now.}}	{count, plural, other {Hiện có {count} chương đọc miễn phí.}}	A3 上线后已不再被组件引用（原章节区块的单复数说明，现改用 `chapterListCount`），仅为保持 key 集合不变而保留；ICU plural（`one`/`other`），参数 `{count}`	已停用，无展示位置限制；分支需保持 `one`/`other` 两个 CLDR 类别
+vi	novel.previewCount	{count} chapters available	{count} chương có thể đọc	"详情页元信息行""{count} 章可试读"""	元信息行内联文本，含 `{count}` 插值，≤30 字符（不含插值）
+vi	novel.readMoreChapters	Read more chapters	Đọc thêm chương	"章节列表末尾""阅读更多章节""按钮，跳 `readOnUpstreamHref`"	按钮标签，≤25 字符
+vi	novel.startPreview	Start reading	Bắt đầu đọc	详情页行动区主按钮	按钮标签，≤20 字符
+vi	unavailable.takedownBody	At the rights holder's request, this book is no longer offered here.	Theo yêu cầu của chủ sở hữu bản quyền, sách này không còn được cung cấp ở đây.	撤回（takedown）状态页正文	单句正文，≤80 字符
+vi	unavailable.unpublishedBody	If it returns, this address will still work.	Nếu quay lại, địa chỉ này vẫn sẽ hoạt động.	下架（unpublished）状态页正文	"正文段落；原两句改一句，去掉的那句由同一屏的 `unavailable.unpublishedTitle`（""This book is temporarily unavailable""）承担""为什么不可用""这层含义"
+zh-Hant	blog.listDescription	Articles and updates.	文章與最新消息。	博客列表页说明	SEO description 候选来源之一，≤60 字符
+zh-Hant	blog.unpublishedBody	If it returns, this address will still work.	若日後恢復，此網址仍可使用。	博客文章下架状态正文（与 13 同结构、独立键）	同 13
+zh-Hant	chapter.endOfPreview	That's everything available right now.	目前可閱讀的內容到此為止。	章节页章末提示（最后一章可试读时）	单句提示，≤60 字符
+zh-Hant	chapter.lastPreviewChapter	This is the last free chapter	這是最後一個免費章節	"章节页 `ChapterPager` 末章位提示（替代""下一章""按钮）；指“可免费读的最后一章”，之后可能还有锁定章节，故不能写成全书终章"	"行内提示文字，≤40 字符，句式与相邻的 `chapter.firstChapter`（""This is the first chapter""）保持一致"
+zh-Hant	chapter.previewPosition	{index} / {total}	{index} / {total}	"章节页 `BookAttributionBar` 试读进度指示（""第 N / 共 M""）"	行内小字，含 `{index}`/`{total}` 两个插值
+zh-Hant	chapter.remainingOnOrigin	Keep reading to continue the story.	繼續閱讀，故事仍在延續。	章节页章末提示（非最后一章时的次级说明）	单句提示，≤60 字符
+zh-Hant	collection.allWorksDescription	Works currently available to read.	目前可供閱讀的作品。	全部作品聚合页说明	SEO description 候选来源之一，≤80 字符
+zh-Hant	home.startPreview	Start reading	開始閱讀	"首页 Hero/FeaturedNovel 的""开始试读""按钮"	按钮标签，≤20 字符
+zh-Hant	meta.siteDescription	Discover novels and start reading free chapters.	探索小說，開始閱讀免費章節。	全站兜底 meta description（`SiteSetting.siteDescription` 为空时的回退）	SEO meta description，≤160 字符
+zh-Hant	nav.footerNote	New chapters are added regularly.	新章節定期更新。	页脚静态说明行（`SiteFooter`，不是 `SiteSetting.footer_disclaimer_text` 那个后台可编辑字段）	页脚单行，建议 ≤60 字符（原两句改一句，为了让句数门禁对本键直接跳过比较，不强制改写 14 语种）
+zh-Hant	novel.chapterListCount	{count, plural, one {1 chapter total} other {{count} chapters total}}	{count, plural, other {共{count}章}}	章节列表标题下方的数量说明（替代旧的 `novel.previewChaptersDescription`），ICU plural，参数 `{count}` = `totalChapterCount`	单行说明；每个语种必须覆盖自己的 CLDR 复数类别集合（`tests/ui/messages-completeness.test.ts` 的 `EXPECTED_PLURAL_CATEGORIES` 表），不多不少
+zh-Hant	novel.chapterListTitle	Chapter list	章節列表	章节列表区块标题（小说页 + 章节页，替代旧的 `novel.previewChapters`）	"区块标题，≤20 字符；不得使用""完整目录/全部章节""等宣称完整性的措辞"
+zh-Hant	novel.closeDialog	Close	關閉	弹窗关闭按钮（通用）	按钮标签，≤15 字符
+zh-Hant	novel.continueReadingBarLabel	Continue reading bar	繼續閱讀列	固定底部浮窗（StickyCTA）的 `aria-label`，读屏 landmark 名称	读屏专用，不可见，不限长度
+zh-Hant	novel.continueReadingModalBody	Continue with Chapter {number} and the rest of the story.	繼續閱讀第{number}章及故事的其餘部分。	弹窗正文，参数 `{number}` = 点击的锁定章节号；弹窗按钮会跳转到别处，不得写成“内容就在这里/当前页”	弹窗正文单句，含插值，≤80 字符（不含插值）
+zh-Hant	novel.continueReadingModalTitle	Continue reading	繼續閱讀	点击锁定章节弹出的确认弹窗标题	弹窗标题，≤25 字符
+zh-Hant	novel.expandAllChapters	Show all {count} chapters	顯示全部{count}章	"""展开全部 N 章""按钮，参数 `{count}` = 全书总章数（`totalChapterCount`），不是锁定条目数"	按钮标签，含插值，≤40 字符（不含插值）
+zh-Hant	novel.lockedChapterHint	Locked — tap to continue reading	已鎖定，點擊繼續閱讀	锁定章节按钮的读屏专用提示（视觉上只有锁图标 + 章节号，`sr-only`）	读屏文本，不限长度但建议简短（≤50 字符）
+zh-Hant	novel.newReleases	New releases	新書上架	"""新书推荐""模块标题（""相关推荐""复用既有的 `novel.relatedWorks`，不是新键）"	区块标题，≤20 字符
+zh-Hant	novel.noPreviewChapters	No chapters to read yet.	目前尚無可閱讀的章節。	"已停用（发布与 Preview 解耦后""零章节""整块不渲染，`PreviewChapterList.tsx` 直接返回 null），仅为保持 key 集合不变而保留"	已停用，无展示位置限制
+zh-Hant	novel.previewChapters	Chapters	章節	A3 上线后已不再被组件引用（原章节区块标题，现改用 `chapterListTitle`），仅为保持其它 14 语种 key 集合不变而保留	已停用，无展示位置限制
+zh-Hant	novel.previewChaptersDescription	{count, plural, one {1 chapter free to read now.} other {{count} chapters free to read now.}}	{count, plural, other {現在可免費閱讀{count}章。}}	A3 上线后已不再被组件引用（原章节区块的单复数说明，现改用 `chapterListCount`），仅为保持 key 集合不变而保留；ICU plural（`one`/`other`），参数 `{count}`	已停用，无展示位置限制；分支需保持 `one`/`other` 两个 CLDR 类别
+zh-Hant	novel.previewCount	{count} chapters available	{count}章可讀	"详情页元信息行""{count} 章可试读"""	元信息行内联文本，含 `{count}` 插值，≤30 字符（不含插值）
+zh-Hant	novel.readMoreChapters	Read more chapters	閱讀更多章節	"章节列表末尾""阅读更多章节""按钮，跳 `readOnUpstreamHref`"	按钮标签，≤25 字符
+zh-Hant	novel.startPreview	Start reading	開始閱讀	详情页行动区主按钮	按钮标签，≤20 字符
+zh-Hant	unavailable.takedownBody	At the rights holder's request, this book is no longer offered here.	應版權方要求，本書已不再提供閱讀。	撤回（takedown）状态页正文	单句正文，≤80 字符
+zh-Hant	unavailable.unpublishedBody	If it returns, this address will still work.	若日後恢復，此網址仍可使用。	下架（unpublished）状态页正文	"正文段落；原两句改一句，去掉的那句由同一屏的 `unavailable.unpublishedTitle`（""This book is temporarily unavailable""）承担""为什么不可用""这层含义"
+ja	nav.about	About	私たちについて	顶部导航'关于'链接（本轮 27 键之外，因 Owner 规则一并修改）	导航项，≤12 字符

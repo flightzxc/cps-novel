@@ -38,14 +38,18 @@ const messages = {
     closeMenu: "Zavřít menu",
     about: "O webu",
     copyright: "Obsah a autorská práva",
-    footerNote: "Tento web nabízí bezplatné ukázkové kapitoly. Celý příběh najdete na původní platformě.",
+    // 运营前端与SEO优化第一轮 · C（Owner 2026-09-29 拍板）：去掉"tento
+    // web"/"původní platforma"，按本站就是官方站点处理，按新英文"New
+    // chapters are added regularly." 重新翻译。
+    footerNote: "Nové kapitoly přibývají pravidelně.",
     language: "Jazyk",
   },
   home: {
     works: "Díla",
     viewAll: "Zobrazit vše",
     featuredEyebrow: "Doporučené",
-    startPreview: "Spustit ukázku",
+    // C: 去掉"ukázka"（preview），按新英文"Start reading"重新翻译。
+    startPreview: "Začít číst",
     viewDetails: "Zobrazit podrobnosti",
     carouselLabel: "Doporučená díla",
     carouselRole: "kolotoč",
@@ -65,36 +69,66 @@ const messages = {
     // many 为小数专用罕见分支，与 few 同文，非漏翻译）。
     chapterCount:
       "{count, plural, one {{count} kapitola} few {{count} kapitoly} many {{count} kapitoly} other {{count} kapitol}}",
-    // 施工工单_I18N_复数能力 §六.1: 名词随数量变形（one/few/many/other）。
+    // C: 去掉"ukázková"（preview），按新英文"{count} chapters available"
+    // 重新翻译；{count} 变量位置不变；分支与 chapterCount 的名词变形一致，
+    // many 与 few 同文（小数专用罕见分支）。
     previewCount:
-      "{count, plural, one {{count} ukázková kapitola} few {{count} ukázkové kapitoly} many {{count} ukázkové kapitoly} other {{count} ukázkových kapitol}}",
-    startPreview: "Spustit ukázku",
+      "{count, plural, one {{count} kapitola dostupná} few {{count} kapitoly dostupné} many {{count} kapitoly dostupné} other {{count} kapitol dostupných}}",
+    // C: 去掉"ukázku"。
+    startPreview: "Začít číst",
     readOnUpstream: "Pokračovat ve čtení",
     synopsis: "Synopse",
-    previewChapters: "Ukázkové kapitoly",
-    // 施工工单_I18N_复数能力 §六.1/步骤 3: 承诺句，四档补全（one 分支沿用步骤 2
-    // 折键时逐字保留的原文；other 沿用步骤 2 已保留的旧 base 原文（属格复数，
-    // 恰好是 cs 的 other 类别正确形态）；few 为步骤 3 新译，many 与 few 同文——
-    // 小数专用罕见分支，非漏翻译）。
+    // C: 已停用（组件改用 chapterListTitle），按新英文"Chapters"重新翻译。
+    previewChapters: "Kapitoly",
+    // 施工工单_I18N_复数能力 §六.1/步骤 3 + C（本轮）：已停用（组件改用
+    // chapterListCount）。按新英文"{count, plural, one {1 chapter free to
+    // read now.} other {{count} chapters free to read now.}}"重新翻译，
+    // 去掉"na tomto webu"/"původní platformou"。
     previewChaptersDescription:
-      "{count, plural, one {1 ukázková kapitola na tomto webu, poskytnutá původní platformou.} few {{count} ukázkové kapitoly na tomto webu, poskytnuté původní platformou.} many {{count} ukázkové kapitoly na tomto webu, poskytnuté původní platformou.} other {{count} ukázkových kapitol na tomto webu, všechny poskytnuté původní platformou.}}",
-    noPreviewChapters: "Tato kniha zatím nemá žádné ukázkové kapitoly.",
+      "{count, plural, one {{count} kapitola je nyní zdarma k přečtení.} few {{count} kapitoly jsou nyní zdarma k přečtení.} many {{count} kapitoly jsou nyní zdarma k přečtení.} other {{count} kapitol je nyní zdarma k přečtení.}}",
+    // C: 已停用，按新英文"No chapters to read yet."重新翻译。
+    noPreviewChapters: "Zatím zde nejsou žádné kapitoly ke čtení.",
     relatedWorks: "Související díla",
     chapterHeading: "Kapitola {number}",
+    // A3/B2 新增键：章节列表区块标题，不使用"úplný seznam/všechny
+    // kapitoly"这类宣称完整性的措辞。
+    chapterListTitle: "Seznam kapitol",
+    // A3/B2 新增键，ICU plural（cs: one/few/many/other，many 与 few 同文）。
+    chapterListCount:
+      "{count, plural, one {Celkem {count} kapitola} few {Celkem {count} kapitoly} many {Celkem {count} kapitoly} other {Celkem {count} kapitol}}",
+    lockedChapterHint: "Uzamčeno — klepnutím budete pokračovat ve čtení",
+    // A3 新增键，ICU plural（cs: one/few/many/other）。省略"všechny/všech"
+    // （避免与后面数量名词的格搭配冲突），直接用"Zobrazit {count} kapitol"
+    // 与 chapterCount 的名词变形一致。
+    expandAllChapters:
+      "Zobrazit {count, plural, one {{count} kapitolu} few {{count} kapitoly} many {{count} kapitoly} other {{count} kapitol}}",
+    readMoreChapters: "Číst další kapitoly",
+    continueReadingModalTitle: "Pokračovat ve čtení",
+    // GPT 验收后修订（2026-09-29）：随英文 "Continue with Chapter {number} and the rest of the story." 重译；不再说"zde"（就在这里）。
+    continueReadingModalBody: "Pokračujte kapitolou {number} a zbytkem příběhu.",
+    closeDialog: "Zavřít",
+    newReleases: "Novinky",
+    continueReadingBarLabel: "Panel pokračování čtení",
   },
   chapter: {
     nav: "Navigace kapitolami",
     previous: "Předchozí kapitola",
     next: "Další kapitola",
     firstChapter: "Toto je první kapitola",
-    lastPreviewChapter: "Toto je poslední ukázková kapitola",
+    // C: 去掉"ukázková"，与上面 firstChapter 保持同一种句式。
+    // GPT 验收后修订（2026-09-29）：随英文 "This is the last free chapter" 补上"bezplatná"（免费）。
+    lastPreviewChapter: "Toto je poslední bezplatná kapitola",
     heading: "Kapitola {number}",
     readerSettings: "Nastavení čtení",
     closeReaderSettings: "Zavřít nastavení čtení",
-    previewPosition: "Ukázka {index} / {total}",
-    endOfPreview: "Zde ukázka na tomto webu končí.",
+    // C: 去掉"Ukázka"前缀，{index}/{total} 两个变量位置不变；用
+    // "z"代替"/"以避免与英文原文字面完全相同（触发 leftover-English 门禁）。
+    previewPosition: "{index} z {total}",
+    // C: 去掉"ukázka"/"na tomto webu"。
+    endOfPreview: "To je prozatím vše, co je k dispozici.",
     continuePrompt: "Chcete pokračovat ve čtení?",
-    remainingOnOrigin: "Další kapitoly pokračují na původní platformě.",
+    // C: 去掉"původní platformě"。
+    remainingOnOrigin: "Čtěte dál, abyste pokračovali v příběhu.",
     readOnUpstream: "Pokračovat ve čtení",
     theme: "Motiv",
     fontSize: "Velikost písma",
@@ -118,7 +152,8 @@ const messages = {
       "{count, plural, one {{count} dílo} few {{count} díla} many {{count} díla} other {{count} děl}}",
     empty: "Zatím zde nejsou žádná díla ke čtení.",
     allWorksTitle: "Všechna díla",
-    allWorksDescription: "Díla, která lze na tomto webu aktuálně číst.",
+    // C: 去掉"na tomto webu"。
+    allWorksDescription: "Díla aktuálně dostupná ke čtení.",
     allWorksEmpty: "Zatím nejsou žádná veřejně dostupná díla.",
     genreDescription: "Díla, která si můžete v této kolekci přečíst.",
     genreEmpty: "V této kolekci zatím nejsou žádná díla.",
@@ -128,18 +163,24 @@ const messages = {
   },
   unavailable: {
     unpublishedTitle: "Tato kniha je dočasně nedostupná",
-    unpublishedBody: "Byla odstraněna z tohoto webu. Pokud se vrátí, tato adresa bude nadále fungovat.",
+    // C: 原两句去掉第一句里的"odstraněna z tohoto webu"（"暂时不可用"已由
+    // unpublishedTitle 承担），只保留地址持久性提示，沿用旧译文的第二句。
+    unpublishedBody: "Pokud se vrátí, tato adresa bude nadále fungovat.",
     takedownTitle: "Tato kniha byla stažena",
-    takedownBody: "Na žádost držitele práv tento web tuto knihu již nenabízí.",
+    // C: 去掉"tento web"，用"zde"（here）对应新英文"no longer offered
+    // here"。
+    takedownBody: "Na žádost držitele práv už tato kniha zde není nabízena.",
     returnHome: "Zpět domů",
   },
   blog: {
     listTitle: "Blog",
-    listDescription: "Články a novinky z tohoto webu.",
+    // C: 去掉"z tohoto webu"。
+    listDescription: "Články a novinky.",
     empty: "Zatím nejsou dostupné žádné blogové články.",
     publishedOn: "Publikováno {date}",
     unpublishedTitle: "Tento příspěvek je dočasně nedostupný",
-    unpublishedBody: "Byl odstraněn z tohoto webu. Pokud se vrátí, tato adresa bude nadále fungovat.",
+    // C: 同 unavailable.unpublishedBody 的理由。
+    unpublishedBody: "Pokud se vrátí, tato adresa bude nadále fungovat.",
   },
   errorPage: {
     title: "Něco se pokazilo",
@@ -160,7 +201,8 @@ const messages = {
   meta: {
     notFound: "Nenalezeno",
     chapterNotFound: "Kapitola nenalezena",
-    siteDescription: "Objevujte romány a čtěte ukázkové kapitoly.",
+    // C: 去掉"ukázkové"（preview）。
+    siteDescription: "Objevujte romány a začněte číst bezplatné kapitoly.",
   },
 } satisfies LocaleMessages;
 

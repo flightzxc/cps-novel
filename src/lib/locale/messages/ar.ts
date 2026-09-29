@@ -38,14 +38,18 @@ const messages = {
     closeMenu: "أغلق القائمة",
     about: "حول الموقع",
     copyright: "المحتوى وحقوق النشر",
-    footerNote: "يقدم هذا الموقع فصولاً مجانية للمعاينة. القصة الكاملة متوفرة على المنصة الأصلية.",
+    // 运营前端与SEO优化第一轮 · C（Owner 2026-09-29 拍板）：去掉"هذا
+    // الموقع"/"المنصة الأصلية"，按本站就是官方站点处理，按新英文"New
+    // chapters are added regularly." 重新翻译。
+    footerNote: "تُضاف فصول جديدة بانتظام.",
     language: "اللغة",
   },
   home: {
     works: "الأعمال",
     viewAll: "عرض الكل",
     featuredEyebrow: "مميز",
-    startPreview: "ابدأ المعاينة",
+    // C: 去掉"المعاينة"（preview），按新英文"Start reading"重新翻译。
+    startPreview: "ابدأ القراءة",
     viewDetails: "عرض التفاصيل",
     carouselLabel: "الأعمال المميزة",
     carouselRole: "عرض دوّار",
@@ -69,37 +73,69 @@ const messages = {
     // tanwin，100+ 用裸单数名词）。
     chapterCount:
       "{count, plural, zero {لا فصول} one {فصل واحد} two {فصلان} few {{count} فصول} many {{count} فصلاً} other {{count} فصل}}",
-    // 施工工单_I18N_复数能力 §六.1: 六档全覆盖，数词-名词一致规则同上，用介词
-    // للمعاينة（供试读）代替属格结构。
+    // C: 去掉"للمعاينة"（preview），按新英文"{count} chapters available"
+    // 重新翻译；六档全覆盖，数词-名词一致规则同 chapterCount，形容词
+    // "متاح/متاحة/متاحان/متاحاً"随名词的性/数/格呼应。
     previewCount:
-      "{count, plural, zero {لا فصول للمعاينة} one {فصل واحد للمعاينة} two {فصلان للمعاينة} few {{count} فصول للمعاينة} many {{count} فصلاً للمعاينة} other {{count} فصل للمعاينة}}",
-    startPreview: "ابدأ المعاينة",
+      "{count, plural, zero {لا فصول متاحة} one {فصل واحد متاح} two {فصلان متاحان} few {{count} فصول متاحة} many {{count} فصلاً متاحاً} other {{count} فصل متاح}}",
+    // C: 去掉"المعاينة"。
+    startPreview: "ابدأ القراءة",
     readOnUpstream: "متابعة القراءة",
     synopsis: "القصة",
-    previewChapters: "فصول المعاينة",
-    // 施工工单_I18N_复数能力 §六.1/步骤 3: 承诺句，六档全补全。one/many 两分支
-    // 沿用步骤 2 折键时逐字保留的原文；zero/two/few/other 为步骤 3 新译，句式
-    // 与既有 one/many 分支保持一致（"يوفر هذا الموقع ... للمعاينة، ... من المنصة
-    // الأصلية"），只替换计数短语与呼应的谓语/代词数。
+    // C: 已停用（组件改用 chapterListTitle），按新英文"Chapters"重新翻译。
+    previewChapters: "الفصول",
+    // 施工工单_I18N_复数能力 §六.1/步骤 3 + C（本轮）：已停用（组件改用
+    // chapterListCount）。按新英文"{count, plural, one {1 chapter free to
+    // read now.} other {{count} chapters free to read now.}}"重新翻译，
+    // 去掉"هذا الموقع"/"المنصة الأصلية"。六档全覆盖，句式"يمكنك الآن قراءة
+    // ... مجانًا"，two 分支用宾格双数"فصلين"（作动名词 قراءة 的宾语，非主格
+    // 「فصلان」）。
     previewChaptersDescription:
-      "{count, plural, zero {لا يوفر هذا الموقع أي فصول للمعاينة، وجميع المحتوى مقدَّم من المنصة الأصلية.} one {يوفر هذا الموقع فصلاً واحدًا للمعاينة، مقدَّمًا من المنصة الأصلية.} two {يوفر هذا الموقع فصلين للمعاينة، وكلاهما مقدَّم من المنصة الأصلية.} few {يوفر هذا الموقع {count} فصول للمعاينة، جميعها مقدَّمة من المنصة الأصلية.} many {يوفر هذا الموقع {count} فصلاً للمعاينة، جميعها مقدَّمة من المنصة الأصلية.} other {يوفر هذا الموقع {count} فصل للمعاينة، جميعها مقدَّمة من المنصة الأصلية.}}",
-    noPreviewChapters: "لا توجد فصول معاينة لهذا الكتاب بعد.",
+      "{count, plural, zero {لا توجد فصول متاحة للقراءة مجانًا الآن.} one {يمكنك الآن قراءة فصل واحد مجانًا.} two {يمكنك الآن قراءة فصلين مجانًا.} few {يمكنك الآن قراءة {count} فصول مجانًا.} many {يمكنك الآن قراءة {count} فصلاً مجانًا.} other {يمكنك الآن قراءة {count} فصل مجانًا.}}",
+    // C: 已停用，按新英文"No chapters to read yet."重新翻译。
+    noPreviewChapters: "لا توجد فصول للقراءة بعد.",
     relatedWorks: "أعمال ذات صلة",
     chapterHeading: "الفصل {number}",
+    // A3/B2 新增键：章节列表区块标题，不使用"القائمة الكاملة/جميع
+    // الفصول"这类宣称完整性的措辞。
+    chapterListTitle: "قائمة الفصول",
+    // A3/B2 新增键，ICU plural（ar: zero/one/two/few/many/other），前缀
+    // "المجموع:"（总计）在各分支间保持不变，只替换计数短语。
+    chapterListCount:
+      "{count, plural, zero {المجموع: لا فصول} one {المجموع: فصل واحد} two {المجموع: فصلان} few {المجموع: {count} فصول} many {المجموع: {count} فصلاً} other {المجموع: {count} فصل}}",
+    lockedChapterHint: "مُقفَل — اضغط لمتابعة القراءة",
+    // A3 新增键，ICU plural（ar: zero/one/two/few/many/other）。省略
+    // "جميع"（避免与宾格双数/复数的格搭配冲突），two 分支用宾格双数
+    // "فصلين"（作动名词 عرض 的宾语）。
+    expandAllChapters:
+      "{count, plural, zero {عرض الفصول} one {عرض فصل واحد} two {عرض فصلين} few {عرض {count} فصول} many {عرض {count} فصلاً} other {عرض {count} فصل}}",
+    readMoreChapters: "قراءة المزيد من الفصول",
+    continueReadingModalTitle: "متابعة القراءة",
+    // GPT 验收后修订（2026-09-29）：随英文 "Continue with Chapter {number} and the rest of the story." 重译；不再说"هنا"（就在这里）。
+    continueReadingModalBody: "تابع القراءة مع الفصل {number} وبقية القصة.",
+    closeDialog: "إغلاق",
+    newReleases: "إصدارات جديدة",
+    continueReadingBarLabel: "شريط متابعة القراءة",
   },
   chapter: {
     nav: "التنقل بين الفصول",
     previous: "الفصل السابق",
     next: "الفصل التالي",
     firstChapter: "هذا هو الفصل الأول",
-    lastPreviewChapter: "هذا هو آخر فصل معاينة",
+    // C: 去掉"معاينة"，与上面 firstChapter 保持同一种句式。
+    // GPT 验收后修订（2026-09-29）：随英文 "This is the last free chapter" 补上"مجاني"（免费）。
+    lastPreviewChapter: "هذا هو آخر فصل مجاني",
     heading: "الفصل {number}",
     readerSettings: "إعدادات القراءة",
     closeReaderSettings: "إغلاق إعدادات القراءة",
-    previewPosition: "معاينة {index} / {total}",
-    endOfPreview: "هذه نهاية المعاينة على هذا الموقع.",
+    // C: 去掉"معاينة"前缀，{index}/{total} 两个变量位置不变；用
+    // "من"代替"/"以避免与英文原文字面完全相同（触发 leftover-English 门禁）。
+    previewPosition: "{index} من {total}",
+    // C: 去掉"المعاينة"/"هذا الموقع"。
+    endOfPreview: "هذا كل ما هو متاح حاليًا.",
     continuePrompt: "هل تريد متابعة القراءة؟",
-    remainingOnOrigin: "الفصول التالية تُتابَع على المنصة الأصلية.",
+    // C: 去掉"المنصة الأصلية"。
+    remainingOnOrigin: "تابع القراءة لتكتشف بقية القصة.",
     readOnUpstream: "متابعة القراءة",
     theme: "المظهر",
     fontSize: "حجم الخط",
@@ -123,7 +159,8 @@ const messages = {
       "{count, plural, zero {لا أعمال} one {عمل واحد} two {عملان} few {{count} أعمال} many {{count} عملاً} other {{count} عمل}}",
     empty: "لا توجد أعمال للقراءة هنا بعد.",
     allWorksTitle: "جميع الأعمال",
-    allWorksDescription: "الأعمال المتاحة حاليًا للقراءة على هذا الموقع.",
+    // C: 去掉"هذا الموقع"。
+    allWorksDescription: "أعمال متاحة للقراءة حاليًا.",
     allWorksEmpty: "لا توجد أعمال متاحة للجميع بعد.",
     genreDescription: "أعمال يمكنك قراءتها في هذه المجموعة.",
     genreEmpty: "لا توجد أعمال في هذه المجموعة بعد.",
@@ -133,18 +170,24 @@ const messages = {
   },
   unavailable: {
     unpublishedTitle: "هذا الكتاب غير متاح مؤقتًا",
-    unpublishedBody: "تمت إزالته من هذا الموقع. إذا عاد، سيظل هذا العنوان يعمل.",
+    // C: 原两句去掉第一句里的"إزالته من هذا الموقع"（"暂时不可用"已由
+    // unpublishedTitle 承担），只保留地址持久性提示，沿用旧译文的第二句。
+    unpublishedBody: "إذا عاد، سيظل هذا العنوان يعمل.",
     takedownTitle: "تم سحب هذا الكتاب",
-    takedownBody: "بناءً على طلب صاحب الحقوق، لم يعد هذا الموقع يقدم هذا الكتاب.",
+    // C: 去掉"هذا الموقع"，用"هنا"（here）对应新英文"no longer offered
+    // here"。
+    takedownBody: "بناءً على طلب صاحب الحقوق، لم يعد هذا الكتاب متوفرًا هنا.",
     returnHome: "العودة إلى الرئيسية",
   },
   blog: {
     listTitle: "Blog",
-    listDescription: "مقالات وتحديثات من هذا الموقع.",
+    // C: 去掉"من هذا الموقع"。
+    listDescription: "مقالات وتحديثات.",
     empty: "لا توجد تدوينات بعد.",
     publishedOn: "نُشر في {date}",
     unpublishedTitle: "هذا المنشور غير متاح مؤقتًا",
-    unpublishedBody: "تمت إزالته من هذا الموقع. إذا عاد، سيظل هذا العنوان يعمل.",
+    // C: 同 unavailable.unpublishedBody 的理由。
+    unpublishedBody: "إذا عاد، سيظل هذا العنوان يعمل.",
   },
   errorPage: {
     title: "حدث خطأ ما",
@@ -165,7 +208,8 @@ const messages = {
   meta: {
     notFound: "غير موجود",
     chapterNotFound: "الفصل غير موجود",
-    siteDescription: "استكشف الروايات واقرأ فصول المعاينة.",
+    // C: 去掉"فصول المعاينة"（preview）。
+    siteDescription: "اكتشف الروايات وابدأ بقراءة فصول مجانية.",
   },
 } satisfies LocaleMessages;
 

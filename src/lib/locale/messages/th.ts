@@ -38,14 +38,22 @@ const messages = {
     closeMenu: "ปิดเมนู",
     about: "เกี่ยวกับ",
     copyright: "เนื้อหาและลิขสิทธิ์",
-    footerNote: "เว็บไซต์นี้มีตอนตัวอย่างให้อ่านฟรี เนื้อเรื่องเต็มอยู่บนแพลตฟอร์มต้นฉบับ",
+    // แปลรอบที่ 1 ของทีมปฏิบัติการ · กลุ่ม A: ตาม C (Owner ตัดสิน 2026-09-29
+    // ให้ตัดคำว่า "เว็บไซต์นี้ / แพลตฟอร์มต้นฉบับ / ตัวอย่าง") แปลใหม่ตาม
+    // ต้นฉบับภาษาอังกฤษที่แก้ไขแล้ว ("New chapters are added regularly.")
+    // ไม่ใช้คำว่า "เว็บไซต์นี้" หรือ "แพลตฟอร์มต้นฉบับ"
+    footerNote: "มีตอนใหม่อัปเดตอย่างสม่ำเสมอ",
+    // WO-1 §5.4/§6.4 (new key): the locale switcher's trigger-button aria
+    // label. Consumed starting WO-2 — this key only exists so WO-2/WO-3
+    // don't both need to touch en.ts (see the work order's rationale).
     language: "ภาษา",
   },
   home: {
     works: "ผลงาน",
     viewAll: "ดูทั้งหมด",
     featuredEyebrow: "แนะนำ",
-    startPreview: "เริ่มอ่านตัวอย่าง",
+    // C: "Start preview" → "Start reading" ตัดคำว่า "ตัวอย่าง" ออก
+    startPreview: "เริ่มอ่าน",
     viewDetails: "ดูรายละเอียด",
     carouselLabel: "ผลงานแนะนำ",
     carouselRole: "แคโรเซล",
@@ -59,35 +67,60 @@ const messages = {
     tagsLabel: "แท็ก",
     genreTags: "แท็กหมวดหมู่",
     chapterCount: "{count} ตอน",
-    previewCount: "{count} ตอนตัวอย่าง",
-    startPreview: "เริ่มอ่านตัวอย่าง",
+    // C: ตัดคำว่า "ตัวอย่าง" ออก ตำแหน่ง {count} เหมือนเดิม
+    previewCount: "มี {count} ตอนให้อ่าน",
+    startPreview: "เริ่มอ่าน",
     readOnUpstream: "อ่านต่อ",
     synopsis: "เรื่องย่อ",
-    previewChapters: "ตอนตัวอย่าง",
-    // 施工工单_I18N_复数能力 §6.2 折键：th 的 Intl.PluralRules 只解出 other 一档
-    // （no one category），one 分支在 th 永远选不中，会被门禁的 CLDR
-    // 类别覆盖检查判为多余分支——因此这里只保留原 previewChaptersDescription
-    // 一句（已含 {count}，任意数量下都语法正确），原 …One 的单数措辞变体停用，
-    // 不再单独出现。
-    previewChaptersDescription:
-      "{count, plural, other {ตอนตัวอย่าง {count} ตอนบนเว็บไซต์นี้ ทั้งหมดจัดหาโดยแพลตฟอร์มต้นฉบับ}}",
-    noPreviewChapters: "หนังสือเล่มนี้ยังไม่มีตอนตัวอย่าง",
+    // คีย์นี้ไม่ถูกอ้างอิงจากคอมโพเนนต์แล้วหลังปรับใช้แนวทาง A3 (หัวข้อ
+    // เปลี่ยนไปใช้ chapterListTitle ด้านล่าง) คงค่าไว้เพื่อรักษาชุดคีย์
+    // เท่านั้น ปรับตาม C ตัดคำว่า "ตัวอย่าง" ออก
+    previewChapters: "ตอน",
+    // 施工工单_I18N_复数能力 §6.2 折键：th ของ Intl.PluralRules สามารถ
+    // แยกได้แค่หมวด other เท่านั้น (no one category) หมวด one จึงไม่มีทาง
+    // ถูกเลือกใน th และจะถูกตัดสินว่าเป็นสาขาส่วนเกินโดยการตรวจสอบความ
+    // ครอบคลุมหมวด CLDR ของ门禁——จึงคงไว้เฉพาะสาขา other (มี {count}
+    // อยู่แล้ว ถูกต้องตามหลักไวยากรณ์ทุกจำนวน) C: ตัดคำว่า "เว็บไซต์นี้"
+    // และ "แพลตฟอร์มต้นฉบับ" ออก พารามิเตอร์/หมวด plural เหมือนเดิม
+    previewChaptersDescription: "{count, plural, other {อ่านฟรีได้แล้ว {count} ตอน}}",
+    // หลังแยกการเผยแพร่ออกจาก Preview บล็อก "ไม่มีตอน" ทั้งบล็อกไม่ถูก
+    // เรนเดอร์แล้ว ไม่มีการอ้างอิง ปรับคำแปลตามความหมายต้นฉบับใหม่ตาม C
+    noPreviewChapters: "ยังไม่มีตอนให้อ่าน",
     relatedWorks: "ผลงานที่เกี่ยวข้อง",
     chapterHeading: "ตอนที่ {number}",
+    // คีย์ใหม่ A3/B2/A4/B1 · แปลรอบที่ 1 ของทีมปฏิบัติการ กลุ่ม A เสร็จแล้ว
+    // หลัก Owner: ห้ามมีความหมาย "เว็บไซต์นี้ / แพลตฟอร์มต้นฉบับ / ตัวอย่าง
+    // / พรีวิว" (ถือว่าเว็บไซต์นี้คือเว็บไซต์ทางการ)
+    chapterListTitle: "รายการตอน",
+    chapterListCount: "{count, plural, other {ทั้งหมด {count} ตอน}}",
+    lockedChapterHint: "ล็อกอยู่ — แตะเพื่ออ่านต่อ",
+    expandAllChapters: "แสดงทั้งหมด {count} ตอน",
+    readMoreChapters: "อ่านตอนเพิ่มเติม",
+    continueReadingModalTitle: "อ่านต่อ",
+    // GPT 验收后修订（2026-09-29）：随英文 "Continue with Chapter {number} and the rest of the story." 重译；不再说"ที่นี่"（就在这里）。
+    continueReadingModalBody: "อ่านต่อตั้งแต่ตอนที่ {number} และเรื่องราวที่เหลือ",
+    closeDialog: "ปิด",
+    newReleases: "ผลงานใหม่",
+    continueReadingBarLabel: "แถบอ่านต่อ",
   },
   chapter: {
     nav: "การนำทางตอน",
     previous: "ตอนก่อนหน้า",
     next: "ตอนถัดไป",
     firstChapter: "นี่คือตอนแรก",
-    lastPreviewChapter: "นี่คือตอนตัวอย่างสุดท้าย",
+    // C: ตัดคำว่า "ตัวอย่าง" ออก คงรูปประโยคเดียวกับ firstChapter
+    // GPT 验收后修订（2026-09-29）：随英文 "This is the last free chapter" 补上"ฟรี"（免费）。
+    lastPreviewChapter: "นี่คือตอนฟรีตอนสุดท้าย",
     heading: "ตอนที่ {number}",
     readerSettings: "ตั้งค่าการอ่าน",
     closeReaderSettings: "ปิดการตั้งค่าการอ่าน",
-    previewPosition: "ตัวอย่าง {index} / {total}",
-    endOfPreview: "นี่คือจุดสิ้นสุดของตัวอย่างบนเว็บไซต์นี้",
+    // C: ตัดคำนำ "ตัวอย่าง" ออก {index}/{total} เหมือนเดิม
+    previewPosition: "{index} / {total}",
+    // C: ตัดคำว่า "ตัวอย่าง" และ "เว็บไซต์นี้" ออก
+    endOfPreview: "ตอนนี้มีเนื้อหาให้อ่านเพียงเท่านี้",
     continuePrompt: "ต้องการอ่านต่อหรือไม่",
-    remainingOnOrigin: "ตอนถัดไปมีต่อบนแพลตฟอร์มต้นฉบับ",
+    // C: ตัดคำว่า "แพลตฟอร์มต้นฉบับ" ออก
+    remainingOnOrigin: "อ่านต่อเพื่อติดตามเรื่องราว",
     readOnUpstream: "อ่านต่อ",
     theme: "ธีม",
     fontSize: "ขนาดตัวอักษร",
@@ -109,7 +142,8 @@ const messages = {
     workCount: "{count} ผลงาน",
     empty: "ยังไม่มีผลงานให้อ่านที่นี่",
     allWorksTitle: "ผลงานทั้งหมด",
-    allWorksDescription: "ผลงานที่พร้อมให้อ่านบนเว็บไซต์นี้ในขณะนี้",
+    // C: ตัดคำว่า "บนเว็บไซต์นี้" ออก
+    allWorksDescription: "ผลงานที่พร้อมให้อ่านในขณะนี้",
     allWorksEmpty: "ยังไม่มีผลงานที่เปิดให้สาธารณะอ่าน",
     genreDescription: "ผลงานที่คุณสามารถอ่านได้ในคอลเลกชันนี้",
     genreEmpty: "ยังไม่มีผลงานในคอลเลกชันนี้",
@@ -119,18 +153,23 @@ const messages = {
   },
   unavailable: {
     unpublishedTitle: "หนังสือเล่มนี้ไม่พร้อมให้บริการชั่วคราว",
-    unpublishedBody: "หนังสือเล่มนี้ถูกนำออกจากเว็บไซต์นี้แล้ว หากกลับมา ที่อยู่นี้จะยังใช้งานได้",
+    // C: ตัดประโยค "ถูกนำออกจากเว็บไซต์นี้แล้ว" ออก คงไว้เฉพาะข้อความที่อยู่
+    // ยังใช้งานได้
+    unpublishedBody: "หากกลับมา ที่อยู่นี้จะยังใช้งานได้",
     takedownTitle: "หนังสือเล่มนี้ถูกถอดออกแล้ว",
-    takedownBody: "ตามคำร้องขอของเจ้าของลิขสิทธิ์ เว็บไซต์นี้จะไม่ให้บริการหนังสือเล่มนี้อีกต่อไป",
+    // C: ตัดคำว่า "เว็บไซต์นี้" ออก
+    takedownBody: "ตามคำร้องขอของเจ้าของลิขสิทธิ์ หนังสือเล่มนี้ไม่มีให้บริการที่นี่อีกต่อไป",
     returnHome: "กลับหน้าแรก",
   },
   blog: {
     listTitle: "Blog",
-    listDescription: "บทความและข่าวสารจากเว็บไซต์นี้",
+    // C: ตัดคำว่า "จากเว็บไซต์นี้" ออก
+    listDescription: "บทความและข่าวสาร",
     empty: "ยังไม่มีบทความบล็อก",
     publishedOn: "เผยแพร่เมื่อ {date}",
     unpublishedTitle: "บทความนี้ไม่พร้อมให้บริการชั่วคราว",
-    unpublishedBody: "บทความนี้ถูกนำออกจากเว็บไซต์นี้แล้ว หากกลับมา ที่อยู่นี้จะยังใช้งานได้",
+    // C: เหตุผลเดียวกับ unavailable.unpublishedBody
+    unpublishedBody: "หากกลับมา ที่อยู่นี้จะยังใช้งานได้",
   },
   errorPage: {
     title: "เกิดข้อผิดพลาด",
@@ -151,7 +190,8 @@ const messages = {
   meta: {
     notFound: "ไม่พบ",
     chapterNotFound: "ไม่พบตอน",
-    siteDescription: "ค้นพบนิยายและอ่านตอนตัวอย่าง",
+    // C: ตัดคำว่า "ตัวอย่าง" ออก
+    siteDescription: "ค้นพบนิยายและเริ่มอ่านตอนฟรี",
   },
 } satisfies LocaleMessages;
 

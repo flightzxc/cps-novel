@@ -26,10 +26,11 @@ describe("撤回状态", () => {
     render(<UnavailableScreen locale="en" reason="takedown" />);
 
     expect(screen.getByRole("heading", { name: "This book has been withdrawn" })).toBeTruthy();
-    // Owner 拍板 2026-09-10 (承诺句英文口径): "This withdrawal is permanent."
-    // was removed from `unavailable.takedownBody` — assert the remaining
-    // sentence is still shown, and that the deleted permanence claim is gone.
-    expect(screen.getByText(/no longer offers this book/)).toBeTruthy();
+    // C（Owner 2026-09-29 拍板"按运营原文做"）: `unavailable.takedownBody`
+    // 去掉了 "this site"，从 "...this site no longer offers this book." 改成
+    // "...this book is no longer offered here."——断言跟随新文案，"永久"这层
+    // 措辞此前就已经不在（Owner 拍板 2026-09-10），这条检查不变。
+    expect(screen.getByText(/no longer offered here/)).toBeTruthy();
     expect(screen.queryByText(/permanent/i)).toBeNull();
   });
 

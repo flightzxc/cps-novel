@@ -1,13 +1,16 @@
 import { buildBlogSeoMeta, type BlogSeoData } from "./seo-templates/blog";
+import { buildChapterSeoMeta, type ChapterSeoData } from "./seo-templates/chapter";
 import { buildCollectionSeoMeta, type CollectionSeoData } from "./seo-templates/collection";
 import { buildCategorySeoMeta, type CategorySeoData } from "./seo-templates/category";
 import { buildHomeSeoMeta, type HomeSeoData } from "./seo-templates/home";
 import { buildNovelSeoMeta, type NovelSeoData } from "./seo-templates/novel";
 
-export type { BlogSeoData, CategorySeoData, CollectionSeoData, HomeSeoData, NovelSeoData };
+export type { BlogSeoData, CategorySeoData, ChapterSeoData, CollectionSeoData, HomeSeoData, NovelSeoData };
 
 export type SeoInput =
   | { entity: "novel"; data: NovelSeoData; locale?: string }
+  /** D5: 章节页专用——三级 BreadcrumbList（首页/小说页/章节页），小说页本身仍用上面的 "novel"。 */
+  | { entity: "chapter"; data: ChapterSeoData; locale?: string }
   | { entity: "home"; data: HomeSeoData; locale?: string }
   | { entity: "collection"; data: CollectionSeoData; pageNumber?: number; locale?: string }
   | { entity: "category"; data: CategorySeoData; pageNumber?: number; locale?: string }
@@ -73,6 +76,8 @@ export function generateSeoMeta(input: SeoInput): SeoOutput {
   switch (input.entity) {
     case "novel":
       return buildNovelSeoMeta(input.data, locale);
+    case "chapter":
+      return buildChapterSeoMeta(input.data, locale);
     case "home":
       return buildHomeSeoMeta(input.data, locale);
     case "collection":

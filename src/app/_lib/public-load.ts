@@ -20,6 +20,7 @@ import {
 } from "@/lib/site/queries";
 import type { PublicTaxonomyTag } from "@/lib/site/public-taxonomy";
 import { getHomeCarouselItems } from "@/lib/site/home-carousel-service";
+import { getRelatedAndNewReleaseNovels } from "@/lib/site/related-novels";
 import { checkBlogArticlePublicAccess } from "@/server/publication/access";
 
 
@@ -104,6 +105,17 @@ export const loadChapterView = cache(async (articleId: string, chapterNumber: nu
 /** Publicly-visible Article siblings (other locales) for one Novel — hreflang input. */
 export const loadHreflangSiblings = cache(async (novelId: string) =>
   loadNovelHreflangSiblings(prisma, novelId),
+);
+
+/**
+ * A4/B3: "相关推荐" + "新书推荐"，小说页与章节页共用同一次查询。
+ * `articleId`/`novelId` 都是当前页面的 Article/Novel（Prisma 内部 id，不是
+ * `NovelDetailView.id` 那个 businessId）——两个页面的 loader 都已经手上有
+ * `access.articleId`/`access.novelId`，直接传入即可。
+ */
+export const loadRelatedAndNewReleases = cache(
+  async (locale: SiteLocale, articleId: string, novelId: string) =>
+    getRelatedAndNewReleaseNovels(prisma, locale, articleId, novelId),
 );
 
 // ---------------------------------------------------------------------------

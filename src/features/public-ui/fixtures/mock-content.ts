@@ -401,6 +401,8 @@ export function getMockChapterView(chapterNumber: number): ChapterView | null {
         ? devPreviewChapterPath(chapterNumber + 1)
         : undefined,
     readOnUpstreamHref: `${DETAIL_HREF}#mock-go-link`,
+    totalChapterCount: MOCK_NOVEL_DETAIL.totalChapterCount,
+    previewChapters: MOCK_NOVEL_DETAIL.previewChapters,
   };
 }
 

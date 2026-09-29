@@ -67,6 +67,60 @@ describe("generateSeoMeta", () => {
     expect(seo.openGraph.type).toBe("website");
   });
 
+  /**
+   * D5：章节页此前借用 `entity: "novel"` 的两级 BreadcrumbList（首页/当前页），
+   * 缺了小说页这一级。`entity: "chapter"`（`buildChapterSeoMeta`）补上第三级
+   * ——首页(1) → 小说页(2) → 章节页(3)，小说页自己保持两级（上面
+   * "builds novel metadata" 那条用例已经覆盖，不受影响）。
+   *
+   * 新增用例（交接文档"测试与门禁"一节要求）。变异③：把这里的第 2 级删掉
+   * 必须让这条用例变红，证明它真的在守三级结构，不是摆设。
+   */
+  it("builds chapter metadata with a 3-level BreadcrumbList (home → novel → chapter)", () => {
+    const seo = generateSeoMeta({
+      entity: "chapter",
+      data: {
+        title: "The Harbour · The Lantern Keeper's Daughter",
+        description: "The tide came in early that year.",
+        canonicalPath: "/novel/lantern-keepers-daughter-pabc123/chapter/1",
+        novelTitle: "The Lantern Keeper's Daughter",
+        novelCanonicalPath: "/novel/lantern-keepers-daughter-pabc123",
+        coverUrl: "/covers/lantern.jpg",
+        siteName: "cps-novel",
+        hreflangAlternates: {
+          "x-default": `${ORIGIN}/novel/lantern-keepers-daughter-pabc123/chapter/1`,
+          en: `${ORIGIN}/novel/lantern-keepers-daughter-pabc123/chapter/1`,
+        },
+      },
+    });
+
+    const jsonLd = JSON.parse(seo.other!["application/ld+json"]) as unknown[];
+    const breadcrumb = jsonLd.find(
+      (node): node is { itemListElement: unknown[] } =>
+        typeof node === "object" && node !== null && (node as { "@type"?: string })["@type"] === "BreadcrumbList",
+    );
+    expect(breadcrumb).toBeTruthy();
+    expect(breadcrumb!.itemListElement).toEqual([
+      { "@type": "ListItem", position: 1, name: "Home", item: `${ORIGIN}/` },
+      {
+        "@type": "ListItem",
+        position: 2,
+        name: "The Lantern Keeper's Daughter",
+        item: `${ORIGIN}/novel/lantern-keepers-daughter-pabc123`,
+      },
+      {
+        "@type": "ListItem",
+        position: 3,
+        name: "The Harbour · The Lantern Keeper's Daughter",
+        item: `${ORIGIN}/novel/lantern-keepers-daughter-pabc123/chapter/1`,
+      },
+    ]);
+    // 所有 item 都是通过 getSiteUrl/toAbsoluteUrl 生成的绝对地址。
+    for (const entry of breadcrumb!.itemListElement as { item: string }[]) {
+      expect(entry.item.startsWith(ORIGIN)).toBe(true);
+    }
+  });
+
   it("noindexes collection page 2", () => {
     const seo = generateSeoMeta({
       entity: "collection",

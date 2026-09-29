@@ -212,12 +212,24 @@ const EXPECTED_PLURAL_CATEGORIES: Readonly<Record<SiteLocale, readonly string[]>
  *  - `pagination.pageOf` ("{current} / {total}"): a locale-agnostic digit
  *    ratio, not prose — CPS's `common.pageOf` is identical across all 15
  *    of its locales for the same reason.
+ *  - `chapter.previewPosition` ("{index} / {total}"): same shape and same
+ *    reason as `pagination.pageOf` — a bare digit ratio built entirely from
+ *    interpolation, no translatable prose around it. Most locales render it
+ *    byte-identical to English on purpose (pure symbolic formatting); a few
+ *    (`ru`/`pl`/`cs`/`ar`) instead localize the separator (e.g. "{index} из
+ *    {total}"), which is also fine — the allowlist only needs to cover the
+ *    locales that legitimately stay identical, and per-key (not per-locale)
+ *    matches how `pagination.pageOf` is already registered above.
  *  - `nav.genres` ("Genres") in `fr`: the correct French word — French is
  *    the etymological source of the English word, not a leftover.
  *  - `pagination.label` ("Pagination") in `fr`: same — French is the
  *    etymological source of the English word.
  */
-const ALLOW_SAME_AS_EN: ReadonlySet<string> = new Set(["blog.listTitle", "pagination.pageOf"]);
+const ALLOW_SAME_AS_EN: ReadonlySet<string> = new Set([
+  "blog.listTitle",
+  "pagination.pageOf",
+  "chapter.previewPosition",
+]);
 const ALLOW_SAME_AS_EN_SCOPED: ReadonlySet<string> = new Set(["fr:nav.genres", "fr:pagination.label"]);
 
 const NON_EN_LOCALES = SITE_LOCALES.filter((locale) => locale !== "en");

@@ -64,9 +64,10 @@ describe("loadMessages", () => {
 
   it("treats an empty/whitespace-only value in the target locale as missing and falls back to English", () => {
     const es = loadMessages("es");
-    expect(t(es, "nav.footerNote", "es")).toBe(
-      "This site offers free preview chapters. The full story is on the original platform.",
-    );
+    // C（Owner 2026-09-29 拍板"按运营原文做"）：`nav.footerNote` 的英文原文
+    // 已改写（去掉 "this site" / "original platform"），这里跟随更新，
+    // 断言的仍是"回落到英文"这个机制本身，不是具体文案内容。
+    expect(t(es, "nav.footerNote", "es")).toBe("New chapters are added regularly.");
   });
 
   it("falls back wholesale to English for a namespace the target locale never touched", () => {

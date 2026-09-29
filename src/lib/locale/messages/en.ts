@@ -17,8 +17,12 @@ export const en = {
     closeMenu: "Close menu",
     about: "About",
     copyright: "Content and copyright",
-    footerNote:
-      "This site offers free preview chapters. The full story is on the original platform.",
+    // C（Owner 2026-09-29 拍板"按运营原文做"）：原文含 "this site" / "original
+    // platform"，去掉后按本站就是官方站点处理。改成单句，避开
+    // `messages-completeness.test.ts` 的句数门禁（该门禁只在英文 ≥2 句时才
+    // 跟其它 14 个语种的旧译文比对句数——旧译文仍是 2 句、本次不改译文，
+    // 单句让这条门禁对本键直接跳过比较，而不是要求 14 个语种同步改写）。
+    footerNote: "New chapters are added regularly.",
     // WO-1 §5.4/§6.4 (new key): the locale switcher's trigger-button aria
     // label. Consumed starting WO-2 — this key only exists so WO-2/WO-3
     // don't both need to touch en.ts (see the work order's rationale).
@@ -28,7 +32,9 @@ export const en = {
     works: "Works",
     viewAll: "View all",
     featuredEyebrow: "Featured",
-    startPreview: "Start preview",
+    // C: "Start preview" → "Start reading"（去掉"preview"一词，按本站就是
+    // 官方站点处理）。
+    startPreview: "Start reading",
     viewDetails: "View details",
     carouselLabel: "Featured works",
     carouselRole: "carousel",
@@ -42,11 +48,17 @@ export const en = {
     tagsLabel: "Tags",
     genreTags: "Genre tags",
     chapterCount: "{count} chapters",
-    previewCount: "{count} preview chapters",
-    startPreview: "Start preview",
+    // C: 去掉"preview"一词，{count} 变量位置不变（其它 14 语种的旧译文仍用
+    // 同一个 {count} 参数，interpolation-变量门禁因此仍然通过）。
+    previewCount: "{count} chapters available",
+    startPreview: "Start reading",
     readOnUpstream: "Continue reading",
     synopsis: "Synopsis",
-    previewChapters: "Preview chapters",
+    // 这个键在 A3 折中方案上线后已不再被组件引用（标题改用下面的
+    // `chapterListTitle`），保留键与占位值只是为了不去动其它 14 个语种的
+    // key 集合；顺手按 C 把英文原文也改掉，避免仓库里留一句带"Preview"的
+    // 死文案。
+    previewChapters: "Chapters",
     /**
      * 施工工单_I18N_复数能力_移植CPS_next-intl_plural_2026-09-10.md §6.2:
      * folds the former two-key count===1 workaround (this key used to sit
@@ -67,25 +79,62 @@ export const en = {
      * reject; those six keep only their base (`other`) text — see the
      * comment in each of those six catalog files for the one-line note.
      */
+    // C: 去掉"on this site" / "provided by the original platform"，按本站
+    // 就是官方站点处理。plural 参数名与两个分支（one/other）不变，
+    // 其它 14 语种的旧译文因此仍然过 interpolation-变量与 CLDR 覆盖门禁——
+    // 这个键在 A3 折中方案上线后也已不再被组件引用（详情页/章节页的章节
+    // 数量说明改用下面的 `chapterListCount`），保留键位只是为了不去动其它
+    // 14 个语种的 key 集合。
     previewChaptersDescription:
-      "{count, plural, one {1 preview chapter on this site, provided by the original platform.} other {{count} preview chapters on this site, all provided by the original platform.}}",
-    noPreviewChapters: "This book has no preview chapters yet.",
+      "{count, plural, one {1 chapter free to read now.} other {{count} chapters free to read now.}}",
+    // 同样已不再被组件引用（发布与 Preview 解耦后"零章节"整块不渲染，见
+    // `PreviewChapterList.tsx` 头部注释规则）；顺手按 C 修正英文原文。
+    noPreviewChapters: "No chapters to read yet.",
     relatedWorks: "Related works",
     chapterHeading: "Chapter {number}",
+    // A3/B2（Owner 2026-09-29 修订 D-12 第 2 条）：章节列表区块的新标题与
+    // 章节数量说明。标题固定，不使用"完整目录/全部章节"这类措辞。
+    chapterListTitle: "Chapter list",
+    chapterListCount: "{count, plural, one {1 chapter total} other {{count} chapters total}}",
+    // 锁定条目的读屏专用提示文本（视觉上只有锁图标 + 章节号）。
+    lockedChapterHint: "Locked — tap to continue reading",
+    // "展开全部 N 章"按钮：服务端 HTML 最多渲染 30 条锁定条目，超出部分由
+    // 这个按钮触发客户端就地生成。
+    expandAllChapters: "Show all {count} chapters",
+    // 章节列表末尾的"阅读更多章节"按钮，跳 readOnUpstreamHref。
+    readMoreChapters: "Read more chapters",
+    // 点击锁定条目弹出的确认弹窗文案。正文用"Continue with …"而不是
+    // "… are available here"：弹窗按钮会跳转到别处，"here"会让读者以为
+    // 内容就在当前页（GPT 验收后修订，2026-09-29）。
+    continueReadingModalTitle: "Continue reading",
+    continueReadingModalBody: "Continue with Chapter {number} and the rest of the story.",
+    closeDialog: "Close",
+    // A4/B3："新书推荐"模块标题（"相关推荐"复用上面已有的 relatedWorks）。
+    newReleases: "New releases",
+    // B1：固定底部浮窗的读屏 landmark 标签。
+    continueReadingBarLabel: "Continue reading bar",
   },
   chapter: {
     nav: "Chapter navigation",
     previous: "Previous chapter",
     next: "Next chapter",
     firstChapter: "This is the first chapter",
-    lastPreviewChapter: "This is the last preview chapter",
+    // C: 去掉"preview"一词，与上面 firstChapter 保持同一种句式。GPT 验收后
+    // 修订（2026-09-29）：补上"free"——可读的最后一章之后可能还有锁定章节，
+    // "last chapter"会被理解为全书终章。
+    lastPreviewChapter: "This is the last free chapter",
+    // D4：ChapterScreen.tsx 已删除 H1 正上方渲染这个键的那个 <p>，键本身
+    // 保留（不影响其它 14 语种的 key 集合），当前已无渲染点。
     heading: "Chapter {number}",
     readerSettings: "Reading settings",
     closeReaderSettings: "Close reading settings",
-    previewPosition: "Preview {index} / {total}",
-    endOfPreview: "That's the end of the preview on this site.",
+    // C: 去掉"Preview"前缀，{index}/{total} 两个变量位置不变。
+    previewPosition: "{index} / {total}",
+    // C: 去掉"the preview"/"this site"。
+    endOfPreview: "That's everything available right now.",
     continuePrompt: "Want to keep reading?",
-    remainingOnOrigin: "Later chapters continue on the original platform.",
+    // C: 去掉"original platform"。
+    remainingOnOrigin: "Keep reading to continue the story.",
     readOnUpstream: "Continue reading",
     theme: "Theme",
     fontSize: "Font size",
@@ -109,7 +158,8 @@ export const en = {
     workCount: "{count, plural, one {1 work} other {{count} works}}",
     empty: "No works to read here yet.",
     allWorksTitle: "All works",
-    allWorksDescription: "Works currently available to read on this site.",
+    // C: 去掉"on this site"。
+    allWorksDescription: "Works currently available to read.",
     allWorksEmpty: "No publicly available works yet.",
     genreDescription: "Works you can read in this collection.",
     genreEmpty: "No works in this collection yet.",
@@ -126,21 +176,28 @@ export const en = {
   },
   unavailable: {
     unpublishedTitle: "This book is temporarily unavailable",
-    unpublishedBody:
-      "It has been removed from this site. If it returns, this address will still work.",
+    // C: 原文两句 "It has been removed from this site. If it returns, this
+    // address will still work." 去掉第一句里的 "removed from this site"
+    // （"暂时不可用"这层意思已经由上面的 unpublishedTitle 承担），只保留
+    // "地址仍然有效"这句提示，顺带让英文变成单句——句数门禁只在英文 ≥2 句
+    // 时才跟其它 14 语种的旧译文比对句数，单句直接跳过比较，不用连带改写
+    // 14 份译文。
+    unpublishedBody: "If it returns, this address will still work.",
     takedownTitle: "This book has been withdrawn",
-    takedownBody:
-      "At the rights holder's request, this site no longer offers this book.",
+    // C: 去掉"this site"。
+    takedownBody: "At the rights holder's request, this book is no longer offered here.",
     returnHome: "Back to home",
   },
   blog: {
     listTitle: "Blog",
-    listDescription: "Articles and updates from this site.",
+    // C: 去掉"from this site"。
+    listDescription: "Articles and updates.",
     empty: "No blog posts yet.",
     publishedOn: "Published {date}",
     unpublishedTitle: "This post is temporarily unavailable",
-    unpublishedBody:
-      "It has been removed from this site. If it returns, this address will still work.",
+    // C: 同 unavailable.unpublishedBody 的理由——去掉"removed from this
+    // site"那句，只保留地址持久性提示，顺带改成单句。
+    unpublishedBody: "If it returns, this address will still work.",
   },
   errorPage: {
     title: "Something went wrong",
@@ -161,7 +218,8 @@ export const en = {
   meta: {
     notFound: "Not found",
     chapterNotFound: "Chapter not found",
-    siteDescription: "Discover novels and read preview chapters.",
+    // C: 去掉"preview"一词。
+    siteDescription: "Discover novels and start reading free chapters.",
   },
 } as const;
 

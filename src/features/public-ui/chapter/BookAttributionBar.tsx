@@ -32,7 +32,7 @@ export function BookAttributionBar({
       <a href={novel.href} className="flex shrink-0 items-center gap-3 rounded-novel-sm">
         <CoverImage
           src={novel.coverUrl}
-          alt=""
+          alt={novel.title}
           className="w-8 shrink-0"
           sizeHint="32px"
         />

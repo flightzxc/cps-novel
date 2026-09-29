@@ -8,6 +8,7 @@ import {
   loadChapterView,
   loadChrome,
   loadHreflangSiblings,
+  loadRelatedAndNewReleases,
 } from "@/app/_lib/public-load";
 import { noIndexMetadata, toNextMetadata } from "@/app/_lib/seo-metadata";
 import { ChapterScreen } from "@/features/public-ui/chapter/ChapterScreen";
@@ -18,7 +19,7 @@ import { buildChapterPath } from "@/lib/seo/chapter-path";
 import { buildNovelHreflangAlternates, type NovelHreflangSibling } from "@/lib/seo/novel-hreflang";
 import { generateSeoMeta } from "@/lib/seo/seo-meta-generator";
 import { canonicalUrl } from "@/lib/seo/seo-utils";
-import { decodeSlugParam, localePrefix } from "@/lib/slug/article-path";
+import { buildArticlePath, decodeSlugParam, localePrefix } from "@/lib/slug/article-path";
 
 /**
  * Chapter page shared body (WO-1 §6.1): extracted verbatim out of
@@ -98,13 +99,17 @@ export async function buildChapterMetadata(
     shortId: access.shortId,
     chapterNumber,
   });
+  // D5: novel page's own path — the breadcrumb's new middle level.
+  const novelPath = buildArticlePath({ locale, slug: access.slugPart, shortId: access.shortId });
   const seo = generateSeoMeta({
-    entity: "novel",
+    entity: "chapter",
     locale,
     data: {
       title: `${chapter.title} · ${chapter.novel.title}`,
       description: chapter.paragraphs[0] ?? chapter.novel.title,
       canonicalPath: routePath,
+      novelTitle: chapter.novel.title,
+      novelCanonicalPath: novelPath,
       coverUrl: chapter.novel.coverUrl,
       defaultOgImage: settings.defaultOgImage.trim() || null,
       siteName: settings.siteName,
@@ -145,7 +150,10 @@ export async function ChapterBody({
     );
   }
 
-  const chapter = await loadChapterView(access.articleId, chapterNumber);
+  const [chapter, recommendations] = await Promise.all([
+    loadChapterView(access.articleId, chapterNumber),
+    loadRelatedAndNewReleases(locale, access.articleId, access.novelId),
+  ]);
   if (!chapter) notFound();
 
   // See `buildChapterMetadata` above — locale-prefixed path.
@@ -155,13 +163,17 @@ export async function ChapterBody({
     shortId: access.shortId,
     chapterNumber,
   });
+  // D5: novel page's own path — the breadcrumb's new middle level.
+  const novelPath = buildArticlePath({ locale, slug: access.slugPart, shortId: access.shortId });
   const seo = generateSeoMeta({
-    entity: "novel",
+    entity: "chapter",
     locale,
     data: {
       title: `${chapter.title} · ${chapter.novel.title}`,
       description: chapter.paragraphs[0] ?? chapter.novel.title,
       canonicalPath: routePath,
+      novelTitle: chapter.novel.title,
+      novelCanonicalPath: novelPath,
       coverUrl: chapter.novel.coverUrl,
       defaultOgImage: settings.defaultOgImage.trim() || null,
       siteName: settings.siteName,
@@ -172,7 +184,13 @@ export async function ChapterBody({
   return (
     <>
       {seo.other ? <JsonLd json={seo.other["application/ld+json"]} /> : null}
-      <ChapterScreen locale={locale} chrome={chrome} chapter={chapter} />
+      <ChapterScreen
+        locale={locale}
+        chrome={chrome}
+        chapter={chapter}
+        related={recommendations.related}
+        newReleases={recommendations.newReleases}
+      />
     </>
   );
 }

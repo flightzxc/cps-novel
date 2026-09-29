@@ -97,6 +97,9 @@ vi.mock("@/app/_lib/public-load", () => ({
   loadNovelDetail: vi.fn(),
   loadChapterView: vi.fn(),
   loadHreflangSiblings: vi.fn(),
+  // A4/B3：默认给空结果，这份用例不关心推荐模块——各测试只关心
+  // generateMetadata/default 的自洽性，与推荐数据无关。
+  loadRelatedAndNewReleases: vi.fn().mockResolvedValue({ related: [], newReleases: [] }),
   loadBlogList: vi.fn(),
   loadBlogAccess: vi.fn(),
   loadBlogDetail: vi.fn(),
@@ -516,6 +519,8 @@ describe("chapter: bare-path and [locale]-prefixed shells agree", () => {
       paragraphs: ["First paragraph."],
       novel: { id: "biz-1", title: DETAIL.title, href: CARD.href, coverUrl: DETAIL.coverUrl },
       previewPosition: { index: 1, total: 1 },
+      totalChapterCount: 1,
+      previewChapters: [],
     });
   });
 
