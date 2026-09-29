@@ -12,7 +12,7 @@ Compose runtime 与 Health 身份一致性验证（`/api/health` 的 `metadataCo
 为已发布。
 
 > Notion 权威页：[海阅 版本管理与发版手账](https://app.notion.com/p/3e4601b5fd3481b5a39bcf48408015c2)。
-> 本文件是仓库内镜像；v0.5.0 当前快照、版本表与详细手账已直接同步到 Notion 并读回核对（Owner 已接受执行节点审计证据）。本文件变更不会自动写入 Notion。
+> 本文件是仓库内镜像；v0.5.4 当前快照、版本表与详细手账已直接同步到 Notion 并读回核对。本文件变更不会自动写入 Notion。
 
 ## 当前快照
 
