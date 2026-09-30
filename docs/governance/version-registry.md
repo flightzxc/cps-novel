@@ -12,7 +12,7 @@ Compose runtime 与 Health 身份一致性验证（`/api/health` 的 `metadataCo
 为已发布。
 
 > Notion 权威页：[海阅 版本管理与发版手账](https://app.notion.com/p/3e4601b5fd3481b5a39bcf48408015c2)。
-> 本文件是仓库内镜像；v0.5.4 当前快照、版本表与详细手账已直接同步到 Notion 并读回核对。本文件变更不会自动写入 Notion。
+> 本文件是仓库内镜像；v0.5.5 当前运行快照、版本表与部署记录（页面验收未收官）已直接同步到 Notion 并读回核对。本文件变更不会自动写入 Notion。
 
 ## 当前快照
 
@@ -25,7 +25,7 @@ Compose runtime 与 Health 身份一致性验证（`/api/health` 的 `metadataCo
 - 第二阶段仅部署 haiyue-vps，站名原值 PulseNovel；前后批次 paused、运行领取任务与定类在途计数 0，线上 20 条迁移与 Final 一致。在线备份及 restore-list、目标机归档与载入身份核验通过；env 备份后仅改两版本号，标签开关、写闸、白名单和其它 env 字节不变。PREPROD_APPROVED_MIGRATION=YES 下 RELEASE=PASS / EXIT=0，health 0.5.5 / Final，五应用服务及 postgres healthy、postgres ID 未变，备份 ok、核验时近五分钟错误日志 0，容器 Next 16.3.3。
 - 页面 HTTP：小说、章节、浏览、分类 title/OG、分类 canonical/hreflang、错前缀 308、不存在短码 404/noindex/无占位符通过相应子项。分类 sitemap 仍为旧缓存、页面网址缺 /ko；首页 absolute 标题、ko 404 本地化标题与提示词口径有差异；404 HTTP HTML 未见页头页脚品牌，待真实浏览器确认；博客既有开关 false，正常列表不可测；15 个公开 ko 书页均无其它语种同书版。Browser 扩展连接超时，交互及 375px 截图未完成，等待 Owner 重连登录和口径裁决。未修改门禁、功能、开关或主动写业务数据。
 - 第三阶段未获授权、未执行，时间/approver/模板备份路径均无；已发布文章 TKD 回填不在范围。领取批次由 Owner 恢复。回滚目标 v0.5.4 Final `0260d8d89c8aba83ba7eb8887ae94461489a927c`，使用原发布目录和 `/opt/cps-novel/shared/env/preprod.env.bak-v055-20260930T114510Z`，不重建 postgres；模板恢复另行授权。
-- tag、生成 CHANGELOG、正式发布开发日志待页面验收收官；Notion 状态同步另行回读。本版已切换运行身份，不能宣称第二阶段全项验收或 Next 正式切换前置条件已满足；公网可见仍须正式域名切换。
+- tag、生成 CHANGELOG、正式发布开发日志待页面验收收官；Notion 当前快照、台账行与部署记录已按实际阻塞状态同步并回读，未冒称正式验收收官。本版已切换运行身份，不能宣称第二阶段全项验收或 Next 正式切换前置条件已满足；公网可见仍须正式域名切换。
 
 ### v0.5.4 —— 已发布到预生产（2026-09-29，`RELEASE=PASS`）
 
