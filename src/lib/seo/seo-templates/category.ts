@@ -26,6 +26,16 @@ export interface CategorySeoData {
   description?: string | null;
   siteName: string;
   defaultOgImage?: string | null;
+  /**
+   * The locales in which this category page really returns 200 (has public
+   * content) — `listCategoryPublicLocales` in `@/lib/site/category-locales`,
+   * plus the page's own locale. Required, no default: a category page that
+   * blind-enumerates all 15 registered locales advertises hreflang URLs that
+   * are 404 (an empty category is a 404 here), which is exactly the defect
+   * this field exists to prevent — same "no silent default" reasoning as
+   * `SiteShell`'s required `locale`.
+   */
+  hreflangLocales: readonly string[];
 }
 
 export function buildCategorySeoMeta(
@@ -76,7 +86,7 @@ export function buildCategorySeoMeta(
     },
     alternates: {
       canonical,
-      languages: buildHreflangAlternates(`/category/${data.slug}`, locale),
+      languages: buildHreflangAlternates(`/category/${data.slug}`, locale, data.hreflangLocales),
     },
     robots: shouldNoIndex(pageNumber) ? { index: false, follow: true } : undefined,
     other: { "application/ld+json": JSON.stringify([collectionLd, breadcrumbLd]) },

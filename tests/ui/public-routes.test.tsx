@@ -378,10 +378,17 @@ describe("public chapter", () => {
 });
 
 describe("novel segment not-found.tsx", () => {
-  it("declares noindex and renders the unavailable explanation", () => {
+  // 2026-09-30（404 页面照搬 CPS）：这个壳渲染的是真正的 404 页
+  // （`notFoundPage.*` 文案，带站名的页头页脚），不再是"暂时不可用，地址仍然有
+  // 效"的下架页——一个不存在的地址不该对读者说"稍后可能回来"。真正的下架页
+  // （`UnavailableScreen`）由详情页/章节页的 `unavailable` 分支自己渲染，仍有
+  // 各自的用例覆盖，没有被这里的改动波及。
+  it("declares noindex and renders the 404 explanation, not the unavailable one", async () => {
     expect(novelNotFoundModule.metadata.robots).toEqual({ index: false, follow: false });
-    render(novelNotFoundModule.default());
-    expect(screen.getByTestId("unavailable-screen")).toBeTruthy();
+    render(await novelNotFoundModule.default());
+    expect(screen.getByTestId("public-not-found-panel")).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "This page could not be found" })).toBeTruthy();
+    expect(screen.queryByTestId("unavailable-screen")).toBeNull();
   });
 });
 

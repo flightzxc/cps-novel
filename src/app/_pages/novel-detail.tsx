@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { notFound } from "next/navigation";
+import { notFound, permanentRedirect } from "next/navigation";
 
 import { JsonLd } from "@/app/_components/json-ld";
 import {
@@ -76,7 +76,9 @@ export async function buildNovelMetadata(
   if (access.kind === "not_found") {
     return noIndexMetadata(getPublicT(locale)("meta.notFound"));
   }
-  if (access.kind === "unavailable" || access.kind === "takedown") {
+  // `redirect`: 页面本体马上 308 到规范地址，这份元数据不会被任何人看到；
+  // 走 noindex 只是让它在任何意外泄漏的情形下不被收录。
+  if (access.kind === "unavailable" || access.kind === "takedown" || access.kind === "redirect") {
     return noIndexMetadata(access.title);
   }
 
@@ -126,6 +128,12 @@ export async function NovelBody({
   ]);
 
   if (access.kind === "not_found" || access.kind === "takedown") notFound();
+  // 短码能找到已发布文章、但语种前缀不对或 slug 过期：308 到规范地址（CPS
+  // `permanentRedirect(getCanonicalDramaPath(data))` 同款，
+  // `drama/[slug]/page.tsx:204-207`）。不是批量 301——每条请求各自按短码就地纠正。
+  if (access.kind === "redirect") {
+    permanentRedirect(buildArticlePath({ locale: access.locale, slug: access.slugPart, shortId: access.shortId }));
+  }
   if (access.kind === "unavailable") {
     return (
       <UnavailableScreen

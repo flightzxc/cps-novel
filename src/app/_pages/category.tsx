@@ -7,11 +7,12 @@ import { loadActiveLocales, loadChrome } from "@/app/_lib/public-load";
 import { toNextMetadata } from "@/app/_lib/seo-metadata";
 import { CollectionScreen } from "@/features/public-ui/collection/CollectionScreen";
 import { Pagination } from "@/features/public-ui/collection/Pagination";
-import type { SiteLocale } from "@/lib/locale/locale-canonical";
+import { SITE_LOCALES, type SiteLocale } from "@/lib/locale/locale-canonical";
 import { getPublicT } from "@/lib/locale/messages";
 import { generateSeoMeta } from "@/lib/seo/seo-meta-generator";
 import { localePrefix } from "@/lib/slug/article-path";
 import { getPublicCategoryPage } from "@/lib/site/category-queries";
+import { listCategoryPublicLocales } from "@/lib/site/category-locales";
 
 /**
  * Category page shared body (WO-1 §6.1): extracted verbatim out of
@@ -41,10 +42,14 @@ async function load(locale: SiteLocale, slug: string, rawPage: string | string[]
     getPublicCategoryPage(prisma, locale, slug, page),
     loadChrome(locale, undefined, undefined, activeLocales),
   ]);
-  return category ? { category, ...chrome } : null;
+  return category ? { category, activeLocales, ...chrome } : null;
 }
 
-function seoFor(locale: SiteLocale, loaded: NonNullable<Awaited<ReturnType<typeof load>>>) {
+function seoFor(
+  locale: SiteLocale,
+  loaded: NonNullable<Awaited<ReturnType<typeof load>>>,
+  hreflangLocales: readonly SiteLocale[],
+) {
   return generateSeoMeta({
     entity: "category",
     locale,
@@ -55,8 +60,28 @@ function seoFor(locale: SiteLocale, loaded: NonNullable<Awaited<ReturnType<typeo
       description: loaded.category.category.description,
       siteName: loaded.settings.siteName,
       defaultOgImage: loaded.settings.defaultOgImage || loaded.category.novels[0]?.coverUrl,
+      hreflangLocales,
     },
   });
+}
+
+/**
+ * 2026-09-30：hreflang 只列这个分类**确实有公开内容**（页面返回 200）的语种，
+ * 不再对 15 个已登记语种盲枚举——海阅的空分类是 404，盲枚举会把 404 地址当作
+ * "其它语言版本"。当前语种恒在（自引用）；其它语种从动态层活跃语种里逐个用
+ * 页面自己的查询确认。只有 `generateMetadata` 需要它（`alternates` 只出现在
+ * 元数据里），页面本体不重复这份开销。
+ */
+async function hreflangLocalesFor(
+  locale: SiteLocale,
+  loaded: NonNullable<Awaited<ReturnType<typeof load>>>,
+): Promise<SiteLocale[]> {
+  const others = await listCategoryPublicLocales(
+    prisma,
+    loaded.category.category.slug,
+    loaded.activeLocales.filter((candidate) => candidate !== locale),
+  );
+  return SITE_LOCALES.filter((candidate) => candidate === locale || others.includes(candidate));
 }
 
 export async function buildCategoryMetadata(
@@ -66,9 +91,10 @@ export async function buildCategoryMetadata(
 ): Promise<Metadata> {
   const [{ slug }, query] = await Promise.all([params, searchParams]);
   const loaded = await load(locale, slug, query.page);
-  return loaded
-    ? toNextMetadata(seoFor(locale, loaded))
-    : { title: getPublicT(locale)("meta.notFound"), robots: { index: false, follow: false } };
+  if (!loaded) {
+    return { title: getPublicT(locale)("meta.notFound"), robots: { index: false, follow: false } };
+  }
+  return toNextMetadata(seoFor(locale, loaded, await hreflangLocalesFor(locale, loaded)));
 }
 
 export async function CategoryBody({
@@ -84,7 +110,9 @@ export async function CategoryBody({
   const loaded = await load(locale, slug, query.page);
   if (!loaded) notFound();
   const t = getPublicT(locale);
-  const seo = seoFor(locale, loaded);
+  // 页面本体只读 `seo.other`（JSON-LD），不读 `alternates`——hreflang 只在
+  // `generateMetadata` 里算，这里传自引用即可，不重复查其它语种。
+  const seo = seoFor(locale, loaded, [locale]);
   return <>
     {seo.other ? <JsonLd json={seo.other["application/ld+json"]} /> : null}
     <CollectionScreen
