@@ -11,17 +11,14 @@ import { Prisma, type PrismaClient } from "@prisma/client";
 import { createWithPublicPageShortIdRetry, generatePublicPageShortIdCandidate } from "@/lib/slug/short-id";
 import { withDbRetry } from "@/lib/db/db-retry";
 import { SITE_LOCALES, type SiteLocale } from "@/lib/locale/locale-canonical";
-import {
-  buildNovelTemplateValues,
-  isTemplateRenderError,
-  renderArticleDraft,
-} from "@/lib/seo/template";
+import { isTemplateRenderError } from "@/lib/seo/template";
 import {
   selectActiveArticleTemplate,
   validateStoredArticleTemplate,
 } from "@/server/article-templates";
 
-import { promoRedirectUrlFor, resolveReadyPromoLinkForNovel } from "./promo";
+import { resolveReadyPromoLinkForNovel } from "./promo";
+import { countPreviewChapters, renderNovelArticleDraft } from "./render-novel-article";
 import {
   ARTICLE_GENERATE_AUDIT_ACTION,
   auditActorId,
@@ -61,13 +58,6 @@ type ArticleRow = {
 
 function asSiteLocale(locale: string): SiteLocale | null {
   return (SITE_LOCALES as readonly string[]).includes(locale) ? (locale as SiteLocale) : null;
-}
-
-async function countPreviewChapters(db: { novelChapter?: { count: (args: unknown) => Promise<number> } }, novelId: string): Promise<number> {
-  if (!db.novelChapter) return 0;
-  return db.novelChapter.count({
-    where: { novelId, status: "preview", deletedAt: null, content: { isNot: null } },
-  });
 }
 
 async function loadExistingArticle(
@@ -233,18 +223,15 @@ async function runGenerate(
   }
 
   const previewChapterCount = await countPreviewChapters(db as never, novel.id);
-  const rendered = renderArticleDraft(
-    selected.source,
-    buildNovelTemplateValues({
-      title: novel.title,
-      description: novel.description,
-      coverUrl: novel.coverUrl,
-      totalChapterCount: novel.totalChapterCount,
-      previewChapterCount,
-      promoRedirectUrl: promoRedirectUrlFor(promo.promo.publicRedirectCode),
-    }),
-    { templateKey: selected.template.templateKey, novelId: novel.id },
-  );
+  // 渲染与取值的唯一入口——存量文章的 SEO 字段回写工具（`article-templates/tkd-repair.ts`）
+  // 调用的是同一个函数，见 `render-novel-article.ts` 头注释。
+  const rendered = renderNovelArticleDraft({
+    source: selected.source,
+    templateKey: selected.template.templateKey,
+    novel,
+    previewChapterCount,
+    promoPublicRedirectCode: promo.promo.publicRedirectCode,
+  });
 
   const article = await createWithPublicPageShortIdRetry((candidateShortId) =>
     db.article.create({
