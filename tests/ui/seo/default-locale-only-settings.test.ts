@@ -48,7 +48,7 @@ const loadBlogList = vi.mocked(publicLoad.loadBlogList);
 const categoryQueries = await import("@/lib/site/category-queries");
 const getPublicCategoryPage = vi.mocked(categoryQueries.getPublicCategoryPage);
 
-const { buildHomeMetadata } = await import("@/app/_pages/home");
+const { buildHomeMetadata, HomeBody } = await import("@/app/_pages/home");
 const { buildBrowseMetadata } = await import("@/app/_pages/browse");
 const { buildBlogListMetadata } = await import("@/app/_pages/blog-list");
 
@@ -156,6 +156,35 @@ describe("首页：只有默认语种读后台单值", () => {
       expect(titleOf(metadata), locale).toBe(t("meta.homeTitleFallback"));
       expect(metadata.description, locale).toBe(t("meta.siteDescription"));
     }
+  });
+});
+
+describe("首页 WebSite JSON-LD 与 meta 同一套取值（复核 A3）", () => {
+  /** HomeBody 只返回元素树；取第一个 JSON-LD script 的内容。 */
+  async function websiteJsonLd(locale: "en" | "ja") {
+    const tree = await HomeBody({ locale });
+    const children = (tree as unknown as { props: { children: unknown[] } }).props.children;
+    const node = children.find((child) => typeof child === "object" && child !== null && typeof (child as { props?: { json?: unknown } }).props?.json === "string") as { props: { json: string } };
+    return JSON.parse(node.props.json) as { "@type": string; name: string; description: string };
+  }
+
+  it("/ja：JSON-LD description 是 ja 文案，与 <meta description> 一致，不读后台值（此前是英文后台值）", async () => {
+    loadChrome.mockResolvedValue({ settings: SETTINGS_FILLED, chrome: CHROME });
+    const meta = await buildHomeMetadata("ja");
+    const ld = await websiteJsonLd("ja");
+    const t = getPublicT("ja");
+    expect(ld["@type"]).toBe("WebSite");
+    expect(ld.description).toBe(t("meta.siteDescription"));
+    expect(ld.description).toBe(meta.description);
+    expect(ld.description).not.toContain("ADMIN");
+  });
+
+  it("en：JSON-LD description 与 meta 一样读后台值；后台为空时同样退回文案", async () => {
+    loadChrome.mockResolvedValue({ settings: SETTINGS_FILLED, chrome: CHROME });
+    expect((await websiteJsonLd("en")).description).toBe("ADMIN-HOME-DESCRIPTION");
+    expect((await websiteJsonLd("en")).description).toBe((await buildHomeMetadata("en")).description);
+    loadChrome.mockResolvedValue({ settings: SETTINGS_EMPTY, chrome: CHROME });
+    expect((await websiteJsonLd("en")).description).toBe(getPublicT("en")("meta.siteDescription"));
   });
 });
 
