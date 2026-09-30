@@ -507,7 +507,6 @@ describe("助手自身的可信度（防止'合并'被悄悄换成假的）", ()
 
 afterEach(() => {
   if (process.env.TKD_PRINT_TITLES === "1" && titleLog.length > 0) {
-    // eslint-disable-next-line no-console
     console.log(titleLog.splice(0).map((row) => `${row.route}\t${row.title}\t[og:title=${row.ogTitle}]`).join("\n"));
   }
 });
