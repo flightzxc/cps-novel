@@ -207,7 +207,7 @@ describe("执行清单：冻结整轮范围 + 每批对账", () => {
     locale: "de",
     updatedAt: new Date("2026-09-30T00:00:00.000Z"),
     bodyTemplate: "<article><h1>{novel_title}</h1></article>",
-    seoTemplate: { title: "{novel_title}", metaTitle: "{novel_title} Roman - Kostenlose Kapitel online lesen", metaDescription: "{novel_description}" },
+    seoTemplate: { title: "{novel_title}", metaTitle: "{novel_title} Roman: Kapitel online gratis lesen", metaDescription: "{novel_description}" },
     slugTemplate: "",
     metaKeywordsTemplate: "",
   };
@@ -334,7 +334,7 @@ describe("备份文件解析 parseTemplateTkdBackup", () => {
     slug: "das-verlorene-koenigreich",
     status: "published",
     before: { metaTitle: "Das verlorene Königreich", metaDescription: "d" },
-    after: { metaTitle: "Das verlorene Königreich Roman - Kostenlose Kapitel online lesen", metaDescription: "d" },
+    after: { metaTitle: "Das verlorene Königreich Roman: Kapitel online gratis lesen", metaDescription: "d" },
     readUpdatedAt: "2026-09-30T00:00:00.000Z",
     beforeSeoMetadata: { metaTitle: "Das verlorene Königreich", metaDescription: "d", coverUrl: "x" },
   };

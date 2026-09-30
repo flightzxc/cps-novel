@@ -11,14 +11,14 @@
     "es.json": {
       "locale": "es",
       "templateKey": "system-default-es-v1",
-      "sha256": "78eac92b1ac8992d41ced019a9cb8de1d673e4fc4674c9c16afc61a5a356769b",
-      "bytes": 1484
+      "sha256": "97c26307ddfa385ae27332e0757746f86f2a4ee5a4f28a09d1497838d1d126f9",
+      "bytes": 1479
     },
     "pt-BR.json": {
       "locale": "pt-BR",
       "templateKey": "system-default-pt-BR-v1",
-      "sha256": "5747b94a460f446a8c4d3c32e580e3fe4f7d07c4d4a76c29f49c58e09f16f634",
-      "bytes": 1506
+      "sha256": "5549b79a1c508070319f21fd371ef12dfaa4c1642a7a2428453d762a431173e6",
+      "bytes": 1500
     },
     "id.json": {
       "locale": "id",
@@ -29,8 +29,8 @@
     "vi.json": {
       "locale": "vi",
       "templateKey": "system-default-vi-v1",
-      "sha256": "e85ad2e348c3038862f78b64ffff714a1030e66f700fc62dbcbd4f7a6cb39f48",
-      "bytes": 1491
+      "sha256": "8d89544c2493c368caac9718811652c82ae3b8a259faa05882c02bf03c97b9c8",
+      "bytes": 1475
     },
     "th.json": {
       "locale": "th",
@@ -59,38 +59,38 @@
     "ar.json": {
       "locale": "ar",
       "templateKey": "system-default-ar-v1",
-      "sha256": "01dddf9f3d45c83418ff56a447dcc8be676a7bfeb3d6d91f2dacd498b1744a46",
-      "bytes": 1571
+      "sha256": "c6ba9d28ee6fca07caa45ede2cd10fecef77d4fd6a5f07a92c95416894fe1f47",
+      "bytes": 1562
     },
     "fr.json": {
       "locale": "fr",
       "templateKey": "system-default-fr-v1",
-      "sha256": "08532bcfaadf783646d600822523376f042c3fb9a015bea27d55896059f939b9",
-      "bytes": 1500
+      "sha256": "068ca60b647fd4de88a2091627d4ce81f0597b0ae87b5db7f4b69c3bddc7cf07",
+      "bytes": 1490
     },
     "de.json": {
       "locale": "de",
       "templateKey": "system-default-de-v1",
-      "sha256": "6a65fd8a102ac2a02474020bd4a40d58f49ddd0d1deab9664d175e56ac051ac0",
-      "bytes": 1468
+      "sha256": "2ef0489137b2998a21bda5ce573006db02b5f74702b31443715fe8c2e518302b",
+      "bytes": 1463
     },
     "pl.json": {
       "locale": "pl",
       "templateKey": "system-default-pl-v1",
-      "sha256": "576febeb5ef7ac0f2e3f764163d79e2355628e1b198406086ea915dc573ff37b",
-      "bytes": 1489
+      "sha256": "c5c184369ecf907dbf168926e28e51172332dedfe730c2204ec210a34a04c065",
+      "bytes": 1481
     },
     "cs.json": {
       "locale": "cs",
       "templateKey": "system-default-cs-v1",
-      "sha256": "35f2490f6b98516ea4f497261089f4dd6fa4057b9105e92042fe20c0c4ef45d9",
-      "bytes": 1479
+      "sha256": "f72ec35a38ef86ce043c312426aa322efdcc3e79083198d806a4fedd3f5826d6",
+      "bytes": 1466
     },
     "ru.json": {
       "locale": "ru",
       "templateKey": "system-default-ru-v1",
-      "sha256": "b31b6f277beb54cbcccfd98c2bb4b561ba503a8bec10beac06694331709db0b7",
-      "bytes": 1598
+      "sha256": "74809a11bc46abb0987adfad70f1d7fdfd6f86e6fda0ebc99824f1d58aa227f4",
+      "bytes": 1584
     }
   }
 }
