@@ -8,7 +8,22 @@ import {
 } from "./_shared";
 
 export interface NovelSeoData {
+  /**
+   * `<title>` / og:title / twitter:title 用的标题——小说详情页传的是去重后的文章 SEO 标题
+   * （`seoMetadata.metaTitle`，新默认模板下是 "{书名} Novel - Read Free Chapters Online" 这样的
+   * 自然语言句式）。
+   */
   title: string;
+  /**
+   * 只给结构化数据用的干净书名：Book JSON-LD 的 `name`、面包屑第 2 级、og:image 的 alt。
+   * 不传时退回 `title`（此前的行为）。
+   *
+   * 为什么要单独一个字段（TKD 对齐 CPS，Owner 2026-09-30）：模板 SEO 标题改成自然语言之后，
+   * `title` 不再等于书名；若 JSON-LD 仍读 `title`，全站所有小说页的 Book.name 与面包屑都会变成
+   * 营销句式。CPS 剧集详情页同样把两者分开——`<title>`/og 用文章 SEO 标题，JSON-LD 用剧名
+   * （`v8.5.1:src/app/[locale]/(site)/drama/[slug]/page.tsx` 的 `generateMetadata`）。
+   */
+  name?: string;
   description: string;
   canonicalPath: string;
   coverUrl?: string | null;
@@ -37,8 +52,8 @@ export interface NovelSeoData {
 }
 
 export function buildNovelSeoMeta(data: NovelSeoData, locale = "en") {
-  const name = data.title.trim();
-  const title = name;
+  const title = data.title.trim();
+  const name = data.name?.trim() || title;
   const description = truncateDescription(data.description);
   const canonical = buildCanonical(data.canonicalPath);
   const ogImage = resolveOgImage(data.coverUrl, data.defaultOgImage);

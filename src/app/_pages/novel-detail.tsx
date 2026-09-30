@@ -111,6 +111,8 @@ export async function buildNovelMetadata(
     locale,
     data: {
       title: metadataTitleFor(novel, settings.siteName),
+      // JSON-LD 与面包屑用干净书名，不用 SEO 标题（见 `NovelSeoData.name`）。
+      name: novel.title,
       description: novel.seoDescription ?? novel.description,
       canonicalPath: routePath,
       coverUrl: novel.coverUrl,
@@ -165,6 +167,8 @@ export async function NovelBody({
     locale,
     data: {
       title: metadataTitleFor(novel, settings.siteName),
+      // JSON-LD 与面包屑用干净书名，不用 SEO 标题（见 `NovelSeoData.name`）。
+      name: novel.title,
       description: novel.seoDescription ?? novel.description,
       canonicalPath: routePath,
       coverUrl: novel.coverUrl,

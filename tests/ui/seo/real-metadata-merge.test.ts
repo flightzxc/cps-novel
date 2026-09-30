@@ -88,6 +88,7 @@ const loadArticleAccess = vi.mocked(publicLoad.loadArticleAccess);
 const loadNovelDetail = vi.mocked(publicLoad.loadNovelDetail);
 const loadChapterView = vi.mocked(publicLoad.loadChapterView);
 const loadHreflangSiblings = vi.mocked(publicLoad.loadHreflangSiblings);
+const loadRelatedAndNewReleases = vi.mocked(publicLoad.loadRelatedAndNewReleases);
 const loadBlogList = vi.mocked(publicLoad.loadBlogList);
 const loadBlogAccess = vi.mocked(publicLoad.loadBlogAccess);
 const loadBlogDetail = vi.mocked(publicLoad.loadBlogDetail);
@@ -281,6 +282,69 @@ describe("小说详情：SEO 标题 + 布局后缀；已带后缀的先去重", 
     const resolved = await resolve("/ja/novel/x", { routeDir: "[locale]/novel/[slugParam]", params: { locale: "ja", slugParam: "x" } });
     expect(resolved.title.absolute).toBe("失われた王国 小説 - 無料の章をオンラインで読む | PulseNovel");
     expectSocialTitlesWithoutSuffix(resolved, "失われた王国 小説 - 無料の章をオンラインで読む");
+  });
+});
+
+describe("小说详情/章节页 JSON-LD：书名干净，不带营销句式的 SEO 标题（复核 A1，对应 CPS 剧集详情页）", () => {
+  /** 取页面 Body 输出里第一个 JSON-LD script 的内容（Body 只返回元素树，不渲染子组件）。 */
+  function firstJsonLd(tree: unknown): Array<Record<string, unknown>> {
+    const children = (tree as { props: { children: unknown[] } }).props.children;
+    const node = children.find(
+      (child) => typeof child === "object" && child !== null && "props" in child && typeof (child as { props: { json?: unknown } }).props.json === "string",
+    ) as { props: { json: string } } | undefined;
+    if (!node) throw new Error("no JSON-LD element in the page body");
+    return JSON.parse(node.props.json) as Array<Record<string, unknown>>;
+  }
+
+  beforeEach(() => {
+    loadArticleAccess.mockResolvedValue(PUBLISHED_ACCESS);
+    loadRelatedAndNewReleases.mockResolvedValue({ related: [], newReleases: [] } as never);
+  });
+
+  it("新模板生效（seoTitle = 'X Novel - Read Free Chapters Online'）：<title>/og:title 用 SEO 标题，Book.name 与面包屑第 2 级仍是 'Lost Kingdom'", async () => {
+    const seoTitle = "Lost Kingdom Novel - Read Free Chapters Online";
+    loadNovelDetail.mockResolvedValue(novelDetail({ seoTitle }) as never);
+    const merged = await resolve("/novel/lost-kingdom-pabc123", { routeDir: "novel/[slugParam]", params: { slugParam: "lost-kingdom-pabc123" } });
+    expect(merged.title.absolute).toBe(`${seoTitle} | PulseNovel`);
+    expectSocialTitlesWithoutSuffix(merged, seoTitle);
+
+    const { NovelBody } = await import("@/app/_pages/novel-detail");
+    const jsonLd = firstJsonLd(await NovelBody({ locale: "en", params: Promise.resolve({ slugParam: "lost-kingdom-pabc123" }) }));
+    const [book, breadcrumb] = jsonLd as [Record<string, unknown>, { itemListElement: Array<{ position: number; name: string }> }];
+    expect(book).toMatchObject({ "@type": "Book", name: "Lost Kingdom" });
+    expect(breadcrumb.itemListElement.find((item) => item.position === 2)!.name).toBe("Lost Kingdom");
+    expect(JSON.stringify(jsonLd)).not.toContain("Read Free Chapters Online");
+  });
+
+  it("SEO 标题自带站点后缀的老数据：JSON-LD 同样是干净书名（不带 '| PulseNovel'）", async () => {
+    loadNovelDetail.mockResolvedValue(novelDetail({ seoTitle: "Lost Kingdom | PulseNovel" }) as never);
+    const { NovelBody } = await import("@/app/_pages/novel-detail");
+    const [book] = firstJsonLd(await NovelBody({ locale: "en", params: Promise.resolve({ slugParam: "x" }) }));
+    expect(book).toMatchObject({ name: "Lost Kingdom" });
+  });
+
+  it("章节页面包屑第 2 级拿到的是干净书名（chapter.novel.title = 文章标题，不是 SEO 标题）", async () => {
+    const article = {
+      id: "article-1",
+      title: "Lost Kingdom",
+      slug: "lost-kingdom",
+      locale: "en",
+      publicPageShortId: "abc123",
+      publishedAt: new Date("2026-01-01T00:00:00Z"),
+      summary: "s",
+      body: "b",
+      // 文章自己的 SEO 标题是营销句式——章节页的书名来源不能是它。
+      seoMetadata: { metaTitle: "Lost Kingdom Novel - Read Free Chapters Online" },
+      novel: { id: "n1", businessId: "biz-1", title: "Lost Kingdom", description: "d", coverUrl: null, locale: "en", totalChapterCount: 12 },
+    };
+    loadChapterView.mockResolvedValue(
+      toChapterView(article, { canonicalChapterNumber: 3, title: "Chapter 3: The Gate", body: "The gate opened." }, [{ canonicalChapterNumber: 3, title: null }]) as never,
+    );
+    const { ChapterBody } = await import("@/app/_pages/chapter");
+    const jsonLd = firstJsonLd(await ChapterBody({ locale: "en", params: Promise.resolve({ slugParam: "lost-kingdom-pabc123", chapterNumber: "3" }) }));
+    const breadcrumb = jsonLd.find((entry) => entry["@type"] === "BreadcrumbList") as { itemListElement: Array<{ position: number; name: string }> };
+    expect(breadcrumb.itemListElement.find((item) => item.position === 2)!.name).toBe("Lost Kingdom");
+    expect(JSON.stringify(jsonLd)).not.toContain("Read Free Chapters Online");
   });
 });
 
