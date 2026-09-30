@@ -29,7 +29,7 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: routerPush }),
 }));
 
-const { LocaleSwitcher, planLocaleSwitch, buildLocaleHomeHref } = await import(
+const { LocaleSwitcher, planLocaleSwitch, buildLocaleHomeHref, isBookPagePath } = await import(
   "@/features/public-ui/layout/LocaleSwitcher"
 );
 
@@ -55,8 +55,17 @@ function clickLocale(nativeName: string) {
   return item;
 }
 
-function toastText(locale: SiteLocale, target: string): string {
-  return getPublicT(locale)("localeSwitcher.fallbackToast", { locale: target });
+/**
+ * 两个提示键（Owner 2026-09-30）：书页（详情页、章节页）用 `fallbackToast`
+ * （逐字照搬 CPS），其它页面用 `fallbackToastPage`。用例里按页面类型显式指定期望
+ * 的键——选错键（书页弹了"page"、分类页弹了"title"）必须变红。
+ */
+type ToastKey = "localeSwitcher.fallbackToast" | "localeSwitcher.fallbackToastPage";
+const BOOK_TOAST: ToastKey = "localeSwitcher.fallbackToast";
+const PAGE_TOAST: ToastKey = "localeSwitcher.fallbackToastPage";
+
+function toastText(locale: SiteLocale, target: string, key: ToastKey): string {
+  return getPublicT(locale)(key, { locale: target });
 }
 
 beforeEach(() => {
@@ -166,7 +175,7 @@ describe("书的详情页切换语种（照搬 CPS switchLocale + /api/novel-loc
 
     await waitFor(() => expect(routerPush).toHaveBeenCalledTimes(1));
     expect(routerPush).toHaveBeenCalledWith("/");
-    expect(screen.getByRole("status").textContent).toBe(toastText("ko", "English"));
+    expect(screen.getByRole("status").textContent).toBe(toastText("ko", "English", BOOK_TOAST));
   });
 
   it("接口出错（网络失败）→ 同样弹提示 + 跳目标语种首页", async () => {
@@ -176,7 +185,7 @@ describe("书的详情页切换语种（照搬 CPS switchLocale + /api/novel-loc
     clickLocale("English");
 
     await waitFor(() => expect(routerPush).toHaveBeenCalledWith("/"));
-    expect(screen.getByRole("status").textContent).toBe(toastText("ko", "English"));
+    expect(screen.getByRole("status").textContent).toBe(toastText("ko", "English", BOOK_TOAST));
   });
 
   it("接口返回 5xx → 同样弹提示 + 跳目标语种首页（不因为 500 把用户留在原地）", async () => {
@@ -225,11 +234,11 @@ describe("书的详情页切换语种（照搬 CPS switchLocale + /api/novel-loc
 
 describe("章节页 / 分类页 / 博客文章页 / 其它路径：不查对应关系，直接弹提示 + 跳目标语种首页", () => {
   it.each([
-    ["章节页", "/ko/novel/deungdae-pabc12345/chapter/3"],
-    ["分类页", "/ko/category/romance"],
-    ["博客文章页", "/ko/blog/some-post"],
-    ["一个不存在的地址（404 页本身）", "/ko/no-such-page"],
-  ])("%s：一次网络请求都不发，弹提示，跳 en 首页", async (_label, pathname) => {
+    ["章节页", "/ko/novel/deungdae-pabc12345/chapter/3", BOOK_TOAST],
+    ["分类页", "/ko/category/romance", PAGE_TOAST],
+    ["博客文章页", "/ko/blog/some-post", PAGE_TOAST],
+    ["一个不存在的地址（404 页本身）", "/ko/no-such-page", PAGE_TOAST],
+  ] as const)("%s：一次网络请求都不发，弹提示（键随页面类型），跳 en 首页", async (_label, pathname, key) => {
     mockPathname = pathname;
     renderSwitcher("ko", ["en", "ko"]);
 
@@ -237,7 +246,7 @@ describe("章节页 / 分类页 / 博客文章页 / 其它路径：不查对应�
 
     await waitFor(() => expect(routerPush).toHaveBeenCalledWith("/"));
     expect(fetchMock).not.toHaveBeenCalled();
-    expect(screen.getByRole("status").textContent).toBe(toastText("ko", "English"));
+    expect(screen.getByRole("status").textContent).toBe(toastText("ko", "English", key));
   });
 
   it("目标是非 en 语种时跳的是 /{locale} 而不是 /{locale}/", async () => {
@@ -247,7 +256,7 @@ describe("章节页 / 分类页 / 博客文章页 / 其它路径：不查对应�
     clickLocale("Español");
 
     await waitFor(() => expect(routerPush).toHaveBeenCalledWith("/es"));
-    expect(screen.getByRole("status").textContent).toBe(toastText("ko", "Español"));
+    expect(screen.getByRole("status").textContent).toBe(toastText("ko", "Español", BOOK_TOAST));
   });
 
   it("/browse?category=… 同样走保底", async () => {
@@ -260,7 +269,7 @@ describe("章节页 / 分类页 / 博客文章页 / 其它路径：不查对应�
     await waitFor(() => expect(routerPush).toHaveBeenCalled());
     expect(routerPush).toHaveBeenCalledWith("/?category=romance");
     expect(fetchMock).not.toHaveBeenCalled();
-    expect(screen.getByRole("status")).toBeTruthy();
+    expect(screen.getByRole("status").textContent).toBe(toastText("ko", "English", PAGE_TOAST));
   });
 
   it("菜单条目的 href 在保底页上是目标语种首页（新标签打开也不会落进 404 路径）", () => {
@@ -284,6 +293,51 @@ describe("章节页 / 分类页 / 博客文章页 / 其它路径：不查对应�
     expect(fetchMock).not.toHaveBeenCalled();
     expect(screen.queryByRole("status")).toBeNull();
     expect(document.cookie).not.toContain("NEXT_LOCALE");
+  });
+});
+
+describe("提示用哪个键：书页 → fallbackToast（逐字照搬 CPS），其它页面 → fallbackToastPage", () => {
+  it.each([
+    ["/novel/deungdae-pabc12345", true],
+    ["/ko/novel/deungdae-pabc12345", true],
+    ["/ko/novel/deungdae-pabc12345/", true],
+    ["/novel/deungdae-pabc12345/chapter/3", true],
+    ["/ko/novel/deungdae-pabc12345/chapter/12", true],
+    ["/", false],
+    ["/ko", false],
+    ["/ko/category/romance", false],
+    ["/category/romance", false],
+    ["/ko/blog/some-post", false],
+    ["/ko/browse", false],
+    ["/ko/no-such-page", false],
+    ["/novel", false],
+    ["/novel/x/reviews", false],
+  ])("isBookPagePath(%s) = %s", (pathname, expected) => {
+    expect(isBookPagePath(pathname)).toBe(expected);
+  });
+
+  it("英文界面下的两句话一字不差：书页说 “This title”（CPS 原文），分类页说 “This page”", async () => {
+    mockPathname = "/novel/lantern-pabc12345/chapter/3";
+    const first = renderSwitcher("en", ["en", "ko"]);
+    clickLocale("한국어");
+    await waitFor(() => expect(routerPush).toHaveBeenCalled());
+    expect(screen.getByRole("status").textContent).toBe("This title isn't available in 한국어 yet. Switched to the 한국어 homepage.");
+
+    first.unmount();
+    window.sessionStorage.clear();
+    routerPush.mockReset();
+    mockPathname = "/category/romance";
+    renderSwitcher("en", ["en", "ko"]);
+    clickLocale("한국어");
+    await waitFor(() => expect(routerPush).toHaveBeenCalled());
+    expect(screen.getByRole("status").textContent).toBe("This page isn't available in 한국어 yet. Switched to the 한국어 homepage.");
+  });
+
+  it("书页上不会出现另一个键的文案，非书页上也是（15 语种目录里两句话本来就不同）", () => {
+    for (const locale of ["en", "ko", "ja", "de", "ru"] as const) {
+      const t = getPublicT(locale);
+      expect(t(BOOK_TOAST, { locale: "X" })).not.toBe(t(PAGE_TOAST, { locale: "X" }));
+    }
   });
 });
 
@@ -344,7 +398,7 @@ describe("提示跨页面存活（SiteShell 在页面 body 里，router.push 后
 
     clickLocale("English");
     expect(routerPush).toHaveBeenCalledWith("/");
-    expect(screen.getByRole("status").textContent).toBe(toastText("ko", "English"));
+    expect(screen.getByRole("status").textContent).toBe(toastText("ko", "English", BOOK_TOAST));
 
     // 导航：旧页面卸载，目标语种首页上新挂载一个切换器。
     first.unmount();
@@ -353,7 +407,7 @@ describe("提示跨页面存活（SiteShell 在页面 body 里，router.push 后
     renderSwitcher("en", ["en", "ko"]);
 
     // 读回来的仍是点击时按源语种（ko）生成的那句话。
-    expect(screen.getByRole("status").textContent).toBe(toastText("ko", "English"));
+    expect(screen.getByRole("status").textContent).toBe(toastText("ko", "English", BOOK_TOAST));
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(3600);

@@ -33,12 +33,22 @@ import { decodeSlugParam, localePrefix } from "@/lib/slug/article-path";
  *   （`/browse?category=…` 例外：分类在目标语种没有文章时就是 404，归入下一类）。
  * - **书的详情页**（`/novel/{slug}`）：先问 `/api/novel-locale-check`
  *   （CPS `/api/drama-locale-check` 的移植），目标语种有这本书的公开页就直接
- *   跳过去；没有、或者接口出错，就弹 `localeSwitcher.fallbackToast` 提示，
- *   再跳**目标语种首页**。
+ *   跳过去；没有、或者接口出错，就弹提示，再跳**目标语种首页**。
  * - **其余一切**——章节页、分类页、博客文章页、404 页本身、任何未登记的路径：
  *   不查对应关系（Owner：切换语种后有没有同一本书不确定，也无法关联），
  *   直接弹提示 + 跳目标语种首页。白名单思路：只有明确知道"各语种都存在"的页面
  *   才直接切换，其它默认走保底，不会再把用户送进 404。
+ *
+ * 提示有两个键（Owner 2026-09-30 拍板）：书页（详情页、章节页）用
+ * `localeSwitcher.fallbackToast`——逐字照搬 CPS 原文（"This title isn't
+ * available…"）；其它页面（分类页、博客页、404 页、未登记路径）用
+ * `localeSwitcher.fallbackToastPage`——CPS 没有对应场景的新键（"This page
+ * isn't available…"）。选哪个键由 `isBookPagePath` 决定。
+ *
+ * 分页等 query 参数**照 CPS 保留**：CPS 的 `switchLocale` 对非详情页走
+ * `buildPathOnlyLocaleHref`，原样带上 search（和 hash），所以 `/browse?page=N`
+ * 直接切过去、带着 `?page=N`——目标语种页数不足时会 404，这是登记在
+ * `docs/governance/port-registry.md` 里的已知残留，不在这里另造规则。
  *
  * 两处必须交代的、与 CPS 不同的实现细节（行为等价，结构不同）：
  * 1. 提示要跨页面存活。CPS 的页头在 layout 里、导航时不重挂载，提示状态留在
@@ -206,6 +216,18 @@ export function planLocaleSwitch(pathname: string, search?: string): LocaleSwitc
   return { kind: "fallback" };
 }
 
+/**
+ * 书页 = 小说详情页（`/novel/{slug}`）与章节页（`/novel/{slug}/chapter/{n}`）。
+ * 决定切换提示用哪个键：书页用逐字照搬 CPS 的 `fallbackToast`，其它页面用
+ * `fallbackToastPage`。与 `planLocaleSwitch` 各管一件事：一个决定"去哪儿"，
+ * 一个决定"说什么"。
+ */
+export function isBookPagePath(pathname: string): boolean {
+  const segments = stripLocalePrefix(pathname).split("/").filter(Boolean);
+  if (segments[0] !== "novel") return false;
+  return segments.length === 2 || (segments.length === 4 && segments[2] === "chapter");
+}
+
 /** 菜单条目的 `href`：直接切换用换前缀的路径，其余一律是目标语种首页（真正的跳转由点击处理接管）。 */
 function hrefForMenuItem(pathname: string, target: SiteLocale): string {
   return planLocaleSwitch(pathname).kind === "direct"
@@ -343,7 +365,8 @@ function LocaleSwitcherMenu({ selectable }: { selectable: readonly SiteLocale[] 
 
   /** 目标语种没有对应内容：弹提示（同时留给下一页），再回目标语种首页。 */
   function fallBackToHome(target: SiteLocale, search: string) {
-    const message = t("localeSwitcher.fallbackToast", { locale: SITE_LOCALE_NATIVE_NAMES[target] });
+    const key = isBookPagePath(pathname ?? "/") ? "localeSwitcher.fallbackToast" : "localeSwitcher.fallbackToastPage";
+    const message = t(key, { locale: SITE_LOCALE_NATIVE_NAMES[target] });
     stashSwitchToast(message);
     showToast(message);
     router.push(buildLocaleHomeHref(target, search));

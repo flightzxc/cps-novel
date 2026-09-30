@@ -179,7 +179,10 @@ const messages = {
     body: "주소가 잘못되었거나 이 페이지가 더 이상 존재하지 않습니다.",
   },
   localeSwitcher: {
+    // 书页（详情页、章节页）：逐字照搬 CPS v8.5.1 src/messages/ko.json:136。
     fallbackToast: "이 작품은 아직 {locale}로 제공되지 않습니다. {locale} 홈으로 이동했습니다.",
+    // 其它页面（分类页、博客页、404 页、未登记路径）：新键，CPS 无此场景。
+    fallbackToastPage: "이 페이지는 아직 {locale}로 제공되지 않습니다. {locale} 홈으로 이동했습니다.",
   },
   pagination: {
     previous: "이전",

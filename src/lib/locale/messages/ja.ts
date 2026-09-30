@@ -181,7 +181,10 @@ const messages = {
     body: "アドレスが間違っているか、このページはすでに存在しません。",
   },
   localeSwitcher: {
+    // 书页（详情页、章节页）：逐字照搬 CPS v8.5.1 src/messages/ja.json:136。
     fallbackToast: "この作品はまだ{locale}で利用できません。{locale}のホームに移動しました。",
+    // 其它页面（分类页、博客页、404 页、未登记路径）：新键，CPS 无此场景。
+    fallbackToastPage: "このページはまだ{locale}で利用できません。{locale}のホームに移動しました。",
   },
   pagination: {
     previous: "前へ",

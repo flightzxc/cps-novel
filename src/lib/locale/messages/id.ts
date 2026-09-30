@@ -153,7 +153,10 @@ const messages = {
     body: "Alamatnya mungkin salah, atau halaman ini sudah tidak ada lagi.",
   },
   localeSwitcher: {
-    fallbackToast: "Buku ini belum tersedia dalam {locale}. Dialihkan ke beranda {locale}.",
+    // 书页（详情页、章节页）：逐字照搬 CPS v8.5.1 src/messages/id.json:136。
+    fallbackToast: "Judul ini belum tersedia dalam {locale}. Dialihkan ke beranda {locale}.",
+    // 其它页面（分类页、博客页、404 页、未登记路径）：新键，CPS 无此场景。
+    fallbackToastPage: "Halaman ini belum tersedia dalam {locale}. Dialihkan ke beranda {locale}.",
   },
   pagination: {
     previous: "Sebelumnya",

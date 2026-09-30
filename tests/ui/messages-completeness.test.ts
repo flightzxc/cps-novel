@@ -342,7 +342,16 @@ const SENTENCE_COUNT_LOCALES = NON_EN_LOCALES.filter((locale) => locale !== "th"
  *    style choice, not a systemic zh-Hant rule gap. Pre-existing at
  *    `f1ccf6f`; not touched by this pass (施工纪律：不改任何译文措辞).
  */
-const SENTENCE_COUNT_EXCEPTIONS: ReadonlySet<string> = new Set(["zh-Hant:nav.footerNote"]);
+const SENTENCE_COUNT_EXCEPTIONS: ReadonlySet<string> = new Set([
+  "zh-Hant:nav.footerNote",
+  // 2026-09-30 `localeSwitcher.fallbackToast`（书页提示）是**逐字照搬 CPS v8.5.1**
+  // 的（Owner 拍板"CPS 有则照搬，文字一个不动"）。CPS 的繁体中文原文
+  // "此劇目尚未提供{locale}版本，已切換至{locale}首頁。" 用逗号连成一句，英文原文
+  // 是两句——与上面 `nav.footerNote` 同一种地道的中文并句，没有任何信息被截断。
+  // 不改译文，只登记例外。（非书页那个键 `fallbackToastPage` 是新译，按英文拆成
+  // 两句，不需要例外。）
+  "zh-Hant:localeSwitcher.fallbackToast",
+]);
 
 describe("message catalog completeness (all 15 registered locales)", () => {
   it("SITE_LOCALES and CATALOGS agree on the set of registered locales", () => {

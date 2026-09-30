@@ -192,7 +192,10 @@ const messages = {
     body: "Adres może być nieprawidłowy albo ta strona już nie istnieje.",
   },
   localeSwitcher: {
-    fallbackToast: "Ta książka nie jest jeszcze dostępna w języku „{locale}”. Przełączono na stronę główną w języku „{locale}”.",
+    // 书页（详情页、章节页）：逐字照搬 CPS v8.5.1 src/messages/pl.json:136。
+    fallbackToast: "Ten tytuł nie jest jeszcze dostępny w języku {locale}. Przełączono na stronę główną {locale}.",
+    // 其它页面（分类页、博客页、404 页、未登记路径）：新键，CPS 无此场景。
+    fallbackToastPage: "Ta strona nie jest jeszcze dostępna w języku „{locale}”. Przełączono na stronę główną w języku „{locale}”.",
   },
   pagination: {
     previous: "Poprzednia",
