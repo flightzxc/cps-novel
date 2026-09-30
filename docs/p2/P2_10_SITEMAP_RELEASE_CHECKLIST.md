@@ -11,6 +11,10 @@
 ## 静态服务不变量
 
 - [ ] `/sitemap.xml` 和 `/sitemap/[fileName]` 只读 `current` 静态 release；缺失返回 503，不查库、不动态生成。
+      **运营 V2 更新（2026-09-30）**：release 存在但总索引没列出的分片（没有公开内容的语种、关闭的博客家族、
+      超出实际分片数的序号）返回 **404**，不再是 503；503 只留给"还没有任何 release / 索引读不到"以及
+      "索引列了却读不到文件"。旧 `site_categorypage_<语种>[_N].xml` 308 到同语种 `site_mainpage_<语种>.xml`
+      （分类页已并入 mainpage；语种没有内容时 404）。
 - [ ] 正式 locale HTTP dry-run 仅在 D-7 关闭后执行；fixture 验收只通过 generator 参数注入并直接读盘。
 
 ## PR2 开关门禁
@@ -24,6 +28,9 @@
       取决于该语种下是否存在真正公开可见的 Article（既有可见性谓词族），不取决于任何白名单。
       提前开启 flag 的风险因而变成"给尚无发布内容的语种生成空分片"而非"确定性失败任务"——
       是否已具备开启条件仍需 Owner 按当下真实发布数据重新判断，本条不代为拍板。
+      **运营 V2 再更新（2026-09-30）**：上面"给尚无发布内容的语种生成空分片"的风险已消除——没有任何公开小说、
+      （博客开启时）也没有公开博客文章的语种，总索引一个分片都不列（mainpage 也不列），直接访问 404。
+      整站一个公开内容都没有时，刷新任务会因"没有任何公开 URL"失败并保留上一版 release（原有的防空发布保险丝）。
 - [ ] 正式 locale 直接读盘 dry-run 先以 flags 全关完成。
 - [ ] dry-run、真实 `SITE_URL` 与静态目录权限均验证后，可先开 enqueue flag，但此时 Worker allowlist 必须仍排除 `sitemap_refresh`，任务只允许保持 pending。
 - [ ] 单独审批 Worker write flag 后，在同一次部署中设置 `SITEMAP_AUTO_REFRESH_ALLOW_WRITE=true` 并把 `sitemap_refresh` 加入 Worker allowlist，避免 write gate 关闭期间任务被消费为 failed。

@@ -20,8 +20,13 @@ import { invalidateSiteSettingCache } from "@/server/site-settings/service";
  *
  * 这条用例用**真实的** `createSitemapFamilyBuilder` 跑完整的 `generateStaticSitemaps`，
  * 只给 ko 一条文章，把上面这个结论钉成可回归的事实：en 的 novelpage 分片没有生成、
- * 也没有出现在索引里。（`mainpage` 每个已登记语种恒有一个分片，里面只有首页——首页
- * 在每个语种都返回 200，不是空分片，不在此列。）
+ * 也没有出现在索引里。
+ *
+ * 🔴 运营 V2（Owner 2026-09-30）修订：上面括注里"mainpage 每个已登记语种恒有一个分片、
+ * 首页在每个语种都返回 200 所以不算空分片"这一条**不再成立**——没有任何公开小说、也没有
+ * 任何公开博客文章的语种，mainpage 也不出（总索引一个分片都不列，直接访问返回 404）。
+ * 所以下面 mainpage 的断言由"15 个语种全列"改为"只列有内容的 ko"；categorypage 同时并入
+ * mainpage，不再有这个类型。完整的新规则用例见 `sitemap-ops-round2.test.ts`。
  */
 
 const temporaryRoots: string[] = [];
@@ -49,7 +54,7 @@ function candidate(overrides: Record<string, unknown> = {}) {
   };
 }
 
-describe("static sitemap index never lists an empty locale's novelpage/categorypage shard", () => {
+describe("static sitemap index never lists an empty locale's novelpage/mainpage shard", () => {
   it("with only ko populated: site_novelpage_ko.xml is indexed and written; site_novelpage_en.xml (and every other empty locale) is neither", async () => {
     process.env.SITE_URL = "https://novel.example";
     const root = await fs.mkdtemp(path.join(os.tmpdir(), "sitemap-empty-locale-"));
@@ -61,6 +66,7 @@ describe("static sitemap index never lists an empty locale's novelpage/categoryp
     });
     const fixtureDb = {
       article: { findMany },
+      novelChapter: { findMany: vi.fn().mockResolvedValue([]) },
       $queryRaw: vi.fn().mockResolvedValue([]),
       siteSetting: {
         findUnique: vi.fn().mockResolvedValue({
@@ -77,6 +83,8 @@ describe("static sitemap index never lists an empty locale's novelpage/categoryp
           indexNowKey: "",
           indexNowKeyLocation: "",
           ga4MeasurementId: null,
+          yandexVerification: "",
+          yandexMetricaId: null,
           updatedAt: new Date("2026-08-04T00:00:00.000Z"),
         }),
       },
@@ -86,13 +94,12 @@ describe("static sitemap index never lists an empty locale's novelpage/categoryp
       buildFamily: createSitemapFamilyBuilder(fixtureDb as never, { ...process.env, FEATURE_ARTICLE_BLOG: "false" }),
       rootDir: root,
       runId: "empty-locale-not-indexed",
-      types: ["mainpage", "novelpage", "categorypage"],
     });
 
     const listed = result.manifest.sitemapFiles;
     expect(listed).toContain("sitemap/site_novelpage_ko.xml");
     expect(listed.filter((name) => name.includes("site_novelpage_"))).toEqual(["sitemap/site_novelpage_ko.xml"]);
-    // No category has any public membership in this fixture -> no categorypage shard anywhere.
+    // categorypage no longer exists as a shard type (folded into mainpage).
     expect(listed.filter((name) => name.includes("site_categorypage_"))).toEqual([]);
 
     const releaseDir = path.join(root, "releases", "empty-locale-not-indexed");
@@ -101,19 +108,22 @@ describe("static sitemap index never lists an empty locale's novelpage/categoryp
     expect(indexXml).not.toContain("site_novelpage_en.xml");
     await expect(fs.stat(path.join(releaseDir, "sitemap", "site_novelpage_en.xml"))).rejects.toMatchObject({ code: "ENOENT" });
 
-    // Home exists (HTTP 200) in every registered locale, so mainpage shards are the one family listed for all of them.
-    expect(listed.filter((name) => name.includes("site_mainpage_"))).toHaveLength(15);
+    // 运营 V2: mainpage follows the same rule as every other family — only the populated locale (ko) is listed.
+    expect(listed.filter((name) => name.includes("site_mainpage_"))).toEqual(["sitemap/site_mainpage_ko.xml"]);
+    expect(indexXml).not.toContain("site_mainpage_en.xml");
+    await expect(fs.stat(path.join(releaseDir, "sitemap", "site_mainpage_en.xml"))).rejects.toMatchObject({ code: "ENOENT" });
   });
 });
 
 /**
- * 同一轮核查里顺带发现的第二个问题：categorypage 分片的 URL 漏了语种前缀。
+ * 同一轮核查里顺带发现的第二个问题：分类页的 URL 漏了语种前缀。
  * 生产实测（只读）`site_categorypage_ko.xml` 里是
  * `https://…/category/female-audience`（无 `/ko`），该地址 404
  * （en 没有这个分类），真正的页面是 `/ko/category/female-audience`（200）。
- * 修复后分片内 URL 与该分片所属语种一致。
+ * 修复后分类页 URL 与所属语种一致。运营 V2 起分类页并入 mainpage 分片，这条用例改读
+ * mainpage 里的分类条目（首页之后），前缀规则不变。
  */
-describe("categorypage shard URLs carry the shard's own locale prefix", () => {
+describe("category page URLs (now inside the mainpage shard) carry the shard's own locale prefix", () => {
   const tagRow = {
     novel_id: "11111111-1111-4111-8111-111111111111",
     id: "22222222-2222-4222-8222-222222222222",
@@ -135,17 +145,44 @@ describe("categorypage shard URLs carry the shard's own locale prefix", () => {
           }),
         ]),
       },
+      novelChapter: { findMany: vi.fn().mockResolvedValue([]) },
       $queryRaw: vi.fn().mockResolvedValue([tagRow]),
+      siteSetting: {
+        findUnique: vi.fn().mockResolvedValue({
+          siteName: "Fixture",
+          siteDescription: "",
+          homeMetaTitle: "",
+          homeMetaDescription: "",
+          defaultOgImage: "",
+          googleSearchConsoleVerification: "",
+          footerCopyrightText: "",
+          footerDisclaimerText: "",
+          friendLinks: [],
+          indexNowHost: "",
+          indexNowKey: "",
+          indexNowKeyLocation: "",
+          ga4MeasurementId: null,
+          yandexVerification: "",
+          yandexMetricaId: null,
+          updatedAt: new Date("2026-08-04T00:00:00.000Z"),
+        }),
+      },
     };
   }
 
-  it("ko shard lists /ko/category/{slug}; en shard stays bare; page 2+ keeps the prefix too", async () => {
+  it("ko mainpage lists /ko/category/{slug}; en stays bare; page 2+ keeps the prefix too", async () => {
     process.env.SITE_URL = "https://novel.example";
-    const ko = await createSitemapFamilyBuilder(fixtureDb("ko") as never)({ type: "categorypage", locale: "ko" });
-    expect(ko[0]!.entries.map((entry) => entry.loc)).toEqual(["https://novel.example/ko/category/fantasy"]);
+    const ko = await createSitemapFamilyBuilder(fixtureDb("ko") as never)({ type: "mainpage", locale: "ko" });
+    expect(ko[0]!.entries.map((entry) => entry.loc)).toEqual([
+      "https://novel.example/ko",
+      "https://novel.example/ko/category/fantasy",
+    ]);
 
-    const en = await createSitemapFamilyBuilder(fixtureDb("en") as never)({ type: "categorypage", locale: "en" });
-    expect(en[0]!.entries.map((entry) => entry.loc)).toEqual(["https://novel.example/category/fantasy"]);
+    const en = await createSitemapFamilyBuilder(fixtureDb("en") as never)({ type: "mainpage", locale: "en" });
+    expect(en[0]!.entries.map((entry) => entry.loc)).toEqual([
+      "https://novel.example",
+      "https://novel.example/category/fantasy",
+    ]);
 
     // 21 books in the category -> 2 pages (BROWSE_PAGE_SIZE = 20).
     const many = fixtureDb("ko");
@@ -159,8 +196,9 @@ describe("categorypage shard URLs carry the shard's own locale prefix", () => {
     many.$queryRaw.mockResolvedValue(
       Array.from({ length: 21 }, () => tagRow),
     );
-    const paged = await createSitemapFamilyBuilder(many as never)({ type: "categorypage", locale: "ko" });
+    const paged = await createSitemapFamilyBuilder(many as never)({ type: "mainpage", locale: "ko" });
     expect(paged[0]!.entries.map((entry) => entry.loc)).toEqual([
+      "https://novel.example/ko",
       "https://novel.example/ko/category/fantasy",
       "https://novel.example/ko/category/fantasy?page=2",
     ]);

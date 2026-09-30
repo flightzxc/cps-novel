@@ -42,6 +42,20 @@ export const HOME_GRID_LIMIT = 20;
 export const BROWSE_PAGE_SIZE = 20;
 export const PREVIEW_CHAPTER_TAKE = 64;
 
+/**
+ * 章节页"能返回 200"的章节行条件——**唯一定义**：详情页的章节列表
+ * （`listPreviewChapterRefs`）、章节页本身（`getPublicChapterView`）和站点地图列章节 URL
+ * （`src/lib/seo/sitemap.ts`）三处共用同一个片段，站点地图里有的章节页就一定是页面自己
+ * 认为可读的那一批（运营 V2，Owner 2026-09-30）。另外页面要求正文非空白、且章节号落在
+ * 按章节号升序取前 `PREVIEW_CHAPTER_TAKE` 条之内，这两条不能写成 where 片段，由各调用方
+ * 在取出行之后自己判断。
+ */
+export const PUBLIC_PREVIEW_CHAPTER_WHERE = {
+  deletedAt: null,
+  status: "preview",
+  content: { isNot: null },
+} satisfies Prisma.NovelChapterWhereInput;
+
 export const ARTICLE_CARD_SELECT = {
   id: true,
   title: true,
@@ -338,12 +352,7 @@ export async function listPreviewChapterRefs(
   novelId: string,
 ): Promise<PreviewChapterRecord[]> {
   return db.novelChapter.findMany({
-    where: {
-      novelId,
-      deletedAt: null,
-      status: "preview",
-      content: { isNot: null },
-    },
+    where: { novelId, ...PUBLIC_PREVIEW_CHAPTER_WHERE },
     orderBy: { canonicalChapterNumber: "asc" },
     take: PREVIEW_CHAPTER_TAKE,
     select: {
@@ -375,9 +384,7 @@ export async function getPublicChapterView(
     where: {
       novelId: rowWithNovel.novel.id,
       canonicalChapterNumber: chapterNumber,
-      deletedAt: null,
-      status: "preview",
-      content: { isNot: null },
+      ...PUBLIC_PREVIEW_CHAPTER_WHERE,
     },
     select: {
       canonicalChapterNumber: true,

@@ -6,6 +6,7 @@ import type { Prisma, PrismaClient } from "@prisma/client";
 
 import { BLOG_FAMILY_ARTICLE_TYPES } from "@/domain/database-statuses";
 import { isArticleBlogEnabled } from "@/lib/flags";
+import { buildChapterPath } from "@/lib/seo/chapter-path";
 import { getSiteUrl, toAbsoluteUrl } from "@/lib/seo/site-url";
 import { buildArticlePath, buildBlogPath, localePrefix } from "@/lib/slug/article-path";
 import {
@@ -20,7 +21,11 @@ import {
   listDistinctPublicTaxonomy,
   loadPublicTaxonomyByNovelIds,
 } from "@/lib/site/public-taxonomy";
-import { BROWSE_PAGE_SIZE } from "@/lib/site/queries";
+import {
+  BROWSE_PAGE_SIZE,
+  PREVIEW_CHAPTER_TAKE,
+  PUBLIC_PREVIEW_CHAPTER_WHERE,
+} from "@/lib/site/queries";
 
 /**
  * C-29 (`规划_文章管理能力补齐_博客类型可见性换小说_2026-09-08.md` §三/C-29):
@@ -33,7 +38,15 @@ import { BROWSE_PAGE_SIZE } from "@/lib/site/queries";
  * 404，或者反过来。三处必须同改并有测试。" `tests/backend/seo/
  * sitemap-blog.test.ts` covers all three.
  */
-export const SITEMAP_TYPES = ["mainpage", "novelpage", "categorypage", "blogpage"] as const;
+/**
+ * 运营 V2（Owner 2026-09-30）：分类页并入 mainpage——照 CPS v8.5.1
+ * `src/lib/sitemap.ts:31`（`SitemapFamilySpec.type` 只有 mainpage/dramapage/blogpage
+ * 三类，分类页在 mainpage 里，见同文件 `buildMainPageEntries` 339-367 行）。海阅不再有
+ * `categorypage` 分片；旧的 `site_categorypage_<语种>[_N].xml` 网址由
+ * `/sitemap/[fileName]` 路由 308 到 `site_mainpage_<语种>.xml`（见
+ * `parseLegacyCategoryPageFileName`）。
+ */
+export const SITEMAP_TYPES = ["mainpage", "novelpage", "blogpage"] as const;
 export type SitemapType = (typeof SITEMAP_TYPES)[number];
 
 export interface SitemapFamilySpec {
@@ -192,22 +205,97 @@ function chunks<T>(values: readonly T[], size: number): T[][] {
   return result;
 }
 
+/**
+ * 运营 V2（Owner 2026-09-30，NOVEL_ONLY，CPS 无对应）：免费可读的章节页写进站点地图。
+ *
+ * 入选条件 = 章节页自己认为可读的那一批：共用 `PUBLIC_PREVIEW_CHAPTER_WHERE`
+ * （`deletedAt` 空、`status = preview`、正文行存在）、按章节号升序只取前
+ * `PREVIEW_CHAPTER_TAKE` 条（章节页 `listPreviewChapterRefs` 同一个窗口，窗口之外的章节号
+ * 页面自己会 404），再剔除正文字数为 0 的行。所属小说 / 文章本身的可见性由调用方传入的
+ * `candidates` 保证（同 novelpage 的 `isVisibleCandidate`，与章节页的
+ * `resolveNovelArticlePublicAccessByShortId` + `isPromoReady` 同口径）。
+ *
+ * 只取章节号、更新时间、字数三列，不读正文。⚠️ 正文"非空白"无法用 where 表达，这里退而求其次
+ * 只排除字数为 0 的行；全空白正文（上游给了一段纯空白）是已接受的极小缺口。
+ */
+const CHAPTER_SITEMAP_SELECT = {
+  novelId: true,
+  canonicalChapterNumber: true,
+  updatedAt: true,
+  content: { select: { charCount: true } },
+} as const satisfies Prisma.NovelChapterSelect;
+
+type ChapterSitemapRow = Prisma.NovelChapterGetPayload<{
+  select: typeof CHAPTER_SITEMAP_SELECT;
+}>;
+
+/** 每次按这么多本小说的 id 取章节，避免一条 `IN (...)` 带上万个参数。 */
+const CHAPTER_LOAD_BATCH_SIZE = 500;
+
+async function loadPublicChaptersByNovelId(
+  db: SitemapDb,
+  novelIds: readonly string[],
+): Promise<Map<string, ChapterSitemapRow[]>> {
+  const byNovel = new Map<string, ChapterSitemapRow[]>();
+  const uniqueIds = [...new Set(novelIds)];
+  for (const batch of chunks(uniqueIds, CHAPTER_LOAD_BATCH_SIZE)) {
+    const rows = await db.novelChapter.findMany({
+      where: { ...PUBLIC_PREVIEW_CHAPTER_WHERE, novelId: { in: batch } },
+      orderBy: [{ novelId: "asc" }, { canonicalChapterNumber: "asc" }],
+      select: CHAPTER_SITEMAP_SELECT,
+    });
+    for (const row of rows) {
+      const list = byNovel.get(row.novelId);
+      if (list) list.push(row);
+      else byNovel.set(row.novelId, [row]);
+    }
+  }
+  for (const [novelId, rows] of byNovel) {
+    // 先按章节页同一个窗口截取，再剔除空正文——顺序反过来会让窗口外的章节号"补位"进来。
+    byNovel.set(
+      novelId,
+      rows.slice(0, PREVIEW_CHAPTER_TAKE).filter((row) => (row.content?.charCount ?? 0) > 0),
+    );
+  }
+  return byNovel;
+}
+
 function buildNovelPageFiles(
   locale: SiteLocale,
   candidates: readonly ArticleSitemapCandidateWithNovel[],
+  chaptersByNovelId: ReadonlyMap<string, readonly ChapterSitemapRow[]>,
 ): SitemapFile[] {
-  const entries = candidates.map((candidate): SitemapEntry => ({
-    loc: toAbsoluteUrl(buildArticlePath({
-      locale,
-      slug: candidate.slug,
-      shortId: candidate.publicPageShortId,
-    })),
-    lastmod: candidate.updatedAt.toISOString(),
-    changefreq: "weekly",
-    priority: 0.9,
-    imageUrl: candidate.novel.coverUrl ?? undefined,
-    imageTitle: candidate.title,
-  }));
+  const entries: SitemapEntry[] = [];
+  for (const candidate of candidates) {
+    entries.push({
+      loc: toAbsoluteUrl(buildArticlePath({
+        locale,
+        slug: candidate.slug,
+        shortId: candidate.publicPageShortId,
+      })),
+      lastmod: candidate.updatedAt.toISOString(),
+      changefreq: "weekly",
+      priority: 0.9,
+      imageUrl: candidate.novel.coverUrl ?? undefined,
+      imageTitle: candidate.title,
+    });
+    // 章节网址紧跟在所属小说后面，不新增分片类型；沿用同一个每文件条数上限与分片逻辑。
+    // 网址一律走 `buildChapterPath`，不手拼。lastmod = 该章节行（`novel_chapter`）自己的
+    // `updatedAt`。章节页不进 IndexNow（推送范围不变）。
+    for (const chapter of chaptersByNovelId.get(candidate.novel.id) ?? []) {
+      entries.push({
+        loc: toAbsoluteUrl(buildChapterPath({
+          locale,
+          slug: candidate.slug,
+          shortId: candidate.publicPageShortId,
+          chapterNumber: chapter.canonicalChapterNumber,
+        })),
+        lastmod: chapter.updatedAt.toISOString(),
+        changefreq: "monthly",
+        priority: 0.6,
+      });
+    }
+  }
 
   return chunks(entries, SITEMAP_SHARD_SIZE).map((shardEntries, index) => {
     const name = getSitemapFileName("novelpage", locale, index);
@@ -220,11 +308,15 @@ function buildNovelPageFiles(
   });
 }
 
-async function buildCategoryPageFiles(
+/**
+ * 分类页条目（并入 mainpage，见 `SITEMAP_TYPES` 注释）。判定与并入前的 categorypage 分片
+ * 完全一致：只列该语种有公开内容、会返回 200 的分类页；lastmod 取法不变。
+ */
+async function buildCategoryEntries(
   db: SitemapDb,
   locale: SiteLocale,
   candidates: readonly ArticleSitemapCandidateWithNovel[],
-): Promise<SitemapFile[]> {
+): Promise<SitemapEntry[]> {
   const tagsByNovel = await loadPublicTaxonomyByNovelIds(
     db,
     candidates.map((candidate) => candidate.novel.id),
@@ -260,16 +352,7 @@ async function buildCategoryPageFiles(
       });
     }
   }
-
-  return chunks(entries, SITEMAP_SHARD_SIZE).map((shardEntries, index) => {
-    const name = getSitemapFileName("categorypage", locale, index);
-    return {
-      name,
-      url: toAbsoluteUrl(`/sitemap/${name}`),
-      lastmod: latestDate(shardEntries.map((entry) => new Date(entry.lastmod))).toISOString(),
-      entries: shardEntries,
-    };
-  });
+  return entries;
 }
 
 // ---------------------------------------------------------------------------
@@ -384,6 +467,19 @@ export function createSitemapFamilyBuilder(
     return pending;
   };
 
+  /**
+   * 运营 V2（Owner 2026-09-30，NOVEL_ONLY）：一个语种"有内容"= 至少一本公开可见的小说，
+   * 或者（博客开启时）至少一篇公开可见的博客文章。判定直接读各分片自己用的
+   * `loadVisible` / `loadVisibleBlog`（同一套公开可见判定与同一份缓存），不另写一套。
+   * 没内容的语种不出任何分片（包括 mainpage）；novelpage / blogpage 本来就在空集时返回
+   * `[]`，这里补上的是 mainpage（此前每个已登记语种恒有一个只含首页的 mainpage 分片）。
+   * 默认语种 `en` 按同一规则处理，没内容也不列。
+   */
+  const localeHasPublicContent = async (locale: SiteLocale): Promise<boolean> => {
+    if ((await loadVisible(locale)).length > 0) return true;
+    return isArticleBlogEnabled(env) && (await loadVisibleBlog(locale)).length > 0;
+  };
+
   return async ({ type, locale }) => {
     if (type === "blogpage") {
       // C-29 "开关": `FEATURE_ARTICLE_BLOG` off -> the blog family emits
@@ -398,27 +494,44 @@ export function createSitemapFamilyBuilder(
       return buildBlogPageFiles(locale, blogCandidates);
     }
 
-    const candidates = await loadVisible(locale);
-    if (type === "novelpage") return buildNovelPageFiles(locale, candidates);
-    if (type === "categorypage") return buildCategoryPageFiles(db, locale, candidates);
+    if (type === "novelpage") {
+      const candidates = await loadVisible(locale);
+      if (candidates.length === 0) return [];
+      const chaptersByNovelId = await loadPublicChaptersByNovelId(
+        db,
+        candidates.map((candidate) => candidate.novel.id),
+      );
+      return buildNovelPageFiles(locale, candidates, chaptersByNovelId);
+    }
 
+    // mainpage：首页 → 该语种有公开内容的分类页（并入自原 categorypage，CPS v8.5.1
+    // `src/lib/sitemap.ts` 330-367 行同一顺序：首页在前、分类页在后）。
+    if (!(await localeHasPublicContent(locale))) return [];
+    const candidates = await loadVisible(locale);
     const settings = await getSiteSetting(db, { ttlMs: 0 });
-    const lastmod = latestDate([
+    const homeLastmod = latestDate([
       settings.updatedAt,
       ...candidates.map((candidate) => candidate.updatedAt),
     ]).toISOString();
-    const name = getSitemapFileName("mainpage", locale, 0);
-    return [{
-      name,
-      url: toAbsoluteUrl(`/sitemap/${name}`),
-      lastmod,
-      entries: [{
-        loc: locale === "en" ? getSiteUrl() : toAbsoluteUrl(`/${locale}`),
-        lastmod,
-        changefreq: "daily",
-        priority: 1,
-      }],
+    const entries: SitemapEntry[] = [{
+      loc: locale === "en" ? getSiteUrl() : toAbsoluteUrl(`/${locale}`),
+      lastmod: homeLastmod,
+      changefreq: "daily",
+      priority: 1,
     }];
+    if (candidates.length > 0) {
+      entries.push(...await buildCategoryEntries(db, locale, candidates));
+    }
+
+    return chunks(entries, SITEMAP_SHARD_SIZE).map((shardEntries, index) => {
+      const name = getSitemapFileName("mainpage", locale, index);
+      return {
+        name,
+        url: toAbsoluteUrl(`/sitemap/${name}`),
+        lastmod: latestDate(shardEntries.map((entry) => new Date(entry.lastmod))).toISOString(),
+        entries: shardEntries,
+      };
+    });
   };
 }
 
@@ -445,7 +558,7 @@ export function parseSitemapFileName(fileName: string): {
   locale: SiteLocale;
   index: number;
 } | null {
-  const match = /^site_(mainpage|novelpage|categorypage|blogpage)_([a-zA-Z-]+)(?:_(\d+))?\.xml$/.exec(fileName);
+  const match = /^site_(mainpage|novelpage|blogpage)_([a-zA-Z-]+)(?:_(\d+))?\.xml$/.exec(fileName);
   if (!match) return null;
 
   const locale = match[2];
@@ -456,6 +569,34 @@ export function parseSitemapFileName(fileName: string): {
     locale: locale as SiteLocale,
     index: match[3] ? Number.parseInt(match[3], 10) : 0,
   };
+}
+
+/**
+ * 旧的 `site_categorypage_<语种>.xml`（含 `_N` 分页）——分类页并入 mainpage 之前的分片文件名。
+ * 不再是有效的分片类型（`parseSitemapFileName` 不认），单独解析只为让路由把它 308 到
+ * `site_mainpage_<语种>.xml`。语种必须是已登记的 `SITE_LOCALES`，否则返回 null。
+ */
+export function parseLegacyCategoryPageFileName(fileName: string): {
+  locale: SiteLocale;
+  index: number;
+} | null {
+  const match = /^site_categorypage_([a-zA-Z-]+)(?:_(\d+))?\.xml$/.exec(fileName);
+  if (!match) return null;
+
+  const locale = match[1];
+  if (!(SITE_LOCALES as readonly string[]).includes(locale)) return null;
+
+  return {
+    locale: locale as SiteLocale,
+    index: match[2] ? Number.parseInt(match[2], 10) : 0,
+  };
+}
+
+/** 从总索引 XML 里取出它列出的全部分片文件名（`/sitemap/<name>.xml`）。 */
+export function extractIndexedSitemapFileNames(indexXml: string): string[] {
+  return Array.from(indexXml.matchAll(/<loc>[^<]*\/sitemap\/([^/<]+\.xml)<\/loc>/g)).map(
+    (match) => match[1]!,
+  );
 }
 
 export function renderUrlSetXml(entries: SitemapEntry[]): string {

@@ -85,6 +85,9 @@ describe("createSitemapFamilyBuilder · per-locale isolation", () => {
     });
     const fixtureDb = {
       article: { findMany },
+      // 运营 V2：novelpage 分片会读章节、mainpage 会读分类归属；这条用例不关心它们，给空结果。
+      novelChapter: { findMany: vi.fn().mockResolvedValue([]) },
+      $queryRaw: vi.fn().mockResolvedValue([]),
       siteSetting: {
         findUnique: vi.fn().mockResolvedValue({
           siteName: "Fixture",
@@ -100,6 +103,8 @@ describe("createSitemapFamilyBuilder · per-locale isolation", () => {
           indexNowKey: "",
           indexNowKeyLocation: "",
           ga4MeasurementId: null,
+          yandexVerification: "",
+          yandexMetricaId: null,
           updatedAt: new Date("2026-08-04T00:00:00.000Z"),
         }),
       },

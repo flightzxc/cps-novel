@@ -59,7 +59,8 @@ async function surfaces() {
     categories, cards: await listPublicArticles(web, "en"), detail: await getPublicNovelDetail(web, article),
     category: await getPublicCategoryPage(web, "en", "text-z", 1),
     chrome: await loadPublicChrome(web, "en", "home", categories, ["en"]),
-    sitemap: await createSitemapFamilyBuilder(web)({ type: "categorypage", locale: "en" }),
+    // 运营 V2（Owner 2026-09-30）：分类页并入 mainpage，分类条目现在在 mainpage 分片里。
+    sitemap: await createSitemapFamilyBuilder(web)({ type: "mainpage", locale: "en" }),
     loaders: { categories: await loadPublicCategories("en"), cards: await loadBrowseNovels("en"), detail: await loadNovelDetail(article), chrome: await loadChrome("en", "home", categories, ["en"]) },
   };
 }

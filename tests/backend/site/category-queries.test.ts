@@ -89,7 +89,8 @@ describe("public category queries · CPS category semantics on CanonicalTag", ()
     expect(source).not.toMatch(/replaceAutoTagSnapshot|novelCanonicalTag\.(create|update|upsert)/);
   });
 
-  it("category sitemap includes only tags backed by a visible published book", async () => {
+  // 运营 V2（Owner 2026-09-30）：分类页并入 mainpage——分类条目跟在首页后面，判定不变。
+  it("category entries (now inside mainpage, after the home page) include only tags backed by a visible published book", async () => {
     process.env.SITE_URL = "https://novel.example";
     const db = {
       article: { findMany: vi.fn().mockResolvedValue([{
@@ -97,15 +98,27 @@ describe("public category queries · CPS category semantics on CanonicalTag", ()
         novel: { id: article.novel.id, status: "published", deletedAt: null, coverUrl: "/cover.jpg" },
         promoLink: { ...article.promoLink, deletedAt: null },
       }]) },
+      siteSetting: { findUnique: vi.fn().mockResolvedValue({
+        siteName: "Fixture", siteDescription: "", homeMetaTitle: "", homeMetaDescription: "", defaultOgImage: "",
+        googleSearchConsoleVerification: "", footerCopyrightText: "", footerDisclaimerText: "", friendLinks: [],
+        indexNowHost: "", indexNowKey: "", indexNowKeyLocation: "", ga4MeasurementId: null,
+        yandexVerification: "", yandexMetricaId: null, updatedAt: new Date("2026-09-01T00:00:00Z"),
+      }) },
       $queryRaw: vi.fn().mockResolvedValue([tagRow]),
     } as unknown as PrismaClient;
-    const files = await createSitemapFamilyBuilder(db)({ type: "categorypage", locale: "en" });
+    const files = await createSitemapFamilyBuilder(db)({ type: "mainpage", locale: "en" });
     expect(files).toHaveLength(1);
-    expect(files[0]?.entries).toEqual([expect.objectContaining({ loc: expect.stringContaining("/category/fantasy"), priority: 0.7 })]);
+    expect(files[0]?.name).toBe("site_mainpage_en.xml");
+    expect(files[0]?.entries).toEqual([
+      expect.objectContaining({ loc: "https://novel.example", priority: 1 }),
+      expect.objectContaining({ loc: expect.stringContaining("/category/fantasy"), priority: 0.7 }),
+    ]);
 
+    // No tag has any public membership -> mainpage is just the home page (the locale still has a book).
     (db.$queryRaw as unknown as ReturnType<typeof vi.fn>).mockResolvedValue([]);
     const emptyBuilder = createSitemapFamilyBuilder(db);
-    await expect(emptyBuilder({ type: "categorypage", locale: "en" })).resolves.toEqual([]);
+    const homeOnly = await emptyBuilder({ type: "mainpage", locale: "en" });
+    expect(homeOnly[0]?.entries).toEqual([expect.objectContaining({ loc: "https://novel.example" })]);
     delete process.env.SITE_URL;
   });
 });
