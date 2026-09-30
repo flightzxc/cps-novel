@@ -12,7 +12,7 @@ Compose runtime 与 Health 身份一致性验证（`/api/health` 的 `metadataCo
 为已发布。
 
 > Notion 权威页：[海阅 版本管理与发版手账](https://app.notion.com/p/3e4601b5fd3481b5a39bcf48408015c2)。
-> 本文件是仓库内镜像；v0.5.5 初轮部署状态已同步回读；当前按 Owner + Opus 验收更新为正式收官状态，本轮最终 Notion 同步回读见发布记录。本文件变更不会自动写入 Notion。
+> 本文件是仓库内镜像；v0.5.5 当前快照、版本表与正式手账已按 Owner + Opus 验收结论同步 Notion 并回读核对。本文件变更不会自动写入 Notion。
 
 ## 当前快照
 
@@ -27,7 +27,7 @@ Compose runtime 与 Health 身份一致性验证（`/api/health` 的 `metadataCo
 - 本版新布局仅 404，Owner Chrome 375px 手机截图已确认、图片由 Owner 另附；不冒称 Codex 已收到或保存图片文件。首页 absolute / 404 本地化标题按 Owner 收官裁决接受；博客原开关 false，正常列表未启用，不为验收改开关。跨语种同书直达目前无公开数据，由单测覆盖，首次出现数据时补实测。详细口径见 [ADR](../adr/ADR-V055-PREPRODUCTION-ACCEPTANCE.md)。
 - 分类 sitemap 旧缓存按 Owner 裁决后续只读检查分片内页面 URL 的 /ko/category/ 前缀；一次性线程跟进 `v0-5-5-sitemap` 已安排 2026-10-02 04:35 JST（03:35 +0800）。目前未执行、未冒称通过；不主动刷新或创建任务。正式收官不移动部署 Final。
 - 第三阶段仍未获授权、未执行，时间/approver/模板备份路径均无；已发布文章 TKD 回填不在范围。领取批次由 Owner 恢复。回滚目标 v0.5.4 Final `0260d8d89c8aba83ba7eb8887ae94461489a927c`，使用原发布目录和 `/opt/cps-novel/shared/env/preprod.env.bak-v055-20260930T114510Z`，不重建 postgres；模板恢复另行授权。
-- annotated tag `v0.5.5` 固定于 Final，已生成 CHANGELOG，正式发版开发日志与版本台账已更新；本轮 Notion 最终同步回读随后确认。收官记录时间 2026-09-30 23:22:25 +0800（JST 2026-10-01 00:22:25 +0900）。预生产已生效，Next 16.3.3 正式切换前置条件满足；公网可见仍须正式域名切换。
+- annotated tag `v0.5.5` 固定于 Final，已生成 CHANGELOG，正式发版开发日志与版本台账已更新；Notion 当前快照、版本表与正式手账已同步并回读一致。收官记录时间 2026-09-30 23:22:25 +0800（JST 2026-10-01 00:22:25 +0900）。预生产已生效，Next 16.3.3 正式切换前置条件满足；公网可见仍须正式域名切换。
 
 ### v0.5.4 —— 已发布到预生产（2026-09-29，`RELEASE=PASS`）
 
