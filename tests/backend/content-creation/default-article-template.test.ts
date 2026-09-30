@@ -44,8 +44,10 @@ describe("DEFAULT_ARTICLE_TEMPLATE", () => {
         '<p><a href="/go/AbCd1234">Start Reading</a></p>' +
         "</article>",
     );
+    // TKD 对齐 CPS（Owner 2026-09-30）：SEO 标题是自然语言句式，不含品牌名
+    // （品牌后缀由根布局的标题模板加）；title（H1 用）与 metaDescription 不动。
     expect(rendered.seoMetadata).toEqual({
-      metaTitle: "The Great Adventure Begins",
+      metaTitle: "The Great Adventure Begins Novel - Read Free Chapters Online",
       metaDescription: "A sweeping tale of courage.",
     });
     // P2-02B bumped this to 2 (metaKeywords/slug slots) — assert against the live

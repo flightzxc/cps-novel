@@ -82,6 +82,11 @@ export const DEFAULT_ARTICLE_TEMPLATE: ArticleTemplateSource = Object.freeze({
     '{if promo_redirect_url}<p><a href="{promo_redirect_url}">Start Reading</a></p>{endif}',
     "</article>",
   ].join(""),
-  metaTitle: "{novel_title}",
+  // TKD 对齐 CPS（Owner 2026-09-30）：SEO 标题由裸变量改成自然语言，句式照 CPS 线上
+  // 剧集页（"{剧名} Drama Watch Free Online"）。不含品牌名——品牌后缀由根布局的标题模板加。
+  // 与 `assets/article-templates/en.json` 的 `seoTemplate.metaTitle` 保持同一句
+  // （`article-template-bootstrap.test.ts` 钉住两边一致）；15 语译文在各语种资产里。
+  // `title`（H1 用）与 `metaDescription` 不动。
+  metaTitle: "{novel_title} Novel - Read Free Chapters Online",
   metaDescription: "{novel_description}",
 });

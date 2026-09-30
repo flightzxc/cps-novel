@@ -52,12 +52,39 @@
  *    rewrites `<h1>` to `<h2>` (or drops/reorders/adds a tag) while leaving
  *    every `{...}` token untouched would sail past the token-sequence check
  *    alone, so both checks run independently.
- *  - `seoTemplate`/`slugTemplate`/`metaKeywordsTemplate` — deep-equal to
- *    en's (this repo's built-in default template has no natural-language
- *    SEO copy to translate: `title`/`metaTitle` are the bare variable
- *    `{novel_title}`, `metaDescription` is the bare variable
- *    `{novel_description}`, `slugTemplate`/`metaKeywordsTemplate` are both
+ *  - `seoTemplate` — the same set of fields as en's (`title`/`metaTitle`/
+ *    `metaDescription`), and for each field the ordered `{...}` token
+ *    sequence (and, defensively, HTML tag sequence) identical to en's; the
+ *    natural-language text between the tokens MAY differ per locale.
+ *    TKD 对齐 CPS（Owner 2026-09-30）: the built-in default's SEO title used to
+ *    be the bare variable `{novel_title}` in every locale, so this check
+ *    demanded the whole `seoTemplate` be byte-identical to en's. The
+ *    `metaTitle` is now a natural-language sentence per locale (en:
+ *    `{novel_title} Novel - Read Free Chapters Online`, same shape as CPS's
+ *    live `{剧名} Drama Watch Free Online`), so byte-identity would forbid
+ *    translating it. The rule is relaxed to what actually has to hold — the
+ *    variable/control-token sequence — so a translation can neither drop nor
+ *    add nor reorder a variable, while the words around them can be
+ *    localized. `title` and `metaDescription` stay bare variables in every
+ *    shipped asset (a test pins that), but the loader no longer forces it.
+ *  - `slugTemplate`/`metaKeywordsTemplate` — deep-equal to en's (both are
  *    `""` — see `src/server/content-creation/default-article-template.ts`).
+ *
+ * ## In-place update, no new version (TKD 对齐 CPS, Owner 2026-09-30)
+ *
+ * Changing the shipped SEO title is done **in place**: same `templateKey`,
+ * same `version: 1`, same `schemaVersion: 1`, only `seoTemplate.metaTitle`
+ * differs, the manifest SHA-256 is refreshed. No `version: 2` row is minted,
+ * because the admin "new version" flow does not deactivate the old one and
+ * non-en locales select "the earliest-created active template"
+ * (`src/server/article-templates/service.ts`), so a v2 would leave 14
+ * locales rendering new articles from the old template. Running `--apply`
+ * against a production database that was bootstrapped from the previous
+ * asset set therefore shows exactly 15 `update` rows whose only changed
+ * field is `seoTemplate.metaTitle` — the dry-run report's `changes[]` lists
+ * the changed fields per row so that can be checked before applying, and any
+ * other field showing up there means an operator edited the row in the admin
+ * UI and the diff must be reviewed before `--apply`.
  */
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
@@ -242,6 +269,36 @@ function parseAsset(raw: unknown, locale: string): ArticleTemplateAsset {
   };
 }
 
+/**
+ * `seoTemplate` invariant (relaxed from "byte-identical to en" — see this
+ * file's header): same field set as en, and per field the same ordered
+ * `{...}` token sequence and HTML tag sequence, never blank. The natural
+ * language between the tokens may differ.
+ */
+function checkSeoTemplateAgainstReference(asset: ArticleTemplateAsset, reference: ArticleTemplateAsset): void {
+  const assetSeo = asset.seoTemplate as Record<string, unknown>;
+  const referenceSeo = reference.seoTemplate as Record<string, unknown>;
+  if (JSON.stringify(Object.keys(assetSeo).sort()) !== JSON.stringify(Object.keys(referenceSeo).sort())) {
+    fail("asset_invariant_violation", `${asset.locale}.json: seoTemplate field set differs from en.json`);
+  }
+  for (const field of Object.keys(referenceSeo).sort()) {
+    const value = assetSeo[field];
+    const referenceValue = referenceSeo[field];
+    if (typeof value !== "string" || typeof referenceValue !== "string") {
+      fail("asset_invariant_violation", `${asset.locale}.json: seoTemplate.${field} must be a string, like en.json`);
+    }
+    if (value.trim() === "") {
+      fail("asset_invariant_violation", `${asset.locale}.json: seoTemplate.${field} is blank`);
+    }
+    if (JSON.stringify(tokenSequence(value)) !== JSON.stringify(tokenSequence(referenceValue))) {
+      fail("asset_invariant_violation", `${asset.locale}.json: seoTemplate.${field} placeholder/control-token sequence differs from en.json`);
+    }
+    if (JSON.stringify(htmlTagSequence(value)) !== JSON.stringify(htmlTagSequence(referenceValue))) {
+      fail("asset_invariant_violation", `${asset.locale}.json: seoTemplate.${field} HTML tag-name sequence differs from en.json`);
+    }
+  }
+}
+
 /** Cross-checks one non-en asset's structural invariants against the en reference. */
 function checkInvariantsAgainstReference(asset: ArticleTemplateAsset, reference: ArticleTemplateAsset): void {
   if (asset.version !== reference.version || asset.schemaVersion !== reference.schemaVersion) {
@@ -281,9 +338,7 @@ function checkInvariantsAgainstReference(asset: ArticleTemplateAsset, reference:
   if (bodyTags !== refBodyTags) {
     fail("asset_invariant_violation", `${asset.locale}.json: bodyTemplate HTML tag-name sequence differs from en.json`);
   }
-  if (JSON.stringify(asset.seoTemplate) !== JSON.stringify(reference.seoTemplate)) {
-    fail("asset_invariant_violation", `${asset.locale}.json: seoTemplate differs from en.json (this repo's default template carries no translatable SEO copy — every seoTemplate field is a bare variable)`);
-  }
+  checkSeoTemplateAgainstReference(asset, reference);
   if (asset.slugTemplate !== reference.slugTemplate || asset.metaKeywordsTemplate !== reference.metaKeywordsTemplate) {
     fail("asset_invariant_violation", `${asset.locale}.json: slugTemplate/metaKeywordsTemplate differ from en.json`);
   }
@@ -486,6 +541,45 @@ function assetContentEqualsRow(asset: ArticleTemplateAsset, row: TemplateRow | u
 type RowCategory = "create" | "update" | "unchanged" | "soft_deleted";
 
 /**
+ * Names of the fields on which an existing row differs from what the asset
+ * would write — the dry-run's answer to "what exactly will `--apply` change".
+ * `seoTemplate` is compared per key (`seoTemplate.metaTitle`) so the
+ * in-place SEO-title update reads as one field per row, and an operator edit
+ * to anything else shows up by name.
+ */
+function changedFieldsOf(asset: ArticleTemplateAsset, row: TemplateRow): string[] {
+  const changed: string[] = [];
+  if (row.templateName !== asset.templateName) changed.push("templateName");
+  if (row.locale !== asset.locale) changed.push("locale");
+  if (row.version !== asset.version) changed.push("version");
+  if (row.schemaVersion !== asset.schemaVersion) changed.push("schemaVersion");
+  if (row.status !== asset.status) changed.push("status");
+  if (row.applicableArticleType !== asset.applicableArticleType) changed.push("applicableArticleType");
+  if (row.bodyTemplate !== asset.bodyTemplate) changed.push("bodyTemplate");
+  if (JSON.stringify(row.contentTemplate) !== JSON.stringify(asset.contentTemplate)) changed.push("contentTemplate");
+  const rowSeo = isPlainObject(row.seoTemplate) ? row.seoTemplate : null;
+  if (rowSeo === null) {
+    changed.push("seoTemplate");
+  } else {
+    const assetSeo = asset.seoTemplate as Record<string, unknown>;
+    for (const key of [...new Set([...Object.keys(assetSeo), ...Object.keys(rowSeo)])].sort()) {
+      if (JSON.stringify(rowSeo[key]) !== JSON.stringify(assetSeo[key])) changed.push(`seoTemplate.${key}`);
+    }
+  }
+  if (row.slugTemplate !== asset.slugTemplate) changed.push("slugTemplate");
+  if (row.metaKeywordsTemplate !== asset.metaKeywordsTemplate) changed.push("metaKeywordsTemplate");
+  return changed;
+}
+
+export type ArticleTemplateBootstrapChange = {
+  readonly templateKey: string;
+  readonly locale: string;
+  readonly category: "create" | "update";
+  /** Empty for `create` (the whole row is new); the differing field names for `update`. */
+  readonly changedFields: readonly string[];
+};
+
+/**
  * Single classification used by both the dry-run planning pass and the
  * apply pass, so the two can never diverge on what counts as "needs a
  * write" — n1/n2's fix (skip the upsert call entirely for `unchanged` and
@@ -515,6 +609,13 @@ export type ArticleTemplateBootstrapReport = {
   locales: readonly string[];
   planned: { create: number; update: number; unchanged: number; softDeleted: number };
   applied: { created: number; updated: number; unchanged: number; softDeleted: number } | null;
+  /**
+   * One entry per row `--apply` would write (`create`/`update`), with the field names that differ for
+   * an `update`. Review this before `--apply`: after the in-place SEO-title update every row must show
+   * exactly `["seoTemplate.metaTitle"]`; any other field means the production row was edited in the
+   * admin UI and `--apply` would overwrite that edit.
+   */
+  changes: readonly ArticleTemplateBootstrapChange[];
   /** `templateKey`s found soft-deleted (`deletedAt` set) — always skipped, never revived/recreated. */
   softDeletedTemplateKeys: readonly string[];
   /** Human-readable notices, e.g. one per soft-deleted skip. Empty when there's nothing to flag. */
@@ -537,12 +638,18 @@ export async function runArticleTemplateBootstrapCli(
   let plannedSoftDeleted = 0;
   const softDeletedTemplateKeys: string[] = [];
   const warnings: string[] = [];
+  const changes: ArticleTemplateBootstrapChange[] = [];
   for (const locale of selectedLocales) {
     const asset = artifacts.assetsByLocale.get(locale)!;
     const row = existingByKey.get(asset.templateKey);
     const category = categorizeRow(asset, row);
-    if (category === "create") plannedCreate += 1;
-    else if (category === "update") plannedUpdate += 1;
+    if (category === "create") {
+      plannedCreate += 1;
+      changes.push({ templateKey: asset.templateKey, locale, category: "create", changedFields: [] });
+    } else if (category === "update") {
+      plannedUpdate += 1;
+      changes.push({ templateKey: asset.templateKey, locale, category: "update", changedFields: changedFieldsOf(asset, row!) });
+    }
     else if (category === "unchanged") plannedUnchanged += 1;
     else {
       plannedSoftDeleted += 1;
@@ -565,6 +672,7 @@ export async function runArticleTemplateBootstrapCli(
       locales: selectedLocales,
       planned: { create: plannedCreate, update: plannedUpdate, unchanged: plannedUnchanged, softDeleted: plannedSoftDeleted },
       applied: null,
+      changes: Object.freeze(changes),
       softDeletedTemplateKeys: Object.freeze(softDeletedTemplateKeys),
       warnings: Object.freeze(warnings),
     });
@@ -661,6 +769,7 @@ export async function runArticleTemplateBootstrapCli(
       locales: selectedLocales,
       planned: { create: plannedCreate, update: plannedUpdate, unchanged: plannedUnchanged, softDeleted: plannedSoftDeleted },
       applied: { created, updated, unchanged, softDeleted },
+      changes: Object.freeze(changes),
       softDeletedTemplateKeys: Object.freeze(softDeletedTemplateKeys),
       warnings: Object.freeze(warnings),
     });
