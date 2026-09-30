@@ -593,7 +593,13 @@ describe.skipIf(!enabled).sequential("TKD 回写工具（真实 PostgreSQL，wor
 
   it("续跑游标：续批的 --after-id 必须等于游标里的上次终点；跳批/重批被拒", async () => {
     const cursor = parseTemplateTkdCursor(JSON.parse(await readFile(cursorFilePath, "utf8")));
-    for (const [label, afterId] of [["跳批（after-id 不是上次终点）", fx.a1.id], ["重批（不带 after-id 从头再来）", undefined]] as const) {
+    // "跳批"要用一个真实存在、但保证不等于游标上次终点的文章 id。夹具 id 是随机 UUID，游标终点是上一批
+    // （a1、a2、a8）里按 id 排序最后的那一篇——硬编码 fx.a1.id 时，a1 恰好排最后就会让"跳批"变成合法续批
+    // （工具用严格不等判断，正确地放行了），用例随机变红。所以从全部夹具里挑第一个不等于终点的。
+    const skipId = Object.values(fx).map((f) => f.id).find((id) => id !== cursor.lastAfterId)!;
+    expect(skipId).toBeTruthy();
+    expect(skipId).not.toBe(cursor.lastAfterId);
+    for (const [label, afterId] of [["跳批（after-id 不是上次终点）", skipId], ["重批（不带 after-id 从头再来）", undefined]] as const) {
       let captured: TemplateTkdRepairSummary | null = null;
       await expect(
         runTemplateTkdRepair(
