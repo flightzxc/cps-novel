@@ -284,10 +284,24 @@ export async function selectActiveArticleTemplate(
     select: TEMPLATE_SELECT,
     orderBy: { version: "desc" },
   });
-  return preferred ?? db.articleTemplate.findFirst({
+  if (preferred) return preferred;
+  // CPS `getPreferredAutoTemplate` 首选落空后取"第一个启用模板"（id 升序）。CPS 的
+  // 模板是原地编辑，编辑不会让第一个模板挪位；本仓把一次编辑落成同一 templateKey
+  // 的下一个版本行，所以"第一个启用模板"按模板族理解：最早创建的启用行只用来定是
+  // 哪一族，内容取该族最高的启用版本——与上面两条按 templateKey 取
+  // `version: "desc"` 的规则一致。旧写法把两步压成一条 orderBy，各行 createdAt
+  // 互不相同，`version: "desc"` 次序键永远轮不到，于是恒取 v1；非英语默认模板键
+  // `system-default-<locale>-v1` 命不中上面的首选，后台新建的版本因此永不生效。
+  const earliest = await db.articleTemplate.findFirst({
     where: { status: "active", deletedAt: null, AND: conditions },
-    select: TEMPLATE_SELECT,
+    select: { templateKey: true },
     orderBy: [{ createdAt: "asc" }, { version: "desc" }],
+  });
+  if (!earliest) return null;
+  return db.articleTemplate.findFirst({
+    where: { templateKey: earliest.templateKey, status: "active", deletedAt: null, AND: conditions },
+    select: TEMPLATE_SELECT,
+    orderBy: { version: "desc" },
   });
 }
 
