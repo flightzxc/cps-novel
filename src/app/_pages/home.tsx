@@ -8,6 +8,7 @@ import type { SiteLocale } from "@/lib/locale/locale-canonical";
 import { getPublicT } from "@/lib/locale/messages";
 import { generateSeoMeta } from "@/lib/seo/seo-meta-generator";
 import { localePrefix } from "@/lib/slug/article-path";
+import { PUBLIC_SITE_LOCALE } from "@/lib/site/locale-label";
 
 /**
  * Home page shared body (WO-1 `施工工单_WO1-3_多语种公开站地基_2026-09-08.md`
@@ -56,13 +57,22 @@ export async function buildHomeMetadata(locale: SiteLocale): Promise<Metadata> {
     loadHomeNovels(locale),
   ]);
   const t = getPublicT(locale);
+  // 后台"首页标题/首页描述/站点描述"只有一个值（不分语种），运营一填，15 语的首页都
+  // 会显示同一句英文——所以只有默认语种（英文）读它们，其余语种直接读各自的文案
+  // （TKD 对齐 CPS，Owner 2026-09-30；照 CPS `(site)/page.tsx` 的
+  // `useSettingsMetadata = locale === "en"`）。判断用仓库现成的默认语种常量
+  // `PUBLIC_SITE_LOCALE`，不另写字面量。`tests/ui/seo/home-default-locale-only.test.ts`
+  // 钉住这条判断。
+  const useSettingsMetadata = locale === PUBLIC_SITE_LOCALE;
   const seo = generateSeoMeta({
     entity: "home",
     locale,
     data: {
       siteName: settings.siteName,
-      title: settings.homeMetaTitle || settings.siteName,
-      description: settings.homeMetaDescription || settings.siteDescription || t("meta.siteDescription"),
+      title: (useSettingsMetadata && settings.homeMetaTitle) || t("meta.homeTitleFallback"),
+      description:
+        (useSettingsMetadata && (settings.homeMetaDescription || settings.siteDescription)) ||
+        t("meta.siteDescription"),
       defaultOgImage: settings.defaultOgImage.trim() || novels[0]?.coverUrl || null,
     },
   });
@@ -83,6 +93,9 @@ export async function HomeBody({ locale }: { locale: SiteLocale }) {
     loadHomeCarousel(locale),
   ]);
   const t = getPublicT(locale);
+  // 这里的 `seo` 只取 JSON-LD（`seo.other`），不输出 <title>/<meta>——标题与描述由上面的
+  // `buildHomeMetadata` 负责。TKD 对齐 CPS 这一轮不动结构化数据，所以这份输入保持原样，
+  // 没有跟着"只有默认语种读后台值"改（见施工工单第一节"不在本单范围"）。
   const seo = generateSeoMeta({
     entity: "home",
     locale,
