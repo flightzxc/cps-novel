@@ -25,6 +25,8 @@ const ROW = {
   indexNowKey: "key123",
   indexNowKeyLocation: "https://example.com/key123.txt",
   ga4MeasurementId: "G-TEST",
+  yandexVerification: "yandex-code_1",
+  yandexMetricaId: "12345678",
   updatedAt: new Date("2026-08-18T00:00:00Z"),
 };
 
@@ -43,6 +45,9 @@ describe("getSiteSetting", () => {
     expect(snapshot.siteName).toBe("CPS Novel");
     expect(snapshot.indexNowHost).toBe("example.com");
     expect(snapshot.ga4MeasurementId).toBe("G-TEST");
+    // 运营 V2：Yandex 两个新字段随快照透传给公开站（layout 读取）。
+    expect(snapshot.yandexVerification).toBe("yandex-code_1");
+    expect(snapshot.yandexMetricaId).toBe("12345678");
   });
 
   it("queries id=1", async () => {

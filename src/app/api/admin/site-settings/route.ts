@@ -47,6 +47,8 @@ export async function PATCH(request: Request): Promise<Response> {
       ...(Object.prototype.hasOwnProperty.call(body, "footerDisclaimerText") ? { footerDisclaimerText: body.footerDisclaimerText } : {}),
       ...(Object.prototype.hasOwnProperty.call(body, "friendLinks") ? { friendLinks: body.friendLinks } : {}),
       ...(Object.prototype.hasOwnProperty.call(body, "ga4MeasurementId") ? { ga4MeasurementId: body.ga4MeasurementId } : {}),
+      ...(Object.prototype.hasOwnProperty.call(body, "yandexVerification") ? { yandexVerification: body.yandexVerification } : {}),
+      ...(Object.prototype.hasOwnProperty.call(body, "yandexMetricaId") ? { yandexMetricaId: body.yandexMetricaId } : {}),
     };
     return updateAdminSiteSetting(input, serviceDependencies());
   });

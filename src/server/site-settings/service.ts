@@ -17,6 +17,7 @@ import type { AdminIdentityStore, SessionStore } from "@/lib/auth/ports";
 import { withDbRetry } from "@/lib/db/db-retry";
 import { getSiteUrl } from "@/lib/seo/site-url";
 import { normalizeGa4MeasurementId } from "@/lib/seo/ga4-measurement-id";
+import { YANDEX_METRICA_ID_RE, YANDEX_VERIFICATION_RE } from "@/lib/seo/yandex-metrica";
 import {
   requireFreshAdminServiceMutation,
   type AdminServiceAuthorization,
@@ -37,6 +38,10 @@ export type SiteSettingSnapshot = Readonly<{
   indexNowKey: string;
   indexNowKeyLocation: string;
   ga4MeasurementId: string | null;
+  /** 运营 V2（Owner 2026-09-30）：Yandex 站长验证码，空串 = 不输出。 */
+  yandexVerification: string;
+  /** 运营 V2（Owner 2026-09-30）：Yandex Metrica 计数器 ID（纯数字），null = 不输出。 */
+  yandexMetricaId: string | null;
   updatedAt: Date;
 }>;
 
@@ -54,6 +59,8 @@ type SiteSettingRow = {
   indexNowKey: string;
   indexNowKeyLocation: string;
   ga4MeasurementId: string | null;
+  yandexVerification: string;
+  yandexMetricaId: string | null;
   updatedAt: Date;
 };
 
@@ -94,6 +101,8 @@ function toSnapshot(row: SiteSettingRow): SiteSettingSnapshot {
     indexNowKey: row.indexNowKey,
     indexNowKeyLocation: row.indexNowKeyLocation,
     ga4MeasurementId: row.ga4MeasurementId,
+    yandexVerification: row.yandexVerification,
+    yandexMetricaId: row.yandexMetricaId,
     updatedAt: row.updatedAt,
   });
 }
@@ -206,6 +215,8 @@ export const SITE_SETTING_WRITABLE_FIELDS = [
   "indexNowKey",
   "indexNowKeyLocation",
   "ga4MeasurementId",
+  "yandexVerification",
+  "yandexMetricaId",
 ] as const;
 
 type WritableField = (typeof SITE_SETTING_WRITABLE_FIELDS)[number];
@@ -224,6 +235,8 @@ type WritableValues = {
   indexNowKey: string;
   indexNowKeyLocation: string;
   ga4MeasurementId: string | null;
+  yandexVerification: string;
+  yandexMetricaId: string | null;
 };
 type WritablePatch = Partial<WritableValues>;
 
@@ -254,6 +267,8 @@ export type UpdateSiteSettingInput = Readonly<{
   indexNowKey?: unknown;
   indexNowKeyLocation?: unknown;
   ga4MeasurementId?: unknown;
+  yandexVerification?: unknown;
+  yandexMetricaId?: unknown;
 }>;
 
 export type SiteSettingWriteDependencies = Readonly<{
@@ -310,6 +325,8 @@ function adminView(snapshot: SiteSettingSnapshot): AdminSiteSettingView {
     indexNowKey: snapshot.indexNowKey,
     indexNowKeyLocation: snapshot.indexNowKeyLocation,
     ga4MeasurementId: snapshot.ga4MeasurementId,
+    yandexVerification: snapshot.yandexVerification,
+    yandexMetricaId: snapshot.yandexMetricaId,
     updatedAt: snapshot.updatedAt.toISOString(),
   });
 }
@@ -374,12 +391,15 @@ function normalizeFriendLinks(value: unknown): SiteSettingFriendLink[] {
 
 function normalizedPatch(input: UpdateSiteSettingInput): WritablePatch {
   const patch: WritablePatch = {};
-  const textLimits: Record<Exclude<WritableField, "friendLinks" | "ga4MeasurementId">, number> = {
+  const textLimits: Record<
+    Exclude<WritableField, "friendLinks" | "ga4MeasurementId" | "yandexMetricaId">,
+    number
+  > = {
     siteName: 160, siteDescription: 5000, homeMetaTitle: 500,
     homeMetaDescription: 2000, defaultOgImage: 4096,
     googleSearchConsoleVerification: 255, footerCopyrightText: 5000,
     footerDisclaimerText: 5000, indexNowHost: 255, indexNowKey: 255,
-    indexNowKeyLocation: 255,
+    indexNowKeyLocation: 255, yandexVerification: 255,
   };
   for (const field of SITE_SETTING_WRITABLE_FIELDS) {
     if (!Object.prototype.hasOwnProperty.call(input, field)) continue;
@@ -390,6 +410,21 @@ function normalizedPatch(input: UpdateSiteSettingInput): WritablePatch {
       const normalized = normalizeGa4MeasurementId(raw);
       if (raw && !normalized) throw new SiteSettingValidationError("ga4MeasurementId is invalid");
       patch.ga4MeasurementId = normalized;
+    } else if (field === "yandexMetricaId") {
+      // 运营 V2：只允许 1～12 位数字，允许留空（留空存 NULL = 不输出统计代码）；
+      // 其它字符一律拒绝保存，不做"静默清洗"。
+      const raw = textValue(input.yandexMetricaId, field, 32);
+      if (raw && !YANDEX_METRICA_ID_RE.test(raw)) {
+        throw new SiteSettingValidationError("yandexMetricaId must be 1-12 digits");
+      }
+      patch.yandexMetricaId = raw || null;
+    } else if (field === "yandexVerification") {
+      // 运营 V2：只允许 [A-Za-z0-9_-]、1～255 位，允许留空（空串 = 不输出）。
+      const raw = textValue(input.yandexVerification, field, textLimits.yandexVerification);
+      if (raw && !YANDEX_VERIFICATION_RE.test(raw)) {
+        throw new SiteSettingValidationError("yandexVerification may only contain letters, digits, '_' and '-'");
+      }
+      patch.yandexVerification = raw;
     } else {
       patch[field] = textValue(input[field], field, textLimits[field]);
     }
@@ -419,6 +454,8 @@ function validateMergedValues(
     indexNowKey: patch.indexNowKey ?? before.indexNowKey.trim(),
     indexNowKeyLocation: patch.indexNowKeyLocation ?? before.indexNowKeyLocation.trim(),
     ga4MeasurementId: patch.ga4MeasurementId !== undefined ? patch.ga4MeasurementId : before.ga4MeasurementId,
+    yandexVerification: patch.yandexVerification ?? before.yandexVerification.trim(),
+    yandexMetricaId: patch.yandexMetricaId !== undefined ? patch.yandexMetricaId : before.yandexMetricaId,
   };
 
   if (!values.siteName) throw new SiteSettingValidationError("siteName must remain non-empty");
@@ -496,6 +533,8 @@ function auditSnapshot(values: WritableValues, updatedAt: Date): Prisma.JsonObje
     indexNowKeyConfigured: values.indexNowKey.length > 0,
     indexNowKeyLocation: values.indexNowKeyLocation,
     ga4MeasurementId: values.ga4MeasurementId,
+    yandexVerification: values.yandexVerification,
+    yandexMetricaId: values.yandexMetricaId,
     updatedAt: updatedAt.toISOString(),
   };
 }
@@ -639,6 +678,8 @@ export async function updateAdminSiteSetting(
                 indexNowKey: before.indexNowKey,
                 indexNowKeyLocation: before.indexNowKeyLocation,
                 ga4MeasurementId: before.ga4MeasurementId,
+                yandexVerification: before.yandexVerification,
+                yandexMetricaId: before.yandexMetricaId,
               },
               before.updatedAt,
             ),
@@ -658,6 +699,8 @@ export async function updateAdminSiteSetting(
                   indexNowKey: after.indexNowKey,
                   indexNowKeyLocation: after.indexNowKeyLocation,
                   ga4MeasurementId: after.ga4MeasurementId,
+                  yandexVerification: after.yandexVerification,
+                  yandexMetricaId: after.yandexMetricaId,
                 },
                 after.updatedAt,
               ),

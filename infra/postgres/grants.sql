@@ -160,6 +160,10 @@ GRANT SELECT (
 -- `WHERE id = 1` lookup) -- it still cannot see `indexnow_key` or any other
 -- column. Carousel config is owned by the same settings capability.
 -- INSERT/DELETE remain migration_owner-only.
+-- 运营 V2（Owner 2026-09-30）：`yandex_verification` / `yandex_metrica_id` 两列随表级 SELECT
+-- 自动对 web_app / worker_app 可读（worker 的 sitemap 构建器经 getSiteSetting 读整行）；
+-- web_app 的 UPDATE 是列级授权，两列必须显式加进下面的清单。scheduler_app 的列级 SELECT
+-- 仍只有 (id, carousel_config_json)，不读这两列，不扩大。
 GRANT SELECT ON TABLE site_setting TO web_app, worker_app;
 GRANT SELECT (id, carousel_config_json) ON site_setting TO scheduler_app;
 GRANT UPDATE (
@@ -167,6 +171,7 @@ GRANT UPDATE (
   default_og_image, google_search_console_verification,
   footer_copyright_text, footer_disclaimer_text, friend_links,
   indexnow_host, indexnow_key, indexnow_key_location, ga4_measurement_id,
+  yandex_verification, yandex_metrica_id,
   carousel_config_json, updated_at
 ) ON site_setting TO web_app;
 

@@ -112,6 +112,8 @@ const SETTINGS_NO_DESCRIPTION = {
   indexNowKey: "",
   indexNowKeyLocation: "",
   ga4MeasurementId: null,
+  yandexVerification: "",
+  yandexMetricaId: null,
   updatedAt: new Date("2026-09-10T00:00:00Z"),
 };
 

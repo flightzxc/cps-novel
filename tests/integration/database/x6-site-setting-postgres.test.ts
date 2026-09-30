@@ -121,6 +121,9 @@ describe.skipIf(!enabled).sequential("X6 SiteSetting PostgreSQL role boundary", 
         indexNowHost: "novel.example",
         indexNowKey: "x6-disposable-indexnow-key",
         indexNowKeyLocation: "https://novel.example/indexnow-key.txt",
+        // 运营 V2：两个新列走同一条真实角色写路径（web_app 列级 UPDATE 必须已授权）。
+        yandexVerification: "x6-yandex_code-1",
+        yandexMetricaId: "12345678",
       },
       {
         db: web,
@@ -134,6 +137,8 @@ describe.skipIf(!enabled).sequential("X6 SiteSetting PostgreSQL role boundary", 
     expect(result.replayed).toBe(false);
     const persisted = await owner.siteSetting.findUniqueOrThrow({ where: { id: 1 } });
     expect(persisted.indexNowKey).toBe("x6-disposable-indexnow-key");
+    expect(persisted.yandexVerification).toBe("x6-yandex_code-1");
+    expect(persisted.yandexMetricaId).toBe("12345678");
     const audit = await owner.operationAudit.findFirstOrThrow({
       where: { actorType: "admin", action: "site_setting.update", requestId },
     });
@@ -170,6 +175,12 @@ describe.skipIf(!enabled).sequential("X6 SiteSetting PostgreSQL role boundary", 
       "SELECT indexnow_key FROM site_setting WHERE id=1",
     );
     expect(rows[0].indexnow_key).toBe("x6-disposable-indexnow-key");
+    // 运营 V2：worker_app 的表级 SELECT 覆盖新列（sitemap 构建器经 getSiteSetting 读整行），但不能改。
+    const yandex = await worker.$queryRawUnsafe<Array<{ yandex_verification: string; yandex_metrica_id: string | null }>>(
+      "SELECT yandex_verification, yandex_metrica_id FROM site_setting WHERE id=1",
+    );
+    expect(yandex[0]).toEqual({ yandex_verification: "x6-yandex_code-1", yandex_metrica_id: "12345678" });
+    await expectDenied(() => worker.$executeRawUnsafe("UPDATE site_setting SET yandex_metrica_id='1' WHERE id=1"));
     await expectDenied(() => worker.$executeRawUnsafe("UPDATE site_setting SET indexnow_key='denied' WHERE id=1"));
   });
 
@@ -177,6 +188,8 @@ describe.skipIf(!enabled).sequential("X6 SiteSetting PostgreSQL role boundary", 
     for (const client of [analyst, scheduler]) {
       await expectDenied(() => client.$queryRawUnsafe("SELECT indexnow_key FROM site_setting WHERE id=1"));
       await expectDenied(() => client.$queryRawUnsafe("SELECT * FROM site_setting WHERE id=1"));
+      // 运营 V2：新列同样不对 Analyst / Scheduler 开放（Scheduler 的列级 SELECT 仍只有 id, carousel_config_json）。
+      await expectDenied(() => client.$queryRawUnsafe("SELECT yandex_verification, yandex_metrica_id FROM site_setting WHERE id=1"));
     }
   });
 });

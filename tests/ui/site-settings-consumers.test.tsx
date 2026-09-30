@@ -9,7 +9,8 @@ const setting = {
   siteName: "Haiyue", siteDescription: "desc", homeMetaTitle: "Home title", homeMetaDescription: "Home desc",
   defaultOgImage: "/og.jpg", googleSearchConsoleVerification: "google-code", footerCopyrightText: "© Haiyue",
   footerDisclaimerText: "Disclaimer", friendLinks: [{ name: "Partner", url: "https://partner.example", nofollow: true }],
-  indexNowHost: "", indexNowKey: "", indexNowKeyLocation: "", ga4MeasurementId: "G-ABC123", updatedAt: new Date(),
+  indexNowHost: "", indexNowKey: "", indexNowKeyLocation: "", ga4MeasurementId: "G-ABC123",
+  yandexVerification: "", yandexMetricaId: null, updatedAt: new Date(),
 };
 
 describe("SiteSetting public consumers", () => {
