@@ -20,6 +20,7 @@ import {
   auditActorType,
   deriveLocale,
   existsCheck,
+  isNovelLocaleSlugUniqueViolation,
   NOVEL_CREATE_AUDIT_ACTION,
   requireActor,
   requireRequestId,
@@ -186,6 +187,30 @@ async function runDryRun(db: PrismaClient, novelSourceItemId: string): Promise<N
   };
 }
 
+/**
+ * `novel(locale, slug)` 唯一冲突（P2002）发生后的收敛读。
+ *
+ * 场景：同一个 source item 被两个事务并发 materialize，都算出同一个 slug，先提交的一方建好 Novel
+ * 并绑定，后到的一方在 `novel.create` 撞唯一索引。后到方的事务此时已中止，所以这里必须在事务外用
+ * `db` 重新读——走的正是 `loadPlan`，也就是"同一个 source item 被再次 materialize"时本来就会走的那条读路径，
+ * 命中绑定则得到与非并发重放完全一致的 `already_exists`。
+ *
+ * 只在"source item 现在确已绑定到一本 Novel"时返回；未绑定说明是**别的**小说占了这个 slug（真撞车），
+ * 返回 null 让调用方把原 P2002 原样抛出，绝不能按 slug 去认领别人的书。重读本身失败时同样返回 null，
+ * 抛出的仍是原始的 P2002（信息量更大）。
+ */
+async function readAlreadyMaterializedAfterSlugConflict(
+  db: PrismaClient,
+  novelSourceItemId: string,
+): Promise<NovelMaterializeResult | null> {
+  try {
+    const plan = await loadPlan(db as unknown as ReadClient, novelSourceItemId);
+    return plan.stage === "already_exists" ? { outcome: "already_exists", ...plan.summary } : null;
+  } catch {
+    return null;
+  }
+}
+
 async function runMaterializeTransaction(
   tx: WriteClient,
   input: { novelSourceItemId: string; actorType: "admin" | "system"; actorId: string; requestId: string },
@@ -296,6 +321,10 @@ export async function materializeNovelFromSourceItem(
   } catch (error) {
     if (error instanceof ContentCreationConflictSignal) {
       return { outcome: "concurrent_creation_conflict" };
+    }
+    if (isNovelLocaleSlugUniqueViolation(error)) {
+      const converged = await readAlreadyMaterializedAfterSlugConflict(db, novelSourceItemId);
+      if (converged) return converged;
     }
     throw error;
   }

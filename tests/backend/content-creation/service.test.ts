@@ -1,5 +1,7 @@
+import { Prisma } from "@prisma/client";
 import { describe, expect, it } from "vitest";
 
+import { isNovelLocaleSlugUniqueViolation } from "@/server/content-creation/shared";
 import { ContentCreationInputError, materializeNovelFromSourceItem } from "@/server/content-creation/service";
 
 import { FakeContentCreationDb } from "./fake-db";
@@ -524,6 +526,122 @@ describe("materializeNovelFromSourceItem — concurrent creation race", () => {
     expect(fake.articles.size).toBe(0);
     // No audit row from the losing attempt.
     expect(fake.audits).toHaveLength(0);
+  });
+});
+
+describe("materializeNovelFromSourceItem — novel(locale, slug) 唯一冲突收敛", () => {
+  const apply = (fake: FakeContentCreationDb, novelSourceItemId: string, requestId: string) =>
+    materializeNovelFromSourceItem(fake.asPrismaClient(), {
+      novelSourceItemId,
+      mode: "apply",
+      actor: ADMIN_ACTOR,
+      requestId,
+    });
+
+  it("并发 P2002、重读命中绑定：返回与再次 materialize 完全一致的 already_exists", async () => {
+    const fake = new FakeContentCreationDb();
+    const sourceItem = fake.seedSourceItem({ title: "Slug Race Story" });
+
+    // 对手事务在"本事务已选定 slug、尚未插入"的窗口里建好同 slug 的 Novel、绑定同一个 source item 并提交。
+    let winner: ReturnType<FakeContentCreationDb["seedNovel"]> | null = null;
+    fake.onNovelCreate = () => {
+      winner = fake.seedNovel({ locale: "en", slug: "slug-race-story", title: "Slug Race Story" });
+      const item = fake.sourceItems.get(sourceItem.id)!;
+      item.novelId = winner.id;
+      item.status = "linked";
+    };
+
+    const result = await apply(fake, sourceItem.id, "req-slug-race-a");
+
+    expect(winner).not.toBeNull();
+    expect(result).toEqual({
+      outcome: "already_exists",
+      novelId: winner!.id,
+      novelBusinessId: winner!.businessId,
+      locale: "en",
+      novelSlug: "slug-race-story",
+    });
+    // 与非并发场景下"同一个 source item 再 materialize 一次"的返回逐字段一致。
+    expect(await apply(fake, sourceItem.id, "req-slug-race-b")).toEqual(result);
+    // 重读发生在 novel.create 失败之后（事务外），且没有多建书、没有审计、没有文章。
+    const afterCreate = fake.calls.slice(fake.calls.indexOf("novel.create") + 1);
+    expect(afterCreate).toContain("novelSourceItem.findFirst");
+    expect(fake.novels.size).toBe(1);
+    expect(fake.audits).toHaveLength(0);
+    expect(fake.articles.size).toBe(0);
+  });
+
+  it("P2002、重读未命中绑定（别的书占了 slug）：原样抛出，不认领别人的书", async () => {
+    const fake = new FakeContentCreationDb();
+    const sourceItem = fake.seedSourceItem({ title: "Slug Collision Story" });
+    const other = { id: "" };
+
+    // 另一本无关小说抢走了这个 slug；本 source item 始终没有被绑定。
+    fake.onNovelCreate = () => {
+      other.id = fake.seedNovel({ locale: "en", slug: "slug-collision-story", title: "A Different Book" }).id;
+    };
+
+    await expect(apply(fake, sourceItem.id, "req-slug-collision")).rejects.toMatchObject({
+      code: "P2002",
+      meta: { modelName: "Novel", target: ["locale", "slug"] },
+    });
+
+    expect(fake.sourceItems.get(sourceItem.id)).toMatchObject({ novelId: null, status: "pending" });
+    expect(fake.novels.size).toBe(1);
+    expect(fake.novels.get(other.id)).toBeDefined();
+    expect(fake.audits).toHaveLength(0);
+  });
+
+  it("其它约束的 P2002（business_id 用尽重试）：即使 source item 此刻已被绑定也原样抛出，不做重读", async () => {
+    const fake = new FakeContentCreationDb();
+    const sourceItem = fake.seedSourceItem({ title: "Business Id Exhausted Story" });
+    // business_id 冲突连续 5 次 = createNovelWithBusinessIdRetry 用尽，最后一次 P2002 抛出。
+    fake.novelBusinessIdFailuresRemaining = 5;
+    // 若实现误把任何 P2002 都当成 slug 冲突去重读，这里的绑定会让它错误地返回 already_exists。
+    fake.onNovelCreate = () => {
+      const winner = fake.seedNovel({ locale: "en", slug: "some-other-slug" });
+      const item = fake.sourceItems.get(sourceItem.id)!;
+      item.novelId = winner.id;
+      item.status = "linked";
+    };
+
+    await expect(apply(fake, sourceItem.id, "req-bid-exhausted")).rejects.toMatchObject({
+      code: "P2002",
+      meta: { target: ["novel_business_id_key"] },
+    });
+
+    const afterLastCreate = fake.calls.slice(fake.calls.lastIndexOf("novel.create") + 1);
+    expect(afterLastCreate).not.toContain("novelSourceItem.findFirst");
+    expect(fake.audits).toHaveLength(0);
+  });
+});
+
+describe("isNovelLocaleSlugUniqueViolation — 只认 novel(locale, slug) 这一个唯一约束", () => {
+  const p2002 = (meta: Record<string, unknown>) =>
+    new Prisma.PrismaClientKnownRequestError("Unique constraint failed", { code: "P2002", clientVersion: "test", meta });
+
+  it("认：Prisma 6.19 实测形态、列顺序颠倒、索引名（字符串/数组）", () => {
+    expect(isNovelLocaleSlugUniqueViolation(p2002({ modelName: "Novel", target: ["locale", "slug"] }))).toBe(true);
+    expect(isNovelLocaleSlugUniqueViolation(p2002({ modelName: "Novel", target: ["slug", "locale"] }))).toBe(true);
+    expect(isNovelLocaleSlugUniqueViolation(p2002({ target: "novel_locale_slug_active_uidx" }))).toBe(true);
+    expect(isNovelLocaleSlugUniqueViolation(p2002({ target: ["novel_locale_slug_active_uidx"] }))).toBe(true);
+  });
+
+  it("不认：别的约束、别的模型、只含其中一列、缺 target、非 P2002、非 Prisma 错误", () => {
+    expect(isNovelLocaleSlugUniqueViolation(p2002({ modelName: "Novel", target: ["business_id"] }))).toBe(false);
+    expect(isNovelLocaleSlugUniqueViolation(p2002({ target: ["novel_business_id_key"] }))).toBe(false);
+    expect(isNovelLocaleSlugUniqueViolation(p2002({ modelName: "OperationAudit", target: ["request_id", "action"] }))).toBe(false);
+    expect(isNovelLocaleSlugUniqueViolation(p2002({ modelName: "Article", target: ["locale", "slug"] }))).toBe(false);
+    expect(isNovelLocaleSlugUniqueViolation(p2002({ modelName: "Novel", target: ["slug"] }))).toBe(false);
+    expect(isNovelLocaleSlugUniqueViolation(p2002({ modelName: "Novel", target: ["locale", "slug", "business_id"] }))).toBe(false);
+    expect(isNovelLocaleSlugUniqueViolation(p2002({ modelName: "Novel" }))).toBe(false);
+    expect(
+      isNovelLocaleSlugUniqueViolation(
+        new Prisma.PrismaClientKnownRequestError("fk", { code: "P2003", clientVersion: "test", meta: { target: ["locale", "slug"] } }),
+      ),
+    ).toBe(false);
+    expect(isNovelLocaleSlugUniqueViolation(new Error("Unique constraint failed on (locale, slug)"))).toBe(false);
+    expect(isNovelLocaleSlugUniqueViolation(null)).toBe(false);
   });
 });
 

@@ -117,3 +117,28 @@ export function isArticleNovelLocaleUniqueViolation(error: unknown): boolean {
     (target.includes("novelid") && target.includes("locale"))
   );
 }
+
+/** `novel(locale, slug) WHERE deleted_at IS NULL` — 局部唯一索引，只在迁移 SQL 里、不在 Prisma schema 里。 */
+const NOVEL_LOCALE_SLUG_UNIQUE_INDEX = "novel_locale_slug_active_uidx";
+
+/**
+ * 只认 `novel(locale, slug)` 这一个唯一约束的 P2002。
+ *
+ * Prisma 6.19 对这个局部唯一索引报的是 `meta = { modelName: "Novel", target: ["locale", "slug"] }`
+ * （已用一次性 PG16 实测；`business_id` 冲突则是 `target: ["business_id"]`）；索引名形态一并接受，
+ * 以免换驱动/换版本后报法变化导致静默不认。`target` 必须恰好是 locale+slug 两列——
+ * 别的约束（business_id、operation_audit 的 request_id+action……）一律返回 false，不许吞。
+ */
+export function isNovelLocaleSlugUniqueViolation(error: unknown): boolean {
+  if (!isUniqueConstraintViolation(error) || !(error instanceof Prisma.PrismaClientKnownRequestError)) {
+    return false;
+  }
+  const modelName = error.meta?.modelName;
+  if (modelName !== undefined && modelName !== "Novel") return false;
+  const raw = error.meta?.target;
+  const targets = (Array.isArray(raw) ? raw : raw === undefined || raw === null ? [] : [raw])
+    .filter((item): item is string => typeof item === "string")
+    .map((item) => item.toLowerCase());
+  if (targets.length === 1 && targets[0] === NOVEL_LOCALE_SLUG_UNIQUE_INDEX) return true;
+  return targets.length === 2 && targets.includes("locale") && targets.includes("slug");
+}

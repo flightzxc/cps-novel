@@ -114,6 +114,15 @@ function uniqueViolation(target: string): Prisma.PrismaClientKnownRequestError {
   });
 }
 
+/** 与真实 Prisma 6.19 对 `novel_locale_slug_active_uidx`（局部唯一索引）的报法一致（PG16 实测）：`target` 是两列而不是索引名。 */
+function novelLocaleSlugViolation(): Prisma.PrismaClientKnownRequestError {
+  return new Prisma.PrismaClientKnownRequestError("Unique constraint failed on the fields: (`locale`,`slug`)", {
+    code: "P2002",
+    clientVersion: "test",
+    meta: { modelName: "Novel", target: ["locale", "slug"] },
+  });
+}
+
 export class FakeContentCreationDb {
   readonly sourceItems = new Map<string, FakeSourceItem>();
   readonly novels = new Map<string, FakeNovel>();
@@ -147,6 +156,15 @@ export class FakeContentCreationDb {
    * without any real concurrency. See `service.test.ts`'s concurrency test.
    */
   onSourceItemRead: (() => void) | null = null;
+
+  /**
+   * Fires exactly once, at the very start of the first `novel.create` call — after this transaction's own
+   * slug planning already ran, before the fake's unique checks — then clears itself. Lets a test simulate a
+   * concurrent, already-committed transaction taking the planned slug (and optionally linking this same
+   * source item) in the window between "slug chosen" and "row inserted", which is exactly where the real
+   * `novel(locale, slug)` unique index fires.
+   */
+  onNovelCreate: (() => void) | null = null;
 
   private undoLog: Array<() => void> | null = null;
   private logUndo(undo: () => void): void {
@@ -314,6 +332,11 @@ export class FakeContentCreationDb {
   private novelCreate = async (args: { data: Record<string, unknown> }) => {
     this.calls.push("novel.create");
     this.lastNovelCreateArgs = { ...args.data };
+    if (this.onNovelCreate) {
+      const hook = this.onNovelCreate;
+      this.onNovelCreate = null;
+      hook();
+    }
     if (this.novelBusinessIdFailuresRemaining > 0) {
       this.novelBusinessIdFailuresRemaining -= 1;
       throw uniqueViolation("novel_business_id_key");
@@ -321,6 +344,9 @@ export class FakeContentCreationDb {
     const businessId = String(args.data.businessId);
     for (const existing of this.novels.values()) {
       if (existing.businessId === businessId) throw uniqueViolation("novel_business_id_key");
+      if (existing.deletedAt === null && existing.locale === String(args.data.locale) && existing.slug === String(args.data.slug)) {
+        throw novelLocaleSlugViolation();
+      }
     }
     const novel: FakeNovel = {
       id: nextUuid(),
